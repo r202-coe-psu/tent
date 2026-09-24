@@ -24,6 +24,7 @@
 		getRecipientValidationErrorMessage,
 		type FrontlineRecipientSelection
 	} from '../model/frontline-handover';
+	import { formatDistributionError } from '../model/distribution-error';
 	import RecipientSearchPicker from '../common/RecipientSearchPicker.svelte';
 	import InFlightTopUpDialog from './InFlightTopUpDialog.svelte';
 
@@ -154,7 +155,10 @@
 				recipientSelection = null;
 			}
 		} catch (err) {
-			localSubmitError = `ไม่สามารถบันทึกแจกพัสดุได้: ${(err as Error).message}`;
+			localSubmitError = formatDistributionError(
+				err,
+				'ไม่สามารถบันทึกแจกพัสดุได้ กรุณาลองใหม่อีกครั้ง'
+			);
 		}
 	}
 </script>

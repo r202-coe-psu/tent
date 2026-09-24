@@ -9,6 +9,7 @@
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import X from '@lucide/svelte/icons/x';
+	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import { ulid } from '$lib/db/ulid';
 	import { useItemMasters } from '$lib/features/catalog';
 	import { useCreateBulkReturnPool } from '../../application/queries';
@@ -19,6 +20,7 @@
 		validateCreateBulkPoolForm
 	} from '../model/bulk-pool-manager';
 	import { getReturnableBadgeClass, getReturnableBadgeLabel } from '../model/catalog-eligibility';
+	import { formatDistributionError } from '../model/distribution-error';
 
 	interface Props {
 		open?: boolean;
@@ -82,15 +84,23 @@
 	const selectedItem = $derived(allItems.find((item) => item._id === selectedItemId) ?? null);
 
 	const validation = $derived(validateCreateBulkPoolForm(selectedItemId, receivedQty));
+
 	const canSubmit = $derived(
-		Boolean(selectedItemId && receivedQty.trim() && !createMutation.isPending)
+		Boolean(
+			selectedItemId &&
+			receivedQty.trim() &&
+			!createMutation.isPending &&
+			!itemMastersQuery.isError &&
+			!itemMastersQuery.isLoading
+		)
 	);
 
 	async function handleSubmit() {
 		submitError = null;
 		if (!validation.isValid || !validation.normalizedQty) {
-			submitError = validation.error ?? 'กรุณากรอกข้อมูลให้ครบถ้วนและถูกต้อง';
-			toast.error(submitError);
+			const message = validation.error ?? 'กรุณากรอกข้อมูลให้ครบถ้วนและถูกต้อง';
+			submitError = message;
+			toast.error(message);
 			return;
 		}
 
@@ -114,10 +124,10 @@
 			onSuccess?.(pool);
 		} catch (err) {
 			// CRITICAL: Preserve form state and operationUlid on failure so user can retry safely
-			const msg =
-				err instanceof Error
-					? err.message
-					: 'เกิดข้อผิดพลาดในการสร้างจุดรวมคืน กรุณาลองใหม่อีกครั้ง';
+			const msg = formatDistributionError(
+				err,
+				'เกิดข้อผิดพลาดในการสร้างจุดรวมคืน กรุณาลองใหม่อีกครั้ง'
+			);
 			submitError = msg;
 			toast.error(msg);
 		}
@@ -246,9 +256,29 @@
 								<Loader2 class="mx-auto mb-1 h-5 w-5 animate-spin text-slate-400" />
 								กำลังโหลดรายการสินค้า...
 							</div>
+						{:else if itemMastersQuery.isError}
+							<div class="p-6 text-center text-xs text-red-600">
+								<AlertCircle class="mx-auto mb-1 h-5 w-5 text-red-500" />
+								<p class="font-semibold">ไม่สามารถโหลดรายการสินค้าได้</p>
+								<p class="mt-0.5 text-2xs text-red-500">
+									กรุณาตรวจสอบการเชื่อมต่อแล้วลองใหม่อีกครั้ง
+								</p>
+								<button
+									type="button"
+									onclick={() => itemMastersQuery.refetch()}
+									class="mt-2 inline-flex items-center gap-1 rounded-lg border border-red-200 bg-white px-2.5 py-1 text-2xs font-semibold text-red-700 shadow-2xs hover:bg-red-50"
+								>
+									<RefreshCw class="h-3 w-3" />
+									ลองใหม่
+								</button>
+							</div>
 						{:else if filteredItems.length === 0}
 							<div class="p-6 text-center text-xs text-slate-500">
-								ไม่พบสินค้าบรรเทาทุกข์ที่ตรงกับการค้นหา
+								{#if eligibleItems.length === 0}
+									ไม่มีรายการสินค้าที่สามารถเปิดจุดรวมคืนได้ในศูนย์นี้
+								{:else}
+									ไม่พบสินค้าบรรเทาทุกข์ที่ตรงกับการค้นหา
+								{/if}
 							</div>
 						{:else}
 							{#each filteredItems as item (item._id)}

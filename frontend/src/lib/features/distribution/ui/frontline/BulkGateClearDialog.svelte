@@ -30,6 +30,8 @@
 		validateBulkGateClear,
 		validateBulkForwardRecovery
 	} from '../model/loan-return';
+	import { dialogAccessibility } from '../model/dialog-accessibility';
+	import { formatDistributionError } from '../model/distribution-error';
 
 	interface Props {
 		open?: boolean;
@@ -185,11 +187,26 @@
 		}
 	});
 
-	function handleClose() {
-		if (bulkClaimMutation.isPending || abortMutation.isPending) return;
+	const canClose = $derived(
+		!bulkClaimMutation.isPending && !abortMutation.isPending && !isForwardRecovery
+	);
+
+	function performClose() {
 		open = false;
 		localError = null;
 		onclose?.();
+	}
+
+	function requestClose() {
+		// Guarded user dismissal: blocked while mutation is in-flight or in forward recovery
+		if (!canClose) return;
+		performClose();
+	}
+
+	function closeAfterSuccess() {
+		// Authoritative workflow completion: closes deterministically without depending
+		// on cached return-operation-state query invalidation timing.
+		performClose();
 	}
 
 	async function handleSubmit(e: SubmitEvent) {
@@ -249,30 +266,12 @@
 
 			toast.success(successMsg);
 			onsuccess?.(result);
-			handleClose();
+			closeAfterSuccess();
 		} catch (err) {
-			const errorMsg = (err as Error).message;
-			if (
-				errorMsg.includes('InsufficientPoolQuotaError') ||
-				errorMsg.includes('unclaimed quota') ||
-				errorMsg.includes('insufficient quota') ||
-				errorMsg.includes('EXHAUSTED') ||
-				errorMsg.includes('CLOSED')
-			) {
-				localError =
-					'จำนวนของที่จุดรวมคืนไม่เพียงพอหรือมีการเปลี่ยนแปลงจากจุดอื่น กรุณาตรวจสอบจำนวนล่าสุดแล้วลองใหม่';
-			} else if (
-				errorMsg.includes('ConcurrencyCollisionError') ||
-				errorMsg.includes('being processed')
-			) {
-				localError =
-					'รายการยืมนี้กำลังถูกประมวลผลโดยคำขออื่น กรุณารอสักครู่แล้วตรวจสอบสถานะล่าสุดก่อนลองใหม่';
-			} else if (errorMsg.includes('ConflictError') || errorMsg.includes('conflict')) {
-				localError =
-					'ข้อมูลรายการยืมนี้มีการเปลี่ยนแปลงจากจุดอื่น กรุณาปิดหน้าต่างแล้วตรวจสอบสถานะล่าสุดก่อนทำรายการใหม่';
-			} else {
-				localError = `ไม่สามารถเคลียร์รายการจากจุดรวมคืนได้: ${errorMsg}`;
-			}
+			localError = formatDistributionError(
+				err,
+				'ไม่สามารถเคลียร์รายการจากจุดรวมคืนได้ กรุณาลองใหม่อีกครั้ง'
+			);
 		}
 	}
 
@@ -290,20 +289,41 @@
 			selectedPoolId = undefined;
 			toast.info('ยกเลิกรายการเดิมที่ค้างอยู่แล้ว เริ่มต้นรายการใหม่');
 		} catch (err) {
-			localError = `ไม่สามารถยกเลิกรายการเดิมได้: ${(err as Error).message}`;
+			localError = formatDistributionError(
+				err,
+				'ไม่สามารถยกเลิกรายการเดิมได้ กรุณาลองใหม่อีกครั้ง'
+			);
 		}
 	}
 </script>
 
 {#if open && log}
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs"
-		role="dialog"
-		aria-modal="true"
-		aria-labelledby="bulk-gate-clear-dialog-title"
-	>
+	<div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+		<!-- Backdrop dismissal surface -->
+		<button
+			type="button"
+			tabindex="-1"
+			aria-hidden="true"
+			class="fixed inset-0 cursor-default border-0 bg-black/40 backdrop-blur-xs outline-none"
+			onclick={() => {
+				if (canClose) {
+					requestClose();
+				}
+			}}
+		></button>
+
+		<!-- Dialog panel/container -->
 		<div
-			class="flex max-h-[90vh] w-full max-w-lg flex-col overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl transition-all"
+			class="relative z-10 flex max-h-[90vh] w-full max-w-lg flex-col overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl transition-all"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="bulk-gate-clear-dialog-title"
+			aria-describedby="bulk-gate-clear-dialog-desc"
+			tabindex="-1"
+			use:dialogAccessibility={{
+				canClose: () => canClose,
+				onClose: requestClose
+			}}
 		>
 			<!-- Dialog Header -->
 			<div class="flex items-start justify-between border-b border-slate-100 pb-4">
@@ -317,7 +337,7 @@
 						<h2 id="bulk-gate-clear-dialog-title" class="text-base font-bold text-slate-900">
 							เคลียร์รายการจากจุดรวมคืน (CR-134 Bulk Gate Clearance)
 						</h2>
-						<p class="text-xs text-slate-500">
+						<p id="bulk-gate-clear-dialog-desc" class="text-xs text-slate-500">
 							{itemName || log.item_id} · รหัสรายการ: <span class="font-mono">{log._id}</span>
 						</p>
 					</div>
@@ -325,8 +345,8 @@
 
 				<button
 					type="button"
-					onclick={handleClose}
-					disabled={bulkClaimMutation.isPending}
+					onclick={requestClose}
+					disabled={!canClose}
 					class="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-40"
 					aria-label="ปิดหน้าต่าง"
 				>
@@ -471,7 +491,12 @@
 							<AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
 							<div>
 								<p class="font-bold">ไม่สามารถดึงข้อมูลจุดรวมคืนได้</p>
-								<p class="text-2xs text-red-700">{(poolsQuery.error as Error).message}</p>
+								<p class="text-2xs text-red-700">
+									{formatDistributionError(
+										poolsQuery.error,
+										'กรุณาตรวจสอบการเชื่อมต่อแล้วลองใหม่อีกครั้ง'
+									)}
+								</p>
 							</div>
 						</div>
 					{:else if displayPools.length === 0}
@@ -597,8 +622,8 @@
 				<div class="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-3">
 					<button
 						type="button"
-						onclick={handleClose}
-						disabled={bulkClaimMutation.isPending || abortMutation.isPending}
+						onclick={requestClose}
+						disabled={!canClose}
 						class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
 					>
 						ยกเลิก

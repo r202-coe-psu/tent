@@ -8,6 +8,7 @@
 		computeWarehouseReturnSummary,
 		buildVerifiedReturnsPayload
 	} from '../model/warehouse-return';
+	import { formatDistributionError } from '../model/distribution-error';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { toast } from 'svelte-sonner';
@@ -94,8 +95,10 @@
 			onSuccess?.();
 		} catch (err) {
 			// Preserve verified values and form state on error (Prompt §13)
-			const msg =
-				err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการตรวจรับของคืนเข้าคลังสินค้า';
+			const msg = formatDistributionError(
+				err,
+				'เกิดข้อผิดพลาดในการตรวจรับของคืนเข้าคลังสินค้า กรุณาลองใหม่อีกครั้ง'
+			);
 			toast.error(msg);
 		}
 	}

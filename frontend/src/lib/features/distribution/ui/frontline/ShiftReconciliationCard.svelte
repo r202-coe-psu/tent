@@ -25,6 +25,7 @@
 		initializeReturnedQuantities,
 		validateShiftCloseForm
 	} from '../model/shift-reconciliation';
+	import { formatDistributionError } from '../model/distribution-error';
 
 	interface Props {
 		ticket: RequisitionTicket | null;
@@ -114,7 +115,10 @@
 			onShiftClosed?.(updatedTicket);
 		} catch (err) {
 			// CRITICAL: Preserve form inputs so the operator does not lose their entries
-			const msg = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการปิดรอบแจกจ่าย';
+			const msg = formatDistributionError(
+				err,
+				'เกิดข้อผิดพลาดในการปิดรอบแจกจ่าย กรุณาลองใหม่อีกครั้ง'
+			);
 			submitError = msg;
 			toast.error(msg);
 		}
@@ -139,7 +143,10 @@
 			);
 			onReturnsSubmitted?.(updatedTicket);
 		} catch (err) {
-			const msg = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการส่งคืนพัสดุกลับคลัง';
+			const msg = formatDistributionError(
+				err,
+				'เกิดข้อผิดพลาดในการส่งคืนพัสดุกลับคลัง กรุณาลองใหม่อีกครั้ง'
+			);
 			submitError = msg;
 			toast.error(msg);
 		}
@@ -169,7 +176,10 @@
 			<AlertCircle class="mx-auto mb-2 h-8 w-8 text-red-500" />
 			<h3 class="text-sm font-bold text-red-900">ไม่สามารถโหลดข้อมูลกระทบยอดได้</h3>
 			<p class="mt-1 text-xs text-red-700">
-				{(reconciliationQuery.error as Error)?.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อ'}
+				{formatDistributionError(
+					reconciliationQuery.error,
+					'กรุณาตรวจสอบการเชื่อมต่อแล้วลองใหม่อีกครั้ง'
+				)}
 			</p>
 			<button
 				type="button"

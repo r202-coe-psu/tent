@@ -23,6 +23,7 @@
 	import type { DistributionLog } from '../../domain/food-supplies';
 	import RecipientSearchPicker from '../common/RecipientSearchPicker.svelte';
 	import type { FrontlineRecipientSelection } from '../model/frontline-handover';
+	import { formatDistributionError } from '../model/distribution-error';
 	import {
 		isLoanReturnCandidate,
 		isBulkClearedLoan,
@@ -208,7 +209,12 @@
 			<AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
 			<div class="flex-1">
 				<p class="font-bold">ไม่สามารถดึงข้อมูลรายการยืมได้</p>
-				<p class="text-2xs text-red-700">{(recipientLoansQuery.error as Error).message}</p>
+				<p class="text-2xs text-red-700">
+					{formatDistributionError(
+						recipientLoansQuery.error,
+						'กรุณาตรวจสอบการเชื่อมต่อแล้วลองใหม่อีกครั้ง'
+					)}
+				</p>
 				<button
 					type="button"
 					onclick={() => recipientLoansQuery.refetch()}

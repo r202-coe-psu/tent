@@ -15,6 +15,7 @@
 		canReceiveWarehouseReturns
 	} from '../../application/food-supplies/auth';
 	import { isTicketReadyForApproval } from '../model/ticket-lifecycle';
+	import { formatDistributionError } from '../model/distribution-error';
 	import TicketAllocationDialog from './TicketAllocationDialog.svelte';
 	import CancelTicketDialog from './CancelTicketDialog.svelte';
 	import DispatchTicketDialog from './DispatchTicketDialog.svelte';
@@ -86,7 +87,7 @@
 			isCompleteConfirmOpen = false;
 			onActionSuccess?.();
 		} catch (err) {
-			const msg = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการปิดตั๋ว';
+			const msg = formatDistributionError(err, 'เกิดข้อผิดพลาดในการปิดตั๋ว กรุณาลองใหม่อีกครั้ง');
 			toast.error(msg);
 		}
 	}
@@ -102,7 +103,10 @@
 			isApproveConfirmOpen = false;
 			onActionSuccess?.();
 		} catch (err) {
-			const msg = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการอนุมัติตั๋ว';
+			const msg = formatDistributionError(
+				err,
+				'เกิดข้อผิดพลาดในการอนุมัติตั๋ว กรุณาลองใหม่อีกครั้ง'
+			);
 			toast.error(msg);
 		}
 	}
@@ -120,7 +124,10 @@
 			isReceiveConfirmOpen = false;
 			onActionSuccess?.();
 		} catch (err) {
-			const msg = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการยืนยันรับสินค้า';
+			const msg = formatDistributionError(
+				err,
+				'เกิดข้อผิดพลาดในการยืนยันรับสินค้า กรุณาลองใหม่อีกครั้ง'
+			);
 			toast.error(msg);
 		}
 	}

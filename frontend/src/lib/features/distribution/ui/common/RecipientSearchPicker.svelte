@@ -12,6 +12,7 @@
 	import { useSearchEvacuees, lookupEvacueeByScanCode, type Evacuee } from '$lib/features/people';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import type { FrontlineRecipientSelection } from '../model/frontline-handover';
+	import { formatDistributionError } from '../model/distribution-error';
 
 	interface Props {
 		value?: FrontlineRecipientSelection | null;
@@ -72,7 +73,7 @@
 				scanError = `ไม่พบข้อมูลผู้ประสบภัยจากรหัส '${code}'`;
 			}
 		} catch (err) {
-			scanError = `เกิดข้อผิดพลาดในการค้นหา: ${(err as Error).message}`;
+			scanError = formatDistributionError(err, 'เกิดข้อผิดพลาดในการค้นหา กรุณาลองใหม่อีกครั้ง');
 		} finally {
 			isScanning = false;
 		}

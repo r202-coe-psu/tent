@@ -3,6 +3,7 @@
 	import { useAllocateTicketItems } from '../../application/queries';
 	import { getReturnableBadgeLabel, getReturnableBadgeClass } from '../model/catalog-eligibility';
 	import { validatePositiveQuantity, buildAllocationItem } from '../model/ticket-quantity';
+	import { formatDistributionError } from '../model/distribution-error';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { toast } from 'svelte-sonner';
@@ -83,7 +84,10 @@
 			open = false;
 			onSuccess?.();
 		} catch (err) {
-			const msg = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการจัดสรรยอดสินค้า';
+			const msg = formatDistributionError(
+				err,
+				'เกิดข้อผิดพลาดในการจัดสรรยอดสินค้า กรุณาลองใหม่อีกครั้ง'
+			);
 			toast.error(msg);
 		}
 	}

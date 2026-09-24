@@ -23,6 +23,7 @@
 	import SuppliesDistributionCard from './SuppliesDistributionCard.svelte';
 	import LoanReturnCard from './LoanReturnCard.svelte';
 	import ShiftReconciliationCard from './ShiftReconciliationCard.svelte';
+	import { formatDistributionError } from '../model/distribution-error';
 	import * as Select from '$lib/components/ui/select/index.js';
 
 	interface Props {
@@ -166,7 +167,7 @@
 				selectedSuppliesTicketId = ticket._id;
 			}
 		} catch (err) {
-			toast.error(`ไม่สามารถตรวจรับสินค้าได้: ${(err as Error).message}`);
+			toast.error(formatDistributionError(err, 'ไม่สามารถตรวจรับสินค้าได้ กรุณาลองใหม่อีกครั้ง'));
 		} finally {
 			receivingTicketId = null;
 		}

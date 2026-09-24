@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { RequisitionTicket } from '../../domain/food-supplies';
 	import { useDispatchTicket } from '../../application/queries';
+	import { formatDistributionError } from '../model/distribution-error';
 	import PhysicalLotPicker from './PhysicalLotPicker.svelte';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
@@ -79,7 +80,7 @@
 			open = false;
 			onSuccess?.();
 		} catch (err) {
-			const msg = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการปล่อยรถ';
+			const msg = formatDistributionError(err, 'เกิดข้อผิดพลาดในการปล่อยรถ กรุณาลองใหม่อีกครั้ง');
 			toast.error(msg);
 		}
 	}

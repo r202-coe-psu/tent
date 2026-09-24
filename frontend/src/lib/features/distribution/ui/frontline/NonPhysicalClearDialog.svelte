@@ -23,6 +23,8 @@
 		resolveNonPhysicalRecoveryHydration,
 		isReturnReservationModeCollision
 	} from '../model/loan-return';
+	import { dialogAccessibility } from '../model/dialog-accessibility';
+	import { formatDistributionError } from '../model/distribution-error';
 
 	interface Props {
 		open?: boolean;
@@ -116,11 +118,26 @@
 		}
 	});
 
-	function handleClose() {
-		if (clearMutation.isPending || abortMutation.isPending) return;
+	const canClose = $derived(
+		!clearMutation.isPending && !abortMutation.isPending && !isForwardRecovery
+	);
+
+	function performClose() {
 		open = false;
 		localError = null;
 		onclose?.();
+	}
+
+	function requestClose() {
+		// Guarded user dismissal: blocked while mutation is in-flight or in forward recovery
+		if (!canClose) return;
+		performClose();
+	}
+
+	function closeAfterSuccess() {
+		// Authoritative workflow completion: closes deterministically without depending
+		// on cached return-operation-state query invalidation timing.
+		performClose();
 	}
 
 	async function handleAbortAndRestart() {
@@ -138,7 +155,10 @@
 			notesInput = '';
 			toast.info('ยกเลิกรายการเดิมที่ค้างอยู่แล้ว เริ่มต้นรายการใหม่');
 		} catch (err) {
-			localError = `ไม่สามารถยกเลิกรายการเดิมได้: ${(err as Error).message}`;
+			localError = formatDistributionError(
+				err,
+				'ไม่สามารถยกเลิกรายการเดิมได้ กรุณาลองใหม่อีกครั้ง'
+			);
 		}
 	}
 
@@ -195,28 +215,43 @@
 
 			toast.success(successMsg);
 			onsuccess?.(updatedLog);
-			handleClose();
+			closeAfterSuccess();
 		} catch (err) {
-			const errorMsg = (err as Error).message;
-			if (errorMsg.includes('ConflictError') || errorMsg.includes('conflict')) {
-				localError =
-					'ข้อมูลรายการยืมนี้มีการเปลี่ยนแปลงจากจุดอื่น กรุณาปิดหน้าต่างแล้วตรวจสอบสถานะล่าสุดก่อนทำรายการใหม่';
-			} else {
-				localError = `ไม่สามารถตัดจำหน่ายรายการได้: ${errorMsg}`;
-			}
+			localError = formatDistributionError(
+				err,
+				'ไม่สามารถตัดจำหน่ายรายการได้ กรุณาลองใหม่อีกครั้ง'
+			);
 		}
 	}
 </script>
 
 {#if open && log}
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs"
-		role="dialog"
-		aria-modal="true"
-		aria-labelledby="non-physical-clear-dialog-title"
-	>
+	<div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+		<!-- Backdrop dismissal surface -->
+		<button
+			type="button"
+			tabindex="-1"
+			aria-hidden="true"
+			class="fixed inset-0 cursor-default border-0 bg-black/40 backdrop-blur-xs outline-none"
+			onclick={() => {
+				if (canClose) {
+					requestClose();
+				}
+			}}
+		></button>
+
+		<!-- Dialog panel/container -->
 		<div
-			class="flex max-h-[90vh] w-full max-w-lg flex-col overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl transition-all"
+			class="relative z-10 flex max-h-[90vh] w-full max-w-lg flex-col overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl transition-all"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="non-physical-clear-dialog-title"
+			aria-describedby="non-physical-clear-dialog-desc"
+			tabindex="-1"
+			use:dialogAccessibility={{
+				canClose: () => canClose,
+				onClose: requestClose
+			}}
 		>
 			<!-- Dialog Header -->
 			<div class="flex items-start justify-between border-b border-slate-100 pb-4">
@@ -230,7 +265,7 @@
 						<h2 id="non-physical-clear-dialog-title" class="text-base font-bold text-slate-900">
 							ตัดจำหน่ายรายการโดยไม่มีของคืน (Non-Physical Clear)
 						</h2>
-						<p class="text-xs text-slate-500">
+						<p id="non-physical-clear-dialog-desc" class="text-xs text-slate-500">
 							{itemName || log.item_id} · รหัสรายการ: <span class="font-mono">{log._id}</span>
 						</p>
 					</div>
@@ -238,8 +273,8 @@
 
 				<button
 					type="button"
-					onclick={handleClose}
-					disabled={clearMutation.isPending}
+					onclick={requestClose}
+					disabled={!canClose}
 					class="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-40"
 					aria-label="ปิดหน้าต่าง"
 				>
@@ -429,8 +464,8 @@
 				<div class="flex flex-wrap items-center justify-end gap-3 border-t border-slate-100 pt-4">
 					<button
 						type="button"
-						onclick={handleClose}
-						disabled={clearMutation.isPending || abortMutation.isPending}
+						onclick={requestClose}
+						disabled={!canClose}
 						class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
 					>
 						ยกเลิก

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { RequisitionTicket } from '../../domain/food-supplies';
 	import { useCancelTicket } from '../../application/queries';
+	import { formatDistributionError } from '../model/distribution-error';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { toast } from 'svelte-sonner';
@@ -50,7 +51,10 @@
 			open = false;
 			onSuccess?.();
 		} catch (err) {
-			const msg = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการยกเลิกตั๋ว';
+			const msg = formatDistributionError(
+				err,
+				'เกิดข้อผิดพลาดในการยกเลิกตั๋ว กรุณาลองใหม่อีกครั้ง'
+			);
 			toast.error(msg);
 		}
 	}

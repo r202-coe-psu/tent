@@ -24,6 +24,7 @@
 		getItemCapacitySummary,
 		type FrontlineRecipientSelection
 	} from '../model/frontline-handover';
+	import { formatDistributionError } from '../model/distribution-error';
 	import RecipientSearchPicker from '../common/RecipientSearchPicker.svelte';
 	import MealEntitlementWarning from './MealEntitlementWarning.svelte';
 	import InFlightTopUpDialog from './InFlightTopUpDialog.svelte';
@@ -187,7 +188,10 @@
 				recipientSelection = null;
 			}
 		} catch (err) {
-			localSubmitError = `ไม่สามารถบันทึกแจกอาหารได้: ${(err as Error).message}`;
+			localSubmitError = formatDistributionError(
+				err,
+				'ไม่สามารถบันทึกแจกอาหารได้ กรุณาลองใหม่อีกครั้ง'
+			);
 		}
 	}
 

@@ -10,6 +10,7 @@
 		getReturnableBadgeClass
 	} from '../model/catalog-eligibility';
 	import { validatePositiveQuantity, buildCreateTicketItem } from '../model/ticket-quantity';
+	import { formatDistributionError } from '../model/distribution-error';
 	import CatalogItemPicker from './CatalogItemPicker.svelte';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
@@ -177,7 +178,10 @@
 			open = false;
 			onCreated();
 		} catch (err) {
-			const msg = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการสร้างใบเบิกจ่าย';
+			const msg = formatDistributionError(
+				err,
+				'เกิดข้อผิดพลาดในการสร้างใบเบิกจ่าย กรุณาลองใหม่อีกครั้ง'
+			);
 			toast.error(msg);
 		}
 	}
