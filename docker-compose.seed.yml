@@ -84,6 +84,16 @@ services:
     restart: "no"
     command: sh -c "corepack enable && pnpm unseed:master-data --confirm"
 
+  unseed-master:
+    <<: *node-seed
+    profiles: ["unseed-master", "master"]
+    container_name: tent-unseed-master
+    depends_on:
+      couchdb:
+        condition: service_healthy
+    restart: "no"
+    command: sh -c "corepack enable && pnpm unseed:master --confirm"
+
   mongo-wipe:
     profiles: ["reset", "mongo-wipe"]
     container_name: tent-mongo-wipe

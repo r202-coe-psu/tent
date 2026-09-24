@@ -145,6 +145,8 @@ pnpm exec lefthook run pre-push
   `docker compose -f docker-compose.yml -f docker-compose.seed.yml run --rm unseed`
 - **Unseed master_data only**:
   `docker compose -f docker-compose.yml -f docker-compose.seed.yml run --rm unseed-master-data`
+- **Unseed master (master_data + config + catalog)**:
+  `docker compose -f docker-compose.yml -f docker-compose.seed.yml --profile master run --rm unseed-master`
 - **Wipe Mongo** (`dropDatabase` ตาม `DATABASE_URI`):
   `docker compose -f docker-compose.yml -f docker-compose.seed.yml run --rm mongo-wipe`
 - **Bootstrap Mongo** (project จาก Couch แล้ว exit):
