@@ -8,6 +8,7 @@ import {
 	unitCodeSchema,
 	type UnitOfMeasure
 } from './unit-of-measure';
+import { STANDARD_UOM_OPTIONS } from '$lib/features/sop-ratios';
 
 describe('unit-of-measure domain', () => {
 	const mockCtx = {
@@ -230,5 +231,49 @@ describe('unit-of-measure domain', () => {
 			expect(formatUnit(undefined)).toBe('');
 			expect(formatUnit('')).toBe('');
 		});
+	});
+});
+
+describe('unit aliases used by requirement groups', () => {
+	it('formats nutrition and metric aliases in Thai', () => {
+		expect(formatUnit('kcal', [], 'th')).toBe('กิโลแคลอรี');
+		expect(formatUnit('gram', [], 'th')).toBe('กรัม');
+		expect(formatUnit('mg', [], 'th')).toBe('มิลลิกรัม');
+		expect(formatUnit('mcg', [], 'th')).toBe('ไมโครกรัม');
+		expect(formatUnit('litre', [], 'th')).toBe('ลิตร');
+		expect(formatUnit('pcs', [], 'th')).toBe('ชิ้น');
+	});
+
+	it('formats the same aliases in English and short Thai', () => {
+		expect(formatUnit('gram', [], 'en')).toBe('g');
+		expect(formatUnit('litre', [], 'en')).toBe('L');
+		expect(formatUnit('kcal', [], 'en')).toBe('kcal');
+		expect(formatUnit('gram', [], 'th', true)).toBe('ก.');
+		expect(formatUnit('mg', [], 'th', true)).toBe('มก.');
+	});
+
+	it('never leaves a standard requirement-group unit unformatted', () => {
+		for (const option of STANDARD_UOM_OPTIONS) {
+			expect(formatUnit(option.value, [], 'th')).not.toBe(option.value);
+		}
+	});
+
+	it('lets the unit master override an alias', () => {
+		const master: UnitOfMeasure[] = [
+			{
+				_id: 'unit_of_measure:kcal',
+				type: 'unit_of_measure',
+				schema_v: 1,
+				code: 'kcal',
+				label_th: 'กิโลแคลอรี (ศูนย์)',
+				label_en: 'kilocalorie',
+				dimension: 'count',
+				created_at: '2026-09-24T00:00:00.000Z',
+				updated_at: '2026-09-24T00:00:00.000Z',
+				created_by: 'system'
+			} as unknown as UnitOfMeasure
+		];
+		expect(formatUnit('kcal', master, 'th')).toBe('กิโลแคลอรี (ศูนย์)');
+		expect(formatUnit('kcal', master, 'en')).toBe('kilocalorie');
 	});
 });

@@ -172,6 +172,12 @@ export const FALLBACK_UNIT_LABELS: Record<string, { th: string; th_short?: strin
 			{ th: u.label_th, th_short: u.label_th_short, en: u.label_en }
 		])
 	),
+	pcs: { th: 'ชิ้น', en: 'pcs' },
+	gram: { th: 'กรัม', th_short: 'ก.', en: 'g' },
+	litre: { th: 'ลิตร', th_short: 'ล.', en: 'L' },
+	mg: { th: 'มิลลิกรัม', th_short: 'มก.', en: 'mg' },
+	mcg: { th: 'ไมโครกรัม', th_short: 'มคก.', en: 'mcg' },
+	kcal: { th: 'กิโลแคลอรี', th_short: 'กิโลแคลอรี', en: 'kcal' },
 	// Legacy Thai labels backward-compat mapping
 	ชิ้น: { th: 'ชิ้น', en: 'pcs' },
 	หน่วย: { th: 'หน่วย', en: 'unit' },
