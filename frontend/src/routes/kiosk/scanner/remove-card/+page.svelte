@@ -3,6 +3,8 @@
 	import {
 		buildKioskContextQuery,
 		getKioskDisplayContext,
+		KioskIdleTimeout,
+		KIOSK_IDLE_TIMEOUT_MS,
 		KioskPreRegisteredCheckIn,
 		type GateInput
 	} from '$lib/features/kiosk';
@@ -19,6 +21,21 @@
 	let gate = $state<GateInput | null>(null);
 	let cardRemoved = $state(false);
 	let ready = $state(false);
+	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, returnHome);
+
+	$effect(() => {
+		if (!gate) return;
+		idleTimeout.start();
+		return () => idleTimeout.stop();
+	});
+
+	function recordActivity(): void {
+		idleTimeout.recordActivity();
+	}
+
+	function handlePrintBusyChange(busy: boolean): void {
+		idleTimeout.setPaused(busy);
+	}
 
 	function returnHome(): void {
 		window.location.assign(`/kiosk${contextQuery}`);
@@ -46,6 +63,8 @@
 
 <svelte:head><title>รายงานตัวด้วยบัตรประชาชน — SmartShelter Kiosk</title></svelte:head>
 
+<svelte:window onpointerdown={recordActivity} onkeydown={recordActivity} />
+
 <div {@attach cardEventAttachment} data-kiosk-card-ready={ready ? 'true' : undefined}>
 	<KioskPreRegisteredCheckIn
 		input={gate}
@@ -53,6 +72,7 @@
 		displayShelterCode={displayContext.shelterCode}
 		cardMode
 		{cardRemoved}
+		onprintbusychange={handlePrintBusyChange}
 		onreset={returnHome}
 	/>
 </div>

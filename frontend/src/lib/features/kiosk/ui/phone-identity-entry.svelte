@@ -10,6 +10,7 @@
 	import KioskPreRegisteredCheckIn from './kiosk-pre-registered-check-in.svelte';
 	import { formatPhoneForDisplay, normalizeKioskPhone } from '../domain/phone';
 	import type { GateInput } from '../data/kiosk-check-in.api';
+	import { KioskIdleTimeout, KIOSK_IDLE_TIMEOUT_MS } from './kiosk-idle-timeout.svelte.js';
 
 	interface Props {
 		contextQuery: string;
@@ -19,12 +20,14 @@
 	let { contextQuery, displayShelterCode }: Props = $props();
 	let phone = $state('');
 	let gate = $state<GateInput | null>(null);
-	let idleTimer: number | null = null;
-	let printBusy = $state(false);
 	const isValid = $derived(normalizeKioskPhone(phone) !== null && phone.startsWith('0'));
 	const displayPhone = $derived(formatPhoneForDisplay(phone));
 	const homeUrl = $derived(resolve(`/kiosk${contextQuery as `?${string}`}`));
 	const phoneUrl = $derived(resolve(`/kiosk/phone${contextQuery as `?${string}`}`));
+	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, () => {
+		resetEntry();
+		void goto(resolve(`/kiosk${contextQuery as `?${string}`}`));
+	});
 
 	function startLookup(): void {
 		if (!isValid || gate) return;
@@ -37,30 +40,17 @@
 		phone = '';
 	}
 
-	function resetIdleTimer(): void {
-		if (idleTimer !== null) window.clearTimeout(idleTimer);
-		idleTimer = null;
-		if (printBusy) return;
-		idleTimer = window.setTimeout(() => {
-			resetEntry();
-			void goto(homeUrl);
-		}, 60_000);
-	}
-
 	function recordActivity(): void {
-		resetIdleTimer();
+		idleTimeout.recordActivity();
 	}
 
 	function handlePrintBusyChange(busy: boolean): void {
-		printBusy = busy;
-		resetIdleTimer();
+		idleTimeout.setPaused(busy);
 	}
 
 	onMount(() => {
-		resetIdleTimer();
-		return () => {
-			if (idleTimer !== null) window.clearTimeout(idleTimer);
-		};
+		idleTimeout.start();
+		return () => idleTimeout.stop();
 	});
 </script>
 

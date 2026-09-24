@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { Html5Qrcode } from 'html5-qrcode';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import CameraOff from '@lucide/svelte/icons/camera-off';
@@ -8,6 +10,7 @@
 	import KioskCheckInWizard from './kiosk-check-in-wizard.svelte';
 	import type { GateInput } from '../data/kiosk-check-in.api';
 	import KioskPreRegisteredCheckIn from './kiosk-pre-registered-check-in.svelte';
+	import { KioskIdleTimeout, KIOSK_IDLE_TIMEOUT_MS } from './kiosk-idle-timeout.svelte.js';
 
 	interface Props {
 		contextQuery: string;
@@ -21,9 +24,27 @@
 	let cameraAttempt = $state(0);
 	let lastScanTime = 0;
 
-	const backUrl = $derived('/kiosk' + contextQuery);
+	const backUrl = $derived(resolve(`/kiosk${contextQuery as `?${string}`}`));
+	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, () => {
+		resetScan();
+		void goto(resolve(`/kiosk${contextQuery as `?${string}`}`));
+	});
 	const cameraReaderId = 'kiosk-registration-qr-reader';
 	const tokenPattern = /^evacuee:[0-7][0-9A-HJKMNP-TV-Z]{25}$/i;
+
+	$effect(() => {
+		if (!gate) return;
+		idleTimeout.start();
+		return () => idleTimeout.stop();
+	});
+
+	function recordActivity(): void {
+		idleTimeout.recordActivity();
+	}
+
+	function handlePrintBusyChange(busy: boolean): void {
+		idleTimeout.setPaused(busy);
+	}
 
 	function handleScan(decodedValue: string): void {
 		if (gate) return;
@@ -90,8 +111,16 @@
 	<title>สแกน QR — SmartShelter Kiosk</title>
 </svelte:head>
 
+<svelte:window onpointerdown={recordActivity} onkeydown={recordActivity} />
+
 {#if gate}
-	<KioskPreRegisteredCheckIn input={gate} {contextQuery} {displayShelterCode} onreset={resetScan} />
+	<KioskPreRegisteredCheckIn
+		input={gate}
+		{contextQuery}
+		{displayShelterCode}
+		onprintbusychange={handlePrintBusyChange}
+		onreset={resetScan}
+	/>
 {:else}
 	<section
 		class="qr-scan-page mx-auto flex w-full max-w-3xl flex-col gap-3"

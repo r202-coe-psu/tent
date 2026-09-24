@@ -6,6 +6,7 @@ export { default as KioskCheckInWizard } from './ui/kiosk-check-in-wizard.svelte
 export { default as KioskNumpad } from './ui/kiosk-numpad.svelte';
 export { default as KioskPhoneIdentityEntry } from './ui/phone-identity-entry.svelte';
 export { default as PhoneHouseholdPicker } from './ui/phone-household-picker.svelte';
+export { KioskIdleTimeout, KIOSK_IDLE_TIMEOUT_MS } from './ui/kiosk-idle-timeout.svelte.js';
 export type {
 	GateInput,
 	KioskHouseholdCandidate,
