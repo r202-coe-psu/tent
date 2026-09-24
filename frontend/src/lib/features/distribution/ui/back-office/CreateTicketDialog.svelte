@@ -9,6 +9,7 @@
 		getReturnableBadgeLabel,
 		getReturnableBadgeClass
 	} from '../model/catalog-eligibility';
+	import { validatePositiveQuantity, buildCreateTicketItem } from '../model/ticket-quantity';
 	import CatalogItemPicker from './CatalogItemPicker.svelte';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { toast } from 'svelte-sonner';
@@ -136,8 +137,8 @@
 			}
 			seenItemIds[item.master._id] = true;
 
-			const qtyNum = parseFloat(item.requested_qty);
-			if (isNaN(qtyNum) || qtyNum <= 0) {
+			const qtyValidation = validatePositiveQuantity(item.requested_qty);
+			if (!qtyValidation.isValid) {
 				toast.error(`จำนวนเบิกของ ${item.master.name} ต้องมากกว่า 0`);
 				return;
 			}
@@ -158,15 +159,7 @@
 			...(requisitionType === 'food' && meal ? { meal } : {}),
 			source_location: sourceLocation,
 			destination_location: destination,
-			items: selectedItems.map((item) => ({
-				item_id: item.master._id,
-				item_name: item.master.name,
-				category: item.master.category,
-				type_class: item.master.type_class,
-				returnable: item.master.returnable,
-				requested_qty: String(parseFloat(item.requested_qty)),
-				allocated_qty: String(parseFloat(item.requested_qty))
-			})),
+			items: selectedItems.map(buildCreateTicketItem),
 			...(notes.trim() ? { notes: notes.trim() } : {})
 		};
 

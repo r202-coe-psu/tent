@@ -7,6 +7,7 @@
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import { useAmendActiveTicket } from '../../application/queries';
 	import type { RequisitionTicket } from '../../domain/food-supplies';
+	import { validatePositiveQuantity } from '../model/ticket-quantity';
 
 	interface Props {
 		ticket: RequisitionTicket;
@@ -51,12 +52,12 @@
 
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
-		const qtyNum = parseFloat(addedQty);
 		if (!selectedItemId) {
 			localError = 'กรุณาเลือกรายการสินค้าที่ต้องการขอเบิกเติม';
 			return;
 		}
-		if (isNaN(qtyNum) || qtyNum <= 0) {
+		const qtyRes = validatePositiveQuantity(addedQty);
+		if (!qtyRes.isValid || !qtyRes.value) {
 			localError = 'จำนวนที่ขอเติมต้องมากกว่า 0';
 			return;
 		}
@@ -69,13 +70,13 @@
 				input: {
 					amendmentId,
 					item_id: selectedItemId,
-					added_qty: addedQty.trim(),
+					added_qty: qtyRes.value,
 					reason: reason.trim() || undefined
 				},
 				shelterCode
 			});
 
-			toast.success(`ขอเบิกเติมสินค้าเรียบร้อยแล้ว (+${addedQty.trim()})`);
+			toast.success(`ขอเบิกเติมสินค้าเรียบร้อยแล้ว (+${qtyRes.value})`);
 			// Reset stable ID for next operation
 			amendmentId = ulid();
 			handleClose();
@@ -170,8 +171,8 @@
 					</label>
 					<input
 						id="topup-qty-input"
-						type="number"
-						min="1"
+						type="text"
+						inputmode="decimal"
 						bind:value={addedQty}
 						class="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-900 shadow-2xs focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
 						disabled={amendMutation.isPending}

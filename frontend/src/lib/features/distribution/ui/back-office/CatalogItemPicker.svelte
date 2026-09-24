@@ -8,6 +8,7 @@
 		getReturnableBadgeLabel,
 		getReturnableBadgeClass
 	} from '../model/catalog-eligibility';
+	import { validatePositiveQuantity } from '../model/ticket-quantity';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import Search from '@lucide/svelte/icons/search';
 	import Package from '@lucide/svelte/icons/package';
@@ -59,9 +60,9 @@
 
 	function handleAdd(item: ItemMaster) {
 		const rawQty = itemQuantities[item._id] ?? '1';
-		const num = parseFloat(rawQty);
-		if (isNaN(num) || num <= 0) return;
-		onSelectItem(item, String(num));
+		const res = validatePositiveQuantity(rawQty);
+		if (!res.isValid || !res.value) return;
+		onSelectItem(item, res.value);
 	}
 </script>
 

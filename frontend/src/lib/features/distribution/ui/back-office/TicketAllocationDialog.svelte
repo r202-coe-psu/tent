@@ -2,6 +2,7 @@
 	import type { RequisitionTicket } from '../../domain/food-supplies';
 	import { useAllocateTicketItems } from '../../application/queries';
 	import { getReturnableBadgeLabel, getReturnableBadgeClass } from '../model/catalog-eligibility';
+	import { validatePositiveQuantity, buildAllocationItem } from '../model/ticket-quantity';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { toast } from 'svelte-sonner';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
@@ -55,8 +56,7 @@
 		for (const item of ticket.items) {
 			const raw = formQuantities[item.item_id];
 			if (!raw) return false;
-			const num = parseFloat(raw);
-			if (isNaN(num) || num <= 0) return false;
+			if (!validatePositiveQuantity(raw).isValid) return false;
 		}
 		return true;
 	});
@@ -67,10 +67,9 @@
 			return;
 		}
 
-		const allocations = ticket.items.map((item) => ({
-			item_id: item.item_id,
-			allocated_qty: String(parseFloat(formQuantities[item.item_id]))
-		}));
+		const allocations = ticket.items.map((item) =>
+			buildAllocationItem(item, formQuantities[item.item_id] ?? '')
+		);
 
 		try {
 			await allocateMutation.mutateAsync({
@@ -165,9 +164,8 @@
 								<td class="py-3 pr-4 pl-2 text-right">
 									<div class="inline-flex items-center justify-end gap-1">
 										<input
-											type="number"
-											min="0.0001"
-											step="any"
+											type="text"
+											inputmode="decimal"
 											bind:value={formQuantities[item.item_id]}
 											aria-label="ยอดจัดสรร {item.item_name}"
 											class="h-9 w-24 rounded-lg border border-slate-200 bg-white px-2.5 text-right text-xs font-bold text-slate-900 tabular-nums shadow-2xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none"

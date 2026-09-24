@@ -6,6 +6,7 @@
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import Loader from '@lucide/svelte/icons/loader';
 	import { qtyGte } from '$lib/utils/qty';
+	import { validatePositiveQuantity } from '../model/ticket-quantity';
 	import {
 		resolveAuthenticatedAuthorContext,
 		useDistributionLogs,
@@ -91,9 +92,9 @@
 	});
 
 	const isQtyValid = $derived.by(() => {
-		const parsed = parseFloat(qtyInput);
-		if (isNaN(parsed) || parsed <= 0) return false;
-		return qtyGte(capacitySummary.inHandQty, qtyInput.trim());
+		const res = validatePositiveQuantity(qtyInput);
+		if (!res.isValid || !res.value) return false;
+		return qtyGte(capacitySummary.inHandQty, res.value);
 	});
 
 	async function handleSubmit(e: Event) {
@@ -117,7 +118,8 @@
 			localSubmitError = recipientValidation.errorMsg ?? 'ผู้รับไม่ถูกต้องสำหรับประเภทสิ่งของนี้';
 			return;
 		}
-		if (!isQtyValid) {
+		const qtyRes = validatePositiveQuantity(qtyInput);
+		if (!qtyRes.isValid || !qtyRes.value || !isQtyValid) {
 			localSubmitError = 'จำนวนที่ระบุเกินยอดคงเหลือในมือ';
 			return;
 		}
@@ -127,7 +129,7 @@
 				ticketId: ticket._id,
 				input: {
 					item_id: selectedItem.item_id,
-					qty: qtyInput.trim(),
+					qty: qtyRes.value,
 					recipient_type: recipientSelection.recipientType,
 					recipient_id: recipientSelection.recipientId,
 					household_id:
@@ -141,7 +143,7 @@
 
 			const modeLabel = isReturnableItem ? 'ยืมสิ่งของ' : 'แจกจ่ายพัสดุ';
 			toast.success(
-				`บันทึก${modeLabel}สำเร็จ: ${selectedItem.item_name} จำนวน ${qtyInput.trim()} หน่วย`
+				`บันทึก${modeLabel}สำเร็จ: ${selectedItem.item_name} จำนวน ${qtyRes.value} หน่วย`
 			);
 
 			// Reset form state
@@ -278,9 +280,8 @@
 			</label>
 			<input
 				id="supplies-qty-input"
-				type="number"
-				min="1"
-				max={capacitySummary.inHandQty}
+				type="text"
+				inputmode="decimal"
 				bind:value={qtyInput}
 				class="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-900 shadow-2xs focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
 				disabled={recordSuppliesMutation.isPending || capacitySummary.isExhausted}

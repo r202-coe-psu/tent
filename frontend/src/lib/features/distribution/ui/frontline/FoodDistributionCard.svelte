@@ -7,6 +7,7 @@
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import Loader from '@lucide/svelte/icons/loader';
 	import { qtyGte } from '$lib/utils/qty';
+	import { validatePositiveQuantity } from '../model/ticket-quantity';
 	import {
 		resolveAuthenticatedAuthorContext,
 		useDistributionLogs,
@@ -110,9 +111,9 @@
 	};
 
 	const isQtyValid = $derived.by(() => {
-		const parsed = parseFloat(qtyInput);
-		if (isNaN(parsed) || parsed <= 0) return false;
-		return qtyGte(capacitySummary.inHandQty, qtyInput.trim());
+		const res = validatePositiveQuantity(qtyInput);
+		if (!res.isValid || !res.value) return false;
+		return qtyGte(capacitySummary.inHandQty, res.value);
 	});
 
 	function handleSubmitClick(e: Event) {
@@ -149,6 +150,11 @@
 
 	async function executeHandover(isOverride: boolean, overrideReason?: string) {
 		if (!selectedItem || !recipientSelection) return;
+		const qtyRes = validatePositiveQuantity(qtyInput);
+		if (!qtyRes.isValid || !qtyRes.value || !isQtyValid) {
+			localSubmitError = 'จำนวนที่ระบุเกินยอดคงเหลือในมือ';
+			return;
+		}
 
 		localSubmitError = null;
 		try {
@@ -156,7 +162,7 @@
 				ticketId: ticket._id,
 				input: {
 					item_id: selectedItem.item_id,
-					qty: qtyInput.trim(),
+					qty: qtyRes.value,
 					recipient_type: recipientSelection.recipientType,
 					recipient_id: recipientSelection.recipientId,
 					household_id:
@@ -171,7 +177,7 @@
 				shelterCode
 			});
 
-			toast.success(`บันทึกแจกอาหารสำเร็จ: ${selectedItem.item_name} จำนวน ${qtyInput.trim()} ชุด`);
+			toast.success(`บันทึกแจกอาหารสำเร็จ: ${selectedItem.item_name} จำนวน ${qtyRes.value} ชุด`);
 			// Reset form state
 			warningModalOpen = false;
 			qtyInput = '1';
@@ -304,9 +310,8 @@
 			</label>
 			<input
 				id="food-qty-input"
-				type="number"
-				min="1"
-				max={capacitySummary.inHandQty}
+				type="text"
+				inputmode="decimal"
 				bind:value={qtyInput}
 				class="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-900 shadow-2xs focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none"
 				disabled={recordFoodMutation.isPending || capacitySummary.isExhausted}
