@@ -104,6 +104,11 @@ export const registerPhoneLimiter = new RateLimiter(60000, 3);
 // Lookup is a read but also an enumeration surface — hold it tighter.
 export const registerLookupIpLimiter = new RateLimiter(60000, 10);
 
+/** Kiosk phone lookup — per scanner device (registry_id), FR-KPC-59. */
+export const kioskPhoneDeviceLimiter = new RateLimiter(60_000, 10);
+/** Kiosk phone lookup — per normalized phone across devices. */
+export const kioskPhoneNumberLimiter = new RateLimiter(60_000, 5);
+
 // Public volunteer board (CR-092 / T-28). Its own buckets so a donation drive and a
 // volunteer callout cannot starve each other.
 /**
