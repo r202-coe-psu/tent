@@ -1,11 +1,12 @@
 ---
-id: draft
+id: CR-130
 title: Food Sphere Standard target_segment ตาม 7 กลุ่มอายุ Dashboard (schema_v 1 → 2) + ซ่อนตัวแปร SOP ratio ในหน้าจอเหลือ 9 คีย์ (แบบ A)
-status: proposed
+status: approved
 date: 2026-09-17
+updated: 2026-09-25
 requested_by: ทีมพัฒนา SOP Ratios & Demographics Dashboard; Kontuch Suksawat (ส่วน B — requirement 2026-09-16 "สิ่งที่ตัดออกในตัวแปรมาตรฐาน Sphere")
-decision_date: 2026-09-18 (PO decisions — ดู Decision Log)
-decided_by: เจ้าของโครงการ
+decision_date: 2026-09-18 (PO decisions); อนุมัติอย่างเป็นทางการ 2026-09-25
+decided_by: จาคี (Project Owner) — อนุมัติ 2026-09-25
 layer: volatile
 affects:
   - docs/data/schema.md §4.6 (`food_sphere_standard`) — enum `target_segment`, ตัวอย่าง `_id`, schema_v 1 → 2
@@ -24,7 +25,7 @@ affects:
 >
 > โค้ดของทั้งสองส่วนอยู่บน **PR #285** (`chore/sop-parameters-sphere-cleanup`) ยังไม่ merge เข้า `develop` — เอกสาร CR นี้กับ PR #285 ต้องอนุมัติและ merge ไปด้วยกัน
 
-# Draft — Food Sphere Standard target_segment Alignment with Demographics Dashboard
+# CR-130 — Food Sphere Standard target_segment Alignment with Demographics Dashboard
 
 ## สรุป (TL;DR)
 
@@ -234,3 +235,5 @@ affects:
   4. **แบบ B (ตัด 20 → 9 ออกจาก schema จริง) เลื่อน** ไปรอบ refactor หลังคุย stakeholder และยืนยันว่าไม่ใช้คีย์ที่ตัดแล้ว · B-D1…B-D5 ไม่ต้องเคาะในรอบนี้
   5. คง commit ของแบบ A บน PR #285 ไว้ (ไม่ตัดออกตามข้อเสนอเดิมของแบบ B)
   6. รันเลข CR จาก `docs/changes/_index.md` ตอน approve และ merge เอกสารกับ PR #285 ไปพร้อมกัน
+- 2026-09-25 — **เจ้าของโครงการ (จาคี) อนุมัติเอกสารและให้รันเลขเป็น CR-130 อย่างเป็นทางการ (status: approved)**
+
