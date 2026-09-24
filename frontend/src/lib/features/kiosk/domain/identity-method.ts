@@ -7,11 +7,12 @@ export interface IdentityMethodDefinition {
 	description?: string;
 	buttonLabel: string;
 	enabled: boolean;
-	href?: typeof KIOSK_QR_PATH | typeof KIOSK_CARD_PATH;
+	href?: typeof KIOSK_QR_PATH | typeof KIOSK_CARD_PATH | typeof KIOSK_PHONE_PATH;
 }
 
 export const KIOSK_QR_PATH = '/kiosk/qr';
 export const KIOSK_CARD_PATH = '/kiosk/scanner/waiting';
+export const KIOSK_PHONE_PATH = '/kiosk/phone';
 
 export const IDENTITY_METHODS: readonly IdentityMethodDefinition[] = [
 	{
@@ -36,8 +37,10 @@ export const IDENTITY_METHODS: readonly IdentityMethodDefinition[] = [
 		id: 'phone',
 		icon: 'phone',
 		title: 'เบอร์โทรศัพท์',
-		buttonLabel: 'ยังไม่เปิดใช้งาน',
-		enabled: false
+		description: 'กรอกเบอร์ที่ใช้ลงทะเบียน',
+		buttonLabel: 'กรอกเบอร์',
+		enabled: true,
+		href: KIOSK_PHONE_PATH
 	},
 	{
 		id: 'thaid',
