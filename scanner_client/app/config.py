@@ -71,10 +71,6 @@ def _is_placeholder(value: str) -> bool:
     )
 
 
-def _is_loopback(hostname: str | None) -> bool:
-    return (hostname or "").strip("[]").lower() in {"localhost", "127.0.0.1", "::1"}
-
-
 def validate_config(config: Mapping[str, Any]) -> dict[str, Any]:
     """Validate required scanner credentials before browser or reader startup."""
 
@@ -90,13 +86,10 @@ def validate_config(config: Mapping[str, Any]) -> dict[str, Any]:
         raise ScannerConfigError("DEVICE_SECRET is missing or still uses a placeholder")
 
     parsed = urlparse(base_url)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc or not parsed.hostname:
         raise ScannerConfigError("TENT_BASE_URL must be an absolute HTTP(S) URL")
     if _is_placeholder(parsed.hostname or "") or "<" in (parsed.hostname or ""):
         raise ScannerConfigError("TENT_BASE_URL is still a placeholder")
-    if parsed.scheme != "https" and not _is_loopback(parsed.hostname):
-        raise ScannerConfigError("TENT_BASE_URL must use HTTPS outside loopback development")
-
     validated = dict(config)
     validated.update(
         {

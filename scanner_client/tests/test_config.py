@@ -41,13 +41,16 @@ class ScannerConfigTests(unittest.TestCase):
             with self.assertRaises(ScannerConfigError):
                 validate_config(config)
 
-    def test_non_loopback_http_is_rejected_but_loopback_is_allowed(self):
+    def test_http_is_allowed_for_non_loopback_and_loopback_hosts(self):
         base = {"DEVICE_ID": "kiosk-01", "DEVICE_SECRET": "real-secret"}
-        with self.assertRaises(ScannerConfigError):
-            validate_config({**base, "TENT_BASE_URL": "http://tent.example.go.th"})
-
-        config = validate_config({**base, "TENT_BASE_URL": "http://127.0.0.1:5173/"})
-        self.assertEqual(config["TENT_BASE_URL"], "http://127.0.0.1:5173")
+        for url in (
+            "http://tent.example.go.th",
+            "http://172.30.92.241:5173/",
+            "http://127.0.0.1:5173/",
+        ):
+            with self.subTest(url=url):
+                config = validate_config({**base, "TENT_BASE_URL": url})
+                self.assertEqual(config["TENT_BASE_URL"], url.rstrip("/"))
 
 
 if __name__ == "__main__":
