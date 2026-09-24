@@ -234,7 +234,11 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 		setHousehold([later, laterMember], later);
 		const earlier = evacuee(0, { first_name: 'ต้น', last_name: 'นามสกุลยาว' });
 		const earlierMember = evacuee(1, { phone: null });
-		setHousehold([earlier, earlierMember], earlier);
+		const earlierStaffMember = evacuee(5, {
+			phone: null,
+			registered_via: 'station_1'
+		});
+		setHousehold([earlier, earlierMember, earlierStaffMember], earlier);
 
 		expect(await lookupPreRegisteredEvacuee(shelterCode, { source: 'phone', phone })).toEqual({
 			kind: 'candidates',
@@ -243,7 +247,7 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 				{
 					primary_evacuee_id: earlier._id,
 					contact_display: 'ต้น นา****ว',
-					member_count: 2,
+					member_count: 3,
 					pending_count: 2
 				},
 				{
@@ -435,7 +439,7 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 		expect(result).toMatchObject({ kind: 'household', primary_evacuee_id: legacy._id });
 	});
 
-	it('keeps card and QR household names unmasked', async () => {
+	it('masks card and QR household names', async () => {
 		const person = evacuee(0, { last_name: 'ใจดี' });
 		evacuees = [person];
 
@@ -447,10 +451,57 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 			shelterCode,
 			kioskGateInputSchema.parse({ source: 'qr', token: person._id })
 		);
-		expect(card).toMatchObject({ kind: 'household', name_masked: false });
-		expect(qr).toMatchObject({ kind: 'household', name_masked: false });
-		if (card.kind === 'household') expect(card.members[0].last_name).toBe('ใจดี');
-		if (qr.kind === 'household') expect(qr.members[0].last_name).toBe('ใจดี');
+		expect(card).toMatchObject({ kind: 'household', name_masked: true });
+		expect(qr).toMatchObject({ kind: 'household', name_masked: true });
+		if (card.kind === 'household') expect(card.members[0].last_name).toBe('ใ****');
+		if (qr.kind === 'household') expect(qr.members[0].last_name).toBe('ใ****');
+	});
+
+	it('lists eligible staff-created household members without making them selectable', async () => {
+		const primary = evacuee(0);
+		const staffMember = evacuee(1, {
+			registered_via: 'station_1',
+			person_id: { number: '9876543210987' }
+		});
+		const cancelled = evacuee(2, {
+			current_stay: { status: 'cancelled' },
+			person_id: { number: '9876543210988' }
+		});
+		const optedOut = evacuee(3, {
+			privacy: { search_excluded: true },
+			person_id: { number: '9876543210989' }
+		});
+		setHousehold([primary, staffMember, cancelled, optedOut]);
+
+		const result = await lookupPreRegisteredEvacuee(shelterCode, {
+			source: 'qr',
+			token: primary._id
+		});
+
+		expect(result).toMatchObject({ kind: 'household', name_masked: true });
+		if (result.kind !== 'household') throw new Error('Expected a household lookup result');
+		expect(result.members.map((member) => member.evacuee_id)).toEqual([
+			primary._id,
+			staffMember._id
+		]);
+		expect(result.members[1]).toMatchObject({ selectable: false, status: 'pre_registered' });
+		const householdQuery = mockAdminFetch.mock.calls
+			.filter(([path]) => path.endsWith('/_find'))
+			.map(([, init]) => JSON.parse(String(init?.body)) as { selector: Record<string, unknown> })
+			.find(({ selector }) => selector.household_id === primary.household_id);
+		expect(householdQuery?.selector).not.toHaveProperty('registered_via');
+	});
+
+	it('returns not_found when the scanned primary opted out of search', async () => {
+		const person = evacuee(0, { privacy: { search_excluded: true } });
+		evacuees = [person];
+
+		expect(
+			await lookupPreRegisteredEvacuee(shelterCode, {
+				source: 'qr',
+				token: person._id
+			})
+		).toEqual({ kind: 'not_found' });
 	});
 
 	it('keeps ambiguous card lookup as not_found', async () => {

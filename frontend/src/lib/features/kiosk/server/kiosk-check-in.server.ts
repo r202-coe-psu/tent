@@ -2,10 +2,9 @@ import { dev } from '$app/environment';
 import { z } from 'zod';
 import { now } from '$lib/db/model';
 import { deriveHouseholdStatus, stayStatusSchema } from '$lib/features/people/domain/people';
-import { isAlreadyCheckedInStatus } from '../domain/check-in-status';
+import { isAlreadyCheckedInStatus, isListedHouseholdMember } from '../domain/check-in-status';
 import { normalizeKioskPhone, phoneVariants } from '../domain/phone';
 import {
-	EXCLUDE_SEARCH_OPT_OUT,
 	groupPhoneMatches,
 	KIOSK_PHONE_MAX_CANDIDATES,
 	isPhoneMatchEligible
@@ -113,13 +112,13 @@ function responseStatus(error: unknown): number | null {
 function toSummary(
 	doc: EvacueeDoc,
 	primaryId: string,
-	options: { maskNames: boolean; matchedPhoneIds?: ReadonlySet<string> }
+	options: { matchedPhoneIds?: ReadonlySet<string> } = {}
 ): KioskEvacueeSummary {
 	const status = doc.current_stay?.status ?? 'unknown';
 	return {
 		evacuee_id: doc._id,
 		first_name: doc.first_name ?? '',
-		last_name: options.maskNames ? maskLastName(doc.last_name) : (doc.last_name ?? ''),
+		last_name: maskLastName(doc.last_name),
 		gender: doc.gender ?? null,
 		age: typeof doc.age === 'number' ? doc.age : null,
 		status,
@@ -143,8 +142,7 @@ async function expandHousehold(
 			selector: {
 				type: 'evacuee',
 				household_id: primary.household_id,
-				shelter_code: shelterCode,
-				registered_via: 'web'
+				shelter_code: shelterCode
 			},
 			limit: 100
 		})
@@ -154,7 +152,7 @@ async function expandHousehold(
 			doc._id !== primary._id &&
 			doc.shelter_code === shelterCode &&
 			doc.household_id === primary.household_id &&
-			doc.registered_via === 'web'
+			isListedHouseholdMember(doc)
 		) {
 			members.push(doc);
 		}
@@ -303,8 +301,7 @@ async function lookupByPhone(
 							selector: {
 								type: 'evacuee',
 								household_id: householdId,
-								shelter_code: shelterCode,
-								registered_via: 'web'
+								shelter_code: shelterCode
 							},
 							limit: 100
 						})
@@ -316,15 +313,11 @@ async function lookupByPhone(
 				const householdMembers = candidate.householdId
 					? expanded.filter(
 							(member) =>
-								member.household_id === candidate.householdId &&
-								member.shelter_code === shelterCode &&
-								member.registered_via === 'web'
+								member.household_id === candidate.householdId && member.shelter_code === shelterCode
 						)
 					: [];
 				const members = householdMembers.length > 0 ? householdMembers : [candidate.primary];
-				const visibleMembers = EXCLUDE_SEARCH_OPT_OUT
-					? members.filter((member) => member.privacy?.search_excluded !== true)
-					: members;
+				const visibleMembers = members.filter(isListedHouseholdMember);
 				return {
 					primary_evacuee_id: candidate.primary._id,
 					contact_display: [candidate.primary.first_name, maskLastName(candidate.primary.last_name)]
@@ -346,7 +339,7 @@ async function lookupByPhone(
 	const primary = await getById(dbName, group.primary._id);
 	if (!primary || !isPhoneMatchEligible(primary, shelterCode)) return { kind: 'not_found' };
 	const members = (await expandHousehold(dbName, primary, shelterCode)).filter(
-		(member) => !EXCLUDE_SEARCH_OPT_OUT || member.privacy?.search_excluded !== true
+		isListedHouseholdMember
 	);
 	const matchedPhoneIds = new Set(group.matched.map((matched) => matched._id));
 	return {
@@ -354,9 +347,7 @@ async function lookupByPhone(
 		name_masked: true,
 		shelter_code: shelterCode,
 		primary_evacuee_id: primary._id,
-		members: members.map((member) =>
-			toSummary(member, primary._id, { maskNames: true, matchedPhoneIds })
-		)
+		members: members.map((member) => toSummary(member, primary._id, { matchedPhoneIds }))
 	};
 }
 
@@ -394,6 +385,7 @@ export async function lookupPreRegisteredEvacuee(
 		(doc) =>
 			doc.shelter_code === shelterCode &&
 			doc.registered_via === 'web' &&
+			doc.privacy?.search_excluded !== true &&
 			(doc.current_stay?.status === 'pre_registered' ||
 				isAlreadyCheckedInStatus(doc.current_stay?.status))
 	);
@@ -410,10 +402,10 @@ export async function lookupPreRegisteredEvacuee(
 	const members = await expandHousehold(dbName, primary, shelterCode);
 	return {
 		kind: 'household',
-		name_masked: false,
+		name_masked: true,
 		shelter_code: shelterCode,
 		primary_evacuee_id: primary._id,
-		members: members.map((member) => toSummary(member, primary._id, { maskNames: false }))
+		members: members.filter(isListedHouseholdMember).map((member) => toSummary(member, primary._id))
 	};
 }
 

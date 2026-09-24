@@ -11,7 +11,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import KioskCheckInWizard from './kiosk-check-in-wizard.svelte';
 	import PhoneHouseholdPicker from './phone-household-picker.svelte';
-	import { isAlreadyCheckedInStatus } from '../domain/check-in-status';
+	import { initialSelection, toExistingReportResults } from '../domain/household-selection';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import {
 		checkInSelectedMembers,
@@ -142,37 +142,13 @@
 				return;
 			}
 			lookup = found;
-			if (gate.source === 'phone') {
-				const selectableMembers = found.members.filter((member) => member.selectable);
-				if (selectableMembers.length === 0) {
-					results = found.members
-						.filter((member) => isAlreadyCheckedInStatus(member.status))
-						.map((member) => ({
-							evacuee_id: member.evacuee_id,
-							status: 'already_checked_in' as const,
-							stay_status: member.status,
-							...(member.status === 'arriving' ? { qr_payload: member.evacuee_id } : {})
-						}));
-					return;
-				}
-				selectedIds = selectableMembers.map((member) => member.evacuee_id);
+			const selectableMembers = found.members.filter((member) => member.selectable);
+			if (selectableMembers.length === 0) {
+				results = toExistingReportResults(found.members);
+				await prepareQrImages(results);
 				return;
 			}
-			const scannedMember = found.members.find((member) => member.is_primary);
-			if (scannedMember && isAlreadyCheckedInStatus(scannedMember.status)) {
-				results = [
-					{
-						evacuee_id: scannedMember.evacuee_id,
-						status: 'already_checked_in',
-						stay_status: scannedMember.status,
-						...(scannedMember.status === 'arriving' ? { qr_payload: scannedMember.evacuee_id } : {})
-					}
-				];
-				return;
-			}
-			selectedIds = found.members
-				.filter((member) => member.is_primary && member.selectable)
-				.map((member) => member.evacuee_id);
+			selectedIds = initialSelection(gate.source, selectableMembers);
 		} catch (error) {
 			if (generation !== lookupGeneration) return;
 			if (error instanceof KioskRequestError) {
@@ -475,13 +451,17 @@
 							? ''
 							: 'bg-slate-50'}"
 					>
-						<Checkbox
-							checked={selectedIds.includes(member.evacuee_id)}
-							onCheckedChange={(checked) => toggleMember(member, checked)}
-							disabled={!member.selectable || isSubmitting || (cardMode && !cardRemoved)}
-							aria-labelledby={`member-name-${member.evacuee_id}`}
-							class="size-12"
-						/>
+						{#if member.selectable}
+							<Checkbox
+								checked={selectedIds.includes(member.evacuee_id)}
+								onCheckedChange={(checked) => toggleMember(member, checked)}
+								disabled={isSubmitting || (cardMode && !cardRemoved)}
+								aria-labelledby={`member-name-${member.evacuee_id}`}
+								class="size-12"
+							/>
+						{:else}
+							<span class="size-12 shrink-0" aria-hidden="true"></span>
+						{/if}
 						<div class="min-w-0 flex-1">
 							<p
 								id={`member-name-${member.evacuee_id}`}
@@ -502,7 +482,7 @@
 				{/each}
 			</div>
 
-			{#if selectedMembers.length > 0 && selectedMembers.length < lookup.members.length}
+			{#if selectedMembers.length > 0 && selectedMembers.length < lookup.members.filter((member) => member.selectable).length}
 				<p class="mt-4 text-sm leading-relaxed text-slate-600">
 					เลือก {selectedMembers.length} คน · รายงานตัวแล้วเลือกซ้ำไม่ได้
 				</p>
