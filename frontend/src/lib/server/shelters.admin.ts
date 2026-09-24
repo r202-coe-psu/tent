@@ -17,6 +17,7 @@ import { buildSecurityMutationLock, type SecurityMutationLock } from './security
 import {
 	buildValidateDocUpdate,
 	REFERRAL_MANGO_INDEXES,
+	KIOSK_LOOKUP_MANGO_INDEXES,
 	TRANSFER_LEDGER_MANGO_INDEXES
 } from './shelter-access-design';
 import {
@@ -35,6 +36,7 @@ import {
 import { deployShelterViewsFn } from '$lib/features/shelters/server/deploy';
 
 export { REFERRAL_MANGO_INDEXES, TRANSFER_LEDGER_MANGO_INDEXES } from './shelter-access-design';
+export { KIOSK_LOOKUP_MANGO_INDEXES } from './shelter-access-design';
 
 export interface ViewResult {
 	rows: { key: string; value: number }[];
@@ -459,6 +461,20 @@ export async function redeployShelterAccessDesign(
  */
 export async function deployReferralMangoIndexes(db: string): Promise<void> {
 	for (const def of REFERRAL_MANGO_INDEXES) {
+		const res = await adminRaw(`/${db}/_index`, 'POST', def);
+		if (res.status >= 400) {
+			const detail = (res.data as { reason?: string; error?: string } | null) ?? {};
+			throw new ServiceError(
+				'INTERNAL',
+				`Mango index ${def.name} deploy failed (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+			);
+		}
+	}
+}
+
+/** Idempotent deploy of the kiosk lookup Mango indexes on a shelter DB. */
+export async function deployKioskLookupMangoIndexes(db: string): Promise<void> {
+	for (const def of KIOSK_LOOKUP_MANGO_INDEXES) {
 		const res = await adminRaw(`/${db}/_index`, 'POST', def);
 		if (res.status >= 400) {
 			const detail = (res.data as { reason?: string; error?: string } | null) ?? {};

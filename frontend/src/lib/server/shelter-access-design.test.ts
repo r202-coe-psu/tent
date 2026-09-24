@@ -1,7 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { SOP_RATIO_KEYS, SOP_RATIO_KIND } from '$lib/features/sop-ratios/server';
 import { DAILY_SOP_QUESTIONS } from '$lib/features/daily-sop';
-import { buildValidateDocUpdate } from './shelter-access-design';
+import {
+	buildValidateDocUpdate,
+	KIOSK_LOOKUP_MANGO_INDEXES,
+	REFERRAL_MANGO_INDEXES
+} from './shelter-access-design';
 
 type UserCtx = { name: string; roles: string[] };
 type Doc = Record<string, unknown>;
@@ -142,6 +146,38 @@ const simulationResult = (shelterCode = 'SH001') => ({
 });
 
 describe('buildValidateDocUpdate', () => {
+	it('defines all kiosk lookup indexes without shelter_code or a schema version bump', () => {
+		expect(KIOSK_LOOKUP_MANGO_INDEXES).toEqual([
+			{
+				index: { fields: ['type', 'phone'] },
+				name: 'evacuee-type-phone-idx',
+				type: 'json'
+			},
+			{
+				index: { fields: ['type', 'person_id.number'] },
+				name: 'evacuee-type-person-id-idx',
+				type: 'json'
+			},
+			{
+				index: { fields: ['type', 'household_id'] },
+				name: 'evacuee-type-household-idx',
+				type: 'json'
+			}
+		]);
+		for (const definition of KIOSK_LOOKUP_MANGO_INDEXES) {
+			expect(definition.index.fields[0]).toBe('type');
+			expect(definition.index.fields).not.toContain('shelter_code');
+		}
+		const referralNames = REFERRAL_MANGO_INDEXES.map(({ name }) => name);
+		expect(KIOSK_LOOKUP_MANGO_INDEXES.every(({ name }) => referralNames.includes(name))).toBe(
+			false
+		);
+	});
+
+	it('keeps referral indexes separate and unchanged', () => {
+		expect(REFERRAL_MANGO_INDEXES).toHaveLength(7);
+	});
+
 	it('includes audit in the allowed doc type whitelist', () => {
 		const validateFn = buildValidateDocUpdate('SH001');
 		expect(validateFn).toContain("'audit'");
