@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-09-24 # Approved CR-135 partner-client name/module preset; CR-136 partner-client secret reveal/edit/delete
+updated: 2026-09-25 # Approved CR-137 shrink master_data types (10→4); zone/community free text; fixed pet enum
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 
@@ -149,3 +149,4 @@ note: ดัชนี Change Record ทุกตัว — กติกาอย
 | [CR-134](CR-134-bulk-return-claim-recovery.md) | ระบบบันทึกการเคลียร์ของยืมแบบกองรวมและกลไกฟื้นฟูหลังขัดข้อง (Bulk Return Claim & Crash Recovery) — bulk_return_claim (schema_v 1) + bulk_return_pool (schema_v 1 → 2) claim_ids | proposed | stable | 2026-09-17 (proposed) | docs/data/schema.md §2.31/§2.32, CR-121, frontend/src/lib/features/distribution/**, server/shelter-access-design.ts |
 | [CR-135](CR-135-partner-client-name-module-preset.md) | Partner OAuth2 clients — ตั้ง name เอง (unique) + description + module radio preset scope + generated `tpc_` client_id; ซ่อนแท็บ External API Keys ชั่วคราว | approved | volatile | 2026-09-24 | docs/data/schema.md §9.6, packages/tent-model third_party_client, backend thirdparty_clients_admin, frontend third-party-clients feature |
 | [CR-136](CR-136-partner-client-secret-reveal-edit-delete.md) | Partner OAuth2 clients — password-gated secret reveal (HMAC derivation), editable scopes, soft-delete after revoke, regenerate secret | approved | stable | 2026-09-24 | docs/data/schema.md §9.6 (+`secret_issued_at`, +`deleted_at`), backend secret_derivation / thirdparty_clients_admin, frontend third-party-clients + BFF secret/regenerate routes |
+| [CR-137](CR-137-shrink-master-data-types-zone-community-text.md) | Shrink master_data enum (10→4): drop health_condition, dietary_restrictions, pet_types, house_damage, municipality_zone, community; zone/community free text; pets dog|cat|other; remove public pet-types API | approved | volatile | 2026-09-25 | docs/data/schema.md §1.3/§3.1/§3.3, docs/master-data/README.md, master-data domain+seed, registration/household config UI, household+shelter forms, public pet-types BFF |

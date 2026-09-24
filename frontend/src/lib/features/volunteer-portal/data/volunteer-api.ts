@@ -275,5 +275,17 @@ export async function fetchVolunteerSkills(shelterCode?: string): Promise<Volunt
 	if (!response.ok || !data) {
 		throw apiError(data, response.status, 'ไม่สามารถโหลดรายการทักษะได้');
 	}
-	return (data as { volunteerSkills?: VolunteerSkillOption[] }).volunteerSkills ?? [];
+	const raw =
+		(
+			data as {
+				volunteerSkills?: Array<VolunteerSkillOption & { label_th?: string; label_en?: string }>;
+			}
+		).volunteerSkills ?? [];
+	return raw.map((item) => ({
+		code: item.code,
+		label: item.label?.trim() || item.label_th?.trim() || item.label_en?.trim() || item.code,
+		category: item.category,
+		description: item.description,
+		is_default: item.is_default
+	}));
 }

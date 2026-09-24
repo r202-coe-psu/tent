@@ -187,27 +187,6 @@ export async function uploadShelterBookingPhoto(
 	return (await res.json()) as ShelterBookingPhotoUploadResponse;
 }
 
-export interface PetTypeOption {
-	code: string;
-	label: string;
-	is_default: boolean;
-}
-
-/**
- * Pet species offered for one shelter (`/api/public/v1/config/pet-types`) —
- * global + shelter-local `pet_types` master data merged server-side. Degrades
- * to an empty list on any failure, same as the vulnerable-groups reference
- * data: a slow/broken lookup must not block the rest of the booking form.
- */
-export async function fetchPetTypes(shelterCode: string): Promise<PetTypeOption[]> {
-	const res = await fetch(
-		`/api/public/v1/config/pet-types?shelter=${encodeURIComponent(shelterCode)}`
-	);
-	if (!res.ok) return [];
-	const body = (await res.json().catch(() => null)) as { petTypes?: PetTypeOption[] } | null;
-	return body?.petTypes ?? [];
-}
-
 export interface PublicSubdistrict {
 	subdistrict: string;
 	zipcode: number;

@@ -45,7 +45,7 @@ describe('unseed script functions', () => {
 				rows: [
 					{ id: 'master_data:vulnerable_group', value: { rev: '1-a' } },
 					{ id: 'master_data:shelter_type', value: { rev: '2-b' } },
-					{ id: 'master_data:pet_types:SH001', value: { rev: '1-c' } },
+					{ id: 'master_data:housing_type:SH001', value: { rev: '1-c' } },
 					{ id: 'other_doc', value: { rev: '1-d' } }
 				]
 			}
@@ -55,7 +55,7 @@ describe('unseed script functions', () => {
 		expect(docs).toEqual([
 			{ id: 'master_data:vulnerable_group', rev: '1-a' },
 			{ id: 'master_data:shelter_type', rev: '2-b' },
-			{ id: 'master_data:pet_types:SH001', rev: '1-c' }
+			{ id: 'master_data:housing_type:SH001', rev: '1-c' }
 		]);
 	});
 
@@ -174,7 +174,7 @@ describe('unseed script functions', () => {
 				if (path.includes('startkey=%22master_data%22')) {
 					return {
 						status: 200,
-						data: { rows: [{ id: 'master_data:pet_types', value: { rev: '1-a' } }] }
+						data: { rows: [{ id: 'master_data:housing_type', value: { rev: '1-a' } }] }
 					};
 				}
 				if (path.includes('startkey=%22config%3A%22')) {
@@ -194,12 +194,12 @@ describe('unseed script functions', () => {
 		});
 
 		const result = await unseedMaster({ confirm: true, req: mockReq });
-		expect(result.docs).toEqual(['master_data:pet_types', 'config:app']);
+		expect(result.docs).toEqual(['master_data:housing_type', 'config:app']);
 		expect(result.dbs).toEqual(['catalog']);
 
 		expect(mockReq).toHaveBeenCalledWith('POST', '/registry/_bulk_docs', {
 			docs: [
-				{ _id: 'master_data:pet_types', _rev: '1-a', _deleted: true },
+				{ _id: 'master_data:housing_type', _rev: '1-a', _deleted: true },
 				{ _id: 'config:app', _rev: '1-cfg', _deleted: true }
 			]
 		});

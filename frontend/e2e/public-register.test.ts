@@ -29,15 +29,8 @@ const SHELTERS = {
 
 const GROUPS = {
 	groups: [
-		{ code: 'vg_elderly', label: 'ผู้สูงอายุ' },
-		{ code: 'vg_bedridden', label: 'ผู้ป่วยติดเตียง' }
-	]
-};
-
-const PET_TYPES = {
-	petTypes: [
-		{ code: 'dog', label: 'สุนัข', is_default: true },
-		{ code: 'cat', label: 'แมว', is_default: false }
+		{ code: 'vg_elderly', label_th: 'ผู้สูงอายุ', label_en: 'Elderly' },
+		{ code: 'vg_bedridden', label_th: 'ผู้ป่วยติดเตียง', label_en: 'Bedridden' }
 	]
 };
 
@@ -71,9 +64,6 @@ async function mockReferenceData(page: Page) {
 	);
 	await page.route('**/api/public/v1/config/vulnerable-groups', (route) =>
 		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(GROUPS) })
-	);
-	await page.route('**/api/public/v1/config/pet-types**', (route) =>
-		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(PET_TYPES) })
 	);
 	await page.route('**/api/public/v1/config/shelter-policy**', (route) =>
 		route.fulfill({

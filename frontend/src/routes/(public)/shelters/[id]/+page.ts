@@ -1,5 +1,6 @@
 import type { PageLoad } from './$types';
 import { fetchShelterTypes } from '$lib/features/public-portal';
+import { formatMasterLabel } from '$lib/features/master-data';
 
 export const load: PageLoad = async ({ fetch, params }) => {
 	try {
@@ -14,7 +15,7 @@ export const load: PageLoad = async ({ fetch, params }) => {
 			if (shelter && shelter.admin_type) {
 				const typeMap = new Map<string, string>();
 				for (const t of shelterTypes) {
-					typeMap.set(t.code, t.label);
+					typeMap.set(t.code, formatMasterLabel(t, 'th'));
 				}
 				shelter.admin_type = typeMap.get(shelter.admin_type) || shelter.admin_type;
 			}
