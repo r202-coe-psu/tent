@@ -12,6 +12,7 @@
 		useAbortAbandonedReturnReservation
 	} from '../../application/queries';
 	import { ulid } from '$lib/db/ulid';
+	import { Label } from '$lib/components/ui/label/index.js';
 	import * as RadioGroup from '$lib/components/ui/radio-group/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import {
@@ -354,14 +355,15 @@
 
 				<!-- Reason Selection -->
 				<div class="space-y-2">
-					<label
-						for="clear-reason-group"
+					<Label
+						id="clear-reason-label"
 						class="text-2xs font-bold tracking-wider text-slate-700 uppercase"
 					>
 						เหตุผลในการตัดจำหน่าย <span class="text-red-500">*</span>
-					</label>
+					</Label>
 
 					<RadioGroup.Root
+						aria-labelledby="clear-reason-label"
 						bind:value={selectedReason}
 						disabled={clearMutation.isPending ||
 							!canClearLoan ||

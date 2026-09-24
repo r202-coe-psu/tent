@@ -68,7 +68,7 @@
 	let lastInitializedLogId = $state<string | null>(null);
 	let hydratedOperationId = $state<string | null>(null);
 	let operationUlid = $state<string>(ulid());
-	let selectedPoolId = $state<string | null>(null);
+	let selectedPoolId = $state<string | undefined>(undefined);
 	let localError = $state<string | null>(null);
 
 	// Derived metrics from authoritative log
@@ -152,7 +152,7 @@
 			lastInitializedLogId = log._id;
 			hydratedOperationId = null;
 			operationUlid = ulid();
-			selectedPoolId = null;
+			selectedPoolId = undefined;
 			localError = null;
 		}
 
@@ -287,7 +287,7 @@
 			});
 			operationUlid = ulid();
 			hydratedOperationId = null;
-			selectedPoolId = null;
+			selectedPoolId = undefined;
 			toast.info('ยกเลิกรายการเดิมที่ค้างอยู่แล้ว เริ่มต้นรายการใหม่');
 		} catch (err) {
 			localError = `ไม่สามารถยกเลิกรายการเดิมได้: ${(err as Error).message}`;
