@@ -13,6 +13,8 @@
 	} from '../../application/queries';
 	import { subQty } from '$lib/utils/qty';
 	import { ulid } from '$lib/db/ulid';
+	import { Input } from '$lib/components/ui/input/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
 	import {
 		calculateLoanRemainingQty,
 		calculateNewCumulativeReturned,
@@ -232,7 +234,7 @@
 		aria-labelledby="counter-return-dialog-title"
 	>
 		<div
-			class="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-xl transition-all"
+			class="flex max-h-[90vh] w-full max-w-lg flex-col overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl transition-all"
 		>
 			<!-- Dialog Header -->
 			<div class="flex items-start justify-between border-b border-slate-100 pb-4">
@@ -376,17 +378,15 @@
 
 					<!-- Keep raw input as a string so inventory quantities never pass through
 					     JavaScript floating-point conversion before Decimal-safe validation. -->
-					<input
+					<Input
 						id="return-qty-input"
-						type="number"
-						step="any"
-						min="0.0001"
-						max={remainingQty}
+						type="text"
+						inputmode="decimal"
 						value={returningNowQty}
 						oninput={(e) => {
 							returningNowQty = e.currentTarget.value;
 						}}
-						class="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-bold text-slate-900 shadow-2xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+						class="h-10 w-full text-sm font-bold shadow-2xs"
 						disabled={returnMutation.isPending ||
 							!canReturnStock ||
 							isForwardRecovery ||
@@ -425,19 +425,29 @@
 					>
 						สภาพพัสดุที่รับคืน <span class="text-red-500">*</span>
 					</label>
-					<select
-						id="return-condition-select"
+					<Select.Root
+						type="single"
 						bind:value={condition}
-						class="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-900 shadow-2xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
 						disabled={returnMutation.isPending ||
 							!canReturnStock ||
 							isForwardRecovery ||
 							isCrossModeCollision}
 					>
-						{#each RETURN_CONDITION_OPTIONS as opt (opt.value)}
-							<option value={opt.value}>{opt.label}</option>
-						{/each}
-					</select>
+						<Select.Trigger
+							id="return-condition-select"
+							aria-label="สภาพพัสดุที่รับคืน"
+							class="h-9 w-full rounded-xl text-xs font-semibold shadow-2xs"
+						>
+							<span class="truncate">
+								{RETURN_CONDITION_OPTIONS.find((o) => o.value === condition)?.label ?? condition}
+							</span>
+						</Select.Trigger>
+						<Select.Content>
+							{#each RETURN_CONDITION_OPTIONS as opt (opt.value)}
+								<Select.Item value={opt.value} label={opt.label} />
+							{/each}
+						</Select.Content>
+					</Select.Root>
 					<p class="text-2xs text-slate-500">
 						{RETURN_CONDITION_OPTIONS.find((o) => o.value === condition)?.description}
 					</p>
@@ -451,12 +461,12 @@
 					>
 						หมายเหตุการรับคืน (ถ้ามี)
 					</label>
-					<input
+					<Input
 						id="return-notes-input"
 						type="text"
 						bind:value={notesInput}
 						placeholder="เช่น สภาพดีพร้อมใช้, มีรอยเปื้อนเล็กน้อย..."
-						class="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs shadow-2xs placeholder:text-slate-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+						class="h-9 w-full text-xs shadow-2xs placeholder:text-slate-400"
 						disabled={returnMutation.isPending ||
 							!canReturnStock ||
 							isForwardRecovery ||
@@ -476,7 +486,7 @@
 				{/if}
 
 				<!-- Action Buttons -->
-				<div class="flex items-center justify-end gap-3 border-t border-slate-100 pt-4">
+				<div class="flex flex-wrap items-center justify-end gap-3 border-t border-slate-100 pt-4">
 					<button
 						type="button"
 						onclick={handleClose}

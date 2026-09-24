@@ -1,6 +1,8 @@
 <script lang="ts">
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import X from '@lucide/svelte/icons/x';
+	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
+	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import type { MealPeriod } from '../../domain/food-supplies';
 
 	interface Props {
@@ -63,7 +65,7 @@
 		aria-labelledby="meal-warning-title"
 	>
 		<div
-			class="w-full max-w-md rounded-2xl border border-amber-200 bg-white p-6 shadow-xl transition-all"
+			class="flex max-h-[90vh] w-full max-w-md flex-col overflow-y-auto rounded-2xl border border-amber-200 bg-white p-6 shadow-xl transition-all"
 		>
 			<!-- Dialog Header -->
 			<div class="flex items-start justify-between">
@@ -120,11 +122,7 @@
 					<label
 						class="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-800"
 					>
-						<input
-							type="checkbox"
-							bind:checked={isConfirmed}
-							class="h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500"
-						/>
+						<Checkbox bind:checked={isConfirmed} />
 						<span>ยืนยันแจกซ้ำเป็นกรณีพิเศษ (Override)</span>
 					</label>
 
@@ -135,13 +133,13 @@
 						>
 							เหตุผลในการแจกซ้ำ <span class="text-red-500">*</span>
 						</label>
-						<textarea
+						<Textarea
 							id="override-reason-input"
 							bind:value={overrideReason}
 							rows={2}
 							placeholder="เช่น มาขอรับแทนสมาชิกในครอบครัวที่ป่วยติดเตียง, อาหารเดิมหกเสียหาย..."
-							class="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs shadow-2xs placeholder:text-slate-400 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none"
-						></textarea>
+							class="w-full text-xs shadow-2xs placeholder:text-slate-400"
+						/>
 					</div>
 
 					{#if error}
@@ -151,7 +149,9 @@
 			</div>
 
 			<!-- Dialog Actions -->
-			<div class="mt-6 flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
+			<div
+				class="mt-6 flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-4"
+			>
 				<button
 					type="button"
 					onclick={handleCancel}

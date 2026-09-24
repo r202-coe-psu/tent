@@ -12,6 +12,8 @@
 	import { validatePositiveQuantity, buildCreateTicketItem } from '../model/ticket-quantity';
 	import CatalogItemPicker from './CatalogItemPicker.svelte';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import { Input } from '$lib/components/ui/input/index.js';
+	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { toast } from 'svelte-sonner';
 	import Plus from '@lucide/svelte/icons/plus';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
@@ -268,13 +270,13 @@
 					จุดหมายปลายทาง / จุดแจกจ่าย <span class="text-red-500">*</span>
 				</label>
 				<div class="flex gap-2">
-					<input
+					<Input
 						id="destination-input"
 						type="text"
 						bind:value={destinationLocation}
 						placeholder="เช่น เต็นท์โซน A, จุดแจกจ่ายโรงอาหารกลาง"
 						list="destination-list"
-						class="h-10 flex-1 rounded-lg border border-slate-200/80 bg-white px-3 text-sm text-slate-800 shadow-2xs placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none"
+						class="h-10 flex-1 rounded-lg text-sm shadow-2xs placeholder:text-slate-400"
 					/>
 					<datalist id="destination-list">
 						{#each destinationSuggestions as dest (dest)}
@@ -351,8 +353,8 @@
 						</p>
 					</div>
 				{:else}
-					<div class="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-2xs">
-						<table class="w-full text-left text-sm">
+					<div class="overflow-x-auto rounded-xl border border-slate-200/80 bg-white shadow-2xs">
+						<table class="w-full min-w-[460px] text-left text-sm">
 							<thead
 								class="border-b border-slate-200 bg-slate-50 text-xs font-semibold tracking-wider text-slate-600 uppercase"
 							>
@@ -385,13 +387,12 @@
 										</td>
 										<td class="px-2 py-2.5 text-right">
 											<div class="inline-flex items-center gap-1.5">
-												<input
-													type="number"
-													min="1"
-													step="any"
+												<Input
+													type="text"
+													inputmode="decimal"
 													bind:value={item.requested_qty}
 													aria-label="จำนวนเบิก {item.master.name}"
-													class="h-8 w-20 rounded-md border border-slate-200 bg-white px-2 text-right text-xs font-bold text-slate-900 tabular-nums focus-visible:ring-1 focus-visible:ring-slate-900 focus-visible:outline-none"
+													class="h-8 w-20 text-right text-xs font-bold tabular-nums"
 												/>
 												<span class="text-xs text-slate-500">{item.master.base_unit}</span>
 											</div>
@@ -420,26 +421,26 @@
 				<label for="ticket-notes" class="text-sm font-semibold text-slate-700">
 					หมายเหตุเพิ่มเติม (ถ้ามี)
 				</label>
-				<textarea
+				<Textarea
 					id="ticket-notes"
 					bind:value={notes}
-					rows="2"
+					rows={2}
 					placeholder="เช่น เบิกด่วนสำหรับผู้พักพิงกลุ่มเปราะบาง, ส่งมอบภายใน 12:00 น."
-					class="w-full rounded-lg border border-slate-200/80 bg-white p-2.5 text-sm text-slate-800 shadow-2xs placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none"
-				></textarea>
+					class="w-full text-sm shadow-2xs placeholder:text-slate-400"
+				/>
 			</div>
 		</div>
 
 		<!-- Footer Actions -->
 		<div
-			class="flex items-center justify-between border-t border-slate-200 bg-slate-50/75 px-6 py-4"
+			class="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/75 px-6 py-4"
 		>
 			<div class="flex items-center gap-1.5 text-xs text-slate-500">
 				<AlertCircle class="h-3.5 w-3.5 text-slate-400" />
 				<span>เมื่อสร้างสำเร็จ ตั๋วจะอยู่ในสถานะ "รอจัดของ" (PENDING_PICK)</span>
 			</div>
 
-			<div class="flex items-center gap-2">
+			<div class="flex flex-wrap items-center gap-2">
 				<button
 					type="button"
 					onclick={() => {

@@ -1,6 +1,8 @@
 <script lang="ts">
 	import type { RequisitionTicketStatus } from '../../domain/food-supplies';
 	import { REQUISITION_TICKET_STATUSES, TICKET_STATUS_LABELS } from '../model/ticket-status';
+	import { Input } from '$lib/components/ui/input/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
 	import Search from '@lucide/svelte/icons/search';
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 
@@ -35,14 +37,14 @@
 	<!-- Search input -->
 	<div class="relative max-w-md min-w-[240px] flex-1">
 		<Search class="absolute top-2.5 left-3 h-4 w-4 text-slate-400" aria-hidden="true" />
-		<input
+		<Input
 			type="text"
 			id="ticket-search-input"
 			value={search}
 			oninput={(e) => onSearchChange(e.currentTarget.value)}
 			placeholder="ค้นหาเลขที่ตั๋ว, ผู้ร้องขอ, จุดหมาย..."
 			aria-label="ค้นหาเลขที่ตั๋ว, ผู้ร้องขอ, จุดหมาย"
-			class="h-10 w-full rounded-lg border border-slate-200/80 bg-white pr-3 pl-9 text-sm text-slate-800 shadow-2xs placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none"
+			class="h-10 w-full rounded-lg pl-9 text-sm shadow-2xs placeholder:text-slate-400"
 		/>
 	</div>
 
@@ -53,19 +55,31 @@
 			<label for="detailed-status-filter" class="shrink-0 text-xs font-semibold text-slate-600">
 				สถานะ:
 			</label>
-			<select
-				id="detailed-status-filter"
+			<Select.Root
+				type="single"
 				value={detailedStatus}
-				onchange={(e) => onStatusChange(e.currentTarget.value as RequisitionTicketStatus | 'all')}
-				class="h-10 rounded-lg border border-slate-200/80 bg-white px-3 py-2 text-sm text-slate-800 shadow-2xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none"
+				onValueChange={(val) => {
+					if (val) onStatusChange(val as RequisitionTicketStatus | 'all');
+				}}
 			>
-				<option value="all">ทุกสถานะ (ทั้งหมด 9 สถานะ)</option>
-				{#each REQUISITION_TICKET_STATUSES as status (status)}
-					<option value={status}>
-						{TICKET_STATUS_LABELS[status]} ({status})
-					</option>
-				{/each}
-			</select>
+				<Select.Trigger
+					id="detailed-status-filter"
+					aria-label="กรองตามสถานะ"
+					class="h-10 min-w-[180px] rounded-lg text-sm shadow-2xs"
+				>
+					<span class="truncate">
+						{detailedStatus === 'all'
+							? 'ทุกสถานะ (ทั้งหมด 9 สถานะ)'
+							: `${TICKET_STATUS_LABELS[detailedStatus]} (${detailedStatus})`}
+					</span>
+				</Select.Trigger>
+				<Select.Content>
+					<Select.Item value="all" label="ทุกสถานะ (ทั้งหมด 9 สถานะ)" />
+					{#each REQUISITION_TICKET_STATUSES as status (status)}
+						<Select.Item value={status} label={`${TICKET_STATUS_LABELS[status]} (${status})`} />
+					{/each}
+				</Select.Content>
+			</Select.Root>
 		</div>
 
 		<!-- Destination Location Filter -->
@@ -73,17 +87,29 @@
 			<label for="destination-filter" class="shrink-0 text-xs font-semibold text-slate-600">
 				จุดหมาย:
 			</label>
-			<select
-				id="destination-filter"
+			<Select.Root
+				type="single"
 				value={destination}
-				onchange={(e) => onDestinationChange(e.currentTarget.value)}
-				class="h-10 rounded-lg border border-slate-200/80 bg-white px-3 py-2 text-sm text-slate-800 shadow-2xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none"
+				onValueChange={(val) => {
+					if (val) onDestinationChange(val);
+				}}
 			>
-				<option value="all">ทุกจุดหมาย</option>
-				{#each destinations as dest (dest)}
-					<option value={dest}>{dest}</option>
-				{/each}
-			</select>
+				<Select.Trigger
+					id="destination-filter"
+					aria-label="กรองตามจุดหมาย"
+					class="h-10 min-w-[140px] rounded-lg text-sm shadow-2xs"
+				>
+					<span class="truncate">
+						{destination === 'all' ? 'ทุกจุดหมาย' : destination}
+					</span>
+				</Select.Trigger>
+				<Select.Content>
+					<Select.Item value="all" label="ทุกจุดหมาย" />
+					{#each destinations as dest (dest)}
+						<Select.Item value={dest} label={dest} />
+					{/each}
+				</Select.Content>
+			</Select.Root>
 		</div>
 
 		<!-- Reset Filters Button -->

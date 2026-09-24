@@ -10,6 +10,7 @@
 	} from '../model/catalog-eligibility';
 	import { validatePositiveQuantity } from '../model/ticket-quantity';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import { Input } from '$lib/components/ui/input/index.js';
 	import Search from '@lucide/svelte/icons/search';
 	import Package from '@lucide/svelte/icons/package';
 	import Check from '@lucide/svelte/icons/check';
@@ -89,12 +90,12 @@
 			<!-- Search Bar -->
 			<div class="relative mt-4">
 				<Search class="absolute top-2.5 left-3 h-4 w-4 text-slate-400" aria-hidden="true" />
-				<input
+				<Input
 					type="text"
 					bind:value={searchQuery}
 					placeholder="ค้นหาชื่อรายการ หรือ SKU..."
 					aria-label="ค้นหาชื่อรายการ หรือ SKU"
-					class="h-10 w-full rounded-lg border border-slate-200/80 bg-white pr-3 pl-9 text-sm text-slate-800 shadow-2xs placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none"
+					class="h-10 w-full rounded-lg pl-9 text-sm shadow-2xs placeholder:text-slate-400"
 				/>
 			</div>
 		</div>
@@ -170,16 +171,15 @@
 							{:else}
 								<div class="flex items-center gap-1.5">
 									<label for="qty-{item._id}" class="sr-only">จำนวนที่ต้องการเบิก</label>
-									<input
+									<Input
 										id="qty-{item._id}"
-										type="number"
-										min="1"
-										step="any"
+										type="text"
+										inputmode="decimal"
 										value={itemQuantities[item._id] ?? '1'}
 										oninput={(e) => {
 											itemQuantities[item._id] = e.currentTarget.value;
 										}}
-										class="h-9 w-20 rounded-lg border border-slate-200/80 bg-white px-2.5 text-right text-sm font-semibold text-slate-800 tabular-nums shadow-2xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none"
+										class="h-9 w-20 text-right text-sm font-semibold tabular-nums shadow-2xs"
 									/>
 									<span class="min-w-[30px] text-xs text-slate-500">{item.base_unit}</span>
 								</div>

@@ -7,6 +7,7 @@
 	import Loader from '@lucide/svelte/icons/loader';
 	import { qtyGte } from '$lib/utils/qty';
 	import { validatePositiveQuantity } from '../model/ticket-quantity';
+	import { Input } from '$lib/components/ui/input/index.js';
 	import {
 		resolveAuthenticatedAuthorContext,
 		useDistributionLogs,
@@ -278,12 +279,12 @@
 			>
 				จำนวนที่เบิก/ให้ยืม <span class="text-red-500">*</span>
 			</label>
-			<input
+			<Input
 				id="supplies-qty-input"
 				type="text"
 				inputmode="decimal"
 				bind:value={qtyInput}
-				class="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-900 shadow-2xs focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+				class="h-9 w-full text-xs font-bold shadow-2xs"
 				disabled={recordSuppliesMutation.isPending || capacitySummary.isExhausted}
 			/>
 		</div>
@@ -295,12 +296,12 @@
 			>
 				หมายเหตุการแจกจ่าย / สภาพสิ่งของ (ถ้ามี)
 			</label>
-			<input
+			<Input
 				id="supplies-notes-input"
 				type="text"
 				bind:value={notesInput}
 				placeholder="เช่น เบิกสำหรับเต็นท์พยาบาล, ระบุเลขซีเรียล..."
-				class="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs shadow-2xs placeholder:text-slate-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+				class="h-9 w-full text-xs shadow-2xs placeholder:text-slate-400"
 				disabled={recordSuppliesMutation.isPending}
 			/>
 		</div>

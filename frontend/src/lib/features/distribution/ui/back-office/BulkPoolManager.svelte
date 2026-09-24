@@ -8,6 +8,7 @@
 	import Search from '@lucide/svelte/icons/search';
 	import XCircle from '@lucide/svelte/icons/x-circle';
 	import Plus from '@lucide/svelte/icons/plus';
+	import { Input } from '$lib/components/ui/input/index.js';
 	import { useItemMasters } from '$lib/features/catalog';
 	import { useSupplyItems } from '$lib/features/supply';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
@@ -161,13 +162,13 @@
 				class="pointer-events-none absolute top-2.5 left-3 h-4 w-4 text-slate-400"
 				aria-hidden="true"
 			/>
-			<input
+			<Input
 				type="search"
 				value={searchQuery}
 				oninput={(event) => (searchQuery = event.currentTarget.value)}
 				placeholder="ค้นหาชื่อสินค้า หรือ SKU..."
 				aria-label="ค้นหาจุดรวมคืนตามชื่อสินค้า หรือ SKU"
-				class="h-10 w-full rounded-lg border border-slate-200/80 bg-white pr-3 pl-9 text-sm text-slate-800 shadow-2xs placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none"
+				class="h-10 w-full pl-9 text-sm shadow-2xs placeholder:text-slate-400"
 			/>
 		</div>
 	</div>

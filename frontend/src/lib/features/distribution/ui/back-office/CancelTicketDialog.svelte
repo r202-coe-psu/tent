@@ -2,6 +2,7 @@
 	import type { RequisitionTicket } from '../../domain/food-supplies';
 	import { useCancelTicket } from '../../application/queries';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { toast } from 'svelte-sonner';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
@@ -79,7 +80,7 @@
 		</div>
 
 		<!-- Body -->
-		<div class="flex-1 space-y-4 p-6">
+		<div class="flex-1 space-y-4 overflow-y-auto p-6">
 			<!-- Ticket Summary Card -->
 			<div class="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 text-xs text-slate-700">
 				<div class="flex items-center justify-between">
@@ -101,13 +102,13 @@
 				<label for="cancel-reason" class="text-sm font-semibold text-slate-800">
 					เหตุผลในการยกเลิก <span class="text-red-600">*</span>
 				</label>
-				<textarea
+				<Textarea
 					id="cancel-reason"
 					bind:value={reason}
-					rows="3"
+					rows={3}
 					placeholder="เช่น ผู้ขอแจ้งยกเลิกความต้องการ, สินค้าไม่เพียงพอ, สร้างตั๋วซ้ำซ้อน"
-					class="w-full rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-800 shadow-2xs placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:outline-none"
-				></textarea>
+					class="w-full text-sm shadow-2xs placeholder:text-slate-400"
+				/>
 				<p class="text-2xs text-slate-500">
 					เหตุผลนี้จะถูกบันทึกในประวัติตั๋วเพื่อใช้ในการตรวจสอบย้อนหลัง
 				</p>
@@ -116,7 +117,7 @@
 
 		<!-- Footer Actions -->
 		<div
-			class="flex items-center justify-between border-t border-slate-200 bg-slate-50/75 px-6 py-4"
+			class="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/75 px-6 py-4"
 		>
 			<button
 				type="button"

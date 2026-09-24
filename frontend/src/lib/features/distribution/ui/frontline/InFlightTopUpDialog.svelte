@@ -8,6 +8,8 @@
 	import { useAmendActiveTicket } from '../../application/queries';
 	import type { RequisitionTicket } from '../../domain/food-supplies';
 	import { validatePositiveQuantity } from '../model/ticket-quantity';
+	import { Input } from '$lib/components/ui/input/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
 
 	interface Props {
 		ticket: RequisitionTicket;
@@ -27,6 +29,8 @@
 	let addedQty = $state('10');
 	let reason = $state('ขอเบิกเติมฉุกเฉินหน้างาน (In-Flight Top-Up)');
 	let localError = $state<string | null>(null);
+
+	const selectedItem = $derived(ticket.items.find((i) => i.item_id === selectedItemId));
 
 	// Keep selectedItemId valid when ticket prop changes or dialog opens.
 	$effect(() => {
@@ -94,7 +98,7 @@
 		aria-labelledby="topup-dialog-title"
 	>
 		<div
-			class="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-xl transition-all"
+			class="flex max-h-[90vh] w-full max-w-lg flex-col overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl transition-all"
 		>
 			<!-- Dialog Header -->
 			<div class="flex items-start justify-between">
@@ -147,18 +151,27 @@
 					>
 						เลือกสินค้าในตั๋วที่ต้องการเติม <span class="text-red-500">*</span>
 					</label>
-					<select
-						id="topup-item-select"
-						bind:value={selectedItemId}
-						class="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs shadow-2xs focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-						disabled={amendMutation.isPending}
-					>
-						{#each ticket.items as item (item.item_id)}
-							<option value={item.item_id}>
-								{item.item_name} (ยอดจัดสรรปัจจุบัน: {item.allocated_qty})
-							</option>
-						{/each}
-					</select>
+					<Select.Root type="single" bind:value={selectedItemId} disabled={amendMutation.isPending}>
+						<Select.Trigger
+							id="topup-item-select"
+							aria-label="เลือกสินค้าในตั๋วที่ต้องการเติม"
+							class="h-9 w-full rounded-lg text-xs shadow-2xs"
+						>
+							<span class="truncate">
+								{selectedItem
+									? `${selectedItem.item_name} (ยอดจัดสรรปัจจุบัน: ${selectedItem.allocated_qty})`
+									: 'เลือกสินค้าในตั๋ว'}
+							</span>
+						</Select.Trigger>
+						<Select.Content>
+							{#each ticket.items as item (item.item_id)}
+								<Select.Item
+									value={item.item_id}
+									label={`${item.item_name} (ยอดจัดสรรปัจจุบัน: ${item.allocated_qty})`}
+								/>
+							{/each}
+						</Select.Content>
+					</Select.Root>
 				</div>
 
 				<!-- Added Quantity -->
@@ -169,12 +182,12 @@
 					>
 						จำนวนที่ต้องการขอเติมเพิ่ม <span class="text-red-500">*</span>
 					</label>
-					<input
+					<Input
 						id="topup-qty-input"
 						type="text"
 						inputmode="decimal"
 						bind:value={addedQty}
-						class="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-900 shadow-2xs focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+						class="h-9 w-full text-xs font-semibold shadow-2xs"
 						disabled={amendMutation.isPending}
 					/>
 				</div>
@@ -187,12 +200,12 @@
 					>
 						เหตุผลในการขอเบิกเติม
 					</label>
-					<input
+					<Input
 						id="topup-reason-input"
 						type="text"
 						bind:value={reason}
 						placeholder="เช่น มีผู้ประสบภัยย้ายมาเพิ่มจากโซนอื่น, อาหารหมดก่อนปิดรอบ..."
-						class="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs shadow-2xs placeholder:text-slate-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+						class="h-9 w-full text-xs shadow-2xs placeholder:text-slate-400"
 						disabled={amendMutation.isPending}
 					/>
 				</div>
@@ -207,7 +220,7 @@
 				{/if}
 
 				<!-- Form Actions -->
-				<div class="flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
+				<div class="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-4">
 					<button
 						type="button"
 						onclick={handleClose}

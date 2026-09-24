@@ -1,5 +1,7 @@
 <script lang="ts">
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import { Input } from '$lib/components/ui/input/index.js';
+	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { toast } from 'svelte-sonner';
 	import PackagePlus from '@lucide/svelte/icons/package-plus';
 	import Package from '@lucide/svelte/icons/package';
@@ -226,13 +228,13 @@
 							class="pointer-events-none absolute top-2.5 left-3 h-4 w-4 text-slate-400"
 							aria-hidden="true"
 						/>
-						<input
+						<Input
 							id="bulk-pool-item-search"
 							type="search"
 							value={itemSearch}
 							oninput={(event) => (itemSearch = event.currentTarget.value)}
 							placeholder="ค้นหาชื่อสินค้า หรือ SKU เพื่อเลือก..."
-							class="h-9 w-full rounded-lg border border-slate-200 bg-white pr-3 pl-9 text-xs text-slate-800 shadow-2xs placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-violet-600 focus-visible:outline-none"
+							class="h-9 w-full pl-9 text-xs shadow-2xs placeholder:text-slate-400"
 						/>
 					</div>
 
@@ -287,14 +289,14 @@
 					จำนวนที่รับคืนเข้ารวม ({selectedItem?.base_unit ?? 'ชิ้น'})
 					<span class="text-red-500">*</span>
 				</label>
-				<input
+				<Input
 					id="bulk-pool-qty"
 					type="text"
 					inputmode="decimal"
 					value={receivedQty}
 					oninput={(event) => (receivedQty = event.currentTarget.value)}
 					placeholder="เช่น 10, 50, 100"
-					class="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 font-mono text-xs text-slate-800 shadow-2xs placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-violet-600 focus-visible:outline-none"
+					class="h-9 w-full font-mono text-xs shadow-2xs placeholder:text-slate-400"
 				/>
 				<p class="text-2xs text-slate-500">
 					ระบบจะบันทึกรับเข้าคลัง StockLedger 1 รายการ และตั้งต้นโควตาคงเหลือ (unclaimed quota)
@@ -307,20 +309,20 @@
 				<label for="bulk-pool-notes" class="block text-xs font-bold text-slate-700">
 					หมายเหตุ / ที่มาของการรับคืน (ไม่บังคับ)
 				</label>
-				<textarea
+				<Textarea
 					id="bulk-pool-notes"
 					rows={2}
 					value={notes}
 					oninput={(event) => (notes = event.currentTarget.value)}
 					placeholder="ระบุจุดที่รวบรวมของคืน เช่น กองรับคืนเต็นท์ A, เก็บกู้จากหน้างาน..."
-					class="w-full rounded-lg border border-slate-200 bg-white p-2.5 text-xs text-slate-800 shadow-2xs placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-violet-600 focus-visible:outline-none"
-				></textarea>
+					class="w-full text-xs shadow-2xs placeholder:text-slate-400"
+				/>
 			</div>
 		</div>
 
 		<!-- Footer -->
 		<div
-			class="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/60 px-6 py-4"
+			class="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/60 px-6 py-4"
 		>
 			<button
 				type="button"

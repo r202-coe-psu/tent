@@ -158,8 +158,8 @@
 				</button>
 			</div>
 
-			<div class="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-2xs">
-				<table class="w-full text-left text-sm">
+			<div class="overflow-x-auto rounded-xl border border-slate-200/80 bg-white shadow-2xs">
+				<table class="w-full min-w-[640px] text-left text-sm">
 					<thead
 						class="border-b border-slate-200 bg-slate-50/75 text-2xs font-semibold tracking-wider text-slate-600 uppercase"
 					>

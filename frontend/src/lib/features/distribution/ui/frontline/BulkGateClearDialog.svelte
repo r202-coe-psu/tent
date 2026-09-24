@@ -11,6 +11,7 @@
 	import Play from '@lucide/svelte/icons/play';
 	import { ulid } from '$lib/db/ulid';
 	import { qtyLte } from '$lib/utils/qty';
+	import * as RadioGroup from '$lib/components/ui/radio-group/index.js';
 	import type {
 		BulkReturnPool,
 		BulkReturnClaim,
@@ -302,7 +303,7 @@
 		aria-labelledby="bulk-gate-clear-dialog-title"
 	>
 		<div
-			class="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-xl transition-all"
+			class="flex max-h-[90vh] w-full max-w-lg flex-col overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl transition-all"
 		>
 			<!-- Dialog Header -->
 			<div class="flex items-start justify-between border-b border-slate-100 pb-4">
@@ -485,7 +486,11 @@
 							</p>
 						</div>
 					{:else}
-						<div id="bulk-pool-selection" class="max-h-56 space-y-2 overflow-y-auto pr-1">
+						<RadioGroup.Root
+							id="bulk-pool-selection"
+							bind:value={selectedPoolId}
+							class="max-h-56 space-y-2 overflow-y-auto pr-1"
+						>
 							{#each displayPools as pool (pool._id)}
 								{@const isRecoveryPool = isForwardRecovery && effectivePool?._id === pool._id}
 								{@const isSelected = selectedPoolId === pool._id || isRecoveryPool}
@@ -494,6 +499,7 @@
 									: qtyLte(remainingQty, pool.unclaimed_quota)}
 
 								<label
+									for="bulk-pool-{pool._id}"
 									class="flex cursor-pointer items-start justify-between gap-3 rounded-xl border p-3 transition-all {isSelected
 										? isRecoveryPool
 											? 'border-blue-600 bg-blue-50/50 shadow-2xs ring-1 ring-blue-600'
@@ -503,17 +509,15 @@
 											: 'border-slate-200/60 bg-slate-50/60 opacity-60'}"
 								>
 									<div class="flex items-start gap-2.5">
-										<input
-											type="radio"
-											name="bulk-pool"
+										<RadioGroup.Item
 											value={pool._id}
-											bind:group={selectedPoolId}
+											id="bulk-pool-{pool._id}"
 											disabled={bulkClaimMutation.isPending ||
 												(!hasEnoughQuota && !isRecoveryPool) ||
 												!canClearLoan ||
 												isForwardRecovery ||
 												isCrossModeCollision}
-											class="mt-1 text-purple-600 focus:ring-purple-600"
+											class="mt-1"
 										/>
 										<div class="space-y-0.5">
 											<div class="flex items-center gap-1.5">
@@ -571,7 +575,7 @@
 									{/if}
 								</label>
 							{/each}
-						</div>
+						</RadioGroup.Root>
 					{/if}
 				</div>
 
@@ -590,7 +594,7 @@
 				{/if}
 
 				<!-- Dialog Actions -->
-				<div class="flex items-center justify-end gap-2 border-t border-slate-100 pt-3">
+				<div class="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-3">
 					<button
 						type="button"
 						onclick={handleClose}

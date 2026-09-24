@@ -8,6 +8,7 @@
 	import Loader from '@lucide/svelte/icons/loader';
 	import { qtyGte } from '$lib/utils/qty';
 	import { validatePositiveQuantity } from '../model/ticket-quantity';
+	import { Input } from '$lib/components/ui/input/index.js';
 	import {
 		resolveAuthenticatedAuthorContext,
 		useDistributionLogs,
@@ -308,12 +309,12 @@
 			<label for="food-qty-input" class="mb-1 block text-2xs font-bold text-slate-700 uppercase">
 				จำนวนชุดที่แจก <span class="text-red-500">*</span>
 			</label>
-			<input
+			<Input
 				id="food-qty-input"
 				type="text"
 				inputmode="decimal"
 				bind:value={qtyInput}
-				class="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-900 shadow-2xs focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none"
+				class="h-9 w-full text-xs font-bold shadow-2xs"
 				disabled={recordFoodMutation.isPending || capacitySummary.isExhausted}
 			/>
 		</div>
@@ -322,12 +323,12 @@
 			<label for="food-notes-input" class="mb-1 block text-2xs font-bold text-slate-700 uppercase">
 				หมายเหตุการแจกจ่าย (ถ้ามี)
 			</label>
-			<input
+			<Input
 				id="food-notes-input"
 				type="text"
 				bind:value={notesInput}
 				placeholder="เช่น ขอรับเพิ่มสำหรับเด็กเล็ก, แจกพร้อมน้ำดื่ม..."
-				class="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs shadow-2xs placeholder:text-slate-400 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 focus:outline-none"
+				class="h-9 w-full text-xs shadow-2xs placeholder:text-slate-400"
 				disabled={recordFoodMutation.isPending}
 			/>
 		</div>

@@ -10,6 +10,7 @@
 	import Check from '@lucide/svelte/icons/check';
 	import Building2 from '@lucide/svelte/icons/building-2';
 	import { useSearchEvacuees, lookupEvacueeByScanCode, type Evacuee } from '$lib/features/people';
+	import { Input } from '$lib/components/ui/input/index.js';
 	import type { FrontlineRecipientSelection } from '../model/frontline-handover';
 
 	interface Props {
@@ -242,12 +243,12 @@
 			<!-- Name / Phone search input -->
 			<div class="relative">
 				<Search class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400" />
-				<input
+				<Input
 					id="recipient-search-input"
 					type="search"
 					bind:value={searchTerm}
 					placeholder="พิมพ์ชื่อ นามสกุล ชื่อเล่น หรือเบอร์โทรศัพท์..."
-					class="h-9 w-full rounded-lg border border-slate-200 bg-white pr-3 pl-9 text-xs shadow-2xs transition-colors placeholder:text-slate-400 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 focus:outline-none"
+					class="h-9 w-full pl-9 text-xs shadow-2xs placeholder:text-slate-400"
 					{disabled}
 				/>
 			</div>
@@ -256,11 +257,11 @@
 			<form onsubmit={handleScanSubmit} class="flex items-center gap-2">
 				<div class="relative flex-1">
 					<QrCode class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400" />
-					<input
+					<Input
 						type="text"
 						bind:value={scanCodeInput}
 						placeholder="สแกน QR หรือวางรหัสบัตร / evacuee:ID..."
-						class="h-8 w-full rounded-lg border border-slate-200 bg-white pr-3 pl-9 text-xs shadow-2xs transition-colors placeholder:text-slate-400 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 focus:outline-none"
+						class="h-8 w-full pl-9 text-xs shadow-2xs placeholder:text-slate-400"
 						{disabled}
 					/>
 				</div>
@@ -353,13 +354,13 @@
 				<label for="outside-notes" class="mb-1 block text-2xs font-medium text-slate-600">
 					หมายเหตุ / ข้อมูลผู้รับ (ไม่บังคับ)
 				</label>
-				<input
+				<Input
 					id="outside-notes"
 					type="text"
 					value={outsideNotes}
 					oninput={handleOutsideNotesChange}
 					placeholder="เช่น ประชาชนชุมชนข้างเคียง, ญาติผู้ประสบภัย..."
-					class="h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs shadow-2xs placeholder:text-slate-400 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 focus:outline-none"
+					class="h-8 w-full px-2.5 text-xs shadow-2xs placeholder:text-slate-400"
 					{disabled}
 				/>
 			</div>

@@ -3,6 +3,7 @@
 	import { useDispatchTicket } from '../../application/queries';
 	import PhysicalLotPicker from './PhysicalLotPicker.svelte';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import { Input } from '$lib/components/ui/input/index.js';
 	import { toast } from 'svelte-sonner';
 	import Truck from '@lucide/svelte/icons/truck';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
@@ -170,13 +171,13 @@
 						>
 						<div class="relative mt-1">
 							<User class="absolute top-2.5 left-2.5 h-3.5 w-3.5 text-slate-400" />
-							<input
+							<Input
 								id="driver-name"
 								type="text"
 								bind:value={driverName}
 								placeholder="ระบุชื่อคนขับ (ถ้ามี)"
 								disabled={isSubmitting}
-								class="h-9 w-full rounded-lg border border-slate-300 bg-white pr-3 pl-8 text-xs text-slate-800 placeholder-slate-400 focus:border-[#0A2647] focus:ring-1 focus:ring-[#0A2647] focus:outline-none disabled:bg-slate-100"
+								class="h-9 w-full rounded-lg pr-3 pl-8 text-xs placeholder:text-slate-400"
 							/>
 						</div>
 					</div>
@@ -187,13 +188,13 @@
 						>
 						<div class="relative mt-1">
 							<Truck class="absolute top-2.5 left-2.5 h-3.5 w-3.5 text-slate-400" />
-							<input
+							<Input
 								id="license-plate"
 								type="text"
 								bind:value={licensePlate}
 								placeholder="ระบุทะเบียนรถ (ถ้ามี)"
 								disabled={isSubmitting}
-								class="h-9 w-full rounded-lg border border-slate-300 bg-white pr-3 pl-8 text-xs text-slate-800 placeholder-slate-400 focus:border-[#0A2647] focus:ring-1 focus:ring-[#0A2647] focus:outline-none disabled:bg-slate-100"
+								class="h-9 w-full rounded-lg pr-3 pl-8 text-xs placeholder:text-slate-400"
 							/>
 						</div>
 					</div>
@@ -202,7 +203,9 @@
 		</div>
 
 		<!-- Footer Actions -->
-		<div class="flex items-center justify-end gap-3 border-t border-slate-200 bg-white px-6 py-4">
+		<div
+			class="flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 bg-white px-6 py-4"
+		>
 			<button
 				type="button"
 				disabled={isSubmitting}

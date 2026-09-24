@@ -12,6 +12,8 @@
 		useAbortAbandonedReturnReservation
 	} from '../../application/queries';
 	import { ulid } from '$lib/db/ulid';
+	import * as RadioGroup from '$lib/components/ui/radio-group/index.js';
+	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import {
 		calculateLoanRemainingQty,
 		type NonPhysicalClearReason,
@@ -213,7 +215,7 @@
 		aria-labelledby="non-physical-clear-dialog-title"
 	>
 		<div
-			class="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-xl transition-all"
+			class="flex max-h-[90vh] w-full max-w-lg flex-col overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl transition-all"
 		>
 			<!-- Dialog Header -->
 			<div class="flex items-start justify-between border-b border-slate-100 pb-4">
@@ -359,32 +361,30 @@
 						เหตุผลในการตัดจำหน่าย <span class="text-red-500">*</span>
 					</label>
 
-					<div id="clear-reason-group" class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+					<RadioGroup.Root
+						bind:value={selectedReason}
+						disabled={clearMutation.isPending ||
+							!canClearLoan ||
+							isForwardRecovery ||
+							isCrossModeCollision}
+						class="grid grid-cols-1 gap-2 sm:grid-cols-2"
+					>
 						{#each NON_PHYSICAL_CLEAR_REASON_OPTIONS as opt (opt.value)}
 							<label
+								for="clear-reason-{opt.value}"
 								class="flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 transition-all {selectedReason ===
 								opt.value
 									? 'border-slate-800 bg-slate-50 shadow-2xs ring-1 ring-slate-800'
 									: 'border-slate-200 bg-white hover:border-slate-300'}"
 							>
-								<input
-									type="radio"
-									name="clear-reason"
-									value={opt.value}
-									bind:group={selectedReason}
-									class="mt-0.5 text-slate-900 focus:ring-slate-900"
-									disabled={clearMutation.isPending ||
-										!canClearLoan ||
-										isForwardRecovery ||
-										isCrossModeCollision}
-								/>
+								<RadioGroup.Item value={opt.value} id="clear-reason-{opt.value}" class="mt-0.5" />
 								<div>
 									<p class="text-xs font-bold text-slate-900">{opt.label}</p>
 									<p class="mt-0.5 text-2xs text-slate-500">{opt.description}</p>
 								</div>
 							</label>
 						{/each}
-					</div>
+					</RadioGroup.Root>
 				</div>
 
 				<!-- Mandatory Notes Input -->
@@ -395,18 +395,18 @@
 					>
 						หมายเหตุ / เหตุผลประกอบการตัดจำหน่าย <span class="text-red-500">*</span>
 					</label>
-					<textarea
+					<Textarea
 						id="clear-notes-input"
-						rows="3"
+						rows={3}
 						bind:value={notesInput}
 						placeholder="ระบุรายละเอียด เช่น พัดลมสูญหายระหว่างเหตุอุทกภัย, ได้รับอนุมัติยกเว้นโดยผู้จัดการศูนย์..."
-						class="w-full rounded-xl border border-slate-200 bg-white p-3 text-xs shadow-2xs placeholder:text-slate-400 focus:border-slate-800 focus:ring-1 focus:ring-slate-800 focus:outline-none"
+						class="w-full text-xs shadow-2xs placeholder:text-slate-400"
 						disabled={clearMutation.isPending ||
 							!canClearLoan ||
 							isForwardRecovery ||
 							isCrossModeCollision}
 						required
-					></textarea>
+					/>
 					<p class="text-2xs text-slate-400">
 						* จำเป็นต้องระบุหมายเหตุเพื่อบันทึกประวัติการตรวจสอบย้อนหลังตามเกณฑ์ VDU Rule 13
 					</p>
@@ -424,7 +424,7 @@
 				{/if}
 
 				<!-- Action Buttons -->
-				<div class="flex items-center justify-end gap-3 border-t border-slate-100 pt-4">
+				<div class="flex flex-wrap items-center justify-end gap-3 border-t border-slate-100 pt-4">
 					<button
 						type="button"
 						onclick={handleClose}

@@ -4,6 +4,7 @@
 	import { getReturnableBadgeLabel, getReturnableBadgeClass } from '../model/catalog-eligibility';
 	import { validatePositiveQuantity, buildAllocationItem } from '../model/ticket-quantity';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import { Input } from '$lib/components/ui/input/index.js';
 	import { toast } from 'svelte-sonner';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import Boxes from '@lucide/svelte/icons/boxes';
@@ -130,8 +131,8 @@
 				</button>
 			</div>
 
-			<div class="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-2xs">
-				<table class="w-full text-left text-sm">
+			<div class="overflow-x-auto rounded-xl border border-slate-200/80 bg-white shadow-2xs">
+				<table class="w-full min-w-[460px] text-left text-sm">
 					<thead
 						class="border-b border-slate-200 bg-slate-50/75 text-xs font-semibold tracking-wider text-slate-600 uppercase"
 					>
@@ -163,12 +164,12 @@
 								</td>
 								<td class="py-3 pr-4 pl-2 text-right">
 									<div class="inline-flex items-center justify-end gap-1">
-										<input
+										<Input
 											type="text"
 											inputmode="decimal"
 											bind:value={formQuantities[item.item_id]}
 											aria-label="ยอดจัดสรร {item.item_name}"
-											class="h-9 w-24 rounded-lg border border-slate-200 bg-white px-2.5 text-right text-xs font-bold text-slate-900 tabular-nums shadow-2xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none"
+											class="h-9 w-24 text-right text-xs font-bold tabular-nums shadow-2xs"
 										/>
 									</div>
 								</td>
@@ -191,7 +192,7 @@
 
 		<!-- Footer Actions -->
 		<div
-			class="flex items-center justify-between border-t border-slate-200 bg-slate-50/75 px-6 py-4"
+			class="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/75 px-6 py-4"
 		>
 			<button
 				type="button"
