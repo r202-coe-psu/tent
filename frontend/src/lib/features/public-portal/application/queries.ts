@@ -5,7 +5,6 @@ import {
 	fetchVulnerableGroupLabels,
 	listPublicShelters
 } from '../data/public-api';
-import { toLabelMap } from '../domain/master-labels';
 import type { ListPublicSheltersParams } from '../domain/types';
 
 const LABEL_STALE_MS = 5 * 60 * 1000;
@@ -32,19 +31,26 @@ export function useFamilySearchMutation() {
 	}));
 }
 
-/** Shared across shelter cards / detail — TanStack dedupes by key. */
-export function useVulnerableGroupLabelMap() {
+/** Bilingual vulnerable-group options — derive maps with `toLabelMap(data, langState.current)`. */
+export function useVulnerableGroupLabels() {
 	return createQuery(() => ({
 		queryKey: publicPortalKeys.vulnerableGroupLabels(),
-		queryFn: async () => toLabelMap(await fetchVulnerableGroupLabels()),
+		queryFn: () => fetchVulnerableGroupLabels(),
 		staleTime: LABEL_STALE_MS
 	}));
 }
 
-export function useShelterTypeLabelMap() {
+/** Bilingual shelter-type options — derive maps with `toLabelMap(data, langState.current)`. */
+export function useShelterTypeLabels() {
 	return createQuery(() => ({
 		queryKey: publicPortalKeys.shelterTypeLabels(),
-		queryFn: async () => toLabelMap(await fetchShelterTypeLabels()),
+		queryFn: () => fetchShelterTypeLabels(),
 		staleTime: LABEL_STALE_MS
 	}));
 }
+
+/** @deprecated Use `useVulnerableGroupLabels` + `toLabelMap(data, lang)`. */
+export const useVulnerableGroupLabelMap = useVulnerableGroupLabels;
+
+/** @deprecated Use `useShelterTypeLabels` + `toLabelMap(data, lang)`. */
+export const useShelterTypeLabelMap = useShelterTypeLabels;

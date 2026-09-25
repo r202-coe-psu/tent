@@ -13,8 +13,18 @@ describe('housing-type-ui (CR-112 Select identity)', () => {
 		const items = buildHousingTypeSelectItems({
 			defaultItems: defaults,
 			masterItems: [
-				{ code: '01HXYZULIDONLY000000000001', label: 'บ้านตนเอง (ULID)', status: 'active' },
-				{ code: '01HXYZULIDONLY000000000002', label: 'บ้านเช่า (ULID)', status: 'active' }
+				{
+					code: '01HXYZULIDONLY000000000001',
+					label_th: 'บ้านตนเอง (ULID)',
+					label_en: 'Owned (ULID)',
+					status: 'active'
+				},
+				{
+					code: '01HXYZULIDONLY000000000002',
+					label_th: 'บ้านเช่า (ULID)',
+					label_en: 'Rented (ULID)',
+					status: 'active'
+				}
 			],
 			currentValue: 'owned_house'
 		});
@@ -34,9 +44,24 @@ describe('housing-type-ui (CR-112 Select identity)', () => {
 		const items = buildHousingTypeSelectItems({
 			defaultItems: defaults,
 			masterItems: [
-				{ code: 'owned_house', label: 'บ้านของตนเอง (ศูนย์)', status: 'active' },
-				{ code: '01HXYZULIDONLY000000000001', label: 'ignored', status: 'active' },
-				{ code: 'rented_house', label: 'เช่า', status: 'disabled' }
+				{
+					code: 'owned_house',
+					label_th: 'บ้านของตนเอง (ศูนย์)',
+					label_en: 'Owned house (shelter)',
+					status: 'active'
+				},
+				{
+					code: '01HXYZULIDONLY000000000001',
+					label_th: 'ignored',
+					label_en: 'ignored',
+					status: 'active'
+				},
+				{
+					code: 'rented_house',
+					label_th: 'เช่า',
+					label_en: 'Rented',
+					status: 'disabled'
+				}
 			]
 		});
 
@@ -44,6 +69,22 @@ describe('housing-type-ui (CR-112 Select identity)', () => {
 		// disabled master entry must not replace default label
 		expect(items.find((i) => i.value === 'rented_house')?.label).toBe('บ้านเช่า');
 		expect(items.some((i) => i.value.startsWith('01H'))).toBe(false);
+	});
+
+	it('uses English labels when lang is en', () => {
+		const items = buildHousingTypeSelectItems({
+			defaultItems: defaults,
+			masterItems: [
+				{
+					code: 'owned_house',
+					label_th: 'บ้านของตนเอง',
+					label_en: 'Owned house',
+					status: 'active'
+				}
+			],
+			lang: 'en'
+		});
+		expect(items.find((i) => i.value === 'owned_house')?.label).toBe('Owned house');
 	});
 
 	it('appends an orphan option so a pre-reg code still displays when missing from master', () => {

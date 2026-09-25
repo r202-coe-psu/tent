@@ -3,6 +3,7 @@
  * Master data may supply labels for known codes; never use ULID item codes as values.
  */
 
+import { formatMasterLabel } from '$lib/features/master-data';
 import type { HousingType } from './people';
 
 export const CR112_HOUSING_TYPE_CODES = [
@@ -17,7 +18,8 @@ export type HousingTypeSelectItem = { value: string; label: string };
 
 export type MasterHousingItem = {
 	code: string;
-	label: string;
+	label_th: string;
+	label_en: string;
 	status?: string;
 };
 
@@ -42,15 +44,16 @@ export function buildHousingTypeSelectItems(opts: {
 	masterItems?: MasterHousingItem[];
 	currentValue?: string | null;
 	labelForCode?: (code: string, fallback: string) => string;
+	lang?: string;
 }): HousingTypeSelectItem[] {
-	const { defaultItems, masterItems = [], currentValue, labelForCode } = opts;
+	const { defaultItems, masterItems = [], currentValue, labelForCode, lang = 'th' } = opts;
 	const knownCodes = new Set(defaultItems.map((i) => i.value));
 
 	const masterLabelByCode = new Map<string, string>();
 	for (const item of masterItems) {
 		if (item.status && item.status !== 'active') continue;
 		if (!knownCodes.has(item.code)) continue;
-		masterLabelByCode.set(item.code, item.label);
+		masterLabelByCode.set(item.code, formatMasterLabel(item, lang));
 	}
 
 	const items = defaultItems.map((d) => {

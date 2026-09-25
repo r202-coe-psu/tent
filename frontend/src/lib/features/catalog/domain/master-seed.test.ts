@@ -242,18 +242,18 @@ describe('master seed unit-of-measure provisioning', () => {
 		const itemMasters = couch.putDoc.mock.calls
 			.map(([, doc]) => doc as Record<string, unknown>)
 			.filter((doc) => doc.type === 'item_master');
-		expect(itemMasters).toHaveLength(29);
+		expect(itemMasters).toHaveLength(34);
 		const rice = itemMasters.find((doc) => doc.name === 'ข้าวสาร');
 		const eggs = itemMasters.find((doc) => doc.name === 'ไข่ไก่');
 		const vest = itemMasters.find((doc) => doc.name === 'เสื้อกั๊กสะท้อนแสง');
+		const fishSauce = itemMasters.find((doc) => doc.name === 'น้ำปลา');
+		const mosquitoNet = itemMasters.find((doc) => doc.name === 'มุ้ง');
 		expect(rice).toMatchObject({
 			base_unit: 'กิโลกรัม',
 			default_inventory_uom: 'bag',
 			default_issue_uom: 'kg',
-			conversions: [
-				{ uom_name: 'bag', multiplier: '5' },
-				{ uom_name: 'bag', multiplier: '50' }
-			]
+			category: 'item_category:food',
+			conversions: [{ uom_name: 'bag', multiplier: '50' }]
 		});
 		expect(eggs).toMatchObject({
 			default_inventory_uom: 'case',
@@ -263,6 +263,27 @@ describe('master seed unit-of-measure provisioning', () => {
 			default_inventory_uom: 'case',
 			default_issue_uom: 'case'
 		});
+		expect(fishSauce).toMatchObject({ category: 'item_category:food', base_unit: 'bottle' });
+		expect(mosquitoNet).toMatchObject({ category: 'item_category:bedding', base_unit: 'piece' });
+		const categories = couch.putDoc.mock.calls
+			.map(([, doc]) => doc as Record<string, unknown>)
+			.filter((doc) => doc.type === 'item_category');
+		expect(categories).toHaveLength(10);
+		expect(categories.every((doc) => doc.is_protected === true)).toBe(true);
+		expect(categories.map((doc) => doc._id).sort()).toEqual(
+			[
+				'item_category:bedding',
+				'item_category:food',
+				'item_category:fuel_energy',
+				'item_category:kits',
+				'item_category:medical',
+				'item_category:ready_meal',
+				'item_category:special_care',
+				'item_category:volunteer_ppe',
+				'item_category:wash',
+				'item_category:water'
+			].sort()
+		);
 		for (const itemMaster of itemMasters) {
 			assertItemMasterSeedUomCodes(itemMaster, new Set(['case']));
 		}

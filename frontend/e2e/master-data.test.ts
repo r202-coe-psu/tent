@@ -1,16 +1,16 @@
 /**
- * E2E Tests: Master Data Config pages (registration-config, shelter-config,
- * household-master-data) — CR-010 UI on top of `MasterDataConfigPage`.
+ * E2E Tests: Master Data hub (`/back-office/master-data`) — CR-010 UI.
  *
  * Strategy: real auth (CouchDB session cookies via injectSession), but the
  * `/api/back-office/master-data/*` BFF is fully mocked (`mockMasterData`).
  * Reason: unlike per-test users, master_data docs are 1 global doc per
  * `master_type` — real writes would race across parallel test workers/files.
  *
- * Coverage per page:
- * [Guard]  non-admin (registration_staff) is redirected away from the page
- * [Header] page-specific ConsoleBanner title + only its allowed master types
- * [CRUD]   add → edit → delete an item round-trips through the mocked BFF
+ * Coverage:
+ * [Guard]     non-manager is redirected away from the page
+ * [Hub]       sidebar shows all 4 types; type query selects the panel
+ * [CRUD]      add → edit round-trips through the mocked BFF
+ * [Redirect]  legacy URLs land on the hub with the correct `?type=`
  */
 
 import { test, expect, type Page, type Route } from '@playwright/test';
@@ -25,28 +25,26 @@ import { injectSession, clearSession } from './helpers/login';
 
 const BASE = 'http://localhost:4173';
 const API_PATTERN = '**/api/back-office/master-data**';
+const HUB_PATH = '/back-office/master-data';
 
-// Thai + English labels for the master_type enum (mirrors
-// `MASTER_DATA_TYPE_LABELS` in `$lib/features/master-data/domain/master-data.ts`).
-const TYPE_LABELS: Record<string, string> = {
-	vulnerable_group: 'ประเภทกลุ่มเปราะบาง (Vulnerable Group)',
-	health_condition: 'โรคประจำตัวและอาการแพ้ (Health Condition)',
-	dietary_restrictions: 'ศาสนาและข้อจำกัดอาหาร (Dietary Restrictions)',
-	pet_types: 'ประเภทสัตว์เลี้ยง (Pet Types)',
-	house_damage: 'สถานะความเสียหายของบ้าน (House Damage)',
-	municipality_zone: 'เขตเทศบาล (Municipality Zone)',
-	community: 'ชุมชน (Community)',
-	shelter_type: 'ประเภทศูนย์พักพิง (Shelter Type)'
+const SHORT_TITLES: Record<string, string> = {
+	vulnerable_group: 'กลุ่มเปราะบาง',
+	housing_type: 'ประเภทที่อยู่',
+	shelter_type: 'ประเภทศูนย์',
+	volunteer_skills: 'ทักษะอาสา'
 };
 
-type MockItem = { code: string; label: string; is_default: boolean };
+type MockItem = {
+	code: string;
+	label_th: string;
+	label_en: string;
+	is_default: boolean;
+	status?: 'active' | 'inactive';
+	category?: string;
+	description?: string;
+};
 type MockStore = Map<string, MockItem[]>;
 
-/**
- * Mocks the master-data BFF entirely (GET list/detail, PUT replace, DELETE
- * item) against an in-memory store, keyed by `master_type`. Returns the store
- * so a test can assert on the persisted shape after a UI action.
- */
 async function mockMasterData(page: Page, seed: Record<string, MockItem[]>): Promise<MockStore> {
 	const store: MockStore = new Map(Object.entries(seed));
 
@@ -116,8 +114,6 @@ async function mockMasterData(page: Page, seed: Record<string, MockItem[]>): Pro
 	return store;
 }
 
-// ─── fixture accounts (shared across all page describes) ──────────────────────
-
 const RUN_ID = Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
 const SA = {
 	name: `md_sa_${RUN_ID}`,
@@ -150,95 +146,72 @@ test.afterEach(async ({ page }) => {
 	await clearSession(page);
 });
 
-// ─── per-page config ────────────────────────────────────────────────────────────
+test.describe('Master Data hub', () => {
+	test('redirects a non-manager user away from the page', async ({ page }) => {
+		await injectSession(page, STAFF, sessions[STAFF.name]);
+		await mockMasterData(page, {});
+		await page.goto(`${BASE}${HUB_PATH}`);
+		await expect(page).toHaveURL(`${BASE}/portal`, { timeout: 8000 });
+	});
 
-const PAGES = [
-	{
-		name: 'registration-config',
-		path: '/back-office/registration-config',
-		title: '1. ข้อมูลหลักบุคคล (Person Master Data)',
-		allowedTypes: [
-			'vulnerable_group',
-			'health_condition',
-			'dietary_restrictions',
-			'pet_types',
-			'house_damage'
-		],
-		foreignTypes: ['shelter_type', 'municipality_zone', 'community'],
-		primaryType: 'pet_types'
-	},
-	{
-		name: 'shelter-config',
-		path: '/back-office/shelter-config',
-		title: '2. ตั้งค่าศูนย์พักพิง (Shelter Master Data)',
-		allowedTypes: ['shelter_type'],
-		foreignTypes: ['vulnerable_group', 'municipality_zone'],
-		primaryType: 'shelter_type'
-	},
-	{
-		name: 'household-master-data',
-		path: '/back-office/household-master-data',
-		title: '3. ตั้งค่าครัวเรือน (Household Master Data)',
-		allowedTypes: ['municipality_zone', 'community'],
-		foreignTypes: ['vulnerable_group', 'shelter_type'],
-		primaryType: 'community'
-	}
-];
-
-for (const cfg of PAGES) {
-	test.describe(`Master Data Config — ${cfg.name}`, () => {
-		test('redirects a non-admin user away from the page', async ({ page }) => {
-			await injectSession(page, STAFF, sessions[STAFF.name]);
-			await mockMasterData(page, {});
-			await page.goto(`${BASE}${cfg.path}`);
-			await expect(page).toHaveURL(`${BASE}/portal`, { timeout: 8000 });
+	test('renders the hub with all 4 type sidebar entries', async ({ page }) => {
+		await injectSession(page, SA, sessions[SA.name]);
+		await mockMasterData(page, {
+			vulnerable_group: [],
+			housing_type: [],
+			shelter_type: [],
+			volunteer_skills: []
 		});
+		await page.goto(`${BASE}${HUB_PATH}`);
 
-		test('renders the page-specific header and only its allowed master types', async ({ page }) => {
-			await injectSession(page, SA, sessions[SA.name]);
-			const seed = Object.fromEntries(
-				[...cfg.allowedTypes, ...cfg.foreignTypes].map((t) => [t, []])
-			);
-			await mockMasterData(page, seed);
-			await page.goto(`${BASE}${cfg.path}`);
+		await expect(page.getByRole('heading', { level: 1, name: 'Master Data' })).toBeVisible();
 
-			await expect(page.getByRole('heading', { level: 2, name: cfg.title })).toBeVisible();
+		for (const shortTitle of Object.values(SHORT_TITLES)) {
+			await expect(
+				page.getByRole('navigation', { name: 'ประเภท Master Data' }).getByText(shortTitle).first()
+			).toBeVisible();
+		}
+	});
 
-			for (const type of cfg.allowedTypes) {
-				await expect(page.locator('nav button', { hasText: TYPE_LABELS[type] })).toBeVisible();
-			}
-			for (const type of cfg.foreignTypes) {
-				await expect(page.locator('nav button', { hasText: TYPE_LABELS[type] })).not.toBeVisible();
-			}
-		});
+	test('supports add and edit of an item', async ({ page }) => {
+		await injectSession(page, SA, sessions[SA.name]);
+		await mockMasterData(page, { vulnerable_group: [] });
+		await page.goto(`${BASE}${HUB_PATH}?type=vulnerable_group`);
 
-		test('supports add, edit, and delete of an item', async ({ page }) => {
-			await injectSession(page, SA, sessions[SA.name]);
-			const seed = Object.fromEntries(cfg.allowedTypes.map((t) => [t, []]));
-			await mockMasterData(page, seed);
-			await page.goto(`${BASE}${cfg.path}?type=${cfg.primaryType}`);
+		await page.getByRole('button', { name: 'เพิ่มรายการ' }).first().click();
+		await expect(page.getByRole('dialog')).toBeVisible();
+		await page.locator('#master-data-code').fill('test_add_item');
+		await page.locator('#master-data-label-th').fill('รายการทดสอบ Add');
+		await page.locator('#master-data-label-en').fill('Test Add Item');
+		await page.getByRole('button', { name: 'บันทึก' }).click();
+		await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 8000 });
+		await expect(page.getByText('รายการทดสอบ Add')).toBeVisible();
 
-			// Add
-			await page.getByRole('button', { name: 'เพิ่มข้อมูล' }).click();
-			await expect(page.getByRole('dialog')).toBeVisible();
-			await page.locator('#master-data-label').fill('รายการทดสอบ Add');
-			await page.getByRole('button', { name: 'บันทึก' }).click();
-			await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 8000 });
-			await expect(page.getByText('รายการทดสอบ Add')).toBeVisible();
+		await page.getByRole('button', { name: 'แก้ไข รายการทดสอบ Add' }).click();
+		await expect(page.getByRole('dialog')).toBeVisible();
+		await page.locator('#master-data-label-th').fill('รายการทดสอบ Edited');
+		await page.locator('#master-data-label-en').fill('Test Edited Item');
+		await page.getByRole('button', { name: 'บันทึก' }).click();
+		await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 8000 });
+		await expect(page.getByText('รายการทดสอบ Edited')).toBeVisible();
+		await expect(page.getByText('รายการทดสอบ Add')).not.toBeVisible();
+	});
 
-			// Edit
-			await page.getByRole('button', { name: 'จัดการ รายการทดสอบ Add' }).click();
-			await expect(page.getByRole('dialog')).toBeVisible();
-			await page.locator('#master-data-label').fill('รายการทดสอบ Edited');
-			await page.getByRole('button', { name: 'บันทึก' }).click();
-			await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 8000 });
-			await expect(page.getByText('รายการทดสอบ Edited')).toBeVisible();
-			await expect(page.getByText('รายการทดสอบ Add')).not.toBeVisible();
-
-			// Delete (native `confirm()` dialog)
-			page.once('dialog', (d) => d.accept());
-			await page.getByRole('button', { name: 'ลบ รายการทดสอบ Edited' }).click();
-			await expect(page.getByText('รายการทดสอบ Edited')).not.toBeVisible({ timeout: 8000 });
+	test('legacy registration-config redirects to hub with vulnerable_group', async ({ page }) => {
+		await injectSession(page, SA, sessions[SA.name]);
+		await mockMasterData(page, { vulnerable_group: [] });
+		await page.goto(`${BASE}/back-office/registration-config`);
+		await expect(page).toHaveURL(new RegExp(`${HUB_PATH}\\?type=vulnerable_group`), {
+			timeout: 8000
 		});
 	});
-}
+
+	test('legacy volunteer-skills redirects to hub with volunteer_skills', async ({ page }) => {
+		await injectSession(page, SA, sessions[SA.name]);
+		await mockMasterData(page, { volunteer_skills: [] });
+		await page.goto(`${BASE}/back-office/volunteer-skills`);
+		await expect(page).toHaveURL(new RegExp(`${HUB_PATH}\\?type=volunteer_skills`), {
+			timeout: 8000
+		});
+	});
+});

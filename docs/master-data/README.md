@@ -2,7 +2,7 @@
 title: Smart Shelter — Master Data Seed SSoT
 status: draft
 created: 2026-09-17
-updated: 2026-09-23
+updated: 2026-09-25
 language: th
 ---
 
@@ -18,10 +18,10 @@ language: th
 
 | พื้นที่    | ข้อมูลที่ seed สร้าง                                                                                  |
 | ---------- | ----------------------------------------------------------------------------------------------------- |
-| `registry` | global `master_data` 10 เอกสาร รวมรายการ seed 84 รายการ                                                |
+| `registry` | global `master_data` 4 เอกสาร รวมรายการ seed 31 รายการ (CR-137)                                         |
 | `registry` | `config:app` 1 singleton พร้อมค่า default                                                             |
 | `registry` | `config:public_portal` 1 singleton พร้อมค่า default FAQ 13 รายการ (ช่องทางติดต่อเว้นว่างไว้ ไม่ seed) |
-| `catalog`  | `unit_of_measure` 27, `item_category` 10, `item_master` 29, `recipe` 6                               |
+| `catalog`  | `unit_of_measure` 27, `item_category` 10, `item_master` 34, `recipe` 6                               |
 | `catalog`  | SOP profile 1, audit 1 และ active pointer 1                                                           |
 | `catalog`  | `requirement_group` 5, `food_sphere_standard` 24 และ `replenishment_policy` 5                         |
 
@@ -57,177 +57,93 @@ language: th
 | Database                         | `registry`                         |
 | Document type                    | `master_data`                      |
 | Global document ID               | `master_data:{master_type}`        |
-| `schema_v`                       | `3`                                |
+| `schema_v`                       | `4`                                |
 | Item status                      | `active` สำหรับรายการที่ seed ใหม่ |
 | Author                           | `seed`                             |
 | Global scope                     | ไม่มี `shelter_code`               |
-| จำนวน master types               | 10                                 |
-| จำนวนรายการใน canonical seed set | 84                                 |
+| จำนวน master types               | 4 (CR-137)                         |
+| จำนวนรายการใน canonical seed set | 31                                 |
 
 Global seed ใช้ `enforceOneDefault()` เพื่อให้แต่ละ master type มีรายการที่เป็น default ได้ไม่เกินหนึ่งรายการ หากเอกสารเดิมมีรายการที่ไม่มีอยู่ใน canonical seed set ระบบจะเก็บรายการเดิมไว้ เว้นแต่เข้าเงื่อนไข migration ใน §1.4 ดังนั้น ตารางด้านล่างจึงเป็น **รายการที่ seed กำหนด** ไม่ใช่รายการทั้งหมดที่อาจมีอยู่ใน database แล้ว
 
 ### 1.2 ความหมายของ code และ key
 
-`SeedItemDef.key` เป็นคีย์ที่ใช้เฉพาะระหว่างการ seed ส่วน `MasterDataItem.code` คือค่าที่บันทึกจริงใน CouchDB
+`SeedItemDef.key` คือค่าที่บันทึกเป็น `MasterDataItem.code` (semantic snake_case) สำหรับ **ทุก** master type
 
-| Master type                                                                                                  | Persisted code                                                |
-| ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------- |
-| `vulnerable_group`                                                                                           | ใช้ key เดิมแบบ stable                                        |
-| `pet_types`                                                                                                  | ใช้ key เดิมแบบ stable                                        |
-| `housing_type`                                                                                               | ใช้ key เดิมแบบ stable                                        |
-| `health_condition`, `dietary_restrictions`, `house_damage`, `shelter_type`, `municipality_zone`, `community` | สร้างเป็น `item_<ulid>` และ reuse code เดิมเมื่อพบ label เดิม |
-| `volunteer_skills` | สร้างเป็น `item_<ulid>` และ reuse code เดิมเมื่อพบ label เดิม |
+| Master type | Persisted code |
+| --- | --- |
+| `vulnerable_group` | `d.key` (stable) |
+| `housing_type` | `d.key` (stable) |
+| `shelter_type` | `d.key` (stable) — เลิก `item_<ulid>` |
+| `volunteer_skills` | `d.key` (stable) — เลิก `item_<ulid>` |
 
-`community.parent_key` อ้างถึง key ของ `municipality_zone` ระหว่างการ seed จากนั้นระบบจะแปลงเป็น `parent_code` ของ zone ที่บันทึกจริง
+รายการเก็บชื่อแบบ bilingual: `label_th` + `label_en` (ทั้งคู่บังคับ). UI สร้างรายการใหม่ต้องกรอก `code` เอง (ไม่มี auto-ULID). รายการเก่า `item_*` แก้รหัสได้ตอนแก้ไข.
+
+**CR-137:** `municipality_zone` / `community` ไม่ใช่ master types — เป็น free-text บน household/shelter docs. `pets.species` เป็น domain enum `dog|cat|other` (ไม่ seed `pet_types`).
 
 ### 1.3 Canonical seeded items
 
 #### `vulnerable_group` — กลุ่มเปราะบาง
 
-| code                | label                                | default |
-| ------------------- | ------------------------------------ | ------- |
-| `bedridden`         | ผู้ป่วยติดเตียง                      | —       |
-| `dialysis`          | ผู้ป่วยฟอกไต                         | —       |
-| `wheelchair`        | ผู้ใช้วีลแชร์                        | —       |
-| `psychiatric`       | ผู้ป่วยจิตเวช                        | —       |
-| `elderly_dependent` | ผู้สูงอายุช่วยเหลือตัวเองไม่ได้      | —       |
-| `infant`            | ทารก                                 | —       |
-| `young_child`       | เด็กเล็ก                             | —       |
-| `pregnant`          | สตรีมีครรภ์                          | —       |
-| `vision_impaired`   | ผู้พิการทางการมองเห็น                | —       |
-| `hearing_impaired`  | ผู้พิการทางการได้ยิน                 | —       |
-| `disability_other`  | ผู้พิการ (อื่นๆ / ไม่ระบุรายละเอียด) | —       |
-| `chronic_illness`   | ผู้มีโรคประจำตัว/เรื้อรัง            | —       |
-
-#### `health_condition` — โรคประจำตัวและอาการแพ้
-
-| key               | label           | default |
-| ----------------- | --------------- | ------- |
-| `diabetes`        | เบาหวาน         | —       |
-| `hypertension`    | ความดันโลหิตสูง | —       |
-| `heart_disease`   | โรคหัวใจ        | —       |
-| `asthma`          | หอบหืด          | —       |
-| `seafood_allergy` | แพ้อาหารทะเล    | —       |
-| `sulfa_allergy`   | แพ้ยาซัลฟา      | —       |
-
-#### `dietary_restrictions` — ศาสนาและข้อจำกัดอาหาร
-
-| key     | label          | default |
-| ------- | -------------- | ------- |
-| `halal` | อิสลาม (ฮาลาล) | **ใช่** |
-
-#### `pet_types` — ประเภทสัตว์เลี้ยง
-
-| code    | label | default |
-| ------- | ----- | ------- |
-| `dog`   | สุนัข | —       |
-| `cat`   | แมว   | —       |
-| `other` | อื่นๆ | —       |
+| code                | label_th                             | label_en | default |
+| ------------------- | ------------------------------------ | -------- | ------- |
+| `bedridden`         | ผู้ป่วยติดเตียง                      | Bedridden | —       |
+| `dialysis`          | ผู้ป่วยฟอกไต                         | Dialysis patient | —       |
+| `wheelchair`        | ผู้ใช้วีลแชร์                        | Wheelchair user | —       |
+| `psychiatric`       | ผู้ป่วยจิตเวช                        | Psychiatric patient | —       |
+| `elderly_dependent` | ผู้สูงอายุช่วยเหลือตัวเองไม่ได้      | Dependent elderly | —       |
+| `infant`            | ทารก                                 | Infant | —       |
+| `young_child`       | เด็กเล็ก                             | Young child | —       |
+| `pregnant`          | สตรีมีครรภ์                          | Pregnant | —       |
+| `vision_impaired`   | ผู้พิการทางการมองเห็น                | Vision impaired | —       |
+| `hearing_impaired`  | ผู้พิการทางการได้ยิน                 | Hearing impaired | —       |
+| `disability_other`  | ผู้พิการ (อื่นๆ / ไม่ระบุรายละเอียด) | Disability (other / unspecified) | —       |
+| `chronic_illness`   | ผู้มีโรคประจำตัว/เรื้อรัง            | Chronic illness | —       |
 
 #### `housing_type` — ประเภทที่อยู่อาศัย
 
-| code             | label                             | default |
-| ---------------- | --------------------------------- | ------- |
-| `owned_house`    | บ้านตนเอง                         | **ใช่** |
-| `rented_house`   | บ้านเช่า                          | —       |
-| `condo`          | คอนโดมิเนียม                      | —       |
-| `apartment_dorm` | อพาร์ตเมนต์/หอพัก                 | —       |
-| `homeless`       | ไร้ที่อยู่อาศัย / ไม่มีบ้านเลขที่ | —       |
-
-#### `house_damage` — สถานะความเสียหายของบ้าน
-
-| key                   | label            | default |
-| --------------------- | ---------------- | ------- |
-| `total_loss`          | เสียหายทั้งหลัง  | **ใช่** |
-| `partial`             | เสียหายบางส่วน   | —       |
-| `flooded_first_floor` | น้ำท่วมถึงชั้น 1 | —       |
+| code             | label_th                          | label_en | default |
+| ---------------- | --------------------------------- | -------- | ------- |
+| `owned_house`    | บ้านตนเอง                         | Owned house | **ใช่** |
+| `rented_house`   | บ้านเช่า                          | Rented house | —       |
+| `condo`          | คอนโดมิเนียม                      | Condominium | —       |
+| `apartment_dorm` | อพาร์ตเมนต์/หอพัก                 | Apartment / dormitory | —       |
+| `homeless`       | ไร้ที่อยู่อาศัย / ไม่มีบ้านเลขที่ | Homeless / no house number | —       |
 
 #### `shelter_type` — ประเภทศูนย์พักพิง
 
-| key                   | label       | default |
-| --------------------- | ----------- | ------- |
-| `school`              | โรงเรียน    | **ใช่** |
-| `community_hall`      | ศาลาประชาคม | —       |
-| `temple`              | วัด         | —       |
-| `government_building` | อาคารราชการ | —       |
-| `sports_centre`       | ศูนย์กีฬา   | —       |
-
-#### `municipality_zone` — เขตเทศบาล
-
-| key      | label                 | default |
-| -------- | --------------------- | ------- |
-| `zone_1` | เขตเทศบาลนครหาดใหญ่ 1 | **ใช่** |
-| `zone_2` | เขตเทศบาลนครหาดใหญ่ 2 | —       |
-| `zone_3` | เขตเทศบาลนครหาดใหญ่ 3 | —       |
-| `zone_4` | เขตเทศบาลนครหาดใหญ่ 4 | —       |
-
-#### `community` — ชุมชน
-
-`community` มี `parent_type: municipality_zone` และมีทั้งหมด 36 รายการ แบ่งตาม zone ดังนี้
-
-| key                     | label                       | parent_key | default |
-| ----------------------- | --------------------------- | ---------- | ------- |
-| `na_khai_senanarong`    | ชุมชนหน้าค่ายเสนาณรงค์      | `zone_1`   | **ใช่** |
-| `na_suan_satharana`     | ชุมชนหน้าสวนสาธารณะ         | `zone_1`   | —       |
-| `rong_pun`              | ชุมชนโรงปูน                 | `zone_1`   | —       |
-| `na_rph_sikarin`        | ชุมชนหน้าโรงพยาบาลศิครินทร์ | `zone_1`   | —       |
-| `ko_suea`               | ชุมชนเกาะเสือ               | `zone_1`   | —       |
-| `rongrian_chatri`       | ชุมชนโรงเรียนชาตรี          | `zone_1`   | —       |
-| `sikarin`               | ชุมชนศิครินทร์              | `zone_1`   | —       |
-| `rathakan`              | ชุมชนรัถการ                 | `zone_1`   | —       |
-| `mae_litao`             | ชุมชนแม่ลิเตา               | `zone_1`   | —       |
-| `talat_mai`             | ชุมชนตลาดใหม่               | `zone_2`   | —       |
-| `suan_siri`             | ชุมชนสวนศิริ                | `zone_2`   | —       |
-| `sam_chai`              | ชุมชนสามชัย                 | `zone_2`   | —       |
-| `rph_bangkok`           | ชุมชนโรงพยาบาลกรุงเทพ       | `zone_2`   | —       |
-| `ban_ja`                | ชุมชนบ้านจ่า                | `zone_2`   | —       |
-| `klang_na`              | ชุมชนกลางนา                 | `zone_2`   | —       |
-| `sam_yaek_khlong_rian`  | ชุมชนสามแยกคลองเรียน        | `zone_2`   | —       |
-| `chan_prathip`          | ชุมชนจันทร์ประทีป           | `zone_3`   | —       |
-| `d_land_thai_charoen`   | ชุมชนดีแลนด์-ไทยเจริญ       | `zone_3`   | —       |
-| `rim_khuan`             | ชุมชนริมควน                 | `zone_3`   | —       |
-| `khlong_rabai_1`        | ชุมชนคลองระบายน้ำที่ 1      | `zone_3`   | —       |
-| `lang_thiwa_amphoe`     | ชุมชนหลังที่ว่าการอำเภอ     | `zone_3`   | —       |
-| `plak_krim`             | ชุมชนปลักกริม               | `zone_3`   | —       |
-| `rattana_wibun`         | ชุมชนรัตนวิบูลย์            | `zone_3`   | —       |
-| `thung_sao`             | ชุมชนทุ่งเสา                | `zone_3`   | —       |
-| `khonsong`              | ชุมชนขนส่ง                  | `zone_3`   | —       |
-| `lang_rongphak`         | ชุมชนหลังโรงพัก             | `zone_3`   | —       |
-| `lang_u_rotfai`         | ชุมชนหลังอู่รถไฟ            | `zone_3`   | —       |
-| `ko_liap`               | ชุมชนเกาะเลียบ              | `zone_4`   | —       |
-| `wat_hatyai_nai`        | ชุมชนวัดหาดใหญ่ใน           | `zone_4`   | —       |
-| `rattana_uthit`         | ชุมชนรัตนอุทิศ              | `zone_4`   | —       |
-| `tha_sai`               | ชุมชนท่าไทร                 | `zone_4`   | —       |
-| `ratchamangkhalaphisek` | ชุมชนรัชมังคลาภิเษก         | `zone_4`   | —       |
-| `mongkhon_hansa`        | ชุมชนมงคลหรรษา              | `zone_4`   | —       |
-| `chok_saman`            | ชุมชนโชคสมาน                | `zone_4`   | —       |
-| `rat_uthit`             | ชุมชนราษฎร์อุทิศ            | `zone_4`   | —       |
-| `hua_phan_rotfai`       | ชุมชนหัวพานรถไฟ             | `zone_4`   | —       |
+| code                  | label_th    | label_en | default |
+| --------------------- | ----------- | -------- | ------- |
+| `school`              | โรงเรียน    | School | **ใช่** |
+| `community_hall`      | ศาลาประชาคม | Community hall | —       |
+| `temple`              | วัด         | Temple | —       |
+| `government_building` | อาคารราชการ | Government building | —       |
+| `sports_centre`       | ศูนย์กีฬา   | Sports centre | —       |
 
 #### `volunteer_skills` — ทักษะมาตรฐานจิตอาสา
 
 Seed ลง global `master_data:volunteer_skills` จำนวน 9 รายการ โดยมี `category: operational` 8 รายการ และ `category: controlled` 1 รายการ (`medical`)
 
-| key | label | category | description | default |
-| --- | --- | --- | --- | --- |
-| `cooking` | ประกอบอาหาร / ครัวสนาม | `operational` | ช่วยเตรียมวัตถุดิบ ปรุงอาหาร แจกอาหารครัวกลาง | **ใช่** |
-| `logistics` | ขนย้ายสิ่งของ / พลาธิการ | `operational` | ขนย้ายกระสอบทราย ลำเลียงถุงยังชีพ ยกของหนัก | — |
-| `screening` | คัดกรองและสแกนประวัติ | `operational` | ต้อนรับ ลงทะเบียน คัดกรองประวัติผู้ประสบภัยเบื้องต้น | — |
-| `medical` | การแพทย์ / ปฐมพยาบาล | `controlled` | ปฐมพยาบาลเบื้องต้น วัดสัญญาณชีพ (ต้องผ่านการตรวจรับรองใบประกอบวิชาชีพ) | — |
-| `reception` | ประสานงาน / ต้อนรับ | `operational` | ต้อนรับผู้ประสบภัย ประสานงานระหว่างจุดบริการ | — |
-| `distribution` | แจกจ่ายของยังชีพ | `operational` | แจกจ่ายถุงยังชีพ น้ำดื่ม เครื่องอุปโภคบริโภค | — |
-| `sanitation` | ทำความสะอาด / สุขอนามัย | `operational` | ทำความสะอาดพื้นที่ส่วนกลาง ดูแลสุขอนามัยในศูนย์ | — |
-| `childcare` | สันทนาการ / ดูแลเด็ก | `operational` | กิจกรรมสันทนาการ ดูแลเด็กและผู้สูงอายุ | — |
-| `transport` | ขับขี่ยานพาหนะ / ขนส่ง | `operational` | ขับขี่ยานพาหนะขนส่งคนและสิ่งของ | — |
+| code | label_th | label_en | category | description | default |
+| --- | --- | --- | --- | --- | --- |
+| `cooking` | ประกอบอาหาร / ครัวสนาม | Cooking / field kitchen | `operational` | ช่วยเตรียมวัตถุดิบ ปรุงอาหาร แจกอาหารครัวกลาง | **ใช่** |
+| `logistics` | ขนย้ายสิ่งของ / พลาธิการ | Logistics / supply movement | `operational` | ขนย้ายกระสอบทราย ลำเลียงถุงยังชีพ ยกของหนัก | — |
+| `screening` | คัดกรองและสแกนประวัติ | Screening and registration | `operational` | ต้อนรับ ลงทะเบียน คัดกรองประวัติผู้ประสบภัยเบื้องต้น | — |
+| `medical` | การแพทย์ / ปฐมพยาบาล | Medical / first aid | `controlled` | ปฐมพยาบาลเบื้องต้น วัดสัญญาณชีพ (ต้องผ่านการตรวจรับรองใบประกอบวิชาชีพ) | — |
+| `reception` | ประสานงาน / ต้อนรับ | Coordination / reception | `operational` | ต้อนรับผู้ประสบภัย ประสานงานระหว่างจุดบริการ | — |
+| `distribution` | แจกจ่ายของยังชีพ | Relief distribution | `operational` | แจกจ่ายถุงยังชีพ น้ำดื่ม เครื่องอุปโภคบริโภค | — |
+| `sanitation` | ทำความสะอาด / สุขอนามัย | Cleaning / sanitation | `operational` | ทำความสะอาดพื้นที่ส่วนกลาง ดูแลสุขอนามัยในศูนย์ | — |
+| `childcare` | สันทนาการ / ดูแลเด็ก | Recreation / childcare | `operational` | กิจกรรมสันทนาการ ดูแลเด็กและผู้สูงอายุ | — |
+| `transport` | ขับขี่ยานพาหนะ / ขนส่ง | Driving / transport | `operational` | ขับขี่ยานพาหนะขนส่งคนและสิ่งของ | — |
 
 ### 1.4 การย้ายข้อมูลเดิมและการ seed ซ้ำ
 
 - code เดิมของกลุ่มเปราะบาง `elderly` จะถูกย้ายเป็น `elderly_dependent`
 - code เดิมของกลุ่มเปราะบาง `disabled` จะถูกย้ายเป็น `disability_other`
 - label เดิม `ผู้สูงอายุ`, `ผู้พิการ` และ `ผู้ป่วยเรื้อรัง` ใช้ช่วยค้นหารายการปลายทางระหว่าง migration
-- รายการ `pet_types` ที่มี code `bird` หรือ label `นก` จะไม่ถูกเก็บเพิ่มเป็นรายการส่วนเกิน
-- รายการ `dietary_restrictions` ที่มี label `มังสวิรัติ` หรือ `อาหารอ่อน` จะไม่ถูกเก็บเพิ่มเป็นรายการส่วนเกิน
-- เมื่อ seed ซ้ำ ระบบจะใช้ code เดิมของรายการที่มี label เดิม และเก็บรายการเดิมที่ไม่มีใน seed ไว้ตามกติกา
+- เมื่อ seed ซ้ำ ระบบจับคู่ด้วย `label_th` หรือ `code`/`key` — ถ้า reuse ได้ `item_*` แต่ `d.key` ว่าง จะ**เขียนทับเป็น `d.key`** สำหรับรายการจาก seed defs; extras ที่ผู้ใช้สร้างเองไม่แตะ
+- schema_v ของเอกสารที่ seed เขียน = **4** (bilingual labels)
+- **CR-137:** seed ไม่สร้าง `health_condition` / `dietary_restrictions` / `pet_types` / `house_damage` / `municipality_zone` / `community` อีก; orphan docs ใน DB ถูกละเว้นโดย enum
 
 ## 2. Catalog seed
 
@@ -302,78 +218,86 @@ Seed ลง global `master_data:volunteer_skills` จำนวน 9 รายก
 
 ### 2.2 `item_category`
 
-หมวดหมู่สิ่งของมาตรฐานมี 10 รายการ ใช้ `schema_v: 2` สร้างด้วย `_id` รูปแบบ `item_category:{ulid}` และเก็บชื่อเป็นภาษาไทย:
+หมวดหมู่ระบบมาตรฐานมี 10 รายการตาม CR-119 ใช้ `schema_v: 2` พร้อม `_id` คงที่ `item_category:{system_key.toLowerCase()}`, `system_key`, `default_class`, `description` และ `is_protected: true`
 
-| `_id`                  | name                           |
-| ---------------------- | ------------------------------ |
-| `item_category:{ulid}` | อาหารและวัตถุดิบ               |
-| `item_category:{ulid}` | น้ำดื่มสะอาด                   |
-| `item_category:{ulid}` | สุขอนามัยและของใช้ส่วนตัว      |
-| `item_category:{ulid}` | เวชภัณฑ์และการปฐมพยาบาล        |
-| `item_category:{ulid}` | ของใช้กลุ่มเปราะบาง            |
-| `item_category:{ulid}` | อุปกรณ์เจ้าหน้าที่และอาสาสมัคร |
-| `item_category:{ulid}` | อาหารปรุงเสร็จและเครื่องดื่ม   |
-| `item_category:{ulid}` | เครื่องนอนและที่พักพิง         |
-| `item_category:{ulid}` | เชื้อเพลิงและพลังงาน           |
-| `item_category:{ulid}` | ชุดพัสดุยังชีพรวม              |
+การ seed แบบ idempotent: ถ้าเอกสาร deterministic id มีอยู่แล้ว จะคง `is_protected`, `system_key`, `default_class` และ**ไม่เขียนทับ** `name` / `description` ที่ผู้ดูแลส่วนกลางแก้ไว้แล้ว · หมวดเก่าที่สร้างด้วย ULID และชื่อไทยสั้นจะถูกลบเมื่อ seed สร้าง id ใหม่สำเร็จ
+
+| `_id` | system_key | name | default_class |
+| --- | --- | --- | --- |
+| `item_category:food` | `FOOD` | อาหารและวัตถุดิบ (Food Ingredients) | `CONSUMABLE` |
+| `item_category:water` | `WATER` | น้ำดื่มสะอาด (Drinking Water) | `CONSUMABLE` |
+| `item_category:wash` | `WASH` | สุขอนามัยและของใช้ส่วนตัว (WASH & Hygiene) | `CONSUMABLE` |
+| `item_category:medical` | `MEDICAL` | เวชภัณฑ์และการปฐมพยาบาล (Medical & First Aid) | `CONSUMABLE` |
+| `item_category:special_care` | `SPECIAL_CARE` | ของใช้กลุ่มเปราะบาง (Special Care & Vulnerable) | `CONSUMABLE` |
+| `item_category:volunteer_ppe` | `VOLUNTEER_PPE` | อุปกรณ์เจ้าหน้าที่และอาสาสมัคร (PPE & Operations) | `EQUIPMENT` |
+| `item_category:ready_meal` | `READY_MEAL` | อาหารปรุงเสร็จและเครื่องดื่ม (Ready-to-Eat Meals) | `CONSUMABLE` |
+| `item_category:bedding` | `BEDDING` | เครื่องนอนและที่พักพิง (Shelter & Bedding) | `DURABLE` |
+| `item_category:fuel_energy` | `FUEL_ENERGY` | เชื้อเพลิงและพลังงาน (Fuel & Energy) | `CONSUMABLE` |
+| `item_category:kits` | `KITS` | ชุดพัสดุยังชีพรวม (Relief Kits & Packages) | `CONSUMABLE` |
 
 ### 2.3 `item_master`
 
-รายการสิ่งของหลักมี 29 รายการ ใช้ `schema_v: 4` สร้างด้วย `_id` รูปแบบ `item_master:{ulid}` และผูกกับ `category` ตามชื่อหมวดหมู่ภาษาไทย:
+รายการสิ่งของหลักมี **34** รายการ ใช้ `schema_v: 4` สร้างด้วย `_id` รูปแบบ `item_master:{ulid}` และผูก `category` เป็น **category id** (เช่น `item_category:food`) · ตัวอ่านยังรับชื่อไทยเก่าแล้ว map ไป id
 
 ค่า `base_unit`, `default_inventory_uom`, `default_issue_uom` และ `conversions[].uom_name`
 ของ item master ที่สร้างใหม่ต้องเป็น canonical code จาก `unit_of_measure` เช่น `bag`, `box`,
 `pack`, `set` และ `piece`; จำนวนต่อบรรจุภัณฑ์เก็บใน `conversions[].multiplier`. เมื่อ seed ซ้ำ
 ระบบจะคงค่า canonical/custom UOM ที่มีอยู่ และ normalize ชื่อบรรจุภัณฑ์ legacy ที่ไม่ใช่ code
-กลับเป็นค่า canonical ของ item โดยไม่แก้ไข stock ledger ย้อนหลัง. `base_unit` legacy เดิมของ
+กลับเป็นค่า canonical ของ item โดยไม่แก้ไข stock ledger ย้อนหลัง. หาก conversions เดิมมีรหัสหน่วยซ้ำ
+(เช่น ข้าวสาร `bag` ×5 และ `bag` ×50) seed จะแทนที่ด้วยค่า canonical จาก defs. `base_unit` legacy เดิมของ
 item ที่มีอยู่จะคงไว้เพื่อไม่ทำให้ `stock_ledger.unit` ย้อนหลังไม่ตรงกัน; item ใหม่ใช้ canonical
 code เสมอ. หากไม่มีค่า default เฉพาะ ระบบจะใช้ `base_unit` เป็นค่า `default_inventory_uom` และ
 `default_issue_uom`.
 
-| `_id`                | name                     | category                       | base_unit  | type_class   | conversions                | inventory / issue uom | storage / shelf life     | properties / flags                                           |
-| -------------------- | ------------------------ | ------------------------------ | ---------- | ------------ | -------------------------- | --------------------- | ------------------------ | ------------------------------------------------------------ |
-| `item_master:{ulid}` | ข้าวสาร                  | อาหารและวัตถุดิบ               | `kg`       | `CONSUMABLE` | `bag` (x5), `bag` (x50)    | `bag` / kg            | DRY / 365 วัน            | ผูก `FOOD_ENERGY`                                            |
-| `item_master:{ulid}` | ไข่ไก่                   | อาหารและวัตถุดิบ               | `piece`    | `CONSUMABLE` | `pack` (x30)               | `pack` / piece        | DRY / 21 วัน             | ผูก `FOOD_PROTEIN`                                           |
-| `item_master:{ulid}` | ผักรวม                   | อาหารและวัตถุดิบ               | `kg`       | `CONSUMABLE` | —                          | kg / kg               | CHILLED / 5 วัน          | —                                                            |
-| `item_master:{ulid}` | ปลากระป๋อง               | อาหารและวัตถุดิบ               | `can`      | `CONSUMABLE` | `pack` (x10), `box` (x100) | `box` / can           | DRY / 730 วัน            | `dietary: ['HALAL']`                                         |
-| `item_master:{ulid}` | เนื้อไก่สด               | อาหารและวัตถุดิบ               | `kg`       | `CONSUMABLE` | —                          | kg / kg               | CHILLED / 3 วัน          | `dietary: ['HALAL']`                                         |
-| `item_master:{ulid}` | น้ำมันพืช                | อาหารและวัตถุดิบ               | `bottle`   | `CONSUMABLE` | `box` (x12)                | `box` / bottle        | DRY / 365 วัน            | `dietary: ['HALAL']`, ผูก `FOOD_FAT`                         |
-| `item_master:{ulid}` | น้ำดื่ม 600 มล.          | น้ำดื่มสะอาด                   | `bottle`   | `CONSUMABLE` | `pack` (x12)               | `pack` / bottle       | DRY / 365 วัน            | ผูก `DRINKING_WATER`                                         |
-| `item_master:{ulid}` | น้ำดื่มถัง 5 ลิตร        | น้ำดื่มสะอาด                   | `bottle`   | `CONSUMABLE` | `pack` (x4)                | `pack` / bottle       | DRY / 365 วัน            | ผูก `DRINKING_WATER`                                         |
-| `item_master:{ulid}` | สบู่ก้อน                 | สุขอนามัยและของใช้ส่วนตัว      | `bar`      | `CONSUMABLE` | `pack` (x4)                | `pack` / bar          | DRY / 730 วัน            | —                                                            |
-| `item_master:{ulid}` | ยาสีฟัน                  | สุขอนามัยและของใช้ส่วนตัว      | `tube`     | `CONSUMABLE` | `pack` (x6)                | `pack` / tube         | DRY / 730 วัน            | —                                                            |
-| `item_master:{ulid}` | แปรงสีฟัน                | สุขอนามัยและของใช้ส่วนตัว      | `piece`    | `CONSUMABLE` | `pack` (x12)               | `pack` / piece        | DRY / —                  | —                                                            |
-| `item_master:{ulid}` | ผ้าอนามัย                | สุขอนามัยและของใช้ส่วนตัว      | `pack`     | `CONSUMABLE` | `box` (x24)                | `box` / pack          | DRY / 1095 วัน           | `target_gender: 'FEMALE'`                                    |
-| `item_master:{ulid}` | ผงซักฟอก                 | สุขอนามัยและของใช้ส่วนตัว      | `bag`      | `CONSUMABLE` | `box` (x12)                | `box` / bag           | DRY / 730 วัน            | —                                                            |
-| `item_master:{ulid}` | ยาพาราเซตามอล 500 มก.    | เวชภัณฑ์และการปฐมพยาบาล        | `tablet`   | `CONSUMABLE` | `pack` (x10), `box` (x100) | `box` / tablet        | CONTROLLED_MED / 730 วัน | —                                                            |
-| `item_master:{ulid}` | ชุดทำแผลปฐมพยาบาล        | เวชภัณฑ์และการปฐมพยาบาล        | `set`      | `CONSUMABLE` | `box` (x10)                | `box` / set           | DRY / 730 วัน            | —                                                            |
-| `item_master:{ulid}` | แอลกอฮอล์ล้างแผล 70%     | เวชภัณฑ์และการปฐมพยาบาล        | `bottle`   | `CONSUMABLE` | `box` (x24)                | `box` / bottle        | DRY / 1095 วัน           | —                                                            |
-| `item_master:{ulid}` | ผงเกลือแร่ ORS           | เวชภัณฑ์และการปฐมพยาบาล        | `sachet`   | `CONSUMABLE` | `box` (x50)                | `box` / sachet        | DRY / 730 วัน            | —                                                            |
-| `item_master:{ulid}` | ผ้าอ้อมผู้ใหญ่ ไซส์ L    | ของใช้กลุ่มเปราะบาง            | `piece`    | `CONSUMABLE` | `pack` (x10), `box` (x80)  | `box` / piece         | DRY / 1095 วัน           | `age_group: 'ELDERLY'`                                       |
-| `item_master:{ulid}` | ผ้าอ้อมเด็ก ไซส์ M       | ของใช้กลุ่มเปราะบาง            | `piece`    | `CONSUMABLE` | `pack` (x20), `box` (x120) | `box` / piece         | DRY / 1095 วัน           | `age_group: 'CHILD'`                                         |
-| `item_master:{ulid}` | นมผงสำหรับทารก           | ของใช้กลุ่มเปราะบาง            | `can`      | `CONSUMABLE` | `box` (x12)                | `box` / can           | DRY / 365 วัน            | `age_group: 'INFANT'`                                        |
-| `item_master:{ulid}` | เสื้อกั๊กสะท้อนแสง       | อุปกรณ์เจ้าหน้าที่และอาสาสมัคร | `piece`    | `EQUIPMENT`  | —                          | — / —                 | —                        | `returnable: true`, `asset_status: 'READY'`                  |
-| `item_master:{ulid}` | รองเท้าบูทยางกันน้ำ      | อุปกรณ์เจ้าหน้าที่และอาสาสมัคร | `pair`     | `EQUIPMENT`  | —                          | — / —                 | —                        | `returnable: true`, `asset_status: 'READY'`                  |
-| `item_master:{ulid}` | ข้าวกล่องทั่วไป          | อาหารปรุงเสร็จและเครื่องดื่ม   | `box`      | `CONSUMABLE` | —                          | box / box             | DRY / 1 วัน              | `distribution_type: 'recurring'`                             |
-| `item_master:{ulid}` | ข้าวกล่องฮาลาล           | อาหารปรุงเสร็จและเครื่องดื่ม   | `box`      | `CONSUMABLE` | —                          | box / box             | DRY / 1 วัน              | `distribution_type: 'recurring'`, `dietary: ['HALAL']`       |
-| `item_master:{ulid}` | ผ้าห่มกันหนาว            | เครื่องนอนและที่พักพิง         | `piece`    | `DURABLE`    | `bundle` (x10)             | `bundle` / piece      | —                        | `returnable: true`, `qty_per_person: 1`, `one_time`          |
-| `item_master:{ulid}` | เสื่อปูนอน               | เครื่องนอนและที่พักพิง         | `piece`    | `DURABLE`    | `bundle` (x10)             | `bundle` / piece      | —                        | `returnable: true`, `qty_per_person: 1`, `one_time`          |
-| `item_master:{ulid}` | เต็นท์ครอบครัว           | เครื่องนอนและที่พักพิง         | `piece`    | `DURABLE`    | —                          | piece / piece         | —                        | `returnable: true`, `qty_per_person: 1`, `one_time`          |
-| `item_master:{ulid}` | ถังแก๊สหุงต้ม LPG 15 กก. | เชื้อเพลิงและพลังงาน           | `cylinder` | `CONSUMABLE` | —                          | cylinder / cylinder   | —                        | `fuel_type: 'LPG'`, `capacity_kg: '15'`, `burn_rate: '0.35'` |
-| `item_master:{ulid}` | ถุงยังชีพธารน้ำใจ        | ชุดพัสดุยังชีพรวม              | `set`      | `CONSUMABLE` | —                          | set / set             | DRY / 180 วัน            | `distribution_type: 'one_time'`                              |
+| `_id` | name | category | base_unit | type_class | conversions | inventory / issue uom | storage / shelf life | properties / flags |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `item_master:{ulid}` | ข้าวสาร | `item_category:food` | `kg` | `CONSUMABLE` | `bag` (x50) | `bag` / kg | DRY / 365 วัน | ผูก `FOOD_ENERGY` |
+| `item_master:{ulid}` | ไข่ไก่ | `item_category:food` | `piece` | `CONSUMABLE` | `pack` (x30) | `pack` / piece | DRY / 21 วัน | ผูก `FOOD_PROTEIN` |
+| `item_master:{ulid}` | ผักรวม | `item_category:food` | `kg` | `CONSUMABLE` | — | kg / kg | CHILLED / 5 วัน | — |
+| `item_master:{ulid}` | ปลากระป๋อง | `item_category:food` | `can` | `CONSUMABLE` | `pack` (x10), `box` (x100) | `box` / can | DRY / 730 วัน | `dietary: ['HALAL']` |
+| `item_master:{ulid}` | เนื้อไก่สด | `item_category:food` | `kg` | `CONSUMABLE` | — | kg / kg | CHILLED / 3 วัน | `dietary: ['HALAL']` |
+| `item_master:{ulid}` | น้ำมันพืช | `item_category:food` | `bottle` | `CONSUMABLE` | `box` (x12) | `box` / bottle | DRY / 365 วัน | `dietary: ['HALAL']`, ผูก `FOOD_FAT` |
+| `item_master:{ulid}` | น้ำปลา | `item_category:food` | `bottle` | `CONSUMABLE` | — | bottle / bottle | DRY / 730 วัน | `dietary: ['HALAL']` |
+| `item_master:{ulid}` | เกลือ | `item_category:food` | `kg` | `CONSUMABLE` | — | kg / kg | DRY / 1095 วัน | — |
+| `item_master:{ulid}` | น้ำตาลทราย | `item_category:food` | `kg` | `CONSUMABLE` | — | kg / kg | DRY / 730 วัน | — |
+| `item_master:{ulid}` | น้ำดื่ม 600 มล. | `item_category:water` | `bottle` | `CONSUMABLE` | `pack` (x12) | `pack` / bottle | DRY / 365 วัน | ผูก `DRINKING_WATER` |
+| `item_master:{ulid}` | น้ำดื่มถัง 5 ลิตร | `item_category:water` | `bottle` | `CONSUMABLE` | `pack` (x4) | `pack` / bottle | DRY / 365 วัน | ผูก `DRINKING_WATER` |
+| `item_master:{ulid}` | สบู่ก้อน | `item_category:wash` | `bar` | `CONSUMABLE` | `pack` (x4) | `pack` / bar | DRY / 730 วัน | — |
+| `item_master:{ulid}` | ยาสีฟัน | `item_category:wash` | `tube` | `CONSUMABLE` | `pack` (x6) | `pack` / tube | DRY / 730 วัน | — |
+| `item_master:{ulid}` | แปรงสีฟัน | `item_category:wash` | `piece` | `CONSUMABLE` | `pack` (x12) | `pack` / piece | DRY / — | — |
+| `item_master:{ulid}` | ผ้าอนามัย | `item_category:wash` | `pack` | `CONSUMABLE` | `box` (x24) | `box` / pack | DRY / 1095 วัน | `target_gender: 'FEMALE'` |
+| `item_master:{ulid}` | ผงซักฟอก | `item_category:wash` | `bag` | `CONSUMABLE` | `box` (x12) | `box` / bag | DRY / 730 วัน | — |
+| `item_master:{ulid}` | ยาพาราเซตามอล 500 มก. | `item_category:medical` | `tablet` | `CONSUMABLE` | `pack` (x10), `box` (x100) | `box` / tablet | CONTROLLED_MED / 730 วัน | — |
+| `item_master:{ulid}` | ชุดทำแผลปฐมพยาบาล | `item_category:medical` | `set` | `CONSUMABLE` | `box` (x10) | `box` / set | DRY / 730 วัน | — |
+| `item_master:{ulid}` | แอลกอฮอล์ล้างแผล 70% | `item_category:medical` | `bottle` | `CONSUMABLE` | `box` (x24) | `box` / bottle | DRY / 1095 วัน | — |
+| `item_master:{ulid}` | ผงเกลือแร่ ORS | `item_category:medical` | `sachet` | `CONSUMABLE` | `box` (x50) | `box` / sachet | DRY / 730 วัน | — |
+| `item_master:{ulid}` | ผ้าอ้อมผู้ใหญ่ ไซส์ L | `item_category:special_care` | `piece` | `CONSUMABLE` | `pack` (x10), `box` (x80) | `box` / piece | DRY / 1095 วัน | `age_group: 'ELDERLY'` |
+| `item_master:{ulid}` | ผ้าอ้อมเด็ก ไซส์ M | `item_category:special_care` | `piece` | `CONSUMABLE` | `pack` (x20), `box` (x120) | `box` / piece | DRY / 1095 วัน | `age_group: 'CHILD'` |
+| `item_master:{ulid}` | นมผงสำหรับทารก | `item_category:special_care` | `can` | `CONSUMABLE` | `box` (x12) | `box` / can | DRY / 365 วัน | `age_group: 'INFANT'` |
+| `item_master:{ulid}` | เสื้อกั๊กสะท้อนแสง | `item_category:volunteer_ppe` | `piece` | `EQUIPMENT` | — | — / — | — | `returnable: true`, `asset_status: 'READY'` |
+| `item_master:{ulid}` | รองเท้าบูทยางกันน้ำ | `item_category:volunteer_ppe` | `pair` | `EQUIPMENT` | — | — / — | — | `returnable: true`, `asset_status: 'READY'` |
+| `item_master:{ulid}` | ถุงมือ | `item_category:volunteer_ppe` | `pair` | `EQUIPMENT` | — | — / — | — | `returnable: true`, `asset_status: 'READY'` |
+| `item_master:{ulid}` | ข้าวกล่องทั่วไป | `item_category:ready_meal` | `box` | `CONSUMABLE` | — | box / box | DRY / 1 วัน | `distribution_type: 'recurring'` |
+| `item_master:{ulid}` | ข้าวกล่องฮาลาล | `item_category:ready_meal` | `box` | `CONSUMABLE` | — | box / box | DRY / 1 วัน | `distribution_type: 'recurring'`, `dietary: ['HALAL']` |
+| `item_master:{ulid}` | ผ้าห่มกันหนาว | `item_category:bedding` | `piece` | `DURABLE` | `bundle` (x10) | `bundle` / piece | — | `returnable: true`, `qty_per_person: 1`, `one_time` |
+| `item_master:{ulid}` | เสื่อปูนอน | `item_category:bedding` | `piece` | `DURABLE` | `bundle` (x10) | `bundle` / piece | — | `returnable: true`, `qty_per_person: 1`, `one_time` |
+| `item_master:{ulid}` | เต็นท์ครอบครัว | `item_category:bedding` | `piece` | `DURABLE` | — | piece / piece | — | `returnable: true`, `qty_per_person: 1`, `one_time` |
+| `item_master:{ulid}` | มุ้ง | `item_category:bedding` | `piece` | `DURABLE` | — | piece / piece | — | `returnable: true`, `qty_per_person: 1`, `one_time` |
+| `item_master:{ulid}` | ถังแก๊สหุงต้ม LPG 15 กก. | `item_category:fuel_energy` | `cylinder` | `CONSUMABLE` | — | cylinder / cylinder | — | `fuel_type: 'LPG'`, `capacity_kg: '15'`, `burn_rate: '0.35'` |
+| `item_master:{ulid}` | ถุงยังชีพธารน้ำใจ | `item_category:kits` | `set` | `CONSUMABLE` | — | set / set | DRY / 180 วัน | `distribution_type: 'one_time'` |
 
 ### 2.4 `recipe`
 
-สูตรอาหารมาตรฐานสำหรับโรงครัวศูนย์พักพิงมี 6 รายการ ใช้ `schema_v: 4`, `standard_portions: "1"` และ `standard_duration_hours: "1"` และสร้างด้วย `_id` รูปแบบ `recipe:{ulid}`:
+สูตรอาหารมาตรฐานสำหรับโรงครัวศูนย์พักพิงมี 6 รายการ ใช้ `schema_v: 4`, `standard_portions: "1"` และ `standard_duration_hours: "1"` และสร้างด้วย `_id` รูปแบบ `recipe:{ulid}` · เมนูผัด/ทอด/พะโล้ใส่เครื่องปรุงและน้ำมันพืชที่มีในคลังแล้ว (ไม่สร้างน้ำมันซ้ำ)
 
-| `_id`           | label                    | ingredients                                       |
-| --------------- | ------------------------ | ------------------------------------------------- |
-| `recipe:{ulid}` | ข้าวไข่เจียว             | ข้าวสาร 0.2 kg; ไข่ไก่ 2 piece                    |
-| `recipe:{ulid}` | ข้าวต้มไก่สับ            | ข้าวสาร 0.15 kg; เนื้อไก่สด 0.1 kg                |
-| `recipe:{ulid}` | ข้าวกะเพราไก่สับ         | ข้าวสาร 0.2 kg; เนื้อไก่สด 0.15 kg                |
-| `recipe:{ulid}` | ข้าวไก่ผัดกระเทียม       | ข้าวสาร 0.2 kg; เนื้อไก่สด 0.15 kg                |
-| `recipe:{ulid}` | ข้าวไข่พะโล้ไก่          | ข้าวสาร 0.2 kg; ไข่ไก่ 2 piece; เนื้อไก่สด 0.1 kg |
-| `recipe:{ulid}` | ข้าวปลากระป๋องทรงเครื่อง | ข้าวสาร 0.2 kg; ปลากระป๋อง 0.5 can                |
+| `_id` | label | ingredients |
+| --- | --- | --- |
+| `recipe:{ulid}` | ข้าวไข่เจียว | ข้าวสาร 0.2 kg; ไข่ไก่ 2 piece; น้ำมันพืช 0.02 bottle |
+| `recipe:{ulid}` | ข้าวต้มไก่สับ | ข้าวสาร 0.15 kg; เนื้อไก่สด 0.1 kg; เกลือ 0.005 kg |
+| `recipe:{ulid}` | ข้าวกะเพราไก่สับ | ข้าวสาร 0.2 kg; เนื้อไก่สด 0.15 kg; น้ำมันพืช 0.02 bottle; น้ำปลา 0.01 bottle |
+| `recipe:{ulid}` | ข้าวไก่ผัดกระเทียม | ข้าวสาร 0.2 kg; เนื้อไก่สด 0.15 kg; น้ำมันพืช 0.02 bottle; น้ำปลา 0.01 bottle |
+| `recipe:{ulid}` | ข้าวไข่พะโล้ไก่ | ข้าวสาร 0.2 kg; ไข่ไก่ 2 piece; เนื้อไก่สด 0.1 kg; น้ำตาลทราย 0.02 kg; น้ำปลา 0.01 bottle |
+| `recipe:{ulid}` | ข้าวปลากระป๋องทรงเครื่อง | ข้าวสาร 0.2 kg; ปลากระป๋อง 0.5 can; น้ำมันพืช 0.02 bottle; น้ำปลา 0.01 bottle |
 
 ## 3. SOP ratio seed
 
