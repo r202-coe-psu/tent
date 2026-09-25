@@ -6,7 +6,7 @@
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
-	import * as Pagination from '$lib/components/ui/pagination/index.js';
+	import PaginationControls from '$lib/components/pagination-controls.svelte';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import { parseCampaignNotes, publicItemAggregate, type NeedItem } from '$lib/features/operations';
@@ -588,23 +588,11 @@
 					แสดง {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, flatRows.length)}
 					จาก {flatRows.length} รายการ
 				</p>
-				<Pagination.Root bind:page={currentPage} count={flatRows.length} perPage={PAGE_SIZE}>
-					{#snippet children({ pages })}
-						<Pagination.Content>
-							<Pagination.Previous />
-							{#each pages as p, i (p.type === 'page' ? `page-${p.value}` : `ellipsis-${i}`)}
-								<Pagination.Item>
-									{#if p.type === 'page'}
-										<Pagination.Link page={p} isActive={p.value === safePage} />
-									{:else}
-										<Pagination.Ellipsis />
-									{/if}
-								</Pagination.Item>
-							{/each}
-							<Pagination.Next />
-						</Pagination.Content>
-					{/snippet}
-				</Pagination.Root>
+				<PaginationControls
+					bind:page={() => safePage, (p) => (currentPage = p)}
+					count={flatRows.length}
+					perPage={PAGE_SIZE}
+				/>
 			</div>
 		{/if}
 	</div>
