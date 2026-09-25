@@ -21,7 +21,7 @@ language: th
 | `registry` | global `master_data` 4 เอกสาร รวมรายการ seed 31 รายการ (CR-137)                                         |
 | `registry` | `config:app` 1 singleton พร้อมค่า default                                                             |
 | `registry` | `config:public_portal` 1 singleton พร้อมค่า default FAQ 13 รายการ (ช่องทางติดต่อเว้นว่างไว้ ไม่ seed) |
-| `catalog`  | `unit_of_measure` 27, `item_category` 10, `item_master` 29, `recipe` 6                               |
+| `catalog`  | `unit_of_measure` 27, `item_category` 10, `item_master` 34, `recipe` 6                               |
 | `catalog`  | SOP profile 1, audit 1 และ active pointer 1                                                           |
 | `catalog`  | `requirement_group` 5, `food_sphere_standard` 24 และ `replenishment_policy` 5                         |
 
@@ -218,78 +218,86 @@ Seed ลง global `master_data:volunteer_skills` จำนวน 9 รายก
 
 ### 2.2 `item_category`
 
-หมวดหมู่สิ่งของมาตรฐานมี 10 รายการ ใช้ `schema_v: 2` สร้างด้วย `_id` รูปแบบ `item_category:{ulid}` และเก็บชื่อเป็นภาษาไทย:
+หมวดหมู่ระบบมาตรฐานมี 10 รายการตาม CR-119 ใช้ `schema_v: 2` พร้อม `_id` คงที่ `item_category:{system_key.toLowerCase()}`, `system_key`, `default_class`, `description` และ `is_protected: true`
 
-| `_id`                  | name                           |
-| ---------------------- | ------------------------------ |
-| `item_category:{ulid}` | อาหารและวัตถุดิบ               |
-| `item_category:{ulid}` | น้ำดื่มสะอาด                   |
-| `item_category:{ulid}` | สุขอนามัยและของใช้ส่วนตัว      |
-| `item_category:{ulid}` | เวชภัณฑ์และการปฐมพยาบาล        |
-| `item_category:{ulid}` | ของใช้กลุ่มเปราะบาง            |
-| `item_category:{ulid}` | อุปกรณ์เจ้าหน้าที่และอาสาสมัคร |
-| `item_category:{ulid}` | อาหารปรุงเสร็จและเครื่องดื่ม   |
-| `item_category:{ulid}` | เครื่องนอนและที่พักพิง         |
-| `item_category:{ulid}` | เชื้อเพลิงและพลังงาน           |
-| `item_category:{ulid}` | ชุดพัสดุยังชีพรวม              |
+การ seed แบบ idempotent: ถ้าเอกสาร deterministic id มีอยู่แล้ว จะคง `is_protected`, `system_key`, `default_class` และ**ไม่เขียนทับ** `name` / `description` ที่ผู้ดูแลส่วนกลางแก้ไว้แล้ว · หมวดเก่าที่สร้างด้วย ULID และชื่อไทยสั้นจะถูกลบเมื่อ seed สร้าง id ใหม่สำเร็จ
+
+| `_id` | system_key | name | default_class |
+| --- | --- | --- | --- |
+| `item_category:food` | `FOOD` | อาหารและวัตถุดิบ (Food Ingredients) | `CONSUMABLE` |
+| `item_category:water` | `WATER` | น้ำดื่มสะอาด (Drinking Water) | `CONSUMABLE` |
+| `item_category:wash` | `WASH` | สุขอนามัยและของใช้ส่วนตัว (WASH & Hygiene) | `CONSUMABLE` |
+| `item_category:medical` | `MEDICAL` | เวชภัณฑ์และการปฐมพยาบาล (Medical & First Aid) | `CONSUMABLE` |
+| `item_category:special_care` | `SPECIAL_CARE` | ของใช้กลุ่มเปราะบาง (Special Care & Vulnerable) | `CONSUMABLE` |
+| `item_category:volunteer_ppe` | `VOLUNTEER_PPE` | อุปกรณ์เจ้าหน้าที่และอาสาสมัคร (PPE & Operations) | `EQUIPMENT` |
+| `item_category:ready_meal` | `READY_MEAL` | อาหารปรุงเสร็จและเครื่องดื่ม (Ready-to-Eat Meals) | `CONSUMABLE` |
+| `item_category:bedding` | `BEDDING` | เครื่องนอนและที่พักพิง (Shelter & Bedding) | `DURABLE` |
+| `item_category:fuel_energy` | `FUEL_ENERGY` | เชื้อเพลิงและพลังงาน (Fuel & Energy) | `CONSUMABLE` |
+| `item_category:kits` | `KITS` | ชุดพัสดุยังชีพรวม (Relief Kits & Packages) | `CONSUMABLE` |
 
 ### 2.3 `item_master`
 
-รายการสิ่งของหลักมี 29 รายการ ใช้ `schema_v: 4` สร้างด้วย `_id` รูปแบบ `item_master:{ulid}` และผูกกับ `category` ตามชื่อหมวดหมู่ภาษาไทย:
+รายการสิ่งของหลักมี **34** รายการ ใช้ `schema_v: 4` สร้างด้วย `_id` รูปแบบ `item_master:{ulid}` และผูก `category` เป็น **category id** (เช่น `item_category:food`) · ตัวอ่านยังรับชื่อไทยเก่าแล้ว map ไป id
 
 ค่า `base_unit`, `default_inventory_uom`, `default_issue_uom` และ `conversions[].uom_name`
 ของ item master ที่สร้างใหม่ต้องเป็น canonical code จาก `unit_of_measure` เช่น `bag`, `box`,
 `pack`, `set` และ `piece`; จำนวนต่อบรรจุภัณฑ์เก็บใน `conversions[].multiplier`. เมื่อ seed ซ้ำ
 ระบบจะคงค่า canonical/custom UOM ที่มีอยู่ และ normalize ชื่อบรรจุภัณฑ์ legacy ที่ไม่ใช่ code
-กลับเป็นค่า canonical ของ item โดยไม่แก้ไข stock ledger ย้อนหลัง. `base_unit` legacy เดิมของ
+กลับเป็นค่า canonical ของ item โดยไม่แก้ไข stock ledger ย้อนหลัง. หาก conversions เดิมมีรหัสหน่วยซ้ำ
+(เช่น ข้าวสาร `bag` ×5 และ `bag` ×50) seed จะแทนที่ด้วยค่า canonical จาก defs. `base_unit` legacy เดิมของ
 item ที่มีอยู่จะคงไว้เพื่อไม่ทำให้ `stock_ledger.unit` ย้อนหลังไม่ตรงกัน; item ใหม่ใช้ canonical
 code เสมอ. หากไม่มีค่า default เฉพาะ ระบบจะใช้ `base_unit` เป็นค่า `default_inventory_uom` และ
 `default_issue_uom`.
 
-| `_id`                | name                     | category                       | base_unit  | type_class   | conversions                | inventory / issue uom | storage / shelf life     | properties / flags                                           |
-| -------------------- | ------------------------ | ------------------------------ | ---------- | ------------ | -------------------------- | --------------------- | ------------------------ | ------------------------------------------------------------ |
-| `item_master:{ulid}` | ข้าวสาร                  | อาหารและวัตถุดิบ               | `kg`       | `CONSUMABLE` | `bag` (x5), `bag` (x50)    | `bag` / kg            | DRY / 365 วัน            | ผูก `FOOD_ENERGY`                                            |
-| `item_master:{ulid}` | ไข่ไก่                   | อาหารและวัตถุดิบ               | `piece`    | `CONSUMABLE` | `pack` (x30)               | `pack` / piece        | DRY / 21 วัน             | ผูก `FOOD_PROTEIN`                                           |
-| `item_master:{ulid}` | ผักรวม                   | อาหารและวัตถุดิบ               | `kg`       | `CONSUMABLE` | —                          | kg / kg               | CHILLED / 5 วัน          | —                                                            |
-| `item_master:{ulid}` | ปลากระป๋อง               | อาหารและวัตถุดิบ               | `can`      | `CONSUMABLE` | `pack` (x10), `box` (x100) | `box` / can           | DRY / 730 วัน            | `dietary: ['HALAL']`                                         |
-| `item_master:{ulid}` | เนื้อไก่สด               | อาหารและวัตถุดิบ               | `kg`       | `CONSUMABLE` | —                          | kg / kg               | CHILLED / 3 วัน          | `dietary: ['HALAL']`                                         |
-| `item_master:{ulid}` | น้ำมันพืช                | อาหารและวัตถุดิบ               | `bottle`   | `CONSUMABLE` | `box` (x12)                | `box` / bottle        | DRY / 365 วัน            | `dietary: ['HALAL']`, ผูก `FOOD_FAT`                         |
-| `item_master:{ulid}` | น้ำดื่ม 600 มล.          | น้ำดื่มสะอาด                   | `bottle`   | `CONSUMABLE` | `pack` (x12)               | `pack` / bottle       | DRY / 365 วัน            | ผูก `DRINKING_WATER`                                         |
-| `item_master:{ulid}` | น้ำดื่มถัง 5 ลิตร        | น้ำดื่มสะอาด                   | `bottle`   | `CONSUMABLE` | `pack` (x4)                | `pack` / bottle       | DRY / 365 วัน            | ผูก `DRINKING_WATER`                                         |
-| `item_master:{ulid}` | สบู่ก้อน                 | สุขอนามัยและของใช้ส่วนตัว      | `bar`      | `CONSUMABLE` | `pack` (x4)                | `pack` / bar          | DRY / 730 วัน            | —                                                            |
-| `item_master:{ulid}` | ยาสีฟัน                  | สุขอนามัยและของใช้ส่วนตัว      | `tube`     | `CONSUMABLE` | `pack` (x6)                | `pack` / tube         | DRY / 730 วัน            | —                                                            |
-| `item_master:{ulid}` | แปรงสีฟัน                | สุขอนามัยและของใช้ส่วนตัว      | `piece`    | `CONSUMABLE` | `pack` (x12)               | `pack` / piece        | DRY / —                  | —                                                            |
-| `item_master:{ulid}` | ผ้าอนามัย                | สุขอนามัยและของใช้ส่วนตัว      | `pack`     | `CONSUMABLE` | `box` (x24)                | `box` / pack          | DRY / 1095 วัน           | `target_gender: 'FEMALE'`                                    |
-| `item_master:{ulid}` | ผงซักฟอก                 | สุขอนามัยและของใช้ส่วนตัว      | `bag`      | `CONSUMABLE` | `box` (x12)                | `box` / bag           | DRY / 730 วัน            | —                                                            |
-| `item_master:{ulid}` | ยาพาราเซตามอล 500 มก.    | เวชภัณฑ์และการปฐมพยาบาล        | `tablet`   | `CONSUMABLE` | `pack` (x10), `box` (x100) | `box` / tablet        | CONTROLLED_MED / 730 วัน | —                                                            |
-| `item_master:{ulid}` | ชุดทำแผลปฐมพยาบาล        | เวชภัณฑ์และการปฐมพยาบาล        | `set`      | `CONSUMABLE` | `box` (x10)                | `box` / set           | DRY / 730 วัน            | —                                                            |
-| `item_master:{ulid}` | แอลกอฮอล์ล้างแผล 70%     | เวชภัณฑ์และการปฐมพยาบาล        | `bottle`   | `CONSUMABLE` | `box` (x24)                | `box` / bottle        | DRY / 1095 วัน           | —                                                            |
-| `item_master:{ulid}` | ผงเกลือแร่ ORS           | เวชภัณฑ์และการปฐมพยาบาล        | `sachet`   | `CONSUMABLE` | `box` (x50)                | `box` / sachet        | DRY / 730 วัน            | —                                                            |
-| `item_master:{ulid}` | ผ้าอ้อมผู้ใหญ่ ไซส์ L    | ของใช้กลุ่มเปราะบาง            | `piece`    | `CONSUMABLE` | `pack` (x10), `box` (x80)  | `box` / piece         | DRY / 1095 วัน           | `age_group: 'ELDERLY'`                                       |
-| `item_master:{ulid}` | ผ้าอ้อมเด็ก ไซส์ M       | ของใช้กลุ่มเปราะบาง            | `piece`    | `CONSUMABLE` | `pack` (x20), `box` (x120) | `box` / piece         | DRY / 1095 วัน           | `age_group: 'CHILD'`                                         |
-| `item_master:{ulid}` | นมผงสำหรับทารก           | ของใช้กลุ่มเปราะบาง            | `can`      | `CONSUMABLE` | `box` (x12)                | `box` / can           | DRY / 365 วัน            | `age_group: 'INFANT'`                                        |
-| `item_master:{ulid}` | เสื้อกั๊กสะท้อนแสง       | อุปกรณ์เจ้าหน้าที่และอาสาสมัคร | `piece`    | `EQUIPMENT`  | —                          | — / —                 | —                        | `returnable: true`, `asset_status: 'READY'`                  |
-| `item_master:{ulid}` | รองเท้าบูทยางกันน้ำ      | อุปกรณ์เจ้าหน้าที่และอาสาสมัคร | `pair`     | `EQUIPMENT`  | —                          | — / —                 | —                        | `returnable: true`, `asset_status: 'READY'`                  |
-| `item_master:{ulid}` | ข้าวกล่องทั่วไป          | อาหารปรุงเสร็จและเครื่องดื่ม   | `box`      | `CONSUMABLE` | —                          | box / box             | DRY / 1 วัน              | `distribution_type: 'recurring'`                             |
-| `item_master:{ulid}` | ข้าวกล่องฮาลาล           | อาหารปรุงเสร็จและเครื่องดื่ม   | `box`      | `CONSUMABLE` | —                          | box / box             | DRY / 1 วัน              | `distribution_type: 'recurring'`, `dietary: ['HALAL']`       |
-| `item_master:{ulid}` | ผ้าห่มกันหนาว            | เครื่องนอนและที่พักพิง         | `piece`    | `DURABLE`    | `bundle` (x10)             | `bundle` / piece      | —                        | `returnable: true`, `qty_per_person: 1`, `one_time`          |
-| `item_master:{ulid}` | เสื่อปูนอน               | เครื่องนอนและที่พักพิง         | `piece`    | `DURABLE`    | `bundle` (x10)             | `bundle` / piece      | —                        | `returnable: true`, `qty_per_person: 1`, `one_time`          |
-| `item_master:{ulid}` | เต็นท์ครอบครัว           | เครื่องนอนและที่พักพิง         | `piece`    | `DURABLE`    | —                          | piece / piece         | —                        | `returnable: true`, `qty_per_person: 1`, `one_time`          |
-| `item_master:{ulid}` | ถังแก๊สหุงต้ม LPG 15 กก. | เชื้อเพลิงและพลังงาน           | `cylinder` | `CONSUMABLE` | —                          | cylinder / cylinder   | —                        | `fuel_type: 'LPG'`, `capacity_kg: '15'`, `burn_rate: '0.35'` |
-| `item_master:{ulid}` | ถุงยังชีพธารน้ำใจ        | ชุดพัสดุยังชีพรวม              | `set`      | `CONSUMABLE` | —                          | set / set             | DRY / 180 วัน            | `distribution_type: 'one_time'`                              |
+| `_id` | name | category | base_unit | type_class | conversions | inventory / issue uom | storage / shelf life | properties / flags |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `item_master:{ulid}` | ข้าวสาร | `item_category:food` | `kg` | `CONSUMABLE` | `bag` (x50) | `bag` / kg | DRY / 365 วัน | ผูก `FOOD_ENERGY` |
+| `item_master:{ulid}` | ไข่ไก่ | `item_category:food` | `piece` | `CONSUMABLE` | `pack` (x30) | `pack` / piece | DRY / 21 วัน | ผูก `FOOD_PROTEIN` |
+| `item_master:{ulid}` | ผักรวม | `item_category:food` | `kg` | `CONSUMABLE` | — | kg / kg | CHILLED / 5 วัน | — |
+| `item_master:{ulid}` | ปลากระป๋อง | `item_category:food` | `can` | `CONSUMABLE` | `pack` (x10), `box` (x100) | `box` / can | DRY / 730 วัน | `dietary: ['HALAL']` |
+| `item_master:{ulid}` | เนื้อไก่สด | `item_category:food` | `kg` | `CONSUMABLE` | — | kg / kg | CHILLED / 3 วัน | `dietary: ['HALAL']` |
+| `item_master:{ulid}` | น้ำมันพืช | `item_category:food` | `bottle` | `CONSUMABLE` | `box` (x12) | `box` / bottle | DRY / 365 วัน | `dietary: ['HALAL']`, ผูก `FOOD_FAT` |
+| `item_master:{ulid}` | น้ำปลา | `item_category:food` | `bottle` | `CONSUMABLE` | — | bottle / bottle | DRY / 730 วัน | `dietary: ['HALAL']` |
+| `item_master:{ulid}` | เกลือ | `item_category:food` | `kg` | `CONSUMABLE` | — | kg / kg | DRY / 1095 วัน | — |
+| `item_master:{ulid}` | น้ำตาลทราย | `item_category:food` | `kg` | `CONSUMABLE` | — | kg / kg | DRY / 730 วัน | — |
+| `item_master:{ulid}` | น้ำดื่ม 600 มล. | `item_category:water` | `bottle` | `CONSUMABLE` | `pack` (x12) | `pack` / bottle | DRY / 365 วัน | ผูก `DRINKING_WATER` |
+| `item_master:{ulid}` | น้ำดื่มถัง 5 ลิตร | `item_category:water` | `bottle` | `CONSUMABLE` | `pack` (x4) | `pack` / bottle | DRY / 365 วัน | ผูก `DRINKING_WATER` |
+| `item_master:{ulid}` | สบู่ก้อน | `item_category:wash` | `bar` | `CONSUMABLE` | `pack` (x4) | `pack` / bar | DRY / 730 วัน | — |
+| `item_master:{ulid}` | ยาสีฟัน | `item_category:wash` | `tube` | `CONSUMABLE` | `pack` (x6) | `pack` / tube | DRY / 730 วัน | — |
+| `item_master:{ulid}` | แปรงสีฟัน | `item_category:wash` | `piece` | `CONSUMABLE` | `pack` (x12) | `pack` / piece | DRY / — | — |
+| `item_master:{ulid}` | ผ้าอนามัย | `item_category:wash` | `pack` | `CONSUMABLE` | `box` (x24) | `box` / pack | DRY / 1095 วัน | `target_gender: 'FEMALE'` |
+| `item_master:{ulid}` | ผงซักฟอก | `item_category:wash` | `bag` | `CONSUMABLE` | `box` (x12) | `box` / bag | DRY / 730 วัน | — |
+| `item_master:{ulid}` | ยาพาราเซตามอล 500 มก. | `item_category:medical` | `tablet` | `CONSUMABLE` | `pack` (x10), `box` (x100) | `box` / tablet | CONTROLLED_MED / 730 วัน | — |
+| `item_master:{ulid}` | ชุดทำแผลปฐมพยาบาล | `item_category:medical` | `set` | `CONSUMABLE` | `box` (x10) | `box` / set | DRY / 730 วัน | — |
+| `item_master:{ulid}` | แอลกอฮอล์ล้างแผล 70% | `item_category:medical` | `bottle` | `CONSUMABLE` | `box` (x24) | `box` / bottle | DRY / 1095 วัน | — |
+| `item_master:{ulid}` | ผงเกลือแร่ ORS | `item_category:medical` | `sachet` | `CONSUMABLE` | `box` (x50) | `box` / sachet | DRY / 730 วัน | — |
+| `item_master:{ulid}` | ผ้าอ้อมผู้ใหญ่ ไซส์ L | `item_category:special_care` | `piece` | `CONSUMABLE` | `pack` (x10), `box` (x80) | `box` / piece | DRY / 1095 วัน | `age_group: 'ELDERLY'` |
+| `item_master:{ulid}` | ผ้าอ้อมเด็ก ไซส์ M | `item_category:special_care` | `piece` | `CONSUMABLE` | `pack` (x20), `box` (x120) | `box` / piece | DRY / 1095 วัน | `age_group: 'CHILD'` |
+| `item_master:{ulid}` | นมผงสำหรับทารก | `item_category:special_care` | `can` | `CONSUMABLE` | `box` (x12) | `box` / can | DRY / 365 วัน | `age_group: 'INFANT'` |
+| `item_master:{ulid}` | เสื้อกั๊กสะท้อนแสง | `item_category:volunteer_ppe` | `piece` | `EQUIPMENT` | — | — / — | — | `returnable: true`, `asset_status: 'READY'` |
+| `item_master:{ulid}` | รองเท้าบูทยางกันน้ำ | `item_category:volunteer_ppe` | `pair` | `EQUIPMENT` | — | — / — | — | `returnable: true`, `asset_status: 'READY'` |
+| `item_master:{ulid}` | ถุงมือ | `item_category:volunteer_ppe` | `pair` | `EQUIPMENT` | — | — / — | — | `returnable: true`, `asset_status: 'READY'` |
+| `item_master:{ulid}` | ข้าวกล่องทั่วไป | `item_category:ready_meal` | `box` | `CONSUMABLE` | — | box / box | DRY / 1 วัน | `distribution_type: 'recurring'` |
+| `item_master:{ulid}` | ข้าวกล่องฮาลาล | `item_category:ready_meal` | `box` | `CONSUMABLE` | — | box / box | DRY / 1 วัน | `distribution_type: 'recurring'`, `dietary: ['HALAL']` |
+| `item_master:{ulid}` | ผ้าห่มกันหนาว | `item_category:bedding` | `piece` | `DURABLE` | `bundle` (x10) | `bundle` / piece | — | `returnable: true`, `qty_per_person: 1`, `one_time` |
+| `item_master:{ulid}` | เสื่อปูนอน | `item_category:bedding` | `piece` | `DURABLE` | `bundle` (x10) | `bundle` / piece | — | `returnable: true`, `qty_per_person: 1`, `one_time` |
+| `item_master:{ulid}` | เต็นท์ครอบครัว | `item_category:bedding` | `piece` | `DURABLE` | — | piece / piece | — | `returnable: true`, `qty_per_person: 1`, `one_time` |
+| `item_master:{ulid}` | มุ้ง | `item_category:bedding` | `piece` | `DURABLE` | — | piece / piece | — | `returnable: true`, `qty_per_person: 1`, `one_time` |
+| `item_master:{ulid}` | ถังแก๊สหุงต้ม LPG 15 กก. | `item_category:fuel_energy` | `cylinder` | `CONSUMABLE` | — | cylinder / cylinder | — | `fuel_type: 'LPG'`, `capacity_kg: '15'`, `burn_rate: '0.35'` |
+| `item_master:{ulid}` | ถุงยังชีพธารน้ำใจ | `item_category:kits` | `set` | `CONSUMABLE` | — | set / set | DRY / 180 วัน | `distribution_type: 'one_time'` |
 
 ### 2.4 `recipe`
 
-สูตรอาหารมาตรฐานสำหรับโรงครัวศูนย์พักพิงมี 6 รายการ ใช้ `schema_v: 4`, `standard_portions: "1"` และ `standard_duration_hours: "1"` และสร้างด้วย `_id` รูปแบบ `recipe:{ulid}`:
+สูตรอาหารมาตรฐานสำหรับโรงครัวศูนย์พักพิงมี 6 รายการ ใช้ `schema_v: 4`, `standard_portions: "1"` และ `standard_duration_hours: "1"` และสร้างด้วย `_id` รูปแบบ `recipe:{ulid}` · เมนูผัด/ทอด/พะโล้ใส่เครื่องปรุงและน้ำมันพืชที่มีในคลังแล้ว (ไม่สร้างน้ำมันซ้ำ)
 
-| `_id`           | label                    | ingredients                                       |
-| --------------- | ------------------------ | ------------------------------------------------- |
-| `recipe:{ulid}` | ข้าวไข่เจียว             | ข้าวสาร 0.2 kg; ไข่ไก่ 2 piece                    |
-| `recipe:{ulid}` | ข้าวต้มไก่สับ            | ข้าวสาร 0.15 kg; เนื้อไก่สด 0.1 kg                |
-| `recipe:{ulid}` | ข้าวกะเพราไก่สับ         | ข้าวสาร 0.2 kg; เนื้อไก่สด 0.15 kg                |
-| `recipe:{ulid}` | ข้าวไก่ผัดกระเทียม       | ข้าวสาร 0.2 kg; เนื้อไก่สด 0.15 kg                |
-| `recipe:{ulid}` | ข้าวไข่พะโล้ไก่          | ข้าวสาร 0.2 kg; ไข่ไก่ 2 piece; เนื้อไก่สด 0.1 kg |
-| `recipe:{ulid}` | ข้าวปลากระป๋องทรงเครื่อง | ข้าวสาร 0.2 kg; ปลากระป๋อง 0.5 can                |
+| `_id` | label | ingredients |
+| --- | --- | --- |
+| `recipe:{ulid}` | ข้าวไข่เจียว | ข้าวสาร 0.2 kg; ไข่ไก่ 2 piece; น้ำมันพืช 0.02 bottle |
+| `recipe:{ulid}` | ข้าวต้มไก่สับ | ข้าวสาร 0.15 kg; เนื้อไก่สด 0.1 kg; เกลือ 0.005 kg |
+| `recipe:{ulid}` | ข้าวกะเพราไก่สับ | ข้าวสาร 0.2 kg; เนื้อไก่สด 0.15 kg; น้ำมันพืช 0.02 bottle; น้ำปลา 0.01 bottle |
+| `recipe:{ulid}` | ข้าวไก่ผัดกระเทียม | ข้าวสาร 0.2 kg; เนื้อไก่สด 0.15 kg; น้ำมันพืช 0.02 bottle; น้ำปลา 0.01 bottle |
+| `recipe:{ulid}` | ข้าวไข่พะโล้ไก่ | ข้าวสาร 0.2 kg; ไข่ไก่ 2 piece; เนื้อไก่สด 0.1 kg; น้ำตาลทราย 0.02 kg; น้ำปลา 0.01 bottle |
+| `recipe:{ulid}` | ข้าวปลากระป๋องทรงเครื่อง | ข้าวสาร 0.2 kg; ปลากระป๋อง 0.5 can; น้ำมันพืช 0.02 bottle; น้ำปลา 0.01 bottle |
 
 ## 3. SOP ratio seed
 

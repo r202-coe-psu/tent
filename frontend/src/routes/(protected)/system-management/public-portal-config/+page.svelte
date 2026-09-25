@@ -61,7 +61,6 @@
 <StaffPageShell
 	title={data.title}
 	description="จัดการคำถามที่พบบ่อย (FAQ) และลิงก์ติดต่อสำหรับหน้าเว็บไซต์หลักและระบบต่างๆ"
-	maxWidth="7xl"
 >
 	<StaffHub>
 		{#snippet nav()}
