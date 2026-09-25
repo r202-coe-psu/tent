@@ -4,14 +4,22 @@
  * must default `--label` to the same value so CSS `@page` and the CUPS `PageSize` agree.
  */
 export const KIOSK_PRINT_DPI = 203;
-export const KIOSK_LABEL_MM = { width: 60, height: 40 } as const;
+export const KIOSK_LABEL_MM = { width: 60, height: 60 } as const;
 export const KIOSK_LABEL_MAX_WIDTH_MM = 82;
 export const KIOSK_LABEL_PADDING_MM = 2;
+/** Height kept under the QR in the stacked layout: brand + 2-line name + shelter + gaps. */
+export const KIOSK_LABEL_TEXT_MM = 20;
 export const KIOSK_QR_MIN_MM = 20;
 export const KIOSK_QR_MARGIN_MODULES = 2;
 export const KIOSK_QR_QUIET_ZONE_MODULES = 4;
-export const KIOSK_QR_BASE_DOTS_PER_MODULE = 6;
+/** Modules above 1 mm (8 dots) add no scan margin, so bigger labels do not grow the QR further. */
+export const KIOSK_QR_MAX_DOTS_PER_MODULE = 8;
 export const KIOSK_QR_COLOR = { dark: '#000000', light: '#FFFFFF' } as const;
+
+/** Square/portrait labels stack the QR above the text; landscape labels put the text beside it. */
+export type KioskLabelLayout = 'stacked' | 'side';
+export const KIOSK_LABEL_LAYOUT: KioskLabelLayout =
+	KIOSK_LABEL_MM.height >= KIOSK_LABEL_MM.width ? 'stacked' : 'side';
 
 const MM_PER_INCH = 25.4;
 
@@ -32,9 +40,18 @@ export function dotsToMm(dots: number): number {
 	return (dots / KIOSK_PRINT_DPI) * MM_PER_INCH;
 }
 
+/** Largest square (mm) the QR image may occupy on the label for the current layout. */
+export function kioskQrBoxMm(): number {
+	const innerWidth = KIOSK_LABEL_MM.width - KIOSK_LABEL_PADDING_MM * 2;
+	const innerHeight = KIOSK_LABEL_MM.height - KIOSK_LABEL_PADDING_MM * 2;
+	return KIOSK_LABEL_LAYOUT === 'stacked'
+		? Math.min(innerWidth, innerHeight - KIOSK_LABEL_TEXT_MM)
+		: innerHeight;
+}
+
 /**
  * Size a QR (moduleCount = modules per side, e.g. 29 for version 3) so every module is a whole
- * number of printer dots, the visible code is at least KIOSK_QR_MIN_MM, and it fits the label.
+ * number of printer dots, the visible code is at least KIOSK_QR_MIN_MM, and it fits the QR box.
  */
 export function kioskQrPrintSize(moduleCount: number): KioskQrPrintSize {
 	const minDotsForSize = Math.ceil(mmToDots(KIOSK_QR_MIN_MM) / moduleCount);
@@ -43,12 +60,11 @@ export function kioskQrPrintSize(moduleCount: number): KioskQrPrintSize {
 	// Widen the in-image margin until image margin + label padding reach the 4-module quiet zone.
 	for (let margin = KIOSK_QR_MARGIN_MODULES; margin <= KIOSK_QR_QUIET_ZONE_MODULES; margin++) {
 		const totalModules = moduleCount + margin * 2;
-		const maxDotsToFit = Math.floor(
-			mmToDots(KIOSK_LABEL_MM.height - KIOSK_LABEL_PADDING_MM * 2) / totalModules
-		);
+		const maxDotsToFit = Math.floor(mmToDots(kioskQrBoxMm()) / totalModules);
+		// Largest whole-dot module that fits, capped; never below the 20 mm minimum when it fits.
 		const dotsPerModule = Math.max(
 			1,
-			Math.min(Math.max(KIOSK_QR_BASE_DOTS_PER_MODULE, minDotsForSize), maxDotsToFit)
+			Math.min(Math.max(KIOSK_QR_MAX_DOTS_PER_MODULE, minDotsForSize), maxDotsToFit)
 		);
 		const widthPx = totalModules * dotsPerModule;
 		size = { widthPx, sizeMm: dotsToMm(widthPx), margin, dotsPerModule };
