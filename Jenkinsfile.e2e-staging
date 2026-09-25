@@ -1,0 +1,102 @@
+pipeline {
+    agent { label 'mgmt' }
+
+    options {
+        skipDefaultCheckout(true)
+        disableConcurrentBuilds(abortPrevious: true)
+        buildDiscarder(logRotator(numToKeepStr: '20', daysToKeepStr: '14'))
+        timeout(time: 15, unit: 'MINUTES')
+        timestamps()
+    }
+
+    parameters {
+        string(name: 'DEPLOY_COMMIT', defaultValue: '', description: 'Exact commit deployed to Staging')
+        string(name: 'STAGING_URL', defaultValue: 'https://shelter.importstar.dev', description: 'Staging base URL')
+    }
+
+    stages {
+        stage('Validate and Checkout Deployed Commit') {
+            steps {
+                checkout scm
+                script {
+                    if (!(params.DEPLOY_COMMIT ==~ /[0-9a-f]{40}/)) {
+                        error('DEPLOY_COMMIT must be a full 40-character lowercase Git SHA')
+                    }
+                    if (!(params.STAGING_URL ==~ /https:\/\/[^\s\/]+\/?/)) {
+                        error('STAGING_URL must be an HTTPS origin without a path')
+                    }
+                }
+                withEnv(["DEPLOY_COMMIT=${params.DEPLOY_COMMIT}"]) {
+                    sh '''
+                        set -eu
+                        git fetch --no-tags origin +refs/heads/staging:refs/remotes/origin/staging
+                        git cat-file -e "${DEPLOY_COMMIT}^{commit}"
+                        git merge-base --is-ancestor "$DEPLOY_COMMIT" origin/staging
+                        git checkout --detach "$DEPLOY_COMMIT"
+                        test "$(git rev-parse HEAD)" = "$DEPLOY_COMMIT"
+                    '''
+                }
+            }
+        }
+
+        stage('Wait for Staging Readiness') {
+            steps {
+                withEnv(["STAGING_URL=${params.STAGING_URL.replaceAll('/+$', '')}"]) {
+                    sh '''
+                        set -eu
+                        health_body="$(mktemp)"
+                        trap 'rm -f "$health_body"' EXIT
+                        deadline=$(( $(date +%s) + 120 ))
+
+                        while [ "$(date +%s)" -lt "$deadline" ]; do
+                            status="$(curl --silent --show-error --output "$health_body" --write-out '%{http_code}' --max-time 10 "$STAGING_URL/api/health" || true)"
+                            body="$(tr -d '\r\n' < "$health_body")"
+                            if [ "$status" = '200' ] && [ "$body" = '{"ok":true,"service":"frontend"}' ]; then
+                                echo 'Staging health check passed.'
+                                exit 0
+                            fi
+                            sleep 5
+                        done
+
+                        echo 'Staging did not return the expected health payload within 120 seconds.' >&2
+                        exit 1
+                    '''
+                }
+            }
+        }
+
+        stage('Run Staging E2E Smoke') {
+            steps {
+                withCredentials([
+                    usernamePassword(credentialsId: 'tent-staging-e2e-bot', usernameVariable: 'E2E_USERNAME', passwordVariable: 'E2E_PASSWORD')
+                ]) {
+                    withEnv([
+                        'CI=true',
+                        "STAGING_URL=${params.STAGING_URL.replaceAll('/+$', '')}"
+                    ]) {
+                        sh 'scripts/run-staging-e2e.sh'
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            junit allowEmptyResults: true, testResults: 'frontend/test-results/staging/junit.xml'
+            publishHTML(target: [
+                allowMissing: true,
+                alwaysLinkToLastBuild: true,
+                keepAll: true,
+                reportDir: 'frontend/playwright-report/staging',
+                reportFiles: 'index.html',
+                reportName: 'Staging E2E Report'
+            ])
+            archiveArtifacts allowEmptyArchive: true, artifacts: 'frontend/test-results/staging/**/*,frontend/playwright-report/staging/**/*', fingerprint: false
+            cleanWs(cleanWhenNotBuilt: false,
+                    deleteDirs: true,
+                    disableDeferredWipeout: true,
+                    notFailBuild: true)
+        }
+    }
+}
