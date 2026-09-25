@@ -7,19 +7,25 @@
 	import Truck from '@lucide/svelte/icons/truck';
 	import PackageOpen from '@lucide/svelte/icons/package-open';
 	import Wand from '@lucide/svelte/icons/wand-sparkles';
+	import Pencil from '@lucide/svelte/icons/pencil';
+	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import { toast } from 'svelte-sonner';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { DatePicker } from '$lib/components/ui/date-picker/index.js';
+	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
+	import { errorMessage } from '$lib/utils/errors';
 	import {
 		createDonationSlot,
 		editDonationSlot,
 		parseCapacityInput,
 		slotsOnDate,
 		useDonationSlotSchedule,
+		useDeleteDonationSlot,
 		useDonations,
 		useSaveDonationSlot,
 		type DonationSlot,
@@ -59,6 +65,19 @@
 	const scheduleQuery = useDonationSlotSchedule();
 	const donationsQuery = useDonations();
 	const saveSlot = useSaveDonationSlot();
+	const deleteSlot = useDeleteDonationSlot();
+
+	// Edit dialog — only what a booking does not key on: `from` is the window's identity
+	// (bookings point at date + start time), so moving it is delete + add, not an edit.
+	let editing = $state<DonationSlot | null>(null);
+	let editTo = $state('');
+	let editCapacity = $state<string | number | null>('');
+	let editNote = $state('');
+	let editOpen = $state(false);
+
+	// Delete confirmation — only offered for a window nobody has booked.
+	let deleting = $state<DonationSlot | null>(null);
+	let deleteOpen = $state(false);
 
 	const slots = $derived(slotsOnDate(scheduleQuery.data ?? [], mode, selectedDate));
 	const donations = $derived(donationsQuery.data ?? []);
@@ -107,8 +126,8 @@
 			await persist(slot, `เพิ่มช่วงเวลา ${newFrom} - ${newTo} แล้ว`);
 			newNote = '';
 		} catch (err) {
-			// Zod carries the reason (เวลาสิ้นสุดก่อนเวลาเริ่ม / ความจุต้องมากกว่า 0)
-			toast.error(err instanceof Error ? err.message.split('\n')[0] : 'ข้อมูลช่วงเวลาไม่ถูกต้อง');
+			// Zod carries the reason on each issue (เวลาสิ้นสุดก่อนเวลาเริ่ม / ความจุต้องมากกว่า 0)
+			toast.error(errorMessage(err));
 		}
 	}
 
@@ -135,26 +154,57 @@
 		}
 	}
 
-	async function changeCapacity(slot: DonationSlot, raw: string) {
-		const capacity = parseCapacityInput(raw);
-		if (capacity === null) {
-			if (isPickup) {
-				toast.error('คิวรถต้องกำหนดจำนวนเที่ยว');
-				return;
-			}
-			if (slot.capacity === null) return;
-			await persist(editDonationSlot(slot, { capacity: null }), `ปลดเพดานช่วง ${slot.from} แล้ว`);
+	function openEdit(slot: DonationSlot) {
+		editing = slot;
+		editTo = slot.to;
+		editCapacity = slot.capacity ?? '';
+		editNote = slot.note ?? '';
+		editOpen = true;
+	}
+
+	async function saveEdit() {
+		if (!editing) return;
+		const slot = editing;
+		const capacity = parseCapacityInput(editCapacity);
+		if (capacity === null && isPickup) {
+			toast.error('คิวรถต้องกำหนดจำนวนเที่ยว');
 			return;
 		}
-		if (!Number.isInteger(capacity) || capacity < 1) {
-			toast.error('ความจุต้องเป็นจำนวนเต็มมากกว่า 0');
+		const booked = bookedOn(slot);
+		if (capacity !== null && Number.isInteger(capacity) && capacity < booked) {
+			toast.error(`ช่วงนี้มีผู้จองแล้ว ${booked} คิว เพดานต้องไม่น้อยกว่านี้`);
 			return;
 		}
-		if (capacity === slot.capacity) return;
-		await persist(
-			editDonationSlot(slot, { capacity }),
-			`แก้ความจุ ${slot.from} เป็น ${capacity} คิว`
-		);
+		let updated: DonationSlot;
+		try {
+			updated = editDonationSlot(slot, { to: editTo, capacity, note: editNote.trim() });
+		} catch (err) {
+			// Zod carries the reason on each issue (เวลาสิ้นสุดก่อนเวลาเริ่ม / ความจุต้องมากกว่า 0)
+			toast.error(errorMessage(err));
+			return;
+		}
+		await persist(updated, `แก้ไขช่วง ${slot.from} - ${updated.to} แล้ว`);
+		editOpen = false;
+		editing = null;
+	}
+
+	function openDelete(slot: DonationSlot) {
+		deleting = slot;
+		deleteOpen = true;
+	}
+
+	async function confirmDelete() {
+		if (!deleting) return;
+		const slot = deleting;
+		try {
+			await deleteSlot.mutateAsync(slot);
+			toast.success(`ลบช่วง ${slot.from} - ${slot.to} แล้ว`);
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'ลบช่วงเวลาไม่สำเร็จ');
+		} finally {
+			deleteOpen = false;
+			deleting = null;
+		}
 	}
 
 	async function toggleStatus(slot: DonationSlot) {
@@ -285,7 +335,10 @@
 				/>
 			</div>
 
-			<div class="flex flex-col gap-2 sm:flex-row">
+			<!-- Stacked at every width: the card is 5/12 of the row, too narrow for two
+			     full-width buttons side by side (Button is shrink-0, so the second one used to
+			     spill out under the list card and could not be clicked). -->
+			<div class="flex flex-col gap-2">
 				<Button onclick={addSlot} disabled={saveSlot.isPending} class="h-11 w-full sm:h-10">
 					<Plus class="mr-1.5 h-4 w-4" />
 					เพิ่มช่วงเวลา
@@ -374,17 +427,16 @@
 								</p>
 							</div>
 
-							<div class="flex items-center gap-2">
-								<Label for="cap-{slot._id}" class="sr-only">ความจุของช่วง {slot.from}</Label>
-								<Input
-									id="cap-{slot._id}"
-									type="number"
-									min="1"
-									placeholder={isPickup ? '' : 'ไม่จำกัด'}
-									value={slot.capacity ?? ''}
-									onchange={(e) => changeCapacity(slot, e.currentTarget.value)}
-									class="h-11 w-24 tabular-nums sm:h-10"
-								/>
+							<div class="flex flex-wrap items-center gap-2">
+								<Button
+									variant="outline"
+									onclick={() => openEdit(slot)}
+									disabled={saveSlot.isPending}
+									class="h-11 shrink-0 sm:h-10"
+								>
+									<Pencil class="mr-1.5 h-4 w-4" />
+									แก้ไข
+								</Button>
 								<Button
 									variant="outline"
 									onclick={() => toggleStatus(slot)}
@@ -399,6 +451,20 @@
 										งดรับ
 									{/if}
 								</Button>
+								<Button
+									variant="outline"
+									onclick={() => openDelete(slot)}
+									disabled={booked > 0 || deleteSlot.isPending}
+									class="h-11 shrink-0 border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800 sm:h-10"
+								>
+									<Trash2 class="mr-1.5 h-4 w-4" />
+									ลบ
+								</Button>
+								{#if booked > 0}
+									<p class="w-full text-xs text-slate-500">
+										มีผู้จองแล้ว ลบไม่ได้ — ใช้ "งดรับ" เพื่อหยุดรับแทน
+									</p>
+								{/if}
 							</div>
 						</li>
 					{/each}
@@ -407,3 +473,83 @@
 		</div>
 	</div>
 </div>
+
+<Dialog.Root bind:open={editOpen}>
+	<Dialog.Content class="sm:max-w-md">
+		<Dialog.Header>
+			<Dialog.Title>แก้ไขช่วง {editing?.from ?? ''} - {editTo}</Dialog.Title>
+			<Dialog.Description>
+				เวลาเริ่มแก้ไม่ได้ เพราะการจองผูกกับวันและเวลาเริ่ม — ถ้าจะย้ายเวลาเริ่ม
+				ให้ลบแล้วเพิ่มช่วงใหม่
+			</Dialog.Description>
+		</Dialog.Header>
+		<div class="space-y-4">
+			<div class="space-y-1.5">
+				<Label for="edit-slot-to" class="text-sm font-semibold text-slate-700">ถึง</Label>
+				<Input
+					id="edit-slot-to"
+					type="time"
+					bind:value={editTo}
+					class="h-11 tabular-nums sm:h-10"
+				/>
+			</div>
+			<div class="space-y-1.5">
+				<Label for="edit-slot-capacity" class="text-sm font-semibold text-slate-700">
+					{isPickup ? 'จำนวนเที่ยวรถต่อช่วง' : 'จำกัดจำนวนคิว (ไม่บังคับ)'}
+					{#if isPickup}<span class="text-red-500">*</span>{/if}
+				</Label>
+				<Input
+					id="edit-slot-capacity"
+					type="number"
+					min="1"
+					placeholder={isPickup ? 'เช่น 2' : 'ไม่จำกัด'}
+					bind:value={editCapacity}
+					class="h-11 tabular-nums sm:h-10"
+				/>
+				{#if editing}
+					<p class="text-xs text-slate-500">
+						จองแล้ว <span class="tabular-nums">{bookedOn(editing)}</span> คิว — เพดานต้องไม่น้อยกว่านี้
+					</p>
+				{/if}
+			</div>
+			<div class="space-y-1.5">
+				<Label for="edit-slot-note" class="text-sm font-semibold text-slate-700">หมายเหตุ</Label>
+				<Input
+					id="edit-slot-note"
+					placeholder="เช่น เข้าประตู 2 / จอดรถลานหลัง"
+					bind:value={editNote}
+					class="h-11 sm:h-10"
+				/>
+			</div>
+		</div>
+		<Dialog.Footer>
+			<Button variant="outline" onclick={() => (editOpen = false)} class="h-11 sm:h-10"
+				>ยกเลิก</Button
+			>
+			<Button onclick={saveEdit} disabled={saveSlot.isPending} class="h-11 sm:h-10">
+				บันทึกการแก้ไข
+			</Button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>
+
+<AlertDialog.Root bind:open={deleteOpen}>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>ลบช่วง {deleting?.from ?? ''} - {deleting?.to ?? ''}?</AlertDialog.Title>
+			<AlertDialog.Description>
+				ช่วงนี้ยังไม่มีผู้จอง ลบแล้วจะหายจากหน้าบริจาคทันที และย้อนกลับไม่ได้
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel onclick={() => (deleting = null)}>ยกเลิก</AlertDialog.Cancel>
+			<AlertDialog.Action
+				onclick={confirmDelete}
+				disabled={deleteSlot.isPending}
+				class="bg-red-600 text-white hover:bg-red-700"
+			>
+				ยืนยันลบ
+			</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>

@@ -1,6 +1,11 @@
 import { z } from 'zod';
 import { makeDoc, touch, type AuthorContext } from '$lib/db/model';
-import type { DonationSlot, DonationSlotMode } from './operations';
+import {
+	isDonationOutstanding,
+	type DonationSlot,
+	type DonationSlotMode,
+	type DonationStatus
+} from './operations';
 
 /**
  * `donation_slot` (schema.md §2.13, DN-5) — the windows a shelter opens for public
@@ -89,6 +94,7 @@ export function createDonationSlot(input: DonationSlotInput, ctx: AuthorContext)
  *
  * `mode`/`date`/`from` are the identity, so they are taken from the doc, not the
  * form — moving a window to another time means creating one and closing this.
+ * `note: ''` clears the note; leaving `note` out keeps it.
  */
 export function editDonationSlot(
 	slot: DonationSlot,
@@ -106,16 +112,60 @@ export function editDonationSlot(
 		to: patch.to ?? slot.to,
 		capacity: patch.capacity !== undefined ? patch.capacity : slot.capacity,
 		status: patch.status ?? slot.status,
-		note: patch.note ?? slot.note
+		note: patch.note !== undefined ? patch.note : slot.note
 	});
 
+	// Drop the old note first — spreading `slot` would otherwise keep one the edit cleared.
+	const { note: _previous, ...rest } = slot;
+	void _previous;
 	return touch({
-		...slot,
+		...rest,
 		to: merged.to,
 		capacity: merged.capacity,
 		status: merged.status,
 		...(merged.note ? { note: merged.note } : {})
 	});
+}
+
+/** What `countSlotBookings` reads off a donation. */
+export interface SlotBookingLike {
+	status: DonationStatus;
+	logistics?: { slot?: { date: string; from: string } | null } | null;
+}
+
+/**
+ * How many bookings already hold a place in one window (date + start time — the key a
+ * booking's `logistics.slot` points at, schema.md §2.3/§2.13).
+ *
+ * A booking holds it from the moment it is made until staff key the goods in, so
+ * `pending_review`/`verifying` count as well as `declared`/`received` (CR-052) —
+ * counting `declared` alone reads every slot as empty once the first review starts.
+ */
+export function countSlotBookings(
+	donations: readonly SlotBookingLike[],
+	date: string,
+	from: string
+): number {
+	return donations.filter(
+		(d) =>
+			(isDonationOutstanding(d.status) || d.status === 'received') &&
+			d.logistics?.slot?.date === date &&
+			d.logistics?.slot?.from === from
+	).length;
+}
+
+/**
+ * A window can be deleted only while nobody holds a place in it. Its bookings point at
+ * it by date + start time, so deleting a booked window leaves them pointing at nothing —
+ * a drop-off booking silently falls back to the standard hours, a pickup booking loses
+ * its truck. Staff close a booked window ("งดรับ") instead.
+ */
+export function assertDonationSlotDeletable(slot: DonationSlot, bookedCount: number): void {
+	if (bookedCount > 0) {
+		throw new Error(
+			`ช่วง ${slot.from} - ${slot.to} มีผู้จองแล้ว ${bookedCount} คิว ลบไม่ได้ — ใช้ "งดรับ" แทน`
+		);
+	}
 }
 
 /** Windows of one queue on one date, earliest first. */

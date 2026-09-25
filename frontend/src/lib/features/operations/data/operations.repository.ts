@@ -104,6 +104,8 @@ export interface OperationsRepository {
 	listDonationSlots(): Promise<DonationSlot[]>;
 	getDonationSlot(id: string): Promise<DonationSlot | null>;
 	updateDonationSlot(slot: DonationSlot): Promise<DonationSlot>;
+	/** Refuses while any booking holds a place in the window (`assertDonationSlotDeletable`). */
+	deleteDonationSlot(slot: DonationSlot): Promise<void>;
 
 	// Purchase methods (CR-032) — procurement is a two-step flow, mirroring
 	// donation: the doc is declared first, the physical count is keyed later.

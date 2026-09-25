@@ -122,6 +122,17 @@ export const useSaveDonationSlot = () => {
 	}));
 };
 
+/** Delete one window; the repository refuses while it has bookings. */
+export const useDeleteDonationSlot = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (slot: DonationSlot) => operationsRepository().deleteDonationSlot(slot),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: operationsKeys.donationSlots() });
+		}
+	}));
+};
+
 export const useLedger = (enabled: () => boolean = () => true) =>
 	createQuery(() => ({
 		queryKey: operationsKeys.ledger(),

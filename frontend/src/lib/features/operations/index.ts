@@ -115,6 +115,8 @@ export { deriveDeterministicLedgerId } from './domain/deterministic-ledger-id';
 
 // Domain — donation queue slots (DN-5 · schema.md §2.13)
 export {
+	assertDonationSlotDeletable,
+	countSlotBookings,
 	createDonationSlot,
 	editDonationSlot,
 	donationSlotId,
@@ -145,6 +147,7 @@ export {
 	useCreateCampaign,
 	useDonationSlotSchedule,
 	useSaveDonationSlot,
+	useDeleteDonationSlot,
 	useReceiveWalkInDonation,
 	useUpdateCampaign,
 	usePurchases,

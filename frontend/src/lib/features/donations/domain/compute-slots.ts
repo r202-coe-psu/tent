@@ -1,5 +1,5 @@
 import type { DonationSlot, DonationSlotMode, DonationStatus } from '$lib/features/operations';
-import { isDonationOutstanding, slotsOnDate } from '$lib/features/operations';
+import { countSlotBookings, slotsOnDate } from '$lib/features/operations';
 
 /**
  * Drop-off / pickup queue availability (schema.md §2.13, DN-5).
@@ -64,23 +64,15 @@ export interface SlotBooking {
 }
 
 /**
- * How many bookings already hold a place in one window.
- *
- * A booking holds it from the moment it is made until staff key the goods in, so
- * `pending_review`/`verifying` count as well as `declared`/`received` (CR-052) —
- * counting `declared` alone reads every slot as empty once the first review starts.
+ * How many bookings already hold a place in one window. The rule lives with the slot
+ * (`countSlotBookings` in operations) so the back-office delete guard reads the same one.
  */
 export function slotBookedCount(
 	donations: readonly SlotBooking[],
 	date: string,
 	from: string
 ): number {
-	return donations.filter(
-		(d) =>
-			(isDonationOutstanding(d.status) || d.status === 'received') &&
-			d.logistics?.slot?.date === date &&
-			d.logistics?.slot?.from === from
-	).length;
+	return countSlotBookings(donations, date, from);
 }
 
 /** Availability of one configured window. A `null` capacity never reads as full. */

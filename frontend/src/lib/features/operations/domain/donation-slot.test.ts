@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
+	assertDonationSlotDeletable,
+	countSlotBookings,
 	createDonationSlot,
 	donationSlotId,
 	editDonationSlot,
@@ -118,6 +120,50 @@ describe('editDonationSlot', () => {
 	it('lets a drop-off window drop its ceiling', () => {
 		const uncapped = editDonationSlot(slot({ mode: 'dropoff' }), { capacity: null });
 		expect(uncapped.capacity).toBeNull();
+	});
+});
+
+describe('editDonationSlot — note', () => {
+	it('clears the note on an empty string and keeps it when left out', () => {
+		const noted = slot({ note: 'ประตู 2' });
+		expect(editDonationSlot(noted, { note: '' }).note).toBeUndefined();
+		expect(editDonationSlot(noted, { capacity: 3 }).note).toBe('ประตู 2');
+		expect(editDonationSlot(noted, { note: 'ลานหลัง' }).note).toBe('ลานหลัง');
+	});
+});
+
+describe('countSlotBookings', () => {
+	const booking = (status: string, from = '09:00', date = '2026-09-22') => ({
+		status: status as never,
+		logistics: { slot: { date, from } }
+	});
+
+	it('counts every booking still holding a place, received included', () => {
+		const donations = [
+			booking('declared'),
+			booking('pending_review'),
+			booking('verifying'),
+			booking('received'),
+			booking('cancelled'),
+			booking('rejected'),
+			booking('expired')
+		];
+		expect(countSlotBookings(donations, '2026-09-22', '09:00')).toBe(4);
+	});
+
+	it('matches on date and start time only', () => {
+		const donations = [booking('declared', '10:00'), booking('declared', '09:00', '2026-09-23')];
+		expect(countSlotBookings(donations, '2026-09-22', '09:00')).toBe(0);
+	});
+});
+
+describe('assertDonationSlotDeletable', () => {
+	it('lets an unbooked window go', () => {
+		expect(() => assertDonationSlotDeletable(slot(), 0)).not.toThrow();
+	});
+
+	it('refuses a booked window and points staff at closing it instead', () => {
+		expect(() => assertDonationSlotDeletable(slot(), 2)).toThrow(/2 คิว.*งดรับ/);
 	});
 });
 
