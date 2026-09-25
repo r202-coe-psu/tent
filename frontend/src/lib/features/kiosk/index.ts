@@ -7,6 +7,7 @@ export { default as KioskNumpad } from './ui/kiosk-numpad.svelte';
 export { default as KioskPhoneIdentityEntry } from './ui/phone-identity-entry.svelte';
 export { default as PhoneHouseholdPicker } from './ui/phone-household-picker.svelte';
 export { KioskIdleTimeout, KIOSK_IDLE_TIMEOUT_MS } from './ui/kiosk-idle-timeout.svelte.js';
+export { navigateToKioskHome } from './application/kiosk-navigation';
 export type {
 	GateInput,
 	KioskHouseholdCandidate,
@@ -18,6 +19,11 @@ export type {
 } from './data/kiosk-check-in.api';
 export { KioskRequestError } from './data/kiosk-check-in.api';
 export {
+	fetchKioskConfig,
+	KIOSK_CONFIG_TIMEOUT_MS,
+	type KioskConfig
+} from './data/kiosk-config.api';
+export {
 	buildKioskContextQuery,
 	getKioskDisplayContext,
 	KIOSK_DISPLAY_QUERY_KEYS,
@@ -26,6 +32,7 @@ export {
 	type KioskDisplayQuery,
 	type KioskDisplayQueryKey
 } from './domain/display-context';
+export { isKioskPhoneCheckInEnabled } from './domain/kiosk-config';
 export {
 	IDENTITY_METHODS,
 	visibleIdentityMethods,
@@ -36,10 +43,3 @@ export {
 	type IdentityMethodId,
 	type IdentityMethodOptions
 } from './domain/identity-method';
-export {
-	fetchKioskConfig,
-	KIOSK_CONFIG_TIMEOUT_MS,
-	type KioskConfig
-} from './data/kiosk-config.api';
-export { isKioskPhoneCheckInEnabled } from './domain/kiosk-config';
-export { navigateToKioskHome } from './application/kiosk-navigation';
