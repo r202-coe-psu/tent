@@ -3,6 +3,7 @@ import { couchReq } from './helpers/couch';
 import {
 	RUN_ID,
 	catalogItem,
+	committedQty,
 	deleteDoc,
 	fillBooking,
 	freeEveningWindows,
@@ -32,9 +33,9 @@ import {
  * stay.
  */
 
-// No seeded campaign asks for it and the seed puts no stock of it — any on-hand would
-// already cover the 1-unit target and keep it off the board. `id`/`unit` are looked up
-// in beforeAll: the catalog mints `item_master:<ulid>` per seed.
+// No seeded campaign asks for it, so the board line is this spec's alone. The target is
+// set one above what is already on hand + booked, so stock received by hand does not
+// cover it. `id`/`unit` are looked up in beforeAll: the catalog mints `item_master:<ulid>`.
 const RACE_ITEM = { id: '', name: 'แปรงสีฟัน', unit: '' };
 
 let shelter: PublicShelter;
@@ -197,7 +198,15 @@ test('two donors race for the last unit of a need → only one is accepted', asy
 		...stamp(),
 		schema_v: 3,
 		title: RACE_ITEM.name,
-		needs: [{ item_id: RACE_ITEM.id, qty_target: '1', unit: RACE_ITEM.unit, status: 'open' }],
+		needs: [
+			{
+				item_id: RACE_ITEM.id,
+				// Exactly one unit short, whatever is already on the shelf or booked.
+				qty_target: String((await committedQty(shelter.code, RACE_ITEM.id)) + 1),
+				unit: RACE_ITEM.unit,
+				status: 'open'
+			}
+		],
 		status: 'open',
 		visible_on_home: true,
 		urgency: 'critical',

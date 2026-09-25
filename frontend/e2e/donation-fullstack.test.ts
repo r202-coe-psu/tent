@@ -34,8 +34,8 @@ import {
  * Back-office setup (campaigns, slots, walk-in) lives in donation-fullstack-admin.
  */
 
-// A catalog item no seeded campaign asks for and the seed puts no stock of (stock at or
-// above the target keeps a need off the board), so the board line is this run's alone.
+// A catalog item no seeded campaign asks for, so the board line is this run's alone.
+// Stock of it is fine: `openRunCampaign` sets the target on top of what is on hand.
 const NEED_ITEM = 'ยาสีฟัน';
 
 let shelter: PublicShelter;

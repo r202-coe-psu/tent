@@ -360,8 +360,47 @@ export async function boardLineFor(
 export const BOARD_SYNC = { timeout: 30_000 };
 
 /**
+ * What already counts against a need for `itemId` at `shelterCode`: the shelf
+ * (sum of `stock_ledger.qty`) plus bookings still holding a place (declared /
+ * pending_review / verifying) — the two terms the board subtracts from the target.
+ * A campaign's target has to sit on top of these, or stock someone received by hand
+ * covers it and the line never reaches the board.
+ */
+export async function committedQty(shelterCode: string, itemId: string): Promise<number> {
+	const db = shelterDb(shelterCode);
+	const [ledger, bookings] = await Promise.all([
+		couchReq('POST', `/${db}/_find`, {
+			selector: { type: 'stock_ledger', item_id: itemId },
+			fields: ['qty'],
+			limit: 10000
+		}),
+		couchReq('POST', `/${db}/_find`, {
+			selector: {
+				type: 'donation',
+				status: { $in: ['declared', 'pending_review', 'verifying'] },
+				items: { $elemMatch: { item_id: itemId } }
+			},
+			fields: ['items'],
+			limit: 10000
+		})
+	]);
+	const onHand = (ledger.data as { docs: { qty: string }[] }).docs.reduce(
+		(sum, d) => sum + Number(d.qty),
+		0
+	);
+	const reserved = (
+		bookings.data as { docs: { items: { item_id?: string; qty: string }[] }[] }
+	).docs
+		.flatMap((d) => d.items)
+		.filter((it) => it.item_id === itemId)
+		.reduce((sum, it) => sum + Number(it.qty), 0);
+	return Math.max(0, onHand) + reserved;
+}
+
+/**
  * Open a campaign of this run's own for `itemName` at `shelterCode`, straight into
- * CouchDB, and wait for it on the public board. Seeded campaigns bind legacy `item:*`
+ * CouchDB, short by `shortfall` on top of what is already committed (`committedQty`),
+ * and wait for it on the public board. Seeded campaigns bind legacy `item:*`
  * ids the current catalog no longer holds, so their donations cannot be received into
  * stock (CATALOG_MISMATCH); a campaign on a real `item_master` id can.
  */
@@ -369,10 +408,11 @@ export async function openRunCampaign(
 	request: APIRequestContext,
 	shelterCode: string,
 	itemName: string,
-	qtyTarget: number,
+	shortfall: number,
 	tag: string
 ): Promise<PublicNeed> {
 	const item = await catalogItem(itemName);
+	const qtyTarget = (await committedQty(shelterCode, item.id)) + shortfall;
 	const id = `donation_campaign:e2e-${tag}-${RUN_ID}`;
 	const now = new Date().toISOString();
 	await couchReq('PUT', `/${shelterDb(shelterCode)}/${encodeURIComponent(id)}`, {
