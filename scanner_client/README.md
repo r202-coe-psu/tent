@@ -18,7 +18,8 @@
    - [Step 7: ทดสอบรันระบบ](#step-7-ทดสอบรันระบบ)
 4. [การตั้งค่าให้รันอัตโนมัติเมื่อเปิดเครื่อง (Autostart on Boot)](#-การตั้งค่าให้รันอัตโนมัติเมื่อเปิดเครื่อง-autostart-on-boot)
 5. [การตั้งค่าจอแสดงผลแนวตั้งและการป้องกันจอดับ (Display Optimization)](#-การตั้งค่าจอแสดงผลแนวตั้งและการป้องกันจอดับ-display-optimization)
-6. [การแก้ไขปัญหาที่พบบ่อย (Troubleshooting & FAQ)](#-การแก้ไขปัญหาที่พบบ่อย-troubleshooting--faq)
+6. [เครื่องพิมพ์ Label XP-365B (USB Label Printer)](#-เครื่องพิมพ์-label-xp-365b-usb-label-printer)
+7. [การแก้ไขปัญหาที่พบบ่อย (Troubleshooting & FAQ)](#-การแก้ไขปัญหาที่พบบ่อย-troubleshooting--faq)
 
 ---
 
@@ -41,7 +42,7 @@ flowchart LR
 2. **Card Engine**: อ่านเลขประจำตัวประชาชน 13 หลักเพื่อค้นหาเท่านั้น; ชื่อ ที่อยู่ และรูปจากบัตรไม่ถูกส่งเข้า API
 3. **Kiosk API**: Python Client แนบ `X-Device-Id` และ `X-Device-Secret` เฉพาะคำขอ same-origin ไปยัง `/api/v1/scanner/kiosk/lookup` และ `/check-in`; server ตรวจ device และใช้ศูนย์ที่ผูกกับ device
 4. **Check-in**: เจ้าหน้าที่เลือกสมาชิกที่มาถึง ระบบเปลี่ยนเฉพาะผู้ที่เลือกจาก `pre_registered` เป็น `arriving` และสร้าง QR แบบไม่มีข้อมูลส่วนบุคคล
-5. **Wristband**: พิมพ์แยกคนได้ และสั่งพิมพ์ซ้ำจากผลเดิมโดยไม่ส่ง check-in ซ้ำ
+5. **Wristband**: พิมพ์ label 1 ดวงต่อคนออกเครื่องพิมพ์ label ทันที (ไม่มี print dialog) และสั่งพิมพ์ซ้ำจากผลเดิมโดยไม่ส่ง check-in ซ้ำ — ดู [เครื่องพิมพ์ Label XP-365B](#-เครื่องพิมพ์-label-xp-365b-usb-label-printer)
 
 ค่า `shelter_code` ใน URL เป็นข้อมูลแสดงผลเท่านั้น; server ใช้ shelter ที่ผูกกับ device หลังตรวจ `X-Device-Id`/`X-Device-Secret` ทุกคำขอ
 
@@ -75,6 +76,7 @@ Legacy `POST /api/v1/scanner/draft` ถูกปิดเพื่อไม่�
 4. **จอแสดงผล (Display)**:
    - จอ HDMI หรือ DSI Touchscreen (แนะนำความละเอียด 1080x1920 แนวตั้ง หรือ 1920x1080 แนวนอน)
 5. **แหล่งจ่ายไฟ (Power Supply)**: อะแดปเตอร์มาตรฐาน Type-C 5V 3A (สำหรับ RPi 4) หรือ 5V 5A (สำหรับ RPi 5)
+6. **เครื่องพิมพ์ Label**: **Xprinter XP-365B** (USB, direct thermal, label mode) + ม้วน label ความร้อนแบบมีช่องว่างระหว่างดวง (ค่าตั้งต้น 60×40 mm, gap 2 mm) — ดู [เครื่องพิมพ์ Label XP-365B](#-เครื่องพิมพ์-label-xp-365b-usb-label-printer)
 
 ---
 
@@ -456,6 +458,91 @@ tail -f /tmp/kiosk_autostart.log
   ไปที่เมนู **Raspberry Pi Menu** $\rightarrow$ **Preferences** $\rightarrow$ **Screen Configuration** $\rightarrow$ คลิกขวาที่หน้าจอ $\rightarrow$ **Orientation** $\rightarrow$ เลือก `Right (90°)` หรือ `Left (270°)` $\rightarrow$ กด Apply
 - **ผ่านไฟล์ `/boot/firmware/cmdline.txt` (สำหรับ HDMI Display):**
   เพิ่มค่า `video=HDMI-A-1:1080x1920M@60,rotate=90` ต่อท้ายบรรทัด
+
+---
+
+## 🖨️ เครื่องพิมพ์ Label XP-365B (USB Label Printer)
+
+ปุ่ม **"พิมพ์ QR Code"** บนหน้าผลรายงานตัวพิมพ์ label ออก **Xprinter XP-365B** ทันที 1 ดวงต่อคน โดยไม่มีหน้าต่าง print dialog:
+
+```text
+ปุ่ม "พิมพ์ QR Code" → Chromium (--kiosk-printing) → CUPS queue "tent_xprinter" → driver Xprinter (TSPL) → USB → XP-365B
+```
+
+- Scanner Client เปิด Chromium พร้อม `--kiosk-printing` เองในโหมด Kiosk (ควบคุมด้วย `KIOSK_SILENT_PRINT` ใน `.env`)
+- Driver ของ Xprinter **จำเป็น** — ติดตั้งครั้งเดียวต่อเครื่อง (ไม่ใช่โปรแกรมที่รันค้าง; CUPS เรียกใช้เฉพาะตอนพิมพ์)
+- ขนาด label ถูกกำหนดที่ `KIOSK_LABEL_MM` ใน `frontend/src/lib/features/kiosk/domain/print-label.ts` — queue ของเครื่องพิมพ์ **ต้องตั้งขนาดเท่ากัน** ไม่เช่นนั้นจะพิมพ์คร่อมหรือได้ label ว่าง
+
+### 1. ติดตั้งครั้งแรก
+
+ทำหลังติดตั้ง Scanner Client ตาม Step 1–6 แล้ว
+
+1. **ต่อเครื่อง + ใส่ม้วน label:** ต่อ XP-365B เข้าพอร์ต USB ของ Pi แล้วเปิดเครื่อง → ใส่ม้วนให้ **ด้านเคลือบความร้อนหันขึ้นหาหัวพิมพ์** (ขูดด้วยเล็บต้องเกิดรอยดำ) → ปิดฝาจนล็อก
+2. **ตรวจโหมด + calibrate:** พิมพ์ self-test (กดปุ่ม FEED ค้างขณะเปิดเครื่อง) → ต้องอยู่ **label mode** → calibrate gap sensor ตามคู่มือที่มากับเครื่อง → กด FEED 1 ครั้งต้องป้อนออก 1 ดวงพอดีรอยฉีก
+3. **เตรียมไฟล์ driver:** ดาวน์โหลด `printer-driver-xprinter_3.13.55_all.deb` จาก [xprintertech.com](https://www.xprintertech.com/drivers-2.html) (ไฟล์ไม่อยู่ใน repo) แล้วคัดลอกไปที่ Pi และตรวจ checksum:
+   ```bash
+   sha256sum ~/printer-driver-xprinter_3.13.55_all.deb
+   # ต้องได้ 2dc1d5d182ca7176c509ca07ce40040494d0c5c64eb646d2aa2dfee4c123e9ca
+   ```
+4. **ติดตั้งและตั้งค่า:**
+   ```bash
+   cd ~/tent/scanner_client
+   ./setup_printer.sh ~/printer-driver-xprinter_3.13.55_all.deb --test
+   ```
+   - ม้วนไม่ใช่ 60×40 mm → ใส่ `--label <กว้าง>x<สูง>` (mm, กว้างไม่เกิน 82) และแก้ `KIOSK_LABEL_MM` ให้ตรงกัน
+   - gap ไม่ใช่ 2 mm → ใส่ `--gap <mm>`
+   - `--test` พิมพ์ label ทดสอบ 1 ดวง (รันผ่าน SSH ได้) — ต้องออก 1 ดวงพอดี QR สแกนได้
+5. **ตั้งค่า `.env`:**
+   ```env
+   PRINTER_NAME=tent_xprinter
+   BROWSER_EXECUTABLE_PATH=/usr/bin/chromium
+   ```
+   ไม่ต้องตั้ง `KIOSK_SILENT_PRINT` (โหมด Kiosk เปิด silent print ให้อยู่แล้ว)
+6. **ทดสอบผ่าน Chromium (จาก terminal บนหน้าจอ Pi ไม่ใช่ SSH):**
+   ```bash
+   ./test_label_print.sh --cleanup
+   ```
+   ต้องออก label ทดสอบ 2 ดวงพอดีโดยไม่มี print dialog
+7. **ตรวจสถานะ:** `./setup_printer.sh --status` → ทุกข้อต้องเป็น ✅
+8. **Reboot** → Kiosk เปิดเอง → รายงานตัวผู้ทดสอบ → กด "พิมพ์ QR Code" → label ออกโดยไม่มี dialog
+
+`setup_printer.sh` ทำให้อัตโนมัติ: ติดตั้ง CUPS + driver, เลือก filter ให้ตรงสถาปัตยกรรม, **ห่อ filter ให้ลบภาพ label ออกจาก `/tmp` หลังทุกงานพิมพ์**, ลบ cron `mvimg.sh` + `/var/log/prnlog` ที่ driver ติดตั้งมา (เก็บภาพชื่อผู้อพยพ), สร้าง queue `tent_xprinter` ขนาด label เป็น default และลบ queue `XP-365B` ที่ driver สร้างเอง, ปิดการเข้าถึง CUPS จากเครื่องอื่น, ติดตั้ง Chromium policy (ไม่มี header/footer, ปิด "Save as PDF")
+
+> ⚠️ `setup_printer.sh` รันได้เฉพาะบน Raspberry Pi (แก้ค่าเครื่องพิมพ์ทั้งระบบ) — บนเครื่อง dev ใช้ `./test_label_print.sh --configure` แทน
+
+### 2. ใช้งานประจำวัน (เจ้าหน้าที่หน้า Kiosk)
+
+| สถานการณ์                          | ทำอย่างไร                                                                                   |
+| :--------------------------------- | :------------------------------------------------------------------------------------------ |
+| รายงานตัวสำเร็จ                    | กด **"พิมพ์ QR Code"** → ฉีก label ตามรอยทีละดวง → ติดสายรัดข้อมือให้ตรงคน (ดูชื่อบน label) |
+| label ออกไม่ครบ / ต้องการพิมพ์ใหม่ | กด "พิมพ์ QR Code" ซ้ำบนหน้าผลเดิม — ไม่บันทึก check-in ซ้ำ                                 |
+| กดแล้วไม่มี label ออก              | ตรวจไฟเครื่อง / ฝา / สาย USB → แก้แล้วกดพิมพ์ซ้ำ; ยังไม่ออก → แจ้งผู้ดูแล                   |
+| label หมด                          | เปิดฝา → ใส่ม้วนใหม่ (ด้านเคลือบขึ้น) → ปิดฝา → กด FEED 1 ครั้ง → กด "พิมพ์ QR Code" ซ้ำ    |
+| พิมพ์คร่อมรอยฉีก / มีดวงว่างแทรก   | กด FEED 1 ครั้งให้เครื่องจับ gap ใหม่ → พิมพ์ซ้ำ; ยังเป็นอยู่ → แจ้งผู้ดูแลให้ calibrate    |
+| QR จาง / สแกนไม่ติด                | แจ้งผู้ดูแลให้เพิ่มความเข้ม                                                                 |
+
+หน้าจอ Kiosk ยังไม่แสดงสถานะเครื่องพิมพ์ — ยืนยันผลด้วยการดู label ที่ออกมา
+
+### 3. บำรุงรักษา
+
+| เหตุการณ์                     | ขั้นตอน                                                                                                                                                                     |
+| :---------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| อัปเกรด / ติดตั้ง `.deb` ใหม่ | รัน `./setup_printer.sh <deb ใหม่>` ซ้ำ **ทุกครั้ง** — ตัวติดตั้งของ driver เขียนทับ wrapper และสร้าง cron + queue `XP-365B` กลับมา                                         |
+| เปลี่ยนขนาดม้วน label         | (1) แก้ `KIOSK_LABEL_MM` + deploy frontend (2) รัน `./setup_printer.sh --label <W>x<H> --gap <N>` บน **ทุก** Pi (3) `./test_label_print.sh` — (1) กับ (2) ต้องเสร็จพร้อมกัน |
+| เปลี่ยนเครื่องพิมพ์ตัวใหม่    | รัน `./setup_printer.sh` ซ้ำ (หา URI ใหม่ให้เอง)                                                                                                                            |
+| QR จาง                        | `sudo lpadmin -p tent_xprinter -o Darkness=12` (สูงสุด 15) · ช้าลงให้คมขึ้น `-o PrintSpeed=2`                                                                               |
+
+### 4. แก้ปัญหาเครื่องพิมพ์
+
+| อาการ                                | ตรวจ / แก้                                                                                                                                         |
+| :----------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ดูสถานะรวม                           | `./setup_printer.sh --status`                                                                                                                      |
+| ไม่พบเครื่องบน USB                   | `lsusb` ต้องเห็น `1fc9:2016` (ชื่ออาจขึ้นเป็น "NXP Semiconductors Printer-80") · `lpinfo -v \| grep usb` · เปลี่ยนสาย/พอร์ต                        |
+| กดพิมพ์แล้วไม่ออก / job ค้าง         | `lpstat -p tent_xprinter -o` · `cancel -a tent_xprinter` · `sudo cupsenable tent_xprinter`                                                         |
+| label ว่างทั้งดวง (ไม่มีสี)          | ใส่ม้วนกลับด้าน หรือไม่ใช่กระดาษความร้อน (ขูดด้วยเล็บต้องเกิดรอยดำ) · ฝาปิดไม่สนิท                                                                 |
+| พิมพ์คร่อม label / มี label ว่างแทรก | calibrate gap ใหม่ · ตรวจ `PageSize` ใน `--status` ให้เท่ากับ `KIOSK_LABEL_MM` · รัน setup ด้วย `--label`/`--gap` ให้ตรงม้วน                       |
+| ยังมี print dialog ขึ้น              | ตรวจว่า Kiosk รันด้วย `/usr/bin/chromium` (`ps aux \| grep kiosk-printing`) และไม่ได้ตั้ง `KIOSK_SILENT_PRINT=false`                               |
+| Filter error                         | `sudo cupsctl --debug-logging` → `sudo tail -f /var/log/cups/error_log` → รัน `./setup_printer.sh` ซ้ำ → ปิดด้วย `sudo cupsctl --no-debug-logging` |
 
 ---
 

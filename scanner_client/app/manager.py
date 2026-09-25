@@ -29,6 +29,9 @@ except ImportError:  # pragma: no cover - tests can exercise bootstrap without a
 
 logger = logging.getLogger(__name__)
 
+# Chromium managed policies are read from /etc/chromium/policies by the Debian/Pi OS build only.
+SYSTEM_CHROMIUM_PATH = "/usr/bin/chromium"
+
 
 class BootstrapError(RuntimeError):
     """Base class for safe scanner bootstrap failures."""
@@ -55,6 +58,11 @@ class ScannerClientManager:
         self.executable_path = self._resolve_executable_path(config.get("BROWSER_EXECUTABLE_PATH"))
         self.is_debug = str(config.get("DEBUG", "true")).lower() in ("true", "1", "yes")
         self.is_headless = str(config.get("HEADLESS", "false")).lower() in ("true", "1", "yes")
+        # Unset follows the mode (kiosk: on, debug window: off); an explicit value wins in both modes.
+        raw_silent_print = str(config.get("KIOSK_SILENT_PRINT") or "").strip().lower()
+        self.silent_print = (
+            raw_silent_print in ("true", "1", "yes") if raw_silent_print else not self.is_debug
+        )
         self.poll_interval = float(config.get("POLL_INTERVAL", "0.5"))
         self.min_reading_display = 0.6
         self.client_nav_timeout_ms = 5000
@@ -401,6 +409,15 @@ class ScannerClientManager:
             "--no-sandbox",                # Prevent sandbox privilege crashes in kiosk environments
             "--touch-events=enabled",      # Enable touch screen event support
         ]
+
+        if self.silent_print:
+            # Print straight to the CUPS default printer (the label queue) without the print preview.
+            base_args.append("--kiosk-printing")
+            if self.executable_path != SYSTEM_CHROMIUM_PATH:
+                logger.warning(
+                    f"⚠️  Silent print is on but the browser is not {SYSTEM_CHROMIUM_PATH}; "
+                    "managed print policies (no header/footer, no Save as PDF) may not apply"
+                )
 
         if self.device_scale_factor:
             base_args.extend([

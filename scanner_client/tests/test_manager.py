@@ -346,3 +346,31 @@ class KioskApiRouteTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SilentPrintArgsTests(unittest.TestCase):
+    def build(self, **overrides):
+        with patch.object(manager.ScannerClientManager, "_resolve_executable_path", return_value=manager.SYSTEM_CHROMIUM_PATH):
+            client = manager.ScannerClientManager(valid_config(**overrides))
+        return client._build_browser_args()
+
+    def test_kiosk_mode_prints_silently_by_default(self):
+        self.assertIn("--kiosk-printing", self.build(DEBUG="false"))
+
+    def test_debug_mode_keeps_print_preview_by_default(self):
+        self.assertNotIn("--kiosk-printing", self.build(DEBUG="true"))
+
+    def test_explicit_true_enables_silent_print_in_debug_window(self):
+        self.assertIn("--kiosk-printing", self.build(DEBUG="true", KIOSK_SILENT_PRINT="true"))
+
+    def test_explicit_false_disables_silent_print_in_kiosk_mode(self):
+        self.assertNotIn("--kiosk-printing", self.build(DEBUG="false", KIOSK_SILENT_PRINT="false"))
+
+    def test_warns_when_policies_may_not_apply(self):
+        with patch.object(manager.ScannerClientManager, "_resolve_executable_path", return_value=None):
+            client = manager.ScannerClientManager(valid_config(DEBUG="false"))
+        with self.assertLogs(manager.logger, level="WARNING") as logs:
+            args = client._build_browser_args()
+
+        self.assertIn("--kiosk-printing", args)
+        self.assertTrue(any("managed print policies" in line for line in logs.output))

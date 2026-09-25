@@ -13,6 +13,13 @@
 	import KioskLookupErrorActions from './kiosk-lookup-error-actions.svelte';
 	import PhoneHouseholdPicker from './phone-household-picker.svelte';
 	import { initialSelection, toExistingReportResults } from '../domain/household-selection';
+	import {
+		KIOSK_LABEL_MM,
+		KIOSK_LABEL_PADDING_MM,
+		KIOSK_QR_COLOR,
+		kioskLabelPageCss,
+		kioskQrPrintSize
+	} from '../domain/print-label';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import {
 		checkInSelectedMembers,
@@ -59,7 +66,7 @@
 	let selectedIds = $state<string[]>([]);
 	let results = $state<KioskCheckInMemberResult[]>([]);
 	let retryableIds = $state<string[]>([]);
-	let qrImages = $state<Record<string, string>>({});
+	let qrImages = $state<Record<string, { src: string; sizeMm: number }>>({});
 	let actionError = $state('');
 	let printError = $state('');
 	let printBusy = $state(false);
@@ -245,15 +252,17 @@
 		generation?: number
 	): Promise<boolean> {
 		printError = '';
-		const nextImages: Record<string, string> = { ...qrImages };
+		const nextImages: Record<string, { src: string; sizeMm: number }> = { ...qrImages };
 		try {
 			for (const item of items) {
 				if (!item.qr_payload || nextImages[item.evacuee_id]) continue;
-				nextImages[item.evacuee_id] = await QRCode.toDataURL(item.qr_payload, {
-					width: 240,
-					margin: 1,
-					color: { dark: '#0A2647', light: '#FFFFFF' }
+				const size = kioskQrPrintSize(QRCode.create(item.qr_payload, {}).modules.size);
+				const src = await QRCode.toDataURL(item.qr_payload, {
+					width: size.widthPx,
+					margin: size.margin,
+					color: KIOSK_QR_COLOR
 				});
+				nextImages[item.evacuee_id] = { src, sizeMm: size.sizeMm };
 			}
 			if (generation !== undefined && generation !== lookupGeneration) return false;
 			qrImages = nextImages;
@@ -282,6 +291,13 @@
 		}
 	}
 
+	// Print labels must be a direct child of <body> so print CSS can drop the whole kiosk screen with
+	// display:none; visibility:hidden keeps its layout height and prints blank labels.
+	function mountOnBody(node: HTMLElement) {
+		document.body.appendChild(node);
+		return () => node.remove();
+	}
+
 	function fullName(member: Pick<KioskEvacueeSummary, 'first_name' | 'last_name'>): string {
 		return [member.first_name, member.last_name].filter(Boolean).join(' ') || 'ไม่ระบุชื่อ';
 	}
@@ -299,6 +315,9 @@
 
 <svelte:head>
 	<title>ตรวจสอบและรายงานตัว — SmartShelter Kiosk</title>
+	<!-- Static CSS built from KIOSK_LABEL_MM constants only (no user input). -->
+	<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+	{@html `<style>${kioskLabelPageCss()}</style>`}
 </svelte:head>
 
 <section class="mx-auto flex w-full max-w-5xl flex-col gap-3" aria-labelledby="check-in-title">
@@ -641,20 +660,35 @@
 			</div>
 		</section>
 
-		<div class="print-area" aria-hidden="true">
-			{#each successfulResults as result (result.evacuee_id)}
-				{@const person = lookup?.members.find((member) => member.evacuee_id === result.evacuee_id)}
-				<div class="wristband">
-					<div class="wristband-brand">SMART SHELTER · รายงานตัวแล้ว</div>
-					<p class="wristband-name">{person ? fullName(person) : ''}</p>
-					<p class="wristband-center">ศูนย์ {lookup?.shelter_code}</p>
-					{#if qrImages[result.evacuee_id]}<img
-							src={qrImages[result.evacuee_id]}
-							alt="QR ประจำตัวสำหรับใช้ภายในศูนย์"
-						/>{:else}<div class="qr-placeholder">QR</div>{/if}
-					<p class="wristband-help">สแกน QR นี้เพื่อค้นหาข้อมูลในศูนย์พักพิง</p>
-				</div>
-			{/each}
+		<!-- The wrapper stays in place for Svelte's DOM bookkeeping; its child is moved to <body>. -->
+		<div hidden>
+			<div
+				class="kiosk-print-area"
+				aria-hidden="true"
+				style:--label-width="{KIOSK_LABEL_MM.width}mm"
+				style:--label-height="{KIOSK_LABEL_MM.height}mm"
+				style:--label-padding="{KIOSK_LABEL_PADDING_MM}mm"
+				{@attach mountOnBody}
+			>
+				{#each successfulResults as result (result.evacuee_id)}
+					{@const person = lookup?.members.find(
+						(member) => member.evacuee_id === result.evacuee_id
+					)}
+					{@const qr = qrImages[result.evacuee_id]}
+					<div class="wristband" style:--qr-size="{qr?.sizeMm ?? 24}mm">
+						{#if qr}<img
+								class="wristband-qr"
+								src={qr.src}
+								alt="QR ประจำตัวสำหรับใช้ภายในศูนย์"
+							/>{:else}<div class="wristband-qr qr-placeholder">QR</div>{/if}
+						<div class="wristband-text">
+							<p class="wristband-brand">SMART SHELTER · รายงานตัวแล้ว</p>
+							<p class="wristband-name">{person ? fullName(person) : ''}</p>
+							<p class="wristband-center">ศูนย์ {lookup?.shelter_code}</p>
+						</div>
+					</div>
+				{/each}
+			</div>
 		</div>
 	{/if}
 
@@ -665,71 +699,78 @@
 </section>
 
 <style>
-	.print-area {
+	.kiosk-print-area {
 		display: none;
 	}
 
+	/* Label size comes from domain/print-label.ts (CSS vars + generated @page in <svelte:head>). */
 	@media print {
-		:global(body *) {
-			visibility: hidden !important;
+		:global(body) {
+			margin: 0 !important;
 		}
-		.print-area,
-		.print-area * {
-			visibility: visible !important;
+		:global(body > :not(.kiosk-print-area)) {
+			display: none !important;
 		}
-		.print-area {
+		.kiosk-print-area {
 			display: block;
-			position: absolute;
-			inset: 0;
-			width: 100%;
 		}
 		.wristband {
 			box-sizing: border-box;
-			width: 80mm;
-			min-height: 120mm;
-			margin: 0 auto;
-			padding: 8mm;
-			page-break-after: always;
+			display: grid;
+			grid-template-columns: var(--qr-size) minmax(0, 1fr);
+			column-gap: 2mm;
+			align-items: center;
+			width: var(--label-width);
+			height: var(--label-height);
+			padding: var(--label-padding);
+			overflow: hidden;
 			break-after: page;
-			border: 1px dashed #64748b;
-			text-align: center;
+			break-inside: avoid;
 			font-family: sans-serif;
-			color: #0f172a;
+			color: #000;
+		}
+		.wristband:last-child {
+			break-after: auto;
+		}
+		.wristband-qr {
+			display: block;
+			width: var(--qr-size);
+			height: var(--qr-size);
+			image-rendering: pixelated;
+		}
+		.wristband-text {
+			display: flex;
+			flex-direction: column;
+			gap: 1mm;
+			min-width: 0;
+		}
+		.wristband-text p {
+			margin: 0;
+		}
+		.wristband-brand,
+		.wristband-center {
+			font-size: 8pt;
+			line-height: 1.2;
 		}
 		.wristband-brand {
-			font-size: 10pt;
 			font-weight: 700;
 		}
 		.wristband-name {
-			margin: 8mm 0 2mm;
-			font-size: 18pt;
-			font-weight: 800;
-		}
-		.wristband-center {
-			margin: 0;
+			display: -webkit-box;
+			overflow: hidden;
 			font-size: 11pt;
-		}
-		.wristband img {
-			display: block;
-			width: 48mm;
-			height: 48mm;
-			margin: 6mm auto;
-		}
-		.wristband-help {
-			margin: 0;
-			font-size: 9pt;
+			font-weight: 800;
+			line-height: 1.4;
+			overflow-wrap: anywhere;
+			-webkit-box-orient: vertical;
+			-webkit-line-clamp: 3;
+			line-clamp: 3;
 		}
 		.qr-placeholder {
 			display: grid;
 			place-items: center;
-			width: 48mm;
-			height: 48mm;
-			margin: 6mm auto;
-			border: 1px solid #94a3b8;
-		}
-		@page {
-			size: 90mm 130mm;
-			margin: 4mm;
+			border: 1px solid #000;
+			font-size: 8pt;
 		}
 	}
 </style>
