@@ -20,7 +20,8 @@
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import SearchSelect from '$lib/components/search-select.svelte';
-	import { useMasterData } from '$lib/features/master-data';
+	import { useMasterData, formatMasterLabel } from '$lib/features/master-data';
+	import { langState } from '$lib/states/i18n.svelte';
 	import { useProvinces, useDistricts, useSubdistricts } from '../application/queries';
 	import LocationMapPicker from './location-map-picker.svelte';
 
@@ -52,44 +53,30 @@
 		{ value: 'provincial', label: 'ระดับเมือง/จังหวัด (ศูนย์บัญชาการขนาดใหญ่/จุดยุทธศาสตร์)' }
 	];
 
-	// Master data (live query) — shelter_type + structured address (CR-019/CR-011 pattern).
+	// Master data (live query) — shelter_type (CR-019/CR-011 pattern).
 	const shelterTypeQuery = useMasterData(() => 'shelter_type');
-	const municipalityZoneQuery = useMasterData(() => 'municipality_zone');
-	const communityQuery = useMasterData(() => 'community');
 
 	const shelterTypeItems = $derived(
 		(shelterTypeQuery.data?.items ?? [])
 			.filter((i) => i.status === 'active')
-			.map((i) => ({ value: i.code, label: i.label }))
-	);
-	const municipalityZoneItems = $derived(
-		(municipalityZoneQuery.data?.items ?? [])
-			.filter((i) => i.status === 'active')
-			.map((i) => ({ value: i.code, label: i.label }))
-	);
-	const communityItems = $derived(
-		(communityQuery.data?.items ?? [])
-			.filter((i) => i.status === 'active')
-			.map((i) => ({ value: i.code, label: i.label }))
+			.map((i) => ({
+				value: i.code,
+				label: formatMasterLabel(i, langState.current)
+			}))
 	);
 
-	// Seed configured defaults (master_data `is_default`) when a field is untouched.
+	// Seed configured default (master_data `is_default`) for shelter_type when untouched.
 	// A new shelter starts empty → gets the default; an existing shelter already
 	// has values (superForm initialises synchronously) so the once/only-when-empty
 	// guard leaves them alone. (CR-049)
 	let defaultsSeeded = false;
 	$effect(() => {
 		const stItems = shelterTypeQuery.data?.items;
-		const mzItems = municipalityZoneQuery.data?.items;
-		if (!stItems || !mzItems || defaultsSeeded) return;
+		if (!stItems || defaultsSeeded) return;
 		defaultsSeeded = true;
 		if (!$formData.shelter_type) {
 			const d = stItems.find((i) => i.is_default && i.status === 'active');
 			if (d) $formData.shelter_type = d.code;
-		}
-		if (!$formData.municipality_zone) {
-			const d = mzItems.find((i) => i.is_default && i.status === 'active');
-			if (d) $formData.municipality_zone = d.code;
 		}
 	});
 
@@ -452,24 +439,13 @@
 			<Form.Control>
 				{#snippet children({ props })}
 					<Form.Label>โซนเทศบาล (Municipality Zone)</Form.Label>
-					<Select.Root
-						type="single"
-						bind:value={
-							() => $formData.municipality_zone ?? '',
-							(v) => ($formData.municipality_zone = v || null)
-						}
+					<Input
+						{...props}
+						value={$formData.municipality_zone ?? ''}
+						oninput={(e) => ($formData.municipality_zone = e.currentTarget.value || null)}
 						{disabled}
-					>
-						<Select.Trigger {...props} class={selectTriggerClass}>
-							{municipalityZoneItems.find((o) => o.value === $formData.municipality_zone)?.label ??
-								'— เลือกโซน —'}
-						</Select.Trigger>
-						<Select.Content>
-							{#each municipalityZoneItems as opt (opt.value)}
-								<Select.Item value={opt.value} label={opt.label} />
-							{/each}
-						</Select.Content>
-					</Select.Root>
+						placeholder="ระบุเขตเทศบาล..."
+					/>
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />
@@ -479,21 +455,13 @@
 			<Form.Control>
 				{#snippet children({ props })}
 					<Form.Label>ชุมชน (Community)</Form.Label>
-					<Select.Root
-						type="single"
-						bind:value={() => $formData.community ?? '', (v) => ($formData.community = v || null)}
+					<Input
+						{...props}
+						value={$formData.community ?? ''}
+						oninput={(e) => ($formData.community = e.currentTarget.value || null)}
 						{disabled}
-					>
-						<Select.Trigger {...props} class={selectTriggerClass}>
-							{communityItems.find((o) => o.value === $formData.community)?.label ??
-								'— เลือกชุมชน —'}
-						</Select.Trigger>
-						<Select.Content>
-							{#each communityItems as opt (opt.value)}
-								<Select.Item value={opt.value} label={opt.label} />
-							{/each}
-						</Select.Content>
-					</Select.Root>
+						placeholder="ระบุชุมชน..."
+					/>
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />

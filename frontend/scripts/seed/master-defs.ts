@@ -1,195 +1,127 @@
 /**
  * Canonical master_data definitions for platform init (prod + staging).
  *
- * municipality_zone + community use real Hat Yai municipality lists
- * (เทศบาลนครหาดใหญ่ — 4 เขต / 36 ชุมชน จากประกาศเลือกตั้งคณะกรรมการชุมชน).
+ * CR-137: only vulnerable_group, housing_type, shelter_type, volunteer_skills.
+ * municipality_zone / community are free-text fields on household/shelter docs
+ * (not master types). Pet species is a domain enum (dog|cat|other).
+ *
+ * Every item uses `key` as the persisted `code` (semantic snake_case) and
+ * bilingual `label_th` / `label_en`.
  */
 import { CR112_VULNERABLE_GROUP_ACTIVE } from '$lib/features/master-data/domain';
 import type { MasterTypeDef } from './types';
-
-/** Real Hat Yai communities keyed by zone (parent_key = zone_1…zone_4). */
-const HAT_YAI_COMMUNITIES: {
-	key: string;
-	label: string;
-	parent_key: string;
-	is_default?: boolean;
-}[] = [
-	// เขต 1
-	{
-		key: 'na_khai_senanarong',
-		label: 'ชุมชนหน้าค่ายเสนาณรงค์',
-		parent_key: 'zone_1',
-		is_default: true
-	},
-	{ key: 'na_suan_satharana', label: 'ชุมชนหน้าสวนสาธารณะ', parent_key: 'zone_1' },
-	{ key: 'rong_pun', label: 'ชุมชนโรงปูน', parent_key: 'zone_1' },
-	{ key: 'na_rph_sikarin', label: 'ชุมชนหน้าโรงพยาบาลศิครินทร์', parent_key: 'zone_1' },
-	{ key: 'ko_suea', label: 'ชุมชนเกาะเสือ', parent_key: 'zone_1' },
-	{ key: 'rongrian_chatri', label: 'ชุมชนโรงเรียนชาตรี', parent_key: 'zone_1' },
-	{ key: 'sikarin', label: 'ชุมชนศิครินทร์', parent_key: 'zone_1' },
-	{ key: 'rathakan', label: 'ชุมชนรัถการ', parent_key: 'zone_1' },
-	{ key: 'mae_litao', label: 'ชุมชนแม่ลิเตา', parent_key: 'zone_1' },
-	// เขต 2
-	{ key: 'talat_mai', label: 'ชุมชนตลาดใหม่', parent_key: 'zone_2' },
-	{ key: 'suan_siri', label: 'ชุมชนสวนศิริ', parent_key: 'zone_2' },
-	{ key: 'sam_chai', label: 'ชุมชนสามชัย', parent_key: 'zone_2' },
-	{ key: 'rph_bangkok', label: 'ชุมชนโรงพยาบาลกรุงเทพ', parent_key: 'zone_2' },
-	{ key: 'ban_ja', label: 'ชุมชนบ้านจ่า', parent_key: 'zone_2' },
-	{ key: 'klang_na', label: 'ชุมชนกลางนา', parent_key: 'zone_2' },
-	{ key: 'sam_yaek_khlong_rian', label: 'ชุมชนสามแยกคลองเรียน', parent_key: 'zone_2' },
-	// เขต 3
-	{ key: 'chan_prathip', label: 'ชุมชนจันทร์ประทีป', parent_key: 'zone_3' },
-	{ key: 'd_land_thai_charoen', label: 'ชุมชนดีแลนด์-ไทยเจริญ', parent_key: 'zone_3' },
-	{ key: 'rim_khuan', label: 'ชุมชนริมควน', parent_key: 'zone_3' },
-	{ key: 'khlong_rabai_1', label: 'ชุมชนคลองระบายน้ำที่ 1', parent_key: 'zone_3' },
-	{ key: 'lang_thiwa_amphoe', label: 'ชุมชนหลังที่ว่าการอำเภอ', parent_key: 'zone_3' },
-	{ key: 'plak_krim', label: 'ชุมชนปลักกริม', parent_key: 'zone_3' },
-	{ key: 'rattana_wibun', label: 'ชุมชนรัตนวิบูลย์', parent_key: 'zone_3' },
-	{ key: 'thung_sao', label: 'ชุมชนทุ่งเสา', parent_key: 'zone_3' },
-	{ key: 'khonsong', label: 'ชุมชนขนส่ง', parent_key: 'zone_3' },
-	{ key: 'lang_rongphak', label: 'ชุมชนหลังโรงพัก', parent_key: 'zone_3' },
-	{ key: 'lang_u_rotfai', label: 'ชุมชนหลังอู่รถไฟ', parent_key: 'zone_3' },
-	// เขต 4
-	{ key: 'ko_liap', label: 'ชุมชนเกาะเลียบ', parent_key: 'zone_4' },
-	{ key: 'wat_hatyai_nai', label: 'ชุมชนวัดหาดใหญ่ใน', parent_key: 'zone_4' },
-	{ key: 'rattana_uthit', label: 'ชุมชนรัตนอุทิศ', parent_key: 'zone_4' },
-	{ key: 'tha_sai', label: 'ชุมชนท่าไทร', parent_key: 'zone_4' },
-	{ key: 'ratchamangkhalaphisek', label: 'ชุมชนรัชมังคลาภิเษก', parent_key: 'zone_4' },
-	{ key: 'mongkhon_hansa', label: 'ชุมชนมงคลหรรษา', parent_key: 'zone_4' },
-	{ key: 'chok_saman', label: 'ชุมชนโชคสมาน', parent_key: 'zone_4' },
-	{ key: 'rat_uthit', label: 'ชุมชนราษฎร์อุทิศ', parent_key: 'zone_4' },
-	{ key: 'hua_phan_rotfai', label: 'ชุมชนหัวพานรถไฟ', parent_key: 'zone_4' }
-];
 
 export const MASTER_DATA_DEFS: MasterTypeDef[] = [
 	{
 		type: 'vulnerable_group',
 		items: CR112_VULNERABLE_GROUP_ACTIVE.map((item) => ({
 			key: item.code,
-			label: item.label,
+			label_th: item.label_th,
+			label_en: item.label_en,
 			...('is_default' in item && item.is_default ? { is_default: true as const } : {})
 		}))
 	},
 	{
-		type: 'health_condition',
-		items: [
-			{ key: 'diabetes', label: 'เบาหวาน' },
-			{ key: 'hypertension', label: 'ความดันโลหิตสูง' },
-			{ key: 'heart_disease', label: 'โรคหัวใจ' },
-			{ key: 'asthma', label: 'หอบหืด' },
-			{ key: 'seafood_allergy', label: 'แพ้อาหารทะเล' },
-			{ key: 'sulfa_allergy', label: 'แพ้ยาซัลฟา' }
-		]
-	},
-	{
-		type: 'dietary_restrictions',
-		items: [{ key: 'halal', label: 'อิสลาม (ฮาลาล)', is_default: true }]
-	},
-	{
-		type: 'pet_types',
-		items: [
-			{ key: 'dog', label: 'สุนัข' },
-			{ key: 'cat', label: 'แมว' },
-			{ key: 'other', label: 'อื่นๆ' }
-		]
-	},
-	{
 		type: 'housing_type',
 		items: [
-			{ key: 'owned_house', label: 'บ้านตนเอง', is_default: true },
-			{ key: 'rented_house', label: 'บ้านเช่า' },
-			{ key: 'condo', label: 'คอนโดมิเนียม' },
-			{ key: 'apartment_dorm', label: 'อพาร์ตเมนต์/หอพัก' },
-			{ key: 'homeless', label: 'ไร้ที่อยู่อาศัย / ไม่มีบ้านเลขที่' }
-		]
-	},
-	{
-		type: 'house_damage',
-		items: [
-			{ key: 'total_loss', label: 'เสียหายทั้งหลัง', is_default: true },
-			{ key: 'partial', label: 'เสียหายบางส่วน' },
-			{ key: 'flooded_first_floor', label: 'น้ำท่วมถึงชั้น 1' }
+			{
+				key: 'owned_house',
+				label_th: 'บ้านตนเอง',
+				label_en: 'Owned house',
+				is_default: true
+			},
+			{ key: 'rented_house', label_th: 'บ้านเช่า', label_en: 'Rented house' },
+			{ key: 'condo', label_th: 'คอนโดมิเนียม', label_en: 'Condominium' },
+			{
+				key: 'apartment_dorm',
+				label_th: 'อพาร์ตเมนต์/หอพัก',
+				label_en: 'Apartment / dormitory'
+			},
+			{
+				key: 'homeless',
+				label_th: 'ไร้ที่อยู่อาศัย / ไม่มีบ้านเลขที่',
+				label_en: 'Homeless / no house number'
+			}
 		]
 	},
 	{
 		type: 'shelter_type',
 		items: [
-			{ key: 'school', label: 'โรงเรียน', is_default: true },
-			{ key: 'community_hall', label: 'ศาลาประชาคม' },
-			{ key: 'temple', label: 'วัด' },
-			{ key: 'government_building', label: 'อาคารราชการ' },
-			{ key: 'sports_centre', label: 'ศูนย์กีฬา' }
+			{ key: 'school', label_th: 'โรงเรียน', label_en: 'School', is_default: true },
+			{ key: 'community_hall', label_th: 'ศาลาประชาคม', label_en: 'Community hall' },
+			{ key: 'temple', label_th: 'วัด', label_en: 'Temple' },
+			{
+				key: 'government_building',
+				label_th: 'อาคารราชการ',
+				label_en: 'Government building'
+			},
+			{ key: 'sports_centre', label_th: 'ศูนย์กีฬา', label_en: 'Sports centre' }
 		]
-	},
-	{
-		type: 'municipality_zone',
-		items: [
-			{ key: 'zone_1', label: 'เขตเทศบาลนครหาดใหญ่ 1', is_default: true },
-			{ key: 'zone_2', label: 'เขตเทศบาลนครหาดใหญ่ 2' },
-			{ key: 'zone_3', label: 'เขตเทศบาลนครหาดใหญ่ 3' },
-			{ key: 'zone_4', label: 'เขตเทศบาลนครหาดใหญ่ 4' }
-		]
-	},
-	{
-		type: 'community',
-		parent_type: 'municipality_zone',
-		items: HAT_YAI_COMMUNITIES
 	},
 	{
 		type: 'volunteer_skills',
 		items: [
 			{
 				key: 'cooking',
-				label: 'ประกอบอาหาร / ครัวสนาม',
+				label_th: 'ประกอบอาหาร / ครัวสนาม',
+				label_en: 'Cooking / field kitchen',
 				category: 'operational',
 				description: 'ช่วยเตรียมวัตถุดิบ ปรุงอาหาร แจกอาหารครัวกลาง',
 				is_default: true
 			},
 			{
 				key: 'logistics',
-				label: 'ขนย้ายสิ่งของ / พลาธิการ',
+				label_th: 'ขนย้ายสิ่งของ / พลาธิการ',
+				label_en: 'Logistics / supply movement',
 				category: 'operational',
 				description: 'ขนย้ายกระสอบทราย ลำเลียงถุงยังชีพ ยกของหนัก'
 			},
 			{
 				key: 'screening',
-				label: 'คัดกรองและสแกนประวัติ',
+				label_th: 'คัดกรองและสแกนประวัติ',
+				label_en: 'Screening and registration',
 				category: 'operational',
 				description: 'ต้อนรับ ลงทะเบียน คัดกรองประวัติผู้ประสบภัยเบื้องต้น'
 			},
 			{
 				key: 'medical',
-				label: 'การแพทย์ / ปฐมพยาบาล',
+				label_th: 'การแพทย์ / ปฐมพยาบาล',
+				label_en: 'Medical / first aid',
 				category: 'controlled',
 				description: 'ปฐมพยาบาลเบื้องต้น วัดสัญญาณชีพ (ต้องผ่านการตรวจรับรองใบประกอบวิชาชีพ)'
 			},
 			{
 				key: 'reception',
-				label: 'ประสานงาน / ต้อนรับ',
+				label_th: 'ประสานงาน / ต้อนรับ',
+				label_en: 'Coordination / reception',
 				category: 'operational',
 				description: 'ต้อนรับผู้ประสบภัย ประสานงานระหว่างจุดบริการ'
 			},
 			{
 				key: 'distribution',
-				label: 'แจกจ่ายของยังชีพ',
+				label_th: 'แจกจ่ายของยังชีพ',
+				label_en: 'Relief distribution',
 				category: 'operational',
 				description: 'แจกจ่ายถุงยังชีพ น้ำดื่ม เครื่องอุปโภคบริโภค'
 			},
 			{
 				key: 'sanitation',
-				label: 'ทำความสะอาด / สุขอนามัย',
+				label_th: 'ทำความสะอาด / สุขอนามัย',
+				label_en: 'Cleaning / sanitation',
 				category: 'operational',
 				description: 'ทำความสะอาดพื้นที่ส่วนกลาง ดูแลสุขอนามัยในศูนย์'
 			},
 			{
 				key: 'childcare',
-				label: 'สันทนาการ / ดูแลเด็ก',
+				label_th: 'สันทนาการ / ดูแลเด็ก',
+				label_en: 'Recreation / childcare',
 				category: 'operational',
 				description: 'กิจกรรมสันทนาการ ดูแลเด็กและผู้สูงอายุ'
 			},
 			{
 				key: 'transport',
-				label: 'ขับขี่ยานพาหนะ / ขนส่ง',
+				label_th: 'ขับขี่ยานพาหนะ / ขนส่ง',
+				label_en: 'Driving / transport',
 				category: 'operational',
 				description: 'ขับขี่ยานพาหนะขนส่งคนและสิ่งของ'
 			}
@@ -197,8 +129,25 @@ export const MASTER_DATA_DEFS: MasterTypeDef[] = [
 	}
 ];
 
-/** Flat list of community seed keys for volume generators. */
-export const COMMUNITY_KEYS = HAT_YAI_COMMUNITIES.map((c) => c.key);
+/** Sample free-text community names for volume generators (CR-137 — not master codes). */
+export const SAMPLE_COMMUNITY_LABELS = [
+	'ชุมชนหน้าค่ายเสนาณรงค์',
+	'ชุมชนตลาดใหม่',
+	'ชุมชนจันทร์ประทีป',
+	'ชุมชนเกาะเลียบ',
+	'ชุมชนสวนศิริ',
+	'ชุมชนริมควน',
+	'ชุมชนท่าไทร',
+	'ชุมชนสามชัย'
+] as const;
+
+/** Sample free-text municipality zone names for volume generators. */
+export const SAMPLE_ZONE_LABELS = [
+	'เขตเทศบาลนครหาดใหญ่ 1',
+	'เขตเทศบาลนครหาดใหญ่ 2',
+	'เขตเทศบาลนครหาดใหญ่ 3',
+	'เขตเทศบาลนครหาดใหญ่ 4'
+] as const;
 
 export const HOUSING_TYPE_KEYS = [
 	'owned_house',

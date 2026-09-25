@@ -53,9 +53,10 @@
 			if (searchQuery.trim()) {
 				const query = searchQuery.toLowerCase().trim();
 				const matchCode = item.code.toLowerCase().includes(query);
-				const matchLabel = item.label.toLowerCase().includes(query);
+				const matchLabelTh = item.label_th.toLowerCase().includes(query);
+				const matchLabelEn = item.label_en.toLowerCase().includes(query);
 				const matchDesc = item.description?.toLowerCase().includes(query) ?? false;
-				return matchCode || matchLabel || matchDesc;
+				return matchCode || matchLabelTh || matchLabelEn || matchDesc;
 			}
 			return true;
 		})
@@ -103,7 +104,8 @@
 
 	async function handleSaveSkill(data: {
 		code: string;
-		label: string;
+		label_th: string;
+		label_en: string;
 		category: 'operational' | 'controlled';
 		description: string;
 		is_default: boolean;
@@ -115,8 +117,9 @@
 				if (item.code === editingItem?.code) {
 					return {
 						...item,
-						code: editingItem.code,
-						label: data.label,
+						code: data.code,
+						label_th: data.label_th,
+						label_en: data.label_en,
 						category: data.category,
 						description: data.description,
 						is_default: data.is_default ? true : item.is_default
@@ -130,7 +133,8 @@
 		} else {
 			const newItem: MasterDataItem = {
 				code: data.code,
-				label: data.label,
+				label_th: data.label_th,
+				label_en: data.label_en,
 				category: data.category,
 				description: data.description,
 				is_default: data.is_default,

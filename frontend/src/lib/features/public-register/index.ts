@@ -28,8 +28,7 @@ export {
 	useBookingProvinces,
 	useBookingSubdistricts,
 	useCreateBooking,
-	useCreateUnassignedRegistration,
-	usePetTypes
+	useCreateUnassignedRegistration
 } from './application/queries';
 
 // data
@@ -38,7 +37,6 @@ export {
 	createUnassignedRegistration,
 	matchResidence,
 	fetchDistricts,
-	fetchPetTypes,
 	fetchProvinces,
 	fetchSubdistricts,
 	lookupBooking,
@@ -47,7 +45,6 @@ export {
 	uploadUnassignedPhoto,
 	type BookingTicketResponse,
 	type TicketStatusResult,
-	type PetTypeOption,
 	type PublicSubdistrict,
 	type ResidenceMatchChip,
 	type ResidenceMatchRequest,

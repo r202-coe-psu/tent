@@ -11,7 +11,7 @@
 	import Activity from '@lucide/svelte/icons/activity';
 	import X from '@lucide/svelte/icons/x';
 	import { toast } from 'svelte-sonner';
-	import { useMasterData } from '$lib/features/master-data';
+	import { useMasterData, formatMasterLabel } from '$lib/features/master-data';
 	import { listShelters, sheltersKeys } from '$lib/features/shelters';
 	import {
 		buildMasterLookup,
@@ -42,6 +42,8 @@
 		isImportJobTerminal,
 		type DuplicateAction
 	} from '../application/queries';
+	import StaffPageShell from '$lib/components/staff-page-shell.svelte';
+	import { spatial } from '$lib/tokens';
 	import ImportPreviewTable from './import-preview-table.svelte';
 	import ImportLogHistory from './import-log-history.svelte';
 	import ImportProgress from './import-progress.svelte';
@@ -52,7 +54,9 @@
 	const shelterTypeQuery = useMasterData(() => 'shelter_type');
 
 	const activeItems = $derived<Record<MasterColumn, { code: string; label: string }[]>>({
-		shelter_type: (shelterTypeQuery.data?.items ?? []).filter((i) => i.status === 'active')
+		shelter_type: (shelterTypeQuery.data?.items ?? [])
+			.filter((i) => i.status === 'active')
+			.map((i) => ({ code: i.code, label: formatMasterLabel(i, 'th') }))
 	});
 
 	const masterDataLoading = $derived(shelterTypeQuery.isLoading);
@@ -278,41 +282,32 @@
 	);
 </script>
 
-<div class="flex w-full flex-1 flex-col gap-6 bg-[#F8FAFC] p-4 sm:p-6">
-	<div class="flex flex-wrap items-end justify-between gap-4">
-		<div>
-			<h1 class="text-3xl font-extrabold tracking-tight text-[#0A2647]">
-				นำเข้าศูนย์พักพิงจาก Excel
-			</h1>
-			<p class="mt-2 text-base text-slate-700">
-				ดาวน์โหลด template กรอกข้อมูล แล้วอัปโหลดเพื่อสร้างศูนย์พักพิงหลายแห่งพร้อมกัน
-			</p>
-			<p class="mt-1 text-sm text-slate-500">
-				{APP_ONLY_FIELDS.join(' · ')} ไม่มีในไฟล์ — ตั้งค่าในหน้าแก้ไขศูนย์พักพิงหลังนำเข้าเสร็จ
-			</p>
-		</div>
-		<div class="flex flex-wrap gap-2">
-			{#if activeJobId}
-				<Button variant="outline" onclick={() => (progressDialogOpen = true)}>
-					<Activity class="mr-2 h-4 w-4" aria-hidden="true" />
-					ดูความคืบหน้างานล่าสุด
-				</Button>
-			{/if}
-			<Button
-				variant="outline"
-				onclick={() => downloadTemplate(false)}
-				disabled={masterDataLoading}
-			>
-				<Download class="mr-2 h-4 w-4" /> ดาวน์โหลด Template
+<StaffPageShell
+	title="นำเข้าศูนย์พักพิงจาก Excel"
+	description="ดาวน์โหลด template กรอกข้อมูล แล้วอัปโหลดเพื่อสร้างศูนย์พักพิงหลายแห่งพร้อมกัน"
+>
+	{#snippet meta()}
+		<p class="text-sm text-slate-500">
+			{APP_ONLY_FIELDS.join(' · ')} ไม่มีในไฟล์ — ตั้งค่าในหน้าแก้ไขศูนย์พักพิงหลังนำเข้าเสร็จ
+		</p>
+	{/snippet}
+	{#snippet actions()}
+		{#if activeJobId}
+			<Button variant="outline" onclick={() => (progressDialogOpen = true)}>
+				<Activity class="mr-2 h-4 w-4" aria-hidden="true" />
+				ดูความคืบหน้างานล่าสุด
 			</Button>
-			<Button variant="outline" onclick={() => downloadTemplate(true)} disabled={masterDataLoading}>
-				<Download class="mr-2 h-4 w-4" /> Template + ตัวอย่างข้อมูล
-			</Button>
-		</div>
-	</div>
+		{/if}
+		<Button variant="outline" onclick={() => downloadTemplate(false)} disabled={masterDataLoading}>
+			<Download class="mr-2 h-4 w-4" /> ดาวน์โหลด Template
+		</Button>
+		<Button variant="outline" onclick={() => downloadTemplate(true)} disabled={masterDataLoading}>
+			<Download class="mr-2 h-4 w-4" /> Template + ตัวอย่างข้อมูล
+		</Button>
+	{/snippet}
 
 	<!-- Upload -->
-	<div class="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-2xs md:p-6">
+	<div class="{spatial.container.staffPageCard} p-4 md:p-6">
 		{#if filename}
 			<div class="flex flex-wrap items-center justify-between gap-3">
 				<div class="flex items-center gap-2 text-sm">
@@ -353,10 +348,10 @@
 
 	<!-- Preview + commit -->
 	{#if validations.length > 0 && !importMutation.isPending && !importSubmitted}
-		<div class="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-2xs md:p-6">
+		<div class="{spatial.container.staffPageCard} p-4 md:p-6">
 			<div class="mb-4 flex flex-wrap items-center justify-between gap-3">
 				<h3 class="text-lg font-semibold text-foreground">ตรวจสอบข้อมูลก่อนนำเข้า</h3>
-				<Button onclick={runImport} disabled={importDisabled}>
+				<Button onclick={runImport} disabled={importDisabled} class="btn-primary-brand">
 					<Upload class="mr-2 h-4 w-4" />
 					{importMutation.isPending ? 'กำลังสร้างงาน...' : importLabel}
 				</Button>
@@ -408,7 +403,7 @@
 	{/if}
 
 	<!-- History -->
-	<div class="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-2xs md:p-6">
+	<div class="{spatial.container.staffPageCard} p-4 md:p-6">
 		<div class="mb-5 flex flex-wrap items-end justify-between gap-3">
 			<div>
 				<h2 class="text-2xl font-bold tracking-tight text-slate-900">ประวัติการนำเข้า</h2>
@@ -466,4 +461,4 @@
 			</Dialog.Content>
 		</Dialog.Root>
 	{/if}
-</div>
+</StaffPageShell>

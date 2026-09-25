@@ -5,7 +5,7 @@
 
 export const typography = {
 	fonts: {
-		sans: "'IBM Plex Sans Thai', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+		sans: "'IBM Plex Sans Thai Looped', 'IBM Plex Sans Thai', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
 		mono: "'Geist Mono', 'Fira Code', 'SF Mono', Consolas, monospace"
 	},
 	scale: {
@@ -15,6 +15,14 @@ export const typography = {
 			weight: '800 (Extrabold)',
 			lineHeight: '1.2 (tight)',
 			classes: 'text-3xl sm:text-4xl font-extrabold text-[#0A2647] tracking-tight'
+		},
+		/** Staff console H1 — denser than marketing h1; used by StaffPageShell */
+		h1Staff: {
+			name: 'Staff Page Title (H1)',
+			size: '1.5rem - 1.875rem (24px - 30px)',
+			weight: '700 (Bold)',
+			lineHeight: '1.25 (snug)',
+			classes: 'text-2xl sm:text-3xl font-bold tracking-tight text-[#0A2647]'
 		},
 		h2: {
 			name: 'Section Header (H2)',

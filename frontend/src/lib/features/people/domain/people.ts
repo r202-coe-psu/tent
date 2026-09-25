@@ -821,10 +821,10 @@ export const householdPreRegisterAddressFormSchema = householdAddressFieldsSchem
 			.trim()
 			.regex(/^\d{5}$/, 'กรุณากรอกรหัสไปรษณีย์ 5 หลัก'),
 		municipalityZone: z
-			.string({ error: 'กรุณาเลือกเขตการปกครอง' })
+			.string({ error: 'กรุณาระบุเขตการปกครอง' })
 			.trim()
-			.min(1, 'กรุณาเลือกเขตการปกครอง'),
-		community: z.string({ error: 'กรุณาเลือกชุมชน' }).trim().min(1, 'กรุณาเลือกชุมชน')
+			.min(1, 'กรุณาระบุเขตการปกครอง'),
+		community: z.string({ error: 'กรุณาระบุชุมชน' }).trim().min(1, 'กรุณาระบุชุมชน')
 	})
 	.superRefine((data, ctx) => {
 		const hasAddress = Boolean(data.addressNo.trim());

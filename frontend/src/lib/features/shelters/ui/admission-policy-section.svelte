@@ -11,7 +11,7 @@
 	import { applyPetPolicy } from '../domain/feature-flag-policy-sync';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
-	import { useMasterData } from '$lib/features/master-data';
+	import { useMasterData, formatMasterLabel } from '$lib/features/master-data';
 
 	let {
 		formData,
@@ -25,7 +25,7 @@
 	const vulnerableGroups = $derived(
 		(vulnerableGroupQuery.data?.items ?? [])
 			.filter((i) => i.status === 'active')
-			.map((i) => ({ value: i.code, label: i.label }))
+			.map((i) => ({ value: i.code, label: formatMasterLabel(i, 'th') }))
 	);
 
 	const selectedVulnerable = $derived(

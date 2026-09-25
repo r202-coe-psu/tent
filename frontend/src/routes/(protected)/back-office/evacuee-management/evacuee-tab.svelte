@@ -31,7 +31,7 @@
 	import { getShelterCode } from '$lib/db/shelter';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { useShelter } from '$lib/features/shelters';
-	import { useMasterData } from '$lib/features/master-data';
+	import { useMasterData, formatMasterLabel } from '$lib/features/master-data';
 
 	const PAGE_SIZE = 10;
 	let currentPage = $state(1);
@@ -57,7 +57,7 @@
 		const masterItems = vulnerableGroupQuery.data?.items ?? [];
 		return supported.map((code) => {
 			const masterItem = masterItems.find((item) => item.code === code);
-			return { value: code, label: masterItem?.label ?? code };
+			return { value: code, label: masterItem ? formatMasterLabel(masterItem, 'th') : code };
 		});
 	});
 
@@ -437,8 +437,10 @@
 							<div class="flex flex-wrap gap-1.5">
 								{#if e.special_needs && e.special_needs.length > 0}
 									{#each e.special_needs as need (need)}
-										{@const label =
-											vulnerableGroupQuery.data?.items.find((i) => i.code === need)?.label ?? need}
+										{@const masterItem = vulnerableGroupQuery.data?.items.find(
+											(i) => i.code === need
+										)}
+										{@const label = masterItem ? formatMasterLabel(masterItem, 'th') : need}
 										<span
 											class="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-900"
 											>{label}</span
@@ -522,9 +524,10 @@
 								<div class="flex flex-wrap gap-1">
 									{#if e.special_needs && e.special_needs.length > 0}
 										{#each e.special_needs as need (need)}
-											{@const label =
-												vulnerableGroupQuery.data?.items.find((i) => i.code === need)?.label ??
-												need}
+											{@const masterItem = vulnerableGroupQuery.data?.items.find(
+												(i) => i.code === need
+											)}
+											{@const label = masterItem ? formatMasterLabel(masterItem, 'th') : need}
 											<span
 												class="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-2xs font-medium text-amber-700"
 												>{label}</span

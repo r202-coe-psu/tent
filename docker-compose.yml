@@ -94,6 +94,7 @@ services:
       SECRET_KEY: ${SECRET_KEY:-dev-secret-key}
       EXTERNAL_API_SECRET: ${EXTERNAL_API_SECRET:-dev-external-secret}
       THIRDPARTY_JWT_SIGNING_KEY: ${THIRDPARTY_JWT_SIGNING_KEY:-dev-thirdparty-jwt-signing-key}
+      THIRDPARTY_SECRET_SALT: ${THIRDPARTY_SECRET_SALT:-salt-change-this-on-prod}
       COUCHDB_URL: ${COUCHDB_URL:-http://couchdb:5984}
     ports:
       - "9000:9000"
