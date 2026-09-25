@@ -1,6 +1,6 @@
 <script lang="ts">
-	import type { RequisitionTicketStatus } from '../../domain/food-supplies';
-	import { REQUISITION_TICKET_STATUSES, TICKET_STATUS_LABELS } from '../model/ticket-status';
+	import type { RequisitionType } from '../../domain/food-supplies';
+	import { getRequisitionTypeLabel } from '../model/ticket-status';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import Search from '@lucide/svelte/icons/search';
@@ -8,28 +8,28 @@
 
 	interface Props {
 		search: string;
-		detailedStatus: RequisitionTicketStatus | 'all';
 		destination: string | 'all';
 		destinations: readonly string[];
+		requisitionType?: RequisitionType | 'all';
 		onSearchChange: (value: string) => void;
-		onStatusChange: (status: RequisitionTicketStatus | 'all') => void;
 		onDestinationChange: (destination: string | 'all') => void;
+		onTypeChange?: (type: RequisitionType | 'all') => void;
 		onResetFilters?: () => void;
 	}
 
 	let {
 		search,
-		detailedStatus,
 		destination,
 		destinations,
+		requisitionType = 'all',
 		onSearchChange,
-		onStatusChange,
 		onDestinationChange,
+		onTypeChange,
 		onResetFilters
 	}: Props = $props();
 
 	const hasActiveFilters = $derived(
-		search.trim().length > 0 || detailedStatus !== 'all' || destination !== 'all'
+		search.trim().length > 0 || destination !== 'all' || requisitionType !== 'all'
 	);
 </script>
 
@@ -50,34 +50,31 @@
 
 	<!-- Dropdown filters -->
 	<div class="flex flex-wrap items-center gap-2">
-		<!-- Detailed Canonical Status Filter -->
+		<!-- Requisition Type Filter -->
 		<div class="flex items-center gap-1.5">
-			<label for="detailed-status-filter" class="shrink-0 text-xs font-semibold text-slate-600">
-				สถานะ:
+			<label for="requisition-type-filter" class="shrink-0 text-xs font-semibold text-slate-600">
+				ประเภท:
 			</label>
 			<Select.Root
 				type="single"
-				value={detailedStatus}
+				value={requisitionType}
 				onValueChange={(val) => {
-					if (val) onStatusChange(val as RequisitionTicketStatus | 'all');
+					if (val && onTypeChange) onTypeChange(val as RequisitionType | 'all');
 				}}
 			>
 				<Select.Trigger
-					id="detailed-status-filter"
-					aria-label="กรองตามสถานะ"
-					class="h-10 min-w-[180px] rounded-lg text-sm shadow-2xs"
+					id="requisition-type-filter"
+					aria-label="กรองตามประเภท"
+					class="h-10 min-w-[130px] rounded-lg text-sm shadow-2xs"
 				>
 					<span class="truncate">
-						{detailedStatus === 'all'
-							? 'ทุกสถานะ (ทั้งหมด 9 สถานะ)'
-							: `${TICKET_STATUS_LABELS[detailedStatus]} (${detailedStatus})`}
+						{requisitionType === 'all' ? 'ทุกประเภท' : getRequisitionTypeLabel(requisitionType)}
 					</span>
 				</Select.Trigger>
 				<Select.Content>
-					<Select.Item value="all" label="ทุกสถานะ (ทั้งหมด 9 สถานะ)" />
-					{#each REQUISITION_TICKET_STATUSES as status (status)}
-						<Select.Item value={status} label={`${TICKET_STATUS_LABELS[status]} (${status})`} />
-					{/each}
+					<Select.Item value="all" label="ทุกประเภท" />
+					<Select.Item value="food" label="อาหาร" />
+					<Select.Item value="supplies" label="พัสดุ" />
 				</Select.Content>
 			</Select.Root>
 		</div>

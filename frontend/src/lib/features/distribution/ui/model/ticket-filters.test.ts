@@ -3,10 +3,13 @@ import type { RequisitionTicket, RequisitionTicketStatus } from '../../domain/fo
 import {
 	WORKFLOW_GROUPS,
 	WORKFLOW_GROUP_MAP,
+	DEFAULT_TICKET_SORT,
 	matchesWorkflowGroup,
 	getWorkflowGroupForStatus,
 	computeTicketGroupCounts,
-	filterRequisitionTickets
+	filterRequisitionTickets,
+	sortRequisitionTickets,
+	filterAndSortRequisitionTickets
 } from './ticket-filters';
 
 const mockTicket = (
@@ -176,6 +179,7 @@ describe('Ticket Workflow Groups & Filtering (Slice 5.1 §17, §18, §19, §43)'
 		});
 		const t3 = mockTicket('03', 'IN_TRANSIT', {
 			ticket_no: 'TKT-SUPPLIES-0003',
+			requisition_type: 'supplies',
 			requested_by: 'somchai',
 			destination_location: 'เต็นท์ A'
 		});
@@ -256,6 +260,211 @@ describe('Ticket Workflow Groups & Filtering (Slice 5.1 §17, §18, §19, §43)'
 			const result = filterRequisitionTickets(allTickets, {
 				groupId: 'all',
 				search: 'nonexistent'
+			});
+			expect(result).toEqual([]);
+		});
+
+		it('filters by requisition type (food vs supplies)', () => {
+			const foodOnly = filterRequisitionTickets(allTickets, {
+				groupId: 'all',
+				requisitionType: 'food'
+			});
+			expect(foodOnly).toEqual([t1, t2, t4]);
+
+			const suppliesOnly = filterRequisitionTickets(allTickets, {
+				groupId: 'all',
+				requisitionType: 'supplies'
+			});
+			expect(suppliesOnly).toEqual([t3]);
+
+			const allTypes = filterRequisitionTickets(allTickets, {
+				groupId: 'all',
+				requisitionType: 'all'
+			});
+			expect(allTypes).toEqual(allTickets);
+		});
+
+		it('does not mutate input array during filtering', () => {
+			const copy = [...allTickets];
+			filterRequisitionTickets(allTickets, { groupId: 'pending_ready' });
+			expect(allTickets).toEqual(copy);
+		});
+	});
+
+	describe('sortRequisitionTickets & DEFAULT_TICKET_SORT', () => {
+		const olderTicket = mockTicket('old', 'COMPLETED', {
+			_id: 'requisition_ticket:old',
+			created_at: '2026-09-18T08:00:00.000Z'
+		});
+		const middleTicket = mockTicket('mid', 'PENDING_PICK', {
+			_id: 'requisition_ticket:mid',
+			created_at: '2026-09-19T10:00:00.000Z'
+		});
+		const newerTicket = mockTicket('new', 'READY_FOR_DISPATCH', {
+			_id: 'requisition_ticket:new',
+			created_at: '2026-09-19T15:00:00.000Z'
+		});
+
+		it('defines canonical DEFAULT_TICKET_SORT as newest-first (created_at DESC)', () => {
+			expect(DEFAULT_TICKET_SORT).toEqual({
+				field: 'created_at',
+				direction: 'desc'
+			});
+		});
+
+		it('sorts tickets by default newest -> oldest (created_at DESC)', () => {
+			const unsorted = [middleTicket, olderTicket, newerTicket];
+			const sorted = sortRequisitionTickets(unsorted);
+
+			expect(sorted.map((t) => t._id)).toEqual([
+				'requisition_ticket:new',
+				'requisition_ticket:mid',
+				'requisition_ticket:old'
+			]);
+		});
+
+		it('guarantees the oldest ticket appears after newer tickets', () => {
+			const sorted = sortRequisitionTickets([olderTicket, newerTicket]);
+			expect(sorted[0]._id).toBe('requisition_ticket:new');
+			expect(sorted[1]._id).toBe('requisition_ticket:old');
+		});
+
+		it('provides deterministic secondary tie-breaking by _id when timestamps are identical', () => {
+			const sameTimeA = mockTicket('tie_a', 'PENDING_PICK', {
+				_id: 'requisition_ticket:tie_a',
+				created_at: '2026-09-19T12:00:00.000Z'
+			});
+			const sameTimeB = mockTicket('tie_b', 'PENDING_PICK', {
+				_id: 'requisition_ticket:tie_b',
+				created_at: '2026-09-19T12:00:00.000Z'
+			});
+
+			const order1 = sortRequisitionTickets([sameTimeA, sameTimeB]);
+			const order2 = sortRequisitionTickets([sameTimeB, sameTimeA]);
+
+			expect(order1.map((t) => t._id)).toEqual(order2.map((t) => t._id));
+		});
+
+		it('preserves explicit user sort (oldest first: direction asc) and does not override it', () => {
+			const unsorted = [middleTicket, olderTicket, newerTicket];
+			const sortedAsc = sortRequisitionTickets(unsorted, {
+				field: 'created_at',
+				direction: 'asc'
+			});
+
+			expect(sortedAsc.map((t) => t._id)).toEqual([
+				'requisition_ticket:old',
+				'requisition_ticket:mid',
+				'requisition_ticket:new'
+			]);
+		});
+
+		it('does not mutate the original tickets array', () => {
+			const input = [olderTicket, newerTicket];
+			const inputCopy = [...input];
+			const result = sortRequisitionTickets(input);
+
+			expect(input).toEqual(inputCopy);
+			expect(result).not.toBe(input);
+		});
+	});
+
+	describe('filterAndSortRequisitionTickets (Composition)', () => {
+		const tOldFood = mockTicket('01', 'PENDING_PICK', {
+			_id: 'requisition_ticket:01',
+			requisition_type: 'food',
+			created_at: '2026-09-19T08:00:00.000Z',
+			destination_location: 'เต็นท์ A'
+		});
+		const tMidSupplies = mockTicket('02', 'PENDING_PICK', {
+			_id: 'requisition_ticket:02',
+			requisition_type: 'supplies',
+			created_at: '2026-09-19T10:00:00.000Z',
+			destination_location: 'เต็นท์ B'
+		});
+		const tNewFood = mockTicket('03', 'READY_FOR_DISPATCH', {
+			_id: 'requisition_ticket:03',
+			requisition_type: 'food',
+			created_at: '2026-09-19T12:00:00.000Z',
+			destination_location: 'เต็นท์ A'
+		});
+		const allTickets = [tOldFood, tMidSupplies, tNewFood];
+
+		it('composes status-group tab filtering and default newest-first sorting', () => {
+			const result = filterAndSortRequisitionTickets(allTickets, {
+				groupId: 'pending_ready'
+			});
+
+			// All three tickets belong to pending_ready; newest-first order preserved
+			expect(result.map((t) => t._id)).toEqual([
+				'requisition_ticket:03',
+				'requisition_ticket:02',
+				'requisition_ticket:01'
+			]);
+		});
+
+		it('filters exclusively by status-group tab when in_progress or completed', () => {
+			const tCompleted = mockTicket('04', 'COMPLETED', {
+				_id: 'requisition_ticket:04',
+				created_at: '2026-09-19T14:00:00.000Z'
+			});
+			const withCompleted = [...allTickets, tCompleted];
+
+			const completedResult = filterAndSortRequisitionTickets(withCompleted, {
+				groupId: 'completed'
+			});
+			expect(completedResult.map((t) => t._id)).toEqual(['requisition_ticket:04']);
+		});
+
+		it('composes type filtering and destination filtering with sorting', () => {
+			const result = filterAndSortRequisitionTickets(allTickets, {
+				groupId: 'all',
+				requisitionType: 'food',
+				destination: 'เต็นท์ A'
+			});
+
+			// tNewFood (12:00) and tOldFood (08:00) match; newest first
+			expect(result.map((t) => t._id)).toEqual(['requisition_ticket:03', 'requisition_ticket:01']);
+		});
+
+		it('clearing filters restores the full ticket list ordered newest-first', () => {
+			const clearedFilters = {
+				groupId: 'all' as const,
+				detailedStatus: 'all' as const,
+				requisitionType: 'all' as const,
+				destination: 'all',
+				search: ''
+			};
+
+			const result = filterAndSortRequisitionTickets(allTickets, clearedFilters);
+
+			expect(result.map((t) => t._id)).toEqual([
+				'requisition_ticket:03',
+				'requisition_ticket:02',
+				'requisition_ticket:01'
+			]);
+		});
+
+		it('honors explicit ascending sort when filtering is active', () => {
+			const result = filterAndSortRequisitionTickets(
+				allTickets,
+				{
+					groupId: 'all',
+					requisitionType: 'food'
+				},
+				{
+					field: 'created_at',
+					direction: 'asc'
+				}
+			);
+
+			// Food tickets are tOldFood (08:00) and tNewFood (12:00); oldest first
+			expect(result.map((t) => t._id)).toEqual(['requisition_ticket:01', 'requisition_ticket:03']);
+		});
+
+		it('returns empty array cleanly when no tickets match filters', () => {
+			const result = filterAndSortRequisitionTickets(allTickets, {
+				groupId: 'completed'
 			});
 			expect(result).toEqual([]);
 		});

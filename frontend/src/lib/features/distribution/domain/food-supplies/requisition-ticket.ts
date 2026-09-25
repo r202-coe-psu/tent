@@ -5,13 +5,13 @@ import {
 	qtyGt,
 	qtyStrNonNegativeSchema,
 	qtyStrPositiveSchema,
-	qtyStrCoerceNonNegativeSchema,
-	qtyStrCoercePositiveSchema
+	qtyStrCoerceNonNegativeSchema
 } from '$lib/utils/qty';
 import {
 	foodSuppliesBaseDocShape,
 	mealPeriodSchema,
 	type MealPeriod,
+	normalizeWholeItemInput,
 	requisitionTicketIdSchema,
 	ULID_PATTERN
 } from './shared';
@@ -35,6 +35,13 @@ export const requisitionTicketStatusSchema = z.enum([
 	'CANCELLED'
 ]);
 export type RequisitionTicketStatus = z.infer<typeof requisitionTicketStatusSchema>;
+const POSITIVE_INT_RE = /^0*[1-9]\d*$/;
+
+export const positiveIntegerQtyStrSchema = z
+	.string()
+	.trim()
+	.regex(POSITIVE_INT_RE, 'Quantity must be a positive whole number')
+	.transform((s) => s.replace(/^0+/, ''));
 
 /** Strict persisted TicketItem contract. CR-038 forbids numeric JSON qty values in documents. */
 export const ticketItemSchema = z.object({
@@ -43,8 +50,12 @@ export const ticketItemSchema = z.object({
 	category: z.string().trim().min(1).optional(),
 	type_class: z.enum(['CONSUMABLE', 'DURABLE', 'EQUIPMENT']),
 	returnable: z.boolean().optional(),
-	requested_qty: qtyStrPositiveSchema,
-	allocated_qty: qtyStrPositiveSchema,
+	requested_qty: qtyStrPositiveSchema.refine((s) => POSITIVE_INT_RE.test(s), {
+		message: 'Quantity must be a positive whole number'
+	}),
+	allocated_qty: qtyStrPositiveSchema.refine((s) => POSITIVE_INT_RE.test(s), {
+		message: 'Quantity must be a positive whole number'
+	}),
 	distributed_qty: qtyStrNonNegativeSchema.optional(),
 	returned_qty: qtyStrNonNegativeSchema.optional(),
 	discrepancy_qty: qtyStrNonNegativeSchema.optional()
@@ -53,8 +64,24 @@ export type TicketItem = z.infer<typeof ticketItemSchema>;
 
 /** Explicit API/input boundary. Factories normalize quantities before persisting them. */
 const ticketItemInputSchema = ticketItemSchema.extend({
-	requested_qty: qtyStrCoercePositiveSchema,
-	allocated_qty: qtyStrCoercePositiveSchema,
+	requested_qty: z.union([z.string(), z.number()]).transform((v, ctx) => {
+		const raw = typeof v === 'number' ? String(v) : v.trim();
+		const norm = normalizeWholeItemInput(raw);
+		if (!norm.isValid || !norm.value) {
+			ctx.addIssue({ code: 'custom', message: 'Quantity must be a positive whole number' });
+			return z.NEVER;
+		}
+		return norm.value;
+	}),
+	allocated_qty: z.union([z.string(), z.number()]).transform((v, ctx) => {
+		const raw = typeof v === 'number' ? String(v) : v.trim();
+		const norm = normalizeWholeItemInput(raw);
+		if (!norm.isValid || !norm.value) {
+			ctx.addIssue({ code: 'custom', message: 'Quantity must be a positive whole number' });
+			return z.NEVER;
+		}
+		return norm.value;
+	}),
 	distributed_qty: qtyStrCoerceNonNegativeSchema.optional(),
 	returned_qty: qtyStrCoerceNonNegativeSchema.optional(),
 	discrepancy_qty: qtyStrCoerceNonNegativeSchema.optional()

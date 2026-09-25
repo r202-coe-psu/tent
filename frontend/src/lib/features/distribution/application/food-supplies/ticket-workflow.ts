@@ -1,9 +1,10 @@
 import type { AuthorContext } from '$lib/db/model';
 import { qtyGt } from '$lib/utils/qty';
-import type {
-	RequisitionTicket,
-	RequisitionTicketInput,
-	TicketItem
+import {
+	type RequisitionTicket,
+	type RequisitionTicketInput,
+	type TicketItem,
+	normalizeWholeItemInput
 } from '../../domain/food-supplies';
 import {
 	RequisitionTicketRemoteRepository,
@@ -17,7 +18,7 @@ import {
 	assertCanPerformFrontlineDistribution
 } from './auth';
 import { TicketStateError, WorkflowValidationError } from './errors';
-import { assertPositiveQty } from './validation';
+import { assertPositiveIntegerQty } from './validation';
 
 export interface ItemAllocationInput {
 	item_id: string;
@@ -56,6 +57,26 @@ export async function createRequisitionTicket(
 		throw new WorkflowValidationError('Requisition ticket requires at least one item');
 	}
 
+	for (const item of input.items) {
+		const normReq = normalizeWholeItemInput(String(item.requested_qty));
+		if (!normReq.isValid || !normReq.value) {
+			throw new WorkflowValidationError(
+				`requested_qty must be a positive whole number for item ${item.item_id}`
+			);
+		}
+		item.requested_qty = normReq.value;
+
+		if (item.allocated_qty) {
+			const normAlloc = normalizeWholeItemInput(String(item.allocated_qty));
+			if (!normAlloc.isValid || !normAlloc.value) {
+				throw new WorkflowValidationError(
+					`allocated_qty must be a positive whole number for item ${item.item_id}`
+				);
+			}
+			item.allocated_qty = normAlloc.value;
+		}
+	}
+
 	const ticketRepo = resolveTicketRepo(repo, ctx);
 	return ticketRepo.create(input, ctx);
 }
@@ -76,7 +97,13 @@ export async function allocateTicketItems(
 	}
 
 	for (const alloc of allocations) {
-		assertPositiveQty(alloc.allocated_qty, 'allocated_qty', `for item ${alloc.item_id}`);
+		const norm = normalizeWholeItemInput(String(alloc.allocated_qty));
+		if (!norm.isValid || !norm.value) {
+			throw new WorkflowValidationError(
+				`allocated_qty must be a positive whole number for item ${alloc.item_id}`
+			);
+		}
+		alloc.allocated_qty = norm.value;
 	}
 
 	const ticketRepo = resolveTicketRepo(repo, ctx);

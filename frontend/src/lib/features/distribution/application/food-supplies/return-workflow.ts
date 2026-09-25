@@ -26,7 +26,8 @@ import {
 	createBulkReturnPool as createBulkReturnPoolDocument,
 	createLoanReturnReservation,
 	deriveClaimIdFromDistributionLog,
-	deriveReservationIdFromDistributionLog
+	deriveReservationIdFromDistributionLog,
+	normalizeWholeItemInput
 } from '../../domain/food-supplies';
 import {
 	BulkReturnClaimRemoteRepository,
@@ -1113,7 +1114,12 @@ export async function createBulkReturnPool(
 ): Promise<BulkReturnPool> {
 	assertCanReceivePhysicalStock(ctx);
 
-	assertPositiveQty(input.total_received_qty, 'total_received_qty');
+	const norm = normalizeWholeItemInput(input.total_received_qty);
+	if (!norm.isValid || !norm.normalized) {
+		throw new WorkflowValidationError('total_received_qty must be a positive whole number');
+	}
+	const totalReceivedQty = norm.normalized;
+
 	if (!isUlid(input.operationUlid)) {
 		throw new WorkflowValidationError('operationUlid must be a valid ULID');
 	}
@@ -1127,7 +1133,7 @@ export async function createBulkReturnPool(
 	const ledgerEntry = createStockLedger(
 		{
 			item_id: input.item_id,
-			qty: input.total_received_qty,
+			qty: totalReceivedQty,
 			unit: 'ชิ้น',
 			reason: 'receive',
 			ref_id: poolId,
@@ -1140,7 +1146,7 @@ export async function createBulkReturnPool(
 	const poolInput: BulkReturnPoolInput = {
 		item_id: input.item_id,
 		stock_ledger_id: ledgerId,
-		total_received_qty: input.total_received_qty,
+		total_received_qty: totalReceivedQty,
 		...(input.ticket_id ? { ticket_id: input.ticket_id } : {}),
 		...(input.shift_id ? { shift_id: input.shift_id } : {}),
 		...(input.notes ? { notes: input.notes } : {})

@@ -9,6 +9,10 @@
 		buildVerifiedReturnsPayload
 	} from '../model/warehouse-return';
 	import { formatDistributionError } from '../model/distribution-error';
+	import {
+		normalizeWholeItemInput,
+		formatNormalizationNotice
+	} from '../model/ticket-quantity';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { toast } from 'svelte-sonner';
@@ -31,10 +35,27 @@
 	const receiveMutation = useReceiveWarehouseReturns();
 
 	let verifiedValues = $state<Record<string, string>>({});
+	let warehouseNotices = $state<Record<string, string>>({});
 	let formErrors = $state<Record<string, string>>({});
+
+	function handleVerifiedQtyBlur(itemId: string) {
+		const raw = (verifiedValues[itemId] ?? '').trim();
+		if (!raw) return;
+		const normRes = normalizeWholeItemInput(raw, { allowZero: true });
+		if (normRes.normalized !== null) {
+			if (normRes.wasNormalized) {
+				warehouseNotices[itemId] = formatNormalizationNotice(raw, normRes.normalized, 'ชิ้น');
+			}
+			verifiedValues = {
+				...verifiedValues,
+				[itemId]: normRes.normalized
+			};
+		}
+	}
 
 	function resetForm() {
 		verifiedValues = initializeVerifiedQuantities(ticket.items);
+		warehouseNotices = {};
 		formErrors = {};
 	}
 
@@ -46,6 +67,7 @@
 
 	function handleMatchDeclared() {
 		verifiedValues = initializeVerifiedQuantities(ticket.items);
+		warehouseNotices = {};
 		formErrors = {};
 	}
 
@@ -57,6 +79,7 @@
 	);
 
 	function handleQtyInput(itemId: string, value: string) {
+		delete warehouseNotices[itemId];
 		verifiedValues = {
 			...verifiedValues,
 			[itemId]: value
@@ -70,6 +93,9 @@
 	}
 
 	async function handleSubmit() {
+		for (const item of ticket.items) {
+			handleVerifiedQtyBlur(item.item_id);
+		}
 		const validation = validateWarehouseReturnForm(ticket.items, verifiedValues);
 		if (!validation.isValid || !validation.normalizedValues) {
 			formErrors = validation.errors;
@@ -218,12 +244,11 @@
 								<td class="px-2 py-3 text-right">
 									<div class="inline-flex flex-col items-end">
 										<Input
-											type="number"
-											min="0"
-											max={preview.frontlineReturned}
-											step="any"
+											type="text"
+											inputmode="decimal"
 											disabled={isSubmitting}
 											value={verifiedValues[preview.itemId] ?? ''}
+											onblur={() => handleVerifiedQtyBlur(preview.itemId)}
 											oninput={(e) =>
 												handleQtyInput(preview.itemId, (e.target as HTMLInputElement).value)}
 											aria-label={`จำนวนตรวจรับจริง ${preview.itemName}`}
@@ -233,6 +258,11 @@
 												? 'border-slate-200 bg-white text-slate-900 focus-visible:ring-slate-900'
 												: 'border-red-300 bg-red-50/50 text-red-900 focus-visible:ring-red-500'}"
 										/>
+										{#if warehouseNotices[preview.itemId]}
+											<span class="mt-1 text-right text-2xs font-medium text-amber-700" role="status">
+												{warehouseNotices[preview.itemId]}
+											</span>
+										{/if}
 										{#if formErrors[preview.itemId] || preview.error}
 											<span class="mt-1 text-right text-2xs font-semibold text-red-600">
 												{formErrors[preview.itemId] ?? preview.error}

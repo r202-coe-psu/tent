@@ -9,7 +9,12 @@
 		getReturnableBadgeLabel,
 		getReturnableBadgeClass
 	} from '../model/catalog-eligibility';
-	import { validatePositiveQuantity, buildCreateTicketItem } from '../model/ticket-quantity';
+	import {
+		validatePositiveQuantity,
+		buildCreateTicketItem,
+		normalizeWholeItemInput,
+		formatNormalizationNotice
+	} from '../model/ticket-quantity';
 	import { formatDistributionError } from '../model/distribution-error';
 	import CatalogItemPicker from './CatalogItemPicker.svelte';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
@@ -47,6 +52,7 @@
 	let notes = $state('');
 	let selectedItems = $state<SelectedTicketItem[]>([]);
 	let pickerOpen = $state(false);
+	let normalizationNotices = $state<Record<string, string>>({});
 
 	// Available destination suggestions from shelter zones and food distribution points
 	const destinationSuggestions = $derived.by(() => {
@@ -102,6 +108,20 @@
 		selectedItems = selectedItems.filter((item) => item.master._id !== itemId);
 	}
 
+	function handleItemQtyBlur(itemId: string, raw: string) {
+		const item = selectedItems.find((i) => i.master._id === itemId);
+		if (!item) return;
+		const norm = normalizeWholeItemInput(raw);
+		if (norm.isValid && norm.value && norm.wasNormalized) {
+			normalizationNotices[itemId] = formatNormalizationNotice(
+				raw.trim(),
+				norm.value,
+				item.master.base_unit
+			);
+			item.requested_qty = norm.value;
+		}
+	}
+
 	function resetForm() {
 		requisitionType = 'food';
 		destinationLocation = '';
@@ -109,6 +129,7 @@
 		notes = '';
 		selectedItems = [];
 		pickerOpen = false;
+		normalizationNotices = {};
 	}
 
 	async function handleSubmit() {
@@ -131,7 +152,7 @@
 			return;
 		}
 
-		// 4. Validation: Quantities and Duplicates and Category eligibility
+		// 4. Validation & Normalization: Quantities and Duplicates and Category eligibility
 		const seenItemIds: Record<string, boolean> = {};
 		for (const item of selectedItems) {
 			if (seenItemIds[item.master._id]) {
@@ -140,10 +161,22 @@
 			}
 			seenItemIds[item.master._id] = true;
 
-			const qtyValidation = validatePositiveQuantity(item.requested_qty);
-			if (!qtyValidation.isValid) {
-				toast.error(`จำนวนเบิกของ ${item.master.name} ต้องมากกว่า 0`);
+			const norm = normalizeWholeItemInput(item.requested_qty);
+			if (!norm.isValid || !norm.value) {
+				toast.error(
+					norm.error ??
+						`จำนวนเบิกของ ${item.master.name} ต้องเป็นจำนวนเต็มตั้งแต่ 1 ขึ้นไป`
+				);
 				return;
+			}
+
+			if (norm.wasNormalized) {
+				normalizationNotices[item.master._id] = formatNormalizationNotice(
+					item.requested_qty.trim(),
+					norm.value,
+					item.master.base_unit
+				);
+				item.requested_qty = norm.value;
 			}
 
 			if (!isEligibleDistributionCatalogItem(item.master, requisitionType)) {
@@ -342,7 +375,7 @@
 						class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#0A2647] shadow-2xs transition-colors hover:bg-slate-50"
 					>
 						<Plus class="h-3.5 w-3.5" />
-						<span>+ เพิ่มรายการ</span>
+						<span>เพิ่มรายการ</span>
 					</button>
 				</div>
 
@@ -353,7 +386,7 @@
 						<Package class="mx-auto mb-2 h-8 w-8 text-slate-400" />
 						<p class="text-xs font-semibold text-slate-700">ยังไม่ได้เลือกรายการในตั๋วนี้</p>
 						<p class="mt-0.5 text-xs text-slate-500">
-							กดปุ่ม "+ เพิ่มรายการ" ด้านบนเพื่อค้นหาจาก Master Catalog
+							กดปุ่ม "เพิ่มรายการ" ด้านบนเพื่อค้นหาจาก Master Catalog
 						</p>
 					</div>
 				{:else}
@@ -390,15 +423,37 @@
 											</span>
 										</td>
 										<td class="px-2 py-2.5 text-right">
-											<div class="inline-flex items-center gap-1.5">
-												<Input
-													type="text"
-													inputmode="decimal"
-													bind:value={item.requested_qty}
-													aria-label="จำนวนเบิก {item.master.name}"
-													class="h-8 w-20 text-right text-xs font-bold tabular-nums"
-												/>
-												<span class="text-xs text-slate-500">{item.master.base_unit}</span>
+											<div class="inline-flex flex-col items-end gap-1">
+												<div class="inline-flex items-center gap-1.5">
+													<Input
+														type="text"
+														inputmode="decimal"
+														min="1"
+														bind:value={item.requested_qty}
+														oninput={() => {
+															if (normalizationNotices[item.master._id]) {
+																const next = { ...normalizationNotices };
+																delete next[item.master._id];
+																normalizationNotices = next;
+															}
+														}}
+														onblur={() => {
+															handleItemQtyBlur(item.master._id, item.requested_qty);
+														}}
+														aria-label="จำนวนเบิก {item.master.name}"
+														class="h-8 w-20 text-right text-xs font-bold tabular-nums {validatePositiveQuantity(
+															item.requested_qty
+														).isValid
+															? ''
+															: 'border-red-400 focus:ring-red-400'}"
+													/>
+													<span class="text-xs text-slate-500">{item.master.base_unit}</span>
+												</div>
+												{#if normalizationNotices[item.master._id]}
+													<span class="text-right text-2xs font-medium text-amber-700" role="status">
+														{normalizationNotices[item.master._id]}
+													</span>
+												{/if}
 											</div>
 										</td>
 										<td class="py-2.5 pr-4 pl-2 text-right">

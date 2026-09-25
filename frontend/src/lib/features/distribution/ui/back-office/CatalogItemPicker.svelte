@@ -8,9 +8,14 @@
 		getReturnableBadgeLabel,
 		getReturnableBadgeClass
 	} from '../model/catalog-eligibility';
-	import { validatePositiveQuantity } from '../model/ticket-quantity';
+	import {
+		validatePositiveQuantity,
+		normalizeWholeItemInput,
+		formatNormalizationNotice
+	} from '../model/ticket-quantity';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { toast } from 'svelte-sonner';
 	import Search from '@lucide/svelte/icons/search';
 	import Package from '@lucide/svelte/icons/package';
 	import Check from '@lucide/svelte/icons/check';
@@ -37,6 +42,7 @@
 
 	let searchQuery = $state('');
 	let itemQuantities = $state<Record<string, string>>({});
+	let pickerNotices = $state<Record<string, string>>({});
 
 	// Filter only eligible items for the requisition type
 	const eligibleItems = $derived.by(() => {
@@ -59,11 +65,27 @@
 		return stockBalanceQuery.data?.get(itemId) ?? '0';
 	}
 
+	function handlePickerQtyBlur(itemId: string, raw: string, unit: string) {
+		const norm = normalizeWholeItemInput(raw);
+		if (norm.isValid && norm.value && norm.wasNormalized) {
+			itemQuantities[itemId] = norm.value;
+			pickerNotices[itemId] = formatNormalizationNotice(raw.trim(), norm.value, unit);
+		}
+	}
+
 	function handleAdd(item: ItemMaster) {
 		const rawQty = itemQuantities[item._id] ?? '1';
-		const res = validatePositiveQuantity(rawQty);
-		if (!res.isValid || !res.value) return;
-		onSelectItem(item, res.value);
+		const norm = normalizeWholeItemInput(rawQty);
+		if (!norm.isValid || !norm.value) {
+			toast.error(norm.error ?? 'จำนวนต้องเป็นจำนวนเต็มตั้งแต่ 1 ขึ้นไป');
+			return;
+		}
+		if (norm.wasNormalized) {
+			itemQuantities[item._id] = norm.value;
+			pickerNotices[item._id] = formatNormalizationNotice(rawQty.trim(), norm.value, item.base_unit);
+			toast.info(formatNormalizationNotice(rawQty.trim(), norm.value, item.base_unit));
+		}
+		onSelectItem(item, norm.value);
 	}
 </script>
 
@@ -169,19 +191,35 @@
 									เพิ่มในตั๋วแล้ว
 								</span>
 							{:else}
-								<div class="flex items-center gap-1.5">
-									<label for="qty-{item._id}" class="sr-only">จำนวนที่ต้องการเบิก</label>
-									<Input
-										id="qty-{item._id}"
-										type="text"
-										inputmode="decimal"
-										value={itemQuantities[item._id] ?? '1'}
-										oninput={(e) => {
-											itemQuantities[item._id] = e.currentTarget.value;
-										}}
-										class="h-9 w-20 text-right text-sm font-semibold tabular-nums shadow-2xs"
-									/>
-									<span class="min-w-[30px] text-xs text-slate-500">{item.base_unit}</span>
+								<div class="flex flex-col items-end gap-1">
+									<div class="flex items-center gap-1.5">
+										<label for="qty-{item._id}" class="sr-only">จำนวนที่ต้องการเบิก</label>
+										<Input
+											id="qty-{item._id}"
+											type="text"
+											inputmode="decimal"
+											min="1"
+											value={itemQuantities[item._id] ?? '1'}
+											oninput={(e) => {
+												itemQuantities[item._id] = e.currentTarget.value;
+												if (pickerNotices[item._id]) {
+													const next = { ...pickerNotices };
+													delete next[item._id];
+													pickerNotices = next;
+												}
+											}}
+											onblur={(e) => {
+												handlePickerQtyBlur(item._id, e.currentTarget.value, item.base_unit);
+											}}
+											class="h-9 w-20 text-right text-sm font-semibold tabular-nums shadow-2xs"
+										/>
+										<span class="min-w-[30px] text-xs text-slate-500">{item.base_unit}</span>
+									</div>
+									{#if pickerNotices[item._id]}
+										<span class="text-right text-2xs font-medium text-amber-700" role="status">
+											{pickerNotices[item._id]}
+										</span>
+									{/if}
 								</div>
 
 								<button

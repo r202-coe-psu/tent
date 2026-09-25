@@ -21,6 +21,10 @@
 	} from '../model/bulk-pool-manager';
 	import { getReturnableBadgeClass, getReturnableBadgeLabel } from '../model/catalog-eligibility';
 	import { formatDistributionError } from '../model/distribution-error';
+	import {
+		normalizeWholeItemInput,
+		formatNormalizationNotice
+	} from '../model/ticket-quantity';
 
 	interface Props {
 		open?: boolean;
@@ -38,6 +42,7 @@
 	let operationUlid = $state<string | null>(null);
 	let selectedItemId = $state('');
 	let receivedQty = $state('');
+	let qtyNotice = $state<string | null>(null);
 	let notes = $state('');
 	let itemSearch = $state('');
 	let submitError = $state<string | null>(null);
@@ -49,10 +54,27 @@
 		return operationUlid;
 	}
 
+	function handleQtyBlur() {
+		const raw = receivedQty.trim();
+		if (!raw) return;
+		const normRes = normalizeWholeItemInput(raw);
+		if (normRes.normalized !== null) {
+			if (normRes.wasNormalized) {
+				qtyNotice = formatNormalizationNotice(
+					raw,
+					normRes.normalized,
+					selectedItem?.base_unit ?? 'ชิ้น'
+				);
+			}
+			receivedQty = normRes.normalized;
+		}
+	}
+
 	function resetForm() {
 		operationUlid = null;
 		selectedItemId = '';
 		receivedQty = '';
+		qtyNotice = null;
 		notes = '';
 		itemSearch = '';
 		submitError = null;
@@ -97,6 +119,7 @@
 
 	async function handleSubmit() {
 		submitError = null;
+		handleQtyBlur();
 		if (!validation.isValid || !validation.normalizedQty) {
 			const message = validation.error ?? 'กรุณากรอกข้อมูลให้ครบถ้วนและถูกต้อง';
 			submitError = message;
@@ -324,10 +347,19 @@
 					type="text"
 					inputmode="decimal"
 					value={receivedQty}
-					oninput={(event) => (receivedQty = event.currentTarget.value)}
+					onblur={handleQtyBlur}
+					oninput={(event) => {
+						qtyNotice = null;
+						receivedQty = event.currentTarget.value;
+					}}
 					placeholder="เช่น 10, 50, 100"
 					class="h-9 w-full font-mono text-xs shadow-2xs placeholder:text-slate-400"
 				/>
+				{#if qtyNotice}
+					<p class="mt-1 text-2xs font-medium text-amber-700" role="status">
+						{qtyNotice}
+					</p>
+				{/if}
 				<p class="text-2xs text-slate-500">
 					ระบบจะบันทึกรับเข้าคลัง StockLedger 1 รายการ และตั้งต้นโควตาคงเหลือ (unclaimed quota)
 					เท่ากับจำนวนนี้

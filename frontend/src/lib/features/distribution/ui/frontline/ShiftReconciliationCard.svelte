@@ -26,6 +26,10 @@
 		validateShiftCloseForm
 	} from '../model/shift-reconciliation';
 	import { formatDistributionError } from '../model/distribution-error';
+	import {
+		normalizeWholeItemInput,
+		formatNormalizationNotice
+	} from '../model/ticket-quantity';
 
 	interface Props {
 		ticket: RequisitionTicket | null;
@@ -59,8 +63,21 @@
 
 	// Form state for returned quantities, keyed by item_id
 	let returnedInputs = $state<Record<string, string>>({});
+	let reconcileNotices = $state<Record<string, string>>({});
 	let initializedForTicketId = $state<string | null>(null);
 	let submitError = $state<string | null>(null);
+
+	function handleReturnedQtyBlur(itemId: string) {
+		const raw = (returnedInputs[itemId] ?? '').trim();
+		if (!raw) return;
+		const normRes = normalizeWholeItemInput(raw, { allowZero: true });
+		if (normRes.normalized !== null) {
+			if (normRes.wasNormalized) {
+				reconcileNotices[itemId] = formatNormalizationNotice(raw, normRes.normalized, 'ชิ้น');
+			}
+			returnedInputs[itemId] = normRes.normalized;
+		}
+	}
 
 	// Sync initial form values when reconciliation data is loaded
 	$effect(() => {
@@ -84,6 +101,10 @@
 			return;
 		}
 		if (!ticket) return;
+
+		for (const item of summaries) {
+			handleReturnedQtyBlur(item.item_id);
+		}
 
 		submitError = null;
 		if (!validation.isValid || !validation.normalizedValues) {
@@ -299,7 +320,9 @@
 													inputmode="decimal"
 													disabled={!canFrontline || closeShiftMutation.isPending}
 													value={returnedInputs[item.itemId] ?? ''}
+													onblur={() => handleReturnedQtyBlur(item.itemId)}
 													oninput={(e) => {
+														delete reconcileNotices[item.itemId];
 														returnedInputs[item.itemId] = (e.target as HTMLInputElement).value;
 													}}
 													aria-label={`จำนวนส่งคืน ${item.itemName}`}
@@ -309,6 +332,11 @@
 														? 'border-red-300 bg-red-50 text-red-900 focus-visible:ring-red-500'
 														: 'border-slate-200 bg-white text-slate-900 focus-visible:ring-teal-600'}"
 												/>
+												{#if reconcileNotices[item.itemId]}
+													<span class="mt-1 text-right text-2xs font-medium text-amber-700" role="status">
+														{reconcileNotices[item.itemId]}
+													</span>
+												{/if}
 												{#if validation.errors[item.itemId]}
 													<span class="mt-1 text-right text-2xs text-red-600">
 														{validation.errors[item.itemId]}

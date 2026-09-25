@@ -175,11 +175,17 @@ describe('Warehouse Return Verification & Ticket Completion UI Model', () => {
 		});
 	});
 
-	describe('8. canonical decimal string preserved', () => {
-		it('preserves canonical decimal precision (e.g. 18.5000 -> 18.5)', () => {
-			const res = validateVerifiedQuantity('18.5000', '20');
+	describe('8. whole-item ceiling normalization', () => {
+		it('normalizes decimal strings with whole-item ceiling (e.g. 18.1000 -> 19, 18.000 -> 18)', () => {
+			const res = validateVerifiedQuantity('18.1000', '20');
 			expect(res.isValid).toBe(true);
-			expect(res.normalized).toBe('18.5');
+			expect(res.normalized).toBe('19');
+			expect(res.wasNormalized).toBe(true);
+
+			const resWhole = validateVerifiedQuantity('18.000', '20');
+			expect(resWhole.isValid).toBe(true);
+			expect(resWhole.normalized).toBe('18');
+			expect(resWhole.wasNormalized).toBe(true);
 		});
 	});
 

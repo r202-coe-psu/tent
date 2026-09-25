@@ -35,7 +35,7 @@ function ticketInput(requisition_type: 'food' | 'supplies' = 'food') {
 	};
 }
 
-describe('Food & Supplies RequisitionTicket contract (CR-121)', () => {
+describe('Food & Supplies RequisitionTicket contract ', () => {
 	it('creates canonical Food and Supplies Tickets with a pending-pick initial state', () => {
 		const food = createFlow2RequisitionTicket(ticketInput('food'), ctx, ULID);
 		const supplies = createFlow2RequisitionTicket(ticketInput('supplies'), ctx, ULID);

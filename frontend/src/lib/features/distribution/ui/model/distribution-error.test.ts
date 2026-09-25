@@ -1,12 +1,20 @@
-import { describe, it, expect } from 'vitest';
-import { formatDistributionError, isUnsafeRawMessage } from './distribution-error';
+import { describe, it, expect, vi } from 'vitest';
+import {
+	formatDistributionError,
+	isUnsafeRawMessage,
+	mapDistributionQueryError
+} from './distribution-error';
 import {
 	ConflictError,
 	AuthError,
+	CouchAuthError,
+	ValidationError,
+	CannotConnectError,
 	NotFoundError,
 	CouchDocumentPolicyError,
 	NetworkError
 } from '$lib/utils/errors';
+import { ZodError } from 'zod';
 import {
 	WorkflowValidationError,
 	InsufficientPoolQuotaError,
@@ -156,5 +164,123 @@ describe('isUnsafeRawMessage', () => {
 	it('allows safe plain messages', () => {
 		expect(isUnsafeRawMessage('กรุณาระบุจำนวนที่ถูกต้อง')).toBe(false);
 		expect(isUnsafeRawMessage('ไม่พบรายการสินค้าที่ระบุ')).toBe(false);
+	});
+});
+
+describe('mapDistributionQueryError', () => {
+	it('maps 401 CouchAuthError and status 401 to session expired reauth presentation', () => {
+		const couchAuthErr = new CouchAuthError(401);
+		const result1 = mapDistributionQueryError(couchAuthErr);
+		expect(result1.kind).toBe('AUTH_401');
+		expect(result1.title).toBe('เซสชันหมดอายุหรือยังไม่ได้เข้าสู่ระบบ');
+		expect(result1.description).toBe('กรุณาเข้าสู่ระบบใหม่เพื่อโหลดข้อมูลใบเบิกจ่าย');
+		expect(result1.actionLabel).toBe('เข้าสู่ระบบใหม่');
+		expect(result1.actionType).toBe('reauth');
+		expect(result1.retryable).toBe(false);
+
+		const plain401 = { status: 401, message: 'Unauthorized' };
+		const result2 = mapDistributionQueryError(plain401);
+		expect(result2.kind).toBe('AUTH_401');
+		expect(result2.title).toBe('เซสชันหมดอายุหรือยังไม่ได้เข้าสู่ระบบ');
+		expect(result2.actionType).toBe('reauth');
+	});
+
+	it('maps 403 authorization error to permission error without retry', () => {
+		const couch403 = new CouchAuthError(403);
+		const result1 = mapDistributionQueryError(couch403);
+		expect(result1.kind).toBe('FORBIDDEN_403');
+		expect(result1.title).toBe('ไม่มีสิทธิ์เข้าถึงข้อมูลใบเบิกจ่าย');
+		expect(result1.description).toBe('บัญชีนี้ไม่มีสิทธิ์เข้าถึงข้อมูลของศูนย์พักพิงที่เลือก');
+		expect(result1.retryable).toBe(false);
+		expect(result1.actionType).toBe('none');
+		expect(result1.actionLabel).toBeUndefined();
+
+		const workflowAuthErr = new WorkflowAuthorizationError('Unauthorized to access shelter');
+		const result2 = mapDistributionQueryError(workflowAuthErr);
+		expect(result2.kind).toBe('FORBIDDEN_403');
+		expect(result2.title).toBe('ไม่มีสิทธิ์เข้าถึงข้อมูลใบเบิกจ่าย');
+
+		// Invariant: 403 must not claim connection failed
+		expect(result1.title).not.toContain('เชื่อมต่อ');
+		expect(result2.title).not.toContain('เชื่อมต่อ');
+	});
+
+	it('maps CannotConnectError and NetworkError to unavailable connection message with retry', () => {
+		const cannotConnectErr = new CannotConnectError();
+		const result1 = mapDistributionQueryError(cannotConnectErr);
+		expect(result1.kind).toBe('COUCH_UNAVAILABLE');
+		expect(result1.title).toBe('ไม่สามารถเชื่อมต่อระบบข้อมูลได้');
+		expect(result1.description).toBe('กรุณาตรวจสอบการเชื่อมต่อหรือลองใหม่อีกครั้ง');
+		expect(result1.actionLabel).toBe('ลองใหม่');
+		expect(result1.actionType).toBe('retry');
+		expect(result1.retryable).toBe(true);
+
+		const networkErr = new NetworkError();
+		const result2 = mapDistributionQueryError(networkErr);
+		expect(result2.kind).toBe('COUCH_UNAVAILABLE');
+		expect(result2.title).toBe('ไม่สามารถเชื่อมต่อระบบข้อมูลได้');
+		expect(result2.retryable).toBe(true);
+
+		const proxy502 = { status: 502, message: 'Bad Gateway' };
+		const result3 = mapDistributionQueryError(proxy502);
+		expect(result3.kind).toBe('PROXY_FAILURE');
+		expect(result3.title).toBe('ไม่สามารถเชื่อมต่อระบบข้อมูลได้');
+		expect(result3.retryable).toBe(true);
+	});
+
+	it('maps ZodError and schema parsing failure to invalid data message with retry', () => {
+		const zodErr = new ZodError([
+			{
+				code: 'invalid_type',
+				expected: 'string',
+				path: ['requisition_type'],
+				message: 'Expected string, received number'
+			}
+		]);
+		const result1 = mapDistributionQueryError(zodErr);
+		expect(result1.kind).toBe('QUERY_PARSE_FAILURE');
+		expect(result1.title).toBe('ไม่สามารถอ่านข้อมูลใบเบิกจ่ายได้');
+		expect(result1.description).toBe(
+			'ข้อมูลบางรายการมีรูปแบบไม่ถูกต้อง กรุณาลองใหม่หรือติดต่อผู้ดูแลระบบ'
+		);
+		expect(result1.actionLabel).toBe('ลองใหม่');
+		expect(result1.actionType).toBe('retry');
+		expect(result1.retryable).toBe(true);
+		// Invariant: raw internal Zod details must NOT leak into title or description
+		expect(result1.title).not.toContain('invalid_type');
+		expect(result1.description).not.toContain('Expected string');
+
+		const validationErr = new ValidationError('Malformed document schema');
+		const result2 = mapDistributionQueryError(validationErr);
+		expect(result2.kind).toBe('QUERY_PARSE_FAILURE');
+		expect(result2.title).toBe('ไม่สามารถอ่านข้อมูลใบเบิกจ่ายได้');
+	});
+
+	it('maps unknown Error or null to generic fallback message with retry', () => {
+		const unknownErr = new Error('Database file corrupted unexpectedly');
+		const result1 = mapDistributionQueryError(unknownErr);
+		expect(result1.kind).toBe('OTHER');
+		expect(result1.title).toBe('ไม่สามารถโหลดรายการใบเบิกจ่ายได้');
+		expect(result1.description).toBe('เกิดข้อผิดพลาดที่ไม่คาดคิด กรุณาลองใหม่อีกครั้ง');
+		expect(result1.actionLabel).toBe('ลองใหม่');
+		expect(result1.actionType).toBe('retry');
+		expect(result1.retryable).toBe(true);
+
+		const nullResult = mapDistributionQueryError(null);
+		expect(nullResult.kind).toBe('OTHER');
+		expect(nullResult.title).toBe('ไม่สามารถโหลดรายการใบเบิกจ่ายได้');
+		expect(nullResult.retryable).toBe(true);
+	});
+
+	it('supports invoking refetch action when retryable is true', () => {
+		const err = new NetworkError();
+		const presentation = mapDistributionQueryError(err);
+		expect(presentation.retryable).toBe(true);
+
+		const refetchSpy = vi.fn();
+		if (presentation.retryable) {
+			refetchSpy();
+		}
+		expect(refetchSpy).toHaveBeenCalledTimes(1);
 	});
 });

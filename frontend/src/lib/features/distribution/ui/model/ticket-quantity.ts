@@ -1,15 +1,50 @@
 /**
  * Canonical Decimal quantity helpers for transactional ticket creation and allocation UI.
+ * Enforces positive whole-number (integer item count) invariants for distribution workflows.
  * Strictly prevents IEEE-754 precision loss by avoiding parseFloat / Number / parseInt.
  */
 
-import { qtyStrCoercePositiveSchema } from '$lib/utils/qty';
+import { persistQty } from '$lib/utils/qty';
 import type { ItemMaster } from '$lib/features/catalog';
+import {
+	normalizeWholeItemInput,
+	type WholeItemNormalizationResult,
+	type WholeItemNormalizationOptions
+} from '../../domain/food-supplies';
+
+export {
+	normalizeWholeItemInput,
+	type WholeItemNormalizationResult,
+	type WholeItemNormalizationOptions
+};
 
 export interface QuantityValidationResult {
 	isValid: boolean;
 	value?: string;
 	error?: string;
+	wasNormalized?: boolean;
+	originalValue?: string;
+}
+
+/** Matches positive whole numbers with optional leading zeros (no decimals, no sign, no scientific notation). */
+const POSITIVE_INTEGER_RE = /^0*([1-9]\d*)$/;
+
+/** Tests whether a raw string represents a valid positive whole number. */
+export function isPositiveIntegerString(raw: string): boolean {
+	return POSITIVE_INTEGER_RE.test(raw.trim());
+}
+
+/**
+ * Formats user-friendly Thai feedback when a quantity is normalized (ceiling-rounded).
+ * E.g. "จำนวนต้องเป็นจำนวนเต็ม ระบบปรับจาก 1.5 เป็น 2"
+ */
+export function formatNormalizationNotice(
+	original: string,
+	normalized: string,
+	unit?: string
+): string {
+	const unitSuffix = unit ? ` ${unit}` : '';
+	return `จำนวนต้องเป็นจำนวนเต็ม ระบบปรับจาก ${original} เป็น ${normalized}${unitSuffix}`;
 }
 
 /**
@@ -17,36 +52,39 @@ export interface QuantityValidationResult {
  * (ticket item request, allocation, or catalog picker).
  *
  * Guarantees:
- * - Pure Decimal math via `persistQty` and canonical Zod schema.
+ * - Automatically normalizes valid positive decimals by ALWAYS ROUNDING UP (Ceiling).
+ * - Normalizes redundant leading zeros (e.g. '050' -> '50').
  * - ZERO IEEE-754 `parseFloat` / `Number` / `parseInt` conversion.
- * - Preserves precision for arbitrary large integers (> Number.MAX_SAFE_INTEGER).
- * - Preserves fractional precision up to canonical QTY_DECIMALS (4 places).
- * - Canonicalizes formatting (e.g. removes leading zeros, redundant trailing zeros).
- * - Strictly rejects non-numeric strings, NaN, Infinity, empty/whitespace, zero, and negative values.
+ * - Preserves precision for arbitrarily large integers (> Number.MAX_SAFE_INTEGER).
+ * - Strictly rejects non-numeric strings, NaN, Infinity, empty/whitespace, zero, negative values,
+ *   and scientific notation (1e2, 1E2).
+ * - Clear Thai validation message: "จำนวนต้องเป็นจำนวนเต็มตั้งแต่ 1 ขึ้นไป".
  */
-export function validatePositiveQuantity(raw: string): QuantityValidationResult {
-	const trimmed = raw.trim();
-	if (!trimmed) {
-		return { isValid: false, error: 'กรุณาระบุจำนวน' };
-	}
-
-	const parsed = qtyStrCoercePositiveSchema.safeParse(trimmed);
-	if (!parsed.success) {
+export function validatePositiveQuantity(
+	raw: string,
+	options?: { allowZero?: boolean }
+): QuantityValidationResult {
+	const norm = normalizeWholeItemInput(raw, options);
+	if (!norm.isValid || !norm.value) {
 		return {
 			isValid: false,
-			error: 'จำนวนต้องมากกว่า 0'
+			error: norm.error ?? 'จำนวนต้องเป็นจำนวนเต็มตั้งแต่ 1 ขึ้นไป'
 		};
 	}
 
 	return {
 		isValid: true,
-		value: parsed.data
+		value: norm.value,
+		wasNormalized: norm.wasNormalized,
+		originalValue: (raw ?? '').trim()
 	};
 }
 
+export const validateIntegerQuantity = validatePositiveQuantity;
+
 /**
  * Constructs a single canonical ticket item for CreateTicketDialog.
- * Ensures requested_qty and initial allocated_qty are identical canonical Decimal strings.
+ * Ensures requested_qty and initial allocated_qty are identical positive whole-number Decimal strings.
  */
 export function buildCreateTicketItem(item: { master: ItemMaster; requested_qty: string }): {
 	item_id: string;
@@ -59,7 +97,11 @@ export function buildCreateTicketItem(item: { master: ItemMaster; requested_qty:
 } {
 	const res = validatePositiveQuantity(item.requested_qty);
 	if (!res.isValid || !res.value) {
-		throw new Error(`จำนวนเบิกของ ${item.master.name} ต้องมากกว่า 0`);
+		throw new Error(
+			res.error
+				? `จำนวนเบิกของ ${item.master.name}: ${res.error}`
+				: `จำนวนเบิกของ ${item.master.name} ต้องเป็นจำนวนเต็มตั้งแต่ 1 ขึ้นไป`
+		);
 	}
 	return {
 		item_id: item.master._id,
@@ -74,7 +116,7 @@ export function buildCreateTicketItem(item: { master: ItemMaster; requested_qty:
 
 /**
  * Constructs a single allocation item for TicketAllocationDialog.
- * Ensures allocated_qty is a canonical Decimal string without precision loss.
+ * Ensures allocated_qty is a canonical positive whole-number Decimal string without precision loss.
  */
 export function buildAllocationItem(
 	item: { item_id: string; item_name?: string },
@@ -82,7 +124,11 @@ export function buildAllocationItem(
 ): { item_id: string; allocated_qty: string } {
 	const res = validatePositiveQuantity(rawQty);
 	if (!res.isValid || !res.value) {
-		throw new Error(`จำนวนจัดสรรของ ${item.item_name || item.item_id} ต้องมากกว่า 0`);
+		throw new Error(
+			res.error
+				? `จำนวนจัดสรรของ ${item.item_name || item.item_id}: ${res.error}`
+				: `จำนวนจัดสรรของ ${item.item_name || item.item_id} ต้องเป็นจำนวนเต็มตั้งแต่ 1 ขึ้นไป`
+		);
 	}
 	return {
 		item_id: item.item_id,

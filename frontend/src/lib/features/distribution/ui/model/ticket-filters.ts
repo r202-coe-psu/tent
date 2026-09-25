@@ -1,4 +1,8 @@
-import type { RequisitionTicket, RequisitionTicketStatus } from '../../domain/food-supplies';
+import type {
+	RequisitionTicket,
+	RequisitionTicketStatus,
+	RequisitionType
+} from '../../domain/food-supplies';
 
 export type TicketWorkflowGroupId =
 	'all' | 'pending_ready' | 'in_progress' | 'returns_closeout' | 'completed';
@@ -118,12 +122,13 @@ export interface TicketFilterOptions {
 	groupId: TicketWorkflowGroupId;
 	detailedStatus?: RequisitionTicketStatus | 'all';
 	destination?: string | 'all';
+	requisitionType?: RequisitionType | 'all';
 	search?: string;
 }
 
 /**
  * Pure filter predicate combining workflow group, detailed canonical status,
- * destination location, and text search across ticket_no and requested_by.
+ * requisition type, destination location, and text search across ticket_no and requested_by.
  */
 export function filterRequisitionTickets(
 	tickets: readonly RequisitionTicket[],
@@ -146,14 +151,21 @@ export function filterRequisitionTickets(
 			}
 		}
 
-		// 3. Destination location filter
+		// 3. Requisition type filter (food, supplies, kitchen, transfer)
+		if (filters.requisitionType && filters.requisitionType !== 'all') {
+			if (ticket.requisition_type !== filters.requisitionType) {
+				return false;
+			}
+		}
+
+		// 4. Destination location filter
 		if (filters.destination && filters.destination !== 'all') {
 			if (ticket.destination_location !== filters.destination) {
 				return false;
 			}
 		}
 
-		// 4. Text search by ticket_no or requested_by
+		// 5. Text search by ticket_no, requested_by, or destination_location
 		if (trimmedSearch.length > 0) {
 			const matchTicketNo = ticket.ticket_no.toLowerCase().includes(trimmedSearch);
 			const matchRequester = ticket.requested_by.toLowerCase().includes(trimmedSearch);
@@ -165,4 +177,56 @@ export function filterRequisitionTickets(
 
 		return true;
 	});
+}
+
+export type TicketSortField = 'created_at';
+export type TicketSortDirection = 'asc' | 'desc';
+
+export interface TicketSortOption {
+	field: TicketSortField;
+	direction: TicketSortDirection;
+}
+
+/**
+ * Default ticket ordering: Newest -> Oldest (created_at DESC).
+ * Deterministic secondary tie-breaker: ticket._id (DESC).
+ */
+export const DEFAULT_TICKET_SORT: TicketSortOption = {
+	field: 'created_at',
+	direction: 'desc'
+};
+
+/**
+ * Sorts tickets deterministically.
+ * Default: newest first (created_at DESC).
+ * Secondary tie-breaker: ticket._id.
+ * Does not mutate original tickets array.
+ */
+export function sortRequisitionTickets(
+	tickets: readonly RequisitionTicket[],
+	sort: TicketSortOption = DEFAULT_TICKET_SORT
+): RequisitionTicket[] {
+	return [...tickets].sort((a, b) => {
+		const timeA = new Date(a.created_at).getTime();
+		const timeB = new Date(b.created_at).getTime();
+
+		if (timeA !== timeB) {
+			return sort.direction === 'asc' ? timeA - timeB : timeB - timeA;
+		}
+
+		// Stable secondary tie-break by _id
+		return sort.direction === 'asc' ? a._id.localeCompare(b._id) : b._id.localeCompare(a._id);
+	});
+}
+
+/**
+ * Pure helper combining filtering and deterministic sorting.
+ */
+export function filterAndSortRequisitionTickets(
+	tickets: readonly RequisitionTicket[],
+	filters: TicketFilterOptions,
+	sort: TicketSortOption = DEFAULT_TICKET_SORT
+): RequisitionTicket[] {
+	const filtered = filterRequisitionTickets(tickets, filters);
+	return sortRequisitionTickets(filtered, sort);
 }

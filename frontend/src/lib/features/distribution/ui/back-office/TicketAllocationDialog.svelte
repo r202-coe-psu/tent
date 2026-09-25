@@ -2,7 +2,12 @@
 	import type { RequisitionTicket } from '../../domain/food-supplies';
 	import { useAllocateTicketItems } from '../../application/queries';
 	import { getReturnableBadgeLabel, getReturnableBadgeClass } from '../model/catalog-eligibility';
-	import { validatePositiveQuantity, buildAllocationItem } from '../model/ticket-quantity';
+	import {
+		validatePositiveQuantity,
+		buildAllocationItem,
+		normalizeWholeItemInput,
+		formatNormalizationNotice
+	} from '../model/ticket-quantity';
 	import { formatDistributionError } from '../model/distribution-error';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
@@ -26,6 +31,7 @@
 
 	// Form quantities state keyed by item_id
 	let formQuantities = $state<Record<string, string>>({});
+	let allocationNotices = $state<Record<string, string>>({});
 
 	// Initialize or reset form quantities from ticket items
 	function initForm() {
@@ -35,6 +41,7 @@
 			initial[item.item_id] = item.allocated_qty ?? item.requested_qty ?? '';
 		}
 		formQuantities = initial;
+		allocationNotices = {};
 	}
 
 	$effect(() => {
@@ -63,10 +70,28 @@
 		return true;
 	});
 
+	function handleAllocationBlur(itemId: string) {
+		const raw = formQuantities[itemId];
+		if (!raw) return;
+		const norm = normalizeWholeItemInput(raw);
+		if (norm.isValid && norm.value && norm.wasNormalized) {
+			formQuantities[itemId] = norm.value;
+			allocationNotices[itemId] = formatNormalizationNotice(raw.trim(), norm.value);
+		}
+	}
+
 	async function handleSubmit() {
-		if (!isValid) {
-			toast.error('กรุณาระบุจำนวนจัดสรรที่ถูกต้องและมากกว่า 0 สำหรับทุกรายการ');
-			return;
+		for (const item of ticket.items) {
+			const raw = formQuantities[item.item_id] ?? '';
+			const norm = normalizeWholeItemInput(raw);
+			if (!norm.isValid || !norm.value) {
+				toast.error('จำนวนต้องเป็นจำนวนเต็มตั้งแต่ 1 ขึ้นไปสำหรับทุกรายการ');
+				return;
+			}
+			if (norm.wasNormalized) {
+				formQuantities[item.item_id] = norm.value;
+				allocationNotices[item.item_id] = formatNormalizationNotice(raw.trim(), norm.value);
+			}
 		}
 
 		const allocations = ticket.items.map((item) =>
@@ -167,14 +192,34 @@
 									{item.requested_qty}
 								</td>
 								<td class="py-3 pr-4 pl-2 text-right">
-									<div class="inline-flex items-center justify-end gap-1">
+									<div class="inline-flex flex-col items-end gap-1">
 										<Input
 											type="text"
 											inputmode="decimal"
+											min="1"
 											bind:value={formQuantities[item.item_id]}
+											oninput={() => {
+												if (allocationNotices[item.item_id]) {
+													const next = { ...allocationNotices };
+													delete next[item.item_id];
+													allocationNotices = next;
+												}
+											}}
+											onblur={() => {
+												handleAllocationBlur(item.item_id);
+											}}
 											aria-label="ยอดจัดสรร {item.item_name}"
-											class="h-9 w-24 text-right text-xs font-bold tabular-nums shadow-2xs"
+											class="h-9 w-24 text-right text-xs font-bold tabular-nums shadow-2xs {!formQuantities[
+												item.item_id
+											] || validatePositiveQuantity(formQuantities[item.item_id]).isValid
+												? ''
+												: 'border-red-400 focus:ring-red-400'}"
 										/>
+										{#if allocationNotices[item.item_id]}
+											<span class="text-right text-2xs font-medium text-amber-700" role="status">
+												{allocationNotices[item.item_id]}
+											</span>
+										{/if}
 									</div>
 								</td>
 							</tr>

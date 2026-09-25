@@ -4,12 +4,12 @@
 		resolveAuthenticatedAuthorContext
 	} from '../../application/queries';
 	import { canCreateTicket } from '../../application/food-supplies/auth';
-	import type { RequisitionTicketStatus } from '../../domain/food-supplies';
+	import type { RequisitionType } from '../../domain/food-supplies';
 	import {
 		type TicketWorkflowGroupId,
+		type TicketSortDirection,
 		computeTicketGroupCounts,
-		filterRequisitionTickets,
-		matchesWorkflowGroup
+		filterAndSortRequisitionTickets
 	} from '../model/ticket-filters';
 	import TicketGroupTabs from './TicketGroupTabs.svelte';
 	import TicketFilters from './TicketFilters.svelte';
@@ -25,11 +25,15 @@
 	import Truck from '@lucide/svelte/icons/truck';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
+	import LogIn from '@lucide/svelte/icons/log-in';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import Clock from '@lucide/svelte/icons/clock';
 	import Send from '@lucide/svelte/icons/send';
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
+	import { mapDistributionQueryError } from '../model/distribution-error';
+	import { backofficeState } from '$lib/stores/backoffice.svelte';
+	import { authStore } from '$lib/stores/auth.svelte';
 
 	const shelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
 
@@ -38,6 +42,17 @@
 	const tickets = $derived(ticketsQuery.data ?? []);
 	const isLoading = $derived(ticketsQuery.isLoading);
 	const isError = $derived(ticketsQuery.isError);
+	const errorPresentation = $derived(mapDistributionQueryError(ticketsQuery.error));
+
+
+
+	function handleReauth() {
+		if (authStore.isAuthenticated) {
+			backofficeState.requestReauth();
+		} else {
+			goto('/login');
+		}
+	}
 
 	// Detail shell selection & deep linking (?ticketId=...)
 	let localSelectedTicketId = $state<string | null>(null);
@@ -82,9 +97,10 @@
 
 	// Filter states
 	let activeGroup = $state<TicketWorkflowGroupId>('all');
-	let detailedStatus = $state<RequisitionTicketStatus | 'all'>('all');
+	let selectedType = $state<RequisitionType | 'all'>('all');
 	let selectedDestination = $state<string | 'all'>('all');
 	let searchQuery = $state('');
+	let sortDirection = $state<TicketSortDirection>('desc');
 
 	// Create dialog open state
 	let isCreateOpen = $state(false);
@@ -114,50 +130,41 @@
 		return list.sort((a, b) => a.localeCompare(b, 'th'));
 	});
 
-	// Filtered tickets
+	// Filtered & sorted tickets (default: created_at newest-first)
 	const filteredTickets = $derived.by(() => {
-		return filterRequisitionTickets(tickets, {
-			groupId: activeGroup,
-			detailedStatus,
-			destination: selectedDestination,
-			search: searchQuery
-		});
+		return filterAndSortRequisitionTickets(
+			tickets,
+			{
+				groupId: activeGroup,
+				requisitionType: selectedType,
+				destination: selectedDestination,
+				search: searchQuery
+			},
+			{
+				field: 'created_at',
+				direction: sortDirection
+			}
+		);
 	});
 
 	// Handle Group Tab change
 	function handleSelectGroup(group: TicketWorkflowGroupId) {
 		activeGroup = group;
-		// If detailed status doesn't belong to the newly selected group, reset it to avoid impossible filters
-		if (
-			detailedStatus !== 'all' &&
-			group !== 'all' &&
-			!matchesWorkflowGroup(detailedStatus, group)
-		) {
-			detailedStatus = 'all';
-		}
-	}
-
-	// Handle Detailed Status change
-	function handleStatusChange(status: RequisitionTicketStatus | 'all') {
-		detailedStatus = status;
-		// If selected status doesn't match active group, switch active group to all or matching group
-		if (status !== 'all' && activeGroup !== 'all' && !matchesWorkflowGroup(status, activeGroup)) {
-			activeGroup = 'all';
-		}
 	}
 
 	function handleResetFilters() {
 		searchQuery = '';
-		detailedStatus = 'all';
+		selectedType = 'all';
 		selectedDestination = 'all';
 	}
 
 	function handleTicketCreated() {
 		// Post-create UX: activate "รอจัด / พร้อมส่ง" so PENDING_PICK is immediately visible
 		activeGroup = 'pending_ready';
-		detailedStatus = 'all';
+		selectedType = 'all';
 		searchQuery = '';
 		selectedDestination = 'all';
+		sortDirection = 'desc';
 	}
 </script>
 
@@ -177,7 +184,7 @@
 			<div>
 				<h1 class="text-2xl font-bold tracking-tight text-slate-900">ระบบเบิกจ่ายพัสดุและอาหาร</h1>
 				<p class="text-xs text-slate-500">
-					ศูนย์ควบคุมตั๋วเบิกจ่ายพัสดุ อาหารปรุงสุก (Ready-Meal) และติดตามของยืม (CR-121) • ศูนย์: {shelterCode}
+					ศูนย์ควบคุมตั๋วเบิกจ่ายพัสดุ อาหารปรุงสุก (Ready-Meal) และติดตามของยืม • ศูนย์: {shelterCode}
 				</p>
 			</div>
 		</div>
@@ -301,14 +308,14 @@
 			<!-- Grouped Workflow Tabs -->
 			<TicketGroupTabs {activeGroup} counts={groupCounts} onSelectGroup={handleSelectGroup} />
 
-			<!-- Detailed Filters & Search -->
+			<!-- Filters & Search -->
 			<TicketFilters
 				search={searchQuery}
-				{detailedStatus}
+				requisitionType={selectedType}
 				destination={selectedDestination}
 				destinations={availableDestinations}
 				onSearchChange={(val) => (searchQuery = val)}
-				onStatusChange={handleStatusChange}
+				onTypeChange={(type) => (selectedType = type)}
 				onDestinationChange={(dest) => (selectedDestination = dest)}
 				onResetFilters={handleResetFilters}
 			/>
@@ -323,24 +330,40 @@
 					<p class="mt-0.5 text-xs text-slate-500">กรุณารอสักครู่</p>
 				</div>
 			{:else if isError}
-				<div class="rounded-xl border border-red-200 bg-red-50/50 p-8 text-center shadow-2xs">
-					<AlertCircle class="mx-auto mb-2 h-8 w-8 text-red-500" />
-					<h3 class="text-sm font-bold text-red-900">ไม่สามารถเชื่อมต่อฐานข้อมูลตั๋วเบิกจ่ายได้</h3>
+				<div
+					role="alert"
+					class="rounded-xl border border-red-200 bg-red-50/50 p-8 text-center shadow-2xs"
+				>
+					<AlertCircle class="mx-auto mb-2 h-8 w-8 text-red-500" aria-hidden="true" />
+					<h3 class="text-sm font-bold text-red-900">{errorPresentation.title}</h3>
 					<p class="mx-auto mt-1 max-w-md text-xs text-red-700">
-						เกิดข้อผิดพลาดในการเรียกดูข้อมูล กรุณาตรวจสอบสัญญาณเครือข่ายหรือลองใหม่อีกครั้ง
+						{errorPresentation.description}
 					</p>
-					<button
-						type="button"
-						onclick={() => ticketsQuery.refetch()}
-						class="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-800 shadow-2xs transition-colors hover:bg-red-50"
-					>
-						<RefreshCw class="h-3.5 w-3.5" />
-						<span>ลองใหม่</span>
-					</button>
+					{#if errorPresentation.actionType === 'reauth'}
+						<button
+							type="button"
+							onclick={handleReauth}
+							class="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-800 shadow-2xs transition-colors hover:bg-red-50 focus:ring-2 focus:ring-red-400 focus:outline-hidden"
+						>
+							<LogIn class="h-3.5 w-3.5" aria-hidden="true" />
+							<span>{errorPresentation.actionLabel}</span>
+						</button>
+					{:else if errorPresentation.retryable}
+						<button
+							type="button"
+							onclick={() => ticketsQuery.refetch()}
+							class="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-800 shadow-2xs transition-colors hover:bg-red-50 focus:ring-2 focus:ring-red-400 focus:outline-hidden"
+						>
+							<RefreshCw class="h-3.5 w-3.5" aria-hidden="true" />
+							<span>{errorPresentation.actionLabel}</span>
+						</button>
+					{/if}
 				</div>
 			{:else}
 				<TicketTable
 					tickets={filteredTickets}
+					{sortDirection}
+					onToggleSort={() => (sortDirection = sortDirection === 'desc' ? 'asc' : 'desc')}
 					onViewTicket={(ticket) => handleOpenDetail(ticket._id)}
 				/>
 			{/if}

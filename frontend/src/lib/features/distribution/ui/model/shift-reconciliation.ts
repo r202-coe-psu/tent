@@ -7,6 +7,7 @@ import {
 	qtyStrNonNegativeSchema,
 	subQty
 } from '$lib/utils/qty';
+import { normalizeWholeItemInput } from '../../domain/food-supplies';
 import type {
 	ItemReconciliationSummary,
 	ShiftCloseOptions
@@ -38,6 +39,7 @@ export interface ShiftClosePreview {
 export interface ReturnedQtyValidationResult {
 	isValid: boolean;
 	normalized?: string;
+	wasNormalized?: boolean;
 	error?: string;
 }
 
@@ -62,8 +64,8 @@ export function initializeReturnedQuantities(
 
 /**
  * Validates a single returned quantity string against canonical rules:
- * - Must be a valid decimal string
- * - Must be >= 0
+ * - Must be a valid whole-item quantity (normalizes decimal with ceiling)
+ * - Must be >= 0 (allowZero: true)
  * - Must be <= remaining_in_hand
  */
 export function validateReturnedQuantity(
@@ -75,30 +77,24 @@ export function validateReturnedQuantity(
 		return { isValid: false, error: 'กรุณาระบุจำนวนส่งคืน' };
 	}
 
-	const parsed = qtyStrNonNegativeSchema.safeParse(trimmed);
-	if (!parsed.success) {
-		try {
-			const dec = parseQty(trimmed);
-			if (dec.isNegative()) {
-				return { isValid: false, error: 'จำนวนส่งคืนต้องไม่ติดลบ (≥ 0)' };
-			}
-		} catch {
-			// Ignore parse error; drop through
-		}
-		return { isValid: false, error: 'จำนวนต้องเป็นตัวเลขที่ถูกต้อง' };
+	const norm = normalizeWholeItemInput(trimmed, { allowZero: true });
+	if (!norm.isValid || norm.normalized === null) {
+		return { isValid: false, error: norm.error ?? 'จำนวนต้องเป็นตัวเลขที่ถูกต้อง' };
 	}
 
-	const normalized = parsed.data;
+	const normalized = norm.normalized;
 	const safeRemaining = persistQty(remainingInHand || '0');
 
 	if (!qtyLte(normalized, safeRemaining)) {
 		return {
 			isValid: false,
-			error: `จำนวนส่งคืน (${normalized}) ต้องไม่เกินจำนวนคงเหลือในมือ (${safeRemaining})`
+			error: `จำนวนส่งคืน (${normalized}) ต้องไม่เกินจำนวนคงเหลือในมือ (${safeRemaining})`,
+			normalized,
+			wasNormalized: norm.wasNormalized
 		};
 	}
 
-	return { isValid: true, normalized };
+	return { isValid: true, normalized, wasNormalized: norm.wasNormalized };
 }
 
 /**
@@ -138,9 +134,8 @@ export function computeItemPreview(
 	item: ItemReconciliationSummary,
 	returnedQtyInput: string
 ): ItemReconciliationPreview {
-	const safeReturned = qtyStrNonNegativeSchema.safeParse(returnedQtyInput.trim()).success
-		? persistQty(returnedQtyInput.trim())
-		: '0';
+	const norm = normalizeWholeItemInput(returnedQtyInput.trim(), { allowZero: true });
+	const safeReturned = norm.isValid && norm.normalized !== null ? norm.normalized : '0';
 
 	const allocated = persistQty(item.allocated_qty || '0');
 	const distributed = persistQty(item.distributed_qty || '0');

@@ -1,8 +1,9 @@
 import { addQty, qtyGt, qtyLte, qtyStrPositiveSchema, subQty } from '$lib/utils/qty';
-import type {
-	DistributionLog,
-	ReturnCondition,
-	NonPhysicalClearReason
+import {
+	normalizeWholeItemInput,
+	type DistributionLog,
+	type ReturnCondition,
+	type NonPhysicalClearReason
 } from '../../domain/food-supplies';
 
 export type { NonPhysicalClearReason };
@@ -56,12 +57,13 @@ export function calculateNewCumulativeReturned(
 export interface ReturnQtyValidationResult {
 	isValid: boolean;
 	error?: string;
+	normalizedQty?: string;
+	wasNormalized?: boolean;
 }
 
 /**
  * Validates the quantity entered by an operator for physical counter return.
- * Uses canonical Decimal schema parsing (qtyStrPositiveSchema) rather than parseFloat
- * to preserve exact fractional precision (≤4 decimals) and strictly reject non-numeric syntax.
+ * Normalizes countable whole-item input with ceiling behavior.
  * - Must be non-empty
  * - Must be a valid positive quantity (> 0, ≤4 decimals)
  * - Must not exceed currently known remaining balance
@@ -83,14 +85,30 @@ export function validateCounterReturnQuantity(
 		};
 	}
 
-	if (!qtyLte(parsed.data, remaining)) {
+	const norm = normalizeWholeItemInput(parsed.data);
+	if (!norm.isValid || !norm.normalized) {
 		return {
 			isValid: false,
-			error: `จำนวนที่คืนครั้งนี้ (${trimmed}) เกินจำนวนคงค้างที่ต้องส่งคืน (${remaining})`
+			error: 'จำนวนที่คืนต้องมากกว่า 0 และเป็นตัวเลขทศนิยมไม่เกิน 4 ตำแหน่ง'
 		};
 	}
 
-	return { isValid: true };
+	const targetQty = norm.normalized;
+
+	if (!qtyLte(targetQty, remaining)) {
+		return {
+			isValid: false,
+			error: `จำนวนที่คืนครั้งนี้ (${targetQty}) เกินจำนวนคงค้างที่ต้องส่งคืน (${remaining})`,
+			normalizedQty: targetQty,
+			wasNormalized: norm.wasNormalized
+		};
+	}
+
+	return {
+		isValid: true,
+		normalizedQty: targetQty,
+		wasNormalized: norm.wasNormalized
+	};
 }
 
 export interface NonPhysicalClearValidationResult {

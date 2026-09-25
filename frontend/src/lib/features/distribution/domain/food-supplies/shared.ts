@@ -34,3 +34,92 @@ export function thailandCalendarDay(isoTimestampOrDate: string | Date = new Date
 		typeof isoTimestampOrDate === 'string' ? new Date(isoTimestampOrDate) : isoTimestampOrDate;
 	return new Date(d.getTime() + THAILAND_UTC_OFFSET_MS).toISOString().slice(0, 10);
 }
+
+export interface WholeItemNormalizationResult {
+	isValid: boolean;
+	value?: string;
+	normalized: string | null;
+	wasNormalized?: boolean;
+	error?: string;
+}
+
+export interface WholeItemNormalizationOptions {
+	allowZero?: boolean;
+}
+
+const POSITIVE_DECIMAL_STRING_RE = /^0*(\d+)(?:\.(\d+))?$/;
+
+/**
+ * Normalizes user-entered whole-item quantities by ALWAYS ROUNDING UP (Ceiling).
+ * Operates purely on decimal-string semantics with ZERO IEEE-754 floating-point conversion.
+ *
+ * Examples:
+ * - "1"      -> "1"
+ * - "01"     -> "1"
+ * - "1.0"    -> "1"
+ * - "2.000"  -> "2"
+ * - "0.1"    -> "1"
+ * - "0.5"    -> "1"
+ * - "1.01"   -> "2"
+ * - "1.5"    -> "2"
+ * - "1.99"   -> "2"
+ * - "2.0001" -> "3"
+ * - "10.01"  -> "11"
+ *
+ * Invalid inputs remain invalid:
+ * - "", "0" (when allowZero is false), negative numbers ("-1", "-0.5"),
+ *   non-numeric ("abc", "NaN", "Infinity"), and scientific notation ("1e2", "1E2").
+ */
+export function normalizeWholeItemInput(
+	raw: string,
+	options?: WholeItemNormalizationOptions
+): WholeItemNormalizationResult {
+	const trimmed = (raw ?? '').trim();
+	if (!trimmed) {
+		return { isValid: false, normalized: null, error: 'กรุณาระบุจำนวน' };
+	}
+
+	const match = POSITIVE_DECIMAL_STRING_RE.exec(trimmed);
+	if (!match) {
+		return {
+			isValid: false,
+			normalized: null,
+			error: 'จำนวนต้องเป็นตัวเลขที่ถูกต้อง'
+		};
+	}
+
+	const intPart = match[1];
+	const fracPart = match[2];
+	const intClean = intPart.replace(/^0+/, '') || '0';
+	const hasFraction = fracPart !== undefined && /[1-9]/.test(fracPart);
+
+	if (intClean === '0' && !hasFraction) {
+		if (options?.allowZero) {
+			return {
+				isValid: true,
+				value: '0',
+				normalized: '0',
+				wasNormalized: trimmed !== '0'
+			};
+		}
+		return {
+			isValid: false,
+			normalized: null,
+			error: 'จำนวนต้องเป็นจำนวนเต็มตั้งแต่ 1 ขึ้นไป'
+		};
+	}
+
+	let result: string;
+	if (hasFraction) {
+		result = (BigInt(intClean) + 1n).toString();
+	} else {
+		result = intClean;
+	}
+
+	return {
+		isValid: true,
+		value: result,
+		normalized: result,
+		wasNormalized: result !== trimmed
+	};
+}

@@ -6,7 +6,7 @@ const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'staff:flow2' };
 const ULID = '01J00000000000000000000000';
 const TICKET_ID = `requisition_ticket:${ULID}`;
 
-describe('Food & Supplies BulkReturnPool contract (CR-121)', () => {
+describe('Food & Supplies BulkReturnPool contract', () => {
 	it('creates a Decimal-safe active pool with an exact quota equation', () => {
 		const pool = createBulkReturnPool(
 			{

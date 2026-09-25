@@ -1,19 +1,30 @@
 <script lang="ts">
 	import type { RequisitionTicket } from '../../domain/food-supplies';
+	import type { TicketSortDirection } from '../model/ticket-filters';
 	import TicketStatusBadge from '../common/TicketStatusBadge.svelte';
 	import { getRequisitionTypeLabel } from '../model/ticket-status';
 	import Eye from '@lucide/svelte/icons/eye';
 	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import Inbox from '@lucide/svelte/icons/inbox';
+	import ArrowDown from '@lucide/svelte/icons/arrow-down';
+	import ArrowUp from '@lucide/svelte/icons/arrow-up';
 
 	interface Props {
 		tickets: readonly RequisitionTicket[];
 		pageSize?: number;
 		onViewTicket?: (ticket: RequisitionTicket) => void;
+		sortDirection?: TicketSortDirection;
+		onToggleSort?: () => void;
 	}
 
-	let { tickets, pageSize = 10, onViewTicket }: Props = $props();
+	let {
+		tickets,
+		pageSize = 10,
+		onViewTicket,
+		sortDirection = 'desc',
+		onToggleSort
+	}: Props = $props();
 
 	let currentPage = $state(1);
 
@@ -83,7 +94,29 @@
 						<th scope="col" class="px-3 py-3.5">ประเภท</th>
 						<th scope="col" class="px-3 py-3.5">จุดหมายปลายทาง</th>
 						<th scope="col" class="px-3 py-3.5">ผู้ร้องขอ</th>
-						<th scope="col" class="px-3 py-3.5">วันที่สร้าง</th>
+						<th
+							scope="col"
+							class="px-3 py-3.5"
+							aria-sort={sortDirection === 'desc' ? 'descending' : 'ascending'}
+						>
+							{#if onToggleSort}
+								<button
+									type="button"
+									onclick={onToggleSort}
+									class="group inline-flex items-center gap-1 rounded font-semibold text-slate-600 uppercase transition-colors hover:text-slate-900 focus:ring-2 focus:ring-[#0A2647] focus:ring-offset-1 focus:outline-none"
+									aria-label={`เรียงตามวันที่สร้าง (${sortDirection === 'desc' ? 'แสดงใหม่ไปเก่า คลิกเพื่อเรียงเก่าไปใหม่' : 'แสดงเก่าไปใหม่ คลิกเพื่อเรียงใหม่ไปเก่า'})`}
+								>
+									<span>วันที่สร้าง</span>
+									{#if sortDirection === 'desc'}
+										<ArrowDown class="h-3.5 w-3.5 text-slate-700" aria-hidden="true" />
+									{:else}
+										<ArrowUp class="h-3.5 w-3.5 text-slate-700" aria-hidden="true" />
+									{/if}
+								</button>
+							{:else}
+								วันที่สร้าง
+							{/if}
+						</th>
 						<th scope="col" class="px-3 py-3.5">สถานะ</th>
 						<th scope="col" class="relative py-3.5 pr-4 pl-3 text-right sm:pr-6">
 							<span class="sr-only">การจัดการ</span>

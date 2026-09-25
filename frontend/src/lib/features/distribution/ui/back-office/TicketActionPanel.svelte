@@ -295,7 +295,7 @@
 						<strong>เปิดแจกจ่ายแล้ว (Distributing)</strong>
 						<p class="mt-0.5 text-slate-600">
 							สินค้าพร้อมแจกจ่ายที่จุดบริการ <strong>{ticket.destination_location}</strong> การแจกจ่ายดำเนินการที่สถานี
-							Onsite Distribution (Slice 5.4)
+							Onsite Distribution 
 						</p>
 					</div>
 				</div>

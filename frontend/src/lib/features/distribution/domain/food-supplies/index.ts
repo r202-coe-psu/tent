@@ -76,7 +76,10 @@ export {
 	requisitionTicketIdSchema,
 	distributionLogIdSchema,
 	bulkReturnPoolIdSchema,
-	stockLedgerIdSchema
+	stockLedgerIdSchema,
+	normalizeWholeItemInput,
+	type WholeItemNormalizationResult,
+	type WholeItemNormalizationOptions
 } from './shared';
 
 export {

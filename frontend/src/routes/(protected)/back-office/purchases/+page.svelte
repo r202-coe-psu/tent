@@ -6,23 +6,16 @@
 		usePurchases,
 		useStockLedgers,
 		purchaseReceiptStatus,
-		startOperationsLiveQuery,
 		type Purchase
 	} from '$lib/features/operations';
 	import * as Dialog from '$lib/components/ui/dialog';
-	import { useQueryClient } from '@tanstack/svelte-query';
 	import ShoppingCart from '@lucide/svelte/icons/shopping-cart';
 	import Plus from '@lucide/svelte/icons/plus';
 	import PackageCheck from '@lucide/svelte/icons/package-check';
 	import Pencil from '@lucide/svelte/icons/pencil';
 
-	const queryClient = useQueryClient();
-
-	// Reactivity comes from the PouchDB changes feed — never poll.
-	$effect(() => {
-		const handle = startOperationsLiveQuery(queryClient);
-		return () => handle.stop();
-	});
+	// Live query subscribers (operations) are already registered globally
+	// via STAFF_LIVE_QUERY_STARTERS in the (protected) layout — no per-page subscription needed.
 
 	const purchasesQuery = usePurchases();
 	const ledgerQuery = useStockLedgers();

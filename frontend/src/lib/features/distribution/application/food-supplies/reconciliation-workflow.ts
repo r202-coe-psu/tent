@@ -10,6 +10,7 @@ import {
 } from '$lib/features/operations';
 import { ConflictError } from '$lib/utils/errors';
 import type { RequisitionTicket, TicketItem } from '../../domain/food-supplies';
+import { normalizeWholeItemInput } from '../../domain/food-supplies';
 import {
 	DistributionLogRemoteRepository,
 	type DistributionLogRepository,
@@ -164,7 +165,12 @@ export async function closeShift(
 		const distributed = summary ? summary.distributed_qty : item.distributed_qty || '0';
 		const remainingInHand = summary ? summary.remaining_in_hand : '0';
 
-		const returned = options?.returned_quantities?.[item.item_id] ?? remainingInHand;
+		const rawReturned = options?.returned_quantities?.[item.item_id] ?? remainingInHand;
+		const normReturned = normalizeWholeItemInput(rawReturned, { allowZero: true });
+		const returned =
+			normReturned.isValid && normReturned.normalized !== null
+				? normReturned.normalized
+				: rawReturned;
 		const allocated = item.allocated_qty || '0';
 		const accounted = addQty(distributed, returned);
 		const discrepancy = subQty(allocated, accounted);
@@ -254,26 +260,27 @@ export async function receiveWarehouseReturns(
 	const verifiedByItem = new Map<string, string>();
 	for (const item of current.items) {
 		const rawVerified = requestedQuantities[item.item_id] ?? item.returned_qty ?? '0';
-		const parsedVerified = qtyStrNonNegativeSchema.safeParse(rawVerified);
-		if (!parsedVerified.success) {
+		const normVerified = normalizeWholeItemInput(rawVerified, { allowZero: true });
+		if (!normVerified.isValid || normVerified.normalized === null) {
 			throw new WorkflowValidationError(
-				`Warehouse verified return for ${item.item_id} must be a non-negative decimal string`
+				`Warehouse verified return for ${item.item_id} must be a valid whole-item quantity`
 			);
 		}
+		const verifiedQty = normVerified.normalized;
 
 		const expectedReturn = item.returned_qty ?? '0';
 		const remainingAfterDistribution = subQty(item.allocated_qty, item.distributed_qty ?? '0');
-		if (!qtyLte(parsedVerified.data, expectedReturn)) {
+		if (!qtyLte(verifiedQty, expectedReturn)) {
 			throw new WorkflowValidationError(
 				`Warehouse verified return for ${item.item_id} cannot exceed the ${expectedReturn} sent from the shift`
 			);
 		}
-		if (!qtyLte(parsedVerified.data, remainingAfterDistribution)) {
+		if (!qtyLte(verifiedQty, remainingAfterDistribution)) {
 			throw new StockIntegrityError(
 				`Warehouse verified return for ${item.item_id} exceeds its ${remainingAfterDistribution} ticket remainder`
 			);
 		}
-		verifiedByItem.set(item.item_id, parsedVerified.data);
+		verifiedByItem.set(item.item_id, verifiedQty);
 	}
 
 	// Idempotency check against existing receive ledger entries for this ticket

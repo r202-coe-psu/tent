@@ -11,6 +11,7 @@ import {
 	operationsRepository
 } from '$lib/features/operations';
 import type { RequisitionTicket, TicketAmendment } from '../../domain/food-supplies';
+import { normalizeWholeItemInput } from '../../domain/food-supplies';
 import {
 	RequisitionTicketRemoteRepository,
 	type RequisitionTicketRepository
@@ -205,7 +206,11 @@ export async function amendActiveTicket(
 ): Promise<RequisitionTicket> {
 	assertCanDispatchTicket(ctx);
 
-	assertPositiveQty(input.added_qty, 'Amendment added_qty');
+	const norm = normalizeWholeItemInput(input.added_qty);
+	if (!norm.isValid || !norm.normalized) {
+		throw new WorkflowValidationError('Amendment added_qty must be a positive whole number');
+	}
+	const addedQty = norm.normalized;
 
 	const amendmentId = input.amendmentId;
 	if (!isUlid(amendmentId)) {
@@ -237,7 +242,7 @@ export async function amendActiveTicket(
 	const ledgerEntry = createStockLedger(
 		{
 			item_id: input.item_id,
-			qty: qtyNeg(input.added_qty),
+			qty: qtyNeg(addedQty),
 			unit: 'ชิ้น',
 			reason: 'distribute',
 			ref_id: current._id,
@@ -252,7 +257,7 @@ export async function amendActiveTicket(
 	const intendedAmendment: TicketAmendment = {
 		amendment_id: amendmentId,
 		item_id: input.item_id,
-		added_qty: input.added_qty,
+		added_qty: addedQty,
 		amended_at: now(),
 		amended_by: ctx.createdBy,
 		reason: input.reason || 'Frontline radio top-up request'
@@ -306,7 +311,7 @@ export async function amendActiveTicket(
 				if (i.item_id !== input.item_id) return i;
 				return {
 					...i,
-					allocated_qty: addQty(i.allocated_qty || '0', input.added_qty)
+					allocated_qty: addQty(i.allocated_qty || '0', addedQty)
 				};
 			});
 

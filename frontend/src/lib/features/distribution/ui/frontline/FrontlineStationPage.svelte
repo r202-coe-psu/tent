@@ -455,7 +455,7 @@
 			{/if}
 		</div>
 	{:else if activeTab === 'food'}
-		<!-- TAB 2: Food Handover Surface (Slice 5.4) -->
+		<!-- TAB 2: Food Handover Surface-->
 		<div class="space-y-4">
 			{#if distributingFoodTickets.length === 0}
 				<div
@@ -525,7 +525,7 @@
 			{/if}
 		</div>
 	{:else if activeTab === 'supplies'}
-		<!-- TAB 3: Supplies & Loans Surface (Slice 5.4) -->
+		<!-- TAB 3: Supplies & Loans Surface -->
 		<div class="space-y-4">
 			{#if distributingSuppliesTickets.length === 0}
 				<div

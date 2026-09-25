@@ -2,7 +2,11 @@ import type { AuthorContext } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
 import { parseQty, persistQty, qtyGt } from '$lib/utils/qty';
 import type { ItemMaster } from '$lib/features/catalog';
-import type { BulkReturnPool, BulkReturnPoolStatus } from '../../domain/food-supplies';
+import {
+	normalizeWholeItemInput,
+	type BulkReturnPool,
+	type BulkReturnPoolStatus
+} from '../../domain/food-supplies';
 import type { CreateBulkPoolInput } from '../../application/food-supplies/return-workflow';
 import { canReceivePhysicalStock } from '../../application/food-supplies/auth';
 import { isAnyFoodCategory } from './catalog-eligibility';
@@ -119,12 +123,13 @@ export function isEligibleBulkPoolItem(
 export interface CreateBulkPoolFormValidation {
 	isValid: boolean;
 	normalizedQty?: string;
+	wasNormalized?: boolean;
 	error?: string;
 }
 
 /**
  * Pure validator for Create Bulk Pool form inputs.
- * Uses exact Decimal math via parseQty, persistQty, and qtyGt.
+ * Normalizes countable whole items using ceiling behavior without floating point math.
  */
 export function validateCreateBulkPoolForm(
 	itemId: string,
@@ -140,19 +145,16 @@ export function validateCreateBulkPoolForm(
 		return { isValid: false, error: 'กรุณาระบุจำนวนที่รับคืน' };
 	}
 
-	try {
-		const parsed = parseQty(trimmedQty);
-		if (parsed.isNaN() || !parsed.isFinite()) {
-			return { isValid: false, error: 'จำนวนต้องเป็นตัวเลขที่ถูกต้อง' };
-		}
-		if (!qtyGt(trimmedQty, '0')) {
-			return { isValid: false, error: 'จำนวนต้องมากกว่า 0' };
-		}
-		const normalized = persistQty(trimmedQty);
-		return { isValid: true, normalizedQty: normalized };
-	} catch {
+	const norm = normalizeWholeItemInput(trimmedQty);
+	if (!norm.isValid || !norm.normalized) {
 		return { isValid: false, error: 'จำนวนต้องเป็นตัวเลขที่ถูกต้อง' };
 	}
+
+	return {
+		isValid: true,
+		normalizedQty: norm.normalized,
+		wasNormalized: norm.wasNormalized
+	};
 }
 
 /**

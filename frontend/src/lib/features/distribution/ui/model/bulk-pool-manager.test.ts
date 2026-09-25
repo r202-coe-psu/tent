@@ -172,10 +172,11 @@ describe('Bulk Pool Intake & Create Dialog (Slice 5.5E-2)', () => {
 			expect(res.normalizedQty).toBe('10');
 		});
 
-		it('accepts and normalizes valid positive decimal quantity', () => {
+		it('accepts and normalizes valid positive decimal quantity with whole-item ceiling', () => {
 			const res = validateCreateBulkPoolForm('item:fan', '25.5');
 			expect(res.isValid).toBe(true);
-			expect(res.normalizedQty).toBe('25.5');
+			expect(res.normalizedQty).toBe('26');
+			expect(res.wasNormalized).toBe(true);
 		});
 	});
 

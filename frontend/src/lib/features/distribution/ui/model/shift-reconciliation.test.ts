@@ -74,23 +74,29 @@ describe('Shift Reconciliation UI Model', () => {
 			expect(res.error).toContain('ต้องไม่เกินจำนวนคงเหลือในมือ');
 		});
 
-		it('preserves canonical decimal strings (e.g. 2.5000 -> 2.5)', () => {
-			const res = validateReturnedQuantity('2.5000', '3.5');
+		it('normalizes decimal strings with whole-item ceiling (e.g. 2.1000 -> 3, 2.000 -> 2)', () => {
+			const res = validateReturnedQuantity('2.1000', '3.5');
 			expect(res.isValid).toBe(true);
-			expect(res.normalized).toBe('2.5');
+			expect(res.normalized).toBe('3');
+			expect(res.wasNormalized).toBe(true);
+
+			const resWhole = validateReturnedQuantity('2.000', '3.5');
+			expect(resWhole.isValid).toBe(true);
+			expect(resWhole.normalized).toBe('2');
+			expect(resWhole.wasNormalized).toBe(true);
 		});
 	});
 
 	describe('3. Form validation across all items', () => {
 		it('validates all items and produces normalizedValues when valid', () => {
 			const formValues = {
-				'item:fan': '2.5',
+				'item:fan': '2.1',
 				'item:rice': '0'
 			};
 			const res = validateShiftCloseForm(sampleSummaries, formValues);
 			expect(res.isValid).toBe(true);
 			expect(res.normalizedValues).toEqual({
-				'item:fan': '2.5',
+				'item:fan': '3',
 				'item:rice': '0'
 			});
 			expect(Object.keys(res.errors)).toHaveLength(0);

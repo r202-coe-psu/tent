@@ -25,6 +25,10 @@
 	} from '../model/loan-return';
 	import { dialogAccessibility } from '../model/dialog-accessibility';
 	import { formatDistributionError } from '../model/distribution-error';
+	import {
+		normalizeWholeItemInput,
+		formatNormalizationNotice
+	} from '../model/ticket-quantity';
 
 	interface Props {
 		open?: boolean;
@@ -60,9 +64,22 @@
 	let hydratedOperationId = $state<string | null>(null);
 	let operationUlid = $state<string>(ulid());
 	let returningNowQty = $state('');
+	let returnQtyNotice = $state<string | null>(null);
 	let condition = $state<ReturnCondition>('READY');
 	let notesInput = $state('');
 	let localError = $state<string | null>(null);
+
+	function handleReturnQtyBlur() {
+		const raw = returningNowQty.trim();
+		if (!raw) return;
+		const normRes = normalizeWholeItemInput(raw);
+		if (normRes.normalized !== null) {
+			if (normRes.wasNormalized) {
+				returnQtyNotice = formatNormalizationNotice(raw, normRes.normalized, 'ชิ้น');
+			}
+			returningNowQty = normRes.normalized;
+		}
+	}
 
 	// Derived metrics from authoritative log
 	const previousReturned = $derived(log?.qty_returned ?? '0');
@@ -132,6 +149,7 @@
 	function performClose() {
 		open = false;
 		localError = null;
+		returnQtyNotice = null;
 		onclose?.();
 	}
 
@@ -148,6 +166,7 @@
 	}
 
 	function handleSetFullReturn() {
+		returnQtyNotice = null;
 		returningNowQty = remainingQty;
 		localError = null;
 	}
@@ -155,6 +174,7 @@
 	async function handleAbortAndRestart() {
 		if (!log) return;
 		localError = null;
+		returnQtyNotice = null;
 		try {
 			await abortMutation.mutateAsync({
 				logId: log._id,
@@ -179,6 +199,7 @@
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
 		localError = null;
+		handleReturnQtyBlur();
 
 		if (!log) {
 			localError = 'ไม่พบข้อมูลรายการยืม';
@@ -414,7 +435,9 @@
 						type="text"
 						inputmode="decimal"
 						value={returningNowQty}
+						onblur={handleReturnQtyBlur}
 						oninput={(e) => {
+							returnQtyNotice = null;
 							returningNowQty = e.currentTarget.value;
 						}}
 						class="h-10 w-full text-sm font-bold shadow-2xs"
@@ -424,6 +447,11 @@
 							isCrossModeCollision}
 						required
 					/>
+					{#if returnQtyNotice}
+						<p class="mt-1 text-2xs font-medium text-amber-700" role="status">
+							{returnQtyNotice}
+						</p>
+					{/if}
 
 					<!-- Dynamic Cumulative Result Feedback -->
 					{#if validation.isValid}

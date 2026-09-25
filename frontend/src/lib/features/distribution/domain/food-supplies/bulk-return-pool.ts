@@ -10,6 +10,7 @@ import {
 import {
 	bulkReturnPoolIdSchema,
 	foodSuppliesBaseDocShape,
+	normalizeWholeItemInput,
 	requisitionTicketIdSchema,
 	stockLedgerIdSchema,
 	ULID_PATTERN
@@ -92,7 +93,13 @@ export const bulkReturnPoolInputSchema = z.object({
 	stock_ledger_id: stockLedgerIdSchema,
 	ticket_id: requisitionTicketIdSchema.optional(),
 	shift_id: z.string().min(1).optional(),
-	total_received_qty: qtyStrCoercePositiveSchema,
+	total_received_qty: z
+		.union([z.string(), z.number()])
+		.transform((val) => {
+			const norm = normalizeWholeItemInput(val);
+			return norm.normalized ?? String(val);
+		})
+		.pipe(qtyStrPositiveSchema),
 	notes: z.string().trim().min(1).optional()
 });
 export type BulkReturnPoolInput = z.input<typeof bulkReturnPoolInputSchema>;

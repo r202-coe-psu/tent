@@ -68,12 +68,16 @@ export function getTicketStatusBadgeClass(status: RequisitionTicketStatus): stri
 /**
  * Canonical Thai UI labels for ticket types.
  */
-export const REQUISITION_TYPE_LABELS: Record<Flow2RequisitionType, string> = {
+export const REQUISITION_TYPES: readonly Flow2RequisitionType[] = ['food', 'supplies'] as const;
+
+export const REQUISITION_TYPE_LABELS: Record<string, string> = {
 	food: 'อาหาร',
-	supplies: 'พัสดุ'
+	supplies: 'พัสดุ',
+	kitchen: 'ครัว',
+	transfer: 'โอนย้าย'
 };
 
-export function getRequisitionTypeLabel(type: Flow2RequisitionType): string {
+export function getRequisitionTypeLabel(type: string): string {
 	return REQUISITION_TYPE_LABELS[type] ?? type;
 }
 

@@ -133,7 +133,7 @@
 					class="inline-flex items-center gap-1.5 rounded-xl bg-violet-700 px-3.5 py-1.5 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-violet-800"
 				>
 					<Plus class="h-4 w-4" aria-hidden="true" />
-					<span>+ เปิดจุดรวมคืนพัสดุ</span>
+					<span>เปิดจุดรวมคืนพัสดุ</span>
 				</button>
 			{/if}
 		</div>

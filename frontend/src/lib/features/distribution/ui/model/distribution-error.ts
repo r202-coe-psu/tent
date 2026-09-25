@@ -18,6 +18,7 @@ import {
 	InsufficientPoolQuotaError,
 	ConcurrencyCollisionError
 } from '../../application/food-supplies/errors';
+import { ZodError } from 'zod';
 
 /**
  * Checks whether an error message is potentially unsafe (internal CouchDB leak, JSON, stack trace, etc.)
@@ -149,4 +150,180 @@ export function formatDistributionError(
 	}
 
 	return fallbackMessage;
+}
+
+export type DistributionQueryErrorKind =
+	| 'AUTH_401'
+	| 'FORBIDDEN_403'
+	| 'COUCH_UNAVAILABLE'
+	| 'PROXY_FAILURE'
+	| 'QUERY_PARSE_FAILURE'
+	| 'OTHER';
+
+export interface DistributionQueryErrorPresentation {
+	kind: DistributionQueryErrorKind;
+	title: string;
+	description: string;
+	retryable: boolean;
+	actionLabel?: string;
+	actionType: 'retry' | 'reauth' | 'none';
+}
+
+function extractErrorStatus(err: unknown): number | undefined {
+	if (typeof err === 'object' && err !== null) {
+		if ('status' in err && typeof (err as { status: unknown }).status === 'number') {
+			return (err as { status: number }).status;
+		}
+		if ('statusCode' in err && typeof (err as { statusCode: unknown }).statusCode === 'number') {
+			return (err as { statusCode: number }).statusCode;
+		}
+	}
+	if (err instanceof AuthError) {
+		return err.status;
+	}
+	return undefined;
+}
+
+function extractErrorCode(err: unknown): string | undefined {
+	if (
+		typeof err === 'object' &&
+		err !== null &&
+		'code' in err &&
+		typeof (err as { code: unknown }).code === 'string'
+	) {
+		return (err as { code: string }).code;
+	}
+	return undefined;
+}
+
+function extractErrorMessage(err: unknown): string {
+	if (err instanceof Error) return err.message;
+	if (typeof err === 'string') return err;
+	if (typeof err === 'object' && err !== null && 'message' in err) {
+		return String((err as { message: unknown }).message);
+	}
+	return '';
+}
+
+/**
+ * Maps query-level read errors (e.g. from TanStack useRequisitionTickets)
+ * into a safe, human-friendly Thai error presentation for UI cards/banners.
+ *
+ * Distinguishes 401 (Session), 403 (Permission), Database/Network/Proxy unavailable,
+ * and schema/parsing failures without exposing internal CouchDB/Zod leaks.
+ */
+export function mapDistributionQueryError(err: unknown): DistributionQueryErrorPresentation {
+	if (!err) {
+		return {
+			kind: 'OTHER',
+			title: 'ไม่สามารถโหลดรายการใบเบิกจ่ายได้',
+			description: 'เกิดข้อผิดพลาดที่ไม่คาดคิด กรุณาลองใหม่อีกครั้ง',
+			retryable: true,
+			actionType: 'retry',
+			actionLabel: 'ลองใหม่'
+		};
+	}
+
+	const status = extractErrorStatus(err);
+	const code = extractErrorCode(err);
+	const rawMessage = extractErrorMessage(err);
+
+	// 1. Permission Error — HTTP 403
+	if (
+		status === 403 ||
+		err instanceof WorkflowAuthorizationError ||
+		err instanceof CouchDocumentPolicyError ||
+		(err instanceof AuthError && err.status === 403) ||
+		(code === 'AUTH' && status === 403) ||
+		isPouchError(err, 403) ||
+		(status === undefined &&
+			/\b403\b|forbidden|cross-shelter access denied|unauthorized to access/i.test(rawMessage))
+	) {
+		return {
+			kind: 'FORBIDDEN_403',
+			title: 'ไม่มีสิทธิ์เข้าถึงข้อมูลใบเบิกจ่าย',
+			description: 'บัญชีนี้ไม่มีสิทธิ์เข้าถึงข้อมูลของศูนย์พักพิงที่เลือก',
+			retryable: false,
+			actionType: 'none',
+			actionLabel: undefined
+		};
+	}
+
+	// 2. Authentication / Session Error — HTTP 401
+	if (
+		status === 401 ||
+		(err instanceof AuthError && err.status === 401) ||
+		(code === 'AUTH' && status === 401) ||
+		isPouchError(err, 401) ||
+		(status === undefined &&
+			/\b401\b|unauthorized|session expired|เซสชันหมดอายุ/i.test(rawMessage) &&
+			!/\b403\b|forbidden/i.test(rawMessage))
+	) {
+		return {
+			kind: 'AUTH_401',
+			title: 'เซสชันหมดอายุหรือยังไม่ได้เข้าสู่ระบบ',
+			description: 'กรุณาเข้าสู่ระบบใหม่เพื่อโหลดข้อมูลใบเบิกจ่าย',
+			retryable: false,
+			actionType: 'reauth',
+			actionLabel: 'เข้าสู่ระบบใหม่'
+		};
+	}
+
+	// 3. Database / Network / Proxy Unavailable
+	const isProxy = status === 502 || status === 504 || /(?:proxy|bad gateway)/i.test(rawMessage);
+	const isUnavailable =
+		isProxy ||
+		err instanceof CannotConnectError ||
+		err instanceof NetworkError ||
+		code === 'CANNOT_CONNECT' ||
+		code === 'NETWORK' ||
+		status === 0 ||
+		(status !== undefined && status >= 500) ||
+		/(?:network unavailable|failed to fetch|cannot connect|connection refused|econnrefused)/i.test(
+			rawMessage
+		);
+
+	if (isUnavailable) {
+		return {
+			kind: isProxy ? 'PROXY_FAILURE' : 'COUCH_UNAVAILABLE',
+			title: 'ไม่สามารถเชื่อมต่อระบบข้อมูลได้',
+			description: 'กรุณาตรวจสอบการเชื่อมต่อหรือลองใหม่อีกครั้ง',
+			retryable: true,
+			actionType: 'retry',
+			actionLabel: 'ลองใหม่'
+		};
+	}
+
+	// 4. Invalid / Unexpected Returned Data (Schema / Zod / Parse failure)
+	const isParseFailure =
+		err instanceof ZodError ||
+		(typeof err === 'object' &&
+			err !== null &&
+			((err as { name?: string }).name === 'ZodError' ||
+				Array.isArray((err as { issues?: unknown }).issues))) ||
+		err instanceof ValidationError ||
+		code === 'VALIDATION' ||
+		err instanceof SyntaxError ||
+		/(?:zod|schema|parse error|malformed.*document)/i.test(rawMessage);
+
+	if (isParseFailure) {
+		return {
+			kind: 'QUERY_PARSE_FAILURE',
+			title: 'ไม่สามารถอ่านข้อมูลใบเบิกจ่ายได้',
+			description: 'ข้อมูลบางรายการมีรูปแบบไม่ถูกต้อง กรุณาลองใหม่หรือติดต่อผู้ดูแลระบบ',
+			retryable: true,
+			actionType: 'retry',
+			actionLabel: 'ลองใหม่'
+		};
+	}
+
+	// 5. Unknown Error / Fallback
+	return {
+		kind: 'OTHER',
+		title: 'ไม่สามารถโหลดรายการใบเบิกจ่ายได้',
+		description: 'เกิดข้อผิดพลาดที่ไม่คาดคิด กรุณาลองใหม่อีกครั้ง',
+		retryable: true,
+		actionType: 'retry',
+		actionLabel: 'ลองใหม่'
+	};
 }

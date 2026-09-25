@@ -7,7 +7,11 @@
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import { useAmendActiveTicket } from '../../application/queries';
 	import type { RequisitionTicket } from '../../domain/food-supplies';
-	import { validatePositiveQuantity } from '../model/ticket-quantity';
+	import {
+		validatePositiveQuantity,
+		normalizeWholeItemInput,
+		formatNormalizationNotice
+	} from '../model/ticket-quantity';
 	import { dialogAccessibility } from '../model/dialog-accessibility';
 	import { formatDistributionError } from '../model/distribution-error';
 	import { Input } from '$lib/components/ui/input/index.js';
@@ -29,8 +33,21 @@
 	// selectedItemId syncs reactively via $effect — avoids Svelte state_referenced_locally warning
 	let selectedItemId = $state('');
 	let addedQty = $state('10');
+	let addedQtyNotice = $state<string | null>(null);
 	let reason = $state('ขอเบิกเติมฉุกเฉินหน้างาน (In-Flight Top-Up)');
 	let localError = $state<string | null>(null);
+
+	function handleQtyBlur() {
+		const raw = addedQty.trim();
+		if (!raw) return;
+		const normRes = normalizeWholeItemInput(raw);
+		if (normRes.normalized !== null) {
+			if (normRes.wasNormalized) {
+				addedQtyNotice = formatNormalizationNotice(raw, normRes.normalized, 'ชิ้น');
+			}
+			addedQty = normRes.normalized;
+		}
+	}
 
 	const selectedItem = $derived(ticket.items.find((i) => i.item_id === selectedItemId));
 
@@ -56,18 +73,20 @@
 		if (!canClose) return;
 		open = false;
 		localError = null;
+		addedQtyNotice = null;
 		onclose?.();
 	}
 
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
+		handleQtyBlur();
 		if (!selectedItemId) {
 			localError = 'กรุณาเลือกรายการสินค้าที่ต้องการขอเบิกเติม';
 			return;
 		}
 		const qtyRes = validatePositiveQuantity(addedQty);
 		if (!qtyRes.isValid || !qtyRes.value) {
-			localError = 'จำนวนที่ขอเติมต้องมากกว่า 0';
+			localError = qtyRes.error ?? 'จำนวนต้องเป็นจำนวนเต็มตั้งแต่ 1 ขึ้นไป';
 			return;
 		}
 
@@ -214,9 +233,18 @@
 						type="text"
 						inputmode="decimal"
 						bind:value={addedQty}
+						onblur={handleQtyBlur}
+						oninput={() => {
+							addedQtyNotice = null;
+						}}
 						class="h-9 w-full text-xs font-semibold shadow-2xs"
 						disabled={amendMutation.isPending}
 					/>
+					{#if addedQtyNotice}
+						<p class="mt-1 text-2xs font-medium text-amber-700" role="status">
+							{addedQtyNotice}
+						</p>
+					{/if}
 				</div>
 
 				<!-- Reason / Notes -->

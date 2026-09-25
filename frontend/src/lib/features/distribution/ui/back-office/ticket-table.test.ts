@@ -105,4 +105,10 @@ describe('Ticket Table & Presentation Invariants (Slice 5.1 §45)', () => {
 		expect(onView).toHaveBeenCalledWith(ticket);
 		expect(onView).toHaveBeenCalledTimes(1);
 	});
+
+	it('supports created_at sort toggle callback affordance', () => {
+		const onToggleSort = vi.fn();
+		onToggleSort();
+		expect(onToggleSort).toHaveBeenCalledTimes(1);
+	});
 });

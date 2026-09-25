@@ -260,6 +260,7 @@ export {
 	TICKET_STATUS_BADGE_CLASSES,
 	getTicketStatusLabel,
 	getTicketStatusBadgeClass,
+	REQUISITION_TYPES,
 	REQUISITION_TYPE_LABELS,
 	getRequisitionTypeLabel,
 	MEAL_PERIOD_LABELS,
@@ -273,10 +274,16 @@ export {
 	getWorkflowGroupForStatus,
 	computeTicketGroupCounts,
 	filterRequisitionTickets,
+	sortRequisitionTickets,
+	filterAndSortRequisitionTickets,
+	DEFAULT_TICKET_SORT,
 	type TicketWorkflowGroupId,
 	type WorkflowGroupDefinition,
 	type TicketGroupCounts,
-	type TicketFilterOptions
+	type TicketFilterOptions,
+	type TicketSortField,
+	type TicketSortDirection,
+	type TicketSortOption
 } from './ui/model/ticket-filters';
 
 export {
@@ -354,3 +361,10 @@ export {
 	type VerifiedQtyValidationResult,
 	type WarehouseReturnFormValidationResult
 } from './ui/model/warehouse-return';
+
+export {
+	formatDistributionError,
+	mapDistributionQueryError,
+	type DistributionQueryErrorKind,
+	type DistributionQueryErrorPresentation
+} from './ui/model/distribution-error';
