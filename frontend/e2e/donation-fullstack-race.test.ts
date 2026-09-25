@@ -3,7 +3,7 @@ import { couchReq } from './helpers/couch';
 import {
 	RUN_ID,
 	catalogItem,
-	committedQty,
+	onHandQty,
 	deleteDoc,
 	fillBooking,
 	freeEveningWindows,
@@ -34,12 +34,13 @@ import {
  */
 
 // No seeded campaign asks for it, so the board line is this spec's alone. The target is
-// set one above what is already on hand + booked, so stock received by hand does not
+// set one above what is already on hand, so stock received by hand does not
 // cover it. `id`/`unit` are looked up in beforeAll: the catalog mints `item_master:<ulid>`.
 const RACE_ITEM = { id: '', name: 'แปรงสีฟัน', unit: '' };
 
 let shelter: PublicShelter;
 let pickup: SlotWindow;
+let dropoff: SlotWindow;
 const campaignId = `donation_campaign:e2e-race-${RUN_ID}`;
 
 test.describe.configure({ mode: 'serial' });
@@ -66,9 +67,10 @@ test.beforeAll(async ({ request }) => {
 	shelter = pick!;
 	Object.assign(RACE_ITEM, await catalogItem(RACE_ITEM.name));
 
-	const [w] = await freeEveningWindows(shelter.code, 1);
-	test.skip(!w, 'no free evening window left today');
+	const [w, d] = await freeEveningWindows(shelter.code, 2);
+	test.skip(!w || !d, 'no free evening windows left today');
 	pickup = w;
+	dropoff = d;
 });
 
 test.afterAll(async ({ request }) => {
@@ -114,12 +116,15 @@ function errorCode(r: BookingResponse) {
 	return typeof r.error === 'string' ? r.error : r.error?.code;
 }
 
-/** Outstanding bookings CouchDB holds for one pickup window today. */
-async function bookingsInWindow(w: SlotWindow) {
+/** Outstanding bookings CouchDB holds for one window of one queue today. */
+async function bookingsInWindow(
+	w: SlotWindow,
+	method: 'shelter_pickup' | 'self_dropoff' = 'shelter_pickup'
+) {
 	const res = await couchReq('POST', `/${shelterDb(shelter.code)}/_find`, {
 		selector: {
 			type: 'donation',
-			'logistics.delivery_method': 'shelter_pickup',
+			'logistics.delivery_method': method,
 			'logistics.slot.date': todayYmd(),
 			'logistics.slot.from': w.from,
 			status: { $nin: ['cancelled', 'rejected', 'expired', 'redirected'] }
@@ -186,6 +191,61 @@ test('two donors race for the last pickup trip → only one gets it', async ({
 	expect(await bookingsInWindow(pickup)).toEqual([{ booking_ref: winners[0].bookingRef }]);
 });
 
+test('two donors race for the last place in a capped drop-off window → only one gets it', async ({
+	browser,
+	request
+}) => {
+	// Drop-off windows are normally uncapped, but staff may put a ceiling on a busy one
+	// (the slot screen's "จำกัดจำนวนคิว"). That ceiling goes through the same BFF
+	// count-then-write as the pickup trip above, and leaks the same way.
+	// KNOWN BUG (same root cause as the pickup race): both donors get the one place.
+	// Reproduced 3/3. A donor booking a few seconds AFTER the first is blocked (the
+	// window reads full), so the ceiling itself works — only simultaneous bookings slip
+	// through. Expected to fail until fixed; Playwright flags it once it passes.
+	test.fail();
+	const need = (await publicNeedsBoard(request))
+		.find((s) => s.code === shelter.code)!
+		.needs.find((n) => n.status === 'open' && Number(n.qty_needed) >= 2);
+	test.skip(!need, `${shelter.code} has no open need with room for two`);
+
+	const db = shelterDb(shelter.code);
+	const slotId = `donation_slot:dropoff:${todayYmd()}:${dropoff.from}`;
+	await couchReq('PUT', `/${db}/${encodeURIComponent(slotId)}`, {
+		_id: slotId,
+		type: 'donation_slot',
+		shelter_code: shelter.code,
+		...stamp(),
+		mode: 'dropoff',
+		date: todayYmd(),
+		from: dropoff.from,
+		to: dropoff.to,
+		capacity: 1,
+		status: 'open',
+		note: `e2e race ${RUN_ID}`
+	});
+
+	const results = await raceTwoDonors(browser, (who) => ({
+		shelter,
+		need: need!,
+		donorName: `E2E แย่งคิวมาส่ง ${who} ${RUN_ID}`,
+		phone: who === 'A' ? '0863330001' : '0863330002',
+		mode: { kind: 'self', slot: new RegExp(`^${dropoff.from} - ${dropoff.to} ว่าง`) }
+	}));
+
+	const winners = results.filter((r) => r.success);
+	const losers = results.filter((r) => !r.success);
+	const summary = JSON.stringify(results);
+	expect(winners, `both donors were answered: ${summary}`).toHaveLength(1);
+	expect(losers.map(errorCode), summary).toEqual(['SLOT_FULL']);
+
+	await expect
+		.poll(async () => (await bookingsInWindow(dropoff, 'self_dropoff')).length, SYNC)
+		.toBeGreaterThan(0);
+	expect(await bookingsInWindow(dropoff, 'self_dropoff')).toEqual([
+		{ booking_ref: winners[0].bookingRef }
+	]);
+});
+
 test('two donors race for the last unit of a need → only one is accepted', async ({
 	browser,
 	request
@@ -201,8 +261,8 @@ test('two donors race for the last unit of a need → only one is accepted', asy
 		needs: [
 			{
 				item_id: RACE_ITEM.id,
-				// Exactly one unit short, whatever is already on the shelf or booked.
-				qty_target: String((await committedQty(shelter.code, RACE_ITEM.id)) + 1),
+				// Exactly one unit short, whatever is already on the shelf.
+				qty_target: String((await onHandQty(shelter.code, RACE_ITEM.id)) + 1),
 				unit: RACE_ITEM.unit,
 				status: 'open'
 			}
