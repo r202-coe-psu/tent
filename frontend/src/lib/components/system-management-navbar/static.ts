@@ -102,7 +102,7 @@ export const systemManagementNavbarGroups: SystemManagementNavbarGroup[] = [
 						requiresAdmin: true
 					},
 					{
-						label: 'คลังพัสดุและสิ่งของ',
+						label: 'คลังสินค้า',
 						href: resolve(`${base}/catalog`),
 						icon: Warehouse,
 						requiresAdmin: true

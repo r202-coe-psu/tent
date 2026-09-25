@@ -489,7 +489,7 @@
 					closeOnClick: false,
 					maxWidth: '280px'
 				}).setLngLat(lngLat).setHTML(`
-					<div style="font-size:0.75rem;font-family:'IBM Plex Sans Thai',sans-serif;color:#1e293b;min-width:180px;padding:2px 0;">
+					<div style="font-size:0.75rem;font-family:'IBM Plex Sans Thai Looped','IBM Plex Sans Thai',sans-serif;color:#1e293b;min-width:180px;padding:2px 0;">
 						<strong style="font-size:0.875rem;display:block;margin-bottom:3px;color:#0f172a;line-height:1.3;">${shelter.name}</strong>
 						<div style="margin-bottom:6px;font-size:0.65rem;color:#64748b;font-weight:500;">
 							${getSiteKindText(shelter.site_kind)} · ${shelter.type || shelter.admin_type ? translateAdminType(shelter.type || shelter.admin_type || '') : t.shelter}
@@ -745,6 +745,7 @@
 			0 8px 10px -6px rgba(0, 0, 0, 0.08) !important;
 		border: 1px solid #e2e8f0 !important;
 		font-family:
+			'IBM Plex Sans Thai Looped',
 			'IBM Plex Sans Thai',
 			-apple-system,
 			sans-serif !important;
