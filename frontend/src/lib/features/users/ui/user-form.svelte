@@ -561,20 +561,19 @@
 					<Form.Control>
 						{#snippet children({ props })}
 							<Form.Label class="font-bold">
-								<span class="flex flex-col gap-0.5 sm:flex-row sm:flex-wrap sm:items-baseline sm:gap-x-1.5">
+								<span
+									class="flex flex-col gap-0.5 sm:flex-row sm:flex-wrap sm:items-baseline sm:gap-x-1.5"
+								>
 									<span class="inline-flex items-center gap-1">
 										<Phone class="size-3.5 shrink-0" /> เบอร์โทรศัพท์
 									</span>
-									<span class="text-xs font-normal text-slate-500"
-										>(ไม่บังคับ — ใช้ login ได้)</span
+									<span class="text-xs font-normal text-slate-500">(ไม่บังคับ — ใช้ login ได้)</span
 									>
 								</span>
 							</Form.Label>
 							<Input
 								{...props}
-								bind:value={
-									() => $formData.phone ?? '', (v) => ($formData.phone = v)
-								}
+								bind:value={() => $formData.phone ?? '', (v) => ($formData.phone = v)}
 								type="tel"
 								maxlength={10}
 								class="h-11 bg-white"
@@ -636,7 +635,8 @@
 								<span class="inline-flex items-center gap-1">
 									<Briefcase class="size-3.5 shrink-0" /> ตำแหน่ง / วิชาชีพ
 								</span>
-								<span class="mt-0.5 block text-xs font-normal text-slate-500 sm:mt-0 sm:ml-0 sm:inline sm:pl-1.5"
+								<span
+									class="mt-0.5 block text-xs font-normal text-slate-500 sm:mt-0 sm:ml-0 sm:inline sm:pl-1.5"
 									>(ไม่บังคับ)</span
 								>
 							</Form.Label>
@@ -661,7 +661,8 @@
 								<span class="inline-flex items-center gap-1">
 									<Mail class="size-3.5 shrink-0" /> อีเมลติดต่อ
 								</span>
-								<span class="mt-0.5 block text-xs font-normal text-slate-500 sm:mt-0 sm:inline sm:pl-1.5"
+								<span
+									class="mt-0.5 block text-xs font-normal text-slate-500 sm:mt-0 sm:inline sm:pl-1.5"
 									>(ไม่บังคับ)</span
 								>
 							</Form.Label>

@@ -478,371 +478,372 @@
 
 {#snippet jobFormFields()}
 	<form method="POST" use:form.enhance class="space-y-6 px-4 py-5 sm:px-6">
-			<Form.Field {form} name="title">
-				<Form.Control>
-					{#snippet children({ props })}
-						<Form.Label>หัวข้อภารกิจอาสา <span class="text-destructive">*</span></Form.Label>
-						<Input
-							{...props}
-							bind:value={$formData.title}
-							class="!h-11"
-							placeholder="เช่น ช่วยแจกจ่ายอาหารประจำวัน, สตาฟคัดกรองประชากร"
-						/>
-					{/snippet}
-				</Form.Control>
-				<Form.FieldErrors />
-			</Form.Field>
+		<Form.Field {form} name="title">
+			<Form.Control>
+				{#snippet children({ props })}
+					<Form.Label>หัวข้อภารกิจอาสา <span class="text-destructive">*</span></Form.Label>
+					<Input
+						{...props}
+						bind:value={$formData.title}
+						class="!h-11"
+						placeholder="เช่น ช่วยแจกจ่ายอาหารประจำวัน, สตาฟคัดกรองประชากร"
+					/>
+				{/snippet}
+			</Form.Control>
+			<Form.FieldErrors />
+		</Form.Field>
 
-			<Form.Field {form} name="description">
-				<Form.Control>
-					{#snippet children({ props })}
-						<Form.Label>
-							รายละเอียดงาน / SOP เบื้องต้น <span class="text-destructive">*</span>
-						</Form.Label>
-						<Textarea
-							{...props}
-							bind:value={$formData.description}
-							rows={3}
-							placeholder="อธิบายภาระหน้าที่ ความปลอดภัย และสถานที่ปฏิบัติงานอย่างชัดเจน..."
-						/>
-					{/snippet}
-				</Form.Control>
-				<Form.FieldErrors />
-			</Form.Field>
+		<Form.Field {form} name="description">
+			<Form.Control>
+				{#snippet children({ props })}
+					<Form.Label>
+						รายละเอียดงาน / SOP เบื้องต้น <span class="text-destructive">*</span>
+					</Form.Label>
+					<Textarea
+						{...props}
+						bind:value={$formData.description}
+						rows={3}
+						placeholder="อธิบายภาระหน้าที่ ความปลอดภัย และสถานที่ปฏิบัติงานอย่างชัดเจน..."
+					/>
+				{/snippet}
+			</Form.Control>
+			<Form.FieldErrors />
+		</Form.Field>
 
-			<div class="space-y-2">
-				<span class="text-sm font-medium">ความด่วนของภารกิจ / URGENCY</span>
-				<div class="grid grid-cols-2 gap-2">
-					<Button
-						type="button"
-						variant="outline"
-						class="min-h-11 justify-center gap-1 {!$formData.is_urgent
-							? 'border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100'
-							: ''}"
-						aria-pressed={!$formData.is_urgent}
-						onclick={() => ($formData.is_urgent = false)}
-					>
-						🟢 งานทั่วไป <span class="hidden sm:inline">(Normal)</span>
-					</Button>
-					<Button
-						type="button"
-						variant="outline"
-						class="min-h-11 justify-center gap-1 {$formData.is_urgent
-							? 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100'
-							: ''}"
-						aria-pressed={$formData.is_urgent}
-						onclick={() => ($formData.is_urgent = true)}
-					>
-						🚨 ด่วนพิเศษ <span class="hidden sm:inline">(Urgent)</span>
-					</Button>
-				</div>
+		<div class="space-y-2">
+			<span class="text-sm font-medium">ความด่วนของภารกิจ / URGENCY</span>
+			<div class="grid grid-cols-2 gap-2">
+				<Button
+					type="button"
+					variant="outline"
+					class="min-h-11 justify-center gap-1 {!$formData.is_urgent
+						? 'border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100'
+						: ''}"
+					aria-pressed={!$formData.is_urgent}
+					onclick={() => ($formData.is_urgent = false)}
+				>
+					🟢 งานทั่วไป <span class="hidden sm:inline">(Normal)</span>
+				</Button>
+				<Button
+					type="button"
+					variant="outline"
+					class="min-h-11 justify-center gap-1 {$formData.is_urgent
+						? 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100'
+						: ''}"
+					aria-pressed={$formData.is_urgent}
+					onclick={() => ($formData.is_urgent = true)}
+				>
+					🚨 ด่วนพิเศษ <span class="hidden sm:inline">(Urgent)</span>
+				</Button>
 			</div>
+		</div>
 
-			<div class="space-y-2">
-				<span class="text-sm font-medium">สถานะการรับสมัคร (LIFECYCLE STATUS)</span>
-				<div class="grid grid-cols-2 gap-2 md:grid-cols-5">
-					{#each STATUS_OPTIONS as option (option.value)}
-						{@const selected = $formData.status === option.value}
-						<Button
-							type="button"
-							variant="outline"
-							class="min-h-11 justify-center {selected ? option.selectedClass : ''}"
-							aria-pressed={selected}
-							onclick={() => ($formData.status = option.value)}
+		<div class="space-y-2">
+			<span class="text-sm font-medium">สถานะการรับสมัคร (LIFECYCLE STATUS)</span>
+			<div class="grid grid-cols-2 gap-2 md:grid-cols-5">
+				{#each STATUS_OPTIONS as option (option.value)}
+					{@const selected = $formData.status === option.value}
+					<Button
+						type="button"
+						variant="outline"
+						class="min-h-11 justify-center {selected ? option.selectedClass : ''}"
+						aria-pressed={selected}
+						onclick={() => ($formData.status = option.value)}
+					>
+						{option.label}
+					</Button>
+				{/each}
+			</div>
+			<p class="text-xs text-muted-foreground">
+				ค่าที่เลือกที่นี่จะถูกบันทึกตามที่เลือก — ระบบจะปรับเป็น "เต็มโควตา" ให้เองก็ต่อเมื่อ
+				โควตาถูกจองครบจริงในการมอบหมาย/ตอบรับครั้งถัดไป
+			</p>
+			<Form.Field {form} name="status">
+				<Form.FieldErrors />
+			</Form.Field>
+		</div>
+
+		<div class="space-y-2">
+			<div class="flex items-center justify-between gap-2">
+				<span class="text-sm font-medium">
+					🧍 ทักษะที่ต้องการเป็นพิเศษ (VOLUNTEER SKILL MASTER LIST)
+				</span>
+				<Badge variant="secondary">เลือกแล้ว {selectedSkillCount} ทักษะ</Badge>
+			</div>
+			<p class="text-xs text-muted-foreground">
+				คลิกเพื่อเลือกทักษะที่อ้างอิงจาก Master List
+				(ระบบจะใช้ในการแมตช์และคัดกรองจิตอาสาที่มีทักษะรับรอง):
+			</p>
+			<div class="grid grid-cols-1 gap-2 rounded-xl border border-border p-3 md:grid-cols-2">
+				{#each skillsList as skill (skill.code)}
+					{@const checked = $formData.skills_required.some(
+						(v) => toSkillCode(v, skillsList) === skill.code
+					)}
+					<label
+						class="flex min-h-11 cursor-pointer items-start gap-2 rounded-lg border p-3 transition-colors {checked
+							? 'border-primary bg-primary/5'
+							: 'border-border hover:bg-muted/40'}"
+					>
+						<Checkbox {checked} onCheckedChange={() => toggleSkill(skill.code)} />
+						<span class="min-w-0 text-xs">
+							<span class="flex items-center gap-1.5 font-medium">
+								<span aria-hidden="true">{skill.icon}</span>
+								<span class="truncate">{skill.label}</span>
+								{#if skill.controlled}
+									<Badge variant="outline" class="shrink-0 text-xs">🔒 ควบคุม</Badge>
+								{/if}
+							</span>
+							<span class="mt-0.5 block text-muted-foreground">{skill.description}</span>
+						</span>
+					</label>
+				{/each}
+			</div>
+			<Form.Field {form} name="skills_required">
+				<Form.FieldErrors />
+			</Form.Field>
+		</div>
+
+		<div class="space-y-3 rounded-xl border border-border p-4">
+			<div class="flex flex-wrap items-start justify-between gap-3">
+				<div class="min-w-0">
+					<p class="text-sm font-semibold">📚 กำหนดกะย่อย (Shifts Schedule Configuration)</p>
+					<p class="text-xs text-muted-foreground">
+						เลือกโหมดการสร้างกะย่อย: เพิ่มทีละวัน หรือสร้างอัตโนมัติเป็นช่วงเวลาต่อเนื่อง
+					</p>
+				</div>
+				<!-- Full-width 2-up on narrow screens; the English suffixes are the
+					     first thing to go, since they only restate the Thai label. -->
+				<div class="grid w-full grid-cols-2 gap-1 rounded-lg bg-muted p-1 md:flex md:w-auto">
+					<Button
+						type="button"
+						size="sm"
+						variant={shiftMode === 'single' ? 'default' : 'ghost'}
+						class="min-h-11 w-full justify-center text-xs md:w-auto"
+						onclick={() => (shiftMode = 'single')}
+					>
+						<Plus class="mr-1 size-3.5 shrink-0" />
+						<span class="truncate">เพิ่มทีละวัน<span class="hidden lg:inline"> (Single)</span></span
 						>
-							{option.label}
-						</Button>
-					{/each}
+					</Button>
+					<Button
+						type="button"
+						size="sm"
+						variant={shiftMode === 'batch' ? 'default' : 'ghost'}
+						class="min-h-11 w-full justify-center text-xs md:w-auto"
+						onclick={() => (shiftMode = 'batch')}
+					>
+						<Zap class="mr-1 size-3.5 shrink-0" />
+						<span class="truncate">
+							สร้างเป็นช่วงวัน<span class="hidden lg:inline"> (Batch Generator)</span>
+						</span>
+					</Button>
 				</div>
-				<p class="text-xs text-muted-foreground">
-					ค่าที่เลือกที่นี่จะถูกบันทึกตามที่เลือก — ระบบจะปรับเป็น "เต็มโควตา" ให้เองก็ต่อเมื่อ
-					โควตาถูกจองครบจริงในการมอบหมาย/ตอบรับครั้งถัดไป
-				</p>
-				<Form.Field {form} name="status">
-					<Form.FieldErrors />
-				</Form.Field>
 			</div>
+
+			{#if shiftMode === 'single'}
+				<div
+					class="grid grid-cols-1 items-end gap-3 rounded-lg border border-border p-3 md:grid-cols-12"
+				>
+					<label class="space-y-1 md:col-span-3">
+						<span class="text-xs font-medium">วันที่ทำงาน</span>
+						<DatePicker bind:value={singleDate} />
+					</label>
+					<label class="space-y-1 md:col-span-3">
+						<span class="text-xs font-medium">วันที่สิ้นสุดกะ</span>
+						<DatePicker bind:value={singleEndDate} />
+					</label>
+					<label class="space-y-1 md:col-span-2">
+						<span class="text-xs font-medium">เวลาเข้ากะ</span>
+						<TimePicker bind:value={singleStart} />
+					</label>
+					<label class="space-y-1 md:col-span-2">
+						<span class="text-xs font-medium">เวลาออกกะ</span>
+						<TimePicker bind:value={singleEnd} />
+					</label>
+					<label class="space-y-1 md:col-span-2">
+						<span class="text-xs font-medium">จำนวนรับ (คน)</span>
+						<Input type="number" min="1" bind:value={singleSeats} class="!h-11" />
+					</label>
+					<Button
+						type="button"
+						class="min-h-11 w-full md:col-span-2 md:col-start-11 md:w-auto"
+						disabled={!canAddSingle}
+						onclick={addSingleShift}
+					>
+						<Plus class="mr-1 size-4" /> เพิ่มกะ
+					</Button>
+				</div>
+			{:else}
+				<div class="space-y-3 rounded-lg border border-border p-3">
+					<div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+						<label class="space-y-1">
+							<span class="text-xs font-medium">📅 วันที่เริ่มสร้างกะ (Start Date)</span>
+							<DatePicker bind:value={batchStart} />
+						</label>
+						<label class="space-y-1">
+							<span class="text-xs font-medium">🏁 วันที่สิ้นสุดกะ (End Date)</span>
+							<DatePicker bind:value={batchEnd} />
+						</label>
+					</div>
+					<div class="grid grid-cols-1 gap-3 md:grid-cols-3">
+						<label class="space-y-1">
+							<span class="text-xs font-medium">⏰ เวลาเข้ากะ (Start)</span>
+							<TimePicker bind:value={batchStartTime} />
+						</label>
+						<label class="space-y-1">
+							<span class="text-xs font-medium">⏰ เวลาออกกะ (End)</span>
+							<TimePicker bind:value={batchEndTime} />
+						</label>
+						<label class="space-y-1">
+							<span class="text-xs font-medium">👥 จำนวนคนต่อกะ (Seats)</span>
+							<Input type="number" min="1" bind:value={batchSeats} class="!h-11" />
+						</label>
+					</div>
+
+					<div class="space-y-2">
+						<div class="flex flex-wrap items-center justify-between gap-2">
+							<span class="text-xs font-medium">📅 วันในสัปดาห์ที่ต้องการเปิดกะ</span>
+							<div class="flex flex-wrap gap-1">
+								<Button
+									type="button"
+									size="sm"
+									variant="ghost"
+									class="min-h-11 text-primary"
+									onclick={() => (batchWeekdays = [...ALL_WEEKDAYS])}
+								>
+									ทุกวัน
+								</Button>
+								<Button
+									type="button"
+									size="sm"
+									variant="ghost"
+									class="min-h-11 text-primary"
+									onclick={() => (batchWeekdays = [...WEEKDAYS_MON_FRI])}
+								>
+									จันทร์ - ศุกร์
+								</Button>
+								<Button
+									type="button"
+									size="sm"
+									variant="ghost"
+									class="min-h-11 text-amber-600"
+									onclick={() => (batchWeekdays = [...WEEKENDS])}
+								>
+									เสาร์ - อาทิตย์
+								</Button>
+							</div>
+						</div>
+						<div class="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-7">
+							{#each WEEKDAYS as day (day.value)}
+								{@const active = batchWeekdays.includes(day.value)}
+								<Button
+									type="button"
+									size="sm"
+									variant={active ? 'default' : 'outline'}
+									aria-pressed={active}
+									class="min-h-11 w-full justify-center px-1 text-xs"
+									onclick={() => toggleWeekday(day.value)}
+								>
+									{#if active}<Check class="mr-1 size-3" />{/if}
+									{day.label}
+								</Button>
+							{/each}
+						</div>
+					</div>
+
+					<Button
+						type="button"
+						class="min-h-11 w-full"
+						disabled={!canGenerateBatch}
+						onclick={generateBatch}
+					>
+						<Zap class="mr-1 size-4 shrink-0" />
+						<span class="md:hidden">สร้างชุดกะย่อย</span>
+						<span class="hidden md:inline">ประมวลผลสร้างชุดกะย่อย (Generate Batch Shifts)</span>
+					</Button>
+				</div>
+			{/if}
 
 			<div class="space-y-2">
 				<div class="flex items-center justify-between gap-2">
-					<span class="text-sm font-medium">
-						🧍 ทักษะที่ต้องการเป็นพิเศษ (VOLUNTEER SKILL MASTER LIST)
-					</span>
-					<Badge variant="secondary">เลือกแล้ว {selectedSkillCount} ทักษะ</Badge>
-				</div>
-				<p class="text-xs text-muted-foreground">
-					คลิกเพื่อเลือกทักษะที่อ้างอิงจาก Master List
-					(ระบบจะใช้ในการแมตช์และคัดกรองจิตอาสาที่มีทักษะรับรอง):
-				</p>
-				<div class="grid grid-cols-1 gap-2 rounded-xl border border-border p-3 md:grid-cols-2">
-					{#each skillsList as skill (skill.code)}
-						{@const checked = $formData.skills_required.some(
-							(v) => toSkillCode(v, skillsList) === skill.code
-						)}
-						<label
-							class="flex min-h-11 cursor-pointer items-start gap-2 rounded-lg border p-3 transition-colors {checked
-								? 'border-primary bg-primary/5'
-								: 'border-border hover:bg-muted/40'}"
+					<span class="text-xs font-medium">📋 รายการกะย่อยทั้งหมด ({shifts.length} กะ)</span>
+					{#if shifts.length > 0}
+						<button
+							type="button"
+							class="min-h-11 text-xs font-medium text-destructive hover:underline"
+							onclick={clearShifts}
 						>
-							<Checkbox {checked} onCheckedChange={() => toggleSkill(skill.code)} />
-							<span class="min-w-0 text-xs">
-								<span class="flex items-center gap-1.5 font-medium">
-									<span aria-hidden="true">{skill.icon}</span>
-									<span class="truncate">{skill.label}</span>
-									{#if skill.controlled}
-										<Badge variant="outline" class="shrink-0 text-xs">🔒 ควบคุม</Badge>
-									{/if}
-								</span>
-								<span class="mt-0.5 block text-muted-foreground">{skill.description}</span>
-							</span>
-						</label>
-					{/each}
+							ลบทั้งหมด ({shifts.length})
+						</button>
+					{/if}
 				</div>
-				<Form.Field {form} name="skills_required">
+
+				{#if shifts.length === 0}
+					<p
+						class="rounded-lg border border-dashed border-border p-4 text-center text-xs text-muted-foreground"
+					>
+						ยังไม่มีกะย่อย — เพิ่มอย่างน้อย 1 กะก่อนบันทึก
+					</p>
+				{:else}
+					<ul class="max-h-72 space-y-2 overflow-y-auto pr-1">
+						{#each shifts as shift, index (shift.id)}
+							<li
+								class="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border border-border bg-muted/20 px-4 py-3 text-sm"
+							>
+								<span
+									class="flex size-7 shrink-0 items-center justify-center rounded-full bg-background text-xs font-semibold text-muted-foreground"
+								>
+									{index + 1}
+								</span>
+								<span class="font-semibold text-primary">📅 {shift.date}</span>
+								<span class="hidden text-muted-foreground/50 md:inline">|</span>
+								<span class="font-semibold text-destructive">
+									⏰ {shift.start_time} - {shift.end_time}
+								</span>
+								{#if shift.end_date !== shift.date}
+									<Badge variant="outline" class="shrink-0 text-xs">
+										ถึง {shift.end_date}
+									</Badge>
+								{/if}
+								<span class="hidden text-muted-foreground/50 md:inline">|</span>
+								<span class="font-semibold text-emerald-600">👥 รับ {shift.quota} คน</span>
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon"
+									class="ml-auto min-h-11 min-w-11 shrink-0 text-muted-foreground hover:text-foreground"
+									aria-label={`แก้ไขกะวันที่ ${shift.date}`}
+									onclick={() => openEditShift(shift)}
+								>
+									<Pencil class="size-3.5" />
+								</Button>
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon"
+									class="min-h-11 min-w-11 shrink-0 text-muted-foreground hover:text-destructive"
+									aria-label={`ลบกะวันที่ ${shift.date}`}
+									onclick={() => removeShift(shift.id)}
+								>
+									<X class="size-4" />
+								</Button>
+							</li>
+						{/each}
+					</ul>
+					<p class="text-right text-xs text-muted-foreground">
+						รวมจำนวนรับทั้งงาน <span class="font-semibold text-foreground">{totalSeats}</span> คน
+					</p>
+				{/if}
+				<Form.Field {form} name="shifts">
 					<Form.FieldErrors />
 				</Form.Field>
 			</div>
+		</div>
 
-			<div class="space-y-3 rounded-xl border border-border p-4">
-				<div class="flex flex-wrap items-start justify-between gap-3">
-					<div class="min-w-0">
-						<p class="text-sm font-semibold">📚 กำหนดกะย่อย (Shifts Schedule Configuration)</p>
-						<p class="text-xs text-muted-foreground">
-							เลือกโหมดการสร้างกะย่อย: เพิ่มทีละวัน หรือสร้างอัตโนมัติเป็นช่วงเวลาต่อเนื่อง
-						</p>
-					</div>
-					<!-- Full-width 2-up on narrow screens; the English suffixes are the
-					     first thing to go, since they only restate the Thai label. -->
-					<div class="grid w-full grid-cols-2 gap-1 rounded-lg bg-muted p-1 md:flex md:w-auto">
-						<Button
-							type="button"
-							size="sm"
-							variant={shiftMode === 'single' ? 'default' : 'ghost'}
-							class="min-h-11 w-full justify-center text-xs md:w-auto"
-							onclick={() => (shiftMode = 'single')}
-						>
-							<Plus class="mr-1 size-3.5 shrink-0" />
-							<span class="truncate"
-								>เพิ่มทีละวัน<span class="hidden lg:inline"> (Single)</span></span
-							>
-						</Button>
-						<Button
-							type="button"
-							size="sm"
-							variant={shiftMode === 'batch' ? 'default' : 'ghost'}
-							class="min-h-11 w-full justify-center text-xs md:w-auto"
-							onclick={() => (shiftMode = 'batch')}
-						>
-							<Zap class="mr-1 size-3.5 shrink-0" />
-							<span class="truncate">
-								สร้างเป็นช่วงวัน<span class="hidden lg:inline"> (Batch Generator)</span>
-							</span>
-						</Button>
-					</div>
-				</div>
-
-				{#if shiftMode === 'single'}
-					<div class="grid grid-cols-1 items-end gap-3 rounded-lg border border-border p-3 md:grid-cols-12">
-						<label class="space-y-1 md:col-span-3">
-							<span class="text-xs font-medium">วันที่ทำงาน</span>
-							<DatePicker bind:value={singleDate} />
-						</label>
-						<label class="space-y-1 md:col-span-3">
-							<span class="text-xs font-medium">วันที่สิ้นสุดกะ</span>
-							<DatePicker bind:value={singleEndDate} />
-						</label>
-						<label class="space-y-1 md:col-span-2">
-							<span class="text-xs font-medium">เวลาเข้ากะ</span>
-							<TimePicker bind:value={singleStart} />
-						</label>
-						<label class="space-y-1 md:col-span-2">
-							<span class="text-xs font-medium">เวลาออกกะ</span>
-							<TimePicker bind:value={singleEnd} />
-						</label>
-						<label class="space-y-1 md:col-span-2">
-							<span class="text-xs font-medium">จำนวนรับ (คน)</span>
-							<Input type="number" min="1" bind:value={singleSeats} class="!h-11" />
-						</label>
-						<Button
-							type="button"
-							class="min-h-11 w-full md:col-span-2 md:col-start-11 md:w-auto"
-							disabled={!canAddSingle}
-							onclick={addSingleShift}
-						>
-							<Plus class="mr-1 size-4" /> เพิ่มกะ
-						</Button>
-					</div>
-				{:else}
-					<div class="space-y-3 rounded-lg border border-border p-3">
-						<div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-							<label class="space-y-1">
-								<span class="text-xs font-medium">📅 วันที่เริ่มสร้างกะ (Start Date)</span>
-								<DatePicker bind:value={batchStart} />
-							</label>
-							<label class="space-y-1">
-								<span class="text-xs font-medium">🏁 วันที่สิ้นสุดกะ (End Date)</span>
-								<DatePicker bind:value={batchEnd} />
-							</label>
-						</div>
-						<div class="grid grid-cols-1 gap-3 md:grid-cols-3">
-							<label class="space-y-1">
-								<span class="text-xs font-medium">⏰ เวลาเข้ากะ (Start)</span>
-								<TimePicker bind:value={batchStartTime} />
-							</label>
-							<label class="space-y-1">
-								<span class="text-xs font-medium">⏰ เวลาออกกะ (End)</span>
-								<TimePicker bind:value={batchEndTime} />
-							</label>
-							<label class="space-y-1">
-								<span class="text-xs font-medium">👥 จำนวนคนต่อกะ (Seats)</span>
-								<Input type="number" min="1" bind:value={batchSeats} class="!h-11" />
-							</label>
-						</div>
-
-						<div class="space-y-2">
-							<div class="flex flex-wrap items-center justify-between gap-2">
-								<span class="text-xs font-medium">📅 วันในสัปดาห์ที่ต้องการเปิดกะ</span>
-								<div class="flex flex-wrap gap-1">
-									<Button
-										type="button"
-										size="sm"
-										variant="ghost"
-										class="min-h-11 text-primary"
-										onclick={() => (batchWeekdays = [...ALL_WEEKDAYS])}
-									>
-										ทุกวัน
-									</Button>
-									<Button
-										type="button"
-										size="sm"
-										variant="ghost"
-										class="min-h-11 text-primary"
-										onclick={() => (batchWeekdays = [...WEEKDAYS_MON_FRI])}
-									>
-										จันทร์ - ศุกร์
-									</Button>
-									<Button
-										type="button"
-										size="sm"
-										variant="ghost"
-										class="min-h-11 text-amber-600"
-										onclick={() => (batchWeekdays = [...WEEKENDS])}
-									>
-										เสาร์ - อาทิตย์
-									</Button>
-								</div>
-							</div>
-							<div class="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-7">
-								{#each WEEKDAYS as day (day.value)}
-									{@const active = batchWeekdays.includes(day.value)}
-									<Button
-										type="button"
-										size="sm"
-										variant={active ? 'default' : 'outline'}
-										aria-pressed={active}
-										class="min-h-11 w-full justify-center px-1 text-xs"
-										onclick={() => toggleWeekday(day.value)}
-									>
-										{#if active}<Check class="mr-1 size-3" />{/if}
-										{day.label}
-									</Button>
-								{/each}
-							</div>
-						</div>
-
-						<Button
-							type="button"
-							class="min-h-11 w-full"
-							disabled={!canGenerateBatch}
-							onclick={generateBatch}
-						>
-							<Zap class="mr-1 size-4 shrink-0" />
-							<span class="md:hidden">สร้างชุดกะย่อย</span>
-							<span class="hidden md:inline">ประมวลผลสร้างชุดกะย่อย (Generate Batch Shifts)</span>
-						</Button>
-					</div>
-				{/if}
-
-				<div class="space-y-2">
-					<div class="flex items-center justify-between gap-2">
-						<span class="text-xs font-medium">📋 รายการกะย่อยทั้งหมด ({shifts.length} กะ)</span>
-						{#if shifts.length > 0}
-							<button
-								type="button"
-								class="min-h-11 text-xs font-medium text-destructive hover:underline"
-								onclick={clearShifts}
-							>
-								ลบทั้งหมด ({shifts.length})
-							</button>
-						{/if}
-					</div>
-
-					{#if shifts.length === 0}
-						<p
-							class="rounded-lg border border-dashed border-border p-4 text-center text-xs text-muted-foreground"
-						>
-							ยังไม่มีกะย่อย — เพิ่มอย่างน้อย 1 กะก่อนบันทึก
-						</p>
-					{:else}
-						<ul class="max-h-72 space-y-2 overflow-y-auto pr-1">
-							{#each shifts as shift, index (shift.id)}
-								<li
-									class="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border border-border bg-muted/20 px-4 py-3 text-sm"
-								>
-									<span
-										class="flex size-7 shrink-0 items-center justify-center rounded-full bg-background text-xs font-semibold text-muted-foreground"
-									>
-										{index + 1}
-									</span>
-									<span class="font-semibold text-primary">📅 {shift.date}</span>
-									<span class="hidden text-muted-foreground/50 md:inline">|</span>
-									<span class="font-semibold text-destructive">
-										⏰ {shift.start_time} - {shift.end_time}
-									</span>
-									{#if shift.end_date !== shift.date}
-										<Badge variant="outline" class="shrink-0 text-xs">
-											ถึง {shift.end_date}
-										</Badge>
-									{/if}
-									<span class="hidden text-muted-foreground/50 md:inline">|</span>
-									<span class="font-semibold text-emerald-600">👥 รับ {shift.quota} คน</span>
-									<Button
-										type="button"
-										variant="ghost"
-										size="icon"
-										class="ml-auto min-h-11 min-w-11 shrink-0 text-muted-foreground hover:text-foreground"
-										aria-label={`แก้ไขกะวันที่ ${shift.date}`}
-										onclick={() => openEditShift(shift)}
-									>
-										<Pencil class="size-3.5" />
-									</Button>
-									<Button
-										type="button"
-										variant="ghost"
-										size="icon"
-										class="min-h-11 min-w-11 shrink-0 text-muted-foreground hover:text-destructive"
-										aria-label={`ลบกะวันที่ ${shift.date}`}
-										onclick={() => removeShift(shift.id)}
-									>
-										<X class="size-4" />
-									</Button>
-								</li>
-							{/each}
-						</ul>
-						<p class="text-right text-xs text-muted-foreground">
-							รวมจำนวนรับทั้งงาน <span class="font-semibold text-foreground">{totalSeats}</span> คน
-						</p>
-					{/if}
-					<Form.Field {form} name="shifts">
-						<Form.FieldErrors />
-					</Form.Field>
-				</div>
-			</div>
-
-			{#if $errors._errors && $errors._errors.length > 0}
-				<p class="text-sm font-medium text-destructive">{$errors._errors.join(', ')}</p>
-			{/if}
-		</form>
+		{#if $errors._errors && $errors._errors.length > 0}
+			<p class="text-sm font-medium text-destructive">{$errors._errors.join(', ')}</p>
+		{/if}
+	</form>
 {/snippet}
 
 {#snippet jobFormActions()}
@@ -902,7 +903,7 @@
 			<div class="flex shrink-0 items-center gap-2 border-b border-border px-4 py-4 pr-12 sm:px-6">
 				<Dialog.Title>{@render jobFormTitle()}</Dialog.Title>
 			</div>
-			<div class="min-h-0 max-h-[70vh] overflow-y-auto">
+			<div class="max-h-[70vh] min-h-0 overflow-y-auto">
 				{@render jobFormFields()}
 			</div>
 			{@render jobFormActions()}
