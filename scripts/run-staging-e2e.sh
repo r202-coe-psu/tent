@@ -8,6 +8,7 @@ readonly REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 readonly FRONTEND_DIR="${REPO_ROOT}/frontend"
 readonly IMAGE_NAME="${STAGING_E2E_IMAGE:-tent-staging-e2e:local}"
 readonly ENV_FILE="${E2E_ENV_FILE:-${FRONTEND_DIR}/e2e/.env}"
+readonly CONTAINER_NAME="tent-staging-e2e-$(date +%s)-$$"
 
 build_image=true
 
@@ -76,9 +77,11 @@ if [[ -z "${E2E_ADMIN_PASSWORD:-}" && -z "${E2E_PASSWORD:-}" ]] &&
 	fi
 fi
 
-if [[ -n "${E2E_ADMIN_PASSWORD:-}${E2E_PASSWORD:-}" ]]; then
-	trap 'unset E2E_ADMIN_PASSWORD E2E_PASSWORD' EXIT
-fi
+cleanup() {
+	docker rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
+	unset E2E_ADMIN_PASSWORD E2E_PASSWORD
+}
+trap cleanup EXIT
 
 mkdir -p \
 	"${FRONTEND_DIR}/test-results" \
@@ -108,17 +111,32 @@ for env_name in E2E_BASE_URL E2E_ADMIN_USERNAME E2E_ADMIN_PASSWORD E2E_USERNAME 
 done
 
 set +e
-docker run --rm \
+docker run --name "${CONTAINER_NAME}" \
 	--ipc=host \
-	--user "$(id -u):$(id -g)" \
 	"${docker_env_args[@]}" \
 	--env CI \
 	--env HOME=/tmp \
-	--volume "${FRONTEND_DIR}/test-results:/work/frontend/test-results" \
-	--volume "${FRONTEND_DIR}/playwright-report:/work/frontend/playwright-report" \
 	"${IMAGE_NAME}"
 status=$?
 set -e
 
+artifact_status=0
+if docker container inspect "${CONTAINER_NAME}" >/dev/null 2>&1; then
+	for artifact_dir in test-results playwright-report; do
+		if ! docker cp \
+			"${CONTAINER_NAME}:/work/frontend/${artifact_dir}/." \
+			"${FRONTEND_DIR}/${artifact_dir}/"; then
+			printf 'Warning: could not copy %s from the E2E container.\n' "${artifact_dir}" >&2
+			artifact_status=1
+		fi
+	done
+else
+	printf 'Warning: E2E container was not available for artifact collection.\n' >&2
+	artifact_status=1
+fi
+
 printf 'HTML report: %s\n' "${FRONTEND_DIR}/playwright-report/staging/index.html"
+if [[ "${status}" -eq 0 && "${artifact_status}" -ne 0 ]]; then
+	status=1
+fi
 exit "${status}"
