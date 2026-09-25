@@ -11,7 +11,9 @@ import {
 	freeEveningWindows,
 	ledgerRowsFor,
 	openBackOffice,
+	needLabel,
 	openNeed,
+	catalogItem,
 	pickOpenNeed,
 	publicNeedsBoard,
 	runDocs,
@@ -229,7 +231,7 @@ test.describe('queue slots (DN-5)', () => {
 	/** Anonymous donor up to the logistics step, with `mode` chosen. */
 	async function donorAtLogistics(page: Page, mode: RegExp) {
 		await clearSession(page);
-		await openNeed(page, slotShelter, slotNeed.name);
+		await openNeed(page, slotShelter, needLabel(slotNeed));
 		await page.locator('#donor-name').fill(`E2E ดูคิว ${RUN_ID}`);
 		await page.locator('#donor-phone').fill('0889012345');
 		await page.getByRole('spinbutton', { name: 'ปริมาณ' }).fill('1');
@@ -483,8 +485,9 @@ test.describe('scan station walk-in', () => {
 		expect(doc, 'walk-in donation doc').toBeTruthy();
 		expect(doc.status).toBe('received');
 		expect(doc.channel ?? doc.source).toMatch(/walk/);
+		const soap = await catalogItem('สบู่ก้อน');
 		expect(await ledgerRowsFor(slotShelter.code, doc._id as string)).toEqual([
-			expect.objectContaining({ item_id: 'item:soap', qty: '3' })
+			expect.objectContaining({ item_id: soap.id, qty: '3' })
 		]);
 		expect(await findDonation(slotShelter.code, doc.booking_ref as string)).toBeTruthy();
 	});

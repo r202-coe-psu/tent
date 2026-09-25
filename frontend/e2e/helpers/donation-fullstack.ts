@@ -92,7 +92,44 @@ function cardWith(page: Page, text: string, name: string) {
 		.getByRole('button', { name });
 }
 
-/** Public needs board → `shelter`'s card → the line for `itemName`. */
+/**
+ * What the donor board prints for a need. The projection falls back to the raw item id
+ * as `name` when the catalog has no doc for it — the staging seed still binds campaigns
+ * to legacy `item:*` ids that the current catalog (`item_master:<ulid>`) no longer holds —
+ * and the board then relabels those ids itself. Mirrors `formatItemName` in
+ * `src/lib/components/public-donor-needs.svelte` (Thai); keep the two in step.
+ */
+const LEGACY_ITEM_LABELS: Record<string, string> = {
+	'item:rice': 'ข้าวสาร (อาหารแห้ง)',
+	'item:water': 'น้ำดื่มสะอาด',
+	'item:soap': 'สบู่และของใช้ส่วนตัว',
+	'item:blanket': 'ผ้าห่มกันหนาว',
+	'item:paracetamol': 'ยาพาราเซตามอล (ยาสามัญ)',
+	'item:canned_fish': 'ปลากระป๋อง',
+	'item:instant_noodle': 'บะหมี่กึ่งสำเร็จรูป',
+	'item:mosquito_net': 'มุ้งกันยุง',
+	'item:sanitary_pad': 'ผ้าอนามัย'
+};
+
+export function needLabel(need: { name: string }): string {
+	const label = LEGACY_ITEM_LABELS[need.name];
+	if (label) return label;
+	return need.name.startsWith('item:') ? need.name.slice('item:'.length) : need.name;
+}
+
+/** `item_master` id for a catalog name — ids are minted per seed (`item_master:<ulid>`). */
+export async function catalogItem(name: string): Promise<{ id: string; unit: string }> {
+	const res = await couchReq('POST', '/catalog/_find', {
+		selector: { type: 'item_master', name },
+		fields: ['_id', 'base_unit'],
+		limit: 1
+	});
+	const doc = (res.data as { docs: { _id: string; base_unit: string }[] }).docs[0];
+	expect(doc, `catalog has no item_master named ${name} — run \`pnpm seed\``).toBeTruthy();
+	return { id: doc._id, unit: doc.base_unit };
+}
+
+/** Public needs board → `shelter`'s card → the line for `itemName` (as the board prints it). */
 export async function openNeed(page: Page, shelter: PublicShelter, itemName: string) {
 	await page.goto('/donations');
 	await expect(page.getByRole('heading', { name: /กระดาน\s*ความต้องการด่วน/ })).toBeVisible();
@@ -125,13 +162,13 @@ export async function fillBooking(
 	const { shelter, need, donorName, phone } = opts;
 	const mode = opts.mode ?? { kind: 'self' };
 
-	await openNeed(page, shelter, need.name);
+	await openNeed(page, shelter, needLabel(need));
 
 	// Step 2 — donor + item. Name/unit come from the need; only the qty is ours.
 	await expect(page.getByRole('heading', { name: 'ส่วนที่ 1: ข้อมูลผู้บริจาค' })).toBeVisible();
 	await page.locator('#donor-name').fill(donorName);
 	await page.locator('#donor-phone').fill(phone);
-	await expect(page.getByRole('textbox', { name: 'ประเภทสิ่งของ' })).toHaveValue(need.name);
+	await expect(page.getByRole('textbox', { name: 'ประเภทสิ่งของ' })).toHaveValue(needLabel(need));
 	await page.getByRole('spinbutton', { name: 'ปริมาณ' }).fill('1');
 	await page.getByRole('button', { name: 'ถัดไป: เลือกจุดส่งมอบ' }).click();
 
@@ -304,4 +341,84 @@ export async function freeEveningWindows(shelterCode: string, n: number): Promis
 		if (!taken.has(hhmm(m))) free.push({ from: hhmm(m), to: hhmm(m + 20) });
 	}
 	return free;
+}
+
+/** The public board's line for `itemName` at `shelterCode`, if any. */
+export async function boardLineFor(
+	request: APIRequestContext,
+	shelterCode: string,
+	itemName: string
+): Promise<PublicNeed | undefined> {
+	const res = await request.get('/api/public/v1/needs');
+	if (!res.ok()) return undefined;
+	return ((await res.json()) as PublicShelter[])
+		.find((s) => s.code === shelterCode)
+		?.needs.find((n) => n.name === itemName);
+}
+
+// Campaigns reach the public board through the worker's Mongo projection.
+export const BOARD_SYNC = { timeout: 30_000 };
+
+/**
+ * Open a campaign of this run's own for `itemName` at `shelterCode`, straight into
+ * CouchDB, and wait for it on the public board. Seeded campaigns bind legacy `item:*`
+ * ids the current catalog no longer holds, so their donations cannot be received into
+ * stock (CATALOG_MISMATCH); a campaign on a real `item_master` id can.
+ */
+export async function openRunCampaign(
+	request: APIRequestContext,
+	shelterCode: string,
+	itemName: string,
+	qtyTarget: number,
+	tag: string
+): Promise<PublicNeed> {
+	const item = await catalogItem(itemName);
+	const id = `donation_campaign:e2e-${tag}-${RUN_ID}`;
+	const now = new Date().toISOString();
+	await couchReq('PUT', `/${shelterDb(shelterCode)}/${encodeURIComponent(id)}`, {
+		_id: id,
+		type: 'donation_campaign',
+		schema_v: 3,
+		shelter_code: shelterCode,
+		created_at: now,
+		updated_at: now,
+		created_by: 'e2e',
+		title: itemName,
+		needs: [{ item_id: item.id, qty_target: String(qtyTarget), unit: item.unit, status: 'open' }],
+		status: 'open',
+		visible_on_home: true,
+		urgency: 'normal',
+		notes: `e2e ${tag} ${RUN_ID}`
+	});
+	await expect
+		.poll(async () => (await boardLineFor(request, shelterCode, itemName))?.status, BOARD_SYNC)
+		.toBe('open');
+	return (await boardLineFor(request, shelterCode, itemName))!;
+}
+
+/**
+ * Close + hide this run's campaigns at `shelterCode`, wait until `itemName` has left the
+ * board, then delete them. The worker does not re-project needs on a campaign DELETE, so
+ * a straight delete would strand the line on the public board.
+ */
+export async function retireRunCampaigns(
+	request: APIRequestContext,
+	shelterCode: string,
+	itemName: string
+) {
+	const db = shelterDb(shelterCode);
+	const camps = await runDocs(db, 'donation_campaign', 'notes');
+	for (const c of camps) {
+		await couchReq('PUT', `/${db}/${encodeURIComponent(c._id)}`, {
+			...c,
+			status: 'closed',
+			visible_on_home: false
+		});
+	}
+	if (camps.length) {
+		await expect
+			.poll(async () => await boardLineFor(request, shelterCode, itemName), BOARD_SYNC)
+			.toBeUndefined();
+	}
+	for (const c of await runDocs(db, 'donation_campaign', 'notes')) await deleteDoc(db, c);
 }

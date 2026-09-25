@@ -11,8 +11,9 @@ import {
 	openBackOffice,
 	openInScanStation,
 	openPendingRow,
-	pickOpenNeed,
+	openRunCampaign,
 	publicNeedsBoard,
+	retireRunCampaigns,
 	skipUnlessFullStack,
 	type PublicNeed,
 	type PublicShelter,
@@ -22,14 +23,18 @@ import {
 /**
  * Donor ↔ staff journeys for one booking, against the REAL stack (no route mocks).
  *
- * Needs `docker compose up -d` (CouchDB, Mongo, worker, FastAPI), a seeded open need
+ * Needs `docker compose up -d` (CouchDB, Mongo, worker, FastAPI), a seeded catalog
  * (`pnpm seed`), and the dev server — the BFF only skips reCAPTCHA in dev:
  *   PW_BASE_URL=http://localhost:5173 pnpm test:e2e e2e/donation-fullstack.test.ts
  *
- * Every booking is qty 1 under a donor name carrying RUN_ID, so a run barely dents the
- * seeded need; bookings stay behind (reset: see docker-compose.seed.yml).
+ * The need donors book against is this run's own campaign (NEED_ITEM, on a real
+ * `item_master` id) — seeded campaigns use legacy ids the scan station cannot receive.
+ * It is retired in afterAll; the bookings (qty 1, donor name carrying RUN_ID) stay.
  * Back-office setup (campaigns, slots, walk-in) lives in donation-fullstack-admin.
  */
+
+// A catalog item no seeded campaign asks for, so the board line is this run's alone.
+const NEED_ITEM = 'ผักรวม';
 
 let shelter: PublicShelter;
 let need: PublicNeed;
@@ -39,13 +44,16 @@ test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({ request }) => {
 	skipUnlessFullStack(test.skip);
-	const pick = pickOpenNeed(await publicNeedsBoard(request));
-	test.skip(!pick, 'no open need on the public board — run `pnpm seed` first');
-	({ shelter, need } = pick!);
+	const board = await publicNeedsBoard(request);
+	const pick = board.find((s) => !s.needs.some((n) => n.name === NEED_ITEM));
+	test.skip(!pick, `every shelter already asks for ${NEED_ITEM}`);
+	shelter = pick!;
+	need = await openRunCampaign(request, shelter.code, NEED_ITEM, 50, 'donor');
 	ws = await createWarehouseStaff(shelter.code, 'ws');
 });
 
-test.afterAll(async () => {
+test.afterAll(async ({ request }) => {
+	if (shelter) await retireRunCampaigns(request, shelter.code, NEED_ITEM);
 	await deleteStaff(ws);
 });
 

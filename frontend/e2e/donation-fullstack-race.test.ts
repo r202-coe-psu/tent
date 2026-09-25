@@ -2,6 +2,7 @@ import { test, expect, type Browser, type APIRequestContext } from '@playwright/
 import { couchReq } from './helpers/couch';
 import {
 	RUN_ID,
+	catalogItem,
 	deleteDoc,
 	fillBooking,
 	freeEveningWindows,
@@ -32,7 +33,8 @@ import {
  */
 
 // No seeded campaign asks for it, so the board line this spec opens is the only one.
-const RACE_ITEM = { id: 'item_master:egg', name: 'ไข่ไก่', unit: 'piece' };
+// `id`/`unit` are looked up in beforeAll: the catalog mints `item_master:<ulid>` per seed.
+const RACE_ITEM = { id: '', name: 'ไข่ไก่', unit: '' };
 
 let shelter: PublicShelter;
 let pickup: SlotWindow;
@@ -60,6 +62,7 @@ test.beforeAll(async ({ request }) => {
 	const pick = board.find((s) => !s.needs.some((n) => n.name === RACE_ITEM.name));
 	test.skip(!pick, `every shelter already asks for ${RACE_ITEM.name}`);
 	shelter = pick!;
+	Object.assign(RACE_ITEM, await catalogItem(RACE_ITEM.name));
 
 	const [w] = await freeEveningWindows(shelter.code, 1);
 	test.skip(!w, 'no free evening window left today');
