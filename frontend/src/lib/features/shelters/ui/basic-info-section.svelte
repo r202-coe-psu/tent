@@ -170,6 +170,13 @@
 		});
 	}
 
+	function setKioskPhoneCheckIn(checked: boolean) {
+		ensureFeatureFlags();
+		$formData.feature_flags = patchFeatureFlags($formData.feature_flags, {
+			kiosk_phone_check_in_enabled: checked
+		});
+	}
+
 	/** Registration toggles — also mirror the related policy sections (pets / luggage / parking). */
 	function setAllowPets(checked: boolean) {
 		const next = applyAllowPets($formData, checked);
@@ -336,6 +343,26 @@
 				onCheckedChange={(v) => setAcceptsPreRegistration(v === true)}
 				{disabled}
 				aria-label="รับลงทะเบียนเข้าพักล่วงหน้าจากหน้าสาธารณะ"
+			/>
+		</div>
+
+		<div
+			class="flex items-center justify-between gap-3 rounded-lg border border-shelter-border bg-background p-4"
+		>
+			<div class="min-w-0 flex-1 space-y-1">
+				<label for="kiosk-phone-check-in" class="text-sm font-medium text-card-foreground">
+					รับรายงานตัวด้วยเบอร์โทรที่ Kiosk
+				</label>
+				<p class="text-xs text-muted-foreground">
+					เปิด: ผู้ประสบภัยค้นหาด้วยเบอร์โทรที่ตู้ Kiosk ได้ · ปิด: ซ่อนช่องทางนี้ (ค่าเริ่มต้นปิด)
+				</p>
+			</div>
+			<Switch
+				id="kiosk-phone-check-in"
+				checked={$formData.feature_flags?.kiosk_phone_check_in_enabled ?? false}
+				onCheckedChange={(v) => setKioskPhoneCheckIn(v === true)}
+				{disabled}
+				aria-label="รับรายงานตัวด้วยเบอร์โทรที่ Kiosk"
 			/>
 		</div>
 

@@ -22,8 +22,6 @@ except ImportError:  # pragma: no cover - production installs playwright
     BrowserContext = Any  # type: ignore[misc,assignment]
     Page = Any  # type: ignore[misc,assignment]
 
-from app.config import PHONE_CHECK_IN_DEFAULT, PHONE_CHECK_IN_OFF_VALUE, parse_bool_setting
-
 try:
     from app.scard import ThaiSmartCardReader
 except ImportError:  # pragma: no cover - tests can exercise bootstrap without a card reader
@@ -58,9 +56,6 @@ class ScannerClientManager:
         self.is_debug = str(config.get("DEBUG", "true")).lower() in ("true", "1", "yes")
         self.is_headless = str(config.get("HEADLESS", "false")).lower() in ("true", "1", "yes")
         self.poll_interval = float(config.get("POLL_INTERVAL", "0.5"))
-        self.phone_check_in_enabled = parse_bool_setting(
-            config, "KIOSK_PHONE_CHECK_IN_ENABLED", default=PHONE_CHECK_IN_DEFAULT
-        )
         self.min_reading_display = 0.6
         self.client_nav_timeout_ms = 5000
         self.window_width = int(config.get("WINDOW_WIDTH", "540"))
@@ -94,8 +89,6 @@ class ScannerClientManager:
             "shelter_name": self.shelter_name,
             "station_name": self.station_name,
             "device_name": self.device_name,
-            # FR-KPT-05: only emit the contracted off value when phone check-in is disabled.
-            "phone_check_in": "" if self.phone_check_in_enabled else PHONE_CHECK_IN_OFF_VALUE,
         }
         if extra_params:
             params.update(extra_params)
@@ -218,6 +211,7 @@ class ScannerClientManager:
         allowed_paths = {
             "/api/v1/scanner/kiosk/lookup",
             "/api/v1/scanner/kiosk/check-in",
+            "/api/v1/scanner/kiosk/config",
         }
 
         headers = dict(request.headers)
@@ -434,7 +428,6 @@ class ScannerClientManager:
         await self.bootstrap()
         mode_str = f"Windowed ({self.window_width}x{self.window_height})" if self.is_debug else "Fullscreen Kiosk"
         logger.info(f"Starting Scanner Client Manager (Device: {self.device_id}, Mode: {mode_str})...")
-        logger.info("Phone check-in: %s", "on" if self.phone_check_in_enabled else "off")
         args = self._build_browser_args()
 
         async with async_playwright() as p:

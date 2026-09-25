@@ -10,6 +10,13 @@ import {
 	ScannerDependencyError
 } from '$lib/server/scanners/device-credentials';
 import { lookupPreRegisteredEvacuee } from '$lib/features/kiosk/server/kiosk-check-in.server';
+import {
+	kioskPhoneDeviceLimiter,
+	kioskPhoneNumberLimiter
+} from '$lib/server/security/rate-limiter';
+import { findMasterByCode } from '$lib/server/shelters.admin';
+
+vi.mock('$lib/server/shelters.admin', () => ({ findMasterByCode: vi.fn() }));
 
 vi.mock('$lib/features/scanners/server', async () => {
 	const actual = await vi.importActual<typeof import('$lib/features/scanners/server')>(
@@ -38,6 +45,7 @@ vi.mock('$lib/server/scanners/device-credentials', async () => {
 const mockAuthenticate = vi.mocked(authenticateScannerDevice);
 const mockLookup = vi.mocked(lookupPreRegisteredEvacuee);
 const mockHeartbeat = vi.mocked(scannerServerRepository.updateDeviceLastSeen);
+const mockFindShelter = vi.mocked(findMasterByCode);
 const phone = '0812345678';
 const principalFor = (registryId: string) => ({ registry_id: registryId, shelter_code: 'SH001' });
 const household = {
@@ -83,6 +91,43 @@ describe('POST /api/v1/scanner/kiosk/lookup', () => {
 		});
 		mockHeartbeat.mockResolvedValue(undefined);
 		mockLookup.mockResolvedValue(household as never);
+		mockFindShelter.mockResolvedValue({
+			code: 'SH001',
+			feature_flags: { kiosk_phone_check_in_enabled: true }
+		} as never);
+	});
+
+	it('rejects phone lookup when its authenticated shelter has disabled the method', async () => {
+		mockFindShelter.mockResolvedValueOnce({ code: 'SH001', feature_flags: {} } as never);
+		const deviceLimit = vi.spyOn(kioskPhoneDeviceLimiter, 'check');
+		const phoneLimit = vi.spyOn(kioskPhoneNumberLimiter, 'check');
+
+		const response = await send({ source: 'phone', phone });
+
+		expect(response.status).toBe(403);
+		expect((await response.json()).error.code).toBe('KIOSK_METHOD_DISABLED');
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(deviceLimit).not.toHaveBeenCalled();
+		expect(phoneLimit).not.toHaveBeenCalled();
+		expect(mockLookup).not.toHaveBeenCalled();
+	});
+
+	it('does not read the shelter flag for QR or smart-card lookups', async () => {
+		const response = await send({ source: 'qr', token: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV' });
+
+		expect(response.status).toBe(200);
+		expect(mockFindShelter).not.toHaveBeenCalled();
+	});
+
+	it('returns 503 when the shelter registry cannot be read for phone lookups', async () => {
+		mockFindShelter.mockRejectedValueOnce(new Error('registry unavailable'));
+
+		const response = await send({ source: 'phone', phone });
+
+		expect(response.status).toBe(503);
+		expect((await response.json()).error.code).toBe(DEPENDENCY_UNAVAILABLE);
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(mockLookup).not.toHaveBeenCalled();
 	});
 
 	it('returns a no-store 401 when device authentication fails', async () => {

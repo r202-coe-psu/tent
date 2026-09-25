@@ -612,7 +612,8 @@ describe('buildUpdatePayload — fields the workbook cannot express', () => {
 				allow_assets: false,
 				public_donations_enabled: false,
 				enable_medical_screening: true,
-				accepts_pre_registration: true
+				accepts_pre_registration: true,
+				kiosk_phone_check_in_enabled: false
 			},
 			food_distribution_points: existingPoints
 		});
@@ -623,7 +624,8 @@ describe('buildUpdatePayload — fields the workbook cannot express', () => {
 			allow_assets: false,
 			public_donations_enabled: false,
 			enable_medical_screening: true,
-			accepts_pre_registration: true
+			accepts_pre_registration: true,
+			kiosk_phone_check_in_enabled: false
 		});
 		expect(payload.food_distribution_points).toEqual(existingPoints);
 	});

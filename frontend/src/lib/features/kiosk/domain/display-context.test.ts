@@ -12,8 +12,7 @@ describe('kiosk display context', () => {
 			shelterName: 'ศูนย์พักพิง',
 			shelterCode: '',
 			stationName: 'จุดคัดกรองทั่วไป',
-			deviceName: 'Kiosk',
-			phoneCheckInEnabled: true
+			deviceName: 'Kiosk'
 		});
 	});
 
@@ -23,15 +22,13 @@ describe('kiosk display context', () => {
 				shelter_name: '  ศูนย์ทดสอบ  ',
 				shelter_code: ' SH001 ',
 				station_name: '  จุด 1 ',
-				device_name: '  Kiosk 1 ',
-				phone_check_in: ' OFF '
+				device_name: '  Kiosk 1 '
 			})
 		).toEqual({
 			shelterName: 'ศูนย์ทดสอบ',
 			shelterCode: 'SH001',
 			stationName: 'จุด 1',
-			deviceName: 'Kiosk 1',
-			phoneCheckInEnabled: false
+			deviceName: 'Kiosk 1'
 		});
 	});
 
@@ -41,33 +38,14 @@ describe('kiosk display context', () => {
 				shelterName: 'ศูนย์/หนึ่ง',
 				shelterCode: 'SH001',
 				stationName: 'จุด 1',
-				deviceName: 'Kiosk 1',
-				phoneCheckInEnabled: true
+				deviceName: 'Kiosk 1'
 			})
 		);
 
-		expect([...query.keys()].sort()).toEqual(
-			KIOSK_DISPLAY_QUERY_KEYS.filter((key) => key !== 'phone_check_in').sort()
-		);
+		expect([...query.keys()].sort()).toEqual([...KIOSK_DISPLAY_QUERY_KEYS].sort());
 		expect(query.get('shelter_name')).toBe('ศูนย์/หนึ่ง');
 		expect(query.get('shelter_code')).toBe('SH001');
 		expect(query.get('phone_check_in')).toBeNull();
-	});
-
-	it('serializes the disabled flag and round-trips both flag states', () => {
-		const enabledContext = getKioskDisplayContext({ shelter_code: 'SH001' });
-		const disabledContext = { ...enabledContext, phoneCheckInEnabled: false };
-
-		for (const context of [enabledContext, disabledContext]) {
-			const queryString = buildKioskContextQuery(context);
-			const params = new URLSearchParams(queryString);
-			expect(getKioskDisplayContext(readKioskDisplayQuery(params))).toEqual(context);
-			if (context.phoneCheckInEnabled) {
-				expect(params.has('phone_check_in')).toBe(false);
-			} else {
-				expect(params.get('phone_check_in')).toBe('off');
-			}
-		}
 	});
 
 	it('reads only the allowlisted keys and ignores unknown parameters', () => {
@@ -81,8 +59,7 @@ describe('kiosk display context', () => {
 			shelter_name: null,
 			shelter_code: 'SH001',
 			station_name: null,
-			device_name: null,
-			phone_check_in: 'off'
+			device_name: null
 		});
 		expect(query).not.toHaveProperty('device_secret');
 		expect(query).not.toHaveProperty('error_msg');

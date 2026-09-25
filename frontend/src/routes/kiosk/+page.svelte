@@ -1,11 +1,13 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import type { PageProps } from './$types';
 	import {
 		buildKioskContextQuery,
 		getKioskDisplayContext,
 		readKioskDisplayQuery,
 		IdentityMethodSelector
 	} from '$lib/features/kiosk';
+	let { data }: PageProps = $props();
 
 	const displayContext = $derived(
 		getKioskDisplayContext(readKioskDisplayQuery(page.url.searchParams))
@@ -17,4 +19,4 @@
 	<title>เลือกวิธียืนยันตัวตน — SmartShelter Kiosk</title>
 </svelte:head>
 
-<IdentityMethodSelector {contextQuery} phoneCheckInEnabled={displayContext.phoneCheckInEnabled} />
+<IdentityMethodSelector {contextQuery} phoneCheckInEnabled={data.phoneCheckInEnabled} />

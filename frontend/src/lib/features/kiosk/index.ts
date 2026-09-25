@@ -36,3 +36,9 @@ export {
 	type IdentityMethodId,
 	type IdentityMethodOptions
 } from './domain/identity-method';
+export {
+	fetchKioskConfig,
+	KIOSK_CONFIG_TIMEOUT_MS,
+	type KioskConfig
+} from './data/kiosk-config.api';
+export { isKioskPhoneCheckInEnabled } from './domain/kiosk-config';

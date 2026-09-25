@@ -16,7 +16,7 @@ describe('IdentityMethodSelector', () => {
 
 	it('hides the phone card and renders three cards in one row when disabled', () => {
 		const result = render(IdentityMethodSelector, {
-			props: { contextQuery: '?phone_check_in=off', phoneCheckInEnabled: false }
+			props: { contextQuery: '?shelter_code=SH001', phoneCheckInEnabled: false }
 		});
 
 		expect(result.body).toContain('grid-cols-3');

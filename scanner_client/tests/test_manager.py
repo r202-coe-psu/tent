@@ -90,7 +90,7 @@ class ScannerBootstrapTests(unittest.IsolatedAsyncioTestCase):
             "sk_scan_real_secret_value",
         )
 
-    async def test_disabling_phone_check_in_adds_flag_to_all_kiosk_urls(self):
+    async def test_legacy_env_flag_is_not_added_to_kiosk_urls(self):
         FakeClient.requested_headers = []
         FakeClient.responses = [
             FakeResponse(
@@ -122,7 +122,7 @@ class ScannerBootstrapTests(unittest.IsolatedAsyncioTestCase):
         ):
             with self.subTest(url=url):
                 query = parse_qs(urlparse(url).query)
-                self.assertEqual(query["phone_check_in"], ["off"])
+                self.assertNotIn("phone_check_in", query)
                 self.assertEqual(query["shelter_code"], ["SH001"])
                 self.assertEqual(query["shelter_name"], ["ศูนย์พักพิงทดสอบ"])
                 self.assertEqual(query["station_name"], ["โต๊ะ 1"])
@@ -275,8 +275,22 @@ class KioskApiRouteTests(unittest.IsolatedAsyncioTestCase):
                 True,
             ),
             (
+                "same-origin kiosk config POST",
+                "https://tent.example.go.th/api/v1/scanner/kiosk/config",
+                "POST",
+                "https://tent.example.go.th",
+                True,
+            ),
+            (
                 "GET",
                 "https://tent.example.go.th/api/v1/scanner/kiosk/lookup",
+                "GET",
+                "https://tent.example.go.th",
+                False,
+            ),
+            (
+                "kiosk config GET",
+                "https://tent.example.go.th/api/v1/scanner/kiosk/config",
                 "GET",
                 "https://tent.example.go.th",
                 False,

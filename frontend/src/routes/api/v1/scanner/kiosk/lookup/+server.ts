@@ -7,6 +7,7 @@ import {
 	KioskInputError,
 	normalizeKioskPhone
 } from '$lib/features/kiosk/server';
+import { isKioskPhoneCheckInEnabled } from '$lib/features/kiosk';
 import {
 	kioskPhoneDeviceLimiter,
 	kioskPhoneNumberLimiter
@@ -18,6 +19,7 @@ import {
 	ScannerAuthError,
 	ScannerDependencyError
 } from '$lib/server/scanners/device-credentials';
+import { findMasterByCode } from '$lib/server/shelters.admin';
 
 export const prerender = false;
 
@@ -38,6 +40,23 @@ export const POST: RequestHandler = async ({ request }) => {
 			);
 		}
 		if (parsed.data.source === 'phone') {
+			let shelter;
+			try {
+				shelter = await findMasterByCode(principal.shelter_code);
+			} catch {
+				throw new ScannerDependencyError('Shelter configuration service unavailable');
+			}
+			if (!isKioskPhoneCheckInEnabled(shelter)) {
+				return json(
+					{
+						error: {
+							code: 'KIOSK_METHOD_DISABLED',
+							message: 'ช่องทางนี้ปิดใช้งาน กรุณาติดต่อเจ้าหน้าที่'
+						}
+					},
+					{ status: 403, headers: noStoreHeaders }
+				);
+			}
 			const canonical = normalizeKioskPhone(parsed.data.phone);
 			if (!canonical) {
 				return json(
