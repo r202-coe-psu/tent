@@ -212,6 +212,49 @@ export function toRequisitionInput(plan: MealPlan): KitchenRequisitionInput {
 	return { meal_plan_id: plan._id, items };
 }
 
+export interface TicketItemPayload {
+	item_id: string;
+	item_name: string;
+	unit: string;
+	requested_qty: string;
+}
+
+/**
+ * Converts a meal plan into requisition_ticket item lines (CR-121/CR-126 —
+ * replaces `toRequisitionInput` for the ticket flow). References
+ * `plan.recipes[].recipe_id` directly as `item_id`, same source
+ * `toRequisitionInput` already uses — does not touch `SupplyItem` or
+ * name-match anything, so it carries none of `resolveItemMasterStock`'s
+ * antipattern forward. `itemMasters` only resolves a display name; when a
+ * recipe's `item_id` isn't found there the id itself is shown.
+ */
+export function toTicketItemInput(
+	plan: MealPlan,
+	itemMasters: readonly ItemMaster[]
+): TicketItemPayload[] {
+	const nameOf = (itemId: string) => itemMasters.find((m) => m._id === itemId)?.name ?? itemId;
+	return plan.recipes.map((r) => {
+		const stock = RECIPE_TO_STOCK_ITEM[r.recipe_id];
+		if (stock) {
+			return {
+				item_id: stock.item_id,
+				item_name: nameOf(stock.item_id),
+				unit: stock.unit,
+				requested_qty: persistQty(new Decimal(r.planned_qty).div(stock.recipe_per_stock_unit))
+			};
+		}
+		if (!r.unit) {
+			throw new Error(`toTicketItemInput: no stock item mapping for recipe "${r.recipe_id}"`);
+		}
+		return {
+			item_id: r.recipe_id,
+			item_name: nameOf(r.recipe_id),
+			unit: r.unit,
+			requested_qty: persistQty(r.planned_qty)
+		};
+	});
+}
+
 /**
  * Whether on-hand stock covers a requested requisition line.
  *   `ok`      — on-hand ≥ requested (can issue the full amount)

@@ -25,10 +25,10 @@
 		RICE_RECIPE_ID,
 		RECIPE_LABELS,
 		RECIPE_TO_STOCK_ITEM,
+		toTicketItemInput,
 		MealPlanForm,
-		RequisitionDialog,
 		MealServiceForm,
-		useGasCylinderTypes,
+		useFuelCylinders,
 		useGasLedger,
 		gasCylinderBalance,
 		type MealPlan,
@@ -39,6 +39,10 @@
 	import { useItemMasters } from '$lib/features/catalog';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { useStockBalance } from '$lib/features/operations';
+	import { useCreateTicket, useTickets } from '$lib/features/tickets';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { qtyGt } from '$lib/utils/qty';
 	import { formatThaiTime } from '$lib/utils/date';
 
@@ -46,7 +50,7 @@
 	const supplyItems = useSupplyItems();
 	const itemMasters = useItemMasters(() => getShelterCode());
 	const stockBalance = useStockBalance();
-	const gasTypes = useGasCylinderTypes();
+	const gasTypes = useFuelCylinders();
 	const gasLedger = useGasLedger();
 	let createOpen = $state(false);
 	let createDefaultMode = $state<'sop' | 'recipe' | 'custom'>('sop');
@@ -60,6 +64,8 @@
 	const sopProfile = useActiveSopProfile();
 	const requisitions = useRequisitions();
 	const mealServices = useMealServices();
+	const tickets = useTickets();
+	const createTicket = useCreateTicket();
 
 	// Plans that already have a recorded service — drives the "✓ บันทึกแล้ว" hint.
 	// meal_service.meal_plan_id links a service record to the specific plan it
@@ -73,15 +79,17 @@
 	);
 
 	// Meal plans that already have at least one requisition — drives the
-	// "เบิกแล้ว" hint so staff don't accidentally double-deduct stock.
+	// "เบิกแล้ว" hint so staff don't accidentally double-deduct stock. Includes
+	// both the legacy kitchen_requisition (read-only after CR-126 cutover) and
+	// the new requisition_ticket (any non-CANCELLED ticket counts as "opened").
 	const requisitionedPlanIds = $derived(
-		new Set(
-			(requisitions.data ?? []).map((r) => r.meal_plan_id).filter((id): id is string => Boolean(id))
-		)
+		new Set([
+			...(requisitions.data ?? [])
+				.map((r) => r.meal_plan_id)
+				.filter((id): id is string => Boolean(id)),
+			...(tickets.data ?? []).filter((t) => t.status !== 'CANCELLED').map((t) => t.meal_plan_id)
+		])
 	);
-
-	let reqOpen = $state(false);
-	let reqPlan = $state<MealPlan | null>(null);
 
 	let serviceOpen = $state(false);
 	let servicePlan = $state<MealPlan | null>(null);
@@ -114,9 +122,20 @@
 		return plan.recipes.some((r) => r.recipe_id.startsWith('item_master:'));
 	}
 
-	function openRequisition(plan: MealPlan) {
-		reqPlan = plan;
-		reqOpen = true;
+	// Opens (or resumes — idempotent on meal_plan_id) a requisition_ticket for
+	// this plan and navigates to its detail page (CR-121/CR-126 — replaces the
+	// old instant-cut RequisitionDialog).
+	async function openTicket(plan: MealPlan) {
+		try {
+			const items = toTicketItemInput(plan, itemMasters.data ?? []);
+			const ticket = await createTicket.mutateAsync({
+				input: { meal_plan_id: plan._id, items },
+				ctx: { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'kitchen_staff' }
+			});
+			goto(resolve(`/back-office/tickets/${encodeURIComponent(ticket._id)}`));
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'เปิดตั๋วเบิกวัตถุดิบไม่สำเร็จ');
+		}
 	}
 
 	// Edit/delete are draft-only (in-code guard in useDeleteMealPlanDraft /
@@ -434,14 +453,14 @@
 												<Button
 													size="sm"
 													variant="outline"
-													onclick={() => openRequisition(plan)}
-													disabled={isBomSourced(plan)}
+													onclick={() => openTicket(plan)}
+													disabled={isBomSourced(plan) || createTicket.isPending}
 													title={isBomSourced(plan)
 														? 'แผนนี้มีวัตถุดิบจากสูตร BOM ที่ยังไม่เชื่อมกับสต็อกจริง (ชื่อในสูตรกับชื่อในคลังไม่ตรงกัน) เบิกไม่ได้จนกว่าจะแก้ชื่อให้ตรงกัน'
 														: undefined}
 												>
 													<PackageCheck class="mr-1 h-3.5 w-3.5" />
-													เบิกวัตถุดิบ
+													เปิดตั๋วเบิกวัตถุดิบ
 												</Button>
 												{#if isBomSourced(plan)}
 													<p class="max-w-[220px] text-center text-2xs text-amber-600">
@@ -493,7 +512,6 @@
 
 <MealPlanForm bind:open={createOpen} defaultMode={createDefaultMode} />
 <MealPlanForm bind:open={editOpen} plan={editPlan} />
-<RequisitionDialog bind:open={reqOpen} plan={reqPlan} />
 <MealServiceForm bind:open={serviceOpen} plan={servicePlan} />
 
 <AlertDialog.Root bind:open={deleteConfirmOpen}>

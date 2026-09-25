@@ -41,8 +41,7 @@
 	>
 		{#snippet tooltip()}
 			<Chart.Tooltip
-				labelFormatter={(value) =>
-					value === AGE_BUCKET_LABELS.unknown ? 'อายุ ไม่ระบุ' : value}
+				labelFormatter={(value) => (value === AGE_BUCKET_LABELS.unknown ? 'อายุ ไม่ระบุ' : value)}
 			>
 				{#snippet formatter({ value })}
 					<div

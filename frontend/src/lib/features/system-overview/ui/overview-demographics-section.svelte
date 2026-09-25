@@ -28,9 +28,7 @@
 	}
 
 	const displayedAgeGroups = $derived(
-		selectedCountry
-			? (age_by_country?.[selectedCountry] ?? emptyAgeGroups())
-			: age_groups
+		selectedCountry ? (age_by_country?.[selectedCountry] ?? emptyAgeGroups()) : age_groups
 	);
 
 	const ageRows = $derived(

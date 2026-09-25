@@ -2,16 +2,22 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { useSupplyItems } from '$lib/features/supply';
 	import { itemMasterUnit, useItemMasters } from '$lib/features/catalog';
+	import {
+		kitchenRepository,
+		useCreateFuelCylinder,
+		useRefillGasCylinder
+	} from '$lib/features/kitchen';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { useLedger, useAdjustStock } from '../application/queries';
-	import { SvelteMap } from 'svelte/reactivity';
+	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { toast } from 'svelte-sonner';
 	import Settings from '@lucide/svelte/icons/settings';
 	import MinusCircle from '@lucide/svelte/icons/minus-circle';
 	import PlusCircle from '@lucide/svelte/icons/plus-circle';
 	import { addQty, subQty } from '$lib/utils/qty';
 	import type { StockLot, StockLedger } from '../domain/operations';
+	import type { FuelCylinder } from '$lib/features/kitchen/domain/kitchen';
 
 	let {
 		onsuccess,
@@ -23,6 +29,8 @@
 	const itemMastersQuery = useItemMasters(() => getShelterCode());
 	const ledgerQuery = useLedger();
 	const adjustMutation = useAdjustStock();
+	const createFuelCylinderMutation = useCreateFuelCylinder();
+	const refillGasCylinderMutation = useRefillGasCylinder();
 
 	// Local State
 	let searchQuery = $state('');
@@ -32,6 +40,7 @@
 		name: string;
 		unit: string;
 		perishable?: boolean;
+		category?: string;
 	} | null>(null);
 	let container = $state<HTMLDivElement | null>(null);
 	let selectedLotKey = $state<string>('');
@@ -39,7 +48,7 @@
 	let customExpiry = $state<string>('');
 
 	let newQtyInput = $state<string>('');
-	let adjustmentType = $state<'write_off' | 'add'>('write_off');
+	let adjustmentType = $state<'write_off' | 'add'>('add');
 	let reason = $state<string>('');
 
 	const items = $derived.by(() => {
@@ -96,16 +105,63 @@
 	});
 
 	const currentLot = $derived(itemLots.find((l) => l.key === selectedLotKey));
-	const currentLotQty = $derived(currentLot ? currentLot.qty : '0');
 
 	// Delta Calculation
 	const deltaQty = $derived.by(() => {
 		if (!newQtyInput || isNaN(Number(newQtyInput))) return '0';
-		const base = selectedLotKey === 'new' ? '0' : currentLotQty;
-		return subQty(newQtyInput, base);
+		return adjustmentType === 'add' ? newQtyInput : subQty('0', newQtyInput);
 	});
 
 	const isSubmitting = $derived(adjustMutation.isPending);
+
+	function isFuelEnergyItem(item: { _id: string; category?: string }) {
+		const master = (itemMastersQuery.data ?? []).find((candidate) => candidate._id === item._id);
+		return (
+			item.category === 'item_category:fuel_energy' ||
+			master?.category === 'item_category:fuel_energy'
+		);
+	}
+
+	async function createMissingFuelCylinders(
+		itemMasterId: string,
+		targetCount: number,
+		ctx: { shelterCode: string; createdBy: string },
+		existingCylinders: FuelCylinder[] = []
+	) {
+		const existing = existingCylinders.filter(
+			(cylinder) => cylinder.item_master_id === itemMasterId
+		);
+		const missing = Math.max(0, Math.floor(targetCount) - existing.length);
+		if (missing === 0) return;
+		const master = (itemMastersQuery.data ?? []).find((item) => item._id === itemMasterId);
+		const usedCodes = new SvelteSet(
+			existingCylinders.map((cylinder) => cylinder.cylinder_code.toUpperCase())
+		);
+		let sequence = 1;
+		for (let i = 0; i < missing; i++) {
+			while (usedCodes.has(`LPG-${String(sequence).padStart(2, '0')}`)) sequence += 1;
+			const code = `LPG-${String(sequence).padStart(2, '0')}`;
+			usedCodes.add(code);
+			const created = await createFuelCylinderMutation.mutateAsync({
+				input: {
+					item_master_id: itemMasterId,
+					cylinder_code: code,
+					name: `ถังแก๊ส ${code}`,
+					capacity_kg: master?.capacity_kg ?? '15',
+					burn_rate_kg_per_hour: master?.burn_rate_kg_per_hour ?? '0.5',
+					time_multiplier: master?.time_multiplier ?? '1',
+					deactivated: false
+				},
+				ctx
+			});
+			await refillGasCylinderMutation.mutateAsync({
+				cylinderId: created._id,
+				qtyKg: created.capacity_kg,
+				ctx
+			});
+			sequence += 1;
+		}
+	}
 
 	// Helpers
 	function formatExpiry(expiryStr: string | undefined): string {
@@ -128,7 +184,7 @@
 		// Reset form fields
 		selectedLotKey = '';
 		newQtyInput = '';
-		adjustmentType = 'write_off';
+		adjustmentType = 'add';
 		reason = '';
 	}
 
@@ -138,19 +194,9 @@
 		isDropdownOpen = false;
 		selectedLotKey = '';
 		newQtyInput = '';
-		adjustmentType = 'write_off';
+		adjustmentType = 'add';
 		reason = '';
 	}
-
-	// Watch newQtyInput to auto-set adjustmentType
-	$effect(() => {
-		const delta = Number(deltaQty);
-		if (delta < 0) {
-			adjustmentType = 'write_off';
-		} else if (delta > 0) {
-			adjustmentType = 'add';
-		}
-	});
 
 	// Submit
 	async function handleSubmit(e: SubmitEvent) {
@@ -172,12 +218,8 @@
 			toast.error('สินค้าเน่าเสียได้ จำเป็นต้องระบุวันหมดอายุ');
 			return;
 		}
-		if (!newQtyInput || isNaN(Number(newQtyInput)) || Number(newQtyInput) < 0) {
-			toast.error('กรุณาระบุจำนวนใหม่ที่ถูกต้อง (ต้องไม่ติดลบ)');
-			return;
-		}
-		if (deltaQty === '0') {
-			toast.error('จำนวนใหม่เท่ากับจำนวนเดิม ไม่มีความเปลี่ยนแปลง');
+		if (!newQtyInput || isNaN(Number(newQtyInput)) || Number(newQtyInput) <= 0) {
+			toast.error('กรุณาระบุจำนวนรับเข้าที่ถูกต้อง (ต้องมากกว่า 0)');
 			return;
 		}
 		if (!reason.trim()) {
@@ -213,16 +255,27 @@
 			createdBy: authStore.user?.name ?? 'เจ้าหน้าที่คลังสินค้า (Admin)'
 		};
 
-		toast.promise(adjustMutation.mutateAsync({ input, ctx }), {
-			loading: 'กำลังปรับปรุงสต๊อก...',
-			success: () => {
-				clearSelection();
-				if (onsuccess) onsuccess();
-				return 'ปรับปรุงยอดสต๊อกสำเร็จ!';
-			},
-			error: (err: unknown) =>
-				err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการปรับปรุงยอด'
-		});
+		try {
+			toast.loading('กำลังปรับปรุงสต๊อก...');
+			await adjustMutation.mutateAsync({ input, ctx });
+			if (isFuelEnergyItem(selectedItem) && Number(deltaQty) > 0) {
+				const latestCylinders = await kitchenRepository().listFuelCylinders();
+				const currentCylinders = latestCylinders.filter(
+					(cylinder) => cylinder.item_master_id === selectedItem?._id
+				).length;
+				await createMissingFuelCylinders(
+					selectedItem._id,
+					currentCylinders + Math.ceil(Number(deltaQty)),
+					ctx,
+					latestCylinders
+				);
+			}
+			toast.success('ปรับปรุงยอดสต๊อกสำเร็จ!');
+			clearSelection();
+			if (onsuccess) onsuccess();
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการปรับปรุงยอด');
+		}
 	}
 
 	/**
@@ -371,13 +424,15 @@
 			{#if selectedLotKey}
 				<!-- Quantity Input -->
 				<div class="col-span-1">
-					<label for="new-qty" class="text-xs font-bold text-foreground">จำนวนใหม่ *</label>
+					<label for="new-qty" class="text-xs font-bold text-foreground">
+						{adjustmentType === 'add' ? 'จำนวนรับเข้า *' : 'จำนวนที่ตัดออก *'}
+					</label>
 					<div class="relative mt-1">
 						<Input
 							id="new-qty"
 							type="number"
-							placeholder="ระบุจำนวนใหม่"
-							min="0"
+							placeholder={adjustmentType === 'add' ? 'เช่น 2' : 'เช่น 1'}
+							min="0.01"
 							step="any"
 							bind:value={newQtyInput}
 							class="h-10 w-full rounded-xl border border-border/80 bg-background pr-16 pl-3 font-mono text-sm font-bold shadow-sm transition outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
@@ -407,13 +462,9 @@
 					class="col-span-1 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border/50 bg-muted/40 p-4 sm:col-span-2"
 				>
 					<div class="flex flex-col gap-0.5">
-						<span class="text-xs font-medium text-muted-foreground">คำนวณการปรับยอด (Delta):</span>
-						{#if selectedLotKey !== 'new'}
-							<span class="text-2xs text-muted-foreground/80">
-								(ยอดเดิมในคลัง: {currentLotQty}
-								{selectedItem.unit})
-							</span>
-						{/if}
+						<span class="text-xs font-medium text-muted-foreground">
+							{adjustmentType === 'add' ? 'ยอดรับเข้าคลัง:' : 'ยอดตัดออกจากคลัง:'}
+						</span>
 					</div>
 					<div class="flex items-center gap-3">
 						<span
@@ -438,14 +489,7 @@
 					<div class="mt-2 grid grid-cols-2 gap-3">
 						<button
 							type="button"
-							onclick={() => {
-								if (Number(deltaQty) > 0) {
-									toast.error('ไม่สามารถเลือกประเภทเขียนทิ้งเมื่อจำนวนใหม่มากกว่าจำนวนเดิม');
-									return;
-								}
-								adjustmentType = 'write_off';
-							}}
-							disabled={Number(deltaQty) > 0}
+							onclick={() => (adjustmentType = 'write_off')}
 							class={[
 								'flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 text-sm font-bold transition-all',
 								adjustmentType === 'write_off'
@@ -459,14 +503,7 @@
 						</button>
 						<button
 							type="button"
-							onclick={() => {
-								if (Number(deltaQty) < 0) {
-									toast.error('ไม่สามารถเลือกประเภทปรับยอดเพิ่มเมื่อจำนวนใหม่น้อยกว่าจำนวนเดิม');
-									return;
-								}
-								adjustmentType = 'add';
-							}}
-							disabled={Number(deltaQty) < 0}
+							onclick={() => (adjustmentType = 'add')}
 							class={[
 								'flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 text-sm font-bold transition-all',
 								adjustmentType === 'add'

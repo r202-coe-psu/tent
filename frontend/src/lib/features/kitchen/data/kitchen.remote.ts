@@ -9,12 +9,15 @@ import {
 	createPendingRequisition,
 	createMealSession,
 	createMealService,
-	createGasCylinderType,
-	gasCylinderTypeInputSchema,
+	createMealServiceReceipt,
+	createFuelCylinder,
+	fuelCylinderInputSchema,
 	isMealPlan,
 	isKitchenRequisition,
 	isMealService,
-	isGasCylinderType,
+	isMealServiceReceipt,
+	mealServiceReceiptOutcome,
+	isFuelCylinder,
 	isMealSession,
 	type MealPlan,
 	type MealPlanInput,
@@ -22,8 +25,9 @@ import {
 	type KitchenRequisitionInput,
 	type MealService,
 	type MealServiceInput,
-	type GasCylinderType,
-	type GasCylinderTypeInput,
+	type MealServiceReceipt,
+	type FuelCylinder,
+	type FuelCylinderInput,
 	type MealSession,
 	type MealSessionInput
 } from '../domain/kitchen';
@@ -34,6 +38,13 @@ import {
 	maxRefillKg,
 	type GasLedgerEntry
 } from '../domain/gas-ledger';
+import {
+	createMealDistributionPush,
+	isMealDistributionPush,
+	mealServicePushRemaining,
+	type MealDistributionPush,
+	type MealDistributionPushInput
+} from '../domain/meal-distribution-push';
 import {
 	createStockLedger,
 	stockBalance,
@@ -122,7 +133,7 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		const gasUsage = plan?.gas_usage ?? [];
 		if (gasUsage.length > 0) {
 			const [types, gasLedger] = await Promise.all([
-				this.listGasCylinderTypes(),
+				this.listFuelCylinders(),
 				this.listGasLedger()
 			]);
 			for (const g of gasUsage) {
@@ -262,7 +273,7 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		// 4. Check gas balance
 		if (updatedGas.length > 0) {
 			const [types, gasLedger] = await Promise.all([
-				this.listGasCylinderTypes(),
+				this.listFuelCylinders(),
 				this.listGasLedger()
 			]);
 			for (const g of updatedGas) {
@@ -367,21 +378,60 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		return this.repo.put(rejectedRequisition);
 	}
 
-	// Ensures only one meal service record exists per meal plan.
+	// Ensures only one *active* meal service exists per meal plan — a rejected
+	// service (CR-131) may be superseded by re-recording.
 	async recordMealService(input: MealServiceInput, ctx: AuthorContext): Promise<MealService> {
 		if (input.meal_plan_id) {
 			const existing = await this.getMealServiceByPlanId(input.meal_plan_id);
 			if (existing) {
-				throw new Error('recordMealService: a service is already recorded for this meal plan');
+				const receipts = await this.listMealServiceReceipts();
+				const receipt = receipts.find((r) => r.meal_service_id === existing._id);
+				if (!receipt || receipt.outcome !== 'rejected') {
+					throw new Error('recordMealService: a service is already recorded for this meal plan');
+				}
 			}
 		}
-		return this.repo.put(createMealService(input, ctx));
+		const service = createMealService(input, ctx);
+		const plan = input.meal_plan_id ? await this.getMealPlanById(input.meal_plan_id) : null;
+		const gasUsage = plan?.gas_usage ?? [];
+		if (gasUsage.length === 0) return this.repo.put(service);
+
+		const [cylinders, gasLedger] = await Promise.all([
+			this.listFuelCylinders(),
+			this.listGasLedger()
+		]);
+		for (const usage of gasUsage) {
+			const cylinder = cylinders.find((item) => item._id === usage.cylinder_id);
+			if (!cylinder)
+				throw new Error(`recordMealService: gas cylinder ${usage.cylinder_id} not found`);
+			const remaining = gasCylinderBalance(gasLedger, cylinder._id, cylinder.capacity_kg);
+			if (qtyGt(usage.consumption_kg, remaining)) {
+				throw new Error(
+					`recordMealService: cannot consume ${usage.consumption_kg} kg from "${cylinder.name}" — only ${remaining} kg remaining`
+				);
+			}
+		}
+		const gasLedgerEntries = gasUsage.map((usage) =>
+			createGasLedgerEntry(
+				{
+					cylinder_id: usage.cylinder_id,
+					qty_kg: qtyNeg(usage.consumption_kg),
+					reason: 'consumption',
+					ref_id: plan?._id ?? null
+				},
+				ctx
+			)
+		);
+		await bulkDocs(this.dbName, [service, ...gasLedgerEntries]);
+		return service;
 	}
 
-	// Finds meal service recorded for a specific meal plan.
+	// Finds the latest meal service recorded for a specific meal plan (ulid
+	// order — listMealServices() is already sorted ascending by _id).
 	async getMealServiceByPlanId(mealPlanId: string): Promise<MealService | null> {
 		const services = await this.listMealServices();
-		return services.find((s) => s.meal_plan_id === mealPlanId) ?? null;
+		const matches = services.filter((s) => s.meal_plan_id === mealPlanId);
+		return matches.length > 0 ? matches[matches.length - 1] : null;
 	}
 
 	// Finds first meal service matching date and meal period. Prefer getMealServiceByPlanId.
@@ -394,11 +444,90 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		return this.repo.allByType('meal_service', isMealService);
 	}
 
+	// Ensures only one receipt decision exists per meal_service (idempotency guard).
+	private async assertNoExistingReceipt(mealServiceId: string): Promise<void> {
+		const receipts = await this.listMealServiceReceipts();
+		if (receipts.some((r) => r.meal_service_id === mealServiceId)) {
+			throw new Error(`meal_service ${mealServiceId} already has a receipt decision`);
+		}
+	}
+
+	async confirmMealServiceReceipt(
+		mealServiceId: string,
+		ctx: AuthorContext
+	): Promise<MealServiceReceipt> {
+		await this.assertNoExistingReceipt(mealServiceId);
+		return this.repo.put(createMealServiceReceipt(mealServiceId, 'confirmed', ctx));
+	}
+
+	async rejectMealServiceReceipt(
+		mealServiceId: string,
+		reason: string,
+		ctx: AuthorContext
+	): Promise<MealServiceReceipt> {
+		await this.assertNoExistingReceipt(mealServiceId);
+		return this.repo.put(createMealServiceReceipt(mealServiceId, 'rejected', ctx, reason));
+	}
+
+	listMealServiceReceipts(): Promise<MealServiceReceipt[]> {
+		return this.repo.allByType('meal_service_receipt', isMealServiceReceipt);
+	}
+
+	// Every item must reference a meal_service whose receipt is confirmed, and
+	// stay within its remaining pushable qty — checked all-or-nothing first.
+	async createMealDistributionPush(
+		input: MealDistributionPushInput,
+		ctx: AuthorContext
+	): Promise<MealDistributionPush> {
+		const [services, receipts, pushes] = await Promise.all([
+			this.listMealServices(),
+			this.listMealServiceReceipts(),
+			this.listMealDistributionPushes()
+		]);
+		for (const item of input.items) {
+			const service = services.find((s) => s._id === item.meal_service_id);
+			if (!service) {
+				throw new Error(
+					`createMealDistributionPush: meal_service ${item.meal_service_id} not found`
+				);
+			}
+			const receipt = receipts.find((r) => r.meal_service_id === service._id);
+			if (!receipt || mealServiceReceiptOutcome(receipt) !== 'confirmed') {
+				throw new Error(
+					`createMealDistributionPush: meal_service ${service._id} has not been confirmed into stock`
+				);
+			}
+			const remaining = mealServicePushRemaining(service.actual_yield ?? 0, service._id, pushes);
+			if (item.qty > remaining) {
+				throw new Error(
+					`createMealDistributionPush: cannot push ${item.qty} of ${item.menu_label} — only ${remaining} remaining`
+				);
+			}
+		}
+		return this.repo.put(createMealDistributionPush(input, ctx));
+	}
+
+	listMealDistributionPushes(): Promise<MealDistributionPush[]> {
+		return this.repo.allByType('meal_distribution_push', isMealDistributionPush);
+	}
+
 	async confirmMealPlan(plan: MealPlan): Promise<MealPlan> {
 		if (plan.status !== 'draft') {
 			throw new Error('confirmMealPlan: only draft plans can be confirmed');
 		}
 		return this.repo.put({ ...touch(plan), status: 'confirmed' });
+	}
+
+	async updateMealPlanGasUsage(
+		plan: MealPlan,
+		gasUsage: NonNullable<MealPlan['gas_usage']>,
+		cookingStartedAt?: MealPlan['cooking_started_at']
+	): Promise<MealPlan> {
+		const next = { ...touch(plan) };
+		if (gasUsage.length > 0) next.gas_usage = gasUsage;
+		else delete next.gas_usage;
+		if (cookingStartedAt) next.cooking_started_at = cookingStartedAt;
+		return this.repo.put(next);
 	}
 
 	async updateMealPlanDraft(
@@ -418,6 +547,28 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		return this.repo.put(next);
 	}
 
+	async updateConfirmedMealPlan(
+		plan: MealPlan,
+		patch: Pick<
+			MealPlan,
+			| 'headcount'
+			| 'recipes'
+			| 'calc_source'
+			| 'label'
+			| 'gas_usage'
+			| 'target_tags'
+			| 'allocated_target'
+		>
+	): Promise<MealPlan> {
+		if (plan.status !== 'confirmed') {
+			throw new Error('updateConfirmedMealPlan: only confirmed plans can be edited this way');
+		}
+		const next = { ...touch(plan), ...patch };
+		if (patch.label === undefined) delete next.label;
+		if (patch.gas_usage === undefined) delete next.gas_usage;
+		return this.repo.put(next);
+	}
+
 	async deleteMealPlanDraft(plan: MealPlan): Promise<void> {
 		if (plan.status !== 'draft') {
 			throw new Error('deleteMealPlanDraft: only draft plans can be deleted');
@@ -425,23 +576,20 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		await this.repo.remove(plan);
 	}
 
-	createGasCylinderType(input: GasCylinderTypeInput, ctx: AuthorContext): Promise<GasCylinderType> {
-		return this.repo.put(createGasCylinderType(input, ctx));
+	createFuelCylinder(input: FuelCylinderInput, ctx: AuthorContext): Promise<FuelCylinder> {
+		return this.repo.put(createFuelCylinder(input, ctx));
 	}
 
-	listGasCylinderTypes(): Promise<GasCylinderType[]> {
-		return this.repo.allByType('gas_cylinder_type', isGasCylinderType);
+	listFuelCylinders(): Promise<FuelCylinder[]> {
+		return this.repo.allByType('fuel_cylinder', isFuelCylinder);
 	}
 
-	updateGasCylinderType(
-		doc: GasCylinderType,
-		input: GasCylinderTypeInput
-	): Promise<GasCylinderType> {
-		const d = gasCylinderTypeInputSchema.parse(input);
+	updateFuelCylinder(doc: FuelCylinder, input: FuelCylinderInput): Promise<FuelCylinder> {
+		const d = fuelCylinderInputSchema.parse(input);
 		return this.repo.put(touch({ ...doc, ...d }));
 	}
 
-	async deleteGasCylinderType(doc: GasCylinderType): Promise<void> {
+	async deleteFuelCylinder(doc: FuelCylinder): Promise<void> {
 		await this.repo.remove(doc);
 	}
 
@@ -454,10 +602,7 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		qtyKg: string,
 		ctx: AuthorContext
 	): Promise<GasLedgerEntry> {
-		const [types, gasLedger] = await Promise.all([
-			this.listGasCylinderTypes(),
-			this.listGasLedger()
-		]);
+		const [types, gasLedger] = await Promise.all([this.listFuelCylinders(), this.listGasLedger()]);
 		const cyl = types.find((t) => t._id === cylinderId);
 		if (!cyl) {
 			throw new Error(`refillGasCylinder: cylinder ${cylinderId} not found`);
@@ -475,10 +620,7 @@ export class KitchenRemoteRepository implements KitchenRepository {
 	}
 
 	async writeOffGasCylinder(cylinderId: string, ctx: AuthorContext): Promise<GasLedgerEntry> {
-		const [types, gasLedger] = await Promise.all([
-			this.listGasCylinderTypes(),
-			this.listGasLedger()
-		]);
+		const [types, gasLedger] = await Promise.all([this.listFuelCylinders(), this.listGasLedger()]);
 		const cyl = types.find((t) => t._id === cylinderId);
 		if (!cyl) {
 			throw new Error(`writeOffGasCylinder: cylinder ${cylinderId} not found`);

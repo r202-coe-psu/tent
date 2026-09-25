@@ -4,16 +4,20 @@
 	import { goto } from '$app/navigation';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { SvelteSet } from 'svelte/reactivity';
 	import {
 		useMealSession,
 		useMealPlans,
+		useCreateMealPlan,
+		useUpdateMealPlanGasUsage,
+		useUpdateConfirmedMealPlan,
 		useMealServices,
-		useKitchenRequisitions,
-		useCreatePendingRequisition,
-		useApproveKitchenRequisition,
 		useRecordMealService,
-		useDeleteMealPlanDraft,
-		useGasCylinderTypes,
+		useMealServiceReceipts,
+		mealServiceReceiptOutcome,
+		useConfirmMealServiceReceipt,
+		useRejectMealServiceReceipt,
+		useFuelCylinders,
 		useGasLedger,
 		gasCylinderBalance,
 		calculateGasConsumptionKg,
@@ -23,9 +27,17 @@
 		getActiveTagsFromSession,
 		TARGET_GROUP_LABELS,
 		MEAL_PERIOD_LABELS,
+		StoveLpgAllocation,
 		type TargetGroupTag,
 		type MealPlanGasUsage
 	} from '$lib/features/kitchen';
+	import {
+		useTickets,
+		useCreateTicket,
+		useUpdateTicketItems,
+		useReceiveTicket,
+		TICKET_STATUS_LABELS
+	} from '$lib/features/tickets';
 	import { useRecipes, useItemMasters, getItemDisplayName } from '$lib/features/catalog';
 	import { useSupplyItems } from '$lib/features/supply';
 	import { useStockBalance } from '$lib/features/operations';
@@ -36,7 +48,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { toast } from 'svelte-sonner';
-	import { qtyGt } from '$lib/utils/qty';
+	import { addQty, qtyGt } from '$lib/utils/qty';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import ChefHat from '@lucide/svelte/icons/chef-hat';
 	import Flame from '@lucide/svelte/icons/flame';
@@ -52,17 +64,22 @@
 	import Plus from '@lucide/svelte/icons/plus';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
-	import FastForward from '@lucide/svelte/icons/fast-forward';
+	import Lock from '@lucide/svelte/icons/lock';
 
 	const sessionId = $derived(page.params.session_id);
 	const planIdParam = $derived(page.url.searchParams.get('plan_id'));
 	const stageParam = $derived(page.url.searchParams.get('stage'));
+	// Receipt confirm/reject only makes sense for the warehouse-facing hub
+	// (/back-office/tickets/kitchen "จัดการ") — hidden when reached from the
+	// kitchen-facing overview (/back-office/kitchen).
+	const canManageReceipt = $derived(page.url.searchParams.get('role') === 'warehouse');
 
 	const sessionQuery = useMealSession(() => sessionId);
 	const plans = useMealPlans();
 	const services = useMealServices();
-	const requisitions = useKitchenRequisitions();
-	const gasTypes = useGasCylinderTypes();
+	const serviceReceipts = useMealServiceReceipts();
+	const tickets = useTickets();
+	const gasTypes = useFuelCylinders();
 	const gasLedger = useGasLedger();
 	const recipes = useRecipes(() => getShelterCode());
 	const itemMasters = useItemMasters(() => getShelterCode());
@@ -71,25 +88,24 @@
 
 	const getItemName = (id: string) => getItemDisplayName(id, itemMasters.data, supplyItems.data);
 
-	const createRequisitionMutation = useCreatePendingRequisition();
-	const approveRequisitionMutation = useApproveKitchenRequisition();
+	const createMealPlanMutation = useCreateMealPlan();
+	const updateMealPlanGasUsageMutation = useUpdateMealPlanGasUsage();
+	const updateConfirmedMealPlanMutation = useUpdateConfirmedMealPlan();
+	const createTicketMutation = useCreateTicket();
+	const updateTicketItemsMutation = useUpdateTicketItems();
+	const receiveTicketMutation = useReceiveTicket();
 	const recordServiceMutation = useRecordMealService();
-	const deletePlanMutation = useDeleteMealPlanDraft();
+	const confirmReceiptMutation = useConfirmMealServiceReceipt();
+	const rejectReceiptMutation = useRejectMealServiceReceipt();
 
 	const session = $derived(sessionQuery.data);
 
-	const sessionPlans = $derived.by(() => {
-		if (!sessionId) return [];
-		return (plans.data ?? []).filter((p) => p.meal_session_id === sessionId);
-	});
-
 	// Current Active Batch State
 	let currentStage = $state<'A' | 'B' | 'C'>('A');
-	let isBypassed = $state(false);
 
-	// Plan & Requisition currently tracked in the wizard
+	// Plan & ticket currently tracked in the wizard
 	let activePlanId = $state<string | null>(null);
-	let activeRequisitionId = $state<string | null>(null);
+	let activeTicketId = $state<string | null>(null);
 
 	// Sync activePlanId from query parameter
 	$effect(() => {
@@ -113,32 +129,93 @@
 		return (plans.data ?? []).find((p) => p._id === activePlanId) ?? null;
 	});
 
-	const activeRequisition = $derived.by(() => {
-		if (activeRequisitionId) {
-			return (requisitions.data ?? []).find((r) => r._id === activeRequisitionId) ?? null;
+	const activeTicket = $derived.by(() => {
+		if (activeTicketId) {
+			return (tickets.data ?? []).find((t) => t._id === activeTicketId) ?? null;
 		}
 		if (activePlanId) {
-			return (requisitions.data ?? []).find((r) => r.meal_plan_id === activePlanId) ?? null;
+			return (
+				(tickets.data ?? []).find(
+					(t) => t.meal_plan_id === activePlanId && t.status !== 'CANCELLED'
+				) ?? null
+			);
 		}
 		return null;
 	});
 
+	// Latest service for the plan (ulid order) — a plan may have more than one
+	// after a reject-and-redo cycle (CR-131).
 	const activeService = $derived.by(() => {
 		if (!activePlanId) return null;
-		return (services.data ?? []).find((s) => s.meal_plan_id === activePlanId) ?? null;
+		const matches = (services.data ?? []).filter((s) => s.meal_plan_id === activePlanId);
+		return matches.length > 0 ? matches[matches.length - 1] : null;
 	});
 
-	// Synchronize stage if activeRequisition changes
-	$effect(() => {
-		if (activeRequisition) {
-			if (activeRequisition.status === 'approved' && currentStage === 'B') {
-				// stay on B or user can click proceed to C
-			}
-		}
+	// CR-129/CR-131: warehouse must decide (confirm/reject) before this batch
+	// counts as delivered; a rejected service can be superseded by re-recording.
+	const activeServiceReceipt = $derived.by(() => {
+		if (!activeService) return null;
+		return (
+			(serviceReceipts.data ?? []).find((r) => r.meal_service_id === activeService._id) ?? null
+		);
 	});
+	const activeServiceOutcome = $derived(
+		activeServiceReceipt ? mealServiceReceiptOutcome(activeServiceReceipt) : undefined
+	);
+	const serviceReceiptConfirmed = $derived(activeServiceOutcome === 'confirmed');
+	const serviceRejected = $derived(activeServiceOutcome === 'rejected');
+	// A rejected service doesn't lock the form — kitchen can record a fresh one (CR-131).
+	const isServiceFinalized = $derived(!!activeService && !serviceRejected);
+
+	let showRejectForm = $state(false);
+	let rejectReason = $state('');
+
+	async function handleConfirmServiceReceipt() {
+		if (!activeService) return;
+		try {
+			await confirmReceiptMutation.mutateAsync({
+				mealServiceId: activeService._id,
+				ctx: { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'kitchen_staff' }
+			});
+			toast.success('ยืนยันตรวจรับเข้าสต็อกแล้ว');
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'ยืนยันตรวจรับไม่สำเร็จ');
+		}
+	}
+
+	async function handleRejectServiceReceipt() {
+		if (!activeService) return;
+		if (!rejectReason.trim()) {
+			toast.error('กรุณาระบุเหตุผลที่ปฏิเสธการรับมอบ');
+			return;
+		}
+		try {
+			await rejectReceiptMutation.mutateAsync({
+				mealServiceId: activeService._id,
+				reason: rejectReason.trim(),
+				ctx: { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'kitchen_staff' }
+			});
+			toast.success('ตีกลับโรงครัวแล้ว');
+			showRejectForm = false;
+			rejectReason = '';
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'ปฏิเสธการรับมอบไม่สำเร็จ');
+		}
+	}
 
 	// --- Stage A: Form States ---
 	let selectedRecipeId = $state<string>('');
+	let recipeMode = $state<'bom' | 'custom'>('custom');
+
+	function setRecipeMode(mode: 'bom' | 'custom') {
+		recipeMode = mode;
+		if (mode === 'custom' && selectedRecipeId) {
+			selectedRecipeId = '';
+			isIngredientsManuallyEdited = false;
+			ingredientsList = calculateRecipeIngredients('', allocatedTarget);
+			gasRows.forEach((r) => (r.isManuallyEdited = false));
+		}
+	}
 	let menuLabel = $state('');
 	let allocatedTarget = $state(50);
 	let targetTags = $state<TargetGroupTag[]>(['regular']);
@@ -266,7 +343,12 @@
 	let lastLoadedPlanId = $state<string | null>(null);
 
 	$effect(() => {
-		if (activePlan && activePlan._id !== lastLoadedPlanId) {
+		// Wait for fuel cylinders to load before reconstructing gasRows from
+		// activePlan.gas_usage — cylinder_id → burn_rate_kg_per_hour lookups
+		// below silently fail while gasTypes.data is still undefined, baking a
+		// wrong fallback ('1.0' h) into state that a later cylinder-list load
+		// can no longer correct (lastLoadedPlanId already latched).
+		if (activePlan && activePlan._id !== lastLoadedPlanId && gasTypes.data) {
 			lastLoadedPlanId = activePlan._id;
 			menuLabel = activePlan.label ?? '';
 			allocatedTarget = activePlan.allocated_target ?? activePlan.headcount?.total ?? 50;
@@ -277,35 +359,47 @@
 			) as TargetGroupTag[];
 			targetTags = tags;
 			isEveryone = (tags as string[]).includes('everyone') || tags.length === 5;
-			selectedRecipeId = activePlan.recipes?.[0]?.recipe_id ?? '';
+			const planRecipeId = activePlan.recipes?.[0]?.recipe_id;
+			selectedRecipeId = planRecipeId && planRecipeId !== 'recipe:custom' ? planRecipeId : '';
+			recipeMode = selectedRecipeId ? 'bom' : 'custom';
+			cookingStarted = !!activePlan.cooking_started_at;
 			if (activePlan.gas_usage && activePlan.gas_usage.length > 0) {
-				gasRows = activePlan.gas_usage.map((gu) => {
-					const cyl = (gasTypes.data ?? []).find((t) => t._id === gu.cylinder_id);
-					let hrs = '1.0';
-					if (cyl && cyl.burn_rate_kg_per_hour) {
-						const consumption = parseFloat(gu.consumption_kg) || 0;
-						const rate = parseFloat(cyl.burn_rate_kg_per_hour) || 1;
-						hrs = (Math.round((consumption / rate) * 10) / 10).toFixed(1);
-					}
-					return {
-						cylinder_id: gu.cylinder_id,
-						hours: hrs,
-						isManuallyEdited: true
-					};
-				});
+				const repairedRows = repairLegacyGasRows(
+					activePlan.gas_usage,
+					activePlan.recipes?.[0]?.recipe_id ?? selectedRecipeId,
+					allocatedTarget
+				);
+				gasRows =
+					repairedRows ??
+					activePlan.gas_usage.map((gu) => {
+						const cyl = (gasTypes.data ?? []).find((t) => t._id === gu.cylinder_id);
+						let hrs = '1.0';
+						if (cyl && cyl.burn_rate_kg_per_hour) {
+							const consumption = parseFloat(gu.consumption_kg) || 0;
+							const rate = parseFloat(cyl.burn_rate_kg_per_hour) || 1;
+							hrs = (Math.round((consumption / rate) * 10) / 10).toFixed(1);
+						}
+						return {
+							cylinder_id: gu.cylinder_id,
+							hours: hrs,
+							isManuallyEdited: true
+						};
+					});
 			} else {
 				const defaultCylId = gasTypes.data?.[0]?._id ?? '';
 				gasRows = [{ cylinder_id: defaultCylId, hours: '1.5', isManuallyEdited: false }];
 			}
 
-			const req = (requisitions.data ?? []).find((r) => r.meal_plan_id === activePlan._id);
-			if (req?.items && req.items.length > 0) {
-				ingredientsList = req.items.map((it) => {
+			const ticketForPlan = (tickets.data ?? []).find(
+				(t) => t.meal_plan_id === activePlan._id && t.status !== 'CANCELLED'
+			);
+			if (ticketForPlan?.items && ticketForPlan.items.length > 0) {
+				ingredientsList = ticketForPlan.items.map((it) => {
 					const master = (itemMasters.data ?? []).find((m) => m._id === it.item_id);
 					return {
 						item_id: it.item_id,
 						name: master?.name || it.item_id,
-						needed: String(it.qty_requested),
+						needed: String(it.requested_qty),
 						unit: it.unit
 					};
 				});
@@ -322,6 +416,7 @@
 			const count = calculateTargetFromTags(targetTags);
 			allocatedTarget = count > 0 ? count : session?.target_headcount?.total || 50;
 			selectedRecipeId = '';
+			recipeMode = 'custom';
 			isIngredientsManuallyEdited = false;
 			ingredientsList = calculateRecipeIngredients('', allocatedTarget);
 			showAddIngredient = false;
@@ -329,41 +424,6 @@
 			gasRows = [{ cylinder_id: defaultCylId, hours: '1.5', isManuallyEdited: false }];
 		}
 	});
-
-	function switchToNewBatch() {
-		activePlanId = null;
-		activeRequisitionId = null;
-		lastLoadedPlanId = null;
-		currentStage = 'A';
-		menuLabel = '';
-		targetTags = getActiveSessionTags();
-		isEveryone = targetTags.length === 5;
-		const count = calculateTargetFromTags(targetTags);
-		allocatedTarget = count > 0 ? count : session?.target_headcount?.total || 50;
-		selectedRecipeId = '';
-		isIngredientsManuallyEdited = false;
-		ingredientsList = calculateRecipeIngredients('', allocatedTarget);
-		showAddIngredient = false;
-		const defaultCylId = gasTypes.data?.[0]?._id ?? '';
-		gasRows = [{ cylinder_id: defaultCylId, hours: '1.5', isManuallyEdited: false }];
-		goto(resolve(`/back-office/kitchen/production-board/${sessionId}`), { replaceState: true });
-	}
-
-	function selectBatch(planId: string) {
-		activePlanId = planId;
-		const req = (requisitions.data ?? []).find((r) => r.meal_plan_id === planId);
-		const svc = (services.data ?? []).find((s) => s.meal_plan_id === planId);
-		if (svc || req?.status === 'approved') {
-			currentStage = 'C';
-		} else if (req) {
-			currentStage = 'B';
-		} else {
-			currentStage = 'A';
-		}
-		goto(resolve(`/back-office/kitchen/production-board/${sessionId}?plan_id=${planId}`), {
-			replaceState: true
-		});
-	}
 
 	// Auto-select first gas cylinder when types load
 	$effect(() => {
@@ -410,8 +470,52 @@
 
 	function calculateCookingHoursFromRecipe(recipeId: string, portions: number): string | null {
 		const recipe = (recipes.data ?? []).find((r) => r._id === recipeId);
+		// Legacy seed rows used standard_portions=1, which made 233 portions
+		// look like 233 cooking hours. Treat that sentinel as 50 portions/hour.
+		if (recipe && Number(recipe.standard_portions) <= 1 && portions > 1) {
+			return Math.max(0.1, Math.round((portions / 50) * 10) / 10).toFixed(1);
+		}
 		return calculateCookingHoursFromPortions(recipe, portions);
 	}
+
+	function repairLegacyGasRows(
+		stored: MealPlanGasUsage[],
+		recipeId: string,
+		portions: number
+	): GasAllocationRow[] | null {
+		// The legacy bug only ever produced a single gas_usage row (multi-cylinder
+		// support didn't exist yet when it happened) — real multi-row data must
+		// never be collapsed down to one row here.
+		if (stored.length !== 1) return null;
+		const firstCylinderId = stored[0]?.cylinder_id;
+		const cylinder = (gasTypes.data ?? []).find((item) => item._id === firstCylinderId);
+		if (!cylinder) return null;
+		// Legacy fingerprint: a single tank can never physically hold more gas
+		// than its own capacity — real recordings never exceed that. Anything
+		// under capacity is genuine data; leave it alone.
+		if (Number(stored[0].consumption_kg) <= Number(cylinder.capacity_kg)) return null;
+		const expectedHours =
+			calculateCookingHoursFromRecipe(recipeId, portions) ??
+			(portions > 0 ? Math.max(0.1, portions / 50).toFixed(1) : null);
+		if (!expectedHours) return null;
+		return [{ cylinder_id: cylinder._id, hours: expectedHours, isManuallyEdited: false }];
+	}
+
+	let repairedGasPlanId = $state<string | null>(null);
+	$effect(() => {
+		if (!activePlan || repairedGasPlanId === activePlan._id || !activePlan.gas_usage?.length)
+			return;
+		const repaired = repairLegacyGasRows(
+			activePlan.gas_usage,
+			activePlan.recipes?.[0]?.recipe_id ?? selectedRecipeId,
+			allocatedTarget
+		);
+		if (repaired) {
+			gasRows = repaired;
+			repairedGasPlanId = activePlan._id;
+		}
+	});
+
 	function handleRecipeChange(e: Event) {
 		const target = e.target as HTMLSelectElement;
 		selectedRecipeId = target.value;
@@ -577,7 +681,61 @@
 	// Backward-compatibility alias for Stage C fallback
 	const estimatedGasKg = $derived(totalEstimatedGasKg);
 
-	const isGasInsufficient = $derived(gasRowsAnalysis.some((r) => r.isInsufficient));
+	// Older demo plans stored the number of portions as cooking hours (233 h),
+	// producing an impossible 116.5 kg estimate. Keep valid custom allocations,
+	// but repair that legacy shape from the recipe's standard production rate.
+	const plannedGasUsageForStage = $derived.by(() => {
+		const stored = activePlan?.gas_usage ?? [];
+		const recipeId = activePlan?.recipes?.[0]?.recipe_id ?? selectedRecipeId;
+		const expectedHours =
+			calculateCookingHoursFromRecipe(recipeId, allocatedTarget) ??
+			(allocatedTarget > 0 ? Math.max(0.1, allocatedTarget / 50).toFixed(1) : null);
+		const firstCylinderId = stored[0]?.cylinder_id || gasRows[0]?.cylinder_id;
+		const cylinder = (gasTypes.data ?? []).find((item) => item._id === firstCylinderId);
+		if (!expectedHours || !cylinder) return stored;
+		const expectedKg = calculateGasConsumptionKg(Number(expectedHours), cylinder);
+		return [{ cylinder_id: cylinder._id, consumption_kg: expectedKg }];
+	});
+
+	const plannedGasRequiredKg = $derived(
+		plannedGasUsageForStage.reduce((total, item) => addQty(total, item.consumption_kg), '0')
+	);
+	const allocatedGasKg = $derived(
+		gasRowsAnalysis.reduce((total, row) => addQty(total, row.consumptionKg), '0')
+	);
+	const isGasAllocationIncomplete = $derived(
+		qtyGt(plannedGasRequiredKg, 0) && qtyGt(plannedGasRequiredKg, allocatedGasKg)
+	);
+	const isGasInsufficient = $derived(
+		gasRowsAnalysis.some((r) => r.isInsufficient) || isGasAllocationIncomplete
+	);
+
+	// Cylinders another confirmed+cooking plan is already drawing from — block
+	// starting cooking here too, not just graying out the option (CR-127 follow-up).
+	const gasCylinderIdsInUseByOthers = $derived.by(() => {
+		const activePlans = (plans.data ?? []).filter(
+			(plan) =>
+				plan._id !== activePlanId &&
+				plan.status === 'confirmed' &&
+				!!plan.cooking_started_at &&
+				!(services.data ?? []).some((service) => service.meal_plan_id === plan._id)
+		);
+		const ids = new SvelteSet<string>();
+		for (const plan of activePlans) {
+			for (const usage of plan.gas_usage ?? []) {
+				ids.add(usage.cylinder_id);
+			}
+		}
+		return ids;
+	});
+	const hasGasCylinderConflict = $derived(
+		gasRows.some((row) => {
+			if (!row.cylinder_id) return false;
+			if (gasCylinderIdsInUseByOthers.has(row.cylinder_id)) return true;
+			const cylinder = (gasTypes.data ?? []).find((c) => c._id === row.cylinder_id);
+			return !!cylinder?.deactivated;
+		})
+	);
 
 	// Submit Stage A ➔ Create Requisition
 	async function handleCreateRequisition() {
@@ -623,86 +781,163 @@
 				consumption_kg: r.consumptionKg
 			}));
 
+		const ctx = {
+			shelterCode: getShelterCode(),
+			createdBy: authStore.user?.name ?? 'kitchen_staff'
+		};
+
 		try {
-			const res = await createRequisitionMutation.mutateAsync({
-				params: {
-					planInput: {
-						date: session.date,
-						meal: session.meal,
-						meal_session_id: session._id,
-						label: finalLabel,
-						target_tags: isEveryone ? ['everyone'] : targetTags,
-						allocated_target: allocatedTarget,
-						headcount: {
-							total: allocatedTarget,
-							halal: targetTags.includes('halal') ? allocatedTarget : 0,
-							soft_food: targetTags.includes('soft_food') ? allocatedTarget : 0,
-							infant: targetTags.includes('infant') ? allocatedTarget : 0
-						},
-						recipes: chosenRecipe
-							? [{ recipe_id: chosenRecipe._id, planned_qty: allocatedTarget }]
-							: [{ recipe_id: 'recipe:custom', planned_qty: allocatedTarget }],
-						gas_usage: gasUsage.length > 0 ? gasUsage : undefined
+			// Plan and ticket are separate features now (CR-121/CR-126) — created
+			// sequentially rather than one atomic bulkDocs. If ticket creation
+			// fails after the plan is written, the plan is just an unticketed
+			// draft/confirmed plan — recoverable by re-opening a ticket for it,
+			// not a correctness bug.
+			const planDoc = await createMealPlanMutation.mutateAsync({
+				input: {
+					date: session.date,
+					meal: session.meal,
+					meal_session_id: session._id,
+					label: finalLabel,
+					target_tags: isEveryone ? ['everyone'] : targetTags,
+					allocated_target: allocatedTarget,
+					headcount: {
+						total: allocatedTarget,
+						halal: targetTags.includes('halal') ? allocatedTarget : 0,
+						soft_food: targetTags.includes('soft_food') ? allocatedTarget : 0,
+						infant: targetTags.includes('infant') ? allocatedTarget : 0
 					},
-					requisitionInput: {
-						meal_session_id: session._id,
-						items: ingredientsList.map((ing) => ({
-							item_id: ing.item_id,
-							qty_requested: ing.needed,
-							unit: ing.unit
-						})),
-						gas_drawdown: gasUsage.map((g) => ({
-							cylinder_id: g.cylinder_id,
-							qty_kg: g.consumption_kg
-						}))
-					}
+					recipes: chosenRecipe
+						? [{ recipe_id: chosenRecipe._id, planned_qty: allocatedTarget }]
+						: [{ recipe_id: 'recipe:custom', planned_qty: allocatedTarget }],
+					gas_usage: gasUsage.length > 0 ? gasUsage : undefined
 				},
-				ctx: {
-					shelterCode: getShelterCode(),
-					createdBy: authStore.user?.name ?? 'kitchen_staff'
+				ctx
+			});
+
+			const ticket = await createTicketMutation.mutateAsync({
+				input: {
+					meal_plan_id: planDoc._id,
+					items: ingredientsList.map((ing) => ({
+						item_id: ing.item_id,
+						item_name: getItemName(ing.item_id),
+						unit: ing.unit,
+						requested_qty: ing.needed
+					}))
+					// LPG dispatch paused temporarily. Keep gas_usage on meal plan
+					// for planning, but do not put gas on requisition ticket.
+				},
+				ctx
+			});
+
+			activePlanId = planDoc._id;
+			activeTicketId = ticket._id;
+			currentStage = 'B';
+			toast.success(`เปิดตั๋วเบิกวัตถุดิบ ${ticket.ticket_no} แล้ว — รอคลังจัดของและอนุมัติ`);
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : 'ไม่สามารถเปิดตั๋วเบิกได้';
+			toast.error(msg);
+		}
+	}
+
+	// Edit an already-created plan/ticket while the ticket is still
+	// PENDING_PICK (CR-127) — kitchen correcting its own request, not
+	// self-approving. Ticket updates first: if the warehouse already moved
+	// past PENDING_PICK, updateTicketItems throws before the plan is touched.
+	async function handleSaveEdits() {
+		if (!session || !activePlan || !activeTicket) return;
+		if (activeTicket.status !== 'PENDING_PICK') {
+			toast.error('แก้ไขไม่ได้ — คลังเริ่มดำเนินการกับตั๋วนี้แล้ว');
+			return;
+		}
+		if (allocatedTarget <= 0) {
+			toast.error('กรุณาระบุจำนวนจานเป้าหมาย');
+			return;
+		}
+		if (targetTags.length === 0) {
+			toast.error('กรุณาเลือกกลุ่มเป้าหมายอย่างน้อย 1 กลุ่ม');
+			return;
+		}
+		if (ingredientsList.length === 0) {
+			toast.error('กรุณาระบุวัตถุดิบอย่างน้อย 1 รายการ');
+			return;
+		}
+		const hasInvalidQty = ingredientsList.some((ing) => Number(ing.needed) <= 0);
+		if (hasInvalidQty) {
+			toast.error('กรุณาระบุจำนวนวัตถุดิบให้มากกว่า 0 ทุกรายการ');
+			return;
+		}
+
+		const chosenRecipe = (recipes.data ?? []).find((r) => r._id === selectedRecipeId);
+		const finalLabel = menuLabel.trim() || chosenRecipe?.label || 'เมนูประกอบอาหาร';
+
+		const hasInvalidGasRow = gasRows.some((r) => !r.cylinder_id || Number(r.hours) <= 0);
+		if (hasInvalidGasRow) {
+			toast.error('กรุณาเลือกถังแก๊สและระบุชั่วโมงการใช้งานให้ถูกต้องทุกแถว');
+			return;
+		}
+		const cylinderIds = gasRows.map((r) => r.cylinder_id).filter(Boolean);
+		if (new Set(cylinderIds).size !== cylinderIds.length) {
+			toast.error('มีถังแก๊สซ้ำกัน กรุณาเลือกถังแก๊สที่ไม่ซ้ำกันในแต่ละแถว');
+			return;
+		}
+
+		const gasUsage: MealPlanGasUsage[] = gasRowsAnalysis
+			.filter((r) => r.cylinder_id && Number(r.consumptionKg) > 0)
+			.map((r) => ({
+				cylinder_id: r.cylinder_id,
+				consumption_kg: r.consumptionKg
+			}));
+
+		try {
+			await updateTicketItemsMutation.mutateAsync({
+				ticket: activeTicket,
+				items: ingredientsList.map((ing) => ({
+					item_id: ing.item_id,
+					item_name: getItemName(ing.item_id),
+					unit: ing.unit,
+					requested_qty: ing.needed
+				}))
+			});
+
+			await updateConfirmedMealPlanMutation.mutateAsync({
+				plan: activePlan,
+				patch: {
+					label: finalLabel,
+					target_tags: isEveryone ? ['everyone'] : targetTags,
+					allocated_target: allocatedTarget,
+					headcount: {
+						total: allocatedTarget,
+						halal: targetTags.includes('halal') ? allocatedTarget : 0,
+						soft_food: targetTags.includes('soft_food') ? allocatedTarget : 0,
+						infant: targetTags.includes('infant') ? allocatedTarget : 0
+					},
+					recipes: chosenRecipe
+						? [{ recipe_id: chosenRecipe._id, planned_qty: allocatedTarget }]
+						: [{ recipe_id: 'recipe:custom', planned_qty: allocatedTarget }],
+					gas_usage: gasUsage.length > 0 ? gasUsage : undefined
 				}
 			});
 
-			activePlanId = res.plan?._id ?? null;
-			activeRequisitionId = res.requisition._id;
-			currentStage = 'B';
-			toast.success('สร้างรายการขอเบิกวัตถุดิบเรียบร้อยแล้ว');
+			toast.success('บันทึกการแก้ไขแล้ว');
 		} catch (err) {
-			const msg = err instanceof Error ? err.message : 'ไม่สามารถสร้างใบเบิกได้';
+			const msg = err instanceof Error ? err.message : 'ไม่สามารถบันทึกการแก้ไขได้';
 			toast.error(msg);
 		}
 	}
 
-	async function handleBypass() {
-		isBypassed = true;
-		if (activeRequisition && activeRequisition.status === 'pending') {
-			try {
-				await approveRequisitionMutation.mutateAsync({
-					requisitionId: activeRequisition._id,
-					approver: authStore.user?.name ?? 'kitchen_staff (Bypass)'
-				});
-			} catch (err) {
-				console.warn('Bypass auto-approval note:', err);
-			}
-		}
-		currentStage = 'C';
-		toast.info('ข้ามขั้นตอนการขอเบิกวัตถุดิบแล้ว — เข้าสู่ขั้นตอนเริ่มปรุงอาหาร');
-	}
-
-	function handleEditAndReRequest() {
-		currentStage = 'A';
-	}
-
-	async function handleCancelBatch() {
-		if (!activePlan) return;
-		if (!confirm('คุณต้องการยกเลิกชุดการผลิตนี้หรือไม่?')) return;
+	// IN_TRANSIT → COMPLETED — kitchen confirms it physically received the
+	// dispatched ingredients (CR-126 — replaces the old self-approve/bypass step).
+	async function handleReceiveTicket() {
+		if (!activeTicket) return;
 		try {
-			await deletePlanMutation.mutateAsync(activePlan);
-			toast.success('ยกเลิกชุดการผลิตแล้ว');
-			goto(resolve('/back-office/kitchen'));
+			await receiveTicketMutation.mutateAsync({
+				ticket: activeTicket,
+				ctx: { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'kitchen_staff' }
+			});
+			currentStage = 'C';
+			toast.success('ยืนยันรับวัตถุดิบแล้ว — เข้าสู่ขั้นตอนเริ่มปรุงอาหาร');
 		} catch (err) {
-			const msg = err instanceof Error ? err.message : 'ไม่สามารถยกเลิกได้';
-			toast.error(msg);
+			toast.error(err instanceof Error ? err.message : 'ยืนยันรับวัตถุดิบไม่สำเร็จ');
 		}
 	}
 
@@ -714,11 +949,12 @@
 	let extOutside = $state(0);
 	let actualGasUsedKg = $state('');
 	let serviceNotes = $state('');
+	let cookingStarted = $state(false);
 
 	// Init stage C defaults from activeService or allocatedTarget
 	$effect(() => {
 		if (currentStage === 'C') {
-			if (activeService) {
+			if (activeService && !serviceRejected) {
 				yieldActualPortions = activeService.actual_yield ?? activePlan?.allocated_target ?? 50;
 				servedInShelter = activeService.served;
 				wastePortions = activeService.waste;
@@ -734,19 +970,89 @@
 		}
 	});
 
+	// Stage C header content — one of 3 cooking sub-phases (CR-127 follow-up UI).
+	const stageCInfo = $derived.by(() => {
+		if (serviceRejected) {
+			return {
+				icon: XCircle,
+				badgeClass: 'bg-red-100 text-red-800',
+				dotClass: 'bg-red-100 text-red-600',
+				badgeLabel: 'ถูกตีกลับจากคลัง (REJECTED)',
+				title: 'คลังปฏิเสธการรับมอบ ต้องบันทึกผลผลิตใหม่',
+				description: `เหตุผล: ${activeServiceReceipt?.reason ?? '-'}`
+			};
+		}
+		if (serviceReceiptConfirmed) {
+			return {
+				icon: CheckCircle2,
+				badgeClass: 'bg-emerald-100 text-emerald-800',
+				dotClass: 'bg-emerald-100 text-emerald-600',
+				badgeLabel: 'ส่งมอบเสร็จสิ้น (DELIVERED)',
+				title: 'คลังตรวจรับเข้าสต็อกเรียบร้อยแล้ว',
+				description: 'ผลผลิตถูกนำเข้ารายการคลังสินค้าพร้อมจ่ายเรียบร้อยแล้ว'
+			};
+		}
+		if (activeService) {
+			return {
+				icon: CheckCircle2,
+				badgeClass: 'bg-amber-100 text-amber-800',
+				dotClass: 'bg-amber-100 text-amber-600',
+				badgeLabel: 'รอคลังตรวจรับเข้าสต็อก (PENDING STOCK RECEIPT)',
+				title: 'บันทึกผลผลิตแล้ว รอคลังตรวจรับเข้าสต็อก (Awaiting Stock Receipt)',
+				description:
+					'บันทึกจำนวนที่ปรุงได้จริงและแจกจ่ายเรียบร้อยแล้ว ระบบตัดสต็อกวัตถุดิบและเพิ่มผลผลิตเข้าสต็อกให้อัตโนมัติ'
+			};
+		}
+		if (cookingStarted) {
+			return {
+				icon: Flame,
+				badgeClass: 'bg-orange-100 text-orange-800',
+				dotClass: 'bg-orange-100 text-orange-600',
+				badgeLabel: 'กำลังปรุงอาหาร (COOKING)',
+				title: 'กำลังปรุงอาหารอยู่ (Cooking in Progress)',
+				description:
+					'เตาแก๊สกำลังทำงานอยู่ ระบุจำนวนผลผลิตจริงและปริมาณแก๊สที่ใช้เมื่อปรุงเสร็จ แล้วกดบันทึกผลผลิตด้านล่าง'
+			};
+		}
+		return {
+			icon: CheckCircle2,
+			badgeClass: 'bg-sky-100 text-sky-800',
+			dotClass: 'bg-sky-100 text-sky-600',
+			badgeLabel: 'วัตถุดิบพร้อมปรุง (READY TO COOK)',
+			title: 'วัตถุดิบพร้อมประกอบอาหารเรียบร้อยแล้ว (Ready to Cook)',
+			description:
+				'วัตถุดิบและแก๊สหุงต้มตรวจรับเข้าโรงครัวเรียบร้อยแล้ว กดปุ่ม "เริ่มปรุงอาหาร" ด้านล่างเพื่อเปลี่ยนสถานะเป็นกำลังผลิตจริง หรือระบุจำนวนผลผลิตจริงเมื่อประกอบอาหารเสร็จ'
+		};
+	});
+
 	async function handleRecordService() {
 		if (!session || !activePlanId) return;
+		if (isGasInsufficient) {
+			toast.error('แก๊สไม่เพียงพอ กรุณาเพิ่มถังหรือปรับชั่วโมงปรุงก่อนบันทึก');
+			return;
+		}
 		if (yieldActualPortions < 0) {
 			toast.error('กรุณาระบุจำนวนจานที่ปรุงได้จริง');
 			return;
 		}
 
-		if (activeService) {
+		if (isServiceFinalized) {
 			toast.info('ชุดการผลิตนี้ได้บันทึกผลผลิตเรียบร้อยแล้ว');
 			return;
 		}
 
 		try {
+			if (activePlan) {
+				await updateMealPlanGasUsageMutation.mutateAsync({
+					plan: activePlan,
+					gasUsage: gasRowsAnalysis
+						.filter((row) => row.cylinder_id && Number(row.consumptionKg) > 0)
+						.map((row) => ({
+							cylinder_id: row.cylinder_id,
+							consumption_kg: row.consumptionKg
+						}))
+				});
+			}
 			await recordServiceMutation.mutateAsync({
 				input: {
 					date: session.date,
@@ -774,6 +1080,34 @@
 			toast.error(msg);
 		}
 	}
+
+	async function handleStartCooking() {
+		if (!activePlan) return;
+		if (isGasInsufficient) {
+			toast.error('แก๊สไม่เพียงพอ กรุณาเพิ่มถังหรือปรับชั่วโมงปรุงก่อนเริ่มปรุง');
+			return;
+		}
+		if (hasGasCylinderConflict) {
+			toast.error('ถังแก๊สที่เลือกกำลังถูกใช้งานโดยชุดการผลิตอื่น หรือใช้ไม่ได้ กรุณาเลือกถังอื่น');
+			return;
+		}
+		try {
+			await updateMealPlanGasUsageMutation.mutateAsync({
+				plan: activePlan,
+				gasUsage: gasRowsAnalysis
+					.filter((row) => row.cylinder_id && Number(row.consumptionKg) > 0)
+					.map((row) => ({
+						cylinder_id: row.cylinder_id,
+						consumption_kg: row.consumptionKg
+					})),
+				cookingStartedAt: new Date().toISOString()
+			});
+			cookingStarted = true;
+			toast.success('เริ่มปรุงอาหารแล้ว — ถังแก๊สเปลี่ยนเป็นกำลังใช้');
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'เริ่มปรุงอาหารไม่สำเร็จ');
+		}
+	}
 </script>
 
 <svelte:head>
@@ -781,139 +1115,104 @@
 </svelte:head>
 
 <div class="flex-1 space-y-4 overflow-auto p-4">
-	<!-- Top Navigation Breadcrumb & Session Info Header -->
-	<div class="flex flex-wrap items-center justify-between gap-3 border-b pb-3">
-		<div class="flex items-center gap-2">
-			<a
-				href={resolve('/back-office/kitchen')}
-				class="inline-flex h-8 w-8 items-center justify-center rounded-lg border bg-background text-muted-foreground transition-colors hover:bg-muted"
-			>
-				<ArrowLeft class="h-4 w-4" />
-			</a>
+	<!-- Header Banner -->
+	<div class="rounded-2xl bg-[#0A2647] p-5 text-white shadow-sm">
+		<div class="flex flex-wrap items-start justify-between gap-4">
 			<div>
-				<div class="flex items-center gap-2">
-					<h2 class="text-base font-bold text-foreground">กระดานการผลิตอาหาร (Production Board)</h2>
-					{#if session}
-						<span
-							class="rounded-full px-2.5 py-0.5 text-xs font-semibold {session.meal === 'breakfast'
-								? 'bg-amber-100 text-amber-800'
-								: session.meal === 'lunch'
-									? 'bg-orange-100 text-orange-800'
-									: session.meal === 'dinner'
-										? 'bg-indigo-100 text-indigo-800'
-										: 'bg-emerald-100 text-emerald-800'}"
-						>
-							{MEAL_PERIOD_LABELS[session.meal] ?? session.meal}
-						</span>
-					{/if}
-				</div>
+				<a
+					href={resolve('/back-office/kitchen')}
+					class="inline-flex items-center gap-1.5 text-xs font-semibold text-white/80 transition-colors hover:text-white"
+				>
+					<ArrowLeft class="h-3.5 w-3.5" />
+					ย้อนกลับหน้าสรุปมื้อ
+				</a>
+				<h1 class="mt-2 text-xl font-extrabold tracking-tight sm:text-2xl">
+					แผงควบคุมและจัดสรรเครื่องครัวภัยพิบัติ (Production Setup Board)
+				</h1>
+				<p class="mt-1 text-xs text-white/70">
+					บริหารสายการผลิต คำนวณวัตถุดิบและเบิกพัสดุสำหรับมื้ออาหาร
+				</p>
 				{#if session}
-					<p class="text-xs text-muted-foreground">
-						{session.name} · {session.date} · เป้าหมายรวม {session.target_headcount.total} คน
+					<p class="mt-1 text-2xs text-white/60">
+						{session.name} · {session.date} · {MEAL_PERIOD_LABELS[session.meal] ?? session.meal}
 					</p>
 				{/if}
 			</div>
-		</div>
-
-		<!-- 3-Stage Progress Stepper -->
-		<div class="flex items-center gap-2 rounded-lg border bg-muted/30 p-1 text-xs">
-			<button
-				type="button"
-				class="flex items-center gap-1.5 rounded-md px-3 py-1 font-semibold transition-colors {currentStage ===
-				'A'
-					? 'bg-primary text-primary-foreground shadow-sm'
-					: 'text-muted-foreground'}"
-				onclick={() => (currentStage = 'A')}
-			>
-				<span class="flex h-4 w-4 items-center justify-center rounded-full bg-white/20 text-2xs"
-					>A</span
-				>
-				สูตร & ขอเบิก
-			</button>
-			<span class="text-muted-foreground/40">/</span>
-			<button
-				type="button"
-				class="flex items-center gap-1.5 rounded-md px-3 py-1 font-semibold transition-colors {currentStage ===
-				'B'
-					? 'bg-primary text-primary-foreground shadow-sm'
-					: 'text-muted-foreground'}"
-				disabled={!activeRequisition}
-				onclick={() => (currentStage = 'B')}
-			>
-				<span class="flex h-4 w-4 items-center justify-center rounded-full bg-white/20 text-2xs"
-					>B</span
-				>
-				ขอเบิก & อนุมัติ
-			</button>
-			<span class="text-muted-foreground/40">/</span>
-			<button
-				type="button"
-				class="flex items-center gap-1.5 rounded-md px-3 py-1 font-semibold transition-colors {currentStage ===
-				'C'
-					? 'bg-primary text-primary-foreground shadow-sm'
-					: 'text-muted-foreground'}"
-				disabled={!activePlanId ||
-					(!activeService &&
-						activeRequisition &&
-						activeRequisition.status !== 'approved' &&
-						!isBypassed)}
-				onclick={() => (currentStage = 'C')}
-			>
-				<span class="flex h-4 w-4 items-center justify-center rounded-full bg-white/20 text-2xs"
-					>C</span
-				>
-				ผลผลิต & แจกจ่าย
-			</button>
+			<div class="flex shrink-0 gap-2">
+				<div class="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-center">
+					<p class="text-2xs font-semibold whitespace-nowrap text-white/70">ผู้อพยพรวม</p>
+					<p class="text-lg font-bold tabular-nums">{session?.target_headcount.total ?? 0} คน</p>
+				</div>
+				<div class="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-center">
+					<p class="text-2xs font-semibold whitespace-nowrap text-white/70">เป้าจัดสรร</p>
+					<p class="text-lg font-bold tabular-nums">{allocatedTarget} จาน</p>
+				</div>
+			</div>
 		</div>
 	</div>
 
-	<!-- Batch Selector Bar -->
-	{#if sessionPlans.length > 0}
-		<div
-			class="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/20 p-2.5"
+	<!-- 3-Stage Progress Stepper -->
+	<div class="flex gap-2 rounded-xl border bg-white p-1.5 shadow-2xs">
+		<button
+			type="button"
+			class="flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-colors {currentStage ===
+			'A'
+				? 'bg-[#0A2647] text-white shadow-sm'
+				: 'text-muted-foreground'}"
+			onclick={() => (currentStage = 'A')}
 		>
-			<div class="flex flex-wrap items-center gap-2">
-				<span class="text-xs font-semibold text-muted-foreground">ชุดการผลิตในมื้อนี้:</span>
-				{#each sessionPlans as p (p._id)}
-					{@const isSelected = activePlanId === p._id}
-					{@const pReq = (requisitions.data ?? []).find((r) => r.meal_plan_id === p._id)}
-					{@const pSvc = (services.data ?? []).find((s) => s.meal_plan_id === p._id)}
-					<button
-						type="button"
-						class="flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-semibold transition-all {isSelected
-							? 'bg-primary text-primary-foreground shadow-sm'
-							: 'border bg-background text-foreground hover:bg-muted'}"
-						onclick={() => selectBatch(p._id)}
-					>
-						<span>{p.label ?? 'เมนูอาหาร'}</span>
-						<span class="text-2xs opacity-80">({p.allocated_target ?? p.headcount.total} จาน)</span>
-						{#if pSvc}
-							<CheckCircle2 class="h-3.5 w-3.5 text-emerald-400" />
-						{:else if pReq?.status === 'approved'}
-							<PackageCheck class="h-3.5 w-3.5 text-blue-400" />
-						{:else if pReq?.status === 'pending'}
-							<Clock class="h-3.5 w-3.5 text-amber-400" />
-						{/if}
-					</button>
-				{/each}
-			</div>
-
-			<Button
-				variant="outline"
-				size="sm"
-				class="h-7 gap-1 border-dashed text-xs text-primary hover:bg-primary/5"
-				onclick={switchToNewBatch}
+			<span class="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-2xs"
+				>A</span
 			>
-				<Plus class="h-3.5 w-3.5" />
-				สร้างชุดการผลิตใหม่
-			</Button>
-		</div>
-	{/if}
+			1. วางแผนเมนู (BOM)
+		</button>
+		<button
+			type="button"
+			class="flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-colors {currentStage ===
+			'B'
+				? 'bg-[#0A2647] text-white shadow-sm'
+				: !activeTicket
+					? 'text-muted-foreground/50'
+					: 'text-muted-foreground'}"
+			disabled={!activeTicket}
+			onclick={() => (currentStage = 'B')}
+		>
+			{#if currentStage !== 'B' && !activeTicket}
+				<Lock class="h-3.5 w-3.5" />
+			{:else}
+				<span class="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-2xs"
+					>B</span
+				>
+			{/if}
+			2. รอคลังอนุมัติ
+		</button>
+		<button
+			type="button"
+			class="flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-colors {currentStage ===
+			'C'
+				? 'bg-[#0A2647] text-white shadow-sm'
+				: !activePlanId || (!activeService && activeTicket && activeTicket.status !== 'COMPLETED')
+					? 'text-muted-foreground/50'
+					: 'text-muted-foreground'}"
+			disabled={!activePlanId ||
+				(!activeService && activeTicket && activeTicket.status !== 'COMPLETED')}
+			onclick={() => (currentStage = 'C')}
+		>
+			{#if currentStage !== 'C' && (!activePlanId || (!activeService && activeTicket && activeTicket.status !== 'COMPLETED'))}
+				<Lock class="h-3.5 w-3.5" />
+			{:else}
+				<span class="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-2xs"
+					>C</span
+				>
+			{/if}
+			3. รายงานผลจริง
+		</button>
+	</div>
 
 	<!-- Stage Content -->
 	{#if currentStage === 'A'}
 		<!-- STAGE A: Plan, BOM & Requisition Creation -->
-		<div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
+		<div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
 			<!-- Column 1: Menu & Target Groups -->
 			<Card.Root class="border shadow-sm">
 				<Card.Header class="pb-3">
@@ -937,17 +1236,46 @@
 				</Card.Header>
 				<Card.Content class="space-y-3 text-xs">
 					<div>
-						<Label class="text-xs">สูตรอาหารมาตรฐาน (Catalog Recipe)</Label>
-						<select
-							bind:value={selectedRecipeId}
-							onchange={handleRecipeChange}
-							class="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
-						>
-							<option value="">-- กำหนดวัตถุดิบเอง (Custom) --</option>
-							{#each recipes.data ?? [] as rec (rec._id)}
-								<option value={rec._id}>{rec.label} (สูตรฐาน {rec.standard_portions} จาน)</option>
-							{/each}
-						</select>
+						<Label class="text-xs">สูตรอาหาร (Recipe Source)</Label>
+						<div class="mt-1 flex gap-1 rounded-md border bg-muted/20 p-1">
+							<button
+								type="button"
+								class="flex-1 rounded px-2 py-1 text-xs font-semibold transition-colors {recipeMode ===
+								'custom'
+									? 'bg-primary text-primary-foreground shadow-sm'
+									: 'text-muted-foreground hover:text-foreground'}"
+								onclick={() => setRecipeMode('custom')}
+							>
+								สร้างสูตรเอง (Custom)
+							</button>
+							<button
+								type="button"
+								class="flex-1 rounded px-2 py-1 text-xs font-semibold transition-colors {recipeMode ===
+								'bom'
+									? 'bg-primary text-primary-foreground shadow-sm'
+									: 'text-muted-foreground hover:text-foreground'}"
+								onclick={() => setRecipeMode('bom')}
+							>
+								เลือกจากฐานสูตร (BOM)
+							</button>
+						</div>
+
+						{#if recipeMode === 'bom'}
+							<select
+								bind:value={selectedRecipeId}
+								onchange={handleRecipeChange}
+								class="mt-2 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
+							>
+								<option value="">-- เลือกสูตรอาหาร (BOM) --</option>
+								{#each recipes.data ?? [] as rec (rec._id)}
+									<option value={rec._id}>{rec.label} (สูตรฐาน {rec.standard_portions} จาน)</option>
+								{/each}
+							</select>
+						{:else}
+							<p class="mt-2 text-2xs text-muted-foreground">
+								กำหนดวัตถุดิบเองในตารางด้านขวา ไม่อ้างอิงสูตรจากฐานข้อมูล
+							</p>
+						{/if}
 					</div>
 
 					<div>
@@ -1226,328 +1554,375 @@
 				</Card.Content>
 			</Card.Root>
 
-			<!-- Column 3: Stove & LPG Gas Allocation -->
-			<Card.Root class="border shadow-sm">
-				<Card.Header class="pb-3">
-					<Card.Title class="flex items-center gap-2 text-sm font-bold">
-						<Flame class="h-4 w-4 text-orange-600" />
-						3. จัดสรรเตาและแก๊ส (Stove & LPG)
-					</Card.Title>
-					<Card.Description class="text-xs">
-						ระบุชั่วโมงปรุงเพื่อประเมินปริมาณแก๊สที่ต้องใช้
-					</Card.Description>
-				</Card.Header>
-				<Card.Content class="space-y-3 text-xs">
-					<!-- Multi-cylinder Rows -->
-					<div class="space-y-2.5">
-						{#each gasRows as row, idx (idx)}
-							{@const analysis = gasRowsAnalysis[idx]}
-							{@const isRow0 = idx === 0}
-							{@const autoHours =
-								isRow0 && selectedRecipeId
-									? calculateCookingHoursFromRecipe(selectedRecipeId, allocatedTarget)
-									: null}
+			{#if false}
+				<!-- Moved to Stage C: Stove & LPG Gas Allocation -->
+				<Card.Root class="border shadow-sm">
+					<Card.Header class="pb-3">
+						<Card.Title class="flex items-center gap-2 text-sm font-bold">
+							<Flame class="h-4 w-4 text-orange-600" />
+							3. จัดสรรเตาและแก๊ส (Stove & LPG)
+						</Card.Title>
+						<Card.Description class="text-xs">
+							ระบุชั่วโมงปรุงเพื่อประเมินปริมาณแก๊สที่ต้องใช้
+						</Card.Description>
+					</Card.Header>
+					<Card.Content class="space-y-3 text-xs">
+						<!-- Multi-cylinder Rows -->
+						<div class="space-y-2.5">
+							{#each gasRows as row, idx (idx)}
+								{@const analysis = gasRowsAnalysis[idx]}
+								{@const isRow0 = idx === 0}
+								{@const autoHours =
+									isRow0 && selectedRecipeId
+										? calculateCookingHoursFromRecipe(selectedRecipeId, allocatedTarget)
+										: null}
 
-							<div class="space-y-2 rounded-lg border bg-card/60 p-3 shadow-xs">
-								<div class="flex items-center justify-between border-b pb-1.5">
-									<div class="flex items-center gap-1.5">
-										<span
-											class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-2xs font-bold text-orange-700"
-										>
-											{idx + 1}
-										</span>
-										<span class="font-medium text-foreground">
-											เตา / ถังแก๊สที่ {idx + 1}
-										</span>
-										{#if isRow0}
-											<span class="rounded bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground"
-												>เตาหลัก</span
+								<div class="space-y-2 rounded-lg border bg-card/60 p-3 shadow-xs">
+									<div class="flex items-center justify-between border-b pb-1.5">
+										<div class="flex items-center gap-1.5">
+											<span
+												class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-2xs font-bold text-orange-700"
 											>
-										{/if}
-									</div>
-
-									<div class="flex items-center gap-1.5">
-										{#if isRow0 && row.isManuallyEdited && autoHours !== null}
-											<button
-												type="button"
-												class="inline-flex items-center gap-1 text-2xs text-primary hover:underline"
-												onclick={() => {
-													gasRows.forEach((r) => (r.isManuallyEdited = false));
-													distributeRecipeHours(parseFloat(autoHours));
-												}}
-											>
-												<RotateCcw class="h-3 w-3" />
-												คืนค่าตามสูตร ({autoHours} ชม.)
-											</button>
-										{/if}
-										{#if idx > 0}
-											<button
-												type="button"
-												class="rounded p-1 text-muted-foreground transition-colors hover:bg-rose-50 hover:text-rose-600"
-												onclick={() => removeGasRow(idx)}
-												title="ลบแถวนี้"
-											>
-												<Trash2 class="h-3.5 w-3.5" />
-											</button>
-										{/if}
-									</div>
-								</div>
-
-								<div class="space-y-2">
-									<div>
-										<Label class="text-2xs text-muted-foreground">เลือกถังแก๊ส</Label>
-										<select
-											bind:value={row.cylinder_id}
-											class="mt-1 flex h-8 w-full rounded-md border border-input bg-background px-2.5 py-1 text-xs shadow-xs focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
-										>
-											<option value="" disabled>-- เลือกถังแก๊ส --</option>
-											{#each gasTypes.data ?? [] as cyl (cyl._id)}
-												{@const isUsedElsewhere = gasRows.some(
-													(r, rIdx) => rIdx !== idx && r.cylinder_id === cyl._id
-												)}
-												{@const remaining = gasCylinderBalance(
-													gasLedger.data ?? [],
-													cyl._id,
-													cyl.capacity_kg
-												)}
-												<option value={cyl._id} disabled={isUsedElsewhere}>
-													{cyl.name} (คงเหลือ {remaining} / {cyl.capacity_kg} kg){isUsedElsewhere
-														? ' - เลือกแล้ว'
-														: ''}
-												</option>
-											{/each}
-										</select>
-									</div>
-
-									<div>
-										<Label class="text-2xs text-muted-foreground">ชั่วโมงใช้งาน (ชม.)</Label>
-										<Input
-											type="number"
-											step="0.1"
-											min="0.1"
-											bind:value={row.hours}
-											oninput={() => (row.isManuallyEdited = true)}
-											class="mt-1 h-8 text-xs"
-											placeholder="1.0"
-										/>
-									</div>
-								</div>
-
-								<!-- Row Gas Sub-summary -->
-								{#if analysis}
-									<div
-										class="flex items-center justify-between rounded bg-muted/30 px-2.5 py-1.5 text-2xs"
-									>
-										<span class="text-muted-foreground">
-											ใช้ประมาณ: <strong class="font-mono text-foreground"
-												>{analysis.consumptionKg} kg</strong
-											>
-										</span>
-										<span class="text-muted-foreground">
-											คงเหลือ: <strong
-												class="font-mono {analysis.isInsufficient
-													? 'text-rose-600'
-													: 'text-emerald-600'}">{analysis.remainingKg} kg</strong
-											>
-										</span>
-									</div>
-									{#if analysis.isInsufficient}
-										<div
-											class="flex flex-col gap-1.5 rounded bg-rose-50 px-2.5 py-1.5 text-2xs text-rose-700 sm:flex-row sm:items-center sm:justify-between"
-										>
-											<div class="flex items-center gap-1">
-												<AlertTriangle class="h-3.5 w-3.5 shrink-0 text-rose-600" />
-												<span>
-													แก๊สในถังนี้ไม่พอ (ต้องการ {analysis.consumptionKg} kg แต่เหลือ {analysis.remainingKg}
-													kg)
-												</span>
-											</div>
+												{idx + 1}
+											</span>
+											<span class="font-medium text-foreground">
+												เตา / ถังแก๊สที่ {idx + 1}
+											</span>
 											{#if isRow0}
-												{@const max0 = getMaxHoursForCylinder(row.cylinder_id)}
-												{@const excess = Math.max(
-													0,
-													Math.round(((parseFloat(row.hours) || 0) - max0) * 10) / 10
-												)}
-												{#if gasRows.length > 1}
-													<button
-														type="button"
-														class="inline-flex shrink-0 items-center gap-1 rounded bg-rose-200/70 px-2 py-0.5 font-semibold text-rose-800 transition-colors hover:bg-rose-200"
-														onclick={spillOverExcessGas}
-													>
-														<ArrowRight class="h-3 w-3" />
-														โอนส่วนเกิน ({excess} ชม.) ไปเตาอื่น
-													</button>
-												{:else if (gasTypes.data ?? []).length > 1}
-													<button
-														type="button"
-														class="inline-flex shrink-0 items-center gap-1 rounded bg-rose-200/70 px-2 py-0.5 font-semibold text-rose-800 transition-colors hover:bg-rose-200"
-														onclick={addGasRow}
-													>
-														<Plus class="h-3 w-3" />
-														เพิ่มเตาและโอนส่วนเกินอัตโนมัติ
-													</button>
-												{/if}
+												<span class="rounded bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground"
+													>เตาหลัก</span
+												>
 											{/if}
 										</div>
+
+										<div class="flex items-center gap-1.5">
+											{#if isRow0 && row.isManuallyEdited && autoHours !== null}
+												<button
+													type="button"
+													class="inline-flex items-center gap-1 text-2xs text-primary hover:underline"
+													onclick={() => {
+														gasRows.forEach((r) => (r.isManuallyEdited = false));
+														distributeRecipeHours(parseFloat(autoHours!));
+													}}
+												>
+													<RotateCcw class="h-3 w-3" />
+													คืนค่าตามสูตร ({autoHours} ชม.)
+												</button>
+											{/if}
+											{#if idx > 0}
+												<button
+													type="button"
+													class="rounded p-1 text-muted-foreground transition-colors hover:bg-rose-50 hover:text-rose-600"
+													onclick={() => removeGasRow(idx)}
+													title="ลบแถวนี้"
+												>
+													<Trash2 class="h-3.5 w-3.5" />
+												</button>
+											{/if}
+										</div>
+									</div>
+
+									<div class="space-y-2">
+										<div>
+											<Label class="text-2xs text-muted-foreground">เลือกถังแก๊ส</Label>
+											<select
+												bind:value={row.cylinder_id}
+												class="mt-1 flex h-8 w-full rounded-md border border-input bg-background px-2.5 py-1 text-xs shadow-xs focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
+											>
+												<option value="" disabled>-- เลือกถังแก๊ส --</option>
+												{#each gasTypes.data ?? [] as cyl (cyl._id)}
+													{@const isUsedElsewhere = gasRows.some(
+														(r, rIdx) => rIdx !== idx && r.cylinder_id === cyl._id
+													)}
+													{@const remaining = gasCylinderBalance(
+														gasLedger.data ?? [],
+														cyl._id,
+														cyl.capacity_kg
+													)}
+													<option value={cyl._id} disabled={isUsedElsewhere}>
+														{cyl.name} (คงเหลือ {remaining} / {cyl.capacity_kg} kg){isUsedElsewhere
+															? ' - เลือกแล้ว'
+															: ''}
+													</option>
+												{/each}
+											</select>
+										</div>
+
+										<div>
+											<Label class="text-2xs text-muted-foreground">ชั่วโมงใช้งาน (ชม.)</Label>
+											<Input
+												type="number"
+												step="0.1"
+												min="0.1"
+												bind:value={row.hours}
+												oninput={() => (row.isManuallyEdited = true)}
+												class="mt-1 h-8 text-xs"
+												placeholder="1.0"
+											/>
+										</div>
+									</div>
+
+									<!-- Row Gas Sub-summary -->
+									{#if analysis}
+										<div
+											class="flex items-center justify-between rounded bg-muted/30 px-2.5 py-1.5 text-2xs"
+										>
+											<span class="text-muted-foreground">
+												ใช้ประมาณ: <strong class="font-mono text-foreground"
+													>{analysis.consumptionKg} kg</strong
+												>
+											</span>
+											<span class="text-muted-foreground">
+												คงเหลือ: <strong
+													class="font-mono {analysis.isInsufficient
+														? 'text-rose-600'
+														: 'text-emerald-600'}">{analysis.remainingKg} kg</strong
+												>
+											</span>
+										</div>
+										{#if analysis.isInsufficient}
+											<div
+												class="flex flex-col gap-1.5 rounded bg-rose-50 px-2.5 py-1.5 text-2xs text-rose-700 sm:flex-row sm:items-center sm:justify-between"
+											>
+												<div class="flex items-center gap-1">
+													<AlertTriangle class="h-3.5 w-3.5 shrink-0 text-rose-600" />
+													<span>
+														แก๊สในถังนี้ไม่พอ (ต้องการ {analysis.consumptionKg} kg แต่เหลือ {analysis.remainingKg}
+														kg)
+													</span>
+												</div>
+												{#if isRow0}
+													{@const max0 = getMaxHoursForCylinder(row.cylinder_id)}
+													{@const excess = Math.max(
+														0,
+														Math.round(((parseFloat(row.hours) || 0) - max0) * 10) / 10
+													)}
+													{#if gasRows.length > 1}
+														<button
+															type="button"
+															class="inline-flex shrink-0 items-center gap-1 rounded bg-rose-200/70 px-2 py-0.5 font-semibold text-rose-800 transition-colors hover:bg-rose-200"
+															onclick={spillOverExcessGas}
+														>
+															<ArrowRight class="h-3 w-3" />
+															โอนส่วนเกิน ({excess} ชม.) ไปเตาอื่น
+														</button>
+													{:else if (gasTypes.data ?? []).length > 1}
+														<button
+															type="button"
+															class="inline-flex shrink-0 items-center gap-1 rounded bg-rose-200/70 px-2 py-0.5 font-semibold text-rose-800 transition-colors hover:bg-rose-200"
+															onclick={addGasRow}
+														>
+															<Plus class="h-3 w-3" />
+															เพิ่มเตาและโอนส่วนเกินอัตโนมัติ
+														</button>
+													{/if}
+												{/if}
+											</div>
+										{/if}
 									{/if}
-								{/if}
-							</div>
-						{/each}
-					</div>
-
-					<!-- Add cylinder button -->
-					{#if (gasTypes.data ?? []).length > gasRows.length}
-						<Button
-							type="button"
-							variant="outline"
-							size="sm"
-							class="w-full gap-1.5 border-dashed text-xs text-muted-foreground hover:text-foreground"
-							onclick={addGasRow}
-						>
-							<Plus class="h-3.5 w-3.5" />
-							เพิ่มเตา / ถังแก๊สอีกถัง ({gasRows.length} / {(gasTypes.data ?? []).length})
-						</Button>
-					{/if}
-
-					<!-- Recipe Rate Note -->
-					{#if selectedRecipeId}
-						{@const chosen = (recipes.data ?? []).find((r) => r._id === selectedRecipeId)}
-						{#if chosen && parseFloat(chosen.standard_portions) > 0 && parseFloat(chosen.standard_duration_hours) > 0}
-							{@const stdPortions = parseFloat(chosen.standard_portions)}
-							{@const stdHours = parseFloat(chosen.standard_duration_hours)}
-							{@const rate = Math.round((stdPortions / stdHours) * 10) / 10}
-							<p class="text-2xs text-muted-foreground">
-								คำนวณจากสูตร: กำลังผลิต {rate} จาน/ชม. (มาตรฐาน {stdPortions} จาน ต่อ {stdHours} ชม.)
-							</p>
-						{/if}
-					{/if}
-
-					<!-- Total Allocation Summary -->
-					<div class="space-y-2 rounded-lg border bg-muted/20 p-3">
-						<div class="flex items-center justify-between">
-							<span class="text-muted-foreground">จำนวนถังแก๊สที่ใช้:</span>
-							<span class="font-mono font-bold text-foreground">{gasRows.length} ถัง</span>
-						</div>
-						<div class="flex items-center justify-between">
-							<span class="text-muted-foreground">ประเมินแก๊สรวมที่ต้องใช้:</span>
-							<span class="font-mono font-bold text-foreground">{totalEstimatedGasKg} kg</span>
-						</div>
-						{#if isGasInsufficient}
-							<div
-								class="flex flex-col gap-1.5 rounded bg-rose-50 p-2.5 text-2xs text-rose-700 sm:flex-row sm:items-center sm:justify-between"
-							>
-								<div class="flex items-center gap-1.5">
-									<AlertTriangle class="h-4 w-4 shrink-0 text-rose-600" />
-									<span>มีถังแก๊สที่ไม่เพียงพอต่อการปรุงอาหาร</span>
 								</div>
-								{#if gasRows.length > 1 && gasRowsAnalysis[0]?.isInsufficient}
-									<button
-										type="button"
-										class="inline-flex shrink-0 items-center gap-1 rounded bg-rose-200/70 px-2 py-1 font-semibold text-rose-800 transition-colors hover:bg-rose-200"
-										onclick={spillOverExcessGas}
+							{/each}
+						</div>
+
+						<!-- Add cylinder button -->
+						{#if (gasTypes.data ?? []).length > gasRows.length}
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								class="w-full gap-1.5 border-dashed text-xs text-muted-foreground hover:text-foreground"
+								onclick={addGasRow}
+							>
+								<Plus class="h-3.5 w-3.5" />
+								เพิ่มเตา / ถังแก๊สอีกถัง ({gasRows.length} / {(gasTypes.data ?? []).length})
+							</Button>
+						{/if}
+
+						<!-- Recipe Rate Note -->
+						{#if selectedRecipeId}
+							{@const chosen = (recipes.data ?? []).find((r) => r._id === selectedRecipeId)}
+							{#if chosen && parseFloat(chosen!.standard_portions) > 0 && parseFloat(chosen!.standard_duration_hours) > 0}
+								{@const stdPortions = parseFloat(chosen!.standard_portions)}
+								{@const stdHours = parseFloat(chosen!.standard_duration_hours)}
+								{@const rate = Math.round((stdPortions / stdHours) * 10) / 10}
+								<p class="text-2xs text-muted-foreground">
+									คำนวณจากสูตร: กำลังผลิต {rate} จาน/ชม. (มาตรฐาน {stdPortions} จาน ต่อ {stdHours} ชม.)
+								</p>
+							{/if}
+						{/if}
+
+						<!-- Total Allocation Summary -->
+						<div class="space-y-2 rounded-lg border bg-muted/20 p-3">
+							<div class="flex items-center justify-between">
+								<span class="text-muted-foreground">จำนวนถังแก๊สที่ใช้:</span>
+								<span class="font-mono font-bold text-foreground">{gasRows.length} ถัง</span>
+							</div>
+							<div class="flex items-center justify-between">
+								<span class="text-muted-foreground">ประเมินแก๊สรวมที่ต้องใช้:</span>
+								<span class="font-mono font-bold text-foreground">{totalEstimatedGasKg} kg</span>
+							</div>
+							{#if isGasInsufficient}
+								<div
+									class="flex flex-col gap-1.5 rounded bg-rose-50 p-2.5 text-2xs text-rose-700 sm:flex-row sm:items-center sm:justify-between"
+								>
+									<div class="flex items-center gap-1.5">
+										<AlertTriangle class="h-4 w-4 shrink-0 text-rose-600" />
+										<span>มีถังแก๊สที่ไม่เพียงพอต่อการปรุงอาหาร</span>
+									</div>
+									{#if gasRows.length > 1 && gasRowsAnalysis[0]?.isInsufficient}
+										<button
+											type="button"
+											class="inline-flex shrink-0 items-center gap-1 rounded bg-rose-200/70 px-2 py-1 font-semibold text-rose-800 transition-colors hover:bg-rose-200"
+											onclick={spillOverExcessGas}
+										>
+											<ArrowRight class="h-3 w-3" />
+											กระจายชั่วโมงตามความจุถัง (โอนส่วนเกินเตาแรก)
+										</button>
+									{/if}
+								</div>
+							{/if}
+						</div>
+
+						{#if activeTicket}
+							<div class="space-y-2 rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs">
+								<div class="flex items-center justify-between">
+									<span class="font-semibold text-foreground"
+										>สถานะตั๋วเบิก {activeTicket!.ticket_no}:</span
 									>
-										<ArrowRight class="h-3 w-3" />
-										กระจายชั่วโมงตามความจุถัง (โอนส่วนเกินเตาแรก)
-									</button>
+									<span
+										class="font-semibold {activeTicket!.status === 'COMPLETED'
+											? 'text-green-700'
+											: activeTicket!.status === 'CANCELLED'
+												? 'text-rose-700'
+												: 'text-amber-700'}"
+									>
+										{TICKET_STATUS_LABELS[activeTicket!.status]}
+									</span>
+								</div>
+							</div>
+
+							<div class="flex flex-col gap-2 pt-3">
+								{#if activeTicket!.status === 'COMPLETED'}
+									<Button
+										class="w-full gap-2 bg-green-600 font-semibold text-white shadow-sm hover:bg-green-700"
+										onclick={() => (currentStage = 'C')}
+									>
+										<CheckCircle2 class="h-4 w-4" />
+										ไปยังบันทึกผลผลิต (Stage 3)
+									</Button>
 								{/if}
+								{#if activeTicket!.status === 'PENDING_PICK'}
+									<Button
+										class="w-full gap-2 font-semibold shadow-sm"
+										onclick={handleSaveEdits}
+										disabled={updateTicketItemsMutation.isPending ||
+											updateConfirmedMealPlanMutation.isPending}
+									>
+										<Check class="h-4 w-4" />
+										{updateTicketItemsMutation.isPending ||
+										updateConfirmedMealPlanMutation.isPending
+											? 'กำลังบันทึกการแก้ไข...'
+											: 'บันทึกการแก้ไข'}
+									</Button>
+								{/if}
+								<Button
+									variant="outline"
+									class="w-full gap-2 text-xs font-semibold"
+									onclick={() => (currentStage = 'B')}
+								>
+									<ArrowRight class="h-4 w-4" />
+									ไปยังตรวจสอบการเบิก (Stage B)
+								</Button>
+							</div>
+						{:else}
+							<div class="pt-4">
+								<Button
+									class="w-full gap-2 font-semibold shadow-sm"
+									onclick={handleCreateRequisition}
+									disabled={createMealPlanMutation.isPending || createTicketMutation.isPending}
+								>
+									<Sparkles class="h-4 w-4" />
+									{createMealPlanMutation.isPending || createTicketMutation.isPending
+										? 'กำลังเปิดตั๋วเบิก...'
+										: 'สร้างใบเบิกวัตถุดิบ'}
+								</Button>
 							</div>
 						{/if}
-					</div>
-
-					{#if activeRequisition}
-						<div class="space-y-2 rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs">
-							<div class="flex items-center justify-between">
-								<span class="font-semibold text-foreground">สถานะคำขอเบิก:</span>
-								<span
-									class="font-semibold {activeRequisition.status === 'approved'
-										? 'text-green-700'
-										: activeRequisition.status === 'rejected'
-											? 'text-rose-700'
-											: 'text-amber-700'}"
-								>
-									{#if activeRequisition.status === 'approved'}
-										อนุมัติแล้ว
-									{:else if activeRequisition.status === 'rejected'}
-										ถูกปฏิเสธ
-									{:else}
-										รอคลังอนุมัติ
-									{/if}
-								</span>
-							</div>
-						</div>
-
-						<div class="flex flex-col gap-2 pt-3">
-							{#if activeRequisition.status === 'approved' || isBypassed}
-								<Button
-									class="w-full gap-2 bg-green-600 font-semibold text-white shadow-sm hover:bg-green-700"
-									onclick={() => (currentStage = 'C')}
-								>
-									<CheckCircle2 class="h-4 w-4" />
-									ไปยังบันทึกผลผลิต (Stage 3)
-								</Button>
-							{/if}
-							<Button
-								variant="outline"
-								class="w-full gap-2 text-xs font-semibold"
-								onclick={() => (currentStage = 'B')}
-							>
-								<ArrowRight class="h-4 w-4" />
-								ไปยังตรวจสอบการเบิก (Stage B)
-							</Button>
-						</div>
-					{:else}
-						<div class="pt-4">
-							<Button
-								class="w-full gap-2 font-semibold shadow-sm"
-								onclick={handleCreateRequisition}
-								disabled={createRequisitionMutation.isPending}
-							>
-								<Sparkles class="h-4 w-4" />
-								{createRequisitionMutation.isPending
-									? 'กำลังส่งคำขอเบิก...'
-									: 'สร้างใบเบิกวัตถุดิบ (Create Requisition)'}
-							</Button>
-						</div>
-					{/if}
-				</Card.Content>
-			</Card.Root>
+					</Card.Content>
+				</Card.Root>
+			{/if}
 		</div>
+
+		{#if !activeTicket}
+			<div class="rounded-xl border border-primary/20 bg-primary/5 p-4">
+				<Button
+					class="w-full gap-2 font-semibold shadow-sm"
+					onclick={handleCreateRequisition}
+					disabled={createMealPlanMutation.isPending || createTicketMutation.isPending}
+				>
+					<Sparkles class="h-4 w-4" />
+					{createMealPlanMutation.isPending || createTicketMutation.isPending
+						? 'กำลังเปิดตั๋วเบิก...'
+						: 'สร้างใบเบิกวัตถุดิบ'}
+				</Button>
+			</div>
+		{:else if activeTicket.status === 'PENDING_PICK'}
+			<div class="rounded-xl border border-primary/20 bg-primary/5 p-4">
+				<Button
+					class="w-full gap-2 font-semibold shadow-sm"
+					onclick={handleSaveEdits}
+					disabled={updateTicketItemsMutation.isPending ||
+						updateConfirmedMealPlanMutation.isPending}
+				>
+					<Check class="h-4 w-4" />
+					{updateTicketItemsMutation.isPending || updateConfirmedMealPlanMutation.isPending
+						? 'กำลังบันทึกการแก้ไข...'
+						: 'บันทึกการแก้ไข'}
+				</Button>
+			</div>
+		{/if}
 	{:else if currentStage === 'B'}
-		<!-- STAGE B: Requisition & Warehouse Approval -->
+		<!-- STAGE B: Ticket status (read-only — allocate/approve/dispatch happen at
+		     /back-office/tickets/[id], not here — CR-121/CR-126 role split) -->
 		<Card.Root class="mx-auto max-w-3xl border shadow-sm">
 			<Card.Header class="border-b bg-muted/20">
 				<div class="flex flex-wrap items-center justify-between gap-3">
 					<div>
 						<Card.Title class="flex items-center gap-2 text-lg font-bold">
-							ใบขอเบิกวัตถุดิบ: {activePlan?.label ?? 'รายการวัตถุดิบ'}
+							รอคลังอนุมัติใบเบิก: {activePlan?.label ?? 'รายการวัตถุดิบ'}
 						</Card.Title>
 						<Card.Description class="text-xs">
-							ชุดการผลิต: {activePlan?.label ?? 'เมนูอาหาร'} · เป้าหมาย {activePlan?.allocated_target ??
-								allocatedTarget} จาน
+							{#if activeTicket}
+								{activeTicket.ticket_no} · เป้าหมาย {activePlan?.allocated_target ??
+									allocatedTarget} จาน
+							{:else}
+								ชุดการผลิต: {activePlan?.label ?? 'เมนูอาหาร'} · เป้าหมาย {activePlan?.allocated_target ??
+									allocatedTarget} จาน
+							{/if}
 						</Card.Description>
 					</div>
 
 					<!-- Status Badge -->
-					{#if activeRequisition?.status === 'approved'}
+					{#if activeTicket?.status === 'COMPLETED'}
 						<span
 							class="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-800"
 						>
 							<CheckCircle2 class="h-4 w-4 text-green-600" />
-							คลังอนุมัติแล้ว
+							รับวัตถุดิบแล้ว
 						</span>
-					{:else if activeRequisition?.status === 'rejected'}
+					{:else if activeTicket?.status === 'CANCELLED'}
 						<span
 							class="inline-flex items-center gap-1.5 rounded-full bg-rose-100 px-3 py-1 text-xs font-bold text-rose-800"
 						>
 							<XCircle class="h-4 w-4 text-rose-600" />
-							ถูกปฏิเสธ
+							ยกเลิกแล้ว
 						</span>
-					{:else}
+					{:else if activeTicket}
 						<span
 							class="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800"
 						>
 							<Clock class="h-4 w-4 text-amber-600" />
-							รอคลังสินค้าอนุมัติ
+							{TICKET_STATUS_LABELS[activeTicket.status]}
 						</span>
 					{/if}
 				</div>
@@ -1555,69 +1930,59 @@
 
 			<Card.Content class="space-y-4 p-5 text-xs">
 				<!-- Status Notification Banner -->
-				{#if activeRequisition?.status === 'pending'}
+				{#if activeTicket?.status === 'PENDING_PICK'}
 					<div
 						class="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-800"
 					>
 						<Clock class="h-5 w-5 shrink-0 text-amber-600" />
-						<div class="flex-1">
-							<h4 class="font-bold">รอคลังสินค้าตรวจสอบและอนุมัติตัดจ่ายสต็อก</h4>
+						<div>
+							<h4 class="font-bold">รอคลังจัดของ</h4>
 							<p class="mt-1 text-xs text-amber-700">
-								คำขอเบิกถูกส่งไปยังระบบคลังเรียบร้อยแล้ว หรือท่านสามารถกดปุ่มข้ามขั้นตอน (Bypass)
-								เพื่อเริ่มปรุงอาหารได้ทันที
+								ยังแก้ไขรายการที่ Stage A ได้จนกว่าคลังจะเริ่มจัดของ
 							</p>
-							<div class="mt-2.5">
-								<Button
-									size="sm"
-									class="h-7 gap-1.5 bg-amber-600 text-xs font-semibold text-white shadow-xs hover:bg-amber-700"
-									onclick={handleBypass}
-								>
-									<FastForward class="h-3.5 w-3.5" />
-									ข้ามขั้นตอนนี้ชั่วคราว (Bypass to Cooking)
-								</Button>
-							</div>
 						</div>
 					</div>
-				{:else if activeRequisition?.status === 'approved'}
+				{:else if activeTicket?.status === 'READY_FOR_DISPATCH'}
+					<div
+						class="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 text-blue-800"
+					>
+						<PackageCheck class="h-5 w-5 shrink-0 text-blue-600" />
+						<div>
+							<h4 class="font-bold">ผู้จัดการอนุมัติแล้ว รอคลังปล่อยของ</h4>
+							<p class="mt-1 text-xs text-blue-700">อนุมัติโดย: {activeTicket.approved_by}</p>
+						</div>
+					</div>
+				{:else if activeTicket?.status === 'IN_TRANSIT'}
 					<div
 						class="flex items-start gap-3 rounded-lg border border-green-200 bg-green-50 p-4 text-green-800"
 					>
 						<CheckCircle2 class="h-5 w-5 shrink-0 text-green-600" />
-						<div>
-							<h4 class="font-bold">คลังสินค้าอนุมัติตัดจ่ายวัตถุดิบแล้ว พร้อมเริ่มปรุงอาหาร</h4>
+						<div class="flex-1">
+							<h4 class="font-bold">คลังปล่อยของแล้ว พร้อมยืนยันรับวัตถุดิบ</h4>
 							<p class="mt-1 text-xs text-green-700">
-								อนุมัติโดย: {activeRequisition.approved_by} · ตัดสต็อกสินค้าและแก๊สแล้ว
+								ปล่อยของโดย: {activeTicket.dispatched_by} · ตัดสต็อกวัตถุดิบแล้ว (ข้าม LPG ชั่วคราว)
 							</p>
+							<div class="mt-2.5">
+								<Button
+									size="sm"
+									class="h-7 gap-1.5 bg-green-600 text-xs font-semibold text-white shadow-xs hover:bg-green-700"
+									disabled={receiveTicketMutation.isPending}
+									onclick={handleReceiveTicket}
+								>
+									<CheckCircle2 class="h-3.5 w-3.5" />
+									ยืนยันรับวัตถุดิบ
+								</Button>
+							</div>
 						</div>
 					</div>
-				{:else if activeRequisition?.status === 'rejected'}
+				{:else if activeTicket?.status === 'CANCELLED'}
 					<div
 						class="flex items-start gap-3 rounded-lg border border-rose-200 bg-rose-50 p-4 text-rose-800"
 					>
 						<AlertCircle class="h-5 w-5 shrink-0 text-rose-600" />
 						<div class="flex-1">
-							<h4 class="font-bold">คำขอเบิกถูกปฏิเสธโดยคลังสินค้า</h4>
-							<p class="mt-1 text-xs text-rose-700">
-								เหตุผล: {activeRequisition.reject_reason || 'วัตถุดิบไม่เพียงพอ'}
-							</p>
-							<div class="mt-3 flex items-center gap-2">
-								<Button
-									size="sm"
-									variant="default"
-									class="h-7 text-xs"
-									onclick={handleEditAndReRequest}
-								>
-									แก้ไขแผนและขอเบิกใหม่
-								</Button>
-								<Button
-									size="sm"
-									variant="ghost"
-									class="h-7 text-xs text-rose-700 hover:bg-rose-100"
-									onclick={handleCancelBatch}
-								>
-									ยกเลิกชุดการผลิตนี้
-								</Button>
-							</div>
+							<h4 class="font-bold">ตั๋วนี้ถูกยกเลิกแล้ว</h4>
+							<p class="mt-1 text-xs text-rose-700">เปิดตั๋วใหม่ได้จากขั้นตอน A</p>
 						</div>
 					</div>
 				{/if}
@@ -1632,23 +1997,22 @@
 							<Table.Row>
 								<Table.Head>รายการ</Table.Head>
 								<Table.Head class="text-right">จำนวนที่ขอ</Table.Head>
-								<Table.Head class="text-right">จำนวนที่คลังจ่าย</Table.Head>
+								<Table.Head class="text-right">จำนวนที่คลังจัด</Table.Head>
 							</Table.Row>
 						</Table.Header>
 						<Table.Body class="text-xs">
-							{#each activeRequisition?.items ?? [] as it (it.item_id)}
-								{@const name = getItemName(it.item_id)}
+							{#each activeTicket?.items ?? [] as it (it.item_id)}
 								<Table.Row>
 									<Table.Cell>
-										<span class="font-medium text-foreground">{name}</span>
+										<span class="font-medium text-foreground">{it.item_name}</span>
 									</Table.Cell>
-									<Table.Cell class="text-right font-mono">{it.qty_requested} {it.unit}</Table.Cell>
+									<Table.Cell class="text-right font-mono">{it.requested_qty} {it.unit}</Table.Cell>
 									<Table.Cell
-										class="text-right font-mono font-bold {it.qty_issued !== '0'
+										class="text-right font-mono font-bold {it.allocated_qty !== '0'
 											? 'text-green-700'
 											: 'text-muted-foreground'}"
 									>
-										{it.qty_issued !== '0' ? `${it.qty_issued} ${it.unit}` : 'รอดำเนินการ'}
+										{it.allocated_qty !== '0' ? `${it.allocated_qty} ${it.unit}` : 'รอดำเนินการ'}
 									</Table.Cell>
 								</Table.Row>
 							{/each}
@@ -1657,7 +2021,7 @@
 				</div>
 
 				<!-- Gas Drawdown Table -->
-				{#if activeRequisition?.gas_drawdown && activeRequisition.gas_drawdown.length > 0}
+				{#if activeTicket?.gas_drawdown && activeTicket.gas_drawdown.length > 0}
 					<div class="rounded-lg border">
 						<div
 							class="flex items-center gap-1.5 border-b bg-muted/40 px-3 py-2 font-semibold text-foreground"
@@ -1666,7 +2030,7 @@
 							แก๊สหุงต้มที่ขอเบิก
 						</div>
 						<div class="space-y-1 p-3 text-xs">
-							{#each activeRequisition.gas_drawdown as g (g.cylinder_id)}
+							{#each activeTicket.gas_drawdown as g (g.cylinder_id)}
 								{@const cyl = (gasTypes.data ?? []).find((t) => t._id === g.cylinder_id)}
 								<div class="flex items-center justify-between">
 									<span>{cyl?.name ?? g.cylinder_id}</span>
@@ -1678,163 +2042,280 @@
 				{/if}
 
 				<!-- Action Buttons -->
-				<div class="flex flex-wrap items-center justify-between gap-2 pt-2">
-					<Button variant="outline" onclick={() => goto(resolve('/back-office/kitchen'))}>
-						กลับไปหน้ารวมมื้อ
-					</Button>
-
-					<div class="flex items-center gap-2">
-						{#if activeRequisition?.status !== 'approved'}
-							<Button
-								variant="outline"
-								class="gap-1.5 border-amber-500 bg-amber-50 font-semibold text-amber-900 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-200"
-								onclick={handleBypass}
-							>
-								<FastForward class="h-4 w-4 text-amber-600" />
-								ข้ามขั้นตอนนี้ชั่วคราว (Bypass)
-							</Button>
-						{/if}
-
-						{#if activeRequisition?.status === 'approved' || isBypassed}
-							<Button
-								class="gap-1.5 bg-green-600 text-white shadow-sm hover:bg-green-700"
-								onclick={() => (currentStage = 'C')}
-							>
-								เริ่มปรุงและบันทึกผลผลิต (สู่ช่วง C)
-								<ArrowRight class="h-4 w-4" />
-							</Button>
-						{/if}
-					</div>
+				<div class="flex flex-wrap items-center justify-end gap-2 pt-2">
+					{#if activeTicket}
+						<Button
+							variant="outline"
+							href={resolve(`/back-office/tickets/${encodeURIComponent(activeTicket._id)}`)}
+						>
+							ดูรายละเอียดใบเบิก
+						</Button>
+					{/if}
 				</div>
 			</Card.Content>
 		</Card.Root>
 	{:else if currentStage === 'C'}
 		<!-- STAGE C: Actual Yield & Meal Service Recording -->
-		<Card.Root class="mx-auto max-w-2xl border shadow-sm">
-			<Card.Header class="border-b bg-muted/20">
-				<Card.Title class="flex items-center gap-2 text-base font-bold">
-					<CheckCircle2 class="h-5 w-5 text-emerald-600" />
-					บันทึกผลผลิตจริงและการแจกจ่าย (Actual Yield & Meal Service)
-				</Card.Title>
-				<Card.Description class="text-xs">
-					บันทึกจำนวนจานที่ครัวปรุงได้จริง อาหารที่แจกจ่าย และปริมาณแก๊สที่ใช้งานจริง
-				</Card.Description>
+		<Card.Root class="border shadow-sm">
+			<Card.Header class="flex flex-wrap items-start justify-between gap-4 border-b bg-muted/20">
+				{@const Icon = stageCInfo.icon}
+				<div class="flex items-start gap-2.5">
+					<span
+						class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full {stageCInfo.dotClass}"
+					>
+						<Icon class="h-4 w-4" />
+					</span>
+					<div>
+						<Card.Title class="text-base font-bold">{stageCInfo.title}</Card.Title>
+						<Card.Description class="mt-1 text-xs">{stageCInfo.description}</Card.Description>
+					</div>
+				</div>
+
+				<div class="flex flex-col items-start gap-1.5 sm:items-end">
+					<span
+						class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold {stageCInfo.badgeClass}"
+					>
+						{stageCInfo.badgeLabel}
+					</span>
+					<span class="text-xs text-muted-foreground">
+						สูตร: {activePlan?.label ?? 'เมนูประกอบอาหาร'} ({activePlan?.allocated_target ??
+							allocatedTarget} กล่อง)
+					</span>
+				</div>
 			</Card.Header>
 
 			<Card.Content class="space-y-4 p-5 text-xs">
-				{#if activeService}
-					<div
-						class="flex items-start gap-3 rounded-lg border border-green-200 bg-green-50 p-4 text-green-800"
-					>
-						<CheckCircle2 class="h-5 w-5 shrink-0 text-green-600" />
-						<div>
-							<h4 class="font-bold">บันทึกผลการผลิตและแจกจ่ายเรียบร้อยแล้ว</h4>
-							<p class="mt-1 text-xs text-green-700">
-								บันทึกเมื่อ {new Date(activeService.created_at).toLocaleString('th-TH')} โดย {activeService.created_by}
-							</p>
-						</div>
-					</div>
-				{/if}
-
-				<div
-					class="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/20 p-3"
-				>
-					<div>
-						<span class="font-bold text-foreground">{activePlan?.label ?? 'เมนูประกอบอาหาร'}</span>
-						<p class="text-2xs text-muted-foreground">
-							เป้าหมายตามแผน: {activePlan?.allocated_target ?? allocatedTarget} จาน
-						</p>
-					</div>
-					{#if activeRequisition}
-						<span class="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-bold text-green-800">
-							{activeRequisition.status === 'approved'
-								? 'ใบเบิก: อนุมัติแล้ว'
-								: 'ข้ามขั้นตอนใบเบิก (Bypassed)'}
-						</span>
-					{/if}
-				</div>
-
-				<div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
-					<div>
-						<Label class="text-xs font-semibold">จำนวนจานปรุงได้จริง (Actual Yield)</Label>
-						<Input
-							type="number"
-							min="0"
-							bind:value={yieldActualPortions}
-							class="mt-1 text-xs font-bold"
-						/>
-					</div>
-					<div>
-						<Label class="text-xs">แจกจ่ายในศูนย์ (Served)</Label>
-						<Input type="number" min="0" bind:value={servedInShelter} class="mt-1 text-xs" />
-					</div>
-					<div>
-						<Label class="text-xs">อาหารเหลือทิ้ง (Waste)</Label>
-						<Input type="number" min="0" bind:value={wastePortions} class="mt-1 text-xs" />
-					</div>
-				</div>
-
-				<div class="grid grid-cols-2 gap-3">
-					<div>
-						<Label class="text-xs">แจกอาสาสมัคร/เจ้าหน้าที่ (External)</Label>
-						<Input type="number" min="0" bind:value={extVolunteers} class="mt-1 text-xs" />
-					</div>
-					<div>
-						<Label class="text-xs">แจกผู้พักพิงภายนอก (Outside)</Label>
-						<Input type="number" min="0" bind:value={extOutside} class="mt-1 text-xs" />
-					</div>
-				</div>
-
-				<div>
-					<Label class="text-xs">แก๊สหุงต้มที่ใช้จริง (กิโลกรัม)</Label>
-					<Input
-						type="number"
-						step="0.01"
-						min="0"
-						bind:value={actualGasUsedKg}
-						placeholder="เช่น 1.45"
-						class="mt-1 text-xs"
+				<div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+					<StoveLpgAllocation
+						bind:gasRows
+						{selectedRecipeId}
+						{allocatedTarget}
+						currentPlanId={activePlanId}
 					/>
-				</div>
 
-				<div>
-					<Label class="text-xs">บันทึกเพิ่มเติม (Notes)</Label>
-					<Textarea
-						bind:value={serviceNotes}
-						placeholder="เช่น อาหารปรุงสุกครบถ้วน รสชาติดี..."
-						rows={2}
-						class="mt-1 text-xs"
-					/>
-				</div>
-
-				<div class="flex items-center justify-between pt-2">
-					<Button variant="outline" onclick={() => (currentStage = 'B')}>
-						<ArrowLeft class="mr-1 h-3.5 w-3.5" />
-						กลับ
-					</Button>
-					{#if activeService}
-						<div class="flex items-center gap-2">
-							<span
-								class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800"
+					<div class="space-y-4">
+						{#if serviceRejected}
+							<div
+								class="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-red-900"
 							>
-								✓ บันทึกผลผลิตเรียบร้อยแล้ว
-							</span>
-							<Button variant="default" onclick={() => goto(resolve('/back-office/kitchen'))}>
-								กลับหน้ารวมมื้ออาหาร
-							</Button>
-						</div>
-					{:else}
-						<Button
-							class="gap-1.5 bg-primary shadow-sm"
-							onclick={handleRecordService}
-							disabled={recordServiceMutation.isPending}
+								<XCircle class="h-5 w-5 shrink-0 text-red-600" />
+								<div>
+									<h4 class="font-bold">คลังปฏิเสธการรับมอบ — กรุณาบันทึกผลผลิตใหม่</h4>
+									<p class="mt-1 text-xs text-red-800">เหตุผล: {activeServiceReceipt?.reason}</p>
+								</div>
+							</div>
+						{:else if activeService && !serviceReceiptConfirmed && canManageReceipt}
+							<div class="space-y-3 rounded-xl border border-sky-200 bg-sky-50 p-4">
+								<h4 class="text-sm font-bold text-sky-950">ดำเนินการตรวจรับมอบเสบียง</h4>
+								<Button
+									class="w-full gap-2 bg-emerald-600 font-semibold text-white hover:bg-emerald-700"
+									disabled={confirmReceiptMutation.isPending}
+									onclick={handleConfirmServiceReceipt}
+								>
+									<PackageCheck class="h-4 w-4" />
+									{confirmReceiptMutation.isPending
+										? 'กำลังยืนยัน...'
+										: `ยืนยันตรวจรับเข้าสต็อก (${activeService.actual_yield ?? 0} กล่อง)`}
+								</Button>
+								<p class="text-xs text-sky-800">
+									ยอด {activeService.actual_yield ?? 0} กล่อง จะถูกนำไปเพิ่มในรายการคลังสินค้าพร้อมจ่าย
+									และสามารถใช้งานที่สถานี POS ได้ทันที
+								</p>
+
+								{#if !showRejectForm}
+									<Button
+										class="w-full gap-2 border border-red-200 bg-red-50 font-semibold text-red-700 hover:bg-red-100"
+										onclick={() => (showRejectForm = true)}
+									>
+										<XCircle class="h-4 w-4" />
+										ปฏิเสธการรับมอบ / ตีกลับโรงครัว
+									</Button>
+								{:else}
+									<div class="space-y-2 rounded-lg border border-red-200 bg-white p-3">
+										<Label class="text-xs">เหตุผลที่ปฏิเสธ</Label>
+										<Textarea
+											bind:value={rejectReason}
+											rows={2}
+											class="text-xs"
+											placeholder="เช่น จำนวนไม่ตรง คุณภาพไม่ผ่าน..."
+										/>
+										<div class="flex justify-end gap-2">
+											<Button
+												variant="outline"
+												size="sm"
+												onclick={() => {
+													showRejectForm = false;
+													rejectReason = '';
+												}}
+											>
+												ยกเลิก
+											</Button>
+											<Button
+												variant="destructive"
+												size="sm"
+												disabled={rejectReceiptMutation.isPending}
+												onclick={handleRejectServiceReceipt}
+											>
+												{rejectReceiptMutation.isPending
+													? 'กำลังปฏิเสธ...'
+													: 'ยืนยันปฏิเสธ / ตีกลับ'}
+											</Button>
+										</div>
+									</div>
+								{/if}
+							</div>
+						{:else if activeService && serviceReceiptConfirmed}
+							<div
+								class="flex items-start gap-3 rounded-lg border border-green-200 bg-green-50 p-4 text-green-800"
+							>
+								<CheckCircle2 class="h-5 w-5 shrink-0 text-green-600" />
+								<div>
+									<h4 class="font-bold">บันทึกผลการผลิตและแจกจ่ายเรียบร้อยแล้ว</h4>
+									<p class="mt-1 text-xs text-green-700">
+										บันทึกเมื่อ {new Date(activeService.created_at).toLocaleString('th-TH')} โดย {activeService.created_by}
+									</p>
+								</div>
+							</div>
+						{/if}
+
+						{#if !isServiceFinalized && !cookingStarted}
+							<div class="rounded-xl border border-orange-200 bg-orange-50 p-4">
+								<div class="flex flex-wrap items-center justify-between gap-3">
+									<div>
+										<h3 class="font-bold text-orange-950">พร้อมเริ่มปรุงอาหาร?</h3>
+										<p class="mt-1 text-xs text-orange-800">
+											ตรวจแก๊สให้เพียงพอก่อนเริ่ม ระบบจะเปลี่ยนถังที่เลือกเป็นสถานะกำลังใช้
+										</p>
+									</div>
+									<Button
+										class="gap-2 bg-orange-600 font-semibold text-white hover:bg-orange-700"
+										disabled={updateMealPlanGasUsageMutation.isPending ||
+											isGasInsufficient ||
+											hasGasCylinderConflict}
+										title={hasGasCylinderConflict
+											? 'ถังแก๊สที่เลือกกำลังถูกใช้งานโดยชุดการผลิตอื่น หรือใช้ไม่ได้'
+											: undefined}
+										onclick={handleStartCooking}
+									>
+										<Flame class="h-4 w-4" />
+										{updateMealPlanGasUsageMutation.isPending
+											? 'กำลังเริ่มปรุง...'
+											: 'เริ่มปรุงอาหาร (Start Cooking)'}
+									</Button>
+								</div>
+							</div>
+						{/if}
+
+						<div
+							class="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/20 p-3"
 						>
-							<Check class="h-4 w-4" />
-							{recordServiceMutation.isPending
-								? 'กำลังบันทึก...'
-								: 'บันทึกผลการผลิต (Complete Batch)'}
-						</Button>
-					{/if}
+							<div>
+								<span class="font-bold text-foreground"
+									>{activePlan?.label ?? 'เมนูประกอบอาหาร'}</span
+								>
+								<p class="text-2xs text-muted-foreground">
+									เป้าหมายตามแผน: {activePlan?.allocated_target ?? allocatedTarget} จาน
+								</p>
+							</div>
+							{#if activeTicket}
+								<span
+									class="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-bold text-green-800"
+								>
+									ตั๋ว {activeTicket.ticket_no}: รับวัตถุดิบแล้ว
+								</span>
+							{/if}
+						</div>
+
+						<div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+							<div>
+								<Label class="text-xs font-semibold">จำนวนจานปรุงได้จริง (Actual Yield)</Label>
+								<Input
+									type="number"
+									min="0"
+									bind:value={yieldActualPortions}
+									class="mt-1 text-xs font-bold"
+								/>
+							</div>
+							<div>
+								<Label class="text-xs">แจกจ่ายในศูนย์ (Served)</Label>
+								<Input type="number" min="0" bind:value={servedInShelter} class="mt-1 text-xs" />
+							</div>
+							<div>
+								<Label class="text-xs">อาหารเหลือทิ้ง (Waste)</Label>
+								<Input type="number" min="0" bind:value={wastePortions} class="mt-1 text-xs" />
+							</div>
+						</div>
+
+						<div class="grid grid-cols-2 gap-3">
+							<div>
+								<Label class="text-xs">แจกอาสาสมัคร/เจ้าหน้าที่ (External)</Label>
+								<Input type="number" min="0" bind:value={extVolunteers} class="mt-1 text-xs" />
+							</div>
+							<div>
+								<Label class="text-xs">แจกผู้พักพิงภายนอก (Outside)</Label>
+								<Input type="number" min="0" bind:value={extOutside} class="mt-1 text-xs" />
+							</div>
+						</div>
+
+						<div>
+							<Label class="text-xs">แก๊สหุงต้มที่ใช้จริง (กิโลกรัม)</Label>
+							<Input
+								type="number"
+								step="0.01"
+								min="0"
+								bind:value={actualGasUsedKg}
+								placeholder="เช่น 1.45"
+								class="mt-1 text-xs"
+							/>
+						</div>
+
+						<div>
+							<Label class="text-xs">บันทึกเพิ่มเติม (Notes)</Label>
+							<Textarea
+								bind:value={serviceNotes}
+								placeholder="เช่น อาหารปรุงสุกครบถ้วน รสชาติดี..."
+								rows={2}
+								class="mt-1 text-xs"
+							/>
+						</div>
+
+						<div class="flex items-center justify-between pt-2">
+							<Button variant="outline" onclick={() => (currentStage = 'B')}>
+								<ArrowLeft class="mr-1 h-3.5 w-3.5" />
+								กลับ
+							</Button>
+							{#if isServiceFinalized}
+								<div class="flex items-center gap-2">
+									<span
+										class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800"
+									>
+										✓ บันทึกผลผลิตเรียบร้อยแล้ว
+									</span>
+									<Button variant="default" onclick={() => goto(resolve('/back-office/kitchen'))}>
+										กลับหน้ารวมมื้ออาหาร
+									</Button>
+								</div>
+							{:else}
+								<Button
+									class="gap-1.5 bg-primary shadow-sm"
+									onclick={handleRecordService}
+									disabled={recordServiceMutation.isPending || isGasInsufficient || !cookingStarted}
+									title={!cookingStarted
+										? 'กดเริ่มปรุงอาหารก่อน'
+										: isGasInsufficient
+											? 'แก๊สไม่เพียงพอสำหรับชั่วโมงปรุงที่ระบุ'
+											: undefined}
+								>
+									<Check class="h-4 w-4" />
+									{recordServiceMutation.isPending
+										? 'กำลังบันทึก...'
+										: serviceRejected
+											? 'บันทึกผลผลิตใหม่ (แก้ไขตามคำแนะนำ)'
+											: 'บันทึกผลการผลิต (Complete Batch)'}
+								</Button>
+							{/if}
+						</div>
+					</div>
 				</div>
 			</Card.Content>
 		</Card.Root>

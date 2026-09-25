@@ -443,7 +443,7 @@ export async function seedCatalog(): Promise<void> {
 			'recipe',
 			{
 				label: 'ข้าวไข่เจียว',
-				standard_portions: '1',
+				standard_portions: '50',
 				standard_duration_hours: '1',
 				ingredients: [
 					{ item_master_id: 'item_master:rice', quantity: '0.2', uom: 'kg' },
@@ -457,7 +457,7 @@ export async function seedCatalog(): Promise<void> {
 			'recipe',
 			{
 				label: 'ข้าวต้ม',
-				standard_portions: '1',
+				standard_portions: '50',
 				standard_duration_hours: '1',
 				ingredients: [{ item_master_id: 'item_master:rice', quantity: '0.15', uom: 'kg' }]
 			},
@@ -468,7 +468,7 @@ export async function seedCatalog(): Promise<void> {
 			'recipe',
 			{
 				label: 'ข้าวปลากระป๋อง',
-				standard_portions: '1',
+				standard_portions: '50',
 				standard_duration_hours: '1',
 				ingredients: [
 					{ item_master_id: 'item_master:rice', quantity: '0.2', uom: 'kg' },

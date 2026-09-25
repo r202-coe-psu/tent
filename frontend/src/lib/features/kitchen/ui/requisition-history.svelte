@@ -2,27 +2,85 @@
 	import * as Card from '$lib/components/ui/card';
 	import * as Table from '$lib/components/ui/table';
 	import * as Pagination from '$lib/components/ui/pagination';
+	import { Badge } from '$lib/components/ui/badge';
 	import PackageCheck from '@lucide/svelte/icons/package-check';
 	import {
 		useRequisitions,
 		useMealPlans,
 		MEAL_PERIOD_LABELS,
-		toMealPlanMap,
-		type KitchenRequisition
+		toMealPlanMap
 	} from '$lib/features/kitchen';
+	import { useTickets, TICKET_STATUS_LABELS } from '$lib/features/tickets';
 	import { formatThaiDateTime } from '$lib/utils/date';
 	import { qtyGte } from '$lib/utils/qty';
 
 	const requisitions = useRequisitions();
+	const tickets = useTickets();
 	const plans = useMealPlans();
 	const planById = $derived(toMealPlanMap(plans.data));
 
-	// Newest first — issued_at or created_at is the audit timestamp of the withdrawal.
-	const rows = $derived(
-		[...(requisitions.data ?? [])].sort((a, b) =>
-			(b.issued_at ?? b.created_at).localeCompare(a.issued_at ?? a.created_at)
-		)
-	);
+	// Union row shape — CR-126 §2.3: legacy kitchen_requisition (deprecated,
+	// read-only) and requisition_ticket (new) shown together, newest first, with
+	// a "ประเภท" column so an auditor can tell which pipeline produced each row.
+	interface HistoryRow {
+		kind: 'legacy' | 'ticket';
+		id: string;
+		timestamp: string;
+		createdBy: string;
+		mealPlanId: string | null;
+		items: { key: string; label: string; done: string; requested: string; unit: string }[];
+		statusLabel: string;
+		statusClass: string;
+	}
+
+	const COMPLETE_CLASS = 'bg-green-100 text-green-800';
+	const PARTIAL_CLASS = 'bg-amber-100 text-amber-800';
+	const TICKET_STATUS_CLASS: Record<string, string> = {
+		PENDING_PICK: 'bg-amber-100 text-amber-800',
+		READY_FOR_DISPATCH: 'bg-blue-100 text-blue-800',
+		IN_TRANSIT: 'bg-indigo-100 text-indigo-800',
+		COMPLETED: COMPLETE_CLASS,
+		CANCELLED: 'bg-muted text-muted-foreground'
+	};
+
+	const rows = $derived.by((): HistoryRow[] => {
+		const legacy: HistoryRow[] = (requisitions.data ?? []).map((req) => {
+			const complete = req.items.every((i) => qtyGte(i.qty_issued, i.qty_requested));
+			return {
+				kind: 'legacy',
+				id: req._id,
+				timestamp: req.issued_at ?? req.created_at,
+				createdBy: req.created_by,
+				mealPlanId: req.meal_plan_id,
+				items: req.items.map((i) => ({
+					key: i.item_id,
+					label: i.item_id,
+					done: i.qty_issued,
+					requested: i.qty_requested,
+					unit: i.unit
+				})),
+				statusLabel: complete ? 'เบิกครบ' : 'เบิกบางส่วน',
+				statusClass: complete ? COMPLETE_CLASS : PARTIAL_CLASS
+			};
+		});
+		const ticketRows: HistoryRow[] = (tickets.data ?? []).map((t) => ({
+			kind: 'ticket',
+			id: t._id,
+			timestamp: t.created_at,
+			createdBy: t.requested_by,
+			mealPlanId: t.meal_plan_id,
+			items: t.items.map((i) => ({
+				key: i.item_id,
+				label: i.item_name,
+				done: i.allocated_qty,
+				requested: i.requested_qty,
+				unit: i.unit
+			})),
+			statusLabel: `${t.ticket_no} · ${TICKET_STATUS_LABELS[t.status]}`,
+			statusClass: TICKET_STATUS_CLASS[t.status] ?? PARTIAL_CLASS
+		}));
+		return [...legacy, ...ticketRows].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+	});
 
 	const PAGE_SIZE = 10;
 	let currentPage = $state(1);
@@ -30,12 +88,6 @@
 		const start = (currentPage - 1) * PAGE_SIZE;
 		return rows.slice(start, start + PAGE_SIZE);
 	});
-
-	// A requisition is complete when every line issued the full requested qty;
-	// otherwise stock was short and it was a partial withdrawal (schema.md §2.6).
-	function isComplete(req: KitchenRequisition): boolean {
-		return req.items.every((i) => qtyGte(i.qty_issued, i.qty_requested));
-	}
 </script>
 
 <Card.Root class="border-0 shadow-sm">
@@ -45,16 +97,17 @@
 		</div>
 		<div>
 			<Card.Title class="text-sm font-bold">
-				ประวัติการเบิกวัตถุดิบ ({rows.length} ใบ)
+				ประวัติการเบิกวัตถุดิบ ({rows.length} รายการ)
 			</Card.Title>
 			<Card.Description class="text-xs">
-				บันทึกผู้เบิก เวลา รายการ และแผนต้นทาง (audit trail) — ตัดสต็อกผ่าน stock ledger
+				รวมตั๋วเบิกใหม่ (requisition_ticket) และใบเบิกเดิม (kitchen_requisition — เลิกใช้แล้ว,
+				อ่านได้อย่างเดียว)
 			</Card.Description>
 		</div>
 	</Card.Header>
 
 	<Card.Content class="p-0">
-		{#if requisitions.isPending}
+		{#if requisitions.isPending || tickets.isPending}
 			<p class="p-6 text-center text-sm text-muted-foreground">กำลังโหลด...</p>
 		{:else if !rows.length}
 			<p class="p-6 text-center text-sm text-muted-foreground">ยังไม่มีการเบิกวัตถุดิบ</p>
@@ -63,23 +116,30 @@
 				<Table.Root>
 					<Table.Header>
 						<Table.Row class="text-xs">
+							<Table.Head class="min-w-[80px] px-6">ประเภท</Table.Head>
 							<Table.Head class="min-w-[130px] px-6">เวลาเบิก</Table.Head>
 							<Table.Head class="min-w-[120px] px-6">ผู้เบิก</Table.Head>
 							<Table.Head class="min-w-[130px] px-6">แผนต้นทาง</Table.Head>
-							<Table.Head class="min-w-[220px] px-6">รายการที่เบิก (จ่ายจริง / ขอเบิก)</Table.Head>
-							<Table.Head class="min-w-[110px] px-6 text-center">สถานะ</Table.Head>
+							<Table.Head class="min-w-[220px] px-6">รายการที่เบิก (จัดของแล้ว / ขอเบิก)</Table.Head
+							>
+							<Table.Head class="min-w-[140px] px-6 text-center">สถานะ</Table.Head>
 						</Table.Row>
 					</Table.Header>
 					<Table.Body>
-						{#each paginatedRows as req (req._id)}
-							{@const plan = req.meal_plan_id ? (planById[req.meal_plan_id] ?? null) : null}
+						{#each paginatedRows as row (row.id)}
+							{@const plan = row.mealPlanId ? (planById[row.mealPlanId] ?? null) : null}
 							<Table.Row>
-								<Table.Cell class="px-6 text-xs text-muted-foreground">
-									{formatThaiDateTime(req.issued_at ?? req.created_at)}
-								</Table.Cell>
-								<Table.Cell class="px-6 text-sm">{req.created_by}</Table.Cell>
 								<Table.Cell class="px-6">
-									{#if !req.meal_plan_id}
+									<Badge variant="outline" class="font-mono text-2xs">
+										{row.kind === 'ticket' ? 'ตั๋วใหม่' : 'ใบเบิกเดิม'}
+									</Badge>
+								</Table.Cell>
+								<Table.Cell class="px-6 text-xs text-muted-foreground">
+									{formatThaiDateTime(row.timestamp)}
+								</Table.Cell>
+								<Table.Cell class="px-6 text-sm">{row.createdBy}</Table.Cell>
+								<Table.Cell class="px-6">
+									{#if !row.mealPlanId}
 										<p class="text-sm text-muted-foreground">เบิกนอกแผน</p>
 									{:else if !plan}
 										<p class="text-sm text-muted-foreground">ไม่พบแผน</p>
@@ -95,36 +155,28 @@
 								</Table.Cell>
 								<Table.Cell class="px-6">
 									<ul class="space-y-0.5 text-xs">
-										{#each req.items as item (item.item_id)}
+										{#each row.items as item (item.key)}
 											<li>
-												<span class="font-mono">{item.item_id}</span>:
+												<span class="font-mono">{item.label}</span>:
 												<span
-													class="font-semibold {!qtyGte(item.qty_issued, item.qty_requested)
+													class="font-semibold {!qtyGte(item.done, item.requested)
 														? 'text-amber-700'
 														: ''}"
 												>
-													{item.qty_issued}
+													{item.done}
 												</span>
-												/ {item.qty_requested}
+												/ {item.requested}
 												{item.unit}
 											</li>
 										{/each}
 									</ul>
 								</Table.Cell>
 								<Table.Cell class="px-6 text-center">
-									{#if isComplete(req)}
-										<span
-											class="inline-flex rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-800"
-										>
-											เบิกครบ
-										</span>
-									{:else}
-										<span
-											class="inline-flex rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800"
-										>
-											เบิกบางส่วน
-										</span>
-									{/if}
+									<span
+										class="inline-flex rounded-full px-2.5 py-1 text-xs font-medium {row.statusClass}"
+									>
+										{row.statusLabel}
+									</span>
 								</Table.Cell>
 							</Table.Row>
 						{/each}

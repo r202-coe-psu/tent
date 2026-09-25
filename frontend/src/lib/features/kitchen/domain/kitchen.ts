@@ -117,6 +117,7 @@ export interface MealPlan extends BaseDoc {
 	headcount: MealPlanHeadcount;
 	recipes: MealPlanRecipe[];
 	status: MealPlanStatus;
+	cooking_started_at?: Timestamp;
 	override_reason?: string | null;
 	calc_source?: MealCalcSource | null;
 	gas_usage?: MealPlanGasUsage[];
@@ -457,44 +458,107 @@ export function createMealService(input: MealServiceInput, ctx: AuthorContext): 
 export const isMealService = (d: unknown): d is MealService =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'meal_service';
 
-export type KitchenDoc =
-	MealSession | MealPlan | KitchenRequisition | KitchenCounter | MealService | GasCylinderType;
+// ---- MealServiceReceipt (append-only warehouse receipt decision, CR-129/CR-131) ----
+// `meal_service` is append-only (schema.md §1817 invariant) — can't add
+// received_by/received_at/outcome to that doc, so the warehouse's decision is
+// its own doc instead, same pattern as gas_ledger/stock_ledger event rows.
 
-// ---- GasCylinderType (configuration for gas tank/stove specs) -----------
+export const mealServiceReceiptOutcomeSchema = z.enum(['confirmed', 'rejected']);
+export type MealServiceReceiptOutcome = z.infer<typeof mealServiceReceiptOutcomeSchema>;
 
-export interface GasCylinderType extends BaseDoc {
-	type: 'gas_cylinder_type';
-	name: string;
-	capacity_kg: string; // qty_str
-	burn_rate_kg_per_hour: string; // qty_str
-	time_multiplier: string; // qty_str
+export interface MealServiceReceipt extends BaseDoc {
+	type: 'meal_service_receipt';
+	meal_service_id: string;
+	// Optional for backward compat — docs written before CR-131 predate this
+	// field and only ever meant "confirmed"; see mealServiceReceiptOutcome().
+	outcome?: MealServiceReceiptOutcome;
+	received_by: string;
+	reason?: string; // required when outcome = 'rejected'
 }
 
-export const gasCylinderTypeInputSchema = z.object({
-	name: z.string().trim().min(1, 'Name required'),
-	capacity_kg: qtyStrCoercePositiveSchema,
-	burn_rate_kg_per_hour: qtyStrCoercePositiveSchema,
-	time_multiplier: qtyStrCoercePositiveSchema.default('1')
-});
-export type GasCylinderTypeInput = z.input<typeof gasCylinderTypeInputSchema>;
+/** Reads a receipt's outcome, treating a pre-CR-131 doc (no `outcome` field) as 'confirmed'. */
+export function mealServiceReceiptOutcome(receipt: MealServiceReceipt): MealServiceReceiptOutcome {
+	return receipt.outcome ?? 'confirmed';
+}
 
-export function createGasCylinderType(
-	input: GasCylinderTypeInput,
-	ctx: AuthorContext
-): GasCylinderType {
-	const d = gasCylinderTypeInputSchema.parse(input);
+export function createMealServiceReceipt(
+	mealServiceId: string,
+	outcome: MealServiceReceiptOutcome,
+	ctx: AuthorContext,
+	reason?: string
+): MealServiceReceipt {
 	return makeDoc(
-		'gas_cylinder_type',
-		2,
+		'meal_service_receipt',
+		1,
 		{
-			name: d.name,
-			capacity_kg: persistQty(d.capacity_kg),
-			burn_rate_kg_per_hour: persistQty(d.burn_rate_kg_per_hour),
-			time_multiplier: persistQty(d.time_multiplier)
+			meal_service_id: mealServiceId,
+			outcome,
+			received_by: ctx.createdBy,
+			...(reason ? { reason } : {})
 		},
 		ctx
 	);
 }
 
-export const isGasCylinderType = (d: unknown): d is GasCylinderType =>
-	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'gas_cylinder_type';
+export const isMealServiceReceipt = (d: unknown): d is MealServiceReceipt =>
+	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'meal_service_receipt';
+
+export type KitchenDoc =
+	| MealSession
+	| MealPlan
+	| KitchenRequisition
+	| KitchenCounter
+	| MealService
+	| MealServiceReceipt
+	| FuelCylinder;
+
+// ---- FuelCylinder (schema.md §2.7.1, CR-120) — one physical gas tank ----
+// Replaces GasCylinderType (CR-120): a fuel_cylinder is one numbered physical
+// tank, not a spec/type. Status (unused/in_use/empty) is always computed from
+// gas_ledger balance (gas-ledger.ts gasCylinderStatus) — never persisted here.
+
+export interface FuelCylinder extends BaseDoc {
+	type: 'fuel_cylinder';
+	item_master_id: string; // FK item_master in item_category:fuel_energy
+	cylinder_code: string; // e.g. "LPG-01", unique per shelter (case-insensitive)
+	name: string;
+	capacity_kg: string; // qty_str
+	burn_rate_kg_per_hour: string; // qty_str
+	time_multiplier: string; // qty_str
+	tare_weight_kg?: string; // qty_str — empty-tank weight for physical weigh-checks
+	deactivated?: boolean; // true = retired/broken, hidden from kitchen pickers
+}
+
+export const fuelCylinderInputSchema = z.object({
+	item_master_id: z.string().min(1, 'Item master required'),
+	cylinder_code: z.string().trim().min(1, 'Cylinder code required'),
+	name: z.string().trim().min(1, 'Name required'),
+	capacity_kg: qtyStrCoercePositiveSchema,
+	burn_rate_kg_per_hour: qtyStrCoercePositiveSchema,
+	time_multiplier: qtyStrCoercePositiveSchema.default('1'),
+	tare_weight_kg: qtyStrCoercePositiveSchema.optional(),
+	deactivated: z.boolean().optional()
+});
+export type FuelCylinderInput = z.input<typeof fuelCylinderInputSchema>;
+
+export function createFuelCylinder(input: FuelCylinderInput, ctx: AuthorContext): FuelCylinder {
+	const d = fuelCylinderInputSchema.parse(input);
+	return makeDoc(
+		'fuel_cylinder',
+		1,
+		{
+			item_master_id: d.item_master_id,
+			cylinder_code: d.cylinder_code,
+			name: d.name,
+			capacity_kg: persistQty(d.capacity_kg),
+			burn_rate_kg_per_hour: persistQty(d.burn_rate_kg_per_hour),
+			time_multiplier: persistQty(d.time_multiplier),
+			...(d.tare_weight_kg ? { tare_weight_kg: persistQty(d.tare_weight_kg) } : {}),
+			...(d.deactivated !== undefined ? { deactivated: d.deactivated } : {})
+		},
+		ctx
+	);
+}
+
+export const isFuelCylinder = (d: unknown): d is FuelCylinder =>
+	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'fuel_cylinder';

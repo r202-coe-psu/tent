@@ -19,7 +19,9 @@ import {
 	UtensilsCrossed,
 	Tent,
 	Home,
-	FlaskConical
+	FlaskConical,
+	ArrowLeftRight,
+	Siren
 } from '@lucide/svelte/icons';
 
 type Leaf = {
@@ -94,6 +96,20 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						href: resolve('/back-office/purchases'),
 						icon: ShoppingCart
 					}
+				]
+			},
+			{
+				label: 'จัดการคำร้องเบิกจ่าย',
+				href: null,
+				icon: ClipboardList,
+				children: [
+					{ label: 'เบิก-คืนพัสดุหน้างาน', href: null, icon: ArrowLeftRight },
+					{
+						label: 'โรงครัวและเสบียงอาหาร',
+						href: resolve('/back-office/tickets/kitchen'),
+						icon: UtensilsCrossed
+					},
+					{ label: 'จ่ายช่วยเหลือนอกศูนย์ & EOC', href: null, icon: Siren }
 				]
 			},
 			{

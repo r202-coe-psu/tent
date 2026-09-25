@@ -108,6 +108,27 @@ export async function requireKitchen(fetchFn?: typeof fetch) {
 }
 
 /**
+ * Requisition ticket guard — requires system_admin, shelter_manager,
+ * `warehouse_staff`, or `kitchen_staff` (CR-121/CR-126). Both kitchen and
+ * warehouse need to view the ticket queue/detail; which action buttons show is
+ * a further per-role UI decision — the real authorization boundary is the
+ * CouchDB `validate_doc_update` guard (`shelter-access-design.ts`).
+ */
+export async function requireTicketAccess(fetchFn?: typeof fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	const shelter = activeShelterCode(roles);
+	if (
+		!isSystemAdmin(roles) &&
+		!isShelterManager(roles, shelter) &&
+		!isWarehouseStaff(roles, shelter) &&
+		!hasStaffCapability(roles, 'kitchen_staff', shelter)
+	) {
+		throw redirect(302, resolve(LANDING_ROUTE));
+	}
+}
+
+/**
  * Evacuee registration guard — requires system_admin, shelter_manager, or
  * the `registration_staff` capability. Used for PII surfaces (evacuee/
  * household CRUD) so only staff whose job is registration can reach them;

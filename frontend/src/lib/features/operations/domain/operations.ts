@@ -306,10 +306,12 @@ export type OperationsDoc = StockLedger | Donation | DonationCampaign | Purchase
  *
  * Exported so the audit script checks the same table it enforces.
  */
-export const REF_PREFIX_BY_REASON: Record<LedgerReason, string | null> = {
+export const REF_PREFIX_BY_REASON: Record<LedgerReason, string | string[] | null> = {
 	donation: 'donation:',
 	purchase: 'purchase:',
-	requisition: 'kitchen_requisition:',
+	// kitchen_requisition: legacy doc type, deprecated (CR-126) — still accepted so
+	// old rows remain valid; requisition_ticket: new unified ticket (CR-121/CR-126).
+	requisition: ['kitchen_requisition:', 'requisition_ticket:'],
 	// T-13 mints these; nothing writes `stock_transfer` docs yet.
 	transfer_in: 'stock_transfer:',
 	transfer_out: 'stock_transfer:',
@@ -336,11 +338,12 @@ function checkRefId(reason: LedgerReason, refId: string | null, ctx: z.Refinemen
 		}
 		return;
 	}
-	if (!refId?.startsWith(expected)) {
+	const prefixes = Array.isArray(expected) ? expected : [expected];
+	if (!refId || !prefixes.some((p) => refId.startsWith(p))) {
 		ctx.addIssue({
 			code: 'custom',
 			path: ['ref_id'],
-			message: `รายการประเภท '${reason}' ต้องอ้างอิงเอกสารต้นทางที่ขึ้นต้นด้วย '${expected}'`
+			message: `รายการประเภท '${reason}' ต้องอ้างอิงเอกสารต้นทางที่ขึ้นต้นด้วย '${prefixes.join("' หรือ '")}'`
 		});
 	}
 }

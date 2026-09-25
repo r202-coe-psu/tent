@@ -160,7 +160,7 @@ async function* ledgerDocs(db: string): AsyncGenerator<LedgerDoc> {
 // ─── the rule under audit ─────────────────────────────────────────────────────
 
 /** `undefined` = `reason` is not a value the R2 table knows about at all. */
-function expectedPrefix(reason: string | undefined): string | null | undefined {
+function expectedPrefix(reason: string | undefined): string | string[] | null | undefined {
 	if (reason === undefined) return undefined;
 	if (!Object.prototype.hasOwnProperty.call(REF_PREFIX_BY_REASON, reason)) return undefined;
 	return REF_PREFIX_BY_REASON[reason as LedgerReason];
@@ -180,9 +180,10 @@ function violationOf(doc: LedgerDoc): string | null {
 			? null
 			: `expected ref_id null, found ${found}`;
 	}
-	return typeof doc.ref_id === 'string' && doc.ref_id.startsWith(expected)
+	const prefixes = Array.isArray(expected) ? expected : [expected];
+	return typeof doc.ref_id === 'string' && prefixes.some((p) => doc.ref_id!.startsWith(p))
 		? null
-		: `expected ref_id starting with '${expected}', found ${found}`;
+		: `expected ref_id starting with '${prefixes.join("' or '")}', found ${found}`;
 }
 
 // ─── report ───────────────────────────────────────────────────────────────────

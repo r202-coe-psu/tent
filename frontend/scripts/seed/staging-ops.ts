@@ -9,6 +9,8 @@ import {
 	createWalkInDonation,
 	keyPurchaseReceipt
 } from '$lib/features/operations/domain/operations';
+import { createFuelCylinder } from '$lib/features/kitchen/domain/kitchen';
+import { createGasLedgerEntry } from '$lib/features/kitchen/domain/gas-ledger';
 import { shelterDbName } from '$lib/server/shelter-access-design';
 import { prefixRangeEnd } from '../t31-seed-support';
 import { bulkDocs, couchReq } from './couch';
@@ -221,16 +223,92 @@ export async function seedStagingOps(): Promise<void> {
 					]
 				: [];
 
+		// CR-120 §7.2 — 3 independent LPG cylinders for SH001.
+		// Seeded balances: LPG-01 = 15 kg, LPG-02 = 12 kg, LPG-03 = 0 kg.
+		const fuelCylinders =
+			code === SH001_CODE
+				? [
+						createFuelCylinder(
+							{
+								item_master_id: 'item_master:lpg_15kg',
+								cylinder_code: 'LPG-01',
+								name: 'ถังแก๊สหลัก 1',
+								capacity_kg: '15',
+								burn_rate_kg_per_hour: '0.5',
+								time_multiplier: '1',
+								deactivated: false
+							},
+							ctx
+						),
+						createFuelCylinder(
+							{
+								item_master_id: 'item_master:lpg_15kg',
+								cylinder_code: 'LPG-02',
+								name: 'ถังแก๊สหลัก 2',
+								capacity_kg: '15',
+								burn_rate_kg_per_hour: '0.5',
+								time_multiplier: '1',
+								deactivated: false
+							},
+							ctx
+						),
+						createFuelCylinder(
+							{
+								item_master_id: 'item_master:lpg_15kg',
+								cylinder_code: 'LPG-03',
+								name: 'ถังแก๊สสำรอง',
+								capacity_kg: '15',
+								burn_rate_kg_per_hour: '0.5',
+								time_multiplier: '1',
+								deactivated: false
+							},
+							ctx
+						)
+					]
+				: [];
+		const gasLedgerEntries =
+			code === SH001_CODE
+				? [
+						// LPG-01: no ledger delta, remaining = capacity = 15 kg.
+						// LPG-02: +5 refill -8 consumption, remaining = 12 kg.
+						createGasLedgerEntry(
+							{ cylinder_id: fuelCylinders[1]._id, qty_kg: '5', reason: 'refill', ref_id: null },
+							ctx
+						),
+						createGasLedgerEntry(
+							{
+								cylinder_id: fuelCylinders[1]._id,
+								qty_kg: '-8',
+								reason: 'consumption',
+								ref_id: null
+							},
+							ctx
+						),
+						// LPG-03: -15 consumption, remaining = 0 kg.
+						createGasLedgerEntry(
+							{
+								cylinder_id: fuelCylinders[2]._id,
+								qty_kg: '-15',
+								reason: 'consumption',
+								ref_id: null
+							},
+							ctx
+						)
+					]
+				: [];
+
 		await bulkDocs(db, [
 			...stockEntries,
 			...campaigns,
 			...donations,
 			...purchases,
 			...purchaseReceipts,
-			...itemMasterOverrides
+			...itemMasterOverrides,
+			...fuelCylinders,
+			...gasLedgerEntries
 		]);
 		console.log(
-			`  ✓ ${db}: ${stockEntries.length} stock, ${campaigns.length} campaigns, ${donations.length} donations, ${purchases.length} purchases${itemMasterOverrides.length ? `, ${itemMasterOverrides.length} item_master override` : ''}`
+			`  ✓ ${db}: ${stockEntries.length} stock, ${campaigns.length} campaigns, ${donations.length} donations, ${purchases.length} purchases${itemMasterOverrides.length ? `, ${itemMasterOverrides.length} item_master override` : ''}${fuelCylinders.length ? `, ${fuelCylinders.length} fuel_cylinder` : ''}`
 		);
 	}
 }

@@ -1,11 +1,8 @@
 import { parseQty, persistQty, qtyGt, type QtyValue } from '$lib/utils/qty';
-import type { GasCylinderType } from './kitchen';
+import type { FuelCylinder } from './kitchen';
 
-/** The coefficients the gas formula needs — a `gas_cylinder_type` doc satisfies this. */
-export type GasBurnCoefficients = Pick<
-	GasCylinderType,
-	'burn_rate_kg_per_hour' | 'time_multiplier'
->;
+/** The coefficients the gas formula needs — a `fuel_cylinder` doc satisfies this. */
+export type GasBurnCoefficients = Pick<FuelCylinder, 'burn_rate_kg_per_hour' | 'time_multiplier'>;
 
 /**
  * Calculates gas consumption: Cooking Time (hrs) × Burn Rate (kg/hr) × Multiplier.

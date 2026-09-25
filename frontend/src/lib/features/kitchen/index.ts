@@ -2,11 +2,11 @@
 export { default as MealPlanList } from './ui/meal-plan-list.svelte';
 export { default as MealPlanForm } from './ui/meal-plan-form.svelte';
 export { default as GasManagement } from './ui/gas-management.svelte';
-export { default as RequisitionDialog } from './ui/requisition-dialog.svelte';
 export { default as RequisitionHistory } from './ui/requisition-history.svelte';
 export { default as MealServiceForm } from './ui/meal-service-form.svelte';
 export { default as MealServiceSummary } from './ui/meal-service-summary.svelte';
 export { default as MealSessionList } from './ui/MealSessionList.svelte';
+export { default as StoveLpgAllocation } from './ui/stove-lpg-allocation.svelte';
 
 // Domain — meal calculation and requisition
 export {
@@ -15,6 +15,7 @@ export {
 	calculateMealIngredientsFromCustom,
 	resolveItemMasterStock,
 	toRequisitionInput,
+	toTicketItemInput,
 	assessRequisition,
 	expandTargetTags,
 	computeSessionGroupProgress,
@@ -33,6 +34,7 @@ export type {
 	MealCalcResult,
 	CustomIngredientInput,
 	ResolvedItemMaster,
+	TicketItemPayload,
 	StockAvailabilityStatus,
 	RequisitionLineAssessment,
 	TargetGroupTag,
@@ -99,6 +101,8 @@ export type {
 	KitchenRequisitionGasDrawdown,
 	MealService,
 	MealServiceExternal,
+	MealServiceReceipt,
+	MealServiceReceiptOutcome,
 	KitchenDoc,
 	MealPeriod,
 	MealPlanStatus,
@@ -106,9 +110,22 @@ export type {
 	KitchenRequisitionInput,
 	PendingRequisitionInput,
 	MealServiceInput,
-	GasCylinderType,
-	GasCylinderTypeInput
+	FuelCylinder,
+	FuelCylinderInput
 } from './domain/kitchen';
+
+// Domain — meal distribution push to POS (CR-132)
+export type {
+	MealDistributionPush,
+	MealDistributionPushItem,
+	MealDistributionPushInput
+} from './domain/meal-distribution-push';
+export {
+	mealDistributionPushInputSchema,
+	createMealDistributionPush,
+	isMealDistributionPush,
+	mealServicePushRemaining
+} from './domain/meal-distribution-push';
 
 // Domain — schemas, factories, guards, labels
 export {
@@ -129,10 +146,14 @@ export {
 	createMealService,
 	isMealPlan,
 	isKitchenRequisition,
-	gasCylinderTypeInputSchema,
-	createGasCylinderType,
-	isGasCylinderType,
+	fuelCylinderInputSchema,
+	createFuelCylinder,
+	isFuelCylinder,
 	isMealService,
+	mealServiceReceiptOutcomeSchema,
+	createMealServiceReceipt,
+	isMealServiceReceipt,
+	mealServiceReceiptOutcome,
 	MEAL_PERIOD_LABELS
 } from './domain/kitchen';
 
@@ -158,7 +179,9 @@ export {
 	useCreateMealPlan,
 	useCreateMealPlanCalc,
 	useConfirmMealPlan,
+	useUpdateMealPlanGasUsage,
 	useUpdateMealPlanCalc,
+	useUpdateConfirmedMealPlan,
 	useDeleteMealPlanDraft,
 	useRequisitions,
 	useKitchenRequisitions,
@@ -169,10 +192,15 @@ export {
 	useIssueRequisition,
 	useMealServices,
 	useRecordMealService,
-	useGasCylinderTypes,
-	useCreateGasCylinderType,
-	useUpdateGasCylinderType,
-	useDeleteGasCylinderType,
+	useMealServiceReceipts,
+	useConfirmMealServiceReceipt,
+	useRejectMealServiceReceipt,
+	useMealDistributionPushes,
+	useCreateMealDistributionPush,
+	useFuelCylinders,
+	useCreateFuelCylinder,
+	useUpdateFuelCylinder,
+	useDeleteFuelCylinder,
 	useGasLedger,
 	useRefillGasCylinder,
 	useWriteOffGasCylinder,

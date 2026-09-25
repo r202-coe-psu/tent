@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { SvelteSet, SvelteMap } from 'svelte/reactivity';
 	import {
 		useStockBalance,
@@ -9,8 +10,11 @@
 	import { useSupplyItems, useThresholdOverrides } from '$lib/features/supply';
 	import { SUPPLY_CATEGORY_LABELS, type SupplyCategory } from '$lib/features/supply';
 	import { itemMasterUnit, useItemMasters } from '$lib/features/catalog';
+	import FuelEnergyTankStatus from '$lib/features/catalog/ui/fuel-energy-tank-status.svelte';
+	import FuelEnergyTankActions from '$lib/features/catalog/ui/fuel-energy-tank-actions.svelte';
+	import { gasCylinderBalance, useFuelCylinders, useGasLedger } from '$lib/features/kitchen';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { isSystemAdmin } from '$lib/auth/roles';
+	import { isSystemAdmin, isShelterManager, isWarehouseStaff } from '$lib/auth/roles';
 	import { useShelters } from '$lib/features/shelters';
 	import { getShelterCode } from '$lib/db/shelter';
 	import * as Table from '$lib/components/ui/table/index.js';
@@ -39,9 +43,15 @@
 	import Eye from '@lucide/svelte/icons/eye';
 	import Pencil from '@lucide/svelte/icons/pencil';
 
+	// ─── Props ────────────────────────────────────────────────────────────────
+	let { occupancy = 120, initialCategory }: { occupancy?: number; initialCategory?: string } =
+		$props();
+
 	// ─── Queries ──────────────────────────────────────────────────────────────
 	const itemsQuery = useSupplyItems();
 	const itemMastersQuery = useItemMasters(() => getShelterCode());
+	const fuelCylindersQuery = useFuelCylinders();
+	const gasLedgerQuery = useGasLedger();
 	const balanceQuery = useStockBalance();
 	const ledgerQuery = useLedger();
 	const overridesQuery = useThresholdOverrides();
@@ -51,6 +61,7 @@
 	// ─── Roles and Cross-Shelter States ───────────────────────────────────────
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
+	const canManageFuel = $derived(isSA || isShelterManager(roles) || isWarehouseStaff(roles));
 	let showOverall = $state(false);
 
 	const sheltersQuery = useShelters();
@@ -69,12 +80,13 @@
 
 	// ─── Filter state ─────────────────────────────────────────────────────────
 	let searchQuery = $state('');
-	let categoryFilter = $state<string>('all');
+	let categoryFilter = $state<string>(untrack(() => initialCategory ?? 'all'));
 	let locationFilter = $state<string | 'all'>('all');
 	let statusFilter = $state<'all' | 'normal' | 'low' | 'empty' | 'expiring' | 'expired'>('all');
 
 	// ─── Collapsed groups state ──────────────────────────────────────────────
 	const collapsedGroups = new SvelteSet<string>();
+	const expandedFuelItems = new SvelteSet<string>();
 
 	function toggleGroup(category: string) {
 		if (collapsedGroups.has(category)) {
@@ -82,6 +94,11 @@
 		} else {
 			collapsedGroups.add(category);
 		}
+	}
+
+	function toggleFuelItem(itemId: string) {
+		if (expandedFuelItems.has(itemId)) expandedFuelItems.delete(itemId);
+		else expandedFuelItems.add(itemId);
 	}
 
 	// ─── Pagination state ─────────────────────────────────────────────────────
@@ -293,9 +310,6 @@
 		supplies: 'Supplies',
 		fuel: 'Fuel'
 	};
-
-	// ─── Props ────────────────────────────────────────────────────────────────
-	let { occupancy = 120 } = $props();
 
 	// calculate reorder level and evaluate status
 	const itemsWithCalculatedStatus = $derived(
@@ -623,6 +637,23 @@
 								{#if !collapsedGroups.has(group.category)}
 									{#each group.items as item (item._id)}
 										{@const qty = item.qtyOnHand}
+										{@const itemCylinders =
+											fuelCylindersQuery.data?.filter(
+												(cylinder) => cylinder.item_master_id === item._id
+											) ?? []}
+										{@const isFuelItem = item.category === 'item_category:fuel_energy'}
+										{@const shownQty = isFuelItem ? String(itemCylinders.length) : qty}
+										{@const usableFuelCount = itemCylinders.filter(
+											(cylinder) =>
+												!cylinder.deactivated &&
+												Number(
+													gasCylinderBalance(
+														gasLedgerQuery.data ?? [],
+														cylinder._id,
+														cylinder.capacity_kg
+													)
+												) > 0
+										).length}
 										{@const status = item.status}
 										{@const lot = latestLotByItem[item._id]}
 										{@const expired = isExpired(lot?.expiry)}
@@ -630,13 +661,29 @@
 										<Table.Row class="transition-all duration-200 hover:bg-muted/40">
 											<!-- Item name + ID -->
 											<Table.Cell class="p-4 px-5 pl-12">
-												<div class="flex flex-col gap-0.5">
-													<span class="text-sm font-semibold text-foreground">
-														{item.name}
-													</span>
-													<span class="font-mono text-2xs text-muted-foreground">
-														ID: {item._id}
-													</span>
+												<div class="flex items-center gap-2">
+													{#if isFuelItem}
+														<button
+															type="button"
+															onclick={() => toggleFuelItem(item._id)}
+															class="rounded p-1 text-foreground hover:bg-muted"
+															aria-label="เปิดดูถังแก๊ส"
+														>
+															<ChevronDown
+																class="h-4 w-4 transition-transform {expandedFuelItems.has(item._id)
+																	? 'rotate-180'
+																	: ''}"
+															/>
+														</button>
+													{/if}
+													<div class="flex flex-col gap-0.5">
+														<span class="text-sm font-semibold text-foreground">
+															{item.name}
+														</span>
+														<span class="font-mono text-2xs text-muted-foreground">
+															ID: {item._id}
+														</span>
+													</div>
 												</div>
 											</Table.Cell>
 
@@ -665,8 +712,9 @@
 											<!-- สต็อกทั้งหมด (PHYSICAL ON-HAND) -->
 											<Table.Cell class="p-4 text-center">
 												<span class="text-sm font-bold text-foreground">
-													{qty}
-													<span class="text-2xs font-normal text-muted-foreground">{item.unit}</span
+													{shownQty}
+													<span class="text-2xs font-normal text-muted-foreground"
+														>{isFuelItem ? 'ถัง' : item.unit}</span
 													>
 												</span>
 											</Table.Cell>
@@ -674,15 +722,17 @@
 											<!-- ใช้งานได้จริง (USABLE STOCK) -->
 											<Table.Cell class="p-4 text-center">
 												<span
-													class="inline-block rounded-md px-2.5 py-1 text-sm font-bold {expired ||
-													status === 'empty'
-														? 'bg-rose-500/10 text-rose-600'
-														: status === 'low'
-															? 'bg-amber-500/10 text-amber-600'
-															: 'text-[#0b6e4f]'}"
+													class="inline-block rounded-md px-2.5 py-1 text-sm font-bold {isFuelItem
+														? 'text-[#0b6e4f]'
+														: expired || status === 'empty'
+															? 'bg-rose-500/10 text-rose-600'
+															: status === 'low'
+																? 'bg-amber-500/10 text-amber-600'
+																: 'text-[#0b6e4f]'}"
 												>
-													{qty}
-													<span class="text-2xs font-normal text-muted-foreground">{item.unit}</span
+													{isFuelItem ? usableFuelCount : shownQty}
+													<span class="text-2xs font-normal text-muted-foreground"
+														>{isFuelItem ? 'ถัง' : item.unit}</span
 													>
 												</span>
 											</Table.Cell>
@@ -719,6 +769,56 @@
 												{/if}
 											</Table.Cell>
 										</Table.Row>
+
+										{#if item.category === 'item_category:fuel_energy' && expandedFuelItems.has(item._id)}
+											{#each fuelCylindersQuery.data?.filter((cylinder) => cylinder.item_master_id === item._id) ?? [] as cylinder (cylinder._id)}
+												<Table.Row class="transition-all duration-200 hover:bg-muted/40">
+													<Table.Cell class="p-3 pl-25">
+														<div class="flex items-start gap-1.5">
+															<div class="flex flex-col gap-0.5">
+																<span class="font-mono text-xs font-bold text-foreground"
+																	>{cylinder.cylinder_code}</span
+																>
+																<span class="text-xs font-semibold text-foreground"
+																	>{cylinder.name}</span
+																>
+															</div>
+															<FuelEnergyTankStatus
+																itemMasterId={item._id}
+																cylinderId={cylinder._id}
+															/>
+														</div>
+													</Table.Cell>
+													<Table.Cell class="p-3 text-xs text-muted-foreground">ถังแก๊ส</Table.Cell>
+													<Table.Cell class="p-3 text-center text-xs text-muted-foreground"
+														>—</Table.Cell
+													>
+													<Table.Cell class="p-3 text-center text-xs font-semibold text-foreground"
+														>{cylinder.capacity_kg} กก.</Table.Cell
+													>
+													<Table.Cell
+														class="p-3 text-center {cylinder.deactivated
+															? 'text-muted-foreground'
+															: 'text-emerald-700'}"
+													>
+														{#if cylinder.deactivated}
+															<span class="text-xs">0 กก.</span>
+														{:else}
+															<FuelEnergyTankStatus
+																itemMasterId={item._id}
+																cylinderId={cylinder._id}
+																compact
+															/>
+														{/if}
+													</Table.Cell>
+													<Table.Cell class="p-3 text-center">
+														<div class="flex flex-wrap items-center justify-center gap-2">
+															<FuelEnergyTankActions {cylinder} canWrite={canManageFuel} />
+														</div>
+													</Table.Cell>
+												</Table.Row>
+											{/each}
+										{/if}
 									{/each}
 								{/if}
 							{/each}

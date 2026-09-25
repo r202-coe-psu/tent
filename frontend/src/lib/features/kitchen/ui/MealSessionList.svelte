@@ -6,17 +6,24 @@
 		useKitchenRequisitions,
 		useActiveEvacueeDietCounts,
 		useCreateMealSession,
-		useUpdateMealSession,
 		useDeleteMealSession,
 		computeSessionGroupProgress,
 		computeMealVariance,
 		MEAL_VARIANCE_STATUS_LABELS,
 		TARGET_GROUP_LABELS,
 		type MealSession,
+		type MealPlan,
 		type MealPeriod,
+		type MealSessionStatus,
 		type TargetGroupTag,
 		type MealVarianceStatus
 	} from '$lib/features/kitchen';
+	import {
+		useTickets,
+		TICKET_STATUS_LABELS,
+		type TicketStatus,
+		type RequisitionTicket
+	} from '$lib/features/tickets';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { formatThaiDateTime } from '$lib/utils/date';
@@ -24,15 +31,20 @@
 	import * as Card from '$lib/components/ui/card';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as Table from '$lib/components/ui/table';
+	import * as Select from '$lib/components/ui/select';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { toast } from 'svelte-sonner';
 	import Plus from '@lucide/svelte/icons/plus';
+	import Search from '@lucide/svelte/icons/search';
+	import Flame from '@lucide/svelte/icons/flame';
+	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import ChefHat from '@lucide/svelte/icons/chef-hat';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import Clock from '@lucide/svelte/icons/clock';
+	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import XCircle from '@lucide/svelte/icons/x-circle';
 	import Calendar from '@lucide/svelte/icons/calendar';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
@@ -49,9 +61,74 @@
 	const services = useMealServices();
 	const requisitions = useKitchenRequisitions();
 	const dietCounts = useActiveEvacueeDietCounts();
+	const tickets = useTickets();
+
+	// Per meal_plan_id: the most relevant requisition_ticket (CR-126 write path — the legacy
+	// kitchen_requisition above is frozen/read-only, so plans created after cutover only ever
+	// get a ticket, never a new kitchen_requisition row).
+	const ticketByPlanId = $derived.by(() => {
+		const sorted = [...(tickets.data ?? [])].sort((a, b) =>
+			b.created_at.localeCompare(a.created_at)
+		);
+		const map: Record<string, (typeof sorted)[number]> = {};
+		for (const t of sorted) {
+			const existing = map[t.meal_plan_id];
+			if (!existing || existing.status === 'CANCELLED') {
+				map[t.meal_plan_id] = t;
+			}
+		}
+		return map;
+	});
+
+	const TICKET_STATUS_CLASS: Record<TicketStatus, string> = {
+		PENDING_PICK: 'bg-amber-100 text-amber-800',
+		READY_FOR_DISPATCH: 'bg-blue-100 text-blue-800',
+		IN_TRANSIT: 'bg-indigo-100 text-indigo-800',
+		COMPLETED: 'bg-green-100 text-green-800',
+		CANCELLED: 'bg-muted text-muted-foreground'
+	};
+
+	// This card's own wording for the ticket badge — kept local, not a rename of
+	// the shared TICKET_STATUS_LABELS constant used elsewhere (tickets feature).
+	const PRODUCTION_CARD_TICKET_LABEL: Partial<Record<TicketStatus, string>> = {
+		PENDING_PICK: 'รอคลังอนุมัติ'
+	};
+
+	// Once the ticket is COMPLETED (materials received), split the single
+	// "เสร็จสิ้น" badge into the 3 cooking sub-phases Stage C actually tracks —
+	// each with its own color, same palette as the Stage C header badge.
+	function productionCardStatus(
+		ticket: RequisitionTicket,
+		plan: MealPlan,
+		hasService: boolean
+	): { label: string; className: string } {
+		if (ticket.status !== 'COMPLETED') {
+			return {
+				label: PRODUCTION_CARD_TICKET_LABEL[ticket.status] ?? TICKET_STATUS_LABELS[ticket.status],
+				className: TICKET_STATUS_CLASS[ticket.status]
+			};
+		}
+		if (hasService) {
+			return { label: 'รอคลังตรวจรับเข้าสต็อก', className: 'bg-amber-100 text-amber-800' };
+		}
+		if (plan.cooking_started_at) {
+			return { label: 'กำลังปรุงอาหาร', className: 'bg-orange-100 text-orange-800' };
+		}
+		return { label: 'วัตถุดิบพร้อมปรุง', className: 'bg-sky-100 text-sky-800' };
+	}
+
+	// "จัดการ / สูตร" jumps to whichever wizard stage this batch last reached.
+	function latestStageFor(
+		ticket: RequisitionTicket | undefined,
+		hasService: boolean
+	): 'A' | 'B' | 'C' {
+		if (hasService) return 'C';
+		if (!ticket) return 'A';
+		if (ticket.status === 'IN_TRANSIT' || ticket.status === 'COMPLETED') return 'C';
+		return 'B';
+	}
 
 	const createSessionMutation = useCreateMealSession();
-	const updateSessionMutation = useUpdateMealSession();
 	const deleteSessionMutation = useDeleteMealSession();
 
 	let createDialogOpen = $state(false);
@@ -98,9 +175,8 @@
 		createDialogOpen = true;
 	}
 
-	function handleMealChange(e: Event) {
-		const target = e.target as HTMLSelectElement;
-		formMeal = target.value as MealPeriod;
+	function handleMealChange(value: string) {
+		formMeal = value as MealPeriod;
 		const mealThai =
 			formMeal === 'breakfast'
 				? 'มื้อเช้า'
@@ -151,19 +227,6 @@
 		}
 	}
 
-	async function handleCompleteSession(session: MealSession) {
-		try {
-			await updateSessionMutation.mutateAsync({
-				session,
-				patch: { status: 'completed' }
-			});
-			toast.success('บันทึกปิดรอบมื้ออาหารแล้ว');
-		} catch (err) {
-			const msg = err instanceof Error ? err.message : 'ไม่สามารถเปลี่ยนสถานะได้';
-			toast.error(msg);
-		}
-	}
-
 	async function handleDeleteSession(session: MealSession) {
 		if (!confirm(`คุณต้องการลบรอบมื้ออาหาร "${session.name}" หรือไม่?`)) return;
 		try {
@@ -180,6 +243,46 @@
 		return list.sort(
 			(a, b) => b.date.localeCompare(a.date) || b.created_at.localeCompare(a.created_at)
 		);
+	});
+
+	// Client-side search/status/date-range filter row (matches the AI Studio prototype's
+	// Meal Sessions filter bar) — no new field/query needed.
+	let search = $state('');
+	let statusFilter = $state<'ALL' | MealSessionStatus>('ALL');
+	type DateRangePreset = 'ALL' | 'today' | 'last7' | 'last30';
+	let dateRange = $state<DateRangePreset>('ALL');
+
+	const STATUS_FILTER_LABELS: Record<'ALL' | MealSessionStatus, string> = {
+		ALL: 'สถานะ: ทั้งหมด',
+		active: 'กำลังดำเนินการ',
+		completed: 'เสร็จสิ้นแล้ว',
+		cancelled: 'ยกเลิก'
+	};
+	const DATE_RANGE_LABELS: Record<DateRangePreset, string> = {
+		ALL: 'ช่วงวันที่: ทั้งหมด',
+		today: 'วันนี้',
+		last7: '7 วันล่าสุด',
+		last30: '30 วันล่าสุด'
+	};
+
+	function isWithinDateRange(date: string, preset: DateRangePreset): boolean {
+		if (preset === 'ALL') return true;
+		const todayMs = Date.now();
+		const today = new Date(todayMs).toISOString().slice(0, 10);
+		if (preset === 'today') return date === today;
+		const days = preset === 'last7' ? 7 : 30;
+		const from = new Date(todayMs - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+		return date >= from && date <= today;
+	}
+
+	const filteredSessions = $derived.by(() => {
+		const q = search.trim().toLowerCase();
+		return sortedSessions.filter((s) => {
+			if (statusFilter !== 'ALL' && s.status !== statusFilter) return false;
+			if (!isWithinDateRange(s.date, dateRange)) return false;
+			if (!q) return true;
+			return s.name.toLowerCase().includes(q) || s.date.includes(q);
+		});
 	});
 
 	const groupKeys: TargetGroupTag[] = ['halal', 'infant', 'soft_food', 'regular', 'volunteer'];
@@ -204,16 +307,6 @@
 		}
 	}
 
-	function expandAll() {
-		for (const s of sortedSessions) {
-			expandedSessionIds.add(s._id);
-		}
-	}
-
-	function collapseAll() {
-		expandedSessionIds.clear();
-	}
-
 	let activeTabPerSession = $state<Record<string, 'plans' | 'services'>>({});
 
 	function getActiveTab(sessionId: string): 'plans' | 'services' {
@@ -232,504 +325,574 @@
 	};
 </script>
 
-<div class="space-y-4 p-4">
-	<!-- Top Bar -->
-	<div class="flex flex-wrap items-center justify-between gap-3">
-		<div>
-			<h3 class="text-lg font-bold text-foreground">รอบมื้ออาหาร (Meal Production Sessions)</h3>
-			<p class="text-xs text-muted-foreground">
-				บริหารการผลิตอาหารแยกกลุ่มความต้องการพิเศษ 5 กลุ่ม และออกใบเบิกวัตถุดิบสู่คลัง
-			</p>
-		</div>
-		<div class="flex flex-wrap items-center gap-2">
-			{#if sortedSessions.length > 0}
-				<div class="flex items-center gap-1.5 sm:gap-2">
+<div class="min-h-full bg-[#F8FAFC]">
+	<div class="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+		<!-- Top Bar -->
+		<div class="border-b border-slate-200/80 pb-6">
+			<div class="flex flex-wrap items-start justify-between gap-3">
+				<div>
+					<h1 class="text-3xl font-extrabold tracking-tight text-[#0A2647] sm:text-4xl">
+						หน้าสรุปมื้อ (Meal Sessions)
+					</h1>
+					<p class="mt-2 text-base leading-relaxed text-slate-600">
+						บริหารจัดการเป้าหมายและสั่งผลิตเมนูแต่ละมื้อ (เชื่อมต่อทะเบียนผู้พักพิง)
+					</p>
+				</div>
+				<div class="flex flex-wrap items-center gap-2 pt-1">
 					<Button
 						variant="outline"
-						size="sm"
-						onclick={expandAll}
-						class="rounded-xl border-border/60 text-xs font-medium"
+						disabled={sessions.isFetching}
+						onclick={() => {
+							sessions.refetch();
+							plans.refetch();
+						}}
+						class="min-h-11 gap-1.5 border-sky-300 text-sky-700 hover:bg-sky-50"
 					>
-						ขยายทั้งหมด
+						<RefreshCw class="h-3.5 w-3.5 {sessions.isFetching ? 'animate-spin' : ''}" />
+						ซิงค์ข้อมูลล่าสุด
 					</Button>
-					<Button
-						variant="outline"
-						size="sm"
-						onclick={collapseAll}
-						class="rounded-xl border-border/60 text-xs font-medium"
+					<a
+						href={resolve('/back-office/supply') + '?category=item_category%3Afuel_energy'}
+						class="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
+						title="จัดการทรัพยากรแก๊ส"
 					>
-						ยุบทั้งหมด
+						<Flame class="h-3.5 w-3.5" />
+						ถังแก๊สระบบ
+					</a>
+					<a
+						href={resolve('/back-office/catalog') + '?tab=recipe'}
+						class="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
+					>
+						<Calendar class="h-3.5 w-3.5" />
+						ฐานสูตร BOM
+					</a>
+					<Button onclick={openCreateDialog} class="min-h-11 gap-1.5">
+						<Plus class="h-4 w-4" />
+						สร้างมื้อใหม่
 					</Button>
 				</div>
-			{/if}
-			<Button onclick={openCreateDialog} class="gap-1.5 shadow-sm">
-				<Plus class="h-4 w-4" />
-				สร้างรอบมื้ออาหารใหม่
-			</Button>
+			</div>
 		</div>
-	</div>
 
-	<!-- Sessions List -->
-	{#if sessions.isLoading}
-		<div class="flex items-center justify-center p-12 text-muted-foreground">
-			<Clock class="mr-2 h-5 w-5 animate-spin" /> กำลังโหลดรอบมื้ออาหาร...
-		</div>
-	{:else if sortedSessions.length === 0}
-		<Card.Root class="border-dashed py-12 text-center">
-			<Card.Content class="flex flex-col items-center justify-center">
-				<ChefHat class="h-12 w-12 text-muted-foreground/50" />
-				<h4 class="mt-4 text-base font-semibold">ยังไม่มีรอบมื้ออาหาร</h4>
-				<p class="mt-1 max-w-sm text-xs text-muted-foreground">
-					เริ่มต้นวางแผนอาหารและคำนวณสูตรโดยการสร้างรอบมื้ออาหารใหม่
-				</p>
-				<Button onclick={openCreateDialog} variant="outline" class="mt-4 gap-1.5">
-					<Plus class="h-4 w-4" /> สร้างรอบมื้อแรก
-				</Button>
-			</Card.Content>
-		</Card.Root>
-	{:else}
-		<div class="space-y-4">
-			{#each sortedSessions as session (session._id)}
-				{@const sessionPlans = (plans.data ?? []).filter((p) => p.meal_session_id === session._id)}
-				{@const sessionServices = (services.data ?? []).filter(
-					(s) => s.meal_session_id === session._id
-				)}
-				{@const progress = computeSessionGroupProgress(session, sessionPlans, sessionServices)}
-				{@const isExpanded = expandedSessionIds.has(session._id)}
-
-				<div
-					class="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm transition-all duration-200 hover:border-primary/40"
+		<!-- Filter row (search + status + date range) — matches the AI Studio prototype's
+	     Meal Sessions filter bar; client-side only, no new field/query. -->
+		<div
+			class="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs"
+		>
+			<div class="relative min-w-0 flex-1">
+				<Search
+					class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400"
+				/>
+				<Input
+					bind:value={search}
+					placeholder="ค้นหาชื่อมื้อ หรือวันที่..."
+					class="min-h-11 pl-9"
+				/>
+			</div>
+			<Select.Root type="single" bind:value={statusFilter}>
+				<Select.Trigger class="min-h-11 w-full sm:w-52"
+					><Select.Value placeholder="สถานะ: ทั้งหมด"
+						>{STATUS_FILTER_LABELS[statusFilter]}</Select.Value
+					></Select.Trigger
 				>
-					<!-- Card Header (Accordion Button) -->
-					<button
-						type="button"
-						onclick={() => toggleSession(session._id)}
-						aria-expanded={isExpanded}
-						class="flex w-full flex-wrap items-center justify-between gap-2.5 bg-muted/30 px-3.5 py-2.5 text-left transition-colors hover:bg-muted/60 sm:px-5 sm:py-3 {isExpanded
-							? 'border-b'
-							: ''}"
+				<Select.Content>
+					<Select.Item value="ALL" label="สถานะ: ทั้งหมด">สถานะ: ทั้งหมด</Select.Item>
+					<Select.Item value="active" label="กำลังดำเนินการ">กำลังดำเนินการ</Select.Item>
+					<Select.Item value="completed" label="เสร็จสิ้นแล้ว">เสร็จสิ้นแล้ว</Select.Item>
+					<Select.Item value="cancelled" label="ยกเลิก">ยกเลิก</Select.Item>
+				</Select.Content>
+			</Select.Root>
+			<Select.Root type="single" bind:value={dateRange}>
+				<Select.Trigger class="min-h-11 w-full sm:w-52"
+					><Select.Value placeholder="ช่วงวันที่: ทั้งหมด"
+						>{DATE_RANGE_LABELS[dateRange]}</Select.Value
+					></Select.Trigger
+				>
+				<Select.Content>
+					<Select.Item value="ALL" label="ช่วงวันที่: ทั้งหมด">ช่วงวันที่: ทั้งหมด</Select.Item>
+					<Select.Item value="today" label="วันนี้">วันนี้</Select.Item>
+					<Select.Item value="last7" label="7 วันล่าสุด">7 วันล่าสุด</Select.Item>
+					<Select.Item value="last30" label="30 วันล่าสุด">30 วันล่าสุด</Select.Item>
+				</Select.Content>
+			</Select.Root>
+			{#if search || statusFilter !== 'ALL' || dateRange !== 'ALL'}
+				<Button
+					variant="ghost"
+					size="sm"
+					onclick={() => {
+						search = '';
+						statusFilter = 'ALL';
+						dateRange = 'ALL';
+					}}
+				>
+					ล้างตัวกรอง
+				</Button>
+			{/if}
+		</div>
+
+		<!-- Sessions List -->
+		{#if sessions.isLoading}
+			<div class="flex items-center justify-center p-12 text-muted-foreground">
+				<Clock class="mr-2 h-5 w-5 animate-spin" /> กำลังโหลดรอบมื้ออาหาร...
+			</div>
+		{:else if filteredSessions.length === 0}
+			<Card.Root class="border-dashed py-12 text-center">
+				<Card.Content class="flex flex-col items-center justify-center">
+					<ChefHat class="h-12 w-12 text-muted-foreground/50" />
+					<h4 class="mt-4 text-base font-semibold">
+						{sortedSessions.length === 0 ? 'ยังไม่มีรอบมื้ออาหาร' : 'ไม่พบรอบมื้อที่ตรงกับเงื่อนไข'}
+					</h4>
+					{#if sortedSessions.length === 0}
+						<p class="mt-1 max-w-sm text-xs text-muted-foreground">
+							เริ่มต้นวางแผนอาหารและคำนวณสูตรโดยการสร้างรอบมื้ออาหารใหม่
+						</p>
+						<Button onclick={openCreateDialog} variant="outline" class="mt-4 gap-1.5">
+							<Plus class="h-4 w-4" /> สร้างรอบมื้อแรก
+						</Button>
+					{/if}
+				</Card.Content>
+			</Card.Root>
+		{:else}
+			<div class="space-y-4">
+				{#each filteredSessions as session (session._id)}
+					{@const sessionPlans = (plans.data ?? []).filter(
+						(p) => p.meal_session_id === session._id
+					)}
+					{@const sessionServices = (services.data ?? []).filter(
+						(s) => s.meal_session_id === session._id
+					)}
+					{@const progress = computeSessionGroupProgress(session, sessionPlans, sessionServices)}
+					{@const isExpanded = expandedSessionIds.has(session._id)}
+
+					<div
+						class="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm transition-all duration-200 hover:border-primary/40"
 					>
-						<div class="flex min-w-0 flex-wrap items-center gap-2.5 sm:gap-3">
-							<div
-								class="shrink-0 rounded-lg border border-border/60 bg-background/80 p-1 text-muted-foreground shadow-sm"
+						<!-- Card Header (Accordion Button) -->
+						<div class="flex items-stretch">
+							<button
+								type="button"
+								onclick={() => toggleSession(session._id)}
+								aria-expanded={isExpanded}
+								class="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-2.5 bg-muted/30 px-3.5 py-2.5 text-left transition-colors hover:bg-muted/60 sm:px-5 sm:py-3 {isExpanded
+									? 'border-b'
+									: ''}"
 							>
-								{#if isExpanded}
-									<ChevronDown class="h-4 w-4 text-primary" />
-								{:else}
-									<ChevronRight class="h-4 w-4" />
-								{/if}
-							</div>
+								<div class="flex min-w-0 flex-wrap items-center gap-2.5 sm:gap-3">
+									<div
+										class="shrink-0 rounded-lg border border-border/60 bg-background/80 p-1 text-muted-foreground shadow-sm"
+									>
+										{#if isExpanded}
+											<ChevronDown class="h-4 w-4 text-primary" />
+										{:else}
+											<ChevronRight class="h-4 w-4" />
+										{/if}
+									</div>
 
-							<div class="flex flex-wrap items-center gap-2">
-								<span
-									class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold {session.meal ===
-									'breakfast'
-										? 'bg-amber-100 text-amber-800'
-										: session.meal === 'lunch'
-											? 'bg-orange-100 text-orange-800'
-											: session.meal === 'dinner'
-												? 'bg-indigo-100 text-indigo-800'
-												: 'bg-emerald-100 text-emerald-800'}"
-								>
-									{session.meal === 'breakfast'
-										? 'มื้อเช้า'
-										: session.meal === 'lunch'
-											? 'มื้อกลางวัน'
-											: session.meal === 'dinner'
-												? 'มื้อเย็น'
-												: 'ของว่าง'}
-								</span>
-								<h4 class="text-base font-bold text-foreground">{session.name}</h4>
-								<span class="inline-flex items-center gap-1 text-xs text-muted-foreground">
-									<Calendar class="h-3.5 w-3.5" />
-									{session.date}
-								</span>
-							</div>
-						</div>
+									<div class="flex flex-wrap items-center gap-2">
+										<span
+											class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold {session.meal ===
+											'breakfast'
+												? 'bg-amber-100 text-amber-800'
+												: session.meal === 'lunch'
+													? 'bg-orange-100 text-orange-800'
+													: session.meal === 'dinner'
+														? 'bg-indigo-100 text-indigo-800'
+														: 'bg-emerald-100 text-emerald-800'}"
+										>
+											{session.meal === 'breakfast'
+												? 'มื้อเช้า'
+												: session.meal === 'lunch'
+													? 'มื้อกลางวัน'
+													: session.meal === 'dinner'
+														? 'มื้อเย็น'
+														: 'ของว่าง'}
+										</span>
+										<h4 class="text-base font-bold text-foreground">{session.name}</h4>
+										<span class="inline-flex items-center gap-1 text-xs text-muted-foreground">
+											<Calendar class="h-3.5 w-3.5" />
+											{session.date}
+										</span>
+									</div>
+								</div>
 
-						<div class="flex flex-wrap items-center gap-2 sm:gap-3">
-							<!-- 5-Group Completion Badge -->
-							<span
-								class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold {progress.isAllCompleted
-									? 'border border-green-200 bg-green-100 text-green-800'
-									: 'border border-amber-200 bg-amber-100 text-amber-800'}"
-							>
-								{#if progress.isAllCompleted}
-									<CheckCircle2 class="h-3.5 w-3.5 text-green-600" />
-								{:else}
-									<Clock class="h-3.5 w-3.5 text-amber-600" />
-								{/if}
-								{progress.summaryText}
-							</span>
-
-							<!-- Status Badge -->
-							{#if session.status === 'completed'}
-								<span
-									class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700"
-								>
-									เสร็จสิ้นแล้ว
-								</span>
-							{:else if session.status === 'cancelled'}
-								<span
-									class="rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-medium text-rose-700"
-								>
-									ยกเลิก
-								</span>
-							{:else}
-								<span
-									class="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800"
-								>
-									กำลังดำเนินการ
-								</span>
-							{/if}
-
-							<div class="hidden shrink-0 text-xs font-semibold text-muted-foreground sm:block">
-								{isExpanded ? 'คลิกเพื่อยุบ' : 'คลิกเพื่อเปิดดู'}
-							</div>
-						</div>
-					</button>
-
-					{#if isExpanded}
-						{@const currentTab = getActiveTab(session._id)}
-						<div class="space-y-4 p-4 sm:p-5">
-							<!-- 5-Group Target vs Actual Cards -->
-							<div>
-								<div class="mb-2 flex items-center justify-between">
+								<div class="flex flex-wrap items-center gap-2 sm:gap-3">
 									<span class="text-xs font-semibold text-muted-foreground">
-										เป้าหมาย 5 กลุ่มความต้องการ (รวม {session.target_headcount.total} จาน)
+										เป้าหมายรวม: {session.target_headcount.total} คน
 									</span>
+
+									<!-- Group Completion Badge -->
+									<span
+										class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold {progress.isAllCompleted
+											? 'bg-green-100 text-green-800'
+											: 'bg-amber-100 text-amber-800'}"
+									>
+										{#if !progress.isAllCompleted}
+											<AlertTriangle class="h-3.5 w-3.5" />
+										{/if}
+										{progress.summaryText}ครบ
+									</span>
+
+									<!-- Status Badge -->
+									{#if session.status === 'completed'}
+										<span
+											class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700"
+										>
+											เสร็จสิ้นแล้ว
+										</span>
+									{:else if session.status === 'cancelled'}
+										<span
+											class="rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-medium text-rose-700"
+										>
+											ยกเลิก
+										</span>
+									{:else}
+										<span
+											class="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800"
+										>
+											กำลังดำเนินการ
+										</span>
+									{/if}
+								</div>
+							</button>
+							<Button
+								variant="ghost"
+								size="icon"
+								class="m-1 h-9 w-9 shrink-0 self-center text-muted-foreground hover:bg-rose-50 hover:text-rose-700"
+								onclick={(event) => {
+									event.stopPropagation();
+									handleDeleteSession(session);
+								}}
+								aria-label={`ลบ${session.name}`}
+								title="ลบรอบมื้ออาหาร"
+							>
+								<Trash2 class="h-4 w-4" />
+							</Button>
+						</div>
+
+						{#if isExpanded}
+							{@const currentTab = getActiveTab(session._id)}
+							<div class="space-y-4 p-4 sm:p-5">
+								<!-- 5-Group Target vs Actual Cards -->
+								<div>
+									<div class="mb-2 flex items-center justify-between">
+										<span class="text-xs font-semibold text-muted-foreground">
+											เป้าหมาย 5 กลุ่มความต้องการ (รวม {session.target_headcount.total} จาน)
+										</span>
+									</div>
+
+									<div class="overflow-hidden rounded-lg border">
+										<Table.Root>
+											<Table.Header>
+												<Table.Row class="bg-muted/30 text-2xs">
+													<Table.Head class="px-4 py-2 font-semibold">กลุ่มเป้าหมาย</Table.Head>
+													<Table.Head class="px-3 py-2 text-right font-semibold">
+														จำนวนเป้าหมาย (คน)
+													</Table.Head>
+													<Table.Head class="px-3 py-2 text-right font-semibold">
+														ทำแล้ว (จาน)
+													</Table.Head>
+													<Table.Head class="px-3 py-2 text-center font-semibold">สถานะ</Table.Head>
+												</Table.Row>
+											</Table.Header>
+											<Table.Body>
+												{#each groupKeys as groupKey (groupKey)}
+													{@const item = progress.groups[groupKey]}
+													<Table.Row class="text-xs">
+														<Table.Cell class="px-4 py-2 font-semibold">
+															{TARGET_GROUP_LABELS[groupKey]}
+														</Table.Cell>
+														<Table.Cell class="px-3 py-2 text-right">{item.target}</Table.Cell>
+														<Table.Cell class="px-3 py-2 text-right font-semibold">
+															{item.actualYield}
+														</Table.Cell>
+														<Table.Cell class="px-3 py-2 text-center">
+															<span
+																class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-bold {item.isCompleted
+																	? 'bg-green-100 text-green-800'
+																	: 'bg-amber-100 text-amber-800'}"
+															>
+																{#if item.isCompleted}
+																	<CheckCircle2 class="h-3 w-3" />
+																	ครบแล้ว
+																{:else}
+																	<Clock class="h-3 w-3" />
+																	ยังไม่ครบ
+																{/if}
+															</span>
+														</Table.Cell>
+													</Table.Row>
+												{/each}
+											</Table.Body>
+										</Table.Root>
+									</div>
 								</div>
 
-								<div class="grid grid-cols-2 gap-2 sm:grid-cols-5">
-									{#each groupKeys as groupKey (groupKey)}
-										{@const item = progress.groups[groupKey]}
-										<div
-											class="flex flex-col justify-between rounded-lg border p-2.5 transition-colors {item.isCompleted
-												? 'border-green-300 bg-green-50/50'
-												: 'border-muted bg-background'}"
-										>
-											<div class="flex items-center justify-between text-xs">
-												<span class="font-medium text-muted-foreground">
-													{TARGET_GROUP_LABELS[groupKey]}
-												</span>
-												{#if item.isCompleted}
-													<CheckCircle2 class="h-3.5 w-3.5 text-green-600" />
-												{:else}
-													<span class="h-1.5 w-1.5 rounded-full bg-amber-400"></span>
-												{/if}
-											</div>
-											<div class="mt-2 flex items-baseline justify-between">
-												<span
-													class="text-lg font-bold {item.isCompleted
-														? 'text-green-700'
-														: 'text-foreground'}"
-												>
-													{item.actualYield}
-												</span>
-												<span class="text-xs text-muted-foreground">
-													/ {item.target} จาน
-												</span>
-											</div>
+								<!-- Session Tabs: Plans & Batches vs Service Summary -->
+								<div class="rounded-lg border bg-muted/10">
+									<!-- Tab Header Pill Switches -->
+									<div
+										class="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/30 px-3 py-2"
+									>
+										<div class="flex items-center gap-1.5">
+											<button
+												type="button"
+												class="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors {currentTab ===
+												'plans'
+													? 'bg-background text-foreground shadow-sm'
+													: 'text-muted-foreground hover:bg-muted/60'}"
+												onclick={() => setActiveTab(session._id, 'plans')}
+											>
+												<Utensils class="h-3.5 w-3.5" />
+												ชุดการผลิต & แผนอาหาร ({sessionPlans.length})
+											</button>
+											<button
+												type="button"
+												class="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors {currentTab ===
+												'services'
+													? 'bg-background text-foreground shadow-sm'
+													: 'text-muted-foreground hover:bg-muted/60'}"
+												onclick={() => setActiveTab(session._id, 'services')}
+											>
+												<ClipboardCheck class="h-3.5 w-3.5" />
+												สรุปบริการของมื้อนี้ ({sessionServices.length})
+											</button>
 										</div>
-									{/each}
-								</div>
-							</div>
 
-							<!-- Session Tabs: Plans & Batches vs Service Summary -->
-							<div class="rounded-lg border bg-muted/10">
-								<!-- Tab Header Pill Switches -->
-								<div
-									class="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/30 px-3 py-2"
-								>
-									<div class="flex items-center gap-1.5">
-										<button
-											type="button"
-											class="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors {currentTab ===
-											'plans'
-												? 'bg-background text-foreground shadow-sm'
-												: 'text-muted-foreground hover:bg-muted/60'}"
-											onclick={() => setActiveTab(session._id, 'plans')}
-										>
-											<Utensils class="h-3.5 w-3.5" />
-											ชุดการผลิต & แผนอาหาร ({sessionPlans.length})
-										</button>
-										<button
-											type="button"
-											class="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors {currentTab ===
-											'services'
-												? 'bg-background text-foreground shadow-sm'
-												: 'text-muted-foreground hover:bg-muted/60'}"
-											onclick={() => setActiveTab(session._id, 'services')}
-										>
-											<ClipboardCheck class="h-3.5 w-3.5" />
-											สรุปบริการของมื้อนี้ ({sessionServices.length})
-										</button>
+										{#if currentTab === 'plans'}
+											<a
+												href={resolve(`/back-office/kitchen/production-board/${session._id}`)}
+												class="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+											>
+												<Plus class="h-3.5 w-3.5" /> เพิ่มเมนูผลิต
+											</a>
+										{/if}
 									</div>
 
 									{#if currentTab === 'plans'}
-										<a
-											href={resolve(`/back-office/kitchen/production-board/${session._id}`)}
-											class="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
-										>
-											<Plus class="h-3.5 w-3.5" /> เพิ่มเมนูผลิต (Stage A/B/C)
-										</a>
-									{/if}
-								</div>
+										<!-- TAB 1: Batches / Plans List -->
+										<div class="p-3">
+											{#if sessionPlans.length === 0}
+												<p class="py-4 text-center text-xs text-muted-foreground">
+													ยังไม่มีเมนูผลิตในมื้อนี้ กด "+ เพิ่มเมนูผลิต" เพื่อตั้งค่า BOM
+													และขอเบิกวัตถุดิบ
+												</p>
+											{:else}
+												<div class="space-y-2">
+													{#each sessionPlans as plan (plan._id)}
+														{@const ticket = ticketByPlanId[plan._id]}
+														{@const planReq = (requisitions.data ?? []).find(
+															(r) => r.meal_plan_id === plan._id
+														)}
+														{@const planSvc = sessionServices.find(
+															(s) => s.meal_plan_id === plan._id
+														)}
 
-								{#if currentTab === 'plans'}
-									<!-- TAB 1: Batches / Plans List -->
-									<div class="p-3">
-										{#if sessionPlans.length === 0}
-											<p class="py-4 text-center text-xs text-muted-foreground">
-												ยังไม่มีเมนูผลิตในมื้อนี้ กด "+ เพิ่มเมนูผลิต" เพื่อตั้งค่า BOM
-												และขอเบิกวัตถุดิบ
-											</p>
-										{:else}
-											<div class="divide-y divide-border">
-												{#each sessionPlans as plan (plan._id)}
-													{@const planReq = (requisitions.data ?? []).find(
-														(r) => r.meal_plan_id === plan._id
-													)}
-													{@const planSvc = sessionServices.find(
-														(s) => s.meal_plan_id === plan._id
-													)}
-
-													<div
-														class="flex flex-wrap items-center justify-between gap-3 py-2.5 text-xs"
-													>
-														<div class="flex flex-wrap items-center gap-2">
-															<span class="font-bold text-foreground">
-																{plan.label ?? 'เมนูมาตรฐาน'}
-															</span>
-
-															<!-- Target group chips -->
-															{#if plan.target_tags && plan.target_tags.length > 0}
-																<div class="flex flex-wrap gap-1">
-																	{#each plan.target_tags as tag (tag)}
-																		<span
-																			class="rounded bg-secondary px-1.5 py-0.5 text-2xs font-medium text-secondary-foreground"
-																		>
-																			{TARGET_GROUP_LABELS[tag as TargetGroupTag] ?? tag}
-																		</span>
-																	{/each}
-																</div>
-															{/if}
-
-															<span class="text-muted-foreground">
-																(เป้า {plan.allocated_target ?? plan.headcount.total} จาน)
-															</span>
-														</div>
-
-														<!-- Requisition, Service Badges & Actions -->
-														<div class="flex flex-wrap items-center gap-2">
-															{#if planReq}
-																<span
-																	class="inline-flex items-center gap-1 rounded px-2 py-0.5 font-mono text-2xs font-bold {planReq.status ===
-																	'approved'
-																		? 'bg-green-100 text-green-800'
-																		: planReq.status === 'rejected'
-																			? 'bg-rose-100 text-rose-800'
-																			: 'bg-amber-100 text-amber-800'}"
-																	title="ใบเบิกวัตถุดิบ"
-																>
-																	{#if planReq.status === 'approved'}
-																		<Check class="h-3 w-3" />
-																		เบิกวัตถุดิบแล้ว
-																	{:else if planReq.status === 'rejected'}
-																		<XCircle class="h-3 w-3" />
-																		ปฏิเสธคำขอ
-																	{:else}
-																		<Clock class="h-3 w-3" />
-																		รออนุมัติวัตถุดิบ
-																	{/if}
+														<div
+															class="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-background px-3 py-2.5 text-xs"
+														>
+															<div class="flex flex-wrap items-center gap-2">
+																<span class="font-bold text-foreground">
+																	{plan.label ?? 'เมนูมาตรฐาน'}
 																</span>
-															{/if}
 
-															{#if planSvc}
-																<span
-																	class="rounded bg-emerald-50 px-2 py-0.5 text-2xs font-bold text-emerald-700"
-																>
-																	✓ ปรุงจริง {planSvc.actual_yield ?? 0} จาน (แจก {planSvc.served})
-																</span>
-															{:else}
-																<span
-																	class="rounded bg-slate-100 px-2 py-0.5 text-2xs text-slate-600"
-																>
-																	ยังไม่บันทึกผลผลิต
-																</span>
-															{/if}
+																<!-- Target group chips -->
+																{#if plan.target_tags && plan.target_tags.length > 0}
+																	<div class="flex flex-wrap gap-1">
+																		{#each plan.target_tags as tag (tag)}
+																			<span
+																				class="rounded bg-secondary px-1.5 py-0.5 text-2xs font-medium text-secondary-foreground"
+																			>
+																				{TARGET_GROUP_LABELS[tag as TargetGroupTag] ?? tag}
+																			</span>
+																		{/each}
+																	</div>
+																{/if}
 
-															<!-- Action Buttons -->
-															{#if !planSvc && planReq?.status === 'approved'}
+																<span class="text-muted-foreground">
+																	(เป้า {plan.allocated_target ?? plan.headcount.total} จาน)
+																</span>
+
+																{#if ticket}
+																	<a
+																		href={resolve(
+																			`/back-office/tickets/${encodeURIComponent(ticket._id)}`
+																		)}
+																		class="font-mono text-2xs font-semibold text-primary hover:underline"
+																		title="เปิดตั๋วเบิกวัตถุดิบ"
+																	>
+																		{ticket.ticket_no}
+																	</a>
+																{/if}
+															</div>
+
+															<!-- Requisition/Ticket, Service Badges & Actions -->
+															<div class="flex flex-wrap items-center gap-2">
+																{#if ticket}
+																	{@const status = productionCardStatus(ticket, plan, !!planSvc)}
+																	<span
+																		class="inline-flex items-center gap-1 rounded px-2 py-0.5 font-mono text-2xs font-bold {status.className}"
+																		title="ตั๋วเบิกวัตถุดิบ"
+																	>
+																		{status.label}
+																	</span>
+																{:else if planReq}
+																	<span
+																		class="inline-flex items-center gap-1 rounded px-2 py-0.5 font-mono text-2xs font-bold {planReq.status ===
+																		'approved'
+																			? 'bg-green-100 text-green-800'
+																			: planReq.status === 'rejected'
+																				? 'bg-rose-100 text-rose-800'
+																				: 'bg-amber-100 text-amber-800'}"
+																		title="ใบเบิกวัตถุดิบ (ใบเบิกเดิม)"
+																	>
+																		{#if planReq.status === 'approved'}
+																			<Check class="h-3 w-3" />
+																			เบิกวัตถุดิบแล้ว
+																		{:else if planReq.status === 'rejected'}
+																			<XCircle class="h-3 w-3" />
+																			ปฏิเสธคำขอ
+																		{:else}
+																			<Clock class="h-3 w-3" />
+																			รออนุมัติวัตถุดิบ
+																		{/if}
+																	</span>
+																{/if}
+
+																{#if planSvc}
+																	<span
+																		class="rounded bg-emerald-50 px-2 py-0.5 text-2xs font-bold text-emerald-700"
+																	>
+																		✓ ปรุงจริง {planSvc.actual_yield ?? 0} จาน (แจก {planSvc.served})
+																	</span>
+																{/if}
+
+																<!-- Action Buttons -->
 																<a
 																	href={resolve(
-																		`/back-office/kitchen/production-board/${session._id}?plan_id=${plan._id}&stage=C`
+																		`/back-office/kitchen/production-board/${session._id}?plan_id=${plan._id}&stage=${latestStageFor(ticket, !!planSvc)}`
 																	)}
-																	class="inline-flex items-center gap-1 rounded bg-green-600 px-2.5 py-1 text-2xs font-semibold text-white shadow-sm transition-colors hover:bg-green-700"
-																	title="บันทึกผลผลิตใน Stage 3"
+																	class="inline-flex items-center gap-1 rounded border bg-background px-2 py-1 text-2xs font-medium text-foreground transition-colors hover:bg-muted"
+																	title="แก้ไขชุดการผลิตนี้"
 																>
-																	<CheckCircle2 class="h-3 w-3" />
-																	บันทึกผลผลิต (Stage 3)
+																	<Pencil class="h-3 w-3" />
+																	จัดการ / สูตร
 																</a>
-															{/if}
 
-															<a
-																href={resolve(
-																	`/back-office/kitchen/production-board/${session._id}?plan_id=${plan._id}`
-																)}
-																class="inline-flex items-center gap-1 rounded border bg-background px-2 py-1 text-2xs font-medium text-foreground transition-colors hover:bg-muted"
-																title="แก้ไขชุดการผลิตนี้"
-															>
-																<Pencil class="h-3 w-3" />
-																แก้ไข
-															</a>
-
-															<a
-																href={resolve(
-																	`/back-office/kitchen/production-board/${session._id}?plan_id=${plan._id}`
-																)}
-																class="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-																title="เปิดกระดานการผลิตของชุดนี้"
-															>
-																<ChevronRight class="h-4 w-4" />
-															</a>
+																<a
+																	href={resolve(
+																		`/back-office/kitchen/production-board/${session._id}?plan_id=${plan._id}`
+																	)}
+																	class="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+																	title="เปิดกระดานการผลิตของชุดนี้"
+																>
+																	<ChevronRight class="h-4 w-4" />
+																</a>
+															</div>
 														</div>
-													</div>
-												{/each}
-											</div>
-										{/if}
-									</div>
-								{:else}
-									<!-- TAB 2: Service Summary of this session -->
-									<div class="p-3">
-										{#if sessionServices.length === 0}
-											<div class="py-6 text-center text-xs text-muted-foreground">
-												<ClipboardCheck class="mx-auto mb-2 h-7 w-7 text-muted-foreground/40" />
-												<p class="font-medium text-foreground">
-													ยังไม่มีการบันทึกผลบริการในมื้อนี้
-												</p>
-												<p class="mt-1 text-2xs">
-													เมื่อคลังอนุมัติวัตถุดิบและปรุงอาหารเสร็จสิ้น สามารถกดปุ่ม "บันทึกผลผลิต
-													(Stage 3)" เพื่อบันทึกยอดแจกจ่ายจริงได้
-												</p>
-											</div>
-										{:else}
-											<div class="overflow-x-auto rounded-md border bg-background">
-												<Table.Root>
-													<Table.Header>
-														<Table.Row class="bg-muted/30 text-2xs">
-															<Table.Head class="px-4 py-2 font-semibold">แผนต้นทาง</Table.Head>
-															<Table.Head class="px-3 py-2 text-right font-semibold"
-																>วางแผน</Table.Head
-															>
-															<Table.Head class="px-3 py-2 text-right font-semibold"
-																>ทำได้จริง</Table.Head
-															>
-															<Table.Head class="px-3 py-2 text-right font-semibold"
-																>เสิร์ฟในศูนย์</Table.Head
-															>
-															<Table.Head class="px-3 py-2 text-right font-semibold"
-																>เสิร์ฟภายนอก</Table.Head
-															>
-															<Table.Head class="px-3 py-2 text-right font-semibold"
-																>เหลือทิ้ง</Table.Head
-															>
-															<Table.Head class="px-3 py-2 font-semibold">สถานะ</Table.Head>
-															<Table.Head class="px-4 py-2 font-semibold"
-																>ผู้บันทึก / เวลา</Table.Head
-															>
-														</Table.Row>
-													</Table.Header>
-													<Table.Body class="text-xs">
-														{#each sessionServices as svc (svc._id)}
-															{@const plan =
-																sessionPlans.find((p) => p._id === svc.meal_plan_id) ?? null}
-															{@const v = computeMealVariance(svc, plan)}
-															<Table.Row>
-																<Table.Cell class="px-4 py-2 font-medium">
-																	{plan?.label ?? 'เมนูอาหาร'}
-																</Table.Cell>
-																<Table.Cell class="px-3 py-2 text-right font-mono">
-																	{v.planned !== null ? `${v.planned} จาน` : '—'}
-																</Table.Cell>
-																<Table.Cell
-																	class="px-3 py-2 text-right font-mono font-bold text-foreground"
+													{/each}
+												</div>
+											{/if}
+										</div>
+									{:else}
+										<!-- TAB 2: Service Summary of this session -->
+										<div class="p-3">
+											{#if sessionServices.length === 0}
+												<div class="py-6 text-center text-xs text-muted-foreground">
+													<ClipboardCheck class="mx-auto mb-2 h-7 w-7 text-muted-foreground/40" />
+													<p class="font-medium text-foreground">
+														ยังไม่มีการบันทึกผลบริการในมื้อนี้
+													</p>
+													<p class="mt-1 text-2xs">
+														เมื่อคลังอนุมัติวัตถุดิบและปรุงอาหารเสร็จสิ้น สามารถกดปุ่ม "บันทึกผลผลิต
+														(Stage 3)" เพื่อบันทึกยอดแจกจ่ายจริงได้
+													</p>
+												</div>
+											{:else}
+												<div class="overflow-x-auto rounded-md border bg-background">
+													<Table.Root>
+														<Table.Header>
+															<Table.Row class="bg-muted/30 text-2xs">
+																<Table.Head class="px-4 py-2 font-semibold">แผนต้นทาง</Table.Head>
+																<Table.Head class="px-3 py-2 text-right font-semibold"
+																	>วางแผน</Table.Head
 																>
-																	{v.actual_yield} จาน
-																</Table.Cell>
-																<Table.Cell class="px-3 py-2 text-right font-mono text-emerald-700">
-																	{v.served}
-																</Table.Cell>
-																<Table.Cell
-																	class="px-3 py-2 text-right font-mono text-muted-foreground"
+																<Table.Head class="px-3 py-2 text-right font-semibold"
+																	>ทำได้จริง</Table.Head
 																>
-																	{v.external}
-																</Table.Cell>
-																<Table.Cell class="px-3 py-2 text-right font-mono text-amber-700">
-																	{v.waste}
-																</Table.Cell>
-																<Table.Cell class="px-3 py-2">
-																	<span
-																		class="inline-flex rounded-full border px-2 py-0.5 text-2xs font-semibold {STATUS_CLASS[
-																			v.status
-																		]}"
-																	>
-																		{MEAL_VARIANCE_STATUS_LABELS[v.status]}
-																	</span>
-																</Table.Cell>
-																<Table.Cell class="px-4 py-2 text-2xs text-muted-foreground">
-																	<div>{svc.created_by}</div>
-																	<div>{formatThaiDateTime(svc.created_at)}</div>
-																</Table.Cell>
+																<Table.Head class="px-3 py-2 text-right font-semibold"
+																	>เสิร์ฟในศูนย์</Table.Head
+																>
+																<Table.Head class="px-3 py-2 text-right font-semibold"
+																	>เสิร์ฟภายนอก</Table.Head
+																>
+																<Table.Head class="px-3 py-2 text-right font-semibold"
+																	>เหลือทิ้ง</Table.Head
+																>
+																<Table.Head class="px-3 py-2 font-semibold">สถานะ</Table.Head>
+																<Table.Head class="px-4 py-2 font-semibold"
+																	>ผู้บันทึก / เวลา</Table.Head
+																>
 															</Table.Row>
-														{/each}
-													</Table.Body>
-												</Table.Root>
-											</div>
-										{/if}
-									</div>
-								{/if}
-							</div>
-
-							<!-- Card Footer Actions -->
-							<div class="flex flex-wrap items-center justify-between gap-2 pt-1">
-								<div class="flex items-center gap-2">
-									{#if session.status === 'active'}
-										<Button
-											variant="outline"
-											size="sm"
-											class="h-8 gap-1 text-xs text-green-700 hover:bg-green-50"
-											onclick={() => handleCompleteSession(session)}
-										>
-											<Check class="h-3.5 w-3.5" />
-											บันทึกปิดรอบมื้อ
-										</Button>
+														</Table.Header>
+														<Table.Body class="text-xs">
+															{#each sessionServices as svc (svc._id)}
+																{@const plan =
+																	sessionPlans.find((p) => p._id === svc.meal_plan_id) ?? null}
+																{@const v = computeMealVariance(svc, plan)}
+																<Table.Row>
+																	<Table.Cell class="px-4 py-2 font-medium">
+																		{plan?.label ?? 'เมนูอาหาร'}
+																	</Table.Cell>
+																	<Table.Cell class="px-3 py-2 text-right font-mono">
+																		{v.planned !== null ? `${v.planned} จาน` : '—'}
+																	</Table.Cell>
+																	<Table.Cell
+																		class="px-3 py-2 text-right font-mono font-bold text-foreground"
+																	>
+																		{v.actual_yield} จาน
+																	</Table.Cell>
+																	<Table.Cell
+																		class="px-3 py-2 text-right font-mono text-emerald-700"
+																	>
+																		{v.served}
+																	</Table.Cell>
+																	<Table.Cell
+																		class="px-3 py-2 text-right font-mono text-muted-foreground"
+																	>
+																		{v.external}
+																	</Table.Cell>
+																	<Table.Cell class="px-3 py-2 text-right font-mono text-amber-700">
+																		{v.waste}
+																	</Table.Cell>
+																	<Table.Cell class="px-3 py-2">
+																		<span
+																			class="inline-flex rounded-full border px-2 py-0.5 text-2xs font-semibold {STATUS_CLASS[
+																				v.status
+																			]}"
+																		>
+																			{MEAL_VARIANCE_STATUS_LABELS[v.status]}
+																		</span>
+																	</Table.Cell>
+																	<Table.Cell class="px-4 py-2 text-2xs text-muted-foreground">
+																		<div>{svc.created_by}</div>
+																		<div>{formatThaiDateTime(svc.created_at)}</div>
+																	</Table.Cell>
+																</Table.Row>
+															{/each}
+														</Table.Body>
+													</Table.Root>
+												</div>
+											{/if}
+										</div>
 									{/if}
-									<Button
-										variant="ghost"
-										size="sm"
-										class="h-8 gap-1 text-xs text-destructive hover:bg-destructive/10"
-										onclick={() => handleDeleteSession(session)}
-									>
-										<Trash2 class="h-3.5 w-3.5" />
-										ลบ
-									</Button>
 								</div>
-
-								<a
-									href={resolve(`/back-office/kitchen/production-board/${session._id}`)}
-									class="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
-								>
-									<ChefHat class="h-3.5 w-3.5" />
-									เข้าสู่บอร์ดการผลิต (Production Board)
-								</a>
 							</div>
-						</div>
-					{/if}
-				</div>
-			{/each}
-		</div>
-	{/if}
+						{/if}
+					</div>
+				{/each}
+			</div>
+		{/if}
+	</div>
 </div>
 
 <!-- Create Meal Session Modal -->
@@ -757,17 +920,21 @@
 				</div>
 				<div>
 					<Label for="session-meal" class="text-xs font-medium">ช่วงมื้อ</Label>
-					<select
-						id="session-meal"
-						value={formMeal}
-						onchange={handleMealChange}
-						class="mt-1.5 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs transition-colors focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
-					>
-						<option value="breakfast">มื้อเช้า (Breakfast)</option>
-						<option value="lunch">มื้อกลางวัน (Lunch)</option>
-						<option value="dinner">มื้อเย็น (Dinner)</option>
-						<option value="snack">ของว่าง (Snack)</option>
-					</select>
+					<Select.Root type="single" value={formMeal} onValueChange={handleMealChange}>
+						<Select.Trigger id="session-meal" class="mt-1.5 min-h-11 w-full text-sm">
+							<Select.Value />
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Item value="breakfast" label="มื้อเช้า (Breakfast)"
+								>มื้อเช้า (Breakfast)</Select.Item
+							>
+							<Select.Item value="lunch" label="มื้อกลางวัน (Lunch)"
+								>มื้อกลางวัน (Lunch)</Select.Item
+							>
+							<Select.Item value="dinner" label="มื้อเย็น (Dinner)">มื้อเย็น (Dinner)</Select.Item>
+							<Select.Item value="snack" label="ของว่าง (Snack)">ของว่าง (Snack)</Select.Item>
+						</Select.Content>
+					</Select.Root>
 				</div>
 			</div>
 

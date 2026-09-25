@@ -438,6 +438,8 @@ describe('KitchenRemoteRepository.gasCylinderType — CRUD', () => {
 	});
 
 	const input = {
+		item_master_id: 'item_master:lpg_15kg',
+		cylinder_code: 'LPG-01',
 		name: 'เตาแรงดันสูง + ถัง 15kg',
 		capacity_kg: '15',
 		burn_rate_kg_per_hour: '0.5',
@@ -445,18 +447,18 @@ describe('KitchenRemoteRepository.gasCylinderType — CRUD', () => {
 	};
 
 	it('create → list → update → delete round-trips', async () => {
-		const created = await repo.createGasCylinderType(input, ctx);
-		expect(created.type).toBe('gas_cylinder_type');
+		const created = await repo.createFuelCylinder(input, ctx);
+		expect(created.type).toBe('fuel_cylinder');
 
-		const listed = await repo.listGasCylinderTypes();
+		const listed = await repo.listFuelCylinders();
 		expect(listed).toHaveLength(1);
 
-		const updated = await repo.updateGasCylinderType(created, { ...input, capacity_kg: '48' });
+		const updated = await repo.updateFuelCylinder(created, { ...input, capacity_kg: '48' });
 		expect(updated.capacity_kg).toBe('48');
 		expect(updated.updated_at >= created.updated_at).toBe(true);
 
-		await repo.deleteGasCylinderType(updated);
-		expect(await repo.listGasCylinderTypes()).toHaveLength(0);
+		await repo.deleteFuelCylinder(updated);
+		expect(await repo.listFuelCylinders()).toHaveLength(0);
 	});
 });
 
@@ -586,8 +588,15 @@ describe('KitchenRemoteRepository — gas cylinder ledger (CR-085)', () => {
 	}
 
 	it('issueRequisition writes a gas_ledger consumption entry alongside the food ledger', async () => {
-		const cyl = await repo.createGasCylinderType(
-			{ name: 'ถังทดสอบ', capacity_kg: '15', burn_rate_kg_per_hour: '0.5', time_multiplier: '1' },
+		const cyl = await repo.createFuelCylinder(
+			{
+				item_master_id: 'item_master:lpg_15kg',
+				cylinder_code: 'LPG-01',
+				name: 'ถังทดสอบ',
+				capacity_kg: '15',
+				burn_rate_kg_per_hour: '0.5',
+				time_multiplier: '1'
+			},
 			ctx
 		);
 		const plan = await planWithGas(cyl._id, '2', '2026-08-22');
@@ -605,8 +614,15 @@ describe('KitchenRemoteRepository — gas cylinder ledger (CR-085)', () => {
 	});
 
 	it('cannot draw more gas than remains — throws and writes nothing at all (all-or-nothing)', async () => {
-		const cyl = await repo.createGasCylinderType(
-			{ name: 'ถังเล็ก', capacity_kg: '5', burn_rate_kg_per_hour: '0.5', time_multiplier: '1' },
+		const cyl = await repo.createFuelCylinder(
+			{
+				item_master_id: 'item_master:lpg_15kg',
+				cylinder_code: 'LPG-01',
+				name: 'ถังเล็ก',
+				capacity_kg: '5',
+				burn_rate_kg_per_hour: '0.5',
+				time_multiplier: '1'
+			},
 			ctx
 		);
 		const plan = await planWithGas(cyl._id, '10', '2026-08-22'); // more than the 5 kg capacity
@@ -644,8 +660,15 @@ describe('KitchenRemoteRepository — gas cylinder ledger (CR-085)', () => {
 	});
 
 	it('refillGasCylinder tops up a partially-used tank', async () => {
-		const cyl = await repo.createGasCylinderType(
-			{ name: 'ถังเติม', capacity_kg: '15', burn_rate_kg_per_hour: '0.5', time_multiplier: '1' },
+		const cyl = await repo.createFuelCylinder(
+			{
+				item_master_id: 'item_master:lpg_15kg',
+				cylinder_code: 'LPG-01',
+				name: 'ถังเติม',
+				capacity_kg: '15',
+				burn_rate_kg_per_hour: '0.5',
+				time_multiplier: '1'
+			},
 			ctx
 		);
 		// Consume 10 kg by hand (equivalent to a prior requisition).
@@ -669,8 +692,15 @@ describe('KitchenRemoteRepository — gas cylinder ledger (CR-085)', () => {
 	});
 
 	it('refillGasCylinder rejects a refill that would overflow the tank', async () => {
-		const cyl = await repo.createGasCylinderType(
-			{ name: 'ถังเติม', capacity_kg: '15', burn_rate_kg_per_hour: '0.5', time_multiplier: '1' },
+		const cyl = await repo.createFuelCylinder(
+			{
+				item_master_id: 'item_master:lpg_15kg',
+				cylinder_code: 'LPG-01',
+				name: 'ถังเติม',
+				capacity_kg: '15',
+				burn_rate_kg_per_hour: '0.5',
+				time_multiplier: '1'
+			},
 			ctx
 		);
 		await memoryRepo.put({
@@ -692,8 +722,15 @@ describe('KitchenRemoteRepository — gas cylinder ledger (CR-085)', () => {
 	// CR-085 addendum — a dust remainder can never be drawn to 0 through
 	// consumption (all-or-nothing), so writeOffGasCylinder is the only path.
 	it('writeOffGasCylinder zeroes out a dust remainder', async () => {
-		const cyl = await repo.createGasCylinderType(
-			{ name: 'ถังเล็ก', capacity_kg: '4', burn_rate_kg_per_hour: '0.3', time_multiplier: '1' },
+		const cyl = await repo.createFuelCylinder(
+			{
+				item_master_id: 'item_master:lpg_15kg',
+				cylinder_code: 'LPG-01',
+				name: 'ถังเล็ก',
+				capacity_kg: '4',
+				burn_rate_kg_per_hour: '0.3',
+				time_multiplier: '1'
+			},
 			ctx
 		);
 		await memoryRepo.put({
@@ -717,8 +754,15 @@ describe('KitchenRemoteRepository — gas cylinder ledger (CR-085)', () => {
 	});
 
 	it('writeOffGasCylinder rejects a cylinder that is already empty', async () => {
-		const cyl = await repo.createGasCylinderType(
-			{ name: 'ถังหมดแล้ว', capacity_kg: '4', burn_rate_kg_per_hour: '0.3', time_multiplier: '1' },
+		const cyl = await repo.createFuelCylinder(
+			{
+				item_master_id: 'item_master:lpg_15kg',
+				cylinder_code: 'LPG-01',
+				name: 'ถังหมดแล้ว',
+				capacity_kg: '4',
+				burn_rate_kg_per_hour: '0.3',
+				time_multiplier: '1'
+			},
 			ctx
 		);
 		await memoryRepo.put({
@@ -737,7 +781,7 @@ describe('KitchenRemoteRepository — gas cylinder ledger (CR-085)', () => {
 	});
 
 	it('writeOffGasCylinder rejects an unknown cylinder', async () => {
-		await expect(repo.writeOffGasCylinder('gas_cylinder_type:missing', ctx)).rejects.toThrow(
+		await expect(repo.writeOffGasCylinder('fuel_cylinder:missing', ctx)).rejects.toThrow(
 			/not found/
 		);
 	});
@@ -856,12 +900,26 @@ describe('KitchenRemoteRepository — Requisition Workflow', () => {
 
 	it('approveKitchenRequisition handles partial issue (D12) and gas cylinder switch (D15)', async () => {
 		await seedStock('item:beef', 100);
-		const cyl1 = await repo.createGasCylinderType(
-			{ name: 'ถัง 1', capacity_kg: '15', burn_rate_kg_per_hour: '0.5', time_multiplier: '1' },
+		const cyl1 = await repo.createFuelCylinder(
+			{
+				item_master_id: 'item_master:lpg_15kg',
+				cylinder_code: 'LPG-01',
+				name: 'ถัง 1',
+				capacity_kg: '15',
+				burn_rate_kg_per_hour: '0.5',
+				time_multiplier: '1'
+			},
 			ctx
 		);
-		const cyl2 = await repo.createGasCylinderType(
-			{ name: 'ถัง 2', capacity_kg: '15', burn_rate_kg_per_hour: '0.5', time_multiplier: '1' },
+		const cyl2 = await repo.createFuelCylinder(
+			{
+				item_master_id: 'item_master:lpg_15kg',
+				cylinder_code: 'LPG-02',
+				name: 'ถัง 2',
+				capacity_kg: '15',
+				burn_rate_kg_per_hour: '0.5',
+				time_multiplier: '1'
+			},
 			ctx
 		);
 

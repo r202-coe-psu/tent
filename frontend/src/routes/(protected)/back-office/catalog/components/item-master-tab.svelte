@@ -148,13 +148,15 @@
 			(e) => e.name.toLowerCase().includes(needle) || (e.sku ?? '').toLowerCase().includes(needle)
 		);
 	});
-	const total = $derived(filteredAll.length);
-	const totalPages = $derived(Math.max(1, Math.ceil(total / PAGE_SIZE)));
+	const displayAll = $derived(filteredAll.map((item) => ({ item })));
+	const displayTotal = $derived(displayAll.length);
+	const total = $derived(displayTotal);
+	const totalPages = $derived(Math.max(1, Math.ceil(displayTotal / PAGE_SIZE)));
 	const safePage = $derived(Math.min(currentPage, totalPages));
 
 	const paginatedItems = $derived.by(() => {
 		const start = (safePage - 1) * PAGE_SIZE;
-		return filteredAll.slice(start, start + PAGE_SIZE);
+		return displayAll.slice(start, start + PAGE_SIZE);
 	});
 
 	$effect(() => {
@@ -166,6 +168,7 @@
 	// Form Page
 	let viewMode = $state<'list' | 'create' | 'edit'>('list');
 	let selectedId = $state<string | undefined>(undefined);
+	let selectedCylinderId = $state<string | undefined>(undefined);
 
 	$effect(() => {
 		const action = page.url.searchParams.get('action');
@@ -193,17 +196,20 @@
 
 	function showCreateForm() {
 		selectedId = undefined;
+		selectedCylinderId = undefined;
 		viewMode = 'create';
 	}
 
-	function showEditForm(id: string) {
+	function showEditForm(id: string, cylinderId?: string) {
 		selectedId = id;
+		selectedCylinderId = cylinderId;
 		viewMode = 'edit';
 	}
 
 	function backToList() {
 		viewMode = 'list';
 		selectedId = undefined;
+		selectedCylinderId = undefined;
 		const suffix =
 			categoryFilter !== 'ALL' ? `&category=${encodeURIComponent(categoryFilter)}` : '';
 		goto(
@@ -290,31 +296,33 @@
 							</Table.Cell>
 						</Table.Row>
 					{:else}
-						{#each paginatedItems as e (e._id)}
+						{#each paginatedItems as e (e.item._id)}
 							<Table.Row>
 								<Table.Cell
 									class="hidden tracking-wider text-muted-foreground uppercase md:table-cell"
 								>
-									{e.sku || '—'}
+									{e.item.sku ?? '—'}
 								</Table.Cell>
 								<Table.Cell class="font-bold text-foreground">
 									<div class="flex flex-wrap items-center gap-2">
-										{e.name}
-										<CatalogScopeBadge doc={e} />
+										{e.item.name}
+										<CatalogScopeBadge doc={e.item} />
 									</div>
 									<p class="mt-0.5 text-xs text-muted-foreground md:hidden">
-										{e.sku || '—'} · {categoryNameOf(e)} · {itemMasterUnit(e)}
+										{e.item.sku ?? '—'} · {categoryNameOf(e.item)} · {itemMasterUnit(e.item)}
 									</p>
 								</Table.Cell>
-								<Table.Cell class="text-muted-foreground">{categoryNameOf(e)}</Table.Cell>
-								<Table.Cell><TypeClassBadge value={e.type_class} variant="compact" /></Table.Cell>
+								<Table.Cell class="text-muted-foreground">{categoryNameOf(e.item)}</Table.Cell>
+								<Table.Cell
+									><TypeClassBadge value={e.item.type_class} variant="compact" /></Table.Cell
+								>
 								<Table.Cell class="hidden text-muted-foreground lg:table-cell"
-									>{itemMasterUnit(e)}</Table.Cell
+									>{itemMasterUnit(e.item)}</Table.Cell
 								>
 								<Table.Cell class="hidden lg:table-cell">
-									{#if e.dietary && e.dietary.length > 0}
+									{#if e.item.dietary && e.item.dietary.length > 0}
 										<div class="flex flex-wrap gap-1.5">
-											{#if e.dietary.includes('HALAL')}
+											{#if e.item.dietary.includes('HALAL')}
 												<span
 													class="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-300"
 												>
@@ -322,7 +330,7 @@
 													ฮาลาล
 												</span>
 											{/if}
-											{#if e.dietary.includes('VEGAN')}
+											{#if e.item.dietary.includes('VEGAN')}
 												<span
 													class="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-300"
 												>
@@ -336,23 +344,23 @@
 									{/if}
 								</Table.Cell>
 								<Table.Cell class="text-center">
-									{#if canModifyItem(e)}
+									{#if canModifyItem(e.item)}
 										<div class="inline-flex flex-nowrap justify-center gap-2">
 											<Button
 												variant="outline"
 												size="sm"
-												onclick={() => showEditForm(e._id)}
+												onclick={() => showEditForm(e.item._id)}
 												class="min-h-11 border-blue-200 text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-950/20"
 											>
 												<Settings2 class="h-4 w-4" />
 												จัดการ
 											</Button>
-											{#if (e.shelter_code || undefined) === (shelterCode || undefined)}
-												{#if e.deactivated}
+											{#if (e.item.shelter_code || undefined) === (shelterCode || undefined)}
+												{#if e.item.deactivated}
 													<Button
 														variant="outline"
 														size="sm"
-														onclick={() => activateItem(e)}
+														onclick={() => activateItem(e.item)}
 														disabled={updateItemMutation.isPending}
 														class="min-h-11 border-green-200 text-green-600 hover:bg-green-50 hover:text-green-700 dark:border-green-800 dark:text-green-400 dark:hover:bg-green-950/20"
 													>
@@ -363,14 +371,14 @@
 													<Button
 														variant="outline"
 														size="sm"
-														onclick={() => showDeleteConfirm(e._id, e.name)}
+														onclick={() => showDeleteConfirm(e.item._id, e.item.name)}
 														disabled={deleteMutation.isPending}
-														class="min-h-11 {e.override
+														class="min-h-11 {e.item.override
 															? 'border-orange-200 text-orange-600 hover:bg-orange-50 hover:text-orange-700 dark:border-orange-800 dark:text-orange-400 dark:hover:bg-orange-950/20'
 															: 'border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/20'}"
 													>
 														<Trash2 class="h-4 w-4" />
-														{e.override ? 'รีเซ็ต' : 'ลบ'}
+														{e.item.override ? 'รีเซ็ต' : 'ลบ'}
 													</Button>
 												{/if}
 											{/if}
@@ -386,7 +394,7 @@
 
 		{#if totalPages > 1}
 			<div class="mt-4 flex justify-end">
-				<Pagination.Root bind:page={currentPage} count={total} perPage={PAGE_SIZE}>
+				<Pagination.Root bind:page={currentPage} count={displayTotal} perPage={PAGE_SIZE}>
 					{#snippet children({ pages })}
 						<Pagination.Content>
 							<Pagination.Previous />
@@ -417,7 +425,9 @@
 	>
 		<ItemMasterForm
 			id={selectedId}
+			cylinderId={selectedCylinderId}
 			isEdit={viewMode === 'edit'}
+			{canWrite}
 			{basePath}
 			onsuccess={backToList}
 			oncancel={backToList}

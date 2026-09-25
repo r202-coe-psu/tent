@@ -18,8 +18,8 @@ import type {
 	MealPlanGasUsage,
 	KitchenRequisitionInput,
 	MealServiceInput,
-	GasCylinderType,
-	GasCylinderTypeInput
+	FuelCylinder,
+	FuelCylinderInput
 } from '../domain/kitchen';
 import type {
 	CreatePendingRequisitionParams,
@@ -38,6 +38,7 @@ import {
 	deriveSessionHeadcountFromOccupancy
 } from '../domain/occupancy';
 import type { MealPlanHeadcount, MealPeriod } from '../domain/kitchen';
+import type { MealDistributionPushInput } from '../domain/meal-distribution-push';
 
 export const kitchenKeys = {
 	all: ['kitchen'] as const,
@@ -48,7 +49,11 @@ export const kitchenKeys = {
 	kitchenRequisition: (id: string) =>
 		[...kitchenKeys.all, 'kitchen_requisition', getShelterCode(), id] as const,
 	mealServices: () => [...kitchenKeys.all, 'meal_services', getShelterCode()] as const,
-	gasCylinderTypes: () => [...kitchenKeys.all, 'gas_cylinder_types', getShelterCode()] as const,
+	mealServiceReceipts: () =>
+		[...kitchenKeys.all, 'meal_service_receipts', getShelterCode()] as const,
+	mealDistributionPushes: () =>
+		[...kitchenKeys.all, 'meal_distribution_pushes', getShelterCode()] as const,
+	fuelCylinders: () => [...kitchenKeys.all, 'fuel_cylinders', getShelterCode()] as const,
 	gasLedger: () => [...kitchenKeys.all, 'gas_ledger', getShelterCode()] as const,
 	occupancy: () => [...kitchenKeys.all, 'occupancy', getShelterCode()] as const,
 	dietCounts: () => [...kitchenKeys.all, 'diet_counts', getShelterCode()] as const
@@ -217,6 +222,19 @@ export const useConfirmMealPlan = () =>
 		mutationFn: (plan: MealPlan) => kitchenRepository().confirmMealPlan(plan)
 	}));
 
+export const useUpdateMealPlanGasUsage = () =>
+	createMutation(() => ({
+		mutationFn: ({
+			plan,
+			gasUsage,
+			cookingStartedAt
+		}: {
+			plan: MealPlan;
+			gasUsage: MealPlanGasUsage[];
+			cookingStartedAt?: MealPlan['cooking_started_at'];
+		}) => kitchenRepository().updateMealPlanGasUsage(plan, gasUsage, cookingStartedAt)
+	}));
+
 // Draft-only edit — recomputes recipes the same way useCreateMealPlanCalc does,
 // then patches the existing doc in place (date/meal/_id stay fixed).
 export const useUpdateMealPlanCalc = () =>
@@ -257,6 +275,19 @@ export const useUpdateMealPlanCalc = () =>
 				gas_usage: gasUsage && gasUsage.length > 0 ? gasUsage : undefined
 			});
 		}
+	}));
+
+// Confirmed plan edit (CR-127) — caller must have already confirmed the
+// linked ticket is still PENDING_PICK (e.g. by updating the ticket first).
+export const useUpdateConfirmedMealPlan = () =>
+	createMutation(() => ({
+		mutationFn: ({
+			plan,
+			patch
+		}: {
+			plan: MealPlan;
+			patch: Parameters<ReturnType<typeof kitchenRepository>['updateConfirmedMealPlan']>[1];
+		}) => kitchenRepository().updateConfirmedMealPlan(plan, patch)
 	}));
 
 export const useDeleteMealPlanDraft = () =>
@@ -338,29 +369,70 @@ export const useRecordMealService = () =>
 			kitchenRepository().recordMealService(input, ctx)
 	}));
 
-// --- GasCylinderType ---
+// --- MealServiceReceipt (CR-129) ---
 
-export const useGasCylinderTypes = () =>
+export const useMealServiceReceipts = () =>
 	createQuery(() => ({
-		queryKey: kitchenKeys.gasCylinderTypes(),
-		queryFn: () => kitchenRepository().listGasCylinderTypes()
+		queryKey: kitchenKeys.mealServiceReceipts(),
+		queryFn: () => kitchenRepository().listMealServiceReceipts()
 	}));
 
-export const useCreateGasCylinderType = () =>
+export const useConfirmMealServiceReceipt = () =>
 	createMutation(() => ({
-		mutationFn: ({ input, ctx }: { input: GasCylinderTypeInput; ctx: AuthorContext }) =>
-			kitchenRepository().createGasCylinderType(input, ctx)
+		mutationFn: ({ mealServiceId, ctx }: { mealServiceId: string; ctx: AuthorContext }) =>
+			kitchenRepository().confirmMealServiceReceipt(mealServiceId, ctx)
 	}));
 
-export const useUpdateGasCylinderType = () =>
+export const useRejectMealServiceReceipt = () =>
 	createMutation(() => ({
-		mutationFn: ({ doc, input }: { doc: GasCylinderType; input: GasCylinderTypeInput }) =>
-			kitchenRepository().updateGasCylinderType(doc, input)
+		mutationFn: ({
+			mealServiceId,
+			reason,
+			ctx
+		}: {
+			mealServiceId: string;
+			reason: string;
+			ctx: AuthorContext;
+		}) => kitchenRepository().rejectMealServiceReceipt(mealServiceId, reason, ctx)
 	}));
 
-export const useDeleteGasCylinderType = () =>
+// --- MealDistributionPush (CR-132) ---
+
+export const useMealDistributionPushes = () =>
+	createQuery(() => ({
+		queryKey: kitchenKeys.mealDistributionPushes(),
+		queryFn: () => kitchenRepository().listMealDistributionPushes()
+	}));
+
+export const useCreateMealDistributionPush = () =>
 	createMutation(() => ({
-		mutationFn: (doc: GasCylinderType) => kitchenRepository().deleteGasCylinderType(doc)
+		mutationFn: ({ input, ctx }: { input: MealDistributionPushInput; ctx: AuthorContext }) =>
+			kitchenRepository().createMealDistributionPush(input, ctx)
+	}));
+
+// --- FuelCylinder ---
+
+export const useFuelCylinders = () =>
+	createQuery(() => ({
+		queryKey: kitchenKeys.fuelCylinders(),
+		queryFn: () => kitchenRepository().listFuelCylinders()
+	}));
+
+export const useCreateFuelCylinder = () =>
+	createMutation(() => ({
+		mutationFn: ({ input, ctx }: { input: FuelCylinderInput; ctx: AuthorContext }) =>
+			kitchenRepository().createFuelCylinder(input, ctx)
+	}));
+
+export const useUpdateFuelCylinder = () =>
+	createMutation(() => ({
+		mutationFn: ({ doc, input }: { doc: FuelCylinder; input: FuelCylinderInput }) =>
+			kitchenRepository().updateFuelCylinder(doc, input)
+	}));
+
+export const useDeleteFuelCylinder = () =>
+	createMutation(() => ({
+		mutationFn: (doc: FuelCylinder) => kitchenRepository().deleteFuelCylinder(doc)
 	}));
 
 // --- GasLedger ---
@@ -405,8 +477,12 @@ export function startKitchenLiveQuery(queryClient: QueryClient): SubscribeDataCh
 				return [kitchenKeys.requisitions()];
 			case 'meal_service':
 				return [kitchenKeys.mealServices(), kitchenKeys.mealSessions()];
-			case 'gas_cylinder_type':
-				return [kitchenKeys.gasCylinderTypes()];
+			case 'meal_service_receipt':
+				return [kitchenKeys.mealServiceReceipts()];
+			case 'meal_distribution_push':
+				return [kitchenKeys.mealDistributionPushes()];
+			case 'fuel_cylinder':
+				return [kitchenKeys.fuelCylinders()];
 			case 'gas_ledger':
 				return [kitchenKeys.gasLedger(), kitchenKeys.requisitions()];
 			case 'stock_ledger':

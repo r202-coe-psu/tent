@@ -27,17 +27,23 @@
 	import { toast } from 'svelte-sonner';
 
 	import CatalogFormSection from './catalog-form-section.svelte';
+	import FuelEnergyTankActions from './fuel-energy-tank-actions.svelte';
+	import { useFuelCylinders, type FuelCylinder } from '$lib/features/kitchen';
 
 	let {
 		id = '',
+		cylinderId,
 		isEdit = false,
 		basePath = '/back-office/catalog',
+		canWrite = false,
 		onsuccess,
 		oncancel
 	}: {
 		id?: string;
+		cylinderId?: string;
 		isEdit?: boolean;
 		basePath?: string;
+		canWrite?: boolean;
 		onsuccess?: () => void;
 		oncancel?: () => void;
 	} = $props();
@@ -52,6 +58,12 @@
 		() => shelterCode ?? null
 	);
 	const itemCategoriesQuery = useItemCategories(() => shelterCode ?? null);
+	const fuelCylinders = useFuelCylinders();
+	const selectedCylinder = $derived(
+		(cylinderId
+			? fuelCylinders.data?.find((cylinder) => cylinder._id === cylinderId)
+			: undefined) as FuelCylinder | undefined
+	);
 	const createMutation = useCreateItemMaster();
 	const updateMutation = useUpdateItemMaster();
 
@@ -656,6 +668,28 @@
 							</div>
 						</div>
 					</Field.FieldGroup>
+
+					{#if isEdit && selectedCylinder}
+						<div class="mt-5 rounded-xl border border-orange-200 bg-orange-50/50 p-4">
+							<div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+								<div>
+									<p class="text-sm font-bold text-slate-900">จัดการถังจริง</p>
+									<p class="text-xs text-slate-600">
+										ถัง {selectedCylinder.cylinder_code} — การเปลี่ยนแปลงมีผลเฉพาะถังใบนี้
+									</p>
+								</div>
+								<FuelEnergyTankActions cylinder={selectedCylinder} {canWrite} />
+							</div>
+						</div>
+					{/if}
+
+					{#if isEdit && !selectedCylinder}
+						<p
+							class="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600"
+						>
+							เลือกถังจริงจากรายการก่อน เพื่อจัดการสถานะเฉพาะถังนั้น
+						</p>
+					{/if}
 				</CatalogFormSection>
 			{/if}
 

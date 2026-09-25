@@ -4,6 +4,7 @@ import {
 	calculateMealIngredientsFromRecipe,
 	resolveItemMasterStock,
 	toRequisitionInput,
+	toTicketItemInput,
 	assessRequisition,
 	toMealPlanMap,
 	sumHeadcountByTags,
@@ -286,6 +287,71 @@ describe('toRequisitionInput — T-26 handoff (CR-022)', () => {
 	it('throws when a recipe has no stock item mapping', () => {
 		expect(() =>
 			toRequisitionInput(plan([{ recipe_id: 'ingredient:mystery', planned_qty: 10 }]))
+		).toThrow(/no stock item mapping/);
+	});
+});
+
+describe('toTicketItemInput — CR-121/CR-126 ticket handoff', () => {
+	const plan = (recipes: MealPlan['recipes']): MealPlan => ({
+		_id: 'meal_plan:2026-07-15:lunch',
+		type: 'meal_plan',
+		schema_v: 2,
+		shelter_code: 'SH001',
+		created_at: AS_OF,
+		updated_at: AS_OF,
+		created_by: 'tester',
+		date: '2026-07-15',
+		meal: 'lunch',
+		headcount: headcount(100),
+		recipes,
+		status: 'confirmed'
+	});
+
+	const itemMaster = (overrides: Partial<ItemMaster> = {}): ItemMaster => ({
+		_id: 'item_master:rice',
+		type: 'item_master',
+		schema_v: 3,
+		created_at: AS_OF,
+		updated_at: AS_OF,
+		created_by: 'tester',
+		name: 'ข้าวสาร',
+		base_unit: 'kg',
+		conversions: [],
+		distribution_type: 'recurring',
+		type_class: 'CONSUMABLE',
+		dietary: [],
+		...overrides
+	});
+
+	it('maps rice recipe (grams) to a ticket item, converted to kg — same as toRequisitionInput', () => {
+		const items = toTicketItemInput(plan([{ recipe_id: RICE_RECIPE_ID, planned_qty: 15000 }]), []);
+		expect(items).toEqual([
+			{ item_id: 'item:rice', item_name: 'item:rice', unit: 'kg', requested_qty: '15' }
+		]);
+	});
+
+	it('resolves item_name from the itemMasters list when available', () => {
+		const im = itemMaster({ _id: 'item_master:beef', name: 'เนื้อวัว', base_unit: 'kg' });
+		const items = toTicketItemInput(
+			plan([{ recipe_id: 'item_master:beef', planned_qty: 5, unit: 'kg' }]),
+			[im]
+		);
+		expect(items).toEqual([
+			{ item_id: 'item_master:beef', item_name: 'เนื้อวัว', unit: 'kg', requested_qty: '5' }
+		]);
+	});
+
+	it('falls back to the raw item_id when no matching ItemMaster is found', () => {
+		const items = toTicketItemInput(
+			plan([{ recipe_id: 'item_master:unknown', planned_qty: 5, unit: 'kg' }]),
+			[]
+		);
+		expect(items[0].item_name).toBe('item_master:unknown');
+	});
+
+	it('throws when a recipe has no stock item mapping (no unit, not RECIPE_TO_STOCK_ITEM)', () => {
+		expect(() =>
+			toTicketItemInput(plan([{ recipe_id: 'ingredient:mystery', planned_qty: 10 }]), [])
 		).toThrow(/no stock item mapping/);
 	});
 });

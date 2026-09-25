@@ -21,7 +21,7 @@ describe('calculateGasConsumptionKg (CR-058 §2.2)', () => {
 		expect(calculateGasConsumptionKg('2', cylinder('1.5', '1.25'))).toBe('3.75');
 	});
 
-	it('accepts qty_str coefficients verbatim from a gas_cylinder_type doc', () => {
+	it('accepts qty_str coefficients verbatim from a fuel_cylinder doc', () => {
 		expect(calculateGasConsumptionKg('4', cylinder('0.75', '1'))).toBe('3');
 	});
 

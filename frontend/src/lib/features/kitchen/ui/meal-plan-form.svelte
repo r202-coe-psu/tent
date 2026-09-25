@@ -16,7 +16,7 @@
 		useCreateMealPlanCalc,
 		useUpdateMealPlanCalc,
 		useOccupancyHeadcount,
-		useGasCylinderTypes,
+		useFuelCylinders,
 		useGasLedger,
 		calculateMealIngredients,
 		calculateMealIngredientsFromRecipe,
@@ -76,7 +76,7 @@
 	const itemMasters = useItemMasters(() => getShelterCode());
 	const supplyItems = useSupplyItems();
 	const stockBalance = useStockBalance();
-	const gasTypes = useGasCylinderTypes();
+	const gasTypes = useFuelCylinders();
 	const gasLedger = useGasLedger();
 
 	// Gas usage rows: cylinder type and cooking hours input.
@@ -664,7 +664,8 @@
 					<p class="text-xs text-muted-foreground">
 						ยังไม่มีข้อมูลถังแก๊ส —
 						<a
-							href={resolve('/back-office/kitchen/gas')}
+							href={resolve('/back-office/catalog') +
+								'?tab=item_master&category=item_category%3Afuel_energy'}
 							target="_blank"
 							rel="noopener"
 							class="underline">ตั้งค่าที่นี่</a

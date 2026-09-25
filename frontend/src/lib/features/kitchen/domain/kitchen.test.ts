@@ -360,7 +360,7 @@ describe('createPendingRequisition & Migration Guard', () => {
 				meal_plan_id: 'meal_plan:01J',
 				meal_session_id: 'meal_session:01J',
 				items: [{ item_id: 'item:rice', qty_requested: '50', qty_issued: '0', unit: 'kg' }],
-				gas_drawdown: [{ cylinder_id: 'gas_cylinder_type:01J', qty_kg: '1.5' }]
+				gas_drawdown: [{ cylinder_id: 'fuel_cylinder:01J', qty_kg: '1.5' }]
 			},
 			ctx
 		);

@@ -105,6 +105,20 @@ export const TRANSFER_LEDGER_MANGO_INDEXES = [
 	}
 ];
 
+/** Mango index definitions required by requisition_ticket list/find (CR-121/CR-126). */
+export const REQUISITION_TICKET_MANGO_INDEXES = [
+	{
+		index: { fields: ['type', 'requisition_type', 'status'] },
+		name: 'requisition-ticket-type-status-idx',
+		type: 'json' as const
+	},
+	{
+		index: { fields: ['type', 'meal_plan_id'] },
+		name: 'requisition-ticket-mealplan-idx',
+		type: 'json' as const
+	}
+];
+
 /**
  * Server-side `validate_doc_update` for a shelter db. Enforces the common
  * envelope (schema.md §0) + shelter_code match + allowed doc types, then the
@@ -211,12 +225,12 @@ export function buildValidateDocUpdate(code: string): string {
     'donation', 'donation_campaign', 'stock_ledger', 'donation_slot', 'donation_redirect',
     'audit', 'daily_calc', 'simulation', 'purchase', 'referral',
     'meal_session', 'kitchen_counter',
-    'meal_plan', 'kitchen_requisition', 'meal_service', 'gas_cylinder_type', 'gas_ledger',
+    'meal_plan', 'kitchen_requisition', 'meal_service', 'fuel_cylinder', 'gas_ledger',
     'item_category', 'item_master', 'recipe',
     'requirement_group', 'food_sphere_standard', 'replenishment_policy', 'sop_override',
     'distribution_request', 'distribution_batch', 'stock_lot_reservation',
     'distribution_issue', 'distribution_issue_idempotency', 'distribution_issue_capacity', 'distribution_one_time_guard', 'distribution_issue_gate',
-    'daily_sop_assessment'
+    'daily_sop_assessment', 'requisition_ticket'
   ];
   if (allowed.indexOf(newDoc.type) === -1) {
     throw { forbidden: 'doc type not allowed yet: ' + newDoc.type };
@@ -1019,6 +1033,102 @@ export function buildValidateDocUpdate(code: string): string {
       if (newDoc.shelter_code !== oldDoc.shelter_code) throw { forbidden: 'Cannot change shelter_code' };
       if (newDoc.evacuee_id !== oldDoc.evacuee_id) throw { forbidden: 'Cannot change evacuee_id on one-time guard' };
       if (newDoc.item_id !== oldDoc.item_id) throw { forbidden: 'Cannot change item_id on one-time guard' };
+    }
+  }
+  // 11. requisition_ticket lifecycle and role rules — kitchen slice only (CR-121/CR-126).
+  // food/supplies/transfer requisition_type are not implemented yet; reject them here
+  // rather than silently accepting them under the kitchen-only transition table below.
+  if (newDoc.type === 'requisition_ticket') {
+    if (newDoc.requisition_type !== 'kitchen') {
+      throw { forbidden: 'requisition_ticket: only requisition_type "kitchen" is implemented' };
+    }
+    if (!oldDoc) {
+      if (newDoc.status !== 'PENDING_PICK') {
+        throw { forbidden: 'New requisition_ticket must start PENDING_PICK' };
+      }
+      if (!isRole('kitchen_staff')) {
+        throw { forbidden: 'Only kitchen staff or system admin can open a requisition_ticket' };
+      }
+      if (typeof newDoc.meal_plan_id !== 'string' || !newDoc.meal_plan_id) {
+        throw { forbidden: 'requisition_ticket requires meal_plan_id' };
+      }
+      if (newDoc.requested_by !== userCtx.name) {
+        throw { forbidden: 'requested_by must match the authenticated user' };
+      }
+      if (!Array.isArray(newDoc.items) || newDoc.items.length === 0) {
+        throw { forbidden: 'requisition_ticket requires at least one item' };
+      }
+      for (var newTicketIndex = 0; newTicketIndex < newDoc.items.length; newTicketIndex++) {
+        if (newDoc.items[newTicketIndex].allocated_qty !== '0') {
+          throw { forbidden: 'New requisition_ticket items must start allocated_qty "0"' };
+        }
+      }
+      if (typeof newDoc.approved_by !== 'undefined' || typeof newDoc.dispatched_by !== 'undefined' ||
+          typeof newDoc.received_by !== 'undefined') {
+        throw { forbidden: 'New requisition_ticket cannot contain lifecycle metadata' };
+      }
+    }
+    if (oldDoc) {
+      if (newDoc._id !== oldDoc._id) throw { forbidden: 'Cannot change _id' };
+      if (newDoc.type !== oldDoc.type) throw { forbidden: 'Cannot change type' };
+      if (newDoc.shelter_code !== oldDoc.shelter_code) throw { forbidden: 'Cannot change shelter_code' };
+      if (newDoc.meal_plan_id !== oldDoc.meal_plan_id) throw { forbidden: 'Cannot change meal_plan_id' };
+      var ticketFrom = oldDoc.status;
+      var ticketTo = newDoc.status;
+      var ticketTransitions = {
+        PENDING_PICK: ['PENDING_PICK', 'READY_FOR_DISPATCH', 'CANCELLED'],
+        READY_FOR_DISPATCH: ['IN_TRANSIT', 'CANCELLED'],
+        IN_TRANSIT: ['COMPLETED'],
+        COMPLETED: [],
+        CANCELLED: []
+      };
+      var ticketAllowedNext = ticketTransitions[ticketFrom] || [];
+      if (ticketAllowedNext.indexOf(ticketTo) === -1) {
+        throw { forbidden: 'Invalid requisition_ticket transition from ' + ticketFrom + ' to ' + ticketTo };
+      }
+      if (ticketFrom !== 'PENDING_PICK' && JSON.stringify(newDoc.items) !== JSON.stringify(oldDoc.items)) {
+        throw { forbidden: 'Cannot modify requisition_ticket items once past PENDING_PICK' };
+      }
+      if (ticketFrom === 'PENDING_PICK' && ticketTo === 'PENDING_PICK' && !isRole('warehouse_staff')) {
+        throw { forbidden: 'Only warehouse staff or system admin can allocate requisition_ticket items' };
+      }
+      if (ticketTo === 'READY_FOR_DISPATCH') {
+        if (!isRole('shelter_manager')) {
+          throw { forbidden: 'Only shelter manager or system admin can approve a requisition_ticket' };
+        }
+        for (var approveIndex = 0; approveIndex < newDoc.items.length; approveIndex++) {
+          if (!(parseFloat(newDoc.items[approveIndex].allocated_qty) > 0)) {
+            throw { forbidden: 'Every requisition_ticket item needs allocated_qty > 0 before approval' };
+          }
+        }
+        if (newDoc.approved_by !== userCtx.name) {
+          throw { forbidden: 'approved_by must match the authenticated user' };
+        }
+      }
+      if (ticketTo === 'IN_TRANSIT') {
+        if (!isRole('warehouse_staff')) {
+          throw { forbidden: 'Only warehouse staff or system admin can dispatch a requisition_ticket' };
+        }
+        if (newDoc.dispatched_by !== userCtx.name) {
+          throw { forbidden: 'dispatched_by must match the authenticated user' };
+        }
+      }
+      if (ticketTo === 'COMPLETED') {
+        if (!isRole('kitchen_staff')) {
+          throw { forbidden: 'Only kitchen staff or system admin can receive a requisition_ticket' };
+        }
+        if (newDoc.received_by !== userCtx.name) {
+          throw { forbidden: 'received_by must match the authenticated user' };
+        }
+      }
+      if (ticketTo === 'CANCELLED') {
+        var canCancelTicket = ticketFrom === 'PENDING_PICK'
+          ? (isRole('kitchen_staff') || isRole('warehouse_staff') || isRole('shelter_manager'))
+          : (isRole('warehouse_staff') || isRole('shelter_manager'));
+        if (!canCancelTicket) {
+          throw { forbidden: 'Not authorized to cancel this requisition_ticket' };
+        }
+      }
     }
   }
 }`;

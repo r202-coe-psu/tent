@@ -7,10 +7,15 @@ import type {
 	KitchenRequisitionInput,
 	MealService,
 	MealServiceInput,
-	GasCylinderType,
-	GasCylinderTypeInput
+	MealServiceReceipt,
+	FuelCylinder,
+	FuelCylinderInput
 } from '../domain/kitchen';
 import type { GasLedgerEntry } from '../domain/gas-ledger';
+import type {
+	MealDistributionPush,
+	MealDistributionPushInput
+} from '../domain/meal-distribution-push';
 import type { AuthorContext } from '$lib/db/model';
 
 export interface CreatePendingRequisitionParams {
@@ -51,6 +56,11 @@ export interface KitchenRepository {
 	getMealPlan(date: string, meal: string): Promise<MealPlan | null>;
 	listMealPlans(): Promise<MealPlan[]>;
 	confirmMealPlan(plan: MealPlan): Promise<MealPlan>;
+	updateMealPlanGasUsage(
+		plan: MealPlan,
+		gasUsage: NonNullable<MealPlan['gas_usage']>,
+		cookingStartedAt?: MealPlan['cooking_started_at']
+	): Promise<MealPlan>;
 	// Draft-only — a confirmed plan may already be requisitioned/serviced, so
 	// editing or deleting it would orphan those records' meal_plan_id reference.
 	updateMealPlanDraft(
@@ -69,6 +79,22 @@ export interface KitchenRepository {
 		>
 	): Promise<MealPlan>;
 	deleteMealPlanDraft(plan: MealPlan): Promise<void>;
+	// Confirmed plans (a ticket already references them) — only while that
+	// ticket is still PENDING_PICK; caller enforces the ticket-status guard by
+	// updating the ticket's items first (CR-127).
+	updateConfirmedMealPlan(
+		plan: MealPlan,
+		patch: Pick<
+			MealPlan,
+			| 'headcount'
+			| 'recipes'
+			| 'calc_source'
+			| 'label'
+			| 'gas_usage'
+			| 'target_tags'
+			| 'allocated_target'
+		>
+	): Promise<MealPlan>;
 
 	// KitchenRequisition — State Machine (pending -> approved | rejected)
 	createPendingRequisition(
@@ -93,21 +119,40 @@ export interface KitchenRepository {
 	listRequisitions(): Promise<KitchenRequisition[]>;
 
 	// MealService — ulid _id, append-only; recordMealService rejects a second
-	// service for a plan that already has one (one-shot per meal_plan_id).
+	// service for a plan whose latest service hasn't been rejected (CR-131) — a
+	// rejected service may be superseded by re-recording.
 	recordMealService(input: MealServiceInput, ctx: AuthorContext): Promise<MealService>;
+	/** Latest meal_service for a plan (ulid order) — a plan may have more than
+	 * one after a reject-and-redo cycle (CR-131). */
 	getMealServiceByPlanId(mealPlanId: string): Promise<MealService | null>;
 	/** @deprecated Ambiguous with multiple plans per date+meal — use getMealServiceByPlanId. */
 	getMealService(date: string, meal: string): Promise<MealService | null>;
 	listMealServices(): Promise<MealService[]>;
 
-	// Gas cylinder type configuration.
-	createGasCylinderType(input: GasCylinderTypeInput, ctx: AuthorContext): Promise<GasCylinderType>;
-	listGasCylinderTypes(): Promise<GasCylinderType[]>;
-	updateGasCylinderType(
-		doc: GasCylinderType,
-		input: GasCylinderTypeInput
-	): Promise<GasCylinderType>;
-	deleteGasCylinderType(doc: GasCylinderType): Promise<void>;
+	// MealServiceReceipt (CR-129/CR-131) — warehouse confirms or rejects receipt
+	// of cooked output; append-only, rejects a second decision for a meal_service
+	// that already has one.
+	confirmMealServiceReceipt(mealServiceId: string, ctx: AuthorContext): Promise<MealServiceReceipt>;
+	rejectMealServiceReceipt(
+		mealServiceId: string,
+		reason: string,
+		ctx: AuthorContext
+	): Promise<MealServiceReceipt>;
+	listMealServiceReceipts(): Promise<MealServiceReceipt[]>;
+
+	// MealDistributionPush (CR-132) — pushes confirmed-receipt meal_service output
+	// to a distribution point; all-or-nothing check against remaining qty first.
+	createMealDistributionPush(
+		input: MealDistributionPushInput,
+		ctx: AuthorContext
+	): Promise<MealDistributionPush>;
+	listMealDistributionPushes(): Promise<MealDistributionPush[]>;
+
+	// Fuel cylinder — one physical gas tank (schema.md §2.7.1, CR-120).
+	createFuelCylinder(input: FuelCylinderInput, ctx: AuthorContext): Promise<FuelCylinder>;
+	listFuelCylinders(): Promise<FuelCylinder[]>;
+	updateFuelCylinder(doc: FuelCylinder, input: FuelCylinderInput): Promise<FuelCylinder>;
+	deleteFuelCylinder(doc: FuelCylinder): Promise<void>;
 
 	// Gas ledger operations.
 	listGasLedger(): Promise<GasLedgerEntry[]>;

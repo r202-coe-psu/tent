@@ -10,6 +10,7 @@ import { startShelterImportLiveQuery } from '$lib/features/shelter-import';
 import { SHELTER_REGISTRY_DB, startSheltersLiveQuery } from '$lib/features/shelters';
 import { startSopRatioLiveQuery } from '$lib/features/sop-ratios';
 import { CATALOG_DB, startCatalogLiveQuery } from '$lib/features/supply';
+import { startTicketsLiveQuery } from '$lib/features/tickets';
 import { endpointStore } from '$lib/stores/endpoint.svelte';
 import { startChangesSubscriber, type ChangesSubscriberHandle } from './changes-subscriber';
 import { getShelterDb } from './shelter';
@@ -37,6 +38,7 @@ export const STAFF_LIVE_QUERY_STARTERS: readonly LiveQueryStarter[] = [
 	startPeopleImportLiveQuery,
 	startOperationsLiveQuery,
 	startKitchenLiveQuery,
+	startTicketsLiveQuery,
 	startSopRatioLiveQuery,
 	startDailyCalcLiveQuery,
 	startReferralsLiveQuery
