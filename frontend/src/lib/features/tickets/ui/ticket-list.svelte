@@ -242,12 +242,30 @@
 					: outcome === 'rejected'
 						? 'border-red-200 bg-red-50 text-red-900'
 						: 'border-sky-200 bg-sky-50 text-sky-900';
+			// Once the warehouse confirms receipt (outcome === 'confirmed'), this row
+			// stops being "รับเข้า: โรงครัวกลาง -> คลังเสบียงกลาง" (food arriving at the
+			// warehouse) and becomes "จ่ายออก: คลังเสบียงกลาง -> ..." (food waiting to
+			// leave the warehouse for a distribution point, CR-132) — same underlying
+			// meal_service, but the direction/label must track which leg is next.
+			const pushedStations = Array.from(
+				new Set(
+					(pushes.data ?? [])
+						.filter((p) => p.items.some((i) => i.meal_service_id === service._id))
+						.map((p) => p.pos_station)
+				)
+			);
+			const outboundToLabel =
+				remaining <= 0 && pushedStations.length > 0
+					? pushedStations.length > 1
+						? 'หลายจุดแจก'
+						: pushedStations[0]
+					: 'รอเลือกจุดแจก';
 			return {
 				key: `service:${service._id}`,
 				code: `RCV-${service._id.slice(-6).toUpperCase()}`,
-				direction: 'in' as const,
-				fromLabel: 'โรงครัวกลาง',
-				toLabel: 'คลังเสบียงกลาง',
+				direction: outcome === 'confirmed' ? ('out' as const) : ('in' as const),
+				fromLabel: outcome === 'confirmed' ? 'คลังเสบียงกลาง' : 'โรงครัวกลาง',
+				toLabel: outcome === 'confirmed' ? outboundToLabel : 'คลังเสบียงกลาง',
 				missionTitle: `รับอาหารปรุงเสร็จ: ${planLabel(service.meal_plan_id ?? undefined, planMap)}`,
 				recipeChip: recipeChipFor(plan),
 				producedQty: service.actual_yield,
@@ -567,13 +585,6 @@
 		</section>
 
 		<section class="rounded-2xl border border-slate-200/80 bg-white shadow-2xs">
-			<div class="border-b border-slate-200/80 p-5 sm:p-6">
-				<h2 class="text-2xl font-bold tracking-tight text-slate-900">คิวดำเนินการ</h2>
-				<p class="mt-1 text-sm text-slate-500">
-					รวมคำร้องเบิกวัตถุดิบและการรับอาหารปรุงเสร็จเข้าสต็อกในหน้าเดียว
-				</p>
-			</div>
-
 			{#if hasActiveFilters}<div
 					class="flex items-center justify-between gap-3 border-b border-slate-200/80 bg-slate-50 px-5 py-3 text-sm text-slate-600 sm:px-6"
 				>
