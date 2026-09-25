@@ -1,4 +1,3 @@
-import { dev } from '$app/environment';
 import { z } from 'zod';
 import { now } from '$lib/db/model';
 import { deriveHouseholdStatus, stayStatusSchema } from '$lib/features/people/domain/people';
@@ -229,17 +228,7 @@ async function lookupByPhone(
 	const docs = [...docsById.values()];
 	// A capped or malformed page sequence cannot prove there are five or fewer groups.
 	// Fail closed instead of returning an incomplete household picker.
-	if (truncated) {
-		if (dev) {
-			console.info('[Kiosk lookup] Phone match result', {
-				gate: 'phone',
-				candidate_count: docs.length,
-				outcome: 'too_many',
-				truncated: true
-			});
-		}
-		return { kind: 'too_many' };
-	}
+	if (truncated) return { kind: 'too_many' };
 	const householdIds = [
 		...new Set(docs.map((doc) => doc.household_id).filter((id): id is string => Boolean(id)))
 	];
@@ -264,14 +253,6 @@ async function lookupByPhone(
 
 	const groups = groupPhoneMatches(docs, shelterCode, headByHousehold);
 	if (groups.length > KIOSK_PHONE_MAX_CANDIDATES) return { kind: 'too_many' };
-	if (dev) {
-		console.info('[Kiosk lookup] Phone match result', {
-			gate: 'phone',
-			candidate_count: docs.length,
-			group_count: groups.length,
-			outcome: primaryId ? 'resolve_candidate' : groups.length === 0 ? 'not_found' : 'matched'
-		});
-	}
 
 	const normalizedPrimaryId = primaryId
 		? `evacuee:${primaryId.slice('evacuee:'.length).toUpperCase()}`
@@ -385,13 +366,6 @@ export async function lookupPreRegisteredEvacuee(
 			doc.registered_via === 'web' &&
 			isListedHouseholdMember(doc)
 	);
-	if (dev) {
-		console.info('[Kiosk lookup] Match result', {
-			candidate_count: candidates.length,
-			eligible_count: eligible.length,
-			outcome: eligible.length === 1 ? 'matched' : eligible.length === 0 ? 'no_match' : 'ambiguous'
-		});
-	}
 	if (eligible.length !== 1) return { kind: 'not_found' };
 
 	const primary = eligible[0];

@@ -1,5 +1,3 @@
-import { dev } from '$app/environment';
-
 export type GateInput =
 	| { source: 'smart-card'; citizen_id: string }
 	| { source: 'qr'; token: string }
@@ -150,7 +148,6 @@ export async function lookupPreRegisteredEvacuee(
 			body: JSON.stringify(input)
 		},
 		async (response) => {
-			if (dev) console.info('[Kiosk lookup] Response', { http_status: response.status });
 			if (!response.ok) throw await requestError(response);
 			return normalizeLookupResponse(await response.json());
 		},
