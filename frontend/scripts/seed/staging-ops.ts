@@ -16,6 +16,25 @@ import { prefixRangeEnd } from '../t31-seed-support';
 import { bulkDocs, couchReq } from './couch';
 import { ITEM, SH001_CODE, SH002_CODE, SH003_CODE } from './types';
 
+/**
+ * item_master ids are random ULIDs since the catalog rewrite (develop merge) — only
+ * preserved across reseeds by matching on `name`. Resolve the real id for a few
+ * item masters this script references by the old deterministic id, falling back to
+ * that literal id only if no match exists (keeps this a no-op on an already-seeded DB).
+ */
+async function resolveItemMasterIdsByName(): Promise<Map<string, string>> {
+	const byName = new Map<string, string>();
+	const { status, data } = await couchReq('GET', '/catalog/_all_docs?include_docs=true');
+	if (status !== 200) return byName;
+	const rows = (data as { rows?: Array<{ doc?: { type?: string; name?: string; _id: string } }> })
+		.rows;
+	for (const row of rows ?? []) {
+		const doc = row.doc;
+		if (doc?.type === 'item_master' && doc.name) byName.set(doc.name, doc._id);
+	}
+	return byName;
+}
+
 async function hasOps(db: string): Promise<boolean> {
 	const prefix = 'donation_campaign:seed-st:';
 	const startkey = encodeURIComponent(JSON.stringify(prefix));
@@ -35,6 +54,7 @@ function scale(code: string, hi: number, mid: number, lo: number): string {
 }
 
 export async function seedStagingOps(): Promise<void> {
+	const itemMasterIdByName = await resolveItemMasterIdsByName();
 	for (const code of [SH001_CODE, SH002_CODE, SH003_CODE]) {
 		const db = shelterDbName(code);
 		const ctx: AuthorContext = { shelterCode: code, createdBy: 'seed' };
@@ -207,7 +227,7 @@ export async function seedStagingOps(): Promise<void> {
 			code === SH001_CODE
 				? [
 						{
-							_id: 'item_master:rice',
+							_id: itemMasterIdByName.get('ข้าวสาร') ?? 'item_master:rice',
 							type: 'item_master',
 							schema_v: 4,
 							created_at: now(),
@@ -229,12 +249,14 @@ export async function seedStagingOps(): Promise<void> {
 
 		// CR-120 §7.2 — 3 independent LPG cylinders for SH001.
 		// Seeded balances: LPG-01 = 15 kg, LPG-02 = 12 kg, LPG-03 = 0 kg.
+		const lpgItemMasterId =
+			itemMasterIdByName.get('ถังแก๊สหุงต้ม LPG 15 กก.') ?? 'item_master:lpg_15kg';
 		const fuelCylinders =
 			code === SH001_CODE
 				? [
 						createFuelCylinder(
 							{
-								item_master_id: 'item_master:lpg_15kg',
+								item_master_id: lpgItemMasterId,
 								cylinder_code: 'LPG-01',
 								name: 'ถังแก๊สหลัก 1',
 								capacity_kg: '15',
@@ -246,7 +268,7 @@ export async function seedStagingOps(): Promise<void> {
 						),
 						createFuelCylinder(
 							{
-								item_master_id: 'item_master:lpg_15kg',
+								item_master_id: lpgItemMasterId,
 								cylinder_code: 'LPG-02',
 								name: 'ถังแก๊สหลัก 2',
 								capacity_kg: '15',
@@ -258,7 +280,7 @@ export async function seedStagingOps(): Promise<void> {
 						),
 						createFuelCylinder(
 							{
-								item_master_id: 'item_master:lpg_15kg',
+								item_master_id: lpgItemMasterId,
 								cylinder_code: 'LPG-03',
 								name: 'ถังแก๊สสำรอง',
 								capacity_kg: '15',

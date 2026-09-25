@@ -666,10 +666,85 @@ describe('buildValidateDocUpdate', () => {
 				'kitchen_requisition',
 				'meal_service',
 				'fuel_cylinder',
-				'gas_ledger'
+				'gas_ledger',
+				'meal_service_receipt',
+				'meal_distribution_push'
 			] as const) {
 				expect(validateFn).toContain(`'${type}'`);
 			}
+		});
+
+		// CR-142/CR-143/CR-144: no role gate documented for these two — any
+		// authenticated shelter-scoped user may write them (see CR-142's own
+		// doc: role separation is UI-only via `role=warehouse`, not CouchDB-enforced).
+		it('accepts a new meal_service_receipt from any shelter-scoped role', () => {
+			expect(() =>
+				compile()(
+					{
+						_id: 'meal_service_receipt:01J',
+						type: 'meal_service_receipt',
+						...envelope,
+						schema_v: 1,
+						meal_service_id: 'meal_service:01J',
+						outcome: 'confirmed',
+						received_by: 'reg'
+					},
+					null,
+					REGISTRATION
+				)
+			).not.toThrow();
+		});
+
+		it('rejects updating an existing meal_service_receipt (append-only)', () => {
+			const receipt = {
+				_id: 'meal_service_receipt:01J',
+				type: 'meal_service_receipt',
+				...envelope,
+				schema_v: 1,
+				meal_service_id: 'meal_service:01J',
+				outcome: 'confirmed',
+				received_by: 'reg'
+			};
+			expectForbidden(
+				() => compile()({ ...receipt, outcome: 'rejected' }, receipt, REGISTRATION),
+				/Cannot update append-only meal_service_receipt/
+			);
+		});
+
+		it('accepts a new meal_distribution_push from any shelter-scoped role', () => {
+			expect(() =>
+				compile()(
+					{
+						_id: 'meal_distribution_push:01J',
+						type: 'meal_distribution_push',
+						...envelope,
+						schema_v: 1,
+						pos_station: 'จุดแจกจ่ายรวมทุกโซน (Main Hub POS)',
+						meal_session_id: 'meal_session:01J',
+						dispatcher: 'reg',
+						items: [{ meal_service_id: 'meal_service:01J', menu_label: 'ข้าวต้ม', qty: 10 }]
+					},
+					null,
+					REGISTRATION
+				)
+			).not.toThrow();
+		});
+
+		it('rejects updating an existing meal_distribution_push (append-only)', () => {
+			const push = {
+				_id: 'meal_distribution_push:01J',
+				type: 'meal_distribution_push',
+				...envelope,
+				schema_v: 1,
+				pos_station: 'จุดแจกจ่ายรวมทุกโซน (Main Hub POS)',
+				meal_session_id: 'meal_session:01J',
+				dispatcher: 'reg',
+				items: [{ meal_service_id: 'meal_service:01J', menu_label: 'ข้าวต้ม', qty: 10 }]
+			};
+			expectForbidden(
+				() => compile()({ ...push, items: [{ ...push.items[0], qty: 20 }] }, push, REGISTRATION),
+				/Cannot update append-only meal_distribution_push/
+			);
 		});
 
 		it('accepts a new meal_plan from kitchen_staff', () => {
@@ -2171,14 +2246,22 @@ describe('buildValidateDocUpdate', () => {
 			expect(() => compile()(allocated, ticket, WAREHOUSE)).not.toThrow();
 		});
 
-		it('rejects allocation from a non-warehouse role', () => {
+		it('kitchen_staff can edit its own requested_qty while status stays PENDING_PICK (CR-140)', () => {
+			const ticket = newTicket();
+			const edited = newTicket({
+				items: [{ ...(ticket.items as Doc[])[0], requested_qty: '45' }]
+			});
+			expect(() => compile()(edited, ticket, KITCHEN)).not.toThrow();
+		});
+
+		it('rejects PENDING_PICK item updates from a role with neither warehouse_staff nor kitchen_staff', () => {
 			const ticket = newTicket();
 			const allocated = newTicket({
 				items: [{ ...(ticket.items as Doc[])[0], allocated_qty: '30' }]
 			});
 			expectForbidden(
-				() => compile()(allocated, ticket, KITCHEN),
-				/Only warehouse staff or system admin can allocate/
+				() => compile()(allocated, ticket, REGISTRATION),
+				/Only warehouse staff, kitchen staff, or system admin can update requisition_ticket items/
 			);
 		});
 

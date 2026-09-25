@@ -333,7 +333,8 @@ export function buildValidateDocUpdate(code: string): string {
     'distribution_request', 'distribution_batch', 'stock_lot_reservation',
     'distribution_issue', 'distribution_issue_idempotency', 'distribution_issue_capacity', 'distribution_one_time_guard', 'distribution_issue_gate',
     'daily_sop_assessment',
-    'requisition_ticket', 'distribution_log', 'bulk_return_pool', 'bulk_return_claim'
+    'requisition_ticket', 'distribution_log', 'bulk_return_pool', 'bulk_return_claim',
+    'meal_service_receipt', 'meal_distribution_push'
   ];
   if (allowed.indexOf(newDoc.type) === -1) {
     throw { forbidden: 'doc type not allowed yet: ' + newDoc.type };
@@ -1210,8 +1211,15 @@ export function buildValidateDocUpdate(code: string): string {
       if (ticketFrom !== 'PENDING_PICK' && JSON.stringify(newDoc.items) !== JSON.stringify(oldDoc.items)) {
         throw { forbidden: 'Cannot modify requisition_ticket items once past PENDING_PICK' };
       }
-      if (ticketFrom === 'PENDING_PICK' && ticketTo === 'PENDING_PICK' && !isRole('warehouse_staff')) {
-        throw { forbidden: 'Only warehouse staff or system admin can allocate requisition_ticket items' };
+      if (
+        ticketFrom === 'PENDING_PICK' &&
+        ticketTo === 'PENDING_PICK' &&
+        !isRole('warehouse_staff') &&
+        !isRole('kitchen_staff')
+      ) {
+        // warehouse_staff allocates (allocated_qty); kitchen_staff edits its own
+        // request while nothing's been picked yet (CR-140, requested_qty only).
+        throw { forbidden: 'Only warehouse staff, kitchen staff, or system admin can update requisition_ticket items while PENDING_PICK' };
       }
       if (ticketTo === 'READY_FOR_DISPATCH') {
         if (!isRole('shelter_manager')) {
