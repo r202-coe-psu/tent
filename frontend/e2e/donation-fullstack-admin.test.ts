@@ -19,6 +19,7 @@ import {
 	runDocs,
 	shelterDb,
 	skipUnlessFullStack,
+	todayYmd,
 	type PublicNeed,
 	type PublicShelter,
 	type SlotWindow,
@@ -306,6 +307,9 @@ test.describe('queue slots (DN-5)', () => {
 		await openSlots(page, 'รถศูนย์ไปรับ');
 		await expect(slot).toContainText('คิวเต็ม');
 		await expect(slot).toContainText('จองแล้ว 1 / 1 เที่ยว');
+		// Booked → it cannot be deleted, only closed.
+		await expect(slot.getByRole('button', { name: 'ลบ' })).toBeDisabled();
+		await expect(slot).toContainText('มีผู้จองแล้ว ลบไม่ได้');
 
 		// The first donor cancels — the trip goes back on offer.
 		await clearSession(page);
@@ -347,31 +351,55 @@ test.describe('queue slots (DN-5)', () => {
 		await expect(windowButton(page, DROPOFF)).toHaveAccessibleName(/ว่าง/);
 	});
 
-	test('staff put a ceiling on a window, lift it, and cannot add the same start twice', async ({
+	test('staff edit a window (end, ceiling, note), then delete it while nobody has booked it', async ({
 		page
 	}) => {
 		await openSlots(page, 'ผู้บริจาคมาส่งเอง');
-		const slot = await addSlot(page, CAPPED);
-		await expect(slot).toContainText('ไม่จำกัด');
+		const original = await addSlot(page, CAPPED);
+		await expect(original).toContainText('ไม่จำกัด');
 
-		// The ceiling box saves on change (blur), not on a button.
-		const ceiling = slot.getByRole('spinbutton');
-		await ceiling.fill('2');
-		await ceiling.press('Tab');
-		await expect(page.getByText(`แก้ความจุ ${CAPPED.from} เป็น 2 คิว`)).toBeVisible();
-		await expect(slot).toContainText('จองแล้ว 0 / 2 คิว');
+		// Edit: the start is the window's identity, so only end / ceiling / note move.
+		const [h, m] = CAPPED.from.split(':').map(Number);
+		const endMin = h * 60 + m + 15;
+		const newTo = `${String(Math.floor(endMin / 60)).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`;
+		const note = `ประตู 2 (e2e ${RUN_ID})`;
+		await original.getByRole('button', { name: 'แก้ไข' }).click();
+		const dialog = page.getByRole('dialog', { name: new RegExp(`^แก้ไขช่วง ${CAPPED.from}`) });
+		await dialog.locator('#edit-slot-to').fill(newTo);
+		await dialog.locator('#edit-slot-capacity').fill('2');
+		await dialog.locator('#edit-slot-note').fill(note);
+		await dialog.getByRole('button', { name: 'บันทึกการแก้ไข' }).click();
+		await expect(page.getByText(`แก้ไขช่วง ${CAPPED.from} - ${newTo} แล้ว`)).toBeVisible();
+		await expect(dialog).toBeHidden();
 
-		await ceiling.fill('');
-		await ceiling.press('Tab');
-		await expect(page.getByText(`ปลดเพดานช่วง ${CAPPED.from} แล้ว`)).toBeVisible();
-		await expect(slot).toContainText('ไม่จำกัด');
+		const edited = slotRow(page, { from: CAPPED.from, to: newTo });
+		await expect(edited).toContainText('จองแล้ว 0 / 2 คิว');
+		await expect(edited).toContainText('ประตู 2');
+
+		// Lift the ceiling again from the same dialog.
+		await edited.getByRole('button', { name: 'แก้ไข' }).click();
+		await dialog.locator('#edit-slot-capacity').fill('');
+		await dialog.getByRole('button', { name: 'บันทึกการแก้ไข' }).click();
+		await expect(edited).toContainText('ไม่จำกัด');
 
 		// Same start again → refused; still one row for it.
 		await page.locator('#slot-from').fill(CAPPED.from);
 		await page.locator('#slot-to').fill(CAPPED.to);
 		await page.getByRole('button', { name: 'เพิ่มช่วงเวลา' }).click();
 		await expect(page.getByText(`มีช่วงเวลา ${CAPPED.from} ของวันนี้อยู่แล้ว`)).toBeVisible();
-		await expect(slot).toHaveCount(1);
+		await expect(edited).toHaveCount(1);
+
+		// Nobody booked it → delete is offered, behind a confirmation.
+		await edited.getByRole('button', { name: 'ลบ' }).click();
+		const confirm = page.getByRole('alertdialog', { name: new RegExp(`^ลบช่วง ${CAPPED.from}`) });
+		await confirm.getByRole('button', { name: 'ยืนยันลบ' }).click();
+		await expect(page.getByText(`ลบช่วง ${CAPPED.from} - ${newTo} แล้ว`)).toBeVisible();
+		await expect(edited).toHaveCount(0);
+		const slotId = `donation_slot:dropoff:${todayYmd()}:${CAPPED.from}`;
+		expect(
+			(await couchReq('GET', `/${shelterDb(slotShelter.code)}/${encodeURIComponent(slotId)}`))
+				.status
+		).toBe(404);
 	});
 
 	test('another day: no truck until staff open the day (เปิดรอบรถทั้งวัน), then donors see it', async ({
@@ -400,10 +428,6 @@ test.describe('queue slots (DN-5)', () => {
 		);
 
 		// Staff: open tomorrow's truck in one click — it needs a trip count first.
-		// Phone width: from `sm` up the button is pushed out of its card (Button is
-		// `shrink-0`, both are `w-full`) and a mouse cannot reach it — see the layout test
-		// below. Below `sm` the row stacks, which is the only layout it works in today.
-		await page.setViewportSize({ width: 600, height: 1000 });
 		await openSlots(page, 'รถศูนย์ไปรับ');
 		await staffPicksDate(page, tomorrow);
 		const standard = page.getByRole('button', { name: 'เปิดรอบรถทั้งวัน' });
@@ -423,11 +447,27 @@ test.describe('queue slots (DN-5)', () => {
 			5
 		);
 	});
+	test('empty add form is refused with the reason, not raw validation JSON', async ({ page }) => {
+		await openSlots(page, 'รถศูนย์ไปรับ');
+		const add = page.getByRole('button', { name: 'เพิ่มช่วงเวลา' });
+		const toast = page.locator('[data-sonner-toast]').last();
+
+		await page.locator('#slot-from').fill('');
+		await page.locator('#slot-to').fill('');
+		await add.click();
+		await expect(toast).toContainText('เวลาเริ่มต้องเป็นรูปแบบ HH:mm');
+		await expect(toast).not.toContainText('[');
+
+		// Times fine, but a truck window needs a trip count.
+		await page.locator('#slot-from').fill('09:00');
+		await page.locator('#slot-to').fill('10:00');
+		await add.click();
+		await expect(page.getByText('คิวรถไปรับต้องกำหนดจำนวนเที่ยว')).toBeVisible();
+	});
+
 	test('slot form buttons stay inside their card on a desktop screen', async ({ page }) => {
-		// KNOWN BUG: `donation-slots-manager.svelte` puts two `w-full` buttons in a
-		// `sm:flex-row`, and Button is `shrink-0` — the second one lands outside the card,
-		// under the list. Expected to fail until fixed; Playwright flags it once it passes.
-		test.fail();
+		// Regression: the two form buttons sat side by side from `sm` up, and Button being
+		// `shrink-0` pushed the second one out of its card, under the list, unclickable.
 		await page.setViewportSize({ width: 1280, height: 720 });
 		for (const mode of ['ผู้บริจาคมาส่งเอง', 'รถศูนย์ไปรับ'] as const) {
 			await openSlots(page, mode);

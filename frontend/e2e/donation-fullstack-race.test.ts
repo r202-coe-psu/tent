@@ -32,9 +32,10 @@ import {
  * stay.
  */
 
-// No seeded campaign asks for it, so the board line this spec opens is the only one.
-// `id`/`unit` are looked up in beforeAll: the catalog mints `item_master:<ulid>` per seed.
-const RACE_ITEM = { id: '', name: 'ไข่ไก่', unit: '' };
+// No seeded campaign asks for it and the seed puts no stock of it — any on-hand would
+// already cover the 1-unit target and keep it off the board. `id`/`unit` are looked up
+// in beforeAll: the catalog mints `item_master:<ulid>` per seed.
+const RACE_ITEM = { id: '', name: 'แปรงสีฟัน', unit: '' };
 
 let shelter: PublicShelter;
 let pickup: SlotWindow;

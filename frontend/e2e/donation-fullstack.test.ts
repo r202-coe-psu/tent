@@ -13,6 +13,7 @@ import {
 	openPendingRow,
 	openRunCampaign,
 	publicNeedsBoard,
+	reloadUntilVisible,
 	retireRunCampaigns,
 	skipUnlessFullStack,
 	type PublicNeed,
@@ -33,8 +34,9 @@ import {
  * Back-office setup (campaigns, slots, walk-in) lives in donation-fullstack-admin.
  */
 
-// A catalog item no seeded campaign asks for, so the board line is this run's alone.
-const NEED_ITEM = 'ผักรวม';
+// A catalog item no seeded campaign asks for and the seed puts no stock of (stock at or
+// above the target keeps a need off the board), so the board line is this run's alone.
+const NEED_ITEM = 'ยาสีฟัน';
 
 let shelter: PublicShelter;
 let need: PublicNeed;
@@ -112,7 +114,7 @@ test.describe('staff review', () => {
 		await page.goto(`/donations/track?ref=${bookingRef}&phone=${phone}`);
 		await expect(page).toHaveURL(/\/donations\/track\/TX-/);
 		await expect(page.getByRole('heading', { name: bookingRef })).toBeVisible();
-		await expect(page.getByRole('heading', { name: 'ศูนย์รับของเรียบร้อยแล้ว' })).toBeVisible();
+		await reloadUntilVisible(page, page.getByRole('heading', { name: 'ศูนย์รับของเรียบร้อยแล้ว' }));
 		await expect(page.getByRole('button', { name: 'แก้ไขรายการที่จะบริจาค' })).toHaveCount(0);
 	});
 
@@ -215,10 +217,7 @@ test.describe('donor self-service on the track page', () => {
 		await expect(dialog).toBeHidden();
 		// The refetch right after saving has come back without the revision (1 run in 3);
 		// a reload shows it. Tolerated here, noted as a finding.
-		await expect(async () => {
-			if (!(await page.getByText('แก้ไขแล้ว 1 ครั้ง').isVisible())) await page.reload();
-			await expect(page.getByText('แก้ไขแล้ว 1 ครั้ง')).toBeVisible({ timeout: 2_000 });
-		}).toPass({ timeout: 15_000 });
+		await reloadUntilVisible(page, page.getByText('แก้ไขแล้ว 1 ครั้ง'));
 
 		// Staff see the donor's new number, not the one first declared.
 		await expect
@@ -276,8 +275,10 @@ test.describe('donor self-service on the track page', () => {
 		expect((await logistics())?.delivery_method).toBe('parcel');
 
 		await page.goto(`/donations/track/${trackingToken}`);
-		// The input has no label; its placeholder (= accessible name) is the saved number.
+		// The input has no label; its placeholder (= accessible name) is the saved number —
+		// which the page only knows once the projection has caught up.
 		const box = page.getByRole('textbox', { name: first });
+		await reloadUntilVisible(page, box);
 		await box.fill(later);
 		await page.getByRole('button', { name: 'บันทึก', exact: true }).click();
 

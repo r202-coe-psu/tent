@@ -1,4 +1,4 @@
-import { expect, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 import {
 	createCouchUser,
 	deleteCouchUser,
@@ -267,7 +267,7 @@ export async function openInScanStation(page: Page, bookingRef: string) {
 	await page.getByRole('textbox', { name: 'รหัสการจอง' }).fill(bookingRef);
 	await page.getByRole('button', { name: 'ค้นหา' }).click();
 	await expect(
-		page.getByRole('heading', { name: `${bookingRef} - ตรวจรับพัสดุบริจาค (Verifying Drop-off)` })
+		page.getByRole('heading', { name: `${bookingRef} - ตรวจรับพัสดุบริจาค` })
 	).toBeVisible();
 }
 
@@ -421,4 +421,15 @@ export async function retireRunCampaigns(
 			.toBeUndefined();
 	}
 	for (const c of await runDocs(db, 'donation_campaign', 'notes')) await deleteDoc(db, c);
+}
+
+/**
+ * The public track page reads the Mongo projection, which trails CouchDB by the sync
+ * worker, and does not refetch on its own. After a write, reload until `target` shows.
+ */
+export async function reloadUntilVisible(page: Page, target: Locator, timeout = 20_000) {
+	await expect(async () => {
+		if (!(await target.isVisible())) await page.reload();
+		await expect(target).toBeVisible({ timeout: 2_000 });
+	}).toPass({ timeout });
 }
