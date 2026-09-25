@@ -2077,6 +2077,70 @@ describe('buildValidateDocUpdate', () => {
 			);
 		});
 
+		it('shelter_manager one-click approves PENDING_PICK → COMPLETED (CR-128)', () => {
+			const ticket = newTicket({
+				items: [
+					{
+						item_id: 'item_master:rice',
+						item_name: 'ข้าวสาร',
+						unit: 'kg',
+						requested_qty: '30',
+						allocated_qty: '0'
+					}
+				]
+			});
+			const completed = {
+				...ticket,
+				status: 'COMPLETED',
+				items: [{ ...(ticket.items as Doc[])[0], allocated_qty: '30' }],
+				approved_by: 'mgr',
+				dispatched_by: 'mgr',
+				received_by: 'mgr'
+			};
+			expect(() => compile()(completed, ticket, MANAGER)).not.toThrow();
+		});
+
+		it('rejects one-click approve from kitchen_staff (manager-only, CR-128)', () => {
+			const ticket = newTicket({
+				items: [
+					{
+						item_id: 'item_master:rice',
+						item_name: 'ข้าวสาร',
+						unit: 'kg',
+						requested_qty: '30',
+						allocated_qty: '0'
+					}
+				]
+			});
+			const completed = {
+				...ticket,
+				status: 'COMPLETED',
+				items: [{ ...(ticket.items as Doc[])[0], allocated_qty: '30' }],
+				approved_by: 'kt',
+				dispatched_by: 'kt',
+				received_by: 'kt'
+			};
+			expectForbidden(
+				() => compile()(completed, ticket, KITCHEN),
+				/Only shelter manager or system admin can one-click approve/
+			);
+		});
+
+		it('rejects one-click approve while any line is still allocated_qty 0', () => {
+			const ticket = newTicket();
+			const completed = {
+				...ticket,
+				status: 'COMPLETED',
+				approved_by: 'mgr',
+				dispatched_by: 'mgr',
+				received_by: 'mgr'
+			};
+			expectForbidden(
+				() => compile()(completed, ticket, MANAGER),
+				/needs allocated_qty > 0 before approval/
+			);
+		});
+
 		it('kitchen_staff can cancel while PENDING_PICK', () => {
 			const ticket = newTicket();
 			const cancelled = { ...ticket, status: 'CANCELLED' };

@@ -1076,7 +1076,7 @@ export function buildValidateDocUpdate(code: string): string {
       var ticketFrom = oldDoc.status;
       var ticketTo = newDoc.status;
       var ticketTransitions = {
-        PENDING_PICK: ['PENDING_PICK', 'READY_FOR_DISPATCH', 'CANCELLED'],
+        PENDING_PICK: ['PENDING_PICK', 'READY_FOR_DISPATCH', 'COMPLETED', 'CANCELLED'],
         READY_FOR_DISPATCH: ['IN_TRANSIT', 'CANCELLED'],
         IN_TRANSIT: ['COMPLETED'],
         COMPLETED: [],
@@ -1113,7 +1113,26 @@ export function buildValidateDocUpdate(code: string): string {
           throw { forbidden: 'dispatched_by must match the authenticated user' };
         }
       }
-      if (ticketTo === 'COMPLETED') {
+      if (ticketTo === 'COMPLETED' && ticketFrom === 'PENDING_PICK') {
+        // One-click approve (CR-128, requisition_type 'kitchen' only): shelter_manager/
+        // system_admin does approve+dispatch+receive in one write, all 3 by-fields same actor.
+        if (!isRole('shelter_manager')) {
+          throw { forbidden: 'Only shelter manager or system admin can one-click approve a requisition_ticket' };
+        }
+        for (var oneStepIndex = 0; oneStepIndex < newDoc.items.length; oneStepIndex++) {
+          if (!(parseFloat(newDoc.items[oneStepIndex].allocated_qty) > 0)) {
+            throw { forbidden: 'Every requisition_ticket item needs allocated_qty > 0 before approval' };
+          }
+        }
+        if (
+          newDoc.approved_by !== userCtx.name ||
+          newDoc.dispatched_by !== userCtx.name ||
+          newDoc.received_by !== userCtx.name
+        ) {
+          throw { forbidden: 'approved_by/dispatched_by/received_by must match the authenticated user' };
+        }
+      }
+      if (ticketTo === 'COMPLETED' && ticketFrom === 'IN_TRANSIT') {
         if (!isRole('kitchen_staff')) {
           throw { forbidden: 'Only kitchen staff or system admin can receive a requisition_ticket' };
         }
