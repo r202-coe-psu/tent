@@ -112,4 +112,11 @@ describe('evaluateCategoryDeletion', () => {
 			expect(decision.canHardDelete).toBe(true);
 		});
 	});
+
+	it('should reject delete of protected system categories at any scope', () => {
+		const decision = evaluateCategoryDeletion(baseUsage, 'central', { isProtected: true });
+		expect(decision.action).toBe('deactivate');
+		expect(decision.canHardDelete).toBe(false);
+		expect(decision.reason).toContain('ไม่อนุญาตให้ลบหมวดหมู่ระบบมาตรฐาน');
+	});
 });
