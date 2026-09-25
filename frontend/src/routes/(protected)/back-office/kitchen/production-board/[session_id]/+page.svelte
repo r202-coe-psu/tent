@@ -987,9 +987,10 @@
 				icon: CheckCircle2,
 				badgeClass: 'bg-emerald-100 text-emerald-800',
 				dotClass: 'bg-emerald-100 text-emerald-600',
-				badgeLabel: 'ส่งมอบเสร็จสิ้น (DELIVERED)',
+				badgeLabel: 'ตรวจรับเข้าคลังแล้ว — พร้อมจ่ายออก (RECEIVED, READY TO DISPATCH)',
 				title: 'คลังตรวจรับเข้าสต็อกเรียบร้อยแล้ว',
-				description: 'ผลผลิตถูกนำเข้ารายการคลังสินค้าพร้อมจ่ายเรียบร้อยแล้ว'
+				description:
+					'ผลผลิตถูกนำเข้ารายการคลังสินค้าแล้ว รอจัดสรรส่งจุดแจกจ่าย (Push) ที่ /back-office/kitchen/distribute'
 			};
 		}
 		if (activeService) {
@@ -2169,11 +2170,19 @@
 								class="flex items-start gap-3 rounded-lg border border-green-200 bg-green-50 p-4 text-green-800"
 							>
 								<CheckCircle2 class="h-5 w-5 shrink-0 text-green-600" />
-								<div>
-									<h4 class="font-bold">บันทึกผลการผลิตและแจกจ่ายเรียบร้อยแล้ว</h4>
+								<div class="flex-1">
+									<h4 class="font-bold">บันทึกผลการผลิตและตรวจรับเข้าคลังเรียบร้อยแล้ว</h4>
 									<p class="mt-1 text-xs text-green-700">
 										บันทึกเมื่อ {new Date(activeService.created_at).toLocaleString('th-TH')} โดย {activeService.created_by}
+										— ยังไม่แจกจ่าย รอจัดสรรส่งจุดแจก (Push)
 									</p>
+									<Button
+										size="sm"
+										class="mt-2 gap-1.5 bg-emerald-700 hover:bg-emerald-800"
+										onclick={() => goto(resolve('/back-office/kitchen/distribute'))}
+									>
+										ไปจัดสรรอาหารส่งจุดแจก (Push)
+									</Button>
 								</div>
 							</div>
 						{/if}
