@@ -6,26 +6,40 @@ import type {
 	BulkReturnPool,
 	BulkReturnPoolInput,
 	DistributionLog,
-	DistributionLogInput
+	DistributionLogInput,
+	LoanReturnReservation,
+	LoanReturnReservationStatus
 } from '../../domain/food-supplies';
 import {
 	assertBulkReturnClaimTransition,
+	assertLoanReturnReservationTransition,
 	bulkReturnPoolDocSchema,
 	createBulkReturnPool as createBulkReturnPoolDoc,
 	createDistributionLog,
-	deriveClaimIdFromDistributionLog
+	createLoanReturnReservation,
+	deriveClaimIdFromDistributionLog,
+	deriveReservationIdFromDistributionLog,
+	loanReturnReservationDocSchema
 } from '../../domain/food-supplies';
 import type {
 	BulkReturnClaimRepository,
 	BulkReturnPoolRepository,
 	DistributionLogRepository,
+	LoanReturnReservationRepository,
+	ReinitializeLoanReturnReservationInput,
 	RecordReturnInput,
 	RecordClearInput
 } from '../../data/food-supplies';
-import type { OperationsRepository, StockLedger } from '$lib/features/operations';
+import {
+	createStockLedger,
+	deriveDeterministicLedgerId,
+	type OperationsRepository,
+	type StockLedger
+} from '$lib/features/operations';
 import {
 	ConcurrencyCollisionError,
 	InsufficientPoolQuotaError,
+	ReservationSemanticMismatchError,
 	StockIntegrityError,
 	WorkflowAuthorizationError,
 	WorkflowValidationError
@@ -33,11 +47,18 @@ import {
 import { canReceivePhysicalStock } from './auth';
 import { ConflictError } from '$lib/utils/errors';
 import { parseQty } from '$lib/utils/qty';
+import { endpointStore } from '$lib/stores/endpoint.svelte';
 import { buildValidateDocUpdate } from '$lib/server/shelter-access-design';
 import {
+	abortAbandonedReturnReservation,
+	abortReturnReservation,
+	acquireReturnReservation,
+	fenceReturnReservation,
+	commitReturnReservation,
 	clearLoanNonPhysical,
 	clearLoanViaBulkPool,
 	createBulkReturnPool,
+	getReturnOperationState,
 	returnLoanAtCounter
 } from './return-workflow';
 
@@ -129,25 +150,30 @@ class InMemoryOperationsRepository implements Partial<OperationsRepository> {
 	ledger: StockLedger[] = [];
 	/** If true, the next addLedgerEntry call throws ConflictError instead of persisting. */
 	throwConflictOnNext = false;
-	private addBarrier: { remaining: number; release: () => void; wait: Promise<void> } | null = null;
+	private pausedLedgerWrite: {
+		started: () => void;
+		wait: Promise<void>;
+	} | null = null;
 
-	holdNextLedgerWrites(count: number): void {
+	pauseNextLedgerWrite(): { started: Promise<void>; release: () => void } {
+		let startedResolve: () => void = () => undefined;
 		let release: () => void = () => undefined;
+		const started = new Promise<void>((resolve) => {
+			startedResolve = resolve;
+		});
 		const wait = new Promise<void>((resolve) => {
 			release = resolve;
 		});
-		this.addBarrier = { remaining: count, release, wait };
+		this.pausedLedgerWrite = { started: startedResolve, wait };
+		return { started, release };
 	}
 
 	async addLedgerEntry(entry: StockLedger): Promise<StockLedger> {
-		const barrier = this.addBarrier;
-		if (barrier) {
-			barrier.remaining -= 1;
-			if (barrier.remaining === 0) {
-				this.addBarrier = null;
-				barrier.release();
-			}
-			await barrier.wait;
+		const pausedWrite = this.pausedLedgerWrite;
+		if (pausedWrite) {
+			this.pausedLedgerWrite = null;
+			pausedWrite.started();
+			await pausedWrite.wait;
 		}
 		if (this.throwConflictOnNext) {
 			this.throwConflictOnNext = false;
@@ -368,11 +394,99 @@ class InMemoryClaimRepository implements BulkReturnClaimRepository {
 	}
 }
 
+class InMemoryReservationRepository implements LoanReturnReservationRepository {
+	reservations = new Map<string, LoanReturnReservation>();
+	failNextReinitializeWithConflict = false;
+	failNextCommit = false;
+
+	async create(reservation: LoanReturnReservation): Promise<LoanReturnReservation> {
+		if (this.reservations.has(reservation._id)) {
+			throw new ConflictError(`Conflict on doc ${reservation._id}`);
+		}
+		const parsed = loanReturnReservationDocSchema.parse(reservation);
+		this.reservations.set(parsed._id, structuredClone(parsed));
+		return structuredClone(parsed);
+	}
+
+	async get(reservationId: string): Promise<LoanReturnReservation | null> {
+		const found = this.reservations.get(reservationId);
+		if (!found) return null;
+		const parsed = loanReturnReservationDocSchema.parse(found);
+		return structuredClone(parsed);
+	}
+
+	async mutateCAS(
+		reservationId: string,
+		mutator: (current: LoanReturnReservation) => LoanReturnReservation
+	): Promise<LoanReturnReservation> {
+		const current = this.reservations.get(reservationId);
+		if (!current) throw new Error(`Reservation ${reservationId} not found`);
+		const next = mutator(structuredClone(current));
+		if (this.failNextCommit && current.status === 'FENCED' && next.status === 'COMMITTED') {
+			this.failNextCommit = false;
+			throw new Error('Simulated reservation commit failure');
+		}
+		assertLoanReturnReservationTransition(current, next);
+		const parsed = loanReturnReservationDocSchema.parse(next);
+		this.reservations.set(reservationId, structuredClone(parsed));
+		return structuredClone(parsed);
+	}
+
+	async mutateStatusCAS(
+		reservationId: string,
+		targetStatus: LoanReturnReservationStatus,
+		notesOrCtx?: string | AuthorContext,
+		maybeCtx?: AuthorContext
+	): Promise<LoanReturnReservation> {
+		void maybeCtx;
+		const notes = typeof notesOrCtx === 'string' ? notesOrCtx : undefined;
+		return this.mutateCAS(reservationId, (current) => ({
+			...current,
+			status: targetStatus,
+			...(notes !== undefined ? { notes } : {}),
+			updated_at: new Date().toISOString()
+		}));
+	}
+
+	async reinitializeCAS(
+		reservationId: string,
+		input: ReinitializeLoanReturnReservationInput,
+		ctx?: AuthorContext
+	): Promise<LoanReturnReservation> {
+		if (this.failNextReinitializeWithConflict) {
+			this.failNextReinitializeWithConflict = false;
+			throw new ConflictError(`Conflict on doc ${reservationId}`);
+		}
+		return this.mutateCAS(reservationId, (current) => {
+			if (current.status !== 'ABORTED' && current.status !== 'COMMITTED') {
+				throw new Error(
+					`Cannot reinitialize reservation ${reservationId} in status ${current.status}; must be ABORTED or COMMITTED`
+				);
+			}
+			return {
+				...current,
+				operation_id: input.operation_id,
+				operation_by: input.operation_by ?? ctx?.createdBy ?? 'system',
+				mode: input.mode,
+				status: 'RESERVED' as const,
+				qty_returned: input.qty_returned,
+				return_condition: input.return_condition,
+				bulk_pool_id: input.bulk_pool_id,
+				claimed_qty: input.claimed_qty,
+				clear_reason: input.clear_reason,
+				notes: input.notes ?? current.notes,
+				updated_at: new Date().toISOString()
+			};
+		});
+	}
+}
+
 describe('return-workflow', () => {
 	let logRepo: InMemoryLogRepository;
 	let opsRepo: InMemoryOperationsRepository;
 	let poolRepo: InMemoryPoolRepository;
 	let claimRepo: InMemoryClaimRepository;
+	let reservationRepo: InMemoryReservationRepository;
 	const POS_CTX: AuthorContext = {
 		shelterCode: 'SH001',
 		createdBy: 'pos_user',
@@ -410,10 +524,12 @@ describe('return-workflow', () => {
 	};
 
 	beforeEach(() => {
+		endpointStore.markConnected();
 		logRepo = new InMemoryLogRepository();
 		opsRepo = new InMemoryOperationsRepository();
 		poolRepo = new InMemoryPoolRepository();
 		claimRepo = new InMemoryClaimRepository();
+		reservationRepo = new InMemoryReservationRepository();
 	});
 
 	it('handles counter loan return with inbound stock ledger entry', async () => {
@@ -435,7 +551,13 @@ describe('return-workflow', () => {
 			log._id,
 			{ qty_returned: '2', condition_on_return: 'READY', notes: 'Returned in good condition' },
 			POS_CTX,
-			{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo }
+			{
+				logRepo,
+				operationsRepo: opsRepo as unknown as OperationsRepository,
+				poolRepo,
+				claimRepo,
+				reservationRepo
+			}
 		);
 
 		expect(result.log.status).toBe('returned');
@@ -464,19 +586,33 @@ describe('return-workflow', () => {
 		);
 
 		// First return
-		await returnLoanAtCounter(log._id, { qty_returned: '1' }, POS_CTX, {
-			logRepo,
-			operationsRepo: opsRepo as unknown as OperationsRepository,
-			poolRepo
-		});
+		await returnLoanAtCounter(
+			log._id,
+			{ qty_returned: '1', condition_on_return: 'READY' },
+			POS_CTX,
+			{
+				logRepo,
+				operationsRepo: opsRepo as unknown as OperationsRepository,
+				poolRepo,
+				claimRepo,
+				reservationRepo
+			}
+		);
 		expect(opsRepo.ledger).toHaveLength(1);
 
 		// Retry
-		const retry = await returnLoanAtCounter(log._id, { qty_returned: '1' }, POS_CTX, {
-			logRepo,
-			operationsRepo: opsRepo as unknown as OperationsRepository,
-			poolRepo
-		});
+		const retry = await returnLoanAtCounter(
+			log._id,
+			{ qty_returned: '1', condition_on_return: 'READY' },
+			POS_CTX,
+			{
+				logRepo,
+				operationsRepo: opsRepo as unknown as OperationsRepository,
+				poolRepo,
+				claimRepo,
+				reservationRepo
+			}
+		);
 		expect(retry.ledgerEntryCreated).toBe(false);
 		expect(opsRepo.ledger).toHaveLength(1);
 	});
@@ -502,11 +638,18 @@ describe('return-workflow', () => {
 				status: 'active',
 				qty_returned: priorQtyReturned
 			});
-			const result = await returnLoanAtCounter(log._id, { qty_returned: '2' }, POS_CTX, {
-				logRepo,
-				operationsRepo: opsRepo as unknown as OperationsRepository,
-				poolRepo
-			});
+			const result = await returnLoanAtCounter(
+				log._id,
+				{ qty_returned: '2', condition_on_return: 'READY' },
+				POS_CTX,
+				{
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				}
+			);
 
 			expect(result.ledgerEntryCreated).toBe(priorQtyReturned === '0');
 		}
@@ -529,20 +672,34 @@ describe('return-workflow', () => {
 			},
 			POS_CTX
 		);
-		await returnLoanAtCounter(log._id, { qty_returned: '1' }, POS_CTX, {
-			logRepo,
-			operationsRepo: opsRepo as unknown as OperationsRepository,
-			poolRepo
-		});
+		await returnLoanAtCounter(
+			log._id,
+			{ qty_returned: '1', condition_on_return: 'READY' },
+			POS_CTX,
+			{
+				logRepo,
+				operationsRepo: opsRepo as unknown as OperationsRepository,
+				poolRepo,
+				claimRepo,
+				reservationRepo
+			}
+		);
 		const returned = await logRepo.get(log._id);
 		if (!returned) throw new Error('Expected returned distribution log');
 		logRepo.logs.set(log._id, { ...returned, qty_returned: '1.0' });
 
-		const replay = await returnLoanAtCounter(log._id, { qty_returned: '1.00' }, POS_CTX, {
-			logRepo,
-			operationsRepo: opsRepo as unknown as OperationsRepository,
-			poolRepo
-		});
+		const replay = await returnLoanAtCounter(
+			log._id,
+			{ qty_returned: '1.00', condition_on_return: 'READY' },
+			POS_CTX,
+			{
+				logRepo,
+				operationsRepo: opsRepo as unknown as OperationsRepository,
+				poolRepo,
+				claimRepo,
+				reservationRepo
+			}
+		);
 
 		expect(replay.ledgerEntryCreated).toBe(false);
 		expect(opsRepo.ledger).toHaveLength(1);
@@ -562,21 +719,35 @@ describe('return-workflow', () => {
 			},
 			POS_CTX
 		);
-		await returnLoanAtCounter(log._id, { qty_returned: '1' }, POS_CTX, {
-			logRepo,
-			operationsRepo: opsRepo as unknown as OperationsRepository,
-			poolRepo
-		});
+		await returnLoanAtCounter(
+			log._id,
+			{ qty_returned: '1', condition_on_return: 'READY' },
+			POS_CTX,
+			{
+				logRepo,
+				operationsRepo: opsRepo as unknown as OperationsRepository,
+				poolRepo,
+				claimRepo,
+				reservationRepo
+			}
+		);
 		const returned = await logRepo.get(log._id);
 		if (!returned) throw new Error('Expected returned distribution log');
 		logRepo.logs.set(log._id, { ...returned, qty_returned: '1.0' });
 
 		await expect(
-			returnLoanAtCounter(log._id, { qty_returned: '1.01' }, POS_CTX, {
-				logRepo,
-				operationsRepo: opsRepo as unknown as OperationsRepository,
-				poolRepo
-			})
+			returnLoanAtCounter(
+				log._id,
+				{ qty_returned: '1.01', condition_on_return: 'READY' },
+				POS_CTX,
+				{
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				}
+			)
 		).rejects.toBeInstanceOf(WorkflowValidationError);
 		expect(opsRepo.ledger).toHaveLength(1);
 	});
@@ -602,11 +773,18 @@ describe('return-workflow', () => {
 		);
 
 		await expect(
-			returnLoanAtCounter(missingReceipt._id, { qty_returned: '2' }, POS_CTX, {
-				logRepo,
-				operationsRepo: opsRepo as unknown as OperationsRepository,
-				poolRepo
-			})
+			returnLoanAtCounter(
+				missingReceipt._id,
+				{ qty_returned: '2', condition_on_return: 'READY' },
+				POS_CTX,
+				{
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				}
+			)
 		).rejects.toBeInstanceOf(StockIntegrityError);
 
 		const mismatchedReceipt = await logRepo.create(
@@ -644,11 +822,18 @@ describe('return-workflow', () => {
 		});
 
 		await expect(
-			returnLoanAtCounter(mismatchedReceipt._id, { qty_returned: '2' }, POS_CTX, {
-				logRepo,
-				operationsRepo: opsRepo as unknown as OperationsRepository,
-				poolRepo
-			})
+			returnLoanAtCounter(
+				mismatchedReceipt._id,
+				{ qty_returned: '2', condition_on_return: 'READY' },
+				POS_CTX,
+				{
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				}
+			)
 		).rejects.toBeInstanceOf(StockIntegrityError);
 		expect(opsRepo.ledger).toHaveLength(1);
 	});
@@ -667,24 +852,52 @@ describe('return-workflow', () => {
 			},
 			POS_CTX
 		);
-		opsRepo.holdNextLedgerWrites(2);
+		const ledgerGate = opsRepo.pauseNextLedgerWrite();
+		const winner = returnLoanAtCounter(
+			log._id,
+			{ qty_returned: '10', condition_on_return: 'READY' },
+			POS_CTX,
+			{
+				logRepo,
+				operationsRepo: opsRepo as unknown as OperationsRepository,
+				poolRepo,
+				claimRepo,
+				reservationRepo
+			}
+		);
+		await ledgerGate.started;
 
-		await Promise.allSettled([
-			returnLoanAtCounter(log._id, { qty_returned: '10' }, POS_CTX, {
+		const loser = returnLoanAtCounter(
+			log._id,
+			{ qty_returned: '10', condition_on_return: 'READY' },
+			POS_CTX,
+			{
 				logRepo,
 				operationsRepo: opsRepo as unknown as OperationsRepository,
-				poolRepo
-			}),
-			returnLoanAtCounter(log._id, { qty_returned: '10' }, POS_CTX, {
-				logRepo,
-				operationsRepo: opsRepo as unknown as OperationsRepository,
-				poolRepo
-			})
-		]);
+				poolRepo,
+				claimRepo,
+				reservationRepo
+			}
+		);
+		const loserResult = await Promise.allSettled([loser]);
+		ledgerGate.release();
+		const winnerResult = await Promise.allSettled([winner]);
 
 		expect(opsRepo.ledger).toHaveLength(1);
 		expect(opsRepo.ledger[0].qty).toBe('10');
-		expect((await logRepo.get(log._id))?.status).toBe('returned');
+		const finalLog = await logRepo.get(log._id);
+		expect(finalLog?.status).toBe('returned');
+		expect(finalLog?.qty_returned).toBe('10');
+		expect(
+			(await reservationRepo.get(deriveReservationIdFromDistributionLog(log._id)))?.status
+		).toBe('COMMITTED');
+		expect(winnerResult[0].status).toBe('fulfilled');
+		expect(loserResult[0].status).toBe('fulfilled');
+		if (winnerResult[0].status === 'fulfilled' && loserResult[0].status === 'fulfilled') {
+			expect(
+				[winnerResult[0].value, loserResult[0].value].filter((result) => result.ledgerEntryCreated)
+			).toHaveLength(1);
+		}
 	});
 
 	it('fails closed when competing counter returns use different targets from the same prior state', async () => {
@@ -701,27 +914,44 @@ describe('return-workflow', () => {
 			},
 			POS_CTX
 		);
-		opsRepo.holdNextLedgerWrites(2);
+		const opA = '01J00000000000000000000301';
+		const opB = '01J00000000000000000000302';
+		const ledgerGate = opsRepo.pauseNextLedgerWrite();
+		const winner = returnLoanAtCounter(
+			log._id,
+			{ qty_returned: '2', condition_on_return: 'READY', operationUlid: opA },
+			POS_CTX,
+			{
+				logRepo,
+				operationsRepo: opsRepo as unknown as OperationsRepository,
+				poolRepo,
+				claimRepo,
+				reservationRepo
+			}
+		);
+		await ledgerGate.started;
 
-		const results = await Promise.allSettled([
-			returnLoanAtCounter(log._id, { qty_returned: '2' }, POS_CTX, {
+		const loser = returnLoanAtCounter(
+			log._id,
+			{ qty_returned: '4', condition_on_return: 'READY', operationUlid: opB },
+			POS_CTX,
+			{
 				logRepo,
 				operationsRepo: opsRepo as unknown as OperationsRepository,
-				poolRepo
-			}),
-			returnLoanAtCounter(log._id, { qty_returned: '4' }, POS_CTX, {
-				logRepo,
-				operationsRepo: opsRepo as unknown as OperationsRepository,
-				poolRepo
-			})
-		]);
+				poolRepo,
+				claimRepo,
+				reservationRepo
+			}
+		);
+		const loserResult = await Promise.allSettled([loser]);
+		ledgerGate.release();
+		const winnerResult = await Promise.allSettled([winner]);
 
 		expect(opsRepo.ledger).toHaveLength(1);
-		expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
-		const rejected = results.find((result) => result.status === 'rejected');
-		expect(rejected?.status).toBe('rejected');
-		if (rejected?.status === 'rejected') {
-			expect(rejected.reason).toBeInstanceOf(StockIntegrityError);
+		expect(winnerResult[0].status).toBe('fulfilled');
+		expect(loserResult[0].status).toBe('rejected');
+		if (loserResult[0].status === 'rejected') {
+			expect(loserResult[0].reason).toBeInstanceOf(ConcurrencyCollisionError);
 		}
 	});
 
@@ -743,21 +973,30 @@ describe('return-workflow', () => {
 		// Simulate a crash after the deterministic ledger write but before the log CAS.
 		logRepo.failNextRecordReturn = new Error('simulated recordReturn crash');
 		await expect(
-			returnLoanAtCounter(log._id, { qty_returned: '2' }, POS_CTX, {
+			returnLoanAtCounter(log._id, { qty_returned: '2', condition_on_return: 'READY' }, POS_CTX, {
 				logRepo,
 				operationsRepo: opsRepo as unknown as OperationsRepository,
-				poolRepo
+				poolRepo,
+				claimRepo,
+				reservationRepo
 			})
 		).rejects.toThrow('simulated recordReturn crash');
 		expect(opsRepo.ledger).toHaveLength(1);
 		expect(log.status).toBe('active'); // Still active in DB
 
 		// Retry return operation
-		const retryResult = await returnLoanAtCounter(log._id, { qty_returned: '2' }, POS_CTX, {
-			logRepo,
-			operationsRepo: opsRepo as unknown as OperationsRepository,
-			poolRepo
-		});
+		const retryResult = await returnLoanAtCounter(
+			log._id,
+			{ qty_returned: '2', condition_on_return: 'READY' },
+			POS_CTX,
+			{
+				logRepo,
+				operationsRepo: opsRepo as unknown as OperationsRepository,
+				poolRepo,
+				claimRepo,
+				reservationRepo
+			}
+		);
 
 		expect(retryResult.ledgerEntryCreated).toBe(false); // Did NOT create duplicate stock entry
 		expect(opsRepo.ledger).toHaveLength(1); // Exact single entry preserved
@@ -789,10 +1028,12 @@ describe('return-workflow', () => {
 		} as unknown as OperationsRepository;
 
 		await expect(
-			returnLoanAtCounter(log._id, { qty_returned: '2' }, POS_CTX, {
+			returnLoanAtCounter(log._id, { qty_returned: '2', condition_on_return: 'READY' }, POS_CTX, {
 				logRepo,
 				operationsRepo: failingOpsRepo,
-				poolRepo
+				poolRepo,
+				claimRepo,
+				reservationRepo
 			})
 		).rejects.toThrow('Database disk error');
 
@@ -817,10 +1058,12 @@ describe('return-workflow', () => {
 
 		// Attempt to return 5 items on a loan of 2 items
 		await expect(
-			returnLoanAtCounter(log._id, { qty_returned: '5' }, POS_CTX, {
+			returnLoanAtCounter(log._id, { qty_returned: '5', condition_on_return: 'READY' }, POS_CTX, {
 				logRepo,
 				operationsRepo: opsRepo as unknown as OperationsRepository,
-				poolRepo
+				poolRepo,
+				claimRepo,
+				reservationRepo
 			})
 		).rejects.toThrow(/cannot exceed issued qty/);
 
@@ -843,11 +1086,18 @@ describe('return-workflow', () => {
 		);
 
 		// Partial return 1: 2 items returned
-		const res1 = await returnLoanAtCounter(log._id, { qty_returned: '2' }, POS_CTX, {
-			logRepo,
-			operationsRepo: opsRepo as unknown as OperationsRepository,
-			poolRepo
-		});
+		const res1 = await returnLoanAtCounter(
+			log._id,
+			{ qty_returned: '2', condition_on_return: 'READY' },
+			POS_CTX,
+			{
+				logRepo,
+				operationsRepo: opsRepo as unknown as OperationsRepository,
+				poolRepo,
+				claimRepo,
+				reservationRepo
+			}
+		);
 		expect(res1.ledgerEntryCreated).toBe(true);
 		expect(res1.log.status).toBe('partially_returned');
 		expect(res1.log.qty_returned).toBe('2');
@@ -855,11 +1105,18 @@ describe('return-workflow', () => {
 		expect(opsRepo.ledger[0].qty).toBe('2');
 
 		// Partial return 2: 2 more items returned (cumulative 4)
-		const res2 = await returnLoanAtCounter(log._id, { qty_returned: '4' }, POS_CTX, {
-			logRepo,
-			operationsRepo: opsRepo as unknown as OperationsRepository,
-			poolRepo
-		});
+		const res2 = await returnLoanAtCounter(
+			log._id,
+			{ qty_returned: '4', condition_on_return: 'READY' },
+			POS_CTX,
+			{
+				logRepo,
+				operationsRepo: opsRepo as unknown as OperationsRepository,
+				poolRepo,
+				claimRepo,
+				reservationRepo
+			}
+		);
 		expect(res2.ledgerEntryCreated).toBe(true);
 		expect(res2.log.status).toBe('partially_returned');
 		expect(res2.log.qty_returned).toBe('4');
@@ -867,11 +1124,18 @@ describe('return-workflow', () => {
 		expect(opsRepo.ledger[1].qty).toBe('2'); // Delta was 2
 
 		// Final return 3: remaining 1 item returned (cumulative 5)
-		const res3 = await returnLoanAtCounter(log._id, { qty_returned: '5' }, POS_CTX, {
-			logRepo,
-			operationsRepo: opsRepo as unknown as OperationsRepository,
-			poolRepo
-		});
+		const res3 = await returnLoanAtCounter(
+			log._id,
+			{ qty_returned: '5', condition_on_return: 'READY' },
+			POS_CTX,
+			{
+				logRepo,
+				operationsRepo: opsRepo as unknown as OperationsRepository,
+				poolRepo,
+				claimRepo,
+				reservationRepo
+			}
+		);
 		expect(res3.ledgerEntryCreated).toBe(true);
 		expect(res3.log.status).toBe('returned');
 		expect(res3.log.qty_returned).toBe('5');
@@ -946,10 +1210,12 @@ describe('return-workflow', () => {
 
 		// Caller requests target qty_returned = 3 (which is < 4)
 		await expect(
-			returnLoanAtCounter(log._id, { qty_returned: '3' }, POS_CTX, {
+			returnLoanAtCounter(log._id, { qty_returned: '3', condition_on_return: 'READY' }, POS_CTX, {
 				logRepo,
 				operationsRepo: opsRepo as unknown as OperationsRepository,
-				poolRepo
+				poolRepo,
+				claimRepo,
+				reservationRepo
 			})
 		).rejects.toThrow(StockIntegrityError);
 
@@ -977,27 +1243,43 @@ describe('return-workflow', () => {
 			},
 			POS_CTX
 		);
-		await returnLoanAtCounter(log._id, { qty_returned: '2' }, POS_CTX, {
-			logRepo,
-			operationsRepo: opsRepo as unknown as OperationsRepository,
-			poolRepo
-		});
+		await returnLoanAtCounter(
+			log._id,
+			{ qty_returned: '2', condition_on_return: 'READY' },
+			POS_CTX,
+			{
+				logRepo,
+				operationsRepo: opsRepo as unknown as OperationsRepository,
+				poolRepo,
+				claimRepo,
+				reservationRepo
+			}
+		);
 
 		logRepo.failNextRecordReturn = new Error('simulated partial return crash');
 		await expect(
-			returnLoanAtCounter(log._id, { qty_returned: '4' }, POS_CTX, {
+			returnLoanAtCounter(log._id, { qty_returned: '4', condition_on_return: 'READY' }, POS_CTX, {
 				logRepo,
 				operationsRepo: opsRepo as unknown as OperationsRepository,
-				poolRepo
+				poolRepo,
+				claimRepo,
+				reservationRepo
 			})
 		).rejects.toThrow('simulated partial return crash');
 		expect(opsRepo.ledger).toHaveLength(2);
 
-		const result = await returnLoanAtCounter(log._id, { qty_returned: '4' }, POS_CTX, {
-			logRepo,
-			operationsRepo: opsRepo as unknown as OperationsRepository,
-			poolRepo
-		});
+		const result = await returnLoanAtCounter(
+			log._id,
+			{ qty_returned: '4', condition_on_return: 'READY' },
+			POS_CTX,
+			{
+				logRepo,
+				operationsRepo: opsRepo as unknown as OperationsRepository,
+				poolRepo,
+				claimRepo,
+				reservationRepo
+			}
+		);
 
 		expect(result.ledgerEntryCreated).toBe(false); // No duplicate ledger row
 		expect(opsRepo.ledger).toHaveLength(2);
@@ -1042,11 +1324,18 @@ describe('return-workflow', () => {
 			created_by: POS_CTX.createdBy
 		});
 
-		const result = await returnLoanAtCounter(log._id, { qty_returned: '4' }, POS_CTX, {
-			logRepo,
-			operationsRepo: opsRepo as unknown as OperationsRepository,
-			poolRepo
-		});
+		const result = await returnLoanAtCounter(
+			log._id,
+			{ qty_returned: '4', condition_on_return: 'READY' },
+			POS_CTX,
+			{
+				logRepo,
+				operationsRepo: opsRepo as unknown as OperationsRepository,
+				poolRepo,
+				claimRepo,
+				reservationRepo
+			}
+		);
 
 		expect(result.ledgerEntryCreated).toBe(true);
 		expect(opsRepo.ledger).toHaveLength(2);
@@ -1074,7 +1363,13 @@ describe('return-workflow', () => {
 			log._id,
 			{ clear_reason: 'lost', notes: 'Lost during river surge evacuation' },
 			POS_CTX,
-			logRepo
+			{
+				logRepo,
+				operationsRepo: opsRepo as unknown as OperationsRepository,
+				poolRepo,
+				claimRepo,
+				reservationRepo
+			}
 		);
 
 		expect(cleared.status).toBe('lost');
@@ -1102,7 +1397,13 @@ describe('return-workflow', () => {
 			log._id,
 			{ clear_reason: 'waived', notes: 'Given permanently to injured evacuee upon departure' },
 			POS_CTX,
-			logRepo
+			{
+				logRepo,
+				operationsRepo: opsRepo as unknown as OperationsRepository,
+				poolRepo,
+				claimRepo,
+				reservationRepo
+			}
 		);
 
 		expect(cleared.status).toBe('waived');
@@ -1126,7 +1427,13 @@ describe('return-workflow', () => {
 		);
 
 		await expect(
-			clearLoanNonPhysical(log._id, { clear_reason: 'lost', notes: '   ' }, POS_CTX, logRepo)
+			clearLoanNonPhysical(log._id, { clear_reason: 'lost', notes: '   ' }, POS_CTX, {
+				logRepo,
+				operationsRepo: opsRepo as unknown as OperationsRepository,
+				poolRepo,
+				claimRepo,
+				reservationRepo
+			})
 		).rejects.toThrow(/notes are required/);
 	});
 
@@ -1140,7 +1447,13 @@ describe('return-workflow', () => {
 				ticket_id: 'requisition_ticket:01J00000000000000000000001'
 			},
 			POS_CTX,
-			{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo }
+			{
+				logRepo,
+				operationsRepo: opsRepo as unknown as OperationsRepository,
+				poolRepo,
+				claimRepo,
+				reservationRepo
+			}
 		);
 
 		expect(pool.total_received_qty).toBe('20');
@@ -1170,7 +1483,9 @@ describe('return-workflow', () => {
 			createBulkReturnPool(input, POS_CTX, {
 				logRepo,
 				operationsRepo: opsRepo as unknown as OperationsRepository,
-				poolRepo
+				poolRepo,
+				claimRepo,
+				reservationRepo
 			})
 		).rejects.toThrow('simulated pool write failure');
 		expect(opsRepo.ledger).toHaveLength(1);
@@ -1178,7 +1493,9 @@ describe('return-workflow', () => {
 		const recovered = await createBulkReturnPool(input, POS_CTX, {
 			logRepo,
 			operationsRepo: opsRepo as unknown as OperationsRepository,
-			poolRepo
+			poolRepo,
+			claimRepo,
+			reservationRepo
 		});
 		expect(recovered._id).toBe('bulk_return_pool:01J00000000000000000000003');
 		expect(recovered.stock_ledger_id).toBe('stock_ledger:01J00000000000000000000003');
@@ -1197,14 +1514,18 @@ describe('return-workflow', () => {
 			createBulkReturnPool(input, POS_CTX, {
 				logRepo,
 				operationsRepo: opsRepo as unknown as OperationsRepository,
-				poolRepo
+				poolRepo,
+				claimRepo,
+				reservationRepo
 			})
 		).rejects.toThrow('simulated pool write failure');
 
 		const recovered = await createBulkReturnPool(input, WAREHOUSE_CTX, {
 			logRepo,
 			operationsRepo: opsRepo as unknown as OperationsRepository,
-			poolRepo
+			poolRepo,
+			claimRepo,
+			reservationRepo
 		});
 		expect(opsRepo.ledger).toHaveLength(1);
 		expect(opsRepo.ledger[0].created_by).toBe(POS_CTX.createdBy);
@@ -1220,12 +1541,16 @@ describe('return-workflow', () => {
 		const first = await createBulkReturnPool(input, POS_CTX, {
 			logRepo,
 			operationsRepo: opsRepo as unknown as OperationsRepository,
-			poolRepo
+			poolRepo,
+			claimRepo,
+			reservationRepo
 		});
 		const replay = await createBulkReturnPool(input, POS_CTX, {
 			logRepo,
 			operationsRepo: opsRepo as unknown as OperationsRepository,
-			poolRepo
+			poolRepo,
+			claimRepo,
+			reservationRepo
 		});
 
 		expect(replay._id).toBe(first._id);
@@ -1241,13 +1566,17 @@ describe('return-workflow', () => {
 		const first = await createBulkReturnPool(input, POS_CTX, {
 			logRepo,
 			operationsRepo: opsRepo as unknown as OperationsRepository,
-			poolRepo
+			poolRepo,
+			claimRepo,
+			reservationRepo
 		});
 
 		const replay = await createBulkReturnPool(input, WAREHOUSE_CTX, {
 			logRepo,
 			operationsRepo: opsRepo as unknown as OperationsRepository,
-			poolRepo
+			poolRepo,
+			claimRepo,
+			reservationRepo
 		});
 
 		expect(replay._id).toBe(first._id);
@@ -1264,14 +1593,18 @@ describe('return-workflow', () => {
 		await createBulkReturnPool(input, POS_CTX, {
 			logRepo,
 			operationsRepo: opsRepo as unknown as OperationsRepository,
-			poolRepo
+			poolRepo,
+			claimRepo,
+			reservationRepo
 		});
 
 		await expect(
 			createBulkReturnPool({ ...input, total_received_qty: '4' }, POS_CTX, {
 				logRepo,
 				operationsRepo: opsRepo as unknown as OperationsRepository,
-				poolRepo
+				poolRepo,
+				claimRepo,
+				reservationRepo
 			})
 		).rejects.toBeInstanceOf(StockIntegrityError);
 		expect(opsRepo.ledger).toHaveLength(1);
@@ -1287,14 +1620,22 @@ describe('return-workflow', () => {
 		await createBulkReturnPool(input, POS_CTX, {
 			logRepo,
 			operationsRepo: opsRepo as unknown as OperationsRepository,
-			poolRepo
+			poolRepo,
+			claimRepo,
+			reservationRepo
 		});
 
 		await expect(
 			createBulkReturnPool(
 				{ ...input, ticket_id: 'requisition_ticket:01J00000000000000000000009' },
 				POS_CTX,
-				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo }
+				{
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				}
 			)
 		).rejects.toBeInstanceOf(StockIntegrityError);
 		expect(opsRepo.ledger).toHaveLength(1);
@@ -1324,7 +1665,13 @@ describe('return-workflow', () => {
 			createBulkReturnPool(
 				{ operationUlid, item_id: 'item:cot', total_received_qty: '3' },
 				POS_CTX,
-				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo }
+				{
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				}
 			)
 		).rejects.toBeInstanceOf(StockIntegrityError);
 		expect(poolRepo.pools).toHaveLength(0);
@@ -1354,7 +1701,13 @@ describe('return-workflow', () => {
 			createBulkReturnPool(
 				{ operationUlid, item_id: 'item:cot', total_received_qty: '3' },
 				POS_CTX,
-				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo }
+				{
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				}
 			)
 		).rejects.toBeInstanceOf(StockIntegrityError);
 	});
@@ -1376,7 +1729,13 @@ describe('return-workflow', () => {
 			createBulkReturnPool(
 				{ operationUlid, item_id: 'item:cot', total_received_qty: '3' },
 				POS_CTX,
-				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo }
+				{
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				}
 			)
 		).rejects.toBeInstanceOf(StockIntegrityError);
 		expect(opsRepo.ledger).toHaveLength(0);
@@ -1387,7 +1746,13 @@ describe('return-workflow', () => {
 			createBulkReturnPool(
 				{ operationUlid: 'not-a-ulid', item_id: 'item:cot', total_received_qty: '3' },
 				POS_CTX,
-				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo }
+				{
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				}
 			)
 		).rejects.toThrow('operationUlid must be a valid ULID');
 		expect(opsRepo.ledger).toHaveLength(0);
@@ -1403,7 +1768,13 @@ describe('return-workflow', () => {
 				ticket_id: 'requisition_ticket:01J00000000000000000000001'
 			},
 			POS_CTX,
-			{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo }
+			{
+				logRepo,
+				operationsRepo: opsRepo as unknown as OperationsRepository,
+				poolRepo,
+				claimRepo,
+				reservationRepo
+			}
 		);
 		expect(opsRepo.ledger).toHaveLength(1); // 1 physical credit
 
@@ -1431,7 +1802,13 @@ describe('return-workflow', () => {
 				notes: 'Confirmed returned in bulk pile'
 			},
 			POS_CTX,
-			{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+			{
+				logRepo,
+				operationsRepo: opsRepo as unknown as OperationsRepository,
+				poolRepo,
+				claimRepo,
+				reservationRepo
+			}
 		);
 
 		expect(resolved.log.status).toBe('returned');
@@ -1482,7 +1859,9 @@ describe('return-workflow', () => {
 			const recovered = await createBulkReturnPool(input, POS_CTX, {
 				logRepo,
 				operationsRepo: opsRepo as unknown as OperationsRepository,
-				poolRepo
+				poolRepo,
+				claimRepo,
+				reservationRepo
 			});
 
 			// Assert: pool was created, no second ledger written
@@ -1521,7 +1900,13 @@ describe('return-workflow', () => {
 				createBulkReturnPool(
 					{ operationUlid, item_id: 'item:cot', total_received_qty: '5' },
 					POS_CTX,
-					{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo }
+					{
+						logRepo,
+						operationsRepo: opsRepo as unknown as OperationsRepository,
+						poolRepo,
+						claimRepo,
+						reservationRepo
+					}
 				)
 			).rejects.toBeInstanceOf(StockIntegrityError);
 
@@ -1543,7 +1928,13 @@ describe('return-workflow', () => {
 				createBulkReturnPool(
 					{ operationUlid, item_id: 'item:cot', total_received_qty: '5' },
 					POS_CTX,
-					{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo }
+					{
+						logRepo,
+						operationsRepo: opsRepo as unknown as OperationsRepository,
+						poolRepo,
+						claimRepo,
+						reservationRepo
+					}
 				)
 			).rejects.toBe(networkError);
 
@@ -1579,7 +1970,13 @@ describe('return-workflow', () => {
 						log._id,
 						{ qty_returned: '2', condition_on_return: 'READY' },
 						REG_STAFF_CTX,
-						{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo }
+						{
+							logRepo,
+							operationsRepo: opsRepo as unknown as OperationsRepository,
+							poolRepo,
+							claimRepo,
+							reservationRepo
+						}
 					)
 				).rejects.toBeInstanceOf(WorkflowAuthorizationError);
 
@@ -1598,7 +1995,13 @@ describe('return-workflow', () => {
 					createBulkReturnPool(
 						{ operationUlid, item_id: 'item:blanket', total_received_qty: '10' },
 						REG_STAFF_CTX,
-						{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo }
+						{
+							logRepo,
+							operationsRepo: opsRepo as unknown as OperationsRepository,
+							poolRepo,
+							claimRepo,
+							reservationRepo
+						}
 					)
 				).rejects.toBeInstanceOf(WorkflowAuthorizationError);
 
@@ -1636,7 +2039,13 @@ describe('return-workflow', () => {
 						log._id,
 						{ qty_returned: '1', condition_on_return: 'READY' },
 						ctx,
-						{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo }
+						{
+							logRepo,
+							operationsRepo: opsRepo as unknown as OperationsRepository,
+							poolRepo,
+							claimRepo,
+							reservationRepo
+						}
 					);
 					expect(result.log.status, `${name} should succeed`).toBe('returned');
 					expect(result.ledgerEntryCreated).toBe(true);
@@ -1646,7 +2055,13 @@ describe('return-workflow', () => {
 					const pool = await createBulkReturnPool(
 						{ operationUlid: poolUlid, item_id: 'item:mat', total_received_qty: '5' },
 						ctx,
-						{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo }
+						{
+							logRepo,
+							operationsRepo: opsRepo as unknown as OperationsRepository,
+							poolRepo,
+							claimRepo,
+							reservationRepo
+						}
 					);
 					expect(pool.status, `${name} should create active pool`).toBe('ACTIVE');
 				}
@@ -1671,7 +2086,13 @@ describe('return-workflow', () => {
 					log._id,
 					{ clear_reason: 'lost', notes: 'Item swept away in flood' },
 					REG_STAFF_CTX,
-					logRepo
+					{
+						logRepo,
+						operationsRepo: opsRepo as unknown as OperationsRepository,
+						poolRepo,
+						claimRepo,
+						reservationRepo
+					}
 				);
 
 				expect(cleared.status).toBe('lost');
@@ -1686,7 +2107,13 @@ describe('return-workflow', () => {
 				const pool = await createBulkReturnPool(
 					{ operationUlid, item_id: 'item:cot', total_received_qty: '5' },
 					WAREHOUSE_CTX,
-					{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo }
+					{
+						logRepo,
+						operationsRepo: opsRepo as unknown as OperationsRepository,
+						poolRepo,
+						claimRepo,
+						reservationRepo
+					}
 				);
 				expect(opsRepo.ledger).toHaveLength(1);
 
@@ -1714,7 +2141,7 @@ describe('return-workflow', () => {
 						notes: 'Gate return swept earlier'
 					},
 					REG_STAFF_CTX,
-					{ logRepo, poolRepo, claimRepo }
+					{ logRepo, poolRepo, claimRepo, reservationRepo }
 				);
 
 				expect(resolved.log.status).toBe('returned');
@@ -1753,7 +2180,7 @@ describe('return-workflow', () => {
 						poolId: 'bulk_return_pool:01J00000000000000000000991'
 					} as unknown as Parameters<typeof clearLoanViaBulkPool>[0],
 					POS_CTX,
-					{ logRepo, poolRepo, claimRepo }
+					{ logRepo, poolRepo, claimRepo, reservationRepo }
 				)
 			).rejects.toThrow('operationUlid must be a valid ULID');
 			expect(claimRepo.claims).toHaveLength(0);
@@ -1790,7 +2217,13 @@ describe('return-workflow', () => {
 			const result = await clearLoanViaBulkPool(
 				{ operationUlid: OP_ULID, logId: log._id, poolId: pool._id, notes: 'Normal clear' },
 				POS_CTX,
-				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+				{
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				}
 			);
 
 			expect(result.log.status).toBe('returned');
@@ -1849,7 +2282,13 @@ describe('return-workflow', () => {
 			const result = await clearLoanViaBulkPool(
 				{ operationUlid: '01J00000000000000000000104', logId: log._id, poolId: pool._id },
 				POS_CTX,
-				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+				{
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				}
 			);
 
 			expect(result.claim.claimed_qty).toBe('3');
@@ -1868,7 +2307,13 @@ describe('return-workflow', () => {
 					total_received_qty: '10'
 				},
 				WAREHOUSE_CTX,
-				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo }
+				{
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				}
 			);
 			expect(opsRepo.ledger).toHaveLength(1);
 
@@ -1898,7 +2343,8 @@ describe('return-workflow', () => {
 					logRepo,
 					operationsRepo: opsRepo as unknown as OperationsRepository,
 					poolRepo,
-					claimRepo
+					claimRepo,
+					reservationRepo
 				}
 			);
 
@@ -1940,7 +2386,13 @@ describe('return-workflow', () => {
 			const result = await clearLoanViaBulkPool(
 				{ operationUlid: '01J00000000000000000000107', logId: log._id, poolId: pool._id },
 				POS_CTX,
-				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+				{
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				}
 			);
 
 			expect(result.claim._id).toBe(expectedClaimId);
@@ -1978,7 +2430,13 @@ describe('return-workflow', () => {
 			const res1 = await clearLoanViaBulkPool(
 				{ operationUlid: opId, logId: log._id, poolId: pool._id },
 				POS_CTX,
-				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+				{
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				}
 			);
 			expect(res1.claim.status).toBe('COMPLETE');
 			expect(res1.pool.claimed_qty).toBe('1');
@@ -1988,7 +2446,13 @@ describe('return-workflow', () => {
 			const res2 = await clearLoanViaBulkPool(
 				{ operationUlid: opId, logId: log._id, poolId: pool._id },
 				POS_CTX,
-				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+				{
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				}
 			);
 			expect(res2.claim.status).toBe('COMPLETE');
 			expect(res2.pool.claimed_qty).toBe('1');
@@ -2030,7 +2494,13 @@ describe('return-workflow', () => {
 			await clearLoanViaBulkPool(
 				{ operationUlid: opA, logId: log._id, poolId: pool._id },
 				POS_CTX,
-				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+				{
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				}
 			);
 
 			// Competing operation with different ULID fails closed
@@ -2039,7 +2509,8 @@ describe('return-workflow', () => {
 					logRepo,
 					operationsRepo: opsRepo as unknown as OperationsRepository,
 					poolRepo,
-					claimRepo
+					claimRepo,
+					reservationRepo
 				})
 			).rejects.toThrow(ConcurrencyCollisionError);
 		});
@@ -2096,7 +2567,13 @@ describe('return-workflow', () => {
 			const result = await clearLoanViaBulkPool(
 				{ operationUlid: opId, logId: log._id, poolId: pool._id },
 				POS_CTX,
-				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+				{
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				}
 			);
 
 			expect(result.claim.status).toBe('COMPLETE');
@@ -2156,7 +2633,13 @@ describe('return-workflow', () => {
 			const result = await clearLoanViaBulkPool(
 				{ operationUlid: opId, logId: log._id, poolId: pool._id },
 				POS_CTX,
-				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+				{
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				}
 			);
 
 			expect(result.claim.status).toBe('COMPLETE');
@@ -2216,7 +2699,13 @@ describe('return-workflow', () => {
 			const result = await clearLoanViaBulkPool(
 				{ operationUlid: opId, logId: log._id, poolId: pool._id },
 				POS_CTX,
-				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+				{
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				}
 			);
 
 			expect(result.log.status).toBe('returned');
@@ -2284,7 +2773,13 @@ describe('return-workflow', () => {
 			const result = await clearLoanViaBulkPool(
 				{ operationUlid: opId, logId: log._id, poolId: pool._id },
 				POS_CTX,
-				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+				{
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				}
 			);
 
 			expect(result.claim.status).toBe('COMPLETE');
@@ -2323,12 +2818,24 @@ describe('return-workflow', () => {
 			await clearLoanViaBulkPool(
 				{ operationUlid: opId, logId: log._id, poolId: pool._id },
 				POS_CTX,
-				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+				{
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				}
 			);
 			await clearLoanViaBulkPool(
 				{ operationUlid: opId, logId: log._id, poolId: pool._id },
 				POS_CTX,
-				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+				{
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				}
 			);
 
 			const currentPool = (await poolRepo.get(pool._id))!;
@@ -2367,7 +2874,13 @@ describe('return-workflow', () => {
 			const result = await clearLoanViaBulkPool(
 				{ operationUlid: '01J00000000000000000000124', logId: log._id, poolId: pool._id },
 				POS_CTX,
-				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+				{
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				}
 			);
 
 			expect(result.log.qty_returned).toBe(result.log.qty);
@@ -2426,7 +2939,8 @@ describe('return-workflow', () => {
 					logRepo,
 					operationsRepo: opsRepo as unknown as OperationsRepository,
 					poolRepo,
-					claimRepo
+					claimRepo,
+					reservationRepo
 				})
 			).rejects.toThrow(StockIntegrityError);
 		});
@@ -2483,7 +2997,8 @@ describe('return-workflow', () => {
 					logRepo,
 					operationsRepo: opsRepo as unknown as OperationsRepository,
 					poolRepo,
-					claimRepo
+					claimRepo,
+					reservationRepo
 				})
 			).rejects.toThrow(WorkflowValidationError);
 		});
@@ -2531,7 +3046,8 @@ describe('return-workflow', () => {
 						logRepo,
 						operationsRepo: opsRepo as unknown as OperationsRepository,
 						poolRepo,
-						claimRepo
+						claimRepo,
+						reservationRepo
 					}
 				)
 			).rejects.toThrow(InsufficientPoolQuotaError);
@@ -2581,7 +3097,8 @@ describe('return-workflow', () => {
 					logRepo,
 					operationsRepo: opsRepo as unknown as OperationsRepository,
 					poolRepo,
-					claimRepo
+					claimRepo,
+					reservationRepo
 				})
 			).rejects.toThrow('ETIMEDOUT');
 
@@ -2663,7 +3180,13 @@ describe('return-workflow', () => {
 			const result = await clearLoanViaBulkPool(
 				{ operationUlid: op2, logId: log._id, poolId: pool2._id },
 				POS_CTX,
-				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+				{
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				}
 			);
 
 			expect(result.claim.status).toBe('COMPLETE');
@@ -2724,7 +3247,13 @@ describe('return-workflow', () => {
 			await clearLoanViaBulkPool(
 				{ operationUlid: opWinner, logId: log._id, poolId: pool._id },
 				POS_CTX,
-				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+				{
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				}
 			);
 
 			// Second loser attempts to reinitialize but detects claim is no longer ABORTED
@@ -2736,7 +3265,8 @@ describe('return-workflow', () => {
 						logRepo,
 						operationsRepo: opsRepo as unknown as OperationsRepository,
 						poolRepo,
-						claimRepo
+						claimRepo,
+						reservationRepo
 					}
 				)
 			).rejects.toThrow(ConcurrencyCollisionError);
@@ -2778,7 +3308,13 @@ describe('return-workflow', () => {
 			const result = await clearLoanViaBulkPool(
 				{ operationUlid: '01J00000000000000000000142', logId: log._id, poolId: v1Pool._id },
 				POS_CTX,
-				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+				{
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				}
 			);
 
 			expect(result.pool.schema_v).toBe(2);
@@ -2963,17 +3499,22 @@ describe('return-workflow', () => {
 				{ name: 'mgr', roles: ['shelter:SH001', 'shelter_manager'] },
 				{ name: 'admin', roles: ['system_admin'] }
 			]) {
-				expect(() => validate(claimDoc, null, userCtx)).not.toThrow();
+				expect(() =>
+					validate({ ...claimDoc, created_by: userCtx.name }, null, userCtx)
+				).not.toThrow();
 			}
 
 			expectForbidden(
 				() =>
-					validate(claimDoc, null, { name: 'unauth', roles: ['shelter:SH001', 'kitchen_staff'] }),
+					validate({ ...claimDoc, created_by: 'unauth' }, null, {
+						name: 'unauth',
+						roles: ['shelter:SH001', 'kitchen_staff']
+					}),
 				/Only registration staff, supply coordinator, shelter manager, or system admin can manage bulk return claims/
 			);
 			expectForbidden(
 				() =>
-					validate({ ...claimDoc, shelter_code: 'SH002' }, null, {
+					validate({ ...claimDoc, created_by: 'reg', shelter_code: 'SH002' }, null, {
 						name: 'reg',
 						roles: ['shelter:SH001', 'registration_staff']
 					}),
@@ -3133,7 +3674,13 @@ describe('return-workflow', () => {
 			const result = await clearLoanViaBulkPool(
 				{ operationUlid: opId, logId: log._id, poolId: pool._id },
 				ACTOR_B_CTX,
-				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+				{
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				}
 			);
 
 			expect(result.claim.status).toBe('COMPLETE');
@@ -3176,7 +3723,7 @@ describe('return-workflow', () => {
 					notes: 'Gate return'
 				},
 				REG_STAFF_CTX,
-				{ logRepo, poolRepo, claimRepo }
+				{ logRepo, poolRepo, claimRepo, reservationRepo }
 			);
 
 			expect(result.log.status).toBe('returned');
@@ -3200,7 +3747,13 @@ describe('return-workflow', () => {
 					total_received_qty: '1'
 				},
 				POS_CTX,
-				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo }
+				{
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				}
 			);
 			const log = await logRepo.create(
 				{
@@ -3222,17 +3775,2262 @@ describe('return-workflow', () => {
 					poolId: pool._id
 				},
 				POS_CTX,
-				{ logRepo, operationsRepo: opsRepo as unknown as OperationsRepository, poolRepo, claimRepo }
+				{
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				}
 			);
 
 			await expect(
-				returnLoanAtCounter(log._id, { qty_returned: '1' }, POS_CTX, {
+				returnLoanAtCounter(log._id, { qty_returned: '1', condition_on_return: 'READY' }, POS_CTX, {
 					logRepo,
 					operationsRepo: opsRepo as unknown as OperationsRepository,
-					poolRepo
+					poolRepo,
+					claimRepo,
+					reservationRepo
 				})
 			).rejects.toBeInstanceOf(WorkflowValidationError);
 			expect(opsRepo.ledger).toHaveLength(1);
+		});
+
+		describe('CR-134 R1: Physical Return vs Bulk Claim Interlock & Freshness Guard', () => {
+			it('Test A — physical return succeeds when no bulk claim exists', async () => {
+				const log = await logRepo.create(
+					{
+						ticket_id: 'requisition_ticket:01J00000000000000000000001',
+						item_id: 'item:fan',
+						qty: '2',
+						recipient_type: 'evacuee',
+						recipient_id: 'evacuee:01J00000000000000000000001',
+						is_returnable: true,
+						status: 'active',
+						is_override: false
+					},
+					POS_CTX
+				);
+
+				const result = await returnLoanAtCounter(
+					log._id,
+					{ qty_returned: '2', condition_on_return: 'READY' },
+					POS_CTX,
+					{
+						logRepo,
+						operationsRepo: opsRepo as unknown as OperationsRepository,
+						poolRepo,
+						claimRepo,
+						reservationRepo
+					}
+				);
+
+				expect(result.log.status).toBe('returned');
+				expect(result.log.qty_returned).toBe('2');
+				expect(result.ledgerEntryCreated).toBe(true);
+				expect(opsRepo.ledger).toHaveLength(1);
+			});
+
+			it('Test B — physical return fails closed while CLAIM_INTENT exists', async () => {
+				const log = await logRepo.create(
+					{
+						ticket_id: 'requisition_ticket:01J00000000000000000000001',
+						item_id: 'item:fan',
+						qty: '2',
+						recipient_type: 'evacuee',
+						recipient_id: 'evacuee:01J00000000000000000000001',
+						is_returnable: true,
+						status: 'active',
+						is_override: false
+					},
+					POS_CTX
+				);
+				const claimId = deriveClaimIdFromDistributionLog(log._id);
+				await claimRepo.create({
+					_id: claimId,
+					type: 'bulk_return_claim',
+					schema_v: 1,
+					shelter_code: POS_CTX.shelterCode,
+					operation_id: '01J00000000000000000000170',
+					distribution_log_id: log._id,
+					bulk_pool_id: 'bulk_return_pool:01J00000000000000000000099',
+					item_id: log.item_id,
+					claimed_qty: '2',
+					status: 'CLAIM_INTENT',
+					created_at: new Date().toISOString(),
+					created_by: POS_CTX.createdBy,
+					updated_at: new Date().toISOString()
+				});
+
+				await expect(
+					returnLoanAtCounter(
+						log._id,
+						{ qty_returned: '2', condition_on_return: 'READY' },
+						POS_CTX,
+						{
+							logRepo,
+							operationsRepo: opsRepo as unknown as OperationsRepository,
+							poolRepo,
+							claimRepo,
+							reservationRepo
+						}
+					)
+				).rejects.toBeInstanceOf(ConcurrencyCollisionError);
+
+				// Assert no side effects
+				expect(opsRepo.ledger).toHaveLength(0);
+				const unchangedLog = await logRepo.get(log._id);
+				expect(unchangedLog?.status).toBe('active');
+				expect(unchangedLog?.qty_returned).toBeUndefined();
+			});
+
+			it('Test C — physical return fails closed while POOL_CLAIMED exists', async () => {
+				const log = await logRepo.create(
+					{
+						ticket_id: 'requisition_ticket:01J00000000000000000000001',
+						item_id: 'item:fan',
+						qty: '2',
+						recipient_type: 'evacuee',
+						recipient_id: 'evacuee:01J00000000000000000000001',
+						is_returnable: true,
+						status: 'active',
+						is_override: false
+					},
+					POS_CTX
+				);
+				const claimId = deriveClaimIdFromDistributionLog(log._id);
+				await claimRepo.create({
+					_id: claimId,
+					type: 'bulk_return_claim',
+					schema_v: 1,
+					shelter_code: POS_CTX.shelterCode,
+					operation_id: '01J00000000000000000000171',
+					distribution_log_id: log._id,
+					bulk_pool_id: 'bulk_return_pool:01J00000000000000000000099',
+					item_id: log.item_id,
+					claimed_qty: '2',
+					status: 'POOL_CLAIMED',
+					created_at: new Date().toISOString(),
+					created_by: POS_CTX.createdBy,
+					updated_at: new Date().toISOString()
+				});
+
+				await expect(
+					returnLoanAtCounter(
+						log._id,
+						{ qty_returned: '2', condition_on_return: 'READY' },
+						POS_CTX,
+						{
+							logRepo,
+							operationsRepo: opsRepo as unknown as OperationsRepository,
+							poolRepo,
+							claimRepo,
+							reservationRepo
+						}
+					)
+				).rejects.toBeInstanceOf(ConcurrencyCollisionError);
+
+				// Assert no side effects
+				expect(opsRepo.ledger).toHaveLength(0);
+				const unchangedLog = await logRepo.get(log._id);
+				expect(unchangedLog?.status).toBe('active');
+				expect(unchangedLog?.qty_returned).toBeUndefined();
+			});
+
+			it('Test D — physical return is permitted when claim is ABORTED', async () => {
+				const log = await logRepo.create(
+					{
+						ticket_id: 'requisition_ticket:01J00000000000000000000001',
+						item_id: 'item:fan',
+						qty: '2',
+						recipient_type: 'evacuee',
+						recipient_id: 'evacuee:01J00000000000000000000001',
+						is_returnable: true,
+						status: 'active',
+						is_override: false
+					},
+					POS_CTX
+				);
+
+				const claimId = deriveClaimIdFromDistributionLog(log._id);
+				await claimRepo.create({
+					_id: claimId,
+					type: 'bulk_return_claim',
+					schema_v: 1,
+					shelter_code: POS_CTX.shelterCode,
+					operation_id: '01J00000000000000000000172',
+					distribution_log_id: log._id,
+					bulk_pool_id: 'bulk_return_pool:01J00000000000000000000099',
+					item_id: log.item_id,
+					claimed_qty: '2',
+					status: 'ABORTED',
+					created_at: new Date().toISOString(),
+					created_by: POS_CTX.createdBy,
+					updated_at: new Date().toISOString()
+				});
+
+				const result = await returnLoanAtCounter(
+					log._id,
+					{ qty_returned: '2', condition_on_return: 'READY' },
+					POS_CTX,
+					{
+						logRepo,
+						operationsRepo: opsRepo as unknown as OperationsRepository,
+						poolRepo,
+						claimRepo,
+						reservationRepo
+					}
+				);
+
+				expect(result.log.status).toBe('returned');
+				expect(result.log.qty_returned).toBe('2');
+				expect(opsRepo.ledger).toHaveLength(1);
+			});
+
+			it('Test E — physical return on COMPLETE loan is rejected by terminal semantics', async () => {
+				const log = await logRepo.create(
+					{
+						ticket_id: 'requisition_ticket:01J00000000000000000000001',
+						item_id: 'item:fan',
+						qty: '2',
+						recipient_type: 'evacuee',
+						recipient_id: 'evacuee:01J00000000000000000000001',
+						is_returnable: true,
+						status: 'returned',
+						clear_reason: 'bulk_dropoff',
+						qty_returned: '2',
+						is_override: false
+					},
+					POS_CTX
+				);
+				// createDistributionLog normalizes new loans to active; install the
+				// canonical terminal state explicitly for this rejection fixture.
+				logRepo.logs.set(log._id, {
+					...log,
+					status: 'returned',
+					clear_reason: 'bulk_dropoff',
+					qty_returned: '2',
+					returned_at: new Date().toISOString(),
+					returned_by: POS_CTX.createdBy
+				});
+
+				const claimId = deriveClaimIdFromDistributionLog(log._id);
+				await claimRepo.create({
+					_id: claimId,
+					type: 'bulk_return_claim',
+					schema_v: 1,
+					shelter_code: POS_CTX.shelterCode,
+					operation_id: '01J00000000000000000000173',
+					distribution_log_id: log._id,
+					bulk_pool_id: 'bulk_return_pool:01J00000000000000000000099',
+					item_id: log.item_id,
+					claimed_qty: '2',
+					status: 'COMPLETE',
+					created_at: new Date().toISOString(),
+					created_by: POS_CTX.createdBy,
+					updated_at: new Date().toISOString()
+				});
+
+				await expect(
+					returnLoanAtCounter(
+						log._id,
+						{ qty_returned: '2', condition_on_return: 'READY' },
+						POS_CTX,
+						{
+							logRepo,
+							operationsRepo: opsRepo as unknown as OperationsRepository,
+							poolRepo,
+							claimRepo,
+							reservationRepo
+						}
+					)
+				).rejects.toBeInstanceOf(WorkflowValidationError);
+
+				expect(opsRepo.ledger).toHaveLength(0);
+			});
+
+			it('detects concurrent loan modification before pool mutation and aborts claim with zero quota consumed', async () => {
+				const pool = await poolRepo.create(
+					createBulkReturnPoolDoc(
+						{
+							stock_ledger_id: 'stock_ledger:01J00000000000000000000174',
+							item_id: 'item:cot',
+							total_received_qty: '10'
+						},
+						WAREHOUSE_CTX,
+						'01J00000000000000000000174'
+					),
+					WAREHOUSE_CTX
+				);
+
+				const log = await logRepo.create(
+					{
+						ticket_id: 'requisition_ticket:01J00000000000000000000001',
+						item_id: 'item:cot',
+						qty: '4',
+						recipient_type: 'evacuee',
+						recipient_id: 'evacuee:01J00000000000000000000001',
+						is_returnable: true,
+						status: 'active',
+						is_override: false
+					},
+					POS_CTX
+				);
+
+				const opId = '01J00000000000000000000175';
+				const claimId = deriveClaimIdFromDistributionLog(log._id);
+				const ledgerCountBefore = opsRepo.ledger.length;
+
+				// Pause the authoritative reread after CLAIM_INTENT exists. This
+				// models a real concurrent change between the initial snapshot and
+				// the pre-quota freshness check.
+				let freshReadStartedResolve: () => void = () => undefined;
+				let releaseFreshRead: () => void = () => undefined;
+				const freshReadStarted = new Promise<void>((resolve) => {
+					freshReadStartedResolve = resolve;
+				});
+				const freshReadGate = new Promise<void>((resolve) => {
+					releaseFreshRead = resolve;
+				});
+				const originalGet = logRepo.get.bind(logRepo);
+				let logReadCount = 0;
+				logRepo.get = async (logId) => {
+					logReadCount += 1;
+					if (logReadCount === 2) {
+						freshReadStartedResolve();
+						await freshReadGate;
+					}
+					return originalGet(logId);
+				};
+
+				const bulkAttempt = clearLoanViaBulkPool(
+					{ operationUlid: opId, logId: log._id, poolId: pool._id },
+					POS_CTX,
+					{
+						logRepo,
+						operationsRepo: opsRepo as unknown as OperationsRepository,
+						poolRepo,
+						claimRepo,
+						reservationRepo
+					}
+				);
+				await freshReadStarted;
+
+				const claimBeforeChange = await claimRepo.get(claimId);
+				expect(claimBeforeChange?.status).toBe('CLAIM_INTENT');
+				await logRepo.recordReturn(
+					log._id,
+					{
+						qty_returned: '1',
+						clear_reason: 'routine',
+						condition_on_return: 'READY'
+					},
+					POS_CTX
+				);
+				releaseFreshRead();
+
+				await expect(bulkAttempt).rejects.toBeInstanceOf(ConcurrencyCollisionError);
+
+				// Verify claim transitioned to ABORTED
+				const claimAfter = await claimRepo.get(claimId);
+				expect(claimAfter?.status).toBe('ABORTED');
+
+				// Verify pool quota was NOT deducted (total 10, claimed 0, unclaimed 10)
+				const poolAfter = await poolRepo.get(pool._id);
+				expect(poolAfter?.claimed_qty).toBe('0');
+				expect(poolAfter?.unclaimed_quota).toBe('10');
+				expect(poolAfter?.claim_ids ?? []).not.toContain(claimId);
+
+				// Verify zero new StockLedger entries
+				expect(opsRepo.ledger.length).toBe(ledgerCountBefore);
+			});
+
+			it('recovery: retry after CLAIM_INTENT continues forward when log is unchanged', async () => {
+				const pool = await poolRepo.create(
+					createBulkReturnPoolDoc(
+						{
+							stock_ledger_id: 'stock_ledger:01J00000000000000000000176',
+							item_id: 'item:cot',
+							total_received_qty: '10'
+						},
+						WAREHOUSE_CTX,
+						'01J00000000000000000000176'
+					),
+					WAREHOUSE_CTX
+				);
+
+				const log = await logRepo.create(
+					{
+						ticket_id: 'requisition_ticket:01J00000000000000000000001',
+						item_id: 'item:cot',
+						qty: '3',
+						recipient_type: 'evacuee',
+						recipient_id: 'evacuee:01J00000000000000000000001',
+						is_returnable: true,
+						status: 'active',
+						is_override: false
+					},
+					POS_CTX
+				);
+
+				const opId = '01J00000000000000000000177';
+				const claimId = deriveClaimIdFromDistributionLog(log._id);
+
+				// Crash simulation: CLAIM_INTENT persisted but process crashed before pool effect
+				await claimRepo.create({
+					_id: claimId,
+					type: 'bulk_return_claim',
+					schema_v: 1,
+					shelter_code: POS_CTX.shelterCode,
+					operation_id: opId,
+					distribution_log_id: log._id,
+					bulk_pool_id: pool._id,
+					item_id: log.item_id,
+					claimed_qty: '3',
+					status: 'CLAIM_INTENT',
+					created_at: new Date().toISOString(),
+					created_by: POS_CTX.createdBy,
+					updated_at: new Date().toISOString()
+				});
+
+				// Retry with same operationUlid: log is still fresh
+				const result = await clearLoanViaBulkPool(
+					{ operationUlid: opId, logId: log._id, poolId: pool._id },
+					POS_CTX,
+					{
+						logRepo,
+						operationsRepo: opsRepo as unknown as OperationsRepository,
+						poolRepo,
+						claimRepo,
+						reservationRepo
+					}
+				);
+
+				expect(result.claim.status).toBe('COMPLETE');
+				expect(result.pool.claimed_qty).toBe('3');
+				expect(result.log.status).toBe('returned');
+				expect(result.log.clear_reason).toBe('bulk_dropoff');
+			});
+
+			it('recovery: retry after pool claim does NOT consume quota twice', async () => {
+				const pool = await poolRepo.create(
+					createBulkReturnPoolDoc(
+						{
+							stock_ledger_id: 'stock_ledger:01J00000000000000000000178',
+							item_id: 'item:cot',
+							total_received_qty: '10'
+						},
+						WAREHOUSE_CTX,
+						'01J00000000000000000000178'
+					),
+					WAREHOUSE_CTX
+				);
+
+				const log = await logRepo.create(
+					{
+						ticket_id: 'requisition_ticket:01J00000000000000000000001',
+						item_id: 'item:cot',
+						qty: '2',
+						recipient_type: 'evacuee',
+						recipient_id: 'evacuee:01J00000000000000000000001',
+						is_returnable: true,
+						status: 'active',
+						is_override: false
+					},
+					POS_CTX
+				);
+
+				const opId = '01J00000000000000000000179';
+				const claimId = deriveClaimIdFromDistributionLog(log._id);
+
+				// Claim already in POOL_CLAIMED and pool already has claimId
+				await claimRepo.create({
+					_id: claimId,
+					type: 'bulk_return_claim',
+					schema_v: 1,
+					shelter_code: POS_CTX.shelterCode,
+					operation_id: opId,
+					distribution_log_id: log._id,
+					bulk_pool_id: pool._id,
+					item_id: log.item_id,
+					claimed_qty: '2',
+					status: 'POOL_CLAIMED',
+					created_at: new Date().toISOString(),
+					created_by: POS_CTX.createdBy,
+					updated_at: new Date().toISOString()
+				});
+
+				await poolRepo.claimQuota(pool._id, claimId, '2', WAREHOUSE_CTX);
+				const poolBeforeRetry = await poolRepo.get(pool._id);
+				expect(poolBeforeRetry?.claimed_qty).toBe('2');
+
+				// Retry clearLoanViaBulkPool
+				const result = await clearLoanViaBulkPool(
+					{ operationUlid: opId, logId: log._id, poolId: pool._id },
+					POS_CTX,
+					{
+						logRepo,
+						operationsRepo: opsRepo as unknown as OperationsRepository,
+						poolRepo,
+						claimRepo,
+						reservationRepo
+					}
+				);
+
+				expect(result.claim.status).toBe('COMPLETE');
+				expect(result.pool.claimed_qty).toBe('2'); // unchanged!
+				expect(result.log.status).toBe('returned');
+			});
+		});
+
+		describe('CR-134 R3: Shared Return Reservation Protocol & Controlled Concurrency', () => {
+			it('Test RACE-A: Bulk acquires shared reservation first, physical rejected before ledger write, bulk converges', async () => {
+				const pool = await poolRepo.create(
+					createBulkReturnPoolDoc(
+						{
+							stock_ledger_id: 'stock_ledger:01J00000000000000000000201',
+							item_id: 'item:cot',
+							total_received_qty: '10'
+						},
+						WAREHOUSE_CTX,
+						'01J00000000000000000000201'
+					),
+					WAREHOUSE_CTX
+				);
+
+				const log = await logRepo.create(
+					{
+						ticket_id: 'requisition_ticket:01J00000000000000000000001',
+						item_id: 'item:cot',
+						qty: '2',
+						recipient_type: 'evacuee',
+						recipient_id: 'evacuee:01J00000000000000000000001',
+						is_returnable: true,
+						status: 'active',
+						is_override: false
+					},
+					POS_CTX
+				);
+
+				const opBulk = '01J00000000000000000000202';
+				const opPhys = '01J00000000000000000000203';
+				const deps = {
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				};
+
+				// 1. Bulk workflow acquires shared reservation first
+				const resDoc = await acquireReturnReservation(
+					{
+						logId: log._id,
+						mode: 'BULK',
+						operationId: opBulk,
+						bulk_pool_id: pool._id,
+						claimed_qty: '2'
+					},
+					POS_CTX,
+					deps
+				);
+				expect(resDoc.status).toBe('RESERVED');
+				expect(resDoc.mode).toBe('BULK');
+
+				// 2. Pause bulk. Start physical return workflow.
+				const ledgerCountBefore = opsRepo.ledger.length; // 1 from pool creation
+				await expect(
+					returnLoanAtCounter(
+						log._id,
+						{ qty_returned: '2', condition_on_return: 'READY', operationUlid: opPhys },
+						POS_CTX,
+						deps
+					)
+				).rejects.toBeInstanceOf(ConcurrencyCollisionError);
+
+				// Physical produces zero stock ledger side effects (delta = 0)
+				expect(opsRepo.ledger).toHaveLength(ledgerCountBefore);
+				const unchangedLog = await logRepo.get(log._id);
+				expect(unchangedLog?.status).toBe('active');
+				expect(unchangedLog?.qty_returned).toBeUndefined();
+
+				// 3. Resume bulk workflow. It completes cleanly.
+				const bulkResult = await clearLoanViaBulkPool(
+					{ operationUlid: opBulk, logId: log._id, poolId: pool._id },
+					POS_CTX,
+					deps
+				);
+
+				expect(bulkResult.claim.status).toBe('COMPLETE');
+				expect(bulkResult.pool.claimed_qty).toBe('2');
+				expect(bulkResult.pool.unclaimed_quota).toBe('8');
+				expect(bulkResult.log.status).toBe('returned');
+				expect(bulkResult.log.clear_reason).toBe('bulk_dropoff');
+				// Zero additional StockLedger writes from bulk claim (Zero-Second Restock)
+				expect(opsRepo.ledger).toHaveLength(ledgerCountBefore);
+				// Shared reservation is committed
+				const finalRes = await reservationRepo.get(deriveReservationIdFromDistributionLog(log._id));
+				expect(finalRes?.status).toBe('COMMITTED');
+			});
+
+			it('Test RACE-B: Physical acquires shared reservation first, bulk rejected before pool quota mutation, physical completes', async () => {
+				const pool = await poolRepo.create(
+					createBulkReturnPoolDoc(
+						{
+							stock_ledger_id: 'stock_ledger:01J00000000000000000000204',
+							item_id: 'item:cot',
+							total_received_qty: '10'
+						},
+						WAREHOUSE_CTX,
+						'01J00000000000000000000204'
+					),
+					WAREHOUSE_CTX
+				);
+
+				const log = await logRepo.create(
+					{
+						ticket_id: 'requisition_ticket:01J00000000000000000000001',
+						item_id: 'item:cot',
+						qty: '3',
+						recipient_type: 'evacuee',
+						recipient_id: 'evacuee:01J00000000000000000000001',
+						is_returnable: true,
+						status: 'active',
+						is_override: false
+					},
+					POS_CTX
+				);
+
+				const opPhys = '01J00000000000000000000205';
+				const opBulk = '01J00000000000000000000206';
+				const deps = {
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				};
+
+				// 1. Physical acquires shared reservation first
+				const resDoc = await acquireReturnReservation(
+					{
+						logId: log._id,
+						mode: 'PHYSICAL',
+						operationId: opPhys,
+						qty_returned: '3',
+						return_condition: 'READY'
+					},
+					POS_CTX,
+					deps
+				);
+				expect(resDoc.status).toBe('RESERVED');
+				expect(resDoc.mode).toBe('PHYSICAL');
+
+				// 2. Pause physical BEFORE irreversible receipt. Start bulk return workflow.
+				await expect(
+					clearLoanViaBulkPool(
+						{ operationUlid: opBulk, logId: log._id, poolId: pool._id },
+						POS_CTX,
+						deps
+					)
+				).rejects.toBeInstanceOf(ConcurrencyCollisionError);
+
+				// Bulk was rejected BEFORE pool quota mutation or claim creation
+				const poolAfter = await poolRepo.get(pool._id);
+				expect(poolAfter?.claimed_qty).toBe('0');
+				expect(poolAfter?.unclaimed_quota).toBe('10');
+				expect(poolAfter?.claim_ids ?? []).toHaveLength(0);
+				const claimAfter = await claimRepo.get(deriveClaimIdFromDistributionLog(log._id));
+				expect(claimAfter).toBeNull();
+
+				// 3. Resume physical workflow with same operationUlid
+				const physResult = await returnLoanAtCounter(
+					log._id,
+					{ qty_returned: '3', condition_on_return: 'READY', operationUlid: opPhys },
+					POS_CTX,
+					deps
+				);
+
+				expect(physResult.log.status).toBe('returned');
+				expect(physResult.log.qty_returned).toBe('3');
+				expect(physResult.ledgerEntryCreated).toBe(true);
+				// Exactly one physical receipt created
+				const receipts = opsRepo.ledger.filter((e) => e.ref_id === log._id);
+				expect(receipts).toHaveLength(1);
+				expect(receipts[0].qty).toBe('3');
+				// Reservation is committed
+				const finalRes = await reservationRepo.get(deriveReservationIdFromDistributionLog(log._id));
+				expect(finalRes?.status).toBe('COMMITTED');
+			});
+
+			it('Test Simultaneous: Concurrent acquisition attempts result in exactly one winner and zero side effects for loser', async () => {
+				const log = await logRepo.create(
+					{
+						ticket_id: 'requisition_ticket:01J00000000000000000000001',
+						item_id: 'item:cot',
+						qty: '2',
+						recipient_type: 'evacuee',
+						recipient_id: 'evacuee:01J00000000000000000000001',
+						is_returnable: true,
+						status: 'active',
+						is_override: false
+					},
+					POS_CTX
+				);
+
+				const opPhys = '01J00000000000000000000207';
+				const opBulk = '01J00000000000000000000208';
+				const deps = {
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				};
+
+				const [rPhys, rBulk] = await Promise.allSettled([
+					acquireReturnReservation(
+						{
+							logId: log._id,
+							mode: 'PHYSICAL',
+							operationId: opPhys,
+							qty_returned: '2',
+							return_condition: 'READY'
+						},
+						POS_CTX,
+						deps
+					),
+					acquireReturnReservation(
+						{
+							logId: log._id,
+							mode: 'BULK',
+							operationId: opBulk,
+							bulk_pool_id: 'bulk_return_pool:01J00000000000000000000201',
+							claimed_qty: '2'
+						},
+						POS_CTX,
+						deps
+					)
+				]);
+
+				const fulfilled = [rPhys, rBulk].filter((r) => r.status === 'fulfilled');
+				const rejected = [rPhys, rBulk].filter((r) => r.status === 'rejected');
+
+				expect(fulfilled).toHaveLength(1);
+				expect(rejected).toHaveLength(1);
+				expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(
+					ConcurrencyCollisionError
+				);
+
+				// Authoritative reservation is owned exclusively by the winner
+				const res = await reservationRepo.get(deriveReservationIdFromDistributionLog(log._id));
+				expect(res?.status).toBe('RESERVED');
+				const winnerMode = (fulfilled[0] as PromiseFulfilledResult<LoanReturnReservation>).value
+					.mode;
+				expect(res?.mode).toBe(winnerMode);
+			});
+
+			it('Abandoned Session: Operator B discovers pre-effect abandoned bulk reservation and aborts safely without knowing token', async () => {
+				const pool = await poolRepo.create(
+					createBulkReturnPoolDoc(
+						{
+							stock_ledger_id: 'stock_ledger:01J00000000000000000000209',
+							item_id: 'item:cot',
+							total_received_qty: '10'
+						},
+						WAREHOUSE_CTX,
+						'01J00000000000000000000209'
+					),
+					WAREHOUSE_CTX
+				);
+
+				const log = await logRepo.create(
+					{
+						ticket_id: 'requisition_ticket:01J00000000000000000000001',
+						item_id: 'item:cot',
+						qty: '2',
+						recipient_type: 'evacuee',
+						recipient_id: 'evacuee:01J00000000000000000000001',
+						is_returnable: true,
+						status: 'active',
+						is_override: false
+					},
+					POS_CTX
+				);
+
+				const opA = '01J00000000000000000000210';
+				const OPERATOR_A_CTX: AuthorContext = { ...POS_CTX, createdBy: 'operator_a' };
+				const OPERATOR_B_CTX: AuthorContext = {
+					...POS_CTX,
+					createdBy: 'operator_b',
+					roles: ['shelter:SH001', 'shelter_manager']
+				};
+				const deps = {
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				};
+
+				// Operator A begins bulk reservation and creates CLAIM_INTENT, then session drops
+				await acquireReturnReservation(
+					{
+						logId: log._id,
+						mode: 'BULK',
+						operationId: opA,
+						bulk_pool_id: pool._id,
+						claimed_qty: '2'
+					},
+					OPERATOR_A_CTX,
+					deps
+				);
+				const claimId = deriveClaimIdFromDistributionLog(log._id);
+				await claimRepo.create({
+					_id: claimId,
+					type: 'bulk_return_claim',
+					schema_v: 1,
+					shelter_code: OPERATOR_A_CTX.shelterCode,
+					operation_id: opA,
+					distribution_log_id: log._id,
+					bulk_pool_id: pool._id,
+					item_id: log.item_id,
+					claimed_qty: '2',
+					status: 'CLAIM_INTENT',
+					created_at: new Date().toISOString(),
+					created_by: OPERATOR_A_CTX.createdBy,
+					updated_at: new Date().toISOString()
+				});
+
+				// Operator B opens dialog in a new session (knows ONLY logId, NOT opA)
+				const state = await getReturnOperationState(log._id, OPERATOR_B_CTX, deps);
+				expect(state.phase).toBe('PRE_EFFECT_ABORTABLE');
+				expect(state.canAbort).toBe(true);
+				expect(state.canResume).toBe(true);
+				expect(state.reservation?.operation_id).toBe(opA);
+
+				// Operator B aborts the abandoned reservation safely
+				const abortedRes = await abortAbandonedReturnReservation(log._id, OPERATOR_B_CTX, deps);
+				expect(abortedRes.status).toBe('ABORTED');
+				// Operator A's provenance is preserved on reservation document (Rule 16)
+				expect(abortedRes.created_by).toBe('operator_a');
+
+				// Claim doc is also aborted
+				const abortedClaim = await claimRepo.get(claimId);
+				expect(abortedClaim?.status).toBe('ABORTED');
+				expect(abortedClaim?.created_by).toBe('operator_a'); // Rule 15 preserved
+
+				// Loan is now completely free to be returned by Operator B with a brand-new operationUlid
+				const opB = '01J00000000000000000000211';
+				const normalResult = await returnLoanAtCounter(
+					log._id,
+					{ qty_returned: '2', condition_on_return: 'READY', operationUlid: opB },
+					OPERATOR_B_CTX,
+					deps
+				);
+				expect(normalResult.log.status).toBe('returned');
+				expect(normalResult.log.qty_returned).toBe('2');
+				expect(normalResult.ledgerEntryCreated).toBe(true);
+			});
+
+			it('Abandoned Session: Irreversible effect rejects safe abort and requires forward recovery', async () => {
+				const log = await logRepo.create(
+					{
+						ticket_id: 'requisition_ticket:01J00000000000000000000001',
+						item_id: 'item:fan',
+						qty: '2',
+						recipient_type: 'evacuee',
+						recipient_id: 'evacuee:01J00000000000000000000001',
+						is_returnable: true,
+						status: 'active',
+						is_override: false
+					},
+					POS_CTX
+				);
+
+				const opA = '01J00000000000000000000212';
+				const OPERATOR_A_CTX: AuthorContext = { ...POS_CTX, createdBy: 'operator_a' };
+				const OPERATOR_B_CTX: AuthorContext = { ...POS_CTX, createdBy: 'operator_b' };
+				const deps = {
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				};
+
+				// Operator A acquires reservation and writes StockLedger receipt, then crashes before log recordReturn
+				await acquireReturnReservation(
+					{
+						logId: log._id,
+						mode: 'PHYSICAL',
+						operationId: opA,
+						qty_returned: '2',
+						return_condition: 'READY'
+					},
+					OPERATOR_A_CTX,
+					deps
+				);
+				const receiptId = await deriveDeterministicLedgerId('counter_return', log._id, 'from', '0');
+				await opsRepo.addLedgerEntry(
+					createStockLedger(
+						{
+							item_id: log.item_id,
+							qty: '2',
+							unit: 'ชิ้น',
+							reason: 'receive',
+							ref_id: log._id,
+							lot: { note: 'counter_loan_return' }
+						},
+						OPERATOR_A_CTX,
+						receiptId
+					)
+				);
+				expect(opsRepo.ledger).toHaveLength(1);
+
+				// Operator B discovers in-flight operation state
+				const state = await getReturnOperationState(log._id, OPERATOR_B_CTX, deps);
+				expect(state.phase).toBe('IRREVERSIBLE_FORWARD_ONLY');
+				expect(state.canAbort).toBe(false);
+				expect(state.canResume).toBe(true);
+
+				// Operator B attempts safe abort -> REJECTED because irreversible receipt exists!
+				await expect(abortAbandonedReturnReservation(log._id, MANAGER_CTX, deps)).rejects.toThrow(
+					/irreversible StockLedger receipt already exists/
+				);
+
+				// Operator B performs forward recovery using the discovered operation_id
+				const recoveryResult = await returnLoanAtCounter(
+					log._id,
+					{
+						qty_returned: '2',
+						condition_on_return: 'READY',
+						operationUlid: state.reservation!.operation_id
+					},
+					OPERATOR_B_CTX,
+					deps
+				);
+
+				// No duplicate receipt created! Existing receipt reused cleanly.
+				expect(recoveryResult.ledgerEntryCreated).toBe(false);
+				expect(opsRepo.ledger).toHaveLength(1);
+				expect(recoveryResult.log.status).toBe('returned');
+				expect(recoveryResult.log.qty_returned).toBe('2');
+
+				// Reservation committed with Operator A's original created_by preserved
+				const committedRes = await reservationRepo.get(
+					deriveReservationIdFromDistributionLog(log._id)
+				);
+				expect(committedRes?.status).toBe('COMMITTED');
+				expect(committedRes?.created_by).toBe('operator_a');
+			});
+		});
+
+		describe('CR-134 R4: Sound Loan Resolution Coordination & Write-Authority Fencing', () => {
+			it('Section 30: Stale owner is fenced out when attempting irreversible mutation after abort/takeover', async () => {
+				const log = await logRepo.create(
+					{
+						ticket_id: 'requisition_ticket:01J00000000000000000000001',
+						item_id: 'item:fan',
+						qty: '2',
+						recipient_type: 'evacuee',
+						recipient_id: 'evacuee:01J00000000000000000000001',
+						is_returnable: true,
+						status: 'active',
+						is_override: false
+					},
+					POS_CTX
+				);
+
+				const opA = '01J00000000000000000000301';
+				const opB = '01J00000000000000000000302';
+				const OPERATOR_A_CTX: AuthorContext = { ...POS_CTX, createdBy: 'operator_a' };
+				const MANAGER_B_CTX: AuthorContext = {
+					...POS_CTX,
+					createdBy: 'manager_b',
+					roles: ['shelter:SH001', 'shelter_manager']
+				};
+				const deps = {
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				};
+
+				// Step 1: Operator A acquires RESERVED in PHYSICAL mode
+				await acquireReturnReservation(
+					{
+						logId: log._id,
+						mode: 'PHYSICAL',
+						operationId: opA,
+						qty_returned: '2',
+						return_condition: 'READY'
+					},
+					OPERATOR_A_CTX,
+					deps
+				);
+
+				// Step 2: Session drops. Manager B discovers and safely aborts A's reservation
+				await abortAbandonedReturnReservation(log._id, MANAGER_B_CTX, deps);
+
+				// Manager B reinitializes and starts their own operation B
+				await acquireReturnReservation(
+					{
+						logId: log._id,
+						mode: 'PHYSICAL',
+						operationId: opB,
+						qty_returned: '2',
+						return_condition: 'READY'
+					},
+					MANAGER_B_CTX,
+					deps
+				);
+
+				// Step 3: Stale Operator A attempts to fence their old operation A
+				await expect(
+					fenceReturnReservation(log._id, opA, 'PHYSICAL', OPERATOR_A_CTX, deps)
+				).rejects.toBeInstanceOf(ConcurrencyCollisionError);
+
+				// Stale Operator A cannot cross irreversible boundary; produces ZERO receipts
+				const ledgerEntries = opsRepo.ledger.filter((e) => e.ref_id === log._id);
+				expect(ledgerEntries).toHaveLength(0);
+			});
+
+			it('Section 31: Abort vs Fence CAS race allows exactly one winner', async () => {
+				const log = await logRepo.create(
+					{
+						ticket_id: 'requisition_ticket:01J00000000000000000000001',
+						item_id: 'item:fan',
+						qty: '2',
+						recipient_type: 'evacuee',
+						recipient_id: 'evacuee:01J00000000000000000000001',
+						is_returnable: true,
+						status: 'active',
+						is_override: false
+					},
+					POS_CTX
+				);
+
+				const opA = '01J00000000000000000000303';
+				const OPERATOR_A_CTX: AuthorContext = { ...POS_CTX, createdBy: 'operator_a' };
+				const MANAGER_B_CTX: AuthorContext = {
+					...POS_CTX,
+					createdBy: 'manager_b',
+					roles: ['shelter:SH001', 'shelter_manager']
+				};
+				const deps = {
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				};
+
+				await acquireReturnReservation(
+					{
+						logId: log._id,
+						mode: 'PHYSICAL',
+						operationId: opA,
+						qty_returned: '2',
+						return_condition: 'READY'
+					},
+					OPERATOR_A_CTX,
+					deps
+				);
+
+				// Owner fences operation
+				const fenced = await fenceReturnReservation(log._id, opA, 'PHYSICAL', OPERATOR_A_CTX, deps);
+				expect(fenced.status).toBe('FENCED');
+
+				// Once FENCED, abort is impossible via CAS
+				await expect(abortAbandonedReturnReservation(log._id, MANAGER_B_CTX, deps)).rejects.toThrow(
+					/operation is FENCED/
+				);
+
+				await expect(abortReturnReservation(log._id, opA, OPERATOR_A_CTX, deps)).rejects.toThrow(
+					/operation is FENCED/
+				);
+			});
+
+			it('Section 32: PHYSICAL vs NON_PHYSICAL mutual exclusion with zero side effects for loser', async () => {
+				const log = await logRepo.create(
+					{
+						ticket_id: 'requisition_ticket:01J00000000000000000000001',
+						item_id: 'item:blanket',
+						qty: '2',
+						recipient_type: 'evacuee',
+						recipient_id: 'evacuee:01J00000000000000000000001',
+						is_returnable: true,
+						status: 'active',
+						is_override: false
+					},
+					POS_CTX
+				);
+
+				const opPhys = '01J00000000000000000000304';
+				const opNonPhys = '01J00000000000000000000305';
+				const deps = {
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				};
+
+				// Physical acquires reservation first
+				await acquireReturnReservation(
+					{
+						logId: log._id,
+						mode: 'PHYSICAL',
+						operationId: opPhys,
+						qty_returned: '2',
+						return_condition: 'READY'
+					},
+					POS_CTX,
+					deps
+				);
+
+				// Non-physical attempt fails closed before DistributionLog clear
+				await expect(
+					clearLoanNonPhysical(
+						log._id,
+						{ clear_reason: 'lost', notes: 'Evacuee lost blanket', operationUlid: opNonPhys },
+						REG_STAFF_CTX,
+						deps
+					)
+				).rejects.toBeInstanceOf(ConcurrencyCollisionError);
+
+				// DistributionLog remains active and not closed
+				const checkLog = await logRepo.get(log._id);
+				expect(checkLog?.status).toBe('active');
+			});
+
+			it('Section 32: BULK vs NON_PHYSICAL mutual exclusion with zero side effects for loser', async () => {
+				const pool = await poolRepo.create(
+					createBulkReturnPoolDoc(
+						{
+							stock_ledger_id: 'stock_ledger:01J00000000000000000000306',
+							item_id: 'item:cot',
+							total_received_qty: '10'
+						},
+						WAREHOUSE_CTX,
+						'01J00000000000000000000306'
+					),
+					WAREHOUSE_CTX
+				);
+
+				const log = await logRepo.create(
+					{
+						ticket_id: 'requisition_ticket:01J00000000000000000000001',
+						item_id: 'item:cot',
+						qty: '1',
+						recipient_type: 'evacuee',
+						recipient_id: 'evacuee:01J00000000000000000000001',
+						is_returnable: true,
+						status: 'active',
+						is_override: false
+					},
+					POS_CTX
+				);
+
+				const opBulk = '01J00000000000000000000307';
+				const opNonPhys = '01J00000000000000000000308';
+				const deps = {
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				};
+
+				// Non-physical acquires reservation first
+				await acquireReturnReservation(
+					{
+						logId: log._id,
+						mode: 'NON_PHYSICAL',
+						operationId: opNonPhys,
+						clear_reason: 'lost',
+						notes: 'cross-mode test'
+					},
+					REG_STAFF_CTX,
+					deps
+				);
+
+				// Bulk clear fails closed before pool quota is deducted
+				await expect(
+					clearLoanViaBulkPool(
+						{ operationUlid: opBulk, logId: log._id, poolId: pool._id },
+						REG_STAFF_CTX,
+						deps
+					)
+				).rejects.toBeInstanceOf(ConcurrencyCollisionError);
+
+				const poolCheck = await poolRepo.get(pool._id);
+				expect(poolCheck?.claimed_qty).toBe('0');
+				expect(poolCheck?.unclaimed_quota).toBe('10');
+			});
+
+			it('Section 33: Split-Brain Policy fails closed when active endpoint is Edge or disconnected', async () => {
+				const log = await logRepo.create(
+					{
+						ticket_id: 'requisition_ticket:01J00000000000000000000001',
+						item_id: 'item:fan',
+						qty: '1',
+						recipient_type: 'evacuee',
+						recipient_id: 'evacuee:01J00000000000000000000001',
+						is_returnable: true,
+						status: 'active',
+						is_override: false
+					},
+					POS_CTX
+				);
+
+				const edgeDeps = {
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo,
+					endpointStore: { active: 'edge', isWritable: true }
+				};
+
+				// Physical on edge -> rejected
+				await expect(
+					returnLoanAtCounter(
+						log._id,
+						{ qty_returned: '1', condition_on_return: 'READY' },
+						POS_CTX,
+						edgeDeps
+					)
+				).rejects.toThrow(/Authoritative central connectivity is required/);
+
+				// Non-physical on edge -> rejected
+				await expect(
+					clearLoanNonPhysical(
+						log._id,
+						{ clear_reason: 'lost', notes: 'Testing edge rejection' },
+						REG_STAFF_CTX,
+						edgeDeps
+					)
+				).rejects.toThrow(/Authoritative central connectivity is required/);
+
+				// Disconnected central endpoint -> rejected
+				const disconnectedDeps = {
+					...edgeDeps,
+					endpointStore: { active: 'central', isWritable: false }
+				};
+				await expect(
+					returnLoanAtCounter(
+						log._id,
+						{ qty_returned: '1', condition_on_return: 'READY' },
+						POS_CTX,
+						disconnectedDeps
+					)
+				).rejects.toThrow(/Authoritative central connectivity is required/);
+			});
+
+			it('Section 35: Commit failure recovery converges forward without duplicate receipts', async () => {
+				const log = await logRepo.create(
+					{
+						ticket_id: 'requisition_ticket:01J00000000000000000000001',
+						item_id: 'item:fan',
+						qty: '2',
+						recipient_type: 'evacuee',
+						recipient_id: 'evacuee:01J00000000000000000000001',
+						is_returnable: true,
+						status: 'active',
+						is_override: false
+					},
+					POS_CTX
+				);
+
+				const opId = '01J00000000000000000000309';
+				const deps = {
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				};
+
+				// Simulate a commit failure before the FENCED reservation is persisted as COMMITTED.
+				reservationRepo.failNextCommit = true;
+				await expect(
+					returnLoanAtCounter(
+						log._id,
+						{ qty_returned: '2', condition_on_return: 'READY', operationUlid: opId },
+						POS_CTX,
+						deps
+					)
+				).rejects.toThrow('Simulated reservation commit failure');
+				expect(opsRepo.ledger).toHaveLength(1);
+				const resId = deriveReservationIdFromDistributionLog(log._id);
+				expect((await reservationRepo.get(resId))?.status).toBe('FENCED');
+
+				// New session recovers forward with the same operationUlid
+				const state = await getReturnOperationState(log._id, POS_CTX, deps);
+				expect(state.phase).toBe('IRREVERSIBLE_FORWARD_ONLY');
+				expect(state.canResume).toBe(true);
+
+				const retryResult = await returnLoanAtCounter(
+					log._id,
+					{ qty_returned: '2', condition_on_return: 'READY', operationUlid: opId },
+					POS_CTX,
+					deps
+				);
+
+				// Zero duplicate receipt created
+				expect(retryResult.ledgerEntryCreated).toBe(false);
+				expect(opsRepo.ledger).toHaveLength(1);
+				const finalRes = await reservationRepo.get(resId);
+				expect(finalRes?.status).toBe('COMMITTED');
+			});
+
+			describe('CR-134 R4.1 — Contract Convergence & Safety Invariants', () => {
+				it('rejects physical semantic replay mismatch on same operation_id', async () => {
+					const log = await logRepo.create(
+						{
+							ticket_id: 'requisition_ticket:01J00000000000000000000001',
+							item_id: 'item:fan',
+							qty: '5',
+							recipient_type: 'evacuee',
+							recipient_id: 'evacuee:01J00000000000000000000001',
+							is_returnable: true,
+							status: 'active',
+							is_override: false
+						},
+						WAREHOUSE_CTX
+					);
+					const opId = '01J00000000000000000000901';
+					const deps = {
+						logRepo,
+						operationsRepo: opsRepo as unknown as OperationsRepository,
+						poolRepo,
+						claimRepo,
+						reservationRepo
+					};
+
+					// Initial reservation with qty 2, condition READY
+					await acquireReturnReservation(
+						{
+							logId: log._id,
+							mode: 'PHYSICAL',
+							operationId: opId,
+							qty_returned: '2',
+							return_condition: 'READY'
+						},
+						WAREHOUSE_CTX,
+						deps
+					);
+
+					// Same opId replay with modified quantity -> rejected
+					await expect(
+						acquireReturnReservation(
+							{
+								logId: log._id,
+								mode: 'PHYSICAL',
+								operationId: opId,
+								qty_returned: '3',
+								return_condition: 'READY'
+							},
+							WAREHOUSE_CTX,
+							deps
+						)
+					).rejects.toBeInstanceOf(ReservationSemanticMismatchError);
+
+					// Same opId replay with modified condition -> rejected
+					await expect(
+						acquireReturnReservation(
+							{
+								logId: log._id,
+								mode: 'PHYSICAL',
+								operationId: opId,
+								qty_returned: '2',
+								return_condition: 'BROKEN'
+							},
+							WAREHOUSE_CTX,
+							deps
+						)
+					).rejects.toBeInstanceOf(ReservationSemanticMismatchError);
+				});
+
+				it('rejects bulk pool or claimed_qty semantic replay mismatch on same operation_id', async () => {
+					const poolA = await poolRepo.create(
+						createBulkReturnPoolDoc(
+							{
+								stock_ledger_id: 'stock_ledger:01J00000000000000000000911',
+								item_id: 'item:cot',
+								total_received_qty: '10'
+							},
+							WAREHOUSE_CTX,
+							'01J00000000000000000000911'
+						),
+						WAREHOUSE_CTX
+					);
+					const poolB = await poolRepo.create(
+						createBulkReturnPoolDoc(
+							{
+								stock_ledger_id: 'stock_ledger:01J00000000000000000000912',
+								item_id: 'item:cot',
+								total_received_qty: '10'
+							},
+							WAREHOUSE_CTX,
+							'01J00000000000000000000912'
+						),
+						WAREHOUSE_CTX
+					);
+					const log = await logRepo.create(
+						{
+							ticket_id: 'requisition_ticket:01J00000000000000000000001',
+							item_id: 'item:cot',
+							qty: '3',
+							recipient_type: 'evacuee',
+							recipient_id: 'evacuee:01J00000000000000000000001',
+							is_returnable: true,
+							status: 'active',
+							is_override: false
+						},
+						REG_STAFF_CTX
+					);
+					const opId = '01J00000000000000000000913';
+					const deps = {
+						logRepo,
+						operationsRepo: opsRepo as unknown as OperationsRepository,
+						poolRepo,
+						claimRepo,
+						reservationRepo
+					};
+
+					await acquireReturnReservation(
+						{
+							logId: log._id,
+							mode: 'BULK',
+							operationId: opId,
+							bulk_pool_id: poolA._id,
+							claimed_qty: '3'
+						},
+						REG_STAFF_CTX,
+						deps
+					);
+
+					// Same opId replay switching pool -> rejected
+					await expect(
+						acquireReturnReservation(
+							{
+								logId: log._id,
+								mode: 'BULK',
+								operationId: opId,
+								bulk_pool_id: poolB._id,
+								claimed_qty: '3'
+							},
+							REG_STAFF_CTX,
+							deps
+						)
+					).rejects.toThrow(/Bulk pool ID cannot be modified/);
+
+					// Same opId replay switching claimed_qty -> rejected
+					await expect(
+						acquireReturnReservation(
+							{
+								logId: log._id,
+								mode: 'BULK',
+								operationId: opId,
+								bulk_pool_id: poolA._id,
+								claimed_qty: '2'
+							},
+							REG_STAFF_CTX,
+							deps
+						)
+					).rejects.toThrow(/Bulk claimed quantity cannot be modified/);
+				});
+
+				it('rejects lost -> waived semantic replay mismatch on same operation_id', async () => {
+					const log = await logRepo.create(
+						{
+							ticket_id: 'requisition_ticket:01J00000000000000000000001',
+							item_id: 'item:fan',
+							qty: '1',
+							recipient_type: 'evacuee',
+							recipient_id: 'evacuee:01J00000000000000000000001',
+							is_returnable: true,
+							status: 'active',
+							is_override: false
+						},
+						REG_STAFF_CTX
+					);
+					const opId = '01J00000000000000000000921';
+					const deps = {
+						logRepo,
+						operationsRepo: opsRepo as unknown as OperationsRepository,
+						poolRepo,
+						claimRepo,
+						reservationRepo
+					};
+
+					await acquireReturnReservation(
+						{
+							logId: log._id,
+							mode: 'NON_PHYSICAL',
+							operationId: opId,
+							clear_reason: 'lost',
+							notes: 'Lost in flood'
+						},
+						REG_STAFF_CTX,
+						deps
+					);
+
+					// Replay same opId switching from lost to waived -> rejected
+					await expect(
+						acquireReturnReservation(
+							{
+								logId: log._id,
+								mode: 'NON_PHYSICAL',
+								operationId: opId,
+								clear_reason: 'waived',
+								notes: 'Waived by manager'
+							},
+							REG_STAFF_CTX,
+							deps
+						)
+					).rejects.toThrow(/Non-physical clear reason cannot be modified/);
+				});
+
+				it('stale owner cannot fence after reservation is aborted and reinitialized', async () => {
+					const log = await logRepo.create(
+						{
+							ticket_id: 'requisition_ticket:01J00000000000000000000001',
+							item_id: 'item:fan',
+							qty: '1',
+							recipient_type: 'evacuee',
+							recipient_id: 'evacuee:01J00000000000000000000001',
+							is_returnable: true,
+							status: 'active',
+							is_override: false
+						},
+						WAREHOUSE_CTX
+					);
+					const opStale = '01J00000000000000000000931';
+					const opNew = '01J00000000000000000000932';
+					const deps = {
+						logRepo,
+						operationsRepo: opsRepo as unknown as OperationsRepository,
+						poolRepo,
+						claimRepo,
+						reservationRepo
+					};
+
+					// 1. Stale owner acquires reservation
+					await acquireReturnReservation(
+						{
+							logId: log._id,
+							mode: 'PHYSICAL',
+							operationId: opStale,
+							qty_returned: '1',
+							return_condition: 'READY'
+						},
+						WAREHOUSE_CTX,
+						deps
+					);
+
+					// 2. Aborted before side effect
+					await abortReturnReservation(log._id, opStale, WAREHOUSE_CTX, deps);
+
+					// 3. New attempt acquires reservation
+					await acquireReturnReservation(
+						{
+							logId: log._id,
+							mode: 'PHYSICAL',
+							operationId: opNew,
+							qty_returned: '1',
+							return_condition: 'READY'
+						},
+						WAREHOUSE_CTX,
+						deps
+					);
+
+					// 4. Stale owner tries to fence with old operationId -> rejected
+					await expect(
+						fenceReturnReservation(log._id, opStale, 'PHYSICAL', WAREHOUSE_CTX, deps)
+					).rejects.toBeInstanceOf(ConcurrencyCollisionError);
+				});
+
+				it('enforces abort vs fence concurrency: once FENCED, abort is forbidden', async () => {
+					const log = await logRepo.create(
+						{
+							ticket_id: 'requisition_ticket:01J00000000000000000000001',
+							item_id: 'item:fan',
+							qty: '1',
+							recipient_type: 'evacuee',
+							recipient_id: 'evacuee:01J00000000000000000000001',
+							is_returnable: true,
+							status: 'active',
+							is_override: false
+						},
+						WAREHOUSE_CTX
+					);
+					const opId = '01J00000000000000000000941';
+					const deps = {
+						logRepo,
+						operationsRepo: opsRepo as unknown as OperationsRepository,
+						poolRepo,
+						claimRepo,
+						reservationRepo
+					};
+
+					await acquireReturnReservation(
+						{
+							logId: log._id,
+							mode: 'PHYSICAL',
+							operationId: opId,
+							qty_returned: '1',
+							return_condition: 'READY'
+						},
+						WAREHOUSE_CTX,
+						deps
+					);
+
+					await fenceReturnReservation(log._id, opId, 'PHYSICAL', WAREHOUSE_CTX, deps);
+
+					// Trying to abort a FENCED reservation throws ConcurrencyCollisionError
+					await expect(
+						abortReturnReservation(log._id, opId, WAREHOUSE_CTX, deps)
+					).rejects.toBeInstanceOf(ConcurrencyCollisionError);
+				});
+
+				it('enforces mode RBAC on FENCE transition', async () => {
+					const log = await logRepo.create(
+						{
+							ticket_id: 'requisition_ticket:01J00000000000000000000001',
+							item_id: 'item:fan',
+							qty: '1',
+							recipient_type: 'evacuee',
+							recipient_id: 'evacuee:01J00000000000000000000001',
+							is_returnable: true,
+							status: 'active',
+							is_override: false
+						},
+						COORDINATOR_CTX
+					);
+					const deps = {
+						logRepo,
+						operationsRepo: opsRepo as unknown as OperationsRepository,
+						poolRepo,
+						claimRepo,
+						reservationRepo
+					};
+
+					// PHYSICAL: Registration staff cannot fence
+					const opPhys = '01J00000000000000000000951';
+					await acquireReturnReservation(
+						{
+							logId: log._id,
+							mode: 'PHYSICAL',
+							operationId: opPhys,
+							qty_returned: '1',
+							return_condition: 'READY'
+						},
+						WAREHOUSE_CTX,
+						deps
+					);
+					await expect(
+						fenceReturnReservation(log._id, opPhys, 'PHYSICAL', REG_STAFF_CTX, deps)
+					).rejects.toThrow(/PHYSICAL return reservation requires warehouse/);
+
+					await abortReturnReservation(log._id, opPhys, WAREHOUSE_CTX, deps);
+
+					// BULK: Warehouse staff cannot fence
+					const opBulk = '01J00000000000000000000952';
+					await acquireReturnReservation(
+						{
+							logId: log._id,
+							mode: 'BULK',
+							operationId: opBulk,
+							bulk_pool_id: 'bulk_return_pool:01J00000000000000000000911',
+							claimed_qty: '1'
+						},
+						REG_STAFF_CTX,
+						deps
+					);
+					await expect(
+						fenceReturnReservation(log._id, opBulk, 'BULK', WAREHOUSE_CTX, deps)
+					).rejects.toThrow(/BULK return reservation requires registration/);
+				});
+
+				it('enforces mode RBAC on COMMIT transition', async () => {
+					const log = await logRepo.create(
+						{
+							ticket_id: 'requisition_ticket:01J00000000000000000000001',
+							item_id: 'item:fan',
+							qty: '1',
+							recipient_type: 'evacuee',
+							recipient_id: 'evacuee:01J00000000000000000000001',
+							is_returnable: true,
+							status: 'active',
+							is_override: false
+						},
+						COORDINATOR_CTX
+					);
+					const deps = {
+						logRepo,
+						operationsRepo: opsRepo as unknown as OperationsRepository,
+						poolRepo,
+						claimRepo,
+						reservationRepo
+					};
+
+					const opPhys = '01J00000000000000000000961';
+					await acquireReturnReservation(
+						{
+							logId: log._id,
+							mode: 'PHYSICAL',
+							operationId: opPhys,
+							qty_returned: '1',
+							return_condition: 'READY'
+						},
+						WAREHOUSE_CTX,
+						deps
+					);
+					await fenceReturnReservation(log._id, opPhys, 'PHYSICAL', WAREHOUSE_CTX, deps);
+
+					// Registration staff cannot commit a PHYSICAL reservation
+					await expect(
+						commitReturnReservation(log._id, opPhys, REG_STAFF_CTX, deps)
+					).rejects.toThrow(/PHYSICAL return reservation requires warehouse/);
+				});
+
+				it('recovers forward when non-physical clear succeeds but reservation commit crashes', async () => {
+					const log = await logRepo.create(
+						{
+							ticket_id: 'requisition_ticket:01J00000000000000000000001',
+							item_id: 'item:fan',
+							qty: '1',
+							recipient_type: 'evacuee',
+							recipient_id: 'evacuee:01J00000000000000000000001',
+							is_returnable: true,
+							status: 'active',
+							is_override: false
+						},
+						REG_STAFF_CTX
+					);
+					const opId = '01J00000000000000000000971';
+					const deps = {
+						logRepo,
+						operationsRepo: opsRepo as unknown as OperationsRepository,
+						poolRepo,
+						claimRepo,
+						reservationRepo
+					};
+
+					// Simulate reservation commit failure before COMMITTED is persisted.
+					reservationRepo.failNextCommit = true;
+					await expect(
+						clearLoanNonPhysical(
+							log._id,
+							{ clear_reason: 'lost', notes: 'Lost in typhoon', operationUlid: opId },
+							REG_STAFF_CTX,
+							deps
+						)
+					).rejects.toThrow('Simulated reservation commit failure');
+
+					const resId = deriveReservationIdFromDistributionLog(log._id);
+					expect((await reservationRepo.get(resId))?.status).toBe('FENCED');
+
+					// Inspect operation state: must surface as IRREVERSIBLE_FORWARD_ONLY, NOT TERMINAL
+					const state = await getReturnOperationState(log._id, REG_STAFF_CTX, deps);
+					expect(state.phase).toBe('IRREVERSIBLE_FORWARD_ONLY');
+					expect(state.canResume).toBe(true);
+
+					// Retry clearLoanNonPhysical with the same opId -> recovers cleanly and commits
+					const recovered = await clearLoanNonPhysical(
+						log._id,
+						{ clear_reason: 'lost', notes: 'Lost in typhoon', operationUlid: opId },
+						REG_STAFF_CTX,
+						deps
+					);
+					expect(recovered.status).toBe('lost');
+
+					const finalRes = await reservationRepo.get(resId);
+					expect(finalRes?.status).toBe('COMMITTED');
+				});
+
+				it('recovers forward when bulk clearance succeeds but reservation commit crashes', async () => {
+					const pool = await poolRepo.create(
+						createBulkReturnPoolDoc(
+							{
+								stock_ledger_id: 'stock_ledger:01J00000000000000000000981',
+								item_id: 'item:blanket',
+								total_received_qty: '5'
+							},
+							WAREHOUSE_CTX,
+							'01J00000000000000000000981'
+						),
+						WAREHOUSE_CTX
+					);
+					const log = await logRepo.create(
+						{
+							ticket_id: 'requisition_ticket:01J00000000000000000000001',
+							item_id: 'item:blanket',
+							qty: '2',
+							recipient_type: 'evacuee',
+							recipient_id: 'evacuee:01J00000000000000000000001',
+							is_returnable: true,
+							status: 'active',
+							is_override: false
+						},
+						REG_STAFF_CTX
+					);
+					const opId = '01J00000000000000000000982';
+					const deps = {
+						logRepo,
+						operationsRepo: opsRepo as unknown as OperationsRepository,
+						poolRepo,
+						claimRepo,
+						reservationRepo
+					};
+
+					// Simulate reservation commit failure before COMMITTED is persisted.
+					reservationRepo.failNextCommit = true;
+					await expect(
+						clearLoanViaBulkPool(
+							{ operationUlid: opId, logId: log._id, poolId: pool._id },
+							REG_STAFF_CTX,
+							deps
+						)
+					).rejects.toThrow('Simulated reservation commit failure');
+
+					const resId = deriveReservationIdFromDistributionLog(log._id);
+					expect((await reservationRepo.get(resId))?.status).toBe('FENCED');
+
+					// Inspect operation state: must surface as IRREVERSIBLE_FORWARD_ONLY
+					const state = await getReturnOperationState(log._id, REG_STAFF_CTX, deps);
+					expect(state.phase).toBe('IRREVERSIBLE_FORWARD_ONLY');
+					expect(state.canResume).toBe(true);
+
+					// Retry clearLoanViaBulkPool -> commits reservation forward
+					const recovered = await clearLoanViaBulkPool(
+						{ operationUlid: opId, logId: log._id, poolId: pool._id },
+						REG_STAFF_CTX,
+						deps
+					);
+					expect(recovered.log.status).toBe('returned');
+					expect(recovered.claim.status).toBe('COMPLETE');
+
+					const finalRes = await reservationRepo.get(resId);
+					expect(finalRes?.status).toBe('COMMITTED');
+				});
+			});
+
+			describe('CR-134 R4.2 focused recovery and contract alignment', () => {
+				it('InMemoryReservationRepository validates production schema and rejects legacy conditions', async () => {
+					const validDoc = createLoanReturnReservation(
+						{
+							distribution_log_id: 'distribution_log:01J00000000000000000000002',
+							mode: 'PHYSICAL',
+							operation_id: '01J00000000000000000000001',
+							qty_returned: '1',
+							return_condition: 'READY'
+						},
+						WAREHOUSE_CTX
+					);
+					const created = await reservationRepo.create(validDoc);
+					expect(created.return_condition).toBe('READY');
+
+					// Raw runtime input with legacy conditions is rejected by the production schema.
+					for (const legacyCondition of ['good', 'damaged', 'unusable']) {
+						const parsed = loanReturnReservationDocSchema.safeParse({
+							...validDoc,
+							return_condition: legacyCondition
+						});
+						expect(parsed.success).toBe(false);
+					}
+				});
+
+				it('verifies cumulative quantity: previous 3 + return 2 -> reservation target 5, ledger delta 2', async () => {
+					const deps = {
+						logRepo,
+						operationsRepo: opsRepo as unknown as OperationsRepository,
+						poolRepo,
+						claimRepo,
+						reservationRepo
+					};
+
+					// Create a log with qty = 10 and previously returned = 3
+					const log = await logRepo.create(
+						{
+							ticket_id: 'requisition_ticket:01J00000000000000000000001',
+							item_id: 'item:fan',
+							qty: '10',
+							recipient_type: 'evacuee',
+							recipient_id: 'evacuee:01J00000000000000000000001',
+							is_returnable: true,
+							status: 'active',
+							is_override: false
+						},
+						POS_CTX
+					);
+					// Record initial return of 3
+					await returnLoanAtCounter(
+						log._id,
+						{ qty_returned: '3', condition_on_return: 'READY' },
+						POS_CTX,
+						deps
+					);
+
+					const logAfterFirst = await logRepo.get(log._id);
+					expect(logAfterFirst?.qty_returned).toBe('3');
+
+					// Next action: return +2 (target cumulative = 5)
+					const result = await returnLoanAtCounter(
+						log._id,
+						{ qty_returned: '5', condition_on_return: 'READY' },
+						POS_CTX,
+						deps
+					);
+					expect(result.ledgerEntryCreated).toBe(true);
+
+					const logAfterSecond = await logRepo.get(log._id);
+					expect(logAfterSecond?.qty_returned).toBe('5');
+
+					// Check reservation: persisted cumulative target must be '5'
+					const resId = deriveReservationIdFromDistributionLog(log._id);
+					const res = await reservationRepo.get(resId);
+					expect(res?.qty_returned).toBe('5');
+					expect(res?.return_condition).toBe('READY');
+
+					// Check StockLedger entries for this log: first was 3, second delta was 2
+					const ledger = await opsRepo.listLedger();
+					const receipts = ledger.filter((e) => e.ref_id === log._id && e.reason === 'receive');
+					expect(receipts).toHaveLength(2);
+					expect(receipts[0].qty).toBe('3');
+					expect(receipts[1].qty).toBe('2');
+				});
+
+				it('evaluates real endpoint writable state (connecting/disconnected -> rejected, connected central -> allowed)', async () => {
+					const log = await logRepo.create(
+						{
+							ticket_id: 'requisition_ticket:01J00000000000000000000001',
+							item_id: 'item:fan',
+							qty: '1',
+							recipient_type: 'evacuee',
+							recipient_id: 'evacuee:01J00000000000000000000001',
+							is_returnable: true,
+							status: 'active',
+							is_override: false
+						},
+						POS_CTX
+					);
+
+					const baseDeps = {
+						logRepo,
+						operationsRepo: opsRepo as unknown as OperationsRepository,
+						poolRepo,
+						claimRepo,
+						reservationRepo
+					};
+
+					// 1. connecting/non-writable status -> isWritable is false
+					await expect(
+						returnLoanAtCounter(
+							log._id,
+							{ qty_returned: '1', condition_on_return: 'READY' },
+							POS_CTX,
+							{ ...baseDeps, endpointStore: { active: 'central', isWritable: false } }
+						)
+					).rejects.toThrow(/Authoritative central connectivity is required/);
+
+					// 2. disconnected status -> isWritable is false
+					endpointStore.markDisconnected();
+					await expect(
+						returnLoanAtCounter(
+							log._id,
+							{ qty_returned: '1', condition_on_return: 'READY' },
+							POS_CTX,
+							baseDeps
+						)
+					).rejects.toThrow(/Authoritative central connectivity is required/);
+
+					// 3. connected status -> isWritable is true
+					endpointStore.markConnected();
+					const res = await returnLoanAtCounter(
+						log._id,
+						{ qty_returned: '1', condition_on_return: 'READY' },
+						POS_CTX,
+						baseDeps
+					);
+					expect(res.log.qty_returned).toBe('1');
+				});
+
+				it('enforces pre-effect abort permissions (owner allowed, manager/admin allowed, different staff rejected, FENCED rejected)', async () => {
+					const deps = {
+						logRepo,
+						operationsRepo: opsRepo as unknown as OperationsRepository,
+						poolRepo,
+						claimRepo,
+						reservationRepo
+					};
+
+					const log = await logRepo.create(
+						{
+							ticket_id: 'requisition_ticket:01J00000000000000000000001',
+							item_id: 'item:fan',
+							qty: '2',
+							recipient_type: 'evacuee',
+							recipient_id: 'evacuee:01J00000000000000000000001',
+							is_returnable: true,
+							status: 'active',
+							is_override: false
+						},
+						WAREHOUSE_CTX
+					);
+
+					// 1. Acquire reservation by WAREHOUSE_CTX (wh_user)
+					const op1 = '01J00000000000000000000991';
+					await acquireReturnReservation(
+						{
+							logId: log._id,
+							mode: 'PHYSICAL',
+							operationId: op1,
+							qty_returned: '1',
+							return_condition: 'READY'
+						},
+						WAREHOUSE_CTX,
+						deps
+					);
+
+					// 2. Another warehouse staff (different actor, not manager/admin) cannot abort
+					const otherStaffCtx: AuthorContext = {
+						shelterCode: 'SH001',
+						createdBy: 'wh_staff_2',
+						roles: ['shelter:SH001', 'warehouse_staff']
+					};
+					await expect(
+						abortAbandonedReturnReservation(log._id, otherStaffCtx, deps)
+					).rejects.toThrow(/caller is not the owner or a manager\/admin/);
+
+					// 3. Shelter manager CAN abort
+					const managerAborted = await abortAbandonedReturnReservation(log._id, MANAGER_CTX, deps);
+					expect(managerAborted.status).toBe('ABORTED');
+
+					// 4. Re-acquire with new operation by WAREHOUSE_CTX
+					const op2 = '01J00000000000000000000992';
+					await acquireReturnReservation(
+						{
+							logId: log._id,
+							mode: 'PHYSICAL',
+							operationId: op2,
+							qty_returned: '1',
+							return_condition: 'READY'
+						},
+						WAREHOUSE_CTX,
+						deps
+					);
+
+					// 5. System admin CAN abort
+					const adminAborted = await abortAbandonedReturnReservation(log._id, ADMIN_CTX, deps);
+					expect(adminAborted.status).toBe('ABORTED');
+
+					// 6. Re-acquire and advance to FENCED
+					const op3 = '01J00000000000000000000993';
+					await acquireReturnReservation(
+						{
+							logId: log._id,
+							mode: 'PHYSICAL',
+							operationId: op3,
+							qty_returned: '1',
+							return_condition: 'READY'
+						},
+						WAREHOUSE_CTX,
+						deps
+					);
+					await fenceReturnReservation(log._id, op3, 'PHYSICAL', WAREHOUSE_CTX, deps);
+
+					// 7. FENCED abort is rejected even for manager and admin
+					await expect(abortAbandonedReturnReservation(log._id, MANAGER_CTX, deps)).rejects.toThrow(
+						/operation is FENCED.*recover.*forward/i
+					);
+					await expect(abortAbandonedReturnReservation(log._id, ADMIN_CTX, deps)).rejects.toThrow(
+						/operation is FENCED.*recover.*forward/i
+					);
+				});
+
+				it('allows forward recovery of bulk return when pool is now EXHAUSTED after quota claim', async () => {
+					// Create a pool with total quota 1
+					const pool = await poolRepo.create(
+						createBulkReturnPoolDoc(
+							{
+								stock_ledger_id: 'stock_ledger:01J00000000000000000000995',
+								item_id: 'item:cot',
+								total_received_qty: '1'
+							},
+							WAREHOUSE_CTX,
+							'01J00000000000000000000995'
+						),
+						WAREHOUSE_CTX
+					);
+
+					const log = await logRepo.create(
+						{
+							ticket_id: 'requisition_ticket:01J00000000000000000000001',
+							item_id: 'item:cot',
+							qty: '1',
+							recipient_type: 'evacuee',
+							recipient_id: 'evacuee:01J00000000000000000000001',
+							is_returnable: true,
+							status: 'active',
+							is_override: false
+						},
+						REG_STAFF_CTX
+					);
+					const opId = '01J00000000000000000000996';
+					const deps = {
+						logRepo,
+						operationsRepo: opsRepo as unknown as OperationsRepository,
+						poolRepo,
+						claimRepo,
+						reservationRepo
+					};
+
+					// Step 1: acquire bulk reservation
+					await acquireReturnReservation(
+						{
+							logId: log._id,
+							mode: 'BULK',
+							operationId: opId,
+							bulk_pool_id: pool._id,
+							claimed_qty: '1'
+						},
+						REG_STAFF_CTX,
+						deps
+					);
+
+					// Step 2: claim quota -> pool remaining becomes 0, status becomes EXHAUSTED
+					const claimId = deriveClaimIdFromDistributionLog(log._id);
+					await claimRepo.create({
+						_id: claimId,
+						type: 'bulk_return_claim',
+						schema_v: 1,
+						shelter_code: 'SH001',
+						distribution_log_id: log._id,
+						bulk_pool_id: pool._id,
+						item_id: 'item:cot',
+						claimed_qty: '1',
+						status: 'POOL_CLAIMED',
+						operation_id: opId,
+						created_by: REG_STAFF_CTX.createdBy,
+						created_at: new Date().toISOString(),
+						updated_at: new Date().toISOString()
+					});
+					await poolRepo.claimQuota(pool._id, claimId, '1', REG_STAFF_CTX);
+
+					// Reservation is advanced to FENCED
+					await fenceReturnReservation(log._id, opId, 'BULK', REG_STAFF_CTX, deps);
+
+					// Check pool status is indeed EXHAUSTED
+					const currentPool = await poolRepo.get(pool._id);
+					expect(currentPool?.status).toBe('EXHAUSTED');
+
+					// Step 3: Forward recovery via clearLoanViaBulkPool should succeed
+					// even though the pool is EXHAUSTED, because this operation already holds the claim
+					const res = await clearLoanViaBulkPool(
+						{
+							logId: log._id,
+							poolId: pool._id,
+							operationUlid: opId
+						},
+						REG_STAFF_CTX,
+						deps
+					);
+					expect(res.log.status).toBe('returned');
+					expect(res.claim.status).toBe('COMPLETE');
+
+					const finalRes = await reservationRepo.get(
+						deriveReservationIdFromDistributionLog(log._id)
+					);
+					expect(finalRes?.status).toBe('COMMITTED');
+				});
+
+				it('enforces cross-mode safety: active PHYSICAL reservation blocks BULK and NON_PHYSICAL clearances', async () => {
+					const deps = {
+						logRepo,
+						operationsRepo: opsRepo as unknown as OperationsRepository,
+						poolRepo,
+						claimRepo,
+						reservationRepo
+					};
+
+					const log = await logRepo.create(
+						{
+							ticket_id: 'requisition_ticket:01J00000000000000000000001',
+							item_id: 'item:fan',
+							qty: '1',
+							recipient_type: 'evacuee',
+							recipient_id: 'evacuee:01J00000000000000000000001',
+							is_returnable: true,
+							status: 'active',
+							is_override: false
+						},
+						WAREHOUSE_CTX
+					);
+
+					// Acquire PHYSICAL reservation
+					const opId = '01J00000000000000000000997';
+					await acquireReturnReservation(
+						{
+							logId: log._id,
+							mode: 'PHYSICAL',
+							operationId: opId,
+							qty_returned: '1',
+							return_condition: 'READY'
+						},
+						WAREHOUSE_CTX,
+						deps
+					);
+
+					// Attempting NON_PHYSICAL clear on this log throws
+					await expect(
+						clearLoanNonPhysical(
+							log._id,
+							{ clear_reason: 'lost', notes: 'testing cross-mode' },
+							REG_STAFF_CTX,
+							deps
+						)
+					).rejects.toThrow(/reserved for PHYSICAL/);
+
+					// Bulk preflight validates the target pool before reservation
+					// acquisition; provide a valid matching pool so this assertion
+					// reaches the intended cross-mode collision.
+					const pool = await poolRepo.create(
+						createBulkReturnPoolDoc(
+							{
+								stock_ledger_id: 'stock_ledger:01J00000000000000000000995',
+								item_id: log.item_id,
+								total_received_qty: '1'
+							},
+							WAREHOUSE_CTX,
+							'01J00000000000000000000995'
+						),
+						WAREHOUSE_CTX
+					);
+
+					// Attempting BULK clear on this log throws
+					await expect(
+						clearLoanViaBulkPool(
+							{
+								operationUlid: '01J00000000000000000000998',
+								logId: log._id,
+								poolId: pool._id
+							},
+							REG_STAFF_CTX,
+							deps
+						)
+					).rejects.toThrow(/reserved for PHYSICAL/);
+
+					// getReturnOperationState correctly identifies PHYSICAL mode
+					const state = await getReturnOperationState(log._id, WAREHOUSE_CTX, deps);
+					expect(state.reservation?.mode).toBe('PHYSICAL');
+				});
+			});
 		});
 	});
 });

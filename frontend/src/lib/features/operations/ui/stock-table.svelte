@@ -636,18 +636,14 @@
 													{getCategoryLabel(item.category)}
 												</span>
 												{#if lot?.note}
-													<span
-														class="inline-flex items-center gap-1 text-xs text-slate-600"
-													>
+													<span class="inline-flex items-center gap-1 text-xs text-slate-600">
 														<MapPin class="h-3.5 w-3.5 shrink-0" />
 														{lot.note}
 													</span>
 												{/if}
 											</div>
 											<div class="grid grid-cols-2 gap-3">
-												<div
-													class="rounded-lg border border-slate-200/80 bg-slate-50/80 p-3"
-												>
+												<div class="rounded-lg border border-slate-200/80 bg-slate-50/80 p-3">
 													<p class="text-xs font-semibold text-slate-500">สต็อกทั้งหมด</p>
 													<p class="mt-1 text-lg font-bold text-slate-900 tabular-nums">
 														{qty}
@@ -1046,7 +1042,7 @@
 			side="bottom"
 			class="flex h-[100dvh] max-h-[100dvh] flex-col gap-0 overflow-hidden rounded-none border-0 p-0 pb-[env(safe-area-inset-bottom)]"
 		>
-			<Sheet.Header class="shrink-0 border-b border-border/60 px-4 py-4 text-left pr-12">
+			<Sheet.Header class="shrink-0 border-b border-border/60 px-4 py-4 pr-12 text-left">
 				<Sheet.Title class="sr-only">จัดการสต็อก</Sheet.Title>
 				<Sheet.Description class="sr-only">รับเข้า เบิกจ่าย หรือปรับปรุงยอดสต็อก</Sheet.Description>
 				{@render manageHeader()}

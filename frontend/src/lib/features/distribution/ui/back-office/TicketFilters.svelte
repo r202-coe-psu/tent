@@ -1,0 +1,127 @@
+<script lang="ts">
+	import type { RequisitionTicketStatus } from '../../domain/food-supplies';
+	import { REQUISITION_TICKET_STATUSES, TICKET_STATUS_LABELS } from '../model/ticket-status';
+	import { Input } from '$lib/components/ui/input/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
+	import Search from '@lucide/svelte/icons/search';
+	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
+
+	interface Props {
+		search: string;
+		detailedStatus: RequisitionTicketStatus | 'all';
+		destination: string | 'all';
+		destinations: readonly string[];
+		onSearchChange: (value: string) => void;
+		onStatusChange: (status: RequisitionTicketStatus | 'all') => void;
+		onDestinationChange: (destination: string | 'all') => void;
+		onResetFilters?: () => void;
+	}
+
+	let {
+		search,
+		detailedStatus,
+		destination,
+		destinations,
+		onSearchChange,
+		onStatusChange,
+		onDestinationChange,
+		onResetFilters
+	}: Props = $props();
+
+	const hasActiveFilters = $derived(
+		search.trim().length > 0 || detailedStatus !== 'all' || destination !== 'all'
+	);
+</script>
+
+<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+	<!-- Search input -->
+	<div class="relative max-w-md min-w-[240px] flex-1">
+		<Search class="absolute top-2.5 left-3 h-4 w-4 text-slate-400" aria-hidden="true" />
+		<Input
+			type="text"
+			id="ticket-search-input"
+			value={search}
+			oninput={(e) => onSearchChange(e.currentTarget.value)}
+			placeholder="ค้นหาเลขที่ตั๋ว, ผู้ร้องขอ, จุดหมาย..."
+			aria-label="ค้นหาเลขที่ตั๋ว, ผู้ร้องขอ, จุดหมาย"
+			class="h-10 w-full rounded-lg pl-9 text-sm shadow-2xs placeholder:text-slate-400"
+		/>
+	</div>
+
+	<!-- Dropdown filters -->
+	<div class="flex flex-wrap items-center gap-2">
+		<!-- Detailed Canonical Status Filter -->
+		<div class="flex items-center gap-1.5">
+			<label for="detailed-status-filter" class="shrink-0 text-xs font-semibold text-slate-600">
+				สถานะ:
+			</label>
+			<Select.Root
+				type="single"
+				value={detailedStatus}
+				onValueChange={(val) => {
+					if (val) onStatusChange(val as RequisitionTicketStatus | 'all');
+				}}
+			>
+				<Select.Trigger
+					id="detailed-status-filter"
+					aria-label="กรองตามสถานะ"
+					class="h-10 min-w-[180px] rounded-lg text-sm shadow-2xs"
+				>
+					<span class="truncate">
+						{detailedStatus === 'all'
+							? 'ทุกสถานะ (ทั้งหมด 9 สถานะ)'
+							: `${TICKET_STATUS_LABELS[detailedStatus]} (${detailedStatus})`}
+					</span>
+				</Select.Trigger>
+				<Select.Content>
+					<Select.Item value="all" label="ทุกสถานะ (ทั้งหมด 9 สถานะ)" />
+					{#each REQUISITION_TICKET_STATUSES as status (status)}
+						<Select.Item value={status} label={`${TICKET_STATUS_LABELS[status]} (${status})`} />
+					{/each}
+				</Select.Content>
+			</Select.Root>
+		</div>
+
+		<!-- Destination Location Filter -->
+		<div class="flex items-center gap-1.5">
+			<label for="destination-filter" class="shrink-0 text-xs font-semibold text-slate-600">
+				จุดหมาย:
+			</label>
+			<Select.Root
+				type="single"
+				value={destination}
+				onValueChange={(val) => {
+					if (val) onDestinationChange(val);
+				}}
+			>
+				<Select.Trigger
+					id="destination-filter"
+					aria-label="กรองตามจุดหมาย"
+					class="h-10 min-w-[140px] rounded-lg text-sm shadow-2xs"
+				>
+					<span class="truncate">
+						{destination === 'all' ? 'ทุกจุดหมาย' : destination}
+					</span>
+				</Select.Trigger>
+				<Select.Content>
+					<Select.Item value="all" label="ทุกจุดหมาย" />
+					{#each destinations as dest (dest)}
+						<Select.Item value={dest} label={dest} />
+					{/each}
+				</Select.Content>
+			</Select.Root>
+		</div>
+
+		<!-- Reset Filters Button -->
+		{#if hasActiveFilters && onResetFilters}
+			<button
+				type="button"
+				onclick={onResetFilters}
+				class="inline-flex h-10 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 shadow-2xs transition-colors hover:bg-slate-50 hover:text-slate-900"
+			>
+				<RotateCcw class="h-3.5 w-3.5 text-slate-400" />
+				ล้างตัวกรอง
+			</button>
+		{/if}
+	</div>
+</div>

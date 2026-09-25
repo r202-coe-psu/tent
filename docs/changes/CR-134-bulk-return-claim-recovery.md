@@ -1,19 +1,22 @@
 ---
 id: CR-134
 title: ระบบบันทึกการเคลียร์ของยืมแบบกองรวมและกลไกฟื้นฟูหลังขัดข้อง (Bulk Return Claim & Crash Recovery)
-status: proposed
+status: approved
 date: 2026-09-17
-updated: 2026-09-17
+updated: 2026-09-24
 requested_by: Terra (P1-02 Architecture)
 decided_by: pending Project Owner
 layer: stable
 affects:
-  - docs/data/schema.md §2.32 (เพิ่ม bulk_return_claim — schema_v 1)
-  - docs/data/schema.md §2.31 (bulk_return_pool schema_v 1 → 2, เพิ่ม claim_ids และ lazy upgrade)
+  - docs/data/schema.md §2.32 (เสนอเพิ่ม bulk_return_claim — schema_v 1 เมื่อได้รับอนุมัติ)
+  - docs/data/schema.md §2.33 (เสนอเพิ่ม loan_return_reservation — schema_v 1 เมื่อได้รับอนุมัติ)
+  - docs/data/schema.md §2.31 (เสนอปรับ bulk_return_pool schema_v 1 → 2, เพิ่ม claim_ids และ lazy upgrade เมื่อได้รับอนุมัติ)
   - docs/changes/CR-121-spec-ticket.md §4.4
   - frontend/src/lib/server/shelter-access-design.ts
   - frontend/src/lib/features/distribution/domain/food-supplies/bulk-return-claim.ts
+  - frontend/src/lib/features/distribution/domain/food-supplies/return-reservation.ts
   - frontend/src/lib/features/distribution/data/food-supplies/bulk-return-claim.repository.ts
+  - frontend/src/lib/features/distribution/data/food-supplies/return-reservation.repository.ts
   - frontend/src/lib/features/distribution/data/food-supplies/bulk-return-pool.repository.ts
   - frontend/src/lib/features/distribution/application/food-supplies/return-workflow.ts
 ---
@@ -401,12 +404,60 @@ stateDiagram-v2
 - **Schema Versions Summary:**
   - `bulk_return_claim`: เอกสารใหม่เริ่มต้นที่ **`schema_v = 1`**
   - `bulk_return_pool`: ยกระดับเป็น **`schema_v = 2`**
+  - `loan_return_reservation`: เอกสารประสานงานเริ่มต้นที่ **`schema_v = 1`**
   - `distribution_log`: คงที่ **`schema_v = 1`**
   - `requisition_ticket`: คงที่ **`schema_v = 1`**
 
 ---
 
-## 15. Decision log
+## 15. Sound Loan Resolution Coordination Architecture (CR-134 R4)
+
+เพื่อปิดช่องว่าง Concurrency และ Distributed Split-Brain ข้าม 3 ช่องทางการปลดภาระของยืม (Physical Counter Return, Bulk Gate Clearance, Non-Physical Clear/Lost/Waived):
+
+### 15.1 Shared Coordinator Protocol (`loan_return_reservation:{distributionLogUlid}`)
+- รวบรวมทุกช่องทางการปิดภาระของยืมทั้ง 3 รูปแบบ (`PHYSICAL`, `BULK`, `NON_PHYSICAL`) ให้อยู่ภายใต้เอกสารประสานงานตัวกลางตัวเดียวกัน
+- ป้องกันการแย่งชิงสิทธิ์แบบข้ามช่องทาง (Inter-Flow Race Conditions) อย่างเป็นระบบภายใต้กลไก CAS Fencing ของ Central CouchDB ใน Runtime ปัจจุบัน
+- ผูกมัด **Durable Semantic Intent** ระดับ Attempt-scoped เพื่อป้องกัน Semantic Replay Mismatch:
+  - `PHYSICAL`: บันทึก `qty_returned` (cumulative target) และ `return_condition` (`READY` | `MAINTENANCE` | `BROKEN` ตาม canonical enum ของ `distribution_log`)
+  - `BULK`: บันทึก `bulk_pool_id`, `claimed_qty`
+  - `NON_PHYSICAL`: บันทึก `clear_reason` (`lost` | `waived`)
+- แต่ละ `distribution_log` จะมีเอกสารจองสิทธิ์ได้ไม่เกิน 1 ฉบับเท่านั้น
+
+### 15.2 Fencing State & Stale-Owner Protection (`RESERVED -> FENCED -> COMMITTED`)
+- ก่อนที่จะดำเนินการสร้างผลข้างเคียงที่ไม่สามารถย้อนกลับได้ (Irreversible Side Effects):
+  1. `PHYSICAL`: ก่อนบันทึก `stock_ledger` รับของเข้าคลัง
+  2. `BULK`: ก่อนตัดลดโควตาใน `bulk_return_pool`
+  3. `NON_PHYSICAL`: ก่อนบันทึก `distribution_log.recordClear`
+- ผู้ครอบครองสิทธิ์ (Owner) ต้องทำการเลื่อนสถานะการจองจาก `RESERVED` ไปเป็น `FENCED` ผ่าน CAS
+- **Stale-Owner Fencing:** หากคำสั่งถูกสั่งยกเลิก (Abort) หรือถูกแย่งสิทธิ์ (Takeover) ไปแล้ว การทำ Fence CAS จะล้มเหลวด้วย `ConcurrencyCollisionError` ทันที ป้องกันไม่ให้เกิด Side Effect นอกรอบ
+- **Atomic Abort CAS Competition:** เมื่อเอกสารเข้าสู่สถานะ `FENCED` แล้ว จะถูกสั่ง Abort ไม่ได้อีกเด็ดขาด (`FENCED -> ABORTED` ถูกปฏิเสธทั้งระดับ Application และ CouchDB VDU) มีเพียงทางเดียวคือเดินหน้าไปสู่ `COMMITTED`
+
+### 15.3 Central-Only Write Authority Policy (Proposed / Governance-Sensitive)
+- ใน Runtime ปัจจุบันของ Frontend ยังไม่มีการเปิดใช้งานเส้นทางเขียนผ่าน CouchDB Edge สำรอง (Central-only in practice)
+- เพื่อความปลอดภัยของลำดับการจองสิทธิ์ใน Runtime ปัจจุบัน ฟังก์ชัน `assertCentralWriteAuthority(endpointStore)` จึงถูกนำมาใช้เพื่อ fail-closed หาก endpoint ไม่ใช่ central หรือ writable
+- **หมายเหตุด้าน Governance และสถาปัตยกรรมในอนาคต (Future Edge Policy):** นโยบายนี้เป็นข้อเสนอระดับ Implementation สำหรับ Current Runtime เท่านั้น ไม่ใช่นโยบายถาวรที่ได้รับการอนุมัติแล้ว หากในอนาคตมีการเปิดใช้งาน Edge Write Fallback สำหรับกระบวนการ Loan Resolution จะต้องมีการพิจารณาและอนุมัติกลไก Reservation Consensus ระดับ Distributed อีกครั้งก่อนเปิดใช้งาน
+
+### 15.4 Mode-Specific Authorization (VDU Rule 16)
+- บังคับใช้สิทธิ์ตามโหมดการคืนในระดับ CouchDB VDU ทุกการเปลี่ยนผ่าน (CREATE, REINITIALIZE, FENCE, COMMIT, ABORT):
+  - `mode: 'PHYSICAL'`: อนุญาตเฉพาะ `warehouse_staff`, `supply_coordinator`, `shelter_manager`, `system_admin` (ปฏิเสธ `registration_staff`)
+  - `mode: 'BULK'` และ `mode: 'NON_PHYSICAL'`: อนุญาตเฉพาะ `registration_staff`, `supply_coordinator`, `shelter_manager`, `system_admin` (ปฏิเสธ `warehouse_staff`)
+- ฟิลด์ `created_by` เป็น Permanently Immutable และ `operation_by` ผูกกับ `userCtx.name` ของผู้ส่งคำสั่งเสมอ
+
+### 15.5 Recovery UX & Pre-Effect Abort Authorization
+- เนื่องจาก CouchDB VDU และระบบไม่มี Trusted Server Clock Authority กลไก Lease หมดอายุอิงเวลาเครื่องไคลเอนต์จึงถูกถอดออกเพื่อความรัดกุมสูงสุด โดยอาศัย CAS Fencing และ Pre-Effect Role-Based Abort แทน:
+  - ในสถานะ `RESERVED`: อนุญาตให้สั่ง Abort ได้เฉพาะเจ้าของคำสั่งเดิม (`operation_by`) หรือบทบาทผู้บริหาร (`shelter_manager`, `system_admin`) เท่านั้น เพื่อป้องกันไม่ให้เกิด permanent deadlock และป้องกันเจ้าหน้าที่คนอื่นแทรกแซงโดยพลการ
+  - ในสถานะ `FENCED`: ไม่อนุญาตให้สั่ง Abort โดยเด็ดขาดสำหรับทุกบทบาท ต้องกู้คืนเดินหน้า (Forward Recovery) ไปสู่ `COMMITTED` เท่านั้น
+  - เจ้าหน้าที่คนอื่นที่มีสิทธิ์ในโหมดนั้นสามารถเข้ามากู้คืนเดินหน้าคำสั่งที่ค้างอยู่ในสถานะ `FENCED` ได้ (Cross-Actor Forward Recovery) โดย audit trail สุดท้ายจะบันทึก actor ผู้กู้คืนจริง
+- หน้าจอ UI ทั้ง 3 Dialog (`BulkGateClearDialog`, `CounterReturnDialog`, `NonPhysicalClearDialog`):
+  - ตรวจจับและบล็อกการทำรายการซ้อนข้ามโหมด (Cross-Mode Collision Protection)
+  - นำค่า Durable Semantic Intent ที่บันทึกไว้กลับมาแสดงอัตโนมัติ (Async Recovery Hydration ครั้งเดียวต่อคำสั่ง) โดยไม่ให้ผู้ใช้กรอกค่าใหม่ในคำสั่งเดิม
+  - ล็อกช่องกรอกข้อมูลในสถานะ `IRREVERSIBLE_FORWARD_ONLY` เพื่อให้กู้คืนเดินหน้าได้อย่างปลอดภัย
+  - เปิดให้สั่ง Abort & Restart ได้เมื่ออยู่ในสถานะ `PRE_EFFECT_ABORTABLE` ตามสิทธิ์ของผู้ใช้
+  - รองรับการกู้คืน Bulk เมื่อพูลเปลี่ยนสถานะเป็น `EXHAUSTED` หลังการตัดโควตาสำเร็จ โดยใช้ dedicated pool-by-id query แยกจากการเลือกพูลใหม่
+
+---
+
+## 16. Decision log
 - 2026-09-17 — proposed: ร่างข้อกำหนดการประสานงานและฟื้นฟูการเคลียร์ของยืมแบบกองรวม (P1-02)
 - 2026-09-17 — revision 1: แก้ไขข้อบกพร่องจากการ Review อิสระ (Claim ID ผูก Log, schema_v 2 บนพูล, claim.claimed_qty เป็น authoritative)
 - 2026-09-17 — revision 2: แก้ไขข้อบกพร่องจากการ Re-Review:
@@ -417,3 +468,23 @@ stateDiagram-v2
   5. แยกแยะ Transient Failures ไม่ให้กลายเป็นสถานะ ABORTED โดยไม่จำเป็น
   6. บังคับ Strict Final Quantity Equality (`newReturned === log.qty`) ก่อน mark returned
 - 2026-09-17 — proposed: นำเสนอข้อกำหนดและกลไกฟื้นฟูต่อ Project Owner; technical implementation verified (P0=0, P1=0)
+- 2026-09-24 — revision 3 (R4): ขยายสถาปัตยกรรม Sound Loan Resolution Coordination:
+  1. บรรจุ Shared Reservation Coordinator (`loan_return_reservation`) ครอบคลุมทั้ง PHYSICAL, BULK, และ NON_PHYSICAL
+  2. เพิ่มสถานะ `FENCED` ตัดวงจร TOCTOU ป้องกัน Stale-Owner Effect Write
+  3. บังคับ Central-Only Write Authority Policy ป้องกัน Split-Brain บน Edge
+  4. เพิ่ม Mode-Specific RBAC ใน VDU Rule 16
+  5. เพิ่ม Pre-Effect Role-Based Abort และ Crash Recovery UX ใน Frontline Dialogs
+- 2026-09-24 — revision 4 (R4.1 Focused Contract Convergence Repair):
+  1. รวมสัญญา Runtime ของ `loan_return_reservation` ให้สอดคล้องกันทุกชั้น: เพิ่ม durable intent (`qty_returned`, `return_condition`, `bulk_pool_id`, `claimed_qty`, `clear_reason`)
+  2. คงสถานะ CR-134 เป็น `status: proposed`, `decided_by: pending Project Owner` และถอนการ canonicalize §2.33 ออกจาก `docs/data/schema.md` ตามหลัก governance
+  3. บังคับ Mode-Specific RBAC บนทุก Transition (CREATE, REINITIALIZE, FENCE, COMMIT, ABORT) ใน VDU Rule 16 และ Application Layer
+  4. แก้ไขบั๊กการเรียงลำดับใน `getReturnOperationState` โดยให้ตรวจจับสถานะ `FENCED` เป็น `IRREVERSIBLE_FORWARD_ONLY` เสมอ ไม่ถูกบดบังด้วยสถานะ terminal ของ log
+  5. ปรับปรุง Frontline Dialogs ทั้ง 3 ชุด (`CounterReturnDialog`, `BulkGateClearDialog`, `NonPhysicalClearDialog`) ให้ป้องกัน Cross-mode collision, โหลด durable intent โดยอัตโนมัติ, ล็อก input ในช่วง forward recovery, และรองรับ abort ในช่วง pre-effect
+- 2026-09-24 — revision 5 (R4.2 Focused Findings Repair):
+  1. ประสานคำศัพท์สภาพของคืนให้ตรงกับ Canonical Condition (`READY` | `MAINTENANCE` | `BROKEN`) ทุกชั้น (Domain, VDU, Application, UI, Tests)
+  2. แก้ไข Async Recovery Hydration ใน CounterReturnDialog และ NonPhysicalClearDialog ให้ดึง persisted intent อย่างแม่นยำครั้งเดียวต่อ operation ID
+  3. เพิ่มการกู้คืน Bulk Forward Recovery สำหรับพูลที่เปลี่ยนเป็น `EXHAUSTED` หลังการตัดโควตาสำเร็จ โดยไม่กระทบการเลือกพูลสำหรับรายการใหม่
+  4. ถอด Lease Semantics ออกเนื่องจากขาด Trusted Wall-clock Authority โดยใช้ CAS Fencing ร่วมกับ Role-Based Pre-Effect Abort (`operation_by` เดิม หรือ `shelter_manager`/`system_admin`)
+  5. ปรับ `InMemoryReservationRepository` ในชุดทดสอบให้ parse เอกสารผ่าน `loanReturnReservationDocSchema` เดียวกับ Production
+  6. แก้ไข Endpoint Store writable mapping ให้ตรวจสอบสถานะ `status === 'connected'` จริง
+  7. เพิ่มการทดสอบ Recovery สำหรับ UI Model helpers และ Workflow ครบทุกกรณี

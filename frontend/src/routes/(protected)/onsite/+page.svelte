@@ -6,9 +6,11 @@
 	import Search from '@lucide/svelte/icons/search';
 	import Stethoscope from '@lucide/svelte/icons/stethoscope';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
+	import Truck from '@lucide/svelte/icons/truck';
 	import { resolve } from '$app/paths';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { canAccessMedicalScreening, canAccessZoning } from '$lib/auth/roles';
+	import { canPerformFrontlineDistribution, canDispatchTicket } from '$lib/features/distribution';
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -20,6 +22,18 @@
 		shelterQuery.data?.feature_flags?.enable_medical_screening ?? false
 	);
 	const showMedicalTile = $derived(canAccessMedical && enableMedical);
+	const canDistribution = $derived(
+		canPerformFrontlineDistribution({
+			shelterCode: shelterStore.selectedShelterCode ?? getShelterCode(),
+			createdBy: authStore.user?.name ?? '',
+			roles: authStore.user?.roles ?? []
+		}) ||
+			canDispatchTicket({
+				shelterCode: shelterStore.selectedShelterCode ?? getShelterCode(),
+				createdBy: authStore.user?.name ?? '',
+				roles: authStore.user?.roles ?? []
+			})
+	);
 </script>
 
 <svelte:head>
@@ -93,6 +107,25 @@
 					<h2 class="mb-1 text-2xl font-bold text-foreground">จัดสรรที่พัก</h2>
 					<p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
 						Zoning Desk (Station 3)
+					</p>
+				</div>
+			</a>
+		{/if}
+
+		{#if canDistribution}
+			<a
+				href={resolve('/onsite/distribution')}
+				class="group flex min-h-[220px] flex-col justify-between rounded-2xl border border-border bg-card p-8 shadow-[0_4px_25px_rgba(0,0,0,0.03)] transition-all hover:-translate-y-1 hover:shadow-md"
+			>
+				<div
+					class="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-xl text-foreground transition-colors group-hover:bg-primary-muted group-hover:text-primary"
+				>
+					<Truck class="size-6" />
+				</div>
+				<div>
+					<h2 class="mb-1 text-2xl font-bold text-foreground">จุดแจกจ่ายพัสดุและอาหาร</h2>
+					<p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+						Distribution Desk (Station 4)
 					</p>
 				</div>
 			</a>

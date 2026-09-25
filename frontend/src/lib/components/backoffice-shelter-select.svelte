@@ -69,9 +69,7 @@
 		<SelectTrigger
 			class={cn(
 				'h-11 min-h-11',
-				compact
-					? 'w-11 justify-center px-0 [&_svg:last-child]:hidden'
-					: 'w-full'
+				compact ? 'w-11 justify-center px-0 [&_svg:last-child]:hidden' : 'w-full'
 			)}
 			aria-label="เลือกศูนย์อพยพ"
 			title={compact ? selectedShelterLabel : undefined}
@@ -89,10 +87,7 @@
 				<SelectItem value="" disabled label="ไม่มีศูนย์พักพิงที่เข้าถึงได้" />
 			{:else}
 				{#each availableShelters as shelter (shelter.code)}
-					<SelectItem
-						value={shelter.code}
-						label={shelterLabel(shelter.code, shelter.name)}
-					/>
+					<SelectItem value={shelter.code} label={shelterLabel(shelter.code, shelter.name)} />
 				{/each}
 			{/if}
 		</SelectContent>

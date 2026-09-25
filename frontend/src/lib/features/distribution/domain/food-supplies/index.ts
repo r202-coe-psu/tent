@@ -34,6 +34,9 @@ export {
 	createDistributionLog,
 	assertDistributionLogIssuanceImmutable,
 	assertDistributionLogCanBeVoided,
+	isDuplicateMealDistributionLog,
+	calculateDistributedQtyForTicketItem,
+	calculateInHandQtyForTicketItem,
 	type DistributionRecipientType,
 	type DistributionLogStatus,
 	type ReturnCondition,
@@ -75,3 +78,24 @@ export {
 	bulkReturnPoolIdSchema,
 	stockLedgerIdSchema
 } from './shared';
+
+export {
+	loanReturnReservationModeSchema,
+	loanReturnReservationStatusSchema,
+	loanReturnReservationIdSchema,
+	loanReturnReservationDocSchema,
+	physicalReturnConditionSchema,
+	nonPhysicalClearReasonSchema,
+	createLoanReturnReservationInputSchema,
+	createLoanReturnReservation,
+	deriveReservationIdFromDistributionLog,
+	isAllowedReservationTransition,
+	assertLoanReturnReservationPermanentImmutability,
+	assertLoanReturnReservationTransition,
+	type LoanReturnReservationMode,
+	type LoanReturnReservationStatus,
+	type PhysicalReturnCondition,
+	type NonPhysicalClearReason,
+	type LoanReturnReservation,
+	type CreateLoanReturnReservationInput
+} from './return-reservation';
