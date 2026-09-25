@@ -1,6 +1,7 @@
 <script lang="ts">
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import Expand from '@lucide/svelte/icons/expand';
+	import HeartHandshake from '@lucide/svelte/icons/heart-handshake';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Search from '@lucide/svelte/icons/search';
 	import Stethoscope from '@lucide/svelte/icons/stethoscope';
@@ -127,6 +128,22 @@
 				<h2 class="mb-1 text-2xl font-bold text-foreground">สแกนเข้า-ออกศูนย์</h2>
 				<p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
 					Check-in / Out
+				</p>
+			</div>
+		</a>
+		<a
+			href={resolve('/onsite/volunteer-check-in')}
+			class="group flex min-h-[220px] flex-col justify-between rounded-2xl border border-border bg-card p-8 shadow-[0_4px_25px_rgba(0,0,0,0.03)] transition-all hover:-translate-y-1 hover:shadow-md"
+		>
+			<div
+				class="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-xl text-foreground transition-colors group-hover:bg-primary-muted group-hover:text-primary"
+			>
+				<HeartHandshake class="size-6" />
+			</div>
+			<div>
+				<h2 class="mb-1 text-2xl font-bold text-foreground">เช็คอินจิตอาสาเข้างาน</h2>
+				<p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+					Check-in Volunteer
 				</p>
 			</div>
 		</a>

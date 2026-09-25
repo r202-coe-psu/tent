@@ -1,6 +1,4 @@
 import type { PageLoad } from './$types';
-import type { FaqItem } from '$lib/features/public-portal';
-import type { Announcement } from '$lib/features/announcements';
 
 type TransparencySummaryPayload = {
 	summary?: {
@@ -18,64 +16,87 @@ type TransparencySummaryPayload = {
 	isStale?: boolean;
 };
 
-export const load: PageLoad = async ({ fetch }) => {
-	let faqs: FaqItem[] = [];
-	let announcements: Announcement[] = [];
-	let configData: Record<string, unknown> = {};
+export type PublicNeedItem = {
+	item_id: string;
+	name: string;
+	qty_needed: string | number;
+	qty_target?: string | number;
+	unit: string;
+	status?: string;
+	category?: string;
+	urgency?: 'critical' | 'important' | 'normal' | string;
+	target?: number;
+	received?: number;
+};
+
+export type PublicShelterNeeds = {
+	code: string;
+	name: string;
+	needs: PublicNeedItem[];
+};
+
+export type PublicShelterItem = {
+	code: string;
+	name: string;
+	province?: string;
+	district?: string;
+	subdistrict?: string;
+	site_kind?: string;
+	status?: string;
+	capacity?: number;
+};
+
+export const load: PageLoad = async ({ fetch, parent }) => {
 	let metrics: TransparencySummaryPayload | undefined;
 
-	try {
-		const configRes = await fetch('/api/public/v1/config/faqs?category=public');
-		if (configRes.ok) {
-			configData = await configRes.json();
-			faqs = (configData.faqs as FaqItem[]) || [];
-		}
-	} catch (e) {
-		console.error('Failed to fetch config', e);
-	}
+	const [, needsRes, sheltersRes, summaryRes] = await Promise.all([
+		parent(),
+		fetch('/api/public/v1/needs').catch(() => null),
+		fetch('/api/public/v1/shelters').catch(() => null),
+		fetch('/api/public/v1/transparency/summary').catch((e) => {
+			console.error('[public-home] failed to fetch transparency summary', e);
+			return null;
+		})
+	]);
+	const [needsData, sheltersData, summaryData] = await Promise.all([
+		needsRes?.ok
+			? needsRes.json().catch(() => [] as PublicShelterNeeds[])
+			: Promise.resolve([] as PublicShelterNeeds[]),
+		sheltersRes?.ok
+			? sheltersRes.json().catch(() => ({}) as { shelters?: PublicShelterItem[] })
+			: Promise.resolve({} as { shelters?: PublicShelterItem[] }),
+		summaryRes ? summaryRes.json().catch(() => null) : Promise.resolve(null)
+	]);
 
-	try {
-		const annRes = await fetch('/api/public/v1/announcements');
-		if (annRes.ok) {
-			const annData = await annRes.json();
-			announcements = (annData.items as Announcement[]) || [];
-		}
-	} catch (e) {
-		console.error('Failed to fetch announcements', e);
-	}
+	const donationNeeds: PublicShelterNeeds[] = needsData || [];
+	const sheltersList: PublicShelterItem[] = sheltersData.shelters || [];
 
-	try {
-		const summaryRes = await fetch('/api/public/v1/transparency/summary');
-		const summaryData = (await summaryRes
-			.json()
-			.catch(() => null)) as TransparencySummaryPayload | null;
+	if (summaryRes) {
+		const parsedSummaryData = summaryData as TransparencySummaryPayload | null;
 
 		if (!summaryRes.ok) {
 			console.error(
 				'[public-home] transparency summary request failed',
 				summaryRes.status,
-				summaryData
+				parsedSummaryData
 			);
 		}
 
-		if (summaryData?.summary && summaryData.flags != null) {
+		if (parsedSummaryData?.summary && parsedSummaryData.flags != null) {
 			metrics = {
-				summary: summaryData.summary,
-				flags: summaryData.flags,
-				lastUpdated: summaryData.lastUpdated ?? Date.now(),
-				isStale: summaryData.isStale ?? !summaryRes.ok
+				summary: parsedSummaryData.summary,
+				flags: parsedSummaryData.flags,
+				lastUpdated: parsedSummaryData.lastUpdated ?? Date.now(),
+				isStale: parsedSummaryData.isStale ?? !summaryRes.ok
 			};
-		} else if (!summaryData?.summary) {
-			console.error('[public-home] transparency summary missing from response', summaryData);
+		} else if (!parsedSummaryData?.summary) {
+			console.error('[public-home] transparency summary missing from response', parsedSummaryData);
 		}
-	} catch (e) {
-		console.error('[public-home] failed to fetch transparency summary', e);
 	}
 
 	return {
-		configData,
-		announcements,
-		faqs,
+		donationNeeds,
+		sheltersList,
 		...metrics
 	};
 };

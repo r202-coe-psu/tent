@@ -28,24 +28,26 @@ export {
 	useBookingProvinces,
 	useBookingSubdistricts,
 	useCreateBooking,
-	useCreateUnassignedRegistration,
-	usePetTypes
+	useCreateUnassignedRegistration
 } from './application/queries';
 
 // data
 export {
 	createBooking,
 	createUnassignedRegistration,
+	matchResidence,
 	fetchDistricts,
-	fetchPetTypes,
 	fetchProvinces,
 	fetchSubdistricts,
 	lookupBooking,
+	checkTicketStatus,
 	uploadShelterBookingPhoto,
 	uploadUnassignedPhoto,
 	type BookingTicketResponse,
-	type PetTypeOption,
+	type TicketStatusResult,
 	type PublicSubdistrict,
+	type ResidenceMatchChip,
+	type ResidenceMatchRequest,
 	type ShelterBookingPhotoUploadResponse,
 	type UnassignedPhotoUploadResponse,
 	type UnassignedRegistrationResponse
@@ -65,6 +67,7 @@ export {
 	bookingNationalIdSchema,
 	bookingPhoneSchema,
 	bookingShelterCodeSchema,
+	UNASSIGNED_SHELTER_CODE,
 	evacueeIdFromBookingCode,
 	householdLabelFrom,
 	isCaptchaKeyConfigured,

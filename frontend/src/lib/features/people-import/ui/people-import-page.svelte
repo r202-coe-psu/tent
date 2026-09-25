@@ -7,22 +7,15 @@
 	import { toast } from 'svelte-sonner';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
-	import { useMasterData } from '$lib/features/master-data';
 	import { useEvacuees } from '$lib/features/people';
 	import {
-		buildMasterLookup,
+		emptyLookups,
 		orphanMemberRows,
 		validateWorkbook,
-		type Lookups,
 		type ParsedWorkbook,
 		type RowValidation
 	} from '../domain/import-row';
-	import {
-		APP_ONLY_FIELDS,
-		MASTER_COLUMNS,
-		type EnumChoice,
-		type MasterColumn
-	} from '../domain/columns';
+	import { APP_ONLY_FIELDS } from '../domain/columns';
 	import { findExistingDuplicates, type DuplicateMatch } from '../domain/duplicates';
 	import {
 		buildPeopleCsvTemplateBlob,
@@ -36,21 +29,8 @@
 
 	const shelterCode = $derived(getShelterCode());
 
-	const municipalityZoneQuery = useMasterData(() => 'municipality_zone');
-	const communityQuery = useMasterData(() => 'community');
-
-	const activeItems = $derived<Record<MasterColumn, { code: string; label: string }[]>>({
-		municipality_zone: (municipalityZoneQuery.data?.items ?? []).filter(
-			(i) => i.status === 'active'
-		),
-		community: (communityQuery.data?.items ?? []).filter((i) => i.status === 'active')
-	});
-
-	const masterDataLoading = $derived(municipalityZoneQuery.isLoading || communityQuery.isLoading);
-
-	const lookups = $derived(
-		Object.fromEntries(MASTER_COLUMNS.map((t) => [t, buildMasterLookup(activeItems[t])])) as Lookups
-	);
+	/** CR-137: zone/community are free text — no master lookups. */
+	const lookups = emptyLookups();
 
 	let workbook = $state<ParsedWorkbook>({ households: [], members: [] });
 	let filename = $state('');
@@ -90,12 +70,7 @@
 	const importMutation = useImportPeople();
 
 	function templateMasters(): TemplateMasters {
-		return Object.fromEntries(
-			MASTER_COLUMNS.map((t) => [
-				t,
-				activeItems[t].map((i): EnumChoice => ({ value: i.code, label: i.label }))
-			])
-		) as TemplateMasters;
+		return {};
 	}
 
 	function download(blob: Blob, name: string) {
@@ -182,17 +157,13 @@
 			</p>
 		</div>
 		<div class="flex flex-wrap gap-2">
-			<Button
-				variant="outline"
-				onclick={() => downloadTemplate(false)}
-				disabled={masterDataLoading}
-			>
+			<Button variant="outline" onclick={() => downloadTemplate(false)}>
 				<Download class="mr-2 h-4 w-4" /> ดาวน์โหลด Template
 			</Button>
-			<Button variant="outline" onclick={() => downloadTemplate(true)} disabled={masterDataLoading}>
+			<Button variant="outline" onclick={() => downloadTemplate(true)}>
 				<Download class="mr-2 h-4 w-4" /> Template + ตัวอย่างข้อมูล
 			</Button>
-			<Button variant="outline" onclick={downloadCsvTemplate} disabled={masterDataLoading}>
+			<Button variant="outline" onclick={downloadCsvTemplate}>
 				<Download class="mr-2 h-4 w-4" /> Template (CSV)
 			</Button>
 		</div>
@@ -214,8 +185,6 @@
 					<X class="mr-1 h-4 w-4" /> ล้างไฟล์
 				</Button>
 			</div>
-		{:else if masterDataLoading}
-			<p class="py-10 text-center text-sm text-muted-foreground">กำลังโหลดข้อมูลตั้งต้น...</p>
 		{:else}
 			<label
 				class="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border px-6 py-10 text-center transition-colors focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 hover:bg-muted/40"

@@ -418,7 +418,7 @@ export interface paths {
 		get?: never;
 		put?: never;
 		/** Issue Token */
-		post: operations['issue_token_third_party_token_post'];
+		post: operations['issue_token_external_token_post'];
 		delete?: never;
 		options?: never;
 		head?: never;
@@ -460,6 +460,52 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/v1/admin/thirdparty-clients/{client_row_id}': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		post?: never;
+		/**
+		 * Delete Client
+		 * @description Soft-delete — only once already revoked (409 otherwise). Never hard-deletes.
+		 */
+		delete: operations['delete_client_v1_admin_thirdparty_clients__client_row_id__delete'];
+		options?: never;
+		head?: never;
+		/**
+		 * Update Client Scopes
+		 * @description Edit `allowed_scopes` — refused (409) once the client is revoked.
+		 */
+		patch: operations['update_client_scopes_v1_admin_thirdparty_clients__client_row_id__patch'];
+		trace?: never;
+	};
+	'/v1/admin/thirdparty-clients/{client_row_id}/secret': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * Reveal Client Secret
+		 * @description Decrypt and return the plaintext secret. The BFF gates this behind the caller
+		 *     re-entering their own CouchDB password — this endpoint itself only enforces the
+		 *     same `EXTERNAL_API_SECRET` bearer as every other route on this router.
+		 */
+		get: operations['reveal_client_secret_v1_admin_thirdparty_clients__client_row_id__secret_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/external/locations': {
 		parameters: {
 			query?: never;
@@ -468,7 +514,7 @@ export interface paths {
 			cookie?: never;
 		};
 		/** List Locations */
-		get: operations['list_locations_third_party_locations_get'];
+		get: operations['list_locations_external_locations_get'];
 		put?: never;
 		post?: never;
 		delete?: never;
@@ -485,7 +531,7 @@ export interface paths {
 			cookie?: never;
 		};
 		/** Get Location */
-		get: operations['get_location_third_party_locations__location_code__get'];
+		get: operations['get_location_external_locations__location_code__get'];
 		put?: never;
 		post?: never;
 		delete?: never;
@@ -502,7 +548,7 @@ export interface paths {
 			cookie?: never;
 		};
 		/** Get Location Occupancy */
-		get: operations['get_location_occupancy_third_party_locations__location_code__occupancy_get'];
+		get: operations['get_location_occupancy_external_locations__location_code__occupancy_get'];
 		put?: never;
 		post?: never;
 		delete?: never;
@@ -519,7 +565,7 @@ export interface paths {
 			cookie?: never;
 		};
 		/** Get Location Occupants */
-		get: operations['get_location_occupants_third_party_locations__location_code__occupants_get'];
+		get: operations['get_location_occupants_external_locations__location_code__occupants_get'];
 		put?: never;
 		post?: never;
 		delete?: never;
@@ -536,7 +582,7 @@ export interface paths {
 			cookie?: never;
 		};
 		/** Get Location Stock */
-		get: operations['get_location_stock_third_party_locations__location_code__stock_get'];
+		get: operations['get_location_stock_external_locations__location_code__stock_get'];
 		put?: never;
 		post?: never;
 		delete?: never;
@@ -553,7 +599,7 @@ export interface paths {
 			cookie?: never;
 		};
 		/** Get Summary */
-		get: operations['get_summary_third_party_summary_get'];
+		get: operations['get_summary_external_summary_get'];
 		put?: never;
 		post?: never;
 		delete?: never;
@@ -616,6 +662,26 @@ export interface paths {
 		 * @description Public pre-registration without a shelter — writes Mongo only (FR-UR-01).
 		 */
 		post: operations['create_unassigned_registration_public_v1_unassigned_registrations_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/unassigned-registrations/residence-match': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Match Unassigned Residence
+		 * @description Service-to-service Residence match — ids + landmark/housing_type only (no member PII).
+		 */
+		post: operations['match_unassigned_residence_public_v1_unassigned_registrations_residence_match_post'];
 		delete?: never;
 		options?: never;
 		head?: never;
@@ -723,6 +789,228 @@ export interface paths {
 		 * @description Claim open members into this shelter — Couch birth at pre_registered (#247).
 		 */
 		post: operations['claim_unassigned_registration_staff_v1_unassigned_registrations__registration_id__claim_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/jobs': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** List Jobs */
+		get: operations['list_jobs_public_v1_jobs_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/jobs/{job_id}/preflight': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Preflight Job Application */
+		post: operations['preflight_job_application_public_v1_jobs__job_id__preflight_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/jobs/{job_id}/apply': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Apply To Job */
+		post: operations['apply_to_job_public_v1_jobs__job_id__apply_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/volunteer/ticket/{token}': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** Get Ticket */
+		get: operations['get_ticket_public_v1_volunteer_ticket__token__get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/volunteer/ticket/find': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Find Tickets */
+		post: operations['find_tickets_public_v1_volunteer_ticket_find_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/volunteer/ticket/{token}/cancel': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Cancel Ticket */
+		post: operations['cancel_ticket_public_v1_volunteer_ticket__token__cancel_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/volunteer/schedule': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Volunteer Schedule
+		 * @description ตารางทำงานจิตอาสา — the roster behind the Access Portal (CR-092 หน้าจอ 6).
+		 */
+		post: operations['volunteer_schedule_public_v1_volunteer_schedule_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/volunteer/schedule/respond': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Respond To Dispatch
+		 * @description Accept or decline an offered shift with the code a manager read out.
+		 */
+		post: operations['respond_to_dispatch_public_v1_volunteer_schedule_respond_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/volunteer/schedule/action': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Volunteer Schedule Action
+		 * @description Check in, check out, or withdraw from the caller's own assigned shift.
+		 */
+		post: operations['volunteer_schedule_action_public_v1_volunteer_schedule_action_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/volunteer/access/resolve': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Resolve Volunteer Access
+		 * @description Resolve a portal credential before a browser session is created.
+		 */
+		post: operations['resolve_volunteer_access_public_v1_volunteer_access_resolve_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/volunteer/profile': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Volunteer Profile
+		 * @description The volunteer's own profile, for the Access Portal's edit screen.
+		 */
+		post: operations['volunteer_profile_public_v1_volunteer_profile_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/public/v1/volunteer/profile/update': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Update Volunteer Profile
+		 * @description Change the parts of the profile the volunteer owns (skills, for now).
+		 */
+		post: operations['update_volunteer_profile_public_v1_volunteer_profile_update_post'];
 		delete?: never;
 		options?: never;
 		head?: never;
@@ -905,6 +1193,44 @@ export interface components {
 			unit_label: string;
 			/** Level */
 			level: string;
+		};
+		/**
+		 * DispatchRespondRequest
+		 * @description Answering an offered shift — two factors, neither enough alone.
+		 *
+		 *     The credential is whatever the portal signed in with and must resolve to the
+		 *     assignment's own volunteer; ``code`` is the short code a manager read out. A
+		 *     six-character code is only safe because the caller has to know whose shift it is
+		 *     as well.
+		 */
+		DispatchRespondRequest: {
+			/** Phone */
+			phone?: string | null;
+			/** Token */
+			token?: string | null;
+			/** Portal Id */
+			portal_id?: string | null;
+			/** Assignment Id */
+			assignment_id: string;
+			/** Code */
+			code: string;
+			/**
+			 * Action
+			 * @enum {string}
+			 */
+			action: 'accepted' | 'declined';
+		};
+		/** DispatchRespondResponse */
+		DispatchRespondResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Assignment Id */
+			assignment_id: string;
+			/** Dispatch Status */
+			dispatch_status: string;
 		};
 		/** DonationCancelResponse */
 		DonationCancelResponse: {
@@ -1190,6 +1516,26 @@ export interface components {
 			geo?: components['schemas']['GeoPoint'] | null;
 			/** Label */
 			label?: string | null;
+		};
+		/** JobShiftTemplate */
+		JobShiftTemplate: {
+			/**
+			 * Shift Name
+			 * @default
+			 */
+			shift_name: string;
+			/**
+			 * Start Time
+			 * @default
+			 */
+			start_time: string;
+			/**
+			 * End Time
+			 * @default
+			 */
+			end_time: string;
+			/** Days */
+			days?: string[];
 		};
 		/** LocationDetailEnvelope */
 		LocationDetailEnvelope: {
@@ -1552,10 +1898,32 @@ export interface components {
 			name: string;
 			/** Qty Needed */
 			qty_needed: string;
+			/**
+			 * Qty Target
+			 * @default 0
+			 */
+			qty_target: string;
+			/**
+			 * On Hand
+			 * @default 0
+			 */
+			on_hand: string;
+			/**
+			 * Reserved
+			 * @default 0
+			 */
+			reserved: string;
 			/** Unit */
 			unit: string;
 			/** Status */
 			status: string;
+			/**
+			 * Urgency
+			 * @default normal
+			 */
+			urgency: string;
+			/** Category */
+			category?: string | null;
 		};
 		/** NeedsListResponse */
 		NeedsListResponse: {
@@ -1783,6 +2151,216 @@ export interface components {
 			 */
 			updated_at: string;
 		};
+		/**
+		 * PublicJobItem
+		 * @description One card on the board (CR-092 screen 1).
+		 *
+		 *     Carries the 2-colour quota the card renders (``รับแล้ว`` / ``ว่าง``) — the third,
+		 *     ``dispatched``, is a back-office state and is folded into "not available" here
+		 *     rather than shown to the public.
+		 */
+		PublicJobItem: {
+			/** Job Id */
+			job_id: string;
+			/** Shelter Code */
+			shelter_code: string;
+			/**
+			 * Shelter Name
+			 * @default
+			 */
+			shelter_name: string;
+			/** Title */
+			title: string;
+			/** Description */
+			description: string;
+			/** Tier */
+			tier: string;
+			/** Skills Required */
+			skills_required?: string[];
+			shift_template?: components['schemas']['JobShiftTemplate'];
+			/** Shifts */
+			shifts?: components['schemas']['PublicJobShift'][];
+			/** Quota */
+			quota: number;
+			/** Slots Confirmed */
+			slots_confirmed: number;
+			/** Slots Remaining */
+			slots_remaining: number;
+			/**
+			 * Applicants Count
+			 * @default 0
+			 */
+			applicants_count: number;
+			/** Status */
+			status: string;
+			/**
+			 * Requires Review
+			 * @default false
+			 */
+			requires_review: boolean;
+		};
+		/** PublicJobListResponse */
+		PublicJobListResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Jobs */
+			jobs?: components['schemas']['PublicJobItem'][];
+		};
+		/**
+		 * PublicJobShift
+		 * @description Concrete shift identity plus renderable snapshot fields.
+		 */
+		PublicJobShift: {
+			/** Shift Id */
+			shift_id: string;
+			/**
+			 * Date
+			 * @default
+			 */
+			date: string;
+			/** End Date */
+			end_date?: string | null;
+			/**
+			 * Start Time
+			 * @default
+			 */
+			start_time: string;
+			/**
+			 * End Time
+			 * @default
+			 */
+			end_time: string;
+			/** Station */
+			station?: string | null;
+			/**
+			 * Quota
+			 * @default 0
+			 */
+			quota: number;
+			/**
+			 * Slots Confirmed
+			 * @default 0
+			 */
+			slots_confirmed: number;
+			/**
+			 * Slots Dispatched
+			 * @default 0
+			 */
+			slots_dispatched: number;
+			/**
+			 * Slots Remaining
+			 * @default 0
+			 */
+			slots_remaining: number;
+			/**
+			 * Applicants Count
+			 * @default 0
+			 */
+			applicants_count: number;
+		};
+		/**
+		 * ScheduleActionRequest
+		 * @description A state change requested by the volunteer who owns a schedule row.
+		 */
+		ScheduleActionRequest: {
+			/** Phone */
+			phone?: string | null;
+			/** Token */
+			token?: string | null;
+			/** Portal Id */
+			portal_id?: string | null;
+			/** Assignment Id */
+			assignment_id: string;
+			/**
+			 * Action
+			 * @enum {string}
+			 */
+			action: 'check_in' | 'check_out' | 'withdraw';
+		};
+		/** ScheduleActionResponse */
+		ScheduleActionResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Assignment Id */
+			assignment_id: string;
+			/** Status */
+			status: string;
+			/** Requested At */
+			requested_at: string;
+		};
+		/**
+		 * ScheduleLookupRequest
+		 * @description Same key as the ticket lookup — the portal signs in by phone or by token.
+		 */
+		ScheduleLookupRequest: {
+			/** Phone */
+			phone?: string | null;
+			/** Token */
+			token?: string | null;
+			/** Portal Id */
+			portal_id?: string | null;
+		};
+		/**
+		 * ScheduleShift
+		 * @description One shift the volunteer is actually on (schema.md §2.9, CR-092 หน้าจอ 6).
+		 *
+		 *     Distinct from a ticket: a ticket is the application they filed, this is the roster
+		 *     entry a manager put them on, with the duty window the Time-Bound access guard reads
+		 *     and the check-in stamps the tablet station writes.
+		 */
+		ScheduleShift: {
+			/** Assignment Id */
+			assignment_id: string;
+			/** Job Id */
+			job_id: string;
+			/** Shift Id */
+			shift_id?: string | null;
+			/**
+			 * Job Title
+			 * @default
+			 */
+			job_title: string;
+			/** Shelter Code */
+			shelter_code: string;
+			/**
+			 * Shelter Name
+			 * @default
+			 */
+			shelter_name: string;
+			/**
+			 * Date
+			 * @default
+			 */
+			date: string;
+			/**
+			 * Shift
+			 * @default
+			 */
+			shift: string;
+			/**
+			 * Station
+			 * @default
+			 */
+			station: string;
+			/** Start Ts */
+			start_ts?: string | null;
+			/** End Ts */
+			end_ts?: string | null;
+			/** Check In At */
+			check_in_at?: string | null;
+			/** Check Out At */
+			check_out_at?: string | null;
+			/** Status */
+			status: string;
+			/** Dispatch Status */
+			dispatch_status?: string | null;
+		};
 		/** SearchRequest */
 		SearchRequest: {
 			/** Search */
@@ -1894,6 +2472,11 @@ export interface components {
 			contact: components['schemas']['ShelterContactDetail'];
 			/** Faq */
 			faq: components['schemas']['ShelterFaqDetail'][];
+			/**
+			 * Accepts Pre Registration
+			 * @default false
+			 */
+			accepts_pre_registration: boolean;
 		};
 		/** ShelterDetailResponse */
 		ShelterDetailResponse: {
@@ -1969,6 +2552,11 @@ export interface components {
 			vulnerable_groups?: string[] | null;
 			/** Admin Type */
 			admin_type?: string | null;
+			/**
+			 * Accepts Pre Registration
+			 * @default false
+			 */
+			accepts_pre_registration: boolean;
 			/**
 			 * Updated At
 			 * Format: date-time
@@ -2100,10 +2688,15 @@ export interface components {
 			/** Locations */
 			locations: components['schemas']['SummaryLocationItem'][];
 		};
-		/** ThirdPartyClientCreateRequest */
+		/**
+		 * ThirdPartyClientCreateRequest
+		 * @description ``client_id`` is generated server-side (``tpc_…``) — not accepted from the caller.
+		 */
 		ThirdPartyClientCreateRequest: {
-			/** Client Id */
-			client_id: string;
+			/** Name */
+			name: string;
+			/** Description */
+			description?: string | null;
 			/** Module Name */
 			module_name: string;
 			/** Allowed Scopes */
@@ -2118,12 +2711,18 @@ export interface components {
 			id: string;
 			/** Client Id */
 			client_id: string;
+			/** Name */
+			name: string | null;
+			/** Description */
+			description: string | null;
 			/** Module Name */
 			module_name: string;
 			/** Allowed Scopes */
 			allowed_scopes: string[];
 			/** Is Active */
 			is_active: boolean;
+			/** Deleted At */
+			deleted_at: string | null;
 			/**
 			 * Created At
 			 * Format: date-time
@@ -2137,6 +2736,15 @@ export interface components {
 			/** Client Secret */
 			client_secret: string;
 		};
+		/** ThirdPartyClientDeleteResponse */
+		ThirdPartyClientDeleteResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			client: components['schemas']['ThirdPartyClientPublic'];
+		};
 		/** ThirdPartyClientListResponse */
 		ThirdPartyClientListResponse: {
 			/** Clients */
@@ -2146,19 +2754,25 @@ export interface components {
 		};
 		/**
 		 * ThirdPartyClientPublic
-		 * @description Client metadata without the secret hash.
+		 * @description Client metadata without the secret hash/ciphertext.
 		 */
 		ThirdPartyClientPublic: {
 			/** Id */
 			id: string;
 			/** Client Id */
 			client_id: string;
+			/** Name */
+			name: string | null;
+			/** Description */
+			description: string | null;
 			/** Module Name */
 			module_name: string;
 			/** Allowed Scopes */
 			allowed_scopes: string[];
 			/** Is Active */
 			is_active: boolean;
+			/** Deleted At */
+			deleted_at: string | null;
 			/**
 			 * Created At
 			 * Format: date-time
@@ -2178,6 +2792,110 @@ export interface components {
 			 */
 			success: boolean;
 			client: components['schemas']['ThirdPartyClientPublic'];
+		};
+		/**
+		 * ThirdPartyClientSecretResponse
+		 * @description Decrypted plaintext secret — ``GET .../secret``, gated upstream by the BFF's
+		 *     own-password re-auth (CR-136).
+		 */
+		ThirdPartyClientSecretResponse: {
+			/** Client Secret */
+			client_secret: string;
+		};
+		/**
+		 * ThirdPartyClientUpdateRequest
+		 * @description ``PATCH`` body — scopes only. Refused (409) once the client is revoked.
+		 */
+		ThirdPartyClientUpdateRequest: {
+			/** Allowed Scopes */
+			allowed_scopes: string[];
+		};
+		/** TicketFindItem */
+		TicketFindItem: {
+			/** Job Id */
+			job_id: string;
+			/**
+			 * Applicant Name
+			 * @default
+			 */
+			applicant_name: string;
+			/** Status */
+			status: string;
+			/**
+			 * Job Title
+			 * @default
+			 */
+			job_title: string;
+			/** Shelter Code */
+			shelter_code: string;
+			/**
+			 * Shift Date
+			 * @default
+			 */
+			shift_date: string;
+			/** End Date */
+			end_date?: string | null;
+			/** Shift Id */
+			shift_id?: string | null;
+			/**
+			 * Start Time
+			 * @default
+			 */
+			start_time: string;
+			/**
+			 * End Time
+			 * @default
+			 */
+			end_time: string;
+		};
+		/**
+		 * TicketFindRequest
+		 * @description Tab 2 — "ค้นหาตั๋วของฉัน", by phone or by a token already in hand.
+		 */
+		TicketFindRequest: {
+			/** Phone */
+			phone?: string | null;
+			/** Token */
+			token?: string | null;
+			/** Portal Id */
+			portal_id?: string | null;
+		};
+		/** TicketFindResponse */
+		TicketFindResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Tickets */
+			tickets?: components['schemas']['TicketFindItem'][];
+			/**
+			 * Phone Masked
+			 * @default
+			 */
+			phone_masked: string;
+		};
+		/** TicketShift */
+		TicketShift: {
+			/** Shift Id */
+			shift_id?: string | null;
+			/**
+			 * Date
+			 * @default
+			 */
+			date: string;
+			/**
+			 * Start Time
+			 * @default
+			 */
+			start_time: string;
+			/**
+			 * End Time
+			 * @default
+			 */
+			end_time: string;
+			/** Station */
+			station?: string | null;
 		};
 		/** TokenErrorDetail */
 		TokenErrorDetail: {
@@ -2324,6 +3042,11 @@ export interface components {
 			 * @enum {string}
 			 */
 			registered_via: 'web' | 'staff';
+			/**
+			 * Join Registration Id
+			 * @description Append members (and pets) into this open registration's reserved household.
+			 */
+			join_registration_id?: string | null;
 		};
 		/** UnassignedRegistrationCreateResponse */
 		UnassignedRegistrationCreateResponse: {
@@ -2435,6 +3158,71 @@ export interface components {
 			/** Open Members */
 			open_members: number;
 		};
+		/** UnassignedResidenceMatchHit */
+		UnassignedResidenceMatchHit: {
+			/** Id */
+			id: string;
+			/** Landmark */
+			landmark?: string | null;
+			/** Housing Type */
+			housing_type?: string | null;
+			/** Claimed Shelter Code */
+			claimed_shelter_code?: string | null;
+			/** Claimed Household Id */
+			claimed_household_id?: string | null;
+			/**
+			 * Status
+			 * @default open
+			 */
+			status: string;
+			/** Primary Contact Name Masked */
+			primary_contact_name_masked?: string | null;
+			/** Matched Member Masked */
+			matched_member_masked?: string | null;
+			/**
+			 * Member Count
+			 * @default 0
+			 */
+			member_count: number;
+			/** Pets */
+			pets?: {
+				[key: string]: unknown;
+			}[];
+			/** Household Address */
+			household_address?: {
+				[key: string]: unknown;
+			} | null;
+		};
+		/**
+		 * UnassignedResidenceMatchRequest
+		 * @description Service-to-service residence match — no member PII in response.
+		 */
+		UnassignedResidenceMatchRequest: {
+			/** Housing Type */
+			housing_type?:
+				('owned_house' | 'rented_house' | 'condo' | 'apartment_dorm' | 'homeless') | null;
+			/** Residence Landmark */
+			residence_landmark?: string | null;
+			/** Address No */
+			address_no?: string | null;
+			/** Village No */
+			village_no?: string | null;
+			/** Subdistrict */
+			subdistrict?: string | null;
+			/** District */
+			district?: string | null;
+			/** Province */
+			province?: string | null;
+			/** Postal Code */
+			postal_code?: string | null;
+			/** Phone */
+			phone?: string | null;
+		};
+		/** UnassignedResidenceMatchResponse */
+		UnassignedResidenceMatchResponse: {
+			/** Matches */
+			matches: components['schemas']['UnassignedResidenceMatchHit'][];
+		};
 		/** ValidationError */
 		ValidationError: {
 			/** Location */
@@ -2455,6 +3243,282 @@ export interface components {
 			 * @default ok
 			 */
 			status: string;
+		};
+		/**
+		 * VolunteerApplyRequest
+		 * @description The 4-field quick-apply form (FR-VOL-02.2).
+		 *
+		 *     ``national_id`` is optional here even though CR-092 lists it as a main field: a
+		 *     volunteer with a passport or a pink card has no 13-digit number, and refusing them
+		 *     at the form would be a worse failure than a profile that dedupes on phone alone.
+		 */
+		VolunteerApplyRequest: {
+			/** First Name */
+			first_name: string;
+			/** Last Name */
+			last_name: string;
+			/** Phone */
+			phone: string;
+			/** National Id */
+			national_id?: string | null;
+			/** Email */
+			email?: string | null;
+			/** Skills */
+			skills?: string[];
+			/** Shift Id */
+			shift_id?: string | null;
+			/** Shift Date */
+			shift_date?: string | null;
+			/** Station */
+			station?: string | null;
+		};
+		/** VolunteerApplyResponse */
+		VolunteerApplyResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Tracking Token */
+			tracking_token: string;
+			/** Status */
+			status: string;
+			/** Job Id */
+			job_id: string;
+			/** Shift Id */
+			shift_id?: string | null;
+		};
+		/** VolunteerCancelResponse */
+		VolunteerCancelResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/**
+			 * Message
+			 * @default Application cancelled
+			 */
+			message: string;
+		};
+		/** VolunteerPreflightProfile */
+		VolunteerPreflightProfile: {
+			/**
+			 * Volunteer Code
+			 * @default
+			 */
+			volunteer_code: string;
+			/**
+			 * Display Name
+			 * @default
+			 */
+			display_name: string;
+			/**
+			 * Identity Status
+			 * @default pending
+			 * @enum {string}
+			 */
+			identity_status: 'verified' | 'pending' | 'rejected';
+			/** Existing Skills */
+			existing_skills?: string[];
+			/** New Skills */
+			new_skills?: string[];
+			/** New Controlled Skills */
+			new_controlled_skills?: string[];
+		};
+		/**
+		 * VolunteerPreflightRequest
+		 * @description Read-only identity preview; it never reserves a slot or writes a document.
+		 */
+		VolunteerPreflightRequest: {
+			/** Shelter Code */
+			shelter_code: string;
+			/** Phone */
+			phone: string;
+			/** Skills */
+			skills?: string[];
+		};
+		/** VolunteerPreflightResponse */
+		VolunteerPreflightResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/**
+			 * Match
+			 * @enum {string}
+			 */
+			match: 'no_match' | 'matched_one' | 'ambiguous_match';
+			existing_profile?: components['schemas']['VolunteerPreflightProfile'] | null;
+			/**
+			 * Message
+			 * @default
+			 */
+			message: string;
+		};
+		/**
+		 * VolunteerProfile
+		 * @description The volunteer's own profile, merged across every shelter they hold one at.
+		 *
+		 *     ``volunteer`` is a per-shelter document, so someone who has helped at two centres has
+		 *     two of them. The portal shows one person, so the newest document supplies the
+		 *     identity and the shelters are listed alongside — and an edit made here is applied to
+		 *     all of them (see ``VolunteerProfileUpdateBuffer``).
+		 *
+		 *     No ``national_id`` and no raw phone, same rule as the Digital Pass (FR-VOL-03.4).
+		 */
+		VolunteerProfile: {
+			/**
+			 * First Name
+			 * @default
+			 */
+			first_name: string;
+			/**
+			 * Last Name
+			 * @default
+			 */
+			last_name: string;
+			/** Nickname */
+			nickname?: string | null;
+			/**
+			 * Phone Masked
+			 * @default
+			 */
+			phone_masked: string;
+			/** Email */
+			email?: string | null;
+			/**
+			 * Volunteer Code
+			 * @default
+			 */
+			volunteer_code: string;
+			/** Skills */
+			skills?: string[];
+			/** Organization */
+			organization?: string | null;
+			/**
+			 * Identity Verified
+			 * @default false
+			 */
+			identity_verified: boolean;
+			/**
+			 * Personnel Type
+			 * @default volunteer
+			 */
+			personnel_type: string;
+			/** Shelter Codes */
+			shelter_codes?: string[];
+			/**
+			 * Portal Id
+			 * @default
+			 */
+			portal_id: string;
+		};
+		/** VolunteerProfileResponse */
+		VolunteerProfileResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			profile?: components['schemas']['VolunteerProfile'] | null;
+		};
+		/**
+		 * VolunteerProfileUpdateRequest
+		 * @description What a volunteer may change about themselves.
+		 *
+		 *     Skills only, for now. They are self-declared and carry no authority on their own: a
+		 *     controlled job still routes to review, and ``identity_verified`` stays a staff badge
+		 *     — so this cannot be used to unlock work the shelter has not approved.
+		 */
+		VolunteerProfileUpdateRequest: {
+			/** Phone */
+			phone?: string | null;
+			/** Token */
+			token?: string | null;
+			/** Portal Id */
+			portal_id?: string | null;
+			/** Skills */
+			skills?: string[];
+		};
+		/** VolunteerProfileUpdateResponse */
+		VolunteerProfileUpdateResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/**
+			 * Updated
+			 * @default 0
+			 */
+			updated: number;
+			profile?: components['schemas']['VolunteerProfile'] | null;
+		};
+		/** VolunteerScheduleResponse */
+		VolunteerScheduleResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			/** Shifts */
+			shifts?: components['schemas']['ScheduleShift'][];
+		};
+		/**
+		 * VolunteerTicket
+		 * @description What the Digital Pass may show.
+		 *
+		 *     No ``national_id`` in any form and no raw phone — FR-VOL-03.4. ``token`` is echoed
+		 *     because the pass displays it as the human-readable ticket id.
+		 */
+		VolunteerTicket: {
+			/** Token */
+			token: string;
+			/**
+			 * Can Cancel
+			 * @default true
+			 */
+			can_cancel: boolean;
+			/** Status */
+			status: string;
+			/** Job Id */
+			job_id: string;
+			/** Shift Id */
+			shift_id?: string | null;
+			/**
+			 * Job Title
+			 * @default
+			 */
+			job_title: string;
+			/** Shelter Code */
+			shelter_code: string;
+			/**
+			 * Shelter Name
+			 * @default
+			 */
+			shelter_name: string;
+			/** Applicant Name */
+			applicant_name: string;
+			/** Phone Masked */
+			phone_masked: string;
+			/** Skills */
+			skills?: string[];
+			selected_shift?: components['schemas']['TicketShift'];
+			/** Applied At */
+			applied_at: string;
+			/** Qr Payload */
+			qr_payload: string;
+		};
+		/** VolunteerTicketResponse */
+		VolunteerTicketResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			ticket: components['schemas']['VolunteerTicket'];
 		};
 	};
 	responses: never;
@@ -3249,7 +4313,7 @@ export interface operations {
 			};
 		};
 	};
-	issue_token_third_party_token_post: {
+	issue_token_external_token_post: {
 		parameters: {
 			query?: never;
 			header?: never;
@@ -3384,7 +4448,104 @@ export interface operations {
 			};
 		};
 	};
-	list_locations_third_party_locations_get: {
+	delete_client_v1_admin_thirdparty_clients__client_row_id__delete: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				client_row_id: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ThirdPartyClientDeleteResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	update_client_scopes_v1_admin_thirdparty_clients__client_row_id__patch: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				client_row_id: string;
+			};
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['ThirdPartyClientUpdateRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ThirdPartyClientPublic'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	reveal_client_secret_v1_admin_thirdparty_clients__client_row_id__secret_get: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				client_row_id: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ThirdPartyClientSecretResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	list_locations_external_locations_get: {
 		parameters: {
 			query?: {
 				/** @description Filter by location_status */
@@ -3423,7 +4584,7 @@ export interface operations {
 			};
 		};
 	};
-	get_location_third_party_locations__location_code__get: {
+	get_location_external_locations__location_code__get: {
 		parameters: {
 			query?: never;
 			header?: never;
@@ -3463,7 +4624,7 @@ export interface operations {
 			};
 		};
 	};
-	get_location_occupancy_third_party_locations__location_code__occupancy_get: {
+	get_location_occupancy_external_locations__location_code__occupancy_get: {
 		parameters: {
 			query?: never;
 			header?: never;
@@ -3503,7 +4664,7 @@ export interface operations {
 			};
 		};
 	};
-	get_location_occupants_third_party_locations__location_code__occupants_get: {
+	get_location_occupants_external_locations__location_code__occupants_get: {
 		parameters: {
 			query?: {
 				purpose?: string | null;
@@ -3567,7 +4728,7 @@ export interface operations {
 			};
 		};
 	};
-	get_location_stock_third_party_locations__location_code__stock_get: {
+	get_location_stock_external_locations__location_code__stock_get: {
 		parameters: {
 			query?: never;
 			header?: never;
@@ -3607,7 +4768,7 @@ export interface operations {
 			};
 		};
 	};
-	get_summary_third_party_summary_get: {
+	get_summary_external_summary_get: {
 		parameters: {
 			query?: never;
 			header?: never;
@@ -3700,6 +4861,39 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['UnassignedRegistrationCreateResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	match_unassigned_residence_public_v1_unassigned_registrations_residence_match_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['UnassignedResidenceMatchRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['UnassignedResidenceMatchResponse'];
 				};
 			};
 			/** @description Validation Error */
@@ -3916,6 +5110,401 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['UnassignedRegistrationClaimResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	list_jobs_public_v1_jobs_get: {
+		parameters: {
+			query?: {
+				shelter_code?: string | null;
+				skill?: string | null;
+			};
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['PublicJobListResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	preflight_job_application_public_v1_jobs__job_id__preflight_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				job_id: string;
+			};
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['VolunteerPreflightRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['VolunteerPreflightResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	apply_to_job_public_v1_jobs__job_id__apply_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				job_id: string;
+			};
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['VolunteerApplyRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			201: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['VolunteerApplyResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	get_ticket_public_v1_volunteer_ticket__token__get: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				token: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['VolunteerTicketResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	find_tickets_public_v1_volunteer_ticket_find_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['TicketFindRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['TicketFindResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	cancel_ticket_public_v1_volunteer_ticket__token__cancel_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				token: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['VolunteerCancelResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	volunteer_schedule_public_v1_volunteer_schedule_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['ScheduleLookupRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['VolunteerScheduleResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	respond_to_dispatch_public_v1_volunteer_schedule_respond_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['DispatchRespondRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['DispatchRespondResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	volunteer_schedule_action_public_v1_volunteer_schedule_action_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['ScheduleActionRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ScheduleActionResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	resolve_volunteer_access_public_v1_volunteer_access_resolve_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['TicketFindRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['VolunteerProfileResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	volunteer_profile_public_v1_volunteer_profile_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['ScheduleLookupRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['VolunteerProfileResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	update_volunteer_profile_public_v1_volunteer_profile_update_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['VolunteerProfileUpdateRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['VolunteerProfileUpdateResponse'];
 				};
 			};
 			/** @description Validation Error */

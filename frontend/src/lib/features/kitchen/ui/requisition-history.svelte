@@ -13,11 +13,15 @@
 	import { useTickets, TICKET_STATUS_LABELS } from '$lib/features/tickets';
 	import { formatThaiDateTime } from '$lib/utils/date';
 	import { qtyGte } from '$lib/utils/qty';
+	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 
 	const requisitions = useRequisitions();
 	const tickets = useTickets();
 	const plans = useMealPlans();
 	const planById = $derived(toMealPlanMap(plans.data));
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
 
 	// Union row shape — CR-126 §2.3: legacy kitchen_requisition (deprecated,
 	// read-only) and requisition_ticket (new) shown together, newest first, with
@@ -166,7 +170,7 @@
 													{item.done}
 												</span>
 												/ {item.requested}
-												{item.unit}
+												{formatUnit(item.unit, units, langState.current)}
 											</li>
 										{/each}
 									</ul>

@@ -1,5 +1,6 @@
+import { paginateItems } from '$lib/db/paginate';
 import { createRemoteRepository, type Repository, type PaginatedResult } from '$lib/db/repository';
-import { touch, now, type AuthorContext } from '$lib/db/model';
+import { touch, type AuthorContext } from '$lib/db/model';
 import {
 	createItemCategory,
 	isItemCategory,
@@ -8,33 +9,85 @@ import {
 	createItemMaster,
 	type ItemMaster,
 	type ItemMasterInput,
-	itemMasterInputSchema,
-	normalizeItemMasterFields,
 	isItemMaster,
 	createRecipe,
 	type Recipe,
 	type RecipeInput,
 	isRecipe,
-	isSystemCategoryDocId,
-	categoryReferenceMatches,
-	SYSTEM_CATEGORY_DEFINITIONS
+	itemBelongsToCategory,
+	canShelterDeleteCatalogDoc
 } from '../domain/catalog';
+import {
+	createUnitOfMeasure,
+	isUnitOfMeasure,
+	assertKnownUnitCodes,
+	isCanonicalUnitCode,
+	isLegacyUnitLabel,
+	type UnitOfMeasure,
+	type UnitOfMeasureInput
+} from '../domain/unit-of-measure';
 import {
 	evaluateCategoryDeletion,
 	type CategoryUsageDetails,
 	type DeleteCategoryResult
 } from '../domain/catalog-deletion';
+import { NotFoundError, CouchAuthError, AuthError } from '$lib/utils/errors';
 import type { CatalogRepository } from './catalog.repository';
 
 export const CATALOG_DB = 'catalog';
 
-function paginate<T>(items: T[], page: number, pageSize: number): PaginatedResult<T> {
-	const total = items.length;
-	const totalPages = Math.max(1, Math.ceil(total / pageSize));
-	const safePage = Math.max(1, Math.min(page, totalPages));
-	const start = (safePage - 1) * pageSize;
-	const slicedItems = items.slice(start, start + pageSize);
-	return { items: slicedItems, total, page: safePage, pageSize, totalPages };
+type AnyDoc = { _id: string; type: string; [key: string]: unknown };
+
+function isDocType(type: string) {
+	return (doc: unknown): doc is AnyDoc =>
+		!!doc && typeof doc === 'object' && (doc as { type?: unknown }).type === type;
+}
+
+function unitReferencesDoc(doc: AnyDoc, code: string): boolean {
+	const target = code.trim().toLowerCase();
+	const same = (value: unknown) =>
+		typeof value === 'string' && value.trim().toLowerCase() === target;
+
+	if (doc.type === 'item_master') {
+		const conversions = Array.isArray(doc.conversions) ? doc.conversions : [];
+		return [
+			doc.base_unit,
+			doc.default_inventory_uom,
+			doc.default_issue_uom,
+			...conversions.map((conversion) =>
+				conversion && typeof conversion === 'object'
+					? (conversion as { uom_name?: unknown }).uom_name
+					: undefined
+			)
+		].some(same);
+	}
+	if (doc.type === 'recipe') {
+		return (Array.isArray(doc.ingredients) ? doc.ingredients : []).some(
+			(ingredient) =>
+				!!ingredient &&
+				typeof ingredient === 'object' &&
+				same((ingredient as { uom?: unknown }).uom)
+		);
+	}
+	if (doc.type === 'donation_campaign') {
+		return (Array.isArray(doc.needs) ? doc.needs : []).some(
+			(need) => !!need && typeof need === 'object' && same((need as { unit?: unknown }).unit)
+		);
+	}
+	if (doc.type === 'stock_ledger') {
+		return same(doc.unit);
+	}
+	if (doc.type === 'purchase') {
+		return (Array.isArray(doc.items) ? doc.items : []).some(
+			(item) => !!item && typeof item === 'object' && same((item as { unit?: unknown }).unit)
+		);
+	}
+	if (doc.type === 'stock_transfer') {
+		return (Array.isArray(doc.items) ? doc.items : []).some(
+			(item) => !!item && typeof item === 'object' && same((item as { unit?: unknown }).unit)
+		);
+	}
+	return false;
 }
 
 /**
@@ -55,7 +108,7 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		return this.repo;
 	}
 
-	createItemCategory(
+	async createItemCategory(
 		input: ItemCategoryInput,
 		ctx: AuthorContext,
 		shelterCode?: string
@@ -84,7 +137,7 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		shelterCode?: string | null
 	): Promise<PaginatedResult<ItemCategory>> {
 		const items = await this.listItemCategories(shelterCode);
-		return paginate(items, page, pageSize);
+		return paginateItems(items, page, pageSize);
 	}
 
 	async getItemCategory(id: string, shelterCode?: string | null): Promise<ItemCategory | null> {
@@ -97,58 +150,32 @@ export class CatalogRemoteRepository implements CatalogRepository {
 	}
 
 	async updateItemCategory(itemCategory: ItemCategory): Promise<ItemCategory> {
-		if (itemCategory.is_protected || isSystemCategoryDocId(itemCategory._id)) {
-			if (itemCategory.override || itemCategory.shelter_code) {
-				throw new Error('ไม่อนุญาตให้สร้าง local override บนหมวดหมู่ระบบมาตรฐาน');
+		const existing = await this.getItemCategory(itemCategory._id, itemCategory.shelter_code);
+		if (!existing) {
+			throw new Error(`ไม่พบข้อมูลหมวดหมู่: ${itemCategory._id}`);
+		}
+		if (existing.is_protected) {
+			if (!itemCategory.is_protected) {
+				throw new Error('ไม่สามารถยกเลิกการปกป้องหมวดหมู่ระบบมาตรฐานได้');
 			}
-			const existing = await this.repo.get<ItemCategory>(itemCategory._id);
-			if (existing) {
-				// CR-125: default_class is editable on protected categories; system_key and
-				// is_protected remain immutable per CR-119 FR-04.
-				itemCategory.system_key = existing.system_key;
-				itemCategory.is_protected = true;
+			if (itemCategory.system_key !== existing.system_key) {
+				throw new Error('ไม่สามารถแก้ไข system_key ของหมวดหมู่ระบบมาตรฐานได้');
 			}
+			if (itemCategory.default_class !== existing.default_class) {
+				throw new Error('ไม่สามารถแก้ไข default_class ของหมวดหมู่ระบบมาตรฐานได้');
+			}
+			const updated: ItemCategory = {
+				...existing,
+				name: itemCategory.name,
+				description: itemCategory.description,
+				deactivated: itemCategory.deactivated,
+				is_default: itemCategory.is_default
+			};
+			const repo = this.getWriteRepo(updated.shelter_code);
+			return repo.put(touch(updated));
 		}
 		const repo = this.getWriteRepo(itemCategory.shelter_code);
 		return repo.put(touch(itemCategory));
-	}
-
-	private async canonicalizeItemMasterCategory(
-		category?: string,
-		shelterCode?: string | null
-	): Promise<string | undefined> {
-		if (!category) return undefined;
-		if (isSystemCategoryDocId(category)) return category;
-
-		const categories = await this.listItemCategories(shelterCode);
-		const matched = categories.filter((cat) => categoryReferenceMatches(category, cat));
-
-		if (matched.length > 1) {
-			throw new Error(`หมวดหมู่ '${category}' มีข้อมูลซ้ำซ้อน ไม่สามารถระบุหมวดหมู่ที่แน่นอนได้`);
-		}
-		if (matched.length === 1) {
-			return matched[0]._id;
-		}
-
-		const systemMatches = SYSTEM_CATEGORY_DEFINITIONS.filter(
-			(def) =>
-				def.id === category ||
-				def.name === category ||
-				def.key.toUpperCase() === category.toUpperCase() ||
-				def.id === `item_category:${category.toLowerCase()}`
-		);
-		if (systemMatches.length > 1) {
-			throw new Error(`หมวดหมู่ '${category}' มีข้อมูลซ้ำซ้อน ไม่สามารถระบุหมวดหมู่ที่แน่นอนได้`);
-		}
-		if (systemMatches.length === 1) {
-			return systemMatches[0].id;
-		}
-
-		if (category.startsWith('item_category:')) {
-			return category;
-		}
-
-		throw new Error(`ไม่พบหมวดหมู่ '${category}' ในระบบ`);
 	}
 
 	async createItemMaster(
@@ -156,13 +183,10 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		ctx: AuthorContext,
 		shelterCode?: string
 	): Promise<ItemMaster> {
-		const canonicalCategory = await this.canonicalizeItemMasterCategory(
-			input.category,
-			shelterCode
-		);
-		const normalizedInput = { ...input, category: canonicalCategory };
 		const repo = this.getWriteRepo(shelterCode);
-		return repo.put(createItemMaster(normalizedInput, ctx, shelterCode));
+		const item = createItemMaster(input, ctx, shelterCode);
+		await this.validateItemMasterUnits(item);
+		return repo.put(item);
 	}
 
 	async listItemMasters(shelterCode?: string | null): Promise<ItemMaster[]> {
@@ -185,7 +209,7 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		shelterCode?: string | null
 	): Promise<PaginatedResult<ItemMaster>> {
 		const items = await this.listItemMasters(shelterCode);
-		return paginate(items, page, pageSize);
+		return paginateItems(items, page, pageSize);
 	}
 
 	async getItemMaster(id: string, shelterCode?: string | null): Promise<ItemMaster | null> {
@@ -198,42 +222,49 @@ export class CatalogRemoteRepository implements CatalogRepository {
 	}
 
 	async updateItemMaster(itemMaster: ItemMaster): Promise<ItemMaster> {
-		const canonicalCategory = await this.canonicalizeItemMasterCategory(
-			itemMaster.category,
-			itemMaster.shelter_code
-		);
-
-		const parsedInput = itemMasterInputSchema.parse({
-			...itemMaster,
-			category: canonicalCategory
-		});
-
-		const normalizedFields = normalizeItemMasterFields(parsedInput, {
-			shelterCode: itemMaster.shelter_code,
-			override: itemMaster.override
-		});
-
-		const docToSave: ItemMaster = {
-			_id: itemMaster._id,
-			...(itemMaster._rev ? { _rev: itemMaster._rev } : {}),
-			type: 'item_master',
-			schema_v: itemMaster.schema_v ?? 4,
-			created_at: itemMaster.created_at ?? now(),
-			created_by: itemMaster.created_by ?? 'system',
-			updated_at: now(),
-			...normalizedFields,
-			category: canonicalCategory
-		};
-		if (itemMaster.shelter_code) docToSave.shelter_code = itemMaster.shelter_code;
-		if (itemMaster.override) docToSave.override = itemMaster.override;
-
+		const current = await this.getItemMaster(itemMaster._id, itemMaster.shelter_code);
+		if (!current) throw new Error(`Item master not found: ${itemMaster._id}`);
+		await this.validateItemMasterUnits(itemMaster, current);
 		const repo = this.getWriteRepo(itemMaster.shelter_code);
-		return repo.put(docToSave);
+		return repo.put(touch(itemMaster));
 	}
 
-	createRecipe(input: RecipeInput, ctx: AuthorContext, shelterCode?: string): Promise<Recipe> {
+	private async validateItemMasterUnits(item: ItemMaster, current?: ItemMaster): Promise<void> {
+		const units = await this.listUnitsOfMeasure();
+		if (units.length === 0) {
+			throw new Error('Unit of measure master is unavailable; item master write was rejected');
+		}
+
+		const legacyBaseUnchanged =
+			!!current &&
+			typeof current.base_unit === 'string' &&
+			current.base_unit === item.base_unit &&
+			!isCanonicalUnitCode(item.base_unit) &&
+			isLegacyUnitLabel(item.base_unit);
+		if (!legacyBaseUnchanged && !isCanonicalUnitCode(item.base_unit)) {
+			throw new Error(`Base unit must be a valid lowercase English code: ${item.base_unit}`);
+		}
+		const canonicalCodes = [
+			item.default_inventory_uom,
+			item.default_issue_uom,
+			...(item.conversions ?? []).map((conversion) => conversion.uom_name),
+			...(legacyBaseUnchanged ? [] : [item.base_unit])
+		].filter((code): code is string => !!code && code.trim() !== '');
+
+		assertKnownUnitCodes(canonicalCodes, units, {
+			allowDeactivated: current?.base_unit === item.base_unit ? [item.base_unit] : []
+		});
+	}
+
+	async createRecipe(
+		input: RecipeInput,
+		ctx: AuthorContext,
+		shelterCode?: string
+	): Promise<Recipe> {
 		const repo = this.getWriteRepo(shelterCode);
-		return repo.put(createRecipe(input, ctx, shelterCode));
+		const recipe = createRecipe(input, ctx, shelterCode);
+		await this.validateRecipeUnits(recipe);
+		return repo.put(recipe);
 	}
 
 	async listRecipes(shelterCode?: string | null): Promise<Recipe[]> {
@@ -256,7 +287,7 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		shelterCode?: string | null
 	): Promise<PaginatedResult<Recipe>> {
 		const items = await this.listRecipes(shelterCode);
-		return paginate(items, page, pageSize);
+		return paginateItems(items, page, pageSize);
 	}
 
 	async getRecipe(id: string, shelterCode?: string | null): Promise<Recipe | null> {
@@ -268,9 +299,21 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		return this.repo.get<Recipe>(id);
 	}
 
-	updateRecipe(recipe: Recipe): Promise<Recipe> {
+	async updateRecipe(recipe: Recipe): Promise<Recipe> {
 		const repo = this.getWriteRepo(recipe.shelter_code);
+		await this.validateRecipeUnits(recipe);
 		return repo.put(touch(recipe));
+	}
+
+	private async validateRecipeUnits(recipe: Recipe): Promise<void> {
+		const units = await this.listUnitsOfMeasure();
+		if (units.length === 0) {
+			throw new Error('Unit of measure master is unavailable; recipe write was rejected');
+		}
+		assertKnownUnitCodes(
+			recipe.ingredients.map((ingredient) => ingredient.uom),
+			units
+		);
 	}
 
 	async deleteItemMaster(id: string, shelterCode?: string | null): Promise<boolean> {
@@ -278,6 +321,9 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		if (!item) return false;
 
 		if (item.override) {
+			if (shelterCode && item.shelter_code !== shelterCode) {
+				throw new Error('ไม่อนุญาตให้ลบรายการส่วนกลางจากศูนย์พักพิง');
+			}
 			const repo = this.getWriteRepo(item.shelter_code);
 			await repo.remove(item);
 			return true;
@@ -290,7 +336,11 @@ export class CatalogRemoteRepository implements CatalogRepository {
 			return false;
 		}
 
-		// Shelter scope (custom item created by this shelter)
+		// Shelter scope: only shelter-authored rows may be deleted/deactivated
+		if (!canShelterDeleteCatalogDoc(item, shelterCode)) {
+			throw new Error('ไม่อนุญาตให้ลบรายการส่วนกลางจากศูนย์พักพิง');
+		}
+
 		const shelterDb = `shelter_${shelterCode.toLowerCase()}`;
 		const shelterRepo = createRemoteRepository(shelterDb);
 		const ledgerEntries = await shelterRepo.allByType(
@@ -305,11 +355,10 @@ export class CatalogRemoteRepository implements CatalogRepository {
 			item.deactivated = true;
 			await this.updateItemMaster(item);
 			return false;
-		} else {
-			const repo = this.getWriteRepo(item.shelter_code);
-			await repo.remove(item);
-			return true;
 		}
+		const repo = this.getWriteRepo(item.shelter_code);
+		await repo.remove(item);
+		return true;
 	}
 
 	async inspectCategoryUsage(
@@ -327,13 +376,7 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		if (shelterCode) {
 			const itemMasters = await this.listItemMasters(shelterCode);
 			const localItems = itemMasters
-				.filter(
-					(item) =>
-						item.category &&
-						(item.category === id ||
-							item.category === category._id ||
-							item.category === categoryName)
-				)
+				.filter((item) => itemBelongsToCategory(item, category))
 				.map((item) => item.name);
 
 			return {
@@ -357,12 +400,7 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		// Central scope (System Management)
 		const centralItems = await this.repo.allByType('item_master', isItemMaster);
 		const centralMatching = centralItems
-			.filter(
-				(item) =>
-					!item.shelter_code &&
-					item.category &&
-					(item.category === id || item.category === category._id || item.category === categoryName)
-			)
+			.filter((item) => !item.shelter_code && itemBelongsToCategory(item, category))
 			.map((item) => item.name);
 
 		return {
@@ -383,12 +421,29 @@ export class CatalogRemoteRepository implements CatalogRepository {
 			throw new Error(`ไม่พบข้อมูลหมวดหมู่ ${id}`);
 		}
 
-		if (category.is_protected || isSystemCategoryDocId(id) || isSystemCategoryDocId(category._id)) {
+		if (category.is_protected) {
 			throw new Error('ไม่อนุญาตให้ลบหมวดหมู่ระบบมาตรฐาน');
 		}
 
+		if (shelterCode) {
+			if (category.override && category.shelter_code === shelterCode) {
+				const repo = this.getWriteRepo(category.shelter_code);
+				await repo.remove(category);
+				return {
+					wasDeleted: true,
+					actionTaken: 'reset',
+					categoryName: category.name
+				};
+			}
+			if (!canShelterDeleteCatalogDoc(category, shelterCode)) {
+				throw new Error('ไม่อนุญาตให้ลบหมวดหมู่ส่วนกลางจากศูนย์พักพิง');
+			}
+		}
+
 		const usage = await this.inspectCategoryUsage(id, shelterCode);
-		const decision = evaluateCategoryDeletion(usage, shelterCode ? 'shelter' : 'central');
+		const decision = evaluateCategoryDeletion(usage, shelterCode ? 'shelter' : 'central', {
+			isProtected: !!category.is_protected
+		});
 
 		if (decision.action === 'reset') {
 			const repo = this.getWriteRepo(category.shelter_code);
@@ -425,6 +480,9 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		if (!recipe) return false;
 
 		if (recipe.override) {
+			if (shelterCode && recipe.shelter_code !== shelterCode) {
+				throw new Error('ไม่อนุญาตให้ลบสูตรอาหารส่วนกลางจากศูนย์พักพิง');
+			}
 			const repo = this.getWriteRepo(recipe.shelter_code);
 			await repo.remove(recipe);
 			return true;
@@ -437,7 +495,10 @@ export class CatalogRemoteRepository implements CatalogRepository {
 			return false;
 		}
 
-		// Shelter scope (custom recipe created by this shelter)
+		if (!canShelterDeleteCatalogDoc(recipe, shelterCode)) {
+			throw new Error('ไม่อนุญาตให้ลบสูตรอาหารส่วนกลางจากศูนย์พักพิง');
+		}
+
 		const shelterDb = `shelter_${shelterCode.toLowerCase()}`;
 		const shelterRepo = createRemoteRepository(shelterDb);
 		const mealPlans = await shelterRepo.allByType(
@@ -452,11 +513,152 @@ export class CatalogRemoteRepository implements CatalogRepository {
 			recipe.deactivated = true;
 			await this.updateRecipe(recipe);
 			return false;
-		} else {
-			const repo = this.getWriteRepo(recipe.shelter_code);
-			await repo.remove(recipe);
-			return true;
 		}
+		const repo = this.getWriteRepo(recipe.shelter_code);
+		await repo.remove(recipe);
+		return true;
+	}
+
+	async createUnitOfMeasure(input: UnitOfMeasureInput, ctx: AuthorContext): Promise<UnitOfMeasure> {
+		const doc = createUnitOfMeasure(input, ctx);
+		if (await this.getUnitOfMeasure(doc.code)) {
+			throw new Error(`รหัสหน่วยนับนี้มีอยู่ในระบบแล้ว: ${doc.code}`);
+		}
+		return this.repo.put(doc);
+	}
+
+	async listUnitsOfMeasure(): Promise<UnitOfMeasure[]> {
+		const items = await this.repo.allByType('unit_of_measure', isUnitOfMeasure);
+		return items.sort((a, b) => {
+			if (typeof a.sort_order === 'number' && typeof b.sort_order === 'number') {
+				return a.sort_order - b.sort_order;
+			}
+			if (typeof a.sort_order === 'number') return -1;
+			if (typeof b.sort_order === 'number') return 1;
+			return a.label_th.localeCompare(b.label_th, 'th');
+		});
+	}
+
+	async listUnitsOfMeasurePaginated(
+		page: number,
+		pageSize: number
+	): Promise<PaginatedResult<UnitOfMeasure>> {
+		const items = await this.listUnitsOfMeasure();
+		return paginateItems(items, page, pageSize);
+	}
+
+	async getUnitOfMeasure(codeOrId: string): Promise<UnitOfMeasure | null> {
+		const id = codeOrId.startsWith('unit_of_measure:') ? codeOrId : `unit_of_measure:${codeOrId}`;
+		return this.repo.get<UnitOfMeasure>(id);
+	}
+
+	async updateUnitOfMeasure(uom: UnitOfMeasure): Promise<UnitOfMeasure> {
+		const existing = await this.getUnitOfMeasure(uom._id);
+		if (!existing) {
+			throw new Error(`ไม่พบข้อมูลหน่วยนับ: ${uom._id}`);
+		}
+		if (existing.code !== uom.code) {
+			throw new Error('ไม่สามารถเปลี่ยนรหัสหน่วยนับได้');
+		}
+		if (existing.is_protected) {
+			if (!uom.is_protected) {
+				throw new Error('ไม่สามารถยกเลิกการปกป้องหน่วยนับมาตรฐานของระบบได้');
+			}
+			if (existing.dimension !== uom.dimension) {
+				throw new Error('ไม่สามารถแก้ไขรหัสหรือมิติการวัดของหน่วยนับมาตรฐานได้');
+			}
+		}
+
+		// Merge only editable fields onto the latest persisted document so a stale
+		// form cannot overwrite newer labels or send an obsolete _rev to CouchDB.
+		const updated: UnitOfMeasure = {
+			...existing,
+			label_th: uom.label_th,
+			label_th_short: uom.label_th_short,
+			label_en: uom.label_en,
+			sort_order: uom.sort_order,
+			deactivated: uom.deactivated
+		};
+		return this.repo.put(touch(updated));
+	}
+
+	async deleteUnitOfMeasure(id: string): Promise<boolean> {
+		const uom = await this.getUnitOfMeasure(id);
+		if (!uom) return false;
+		if (uom.is_protected) {
+			throw new Error('ไม่สามารถลบหน่วยนับมาตรฐานของระบบได้');
+		}
+
+		const databases = new Set<string>([CATALOG_DB]);
+		try {
+			const registry = createRemoteRepository('registry');
+			const shelters = await registry.allByType(
+				'shelter',
+				(doc): doc is AnyDoc =>
+					!!doc &&
+					typeof doc === 'object' &&
+					(doc as { type?: unknown }).type === 'shelter' &&
+					typeof (doc as { code?: unknown }).code === 'string'
+			);
+			for (const shelter of shelters) {
+				databases.add(`shelter_${String(shelter.code).toLowerCase()}`);
+			}
+		} catch (err) {
+			// If registry is unreachable or permission denied, continue with central catalog check
+			if (!(
+				err instanceof NotFoundError ||
+				err instanceof CouchAuthError ||
+				err instanceof AuthError ||
+				(typeof err === 'object' &&
+					err !== null &&
+					((err as { status?: number }).status === 404 ||
+						(err as { status?: number }).status === 403))
+			)) {
+				throw err;
+			}
+		}
+
+		const referenceTypes = [
+			'item_master',
+			'recipe',
+			'donation_campaign',
+			'stock_ledger',
+			'purchase'
+		];
+		for (const database of databases) {
+			const repository = database === CATALOG_DB ? this.repo : createRemoteRepository(database);
+			for (const type of referenceTypes) {
+				let docs: AnyDoc[];
+				try {
+					docs = await repository.allByType(type, isDocType(type));
+				} catch (err) {
+					// If the database does not exist (404) or is forbidden to this session (403), skip it
+					if (
+						err instanceof NotFoundError ||
+						err instanceof CouchAuthError ||
+						err instanceof AuthError ||
+						(typeof err === 'object' &&
+							err !== null &&
+							((err as { status?: number }).status === 404 ||
+								(err as { status?: number }).status === 403 ||
+								(err as { name?: string }).name === 'NotFoundError' ||
+								(err as { name?: string }).name === 'CouchAuthError' ||
+								(err as { name?: string }).name === 'AuthError'))
+					) {
+						break;
+					}
+					throw err;
+				}
+				const reference = docs.find((doc) => unitReferencesDoc(doc, uom.code));
+				if (reference) {
+					throw new Error(
+						`ไม่สามารถลบหน่วยนับ "${uom.code}" ได้ เนื่องจากมีรายการสินค้าอ้างอิงอยู่ (${reference._id})`
+					);
+				}
+			}
+		}
+		await this.repo.remove(uom);
+		return true;
 	}
 }
 

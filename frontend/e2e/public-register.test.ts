@@ -29,15 +29,8 @@ const SHELTERS = {
 
 const GROUPS = {
 	groups: [
-		{ code: 'vg_elderly', label: 'ผู้สูงอายุ' },
-		{ code: 'vg_bedridden', label: 'ผู้ป่วยติดเตียง' }
-	]
-};
-
-const PET_TYPES = {
-	petTypes: [
-		{ code: 'dog', label: 'สุนัข', is_default: true },
-		{ code: 'cat', label: 'แมว', is_default: false }
+		{ code: 'vg_elderly', label_th: 'ผู้สูงอายุ', label_en: 'Elderly' },
+		{ code: 'vg_bedridden', label_th: 'ผู้ป่วยติดเตียง', label_en: 'Bedridden' }
 	]
 };
 
@@ -71,9 +64,6 @@ async function mockReferenceData(page: Page) {
 	);
 	await page.route('**/api/public/v1/config/vulnerable-groups', (route) =>
 		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(GROUPS) })
-	);
-	await page.route('**/api/public/v1/config/pet-types**', (route) =>
-		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(PET_TYPES) })
 	);
 	await page.route('**/api/public/v1/config/shelter-policy**', (route) =>
 		route.fulfill({
@@ -190,7 +180,7 @@ test.describe('Public shelter booking (T-71 / CR-070)', () => {
 
 		await openBooking(page);
 
-		await page.getByRole('button', { name: /เลือกศูนย์พักพิง/ }).click();
+		await page.getByRole('button', { name: /เลือกศูนย์พักพิง|ไม่ระบุศูนย์พักพิง/ }).click();
 		// Unassigned + one open shelter (closed shelters omitted).
 		await expect(page.getByRole('option')).toHaveCount(2);
 		await page.getByRole('option', { name: /เทศบาลนครหาดใหญ่/ }).click();
@@ -445,7 +435,7 @@ test.describe('Public unassigned registration (#255 / CR-113)', () => {
 		await page.waitForURL('**/pre-register');
 		await expect(page.getByRole('heading', { name: 'ศูนย์พักพิงที่ต้องการเข้าพัก' })).toBeVisible();
 
-		await page.getByRole('button', { name: /เลือกศูนย์พักพิง/ }).click();
+		await page.getByRole('button', { name: /เลือกศูนย์พักพิง|ไม่ระบุศูนย์พักพิง/ }).click();
 		await page.getByRole('option', { name: /ไม่ระบุศูนย์พักพิง/ }).click();
 
 		await fillAddress(page);

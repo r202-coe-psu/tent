@@ -40,7 +40,9 @@ export interface DeleteCategoryResult {
  * Pure evaluation function for category deletion.
  *
  * Rules:
+ * 0. Protected system categories (`is_protected`) may never be deleted at any scope.
  * 1. Shelter scope:
+ *    - Central-origin docs (no matching shelter_code, or override handled as reset) cannot be deleted
  *    - If document is an override (override: true) -> 'reset' (restore central default)
  *    - If local custom document ->
  *        - has item masters using it in this shelter -> 'deactivate'
@@ -51,8 +53,18 @@ export interface DeleteCategoryResult {
  */
 export function evaluateCategoryDeletion(
 	usage: CategoryUsageDetails,
-	scope: 'central' | 'shelter'
+	scope: 'central' | 'shelter',
+	options?: { isProtected?: boolean }
 ): CatalogDeletionDecision {
+	if (options?.isProtected) {
+		return {
+			action: 'deactivate',
+			reason: 'ไม่อนุญาตให้ลบหมวดหมู่ระบบมาตรฐาน',
+			canHardDelete: false,
+			usage
+		};
+	}
+
 	if (scope === 'shelter') {
 		if (usage.isOverride) {
 			return {
@@ -68,7 +80,7 @@ export function evaluateCategoryDeletion(
 			return {
 				action: 'deactivate',
 				reason:
-					'หมวดหมู่นี้มีรายการสินค้าในศูนย์พักพิงอ้างอิงอยู่ ระบบจะเปลี่ยนสถานะเป็นปิดการใช้งาน (Deactivated) แทนการลบถาวร',
+					'หมวดหมู่นี้มีรายการสินค้าในศูนย์พักพิงอ้างอิงอยู่ ระบบจะเปลี่ยนสถานะเป็นปิดการใช้งาน แทนการลบถาวร',
 				canHardDelete: false,
 				usage
 			};
@@ -102,8 +114,8 @@ export function evaluateCategoryDeletion(
 
 	const reason =
 		reasons.length > 0
-			? `ไม่สามารถลบถาวรได้เนื่องจาก: ${reasons.join(', ')} ระบบจะเปลี่ยนสถานะเป็นปิดการใช้งาน (Deactivated) แทน`
-			: 'หมวดหมู่มาตรฐานส่วนกลางจะถูกเปลี่ยนสถานะเป็นปิดการใช้งาน (Deactivated) เพื่อป้องกันผลกระทบต่อข้อมูลอ้างอิงข้ามศูนย์พักพิง';
+			? `ไม่สามารถลบถาวรได้เนื่องจาก: ${reasons.join(', ')} ระบบจะเปลี่ยนสถานะเป็นปิดการใช้งาน แทน`
+			: 'หมวดหมู่มาตรฐานส่วนกลางจะถูกเปลี่ยนสถานะเป็นปิดการใช้งาน เพื่อป้องกันผลกระทบต่อข้อมูลอ้างอิงข้ามศูนย์พักพิง';
 
 	return {
 		action: 'deactivate',

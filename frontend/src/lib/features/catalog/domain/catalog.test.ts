@@ -3,20 +3,18 @@ import {
 	createItemMaster,
 	isItemMaster,
 	itemMasterInputSchema,
+	itemMasterUpdateInputSchema,
 	createItemCategory,
 	isItemCategory,
 	itemCategoryInputSchema,
 	createRecipe,
 	isRecipe,
 	recipeInputSchema,
-	SYSTEM_CATEGORY_KEYS,
-	SYSTEM_CATEGORY_DEFINITIONS,
-	systemCategoryDocId,
-	isSystemCategoryDocId,
-	categoryReferenceMatches,
-	isFuelEnergyCategory,
-	type ItemCategory,
-	type TypeClass
+	mergeCatalogGenerations,
+	resolveCategoryId,
+	itemBelongsToCategory,
+	catalogOrigin,
+	canShelterDeleteCatalogDoc
 } from './catalog';
 import type { AuthorContext } from '$lib/db/model';
 
@@ -71,7 +69,42 @@ describe('catalog domain', () => {
 		expect(doc._id).toMatch(/^item_category:[0-9A-HJKMNP-TV-Z]{26}$/);
 		expect(doc.type).toBe('item_category');
 		expect(doc.name).toBe('เครื่องมือแพทย์');
+		expect(doc.is_protected).toBe(false);
 		expect(isItemCategory(doc)).toBe(true);
+	});
+
+	it('resolves category refs by id, system name, and legacy Thai name', () => {
+		const cats = [
+			{
+				_id: 'item_category:food',
+				name: 'อาหารและวัตถุดิบ (Food Ingredients)',
+				system_key: 'FOOD' as const
+			}
+		];
+		expect(resolveCategoryId('item_category:food', cats)).toBe('item_category:food');
+		expect(resolveCategoryId('อาหารและวัตถุดิบ', cats)).toBe('item_category:food');
+		expect(resolveCategoryId('unknown', cats)).toBeUndefined();
+		expect(itemBelongsToCategory({ category: 'อาหารและวัตถุดิบ' }, cats[0])).toBe(true);
+		expect(catalogOrigin({ shelter_code: 'SH001' }, 'SH001')).toBe('local');
+		expect(catalogOrigin({ shelter_code: 'SH001', override: true }, 'SH001')).toBe('override');
+		expect(catalogOrigin({}, 'SH001')).toBe('central');
+		expect(canShelterDeleteCatalogDoc({ shelter_code: 'SH001' }, 'SH001')).toBe(true);
+		expect(canShelterDeleteCatalogDoc({}, 'SH001')).toBe(false);
+	});
+
+	it('rejects duplicate conversion uom codes on one item', () => {
+		expect(() =>
+			itemMasterInputSchema.parse({
+				name: 'ข้าวสาร',
+				base_unit: 'kg',
+				type_class: 'CONSUMABLE',
+				distribution_type: 'recurring',
+				conversions: [
+					{ uom_name: 'bag', multiplier: '5' },
+					{ uom_name: 'bag', multiplier: '50' }
+				]
+			})
+		).toThrow();
 	});
 
 	it('should validate valid recipe input', () => {
@@ -79,7 +112,7 @@ describe('catalog domain', () => {
 			label: 'ข้าวผัดไข่มาตรฐาน',
 			ingredients: [
 				{ item_master_id: 'item_master_rice_123', quantity: 10, uom: 'kg' },
-				{ item_master_id: 'item_master_egg_123', quantity: 100, uom: 'ชิ้น' }
+				{ item_master_id: 'item_master_egg_123', quantity: 100, uom: 'piece' }
 			],
 			standard_portions: 100,
 			standard_duration_hours: 1.5
@@ -93,7 +126,7 @@ describe('catalog domain', () => {
 	it('should create recipe doc with recipe: prefix', () => {
 		const input = {
 			label: 'แกงจืดเต้าหู้หมูสับ',
-			ingredients: [{ item_master_id: 'item_master_tofu_123', quantity: '50', uom: 'หลอด' }],
+			ingredients: [{ item_master_id: 'item_master_tofu_123', quantity: '50', uom: 'tube' }],
 			standard_portions: '50',
 			standard_duration_hours: '0.5'
 		};
@@ -222,7 +255,7 @@ describe('catalog domain', () => {
 		// Consumable
 		const consumableInput = {
 			name: 'นมสด',
-			base_unit: 'ขวด',
+			base_unit: 'bottle',
 			distribution_type: 'recurring' as const,
 			type_class: 'CONSUMABLE' as const,
 			shelf_life_days: 7,
@@ -239,7 +272,7 @@ describe('catalog domain', () => {
 		// Durable
 		const durableInput = {
 			name: 'เต็นท์พักแรม',
-			base_unit: 'หลัง',
+			base_unit: 'unit',
 			distribution_type: 'one_time' as const,
 			type_class: 'DURABLE' as const,
 			qty_per_person: 0.5,
@@ -265,10 +298,10 @@ describe('catalog domain', () => {
 
 		const equipmentDoc = createItemMaster(equipmentInput, ctx);
 		expect(equipmentDoc.asset_status).toBe('READY');
-		expect(equipmentDoc.base_unit).toBe('ชิ้น');
+		expect(equipmentDoc.base_unit).toBe('piece');
 	});
 
-	it('should enforce required fields conditionally', () => {
+	it('should enforce required fields conditionally and reject non-code base_unit', () => {
 		// For Consumable/Durable, base_unit is required
 		expect(() =>
 			itemMasterInputSchema.parse({
@@ -278,11 +311,30 @@ describe('catalog domain', () => {
 			})
 		).toThrow();
 
+		// base_unit must be lowercase English code (reject Thai labels)
+		expect(() =>
+			itemMasterInputSchema.parse({
+				name: 'ข้าวสาร',
+				base_unit: 'กิโลกรัม',
+				distribution_type: 'recurring' as const,
+				type_class: 'CONSUMABLE' as const
+			})
+		).toThrow(/Base unit must be a valid lowercase English code/);
+
+		expect(() =>
+			itemMasterInputSchema.parse({
+				name: 'ข้าวสาร',
+				base_unit: 'ชิ้น',
+				distribution_type: 'recurring' as const,
+				type_class: 'CONSUMABLE' as const
+			})
+		).toThrow(/Base unit must be a valid lowercase English code/);
+
 		// For Consumable/Durable, distribution_type is required
 		expect(() =>
 			itemMasterInputSchema.parse({
 				name: 'นมสด',
-				base_unit: 'ขวด',
+				base_unit: 'bottle',
 				type_class: 'CONSUMABLE' as const
 			})
 		).toThrow();
@@ -296,331 +348,77 @@ describe('catalog domain', () => {
 		).toThrow();
 	});
 
-	describe('CR-119: System Item Categories', () => {
-		it('should have exactly 10 system category definitions with valid keys, IDs, and default classes', () => {
-			expect(SYSTEM_CATEGORY_DEFINITIONS).toHaveLength(10);
-			expect(SYSTEM_CATEGORY_KEYS).toHaveLength(10);
-
-			const keys = SYSTEM_CATEGORY_DEFINITIONS.map((d) => d.key);
-			const ids = SYSTEM_CATEGORY_DEFINITIONS.map((d) => d.id);
-			expect(new Set(keys).size).toBe(10);
-			expect(new Set(ids).size).toBe(10);
-
-			for (const def of SYSTEM_CATEGORY_DEFINITIONS) {
-				expect(SYSTEM_CATEGORY_KEYS).toContain(def.key);
-				expect(def.id).toBe(`item_category:${def.key.toLowerCase()}`);
-				expect(systemCategoryDocId(def.key)).toBe(def.id);
-				expect(isSystemCategoryDocId(def.id)).toBe(true);
-				expect(['CONSUMABLE', 'DURABLE', 'EQUIPMENT']).toContain(def.default_class);
-				expect(def.name.trim().length).toBeGreaterThan(0);
-				expect(def.description.trim().length).toBeGreaterThan(0);
-			}
-
-			expect(isSystemCategoryDocId('item_category:custom_123')).toBe(false);
+	it('allows known legacy base_unit labels only for updates', () => {
+		const legacy = itemMasterUpdateInputSchema.parse({
+			name: 'ข้าวสารเดิม',
+			base_unit: 'กิโลกรัม',
+			distribution_type: 'recurring' as const,
+			type_class: 'CONSUMABLE' as const
 		});
+		expect(legacy.base_unit).toBe('กิโลกรัม');
 
-		it('should validate schema v2 item category input and custom creation invariants', () => {
-			const validCustom = itemCategoryInputSchema.parse({
-				name: 'เต็นท์ขนาดพิเศษ',
-				default_class: 'DURABLE',
-				description: 'เต็นท์พักแรมขนาด 6 คน'
-			});
-			expect(validCustom.default_class).toBe('DURABLE');
-			expect(validCustom.description).toBe('เต็นท์พักแรมขนาด 6 คน');
+		expect(() =>
+			itemMasterUpdateInputSchema.parse({
+				name: 'ข้าวสารใหม่',
+				base_unit: 'หน่วยเดิมที่ไม่รู้จัก',
+				distribution_type: 'recurring' as const,
+				type_class: 'CONSUMABLE' as const
+			})
+		).toThrow(/Base unit must be a valid lowercase English code/);
+	});
+});
 
-			const doc = createItemCategory(validCustom, ctx);
-			expect(doc.schema_v).toBe(2);
-			expect(doc.is_protected).toBe(false);
-			expect(doc.default_class).toBe('DURABLE');
-			expect(doc.description).toBe('เต็นท์พักแรมขนาด 6 คน');
-		});
+// `item_master` replaces `supply_item` (schema.md §4.2) but the migration has not
+// run, so the seed carries both generations of the same goods. Item pickers listed
+// the two sources back to back and showed "ข้าวสาร (kg)" twice — with no way to see
+// which id was being bound.
+describe('mergeCatalogGenerations', () => {
+	const supply = [
+		{ _id: 'item:rice', name: 'ข้าวสาร', unit: 'kg', category: 'food', perishable: false },
+		{ _id: 'item:water', name: 'น้ำดื่ม', unit: 'bottle', category: 'water', perishable: false }
+	];
+	const masters = [
+		{ _id: 'item_master:rice', name: 'ข้าวสาร', base_unit: 'kg', category: 'food' },
+		{ _id: 'item_master:canned-fish', name: 'ปลากระป๋อง', base_unit: 'can', category: 'food' }
+	];
 
-		it('should reject invalid default_class in itemCategoryInputSchema', () => {
-			expect(() =>
-				itemCategoryInputSchema.parse({
-					name: 'หมวดหมู่ทดสอบ',
-					default_class: 'INVALID_CLASS' as unknown as TypeClass
-				})
-			).toThrow();
-		});
-
-		it('should match category references via categoryReferenceMatches helper', () => {
-			const foodCat: ItemCategory = {
-				_id: 'item_category:food',
-				type: 'item_category',
-				schema_v: 2,
-				name: 'อาหารและวัตถุดิบ (Food Ingredients)',
-				system_key: 'FOOD',
-				default_class: 'CONSUMABLE',
-				is_protected: true,
-				created_at: '2026-09-15T00:00:00.000Z',
-				updated_at: '2026-09-15T00:00:00.000Z',
-				created_by: 'system'
-			};
-
-			// Direct ID match
-			expect(categoryReferenceMatches('item_category:food', foodCat)).toBe(true);
-			// Direct name match
-			expect(categoryReferenceMatches('อาหารและวัตถุดิบ (Food Ingredients)', foodCat)).toBe(true);
-			// System key match
-			expect(categoryReferenceMatches('FOOD', foodCat)).toBe(true);
-			expect(categoryReferenceMatches('food', foodCat)).toBe(true);
-			// Suffix slug match
-			expect(categoryReferenceMatches('food', foodCat)).toBe(true);
-
-			// Negative cases
-			expect(categoryReferenceMatches('WATER', foodCat)).toBe(false);
-			expect(categoryReferenceMatches('item_category:water', foodCat)).toBe(false);
-			expect(categoryReferenceMatches('', foodCat)).toBe(false);
-		});
+	it('lists each item once', () => {
+		const merged = mergeCatalogGenerations(supply, masters);
+		expect(merged.map((m) => m.name)).toEqual(['ข้าวสาร', 'น้ำดื่ม', 'ปลากระป๋อง']);
 	});
 
-	describe('CR-120: Item Master for FUEL_ENERGY (LPG)', () => {
-		it('should recognize fuel energy category references via isFuelEnergyCategory', () => {
-			expect(isFuelEnergyCategory('item_category:fuel_energy')).toBe(true);
-			expect(isFuelEnergyCategory('ITEM_CATEGORY:FUEL_ENERGY')).toBe(true);
-			expect(isFuelEnergyCategory('FUEL_ENERGY')).toBe(true);
-			expect(isFuelEnergyCategory('fuel_energy')).toBe(true);
-			expect(isFuelEnergyCategory('เชื้อเพลิงและพลังงาน (Fuel & Energy)')).toBe(true);
+	// Every stock_ledger row and campaign need in the data is an `item:` id; binding a
+	// new campaign to `item_master:rice` would open a second donor card for rice.
+	it('keeps the legacy id when the same item exists in both generations', () => {
+		const merged = mergeCatalogGenerations(supply, masters);
+		expect(merged.find((m) => m.name === 'ข้าวสาร')?._id).toBe('item:rice');
+	});
 
-			// Non-fuel categories
-			expect(isFuelEnergyCategory('item_category:food')).toBe(false);
-			expect(isFuelEnergyCategory('FOOD')).toBe(false);
-			expect(isFuelEnergyCategory('WATER')).toBe(false);
-			expect(isFuelEnergyCategory('')).toBe(false);
-			expect(isFuelEnergyCategory(undefined)).toBe(false);
+	it('keeps an item_master that has no legacy twin', () => {
+		const merged = mergeCatalogGenerations(supply, masters);
+		expect(merged.find((m) => m.name === 'ปลากระป๋อง')?._id).toBe('item_master:canned-fish');
+	});
 
-			// Custom categories list
-			const customCategories: ItemCategory[] = [
-				{
-					_id: 'item_category:fuel_energy',
-					type: 'item_category',
-					schema_v: 2,
-					name: 'เชื้อเพลิงและพลังงาน (Fuel & Energy)',
-					system_key: 'FUEL_ENERGY',
-					default_class: 'CONSUMABLE',
-					is_protected: true,
-					created_at: '2026-09-15T00:00:00.000Z',
-					updated_at: '2026-09-15T00:00:00.000Z',
-					created_by: 'system'
-				}
-			];
-			expect(isFuelEnergyCategory('fuel_energy', customCategories)).toBe(true);
-		});
+	it('resolves the item_master unit through base_unit', () => {
+		const merged = mergeCatalogGenerations([], masters);
+		expect(merged.find((m) => m.name === 'ปลากระป๋อง')?.unit).toBe('can');
+	});
 
-		it('should parse valid LPG payload and persist as qty strings with default time_multiplier 1', () => {
-			const input = {
-				name: 'แก๊สหุงต้ม LPG 15 กิโลกรัม',
-				category: 'item_category:fuel_energy',
-				capacity_kg: '15',
-				burn_rate_kg_per_hour: '0.5',
-				type_class: 'CONSUMABLE' as const
-			};
+	it('drops deactivated item masters', () => {
+		const merged = mergeCatalogGenerations(
+			[],
+			[{ _id: 'item_master:old', name: 'เลิกใช้', base_unit: 'ชิ้น', deactivated: true }]
+		);
+		expect(merged).toEqual([]);
+	});
 
-			const parsed = itemMasterInputSchema.parse(input);
-			expect(parsed.capacity_kg).toBe('15');
-			expect(parsed.burn_rate_kg_per_hour).toBe('0.5');
-			expect(parsed.time_multiplier).toBeUndefined();
-
-			const doc = createItemMaster(input, ctx);
-			expect(doc.schema_v).toBe(4);
-			expect(doc.base_unit).toBe('ถัง');
-			expect(doc.fuel_type).toBe('LPG');
-			expect(doc.capacity_kg).toBe('15');
-			expect(doc.burn_rate_kg_per_hour).toBe('0.5');
-			expect(doc.time_multiplier).toBe('1');
-			expect(doc.type_class).toBe('CONSUMABLE');
-			expect(doc.distribution_type).toBe('recurring');
-		});
-
-		it('should accept custom time_multiplier and numbers coerced to qty strings', () => {
-			const input = {
-				name: 'แก๊สหุงต้ม LPG 48 กก.',
-				category: 'item_category:fuel_energy',
-				capacity_kg: 48,
-				burn_rate_kg_per_hour: 0.75,
-				time_multiplier: 1.25,
-				type_class: 'CONSUMABLE' as const
-			};
-
-			const doc = createItemMaster(input, ctx);
-			expect(doc.capacity_kg).toBe('48');
-			expect(doc.burn_rate_kg_per_hour).toBe('0.75');
-			expect(doc.time_multiplier).toBe('1.25');
-		});
-
-		it('should reject missing capacity_kg or burn_rate_kg_per_hour for FUEL_ENERGY with correct path', () => {
-			// Missing capacity_kg
-			expect(() =>
-				itemMasterInputSchema.parse({
-					name: 'แก๊ส',
-					category: 'item_category:fuel_energy',
-					burn_rate_kg_per_hour: '0.5',
-					type_class: 'CONSUMABLE' as const
-				})
-			).toThrowError(/capacity_kg/i);
-
-			// Missing burn_rate_kg_per_hour
-			expect(() =>
-				itemMasterInputSchema.parse({
-					name: 'แก๊ส',
-					category: 'item_category:fuel_energy',
-					capacity_kg: '15',
-					type_class: 'CONSUMABLE' as const
-				})
-			).toThrowError(/burn_rate/i);
-		});
-
-		it('should reject zero, negative, or invalid engineering values', () => {
-			// Zero capacity
-			expect(() =>
-				itemMasterInputSchema.parse({
-					name: 'แก๊ส',
-					category: 'item_category:fuel_energy',
-					capacity_kg: '0',
-					burn_rate_kg_per_hour: '0.5',
-					type_class: 'CONSUMABLE' as const
-				})
-			).toThrow();
-
-			// Negative capacity
-			expect(() =>
-				itemMasterInputSchema.parse({
-					name: 'แก๊ส',
-					category: 'item_category:fuel_energy',
-					capacity_kg: '-15',
-					burn_rate_kg_per_hour: '0.5',
-					type_class: 'CONSUMABLE' as const
-				})
-			).toThrow();
-
-			// Zero burn rate
-			expect(() =>
-				itemMasterInputSchema.parse({
-					name: 'แก๊ส',
-					category: 'item_category:fuel_energy',
-					capacity_kg: '15',
-					burn_rate_kg_per_hour: '0',
-					type_class: 'CONSUMABLE' as const
-				})
-			).toThrow();
-
-			// Negative time_multiplier
-			expect(() =>
-				itemMasterInputSchema.parse({
-					name: 'แก๊ส',
-					category: 'item_category:fuel_energy',
-					capacity_kg: '15',
-					burn_rate_kg_per_hour: '0.5',
-					time_multiplier: '-1',
-					type_class: 'CONSUMABLE' as const
-				})
-			).toThrow();
-		});
-
-		it('should reject type_class other than CONSUMABLE for FUEL_ENERGY', () => {
-			expect(() =>
-				itemMasterInputSchema.parse({
-					name: 'ถังแก๊ส',
-					category: 'item_category:fuel_energy',
-					capacity_kg: '15',
-					burn_rate_kg_per_hour: '0.5',
-					type_class: 'DURABLE' as const
-				})
-			).toThrowError(/CONSUMABLE/);
-
-			expect(() =>
-				itemMasterInputSchema.parse({
-					name: 'เตาแก๊ส',
-					category: 'item_category:fuel_energy',
-					capacity_kg: '15',
-					burn_rate_kg_per_hour: '0.5',
-					type_class: 'EQUIPMENT' as const,
-					asset_status: 'READY' as const
-				})
-			).toThrowError(/CONSUMABLE/);
-		});
-
-		it('should override client base_unit and fuel_type to domain contract constants', () => {
-			const input = {
-				name: 'แก๊ส LPG 15kg',
-				category: 'item_category:fuel_energy',
-				capacity_kg: '15',
-				burn_rate_kg_per_hour: '0.5',
-				base_unit: 'กล่อง', // Client attempts wrong unit
-				type_class: 'CONSUMABLE' as const
-			};
-
-			const doc = createItemMaster(input, ctx);
-			expect(doc.base_unit).toBe('ถัง');
-			expect(doc.fuel_type).toBe('LPG');
-		});
-
-		it('should omit food, dietary, and equipment fields from LPG document', () => {
-			const input = {
-				name: 'แก๊ส LPG 15kg',
-				category: 'item_category:fuel_energy',
-				capacity_kg: '15',
-				burn_rate_kg_per_hour: '0.5',
-				type_class: 'CONSUMABLE' as const,
-				// Stale or irrelevant fields
-				shelf_life_days: 365,
-				storage_type: 'DRY' as const,
-				allergens: 'none',
-				target_gender: 'ALL' as const,
-				age_group: 'ALL' as const,
-				dietary: ['HALAL' as const],
-				qty_per_person: 1,
-				returnable: true,
-				asset_status: 'READY' as const
-			};
-
-			const doc = createItemMaster(input, ctx);
-			expect(doc.fuel_type).toBe('LPG');
-			expect(doc.capacity_kg).toBe('15');
-			expect(doc.burn_rate_kg_per_hour).toBe('0.5');
-			expect(doc.time_multiplier).toBe('1');
-
-			// Assert that food and durable/equipment fields are omitted
-			expect(doc.shelf_life_days).toBeUndefined();
-			expect(doc.storage_type).toBeUndefined();
-			expect(doc.allergens).toBeUndefined();
-			expect(doc.target_gender).toBeUndefined();
-			expect(doc.age_group).toBeUndefined();
-			expect(doc.dietary).toBeUndefined();
-			expect(doc.qty_per_person).toBeUndefined();
-			expect(doc.returnable).toBeUndefined();
-			expect(doc.asset_status).toBeUndefined();
-		});
-
-		it('should omit LPG fields from non-fuel Item Master and preserve food/durable fields', () => {
-			const foodInput = {
-				name: 'ข้าวหอมมะลิ',
-				category: 'item_category:food',
-				base_unit: 'kg',
-				type_class: 'CONSUMABLE' as const,
-				distribution_type: 'recurring' as const,
-				shelf_life_days: 180,
-				storage_type: 'DRY' as const,
-				allergens: 'ไม่มี',
-				dietary: ['HALAL' as const],
-				// Attempt to inject LPG fields into food
-				fuel_type: 'LPG' as const,
-				capacity_kg: '15',
-				burn_rate_kg_per_hour: '0.5'
-			};
-
-			const doc = createItemMaster(foodInput, ctx);
-			expect(doc.fuel_type).toBeUndefined();
-			expect(doc.capacity_kg).toBeUndefined();
-			expect(doc.burn_rate_kg_per_hour).toBeUndefined();
-			expect(doc.time_multiplier).toBeUndefined();
-
-			expect(doc.name).toBe('ข้าวหอมมะลิ');
-			expect(doc.shelf_life_days).toBe(180);
-			expect(doc.storage_type).toBe('DRY');
-			expect(doc.allergens).toBe('ไม่มี');
-			expect(doc.dietary).toEqual(['HALAL']);
-		});
+	// Names arrive from two different seeds; a stray space must not defeat the match.
+	it('matches names ignoring case and surrounding space', () => {
+		const merged = mergeCatalogGenerations(
+			[{ _id: 'item:soap', name: ' สบู่ก้อน ', unit: 'bar', category: 'hygiene' }],
+			[{ _id: 'item_master:soap', name: 'สบู่ก้อน', base_unit: 'bar' }]
+		);
+		expect(merged).toHaveLength(1);
+		expect(merged[0]._id).toBe('item:soap');
 	});
 });

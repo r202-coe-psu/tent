@@ -28,6 +28,7 @@
 	} from '../domain/schema';
 	import type { UserSummary } from '../data/users.api';
 	import { useShelters } from '$lib/features/shelters';
+	import { generateTemporaryPassphrase } from '$lib/auth/passphrase-generator';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import {
@@ -41,7 +42,8 @@
 		FileText,
 		Plus,
 		Trash2,
-		Info
+		Info,
+		RefreshCw
 	} from '@lucide/svelte';
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import Building2 from '@lucide/svelte/icons/building-2';
@@ -61,7 +63,7 @@
 		allowSystemAdminRole = false,
 		lockedShelterCode = null,
 		pending = false,
-		layout = 'dialog'
+		layout = 'page'
 	}: {
 		/** Omit to create a user; pass one to edit it (username becomes read-only). */
 		user?: UserSummary;
@@ -75,7 +77,7 @@
 		/** When set, this code is always shelter_id — hide the picker even for SA. */
 		lockedShelterCode?: string | null;
 		pending?: boolean;
-		/** Dialog keeps an inner scroll; page lets the document scroll. */
+		/** Page lets the document scroll (default). Dialog keeps an inner scroll if reused. */
 		layout?: 'dialog' | 'page';
 	} = $props();
 
@@ -127,7 +129,7 @@
 						personnel_type: (editing.personnel_type ?? 'staff') as PersonnelType,
 						organization: editing.organization ?? '',
 						position: editing.position ?? '',
-						phone: editing.phone ?? editing.name,
+						phone: editing.phone ?? '',
 						email: editing.email ?? '',
 						notes: editing.notes ?? '',
 						is_system_admin: isAppSystemAdmin(editing.roles),
@@ -312,13 +314,6 @@
 		);
 	}
 
-	// Sync username with phone if not editing and not SA role
-	$effect(() => {
-		if (!editing && !isSaRoleSelected && $formData.phone) {
-			$formData.username = $formData.phone;
-		}
-	});
-
 	/** `label` is what the trigger shows once picked — the name, not the raw code. */
 	const shelterItems = $derived(
 		(sheltersQuery.data ?? [])
@@ -493,31 +488,36 @@
 	use:form.enhance
 	class={layout === 'page' ? 'flex flex-col' : 'flex min-h-0 flex-1 flex-col'}
 >
-	<div class={['space-y-6 px-6 pt-6 pb-8', layout !== 'page' && 'min-h-0 flex-1 overflow-y-auto']}>
+	<div
+		class={[
+			'space-y-6 px-4 pt-4 pb-8 sm:px-6 sm:pt-6',
+			layout !== 'page' && 'min-h-0 flex-1 overflow-y-auto'
+		]}
+	>
 		<!-- 1. ประเภทบุคลากร (Personnel Type) -->
 		<fieldset>
 			<legend class="mb-2 block text-sm font-bold text-slate-800">ประเภทผู้ปฏิบัติงาน</legend>
-			<div class="grid grid-cols-2 gap-3">
+			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 				<button
 					type="button"
-					class="flex items-center justify-center gap-2 rounded-lg border-2 p-3 text-sm font-medium transition-all {$formData.personnel_type ===
+					class="flex items-center justify-start gap-2 rounded-lg border-2 p-3 text-left text-sm font-medium whitespace-normal transition-all sm:justify-center {$formData.personnel_type ===
 					'staff'
 						? 'border-blue-600 bg-blue-50 text-blue-800'
 						: 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'}"
 					onclick={() => ($formData.personnel_type = 'staff')}
 				>
-					<Building class="size-4" />
+					<Building class="size-4 shrink-0" />
 					<span>เจ้าหน้าที่ประจำ (Staff)</span>
 				</button>
 				<button
 					type="button"
-					class="flex items-center justify-center gap-2 rounded-lg border-2 p-3 text-sm font-medium transition-all {$formData.personnel_type ===
+					class="flex items-center justify-start gap-2 rounded-lg border-2 p-3 text-left text-sm font-medium whitespace-normal transition-all sm:justify-center {$formData.personnel_type ===
 					'volunteer'
 						? 'border-emerald-600 bg-emerald-50 text-emerald-800'
 						: 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'}"
 					onclick={() => ($formData.personnel_type = 'volunteer')}
 				>
-					<Users class="size-4" />
+					<Users class="size-4 shrink-0" />
 					<span>อาสาสมัครช่วยงานระบบ</span>
 				</button>
 			</div>
@@ -531,17 +531,49 @@
 			</h4>
 
 			<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-				<!-- Phone (Username) -->
-				<Form.Field {form} name="phone">
+				<!-- Username (CouchDB name) -->
+				<Form.Field {form} name="username">
 					<Form.Control>
 						{#snippet children({ props })}
-							<Form.Label class="flex items-center gap-1 font-bold">
-								<Phone class="size-3.5" /> เบอร์โทรศัพท์ (ใช้เป็น Username)
-								<span class="text-red-500">*</span>
+							<Form.Label class="font-bold">
+								<span class="inline-flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+									<span>Username <span class="text-red-500">*</span></span>
+									{#if editing}
+										<span class="text-xs font-normal text-slate-500">(แก้ไม่ได้)</span>
+									{/if}
+								</span>
 							</Form.Label>
 							<Input
 								{...props}
-								bind:value={$formData.phone}
+								bind:value={$formData.username}
+								class="h-11 bg-white"
+								placeholder="เช่น staff01 หรือ 0812345678"
+								readonly={Boolean(editing)}
+								autocomplete="username"
+							/>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+
+				<!-- Phone (optional alternate login) -->
+				<Form.Field {form} name="phone">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label class="font-bold">
+								<span
+									class="flex flex-col gap-0.5 sm:flex-row sm:flex-wrap sm:items-baseline sm:gap-x-1.5"
+								>
+									<span class="inline-flex items-center gap-1">
+										<Phone class="size-3.5 shrink-0" /> เบอร์โทรศัพท์
+									</span>
+									<span class="text-xs font-normal text-slate-500">(ไม่บังคับ — ใช้ login ได้)</span
+									>
+								</span>
+							</Form.Label>
+							<Input
+								{...props}
+								bind:value={() => $formData.phone ?? '', (v) => ($formData.phone = v)}
 								type="tel"
 								maxlength={10}
 								class="h-11 bg-white"
@@ -551,25 +583,25 @@
 					</Form.Control>
 					<Form.FieldErrors />
 				</Form.Field>
-
-				<!-- Display Name -->
-				<Form.Field {form} name="display_name">
-					<Form.Control>
-						{#snippet children({ props })}
-							<Form.Label class="font-bold"
-								>ชื่อ-นามสกุล <span class="text-red-500">*</span></Form.Label
-							>
-							<Input
-								{...props}
-								bind:value={$formData.display_name}
-								class="h-11 bg-white"
-								placeholder="นาย สมชาย ใจดี"
-							/>
-						{/snippet}
-					</Form.Control>
-					<Form.FieldErrors />
-				</Form.Field>
 			</div>
+
+			<!-- Display Name -->
+			<Form.Field {form} name="display_name">
+				<Form.Control>
+					{#snippet children({ props })}
+						<Form.Label class="font-bold"
+							>ชื่อ-นามสกุล <span class="text-red-500">*</span></Form.Label
+						>
+						<Input
+							{...props}
+							bind:value={$formData.display_name}
+							class="h-11 bg-white"
+							placeholder="นาย สมชาย ใจดี"
+						/>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
 
 			<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 				<!-- Organization -->
@@ -577,12 +609,12 @@
 					<Form.Control>
 						{#snippet children({ props })}
 							<Form.Label class="font-bold">
-								หน่วยงาน / องค์กรต้นสังกัด
-								{#if $formData.personnel_type === 'staff'}
-									<span class="text-red-500">*</span>
-								{:else}
-									<span class="text-xs font-normal text-slate-500">(ไม่บังคับสำหรับอาสา)</span>
-								{/if}
+								<span
+									class="flex flex-col gap-0.5 sm:flex-row sm:flex-wrap sm:items-baseline sm:gap-x-1.5"
+								>
+									<span>หน่วยงาน / องค์กรต้นสังกัด</span>
+									<span class="text-xs font-normal text-slate-500">(ไม่บังคับ)</span>
+								</span>
 							</Form.Label>
 							<Input
 								{...props}
@@ -599,8 +631,14 @@
 				<Form.Field {form} name="position">
 					<Form.Control>
 						{#snippet children({ props })}
-							<Form.Label class="flex items-center gap-1 font-bold">
-								<Briefcase class="size-3.5" /> ตำแหน่ง / วิชาชีพ
+							<Form.Label class="font-bold">
+								<span class="inline-flex items-center gap-1">
+									<Briefcase class="size-3.5 shrink-0" /> ตำแหน่ง / วิชาชีพ
+								</span>
+								<span
+									class="mt-0.5 block text-xs font-normal text-slate-500 sm:mt-0 sm:ml-0 sm:inline sm:pl-1.5"
+									>(ไม่บังคับ)</span
+								>
 							</Form.Label>
 							<Input
 								{...props}
@@ -619,8 +657,14 @@
 				<Form.Field {form} name="email">
 					<Form.Control>
 						{#snippet children({ props })}
-							<Form.Label class="flex items-center gap-1 font-bold">
-								<Mail class="size-3.5" /> อีเมลติดต่อ (Optional)
+							<Form.Label class="font-bold">
+								<span class="inline-flex items-center gap-1">
+									<Mail class="size-3.5 shrink-0" /> อีเมลติดต่อ
+								</span>
+								<span
+									class="mt-0.5 block text-xs font-normal text-slate-500 sm:mt-0 sm:inline sm:pl-1.5"
+									>(ไม่บังคับ)</span
+								>
 							</Form.Label>
 							<Input
 								{...props}
@@ -639,33 +683,45 @@
 					<Form.Field {form} name="password">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label class="flex items-center justify-between font-bold">
-									<span>
-										รหัสผ่าน (Password)
-										<span class="text-red-500">*</span>
-									</span>
+								<Form.Label class="font-bold">
+									รหัสผ่าน (Password) <span class="text-red-500">*</span>
 								</Form.Label>
-								<div class="relative">
-									<Input
-										{...props}
-										type={showPassword ? 'text' : 'password'}
-										bind:value={$formData.password}
-										class="h-11 bg-white pr-10"
-										placeholder="••••••"
-									/>
+								<div class="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+									<div class="relative min-w-0 flex-1">
+										<Input
+											{...props}
+											type={showPassword ? 'text' : 'password'}
+											bind:value={$formData.password}
+											class="h-11 bg-white pr-10"
+											placeholder="••••••"
+											autocomplete="new-password"
+										/>
+										<Button
+											type="button"
+											variant="ghost"
+											size="icon"
+											class="absolute top-0 right-0 h-full px-3 hover:bg-transparent"
+											aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
+											onclick={() => (showPassword = !showPassword)}
+										>
+											{#if showPassword}
+												<EyeOff class="size-4 text-muted-foreground" />
+											{:else}
+												<Eye class="size-4 text-muted-foreground" />
+											{/if}
+										</Button>
+									</div>
 									<Button
 										type="button"
-										variant="ghost"
-										size="icon"
-										class="absolute top-0 right-0 h-full px-3 hover:bg-transparent"
-										aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
-										onclick={() => (showPassword = !showPassword)}
+										variant="outline"
+										class="h-11 shrink-0 gap-1.5 border-slate-200 sm:px-3"
+										onclick={() => {
+											$formData.password = generateTemporaryPassphrase();
+											showPassword = true;
+										}}
 									>
-										{#if showPassword}
-											<EyeOff class="size-4 text-muted-foreground" />
-										{:else}
-											<Eye class="size-4 text-muted-foreground" />
-										{/if}
+										<RefreshCw class="size-4" />
+										สร้างรหัส
 									</Button>
 								</div>
 							{/snippet}
@@ -770,7 +826,7 @@
 			{:else if multiShelter}
 				<div class="space-y-3">
 					<div
-						class="sticky top-0 z-10 -mx-1 flex items-center justify-between gap-2 border-b border-border bg-white/95 px-1 py-2 backdrop-blur supports-backdrop-filter:bg-white/80"
+						class="sticky top-0 z-10 -mx-1 flex flex-wrap items-center justify-between gap-2 border-b border-border bg-white/95 px-1 py-2 backdrop-blur supports-backdrop-filter:bg-white/80"
 					>
 						<p class="text-sm font-bold text-slate-800">
 							ศูนย์พักพิงและตำแหน่งหน้าที่ <span class="text-red-500">*</span>
@@ -1028,13 +1084,13 @@
 
 	<!-- 5. ปุ่มดำเนินการ (sticky bottom + safe-area offset) -->
 	<div
-		class="sticky bottom-0 z-10 flex shrink-0 gap-4 border-t border-border bg-background/95 px-6 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur supports-backdrop-filter:bg-background/80"
+		class="sticky bottom-0 z-10 flex shrink-0 flex-col-reverse gap-3 border-t border-border bg-background/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur supports-backdrop-filter:bg-background/80 sm:flex-row sm:gap-4 sm:px-6"
 	>
 		{#if oncancel}
 			<Button
 				type="button"
 				variant="outline"
-				class="h-11 flex-1 border-slate-200"
+				class="h-11 w-full border-slate-200 sm:flex-1"
 				onclick={oncancel}
 			>
 				ยกเลิก
@@ -1042,7 +1098,7 @@
 		{/if}
 		<Form.Button
 			disabled={$submitting || pending}
-			class="h-11 flex-1 bg-blue-700 hover:bg-blue-800"
+			class="h-11 w-full bg-blue-700 hover:bg-blue-800 sm:flex-1"
 		>
 			<Save class="mr-2 h-4 w-4" />
 			บันทึกข้อมูล

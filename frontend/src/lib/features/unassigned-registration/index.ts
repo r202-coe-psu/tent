@@ -18,10 +18,17 @@ export type {
 } from './domain/claim';
 
 export {
+	CLAIM_DIALOG_DESCRIPTION,
 	CLAIM_FLOW_STATUS_GUIDANCE,
 	UNASSIGNED_QUEUE_BADGE_LABEL,
 	UNASSIGNED_QUEUE_BADGE_SHORT,
+	formatClaimCreatedAt,
+	formatOpenMemberCardType,
+	formatOpenMemberDemographicsLine,
+	formatOpenMemberGender,
+	formatOpenMemberIdentityLine,
 	formatOpenMemberName,
+	formatOpenMemberVulnerableGroup,
 	isOnlineRequiredError
 } from './domain/search';
 export {

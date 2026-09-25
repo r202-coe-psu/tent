@@ -3,20 +3,19 @@
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { isSystemAdmin, isShelterManager, isWarehouseStaff } from '$lib/auth/roles';
 	import { getShelterCode } from '$lib/db/shelter';
-	import { goto } from '$app/navigation';
 	// Component
+	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import * as Table from '$lib/components/ui/table/index.js';
 	import * as Pagination from '$lib/components/ui/pagination/index.js';
+	import { Separator } from '$lib/components/ui/separator/index.js';
+	import * as Dialog from '$lib/components/ui/dialog/index.js';
 
 	// Icon
-	import Package from '@lucide/svelte/icons/package';
-	import ArrowRight from '@lucide/svelte/icons/arrow-right';
-	import PackageOpen from '@lucide/svelte/icons/package-open';
-	import Wrench from '@lucide/svelte/icons/wrench';
-	import Settings2 from '@lucide/svelte/icons/settings-2';
-	import Trash2 from '@lucide/svelte/icons/trash-2';
-	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
+	import Search from '@lucide/svelte/icons/search';
+	import Plus from '@lucide/svelte/icons/plus';
+	import X from '@lucide/svelte/icons/x';
+	import { Settings2, Trash2, RotateCcw } from '@lucide/svelte';
 	// Feature
 	import {
 		useItemCategories,
@@ -24,10 +23,6 @@
 		useDeleteItemCategory,
 		useUpdateItemCategory,
 		useItemMasters,
-		CatalogListToolbar,
-		CatalogFormShell,
-		CatalogScopeBadge,
-		TypeClassBadge,
 		type ItemCategory
 	} from '$lib/features/catalog';
 
@@ -61,21 +56,10 @@
 
 	const itemCounts = $derived.by(() => {
 		const masters = itemMastersQuery.data ?? [];
-		const categories = query.data ?? [];
 		const counts: Record<string, number> = {};
-		for (const cat of categories) {
-			counts[cat._id] = 0;
-		}
 		for (const item of masters) {
-			if (!item.category) continue;
-			for (const cat of categories) {
-				if (
-					item.category === cat._id ||
-					item.category === cat.name ||
-					(cat.system_key && item.category.toUpperCase() === cat.system_key.toUpperCase())
-				) {
-					counts[cat._id] = (counts[cat._id] || 0) + 1;
-				}
+			if (item.category) {
+				counts[item.category] = (counts[item.category] || 0) + 1;
 			}
 		}
 		return counts;
@@ -111,8 +95,8 @@
 					if (result.actionTaken === 'reset') {
 						toast.success(`คืนค่ามาตรฐานหมวดหมู่ "${result.categoryName || name}" สำเร็จ`);
 					} else if (result.actionTaken === 'deactivate') {
-						toast.info(
-							`เปลี่ยนสถานะหมวดหมู่ "${result.categoryName || name}" เป็นปิดการใช้งาน (Deactivated) แล้ว`
+						toast.success(
+							`เปลี่ยนสถานะหมวดหมู่ "${result.categoryName || name}" เป็นปิดการใช้งานแล้ว`
 						);
 					} else {
 						toast.success(`ลบหมวดหมู่ "${result.categoryName || name}" ถาวรสำเร็จ`);
@@ -142,12 +126,7 @@
 		const items = query.data ?? [];
 		const needle = q.trim().toLowerCase();
 		if (!needle) return items;
-		return items.filter(
-			(e) =>
-				e.name.toLowerCase().includes(needle) ||
-				(e.system_key ?? '').toLowerCase().includes(needle) ||
-				(e.description ?? '').toLowerCase().includes(needle)
-		);
+		return items.filter((e) => e.name.toLowerCase().includes(needle));
 	});
 	const total = $derived(filteredAll.length);
 	const totalPages = $derived(Math.max(1, Math.ceil(total / PAGE_SIZE)));
@@ -183,120 +162,127 @@
 
 {#if viewMode === 'list'}
 	<div class="flex w-full flex-col gap-4">
-		<CatalogListToolbar {total} bind:search={q} {canWrite} onadd={showCreateForm} />
-
-		<!-- List -->
-		<div class="overflow-x-auto rounded-xl border border-border bg-card">
-			<div
-				class="hidden items-center gap-4 border-b border-border bg-muted/30 px-4 py-2.5 text-sm font-semibold text-slate-900 sm:grid sm:grid-cols-[1fr_160px_220px] dark:text-slate-100"
-			>
-				<span>ชื่อข้อมูลมาตรฐาน</span>
-				<span class="text-center">จำนวนรายการสิ่งของ</span>
-				<span class="text-right">จัดการ</span>
-			</div>
-			{#if query.isLoading}
-				<div class="py-6 text-center text-sm text-muted-foreground">กำลังโหลดข้อมูล...</div>
-			{:else if filteredAll.length === 0}
-				<div
-					class="flex flex-col items-center gap-2 py-10 text-center text-sm text-muted-foreground"
-				>
-					<PackageOpen class="size-8 text-slate-300" />
-					ไม่พบข้อมูลมาสเตอร์ที่ค้นหาตามเงื่อนไขนี้
+		<div class="flex items-center justify-between gap-4">
+			<span class="text-md font-bold">รายการข้อมูล ({total})</span>
+			<div class="item-center flex gap-2">
+				<div class="relative w-72">
+					<Search class="absolute top-2.5 left-2.5 h-4 w-4 text-muted-foreground" />
+					<Input bind:value={q} type="search" placeholder="ค้นหา..." class="pl-9" />
 				</div>
-			{:else}
-				<ul class="divide-y divide-border">
-					{#each paginatedItems as e (e._id)}
-						{@const count = itemCounts[e._id] || 0}
-						<li
-							class="grid grid-cols-1 gap-3 p-4 sm:grid-cols-[1fr_160px_220px] sm:items-start sm:gap-4"
-						>
-							<div class="min-w-0 space-y-1">
-								<div class="flex flex-wrap items-center gap-2">
-									<span class="text-base font-bold text-foreground">{e.name}</span>
-									<CatalogScopeBadge doc={e} />
-									{#if e.default_class}
-										<TypeClassBadge value={e.default_class} variant="compact" />
-									{/if}
-								</div>
-								{#if e.system_key}
-									<p class="text-sm text-muted-foreground">
-										รหัสระบบ ·
-										<span class="font-semibold tracking-wider text-foreground uppercase"
-											>{e.system_key}</span
+				{#if canWrite}
+					<Button size="lg" class="flex items-center gap-2" onclick={showCreateForm}>
+						<Plus class="h-4 w-4" />
+						เพิ่มข้อมูล
+					</Button>
+				{/if}
+			</div>
+		</div>
+
+		<!-- Table -->
+		<div class="overflow-x-auto rounded-xl border border-border bg-card">
+			<Table.Root>
+				<Table.Header>
+					<Table.Row>
+						<Table.Head class="font-bold">ชื่อหมวดหมู่สิ่งของ</Table.Head>
+						<Table.Head class="font-bold">จำนวนรายการสิ่งของ</Table.Head>
+						<Table.Head class="w-24 text-center font-bold">จัดการ</Table.Head>
+					</Table.Row>
+				</Table.Header>
+				<Table.Body>
+					{#if query.isLoading}
+						<Table.Row>
+							<Table.Cell colspan={3} class="py-6 text-center text-muted-foreground"
+								>กำลังโหลดข้อมูล...</Table.Cell
+							>
+						</Table.Row>
+					{:else if filteredAll.length === 0}
+						<Table.Row>
+							<Table.Cell colspan={3} class="py-6 text-center text-muted-foreground"
+								>📭 ไม่พบข้อมูลมาสเตอร์ที่ค้นหาตามเงื่อนไขนี้</Table.Cell
+							>
+						</Table.Row>
+					{:else}
+						{#each paginatedItems as e (e._id)}
+							<Table.Row>
+								<Table.Cell class="font-bold text-foreground">
+									{e.name}
+									{#if !e.shelter_code}
+										<span
+											class="ml-2 inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700 ring-1 ring-slate-600/10 ring-inset dark:bg-zinc-800 dark:text-zinc-400 dark:ring-zinc-700"
 										>
-									</p>
-								{/if}
-								{#if e.description}
-									<p class="text-sm text-muted-foreground">{e.description}</p>
-								{/if}
-							</div>
-
-							<div class="flex items-start justify-start sm:justify-center">
-								{#if count > 0}
-									<button
-										type="button"
-										onclick={() =>
-											goto(`${basePath}?tab=item_master&category=${encodeURIComponent(e._id)}`)}
-										aria-label="ดูรายการสิ่งของในหมวด {e.name} จำนวน {count} รายการ"
-										class="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 px-3 text-xs font-semibold text-teal-900 hover:bg-teal-100 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none dark:border-teal-900/40 dark:bg-teal-950/40 dark:text-teal-300"
-									>
-										<Package class="size-4" />
-										<span class="tabular-nums">{count}</span> รายการ
-										<ArrowRight class="size-3.5" />
-									</button>
-								{:else}
-									<span class="badge-muted">0 รายการ</span>
-								{/if}
-							</div>
-
-							<div class="flex flex-wrap items-start gap-2 sm:justify-end">
-								{#if canModifyCategory(e)}
-									<Button
-										variant="outline"
-										size="sm"
-										onclick={() => showEditForm(e._id)}
-										class="min-h-11 border-blue-200 text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-950/20"
-									>
-										<Settings2 class="h-4 w-4" />
-										จัดการ
-									</Button>
-									{#if (e.shelter_code || undefined) === (shelterCode || undefined)}
-										{#if e.deactivated}
-											<Button
-												variant="outline"
-												size="sm"
-												onclick={() => activateCategory(e)}
-												disabled={updateCategoryMutation.isPending}
-												class="min-h-11 border-emerald-200 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-950/20"
-											>
-												<RotateCcw class="h-4 w-4" />
-												นำกลับมาใช้
-											</Button>
-										{:else}
-											<Button
-												variant="outline"
-												size="sm"
-												disabled={e.is_protected || deleteMutation.isPending}
-												title={e.is_protected ? 'หมวดหมู่ระบบมาตรฐาน ลบไม่ได้' : undefined}
-												onclick={() => showDeleteConfirm(e._id, e.name)}
-												class="min-h-11 {e.override
-													? 'border-orange-200 text-orange-600 hover:bg-orange-50 hover:text-orange-700 dark:border-orange-800 dark:text-orange-400 dark:hover:bg-orange-950/20'
-													: 'border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/20'}"
-											>
-												<Trash2 class="h-4 w-4" />
-												{e.override ? 'รีเซ็ต' : 'ลบ'}
-												{#if e.is_protected}<span class="sr-only"
-														>(หมวดหมู่ระบบมาตรฐาน ลบไม่ได้)</span
-													>{/if}
-											</Button>
-										{/if}
+											ส่วนกลาง
+										</span>
+									{:else if e.override}
+										<span
+											class="ml-2 inline-flex items-center rounded-full bg-orange-50 px-2 py-0.5 text-xs font-semibold text-orange-700 ring-1 ring-orange-600/10 ring-inset dark:bg-orange-950/40 dark:text-orange-400 dark:ring-orange-500/20"
+										>
+											ปรับแต่งแล้ว
+										</span>
+									{:else}
+										<span
+											class="ml-2 inline-flex items-center rounded-full bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700 ring-1 ring-teal-600/10 ring-inset dark:bg-teal-950/40 dark:text-teal-400 dark:ring-teal-500/20"
+										>
+											เฉพาะศูนย์
+										</span>
 									{/if}
-								{/if}
-							</div>
-						</li>
-					{/each}
-				</ul>
-			{/if}
+									{#if e.deactivated}
+										<span
+											class="ml-2 inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700 ring-1 ring-red-600/10 ring-inset dark:bg-red-950/40 dark:text-red-400 dark:ring-red-500/20"
+										>
+											ปิดใช้งาน
+										</span>
+									{/if}
+								</Table.Cell>
+								<Table.Cell class="text-muted-foreground">
+									{itemCounts[e.name] || 0} รายการ
+								</Table.Cell>
+								<Table.Cell class="text-center">
+									{#if canModifyCategory(e)}
+										<div class="inline-flex gap-2">
+											<Button
+												variant="outline"
+												size="sm"
+												onclick={() => showEditForm(e._id)}
+												class="border-blue-200 text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-950/20"
+											>
+												<Settings2 class="h-4 w-4" />
+												จัดการ
+											</Button>
+											{#if (e.shelter_code || undefined) === (shelterCode || undefined)}
+												{#if e.deactivated}
+													<Button
+														variant="outline"
+														size="sm"
+														onclick={() => activateCategory(e)}
+														disabled={updateCategoryMutation.isPending}
+														class="border-emerald-200 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-950/20"
+													>
+														<RotateCcw class="h-4 w-4" />
+														นำกลับมาใช้
+													</Button>
+												{:else}
+													<Button
+														variant="outline"
+														size="sm"
+														onclick={() => showDeleteConfirm(e._id, e.name)}
+														disabled={deleteMutation.isPending}
+														class={e.override
+															? 'border-orange-200 text-orange-600 hover:bg-orange-50 hover:text-orange-700 dark:border-orange-800 dark:text-orange-400 dark:hover:bg-orange-950/20'
+															: 'border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/20'}
+													>
+														<Trash2 class="h-4 w-4" />
+														{e.override ? 'รีเซ็ต' : 'ลบ'}
+													</Button>
+												{/if}
+											{/if}
+										</div>
+									{/if}
+								</Table.Cell>
+							</Table.Row>
+						{/each}
+					{/if}
+				</Table.Body>
+			</Table.Root>
 		</div>
 
 		{#if totalPages > 1}
@@ -322,22 +308,44 @@
 		{/if}
 	</div>
 {:else}
-	<CatalogFormShell
-		title={viewMode === 'edit'
-			? 'แก้ไขหมวดหมู่สิ่งของ (Item Category)'
-			: 'เพิ่มหมวดหมู่สิ่งของ (Item Category)'}
-		icon={Wrench}
-		{canWrite}
-		onclose={backToList}
+	<div
+		class="w-full rounded-2xl border border-slate-100 bg-card p-6 shadow-sm md:p-8 dark:border-zinc-800"
 	>
-		<ItemCategoryForm
-			id={selectedId}
-			isEdit={viewMode === 'edit'}
-			{basePath}
-			onsuccess={backToList}
-			oncancel={backToList}
-		/>
-	</CatalogFormShell>
+		<div class="flex items-start justify-between gap-4">
+			<div class="flex flex-col gap-1.5">
+				<span
+					class="text-2xs font-semibold tracking-wider text-[#002f6c] uppercase dark:text-blue-400"
+				>
+					ฐานข้อมูลมาสเตอร์ส่วนกลาง (MASTER DATA ENGINE)
+				</span>
+
+				<h1 class="text-xl leading-tight font-bold text-slate-800 md:text-2xl dark:text-slate-100">
+					{viewMode === 'create'
+						? '➕ บันทึกหมวดหมู่สิ่งของ (Item Category) ใหม่'
+						: '🛠️ แก้ไขหมวดหมู่สิ่งของ (Item Category)'}
+				</h1>
+			</div>
+
+			<div class="flex items-center">
+				<button onclick={backToList} class="rounded-lg p-2 transition hover:bg-muted/50">
+					<X class="h-5 w-5 text-muted-foreground" />
+				</button>
+			</div>
+		</div>
+		<Separator class="my-4 bg-slate-100 dark:bg-zinc-800" />
+		{#if canWrite}
+			<ItemCategoryForm
+				id={selectedId}
+				isEdit={viewMode === 'edit'}
+				{basePath}
+				onsuccess={backToList}
+			/>
+		{:else}
+			<div class="py-12 text-center text-sm font-bold text-destructive">
+				คุณไม่มีสิทธิ์เข้าถึงส่วนนี้ (Unauthorized)
+			</div>
+		{/if}
+	</div>
 {/if}
 
 <Dialog.Root bind:open={deleteConfirmOpen}>
@@ -368,8 +376,7 @@
 						>?
 						<span class="mt-3 block text-xs leading-relaxed text-muted-foreground">
 							* หากหมวดหมู่นี้มีสินค้าใช้งานอยู่ หรือเป็นหมวดหมู่ส่วนกลาง
-							ระบบจะเปลี่ยนสถานะเป็นปิดการใช้งาน (Deactivated) แทนการลบถาวร
-							เพื่อไม่ให้กระทบต่อประวัติสิ่งของ
+							ระบบจะเปลี่ยนสถานะเป็นปิดการใช้งาน แทนการลบถาวร เพื่อไม่ให้กระทบต่อประวัติสิ่งของ
 						</span>
 					{/if}
 				{/if}

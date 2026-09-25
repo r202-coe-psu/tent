@@ -29,11 +29,12 @@
 		canChangeEvacueeZone,
 		canConfirmRoom,
 		isPendingZoneArrivalConfirmation,
+		zoneLabel,
 		type Evacuee,
 		type Screening
 	} from '$lib/features/people';
 	import { useShelter } from '$lib/features/shelters';
-	import { useMasterData } from '$lib/features/master-data';
+	import { useMasterData, formatMasterLabel } from '$lib/features/master-data';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
@@ -46,6 +47,7 @@
 	const householdsQuery = useHouseholds();
 	const screeningsQuery = useScreenings();
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
+	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
 	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
 	const checkInMutation = useCheckInEvacuee();
 	const changeZoneMutation = useChangeEvacueeZone();
@@ -80,8 +82,8 @@
 	};
 
 	function getSpecialNeedLabel(need: string): string {
-		const fromMaster = vulnerableGroupQuery.data?.items.find((i) => i.code === need)?.label;
-		if (fromMaster) return fromMaster;
+		const masterItem = vulnerableGroupQuery.data?.items.find((i) => i.code === need);
+		if (masterItem) return formatMasterLabel(masterItem, 'th');
 		return SPECIAL_NEED_LABELS[need] ?? need;
 	}
 
@@ -216,8 +218,8 @@
 			}
 			toast.success(
 				isRezone
-					? `ย้ายโซนเป็น ${selectedZone} เรียบร้อย`
-					: `จัดที่พักโซน ${selectedZone} และเช็คอินเรียบร้อย`
+					? `ย้ายโซนเป็น ${zoneLabel(selectedZone, shelterZones)} เรียบร้อย`
+					: `จัดที่พักโซน ${zoneLabel(selectedZone, shelterZones)} และเช็คอินเรียบร้อย`
 			);
 			await goto(resolve('/onsite/zoning'));
 		} catch (err: unknown) {
@@ -331,7 +333,7 @@
 								<p class="text-2xs text-muted-foreground">
 									{member.current_stay.status}
 									{#if member.current_stay.zone}
-										· {member.current_stay.zone}{/if}
+										· {zoneLabel(member.current_stay.zone, shelterZones)}{/if}
 								</p>
 							</div>
 						</label>

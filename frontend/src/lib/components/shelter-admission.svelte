@@ -4,6 +4,7 @@
 	import Users from '@lucide/svelte/icons/users';
 	import {
 		resolveMasterLabel,
+		toLabelMap,
 		useVulnerableGroupLabelMap,
 		type PublicShelterDetail
 	} from '$lib/features/public-portal';
@@ -14,7 +15,10 @@
 	let { shelter }: { shelter: NonNullable<PublicShelterDetail> } = $props();
 
 	let t = $derived(getTranslation(PUBLIC_SHELTER_DETAILS_I18N, langState.current));
-	const vulnerableGroupLabels = useVulnerableGroupLabelMap();
+	const vulnerableGroupLabelsQuery = useVulnerableGroupLabelMap();
+	const vulnerableGroupLabels = $derived(
+		toLabelMap(vulnerableGroupLabelsQuery.data, langState.current)
+	);
 
 	function translatePetCategories(categoriesStr: string): string {
 		if (!categoriesStr) return '';
@@ -52,7 +56,7 @@
 		return groups
 			.map((code) => ({
 				code,
-				label: resolveMasterLabel(code, vulnerableGroupLabels.data, legacy)
+				label: resolveMasterLabel(code, vulnerableGroupLabels, legacy)
 			}))
 			.filter((g) => g.label);
 	});

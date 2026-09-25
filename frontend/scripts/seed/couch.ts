@@ -8,34 +8,51 @@ import { parseCouchCredentialUrl } from '$lib/server/couch-credentials';
 import { assertBulkWriteResults, type BulkWriteResult } from '../t31-seed-support';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const envPath = resolve(__dirname, '../../.env');
+const envPaths = [
+	resolve(__dirname, '../../../.env'),
+	resolve(__dirname, '../../.env'),
+	resolve(process.cwd(), '.env')
+];
 
 function loadEnv(): Record<string, string> {
-	if (!existsSync(envPath)) return {};
-	return Object.fromEntries(
-		readFileSync(envPath, 'utf-8')
-			.split('\n')
-			.filter((l) => l.trim() && !l.startsWith('#') && l.includes('='))
-			.map((l) => {
-				const eq = l.indexOf('=');
-				const k = l.slice(0, eq).trim();
-				const v = l
-					.slice(eq + 1)
-					.trim()
-					.replace(/^['"]|['"]$/g, '');
-				return [k, v];
-			})
-	);
+	const merged: Record<string, string> = {};
+	for (const p of envPaths) {
+		if (!existsSync(p)) continue;
+		const parsed = Object.fromEntries(
+			readFileSync(p, 'utf-8')
+				.split('\n')
+				.filter((l) => l.trim() && !l.startsWith('#') && l.includes('='))
+				.map((l) => {
+					const eq = l.indexOf('=');
+					const k = l.slice(0, eq).trim();
+					const v = l
+						.slice(eq + 1)
+						.trim()
+						.replace(/^['"]|['"]$/g, '');
+					return [k, v];
+				})
+		);
+		Object.assign(merged, parsed);
+	}
+	return merged;
 }
 
 export const env = loadEnv();
 export const rawCouchUrl =
-	process.env.COUCHDB_ADMIN_URL ?? env.COUCHDB_ADMIN_URL ?? 'http://admin:password@localhost:5984';
+	process.env.COUCHDB_ADMIN_URL ??
+	env.COUCHDB_ADMIN_URL ??
+	(env.COUCHDB_USER && env.COUCHDB_PASSWORD
+		? `http://${env.COUCHDB_USER}:${env.COUCHDB_PASSWORD}@${env.COUCHDB_HOST || '127.0.0.1'}:${env.COUCHDB_PORT || '5984'}`
+		: 'http://admin:password@localhost:5984');
 
 /** Public-writer username(s) for shelter `_security.members.names`. */
 export const PUBLIC_WRITER_NAMES: string[] = (() => {
 	const creds = parseCouchCredentialUrl(
-		process.env.COUCHDB_PUBLIC_WRITER_URL ?? env.COUCHDB_PUBLIC_WRITER_URL
+		process.env.COUCHDB_PUBLIC_WRITER_URL ??
+			env.COUCHDB_PUBLIC_WRITER_URL ??
+			(env.COUCHDB_PUBLIC_WRITER_USER && env.COUCHDB_PUBLIC_WRITER_PASSWORD
+				? `http://${env.COUCHDB_PUBLIC_WRITER_USER}:${env.COUCHDB_PUBLIC_WRITER_PASSWORD}@${env.COUCHDB_HOST || '127.0.0.1'}:${env.COUCHDB_PORT || '5984'}`
+				: undefined)
 	);
 	return creds ? [creds.user] : [];
 })();
@@ -114,6 +131,25 @@ export async function putDoc(
 ): Promise<void> {
 	const id = (doc as { _id: string })._id;
 	const { status } = await couchReq('PUT', `/${db}/${encodeURIComponent(id)}`, doc);
+	if (status !== 201 && status !== 409) {
+		throw new Error(`PUT ${id} → ${db} failed (HTTP ${status})`);
+	}
+}
+
+/** PUT a deterministic fixture, carrying the current revision when it exists. */
+export async function putDocUpsert(
+	db: string,
+	doc: Record<string, unknown> & { _id: string }
+): Promise<void> {
+	const id = doc._id;
+	const path = `/${db}/${encodeURIComponent(id)}`;
+	const current = await couchReq('GET', path);
+	const currentRev =
+		current.status === 200 && current.data && typeof current.data === 'object'
+			? (current.data as { _rev?: string })._rev
+			: undefined;
+	const next = currentRev ? { ...doc, _rev: currentRev } : doc;
+	const { status } = await couchReq('PUT', path, next);
 	if (status !== 201 && status !== 409) {
 		throw new Error(`PUT ${id} → ${db} failed (HTTP ${status})`);
 	}

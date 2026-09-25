@@ -23,8 +23,29 @@ vi.mock('$lib/db/repository', async (importOriginal) => {
 
 import { CatalogRemoteRepository } from './catalog.remote';
 import type { AuthorContext } from '$lib/db/model';
+import type { UnitOfMeasure } from '../domain/unit-of-measure';
+import type { ItemMaster } from '../domain/catalog';
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'tester' };
+
+async function seedUnitMaster() {
+	for (const [code, label, dimension] of [
+		['kg', 'กิโลกรัม', 'mass'],
+		['bottle', 'ขวด', 'count'],
+		['sachet', 'ซอง', 'count'],
+		['piece', 'ชิ้น', 'count']
+	] as const) {
+		await getDb('catalog').put({
+			_id: `unit_of_measure:${code}`,
+			type: 'unit_of_measure',
+			code,
+			label_th: label,
+			label_en: code,
+			dimension,
+			deactivated: false
+		});
+	}
+}
 
 describe('CatalogRemoteRepository', () => {
 	let repo: CatalogRemoteRepository;
@@ -32,6 +53,7 @@ describe('CatalogRemoteRepository', () => {
 	beforeEach(async () => {
 		dbs.clear();
 		repo = new CatalogRemoteRepository();
+		await seedUnitMaster();
 	});
 
 	it('should deactivate central recipe when deleted even if not used by any meal plan', async () => {
@@ -287,7 +309,7 @@ describe('CatalogRemoteRepository', () => {
 			await repo.createItemMaster(
 				{
 					name: 'บะหมี่สำเร็จรูป',
-					base_unit: 'ซอง',
+					base_unit: 'sachet',
 					category: 'อาหารแห้งเฉพาะศูนย์ SH001',
 					distribution_type: 'recurring',
 					type_class: 'CONSUMABLE',
@@ -315,7 +337,7 @@ describe('CatalogRemoteRepository', () => {
 			await repo.createItemMaster(
 				{
 					name: 'น้ำดื่มบรรจุขวด',
-					base_unit: 'ขวด',
+					base_unit: 'bottle',
 					category: 'เครื่องดื่ม',
 					distribution_type: 'recurring',
 					type_class: 'CONSUMABLE',
@@ -369,244 +391,227 @@ describe('CatalogRemoteRepository', () => {
 			expect(removed).toBeNull();
 		});
 
-		it('CR-119: should reject deletion of system protected categories', async () => {
-			// Seed a system protected category doc
+		it('rejects shelter delete of a central item master', async () => {
+			const item = await repo.createItemMaster(
+				{
+					name: 'สินค้าส่วนกลางห้ามลบ',
+					base_unit: 'piece',
+					distribution_type: 'recurring',
+					type_class: 'CONSUMABLE',
+					dietary: []
+				},
+				ctx
+			);
+
+			await expect(repo.deleteItemMaster(item._id, 'SH001')).rejects.toThrow(
+				'ไม่อนุญาตให้ลบรายการส่วนกลางจากศูนย์พักพิง'
+			);
+
+			const stillThere = await repo.getItemMaster(item._id);
+			expect(stillThere).not.toBeNull();
+			expect(stillThere?.deactivated).not.toBe(true);
+		});
+
+		it('rejects delete of protected system categories', async () => {
+			const id = 'item_category:food';
 			await getDb('catalog').put({
-				_id: 'item_category:food',
+				_id: id,
 				type: 'item_category',
-				schema_v: 2,
-				name: 'อาหารและวัตถุดิบ (Food Ingredients)',
+				name: 'อาหารและวัตถุดิบ',
 				system_key: 'FOOD',
 				default_class: 'CONSUMABLE',
 				is_protected: true,
-				created_at: '2026-09-15T00:00:00.000Z',
-				updated_at: '2026-09-15T00:00:00.000Z',
-				created_by: 'system'
+				schema_v: 2,
+				created_at: '2026-09-01T00:00:00.000Z',
+				updated_at: '2026-09-01T00:00:00.000Z',
+				created_by: 'seed'
 			});
 
-			await expect(repo.deleteItemCategory('item_category:food')).rejects.toThrow(
+			await expect(repo.deleteItemCategory(id)).rejects.toThrow(
+				'ไม่อนุญาตให้ลบหมวดหมู่ระบบมาตรฐาน'
+			);
+			await expect(repo.deleteItemCategory(id, 'SH001')).rejects.toThrow(
 				'ไม่อนุญาตให้ลบหมวดหมู่ระบบมาตรฐาน'
 			);
 		});
+	});
 
-		it('CR-119: should reject local override on protected categories', async () => {
-			await getDb('catalog').put({
-				_id: 'item_category:water',
-				type: 'item_category',
-				schema_v: 2,
-				name: 'น้ำดื่มสะอาด (Drinking Water)',
-				system_key: 'WATER',
-				default_class: 'CONSUMABLE',
-				is_protected: true,
-				created_at: '2026-09-15T00:00:00.000Z',
-				updated_at: '2026-09-15T00:00:00.000Z',
-				created_by: 'system'
+	describe('UnitOfMeasure & AC-03 validation in repository', () => {
+		it('rejects createItemMaster when base_unit is Thai string (AC-03)', async () => {
+			await expect(
+				repo.createItemMaster(
+					{
+						name: 'ข้าวสารหอมมะลิ',
+						base_unit: 'กิโลกรัม',
+						type_class: 'CONSUMABLE',
+						distribution_type: 'recurring'
+					},
+					ctx
+				)
+			).rejects.toThrow(/Base unit must be a valid lowercase English code/);
+		});
+
+		it('allows legacy item_master edits when base_unit is unchanged', async () => {
+			const legacy = await getDb('catalog').put({
+				_id: 'item_master:legacy',
+				type: 'item_master',
+				base_unit: 'กิโลกรัม',
+				name: 'รายการเดิม',
+				updated_at: '2026-08-01T00:00:00.000Z'
 			});
 
-			// Attempting override in shelter
+			const updated = await repo.updateItemMaster({
+				...legacy,
+				name: 'รายการเดิมแก้ไข'
+			} as unknown as ItemMaster);
+			expect(updated.name).toBe('รายการเดิมแก้ไข');
+			expect(updated.base_unit).toBe('กิโลกรัม');
+
 			await expect(
-				repo.updateItemCategory({
-					_id: 'item_category:water',
-					type: 'item_category',
-					schema_v: 2,
-					name: 'น้ำดื่มเฉพาะศูนย์',
-					shelter_code: 'SH001',
-					override: true,
-					created_at: '2026-09-15T00:00:00.000Z',
-					updated_at: '2026-09-15T00:00:00.000Z',
-					created_by: 'tester'
+				repo.updateItemMaster({ ...legacy, base_unit: 'หน่วยใหม่' } as unknown as ItemMaster)
+			).rejects.toThrow(/Base unit must be a valid lowercase English code/);
+		});
+
+		it('creates and lists units of measure sorted by sort_order', async () => {
+			for (const unit of await repo.listUnitsOfMeasure()) {
+				await getDb('catalog').remove(unit);
+			}
+			await repo.createUnitOfMeasure(
+				{
+					code: 'bottle',
+					label_th: 'ขวด',
+					label_en: 'bottle',
+					dimension: 'count',
+					sort_order: 10
+				},
+				ctx
+			);
+
+			await repo.createUnitOfMeasure(
+				{
+					code: 'piece',
+					label_th: 'ชิ้น',
+					label_en: 'pcs',
+					dimension: 'count',
+					sort_order: 1
+				},
+				ctx
+			);
+
+			const list = await repo.listUnitsOfMeasure();
+			expect(list).toHaveLength(2);
+			expect(list[0].code).toBe('piece');
+			expect(list[1].code).toBe('bottle');
+		});
+
+		it('protects is_protected unit of measure from code/dimension modification and deletion', async () => {
+			for (const unit of await repo.listUnitsOfMeasure()) {
+				await getDb('catalog').remove(unit);
+			}
+			const uom = await repo.createUnitOfMeasure(
+				{
+					code: 'kg',
+					label_th: 'กิโลกรัม',
+					label_en: 'kg',
+					dimension: 'mass',
+					is_protected: true
+				},
+				ctx
+			);
+
+			// Updating labels is allowed for protected units
+			const updated = await repo.updateUnitOfMeasure({
+				...uom,
+				label_th: 'กิโลกรัม (แก้ไข)'
+			});
+			expect(updated.label_th).toBe('กิโลกรัม (แก้ไข)');
+
+			// Attempting to change code or dimension must be rejected
+			await expect(
+				repo.updateUnitOfMeasure({
+					...uom,
+					code: 'kilogram'
 				})
-			).rejects.toThrow('ไม่อนุญาตให้สร้าง local override บนหมวดหมู่ระบบมาตรฐาน');
-		});
-
-		it('CR-119/CR-125: should preserve system_key/is_protected but allow default_class on protected category updates', async () => {
-			await getDb('catalog').put({
-				_id: 'item_category:bedding',
-				type: 'item_category',
-				schema_v: 2,
-				name: 'เครื่องนอนและที่พักพิง (Shelter & Bedding)',
-				system_key: 'BEDDING',
-				default_class: 'DURABLE',
-				is_protected: true,
-				created_at: '2026-09-15T00:00:00.000Z',
-				updated_at: '2026-09-15T00:00:00.000Z',
-				created_by: 'system'
-			});
-
-			// System Admin updates name, description, and default_class (CR-125), and tries to
-			// change system_key and unprotect the category (still not allowed).
-			const updated = await repo.updateItemCategory({
-				_id: 'item_category:bedding',
-				type: 'item_category',
-				schema_v: 2,
-				name: 'เครื่องนอนและเต็นท์',
-				description: 'คำอธิบายใหม่',
-				system_key: 'WATER', // Attempted change
-				default_class: 'CONSUMABLE', // CR-125: allowed change
-				is_protected: false as unknown as boolean, // Attempted unprotect
-				created_at: '2026-09-15T00:00:00.000Z',
-				updated_at: '2026-09-15T00:00:00.000Z',
-				created_by: 'system_admin'
-			});
-
-			expect(updated.name).toBe('เครื่องนอนและเต็นท์');
-			expect(updated.description).toBe('คำอธิบายใหม่');
-			// CR-125: default_class is now editable on protected categories
-			expect(updated.default_class).toBe('CONSUMABLE');
-			// system_key and is_protected remain immutable per CR-119 FR-04
-			expect(updated.is_protected).toBe(true);
-			expect(updated.system_key).toBe('BEDDING');
-		});
-
-		it('CR-119: should canonicalize item_master.category to canonical _id on create and update', async () => {
-			// 1. Create with system category name
-			const item1 = await repo.createItemMaster(
-				{
-					name: 'ปลากระป๋อง',
-					base_unit: 'กระป๋อง',
-					category: 'อาหารและวัตถุดิบ (Food Ingredients)',
-					distribution_type: 'recurring',
-					type_class: 'CONSUMABLE',
-					dietary: []
-				},
-				ctx
-			);
-			expect(item1.category).toBe('item_category:food');
-
-			// 2. Create with system key string
-			const item2 = await repo.createItemMaster(
-				{
-					name: 'ถังแก๊ส LPG 15kg',
-					base_unit: 'ถัง',
-					category: 'FUEL_ENERGY',
-					capacity_kg: '15',
-					burn_rate_kg_per_hour: '0.5',
-					distribution_type: 'recurring',
-					type_class: 'CONSUMABLE',
-					dietary: []
-				},
-				ctx
-			);
-			expect(item2.category).toBe('item_category:fuel_energy');
-			expect(item2.fuel_type).toBe('LPG');
-			expect(item2.capacity_kg).toBe('15');
-
-			// 3. Update legacy item master where category was name
-			item2.category = 'อาหารและวัตถุดิบ (Food Ingredients)';
-			const updatedItem = await repo.updateItemMaster(item2);
-			expect(updatedItem.category).toBe('item_category:food');
-			expect(updatedItem.fuel_type).toBeUndefined();
-			expect(updatedItem.capacity_kg).toBeUndefined();
-		});
-
-		it('CR-119: should reject unknown or ambiguous category references', async () => {
-			// 1. Unknown category reference
-			await expect(
-				repo.createItemMaster(
-					{
-						name: 'ของเล่นเด็ก',
-						base_unit: 'ชิ้น',
-						category: 'หมวดหมู่ที่ไม่มีอยู่จริง',
-						distribution_type: 'recurring',
-						type_class: 'CONSUMABLE',
-						dietary: []
-					},
-					ctx
-				)
-			).rejects.toThrow(/ไม่พบหมวดหมู่/);
-
-			// 2. Ambiguous category reference (multiple matching categories)
-			await repo.createItemCategory({ name: 'อุปกรณ์ซ่อมบำรุง' }, ctx);
-			await repo.createItemCategory({ name: 'อุปกรณ์ซ่อมบำรุง' }, ctx);
+			).rejects.toThrow(/ไม่สามารถเปลี่ยนรหัสหน่วยนับได้/);
 
 			await expect(
-				repo.createItemMaster(
-					{
-						name: 'ค้อน',
-						base_unit: 'อัน',
-						category: 'อุปกรณ์ซ่อมบำรุง',
-						distribution_type: 'recurring',
-						type_class: 'CONSUMABLE',
-						dietary: []
-					},
-					ctx
-				)
-			).rejects.toThrow(/ข้อมูลซ้ำซ้อน/);
+				repo.updateUnitOfMeasure({
+					...uom,
+					dimension: 'volume'
+				})
+			).rejects.toThrow(/ไม่สามารถแก้ไขรหัสหรือมิติการวัดของหน่วยนับมาตรฐานได้/);
+
+			// Attempting to delete must be rejected
+			await expect(repo.deleteUnitOfMeasure(uom._id)).rejects.toThrow(
+				/ไม่สามารถลบหน่วยนับมาตรฐานของระบบได้/
+			);
 		});
 
-		it('CR-120: should enforce LPG invariant on repository create, direct update, and shelter override', async () => {
-			// 1. Create LPG Item Master via repository
-			const lpgDoc = await repo.createItemMaster(
+		it('keeps custom UOM codes immutable and merges the latest persisted document', async () => {
+			const uom = await repo.createUnitOfMeasure(
 				{
-					name: 'แก๊สหุงต้ม LPG 15 กิโลกรัม',
-					category: 'item_category:fuel_energy',
-					base_unit: 'กล่อง', // Client sends invalid unit
-					capacity_kg: '15',
-					burn_rate_kg_per_hour: '0.5',
-					type_class: 'CONSUMABLE' as const
+					code: 'crate',
+					label_th: 'ลัง',
+					label_en: 'crate',
+					dimension: 'count'
 				},
 				ctx
 			);
 
-			expect(lpgDoc.category).toBe('item_category:fuel_energy');
-			expect(lpgDoc.base_unit).toBe('ถัง'); // Must be overridden to ถัง
-			expect(lpgDoc.fuel_type).toBe('LPG'); // Must be set to LPG
-			expect(lpgDoc.capacity_kg).toBe('15');
-			expect(lpgDoc.burn_rate_kg_per_hour).toBe('0.5');
-			expect(lpgDoc.time_multiplier).toBe('1'); // Defaulted
-			expect(lpgDoc.type_class).toBe('CONSUMABLE');
+			// Simulate a newer server-side field written after the caller read `uom`.
+			await getDb('catalog').put({ ...uom, server_note: 'keep-me' });
+			const updated = await repo.updateUnitOfMeasure({
+				...uom,
+				label_th: 'ลังสินค้า'
+			});
 
-			// 2. Reject invalid direct update
-			const invalidUpdate = {
-				...lpgDoc,
-				capacity_kg: '0' // Zero capacity is invalid
-			};
-			await expect(repo.updateItemMaster(invalidUpdate)).rejects.toThrow();
+			expect(updated.label_th).toBe('ลังสินค้า');
+			expect((updated as UnitOfMeasure & { server_note?: string }).server_note).toBe('keep-me');
+			await expect(repo.updateUnitOfMeasure({ ...uom, code: 'box' })).rejects.toThrow(
+				/ไม่สามารถเปลี่ยนรหัสหน่วยนับได้/
+			);
+		});
 
-			// 3. Direct update with stale hidden fields (food fields must be stripped)
-			const updateWithStale = {
-				...lpgDoc,
-				burn_rate_kg_per_hour: '0.6',
-				shelf_life_days: 90, // Stale food field
-				allergens: 'ถั่ว', // Stale food field
-				dietary: ['HALAL' as const] // Stale food field
-			};
-			const updated = await repo.updateItemMaster(updateWithStale);
-			expect(updated.burn_rate_kg_per_hour).toBe('0.6');
-			expect(updated.shelf_life_days).toBeUndefined();
-			expect(updated.allergens).toBeUndefined();
-			expect(updated.dietary).toBeUndefined();
+		it('blocks deletion of a custom UOM while it is referenced by an item master', async () => {
+			const uom = await repo.createUnitOfMeasure(
+				{
+					code: 'crate',
+					label_th: 'ลัง',
+					label_en: 'crate',
+					dimension: 'count'
+				},
+				ctx
+			);
+			await repo.createItemMaster(
+				{
+					name: 'ลังสินค้า',
+					base_unit: 'crate',
+					type_class: 'CONSUMABLE',
+					distribution_type: 'recurring'
+				},
+				ctx
+			);
 
-			// 4. Create shelter override from central LPG
-			const centralItem = await repo.getItemMaster(lpgDoc._id);
-			expect(centralItem).not.toBeNull();
+			await expect(repo.deleteUnitOfMeasure(uom._id)).rejects.toThrow(
+				/ไม่สามารถลบหน่วยนับ "crate" ได้ เนื่องจากมีรายการสินค้าอ้างอิงอยู่/
+			);
+		});
 
-			// eslint-disable-next-line @typescript-eslint/no-unused-vars
-			const { _rev, ...itemWithoutRev } = centralItem!;
-			const overridePayload = {
-				...itemWithoutRev,
-				shelter_code: 'SH001',
-				override: true,
-				burn_rate_kg_per_hour: '0.45'
-			};
+		it('successfully deletes an unreferenced custom UOM', async () => {
+			const uom = await repo.createUnitOfMeasure(
+				{
+					code: 'unreferenced_box',
+					label_th: 'กล่องทดสอบ',
+					label_en: 'test box',
+					dimension: 'count'
+				},
+				ctx
+			);
+			const wasDeleted = await repo.deleteUnitOfMeasure(uom._id);
+			expect(wasDeleted).toBe(true);
 
-			const overrideDoc = await repo.updateItemMaster(overridePayload);
-			expect(overrideDoc._id).toBe(centralItem!._id);
-			expect(overrideDoc.shelter_code).toBe('SH001');
-			expect(overrideDoc.override).toBe(true);
-			expect(overrideDoc.base_unit).toBe('ถัง');
-			expect(overrideDoc.fuel_type).toBe('LPG');
-			expect(overrideDoc.capacity_kg).toBe('15');
-			expect(overrideDoc.burn_rate_kg_per_hour).toBe('0.45');
-
-			// Verify shelter DB contains the override and central DB retains original
-			const localItem = await repo.getItemMaster(lpgDoc._id, 'SH001');
-			expect(localItem?.burn_rate_kg_per_hour).toBe('0.45');
-			expect(localItem?.shelter_code).toBe('SH001');
-
-			const centralItemStillIntact = await repo.getItemMaster(lpgDoc._id);
-			expect(centralItemStillIntact?.burn_rate_kg_per_hour).toBe('0.6');
-			expect(centralItemStillIntact?.shelter_code).toBeUndefined();
+			const found = await repo.getUnitOfMeasure(uom._id);
+			expect(found).toBeNull();
 		});
 	});
 });

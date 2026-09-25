@@ -121,7 +121,9 @@ test.describe('Catalog Management — Item Master CRUD', () => {
 		await expect(page.getByRole('dialog')).toBeVisible();
 		await page.getByRole('button', { name: 'ยืนยันการลบ' }).click();
 
-		await expect(page.getByText(`ลบรายการ "${itemName}" สำเร็จ`)).toBeVisible({ timeout: 8000 });
+		await expect(page.getByText(`ลบรายการ "${itemName}" ถาวรสำเร็จ`)).toBeVisible({
+			timeout: 8000
+		});
 		await expect(page.locator('table').getByText(itemName)).not.toBeVisible();
 	});
 });

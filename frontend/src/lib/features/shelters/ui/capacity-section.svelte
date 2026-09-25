@@ -31,7 +31,10 @@
 	}
 </script>
 
-<section class="mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border p-6">
+<section
+	id="capacity"
+	class="shelter-form-scroll-mt mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border p-6"
+>
 	<div class="flex items-center space-x-2 border-b border-shelter-border pb-3">
 		<Building2 class="h-5 w-5 text-shelter-blue-text" />
 		<span class="text-sm font-bold text-black">2.</span>

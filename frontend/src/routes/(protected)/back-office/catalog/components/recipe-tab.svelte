@@ -5,25 +5,24 @@
 	import { getShelterCode } from '$lib/db/shelter';
 
 	// Component
+	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import * as Table from '$lib/components/ui/table/index.js';
 	import * as Pagination from '$lib/components/ui/pagination/index.js';
-	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import { Separator } from '$lib/components/ui/separator/index.js';
 
 	// Icon
-	import PackageOpen from '@lucide/svelte/icons/package-open';
-	import ChefHat from '@lucide/svelte/icons/chef-hat';
-	import Settings2 from '@lucide/svelte/icons/settings-2';
-	import Trash2 from '@lucide/svelte/icons/trash-2';
-	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
+	import Search from '@lucide/svelte/icons/search';
+	import Plus from '@lucide/svelte/icons/plus';
+	import X from '@lucide/svelte/icons/x';
+	import { Settings2, Trash2, RotateCcw } from '@lucide/svelte';
+	import * as Dialog from '$lib/components/ui/dialog/index.js';
 
 	import {
 		useRecipes,
 		RecipeForm,
 		useDeleteRecipe,
 		useUpdateRecipe,
-		CatalogListToolbar,
-		CatalogFormShell,
-		CatalogScopeBadge,
 		type Recipe
 	} from '$lib/features/catalog';
 
@@ -81,16 +80,19 @@
 	function confirmDelete() {
 		if (!pendingDeleteRecipe) return;
 		const { id, label } = pendingDeleteRecipe;
+		const targetRecipe = query.data?.find((i) => i._id === id);
+		const isOverride = !!targetRecipe?.override;
+
 		deleteMutation.mutate(
 			{ id, shelterCode },
 			{
 				onSuccess: (wasDeleted) => {
-					if (wasDeleted) {
-						toast.success(`ลบสูตรอาหาร "${label}" สำเร็จ`);
+					if (isOverride) {
+						toast.success(`คืนค่ามาตรฐานสูตรอาหาร "${label}" สำเร็จ`);
+					} else if (!wasDeleted) {
+						toast.success(`เปลี่ยนสถานะสูตรอาหาร "${label}" เป็นปิดการใช้งานแล้ว`);
 					} else {
-						toast.success(
-							`เปลี่ยนสถานะสูตรอาหาร "${label}" เป็นปิดใช้งาน (Deactivated) เนื่องจากสูตรนี้ถูกใช้งานในระบบแล้ว`
-						);
+						toast.success(`ลบสูตรอาหาร "${label}" ถาวรสำเร็จ`);
 					}
 					deleteConfirmOpen = false;
 					pendingDeleteRecipe = null;
@@ -141,83 +143,123 @@
 
 {#if viewMode === 'list'}
 	<div class="flex w-full flex-col gap-4">
-		<CatalogListToolbar {total} bind:search={q} {canWrite} onadd={showCreateForm} />
-
-		<!-- List -->
-		<div class="overflow-x-auto rounded-xl border border-border bg-card">
-			<div
-				class="hidden items-center gap-4 border-b border-border bg-muted/30 px-4 py-2.5 text-sm font-semibold text-slate-900 sm:grid sm:grid-cols-[1fr_220px] dark:text-slate-100"
-			>
-				<span>ชื่อข้อมูลมาตรฐาน</span>
-				<span class="text-right">จัดการ</span>
-			</div>
-			{#if query.isLoading}
-				<div class="py-6 text-center text-sm text-muted-foreground">กำลังโหลดข้อมูล...</div>
-			{:else if filteredAll.length === 0}
-				<div
-					class="flex flex-col items-center gap-2 py-10 text-center text-sm text-muted-foreground"
-				>
-					<PackageOpen class="size-8 text-slate-300" />
-					ไม่พบข้อมูลมาสเตอร์ที่ค้นหาตามเงื่อนไขนี้
+		<div class="flex items-center justify-between gap-4">
+			<span class="text-md font-bold">รายการข้อมูล ({total})</span>
+			<div class="item-center flex gap-2">
+				<div class="relative w-72">
+					<Search class="absolute top-2.5 left-2.5 h-4 w-4 text-muted-foreground" />
+					<Input bind:value={q} type="search" placeholder="ค้นหา..." class="pl-9" />
 				</div>
-			{:else}
-				<ul class="divide-y divide-border">
-					{#each paginatedItems as e (e._id)}
-						<li class="grid grid-cols-1 gap-3 p-4 sm:grid-cols-[1fr_220px] sm:items-start sm:gap-4">
-							<div class="min-w-0 space-y-1">
-								<div class="flex flex-wrap items-center gap-2">
-									<span class="text-base font-bold text-foreground">{e.label}</span>
-									<CatalogScopeBadge doc={e} />
-								</div>
-								<p class="text-sm text-muted-foreground tabular-nums">
-									{e.standard_portions} กล่อง · {e.standard_duration_hours} ชม.
-								</p>
-							</div>
+				{#if canWrite}
+					<Button size="lg" class="flex items-center gap-2" onclick={showCreateForm}>
+						<Plus class="h-4 w-4" />
+						เพิ่มข้อมูล
+					</Button>
+				{/if}
+			</div>
+		</div>
 
-							<div class="flex flex-wrap items-start gap-2 sm:justify-end">
-								{#if canModifyRecipe(e)}
-									<Button
-										variant="outline"
-										size="sm"
-										onclick={() => showEditForm(e._id)}
-										class="min-h-11 border-blue-200 text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-950/20"
-									>
-										<Settings2 class="h-4 w-4" />
-										จัดการ
-									</Button>
-									{#if (e.shelter_code || undefined) === (shelterCode || undefined)}
-										{#if e.deactivated}
-											<Button
-												variant="outline"
-												size="sm"
-												onclick={() => activateRecipe(e)}
-												disabled={updateRecipeMutation.isPending}
-												class="min-h-11 border-green-200 text-green-600 hover:bg-green-50 hover:text-green-700 dark:border-green-800 dark:text-green-400 dark:hover:bg-green-950/20"
-											>
-												<RotateCcw class="h-4 w-4" />
-												นำกลับมาใช้
-											</Button>
-										{:else}
-											<Button
-												variant="outline"
-												size="sm"
-												onclick={() => showDeleteConfirm(e._id, e.label)}
-												disabled={deleteMutation.isPending}
-												class="min-h-11 {e.override
-													? 'border-orange-200 text-orange-600 hover:bg-orange-50 hover:text-orange-700 dark:border-orange-800 dark:text-orange-400 dark:hover:bg-orange-950/20'
-													: 'border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/20'}"
-											>
-												<Trash2 class="h-4 w-4" />
-												{e.override ? 'รีเซ็ต' : 'ลบ'}
-											</Button>
-										{/if}
+		<!-- Table -->
+		<div class="overflow-x-auto rounded-xl border border-border bg-card">
+			<Table.Root>
+				<Table.Header>
+					<Table.Row>
+						<Table.Head class="font-bold">ชื่อสูตรอาหารมาตรฐาน</Table.Head>
+						<Table.Head class="w-24 text-center font-bold">จัดการ</Table.Head>
+					</Table.Row>
+				</Table.Header>
+				<Table.Body>
+					{#if query.isLoading}
+						<Table.Row>
+							<Table.Cell colspan={2} class="py-6 text-center text-muted-foreground"
+								>กำลังโหลดข้อมูล...</Table.Cell
+							>
+						</Table.Row>
+					{:else if filteredAll.length === 0}
+						<Table.Row>
+							<Table.Cell colspan={2} class="py-6 text-center text-muted-foreground"
+								>📭 ไม่พบข้อมูลมาสเตอร์ที่ค้นหาตามเงื่อนไขนี้</Table.Cell
+							>
+						</Table.Row>
+					{:else}
+						{#each paginatedItems as e (e._id)}
+							<Table.Row>
+								<Table.Cell class="font-bold text-foreground">
+									{e.label}
+									{#if !e.shelter_code}
+										<span
+											class="ml-2 inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700 ring-1 ring-slate-600/10 ring-inset dark:bg-zinc-800 dark:text-zinc-400 dark:ring-zinc-700"
+										>
+											ส่วนกลาง
+										</span>
+									{:else if e.override}
+										<span
+											class="ml-2 inline-flex items-center rounded-full bg-orange-50 px-2 py-0.5 text-xs font-semibold text-orange-700 ring-1 ring-orange-600/10 ring-inset dark:bg-orange-950/40 dark:text-orange-400 dark:ring-orange-500/20"
+										>
+											ปรับแต่งแล้ว
+										</span>
+									{:else}
+										<span
+											class="ml-2 inline-flex items-center rounded-full bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-700 ring-1 ring-teal-600/10 ring-inset dark:bg-teal-950/40 dark:text-teal-400 dark:ring-teal-500/20"
+										>
+											เฉพาะศูนย์
+										</span>
 									{/if}
-								{/if}
-							</div>
-						</li>
-					{/each}
-				</ul>
-			{/if}
+									{#if e.deactivated}
+										<span
+											class="ml-2 inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700 ring-1 ring-red-600/10 ring-inset dark:bg-red-950/40 dark:text-red-400 dark:ring-red-500/20"
+										>
+											ปิดใช้งาน
+										</span>
+									{/if}
+								</Table.Cell>
+								<Table.Cell class="text-center">
+									{#if canModifyRecipe(e)}
+										<div class="inline-flex gap-2">
+											<Button
+												variant="outline"
+												size="sm"
+												onclick={() => showEditForm(e._id)}
+												class="border-blue-200 text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-950/20"
+											>
+												<Settings2 class="h-4 w-4" />
+												จัดการ
+											</Button>
+											{#if (e.shelter_code || undefined) === (shelterCode || undefined)}
+												{#if e.deactivated}
+													<Button
+														variant="outline"
+														size="sm"
+														onclick={() => activateRecipe(e)}
+														disabled={updateRecipeMutation.isPending}
+														class="border-green-200 text-green-600 hover:bg-green-50 hover:text-green-700 dark:border-green-800 dark:text-green-400 dark:hover:bg-green-950/20"
+													>
+														<RotateCcw class="h-4 w-4" />
+														นำกลับมาใช้
+													</Button>
+												{:else}
+													<Button
+														variant="outline"
+														size="sm"
+														onclick={() => showDeleteConfirm(e._id, e.label)}
+														disabled={deleteMutation.isPending}
+														class={e.override
+															? 'border-orange-200 text-orange-600 hover:bg-orange-50 hover:text-orange-700 dark:border-orange-800 dark:text-orange-400 dark:hover:bg-orange-950/20'
+															: 'border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/20'}
+													>
+														<Trash2 class="h-4 w-4" />
+														{e.override ? 'รีเซ็ต' : 'ลบ'}
+													</Button>
+												{/if}
+											{/if}
+										</div>
+									{/if}
+								</Table.Cell>
+							</Table.Row>
+						{/each}
+					{/if}
+				</Table.Body>
+			</Table.Root>
 		</div>
 
 		{#if totalPages > 1}
@@ -243,20 +285,39 @@
 		{/if}
 	</div>
 {:else}
-	<CatalogFormShell
-		title={viewMode === 'edit' ? 'แก้ไขสูตรอาหารมาตรฐาน (BOM)' : 'เพิ่มสูตรอาหารมาตรฐานใหม่ (BOM)'}
-		icon={ChefHat}
-		{canWrite}
-		onclose={backToList}
+	<div
+		class="w-full rounded-2xl border border-slate-100 bg-card p-6 shadow-sm md:p-8 dark:border-zinc-800"
 	>
-		<RecipeForm
-			id={selectedId}
-			isEdit={viewMode === 'edit'}
-			{basePath}
-			onsuccess={backToList}
-			oncancel={backToList}
-		/>
-	</CatalogFormShell>
+		<div class="flex items-start justify-between gap-4">
+			<div class="flex flex-col gap-1.5">
+				<span
+					class="text-2xs font-semibold tracking-wider text-[#002f6c] uppercase dark:text-blue-400"
+				>
+					ฐานข้อมูลมาสเตอร์ส่วนกลาง (MASTER DATA ENGINE)
+				</span>
+
+				<h1 class="text-xl leading-tight font-bold text-slate-800 md:text-2xl dark:text-slate-100">
+					{viewMode === 'create'
+						? '➕ บันทึกสูตรอาหารมาตรฐาน (BOM) ใหม่'
+						: '🛠️ แก้ไขสูตรอาหารมาตรฐาน (BOM)'}
+				</h1>
+			</div>
+
+			<div class="flex items-center">
+				<button onclick={backToList} class="rounded-lg p-2 transition hover:bg-muted/50">
+					<X class="h-5 w-5 text-muted-foreground" />
+				</button>
+			</div>
+		</div>
+		<Separator class="my-4 bg-slate-100 dark:bg-zinc-800" />
+		{#if canWrite}
+			<RecipeForm id={selectedId} isEdit={viewMode === 'edit'} {basePath} onsuccess={backToList} />
+		{:else}
+			<div class="py-12 text-center text-sm font-bold text-destructive">
+				คุณไม่มีสิทธิ์เข้าถึงส่วนนี้ (Unauthorized)
+			</div>
+		{/if}
+	</div>
 {/if}
 
 <Dialog.Root bind:open={deleteConfirmOpen}>
@@ -287,7 +348,8 @@
 						>?
 						<span class="mt-3 block text-xs leading-relaxed text-muted-foreground">
 							* หากสูตรอาหารนี้ถูกใช้ในแผนเตรียมอาหาร (Meal Plan) อยู่ในระบบแล้ว
-							รายการจะถูกเปลี่ยนสถานะเป็นปิดใช้งาน (Deactivated) แทนการลบถาวร
+							หรือเป็นสูตรอาหารมาตรฐานส่วนกลาง ระบบจะเปลี่ยนสถานะเป็นปิดการใช้งาน แทนการลบถาวร
+							เพื่อรักษาความสมบูรณ์ของข้อมูลอ้างอิง
 						</span>
 					{/if}
 				{/if}

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { createShelterSchema } from '$lib/features/shelters/server';
-import { petPolicySchema, zoneSchema } from '$lib/features/shelters';
+import { foodDistributionPointSchema, petPolicySchema, zoneSchema } from '$lib/features/shelters';
+import { ulid } from '$lib/db/ulid';
 import {
 	FIELD_SEPARATOR,
 	H,
@@ -22,6 +23,7 @@ import {
 	PROJECT_LEVEL_CHOICES,
 	SITE_KIND_CHOICES,
 	WATER_SOURCE_CHOICES,
+	FOOD_DISTRIBUTION_PATH_TO_HEADER,
 	ZONE_STATUS_CHOICES,
 	ZONE_TYPE_CHOICES
 } from './columns';
@@ -62,6 +64,10 @@ export interface ParsedWorkbook {
 	shelters: RawSheetRow[];
 	/** Zone rows, still one entry per zone. */
 	zones: RawSheetRow[];
+	/** Food distribution point rows, still one entry per point. */
+	foodDistributionPoints: RawSheetRow[];
+	/** True when the uploaded workbook includes the current food-point sheet. */
+	hasFoodDistributionPointsSheet: boolean;
 }
 
 export interface RowFieldError {
@@ -87,11 +93,15 @@ export interface RowValidation {
 	/** present when `ok` — the parsed, ready-to-POST payload. */
 	shelter?: ShelterInput;
 	errors: RowFieldError[];
+	/** Whether the current workbook explicitly supplied food points for this row. */
+	foodDistributionPointsProvided?: boolean;
 }
 
 /** The stored shelter, as far as {@link buildUpdatePayload} needs to read it. */
 export interface ExistingShelterPolicy {
 	admission_policy?: { supported_vulnerable_groups?: string[] } | null;
+	food_distribution_points?: ShelterInput['food_distribution_points'];
+	feature_flags?: ShelterInput['feature_flags'];
 }
 
 /**
@@ -107,13 +117,24 @@ export interface ExistingShelterPolicy {
  */
 export function buildUpdatePayload(
 	shelter: ShelterInput,
-	existing: ExistingShelterPolicy | null
+	existing: ExistingShelterPolicy | null,
+	options: { foodDistributionPointsProvided?: boolean } = {}
 ): Omit<ShelterInput, 'municipality_zone' | 'community'> {
 	const rest: Partial<ShelterInput> = { ...shelter };
 	delete rest.municipality_zone;
 	delete rest.community;
+	// Operational fields are deliberately not workbook-owned. Preserve them
+	// from the stored document instead of replacing them with schema defaults.
+	delete rest.feature_flags;
+	if (options.foodDistributionPointsProvided !== true) delete rest.food_distribution_points;
 	return {
 		...(rest as Omit<ShelterInput, 'municipality_zone' | 'community'>),
+		...(existing?.feature_flags !== undefined ? { feature_flags: existing.feature_flags } : {}),
+		...(options.foodDistributionPointsProvided === true
+			? { food_distribution_points: shelter.food_distribution_points }
+			: existing?.food_distribution_points !== undefined
+				? { food_distribution_points: existing.food_distribution_points }
+				: {}),
 		admission_policy: {
 			...shelter.admission_policy,
 			supported_vulnerable_groups: existing?.admission_policy?.supported_vulnerable_groups ?? []
@@ -371,6 +392,36 @@ function buildZones(zoneRows: readonly RawSheetRow[], sink: ErrorSink): ParsedZo
 	return zones;
 }
 
+type ParsedFoodDistributionPoint = z.infer<typeof foodDistributionPointSchema>;
+
+function buildFoodDistributionPoints(
+	pointRows: readonly RawSheetRow[],
+	sink: ErrorSink
+): ParsedFoodDistributionPoint[] {
+	const points: ParsedFoodDistributionPoint[] = [];
+	for (const { cells, line } of pointRows) {
+		const parsed = foodDistributionPointSchema.safeParse({
+			// IDs are optional in the workbook for usability; the persisted schema
+			// still gets the same ULID shape used by the form.
+			id: cell(cells, H.food_point_id) || ulid(),
+			name: cell(cells, H.food_point_name),
+			note: strOrNull(cell(cells, H.food_point_note)),
+			lat: numOrUndef(cell(cells, H.food_point_lat)),
+			lng: numOrUndef(cell(cells, H.food_point_lng))
+		});
+
+		if (!parsed.success) {
+			for (const issue of parsed.error.issues) {
+				const header = FOOD_DISTRIBUTION_PATH_TO_HEADER[issue.path.join('.')] ?? H.food_point_name;
+				sink.push(header, issue.message, line);
+			}
+			continue;
+		}
+		points.push(parsed.data);
+	}
+	return points;
+}
+
 /** {@link resolveEnum} but tagging the error with a zone-sheet row number. */
 function resolveEnumOnSheet<T extends string>(
 	raw: RawRow,
@@ -482,7 +533,9 @@ export function validateRow(
 	raw: RawRow,
 	row: number,
 	lookups: Lookups,
-	zoneRows: readonly RawSheetRow[] = []
+	zoneRows: readonly RawSheetRow[] = [],
+	foodPointRows: readonly RawSheetRow[] = [],
+	foodDistributionPointsProvided = foodPointRows.length > 0
 ): RowValidation {
 	const sink = createSink();
 	const nameCell = cell(raw, H.name);
@@ -540,6 +593,7 @@ export function validateRow(
 	const petCategories = petPolicy === 'conditional' ? buildPetCategories(raw, sink) : [];
 
 	const zones = buildZones(zoneRows, sink);
+	const foodDistributionPoints = buildFoodDistributionPoints(foodPointRows, sink);
 
 	const capacityCell = cell(raw, H.capacity);
 
@@ -617,6 +671,7 @@ export function validateRow(
 			secondary_muster_point: strOrNull(cell(raw, H.secondary_muster_point))
 		},
 		zones,
+		food_distribution_points: foodDistributionPoints,
 		admission_policy: {
 			supported_vulnerable_groups: [],
 			pet_policy: { policy: petPolicy ?? null, categories: petCategories }
@@ -670,9 +725,16 @@ export function validateRow(
 	}
 
 	if (sink.errors.length === 0 && parsed.success) {
-		return { row, name, ok: true, shelter: parsed.data, errors: [] };
+		return {
+			row,
+			name,
+			ok: true,
+			shelter: parsed.data,
+			errors: [],
+			foodDistributionPointsProvided
+		};
 	}
-	return { row, name, ok: false, errors: sink.errors };
+	return { row, name, ok: false, errors: sink.errors, foodDistributionPointsProvided };
 }
 
 /** Group zone rows by their `รหัสศูนย์พักพิง` value. */
@@ -694,9 +756,17 @@ function groupZonesByRef(zones: readonly RawSheetRow[]): Map<string, RawSheetRow
  */
 export function validateWorkbook(wb: ParsedWorkbook, lookups: Lookups): RowValidation[] {
 	const byRef = groupZonesByRef(wb.zones);
+	const byFoodDistributionRef = groupZonesByRef(wb.foodDistributionPoints ?? []);
 	const rows = wb.shelters.map((s, i) => {
 		const ref = s.ref === '' ? String(i + 1) : s.ref;
-		return validateRow(s.cells, i + 1, lookups, byRef.get(ref) ?? []);
+		return validateRow(
+			s.cells,
+			i + 1,
+			lookups,
+			byRef.get(ref) ?? [],
+			byFoodDistributionRef.get(ref) ?? [],
+			wb.hasFoodDistributionPointsSheet === true
+		);
 	});
 
 	const inFileDuplicates = findInFileDuplicates(rows);
@@ -729,6 +799,12 @@ export function validateWorkbook(wb: ParsedWorkbook, lookups: Lookups): RowValid
 export function orphanZoneRows(wb: ParsedWorkbook): RawSheetRow[] {
 	const refs = new Set(wb.shelters.map((s, i) => (s.ref === '' ? String(i + 1) : s.ref)));
 	return wb.zones.filter((z) => !refs.has(z.ref));
+}
+
+/** Food-point rows whose `รหัสศูนย์พักพิง` matches no shelter. */
+export function orphanFoodDistributionRows(wb: ParsedWorkbook): RawSheetRow[] {
+	const refs = new Set(wb.shelters.map((s, i) => (s.ref === '' ? String(i + 1) : s.ref)));
+	return (wb.foodDistributionPoints ?? []).filter((point) => !refs.has(point.ref));
 }
 
 /** Validate shelter rows without zone data — kept for callers with a flat row list. */

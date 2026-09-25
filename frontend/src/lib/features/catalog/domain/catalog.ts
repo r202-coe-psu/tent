@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { catalogDoc, type CatalogDoc, type AuthorContext } from '$lib/db/model';
-import { persistQty, qtyStrCoercePositiveSchema, type QtyValue } from '$lib/utils/qty';
+import { persistQty, qtyStrCoercePositiveSchema } from '$lib/utils/qty';
+import { isCanonicalUnitCode, isLegacyUnitLabel, unitCodeSchema } from './unit-of-measure';
 
 // ---------------------------------------------------------------- enums
 export const distributionTypeSchema = z.enum(['recurring', 'one_time']);
@@ -24,21 +25,7 @@ export type Dietary = z.infer<typeof dietarySchema>;
 export const assetStatusSchema = z.enum(['READY', 'IN_USE', 'MAINTENANCE', 'BROKEN']);
 export type AssetStatus = z.infer<typeof assetStatusSchema>;
 
-export const fuelTypeSchema = z.literal('LPG');
-export type FuelType = z.infer<typeof fuelTypeSchema>;
-
-// ---------------------------------------------------------------- documents
-export interface Ingredient {
-	item_master_id: string;
-	quantity: string; // qty_str
-	uom: string;
-}
-
-export interface UomConversion {
-	uom_name: string;
-	multiplier: string; // qty_str
-	barcode?: string;
-}
+// ---------------------------------------------------------------- system categories (CR-119)
 
 export const SYSTEM_CATEGORY_KEYS = [
 	'FOOD',
@@ -55,19 +42,22 @@ export const SYSTEM_CATEGORY_KEYS = [
 
 export type SystemCategoryKey = (typeof SYSTEM_CATEGORY_KEYS)[number];
 
-export interface SystemCategoryDefinition {
+export type SystemItemCategoryDef = {
 	key: SystemCategoryKey;
 	id: string;
 	name: string;
+	/** Short Thai name used by legacy docs / early seeds */
+	legacy_names: string[];
 	default_class: TypeClass;
 	description: string;
-}
+};
 
-export const SYSTEM_CATEGORY_DEFINITIONS: readonly SystemCategoryDefinition[] = [
+export const SYSTEM_ITEM_CATEGORIES: readonly SystemItemCategoryDef[] = [
 	{
 		key: 'FOOD',
 		id: 'item_category:food',
 		name: 'อาหารและวัตถุดิบ (Food Ingredients)',
+		legacy_names: ['อาหารและวัตถุดิบ'],
 		default_class: 'CONSUMABLE',
 		description: 'วัตถุดิบประกอบอาหารสดและแห้งสำหรับโรงครัวกลาง'
 	},
@@ -75,6 +65,7 @@ export const SYSTEM_CATEGORY_DEFINITIONS: readonly SystemCategoryDefinition[] = 
 		key: 'WATER',
 		id: 'item_category:water',
 		name: 'น้ำดื่มสะอาด (Drinking Water)',
+		legacy_names: ['น้ำดื่มสะอาด'],
 		default_class: 'CONSUMABLE',
 		description: 'น้ำดื่มบรรจุขวด ถังน้ำดื่มสะอาดสำหรับบริโภค'
 	},
@@ -82,6 +73,7 @@ export const SYSTEM_CATEGORY_DEFINITIONS: readonly SystemCategoryDefinition[] = 
 		key: 'WASH',
 		id: 'item_category:wash',
 		name: 'สุขอนามัยและของใช้ส่วนตัว (WASH & Hygiene)',
+		legacy_names: ['สุขอนามัยและของใช้ส่วนตัว'],
 		default_class: 'CONSUMABLE',
 		description: 'สบู่ ยาสระผม แปรงสีฟัน ยาสีฟัน ผ้าอนามัย ผงซักฟอก'
 	},
@@ -89,6 +81,7 @@ export const SYSTEM_CATEGORY_DEFINITIONS: readonly SystemCategoryDefinition[] = 
 		key: 'MEDICAL',
 		id: 'item_category:medical',
 		name: 'เวชภัณฑ์และการปฐมพยาบาล (Medical & First Aid)',
+		legacy_names: ['เวชภัณฑ์และการปฐมพยาบาล'],
 		default_class: 'CONSUMABLE',
 		description: 'ยาสามัญประจำบ้าน ยาประจำตัว ชุดทำแผล แอลกอฮอล์ อุปกรณ์การแพทย์'
 	},
@@ -96,6 +89,7 @@ export const SYSTEM_CATEGORY_DEFINITIONS: readonly SystemCategoryDefinition[] = 
 		key: 'SPECIAL_CARE',
 		id: 'item_category:special_care',
 		name: 'ของใช้กลุ่มเปราะบาง (Special Care & Vulnerable)',
+		legacy_names: ['ของใช้กลุ่มเปราะบาง'],
 		default_class: 'CONSUMABLE',
 		description: 'ผ้าอ้อมผู้ใหญ่/เด็ก นมผงทารก แผ่นรองซับ สำหรับกลุ่มเฉพาะ'
 	},
@@ -103,6 +97,7 @@ export const SYSTEM_CATEGORY_DEFINITIONS: readonly SystemCategoryDefinition[] = 
 		key: 'VOLUNTEER_PPE',
 		id: 'item_category:volunteer_ppe',
 		name: 'อุปกรณ์เจ้าหน้าที่และอาสาสมัคร (PPE & Operations)',
+		legacy_names: ['อุปกรณ์เจ้าหน้าที่และอาสาสมัคร'],
 		default_class: 'EQUIPMENT',
 		description: 'ถุงมือ เสื้อกั๊กสะท้อนแสง รองเท้าบูท อุปกรณ์คุ้มครองความปลอดภัย'
 	},
@@ -110,6 +105,7 @@ export const SYSTEM_CATEGORY_DEFINITIONS: readonly SystemCategoryDefinition[] = 
 		key: 'READY_MEAL',
 		id: 'item_category:ready_meal',
 		name: 'อาหารปรุงเสร็จและเครื่องดื่ม (Ready-to-Eat Meals)',
+		legacy_names: ['อาหารปรุงเสร็จและเครื่องดื่ม'],
 		default_class: 'CONSUMABLE',
 		description: 'อาหารปรุงสุกพร้อมรับประทาน ข้าวกล่อง นม สำหรับแจกจ่ายหน้างาน'
 	},
@@ -117,6 +113,7 @@ export const SYSTEM_CATEGORY_DEFINITIONS: readonly SystemCategoryDefinition[] = 
 		key: 'BEDDING',
 		id: 'item_category:bedding',
 		name: 'เครื่องนอนและที่พักพิง (Shelter & Bedding)',
+		legacy_names: ['เครื่องนอนและที่พักพิง'],
 		default_class: 'DURABLE',
 		description: 'เสื่อปูนอน มุ้ง ผ้าห่ม หมอน เต็นท์ครอบครัว พัสดุหมุนเวียนยืม-คืน'
 	},
@@ -124,6 +121,7 @@ export const SYSTEM_CATEGORY_DEFINITIONS: readonly SystemCategoryDefinition[] = 
 		key: 'FUEL_ENERGY',
 		id: 'item_category:fuel_energy',
 		name: 'เชื้อเพลิงและพลังงาน (Fuel & Energy)',
+		legacy_names: ['เชื้อเพลิงและพลังงาน'],
 		default_class: 'CONSUMABLE',
 		description: 'แก๊สหุงต้ม LPG (15kg/4kg) น้ำมันดีเซลเครื่องปั่นไฟ ถ่านไม้ วัตถุไวไฟ'
 	},
@@ -131,50 +129,87 @@ export const SYSTEM_CATEGORY_DEFINITIONS: readonly SystemCategoryDefinition[] = 
 		key: 'KITS',
 		id: 'item_category:kits',
 		name: 'ชุดพัสดุยังชีพรวม (Relief Kits & Packages)',
+		legacy_names: ['ชุดพัสดุยังชีพรวม'],
 		default_class: 'CONSUMABLE',
 		description: 'ถุงยังชีพพระราชทาน ชุดธารน้ำใจ ชุดสุขอนามัยครอบครัว'
 	}
-];
+] as const;
 
-export function systemCategoryDocId(key: SystemCategoryKey): string {
+export function systemCategoryId(key: SystemCategoryKey): string {
 	return `item_category:${key.toLowerCase()}`;
 }
 
-export function isSystemCategoryDocId(id: string): boolean {
-	return SYSTEM_CATEGORY_DEFINITIONS.some((def) => def.id === id);
-}
+/**
+ * Resolve a stored `item_master.category` value (id or legacy Thai name) to a category `_id`.
+ */
+export function resolveCategoryId(
+	categoryRef: string | undefined | null,
+	categories: readonly Pick<ItemCategory, '_id' | 'name' | 'system_key'>[]
+): string | undefined {
+	if (!categoryRef) return undefined;
+	const trimmed = categoryRef.trim();
+	if (!trimmed) return undefined;
 
-export function categoryReferenceMatches(reference: string, category: ItemCategory): boolean {
-	if (!reference) return false;
-	if (reference === category._id) return true;
-	if (reference === category.name) return true;
-	if (category.system_key && reference.toUpperCase() === category.system_key.toUpperCase())
-		return true;
-	if (reference.toLowerCase() === category._id.replace(/^item_category:/, '')) return true;
-	return false;
-}
+	const byId = categories.find((c) => c._id === trimmed);
+	if (byId) return byId._id;
 
-export function isFuelEnergyCategory(category?: string, categories?: ItemCategory[]): boolean {
-	if (!category) return false;
-	const trimmed = category.trim();
-	if (
-		trimmed === 'item_category:fuel_energy' ||
-		trimmed.toLowerCase() === 'item_category:fuel_energy'
-	)
-		return true;
-	if (trimmed.toUpperCase() === 'FUEL_ENERGY') return true;
-	const fuelDef = SYSTEM_CATEGORY_DEFINITIONS.find((def) => def.key === 'FUEL_ENERGY');
-	if (fuelDef && (trimmed === fuelDef.name || trimmed === fuelDef.id)) return true;
-	if (categories && categories.length > 0) {
-		const matched = categories.find((c) => categoryReferenceMatches(trimmed, c));
-		if (
-			matched &&
-			(matched._id === 'item_category:fuel_energy' || matched.system_key === 'FUEL_ENERGY')
-		) {
-			return true;
-		}
+	const byName = categories.find((c) => c.name === trimmed);
+	if (byName) return byName._id;
+
+	const system = SYSTEM_ITEM_CATEGORIES.find(
+		(def) =>
+			def.id === trimmed ||
+			def.name === trimmed ||
+			def.legacy_names.includes(trimmed) ||
+			def.key === trimmed
+	);
+	if (system) {
+		const live = categories.find((c) => c._id === system.id || c.system_key === system.key);
+		return live?._id ?? system.id;
 	}
-	return false;
+
+	return undefined;
+}
+
+/** True when an item belongs to the given category (id or legacy name). */
+export function itemBelongsToCategory(
+	item: Pick<ItemMaster, 'category'>,
+	category: Pick<ItemCategory, '_id' | 'name' | 'system_key'>
+): boolean {
+	if (!item.category) return false;
+	if (item.category === category._id || item.category === category.name) return true;
+	const resolved = resolveCategoryId(item.category, [category]);
+	return resolved === category._id;
+}
+
+export function catalogOrigin(
+	doc: { shelter_code?: string; override?: boolean },
+	shelterCode?: string | null
+): 'central' | 'override' | 'local' {
+	if (doc.override && shelterCode && doc.shelter_code === shelterCode) return 'override';
+	if (shelterCode && doc.shelter_code === shelterCode && !doc.override) return 'local';
+	return 'central';
+}
+
+/** Shelter may hard-delete / deactivate only shelter-authored non-override rows. */
+export function canShelterDeleteCatalogDoc(
+	doc: { shelter_code?: string; override?: boolean },
+	shelterCode: string
+): boolean {
+	return doc.shelter_code === shelterCode && !doc.override;
+}
+
+// ---------------------------------------------------------------- documents
+export interface Ingredient {
+	item_master_id: string;
+	quantity: string; // qty_str
+	uom: string;
+}
+
+export interface UomConversion {
+	uom_name: string;
+	multiplier: string; // qty_str
+	barcode?: string;
 }
 
 export interface ItemCategory extends CatalogDoc {
@@ -206,19 +241,13 @@ export interface ItemMaster extends CatalogDoc {
 	shelter_code?: string;
 	override?: boolean;
 
-	// CR-120: FUEL_ENERGY (LPG) fields
-	fuel_type?: FuelType;
-	capacity_kg?: string; // qty_str
-	burn_rate_kg_per_hour?: string; // qty_str
-	time_multiplier?: string; // qty_str
-
 	// New fields
 	shelf_life_days?: number;
 	storage_type?: StorageType;
 	allergens?: string;
 	target_gender?: TargetGender;
 	age_group?: AgeGroup;
-	dietary?: Dietary[];
+	dietary: Dietary[];
 
 	// Durable & Equipment specific fields
 	qty_per_person?: number;
@@ -240,7 +269,7 @@ export interface Recipe extends CatalogDoc {
 // ---------------------------------------------------------------- unit resolution
 
 /** Fallback unit for `item_master` docs written before `base_unit` was required. */
-export const DEFAULT_ITEM_UNIT = 'ชิ้น';
+export const DEFAULT_ITEM_UNIT = 'piece';
 
 /**
  * The stock-keeping unit of an `item_master`.
@@ -256,9 +285,79 @@ export function itemMasterUnit(item: { base_unit?: string; unit?: string }): str
 	return item.base_unit || item.unit || DEFAULT_ITEM_UNIT;
 }
 
+// ---------------------------------------------------------------- catalog generations
+
+/** One pickable catalog row, whichever generation it came from. */
+export type CatalogEntry = {
+	_id: string;
+	name: string;
+	unit: string;
+	category: string;
+	perishable: boolean;
+};
+
+/**
+ * `item_master` replaces `supply_item` (schema.md §4.2, CR-013), but the migration
+ * has not been run: the seed still carries BOTH generations of the same goods —
+ * `item:rice` and `item_master:rice` — and §4.2's migration note says clients must
+ * handle either prefix meanwhile. Item pickers listed the two sources back to back,
+ * so staff saw "ข้าวสาร (kg)" twice with no way to tell which id they were binding to.
+ *
+ * Collapsed on NAME, and the LEGACY `item:` row wins when both exist. That is the
+ * opposite of the migration direction and deliberate: every `stock_ledger.item_id`
+ * and every `donation_campaign.needs[].item_id` in the data today is an `item:` id,
+ * so binding a new campaign to `item_master:rice` would open a second donor card for
+ * rice and stop its on-hand from matching (the public projection is keyed
+ * `{shelter}:{item_id}` — schema.md §2.4).
+ *
+ * WHEN THE MIGRATION RUNS, flip `LEGACY_WINS` to false — that is the whole change.
+ * An `item_master` with no legacy twin (e.g. `item_master:canned-fish`) is always
+ * listed; nothing is hidden, only de-duplicated.
+ */
+const LEGACY_WINS = true;
+
+export function mergeCatalogGenerations(
+	supplyItems: readonly {
+		_id: string;
+		name: string;
+		unit?: string;
+		category?: string;
+		perishable?: boolean;
+	}[],
+	itemMasters: readonly {
+		_id: string;
+		name: string;
+		base_unit?: string;
+		unit?: string;
+		category?: string;
+		deactivated?: boolean;
+	}[]
+): CatalogEntry[] {
+	const legacy: CatalogEntry[] = supplyItems.map((i) => ({
+		_id: i._id,
+		name: i.name,
+		unit: i.unit || '',
+		category: i.category || '',
+		perishable: i.perishable ?? false
+	}));
+	const masters: CatalogEntry[] = itemMasters
+		.filter((m) => !m.deactivated)
+		.map((m) => ({
+			_id: m._id,
+			name: m.name,
+			unit: itemMasterUnit(m) || '',
+			category: m.category || '',
+			perishable: false
+		}));
+
+	const [preferred, fallback] = LEGACY_WINS ? [legacy, masters] : [masters, legacy];
+	const claimed = new Set(preferred.map((e) => e.name.trim().toLowerCase()));
+	return [...preferred, ...fallback.filter((e) => !claimed.has(e.name.trim().toLowerCase()))];
+}
+
 // ---------------------------------------------------------------- input schemas
 export const itemCategoryInputSchema = z.object({
-	name: z.string().trim().min(1, 'Name is required'),
+	name: z.string().trim().min(1, 'กรุณาระบุชื่อหมวดสินค้า'),
 	default_class: typeClassSchema.optional(),
 	description: z.string().trim().optional(),
 	is_default: z.boolean().optional(),
@@ -268,9 +367,9 @@ export const itemCategoryInputSchema = z.object({
 
 export type ItemCategoryInput = z.input<typeof itemCategoryInputSchema>;
 
-export const itemMasterInputSchema = z
+const itemMasterFieldsSchema = z
 	.object({
-		name: z.string().trim().min(1, 'Name is required'),
+		name: z.string().trim().min(1, 'กรุณาระบุชื่อสินค้า'),
 		category: z.string().trim().optional(),
 		sku: z.string().trim().optional(),
 		description: z.string().trim().optional(),
@@ -278,32 +377,17 @@ export const itemMasterInputSchema = z
 		conversions: z
 			.array(
 				z.object({
-					uom_name: z.string().trim(),
+					uom_name: z.union([z.literal(''), unitCodeSchema]),
 					multiplier: qtyStrCoercePositiveSchema,
 					barcode: z.string().trim().optional()
 				})
 			)
 			.default([]),
-		default_inventory_uom: z.string().trim().optional(),
-		default_issue_uom: z.string().trim().optional(),
+		default_inventory_uom: z.union([z.literal(''), unitCodeSchema]).optional(),
+		default_issue_uom: z.union([z.literal(''), unitCodeSchema]).optional(),
 		distribution_type: distributionTypeSchema.optional(),
 		type_class: typeClassSchema,
 		deactivated: z.boolean().optional(),
-
-		// CR-120: FUEL_ENERGY (LPG) fields
-		fuel_type: fuelTypeSchema.optional(),
-		capacity_kg: z.preprocess(
-			(v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
-			qtyStrCoercePositiveSchema.optional()
-		),
-		burn_rate_kg_per_hour: z.preprocess(
-			(v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
-			qtyStrCoercePositiveSchema.optional()
-		),
-		time_multiplier: z.preprocess(
-			(v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
-			qtyStrCoercePositiveSchema.optional()
-		),
 
 		// New fields
 		shelf_life_days: z.number().optional(),
@@ -320,59 +404,86 @@ export const itemMasterInputSchema = z
 		override: z.boolean().optional()
 	})
 	.superRefine((data, ctx) => {
-		if (isFuelEnergyCategory(data.category)) {
-			if (data.type_class !== 'CONSUMABLE') {
+		const codes = (data.conversions ?? [])
+			.map((c) => c.uom_name?.trim())
+			.filter((code): code is string => !!code);
+		const seen = new Set<string>();
+		for (const [index, code] of codes.entries()) {
+			if (seen.has(code)) {
 				ctx.addIssue({
 					code: z.ZodIssueCode.custom,
-					message: 'Item in FUEL_ENERGY category must be CONSUMABLE',
-					path: ['type_class']
+					message: 'ห้ามใช้รหัสหน่วยเดียวกันซ้ำในสินค้าชิ้นเดียว',
+					path: ['conversions', index, 'uom_name']
 				});
 			}
-			if (!data.capacity_kg) {
-				ctx.addIssue({
-					code: z.ZodIssueCode.custom,
-					message: 'Capacity (kg) is required for FUEL_ENERGY',
-					path: ['capacity_kg']
-				});
-			}
-			if (!data.burn_rate_kg_per_hour) {
-				ctx.addIssue({
-					code: z.ZodIssueCode.custom,
-					message: 'Burn rate (kg/hour) is required for FUEL_ENERGY',
-					path: ['burn_rate_kg_per_hour']
-				});
-			}
-		}
-
-		if (data.type_class !== 'EQUIPMENT') {
-			if (
-				!isFuelEnergyCategory(data.category) &&
-				(!data.base_unit || data.base_unit.trim() === '')
-			) {
-				ctx.addIssue({
-					code: z.ZodIssueCode.custom,
-					message: 'Unit is required',
-					path: ['base_unit']
-				});
-			}
-			if (!isFuelEnergyCategory(data.category) && !data.distribution_type) {
-				ctx.addIssue({
-					code: z.ZodIssueCode.custom,
-					message: 'Distribution type is required',
-					path: ['distribution_type']
-				});
-			}
-		} else {
-			if (!data.asset_status) {
-				ctx.addIssue({
-					code: z.ZodIssueCode.custom,
-					message: 'Asset status is required',
-					path: ['asset_status']
-				});
-			}
+			seen.add(code);
 		}
 	});
+
+type ItemMasterFields = z.output<typeof itemMasterFieldsSchema>;
+
+function isLegacyBaseUnit(value: string): boolean {
+	const trimmed = value.trim();
+	return !isCanonicalUnitCode(trimmed) && isLegacyUnitLabel(trimmed);
+}
+
+function validateItemMasterFields(
+	data: ItemMasterFields,
+	ctx: z.RefinementCtx,
+	allowLegacyBaseUnit: boolean
+): void {
+	const isValidBaseUnit = (value: string): boolean =>
+		isCanonicalUnitCode(value) || (allowLegacyBaseUnit && isLegacyBaseUnit(value));
+
+	if (data.type_class !== 'EQUIPMENT') {
+		if (!data.base_unit || data.base_unit.trim() === '') {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: 'Unit is required',
+				path: ['base_unit']
+			});
+		} else if (!isValidBaseUnit(data.base_unit)) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: 'Base unit must be a valid lowercase English code (e.g. kg, piece, can)',
+				path: ['base_unit']
+			});
+		}
+		if (!data.distribution_type) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: 'Distribution type is required',
+				path: ['distribution_type']
+			});
+		}
+	} else {
+		if (data.base_unit && !isValidBaseUnit(data.base_unit)) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: 'Base unit must be a valid lowercase English code (e.g. kg, piece, can)',
+				path: ['base_unit']
+			});
+		}
+		if (!data.asset_status) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: 'Asset status is required',
+				path: ['asset_status']
+			});
+		}
+	}
+}
+
+export const itemMasterInputSchema = itemMasterFieldsSchema.superRefine((data, ctx) => {
+	validateItemMasterFields(data, ctx, false);
+});
+
+/** Update schema keeps recognized legacy Thai units readable without allowing new ones. */
+export const itemMasterUpdateInputSchema = itemMasterFieldsSchema.superRefine((data, ctx) => {
+	validateItemMasterFields(data, ctx, true);
+});
 export type ItemMasterInput = z.input<typeof itemMasterInputSchema>;
+export type ItemMasterUpdateInput = z.input<typeof itemMasterUpdateInputSchema>;
 
 export const recipeInputSchema = z.object({
 	label: z.string().trim().min(1, 'Name is required'),
@@ -381,7 +492,7 @@ export const recipeInputSchema = z.object({
 			z.object({
 				item_master_id: z.string().trim(),
 				quantity: qtyStrCoercePositiveSchema,
-				uom: z.string().trim()
+				uom: unitCodeSchema
 			})
 		)
 		.default([]),
@@ -393,102 +504,7 @@ export const recipeInputSchema = z.object({
 
 export type RecipeInput = z.infer<typeof recipeInputSchema>;
 
-// ---------------------------------------------------------------- factories & normalizers
-
-export type NormalizedItemMasterFields = Omit<
-	ItemMaster,
-	'_id' | '_rev' | 'type' | 'schema_v' | 'created_at' | 'created_by' | 'updated_at'
->;
-
-export function normalizeItemMasterFields(
-	input: ItemMasterInput,
-	options?: { shelterCode?: string; override?: boolean }
-): NormalizedItemMasterFields {
-	const isLpg = isFuelEnergyCategory(input.category);
-
-	const base = {
-		name: input.name.trim(),
-		category: input.category?.trim() || undefined,
-		sku: input.sku?.trim() || undefined,
-		description: input.description?.trim() || undefined,
-		deactivated: input.deactivated ?? false,
-		...(options?.shelterCode ? { shelter_code: options.shelterCode } : {}),
-		...(options?.override !== undefined
-			? { override: options.override }
-			: input.override !== undefined
-				? { override: input.override }
-				: {})
-	};
-
-	if (isLpg) {
-		return {
-			...base,
-			type_class: 'CONSUMABLE',
-			base_unit: 'ถัง',
-			fuel_type: 'LPG',
-			capacity_kg: persistQty(input.capacity_kg as QtyValue),
-			burn_rate_kg_per_hour: persistQty(input.burn_rate_kg_per_hour as QtyValue),
-			time_multiplier: input.time_multiplier ? persistQty(input.time_multiplier as QtyValue) : '1',
-			conversions: (input.conversions || []).map((c) => ({
-				...c,
-				multiplier: persistQty(c.multiplier)
-			})),
-			default_inventory_uom: input.default_inventory_uom?.trim() || undefined,
-			default_issue_uom: input.default_issue_uom?.trim() || undefined,
-			distribution_type: input.distribution_type || 'recurring'
-		};
-	}
-
-	if (input.type_class === 'CONSUMABLE') {
-		return {
-			...base,
-			type_class: 'CONSUMABLE',
-			base_unit: input.base_unit || DEFAULT_ITEM_UNIT,
-			conversions: (input.conversions || []).map((c) => ({
-				...c,
-				multiplier: persistQty(c.multiplier)
-			})),
-			default_inventory_uom: input.default_inventory_uom?.trim() || undefined,
-			default_issue_uom: input.default_issue_uom?.trim() || undefined,
-			distribution_type: input.distribution_type || 'recurring',
-			shelf_life_days: input.shelf_life_days,
-			storage_type: input.storage_type,
-			allergens: input.allergens?.trim() || undefined,
-			target_gender: input.target_gender,
-			age_group: input.age_group,
-			dietary: input.dietary || []
-		};
-	}
-
-	if (input.type_class === 'DURABLE') {
-		return {
-			...base,
-			type_class: 'DURABLE',
-			base_unit: input.base_unit || DEFAULT_ITEM_UNIT,
-			conversions: (input.conversions || []).map((c) => ({
-				...c,
-				multiplier: persistQty(c.multiplier)
-			})),
-			default_inventory_uom: input.default_inventory_uom?.trim() || undefined,
-			default_issue_uom: input.default_issue_uom?.trim() || undefined,
-			distribution_type: input.distribution_type || 'recurring',
-			qty_per_person: input.qty_per_person,
-			returnable: input.returnable ?? false,
-			target_gender: input.target_gender,
-			age_group: input.age_group,
-			dietary: []
-		};
-	}
-
-	// EQUIPMENT
-	return {
-		...base,
-		type_class: 'EQUIPMENT',
-		base_unit: input.base_unit || DEFAULT_ITEM_UNIT,
-		conversions: [],
-		asset_status: input.asset_status || 'READY'
-	};
-}
+// ---------------------------------------------------------------- factories
 
 export function createItemCategory(
 	input: ItemCategoryInput,
@@ -501,10 +517,10 @@ export function createItemCategory(
 		2,
 		{
 			name: d.name,
-			default_class: d.default_class,
-			description: d.description,
+			...(d.default_class ? { default_class: d.default_class } : {}),
+			...(d.description ? { description: d.description } : {}),
+			...(d.is_default !== undefined ? { is_default: d.is_default } : {}),
 			is_protected: false,
-			is_default: d.is_default ?? false,
 			deactivated: d.deactivated ?? false,
 			...(shelterCode ? { shelter_code: shelterCode } : {}),
 			...(d.override ? { override: d.override } : {})
@@ -520,11 +536,44 @@ export function createItemMaster(
 	shelterCode?: string
 ): ItemMaster {
 	const d = itemMasterInputSchema.parse(input);
-	const fields = normalizeItemMasterFields(d, {
-		shelterCode,
-		override: d.override
-	});
-	return catalogDoc('item_master', 4, fields, ctx.createdBy);
+	const doc = catalogDoc(
+		'item_master',
+		4,
+		{
+			name: d.name,
+			category: d.category,
+			sku: d.sku,
+			description: d.description,
+			base_unit: d.base_unit || 'piece',
+			conversions: d.conversions.map((c) => ({
+				...c,
+				multiplier: persistQty(c.multiplier)
+			})),
+			default_inventory_uom: d.default_inventory_uom,
+			default_issue_uom: d.default_issue_uom,
+			distribution_type:
+				d.distribution_type || (d.type_class === 'EQUIPMENT' ? undefined : 'recurring'),
+			type_class: d.type_class,
+			deactivated: d.deactivated ?? false,
+			...(shelterCode ? { shelter_code: shelterCode } : {}),
+			...(d.override ? { override: d.override } : {}),
+
+			// New fields
+			shelf_life_days: d.shelf_life_days,
+			storage_type: d.storage_type,
+			allergens: d.allergens,
+			target_gender: d.target_gender,
+			age_group: d.age_group,
+			dietary: d.dietary,
+
+			// Durable & Equipment specific fields
+			qty_per_person: d.qty_per_person,
+			returnable: d.returnable,
+			asset_status: d.asset_status
+		},
+		ctx.createdBy
+	);
+	return doc;
 }
 
 export function createRecipe(input: RecipeInput, ctx: AuthorContext, shelterCode?: string): Recipe {

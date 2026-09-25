@@ -1,0 +1,499 @@
+<script lang="ts">
+	import { untrack } from 'svelte';
+	import Loader2 from '@lucide/svelte/icons/loader-2';
+	import { Input } from '$lib/components/ui/input/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
+	import SearchSelect from '$lib/components/search-select.svelte';
+	import * as Form from '$lib/components/ui/form/index.js';
+	import * as Field from '$lib/components/ui/field/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
+	import { defaults, superForm } from 'sveltekit-superforms';
+	import { zod4 } from 'sveltekit-superforms/adapters';
+	import {
+		useProvinces,
+		useDistricts,
+		useSubdistricts
+	} from '$lib/features/shelters/application/queries';
+	import { useMasterData } from '$lib/features/master-data';
+	import {
+		householdPreRegisterAddressFormSchema,
+		type HouseholdAddressForm
+	} from '../../domain/people';
+	import {
+		buildHousingTypeSelectItems,
+		DEFAULT_HOUSING_TYPE_ITEMS_TH,
+		housingTypeLabelForCode,
+		setHousingTypeFromSelect
+	} from '../../domain/housing-type-ui';
+	import {
+		hasMinimumResidence,
+		suggestHouseholdsByResidence,
+		type ResidenceFields,
+		type ResidenceMatchCandidate
+	} from '../../domain/registration-shell';
+	import { useHouseholds } from '../../application/queries';
+	import {
+		readResidenceSuggestDeps,
+		residenceSuggestTick
+	} from '../registration/residence-suggest-reactivity.svelte';
+
+	let {
+		initialData = null,
+		initialJoinHouseholdId = null,
+		householdLabel = '',
+		onBack,
+		onNext
+	}: {
+		initialData?: Partial<HouseholdAddressForm> | null;
+		initialJoinHouseholdId?: string | null;
+		householdLabel?: string;
+		onBack: () => void;
+		onNext: (data: HouseholdAddressForm, joinHouseholdId: string | null) => void;
+	} = $props();
+
+	const form = superForm(defaults(zod4(householdPreRegisterAddressFormSchema)), {
+		SPA: true,
+		validators: zod4(householdPreRegisterAddressFormSchema),
+		resetForm: false,
+		onUpdate: async ({ form }) => {
+			if (!form.valid) return;
+			onNext(form.data, selectedJoinHouseholdId);
+		}
+	});
+
+	const { form: formData, submitting } = form;
+
+	let initialized = $state(false);
+	$effect(() => {
+		if (initialized || !initialData) return;
+		initialized = true;
+		$formData = { ...$formData, ...initialData };
+	});
+
+	const provincesQuery = useProvinces();
+	const districtsQuery = useDistricts(() => $formData.province || null);
+	const subdistrictsQuery = useSubdistricts(
+		() => $formData.province || null,
+		() => $formData.district || null
+	);
+	const housingTypeQuery = useMasterData(() => 'housing_type');
+	const householdsQuery = useHouseholds();
+
+	const provinceItems = $derived((provincesQuery.data ?? []).map((p) => ({ value: p, label: p })));
+	const districtItems = $derived((districtsQuery.data ?? []).map((d) => ({ value: d, label: d })));
+	const subdistrictItems = $derived(
+		(subdistrictsQuery.data ?? []).map((s) => ({ value: s.subdistrict, label: s.subdistrict }))
+	);
+	const housingTypeItems = $derived(
+		buildHousingTypeSelectItems({
+			defaultItems: DEFAULT_HOUSING_TYPE_ITEMS_TH,
+			masterItems: housingTypeQuery.data?.items ?? [],
+			currentValue: $formData.housingType
+		})
+	);
+	const housingTypeTriggerLabel = $derived(
+		$formData.housingType
+			? housingTypeLabelForCode($formData.housingType, housingTypeItems, $formData.housingType)
+			: '— เลือกประเภทที่อยู่อาศัย —'
+	);
+	const isHomeless = $derived($formData.housingType === 'homeless');
+
+	let selectedJoinHouseholdId = $state<string | null>(
+		untrack(() => initialJoinHouseholdId ?? null)
+	);
+	let residenceSuggestTimer: ReturnType<typeof setTimeout> | null = null;
+	let residenceSuggestions = $state<ResidenceMatchCandidate[]>([]);
+	let residenceSuggestPending = $state(false);
+	let residenceSuggestCheckedEmpty = $state(false);
+
+	const hasJoinSelection = $derived(Boolean(selectedJoinHouseholdId));
+	const selectedJoinHousehold = $derived(
+		selectedJoinHouseholdId
+			? ((householdsQuery.data ?? []).find((h) => h._id === selectedJoinHouseholdId) ?? null)
+			: null
+	);
+
+	function formatResidenceSummary(r: ResidenceFields): string {
+		const parts = [
+			r.residence_landmark,
+			r.address_no,
+			r.village_no,
+			r.subdistrict ? `ต.${r.subdistrict}` : '',
+			r.district ? `อ.${r.district}` : '',
+			r.province ? `จ.${r.province}` : '',
+			r.postal_code
+		].filter((p) => (p ?? '').toString().trim());
+		return parts.join(' ') || '—';
+	}
+
+	function clearJoinSelection() {
+		selectedJoinHouseholdId = null;
+	}
+
+	function confirmJoin(suggestion: ResidenceMatchCandidate) {
+		selectedJoinHouseholdId = suggestion._id;
+	}
+
+	function continueCreateDespiteSuggest() {
+		clearJoinSelection();
+	}
+
+	/** Debounced residence suggest while address fields change (choice always create). */
+	$effect(() => {
+		// Read each Superforms field so nested mutations re-run this effect.
+		const residence: ResidenceFields = {
+			housing_type: $formData.housingType,
+			residence_landmark: $formData.residenceLandmark,
+			address_no: $formData.addressNo,
+			village_no: $formData.villageNo,
+			subdistrict: $formData.subdistrict,
+			district: $formData.district,
+			province: $formData.province,
+			postal_code: $formData.postalCode
+		};
+
+		const households = householdsQuery.data ?? [];
+		const deps = readResidenceSuggestDeps(
+			'create',
+			residence,
+			households,
+			Boolean(householdsQuery.isLoading) && households.length === 0
+		);
+		const tick = residenceSuggestTick(deps);
+
+		if (residenceSuggestTimer) clearTimeout(residenceSuggestTimer);
+
+		if (tick.kind === 'clear' || !hasMinimumResidence(residence)) {
+			residenceSuggestions = [];
+			residenceSuggestPending = false;
+			residenceSuggestCheckedEmpty = false;
+			if (untrack(() => selectedJoinHouseholdId)) clearJoinSelection();
+			return;
+		}
+
+		if (tick.kind === 'pending') {
+			residenceSuggestions = [];
+			residenceSuggestPending = true;
+			residenceSuggestCheckedEmpty = false;
+			return;
+		}
+
+		residenceSuggestPending = true;
+		residenceSuggestCheckedEmpty = false;
+		const matches = suggestHouseholdsByResidence(residence, households);
+		const selectedId = untrack(() => selectedJoinHouseholdId);
+		residenceSuggestTimer = setTimeout(() => {
+			residenceSuggestions = matches;
+			residenceSuggestPending = false;
+			residenceSuggestCheckedEmpty = matches.length === 0;
+			if (selectedId && !matches.some((m) => m._id === selectedId)) {
+				clearJoinSelection();
+			}
+		}, 350);
+		return () => {
+			if (residenceSuggestTimer) clearTimeout(residenceSuggestTimer);
+		};
+	});
+
+	const selectTriggerClass =
+		"flex !h-9 w-full items-start rounded-md border border-input bg-background px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4";
+
+	function selectProvince(value: string | null) {
+		$formData.province = value ?? '';
+		$formData.district = '';
+		$formData.subdistrict = '';
+		$formData.postalCode = '';
+	}
+
+	function selectDistrict(value: string | null) {
+		$formData.district = value ?? '';
+		$formData.subdistrict = '';
+		$formData.postalCode = '';
+	}
+
+	function selectSubdistrict(value: string | null) {
+		$formData.subdistrict = value ?? '';
+		const match = (subdistrictsQuery.data ?? []).find((s) => s.subdistrict === value);
+		$formData.postalCode = match ? String(match.zipcode) : '';
+	}
+</script>
+
+<form method="POST" use:form.enhance class="mx-auto w-full max-w-5xl space-y-6">
+	<Field.FieldGroup>
+		<!-- ข้อมูลครัวเรือนเบื้องต้น -->
+		<div class="rounded-2xl border border-border bg-card p-6 shadow-sm">
+			<h3 class="mb-4 text-base font-bold text-slate-800 dark:text-slate-200">
+				ข้อมูลครัวเรือนเบื้องต้น
+			</h3>
+			<div class="space-y-4">
+				<div class="space-y-2">
+					<Label for="hh-label">ชื่อเรียกครัวเรือน</Label>
+					<Input
+						id="hh-label"
+						value={householdLabel || 'กรุณากรอกชื่อและนามสกุลหัวหน้าครัวเรือน...'}
+						disabled
+						class="bg-muted text-muted-foreground"
+					/>
+				</div>
+
+				<div class="grid grid-cols-2 gap-4">
+					<Form.Field {form} name="municipalityZone">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label>เขตการปกครอง <span class="text-destructive">*</span></Form.Label>
+								<Input
+									{...props}
+									bind:value={$formData.municipalityZone}
+									placeholder="ระบุเขตเทศบาล..."
+								/>
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
+					<Form.Field {form} name="community">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label>ชุมชน <span class="text-destructive">*</span></Form.Label>
+								<Input {...props} bind:value={$formData.community} placeholder="ระบุชุมชน..." />
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
+				</div>
+			</div>
+		</div>
+
+		<!-- ที่อยู่ครัวเรือนเดิม -->
+		<div class="rounded-2xl border border-border bg-card p-6 shadow-sm">
+			<h3 class="mb-4 text-base font-bold text-slate-800 dark:text-slate-200">
+				ที่อยู่ครัวเรือนเดิม (ก่อนอพยพ)
+			</h3>
+			<div class="grid grid-cols-2 gap-4">
+				<Form.Field {form} name="housingType">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label>ประเภทที่อยู่อาศัย</Form.Label>
+							<Select.Root
+								type="single"
+								bind:value={
+									() => $formData.housingType ?? '',
+									(v) => setHousingTypeFromSelect(v, (next) => ($formData.housingType = next))
+								}
+							>
+								<Select.Trigger {...props} class={selectTriggerClass}>
+									{housingTypeTriggerLabel}
+								</Select.Trigger>
+								<Select.Content>
+									{#each housingTypeItems as opt (opt.value)}
+										<Select.Item value={opt.value} label={opt.label} />
+									{/each}
+								</Select.Content>
+							</Select.Root>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+				<Form.Field {form} name="residenceLandmark">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label>
+								จุดสังเกตที่อยู่
+								{#if isHomeless}
+									<span class="font-normal text-muted-foreground">(หรือบ้านเลขที่)</span>
+								{/if}
+							</Form.Label>
+							<Input
+								{...props}
+								placeholder={isHomeless ? 'เช่น ริมคลองข้างตลาด' : 'เช่น ใกล้สะพาน / ปากซอย'}
+								bind:value={$formData.residenceLandmark}
+							/>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+
+				<Form.Field {form} name="addressNo">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label>
+								บ้านเลขที่
+								{#if !isHomeless}<span class="text-destructive">*</span>{/if}
+								{#if isHomeless}
+									<span class="font-normal text-muted-foreground">(ไม่บังคับถ้ามีจุดสังเกต)</span>
+								{/if}
+							</Form.Label>
+							<Input {...props} placeholder="เช่น 12/3" bind:value={$formData.addressNo} />
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+				<Form.Field {form} name="villageNo">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label
+								>หมู่ที่ / ตรอก / ซอย / ถนน <span class="text-destructive">*</span></Form.Label
+							>
+							<Input {...props} placeholder="เช่น หมู่ 2" bind:value={$formData.villageNo} />
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+
+				<Form.Field {form} name="province">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label>จังหวัด <span class="text-destructive">*</span></Form.Label>
+							<SearchSelect
+								name={props.name}
+								options={provinceItems}
+								bind:value={() => $formData.province, selectProvince}
+								placeholder={provincesQuery.isLoading ? 'กำลังโหลด...' : 'เลือกจังหวัด...'}
+								disabled={provincesQuery.isLoading}
+							/>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+				<Form.Field {form} name="district">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label>อำเภอ / เขต <span class="text-destructive">*</span></Form.Label>
+							<SearchSelect
+								name={props.name}
+								options={districtItems}
+								bind:value={() => $formData.district, selectDistrict}
+								placeholder={!$formData.province
+									? 'เลือกจังหวัดก่อน'
+									: districtsQuery.isLoading
+										? 'กำลังโหลด...'
+										: 'เลือกอำเภอ...'}
+								disabled={!$formData.province || districtsQuery.isLoading}
+							/>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+				<Form.Field {form} name="subdistrict">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label>ตำบล / แขวง <span class="text-destructive">*</span></Form.Label>
+							<SearchSelect
+								name={props.name}
+								options={subdistrictItems}
+								bind:value={() => $formData.subdistrict, selectSubdistrict}
+								placeholder={!$formData.district
+									? 'เลือกอำเภอก่อน'
+									: subdistrictsQuery.isLoading
+										? 'กำลังโหลด...'
+										: 'เลือกตำบล...'}
+								disabled={!$formData.district || subdistrictsQuery.isLoading}
+							/>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+				<Form.Field {form} name="postalCode">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label>รหัสไปรษณีย์ <span class="text-destructive">*</span></Form.Label>
+							<Input
+								{...props}
+								placeholder={!$formData.subdistrict ? 'เลือกตำบลก่อน' : 'เช่น 90110'}
+								disabled={!$formData.subdistrict}
+								bind:value={$formData.postalCode}
+							/>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+			</div>
+
+			{#if hasJoinSelection}
+				<div
+					class="mt-4 space-y-2 rounded-xl border border-primary/30 bg-primary/5 p-3"
+					role="status"
+					aria-live="polite"
+				>
+					<p class="text-sm font-semibold text-foreground">จะเข้าร่วมครอบครัวที่มีอยู่แล้ว</p>
+					{#if selectedJoinHousehold}
+						<p class="text-xs text-muted-foreground">
+							{#if selectedJoinHousehold.label?.trim()}
+								<span class="font-medium text-foreground">{selectedJoinHousehold.label}</span>
+								·
+							{/if}
+							{formatResidenceSummary(selectedJoinHousehold)}
+						</p>
+					{/if}
+					<p class="text-xs text-muted-foreground">
+						หัวหน้าครัวเรือนจะถูกเพิ่มเข้าครอบครัวนี้ — หรือเลือกสร้างใหม่แทนได้
+					</p>
+					<Button type="button" size="sm" variant="outline" onclick={continueCreateDespiteSuggest}>
+						สร้างครอบครัวใหม่ที่อยู่นี้
+					</Button>
+				</div>
+			{:else if residenceSuggestPending}
+				<div
+					class="mt-4 flex items-center gap-2 rounded-xl border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
+					role="status"
+					aria-live="polite"
+				>
+					<Loader2 class="size-3.5 animate-spin" aria-hidden="true" />
+					กำลังค้นหาครอบครัวที่อยู่ตรงกัน...
+				</div>
+			{:else if residenceSuggestions.length > 0}
+				<div class="mt-4 space-y-2 rounded-xl border border-border bg-muted/20 p-3">
+					<p class="text-xs font-semibold text-foreground">
+						พบครอบครัวที่อยู่ใกล้เคียง — เข้าร่วมได้ หรือสร้างใหม่ได้เสมอ
+					</p>
+					<ul class="space-y-2">
+						{#each residenceSuggestions as suggestion (suggestion._id)}
+							<li class="flex flex-wrap items-center justify-between gap-2 text-sm">
+								<span>
+									{#if suggestion.label?.trim()}
+										<span class="font-medium">{suggestion.label}</span>
+										<span class="text-muted-foreground">
+											· {formatResidenceSummary(suggestion)}
+										</span>
+									{:else}
+										<span class="text-muted-foreground">
+											{formatResidenceSummary(suggestion)}
+										</span>
+									{/if}
+								</span>
+								<Button
+									type="button"
+									size="sm"
+									variant="outline"
+									onclick={() => confirmJoin(suggestion)}
+								>
+									เข้าร่วม
+								</Button>
+							</li>
+						{/each}
+					</ul>
+					<Button type="button" size="sm" onclick={continueCreateDespiteSuggest}>
+						สร้างครอบครัวใหม่ที่อยู่นี้
+					</Button>
+				</div>
+			{:else if residenceSuggestCheckedEmpty}
+				<p class="mt-4 text-xs text-muted-foreground">
+					ไม่พบครอบครัวที่อยู่ตรงกันในศูนย์นี้ — จะสร้างครอบครัวใหม่
+				</p>
+			{/if}
+		</div>
+
+		<!-- Navigation -->
+		<div class="mt-8 flex justify-between border-t border-border pt-4">
+			<Button type="button" variant="outline" onclick={onBack} class="h-11 px-8 font-semibold">
+				ย้อนกลับ
+			</Button>
+			<Form.Button
+				disabled={$submitting}
+				class="h-11 bg-[#0d2240] px-8 font-semibold text-white hover:bg-[#1a3a5c]"
+			>
+				ถัดไป (ทรัพย์สินและสัตว์เลี้ยง) →
+			</Form.Button>
+		</div>
+	</Field.FieldGroup>
+</form>

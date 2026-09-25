@@ -3,19 +3,19 @@ import { resolve } from '$app/paths';
 import type { Icon } from '@lucide/svelte';
 import {
 	Calculator,
-	Home,
 	KeyRound,
 	MapPin,
 	Megaphone,
 	Settings,
-	Tent,
+	Shield,
 	Users,
 	Building,
 	UserCog,
 	Warehouse,
 	Cpu,
 	LayoutDashboard,
-	ClipboardList
+	ClipboardList,
+	Database
 } from '@lucide/svelte/icons';
 
 type Leaf = {
@@ -96,25 +96,13 @@ export const systemManagementNavbarGroups: SystemManagementNavbarGroup[] = [
 				icon: Settings,
 				children: [
 					{
-						label: 'ข้อมูลหลักบุคคล',
-						href: resolve(`${base}/registration-config`),
-						icon: Users,
+						label: 'Master Data',
+						href: resolve(`${base}/master-data`),
+						icon: Database,
 						requiresAdmin: true
 					},
 					{
-						label: 'การตั้งค่าศูนย์พักพิง',
-						href: resolve(`${base}/shelter-config`),
-						icon: Tent,
-						requiresAdmin: true
-					},
-					{
-						label: 'ข้อมูลครัวเรือน',
-						href: resolve(`${base}/household-master-data`),
-						icon: Home,
-						requiresAdmin: true
-					},
-					{
-						label: 'คลังพัสดุและสิ่งของ',
+						label: 'คลังสินค้า',
 						href: resolve(`${base}/catalog`),
 						icon: Warehouse,
 						requiresAdmin: true
@@ -129,6 +117,12 @@ export const systemManagementNavbarGroups: SystemManagementNavbarGroup[] = [
 						label: 'คำถามที่พบบ่อย (FAQ)',
 						href: resolve(`${base}/public-portal-config`),
 						icon: Megaphone,
+						requiresAdmin: true
+					},
+					{
+						label: 'ความปลอดภัย / reCAPTCHA',
+						href: resolve(`${base}/security`),
+						icon: Shield,
 						requiresAdmin: true
 					},
 					{ label: 'งานอาสาสมัคร', href: null, icon: Users },

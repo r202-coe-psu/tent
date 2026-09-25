@@ -4,20 +4,28 @@ import { registerIpLimiter, registerPhoneLimiter } from '$lib/server/security/ra
 
 type PostEvent = Parameters<typeof POST>[0];
 
-const { mockEnv, mockAppEnv } = vi.hoisted(() => ({
+const { mockEnv, mockAppEnv, adminRaw } = vi.hoisted(() => ({
 	mockEnv: {
 		SECRET_RECAPTCHA_KEY: 'test-recaptcha-secret',
 		FASTAPI_INTERNAL_URL: 'http://localhost:9000',
 		EXTERNAL_API_SECRET: 'test-external-secret'
 	},
-	mockAppEnv: { dev: false }
+	mockAppEnv: { dev: false },
+	adminRaw: vi.fn()
 }));
 
 vi.mock('$env/dynamic/private', () => ({ env: mockEnv }));
 vi.mock('$app/environment', () => ({
+	get browser() {
+		return false;
+	},
 	get dev() {
 		return mockAppEnv.dev;
 	}
+}));
+
+vi.mock('$lib/server/couch-admin', () => ({
+	adminRaw
 }));
 
 vi.mock('$lib/server/security/rate-limiter', () => ({
@@ -91,6 +99,11 @@ describe('POST /api/public/v1/unassigned-registrations', () => {
 		vi.mocked(registerPhoneLimiter.check).mockReturnValue(true);
 		verifyToken.mockReset();
 		verifyToken.mockResolvedValue(true);
+		adminRaw.mockReset();
+		adminRaw.mockResolvedValue({
+			status: 200,
+			data: { _id: 'config:app', type: 'config', recaptcha_enabled: true }
+		});
 		vi.unstubAllGlobals();
 	});
 

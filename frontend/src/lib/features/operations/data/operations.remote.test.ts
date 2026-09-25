@@ -17,29 +17,119 @@ vi.mock('$lib/features/supply', () => ({
 	supplyRepository: () => ({ getItem: mockGetItem })
 }));
 
-let memoryRepo = createInMemoryRepository();
+import type { Repository } from '$lib/db/repository';
+import { ConflictError } from '$lib/utils/errors';
+
+const couchDocs = new Map<string, { _id: string; _rev?: string } & Record<string, unknown>>();
+
+function mockPutDoc<T extends { _id: string; _rev?: string }>(doc: T, strict = false): T {
+	const existing = couchDocs.get(doc._id);
+	if (existing) {
+		if (strict && (!doc._rev || doc._rev !== existing._rev)) {
+			throw new ConflictError(doc._id);
+		}
+		const revNum = existing._rev ? parseInt(existing._rev.split('-')[0], 10) + 1 : 2;
+		const saved = { ...doc, _rev: `${revNum}-mockrev` } as T;
+		couchDocs.set(doc._id, JSON.parse(JSON.stringify(saved)));
+		return JSON.parse(JSON.stringify(saved));
+	} else {
+		if (strict && doc._rev) {
+			throw new Error(`Cannot create new document ${doc._id} with existing rev`);
+		}
+		const saved = { ...doc, _rev: '1-mockrev' } as T;
+		couchDocs.set(doc._id, JSON.parse(JSON.stringify(saved)));
+		return JSON.parse(JSON.stringify(saved));
+	}
+}
+
+function mockGetDoc<T extends { _id: string }>(id: string): T | null {
+	const found = couchDocs.get(id);
+	if (!found) return null;
+	return JSON.parse(JSON.stringify(found)) as T;
+}
+
+let memoryRepo: Repository = {
+	async put<T extends { _id: string }>(doc: T): Promise<T> {
+		return mockPutDoc(doc, false);
+	},
+	async get<T extends { _id: string }>(id: string): Promise<T | null> {
+		return mockGetDoc<T>(id);
+	},
+	async remove(doc: { _id: string; _rev?: string }): Promise<void> {
+		couchDocs.delete(doc._id);
+	},
+	async allByType<T extends { _id: string; type: string }>(
+		type: string,
+		guard: (d: unknown) => d is T
+	): Promise<T[]> {
+		return [...couchDocs.values()].filter((d): d is T => d._id.startsWith(`${type}:`) && guard(d));
+	},
+	async pageByType<T extends { _id: string; type: string }>(
+		type: string,
+		guard: (d: unknown) => d is T,
+		page: number,
+		pageSize: number
+	) {
+		const matched = await this.allByType(type, guard);
+		const total = matched.length;
+		const totalPages = Math.max(1, Math.ceil(total / pageSize));
+		const safePage = Math.max(1, Math.min(page, totalPages));
+		const start = (safePage - 1) * pageSize;
+		return {
+			items: matched.slice(start, start + pageSize),
+			total,
+			page: safePage,
+			pageSize,
+			totalPages
+		};
+	},
+	async find<T>(): Promise<T[]> {
+		return [...couchDocs.values()] as unknown as T[];
+	},
+	async bulkDocs<T extends { _id: string; _rev?: string }>(docs: T[]): Promise<T[]> {
+		const saved: T[] = [];
+		for (const doc of docs) {
+			const existing = mockGetDoc<T>(doc._id);
+			if (!existing) {
+				// CouchDB reports a conflict for a create carrying an _rev.
+				saved.push(doc._rev ? doc : mockPutDoc(doc, false));
+				continue;
+			}
+			if (!doc._rev || doc._rev !== existing._rev) {
+				// bulkDocs returns per-document conflicts; the repository wrapper keeps
+				// the original document for idempotent conflict-only batches.
+				saved.push(doc);
+				continue;
+			}
+			saved.push(mockPutDoc(doc, true));
+		}
+		return saved;
+	}
+};
+
 vi.mock('$lib/db/repository', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('$lib/db/repository')>();
 	return { ...actual, createRemoteRepository: () => memoryRepo };
 });
 
-// bulkDocs (used by receivePurchase to write a whole receipt in one request)
-// bypasses the Repository abstraction and hits couch-db.ts directly — route it
-// through the same in-memory store so the rows are readable via the repo.
 vi.mock('$lib/db/couch-db', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('$lib/db/couch-db')>();
 	return {
 		...actual,
+		getDoc: async <T extends { _id: string }>(_dbName: string, id: string) => mockGetDoc<T>(id),
+		putDocStrict: async (_dbName: string, doc: { _id: string; _rev?: string }) =>
+			mockPutDoc(doc, true),
 		bulkDocs: async (_dbName: string, docs: { _id: string }[]) => {
 			const saved = [];
-			for (const doc of docs) saved.push(await memoryRepo.put(doc));
+			for (const doc of docs) saved.push(mockPutDoc(doc, false));
 			return saved;
 		}
 	};
 });
 
 import { OperationsRemoteRepository, assertReceiveAgainstCatalog } from './operations.remote';
-import { createReceiveEntry } from '../domain/operations';
+import { createReceiveEntry, projectStockLotBalances } from '../domain/operations';
+import { createStockLotReservation, makeLotReservationDocId } from '$lib/features/distribution';
 import type { AuthorContext } from '$lib/db/model';
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'tester' };
@@ -48,9 +138,8 @@ const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'tester' };
 // that only need stock on hand still have to name one.
 const DONATION_REF = 'donation:01JFIXTUREDONATION';
 
-// Phase 2A requires the strict batch reference contract (distribution_batch:*),
-// while actual batch persistence/verification is introduced in Phase 3.
-const DISTRIBUTION_BATCH_REF = 'distribution_batch:01JFIXTUREBATCH';
+// Ticket-era canonical distribute reference requires requisition_ticket: (CR-121 / schema §2.1)
+const DISTRIBUTION_BATCH_REF = 'requisition_ticket:01JFIXTURETICKET';
 
 describe('assertReceiveAgainstCatalog', () => {
 	const entry = createReceiveEntry(
@@ -160,7 +249,7 @@ describe('OperationsRemoteRepository', () => {
 	let repo: OperationsRemoteRepository;
 
 	beforeEach(() => {
-		memoryRepo = createInMemoryRepository();
+		couchDocs.clear();
 		repo = new OperationsRemoteRepository('shelter_sh001');
 	});
 
@@ -348,6 +437,197 @@ describe('OperationsRemoteRepository', () => {
 					ctx
 				)
 			).rejects.toThrow('Insufficient stock');
+		});
+
+		it('rejects an overdrawn selected lot even when another lot keeps the aggregate balance sufficient', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'bar' } as SupplyItem);
+			const firstLot = await repo.receiveStock(
+				{ item_id: 'item:soap', qty: 2, unit: 'bar', source: 'donation', ref_id: DONATION_REF },
+				ctx
+			);
+			await repo.receiveStock(
+				{ item_id: 'item:soap', qty: 10, unit: 'bar', source: 'donation', ref_id: DONATION_REF },
+				ctx
+			);
+
+			await expect(
+				repo.distributeStock(
+					{
+						item_id: 'item:soap',
+						qty: 5,
+						unit: 'bar',
+						ref_id: DISTRIBUTION_BATCH_REF,
+						lot_ref: firstLot._id
+					},
+					ctx
+				)
+			).rejects.toThrow('Insufficient stock in lot');
+
+			expect(await repo.listLedger()).toHaveLength(2);
+		});
+
+		it('rejects a selected lot that belongs to another item or does not exist', async () => {
+			mockGetItem.mockImplementation(async (itemId: string) =>
+				itemId === 'item:soap' || itemId === 'item:water' ? ({ unit: 'bar' } as SupplyItem) : null
+			);
+			const waterLot = await repo.receiveStock(
+				{ item_id: 'item:water', qty: 10, unit: 'bar', source: 'donation', ref_id: DONATION_REF },
+				ctx
+			);
+
+			await expect(
+				repo.distributeStock(
+					{
+						item_id: 'item:soap',
+						qty: 1,
+						unit: 'bar',
+						ref_id: DISTRIBUTION_BATCH_REF,
+						lot_ref: waterLot._id
+					},
+					ctx
+				)
+			).rejects.toThrow('does not match item');
+
+			await expect(
+				repo.distributeStock(
+					{
+						item_id: 'item:soap',
+						qty: 1,
+						unit: 'bar',
+						ref_id: DISTRIBUTION_BATCH_REF,
+						lot_ref: 'stock_ledger:missing-lot'
+					},
+					ctx
+				)
+			).rejects.toThrow('is not available');
+
+			expect(await repo.listLedger()).toHaveLength(1);
+		});
+
+		it('recovers an abandoned direct-distribution claim before checking availability', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'bar' } as SupplyItem);
+			const inbound = await repo.receiveStock(
+				{ item_id: 'item:soap', qty: 10, unit: 'bar', source: 'donation', ref_id: DONATION_REF },
+				ctx
+			);
+			const reservationId = await makeLotReservationDocId(inbound._id);
+			const staleReservation = createStockLotReservation(
+				{
+					lot_ref: inbound._id,
+					pending_claims: [
+						{
+							operation_id: 'op_dist_abandoned',
+							request_id: 'distribution_request:abandoned',
+							batch_id: 'distribution_batch:abandoned',
+							item_id: 'item:soap',
+							lot_ref: inbound._id,
+							qty: '8',
+							claimed_at: '2026-09-01T00:00:00.000Z'
+						}
+					]
+				},
+				reservationId.slice('stock_lot_reservation:'.length),
+				ctx
+			);
+			mockPutDoc(staleReservation);
+
+			await repo.distributeStock(
+				{
+					item_id: 'item:soap',
+					qty: 5,
+					unit: 'bar',
+					ref_id: DISTRIBUTION_BATCH_REF,
+					lot_ref: inbound._id
+				},
+				ctx
+			);
+
+			expect(
+				mockGetDoc<{ _id: string; pending_claims: unknown[] }>(reservationId)?.pending_claims
+			).toEqual([]);
+			expect((await repo.getBalance()).get('item:soap')).toBe('5');
+		});
+
+		it('serializes concurrent distributions for the same lot across multiple clients and never creates a negative lot balance', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'bar' } as SupplyItem);
+			const inbound = await repo.receiveStock(
+				{ item_id: 'item:soap', qty: 10, unit: 'bar', source: 'donation', ref_id: DONATION_REF },
+				ctx
+			);
+
+			// Simulate two distinct clients / repository instances communicating with the same CouchDB
+			const clientRepoA = new OperationsRemoteRepository('shelter_sh001');
+			const clientRepoB = new OperationsRemoteRepository('shelter_sh001');
+
+			const results = await Promise.allSettled([
+				clientRepoA.distributeStock(
+					{
+						item_id: 'item:soap',
+						qty: 7,
+						unit: 'bar',
+						ref_id: DISTRIBUTION_BATCH_REF,
+						lot_ref: inbound._id
+					},
+					ctx
+				),
+				clientRepoB.distributeStock(
+					{
+						item_id: 'item:soap',
+						qty: 7,
+						unit: 'bar',
+						ref_id: DISTRIBUTION_BATCH_REF,
+						lot_ref: inbound._id
+					},
+					ctx
+				)
+			]);
+
+			expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+			expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
+			expect(await repo.getBalance()).toEqual(new Map([['item:soap', '3']]));
+			expect(projectStockLotBalances(await repo.listLedger())).toEqual([
+				expect.objectContaining({ lot_ref: inbound._id, item_id: 'item:soap', qty: '3' })
+			]);
+		});
+
+		it('allows concurrent distributions across multiple clients when total quantity does not exceed lot balance', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'bar' } as SupplyItem);
+			const inbound = await repo.receiveStock(
+				{ item_id: 'item:soap', qty: 10, unit: 'bar', source: 'donation', ref_id: DONATION_REF },
+				ctx
+			);
+
+			const clientRepoA = new OperationsRemoteRepository('shelter_sh001');
+			const clientRepoB = new OperationsRemoteRepository('shelter_sh001');
+
+			const results = await Promise.allSettled([
+				clientRepoA.distributeStock(
+					{
+						item_id: 'item:soap',
+						qty: 4,
+						unit: 'bar',
+						ref_id: DISTRIBUTION_BATCH_REF,
+						lot_ref: inbound._id
+					},
+					ctx
+				),
+				clientRepoB.distributeStock(
+					{
+						item_id: 'item:soap',
+						qty: 4,
+						unit: 'bar',
+						ref_id: DISTRIBUTION_BATCH_REF,
+						lot_ref: inbound._id
+					},
+					ctx
+				)
+			]);
+
+			expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(2);
+			expect(await repo.getBalance()).toEqual(new Map([['item:soap', '2']]));
+			expect(projectStockLotBalances(await repo.listLedger())).toEqual([
+				expect.objectContaining({ lot_ref: inbound._id, item_id: 'item:soap', qty: '2' })
+			]);
 		});
 	});
 
@@ -681,16 +961,33 @@ describe('OperationsRemoteRepository', () => {
 describe('OperationsRemoteRepository.updateCampaign', () => {
 	let repo: OperationsRemoteRepository;
 
-	beforeEach(() => {
+	beforeEach(async () => {
 		memoryRepo = createInMemoryRepository();
 		repo = new OperationsRemoteRepository('shelter_sh001');
+		mockGetItem.mockReset();
+		mockGetItem.mockResolvedValue({
+			_id: 'item:water',
+			type: 'item',
+			name: 'น้ำดื่ม',
+			unit: 'bottle',
+			perishable: false
+		} as unknown as SupplyItem);
+		await memoryRepo.put({
+			_id: 'unit_of_measure:bottle',
+			type: 'unit_of_measure',
+			code: 'bottle',
+			label_th: 'ขวด',
+			label_en: 'bottle',
+			dimension: 'count',
+			deactivated: false
+		});
 	});
 
 	it('should update campaign and create an audit log entry', async () => {
 		const created = await repo.createCampaign(
 			{
 				title: 'น้ำดื่มและยารักษาโรค',
-				needs: [{ item_id: 'item:water', qty_target: 100, unit: 'ขวด', status: 'open' }]
+				needs: [{ item_id: 'item:water', qty_target: 100, unit: 'bottle', status: 'open' }]
 			},
 			ctx
 		);

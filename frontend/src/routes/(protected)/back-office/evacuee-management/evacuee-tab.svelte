@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import * as Table from '$lib/components/ui/table/index.js';
-	import * as Pagination from '$lib/components/ui/pagination/index.js';
+	import PaginationControls from '$lib/components/pagination-controls.svelte';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
@@ -31,7 +31,7 @@
 	import { getShelterCode } from '$lib/db/shelter';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { useShelter } from '$lib/features/shelters';
-	import { useMasterData } from '$lib/features/master-data';
+	import { useMasterData, formatMasterLabel } from '$lib/features/master-data';
 
 	const PAGE_SIZE = 10;
 	let currentPage = $state(1);
@@ -57,7 +57,7 @@
 		const masterItems = vulnerableGroupQuery.data?.items ?? [];
 		return supported.map((code) => {
 			const masterItem = masterItems.find((item) => item.code === code);
-			return { value: code, label: masterItem?.label ?? code };
+			return { value: code, label: masterItem ? formatMasterLabel(masterItem, 'th') : code };
 		});
 	});
 
@@ -83,7 +83,6 @@
 
 	const items = $derived(query.data?.items ?? []);
 	const total = $derived(query.data?.total ?? 0);
-	const totalPages = $derived(query.data?.totalPages ?? 1);
 
 	const pageIds = $derived(items.map((e) => e._id));
 	const allPageSelected = $derived(
@@ -199,9 +198,9 @@
 	});
 </script>
 
-<div class="flex max-h-screen flex-col gap-6 p-6">
+<div class="flex flex-col gap-6 p-4 sm:p-6">
 	<!-- Header -->
-	<div class="flex items-start justify-between gap-4">
+	<div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
 		<div class="space-y-1">
 			<h2 class="text-lg font-bold tracking-tight text-foreground">ทะเบียนผู้พักพิง</h2>
 			<p class="text-sm text-muted-foreground">
@@ -211,7 +210,11 @@
 				>
 			</p>
 		</div>
-		<Button size="sm" onclick={() => goto(resolve('/onsite/people'))}>
+		<Button
+			class="min-h-11 w-full sm:w-auto"
+			size="sm"
+			onclick={() => goto(resolve('/onsite/people'))}
+		>
 			<Users class="h-3.5 w-3.5" />
 			เริ่มลงทะเบียน
 		</Button>
@@ -231,7 +234,7 @@
 					placeholder="ค้นหาชื่อ รหัสประจำตัว หรือเบอร์โทรศัพท์..."
 					bind:value={search}
 					oninput={resetPageOnFilter}
-					class="h-8 rounded-xl bg-background pl-9 shadow-xs"
+					class="h-11 rounded-xl bg-background pl-9 shadow-xs"
 				/>
 			</div>
 		</div>
@@ -329,7 +332,7 @@
 
 	{#if selectedIds.length > 0}
 		<div
-			class="sticky top-2 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card/95 px-4 py-3 shadow-sm backdrop-blur"
+			class="sticky top-[var(--bo-evacuee-selection-top,var(--bo-sticky-top))] z-10 flex flex-col gap-3 rounded-xl border border-border bg-card/95 px-4 py-3 shadow-sm backdrop-blur supports-backdrop-filter:bg-card/80 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
 		>
 			<p class="text-sm font-medium text-foreground">
 				เลือกแล้ว <span class="text-primary tabular-nums">{selectedIds.length}</span> คน
@@ -339,20 +342,24 @@
 					>
 				{/if}
 			</p>
-			<div class="flex flex-wrap gap-2">
+			<div class="flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap">
 				<Button
 					variant="outline"
 					size="sm"
+					class="min-h-11 w-full sm:w-auto"
 					onclick={selectAllMatching}
 					disabled={isSelectingAllMatching || total === 0}
 				>
 					{isSelectingAllMatching ? 'กำลังเลือก...' : 'เลือกทั้งหมดตามตัวกรอง'}
 				</Button>
-				<Button variant="ghost" size="sm" onclick={clearSelection}>ล้างการเลือก</Button>
+				<Button variant="ghost" size="sm" class="min-h-11 w-full sm:w-auto" onclick={clearSelection}
+					>ล้างการเลือก</Button
+				>
 				{#if canCancel}
 					<Button
 						variant="destructive"
 						size="sm"
+						class="min-h-11 w-full sm:w-auto"
 						onclick={handleBulkCancel}
 						disabled={isBulkCancelling || selectedIds.length === 0}
 					>
@@ -363,7 +370,7 @@
 		</div>
 	{/if}
 
-	<!-- Table -->
+	<!-- List -->
 	{#if query.isLoading}
 		<div class="flex items-center justify-center py-16">
 			<p class="text-sm text-muted-foreground">กำลังโหลดข้อมูล...</p>
@@ -382,7 +389,102 @@
 			<p class="text-sm text-muted-foreground">ไม่พบผู้ประสบภัยในระบบ</p>
 		</div>
 	{:else}
-		<div class="overflow-hidden rounded-xl border border-border shadow-sm">
+		<!-- Mobile card list (< md) -->
+		<div class="space-y-3 md:hidden">
+			<div
+				class="flex items-center gap-3 rounded-xl border border-slate-200/80 bg-white px-4 py-3 shadow-2xs"
+			>
+				<Checkbox
+					checked={allPageSelected}
+					indeterminate={somePageSelected}
+					onCheckedChange={toggleSelectPage}
+					aria-label="เลือกทั้งหน้า"
+				/>
+				<span class="text-sm font-semibold text-slate-700">เลือกทั้งหน้า</span>
+			</div>
+
+			{#each items as e (e._id)}
+				<article
+					class="rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs transition-colors"
+				>
+					<div class="flex items-start gap-3">
+						<Checkbox
+							class="mt-1"
+							checked={selectedIds.includes(e._id)}
+							onCheckedChange={(checked) => toggleId(e._id, checked)}
+							aria-label={`เลือก ${e.first_name} ${e.last_name}`}
+						/>
+						<div class="min-w-0 flex-1 space-y-3">
+							<div class="flex items-start justify-between gap-2">
+								<div class="min-w-0">
+									<h3 class="text-base font-bold text-slate-900">
+										{e.first_name}
+										{e.last_name}
+										{#if e.nickname}
+											<span class="ml-1 text-sm font-normal text-slate-500">({e.nickname})</span>
+										{/if}
+									</h3>
+									<p class="mt-1 text-sm text-slate-500">
+										โซน
+										<span class="font-semibold text-primary tabular-nums">
+											{zoneLabel(e.current_stay.zone, shelterQuery.data?.zones ?? [])}
+										</span>
+									</p>
+								</div>
+								<StayStatusBadge status={e.current_stay.status} size="sm" />
+							</div>
+
+							<div class="flex flex-wrap gap-1.5">
+								{#if e.special_needs && e.special_needs.length > 0}
+									{#each e.special_needs as need (need)}
+										{@const masterItem = vulnerableGroupQuery.data?.items.find(
+											(i) => i.code === need
+										)}
+										{@const label = masterItem ? formatMasterLabel(masterItem, 'th') : need}
+										<span
+											class="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-900"
+											>{label}</span
+										>
+									{/each}
+								{:else}
+									<span
+										class="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs text-slate-500"
+										>ทั่วไป</span
+									>
+								{/if}
+							</div>
+
+							<div class="flex flex-col gap-2">
+								{#if canCheckInEvacuee(e)}
+									<Button
+										variant="outline"
+										size="sm"
+										class="min-h-11 w-full"
+										onclick={() => handleCheckIn(e)}
+										disabled={checkIn.isPending}
+									>
+										เช็คอิน
+									</Button>
+								{/if}
+								<Button
+									variant="outline"
+									size="sm"
+									class="min-h-11 w-full"
+									onclick={() =>
+										goto(resolve(`/back-office/evacuee-management/edit/evacuee/${e._id}`))}
+								>
+									<Pencil class="h-3.5 w-3.5" />
+									แก้ไข
+								</Button>
+							</div>
+						</div>
+					</div>
+				</article>
+			{/each}
+		</div>
+
+		<!-- Desktop table (md+) -->
+		<div class="hidden overflow-x-auto rounded-xl border border-border shadow-sm md:block">
 			<Table.Root>
 				<Table.Header>
 					<Table.Row class="bg-muted/40 hover:bg-muted/40">
@@ -422,9 +524,10 @@
 								<div class="flex flex-wrap gap-1">
 									{#if e.special_needs && e.special_needs.length > 0}
 										{#each e.special_needs as need (need)}
-											{@const label =
-												vulnerableGroupQuery.data?.items.find((i) => i.code === need)?.label ??
-												need}
+											{@const masterItem = vulnerableGroupQuery.data?.items.find(
+												(i) => i.code === need
+											)}
+											{@const label = masterItem ? formatMasterLabel(masterItem, 'th') : need}
 											<span
 												class="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-2xs font-medium text-amber-700"
 												>{label}</span
@@ -439,7 +542,7 @@
 							</Table.Cell>
 							<Table.Cell>
 								<span class="rounded-md bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
-									{zoneLabel(e.current_stay.zone)}
+									{zoneLabel(e.current_stay.zone, shelterQuery.data?.zones ?? [])}
 								</span>
 							</Table.Cell>
 							<Table.Cell class="text-center">
@@ -475,24 +578,6 @@
 			</Table.Root>
 		</div>
 
-		{#if totalPages > 1}
-			<Pagination.Root bind:page={currentPage} count={total} perPage={PAGE_SIZE}>
-				{#snippet children({ pages })}
-					<Pagination.Content>
-						<Pagination.Previous />
-						{#each pages as p, i (i)}
-							<Pagination.Item>
-								{#if p.type === 'page'}
-									<Pagination.Link page={p} isActive={p.value === currentPage} />
-								{:else}
-									<Pagination.Ellipsis />
-								{/if}
-							</Pagination.Item>
-						{/each}
-						<Pagination.Next />
-					</Pagination.Content>
-				{/snippet}
-			</Pagination.Root>
-		{/if}
+		<PaginationControls bind:page={currentPage} count={total} perPage={PAGE_SIZE} />
 	{/if}
 </div>

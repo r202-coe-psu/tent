@@ -5,10 +5,15 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import * as Dialog from '$lib/components/ui/dialog';
+	import { RegisteredViaBadge } from '$lib/features/people';
 
 	import {
-		CLAIM_FLOW_STATUS_GUIDANCE,
+		CLAIM_DIALOG_DESCRIPTION,
+		formatClaimCreatedAt,
+		formatOpenMemberDemographicsLine,
+		formatOpenMemberIdentityLine,
 		formatOpenMemberName,
+		formatOpenMemberVulnerableGroup,
 		pickReportInEvacueeId,
 		toggleMemberSelection,
 		useClaimUnassignedRegistration,
@@ -91,19 +96,18 @@
 		<Dialog.Header>
 			<Dialog.Title>รับเข้าศูนย์ (claim)</Dialog.Title>
 			<Dialog.Description>
-				{CLAIM_FLOW_STATUS_GUIDANCE}
+				{CLAIM_DIALOG_DESCRIPTION}
 			</Dialog.Description>
 		</Dialog.Header>
 		{#if hit}
 			<div class="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden text-sm">
 				<div class="rounded-xl border border-slate-200/80 bg-white p-3">
-					<div class="mb-2">
+					<div class="mb-2 flex flex-wrap items-center gap-2">
 						<UnassignedQueueBadge />
+						<RegisteredViaBadge via={hit.registered_via} />
 					</div>
-					<p class="text-xs font-semibold text-slate-500">รหัสเอกสาร</p>
-					<p class="break-all text-slate-900 tabular-nums">{hit.id}</p>
-					<p class="mt-2 text-xs font-semibold text-slate-500">ครัวเรือนสำรอง</p>
-					<p class="break-all text-slate-900 tabular-nums">{hit.reserved_household_id}</p>
+					<p class="text-xs font-semibold text-slate-500">ลงทะเบียนเมื่อ</p>
+					<p class="text-slate-900 tabular-nums">{formatClaimCreatedAt(hit.created_at)}</p>
 				</div>
 				<div class="min-h-0 flex-1 overflow-y-auto">
 					<p class="mb-2 text-sm font-semibold text-slate-900">สมาชิกที่ยัง open</p>
@@ -117,11 +121,32 @@
 										class="mt-1"
 										aria-label={`เลือก ${formatOpenMemberName(member)}`}
 									/>
-									<div class="min-w-0 flex-1">
+									<div class="min-w-0 flex-1 space-y-1">
 										<p class="font-medium text-slate-900">{formatOpenMemberName(member)}</p>
 										<p class="text-xs text-muted-foreground tabular-nums">
-											{member.phone ?? 'ไม่มีเบอร์'} · {member.person_id?.number ?? 'ไม่มีเลขบัตร'}
+											{formatOpenMemberIdentityLine(member)}
 										</p>
+										<p class="text-xs text-muted-foreground">
+											{formatOpenMemberDemographicsLine(member)}
+										</p>
+										{#if member.vulnerable_groups.length > 0 || member.special_needs.length > 0}
+											<div class="flex flex-wrap gap-1.5 pt-0.5">
+												{#each member.vulnerable_groups as code (code)}
+													<span
+														class="rounded-md border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-xs text-rose-900"
+													>
+														{formatOpenMemberVulnerableGroup(code)}
+													</span>
+												{/each}
+												{#each member.special_needs as need (need)}
+													<span
+														class="rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-xs text-amber-900"
+													>
+														{need}
+													</span>
+												{/each}
+											</div>
+										{/if}
 									</div>
 								</div>
 							</li>

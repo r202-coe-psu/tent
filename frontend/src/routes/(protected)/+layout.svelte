@@ -1,48 +1,56 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { Button } from '$lib/components/ui/button';
-	import { Separator } from '$lib/components/ui/separator';
 	import ConnectionBanner from '$lib/components/ConnectionBanner.svelte';
-	import { startStaffCouchSync } from '$lib/db/staff-couch-sync';
+	import StaffAccountMenu from '$lib/components/staff-account-menu.svelte';
+	import { invalidateQueriesAfterReauth, startStaffCouchSync } from '$lib/db/staff-couch-sync';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { toast } from 'svelte-sonner';
-	import { LOGOUT_ROUTE } from '$lib/guards/auth';
 	import { SessionExpiredBar } from '$lib/features/login';
-	import LanguageSwitcher from '$lib/components/language-switcher.svelte';
 	import type { LayoutProps } from './$types';
 
 	let { children, data }: LayoutProps = $props();
 
+	/** Set while session is expired so we refetch errored queries on reauth. */
+	let pendingReauthRecovery = false;
+
 	$effect(() => {
-		if (!authStore.isAuthenticated || authStore.needsReauth) return;
+		if (authStore.needsReauth) {
+			pendingReauthRecovery = true;
+			return;
+		}
+		if (!authStore.isAuthenticated) return;
+
+		if (pendingReauthRecovery) {
+			pendingReauthRecovery = false;
+			invalidateQueriesAfterReauth(data.queryClient);
+		}
+
 		const sync = startStaffCouchSync(data.queryClient);
 		return () => sync.stop();
 	});
-
-	async function logout() {
-		await authStore.logout();
-		toast.success('Logged out successfully');
-		await goto(resolve(LOGOUT_ROUTE));
-	}
 </script>
 
 <ConnectionBanner />
 
 <div class="flex min-h-[var(--app-shell-height)] flex-col pb-[var(--testing-banner-height)]">
-	{#if !page.url.pathname.startsWith('/back-office')}
+	{#if !page.url.pathname.startsWith('/back-office') && !page.url.pathname.startsWith('/system-management') && !page.url.pathname.startsWith('/onsite')}
 		<header
 			class="sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between border-b bg-background px-6"
 		>
 			<div class="flex items-center gap-6">
-				<a href={resolve('/portal')} class="font-semibold">Smart Shelter</a>
+				<a href={resolve('/portal')} class="flex min-w-0 items-center gap-2.5">
+					<img
+						src="/logo.png"
+						alt="PSU Smart Shelter"
+						class="h-8 w-8 shrink-0 rounded-lg object-contain"
+					/>
+					<span class="truncate text-sm font-semibold tracking-tight sm:text-base"
+						>PSU Smart Shelter</span
+					>
+				</a>
 			</div>
-			<div class="flex items-center gap-4">
-				<span class="text-sm text-muted-foreground">{authStore.user?.name}</span>
-				<LanguageSwitcher />
-				<Separator orientation="vertical" class="h-4" />
-				<Button variant="outline" size="sm" onclick={logout}>Logout</Button>
+			<div class="flex items-center gap-2">
+				<StaffAccountMenu />
 			</div>
 		</header>
 	{/if}

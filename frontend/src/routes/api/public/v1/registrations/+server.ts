@@ -1,15 +1,14 @@
 import { json } from '@sveltejs/kit';
-import { dev } from '$app/environment';
 import { env } from '$env/dynamic/private';
 import { z } from 'zod';
 import type { RequestHandler } from './$types';
 
 import {
 	bookingCodeFrom,
-	isCaptchaKeyConfigured,
 	isForecastCapacityExceeded,
 	publicBookingInputSchema,
-	executePublicFamilyRegistration
+	executePublicFamilyRegistration,
+	PublicRegistrationWriteError
 } from '$lib/features/public-register/server';
 import {
 	findConflictingHold,
@@ -21,13 +20,16 @@ import {
 } from '$lib/features/people/server';
 import { isShelterBookable } from '$lib/features/shelters/server';
 import { ReCaptchaProvider } from '$lib/server/security/captcha';
+import { verifyRecaptchaOrSkip } from '$lib/server/security/recaptcha-gate';
 import { registerIpLimiter, registerPhoneLimiter } from '$lib/server/security/rate-limiter';
 import { findMasterByCode } from '$lib/server/shelters.admin';
 
 // Never prerendered — runs on the Node server at runtime.
 export const prerender = false;
 
-const captchaProvider = new ReCaptchaProvider(env.SECRET_RECAPTCHA_KEY || 'dummy-secret');
+const captchaProvider = new ReCaptchaProvider(
+	env.RECAPTCHA_PROJECT_ID || env.SECRET_RECAPTCHA_KEY || 'smart-shelter-508719'
+);
 
 const noStore = { 'Cache-Control': 'no-store' };
 
@@ -61,6 +63,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 				shelter_code: z.string().trim().min(1, 'กรุณาระบุศูนย์พักพิง'),
 				captchaToken: z.string().optional(),
 				disclaimerAcknowledged: z.boolean().optional(),
+				join_match_token: z.string().trim().min(1).nullable().optional(),
 				members: unifiedRegistrationInputSchema.shape.members,
 				household: unifiedRegistrationInputSchema.shape.household
 			})
@@ -90,7 +93,8 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 		nationalId = parsed.data.members[0].person_id?.number?.trim() || null;
 		unifiedInput = {
 			members: parsed.data.members,
-			household: parsed.data.household
+			household: parsed.data.household,
+			...(parsed.data.join_match_token ? { join_match_token: parsed.data.join_match_token } : {})
 		};
 	} else {
 		// Legacy booking shape (for backward compatibility with tests)
@@ -108,25 +112,15 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 		phone = legacy.phone;
 		nationalId = legacy.national_id ?? null;
 
-		const LEGACY_PET_SPECIES = new Set(['dog', 'cat', 'other']);
 		const pets = legacy.pets.map((pet) => {
-			const isBird = pet.species === 'bird';
-			const isKnown = LEGACY_PET_SPECIES.has(pet.species);
-			const species = (isKnown ? pet.species : 'other') as 'dog' | 'cat' | 'other';
 			const rawNotes = [pet.name, pet.condition, pet.notes]
 				.map((s) => s?.trim())
 				.filter(Boolean)
 				.join(' | ');
-			const notes = isBird
-				? rawNotes || 'นก'
-				: isKnown
-					? rawNotes || undefined
-					: [rawNotes, `ชนิด: ${pet.species}`].filter(Boolean).join(' — ') || undefined;
-
 			return {
-				species,
+				species: pet.species,
 				count: 1,
-				notes,
+				notes: rawNotes || undefined,
 				has_cage: pet.has_cage
 			};
 		});
@@ -183,23 +177,18 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 		return json({ success: false, error: 'RATE_LIMITED' }, { status: 429, headers: noStore });
 	}
 
-	// 3. CAPTCHA verification.
-	if (!isCaptchaKeyConfigured(env.SECRET_RECAPTCHA_KEY)) {
-		if (!dev) {
-			console.error('SECRET_RECAPTCHA_KEY is missing or is a placeholder!');
-			return json(
-				{ success: false, error: 'SERVER_MISCONFIGURED' },
-				{ status: 500, headers: noStore }
-			);
-		}
-		console.warn('[dev] SECRET_RECAPTCHA_KEY not configured — skipping CAPTCHA verification');
-	} else {
-		if (!captchaToken) {
-			return json({ success: false, error: 'CAPTCHA_REQUIRED' }, { status: 400, headers: noStore });
-		}
-		if (!(await captchaProvider.verifyToken(captchaToken, ip, 'register'))) {
-			return json({ success: false, error: 'CAPTCHA_FAILED' }, { status: 403, headers: noStore });
-		}
+	// 3. CAPTCHA verification (honors config:app.recaptcha_enabled).
+	const captcha = await verifyRecaptchaOrSkip({
+		token: captchaToken ?? '',
+		ip,
+		action: 'register',
+		provider: captchaProvider
+	});
+	if (!captcha.ok) {
+		return json(
+			{ success: false, error: captcha.error },
+			{ status: captcha.status, headers: noStore }
+		);
 	}
 
 	// 4. Trust nothing from the browser about the shelter.
@@ -230,20 +219,51 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 		return json({ success: false, error: 'CAPACITY_EXCEEDED' }, { status: 409, headers: noStore });
 	}
 
-	// 5. Execute CouchDB write via dedicated public executor (#254)
+	// 5. Resolve optional residence-join token → join_household_id (never trust client ids)
+	let resolvedInput = unifiedInput;
+	const rawToken = unifiedInput.join_match_token?.trim();
+	let originShelterCode: string | undefined;
+	if (rawToken) {
+		const { verifyResidenceMatchToken } =
+			await import('$lib/features/public-register/residence-match-token.server');
+		const tokenPayload = verifyResidenceMatchToken(rawToken);
+		if (!tokenPayload || tokenPayload.kind !== 'shelter') {
+			return json(
+				{ success: false, error: 'INVALID_JOIN_TOKEN' },
+				{ status: 400, headers: noStore }
+			);
+		}
+		if (tokenPayload.shelterCode !== shelterCode) {
+			originShelterCode = tokenPayload.shelterCode;
+		}
+		resolvedInput = {
+			...unifiedInput,
+			join_match_token: null,
+			join_household_id: tokenPayload.householdId
+		};
+	}
+
+	// 6. Execute CouchDB write via dedicated public executor (#254)
 	let writeResult: Awaited<ReturnType<typeof executePublicFamilyRegistration>>;
 	try {
-		writeResult = await executePublicFamilyRegistration(unifiedInput, {
+		writeResult = await executePublicFamilyRegistration(resolvedInput, {
 			shelterCode,
-			createdBy: 'public'
+			createdBy: 'public',
+			originShelterCode
 		});
-	} catch {
+	} catch (err) {
+		if (err instanceof PublicRegistrationWriteError && err.message === 'JOIN_TARGET_NOT_FOUND') {
+			return json(
+				{ success: false, error: 'JOIN_TARGET_NOT_FOUND' },
+				{ status: 404, headers: noStore }
+			);
+		}
 		return json({ success: false, error: 'WRITE_FAILED' }, { status: 502, headers: noStore });
 	}
 
 	const { household, evacuees } = writeResult;
 
-	// 6. Ticket payload — no person_id, no medical, no full phone (Public DoD).
+	// 7. Ticket payload — no person_id, no medical, no full phone (Public DoD).
 	return json(
 		{
 			success: true,

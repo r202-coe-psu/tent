@@ -395,7 +395,7 @@
 </script>
 
 <Dialog.Root bind:open>
-	<Dialog.Content class="sm:max-w-2xl">
+	<Dialog.Content class="max-h-[90dvh] overflow-y-auto p-4 sm:max-w-2xl sm:p-6">
 		<Dialog.Header>
 			<Dialog.Title>
 				{#if sourceMode === 'recipe'}
@@ -419,10 +419,17 @@
 		</Dialog.Header>
 
 		<form onsubmit={handleSubmit} class="space-y-4">
-			<div class="grid grid-cols-2 gap-4">
+			<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 				<div class="space-y-1.5">
 					<Label for="mp-date">วันที่</Label>
-					<Input id="mp-date" type="date" bind:value={date} required disabled={isEdit} />
+					<Input
+						id="mp-date"
+						type="date"
+						class="min-h-11 sm:min-h-9"
+						bind:value={date}
+						required
+						disabled={isEdit}
+					/>
 				</div>
 				<div class="space-y-1.5">
 					<Label for="mp-meal">มื้ออาหาร</Label>
@@ -430,7 +437,7 @@
 						id="mp-meal"
 						bind:value={meal}
 						disabled={isEdit}
-						class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:ring-1 focus:ring-ring focus:outline-none disabled:opacity-50"
+						class="flex h-11 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:ring-1 focus:ring-ring focus:outline-none disabled:opacity-50 sm:h-9"
 					>
 						{#each Object.entries(MEAL_PERIOD_LABELS) as [value, label] (value)}
 							<option {value}>{label}</option>
@@ -457,11 +464,11 @@
 							{#each customRows as row, i (i)}
 								{@const currentUnresolved =
 									row.itemId && !foodSupplyItems.some((item) => item._id === row.itemId)}
-								<div class="flex items-center gap-2">
+								<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
 									<select
 										bind:value={row.itemId}
 										onchange={() => onCustomItemPick(row)}
-										class="flex h-9 min-w-0 flex-1 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:ring-1 focus:ring-ring focus:outline-none"
+										class="flex h-11 min-w-0 flex-1 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:ring-1 focus:ring-ring focus:outline-none sm:h-9"
 									>
 										<option value={null} disabled>เลือกวัตถุดิบ...</option>
 										{#if currentUnresolved}
@@ -473,24 +480,27 @@
 											<option value={item._id}>{item.name} ({item.unit})</option>
 										{/each}
 									</select>
-									<Input
-										type="number"
-										min="0"
-										step="any"
-										class="w-28"
-										placeholder="ต่อคน"
-										bind:value={row.qtyPerPerson}
-									/>
-									<Button
-										type="button"
-										size="sm"
-										variant="outline"
-										class="text-destructive hover:text-destructive"
-										onclick={() => removeCustomRow(i)}
-										disabled={customRows.length <= 1}
-									>
-										<Trash2 class="h-3.5 w-3.5" />
-									</Button>
+									<div class="flex items-center gap-2">
+										<Input
+											type="number"
+											min="0"
+											step="any"
+											class="min-h-11 w-full sm:min-h-9 sm:w-28"
+											placeholder="ต่อคน"
+											bind:value={row.qtyPerPerson}
+										/>
+										<Button
+											type="button"
+											size="sm"
+											variant="outline"
+											class="min-h-11 min-w-11 text-destructive hover:text-destructive sm:min-h-9 sm:min-w-9"
+											onclick={() => removeCustomRow(i)}
+											disabled={customRows.length <= 1}
+										>
+											<Trash2 class="h-3.5 w-3.5" />
+											<span class="sr-only">ลบวัตถุดิบ</span>
+										</Button>
+									</div>
 								</div>
 								{#if row.itemId && !currentUnresolved}
 									<p class="pl-0.5 text-xs text-muted-foreground">
@@ -564,18 +574,36 @@
 				<Input id="mp-total" type="number" min="1" bind:value={total} required />
 			</div>
 
-			<div class="grid grid-cols-3 gap-3">
+			<div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
 				<div class="space-y-1.5">
 					<Label for="mp-halal" class="text-xs">ฮาลาล</Label>
-					<Input id="mp-halal" type="number" min="0" bind:value={halal} />
+					<Input
+						id="mp-halal"
+						type="number"
+						min="0"
+						class="min-h-11 sm:min-h-9"
+						bind:value={halal}
+					/>
 				</div>
 				<div class="space-y-1.5">
 					<Label for="mp-soft" class="text-xs">อาหารอ่อน</Label>
-					<Input id="mp-soft" type="number" min="0" bind:value={softFood} />
+					<Input
+						id="mp-soft"
+						type="number"
+						min="0"
+						class="min-h-11 sm:min-h-9"
+						bind:value={softFood}
+					/>
 				</div>
 				<div class="space-y-1.5">
 					<Label for="mp-infant" class="text-xs">ทารก</Label>
-					<Input id="mp-infant" type="number" min="0" bind:value={infant} />
+					<Input
+						id="mp-infant"
+						type="number"
+						min="0"
+						class="min-h-11 sm:min-h-9"
+						bind:value={infant}
+					/>
 				</div>
 			</div>
 
@@ -675,10 +703,10 @@
 					<div class="space-y-2">
 						{#each gasRows as row, i (i)}
 							{@const rowResult = gasRowResults[i]}
-							<div class="flex items-center gap-2">
+							<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
 								<select
 									bind:value={row.gasTypeId}
-									class="flex h-9 min-w-0 flex-1 rounded-md border border-input bg-transparent px-3 text-sm shadow-sm focus:ring-1 focus:ring-ring focus:outline-none"
+									class="flex h-11 min-w-0 flex-1 rounded-md border border-input bg-transparent px-3 text-sm shadow-sm focus:ring-1 focus:ring-ring focus:outline-none sm:h-9"
 								>
 									<option value={null} disabled>เลือกถังแก๊ส...</option>
 									{#each availableGasTypes(i) as g (g._id)}
@@ -687,23 +715,26 @@
 										</option>
 									{/each}
 								</select>
-								<Input
-									type="text"
-									inputmode="decimal"
-									class="w-28"
-									placeholder={selectedRecipe?.standard_duration_hours ?? '1 ชม.'}
-									bind:value={row.cookingHoursInput}
-								/>
-								<Button
-									type="button"
-									size="sm"
-									variant="outline"
-									class="text-destructive hover:text-destructive"
-									onclick={() => removeGasRow(i)}
-									disabled={gasRows.length <= 1}
-								>
-									<Trash2 class="h-3.5 w-3.5" />
-								</Button>
+								<div class="flex items-center gap-2">
+									<Input
+										type="text"
+										inputmode="decimal"
+										class="min-h-11 w-full sm:min-h-9 sm:w-28"
+										placeholder={selectedRecipe?.standard_duration_hours ?? '1 ชม.'}
+										bind:value={row.cookingHoursInput}
+									/>
+									<Button
+										type="button"
+										size="sm"
+										variant="outline"
+										class="min-h-11 min-w-11 text-destructive hover:text-destructive sm:min-h-9 sm:min-w-9"
+										onclick={() => removeGasRow(i)}
+										disabled={gasRows.length <= 1}
+									>
+										<Trash2 class="h-3.5 w-3.5" />
+										<span class="sr-only">ลบถัง</span>
+									</Button>
+								</div>
 							</div>
 							{#if rowResult.result}
 								{@const remaining = row.gasTypeId ? remainingGasOf(row.gasTypeId) : '0'}
@@ -737,10 +768,18 @@
 				{/if}
 			</div>
 
-			<Dialog.Footer>
-				<Button type="button" variant="outline" onclick={() => (open = false)}>ยกเลิก</Button>
+			<Dialog.Footer class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+				<Button
+					type="button"
+					variant="outline"
+					class="min-h-11 w-full sm:w-auto"
+					onclick={() => (open = false)}
+				>
+					ยกเลิก
+				</Button>
 				<Button
 					type="submit"
+					class="min-h-11 w-full sm:w-auto"
 					disabled={createCalc.isPending ||
 						updateCalc.isPending ||
 						total <= 0 ||

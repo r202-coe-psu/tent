@@ -3,7 +3,7 @@ id: CR-121
 title: ระบบตั๋วเบิกจ่ายพัสดุและอาหาร 4-in-1 (RequisitionTicket) พร้อมระบบแจกจ่ายหน้างานและติดตามของยืม (DistributionLog)
 status: approved
 date: 2026-09-12
-updated: 2026-09-14
+updated: 2026-09-17
 requested_by: "Team Leader (ฝ่ายปฏิบัติการหน้างาน โรงครัว และคลังสินค้า)"
 decided_by: Project Owner
 layer: stable
@@ -565,7 +565,7 @@ export interface MealService extends BaseDoc {
 
 | `reason` | `ref_id` prefix ที่ยอมรับ | คำอธิบายและที่มา |
 | --- | --- | --- |
-| `receive` | `['meal_service:', 'requisition_ticket:', 'distribution_log:']` | รับผลผลิตครัว (`meal_service:`), รับของแจกเหลือคืนคลัง (`requisition_ticket:`), รับของยืมคืนที่เคาน์เตอร์/ด่าน (`distribution_log:`) |
+| `receive` | `['meal_service:', 'requisition_ticket:', 'distribution_log:', 'bulk_return_pool:']` | รับผลผลิตครัว (`meal_service:`), รับของแจกเหลือคืนคลัง (`requisition_ticket:`), รับของยืมคืนที่เคาน์เตอร์/ด่าน (`distribution_log:`), หรือรับของกองรวมที่ผูก receipt กับ Pool แบบ deterministic (`bulk_return_pool:`) |
 | `requisition` | `['requisition_ticket:', 'kitchen_requisition:']` | ตัดสต็อกวัตถุดิบเข้าครัวตามตั๋วเบิกกลาง (และรองรับตั๋วครัวเดิมแบบ Backward-compatible) |
 | `distribute` | `'requisition_ticket:'` | ตัดสต็อกพัสดุและอาหารสำหรับนำไปแจกจ่ายหน้างานตามตั๋วเบิกกลาง |
 | `transfer_out` | `['stock_transfer:', 'requisition_ticket:']` | ตัดสต็อกโอนย้ายพัสดุข้ามศูนย์ตามตั๋วโอนย้าย |
@@ -578,6 +578,7 @@ export interface MealService extends BaseDoc {
 1. **ห้ามเพิ่มฟิลด์นอก Envelope:** ใน `stock_ledger` ไม่มีฟิลด์ `notes` ระดับบน หากต้องการบันทึกคำอธิบายประกอบ ให้บันทึกลงใน `lot.note` เท่านั้น
 2. **การตรวจจับผ่าน Zod SuperRefine:** ฟังก์ชัน `checkRefId` ใน `operations.ts` ต้องตรวจสอบว่า `ref_id` ขึ้นต้นด้วย Prefix ตัวใดตัวหนึ่งใน Array ที่กำหนดไว้ หากไม่ตรงจะถูกปฏิเสธด้วย Parse Error ทันที
 3. **ป้องกัน Double Count ของยืม:** การคืนของยืมที่หน้างานจะลงบัญชีคลังเพียงครั้งเดียว ณ จุดรับจริง (เคาน์เตอร์รับคืน หรือตอนคลังตรวจรับกองรวม) การปลดภาระที่ด่าน Check-out จะไม่บันทึก `stock_ledger` ซ้ำ
+4. **Deterministic Bulk-Pool Receipt (P1-03):** ผู้เรียกต้องสร้าง `operationUlid` ก่อน write และใช้ซ้ำเมื่อ retry; สร้าง `stock_ledger:{operationUlid}` (`reason:'receive'`, `ref_id:'bulk_return_pool:{operationUlid}'`) ก่อน แล้วสร้าง `bulk_return_pool:{operationUlid}` ที่อ้าง `stock_ledger_id:'stock_ledger:{operationUlid}'`. หาก create conflict ต้องอ่านเอกสารเดิมและตรวจ immutable creation semantics ก่อนดำเนินการต่อ; ห้ามสร้าง receipt ใหม่สำหรับ operation เดิม
 
 ---
 
@@ -832,4 +833,4 @@ export interface MealService extends BaseDoc {
 - **2026-09-13 (Decision 3):** ยกเลิกโมเดล 5 Standard Meal Archetypes โดยเปลี่ยนเป็นบันทึกอาหารปรุงสำเร็จเป็น `ItemMaster` รายชนิดอาหารจริงโดยตรง (เช่น ข้าวกะเพราไก่, ข้าวผัดฮาลาล) ภายใต้หมวดหมู่ `category: 'item_category:ready_meal'` (`default_class: 'CONSUMABLE'`) เพื่อให้ชื่ออาหารใน Master Data, ตั๋วเบิกจ่าย, และสต็อกการ์ดตรงกับความเป็นจริงหน้างาน
 - **2026-09-14 (Decision 4):** ปรับปรุงข้อกำหนดบัญชีคลัง `stock_ledger` ให้สอดคล้องกับ Invariant CR-055 โดยคง enum `receive` สำหรับการรับเข้าทุกประเภท (ผลผลิตครัว, ของแจกเหลือส่งคืน, ของยืมส่งคืน) และขยาย `REF_PREFIX_BY_REASON` ใน `operations.ts` ให้ `receive` รับ Prefix ได้หลายชนิด (`['meal_service:', 'requisition_ticket:', 'distribution_log:']`) พร้อมกำหนดให้ตั๋วเบิกจ่ายตัดสต็อกด้วย `requisition` (ครัว) และ `distribute` (แจกจ่าย) โดยผูก `ref_id` กับ `'requisition_ticket:'`
 - **2026-09-14 (Decision 5):** อุดช่องโหว่การปลดภาระของยืมคืนแบบกองรวม (Bulk Drop-off Unbounded Resolve) ที่ด่าน Check-out ด้วยระบบ **Hybrid Auto-Pool**: คลังตรวจรับกองรวมสร้าง Pool ยอดรับจริงประจำกะ (`unclaimed_quota`) โดยด่าน Check-out จะกดปุ่ม [ 🤝 ยืนยันว่าคืนแล้วในกองรวม ] ได้เฉพาะเมื่อยังมีโควตาเหลือใน Pool หากโควตาหมดจะล็อกปุ่มและบังคับให้เลือก Lost หรือต้องใช้สิทธิ์ `shelter_manager` Override พร้อมบันทึก `bulk_pool_id` และรายงานส่วนต่างตอนปิดรอบ
-
+- **2026-09-17 (Amendment via CR-134):** ขยายกลไกการปลดภาระของยืมแบบกองรวม (Bulk Drop-off) ด้วยเอกสารประสานงาน `bulk_return_claim` (schema_v 1) และยกระดับ `bulk_return_pool` สู่ schema_v 2 (เพิ่ม `claim_ids`) เพื่อแก้ปัญหา Crash Recovery / Idempotency ตาม [CR-134](CR-134-bulk-return-claim-recovery.md).

@@ -4,15 +4,12 @@
 	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import Menu from '@lucide/svelte/icons/menu';
-	import X from '@lucide/svelte/icons/x';
-	import LogOut from '@lucide/svelte/icons/log-out';
-	import { slide } from 'svelte/transition';
+	import * as Sheet from '$lib/components/ui/sheet';
+	import StaffAccountMenu from '$lib/components/staff-account-menu.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { goto } from '$app/navigation';
+	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { toast } from 'svelte-sonner';
-	import { LOGOUT_ROUTE } from '$lib/guards/auth';
-	import { isSystemAdmin, formatRoleList } from '$lib/auth/roles';
+	import { isSystemAdmin } from '$lib/auth/roles';
 	import {
 		systemManagementNavbarGroups,
 		systemManagementHomePath,
@@ -28,12 +25,13 @@
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
 
-	async function logout() {
+	function closeMobileMenu() {
 		mobileMenuOpen = false;
-		await authStore.logout();
-		toast.success('Logged out successfully');
-		await goto(resolve(LOGOUT_ROUTE));
 	}
+
+	afterNavigate(() => {
+		mobileMenuOpen = false;
+	});
 
 	function normalize(path: string): string {
 		return path.replace(/\/$/, '');
@@ -79,7 +77,7 @@
 </script>
 
 <aside
-	class="sticky top-0 z-20 hidden h-[var(--app-shell-height)] shrink-0 flex-col self-start border-r border-sidebar-border bg-card text-foreground transition-[width] duration-200 md:flex {collapsed
+	class="sticky top-0 z-20 hidden h-[var(--app-shell-height)] shrink-0 flex-col self-start border-r border-sidebar-border bg-card text-foreground transition-[width] duration-200 lg:flex {collapsed
 		? 'w-16'
 		: 'w-72'}"
 >
@@ -94,14 +92,14 @@
 				class="flex items-center gap-3 {collapsed ? 'flex-none justify-center' : 'flex-1'}"
 				aria-label="กลับหน้าระบบส่วนกลาง"
 			>
-				<div
-					class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-xs font-bold text-primary-foreground"
-				>
-					SS
-				</div>
+				<img
+					src="/logo.png"
+					alt="PSU Smart Shelter"
+					class="h-8 w-8 shrink-0 rounded-lg object-contain"
+				/>
 				{#if !collapsed}
-					<span class="text-xl font-bold tracking-tight text-foreground">
-						Smart<span class="text-primary">Shelter</span>
+					<span class="truncate text-base font-bold tracking-tight text-foreground">
+						PSU Smart Shelter
 					</span>
 				{/if}
 			</a>
@@ -365,211 +363,198 @@
 
 		<div class="mt-auto border-t border-sidebar-border bg-card p-4">
 			{#if collapsed}
-				<div class="flex flex-col items-center gap-4">
-					<Tooltip.Root>
-						<Tooltip.Trigger>
-							{#snippet child({ props })}
-								<div
-									{...props}
-									class="flex h-9 w-9 cursor-default items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary"
-								>
-									{authStore.user?.name?.substring(0, 2).toUpperCase() || 'US'}
-								</div>
-							{/snippet}
-						</Tooltip.Trigger>
-						<Tooltip.Content side="right" sideOffset={8}>
-							{authStore.user?.name} ({formatRoleList(roles)})
-						</Tooltip.Content>
-					</Tooltip.Root>
-
-					<Tooltip.Root>
-						<Tooltip.Trigger>
-							{#snippet child({ props })}
-								<button
-									{...props}
-									type="button"
-									class="flex h-9 w-9 items-center justify-center rounded-xl border border-destructive/20 text-destructive transition-colors hover:bg-destructive/10 active:scale-95"
-									onclick={logout}
-									aria-label="ออกจากระบบ"
-								>
-									<LogOut class="h-4 w-4" />
-								</button>
-							{/snippet}
-						</Tooltip.Trigger>
-						<Tooltip.Content side="right" sideOffset={8}>ออกจากระบบ</Tooltip.Content>
-					</Tooltip.Root>
+				<div class="flex flex-col items-center">
+					<StaffAccountMenu compact side="right" />
 				</div>
 			{:else}
-				<div class="flex flex-col gap-3">
-					<div class="flex flex-col gap-0.5">
-						<span class="text-xs font-normal text-muted-foreground">เข้าสู่ระบบโดย</span>
-						<span class="truncate text-sm font-bold text-foreground" title={authStore.user?.name}
-							>{authStore.user?.name}</span
-						>
-						<span
-							class="mt-1 max-w-full self-start truncate rounded-lg border border-primary/10 bg-primary/5 px-2 py-1 text-2xs font-medium text-primary"
-							title={formatRoleList(roles)}
-						>
-							{formatRoleList(roles)}
-						</span>
-					</div>
-					<button
-						type="button"
-						class="mt-1 flex w-full items-center justify-center gap-2 rounded-xl border border-destructive/20 px-4 py-2.5 text-sm font-medium text-destructive transition-all hover:bg-destructive/10 active:scale-95"
-						onclick={logout}
-					>
-						<LogOut class="h-4 w-4" />
-						<span>ออกจากระบบ</span>
-					</button>
-				</div>
+				<StaffAccountMenu class="w-full" side="top" align="start" />
 			{/if}
 		</div>
 	</Tooltip.Provider>
 </aside>
 
-<div class="relative z-50 w-full shrink-0 border-b border-sidebar-border bg-card md:hidden">
+<div class="z-50 w-full shrink-0 border-b border-sidebar-border bg-card lg:hidden">
 	<div class="flex h-16 w-full items-center justify-between px-4">
 		<a
 			href={systemManagementHomePath}
-			class="flex items-center gap-3"
-			onclick={() => (mobileMenuOpen = false)}
+			class="flex min-h-11 items-center gap-3"
+			onclick={closeMobileMenu}
 		>
-			<div
-				class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-xs font-bold text-primary-foreground"
+			<img
+				src="/logo.png"
+				alt="PSU Smart Shelter"
+				class="h-8 w-8 shrink-0 rounded-lg object-contain"
+			/>
+			<span
+				class="flex min-w-0 items-center gap-1.5 text-base font-bold tracking-tight text-foreground"
 			>
-				SS
-			</div>
-			<span class="text-lg font-bold tracking-tight text-foreground">
-				Smart<span class="text-primary">Shelter</span>
-				<span class="ml-1 rounded bg-primary/10 px-1.5 py-0.5 text-2xs font-semibold text-primary">
+				<span class="truncate">PSU Smart Shelter</span>
+				<span
+					class="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-2xs font-semibold text-primary"
+				>
 					System Management
 				</span>
 			</span>
 		</a>
 		<button
 			type="button"
-			class="flex h-10 w-10 items-center justify-center rounded-lg border border-sidebar-border bg-card text-muted-foreground shadow-sm transition-all hover:bg-muted active:scale-95"
+			class="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-sidebar-border bg-card text-muted-foreground transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
 			onclick={() => (mobileMenuOpen = !mobileMenuOpen)}
 			aria-label={mobileMenuOpen ? 'ปิดเมนู' : 'เปิดเมนู'}
+			aria-expanded={mobileMenuOpen}
+			aria-controls="system-management-mobile-nav"
 		>
-			{#if mobileMenuOpen}<X class="h-5 w-5" />{:else}<Menu class="h-5 w-5" />{/if}
+			<Menu class="h-5 w-5" />
 		</button>
 	</div>
 
-	{#if mobileMenuOpen}
-		<div
-			class="absolute top-16 right-0 left-0 z-40 max-h-[calc(100vh-4rem)] overflow-y-auto border-t border-sidebar-border bg-card p-4 shadow-xl"
-			transition:slide={{ duration: 200 }}
+	<Sheet.Root bind:open={mobileMenuOpen}>
+		<Sheet.Content
+			id="system-management-mobile-nav"
+			side="left"
+			class="gap-0 border-sidebar-border bg-card p-0 text-foreground shadow-none"
 		>
-			<!-- Return to Portal Hub Button on Mobile -->
-			<a
-				href={resolve('/portal')}
-				class="mb-4 flex w-full items-center justify-center gap-2 rounded-xl bg-muted py-2.5 text-sm font-normal text-foreground transition-colors hover:bg-muted/70"
-				onclick={() => (mobileMenuOpen = false)}
-			>
-				<House class="h-4 w-4 shrink-0 text-muted-foreground" />
-				<span>กลับหน้าเลือกเมนูหลัก</span>
-			</a>
+			<Sheet.Header class="border-b border-sidebar-border p-4 pr-14">
+				<Sheet.Title
+					class="flex items-center gap-2.5 text-left text-base font-bold text-foreground"
+				>
+					<img src="/logo.png" alt="" class="h-7 w-7 shrink-0 rounded-md object-contain" />
+					PSU Smart Shelter
+				</Sheet.Title>
+				<Sheet.Description class="text-left text-sm text-muted-foreground">
+					เมนูระบบส่วนกลาง
+				</Sheet.Description>
+			</Sheet.Header>
 
-			<div class="space-y-6">
-				{#each systemManagementNavbarGroups as group (group.title)}
-					{@const visibleItems = group.items.filter(canSee)}
-					<div>
-						<div
-							class="mb-2 px-3 text-2xs font-bold tracking-wider text-muted-foreground/70 uppercase"
-						>
-							{group.title}
-						</div>
-						<div class="space-y-1">
-							{#each visibleItems as item (item.label)}
-								{@const Icon = item.icon}
-								{#if isGroup(item)}
-									{@const expanded = isExpanded(item.label, item)}
-									<button
-										type="button"
-										class="flex w-full items-center gap-3 rounded-xl px-4 py-3 transition-colors {groupIsActive(
-											item
-										)
-											? 'bg-primary-muted text-primary'
-											: 'hover:bg-muted/60'}"
-										onclick={() => toggleExpanded(item.label)}
-										aria-expanded={expanded}
-									>
-										<Icon class="h-4 w-4 shrink-0" />
-										<span class="flex-1 text-left whitespace-nowrap">{item.label}</span>
-										<ChevronDown class="h-3.5 w-3.5 {expanded ? 'rotate-180' : ''}" />
-									</button>
-									{#if expanded}
-										<div class="mt-1 space-y-1">
-											{#each item.children.filter(canSee) as child (child.label)}
-												{@const childActive = isActive(child.href)}
-												{@const ChildIcon = child.icon}
-												{#if child.href}
-													<a
-														href={child.href}
-														class="ml-4 flex items-center gap-3 rounded-xl px-4 py-2.5 {childActive
-															? 'bg-primary font-semibold text-primary-foreground'
-															: 'hover:bg-muted/60'}"
-														onclick={() => (mobileMenuOpen = false)}
-													>
-														<ChildIcon class="h-4 w-4 shrink-0" />
-														<span class="whitespace-nowrap">{child.label}</span>
-													</a>
-												{:else}
-													<span
-														class="ml-4 flex items-center gap-3 rounded-xl px-4 py-2.5 text-muted-foreground opacity-50"
-													>
-														<ChildIcon class="h-4 w-4 shrink-0" />
-														<span class="whitespace-nowrap">{child.label}</span>
-													</span>
-												{/if}
-											{/each}
-										</div>
-									{/if}
-								{:else if item.href}
-									{@const active = isActive(item.href)}
-									<a
-										href={item.href}
-										class="flex items-center gap-3 rounded-xl px-4 py-3 {active
-											? 'bg-primary font-semibold text-primary-foreground'
-											: 'hover:bg-muted/60'}"
-										onclick={() => (mobileMenuOpen = false)}
-									>
-										<Icon class="h-4 w-4 shrink-0" />
-										<span class="whitespace-nowrap">{item.label}</span>
-									</a>
-								{/if}
-							{/each}
-						</div>
-					</div>
-				{/each}
-			</div>
-
-			<!-- Mobile User Profile & Logout Section -->
-			<div class="mt-6 border-t border-sidebar-border pt-4">
-				<div class="flex flex-col gap-3">
-					<div class="flex flex-col gap-0.5">
-						<span class="text-xs font-normal text-muted-foreground">เข้าสู่ระบบโดย</span>
-						<span class="truncate text-sm font-bold text-foreground" title={authStore.user?.name}>
-							{authStore.user?.name}
-						</span>
-						<span
-							class="mt-1 max-w-full self-start truncate rounded-lg border border-primary/10 bg-primary/5 px-2 py-1 text-2xs font-medium text-primary"
-							title={formatRoleList(roles)}
-						>
-							{formatRoleList(roles)}
-						</span>
-					</div>
-					<button
-						type="button"
-						class="mt-1 flex w-full items-center justify-center gap-2 rounded-xl border border-destructive/20 px-4 py-2.5 text-sm font-medium text-destructive transition-all hover:bg-destructive/10 active:scale-95"
-						onclick={logout}
+			<div class="no-scrollbar flex-1 overflow-y-auto">
+				<div class="border-b border-sidebar-border p-4 pb-3">
+					<a
+						href={resolve('/portal')}
+						class="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-muted px-4 py-3 text-sm font-normal text-foreground transition-colors hover:bg-muted/70"
+						onclick={closeMobileMenu}
+						title="กลับหน้าเลือกเมนูหลัก"
 					>
-						<LogOut class="h-4 w-4" />
-						<span>ออกจากระบบ</span>
-					</button>
+						<House class="h-4 w-4 shrink-0 text-muted-foreground" />
+						<span>กลับหน้าเลือกเมนูหลัก</span>
+					</a>
+				</div>
+
+				<div class="space-y-6 p-4 text-xs font-medium text-muted-foreground">
+					{#each systemManagementNavbarGroups as group (group.title)}
+						{@const visibleItems = group.items.filter(canSee)}
+						{#if visibleItems.length > 0}
+							<div>
+								<div
+									class="mb-2 px-3 text-2xs font-bold tracking-wider text-muted-foreground/70 uppercase"
+								>
+									{group.title}
+								</div>
+								<div class="space-y-1">
+									{#each visibleItems as item (item.label)}
+										{@const Icon = item.icon}
+										{#if isGroup(item)}
+											{@const expanded = isExpanded(item.label, item)}
+											{@const active = groupIsActive(item)}
+											<button
+												type="button"
+												class="flex min-h-11 w-full items-center gap-3 rounded-xl px-4 py-3 transition-colors {active
+													? 'bg-primary-muted text-primary'
+													: 'hover:bg-muted/60'}"
+												onclick={() => toggleExpanded(item.label)}
+												aria-expanded={expanded}
+											>
+												<Icon
+													class="h-4 w-4 shrink-0 {active
+														? 'text-primary'
+														: 'text-muted-foreground'}"
+												/>
+												<span class="flex-1 text-left whitespace-nowrap">{item.label}</span>
+												<ChevronDown
+													class="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 {expanded
+														? 'rotate-180'
+														: ''}"
+												/>
+											</button>
+											{#if expanded}
+												<div class="mt-1 space-y-1">
+													{#each item.children.filter(canSee) as child (child.label)}
+														{@const childActive = isActive(child.href)}
+														{@const ChildIcon = child.icon}
+														{#if child.href}
+															<a
+																href={child.href}
+																class="ml-4 flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 transition-colors {childActive
+																	? 'bg-primary font-semibold text-primary-foreground'
+																	: 'hover:bg-muted/60'}"
+																onclick={closeMobileMenu}
+																aria-current={childActive ? 'page' : undefined}
+															>
+																<ChildIcon
+																	class="h-4 w-4 shrink-0 {childActive
+																		? 'text-primary-foreground'
+																		: 'text-muted-foreground'}"
+																/>
+																<span class="whitespace-nowrap">{child.label}</span>
+															</a>
+														{:else}
+															<span
+																class="ml-4 flex min-h-11 cursor-not-allowed items-center gap-3 rounded-xl px-4 py-3 text-muted-foreground opacity-50"
+																aria-disabled="true"
+															>
+																<ChildIcon class="h-4 w-4 shrink-0 text-muted-foreground" />
+																<span class="whitespace-nowrap">{child.label}</span>
+															</span>
+														{/if}
+													{/each}
+												</div>
+											{/if}
+										{:else if item.href}
+											{@const active = isActive(item.href)}
+											<a
+												href={item.href}
+												class="flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 transition-colors {active
+													? 'bg-primary font-semibold text-primary-foreground'
+													: 'hover:bg-muted/60'}"
+												onclick={closeMobileMenu}
+												aria-current={active ? 'page' : undefined}
+											>
+												<Icon
+													class="h-4 w-4 shrink-0 {active
+														? 'text-primary-foreground'
+														: 'text-muted-foreground'}"
+												/>
+												<span class="whitespace-nowrap">{item.label}</span>
+											</a>
+										{:else}
+											<span
+												class="flex min-h-11 cursor-not-allowed items-center gap-3 rounded-xl px-4 py-3 text-muted-foreground opacity-50"
+												aria-disabled="true"
+											>
+												<Icon class="h-4 w-4 shrink-0 text-muted-foreground" />
+												<span class="whitespace-nowrap">{item.label}</span>
+											</span>
+										{/if}
+									{/each}
+								</div>
+							</div>
+						{/if}
+					{/each}
 				</div>
 			</div>
-		</div>
-	{/if}
+
+			<Sheet.Footer class="border-t border-sidebar-border bg-card p-4">
+				<StaffAccountMenu class="w-full" side="top" align="start" onNavigate={closeMobileMenu} />
+			</Sheet.Footer>
+		</Sheet.Content>
+	</Sheet.Root>
 </div>
+
+<style>
+	.no-scrollbar {
+		scrollbar-width: none;
+		-ms-overflow-style: none;
+	}
+	.no-scrollbar::-webkit-scrollbar {
+		display: none;
+	}
+</style>

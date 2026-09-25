@@ -1,17 +1,19 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import * as Table from '$lib/components/ui/table';
-	import * as Card from '$lib/components/ui/card';
 	import { Button } from '$lib/components/ui/button';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert';
+	import StaffPageShell from '$lib/components/staff-page-shell.svelte';
+	import { spatial } from '$lib/tokens';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import { AGE_BUCKET_LABELS } from '$lib/features/dashboard';
 	import {
 		overviewFiltersSchema,
+		getPreRegStatusInfo,
 		type OverviewFilters,
 		type PreRegistrationListItem
-	} from '../domain/schemas';
+	} from '../domain';
 	import { usePreRegistrations } from '../application/queries';
 	import OverviewFilterBar from './overview-filter-bar.svelte';
 
@@ -34,6 +36,7 @@
 			next.operation_status !== filters.operation_status ||
 			next.stay_bucket !== filters.stay_bucket ||
 			next.source !== filters.source ||
+			next.household_id !== filters.household_id ||
 			next.q !== filters.q ||
 			next.limit !== filters.limit;
 		filters = resetOffset ? { ...next, offset: 0 } : next;
@@ -51,13 +54,11 @@
 	}
 </script>
 
-<div class="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
-	<header class="space-y-1">
-		<h1 class="text-2xl font-bold tracking-tight text-[#0A2647] sm:text-3xl">ลงทะเบียนล่วงหน้า</h1>
-		<p class="text-base text-slate-600">คิวยังไม่ผูกศูนย์ และ Pre-reg ที่ผูกศูนย์แล้ว</p>
-	</header>
-
-	<OverviewFilterBar {filters} onChange={onFiltersChange} />
+<StaffPageShell
+	title="ลงทะเบียนล่วงหน้า"
+	description="ตรวจสอบผู้ลงทะเบียนล่วงหน้าทั้งหมด สถานะการเข้าศูนย์ และศูนย์พักพิงปลายทาง"
+>
+	<OverviewFilterBar {filters} onChange={onFiltersChange} showHouseholdFilter={true} />
 
 	{#if listQuery.isError}
 		<Alert variant="destructive">
@@ -67,18 +68,20 @@
 		</Alert>
 	{/if}
 
-	<Card.Root class="rounded-2xl border border-slate-200/80 bg-white shadow-2xs">
-		<Card.Header class="flex flex-row items-center justify-between gap-3 space-y-0">
+	<div class={spatial.container.staffPageCard}>
+		<div
+			class="flex flex-row items-center justify-between gap-3 border-b border-slate-200/80 p-4 sm:p-6"
+		>
 			<div>
-				<Card.Title class="text-lg font-bold text-slate-900">รายการทั้งหมด</Card.Title>
-				<Card.Description class="text-sm text-slate-500">
+				<h2 class="text-lg font-bold text-slate-900">รายการทั้งหมด</h2>
+				<p class="text-sm text-slate-500">
 					{#if listQuery.isPending && items.length === 0}
 						กำลังโหลด...
 					{:else}
 						แสดง {pageStart.toLocaleString('th-TH')}–{pageEnd.toLocaleString('th-TH')} จาก
 						{total.toLocaleString('th-TH')}
 					{/if}
-				</Card.Description>
+				</p>
 			</div>
 			<div class="flex gap-2">
 				<Button
@@ -102,8 +105,8 @@
 					ถัดไป
 				</Button>
 			</div>
-		</Card.Header>
-		<Card.Content>
+		</div>
+		<div class="p-4 sm:p-6">
 			{#if listQuery.isPending && items.length === 0}
 				<Skeleton class="h-48 w-full rounded-xl" />
 			{:else if items.length === 0}
@@ -114,13 +117,14 @@
 						<Table.Header>
 							<Table.Row>
 								<Table.Head>ชื่อ</Table.Head>
-								<Table.Head>สถานะคิว</Table.Head>
+								<Table.Head>ครอบครัว</Table.Head>
+								<Table.Head>สถานะการเข้าศูนย์</Table.Head>
+								<Table.Head>ศูนย์พักพิง</Table.Head>
 								<Table.Head>ต้นทาง</Table.Head>
 								<Table.Head>ประเทศ</Table.Head>
 								<Table.Head>ช่วงอายุ</Table.Head>
-								<Table.Head>ศูนย์</Table.Head>
-								<Table.Head>เวลา</Table.Head>
-								<Table.Head>แหล่ง</Table.Head>
+								<Table.Head>เวลาลงทะเบียน</Table.Head>
+								<Table.Head>แหล่งข้อมูล</Table.Head>
 							</Table.Row>
 						</Table.Header>
 						<Table.Body>
@@ -134,20 +138,68 @@
 											{item.display_name}
 										</a>
 									</Table.Cell>
-									<Table.Cell class="text-sm text-slate-700">{item.queue_status}</Table.Cell>
+									<Table.Cell class="text-sm font-medium text-slate-800">
+										{#if item.household_name}
+											<span title={item.household_id ?? undefined}>{item.household_name}</span>
+										{:else if item.household_id}
+											<span class="font-mono text-xs text-slate-500">{item.household_id}</span>
+										{:else}
+											<span class="text-slate-400">—</span>
+										{/if}
+									</Table.Cell>
+									<Table.Cell>
+										{@const status = getPreRegStatusInfo(
+											item.stay_status,
+											item.queue_status,
+											!!item.shelter_code
+										)}
+										<span
+											class={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap ${status.className}`}
+											title={status.description}
+										>
+											<span class={`size-1.5 rounded-full ${status.dotColor}`}></span>
+											{status.label}
+										</span>
+									</Table.Cell>
+									<Table.Cell>
+										{#if item.shelter_name}
+											<div class="flex flex-col">
+												<span class="text-sm font-medium text-slate-900">{item.shelter_name}</span>
+												{#if item.shelter_code}
+													<span class="font-mono text-xs text-slate-500">[{item.shelter_code}]</span
+													>
+												{/if}
+											</div>
+										{:else if item.shelter_code}
+											<span class="font-mono text-sm font-medium text-slate-900"
+												>[{item.shelter_code}]</span
+											>
+										{:else}
+											<span class="text-sm text-slate-400">ยังไม่ผูกศูนย์</span>
+										{/if}
+									</Table.Cell>
 									<Table.Cell class="text-sm text-slate-700">{originLabel(item)}</Table.Cell>
 									<Table.Cell class="text-sm text-slate-700">{item.country ?? '—'}</Table.Cell>
 									<Table.Cell class="text-sm text-slate-700">
 										{AGE_BUCKET_LABELS[item.age_band] ?? item.age_band}
 									</Table.Cell>
-									<Table.Cell class="text-sm text-slate-700">
-										{item.shelter_name ?? '—'}
-									</Table.Cell>
 									<Table.Cell class="text-sm text-slate-700 tabular-nums">
 										{formatWhen(item.registered_at)}
 									</Table.Cell>
-									<Table.Cell class="text-sm text-slate-700">
-										{item.source === 'unassigned' ? 'ยังไม่ผูก' : 'ผูกศูนย์'}
+									<Table.Cell class="text-sm text-slate-600">
+										{#if item.source === 'unassigned'}
+											<span
+												class="inline-flex items-center rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs text-slate-600"
+											>
+												ส่วนกลาง
+											</span>
+										{:else}
+											<span
+												class="inline-flex items-center rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs text-sky-700"
+											>
+												{item.shelter_code ?? 'ผูกศูนย์'}
+											</span>
+										{/if}
 									</Table.Cell>
 								</Table.Row>
 							{/each}
@@ -155,6 +207,6 @@
 					</Table.Root>
 				</div>
 			{/if}
-		</Card.Content>
-	</Card.Root>
-</div>
+		</div>
+	</div>
+</StaffPageShell>

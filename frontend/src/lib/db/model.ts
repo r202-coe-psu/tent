@@ -74,7 +74,7 @@ export interface AuthorContext {
 
 /** `"{type}:{ulid}"` — the canonical id shape (schema.md §0). */
 export function makeDocId(type: string, id: string = ulid()): string {
-	return `${type}:${id}`;
+	return id.startsWith(`${type}:`) ? id : `${type}:${id}`;
 }
 
 /** Current instant as an ISO-8601 UTC string. */

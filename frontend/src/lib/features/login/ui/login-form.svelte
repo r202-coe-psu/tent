@@ -1,18 +1,25 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
+	import { page } from '$app/state';
+	import { env } from '$env/dynamic/public';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
-	import * as Field from '$lib/components/ui/field/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import { loginSchema } from '../domain/schema';
+	import { resolveLoginIdentifier } from '../data/resolve-login';
 	import { toast } from 'svelte-sonner';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { LANDING_ROUTE } from '$lib/guards/auth';
-	import { fetchAuthStatus } from '$lib/features/users/data/users.api';
+	import { LANDING_ROUTE, resolvePostLoginDestination } from '$lib/guards/auth';
+	import { fetchAuthStatus, googleOAuthStartHref, thaidOAuthStartHref } from '$lib/features/users';
+	import { fetchRecaptchaEnabled } from '$lib/api/recaptcha-status';
+	import { fetchThaidRegistrationStatus } from '$lib/api/thaid-status';
+	import GoogleSignInButton from './google-sign-in-button.svelte';
+	import ThaIdSignInButton from './thaid-sign-in-button.svelte';
 	import Eye from '@lucide/svelte/icons/eye';
 	import EyeOff from '@lucide/svelte/icons/eye-off';
 
@@ -28,6 +35,71 @@
 
 	let showPassword = $state(false);
 
+	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
+	/** Stay false until GET /api/public/v1/recaptcha confirms ON — avoids injecting enterprise.js early. */
+	let captchaEnabled = $state(false);
+	/** Stay false until GET /api/public/v1/thaid/status confirms ON. */
+	let thaidEnabled = $state(false);
+
+	const RECAPTCHA_ERROR = 'ระบบยืนยันตัวตน (reCAPTCHA) ขัดข้อง กรุณาลองใหม่อีกครั้ง';
+	const CAPTCHA_FAILED = 'การยืนยันตัวตนไม่ผ่าน กรุณารีเฟรชหน้าแล้วลองใหม่';
+
+	async function captchaToken(): Promise<string | null> {
+		const injected = window.__captchaToken || '';
+		if (injected) return injected;
+		if (!captchaEnabled) return '';
+		const win = window;
+		if (win.grecaptcha) {
+			try {
+				const action = 'login';
+				if (win.grecaptcha.enterprise) {
+					await new Promise<void>((resolve) => win.grecaptcha!.enterprise!.ready(() => resolve()));
+					return await win.grecaptcha.enterprise.execute(siteKey, { action });
+				}
+				if (win.grecaptcha.execute) {
+					return await win.grecaptcha.execute(siteKey, { action });
+				}
+			} catch {
+				return null;
+			}
+		}
+		return '';
+	}
+
+	onMount(() => {
+		void fetchRecaptchaEnabled().then((enabled) => {
+			captchaEnabled = enabled;
+		});
+		void fetchThaidRegistrationStatus().then((s) => {
+			thaidEnabled = s.enabled;
+		});
+
+		const err = page.url.searchParams.get('error');
+		if (!err) return;
+
+		if (err === 'google_not_linked') {
+			toast.error(
+				'บัญชี Google นี้ยังไม่ได้ผูกกับระบบ — กรุณาเข้าสู่ระบบด้วยรหัสผ่านแล้วผูก Google ใน Settings'
+			);
+		} else if (err === 'thaid_not_linked') {
+			toast.error(
+				'บัญชี ThaID นี้ยังไม่ได้ผูกกับระบบ — กรุณาเข้าสู่ระบบด้วยรหัสผ่านแล้วผูก ThaID ใน Settings'
+			);
+		} else if (err === 'thaid_login_failed') {
+			toast.error('ไม่สามารถเข้าสู่ระบบด้วย ThaID ได้ กรุณาลองอีกครั้ง');
+		} else if (err === 'thaid_disabled') {
+			toast.error('ระบบ ThaiD Digital ID ถูกปิดใช้งานชั่วคราว');
+		} else if (err === 'invalid_state' || err === 'google_login_failed') {
+			toast.error('ไม่สามารถเข้าสู่ระบบได้ กรุณาลองอีกครั้ง');
+		} else if (err.startsWith('oauth_')) {
+			toast.error('ไม่สามารถเชื่อมต่อระบบยืนยันตัวตนภายนอกได้ กรุณาลองอีกครั้ง');
+		}
+
+		const next = new URL(page.url);
+		next.searchParams.delete('error');
+		void goto(`${next.pathname}${next.search}${next.hash}`, { replaceState: true, noScroll: true });
+	});
+
 	const form = superForm(defaults(zod4(loginSchema)), {
 		SPA: true,
 		validators: zod4(loginSchema),
@@ -40,23 +112,42 @@
 
 			toast.promise(
 				(async () => {
+					const enabled = await fetchRecaptchaEnabled();
+					captchaEnabled = enabled;
+					if (enabled) {
+						const token = await captchaToken();
+						if (!token) {
+							toast.error(RECAPTCHA_ERROR);
+							throw new Error(RECAPTCHA_ERROR);
+						}
+
+						const captchaRes = await fetch('/api/v1/auth/captcha/verify', {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ captchaToken: token })
+						});
+						if (!captchaRes.ok) {
+							throw new Error(CAPTCHA_FAILED);
+						}
+					}
+
+					const name = await resolveLoginIdentifier(form.data.username);
 					await authStore.login({
-						name: form.data.username,
+						name,
 						password: form.data.password
 					});
 					reset();
 					onSuccess?.();
-					if (navigateOnSuccess) {
-						try {
-							const status = await fetchAuthStatus();
-							if (status.must_change_password || !status.has_security_question) {
-								await goto(resolve('/force-setup'));
-								return;
-							}
-						} catch {
-							// Fallback if status fetch fails
-						}
-						await goto(resolve(LANDING_ROUTE));
+					let dest: '/portal' | '/force-setup' | '/mfa-challenge' = LANDING_ROUTE;
+					try {
+						const status = await fetchAuthStatus();
+						dest = resolvePostLoginDestination(status);
+					} catch {
+						// Fallback if status fetch fails
+					}
+					// Always honor force-setup / MFA gates; only skip portal when reauth.
+					if (navigateOnSuccess || dest !== LANDING_ROUTE) {
+						await goto(resolve(dest));
 					}
 				})(),
 				{
@@ -70,17 +161,29 @@
 	const { form: formData, submitting, reset } = form;
 </script>
 
+<svelte:head>
+	{#if captchaEnabled}
+		<script
+			src="https://www.google.com/recaptcha/enterprise.js?render={siteKey}"
+			async
+			defer
+		></script>
+	{/if}
+</svelte:head>
+
 {#snippet fields()}
-	<form method="POST" use:form.enhance>
-		<Field.FieldGroup class="space-y-4">
+	<form method="POST" use:form.enhance class="flex flex-col gap-4">
+		<div class="flex flex-col gap-3.5">
 			<Form.Field {form} name="username">
 				<Form.Control>
 					{#snippet children({ props })}
-						<Form.Label class="font-bold">ชื่อผู้ใช้ / เบอร์โทรศัพท์ (Username)</Form.Label>
+						<Form.Label class="text-sm font-semibold text-slate-700"
+							>Username หรือเบอร์โทรศัพท์</Form.Label
+						>
 						<Input
 							{...props}
 							bind:value={$formData.username}
-							placeholder="เช่น 0812345678"
+							placeholder="เช่น staff01 หรือ 0812345678"
 							autocomplete="username"
 							class="h-11"
 						/>
@@ -88,11 +191,14 @@
 				</Form.Control>
 				<Form.FieldErrors />
 			</Form.Field>
+
 			<Form.Field {form} name="password">
 				<Form.Control>
 					{#snippet children({ props })}
 						<div class="flex items-center justify-between">
-							<Form.Label class="font-bold">รหัสผ่าน (Password)</Form.Label>
+							<Form.Label class="text-sm font-semibold text-slate-700"
+								>รหัสผ่าน (Password)</Form.Label
+							>
 							<a
 								href="/forgot-password"
 								class="text-xs font-semibold text-blue-600 hover:text-blue-800 hover:underline"
@@ -128,21 +234,52 @@
 				</Form.Control>
 				<Form.FieldErrors />
 			</Form.Field>
+		</div>
+
+		<div class="flex flex-col gap-2 pt-0.5">
 			<Form.Button
 				disabled={$submitting}
-				class="h-11 w-full bg-[#0f2d5c] font-bold text-white hover:bg-[#0a1e3f]"
+				class="h-11 w-full rounded-xl bg-[#0A2647] font-semibold text-white transition-colors hover:bg-[#051930]"
 			>
 				เข้าสู่ระบบ (Login)
 			</Form.Button>
-		</Field.FieldGroup>
+
+			{#if captchaEnabled}
+				<p class="text-center text-xs text-muted-foreground">
+					เว็บไซต์นี้มีการป้องกันด้วย reCAPTCHA
+				</p>
+			{/if}
+		</div>
+
+		<div class="relative my-0.5">
+			<div class="absolute inset-0 flex items-center" aria-hidden="true">
+				<div class="w-full border-t border-slate-200"></div>
+			</div>
+			<div class="relative flex justify-center text-xs">
+				<span class="bg-white px-2 font-medium text-slate-500">หรือ</span>
+			</div>
+		</div>
+
+		<div class="flex flex-col gap-2.5">
+			<GoogleSignInButton href={googleOAuthStartHref('login')} class="h-11 text-sm font-medium" />
+			{#if thaidEnabled}
+				<ThaIdSignInButton href={thaidOAuthStartHref('login')} class="h-11 text-sm font-medium" />
+			{/if}
+		</div>
 	</form>
 {/snippet}
 
 {#if showCard}
-	<Card.Root class="mx-auto w-full max-w-md rounded-2xl border-slate-200 shadow-lg">
-		<Card.Header class="space-y-1 text-center">
-			<Card.Title class="text-2xl font-bold text-slate-900">เข้าสู่ระบบ Smart Shelter</Card.Title>
-			<Card.Description>ระบบบริหารจัดการศูนย์พักพิงและงานปฏิบัติการฉุกเฉิน</Card.Description>
+	<Card.Root
+		class="mx-auto w-full max-w-md gap-4 rounded-2xl border border-slate-200/80 bg-white py-5 shadow-xs sm:py-6"
+	>
+		<Card.Header class="gap-1 pb-0 text-center">
+			<Card.Title class="text-xl font-bold text-[#0A2647] sm:text-2xl"
+				>เข้าสู่ระบบ Smart Shelter</Card.Title
+			>
+			<Card.Description class="text-xs text-slate-500 sm:text-sm"
+				>ระบบบริหารจัดการศูนย์พักพิงและงานปฏิบัติการฉุกเฉิน</Card.Description
+			>
 		</Card.Header>
 		<Card.Content>
 			{@render fields()}

@@ -14,6 +14,7 @@ import {
 	qtyStrCoerceNonNegativeSchema,
 	subQty
 } from '$lib/utils/qty';
+import { unitCodeSchema } from '$lib/features/catalog/domain/unit-of-measure';
 
 /**
  * Operations domain — stock, donations, transfers (R2–R3).
@@ -258,6 +259,7 @@ export interface DonationCampaign extends BaseDoc {
 	closes_at?: Timestamp | null;
 	notes?: string;
 	visible_on_home?: boolean;
+	urgency?: 'critical' | 'important' | 'normal';
 }
 
 export interface StockTransferItem {
@@ -306,46 +308,92 @@ export type OperationsDoc = StockLedger | Donation | DonationCampaign | Purchase
  *
  * Exported so the audit script checks the same table it enforces.
  */
-export const REF_PREFIX_BY_REASON: Record<LedgerReason, string | string[] | null> = {
+type LedgerRefPrefix = string | null;
+export type LedgerRefRule = LedgerRefPrefix | readonly LedgerRefPrefix[];
+
+export const REF_PREFIX_BY_REASON: Record<LedgerReason, LedgerRefRule> = {
 	donation: 'donation:',
 	purchase: 'purchase:',
 	// kitchen_requisition: legacy doc type, deprecated (CR-126) — still accepted so
 	// old rows remain valid; requisition_ticket: new unified ticket (CR-121/CR-126).
-	requisition: ['kitchen_requisition:', 'requisition_ticket:'],
+	requisition: ['requisition_ticket:', 'kitchen_requisition:'],
 	// T-13 mints these; nothing writes `stock_transfer` docs yet.
 	transfer_in: 'stock_transfer:',
-	transfer_out: 'stock_transfer:',
+	transfer_out: ['stock_transfer:', 'requisition_ticket:'],
 	adjust: null, // manual correction — no source document by definition
-	distribute: 'distribution_batch:',
+	distribute: 'requisition_ticket:',
 	distribution_return: 'distribution_batch:',
-	receive: null // CR-055 Q-2: orphan enum value, kept but pinned to null
+	receive: ['meal_service:', 'requisition_ticket:', 'distribution_log:', 'bulk_return_pool:']
 };
+
+function matchesLedgerRefPrefix(refId: string, prefix: string): boolean {
+	return refId.startsWith(prefix) && refId.length > prefix.length;
+}
+
+/** Current schema.md §2.1 reference predicate for Ticket-era ledger writes. */
+export function isCanonicalLedgerRef(reason: LedgerReason, refId: string | null): boolean {
+	const rule = REF_PREFIX_BY_REASON[reason];
+	const accepted = Array.isArray(rule) ? rule : [rule];
+	if (refId === null) return accepted.includes(null);
+	return accepted.some(
+		(value) => typeof value === 'string' && matchesLedgerRefPrefix(refId, value)
+	);
+}
 
 /**
  * Shared by the write guard (R1, below) and the receive form's pre-validation
  * (R9, `receiveInputSchema`) so both read the same table — the form only mirrors
  * the rule for the user's benefit; this schema is where it is enforced.
  */
-function checkRefId(reason: LedgerReason, refId: string | null, ctx: z.RefinementCtx): void {
-	const expected = REF_PREFIX_BY_REASON[reason];
-	if (expected === null) {
-		if (refId !== null) {
-			ctx.addIssue({
-				code: 'custom',
-				path: ['ref_id'],
-				message: `รายการประเภท '${reason}' ต้องไม่มีเลขอ้างอิง (ref_id ต้องเป็น null)`
-			});
-		}
-		return;
-	}
-	const prefixes = Array.isArray(expected) ? expected : [expected];
-	if (!refId || !prefixes.some((p) => refId.startsWith(p))) {
+function checkRefIdAgainstRule(
+	reason: LedgerReason,
+	refId: string | null,
+	rule: LedgerRefRule,
+	ctx: z.RefinementCtx
+): void {
+	const accepted = Array.isArray(rule) ? rule : [rule];
+	if (isCanonicalLedgerRef(reason, refId)) return;
+	if (accepted.length === 1 && accepted[0] === null) {
 		ctx.addIssue({
 			code: 'custom',
 			path: ['ref_id'],
-			message: `รายการประเภท '${reason}' ต้องอ้างอิงเอกสารต้นทางที่ขึ้นต้นด้วย '${prefixes.join("' หรือ '")}'`
+			message: `รายการประเภท '${reason}' ต้องไม่มีเลขอ้างอิง (ref_id ต้องเป็น null)`
 		});
+		return;
 	}
+	const prefixes = accepted.filter((value): value is string => typeof value === 'string');
+	ctx.addIssue({
+		code: 'custom',
+		path: ['ref_id'],
+		message: `รายการประเภท '${reason}' ต้องอ้างอิงเอกสารต้นทางที่ขึ้นต้นด้วย '${prefixes.join("' หรือ '")}'`
+	});
+}
+
+/** Enforces the current schema.md §2.1 mapping for every new stock_ledger write. */
+function checkRefId(reason: LedgerReason, refId: string | null, ctx: z.RefinementCtx): void {
+	checkRefIdAgainstRule(reason, refId, REF_PREFIX_BY_REASON[reason], ctx);
+}
+
+/**
+ * Historical rows may carry these pre-Ticket Flow 2 references. They are never
+ * canonical Ticket-era writes; callers must opt into this compatibility path.
+ */
+export function isLegacyFlow2LedgerRef(reason: LedgerReason, refId: string | null): boolean {
+	return (
+		(reason === 'distribute' &&
+			refId !== null &&
+			matchesLedgerRefPrefix(refId, 'distribution_batch:')) ||
+		(reason === 'receive' && refId === null)
+	);
+}
+
+function checkLegacyFlow2RefId(
+	reason: LedgerReason,
+	refId: string | null,
+	ctx: z.RefinementCtx
+): void {
+	if (isLegacyFlow2LedgerRef(reason, refId)) return;
+	checkRefId(reason, refId, ctx);
 }
 
 /**
@@ -354,22 +402,25 @@ function checkRefId(reason: LedgerReason, refId: string | null, ctx: z.Refinemen
  * (`stockBalance`, `calculateReserved`, `LedgerTable`) must keep tolerating
  * older rows that predate this rule (CR-055 R5).
  */
-export const stockLedgerInputSchema = z
-	.object({
-		item_id: z.string().min(1),
-		qty: qtyStrCoerceSignedNonZeroSchema,
-		unit: z.string().trim().min(1),
-		reason: ledgerReasonSchema,
-		ref_id: z.string().nullable().default(null),
-		lot_ref: z
-			.string()
-			.regex(/^stock_ledger:.+/)
-			.optional(),
-		lot: stockLotSchema.optional(),
-		occurred_at: z.string().optional()
-	})
-	.superRefine((d, ctx) => {
-		checkRefId(d.reason, d.ref_id, ctx);
+const stockLedgerInputBaseSchema = z.object({
+	item_id: z.string().min(1),
+	qty: qtyStrCoerceSignedNonZeroSchema,
+	unit: z.string().trim().min(1),
+	reason: ledgerReasonSchema,
+	ref_id: z.string().nullable().default(null),
+	lot_ref: z
+		.string()
+		.regex(/^stock_ledger:.+/)
+		.optional(),
+	lot: stockLotSchema.optional(),
+	occurred_at: z.string().optional()
+});
+
+function stockLedgerInputSchemaWith(
+	validateRefId: (reason: LedgerReason, refId: string | null, ctx: z.RefinementCtx) => void
+) {
+	return stockLedgerInputBaseSchema.superRefine((d, ctx) => {
+		validateRefId(d.reason, d.ref_id, ctx);
 		if ((d.reason === 'distribute' || d.reason === 'distribution_return') && !d.lot_ref) {
 			ctx.addIssue({
 				code: 'custom',
@@ -378,7 +429,12 @@ export const stockLedgerInputSchema = z
 			});
 		}
 	});
+}
+
+export const stockLedgerInputSchema = stockLedgerInputSchemaWith(checkRefId);
 export type StockLedgerInput = z.input<typeof stockLedgerInputSchema>;
+
+const legacyFlow2StockLedgerInputSchema = stockLedgerInputSchemaWith(checkLegacyFlow2RefId);
 
 /** Full persisted stock_ledger contract used before signed-sum calculations. */
 export const stockLedgerDocSchema = z
@@ -420,21 +476,20 @@ export function parseStockLedger(input: unknown): StockLedger {
 }
 
 /**
- * The single factory every `stock_ledger` writer must go through (CR-055 R7) —
- * it is where the `reason` ↔ `ref_id` invariant is enforced, so a writer that
- * assembles the doc by hand silently escapes it.
+ * Canonical factory every new `stock_ledger` writer must go through (CR-055 R7) —
+ * it is where the current `reason` ↔ `ref_id` invariant is enforced. The only
+ * exception is the explicitly named legacy Flow 2 compatibility factory below.
  *
  * `id` exists for callers that need the `_id` BEFORE the write, so they can
  * store it on another doc in the same `bulkDocs` batch — kitchen
  * `issueRequisition` puts them on `kitchen_requisition.ledger_ids`. Omit it and
  * `makeDoc` mints a ULID as usual.
  */
-export function createStockLedger(
-	input: StockLedgerInput,
+function createParsedStockLedger(
+	d: z.output<typeof stockLedgerInputBaseSchema>,
 	ctx: AuthorContext,
 	id?: string
 ): StockLedger {
-	const d = stockLedgerInputSchema.parse(input);
 	const entry = makeDoc(
 		'stock_ledger',
 		4,
@@ -461,6 +516,27 @@ export function createStockLedger(
 		throw new Error('New inbound stock ledger lot_ref must equal its own _id');
 	}
 	return { ...entry, lot_ref: entry._id };
+}
+
+export function createStockLedger(
+	input: StockLedgerInput,
+	ctx: AuthorContext,
+	id?: string
+): StockLedger {
+	return createParsedStockLedger(stockLedgerInputSchema.parse(input), ctx, id);
+}
+
+/**
+ * Explicit compatibility writer for the still-supported legacy Flow 2 runtime.
+ * New Ticket-era code must call createStockLedger and therefore use the
+ * canonical schema.md mapping above.
+ */
+export function createLegacyFlow2StockLedger(
+	input: StockLedgerInput,
+	ctx: AuthorContext,
+	id?: string
+): StockLedger {
+	return createParsedStockLedger(legacyFlow2StockLedgerInputSchema.parse(input), ctx, id);
 }
 
 export const receiveSourceSchema = z.enum([
@@ -538,7 +614,7 @@ export const distributeInputSchema = z.object({
 	item_id: z.string().min(1),
 	qty: qtyStrCoercePositiveSchema,
 	unit: z.string().trim().min(1),
-	ref_id: z.string().regex(/^distribution_batch:.+/, 'ref_id must reference a distribution batch'),
+	ref_id: z.string().regex(/^requisition_ticket:.+/, 'ref_id must reference a requisition ticket'),
 	lot_ref: z.string().regex(/^stock_ledger:.+/, 'lot_ref must reference an inbound stock ledger'),
 	note: z.string().trim().optional(), // Used to store destination in lot.note
 	occurred_at: z.string().optional()
@@ -816,7 +892,9 @@ export function createWalkInDonation(input: WalkInDonationInput, ctx: AuthorCont
  * Forward-only transitions for a donation (schema.md §2.3).
  *
  * The CR-052 review chain is `declared → pending_review → verifying → received`,
- * with `redirected` / `rejected` branching out of the review step. `declared` keeps
+ * with `redirected` / `rejected` branching out of EITHER review step: a delivery can
+ * be turned away when staff open the boxes, not only before it arrives — refusing it
+ * writes no ledger row either way, which is what keeps it out of stock. `declared` keeps
  * its direct edge to `received` for the walk-in path (`createWalkInDonation`), which
  * is keyed by staff at the counter and never goes through public review.
  */
@@ -825,7 +903,15 @@ const DONATION_TRANSITIONS: Record<DonationStatus, DonationStatus[]> = {
 	// `redirected` is terminal HERE — the destination shelter continues on its own
 	// `donation_redirect` ticket, not on this doc (CR-087).
 	pending_review: ['verifying', 'redirected', 'rejected', 'expired', 'cancelled'],
-	verifying: ['received', 'cancelled'],
+	// `verifying` spans "approved, waiting for the donor to turn up" AND "the boxes are
+	// open on the counter" — so it keeps every exit `pending_review` has:
+	//   · `redirected` / `rejected` — staff open the boxes and find the expired tin or
+	//     the wrong size (CR-087 / R-16.3);
+	//   · `expired` — the donor never came and the TTL lapsed. The worker's expiry job
+	//     already writes this for every outstanding status (`quota/expiry.py`,
+	//     `EXPIRABLE_STATUSES`), so leaving it out here made the two implementations
+	//     disagree about a transition that happens nightly.
+	verifying: ['received', 'redirected', 'rejected', 'expired', 'cancelled'],
 	received: [],
 	redirected: [],
 	rejected: [],
@@ -1045,7 +1131,7 @@ export function canEditPurchase(purchase: Purchase, stockLedgers: StockLedger[])
 export const transferItemSchema = z.object({
 	item_id: z.string().min(1),
 	qty: qtyStrCoercePositiveSchema,
-	unit: z.string().trim().min(1)
+	unit: unitCodeSchema
 });
 
 export const transferInputSchema = z.object({
@@ -1305,7 +1391,7 @@ export const campaignInputSchema = z.object({
 			z.object({
 				item_id: z.string().min(1),
 				qty_target: qtyStrCoercePositiveSchema,
-				unit: z.string().trim().min(1),
+				unit: unitCodeSchema,
 				status: z.enum(['open', 'closed']).optional().default('open')
 			})
 		)
@@ -1313,7 +1399,8 @@ export const campaignInputSchema = z.object({
 	opens_at: z.string().optional(),
 	closes_at: z.string().nullable().optional(),
 	notes: z.string().trim().optional(),
-	visible_on_home: z.boolean().optional().default(true)
+	visible_on_home: z.boolean().optional().default(true),
+	urgency: z.enum(['critical', 'important', 'normal']).optional().default('normal')
 });
 export type CampaignInput = z.input<typeof campaignInputSchema>;
 
@@ -1327,6 +1414,7 @@ export function createCampaign(input: CampaignInput, ctx: AuthorContext): Donati
 			needs: d.needs.map((n) => ({ ...n, qty_target: persistQty(n.qty_target) })),
 			status: 'open' as const,
 			visible_on_home: d.visible_on_home,
+			urgency: d.urgency,
 			...(d.opens_at ? { opens_at: d.opens_at } : {}),
 			...(d.closes_at !== undefined ? { closes_at: d.closes_at } : {}),
 			...(d.notes ? { notes: d.notes } : {})
@@ -1485,14 +1573,6 @@ export const isPurchase = (d: unknown): d is Purchase =>
 export const isStockTransfer = (d: unknown): d is StockTransfer =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'stock_transfer';
 
-// ---------------------------------------------------------------- special request form schema
-export const specialRequestSchema = z.object({
-	name: z.string().trim().min(1, 'กรุณาระบุชื่อพัสดุ / ประกาศ'),
-	target: qtyStrCoercePositiveSchema,
-	location: z.string().trim().min(1, 'กรุณาระบุคลังเป้าหมาย')
-});
-export type SpecialRequestInput = z.infer<typeof specialRequestSchema>;
-
 /**
  * Determines the donation cut-off status (T-22 Cut-off Rule).
  * Automatically closes when: On-hand inventory (onHand) + Reserved amount (reserved) >= Target (target)
@@ -1559,10 +1639,174 @@ export function reopenNeed(campaign: DonationCampaign, itemId: string): Donation
 	};
 }
 
+/**
+ * Change what a campaign asks for on ONE need (back-office needs board — T-22 edit).
+ *
+ * Targets the need by `item_id`, never by position: the board renders one row per
+ * need, so editing "the first need" would rewrite a different item than the row the
+ * user clicked. `status` is left untouched — closing/reopening is `forceCutOffNeed` /
+ * `reopenNeed`, which carry their own audit reason.
+ */
+export function editNeed(
+	campaign: DonationCampaign,
+	itemId: string,
+	patch: { qty_target: string; unit?: string }
+): DonationCampaign {
+	if (!campaign.needs.some((need) => need.item_id === itemId)) {
+		throw new Error(`Campaign ${campaign._id} has no need for ${itemId}`);
+	}
+	const qtyTarget = qtyStrCoercePositiveSchema.parse(patch.qty_target);
+	return {
+		...campaign,
+		needs: campaign.needs.map((need) =>
+			need.item_id === itemId
+				? {
+						...need,
+						qty_target: qtyTarget,
+						...(patch.unit?.trim() ? { unit: patch.unit.trim() } : {})
+					}
+				: need
+		),
+		updated_at: now()
+	};
+}
+
+/**
+ * `donation_campaign.notes` doubles as the board's free-text blurb AND the only place
+ * the needs-board form's urgency/category survive (§2.4 has no field for either).
+ * Encoding it in one place means the create form and the edit form agree, and — with
+ * `parseCampaignNotes` below — that reopening the edit form shows what was saved
+ * instead of resetting urgency to "normal" and blanking the text.
+ *
+ * Shape: `[ด่วน] หมวด: อาหาร รูป: https://… รายละเอียด...`
+ *
+ * Every tagged part is parsed off the FRONT in a fixed order, so the untagged
+ * remainder is unambiguously the description. Adding a part means adding it here and
+ * in `parseCampaignNotes` in the same position — otherwise the new tag is swallowed
+ * into the description.
+ */
+export const CAMPAIGN_URGENCY_TAG: Record<'critical' | 'important', string> = {
+	critical: '[ด่วน]',
+	important: '[สำคัญ]'
+};
+
+const CAMPAIGN_CATEGORY_PREFIX = 'หมวด:';
+const CAMPAIGN_IMAGE_PREFIX = 'รูป:';
+
+export type CampaignNotesParts = {
+	urgency: 'critical' | 'important' | 'normal';
+	category?: string;
+	/** Illustration for the donor-facing card. §2.4 has no field for it either. */
+	imageUrl?: string;
+	description?: string;
+};
+
+export function buildCampaignNotes(
+	input: Partial<CampaignNotesParts> & { location?: string }
+): string {
+	const parts: string[] = [];
+	if (input.urgency === 'critical' || input.urgency === 'important') {
+		parts.push(CAMPAIGN_URGENCY_TAG[input.urgency]);
+	}
+	const category = input.category?.trim();
+	if (category && category !== 'ถูกกำหนดอัตโนมัติ') {
+		parts.push(`${CAMPAIGN_CATEGORY_PREFIX} ${category}`);
+	}
+	// A URL carries no whitespace, so it reads back as one token like the category.
+	// A value with spaces in it would be unparseable, so it is dropped rather than
+	// written into a string the edit form would then re-read as description.
+	const imageUrl = input.imageUrl?.trim();
+	if (imageUrl && !/\s/.test(imageUrl)) {
+		parts.push(`${CAMPAIGN_IMAGE_PREFIX} ${imageUrl}`);
+	}
+	const description = input.description?.trim();
+	if (description) {
+		parts.push(description);
+	} else if (input.location?.trim()) {
+		parts.push(`ประกาศสำหรับคลัง: ${input.location.trim()}`);
+	}
+	return parts.join(' ');
+}
+
+/** Inverse of `buildCampaignNotes` — what the edit form seeds its fields from. */
+export function parseCampaignNotes(notes?: string | null): CampaignNotesParts {
+	let rest = (notes ?? '').trim();
+	let urgency: CampaignNotesParts['urgency'] = 'normal';
+	for (const [level, tag] of Object.entries(CAMPAIGN_URGENCY_TAG) as [
+		'critical' | 'important',
+		string
+	][]) {
+		if (rest.startsWith(tag)) {
+			urgency = level;
+			rest = rest.slice(tag.length).trim();
+			break;
+		}
+	}
+
+	let category: string | undefined;
+	if (rest.startsWith(CAMPAIGN_CATEGORY_PREFIX)) {
+		// The category is one whitespace-separated token in every value the form
+		// offers; the remainder is the description.
+		const afterPrefix = rest.slice(CAMPAIGN_CATEGORY_PREFIX.length).trim();
+		const [head, ...tail] = afterPrefix.split(/\s+/);
+		if (head) {
+			category = head;
+			rest = tail.join(' ');
+		}
+	}
+
+	let imageUrl: string | undefined;
+	if (rest.startsWith(CAMPAIGN_IMAGE_PREFIX)) {
+		const afterPrefix = rest.slice(CAMPAIGN_IMAGE_PREFIX.length).trim();
+		const [head, ...tail] = afterPrefix.split(/\s+/);
+		if (head) {
+			imageUrl = head;
+			rest = tail.join(' ');
+		}
+	}
+
+	return {
+		urgency,
+		...(category ? { category } : {}),
+		...(imageUrl ? { imageUrl } : {}),
+		...(rest.trim() ? { description: rest.trim() } : {})
+	};
+}
+
 // public donation time-slot booking (R2.3)
 // The slot is “used” when a donation is received into it.
 export const isDonationSlot = (d: unknown): d is DonationSlot =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'donation_slot';
+
+/**
+ * How many OPEN campaigns of this shelter ask for the same item, and what the donor
+ * board therefore shows as one number.
+ *
+ * The public projection is keyed `{shelter}:{item_id}` (schema.md §2.4 / T-60): two
+ * campaigns for `item:water` are one card whose quantity is their sum. Staff who filed
+ * the second campaign kept reporting it "missing" from `/donate` — it had merged. This
+ * is what the board row uses to say so.
+ *
+ * Counts only what the public side counts: a campaign that is closed, hidden
+ * (`visible_on_home === false`), or whose own need is closed contributes nothing.
+ */
+export function publicItemAggregate(
+	campaigns: DonationCampaign[],
+	itemId: string
+): { campaignCount: number; totalTarget: string } {
+	let campaignCount = 0;
+	let totalTarget = '0';
+
+	for (const campaign of campaigns) {
+		if (campaign.status !== 'open' || campaign.visible_on_home === false) continue;
+		const need = campaign.needs.find((n) => n.item_id === itemId && n.status !== 'closed');
+		if (!need) continue;
+		campaignCount += 1;
+		totalTarget = addQty(totalTarget, need.qty_target);
+	}
+
+	return { campaignCount, totalTarget };
+}
 
 /**
  * Maps a Thai item name heuristic to a slugged itemId.

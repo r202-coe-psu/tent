@@ -12,16 +12,24 @@ type PostEvent = Parameters<typeof POST>[0];
 
 // vi.mock factories are hoisted above module scope — the mutable state they close
 // over has to be hoisted with them.
-const { mockEnv, mockAppEnv } = vi.hoisted(() => ({
+const { mockEnv, mockAppEnv, adminRaw } = vi.hoisted(() => ({
 	mockEnv: { SECRET_RECAPTCHA_KEY: 'test-recaptcha-secret' },
-	mockAppEnv: { dev: false }
+	mockAppEnv: { dev: false },
+	adminRaw: vi.fn()
 }));
 
 vi.mock('$env/dynamic/private', () => ({ env: mockEnv }));
 vi.mock('$app/environment', () => ({
+	get browser() {
+		return false;
+	},
 	get dev() {
 		return mockAppEnv.dev;
 	}
+}));
+
+vi.mock('$lib/server/couch-admin', () => ({
+	adminRaw
 }));
 
 vi.mock('$lib/server/shelters.admin', () => ({ findMasterByCode: vi.fn() }));
@@ -47,7 +55,12 @@ vi.mock('$lib/server/security/captcha', () => ({
 	}
 }));
 
-const OPEN_SHELTER = { code: 'SH001', name: 'ศูนย์ทดสอบ', operation_status: 'active' };
+const OPEN_SHELTER = {
+	code: 'SH001',
+	name: 'ศูนย์ทดสอบ',
+	operation_status: 'active',
+	feature_flags: { accepts_pre_registration: true }
+};
 
 const CONTACT = { first_name: 'สมชาย', last_name: 'ใจดี', gender: 'male', special_needs: [] };
 
@@ -103,6 +116,11 @@ describe('POST /api/public/v1/registrations', () => {
 		vi.mocked(registerPhoneLimiter.check).mockReturnValue(true);
 		verifyToken.mockReset();
 		verifyToken.mockResolvedValue(true);
+		adminRaw.mockReset();
+		adminRaw.mockResolvedValue({
+			status: 200,
+			data: { _id: 'config:app', type: 'config', recaptcha_enabled: true }
+		});
 		mockEnv.SECRET_RECAPTCHA_KEY = 'test-recaptcha-secret';
 		mockAppEnv.dev = false;
 		vi.mocked(readForecastOccupancy).mockReset();
@@ -178,6 +196,29 @@ describe('POST /api/public/v1/registrations', () => {
 		vi.mocked(findMasterByCode).mockResolvedValue({
 			...OPEN_SHELTER,
 			operation_status: 'closed'
+		} as never);
+		const res = await POST(event(VALID_BODY));
+		expect(res.status).toBe(409);
+		expect((await res.json()).error).toBe('SHELTER_CLOSED');
+		expect(bulkAsPublicWriter).not.toHaveBeenCalled();
+	});
+
+	it('409 when accepts_pre_registration is off', async () => {
+		vi.mocked(findMasterByCode).mockResolvedValue({
+			...OPEN_SHELTER,
+			feature_flags: { accepts_pre_registration: false }
+		} as never);
+		const res = await POST(event(VALID_BODY));
+		expect(res.status).toBe(409);
+		expect((await res.json()).error).toBe('SHELTER_CLOSED');
+		expect(bulkAsPublicWriter).not.toHaveBeenCalled();
+	});
+
+	it('409 when accepts_pre_registration is missing (default off)', async () => {
+		vi.mocked(findMasterByCode).mockResolvedValue({
+			code: 'SH001',
+			name: 'ศูนย์ทดสอบ',
+			operation_status: 'active'
 		} as never);
 		const res = await POST(event(VALID_BODY));
 		expect(res.status).toBe(409);
@@ -330,21 +371,14 @@ describe('POST /api/public/v1/registrations', () => {
 			});
 		});
 
-		// `species` is a shelter-configured `pet_types` code (master data), not a
-		// fixed enum — a shelter can offer species beyond the legacy dog/cat/bird/
-		// other set. The request must still validate (422 would silently break
-		// booking for that shelter's citizens), even though the value has no
-		// special meaning to the household schema.
-		it('accepts a pet species outside the legacy dog/cat/bird/other set', async () => {
+		// Species is a closed domain enum dog|cat|other (CR-137) — values outside
+		// that set must 422 at the public booking boundary.
+		it('422 when a pet species is outside dog|cat|other', async () => {
 			const res = await POST(
 				event({ ...FAMILY, pets: [{ species: 'rabbit', notes: 'กระต่าย', has_cage: false }] })
 			);
-			expect(res.status).toBe(201);
-
-			const { household } = writtenDocs();
-			expect(household.pets).toEqual([
-				{ species: 'other', count: 1, notes: 'กระต่าย — ชนิด: rabbit', has_cage: false }
-			]);
+			expect(res.status).toBe(422);
+			expect(bulkAsPublicWriter).not.toHaveBeenCalled();
 		});
 
 		it('422 when a pet has no species selected', async () => {

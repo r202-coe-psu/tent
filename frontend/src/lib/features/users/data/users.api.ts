@@ -31,6 +31,14 @@ export interface UserSummary {
 	must_change_password?: boolean;
 	has_security_question?: boolean;
 	affiliation_tags?: string[];
+	/** True when at least one MFA provider (Google or ThaID) is enrolled. */
+	mfa_enrolled?: boolean;
+	/** CR-124 — linked Google email (display). */
+	mfa_google_email?: string | null;
+	/** CR-ThaID — linked ThaID name (display). */
+	mfa_thaid_name?: string | null;
+	/** CR-ThaID — linked ThaID masked PID (display). */
+	mfa_thaid_pid_masked?: string | null;
 }
 
 export function listUsers(): Promise<UserSummary[]> {
@@ -53,6 +61,7 @@ export function createUser(input: {
 		start_ts: string;
 		end_ts: string;
 	} | null;
+	must_change_password?: boolean;
 	affiliation_tags?: string[];
 }): Promise<{ ok: true; merged?: boolean }> {
 	return serviceFetch(USERS_ENDPOINT, { method: 'POST', body: JSON.stringify(input) });
@@ -126,6 +135,39 @@ export interface AuthStatus {
 	roles: string[];
 	must_change_password: boolean;
 	has_security_question: boolean;
+	/** True when at least one MFA provider is enrolled. */
+	mfa_enrolled: boolean;
+	/** Enrolled and no valid session `mfa_ok` cookie. */
+	pending_mfa: boolean;
+	mfa_providers?: Array<'google' | 'thaid'>;
+	mfa_provider_email?: string | null;
+	mfa_thaid_name?: string | null;
+	mfa_thaid_pid_masked?: string | null;
+	phone?: string | null;
+	email?: string | null;
+	organization?: string | null;
+	position?: string | null;
+	personnel_type?: 'staff' | 'volunteer' | null;
+}
+
+export interface OwnProfileUpdateInput {
+	display_name?: string;
+	phone?: string | null;
+	email?: string | null;
+	organization?: string | null;
+	position?: string | null;
+}
+
+export interface OwnProfileUpdateResult {
+	ok: true;
+	name: string;
+	display_name: string;
+	phone: string | null;
+	email: string | null;
+	organization: string | null;
+	position: string | null;
+	personnel_type: 'staff' | 'volunteer' | null;
+	roles: string[];
 }
 
 /** Complete first-time or forced security setup */
@@ -137,6 +179,74 @@ export function submitForceSetup(input: ForceSetupInput): Promise<{ ok: true }> 
 }
 
 /** Check security setup status of currently authenticated user */
+let authStatusRequest: Promise<AuthStatus> | null = null;
+
+/** Forget an in-flight status request when the browser session changes. */
+export function invalidateAuthStatusRequest(): void {
+	authStatusRequest = null;
+}
+
 export function fetchAuthStatus(): Promise<AuthStatus> {
-	return serviceFetch<AuthStatus>('/api/v1/auth/me');
+	if (authStatusRequest) return authStatusRequest;
+
+	const request = serviceFetch<AuthStatus>('/api/v1/auth/me');
+	authStatusRequest = request;
+	void request.then(
+		() => {
+			if (authStatusRequest === request) authStatusRequest = null;
+		},
+		() => {
+			if (authStatusRequest === request) authStatusRequest = null;
+		}
+	);
+
+	return request;
+}
+
+/** Self-service PATCH for soft profile fields on `/api/v1/auth/me`. */
+export function updateOwnProfile(input: OwnProfileUpdateInput): Promise<OwnProfileUpdateResult> {
+	return serviceFetch<OwnProfileUpdateResult>('/api/v1/auth/me', {
+		method: 'PATCH',
+		body: JSON.stringify(input)
+	});
+}
+
+/** Clear BFF `mfa_ok` cookie (after password login / logout). */
+export function clearMfaOk(): Promise<{ ok: true }> {
+	return serviceFetch('/api/v1/auth/mfa/clear', { method: 'POST', body: '{}' });
+}
+
+/** Skip BFF MFA challenge for the current session (sets `mfa_ok` cookie). */
+export function skipMfa(): Promise<{ ok: true }> {
+	return serviceFetch('/api/v1/auth/mfa/skip', { method: 'POST', body: '{}' });
+}
+
+/**
+ * Unlink Google MFA. Omit `name` for self-unlink; pass `name` for admin/manager.
+ */
+export function unlinkGoogleMfa(name?: string): Promise<{ ok: true }> {
+	return serviceFetch('/api/v1/auth/oauth/google/unlink', {
+		method: 'POST',
+		body: JSON.stringify(name ? { name } : {})
+	});
+}
+
+/** Browser navigation target for Google OAuth start (BFF redirects to Google). */
+export function googleOAuthStartHref(mode: 'link' | 'stepup' | 'login'): string {
+	return `/api/v1/auth/oauth/google/start?mode=${mode}`;
+}
+
+/**
+ * Unlink ThaID MFA. Omit `name` for self-unlink; pass `name` for admin/manager.
+ */
+export function unlinkThaidMfa(name?: string): Promise<{ ok: true }> {
+	return serviceFetch('/api/v1/auth/oauth/thaid/unlink', {
+		method: 'POST',
+		body: JSON.stringify(name ? { name } : {})
+	});
+}
+
+/** Browser navigation target for ThaID OAuth start (BFF redirects to ThaID). */
+export function thaidOAuthStartHref(mode: 'link' | 'stepup' | 'login'): string {
+	return `/api/v1/auth/oauth/thaid/start?mode=${mode}`;
 }

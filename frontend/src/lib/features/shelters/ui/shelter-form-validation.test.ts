@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-	SHELTER_STEP_FIELDS,
+	SHELTER_SECTION_FIELDS,
 	collectErrorMessages,
 	collectErrorMessagesForFields,
-	findInvalidStepIndexes,
-	stepHasFieldErrors,
+	findInvalidSectionIds,
+	sectionHasFieldErrors,
 	topLevelErrorKeys
 } from './shelter-form-validation';
 
@@ -27,17 +27,56 @@ describe('shelter-form-validation', () => {
 		expect(topLevelErrorKeys(null)).toEqual([]);
 	});
 
-	it('maps errored fields onto wizard step indexes', () => {
-		expect(findInvalidStepIndexes(sampleErrors)).toEqual([0, 1, 2, 3]);
-		expect(stepHasFieldErrors(0, sampleErrors)).toBe(true);
-		expect(stepHasFieldErrors(4, sampleErrors)).toBe(false);
+	it('maps errored fields onto section ids in canonical order', () => {
+		expect(findInvalidSectionIds(sampleErrors)).toEqual([
+			'basic-info',
+			'capacity',
+			'zones-facilities',
+			'utilities'
+		]);
+		expect(sectionHasFieldErrors('basic-info', sampleErrors)).toBe(true);
+		expect(sectionHasFieldErrors('risk', sampleErrors)).toBe(false);
 	});
 
-	it('maps feature_flags errors to step 0 (basic info)', () => {
+	it('maps feature_flags errors to basic-info', () => {
 		expect(
-			findInvalidStepIndexes({ feature_flags: { enable_medical_screening: ['invalid'] } })
-		).toEqual([0]);
-		expect(SHELTER_STEP_FIELDS[0]).toContain('feature_flags');
+			findInvalidSectionIds({ feature_flags: { enable_medical_screening: ['invalid'] } })
+		).toEqual(['basic-info']);
+		expect(SHELTER_SECTION_FIELDS['basic-info']).toContain('feature_flags');
+	});
+
+	it('maps food_distribution_points errors to food-distribution only', () => {
+		const errors = {
+			food_distribution_points: {
+				'0': {
+					name: ['กรุณาระบุชื่อจุดแจกอาหาร']
+				}
+			}
+		};
+		expect(findInvalidSectionIds(errors)).toEqual(['food-distribution']);
+		expect(sectionHasFieldErrors('food-distribution', errors)).toBe(true);
+		expect(sectionHasFieldErrors('zones-facilities', errors)).toBe(false);
+		expect(SHELTER_SECTION_FIELDS['food-distribution']).toEqual(['food_distribution_points']);
+		expect(SHELTER_SECTION_FIELDS['zones-facilities']).not.toContain('food_distribution_points');
+	});
+
+	it('keeps the canonical section id order', () => {
+		expect(Object.keys(SHELTER_SECTION_FIELDS)).toEqual([
+			'basic-info',
+			'capacity',
+			'zones-facilities',
+			'food-distribution',
+			'utilities',
+			'risk',
+			'admission-policy',
+			'luggage-policy',
+			'parking-policy'
+		]);
+		expect(SHELTER_SECTION_FIELDS['zones-facilities']).toEqual([
+			'zones',
+			'facilities',
+			'common_areas'
+		]);
 	});
 
 	it('flattens nested error messages uniquely', () => {
@@ -49,12 +88,19 @@ describe('shelter-form-validation', () => {
 		]);
 	});
 
-	it('collects messages only for requested fields', () => {
-		expect(collectErrorMessagesForFields(sampleErrors, SHELTER_STEP_FIELDS[0]!)).toEqual([
+	it('collects messages only for the requested section', () => {
+		expect(collectErrorMessagesForFields(sampleErrors, 'basic-info')).toEqual([
 			'ชื่อศูนย์พักพิงต้องไม่ว่าง'
 		]);
-		expect(collectErrorMessagesForFields(sampleErrors, SHELTER_STEP_FIELDS[1]!)).toEqual([
+		expect(collectErrorMessagesForFields(sampleErrors, 'capacity')).toEqual([
 			'ความจุสูงสุดต้องมากกว่า 0'
 		]);
+		expect(collectErrorMessagesForFields(sampleErrors, 'risk')).toEqual([]);
+		expect(
+			collectErrorMessagesForFields(
+				{ food_distribution_points: { '0': { name: ['กรุณาระบุชื่อจุดแจกอาหาร'] } } },
+				'food-distribution'
+			)
+		).toEqual(['กรุณาระบุชื่อจุดแจกอาหาร']);
 	});
 });

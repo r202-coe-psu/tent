@@ -95,10 +95,10 @@ describe('GET /api/back-office/master-data', () => {
 
 	it('surfaces items from an existing doc and empty [] for the rest', async () => {
 		readMock.mockImplementation(async (type) =>
-			type === 'pet_types'
-				? fakeDoc('pet_types', [
-						{ code: 'dog', label: 'Dog', is_default: true },
-						{ code: 'cat', label: 'Cat', is_default: false }
+			type === 'housing_type'
+				? fakeDoc('housing_type', [
+						{ code: 'dog', label_th: 'Dog', label_en: 'Dog', is_default: true },
+						{ code: 'cat', label_th: 'Cat', label_en: 'Cat', is_default: false }
 					])
 				: null
 		);
@@ -106,7 +106,7 @@ describe('GET /api/back-office/master-data', () => {
 		const res = await call();
 		const body = (await res.json()) as Array<{ master_type: string; items: unknown[] }>;
 
-		expect(body.find((e) => e.master_type === 'pet_types')?.items).toHaveLength(2);
+		expect(body.find((e) => e.master_type === 'housing_type')?.items).toHaveLength(2);
 		expect(body.find((e) => e.master_type === 'vulnerable_group')?.items).toEqual([]);
 	});
 
@@ -126,10 +126,12 @@ describe('GET /api/back-office/master-data', () => {
 
 	it('reads shelter-local docs without falling back to global docs', async () => {
 		readMock.mockImplementation(async (type, shelterCode) =>
-			type === 'pet_types' && shelterCode === 'SH001'
+			type === 'housing_type' && shelterCode === 'SH001'
 				? {
-						...fakeDoc('pet_types', [{ code: 'cat', label: 'Cat', is_default: true }]),
-						_id: 'master_data:pet_types:SH001',
+						...fakeDoc('housing_type', [
+							{ code: 'cat', label_th: 'Cat', label_en: 'Cat', is_default: true }
+						]),
+						_id: 'master_data:housing_type:SH001',
 						shelter_code: 'SH001',
 						schema_v: 2
 					}
@@ -146,9 +148,9 @@ describe('GET /api/back-office/master-data', () => {
 		}>;
 
 		expect(authMock).toHaveBeenCalledWith('AuthSession=abc', 'SH001');
-		expect(body.find((entry) => entry.master_type === 'pet_types')).toMatchObject({
-			_id: 'master_data:pet_types:SH001',
-			items: [{ code: 'cat', label: 'Cat', is_default: true }],
+		expect(body.find((entry) => entry.master_type === 'housing_type')).toMatchObject({
+			_id: 'master_data:housing_type:SH001',
+			items: [{ code: 'cat', label_th: 'Cat', label_en: 'Cat', is_default: true }],
 			scope: 'shelter',
 			shelter_code: 'SH001'
 		});
@@ -159,8 +161,10 @@ describe('GET /api/back-office/master-data', () => {
 
 	it('falls back to the global doc for an effective shelter read', async () => {
 		readMock.mockImplementation(async (type, shelterCode) =>
-			type === 'pet_types' && !shelterCode
-				? fakeDoc('pet_types', [{ code: 'dog', label: 'Dog', is_default: true }])
+			type === 'housing_type' && !shelterCode
+				? fakeDoc('housing_type', [
+						{ code: 'dog', label_th: 'Dog', label_en: 'Dog', is_default: true }
+					])
 				: null
 		);
 
@@ -173,8 +177,8 @@ describe('GET /api/back-office/master-data', () => {
 			item_sources: Record<string, { scope: string }>;
 		}>;
 
-		expect(body.find((entry) => entry.master_type === 'pet_types')).toMatchObject({
-			items: [{ code: 'dog', label: 'Dog', is_default: true }],
+		expect(body.find((entry) => entry.master_type === 'housing_type')).toMatchObject({
+			items: [{ code: 'dog', label_th: 'Dog', label_en: 'Dog', is_default: true }],
 			scope: 'effective',
 			shelter_code: 'SH001',
 			item_sources: { dog: { scope: 'global' } }

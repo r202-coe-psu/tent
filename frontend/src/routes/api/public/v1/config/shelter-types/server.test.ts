@@ -19,12 +19,30 @@ describe('GET /api/public/v1/config/shelter-types', () => {
 		readMasterDocMock.mockResolvedValue({
 			_id: 'master_data:shelter_type',
 			type: 'master_data',
-			schema_v: 3,
+			schema_v: 4,
 			master_type: 'shelter_type',
 			items: [
-				{ code: '01K_SCHOOL', label: 'โรงเรียน', is_default: true, status: 'active' },
-				{ code: '01K_TEMPLE', label: 'วัด', is_default: false, status: 'active' },
-				{ code: '01K_OLD', label: 'สถานที่เก่า', is_default: false, status: 'inactive' }
+				{
+					code: '01K_SCHOOL',
+					label_th: 'โรงเรียน',
+					label_en: 'School',
+					is_default: true,
+					status: 'active'
+				},
+				{
+					code: '01K_TEMPLE',
+					label_th: 'วัด',
+					label_en: 'Temple',
+					is_default: false,
+					status: 'active'
+				},
+				{
+					code: '01K_OLD',
+					label_th: 'สถานที่เก่า',
+					label_en: 'Old place',
+					is_default: false,
+					status: 'inactive'
+				}
 			],
 			created_at: '2026-01-01T00:00:00Z',
 			updated_at: '2026-01-01T00:00:00Z',
@@ -37,12 +55,12 @@ describe('GET /api/public/v1/config/shelter-types', () => {
 		const data = await res.json();
 		expect(data).toEqual({
 			types: [
-				{ code: '01K_SCHOOL', label: 'โรงเรียน' },
-				{ code: '01K_TEMPLE', label: 'วัด' }
+				{ code: '01K_SCHOOL', label_th: 'โรงเรียน', label_en: 'School' },
+				{ code: '01K_TEMPLE', label_th: 'วัด', label_en: 'Temple' }
 			],
 			shelterTypes: [
-				{ code: '01K_SCHOOL', label: 'โรงเรียน' },
-				{ code: '01K_TEMPLE', label: 'วัด' }
+				{ code: '01K_SCHOOL', label_th: 'โรงเรียน', label_en: 'School' },
+				{ code: '01K_TEMPLE', label_th: 'วัด', label_en: 'Temple' }
 			]
 		});
 	});

@@ -12,7 +12,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 
 	import type { PublicShelterCardModel } from '../domain/types';
-	import { resolveMasterLabel } from '../domain/master-labels';
+	import { resolveMasterLabel, toLabelMap } from '../domain/master-labels';
 	import { useShelterTypeLabelMap, useVulnerableGroupLabelMap } from '../application/queries';
 
 	import { getTranslation } from '$lib/utils/i18n';
@@ -42,12 +42,20 @@
 
 	let t = $derived(getTranslation(PUBLIC_SHELTER_CARD_I18N, langState.current));
 
-	let canBook = $derived(Boolean(shelter.code) && shelter.status !== 'CLOSED');
+	let canBook = $derived(
+		Boolean(shelter.code) &&
+			shelter.status !== 'CLOSED' &&
+			shelter.accepts_pre_registration === true
+	);
 
 	let showAllVulnerable = $state(false);
 
-	const shelterTypeLabels = useShelterTypeLabelMap();
-	const vulnerableGroupLabels = useVulnerableGroupLabelMap();
+	const shelterTypeLabelsQuery = useShelterTypeLabelMap();
+	const vulnerableGroupLabelsQuery = useVulnerableGroupLabelMap();
+	const shelterTypeLabels = $derived(toLabelMap(shelterTypeLabelsQuery.data, langState.current));
+	const vulnerableGroupLabels = $derived(
+		toLabelMap(vulnerableGroupLabelsQuery.data, langState.current)
+	);
 
 	function adminTypeLabel(type: string): string {
 		const legacyEn: Record<string, string> =
@@ -68,7 +76,7 @@
 						unspecified: 'Unspecified'
 					}
 				: { unspecified: '' };
-		return resolveMasterLabel(type, shelterTypeLabels.data, legacyEn);
+		return resolveMasterLabel(type, shelterTypeLabels, legacyEn);
 	}
 
 	function vulnerableGroupLabel(group: string): string {
@@ -90,7 +98,7 @@
 				ผู้ป่วยแยกกักโรค: 'Quarantine Patient'
 			});
 		}
-		return resolveMasterLabel(group, vulnerableGroupLabels.data, legacy);
+		return resolveMasterLabel(group, vulnerableGroupLabels, legacy);
 	}
 
 	function translatePetPolicy(policyStr: string | undefined): string {

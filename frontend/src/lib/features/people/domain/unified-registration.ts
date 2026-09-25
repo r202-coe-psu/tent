@@ -132,14 +132,33 @@ export const unifiedMemberInputSchema = evacueeInputSchema.omit({
 	track: true
 });
 
-export const unifiedRegistrationInputSchema = z.object({
-	// Intentional 20-member batch cap (#249): keep create compensation; not a soft warning.
-	members: z
-		.array(unifiedMemberInputSchema)
-		.min(1, 'ต้องมีสมาชิกอย่างน้อย 1 คน')
-		.max(20, 'ลงทะเบียนได้สูงสุด 20 คนต่อครั้ง'),
-	household: unifiedHouseholdInputSchema
-});
+export const unifiedRegistrationInputSchema = z
+	.object({
+		// Intentional 20-member batch cap (#249): keep create compensation; not a soft warning.
+		members: z
+			.array(unifiedMemberInputSchema)
+			.min(1, 'ต้องมีสมาชิกอย่างน้อย 1 คน')
+			.max(20, 'ลงทะเบียนได้สูงสุด 20 คนต่อครั้ง'),
+		household: unifiedHouseholdInputSchema,
+		/** Staff create paths — join an existing Household by id (onsite / back-office). */
+		join_household_id: z.string().trim().min(1).nullable().optional(),
+		/**
+		 * Public create paths — short-lived signed match token from residence-match BFF.
+		 * Server resolves to household / unassigned id; never treat as a Couch id.
+		 */
+		join_match_token: z.string().trim().min(1).nullable().optional()
+	})
+	.superRefine((value, ctx) => {
+		const hasHh = Boolean(value.join_household_id?.trim());
+		const hasToken = Boolean(value.join_match_token?.trim());
+		if (hasHh && hasToken) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['join_match_token'],
+				message: 'ระบุได้เพียง join_household_id หรือ join_match_token อย่างใดอย่างหนึ่ง'
+			});
+		}
+	});
 
 export type UnifiedMemberInput = z.input<typeof unifiedMemberInputSchema>;
 export type UnifiedHouseholdInput = z.input<typeof unifiedHouseholdInputSchema>;
@@ -173,7 +192,8 @@ export function blankUnifiedMember(): UnifiedMemberInput {
 		medical_allergies: [],
 		medical_medications: [],
 		emergency_contact: { name: '', phone: '', relation: '' },
-		photo: null
+		photo: null,
+		zone: null
 	};
 }
 
@@ -211,15 +231,25 @@ export function togglePetSpecies(
 	return [...pets, { species, count: 1 }];
 }
 
+export type FamilyRegistrationMode = 'create' | 'join';
+
 export interface FamilyRegistrationPlan {
+	mode: FamilyRegistrationMode;
+	/** Set when `mode === 'join'` — existing Household id (staff) or resolved from token. */
+	targetHouseholdId: string | null;
 	headMemberIndex: 0;
 	memberInputs: EvacueeInput[];
+	/**
+	 * Create: full new Household input.
+	 * Join: pets/vehicles/assets only (append); Residence / label / head are ignored at write.
+	 */
 	householdInput: HouseholdInput;
 }
 
 /**
- * Build the Couch write plan: N Evacuee inputs + 1 Household input.
- * `head_evacuee_id` is filled by the repository after member[0] is persisted.
+ * Build the Couch write plan.
+ * - **create:** N Evacuee inputs + 1 Household input (`head_evacuee_id` filled after persist).
+ * - **join:** N Evacuee inputs linked to `join_household_id`; do not mint Household / overwrite Residence.
  */
 export function planFamilyRegistration(
 	input: UnifiedRegistrationInput,
@@ -228,11 +258,13 @@ export function planFamilyRegistration(
 	const parsed = parseUnifiedRegistration(input);
 	const status = channel === 'onsite' ? 'arriving' : 'pre_registered';
 	const registered_via = channel === 'onsite' ? 'staff' : 'web';
+	const targetHouseholdId = parsed.join_household_id?.trim() || null;
+	const mode: FamilyRegistrationMode = targetHouseholdId ? 'join' : 'create';
 
 	const memberInputs: EvacueeInput[] = parsed.members.map((member) => ({
 		...member,
-		household_id: null,
-		status,
+		household_id: mode === 'join' ? targetHouseholdId : null,
+		status: member.zone ? 'active' : status,
 		registered_via
 	}));
 
@@ -260,6 +292,8 @@ export function planFamilyRegistration(
 	});
 
 	return {
+		mode,
+		targetHouseholdId,
 		headMemberIndex: 0,
 		memberInputs,
 		householdInput
@@ -357,6 +391,7 @@ export function evacueeToUnifiedMember(
 		country: evacuee.country ?? 'THAILAND',
 		religion: evacuee.religion ?? 'buddhist',
 		stay_status: evacuee.current_stay.status,
-		reporting_in: isPreReg && isTarget
+		reporting_in: isPreReg && isTarget,
+		zone: evacuee.current_stay.zone ?? null
 	};
 }
