@@ -5,8 +5,10 @@ const PORTAL_PATH = '/portal';
 const FORCE_SETUP_PATH = '/force-setup';
 const MFA_CHALLENGE_PATH = '/mfa-challenge';
 
-function requiredCredential(name: 'E2E_USERNAME' | 'E2E_PASSWORD'): string {
-	const value = process.env[name];
+function requiredCredential(name: 'E2E_ADMIN_USERNAME' | 'E2E_ADMIN_PASSWORD'): string {
+	// Keep the prior local variable names working while .env files migrate to the documented keys.
+	const legacyName = name === 'E2E_ADMIN_USERNAME' ? 'E2E_USERNAME' : 'E2E_PASSWORD';
+	const value = process.env[name] ?? process.env[legacyName];
 	if (!value) {
 		throw new Error(`${name} is required for the authenticated Staging smoke test`);
 	}
@@ -74,8 +76,8 @@ test.describe('Staging smoke', () => {
 	test('authenticates through the real Staging session and reaches the portal', async ({
 		page
 	}) => {
-		const username = requiredCredential('E2E_USERNAME');
-		const password = requiredCredential('E2E_PASSWORD');
+		const username = requiredCredential('E2E_ADMIN_USERNAME');
+		const password = requiredCredential('E2E_ADMIN_PASSWORD');
 		const captchaStatusResponse = await page.request.get('/api/public/v1/recaptcha');
 		expect(captchaStatusResponse.status()).toBe(200);
 		const captchaStatus = (await captchaStatusResponse.json()) as { enabled: boolean };
