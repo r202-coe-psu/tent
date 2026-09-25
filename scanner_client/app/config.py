@@ -40,6 +40,11 @@ PLACEHOLDER_VALUES = {
     "<one-time-key>",
 }
 
+TRUE_VALUES = frozenset({"true", "1", "yes", "on"})
+FALSE_VALUES = frozenset({"false", "0", "no", "off"})
+PHONE_CHECK_IN_DEFAULT = True
+PHONE_CHECK_IN_OFF_VALUE = "off"  # FR-KPT-05 wire contract with kiosk display context.
+
 
 def load_config(
     env_path: str | os.PathLike[str] = ".env",
@@ -58,6 +63,17 @@ def load_config(
 
 def _clean(value: Any) -> str:
     return str(value).strip() if value is not None else ""
+
+
+def parse_bool_setting(config: Mapping[str, Any], key: str, default: bool) -> bool:
+    raw = _clean(config.get(key)).lower()
+    if not raw:
+        return default
+    if raw in TRUE_VALUES:
+        return True
+    if raw in FALSE_VALUES:
+        return False
+    raise ScannerConfigError(f"{key} must be true or false")
 
 
 def _is_placeholder(value: str) -> bool:
@@ -96,6 +112,9 @@ def validate_config(config: Mapping[str, Any]) -> dict[str, Any]:
             "TENT_BASE_URL": base_url,
             "DEVICE_ID": device_id,
             "DEVICE_SECRET": device_secret,
+            "KIOSK_PHONE_CHECK_IN_ENABLED": parse_bool_setting(
+                config, "KIOSK_PHONE_CHECK_IN_ENABLED", default=PHONE_CHECK_IN_DEFAULT
+            ),
         }
     )
     return validated

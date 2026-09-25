@@ -6,13 +6,17 @@
 	import QrCode from '@lucide/svelte/icons/qr-code';
 	import Smartphone from '@lucide/svelte/icons/smartphone';
 	import KioskCheckInWizard from './kiosk-check-in-wizard.svelte';
-	import { IDENTITY_METHODS, type IdentityMethodDefinition } from '../domain/identity-method';
+	import { visibleIdentityMethods, type IdentityMethodDefinition } from '../domain/identity-method';
 
 	interface Props {
 		contextQuery: string;
+		phoneCheckInEnabled: boolean;
 	}
 
-	let { contextQuery }: Props = $props();
+	let { contextQuery, phoneCheckInEnabled }: Props = $props();
+	const methods = $derived(visibleIdentityMethods({ phoneCheckInEnabled }));
+	const columns = $derived(methods.length === 3 ? 3 : 2);
+	const rows = $derived(Math.ceil(methods.length / columns));
 
 	function iconFor(icon: IdentityMethodDefinition['icon']) {
 		if (icon === 'qr') return QrCode;
@@ -70,8 +74,17 @@
 		</div>
 	{/snippet}
 
-	<div class="method-grid grid grid-cols-2 gap-3 sm:gap-4" aria-label="วิธีค้นหาข้อมูล">
-		{#each IDENTITY_METHODS as method (method.id)}
+	<div
+		class={[
+			'method-grid grid gap-3 sm:gap-4',
+			columns === 3 && 'grid-cols-3',
+			columns === 2 && 'grid-cols-2'
+		]}
+		data-single-row={rows === 1 ? '' : undefined}
+		style:--method-rows={rows}
+		aria-label="วิธีค้นหาข้อมูล"
+	>
+		{#each methods as method (method.id)}
 			{@const MethodIcon = iconFor(method.icon)}
 			{#if method.enabled && method.href}
 				<a
@@ -100,7 +113,17 @@
 	}
 
 	.method-card {
-		min-height: clamp(9.5rem, calc((100svh - 20rem) / 2), 30rem);
+		min-height: clamp(9.5rem, calc((100svh - 20rem) / var(--method-rows, 2)), 30rem);
+	}
+
+	@media (max-width: 640px) {
+		.method-grid[data-single-row] .method-card {
+			padding: 0.5rem;
+		}
+
+		.method-grid[data-single-row] .method-description {
+			display: none;
+		}
 	}
 
 	@media (max-height: 650px) {

@@ -1,21 +1,22 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import type { Snippet } from 'svelte';
-	import { getKioskDisplayContext, KioskShell } from '$lib/features/kiosk';
+	import { getKioskDisplayContext, KioskShell, readKioskDisplayQuery } from '$lib/features/kiosk';
 
 	let { children }: { children: Snippet } = $props();
 
 	const displayContext = $derived(
-		getKioskDisplayContext({
-			shelter_name: page.url.searchParams.get('shelter_name'),
-			shelter_code: page.url.searchParams.get('shelter_code'),
-			station_name: page.url.searchParams.get('station_name'),
-			device_name: page.url.searchParams.get('device_name')
-		})
+		getKioskDisplayContext(readKioskDisplayQuery(page.url.searchParams))
 	);
 	const showClock = $derived(!page.url.pathname.startsWith('/kiosk/scanner/'));
 </script>
 
-<KioskShell {...displayContext} {showClock}>
+<KioskShell
+	shelterName={displayContext.shelterName}
+	shelterCode={displayContext.shelterCode}
+	stationName={displayContext.stationName}
+	deviceName={displayContext.deviceName}
+	{showClock}
+>
 	{@render children()}
 </KioskShell>

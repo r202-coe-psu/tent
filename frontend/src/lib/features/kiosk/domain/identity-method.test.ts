@@ -3,7 +3,8 @@ import {
 	IDENTITY_METHODS,
 	KIOSK_CARD_PATH,
 	KIOSK_PHONE_PATH,
-	KIOSK_QR_PATH
+	KIOSK_QR_PATH,
+	visibleIdentityMethods
 } from './identity-method';
 
 describe('kiosk identity methods', () => {
@@ -22,5 +23,14 @@ describe('kiosk identity methods', () => {
 		expect(IDENTITY_METHODS[1]).toMatchObject({ href: KIOSK_CARD_PATH });
 		expect(IDENTITY_METHODS[2]).toMatchObject({ href: KIOSK_PHONE_PATH });
 		expect(IDENTITY_METHODS[3].href).toBeUndefined();
+	});
+
+	it('filters the phone method from the home screen when disabled', () => {
+		expect(
+			visibleIdentityMethods({ phoneCheckInEnabled: true }).map((method) => method.id)
+		).toEqual(['qr', 'smart-card', 'phone', 'thaid']);
+		expect(
+			visibleIdentityMethods({ phoneCheckInEnabled: false }).map((method) => method.id)
+		).toEqual(['qr', 'smart-card', 'thaid']);
 	});
 });

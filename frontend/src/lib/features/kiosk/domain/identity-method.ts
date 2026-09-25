@@ -50,3 +50,14 @@ export const IDENTITY_METHODS: readonly IdentityMethodDefinition[] = [
 		enabled: false
 	}
 ] as const;
+
+export interface IdentityMethodOptions {
+	phoneCheckInEnabled: boolean;
+}
+
+/** Methods shown on the kiosk home screen; this is a UI toggle, not an access check. */
+export function visibleIdentityMethods(
+	options: IdentityMethodOptions
+): readonly IdentityMethodDefinition[] {
+	return IDENTITY_METHODS.filter((method) => method.id !== 'phone' || options.phoneCheckInEnabled);
+}

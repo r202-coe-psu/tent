@@ -82,12 +82,51 @@ class ScannerBootstrapTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(query["shelter_name"], ["ศูนย์พักพิงทดสอบ"])
         self.assertEqual(query["station_name"], ["โต๊ะ 1"])
         self.assertEqual(query["device_name"], ["Kiosk จุดคัดกรอง 1"])
+        self.assertNotIn("phone_check_in", query)
         self.assertEqual(urlparse(client.home_url).path, "/kiosk")
         self.assertEqual(urlparse(client.waiting_url).path, "/kiosk/scanner/waiting")
         self.assertEqual(
             FakeClient.requested_headers[-1]["X-Device-Secret"],
             "sk_scan_real_secret_value",
         )
+
+    async def test_disabling_phone_check_in_adds_flag_to_all_kiosk_urls(self):
+        FakeClient.requested_headers = []
+        FakeClient.responses = [
+            FakeResponse(
+                200,
+                {
+                    "device": {
+                        "device_id": "kiosk-sh001-01",
+                        "name": "Kiosk จุดคัดกรอง 1",
+                        "shelter_code": "SH001",
+                        "shelter_name": "ศูนย์พักพิงทดสอบ",
+                        "station_name": "โต๊ะ 1",
+                    },
+                    "server_time": "2026-09-22T00:00:00Z",
+                },
+            )
+        ]
+        manager.httpx = FakeHttpx
+        client = manager.ScannerClientManager(valid_config(KIOSK_PHONE_CHECK_IN_ENABLED="false"))
+
+        await client.bootstrap()
+
+        for url in (
+            client.home_url,
+            client.waiting_url,
+            client.reading_url,
+            client.remove_card_url,
+            client.error_url,
+            client._kiosk_url(client.error_path, {"error_msg": "failed"}),
+        ):
+            with self.subTest(url=url):
+                query = parse_qs(urlparse(url).query)
+                self.assertEqual(query["phone_check_in"], ["off"])
+                self.assertEqual(query["shelter_code"], ["SH001"])
+                self.assertEqual(query["shelter_name"], ["ศูนย์พักพิงทดสอบ"])
+                self.assertEqual(query["station_name"], ["โต๊ะ 1"])
+                self.assertEqual(query["device_name"], ["Kiosk จุดคัดกรอง 1"])
 
     async def test_401_fails_closed_before_browser_launch(self):
         FakeClient.requested_headers = []
