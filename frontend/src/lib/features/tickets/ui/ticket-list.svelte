@@ -648,8 +648,12 @@
 											{:else}<Flame class="h-3.5 w-3.5" />ภายใน
 											{/if}
 										</p>
-										<p class="flex items-center gap-1.5 text-sm font-semibold text-slate-800">
-											{row.fromLabel}<ArrowRight class="h-4 w-4 text-slate-400" />{row.toLabel}
+										<p
+											class="flex max-w-48 items-center gap-1.5 text-sm font-semibold text-slate-800"
+										>
+											<span class="shrink-0">{row.fromLabel}</span><ArrowRight
+												class="h-4 w-4 shrink-0 text-slate-400"
+											/><span class="truncate" title={row.toLabel}>{row.toLabel}</span>
 										</p></Table.Cell
 									><Table.Cell
 										><p class="text-sm font-semibold text-slate-800">{row.missionTitle}</p>
