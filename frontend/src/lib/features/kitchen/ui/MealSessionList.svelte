@@ -28,6 +28,7 @@
 	import { getShelterCode } from '$lib/db/shelter';
 	import { formatThaiDateTime } from '$lib/utils/date';
 	import { resolve } from '$app/paths';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import * as Card from '$lib/components/ui/card';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as Table from '$lib/components/ui/table';
@@ -227,8 +228,15 @@
 		}
 	}
 
-	async function handleDeleteSession(session: MealSession) {
-		if (!confirm(`คุณต้องการลบรอบมื้ออาหาร "${session.name}" หรือไม่?`)) return;
+	let pendingDeleteSession = $state<MealSession | null>(null);
+
+	function askDeleteSession(session: MealSession) {
+		pendingDeleteSession = session;
+	}
+
+	async function confirmDeleteSession() {
+		if (!pendingDeleteSession) return;
+		const session = pendingDeleteSession;
 		try {
 			await deleteSessionMutation.mutateAsync(session);
 			toast.success('ลบรอบมื้ออาหารแล้ว');
@@ -236,6 +244,7 @@
 			const msg = err instanceof Error ? err.message : 'ไม่สามารถลบได้';
 			toast.error(msg);
 		}
+		pendingDeleteSession = null;
 	}
 
 	const sortedSessions = $derived.by(() => {
@@ -560,7 +569,7 @@
 								class="m-1 h-9 w-9 shrink-0 self-center text-muted-foreground hover:bg-rose-50 hover:text-rose-700"
 								onclick={(event) => {
 									event.stopPropagation();
-									handleDeleteSession(session);
+									askDeleteSession(session);
 								}}
 								aria-label={`ลบ${session.name}`}
 								title="ลบรอบมื้ออาหาร"
@@ -1004,3 +1013,28 @@
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>
+
+<AlertDialog.Root
+	open={pendingDeleteSession !== null}
+	onOpenChange={(open) => !open && (pendingDeleteSession = null)}
+>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>ลบรอบมื้ออาหารนี้?</AlertDialog.Title>
+			<AlertDialog.Description>
+				{#if pendingDeleteSession}
+					คุณต้องการลบรอบมื้ออาหาร "{pendingDeleteSession.name}" หรือไม่? กู้คืนไม่ได้
+				{/if}
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel onclick={() => (pendingDeleteSession = null)}>ยกเลิก</AlertDialog.Cancel>
+			<AlertDialog.Action
+				class="bg-destructive text-white hover:bg-destructive/90"
+				onclick={confirmDeleteSession}
+			>
+				ลบรอบมื้ออาหาร
+			</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>
