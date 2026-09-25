@@ -2170,6 +2170,40 @@ describe('buildValidateDocUpdate', () => {
 				);
 			});
 
+			it('allows PENDING_PICK allocation update when oldDoc contains CouchDB _revisions metadata', () => {
+				// CouchDB injects `_revisions` into oldDoc during validate_doc_update,
+				// whereas client PUT payloads omit it.
+				const oldDocWithRevisions = {
+					...validTicket,
+					items: [{ ...validTicket.items[0], requested_qty: '120', allocated_qty: '120' }],
+					_revisions: {
+						start: 1,
+						ids: ['9f074e91ec73990aedb5e46a117186d0']
+					}
+				};
+				const newDocWithoutRevisions = {
+					...validTicket,
+					updated_at: '2026-09-01T00:05:00.000Z',
+					items: [{ ...validTicket.items[0], requested_qty: '120', allocated_qty: '100' }]
+				};
+
+				// Valid allocation 120 -> 100 must be accepted
+				expect(() =>
+					compile()(newDocWithoutRevisions, oldDocWithRevisions, WAREHOUSE)
+				).not.toThrow();
+
+				// Unrelated business field mutation (e.g. destination_location) must still be rejected
+				expectForbidden(
+					() =>
+						compile()(
+							{ ...newDocWithoutRevisions, destination_location: 'distribution_point:other' },
+							oldDocWithRevisions,
+							WAREHOUSE
+						),
+					/PENDING_PICK self-updates may only change item allocation quantities/
+				);
+			});
+
 			it('enforces ticket-create roles and binds both creation actors', () => {
 				expect(() => compile()(ticketFor(MANAGER), null, MANAGER)).not.toThrow();
 				expect(() => compile()(ticketFor(ADMIN), null, ADMIN)).not.toThrow();

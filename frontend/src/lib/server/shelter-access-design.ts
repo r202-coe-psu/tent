@@ -218,8 +218,21 @@ export function buildValidateDocUpdate(code: string): string {
     return sameObjectExcept(previousItem, nextItem, { allocated_qty: true });
   }
   function sameTicketPayloadExceptSelfUpdateFields(previousTicket, nextTicket) {
+    // Previous VDU ignore set did not include _revisions:
+    // _rev, updated_at, status, items, amendments
+    //
+    // CouchDB injects _revisions into oldDoc during validate_doc_update,
+    // while normal client PUT payloads do not include it. Treating this
+    // internal revision metadata as a business-field change caused valid
+    // PENDING_PICK allocation updates to be rejected with HTTP 403 (discovered
+    // by real Playwright/CouchDB E2E allocation path).
     return sameObjectExcept(previousTicket, nextTicket, {
-      _rev: true, updated_at: true, status: true, items: true, amendments: true
+      _rev: true,
+      _revisions: true,
+      updated_at: true,
+      status: true,
+      items: true,
+      amendments: true
     });
   }
 
