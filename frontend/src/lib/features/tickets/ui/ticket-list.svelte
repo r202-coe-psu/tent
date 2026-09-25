@@ -199,7 +199,7 @@
 				)
 			}));
 
-		// Only the latest meal_service per plan matters — a rejected one (CR-131)
+		// Only the latest meal_service per plan matters — a rejected one (CR-130)
 		// is superseded by whatever the kitchen re-records afterwards.
 		const latestServicesByPlan: MealService[] = [];
 		for (const service of services.data ?? []) {
@@ -245,7 +245,7 @@
 			// Once the warehouse confirms receipt (outcome === 'confirmed'), this row
 			// stops being "รับเข้า: โรงครัวกลาง -> คลังเสบียงกลาง" (food arriving at the
 			// warehouse) and becomes "จ่ายออก: คลังเสบียงกลาง -> ..." (food waiting to
-			// leave the warehouse for a distribution point, CR-132) — same underlying
+			// leave the warehouse for a distribution point, CR-131) — same underlying
 			// meal_service, but the direction/label must track which leg is next.
 			const pushedStations = Array.from(
 				new Set(

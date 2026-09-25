@@ -2,11 +2,11 @@ import { z } from 'zod';
 import type { BaseDoc, AuthorContext } from '$lib/db/model';
 import { makeDoc } from '$lib/db/model';
 
-// ---- MealDistributionPush (append-only, CR-132) ----
+// ---- MealDistributionPush (append-only, CR-131) ----
 // Pushes confirmed-receipt meal_service output to a distribution point. Deliberately
 // separate from the CR-059 distribution_request/batch engine (built for per-evacuee
 // NFI issuing against real stock_ledger lots) and from CR-121's spec-only
-// distribution_log — see CR-132 for why. No real POS-station doc exists yet, so
+// distribution_log — see CR-131 for why. No real POS-station doc exists yet, so
 // `pos_station` is free text, same convention as requisition_ticket.destination_location.
 
 export const mealDistributionPushItemSchema = z.object({

@@ -1,5 +1,5 @@
 ---
-id: CR-132
+id: CR-131
 title: จัดสรรอาหารปรุงเสร็จส่งจุดแจกจ่าย (Push to POS) — doc ใหม่ meal_distribution_push (MVP, ไม่ผูก stock_ledger)
 status: approved
 date: 2026-09-25
@@ -8,7 +8,7 @@ requested_by: Project Owner (session ปรับ UI /back-office/tickets/kitche
 decided_by: Project Owner
 layer: stable
 extends:
-  - CR-129/CR-131 (meal_service_receipt — ผลผลิตต้องถูก "ยืนยันตรวจรับ" (`outcome=confirmed`) ก่อน
+  - CR-129/CR-130 (meal_service_receipt — ผลผลิตต้องถูก "ยืนยันตรวจรับ" (`outcome=confirmed`) ก่อน
     ถึงจะจัดสรรส่งจุดแจกได้)
 affects:
   - docs/data/schema.md (doc type ใหม่ §2.7.4 `meal_distribution_push`)
@@ -21,7 +21,7 @@ affects:
     เป็นแค่ toast stub — เปลี่ยนเป็นลิงก์ไปหน้าใหม่)
 ---
 
-# CR-132: จัดสรรอาหารปรุงเสร็จส่งจุดแจกจ่าย (Push to POS)
+# CR-131: จัดสรรอาหารปรุงเสร็จส่งจุดแจกจ่าย (Push to POS)
 
 ## 1. Why
 
@@ -70,7 +70,7 @@ meal_distribution_push.items ที่มี meal_service_id ตรงกัน,
 ก่อนเขียน (เหมือน `dispatchTicket`/`oneStepApproveTicket`) — ห้ามจัดสรรเกินยอดคงเหลือ
 
 **Guard:** `meal_service_id` ที่เลือกได้ต้องมี `meal_service_receipt.outcome = 'confirmed'`
-(CR-129/CR-131) เท่านั้น — ยังไม่ยืนยันตรวจรับ ห้ามจัดสรรออก
+(CR-129/CR-130) เท่านั้น — ยังไม่ยืนยันตรวจรับ ห้ามจัดสรรออก
 
 ### 3.2 UI หน้าใหม่ `/back-office/kitchen/distribute`
 

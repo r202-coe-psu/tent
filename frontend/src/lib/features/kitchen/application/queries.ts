@@ -396,7 +396,7 @@ export const useRejectMealServiceReceipt = () =>
 		}) => kitchenRepository().rejectMealServiceReceipt(mealServiceId, reason, ctx)
 	}));
 
-// --- MealDistributionPush (CR-132) ---
+// --- MealDistributionPush (CR-131) ---
 
 export const useMealDistributionPushes = () =>
 	createQuery(() => ({

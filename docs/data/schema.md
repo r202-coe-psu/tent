@@ -3,7 +3,7 @@ title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
 updated: 2026-09-25
-note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 item_category default_class editable; CR-129/CR-131 meal_service_receipt (§2.7.3); CR-132 meal_distribution_push (§2.7.4)
+note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 item_category default_class editable; CR-129/CR-130 meal_service_receipt (§2.7.3); CR-131 meal_distribution_push (§2.7.4)
 ---
 
 # Database Schema v5 — field-level
@@ -572,7 +572,7 @@ flow ปกติเลย ค้างเป็น `in_use` ตลอดไป 
 ข้อมูลเดิม. `reason='consumption'` ถูกเขียนร่วมกับ `stock_ledger` ของวัตถุดิบใน `bulkDocs`
 เดียวกัน และต้อง reject ทั้ง transaction หากแก๊สไม่พอ.
 
-### 2.7.3 `meal_service_receipt` — `meal_service_receipt:{ulid}` · **append-only** · **schema_v 1** (CR-129/CR-131)
+### 2.7.3 `meal_service_receipt` — `meal_service_receipt:{ulid}` · **append-only** · **schema_v 1** (CR-129/CR-130)
 
 > คลังยืนยันหรือปฏิเสธการตรวจรับอาหารปรุงสำเร็จที่ครัวบันทึกผลผลิตแล้ว (checkpoint เชิงธุรการ) —
 > `meal_service` §2.7 เป็น append-only ห้าม update ตัว doc เดิม จึงบันทึกการตัดสินใจของคลังเป็น
@@ -581,9 +581,9 @@ flow ปกติเลย ค้างเป็น `in_use` ตลอดไป 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
 | `meal_service_id` | str | req | อ้าง `meal_service._id` — สูงสุด 1 receipt ต่อ 1 `meal_service_id` (idempotency guard ฝั่ง data layer) |
-| `outcome` | enum(`confirmed`,`rejected`) | opt | ผลการตรวจรับ (CR-131) — doc ก่อน CR-131 ไม่มี field นี้ อ่านเป็น `'confirmed'` เสมอ (ทางเดียวที่มีตอนนั้น) ผ่าน `mealServiceReceiptOutcome()` |
+| `outcome` | enum(`confirmed`,`rejected`) | opt | ผลการตรวจรับ (CR-130) — doc ก่อน CR-130 ไม่มี field นี้ อ่านเป็น `'confirmed'` เสมอ (ทางเดียวที่มีตอนนั้น) ผ่าน `mealServiceReceiptOutcome()` |
 | `received_by` | str | req | ผู้ยืนยัน/ปฏิเสธการตรวจรับ |
-| `reason` | str | conditional req | เหตุผล — บังคับเมื่อ `outcome = 'rejected'` (CR-131) |
+| `reason` | str | conditional req | เหตุผล — บังคับเมื่อ `outcome = 'rejected'` (CR-130) |
 
 **Derive สถานะ (ไม่เก็บ field แยกบน `meal_service`):** ticket-list.svelte (`/back-office/tickets/kitchen`)
 ตีความ `meal_service` ล่าสุดของแต่ละแผน (ตัวก่อนหน้าที่ถูกปฏิเสธไม่แสดงซ้ำ) จากการมี/ไม่มี
@@ -593,15 +593,15 @@ flow ปกติเลย ค้างเป็น `in_use` ตลอดไป 
 (`requisition_ticket`, จบไปแล้วที่ CR-128) หรือการรับเข้าสต็อกอาหารปรุงสำเร็จ (`yield_items`/
 `stock_ledger reason=receive` ตาม CR-121 §3.2 ซึ่งยังไม่ implement ในโค้ดจริง — คนละงาน)
 
-**ผ่อน invariant ของ `meal_service` (CR-131):** เดิม 1 `meal_plan_id` มี `meal_service` ได้แค่ 1
+**ผ่อน invariant ของ `meal_service` (CR-130):** เดิม 1 `meal_plan_id` มี `meal_service` ได้แค่ 1
 doc ตลอดไป ตอนนี้อนุญาตให้บันทึกใหม่ได้เมื่อ doc ล่าสุดของแผนนั้นถูกปฏิเสธแล้วเท่านั้น (ของเดิมไม่ถูก
 ลบ ยังอยู่เป็นประวัติ) — จุดที่เคยดึง "meal_service ตัวแรกที่เจอของแผน" ต้องเปลี่ยนเป็นดึงตัวล่าสุด
 (ตามลำดับ ulid) แทน
 
-### 2.7.4 `meal_distribution_push` — `meal_distribution_push:{ulid}` · **append-only** · **schema_v 1** (CR-132)
+### 2.7.4 `meal_distribution_push` — `meal_distribution_push:{ulid}` · **append-only** · **schema_v 1** (CR-131)
 
-> จัดสรรอาหารปรุงสำเร็จ (`meal_service` ที่ยืนยันตรวจรับแล้วเท่านั้น — CR-129/CR-131) ส่งจุดแจกจ่าย
-> ("Push to POS") — MVP เจตนาไม่ผูกกับ `stock_ledger`/CR-059 distribution engine (ดู CR-132 §2
+> จัดสรรอาหารปรุงสำเร็จ (`meal_service` ที่ยืนยันตรวจรับแล้วเท่านั้น — CR-129/CR-130) ส่งจุดแจกจ่าย
+> ("Push to POS") — MVP เจตนาไม่ผูกกับ `stock_ledger`/CR-059 distribution engine (ดู CR-131 §2
 > สำหรับเหตุผล)
 
 | Field | ชนิด | req | หมายเหตุ |

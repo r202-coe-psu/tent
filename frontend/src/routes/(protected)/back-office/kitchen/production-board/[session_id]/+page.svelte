@@ -144,14 +144,14 @@
 	});
 
 	// Latest service for the plan (ulid order) — a plan may have more than one
-	// after a reject-and-redo cycle (CR-131).
+	// after a reject-and-redo cycle (CR-130).
 	const activeService = $derived.by(() => {
 		if (!activePlanId) return null;
 		const matches = (services.data ?? []).filter((s) => s.meal_plan_id === activePlanId);
 		return matches.length > 0 ? matches[matches.length - 1] : null;
 	});
 
-	// CR-129/CR-131: warehouse must decide (confirm/reject) before this batch
+	// CR-129/CR-130: warehouse must decide (confirm/reject) before this batch
 	// counts as delivered; a rejected service can be superseded by re-recording.
 	const activeServiceReceipt = $derived.by(() => {
 		if (!activeService) return null;
@@ -164,7 +164,7 @@
 	);
 	const serviceReceiptConfirmed = $derived(activeServiceOutcome === 'confirmed');
 	const serviceRejected = $derived(activeServiceOutcome === 'rejected');
-	// A rejected service doesn't lock the form — kitchen can record a fresh one (CR-131).
+	// A rejected service doesn't lock the form — kitchen can record a fresh one (CR-130).
 	const isServiceFinalized = $derived(!!activeService && !serviceRejected);
 
 	let showRejectForm = $state(false);

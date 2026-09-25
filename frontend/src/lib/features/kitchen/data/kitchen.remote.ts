@@ -379,7 +379,7 @@ export class KitchenRemoteRepository implements KitchenRepository {
 	}
 
 	// Ensures only one *active* meal service exists per meal plan — a rejected
-	// service (CR-131) may be superseded by re-recording.
+	// service (CR-130) may be superseded by re-recording.
 	async recordMealService(input: MealServiceInput, ctx: AuthorContext): Promise<MealService> {
 		if (input.meal_plan_id) {
 			const existing = await this.getMealServiceByPlanId(input.meal_plan_id);
