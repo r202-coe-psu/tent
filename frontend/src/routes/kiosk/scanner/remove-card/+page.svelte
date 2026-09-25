@@ -7,6 +7,7 @@
 		KioskIdleTimeout,
 		KIOSK_IDLE_TIMEOUT_MS,
 		KioskPreRegisteredCheckIn,
+		navigateToKioskHome,
 		readKioskDisplayQuery,
 		type GateInput
 	} from '$lib/features/kiosk';
@@ -35,7 +36,7 @@
 	}
 
 	function returnHome(): void {
-		window.location.assign(`/kiosk${contextQuery}`);
+		navigateToKioskHome(contextQuery);
 	}
 
 	function cardEventAttachment() {

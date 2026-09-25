@@ -42,3 +42,4 @@ export {
 	type KioskConfig
 } from './data/kiosk-config.api';
 export { isKioskPhoneCheckInEnabled } from './domain/kiosk-config';
+export { navigateToKioskHome } from './application/kiosk-navigation';
