@@ -1,11 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fetchKioskConfig } from '$lib/features/kiosk';
+import { fetchKioskConfig } from '$lib/features/kiosk/config';
 import { load } from './+page';
 
-vi.mock('$lib/features/kiosk', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/features/kiosk')>()),
-	fetchKioskConfig: vi.fn()
-}));
+vi.mock('$lib/features/kiosk/config', () => ({ fetchKioskConfig: vi.fn() }));
 
 describe('kiosk home route load', () => {
 	it.each([true, false])('returns the shelter phone flag (%s)', async (enabled) => {

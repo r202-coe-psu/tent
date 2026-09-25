@@ -1,6 +1,6 @@
 import { resolve } from '$app/paths';
 import { redirect } from '@sveltejs/kit';
-import { fetchKioskConfig } from '$lib/features/kiosk';
+import { fetchKioskConfig } from '$lib/features/kiosk/config';
 import {
 	buildKioskContextQuery,
 	getKioskDisplayContext,

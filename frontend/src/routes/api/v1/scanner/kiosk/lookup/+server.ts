@@ -7,7 +7,7 @@ import {
 	KioskInputError,
 	normalizeKioskPhone
 } from '$lib/features/kiosk/server';
-import { isKioskPhoneCheckInEnabled } from '$lib/features/kiosk';
+import { isKioskPhoneCheckInEnabled } from '$lib/features/kiosk/config';
 import {
 	kioskPhoneDeviceLimiter,
 	kioskPhoneNumberLimiter

@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { scannerServerRepository } from '$lib/features/scanners/server';
-import { isKioskPhoneCheckInEnabled } from '$lib/features/kiosk';
+import { isKioskPhoneCheckInEnabled } from '$lib/features/kiosk/config';
 import { findMasterByCode } from '$lib/server/shelters.admin';
 import {
 	authenticateScannerDevice,
