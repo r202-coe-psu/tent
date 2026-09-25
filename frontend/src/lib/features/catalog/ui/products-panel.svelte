@@ -496,8 +496,13 @@
 
 <!-- Item sheet -->
 <Sheet.Root bind:open={itemSheetOpen}>
-	<Sheet.Content side="right" class="w-full overflow-y-auto sm:max-w-lg">
-		<Sheet.Header class="border-b border-border pb-4 text-left">
+	<Sheet.Content
+		side="right"
+		class="w-full overflow-y-auto sm:max-w-lg {categorySheetOpen
+			? 'sm:-translate-x-20'
+			: ''}"
+	>
+		<Sheet.Header class="border-b border-border px-6 pt-4 pb-4 text-left">
 			<Sheet.Title>
 				{itemSheetMode === 'create' ? 'เพิ่มสินค้า' : 'แก้ไขสินค้า'}
 			</Sheet.Title>
@@ -505,7 +510,7 @@
 				{selectedCategory?.name ?? 'รายการคลังสินค้า'}
 			</Sheet.Description>
 		</Sheet.Header>
-		<div class="px-1 py-4">
+		<div class="px-6 py-4">
 			{#key `${itemSheetMode}-${editingItemId}-${selectedCategory?._id ?? ''}`}
 				<ItemMasterForm
 					id={editingItemId}
@@ -522,13 +527,13 @@
 
 <!-- Category sheet -->
 <Sheet.Root bind:open={categorySheetOpen}>
-	<Sheet.Content side="right" class="w-full overflow-y-auto sm:max-w-md">
-		<Sheet.Header class="border-b border-border pb-4 text-left">
+	<Sheet.Content side="right" class="w-full overflow-y-auto sm:max-w-sm">
+		<Sheet.Header class="border-b border-border px-6 pt-4 pb-4 text-left">
 			<Sheet.Title>
 				{categorySheetMode === 'create' ? 'เพิ่มหมวดสินค้า' : 'แก้ไขหมวดสินค้า'}
 			</Sheet.Title>
 		</Sheet.Header>
-		<div class="px-1 py-4">
+		<div class="px-6 py-4">
 			{#key `${categorySheetMode}-${editingCategoryId}`}
 				<ItemCategoryForm
 					id={editingCategoryId}
