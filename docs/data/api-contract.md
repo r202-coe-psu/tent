@@ -124,6 +124,33 @@ Versioning: path prefix /api/v1 — breaking change = /api/v2
 | `CONFLICT` 409 | ทำซ้ำ/สถานะไม่ให้ทำ |
 | `RATE_LIMITED` 429 | เกิน limit |
 
+### 2.1 Scanner kiosk — shelter configuration และ phone lookup
+
+เครื่อง scanner ยืนยันตัวตนด้วย `X-Device-ID` และ `X-Device-Secret` ที่ออกตอน provision เครื่อง
+เส้นทาง `/api/v1/scanner/kiosk/*` ใช้ device credentials แทน staff `AuthSession` และตอบ
+`cache-control: no-store`, `pragma: no-cache` เพื่อไม่เก็บข้อมูลเฉพาะศูนย์ไว้ใน cache
+
+```http
+POST /api/v1/scanner/kiosk/config
+X-Device-ID: kiosk-sh001-01
+X-Device-Secret: …
+```
+
+คืนค่าจาก shelter ที่ผูกกับเครื่อง (ไม่รับ `shelter_code` จาก request body):
+
+```json
+{ "shelter_code": "SH001", "phone_check_in_enabled": false }
+```
+
+`phone_check_in_enabled` อ่านจาก `shelter.feature_flags.kiosk_phone_check_in_enabled`;
+ไม่มี shelter หรือไม่มี flag ให้ถือเป็น `false` (ค่าเริ่มต้นปิด) ส่วน registry อ่านไม่ได้ตอบ
+`503 DEPENDENCY_UNAVAILABLE`. Kiosk โหลด config เมื่อเข้า `/kiosk` และ `/kiosk/phone`; เมื่อปิดหรืออ่าน
+ไม่สำเร็จจะซ่อนช่องทางเบอร์โทรและนำทางกลับหน้าเลือกวิธี
+
+การซ่อนปุ่มเป็นเพียง UX: `POST /api/v1/scanner/kiosk/lookup` ที่ `source: "phone"` ตรวจ flag
+ซ้ำฝั่ง server ก่อน rate limit และ lookup; เมื่อปิดตอบ `403 KIOSK_METHOD_DISABLED`.
+QR และ smart-card lookup ไม่ขึ้นกับ flag นี้. Device auth ไม่ผ่านตอบ `401 DEVICE_AUTH_FAILED`.
+
 ## 3. Provisioning (system_admin เท่านั้น)
 
 ```
