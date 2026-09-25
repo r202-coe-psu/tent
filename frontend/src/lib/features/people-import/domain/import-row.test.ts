@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { H } from './columns';
 import {
-	buildMasterLookup,
 	emptyLookups,
 	orphanMemberRows,
 	validateRow,
 	validateWorkbook,
-	type Lookups,
 	type RawRow,
 	type RawSheetRow
 } from './import-row';
@@ -23,13 +21,6 @@ function minimalHead(overrides: RawRow = {}): RawRow {
 
 function memberRow(cells: RawRow, line = 1, ref = '1'): RawSheetRow {
 	return { ref, line, cells };
-}
-
-function lookupsWithZone(): Lookups {
-	return {
-		municipality_zone: buildMasterLookup([{ code: 'Z1', label: 'เขต 1' }]),
-		community: buildMasterLookup([{ code: 'C1', label: 'ชุมชนริมน้ำ' }])
-	};
 }
 
 describe('validateRow — the minimum contract (T-48 required + CR-071 locks)', () => {
@@ -112,26 +103,26 @@ describe('validateRow — cell resolution', () => {
 		expect(result.errors.map((e) => e.column)).toContain(H.phone);
 	});
 
-	it('resolves master data by label and by code', () => {
-		const byLabel = validateRow(
-			minimalHead({ [H.municipality_zone]: 'เขต 1', [H.community]: 'C1' }),
+	it('passes municipality_zone and community through as free text (CR-137)', () => {
+		const result = validateRow(
+			minimalHead({
+				[H.municipality_zone]: 'เขตเทศบาลนครหาดใหญ่ 1',
+				[H.community]: 'ชุมชนริมน้ำ'
+			}),
 			1,
-			lookupsWithZone()
+			emptyLookups()
 		);
 
-		expect(byLabel.payload?.household.municipality_zone).toBe('Z1');
-		expect(byLabel.payload?.household.community).toBe('C1');
+		expect(result.ok).toBe(true);
+		expect(result.payload?.household.municipality_zone).toBe('เขตเทศบาลนครหาดใหญ่ 1');
+		expect(result.payload?.household.community).toBe('ชุมชนริมน้ำ');
 	});
 
-	it('rejects master data the shelter does not have', () => {
-		const result = validateRow(
-			minimalHead({ [H.municipality_zone]: 'เขต 9' }),
-			1,
-			lookupsWithZone()
-		);
+	it('accepts arbitrary zone/community text without master lookup', () => {
+		const result = validateRow(minimalHead({ [H.municipality_zone]: 'เขต 9' }), 1, emptyLookups());
 
-		expect(result.ok).toBe(false);
-		expect(result.errors.map((e) => e.column)).toContain(H.municipality_zone);
+		expect(result.ok).toBe(true);
+		expect(result.payload?.household.municipality_zone).toBe('เขต 9');
 	});
 
 	it('splits multi-value cells on | and rejects unknown tags', () => {

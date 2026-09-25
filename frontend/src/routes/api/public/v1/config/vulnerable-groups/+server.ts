@@ -22,7 +22,11 @@ export const GET: RequestHandler = async () => {
 		const doc = await readMasterDoc('vulnerable_group');
 		const groups = (doc?.items ?? [])
 			.filter((item) => item.status !== 'inactive')
-			.map((item) => ({ code: item.code, label: item.label }));
+			.map((item) => ({
+				code: item.code,
+				label_th: item.label_th,
+				label_en: item.label_en
+			}));
 
 		return json({ groups }, { headers: { 'Cache-Control': 'public, max-age=300' } });
 	} catch (e) {

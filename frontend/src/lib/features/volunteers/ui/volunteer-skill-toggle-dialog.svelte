@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { MasterDataItem } from '$lib/features/master-data';
+	import { formatMasterLabel } from '$lib/features/master-data';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import Power from '@lucide/svelte/icons/power';
 
@@ -43,7 +44,7 @@
 			>
 				<p>
 					คุณต้องการ{isCurrentlyActive ? 'ปิดการใช้งาน' : 'เปิดใช้งาน'}ทักษะ
-					<span class="font-bold">{item.label}</span>
+					<span class="font-bold">{formatMasterLabel(item, 'th')}</span>
 					(<code class="font-mono font-semibold">{item.code}</code>) ใช่หรือไม่?
 				</p>
 				<p class="text-muted-foreground">

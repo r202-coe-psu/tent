@@ -8,6 +8,7 @@ import type {
 	ListPublicSheltersParams,
 	PublicShelterListResponse
 } from '../domain/types';
+import type { MasterLabelOption } from '../domain/master-labels';
 
 function publicApiError(error: unknown, status: number, fallback: string): Error {
 	if (error && typeof error === 'object' && 'error' in error) {
@@ -56,10 +57,10 @@ export async function listPublicShelters(
 	return data as PublicShelterListResponse;
 }
 
-export type MasterLabelOption = { code: string; label: string };
+export type { MasterLabelOption };
 
 /**
- * Code → label for `master_data:vulnerable_group`. Degrades to `[]` on any
+ * Bilingual options for `master_data:vulnerable_group`. Degrades to `[]` on any
  * failure — shelter cards must still render without the badge text.
  */
 export async function fetchVulnerableGroupLabels(
@@ -78,7 +79,7 @@ export async function fetchVulnerableGroupLabels(
 }
 
 /**
- * Code → label for `master_data:shelter_type` (public field `admin_type`).
+ * Bilingual options for `master_data:shelter_type` (public field `admin_type`).
  * Same degrade-to-empty contract as vulnerable groups.
  */
 export async function fetchShelterTypeLabels(

@@ -4,7 +4,6 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import type { Household } from '../../domain/people';
-	import { useMasterData } from '$lib/features/master-data';
 
 	let {
 		household,
@@ -13,23 +12,6 @@
 		household: Household;
 		onOpenAddressModal: () => void;
 	} = $props();
-
-	const municipalityZoneQuery = useMasterData(() => 'municipality_zone');
-	const communityQuery = useMasterData(() => 'community');
-
-	const resolvedMunicipalityZone = $derived.by(() => {
-		const code = household.municipality_zone;
-		if (!code) return null;
-		const item = (municipalityZoneQuery.data?.items ?? []).find((i) => i.code === code);
-		return item ? item.label : code;
-	});
-
-	const resolvedCommunity = $derived.by(() => {
-		const code = household.community;
-		if (!code) return null;
-		const item = (communityQuery.data?.items ?? []).find((i) => i.code === code);
-		return item ? item.label : code;
-	});
 </script>
 
 <div class="space-y-4 rounded-3xl border border-border bg-card p-6 shadow-sm">
@@ -68,12 +50,12 @@
 			<Label class="text-xs text-muted-foreground">เขต / ชุมชน</Label>
 			<p class="text-sm font-semibold text-slate-800">
 				{#if household.municipality_zone}
-					เขต {resolvedMunicipalityZone}
+					เขต {household.municipality_zone}
 				{:else}
 					ไม่ได้ระบุเขต
 				{/if}
 				{#if household.community}
-					(ชุมชน {resolvedCommunity})
+					(ชุมชน {household.community})
 				{/if}
 			</p>
 		</div>

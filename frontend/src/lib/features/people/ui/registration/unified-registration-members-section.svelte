@@ -29,6 +29,7 @@
 		membersSectionDesc,
 		isJoiningExistingHousehold = false,
 		primaryContactPhone = null,
+		thaidEnabled = false,
 		onDirty
 	}: {
 		members: UnifiedMemberWithMeta[];
@@ -41,6 +42,7 @@
 		membersSectionDesc: string;
 		isJoiningExistingHousehold?: boolean;
 		primaryContactPhone?: string | null;
+		thaidEnabled?: boolean;
 		onDirty?: () => void;
 	} = $props();
 
@@ -126,7 +128,7 @@
 >
 	{#snippet actions()}
 		<div class="flex flex-wrap items-center gap-2">
-			{#if channel === 'public'}
+			{#if channel === 'public' && thaidEnabled}
 				<Button
 					type="button"
 					variant="outline"
@@ -183,16 +185,18 @@
 					: (members[0]?.phone ?? null)}
 				onApplyZoneToAll={applyZoneToAll}
 				onRemove={() => removeMember(index)}
-				onScanThaiD={() => handleOpenScanForMember(index)}
+				onScanThaiD={thaidEnabled ? () => handleOpenScanForMember(index) : undefined}
 			/>
 		{/each}
 	</div>
 
-	<ThaidMemberScanDialog
-		bind:open={scanDialogOpen}
-		memberLabel={targetMemberIndex !== null
-			? `สมาชิกคนที่ ${targetMemberIndex + 1}`
-			: 'สมาชิกในครอบครัว'}
-		onscanned={handleMemberScanned}
-	/>
+	{#if thaidEnabled}
+		<ThaidMemberScanDialog
+			bind:open={scanDialogOpen}
+			memberLabel={targetMemberIndex !== null
+				? `สมาชิกคนที่ ${targetMemberIndex + 1}`
+				: 'สมาชิกในครอบครัว'}
+			onscanned={handleMemberScanned}
+		/>
+	{/if}
 </UnifiedRegistrationSection>

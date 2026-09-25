@@ -199,8 +199,68 @@
 		</div>
 	</div>
 
-	<!-- Requests Table -->
-	<div class="overflow-x-auto">
+	<!-- Mobile cards (< md) -->
+	<div class="space-y-3 p-4 md:hidden">
+		{#if loading}
+			<div
+				class="rounded-xl border border-slate-200/80 bg-white p-8 text-center text-sm text-slate-500 shadow-2xs"
+			>
+				กำลังโหลดข้อมูล...
+			</div>
+		{:else if filteredRequests.length === 0}
+			<div
+				class="rounded-xl border border-slate-200/80 bg-white p-8 text-center text-sm text-slate-500 shadow-2xs"
+			>
+				ไม่มีรายการที่อยู่ระหว่างการรอการประเมิน
+			</div>
+		{:else}
+			{#each pagedRequests as req (donationActionRef(req) ?? req.declared_at)}
+				<article class="space-y-3 rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs">
+					<div>
+						<div class="text-base font-bold text-slate-900">
+							{req.donor_name || 'ไม่ระบุชื่อ'}
+						</div>
+						<div class="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
+							<Badge
+								variant="outline"
+								class="border-amber-200 bg-amber-50 text-xs font-bold text-amber-900"
+							>
+								รอพิจารณาอนุมัติ
+							</Badge>
+							<span class="font-semibold text-slate-500">{donationRefLabel(req)}</span>
+							<span class="text-slate-400">·</span>
+							<span class="text-slate-500">{formatRelativeTime(req.declared_at)}</span>
+						</div>
+					</div>
+
+					<div class="rounded-lg border border-slate-200/80 bg-slate-50/80 p-3">
+						<p class="text-xs font-semibold text-slate-500">รายการที่เสนอ</p>
+						<p class="mt-1 text-sm font-medium text-slate-800">{itemsSummary(req)}</p>
+					</div>
+
+					<div
+						class="inline-flex items-start gap-1.5 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-900"
+					>
+						<Info class="mt-0.5 h-4 w-4 shrink-0 text-sky-700" />
+						<span>{getTriggerReason(req)}</span>
+					</div>
+
+					<Button
+						variant="outline"
+						type="button"
+						onclick={() => onViewDetails(req)}
+						class="min-h-11 w-full gap-1.5 rounded-xl border-sky-200 bg-sky-50 px-3.5 text-sm font-bold text-sky-900 hover:bg-sky-100"
+					>
+						<SlidersHorizontal class="h-4 w-4" />
+						จัดการ
+					</Button>
+				</article>
+			{/each}
+		{/if}
+	</div>
+
+	<!-- Desktop table (md+) -->
+	<div class="hidden overflow-x-auto md:block">
 		<Table.Root class="w-full border-collapse text-left">
 			<Table.Header>
 				<Table.Row

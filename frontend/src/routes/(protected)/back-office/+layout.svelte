@@ -11,25 +11,13 @@
 	import { backofficeState } from '$lib/stores/backoffice.svelte';
 	import { endpointStore } from '$lib/stores/endpoint.svelte';
 	import { shouldShowDailySopReconnect } from '$lib/features/daily-sop';
-	import { shelterStore, persistSelectedShelter } from '$lib/stores/shelter.svelte';
-	import { authStore } from '$lib/stores/auth.svelte';
-	import { isSystemAdmin, shelterCodesFromRoles } from '$lib/auth/roles';
-	import { useShelters } from '$lib/features/shelters';
-	import { Select, SelectTrigger, SelectContent, SelectItem } from '$lib/components/ui/select';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import Building from '@lucide/svelte/icons/building';
-	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import { ReauthDialog } from '$lib/features/login';
 
 	let { children }: LayoutProps = $props();
 	let reauthOpen = $state(false);
-
-	// Fetch shelters list dynamically
-	const sheltersQuery = useShelters();
-
-	function shelterLabel(code: string, name: string) {
-		return `${code} — ${name}`;
-	}
 
 	function findMatchingLeaf(
 		node: BackofficeNavbarNode,
@@ -47,7 +35,6 @@
 		}
 		return null;
 	}
-
 	// Find the current page info (label, icon) dynamically
 	const currentPageNode = $derived.by(() => {
 		let currentPath = page.url.pathname;
@@ -67,6 +54,10 @@
 	const PageIcon = $derived(currentPageNode?.icon ?? Building);
 	const isDailySopPage = $derived(page.url.pathname.startsWith('/back-office/dailysop'));
 
+	const showStatusBanner = $derived(
+		endpointStore.status === 'disconnected' || backofficeState.isOffline
+	);
+
 	$effect(() => {
 		if (!backofficeState.reauthRequested) return;
 		reauthOpen = true;
@@ -76,151 +67,65 @@
 	async function retryDailySopConnection(): Promise<void> {
 		await endpointStore.forceRetry();
 	}
-
-	// Get user roles and scoped shelters (multi-shelter compound roles)
-	const roles = $derived(authStore.user?.roles ?? []);
-	const isSA = $derived(isSystemAdmin(roles));
-	const userShelterCodes = $derived(shelterCodesFromRoles(roles));
-
-	// Filter available shelters based on roles
-	const availableShelters = $derived.by(() => {
-		const allShelters = sheltersQuery.data ?? [];
-		if (isSA) {
-			return allShelters;
-		}
-		if (userShelterCodes.length > 0) {
-			return allShelters.filter((s) => userShelterCodes.includes(s.code));
-		}
-		return [];
-	});
-
-	// Prefer persisted selection when still allowed; else first assigned shelter.
-	$effect(() => {
-		const shelters = availableShelters;
-		if (shelters.length === 0) return;
-		const current = shelterStore.selectedShelterCode;
-		if (current && shelters.some((s) => s.code === current)) {
-			persistSelectedShelter(current);
-			return;
-		}
-		const preferred =
-			shelters.find((s) => userShelterCodes.includes(s.code))?.code ?? shelters[0].code;
-		shelterStore.selectedShelterCode = preferred;
-		persistSelectedShelter(preferred);
-	});
-
-	const selectedShelter = $derived(
-		availableShelters.find((s) => s.code === shelterStore.selectedShelterCode)
-	);
-	const selectedShelterLabel = $derived(
-		selectedShelter
-			? shelterLabel(selectedShelter.code, selectedShelter.name)
-			: (shelterStore.selectedShelterCode ?? 'เลือกศูนย์อพยพ')
-	);
 </script>
 
-<div class="flex w-full flex-1 flex-col items-stretch bg-muted/30 text-foreground md:flex-row">
+<!--
+  Shell conventions (Phase 0/1):
+  - Sidebar breakpoint: lg (matches system-management; md–lg was a broken half-row).
+  - Sticky stack: mobile nav → page header (top: --bo-mobile-nav-height) → content.
+  - Page header is title-only (h-16 / 4rem). Shelter select lives in the sidebar / Sheet.
+  - Status banner appears only when offline or session needs reauth (not always-on Online).
+  - Subheaders under this chrome: top-[var(--bo-sticky-top)] (see app.css).
+  - Page padding on children: prefer p-4 sm:p-6; touch targets min-h-11.
+-->
+<div class="flex w-full flex-1 flex-col items-stretch bg-muted/30 text-foreground lg:flex-row">
 	<BackofficeNavbar />
 	<div class="flex w-full min-w-0 flex-1 flex-col">
-		<!-- Sticky top header (shared by all backoffice pages) -->
+		<!-- Sticky under mobile hamburger bar (< lg); flush top when sidebar is visible -->
 		<header
-			class="sticky top-0 z-30 flex shrink-0 flex-col justify-center border-b border-sidebar-border bg-card {isDailySopPage
-				? 'min-h-16 px-4 py-3 md:px-6'
-				: 'h-16 px-4 md:px-6'}"
+			class="sticky top-[var(--bo-mobile-nav-height)] z-30 flex shrink-0 flex-col border-b border-sidebar-border bg-card lg:top-0"
 		>
-			<div
-				class={isDailySopPage
-					? 'flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between'
-					: 'flex items-center justify-between gap-4'}
-			>
-				<!-- Left: Page Title & Icon -->
-				<div class="flex items-center gap-2">
-					<PageIcon class="size-4 shrink-0 text-primary" />
-					<h1 class="text-sm font-bold text-foreground">{pageTitle}</h1>
-				</div>
+			<div class="flex h-16 min-h-16 items-center gap-2 px-4 sm:px-6">
+				<PageIcon class="size-4 shrink-0 text-primary" />
+				<h1 class="truncate text-sm font-bold text-foreground">{pageTitle}</h1>
+			</div>
 
-				<!-- Right: Controls -->
+			{#if showStatusBanner}
 				<div
-					class={isDailySopPage
-						? 'flex w-full flex-nowrap items-center justify-start gap-2 xl:w-auto xl:justify-end'
-						: 'flex items-center justify-end gap-2 md:gap-3'}
+					class="flex min-h-11 flex-wrap items-center gap-2 border-t border-warning-border/40 bg-warning/10 px-4 py-2 sm:px-6"
+					role="status"
 				>
-					<div class="flex items-center gap-1.5 text-xs text-muted-foreground">
-						<span class="hidden shrink-0 sm:inline">ศูนย์อพยพ:</span>
-						<Select type="single" bind:value={shelterStore.selectedShelterCode}>
-							<SelectTrigger
-								class={`h-9 ${
-									isDailySopPage
-										? 'w-[min(45vw,200px)] md:w-[240px] 2xl:w-[280px]'
-										: 'w-[200px] md:w-[280px]'
-								}`}
-							>
-								<span class="truncate">{selectedShelterLabel}</span>
-							</SelectTrigger>
-							<SelectContent>
-								{#if sheltersQuery.isLoading}
-									<SelectItem value="" disabled label="กำลังโหลด..." />
-								{:else if availableShelters.length === 0}
-									<SelectItem value="" disabled label="ไม่มีศูนย์พักพิงที่เข้าถึงได้" />
-								{:else}
-									{#each availableShelters as shelter (shelter.code)}
-										<SelectItem
-											value={shelter.code}
-											label={shelterLabel(shelter.code, shelter.name)}
-										/>
-									{/each}
-								{/if}
-							</SelectContent>
-						</Select>
-					</div>
-
-					{#if isDailySopPage}
-						<span
-							class="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border px-2.5 py-1 text-2xs font-bold {endpointStore.status ===
-							'connected'
-								? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600'
-								: endpointStore.status === 'connecting'
-									? 'border-slate-200 bg-slate-50 text-slate-600'
-									: 'border-amber-200 bg-amber-50 text-amber-700'}"
+					{#if backofficeState.isOffline}
+						<button
+							type="button"
+							class="inline-flex min-h-11 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-full border border-warning-border/40 bg-warning/15 px-2.5 py-1 text-2xs font-bold text-warning-muted hover:bg-warning/25"
+							onclick={() => (reauthOpen = true)}
 						>
-							{#if endpointStore.status === 'connected'}
-								<span class="size-1.5 rounded-full bg-emerald-500"></span> Online
-							{:else if endpointStore.status === 'connecting'}
-								<RefreshCw class="size-3.5 animate-spin" /> กำลังเชื่อมต่อ
-							{:else}
-								<span class="size-1.5 rounded-full bg-amber-500"></span> Offline
-							{/if}
+							<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-warning"></span>
+							Session หมดอายุ — เข้าสู่ระบบอีกครั้ง
+						</button>
+					{:else}
+						<span
+							class="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-warning-border/40 bg-warning/15 px-2.5 py-1 text-2xs font-bold text-warning-muted"
+						>
+							<span class="size-1.5 rounded-full bg-warning"></span>
+							Offline — ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้
 						</span>
-						{#if shouldShowDailySopReconnect(endpointStore.status)}<button
+						{#if isDailySopPage && shouldShowDailySopReconnect(endpointStore.status)}
+							<button
 								type="button"
-								class="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 text-2xs font-bold text-slate-700 shadow-sm hover:bg-slate-50 sm:px-3 sm:text-xs"
+								class="inline-flex h-11 min-h-11 shrink-0 items-center gap-1.5 rounded-xl border border-sidebar-border bg-card px-2.5 text-2xs font-bold text-foreground shadow-sm hover:bg-muted sm:px-3 sm:text-xs"
 								onclick={retryDailySopConnection}
 								aria-label="ตรวจสอบการเชื่อมต่อและซิงค์ข้อมูลอีกครั้ง"
 							>
 								<RotateCcw class="size-3.5" />
-								<span class="hidden sm:inline">ลองเชื่อมต่ออีกครั้ง</span><span class="sm:hidden"
-									>ลองใหม่</span
-								>
-							</button>{/if}
-					{:else if backofficeState.isOffline}
-						<button
-							type="button"
-							class="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-2xs font-bold text-amber-600 hover:bg-amber-500/20"
-							onclick={() => (reauthOpen = true)}
-						>
-							<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500"></span>
-							Session หมดอายุ
-						</button>
-					{:else}
-						<span
-							class="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-2xs font-bold text-emerald-600"
-						>
-							<span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-							Online
-						</span>
+								<span class="hidden sm:inline">ลองเชื่อมต่ออีกครั้ง</span>
+								<span class="sm:hidden">ลองใหม่</span>
+							</button>
+						{/if}
 					{/if}
 				</div>
-			</div>
+			{/if}
 		</header>
 
 		<!-- Content grows with the document; window scroll is the primary scroller. -->

@@ -14,6 +14,7 @@
 		type AuthStatus
 	} from '$lib/features/users';
 	import { ownProfileSchema, type OwnProfileInput } from '../domain/profile-schema';
+	import { fetchThaidRegistrationStatus } from '$lib/api/thaid-status';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
@@ -27,6 +28,8 @@
 	let profile = $state<AuthStatus | null>(null);
 	let loading = $state(true);
 	let loadError = $state<string | null>(null);
+	/** Stay false until GET /api/public/v1/thaid/status confirms ON. */
+	let thaidEnabled = $state(false);
 
 	let editing = $state(false);
 	let saving = $state(false);
@@ -191,6 +194,10 @@
 	}
 
 	onMount(async () => {
+		void fetchThaidRegistrationStatus().then((s) => {
+			thaidEnabled = s.enabled;
+		});
+
 		const mfa = page.url.searchParams.get('mfa');
 		if (mfa === 'linked') {
 			toast.success('ผูกบัญชี Google สำหรับ MFA สำเร็จ');
@@ -200,6 +207,8 @@
 			toast.success('ผูกบัญชี ThaID สำหรับ MFA สำเร็จ');
 		} else if (mfa === 'thaid_conflict') {
 			toast.error('บัญชี ThaID นี้ถูกผูกกับผู้ใช้อื่นแล้ว');
+		} else if (mfa === 'thaid_disabled') {
+			toast.error('ระบบ ThaiD Digital ID ถูกปิดใช้งานชั่วคราว');
 		}
 		await refreshProfile();
 	});
@@ -495,73 +504,75 @@
 						</div>
 					</div>
 
-					<!-- ThaID MFA Card -->
-					<div
-						class="flex aspect-square flex-col items-center justify-between rounded-2xl border p-3.5 text-center shadow-2xs transition-all sm:p-4 {hasThaid
-							? 'border-emerald-200 bg-emerald-50/20'
-							: 'border-slate-200/80 bg-white'}"
-					>
-						<!-- Top: Icon & Name -->
-						<div class="flex flex-col items-center gap-1.5 pt-0.5">
-							<div
-								class="flex size-11 items-center justify-center rounded-xl border border-slate-100 bg-white p-1 shadow-2xs"
-							>
-								<img src="/thaid-logo.png" alt="ThaID" class="size-9 rounded-lg object-contain" />
+					<!-- ThaID MFA Card: show when feature ON, or when already linked (status + unlink only) -->
+					{#if thaidEnabled || hasThaid}
+						<div
+							class="flex aspect-square flex-col items-center justify-between rounded-2xl border p-3.5 text-center shadow-2xs transition-all sm:p-4 {hasThaid
+								? 'border-emerald-200 bg-emerald-50/20'
+								: 'border-slate-200/80 bg-white'}"
+						>
+							<!-- Top: Icon & Name -->
+							<div class="flex flex-col items-center gap-1.5 pt-0.5">
+								<div
+									class="flex size-11 items-center justify-center rounded-xl border border-slate-100 bg-white p-1 shadow-2xs"
+								>
+									<img src="/thaid-logo.png" alt="ThaID" class="size-9 rounded-lg object-contain" />
+								</div>
+								<span class="text-sm font-bold text-slate-800">ThaID</span>
 							</div>
-							<span class="text-sm font-bold text-slate-800">ThaID</span>
-						</div>
 
-						<!-- Center: Status & Linked Info -->
-						<div class="flex w-full min-w-0 flex-col items-center gap-0.5 px-1">
-							{#if hasThaid}
-								<span
-									class="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800"
-								>
-									<span class="size-1.5 rounded-full bg-emerald-500"></span>
-									ผูกบัญชีแล้ว
-								</span>
-								<p
-									class="w-full truncate text-xs text-slate-600"
-									title={[profile.mfa_thaid_name, profile.mfa_thaid_pid_masked]
-										.filter(Boolean)
-										.join(' • ')}
-								>
-									{profile.mfa_thaid_pid_masked || profile.mfa_thaid_name || 'เชื่อมต่อแล้ว'}
-								</p>
-							{:else if isImmutable}
-								<span class="text-xs text-slate-400">ไม่รองรับ</span>
-							{:else}
-								<span
-									class="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500"
-								>
-									ยังไม่ได้ผูก
-								</span>
-								<p class="text-xs text-slate-400">—</p>
-							{/if}
-						</div>
+							<!-- Center: Status & Linked Info -->
+							<div class="flex w-full min-w-0 flex-col items-center gap-0.5 px-1">
+								{#if hasThaid}
+									<span
+										class="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800"
+									>
+										<span class="size-1.5 rounded-full bg-emerald-500"></span>
+										ผูกบัญชีแล้ว
+									</span>
+									<p
+										class="w-full truncate text-xs text-slate-600"
+										title={[profile.mfa_thaid_name, profile.mfa_thaid_pid_masked]
+											.filter(Boolean)
+											.join(' • ')}
+									>
+										{profile.mfa_thaid_pid_masked || profile.mfa_thaid_name || 'เชื่อมต่อแล้ว'}
+									</p>
+								{:else if isImmutable}
+									<span class="text-xs text-slate-400">ไม่รองรับ</span>
+								{:else}
+									<span
+										class="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500"
+									>
+										ยังไม่ได้ผูก
+									</span>
+									<p class="text-xs text-slate-400">—</p>
+								{/if}
+							</div>
 
-						<!-- Bottom: Action Button -->
-						<div class="w-full">
-							{#if hasThaid}
-								<Button
-									variant="outline"
-									class="h-8 w-full border-red-200 text-xs font-medium text-red-600 hover:bg-red-50 hover:text-red-700"
-									onclick={() => (unlinkThaidOpen = true)}
-								>
-									<Unlink class="mr-1 size-3.5" />
-									ยกเลิกการผูก
-								</Button>
-							{:else if !isImmutable}
-								<Button
-									href={thaidOAuthStartHref('link')}
-									class="h-8 w-full bg-[#0A2647] text-xs font-semibold text-white hover:bg-[#051930]"
-								>
-									<Link2 class="mr-1 size-3.5" />
-									ผูกบัญชี
-								</Button>
-							{/if}
+							<!-- Bottom: Action Button -->
+							<div class="w-full">
+								{#if hasThaid}
+									<Button
+										variant="outline"
+										class="h-8 w-full border-red-200 text-xs font-medium text-red-600 hover:bg-red-50 hover:text-red-700"
+										onclick={() => (unlinkThaidOpen = true)}
+									>
+										<Unlink class="mr-1 size-3.5" />
+										ยกเลิกการผูก
+									</Button>
+								{:else if !isImmutable && thaidEnabled}
+									<Button
+										href={thaidOAuthStartHref('link')}
+										class="h-8 w-full bg-[#0A2647] text-xs font-semibold text-white hover:bg-[#051930]"
+									>
+										<Link2 class="mr-1 size-3.5" />
+										ผูกบัญชี
+									</Button>
+								{/if}
+							</div>
 						</div>
-					</div>
+					{/if}
 				</div>
 
 				<!-- Unlink Confirmation Dialogs -->
