@@ -9,7 +9,6 @@
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
-	import PackagePlus from '@lucide/svelte/icons/package-plus';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import PackageCheck from '@lucide/svelte/icons/package-check';
@@ -26,7 +25,6 @@
 	import { DatePicker } from '$lib/components/ui/date-picker/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
-	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { toast } from 'svelte-sonner';
@@ -45,13 +43,11 @@
 		formatUnit,
 		mergeCatalogGenerations,
 		useItemMasters,
-		useCreateItemMaster,
 		useUnitsOfMeasure
 	} from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { ulid } from '$lib/db/ulid';
 	import { getShelterCode } from '$lib/db/shelter';
-	import { authStore } from '$lib/stores/auth.svelte';
 	import { useShelters } from '$lib/features/shelters';
 
 	let {
@@ -83,7 +79,6 @@
 	// Catalog items query
 	const supplyItemsQuery = useSupplyItems();
 	const itemMastersQuery = useItemMasters(() => getShelterCode());
-	const createItemMasterMutation = useCreateItemMaster();
 
 	// De-duplicated across both catalog generations (schema.md §4.2) — the same goods
 	// exist as `item:rice` and `item_master:rice`, and this list showed each twice.
@@ -104,16 +99,6 @@
 		'Zone F (ห้องควบคุมอุณหภูมิ/ตู้แช่)'
 	];
 
-	const ITEM_CATEGORY_OPTIONS = [
-		{ value: 'food', label: 'อาหารและเครื่องดื่ม' },
-		{ value: 'medicine', label: 'ยารักษาโรค/เวชภัณฑ์' },
-		{ value: 'hygiene', label: 'ของใช้ส่วนตัว/สุขอนามัย' },
-		{ value: 'clothing', label: 'เครื่องนุ่งห่ม/ที่นอน' },
-		{ value: 'baby', label: 'แม่และเด็ก' },
-		{ value: 'tools', label: 'อุปกรณ์/เครื่องมือช่าง' },
-		{ value: 'general', label: 'ของใช้ทั่วไป' }
-	];
-
 	/** The catalog row's display label, or the dropdown placeholder when unmapped. */
 	function catalogLabel(itemId: string | undefined, placeholder: string): string {
 		const found = catalogItems.find((c) => c._id === itemId);
@@ -127,17 +112,6 @@
 		return catalogItems.find((c) => c._id === itemId)?.perishable === true;
 	}
 
-	// Quick create item master dialog state
-	let isQuickCreateOpen = $state(false);
-	let quickCreateTargetIndex = $state<number | null>(null);
-	let newItemName = $state('');
-	let newItemCategory = $state('general');
-	let newItemUnit = $state('piece');
-	let creatingItem = $state(false);
-
-	const newItemCategoryLabel = $derived(
-		ITEM_CATEGORY_OPTIONS.find((o) => o.value === newItemCategory)?.label ?? newItemCategory
-	);
 	const redirectTargetLabel = $derived.by(() => {
 		const picked = redirectTargets.find((t) => t.code === selectedTargetShelter);
 		return picked ? `${picked.name} (${picked.code})` : '-- เลือกศูนย์พักพิงปลายทาง --';
@@ -178,7 +152,6 @@
 	// place this file SHOWS a unit runs it back through `formatUnit`.
 	const unitsOfMeasureQuery = useUnitsOfMeasure();
 	const unitsOfMeasure = $derived(unitsOfMeasureQuery.data ?? []);
-	const availableUnits = $derived(unitsOfMeasure.filter((u) => !u.deactivated));
 	let lastLots = $state<{ item_id: string; lot_no: string | null }[]>([]);
 
 	const VEHICLE_LABELS: Record<string, string> = {
@@ -612,58 +585,6 @@
 		}
 	}
 
-	// Quick create item master
-	function openQuickCreate(targetIdx: number) {
-		quickCreateTargetIndex = targetIdx;
-		newItemName = '';
-		newItemCategory = 'general';
-		newItemUnit = 'piece';
-		isQuickCreateOpen = true;
-	}
-
-	async function handleCreateNewItemMaster() {
-		if (!newItemName.trim()) {
-			toast.error('กรุณาระบุชื่อรายการสินค้า');
-			return;
-		}
-		creatingItem = true;
-		try {
-			const shelterCode = getShelterCode();
-			const created = await createItemMasterMutation.mutateAsync({
-				shelterCode,
-				input: {
-					name: newItemName.trim(),
-					category: newItemCategory.trim() || 'general',
-					base_unit: newItemUnit.trim() || 'piece',
-					type_class: 'CONSUMABLE',
-					distribution_type: 'one_time'
-				},
-				ctx: {
-					shelterCode,
-					createdBy: authStore.user?.name ?? 'staff'
-				}
-			});
-
-			if (created && quickCreateTargetIndex !== null) {
-				if (activeView === 'walkin' && walkinItems[quickCreateTargetIndex]) {
-					walkinItems[quickCreateTargetIndex].itemId = created._id;
-					walkinItems[quickCreateTargetIndex].name = created.name;
-					walkinItems[quickCreateTargetIndex].unit = created.base_unit;
-				} else if (scannedItems[quickCreateTargetIndex]) {
-					scannedItems[quickCreateTargetIndex].item_id = created._id;
-					scannedItems[quickCreateTargetIndex].unit = created.base_unit;
-				}
-				toast.success(`สร้างรายการสินค้า "${created.name}" เรียบร้อยแล้ว`);
-			}
-			isQuickCreateOpen = false;
-		} catch (err) {
-			const message = err instanceof Error ? err.message : 'ข้อผิดพลาด';
-			toast.error(`ไม่สามารถสร้างรายการสินค้าได้: ${message}`);
-		} finally {
-			creatingItem = false;
-		}
-	}
-
 	// Walk-in form handlers
 	function addWalkinItem() {
 		walkinItems.push({
@@ -901,8 +822,9 @@
 										<!--
 										Creating an item master is not offered here: checking a booking in is
 										confirming what arrived, so a line that does not match goes in the
-										difference note, not into a new catalog entry. Walk-in intake keeps
-										its quick-create (`openQuickCreate`), where new goods are recorded.
+										difference note, not into a new catalog entry. Walk-in intake does not
+										offer it either: goods the catalog lacks are added by whoever owns the
+										catalog, not keyed in at the counter.
 										-->
 									</div>
 
@@ -1559,15 +1481,6 @@
 										รายการที่ #{idx + 1}
 									</span>
 									<div class="flex items-center gap-3">
-										<Button
-											variant="link"
-											size="sm"
-											type="button"
-											onclick={() => openQuickCreate(idx)}
-											class="h-auto p-0 text-xs font-semibold text-blue-600 dark:text-blue-400"
-										>
-											+ สร้างรายการใหม่
-										</Button>
 										{#if walkinItems.length > 1}
 											<Button
 												variant="ghost"
@@ -1721,98 +1634,3 @@
 		</div>
 	{/if}
 </div>
-
-<!-- Quick Create Item Dialog -->
-<Dialog.Root bind:open={isQuickCreateOpen}>
-	<Dialog.Content class="sm:max-w-md">
-		<Dialog.Header>
-			<Dialog.Title class="flex items-center gap-2 text-base font-bold">
-				<PackagePlus class="h-5 w-5 text-primary" />
-				สร้างรายการสินค้าใหม่ในคลัง
-			</Dialog.Title>
-		</Dialog.Header>
-
-		<div class="space-y-4">
-			<div class="space-y-1.5">
-				<Label for="new-item-name" class="text-sm font-semibold text-foreground">
-					ชื่อสิ่งของ/รายการสินค้า <span class="text-destructive">*</span>
-				</Label>
-				<Input
-					id="new-item-name"
-					type="text"
-					placeholder="เช่น ปลากระป๋องตราสามแม่ครัว"
-					bind:value={newItemName}
-					class="h-10 rounded-xl text-sm"
-				/>
-			</div>
-
-			<div class="grid grid-cols-2 gap-4">
-				<div class="space-y-1.5">
-					<Label for="new-item-category" class="text-sm font-semibold text-foreground">
-						หมวดหมู่
-					</Label>
-					<Select.Root type="single" bind:value={newItemCategory}>
-						<Select.Trigger
-							id="new-item-category"
-							class="h-10 w-full rounded-xl text-sm data-[size=default]:h-10"
-						>
-							{newItemCategoryLabel}
-						</Select.Trigger>
-						<Select.Content>
-							{#each ITEM_CATEGORY_OPTIONS as option (option.value)}
-								<Select.Item value={option.value} label={option.label} />
-							{/each}
-						</Select.Content>
-					</Select.Root>
-				</div>
-
-				<div class="space-y-1.5">
-					<Label for="new-item-unit" class="text-sm font-semibold text-foreground">
-						หน่วยนับมาตรฐาน
-					</Label>
-					<Select.Root
-						type="single"
-						value={newItemUnit}
-						onValueChange={(value) => (newItemUnit = value)}
-						disabled={unitsOfMeasureQuery.isPending || availableUnits.length === 0}
-					>
-						<Select.Trigger id="new-item-unit" class="h-10 w-full rounded-xl text-sm">
-							{formatUnit(newItemUnit, unitsOfMeasure, langState.current) || '-- เลือกหน่วยนับ --'}
-						</Select.Trigger>
-						<Select.Content>
-							{#each availableUnits as u (u.code)}
-								<Select.Item value={u.code} label={`${u.label_th} (${u.code})`}>
-									{u.label_th} ({u.code})
-								</Select.Item>
-							{/each}
-						</Select.Content>
-					</Select.Root>
-				</div>
-			</div>
-		</div>
-
-		<Dialog.Footer class="gap-2.5">
-			<Button
-				variant="ghost"
-				type="button"
-				onclick={() => (isQuickCreateOpen = false)}
-				class="h-10 rounded-xl px-4 text-sm font-semibold text-muted-foreground"
-			>
-				ยกเลิก
-			</Button>
-			<Button
-				type="button"
-				onclick={handleCreateNewItemMaster}
-				disabled={creatingItem}
-				class="h-10 rounded-xl px-5 text-sm font-bold"
-			>
-				{#if creatingItem}
-					<Loader2 class="h-4 w-4 animate-spin" />
-					กำลังสร้าง…
-				{:else}
-					บันทึกรายการใหม่
-				{/if}
-			</Button>
-		</Dialog.Footer>
-	</Dialog.Content>
-</Dialog.Root>
