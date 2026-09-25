@@ -1,7 +1,11 @@
 /// <reference types="node" />
 import { defineConfig, devices } from '@playwright/test';
 
-const stagingURL = process.env.STAGING_URL ?? 'https://shelter.importstar.dev';
+const stagingURL = process.env.E2E_BASE_URL ?? 'https://shelter.importstar.dev';
+
+if (!/^https:\/\/[^\s/]+\/?$/.test(stagingURL)) {
+	throw new Error('E2E_BASE_URL must be an HTTPS origin without a path');
+}
 
 export default defineConfig({
 	testDir: './e2e/staging',

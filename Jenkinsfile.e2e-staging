@@ -68,11 +68,11 @@ pipeline {
         stage('Run Staging E2E Smoke') {
             steps {
                 withCredentials([
-                    usernamePassword(credentialsId: 'tent-staging-e2e-bot', usernameVariable: 'E2E_USERNAME', passwordVariable: 'E2E_PASSWORD')
+                    usernamePassword(credentialsId: 'tent-staging-e2e-bot', usernameVariable: 'E2E_ADMIN_USERNAME', passwordVariable: 'E2E_ADMIN_PASSWORD')
                 ]) {
                     withEnv([
                         'CI=true',
-                        "STAGING_URL=${params.STAGING_URL.replaceAll('/+$', '')}"
+                        "E2E_BASE_URL=${params.STAGING_URL.replaceAll('/+$', '')}"
                     ]) {
                         sh 'scripts/run-staging-e2e.sh'
                     }
