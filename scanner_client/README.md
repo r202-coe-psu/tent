@@ -76,7 +76,7 @@ Legacy `POST /api/v1/scanner/draft` ถูกปิดเพื่อไม่�
 4. **จอแสดงผล (Display)**:
    - จอ HDMI หรือ DSI Touchscreen (แนะนำความละเอียด 1080x1920 แนวตั้ง หรือ 1920x1080 แนวนอน)
 5. **แหล่งจ่ายไฟ (Power Supply)**: อะแดปเตอร์มาตรฐาน Type-C 5V 3A (สำหรับ RPi 4) หรือ 5V 5A (สำหรับ RPi 5)
-6. **เครื่องพิมพ์ Label**: **Xprinter XP-365B** (USB, direct thermal, label mode) + ม้วน label ความร้อนแบบมีช่องว่างระหว่างดวง (ค่าตั้งต้น 60×60 mm, gap 2 mm) — ดู [เครื่องพิมพ์ Label XP-365B](#-เครื่องพิมพ์-label-xp-365b-usb-label-printer)
+6. **เครื่องพิมพ์ Label**: **Xprinter XP-365B** (USB, direct thermal, label mode) + ม้วน label ความร้อนแบบมีช่องว่างระหว่างดวง (ค่าตั้งต้น 80×60 mm (กว้าง×สูง), gap 2 mm) — ดู [เครื่องพิมพ์ Label XP-365B](#-เครื่องพิมพ์-label-xp-365b-usb-label-printer)
 
 ---
 
@@ -489,7 +489,7 @@ tail -f /tmp/kiosk_autostart.log
    cd ~/tent/scanner_client
    ./setup_printer.sh ~/printer-driver-xprinter_3.13.55_all.deb --test
    ```
-   - ม้วนไม่ใช่ 60×60 mm → ใส่ `--label <กว้าง>x<สูง>` (mm, กว้างไม่เกิน 82) และแก้ `KIOSK_LABEL_MM` ให้ตรงกัน
+   - ม้วนไม่ใช่ 80×60 mm (กว้าง×สูง) → ใส่ `--label <กว้าง>x<สูง>` (mm, กว้างไม่เกิน 82) และแก้ `KIOSK_LABEL_MM` ให้ตรงกัน
    - gap ไม่ใช่ 2 mm → ใส่ `--gap <mm>`
    - `--test` พิมพ์ label ทดสอบ 1 ดวง (รันผ่าน SSH ได้) — ต้องออก 1 ดวงพอดี QR สแกนได้
 5. **ตั้งค่า `.env`:**

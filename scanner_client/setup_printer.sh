@@ -52,7 +52,7 @@ STATUS_ONLY=false
 
 while [ $# -gt 0 ]; do
     case "$1" in
-    --label) LABEL="${2:?--label ต้องเป็น WxH เช่น 60x60}"; shift 2 ;;
+    --label) LABEL="${2:?--label ต้องเป็น WxH เช่น 80x60}"; shift 2 ;;
     --gap) GAP="${2:?--gap ต้องเป็นตัวเลข mm}"; shift 2 ;;
     --queue) QUEUE="${2:?--queue ต้องมีชื่อ}"; shift 2 ;;
     --test) DO_TEST=true; shift ;;
@@ -82,7 +82,7 @@ if [ -z "$LABEL" ]; then
     LABEL="$(sed -nE 's/.*KIOSK_LABEL_MM = \{ width: ([0-9.]+), height: ([0-9.]+) \}.*/\1x\2/p' "$LABEL_TS")"
     [ -n "$LABEL" ] || die "อ่าน KIOSK_LABEL_MM จาก print-label.ts ไม่ได้ — ระบุ --label WxH เอง"
 fi
-[[ "$LABEL" =~ ^([0-9]+(\.[0-9]+)?)x([0-9]+(\.[0-9]+)?)$ ]] || die "--label ต้องเป็นรูปแบบ WxH (mm) เช่น 60x60"
+[[ "$LABEL" =~ ^([0-9]+(\.[0-9]+)?)x([0-9]+(\.[0-9]+)?)$ ]] || die "--label ต้องเป็นรูปแบบ WxH (mm) เช่น 80x60"
 LABEL_W="${BASH_REMATCH[1]}"
 awk -v w="$LABEL_W" -v max="$MAX_WIDTH_MM" 'BEGIN { exit !(w > 0 && w <= max) }' ||
     die "label กว้าง ${LABEL_W} mm เกินหัวพิมพ์ XP-365B (${MAX_WIDTH_MM} mm)"

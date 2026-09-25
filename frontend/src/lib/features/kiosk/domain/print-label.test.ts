@@ -5,7 +5,10 @@ import {
 	KIOSK_LABEL_MAX_WIDTH_MM,
 	KIOSK_LABEL_MM,
 	KIOSK_LABEL_PADDING_MM,
+	KIOSK_LABEL_RIGHT_SAFE_MM,
+	KIOSK_LABEL_SHIFT_LEFT_MM,
 	KIOSK_QR_COLOR,
+	KIOSK_QR_MAX_DOTS_PER_MODULE,
 	KIOSK_QR_MIN_MM,
 	KIOSK_QR_QUIET_ZONE_MODULES,
 	KIOSK_LABEL_GAP_MM,
@@ -37,19 +40,28 @@ describe('kiosk label size', () => {
 	it('puts the QR at the left edge and leaves the text column its minimum width', () => {
 		expect(KIOSK_LABEL_LAYOUT).toBe('side');
 		expect(kioskQrBoxMm() + KIOSK_LABEL_GAP_MM + KIOSK_LABEL_SIDE_TEXT_MM).toBeLessThanOrEqual(
-			KIOSK_LABEL_MM.width - KIOSK_LABEL_PADDING_MM * 2
+			KIOSK_LABEL_MM.width - KIOSK_LABEL_PADDING_MM * 2 - KIOSK_LABEL_RIGHT_SAFE_MM
 		);
 	});
 });
 
 describe('kioskQrPrintSize', () => {
-	it('maps an evacuee id QR (version 3) to 6 whole dots per module', () => {
+	it('maps an evacuee id QR (version 3) to 10 whole dots per module', () => {
 		const moduleCount = QRCode.create(SAMPLE_EVACUEE_ID, {}).modules.size;
 		expect(moduleCount).toBe(29);
 
 		const size = kioskQrPrintSize(moduleCount);
-		expect(size).toMatchObject({ widthPx: 198, margin: 2, dotsPerModule: 6 });
-		expect(size.sizeMm).toBeCloseTo(24.77, 2);
+		expect(size).toMatchObject({ widthPx: 350, margin: 3, dotsPerModule: 10 });
+		expect(size.sizeMm).toBeCloseTo(43.79, 2);
+	});
+
+	it.each([21, 25, 29, 33, 37])('uses the largest capped whole-dot module for %i modules', (n) => {
+		const size = kioskQrPrintSize(n);
+		const nextSizeMm = dotsToMm((n + size.margin * 2) * (size.dotsPerModule + 1));
+		expect(size.dotsPerModule).toBeLessThanOrEqual(KIOSK_QR_MAX_DOTS_PER_MODULE);
+		if (size.dotsPerModule < KIOSK_QR_MAX_DOTS_PER_MODULE) {
+			expect(nextSizeMm).toBeGreaterThan(kioskQrBoxMm());
+		}
 	});
 
 	it.each([21, 25, 29, 33, 37])(
@@ -65,6 +77,12 @@ describe('kioskQrPrintSize', () => {
 			expect(quietZoneModules).toBeGreaterThanOrEqual(KIOSK_QR_QUIET_ZONE_MODULES - 0.05);
 		}
 	);
+
+	it('never shifts the visible QR modules off the left edge of the label', () => {
+		const size = kioskQrPrintSize(QRCode.create(SAMPLE_EVACUEE_ID, {}).modules.size);
+		const leftWhiteMm = KIOSK_LABEL_PADDING_MM + dotsToMm(size.margin * size.dotsPerModule);
+		expect(leftWhiteMm).toBeGreaterThan(KIOSK_LABEL_SHIFT_LEFT_MM);
+	});
 
 	it('shrinks rather than overflowing the label for very dense codes', () => {
 		const size = kioskQrPrintSize(81);

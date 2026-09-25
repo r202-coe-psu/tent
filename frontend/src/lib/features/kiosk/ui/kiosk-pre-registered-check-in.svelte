@@ -18,8 +18,11 @@
 		KIOSK_LABEL_LAYOUT,
 		KIOSK_LABEL_MM,
 		KIOSK_LABEL_PADDING_MM,
+		KIOSK_LABEL_RIGHT_SAFE_MM,
+		KIOSK_LABEL_SHIFT_LEFT_MM,
 		KIOSK_QR_COLOR,
 		kioskLabelPageCss,
+		kioskQrBoxMm,
 		kioskQrPrintSize
 	} from '../domain/print-label';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
@@ -671,6 +674,8 @@
 				style:--label-width="{KIOSK_LABEL_MM.width}mm"
 				style:--label-height="{KIOSK_LABEL_MM.height}mm"
 				style:--label-padding="{KIOSK_LABEL_PADDING_MM}mm"
+				style:--label-right-safe="{KIOSK_LABEL_RIGHT_SAFE_MM}mm"
+				style:--label-shift-left="{KIOSK_LABEL_SHIFT_LEFT_MM}mm"
 				style:--label-gap="{KIOSK_LABEL_GAP_MM}mm"
 				{@attach mountOnBody}
 			>
@@ -679,14 +684,14 @@
 						(member) => member.evacuee_id === result.evacuee_id
 					)}
 					{@const qr = qrImages[result.evacuee_id]}
-					<div class="wristband" style:--qr-size="{qr?.sizeMm ?? 24}mm">
+					<div class="wristband" style:--qr-size="{qr?.sizeMm ?? kioskQrBoxMm()}mm">
 						{#if qr}<img
 								class="wristband-qr"
 								src={qr.src}
 								alt="QR ประจำตัวสำหรับใช้ภายในศูนย์"
 							/>{:else}<div class="wristband-qr qr-placeholder">QR</div>{/if}
 						<div class="wristband-text">
-							<p class="wristband-brand">SMART SHELTER · รายงานตัวแล้ว</p>
+							<p class="wristband-brand">SMART SHELTER</p>
 							<p class="wristband-name">{person ? fullName(person) : ''}</p>
 							<p class="wristband-center">ศูนย์ {lookup?.shelter_code}</p>
 						</div>
@@ -727,6 +732,8 @@
 			width: var(--label-width);
 			height: var(--label-height);
 			padding: var(--label-padding);
+			padding-right: calc(var(--label-padding) + var(--label-right-safe));
+			translate: calc(var(--label-shift-left) * -1) 0;
 			overflow: hidden;
 			break-after: page;
 			break-inside: avoid;
@@ -753,7 +760,7 @@
 		}
 		.wristband-brand,
 		.wristband-center {
-			font-size: 8pt;
+			font-size: 9pt;
 			line-height: 1.2;
 		}
 		.wristband-brand {
@@ -762,13 +769,13 @@
 		.wristband-name {
 			display: -webkit-box;
 			overflow: hidden;
-			font-size: 11pt;
+			font-size: 16pt;
 			font-weight: 800;
-			line-height: 1.4;
+			line-height: 1.35;
 			overflow-wrap: anywhere;
 			-webkit-box-orient: vertical;
-			-webkit-line-clamp: 3;
-			line-clamp: 3;
+			-webkit-line-clamp: 4;
+			line-clamp: 4;
 		}
 		/* Square/portrait label: QR on top, centred text below (height budget = KIOSK_LABEL_TEXT_MM). */
 		.stacked .wristband {

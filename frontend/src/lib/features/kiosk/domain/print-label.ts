@@ -4,20 +4,24 @@
  * must default `--label` to the same value so CSS `@page` and the CUPS `PageSize` agree.
  */
 export const KIOSK_PRINT_DPI = 203;
-export const KIOSK_LABEL_MM = { width: 60, height: 60 } as const;
+export const KIOSK_LABEL_MM = { width: 80, height: 60 } as const;
 export const KIOSK_LABEL_MAX_WIDTH_MM = 82;
 export const KIOSK_LABEL_PADDING_MM = 2;
+/** Extra right padding: the XP-365B clips the right edge of an 80 mm label. */
+export const KIOSK_LABEL_RIGHT_SAFE_MM = 4;
+/** Shifts the whole label content left to offset the XP-365B printing right of the label centre. */
+export const KIOSK_LABEL_SHIFT_LEFT_MM = 4;
 /** Space between the QR and the text. */
 export const KIOSK_LABEL_GAP_MM = 2;
 /** Side layout: minimum width of the text column right of the QR (brand, name, shelter). */
-export const KIOSK_LABEL_SIDE_TEXT_MM = 28;
+export const KIOSK_LABEL_SIDE_TEXT_MM = 24;
 /** Stacked layout: height kept under the QR for brand + 2-line name + shelter. */
 export const KIOSK_LABEL_TEXT_MM = 20;
 export const KIOSK_QR_MIN_MM = 20;
 export const KIOSK_QR_MARGIN_MODULES = 2;
 export const KIOSK_QR_QUIET_ZONE_MODULES = 4;
-/** Modules above 1 mm (8 dots) add no scan margin, so bigger labels do not grow the QR further. */
-export const KIOSK_QR_MAX_DOTS_PER_MODULE = 8;
+/** Caps the QR a little below the full box (10 dots = 1.25 mm modules) so the name column keeps ~30 mm. */
+export const KIOSK_QR_MAX_DOTS_PER_MODULE = 10;
 export const KIOSK_QR_COLOR = { dark: '#000000', light: '#FFFFFF' } as const;
 
 /** 'side' = QR at the left edge, text beside it; 'stacked' = QR on top, text below. */
@@ -46,7 +50,7 @@ export function dotsToMm(dots: number): number {
 
 /** Largest square (mm) the QR image may occupy on the label for the current layout. */
 export function kioskQrBoxMm(): number {
-	const innerWidth = KIOSK_LABEL_MM.width - KIOSK_LABEL_PADDING_MM * 2;
+	const innerWidth = KIOSK_LABEL_MM.width - KIOSK_LABEL_PADDING_MM * 2 - KIOSK_LABEL_RIGHT_SAFE_MM;
 	const innerHeight = KIOSK_LABEL_MM.height - KIOSK_LABEL_PADDING_MM * 2;
 	return KIOSK_LABEL_LAYOUT === 'stacked'
 		? Math.min(innerWidth, innerHeight - KIOSK_LABEL_GAP_MM - KIOSK_LABEL_TEXT_MM)
@@ -55,21 +59,17 @@ export function kioskQrBoxMm(): number {
 
 /**
  * Size a QR (moduleCount = modules per side, e.g. 29 for version 3) so every module is a whole
- * number of printer dots, the visible code is at least KIOSK_QR_MIN_MM, and it fits the QR box.
+ * number of printer dots (at most KIOSK_QR_MAX_DOTS_PER_MODULE) and it fits the QR box.
  */
 export function kioskQrPrintSize(moduleCount: number): KioskQrPrintSize {
-	const minDotsForSize = Math.ceil(mmToDots(KIOSK_QR_MIN_MM) / moduleCount);
 	const paddingDots = mmToDots(KIOSK_LABEL_PADDING_MM);
 	let size: KioskQrPrintSize | undefined;
 	// Widen the in-image margin until image margin + label padding reach the 4-module quiet zone.
 	for (let margin = KIOSK_QR_MARGIN_MODULES; margin <= KIOSK_QR_QUIET_ZONE_MODULES; margin++) {
 		const totalModules = moduleCount + margin * 2;
 		const maxDotsToFit = Math.floor(mmToDots(kioskQrBoxMm()) / totalModules);
-		// Largest whole-dot module that fits, capped; never below the 20 mm minimum when it fits.
-		const dotsPerModule = Math.max(
-			1,
-			Math.min(Math.max(KIOSK_QR_MAX_DOTS_PER_MODULE, minDotsForSize), maxDotsToFit)
-		);
+		// Largest whole-dot module that fits the box, capped so the text column keeps the rest.
+		const dotsPerModule = Math.max(1, Math.min(KIOSK_QR_MAX_DOTS_PER_MODULE, maxDotsToFit));
 		const widthPx = totalModules * dotsPerModule;
 		size = { widthPx, sizeMm: dotsToMm(widthPx), margin, dotsPerModule };
 		// 2 mm padding is 15.98 dots, i.e. 1.998 modules at 8 dots — treat that as 2, not a shortfall.
