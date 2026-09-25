@@ -12,7 +12,7 @@ import {
 import { shelterDbName } from '$lib/server/shelter-access-design';
 import { prefixRangeEnd } from '../t31-seed-support';
 import { bulkDocs, couchReq } from './couch';
-import { ITEM, SH001_CODE, SH002_CODE, SH003_CODE } from './types';
+import { ITEM_NAME, SH001_CODE, SH002_CODE, SH003_CODE, type ItemKey } from './types';
 
 async function hasOps(db: string): Promise<boolean> {
 	const prefix = 'donation_campaign:seed-st:';
@@ -26,6 +26,34 @@ async function hasOps(db: string): Promise<boolean> {
 	return ((data as { rows?: unknown[] }).rows ?? []).length > 0;
 }
 
+/**
+ * `ITEM_NAME` → the catalog's `item_master` ids. Run after the master seed, which is what
+ * creates them; fails loudly rather than writing stock or campaigns the catalog cannot
+ * resolve.
+ */
+async function resolveItemIds(): Promise<Record<ItemKey, string>> {
+	const names = Object.values(ITEM_NAME);
+	const { status, data } = await couchReq('POST', '/catalog/_find', {
+		selector: { type: 'item_master', name: { $in: names } },
+		fields: ['_id', 'name'],
+		limit: names.length * 2
+	});
+	if (status !== 200) throw new Error(`seed: catalog item lookup failed (HTTP ${status})`);
+	const idByName = new Map(
+		((data as { docs?: { _id: string; name: string }[] }).docs ?? []).map((d) => [d.name, d._id])
+	);
+	const ids = {} as Record<ItemKey, string>;
+	for (const [key, name] of Object.entries(ITEM_NAME) as [ItemKey, string][]) {
+		const id = idByName.get(name);
+		if (!id)
+			throw new Error(
+				`seed: catalog has no item_master named "${name}" — run the master seed first`
+			);
+		ids[key] = id;
+	}
+	return ids;
+}
+
 function scale(code: string, hi: number, mid: number, lo: number): string {
 	if (code === SH001_CODE) return String(hi);
 	if (code === SH002_CODE) return String(mid);
@@ -33,6 +61,7 @@ function scale(code: string, hi: number, mid: number, lo: number): string {
 }
 
 export async function seedStagingOps(): Promise<void> {
+	const ITEM = await resolveItemIds();
 	for (const code of [SH001_CODE, SH002_CODE, SH003_CODE]) {
 		const db = shelterDbName(code);
 		const ctx: AuthorContext = { shelterCode: code, createdBy: 'seed' };
