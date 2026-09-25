@@ -8,8 +8,9 @@ import {
 	KIOSK_QR_COLOR,
 	KIOSK_QR_MIN_MM,
 	KIOSK_QR_QUIET_ZONE_MODULES,
+	KIOSK_LABEL_GAP_MM,
 	KIOSK_LABEL_LAYOUT,
-	KIOSK_LABEL_TEXT_MM,
+	KIOSK_LABEL_SIDE_TEXT_MM,
 	kioskLabelPageCss,
 	kioskQrBoxMm,
 	kioskQrPrintSize,
@@ -33,23 +34,22 @@ describe('kiosk label size', () => {
 		expect(KIOSK_QR_COLOR).toEqual({ dark: '#000000', light: '#FFFFFF' });
 	});
 
-	it('stacks the QR above the text on the 60x60 mm label and leaves room for the text', () => {
-		expect(KIOSK_LABEL_LAYOUT).toBe('stacked');
-		expect(kioskQrBoxMm() + KIOSK_LABEL_TEXT_MM).toBeLessThanOrEqual(
-			KIOSK_LABEL_MM.height - KIOSK_LABEL_PADDING_MM * 2
+	it('puts the QR at the left edge and leaves the text column its minimum width', () => {
+		expect(KIOSK_LABEL_LAYOUT).toBe('side');
+		expect(kioskQrBoxMm() + KIOSK_LABEL_GAP_MM + KIOSK_LABEL_SIDE_TEXT_MM).toBeLessThanOrEqual(
+			KIOSK_LABEL_MM.width - KIOSK_LABEL_PADDING_MM * 2
 		);
 	});
 });
 
 describe('kioskQrPrintSize', () => {
-	it('maps an evacuee id QR (version 3) to 8 whole dots per module', () => {
+	it('maps an evacuee id QR (version 3) to 6 whole dots per module', () => {
 		const moduleCount = QRCode.create(SAMPLE_EVACUEE_ID, {}).modules.size;
 		expect(moduleCount).toBe(29);
 
 		const size = kioskQrPrintSize(moduleCount);
-		// 2 mm label padding is 15.98 dots (< 2 modules), so the image margin grows to 3 modules.
-		expect(size).toMatchObject({ widthPx: 280, margin: 3, dotsPerModule: 8 });
-		expect(size.sizeMm).toBeCloseTo(35.03, 2);
+		expect(size).toMatchObject({ widthPx: 198, margin: 2, dotsPerModule: 6 });
+		expect(size.sizeMm).toBeCloseTo(24.77, 2);
 	});
 
 	it.each([21, 25, 29, 33, 37])(
@@ -62,7 +62,7 @@ describe('kioskQrPrintSize', () => {
 			expect(size.widthPx).toBe((moduleCount + size.margin * 2) * size.dotsPerModule);
 			expect(visibleMm).toBeGreaterThanOrEqual(KIOSK_QR_MIN_MM);
 			expect(size.sizeMm).toBeLessThanOrEqual(kioskQrBoxMm());
-			expect(quietZoneModules).toBeGreaterThanOrEqual(KIOSK_QR_QUIET_ZONE_MODULES);
+			expect(quietZoneModules).toBeGreaterThanOrEqual(KIOSK_QR_QUIET_ZONE_MODULES - 0.05);
 		}
 	);
 

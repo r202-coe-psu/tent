@@ -7,7 +7,11 @@ export const KIOSK_PRINT_DPI = 203;
 export const KIOSK_LABEL_MM = { width: 60, height: 60 } as const;
 export const KIOSK_LABEL_MAX_WIDTH_MM = 82;
 export const KIOSK_LABEL_PADDING_MM = 2;
-/** Height kept under the QR in the stacked layout: brand + 2-line name + shelter + gaps. */
+/** Space between the QR and the text. */
+export const KIOSK_LABEL_GAP_MM = 2;
+/** Side layout: minimum width of the text column right of the QR (brand, name, shelter). */
+export const KIOSK_LABEL_SIDE_TEXT_MM = 28;
+/** Stacked layout: height kept under the QR for brand + 2-line name + shelter. */
 export const KIOSK_LABEL_TEXT_MM = 20;
 export const KIOSK_QR_MIN_MM = 20;
 export const KIOSK_QR_MARGIN_MODULES = 2;
@@ -16,12 +20,12 @@ export const KIOSK_QR_QUIET_ZONE_MODULES = 4;
 export const KIOSK_QR_MAX_DOTS_PER_MODULE = 8;
 export const KIOSK_QR_COLOR = { dark: '#000000', light: '#FFFFFF' } as const;
 
-/** Square/portrait labels stack the QR above the text; landscape labels put the text beside it. */
+/** 'side' = QR at the left edge, text beside it; 'stacked' = QR on top, text below. */
 export type KioskLabelLayout = 'stacked' | 'side';
-export const KIOSK_LABEL_LAYOUT: KioskLabelLayout =
-	KIOSK_LABEL_MM.height >= KIOSK_LABEL_MM.width ? 'stacked' : 'side';
+export const KIOSK_LABEL_LAYOUT: KioskLabelLayout = 'side';
 
 const MM_PER_INCH = 25.4;
+const QUIET_ZONE_TOLERANCE_MODULES = 0.05;
 
 export type KioskQrPrintSize = {
 	/** Source image width in px; printed 1 px = 1 dot so modules stay a whole number of dots. */
@@ -45,8 +49,8 @@ export function kioskQrBoxMm(): number {
 	const innerWidth = KIOSK_LABEL_MM.width - KIOSK_LABEL_PADDING_MM * 2;
 	const innerHeight = KIOSK_LABEL_MM.height - KIOSK_LABEL_PADDING_MM * 2;
 	return KIOSK_LABEL_LAYOUT === 'stacked'
-		? Math.min(innerWidth, innerHeight - KIOSK_LABEL_TEXT_MM)
-		: innerHeight;
+		? Math.min(innerWidth, innerHeight - KIOSK_LABEL_GAP_MM - KIOSK_LABEL_TEXT_MM)
+		: Math.min(innerHeight, innerWidth - KIOSK_LABEL_GAP_MM - KIOSK_LABEL_SIDE_TEXT_MM);
 }
 
 /**
@@ -68,7 +72,9 @@ export function kioskQrPrintSize(moduleCount: number): KioskQrPrintSize {
 		);
 		const widthPx = totalModules * dotsPerModule;
 		size = { widthPx, sizeMm: dotsToMm(widthPx), margin, dotsPerModule };
-		if (margin + paddingDots / dotsPerModule >= KIOSK_QR_QUIET_ZONE_MODULES) break;
+		// 2 mm padding is 15.98 dots, i.e. 1.998 modules at 8 dots — treat that as 2, not a shortfall.
+		const quietZone = margin + paddingDots / dotsPerModule;
+		if (quietZone >= KIOSK_QR_QUIET_ZONE_MODULES - QUIET_ZONE_TOLERANCE_MODULES) break;
 	}
 	return size as KioskQrPrintSize;
 }

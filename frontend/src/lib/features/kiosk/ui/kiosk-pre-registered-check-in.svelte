@@ -14,6 +14,7 @@
 	import PhoneHouseholdPicker from './phone-household-picker.svelte';
 	import { initialSelection, toExistingReportResults } from '../domain/household-selection';
 	import {
+		KIOSK_LABEL_GAP_MM,
 		KIOSK_LABEL_LAYOUT,
 		KIOSK_LABEL_MM,
 		KIOSK_LABEL_PADDING_MM,
@@ -670,6 +671,7 @@
 				style:--label-width="{KIOSK_LABEL_MM.width}mm"
 				style:--label-height="{KIOSK_LABEL_MM.height}mm"
 				style:--label-padding="{KIOSK_LABEL_PADDING_MM}mm"
+				style:--label-gap="{KIOSK_LABEL_GAP_MM}mm"
 				{@attach mountOnBody}
 			>
 				{#each successfulResults as result (result.evacuee_id)}
@@ -677,7 +679,7 @@
 						(member) => member.evacuee_id === result.evacuee_id
 					)}
 					{@const qr = qrImages[result.evacuee_id]}
-					<div class="wristband" style:--qr-size="{qr?.sizeMm ?? 30}mm">
+					<div class="wristband" style:--qr-size="{qr?.sizeMm ?? 24}mm">
 						{#if qr}<img
 								class="wristband-qr"
 								src={qr.src}
@@ -720,7 +722,7 @@
 			box-sizing: border-box;
 			display: grid;
 			grid-template-columns: var(--qr-size) minmax(0, 1fr);
-			column-gap: 2mm;
+			column-gap: var(--label-gap);
 			align-items: center;
 			width: var(--label-width);
 			height: var(--label-height);
@@ -773,7 +775,7 @@
 			display: flex;
 			flex-direction: column;
 			align-items: center;
-			gap: 1mm;
+			gap: var(--label-gap);
 			text-align: center;
 		}
 		.stacked .wristband-text {
