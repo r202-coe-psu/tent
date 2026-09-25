@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-09-17 # Ratified CR-125 item_category default_class editable
+updated: 2026-09-25 # Approved CR-132 meal distribution push (Push to POS)
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 
@@ -143,3 +143,9 @@ note: ดัชนี Change Record ทุกตัว — กติกาอย
 | [CR-123](CR-123-shelter-import-worker-pipeline.md) | Shelter Excel Import — เปลี่ยนจาก browser loop เป็น Durable Worker Job Pipeline | approved | stable | 2026-09-14 (approved 2026-09-15) | docs/data/schema.md §3.7/§3.9/§3.10/§3.11, schema_v shelter_import_log 2→3, shelter_import_job 1, shelter_import_item 1, shelter_code_sequence 1, frontend/src/lib/features/shelter-import/ |
 | [CR-124](CR-124-staff-google-stepup-mfa.md) | Staff Google step-up MFA — password + linked Google after login (Phase 1); ThaiD/SSO out of scope | approved | stable | 2026-09-15 (approved 2026-09-15) | docs/data/schema.md §6 (_users.mfa), docs/data/api-contract.md §1.1, frontend auth/login/BFF oauth/guards/users |
 | [CR-125](CR-125-item-category-default-class-editable.md) | อนุญาตให้แก้ไข `default_class` ของหมวดหมู่ระบบมาตรฐานได้ (แก้ไข CR-119 FR-04 บางส่วน — `system_key`/`is_protected` ยังคง immutable) | approved | stable | 2026-09-17 (approved 2026-09-17) | docs/changes/CR-119 §4.2 FR-04, docs/data/schema.md §4.1 + invariant #11, catalog.remote.ts, shelter-access-design.ts, sync-central-db.ts, master-seed.ts, item-category-form.svelte |
+| [CR-126](CR-126-kitchen-ticket-lifecycle-carveout.md) | เจาะจง lifecycle 4 สถานะ + role แยกเต็มรูป + backward-compat union ของ `requisition_ticket` ประเภท `kitchen` (ส่วนขยาย CR-121) และรวม CR-120 `fuel_cylinder` migration เข้าเป็นงานเดียวกัน | approved | stable | 2026-09-21 (approved 2026-09-21) | CR-121, CR-120, docs/data/schema.md §2.6/§2.29, frontend/src/lib/features/tickets/**, kitchen/**, operations/domain/operations.ts, server/shelter-access-design.ts |
+| [CR-127](CR-127-kitchen-ticket-edit-after-create.md) | อนุญาตให้ครัวแก้ไข `requisition_ticket` ประเภท `kitchen` (requested_qty/รายการ) และ `meal_plan` ที่ผูกกัน ขณะตั๋วยัง `PENDING_PICK` (ส่วนขยาย CR-121/CR-126) | approved | volatile | 2026-09-24 (approved 2026-09-24) | frontend/src/lib/features/tickets/**, frontend/src/lib/features/kitchen/**, production-board/[session_id]/+page.svelte |
+| [CR-128](CR-128-kitchen-ticket-one-click-approve.md) | ตั๋วเบิกวัตถุดิบครัวอนุมัติจบในคลิกเดียว (`PENDING_PICK`→`COMPLETED` รวด) — ยกเลิก CR-126 §2.2 การแยก 3 บทบาท เฉพาะตั๋วประเภท `kitchen` | approved | volatile | 2026-09-25 (approved 2026-09-25) | frontend/src/lib/features/tickets/** |
+| [CR-129](CR-129-meal-service-receipt-gate.md) | เพิ่ม doc type ใหม่ `meal_service_receipt` — ขั้น "รอตรวจรับเข้าคลัง" จริงระหว่างบันทึกผลผลิตครัวกับส่งมอบเสร็จสิ้น (ส่วนขยาย CR-121/CR-128) | approved | stable | 2026-09-25 (approved 2026-09-25) | docs/data/schema.md §2.7.3, frontend/src/lib/features/kitchen/**, tickets/ui/ticket-list.svelte |
+| [CR-131](CR-131-meal-service-receipt-reject.md) | เพิ่มการปฏิเสธรับมอบ (ตีกลับโรงครัว) ให้ `meal_service_receipt` + ผ่อน invariant ให้บันทึกผลผลิตใหม่ได้หลังถูกตีกลับ (ส่วนขยาย CR-129) | approved | stable | 2026-09-25 (approved 2026-09-25) | docs/data/schema.md §2.7.3, frontend/src/lib/features/kitchen/**, tickets/ui/ticket-list.svelte, production-board/[session_id]/+page.svelte |
+| [CR-132](CR-132-meal-distribution-push.md) | จัดสรรอาหารปรุงเสร็จส่งจุดแจกจ่าย (Push to POS) — doc ใหม่ `meal_distribution_push` เฉพาะอาหาร (แยกจาก CR-059/CR-121 distribution engine) | approved | stable | 2026-09-25 (approved 2026-09-25) | docs/data/schema.md §2.7.4, frontend/src/lib/features/kitchen/**, tickets/ui/ticket-list.svelte, back-office/kitchen/distribute/+page.svelte |
