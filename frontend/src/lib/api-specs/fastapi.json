@@ -1013,6 +1013,117 @@
 				}
 			}
 		},
+		"/v1/admin/thirdparty-clients/{client_row_id}": {
+			"patch": {
+				"tags": ["External"],
+				"summary": "Update Client Scopes",
+				"description": "Edit `allowed_scopes` — refused (409) once the client is revoked.",
+				"operationId": "update_client_scopes_v1_admin_thirdparty_clients__client_row_id__patch",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "client_row_id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Client Row Id" }
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/ThirdPartyClientUpdateRequest" }
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ThirdPartyClientPublic" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			},
+			"delete": {
+				"tags": ["External"],
+				"summary": "Delete Client",
+				"description": "Soft-delete — only once already revoked (409 otherwise). Never hard-deletes.",
+				"operationId": "delete_client_v1_admin_thirdparty_clients__client_row_id__delete",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "client_row_id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Client Row Id" }
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ThirdPartyClientDeleteResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/v1/admin/thirdparty-clients/{client_row_id}/secret": {
+			"get": {
+				"tags": ["External"],
+				"summary": "Reveal Client Secret",
+				"description": "Decrypt and return the plaintext secret. The BFF gates this behind the caller\nre-entering their own CouchDB password — this endpoint itself only enforces the\nsame `EXTERNAL_API_SECRET` bearer as every other route on this router.",
+				"operationId": "reveal_client_secret_v1_admin_thirdparty_clients__client_row_id__secret_get",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "client_row_id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Client Row Id" }
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ThirdPartyClientSecretResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
 		"/external/locations": {
 			"get": {
 				"tags": ["External"],
@@ -1407,6 +1518,41 @@
 						"content": {
 							"application/json": {
 								"schema": { "$ref": "#/components/schemas/UnassignedRegistrationCreateResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
+		},
+		"/public/v1/unassigned-registrations/residence-match": {
+			"post": {
+				"tags": ["Unassigned Registrations"],
+				"summary": "Match Unassigned Residence",
+				"description": "Service-to-service Residence match — ids + landmark/housing_type only (no member PII).",
+				"operationId": "match_unassigned_residence_public_v1_unassigned_registrations_residence_match_post",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/UnassignedResidenceMatchRequest" }
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/UnassignedResidenceMatchResponse" }
 							}
 						}
 					},
@@ -3228,6 +3374,7 @@
 					"reserved": { "type": "string", "title": "Reserved", "default": "0" },
 					"unit": { "type": "string", "title": "Unit" },
 					"status": { "type": "string", "title": "Status" },
+					"urgency": { "type": "string", "title": "Urgency", "default": "normal" },
 					"category": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Category" }
 				},
 				"type": "object",
@@ -4052,7 +4199,11 @@
 			},
 			"ThirdPartyClientCreateRequest": {
 				"properties": {
-					"client_id": { "type": "string", "minLength": 1, "title": "Client Id" },
+					"name": { "type": "string", "maxLength": 100, "minLength": 1, "title": "Name" },
+					"description": {
+						"anyOf": [{ "type": "string", "maxLength": 500 }, { "type": "null" }],
+						"title": "Description"
+					},
 					"module_name": { "type": "string", "minLength": 1, "title": "Module Name" },
 					"allowed_scopes": {
 						"items": { "type": "string" },
@@ -4062,13 +4213,19 @@
 					}
 				},
 				"type": "object",
-				"required": ["client_id", "module_name", "allowed_scopes"],
-				"title": "ThirdPartyClientCreateRequest"
+				"required": ["name", "module_name", "allowed_scopes"],
+				"title": "ThirdPartyClientCreateRequest",
+				"description": "``client_id`` is generated server-side (``tpc_…``) — not accepted from the caller."
 			},
 			"ThirdPartyClientCreateResponse": {
 				"properties": {
 					"id": { "type": "string", "title": "Id" },
 					"client_id": { "type": "string", "title": "Client Id" },
+					"name": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Name" },
+					"description": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Description"
+					},
 					"module_name": { "type": "string", "title": "Module Name" },
 					"allowed_scopes": {
 						"items": { "type": "string" },
@@ -4076,6 +4233,10 @@
 						"title": "Allowed Scopes"
 					},
 					"is_active": { "type": "boolean", "title": "Is Active" },
+					"deleted_at": {
+						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
+						"title": "Deleted At"
+					},
 					"created_at": { "type": "string", "format": "date-time", "title": "Created At" },
 					"updated_at": { "type": "string", "format": "date-time", "title": "Updated At" },
 					"client_secret": { "type": "string", "title": "Client Secret" }
@@ -4084,15 +4245,27 @@
 				"required": [
 					"id",
 					"client_id",
+					"name",
+					"description",
 					"module_name",
 					"allowed_scopes",
 					"is_active",
+					"deleted_at",
 					"created_at",
 					"updated_at",
 					"client_secret"
 				],
 				"title": "ThirdPartyClientCreateResponse",
 				"description": "Create response — plaintext ``client_secret`` is returned once."
+			},
+			"ThirdPartyClientDeleteResponse": {
+				"properties": {
+					"success": { "type": "boolean", "title": "Success", "default": true },
+					"client": { "$ref": "#/components/schemas/ThirdPartyClientPublic" }
+				},
+				"type": "object",
+				"required": ["client"],
+				"title": "ThirdPartyClientDeleteResponse"
 			},
 			"ThirdPartyClientListResponse": {
 				"properties": {
@@ -4111,6 +4284,11 @@
 				"properties": {
 					"id": { "type": "string", "title": "Id" },
 					"client_id": { "type": "string", "title": "Client Id" },
+					"name": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Name" },
+					"description": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Description"
+					},
 					"module_name": { "type": "string", "title": "Module Name" },
 					"allowed_scopes": {
 						"items": { "type": "string" },
@@ -4118,6 +4296,10 @@
 						"title": "Allowed Scopes"
 					},
 					"is_active": { "type": "boolean", "title": "Is Active" },
+					"deleted_at": {
+						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
+						"title": "Deleted At"
+					},
 					"created_at": { "type": "string", "format": "date-time", "title": "Created At" },
 					"updated_at": { "type": "string", "format": "date-time", "title": "Updated At" }
 				},
@@ -4125,14 +4307,17 @@
 				"required": [
 					"id",
 					"client_id",
+					"name",
+					"description",
 					"module_name",
 					"allowed_scopes",
 					"is_active",
+					"deleted_at",
 					"created_at",
 					"updated_at"
 				],
 				"title": "ThirdPartyClientPublic",
-				"description": "Client metadata without the secret hash."
+				"description": "Client metadata without the secret hash/ciphertext."
 			},
 			"ThirdPartyClientRevokeResponse": {
 				"properties": {
@@ -4142,6 +4327,27 @@
 				"type": "object",
 				"required": ["client"],
 				"title": "ThirdPartyClientRevokeResponse"
+			},
+			"ThirdPartyClientSecretResponse": {
+				"properties": { "client_secret": { "type": "string", "title": "Client Secret" } },
+				"type": "object",
+				"required": ["client_secret"],
+				"title": "ThirdPartyClientSecretResponse",
+				"description": "Decrypted plaintext secret — ``GET .../secret``, gated upstream by the BFF's\nown-password re-auth (CR-136)."
+			},
+			"ThirdPartyClientUpdateRequest": {
+				"properties": {
+					"allowed_scopes": {
+						"items": { "type": "string" },
+						"type": "array",
+						"minItems": 1,
+						"title": "Allowed Scopes"
+					}
+				},
+				"type": "object",
+				"required": ["allowed_scopes"],
+				"title": "ThirdPartyClientUpdateRequest",
+				"description": "``PATCH`` body — scopes only. Refused (409) once the client is revoked."
 			},
 			"TicketFindItem": {
 				"properties": {
@@ -4380,6 +4586,11 @@
 						"enum": ["web", "staff"],
 						"title": "Registered Via",
 						"default": "web"
+					},
+					"join_registration_id": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Join Registration Id",
+						"description": "Append members (and pets) into this open registration's reserved household."
 					}
 				},
 				"type": "object",
@@ -4545,6 +4756,98 @@
 				"type": "object",
 				"required": ["open_registrations", "open_members"],
 				"title": "UnassignedRegistrationStatsResponse"
+			},
+			"UnassignedResidenceMatchHit": {
+				"properties": {
+					"id": { "type": "string", "title": "Id" },
+					"landmark": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Landmark" },
+					"housing_type": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Housing Type"
+					},
+					"claimed_shelter_code": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Claimed Shelter Code"
+					},
+					"claimed_household_id": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Claimed Household Id"
+					},
+					"status": { "type": "string", "title": "Status", "default": "open" },
+					"primary_contact_name_masked": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Primary Contact Name Masked"
+					},
+					"matched_member_masked": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Matched Member Masked"
+					},
+					"member_count": { "type": "integer", "title": "Member Count", "default": 0 },
+					"pets": {
+						"items": { "additionalProperties": true, "type": "object" },
+						"type": "array",
+						"title": "Pets"
+					},
+					"household_address": {
+						"anyOf": [{ "additionalProperties": true, "type": "object" }, { "type": "null" }],
+						"title": "Household Address"
+					}
+				},
+				"type": "object",
+				"required": ["id"],
+				"title": "UnassignedResidenceMatchHit"
+			},
+			"UnassignedResidenceMatchRequest": {
+				"properties": {
+					"housing_type": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": ["owned_house", "rented_house", "condo", "apartment_dorm", "homeless"]
+							},
+							{ "type": "null" }
+						],
+						"title": "Housing Type"
+					},
+					"residence_landmark": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Residence Landmark"
+					},
+					"address_no": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Address No"
+					},
+					"village_no": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Village No"
+					},
+					"subdistrict": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Subdistrict"
+					},
+					"district": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "District" },
+					"province": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Province" },
+					"postal_code": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Postal Code"
+					},
+					"phone": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Phone" }
+				},
+				"type": "object",
+				"title": "UnassignedResidenceMatchRequest",
+				"description": "Service-to-service residence match — no member PII in response."
+			},
+			"UnassignedResidenceMatchResponse": {
+				"properties": {
+					"matches": {
+						"items": { "$ref": "#/components/schemas/UnassignedResidenceMatchHit" },
+						"type": "array",
+						"title": "Matches"
+					}
+				},
+				"type": "object",
+				"required": ["matches"],
+				"title": "UnassignedResidenceMatchResponse"
 			},
 			"ValidationError": {
 				"properties": {

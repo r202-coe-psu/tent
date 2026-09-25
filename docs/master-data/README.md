@@ -2,7 +2,7 @@
 title: Smart Shelter — Master Data Seed SSoT
 status: draft
 created: 2026-09-17
-updated: 2026-09-24
+updated: 2026-09-25
 language: th
 ---
 
@@ -18,7 +18,7 @@ language: th
 
 | พื้นที่    | ข้อมูลที่ seed สร้าง                                                                                  |
 | ---------- | ----------------------------------------------------------------------------------------------------- |
-| `registry` | global `master_data` 10 เอกสาร รวมรายการ seed 84 รายการ                                                |
+| `registry` | global `master_data` 4 เอกสาร รวมรายการ seed 31 รายการ (CR-137)                                         |
 | `registry` | `config:app` 1 singleton พร้อมค่า default                                                             |
 | `registry` | `config:public_portal` 1 singleton พร้อมค่า default FAQ 13 รายการ (ช่องทางติดต่อเว้นว่างไว้ ไม่ seed) |
 | `catalog`  | `unit_of_measure` 30, `item_category` 10, `item_master` 29, `recipe` 6                               |
@@ -57,177 +57,93 @@ language: th
 | Database                         | `registry`                         |
 | Document type                    | `master_data`                      |
 | Global document ID               | `master_data:{master_type}`        |
-| `schema_v`                       | `3`                                |
+| `schema_v`                       | `4`                                |
 | Item status                      | `active` สำหรับรายการที่ seed ใหม่ |
 | Author                           | `seed`                             |
 | Global scope                     | ไม่มี `shelter_code`               |
-| จำนวน master types               | 10                                 |
-| จำนวนรายการใน canonical seed set | 84                                 |
+| จำนวน master types               | 4 (CR-137)                         |
+| จำนวนรายการใน canonical seed set | 31                                 |
 
 Global seed ใช้ `enforceOneDefault()` เพื่อให้แต่ละ master type มีรายการที่เป็น default ได้ไม่เกินหนึ่งรายการ หากเอกสารเดิมมีรายการที่ไม่มีอยู่ใน canonical seed set ระบบจะเก็บรายการเดิมไว้ เว้นแต่เข้าเงื่อนไข migration ใน §1.4 ดังนั้น ตารางด้านล่างจึงเป็น **รายการที่ seed กำหนด** ไม่ใช่รายการทั้งหมดที่อาจมีอยู่ใน database แล้ว
 
 ### 1.2 ความหมายของ code และ key
 
-`SeedItemDef.key` เป็นคีย์ที่ใช้เฉพาะระหว่างการ seed ส่วน `MasterDataItem.code` คือค่าที่บันทึกจริงใน CouchDB
+`SeedItemDef.key` คือค่าที่บันทึกเป็น `MasterDataItem.code` (semantic snake_case) สำหรับ **ทุก** master type
 
-| Master type                                                                                                  | Persisted code                                                |
-| ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------- |
-| `vulnerable_group`                                                                                           | ใช้ key เดิมแบบ stable                                        |
-| `pet_types`                                                                                                  | ใช้ key เดิมแบบ stable                                        |
-| `housing_type`                                                                                               | ใช้ key เดิมแบบ stable                                        |
-| `health_condition`, `dietary_restrictions`, `house_damage`, `shelter_type`, `municipality_zone`, `community` | สร้างเป็น `item_<ulid>` และ reuse code เดิมเมื่อพบ label เดิม |
-| `volunteer_skills` | สร้างเป็น `item_<ulid>` และ reuse code เดิมเมื่อพบ label เดิม |
+| Master type | Persisted code |
+| --- | --- |
+| `vulnerable_group` | `d.key` (stable) |
+| `housing_type` | `d.key` (stable) |
+| `shelter_type` | `d.key` (stable) — เลิก `item_<ulid>` |
+| `volunteer_skills` | `d.key` (stable) — เลิก `item_<ulid>` |
 
-`community.parent_key` อ้างถึง key ของ `municipality_zone` ระหว่างการ seed จากนั้นระบบจะแปลงเป็น `parent_code` ของ zone ที่บันทึกจริง
+รายการเก็บชื่อแบบ bilingual: `label_th` + `label_en` (ทั้งคู่บังคับ). UI สร้างรายการใหม่ต้องกรอก `code` เอง (ไม่มี auto-ULID). รายการเก่า `item_*` แก้รหัสได้ตอนแก้ไข.
+
+**CR-137:** `municipality_zone` / `community` ไม่ใช่ master types — เป็น free-text บน household/shelter docs. `pets.species` เป็น domain enum `dog|cat|other` (ไม่ seed `pet_types`).
 
 ### 1.3 Canonical seeded items
 
 #### `vulnerable_group` — กลุ่มเปราะบาง
 
-| code                | label                                | default |
-| ------------------- | ------------------------------------ | ------- |
-| `bedridden`         | ผู้ป่วยติดเตียง                      | —       |
-| `dialysis`          | ผู้ป่วยฟอกไต                         | —       |
-| `wheelchair`        | ผู้ใช้วีลแชร์                        | —       |
-| `psychiatric`       | ผู้ป่วยจิตเวช                        | —       |
-| `elderly_dependent` | ผู้สูงอายุช่วยเหลือตัวเองไม่ได้      | —       |
-| `infant`            | ทารก                                 | —       |
-| `young_child`       | เด็กเล็ก                             | —       |
-| `pregnant`          | สตรีมีครรภ์                          | —       |
-| `vision_impaired`   | ผู้พิการทางการมองเห็น                | —       |
-| `hearing_impaired`  | ผู้พิการทางการได้ยิน                 | —       |
-| `disability_other`  | ผู้พิการ (อื่นๆ / ไม่ระบุรายละเอียด) | —       |
-| `chronic_illness`   | ผู้มีโรคประจำตัว/เรื้อรัง            | —       |
-
-#### `health_condition` — โรคประจำตัวและอาการแพ้
-
-| key               | label           | default |
-| ----------------- | --------------- | ------- |
-| `diabetes`        | เบาหวาน         | —       |
-| `hypertension`    | ความดันโลหิตสูง | —       |
-| `heart_disease`   | โรคหัวใจ        | —       |
-| `asthma`          | หอบหืด          | —       |
-| `seafood_allergy` | แพ้อาหารทะเล    | —       |
-| `sulfa_allergy`   | แพ้ยาซัลฟา      | —       |
-
-#### `dietary_restrictions` — ศาสนาและข้อจำกัดอาหาร
-
-| key     | label          | default |
-| ------- | -------------- | ------- |
-| `halal` | อิสลาม (ฮาลาล) | **ใช่** |
-
-#### `pet_types` — ประเภทสัตว์เลี้ยง
-
-| code    | label | default |
-| ------- | ----- | ------- |
-| `dog`   | สุนัข | —       |
-| `cat`   | แมว   | —       |
-| `other` | อื่นๆ | —       |
+| code                | label_th                             | label_en | default |
+| ------------------- | ------------------------------------ | -------- | ------- |
+| `bedridden`         | ผู้ป่วยติดเตียง                      | Bedridden | —       |
+| `dialysis`          | ผู้ป่วยฟอกไต                         | Dialysis patient | —       |
+| `wheelchair`        | ผู้ใช้วีลแชร์                        | Wheelchair user | —       |
+| `psychiatric`       | ผู้ป่วยจิตเวช                        | Psychiatric patient | —       |
+| `elderly_dependent` | ผู้สูงอายุช่วยเหลือตัวเองไม่ได้      | Dependent elderly | —       |
+| `infant`            | ทารก                                 | Infant | —       |
+| `young_child`       | เด็กเล็ก                             | Young child | —       |
+| `pregnant`          | สตรีมีครรภ์                          | Pregnant | —       |
+| `vision_impaired`   | ผู้พิการทางการมองเห็น                | Vision impaired | —       |
+| `hearing_impaired`  | ผู้พิการทางการได้ยิน                 | Hearing impaired | —       |
+| `disability_other`  | ผู้พิการ (อื่นๆ / ไม่ระบุรายละเอียด) | Disability (other / unspecified) | —       |
+| `chronic_illness`   | ผู้มีโรคประจำตัว/เรื้อรัง            | Chronic illness | —       |
 
 #### `housing_type` — ประเภทที่อยู่อาศัย
 
-| code             | label                             | default |
-| ---------------- | --------------------------------- | ------- |
-| `owned_house`    | บ้านตนเอง                         | **ใช่** |
-| `rented_house`   | บ้านเช่า                          | —       |
-| `condo`          | คอนโดมิเนียม                      | —       |
-| `apartment_dorm` | อพาร์ตเมนต์/หอพัก                 | —       |
-| `homeless`       | ไร้ที่อยู่อาศัย / ไม่มีบ้านเลขที่ | —       |
-
-#### `house_damage` — สถานะความเสียหายของบ้าน
-
-| key                   | label            | default |
-| --------------------- | ---------------- | ------- |
-| `total_loss`          | เสียหายทั้งหลัง  | **ใช่** |
-| `partial`             | เสียหายบางส่วน   | —       |
-| `flooded_first_floor` | น้ำท่วมถึงชั้น 1 | —       |
+| code             | label_th                          | label_en | default |
+| ---------------- | --------------------------------- | -------- | ------- |
+| `owned_house`    | บ้านตนเอง                         | Owned house | **ใช่** |
+| `rented_house`   | บ้านเช่า                          | Rented house | —       |
+| `condo`          | คอนโดมิเนียม                      | Condominium | —       |
+| `apartment_dorm` | อพาร์ตเมนต์/หอพัก                 | Apartment / dormitory | —       |
+| `homeless`       | ไร้ที่อยู่อาศัย / ไม่มีบ้านเลขที่ | Homeless / no house number | —       |
 
 #### `shelter_type` — ประเภทศูนย์พักพิง
 
-| key                   | label       | default |
-| --------------------- | ----------- | ------- |
-| `school`              | โรงเรียน    | **ใช่** |
-| `community_hall`      | ศาลาประชาคม | —       |
-| `temple`              | วัด         | —       |
-| `government_building` | อาคารราชการ | —       |
-| `sports_centre`       | ศูนย์กีฬา   | —       |
-
-#### `municipality_zone` — เขตเทศบาล
-
-| key      | label                 | default |
-| -------- | --------------------- | ------- |
-| `zone_1` | เขตเทศบาลนครหาดใหญ่ 1 | **ใช่** |
-| `zone_2` | เขตเทศบาลนครหาดใหญ่ 2 | —       |
-| `zone_3` | เขตเทศบาลนครหาดใหญ่ 3 | —       |
-| `zone_4` | เขตเทศบาลนครหาดใหญ่ 4 | —       |
-
-#### `community` — ชุมชน
-
-`community` มี `parent_type: municipality_zone` และมีทั้งหมด 36 รายการ แบ่งตาม zone ดังนี้
-
-| key                     | label                       | parent_key | default |
-| ----------------------- | --------------------------- | ---------- | ------- |
-| `na_khai_senanarong`    | ชุมชนหน้าค่ายเสนาณรงค์      | `zone_1`   | **ใช่** |
-| `na_suan_satharana`     | ชุมชนหน้าสวนสาธารณะ         | `zone_1`   | —       |
-| `rong_pun`              | ชุมชนโรงปูน                 | `zone_1`   | —       |
-| `na_rph_sikarin`        | ชุมชนหน้าโรงพยาบาลศิครินทร์ | `zone_1`   | —       |
-| `ko_suea`               | ชุมชนเกาะเสือ               | `zone_1`   | —       |
-| `rongrian_chatri`       | ชุมชนโรงเรียนชาตรี          | `zone_1`   | —       |
-| `sikarin`               | ชุมชนศิครินทร์              | `zone_1`   | —       |
-| `rathakan`              | ชุมชนรัถการ                 | `zone_1`   | —       |
-| `mae_litao`             | ชุมชนแม่ลิเตา               | `zone_1`   | —       |
-| `talat_mai`             | ชุมชนตลาดใหม่               | `zone_2`   | —       |
-| `suan_siri`             | ชุมชนสวนศิริ                | `zone_2`   | —       |
-| `sam_chai`              | ชุมชนสามชัย                 | `zone_2`   | —       |
-| `rph_bangkok`           | ชุมชนโรงพยาบาลกรุงเทพ       | `zone_2`   | —       |
-| `ban_ja`                | ชุมชนบ้านจ่า                | `zone_2`   | —       |
-| `klang_na`              | ชุมชนกลางนา                 | `zone_2`   | —       |
-| `sam_yaek_khlong_rian`  | ชุมชนสามแยกคลองเรียน        | `zone_2`   | —       |
-| `chan_prathip`          | ชุมชนจันทร์ประทีป           | `zone_3`   | —       |
-| `d_land_thai_charoen`   | ชุมชนดีแลนด์-ไทยเจริญ       | `zone_3`   | —       |
-| `rim_khuan`             | ชุมชนริมควน                 | `zone_3`   | —       |
-| `khlong_rabai_1`        | ชุมชนคลองระบายน้ำที่ 1      | `zone_3`   | —       |
-| `lang_thiwa_amphoe`     | ชุมชนหลังที่ว่าการอำเภอ     | `zone_3`   | —       |
-| `plak_krim`             | ชุมชนปลักกริม               | `zone_3`   | —       |
-| `rattana_wibun`         | ชุมชนรัตนวิบูลย์            | `zone_3`   | —       |
-| `thung_sao`             | ชุมชนทุ่งเสา                | `zone_3`   | —       |
-| `khonsong`              | ชุมชนขนส่ง                  | `zone_3`   | —       |
-| `lang_rongphak`         | ชุมชนหลังโรงพัก             | `zone_3`   | —       |
-| `lang_u_rotfai`         | ชุมชนหลังอู่รถไฟ            | `zone_3`   | —       |
-| `ko_liap`               | ชุมชนเกาะเลียบ              | `zone_4`   | —       |
-| `wat_hatyai_nai`        | ชุมชนวัดหาดใหญ่ใน           | `zone_4`   | —       |
-| `rattana_uthit`         | ชุมชนรัตนอุทิศ              | `zone_4`   | —       |
-| `tha_sai`               | ชุมชนท่าไทร                 | `zone_4`   | —       |
-| `ratchamangkhalaphisek` | ชุมชนรัชมังคลาภิเษก         | `zone_4`   | —       |
-| `mongkhon_hansa`        | ชุมชนมงคลหรรษา              | `zone_4`   | —       |
-| `chok_saman`            | ชุมชนโชคสมาน                | `zone_4`   | —       |
-| `rat_uthit`             | ชุมชนราษฎร์อุทิศ            | `zone_4`   | —       |
-| `hua_phan_rotfai`       | ชุมชนหัวพานรถไฟ             | `zone_4`   | —       |
+| code                  | label_th    | label_en | default |
+| --------------------- | ----------- | -------- | ------- |
+| `school`              | โรงเรียน    | School | **ใช่** |
+| `community_hall`      | ศาลาประชาคม | Community hall | —       |
+| `temple`              | วัด         | Temple | —       |
+| `government_building` | อาคารราชการ | Government building | —       |
+| `sports_centre`       | ศูนย์กีฬา   | Sports centre | —       |
 
 #### `volunteer_skills` — ทักษะมาตรฐานจิตอาสา
 
 Seed ลง global `master_data:volunteer_skills` จำนวน 9 รายการ โดยมี `category: operational` 8 รายการ และ `category: controlled` 1 รายการ (`medical`)
 
-| key | label | category | description | default |
-| --- | --- | --- | --- | --- |
-| `cooking` | ประกอบอาหาร / ครัวสนาม | `operational` | ช่วยเตรียมวัตถุดิบ ปรุงอาหาร แจกอาหารครัวกลาง | **ใช่** |
-| `logistics` | ขนย้ายสิ่งของ / พลาธิการ | `operational` | ขนย้ายกระสอบทราย ลำเลียงถุงยังชีพ ยกของหนัก | — |
-| `screening` | คัดกรองและสแกนประวัติ | `operational` | ต้อนรับ ลงทะเบียน คัดกรองประวัติผู้ประสบภัยเบื้องต้น | — |
-| `medical` | การแพทย์ / ปฐมพยาบาล | `controlled` | ปฐมพยาบาลเบื้องต้น วัดสัญญาณชีพ (ต้องผ่านการตรวจรับรองใบประกอบวิชาชีพ) | — |
-| `reception` | ประสานงาน / ต้อนรับ | `operational` | ต้อนรับผู้ประสบภัย ประสานงานระหว่างจุดบริการ | — |
-| `distribution` | แจกจ่ายของยังชีพ | `operational` | แจกจ่ายถุงยังชีพ น้ำดื่ม เครื่องอุปโภคบริโภค | — |
-| `sanitation` | ทำความสะอาด / สุขอนามัย | `operational` | ทำความสะอาดพื้นที่ส่วนกลาง ดูแลสุขอนามัยในศูนย์ | — |
-| `childcare` | สันทนาการ / ดูแลเด็ก | `operational` | กิจกรรมสันทนาการ ดูแลเด็กและผู้สูงอายุ | — |
-| `transport` | ขับขี่ยานพาหนะ / ขนส่ง | `operational` | ขับขี่ยานพาหนะขนส่งคนและสิ่งของ | — |
+| code | label_th | label_en | category | description | default |
+| --- | --- | --- | --- | --- | --- |
+| `cooking` | ประกอบอาหาร / ครัวสนาม | Cooking / field kitchen | `operational` | ช่วยเตรียมวัตถุดิบ ปรุงอาหาร แจกอาหารครัวกลาง | **ใช่** |
+| `logistics` | ขนย้ายสิ่งของ / พลาธิการ | Logistics / supply movement | `operational` | ขนย้ายกระสอบทราย ลำเลียงถุงยังชีพ ยกของหนัก | — |
+| `screening` | คัดกรองและสแกนประวัติ | Screening and registration | `operational` | ต้อนรับ ลงทะเบียน คัดกรองประวัติผู้ประสบภัยเบื้องต้น | — |
+| `medical` | การแพทย์ / ปฐมพยาบาล | Medical / first aid | `controlled` | ปฐมพยาบาลเบื้องต้น วัดสัญญาณชีพ (ต้องผ่านการตรวจรับรองใบประกอบวิชาชีพ) | — |
+| `reception` | ประสานงาน / ต้อนรับ | Coordination / reception | `operational` | ต้อนรับผู้ประสบภัย ประสานงานระหว่างจุดบริการ | — |
+| `distribution` | แจกจ่ายของยังชีพ | Relief distribution | `operational` | แจกจ่ายถุงยังชีพ น้ำดื่ม เครื่องอุปโภคบริโภค | — |
+| `sanitation` | ทำความสะอาด / สุขอนามัย | Cleaning / sanitation | `operational` | ทำความสะอาดพื้นที่ส่วนกลาง ดูแลสุขอนามัยในศูนย์ | — |
+| `childcare` | สันทนาการ / ดูแลเด็ก | Recreation / childcare | `operational` | กิจกรรมสันทนาการ ดูแลเด็กและผู้สูงอายุ | — |
+| `transport` | ขับขี่ยานพาหนะ / ขนส่ง | Driving / transport | `operational` | ขับขี่ยานพาหนะขนส่งคนและสิ่งของ | — |
 
 ### 1.4 การย้ายข้อมูลเดิมและการ seed ซ้ำ
 
 - code เดิมของกลุ่มเปราะบาง `elderly` จะถูกย้ายเป็น `elderly_dependent`
 - code เดิมของกลุ่มเปราะบาง `disabled` จะถูกย้ายเป็น `disability_other`
 - label เดิม `ผู้สูงอายุ`, `ผู้พิการ` และ `ผู้ป่วยเรื้อรัง` ใช้ช่วยค้นหารายการปลายทางระหว่าง migration
-- รายการ `pet_types` ที่มี code `bird` หรือ label `นก` จะไม่ถูกเก็บเพิ่มเป็นรายการส่วนเกิน
-- รายการ `dietary_restrictions` ที่มี label `มังสวิรัติ` หรือ `อาหารอ่อน` จะไม่ถูกเก็บเพิ่มเป็นรายการส่วนเกิน
-- เมื่อ seed ซ้ำ ระบบจะใช้ code เดิมของรายการที่มี label เดิม และเก็บรายการเดิมที่ไม่มีใน seed ไว้ตามกติกา
+- เมื่อ seed ซ้ำ ระบบจับคู่ด้วย `label_th` หรือ `code`/`key` — ถ้า reuse ได้ `item_*` แต่ `d.key` ว่าง จะ**เขียนทับเป็น `d.key`** สำหรับรายการจาก seed defs; extras ที่ผู้ใช้สร้างเองไม่แตะ
+- schema_v ของเอกสารที่ seed เขียน = **4** (bilingual labels)
+- **CR-137:** seed ไม่สร้าง `health_condition` / `dietary_restrictions` / `pet_types` / `house_damage` / `municipality_zone` / `community` อีก; orphan docs ใน DB ถูกละเว้นโดย enum
 
 ## 2. Catalog seed
 

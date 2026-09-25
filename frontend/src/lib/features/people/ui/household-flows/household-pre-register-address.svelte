@@ -42,21 +42,12 @@
 		initialData = null,
 		initialJoinHouseholdId = null,
 		householdLabel = '',
-		municipalityZoneItems = [],
-		communityItems = [],
-		defaultMunicipalityZone = '',
-		defaultCommunity = '',
 		onBack,
 		onNext
 	}: {
 		initialData?: Partial<HouseholdAddressForm> | null;
 		initialJoinHouseholdId?: string | null;
 		householdLabel?: string;
-		municipalityZoneItems?: { value: string; label: string }[];
-		communityItems?: { value: string; label: string }[];
-		/** master_data `is_default` code — pre-selects the field on a fresh form. */
-		defaultMunicipalityZone?: string;
-		defaultCommunity?: string;
 		onBack: () => void;
 		onNext: (data: HouseholdAddressForm, joinHouseholdId: string | null) => void;
 	} = $props();
@@ -78,26 +69,6 @@
 		if (initialized || !initialData) return;
 		initialized = true;
 		$formData = { ...$formData, ...initialData };
-	});
-
-	// Seed the configured defaults once master data arrives — only while the
-	// field is still empty, so returning to this step (initialData restores the
-	// operator's own choice) never overwrites it. (CR-049)
-	//
-	// One flag per field: the two master queries resolve independently, and a
-	// single shared flag would burn out on whichever arrives first and drop the
-	// other default for good.
-	let municipalityZoneSeeded = false;
-	let communitySeeded = false;
-	$effect(() => {
-		if (!municipalityZoneSeeded && defaultMunicipalityZone) {
-			municipalityZoneSeeded = true;
-			if (!$formData.municipalityZone) $formData.municipalityZone = defaultMunicipalityZone;
-		}
-		if (!communitySeeded && defaultCommunity) {
-			communitySeeded = true;
-			if (!$formData.community) $formData.community = defaultCommunity;
-		}
 	});
 
 	const provincesQuery = useProvinces();
@@ -271,11 +242,10 @@
 						<Form.Control>
 							{#snippet children({ props })}
 								<Form.Label>เขตการปกครอง <span class="text-destructive">*</span></Form.Label>
-								<SearchSelect
-									name={props.name}
-									options={municipalityZoneItems}
+								<Input
+									{...props}
 									bind:value={$formData.municipalityZone}
-									placeholder="เลือกเขตการปกครอง..."
+									placeholder="ระบุเขตเทศบาล..."
 								/>
 							{/snippet}
 						</Form.Control>
@@ -285,12 +255,7 @@
 						<Form.Control>
 							{#snippet children({ props })}
 								<Form.Label>ชุมชน <span class="text-destructive">*</span></Form.Label>
-								<SearchSelect
-									name={props.name}
-									options={communityItems}
-									bind:value={$formData.community}
-									placeholder="เลือกชุมชน..."
-								/>
+								<Input {...props} bind:value={$formData.community} placeholder="ระบุชุมชน..." />
 							{/snippet}
 						</Form.Control>
 						<Form.FieldErrors />

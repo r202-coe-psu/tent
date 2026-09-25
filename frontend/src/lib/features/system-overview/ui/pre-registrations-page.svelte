@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import * as Table from '$lib/components/ui/table';
-	import * as Card from '$lib/components/ui/card';
 	import { Button } from '$lib/components/ui/button';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert';
+	import StaffPageShell from '$lib/components/staff-page-shell.svelte';
+	import { spatial } from '$lib/tokens';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import { AGE_BUCKET_LABELS } from '$lib/features/dashboard';
 	import {
@@ -53,14 +54,11 @@
 	}
 </script>
 
-<div class="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
-	<header class="space-y-1">
-		<h1 class="text-2xl font-bold tracking-tight text-[#0A2647] sm:text-3xl">ลงทะเบียนล่วงหน้า</h1>
-		<p class="text-base text-slate-600">
-			ตรวจสอบผู้ลงทะเบียนล่วงหน้าทั้งหมด สถานะการเข้าศูนย์ และศูนย์พักพิงปลายทาง
-		</p>
-	</header>
-
+<StaffPageShell
+	title="ลงทะเบียนล่วงหน้า"
+	description="ตรวจสอบผู้ลงทะเบียนล่วงหน้าทั้งหมด สถานะการเข้าศูนย์ และศูนย์พักพิงปลายทาง"
+	maxWidth="7xl"
+>
 	<OverviewFilterBar {filters} onChange={onFiltersChange} showHouseholdFilter={true} />
 
 	{#if listQuery.isError}
@@ -71,18 +69,20 @@
 		</Alert>
 	{/if}
 
-	<Card.Root class="rounded-2xl border border-slate-200/80 bg-white shadow-2xs">
-		<Card.Header class="flex flex-row items-center justify-between gap-3 space-y-0">
+	<div class={spatial.container.staffPageCard}>
+		<div
+			class="flex flex-row items-center justify-between gap-3 border-b border-slate-200/80 p-4 sm:p-6"
+		>
 			<div>
-				<Card.Title class="text-lg font-bold text-slate-900">รายการทั้งหมด</Card.Title>
-				<Card.Description class="text-sm text-slate-500">
+				<h2 class="text-lg font-bold text-slate-900">รายการทั้งหมด</h2>
+				<p class="text-sm text-slate-500">
 					{#if listQuery.isPending && items.length === 0}
 						กำลังโหลด...
 					{:else}
 						แสดง {pageStart.toLocaleString('th-TH')}–{pageEnd.toLocaleString('th-TH')} จาก
 						{total.toLocaleString('th-TH')}
 					{/if}
-				</Card.Description>
+				</p>
 			</div>
 			<div class="flex gap-2">
 				<Button
@@ -106,8 +106,8 @@
 					ถัดไป
 				</Button>
 			</div>
-		</Card.Header>
-		<Card.Content>
+		</div>
+		<div class="p-4 sm:p-6">
 			{#if listQuery.isPending && items.length === 0}
 				<Skeleton class="h-48 w-full rounded-xl" />
 			{:else if items.length === 0}
@@ -208,6 +208,6 @@
 					</Table.Root>
 				</div>
 			{/if}
-		</Card.Content>
-	</Card.Root>
-</div>
+		</div>
+	</div>
+</StaffPageShell>

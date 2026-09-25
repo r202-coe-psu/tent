@@ -2,8 +2,8 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-09-24
-note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer
+updated: 2026-09-25
+note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer; CR-135/CR-136 partner OAuth2 client name/module preset + secret reveal/edit/delete; CR-137 shrink master_data (10→4) + zone/community free text
 ---
 
 # Database Schema v5 — field-level
@@ -151,8 +151,8 @@ implement — ไม่กระทบ migration นี้
 | `checkout_destination` | {`type`:enum(`returned_home`,`transferred_shelter`,`referred_facility`,`other`), `destination_name`:str?, `notes`:str?} \| null | opt | ปลายทางหลังเช็คเอาต์ — บังคับเมื่อ `status = 'checked-out'` |
 | `housing_type` | enum(`owned_house`,`rented_house`,`condo`,`apartment_dorm`,`homeless`) \| null | opt | code จาก master `housing_type` (CR-112) |
 | `residence_landmark` | str\|null | opt | จุดสังเกต / ที่อยู่โดยประมาณเมื่อไม่มีบ้านเลขที่ (CR-112) |
-| `municipality_zone` | str\|null | opt | เขตเทศบาล เช่น `"zone_1"` — code จาก `master_data:municipality_zone` |
-| `community` | str\|null | opt | ชุมชน เช่น `"z1_c16"` — code จาก `master_data:community` (filter by zone) |
+| `municipality_zone` | str\|null | opt | เขตเทศบาล — **free text** (CR-137); ไม่ใช่ code จาก master_data |
+| `community` | str\|null | opt | ชุมชน — **free text** (CR-137); ไม่ใช่ code จาก master_data |
 | `pets` | [{`species`:enum(`dog`,`cat`,`other`), `count`:int, `notes`:str?, `has_cage`:bool?, `image_url`:str?}] | opt | default `[]` — `species=other` → `notes` บังคับ nonempty; แสดงเฉพาะเมื่อ shelter `feature_flags.allow_pets = true` |
 | `assets` | {`description`:str, `image_url`:str\|null} \| null | opt | ทรัพย์สินมีค่า/สัมภาระ — แสดงเฉพาะเมื่อ `feature_flags.allow_assets = true` |
 | `vehicles` | [{`type`:enum(`car`,`motorcycle`,`other`), `license_plate`:str\|null}] | opt | default `[]` — รายการยานพาหนะ (หลายคันได้) แสดงเฉพาะเมื่อ `feature_flags.allow_vehicles = true` |
@@ -1261,8 +1261,8 @@ backward compatibility ของ CR-059/110; flow ใหม่ใช้ §2.29�
 | `project_level` | enum(`community`,`lao`,`provincial`)\|null | opt | ระดับศูนย์ |
 | `location` | {`address`:str, `lat`:num?, `lng`:num?} | opt | คงไว้เพื่อ backward compatibility |
 | `contact` | {`name`:str, `phone`:str} | opt | — |
-| `municipality_zone` | str\|null | opt | code จาก `master_data:municipality_zone` |
-| `community` | str\|null | opt | code จาก `master_data:community` |
+| `municipality_zone` | str\|null | opt | เขตเทศบาล — **free text** (CR-137) |
+| `community` | str\|null | opt | ชุมชน — **free text** (CR-137) |
 | `address_no` | str\|null | opt | บ้านเลขที่ |
 | `village_no` | str\|null | opt | หมู่/ซอย/ถนน |
 | `subdistrict` | str\|null | opt | ตำบล/แขวง |
@@ -1304,8 +1304,11 @@ backward compatibility ของ CR-059/110; flow ใหม่ใช้ §2.29�
 
 ---
 
-### 3.3 `master_data` — two-tier: `master_data:{master_type}` (global) / `master_data:{master_type}:{shelter_code}` (shelter-local) · **schema_v 3** (CR-012, CR-049)
+### 3.3 `master_data` — two-tier: `master_data:{master_type}` (global) / `master_data:{master_type}:{shelter_code}` (shelter-local) · **schema_v 4**
 
+> **schema_v 4** — item display names are bilingual (`label_th` + `label_en`); new items require
+> a user/seed-supplied snake_case `code` (no auto `item_{ulid}`). Legacy `item_*` codes may be
+> renamed to a slug on edit. Seed uses semantic `SeedItemDef.key` as `code` for all 4 types.
 > **schema_v 3** — เพิ่ม item field `status`; ลบ `excluded_codes` (mechanism ทิ้งทั้งหมด); item `code`
 > ที่สร้างใหม่เป็น **ULID** (`item_{ulid}`) แทน slug. [CR-049](../changes/CR-049-shelter-scope-backoffice-vs-system-management.md).
 > schema_v 2 — baseline two-tier (`shelter_code?` + `excluded_codes?` override-merge) — **แนวทางนี้ถูกยกเลิกโดย CR-049**
@@ -1323,57 +1326,63 @@ backward compatibility ของ CR-059/110; flow ใหม่ใช้ §2.29�
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
-| `master_type` | enum(10 types) | req | `vulnerable_group` \| `health_condition` \| `dietary_restrictions` \| `pet_types` \| `house_damage` \| `municipality_zone` \| `community` \| `shelter_type` \| `housing_type` \| `volunteer_skills` |
+| `master_type` | enum(4 types) | req | `vulnerable_group` \| `housing_type` \| `shelter_type` \| `volunteer_skills` (CR-137 — ตัด `health_condition`, `dietary_restrictions`, `pet_types`, `house_damage`, `municipality_zone`, `community`) |
 | `shelter_code` | str? | opt | มีเฉพาะ doc tier shelter-local — ระบุศูนย์เจ้าของ; ไม่มี field นี้ = global doc |
-| `items` | [{`code`:str, `label`:str, `is_default`:bool, `status`:enum(`active`,`inactive`), `parent_code`:str?}] | req | ≥1 item; `code` = ULID (`item_{ulid}`) สำหรับ item ที่สร้างใหม่ — immutable; item เดิม (seed) ที่เป็น slug/semantic code (เช่น `municipality_zone` เดิม `zone_1`) ยังใช้ได้ต่อ ไม่ rewrite; `parent_code` ใช้สำหรับ `community` → อ้างถึง `code` ของ `municipality_zone` item |
+| `items` | [{`code`:str, `label_th`:str, `label_en`:str, `is_default`:bool, `status`:enum(`active`,`inactive`), `parent_code`:str?, `category`?:str, `description`?:str}] | req | ≥0 items; `code` = user/seed snake_case (`^[a-z0-9_]+$`), unique per type — **required on create** (no ULID fallback); slug codes immutable on edit; legacy `item_*` codes may be renamed once; `label_th` + `label_en` both required (trim, min 1); `parent_code` optional (legacy hierarchy; ไม่มี consumer หลัง CR-137) |
 
 **Seed — `vulnerable_group` active set (CR-112):**
 `bedridden`, `dialysis`, `wheelchair`, `psychiatric`, `elderly_dependent`, `infant`, `young_child`, `pregnant`, `vision_impaired`, `hearing_impaired`, `disability_other`, `chronic_illness`
 
 **Hard migrate map (CR-112):** `elderly` → `elderly_dependent`; `disabled` → `disability_other`; `chronic_illness` คงรหัส
 
-**Seed — `pet_types` active (CR-112):** `dog`, `cat`, `other` · migrate away `bird`
+**Pets (CR-137):** `pets[].species` เป็น domain enum `dog \| cat \| other` — **ไม่** ใช้ `master_data:pet_types` (type ถูกลบ; public `/config/pet-types` ถูกลบ)
 
-**Seed — `housing_type` active (CR-112, master_type ใหม่):**
+**Seed — `housing_type` active (CR-112):**
 
-| key | label |
-| --- | --- |
-| `owned_house` | บ้านตนเอง |
-| `rented_house` | บ้านเช่า |
-| `condo` | คอนโดมิเนียม |
-| `apartment_dorm` | อพาร์ตเมนต์/หอพัก |
-| `homeless` | คนไร้บ้าน / ไม่มีบ้านเลขที่ / ริมคลอง |
+| key | label_th | label_en |
+| --- | --- | --- |
+| `owned_house` | บ้านตนเอง | Owned house |
+| `rented_house` | บ้านเช่า | Rented house |
+| `condo` | คอนโดมิเนียม | Condominium |
+| `apartment_dorm` | อพาร์ตเมนต์/หอพัก | Apartment / dormitory |
+| `homeless` | ไร้ที่อยู่อาศัย / ไม่มีบ้านเลขที่ | Homeless / no house number |
 
 **Item shape:**
 ```ts
 interface MasterDataItem {
-  code: string;                    // ULID (`item_{ulid}`) สำหรับ item ใหม่ — immutable; item เดิม (seed) อาจยังเป็น slug/semantic code
-  label: string;                   // Thai display, editable
+  code: string;                    // user/seed snake_case — required on create; slug immutable; legacy item_* renamable
+  label_th: string;                // Thai display, editable
+  label_en: string;                // English display, editable
   is_default: boolean;             // 1 item per type = true (enforce)
   status: 'active' | 'inactive';   // default 'active'; soft-delete = set 'inactive' (ดูด้านล่าง)
-  parent_code?: string;            // community เท่านั้น — ref code ของ municipality_zone
+  parent_code?: string;            // optional legacy; unused after CR-137
 }
 ```
 
+**Display helper:** `formatMasterLabel(item, lang)` — `lang === 'en'` → `label_en` (fallback `label_th` → `code`); else `label_th` (fallback `label_en` → `code`). Domain is pure — UI passes `langState.current`.
+
 **Resolution / consumption (`scope: "global" | "shelter" | "effective"`):**
-เนื่องจาก `code` เป็น ULID เสมอสำหรับ item ใหม่ global กับ shelter-local จึง **disjoint การันตี**
-(ชนกันไม่ได้) → `scope: "effective"` คืนค่าด้วย **concat ล้วนๆ**: `global.items ++ shelterLocal.items`
+`scope: "effective"` คืนค่าด้วย **concat ล้วนๆ**: `global.items ++ shelterLocal.items`
 — **ไม่มี dedup, ไม่มี override/merge ตาม code**. Global item เป็น **read-only** ที่ back-office (แก้/toggle
 ได้เฉพาะที่ System Management, SA only); shelter-local item แก้/toggle ได้ที่ back-office ของศูนย์ตนเอง.
 (แนวทางเดิม override-merge + `excluded_codes` ของ schema_v 2 **ถูกยกเลิก** — ดู CR-049 เหตุผล code collision)
 
 **Soft-delete (`status`):** การ "ลบ" item = set `status: 'inactive'` — item **ยังอยู่ใน array เดิม**
-(ไม่ hard-delete) เพื่อให้ record ที่อ้าง `code` นั้นอยู่แล้ว (เช่น `evacuee.special_needs`) resolve label
-ได้ตลอด. Consumer ที่สร้าง selection (dropdown ตอนเลือกค่าใหม่) กรองเฉพาะ `status === 'active'`; consumer
-ที่ทำ display/resolve label (แสดงค่าที่บันทึกไว้แล้ว) **ไม่กรอง** — ใช้ `find(code)?.label` ตรงๆ ไม่ว่า
-`status` จะเป็นอะไร. doc เดิม (schema_v ≤2) ที่ไม่มี `status` ต่อ item ให้ default เป็น `active` ตอนอ่าน.
+(ไม่ hard-delete) เพื่อให้ record ที่อ้าง `code` นั้นอยู่แล้ว resolve label ได้ตลอด. Consumer ที่สร้าง
+selection (dropdown ตอนเลือกค่าใหม่) กรองเฉพาะ `status === 'active'`; consumer ที่ทำ display/resolve
+label (แสดงค่าที่บันทึกไว้แล้ว) **ไม่กรอง** — ใช้ `formatMasterLabelByCode(code, items, lang)` ตรงๆ
+ไม่ว่า `status` จะเป็นอะไร. doc เดิม (schema_v ≤2) ที่ไม่มี `status` ต่อ item ให้ default เป็น `active` ตอนอ่าน.
 
-**Seed data (Hat Yai):** ข้อมูล `municipality_zone` (4 เขต) และ `community` (102 ชุมชน) มาจาก [Wikipedia — เทศบาลนครหาดใหญ่](https://th.wikipedia.org/wiki/%E0%B9%80%E0%B8%97%E0%B8%A8%E0%B8%9A%E0%B8%B2%E0%B8%A5%E0%B8%99%E0%B8%84%E0%B8%A3%E0%B8%AB%E0%B8%B2%E0%B8%94%E0%B9%83%E0%B8%AB%E0%B8%8D%E0%B9%88); รายละเอียด seed ใน CR-012 Appendix A. Seed code (`zone_1` เป็นต้น) เป็น slug/semantic ที่มีอยู่ก่อน CR-049 — คงไว้ ไม่ rewrite เป็น ULID.
+**CR-137:** `municipality_zone` / `community` ไม่ใช่ master types แล้ว — เป็น free-text บน household/shelter. ค่าเก่าที่เป็น code จาก seed เดิมโชว์ตามที่เก็บ (ไม่ auto-migrate เป็น label). Orphan `master_data:{removed_type}` docs ใน CouchDB ถูกละเว้นโดย enum — cleanup นอก scope ของ CR นี้.
 
 **Migration (schema_v 2 → 3, CR-049):** เพิ่ม `status` ต่อ item (doc เดิมไม่มี → default `active` ตอนอ่าน);
 ลบ `excluded_codes` ออกจาก schema (doc เดิมที่ยังมี field นี้ถูก ignore ตอนอ่าน — ไม่ error, ไม่ backfill
 ลบทิ้ง); write ใหม่ทั้งหมด stamp `schema_v: 3`. ไม่มี production data ณ วันที่ bump → dev/staging reset ได้
 ตาม pattern CR-019/CR-031 ไม่บังคับ migration script.
+
+**Migration (schema_v 3 → 4):** lift single `label` → `label_th` + `label_en` (ทั้งคู่ = ค่าเดิมถ้ามีแค่ภาษาเดียว);
+stamp `schema_v: 4`. Writer / seed ใหม่ใช้ bilingual เสมอ. Re-seed เขียนทับ seed-owned `item_*` → semantic
+`d.key` เมื่อ key ยังว่าง. ไม่ rewrite FK บน people/shelter/volunteer เมื่อแก้ legacy code.
 
 **Index:** `(master_type)` — global unique 1 doc ต่อ type; `(master_type, shelter_code)` — shelter-local unique 1 doc ต่อ type ต่อศูนย์
 
@@ -2254,3 +2263,37 @@ SoR ของคิวกลางจน claim = Mongo collection นี้ · �
 **Photo (GridFS):** bucket `unassigned_registration_photos` · `POST /public/v1/unassigned-registrations/photos` · สมาชิกเก็บ `photo: gfs:{oid}` · สัตว์เลี้ยงเก็บ `pets[].image_url: gfs:{oid}` · claim อ่าน GridFS → birth Couch `image:{ulid}` (+ attachments) แล้วตั้ง `evacuee.photo` / `household.pets[].image_url`
 
 **Claim (option B):** staff ติ๊กสมาชิก `open` → **mark claimed ใน Mongo ก่อน** → birth Couch `evacuee`(+`household`[+`image`]) ด้วย reserved ids ที่ `pre_registered` · คัดลอก nickname / religion / emergency_contact เมื่อมี · Couch ล้ม → revert Mongo · `_bulk_docs` conflict = OK · คนไม่ติ๊กคง `open` · เมื่อไม่มี `open` เหลือ → best-effort hard-delete · `system_admin` ลบทั้งใบได้ขณะเป็นคิวกลาง · รายละเอียดดู [CR-113](../changes/CR-113-unassigned-registration-mongo.md)
+
+### 9.6 `third_party_clients` (MongoDB) — Partner OAuth2 clients (ADR 0002, EXT-001; **CR-135**, **CR-136**)
+
+Credential ของระบบพันธมิตร (M6/M7) สำหรับ `POST /external/token` (`grant_type=client_credentials`) ·
+สร้าง/แก้ไข/เพิกถอน/ลบโดย `system_admin` ผ่านหน้า **System Management → API Keys** (BFF
+`/api/v1/thirdparty-clients` → FastAPI `/v1/admin/thirdparty-clients`) · ไม่มี `schema_v` (Beanie
+document, เพิ่ม field แบบ additive)
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `_id` | str | req | ULID |
+| `client_id` | str | sys | **ระบบ generate** ตอนสร้าง: `tpc_` + `secrets.token_urlsafe(16)` (≤64 ตัวอักษร ตาม `TokenRequest.client_id`) — ไม่รับจาก request body · client เดิมที่ตั้งชื่อเอง (เช่น `m6-warehouse-logistics`) ยังใช้ได้ตามเดิม |
+| `client_secret_hash` | str | sys | SHA-256 ของ plaintext `tps_…` — ใช้ตรวจ `/external/token` เท่านั้น (unchanged) |
+| `secret_issued_at` | ts\|null | sys | **ใหม่** — เวลาที่ secret ปัจจุบันถูก (re)generate; plaintext ไม่ได้เก็บ/เข้ารหัสไว้เลย แต่ derive แบบ deterministic จาก `HMAC-SHA256(key=THIRDPARTY_SECRET_SALT, msg=client_id + secret_issued_at)` (server-only env var, ไม่ใช่ DB) ทุกครั้งที่ต้อง "ดูซ้ำ" · ไม่ใช้ในเส้นทาง auth · `null` สำหรับ client ที่สร้างก่อน field นี้ (ดูซ้ำไม่ได้ — ต้อง revoke แล้วสร้างใหม่) |
+| `name` | str\|null | req (สร้างใหม่) | ชื่อที่ admin ตั้งเอง, trim, 1–100 ตัวอักษร, **unique แบบไม่สนตัวพิมพ์เฉพาะกับแถวที่ยังไม่ถูกลบ** (`deleted_at = null`) — ซ้ำ → `409`; client ที่ถูก soft-delete แล้วไม่นับกันชื่อ (ใช้ชื่อเดิมสร้างใหม่ได้) · `null` ได้เฉพาะ doc เดิมก่อน field นี้ (UI แสดง `client_id` แทน) |
+| `description` | str\|null | opt | คำอธิบายเพิ่มเติมของคีย์, trim, ≤500 ตัวอักษร; ว่าง → `null` |
+| `module_name` | enum(`M6`,`M7`) | req | โมดูลพันธมิตร (UI: "Module" radio) — ฝังใน JWT claim `module_name` + `TokenResponse.module_name` + `third_party_access_logs.module_name` (semantics เดิม) |
+| `allowed_scopes` | [enum(`location-read`,`location-stock-read`,`occupancy-read`,`occupancy-pii-read`)] | req | ≥1 ค่า · **preset ตาม module** เมื่อเลือกในฟอร์ม: `M6` → `location-read`, `location-stock-read` · `M7` → `location-read`, `location-stock-read`, `occupancy-read` · `occupancy-pii-read` ไม่อยู่ใน preset ใด ๆ · **แก้ไขได้ซ้ำๆ ภายหลัง** ผ่าน `PATCH` แต่**เฉพาะตอน `is_active = true`** เท่านั้น (revoke แล้วแก้ไม่ได้ — `409`) |
+| `is_active` | bool | req | default `true`; revoke → `false` (ไม่ลบ doc) |
+| `deleted_at` | ts\|null | sys | **ใหม่** — soft-delete timestamp; ตั้งได้เฉพาะตอน `is_active = false` (ต้อง revoke ก่อนถึงลบได้ — `409` ถ้ายัง active) · list ไม่คืนแถวที่ `deleted_at != null` (ซ่อนจาก UI แต่ไม่ hard-delete จาก Mongo — เก็บไว้เพื่อ audit) |
+| `created_at` / `updated_at` | ts | sys | — |
+
+**Index:** `(client_id)` unique · `(name)` unique partial (`name` เป็น string **และ** `deleted_at = null`) collation `{locale: "en", strength: 2}` — deployment ที่มี index เก่า (ก่อน CR-136 รอบล่าสุด) ต้อง `db.third_party_clients.dropIndex("name_unique_ci")` ก่อน ไม่งั้น Beanie จะ error `IndexKeySpecsConflict` ตอน startup (Mongo ไม่ auto-update partialFilterExpression ของ index ที่มีอยู่แล้ว)
+
+**Reveal secret (view again):** `POST /api/v1/thirdparty-clients/{id}/secret` body `{password}` — BFF
+verify `password` ของ **ผู้ใช้ที่ login อยู่เอง** กับ CouchDB `_session` (ไม่สร้าง cookie ใหม่, ไม่กระทบ
+session ปัจจุบัน) ก่อน แล้วค่อยเรียก FastAPI `GET .../{id}/secret` เพื่อคำนวณ derive `client_secret` ซ้ำจาก
+`client_id` + `secret_issued_at` — รหัสผ่านผิด → `401`; client ไม่มี `secret_issued_at` (สร้างก่อน field
+นี้ หรือถูกลบ) → `404`. ไม่มี step-up token ข้ามคำขอ — ต้องกรอกรหัสผ่านทุกครั้งที่ต้องการดู
+
+**Regenerate secret:** `POST /v1/admin/thirdparty-clients/{id}/regenerate-secret` — ออก
+`client_secret` ใหม่ให้ `client_id` เดิม (เขียนทับ `client_secret_hash` และตั้ง `secret_issued_at` ใหม่);
+secret เก่าใช้ authenticate ไม่ได้ทันทีที่สำเร็จ ไม่มี grace period · เฉพาะตอน `is_active = true` (revoke
+แล้ว → `409`) · UI ต้องผ่าน confirm dialog เตือนก่อนเสมอ (CR-136 §D)
