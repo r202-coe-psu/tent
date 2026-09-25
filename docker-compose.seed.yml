@@ -16,9 +16,12 @@
 #   docker compose -f docker-compose.yml -f docker-compose.seed.yml --profile reset run --rm reset
 #   docker compose -f docker-compose.yml start worker
 
+# Runs the host's already-installed tsx (frontend/node_modules). Needs `pnpm install`
+# and `svelte-kit sync` on the host once so node_modules and .svelte-kit/tsconfig.json exist.
 x-node-seed: &node-seed
   image: node:24-slim
   working_dir: /app
+  entrypoint: ["node_modules/.bin/tsx", "--tsconfig", ".svelte-kit/tsconfig.json"]
   volumes:
     - ./frontend:/app
   environment:
@@ -40,7 +43,6 @@ x-worker-bootstrap: &worker-bootstrap
 
 services:
   couchdb-init:
-    container_name: tent-couchdb-init
     image: curlimages/curl:latest
     depends_on:
       couchdb:
@@ -72,7 +74,7 @@ services:
       couchdb:
         condition: service_healthy
     restart: "no"
-    command: sh -c "corepack enable && pnpm unseed --confirm"
+    command: ["scripts/unseed.ts", "--confirm"]
 
   unseed-master-data:
     <<: *node-seed
@@ -82,7 +84,7 @@ services:
       couchdb:
         condition: service_healthy
     restart: "no"
-    command: sh -c "corepack enable && pnpm unseed:master-data --confirm"
+    command: ["scripts/unseed.ts", "--master-data", "--confirm"]
 
   unseed-master:
     <<: *node-seed
@@ -92,7 +94,7 @@ services:
       couchdb:
         condition: service_healthy
     restart: "no"
-    command: sh -c "corepack enable && pnpm unseed:master --confirm"
+    command: ["scripts/unseed.ts", "--master", "--confirm"]
 
   mongo-wipe:
     profiles: ["reset", "mongo-wipe"]
@@ -113,20 +115,24 @@ services:
     <<: *node-seed
     container_name: tent-seed
     depends_on:
+      couchdb:
+        condition: service_healthy
       couchdb-init:
         condition: service_completed_successfully
     restart: "no"
-    command: sh -c "corepack enable && pnpm seed:staging"
+    command: ["scripts/seed-staging.ts"]
 
   seed-master:
     <<: *node-seed
     profiles: ["master"]
     container_name: tent-seed-master
     depends_on:
+      couchdb:
+        condition: service_healthy
       couchdb-init:
         condition: service_completed_successfully
     restart: "no"
-    command: sh -c "corepack enable && pnpm seed:master"
+    command: ["scripts/seed-master.ts"]
 
   # Project current CouchDB docs into Mongo, then exit (no continuous sync).
   bootstrap:
@@ -145,6 +151,8 @@ services:
     profiles: ["reset"]
     container_name: tent-reset-seed
     depends_on:
+      couchdb:
+        condition: service_healthy
       couchdb-init:
         condition: service_completed_successfully
       unseed:
@@ -152,7 +160,7 @@ services:
       mongo-wipe:
         condition: service_completed_successfully
     restart: "no"
-    command: sh -c "corepack enable && pnpm seed:staging"
+    command: ["scripts/seed-staging.ts"]
 
   reset-bootstrap:
     <<: *worker-bootstrap
