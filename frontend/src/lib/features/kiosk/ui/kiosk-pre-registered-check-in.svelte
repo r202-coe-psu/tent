@@ -10,6 +10,7 @@
 	import UsersRound from '@lucide/svelte/icons/users-round';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import KioskCheckInWizard from './kiosk-check-in-wizard.svelte';
+	import KioskLookupErrorActions from './kiosk-lookup-error-actions.svelte';
 	import PhoneHouseholdPicker from './phone-household-picker.svelte';
 	import { initialSelection, toExistingReportResults } from '../domain/household-selection';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
@@ -388,37 +389,16 @@
 				<div>
 					<h2 class="text-base font-bold">ค้นหาไม่สำเร็จ</h2>
 					<p class="mt-1 text-base leading-relaxed">{lookupError}</p>
-					<div class="mt-4 flex flex-col gap-2 sm:flex-row">
-						{#if isPhoneGate && (lookupErrorCode === 'PRE_REGISTRATION_NOT_FOUND' || lookupErrorCode === 'KIOSK_TOO_MANY_MATCHES')}
-							<Button
-								type="button"
-								onclick={onreset}
-								class="min-h-12 bg-[#0A2647] px-5 text-base font-bold text-white hover:bg-[#051930]"
-								>กรอกเบอร์ใหม่</Button
-							>
-						{:else}
-							<Button
-								type="button"
-								disabled={isLookingUp || retryAfterSeconds > 0}
-								onclick={retryLookup}
-								class="min-h-12 bg-[#0A2647] px-5 text-base font-bold text-white hover:bg-[#051930]"
-							>
-								{#if retryAfterSeconds > 0}
-									ลองอีกครั้งใน {retryAfterSeconds} วินาที
-								{:else if isLookingUp}
-									กำลังค้นหา…
-								{:else}
-									ลองอีกครั้ง
-								{/if}
-							</Button>
-						{/if}
-						<Button
-							href={backUrl}
-							variant="outline"
-							onclick={onreset}
-							class="min-h-12 border-[#CBD5E1] px-5 text-base font-bold text-[#0A2647]">กลับ</Button
-						>
-					</div>
+					<KioskLookupErrorActions
+						{lookupErrorCode}
+						{isPhoneGate}
+						{isLookingUp}
+						{retryAfterSeconds}
+						{homeUrl}
+						{backUrl}
+						onretry={retryLookup}
+						{onreset}
+					/>
 				</div>
 			</div>
 		</div>
