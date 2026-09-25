@@ -17,6 +17,8 @@
 	import Calendar from '@lucide/svelte/icons/calendar';
 	import Truck from '@lucide/svelte/icons/truck';
 	import Package from '@lucide/svelte/icons/package';
+	import CheckCircle2 from '@lucide/svelte/icons/circle-check';
+	import Circle from '@lucide/svelte/icons/circle';
 
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
@@ -24,13 +26,12 @@
 	import { DatePicker } from '$lib/components/ui/date-picker/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
-	import * as Alert from '$lib/components/ui/alert/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { toast } from 'svelte-sonner';
 	import { Html5Qrcode } from 'html5-qrcode';
-	import { qtyGt } from '$lib/utils/qty';
+	import { qtyAbs, qtyGt, qtyIsZero, subQty } from '$lib/utils/qty';
 	import { onMount } from 'svelte';
 	import {
 		donationActionRef,
@@ -316,6 +317,48 @@
 			scannedItems.every((it) => it.verified && it.item_id && it.storage_zone && it.qty) &&
 			scannedMissingExpiry.length === 0
 	);
+
+	// The receive checklist in the action panel — one line per condition `canReceive`
+	// waits on, ticked as staff complete it (it used to be a red error box listing
+	// what was still missing, which read as a failure before anything had been done).
+	const checkMapped = $derived(
+		scannedItems.length > 0 && scannedItems.every((it) => it.item_id && it.qty)
+	);
+	const checkZoned = $derived(
+		scannedItems.length > 0 && scannedItems.every((it) => it.storage_zone)
+	);
+	const verifiedCount = $derived(scannedItems.filter((it) => it.verified).length);
+	const hasPerishableLine = $derived(
+		scannedItems.some((it) => it.item_id && isPerishable(it.item_id))
+	);
+
+	/**
+	 * How the counted quantity differs from what the donor declared, or null when it
+	 * does not (or the box is not a number yet). The field starts pre-filled with the
+	 * declared amount, so a "matches" badge would show before anyone had counted —
+	 * only a difference is worth flagging.
+	 */
+	function qtyDifference(item: ScannedItem): { more: boolean; amount: string } | null {
+		try {
+			const diff = subQty(item.qty, item.declaredQty);
+			if (qtyIsZero(diff)) return null;
+			return { more: qtyGt(diff, 0), amount: qtyAbs(diff) };
+		} catch {
+			return null;
+		}
+	}
+
+	/** The one logistics detail staff act on at the counter, when the booking has one. */
+	const logisticsDetail = $derived.by(() => {
+		const logistics = donationDoc?.logistics;
+		if (logistics?.delivery_method === 'shelter_pickup' && logistics.pickup_address) {
+			return { label: 'ที่อยู่เข้ารับของ', value: logistics.pickup_address };
+		}
+		if (logistics?.delivery_method === 'parcel') {
+			return { label: 'เลขพัสดุ', value: logistics.courier_tracking_no || 'ยังไม่ได้แจ้ง' };
+		}
+		return null;
+	});
 
 	// Walk-in form state
 	let walkinDonorName = $state('');
@@ -759,523 +802,421 @@
 <div class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
 	{#if activeView === 'scan'}
 		{#if scanState === 'result'}
-			<!-- Verifying Drop-off View (Screenshots 2, 3, 4) -->
+			<!-- Verifying drop-off: count the goods in (left), confirm or reject (right). -->
 			<div>
-				<!-- Top Dark Navy Banner -->
-				<div class="bg-[#002D5B] p-6 text-white md:p-8 dark:bg-slate-900">
+				<!-- Header -->
+				<div class="border-b border-slate-200/80 bg-white px-4 py-4 sm:px-6 sm:py-5">
 					<Button
 						variant="link"
 						size="sm"
 						type="button"
 						onclick={handleCancel}
-						class="mb-3 h-auto gap-1.5 p-0 text-xs font-medium text-blue-200 no-underline hover:text-white hover:no-underline"
+						class="mb-2 h-auto gap-1.5 p-0 text-sm font-medium text-slate-500 no-underline hover:text-slate-900 hover:no-underline"
 					>
-						<ArrowLeft class="h-3.5 w-3.5" />
+						<ArrowLeft class="h-4 w-4" />
 						กลับหน้าตรวจรับบริจาค
 					</Button>
-
-					<div class="flex items-center gap-2.5">
-						<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white">
+					<div class="flex flex-wrap items-center gap-3">
+						<span
+							class="hidden rounded-xl border border-sky-200 bg-sky-50 p-2 text-sky-700 sm:inline-flex"
+						>
 							<PackageCheck class="h-5 w-5" />
+						</span>
+						<div class="min-w-0 basis-full sm:flex-1 sm:basis-auto">
+							<h2 class="text-lg font-bold text-slate-900 sm:text-xl">
+								{donationRefLabel({ booking_ref: bookingRef })} - ตรวจรับพัสดุบริจาค
+							</h2>
+							<p class="text-sm text-slate-500">
+								{donorName || 'ไม่ระบุชื่อ'}
+								{#if donorPhone}· <span class="tabular-nums">{donorPhone}</span>{/if}
+							</p>
 						</div>
-						<h2 class="text-base font-bold text-white md:text-lg">
-							{donationRefLabel({ booking_ref: bookingRef })} - ตรวจรับพัสดุบริจาค (Verifying Drop-off)
-						</h2>
+						<span
+							class="order-first inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-900 sm:order-last"
+						>
+							<ClipboardCheck class="h-3.5 w-3.5" />
+							กำลังตรวจรับ
+						</span>
 					</div>
 				</div>
 
-				<!-- Content Body -->
-				<div class="space-y-6 p-6 md:p-8">
-					<!-- Top Notice Cards (Warning & Donor Contact) -->
-					<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-						<!-- Warning card (Unsolicited Notice) -->
-						<div
-							class="rounded-2xl border border-rose-200 bg-rose-50/70 p-5 text-sm dark:border-rose-900/50 dark:bg-rose-950/20"
-						>
-							<div class="flex items-center gap-2 font-bold text-rose-700 dark:text-rose-400">
-								<AlertTriangle class="h-4.5 w-4.5 shrink-0" />
-								<span>คำชี้แจง / เงื่อนไขตรวจสอบพัสดุพิเศษระวัง</span>
-							</div>
-							<p class="mt-2 text-xs leading-relaxed text-rose-700 dark:text-rose-300">
-								<strong class="font-bold">ประเภท:</strong> รายการไม่อยู่ในประกาศ (Unsolicited)<br />
-								สิ่งของนอกเหนือรายการแจ้งความต้องการ (Unsolicited Donation)
-							</p>
+				<div class="grid grid-cols-1 gap-5 bg-[#F8FAFC] p-4 sm:p-6 lg:grid-cols-12">
+					<!-- Left: items to count -->
+					<div class="space-y-4 lg:col-span-7">
+						<div class="flex items-baseline justify-between gap-2">
+							<h3 class="text-base font-semibold text-slate-800">รายการที่ต้องตรวจรับ</h3>
+							<span class="text-sm text-slate-500 tabular-nums">
+								ตรวจแล้ว {verifiedCount} / {scannedItems.length} รายการ
+							</span>
 						</div>
 
-						<!-- Donor Contact Card -->
-						<div
-							class="rounded-2xl border border-blue-200 bg-blue-50/70 p-5 text-sm dark:border-blue-900/50 dark:bg-blue-950/20"
-						>
-							<div class="flex items-center gap-2 font-bold text-blue-700 dark:text-blue-400">
-								<User class="h-4.5 w-4.5 shrink-0" />
-								<span>ข้อมูลผู้บริจาค / จุดประสานงาน</span>
-							</div>
-							<div class="mt-2 space-y-1 text-sm text-blue-950 dark:text-blue-200">
-								<div class="font-bold text-foreground">{donorName || 'ไม่ระบุชื่อ'}</div>
-								<div class="text-xs text-muted-foreground">
-									โทร. {donorPhone || 'ไม่ระบุเบอร์โทร'}
-								</div>
-								{#if donorEmail}
-									<div class="text-xs text-muted-foreground">{donorEmail}</div>
-								{/if}
-							</div>
-						</div>
-					</div>
-
-					<!-- Section: Item Mapping -->
-					<div class="space-y-4">
-						<div class="flex items-center justify-between">
-							<h3 class="flex items-center gap-2 text-base font-bold text-foreground">
-								<ClipboardCheck class="h-5 w-5 text-primary" />
-								ตรวจสอบและจับคู่ข้อมูล (Item Mapping)
-							</h3>
-						</div>
-
-						<div class="space-y-4">
-							{#each scannedItems as item, idx (item.key)}
+						{#each scannedItems as item, idx (item.key)}
+							{@const diff = qtyDifference(item)}
+							<div
+								class="rounded-xl border bg-white shadow-2xs {item.verified
+									? 'border-emerald-200'
+									: 'border-slate-200/80'}"
+							>
+								<!-- Item header -->
 								<div
-									class="rounded-2xl border border-border/80 bg-card p-5 shadow-xs transition-all md:p-6 {item.verified
-										? 'border-emerald-500/50 bg-emerald-50/15'
-										: ''}"
+									class="flex flex-wrap items-center gap-2 border-b border-slate-100 p-4 sm:px-5"
 								>
-									<!-- Item Header & Verified Checkbox -->
-									<div
-										class="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-4"
-									>
-										<div class="flex flex-wrap items-center gap-2.5">
-											<div
-												class="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary"
-											>
-												<Package class="h-5 w-5" />
-											</div>
-											<span class="text-base font-bold text-foreground">{item.name}</span>
-											<Badge variant="secondary" class="h-6 px-2.5 text-xs font-semibold">
-												แจ้งไว้: {item.declaredQty}
-												{formatUnit(item.unit, unitsOfMeasure, langState.current)}
-											</Badge>
-											{#if item.qty === item.declaredQty}
-												<Badge
-													variant="outline"
-													class="h-6 border-emerald-300/80 bg-emerald-50 px-2 text-xs font-bold text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
-												>
-													✓ ครบถ้วน
-												</Badge>
-											{:else}
-												<Badge
-													variant="outline"
-													class="h-6 border-amber-300/80 bg-amber-50 px-2 text-xs font-bold text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
-												>
-													⚠ มีส่วนต่าง
-												</Badge>
-											{/if}
-										</div>
-
-										<label
-											class="flex cursor-pointer items-center gap-2.5 rounded-xl border border-border/80 bg-background/80 px-3.5 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted/60 {item.verified
-												? 'border-emerald-500/60 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300'
-												: ''}"
+									<Package class="h-5 w-5 shrink-0 text-slate-400" />
+									<span class="text-base font-bold text-slate-900">{item.name}</span>
+									<span class="text-sm text-slate-500">
+										แจ้งไว้ <span class="tabular-nums">{item.declaredQty}</span>
+										{formatUnit(item.unit, unitsOfMeasure, langState.current)}
+									</span>
+									{#if diff}
+										<span
+											class="ml-auto inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-900"
 										>
-											<Checkbox bind:checked={item.verified} />
-											<span class="select-none">ผ่านการตรวจสอบแล้ว</span>
-										</label>
+											<AlertTriangle class="h-3.5 w-3.5" />
+											{diff.more ? 'มากกว่า' : 'น้อยกว่า'}ที่แจ้ง
+											<span class="tabular-nums">{diff.amount}</span>
+											{formatUnit(item.unit, unitsOfMeasure, langState.current)}
+										</span>
+									{/if}
+								</div>
+
+								<!-- Fields: what it is and how much, then where it goes -->
+								<div class="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 sm:px-5">
+									<div class="space-y-1.5">
+										<Label for="map-master-{idx}" class="text-sm font-semibold text-slate-700">
+											รายการในคลัง <span class="text-red-500">*</span>
+										</Label>
+										<Select.Root type="single" bind:value={item.item_id}>
+											<Select.Trigger
+												id="map-master-{idx}"
+												class="h-11 w-full text-sm data-[size=default]:h-11 sm:h-10 sm:data-[size=default]:h-10"
+											>
+												{catalogLabel(item.item_id, '-- เลือกรายการในคลัง --')}
+											</Select.Trigger>
+											<Select.Content>
+												{#each catalogItems as c (c._id)}
+													<Select.Item value={c._id} label="{c.name} ({c.unit})" />
+												{/each}
+											</Select.Content>
+										</Select.Root>
+										<!--
+										Creating an item master is not offered here: checking a booking in is
+										confirming what arrived, so a line that does not match goes in the
+										difference note, not into a new catalog entry. Walk-in intake keeps
+										its quick-create (`openQuickCreate`), where new goods are recorded.
+										-->
 									</div>
 
-									<!-- Form Fields Grid -->
-									<div class="space-y-4">
-										<!-- Row 1: Map to Master & Storage Zone -->
-										<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-											<!-- Map to master -->
-											<div class="space-y-1.5">
-												<div class="flex items-center justify-between">
-													<Label
-														for="map-master-{idx}"
-														class="text-sm font-semibold text-foreground"
-													>
-														จับคู่ฐานข้อมูลหลัก (Map to Master) <span class="text-destructive"
-															>*</span
-														>
-													</Label>
-													<Button
-														variant="link"
-														size="sm"
-														type="button"
-														onclick={() => openQuickCreate(idx)}
-														class="h-auto p-0 text-xs font-semibold text-blue-600 dark:text-blue-400"
-													>
-														+ สร้างรายการใหม่
-													</Button>
-												</div>
-
-												<div class="flex items-center gap-2">
-													<Select.Root type="single" bind:value={item.item_id}>
-														<Select.Trigger
-															id="map-master-{idx}"
-															class="h-10 w-full rounded-xl text-sm data-[size=default]:h-10"
-														>
-															{catalogLabel(item.item_id, '-- เลือกรายการสินค้าหลัก --')}
-														</Select.Trigger>
-														<Select.Content>
-															{#each catalogItems as c (c._id)}
-																<Select.Item value={c._id} label="{c.name} ({c.unit})" />
-															{/each}
-														</Select.Content>
-													</Select.Root>
-
-													<Button
-														type="button"
-														variant="outline"
-														size="icon"
-														onclick={() => openQuickCreate(idx)}
-														class="h-10 w-10 shrink-0 rounded-xl border-blue-200 bg-blue-50/70 text-blue-600 hover:bg-blue-100 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-400"
-														title="สร้างสินค้าใหม่"
-													>
-														<PlusCircle class="h-4 w-4" />
-													</Button>
-												</div>
-											</div>
-
-											<!-- Storage Zone -->
-											<div class="space-y-1.5">
-												<Label
-													for="storage-zone-{idx}"
-													class="text-sm font-semibold text-foreground"
-												>
-													โซนจัดเก็บ <span class="text-destructive">*</span>
-												</Label>
-												<Select.Root type="single" bind:value={item.storage_zone}>
-													<Select.Trigger
-														id="storage-zone-{idx}"
-														class="h-10 w-full rounded-xl text-sm data-[size=default]:h-10"
-													>
-														{item.storage_zone || '-- เลือกโซนจัดเก็บ * --'}
-													</Select.Trigger>
-													<Select.Content>
-														{#each STORAGE_ZONE_OPTIONS as zone (zone)}
-															<Select.Item value={zone} label={zone} />
-														{/each}
-													</Select.Content>
-												</Select.Root>
-											</div>
+									<div class="space-y-1.5">
+										<Label for="item-qty-{idx}" class="text-sm font-semibold text-slate-700">
+											จำนวนรับจริง <span class="text-red-500">*</span>
+										</Label>
+										<div class="relative flex items-center">
+											<Input
+												id="item-qty-{idx}"
+												type="text"
+												inputmode="decimal"
+												bind:value={item.qty}
+												class="h-11 pr-16 text-base font-bold tabular-nums sm:h-10"
+											/>
+											<span
+												class="pointer-events-none absolute right-3 text-sm font-medium text-slate-500"
+											>
+												{formatUnit(item.unit, unitsOfMeasure, langState.current)}
+											</span>
 										</div>
+									</div>
 
-										<!-- Row 2: Expiry date & Real quantity & Difference reason -->
-										<div class="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 md:grid-cols-12">
-											<!-- Expiry date -->
-											<div class="space-y-1.5 md:col-span-3">
-												<Label
-													for="item-expiry-{idx}"
-													class="text-sm font-semibold text-foreground"
-												>
-													วันหมดอายุ
-													{#if item.item_id && isPerishable(item.item_id)}
-														<span class="text-destructive">*</span>
-														<span class="ml-1 text-xs font-normal text-rose-600 dark:text-rose-400">
-															(ของเน่าเสียง่าย)
-														</span>
-													{:else}
-														<span class="ml-1 text-xs font-normal text-muted-foreground">
-															(ถ้ามี)
-														</span>
-													{/if}
-												</Label>
-												<DatePicker
-													id="item-expiry-{idx}"
-													ariaLabel="วันหมดอายุ"
-													bind:value={item.expiry}
-													class="h-10 rounded-xl text-sm {item.item_id &&
-													isPerishable(item.item_id) &&
-													!item.expiry
-														? 'border-rose-300 dark:border-rose-900'
-														: ''}"
-												/>
-											</div>
+									<div class="space-y-1.5">
+										<Label for="storage-zone-{idx}" class="text-sm font-semibold text-slate-700">
+											โซนจัดเก็บ <span class="text-red-500">*</span>
+										</Label>
+										<Select.Root type="single" bind:value={item.storage_zone}>
+											<Select.Trigger
+												id="storage-zone-{idx}"
+												class="h-11 w-full text-sm data-[size=default]:h-11 sm:h-10 sm:data-[size=default]:h-10"
+											>
+												{item.storage_zone || '-- เลือกโซนจัดเก็บ --'}
+											</Select.Trigger>
+											<Select.Content>
+												{#each STORAGE_ZONE_OPTIONS as zone (zone)}
+													<Select.Item value={zone} label={zone} />
+												{/each}
+											</Select.Content>
+										</Select.Root>
+									</div>
 
-											<!-- Real Quantity -->
-											<div class="space-y-1.5 md:col-span-4">
-												<div class="flex items-center justify-between">
-													<Label for="item-qty-{idx}" class="text-sm font-semibold text-foreground">
-														จำนวนรับจริง <span class="text-destructive">*</span>
-													</Label>
-													<span class="text-xs text-muted-foreground">
-														แจ้งไว้: {item.declaredQty}
-														{formatUnit(item.unit, unitsOfMeasure, langState.current)}
-													</span>
-												</div>
-												<div class="relative flex items-center">
-													<Input
-														id="item-qty-{idx}"
-														type="text"
-														inputmode="decimal"
-														bind:value={item.qty}
-														class="h-10 rounded-xl pr-14 text-sm font-bold"
-													/>
-													<span
-														class="pointer-events-none absolute right-3 text-sm font-medium text-muted-foreground"
-													>
-														{formatUnit(item.unit, unitsOfMeasure, langState.current)}
-													</span>
-												</div>
-											</div>
+									<div class="space-y-1.5">
+										<Label for="item-expiry-{idx}" class="text-sm font-semibold text-slate-700">
+											วันหมดอายุ
+											{#if item.item_id && isPerishable(item.item_id)}
+												<span class="text-red-500">*</span>
+												<span class="text-xs font-normal text-red-700">(ของเน่าเสียง่าย)</span>
+											{:else}
+												<span class="text-xs font-normal text-slate-500">(ถ้ามี)</span>
+											{/if}
+										</Label>
+										<DatePicker
+											id="item-expiry-{idx}"
+											ariaLabel="วันหมดอายุ"
+											bind:value={item.expiry}
+											class="h-11 text-sm sm:h-10 {item.item_id &&
+											isPerishable(item.item_id) &&
+											!item.expiry
+												? 'border-red-300'
+												: ''}"
+										/>
+									</div>
 
-											<!-- Difference remark -->
-											<div class="space-y-1.5 md:col-span-5">
-												<Label
-													for="item-remark-{idx}"
-													class="text-sm font-semibold text-foreground"
-												>
-													หมายเหตุ / เหตุผลส่วนต่าง
-												</Label>
-												<Input
-													id="item-remark-{idx}"
-													type="text"
-													placeholder="ระบุข้อความสั้นๆ (ถ้ามี)"
-													bind:value={item.diffReason}
-													class="h-10 rounded-xl text-sm"
-												/>
-											</div>
-										</div>
+									<div class="space-y-1.5 sm:col-span-2">
+										<Label for="item-remark-{idx}" class="text-sm font-semibold text-slate-700">
+											หมายเหตุ / เหตุผลที่จำนวนต่างจากที่แจ้ง
+										</Label>
+										<Input
+											id="item-remark-{idx}"
+											type="text"
+											placeholder="เช่น แตกเสียหาย 2 ขวด (ถ้ามี)"
+											bind:value={item.diffReason}
+											class="h-11 text-sm sm:h-10"
+										/>
 									</div>
 								</div>
-							{/each}
+
+								<!-- Confirmation sits right under the fields it confirms -->
+								<label
+									class="flex min-h-12 cursor-pointer items-center gap-3 rounded-b-xl border-t px-4 py-3 text-sm font-semibold sm:px-5 {item.verified
+										? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+										: 'border-slate-100 bg-slate-50 text-slate-700 hover:bg-slate-100'}"
+								>
+									<Checkbox bind:checked={item.verified} />
+									<span class="flex flex-col">
+										<span class="select-none">ผ่านการตรวจสอบแล้ว</span>
+										<span class="text-xs font-normal text-slate-500">
+											ของจริงตรงกับรายการ จำนวน และสภาพที่กรอกไว้
+										</span>
+									</span>
+								</label>
+							</div>
+						{/each}
+
+						<div class="rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs sm:px-5">
+							<h4 class="text-sm font-semibold text-slate-700">คำชี้แจงจากผู้บริจาค</h4>
+							<p class="mt-1 text-sm whitespace-pre-line text-slate-700">{donorNote}</p>
 						</div>
 					</div>
 
-					<!-- Additional Statement / Condition Details -->
-					<div class="space-y-2">
-						<div class="flex items-center gap-2 text-sm font-bold text-foreground">
-							<PackageCheck class="h-4.5 w-4.5 text-muted-foreground" />
-							<span>คำชี้แจงและกรณีศึกษาสภาพสิ่งของเพิ่มเติม</span>
-						</div>
-						<div
-							class="rounded-2xl border border-border/80 bg-muted/15 p-4.5 text-sm leading-relaxed text-foreground"
-						>
-							{donorNote}
-						</div>
-					</div>
-
-					<!-- Logistics Info (3 boxes) -->
-					<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
-						<div class="rounded-2xl border border-border/80 bg-card p-4.5 shadow-2xs">
-							<div class="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-								<Truck class="h-4 w-4 text-blue-600 dark:text-blue-400" />
-								<span>ยานพาหนะจัดส่ง</span>
-							</div>
-							<p class="mt-2 text-sm font-bold text-foreground">
-								{vehicleLabel}
-							</p>
-						</div>
-
-						<div class="rounded-2xl border border-border/80 bg-card p-4.5 shadow-2xs">
-							<div class="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-								<MapPin class="h-4 w-4 text-blue-600 dark:text-blue-400" />
-								<span>อาคาร/พิกัดเสนอรับเข้า</span>
-							</div>
-							<p class="mt-2 text-sm font-bold text-foreground">จุดรับบริจาคส่วนหน้า</p>
-						</div>
-
-						<div class="rounded-2xl border border-border/80 bg-card p-4.5 shadow-2xs">
-							<div class="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-								<Calendar class="h-4 w-4 text-blue-600 dark:text-blue-400" />
-								<span>นัดหมายเสนอขอบริจาค</span>
-							</div>
-							<p class="mt-2 text-sm font-bold text-foreground">
-								{appointmentLabel}
-							</p>
-						</div>
-					</div>
-
-					<!-- Staff Review Memo Textarea -->
-					<div class="space-y-2">
-						<Label for="review-memo-input" class="text-sm font-bold text-foreground">
-							บันทึกความเห็นของเจ้าหน้าที่ประจำศูนย์ (Internal Review Memo)
-						</Label>
-						<Textarea
-							id="review-memo-input"
-							rows={3}
-							placeholder="เขียนวิเคราะห์ความจุคลัง หรือข้อตกลงพิเศษในการรับของ เช่น โซนตู้แช่สำรองไฟ ฯลฯ"
-							bind:value={remarks}
-							class="rounded-2xl p-3.5 text-sm"
-						/>
-					</div>
-
-					<!-- Bottom Validation Alert Box (Clean, above action buttons) -->
-					{#if !canReceive}
-						<Alert.Root
-							variant="destructive"
-							class="rounded-2xl border-destructive/40 bg-destructive/5"
-						>
-							<AlertTriangle />
-							<Alert.Title class="font-bold">
-								ไม่สามารถกด "ยืนยันรับเข้าคลัง" ได้เนื่องจาก:
-							</Alert.Title>
-							<Alert.Description>
-								<ul class="list-inside list-disc space-y-1 text-xs">
-									{#if scannedItems.some((it) => !it.item_id || !it.qty)}
-										<li>ยังจับคู่ข้อมูลสินค้า หรือกรอกจำนวนรับไม่ครบถ้วน</li>
-									{/if}
-									{#if scannedItems.some((it) => !it.storage_zone)}
-										<li>ยังไม่ได้เลือกโซนจัดเก็บครบทุกรายการ</li>
-									{/if}
-									{#if scannedItems.some((it) => !it.verified)}
-										<li>ยังไม่ได้ติ๊ก "ผ่านการตรวจสอบแล้ว" ครบทุกรายการ</li>
-									{/if}
-									{#if scannedMissingExpiry.length > 0}
-										<li>
-											ของเน่าเสียง่ายยังไม่ได้ระบุวันหมดอายุ: {scannedMissingExpiry.join(', ')}
-										</li>
-									{/if}
-								</ul>
-							</Alert.Description>
-						</Alert.Root>
-					{/if}
-
-					<!-- Action Buttons Row (Professional, clean layout) -->
-					<div
-						class="flex flex-col-reverse items-stretch justify-between gap-3 border-t border-border/60 pt-4 sm:flex-row sm:items-center"
-					>
-						<div class="flex flex-wrap items-center gap-2.5">
-							<!-- Receive Into Stock Button -->
-							<Button
-								type="button"
-								onclick={handleSaveScan}
-								disabled={saving || !canReceive}
-								class="h-11 gap-2 rounded-xl bg-emerald-600 px-6 text-sm font-bold text-white shadow-xs hover:bg-emerald-700"
-							>
-								<Check class="h-4.5 w-4.5" />
-								{saving ? 'กำลังบันทึก…' : 'ยืนยันรับเข้าคลัง'}
-							</Button>
-
-							<!--
-							Redirect ("ประสานงานส่งต่อ") is hidden for now: the centre does not hand
-							donations off to another shelter yet, so offering the action would promise
-							a workflow that has no receiving end. The panel below,
-							`handleConfirmRedirect` and the `/redirect` route all stay wired up —
-							bringing the action back is uncommenting this button, not rebuilding the
-							feature.
-
-							<Button
-								type="button"
-								onclick={() => (actionPanel = actionPanel === 'redirect' ? 'none' : 'redirect')}
-								disabled={saving}
-								class="h-11 gap-2 rounded-xl bg-[#002D5B] px-5 text-sm font-bold text-white shadow-xs hover:bg-[#001f3f] dark:bg-blue-600 dark:hover:bg-blue-700"
-							>
-								<MapPin class="h-4 w-4" />
-								ประสานงานส่งต่อ
-							</Button>
-							-->
+					<!-- Right: booking facts, memo, and the decision -->
+					<div class="space-y-4 lg:sticky lg:top-4 lg:col-span-5 lg:self-start">
+						<div class="space-y-3 rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs">
+							<h4 class="text-sm font-semibold text-slate-700">ข้อมูลการจอง</h4>
+							<dl class="space-y-2.5 text-sm">
+								<div class="flex gap-2.5">
+									<User class="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+									<div>
+										<dt class="sr-only">ผู้บริจาค</dt>
+										<dd class="font-semibold text-slate-900">{donorName || 'ไม่ระบุชื่อ'}</dd>
+										<dd class="text-slate-500 tabular-nums">
+											{donorPhone || 'ไม่ระบุเบอร์โทร'}
+										</dd>
+										{#if donorEmail}<dd class="text-slate-500">{donorEmail}</dd>{/if}
+									</div>
+								</div>
+								<div class="flex gap-2.5">
+									<Truck class="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+									<div>
+										<dt class="text-xs text-slate-500">วิธีส่ง / ยานพาหนะ</dt>
+										<dd class="font-semibold text-slate-900">{vehicleLabel}</dd>
+									</div>
+								</div>
+								<div class="flex gap-2.5">
+									<Calendar class="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+									<div>
+										<dt class="text-xs text-slate-500">นัดหมาย</dt>
+										<dd class="font-semibold text-slate-900 tabular-nums">{appointmentLabel}</dd>
+									</div>
+								</div>
+								{#if logisticsDetail}
+									<div class="flex gap-2.5">
+										<MapPin class="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+										<div>
+											<dt class="text-xs text-slate-500">{logisticsDetail.label}</dt>
+											<dd class="font-semibold text-slate-900">{logisticsDetail.value}</dd>
+										</div>
+									</div>
+								{/if}
+							</dl>
 						</div>
 
-						<!-- Reject Button -->
-						<Button
-							variant="outline"
-							type="button"
-							onclick={() => (actionPanel = actionPanel === 'reject' ? 'none' : 'reject')}
-							disabled={saving}
-							class="h-11 rounded-xl border-rose-200 bg-rose-50/70 px-5 text-sm font-bold text-rose-600 hover:bg-rose-100 hover:text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/20 dark:hover:bg-rose-900/40"
-						>
-							ปฏิเสธคำขอ
-						</Button>
-					</div>
+						<div class="space-y-1.5 rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs">
+							<Label for="review-memo-input" class="text-sm font-semibold text-slate-700">
+								บันทึกของเจ้าหน้าที่
+							</Label>
+							<Textarea
+								id="review-memo-input"
+								rows={3}
+								placeholder="เช่น เก็บตู้แช่สำรองไฟ, กล่องบุบ 1 ใบ"
+								bind:value={remarks}
+								class="text-sm"
+							/>
+						</div>
 
-					<!-- Expandable Redirect Panel -->
-					{#if actionPanel === 'redirect'}
-						<div
-							class="animate-in space-y-4 rounded-2xl border-2 border-blue-500 bg-card p-5 shadow-sm fade-in slide-in-from-top-2"
-						>
-							<div class="space-y-1.5">
-								<Label for="target-shelter-select" class="text-sm font-bold text-foreground">
-									เลือกศูนย์พักพิงปลายทางแห่งใหม่ (Target Shelter Reroute) <span
-										class="text-rose-500">*</span
-									>
-								</Label>
-								<Select.Root type="single" bind:value={selectedTargetShelter}>
-									<Select.Trigger
-										id="target-shelter-select"
-										class="h-10 w-full rounded-xl text-sm data-[size=default]:h-10"
-									>
-										{redirectTargetLabel}
-									</Select.Trigger>
-									<Select.Content>
-										{#each redirectTargets as target (target.code)}
-											<Select.Item value={target.code} label="{target.name} ({target.code})" />
-										{/each}
-									</Select.Content>
-								</Select.Root>
-							</div>
+						<div class="space-y-4 rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs">
+							<h4 class="text-sm font-semibold text-slate-700">ก่อนรับเข้าคลัง</h4>
+							<ul class="space-y-2 text-sm">
+								{#snippet step(done: boolean, text: string)}
+									<li class="flex items-start gap-2 {done ? 'text-emerald-900' : 'text-slate-600'}">
+										{#if done}
+											<CheckCircle2 class="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+										{:else}
+											<Circle class="mt-0.5 h-4 w-4 shrink-0 text-slate-300" />
+										{/if}
+										<span>{text}</span>
+									</li>
+								{/snippet}
+								{@render step(checkMapped, 'เลือกรายการในคลังและกรอกจำนวนรับจริงครบ')}
+								{@render step(checkZoned, 'เลือกโซนจัดเก็บครบทุกรายการ')}
+								{#if hasPerishableLine}
+									{@render step(
+										scannedMissingExpiry.length === 0,
+										'ใส่วันหมดอายุของเน่าเสียง่ายครบ'
+									)}
+								{/if}
+								{@render step(
+									scannedItems.length > 0 && verifiedCount === scannedItems.length,
+									`ติ๊ก "ผ่านการตรวจสอบแล้ว" ครบ (${verifiedCount}/${scannedItems.length})`
+								)}
+							</ul>
 
-							<div class="space-y-1.5">
-								<Label for="redirect-remark-input" class="text-sm font-bold text-foreground">
-									หมายเหตุสำหรับการส่งต่อ (Remark)
-								</Label>
-								<Textarea
-									id="redirect-remark-input"
-									rows={2}
-									placeholder="ระบุเหตุผลการส่งต่อ เช่น คลังเต็ม หรือต้องการการดูแลเฉพาะทาง..."
-									bind:value={redirectNote}
-									class="rounded-xl bg-muted/10 text-sm"
-								/>
-							</div>
-
-							<div class="flex items-center justify-between gap-3 pt-2">
+							<div class="space-y-2">
 								<Button
 									type="button"
-									onclick={handleConfirmRedirect}
-									disabled={saving || !selectedTargetShelter}
-									class="h-10 rounded-xl bg-[#002D5B] px-6 text-sm font-bold text-white hover:bg-[#001f3f] dark:bg-blue-600 dark:hover:bg-blue-700"
+									onclick={handleSaveScan}
+									disabled={saving || !canReceive}
+									class="h-12 w-full gap-2 bg-emerald-600 text-base font-bold text-white hover:bg-emerald-700"
 								>
-									{saving ? 'กำลังดำเนินการ...' : 'ยืนยันการประสานงานส่งต่อ'}
+									<Check class="h-5 w-5" />
+									{saving ? 'กำลังบันทึก…' : 'ยืนยันรับเข้าคลัง'}
 								</Button>
-								<Button
-									variant="ghost"
-									type="button"
-									onclick={() => (actionPanel = 'none')}
-									class="h-10 rounded-xl px-5 text-sm font-bold"
-								>
-									ยกเลิก
-								</Button>
-							</div>
-						</div>
-					{/if}
 
-					<!-- Expandable Reject Panel -->
-					{#if actionPanel === 'reject'}
-						<div
-							class="animate-in space-y-4 rounded-2xl border border-rose-200 bg-white p-5 shadow-2xs fade-in slide-in-from-top-2 dark:border-rose-900/50 dark:bg-card"
-						>
-							<div class="space-y-1.5">
-								<Label for="reject-reason-input" class="text-sm font-bold text-foreground">
-									ระบุเหตุผลในการปฏิเสธคำขอ (Reject Reason)
-								</Label>
-								<Input
-									id="reject-reason-input"
-									type="text"
-									placeholder="เช่น พื้นที่จัดเก็บไม่เพียงพอ, งดรับเสื้อผ้าชั่วคราว..."
-									bind:value={rejectReason}
-									class="h-10 rounded-xl border border-border/80 bg-background text-sm text-foreground placeholder:text-muted-foreground focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20"
-								/>
+								<!--
+								Redirect ("ประสานงานส่งต่อ") is hidden for now: the centre does not hand
+								donations off to another shelter yet, so offering the action would promise
+								a workflow that has no receiving end. The panel below,
+								`handleConfirmRedirect` and the `/redirect` route all stay wired up —
+								bringing the action back is uncommenting this button, not rebuilding the
+								feature.
+
+								<Button
+									type="button"
+									onclick={() => (actionPanel = actionPanel === 'redirect' ? 'none' : 'redirect')}
+									disabled={saving}
+									class="h-11 w-full gap-2"
+								>
+									<MapPin class="h-4 w-4" />
+									ประสานงานส่งต่อ
+								</Button>
+								-->
+
+								<Button
+									variant="outline"
+									type="button"
+									onclick={() => (actionPanel = actionPanel === 'reject' ? 'none' : 'reject')}
+									disabled={saving}
+									class="h-11 w-full border-red-200 text-sm font-semibold text-red-700 hover:bg-red-50 hover:text-red-800"
+								>
+									ปฏิเสธคำขอ
+								</Button>
 							</div>
 
-							<div class="flex items-center gap-3 pt-1">
-								<Button
-									variant="destructive"
-									type="button"
-									onclick={handleConfirmReject}
-									disabled={saving || !rejectReason.trim()}
-									class="h-10 flex-1 rounded-xl bg-destructive px-6 text-sm font-bold text-white shadow-xs hover:bg-destructive/90"
-								>
-									{saving ? 'กำลังดำเนินการ...' : 'ยืนยันการปฏิเสธคำขอ'}
-								</Button>
-								<Button
-									variant="secondary"
-									type="button"
-									onclick={() => (actionPanel = 'none')}
-									class="h-10 rounded-xl px-6 text-sm font-bold"
-								>
-									ยกเลิก
-								</Button>
-							</div>
+							{#if actionPanel === 'redirect'}
+								<div class="space-y-3 rounded-xl border border-sky-200 bg-sky-50/40 p-4">
+									<div class="space-y-1.5">
+										<Label for="target-shelter-select" class="text-sm font-semibold text-slate-700">
+											ศูนย์ปลายทาง <span class="text-red-500">*</span>
+										</Label>
+										<Select.Root type="single" bind:value={selectedTargetShelter}>
+											<Select.Trigger
+												id="target-shelter-select"
+												class="h-11 w-full text-sm data-[size=default]:h-11 sm:h-10 sm:data-[size=default]:h-10"
+											>
+												{redirectTargetLabel}
+											</Select.Trigger>
+											<Select.Content>
+												{#each redirectTargets as target (target.code)}
+													<Select.Item value={target.code} label="{target.name} ({target.code})" />
+												{/each}
+											</Select.Content>
+										</Select.Root>
+									</div>
+									<div class="space-y-1.5">
+										<Label for="redirect-remark-input" class="text-sm font-semibold text-slate-700">
+											หมายเหตุการส่งต่อ
+										</Label>
+										<Textarea
+											id="redirect-remark-input"
+											rows={2}
+											placeholder="ระบุเหตุผลการส่งต่อ เช่น คลังเต็ม หรือต้องการการดูแลเฉพาะทาง..."
+											bind:value={redirectNote}
+											class="text-sm"
+										/>
+									</div>
+									<div class="flex gap-2">
+										<Button
+											type="button"
+											onclick={handleConfirmRedirect}
+											disabled={saving || !selectedTargetShelter}
+											class="h-11 flex-1"
+										>
+											{saving ? 'กำลังดำเนินการ...' : 'ยืนยันการประสานงานส่งต่อ'}
+										</Button>
+										<Button
+											variant="ghost"
+											type="button"
+											onclick={() => (actionPanel = 'none')}
+											class="h-11"
+										>
+											ยกเลิก
+										</Button>
+									</div>
+								</div>
+							{/if}
+
+							{#if actionPanel === 'reject'}
+								<div class="space-y-3 rounded-xl border border-red-200 bg-red-50/40 p-4">
+									<div class="space-y-1.5">
+										<Label for="reject-reason-input" class="text-sm font-semibold text-slate-700">
+											เหตุผลที่ปฏิเสธ <span class="text-red-500">*</span>
+										</Label>
+										<Input
+											id="reject-reason-input"
+											type="text"
+											placeholder="เช่น พื้นที่จัดเก็บไม่เพียงพอ, งดรับเสื้อผ้าชั่วคราว..."
+											bind:value={rejectReason}
+											class="h-11 bg-white text-sm sm:h-10"
+										/>
+									</div>
+									<div class="flex gap-2">
+										<Button
+											variant="destructive"
+											type="button"
+											onclick={handleConfirmReject}
+											disabled={saving || !rejectReason.trim()}
+											class="h-11 flex-1 font-semibold"
+										>
+											{saving ? 'กำลังดำเนินการ...' : 'ยืนยันการปฏิเสธคำขอ'}
+										</Button>
+										<Button
+											variant="outline"
+											type="button"
+											onclick={() => (actionPanel = 'none')}
+											class="h-11"
+										>
+											ยกเลิก
+										</Button>
+									</div>
+								</div>
+							{/if}
 						</div>
-					{/if}
+					</div>
 				</div>
 			</div>
 		{:else}
