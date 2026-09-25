@@ -114,7 +114,7 @@ export type {
 	FuelCylinderInput
 } from './domain/kitchen';
 
-// Domain — meal distribution push to POS (CR-131)
+// Domain — meal distribution push to POS (CR-144)
 export type {
 	MealDistributionPush,
 	MealDistributionPushItem,

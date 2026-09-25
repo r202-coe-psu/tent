@@ -81,7 +81,7 @@ export interface KitchenRepository {
 	deleteMealPlanDraft(plan: MealPlan): Promise<void>;
 	// Confirmed plans (a ticket already references them) — only while that
 	// ticket is still PENDING_PICK; caller enforces the ticket-status guard by
-	// updating the ticket's items first (CR-127).
+	// updating the ticket's items first (CR-140).
 	updateConfirmedMealPlan(
 		plan: MealPlan,
 		patch: Pick<
@@ -119,17 +119,17 @@ export interface KitchenRepository {
 	listRequisitions(): Promise<KitchenRequisition[]>;
 
 	// MealService — ulid _id, append-only; recordMealService rejects a second
-	// service for a plan whose latest service hasn't been rejected (CR-130) — a
+	// service for a plan whose latest service hasn't been rejected (CR-143) — a
 	// rejected service may be superseded by re-recording.
 	recordMealService(input: MealServiceInput, ctx: AuthorContext): Promise<MealService>;
 	/** Latest meal_service for a plan (ulid order) — a plan may have more than
-	 * one after a reject-and-redo cycle (CR-130). */
+	 * one after a reject-and-redo cycle (CR-143). */
 	getMealServiceByPlanId(mealPlanId: string): Promise<MealService | null>;
 	/** @deprecated Ambiguous with multiple plans per date+meal — use getMealServiceByPlanId. */
 	getMealService(date: string, meal: string): Promise<MealService | null>;
 	listMealServices(): Promise<MealService[]>;
 
-	// MealServiceReceipt (CR-129/CR-130) — warehouse confirms or rejects receipt
+	// MealServiceReceipt (CR-142/CR-143) — warehouse confirms or rejects receipt
 	// of cooked output; append-only, rejects a second decision for a meal_service
 	// that already has one.
 	confirmMealServiceReceipt(mealServiceId: string, ctx: AuthorContext): Promise<MealServiceReceipt>;
@@ -140,7 +140,7 @@ export interface KitchenRepository {
 	): Promise<MealServiceReceipt>;
 	listMealServiceReceipts(): Promise<MealServiceReceipt[]>;
 
-	// MealDistributionPush (CR-131) — pushes confirmed-receipt meal_service output
+	// MealDistributionPush (CR-144) — pushes confirmed-receipt meal_service output
 	// to a distribution point; all-or-nothing check against remaining qty first.
 	createMealDistributionPush(
 		input: MealDistributionPushInput,

@@ -64,7 +64,7 @@
 	let vehicle = $state('');
 	let qtyByServiceId = $state<Record<string, string>>({});
 
-	// Only meal_service confirmed into stock (CR-129/CR-130) with remaining qty > 0
+	// Only meal_service confirmed into stock (CR-142/CR-143) with remaining qty > 0
 	// are eligible to push — matches the "รอส่งมอบ" gate.
 	const eligibleServiceRows = $derived.by(() => {
 		return (services.data ?? [])

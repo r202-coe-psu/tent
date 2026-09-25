@@ -1,5 +1,5 @@
 ---
-id: CR-130
+id: CR-143
 title: เพิ่มการปฏิเสธรับมอบ (ตีกลับโรงครัว) ให้ meal_service_receipt — คลังบันทึกผลผลิตใหม่ได้หลังถูกตีกลับ
 status: approved
 date: 2026-09-25
@@ -8,7 +8,7 @@ requested_by: Project Owner (session ปรับ UI /back-office/tickets/kitche
 decided_by: Project Owner
 layer: stable
 extends:
-  - CR-129 (meal_service_receipt — เดิมมีแค่ "ยืนยันตรวจรับ" ทางเดียว)
+  - CR-142 (meal_service_receipt — เดิมมีแค่ "ยืนยันตรวจรับ" ทางเดียว)
 affects:
   - docs/data/schema.md §2.7.3 (เพิ่ม field `outcome`, `reason` ใน meal_service_receipt)
   - frontend/src/lib/features/kitchen/domain/kitchen.ts (`MealServiceReceiptOutcome`,
@@ -23,11 +23,11 @@ affects:
     แสดงแค่ meal_service ล่าสุดต่อแผน; ปุ่มยืนยัน/ปฏิเสธแสดงเฉพาะเมื่อเข้าจากหน้านี้ผ่าน `role=warehouse`)
 ---
 
-# CR-130: ปฏิเสธรับมอบ (ตีกลับโรงครัว)
+# CR-143: ปฏิเสธรับมอบ (ตีกลับโรงครัว)
 
 ## 1. Why
 
-CR-129 ให้คลังกด "ยืนยันตรวจรับ" ได้ทางเดียว แต่ตัวอย่างหน้าจอที่เจ้าของโครงการอ้างอิงมี
+CR-142 ให้คลังกด "ยืนยันตรวจรับ" ได้ทางเดียว แต่ตัวอย่างหน้าจอที่เจ้าของโครงการอ้างอิงมี
 "ปฏิเสธการรับมอบ / ตีกลับโรงครัว" ด้วย — กรณีจำนวนไม่ตรงหรือคุณภาพไม่ผ่าน คลังต้องตีกลับให้ครัวแก้ไข
 
 ## 2. Change
@@ -35,7 +35,7 @@ CR-129 ให้คลังกด "ยืนยันตรวจรับ" ไ
 ### 2.1 `meal_service_receipt` เพิ่ม `outcome`/`reason`
 
 `outcome: 'confirmed' | 'rejected'`, `reason?: string` (บังคับเมื่อ `rejected`) — ยังเป็น
-append-only doc เดียวกับ CR-129 หนึ่งใบต่อ `meal_service` (idempotent ทั้ง 2 ทาง)
+append-only doc เดียวกับ CR-142 หนึ่งใบต่อ `meal_service` (idempotent ทั้ง 2 ทาง)
 
 ### 2.2 ผ่อน invariant "1 แผน/1 ครั้ง" ของ `recordMealService`
 

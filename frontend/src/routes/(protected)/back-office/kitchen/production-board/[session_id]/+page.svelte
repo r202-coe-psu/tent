@@ -144,14 +144,14 @@
 	});
 
 	// Latest service for the plan (ulid order) — a plan may have more than one
-	// after a reject-and-redo cycle (CR-130).
+	// after a reject-and-redo cycle (CR-143).
 	const activeService = $derived.by(() => {
 		if (!activePlanId) return null;
 		const matches = (services.data ?? []).filter((s) => s.meal_plan_id === activePlanId);
 		return matches.length > 0 ? matches[matches.length - 1] : null;
 	});
 
-	// CR-129/CR-130: warehouse must decide (confirm/reject) before this batch
+	// CR-142/CR-143: warehouse must decide (confirm/reject) before this batch
 	// counts as delivered; a rejected service can be superseded by re-recording.
 	const activeServiceReceipt = $derived.by(() => {
 		if (!activeService) return null;
@@ -164,7 +164,7 @@
 	);
 	const serviceReceiptConfirmed = $derived(activeServiceOutcome === 'confirmed');
 	const serviceRejected = $derived(activeServiceOutcome === 'rejected');
-	// A rejected service doesn't lock the form — kitchen can record a fresh one (CR-130).
+	// A rejected service doesn't lock the form — kitchen can record a fresh one (CR-143).
 	const isServiceFinalized = $derived(!!activeService && !serviceRejected);
 
 	let showRejectForm = $state(false);
@@ -711,7 +711,7 @@
 	);
 
 	// Cylinders another confirmed+cooking plan is already drawing from — block
-	// starting cooking here too, not just graying out the option (CR-127 follow-up).
+	// starting cooking here too, not just graying out the option (CR-140 follow-up).
 	const gasCylinderIdsInUseByOthers = $derived.by(() => {
 		const activePlans = (plans.data ?? []).filter(
 			(plan) =>
@@ -787,7 +787,7 @@
 		};
 
 		try {
-			// Plan and ticket are separate features now (CR-121/CR-126) — created
+			// Plan and ticket are separate features now (CR-121/CR-139) — created
 			// sequentially rather than one atomic bulkDocs. If ticket creation
 			// fails after the plan is written, the plan is just an unticketed
 			// draft/confirmed plan — recoverable by re-opening a ticket for it,
@@ -840,7 +840,7 @@
 	}
 
 	// Edit an already-created plan/ticket while the ticket is still
-	// PENDING_PICK (CR-127) — kitchen correcting its own request, not
+	// PENDING_PICK (CR-140) — kitchen correcting its own request, not
 	// self-approving. Ticket updates first: if the warehouse already moved
 	// past PENDING_PICK, updateTicketItems throws before the plan is touched.
 	async function handleSaveEdits() {
@@ -926,7 +926,7 @@
 	}
 
 	// IN_TRANSIT → COMPLETED — kitchen confirms it physically received the
-	// dispatched ingredients (CR-126 — replaces the old self-approve/bypass step).
+	// dispatched ingredients (CR-139 — replaces the old self-approve/bypass step).
 	async function handleReceiveTicket() {
 		if (!activeTicket) return;
 		try {
@@ -970,7 +970,7 @@
 		}
 	});
 
-	// Stage C header content — one of 3 cooking sub-phases (CR-127 follow-up UI).
+	// Stage C header content — one of 3 cooking sub-phases (CR-140 follow-up UI).
 	const stageCInfo = $derived.by(() => {
 		if (serviceRejected) {
 			return {
@@ -1884,7 +1884,7 @@
 		{/if}
 	{:else if currentStage === 'B'}
 		<!-- STAGE B: Ticket status (read-only — allocate/approve/dispatch happen at
-		     /back-office/tickets/[id], not here — CR-121/CR-126 role split) -->
+		     /back-office/tickets/[id], not here — CR-121/CR-139 role split) -->
 		<Card.Root class="mx-auto max-w-3xl border shadow-sm">
 			<Card.Header class="border-b bg-muted/20">
 				<div class="flex flex-wrap items-center justify-between gap-3">

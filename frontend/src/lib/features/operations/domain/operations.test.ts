@@ -329,9 +329,9 @@ describe('stock_ledger reason ↔ ref_id invariant (CR-055)', () => {
 		});
 	}
 
-	// CR-126 — requisition now accepts either the legacy doc type or the new
+	// CR-139 — requisition now accepts either the legacy doc type or the new
 	// unified ticket, so old rows stay valid while new writes move to tickets.
-	it('accepts requisition with a requisition_ticket: ref_id (CR-126)', () => {
+	it('accepts requisition with a requisition_ticket: ref_id (CR-139)', () => {
 		expect(write('requisition', 'requisition_ticket:01J').ref_id).toBe('requisition_ticket:01J');
 	});
 

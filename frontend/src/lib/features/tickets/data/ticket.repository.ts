@@ -17,13 +17,13 @@ export interface TicketRepository {
 		allocatedQty: string
 	): Promise<RequisitionTicket>;
 
-	// PENDING_PICK only — kitchen edits its own requested items (CR-127).
+	// PENDING_PICK only — kitchen edits its own requested items (CR-140).
 	updateTicketItems(
 		ticket: RequisitionTicket,
 		items: TicketItemInput[]
 	): Promise<RequisitionTicket>;
 
-	// PENDING_PICK → COMPLETED in one step (CR-128, kitchen only). Auto-allocates
+	// PENDING_PICK → COMPLETED in one step (CR-141, kitchen only). Auto-allocates
 	// every line to requested_qty, checks + deducts stock same as dispatchTicket,
 	// and sets approved_by/dispatched_by/received_by together. All-or-nothing.
 	oneStepApproveTicket(ticket: RequisitionTicket, ctx: AuthorContext): Promise<RequisitionTicket>;

@@ -23,7 +23,7 @@
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
 
-	// Union row shape — CR-126 §2.3: legacy kitchen_requisition (deprecated,
+	// Union row shape — CR-139 §2.3: legacy kitchen_requisition (deprecated,
 	// read-only) and requisition_ticket (new) shown together, newest first, with
 	// a "ประเภท" column so an auditor can tell which pipeline produced each row.
 	interface HistoryRow {

@@ -80,7 +80,7 @@
 
 	// Meal plans that already have at least one requisition — drives the
 	// "เบิกแล้ว" hint so staff don't accidentally double-deduct stock. Includes
-	// both the legacy kitchen_requisition (read-only after CR-126 cutover) and
+	// both the legacy kitchen_requisition (read-only after CR-139 cutover) and
 	// the new requisition_ticket (any non-CANCELLED ticket counts as "opened").
 	const requisitionedPlanIds = $derived(
 		new Set([
@@ -123,7 +123,7 @@
 	}
 
 	// Opens (or resumes — idempotent on meal_plan_id) a requisition_ticket for
-	// this plan and navigates to its detail page (CR-121/CR-126 — replaces the
+	// this plan and navigates to its detail page (CR-121/CR-139 — replaces the
 	// old instant-cut RequisitionDialog).
 	async function openTicket(plan: MealPlan) {
 		try {

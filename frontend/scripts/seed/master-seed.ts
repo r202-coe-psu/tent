@@ -521,7 +521,7 @@ export async function seedCatalog(): Promise<Map<string, string>> {
     if (newDoc.system_key !== oldDoc.system_key) {
       throw({ forbidden: 'system_key is immutable on protected categories' });
     }
-    // CR-125: default_class is editable on protected categories (amends CR-119 FR-04).
+    // CR-138: default_class is editable on protected categories (amends CR-119 FR-04).
     if (newDoc.is_protected !== true) {
       throw({ forbidden: 'is_protected flag cannot be removed' });
     }

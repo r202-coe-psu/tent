@@ -1,5 +1,5 @@
 ---
-id: CR-126
+id: CR-139
 title: เจาะจง lifecycle/role/backward-compat ของ RequisitionTicket ประเภท `kitchen` (ส่วนขยาย CR-121) + รวม CR-120 fuel_cylinder migration เข้าเป็นงานเดียวกัน
 status: approved
 date: 2026-09-21
@@ -22,7 +22,7 @@ affects:
   - frontend/src/lib/server/shelter-access-design.ts
 ---
 
-# CR-126: เจาะจง lifecycle/role/backward-compat ของ RequisitionTicket ประเภท `kitchen` + รวม fuel_cylinder migration
+# CR-139: เจาะจง lifecycle/role/backward-compat ของ RequisitionTicket ประเภท `kitchen` + รวม fuel_cylinder migration
 
 ## 1. Why
 

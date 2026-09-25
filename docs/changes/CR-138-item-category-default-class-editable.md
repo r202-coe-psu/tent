@@ -1,5 +1,5 @@
 ---
-id: CR-125
+id: CR-138
 title: อนุญาตให้แก้ไข default_class ของหมวดหมู่ระบบมาตรฐานได้ (แก้ไข CR-119 FR-04)
 status: approved
 date: 2026-09-17
@@ -20,7 +20,7 @@ affects:
   - frontend/src/lib/features/catalog/data/catalog.remote.test.ts
 ---
 
-# CR-125: อนุญาตให้แก้ไข default_class ของหมวดหมู่ระบบมาตรฐานได้ (แก้ไข CR-119 FR-04)
+# CR-138: อนุญาตให้แก้ไข default_class ของหมวดหมู่ระบบมาตรฐานได้ (แก้ไข CR-119 FR-04)
 
 ## 1. Why
 
@@ -34,7 +34,7 @@ affects:
 
 ## 2. Change (ก่อน → หลัง)
 
-| มิติ | ก่อน (CR-119 เดิม) | หลัง (CR-125) |
+| มิติ | ก่อน (CR-119 เดิม) | หลัง (CR-138) |
 | --- | --- | --- |
 | `default_class` ของหมวดหมู่ระบบ (`is_protected: true`) | Immutable ทั้ง 3 ชั้น (UI disabled, repository force-restore, CouchDB VDU reject) | **แก้ไขได้** โดย `system_admin` เช่นเดียวกับ `name`/`description` |
 | `system_key` ของหมวดหมู่ระบบ | Immutable | **ยังคง Immutable เหมือนเดิม** — ไม่เปลี่ยน |
@@ -59,11 +59,11 @@ immutability ของ `system_key`/`is_protected`
 
 ## 4. Impact & Traceability
 
-- `docs/changes/CR-119-seed-item-categories.md` §4.2 FR-04: เพิ่มหมายเหตุชี้ไปยัง CR-125
+- `docs/changes/CR-119-seed-item-categories.md` §4.2 FR-04: เพิ่มหมายเหตุชี้ไปยัง CR-138
   ว่าเฉพาะส่วน `default_class` ถูกแก้ไขแล้ว — `system_key`/`is_protected` ยังคง immutable ตามเดิม
 - `docs/data/schema.md` §4.1: ปรับประโยค "ห้ามเปลี่ยน `system_key`, `default_class` หรือ
   `is_protected`" เป็น "ห้ามเปลี่ยน `system_key` หรือ `is_protected` (`default_class` แก้ไขได้ตาม
-  CR-125)"
+  CR-138)"
 - `docs/data/schema.md` §5 invariant #11: ปรับข้อความเดียวกัน
 - โค้ดตาม `affects:` ด้านบน
 
@@ -89,7 +89,7 @@ dev ที่รันอยู่ยอมรับการเปลี่ย�
 
 - **2026-09-17 (Decision 1):** ยืนยันกับ Project Owner ตรงๆ ว่าต้องการแก้ business rule ที่อนุมัติ
   แล้วใน CR-119 FR-04 จริง (ไม่ใช่ความเข้าใจผิด) ก่อนเริ่มแก้โค้ด
-- **2026-09-17 (Decision 2):** เลือก track เป็น Change Record ใหม่ (CR-125) แทนที่จะแก้ CR-119 เดิม
+- **2026-09-17 (Decision 2):** เลือก track เป็น Change Record ใหม่ (CR-138) แทนที่จะแก้ CR-119 เดิม
   ตรงๆ เพื่อรักษาประวัติการอนุมัติเดิมของ CR-119 ไว้ครบ (Non-destructive amendment)
   ตามนโยบาย `docs/change-management.md`
 - **2026-09-17 (Decision 3):** จำกัดขอบเขตแคบที่สุด — แก้เฉพาะ `default_class`, ไม่แตะ `system_key`,

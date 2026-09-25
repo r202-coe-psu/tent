@@ -2039,7 +2039,7 @@ describe('buildValidateDocUpdate', () => {
 				/system_key is immutable on protected categories/
 			);
 
-			// 3. default_class is editable (CR-125 amends CR-119 FR-04)
+			// 3. default_class is editable (CR-138 amends CR-119 FR-04)
 			expect(() =>
 				compile()({ ...protectedCategory, default_class: 'DURABLE' }, protectedCategory, sysAdmin)
 			).not.toThrow();
@@ -2071,7 +2071,7 @@ describe('buildValidateDocUpdate', () => {
 		});
 	});
 
-	describe('requisition_ticket lifecycle and role rules (CR-121/CR-126, kitchen slice)', () => {
+	describe('requisition_ticket lifecycle and role rules (CR-121/CR-139, kitchen slice)', () => {
 		const MANAGER: UserCtx = { name: 'mgr', roles: ['shelter:SH001', 'shelter_manager'] };
 
 		function newTicket(over: Doc = {}): Doc {
@@ -2276,7 +2276,7 @@ describe('buildValidateDocUpdate', () => {
 			);
 		});
 
-		it('shelter_manager one-click approves PENDING_PICK → COMPLETED (CR-128)', () => {
+		it('shelter_manager one-click approves PENDING_PICK → COMPLETED (CR-141)', () => {
 			const ticket = newTicket({
 				items: [
 					{
@@ -2299,7 +2299,7 @@ describe('buildValidateDocUpdate', () => {
 			expect(() => compile()(completed, ticket, MANAGER)).not.toThrow();
 		});
 
-		it('rejects one-click approve from kitchen_staff (manager-only, CR-128)', () => {
+		it('rejects one-click approve from kitchen_staff (manager-only, CR-141)', () => {
 			const ticket = newTicket({
 				items: [
 					{

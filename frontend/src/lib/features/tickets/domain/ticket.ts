@@ -10,9 +10,9 @@ import {
 } from '$lib/utils/qty';
 import type { ItemMaster } from '$lib/features/catalog';
 
-// ---- RequisitionTicket (schema.md §2.29, CR-121 + kitchen carve-out CR-126) ----
+// ---- RequisitionTicket (schema.md §2.29, CR-121 + kitchen carve-out CR-139) ----
 // Scope: `requisition_type: 'kitchen'` only. `food`/`supplies`/`transfer` are not
-// implemented by this feature yet — see CR-126 for why the status enum here is a
+// implemented by this feature yet — see CR-139 for why the status enum here is a
 // subset of CR-121's full 9-status lifecycle.
 
 export const requisitionTypeSchema = z.literal('kitchen');
@@ -40,7 +40,7 @@ export interface TicketItem {
 	item_name: string;
 	unit: string; // item_master.base_unit
 	requested_qty: string; // qty_str > 0
-	allocated_qty: string; // qty_str >= 0 — '0' until warehouse picks (CR-126)
+	allocated_qty: string; // qty_str >= 0 — '0' until warehouse picks (CR-139)
 }
 
 export interface TicketGasDrawdown {
@@ -54,7 +54,7 @@ export interface RequisitionTicket extends BaseDoc {
 	ticket_no: string;
 	requisition_type: RequisitionType;
 	status: TicketStatus;
-	meal_plan_id: string; // kitchen-only idempotency/link key (CR-126)
+	meal_plan_id: string; // kitchen-only idempotency/link key (CR-139)
 	source_location: string;
 	destination_location: string;
 	requested_by: string;
@@ -152,7 +152,7 @@ export function allocateTicketItem(
 
 /**
  * Kitchen edits its own requested items (qty, add/remove) while the ticket
- * hasn't been touched by the warehouse yet (CR-127). Not self-approve/bypass —
+ * hasn't been touched by the warehouse yet (CR-140). Not self-approve/bypass —
  * never writes `status`/`approved_by`/`allocated_qty`; existing lines keep
  * whatever `allocated_qty` they already had (still '0' at this point in
  * practice), new lines start at '0' same as `createTicket`.
@@ -179,7 +179,7 @@ export function updateTicketRequestedItems(
 }
 
 /**
- * One-click approve (CR-128 — supersedes CR-126 §2.2's 3-role split for
+ * One-click approve (CR-141 — supersedes CR-139 §2.2's 3-role split for
  * `requisition_type: 'kitchen'` only). Auto-allocates every line to its full
  * `requested_qty`, then jumps straight `PENDING_PICK` → `COMPLETED` — the
  * combined effect of `approveTicket` + `markTicketDispatched` + `receiveTicket`,
@@ -228,7 +228,7 @@ export function markTicketDispatched(
 	return { ...touch(ticket), status: 'IN_TRANSIT', dispatched_by: ctx.createdBy };
 }
 
-/** kitchen_staff confirms receipt — IN_TRANSIT → COMPLETED (CR-126 §2.1/§2.2). */
+/** kitchen_staff confirms receipt — IN_TRANSIT → COMPLETED (CR-139 §2.1/§2.2). */
 export function receiveTicket(ticket: RequisitionTicket, ctx: AuthorContext): RequisitionTicket {
 	if (ticket.status !== 'IN_TRANSIT') {
 		throw new Error(`receiveTicket: cannot receive — ticket is ${ticket.status}`);

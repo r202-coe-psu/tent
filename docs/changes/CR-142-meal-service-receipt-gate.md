@@ -1,5 +1,5 @@
 ---
-id: CR-129
+id: CR-142
 title: เพิ่มขั้น "รอตรวจรับเข้าคลัง" จริงระหว่างบันทึกผลผลิตครัวกับส่งมอบเสร็จสิ้น (`meal_service_receipt`)
 status: approved
 date: 2026-09-25
@@ -10,7 +10,7 @@ layer: stable
 extends:
   - CR-121 §3.2/§4.2 (ผลผลิตครัว `meal_service`/`yield_items` — ไม่แตะ scope นั้น, ส่วน
     `yield_items`/`stock_ledger` รับเข้าอัตโนมัติยังไม่ implement ในโค้ดจริงตอนนี้ แยกเป็นงานอื่น)
-  - CR-125/CR-128 (ticket-list.svelte unified hub — เดิมมี tab "รอตรวจรับเข้าคลัง" เป็น mock
+  - CR-138/CR-141 (ticket-list.svelte unified hub — เดิมมี tab "รอตรวจรับเข้าคลัง" เป็น mock
     placeholder เท่านั้น เพราะไม่มี state จริงรองรับ — CR นี้ทำให้เป็นของจริง)
 affects:
   - docs/data/schema.md (เพิ่ม doc type ใหม่ §2.7.3 `meal_service_receipt`)
@@ -23,7 +23,7 @@ affects:
     + ปุ่มยืนยันตรวจรับ)
 ---
 
-# CR-129: ขั้น "รอตรวจรับเข้าคลัง" จริงหลังบันทึกผลผลิตครัว
+# CR-142: ขั้น "รอตรวจรับเข้าคลัง" จริงหลังบันทึกผลผลิตครัว
 
 ## 1. Why
 
@@ -58,13 +58,13 @@ ticket-list.svelte ตีความหมวดของแถว `meal_servic
 - ไม่มี receipt → หมวด **"รอตรวจรับเข้าคลัง"** (`PENDING_RECEIPT`, จริงแล้วไม่ใช่ mock อีกต่อไป)
 - มี receipt → หมวด **"ส่งมอบเสร็จสิ้น"** (`DELIVERED_IN`)
 
-ปุ่ม "ยืนยันตรวจรับ" (คลิกเดียว ตามแพทเทิร์น CR-128) อยู่ในแถวของ ticket-list.svelte เอง เรียก
+ปุ่ม "ยืนยันตรวจรับ" (คลิกเดียว ตามแพทเทิร์น CR-141) อยู่ในแถวของ ticket-list.svelte เอง เรียก
 `confirmMealServiceReceipt(mealServiceId, ctx)` — reject ถ้ามี receipt อยู่แล้ว (idempotency)
 
 ### 2.3 ไม่กระทบ `RequisitionTicket`/`stock_ledger`
 
 CR นี้เป็นแค่ checkpoint ตรวจรับเชิงธุรการ (audit gate) ไม่ผูกกับการตัดสต็อกวัตถุดิบ (จบไปแล้วที่
-CR-128) และไม่ผูกกับการรับเข้าสต็อกอาหารปรุงสำเร็จ (`yield_items`/`stock_ledger reason=receive`
+CR-141) และไม่ผูกกับการรับเข้าสต็อกอาหารปรุงสำเร็จ (`yield_items`/`stock_ledger reason=receive`
 ตาม CR-121 §3.2 ซึ่งยังไม่ implement ในโค้ดจริง — คนละงาน แยกทำภายหลังถ้าต้องการ)
 
 ## 3. Impact
