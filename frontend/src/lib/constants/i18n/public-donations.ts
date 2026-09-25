@@ -71,7 +71,7 @@ export const PUBLIC_DONATIONS_I18N = {
 		emailPlaceholder: 'example@email.com',
 		section2Title: 'ส่วนที่ 2: รายละเอียดสิ่งของบริจาค',
 		section2DescSolicited:
-			'💡 เลือกลบรายการที่ไม่ต้องการบริจาคออก และปรับระบุจำนวนที่คุณต้องการบริจาคได้ตามสะดวก',
+			'เลือกลบรายการที่ไม่ต้องการบริจาคออก และปรับระบุจำนวนที่คุณต้องการบริจาคได้ตามสะดวก',
 		section2DescUnsolicited: 'ระบุรายการสิ่งของที่คุณจะนำมามอบให้',
 		deleteItemAria: 'ลบรายการนี้',
 		categoryLabel: 'หมวดหมู่',
@@ -436,7 +436,7 @@ export const PUBLIC_DONATIONS_I18N = {
 		emailPlaceholder: 'example@email.com',
 		section2Title: 'Section 2: Donation Items',
 		section2DescSolicited:
-			'💡 Remove items you do not wish to donate and adjust quantities as needed.',
+			'Remove items you do not wish to donate and adjust quantities as needed.',
 		section2DescUnsolicited: 'Specify the items you will provide.',
 		deleteItemAria: 'Delete this item',
 		categoryLabel: 'Category',
