@@ -8,7 +8,7 @@
 	<title>ความปลอดภัย — SmartShelter</title>
 </svelte:head>
 
-<StaffPageShell title="ความปลอดภัย" maxWidth="3xl">
+<StaffPageShell title="ความปลอดภัย">
 	<div class={spatial.container.staffPageCard}>
 		<div class="divide-y divide-slate-200/80">
 			<div class="px-5 py-4 sm:px-6">

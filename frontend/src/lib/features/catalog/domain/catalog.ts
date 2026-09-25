@@ -25,6 +25,180 @@ export type Dietary = z.infer<typeof dietarySchema>;
 export const assetStatusSchema = z.enum(['READY', 'IN_USE', 'MAINTENANCE', 'BROKEN']);
 export type AssetStatus = z.infer<typeof assetStatusSchema>;
 
+// ---------------------------------------------------------------- system categories (CR-119)
+
+export const SYSTEM_CATEGORY_KEYS = [
+	'FOOD',
+	'WATER',
+	'WASH',
+	'MEDICAL',
+	'SPECIAL_CARE',
+	'VOLUNTEER_PPE',
+	'READY_MEAL',
+	'BEDDING',
+	'FUEL_ENERGY',
+	'KITS'
+] as const;
+
+export type SystemCategoryKey = (typeof SYSTEM_CATEGORY_KEYS)[number];
+
+export type SystemItemCategoryDef = {
+	key: SystemCategoryKey;
+	id: string;
+	name: string;
+	/** Short Thai name used by legacy docs / early seeds */
+	legacy_names: string[];
+	default_class: TypeClass;
+	description: string;
+};
+
+export const SYSTEM_ITEM_CATEGORIES: readonly SystemItemCategoryDef[] = [
+	{
+		key: 'FOOD',
+		id: 'item_category:food',
+		name: 'อาหารและวัตถุดิบ (Food Ingredients)',
+		legacy_names: ['อาหารและวัตถุดิบ'],
+		default_class: 'CONSUMABLE',
+		description: 'วัตถุดิบประกอบอาหารสดและแห้งสำหรับโรงครัวกลาง'
+	},
+	{
+		key: 'WATER',
+		id: 'item_category:water',
+		name: 'น้ำดื่มสะอาด (Drinking Water)',
+		legacy_names: ['น้ำดื่มสะอาด'],
+		default_class: 'CONSUMABLE',
+		description: 'น้ำดื่มบรรจุขวด ถังน้ำดื่มสะอาดสำหรับบริโภค'
+	},
+	{
+		key: 'WASH',
+		id: 'item_category:wash',
+		name: 'สุขอนามัยและของใช้ส่วนตัว (WASH & Hygiene)',
+		legacy_names: ['สุขอนามัยและของใช้ส่วนตัว'],
+		default_class: 'CONSUMABLE',
+		description: 'สบู่ ยาสระผม แปรงสีฟัน ยาสีฟัน ผ้าอนามัย ผงซักฟอก'
+	},
+	{
+		key: 'MEDICAL',
+		id: 'item_category:medical',
+		name: 'เวชภัณฑ์และการปฐมพยาบาล (Medical & First Aid)',
+		legacy_names: ['เวชภัณฑ์และการปฐมพยาบาล'],
+		default_class: 'CONSUMABLE',
+		description: 'ยาสามัญประจำบ้าน ยาประจำตัว ชุดทำแผล แอลกอฮอล์ อุปกรณ์การแพทย์'
+	},
+	{
+		key: 'SPECIAL_CARE',
+		id: 'item_category:special_care',
+		name: 'ของใช้กลุ่มเปราะบาง (Special Care & Vulnerable)',
+		legacy_names: ['ของใช้กลุ่มเปราะบาง'],
+		default_class: 'CONSUMABLE',
+		description: 'ผ้าอ้อมผู้ใหญ่/เด็ก นมผงทารก แผ่นรองซับ สำหรับกลุ่มเฉพาะ'
+	},
+	{
+		key: 'VOLUNTEER_PPE',
+		id: 'item_category:volunteer_ppe',
+		name: 'อุปกรณ์เจ้าหน้าที่และอาสาสมัคร (PPE & Operations)',
+		legacy_names: ['อุปกรณ์เจ้าหน้าที่และอาสาสมัคร'],
+		default_class: 'EQUIPMENT',
+		description: 'ถุงมือ เสื้อกั๊กสะท้อนแสง รองเท้าบูท อุปกรณ์คุ้มครองความปลอดภัย'
+	},
+	{
+		key: 'READY_MEAL',
+		id: 'item_category:ready_meal',
+		name: 'อาหารปรุงเสร็จและเครื่องดื่ม (Ready-to-Eat Meals)',
+		legacy_names: ['อาหารปรุงเสร็จและเครื่องดื่ม'],
+		default_class: 'CONSUMABLE',
+		description: 'อาหารปรุงสุกพร้อมรับประทาน ข้าวกล่อง นม สำหรับแจกจ่ายหน้างาน'
+	},
+	{
+		key: 'BEDDING',
+		id: 'item_category:bedding',
+		name: 'เครื่องนอนและที่พักพิง (Shelter & Bedding)',
+		legacy_names: ['เครื่องนอนและที่พักพิง'],
+		default_class: 'DURABLE',
+		description: 'เสื่อปูนอน มุ้ง ผ้าห่ม หมอน เต็นท์ครอบครัว พัสดุหมุนเวียนยืม-คืน'
+	},
+	{
+		key: 'FUEL_ENERGY',
+		id: 'item_category:fuel_energy',
+		name: 'เชื้อเพลิงและพลังงาน (Fuel & Energy)',
+		legacy_names: ['เชื้อเพลิงและพลังงาน'],
+		default_class: 'CONSUMABLE',
+		description: 'แก๊สหุงต้ม LPG (15kg/4kg) น้ำมันดีเซลเครื่องปั่นไฟ ถ่านไม้ วัตถุไวไฟ'
+	},
+	{
+		key: 'KITS',
+		id: 'item_category:kits',
+		name: 'ชุดพัสดุยังชีพรวม (Relief Kits & Packages)',
+		legacy_names: ['ชุดพัสดุยังชีพรวม'],
+		default_class: 'CONSUMABLE',
+		description: 'ถุงยังชีพพระราชทาน ชุดธารน้ำใจ ชุดสุขอนามัยครอบครัว'
+	}
+] as const;
+
+export function systemCategoryId(key: SystemCategoryKey): string {
+	return `item_category:${key.toLowerCase()}`;
+}
+
+/**
+ * Resolve a stored `item_master.category` value (id or legacy Thai name) to a category `_id`.
+ */
+export function resolveCategoryId(
+	categoryRef: string | undefined | null,
+	categories: readonly Pick<ItemCategory, '_id' | 'name' | 'system_key'>[]
+): string | undefined {
+	if (!categoryRef) return undefined;
+	const trimmed = categoryRef.trim();
+	if (!trimmed) return undefined;
+
+	const byId = categories.find((c) => c._id === trimmed);
+	if (byId) return byId._id;
+
+	const byName = categories.find((c) => c.name === trimmed);
+	if (byName) return byName._id;
+
+	const system = SYSTEM_ITEM_CATEGORIES.find(
+		(def) =>
+			def.id === trimmed ||
+			def.name === trimmed ||
+			def.legacy_names.includes(trimmed) ||
+			def.key === trimmed
+	);
+	if (system) {
+		const live = categories.find((c) => c._id === system.id || c.system_key === system.key);
+		return live?._id ?? system.id;
+	}
+
+	return undefined;
+}
+
+/** True when an item belongs to the given category (id or legacy name). */
+export function itemBelongsToCategory(
+	item: Pick<ItemMaster, 'category'>,
+	category: Pick<ItemCategory, '_id' | 'name' | 'system_key'>
+): boolean {
+	if (!item.category) return false;
+	if (item.category === category._id || item.category === category.name) return true;
+	const resolved = resolveCategoryId(item.category, [category]);
+	return resolved === category._id;
+}
+
+export function catalogOrigin(
+	doc: { shelter_code?: string; override?: boolean },
+	shelterCode?: string | null
+): 'central' | 'override' | 'local' {
+	if (doc.override && shelterCode && doc.shelter_code === shelterCode) return 'override';
+	if (shelterCode && doc.shelter_code === shelterCode && !doc.override) return 'local';
+	return 'central';
+}
+
+/** Shelter may hard-delete / deactivate only shelter-authored non-override rows. */
+export function canShelterDeleteCatalogDoc(
+	doc: { shelter_code?: string; override?: boolean },
+	shelterCode: string
+): boolean {
+	return doc.shelter_code === shelterCode && !doc.override;
+}
+
 // ---------------------------------------------------------------- documents
 export interface Ingredient {
 	item_master_id: string;
@@ -41,6 +215,11 @@ export interface UomConversion {
 export interface ItemCategory extends CatalogDoc {
 	type: 'item_category';
 	name: string;
+	system_key?: SystemCategoryKey | string;
+	default_class?: TypeClass;
+	description?: string;
+	is_protected?: boolean;
+	is_default?: boolean;
 	deactivated?: boolean;
 	shelter_code?: string;
 	override?: boolean;
@@ -178,48 +357,68 @@ export function mergeCatalogGenerations(
 
 // ---------------------------------------------------------------- input schemas
 export const itemCategoryInputSchema = z.object({
-	name: z.string().trim().min(1, 'Name is required'),
+	name: z.string().trim().min(1, 'กรุณาระบุชื่อหมวดสินค้า'),
+	default_class: typeClassSchema.optional(),
+	description: z.string().trim().optional(),
+	is_default: z.boolean().optional(),
 	deactivated: z.boolean().optional(),
 	override: z.boolean().optional()
 });
 
 export type ItemCategoryInput = z.input<typeof itemCategoryInputSchema>;
 
-const itemMasterFieldsSchema = z.object({
-	name: z.string().trim().min(1, 'Name is required'),
-	category: z.string().trim().optional(),
-	sku: z.string().trim().optional(),
-	description: z.string().trim().optional(),
-	base_unit: z.string().trim().optional(),
-	conversions: z
-		.array(
-			z.object({
-				uom_name: z.union([z.literal(''), unitCodeSchema]),
-				multiplier: qtyStrCoercePositiveSchema,
-				barcode: z.string().trim().optional()
-			})
-		)
-		.default([]),
-	default_inventory_uom: z.union([z.literal(''), unitCodeSchema]).optional(),
-	default_issue_uom: z.union([z.literal(''), unitCodeSchema]).optional(),
-	distribution_type: distributionTypeSchema.optional(),
-	type_class: typeClassSchema,
-	deactivated: z.boolean().optional(),
+const itemMasterFieldsSchema = z
+	.object({
+		name: z.string().trim().min(1, 'กรุณาระบุชื่อสินค้า'),
+		category: z.string().trim().optional(),
+		sku: z.string().trim().optional(),
+		description: z.string().trim().optional(),
+		base_unit: z.string().trim().optional(),
+		conversions: z
+			.array(
+				z.object({
+					uom_name: z.union([z.literal(''), unitCodeSchema]),
+					multiplier: qtyStrCoercePositiveSchema,
+					barcode: z.string().trim().optional()
+				})
+			)
+			.default([]),
+		default_inventory_uom: z.union([z.literal(''), unitCodeSchema]).optional(),
+		default_issue_uom: z.union([z.literal(''), unitCodeSchema]).optional(),
+		distribution_type: distributionTypeSchema.optional(),
+		type_class: typeClassSchema,
+		deactivated: z.boolean().optional(),
 
-	// New fields
-	shelf_life_days: z.number().optional(),
-	storage_type: storageTypeSchema.optional(),
-	allergens: z.string().trim().optional(),
-	target_gender: targetGenderSchema.optional(),
-	age_group: ageGroupSchema.optional(),
-	dietary: z.array(dietarySchema).default([]),
+		// New fields
+		shelf_life_days: z.number().optional(),
+		storage_type: storageTypeSchema.optional(),
+		allergens: z.string().trim().optional(),
+		target_gender: targetGenderSchema.optional(),
+		age_group: ageGroupSchema.optional(),
+		dietary: z.array(dietarySchema).default([]),
 
-	// Durable & Equipment specific fields
-	qty_per_person: z.number().min(0).optional(),
-	returnable: z.boolean().optional(),
-	asset_status: assetStatusSchema.optional(),
-	override: z.boolean().optional()
-});
+		// Durable & Equipment specific fields
+		qty_per_person: z.number().min(0).optional(),
+		returnable: z.boolean().optional(),
+		asset_status: assetStatusSchema.optional(),
+		override: z.boolean().optional()
+	})
+	.superRefine((data, ctx) => {
+		const codes = (data.conversions ?? [])
+			.map((c) => c.uom_name?.trim())
+			.filter((code): code is string => !!code);
+		const seen = new Set<string>();
+		for (const [index, code] of codes.entries()) {
+			if (seen.has(code)) {
+				ctx.addIssue({
+					code: z.ZodIssueCode.custom,
+					message: 'ห้ามใช้รหัสหน่วยเดียวกันซ้ำในสินค้าชิ้นเดียว',
+					path: ['conversions', index, 'uom_name']
+				});
+			}
+			seen.add(code);
+		}
+	});
 
 type ItemMasterFields = z.output<typeof itemMasterFieldsSchema>;
 
@@ -318,6 +517,10 @@ export function createItemCategory(
 		2,
 		{
 			name: d.name,
+			...(d.default_class ? { default_class: d.default_class } : {}),
+			...(d.description ? { description: d.description } : {}),
+			...(d.is_default !== undefined ? { is_default: d.is_default } : {}),
+			is_protected: false,
 			deactivated: d.deactivated ?? false,
 			...(shelterCode ? { shelter_code: shelterCode } : {}),
 			...(d.override ? { override: d.override } : {})

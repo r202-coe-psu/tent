@@ -29,6 +29,7 @@ import {
 	isLegacyUnitLabel,
 	type FallbackUnitDef
 } from '$lib/features/catalog/domain/unit-of-measure';
+import { SYSTEM_ITEM_CATEGORIES } from '$lib/features/catalog/domain/catalog';
 
 const canonicalUnitCodes = new Set(FALLBACK_UNIT_DEFINITIONS.map((unit) => unit.code));
 const legacySeedBaseUnits = new Set(['kit', 'tent']);
@@ -102,6 +103,21 @@ function resolveItemMasterConversions(
 ): unknown[] {
 	const existingConversions = Array.isArray(existing) ? existing : [];
 	const configuredConversions = Array.isArray(configured) ? configured : [];
+
+	const existingCodes = existingConversions
+		.map((conversion) =>
+			isRecord(conversion)
+				? normalizeKnownSeedUnitCode(conversion.uom_name, existingUnitCodes)
+				: undefined
+		)
+		.filter((code): code is string => !!code);
+	const hasDuplicateCodes = existingCodes.length !== new Set(existingCodes).size;
+
+	// Prefer configured packs when legacy data has ambiguous duplicate UOM codes (e.g. rice bag×5 + bag×50).
+	if (configuredConversions.length > 0 && (existingConversions.length === 0 || hasDuplicateCodes)) {
+		return configuredConversions;
+	}
+
 	const conversions: unknown[] = [];
 
 	for (
@@ -543,7 +559,14 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 					}
 				).rows
 			: [];
-	const existingCategoriesByName = new Map<string, { _id: string; _rev?: string }>();
+	const existingCategoriesById = new Map<
+		string,
+		{ _id: string; _rev?: string; name?: string; description?: string }
+	>();
+	const existingCategoriesByName = new Map<
+		string,
+		{ _id: string; _rev?: string; name?: string; description?: string }
+	>();
 	const existingItemMastersByName = new Map<string, ExistingItemMasterSeedRef>();
 	const existingRecipesByLabel = new Map<string, { _id: string; _rev?: string }>();
 	const existingUnitCodes = new Set<string>();
@@ -558,7 +581,14 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		) {
 			existingUnitCodes.add(doc.code.trim());
 		} else if (doc.type === 'item_category' && doc.name) {
-			existingCategoriesByName.set(doc.name, { _id: doc._id, _rev: doc._rev });
+			const ref = {
+				_id: doc._id,
+				_rev: doc._rev,
+				name: doc.name,
+				description: (doc as { description?: string }).description
+			};
+			existingCategoriesById.set(doc._id, ref);
+			existingCategoriesByName.set(doc.name, ref);
 		} else if (doc.type === 'item_master' && doc.name) {
 			existingItemMastersByName.set(doc.name, {
 				_id: doc._id,
@@ -573,29 +603,33 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		}
 	}
 
-	const categoryNames = [
-		'อาหารและวัตถุดิบ',
-		'น้ำดื่มสะอาด',
-		'สุขอนามัยและของใช้ส่วนตัว',
-		'เวชภัณฑ์และการปฐมพยาบาล',
-		'ของใช้กลุ่มเปราะบาง',
-		'อุปกรณ์เจ้าหน้าที่และอาสาสมัคร',
-		'อาหารปรุงเสร็จและเครื่องดื่ม',
-		'เครื่องนอนและที่พักพิง',
-		'เชื้อเพลิงและพลังงาน',
-		'ชุดพัสดุยังชีพรวม'
-	];
+	const legacyCategoryDocsToDelete: Array<{ _id: string; _rev: string }> = [];
 
-	const itemCategories = categoryNames.map((name) => {
-		const existing = existingCategoriesByName.get(name);
-		const id = existing?._id ?? `item_category:${ulid()}`;
+	const itemCategories = SYSTEM_ITEM_CATEGORIES.map((def) => {
+		const byId = existingCategoriesById.get(def.id);
+		const byName =
+			existingCategoriesByName.get(def.name) ??
+			def.legacy_names.map((n) => existingCategoriesByName.get(n)).find(Boolean);
+		const existing = byId ?? byName;
+
+		if (existing && existing._id !== def.id && existing._rev) {
+			legacyCategoryDocsToDelete.push({ _id: existing._id, _rev: existing._rev });
+		}
+
+		const preserveName = byId?.name ?? byName?.name;
+		const preserveDescription = byId?.description ?? byName?.description;
+
 		return catalogDoc(
-			id,
+			def.id,
 			'item_category',
 			{
-				name,
+				name: preserveName || def.name,
+				system_key: def.key,
+				default_class: def.default_class,
+				description: preserveDescription || def.description,
+				is_protected: true,
 				deactivated: false,
-				...(existing?._rev ? { _rev: existing._rev } : {})
+				...(byId?._rev ? { _rev: byId._rev } : {})
 			},
 			2
 		);
@@ -618,14 +652,11 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 	}> = [
 		{
 			name: 'ข้าวสาร',
-			category: 'อาหารและวัตถุดิบ',
+			category: 'item_category:food',
 			base_unit: 'kg',
 			type_class: 'CONSUMABLE',
 			extra: {
-				conversions: [
-					{ uom_name: 'bag', multiplier: '5' },
-					{ uom_name: 'bag', multiplier: '50' }
-				],
+				conversions: [{ uom_name: 'bag', multiplier: '50' }],
 				default_inventory_uom: 'bag',
 				default_issue_uom: 'kg',
 				storage_type: 'DRY',
@@ -634,7 +665,7 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		},
 		{
 			name: 'ไข่ไก่',
-			category: 'อาหารและวัตถุดิบ',
+			category: 'item_category:food',
 			base_unit: 'piece',
 			type_class: 'CONSUMABLE',
 			extra: {
@@ -647,7 +678,7 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		},
 		{
 			name: 'ผักรวม',
-			category: 'อาหารและวัตถุดิบ',
+			category: 'item_category:food',
 			base_unit: 'kg',
 			type_class: 'CONSUMABLE',
 			extra: {
@@ -657,7 +688,7 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		},
 		{
 			name: 'ปลากระป๋อง',
-			category: 'อาหารและวัตถุดิบ',
+			category: 'item_category:food',
 			base_unit: 'can',
 			type_class: 'CONSUMABLE',
 			extra: {
@@ -674,7 +705,7 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		},
 		{
 			name: 'เนื้อไก่สด',
-			category: 'อาหารและวัตถุดิบ',
+			category: 'item_category:food',
 			base_unit: 'kg',
 			type_class: 'CONSUMABLE',
 			extra: {
@@ -685,7 +716,7 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		},
 		{
 			name: 'น้ำมันพืช',
-			category: 'อาหารและวัตถุดิบ',
+			category: 'item_category:food',
 			base_unit: 'bottle',
 			type_class: 'CONSUMABLE',
 			extra: {
@@ -698,8 +729,39 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 			}
 		},
 		{
+			name: 'น้ำปลา',
+			category: 'item_category:food',
+			base_unit: 'bottle',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'DRY',
+				shelf_life_days: 730,
+				dietary: ['HALAL']
+			}
+		},
+		{
+			name: 'เกลือ',
+			category: 'item_category:food',
+			base_unit: 'kg',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'DRY',
+				shelf_life_days: 1095
+			}
+		},
+		{
+			name: 'น้ำตาลทราย',
+			category: 'item_category:food',
+			base_unit: 'kg',
+			type_class: 'CONSUMABLE',
+			extra: {
+				storage_type: 'DRY',
+				shelf_life_days: 730
+			}
+		},
+		{
 			name: 'น้ำดื่ม 600 มล.',
-			category: 'น้ำดื่มสะอาด',
+			category: 'item_category:water',
 			base_unit: 'bottle',
 			type_class: 'CONSUMABLE',
 			extra: {
@@ -712,7 +774,7 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		},
 		{
 			name: 'น้ำดื่มถัง 5 ลิตร',
-			category: 'น้ำดื่มสะอาด',
+			category: 'item_category:water',
 			base_unit: 'bottle',
 			type_class: 'CONSUMABLE',
 			extra: {
@@ -725,7 +787,7 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		},
 		{
 			name: 'สบู่ก้อน',
-			category: 'สุขอนามัยและของใช้ส่วนตัว',
+			category: 'item_category:wash',
 			base_unit: 'bar',
 			type_class: 'CONSUMABLE',
 			extra: {
@@ -738,7 +800,7 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		},
 		{
 			name: 'ยาสีฟัน',
-			category: 'สุขอนามัยและของใช้ส่วนตัว',
+			category: 'item_category:wash',
 			base_unit: 'tube',
 			type_class: 'CONSUMABLE',
 			extra: {
@@ -751,7 +813,7 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		},
 		{
 			name: 'แปรงสีฟัน',
-			category: 'สุขอนามัยและของใช้ส่วนตัว',
+			category: 'item_category:wash',
 			base_unit: 'piece',
 			type_class: 'CONSUMABLE',
 			extra: {
@@ -763,7 +825,7 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		},
 		{
 			name: 'ผ้าอนามัย',
-			category: 'สุขอนามัยและของใช้ส่วนตัว',
+			category: 'item_category:wash',
 			base_unit: 'pack',
 			type_class: 'CONSUMABLE',
 			extra: {
@@ -777,7 +839,7 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		},
 		{
 			name: 'ผงซักฟอก',
-			category: 'สุขอนามัยและของใช้ส่วนตัว',
+			category: 'item_category:wash',
 			base_unit: 'bag',
 			type_class: 'CONSUMABLE',
 			extra: {
@@ -790,7 +852,7 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		},
 		{
 			name: 'ยาพาราเซตามอล 500 มก.',
-			category: 'เวชภัณฑ์และการปฐมพยาบาล',
+			category: 'item_category:medical',
 			base_unit: 'tablet',
 			type_class: 'CONSUMABLE',
 			extra: {
@@ -806,7 +868,7 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		},
 		{
 			name: 'ชุดทำแผลปฐมพยาบาล',
-			category: 'เวชภัณฑ์และการปฐมพยาบาล',
+			category: 'item_category:medical',
 			base_unit: 'set',
 			type_class: 'CONSUMABLE',
 			extra: {
@@ -819,7 +881,7 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		},
 		{
 			name: 'แอลกอฮอล์ล้างแผล 70%',
-			category: 'เวชภัณฑ์และการปฐมพยาบาล',
+			category: 'item_category:medical',
 			base_unit: 'bottle',
 			type_class: 'CONSUMABLE',
 			extra: {
@@ -832,7 +894,7 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		},
 		{
 			name: 'ผงเกลือแร่ ORS',
-			category: 'เวชภัณฑ์และการปฐมพยาบาล',
+			category: 'item_category:medical',
 			base_unit: 'sachet',
 			type_class: 'CONSUMABLE',
 			extra: {
@@ -845,7 +907,7 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		},
 		{
 			name: 'ผ้าอ้อมผู้ใหญ่ ไซส์ L',
-			category: 'ของใช้กลุ่มเปราะบาง',
+			category: 'item_category:special_care',
 			base_unit: 'piece',
 			type_class: 'CONSUMABLE',
 			extra: {
@@ -862,7 +924,7 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		},
 		{
 			name: 'ผ้าอ้อมเด็ก ไซส์ M',
-			category: 'ของใช้กลุ่มเปราะบาง',
+			category: 'item_category:special_care',
 			base_unit: 'piece',
 			type_class: 'CONSUMABLE',
 			extra: {
@@ -879,7 +941,7 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		},
 		{
 			name: 'นมผงสำหรับทารก',
-			category: 'ของใช้กลุ่มเปราะบาง',
+			category: 'item_category:special_care',
 			base_unit: 'can',
 			type_class: 'CONSUMABLE',
 			extra: {
@@ -893,28 +955,35 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		},
 		{
 			name: 'เสื้อกั๊กสะท้อนแสง',
-			category: 'อุปกรณ์เจ้าหน้าที่และอาสาสมัคร',
+			category: 'item_category:volunteer_ppe',
 			base_unit: 'piece',
 			type_class: 'EQUIPMENT',
 			extra: { returnable: true, asset_status: 'READY' }
 		},
 		{
 			name: 'รองเท้าบูทยางกันน้ำ',
-			category: 'อุปกรณ์เจ้าหน้าที่และอาสาสมัคร',
+			category: 'item_category:volunteer_ppe',
+			base_unit: 'pair',
+			type_class: 'EQUIPMENT',
+			extra: { returnable: true, asset_status: 'READY' }
+		},
+		{
+			name: 'ถุงมือ',
+			category: 'item_category:volunteer_ppe',
 			base_unit: 'pair',
 			type_class: 'EQUIPMENT',
 			extra: { returnable: true, asset_status: 'READY' }
 		},
 		{
 			name: 'ข้าวกล่องทั่วไป',
-			category: 'อาหารปรุงเสร็จและเครื่องดื่ม',
+			category: 'item_category:ready_meal',
 			base_unit: 'box',
 			type_class: 'CONSUMABLE',
 			extra: { storage_type: 'DRY', shelf_life_days: 1, distribution_type: 'recurring' }
 		},
 		{
 			name: 'ข้าวกล่องฮาลาล',
-			category: 'อาหารปรุงเสร็จและเครื่องดื่ม',
+			category: 'item_category:ready_meal',
 			base_unit: 'box',
 			type_class: 'CONSUMABLE',
 			extra: {
@@ -926,7 +995,7 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		},
 		{
 			name: 'ผ้าห่มกันหนาว',
-			category: 'เครื่องนอนและที่พักพิง',
+			category: 'item_category:bedding',
 			base_unit: 'piece',
 			type_class: 'DURABLE',
 			extra: {
@@ -940,7 +1009,7 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		},
 		{
 			name: 'เสื่อปูนอน',
-			category: 'เครื่องนอนและที่พักพิง',
+			category: 'item_category:bedding',
 			base_unit: 'piece',
 			type_class: 'DURABLE',
 			extra: {
@@ -954,7 +1023,20 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		},
 		{
 			name: 'เต็นท์ครอบครัว',
-			category: 'เครื่องนอนและที่พักพิง',
+			category: 'item_category:bedding',
+			base_unit: 'piece',
+			type_class: 'DURABLE',
+			extra: {
+				default_inventory_uom: 'piece',
+				default_issue_uom: 'piece',
+				returnable: true,
+				qty_per_person: 1,
+				distribution_type: 'one_time'
+			}
+		},
+		{
+			name: 'มุ้ง',
+			category: 'item_category:bedding',
 			base_unit: 'piece',
 			type_class: 'DURABLE',
 			extra: {
@@ -967,7 +1049,7 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		},
 		{
 			name: 'ถังแก๊สหุงต้ม LPG 15 กก.',
-			category: 'เชื้อเพลิงและพลังงาน',
+			category: 'item_category:fuel_energy',
 			base_unit: 'cylinder',
 			type_class: 'CONSUMABLE',
 			extra: {
@@ -979,7 +1061,7 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		},
 		{
 			name: 'ถุงยังชีพธารน้ำใจ',
-			category: 'ชุดพัสดุยังชีพรวม',
+			category: 'item_category:kits',
 			base_unit: 'set',
 			type_class: 'CONSUMABLE',
 			extra: {
@@ -1087,28 +1169,34 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 			label: 'ข้าวไข่เจียว',
 			ingredients: [
 				{ name: 'ข้าวสาร', quantity: '0.2', uom: 'kg' },
-				{ name: 'ไข่ไก่', quantity: '2', uom: 'piece' }
+				{ name: 'ไข่ไก่', quantity: '2', uom: 'piece' },
+				{ name: 'น้ำมันพืช', quantity: '0.02', uom: 'bottle' }
 			]
 		},
 		{
 			label: 'ข้าวต้มไก่สับ',
 			ingredients: [
 				{ name: 'ข้าวสาร', quantity: '0.15', uom: 'kg' },
-				{ name: 'เนื้อไก่สด', quantity: '0.1', uom: 'kg' }
+				{ name: 'เนื้อไก่สด', quantity: '0.1', uom: 'kg' },
+				{ name: 'เกลือ', quantity: '0.005', uom: 'kg' }
 			]
 		},
 		{
 			label: 'ข้าวกะเพราไก่สับ',
 			ingredients: [
 				{ name: 'ข้าวสาร', quantity: '0.2', uom: 'kg' },
-				{ name: 'เนื้อไก่สด', quantity: '0.15', uom: 'kg' }
+				{ name: 'เนื้อไก่สด', quantity: '0.15', uom: 'kg' },
+				{ name: 'น้ำมันพืช', quantity: '0.02', uom: 'bottle' },
+				{ name: 'น้ำปลา', quantity: '0.01', uom: 'bottle' }
 			]
 		},
 		{
 			label: 'ข้าวไก่ผัดกระเทียม',
 			ingredients: [
 				{ name: 'ข้าวสาร', quantity: '0.2', uom: 'kg' },
-				{ name: 'เนื้อไก่สด', quantity: '0.15', uom: 'kg' }
+				{ name: 'เนื้อไก่สด', quantity: '0.15', uom: 'kg' },
+				{ name: 'น้ำมันพืช', quantity: '0.02', uom: 'bottle' },
+				{ name: 'น้ำปลา', quantity: '0.01', uom: 'bottle' }
 			]
 		},
 		{
@@ -1116,14 +1204,18 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 			ingredients: [
 				{ name: 'ข้าวสาร', quantity: '0.2', uom: 'kg' },
 				{ name: 'ไข่ไก่', quantity: '2', uom: 'piece' },
-				{ name: 'เนื้อไก่สด', quantity: '0.1', uom: 'kg' }
+				{ name: 'เนื้อไก่สด', quantity: '0.1', uom: 'kg' },
+				{ name: 'น้ำตาลทราย', quantity: '0.02', uom: 'kg' },
+				{ name: 'น้ำปลา', quantity: '0.01', uom: 'bottle' }
 			]
 		},
 		{
 			label: 'ข้าวปลากระป๋องทรงเครื่อง',
 			ingredients: [
 				{ name: 'ข้าวสาร', quantity: '0.2', uom: 'kg' },
-				{ name: 'ปลากระป๋อง', quantity: '0.5', uom: 'can' }
+				{ name: 'ปลากระป๋อง', quantity: '0.5', uom: 'can' },
+				{ name: 'น้ำมันพืช', quantity: '0.02', uom: 'bottle' },
+				{ name: 'น้ำปลา', quantity: '0.01', uom: 'bottle' }
 			]
 		}
 	];
@@ -1166,7 +1258,11 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 
 	const uomCount = await seedCatalogUnitOfMeasures();
 
-	for (const legacy of [...legacyItemMasterDocsToDelete, ...legacyRecipeDocsToDelete]) {
+	for (const legacy of [
+		...legacyCategoryDocsToDelete,
+		...legacyItemMasterDocsToDelete,
+		...legacyRecipeDocsToDelete
+	]) {
 		await couchReq(
 			'DELETE',
 			`/catalog/${encodeURIComponent(legacy._id)}?rev=${encodeURIComponent(legacy._rev)}`
@@ -1175,7 +1271,7 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 
 	for (const doc of [...itemCategories, ...itemMasters, ...recipes]) await putDoc('catalog', doc);
 	console.log(
-		`  ✓ catalog: ${uomCount} units of measure, ${itemMasters.length} item masters, ${recipes.length} recipes`
+		`  ✓ catalog: ${uomCount} units of measure, ${itemCategories.length} categories, ${itemMasters.length} item masters, ${recipes.length} recipes`
 	);
 
 	await deployCatalogMangoIndexes('catalog');

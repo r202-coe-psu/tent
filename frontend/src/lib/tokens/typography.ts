@@ -5,7 +5,7 @@
 
 export const typography = {
 	fonts: {
-		sans: "'IBM Plex Sans Thai', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+		sans: "'IBM Plex Sans Thai Looped', 'IBM Plex Sans Thai', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
 		mono: "'Geist Mono', 'Fira Code', 'SF Mono', Consolas, monospace"
 	},
 	scale: {
