@@ -42,7 +42,9 @@ async function createSuppliesTicket(
 	await page.getByRole('button', { name: 'สร้างใบเบิกจ่าย' }).click();
 	const createDialog = page.getByRole('dialog', { name: /สร้างใบเบิกจ่ายพัสดุและอาหาร/ });
 	await createDialog.getByRole('radio', { name: /พัสดุและสิ่งของ/ }).click();
-	await createDialog.getByLabel(/จุดหมายปลายทาง/).fill('จุดแจก E2E');
+	await createDialog.getByLabel(/จุดหมายปลายทาง/).click();
+	await page.getByRole('option', { name: /ระบุจุดหมายอื่น/ }).click();
+	await createDialog.getByPlaceholder(/พิมพ์ชื่อจุดหมายปลายทางที่ต้องการ/).fill('จุดแจก E2E');
 	await createDialog.getByRole('button', { name: /เพิ่มรายการ/ }).click();
 	const picker = page.getByRole('dialog', { name: /เลือกรายการพัสดุ/ });
 	await picker.getByLabel(/ค้นหาชื่อรายการ/).fill(item.name);
@@ -386,10 +388,13 @@ test('Journey B: warehouse credits only the lower verified return quantity', asy
 
 		const shiftClosed = await getShelterDocument(ticket.ticketId);
 		expect(shiftClosed?.items).toMatchObject([{ returned_qty: DECLARED_RETURN_QTY }]);
-		await expect(page.getByText('SHIFT_CLOSED', { exact: true })).toBeVisible();
+		const reconciliationCard = page
+			.getByRole('heading', { name: new RegExp(`ใบเบิก ${ticket.ticketNo}`) })
+			.locator('xpath=ancestor::div[contains(@class, "rounded-2xl")][1]');
+		await expect(reconciliationCard.getByText('ปิดรอบแจกแล้ว', { exact: true })).toBeVisible();
 		await page.getByRole('button', { name: /ส่งคืนพัสดุกลับคลังกลาง/ }).click();
 		await expectTicketStatus(ticket, 'RETURN_PENDING_RECEIPT', 'Submit-returns checkpoint');
-		await expect(page.getByText('RETURN_PENDING_RECEIPT', { exact: true })).toBeVisible();
+		await expect(reconciliationCard.getByText('รอคลังตรวจรับคืน', { exact: true })).toBeVisible();
 
 		await page.goto(`/back-office/distribution?ticketId=${encodeURIComponent(ticket.ticketId)}`);
 		await page.getByRole('button', { name: /ตรวจรับของคืนเข้าคลังสินค้า/ }).click();
@@ -402,9 +407,7 @@ test('Journey B: warehouse credits only the lower verified return quantity', asy
 		await verified.fill(VERIFIED_RETURN_QTY);
 		await warehouse.getByRole('button', { name: /ยืนยันตรวจรับเข้าสต็อกคลัง/ }).click();
 		await expectTicketStatus(ticket, 'RETURN_COMPLETED', 'Warehouse receipt checkpoint');
-		await expect(
-			page.getByText('ตรวจรับคืนเรียบร้อยแล้ว (Return Completed)', { exact: true })
-		).toBeVisible();
+		await expect(page.getByText('ตรวจรับคืนเรียบร้อยแล้ว', { exact: true })).toBeVisible();
 
 		const receipts = await findShelterDocuments(
 			(doc) =>
