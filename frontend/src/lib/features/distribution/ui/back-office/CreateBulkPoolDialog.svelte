@@ -3,10 +3,10 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
+	import { Combobox } from '$lib/components/ui/combobox/index.js';
 	import { toast } from 'svelte-sonner';
 	import PackagePlus from '@lucide/svelte/icons/package-plus';
 	import Package from '@lucide/svelte/icons/package';
-	import Search from '@lucide/svelte/icons/search';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import X from '@lucide/svelte/icons/x';
@@ -40,7 +40,6 @@
 	let selectedItemId = $state('');
 	let receivedQty = $state('');
 	let notes = $state('');
-	let itemSearch = $state('');
 	let submitError = $state<string | null>(null);
 
 	function ensureOperationUlid(): string {
@@ -55,7 +54,6 @@
 		selectedItemId = '';
 		receivedQty = '';
 		notes = '';
-		itemSearch = '';
 		submitError = null;
 	}
 
@@ -72,15 +70,16 @@
 	const allItems = $derived(itemMastersQuery.data ?? []);
 	const eligibleItems = $derived(allItems.filter((item) => isEligibleBulkPoolItem(item)));
 
-	const filteredItems = $derived.by(() => {
-		const q = itemSearch.trim().toLowerCase();
-		if (!q) return eligibleItems;
-		return eligibleItems.filter((item) => {
-			const nameMatch = item.name.toLowerCase().includes(q);
-			const skuMatch = item.sku ? item.sku.toLowerCase().includes(q) : false;
-			return nameMatch || skuMatch;
-		});
-	});
+	// Item shape fed into the shared Combobox — value stays the canonical item._id.
+	// Search (name + SKU) is handled by Combobox's own keyword-matching internally.
+	const comboboxItems = $derived(
+		eligibleItems.map((item) => ({
+			value: item._id,
+			label: item.name,
+			sku: item.sku,
+			returnable: item.returnable
+		}))
+	);
 
 	const selectedItem = $derived(allItems.find((item) => item._id === selectedItemId) ?? null);
 
@@ -233,86 +232,67 @@
 							</Button>
 						</div>
 					</div>
-				{:else}
-					<!-- Search & Item List -->
-					<div class="relative">
-						<Search
-							class="pointer-events-none absolute top-2.5 left-3 h-4 w-4 text-slate-400"
-							aria-hidden="true"
-						/>
-						<Input
-							id="bulk-pool-item-search"
-							type="search"
-							value={itemSearch}
-							oninput={(event) => (itemSearch = event.currentTarget.value)}
-							placeholder="ค้นหาชื่อสินค้า หรือ SKU เพื่อเลือก..."
-							class="h-9 w-full pl-9 text-xs shadow-2xs placeholder:text-slate-400"
-						/>
-					</div>
-
+				{:else if itemMastersQuery.isLoading}
 					<div
-						class="max-h-48 divide-y divide-slate-100 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-2xs"
+						class="max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-2xs"
 					>
-						{#if itemMastersQuery.isLoading}
-							<div class="p-6 text-center text-xs text-slate-500">
-								<Loader2 class="mx-auto mb-1 h-5 w-5 animate-spin text-slate-400" />
-								กำลังโหลดรายการสินค้า...
-							</div>
-						{:else if itemMastersQuery.isError}
-							<div class="p-6 text-center text-xs text-red-600">
-								<AlertCircle class="mx-auto mb-1 h-5 w-5 text-red-500" />
-								<p class="font-semibold">ไม่สามารถโหลดรายการสินค้าได้</p>
-								<p class="mt-0.5 text-2xs text-red-500">
-									กรุณาตรวจสอบการเชื่อมต่อแล้วลองใหม่อีกครั้ง
-								</p>
-								<Button
-									type="button"
-									variant="outline"
-									onclick={() => itemMastersQuery.refetch()}
-									class="mt-2 border-red-200 text-2xs font-semibold text-red-700 hover:bg-red-50"
-								>
-									<RefreshCw class="h-3 w-3" />
-									ลองใหม่
-								</Button>
-							</div>
-						{:else if filteredItems.length === 0}
-							<div class="p-6 text-center text-xs text-slate-500">
-								{#if eligibleItems.length === 0}
-									ไม่มีรายการสินค้าที่สามารถเปิดจุดรวมคืนได้ในศูนย์นี้
-								{:else}
-									ไม่พบสินค้าบรรเทาทุกข์ที่ตรงกับการค้นหา
-								{/if}
-							</div>
-						{:else}
-							{#each filteredItems as item (item._id)}
-								<button
-									type="button"
-									onclick={() => {
-										selectedItemId = item._id;
-										itemSearch = '';
-									}}
-									class="flex w-full items-center justify-between p-2.5 text-left text-xs transition-colors hover:bg-violet-50/50"
-								>
-									<div>
-										<div class="font-semibold text-slate-900">{item.name}</div>
-										<div class="font-mono text-2xs text-slate-500">
-											{item._id}
-											{#if item.sku}
-												• SKU: {item.sku}
-											{/if}
-										</div>
-									</div>
-									<span
-										class="inline-flex items-center rounded-full border px-2 py-0.5 text-2xs font-semibold {getReturnableBadgeClass(
-											item.returnable
-										)}"
-									>
-										{getReturnableBadgeLabel(item.returnable)}
-									</span>
-								</button>
-							{/each}
-						{/if}
+						<div class="p-6 text-center text-xs text-slate-500">
+							<Loader2 class="mx-auto mb-1 h-5 w-5 animate-spin text-slate-400" />
+							กำลังโหลดรายการสินค้า...
+						</div>
 					</div>
+				{:else if itemMastersQuery.isError}
+					<div
+						class="max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-2xs"
+					>
+						<div class="p-6 text-center text-xs text-red-600">
+							<AlertCircle class="mx-auto mb-1 h-5 w-5 text-red-500" />
+							<p class="font-semibold">ไม่สามารถโหลดรายการสินค้าได้</p>
+							<p class="mt-0.5 text-2xs text-red-500">
+								กรุณาตรวจสอบการเชื่อมต่อแล้วลองใหม่อีกครั้ง
+							</p>
+							<Button
+								type="button"
+								variant="outline"
+								onclick={() => itemMastersQuery.refetch()}
+								class="mt-2 border-red-200 text-2xs font-semibold text-red-700 hover:bg-red-50"
+							>
+								<RefreshCw class="h-3 w-3" />
+								ลองใหม่
+							</Button>
+						</div>
+					</div>
+				{:else}
+					<!-- Item Search + Selection (shared Combobox) -->
+					<Combobox
+						items={comboboxItems}
+						bind:value={selectedItemId}
+						placeholder="เลือกสินค้าที่ต้องการรับคืน..."
+						searchPlaceholder="ค้นหาชื่อสินค้า หรือ SKU..."
+						emptyText={eligibleItems.length === 0
+							? 'ไม่มีรายการสินค้าที่สามารถเปิดจุดรวมคืนได้ในศูนย์นี้'
+							: 'ไม่พบสินค้าบรรเทาทุกข์ที่ตรงกับการค้นหา'}
+						controlProps={{ id: 'bulk-pool-item-search' }}
+						class="h-9 w-full text-xs shadow-2xs"
+					>
+						{#snippet children({ item })}
+							<div class="flex w-full min-w-0 items-center justify-between gap-2">
+								<div class="min-w-0">
+									<div class="truncate font-semibold text-slate-900">{item.label}</div>
+									{#if item.sku}
+										<div class="font-mono text-2xs text-slate-500">SKU: {item.sku}</div>
+									{/if}
+								</div>
+								<span
+									class="inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-2xs font-semibold {getReturnableBadgeClass(
+										item.returnable
+									)}"
+								>
+									{getReturnableBadgeLabel(item.returnable)}
+								</span>
+							</div>
+						{/snippet}
+					</Combobox>
 				{/if}
 			</div>
 
