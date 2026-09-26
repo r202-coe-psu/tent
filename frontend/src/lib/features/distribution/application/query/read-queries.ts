@@ -173,7 +173,7 @@ export const useReturnOperationState = (
 		const shelterCode = resolveShelterCode(toValue(shelterCodeGetter));
 		const isEnabled = Boolean(toValue(enabled) && id && shelterCode);
 		return {
-			queryKey: ['return-operation-state', shelterCode, id],
+			queryKey: distributionKeys.returnOperationState(shelterCode, id!),
 			queryFn: async () => {
 				const { getReturnOperationState } = await import('../food-supplies/return-workflow');
 				const ctx = resolveAuthenticatedAuthorContext(shelterCode);

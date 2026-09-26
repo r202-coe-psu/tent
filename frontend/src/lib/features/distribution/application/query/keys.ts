@@ -29,5 +29,8 @@ export const distributionKeys = {
 	bulkClaim: (shelterCode: string, claimId: string) =>
 		[...distributionKeys.shelter(shelterCode), 'bulk_claim', claimId] as const,
 	shiftReconciliation: (shelterCode: string, ticketId: string) =>
-		[...distributionKeys.shelter(shelterCode), 'shift_reconciliation', ticketId] as const
+		[...distributionKeys.shelter(shelterCode), 'shift_reconciliation', ticketId] as const,
+
+	returnOperationState: (shelterCode: string, logId: string) =>
+		['return-operation-state', shelterCode, logId] as const
 };

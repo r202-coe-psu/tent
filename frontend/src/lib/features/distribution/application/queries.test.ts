@@ -310,6 +310,14 @@ describe('Phase 5 Slice 5.0 — Distribution TanStack Query Layer', () => {
 				'claim_01'
 			]);
 		});
+
+		it('generates the pre-existing return-operation-state key shape (not nested under shelter)', () => {
+			expect(distributionKeys.returnOperationState('SH001', 'log_01')).toEqual([
+				'return-operation-state',
+				'SH001',
+				'log_01'
+			]);
+		});
 	});
 
 	describe('2. Stable Caller-Owned Operation IDs & Actor Context', () => {

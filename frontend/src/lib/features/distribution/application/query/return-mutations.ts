@@ -4,6 +4,7 @@
  */
 
 import { createMutation, useQueryClient } from '@tanstack/svelte-query';
+import { distributionKeys } from './keys';
 import { resolveAuthenticatedAuthorContext, resolveShelterCode } from './shared';
 import {
 	invalidateDistributionLogs,
@@ -77,7 +78,7 @@ export const useReturnLoanAtCounter = () => {
 			invalidateDistributionLogs(queryClient, shelterCode, variables.logId);
 			invalidateInventoryQueries(queryClient);
 			queryClient.invalidateQueries({
-				queryKey: ['return-operation-state', shelterCode, variables.logId]
+				queryKey: distributionKeys.returnOperationState(shelterCode, variables.logId)
 			});
 			if (variables.ticketId) {
 				invalidateTicket(queryClient, shelterCode, variables.ticketId);
@@ -107,7 +108,7 @@ export const useClearLoanNonPhysical = () => {
 			const shelterCode = resolveShelterCode(variables.shelterCode);
 			invalidateDistributionLogs(queryClient, shelterCode, variables.logId);
 			queryClient.invalidateQueries({
-				queryKey: ['return-operation-state', shelterCode, variables.logId]
+				queryKey: distributionKeys.returnOperationState(shelterCode, variables.logId)
 			});
 			if (variables.ticketId) {
 				invalidateTicket(queryClient, shelterCode, variables.ticketId);
@@ -167,7 +168,7 @@ export const useClearLoanViaBulkPool = () => {
 			invalidateDistributionLogs(queryClient, shelterCode, variables.input.logId);
 			invalidateBulkClaims(queryClient, shelterCode);
 			queryClient.invalidateQueries({
-				queryKey: ['return-operation-state', shelterCode, variables.input.logId]
+				queryKey: distributionKeys.returnOperationState(shelterCode, variables.input.logId)
 			});
 			if (variables.ticketId) {
 				invalidateTicket(queryClient, shelterCode, variables.ticketId);
@@ -203,7 +204,7 @@ export const useAbortAbandonedReturnReservation = () => {
 			invalidateDistributionLogs(queryClient, shelterCode, variables.logId);
 			invalidateBulkClaims(queryClient, shelterCode);
 			queryClient.invalidateQueries({
-				queryKey: ['return-operation-state', shelterCode, variables.logId]
+				queryKey: distributionKeys.returnOperationState(shelterCode, variables.logId)
 			});
 			if (variables.ticketId) {
 				invalidateTicket(queryClient, shelterCode, variables.ticketId);
