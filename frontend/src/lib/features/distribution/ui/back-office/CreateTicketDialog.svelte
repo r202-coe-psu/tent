@@ -11,8 +11,14 @@
 	} from '../model/catalog-eligibility';
 	import { validatePositiveQuantity, buildCreateTicketItem } from '../model/ticket-quantity';
 	import { formatDistributionError } from '../model/distribution-error';
+	import {
+		buildDestinationOptionGroups,
+		resolveDestinationSelection,
+		CUSTOM_DESTINATION_SENTINEL
+	} from '../model/destination-selector';
 	import CatalogItemPicker from './CatalogItemPicker.svelte';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { toast } from 'svelte-sonner';
@@ -42,30 +48,18 @@
 
 	// Form states
 	let requisitionType = $state<Flow2RequisitionType>('food');
-	let destinationLocation = $state('');
+	// Holds a known destination string, the CUSTOM_DESTINATION_SENTINEL, or '' (nothing selected).
+	// Bits UI Select requires a string — never undefined.
+	let destinationSelection = $state('');
+	let customDestinationText = $state('');
 	let meal = $state<MealPeriod | undefined>('breakfast');
 	let notes = $state('');
 	let selectedItems = $state<SelectedTicketItem[]>([]);
 	let pickerOpen = $state(false);
 
-	// Available destination suggestions from shelter zones and food distribution points
-	const destinationSuggestions = $derived.by(() => {
-		const list: string[] = [];
-		const shelter = shelterQuery.data;
-		if (shelter) {
-			if (shelter.zones) {
-				for (const z of shelter.zones) {
-					if (z.name && !list.includes(z.name)) list.push(z.name);
-				}
-			}
-			if (shelter.food_distribution_points) {
-				for (const p of shelter.food_distribution_points) {
-					if (p.name && !list.includes(p.name)) list.push(p.name);
-				}
-			}
-		}
-		return list;
-	});
+	// Grouped destination options from shelter zones and food distribution points
+	const destinationOptions = $derived(buildDestinationOptionGroups(shelterQuery.data));
+	const isCustomDestination = $derived(destinationSelection === CUSTOM_DESTINATION_SENTINEL);
 
 	// Handle type switch: clear meal if supplies, clear incompatible items
 	function handleTypeChange(newType: Flow2RequisitionType) {
@@ -110,7 +104,8 @@
 
 	function resetForm() {
 		requisitionType = 'food';
-		destinationLocation = '';
+		destinationSelection = '';
+		customDestinationText = '';
 		meal = 'breakfast';
 		notes = '';
 		selectedItems = [];
@@ -119,7 +114,7 @@
 
 	async function handleSubmit() {
 		// 1. Validation: Destination
-		const destination = destinationLocation.trim();
+		const destination = resolveDestinationSelection(destinationSelection, customDestinationText);
 		if (!destination) {
 			toast.error('กรุณาระบุจุดหมายปลายทางในการส่งมอบ');
 			return;
@@ -277,24 +272,56 @@
 
 			<!-- Step 2: Destination Location -->
 			<div class="space-y-1.5">
-				<label for="destination-input" class="text-sm font-semibold text-slate-700">
+				<label for="destination-select" class="text-sm font-semibold text-slate-700">
 					จุดหมายปลายทาง / จุดแจกจ่าย <span class="text-red-500">*</span>
 				</label>
-				<div class="flex gap-2">
+				<Select.Root type="single" bind:value={destinationSelection}>
+					<Select.Trigger
+						id="destination-select"
+						aria-label="เลือกจุดหมายปลายทาง"
+						class="h-10 w-full rounded-lg text-sm shadow-2xs"
+					>
+						<span class="truncate">
+							{isCustomDestination
+								? 'ระบุจุดหมายอื่น...'
+								: destinationSelection || 'เลือกโซนหรือจุดแจกจ่าย...'}
+						</span>
+					</Select.Trigger>
+					<Select.Content viewportClass="max-h-[260px]">
+						{#if destinationOptions.zones.length > 0}
+							<Select.Group>
+								<Select.GroupHeading>โซนที่พัก</Select.GroupHeading>
+								{#each destinationOptions.zones as zone (zone.value)}
+									<Select.Item value={zone.value} label={zone.label} />
+								{/each}
+							</Select.Group>
+						{/if}
+						{#if destinationOptions.foodDistributionPoints.length > 0}
+							{#if destinationOptions.zones.length > 0}
+								<Select.Separator />
+							{/if}
+							<Select.Group>
+								<Select.GroupHeading>จุดแจกจ่ายอาหาร</Select.GroupHeading>
+								{#each destinationOptions.foodDistributionPoints as point (point.value)}
+									<Select.Item value={point.value} label={point.label} />
+								{/each}
+							</Select.Group>
+						{/if}
+						<Select.Separator />
+						<Select.Item value={CUSTOM_DESTINATION_SENTINEL} label="ระบุจุดหมายอื่น..." />
+					</Select.Content>
+				</Select.Root>
+
+				{#if isCustomDestination}
 					<Input
-						id="destination-input"
+						id="destination-custom-input"
 						type="text"
-						bind:value={destinationLocation}
-						placeholder="เช่น เต็นท์โซน A, จุดแจกจ่ายโรงอาหารกลาง"
-						list="destination-list"
-						class="h-10 flex-1 rounded-lg text-sm shadow-2xs placeholder:text-slate-400"
+						bind:value={customDestinationText}
+						placeholder="พิมพ์ชื่อจุดหมายปลายทางที่ต้องการ..."
+						class="h-10 w-full rounded-lg text-sm shadow-2xs placeholder:text-slate-400"
 					/>
-					<datalist id="destination-list">
-						{#each destinationSuggestions as dest (dest)}
-							<option value={dest}></option>
-						{/each}
-					</datalist>
-				</div>
+				{/if}
+
 				<p class="text-xs text-slate-500">
 					ตั๋ว 1 ใบส่งมอบตรงไปยังจุดหมายเดียวเท่านั้น ทุกรายการในตั๋วนี้จะถูกนำส่งร่วมกัน
 				</p>
