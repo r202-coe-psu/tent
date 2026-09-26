@@ -17,13 +17,14 @@
 		useReceiveTicketAtDistributionPoint
 	} from '../../application/queries';
 	import { canPerformFrontlineDistribution } from '../../application/food-supplies/auth';
-	import { getTicketStatusLabel } from '../model/ticket-status';
+	import { getTicketStatusLabel, compareByReconciliationProgress } from '../model/ticket-status';
 	import Lock from '@lucide/svelte/icons/lock';
 	import type { RequisitionTicket } from '../../domain/food-supplies';
 	import FoodDistributionCard from './FoodDistributionCard.svelte';
 	import SuppliesDistributionCard from './SuppliesDistributionCard.svelte';
 	import LoanReturnCard from './LoanReturnCard.svelte';
 	import ShiftReconciliationCard from './ShiftReconciliationCard.svelte';
+	import TicketStatusBadge from '../common/TicketStatusBadge.svelte';
 	import { formatDistributionError } from '../model/distribution-error';
 	import * as Select from '$lib/components/ui/select/index.js';
 
@@ -101,16 +102,30 @@
 		distributingSuppliesTickets.find((t) => t._id === selectedSuppliesTicketId) ?? null
 	);
 
-	// Reconciliation eligible tickets (DISTRIBUTING or post-distribution tickets needing close or submit)
+	// Reconciliation eligible tickets (DISTRIBUTING or post-distribution tickets needing close or
+	// submit), ordered by workflow progress so unfinished tickets surface first and fully
+	// COMPLETED tickets sink to the bottom of the selector instead of being mixed in.
 	const reconciliationEligibleTickets = $derived(
-		allTickets.filter(
-			(t) =>
-				t.status === 'DISTRIBUTING' ||
-				t.status === 'SHIFT_CLOSED' ||
-				t.status === 'RETURN_PENDING_RECEIPT' ||
-				t.status === 'RETURN_COMPLETED' ||
-				t.status === 'COMPLETED'
-		)
+		allTickets
+			.filter(
+				(t) =>
+					t.status === 'DISTRIBUTING' ||
+					t.status === 'SHIFT_CLOSED' ||
+					t.status === 'RETURN_PENDING_RECEIPT' ||
+					t.status === 'RETURN_COMPLETED' ||
+					t.status === 'COMPLETED'
+			)
+			.sort(compareByReconciliationProgress)
+	);
+
+	// Tickets that specifically need a direct frontline action right now: shift closed but
+	// returns not yet submitted, or warehouse already verified the return but the ticket still
+	// needs to be closed. Excludes DISTRIBUTING (already surfaced by the food/supplies tabs),
+	// RETURN_PENDING_RECEIPT (waiting on the warehouse, not frontline), and COMPLETED.
+	const reconciliationPendingActionCount = $derived(
+		reconciliationEligibleTickets.filter(
+			(t) => t.status === 'SHIFT_CLOSED' || t.status === 'RETURN_COMPLETED'
+		).length
 	);
 
 	let selectedReconciliationTicketId = $state<string>('');
@@ -358,6 +373,11 @@
 					<p class="text-2xs text-slate-500">Shift Close & Returns</p>
 				</div>
 			</div>
+			{#if reconciliationPendingActionCount > 0}
+				<span class="rounded-full bg-amber-100 px-2 py-0.5 text-2xs font-bold text-amber-900">
+					รอดำเนินการ {reconciliationPendingActionCount}
+				</span>
+			{/if}
 		</button>
 	</div>
 
@@ -633,16 +653,20 @@
 									aria-label="เลือกตั๋วที่ต้องการปิดรอบหรือกระทบยอด"
 									class="h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 shadow-2xs focus-visible:ring-2 focus-visible:ring-teal-500"
 								>
-									<span class="truncate">
-										{#if activeReconciliationTicket}
-											{activeReconciliationTicket.ticket_no} [{getTicketStatusLabel(
-												activeReconciliationTicket.status
-											)}] - {activeReconciliationTicket.destination_location}
-											({activeReconciliationTicket.items.map((i) => i.item_name).join(', ')})
-										{:else}
-											เลือกตั๋วเพื่อกระทบยอด
-										{/if}
-									</span>
+									{#if activeReconciliationTicket}
+										<span class="flex min-w-0 flex-1 items-center gap-2">
+											<TicketStatusBadge
+												status={activeReconciliationTicket.status}
+												class="shrink-0"
+											/>
+											<span class="truncate">
+												{activeReconciliationTicket.ticket_no} - {activeReconciliationTicket.destination_location}
+												({activeReconciliationTicket.items.map((i) => i.item_name).join(', ')})
+											</span>
+										</span>
+									{:else}
+										<span class="truncate">เลือกตั๋วเพื่อกระทบยอด</span>
+									{/if}
 								</Select.Trigger>
 								<Select.Content>
 									{#each reconciliationEligibleTickets as t (t._id)}
@@ -651,7 +675,19 @@
 											label={`${t.ticket_no} [${getTicketStatusLabel(t.status)}] - ${t.destination_location} (${t.items
 												.map((i) => i.item_name)
 												.join(', ')})`}
-										/>
+										>
+											<div class="flex w-full min-w-0 flex-col gap-0.5 text-left">
+												<span class="flex items-center justify-between gap-2">
+													<span class="truncate font-mono text-xs font-bold text-slate-900"
+														>{t.ticket_no}</span
+													>
+													<TicketStatusBadge status={t.status} class="shrink-0" />
+												</span>
+												<span class="truncate text-2xs text-slate-500">
+													{t.destination_location} · {t.items.map((i) => i.item_name).join(', ')}
+												</span>
+											</div>
+										</Select.Item>
 									{/each}
 								</Select.Content>
 							</Select.Root>

@@ -7,6 +7,8 @@ import {
 	getTicketStatusBadgeClass,
 	getRequisitionTypeLabel,
 	getMealPeriodLabel,
+	getReconciliationStatusRank,
+	compareByReconciliationProgress,
 	REQUISITION_TYPE_LABELS,
 	MEAL_PERIOD_LABELS
 } from './ticket-status';
@@ -73,5 +75,67 @@ describe('Ticket Status Model & Labels (Slice 5.1 §16, §44)', () => {
 		expect(getMealPeriodLabel('lunch')).toBe('กลางวัน');
 		expect(getMealPeriodLabel('dinner')).toBe('เย็น');
 		expect(getMealPeriodLabel('snack')).toBe('อาหารว่าง');
+	});
+
+	describe('reconciliation selector workflow-progress ordering', () => {
+		it('ranks each reconciliation-eligible status strictly below the next workflow stage', () => {
+			expect(getReconciliationStatusRank('DISTRIBUTING')).toBeLessThan(
+				getReconciliationStatusRank('SHIFT_CLOSED')
+			);
+			expect(getReconciliationStatusRank('SHIFT_CLOSED')).toBeLessThan(
+				getReconciliationStatusRank('RETURN_PENDING_RECEIPT')
+			);
+			expect(getReconciliationStatusRank('RETURN_PENDING_RECEIPT')).toBeLessThan(
+				getReconciliationStatusRank('RETURN_COMPLETED')
+			);
+			expect(getReconciliationStatusRank('RETURN_COMPLETED')).toBeLessThan(
+				getReconciliationStatusRank('COMPLETED')
+			);
+		});
+
+		it('ranks every unfinished status strictly before COMPLETED', () => {
+			for (const status of [
+				'DISTRIBUTING',
+				'SHIFT_CLOSED',
+				'RETURN_PENDING_RECEIPT',
+				'RETURN_COMPLETED'
+			] as const) {
+				expect(getReconciliationStatusRank(status)).toBeLessThan(
+					getReconciliationStatusRank('COMPLETED')
+				);
+			}
+		});
+
+		it('sorts a shuffled ticket list into the exact workflow-progress order with COMPLETED last', () => {
+			const shuffled = [
+				{ _id: 'a', status: 'COMPLETED' as RequisitionTicketStatus },
+				{ _id: 'b', status: 'RETURN_PENDING_RECEIPT' as RequisitionTicketStatus },
+				{ _id: 'c', status: 'DISTRIBUTING' as RequisitionTicketStatus },
+				{ _id: 'd', status: 'RETURN_COMPLETED' as RequisitionTicketStatus },
+				{ _id: 'e', status: 'SHIFT_CLOSED' as RequisitionTicketStatus }
+			];
+
+			const sorted = [...shuffled].sort(compareByReconciliationProgress);
+
+			expect(sorted.map((t) => t.status)).toEqual([
+				'DISTRIBUTING',
+				'SHIFT_CLOSED',
+				'RETURN_PENDING_RECEIPT',
+				'RETURN_COMPLETED',
+				'COMPLETED'
+			]);
+		});
+
+		it('preserves the original relative order for tickets sharing the same status (stable sort)', () => {
+			const shuffled = [
+				{ _id: 'first-completed', status: 'COMPLETED' as RequisitionTicketStatus },
+				{ _id: 'active', status: 'DISTRIBUTING' as RequisitionTicketStatus },
+				{ _id: 'second-completed', status: 'COMPLETED' as RequisitionTicketStatus }
+			];
+
+			const sorted = [...shuffled].sort(compareByReconciliationProgress);
+
+			expect(sorted.map((t) => t._id)).toEqual(['active', 'first-completed', 'second-completed']);
+		});
 	});
 });
