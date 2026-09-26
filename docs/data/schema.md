@@ -1739,7 +1739,7 @@ provisioning เท่านั้น. `value` คือเลขล่าสุ
 | `type` | str | req | บังคับเป็น `"requirement_group"` |
 | `schema_v` | int | req | เวอร์ชันของสกีมา เริ่มต้น `1` |
 | `name` | str | req | ชื่อแสดงผลภาษาไทย เช่น `"พลังงานอาหาร"`, `"ไขมัน"`, `"โปรตีน"` |
-| `standard_uom` | str | req | หน่วยนับมาตรฐานประจำกลุ่ม เช่น `"kcal"`, `"gram"`, `"litre"` (ใช้ Auto-fill ในหน้าจอกำหนด Sphere) |
+| `standard_uom` | str | req | หน่วยนับมาตรฐานประจำกลุ่ม เช่น `"kcal"`, `"gram"`, `"liter"` (ใช้ Auto-fill ในหน้าจอกำหนด Sphere) |
 | `status` | enum(`active`,`inactive`) | req | สถานะการใช้งาน: `active` = ใช้งานปกติ, `inactive` = ปิดการใช้งาน (Soft-deleted) (ค่าเริ่มต้น `active`, read fallback `active`) |
 | `item_maps` | [{`item_id`:str, `base_uom`:str, `conversion_factor`:num>0, `share_percent`:num?}] | opt | รายการสินค้าที่จับคู่เข้ากลุ่มความต้องการนี้ (ดูโครงสร้างย่อยด้านล่าง) |
 | `source` | enum(`SPHERE_BASELINE`,`SHELTER_OVERRIDE`) | req | แหล่งที่มา: `SPHERE_BASELINE` (ส่วนกลางใน catalog DB) หรือ `SHELTER_OVERRIDE` (เฉพาะศูนย์ใน `shelter_{shelter_code}` DB) |
@@ -1815,7 +1815,7 @@ provisioning เท่านั้น. `value` คือเลขล่าสุ
 | `label_th` | str | req | ชื่อหน่วยภาษาไทย; ห้ามว่างเปล่า |
 | `label_th_short` | str | opt | ชื่อย่อภาษาไทย เช่น `กก.` หรือ `มล.` |
 | `label_en` | str | req | ชื่อหน่วยภาษาอังกฤษ/สัญลักษณ์; ห้ามว่างเปล่า |
-| `dimension` | enum(`count`,`mass`,`volume`,`length`) | req | มิติของหน่วย ใช้ตรวจความสอดคล้องของข้อมูล master |
+| `dimension` | enum(`count`,`mass`,`volume`,`length`,`energy`) | req | มิติของหน่วย ใช้ตรวจความสอดคล้องของข้อมูล master; `energy` เพิ่มสำหรับหน่วยโภชนาการ (`kcal`) ตามมติเจ้าของโครงการ 2026-09-24 |
 | `is_protected` | bool | opt | default `false`; หน่วยระบบที่ seed ต้องเป็น `true` |
 | `sort_order` | num | opt | ลำดับแสดงผลในรายการหน่วย |
 | `deactivated` | bool | opt | default `false`; หน่วยที่ปิดใช้งานไม่ควรปรากฏในตัวเลือกใหม่ |
@@ -1834,11 +1834,12 @@ provisioning เท่านั้น. `value` คือเลขล่าสุ
 | Dimension | Codes |
 | --- | --- |
 | `count` | `piece`, `unit`, `item`, `set`, `pair`, `box`, `pack`, `bag`, `sachet`, `bottle`, `can`, `tablet`, `bar`, `tube`, `roll`, `sheet`, `cloth`, `bundle`, `egg`, `fruit`, `cylinder` |
-| `mass` | `g`, `kg` |
+| `mass` | `g`, `kg`, `mg`, `mcg` |
 | `volume` | `gallon`, `ml`, `l` |
 | `length` | `m` |
+| `energy` | `kcal` |
 
-รวม 27 หน่วย. Seeder ต้องทำงานแบบ idempotent: สร้างเอกสารที่หายไป และบังคับ `code`, `dimension`,
+รวม 30 หน่วย (`mg`, `mcg`, `kcal` เพิ่ม 2026-09-24 เพื่อรองรับหน่วยของ `requirement_group.standard_uom`). Seeder ต้องทำงานแบบ idempotent: สร้างเอกสารที่หายไป และบังคับ `code`, `dimension`,
 `schema_v: 1` และ `is_protected: true` สำหรับเอกสารระบบ โดยคง label ที่ผู้ดูแลแก้ไขไว้.
 
 **Migration/compatibility (CR-125):** เพิ่ม doc type ใหม่แบบ additive ที่ `schema_v: 1`; ไม่ต้อง bump

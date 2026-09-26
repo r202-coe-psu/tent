@@ -21,7 +21,7 @@ language: th
 | `registry` | global `master_data` 4 เอกสาร รวมรายการ seed 31 รายการ (CR-137)                                         |
 | `registry` | `config:app` 1 singleton พร้อมค่า default                                                             |
 | `registry` | `config:public_portal` 1 singleton พร้อมค่า default FAQ 13 รายการ (ช่องทางติดต่อเว้นว่างไว้ ไม่ seed) |
-| `catalog`  | `unit_of_measure` 27, `item_category` 10, `item_master` 34, `recipe` 6                               |
+| `catalog`  | `unit_of_measure` 30, `item_category` 10, `item_master` 34, `recipe` 6                               |
 | `catalog`  | SOP profile 1, audit 1 และ active pointer 1                                                           |
 | `catalog`  | `requirement_group` 5, `food_sphere_standard` 24 และ `replenishment_policy` 5                         |
 
@@ -31,7 +31,7 @@ language: th
 
 - [master-defs.ts](../../frontend/scripts/seed/master-defs.ts) — รายการ `registry.master_data`
 - [master-seed.ts](../../frontend/scripts/seed/master-seed.ts) — ลำดับและรูปแบบการสร้าง registry/catalog/config
-- [unit-of-measure.ts](../../frontend/src/lib/features/catalog/domain/unit-of-measure.ts) — canonical UOM definitions 27 รายการ
+- [unit-of-measure.ts](../../frontend/src/lib/features/catalog/domain/unit-of-measure.ts) — canonical UOM definitions 30 รายการ
 - [master-data.ts](../../frontend/src/lib/features/master-data/domain/master-data.ts) — master type, schema และ vulnerable-group set
 - [sop-ratio.fixture.ts](../../frontend/src/lib/features/sop-ratios/domain/sop-ratio.fixture.ts) — SOP ratio baseline
 - [requirement-group.fixture.ts](../../frontend/src/lib/features/sop-ratios/domain/requirement-group.fixture.ts) — requirement groups
@@ -171,7 +171,7 @@ Seed ลง global `master_data:volunteer_skills` จำนวน 9 รายก
 
 #### Canonical seeded units
 
-รายการด้านล่างตรงกับ `FALLBACK_UNIT_DEFINITIONS` และ seed ใหม่ด้วย `sort_order` 1–27:
+รายการด้านล่างตรงกับ `FALLBACK_UNIT_DEFINITIONS` และ seed ใหม่ด้วย `sort_order` 1–30:
 
 | sort_order | code       | label_th  | label_th_short | label_en | dimension |
 | ---------: | ---------- | --------- | -------------- | -------- | --------- |
@@ -202,8 +202,11 @@ Seed ลง global `master_data:volunteer_skills` จำนวน 9 รายก
 |         25 | `ml`       | มิลลิลิตร | มล.            | ml       | volume    |
 |         26 | `l`        | ลิตร      | ล.             | L        | volume    |
 |         27 | `m`        | เมตร      | ม.             | m        | length    |
+|         28 | `mg`       | มิลลิกรัม | มก.            | mg       | mass      |
+|         29 | `mcg`      | ไมโครกรัม | มคก.           | mcg      | mass      |
+|         30 | `kcal`     | กิโลแคลอรี | กิโลแคลอรี     | kcal     | energy    |
 
-จำนวนตาม dimension: `count` 21, `mass` 2, `volume` 3 และ `length` 1
+จำนวนตาม dimension: `count` 21, `mass` 4, `volume` 3, `length` 1 และ `energy` 1
 
 #### Seed and update behavior
 

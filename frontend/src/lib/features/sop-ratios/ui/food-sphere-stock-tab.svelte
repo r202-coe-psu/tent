@@ -604,7 +604,7 @@
 											class="shrink-0 rounded-full border border-border/60 bg-background/80 px-2 py-0.5 font-mono text-[11px] font-medium text-muted-foreground sm:text-xs"
 										>
 											เป้าหมาย: {group.totalGroupDemand.toLocaleString()}
-											{group.standardUom}/วัน
+											{formatUnit(group.standardUom, units, langState.current)}/วัน
 										</span>
 									{/if}
 								</div>

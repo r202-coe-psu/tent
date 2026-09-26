@@ -35,6 +35,12 @@
 	const itemMastersQuery = useItemMasters();
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
+	const uomOptions = $derived(
+		STANDARD_UOM_OPTIONS.map((opt) => ({
+			value: opt.value,
+			label: formatUnit(opt.value, units, langState.current) || opt.label
+		}))
+	);
 
 	let formGroupId = $state('');
 	let formName = $state('');
@@ -246,15 +252,20 @@
 							id="form-standard-uom"
 							class="h-9 w-full rounded-md border-input bg-background font-mono"
 						>
-							{STANDARD_UOM_OPTIONS.find((o) => o.value === formStandardUom)?.label ??
-								(formStandardUom || '-- เลือกหน่วยนับมาตรฐาน --')}
+							{uomOptions.find((o) => o.value === formStandardUom)?.label ??
+								(formStandardUom
+									? formatUnit(formStandardUom, units, langState.current)
+									: '-- เลือกหน่วยนับมาตรฐาน --')}
 						</Select.Trigger>
 						<Select.Content>
-							{#each STANDARD_UOM_OPTIONS as opt (opt.value)}
+							{#each uomOptions as opt (opt.value)}
 								<Select.Item value={opt.value} label={opt.label} />
 							{/each}
-							{#if formStandardUom && !STANDARD_UOM_OPTIONS.some((c) => c.value === formStandardUom)}
-								<Select.Item value={formStandardUom} label="{formStandardUom} (ระบุเอง)" />
+							{#if formStandardUom && !uomOptions.some((c) => c.value === formStandardUom)}
+								<Select.Item
+									value={formStandardUom}
+									label="{formatUnit(formStandardUom, units, langState.current)} (หน่วยเดิม)"
+								/>
 							{/if}
 						</Select.Content>
 					</Select.Root>
