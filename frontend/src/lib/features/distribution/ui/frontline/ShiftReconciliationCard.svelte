@@ -15,7 +15,8 @@
 		resolveAuthenticatedAuthorContext,
 		useCloseShift,
 		useShiftReconciliation,
-		useSubmitReturnsToWarehouse
+		useSubmitReturnsToWarehouse,
+		useDistributionLogs
 	} from '../../application/queries';
 	import { canPerformFrontlineDistribution } from '../../application/food-supplies/auth';
 	import type { RequisitionTicket } from '../../domain/food-supplies';
@@ -28,6 +29,10 @@
 	} from '../model/shift-reconciliation';
 	import { formatDistributionError } from '../model/distribution-error';
 	import { getTicketStatusLabel } from '../model/ticket-status';
+	import { summarizeTicketLoans } from '../model/loan-return';
+	import { qtyGt } from '$lib/utils/qty';
+	import TicketLoanSummary from '../common/TicketLoanSummary.svelte';
+	import Undo2 from '@lucide/svelte/icons/undo-2';
 
 	interface Props {
 		ticket: RequisitionTicket | null;
@@ -87,6 +92,19 @@
 	const summaries = $derived(reconciliationQuery.data?.summaries ?? []);
 	const validation = $derived(validateShiftCloseForm(summaries, returnedInputs));
 	const preview = $derived(computeShiftClosePreview(summaries, returnedInputs));
+
+	// Durable-loan outstanding indicator — independent of ticket.status (see summarizeTicketLoans).
+	const loanLogsQuery = useDistributionLogs(
+		() => (ticket ? { ticket_id: ticket._id, is_returnable: true } : undefined),
+		() => shelterCode,
+		() => Boolean(ticket)
+	);
+	const loanSummary = $derived(
+		ticket ? summarizeTicketLoans(ticket._id, loanLogsQuery.data ?? []) : null
+	);
+	const hasOutstandingLoans = $derived(
+		Boolean(loanSummary && qtyGt(loanSummary.outstandingQty, '0'))
+	);
 
 	async function handleCloseShift() {
 		if (!canFrontline) {
@@ -232,6 +250,14 @@
 							>
 								{getTicketStatusLabel(ticket.status)}
 							</span>
+							{#if hasOutstandingLoans && loanSummary}
+								<span
+									class="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-2xs font-bold text-amber-900"
+								>
+									<Undo2 class="h-3 w-3" aria-hidden="true" />
+									ของยืมค้างคืน {loanSummary.outstandingQty}
+								</span>
+							{/if}
 						</div>
 						<h2 class="text-lg font-bold text-slate-900">
 							ใบเบิก {ticket.ticket_no} ({ticket.requisition_type === 'food'
@@ -384,12 +410,19 @@
 							<div class="flex items-start gap-2.5">
 								<CheckCircle2 class="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
 								<div>
-									<p class="font-bold">เส้นทางปิดตั๋วทันที</p>
-									<p class="mt-0.5 text-slate-600">
-										ยอดส่งคืนคลังรวมเป็น 0 ชิ้น ระบบจะปิดรอบและเปลี่ยนสถานะตั๋วเป็น <strong
-											class="text-emerald-800">เสร็จสมบูรณ์</strong
-										> ทันที โดยไม่ต้องส่งรถกลับคลังกลาง
-									</p>
+									<p class="font-bold">ไม่มีของเหลือจากรอบแจกที่ต้องส่งคืนคลัง</p>
+									{#if hasOutstandingLoans}
+										<p class="mt-0.5 text-slate-600">
+											สามารถปิดรอบแจกจ่ายได้ทันที แต่ยังมีของยืมที่ผู้ประสบภัยยังไม่ได้คืน
+											ระบบจะติดตามต่อในรายการของยืม-คืนด้านล่าง
+										</p>
+									{:else}
+										<p class="mt-0.5 text-slate-600">
+											ระบบจะปิดรอบและเปลี่ยนสถานะตั๋วเป็น <strong class="text-emerald-800"
+												>เสร็จสมบูรณ์</strong
+											> ทันที โดยไม่ต้องส่งรถกลับคลังกลาง
+										</p>
+									{/if}
 								</div>
 							</div>
 						</div>
@@ -658,6 +691,9 @@
 					</p>
 				</div>
 			{/if}
+
+			<!-- Durable Loan Status (tracked independently of ticket lifecycle) -->
+			<TicketLoanSummary ticketId={ticket._id} items={ticket.items} {shelterCode} />
 		</div>
 	{/if}
 </div>

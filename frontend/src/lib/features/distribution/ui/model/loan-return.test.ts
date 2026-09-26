@@ -13,7 +13,8 @@ import {
 	validateBulkGateClear,
 	validateBulkForwardRecovery,
 	resolveCounterRecoveryHydration,
-	resolveNonPhysicalRecoveryHydration
+	resolveNonPhysicalRecoveryHydration,
+	summarizeTicketLoans
 } from './loan-return';
 import type { DistributionLog, LoanReturnReservation } from '../../domain/food-supplies';
 
@@ -538,6 +539,180 @@ describe('loan-return model helpers', () => {
 					hydratedOperationId: null
 				})
 			).toBeNull();
+		});
+	});
+
+	describe('summarizeTicketLoans', () => {
+		const ticketId = baseLoanLog.ticket_id;
+
+		it('Case 1: a single active loan, no returns yet, is fully outstanding', () => {
+			const summary = summarizeTicketLoans(ticketId, [
+				{ ...baseLoanLog, qty: '10', qty_returned: undefined, status: 'active' }
+			]);
+
+			expect(summary.loanedQty).toBe('10');
+			expect(summary.returnedQty).toBe('0');
+			expect(summary.outstandingQty).toBe('10');
+			expect(summary.openLoanCount).toBe(1);
+			expect(summary.items).toEqual([
+				{
+					itemId: baseLoanLog.item_id,
+					loanedQty: '10',
+					returnedQty: '0',
+					outstandingQty: '10',
+					openLoanCount: 1
+				}
+			]);
+		});
+
+		it('Case 2: a partial return updates returned/outstanding but the loan is still open', () => {
+			const summary = summarizeTicketLoans(ticketId, [
+				{ ...baseLoanLog, qty: '10', qty_returned: '4', status: 'partially_returned' }
+			]);
+
+			expect(summary.loanedQty).toBe('10');
+			expect(summary.returnedQty).toBe('4');
+			expect(summary.outstandingQty).toBe('6');
+			expect(summary.openLoanCount).toBe(1);
+		});
+
+		it('Case 3: a fully returned loan has zero outstanding and is no longer open', () => {
+			const summary = summarizeTicketLoans(ticketId, [
+				{
+					...baseLoanLog,
+					qty: '10',
+					qty_returned: '10',
+					status: 'returned',
+					clear_reason: 'routine',
+					returned_at: '2026-09-24T00:00:00.000Z',
+					returned_by: 'staff_1'
+				}
+			]);
+
+			expect(summary.loanedQty).toBe('10');
+			expect(summary.returnedQty).toBe('10');
+			expect(summary.outstandingQty).toBe('0');
+			expect(summary.openLoanCount).toBe(0);
+		});
+
+		it('Case 4: sums multiple loans under the same ticket, grouped per item', () => {
+			const tent: DistributionLog = {
+				...baseLoanLog,
+				_id: 'distribution_log:01J00000000000000000000010',
+				item_id: 'item_master:tent',
+				qty: '10',
+				qty_returned: '4',
+				status: 'partially_returned'
+			};
+			const blanket1: DistributionLog = {
+				...baseLoanLog,
+				_id: 'distribution_log:01J00000000000000000000011',
+				item_id: 'item_master:blanket',
+				qty: '20',
+				qty_returned: '20',
+				status: 'returned',
+				clear_reason: 'routine',
+				returned_at: '2026-09-24T00:00:00.000Z',
+				returned_by: 'staff_1'
+			};
+			const blanket2: DistributionLog = {
+				...baseLoanLog,
+				_id: 'distribution_log:01J00000000000000000000012',
+				recipient_id: 'evacuee:01J00000000000000000000099',
+				item_id: 'item_master:blanket',
+				qty: '5',
+				qty_returned: undefined,
+				status: 'active'
+			};
+
+			const summary = summarizeTicketLoans(ticketId, [tent, blanket1, blanket2]);
+
+			expect(summary.loanedQty).toBe('35');
+			expect(summary.returnedQty).toBe('24');
+			expect(summary.outstandingQty).toBe('11');
+			expect(summary.openLoanCount).toBe(2);
+
+			const byItem = Object.fromEntries(summary.items.map((i) => [i.itemId, i]));
+			expect(byItem['item_master:tent']).toEqual({
+				itemId: 'item_master:tent',
+				loanedQty: '10',
+				returnedQty: '4',
+				outstandingQty: '6',
+				openLoanCount: 1
+			});
+			expect(byItem['item_master:blanket']).toEqual({
+				itemId: 'item_master:blanket',
+				loanedQty: '25',
+				returnedQty: '20',
+				outstandingQty: '5',
+				openLoanCount: 1
+			});
+		});
+
+		it('Case 5: outstanding loans still report even when the parent ticket is COMPLETED', () => {
+			// summarizeTicketLoans takes only logs — it has no ticket.status input at all,
+			// so ticket completion can never suppress or alter this summary.
+			const summary = summarizeTicketLoans(ticketId, [
+				{ ...baseLoanLog, qty: '10', qty_returned: undefined, status: 'active' }
+			]);
+
+			expect(summary.outstandingQty).toBe('10');
+			expect(summary.openLoanCount).toBe(1);
+		});
+
+		it('excludes voided logs from every total', () => {
+			const summary = summarizeTicketLoans(ticketId, [
+				{
+					...baseLoanLog,
+					qty: '10',
+					status: 'voided',
+					voided_at: '2026-09-24T00:00:00.000Z',
+					voided_by: 'staff_1'
+				}
+			]);
+
+			expect(summary.loanedQty).toBe('0');
+			expect(summary.returnedQty).toBe('0');
+			expect(summary.outstandingQty).toBe('0');
+			expect(summary.openLoanCount).toBe(0);
+			expect(summary.items).toEqual([]);
+		});
+
+		it('excludes lost/waived write-offs from outstanding and open counts (already resolved, not a pending obligation)', () => {
+			const lost: DistributionLog = {
+				...baseLoanLog,
+				_id: 'distribution_log:01J00000000000000000000020',
+				qty: '5',
+				status: 'lost',
+				clear_reason: 'lost',
+				returned_at: '2026-09-24T00:00:00.000Z',
+				returned_by: 'staff_1',
+				notes: 'สูญหายระหว่างเหตุอุทกภัย'
+			};
+
+			const summary = summarizeTicketLoans(ticketId, [lost]);
+
+			expect(summary.outstandingQty).toBe('0');
+			expect(summary.openLoanCount).toBe(0);
+			expect(summary.items).toEqual([]);
+		});
+
+		it('excludes non-returnable (fulfilled) distribution logs entirely', () => {
+			const summary = summarizeTicketLoans(ticketId, [
+				{ ...baseLoanLog, is_returnable: false, status: 'fulfilled', qty: '3' }
+			]);
+
+			expect(summary.loanedQty).toBe('0');
+			expect(summary.items).toEqual([]);
+		});
+
+		it('ignores logs belonging to a different ticket', () => {
+			const summary = summarizeTicketLoans(ticketId, [
+				{ ...baseLoanLog, ticket_id: 'requisition_ticket:01J00000000000000000000099' }
+			]);
+
+			expect(summary.loanedQty).toBe('0');
+			expect(summary.items).toEqual([]);
 		});
 	});
 });

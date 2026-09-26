@@ -1,10 +1,14 @@
 <script lang="ts">
-	import { useRequisitionTicket } from '../../application/queries';
+	import { useRequisitionTicket, useDistributionLogs } from '../../application/queries';
 	import TicketStatusBadge from '../common/TicketStatusBadge.svelte';
 	import TicketLifecycleProgress from '../common/TicketLifecycleProgress.svelte';
+	import TicketLoanSummary from '../common/TicketLoanSummary.svelte';
 	import TicketActionPanel from './TicketActionPanel.svelte';
 	import { getReturnableBadgeLabel, getReturnableBadgeClass } from '../model/catalog-eligibility';
 	import { getRequisitionTypeLabel } from '../model/ticket-status';
+	import { summarizeTicketLoans } from '../model/loan-return';
+	import { qtyGt } from '$lib/utils/qty';
+	import Undo2 from '@lucide/svelte/icons/undo-2';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
@@ -29,6 +33,19 @@
 	const ticket = $derived(ticketQuery.data);
 	const isLoading = $derived(ticketQuery.isLoading);
 	const isError = $derived(ticketQuery.isError);
+
+	// Durable-loan outstanding badge — independent of ticket.status (see summarizeTicketLoans).
+	const loanLogsQuery = useDistributionLogs(
+		() => (ticket ? { ticket_id: ticket._id, is_returnable: true } : undefined),
+		() => shelterCode,
+		() => Boolean(ticket)
+	);
+	const loanSummary = $derived(
+		ticket ? summarizeTicketLoans(ticket._id, loanLogsQuery.data ?? []) : null
+	);
+	const hasOutstandingLoans = $derived(
+		Boolean(loanSummary && qtyGt(loanSummary.outstandingQty, '0'))
+	);
 
 	function formatDateTime(isoString: string): string {
 		try {
@@ -116,6 +133,16 @@
 
 						<!-- Canonical Status Badge -->
 						<TicketStatusBadge status={ticket.status} />
+
+						<!-- Outstanding durable-loan indicator (tracked independently of ticket status) -->
+						{#if hasOutstandingLoans && loanSummary}
+							<span
+								class="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-900"
+							>
+								<Undo2 class="h-3 w-3" aria-hidden="true" />
+								ของยืมค้างคืน {loanSummary.outstandingQty}
+							</span>
+						{/if}
 					</div>
 
 					<Dialog.Description class="sr-only">
@@ -253,7 +280,10 @@
 					</div>
 				</div>
 
-				<!-- 3. Action Panel -->
+				<!-- 3. Durable Loan Status (tracked independently of ticket lifecycle) -->
+				<TicketLoanSummary ticketId={ticket._id} items={ticket.items} {shelterCode} />
+
+				<!-- 4. Action Panel -->
 				<TicketActionPanel
 					{ticket}
 					{shelterCode}

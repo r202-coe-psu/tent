@@ -42,6 +42,77 @@ export function calculateLoanRemainingQty(
 	return qtyGt(remaining, '0') ? remaining : '0';
 }
 
+export interface LoanQuantitySummary {
+	loanedQty: string;
+	returnedQty: string;
+	outstandingQty: string;
+	openLoanCount: number;
+}
+
+export interface TicketItemLoanSummary extends LoanQuantitySummary {
+	itemId: string;
+}
+
+export interface TicketLoanSummary extends LoanQuantitySummary {
+	items: TicketItemLoanSummary[];
+}
+
+function aggregateLoanLogs(logs: readonly DistributionLog[]): LoanQuantitySummary {
+	let loanedQty = '0';
+	let returnedQty = '0';
+	let outstandingQty = '0';
+	let openLoanCount = 0;
+
+	for (const log of logs) {
+		loanedQty = addQty(loanedQty, log.qty);
+		returnedQty = addQty(returnedQty, log.qty_returned ?? '0');
+		outstandingQty = addQty(outstandingQty, calculateLoanRemainingQty(log));
+		if (isLoanReturnCandidate(log)) {
+			openLoanCount += 1;
+		}
+	}
+
+	return { loanedQty, returnedQty, outstandingQty, openLoanCount };
+}
+
+// Aggregates durable-loan lifecycle for a ticket, independent of the ticket's own status —
+// a ticket may be COMPLETED while loans issued under it remain outstanding with recipients
+// (loan resolution is tracked at evacuee check-out, not at ticket completion; CR-121 FR-LON-04).
+// Only is_returnable logs with status active/partially_returned/returned count; voided never
+// happened, and lost/waived are resolved write-offs, not pending obligations, so neither
+// inflates outstandingQty or openLoanCount (reuses isLoanReturnCandidate's convention).
+export function summarizeTicketLoans(
+	ticketId: string,
+	logs: readonly DistributionLog[]
+): TicketLoanSummary {
+	const trackedLogs = logs.filter(
+		(log) =>
+			log.ticket_id === ticketId &&
+			log.is_returnable &&
+			(log.status === 'active' || log.status === 'partially_returned' || log.status === 'returned')
+	);
+
+	const byItem = new Map<string, DistributionLog[]>();
+	for (const log of trackedLogs) {
+		const bucket = byItem.get(log.item_id);
+		if (bucket) {
+			bucket.push(log);
+		} else {
+			byItem.set(log.item_id, [log]);
+		}
+	}
+
+	const items: TicketItemLoanSummary[] = Array.from(byItem.entries()).map(([itemId, itemLogs]) => ({
+		itemId,
+		...aggregateLoanLogs(itemLogs)
+	}));
+
+	return {
+		...aggregateLoanLogs(trackedLogs),
+		items
+	};
+}
+
 /**
  * Calculates new target cumulative returned quantity given the previous cumulative returned
  * and the additional quantity being returned in this specific physical interaction.
@@ -62,13 +133,6 @@ export interface ReturnQtyValidationResult {
 	normalizedQty?: string;
 }
 
-/**
- * Validates the quantity entered by an operator for physical counter return.
- * Requires countable whole-item input without rounding.
- * - Must be non-empty
- * - Must be a valid positive whole quantity
- * - Must not exceed currently known remaining balance
- */
 export function validateCounterReturnQuantity(
 	returningNow: string,
 	remaining: string
@@ -114,7 +178,7 @@ export interface NonPhysicalClearValidationResult {
 }
 
 /**
- * Canonical options for administrative non-physical loan write-offs (Slice 5.5C).
+ * Canonical options for administrative non-physical loan write-offs.
  * Strictly mirrors NonPhysicalClearInput ('lost' | 'waived') in return-workflow.ts.
  */
 export const NON_PHYSICAL_CLEAR_REASON_OPTIONS: {
