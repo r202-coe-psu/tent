@@ -8,6 +8,7 @@
 
 	interface Props {
 		name: string;
+		id?: string;
 		value?: string;
 		placeholder?: string;
 		searchPlaceholder?: string;
@@ -23,6 +24,7 @@
 
 	let {
 		name,
+		id,
 		value = $bindable(''),
 		placeholder = 'เลือก...',
 		searchPlaceholder = 'ค้นหา...',
@@ -61,8 +63,11 @@
 	<div bind:clientWidth={triggerWidth} class="w-full">
 		<Popover.Trigger
 			{...controlProps}
+			id={id || name}
+			data-name={name}
 			type="button"
 			disabled={disabled || loading}
+			aria-busy={loading}
 			class={cn(
 				'flex h-10 w-full items-center justify-between rounded-md border border-input bg-white px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30',
 				value && !loading ? 'text-foreground' : 'text-muted-foreground',

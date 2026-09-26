@@ -245,10 +245,7 @@ async function assertPhoneAvailable(
 	for (const doc of docs) {
 		if (excludeName && doc.name === excludeName) continue;
 		if (doc.name === normalized) {
-			throw new ServiceError(
-				'CONFLICT',
-				`เบอร์ "${normalized}" ชนกับ username ของบัญชีอื่น`
-			);
+			throw new ServiceError('CONFLICT', `เบอร์ "${normalized}" ชนกับ username ของบัญชีอื่น`);
 		}
 		if (doc.phone === normalized) {
 			throw new ServiceError('CONFLICT', `เบอร์ "${normalized}" ถูกใช้โดยบัญชีอื่นแล้ว`);
@@ -524,9 +521,7 @@ export async function updateUser(
 		...(input.personnel_type !== undefined ? { personnel_type: input.personnel_type } : {}),
 		...(input.organization !== undefined ? { organization: input.organization } : {}),
 		...(input.position !== undefined ? { position: input.position } : {}),
-		...(input.phone !== undefined
-			? { phone: await assertPhoneAvailable(input.phone, name) }
-			: {}),
+		...(input.phone !== undefined ? { phone: await assertPhoneAvailable(input.phone, name) } : {}),
 		...(input.email !== undefined ? { email: input.email } : {}),
 		...(input.notes !== undefined ? { notes: input.notes } : {}),
 		...(input.volunteer_id !== undefined ? { volunteer_id: input.volunteer_id } : {}),

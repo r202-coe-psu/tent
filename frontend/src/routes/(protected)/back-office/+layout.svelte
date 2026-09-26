@@ -71,7 +71,7 @@
 	<div class="flex w-full min-w-0 flex-1 flex-col">
 		<!-- Sticky under mobile hamburger bar (< lg); flush top when sidebar is visible -->
 		<header
-			class="sticky z-30 flex shrink-0 flex-col border-b border-sidebar-border bg-card top-[var(--bo-mobile-nav-height)] lg:top-0"
+			class="sticky top-[var(--bo-mobile-nav-height)] z-30 flex shrink-0 flex-col border-b border-sidebar-border bg-card lg:top-0"
 		>
 			<div class="flex h-16 min-h-16 items-center gap-2 px-4 sm:px-6">
 				<PageIcon class="size-4 shrink-0 text-primary" />

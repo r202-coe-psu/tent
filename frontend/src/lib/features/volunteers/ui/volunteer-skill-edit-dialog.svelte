@@ -83,6 +83,7 @@
 	);
 
 	const codeErrorMessage = $derived.by(() => {
+		if (editingItem) return null;
 		if (!formTouched) return null;
 		if (!formCode.trim()) return 'กรุณาระบุรหัสทักษะ (Value/Key)';
 		if (!isCodeValid)
@@ -166,18 +167,29 @@
 			<form onsubmit={handleSubmit} class="space-y-4">
 				<div>
 					<label for="formCode" class="mb-1.5 block text-xs font-bold text-foreground">
-						รหัสทักษะ (Value / Key) <span class="text-danger">* ห้ามมีเว้นวรรค</span>
+						รหัสทักษะ (Value / Key)
+						{#if !editingItem}
+							<span class="text-danger">* ห้ามมีเว้นวรรค</span>
+						{:else}
+							<span class="text-xs font-normal text-muted-foreground">(ไม่สามารถแก้ไขได้)</span>
+						{/if}
 					</label>
 					<Input
 						id="formCode"
 						type="text"
 						bind:value={formCode}
+						disabled={!!editingItem}
+						readonly={!!editingItem}
 						placeholder="เช่น medical_first_aid, cooking_kitchen, logistics"
-						class="w-full rounded-xl border-border bg-background px-4 py-2.5 font-mono text-xs focus:border-primary focus:ring-1 focus:ring-primary {codeErrorMessage
+						class="w-full rounded-xl border-border bg-background px-4 py-2.5 font-mono text-xs focus:border-primary focus:ring-1 focus:ring-primary disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground disabled:opacity-80 {codeErrorMessage
 							? 'border-danger focus:border-danger focus:ring-danger'
 							: ''}"
 					/>
-					{#if codeErrorMessage}
+					{#if editingItem}
+						<p class="mt-1 text-3xs text-muted-foreground">
+							รหัสทักษะ (ID) เป็นค่าคงที่สำหรับอ้างอิงในระบบ ไม่สามารถแก้ไขได้
+						</p>
+					{:else if codeErrorMessage}
 						<p class="mt-1 text-2xs font-medium text-danger">{codeErrorMessage}</p>
 					{:else}
 						<p class="mt-1 text-3xs text-muted-foreground">
