@@ -57,7 +57,6 @@
 <StaffPageShell
 	title="ลงทะเบียนล่วงหน้า"
 	description="ตรวจสอบผู้ลงทะเบียนล่วงหน้าทั้งหมด สถานะการเข้าศูนย์ และศูนย์พักพิงปลายทาง"
-	maxWidth="7xl"
 >
 	<OverviewFilterBar {filters} onChange={onFiltersChange} showHouseholdFilter={true} />
 

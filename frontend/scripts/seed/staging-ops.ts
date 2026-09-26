@@ -1,13 +1,11 @@
 /**
- * Staging ops: stock, campaigns, donations, purchases for SH001–SH003.
+ * Staging ops: stock, campaigns, donations for SH001–SH003.
  */
 import type { AuthorContext } from '$lib/db/model';
 import {
 	createCampaign,
-	createPurchase,
 	createStockLedger,
-	createWalkInDonation,
-	keyPurchaseReceipt
+	createWalkInDonation
 } from '$lib/features/operations/domain/operations';
 import { shelterDbName } from '$lib/server/shelter-access-design';
 import { prefixRangeEnd } from '../t31-seed-support';
@@ -42,13 +40,17 @@ export async function seedStagingOps(): Promise<void> {
 			continue;
 		}
 
+		// Opening balance: stock put on the shelf with no source document, which is
+		// `adjust` (schema.md §2.1, ref_id null) — the same reason the back-office
+		// manual receive writes. `receive` now requires a meal_service / requisition /
+		// distribution_log / bulk_return_pool ref (CR-121) and would be refused.
 		const stockEntries = [
 			createStockLedger(
 				{
 					item_id: ITEM.rice,
 					qty: scale(code, 500, 300, 150),
 					unit: 'kg',
-					reason: 'receive',
+					reason: 'adjust',
 					ref_id: null
 				},
 				ctx
@@ -58,7 +60,7 @@ export async function seedStagingOps(): Promise<void> {
 					item_id: ITEM.water,
 					qty: scale(code, 1200, 800, 400),
 					unit: 'bottle',
-					reason: 'receive',
+					reason: 'adjust',
 					ref_id: null
 				},
 				ctx
@@ -68,13 +70,13 @@ export async function seedStagingOps(): Promise<void> {
 					item_id: ITEM.paracetamol,
 					qty: '2000',
 					unit: 'tablet',
-					reason: 'receive',
+					reason: 'adjust',
 					ref_id: null
 				},
 				ctx
 			),
 			createStockLedger(
-				{ item_id: ITEM.soap, qty: '300', unit: 'bar', reason: 'receive', ref_id: null },
+				{ item_id: ITEM.soap, qty: '300', unit: 'bar', reason: 'adjust', ref_id: null },
 				ctx
 			),
 			createStockLedger(
@@ -82,17 +84,17 @@ export async function seedStagingOps(): Promise<void> {
 					item_id: ITEM.blanket,
 					qty: scale(code, 200, 120, 60),
 					unit: 'piece',
-					reason: 'receive',
+					reason: 'adjust',
 					ref_id: null
 				},
 				ctx
 			),
 			createStockLedger(
-				{ item_id: ITEM.egg, qty: '3000', unit: 'piece', reason: 'receive', ref_id: null },
+				{ item_id: ITEM.egg, qty: '3000', unit: 'piece', reason: 'adjust', ref_id: null },
 				ctx
 			),
 			createStockLedger(
-				{ item_id: ITEM.vegetable, qty: '200', unit: 'kg', reason: 'receive', ref_id: null },
+				{ item_id: ITEM.vegetable, qty: '200', unit: 'kg', reason: 'adjust', ref_id: null },
 				ctx
 			)
 		].map((doc, i) => ({ ...doc, _id: `stock_ledger:seed-st:${code.toLowerCase()}:${i}` }));
@@ -168,42 +170,9 @@ export async function seedStagingOps(): Promise<void> {
 			_id: `donation:seed-st:${code.toLowerCase()}:${i}`
 		}));
 
-		const purchases = [
-			createPurchase(
-				{
-					vendor: 'บริษัท สยามค้าส่ง จำกัด',
-					po_ref: `PO-ST-${code}-0001`,
-					items: [
-						{ item_id: ITEM.rice, qty: '100', unit: 'kg' },
-						{ item_id: ITEM.soap, qty: '60', unit: 'bar' }
-					],
-					note: 'จัดซื้อรอบ staging seed'
-				},
-				ctx
-			)
-		].map((doc, i) => ({
-			...doc,
-			_id: `purchase:seed-st:${code.toLowerCase()}:${i}`
-		}));
-
-		const purchaseReceipts = keyPurchaseReceipt(
-			purchases[0],
-			[{ item_id: ITEM.rice, qty: '100', unit: 'kg' }],
-			ctx
-		).map((doc, i) => ({
-			...doc,
-			_id: `stock_ledger:seed-st:${code.toLowerCase()}:pr-${i}`
-		}));
-
-		await bulkDocs(db, [
-			...stockEntries,
-			...campaigns,
-			...donations,
-			...purchases,
-			...purchaseReceipts
-		]);
+		await bulkDocs(db, [...stockEntries, ...campaigns, ...donations]);
 		console.log(
-			`  ✓ ${db}: ${stockEntries.length} stock, ${campaigns.length} campaigns, ${donations.length} donations, ${purchases.length} purchases`
+			`  ✓ ${db}: ${stockEntries.length} stock, ${campaigns.length} campaigns, ${donations.length} donations`
 		);
 	}
 }

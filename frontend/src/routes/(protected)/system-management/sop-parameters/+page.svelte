@@ -113,7 +113,6 @@
 <StaffPageShell
 	title="พารามิเตอร์ระบบส่วนกลาง"
 	description="จัดการพารามิเตอร์ SOP มาตรฐาน (Sphere Standard) ระดับระบบ — เขียนลงฐานข้อมูลกลาง catalog ทั้งหมด ไม่ผูกกับศูนย์พักพิงใด"
-	maxWidth="7xl"
 >
 	{#if !masterQuery.isLoading && (masterQuery.data ?? []).length === 0 && activeTab === 'sphere_standard'}
 		<div class="rounded-xl border border-dashed border-slate-200 p-6 text-center">
