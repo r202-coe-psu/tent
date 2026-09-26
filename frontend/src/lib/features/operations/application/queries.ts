@@ -19,9 +19,6 @@ import type {
 	ReceiveInput,
 	DistributeInput,
 	AdjustInput,
-	Purchase,
-	PurchaseInput,
-	CountedItem,
 	TransferInput,
 	TransferFilter,
 	WalkInDonationInput,
@@ -35,7 +32,6 @@ export const operationsKeys = {
 	campaigns: () => [...operationsKeys.all, 'campaigns'] as const,
 	stockLedgers: () => [...operationsKeys.all, 'stockLedgers'] as const,
 	donations: () => [...operationsKeys.all, 'donations'] as const,
-	purchases: () => [...operationsKeys.all, 'purchases'] as const,
 	ledger: () => [...operationsKeys.all, 'ledger'] as const,
 	byItem: (id: string) => [...operationsKeys.ledger(), id] as const,
 	balance: () => [...operationsKeys.all, 'balance', getShelterCode()] as const,
@@ -60,12 +56,6 @@ export const useDonations = () =>
 	createQuery(() => ({
 		queryKey: operationsKeys.donations(),
 		queryFn: () => operationsRepository().listDonations()
-	}));
-
-export const usePurchases = () =>
-	createQuery(() => ({
-		queryKey: operationsKeys.purchases(),
-		queryFn: () => operationsRepository().listPurchases()
 	}));
 
 export const useCreateCampaign = () => {
@@ -273,59 +263,6 @@ export const useAdjustStock = () => {
 };
 
 /**
- * Mutation hook to declare a procurement record (CR-032 step 1). Creates no
- * stock — the receipt is keyed separately via {@link useReceivePurchase}.
- */
-export const useCreatePurchase = () => {
-	const queryClient = useQueryClient();
-	return createMutation(() => ({
-		mutationFn: ({ input, ctx }: { input: PurchaseInput; ctx: AuthorContext }) =>
-			operationsRepository().createPurchase(input, ctx),
-		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: operationsKeys.purchases() });
-		}
-	}));
-};
-
-/**
- * Mutation hook to correct a purchase that has not been received yet. The
- * repository refuses the write once any receipt has been keyed (CR-032).
- */
-export const useUpdatePurchase = () => {
-	const queryClient = useQueryClient();
-	return createMutation(() => ({
-		mutationFn: ({ purchase }: { purchase: Purchase }) =>
-			operationsRepository().updatePurchase(purchase),
-		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: operationsKeys.purchases() });
-		}
-	}));
-};
-
-/**
- * Mutation hook to key a counted purchase receipt into stock (CR-032 step 2).
- * Invalidates the whole feature because it appends ledger rows, which move the
- * balance as well as the purchase's received state.
- */
-export const useReceivePurchase = () => {
-	const queryClient = useQueryClient();
-	return createMutation(() => ({
-		mutationFn: ({
-			purchase,
-			counted,
-			ctx
-		}: {
-			purchase: Purchase;
-			counted: CountedItem[];
-			ctx: AuthorContext;
-		}) => operationsRepository().receivePurchase(purchase, counted, ctx),
-		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
-		}
-	}));
-};
-
-/**
  * Query hook to list transfers (source or destination) for the active shelter (CR-059 Flow 1 / T-13).
  */
 export const useTransfers = (filter?: TransferFilter) =>
@@ -449,9 +386,6 @@ export function startOperationsLiveQuery(queryClient: QueryClient): SubscribeDat
 		}
 		if (type === 'donation') {
 			return [operationsKeys.donations()];
-		}
-		if (type === 'purchase') {
-			return [operationsKeys.purchases()];
 		}
 		return [];
 	});

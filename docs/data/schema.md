@@ -2,8 +2,8 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-09-25
-note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer; CR-135/CR-136 partner OAuth2 client name/module preset + secret reveal/edit/delete; CR-137 shrink master_data (10→4) + zone/community free text
+updated: 2026-09-26
+note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer; CR-135/CR-136 partner OAuth2 client name/module preset + secret reveal/edit/delete; CR-137 shrink master_data (10→4) + zone/community free text; CR-138 remove purchase doc type + withdraw purchase from stock_ledger.reason
 ---
 
 # Database Schema v5 — field-level
@@ -289,7 +289,7 @@ projection — เป็นข้อมูลหลังบ้านล้ว�
 > `schema_v`. แถวรับเข้าใหม่ทุกแถวกำหนด `lot_ref === _id`; แถว legacy ที่ไม่มี `lot_ref` ยังอ่านได้
 > และใช้ `_id` ของแถวนั้นเป็น virtual lot reference. `lot_no` เป็นป้ายแสดงผลเท่านั้นและห้ามใช้เป็น identity.
 > **schema_v 4** — เพิ่ม `lot.lot_no` (`L-YYMMDD-XXX`) + `lot.storage_zone` ([CR-088](../changes/CR-088-stock-ledger-lot-storage-zone.md)) — ขั้นตรวจรับบริจาค (T-16 R-16.5) ต้องมีที่เก็บเลขล็อตกับโซนจัดเก็บ. optional ทั้งคู่ ⇒ แถวเก่าไม่ต้อง backfill. `lot_no` ออกโดย **server** ตอนเขียน ledger (`lib/server/lot-number.ts`) ไม่รับจาก client. ผู้เขียน ledger ทุกที่ stamp `schema_v 4` เท่ากัน (`createStockLedger`)
-> **schema_v 3** — เพิ่ม `purchase` ใน reason enum (CR-032) — รองรับรับสต็อกจากแหล่ง "จัดซื้อจัดจ้าง" แยกจากบริจาค; ยอดจริงยังมาจาก ledger. doc type `purchase` (§2.16) + write path มาใน slice ถัดไปของ CR-032. ผู้เขียน ledger ทุกที่ stamp `schema_v 3` เท่ากัน (operations `createStockLedger`, kitchen `issueRequisition`).
+> **schema_v 3** — historically introduced `purchase` in the reason enum ([CR-032](../changes/CR-032-stock-ledger-purchase-reason.md)); **`purchase` withdrawn by [CR-138](../changes/CR-138-remove-purchase.md)** (no schema_v bump). Writers continue stamping ≥3. schema_v 2 rows remain readable.
 > schema_v 2 — `qty` เป็น `qty_str` (ไม่ใช่ JSON number). CR-038.
 
 | Field | ชนิด | req | หมายเหตุ |
@@ -297,7 +297,7 @@ projection — เป็นข้อมูลหลังบ้านล้ว�
 | `item_id` | str | req | → `item_master:{sku\|ulid}` ใน catalog |
 | `qty` | qty_str | req | **signed**: + รับเข้า / − จ่ายออก; ≠ 0; ใน `base_unit` |
 | `unit` | str | req | ต้องตรงกับ `item_master.base_unit` |
-| `reason` | enum(`receive`,`distribute`,`requisition`,`adjust`,`transfer_out`,`transfer_in`,`donation`,`purchase`,`distribution_return`) | req | `distribution_return` = คืนของที่เหลือจาก batch กลับ physical lot เดิม |
+| `reason` | enum(`receive`,`distribute`,`requisition`,`adjust`,`transfer_out`,`transfer_in`,`donation`,`distribution_return`) | req | `distribution_return` = คืนของที่เหลือจาก batch กลับ physical lot เดิม |
 | `ref_id` | str\|null | ตาม `reason` | doc ต้นเหตุ — **ค่าที่ยอมรับผูกกับ `reason` ตามตาราง "`reason` → `ref_id`" ด้านล่าง** (CR-055) |
 | `lot_ref` | str | opt/ตาม `reason` | stable physical-lot identity → `stock_ledger:{id}`; บังคับสำหรับ `distribute`/`distribution_return`; แถวรับเข้าใหม่ self-reference `_id` (เว้นแต่การรับของแจกเหลือคืนคลัง `reason='receive'` ที่แนะนำให้อ้างอิง `lot_ref` เดิมของล็อตที่เบิกจ่ายเพื่อการสืบย้อนกลับ); legacy อาจไม่มี field |
 | `lot` | {`expiry`:ts?, `note`:str?, `lot_no`:str?, `storage_zone`:str?} | opt | ของหมดอายุได้ (อาหาร/ยา) · `lot_no`/`storage_zone` = CR-088 (ดูตารางย่อยด้านล่าง) |
@@ -321,7 +321,6 @@ projection — เป็นข้อมูลหลังบ้านล้ว�
 | `reason` | `ref_id` ต้องเป็น | ที่มา (ผู้เขียน) |
 | --- | --- | --- |
 | `donation` | `donation:{ulid}` — req | `keyDonationReceipt` |
-| `purchase` | `purchase:{ulid}` — req | `keyPurchaseReceipt` (CR-032 · §2.16) |
 | `requisition` | `requisition_ticket:{ulid}` หรือ `kitchen_requisition:{ulid}` — req | ticket เบิกกลางใหม่ (CR-121) หรือ kitchen flow เดิม |
 | `transfer_in` | `stock_transfer:{ulid}` — req | transition ของ §2.2 (T-13 — ยังไม่ wired) |
 | `transfer_out` | `stock_transfer:{ulid}` หรือ `requisition_ticket:{ulid}` — req | โอนย้ายข้ามศูนย์ หรือ ticket โอนย้ายใหม่ (CR-121) |
@@ -750,37 +749,6 @@ open → escalated
 
 > ใช้ envelope มาตรฐาน `BaseDoc` (`_id`,`type`,`schema_v`,`shelter_code`,`created_at`,`updated_at`,`created_by`). append หรือ overwrite เท่านั้น — ไม่ mutate in place.
 > **Index:** `(_id)` (deterministic; `listRange` ใช้ bounded `startkey`/`endkey` = `daily_calc:{from}`..`daily_calc:{to}` ไม่สแกนทั้ง collection)
-
-### 2.16 `purchase` — `purchase:{ulid}` · **schema_v 1**
-
-> **schema_v 1** — doc type ใหม่ ([CR-032](../changes/CR-032-stock-ledger-purchase-reason.md)). บันทึกการจัดซื้อจัดจ้าง — แหล่งรับสต็อกที่แยกจากบริจาค เก็บผู้ขาย/เลขใบสั่งซื้อที่ `stock_ledger` (§2.1) ไม่มีที่เก็บให้
-> **ไม่มี `status`** — CR-032 ตัด state machine (`ordered`→`received`) ออกจาก scope. คำถาม "รับของแล้วหรือยัง" **อนุมานจาก ledger**: มีแถว `stock_ledger` ที่ `reason=purchase` และ `ref_id = purchase._id` หรือยัง (mirror `donation` → `keyedDonationIds`)
-> ของจริงเข้าคลังเมื่อ staff key รับเข้า → เขียน `stock_ledger` (`reason:purchase`, `ref_id=purchase._id`) ซึ่งเป็น **คนละ action กับตอนสร้างใบ** (CR-032 Option A — ไม่มี cross-doc atomic write). `items[]` = **planning signal เท่านั้น** ยอดจริงมาจาก ledger (data-model.md §4) เหมือน `donation.items`
-
-| Field | ชนิด | req | หมายเหตุ |
-| --- | --- | --- | --- |
-| `vendor` | str | req | ชื่อผู้ขาย / หน่วยงานที่จัดหา |
-| `po_ref` | str | opt | เลขใบสั่งซื้อ / สัญญา (อ้างระบบภายนอก) |
-| `items` | [{`item_id`:str, `qty`:qty_str>0, `unit`:str}] | req | ≥1 รายการ — planning signal เท่านั้น |
-| `occurred_at` | ts | req | วันที่รับของเข้าศูนย์ / วันที่จัดซื้อ (ISO-8601 UTC) |
-| `note` | str | opt | — |
-
-> ใช้ envelope มาตรฐาน `BaseDoc` (`_id`,`type`,`schema_v`,`shelter_code`,`created_at`,`updated_at`,`created_by`). append หรือ overwrite (LWW ผ่าน `touch()`) — ไม่ mutate in place.
-> **Index:** `(occurred_at)` · การเช็คสถานะการรับใช้ index `(reason)` ของ `stock_ledger` แล้ว match `ref_id` — ไม่ต้องมี index บน `purchase`
-
-**สถานะการรับ (derived — ห้ามเก็บใน doc)** — คำนวณจากยอดรวมของแถว `stock_ledger` ที่ `reason='purchase'` และ `ref_id = purchase._id` เทียบกับ `items[]` (CR-032 เคาะ 2026-07-25 · T-14 DoD บังคับให้ reconcile กับ ledger ผลต่าง = 0):
-
-| สถานะ | เงื่อนไข |
-| --- | --- |
-| ยังไม่รับ | ไม่มีแถว ledger ที่ชี้มาที่ใบนี้ |
-| รับบางส่วน | มี ≥1 แถว แต่ยังมี item ใน `items[]` ที่ยอดรวม < `qty` ที่สั่ง |
-| รับครบ | ทุก item ใน `items[]` มียอดรวม **≥** `qty` ที่สั่ง |
-
-> **รับเกินที่สั่ง = "รับครบ"** ไม่มีสถานะที่สี่ และ **ไม่ block ตอน key** (ของหน้างานมาเกินได้) · item ที่ key เข้ามาโดยไม่อยู่ใน `items[]` ไม่เปลี่ยนสถานะ · key ได้หลายรอบต่อ 1 ใบ (partial receive) — key ผิดแก้ด้วย correction entry `reason:'adjust'` ตาม T-11 DoD ไม่ใช่แก้แถวเดิม
-
-**การแก้ไข** — แก้ `vendor` / `po_ref` / `items` / `occurred_at` / `note` ได้ **เฉพาะใบสถานะ "ยังไม่รับ"** (LWW `touch()`) · **ไม่มีการยกเลิก/ลบใบ** (ไม่มีฟิลด์สถานะยกเลิก) — ใบที่พิมพ์ผิดปล่อยค้างได้เพราะไม่กระทบยอดสต็อกซึ่งมาจาก ledger เท่านั้น · ห้ามแก้หลังเริ่มรับ เพราะ `items[]` เป็นตัวเทียบของสถานะข้างบน และเป็นฝั่ง "ที่สั่ง" ของ audit "จำนวนจริง vs ที่แจ้ง" (task-breakdown T-16)
-
-**Migration:** doc type ใหม่ ไม่มี doc เดิมให้ migrate
 
 ### 2.17 `job` — `job:{ulid}` · **schema_v 3**
 

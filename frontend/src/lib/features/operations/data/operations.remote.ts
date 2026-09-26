@@ -14,21 +14,17 @@ import {
 } from '$lib/features/distribution';
 import {
 	createCampaign as buildCampaign,
-	createPurchase as buildPurchase,
 	isDonationCampaign,
 	isStockLedger,
 	isDonation,
 	isDonationSlot,
-	isPurchase,
 	isStockTransfer,
-	canEditPurchase,
 	stockBalance,
 	createReceiveEntry,
 	createWalkInDonation,
 	createDistributeEntry,
 	createAdjustEntry,
 	projectStockLotBalances,
-	keyPurchaseReceipt,
 	type DonationCampaign,
 	type CampaignInput,
 	type StockLedger,
@@ -38,9 +34,6 @@ import {
 	type Donation,
 	type WalkInDonationInput,
 	type DonationSlot,
-	type Purchase,
-	type PurchaseInput,
-	type CountedItem,
 	type StockTransfer,
 	type TransferInput,
 	type TransferFilter,
@@ -177,7 +170,7 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		assertReceiveAgainstCatalog(entry, item);
 
 		// One request for both docs (mirrors kitchen `issueRequisition` and
-		// `receivePurchase`). Writing the donation on its own — as a separate
+		// `receiveStock`). Writing the donation on its own — as a separate
 		// button press — would leave a `declared` donation behind whenever the
 		// receipt never followed, and `calculateReserved` counts those forever
 		// (nothing calls `expireDonation`). Minting both here means an abandoned
@@ -602,76 +595,6 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		if (!current) return;
 		assertDonationSlotDeletable(current, countSlotBookings(donations, current.date, current.from));
 		await this.repo.remove(current);
-	}
-
-	// --- Purchase Methods (CR-032) ---
-
-	/** Persist a new procurement record. Stock only moves once staff key the receipt. */
-	async createPurchase(input: PurchaseInput, ctx: AuthorContext): Promise<Purchase> {
-		return this.repo.put(buildPurchase(input, ctx));
-	}
-
-	/** Fetch all procurement records in this shelter. */
-	async listPurchases(): Promise<Purchase[]> {
-		return this.repo.allByType('purchase', isPurchase);
-	}
-
-	/** Fetch a single procurement record by ID. */
-	async getPurchase(id: string): Promise<Purchase | null> {
-		return this.repo.get<Purchase>(id);
-	}
-
-	/**
-	 * Correct a purchase that nothing has been keyed against yet (CR-032).
-	 * Editing `items` after a receipt would move what the receipt status and the
-	 * ordered-vs-actual audit compare against, so it is refused instead.
-	 */
-	async updatePurchase(purchase: Purchase): Promise<Purchase> {
-		if (!canEditPurchase(purchase, await this.listLedger())) {
-			throw new Error(
-				`updatePurchase: ${purchase._id} has already been received — record a correction entry instead`
-			);
-		}
-
-		const existing = await this.repo.get<Purchase>(purchase._id);
-		const merged = {
-			...purchase,
-			_rev: existing?._rev ?? purchase._rev
-		};
-		return this.repo.put(touch(merged));
-	}
-
-	/**
-	 * Key a counted receipt against an already-committed purchase doc: one
-	 * positive `purchase` ledger entry per counted line, each pointing back at the
-	 * purchase. The purchase doc was written in an earlier step, so this is a
-	 * plain append — no cross-doc write to keep consistent (CR-032, Option A).
-	 *
-	 * Every line is validated against the item catalog before anything is written,
-	 * so a bad line rejects the whole receipt instead of half-writing it.
-	 */
-	async receivePurchase(
-		purchase: Purchase,
-		counted: CountedItem[],
-		ctx: AuthorContext
-	): Promise<StockLedger[]> {
-		const rows = keyPurchaseReceipt(purchase, counted, ctx);
-		if (rows.length === 0) {
-			throw new Error(`receivePurchase: ${purchase._id} needs at least one counted line`);
-		}
-
-		const catalog = new Map<string, CatalogItem | null>();
-		for (const row of rows) {
-			if (!catalog.has(row.item_id)) {
-				catalog.set(row.item_id, await this.loadCatalogItem(row.item_id));
-			}
-			assertReceiveAgainstCatalog(row, catalog.get(row.item_id) ?? null);
-		}
-
-		// One request for the whole receipt (mirrors kitchen `issueRequisition`).
-		// Append-only, so a partially applied receipt can simply be re-keyed for
-		// the missing lines — the purchase doc stays valid either way.
-		return bulkDocs(this.dbName, rows);
 	}
 
 	// --- Transfer methods (CR-059 Flow 1 / T-13) ---
