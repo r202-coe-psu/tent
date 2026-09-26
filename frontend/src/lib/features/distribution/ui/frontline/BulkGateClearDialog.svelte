@@ -72,7 +72,10 @@
 	let lastInitializedLogId = $state<string | null>(null);
 	let hydratedOperationId = $state<string | null>(null);
 	let operationUlid = $state<string>(ulid());
-	let selectedPoolId = $state<string | undefined>(undefined);
+	// '' is the explicit "no pool selected yet" UI state — RadioGroup.Root's bind:value cannot
+	// accept `undefined` (its Bits UI primitive declares a non-undefined $bindable fallback and
+	// throws props_invalid_value if bound to undefined).
+	let selectedPoolId = $state<string>('');
 	let localError = $state<string | null>(null);
 
 	// Derived metrics from authoritative log
@@ -156,7 +159,7 @@
 			lastInitializedLogId = log._id;
 			hydratedOperationId = null;
 			operationUlid = ulid();
-			selectedPoolId = undefined;
+			selectedPoolId = '';
 			localError = null;
 		}
 
@@ -288,7 +291,7 @@
 			});
 			operationUlid = ulid();
 			hydratedOperationId = null;
-			selectedPoolId = undefined;
+			selectedPoolId = '';
 			toast.info('ยกเลิกรายการเดิมที่ค้างอยู่แล้ว เริ่มต้นรายการใหม่');
 		} catch (err) {
 			localError = formatDistributionError(
