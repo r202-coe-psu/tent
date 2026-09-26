@@ -220,7 +220,7 @@ describe('stock_ledger schema_v + reason enum (CR-032)', () => {
 			},
 			ctx
 		);
-		expect(entry.schema_v).toBe(4);
+		expect(entry.schema_v).toBe(5);
 	});
 
 	it('accepts `distribution_return` as a valid reason (CR-059)', () => {
@@ -1575,7 +1575,7 @@ describe('lot numbering (CR-088)', () => {
 			ctx
 		);
 		expect(entry.lot).toEqual({ lot_no: 'L-260825-001', storage_zone: 'A-01' });
-		expect(entry.schema_v).toBe(4);
+		expect(entry.schema_v).toBe(5);
 		expect(parseStockLedger(entry)).toEqual(entry);
 	});
 });
