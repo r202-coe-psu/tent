@@ -17,6 +17,8 @@
 	import CreateTicketDialog from './CreateTicketDialog.svelte';
 	import TicketDetailShell from './TicketDetailShell.svelte';
 	import BulkPoolManager from './BulkPoolManager.svelte';
+	import * as Tabs from '$lib/components/ui/tabs/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { page } from '$app/state';
@@ -190,46 +192,35 @@
 		<div class="flex flex-wrap items-center justify-end gap-2">
 			<!-- Action: Create Ticket (Guarded by RBAC canCreateTicket) -->
 			{#if activeView === 'tickets' && userCanCreate}
-				<button
+				<Button
 					type="button"
 					onclick={() => (isCreateOpen = true)}
-					class="inline-flex shrink-0 items-center gap-2 rounded-xl bg-[#0A2647] px-4 py-2.5 text-sm font-semibold text-white shadow-2xs transition-colors hover:bg-[#051930]"
+					class="h-auto shrink-0 gap-2 rounded-xl bg-[#0A2647] px-4 py-2.5 text-sm font-semibold text-white shadow-2xs hover:bg-[#051930]"
 				>
 					<Plus class="h-4 w-4" />
 					<span>สร้างใบเบิกจ่าย</span>
-				</button>
+				</Button>
 			{/if}
 
-			<div
-				class="flex rounded-xl border border-slate-200 bg-white p-1 shadow-2xs"
-				role="tablist"
-				aria-label="มุมมองงานกระจายของ"
-			>
-				<button
-					type="button"
-					role="tab"
-					aria-selected={activeView === 'tickets'}
-					onclick={() => (activeView = 'tickets')}
-					class="rounded-lg px-3 py-2 text-xs font-semibold transition-colors {activeView ===
-					'tickets'
-						? 'bg-[#0A2647] text-white'
-						: 'text-slate-600 hover:bg-slate-50'}"
+			<Tabs.Root bind:value={activeView}>
+				<Tabs.List
+					class="h-auto w-fit rounded-xl border border-slate-200 bg-white p-1 shadow-2xs"
+					aria-label="มุมมองงานกระจายของ"
 				>
-					จัดการใบเบิกจ่าย
-				</button>
-				<button
-					type="button"
-					role="tab"
-					aria-selected={activeView === 'bulk_pools'}
-					onclick={() => (activeView = 'bulk_pools')}
-					class="rounded-lg px-3 py-2 text-xs font-semibold transition-colors {activeView ===
-					'bulk_pools'
-						? 'bg-violet-700 text-white'
-						: 'text-slate-600 hover:bg-slate-50'}"
-				>
-					จุดรวมคืนพัสดุ
-				</button>
-			</div>
+					<Tabs.Trigger
+						value="tickets"
+						class="h-auto flex-none rounded-lg border-transparent px-3 py-2 text-xs font-semibold whitespace-nowrap text-slate-600 shadow-none transition-colors hover:bg-slate-50 data-[state=active]:bg-[#0A2647] data-[state=active]:text-white data-[state=active]:shadow-none"
+					>
+						จัดการใบเบิกจ่าย
+					</Tabs.Trigger>
+					<Tabs.Trigger
+						value="bulk_pools"
+						class="h-auto flex-none rounded-lg border-transparent px-3 py-2 text-xs font-semibold whitespace-nowrap text-slate-600 shadow-none transition-colors hover:bg-slate-50 data-[state=active]:bg-violet-700 data-[state=active]:text-white data-[state=active]:shadow-none"
+					>
+						จุดรวมคืนพัสดุ
+					</Tabs.Trigger>
+				</Tabs.List>
+			</Tabs.Root>
 		</div>
 	</div>
 
@@ -336,23 +327,25 @@
 						{errorPresentation.description}
 					</p>
 					{#if errorPresentation.actionType === 'reauth'}
-						<button
+						<Button
 							type="button"
+							variant="outline"
 							onclick={handleReauth}
-							class="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-800 shadow-2xs transition-colors hover:bg-red-50 focus:ring-2 focus:ring-red-400 focus:outline-hidden"
+							class="mt-4 h-auto gap-1.5 rounded-lg border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-800 shadow-2xs hover:bg-red-50"
 						>
 							<LogIn class="h-3.5 w-3.5" aria-hidden="true" />
 							<span>{errorPresentation.actionLabel}</span>
-						</button>
+						</Button>
 					{:else if errorPresentation.retryable}
-						<button
+						<Button
 							type="button"
+							variant="outline"
 							onclick={() => ticketsQuery.refetch()}
-							class="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-800 shadow-2xs transition-colors hover:bg-red-50 focus:ring-2 focus:ring-red-400 focus:outline-hidden"
+							class="mt-4 h-auto gap-1.5 rounded-lg border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-800 shadow-2xs hover:bg-red-50"
 						>
 							<RefreshCw class="h-3.5 w-3.5" aria-hidden="true" />
 							<span>{errorPresentation.actionLabel}</span>
-						</button>
+						</Button>
 					{/if}
 				</div>
 			{:else}

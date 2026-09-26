@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
 	import Archive from '@lucide/svelte/icons/archive';
-	import X from '@lucide/svelte/icons/x';
 	import Loader from '@lucide/svelte/icons/loader';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
@@ -11,7 +10,9 @@
 	import Play from '@lucide/svelte/icons/play';
 	import { ulid } from '$lib/db/ulid';
 	import { qtyLte } from '$lib/utils/qty';
+	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import * as RadioGroup from '$lib/components/ui/radio-group/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import type {
 		BulkReturnPool,
 		BulkReturnClaim,
@@ -32,7 +33,6 @@
 		getReturnReservationModeLabel
 	} from '../model/loan-return';
 	import { getBulkPoolStatusLabel } from '../model/bulk-pool-manager';
-	import { dialogAccessibility } from '../model/dialog-accessibility';
 	import { formatDistributionError } from '../model/distribution-error';
 
 	interface Props {
@@ -302,36 +302,24 @@
 	}
 </script>
 
-{#if open && log}
-	<div class="fixed inset-0 z-50 flex items-center justify-center p-4">
-		<!-- Backdrop dismissal surface -->
-		<button
-			type="button"
-			tabindex="-1"
-			aria-hidden="true"
-			class="fixed inset-0 cursor-default border-0 bg-black/40 backdrop-blur-xs outline-none"
-			onclick={() => {
-				if (canClose) {
-					requestClose();
-				}
+{#if log}
+	<Dialog.Root
+		{open}
+		onOpenChange={(next) => {
+			if (!next) requestClose();
+		}}
+	>
+		<Dialog.Content
+			class="max-h-[90vh] overflow-y-auto p-6 sm:max-w-lg"
+			closeDisabled={!canClose}
+			onEscapeKeydown={(e) => {
+				if (!canClose) e.preventDefault();
 			}}
-		></button>
-
-		<!-- Dialog panel/container -->
-		<div
-			class="relative z-10 flex max-h-[90vh] w-full max-w-lg flex-col overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl transition-all"
-			role="dialog"
-			aria-modal="true"
-			aria-labelledby="bulk-gate-clear-dialog-title"
-			aria-describedby="bulk-gate-clear-dialog-desc"
-			tabindex="-1"
-			use:dialogAccessibility={{
-				canClose: () => canClose,
-				onClose: requestClose
+			onInteractOutside={(e) => {
+				if (!canClose) e.preventDefault();
 			}}
 		>
-			<!-- Dialog Header -->
-			<div class="flex items-start justify-between border-b border-slate-100 pb-4">
+			<Dialog.Header class="border-b border-slate-100 pb-4">
 				<div class="flex items-center gap-3">
 					<div
 						class="flex h-10 w-10 items-center justify-center rounded-xl border border-purple-200 bg-purple-50 text-purple-700 shadow-2xs"
@@ -339,29 +327,19 @@
 						<Archive class="h-5 w-5" />
 					</div>
 					<div>
-						<h2 id="bulk-gate-clear-dialog-title" class="text-base font-bold text-slate-900">
+						<Dialog.Title class="text-base font-bold text-slate-900">
 							เคลียร์รายการจากจุดรวมคืน
-						</h2>
-						<p id="bulk-gate-clear-dialog-desc" class="text-xs text-slate-500">
+						</Dialog.Title>
+						<Dialog.Description class="text-xs text-slate-500">
 							{itemName || log.item_id} · รหัสรายการ: <span class="font-mono">{log._id}</span>
-						</p>
+						</Dialog.Description>
 					</div>
 				</div>
-
-				<button
-					type="button"
-					onclick={requestClose}
-					disabled={!canClose}
-					class="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-40"
-					aria-label="ปิดหน้าต่าง"
-				>
-					<X class="h-4 w-4" />
-				</button>
-			</div>
+			</Dialog.Header>
 
 			<!-- Critical Invariant Warning Callout (Zero-Second-Restock) -->
 			<div
-				class="mt-4 flex items-start gap-2.5 rounded-xl border border-purple-200 bg-purple-50/80 p-3 text-xs text-purple-950"
+				class="flex items-start gap-2.5 rounded-xl border border-purple-200 bg-purple-50/80 p-3 text-xs text-purple-950"
 				role="note"
 			>
 				<ShieldAlert class="mt-0.5 h-4 w-4 shrink-0 text-purple-600" />
@@ -377,7 +355,7 @@
 			<!-- Authoritative In-Flight Recovery Callout (CR-134 R4) -->
 			{#if isCrossModeCollision}
 				<div
-					class="mt-3 flex items-start gap-2.5 rounded-xl border border-red-300 bg-red-50 p-3 text-xs text-red-950"
+					class="flex items-start gap-2.5 rounded-xl border border-red-300 bg-red-50 p-3 text-xs text-red-950"
 					role="alert"
 				>
 					<AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
@@ -397,7 +375,7 @@
 				</div>
 			{:else if operationState?.phase === 'PRE_EFFECT_ABORTABLE'}
 				<div
-					class="mt-3 flex items-start justify-between gap-2.5 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950"
+					class="flex items-start justify-between gap-2.5 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950"
 					role="status"
 				>
 					<div class="flex items-start gap-2">
@@ -435,7 +413,7 @@
 				</div>
 			{:else if operationState?.phase === 'IRREVERSIBLE_FORWARD_ONLY'}
 				<div
-					class="mt-3 flex items-start gap-2.5 rounded-xl border border-blue-300 bg-blue-50 p-3 text-xs text-blue-950"
+					class="flex items-start gap-2.5 rounded-xl border border-blue-300 bg-blue-50 p-3 text-xs text-blue-950"
 					role="status"
 				>
 					<Play class="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
@@ -450,7 +428,7 @@
 			{/if}
 
 			<!-- Dialog Body Form -->
-			<form onsubmit={handleSubmit} class="mt-4 space-y-4">
+			<form onsubmit={handleSubmit} class="space-y-4">
 				<!-- Loan Balance Summary Box -->
 				<div
 					class="grid grid-cols-3 gap-2.5 rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 text-center"
@@ -629,22 +607,23 @@
 
 				<!-- Dialog Actions -->
 				<div class="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-3">
-					<button
+					<Button
 						type="button"
+						variant="outline"
 						onclick={requestClose}
 						disabled={!canClose}
-						class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+						class="h-auto rounded-xl border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 disabled:cursor-not-allowed"
 					>
 						ยกเลิก
-					</button>
+					</Button>
 
-					<button
+					<Button
 						type="submit"
 						disabled={bulkClaimMutation.isPending ||
 							!validation.isValid ||
 							!canClearLoan ||
 							isCrossModeCollision}
-						class="inline-flex items-center justify-center gap-1.5 rounded-xl border border-purple-600 bg-purple-600 px-4 py-2 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
+						class="h-auto gap-1.5 rounded-xl border-purple-600 bg-purple-600 px-4 py-2 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-purple-700 disabled:cursor-not-allowed"
 					>
 						{#if bulkClaimMutation.isPending}
 							<Loader class="h-3.5 w-3.5 animate-spin" />
@@ -659,9 +638,9 @@
 							<Archive class="h-3.5 w-3.5" />
 							<span>ยืนยันเคลียร์รายการ ({remainingQty} ชิ้น)</span>
 						{/if}
-					</button>
+					</Button>
 				</div>
 			</form>
-		</div>
-	</div>
+		</Dialog.Content>
+	</Dialog.Root>
 {/if}

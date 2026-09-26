@@ -19,6 +19,7 @@
 	import CatalogItemPicker from './CatalogItemPicker.svelte';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import * as RadioGroup from '$lib/components/ui/radio-group/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
@@ -220,17 +221,20 @@
 				<legend class="text-sm font-semibold text-slate-700">
 					ประเภทการเบิกจ่าย <span class="text-red-500">*</span>
 				</legend>
-				<div class="grid grid-cols-2 gap-3" role="radiogroup" aria-label="ประเภทการเบิกจ่าย">
-					<button
-						type="button"
-						role="radio"
-						aria-checked={requisitionType === 'food'}
-						onclick={() => handleTypeChange('food')}
-						class="flex items-center gap-3 rounded-xl border p-3.5 text-left transition-all {requisitionType ===
+				<RadioGroup.Root
+					value={requisitionType}
+					onValueChange={(next) => handleTypeChange(next as Flow2RequisitionType)}
+					class="grid grid-cols-2 gap-3"
+					aria-label="ประเภทการเบิกจ่าย"
+				>
+					<label
+						for="requisition-food"
+						class="flex cursor-pointer items-center gap-3 rounded-xl border p-3.5 text-left transition-all {requisitionType ===
 						'food'
 							? 'border-[#0A2647] bg-[#0A2647]/5 ring-1 ring-[#0A2647]'
 							: 'border-slate-200 bg-white hover:bg-slate-50'}"
 					>
+						<RadioGroup.Item value="food" id="requisition-food" class="mt-0" />
 						<div
 							class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg {requisitionType ===
 							'food'
@@ -243,18 +247,16 @@
 							<div class="text-sm font-bold text-slate-900">อาหารปรุงสุก</div>
 							<div class="text-xs text-slate-500">เฉพาะอาหารพร้อมรับประทาน</div>
 						</div>
-					</button>
+					</label>
 
-					<button
-						type="button"
-						role="radio"
-						aria-checked={requisitionType === 'supplies'}
-						onclick={() => handleTypeChange('supplies')}
-						class="flex items-center gap-3 rounded-xl border p-3.5 text-left transition-all {requisitionType ===
+					<label
+						for="requisition-supplies"
+						class="flex cursor-pointer items-center gap-3 rounded-xl border p-3.5 text-left transition-all {requisitionType ===
 						'supplies'
 							? 'border-[#0A2647] bg-[#0A2647]/5 ring-1 ring-[#0A2647]'
 							: 'border-slate-200 bg-white hover:bg-slate-50'}"
 					>
+						<RadioGroup.Item value="supplies" id="requisition-supplies" class="mt-0" />
 						<div
 							class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg {requisitionType ===
 							'supplies'
@@ -267,8 +269,8 @@
 							<div class="text-sm font-bold text-slate-900">พัสดุและสิ่งของ</div>
 							<div class="text-xs text-slate-500">สิ่งของบรรเทาทุกข์ เครื่องนอน และอุปกรณ์</div>
 						</div>
-					</button>
-				</div>
+					</label>
+				</RadioGroup.Root>
 			</fieldset>
 
 			<!-- Step 2: Destination Location -->
@@ -334,26 +336,24 @@
 					<legend class="text-sm font-semibold text-slate-800">
 						มื้ออาหารสำหรับแจกจ่าย <span class="text-red-500">*</span>
 					</legend>
-					<div
+					<RadioGroup.Root
+						bind:value={meal}
 						class="grid grid-cols-2 gap-2 pt-1 sm:grid-cols-4"
-						role="radiogroup"
 						aria-label="มื้ออาหารสำหรับแจกจ่าย"
 					>
 						{#each ['breakfast', 'lunch', 'dinner', 'snack'] as const as m (m)}
-							<button
-								type="button"
-								role="radio"
-								aria-checked={meal === m}
-								onclick={() => (meal = m)}
-								class="flex items-center justify-center rounded-lg border px-3 py-2 text-xs font-semibold transition-all {meal ===
+							<label
+								for="meal-{m}"
+								class="flex cursor-pointer items-center justify-center rounded-lg border px-3 py-2 text-xs font-semibold transition-all {meal ===
 								m
 									? 'border-amber-600 bg-amber-600 text-white shadow-xs'
 									: 'border-amber-200 bg-white text-slate-700 hover:bg-amber-50'}"
 							>
-								มื้อ{MEAL_PERIOD_LABELS[m]}
-							</button>
+								<RadioGroup.Item value={m} id="meal-{m}" class="hidden" />
+								<span>มื้อ{MEAL_PERIOD_LABELS[m]}</span>
+							</label>
 						{/each}
-					</div>
+					</RadioGroup.Root>
 					<p class="mt-1 text-xs text-amber-800/80">
 						ระบบใช้มื้ออาหารในการตรวจสอบสิทธิ์รับอาหารซ้ำของผู้พักพิงในรอบวัน
 					</p>

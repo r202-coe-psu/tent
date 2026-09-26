@@ -9,6 +9,8 @@
 	import XCircle from '@lucide/svelte/icons/x-circle';
 	import Plus from '@lucide/svelte/icons/plus';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import * as Tabs from '$lib/components/ui/tabs/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import { useItemMasters } from '$lib/features/catalog';
 	import { useSupplyItems } from '$lib/features/supply';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
@@ -113,7 +115,7 @@
 			</div>
 			<div>
 				<p class="text-2xs font-bold tracking-wide text-violet-700 uppercase">คลังรับคืน</p>
-				<h2 class="text-lg font-bold text-slate-900">จุดรวมคืนพัสดุ (Bulk Return Pools)</h2>
+				<h2 class="text-lg font-bold text-slate-900">จุดรวมคืนพัสดุ</h2>
 				<p class="text-xs text-slate-500">ดูโควตาและประวัติการรับคืนของศูนย์ {activeShelterCode}</p>
 			</div>
 		</div>
@@ -125,35 +127,34 @@
 				อ่านอย่างเดียว
 			</span>
 			{#if userCanCreatePool}
-				<button
+				<Button
 					type="button"
 					onclick={() => (isCreateOpen = true)}
-					class="inline-flex items-center gap-1.5 rounded-xl bg-violet-700 px-3.5 py-1.5 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-violet-800"
+					class="h-auto gap-1.5 rounded-xl bg-violet-700 px-3.5 py-1.5 text-xs font-semibold text-white shadow-2xs hover:bg-violet-800"
 				>
 					<Plus class="h-4 w-4" aria-hidden="true" />
 					<span>เปิดจุดรวมคืนพัสดุ</span>
-				</button>
+				</Button>
 			{/if}
 		</div>
 	</div>
 
 	<div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-		<div class="flex flex-wrap gap-2" role="tablist" aria-label="กรองสถานะจุดรวมคืน">
-			{#each BULK_POOL_STATUS_FILTERS as filter (filter)}
-				<button
-					type="button"
-					role="tab"
-					aria-selected={statusFilter === filter}
-					onclick={() => (statusFilter = filter)}
-					class="rounded-lg border px-3 py-2 text-xs font-semibold transition-colors {statusFilter ===
-					filter
-						? 'border-[#0A2647] bg-[#0A2647] text-white'
-						: 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900'}"
-				>
-					{BULK_POOL_STATUS_LABELS[filter]}
-				</button>
-			{/each}
-		</div>
+		<Tabs.Root bind:value={statusFilter}>
+			<Tabs.List
+				class="h-auto w-fit flex-wrap justify-start gap-2 rounded-none bg-transparent p-0"
+				aria-label="กรองสถานะจุดรวมคืน"
+			>
+				{#each BULK_POOL_STATUS_FILTERS as filter (filter)}
+					<Tabs.Trigger
+						value={filter}
+						class="h-auto flex-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold whitespace-nowrap text-slate-600 shadow-none transition-colors hover:bg-slate-50 hover:text-slate-900 data-[state=active]:border-[#0A2647] data-[state=active]:bg-[#0A2647] data-[state=active]:text-white data-[state=active]:shadow-none"
+					>
+						{BULK_POOL_STATUS_LABELS[filter]}
+					</Tabs.Trigger>
+				{/each}
+			</Tabs.List>
+		</Tabs.Root>
 
 		<div class="relative w-full lg:max-w-sm">
 			<Search
@@ -181,14 +182,15 @@
 			<AlertCircle class="mx-auto mb-2 h-8 w-8 text-red-500" aria-hidden="true" />
 			<h3 class="text-sm font-bold text-red-900">ไม่สามารถโหลดข้อมูลจุดรวมคืนได้</h3>
 			<p class="mt-1 text-xs text-red-700">กรุณาตรวจสอบการเชื่อมต่อแล้วลองใหม่อีกครั้ง</p>
-			<button
+			<Button
 				type="button"
+				variant="outline"
 				onclick={() => poolsQuery.refetch()}
-				class="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-800 shadow-2xs hover:bg-red-50"
+				class="mt-4 h-auto gap-1.5 rounded-lg border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-800 shadow-2xs hover:bg-red-50"
 			>
 				<RefreshCw class="h-3.5 w-3.5" aria-hidden="true" />
 				ลองใหม่
-			</button>
+			</Button>
 		</div>
 	{:else if viewState === 'empty'}
 		<div class="rounded-xl border border-slate-200 bg-slate-50 p-12 text-center">
