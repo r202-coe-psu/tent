@@ -3,7 +3,7 @@ title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
 updated: 2026-09-26
-note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer; CR-135/CR-136 partner OAuth2 client name/module preset + secret reveal/edit/delete; CR-137 shrink master_data (10→4) + zone/community free text; CR-138 remove purchase doc type + withdraw purchase from stock_ledger.reason
+note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer; CR-135/CR-136 partner OAuth2 client name/module preset + secret reveal/edit/delete; CR-137 shrink master_data (10→4) + zone/community free text; CR-138 remove purchase doc type + withdraw purchase from stock_ledger.reason; draft-shelter-storage-points (proposed) shelter schema_v 7 + stock_ledger schema_v 5
 ---
 
 # Database Schema v5 — field-level
@@ -288,6 +288,7 @@ projection — เป็นข้อมูลหลังบ้านล้ว�
 > **CR-059 Flow 2** — เพิ่ม physical-lot identity `lot_ref` และ `distribution_return` โดยไม่เปลี่ยน
 > `schema_v`. แถวรับเข้าใหม่ทุกแถวกำหนด `lot_ref === _id`; แถว legacy ที่ไม่มี `lot_ref` ยังอ่านได้
 > และใช้ `_id` ของแถวนั้นเป็น virtual lot reference. `lot_no` เป็นป้ายแสดงผลเท่านั้นและห้ามใช้เป็น identity.
+> **schema_v 5** — เพิ่ม `lot.storage_point_id` → `shelter.common_areas.sub_storage[].id` และให้ `lot.storage_zone` เป็นชื่อจุดเก็บ ณ เวลาบันทึก ([draft-shelter-storage-points](../changes/draft-shelter-storage-points.md), proposed). additive ⇒ แถวเดิมไม่ backfill. writer ใหม่ไม่เก็บสถานที่ใน `lot.note`. ผู้เขียน ledger ทุกที่ stamp `schema_v 5` (`createStockLedger`).
 > **schema_v 4** — เพิ่ม `lot.lot_no` (`L-YYMMDD-XXX`) + `lot.storage_zone` ([CR-088](../changes/CR-088-stock-ledger-lot-storage-zone.md)) — ขั้นตรวจรับบริจาค (T-16 R-16.5) ต้องมีที่เก็บเลขล็อตกับโซนจัดเก็บ. optional ทั้งคู่ ⇒ แถวเก่าไม่ต้อง backfill. `lot_no` ออกโดย **server** ตอนเขียน ledger (`lib/server/lot-number.ts`) ไม่รับจาก client. ผู้เขียน ledger ทุกที่ stamp `schema_v 4` เท่ากัน (`createStockLedger`)
 > **schema_v 3** — historically introduced `purchase` in the reason enum ([CR-032](../changes/CR-032-stock-ledger-purchase-reason.md)); **`purchase` withdrawn by [CR-138](../changes/CR-138-remove-purchase.md)** (no schema_v bump). Writers continue stamping ≥3. schema_v 2 rows remain readable.
 > schema_v 2 — `qty` เป็น `qty_str` (ไม่ใช่ JSON number). CR-038.
@@ -300,7 +301,7 @@ projection — เป็นข้อมูลหลังบ้านล้ว�
 | `reason` | enum(`receive`,`distribute`,`requisition`,`adjust`,`transfer_out`,`transfer_in`,`donation`,`distribution_return`) | req | `distribution_return` = คืนของที่เหลือจาก batch กลับ physical lot เดิม |
 | `ref_id` | str\|null | ตาม `reason` | doc ต้นเหตุ — **ค่าที่ยอมรับผูกกับ `reason` ตามตาราง "`reason` → `ref_id`" ด้านล่าง** (CR-055) |
 | `lot_ref` | str | opt/ตาม `reason` | stable physical-lot identity → `stock_ledger:{id}`; บังคับสำหรับ `distribute`/`distribution_return`; แถวรับเข้าใหม่ self-reference `_id` (เว้นแต่การรับของแจกเหลือคืนคลัง `reason='receive'` ที่แนะนำให้อ้างอิง `lot_ref` เดิมของล็อตที่เบิกจ่ายเพื่อการสืบย้อนกลับ); legacy อาจไม่มี field |
-| `lot` | {`expiry`:ts?, `note`:str?, `lot_no`:str?, `storage_zone`:str?} | opt | ของหมดอายุได้ (อาหาร/ยา) · `lot_no`/`storage_zone` = CR-088 (ดูตารางย่อยด้านล่าง) |
+| `lot` | {`expiry`:ts?, `note`:str?, `lot_no`:str?, `storage_zone`:str?, `storage_point_id`:str?} | opt | ของหมดอายุได้ (อาหาร/ยา) · `lot_no`/`storage_zone` = CR-088, `storage_point_id` = schema_v 5 (ดูตารางย่อยด้านล่าง) |
 | `occurred_at` | ts | req | — |
 
 **`lot` (CR-088)**
@@ -310,7 +311,10 @@ projection — เป็นข้อมูลหลังบ้านล้ว�
 | `expiry` | ts | conditional req | วันหมดอายุ — บังคับเมื่อ `item_master.perishable` หรือเมื่อ `reason='receive'` จาก `meal_service:` (`cooking_completed_at + 4h` ตาม CR-121) |
 | `note` | str | conditional req | บันทึกชื่อเมนูเมื่อรับจากครัว (`reason='receive'`), บันทึก `distribution_return` เมื่อรับของเหลือจากตั๋วแจก (CR-121) |
 | `lot_no` | str | conditional req | `L-YYMMDD-XXX` — `YYMMDD` = วันที่รับจริง, `XXX` = ลำดับ 3 หลัก **ต่อวันต่อศูนย์**; บังคับมีค่าเมื่อรับผลผลิตครัว (CR-121) · **label สำหรับคนอ่านเท่านั้น** ไม่มี business rule ใดผูกกับค่านี้ ⇒ การชนกันในเคสรับพร้อมกันให้ป้ายซ้ำ ไม่ทำให้ยอดผิด (CR-088 ยอมรับความเสี่ยงนี้ แลกกับการไม่ต้องมี counter doc) · **server ออกให้เท่านั้น** (`lib/server/lot-number.ts`) — schema ฝั่งรับ input จาก client strip ค่านี้ทิ้ง |
-| `storage_zone` | str | opt | โซนที่เก็บของจริง — free text ≤100 ตัวอักษร, ยังไม่มี master data โซน |
+| `storage_zone` | str | opt / req เมื่อมี `storage_point_id` | ชื่อจุดเก็บ ณ เวลาบันทึก (snapshot) ≤100 ตัวอักษร · แถวก่อน schema_v 5 = free text |
+| `storage_point_id` | str | opt | → `shelter.common_areas.sub_storage[].id` ของศูนย์เดียวกัน (schema_v 5). ไม่มี = ไม่ระบุ/คลังหลัก หรือแถว legacy |
+
+**การแสดงสถานที่ของล็อต (schema_v 5):** ชื่อปัจจุบันของ `storage_point_id` → `storage_zone` → `note` แบบ legacy (ยกเว้นค่า system `counter_loan_return`, `bulk_return_pool`, `distribution_return`) → "คลังหลัก". key จัดกลุ่ม = `storage_point_id` ถ้ามี ไม่งั้นชื่อตามลำดับเดียวกัน.
 
 **Index:** `(item_id, occurred_at)` · `(reason)` · `stock_balance` = **client** Decimal sum ของ `qty` ต่อ item (อย่าพึ่ง CouchDB `_sum` ของ float/string)
 
@@ -1211,6 +1215,7 @@ backward compatibility ของ CR-059/110; flow ใหม่ใช้ §2.29�
 
 ### 3.1 `shelter` — `shelter:{ulid}`
 
+> **schema_v 7** — `common_areas.sub_storage[].id` บังคับมีค่าเมื่อเขียน; `sub_storage` คือ master "จุดเก็บของ" ของศูนย์ที่ `stock_ledger.lot.storage_point_id` อ้างถึง ([draft-shelter-storage-points](../changes/draft-shelter-storage-points.md), proposed).
 > **schema_v 6** — เพิ่ม `food_distribution_points` (จุดแจกอาหาร — named spot + optional lat/lng; staff-only plane) ([CR-128](../changes/CR-128-shelter-food-distribution-points-and-single-page-form.md)). optional ⇒ doc เดิมไม่ต้อง backfill.
 > **schema_v 5** — เพิ่ม `site_kind` เพื่อแยกศูนย์อพยพกับบ้านพี่เลี้ยงโดยใช้ doc type `shelter` เดิม (CR-067).
 > **schema_v 4** — ขยาย shelter form v4/v5: structured address, project level, key personnel,
@@ -1241,7 +1246,7 @@ backward compatibility ของ CR-059/110; flow ใหม่ใช้ §2.29�
 | `area_m2` | num≥0\|null | opt | พื้นที่ปิดรวม (m²) — ใช้คำนวณ m²/คน เทียบ Sphere 3.5 m² minimum; `null` = ยังไม่ได้วัด |
 | `area_type` | enum(`indoor`,`outdoor`,`hybrid`)\|null | opt | ชนิดพื้นที่ |
 | `facilities` | {`toilets_female`:int≥0?, `toilets_male`:int≥0?, `toilets_accessible`:int≥0?, `showers`:int≥0?, `water_points`:int≥0?, `handwashing_stations`:int≥0?, `car_toilet_accessible`:bool?, `car_toilet_supported`:int≥0?} | opt | นับจริงที่ศูนย์; ถ้า `car_toilet_accessible != true` ให้ถือ `car_toilet_supported = null` |
-| `common_areas` | {`central_kitchen`:bool?, `helipad`:bool?, `parking_capacity`:int≥0?, `sub_storage`:[{`id`:str?, `name`:str, `type`:enum(`general`,`food_dry`,`drinking_water`,`medical_supplies`), `area_m2`:num≥0?}], `isolation_room`:bool?, `women_child_friendly_space`:bool?, `logistics_area_m2`:num≥0?} | opt | ข้อมูลพื้นที่ส่วนกลาง |
+| `common_areas` | {`central_kitchen`:bool?, `helipad`:bool?, `parking_capacity`:int≥0?, `sub_storage`:[{`id`:str, `name`:str, `type`:enum(`general`,`food_dry`,`drinking_water`,`medical_supplies`), `area_m2`:num≥0?}], `isolation_room`:bool?, `women_child_friendly_space`:bool?, `logistics_area_m2`:num≥0?} | opt | ข้อมูลพื้นที่ส่วนกลาง · `sub_storage` = จุดเก็บของของศูนย์ (schema_v 7): `id` = ULID หรือ `legacy-<index>` (back-fill), immutable ต่อรายการ — ตัวเลือก "สถานที่จัดเก็บ" ในจัดการสต็อก |
 | `utilities` | {`power_source`:enum(`city_grid`,`generator`,`solar`)\|null, `water_source`:enum(`city_water`,`water_tank`,`groundwater`)\|null, `communications`:[enum(`cellular`,`wifi`,`vhf_radio`)], `vhf_channel`:str\|null} | opt | utility profile ของศูนย์ |
 | `risk` | {`elevation_m`:num≥0?, `entrance_description`:str?, `constraints`:str?, `secondary_muster_point`:str?} | opt | ความเสี่ยงและข้อจำกัดเชิงกายภาพ |
 | `zones` | [{`code`:str, `name`:str, `capacity`:int>0, `type`:enum(`general`,`male`,`female`,`vulnerable`,`pet`,`quarantine`), `status`:enum(`active`,`closed`), `closed_at`:ts\|null, `closed_by`:str\|null, `reopened_at`:ts\|null, `reopened_by`:str\|null, `reason`:str\|null, `area_m2`:num≥0?, `specifics`:str?}] | req | โครงสร้างโซน + state |
@@ -1258,6 +1263,8 @@ backward compatibility ของ CR-059/110; flow ใหม่ใช้ §2.29�
 **Migration (schema_v 4 → 5, CR-067):** `site_kind` เป็น required สำหรับ shelter ที่สร้าง/เขียนใหม่. Reader ของเอกสาร v4 ที่ไม่มี field ให้ default เป็น `evacuation_center` แบบ lazy; ไม่บังคับ backfill batch. เมื่อเอกสารเดิมถูกเขียนใหม่ ให้ persist `site_kind` และ `schema_v: 5`. `code` ยังคงใช้ pattern `SH\d{3,}` และ database name `shelter_{code}`; ไม่มี sequence `HH` แยก.
 
 **Migration (schema_v 5 → 6, CR-128):** purely additive — `food_distribution_points` เป็น array ใหม่ default `[]`. Reader ของเอกสาร v5 ที่ไม่มี field ให้ default-fill `[]` แบบ lazy; ไม่บังคับ backfill batch. เมื่อเขียนใหม่ stamp `schema_v: 6`; `scripts/migrate-shelter.ts` re-stamp เอกสารเดิมเป็น v6 พร้อมเติม `[]`. ไม่มี rename/semantic change.
+
+**Migration (schema_v 6 → 7, draft-shelter-storage-points):** reader เติม `common_areas.sub_storage[].id = legacy-<index>` ให้รายการที่ไม่มี `id` แบบ deterministic (อ่านซ้ำได้ค่าเดิมจนกว่าจะเขียน) แล้ว stamp `schema_v: 7`; เขียนใหม่ = persist ค่านั้น. `scripts/migrate-shelter.ts` persist ให้เอกสารเดิมทั้งหมด. ห้าม mint ULID ตอนอ่าน เพราะ ledger อาจอ้าง `id` ที่ไม่เคยถูกเขียนลง doc.
 
 ### 3.2 `config` — `config:app` (singleton)
 
