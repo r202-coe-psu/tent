@@ -2,10 +2,9 @@
 	import type { RequisitionTicket } from '../../domain/food-supplies';
 	import type { TicketSortDirection } from '../model/ticket-filters';
 	import TicketStatusBadge from '../common/TicketStatusBadge.svelte';
+	import PaginationControls from '$lib/components/pagination-controls.svelte';
 	import { getRequisitionTypeLabel } from '../model/ticket-status';
 	import Eye from '@lucide/svelte/icons/eye';
-	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
-	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import Inbox from '@lucide/svelte/icons/inbox';
 	import ArrowDown from '@lucide/svelte/icons/arrow-down';
 	import ArrowUp from '@lucide/svelte/icons/arrow-up';
@@ -197,33 +196,7 @@
 				จากทั้งหมด <span class="font-semibold text-slate-800 tabular-nums">{totalItems}</span> รายการ
 			</div>
 
-			{#if totalPages > 1}
-				<div class="flex items-center gap-1">
-					<button
-						type="button"
-						disabled={currentPage === 1}
-						onclick={() => (currentPage = Math.max(1, currentPage - 1))}
-						class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-2xs transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-						aria-label="หน้าก่อนหน้า"
-					>
-						<ChevronLeft class="h-4 w-4" />
-					</button>
-
-					<span class="px-2 text-xs font-medium text-slate-700 tabular-nums">
-						{currentPage} / {totalPages}
-					</span>
-
-					<button
-						type="button"
-						disabled={currentPage === totalPages}
-						onclick={() => (currentPage = Math.min(totalPages, currentPage + 1))}
-						class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-2xs transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-						aria-label="หน้าถัดไป"
-					>
-						<ChevronRight class="h-4 w-4" />
-					</button>
-				</div>
-			{/if}
+			<PaginationControls bind:page={currentPage} count={totalItems} perPage={pageSize} />
 		</div>
 	{/if}
 </div>
