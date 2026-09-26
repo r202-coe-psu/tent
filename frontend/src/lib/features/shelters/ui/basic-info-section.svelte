@@ -179,15 +179,23 @@
 
 <section
 	id="basic-info"
-	class="shelter-form-scroll-mt mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border p-6"
+	class="shelter-form-scroll-mt mb-6 space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs transition-shadow hover:shadow-sm sm:p-8"
 >
-	<div class="flex items-center space-x-2 border-b border-shelter-border pb-3">
-		<MapPin class="h-5 w-5 text-shelter-blue-text" />
-		<span class="text-sm font-bold text-black">1.</span>
-		<h2 class="text-base font-bold text-black">ข้อมูลพื้นฐานและที่ตั้ง</h2>
+	<div class="flex items-center gap-3 border-b border-slate-100 pb-4">
+		<div
+			class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#0A2647]/5 text-[#0A2647]"
+		>
+			<MapPin class="h-5 w-5" />
+		</div>
+		<div>
+			<div class="flex items-center gap-2">
+				<span class="text-xs font-bold tracking-wider text-[#0284C7] uppercase">ส่วนที่ 1</span>
+			</div>
+			<h2 class="text-base font-bold text-[#0A2647] sm:text-lg">ข้อมูลพื้นฐานและที่ตั้ง</h2>
+		</div>
 	</div>
 
-	<h3 class="text-xs font-bold tracking-wider text-muted-foreground uppercase">ข้อมูลหลัก</h3>
+	<h3 class="text-xs font-bold tracking-wider text-slate-400 uppercase">ข้อมูลหลัก</h3>
 
 	<Form.Field {form} name="name">
 		<Form.Control>
@@ -300,19 +308,19 @@
 	</Form.Field>
 
 	<!-- Operational feature flags (CR-016 registration steps + CR-106 Station 2) -->
-	<h3 class="text-xs font-bold tracking-wider text-muted-foreground uppercase">
+	<h3 class="text-xs font-bold tracking-wider text-slate-400 uppercase">
 		คุณสมบัติการปฏิบัติการ (Feature Flags)
 	</h3>
 
 	<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 		<div
-			class="flex items-center justify-between gap-3 rounded-lg border border-shelter-border bg-background p-4"
+			class="flex items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 shadow-2xs transition-colors hover:border-slate-300"
 		>
 			<div class="min-w-0 flex-1 space-y-1">
-				<label for="accepts-pre-registration" class="text-sm font-medium text-card-foreground">
+				<label for="accepts-pre-registration" class="text-sm font-semibold text-slate-800">
 					รับลงทะเบียนเข้าพักล่วงหน้าจากหน้าสาธารณะ
 				</label>
-				<p class="text-xs text-muted-foreground">
+				<p class="text-xs text-slate-500">
 					เปิด: แสดงปุ่มลงทะเบียนบน /shelters และให้เลือกศูนย์นี้ใน /pre-register · ปิด:
 					ศูนย์ยังปรากฏในรายการ แต่จองผ่านหน้าสาธารณะไม่ได้ (ค่าเริ่มต้นปิด)
 				</p>
@@ -327,11 +335,11 @@
 		</div>
 
 		<div
-			class="flex items-center justify-between gap-3 rounded-lg border border-shelter-border bg-background p-4"
+			class="flex items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 shadow-2xs transition-colors hover:border-slate-300"
 		>
 			<label
 				for="enable-medical-screening"
-				class="min-w-0 flex-1 text-sm font-medium text-card-foreground"
+				class="min-w-0 flex-1 text-sm font-semibold text-slate-800"
 			>
 				เปิดคัดกรองการแพทย์ (Station 2)
 			</label>
@@ -345,9 +353,9 @@
 		</div>
 
 		<div
-			class="flex items-center justify-between gap-3 rounded-lg border border-shelter-border bg-background p-4"
+			class="flex items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 shadow-2xs transition-colors hover:border-slate-300"
 		>
-			<label for="allow-pets" class="min-w-0 flex-1 text-sm font-medium text-card-foreground">
+			<label for="allow-pets" class="min-w-0 flex-1 text-sm font-semibold text-slate-800">
 				บันทึกสัตว์เลี้ยงตอนลงทะเบียน
 			</label>
 			<Switch
@@ -360,9 +368,9 @@
 		</div>
 
 		<div
-			class="flex items-center justify-between gap-3 rounded-lg border border-shelter-border bg-background p-4"
+			class="flex items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 shadow-2xs transition-colors hover:border-slate-300"
 		>
-			<label for="allow-assets" class="min-w-0 flex-1 text-sm font-medium text-card-foreground">
+			<label for="allow-assets" class="min-w-0 flex-1 text-sm font-semibold text-slate-800">
 				บันทึกทรัพย์สิน / สัมภาระตอนลงทะเบียน
 			</label>
 			<Switch
@@ -375,9 +383,9 @@
 		</div>
 
 		<div
-			class="flex items-center justify-between gap-3 rounded-lg border border-shelter-border bg-background p-4"
+			class="flex items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 shadow-2xs transition-colors hover:border-slate-300"
 		>
-			<label for="allow-vehicles" class="min-w-0 flex-1 text-sm font-medium text-card-foreground">
+			<label for="allow-vehicles" class="min-w-0 flex-1 text-sm font-semibold text-slate-800">
 				บันทึกยานพาหนะตอนลงทะเบียน
 			</label>
 			<Switch
@@ -430,7 +438,7 @@
 	</Form.Field>
 
 	<!-- Structured address (CR-023 FR-23-0b/0c) -->
-	<h3 class="text-xs font-bold tracking-wider text-muted-foreground uppercase">
+	<h3 class="text-xs font-bold tracking-wider text-slate-400 uppercase">
 		ที่อยู่ทางกายภาพ (Physical Address)
 	</h3>
 
@@ -577,7 +585,7 @@
 	</Form.Field>
 
 	<!-- Center manager (contact) -->
-	<h3 class="text-xs font-bold tracking-wider text-muted-foreground uppercase">
+	<h3 class="text-xs font-bold tracking-wider text-slate-400 uppercase">
 		ผู้ประสานงานหลัก (Contact)
 	</h3>
 
@@ -625,7 +633,7 @@
 	</div>
 
 	<!-- Key personnel (CR-023 FR-23-2/3) -->
-	<h3 class="text-xs font-bold tracking-wider text-muted-foreground uppercase">
+	<h3 class="text-xs font-bold tracking-wider text-slate-400 uppercase">
 		ข้อมูลบุคลากรหลัก (Key Personnel)
 	</h3>
 

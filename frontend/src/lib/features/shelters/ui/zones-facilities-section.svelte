@@ -201,12 +201,22 @@
 
 <section
 	id="zones-facilities"
-	class="shelter-form-scroll-mt mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border p-6"
+	class="shelter-form-scroll-mt mb-6 space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs transition-shadow hover:shadow-sm sm:p-8"
 >
-	<div class="flex items-center space-x-2 border-b border-shelter-border pb-3">
-		<Users class="text-shelter-orange-text h-5 w-5" />
-		<span class="text-sm font-bold text-black">3.</span>
-		<h2 class="text-base font-bold text-black">การจัดการโซนและสิ่งอำนวยความสะดวก</h2>
+	<div class="flex items-center gap-3 border-b border-slate-100 pb-4">
+		<div
+			class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#0A2647]/5 text-[#0A2647]"
+		>
+			<Users class="h-5 w-5" />
+		</div>
+		<div>
+			<div class="flex items-center gap-2">
+				<span class="text-xs font-bold tracking-wider text-[#0284C7] uppercase">ส่วนที่ 3</span>
+			</div>
+			<h2 class="text-base font-bold text-[#0A2647] sm:text-lg">
+				การจัดการโซนและสิ่งอำนวยความสะดวก
+			</h2>
+		</div>
 	</div>
 
 	<CapacityZoneGuideline
@@ -232,7 +242,7 @@
 
 	<div class="space-y-2">
 		{#each $formData.zones ?? [] as zone, index (zone.code)}
-			<div class="space-y-2 rounded-lg border border-shelter-border p-3">
+			<div class="space-y-2 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 shadow-2xs">
 				<div class="flex items-center gap-3">
 					<Form.Field {form} name={`zones[${index}].name`} class="flex-1 space-y-0">
 						<Form.Control>
@@ -510,13 +520,13 @@
 
 	<!-- 3c. Common Areas -->
 	<div class="space-y-4">
-		<h3 class="text-xs font-bold tracking-wider text-muted-foreground uppercase">
+		<h3 class="text-xs font-bold tracking-wider text-slate-400 uppercase">
 			ข้อมูลพื้นที่ส่วนกลาง (Common Areas)
 		</h3>
 
 		<div class="grid grid-cols-1 gap-3 md:grid-cols-2">
 			<label
-				class="flex items-center space-x-2 rounded-lg border border-shelter-border p-3 text-sm"
+				class="flex cursor-pointer items-center space-x-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-3.5 text-sm font-medium text-slate-800 shadow-2xs transition-colors hover:border-slate-300"
 			>
 				<Checkbox
 					bind:checked={
@@ -528,7 +538,7 @@
 				<span>👨‍🍳 ลานประกอบอาหาร (ครัวกลาง)</span>
 			</label>
 			<label
-				class="flex items-center space-x-2 rounded-lg border border-shelter-border p-3 text-sm"
+				class="flex cursor-pointer items-center space-x-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-3.5 text-sm font-medium text-slate-800 shadow-2xs transition-colors hover:border-slate-300"
 			>
 				<Checkbox
 					bind:checked={
@@ -540,7 +550,7 @@
 				<span>🚁 พื้นที่จอดเฮลิคอปเตอร์ (Helipad)</span>
 			</label>
 			<label
-				class="flex items-center space-x-2 rounded-lg border border-shelter-border p-3 text-sm"
+				class="flex cursor-pointer items-center space-x-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-3.5 text-sm font-medium text-slate-800 shadow-2xs transition-colors hover:border-slate-300"
 			>
 				<Checkbox
 					bind:checked={
@@ -552,7 +562,7 @@
 				<span>🔴 ห้องแยกกักโรค (Isolation Room)</span>
 			</label>
 			<label
-				class="flex items-center space-x-2 rounded-lg border border-shelter-border p-3 text-sm"
+				class="flex cursor-pointer items-center space-x-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-3.5 text-sm font-medium text-slate-800 shadow-2xs transition-colors hover:border-slate-300"
 			>
 				<Checkbox
 					bind:checked={
@@ -566,14 +576,14 @@
 		</div>
 
 		<div>
-			<div class="mb-1 block text-xs font-bold text-muted-foreground">
+			<div class="mb-1.5 block text-xs font-bold tracking-wider text-slate-500 uppercase">
 				📦 คลังย่อยและสถานที่จัดเก็บ
 			</div>
 			{#if ($formData.common_areas.sub_storage ?? []).length > 0}
-				<div class="mb-2 space-y-1">
+				<div class="mb-2 space-y-1.5">
 					{#each $formData.common_areas.sub_storage ?? [] as item, i (item.id ?? `legacy-${i}`)}
 						<div
-							class="flex items-center justify-between rounded-lg border border-shelter-border p-2 text-sm"
+							class="flex items-center justify-between rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 text-sm shadow-2xs"
 						>
 							<div class="flex items-center gap-2">
 								<span class="font-medium">{item.name}</span>

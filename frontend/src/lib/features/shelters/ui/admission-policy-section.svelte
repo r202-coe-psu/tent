@@ -170,28 +170,38 @@
 
 <section
 	id="admission-policy"
-	class="shelter-form-scroll-mt mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border p-6"
+	class="shelter-form-scroll-mt mb-6 space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs transition-shadow hover:shadow-sm sm:p-8"
 >
-	<div class="flex items-center space-x-2 border-b border-shelter-border pb-3">
-		<PawPrint class="text-shelter-orange-text h-5 w-5" />
-		<span class="text-sm font-bold text-black">7.</span>
-		<h2 class="text-base font-bold text-black">นโยบายการรับผู้อพยพและกลุ่มเปราะบาง</h2>
+	<div class="flex items-center gap-3 border-b border-slate-100 pb-4">
+		<div
+			class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700"
+		>
+			<PawPrint class="h-5 w-5" />
+		</div>
+		<div>
+			<div class="flex items-center gap-2">
+				<span class="text-xs font-bold tracking-wider text-[#0284C7] uppercase">ส่วนที่ 7</span>
+			</div>
+			<h2 class="text-base font-bold text-[#0A2647] sm:text-lg">
+				นโยบายการรับผู้อพยพและกลุ่มเปราะบาง
+			</h2>
+		</div>
 	</div>
 
 	<!-- Vulnerable groups -->
 	<div class="space-y-3">
-		<h3 class="text-sm font-bold text-card-foreground">
+		<h3 class="text-sm font-bold text-slate-800">
 			กลุ่มเปราะบางที่ศูนย์รองรับได้ (Supported Vulnerable Groups)
 		</h3>
 		{#if vulnerableGroups.length === 0 && orphanVulnerable.length === 0}
-			<p class="text-sm text-muted-foreground">
+			<p class="text-sm text-slate-500">
 				ยังไม่มีข้อมูลกลุ่มเปราะบาง — เพิ่มได้ที่หน้า “ตั้งค่าข้อมูลลงทะเบียน”
 			</p>
 		{:else}
-			<div class="grid grid-cols-2 gap-2 md:grid-cols-3">
+			<div class="grid grid-cols-2 gap-2.5 md:grid-cols-3">
 				{#each vulnerableGroups as group (group.value)}
 					<label
-						class="flex items-center space-x-3 rounded-lg border border-shelter-border bg-background p-3 text-sm"
+						class="flex cursor-pointer items-center space-x-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 text-sm font-medium text-slate-800 shadow-2xs transition-colors hover:border-slate-300"
 					>
 						<Checkbox
 							checked={selectedVulnerable.includes(group.value)}
@@ -204,7 +214,7 @@
 
 				{#each orphanVulnerable as code (code)}
 					<label
-						class="flex items-center space-x-3 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm"
+						class="flex items-center space-x-3 rounded-xl border border-destructive/40 bg-destructive/5 p-3 text-sm"
 					>
 						<Checkbox
 							checked={true}
@@ -223,10 +233,10 @@
 
 	<!-- Pet policy -->
 	<div class="space-y-3">
-		<h3 class="text-sm font-bold text-card-foreground">นโยบายการรับสัตว์เลี้ยง (Pet Policy)</h3>
+		<h3 class="text-sm font-bold text-slate-800">นโยบายการรับสัตว์เลี้ยง (Pet Policy)</h3>
 
-		<div class="space-y-2 rounded-lg border border-shelter-border bg-background p-3">
-			<label class="flex items-center space-x-3 text-sm">
+		<div class="space-y-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 shadow-2xs">
+			<label class="flex cursor-pointer items-center space-x-3 text-sm font-medium text-slate-800">
 				<input
 					type="radio"
 					name="pet-policy"
@@ -234,11 +244,11 @@
 					checked={petPolicy === 'no_pets'}
 					onchange={() => setPetPolicy('no_pets')}
 					{disabled}
-					class="h-4 w-4 accent-shelter-blue-text"
+					class="h-4 w-4 accent-[#0A2647]"
 				/>
 				<span>🚫 ไม่อนุญาตให้นำสัตว์เลี้ยงเข้าศูนย์ (No Pets Allowed)</span>
 			</label>
-			<label class="flex items-center space-x-3 text-sm">
+			<label class="flex cursor-pointer items-center space-x-3 text-sm font-medium text-slate-800">
 				<input
 					type="radio"
 					name="pet-policy"
@@ -246,7 +256,7 @@
 					checked={petPolicy === 'conditional'}
 					onchange={() => setPetPolicy('conditional')}
 					{disabled}
-					class="h-4 w-4 accent-shelter-blue-text"
+					class="h-4 w-4 accent-[#0A2647]"
 				/>
 				<span>✅ อนุญาตให้นำสัตว์เลี้ยงเข้าได้ภายใต้เงื่อนไข (Pets Allowed with Conditions)</span>
 			</label>
@@ -256,8 +266,10 @@
 			<div class="space-y-3">
 				{#each petCategories as cat (cat.value)}
 					{@const entry = categoryEntry(cat.value)}
-					<div class="rounded-lg border border-shelter-border bg-background p-3">
-						<label class="flex items-center space-x-3 text-sm font-medium">
+					<div class="rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 shadow-2xs">
+						<label
+							class="flex cursor-pointer items-center space-x-3 text-sm font-semibold text-slate-900"
+						>
 							<Checkbox
 								checked={!!entry}
 								onCheckedChange={(v) => toggleCategory(cat.value, v === true)}
@@ -267,7 +279,7 @@
 						</label>
 
 						{#if entry}
-							<div class="mt-3 space-y-2 border-t border-shelter-border pt-3 pl-7">
+							<div class="mt-3 space-y-2 border-t border-slate-200/80 pt-3 pl-7">
 								{#if entry.category === 'livestock'}
 									<div class="flex items-center gap-2 pb-1">
 										<span class="shrink-0 text-sm text-muted-foreground">จำนวนรองรับสูงสุด:</span>

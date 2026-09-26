@@ -49,23 +49,31 @@
 
 <section
 	id="luggage-policy"
-	class="shelter-form-scroll-mt mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border p-6"
+	class="shelter-form-scroll-mt mb-6 space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs transition-shadow hover:shadow-sm sm:p-8"
 >
-	<div class="flex items-center space-x-2 border-b border-shelter-border pb-3">
-		<Briefcase class="h-5 w-5 text-shelter-blue-text" />
-		<span class="text-sm font-bold text-black">8.</span>
-		<h2 class="text-base font-bold text-black">
-			นโยบายทรัพย์สินมีค่า / สัมภาระ (Valuables &amp; Luggage Policy)
-		</h2>
+	<div class="flex items-center gap-3 border-b border-slate-100 pb-4">
+		<div
+			class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#0A2647]/5 text-[#0A2647]"
+		>
+			<Briefcase class="h-5 w-5" />
+		</div>
+		<div>
+			<div class="flex items-center gap-2">
+				<span class="text-xs font-bold tracking-wider text-[#0284C7] uppercase">ส่วนที่ 8</span>
+			</div>
+			<h2 class="text-base font-bold text-[#0A2647] sm:text-lg">
+				นโยบายทรัพย์สินมีค่า / สัมภาระ (Valuables &amp; Luggage Policy)
+			</h2>
+		</div>
 	</div>
 
 	<!-- 7.1 Luggage limitation -->
 	<div class="space-y-3">
-		<h3 class="text-sm font-bold text-card-foreground">
+		<h3 class="text-sm font-bold text-slate-800">
 			1. ข้อกำหนดเรื่องปริมาณสัมภาระ (Luggage Limitation)
 		</h3>
-		<div class="space-y-2 rounded-lg border border-shelter-border bg-background p-3">
-			<label class="flex items-center space-x-3 text-sm">
+		<div class="space-y-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 shadow-2xs">
+			<label class="flex cursor-pointer items-center space-x-3 text-sm font-medium text-slate-800">
 				<input
 					type="radio"
 					name="luggage-limitation"
@@ -73,11 +81,11 @@
 					checked={limitation === 'no_limit'}
 					onchange={() => setLimitation('no_limit')}
 					{disabled}
-					class="h-4 w-4 accent-shelter-blue-text"
+					class="h-4 w-4 accent-[#0A2647]"
 				/>
 				<span>ไม่จำกัดปริมาณสัมภาระ (No Limits)</span>
 			</label>
-			<label class="flex items-center space-x-3 text-sm">
+			<label class="flex cursor-pointer items-center space-x-3 text-sm font-medium text-slate-800">
 				<input
 					type="radio"
 					name="luggage-limitation"
@@ -85,14 +93,14 @@
 					checked={limitation === 'limited'}
 					onchange={() => setLimitation('limited')}
 					{disabled}
-					class="h-4 w-4 accent-shelter-blue-text"
+					class="h-4 w-4 accent-[#0A2647]"
 				/>
 				<span>จำกัดปริมาณสัมภาระพื้นที่จำกัด (Limited Luggage)</span>
 			</label>
 
 			{#if limitation === 'limited'}
 				<div class="flex items-center gap-2 pt-2 pl-7 text-sm">
-					<span class="text-muted-foreground">จำกัดไม่เกิน</span>
+					<span class="text-slate-500">จำกัดไม่เกิน</span>
 					<Input
 						type="number"
 						min="0"
@@ -103,10 +111,10 @@
 								e.currentTarget.value === '' ? null : Number(e.currentTarget.value);
 						}}
 						{disabled}
-						class="w-24"
+						class="w-24 bg-white"
 						placeholder="0"
 					/>
-					<span class="text-muted-foreground">ชิ้น/กระเป๋า ต่อ 1 ครอบครัว</span>
+					<span class="text-slate-500">ชิ้น/กระเป๋า ต่อ 1 ครอบครัว</span>
 				</div>
 			{/if}
 		</div>
@@ -114,12 +122,12 @@
 
 	<!-- 7.2 Standard disclaimers -->
 	<div class="space-y-3">
-		<h3 class="text-sm font-bold text-card-foreground">
+		<h3 class="text-sm font-bold text-slate-800">
 			2. เงื่อนไขและข้อปฏิบัติด้านทรัพย์สิน (Standard Disclaimers &amp; Rules)
 		</h3>
-		<div class="space-y-2 rounded-lg border border-shelter-border bg-background p-3">
+		<div class="space-y-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 shadow-2xs">
 			{#each luggageRules as rule (rule.value)}
-				<label class="flex items-start space-x-2 text-sm">
+				<label class="flex cursor-pointer items-start space-x-3 text-sm font-medium text-slate-800">
 					<Checkbox
 						checked={($formData.luggage_policy?.rules ?? []).includes(rule.value)}
 						onCheckedChange={(v) => toggleRule(rule.value, v === true)}
@@ -129,7 +137,7 @@
 				</label>
 			{/each}
 			<div class="flex items-center gap-2 pt-1">
-				<span class="shrink-0 text-sm text-muted-foreground">อื่นๆ (โปรดระบุ):</span>
+				<span class="shrink-0 text-sm font-medium text-slate-600">อื่นๆ (โปรดระบุ):</span>
 				<Input
 					value={$formData.luggage_policy?.rules_other ?? ''}
 					oninput={(e) => {
@@ -137,7 +145,7 @@
 						$formData.luggage_policy!.rules_other = e.currentTarget.value || null;
 					}}
 					{disabled}
-					class="flex-1"
+					class="flex-1 bg-white"
 				/>
 			</div>
 		</div>

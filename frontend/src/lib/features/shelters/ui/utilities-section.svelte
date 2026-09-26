@@ -52,12 +52,20 @@
 
 <section
 	id="utilities"
-	class="shelter-form-scroll-mt mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border p-6"
+	class="shelter-form-scroll-mt mb-6 space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs transition-shadow hover:shadow-sm sm:p-8"
 >
-	<div class="flex items-center space-x-2 border-b border-shelter-border pb-3">
-		<Zap class="h-5 w-5 text-shelter-blue-text" />
-		<span class="text-sm font-bold text-black">5.</span>
-		<h2 class="text-base font-bold text-black">สถานะสาธารณูปโภคพื้นฐาน</h2>
+	<div class="flex items-center gap-3 border-b border-slate-100 pb-4">
+		<div
+			class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#0A2647]/5 text-[#0A2647]"
+		>
+			<Zap class="h-5 w-5" />
+		</div>
+		<div>
+			<div class="flex items-center gap-2">
+				<span class="text-xs font-bold tracking-wider text-[#0284C7] uppercase">ส่วนที่ 5</span>
+			</div>
+			<h2 class="text-base font-bold text-[#0A2647] sm:text-lg">สถานะสาธารณูปโภคพื้นฐาน</h2>
+		</div>
 	</div>
 
 	<div class="grid grid-cols-1 gap-4 md:grid-cols-2">

@@ -2,7 +2,6 @@
 	import { tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { page } from '$app/state';
 	import { toast } from 'svelte-sonner';
 	import { superForm, defaults } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
@@ -26,11 +25,9 @@
 		EMPTY_PARKING_POLICY,
 		DEFAULT_SHELTER_FEATURE_FLAGS
 	} from '$lib/features/shelters';
-	import { UserManagementPage } from '$lib/features/users';
 	import { collectErrorMessages, findInvalidSectionIds } from './shelter-form-validation';
 	import ShelterFormStickyNav from './shelter-form-sticky-nav.svelte';
 	import { createScrollSpy } from '$lib/utils/scroll-spy';
-	import X from '@lucide/svelte/icons/x';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Building2 from '@lucide/svelte/icons/building-2';
 	import Users from '@lucide/svelte/icons/users';
@@ -41,7 +38,6 @@
 	import Briefcase from '@lucide/svelte/icons/briefcase';
 	import Car from '@lucide/svelte/icons/car';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
-	import UserCog from '@lucide/svelte/icons/user-cog';
 	import Save from '@lucide/svelte/icons/save';
 	import { Button } from '$lib/components/ui/button/index.js';
 
@@ -78,8 +74,6 @@
 
 	let activeSection = $state('basic-info');
 	let showValidationSummary = $state(false);
-	/** View switch (not a form section): users for this shelter. */
-	let usersViewActive = $state(page.url.searchParams.get('view') === 'users');
 
 	const scrollSpy = createScrollSpy({
 		sectionIds: () => sectionIds,
@@ -91,7 +85,6 @@
 	});
 
 	function navigateToSection(id: string) {
-		usersViewActive = false;
 		activeSection = id;
 		scrollSpy.pause();
 		document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -237,6 +230,40 @@
 		});
 	}
 
+	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
+	import Loader2 from '@lucide/svelte/icons/loader-2';
+
+	const statusBadgeConfig = $derived.by(() => {
+		const status = $formData.operation_status;
+		switch (status) {
+			case 'active':
+				return {
+					label: 'เปิดรับผู้อพยพ (Active)',
+					classes: 'border border-emerald-200 bg-emerald-50 text-emerald-900',
+					dot: 'bg-emerald-500'
+				};
+			case 'full_capacity':
+				return {
+					label: 'เต็มความจุ (Full)',
+					classes: 'border border-amber-200 bg-amber-50 text-amber-900',
+					dot: 'bg-amber-500'
+				};
+			case 'closed':
+				return {
+					label: 'ปิดศูนย์ (Closed)',
+					classes: 'border border-slate-200 bg-slate-100 text-slate-700',
+					dot: 'bg-slate-400'
+				};
+			case 'standby':
+			default:
+				return {
+					label: 'กำลังเตรียมการ (Standby)',
+					classes: 'border border-sky-200 bg-sky-50 text-sky-900',
+					dot: 'bg-sky-500'
+				};
+		}
+	});
+
 	// Guard native implicit submit: Enter in a text input must not save/redirect.
 	// Enter inside a <textarea> is left alone.
 	function onFormKeydown(event: KeyboardEvent) {
@@ -247,133 +274,143 @@
 	}
 </script>
 
-<main class="text-xs text-foreground">
-	<div
-		class="sticky top-[var(--bo-sticky-top)] z-20 flex items-center justify-between border-b border-slate-200/80 bg-background/95 px-4 py-4 backdrop-blur-sm sm:px-6"
+<main class="min-h-screen max-w-full overflow-x-clip bg-[#F8FAFC] text-slate-800 antialiased">
+	<!-- Civic Light Page Header -->
+	<header
+		class="sticky top-[var(--bo-sticky-top)] z-20 border-b border-slate-200 bg-white/95 shadow-xs backdrop-blur-sm"
 	>
-		<div class="flex items-center space-x-2">
-			<a
-				href={resolvedBasePath}
-				class="mr-1 rounded-lg p-2 transition hover:bg-muted/50"
-				title="ปิด"
-			>
-				<X class="h-4 w-4 text-muted-foreground" />
-			</a>
-			<h1 class="text-2xl font-bold tracking-tight text-[#0A2647]">
-				{isEdit ? 'แก้ไขข้อมูลศูนย์พักพิง' : 'สร้างศูนย์พักพิงใหม่'}
-			</h1>
+		<div class="mx-auto max-w-7xl px-4 py-3 sm:px-6 sm:py-3.5 lg:px-8">
+			<div class="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+				<!-- Mobile Rows 1 & 2 / Desktop Left Column -->
+				<div class="flex min-w-0 items-start gap-3">
+					<a
+						href={resolvedBasePath}
+						class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-2xs transition hover:bg-slate-50 hover:text-slate-900"
+						title="กลับหน้ารายการศูนย์พักพิง"
+					>
+						<ChevronLeft class="h-4 w-4" />
+					</a>
+					<div class="min-w-0 flex-1 space-y-0.5">
+						<!-- Row 1 on mobile: Title + Badge -->
+						<div class="flex flex-wrap items-center gap-2">
+							<h1 class="text-lg leading-snug font-bold tracking-tight text-[#0A2647] sm:text-2xl">
+								{isEdit ? $formData.name || 'แก้ไขข้อมูลศูนย์พักพิง' : 'สร้างศูนย์พักพิงใหม่'}
+							</h1>
+							{#if isEdit}
+								<span
+									class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold {statusBadgeConfig.classes}"
+								>
+									<span class="h-1.5 w-1.5 rounded-full {statusBadgeConfig.dot}"></span>
+									<span>{statusBadgeConfig.label}</span>
+								</span>
+							{/if}
+						</div>
+						<!-- Row 2 on mobile: Subtitle -->
+						<p class="text-xs leading-relaxed text-slate-500">
+							{isEdit
+								? `รหัสศูนย์: ${id} • จัดการข้อมูลและนโยบายการดำเนินงานศูนย์พักพิง`
+								: 'กรอกข้อมูลศูนย์พักพิงและกำหนดนโยบายเพื่อขึ้นทะเบียนในระบบ'}
+						</p>
+					</div>
+				</div>
+
+				<!-- Mobile Row 3 / Desktop Right Column -->
+				<div class="flex items-center gap-2.5 pt-0.5 sm:pt-0">
+					<a
+						href={resolvedBasePath}
+						class="flex-1 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-center text-sm font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 sm:flex-none"
+					>
+						ยกเลิก
+					</a>
+					<Button
+						type="submit"
+						form="shelter-form"
+						disabled={$submitting || isPending}
+						class="flex-1 gap-2 rounded-lg bg-[#0A2647] px-4 py-2 text-sm font-semibold text-white shadow-2xs transition hover:bg-[#051930] sm:flex-none"
+					>
+						{#if isPending}
+							<Loader2 class="h-4 w-4 animate-spin" />
+							<span>กำลังบันทึก...</span>
+						{:else}
+							<Save class="h-4 w-4" />
+							<span>บันทึกข้อมูล</span>
+						{/if}
+					</Button>
+				</div>
+			</div>
 		</div>
-		<div class="flex items-center gap-2">
-			<a
-				href={resolvedBasePath}
-				class="rounded-lg px-3 py-2 text-sm text-muted-foreground transition hover:bg-muted/50"
-			>
-				ยกเลิก
-			</a>
-			{#if !usersViewActive}
-				<Button
-					type="submit"
-					form="shelter-form"
-					disabled={$submitting || isPending}
-					class="hidden gap-2 md:inline-flex"
-				>
-					<Save class="h-4 w-4" />
-					<span>{isPending ? 'กำลังบันทึก...' : 'บันทึกข้อมูล'}</span>
-				</Button>
-			{/if}
-		</div>
-	</div>
+	</header>
 
 	{#if isLoading}
-		<div class="flex items-center justify-center py-20 text-muted-foreground">
-			กำลังโหลดข้อมูลศูนย์พักพิง...
+		<div class="flex items-center justify-center py-24 text-slate-500">
+			<Loader2 class="mr-2 h-5 w-5 animate-spin text-[#0284C7]" />
+			<span>กำลังโหลดข้อมูลศูนย์พักพิง...</span>
 		</div>
 	{:else if isError}
-		<div class="flex flex-col items-center justify-center space-y-2 py-20 text-destructive">
-			<span>เกิดข้อผิดพลาดในการดึงข้อมูล</span>
-			<span class="text-xs text-muted-foreground">{errorMessage}</span>
-			<a href={resolvedBasePath} class="text-muted-foreground underline">กลับหน้ารวม</a>
+		<div
+			class="mx-auto my-16 max-w-md space-y-3 rounded-2xl border border-red-200 bg-white p-8 text-center shadow-xs"
+		>
+			<AlertCircle class="mx-auto h-8 w-8 text-red-600" />
+			<h2 class="text-base font-bold text-slate-900">เกิดข้อผิดพลาดในการดึงข้อมูล</h2>
+			<p class="text-xs text-slate-500">{errorMessage}</p>
+			<a
+				href={resolvedBasePath}
+				class="inline-block rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50"
+			>
+				กลับหน้ารวมศูนย์พักพิง
+			</a>
 		</div>
 	{:else}
-		<div class="flex flex-col gap-6 p-6 md:flex-row" class:pb-28={!usersViewActive}>
-			<!-- Desktop sticky section nav -->
-			<nav
-				class="hidden shrink-0 md:sticky md:top-[calc(var(--shelter-form-sticky-top)+0.5rem)] md:block md:max-h-[calc(100dvh-var(--shelter-form-sticky-top)-1.5rem)] md:w-64 md:self-start md:overflow-y-auto md:rounded-xl md:border md:border-slate-200/80 md:bg-white md:p-3 md:shadow-2xs"
-			>
-				<div class="mb-3 px-2">
-					<p class="text-xs font-bold tracking-wider text-muted-foreground uppercase">
-						หมวดหมู่ข้อมูล
-					</p>
-				</div>
-				<ul class="flex flex-col gap-2">
-					{#each sections as s (s.id)}
-						{@const Icon = s.icon}
-						{@const hasError = sectionsWithErrorsSet.has(s.id)}
-						{@const sectionActive = !usersViewActive && activeSection === s.id}
-						<li>
-							<button
-								type="button"
-								onclick={() => navigateToSection(s.id)}
-								aria-current={sectionActive ? 'true' : undefined}
-								class={[
-									'flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm font-medium transition-[background-color,color,box-shadow,transform] duration-200',
-									sectionActive
-										? hasError
-											? 'border-red-200 bg-red-50 font-semibold text-red-900'
-											: 'border-sky-200 bg-sky-50 font-semibold text-[#0A2647]'
-										: hasError
-											? 'border-transparent bg-destructive/10 text-destructive hover:-translate-y-px hover:bg-destructive/15'
-											: 'border-transparent text-muted-foreground hover:-translate-y-px hover:bg-slate-50 hover:text-foreground'
-								]}
-							>
-								<Icon class="h-4 w-4 shrink-0" />
-								<span class="min-w-0 flex-1">{s.label}</span>
-								{#if hasError}
-									<AlertCircle class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-									<span class="sr-only">มีข้อมูลที่ต้องแก้ไข</span>
-								{/if}
-							</button>
-						</li>
-					{/each}
-					<li>
-						{#if isEdit}
-							<button
-								type="button"
-								onclick={() => (usersViewActive = true)}
-								aria-current={usersViewActive ? 'true' : undefined}
-								class={[
-									'flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm font-medium transition-[background-color,color,box-shadow,transform] duration-200',
-									usersViewActive
-										? 'border-sky-200 bg-sky-50 font-semibold text-[#0A2647]'
-										: 'border-transparent text-muted-foreground hover:-translate-y-px hover:bg-slate-50 hover:text-foreground'
-								]}
-							>
-								<UserCog class="h-4 w-4 shrink-0" />
-								<span class="min-w-0 flex-1">ผู้ใช้งานและสิทธิ์</span>
-							</button>
-						{:else}
-							<button
-								type="button"
-								disabled
-								title="บันทึกศูนย์ก่อนจึงเพิ่มผู้ใช้ได้"
-								class="flex w-full cursor-not-allowed items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground/60"
-							>
-								<UserCog class="h-4 w-4 shrink-0" />
-								<span class="min-w-0 flex-1">ผู้ใช้งานและสิทธิ์</span>
-							</button>
-							<p class="mt-1 px-3 text-2xs text-muted-foreground">
-								บันทึกศูนย์ก่อนจึงเพิ่มผู้ใช้ได้
-							</p>
-						{/if}
-					</li>
-				</ul>
-			</nav>
+		<div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+			<div class="flex flex-col gap-6 pb-28 md:flex-row">
+				<!-- Desktop sticky section nav -->
+				<nav
+					class="hidden shrink-0 md:sticky md:top-[calc(var(--shelter-form-sticky-top)+1rem)] md:block md:max-h-[calc(100dvh-var(--shelter-form-sticky-top)-2rem)] md:w-64 md:self-start md:overflow-y-auto md:rounded-2xl md:border md:border-slate-200 md:bg-white md:p-3 md:shadow-xs"
+				>
+					<div class="mb-2 px-2.5 pt-1">
+						<p class="text-xs font-bold tracking-wider text-slate-400 uppercase">สารบัญหมวดหมู่</p>
+					</div>
+					<ul class="flex flex-col gap-1.5">
+						{#each sections as s, idx (s.id)}
+							{@const hasError = sectionsWithErrorsSet.has(s.id)}
+							{@const sectionActive = activeSection === s.id}
+							<li>
+								<button
+									type="button"
+									onclick={() => navigateToSection(s.id)}
+									aria-current={sectionActive ? 'true' : undefined}
+									class={[
+										'flex w-full items-center gap-2.5 rounded-xl border px-3 py-2 text-left text-sm font-medium transition-all duration-200',
+										sectionActive
+											? hasError
+												? 'border-red-200 bg-red-50 font-semibold text-red-900 shadow-2xs'
+												: 'border-sky-200 bg-sky-50/80 font-semibold text-[#0A2647] shadow-2xs'
+											: hasError
+												? 'border-transparent bg-red-50/50 text-red-700 hover:bg-red-50'
+												: 'border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+									]}
+								>
+									<span
+										class={[
+											'flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-2xs font-bold tabular-nums',
+											sectionActive ? 'bg-[#0A2647] text-white' : 'bg-slate-100 text-slate-500'
+										]}
+									>
+										{idx + 1}
+									</span>
+									<span class="min-w-0 flex-1 truncate">{s.label}</span>
+									{#if hasError}
+										<AlertCircle class="h-4 w-4 shrink-0 text-red-600" aria-hidden="true" />
+										<span class="sr-only">มีข้อมูลที่ต้องแก้ไข</span>
+									{/if}
+								</button>
+							</li>
+						{/each}
+					</ul>
+				</nav>
 
-			<!-- Form / users content -->
-			<div class="min-w-0 flex-1">
-				{#if usersViewActive && isEdit}
-					<UserManagementPage lockedShelterCode={id} compact />
-				{:else}
+				<!-- Form content -->
+				<div class="min-w-0 flex-1">
 					{#if showValidationSummary && (invalidSectionIds.length > 0 || validationMessages.length > 0)}
 						<div
 							class="mb-4 rounded-xl border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive"
@@ -436,20 +473,18 @@
 						<LuggagePolicySection {formData} />
 						<ParkingPolicySection {formData} />
 					</form>
-				{/if}
+				</div>
 			</div>
 		</div>
 
-		{#if !usersViewActive}
-			<ShelterFormStickyNav
-				{sections}
-				{activeSection}
-				sectionsWithErrors={sectionsWithErrorsSet}
-				ariaLabel="นำทางหมวดหมู่ฟอร์มศูนย์พักพิง"
-				onNavigate={navigateToSection}
-				savePending={isPending}
-				saveDisabled={$submitting || isPending}
-			/>
-		{/if}
+		<ShelterFormStickyNav
+			{sections}
+			{activeSection}
+			sectionsWithErrors={sectionsWithErrorsSet}
+			ariaLabel="นำทางหมวดหมู่ฟอร์มศูนย์พักพิง"
+			onNavigate={navigateToSection}
+			savePending={isPending}
+			saveDisabled={$submitting || isPending}
+		/>
 	{/if}
 </main>

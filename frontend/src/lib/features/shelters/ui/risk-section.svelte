@@ -20,12 +20,22 @@
 
 <section
 	id="risk"
-	class="shelter-form-scroll-mt mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border p-6"
+	class="shelter-form-scroll-mt mb-6 space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs transition-shadow hover:shadow-sm sm:p-8"
 >
-	<div class="flex items-center space-x-2 border-b border-shelter-border pb-3">
-		<ShieldAlert class="h-5 w-5 text-shelter-rose-text" />
-		<span class="text-sm font-bold text-black">6.</span>
-		<h2 class="text-base font-bold text-black">ข้อมูลการประเมินความเสี่ยงและโครงสร้าง</h2>
+	<div class="flex items-center gap-3 border-b border-slate-100 pb-4">
+		<div
+			class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-rose-50 text-rose-600"
+		>
+			<ShieldAlert class="h-5 w-5" />
+		</div>
+		<div>
+			<div class="flex items-center gap-2">
+				<span class="text-xs font-bold tracking-wider text-[#0284C7] uppercase">ส่วนที่ 6</span>
+			</div>
+			<h2 class="text-base font-bold text-[#0A2647] sm:text-lg">
+				ข้อมูลการประเมินความเสี่ยงและโครงสร้าง
+			</h2>
+		</div>
 	</div>
 
 	<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -107,9 +117,11 @@
 	</Form.Field>
 
 	<div
-		class="flex items-start gap-2 rounded-lg border border-shelter-border bg-muted/30 p-3 text-sm text-shelter-rose-text"
+		class="flex items-start gap-2.5 rounded-xl border border-rose-200 bg-rose-50/60 p-3.5 text-sm text-rose-900 shadow-2xs"
 	>
-		<AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-shelter-rose-text" />
-		<p>ข้อมูลส่วนนี้จะถูกใช้เพื่อช่วย EOC ทราบถึงข้อจำกัดของศูนย์แบบ Real-time</p>
+		<AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
+		<p class="text-xs leading-relaxed font-medium text-rose-800">
+			ข้อมูลส่วนนี้จะถูกใช้เพื่อช่วย EOC ทราบถึงข้อจำกัดของศูนย์แบบ Real-time
+		</p>
 	</div>
 </section>
