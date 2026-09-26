@@ -75,23 +75,31 @@
 
 <section
 	id="parking-policy"
-	class="shelter-form-scroll-mt mt-6 mb-6 space-y-6 rounded-2xl border border-shelter-border p-6"
+	class="shelter-form-scroll-mt mb-6 space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs transition-shadow hover:shadow-sm sm:p-8"
 >
-	<div class="flex items-center space-x-2 border-b border-shelter-border pb-3">
-		<Car class="h-5 w-5 text-shelter-blue-text" />
-		<span class="text-sm font-bold text-black">9.</span>
-		<h2 class="text-base font-bold text-black">
-			นโยบายยานพาหนะและการจอดรถ (Vehicle &amp; Parking Policy)
-		</h2>
+	<div class="flex items-center gap-3 border-b border-slate-100 pb-4">
+		<div
+			class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#0A2647]/5 text-[#0A2647]"
+		>
+			<Car class="h-5 w-5" />
+		</div>
+		<div>
+			<div class="flex items-center gap-2">
+				<span class="text-xs font-bold tracking-wider text-[#0284C7] uppercase">ส่วนที่ 9</span>
+			</div>
+			<h2 class="text-base font-bold text-[#0A2647] sm:text-lg">
+				นโยบายยานพาหนะและการจอดรถ (Vehicle &amp; Parking Policy)
+			</h2>
+		</div>
 	</div>
 
 	<!-- 8.1 Master parking policy -->
 	<div class="space-y-3">
-		<h3 class="text-sm font-bold text-card-foreground">
+		<h3 class="text-sm font-bold text-slate-800">
 			1. นโยบายหลักพื้นที่จอดรถ (Master Parking Policy)
 		</h3>
-		<div class="space-y-2 rounded-lg border border-shelter-border bg-background p-3">
-			<label class="flex items-center space-x-3 text-sm">
+		<div class="space-y-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 shadow-2xs">
+			<label class="flex cursor-pointer items-center space-x-3 text-sm font-medium text-slate-800">
 				<input
 					type="radio"
 					name="parking-availability"
@@ -99,11 +107,11 @@
 					checked={availability === 'none'}
 					onchange={() => setAvailability('none')}
 					{disabled}
-					class="h-4 w-4 accent-shelter-blue-text"
+					class="h-4 w-4 accent-[#0A2647]"
 				/>
 				<span>ไม่มีพื้นที่จอดรถ (No Parking Available)</span>
 			</label>
-			<label class="flex items-center space-x-3 text-sm">
+			<label class="flex cursor-pointer items-center space-x-3 text-sm font-medium text-slate-800">
 				<input
 					type="radio"
 					name="parking-availability"
@@ -111,7 +119,7 @@
 					checked={availability === 'available'}
 					onchange={() => setAvailability('available')}
 					{disabled}
-					class="h-4 w-4 accent-shelter-blue-text"
+					class="h-4 w-4 accent-[#0A2647]"
 				/>
 				<span>มีพื้นที่จอดรถ (Parking Available)</span>
 			</label>
@@ -121,14 +129,16 @@
 	{#if availability === 'available'}
 		<!-- 8.2 Supported vehicles -->
 		<div class="space-y-3">
-			<h3 class="text-sm font-bold text-card-foreground">
+			<h3 class="text-sm font-bold text-slate-800">
 				2. ประเภทรถที่รองรับและจำนวน (Supported Vehicles &amp; Capacity)
 			</h3>
-			<div class="space-y-3 rounded-lg border border-shelter-border bg-background p-3">
+			<div class="space-y-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 shadow-2xs">
 				{#each vehicleTypes as vt (vt.value)}
 					{@const entry = vehicleEntry(vt.value)}
 					<div class="space-y-2">
-						<label class="flex items-center space-x-3 text-sm">
+						<label
+							class="flex cursor-pointer items-center space-x-3 text-sm font-medium text-slate-800"
+						>
 							<Checkbox
 								checked={!!entry}
 								onCheckedChange={(v) => toggleVehicle(vt.value, v === true)}
@@ -138,17 +148,17 @@
 						</label>
 						{#if entry}
 							<div class="flex items-center gap-2 pl-7 text-sm">
-								<span class="text-muted-foreground">รองรับสูงสุด:</span>
+								<span class="text-slate-500">รองรับสูงสุด:</span>
 								<Input
 									type="number"
 									min="0"
 									value={entry.max_capacity ?? ''}
 									oninput={(e) => setVehicleCapacity(vt.value, e.currentTarget.value)}
 									{disabled}
-									class="w-28"
+									class="w-28 bg-white"
 									placeholder="0"
 								/>
-								<span class="text-muted-foreground">{vt.unit}</span>
+								<span class="text-slate-500">{vt.unit}</span>
 							</div>
 						{/if}
 					</div>
@@ -158,12 +168,14 @@
 
 		<!-- 8.3 Parking rules -->
 		<div class="space-y-3">
-			<h3 class="text-sm font-bold text-card-foreground">
+			<h3 class="text-sm font-bold text-slate-800">
 				3. เงื่อนไขและกฎการจอดรถ (Parking Rules &amp; Disclaimers)
 			</h3>
-			<div class="space-y-2 rounded-lg border border-shelter-border bg-background p-3">
+			<div class="space-y-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 shadow-2xs">
 				{#each parkingRules as rule (rule.value)}
-					<label class="flex items-start space-x-2 text-sm">
+					<label
+						class="flex cursor-pointer items-start space-x-3 text-sm font-medium text-slate-800"
+					>
 						<Checkbox
 							checked={($formData.parking_policy?.rules ?? []).includes(rule.value)}
 							onCheckedChange={(v) => toggleRule(rule.value, v === true)}
@@ -173,7 +185,7 @@
 					</label>
 				{/each}
 				<div class="flex items-center gap-2 pt-1">
-					<span class="shrink-0 text-sm text-muted-foreground">อื่นๆ (โปรดระบุ):</span>
+					<span class="shrink-0 text-sm font-medium text-slate-600">อื่นๆ (โปรดระบุ):</span>
 					<Input
 						value={$formData.parking_policy?.rules_other ?? ''}
 						oninput={(e) => {
@@ -181,7 +193,7 @@
 							$formData.parking_policy!.rules_other = e.currentTarget.value || null;
 						}}
 						{disabled}
-						class="flex-1"
+						class="flex-1 bg-white"
 					/>
 				</div>
 			</div>

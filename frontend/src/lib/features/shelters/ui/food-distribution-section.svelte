@@ -148,22 +148,30 @@
 
 <section
 	id="food-distribution"
-	class="shelter-form-scroll-mt mt-6 mb-6 space-y-4 rounded-2xl border border-shelter-border p-6"
+	class="shelter-form-scroll-mt mb-6 space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs transition-shadow hover:shadow-sm sm:p-8"
 >
-	<div class="flex items-center space-x-2 border-b border-shelter-border pb-3">
-		<UtensilsCrossed class="text-shelter-orange-text h-5 w-5" />
-		<span class="text-sm font-bold text-black">4.</span>
-		<h2 class="text-base font-bold text-black">จุดแจกอาหาร</h2>
+	<div class="flex items-center gap-3 border-b border-slate-100 pb-4">
+		<div
+			class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#0A2647]/5 text-[#0A2647]"
+		>
+			<UtensilsCrossed class="h-5 w-5" />
+		</div>
+		<div>
+			<div class="flex items-center gap-2">
+				<span class="text-xs font-bold tracking-wider text-[#0284C7] uppercase">ส่วนที่ 4</span>
+			</div>
+			<h2 class="text-base font-bold text-[#0A2647] sm:text-lg">จุดแจกอาหาร</h2>
+		</div>
 	</div>
 
 	<div class="flex items-center justify-between gap-3">
-		<h3 class="text-sm font-bold text-card-foreground">รายการจุดแจกอาหาร</h3>
+		<h3 class="text-sm font-bold text-slate-800">รายการจุดแจกอาหาร</h3>
 		<Button
 			variant="outline"
 			size="sm"
 			onclick={addPoint}
 			{disabled}
-			class="rounded-full border-orange-200 bg-orange-50 text-orange-600 shadow-sm hover:bg-orange-100 hover:text-orange-700"
+			class="rounded-full border-orange-200 bg-orange-50 text-orange-700 shadow-2xs hover:bg-orange-100 hover:text-orange-800"
 		>
 			<Plus class="mr-1 h-4 w-4" /> เพิ่มจุดแจกอาหาร
 		</Button>
@@ -171,7 +179,7 @@
 
 	<div class="space-y-2">
 		{#each $formData.food_distribution_points ?? [] as p, i (p.id)}
-			<div class="space-y-3 rounded-lg border border-shelter-border p-3">
+			<div class="space-y-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 shadow-2xs">
 				<div class="flex flex-col gap-3 sm:flex-row sm:items-start">
 					<Form.Field {form} name={`food_distribution_points[${i}].name`} class="min-w-0 flex-1">
 						<Form.Control>

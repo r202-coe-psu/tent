@@ -29,4 +29,9 @@
 	});
 </script>
 
-<ShelterFormPage id={data.id ?? ''} isEdit={data.mode === 'edit'} siteKind={data.siteKind} />
+<ShelterFormPage
+	id={data.id ?? ''}
+	isEdit={data.mode === 'edit'}
+	basePath={resolve('/portal')}
+	siteKind={data.siteKind}
+/>
