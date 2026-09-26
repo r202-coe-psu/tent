@@ -71,10 +71,11 @@
 		mass: 'น้ำหนัก',
 		volume: 'ปริมาตร',
 		length: 'ความยาว',
-		count: 'นับชิ้น'
+		count: 'นับชิ้น',
+		energy: 'พลังงาน'
 	};
 
-	const DIMENSION_ORDER: Dimension[] = ['mass', 'volume', 'length', 'count'];
+	const DIMENSION_ORDER: Dimension[] = ['mass', 'volume', 'length', 'count', 'energy'];
 
 	const form = superForm(
 		defaults(

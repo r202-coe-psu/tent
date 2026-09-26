@@ -252,16 +252,20 @@ describe('nutrition units and legacy aliases', () => {
 
 	it('formats legacy requirement-group units through aliases', () => {
 		expect(formatUnit('gram', [], 'th')).toBe('กรัม');
+		expect(formatUnit('liter', [], 'th')).toBe('ลิตร');
 		expect(formatUnit('litre', [], 'th')).toBe('ลิตร');
 		expect(formatUnit('pcs', [], 'th')).toBe('ชิ้น');
 	});
 
 	it('formats the same units in English and short Thai', () => {
 		expect(formatUnit('gram', [], 'en')).toBe('g');
+		expect(formatUnit('liter', [], 'en')).toBe('L');
 		expect(formatUnit('litre', [], 'en')).toBe('L');
 		expect(formatUnit('kcal', [], 'en')).toBe('kcal');
 		expect(formatUnit('gram', [], 'th', true)).toBe('ก.');
 		expect(formatUnit('mg', [], 'th', true)).toBe('มก.');
+		expect(formatUnit('liter', [], 'th', true)).toBe('ล.');
+		expect(formatUnit('litre', [], 'th', true)).toBe('ล.');
 	});
 
 	it('never leaves a standard requirement-group unit unformatted', () => {

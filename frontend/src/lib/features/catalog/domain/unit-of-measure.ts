@@ -198,6 +198,7 @@ export const FALLBACK_UNIT_LABELS: Record<string, { th: string; th_short?: strin
 	),
 	pcs: { th: 'ชิ้น', en: 'pcs' },
 	gram: { th: 'กรัม', th_short: 'ก.', en: 'g' },
+	liter: { th: 'ลิตร', th_short: 'ล.', en: 'L' },
 	litre: { th: 'ลิตร', th_short: 'ล.', en: 'L' },
 	// Legacy Thai labels backward-compat mapping
 	ชิ้น: { th: 'ชิ้น', en: 'pcs' },

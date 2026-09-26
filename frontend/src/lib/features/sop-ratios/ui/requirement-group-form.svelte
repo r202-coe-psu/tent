@@ -6,7 +6,11 @@
 	import { Combobox } from '$lib/components/ui/combobox/index.js';
 	import { useItemMasters, formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
-	import { type RequirementGroup, type ItemMap } from '../domain/requirement-group';
+	import {
+		STANDARD_UOM_OPTIONS,
+		type RequirementGroup,
+		type ItemMap
+	} from '../domain/requirement-group';
 	import { resolveSource, type Source } from '$lib/utils/source';
 	import { useSaveRequirementGroup } from '../application/requirement-group-queries';
 	import { toast } from 'svelte-sonner';
@@ -32,12 +36,10 @@
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
 	const uomOptions = $derived(
-		units
-			.filter((unit) => !unit.deactivated)
-			.map((unit) => ({
-				value: unit.code,
-				label: formatUnit(unit.code, units, langState.current)
-			}))
+		STANDARD_UOM_OPTIONS.map((opt) => ({
+			value: opt.value,
+			label: formatUnit(opt.value, units, langState.current) || opt.label
+		}))
 	);
 
 	let formGroupId = $state('');
