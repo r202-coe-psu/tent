@@ -3,7 +3,7 @@ title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
 updated: 2026-09-26
-note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer; CR-135/CR-136 partner OAuth2 client name/module preset + secret reveal/edit/delete; CR-137 shrink master_data (10→4) + zone/community free text; CR-138 remove purchase doc type + withdraw purchase from stock_ledger.reason
+note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer; CR-135/CR-136 partner OAuth2 client name/module preset + secret reveal/edit/delete; CR-137 shrink master_data (10→4) + zone/community free text; CR-138 remove purchase doc type + withdraw purchase from stock_ledger.reason; CR-139 shelter storage points; CR-140 item_category default_class editable; CR-144/CR-145 meal_service_receipt (§2.7.3); CR-147 removes CR-146 meal_distribution_push (§2.7.4) — ticket flow ends at warehouse stock-in
 ---
 
 # Database Schema v5 — field-level
@@ -443,6 +443,10 @@ filter จาก `listMealPlans()` แทนการ `get` ตรงด้ว�
 
 ### 2.6 `kitchen_requisition` — `kitchen_requisition:{ulid}` · **append-only**
 
+> **Deprecated (CR-141):** แทนที่ด้วย `requisition_ticket` (`requisition_type: 'kitchen'`, §2.29)
+> — ห้ามสร้างเอกสารใหม่หลัง cutover เอกสารเก่ายังอ่านได้เสมอ (ประวัติ/รายงานย้อนหลัง) และแสดงรวม
+> (union, read-only) กับตั๋วใหม่ในหน้า "ประวัติเบิก"
+
 > **schema_v 2** — `qty_requested` / `qty_issued` เป็น `qty_str`. CR-038.
 
 | Field | ชนิด | req | หมายเหตุ |
@@ -570,6 +574,40 @@ flow ปกติเลย ค้างเป็น `in_use` ตลอดไป 
 `fuel_cylinder._id` พร้อม clean replacement ใน pre-production; ไม่มี migration script สำหรับ
 ข้อมูลเดิม. `reason='consumption'` ถูกเขียนร่วมกับ `stock_ledger` ของวัตถุดิบใน `bulkDocs`
 เดียวกัน และต้อง reject ทั้ง transaction หากแก๊สไม่พอ.
+
+### 2.7.3 `meal_service_receipt` — `meal_service_receipt:{ulid}` · **append-only** · **schema_v 1** (CR-144/CR-145)
+
+> คลังยืนยันหรือปฏิเสธการตรวจรับอาหารปรุงสำเร็จที่ครัวบันทึกผลผลิตแล้ว (checkpoint เชิงธุรการ) —
+> `meal_service` §2.7 เป็น append-only ห้าม update ตัว doc เดิม จึงบันทึกการตัดสินใจของคลังเป็น
+> doc ใหม่แยกต่างหาก แทนการเพิ่มฟิลด์ลง `meal_service` (แพทเทิร์นเดียวกับ `gas_ledger`/`stock_ledger`)
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `meal_service_id` | str | req | อ้าง `meal_service._id` — สูงสุด 1 receipt ต่อ 1 `meal_service_id` (idempotency guard ฝั่ง data layer) |
+| `outcome` | enum(`confirmed`,`rejected`) | opt | ผลการตรวจรับ (CR-145) — doc ก่อน CR-145 ไม่มี field นี้ อ่านเป็น `'confirmed'` เสมอ (ทางเดียวที่มีตอนนั้น) ผ่าน `mealServiceReceiptOutcome()` |
+| `received_by` | str | req | ผู้ยืนยัน/ปฏิเสธการตรวจรับ |
+| `reason` | str | conditional req | เหตุผล — บังคับเมื่อ `outcome = 'rejected'` (CR-145) |
+
+**Derive สถานะ (ไม่เก็บ field แยกบน `meal_service`):** ticket-list.svelte (`/back-office/tickets/kitchen`)
+ตีความ `meal_service` ล่าสุดของแต่ละแผน (ตัวก่อนหน้าที่ถูกปฏิเสธไม่แสดงซ้ำ) จากการมี/ไม่มี
+`meal_service_receipt` คู่กัน: ไม่มี receipt → "รอตรวจรับเข้าคลัง" (`PENDING_RECEIPT`); มีและ
+`outcome='confirmed'` → "ส่งมอบเสร็จสิ้น" (`DELIVERED_IN`); มีและ `outcome='rejected'` → กลับไปหมวด
+"ครัวกำลังปรุง" (`COOKING`, รอครัวบันทึกผลผลิตใหม่) — ไม่ผูกกับการตัดสต็อกวัตถุดิบ
+(`requisition_ticket`, จบไปแล้วที่ CR-143) หรือการรับเข้าสต็อกอาหารปรุงสำเร็จ (`yield_items`/
+`stock_ledger reason=receive` ตาม CR-121 §3.2 ซึ่งยังไม่ implement ในโค้ดจริง — คนละงาน)
+
+**ผ่อน invariant ของ `meal_service` (CR-145):** เดิม 1 `meal_plan_id` มี `meal_service` ได้แค่ 1
+doc ตลอดไป ตอนนี้อนุญาตให้บันทึกใหม่ได้เมื่อ doc ล่าสุดของแผนนั้นถูกปฏิเสธแล้วเท่านั้น (ของเดิมไม่ถูก
+ลบ ยังอยู่เป็นประวัติ) — จุดที่เคยดึง "meal_service ตัวแรกที่เจอของแผน" ต้องเปลี่ยนเป็นดึงตัวล่าสุด
+(ตามลำดับ ulid) แทน
+
+### 2.7.4 `meal_distribution_push` — ถูกลบ (CR-147, ย้อนกลับ CR-146)
+
+> เดิมเป็น doc type append-only สำหรับจัดสรรอาหารปรุงสำเร็จส่งจุดแจกจ่าย ("Push to POS", CR-146).
+> **CR-147 ตัดฟีเจอร์นี้ทั้งหมด** — flow ของ ticket จบที่คลังตรวจรับเข้าสต็อก (`meal_service_receipt`
+> confirmed = "ส่งมอบเสร็จสิ้น") ไม่มีขั้นตอนจัดสรรส่งจุดแจกต่อ. เอกสาร `meal_distribution_push:*`
+> เดิมที่เขียนไปแล้วใน production ยังอยู่ใน CouchDB (append-only ห้ามลบ) แต่แอปไม่อ่าน/เขียนอีกต่อไป —
+> orphan, cleanup นอก scope ของ CR นี้.
 
 ### 2.8 `volunteer` — `volunteer:{ulid}` · **schema_v 4**
 
@@ -1042,6 +1080,27 @@ delta ที่อ้าง `requisition_ticket:{ulid}`.
 **Transition:** `PENDING_PICK → READY_FOR_DISPATCH → IN_TRANSIT → DISTRIBUTING → SHIFT_CLOSED`;
 จาก `SHIFT_CLOSED` ไป `COMPLETED` เมื่อแจกหมดและไม่มีของคืน หรือไป `RETURN_PENDING_RECEIPT`
 แล้ว `RETURN_COMPLETED` เมื่อมีของคืน. `CANCELLED` ใช้ยกเลิกก่อนจบและเป็น terminal.
+
+**`requisition_type: 'kitchen'` — carve-out (CR-141):** implement เฉพาะ slice นี้ก่อน (`food`/
+`supplies`/`transfer` ยังไม่ implement — ตาม CR-121 เดิมทุกประการเมื่อถึงคิว)
+
+- **Status subset:** ใช้ได้แค่ `PENDING_PICK → READY_FOR_DISPATCH → IN_TRANSIT → COMPLETED`
+  (+`CANCELLED` ได้ทุกจุดก่อน `IN_TRANSIT`) — ห้ามใช้ `DISTRIBUTING`/`SHIFT_CLOSED`/
+  `RETURN_PENDING_RECEIPT`/`RETURN_COMPLETED` (สงวนไว้เฉพาะ `food`/`supplies`)
+- **`meal_plan_id`** (str, req เฉพาะ `kitchen`): FK `meal_plan:{ulid}` — เป็น idempotency/link key;
+  เปิดตั๋วซ้ำจากแผนเดิมต้องคืนตั๋วใบเดิม ไม่สร้างซ้ำ
+- **`gas_drawdown`** (opt เฉพาะ `kitchen`): `[{cylinder_id:str, qty_kg:qty_str>0}]` — snapshot มาจาก
+  `meal_plan.gas_usage` ตอนเปิดตั๋ว; ตัด `gas_ledger` (`reason:'consumption'`) พร้อมกับ `stock_ledger`
+  ใน `bulkDocs` เดียวกันตอน dispatch (`READY_FOR_DISPATCH→IN_TRANSIT`) เท่านั้น — เหมือน
+  `kitchen_requisition.gas_drawdown` เดิม (§2.6)
+- **`allocated_qty` ที่จุดสร้าง:** เอกสารใหม่ทุกบรรทัดเริ่มที่ `'0'` (ขัดกับ `qty_str>0` ทั่วไปด้านบน
+  เฉพาะตอนสร้างเท่านั้น) — ต้องมากกว่า 0 ทุกบรรทัดก่อน transition ไป `READY_FOR_DISPATCH` เท่านั้น
+- **Role ต่อ edge:** สร้างตั๋ว (`kitchen_staff`) → จัดของระหว่าง `PENDING_PICK` (`warehouse_staff`) →
+  `PENDING_PICK→READY_FOR_DISPATCH` อนุมัติ (`shelter_manager`/`system_admin` เท่านั้น) →
+  `READY_FOR_DISPATCH→IN_TRANSIT` ปล่อยของ (`warehouse_staff`) →
+  `IN_TRANSIT→COMPLETED` ครัวยืนยันรับของ (`kitchen_staff`)
+- **`kitchen_requisition` เดิม:** หยุดสร้างใหม่หลัง cutover — เอกสารเก่ายังอ่านได้ (deprecated,
+  read-only; ดู §2.6) และแสดงรวม (union) กับ `requisition_ticket` ใหม่ในหน้าประวัติ
 
 ### 2.30 `distribution_log` — `distribution_log:{ulid}` · **schema_v 1** (CR-121)
 
@@ -1538,8 +1597,8 @@ provisioning เท่านั้น. `value` คือเลขล่าสุ
 หมวดหมู่ระบบมาตรฐาน 10 รายการใช้ deterministic ID รูปแบบ
 `item_category:${system_key.toLowerCase()}` และ `is_protected: true`; หมวดหมู่ที่ผู้ใช้สร้างเอง
 ยังใช้ `item_category:{ulid}`. หมวดหมู่ protected ห้ามลบทุกชั้น (UI, repository และ CouchDB VDU),
-ห้ามเปลี่ยน `system_key`, `default_class` หรือ `is_protected` แต่ `system_admin` แก้ `name` และ
-`description` ได้.
+ห้ามเปลี่ยน `system_key` หรือ `is_protected` แต่ `system_admin` แก้ `name`, `description` และ
+`default_class` ได้ (CR-140 แก้ไข CR-119 FR-04 — `default_class` ไม่ immutable อีกต่อไป).
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
@@ -2089,7 +2148,7 @@ CR-059 ไม่เพิ่ม Central→Edge fallback หรือ local write
 ต้อง deploy บน remote shelter database ที่รับ write.
 
 1. `type` อยู่ใน whitelist ของ db นั้น; `_id` ขึ้นต้นด้วย `{type}:`
-2. append-only types (`movement`, `screening`, `people_import_log`, `stock_ledger`, `kitchen_requisition`, `meal_service`, `audit`, `search_audit`, `distribution_issue`, `distribution_issue_idempotency`) — ปฏิเสธ update/delete ทุกกรณี. `distribution_log` เป็น log ถาวรที่ห้ามลบ แต่อนุญาตเฉพาะการเปลี่ยนแปลงสถานะคืน/void ตาม lifecycle
+2. append-only types (`movement`, `screening`, `people_import_log`, `stock_ledger`, `kitchen_requisition`, `meal_service`, `meal_service_receipt`, `audit`, `search_audit`, `distribution_issue`, `distribution_issue_idempotency`) — ปฏิเสธ update/delete ทุกกรณี. `distribution_log` เป็น log ถาวรที่ห้ามลบ แต่อนุญาตเฉพาะการเปลี่ยนแปลงสถานะคืน/void ตาม lifecycle
 3. state machine types (`stock_transfer`, `donation`, `referral`, `shelter_report`, …) — ปฏิเสธ transition ถอยหลัง (ตามลำดับ enum / กราฟของ type นั้น)
 4. role→type เขียนได้ตาม role-permission-matrix (ตรวจ `userCtx.roles` แบบ Compound Scoped Roles `{shelter_code}:{role}`)
 5. `shelter_code` ใน doc ต้องตรงกับ db
@@ -2098,8 +2157,8 @@ CR-059 ไม่เพิ่ม Central→Edge fallback หรือ local write
 8. `sop_override` (shelter_*) ต้องเขียนโดยบทบาท `shelter_manager` ที่มี `shelter_code` ตรงกับ database และเซสชันการทำงาน
 9. `food_sphere_standard`, `requirement_group`, `replenishment_policy` ใน `catalog` (`source=SPHERE_BASELINE`) เขียน/แก้ไขได้เฉพาะบทบาท `system_admin`; ใน `shelter_*` (`source=SHELTER_OVERRIDE`) เขียน/แก้ไขได้เฉพาะบทบาท `shelter_manager` ที่มี `shelter_code` ตรงกับ database
 10. CR-059 request/batch บังคับ role และ transition graph ตาม §2.21–2.22; `distribution_issue` และ `distribution_issue_idempotency` เป็น append-only. Coordination record ตรวจ identity และโครงสร้าง `pending_claims` ตามชนิดเอกสาร
-11. `item_category` ที่ `is_protected=true` ห้ามลบ; `system_key`, `default_class` และ `is_protected` immutable และแก้ `name`/`description` ได้เฉพาะ `system_admin` ตาม CR-119
-12. `unit_of_measure` ใน `catalog`: `code` เป็น immutable สำหรับทุกเอกสาร; เอกสารที่ `is_protected=true` ห้ามลบ, ห้ามแก้ `dimension` และห้ามเปลี่ยน `is_protected` จาก `true` เป็น `false` (ตรวจตรงเงื่อนไข `oldDoc.type === 'unit_of_measure' && oldDoc.is_protected === true && newDoc.is_protected !== true`). การเขียน master ทำได้เฉพาะบทบาท `system_admin` ที่ระดับ Application (CouchDB transport อนุญาต role `system_admin` หรือ `_admin` bypass) ตาม CR-125; ฐานข้อมูล `shelter_*` ไม่อนุญาตให้เขียน `unit_of_measure` เด็ดขาด
+11. `item_category` ที่ `is_protected=true` ห้ามลบ; `system_key` และ `is_protected` immutable และแก้ `name`/`description`/`default_class` ได้เฉพาะ `system_admin` ตาม CR-119 (แก้ไข `default_class` ตาม CR-140 item-category-default-class-editable)
+12. `unit_of_measure` ใน `catalog`: `code` เป็น immutable สำหรับทุกเอกสาร; เอกสารที่ `is_protected=true` ห้ามลบ, ห้ามแก้ `dimension` และห้ามเปลี่ยน `is_protected` จาก `true` เป็น `false` (ตรวจตรงเงื่อนไข `oldDoc.type === 'unit_of_measure' && oldDoc.is_protected === true && newDoc.is_protected !== true`). การเขียน master ทำได้เฉพาะบทบาท `system_admin` ที่ระดับ Application (CouchDB transport อนุญาต role `system_admin` หรือ `_admin` bypass) ตาม CR-125 unit-of-measure-master-data; ฐานข้อมูล `shelter_*` ไม่อนุญาตให้เขียน `unit_of_measure` เด็ดขาด
 13. `requisition_ticket` บังคับ transition ตาม §2.29; `distribution_log` ห้ามลบและการ clear/void ต้องเก็บ audit fields ตาม §2.30
 14. `stock_ledger` reason=`distribute`/`requisition`/`receive` ที่อ้าง ticket หรือ distribution log เขียนได้เฉพาะ role ตาม workflow (อย่างน้อย `warehouse_staff`, `supply_coordinator`, `shelter_manager` หรือ `system_admin`); local validator ตรวจ invariant ที่อยู่ในเอกสารเท่านั้น
 15. `bulk_return_pool` (schema_v 1 และ 2) อยู่ใน whitelist ของ `shelter_*`; schema_v 2 ต้องมี `claim_ids` เป็น array ของ string (ห้ามมี ID ซ้ำ และไม่อนุญาตให้ downgrade เป็น v1); บังคับ `unclaimed_quota >= 0` และ `claimed_qty + unclaimed_quota == total_received_qty` เสมอ; ปฏิเสธการตัดโควตาเมื่อ `unclaimed_quota <= 0`; transition `ACTIVE` → `CLOSED` หรือ `ACTIVE` → `EXHAUSTED` → `CLOSED`; ปิด pool ได้เฉพาะบทบาท `warehouse_staff`, `supply_coordinator` หรือ `shelter_manager`; การอัปเกรด lazy upgrade จาก v1 สู่ v2 ต้องกระทำพร้อมกับการตัดโควตาและเพิ่ม claim_id แรกในเอกสารเดียวกัน

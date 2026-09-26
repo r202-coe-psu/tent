@@ -25,6 +25,7 @@ import {
 } from '$lib/features/sop-ratios/domain/sop-ratio';
 import { validRatios } from '$lib/features/sop-ratios/domain/sop-ratio.fixture';
 import { FALLBACK_UNIT_DEFINITIONS } from '$lib/features/catalog/domain/unit-of-measure';
+import { SYSTEM_ITEM_CATEGORIES, type ItemCategory } from '$lib/features/catalog/domain/catalog';
 
 // ─── env loader ─────────────────────────────────────────────────────────────
 
@@ -173,6 +174,21 @@ async function syncCatalogAccessDesign(
 	dryRun: boolean
 ): Promise<'already_current' | 'created' | 'updated'> {
 	const validateFn = `function (newDoc, oldDoc, userCtx) {
+  if (userCtx.roles.indexOf('_admin') !== -1) {
+    return;
+  }
+  if (oldDoc && oldDoc.type === 'item_category' && oldDoc.is_protected === true) {
+    if (newDoc._deleted === true) {
+      throw({ forbidden: 'Cannot delete system protected category: ' + oldDoc._id });
+    }
+    if (newDoc.system_key !== oldDoc.system_key) {
+      throw({ forbidden: 'system_key is immutable on protected categories' });
+    }
+    // CR-140: default_class is editable on protected categories (amends CR-119 FR-04).
+    if (newDoc.is_protected !== true) {
+      throw({ forbidden: 'is_protected flag cannot be removed' });
+    }
+  }
   function isUnitCode(value) {
     return typeof value === 'string' && /^[a-z][a-z0-9_]{0,15}$/.test(value);
   }
@@ -188,7 +204,7 @@ async function syncCatalogAccessDesign(
       throw({ forbidden: field + ' must match ^[a-z][a-z0-9_]{0,15}$' });
     }
   }
-  if (userCtx.roles.indexOf('_admin') !== -1 || userCtx.roles.indexOf('system_admin') !== -1) {
+  if (userCtx.roles.indexOf('system_admin') !== -1) {
     if (newDoc._deleted && oldDoc && oldDoc.type === 'unit_of_measure' && oldDoc.is_protected) {
       throw({ forbidden: 'Cannot delete system protected unit of measure' });
     }
@@ -438,6 +454,85 @@ async function syncMasterSopBaseline(
 	return existingRev ? 'upgraded' : 'created';
 }
 
+export async function syncSystemItemCategories(
+	dryRun: boolean
+): Promise<{ created: number; updated: number; skipped: number }> {
+	let created = 0;
+	let updated = 0;
+	let skipped = 0;
+
+	for (const cat of SYSTEM_ITEM_CATEGORIES) {
+		const { status, data } = await couchReq('GET', `/catalog/${encodeURIComponent(cat.id)}`);
+		if (status === 404) {
+			if (!dryRun) {
+				const doc: ItemCategory = {
+					_id: cat.id,
+					type: 'item_category',
+					schema_v: 2,
+					system_key: cat.key,
+					name: cat.name,
+					default_class: cat.default_class,
+					description: cat.description,
+					is_protected: true,
+					is_default: false,
+					deactivated: false,
+					created_at: new Date().toISOString(),
+					updated_at: new Date().toISOString(),
+					created_by: 'system'
+				};
+				const putRes = await couchReq('PUT', `/catalog/${encodeURIComponent(cat.id)}`, doc);
+				if (putRes.status >= 400) {
+					const detail = (putRes.data as { reason?: string; error?: string } | null) ?? {};
+					throw new Error(
+						`Cannot create system category ${cat.id} (${putRes.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+					);
+				}
+			}
+			created++;
+		} else if (status === 200) {
+			const existing = data as ItemCategory;
+			if (existing.type && existing.type !== 'item_category') {
+				throw new Error(
+					`Deterministic ID ${cat.id} is occupied by unexpected document type: ${existing.type}`
+				);
+			}
+			const needsRepair =
+				existing.schema_v !== 2 ||
+				existing.system_key !== cat.key ||
+				existing.default_class !== cat.default_class ||
+				!existing.is_protected;
+
+			if (needsRepair) {
+				if (!dryRun) {
+					const patched: ItemCategory = {
+						...existing,
+						schema_v: 2,
+						system_key: cat.key,
+						default_class: cat.default_class,
+						description: existing.description || cat.description,
+						is_protected: true,
+						updated_at: new Date().toISOString()
+					};
+					const putRes = await couchReq('PUT', `/catalog/${encodeURIComponent(cat.id)}`, patched);
+					if (putRes.status >= 400) {
+						const detail = (putRes.data as { reason?: string; error?: string } | null) ?? {};
+						throw new Error(
+							`Cannot repair system category ${cat.id} (${putRes.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+						);
+					}
+				}
+				updated++;
+			} else {
+				skipped++;
+			}
+		} else {
+			throw new Error(`Unexpected status ${status} checking ${cat.id}`);
+		}
+	}
+
+	return { created, updated, skipped };
+}
+
 // ─── main ───────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -479,7 +574,13 @@ async function main() {
 	const sopRes = await syncMasterSopBaseline(DRY_RUN);
 	console.log(`  ✓ catalog: sop_profile:master_sphere_baseline (${sopRes})`);
 
-	// 6. Units of Measure Master Data
+	// 6. System Item Categories (CR-119)
+	const catSync = await syncSystemItemCategories(DRY_RUN);
+	console.log(
+		`  ✓ catalog: 10 system item categories (${catSync.created} created, ${catSync.updated} updated, ${catSync.skipped} skipped)`
+	);
+
+	// 7. Units of Measure Master Data
 	const uomRes = await syncUnitsOfMeasure(DRY_RUN);
 	console.log(
 		`  ✓ catalog: units of measure (${uomRes.created} created/would create, ${uomRes.existing} existing)`

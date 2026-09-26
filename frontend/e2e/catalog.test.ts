@@ -72,7 +72,7 @@ test.describe('Catalog Management — Item Master CRUD', () => {
 		// 1. Create
 		await page.getByRole('button', { name: 'เพิ่มข้อมูล' }).click();
 
-		await expect(page.locator('text=บันทึกข้อมูลตั้งค่ามาตรฐานใหม่')).toBeVisible();
+		await expect(page.locator('text=เพิ่มรายการสิ่งของ (Item Master)')).toBeVisible();
 
 		await page.getByLabel('ชื่อสินค้า (Item Name)').fill(itemName);
 		await page.getByLabel('รหัสสินค้า (SKU)').fill(`SKU-${RUN_ID}`);
@@ -84,7 +84,7 @@ test.describe('Catalog Management — Item Master CRUD', () => {
 		await page.getByLabel('สารก่อภูมิแพ้ (Allergens)').fill('ถั่ว');
 		await page.getByLabel('เพศที่ใช้ได้ (Target Gender)').selectOption('ALL');
 		await page.getByLabel('ช่วงวัยที่เหมาะสม (Age Group)').selectOption('ALL');
-		await page.getByLabel('ข้อจำกัดด้านอาหาร (Dietary)').selectOption('HALAL');
+		await page.getByLabel('ฮาลาล (Halal)').check();
 
 		await page.getByRole('button', { name: 'บันทึกข้อมูล' }).click();
 

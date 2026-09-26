@@ -438,6 +438,8 @@ describe('KitchenRemoteRepository.gasCylinderType — CRUD', () => {
 	});
 
 	const input = {
+		item_master_id: 'item_master:lpg_15kg',
+		cylinder_code: 'LPG-01',
 		name: 'เตาแรงดันสูง + ถัง 15kg',
 		capacity_kg: '15',
 		burn_rate_kg_per_hour: '0.5',
@@ -445,23 +447,22 @@ describe('KitchenRemoteRepository.gasCylinderType — CRUD', () => {
 	};
 
 	it('create → list → update → delete round-trips', async () => {
-		const created = await repo.createGasCylinderType(input, ctx);
-		expect(created.type).toBe('gas_cylinder_type');
+		const created = await repo.createFuelCylinder(input, ctx);
+		expect(created.type).toBe('fuel_cylinder');
 
-		const listed = await repo.listGasCylinderTypes();
+		const listed = await repo.listFuelCylinders();
 		expect(listed).toHaveLength(1);
 
-		const updated = await repo.updateGasCylinderType(created, { ...input, capacity_kg: '48' });
+		const updated = await repo.updateFuelCylinder(created, { ...input, capacity_kg: '48' });
 		expect(updated.capacity_kg).toBe('48');
 		expect(updated.updated_at >= created.updated_at).toBe(true);
 
-		await repo.deleteGasCylinderType(updated);
-		expect(await repo.listGasCylinderTypes()).toHaveLength(0);
+		await repo.deleteFuelCylinder(updated);
+		expect(await repo.listFuelCylinders()).toHaveLength(0);
 	});
 });
 
-// The ticket's demo, as reproducible evidence: requisition (deduct stock) →
-// service record → variance summary. Bypasses the SOP-calc plan entrypoint
+// Requisition (deduct stock) → service record → variance summary. Bypasses the SOP-calc plan entrypoint
 // (createMealPlan directly with recipes) so it stays green regardless of
 // unrelated sop-ratios breakage elsewhere.
 describe('T-27 demo chain — requisition → service record → variance', () => {
@@ -587,8 +588,15 @@ describe('KitchenRemoteRepository — gas cylinder ledger (CR-085)', () => {
 	}
 
 	it('issueRequisition writes a gas_ledger consumption entry alongside the food ledger', async () => {
-		const cyl = await repo.createGasCylinderType(
-			{ name: 'ถังทดสอบ', capacity_kg: '15', burn_rate_kg_per_hour: '0.5', time_multiplier: '1' },
+		const cyl = await repo.createFuelCylinder(
+			{
+				item_master_id: 'item_master:lpg_15kg',
+				cylinder_code: 'LPG-01',
+				name: 'ถังทดสอบ',
+				capacity_kg: '15',
+				burn_rate_kg_per_hour: '0.5',
+				time_multiplier: '1'
+			},
 			ctx
 		);
 		const plan = await planWithGas(cyl._id, '2', '2026-08-22');
@@ -606,8 +614,15 @@ describe('KitchenRemoteRepository — gas cylinder ledger (CR-085)', () => {
 	});
 
 	it('cannot draw more gas than remains — throws and writes nothing at all (all-or-nothing)', async () => {
-		const cyl = await repo.createGasCylinderType(
-			{ name: 'ถังเล็ก', capacity_kg: '5', burn_rate_kg_per_hour: '0.5', time_multiplier: '1' },
+		const cyl = await repo.createFuelCylinder(
+			{
+				item_master_id: 'item_master:lpg_15kg',
+				cylinder_code: 'LPG-01',
+				name: 'ถังเล็ก',
+				capacity_kg: '5',
+				burn_rate_kg_per_hour: '0.5',
+				time_multiplier: '1'
+			},
 			ctx
 		);
 		const plan = await planWithGas(cyl._id, '10', '2026-08-22'); // more than the 5 kg capacity
@@ -645,8 +660,15 @@ describe('KitchenRemoteRepository — gas cylinder ledger (CR-085)', () => {
 	});
 
 	it('refillGasCylinder tops up a partially-used tank', async () => {
-		const cyl = await repo.createGasCylinderType(
-			{ name: 'ถังเติม', capacity_kg: '15', burn_rate_kg_per_hour: '0.5', time_multiplier: '1' },
+		const cyl = await repo.createFuelCylinder(
+			{
+				item_master_id: 'item_master:lpg_15kg',
+				cylinder_code: 'LPG-01',
+				name: 'ถังเติม',
+				capacity_kg: '15',
+				burn_rate_kg_per_hour: '0.5',
+				time_multiplier: '1'
+			},
 			ctx
 		);
 		// Consume 10 kg by hand (equivalent to a prior requisition).
@@ -670,8 +692,15 @@ describe('KitchenRemoteRepository — gas cylinder ledger (CR-085)', () => {
 	});
 
 	it('refillGasCylinder rejects a refill that would overflow the tank', async () => {
-		const cyl = await repo.createGasCylinderType(
-			{ name: 'ถังเติม', capacity_kg: '15', burn_rate_kg_per_hour: '0.5', time_multiplier: '1' },
+		const cyl = await repo.createFuelCylinder(
+			{
+				item_master_id: 'item_master:lpg_15kg',
+				cylinder_code: 'LPG-01',
+				name: 'ถังเติม',
+				capacity_kg: '15',
+				burn_rate_kg_per_hour: '0.5',
+				time_multiplier: '1'
+			},
 			ctx
 		);
 		await memoryRepo.put({
@@ -693,8 +722,15 @@ describe('KitchenRemoteRepository — gas cylinder ledger (CR-085)', () => {
 	// CR-085 addendum — a dust remainder can never be drawn to 0 through
 	// consumption (all-or-nothing), so writeOffGasCylinder is the only path.
 	it('writeOffGasCylinder zeroes out a dust remainder', async () => {
-		const cyl = await repo.createGasCylinderType(
-			{ name: 'ถังเล็ก', capacity_kg: '4', burn_rate_kg_per_hour: '0.3', time_multiplier: '1' },
+		const cyl = await repo.createFuelCylinder(
+			{
+				item_master_id: 'item_master:lpg_15kg',
+				cylinder_code: 'LPG-01',
+				name: 'ถังเล็ก',
+				capacity_kg: '4',
+				burn_rate_kg_per_hour: '0.3',
+				time_multiplier: '1'
+			},
 			ctx
 		);
 		await memoryRepo.put({
@@ -718,8 +754,15 @@ describe('KitchenRemoteRepository — gas cylinder ledger (CR-085)', () => {
 	});
 
 	it('writeOffGasCylinder rejects a cylinder that is already empty', async () => {
-		const cyl = await repo.createGasCylinderType(
-			{ name: 'ถังหมดแล้ว', capacity_kg: '4', burn_rate_kg_per_hour: '0.3', time_multiplier: '1' },
+		const cyl = await repo.createFuelCylinder(
+			{
+				item_master_id: 'item_master:lpg_15kg',
+				cylinder_code: 'LPG-01',
+				name: 'ถังหมดแล้ว',
+				capacity_kg: '4',
+				burn_rate_kg_per_hour: '0.3',
+				time_multiplier: '1'
+			},
 			ctx
 		);
 		await memoryRepo.put({
@@ -738,8 +781,199 @@ describe('KitchenRemoteRepository — gas cylinder ledger (CR-085)', () => {
 	});
 
 	it('writeOffGasCylinder rejects an unknown cylinder', async () => {
-		await expect(repo.writeOffGasCylinder('gas_cylinder_type:missing', ctx)).rejects.toThrow(
+		await expect(repo.writeOffGasCylinder('fuel_cylinder:missing', ctx)).rejects.toThrow(
 			/not found/
 		);
+	});
+});
+
+// ---- 2-Tier MealSession & TKT-KITCHEN Flow 3 Tests ----
+
+describe('KitchenRemoteRepository — MealSession CRUD', () => {
+	let repo: KitchenRemoteRepository;
+
+	beforeEach(() => {
+		memoryRepo = createInMemoryRepository();
+		repo = new KitchenRemoteRepository('shelter_sh001');
+	});
+
+	it('creates, lists, updates, and deletes meal_session', async () => {
+		const session = await repo.createMealSession(
+			{
+				name: 'มื้อกลางวัน 2 ก.ย. 69',
+				date: '2026-09-02',
+				meal: 'lunch',
+				target_headcount: {
+					halal: 20,
+					infant: 5,
+					soft_food: 10,
+					regular: 50,
+					volunteer: 5,
+					total: 90
+				}
+			},
+			ctx
+		);
+		expect(session.type).toBe('meal_session');
+		expect(session.status).toBe('active');
+
+		const list = await repo.listMealSessions();
+		expect(list).toHaveLength(1);
+		expect(list[0]._id).toBe(session._id);
+
+		const updated = await repo.updateMealSession(session, { notes: 'เพิ่มหมายเหตุ' });
+		expect(updated.notes).toBe('เพิ่มหมายเหตุ');
+
+		await repo.deleteMealSession(updated);
+		expect(await repo.listMealSessions()).toHaveLength(0);
+	});
+});
+
+describe('KitchenRemoteRepository — Requisition Workflow', () => {
+	let repo: KitchenRemoteRepository;
+
+	beforeEach(() => {
+		memoryRepo = createInMemoryRepository();
+		repo = new KitchenRemoteRepository('shelter_sh001');
+	});
+
+	it('createPendingRequisition commits meal_plan + requisition', async () => {
+		const res1 = await repo.createPendingRequisition(
+			{
+				planInput: {
+					date: '2026-09-02',
+					meal: 'lunch',
+					headcount: { total: 50, halal: 20, soft_food: 0, infant: 0 },
+					recipes: [{ recipe_id: 'recipe:curry', planned_qty: 100 }]
+				},
+				requisitionInput: {
+					items: [{ item_id: 'item:chicken', qty_requested: '25', unit: 'kg' }]
+				}
+			},
+			ctx
+		);
+
+		expect(res1.plan).toBeDefined();
+		expect(res1.requisition.status).toBe('pending');
+		expect(res1.requisition.meal_plan_id).toBe(res1.plan?._id);
+
+		const res2 = await repo.createPendingRequisition(
+			{
+				requisitionInput: {
+					items: [{ item_id: 'item:rice', qty_requested: '50', unit: 'kg' }]
+				}
+			},
+			ctx
+		);
+		expect(res2.requisition.status).toBe('pending');
+	});
+
+	it('approveKitchenRequisition cuts stock_ledger with reason=requisition and ref_id=requisition._id', async () => {
+		await seedStock('item:pork', 100);
+
+		const { requisition } = await repo.createPendingRequisition(
+			{
+				requisitionInput: {
+					items: [{ item_id: 'item:pork', qty_requested: '20', unit: 'kg' }]
+				}
+			},
+			ctx
+		);
+
+		const approved = await repo.approveKitchenRequisition(
+			requisition._id,
+			'warehouse_officer',
+			undefined,
+			ctx
+		);
+
+		expect(approved.status).toBe('approved');
+		expect(approved.approved_by).toBe('warehouse_officer');
+		expect(approved.ledger_ids).toHaveLength(1);
+
+		const ledgers = await memoryRepo.allByType('stock_ledger', isStockLedger);
+		const reqLedger = ledgers.find((l) => l.ref_id === requisition._id);
+		expect(reqLedger).toBeDefined();
+		expect(reqLedger?.qty).toBe('-20');
+		expect(reqLedger?.reason).toBe('requisition');
+	});
+
+	it('approveKitchenRequisition handles partial issue (D12) and gas cylinder switch (D15)', async () => {
+		await seedStock('item:beef', 100);
+		const cyl1 = await repo.createFuelCylinder(
+			{
+				item_master_id: 'item_master:lpg_15kg',
+				cylinder_code: 'LPG-01',
+				name: 'ถัง 1',
+				capacity_kg: '15',
+				burn_rate_kg_per_hour: '0.5',
+				time_multiplier: '1'
+			},
+			ctx
+		);
+		const cyl2 = await repo.createFuelCylinder(
+			{
+				item_master_id: 'item_master:lpg_15kg',
+				cylinder_code: 'LPG-02',
+				name: 'ถัง 2',
+				capacity_kg: '15',
+				burn_rate_kg_per_hour: '0.5',
+				time_multiplier: '1'
+			},
+			ctx
+		);
+
+		const { requisition } = await repo.createPendingRequisition(
+			{
+				requisitionInput: {
+					items: [{ item_id: 'item:beef', qty_requested: '20', unit: 'kg' }],
+					gas_drawdown: [{ cylinder_id: cyl1._id, qty_kg: '2' }]
+				}
+			},
+			ctx
+		);
+
+		// Warehouse issues 15 instead of 20, and switches to cylinder 2
+		const approved = await repo.approveKitchenRequisition(
+			requisition._id,
+			'warehouse_officer',
+			{
+				partial_items: [{ item_id: 'item:beef', qty_issued: '15' }],
+				switched_gas: [{ cylinder_id: cyl2._id, qty_kg: '2' }]
+			},
+			ctx
+		);
+
+		expect(approved.items[0].qty_issued).toBe('15');
+		expect(approved.gas_drawdown?.[0].cylinder_id).toBe(cyl2._id);
+
+		// Verify stock ledger was cut for 15, not 20
+		const ledgers = await memoryRepo.allByType('stock_ledger', isStockLedger);
+		const beefLedger = ledgers.find((l) => l.ref_id === requisition._id);
+		expect(beefLedger?.qty).toBe('-15');
+	});
+
+	it('rejectKitchenRequisition records rejection reason and blocks subsequent approval', async () => {
+		const { requisition } = await repo.createPendingRequisition(
+			{
+				requisitionInput: {
+					items: [{ item_id: 'item:pork', qty_requested: '30', unit: 'kg' }]
+				}
+			},
+			ctx
+		);
+
+		const rejected = await repo.rejectKitchenRequisition(
+			requisition._id,
+			'วัตถุดิบขาดสต็อก ไม่สามารถจ่ายได้',
+			ctx
+		);
+		expect(rejected.status).toBe('rejected');
+		expect(rejected.reject_reason).toBe('วัตถุดิบขาดสต็อก ไม่สามารถจ่ายได้');
+
+		// Attempting to approve rejected requisition throws
+		await expect(
+			repo.approveKitchenRequisition(requisition._id, 'warehouse_officer', undefined, ctx)
+		).rejects.toThrow(/already rejected/);
 	});
 });

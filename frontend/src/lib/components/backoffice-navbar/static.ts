@@ -16,7 +16,9 @@ import {
 	HandHeart,
 	MapPin,
 	UtensilsCrossed,
-	FlaskConical
+	FlaskConical,
+	ArrowLeftRight,
+	Siren
 } from '@lucide/svelte/icons';
 
 type Leaf = {
@@ -88,6 +90,20 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				label: 'บริจาค',
 				href: resolve('/back-office/stock-donations'),
 				icon: HandHeart
+			},
+			{
+				label: 'จัดการคำร้องเบิกจ่าย',
+				href: null,
+				icon: ClipboardList,
+				children: [
+					{ label: 'เบิก-คืนพัสดุหน้างาน', href: null, icon: ArrowLeftRight },
+					{
+						label: 'โรงครัวและเสบียงอาหาร',
+						href: resolve('/back-office/tickets/kitchen'),
+						icon: UtensilsCrossed
+					},
+					{ label: 'จ่ายช่วยเหลือนอกศูนย์ & EOC', href: null, icon: Siren }
+				]
 			},
 			{
 				label: 'ครัวกลางและอาหาร',

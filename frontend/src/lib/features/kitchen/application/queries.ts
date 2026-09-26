@@ -11,14 +11,20 @@ import { peopleRepository } from '$lib/features/people';
 import { catalogRepository } from '$lib/features/catalog';
 import { supplyRepository } from '$lib/features/supply';
 import type {
+	MealSession,
+	MealSessionInput,
 	MealPlan,
 	MealPlanInput,
 	MealPlanGasUsage,
 	KitchenRequisitionInput,
 	MealServiceInput,
-	GasCylinderType,
-	GasCylinderTypeInput
+	FuelCylinder,
+	FuelCylinderInput
 } from '../domain/kitchen';
+import type {
+	CreatePendingRequisitionParams,
+	ApproveRequisitionOptions
+} from '../data/kitchen.repository';
 import {
 	calculateMealIngredients,
 	calculateMealIngredientsFromRecipe,
@@ -27,20 +33,30 @@ import {
 	DEFAULT_RICE_G_PER_PERSON_MEAL,
 	type CustomIngredientInput
 } from '../domain/meal-calc';
-import { deriveHeadcountFromOccupancy } from '../domain/occupancy';
+import {
+	deriveHeadcountFromOccupancy,
+	deriveSessionHeadcountFromOccupancy
+} from '../domain/occupancy';
 import type { MealPlanHeadcount, MealPeriod } from '../domain/kitchen';
 
 export const kitchenKeys = {
 	all: ['kitchen'] as const,
+	mealSessions: () => [...kitchenKeys.all, 'meal_sessions', getShelterCode()] as const,
+	mealSession: (id: string) => [...kitchenKeys.all, 'meal_session', getShelterCode(), id] as const,
 	mealPlans: () => [...kitchenKeys.all, 'meal_plans', getShelterCode()] as const,
 	requisitions: () => [...kitchenKeys.all, 'requisitions', getShelterCode()] as const,
+	kitchenRequisition: (id: string) =>
+		[...kitchenKeys.all, 'kitchen_requisition', getShelterCode(), id] as const,
 	mealServices: () => [...kitchenKeys.all, 'meal_services', getShelterCode()] as const,
-	gasCylinderTypes: () => [...kitchenKeys.all, 'gas_cylinder_types', getShelterCode()] as const,
+	mealServiceReceipts: () =>
+		[...kitchenKeys.all, 'meal_service_receipts', getShelterCode()] as const,
+	fuelCylinders: () => [...kitchenKeys.all, 'fuel_cylinders', getShelterCode()] as const,
 	gasLedger: () => [...kitchenKeys.all, 'gas_ledger', getShelterCode()] as const,
-	occupancy: () => [...kitchenKeys.all, 'occupancy', getShelterCode()] as const
+	occupancy: () => [...kitchenKeys.all, 'occupancy', getShelterCode()] as const,
+	dietCounts: () => [...kitchenKeys.all, 'diet_counts', getShelterCode()] as const
 };
 
-// --- Occupancy (T-06 handoff) ---
+// --- Occupancy & Diet Counts (T-06 handoff & 2-Tier Headcount) ---
 // Live headcount derived from currently checked-in evacuees. Re-derives on any
 // evacuee change via the kitchen live-query, so meal-plan previews re-calc.
 
@@ -48,6 +64,48 @@ export const useOccupancyHeadcount = () =>
 	createQuery(() => ({
 		queryKey: kitchenKeys.occupancy(),
 		queryFn: async () => deriveHeadcountFromOccupancy(await peopleRepository().listEvacuees())
+	}));
+
+export const useActiveEvacueeDietCounts = () =>
+	createQuery(() => ({
+		queryKey: kitchenKeys.dietCounts(),
+		queryFn: async () =>
+			deriveSessionHeadcountFromOccupancy(await peopleRepository().listEvacuees())
+	}));
+
+// --- MealSession (schema.md §2.7.3) ---
+
+export const useMealSessions = () =>
+	createQuery(() => ({
+		queryKey: kitchenKeys.mealSessions(),
+		queryFn: () => kitchenRepository().listMealSessions()
+	}));
+
+export const useMealSession = (id: () => string | undefined) =>
+	createQuery(() => {
+		const sessionId = id();
+		return {
+			queryKey: kitchenKeys.mealSession(sessionId ?? ''),
+			queryFn: () => (sessionId ? kitchenRepository().getMealSessionById(sessionId) : null),
+			enabled: !!sessionId
+		};
+	});
+
+export const useCreateMealSession = () =>
+	createMutation(() => ({
+		mutationFn: ({ input, ctx }: { input: MealSessionInput; ctx: AuthorContext }) =>
+			kitchenRepository().createMealSession(input, ctx)
+	}));
+
+export const useUpdateMealSession = () =>
+	createMutation(() => ({
+		mutationFn: ({ session, patch }: { session: MealSession; patch: Partial<MealSessionInput> }) =>
+			kitchenRepository().updateMealSession(session, patch)
+	}));
+
+export const useDeleteMealSession = () =>
+	createMutation(() => ({
+		mutationFn: (session: MealSession) => kitchenRepository().deleteMealSession(session)
 	}));
 
 // --- MealPlan ---
@@ -64,11 +122,7 @@ export const useCreateMealPlan = () =>
 			kitchenRepository().createMealPlan(input, ctx)
 	}));
 
-// Shared by create/update: recipeId (catalog BOM) sources ingredients from a
-// catalog Recipe, custom (ad-hoc supply_item list) from staff-typed rows;
-// otherwise falls back to the SOP-ratio rice calc. Rice ratio is a kitchen
-// coefficient, not a SOP ratio (CR-021) — the SOP profile is still read to
-// stamp calc_source provenance in all three cases.
+// Resolves ingredient calculations from recipe, custom ingredients, or default rice ratio.
 async function resolveMealPlanCalc(
 	headcount: MealPlanHeadcount,
 	recipeId: string | undefined,
@@ -165,6 +219,19 @@ export const useConfirmMealPlan = () =>
 		mutationFn: (plan: MealPlan) => kitchenRepository().confirmMealPlan(plan)
 	}));
 
+export const useUpdateMealPlanGasUsage = () =>
+	createMutation(() => ({
+		mutationFn: ({
+			plan,
+			gasUsage,
+			cookingStartedAt
+		}: {
+			plan: MealPlan;
+			gasUsage: MealPlanGasUsage[];
+			cookingStartedAt?: MealPlan['cooking_started_at'];
+		}) => kitchenRepository().updateMealPlanGasUsage(plan, gasUsage, cookingStartedAt)
+	}));
+
 // Draft-only edit — recomputes recipes the same way useCreateMealPlanCalc does,
 // then patches the existing doc in place (date/meal/_id stay fixed).
 export const useUpdateMealPlanCalc = () =>
@@ -207,6 +274,19 @@ export const useUpdateMealPlanCalc = () =>
 		}
 	}));
 
+// Confirmed plan edit (CR-142) — caller must have already confirmed the
+// linked ticket is still PENDING_PICK (e.g. by updating the ticket first).
+export const useUpdateConfirmedMealPlan = () =>
+	createMutation(() => ({
+		mutationFn: ({
+			plan,
+			patch
+		}: {
+			plan: MealPlan;
+			patch: Parameters<ReturnType<typeof kitchenRepository>['updateConfirmedMealPlan']>[1];
+		}) => kitchenRepository().updateConfirmedMealPlan(plan, patch)
+	}));
+
 export const useDeleteMealPlanDraft = () =>
 	createMutation(() => ({
 		mutationFn: (plan: MealPlan) => kitchenRepository().deleteMealPlanDraft(plan)
@@ -218,6 +298,52 @@ export const useRequisitions = () =>
 	createQuery(() => ({
 		queryKey: kitchenKeys.requisitions(),
 		queryFn: () => kitchenRepository().listRequisitions()
+	}));
+
+export const useKitchenRequisitions = useRequisitions;
+
+export const useKitchenRequisition = (id: () => string | undefined) =>
+	createQuery(() => {
+		const reqId = id();
+		return {
+			queryKey: kitchenKeys.kitchenRequisition(reqId ?? ''),
+			queryFn: () => (reqId ? kitchenRepository().getKitchenRequisitionById(reqId) : null),
+			enabled: !!reqId
+		};
+	});
+
+export const useCreatePendingRequisition = () =>
+	createMutation(() => ({
+		mutationFn: ({ params, ctx }: { params: CreatePendingRequisitionParams; ctx: AuthorContext }) =>
+			kitchenRepository().createPendingRequisition(params, ctx)
+	}));
+
+export const useApproveKitchenRequisition = () =>
+	createMutation(() => ({
+		mutationFn: ({
+			requisitionId,
+			approver,
+			options,
+			ctx
+		}: {
+			requisitionId: string;
+			approver: string;
+			options?: ApproveRequisitionOptions;
+			ctx?: AuthorContext;
+		}) => kitchenRepository().approveKitchenRequisition(requisitionId, approver, options, ctx)
+	}));
+
+export const useRejectKitchenRequisition = () =>
+	createMutation(() => ({
+		mutationFn: ({
+			requisitionId,
+			reason,
+			ctx
+		}: {
+			requisitionId: string;
+			reason: string;
+			ctx: AuthorContext;
+		}) => kitchenRepository().rejectKitchenRequisition(requisitionId, reason, ctx)
 	}));
 
 export const useIssueRequisition = () =>
@@ -240,32 +366,59 @@ export const useRecordMealService = () =>
 			kitchenRepository().recordMealService(input, ctx)
 	}));
 
-// --- GasCylinderType ---
+// --- MealServiceReceipt (CR-144) ---
 
-export const useGasCylinderTypes = () =>
+export const useMealServiceReceipts = () =>
 	createQuery(() => ({
-		queryKey: kitchenKeys.gasCylinderTypes(),
-		queryFn: () => kitchenRepository().listGasCylinderTypes()
+		queryKey: kitchenKeys.mealServiceReceipts(),
+		queryFn: () => kitchenRepository().listMealServiceReceipts()
 	}));
 
-export const useCreateGasCylinderType = () =>
+export const useConfirmMealServiceReceipt = () =>
 	createMutation(() => ({
-		mutationFn: ({ input, ctx }: { input: GasCylinderTypeInput; ctx: AuthorContext }) =>
-			kitchenRepository().createGasCylinderType(input, ctx)
+		mutationFn: ({ mealServiceId, ctx }: { mealServiceId: string; ctx: AuthorContext }) =>
+			kitchenRepository().confirmMealServiceReceipt(mealServiceId, ctx)
 	}));
 
-export const useUpdateGasCylinderType = () =>
+export const useRejectMealServiceReceipt = () =>
 	createMutation(() => ({
-		mutationFn: ({ doc, input }: { doc: GasCylinderType; input: GasCylinderTypeInput }) =>
-			kitchenRepository().updateGasCylinderType(doc, input)
+		mutationFn: ({
+			mealServiceId,
+			reason,
+			ctx
+		}: {
+			mealServiceId: string;
+			reason: string;
+			ctx: AuthorContext;
+		}) => kitchenRepository().rejectMealServiceReceipt(mealServiceId, reason, ctx)
 	}));
 
-export const useDeleteGasCylinderType = () =>
+// --- FuelCylinder ---
+
+export const useFuelCylinders = () =>
+	createQuery(() => ({
+		queryKey: kitchenKeys.fuelCylinders(),
+		queryFn: () => kitchenRepository().listFuelCylinders()
+	}));
+
+export const useCreateFuelCylinder = () =>
 	createMutation(() => ({
-		mutationFn: (doc: GasCylinderType) => kitchenRepository().deleteGasCylinderType(doc)
+		mutationFn: ({ input, ctx }: { input: FuelCylinderInput; ctx: AuthorContext }) =>
+			kitchenRepository().createFuelCylinder(input, ctx)
 	}));
 
-// --- GasLedger (CR-085) — real per-cylinder stock ---
+export const useUpdateFuelCylinder = () =>
+	createMutation(() => ({
+		mutationFn: ({ doc, input }: { doc: FuelCylinder; input: FuelCylinderInput }) =>
+			kitchenRepository().updateFuelCylinder(doc, input)
+	}));
+
+export const useDeleteFuelCylinder = () =>
+	createMutation(() => ({
+		mutationFn: (doc: FuelCylinder) => kitchenRepository().deleteFuelCylinder(doc)
+	}));
+
+// --- GasLedger ---
 
 export const useGasLedger = () =>
 	createQuery(() => ({
@@ -297,19 +450,27 @@ export const useWriteOffGasCylinder = () =>
 export function startKitchenLiveQuery(queryClient: QueryClient): SubscribeDataChangesHandle {
 	return subscribeDataChanges(queryClient, getShelterDb, (type) => {
 		switch (type) {
+			case 'meal_session':
+				return [kitchenKeys.mealSessions()];
 			case 'meal_plan':
-				return [kitchenKeys.mealPlans()];
+				return [kitchenKeys.mealPlans(), kitchenKeys.mealSessions()];
 			case 'kitchen_requisition':
 				return [kitchenKeys.requisitions()];
+			case 'kitchen_counter':
+				return [kitchenKeys.requisitions()];
 			case 'meal_service':
-				return [kitchenKeys.mealServices()];
-			case 'gas_cylinder_type':
-				return [kitchenKeys.gasCylinderTypes()];
+				return [kitchenKeys.mealServices(), kitchenKeys.mealSessions()];
+			case 'meal_service_receipt':
+				return [kitchenKeys.mealServiceReceipts()];
+			case 'fuel_cylinder':
+				return [kitchenKeys.fuelCylinders()];
 			case 'gas_ledger':
-				return [kitchenKeys.gasLedger()];
+				return [kitchenKeys.gasLedger(), kitchenKeys.requisitions()];
+			case 'stock_ledger':
+				return [kitchenKeys.requisitions()];
 			case 'evacuee':
 			case 'movement':
-				return [kitchenKeys.occupancy()];
+				return [kitchenKeys.occupancy(), kitchenKeys.dietCounts()];
 			default:
 				return [];
 		}

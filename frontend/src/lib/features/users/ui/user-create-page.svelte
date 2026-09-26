@@ -183,7 +183,8 @@
 <Dialog.Root open={credentialsDialogOpen} onOpenChange={onCredentialsOpenChange}>
 	<Dialog.Content class="rounded-2xl p-4 sm:max-w-[460px] sm:p-6">
 		<Dialog.Header>
-			<Dialog.Title class="text-lg font-bold text-emerald-700">สร้างบัญชีเรียบร้อยแล้ว</Dialog.Title>
+			<Dialog.Title class="text-lg font-bold text-emerald-700">สร้างบัญชีเรียบร้อยแล้ว</Dialog.Title
+			>
 			<Dialog.Description class="pt-2 text-sm text-slate-600">
 				คัดลอก Username และรหัสผ่านเพื่อแจ้งผู้ใช้งาน — กดคัดลอกแล้วจะปิดหน้าต่างนี้
 			</Dialog.Description>
@@ -195,7 +196,7 @@
 			<div>
 				<span class="text-xs font-bold tracking-wider text-emerald-800 uppercase">Username</span>
 				<div
-					class="mt-1 break-all font-mono text-lg font-extrabold tracking-wide text-slate-900 select-all"
+					class="mt-1 font-mono text-lg font-extrabold tracking-wide break-all text-slate-900 select-all"
 				>
 					{createdUsername}
 				</div>
@@ -203,7 +204,7 @@
 			<div>
 				<span class="text-xs font-bold tracking-wider text-emerald-800 uppercase">Password</span>
 				<div
-					class="mt-1 break-all font-mono text-lg font-extrabold tracking-wide text-slate-900 select-all"
+					class="mt-1 font-mono text-lg font-extrabold tracking-wide break-all text-slate-900 select-all"
 				>
 					{createdPassword}
 				</div>

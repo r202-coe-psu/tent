@@ -20,7 +20,7 @@ function entry(
 describe('createGasLedgerEntry', () => {
 	it('generates a ulid _id and stamps schema_v 1', () => {
 		const e = createGasLedgerEntry(
-			{ cylinder_id: 'gas_cylinder_type:A', qty_kg: '-1', reason: 'consumption' },
+			{ cylinder_id: 'fuel_cylinder:A', qty_kg: '-1', reason: 'consumption' },
 			ctx
 		);
 		expect(e._id).toMatch(/^gas_ledger:[0-9A-Z]{26}$/);
@@ -30,7 +30,7 @@ describe('createGasLedgerEntry', () => {
 
 	it('defaults ref_id to null when omitted', () => {
 		const e = createGasLedgerEntry(
-			{ cylinder_id: 'gas_cylinder_type:A', qty_kg: '2', reason: 'refill' },
+			{ cylinder_id: 'fuel_cylinder:A', qty_kg: '2', reason: 'refill' },
 			ctx
 		);
 		expect(e.ref_id).toBeNull();
@@ -39,7 +39,7 @@ describe('createGasLedgerEntry', () => {
 	it('carries ref_id through for a consumption entry', () => {
 		const e = createGasLedgerEntry(
 			{
-				cylinder_id: 'gas_cylinder_type:A',
+				cylinder_id: 'fuel_cylinder:A',
 				qty_kg: '-1.5',
 				reason: 'consumption',
 				ref_id: 'meal_plan:X'
@@ -52,10 +52,7 @@ describe('createGasLedgerEntry', () => {
 
 	it('rejects a zero qty_kg (a real event always has a non-zero delta)', () => {
 		expect(() =>
-			createGasLedgerEntry(
-				{ cylinder_id: 'gas_cylinder_type:A', qty_kg: '0', reason: 'refill' },
-				ctx
-			)
+			createGasLedgerEntry({ cylinder_id: 'fuel_cylinder:A', qty_kg: '0', reason: 'refill' }, ctx)
 		).toThrow();
 	});
 
@@ -69,7 +66,7 @@ describe('createGasLedgerEntry', () => {
 	// consumption flow could never legitimately zero out.
 	it('accepts reason "adjust" (write-off addendum)', () => {
 		const e = createGasLedgerEntry(
-			{ cylinder_id: 'gas_cylinder_type:A', qty_kg: '-0.001', reason: 'adjust' },
+			{ cylinder_id: 'fuel_cylinder:A', qty_kg: '-0.001', reason: 'adjust' },
 			ctx
 		);
 		expect(e.reason).toBe('adjust');

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { useQueryClient } from '@tanstack/svelte-query';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { DatePicker } from '$lib/components/ui/date-picker/index.js';
@@ -7,9 +8,11 @@
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { useSupplyItems } from '$lib/features/supply';
 	import { itemMasterUnit, useItemMasters } from '$lib/features/catalog';
+	import { ensureFuelCylinders, kitchenKeys } from '$lib/features/kitchen';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { useLedger, useAdjustStock } from '../application/queries';
+	import { operationsRepository } from '../data/operations.remote';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { toast } from 'svelte-sonner';
 	import Settings from '@lucide/svelte/icons/settings';
@@ -42,6 +45,7 @@
 	const itemMastersQuery = useItemMasters(() => getShelterCode());
 	const ledgerQuery = useLedger();
 	const adjustMutation = useAdjustStock();
+	const queryClient = useQueryClient();
 	const storagePoints = useStoragePoints(() => getShelterCode());
 
 	// Local State
@@ -52,6 +56,7 @@
 		name: string;
 		unit: string;
 		perishable?: boolean;
+		category?: string;
 	} | null>(null);
 	let container = $state<HTMLDivElement | null>(null);
 	let selectedLotKey = $state<string>('');
@@ -116,13 +121,11 @@
 	});
 
 	const currentLot = $derived(itemLots.find((l) => l.key === selectedLotKey));
-	const currentLotQty = $derived(currentLot ? currentLot.qty : '0');
 
 	// Delta Calculation
 	const deltaQty = $derived.by(() => {
 		if (!newQtyInput || isNaN(Number(newQtyInput))) return '0';
-		const base = selectedLotKey === 'new' ? '0' : currentLotQty;
-		return subQty(newQtyInput, base);
+		return adjustmentType === 'add' ? newQtyInput : subQty('0', newQtyInput);
 	});
 
 	// svelte-ignore state_referenced_locally
@@ -138,7 +141,23 @@
 		}
 	});
 
-	const isSubmitting = $derived(adjustMutation.isPending);
+	// Tracks the whole submit flow (ledger write + fuel-cylinder sync), not just
+	// `adjustMutation.isPending` — that alone goes false the instant the ledger
+	// write resolves, re-enabling the submit button while the fuel-cylinder sync
+	// is still running in the background. A user re-clicking in that window
+	// fires a second, overlapping `handleSubmit` that reads the same "before"
+	// cylinder count and races the first one's create — the likely cause of an
+	// adjustment landing without its matching cylinder.
+	let isProcessing = $state(false);
+	const isSubmitting = $derived(adjustMutation.isPending || isProcessing);
+
+	function isFuelEnergyItem(item: { _id: string; category?: string }) {
+		const master = (itemMastersQuery.data ?? []).find((candidate) => candidate._id === item._id);
+		return (
+			item.category === 'item_category:fuel_energy' ||
+			master?.category === 'item_category:fuel_energy'
+		);
+	}
 
 	// Helpers
 	function formatExpiry(expiryStr: string | undefined): string {
@@ -195,12 +214,8 @@
 			toast.error('สินค้าเน่าเสียได้ จำเป็นต้องระบุวันหมดอายุ');
 			return;
 		}
-		if (!newQtyInput || isNaN(Number(newQtyInput)) || Number(newQtyInput) < 0) {
-			toast.error('กรุณาระบุจำนวนใหม่ที่ถูกต้อง (ต้องไม่ติดลบ)');
-			return;
-		}
-		if (deltaQty === '0') {
-			toast.error('จำนวนใหม่เท่ากับจำนวนเดิม ไม่มีความเปลี่ยนแปลง');
+		if (!newQtyInput || isNaN(Number(newQtyInput)) || Number(newQtyInput) <= 0) {
+			toast.error('กรุณาระบุจำนวนรับเข้าที่ถูกต้อง (ต้องมากกว่า 0)');
 			return;
 		}
 		if (!reason.trim()) {
@@ -238,16 +253,69 @@
 			createdBy: authStore.user?.name ?? 'เจ้าหน้าที่คลังสินค้า (Admin)'
 		};
 
-		toast.promise(adjustMutation.mutateAsync({ input, ctx }), {
-			loading: 'กำลังปรับปรุงสต๊อก...',
-			success: () => {
-				clearSelection();
-				if (onsuccess) onsuccess();
-				return 'ปรับปรุงยอดสต๊อกสำเร็จ!';
-			},
-			error: (err: unknown) =>
-				err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการปรับปรุงยอด'
-		});
+		// Covers the whole flow below (ledger write + fuel-cylinder sync), not
+		// just `adjustMutation` — see the comment on `isProcessing`'s declaration.
+		isProcessing = true;
+		try {
+			const loadingToastId = toast.loading('กำลังปรับปรุงสต๊อก...');
+			try {
+				await adjustMutation.mutateAsync({ input, ctx });
+			} catch (err) {
+				toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการปรับปรุงยอด', {
+					id: loadingToastId
+				});
+				return;
+			}
+
+			// The ledger adjustment above already committed — a failure past this
+			// point must never look like the whole action failed (that would invite
+			// a retry and double-count the ledger entry). Report it loud and
+			// separately instead: manual fix at /back-office/kitchen/gas.
+			if (isFuelEnergyItem(selectedItem) && Number(deltaQty) > 0) {
+				try {
+					// Target against the true stock_ledger balance (fresh fetch,
+					// matching what stock-table.svelte displays), not "current
+					// cylinder count + this delta" — the latter never catches up
+					// on a historical shortfall (from a past race/failure), it just
+					// perpetuates the same gap forever since it only ever adds
+					// enough for THIS transaction's delta. `ensureFuelCylinders`
+					// itself re-reads the live cylinder list and serialises calls
+					// per item, so overlapping submits converge instead of racing.
+					const balance = await operationsRepository().getBalance();
+					const targetQty = Number(balance.get(selectedItem._id) ?? '0');
+					const master = (itemMastersQuery.data ?? []).find((im) => im._id === selectedItem?._id);
+					const created = await ensureFuelCylinders(selectedItem._id, targetQty, ctx, {
+						capacityKg: master?.capacity_kg,
+						burnRateKgPerHour: master?.burn_rate_kg_per_hour,
+						timeMultiplier: master?.time_multiplier
+					});
+					if (created > 0) {
+						// The mutation this app otherwise uses for creating cylinders
+						// goes through `useCreateFuelCylinder`, whose cache invalidation
+						// this direct repo call bypasses — without this, the new
+						// cylinder exists in CouchDB but stock-table.svelte's dropdown
+						// keeps showing the stale list until a full page reload.
+						queryClient.invalidateQueries({ queryKey: kitchenKeys.fuelCylinders() });
+					}
+				} catch (err) {
+					console.error('ensureFuelCylinders failed', err);
+					toast.error('ปรับปรุงยอดสต๊อกสำเร็จ แต่สร้างถังแก๊สให้ไม่สำเร็จ', {
+						id: loadingToastId,
+						description: `${err instanceof Error ? err.message : 'เกิดข้อผิดพลาดไม่ทราบสาเหตุ'} — กรุณาสร้างถังแก๊สเพิ่มเองที่หน้าเสบียงครัว (/back-office/kitchen/gas) ให้ครบตามยอดที่เพิ่ม`,
+						duration: Infinity
+					});
+					clearSelection();
+					if (onsuccess) onsuccess();
+					return;
+				}
+			}
+
+			toast.success('ปรับปรุงยอดสต๊อกสำเร็จ!', { id: loadingToastId });
+			clearSelection();
+		} finally {
+			isProcessing = false;
+		}
+		if (onsuccess) onsuccess();
 	}
 
 	/**
@@ -399,8 +467,8 @@
 						<Input
 							id="new-qty"
 							type="number"
-							placeholder="ระบุจำนวนใหม่"
-							min="0"
+							placeholder={adjustmentType === 'add' ? 'เช่น 2' : 'เช่น 1'}
+							min="0.01"
 							step="any"
 							bind:value={newQtyInput}
 							class="pr-16 font-mono font-bold"
@@ -428,13 +496,9 @@
 					class="col-span-1 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border/50 bg-muted/40 p-4 sm:col-span-2"
 				>
 					<div class="flex flex-col gap-0.5">
-						<span class="text-xs font-medium text-muted-foreground">คำนวณการปรับยอด (Delta):</span>
-						{#if selectedLotKey !== 'new'}
-							<span class="text-2xs text-muted-foreground/80">
-								(ยอดเดิมในคลัง: {currentLotQty}
-								{selectedItem.unit})
-							</span>
-						{/if}
+						<span class="text-xs font-medium text-muted-foreground">
+							{adjustmentType === 'add' ? 'ยอดรับเข้าคลัง:' : 'ยอดตัดออกจากคลัง:'}
+						</span>
 					</div>
 					<div class="flex items-center gap-3">
 						<span

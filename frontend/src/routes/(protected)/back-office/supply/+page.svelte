@@ -38,6 +38,8 @@
 		url.searchParams.set('tab', tab);
 		goto(url, { replaceState: true, keepFocus: true, noScroll: true });
 	}
+
+	const initialCategory = $derived(page.url.searchParams.get('category') ?? undefined);
 </script>
 
 <svelte:head>
@@ -112,7 +114,7 @@
 	<!-- Dynamic Tab Content -->
 	{#if activeTab === 'inventory'}
 		<div class="animate-in duration-300 fade-in slide-in-from-bottom-2">
-			<StockTable {occupancy} />
+			<StockTable {occupancy} {initialCategory} />
 		</div>
 	{:else if activeTab === 'sphere'}
 		<div class="animate-in duration-300 fade-in slide-in-from-bottom-2">

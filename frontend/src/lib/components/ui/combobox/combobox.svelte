@@ -17,6 +17,7 @@
 		disabled = false,
 		controlProps = {},
 		children: itemSnippet,
+		onValueChange,
 		...restProps
 	}: {
 		items: T[];
@@ -39,6 +40,7 @@
 	function onSelect(item: T) {
 		value = item.value;
 		open = false;
+		onValueChange?.(item.value);
 		tick().then(() => triggerRef.focus());
 	}
 

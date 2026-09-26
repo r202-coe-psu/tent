@@ -6,21 +6,29 @@ import { getShelterDb } from '$lib/db/shelter';
 import {
 	createMealPlan,
 	createKitchenRequisition,
+	createPendingRequisition,
+	createMealSession,
 	createMealService,
-	createGasCylinderType,
-	gasCylinderTypeInputSchema,
+	createMealServiceReceipt,
+	createFuelCylinder,
+	fuelCylinderInputSchema,
 	isMealPlan,
 	isKitchenRequisition,
 	isMealService,
-	isGasCylinderType,
+	isMealServiceReceipt,
+	isFuelCylinder,
+	isMealSession,
 	type MealPlan,
 	type MealPlanInput,
 	type KitchenRequisition,
 	type KitchenRequisitionInput,
 	type MealService,
 	type MealServiceInput,
-	type GasCylinderType,
-	type GasCylinderTypeInput
+	type MealServiceReceipt,
+	type FuelCylinder,
+	type FuelCylinderInput,
+	type MealSession,
+	type MealSessionInput
 } from '../domain/kitchen';
 import {
 	createGasLedgerEntry,
@@ -35,8 +43,12 @@ import {
 	isStockLedger,
 	type StockLedger
 } from '$lib/features/operations';
-import { qtyGt, qtyLte, qtyNeg } from '$lib/utils/qty';
-import type { KitchenRepository } from './kitchen.repository';
+import { persistQty, qtyGt, qtyLte, qtyNeg } from '$lib/utils/qty';
+import type {
+	KitchenRepository,
+	CreatePendingRequisitionParams,
+	ApproveRequisitionOptions
+} from './kitchen.repository';
 
 export class KitchenRemoteRepository implements KitchenRepository {
 	private readonly dbName: string;
@@ -47,6 +59,30 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		this.repo = createRemoteRepository(dbName);
 	}
 
+	createMealSession(input: MealSessionInput, ctx: AuthorContext): Promise<MealSession> {
+		return this.repo.put(createMealSession(input, ctx));
+	}
+
+	getMealSessionById(id: string): Promise<MealSession | null> {
+		return this.repo.get<MealSession>(id);
+	}
+
+	listMealSessions(): Promise<MealSession[]> {
+		return this.repo.allByType('meal_session', isMealSession);
+	}
+
+	async updateMealSession(
+		session: MealSession,
+		patch: Partial<MealSessionInput>
+	): Promise<MealSession> {
+		const next = { ...touch(session), ...patch };
+		return this.repo.put(next);
+	}
+
+	async deleteMealSession(session: MealSession): Promise<void> {
+		await this.repo.remove(session);
+	}
+
 	createMealPlan(input: MealPlanInput, ctx: AuthorContext): Promise<MealPlan> {
 		return this.repo.put(createMealPlan(input, ctx));
 	}
@@ -55,9 +91,7 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		return this.repo.get<MealPlan>(id);
 	}
 
-	// @deprecated Ambiguous once multiple plans can share a date+meal — returns
-	// whichever `allByType` yields first. Prefer getMealPlanById when the specific
-	// plan is known; kept only for callers that still key off date+meal.
+	// Find first meal plan matching date and meal period. Prefer getMealPlanById.
 	async getMealPlan(date: string, meal: string): Promise<MealPlan | null> {
 		const plans = await this.listMealPlans();
 		return plans.find((p) => p.date === date && p.meal === meal) ?? null;
@@ -86,15 +120,12 @@ export class KitchenRemoteRepository implements KitchenRepository {
 			}
 		}
 
-		// Gas (CR-085) — the plan being requisitioned may carry a planned draw
-		// from real cylinders. Checked against every OTHER pending validation
-		// before anything is written, so a shortfall here blocks the whole
-		// requisition exactly like an insufficient food item does above.
+		// Verify sufficient gas cylinder balance for planned consumption.
 		const plan = input.meal_plan_id ? await this.getMealPlanById(input.meal_plan_id) : null;
 		const gasUsage = plan?.gas_usage ?? [];
 		if (gasUsage.length > 0) {
 			const [types, gasLedger] = await Promise.all([
-				this.listGasCylinderTypes(),
+				this.listFuelCylinders(),
 				this.listGasLedger()
 			]);
 			for (const g of gasUsage) {
@@ -111,11 +142,7 @@ export class KitchenRemoteRepository implements KitchenRepository {
 			}
 		}
 
-		// The requisition stores its ledger `_id`s, so they must exist before either
-		// doc is built — mint the ULIDs first, then hand each one to
-		// `createStockLedger` (CR-055 R7: no writer assembles a ledger doc by hand,
-		// or it escapes the reason ↔ ref_id invariant). `occurred_at` is passed
-		// explicitly so every row of one requisition shares a timestamp.
+		// Mint ledger document IDs before saving requisition and ledger entries.
 		const ledgerUlids = issuedItems.map(() => ulid());
 		const ledgerIds = ledgerUlids.map((id) => makeDocId('stock_ledger', id));
 		const requisition = createKitchenRequisition(input, ledgerIds, ctx);
@@ -154,32 +181,252 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		return this.repo.allByType('kitchen_requisition', isKitchenRequisition);
 	}
 
-	// One recorded service per plan: ulid _id lost the idempotence the old
-	// deterministic id gave, so a double-submit/race could otherwise write two
-	// services for the same meal_plan_id (summary would then double-count). This
-	// repo-level guard rejects the second write — a real uniqueness check, not
-	// just the UI button's isPending. Only guards plan-linked services; a
-	// planless service (meal_plan_id null) has no plan to be unique against.
+	getKitchenRequisitionById(id: string): Promise<KitchenRequisition | null> {
+		return this.repo.get<KitchenRequisition>(id);
+	}
+
+	async createPendingRequisition(
+		params: CreatePendingRequisitionParams,
+		ctx: AuthorContext
+	): Promise<{ plan?: MealPlan; requisition: KitchenRequisition }> {
+		let planDoc: MealPlan | undefined;
+		if (params.planInput) {
+			planDoc = createMealPlan(params.planInput, ctx);
+		}
+
+		const mealPlanId = planDoc ? planDoc._id : (params.requisitionInput.meal_plan_id ?? null);
+		const requisitionDoc = createPendingRequisition(
+			{
+				...params.requisitionInput,
+				meal_plan_id: mealPlanId
+			},
+			ctx
+		);
+
+		const docsToWrite = [...(planDoc ? [planDoc] : []), requisitionDoc];
+		await bulkDocs(this.dbName, docsToWrite);
+		return { plan: planDoc, requisition: requisitionDoc };
+	}
+
+	async approveKitchenRequisition(
+		requisitionId: string,
+		approver: string,
+		options?: ApproveRequisitionOptions,
+		ctx?: AuthorContext
+	): Promise<KitchenRequisition> {
+		const authCtx: AuthorContext = ctx ?? {
+			shelterCode: this.dbName.replace(/^shelter_/, '').toUpperCase(),
+			createdBy: approver
+		};
+		const requisition = await this.getKitchenRequisitionById(requisitionId);
+		if (!requisition) {
+			throw new Error(`approveKitchenRequisition: requisition ${requisitionId} not found`);
+		}
+		if (requisition.status !== 'pending') {
+			throw new Error(
+				`approveKitchenRequisition: requisition ${requisition._id} is already ${requisition.status}`
+			);
+		}
+
+		// 1. Update items with partial_items if supplied, or default qty_issued = qty_requested
+		const updatedItems = requisition.items.map((item) => {
+			const partial = options?.partial_items?.find((p) => p.item_id === item.item_id);
+			const issued = partial ? partial.qty_issued : item.qty_requested;
+			return {
+				...item,
+				qty_issued: persistQty(issued)
+			};
+		});
+
+		// 2. Update gas_drawdown if switched_gas provided
+		let updatedGas = requisition.gas_drawdown ?? [];
+		if (options?.switched_gas && options.switched_gas.length > 0) {
+			updatedGas = options.switched_gas.map((g) => ({
+				cylinder_id: g.cylinder_id,
+				qty_kg: persistQty(g.qty_kg)
+			}));
+		}
+
+		// 3. Check stock balance
+		const issuedItems = updatedItems.filter((i) => qtyGt(i.qty_issued, '0'));
+		if (issuedItems.length > 0) {
+			const ledger = await this.repo.allByType<StockLedger>('stock_ledger', isStockLedger);
+			const balance = stockBalance(ledger);
+			for (const item of issuedItems) {
+				const onHand = balance.get(item.item_id) ?? '0';
+				if (qtyGt(item.qty_issued, onHand)) {
+					throw new Error(
+						`approveKitchenRequisition: cannot issue ${item.qty_issued} ${item.unit} of ${item.item_id} — only ${onHand} on hand`
+					);
+				}
+			}
+		}
+
+		// 4. Check gas balance
+		if (updatedGas.length > 0) {
+			const [types, gasLedger] = await Promise.all([
+				this.listFuelCylinders(),
+				this.listGasLedger()
+			]);
+			for (const g of updatedGas) {
+				const cyl = types.find((t) => t._id === g.cylinder_id);
+				if (!cyl) {
+					throw new Error(`approveKitchenRequisition: gas cylinder ${g.cylinder_id} not found`);
+				}
+				const remaining = gasCylinderBalance(gasLedger, g.cylinder_id, cyl.capacity_kg);
+				if (qtyGt(g.qty_kg, remaining)) {
+					throw new Error(
+						`approveKitchenRequisition: cannot draw ${g.qty_kg} kg from "${cyl.name}" — only ${remaining} kg remaining`
+					);
+				}
+			}
+		}
+
+		// 5. Generate stock ledger entries
+		const ts = now();
+		const stockLedgerUlids = issuedItems.map(() => ulid());
+		const stockLedgerIds = stockLedgerUlids.map((id) => makeDocId('stock_ledger', id));
+		const stockLedgerEntries = issuedItems.map((item, i) =>
+			createStockLedger(
+				{
+					item_id: item.item_id,
+					qty: qtyNeg(item.qty_issued),
+					unit: item.unit,
+					reason: 'requisition',
+					ref_id: requisition._id,
+					occurred_at: ts
+				},
+				authCtx,
+				stockLedgerUlids[i]
+			)
+		);
+
+		// 6. Generate gas ledger entries
+		const gasLedgerEntries = updatedGas.map((g) =>
+			createGasLedgerEntry(
+				{
+					cylinder_id: g.cylinder_id,
+					qty_kg: qtyNeg(g.qty_kg),
+					reason: 'consumption',
+					ref_id: requisition._id
+				},
+				authCtx
+			)
+		);
+		const gasLedgerIds = gasLedgerEntries.map((g) => g._id);
+		const allLedgerIds = [...stockLedgerIds, ...gasLedgerIds];
+
+		// 7. Update requisition doc
+		const approvedRequisition: KitchenRequisition = {
+			...requisition,
+			status: 'approved',
+			items: updatedItems,
+			gas_drawdown: updatedGas,
+			ledger_ids: allLedgerIds,
+			approved_at: ts,
+			approved_by: approver || authCtx.createdBy || 'warehouse_staff',
+			updated_at: ts
+		};
+
+		// 8. If linked to meal_plan, confirm the meal_plan
+		let confirmedPlan: MealPlan | null = null;
+		if (requisition.meal_plan_id) {
+			const plan = await this.getMealPlanById(requisition.meal_plan_id);
+			if (plan && plan.status === 'draft') {
+				confirmedPlan = { ...touch(plan), status: 'confirmed' };
+			}
+		}
+
+		await bulkDocs(this.dbName, [
+			approvedRequisition,
+			...stockLedgerEntries,
+			...gasLedgerEntries,
+			...(confirmedPlan ? [confirmedPlan] : [])
+		]);
+
+		return approvedRequisition;
+	}
+
+	async rejectKitchenRequisition(
+		requisitionId: string,
+		reason: string,
+		ctx: AuthorContext
+	): Promise<KitchenRequisition> {
+		void ctx;
+		const requisition = await this.getKitchenRequisitionById(requisitionId);
+		if (!requisition) {
+			throw new Error(`rejectKitchenRequisition: requisition ${requisitionId} not found`);
+		}
+		if (requisition.status !== 'pending') {
+			throw new Error(
+				`rejectKitchenRequisition: requisition ${requisition._id} is already ${requisition.status}`
+			);
+		}
+		const rejectedRequisition: KitchenRequisition = {
+			...touch(requisition),
+			status: 'rejected',
+			reject_reason: reason
+		};
+		return this.repo.put(rejectedRequisition);
+	}
+
+	// Ensures only one *active* meal service exists per meal plan — a rejected
+	// service (CR-145) may be superseded by re-recording.
 	async recordMealService(input: MealServiceInput, ctx: AuthorContext): Promise<MealService> {
 		if (input.meal_plan_id) {
 			const existing = await this.getMealServiceByPlanId(input.meal_plan_id);
 			if (existing) {
-				throw new Error('recordMealService: a service is already recorded for this meal plan');
+				const receipts = await this.listMealServiceReceipts();
+				const receipt = receipts.find((r) => r.meal_service_id === existing._id);
+				if (!receipt || receipt.outcome !== 'rejected') {
+					throw new Error('recordMealService: a service is already recorded for this meal plan');
+				}
 			}
 		}
-		return this.repo.put(createMealService(input, ctx));
+		const service = createMealService(input, ctx);
+		const plan = input.meal_plan_id ? await this.getMealPlanById(input.meal_plan_id) : null;
+		const gasUsage = plan?.gas_usage ?? [];
+		if (gasUsage.length === 0) return this.repo.put(service);
+
+		const [cylinders, gasLedger] = await Promise.all([
+			this.listFuelCylinders(),
+			this.listGasLedger()
+		]);
+		for (const usage of gasUsage) {
+			const cylinder = cylinders.find((item) => item._id === usage.cylinder_id);
+			if (!cylinder)
+				throw new Error(`recordMealService: gas cylinder ${usage.cylinder_id} not found`);
+			const remaining = gasCylinderBalance(gasLedger, cylinder._id, cylinder.capacity_kg);
+			if (qtyGt(usage.consumption_kg, remaining)) {
+				throw new Error(
+					`recordMealService: cannot consume ${usage.consumption_kg} kg from "${cylinder.name}" — only ${remaining} kg remaining`
+				);
+			}
+		}
+		const gasLedgerEntries = gasUsage.map((usage) =>
+			createGasLedgerEntry(
+				{
+					cylinder_id: usage.cylinder_id,
+					qty_kg: qtyNeg(usage.consumption_kg),
+					reason: 'consumption',
+					ref_id: plan?._id ?? null
+				},
+				ctx
+			)
+		);
+		await bulkDocs(this.dbName, [service, ...gasLedgerEntries]);
+		return service;
 	}
 
-	// Looks up the service recorded against a specific plan (the reliable join now
-	// that multiple plans share a date+meal). Returns null when none exists yet.
+	// Finds the latest meal service recorded for a specific meal plan (ulid
+	// order — listMealServices() is already sorted ascending by _id).
 	async getMealServiceByPlanId(mealPlanId: string): Promise<MealService | null> {
 		const services = await this.listMealServices();
-		return services.find((s) => s.meal_plan_id === mealPlanId) ?? null;
+		const matches = services.filter((s) => s.meal_plan_id === mealPlanId);
+		return matches.length > 0 ? matches[matches.length - 1] : null;
 	}
 
-	// @deprecated Ambiguous when more than one meal_service shares the date+meal
-	// (each plan for a slot gets its own record) — returns whichever
-	// `listMealServices` yields first. Prefer getMealServiceByPlanId.
+	// Finds first meal service matching date and meal period. Prefer getMealServiceByPlanId.
 	async getMealService(date: string, meal: string): Promise<MealService | null> {
 		const services = await this.listMealServices();
 		return services.find((s) => s.date === date && s.meal === meal) ?? null;
@@ -189,11 +436,52 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		return this.repo.allByType('meal_service', isMealService);
 	}
 
+	// Ensures only one receipt decision exists per meal_service (idempotency guard).
+	private async assertNoExistingReceipt(mealServiceId: string): Promise<void> {
+		const receipts = await this.listMealServiceReceipts();
+		if (receipts.some((r) => r.meal_service_id === mealServiceId)) {
+			throw new Error(`meal_service ${mealServiceId} already has a receipt decision`);
+		}
+	}
+
+	async confirmMealServiceReceipt(
+		mealServiceId: string,
+		ctx: AuthorContext
+	): Promise<MealServiceReceipt> {
+		await this.assertNoExistingReceipt(mealServiceId);
+		return this.repo.put(createMealServiceReceipt(mealServiceId, 'confirmed', ctx));
+	}
+
+	async rejectMealServiceReceipt(
+		mealServiceId: string,
+		reason: string,
+		ctx: AuthorContext
+	): Promise<MealServiceReceipt> {
+		await this.assertNoExistingReceipt(mealServiceId);
+		return this.repo.put(createMealServiceReceipt(mealServiceId, 'rejected', ctx, reason));
+	}
+
+	listMealServiceReceipts(): Promise<MealServiceReceipt[]> {
+		return this.repo.allByType('meal_service_receipt', isMealServiceReceipt);
+	}
+
 	async confirmMealPlan(plan: MealPlan): Promise<MealPlan> {
 		if (plan.status !== 'draft') {
 			throw new Error('confirmMealPlan: only draft plans can be confirmed');
 		}
 		return this.repo.put({ ...touch(plan), status: 'confirmed' });
+	}
+
+	async updateMealPlanGasUsage(
+		plan: MealPlan,
+		gasUsage: NonNullable<MealPlan['gas_usage']>,
+		cookingStartedAt?: MealPlan['cooking_started_at']
+	): Promise<MealPlan> {
+		const next = { ...touch(plan) };
+		if (gasUsage.length > 0) next.gas_usage = gasUsage;
+		else delete next.gas_usage;
+		if (cookingStartedAt) next.cooking_started_at = cookingStartedAt;
+		return this.repo.put(next);
 	}
 
 	async updateMealPlanDraft(
@@ -207,8 +495,29 @@ export class KitchenRemoteRepository implements KitchenRepository {
 			throw new Error('updateMealPlanDraft: only draft plans can be edited');
 		}
 		const next = { ...touch(plan), ...patch };
-		// An explicit `undefined` in the patch means "clear it" — drop the key so
-		// the stored doc loses the old value instead of keeping it.
+		// Delete keys explicitly set to undefined in patch.
+		if (patch.label === undefined) delete next.label;
+		if (patch.gas_usage === undefined) delete next.gas_usage;
+		return this.repo.put(next);
+	}
+
+	async updateConfirmedMealPlan(
+		plan: MealPlan,
+		patch: Pick<
+			MealPlan,
+			| 'headcount'
+			| 'recipes'
+			| 'calc_source'
+			| 'label'
+			| 'gas_usage'
+			| 'target_tags'
+			| 'allocated_target'
+		>
+	): Promise<MealPlan> {
+		if (plan.status !== 'confirmed') {
+			throw new Error('updateConfirmedMealPlan: only confirmed plans can be edited this way');
+		}
+		const next = { ...touch(plan), ...patch };
 		if (patch.label === undefined) delete next.label;
 		if (patch.gas_usage === undefined) delete next.gas_usage;
 		return this.repo.put(next);
@@ -221,23 +530,20 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		await this.repo.remove(plan);
 	}
 
-	createGasCylinderType(input: GasCylinderTypeInput, ctx: AuthorContext): Promise<GasCylinderType> {
-		return this.repo.put(createGasCylinderType(input, ctx));
+	createFuelCylinder(input: FuelCylinderInput, ctx: AuthorContext): Promise<FuelCylinder> {
+		return this.repo.put(createFuelCylinder(input, ctx));
 	}
 
-	listGasCylinderTypes(): Promise<GasCylinderType[]> {
-		return this.repo.allByType('gas_cylinder_type', isGasCylinderType);
+	listFuelCylinders(): Promise<FuelCylinder[]> {
+		return this.repo.allByType('fuel_cylinder', isFuelCylinder);
 	}
 
-	updateGasCylinderType(
-		doc: GasCylinderType,
-		input: GasCylinderTypeInput
-	): Promise<GasCylinderType> {
-		const d = gasCylinderTypeInputSchema.parse(input);
+	updateFuelCylinder(doc: FuelCylinder, input: FuelCylinderInput): Promise<FuelCylinder> {
+		const d = fuelCylinderInputSchema.parse(input);
 		return this.repo.put(touch({ ...doc, ...d }));
 	}
 
-	async deleteGasCylinderType(doc: GasCylinderType): Promise<void> {
+	async deleteFuelCylinder(doc: FuelCylinder): Promise<void> {
 		await this.repo.remove(doc);
 	}
 
@@ -250,10 +556,7 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		qtyKg: string,
 		ctx: AuthorContext
 	): Promise<GasLedgerEntry> {
-		const [types, gasLedger] = await Promise.all([
-			this.listGasCylinderTypes(),
-			this.listGasLedger()
-		]);
+		const [types, gasLedger] = await Promise.all([this.listFuelCylinders(), this.listGasLedger()]);
 		const cyl = types.find((t) => t._id === cylinderId);
 		if (!cyl) {
 			throw new Error(`refillGasCylinder: cylinder ${cylinderId} not found`);
@@ -271,10 +574,7 @@ export class KitchenRemoteRepository implements KitchenRepository {
 	}
 
 	async writeOffGasCylinder(cylinderId: string, ctx: AuthorContext): Promise<GasLedgerEntry> {
-		const [types, gasLedger] = await Promise.all([
-			this.listGasCylinderTypes(),
-			this.listGasLedger()
-		]);
+		const [types, gasLedger] = await Promise.all([this.listFuelCylinders(), this.listGasLedger()]);
 		const cyl = types.find((t) => t._id === cylinderId);
 		if (!cyl) {
 			throw new Error(`writeOffGasCylinder: cylinder ${cylinderId} not found`);

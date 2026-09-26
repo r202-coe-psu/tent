@@ -98,7 +98,10 @@
 				qty_per_person: undefined,
 				returnable: false,
 				asset_status: 'READY',
-				deactivated: false
+				deactivated: false,
+				capacity_kg: '',
+				burn_rate_kg_per_hour: '',
+				time_multiplier: '1'
 			},
 			getValidationAdapter()
 		),
@@ -133,16 +136,39 @@
 					submitData.default_inventory_uom = validated.data.default_inventory_uom || undefined;
 					submitData.default_issue_uom = validated.data.default_issue_uom || undefined;
 					submitData.distribution_type = validated.data.distribution_type;
-					submitData.shelf_life_days = validated.data.shelf_life_days;
-					submitData.storage_type = validated.data.storage_type;
-					submitData.allergens = validated.data.allergens || undefined;
-					submitData.target_gender = validated.data.target_gender;
-					submitData.age_group = validated.data.age_group;
-					submitData.dietary = validated.data.dietary;
 
 					delete submitData.qty_per_person;
 					delete submitData.returnable;
 					delete submitData.asset_status;
+
+					if (validated.data.category === 'item_category:fuel_energy') {
+						// FUEL_ENERGY contract (CR-119/120/125): lock base_unit, hide/don't
+						// persist unrelated food/distribution fields, persist fuel spec.
+						submitData.base_unit = 'cylinder';
+						submitData.fuel_type = 'LPG';
+						submitData.capacity_kg = validated.data.capacity_kg || undefined;
+						submitData.burn_rate_kg_per_hour = validated.data.burn_rate_kg_per_hour || undefined;
+						submitData.time_multiplier = validated.data.time_multiplier || '1';
+
+						delete submitData.shelf_life_days;
+						delete submitData.storage_type;
+						delete submitData.allergens;
+						delete submitData.target_gender;
+						delete submitData.age_group;
+						submitData.dietary = [];
+					} else {
+						submitData.shelf_life_days = validated.data.shelf_life_days;
+						submitData.storage_type = validated.data.storage_type;
+						submitData.allergens = validated.data.allergens || undefined;
+						submitData.target_gender = validated.data.target_gender;
+						submitData.age_group = validated.data.age_group;
+						submitData.dietary = validated.data.dietary;
+
+						delete submitData.fuel_type;
+						delete submitData.capacity_kg;
+						delete submitData.burn_rate_kg_per_hour;
+						delete submitData.time_multiplier;
+					}
 				} else if (validated.data.type_class === 'DURABLE') {
 					submitData.base_unit = validated.data.base_unit;
 					submitData.conversions = conversions;
@@ -159,6 +185,10 @@
 					delete submitData.allergens;
 					submitData.dietary = [];
 					delete submitData.asset_status;
+					delete submitData.fuel_type;
+					delete submitData.capacity_kg;
+					delete submitData.burn_rate_kg_per_hour;
+					delete submitData.time_multiplier;
 				} else if (validated.data.type_class === 'EQUIPMENT') {
 					submitData.base_unit = validated.data.base_unit || 'piece';
 					submitData.asset_status = validated.data.asset_status || 'READY';
@@ -175,6 +205,10 @@
 					submitData.dietary = [];
 					delete submitData.qty_per_person;
 					delete submitData.returnable;
+					delete submitData.fuel_type;
+					delete submitData.capacity_kg;
+					delete submitData.burn_rate_kg_per_hour;
+					delete submitData.time_multiplier;
 				}
 
 				if (isEdit) {
@@ -265,6 +299,9 @@
 			$formData.returnable = item.returnable ?? false;
 			$formData.asset_status = item.asset_status || 'READY';
 			$formData.deactivated = item.deactivated ?? false;
+			$formData.capacity_kg = item.capacity_kg || '';
+			$formData.burn_rate_kg_per_hour = item.burn_rate_kg_per_hour || '';
+			$formData.time_multiplier = item.time_multiplier || '1';
 		}
 	});
 
@@ -696,7 +733,72 @@
 				</section>
 			{/if}
 
-			{#if $formData.type_class === 'CONSUMABLE' || $formData.type_class === 'DURABLE' || $formData.type_class === 'EQUIPMENT'}
+			{#if isFuelEnergy}
+				<section class={sectionClass}>
+					<h2 class="text-sm font-bold text-foreground">เชื้อเพลิงและพลังงาน</h2>
+
+					<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+						<Form.Field {form} name="capacity_kg" class={fieldClass}>
+							<Form.Control>
+								{#snippet children({ props })}
+									<Form.Label class="text-sm font-semibold">
+										ความจุถัง (กก.) <span class="text-destructive">*</span>
+									</Form.Label>
+									<Input
+										{...props}
+										type="number"
+										step="any"
+										min={0}
+										bind:value={$formData.capacity_kg}
+										class="h-11 rounded-xl"
+									/>
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors class="text-xs font-semibold text-destructive" />
+						</Form.Field>
+
+						<Form.Field {form} name="burn_rate_kg_per_hour" class={fieldClass}>
+							<Form.Control>
+								{#snippet children({ props })}
+									<Form.Label class="text-sm font-semibold">
+										อัตราสิ้นเปลืองแก๊ส (กก./ชม.) <span class="text-destructive">*</span>
+									</Form.Label>
+									<Input
+										{...props}
+										type="number"
+										step="any"
+										min={0}
+										bind:value={$formData.burn_rate_kg_per_hour}
+										class="h-11 rounded-xl"
+									/>
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors class="text-xs font-semibold text-destructive" />
+						</Form.Field>
+
+						<Form.Field {form} name="time_multiplier" class={fieldClass}>
+							<Form.Control>
+								{#snippet children({ props })}
+									<Form.Label class="text-sm font-semibold"
+										>ตัวคูณเวลาปรุง (Time Multiplier)</Form.Label
+									>
+									<Input
+										{...props}
+										type="number"
+										step="any"
+										min={0}
+										bind:value={$formData.time_multiplier}
+										class="h-11 rounded-xl"
+									/>
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors class="text-xs font-semibold text-destructive" />
+						</Form.Field>
+					</div>
+				</section>
+			{/if}
+
+			{#if !isFuelEnergy && ($formData.type_class === 'CONSUMABLE' || $formData.type_class === 'DURABLE' || $formData.type_class === 'EQUIPMENT')}
 				<details class="rounded-xl border border-border open:bg-muted/20" open={!compact}>
 					<summary class="cursor-pointer px-4 py-3 text-sm font-semibold">
 						รายละเอียดเพิ่มเติม

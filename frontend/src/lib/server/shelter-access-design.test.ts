@@ -664,11 +664,49 @@ describe('buildValidateDocUpdate', () => {
 				'meal_plan',
 				'kitchen_requisition',
 				'meal_service',
-				'gas_cylinder_type',
-				'gas_ledger'
+				'fuel_cylinder',
+				'gas_ledger',
+				'meal_service_receipt'
 			] as const) {
 				expect(validateFn).toContain(`'${type}'`);
 			}
+		});
+
+		// CR-144/CR-145: no role gate documented for this — any authenticated
+		// shelter-scoped user may write it (role separation is UI-only via the
+		// dedicated /back-office/kitchen/receive-stock page, not CouchDB-enforced).
+		it('accepts a new meal_service_receipt from any shelter-scoped role', () => {
+			expect(() =>
+				compile()(
+					{
+						_id: 'meal_service_receipt:01J',
+						type: 'meal_service_receipt',
+						...envelope,
+						schema_v: 1,
+						meal_service_id: 'meal_service:01J',
+						outcome: 'confirmed',
+						received_by: 'reg'
+					},
+					null,
+					REGISTRATION
+				)
+			).not.toThrow();
+		});
+
+		it('rejects updating an existing meal_service_receipt (append-only)', () => {
+			const receipt = {
+				_id: 'meal_service_receipt:01J',
+				type: 'meal_service_receipt',
+				...envelope,
+				schema_v: 1,
+				meal_service_id: 'meal_service:01J',
+				outcome: 'confirmed',
+				received_by: 'reg'
+			};
+			expectForbidden(
+				() => compile()({ ...receipt, outcome: 'rejected' }, receipt, REGISTRATION),
+				/Cannot update append-only meal_service_receipt/
+			);
 		});
 
 		it('accepts a new meal_plan from kitchen_staff', () => {
@@ -690,14 +728,16 @@ describe('buildValidateDocUpdate', () => {
 			).not.toThrow();
 		});
 
-		it('accepts a new gas_cylinder_type from kitchen_staff', () => {
+		it('accepts a new fuel_cylinder from kitchen_staff', () => {
 			expect(() =>
 				compile()(
 					{
-						_id: 'gas_cylinder_type:01J',
-						type: 'gas_cylinder_type',
+						_id: 'fuel_cylinder:01J',
+						type: 'fuel_cylinder',
 						...envelope,
-						schema_v: 2,
+						schema_v: 1,
+						item_master_id: 'item_master:lpg_15kg',
+						cylinder_code: 'LPG-01',
 						name: 'ถังทดสอบ',
 						capacity_kg: '15',
 						burn_rate_kg_per_hour: '0.5',
@@ -717,7 +757,7 @@ describe('buildValidateDocUpdate', () => {
 						type: 'gas_ledger',
 						...envelope,
 						schema_v: 1,
-						cylinder_id: 'gas_cylinder_type:01J',
+						cylinder_id: 'fuel_cylinder:01J',
 						qty_kg: '-2',
 						reason: 'consumption',
 						ref_id: null,
@@ -729,7 +769,11 @@ describe('buildValidateDocUpdate', () => {
 			).not.toThrow();
 		});
 
-		it.each(['kitchen_requisition', 'meal_service', 'gas_ledger'])(
+		it.each(['meal_session', 'kitchen_counter'])('includes %s in the allowed whitelist', (type) => {
+			expect(buildValidateDocUpdate('SH001')).toContain(`'${type}'`);
+		});
+
+		it.each(['meal_service', 'gas_ledger'])(
 			'rejects updating an existing %s (append-only)',
 			(type) => {
 				const doc = { ...envelope, schema_v: 1, _id: `${type}:01J`, type };
@@ -739,6 +783,31 @@ describe('buildValidateDocUpdate', () => {
 				);
 			}
 		);
+
+		it('allows updating a pending kitchen_requisition', () => {
+			const doc = {
+				...envelope,
+				schema_v: 3,
+				_id: 'kitchen_requisition:01J',
+				type: 'kitchen_requisition',
+				status: 'pending'
+			};
+			expect(() => compile()({ ...doc, status: 'approved' }, doc, KITCHEN)).not.toThrow();
+		});
+
+		it('rejects updating an approved kitchen_requisition', () => {
+			const doc = {
+				...envelope,
+				schema_v: 3,
+				_id: 'kitchen_requisition:01J',
+				type: 'kitchen_requisition',
+				status: 'approved'
+			};
+			expectForbidden(
+				() => compile()({ ...doc, touched: true }, doc, KITCHEN),
+				/Cannot update finalized kitchen_requisition/
+			);
+		});
 
 		it.each(['kitchen_requisition', 'meal_service', 'gas_ledger'])(
 			'rejects deleting an existing %s (append-only)',
@@ -751,12 +820,14 @@ describe('buildValidateDocUpdate', () => {
 			}
 		);
 
-		it('allows updating an existing gas_cylinder_type (mutable, LWW)', () => {
+		it('allows updating an existing fuel_cylinder (mutable, LWW)', () => {
 			const doc = {
 				...envelope,
-				schema_v: 2,
-				_id: 'gas_cylinder_type:01J',
-				type: 'gas_cylinder_type',
+				schema_v: 1,
+				_id: 'fuel_cylinder:01J',
+				type: 'fuel_cylinder',
+				item_master_id: 'item_master:lpg_15kg',
+				cylinder_code: 'LPG-01',
 				name: 'ถังทดสอบ',
 				capacity_kg: '15',
 				burn_rate_kg_per_hour: '0.5',
@@ -1973,6 +2044,395 @@ describe('buildValidateDocUpdate', () => {
 				() => compile()(mutated, validGuard, REGISTRATION),
 				/Cannot change evacuee_id on one-time guard/
 			);
+		});
+
+		it('CR-119: rejects delete and immutable field mutations on protected item_category', () => {
+			const protectedCategory: Doc = {
+				_id: 'item_category:food',
+				type: 'item_category',
+				schema_v: 2,
+				shelter_code: 'SH001',
+				name: 'อาหารและวัตถุดิบ (Food Ingredients)',
+				system_key: 'FOOD',
+				default_class: 'CONSUMABLE',
+				description: 'คำอธิบายเดิม',
+				is_protected: true,
+				created_at: '2026-09-15T00:00:00.000Z',
+				updated_at: '2026-09-15T00:00:00.000Z',
+				created_by: 'system'
+			};
+
+			const sysAdmin: UserCtx = { name: 'sa', roles: ['system_admin'] };
+
+			// 1. Delete rejection
+			expectForbidden(
+				() => compile()({ _id: 'item_category:food', _deleted: true }, protectedCategory, sysAdmin),
+				/Cannot delete system protected category/
+			);
+
+			// 2. system_key immutable
+			expectForbidden(
+				() => compile()({ ...protectedCategory, system_key: 'WATER' }, protectedCategory, sysAdmin),
+				/system_key is immutable on protected categories/
+			);
+
+			// 3. default_class is editable (CR-140 amends CR-119 FR-04)
+			expect(() =>
+				compile()({ ...protectedCategory, default_class: 'DURABLE' }, protectedCategory, sysAdmin)
+			).not.toThrow();
+
+			// 4. is_protected flag removal rejected
+			expectForbidden(
+				() => compile()({ ...protectedCategory, is_protected: false }, protectedCategory, sysAdmin),
+				/is_protected flag cannot be removed/
+			);
+
+			// 5. Updating name or description is permitted
+			expect(() =>
+				compile()(
+					{
+						...protectedCategory,
+						name: 'อาหารและวัตถุดิบสด',
+						description: 'คำอธิบายปรับปรุงใหม่'
+					},
+					protectedCategory,
+					sysAdmin
+				)
+			).not.toThrow();
+
+			// 6. _admin bypass
+			const adminCtx: UserCtx = { name: 'admin', roles: ['_admin'] };
+			expect(() =>
+				compile()({ _id: 'item_category:food', _deleted: true }, protectedCategory, adminCtx)
+			).not.toThrow();
+		});
+	});
+
+	describe('requisition_ticket lifecycle and role rules (CR-121/CR-141, kitchen slice)', () => {
+		const MANAGER: UserCtx = { name: 'mgr', roles: ['shelter:SH001', 'shelter_manager'] };
+
+		function newTicket(over: Doc = {}): Doc {
+			return {
+				_id: 'requisition_ticket:01J',
+				type: 'requisition_ticket',
+				...envelope,
+				schema_v: 1,
+				created_by: 'kt',
+				ticket_no: 'TKT-KITCHEN-0001',
+				requisition_type: 'kitchen',
+				status: 'PENDING_PICK',
+				meal_plan_id: 'meal_plan:01J',
+				source_location: 'warehouse:main',
+				destination_location: 'kitchen',
+				requested_by: 'kt',
+				items: [
+					{
+						item_id: 'item_master:rice',
+						item_name: 'ข้าวสาร',
+						unit: 'kg',
+						requested_qty: '30',
+						allocated_qty: '0'
+					}
+				],
+				...over
+			};
+		}
+
+		it('accepts a new ticket from kitchen_staff with allocated_qty "0"', () => {
+			expect(() => compile()(newTicket(), null, KITCHEN)).not.toThrow();
+		});
+
+		it('rejects a new ticket from a non-kitchen role', () => {
+			expectForbidden(
+				() => compile()(newTicket(), null, WAREHOUSE),
+				/Only kitchen staff or system admin can open/
+			);
+		});
+
+		it('a "food" requisition_type is not rejected by the kitchen-only guard (handled by the general CR-121 rule instead)', () => {
+			expectForbidden(
+				() => compile()(newTicket({ requisition_type: 'food' }), null, KITCHEN),
+				/requisition_ticket id must be requisition_ticket:\{ulid\}/
+			);
+		});
+
+		it('rejects a genuinely invalid requisition_type', () => {
+			expectForbidden(
+				() =>
+					compile()(
+						newTicket({
+							_id: 'requisition_ticket:01J8Z9K5N7QXR3T6V8W0Y2A4B6',
+							requisition_type: 'bogus'
+						}),
+						null,
+						KITCHEN
+					),
+				/Invalid requisition_type: bogus/
+			);
+		});
+
+		it('rejects a new ticket that already carries lifecycle metadata', () => {
+			expectForbidden(
+				() => compile()(newTicket({ approved_by: 'mgr' }), null, KITCHEN),
+				/cannot contain lifecycle metadata/
+			);
+		});
+
+		it('rejects a new ticket with a non-zero allocated_qty line', () => {
+			expectForbidden(
+				() =>
+					compile()(
+						newTicket({
+							items: [
+								{
+									item_id: 'item_master:rice',
+									item_name: 'ข้าวสาร',
+									unit: 'kg',
+									requested_qty: '30',
+									allocated_qty: '5'
+								}
+							]
+						}),
+						null,
+						KITCHEN
+					),
+				/must start allocated_qty "0"/
+			);
+		});
+
+		it('warehouse_staff can allocate items while status stays PENDING_PICK', () => {
+			const ticket = newTicket();
+			const allocated = newTicket({
+				items: [{ ...(ticket.items as Doc[])[0], allocated_qty: '30' }]
+			});
+			expect(() => compile()(allocated, ticket, WAREHOUSE)).not.toThrow();
+		});
+
+		it('kitchen_staff can edit its own requested_qty while status stays PENDING_PICK (CR-142)', () => {
+			const ticket = newTicket();
+			const edited = newTicket({
+				items: [{ ...(ticket.items as Doc[])[0], requested_qty: '45' }]
+			});
+			expect(() => compile()(edited, ticket, KITCHEN)).not.toThrow();
+		});
+
+		it('rejects PENDING_PICK item updates from a role with neither warehouse_staff nor kitchen_staff', () => {
+			const ticket = newTicket();
+			const allocated = newTicket({
+				items: [{ ...(ticket.items as Doc[])[0], allocated_qty: '30' }]
+			});
+			expectForbidden(
+				() => compile()(allocated, ticket, REGISTRATION),
+				/Only warehouse staff, kitchen staff, or system admin can update requisition_ticket items/
+			);
+		});
+
+		it('shelter_manager approves PENDING_PICK → READY_FOR_DISPATCH once every line is allocated', () => {
+			const ticket = newTicket({
+				items: [
+					{
+						item_id: 'item_master:rice',
+						item_name: 'ข้าวสาร',
+						unit: 'kg',
+						requested_qty: '30',
+						allocated_qty: '30'
+					}
+				]
+			});
+			const approved = { ...ticket, status: 'READY_FOR_DISPATCH', approved_by: 'mgr' };
+			expect(() => compile()(approved, ticket, MANAGER)).not.toThrow();
+		});
+
+		it('rejects approval from warehouse_staff (manager-only, AC-TKT-03.1)', () => {
+			const ticket = newTicket({
+				items: [
+					{
+						item_id: 'item_master:rice',
+						item_name: 'ข้าวสาร',
+						unit: 'kg',
+						requested_qty: '30',
+						allocated_qty: '30'
+					}
+				]
+			});
+			const approved = { ...ticket, status: 'READY_FOR_DISPATCH', approved_by: 'ws' };
+			expectForbidden(
+				() => compile()(approved, ticket, WAREHOUSE),
+				/Only shelter manager or system admin can approve/
+			);
+		});
+
+		it('rejects approval while any line is still allocated_qty 0', () => {
+			const ticket = newTicket();
+			const approved = { ...ticket, status: 'READY_FOR_DISPATCH', approved_by: 'mgr' };
+			expectForbidden(
+				() => compile()(approved, ticket, MANAGER),
+				/needs allocated_qty > 0 before approval/
+			);
+		});
+
+		it('warehouse_staff dispatches READY_FOR_DISPATCH → IN_TRANSIT', () => {
+			const ready = newTicket({
+				status: 'READY_FOR_DISPATCH',
+				approved_by: 'mgr',
+				items: [
+					{
+						item_id: 'item_master:rice',
+						item_name: 'ข้าวสาร',
+						unit: 'kg',
+						requested_qty: '30',
+						allocated_qty: '30'
+					}
+				]
+			});
+			const dispatched = { ...ready, status: 'IN_TRANSIT', dispatched_by: 'ws' };
+			expect(() => compile()(dispatched, ready, WAREHOUSE)).not.toThrow();
+		});
+
+		it('rejects dispatch from a non-warehouse role', () => {
+			const ready = newTicket({ status: 'READY_FOR_DISPATCH', approved_by: 'mgr' });
+			const dispatched = { ...ready, status: 'IN_TRANSIT', dispatched_by: 'kt' };
+			expectForbidden(
+				() => compile()(dispatched, ready, KITCHEN),
+				/Only warehouse staff or system admin can dispatch/
+			);
+		});
+
+		it('kitchen_staff receives IN_TRANSIT → COMPLETED', () => {
+			const inTransit = newTicket({
+				status: 'IN_TRANSIT',
+				approved_by: 'mgr',
+				dispatched_by: 'ws'
+			});
+			const received = { ...inTransit, status: 'COMPLETED', received_by: 'kt' };
+			expect(() => compile()(received, inTransit, KITCHEN)).not.toThrow();
+		});
+
+		it('rejects a double-receive (COMPLETED is terminal)', () => {
+			const completed = newTicket({
+				status: 'COMPLETED',
+				approved_by: 'mgr',
+				dispatched_by: 'ws',
+				received_by: 'kt'
+			});
+			expectForbidden(
+				() => compile()({ ...completed, received_by: 'kt2' }, completed, KITCHEN),
+				/Invalid requisition_ticket transition from COMPLETED to COMPLETED/
+			);
+		});
+
+		it('shelter_manager one-click approves PENDING_PICK → COMPLETED (CR-143)', () => {
+			const ticket = newTicket({
+				items: [
+					{
+						item_id: 'item_master:rice',
+						item_name: 'ข้าวสาร',
+						unit: 'kg',
+						requested_qty: '30',
+						allocated_qty: '0'
+					}
+				]
+			});
+			const completed = {
+				...ticket,
+				status: 'COMPLETED',
+				items: [{ ...(ticket.items as Doc[])[0], allocated_qty: '30' }],
+				approved_by: 'mgr',
+				dispatched_by: 'mgr',
+				received_by: 'mgr'
+			};
+			expect(() => compile()(completed, ticket, MANAGER)).not.toThrow();
+		});
+
+		it('rejects one-click approve from kitchen_staff (manager-only, CR-143)', () => {
+			const ticket = newTicket({
+				items: [
+					{
+						item_id: 'item_master:rice',
+						item_name: 'ข้าวสาร',
+						unit: 'kg',
+						requested_qty: '30',
+						allocated_qty: '0'
+					}
+				]
+			});
+			const completed = {
+				...ticket,
+				status: 'COMPLETED',
+				items: [{ ...(ticket.items as Doc[])[0], allocated_qty: '30' }],
+				approved_by: 'kt',
+				dispatched_by: 'kt',
+				received_by: 'kt'
+			};
+			expectForbidden(
+				() => compile()(completed, ticket, KITCHEN),
+				/Only shelter manager or system admin can one-click approve/
+			);
+		});
+
+		it('rejects one-click approve while any line is still allocated_qty 0', () => {
+			const ticket = newTicket();
+			const completed = {
+				...ticket,
+				status: 'COMPLETED',
+				approved_by: 'mgr',
+				dispatched_by: 'mgr',
+				received_by: 'mgr'
+			};
+			expectForbidden(
+				() => compile()(completed, ticket, MANAGER),
+				/needs allocated_qty > 0 before approval/
+			);
+		});
+
+		it('kitchen_staff can cancel while PENDING_PICK', () => {
+			const ticket = newTicket();
+			const cancelled = { ...ticket, status: 'CANCELLED' };
+			expect(() => compile()(cancelled, ticket, KITCHEN)).not.toThrow();
+		});
+
+		it('rejects cancel from a role with no ticket authority', () => {
+			const ticket = newTicket();
+			const cancelled = { ...ticket, status: 'CANCELLED' };
+			expectForbidden(() => compile()(cancelled, ticket, REGISTRATION), /Not authorized to cancel/);
+		});
+
+		it('rejects changing meal_plan_id once created', () => {
+			const ticket = newTicket();
+			expectForbidden(
+				() => compile()({ ...ticket, meal_plan_id: 'meal_plan:other' }, ticket, WAREHOUSE),
+				/Cannot change meal_plan_id/
+			);
+		});
+
+		it('rejects modifying items while dispatching (items freeze once past PENDING_PICK)', () => {
+			const ready = newTicket({
+				status: 'READY_FOR_DISPATCH',
+				approved_by: 'mgr',
+				items: [
+					{
+						item_id: 'item_master:rice',
+						item_name: 'ข้าวสาร',
+						unit: 'kg',
+						requested_qty: '30',
+						allocated_qty: '30'
+					}
+				]
+			});
+			const tampered = {
+				...ready,
+				status: 'IN_TRANSIT',
+				dispatched_by: 'ws',
+				items: [{ ...(ready.items as Doc[])[0], allocated_qty: '999' }]
+			};
+			expectForbidden(
+				() => compile()(tampered, ready, WAREHOUSE),
+				/Cannot modify requisition_ticket items once past PENDING_PICK/
+			);
+		});
+
+		it.each(['requisition_ticket'])('includes %s in the allowed whitelist', (type) => {
+			expect(buildValidateDocUpdate('SH001')).toContain(`'${type}'`);
 		});
 	});
 

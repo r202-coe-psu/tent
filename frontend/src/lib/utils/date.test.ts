@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { formatThaiDateTime, formatThaiDate, daysBetween, buildDateRange } from './date';
+import {
+	formatThaiDateTime,
+	formatThaiTime,
+	formatThaiDate,
+	daysBetween,
+	buildDateRange
+} from './date';
 
 describe('date utilities', () => {
 	describe('formatThaiDateTime', () => {
@@ -20,6 +26,25 @@ describe('date utilities', () => {
 		it('safely falls back to raw string on invalid date formats', () => {
 			const invalid = 'not-a-valid-date';
 			expect(formatThaiDateTime(invalid)).toBe(invalid);
+		});
+	});
+
+	describe('formatThaiTime', () => {
+		it('formats valid ISO datetime string into time string', () => {
+			const iso = '2026-07-04T14:30:00.000Z';
+			const formatted = formatThaiTime(iso);
+			expect(formatted).toBeDefined();
+			expect(typeof formatted).toBe('string');
+			expect(formatted).toMatch(/\d{1,2}:\d{2}/);
+		});
+
+		it('safely handles empty string or undefined-like inputs', () => {
+			expect(formatThaiTime('')).toBe('');
+		});
+
+		it('safely falls back to raw string on invalid date formats', () => {
+			const invalid = 'not-a-valid-date';
+			expect(formatThaiTime(invalid)).toBe(invalid);
 		});
 	});
 

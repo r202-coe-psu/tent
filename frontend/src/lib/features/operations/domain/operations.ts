@@ -326,6 +326,8 @@ export type LedgerRefRule = LedgerRefPrefix | readonly LedgerRefPrefix[];
 
 export const REF_PREFIX_BY_REASON: Record<LedgerReason, LedgerRefRule> = {
 	donation: 'donation:',
+	// kitchen_requisition: legacy doc type, deprecated (CR-141) — still accepted so
+	// old rows remain valid; requisition_ticket: new unified ticket (CR-121/CR-141).
 	requisition: ['requisition_ticket:', 'kitchen_requisition:'],
 	// T-13 mints these; nothing writes `stock_transfer` docs yet.
 	transfer_in: 'stock_transfer:',

@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
+	import { useQueryClient } from '@tanstack/svelte-query';
 	import { resolve } from '$app/paths';
 	import { SvelteSet, SvelteMap } from 'svelte/reactivity';
 	import {
@@ -16,8 +18,9 @@
 		useUnitsOfMeasure
 	} from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
+	import { useFuelCylinders, ensureFuelCylinders, kitchenKeys } from '$lib/features/kitchen';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { isSystemAdmin } from '$lib/auth/roles';
+	import { isSystemAdmin, isShelterManager, isWarehouseStaff } from '$lib/auth/roles';
 	import { useShelters } from '$lib/features/shelters';
 	import { getShelterCode } from '$lib/db/shelter';
 	import * as Table from '$lib/components/ui/table/index.js';
@@ -51,9 +54,16 @@
 	import Eye from '@lucide/svelte/icons/eye';
 	import Pencil from '@lucide/svelte/icons/pencil';
 
+	// ─── Props ────────────────────────────────────────────────────────────────
+	let { occupancy = 120, initialCategory }: { occupancy?: number; initialCategory?: string } =
+		$props();
+
+	const queryClient = useQueryClient();
+
 	// ─── Queries ──────────────────────────────────────────────────────────────
 	const itemsQuery = useSupplyItems();
 	const itemMastersQuery = useItemMasters(() => getShelterCode());
+	const fuelCylindersQuery = useFuelCylinders();
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
 	const balanceQuery = useStockBalance();
@@ -65,6 +75,7 @@
 	// ─── Roles and Cross-Shelter States ───────────────────────────────────────
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
+	const canManageFuel = $derived(isSA || isShelterManager(roles) || isWarehouseStaff(roles));
 	let showOverall = $state(false);
 
 	const sheltersQuery = useShelters();
@@ -84,7 +95,7 @@
 
 	// ─── Filter state ─────────────────────────────────────────────────────────
 	let searchQuery = $state('');
-	let categoryFilter = $state<string>('all');
+	let categoryFilter = $state<string>(untrack(() => initialCategory ?? 'all'));
 	let locationFilter = $state<string | 'all'>('all');
 	let statusFilter = $state<'all' | 'normal' | 'low' | 'empty' | 'expiring' | 'expired'>('all');
 
@@ -316,8 +327,41 @@
 		fuel: 'Fuel'
 	};
 
-	// ─── Props ────────────────────────────────────────────────────────────────
-	let { occupancy = 120 } = $props();
+	// Self-healing reconciliation: if a fuel_energy item's ledger balance ever
+	// gets ahead of its fuel_cylinder count (a past write failed partway, or
+	// two adjustments raced), top the cylinders up automatically the next time
+	// this table has both queries loaded — instead of the gap sitting there
+	// forever waiting for a lucky adjustment that never revisits it.
+	$effect(() => {
+		if (!canManageFuel || balanceQuery.isPending || fuelCylindersQuery.isPending) return;
+		const cylinders = fuelCylindersQuery.data ?? [];
+		const byItem = new SvelteMap<string, number>();
+		for (const c of cylinders) {
+			byItem.set(c.item_master_id, (byItem.get(c.item_master_id) ?? 0) + 1);
+		}
+		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'system' };
+		const itemMasters = itemMastersQuery.data ?? [];
+		for (const item of items) {
+			if (item.category !== 'item_category:fuel_energy') continue;
+			const target = Math.floor(Number(balance.get(item._id) ?? '0'));
+			if (target > (byItem.get(item._id) ?? 0)) {
+				const master = itemMasters.find((im) => im._id === item._id);
+				ensureFuelCylinders(item._id, target, ctx, {
+					capacityKg: master?.capacity_kg,
+					burnRateKgPerHour: master?.burn_rate_kg_per_hour,
+					timeMultiplier: master?.time_multiplier
+				})
+					.then((created) => {
+						if (created > 0) {
+							queryClient.invalidateQueries({ queryKey: kitchenKeys.fuelCylinders() });
+						}
+					})
+					.catch((err) =>
+						console.error('ensureFuelCylinders reconciliation failed', item._id, err)
+					);
+			}
+		}
+	});
 
 	// calculate reorder level and evaluate status
 	const itemsWithCalculatedStatus = $derived(
@@ -780,6 +824,7 @@
 								{#if !collapsedGroups.has(group.category)}
 									{#each group.items as item (item._id)}
 										{@const qty = item.qtyOnHand}
+										{@const isFuelItem = item.category === 'item_category:fuel_energy'}
 										{@const status = item.status}
 										{@const lot = latestLotByItem[item._id]}
 										{@const expired = isExpired(lot?.expiry)}
@@ -787,13 +832,15 @@
 										<Table.Row class="transition-all duration-200 hover:bg-muted/40">
 											<!-- Item name + ID -->
 											<Table.Cell class="p-4 px-5 pl-12">
-												<div class="flex flex-col gap-0.5">
-													<span class="text-sm font-semibold text-foreground">
-														{item.name}
-													</span>
-													<span class="font-mono text-2xs text-muted-foreground">
-														ID: {item._id}
-													</span>
+												<div class="flex items-center gap-2">
+													<div class="flex flex-col gap-0.5">
+														<span class="text-sm font-semibold text-foreground">
+															{item.name}
+														</span>
+														<span class="font-mono text-2xs text-muted-foreground">
+															ID: {item._id}
+														</span>
+													</div>
 												</div>
 											</Table.Cell>
 
@@ -824,7 +871,9 @@
 												<span class="text-sm font-bold text-foreground">
 													{qty}
 													<span class="text-2xs font-normal text-muted-foreground"
-														>{formatUnit(item.unit, units, langState.current)}</span
+														>{isFuelItem
+															? 'ถัง'
+															: formatUnit(item.unit, units, langState.current)}</span
 													>
 												</span>
 											</Table.Cell>
@@ -832,16 +881,19 @@
 											<!-- ใช้งานได้จริง (USABLE STOCK) -->
 											<Table.Cell class="p-4 text-center">
 												<span
-													class="inline-block rounded-md px-2.5 py-1 text-sm font-bold {expired ||
-													status === 'empty'
-														? 'bg-rose-500/10 text-rose-600'
-														: status === 'low'
-															? 'bg-amber-500/10 text-amber-600'
-															: 'text-[#0b6e4f]'}"
+													class="inline-block rounded-md px-2.5 py-1 text-sm font-bold {isFuelItem
+														? 'text-[#0b6e4f]'
+														: expired || status === 'empty'
+															? 'bg-rose-500/10 text-rose-600'
+															: status === 'low'
+																? 'bg-amber-500/10 text-amber-600'
+																: 'text-[#0b6e4f]'}"
 												>
 													{qty}
 													<span class="text-2xs font-normal text-muted-foreground"
-														>{formatUnit(item.unit, units, langState.current)}</span
+														>{isFuelItem
+															? 'ถัง'
+															: formatUnit(item.unit, units, langState.current)}</span
 													>
 												</span>
 											</Table.Cell>

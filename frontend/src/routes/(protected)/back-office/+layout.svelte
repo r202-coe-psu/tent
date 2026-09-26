@@ -20,6 +20,20 @@
 		if (currentPath.startsWith('/back-office/households')) {
 			currentPath = '/back-office/evacuee-management';
 		}
+		// Reached from the ticket queue ("จัดการ"), not the kitchen overview — keep
+		// the header label matching where the user came from, not the /kitchen prefix.
+		if (currentPath.startsWith('/back-office/kitchen/receive-stock')) {
+			currentPath = '/back-office/tickets/kitchen';
+		}
+		// Ticket detail (/back-office/tickets/{id}) has no nav entry of its own —
+		// it's a drill-down from the kitchen ticket queue, so it should keep that
+		// queue's header label instead of falling back to the generic default.
+		if (
+			currentPath.startsWith('/back-office/tickets/') &&
+			!currentPath.startsWith('/back-office/tickets/kitchen')
+		) {
+			currentPath = '/back-office/tickets/kitchen';
+		}
 		for (const group of backofficeNavbarGroups) {
 			for (const item of group.items) {
 				if (isGroup(item)) {
@@ -71,7 +85,7 @@
 	<div class="flex w-full min-w-0 flex-1 flex-col">
 		<!-- Sticky under mobile hamburger bar (< lg); flush top when sidebar is visible -->
 		<header
-			class="sticky z-30 flex shrink-0 flex-col border-b border-sidebar-border bg-card top-[var(--bo-mobile-nav-height)] lg:top-0"
+			class="sticky top-[var(--bo-mobile-nav-height)] z-30 flex shrink-0 flex-col border-b border-sidebar-border bg-card lg:top-0"
 		>
 			<div class="flex h-16 min-h-16 items-center gap-2 px-4 sm:px-6">
 				<PageIcon class="size-4 shrink-0 text-primary" />

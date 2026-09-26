@@ -3,7 +3,7 @@ id: CR-119
 title: ฐานข้อมูล 10 หมวดหมู่ระบบมาตรฐาน (10 System Protected Categories) และกลไก Seed ข้อมูลเริ่มต้นใน Catalog
 status: approved
 date: 2026-09-12
-updated: 2026-09-14
+updated: 2026-09-17
 requested_by: "Project Owner (ระบบบริหารจัดการสิ่งของบรรเทาทุกข์และโรงครัวกลาง)"
 decided_by: Project Owner
 layer: stable
@@ -94,6 +94,9 @@ affects:
 - **FR-04 (Field Mutability Rules for System Categories):**
   - ฟิลด์ `system_key`, `default_class`, และ `is_protected` ถือเป็น **Immutable** สำหรับหมวดหมู่ระบบ (ห้ามแก้ไข)
   - ยินยอมให้ผู้ใช้บทบาท `system_admin` แก้ไขเฉพาะ `name` (ชื่อภาษาไทย) และ `description` (คำอธิบาย) ได้ เพื่อปรับให้เข้ากับบริบทหน้างานขององค์กร
+  - > **แก้ไขบางส่วนโดย [`CR-140`](CR-140-item-category-default-class-editable.md) (2026-09-17):**
+    > `default_class` **ไม่ immutable อีกต่อไป** — `system_admin` แก้ไขได้เช่นเดียวกับ `name`/`description`
+    > แล้ว ส่วน `system_key` และ `is_protected` ยังคง Immutable ตามที่ระบุไว้ข้างต้นทุกประการ
 
 ### 4.3 Integration with ItemMaster Requirements
 - **FR-05 (Category Reference in ItemMaster):**
