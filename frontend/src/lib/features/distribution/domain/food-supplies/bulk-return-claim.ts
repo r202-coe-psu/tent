@@ -1,7 +1,12 @@
 import { z } from 'zod';
 import { type AuthorContext, type BaseDoc, makeDoc } from '$lib/db/model';
-import { qtyGt, qtyStrPositiveSchema } from '$lib/utils/qty';
-import { bulkReturnPoolIdSchema, distributionLogIdSchema, ULID_PATTERN } from './shared';
+import { qtyGt } from '$lib/utils/qty';
+import {
+	bulkReturnPoolIdSchema,
+	distributionLogIdSchema,
+	positiveWholeQtySchema,
+	ULID_PATTERN
+} from './shared';
 
 export const bulkReturnClaimStatusSchema = z.enum([
 	'CLAIM_INTENT',
@@ -27,7 +32,7 @@ export const bulkReturnClaimDocSchema = z.object({
 	distribution_log_id: distributionLogIdSchema,
 	bulk_pool_id: bulkReturnPoolIdSchema,
 	item_id: z.string().min(1),
-	claimed_qty: qtyStrPositiveSchema,
+	claimed_qty: positiveWholeQtySchema,
 	status: bulkReturnClaimStatusSchema,
 	created_at: z.string().datetime(),
 	created_by: z.string().min(1),
@@ -50,7 +55,7 @@ export const createBulkReturnClaimInputSchema = z.object({
 	operation_id: operationUlidSchema,
 	bulk_pool_id: bulkReturnPoolIdSchema,
 	item_id: z.string().min(1),
-	claimed_qty: qtyStrPositiveSchema,
+	claimed_qty: positiveWholeQtySchema,
 	notes: z.string().trim().min(1).optional()
 });
 

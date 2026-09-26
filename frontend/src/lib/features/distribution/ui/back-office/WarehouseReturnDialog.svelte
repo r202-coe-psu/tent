@@ -4,15 +4,12 @@
 	import { getReturnableBadgeLabel, getReturnableBadgeClass } from '../model/catalog-eligibility';
 	import {
 		initializeVerifiedQuantities,
+		validateVerifiedQuantity,
 		validateWarehouseReturnForm,
 		computeWarehouseReturnSummary,
 		buildVerifiedReturnsPayload
 	} from '../model/warehouse-return';
 	import { formatDistributionError } from '../model/distribution-error';
-	import {
-		normalizeWholeItemInput,
-		formatNormalizationNotice
-	} from '../model/ticket-quantity';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { toast } from 'svelte-sonner';
@@ -35,27 +32,16 @@
 	const receiveMutation = useReceiveWarehouseReturns();
 
 	let verifiedValues = $state<Record<string, string>>({});
-	let warehouseNotices = $state<Record<string, string>>({});
 	let formErrors = $state<Record<string, string>>({});
 
 	function handleVerifiedQtyBlur(itemId: string) {
-		const raw = (verifiedValues[itemId] ?? '').trim();
-		if (!raw) return;
-		const normRes = normalizeWholeItemInput(raw, { allowZero: true });
-		if (normRes.normalized !== null) {
-			if (normRes.wasNormalized) {
-				warehouseNotices[itemId] = formatNormalizationNotice(raw, normRes.normalized, 'ชิ้น');
-			}
-			verifiedValues = {
-				...verifiedValues,
-				[itemId]: normRes.normalized
-			};
-		}
+		const item = ticket.items.find((candidate) => candidate.item_id === itemId);
+		if (!item) return;
+		validateVerifiedQuantity(verifiedValues[itemId] ?? '', item.returned_qty ?? '0');
 	}
 
 	function resetForm() {
 		verifiedValues = initializeVerifiedQuantities(ticket.items);
-		warehouseNotices = {};
 		formErrors = {};
 	}
 
@@ -67,7 +53,6 @@
 
 	function handleMatchDeclared() {
 		verifiedValues = initializeVerifiedQuantities(ticket.items);
-		warehouseNotices = {};
 		formErrors = {};
 	}
 
@@ -79,7 +64,6 @@
 	);
 
 	function handleQtyInput(itemId: string, value: string) {
-		delete warehouseNotices[itemId];
 		verifiedValues = {
 			...verifiedValues,
 			[itemId]: value
@@ -245,7 +229,9 @@
 									<div class="inline-flex flex-col items-end">
 										<Input
 											type="text"
-											inputmode="decimal"
+											inputmode="numeric"
+											step="1"
+											min="0"
 											disabled={isSubmitting}
 											value={verifiedValues[preview.itemId] ?? ''}
 											onblur={() => handleVerifiedQtyBlur(preview.itemId)}
@@ -258,11 +244,6 @@
 												? 'border-slate-200 bg-white text-slate-900 focus-visible:ring-slate-900'
 												: 'border-red-300 bg-red-50/50 text-red-900 focus-visible:ring-red-500'}"
 										/>
-										{#if warehouseNotices[preview.itemId]}
-											<span class="mt-1 text-right text-2xs font-medium text-amber-700" role="status">
-												{warehouseNotices[preview.itemId]}
-											</span>
-										{/if}
 										{#if formErrors[preview.itemId] || preview.error}
 											<span class="mt-1 text-right text-2xs font-semibold text-red-600">
 												{formErrors[preview.itemId] ?? preview.error}

@@ -113,8 +113,8 @@ describe('loan-return model helpers', () => {
 			expect(calculateLoanRemainingQty({ qty: '5', qty_returned: '5' })).toBe('0');
 		});
 
-		it('handles decimal string precision correctly', () => {
-			expect(calculateLoanRemainingQty({ qty: '5.5', qty_returned: '2.2' })).toBe('3.3');
+		it('handles whole-unit string arithmetic correctly', () => {
+			expect(calculateLoanRemainingQty({ qty: '5', qty_returned: '2' })).toBe('3');
 		});
 	});
 
@@ -129,11 +129,9 @@ describe('loan-return model helpers', () => {
 			expect(calculateNewCumulativeReturned('4', '1')).toBe('5');
 		});
 
-		it('emits compact canonical Decimal string without trailing zero padding', () => {
-			// '3.3400' + '6.6600' = 10 -> persistQty emits '10'
-			expect(calculateNewCumulativeReturned('3.3400', '6.6600')).toBe('10');
-			expect(calculateNewCumulativeReturned('1.5000', '0.5000')).toBe('2');
-			expect(calculateNewCumulativeReturned('1.2500', '0.2500')).toBe('1.5');
+		it('keeps cumulative whole-unit quantities exact', () => {
+			expect(calculateNewCumulativeReturned('3', '6')).toBe('9');
+			expect(calculateNewCumulativeReturned('1', '1')).toBe('2');
 		});
 	});
 
@@ -141,11 +139,11 @@ describe('loan-return model helpers', () => {
 		it('accepts valid quantity less than or equal to remaining', () => {
 			expect(validateCounterReturnQuantity('1', '3').isValid).toBe(true);
 			expect(validateCounterReturnQuantity('3', '3').isValid).toBe(true);
-			expect(validateCounterReturnQuantity('2.5', '3.0').isValid).toBe(true);
+			expect(validateCounterReturnQuantity('2', '3').isValid).toBe(true);
 		});
 
-		it('accepts canonical decimal format with leading zeros', () => {
-			expect(validateCounterReturnQuantity('0001.2500', '3').isValid).toBe(true);
+		it('accepts canonical integer format with leading zeros', () => {
+			expect(validateCounterReturnQuantity('0001', '3').isValid).toBe(true);
 		});
 
 		it('rejects empty or whitespace-only input', () => {

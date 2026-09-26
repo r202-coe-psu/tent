@@ -1,6 +1,11 @@
 import { z } from 'zod';
 import { type AuthorContext, type BaseDoc, makeDoc } from '$lib/db/model';
-import { distributionLogIdSchema, ULID_PATTERN } from './shared';
+import {
+	distributionLogIdSchema,
+	nonNegativeWholeQtySchema,
+	positiveWholeQtySchema,
+	ULID_PATTERN
+} from './shared';
 import { returnConditionSchema, type ReturnCondition } from './distribution-log';
 
 export { returnConditionSchema, type ReturnCondition };
@@ -44,10 +49,7 @@ export const loanReturnReservationDocSchema = z
 		// PHYSICAL:
 		// Persist the cumulative target so replay can derive and verify the exact
 		// physical delta against the authoritative DistributionLog.
-		qty_returned: z
-			.string()
-			.regex(/^\d+(\.\d+)?$/)
-			.optional(),
+		qty_returned: nonNegativeWholeQtySchema.optional(),
 		return_condition: returnConditionSchema.optional(),
 
 		// BULK:
@@ -55,10 +57,7 @@ export const loanReturnReservationDocSchema = z
 			.string()
 			.regex(new RegExp(`^bulk_return_pool:${ULID_PATTERN}$`))
 			.optional(),
-		claimed_qty: z
-			.string()
-			.regex(/^\d+(\.\d+)?$/)
-			.optional(),
+		claimed_qty: positiveWholeQtySchema.optional(),
 
 		// NON_PHYSICAL:
 		clear_reason: nonPhysicalClearReasonSchema.optional(),
@@ -125,19 +124,13 @@ export const createLoanReturnReservationInputSchema = z.object({
 	operation_id: operationUlidSchema,
 	mode: loanReturnReservationModeSchema,
 	operation_by: z.string().min(1).optional(),
-	qty_returned: z
-		.string()
-		.regex(/^\d+(\.\d+)?$/)
-		.optional(),
+	qty_returned: nonNegativeWholeQtySchema.optional(),
 	return_condition: returnConditionSchema.optional(),
 	bulk_pool_id: z
 		.string()
 		.regex(new RegExp(`^bulk_return_pool:${ULID_PATTERN}$`))
 		.optional(),
-	claimed_qty: z
-		.string()
-		.regex(/^\d+(\.\d+)?$/)
-		.optional(),
+	claimed_qty: positiveWholeQtySchema.optional(),
 	clear_reason: nonPhysicalClearReasonSchema.optional(),
 	notes: z.string().trim().min(1).optional()
 });

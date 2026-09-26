@@ -5,11 +5,8 @@
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import Loader from '@lucide/svelte/icons/loader';
-	import {
-		validatePositiveQuantity,
-		normalizeWholeItemInput,
-		formatNormalizationNotice
-	} from '../model/ticket-quantity';
+	import { qtyGte } from '$lib/utils/qty';
+	import { validatePositiveQuantity } from '../model/ticket-quantity';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import {
 		resolveAuthenticatedAuthorContext,
@@ -58,7 +55,6 @@
 	// State — selectedItemId syncs reactively; never hard-codes a prop value at initialisation
 	let selectedItemId = $state('');
 	let qtyInput = $state('1');
-	let qtyNotice = $state<string | null>(null);
 	let recipientSelection = $state<FrontlineRecipientSelection | null>(null);
 	let notesInput = $state('');
 	let localSubmitError = $state<string | null>(null);
@@ -67,13 +63,7 @@
 	function handleQtyBlur() {
 		const raw = qtyInput.trim();
 		if (!raw) return;
-		const normRes = normalizeWholeItemInput(raw);
-		if (normRes.normalized !== null) {
-			if (normRes.wasNormalized) {
-				qtyNotice = formatNormalizationNotice(raw, normRes.normalized, 'หน่วย');
-			}
-			qtyInput = normRes.normalized;
-		}
+		validatePositiveQuantity(raw);
 	}
 
 	// Keep selectedItemId valid when ticket prop changes (e.g. parent switches active ticket).
@@ -138,7 +128,7 @@
 		}
 		const qtyRes = validatePositiveQuantity(qtyInput);
 		if (!qtyRes.isValid || !qtyRes.value) {
-			localSubmitError = qtyRes.error ?? 'จำนวนต้องเป็นจำนวนเต็มตั้งแต่ 1 ขึ้นไป';
+			localSubmitError = qtyRes.error ?? 'จำนวนต้องเป็นจำนวนเต็มที่ถูกต้อง';
 			return;
 		}
 		if (!isQtyValid) {
@@ -169,7 +159,6 @@
 			);
 
 			// Reset form state
-			qtyNotice = null;
 			qtyInput = '1';
 			notesInput = '';
 			if (recipientSelection.recipientType === 'evacuee') {
@@ -307,20 +296,13 @@
 			<Input
 				id="supplies-qty-input"
 				type="text"
-				inputmode="decimal"
+				inputmode="numeric"
+				step="1"
 				bind:value={qtyInput}
 				onblur={handleQtyBlur}
-				oninput={() => {
-					qtyNotice = null;
-				}}
 				class="h-9 w-full text-xs font-bold shadow-2xs"
 				disabled={recordSuppliesMutation.isPending || capacitySummary.isExhausted}
 			/>
-			{#if qtyNotice}
-				<p class="mt-1 text-2xs font-medium text-amber-700" role="status">
-					{qtyNotice}
-				</p>
-			{/if}
 		</div>
 
 		<div class="sm:col-span-2">

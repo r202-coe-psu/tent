@@ -17,7 +17,7 @@ import {
 } from '../../data/food-supplies';
 import { assertCanPerformFrontlineDistribution } from './auth';
 import { CapacityExceededError, TicketStateError, WorkflowValidationError } from './errors';
-import { assertPositiveQty } from './validation';
+import { assertPositiveIntegerQty } from './validation';
 
 export interface DistributionWorkflowDependencies {
 	ticketRepo?: RequisitionTicketRepository;
@@ -120,7 +120,7 @@ export async function recordFoodDistribution(
 ): Promise<DistributionLog> {
 	assertCanPerformFrontlineDistribution(ctx);
 
-	assertPositiveQty(input.qty, 'Distribution qty');
+	assertPositiveIntegerQty(input.qty, 'Distribution qty');
 
 	const { ticketRepo, logRepo } = resolveDependencies(deps, ctx);
 	const { ticket, targetItem } = await resolveDistributingTicketItem(
@@ -188,7 +188,7 @@ export async function recordSuppliesDistribution(
 ): Promise<DistributionLog> {
 	assertCanPerformFrontlineDistribution(ctx);
 
-	assertPositiveQty(input.qty, 'Distribution qty');
+	assertPositiveIntegerQty(input.qty, 'Distribution qty');
 
 	const { ticketRepo, logRepo } = resolveDependencies(deps, ctx);
 	const { targetItem } = await resolveDistributingTicketItem(

@@ -6,7 +6,8 @@ import {
 	createBulkReturnPool,
 	type BulkReturnPool,
 	type BulkReturnPoolInput,
-	type BulkReturnPoolStatus
+	type BulkReturnPoolStatus,
+	positiveWholeQtySchema
 } from '../../domain/food-supplies';
 import { NotFoundError, resolveShelterDbName, retryCas } from './shared';
 
@@ -105,10 +106,11 @@ export class BulkReturnPoolRemoteRepository implements BulkReturnPoolRepository 
 				throw new Error(`Bulk return pool ${poolId} is not ACTIVE (status: ${current.status})`);
 			}
 
-			const claimDec = parseQty(claimQty);
-			if (claimDec.isNegative() || claimDec.isZero()) {
-				throw new Error('claimQty must be a positive decimal quantity');
+			const parsedClaimQty = positiveWholeQtySchema.safeParse(claimQty);
+			if (!parsedClaimQty.success) {
+				throw new Error('claimQty must be a positive whole quantity');
 			}
+			const claimDec = parseQty(parsedClaimQty.data);
 
 			const currentQuotaDec = parseQty(current.unclaimed_quota);
 			const remainingQuotaDec = currentQuotaDec.minus(claimDec);

@@ -675,7 +675,7 @@ describe('reconciliation-workflow', () => {
 					operationsRepo: opsRepo as unknown as OperationsRepository
 				}
 			)
-		).rejects.toThrow(/non-negative decimal string/);
+		).rejects.toThrow(/non-negative whole number/);
 		expect(opsRepo.ledger).toHaveLength(0);
 
 		await expect(

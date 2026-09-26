@@ -11,15 +11,14 @@ import {
 	operationsRepository
 } from '$lib/features/operations';
 import type { RequisitionTicket, TicketAmendment } from '../../domain/food-supplies';
-import { normalizeWholeItemInput } from '../../domain/food-supplies';
 import {
 	RequisitionTicketRemoteRepository,
 	type RequisitionTicketRepository
 } from '../../data/food-supplies';
 import { assertCanDispatchTicket } from './auth';
+import { assertPositiveIntegerQty } from './validation';
 import { StockIntegrityError, TicketStateError, WorkflowValidationError } from './errors';
 import { assertLedgerReplayBase } from './ledger-replay';
-import { assertPositiveQty } from './validation';
 
 export interface DispatchWorkflowDependencies {
 	ticketRepo?: RequisitionTicketRepository;
@@ -206,11 +205,8 @@ export async function amendActiveTicket(
 ): Promise<RequisitionTicket> {
 	assertCanDispatchTicket(ctx);
 
-	const norm = normalizeWholeItemInput(input.added_qty);
-	if (!norm.isValid || !norm.normalized) {
-		throw new WorkflowValidationError('Amendment added_qty must be a positive whole number');
-	}
-	const addedQty = norm.normalized;
+	assertPositiveIntegerQty(input.added_qty, 'Amendment added_qty');
+	const addedQty = input.added_qty.trim();
 
 	const amendmentId = input.amendmentId;
 	if (!isUlid(amendmentId)) {

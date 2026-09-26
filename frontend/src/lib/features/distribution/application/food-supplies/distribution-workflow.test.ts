@@ -628,7 +628,7 @@ describe('distribution-workflow', () => {
 		);
 		await logRepo.recordReturn(
 			partial._id,
-			{ qty_returned: '0.5', clear_reason: 'routine' },
+			{ qty_returned: '1', clear_reason: 'routine' },
 			POS_CTX
 		);
 		await expect(voidDistributionLog(partial._id, 'Too late', POS_CTX, logRepo)).rejects.toThrow(

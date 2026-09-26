@@ -14,6 +14,7 @@ import {
 	assertBulkReturnClaimTransition,
 	assertLoanReturnReservationTransition,
 	bulkReturnPoolDocSchema,
+	positiveWholeQtySchema,
 	createBulkReturnPool as createBulkReturnPoolDoc,
 	createDistributionLog,
 	createLoanReturnReservation,
@@ -46,7 +47,7 @@ import {
 } from './errors';
 import { canReceivePhysicalStock } from './auth';
 import { ConflictError } from '$lib/utils/errors';
-import { parseQty } from '$lib/utils/qty';
+import { addQty, parseQty } from '$lib/utils/qty';
 import { endpointStore } from '$lib/stores/endpoint.svelte';
 import { buildValidateDocUpdate } from '$lib/server/shelter-access-design';
 import {
@@ -265,10 +266,7 @@ class InMemoryPoolRepository implements BulkReturnPoolRepository {
 			throw new Error(`Bulk return pool ${poolId} is not ACTIVE (status: ${current.status})`);
 		}
 
-		const claimDec = parseQty(claimQty);
-		if (claimDec.isNegative() || claimDec.isZero()) {
-			throw new Error('claimQty must be a positive decimal quantity');
-		}
+		const claimDec = parseQty(positiveWholeQtySchema.parse(claimQty));
 
 		const currentQuotaDec = parseQty(current.unclaimed_quota);
 		const remainingQuotaDec = currentQuotaDec.minus(claimDec);
@@ -617,7 +615,7 @@ describe('return-workflow', () => {
 		expect(opsRepo.ledger).toHaveLength(1);
 	});
 
-	it('canonicalizes equivalent prior return quantities to one counter receipt identity', async () => {
+	it('reuses a zero prior return quantity for one counter receipt identity', async () => {
 		const log = await logRepo.create(
 			{
 				ticket_id: 'requisition_ticket:01J00000000000000000000001',
@@ -632,7 +630,7 @@ describe('return-workflow', () => {
 			POS_CTX
 		);
 
-		for (const priorQtyReturned of ['0', '0.0', '0.00']) {
+		for (const priorQtyReturned of ['0']) {
 			logRepo.logs.set(log._id, {
 				...log,
 				status: 'active',
@@ -658,7 +656,7 @@ describe('return-workflow', () => {
 		expect(opsRepo.ledger[0].qty).toBe('2');
 	});
 
-	it('accepts equivalent decimal formatting for a verified routine-return replay', async () => {
+	it('accepts an idempotent routine-return replay', async () => {
 		const log = await logRepo.create(
 			{
 				ticket_id: 'requisition_ticket:01J00000000000000000000001',
@@ -686,11 +684,11 @@ describe('return-workflow', () => {
 		);
 		const returned = await logRepo.get(log._id);
 		if (!returned) throw new Error('Expected returned distribution log');
-		logRepo.logs.set(log._id, { ...returned, qty_returned: '1.0' });
+		logRepo.logs.set(log._id, { ...returned, qty_returned: '1' });
 
 		const replay = await returnLoanAtCounter(
 			log._id,
-			{ qty_returned: '1.00', condition_on_return: 'READY' },
+			{ qty_returned: '1', condition_on_return: 'READY' },
 			POS_CTX,
 			{
 				logRepo,
@@ -705,7 +703,7 @@ describe('return-workflow', () => {
 		expect(opsRepo.ledger).toHaveLength(1);
 	});
 
-	it('rejects a routine-return replay with a genuinely different decimal quantity', async () => {
+	it('rejects a routine-return replay with a different quantity', async () => {
 		const log = await logRepo.create(
 			{
 				ticket_id: 'requisition_ticket:01J00000000000000000000001',
@@ -733,21 +731,16 @@ describe('return-workflow', () => {
 		);
 		const returned = await logRepo.get(log._id);
 		if (!returned) throw new Error('Expected returned distribution log');
-		logRepo.logs.set(log._id, { ...returned, qty_returned: '1.0' });
+		logRepo.logs.set(log._id, { ...returned, qty_returned: '1' });
 
 		await expect(
-			returnLoanAtCounter(
-				log._id,
-				{ qty_returned: '1.01', condition_on_return: 'READY' },
-				POS_CTX,
-				{
-					logRepo,
-					operationsRepo: opsRepo as unknown as OperationsRepository,
-					poolRepo,
-					claimRepo,
-					reservationRepo
-				}
-			)
+			returnLoanAtCounter(log._id, { qty_returned: '2', condition_on_return: 'READY' }, POS_CTX, {
+				logRepo,
+				operationsRepo: opsRepo as unknown as OperationsRepository,
+				poolRepo,
+				claimRepo,
+				reservationRepo
+			})
 		).rejects.toBeInstanceOf(WorkflowValidationError);
 		expect(opsRepo.ledger).toHaveLength(1);
 	});
@@ -1143,8 +1136,8 @@ describe('return-workflow', () => {
 		expect(opsRepo.ledger[2].qty).toBe('1'); // Delta was 1
 
 		// Total stock received across the 3 returns: 2 + 2 + 1 = 5
-		const totalStock = opsRepo.ledger.reduce((acc, l) => acc + parseInt(l.qty, 10), 0);
-		expect(totalStock).toBe(5);
+		const totalStock = opsRepo.ledger.reduce((acc, l) => addQty(acc, l.qty), '0');
+		expect(totalStock).toBe('5');
 	});
 
 	it('throws StockIntegrityError and prevents mutation when target is less than physical stock already credited', async () => {
@@ -1473,7 +1466,7 @@ describe('return-workflow', () => {
 		const input = {
 			operationUlid: '01J00000000000000000000003',
 			item_id: 'item:cot',
-			total_received_qty: '2.5',
+			total_received_qty: '2',
 			ticket_id: 'requisition_ticket:01J00000000000000000000001',
 			shift_id: 'shift-A'
 		};
@@ -1500,7 +1493,7 @@ describe('return-workflow', () => {
 		expect(recovered._id).toBe('bulk_return_pool:01J00000000000000000000003');
 		expect(recovered.stock_ledger_id).toBe('stock_ledger:01J00000000000000000000003');
 		expect(opsRepo.ledger).toHaveLength(1);
-		expect(opsRepo.ledger[0].qty).toBe('2.5');
+		expect(opsRepo.ledger[0].qty).toBe('2');
 	});
 
 	it('allows an authorized second actor to complete ledger-only recovery without rewriting receipt audit', async () => {

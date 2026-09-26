@@ -165,7 +165,7 @@ describe('Warehouse Return Verification & Ticket Completion UI Model', () => {
 		it('rejects non-numeric string', () => {
 			const res = validateVerifiedQuantity('abc', '20');
 			expect(res.isValid).toBe(false);
-			expect(res.error).toBe('จำนวนต้องเป็นตัวเลขที่ถูกต้อง');
+			expect(res.error).toBe('จำนวนต้องเป็นตัวเลขจำนวนเต็มที่ถูกต้อง');
 		});
 
 		it('rejects empty or whitespace string', () => {
@@ -175,17 +175,11 @@ describe('Warehouse Return Verification & Ticket Completion UI Model', () => {
 		});
 	});
 
-	describe('8. whole-item ceiling normalization', () => {
-		it('normalizes decimal strings with whole-item ceiling (e.g. 18.1000 -> 19, 18.000 -> 18)', () => {
-			const res = validateVerifiedQuantity('18.1000', '20');
-			expect(res.isValid).toBe(true);
-			expect(res.normalized).toBe('19');
-			expect(res.wasNormalized).toBe(true);
-
-			const resWhole = validateVerifiedQuantity('18.000', '20');
-			expect(resWhole.isValid).toBe(true);
-			expect(resWhole.normalized).toBe('18');
-			expect(resWhole.wasNormalized).toBe(true);
+	describe('8. decimal notation rejected', () => {
+		it('rejects decimal notation', () => {
+			const res = validateVerifiedQuantity('18.5000', '20');
+			expect(res.isValid).toBe(false);
+			expect(res.error).toBe('จำนวนต้องเป็นจำนวนเต็ม เช่น 0, 1, 2, 3');
 		});
 	});
 
@@ -263,7 +257,7 @@ describe('Warehouse Return Verification & Ticket Completion UI Model', () => {
 
 		it('validates entire form and extracts clean normalizedValues', () => {
 			const formValues = {
-				'item:fan': '2.0',
+				'item:fan': '2',
 				'item:tent': '18',
 				'item:rice': '0'
 			};

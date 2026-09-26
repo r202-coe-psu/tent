@@ -215,7 +215,7 @@
 				class="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-800 shadow-2xs"
 			>
 				<Layers class="h-3.5 w-3.5 text-sky-600" />
-				Slice 5.5 Frontline Station
+				จุดแจกจ่ายส่วนหน้า
 			</span>
 		</div>
 	</header>

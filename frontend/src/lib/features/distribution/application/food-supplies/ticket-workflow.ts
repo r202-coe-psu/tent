@@ -3,8 +3,7 @@ import { qtyGt } from '$lib/utils/qty';
 import {
 	type RequisitionTicket,
 	type RequisitionTicketInput,
-	type TicketItem,
-	normalizeWholeItemInput
+	type TicketItem
 } from '../../domain/food-supplies';
 import {
 	RequisitionTicketRemoteRepository,
@@ -58,22 +57,9 @@ export async function createRequisitionTicket(
 	}
 
 	for (const item of input.items) {
-		const normReq = normalizeWholeItemInput(String(item.requested_qty));
-		if (!normReq.isValid || !normReq.value) {
-			throw new WorkflowValidationError(
-				`requested_qty must be a positive whole number for item ${item.item_id}`
-			);
-		}
-		item.requested_qty = normReq.value;
-
+		assertPositiveIntegerQty(item.requested_qty, `requested_qty for item ${item.item_id}`);
 		if (item.allocated_qty) {
-			const normAlloc = normalizeWholeItemInput(String(item.allocated_qty));
-			if (!normAlloc.isValid || !normAlloc.value) {
-				throw new WorkflowValidationError(
-					`allocated_qty must be a positive whole number for item ${item.item_id}`
-				);
-			}
-			item.allocated_qty = normAlloc.value;
+			assertPositiveIntegerQty(item.allocated_qty, `allocated_qty for item ${item.item_id}`);
 		}
 	}
 
@@ -97,13 +83,7 @@ export async function allocateTicketItems(
 	}
 
 	for (const alloc of allocations) {
-		const norm = normalizeWholeItemInput(String(alloc.allocated_qty));
-		if (!norm.isValid || !norm.value) {
-			throw new WorkflowValidationError(
-				`allocated_qty must be a positive whole number for item ${alloc.item_id}`
-			);
-		}
-		alloc.allocated_qty = norm.value;
+		assertPositiveIntegerQty(alloc.allocated_qty, `allocated_qty for item ${alloc.item_id}`);
 	}
 
 	const ticketRepo = resolveTicketRepo(repo, ctx);

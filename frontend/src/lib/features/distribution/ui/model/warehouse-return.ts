@@ -1,15 +1,7 @@
-import {
-	addQty,
-	parseQty,
-	persistQty,
-	qtyGt,
-	qtyLte,
-	qtyStrNonNegativeSchema,
-	subQty
-} from '$lib/utils/qty';
+import { addQty, persistQty, qtyGt, qtyLte, subQty } from '$lib/utils/qty';
+import { validateWholeItemInput } from '../../domain/food-supplies';
 import type { AuthorContext } from '$lib/db/model';
 import type { RequisitionTicket, TicketItem } from '../../domain/food-supplies';
-import { normalizeWholeItemInput } from '../../domain/food-supplies';
 import type { VerifiedWarehouseReturns } from '../../application/food-supplies/reconciliation-workflow';
 import { canReceiveWarehouseReturns } from '../../application/food-supplies/auth';
 
@@ -40,7 +32,6 @@ export interface WarehouseReturnSummaryPreview {
 export interface VerifiedQtyValidationResult {
 	isValid: boolean;
 	normalized?: string;
-	wasNormalized?: boolean;
 	error?: string;
 }
 
@@ -64,8 +55,8 @@ export function initializeVerifiedQuantities(items: TicketItem[]): Record<string
 
 /**
  * Validates a single verified quantity string against canonical rules:
- * - Must be a valid whole-item quantity (normalizes decimal with ceiling)
- * - Must be >= 0 (allowZero: true)
+ * - Must be a non-negative whole-number string
+ * - Must be >= 0
  * - Must be <= item.returned_qty sent by frontline (warehouse cannot increase returns)
  */
 export function validateVerifiedQuantity(
@@ -77,24 +68,28 @@ export function validateVerifiedQuantity(
 		return { isValid: false, error: 'กรุณาระบุจำนวนตรวจรับ' };
 	}
 
-	const norm = normalizeWholeItemInput(trimmed, { allowZero: true });
-	if (!norm.isValid || norm.normalized === null) {
-		return { isValid: false, error: norm.error ?? 'จำนวนต้องเป็นตัวเลขที่ถูกต้อง' };
+	const validation = validateWholeItemInput(trimmed, { allowZero: true });
+	if (!validation.isValid || !validation.value) {
+		return {
+			isValid: false,
+			error: /^-/.test(trimmed)
+				? 'จำนวนตรวจรับต้องไม่ติดลบ (≥ 0)'
+				: (validation.error ?? 'จำนวนต้องเป็นตัวเลขจำนวนเต็มที่ถูกต้อง')
+		};
 	}
 
-	const normalized = norm.normalized;
+	const normalized = validation.value;
 	const safeDeclared = persistQty(frontlineDeclared || '0');
 
 	if (!qtyLte(normalized, safeDeclared)) {
 		return {
 			isValid: false,
 			error: `จำนวนตรวจรับ (${normalized}) ต้องไม่เกินจำนวนที่จุดแจกแจ้งส่งคืน (${safeDeclared})`,
-			normalized,
-			wasNormalized: norm.wasNormalized
+			normalized
 		};
 	}
 
-	return { isValid: true, normalized, wasNormalized: norm.wasNormalized };
+	return { isValid: true, normalized };
 }
 
 /**

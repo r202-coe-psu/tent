@@ -31,8 +31,8 @@ const makePool = (
 	created_by: 'warehouse_user',
 	item_id: 'item:fan',
 	stock_ledger_id: `stock_ledger:${id}`,
-	total_received_qty: '10.5',
-	claimed_qty: status === 'ACTIVE' ? '2.5' : '10.5',
+	total_received_qty: '10',
+	claimed_qty: status === 'ACTIVE' ? '2' : '10',
 	unclaimed_quota: status === 'ACTIVE' ? '8' : '0',
 	claim_ids: status === 'ACTIVE' ? [`bulk_return_claim:${id}`] : [],
 	status,
@@ -77,8 +77,8 @@ describe('Bulk Pool Manager model (Slice 5.5E-1 Read-Only)', () => {
 
 	it('returns authoritative quantity strings and claim count without floating-point arithmetic', () => {
 		expect(getBulkPoolAccounting(pools[0])).toEqual({
-			totalReceived: '10.5',
-			claimed: '2.5',
+			totalReceived: '10',
+			claimed: '2',
 			remaining: '8',
 			claimCount: 1
 		});
@@ -163,20 +163,19 @@ describe('Bulk Pool Intake & Create Dialog (Slice 5.5E-2)', () => {
 		it('rejects non-numeric quantity', () => {
 			const res = validateCreateBulkPoolForm('item:fan', 'abc');
 			expect(res.isValid).toBe(false);
-			expect(res.error).toBe('จำนวนต้องเป็นตัวเลขที่ถูกต้อง');
+			expect(res.error).toBe('จำนวนต้องเป็นตัวเลขจำนวนเต็มที่ถูกต้อง');
 		});
 
-		it('accepts and normalizes valid positive integer quantity', () => {
+		it('accepts valid positive integer quantity', () => {
 			const res = validateCreateBulkPoolForm('item:fan', '10');
 			expect(res.isValid).toBe(true);
 			expect(res.normalizedQty).toBe('10');
 		});
 
-		it('accepts and normalizes valid positive decimal quantity with whole-item ceiling', () => {
+		it('rejects positive decimal quantity', () => {
 			const res = validateCreateBulkPoolForm('item:fan', '25.5');
-			expect(res.isValid).toBe(true);
-			expect(res.normalizedQty).toBe('26');
-			expect(res.wasNormalized).toBe(true);
+			expect(res.isValid).toBe(false);
+			expect(res.error).toBe('จำนวนต้องเป็นจำนวนเต็ม เช่น 1, 2, 3');
 		});
 	});
 

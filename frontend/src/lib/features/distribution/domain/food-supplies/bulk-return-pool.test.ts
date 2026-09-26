@@ -7,29 +7,40 @@ const ULID = '01J00000000000000000000000';
 const TICKET_ID = `requisition_ticket:${ULID}`;
 
 describe('Food & Supplies BulkReturnPool contract', () => {
-	it('creates a Decimal-safe active pool with an exact quota equation', () => {
+	it('creates a whole-unit active pool with an exact quota equation', () => {
 		const pool = createBulkReturnPool(
 			{
 				item_id: 'item:wheelchair',
 				stock_ledger_id: `stock_ledger:${ULID}`,
 				ticket_id: TICKET_ID,
-				total_received_qty: '2.5'
+				total_received_qty: '2'
 			},
 			ctx,
 			ULID
 		);
-		expect(pool).toMatchObject({ claimed_qty: '0', unclaimed_quota: '2.5', status: 'ACTIVE' });
+		expect(pool).toMatchObject({ claimed_qty: '0', unclaimed_quota: '2', status: 'ACTIVE' });
 		expect(
-			bulkReturnPoolDocSchema.safeParse({ ...pool, claimed_qty: '1', unclaimed_quota: '1' }).success
+			bulkReturnPoolDocSchema.safeParse({ ...pool, claimed_qty: '1', unclaimed_quota: '0' }).success
 		).toBe(false);
 		expect(
 			bulkReturnPoolDocSchema.safeParse({
 				...pool,
-				claimed_qty: '2.5',
+				claimed_qty: '2',
 				unclaimed_quota: '0',
 				status: 'EXHAUSTED'
 			}).success
 		).toBe(true);
+		expect(() =>
+			createBulkReturnPool(
+				{
+					item_id: 'item:wheelchair',
+					stock_ledger_id: `stock_ledger:${ULID}`,
+					total_received_qty: '2.5'
+				},
+				ctx,
+				ULID
+			)
+		).toThrow();
 		expect(
 			bulkReturnPoolDocSchema.safeParse({
 				...pool,

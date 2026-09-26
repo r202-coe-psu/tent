@@ -77,9 +77,13 @@ export {
 	distributionLogIdSchema,
 	bulkReturnPoolIdSchema,
 	stockLedgerIdSchema,
-	normalizeWholeItemInput,
-	type WholeItemNormalizationResult,
-	type WholeItemNormalizationOptions
+	validateWholeItemInput,
+	positiveWholeQtySchema,
+	nonNegativeWholeQtySchema,
+	positiveWholeQtyCoerceSchema,
+	nonNegativeWholeQtyCoerceSchema,
+	type WholeItemValidationResult,
+	type WholeItemValidationOptions
 } from './shared';
 
 export {

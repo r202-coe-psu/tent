@@ -1,21 +1,15 @@
 import { z } from 'zod';
 import { type AuthorContext, type BaseDoc, makeDoc, now } from '$lib/db/model';
-import {
-	addQty,
-	parseQty,
-	qtyGt,
-	qtyLte,
-	qtyStrNonNegativeSchema,
-	qtyStrPositiveSchema,
-	qtyStrCoercePositiveSchema,
-	subQty
-} from '$lib/utils/qty';
+import { addQty, parseQty, qtyGt, qtyLte, subQty } from '$lib/utils/qty';
 import {
 	bulkReturnPoolIdSchema,
 	distributionLogIdSchema,
 	foodSuppliesBaseDocShape,
 	mealPeriodSchema,
 	type MealPeriod,
+	positiveWholeQtySchema,
+	nonNegativeWholeQtySchema,
+	positiveWholeQtyCoerceSchema,
 	requisitionTicketIdSchema,
 	thailandCalendarDay
 } from './shared';
@@ -46,14 +40,14 @@ const distributionLogFields = {
 	item_id: z.string().min(1),
 	meal_service_id: z.string().min(1).optional(),
 	recipe_id: z.string().min(1).optional(),
-	qty: qtyStrPositiveSchema,
+	qty: positiveWholeQtySchema,
 	recipient_type: distributionRecipientTypeSchema,
 	recipient_id: z.string().min(1).nullable().optional(),
 	household_id: z.string().min(1).optional(),
 	meal: mealPeriodSchema.optional(),
 	is_returnable: z.boolean(),
 	status: distributionLogStatusSchema,
-	qty_returned: qtyStrNonNegativeSchema.optional(),
+	qty_returned: nonNegativeWholeQtySchema.optional(),
 	condition_on_return: returnConditionSchema.optional(),
 	clear_reason: loanClearReasonSchema.optional(),
 	bulk_pool_id: bulkReturnPoolIdSchema.optional(),
@@ -226,7 +220,7 @@ export const distributionLogInputSchema = z
 		item_id: z.string().min(1),
 		meal_service_id: z.string().min(1).optional(),
 		recipe_id: z.string().min(1).optional(),
-		qty: qtyStrCoercePositiveSchema,
+		qty: positiveWholeQtyCoerceSchema,
 		recipient_type: distributionRecipientTypeSchema,
 		recipient_id: z.string().min(1).nullable().optional(),
 		household_id: z.string().min(1).optional(),

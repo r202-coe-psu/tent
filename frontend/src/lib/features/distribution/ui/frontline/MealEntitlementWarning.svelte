@@ -79,7 +79,7 @@
 						<h2 id="meal-warning-title" class="text-base font-bold text-slate-900">
 							แจ้งเตือน: ได้รับอาหารมื้อนี้แล้ว
 						</h2>
-						<p class="text-xs text-slate-500">Meal Entitlement Warning (CR-121 FR-DST-02)</p>
+						<p class="text-xs text-slate-500">ตรวจสอบสิทธิ์การรับอาหาร</p>
 					</div>
 				</div>
 

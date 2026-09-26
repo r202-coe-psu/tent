@@ -1,6 +1,7 @@
 import type { AuthorContext } from '$lib/db/model';
 import { now } from '$lib/db/model';
-import { addQty, parseQty, qtyGt, qtyLte, qtyStrNonNegativeSchema, subQty } from '$lib/utils/qty';
+import { addQty, parseQty, qtyGt, qtyLte, subQty } from '$lib/utils/qty';
+import { nonNegativeWholeQtySchema } from '../../domain/food-supplies';
 import {
 	createStockLedger,
 	deriveDeterministicLedgerId,
@@ -10,7 +11,6 @@ import {
 } from '$lib/features/operations';
 import { ConflictError } from '$lib/utils/errors';
 import type { RequisitionTicket, TicketItem } from '../../domain/food-supplies';
-import { normalizeWholeItemInput } from '../../domain/food-supplies';
 import {
 	DistributionLogRemoteRepository,
 	type DistributionLogRepository,
@@ -165,12 +165,7 @@ export async function closeShift(
 		const distributed = summary ? summary.distributed_qty : item.distributed_qty || '0';
 		const remainingInHand = summary ? summary.remaining_in_hand : '0';
 
-		const rawReturned = options?.returned_quantities?.[item.item_id] ?? remainingInHand;
-		const normReturned = normalizeWholeItemInput(rawReturned, { allowZero: true });
-		const returned =
-			normReturned.isValid && normReturned.normalized !== null
-				? normReturned.normalized
-				: rawReturned;
+		const returned = options?.returned_quantities?.[item.item_id] ?? remainingInHand;
 		const allocated = item.allocated_qty || '0';
 		const accounted = addQty(distributed, returned);
 		const discrepancy = subQty(allocated, accounted);
@@ -260,13 +255,13 @@ export async function receiveWarehouseReturns(
 	const verifiedByItem = new Map<string, string>();
 	for (const item of current.items) {
 		const rawVerified = requestedQuantities[item.item_id] ?? item.returned_qty ?? '0';
-		const normVerified = normalizeWholeItemInput(rawVerified, { allowZero: true });
-		if (!normVerified.isValid || normVerified.normalized === null) {
+		const parsedVerified = nonNegativeWholeQtySchema.safeParse(rawVerified);
+		if (!parsedVerified.success) {
 			throw new WorkflowValidationError(
-				`Warehouse verified return for ${item.item_id} must be a valid whole-item quantity`
+				`Warehouse verified return for ${item.item_id} must be a non-negative whole number`
 			);
 		}
-		const verifiedQty = normVerified.normalized;
+		const verifiedQty = parsedVerified.data;
 
 		const expectedReturn = item.returned_qty ?? '0';
 		const remainingAfterDistribution = subQty(item.allocated_qty, item.distributed_qty ?? '0');

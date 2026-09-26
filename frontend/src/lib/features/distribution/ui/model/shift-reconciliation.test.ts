@@ -21,8 +21,8 @@ describe('Shift Reconciliation UI Model', () => {
 		{
 			item_id: 'item:rice',
 			item_name: 'ข้าวสาร',
-			allocated_qty: '50.5',
-			distributed_qty: '50.5',
+			allocated_qty: '50',
+			distributed_qty: '50',
 			remaining_in_hand: '0'
 		}
 	];
@@ -62,10 +62,10 @@ describe('Shift Reconciliation UI Model', () => {
 			expect(res.error).toBe('จำนวนส่งคืนต้องไม่ติดลบ (≥ 0)');
 		});
 
-		it('rejects non-numeric quantity', () => {
+		it('rejects non-integer quantity', () => {
 			const res = validateReturnedQuantity('abc', '3');
 			expect(res.isValid).toBe(false);
-			expect(res.error).toBe('จำนวนต้องเป็นตัวเลขที่ถูกต้อง');
+			expect(res.error).toBe('จำนวนต้องเป็นตัวเลขจำนวนเต็มที่ถูกต้อง');
 		});
 
 		it('rejects returned quantity exceeding remaining in hand', () => {
@@ -74,29 +74,23 @@ describe('Shift Reconciliation UI Model', () => {
 			expect(res.error).toContain('ต้องไม่เกินจำนวนคงเหลือในมือ');
 		});
 
-		it('normalizes decimal strings with whole-item ceiling (e.g. 2.1000 -> 3, 2.000 -> 2)', () => {
-			const res = validateReturnedQuantity('2.1000', '3.5');
-			expect(res.isValid).toBe(true);
-			expect(res.normalized).toBe('3');
-			expect(res.wasNormalized).toBe(true);
-
-			const resWhole = validateReturnedQuantity('2.000', '3.5');
-			expect(resWhole.isValid).toBe(true);
-			expect(resWhole.normalized).toBe('2');
-			expect(resWhole.wasNormalized).toBe(true);
+		it('rejects decimal notation', () => {
+			const res = validateReturnedQuantity('2.5000', '3.5');
+			expect(res.isValid).toBe(false);
+			expect(res.error).toBe('จำนวนต้องเป็นจำนวนเต็ม เช่น 0, 1, 2, 3');
 		});
 	});
 
 	describe('3. Form validation across all items', () => {
 		it('validates all items and produces normalizedValues when valid', () => {
 			const formValues = {
-				'item:fan': '2.1',
+				'item:fan': '2',
 				'item:rice': '0'
 			};
 			const res = validateShiftCloseForm(sampleSummaries, formValues);
 			expect(res.isValid).toBe(true);
 			expect(res.normalizedValues).toEqual({
-				'item:fan': '3',
+				'item:fan': '2',
 				'item:rice': '0'
 			});
 			expect(Object.keys(res.errors)).toHaveLength(0);

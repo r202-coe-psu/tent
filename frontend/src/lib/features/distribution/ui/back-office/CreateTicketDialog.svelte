@@ -9,12 +9,7 @@
 		getReturnableBadgeLabel,
 		getReturnableBadgeClass
 	} from '../model/catalog-eligibility';
-	import {
-		validatePositiveQuantity,
-		buildCreateTicketItem,
-		normalizeWholeItemInput,
-		formatNormalizationNotice
-	} from '../model/ticket-quantity';
+	import { validatePositiveQuantity, buildCreateTicketItem } from '../model/ticket-quantity';
 	import { formatDistributionError } from '../model/distribution-error';
 	import CatalogItemPicker from './CatalogItemPicker.svelte';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
@@ -52,7 +47,6 @@
 	let notes = $state('');
 	let selectedItems = $state<SelectedTicketItem[]>([]);
 	let pickerOpen = $state(false);
-	let normalizationNotices = $state<Record<string, string>>({});
 
 	// Available destination suggestions from shelter zones and food distribution points
 	const destinationSuggestions = $derived.by(() => {
@@ -111,15 +105,7 @@
 	function handleItemQtyBlur(itemId: string, raw: string) {
 		const item = selectedItems.find((i) => i.master._id === itemId);
 		if (!item) return;
-		const norm = normalizeWholeItemInput(raw);
-		if (norm.isValid && norm.value && norm.wasNormalized) {
-			normalizationNotices[itemId] = formatNormalizationNotice(
-				raw.trim(),
-				norm.value,
-				item.master.base_unit
-			);
-			item.requested_qty = norm.value;
-		}
+		validatePositiveQuantity(raw);
 	}
 
 	function resetForm() {
@@ -129,7 +115,6 @@
 		notes = '';
 		selectedItems = [];
 		pickerOpen = false;
-		normalizationNotices = {};
 	}
 
 	async function handleSubmit() {
@@ -152,7 +137,7 @@
 			return;
 		}
 
-		// 4. Validation & Normalization: Quantities and Duplicates and Category eligibility
+		// 4. Validation: Quantities, duplicates, and category eligibility
 		const seenItemIds: Record<string, boolean> = {};
 		for (const item of selectedItems) {
 			if (seenItemIds[item.master._id]) {
@@ -161,22 +146,12 @@
 			}
 			seenItemIds[item.master._id] = true;
 
-			const norm = normalizeWholeItemInput(item.requested_qty);
-			if (!norm.isValid || !norm.value) {
+			const validation = validatePositiveQuantity(item.requested_qty);
+			if (!validation.isValid) {
 				toast.error(
-					norm.error ??
-						`จำนวนเบิกของ ${item.master.name} ต้องเป็นจำนวนเต็มตั้งแต่ 1 ขึ้นไป`
+					validation.error ?? `จำนวนเบิกของ ${item.master.name} ต้องเป็นจำนวนเต็มที่ถูกต้อง`
 				);
 				return;
-			}
-
-			if (norm.wasNormalized) {
-				normalizationNotices[item.master._id] = formatNormalizationNotice(
-					item.requested_qty.trim(),
-					norm.value,
-					item.master.base_unit
-				);
-				item.requested_qty = norm.value;
 			}
 
 			if (!isEligibleDistributionCatalogItem(item.master, requisitionType)) {
@@ -427,16 +402,10 @@
 												<div class="inline-flex items-center gap-1.5">
 													<Input
 														type="text"
-														inputmode="decimal"
+														inputmode="numeric"
+														step="1"
 														min="1"
 														bind:value={item.requested_qty}
-														oninput={() => {
-															if (normalizationNotices[item.master._id]) {
-																const next = { ...normalizationNotices };
-																delete next[item.master._id];
-																normalizationNotices = next;
-															}
-														}}
 														onblur={() => {
 															handleItemQtyBlur(item.master._id, item.requested_qty);
 														}}
@@ -449,11 +418,6 @@
 													/>
 													<span class="text-xs text-slate-500">{item.master.base_unit}</span>
 												</div>
-												{#if normalizationNotices[item.master._id]}
-													<span class="text-right text-2xs font-medium text-amber-700" role="status">
-														{normalizationNotices[item.master._id]}
-													</span>
-												{/if}
 											</div>
 										</td>
 										<td class="py-2.5 pr-4 pl-2 text-right">

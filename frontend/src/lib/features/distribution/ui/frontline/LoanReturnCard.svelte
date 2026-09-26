@@ -130,13 +130,9 @@
 					>
 						คืนสิ่งของยืม-คืน
 					</span>
-					<span class="text-2xs font-bold text-slate-500">
-						Slice 5.5A / 5.5B / 5.5C / 5.5D Loan Returns
-					</span>
+					<span class="text-2xs font-bold text-slate-500"> การรับคืนของยืม </span>
 				</div>
-				<h3 class="text-base font-bold text-slate-900">
-					สถานีรับคืนพัสดุและสิ่งของยืม-คืน (Loan Return Counter)
-				</h3>
+				<h3 class="text-base font-bold text-slate-900">สถานีรับคืนพัสดุและสิ่งของยืม-คืน</h3>
 			</div>
 		</div>
 
@@ -322,7 +318,7 @@
 								class="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-purple-200 bg-purple-50 py-2 text-xs font-bold text-purple-800 shadow-2xs transition-colors hover:border-purple-300 hover:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-50"
 							>
 								<Archive class="h-3.5 w-3.5 text-purple-600" />
-								<span>เคลียร์จากจุดรวมคืน (CR-134 Gate Clearance)</span>
+								<span>เคลียร์จากจุดรวมคืน</span>
 							</button>
 						</div>
 					</div>

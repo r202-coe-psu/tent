@@ -284,7 +284,7 @@ describe('Phase 5 Slice 5.0 — Distribution TanStack Query Layer', () => {
 			]);
 		});
 
-		it('generates deterministic query keys for bulk pools and claims (CR-134)', () => {
+		it('generates deterministic query keys for bulk pools and claims', () => {
 			expect(distributionKeys.bulkPools('SH001')).toEqual([
 				'distribution',
 				'SH001',

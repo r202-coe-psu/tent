@@ -335,7 +335,7 @@
 					</div>
 					<div>
 						<h2 id="bulk-gate-clear-dialog-title" class="text-base font-bold text-slate-900">
-							เคลียร์รายการจากจุดรวมคืน (CR-134 Bulk Gate Clearance)
+							เคลียร์รายการจากจุดรวมคืน
 						</h2>
 						<p id="bulk-gate-clear-dialog-desc" class="text-xs text-slate-500">
 							{itemName || log.item_id} · รหัสรายการ: <span class="font-mono">{log._id}</span>

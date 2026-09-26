@@ -492,8 +492,8 @@ describe('ticket-workflow', () => {
 		expect(untouched?.status).toBe('PENDING_PICK');
 	});
 
-	describe('Positive whole number quantity enforcement (Slice 5.1/5.7)', () => {
-		it('rejects creating a ticket with fractional requested_qty', async () => {
+	describe('Whole-item quantity input validation', () => {
+		it('rejects fractional requested_qty and allocated_qty at creation', async () => {
 			await expect(
 				createRequisitionTicket(
 					{
@@ -515,7 +515,7 @@ describe('ticket-workflow', () => {
 					WH_CTX,
 					repo
 				)
-			).rejects.toThrow(/must be a positive whole number/);
+			).rejects.toThrow(/positive whole number/);
 		});
 
 		it('rejects creating a ticket with scientific notation requested_qty', async () => {
@@ -543,7 +543,7 @@ describe('ticket-workflow', () => {
 			).rejects.toThrow(/must be a positive whole number/);
 		});
 
-		it('rejects allocating fractional quantity to an item', async () => {
+		it('rejects fractional allocated_qty before persistence', async () => {
 			const ticket = await createRequisitionTicket(
 				{
 					ticket_no: 'TKT-FOOD-0001',
@@ -572,7 +572,7 @@ describe('ticket-workflow', () => {
 					WH_CTX,
 					repo
 				)
-			).rejects.toThrow(/must be a positive whole number/);
+			).rejects.toThrow(/positive whole number/);
 		});
 	});
 });

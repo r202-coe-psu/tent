@@ -1,82 +1,56 @@
 /**
  * Canonical Decimal quantity helpers for transactional ticket creation and allocation UI.
  * Enforces positive whole-number (integer item count) invariants for distribution workflows.
- * Strictly prevents IEEE-754 precision loss by avoiding parseFloat / Number / parseInt.
+ * Uses textual Decimal-string semantics and avoids floating-point coercion.
  */
 
-import { persistQty } from '$lib/utils/qty';
 import type { ItemMaster } from '$lib/features/catalog';
 import {
-	normalizeWholeItemInput,
-	type WholeItemNormalizationResult,
-	type WholeItemNormalizationOptions
+	validateWholeItemInput,
+	positiveWholeQtySchema,
+	type WholeItemValidationResult,
+	type WholeItemValidationOptions
 } from '../../domain/food-supplies';
 
-export {
-	normalizeWholeItemInput,
-	type WholeItemNormalizationResult,
-	type WholeItemNormalizationOptions
-};
+export { validateWholeItemInput, type WholeItemValidationResult, type WholeItemValidationOptions };
 
 export interface QuantityValidationResult {
 	isValid: boolean;
 	value?: string;
 	error?: string;
-	wasNormalized?: boolean;
-	originalValue?: string;
 }
-
-/** Matches positive whole numbers with optional leading zeros (no decimals, no sign, no scientific notation). */
-const POSITIVE_INTEGER_RE = /^0*([1-9]\d*)$/;
 
 /** Tests whether a raw string represents a valid positive whole number. */
 export function isPositiveIntegerString(raw: string): boolean {
-	return POSITIVE_INTEGER_RE.test(raw.trim());
+	return positiveWholeQtySchema.safeParse(raw).success;
 }
 
 /**
- * Formats user-friendly Thai feedback when a quantity is normalized (ceiling-rounded).
- * E.g. "จำนวนต้องเป็นจำนวนเต็ม ระบบปรับจาก 1.5 เป็น 2"
- */
-export function formatNormalizationNotice(
-	original: string,
-	normalized: string,
-	unit?: string
-): string {
-	const unitSuffix = unit ? ` ${unit}` : '';
-	return `จำนวนต้องเป็นจำนวนเต็ม ระบบปรับจาก ${original} เป็น ${normalized}${unitSuffix}`;
-}
-
-/**
- * Validates and canonicalizes user-entered quantity string for transactional ticket operations
- * (ticket item request, allocation, or catalog picker).
+ * Validates and canonicalizes user-entered positive whole-item quantity.
  *
  * Guarantees:
- * - Automatically normalizes valid positive decimals by ALWAYS ROUNDING UP (Ceiling).
  * - Normalizes redundant leading zeros (e.g. '050' -> '50').
- * - ZERO IEEE-754 `parseFloat` / `Number` / `parseInt` conversion.
+ * - No floating-point conversion.
  * - Preserves precision for arbitrarily large integers (> Number.MAX_SAFE_INTEGER).
  * - Strictly rejects non-numeric strings, NaN, Infinity, empty/whitespace, zero, negative values,
  *   and scientific notation (1e2, 1E2).
- * - Clear Thai validation message: "จำนวนต้องเป็นจำนวนเต็มตั้งแต่ 1 ขึ้นไป".
+ * - Rejects decimal notation, including values such as "2.0".
  */
 export function validatePositiveQuantity(
 	raw: string,
 	options?: { allowZero?: boolean }
 ): QuantityValidationResult {
-	const norm = normalizeWholeItemInput(raw, options);
-	if (!norm.isValid || !norm.value) {
+	const result = validateWholeItemInput(raw, options);
+	if (!result.isValid || !result.value) {
 		return {
 			isValid: false,
-			error: norm.error ?? 'จำนวนต้องเป็นจำนวนเต็มตั้งแต่ 1 ขึ้นไป'
+			error: result.error ?? 'จำนวนต้องเป็นจำนวนเต็มที่ถูกต้อง'
 		};
 	}
 
 	return {
 		isValid: true,
-		value: norm.value,
-		wasNormalized: norm.wasNormalized,
-		originalValue: (raw ?? '').trim()
+		value: result.value
 	};
 }
 
@@ -100,7 +74,7 @@ export function buildCreateTicketItem(item: { master: ItemMaster; requested_qty:
 		throw new Error(
 			res.error
 				? `จำนวนเบิกของ ${item.master.name}: ${res.error}`
-				: `จำนวนเบิกของ ${item.master.name} ต้องเป็นจำนวนเต็มตั้งแต่ 1 ขึ้นไป`
+				: `จำนวนเบิกของ ${item.master.name} ต้องเป็นจำนวนเต็มที่ถูกต้อง`
 		);
 	}
 	return {
@@ -127,7 +101,7 @@ export function buildAllocationItem(
 		throw new Error(
 			res.error
 				? `จำนวนจัดสรรของ ${item.item_name || item.item_id}: ${res.error}`
-				: `จำนวนจัดสรรของ ${item.item_name || item.item_id} ต้องเป็นจำนวนเต็มตั้งแต่ 1 ขึ้นไป`
+				: `จำนวนจัดสรรของ ${item.item_name || item.item_id} ต้องเป็นจำนวนเต็มที่ถูกต้อง`
 		);
 	}
 	return {

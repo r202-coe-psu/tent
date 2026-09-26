@@ -1,6 +1,6 @@
-import { addQty, qtyGt, qtyLte, qtyStrPositiveSchema, subQty } from '$lib/utils/qty';
+import { addQty, qtyGt, qtyLte, subQty } from '$lib/utils/qty';
 import {
-	normalizeWholeItemInput,
+	positiveWholeQtySchema,
 	type DistributionLog,
 	type ReturnCondition,
 	type NonPhysicalClearReason
@@ -58,14 +58,13 @@ export interface ReturnQtyValidationResult {
 	isValid: boolean;
 	error?: string;
 	normalizedQty?: string;
-	wasNormalized?: boolean;
 }
 
 /**
  * Validates the quantity entered by an operator for physical counter return.
- * Normalizes countable whole-item input with ceiling behavior.
+ * Requires countable whole-item input without rounding.
  * - Must be non-empty
- * - Must be a valid positive quantity (> 0, ≤4 decimals)
+ * - Must be a valid positive whole quantity
  * - Must not exceed currently known remaining balance
  */
 export function validateCounterReturnQuantity(
@@ -77,37 +76,33 @@ export function validateCounterReturnQuantity(
 		return { isValid: false, error: 'กรุณาระบุจำนวนที่ต้องการคืน' };
 	}
 
-	const parsed = qtyStrPositiveSchema.safeParse(trimmed);
+	const parsed = positiveWholeQtySchema.safeParse(trimmed);
 	if (!parsed.success) {
+		const error =
+			/^-/.test(trimmed) || trimmed === '0'
+				? 'จำนวนที่คืนต้องมากกว่า 0'
+				: /\./.test(trimmed)
+					? 'จำนวนที่คืนต้องเป็นจำนวนเต็ม เช่น 1, 2, 3'
+					: 'จำนวนที่คืนต้องเป็นตัวเลขจำนวนเต็มที่ถูกต้อง';
 		return {
 			isValid: false,
-			error: 'จำนวนที่คืนต้องมากกว่า 0 และเป็นตัวเลขทศนิยมไม่เกิน 4 ตำแหน่ง'
+			error: error
 		};
 	}
 
-	const norm = normalizeWholeItemInput(parsed.data);
-	if (!norm.isValid || !norm.normalized) {
-		return {
-			isValid: false,
-			error: 'จำนวนที่คืนต้องมากกว่า 0 และเป็นตัวเลขทศนิยมไม่เกิน 4 ตำแหน่ง'
-		};
-	}
-
-	const targetQty = norm.normalized;
+	const targetQty = parsed.data;
 
 	if (!qtyLte(targetQty, remaining)) {
 		return {
 			isValid: false,
 			error: `จำนวนที่คืนครั้งนี้ (${targetQty}) เกินจำนวนคงค้างที่ต้องส่งคืน (${remaining})`,
-			normalizedQty: targetQty,
-			wasNormalized: norm.wasNormalized
+			normalizedQty: targetQty
 		};
 	}
 
 	return {
 		isValid: true,
-		normalizedQty: targetQty,
-		wasNormalized: norm.wasNormalized
+		normalizedQty: targetQty
 	};
 }
 

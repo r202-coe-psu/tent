@@ -35,91 +35,97 @@ export function thailandCalendarDay(isoTimestampOrDate: string | Date = new Date
 	return new Date(d.getTime() + THAILAND_UTC_OFFSET_MS).toISOString().slice(0, 10);
 }
 
-export interface WholeItemNormalizationResult {
+export interface WholeItemValidationResult {
 	isValid: boolean;
 	value?: string;
 	normalized: string | null;
-	wasNormalized?: boolean;
 	error?: string;
 }
 
-export interface WholeItemNormalizationOptions {
+export interface WholeItemValidationOptions {
 	allowZero?: boolean;
 }
 
-const POSITIVE_DECIMAL_STRING_RE = /^0*(\d+)(?:\.(\d+))?$/;
+const WHOLE_NUMBER_STRING_RE = /^0*\d+$/;
+const POSITIVE_WHOLE_NUMBER_RE = /^0*[1-9]\d*$/;
+
+export const positiveWholeQtySchema = z
+	.string()
+	.trim()
+	.regex(POSITIVE_WHOLE_NUMBER_RE, 'Quantity must be a positive whole number')
+	.transform((value) => value.replace(/^0+/, ''));
+
+export const nonNegativeWholeQtySchema = z
+	.string()
+	.trim()
+	.regex(WHOLE_NUMBER_STRING_RE, 'Quantity must be a non-negative whole number')
+	.transform((value) => value.replace(/^0+/, '') || '0');
+
+export const positiveWholeQtyCoerceSchema = z
+	.union([z.string(), z.number()])
+	.transform((value, ctx) => {
+		const parsed = positiveWholeQtySchema.safeParse(String(value));
+		if (!parsed.success) {
+			ctx.addIssue({ code: 'custom', message: 'Quantity must be a positive whole number' });
+			return z.NEVER;
+		}
+		return parsed.data;
+	});
+
+export const nonNegativeWholeQtyCoerceSchema = z
+	.union([z.string(), z.number()])
+	.transform((value, ctx) => {
+		const parsed = nonNegativeWholeQtySchema.safeParse(String(value));
+		if (!parsed.success) {
+			ctx.addIssue({ code: 'custom', message: 'Quantity must be a non-negative whole number' });
+			return z.NEVER;
+		}
+		return parsed.data;
+	});
 
 /**
- * Normalizes user-entered whole-item quantities by ALWAYS ROUNDING UP (Ceiling).
- * Operates purely on decimal-string semantics with ZERO IEEE-754 floating-point conversion.
- *
- * Examples:
- * - "1"      -> "1"
- * - "01"     -> "1"
- * - "1.0"    -> "1"
- * - "2.000"  -> "2"
- * - "0.1"    -> "1"
- * - "0.5"    -> "1"
- * - "1.01"   -> "2"
- * - "1.5"    -> "2"
- * - "1.99"   -> "2"
- * - "2.0001" -> "3"
- * - "10.01"  -> "11"
- *
- * Invalid inputs remain invalid:
- * - "", "0" (when allowZero is false), negative numbers ("-1", "-0.5"),
- *   non-numeric ("abc", "NaN", "Infinity"), and scientific notation ("1e2", "1E2").
+ * Validates a count quantity without rounding or floating-point conversion.
+ * Leading zeroes are canonicalized textually; decimal/scientific notation is rejected.
  */
-export function normalizeWholeItemInput(
+export function validateWholeItemInput(
 	raw: string,
-	options?: WholeItemNormalizationOptions
-): WholeItemNormalizationResult {
+	options?: WholeItemValidationOptions
+): WholeItemValidationResult {
 	const trimmed = (raw ?? '').trim();
 	if (!trimmed) {
 		return { isValid: false, normalized: null, error: 'กรุณาระบุจำนวน' };
 	}
 
-	const match = POSITIVE_DECIMAL_STRING_RE.exec(trimmed);
-	if (!match) {
-		return {
-			isValid: false,
-			normalized: null,
-			error: 'จำนวนต้องเป็นตัวเลขที่ถูกต้อง'
-		};
-	}
-
-	const intPart = match[1];
-	const fracPart = match[2];
-	const intClean = intPart.replace(/^0+/, '') || '0';
-	const hasFraction = fracPart !== undefined && /[1-9]/.test(fracPart);
-
-	if (intClean === '0' && !hasFraction) {
-		if (options?.allowZero) {
+	if (!WHOLE_NUMBER_STRING_RE.test(trimmed)) {
+		if (/^-/.test(trimmed)) {
 			return {
-				isValid: true,
-				value: '0',
-				normalized: '0',
-				wasNormalized: trimmed !== '0'
+				isValid: false,
+				normalized: null,
+				error: options?.allowZero ? 'จำนวนต้องไม่ติดลบ (≥ 0)' : 'จำนวนต้องมากกว่า 0'
 			};
 		}
 		return {
 			isValid: false,
 			normalized: null,
-			error: 'จำนวนต้องเป็นจำนวนเต็มตั้งแต่ 1 ขึ้นไป'
+			error: /\./.test(trimmed)
+				? options?.allowZero
+					? 'จำนวนต้องเป็นจำนวนเต็ม เช่น 0, 1, 2, 3'
+					: 'จำนวนต้องเป็นจำนวนเต็ม เช่น 1, 2, 3'
+				: 'จำนวนต้องเป็นตัวเลขจำนวนเต็มที่ถูกต้อง'
 		};
 	}
 
-	let result: string;
-	if (hasFraction) {
-		result = (BigInt(intClean) + 1n).toString();
-	} else {
-		result = intClean;
+	const value = trimmed.replace(/^0+/, '') || '0';
+	if (value === '0' && !options?.allowZero) {
+		return {
+			isValid: false,
+			normalized: null,
+			error: 'จำนวนต้องมากกว่า 0'
+		};
 	}
-
 	return {
 		isValid: true,
-		value: result,
-		normalized: result,
-		wasNormalized: result !== trimmed
+		value,
+		normalized: value
 	};
 }

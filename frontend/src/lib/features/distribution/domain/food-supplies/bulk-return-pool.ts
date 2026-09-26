@@ -1,18 +1,14 @@
 import { z } from 'zod';
 import { type AuthorContext, type BaseDoc, makeDoc } from '$lib/db/model';
-import {
-	parseQty,
-	qtyGt,
-	qtyStrNonNegativeSchema,
-	qtyStrPositiveSchema,
-	qtyStrCoercePositiveSchema
-} from '$lib/utils/qty';
+import { parseQty, qtyGt } from '$lib/utils/qty';
 import {
 	bulkReturnPoolIdSchema,
 	foodSuppliesBaseDocShape,
-	normalizeWholeItemInput,
 	requisitionTicketIdSchema,
 	stockLedgerIdSchema,
+	positiveWholeQtySchema,
+	nonNegativeWholeQtySchema,
+	positiveWholeQtyCoerceSchema,
 	ULID_PATTERN
 } from './shared';
 
@@ -26,9 +22,9 @@ const bulkReturnPoolFields = {
 	stock_ledger_id: stockLedgerIdSchema,
 	ticket_id: requisitionTicketIdSchema.optional(),
 	shift_id: z.string().min(1).optional(),
-	total_received_qty: qtyStrPositiveSchema,
-	claimed_qty: qtyStrNonNegativeSchema,
-	unclaimed_quota: qtyStrNonNegativeSchema,
+	total_received_qty: positiveWholeQtySchema,
+	claimed_qty: nonNegativeWholeQtySchema,
+	unclaimed_quota: nonNegativeWholeQtySchema,
 	claim_ids: z.array(z.string().regex(bulkReturnClaimIdPattern)).default([]),
 	status: bulkReturnPoolStatusSchema,
 	closed_at: z.string().datetime().optional(),
@@ -93,13 +89,7 @@ export const bulkReturnPoolInputSchema = z.object({
 	stock_ledger_id: stockLedgerIdSchema,
 	ticket_id: requisitionTicketIdSchema.optional(),
 	shift_id: z.string().min(1).optional(),
-	total_received_qty: z
-		.union([z.string(), z.number()])
-		.transform((val) => {
-			const norm = normalizeWholeItemInput(val);
-			return norm.normalized ?? String(val);
-		})
-		.pipe(qtyStrPositiveSchema),
+	total_received_qty: positiveWholeQtyCoerceSchema,
 	notes: z.string().trim().min(1).optional()
 });
 export type BulkReturnPoolInput = z.input<typeof bulkReturnPoolInputSchema>;

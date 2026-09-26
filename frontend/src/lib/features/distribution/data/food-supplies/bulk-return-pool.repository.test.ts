@@ -88,7 +88,7 @@ describe('BulkReturnPoolRemoteRepository', () => {
 			{
 				item_id: 'item:cot',
 				stock_ledger_id: dummyStockLedgerId,
-				total_received_qty: '20.5',
+				total_received_qty: '20',
 				notes: 'Morning shift sweep returns'
 			},
 			ctx
@@ -98,11 +98,11 @@ describe('BulkReturnPoolRemoteRepository', () => {
 		expect(pool.type).toBe('bulk_return_pool');
 		expect(pool.status).toBe('ACTIVE');
 		expect(pool.claimed_qty).toBe('0');
-		expect(pool.unclaimed_quota).toBe('20.5');
-		expect(pool.total_received_qty).toBe('20.5');
+		expect(pool.unclaimed_quota).toBe('20');
+		expect(pool.total_received_qty).toBe('20');
 	});
 
-	it('claims quota with exact Decimal arithmetic', async () => {
+	it('claims whole-unit quota with exact arithmetic', async () => {
 		const pool = await repo.create(
 			{
 				item_id: 'item:cot',
@@ -117,9 +117,9 @@ describe('BulkReturnPoolRemoteRepository', () => {
 		expect(updated.unclaimed_quota).toBe('7');
 		expect(updated.status).toBe('ACTIVE');
 
-		const updated2 = await repo.claimQuota(pool._id, '2.5', ctx);
-		expect(updated2.claimed_qty).toBe('5.5');
-		expect(updated2.unclaimed_quota).toBe('4.5');
+		const updated2 = await repo.claimQuota(pool._id, '2', ctx);
+		expect(updated2.claimed_qty).toBe('5');
+		expect(updated2.unclaimed_quota).toBe('5');
 		expect(updated2.status).toBe('ACTIVE');
 	});
 

@@ -26,8 +26,7 @@ import {
 	createBulkReturnPool as createBulkReturnPoolDocument,
 	createLoanReturnReservation,
 	deriveClaimIdFromDistributionLog,
-	deriveReservationIdFromDistributionLog,
-	normalizeWholeItemInput
+	deriveReservationIdFromDistributionLog
 } from '../../domain/food-supplies';
 import {
 	BulkReturnClaimRemoteRepository,
@@ -52,7 +51,7 @@ import {
 	WorkflowValidationError
 } from './errors';
 import { assertLedgerReplayBase } from './ledger-replay';
-import { assertPositiveQty } from './validation';
+import { assertPositiveIntegerQty } from './validation';
 
 function assertCounterReturnLedgerReplay(
 	actual: StockLedger,
@@ -745,7 +744,7 @@ export async function returnLoanAtCounter(
 ): Promise<{ log: DistributionLog; ledgerEntryCreated: boolean }> {
 	assertCanReceivePhysicalStock(ctx);
 
-	assertPositiveQty(input.qty_returned, 'qty_returned');
+	assertPositiveIntegerQty(input.qty_returned, 'qty_returned');
 
 	const resolvedDeps = resolveDependencies(deps, ctx);
 	const {
@@ -1114,11 +1113,8 @@ export async function createBulkReturnPool(
 ): Promise<BulkReturnPool> {
 	assertCanReceivePhysicalStock(ctx);
 
-	const norm = normalizeWholeItemInput(input.total_received_qty);
-	if (!norm.isValid || !norm.normalized) {
-		throw new WorkflowValidationError('total_received_qty must be a positive whole number');
-	}
-	const totalReceivedQty = norm.normalized;
+	assertPositiveIntegerQty(input.total_received_qty, 'total_received_qty');
+	const totalReceivedQty = input.total_received_qty;
 
 	if (!isUlid(input.operationUlid)) {
 		throw new WorkflowValidationError('operationUlid must be a valid ULID');
