@@ -8,6 +8,7 @@
 	import { qtyGte } from '$lib/utils/qty';
 	import { validatePositiveQuantity } from '../model/ticket-quantity';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import {
 		resolveAuthenticatedAuthorContext,
 		useDistributionLogs,
@@ -343,15 +344,16 @@
 
 	<!-- Submit Action Button -->
 	<div class="flex items-center justify-end gap-3 border-t border-slate-100 pt-4">
-		<button
+		<Button
 			type="button"
+			variant="default"
 			onclick={handleSubmitClick}
 			disabled={recordFoodMutation.isPending ||
 				capacitySummary.isExhausted ||
 				!recipientSelection ||
 				!isQtyValid ||
 				!canDistribute}
-			class="inline-flex h-10 items-center gap-2 rounded-xl border border-amber-600 bg-amber-600 px-5 text-xs font-bold text-white shadow-xs transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
+			class="h-10 rounded-xl bg-amber-600 px-5 text-xs font-bold hover:bg-amber-700"
 		>
 			{#if recordFoodMutation.isPending}
 				<Loader class="h-4 w-4 animate-spin" />
@@ -360,7 +362,7 @@
 				<CheckCircle2 class="h-4 w-4" />
 				<span>ยืนยันบันทึกแจกอาหาร</span>
 			{/if}
-		</button>
+		</Button>
 	</div>
 </div>
 

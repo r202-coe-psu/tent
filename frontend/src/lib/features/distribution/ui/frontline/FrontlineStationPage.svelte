@@ -27,6 +27,7 @@
 	import TicketStatusBadge from '../common/TicketStatusBadge.svelte';
 	import { formatDistributionError } from '../model/distribution-error';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 
 	interface Props {
 		initialTab?: 'receive' | 'food' | 'supplies' | 'returns' | 'reconciliation';
@@ -193,13 +194,14 @@
 <div class="mx-auto w-full max-w-6xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
 	<!-- Back Navigation -->
 	<div>
-		<a
+		<Button
 			href={resolve('/onsite')}
-			class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 shadow-2xs transition-colors hover:bg-slate-50 hover:text-slate-900"
+			variant="outline"
+			class="h-auto rounded-full px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900"
 		>
 			<ArrowLeft class="h-3.5 w-3.5" />
 			<span>กลับหน้าระบบส่วนหน้า (Onsite)</span>
-		</a>
+		</Button>
 	</div>
 
 	<!-- Station 4 Header -->
@@ -455,11 +457,12 @@
 							</div>
 
 							<div class="flex shrink-0 items-center gap-2">
-								<button
+								<Button
 									type="button"
+									variant="default"
 									onclick={() => handleReceiveCargo(ticket)}
 									disabled={isReceiving || !canFrontline}
-									class="inline-flex items-center gap-2 rounded-xl border border-emerald-600 bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-2xs hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+									class="h-auto rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold hover:bg-emerald-700"
 								>
 									{#if isReceiving}
 										<Loader class="h-3.5 w-3.5 animate-spin" />
@@ -468,7 +471,7 @@
 										<CheckCircle2 class="h-3.5 w-3.5" />
 										<span>ตรวจรับเข้าจุดแจก</span>
 									{/if}
-								</button>
+								</Button>
 							</div>
 						</div>
 					{/each}
@@ -488,14 +491,15 @@
 						ตั๋วอาหารต้องได้รับการตรวจรับเข้าจุดแจกจ่ายก่อน จึงจะสามารถแจกจ่ายให้ผู้ประสบภัยได้
 					</p>
 					{#if inTransitTickets.some((t) => t.requisition_type === 'food')}
-						<button
+						<Button
 							type="button"
+							variant="outline"
 							onclick={() => (activeTab = 'receive')}
-							class="mt-4 inline-flex items-center gap-2 rounded-xl border border-sky-300 bg-sky-50 px-4 py-2 text-xs font-semibold text-sky-800 hover:bg-sky-100"
+							class="mt-4 h-auto rounded-xl border-sky-300 bg-sky-50 px-4 py-2 text-xs font-semibold text-sky-800 hover:bg-sky-100 hover:text-sky-800"
 						>
 							<Truck class="h-3.5 w-3.5" />
 							<span>ไปยังแท็บรับของเพื่อตรวจรับตั๋วอาหารเข้าจุดแจก</span>
-						</button>
+						</Button>
 					{/if}
 				</div>
 			{:else}
@@ -557,14 +561,15 @@
 						ตั๋วพัสดุต้องได้รับการตรวจรับเข้าจุดแจกจ่ายก่อน จึงจะสามารถแจกจ่ายหรือให้ยืมได้
 					</p>
 					{#if inTransitTickets.some((t) => t.requisition_type === 'supplies')}
-						<button
+						<Button
 							type="button"
+							variant="outline"
 							onclick={() => (activeTab = 'receive')}
-							class="mt-4 inline-flex items-center gap-2 rounded-xl border border-sky-300 bg-sky-50 px-4 py-2 text-xs font-semibold text-sky-800 hover:bg-sky-100"
+							class="mt-4 h-auto rounded-xl border-sky-300 bg-sky-50 px-4 py-2 text-xs font-semibold text-sky-800 hover:bg-sky-100 hover:text-sky-800"
 						>
 							<Truck class="h-3.5 w-3.5" />
 							<span>ไปยังแท็บรับของเพื่อตรวจรับตั๋วพัสดุเข้าจุดแจก</span>
-						</button>
+						</Button>
 					{/if}
 				</div>
 			{:else}

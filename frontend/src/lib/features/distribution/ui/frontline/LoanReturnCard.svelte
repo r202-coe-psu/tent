@@ -33,6 +33,7 @@
 	import CounterReturnDialog from './CounterReturnDialog.svelte';
 	import NonPhysicalClearDialog from './NonPhysicalClearDialog.svelte';
 	import BulkGateClearDialog from './BulkGateClearDialog.svelte';
+	import { Button } from '$lib/components/ui/button/index.js';
 
 	interface Props {
 		shelterCode?: string;
@@ -211,13 +212,14 @@
 						'กรุณาตรวจสอบการเชื่อมต่อแล้วลองใหม่อีกครั้ง'
 					)}
 				</p>
-				<button
+				<Button
 					type="button"
+					variant="link"
 					onclick={() => recipientLoansQuery.refetch()}
-					class="mt-2 font-bold text-red-800 underline hover:text-red-900"
+					class="mt-2 h-auto p-0 font-bold text-red-800 underline hover:text-red-900"
 				>
 					ลองใหม่
-				</button>
+				</Button>
 			</div>
 		</div>
 	{:else if activeLoans.length === 0}
@@ -289,37 +291,40 @@
 						<!-- Action Buttons (Physical Return & Non-Physical Clear) -->
 						<div class="mt-4 space-y-2 border-t border-slate-100 pt-3">
 							<!-- Primary: Physical Counter Return -->
-							<button
+							<Button
 								type="button"
+								variant="default"
 								onclick={() => handleOpenReturn(loan)}
 								disabled={!canReturnStock}
-								class="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-emerald-600 bg-emerald-600 py-2 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+								class="h-auto w-full rounded-xl bg-emerald-600 py-2 text-xs font-bold hover:bg-emerald-700"
 							>
 								<RotateCcw class="h-3.5 w-3.5" />
 								<span>รับคืนของจริง</span>
-							</button>
+							</Button>
 
 							<!-- Secondary: Non-Physical Administrative Clear (Lost / Waived) -->
-							<button
+							<Button
 								type="button"
+								variant="outline"
 								onclick={() => handleOpenClear(loan)}
 								disabled={!canFrontline}
-								class="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 py-2 text-xs font-bold text-slate-700 shadow-2xs transition-colors hover:border-slate-300 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+								class="h-auto w-full rounded-xl border-slate-200 bg-slate-50 py-2 text-xs font-bold text-slate-700 hover:border-slate-300 hover:bg-slate-100 hover:text-slate-700"
 							>
 								<FileX class="h-3.5 w-3.5 text-slate-500" />
 								<span>ตัดรายการโดยไม่มีของคืน (สูญหาย/ยกเว้น)</span>
-							</button>
+							</Button>
 
 							<!-- Tertiary: CR-134 Bulk Gate Clearance -->
-							<button
+							<Button
 								type="button"
+								variant="outline"
 								onclick={() => handleOpenBulkClear(loan)}
 								disabled={!canFrontline}
-								class="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-purple-200 bg-purple-50 py-2 text-xs font-bold text-purple-800 shadow-2xs transition-colors hover:border-purple-300 hover:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-50"
+								class="h-auto w-full rounded-xl border-purple-200 bg-purple-50 py-2 text-xs font-bold text-purple-800 hover:border-purple-300 hover:bg-purple-100 hover:text-purple-800"
 							>
 								<Archive class="h-3.5 w-3.5 text-purple-600" />
 								<span>เคลียร์จากจุดรวมคืน</span>
-							</button>
+							</Button>
 						</div>
 					</div>
 				{/each}

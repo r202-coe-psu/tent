@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import Clock from '@lucide/svelte/icons/clock';
@@ -211,14 +212,15 @@
 					'กรุณาตรวจสอบการเชื่อมต่อแล้วลองใหม่อีกครั้ง'
 				)}
 			</p>
-			<button
+			<Button
 				type="button"
+				variant="outline"
 				onclick={() => reconciliationQuery.refetch()}
-				class="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-800 shadow-2xs hover:bg-red-50"
+				class="mt-4 h-auto rounded-lg border-red-200 px-3 py-1.5 text-xs font-semibold text-red-800 hover:bg-red-50 hover:text-red-800"
 			>
 				<RefreshCw class="h-3.5 w-3.5" />
 				<span>ลองใหม่</span>
-			</button>
+			</Button>
 		</div>
 	{:else}
 		<!-- Authoritative Ticket Reconciliation Surface -->
@@ -468,11 +470,12 @@
 
 					<!-- Close Shift Action Button -->
 					<div class="flex items-center justify-end pt-2">
-						<button
+						<Button
 							type="button"
+							variant="default"
 							onclick={handleCloseShift}
 							disabled={!canFrontline || !validation.isValid || closeShiftMutation.isPending}
-							class="inline-flex items-center gap-2 rounded-xl bg-teal-700 px-5 py-2.5 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
+							class="h-auto rounded-xl bg-teal-700 px-5 py-2.5 text-xs font-bold hover:bg-teal-800"
 						>
 							{#if closeShiftMutation.isPending}
 								<Loader2 class="h-4 w-4 animate-spin" />
@@ -481,7 +484,7 @@
 								<Lock class="h-4 w-4" />
 								<span>ยืนยันปิดรอบแจกจ่าย</span>
 							{/if}
-						</button>
+						</Button>
 					</div>
 				</div>
 			{:else if ticket.status === 'SHIFT_CLOSED'}
@@ -541,11 +544,12 @@
 
 					<!-- Submit Action -->
 					<div class="flex items-center justify-end pt-2">
-						<button
+						<Button
 							type="button"
+							variant="default"
 							onclick={handleSubmitReturns}
 							disabled={!canFrontline || submitReturnsMutation.isPending}
-							class="inline-flex items-center gap-2 rounded-xl bg-purple-700 px-5 py-2.5 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-purple-800 disabled:cursor-not-allowed disabled:opacity-50"
+							class="h-auto rounded-xl bg-purple-700 px-5 py-2.5 text-xs font-bold hover:bg-purple-800"
 						>
 							{#if submitReturnsMutation.isPending}
 								<Loader2 class="h-4 w-4 animate-spin" />
@@ -554,7 +558,7 @@
 								<Send class="h-4 w-4" />
 								<span>ส่งคืนพัสดุกลับคลังกลาง</span>
 							{/if}
-						</button>
+						</Button>
 					</div>
 				</div>
 			{:else if ticket.status === 'RETURN_PENDING_RECEIPT'}

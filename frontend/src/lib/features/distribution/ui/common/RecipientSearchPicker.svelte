@@ -11,6 +11,7 @@
 	import Building2 from '@lucide/svelte/icons/building-2';
 	import { useSearchEvacuees, lookupEvacueeByScanCode, type Evacuee } from '$lib/features/people';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import type { FrontlineRecipientSelection } from '../model/frontline-handover';
 	import { formatDistributionError } from '../model/distribution-error';
 
@@ -227,16 +228,18 @@
 				</div>
 			</div>
 
-			<button
+			<Button
 				type="button"
+				variant="ghost"
+				size="icon-sm"
 				onclick={handleClearSelection}
-				class="rounded-full p-1 text-slate-400 hover:bg-slate-200/60 hover:text-slate-700"
 				title="เปลี่ยนผู้รับ"
 				aria-label="เปลี่ยนผู้รับ"
 				{disabled}
+				class="rounded-full text-slate-400 hover:bg-slate-200/60 hover:text-slate-700"
 			>
 				<X class="h-4 w-4" />
-			</button>
+			</Button>
 		</div>
 	{:else if activeTab === 'evacuee'}
 		<!-- Search by Name/Phone or QR Scan Form -->
@@ -266,10 +269,11 @@
 						{disabled}
 					/>
 				</div>
-				<button
+				<Button
 					type="submit"
+					variant="outline"
 					disabled={disabled || isScanning || !scanCodeInput.trim()}
-					class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+					class="h-8 bg-slate-50 text-xs font-semibold hover:bg-slate-100"
 				>
 					{#if isScanning}
 						<Loader class="h-3 w-3 animate-spin" />
@@ -277,7 +281,7 @@
 					{:else}
 						<span>ค้นหารหัส</span>
 					{/if}
-				</button>
+				</Button>
 			</form>
 
 			{#if scanError}

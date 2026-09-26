@@ -7,6 +7,7 @@
 	import { qtyGte } from '$lib/utils/qty';
 	import { validatePositiveQuantity } from '../model/ticket-quantity';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import {
 		resolveAuthenticatedAuthorContext,
 		useDistributionLogs,
@@ -328,8 +329,9 @@
 			</strong>
 		</div>
 
-		<button
+		<Button
 			type="button"
+			variant="default"
 			onclick={handleSubmit}
 			disabled={recordSuppliesMutation.isPending ||
 				capacitySummary.isExhausted ||
@@ -337,7 +339,7 @@
 				!recipientValidation.isEligible ||
 				!isQtyValid ||
 				!canDistribute}
-			class="inline-flex h-10 items-center gap-2 rounded-xl border border-indigo-600 bg-indigo-600 px-5 text-xs font-bold text-white shadow-xs transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+			class="h-10 rounded-xl bg-indigo-600 px-5 text-xs font-bold hover:bg-indigo-700"
 		>
 			{#if recordSuppliesMutation.isPending}
 				<Loader class="h-4 w-4 animate-spin" />
@@ -346,7 +348,7 @@
 				<CheckCircle2 class="h-4 w-4" />
 				<span>{isReturnableItem ? 'ยืนยันบันทึกการยืมสิ่งของ' : 'ยืนยันบันทึกแจกจ่ายพัสดุ'}</span>
 			{/if}
-		</button>
+		</Button>
 	</div>
 </div>
 
