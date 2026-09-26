@@ -10,6 +10,7 @@
 	let {
 		ref = $bindable(null),
 		class: className,
+		viewportClass,
 		sideOffset = 6,
 		portalProps,
 		children,
@@ -17,6 +18,8 @@
 		...restProps
 	}: WithoutChild<SelectPrimitive.ContentProps> & {
 		portalProps?: WithoutChildrenOrChild<ComponentProps<typeof SelectPortal>>;
+		/** Optional override for the scrollable viewport (e.g. a custom max-height per instance). */
+		viewportClass?: string;
 	} = $props();
 
 	function handleKeydown(e: KeyboardEvent) {
@@ -49,7 +52,8 @@
 		<SelectScrollUpButton />
 		<SelectPrimitive.Viewport
 			class={cn(
-				'max-h-80 w-full min-w-[var(--bits-select-anchor-width)] scroll-my-1 overflow-x-hidden overflow-y-auto p-1.5'
+				'max-h-80 w-full min-w-[var(--bits-select-anchor-width)] scroll-my-1 overflow-x-hidden overflow-y-auto p-1.5',
+				viewportClass
 			)}
 		>
 			{@render children?.()}

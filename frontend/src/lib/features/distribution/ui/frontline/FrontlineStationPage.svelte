@@ -668,13 +668,21 @@
 										<span class="truncate">เลือกตั๋วเพื่อกระทบยอด</span>
 									{/if}
 								</Select.Trigger>
-								<Select.Content>
+								<!--
+									Viewport height is pinned to exactly 4 ticket rows so the dropdown never grows
+									unbounded with many tickets: each row is forced to min-h-14 (56px, via the
+									Select.Item class below) since both text lines are truncated to a single line,
+									so 4 rows is deterministic: 4 × 56px row height + 12px viewport p-1.5 padding
+									(6px top + 6px bottom) = 236px.
+								-->
+								<Select.Content viewportClass="max-h-[236px]">
 									{#each reconciliationEligibleTickets as t (t._id)}
 										<Select.Item
 											value={t._id}
 											label={`${t.ticket_no} [${getTicketStatusLabel(t.status)}] - ${t.destination_location} (${t.items
 												.map((i) => i.item_name)
 												.join(', ')})`}
+											class="min-h-14"
 										>
 											<div class="flex w-full min-w-0 flex-col gap-0.5 text-left">
 												<span class="flex items-center justify-between gap-2">
