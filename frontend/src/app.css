@@ -489,10 +489,12 @@
 		@apply sticky bottom-0 z-30 -mx-1 border-t border-border bg-background/95 px-3 py-2 backdrop-blur-sm sm:space-y-2 sm:px-4 sm:pt-2.5 sm:pb-3;
 		padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
 	}
-	/* Always-reachable Save dock (registration-shell fixed pattern; sits above testing banner). */
 	.shelter-form-bottom-chrome {
-		@apply fixed inset-x-0 z-30 space-y-2 border-t border-shelter-border bg-background/95 px-3 pt-2.5 pb-3 backdrop-blur-sm sm:px-4;
+		@apply fixed inset-x-0 z-30 border-t border-slate-200 bg-white/95 px-4 py-2.5 shadow-lg backdrop-blur-sm sm:px-6;
 		bottom: var(--testing-banner-height);
+		padding-left: max(1rem, env(safe-area-inset-left));
+		padding-right: max(1rem, env(safe-area-inset-right));
+		padding-bottom: max(0.625rem, env(safe-area-inset-bottom));
 	}
 	.sticky-section-nav {
 		/* Top scroll-spy chips (registration-shell / ewar) — not used by unified form */
