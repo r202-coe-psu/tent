@@ -98,13 +98,21 @@ async function seedSecurityQuestion(name: string): Promise<void> {
 	if (res.status >= 400) throw new Error(`Could not finish E2E user setup for ${name}`);
 }
 
+export interface CreateDistributionScenarioOptions {
+	/** Defaults to `SM_DIST_ROLES` (shelter_manager on SH001) when omitted. */
+	roles?: string[];
+}
+
 /** Every test receives a unique namespace; no worker shares fixture ownership. */
-export async function createDistributionScenario(label: string): Promise<DistributionScenario> {
+export async function createDistributionScenario(
+	label: string,
+	options: CreateDistributionScenarioOptions = {}
+): Promise<DistributionScenario> {
 	const namespace = `e2e_${label}_${ulid().toLowerCase()}`;
 	const user: TestUser = {
 		name: `${namespace}_sm`,
 		password: 'Password1!',
-		roles: SM_DIST_ROLES,
+		roles: options.roles ?? SM_DIST_ROLES,
 		display_name: `Distribution ${label}`
 	};
 	await createCouchUser(user);
@@ -276,11 +284,16 @@ export async function seedRecipient(
 	return { recipientId, firstName, lastName };
 }
 
-/** Journey C alone seeds its prerequisite ticket; its loan operations stay browser-driven. */
+/**
+ * Journey C alone seeds its prerequisite ticket; its loan operations stay browser-driven.
+ * `status` defaults to `'DISTRIBUTING'` (Journey C's requirement); pass `'IN_TRANSIT'` for
+ * fixtures that need a ticket still awaiting frontline receipt (e.g. RBAC guard checks).
+ */
 export async function seedDistributingTicket(
 	scenario: DistributionScenario,
 	item: SeededItem,
-	allocatedQty: string
+	allocatedQty: string,
+	status: 'DISTRIBUTING' | 'IN_TRANSIT' = 'DISTRIBUTING'
 ): Promise<{ ticketId: string; ticketNo: string }> {
 	const ticketId = `requisition_ticket:${ulid()}`;
 	const ticketNo = `TKT-SUPPLIES-${Date.now()}`;
@@ -295,13 +308,13 @@ export async function seedDistributingTicket(
 		created_by: scenario.user.name,
 		ticket_no: ticketNo,
 		requisition_type: 'supplies',
-		status: 'DISTRIBUTING',
+		status,
 		source_location: 'คลังสินค้า',
 		destination_location: 'จุดแจก E2E',
 		requested_by: scenario.user.name,
 		approved_by: scenario.user.name,
 		dispatched_by: scenario.user.name,
-		received_by: scenario.user.name,
+		...(status === 'DISTRIBUTING' ? { received_by: scenario.user.name } : {}),
 		items: [
 			{
 				item_id: item.itemId,

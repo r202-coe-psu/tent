@@ -11,7 +11,9 @@ import {
 	findShelterDocuments,
 	getShelterDocument,
 	routeBrowserCouchThroughApp,
+	seedDistributingTicket,
 	seedItemWithStock,
+	type CreateDistributionScenarioOptions,
 	type DistributionScenario,
 	type SeededItem
 } from './distribution';
@@ -51,7 +53,12 @@ async function createSuppliesTicket(
 	await picker.getByLabel(/จำนวนที่ต้องการเบิก/).fill(requestedQty);
 	await picker.getByRole('button', { name: 'เลือก' }).click();
 	await createDialog.getByRole('button', { name: 'ยืนยันสร้างใบเบิกจ่าย' }).click();
-	await expect(page.getByText(/สร้างใบเบิกจ่าย.*สำเร็จ/)).toBeVisible();
+	// Scoped to the Sonner toast container — the closing CreateTicketDialog's own
+	// aggregate text also matches this regex (contains both "สร้างใบเบิกจ่าย..." and
+	// "...อาหารปรุงสำเร็จ"), causing a strict-mode violation on an unscoped page-wide match.
+	await expect(
+		page.locator('[data-sonner-toast]').filter({ hasText: /สร้างใบเบิกจ่าย.*สำเร็จ/ })
+	).toBeVisible();
 
 	let ticketId = '';
 	await expect
@@ -255,9 +262,10 @@ async function expectCompletedTicketInBrowser(page: Page, ticket: TicketFixture)
 
 async function withScenario<T>(
 	label: string,
-	fn: (scenario: DistributionScenario) => Promise<T>
+	fn: (scenario: DistributionScenario) => Promise<T>,
+	options?: CreateDistributionScenarioOptions
 ): Promise<T> {
-	const scenario = await createDistributionScenario(label);
+	const scenario = await createDistributionScenario(label, options);
 	let result!: T;
 	let scenarioError: unknown;
 	let cleanupError: unknown;
@@ -425,5 +433,78 @@ test('Journey B: warehouse credits only the lower verified return quantity', asy
 		await completeDialog.getByRole('button', { name: 'ยืนยันปิดตั๋ว' }).click();
 		await expectTicketStatus(ticket, 'COMPLETED', 'Ticket-completion checkpoint');
 		await expectCompletedTicketInBrowser(page, ticket);
+	});
+});
+
+// UI-level RBAC guards only. These do not replace CouchDB VDU / server-side / data-layer
+// authorization tests, which cover the real security boundary separately.
+test.describe('Distribution RBAC guards', () => {
+	test('kitchen_staff is redirected away from back-office Distribution', async ({ page }) => {
+		await withScenario(
+			'rbac_kitchen',
+			async (scenario) => {
+				await injectSession(page, scenario.user, scenario.session);
+				await page.goto('/back-office/distribution');
+				// requireWarehouseAccess() (guards/auth.ts) only allows system_admin /
+				// shelter_manager / warehouse_staff — kitchen_staff is redirected to /portal
+				// before the Distribution page ever renders.
+				await expect(page).toHaveURL(/\/portal/);
+				// Positive control: this is a real landing page, not a blank/crashed screen.
+				await expect(page.getByRole('heading', { name: /SmartShelter Thailand/ })).toBeVisible();
+			},
+			{ roles: ['shelter:SH001', 'kitchen_staff'] }
+		);
+	});
+
+	test('registration_staff is redirected away from back-office Distribution', async ({ page }) => {
+		await withScenario(
+			'rbac_registration',
+			async (scenario) => {
+				await injectSession(page, scenario.user, scenario.session);
+				await page.goto('/back-office/distribution');
+				// registration_staff is frontline-only; requireWarehouseAccess() does not
+				// include it, so it is redirected the same as any unrelated role.
+				await expect(page).toHaveURL(/\/portal/);
+				await expect(page.getByRole('heading', { name: /SmartShelter Thailand/ })).toBeVisible();
+			},
+			{ roles: ['shelter:SH001', 'registration_staff'] }
+		);
+	});
+
+	test('warehouse_staff cannot perform the frontline receive action', async ({ page }) => {
+		await withScenario(
+			'rbac_warehouse',
+			async (scenario) => {
+				const item = await seedItemWithStock(scenario, {
+					name: `E2E RBAC receive ${scenario.namespace}`,
+					stockQty: '50',
+					returnable: false,
+					typeClass: 'CONSUMABLE'
+				});
+				const ticket = await seedDistributingTicket(scenario, item, '50', 'IN_TRANSIT');
+
+				await injectSession(page, scenario.user, scenario.session);
+				// /onsite/distribution only requires general auth (requireAuth), so
+				// warehouse_staff can reach the page and read tickets — the restriction under
+				// test is the in-page frontline-receive action, not route access.
+				await page.goto('/onsite/distribution');
+				await page.getByRole('button', { name: /1\. รับของถึงจุดแจก/ }).click();
+
+				const ticketCard = page
+					.getByText(ticket.ticketNo, { exact: true })
+					.locator('xpath=ancestor::div[contains(@class, "rounded-xl")][1]');
+				// Positive control: the ticket is visible/readable by this role — proves the
+				// disabled assertion below is RBAC, not a data-loading failure.
+				await expect(ticketCard).toBeVisible();
+				await expect(ticketCard).toContainText(item.name);
+
+				// canPerformFrontlineDistribution() (auth.ts) allows registration_staff /
+				// supply_coordinator / shelter_manager / system_admin, but explicitly not
+				// warehouse_staff — the button renders (so the ticket stays visible) but is
+				// disabled rather than hidden (FrontlineStationPage.svelte).
+				await expect(ticketCard.getByRole('button', { name: /ตรวจรับเข้าจุดแจก/ })).toBeDisabled();
+			},
+			{ roles: ['shelter:SH001', 'warehouse_staff'] }
+		);
 	});
 });
