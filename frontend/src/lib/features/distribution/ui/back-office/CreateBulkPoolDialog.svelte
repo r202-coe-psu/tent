@@ -1,5 +1,6 @@
 <script lang="ts">
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { toast } from 'svelte-sonner';
@@ -219,15 +220,17 @@
 							>
 								{getReturnableBadgeLabel(selectedItem.returnable)}
 							</span>
-							<button
+							<Button
 								type="button"
+								variant="ghost"
+								size="icon-sm"
 								onclick={() => (selectedItemId = '')}
-								class="rounded-lg p-1 text-slate-400 hover:bg-white hover:text-slate-700"
 								title="เปลี่ยนสินค้า"
 								aria-label="เปลี่ยนสินค้า"
+								class="text-slate-400 hover:bg-white hover:text-slate-700"
 							>
 								<X class="h-4 w-4" aria-hidden="true" />
-							</button>
+							</Button>
 						</div>
 					</div>
 				{:else}
@@ -262,14 +265,15 @@
 								<p class="mt-0.5 text-2xs text-red-500">
 									กรุณาตรวจสอบการเชื่อมต่อแล้วลองใหม่อีกครั้ง
 								</p>
-								<button
+								<Button
 									type="button"
+									variant="outline"
 									onclick={() => itemMastersQuery.refetch()}
-									class="mt-2 inline-flex items-center gap-1 rounded-lg border border-red-200 bg-white px-2.5 py-1 text-2xs font-semibold text-red-700 shadow-2xs hover:bg-red-50"
+									class="mt-2 border-red-200 text-2xs font-semibold text-red-700 hover:bg-red-50"
 								>
 									<RefreshCw class="h-3 w-3" />
 									ลองใหม่
-								</button>
+								</Button>
 							</div>
 						{:else if filteredItems.length === 0}
 							<div class="p-6 text-center text-xs text-slate-500">
@@ -353,19 +357,21 @@
 		<div
 			class="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/60 px-6 py-4"
 		>
-			<button
+			<Button
 				type="button"
+				variant="outline"
 				onclick={handleClose}
 				disabled={createMutation.isPending}
-				class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-2xs transition-colors hover:bg-slate-50 disabled:opacity-50"
+				class="text-xs font-semibold"
 			>
 				ยกเลิก
-			</button>
-			<button
+			</Button>
+			<Button
 				type="button"
+				variant="default"
 				onclick={handleSubmit}
 				disabled={!canSubmit}
-				class="inline-flex items-center gap-1.5 rounded-xl bg-violet-700 px-4 py-2 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50"
+				class="bg-violet-700 text-xs font-semibold hover:bg-violet-800"
 			>
 				{#if createMutation.isPending}
 					<Loader2 class="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
@@ -374,7 +380,7 @@
 					<PackagePlus class="h-3.5 w-3.5" aria-hidden="true" />
 					<span>เปิดจุดรวมคืนพัสดุ</span>
 				{/if}
-			</button>
+			</Button>
 		</div>
 	</Dialog.Content>
 </Dialog.Root>

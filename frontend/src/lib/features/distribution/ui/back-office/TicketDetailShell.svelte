@@ -11,6 +11,7 @@
 	import { qtyGt } from '$lib/utils/qty';
 	import Undo2 from '@lucide/svelte/icons/undo-2';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import MapPin from '@lucide/svelte/icons/map-pin';
@@ -90,13 +91,14 @@
 					ไม่สามารถเรียกดูข้อมูลตั๋วรหัส <span class="font-mono font-semibold">{ticketId}</span> จากฐานข้อมูลได้
 					กรุณาตรวจสอบเครือข่ายหรือกลับสู่หน้ารายการ
 				</p>
-				<button
+				<Button
 					type="button"
+					variant="default"
 					onclick={onClose}
-					class="mt-5 inline-flex h-9 items-center rounded-lg bg-[#0A2647] px-4 text-xs font-semibold text-white shadow-2xs hover:bg-[#051930]"
+					class="mt-5 text-xs font-semibold hover:bg-primary-dark"
 				>
 					ปิดหน้าต่าง
-				</button>
+				</Button>
 			</div>
 		{:else}
 			<!-- Header -->
@@ -299,13 +301,9 @@
 
 			<!-- Footer -->
 			<div class="flex justify-end border-t border-slate-200 bg-white px-6 py-3.5">
-				<button
-					type="button"
-					onclick={onClose}
-					class="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50"
-				>
+				<Button type="button" variant="outline" onclick={onClose} class="text-xs font-semibold">
 					ปิดหน้าต่าง
-				</button>
+				</Button>
 			</div>
 		{/if}
 	</Dialog.Content>

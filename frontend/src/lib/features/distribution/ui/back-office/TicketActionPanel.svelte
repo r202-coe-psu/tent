@@ -21,6 +21,7 @@
 	import DispatchTicketDialog from './DispatchTicketDialog.svelte';
 	import WarehouseReturnDialog from './WarehouseReturnDialog.svelte';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import { toast } from 'svelte-sonner';
 	import Boxes from '@lucide/svelte/icons/boxes';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
@@ -150,24 +151,26 @@
 				<div class="flex flex-wrap items-center gap-3">
 					<!-- Action 1: Allocate Quantities -->
 					{#if canAllocate}
-						<button
+						<Button
 							type="button"
+							variant="outline"
 							disabled={isAnyPending}
 							onclick={() => (isAllocateOpen = true)}
-							class="inline-flex h-10 items-center gap-2 rounded-xl border border-[#0A2647] bg-white px-4 text-xs font-semibold text-[#0A2647] shadow-2xs transition-colors hover:bg-[#0A2647]/5 disabled:cursor-not-allowed disabled:opacity-50"
+							class="border-[#0A2647] text-xs font-semibold text-[#0A2647] hover:bg-[#0A2647]/5 hover:text-[#0A2647]"
 						>
 							<Boxes class="h-4 w-4" />
 							<span>จัดสรรยอดสินค้า</span>
-						</button>
+						</Button>
 					{/if}
 
 					<!-- Action 2: Approve for Dispatch -->
 					{#if canApprove}
-						<button
+						<Button
 							type="button"
+							variant="default"
 							disabled={!approvalReadiness.ready || isAnyPending}
 							onclick={() => (isApproveConfirmOpen = true)}
-							class="inline-flex h-10 items-center gap-2 rounded-xl bg-[#0A2647] px-4 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-[#051930] disabled:cursor-not-allowed disabled:opacity-50"
+							class="text-xs font-semibold hover:bg-primary-dark"
 							title={approvalReadiness.ready ? 'อนุมัติให้ปล่อยของ' : approvalReadiness.reason}
 						>
 							{#if approveMutation.isPending}
@@ -177,20 +180,21 @@
 								<CheckCircle2 class="h-4 w-4" />
 								<span>อนุมัติให้ปล่อยของ</span>
 							{/if}
-						</button>
+						</Button>
 					{/if}
 
 					<!-- Action 3: Cancel Ticket -->
 					{#if canCancel}
-						<button
+						<Button
 							type="button"
+							variant="outline"
 							disabled={isAnyPending}
 							onclick={() => (isCancelOpen = true)}
-							class="inline-flex h-10 items-center gap-2 rounded-xl border border-red-200 bg-white px-3.5 text-xs font-semibold text-red-700 shadow-2xs transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+							class="border-red-200 text-xs font-semibold text-red-700 hover:bg-red-50 hover:text-red-700"
 						>
 							<Ban class="h-4 w-4" />
 							<span>ยกเลิกตั๋ว</span>
-						</button>
+						</Button>
 					{/if}
 				</div>
 
@@ -208,27 +212,29 @@
 			<div class="space-y-4">
 				<div class="flex flex-wrap items-center gap-3">
 					{#if canDispatch}
-						<button
+						<Button
 							type="button"
+							variant="default"
 							disabled={isAnyPending}
 							onclick={() => (isDispatchOpen = true)}
-							class="inline-flex h-10 items-center gap-2 rounded-xl bg-[#0A2647] px-4 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-[#051930] disabled:cursor-not-allowed disabled:opacity-50"
+							class="text-xs font-semibold hover:bg-primary-dark"
 						>
 							<Truck class="h-4 w-4" />
 							<span>เลือก Physical Lot และปล่อยรถ</span>
-						</button>
+						</Button>
 					{/if}
 
 					{#if canCancel}
-						<button
+						<Button
 							type="button"
+							variant="outline"
 							disabled={isAnyPending}
 							onclick={() => (isCancelOpen = true)}
-							class="inline-flex h-10 items-center gap-2 rounded-xl border border-red-200 bg-white px-3.5 text-xs font-semibold text-red-700 shadow-2xs transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+							class="border-red-200 text-xs font-semibold text-red-700 hover:bg-red-50 hover:text-red-700"
 						>
 							<Ban class="h-4 w-4" />
 							<span>ยกเลิกตั๋ว</span>
-						</button>
+						</Button>
 					{/if}
 				</div>
 
@@ -250,11 +256,12 @@
 			<div class="space-y-4">
 				<div class="flex flex-wrap items-center gap-3">
 					{#if canReceive}
-						<button
+						<Button
 							type="button"
+							variant="default"
 							disabled={isAnyPending}
 							onclick={() => (isReceiveConfirmOpen = true)}
-							class="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-700 px-4 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+							class="bg-emerald-700 text-xs font-semibold hover:bg-emerald-800"
 						>
 							{#if receiveMutation.isPending}
 								<Loader2 class="h-4 w-4 animate-spin" />
@@ -263,7 +270,7 @@
 								<PackageCheck class="h-4 w-4" />
 								<span>ยืนยันรับของถึงจุดแจก</span>
 							{/if}
-						</button>
+						</Button>
 					{/if}
 				</div>
 
@@ -301,13 +308,14 @@
 				</div>
 
 				<div class="flex items-center gap-3">
-					<a
+					<Button
 						href="/onsite"
-						class="inline-flex h-9 items-center gap-2 rounded-xl border border-emerald-300 bg-white px-3.5 text-xs font-semibold text-emerald-800 shadow-2xs transition-colors hover:bg-emerald-50"
+						variant="outline"
+						class="border-emerald-300 text-xs font-semibold text-emerald-800 hover:bg-emerald-50 hover:text-emerald-800"
 					>
 						<span>ไปยังหน้าจุดแจกจ่าย (Onsite)</span>
 						<ArrowRight class="h-3.5 w-3.5" />
-					</a>
+					</Button>
 				</div>
 			</div>
 		{:else if ticket.status === 'SHIFT_CLOSED'}
@@ -326,15 +334,16 @@
 			<div class="space-y-4">
 				<div class="flex flex-wrap items-center gap-3">
 					{#if canReceiveReturns}
-						<button
+						<Button
 							type="button"
+							variant="default"
 							disabled={isAnyPending}
 							onclick={() => (isWarehouseReturnOpen = true)}
-							class="inline-flex h-10 items-center gap-2 rounded-xl bg-[#0A2647] px-4 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-[#051930] disabled:cursor-not-allowed disabled:opacity-50"
+							class="text-xs font-semibold hover:bg-primary-dark"
 						>
 							<PackageCheck class="h-4 w-4" />
 							<span>ตรวจรับของคืนเข้าคลังสินค้า</span>
-						</button>
+						</Button>
 					{/if}
 				</div>
 
@@ -359,15 +368,16 @@
 			<div class="space-y-4">
 				<div class="flex flex-wrap items-center gap-3">
 					{#if canReceiveReturns}
-						<button
+						<Button
 							type="button"
+							variant="default"
 							disabled={isAnyPending}
 							onclick={() => (isCompleteConfirmOpen = true)}
-							class="inline-flex h-10 items-center gap-2 rounded-xl bg-teal-800 px-4 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-teal-900 disabled:cursor-not-allowed disabled:opacity-50"
+							class="bg-teal-800 text-xs font-semibold hover:bg-teal-900"
 						>
 							<CheckCircle2 class="h-4 w-4" />
 							<span>ปิดตั๋วใบเบิกจ่าย</span>
-						</button>
+						</Button>
 					{/if}
 				</div>
 
@@ -464,18 +474,20 @@
 		</div>
 
 		<Dialog.Footer class="flex items-center justify-end gap-2">
-			<button
+			<Button
 				type="button"
+				variant="outline"
 				onclick={() => (isApproveConfirmOpen = false)}
-				class="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50"
+				class="text-xs font-semibold"
 			>
 				ยกเลิก
-			</button>
-			<button
+			</Button>
+			<Button
 				type="button"
+				variant="default"
 				onclick={handleConfirmApprove}
 				disabled={approveMutation.isPending}
-				class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#0A2647] px-4 text-xs font-semibold text-white shadow-2xs hover:bg-[#051930] disabled:cursor-not-allowed disabled:opacity-50"
+				class="text-xs font-semibold hover:bg-primary-dark"
 			>
 				{#if approveMutation.isPending}
 					<Loader2 class="h-3.5 w-3.5 animate-spin" />
@@ -483,7 +495,7 @@
 				{:else}
 					<span>ยืนยันอนุมัติ</span>
 				{/if}
-			</button>
+			</Button>
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>
@@ -545,18 +557,20 @@
 		</div>
 
 		<Dialog.Footer class="flex items-center justify-end gap-2">
-			<button
+			<Button
 				type="button"
+				variant="outline"
 				onclick={() => (isReceiveConfirmOpen = false)}
-				class="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50"
+				class="text-xs font-semibold"
 			>
 				ยกเลิก
-			</button>
-			<button
+			</Button>
+			<Button
 				type="button"
+				variant="default"
 				onclick={handleConfirmReceive}
 				disabled={receiveMutation.isPending}
-				class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-emerald-700 px-4 text-xs font-semibold text-white shadow-2xs hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+				class="bg-emerald-700 text-xs font-semibold hover:bg-emerald-800"
 			>
 				{#if receiveMutation.isPending}
 					<Loader2 class="h-3.5 w-3.5 animate-spin" />
@@ -564,7 +578,7 @@
 				{:else}
 					<span>ยืนยันรับของ</span>
 				{/if}
-			</button>
+			</Button>
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>
@@ -615,18 +629,20 @@
 		</div>
 
 		<Dialog.Footer class="flex items-center justify-end gap-2">
-			<button
+			<Button
 				type="button"
+				variant="outline"
 				onclick={() => (isCompleteConfirmOpen = false)}
-				class="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50"
+				class="text-xs font-semibold"
 			>
 				ยกเลิก
-			</button>
-			<button
+			</Button>
+			<Button
 				type="button"
+				variant="default"
 				onclick={handleConfirmComplete}
 				disabled={completeMutation.isPending}
-				class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-teal-800 px-4 text-xs font-semibold text-white shadow-2xs hover:bg-teal-900 disabled:cursor-not-allowed disabled:opacity-50"
+				class="bg-teal-800 text-xs font-semibold hover:bg-teal-900"
 			>
 				{#if completeMutation.isPending}
 					<Loader2 class="h-3.5 w-3.5 animate-spin" />
@@ -634,7 +650,7 @@
 				{:else}
 					<span>ยืนยันปิดตั๋ว</span>
 				{/if}
-			</button>
+			</Button>
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>

@@ -2,6 +2,7 @@
 	import type { RequisitionType } from '../../domain/food-supplies';
 	import { getRequisitionTypeLabel } from '../model/ticket-status';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import Search from '@lucide/svelte/icons/search';
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
@@ -111,14 +112,10 @@
 
 		<!-- Reset Filters Button -->
 		{#if hasActiveFilters && onResetFilters}
-			<button
-				type="button"
-				onclick={onResetFilters}
-				class="inline-flex h-10 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 shadow-2xs transition-colors hover:bg-slate-50 hover:text-slate-900"
-			>
+			<Button type="button" variant="outline" onclick={onResetFilters} class="text-xs font-medium">
 				<RotateCcw class="h-3.5 w-3.5 text-slate-400" />
 				ล้างตัวกรอง
-			</button>
+			</Button>
 		{/if}
 	</div>
 </div>

@@ -19,6 +19,7 @@
 	import CatalogItemPicker from './CatalogItemPicker.svelte';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { toast } from 'svelte-sonner';
@@ -369,14 +370,15 @@
 						<p class="text-xs text-slate-500">ระบุจำนวนที่ต้องการเบิกจ่ายจริง</p>
 					</div>
 
-					<button
+					<Button
 						type="button"
+						variant="outline"
 						onclick={() => (pickerOpen = true)}
-						class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#0A2647] shadow-2xs transition-colors hover:bg-slate-50"
+						class="text-xs font-semibold text-[#0A2647] shadow-2xs hover:text-[#0A2647]"
 					>
 						<Plus class="h-3.5 w-3.5" />
 						<span>เพิ่มรายการ</span>
-					</button>
+					</Button>
 				</div>
 
 				{#if selectedItems.length === 0}
@@ -446,15 +448,17 @@
 											</div>
 										</td>
 										<td class="py-2.5 pr-4 pl-2 text-right">
-											<button
+											<Button
 												type="button"
+												variant="ghost"
+												size="icon-sm"
 												onclick={() => handleRemoveItem(item.master._id)}
-												class="rounded-md p-1 text-slate-400 transition-colors hover:text-red-600"
 												title="ลบรายการ"
 												aria-label="ลบรายการ {item.master.name}"
+												class="text-slate-400 hover:text-red-600"
 											>
 												<Trash2 class="h-4 w-4" />
-											</button>
+											</Button>
 										</td>
 									</tr>
 								{/each}
@@ -489,23 +493,25 @@
 			</div>
 
 			<div class="flex flex-wrap items-center gap-2">
-				<button
+				<Button
 					type="button"
+					variant="outline"
 					onclick={() => {
 						resetForm();
 						open = false;
 						onClose();
 					}}
-					class="inline-flex h-10 items-center rounded-lg border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 shadow-2xs transition-colors hover:bg-slate-50"
+					class="text-xs font-semibold"
 				>
 					ยกเลิก
-				</button>
+				</Button>
 
-				<button
+				<Button
 					type="button"
+					variant="default"
 					onclick={handleSubmit}
 					disabled={createMutation.isPending}
-					class="inline-flex h-10 items-center gap-1.5 rounded-lg bg-[#0A2647] px-4 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-[#051930] disabled:cursor-not-allowed disabled:opacity-50"
+					class="text-xs font-semibold hover:bg-primary-dark"
 				>
 					{#if createMutation.isPending}
 						<Loader2 class="h-4 w-4 animate-spin" />
@@ -513,7 +519,7 @@
 					{:else}
 						<span>ยืนยันสร้างใบเบิกจ่าย</span>
 					{/if}
-				</button>
+				</Button>
 			</div>
 		</div>
 	</Dialog.Content>

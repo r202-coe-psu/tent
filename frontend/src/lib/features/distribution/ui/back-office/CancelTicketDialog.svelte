@@ -3,6 +3,7 @@
 	import { useCancelTicket } from '../../application/queries';
 	import { formatDistributionError } from '../model/distribution-error';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { toast } from 'svelte-sonner';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
@@ -123,22 +124,24 @@
 		<div
 			class="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/75 px-6 py-4"
 		>
-			<button
+			<Button
 				type="button"
+				variant="outline"
 				onclick={() => {
 					open = false;
 					onClose();
 				}}
-				class="inline-flex h-10 items-center rounded-lg border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 shadow-2xs transition-colors hover:bg-slate-50"
+				class="text-xs font-semibold"
 			>
 				ย้อนกลับ
-			</button>
+			</Button>
 
-			<button
+			<Button
 				type="button"
+				variant="destructive"
 				onclick={handleSubmit}
 				disabled={!canSubmit}
-				class="inline-flex h-10 items-center gap-1.5 rounded-lg bg-red-600 px-4 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+				class="bg-destructive text-xs font-semibold text-white hover:bg-destructive/90"
 			>
 				{#if cancelMutation.isPending}
 					<Loader2 class="h-4 w-4 animate-spin" />
@@ -146,7 +149,7 @@
 				{:else}
 					<span>ยืนยันยกเลิกตั๋ว</span>
 				{/if}
-			</button>
+			</Button>
 		</div>
 	</Dialog.Content>
 </Dialog.Root>

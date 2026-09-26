@@ -5,6 +5,7 @@
 	import { validatePositiveQuantity, buildAllocationItem } from '../model/ticket-quantity';
 	import { formatDistributionError } from '../model/distribution-error';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { toast } from 'svelte-sonner';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
@@ -135,14 +136,15 @@
 				<span class="text-xs font-semibold text-slate-700">
 					รายการสินค้าในตั๋ว ({ticket.items.length} รายการ)
 				</span>
-				<button
+				<Button
 					type="button"
+					variant="link"
 					onclick={handleMatchRequested}
-					class="inline-flex items-center gap-1 text-xs font-semibold text-[#0A2647] hover:underline"
+					class="h-auto p-0 text-xs font-semibold"
 				>
 					<Check class="h-3.5 w-3.5" />
 					<span>จัดสรรตามยอดขอทั้งหมด</span>
-				</button>
+				</Button>
 			</div>
 
 			<div class="overflow-x-auto rounded-xl border border-slate-200/80 bg-white shadow-2xs">
@@ -217,22 +219,24 @@
 		<div
 			class="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/75 px-6 py-4"
 		>
-			<button
+			<Button
 				type="button"
+				variant="outline"
 				onclick={() => {
 					open = false;
 					onClose();
 				}}
-				class="inline-flex h-10 items-center rounded-lg border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 shadow-2xs transition-colors hover:bg-slate-50"
+				class="text-xs font-semibold"
 			>
 				ยกเลิก
-			</button>
+			</Button>
 
-			<button
+			<Button
 				type="button"
+				variant="default"
 				onclick={handleSubmit}
 				disabled={!isValid || allocateMutation.isPending}
-				class="inline-flex h-10 items-center gap-1.5 rounded-lg bg-[#0A2647] px-4 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-[#051930] disabled:cursor-not-allowed disabled:opacity-50"
+				class="text-xs font-semibold hover:bg-primary-dark"
 			>
 				{#if allocateMutation.isPending}
 					<Loader2 class="h-4 w-4 animate-spin" />
@@ -240,7 +244,7 @@
 				{:else}
 					<span>บันทึกการจัดสรร</span>
 				{/if}
-			</button>
+			</Button>
 		</div>
 	</Dialog.Content>
 </Dialog.Root>

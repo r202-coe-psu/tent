@@ -4,6 +4,7 @@
 	import { formatDistributionError } from '../model/distribution-error';
 	import PhysicalLotPicker from './PhysicalLotPicker.svelte';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { toast } from 'svelte-sonner';
 	import Truck from '@lucide/svelte/icons/truck';
@@ -207,24 +208,26 @@
 		<div
 			class="flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 bg-white px-6 py-4"
 		>
-			<button
+			<Button
 				type="button"
+				variant="outline"
 				disabled={isSubmitting}
 				onclick={() => {
 					resetForm();
 					open = false;
 					onClose();
 				}}
-				class="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 disabled:opacity-50"
+				class="text-xs font-semibold"
 			>
 				ยกเลิก
-			</button>
+			</Button>
 
-			<button
+			<Button
 				type="button"
+				variant="default"
 				disabled={!canSubmit}
 				onclick={handleDispatchSubmit}
-				class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#0A2647] px-5 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-[#051930] disabled:cursor-not-allowed disabled:opacity-50"
+				class="text-xs font-semibold hover:bg-primary-dark"
 			>
 				{#if isSubmitting}
 					<Loader2 class="h-4 w-4 animate-spin" />
@@ -233,7 +236,7 @@
 					<Truck class="h-4 w-4" />
 					<span>ยืนยันปล่อยรถ</span>
 				{/if}
-			</button>
+			</Button>
 		</div>
 	</Dialog.Content>
 </Dialog.Root>
