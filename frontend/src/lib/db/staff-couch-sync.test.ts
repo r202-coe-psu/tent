@@ -3,8 +3,10 @@ import type { QueryClient } from '@tanstack/svelte-query';
 import {
 	CHANGES_FEED_START_DELAY_MS,
 	invalidateQueriesAfterReauth,
+	STAFF_LIVE_QUERY_STARTERS,
 	startStaffCouchSync
 } from './staff-couch-sync';
+import { startDistributionLiveQuery } from '$lib/features/distribution';
 
 const probe = vi.fn();
 const startChangesSubscriberMock = vi.fn((dbNames: string[]) => {
@@ -69,6 +71,10 @@ vi.mock('$lib/features/referrals', () => ({
 	startReferralsLiveQuery: vi.fn(() => ({ stop: vi.fn() }))
 }));
 
+vi.mock('$lib/features/distribution', () => ({
+	startDistributionLiveQuery: vi.fn(() => ({ stop: vi.fn() }))
+}));
+
 const queryClient = {} as QueryClient;
 
 describe('startStaffCouchSync', () => {
@@ -128,6 +134,13 @@ describe('startStaffCouchSync', () => {
 		handle.stop();
 
 		expect(stopSubscriber).toHaveBeenCalledTimes(1);
+	});
+
+	it('registers startDistributionLiveQuery in the production starter registry', () => {
+		// Guards against the exact omission where Distribution's live-query starter
+		// existed and was unit-tested in isolation but was never wired into the
+		// registry that startStaffCouchSync actually starts in the protected app.
+		expect(STAFF_LIVE_QUERY_STARTERS).toContain(startDistributionLiveQuery);
 	});
 });
 

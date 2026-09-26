@@ -76,6 +76,9 @@ export const useReturnLoanAtCounter = () => {
 			const shelterCode = resolveShelterCode(variables.shelterCode);
 			invalidateDistributionLogs(queryClient, shelterCode, variables.logId);
 			invalidateInventoryQueries(queryClient);
+			queryClient.invalidateQueries({
+				queryKey: ['return-operation-state', shelterCode, variables.logId]
+			});
 			if (variables.ticketId) {
 				invalidateTicket(queryClient, shelterCode, variables.ticketId);
 				invalidateShiftReconciliation(queryClient, shelterCode, variables.ticketId);
@@ -103,6 +106,9 @@ export const useClearLoanNonPhysical = () => {
 		onSuccess: (_data, variables) => {
 			const shelterCode = resolveShelterCode(variables.shelterCode);
 			invalidateDistributionLogs(queryClient, shelterCode, variables.logId);
+			queryClient.invalidateQueries({
+				queryKey: ['return-operation-state', shelterCode, variables.logId]
+			});
 			if (variables.ticketId) {
 				invalidateTicket(queryClient, shelterCode, variables.ticketId);
 				invalidateShiftReconciliation(queryClient, shelterCode, variables.ticketId);

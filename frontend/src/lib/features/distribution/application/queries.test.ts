@@ -698,6 +698,9 @@ describe('Phase 5 Slice 5.0 — Distribution TanStack Query Layer', () => {
 			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
 				queryKey: operationsKeys.stockLedgers()
 			});
+			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
+				queryKey: ['return-operation-state', 'SH001', 'log_loan']
+			});
 		});
 
 		it('useClearLoanNonPhysical (Workflow 12): invalidates log and logs without stock write', async () => {
@@ -713,6 +716,9 @@ describe('Phase 5 Slice 5.0 — Distribution TanStack Query Layer', () => {
 			tracker.lastCreatedMutation?.onSuccess?.({}, { logId: 'log_lost', input }, undefined);
 			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
 				queryKey: distributionKeys.log('SH001', 'log_lost')
+			});
+			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
+				queryKey: ['return-operation-state', 'SH001', 'log_lost']
 			});
 		});
 
