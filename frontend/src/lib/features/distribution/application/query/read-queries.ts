@@ -17,6 +17,7 @@ import {
 	bulkReturnClaimRepository
 } from './repositories';
 import { calculateShiftReconciliation } from '../food-supplies/reconciliation-workflow';
+import { getReturnOperationState } from '../food-supplies/return-workflow';
 import type {
 	RequisitionTicketListFilter,
 	DistributionLogListFilter,
@@ -175,7 +176,6 @@ export const useReturnOperationState = (
 		return {
 			queryKey: distributionKeys.returnOperationState(shelterCode, id!),
 			queryFn: async () => {
-				const { getReturnOperationState } = await import('../food-supplies/return-workflow');
 				const ctx = resolveAuthenticatedAuthorContext(shelterCode);
 				return getReturnOperationState(id!, ctx);
 			},
