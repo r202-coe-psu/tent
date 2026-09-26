@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
 	import Package from '@lucide/svelte/icons/package';
-	import PlusCircle from '@lucide/svelte/icons/plus-circle';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import Loader from '@lucide/svelte/icons/loader';
@@ -13,10 +12,7 @@
 		useDistributionLogs,
 		useRecordSuppliesDistribution
 	} from '../../application/queries';
-	import {
-		canPerformFrontlineDistribution,
-		canDispatchTicket
-	} from '../../application/food-supplies/auth';
+	import { canPerformFrontlineDistribution } from '../../application/food-supplies/auth';
 	import type { RequisitionTicket } from '../../domain/food-supplies';
 	import {
 		canRecipientReceiveItem,
@@ -50,7 +46,6 @@
 	const canDistribute = $derived(
 		authContext ? canPerformFrontlineDistribution(authContext) : false
 	);
-	const canTopUp = $derived(authContext ? canDispatchTicket(authContext) : false);
 
 	// State — selectedItemId syncs reactively; never hard-codes a prop value at initialisation
 	let selectedItemId = $state('');
@@ -199,19 +194,10 @@
 			</div>
 		</div>
 
-		<!-- Action: In-Flight Top-Up -->
-		<div class="flex items-center gap-2">
-			{#if canTopUp}
-				<button
-					type="button"
-					onclick={() => (topUpDialogOpen = true)}
-					class="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-800 shadow-2xs transition-colors hover:bg-indigo-100"
-				>
-					<PlusCircle class="h-3.5 w-3.5" />
-					<span>ขอเบิกเติมฉุกเฉิน (Top-Up)</span>
-				</button>
-			{/if}
-		</div>
+		<!--
+			Temporarily hidden: active-ticket amendment is awaiting workflow approval.
+			Keep InFlightTopUpDialog and application/domain logic intact for later re-enablement.
+		-->
 	</div>
 
 	<!-- Line Items & Live In-Hand Capacity Summary -->

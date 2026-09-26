@@ -10,6 +10,7 @@
 	import { validatePositiveQuantity } from '../model/ticket-quantity';
 	import { dialogAccessibility } from '../model/dialog-accessibility';
 	import { formatDistributionError } from '../model/distribution-error';
+	import { addQty } from '$lib/utils/qty';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 
@@ -29,7 +30,7 @@
 	// selectedItemId syncs reactively via $effect — avoids Svelte state_referenced_locally warning
 	let selectedItemId = $state('');
 	let addedQty = $state('10');
-	let reason = $state('ขอเบิกเติมฉุกเฉินหน้างาน (In-Flight Top-Up)');
+	let reason = $state('');
 	let localError = $state<string | null>(null);
 
 	function handleQtyBlur() {
@@ -39,6 +40,18 @@
 	}
 
 	const selectedItem = $derived(ticket.items.find((i) => i.item_id === selectedItemId));
+
+	// Deterministic live preview only — never used to reconstruct historical amendment data.
+	const previewNewQty = $derived.by(() => {
+		if (!selectedItem) return null;
+		const trimmed = addedQty.trim();
+		if (!trimmed) return null;
+		try {
+			return addQty(selectedItem.allocated_qty, trimmed);
+		} catch {
+			return null;
+		}
+	});
 
 	// Keep selectedItemId valid when ticket prop changes or dialog opens.
 	$effect(() => {
@@ -53,6 +66,7 @@
 		if (open) {
 			amendmentId = ulid();
 			localError = null;
+			reason = '';
 		}
 	});
 
@@ -69,7 +83,7 @@
 		e.preventDefault();
 		handleQtyBlur();
 		if (!selectedItemId) {
-			localError = 'กรุณาเลือกรายการสินค้าที่ต้องการขอเบิกเติม';
+			localError = 'กรุณาเลือกรายการสินค้าที่ต้องการเพิ่มจำนวน';
 			return;
 		}
 		const qtyRes = validatePositiveQuantity(addedQty);
@@ -92,14 +106,14 @@
 				shelterCode
 			});
 
-			toast.success(`ขอเบิกเติมสินค้าเรียบร้อยแล้ว (+${qtyRes.value})`);
+			toast.success(`บันทึกการแก้ไขใบเบิกจ่ายเรียบร้อยแล้ว (+${qtyRes.value})`);
 			// Reset stable ID for next operation
 			amendmentId = ulid();
 			handleClose();
 		} catch (err) {
 			localError = formatDistributionError(
 				err,
-				'ไม่สามารถทำรายการขอเบิกเติมได้ กรุณาลองใหม่อีกครั้ง'
+				'ไม่สามารถบันทึกการแก้ไขใบเบิกจ่ายได้ กรุณาลองใหม่อีกครั้ง'
 			);
 		}
 	}
@@ -143,7 +157,7 @@
 					</div>
 					<div>
 						<h2 id="topup-dialog-title" class="text-base font-bold text-slate-900">
-							ขอเบิกเติมฉุกเฉินระหว่างแจก (In-Flight Top-Up)
+							แก้ไขใบเบิกจ่ายระหว่างแจก
 						</h2>
 						<p id="topup-dialog-desc" class="text-xs text-slate-500">
 							ตั๋ว: <strong>{ticket.ticket_no}</strong> (ปลายทาง: {ticket.destination_location})
@@ -168,7 +182,8 @@
 					class="rounded-xl border border-indigo-100 bg-indigo-50/50 p-3 text-xs text-indigo-950"
 				>
 					<p>
-						ระบบจะตัดสต็อกคลังสินค้าทันทีและเพิ่มยอดจัดสรรบนตั๋วเดิม โดยสถานะตั๋วยังคงเป็น
+						จำนวนที่เพิ่มจะถูกรวมในใบเบิกจ่ายปัจจุบันทันที ตัดสต็อกคลังสินค้าจริง
+						และบันทึกเป็นประวัติการแก้ไขที่ย้อนดูได้ โดยสถานะตั๋วยังคงเป็น
 						<strong>กำลังแจกจ่าย</strong>
 					</p>
 					<p class="mt-1 font-mono text-2xs text-indigo-700">
@@ -182,30 +197,57 @@
 						for="topup-item-select"
 						class="mb-1 block text-2xs font-bold text-slate-700 uppercase"
 					>
-						เลือกสินค้าในตั๋วที่ต้องการเติม <span class="text-red-500">*</span>
+						เลือกสินค้าในตั๋วที่ต้องการเพิ่มจำนวน <span class="text-red-500">*</span>
 					</label>
 					<Select.Root type="single" bind:value={selectedItemId} disabled={amendMutation.isPending}>
 						<Select.Trigger
 							id="topup-item-select"
-							aria-label="เลือกสินค้าในตั๋วที่ต้องการเติม"
+							aria-label="เลือกสินค้าในตั๋วที่ต้องการเพิ่มจำนวน"
 							class="h-9 w-full rounded-lg text-xs shadow-2xs"
 						>
 							<span class="truncate">
-								{selectedItem
-									? `${selectedItem.item_name} (ยอดจัดสรรปัจจุบัน: ${selectedItem.allocated_qty})`
-									: 'เลือกสินค้าในตั๋ว'}
+								{selectedItem ? selectedItem.item_name : 'เลือกสินค้าในตั๋ว'}
 							</span>
 						</Select.Trigger>
 						<Select.Content>
 							{#each ticket.items as item (item.item_id)}
-								<Select.Item
-									value={item.item_id}
-									label={`${item.item_name} (ยอดจัดสรรปัจจุบัน: ${item.allocated_qty})`}
-								/>
+								<Select.Item value={item.item_id} label={item.item_name} />
 							{/each}
 						</Select.Content>
 					</Select.Root>
 				</div>
+
+				<!-- Current / Added / New quantity summary — this workflow only ever ADDS quantity -->
+				{#if selectedItem}
+					<div class="rounded-xl border border-slate-200/80 bg-slate-50/60 p-3">
+						<div class="grid grid-cols-3 gap-2 text-center">
+							<div>
+								<p class="text-3xs font-semibold tracking-wide text-slate-500 uppercase">
+									จำนวนปัจจุบัน
+								</p>
+								<p class="text-sm font-bold text-slate-800 tabular-nums">
+									{selectedItem.allocated_qty}
+								</p>
+							</div>
+							<div>
+								<p class="text-3xs font-semibold tracking-wide text-slate-500 uppercase">
+									เพิ่มจำนวน
+								</p>
+								<p class="text-sm font-bold text-indigo-700 tabular-nums">
+									+{addedQty.trim() || '0'}
+								</p>
+							</div>
+							<div>
+								<p class="text-3xs font-semibold tracking-wide text-slate-500 uppercase">
+									จำนวนใหม่
+								</p>
+								<p class="text-sm font-extrabold text-emerald-700 tabular-nums">
+									{previewNewQty ?? '-'}
+								</p>
+							</div>
+						</div>
+					</div>
+				{/if}
 
 				<!-- Added Quantity -->
 				<div>
@@ -213,7 +255,7 @@
 						for="topup-qty-input"
 						class="mb-1 block text-2xs font-bold text-slate-700 uppercase"
 					>
-						จำนวนที่ต้องการขอเติมเพิ่ม <span class="text-red-500">*</span>
+						จำนวนที่ต้องการเพิ่มในใบเบิกจ่าย <span class="text-red-500">*</span>
 					</label>
 					<Input
 						id="topup-qty-input"
@@ -233,13 +275,13 @@
 						for="topup-reason-input"
 						class="mb-1 block text-2xs font-bold text-slate-700 uppercase"
 					>
-						เหตุผลในการขอเบิกเติม
+						เหตุผลในการแก้ไขใบเบิกจ่าย
 					</label>
 					<Input
 						id="topup-reason-input"
 						type="text"
 						bind:value={reason}
-						placeholder="เช่น มีผู้ประสบภัยย้ายมาเพิ่มจากโซนอื่น, อาหารหมดก่อนปิดรอบ..."
+						placeholder="ระบุเหตุผลที่ต้องเพิ่มจำนวนสินค้า"
 						class="h-9 w-full text-xs shadow-2xs placeholder:text-slate-400"
 						disabled={amendMutation.isPending}
 					/>
@@ -271,9 +313,9 @@
 					>
 						{#if amendMutation.isPending}
 							<Loader class="h-3.5 w-3.5 animate-spin" />
-							<span>กำลังส่งคำขอ...</span>
+							<span>กำลังบันทึก...</span>
 						{:else}
-							<span>ยืนยันขอเบิกเติม</span>
+							<span>ยืนยันแก้ไขใบเบิกจ่าย</span>
 						{/if}
 					</button>
 				</div>

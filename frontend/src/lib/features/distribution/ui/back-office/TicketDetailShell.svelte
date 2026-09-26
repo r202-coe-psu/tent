@@ -3,6 +3,7 @@
 	import TicketStatusBadge from '../common/TicketStatusBadge.svelte';
 	import TicketLifecycleProgress from '../common/TicketLifecycleProgress.svelte';
 	import TicketLoanSummary from '../common/TicketLoanSummary.svelte';
+	import TicketAmendmentHistory from '../common/TicketAmendmentHistory.svelte';
 	import TicketActionPanel from './TicketActionPanel.svelte';
 	import { getReturnableBadgeLabel, getReturnableBadgeClass } from '../model/catalog-eligibility';
 	import { getRequisitionTypeLabel } from '../model/ticket-status';
@@ -282,6 +283,9 @@
 
 				<!-- 3. Durable Loan Status (tracked independently of ticket lifecycle) -->
 				<TicketLoanSummary ticketId={ticket._id} items={ticket.items} {shelterCode} />
+
+				<!-- 3b. Amendment audit trail — remains visible regardless of ticket.status -->
+				<TicketAmendmentHistory amendments={ticket.amendments} items={ticket.items} />
 
 				<!-- 4. Action Panel -->
 				<TicketActionPanel

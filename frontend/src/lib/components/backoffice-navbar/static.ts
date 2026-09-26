@@ -17,8 +17,7 @@ import {
 	ShoppingCart,
 	MapPin,
 	UtensilsCrossed,
-	FlaskConical,
-	Truck
+	FlaskConical
 } from '@lucide/svelte/icons';
 
 type Leaf = {
@@ -96,20 +95,13 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 						label: 'ใบจัดซื้อ',
 						href: resolve('/back-office/purchases'),
 						icon: ShoppingCart
-					},
-					{
-						label: 'งานเบิกจ่าย',
-						href: null,
-						icon: Truck,
-						children: [
-							{
-								label: 'จัดการเบิกจ่ายพัสดุและอาหาร',
-								href: resolve('/back-office/distribution'),
-								icon: ClipboardList
-							}
-						]
 					}
 				]
+			},
+			{
+				label: 'จัดการเบิกจ่ายพัสดุและอาหาร',
+				href: resolve('/back-office/distribution'),
+				icon: ClipboardList
 			},
 			{
 				label: 'ครัวกลางและอาหาร',
