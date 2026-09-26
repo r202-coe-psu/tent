@@ -15,6 +15,7 @@
 	} from '$lib/features/kitchen';
 	import { superForm, defaults } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
+	import { formatThaiShortDate } from '$lib/utils/date';
 
 	let { open = $bindable(false), plan = null }: { open?: boolean; plan?: MealPlan | null } =
 		$props();
@@ -64,7 +65,9 @@
 						},
 						ctx
 					});
-					toast.success(`บันทึกบริการ ${MEAL_PERIOD_LABELS[plan.meal]} วันที่ ${plan.date} แล้ว`);
+					toast.success(
+						`บันทึกบริการ ${MEAL_PERIOD_LABELS[plan.meal]} วันที่ ${formatThaiShortDate(plan.date)} แล้ว`
+					);
 					close();
 				} catch (err) {
 					toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาด');
@@ -122,7 +125,7 @@
 			<Dialog.Title>บันทึกผลบริการอาหาร</Dialog.Title>
 			<Dialog.Description class="break-words">
 				{#if plan}
-					แผน {MEAL_PERIOD_LABELS[plan.meal]} วันที่ {plan.date} — วางแผนไว้ {planned.toLocaleString()}
+					แผน {MEAL_PERIOD_LABELS[plan.meal]} วันที่ {formatThaiShortDate(plan.date)} — วางแผนไว้ {planned.toLocaleString()}
 					คน
 				{:else}
 					เลือกแผนอาหารเพื่อบันทึกผลบริการ
@@ -134,7 +137,7 @@
 			<Form.Field {form} name="actual_yield" class="space-y-1.5">
 				<Form.Control>
 					{#snippet children({ props })}
-						<Form.Label>ผลผลิตที่ทำได้จริง (Actual Yield) — เพดานการแจก (ไม่บังคับ)</Form.Label>
+						<Form.Label>ผลผลิตที่ทำได้จริง — เพดานการแจก (ไม่บังคับ)</Form.Label>
 						<Input {...props} type="number" min="0" bind:value={$formData.actual_yield} />
 					{/snippet}
 				</Form.Control>
@@ -182,7 +185,7 @@
 			</div>
 
 			<div class="space-y-1.5">
-				<p class="text-xs font-medium text-muted-foreground">แจกจ่ายนอกศูนย์ (external support)</p>
+				<p class="text-xs font-medium text-muted-foreground">แจกจ่ายนอกศูนย์</p>
 				<div class="grid grid-cols-2 gap-4">
 					<Form.Field {form} name="external.volunteers" class="space-y-1.5">
 						<Form.Control>

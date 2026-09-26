@@ -401,7 +401,7 @@
 				{#if sourceMode === 'recipe'}
 					{isEdit ? 'แก้ไขแผนจากสูตรมาตรฐาน (BOM)' : 'สร้างแผนจากสูตรมาตรฐาน (BOM)'}
 				{:else if sourceMode === 'custom'}
-					{isEdit ? 'แก้ไขแผนแบบกำหนดสูตรเอง (Custom)' : 'สร้างแผนแบบกำหนดสูตรเอง (Custom)'}
+					{isEdit ? 'แก้ไขแผนแบบกำหนดสูตรเอง' : 'สร้างแผนแบบกำหนดสูตรเอง'}
 				{:else}
 					{isEdit ? 'แก้ไขแผนอาหาร (SOP)' : 'สร้างแผนอาหาร (SOP)'}
 				{/if}
@@ -558,15 +558,16 @@
 						> คน
 					{/if}
 				</span>
-				<button
-					type="button"
-					class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-primary hover:bg-primary/10 disabled:opacity-50"
+				<Button
+					variant="ghost"
+					size="sm"
+					class="text-primary hover:bg-primary/10"
 					onclick={resetToOccupancy}
 					disabled={!occupancy.data}
 				>
 					<RefreshCw class="h-3 w-3" />
 					ใช้ยอดล่าสุด
-				</button>
+				</Button>
 			</div>
 
 			<div class="space-y-1.5">
@@ -792,7 +793,7 @@
 					{#if isEdit}
 						{updateCalc.isPending ? 'กำลังบันทึก...' : 'บันทึกการแก้ไข'}
 					{:else}
-						{createCalc.isPending ? 'กำลังบันทึก...' : 'สร้างแผน (draft)'}
+						{createCalc.isPending ? 'กำลังบันทึก...' : 'สร้างแผน'}
 					{/if}
 				</Button>
 			</Dialog.Footer>

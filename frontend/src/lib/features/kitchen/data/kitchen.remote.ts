@@ -16,7 +16,6 @@ import {
 	isKitchenRequisition,
 	isMealService,
 	isMealServiceReceipt,
-	mealServiceReceiptOutcome,
 	isFuelCylinder,
 	isMealSession,
 	type MealPlan,
@@ -38,13 +37,6 @@ import {
 	maxRefillKg,
 	type GasLedgerEntry
 } from '../domain/gas-ledger';
-import {
-	createMealDistributionPush,
-	isMealDistributionPush,
-	mealServicePushRemaining,
-	type MealDistributionPush,
-	type MealDistributionPushInput
-} from '../domain/meal-distribution-push';
 import {
 	createStockLedger,
 	stockBalance,
@@ -471,44 +463,6 @@ export class KitchenRemoteRepository implements KitchenRepository {
 
 	listMealServiceReceipts(): Promise<MealServiceReceipt[]> {
 		return this.repo.allByType('meal_service_receipt', isMealServiceReceipt);
-	}
-
-	// Every item must reference a meal_service whose receipt is confirmed, and
-	// stay within its remaining pushable qty — checked all-or-nothing first.
-	async createMealDistributionPush(
-		input: MealDistributionPushInput,
-		ctx: AuthorContext
-	): Promise<MealDistributionPush> {
-		const [services, receipts, pushes] = await Promise.all([
-			this.listMealServices(),
-			this.listMealServiceReceipts(),
-			this.listMealDistributionPushes()
-		]);
-		for (const item of input.items) {
-			const service = services.find((s) => s._id === item.meal_service_id);
-			if (!service) {
-				throw new Error(
-					`createMealDistributionPush: meal_service ${item.meal_service_id} not found`
-				);
-			}
-			const receipt = receipts.find((r) => r.meal_service_id === service._id);
-			if (!receipt || mealServiceReceiptOutcome(receipt) !== 'confirmed') {
-				throw new Error(
-					`createMealDistributionPush: meal_service ${service._id} has not been confirmed into stock`
-				);
-			}
-			const remaining = mealServicePushRemaining(service.actual_yield ?? 0, service._id, pushes);
-			if (item.qty > remaining) {
-				throw new Error(
-					`createMealDistributionPush: cannot push ${item.qty} of ${item.menu_label} — only ${remaining} remaining`
-				);
-			}
-		}
-		return this.repo.put(createMealDistributionPush(input, ctx));
-	}
-
-	listMealDistributionPushes(): Promise<MealDistributionPush[]> {
-		return this.repo.allByType('meal_distribution_push', isMealDistributionPush);
 	}
 
 	async confirmMealPlan(plan: MealPlan): Promise<MealPlan> {

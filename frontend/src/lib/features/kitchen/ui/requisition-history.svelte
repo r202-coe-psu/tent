@@ -11,7 +11,7 @@
 		toMealPlanMap
 	} from '$lib/features/kitchen';
 	import { useTickets, TICKET_STATUS_LABELS } from '$lib/features/tickets';
-	import { formatThaiDateTime } from '$lib/utils/date';
+	import { formatThaiDateTime, formatThaiShortDate } from '$lib/utils/date';
 	import { qtyGte } from '$lib/utils/qty';
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
@@ -153,7 +153,7 @@
 										</p>
 										<p class="text-xs text-muted-foreground">
 											{#if plan.label}{MEAL_PERIOD_LABELS[plan.meal]} ·
-											{/if}<span class="font-mono">{plan.date}</span>
+											{/if}<span class="font-mono">{formatThaiShortDate(plan.date)}</span>
 										</p>
 									{/if}
 								</Table.Cell>

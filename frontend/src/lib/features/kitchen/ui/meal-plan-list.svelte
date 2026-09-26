@@ -44,7 +44,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { qtyGt } from '$lib/utils/qty';
-	import { formatThaiTime } from '$lib/utils/date';
+	import { formatThaiTime, formatThaiShortDate } from '$lib/utils/date';
 
 	const plans = useMealPlans();
 	const supplyItems = useSupplyItems();
@@ -163,7 +163,9 @@
 		const plan = pendingDeletePlan;
 		try {
 			await deletePlan.mutateAsync(plan);
-			toast.success(`ลบแผน ${MEAL_PERIOD_LABELS[plan.meal]} วันที่ ${plan.date} แล้ว`);
+			toast.success(
+				`ลบแผน ${MEAL_PERIOD_LABELS[plan.meal]} วันที่ ${formatThaiShortDate(plan.date)} แล้ว`
+			);
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาด');
 		} finally {
@@ -209,7 +211,9 @@
 		}
 		try {
 			await confirm.mutateAsync(plan);
-			toast.success(`ยืนยันแผน ${MEAL_PERIOD_LABELS[plan.meal]} วันที่ ${plan.date} แล้ว`);
+			toast.success(
+				`ยืนยันแผน ${MEAL_PERIOD_LABELS[plan.meal]} วันที่ ${formatThaiShortDate(plan.date)} แล้ว`
+			);
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาด');
 		}
@@ -293,7 +297,7 @@
 				</Button>
 				<Button variant="outline" onclick={() => openCreate('custom')} class="rounded-full px-4">
 					<FileText class="mr-1.5 h-3.5 w-3.5" />
-					กำหนดสูตรเอง (Custom)
+					กำหนดสูตรเอง
 				</Button>
 			</div>
 		</Card.Header>
@@ -321,12 +325,7 @@
 									<Table.Cell class="px-6 font-mono text-xs">
 										<p class="font-semibold text-foreground">{planRef(plan)}</p>
 										<p class="text-muted-foreground">
-											{new Date(plan.created_at).toLocaleDateString('th-TH', {
-												day: '2-digit',
-												month: '2-digit',
-												year: 'numeric'
-											})}
-											· {formatThaiTime(plan.created_at)} น.
+											{formatThaiShortDate(plan.created_at)} · {formatThaiTime(plan.created_at)} น.
 										</p>
 									</Table.Cell>
 									<Table.Cell class="max-w-xs px-6">
@@ -432,7 +431,7 @@
 												<Button
 													size="sm"
 													variant="outline"
-													title="แก้ไขแผน (draft)"
+													title="แก้ไขแผน"
 													onclick={() => openEdit(plan)}
 												>
 													<Pencil class="h-3.5 w-3.5" />
@@ -440,7 +439,7 @@
 												<Button
 													size="sm"
 													variant="outline"
-													title="ลบแผน (draft)"
+													title="ลบแผน"
 													class="text-destructive hover:text-destructive"
 													onclick={() => openDeleteConfirm(plan)}
 													disabled={deletePlan.isPending}
@@ -520,8 +519,9 @@
 			<AlertDialog.Title>ลบแผนอาหารนี้?</AlertDialog.Title>
 			<AlertDialog.Description>
 				{#if pendingDeletePlan}
-					ลบแผน {MEAL_PERIOD_LABELS[pendingDeletePlan.meal]} วันที่ {pendingDeletePlan.date}
-					(draft) — ยังไม่เบิกวัตถุดิบหรือบันทึกบริการ ลบได้โดยไม่กระทบสต็อก แต่กู้คืนไม่ได้
+					ลบแผน {MEAL_PERIOD_LABELS[pendingDeletePlan.meal]} วันที่ {formatThaiShortDate(
+						pendingDeletePlan.date
+					)} — ยังไม่เบิกวัตถุดิบหรือบันทึกบริการ ลบได้โดยไม่กระทบสต็อก แต่กู้คืนไม่ได้
 				{/if}
 			</AlertDialog.Description>
 		</AlertDialog.Header>

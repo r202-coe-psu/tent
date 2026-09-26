@@ -12,10 +12,6 @@ import type {
 	FuelCylinderInput
 } from '../domain/kitchen';
 import type { GasLedgerEntry } from '../domain/gas-ledger';
-import type {
-	MealDistributionPush,
-	MealDistributionPushInput
-} from '../domain/meal-distribution-push';
 import type { AuthorContext } from '$lib/db/model';
 
 export interface CreatePendingRequisitionParams {
@@ -139,14 +135,6 @@ export interface KitchenRepository {
 		ctx: AuthorContext
 	): Promise<MealServiceReceipt>;
 	listMealServiceReceipts(): Promise<MealServiceReceipt[]>;
-
-	// MealDistributionPush (CR-144) — pushes confirmed-receipt meal_service output
-	// to a distribution point; all-or-nothing check against remaining qty first.
-	createMealDistributionPush(
-		input: MealDistributionPushInput,
-		ctx: AuthorContext
-	): Promise<MealDistributionPush>;
-	listMealDistributionPushes(): Promise<MealDistributionPush[]>;
 
 	// Fuel cylinder — one physical gas tank (schema.md §2.7.1, CR-120).
 	createFuelCylinder(input: FuelCylinderInput, ctx: AuthorContext): Promise<FuelCylinder>;

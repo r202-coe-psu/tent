@@ -3,7 +3,7 @@ title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
 updated: 2026-09-25
-note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer; CR-135/CR-136 partner OAuth2 client name/module preset + secret reveal/edit/delete; CR-137 shrink master_data (10→4) + zone/community free text; CR-138 item_category default_class editable; CR-142/CR-143 meal_service_receipt (§2.7.3); CR-144 meal_distribution_push (§2.7.4)
+note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer; CR-135/CR-136 partner OAuth2 client name/module preset + secret reveal/edit/delete; CR-137 shrink master_data (10→4) + zone/community free text; CR-138 item_category default_class editable; CR-142/CR-143 meal_service_receipt (§2.7.3); CR-145 removes CR-144 meal_distribution_push (§2.7.4) — ticket flow ends at warehouse stock-in
 ---
 
 # Database Schema v5 — field-level
@@ -598,23 +598,13 @@ doc ตลอดไป ตอนนี้อนุญาตให้บันท
 ลบ ยังอยู่เป็นประวัติ) — จุดที่เคยดึง "meal_service ตัวแรกที่เจอของแผน" ต้องเปลี่ยนเป็นดึงตัวล่าสุด
 (ตามลำดับ ulid) แทน
 
-### 2.7.4 `meal_distribution_push` — `meal_distribution_push:{ulid}` · **append-only** · **schema_v 1** (CR-144)
+### 2.7.4 `meal_distribution_push` — ถูกลบ (CR-145, ย้อนกลับ CR-144)
 
-> จัดสรรอาหารปรุงสำเร็จ (`meal_service` ที่ยืนยันตรวจรับแล้วเท่านั้น — CR-142/CR-143) ส่งจุดแจกจ่าย
-> ("Push to POS") — MVP เจตนาไม่ผูกกับ `stock_ledger`/CR-059 distribution engine (ดู CR-144 §2
-> สำหรับเหตุผล)
-
-| Field | ชนิด | req | หมายเหตุ |
-| --- | --- | --- | --- |
-| `pos_station` | str | req | จุดแจกจ่ายปลายทาง — เลือกจาก `shelter_master.zones[]` จริง (`status != 'closed'`, แพทเทิร์นเดียวกับ evacuee zone picker) หรือ "จุดแจกจ่ายรวมทุกโซน (Main Hub POS)"; เก็บเป็น label ข้อความ ไม่ผูก FK กับ `zones[].code` (เหมือน `requisition_ticket.destination_location`) |
-| `meal_session_id` | str | req | อ้าง `meal_session._id` |
-| `dispatcher` | str | req | เจ้าหน้าที่ผู้จัดสรร/ทีมลำเลียง |
-| `vehicle` | str | opt | ยานพาหนะ/อุปกรณ์ขนส่ง |
-| `items` | [{`meal_service_id`:str, `menu_label`:str, `qty`:int>0}] | req≥1 | แต่ละรายการอ้าง `meal_service._id` ที่มี `meal_service_receipt.outcome='confirmed'` เท่านั้น |
-
-**คงเหลือคำนวณสด (ไม่เก็บ field แยก):** `remaining(meal_service) = actual_yield − Σ(items[].qty
-ทุก meal_distribution_push ที่ meal_service_id ตรงกัน)` ตรวจสอบ all-or-nothing ก่อนเขียน (ห้ามจัดสรร
-เกินยอดคงเหลือ) เหมือนแพทเทิร์น `dispatchTicket`/`oneStepApproveTicket`
+> เดิมเป็น doc type append-only สำหรับจัดสรรอาหารปรุงสำเร็จส่งจุดแจกจ่าย ("Push to POS", CR-144).
+> **CR-145 ตัดฟีเจอร์นี้ทั้งหมด** — flow ของ ticket จบที่คลังตรวจรับเข้าสต็อก (`meal_service_receipt`
+> confirmed = "ส่งมอบเสร็จสิ้น") ไม่มีขั้นตอนจัดสรรส่งจุดแจกต่อ. เอกสาร `meal_distribution_push:*`
+> เดิมที่เขียนไปแล้วใน production ยังอยู่ใน CouchDB (append-only ห้ามลบ) แต่แอปไม่อ่าน/เขียนอีกต่อไป —
+> orphan, cleanup นอก scope ของ CR นี้.
 
 ### 2.8 `volunteer` — `volunteer:{ulid}` · **schema_v 4**
 
@@ -2183,7 +2173,7 @@ CR-059 ไม่เพิ่ม Central→Edge fallback หรือ local write
 ต้อง deploy บน remote shelter database ที่รับ write.
 
 1. `type` อยู่ใน whitelist ของ db นั้น; `_id` ขึ้นต้นด้วย `{type}:`
-2. append-only types (`movement`, `screening`, `people_import_log`, `stock_ledger`, `kitchen_requisition`, `meal_service`, `meal_service_receipt`, `meal_distribution_push`, `audit`, `search_audit`, `distribution_issue`, `distribution_issue_idempotency`) — ปฏิเสธ update/delete ทุกกรณี. `distribution_log` เป็น log ถาวรที่ห้ามลบ แต่อนุญาตเฉพาะการเปลี่ยนแปลงสถานะคืน/void ตาม lifecycle
+2. append-only types (`movement`, `screening`, `people_import_log`, `stock_ledger`, `kitchen_requisition`, `meal_service`, `meal_service_receipt`, `audit`, `search_audit`, `distribution_issue`, `distribution_issue_idempotency`) — ปฏิเสธ update/delete ทุกกรณี. `distribution_log` เป็น log ถาวรที่ห้ามลบ แต่อนุญาตเฉพาะการเปลี่ยนแปลงสถานะคืน/void ตาม lifecycle
 3. state machine types (`stock_transfer`, `donation`, `referral`, `shelter_report`, …) — ปฏิเสธ transition ถอยหลัง (ตามลำดับ enum / กราฟของ type นั้น)
 4. role→type เขียนได้ตาม role-permission-matrix (ตรวจ `userCtx.roles` แบบ Compound Scoped Roles `{shelter_code}:{role}`)
 5. `shelter_code` ใน doc ต้องตรงกับ db

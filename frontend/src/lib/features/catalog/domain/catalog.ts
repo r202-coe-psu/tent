@@ -253,6 +253,14 @@ export interface ItemMaster extends CatalogDoc {
 	qty_per_person?: number;
 	returnable?: boolean;
 	asset_status?: AssetStatus;
+
+	// item_category:fuel_energy specific fields (physical tank spec — a
+	// fuel_cylinder auto-created for this item should always match these, not
+	// a hardcoded guess).
+	fuel_type?: string;
+	capacity_kg?: string;
+	burn_rate_kg_per_hour?: string;
+	time_multiplier?: string;
 }
 
 export interface Recipe extends CatalogDoc {
@@ -401,7 +409,16 @@ const itemMasterFieldsSchema = z
 		qty_per_person: z.number().min(0).optional(),
 		returnable: z.boolean().optional(),
 		asset_status: assetStatusSchema.optional(),
-		override: z.boolean().optional()
+		override: z.boolean().optional(),
+
+		// item_category:fuel_energy specific fields (CR-119/120/125). Empty string
+		// tolerated at the object level (form default before the user fills the
+		// field in) — conditional requiredness for fuel_energy is enforced below
+		// in `validateItemMasterFields`.
+		fuel_type: z.literal('LPG').optional(),
+		capacity_kg: z.union([z.literal(''), qtyStrCoercePositiveSchema]).optional(),
+		burn_rate_kg_per_hour: z.union([z.literal(''), qtyStrCoercePositiveSchema]).optional(),
+		time_multiplier: z.union([z.literal(''), qtyStrCoercePositiveSchema]).optional()
 	})
 	.superRefine((data, ctx) => {
 		const codes = (data.conversions ?? [])
@@ -472,6 +489,25 @@ function validateItemMasterFields(
 			});
 		}
 	}
+
+	// FUEL_ENERGY contract (CR-119/120/125, schema.md): capacity_kg and
+	// burn_rate_kg_per_hour are conditionally required for this category.
+	if (data.category === 'item_category:fuel_energy') {
+		if (!data.capacity_kg || data.capacity_kg === '') {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: 'กรุณาระบุความจุถัง (กก.)',
+				path: ['capacity_kg']
+			});
+		}
+		if (!data.burn_rate_kg_per_hour || data.burn_rate_kg_per_hour === '') {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: 'กรุณาระบุอัตราสิ้นเปลืองแก๊ส (กก./ชม.)',
+				path: ['burn_rate_kg_per_hour']
+			});
+		}
+	}
 }
 
 export const itemMasterInputSchema = itemMasterFieldsSchema.superRefine((data, ctx) => {
@@ -536,6 +572,7 @@ export function createItemMaster(
 	shelterCode?: string
 ): ItemMaster {
 	const d = itemMasterInputSchema.parse(input);
+	const isFuelEnergy = d.category === 'item_category:fuel_energy';
 	const doc = catalogDoc(
 		'item_master',
 		4,
@@ -544,7 +581,8 @@ export function createItemMaster(
 			category: d.category,
 			sku: d.sku,
 			description: d.description,
-			base_unit: d.base_unit || 'piece',
+			// FUEL_ENERGY contract (CR-119/120/125): base_unit locked to "cylinder".
+			base_unit: isFuelEnergy ? 'cylinder' : d.base_unit || 'piece',
 			conversions: d.conversions.map((c) => ({
 				...c,
 				multiplier: persistQty(c.multiplier)
@@ -558,18 +596,34 @@ export function createItemMaster(
 			...(shelterCode ? { shelter_code: shelterCode } : {}),
 			...(d.override ? { override: d.override } : {}),
 
-			// New fields
-			shelf_life_days: d.shelf_life_days,
-			storage_type: d.storage_type,
-			allergens: d.allergens,
-			target_gender: d.target_gender,
-			age_group: d.age_group,
-			dietary: d.dietary,
+			// New fields — FUEL_ENERGY doesn't persist these (schema.md FUEL_ENERGY
+			// contract: hide/don't persist unrelated food/distribution fields).
+			// `dietary` stays required (empty for FUEL_ENERGY) to match `ItemMaster`.
+			dietary: isFuelEnergy ? [] : d.dietary,
+			...(isFuelEnergy
+				? {}
+				: {
+						shelf_life_days: d.shelf_life_days,
+						storage_type: d.storage_type,
+						allergens: d.allergens,
+						target_gender: d.target_gender,
+						age_group: d.age_group
+					}),
 
 			// Durable & Equipment specific fields
 			qty_per_person: d.qty_per_person,
 			returnable: d.returnable,
-			asset_status: d.asset_status
+			asset_status: d.asset_status,
+
+			// item_category:fuel_energy specific fields (CR-119/120/125)
+			...(isFuelEnergy
+				? {
+						fuel_type: 'LPG' as const,
+						capacity_kg: persistQty(d.capacity_kg || '0'),
+						burn_rate_kg_per_hour: persistQty(d.burn_rate_kg_per_hour || '0'),
+						time_multiplier: persistQty(d.time_multiplier || '1')
+					}
+				: {})
 		},
 		ctx.createdBy
 	);

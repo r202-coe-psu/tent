@@ -38,7 +38,6 @@ import {
 	deriveSessionHeadcountFromOccupancy
 } from '../domain/occupancy';
 import type { MealPlanHeadcount, MealPeriod } from '../domain/kitchen';
-import type { MealDistributionPushInput } from '../domain/meal-distribution-push';
 
 export const kitchenKeys = {
 	all: ['kitchen'] as const,
@@ -51,8 +50,6 @@ export const kitchenKeys = {
 	mealServices: () => [...kitchenKeys.all, 'meal_services', getShelterCode()] as const,
 	mealServiceReceipts: () =>
 		[...kitchenKeys.all, 'meal_service_receipts', getShelterCode()] as const,
-	mealDistributionPushes: () =>
-		[...kitchenKeys.all, 'meal_distribution_pushes', getShelterCode()] as const,
 	fuelCylinders: () => [...kitchenKeys.all, 'fuel_cylinders', getShelterCode()] as const,
 	gasLedger: () => [...kitchenKeys.all, 'gas_ledger', getShelterCode()] as const,
 	occupancy: () => [...kitchenKeys.all, 'occupancy', getShelterCode()] as const,
@@ -396,20 +393,6 @@ export const useRejectMealServiceReceipt = () =>
 		}) => kitchenRepository().rejectMealServiceReceipt(mealServiceId, reason, ctx)
 	}));
 
-// --- MealDistributionPush (CR-144) ---
-
-export const useMealDistributionPushes = () =>
-	createQuery(() => ({
-		queryKey: kitchenKeys.mealDistributionPushes(),
-		queryFn: () => kitchenRepository().listMealDistributionPushes()
-	}));
-
-export const useCreateMealDistributionPush = () =>
-	createMutation(() => ({
-		mutationFn: ({ input, ctx }: { input: MealDistributionPushInput; ctx: AuthorContext }) =>
-			kitchenRepository().createMealDistributionPush(input, ctx)
-	}));
-
 // --- FuelCylinder ---
 
 export const useFuelCylinders = () =>
@@ -479,8 +462,6 @@ export function startKitchenLiveQuery(queryClient: QueryClient): SubscribeDataCh
 				return [kitchenKeys.mealServices(), kitchenKeys.mealSessions()];
 			case 'meal_service_receipt':
 				return [kitchenKeys.mealServiceReceipts()];
-			case 'meal_distribution_push':
-				return [kitchenKeys.mealDistributionPushes()];
 			case 'fuel_cylinder':
 				return [kitchenKeys.fuelCylinders()];
 			case 'gas_ledger':

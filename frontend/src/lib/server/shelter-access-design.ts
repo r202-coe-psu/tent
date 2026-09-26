@@ -241,7 +241,7 @@ export function buildValidateDocUpdate(code: string): string {
   // §2.7 meal_service, §2.7.2 gas_ledger (CR-086), §6.2 stock_ledger / audit, CR-059 Phase 3B distribution_issue
   var appendOnly = [
     'stock_ledger', 'audit', 'movement', 'screening', 'people_import_log',
-    'meal_service', 'meal_service_receipt', 'meal_distribution_push', 'gas_ledger',
+    'meal_service', 'meal_service_receipt', 'gas_ledger',
     'distribution_issue', 'distribution_issue_idempotency'
   ];
   var wasAppendOnly = oldDoc && appendOnly.indexOf(oldDoc.type) !== -1;
@@ -334,7 +334,7 @@ export function buildValidateDocUpdate(code: string): string {
     'distribution_issue', 'distribution_issue_idempotency', 'distribution_issue_capacity', 'distribution_one_time_guard', 'distribution_issue_gate',
     'daily_sop_assessment',
     'requisition_ticket', 'distribution_log', 'bulk_return_pool', 'bulk_return_claim',
-    'meal_service_receipt', 'meal_distribution_push'
+    'meal_service_receipt'
   ];
   if (allowed.indexOf(newDoc.type) === -1) {
     throw { forbidden: 'doc type not allowed yet: ' + newDoc.type };

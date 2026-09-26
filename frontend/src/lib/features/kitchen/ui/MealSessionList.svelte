@@ -3,12 +3,14 @@
 		useMealSessions,
 		useMealPlans,
 		useMealServices,
+		useMealServiceReceipts,
 		useKitchenRequisitions,
 		useActiveEvacueeDietCounts,
 		useCreateMealSession,
 		useDeleteMealSession,
 		computeSessionGroupProgress,
 		computeMealVariance,
+		mealServiceReceiptOutcome,
 		MEAL_VARIANCE_STATUS_LABELS,
 		TARGET_GROUP_LABELS,
 		type MealSession,
@@ -25,14 +27,17 @@
 		type RequisitionTicket
 	} from '$lib/features/tickets';
 	import { authStore } from '$lib/stores/auth.svelte';
+	import { formatThaiShortDate } from '$lib/utils/date';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { formatThaiDateTime } from '$lib/utils/date';
 	import { resolve } from '$app/paths';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
+	import * as Accordion from '$lib/components/ui/accordion';
 	import * as Card from '$lib/components/ui/card';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as Table from '$lib/components/ui/table';
 	import * as Select from '$lib/components/ui/select';
+	import * as Tabs from '$lib/components/ui/tabs';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
@@ -40,8 +45,6 @@
 	import { toast } from 'svelte-sonner';
 	import Plus from '@lucide/svelte/icons/plus';
 	import Search from '@lucide/svelte/icons/search';
-	import Flame from '@lucide/svelte/icons/flame';
-	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import ChefHat from '@lucide/svelte/icons/chef-hat';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import Clock from '@lucide/svelte/icons/clock';
@@ -55,11 +58,11 @@
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import Utensils from '@lucide/svelte/icons/utensils';
 	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
-	import { SvelteSet } from 'svelte/reactivity';
 
 	const sessions = useMealSessions();
 	const plans = useMealPlans();
 	const services = useMealServices();
+	const serviceReceipts = useMealServiceReceipts();
 	const requisitions = useKitchenRequisitions();
 	const dietCounts = useActiveEvacueeDietCounts();
 	const tickets = useTickets();
@@ -81,6 +84,29 @@
 		return map;
 	});
 
+	// A session is effectively complete once every one of its plans has a
+	// completed ticket AND a warehouse-confirmed delivery receipt — the same
+	// check the per-plan badge uses. Drives both the status badge and the
+	// status filter so the two never disagree (a session shown under
+	// "เสร็จสิ้นแล้ว" must also be filterable by it, and vice versa).
+	function isSessionEffectivelyComplete(session: MealSession): boolean {
+		const sessionPlans = (plans.data ?? []).filter((p) => p.meal_session_id === session._id);
+		if (sessionPlans.length === 0) return false;
+		return sessionPlans.every((p) => {
+			const ticket = ticketByPlanId[p._id];
+			if (!ticket || ticket.status !== 'COMPLETED') return false;
+			const svc = (services.data ?? []).find((s) => s.meal_plan_id === p._id);
+			if (!svc) return false;
+			const receipt = (serviceReceipts.data ?? []).find((r) => r.meal_service_id === svc._id);
+			return receipt ? mealServiceReceiptOutcome(receipt) === 'confirmed' : false;
+		});
+	}
+
+	function effectiveSessionStatus(session: MealSession): MealSessionStatus {
+		if (session.status === 'completed' || session.status === 'cancelled') return session.status;
+		return isSessionEffectivelyComplete(session) ? 'completed' : session.status;
+	}
+
 	const TICKET_STATUS_CLASS: Record<TicketStatus, string> = {
 		PENDING_PICK: 'bg-amber-100 text-amber-800',
 		READY_FOR_DISPATCH: 'bg-blue-100 text-blue-800',
@@ -101,7 +127,8 @@
 	function productionCardStatus(
 		ticket: RequisitionTicket,
 		plan: MealPlan,
-		hasService: boolean
+		hasService: boolean,
+		receiptConfirmed: boolean
 	): { label: string; className: string } {
 		if (ticket.status !== 'COMPLETED') {
 			return {
@@ -110,6 +137,9 @@
 			};
 		}
 		if (hasService) {
+			if (receiptConfirmed) {
+				return { label: 'ส่งมอบเสร็จสิ้น', className: 'bg-emerald-100 text-emerald-800' };
+			}
 			return { label: 'รอคลังตรวจรับเข้าสต็อก', className: 'bg-amber-100 text-amber-800' };
 		}
 		if (plan.cooking_started_at) {
@@ -287,7 +317,7 @@
 	const filteredSessions = $derived.by(() => {
 		const q = search.trim().toLowerCase();
 		return sortedSessions.filter((s) => {
-			if (statusFilter !== 'ALL' && s.status !== statusFilter) return false;
+			if (statusFilter !== 'ALL' && effectiveSessionStatus(s) !== statusFilter) return false;
 			if (!isWithinDateRange(s.date, dateRange)) return false;
 			if (!q) return true;
 			return s.name.toLowerCase().includes(q) || s.date.includes(q);
@@ -296,25 +326,15 @@
 
 	const groupKeys: TargetGroupTag[] = ['halal', 'infant', 'soft_food', 'regular', 'volunteer'];
 
-	const expandedSessionIds = new SvelteSet<string>();
+	let expandedSessionIds = $state<string[]>([]);
 	let initializedSessions = $state(false);
 
 	$effect(() => {
 		if (!initializedSessions && sortedSessions.length > 0) {
-			for (const s of sortedSessions) {
-				expandedSessionIds.add(s._id);
-			}
+			expandedSessionIds = sortedSessions.map((s) => s._id);
 			initializedSessions = true;
 		}
 	});
-
-	function toggleSession(sessionId: string) {
-		if (expandedSessionIds.has(sessionId)) {
-			expandedSessionIds.delete(sessionId);
-		} else {
-			expandedSessionIds.add(sessionId);
-		}
-	}
 
 	let activeTabPerSession = $state<Record<string, 'plans' | 'services'>>({});
 
@@ -341,7 +361,7 @@
 			<div class="flex flex-wrap items-start justify-between gap-3">
 				<div>
 					<h1 class="text-3xl font-extrabold tracking-tight text-[#0A2647] sm:text-4xl">
-						หน้าสรุปมื้อ (Meal Sessions)
+						หน้าสรุปมื้อ
 					</h1>
 					<p class="mt-2 text-base leading-relaxed text-slate-600">
 						บริหารจัดการเป้าหมายและสั่งผลิตเมนูแต่ละมื้อ (เชื่อมต่อทะเบียนผู้พักพิง)
@@ -350,31 +370,12 @@
 				<div class="flex flex-wrap items-center gap-2 pt-1">
 					<Button
 						variant="outline"
-						disabled={sessions.isFetching}
-						onclick={() => {
-							sessions.refetch();
-							plans.refetch();
-						}}
-						class="min-h-11 gap-1.5 border-sky-300 text-sky-700 hover:bg-sky-50"
-					>
-						<RefreshCw class="h-3.5 w-3.5 {sessions.isFetching ? 'animate-spin' : ''}" />
-						ซิงค์ข้อมูลล่าสุด
-					</Button>
-					<a
-						href={resolve('/back-office/supply') + '?category=item_category%3Afuel_energy'}
-						class="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
-						title="จัดการทรัพยากรแก๊ส"
-					>
-						<Flame class="h-3.5 w-3.5" />
-						ถังแก๊สระบบ
-					</a>
-					<a
 						href={resolve('/back-office/catalog') + '?tab=recipe'}
-						class="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
+						class="min-h-11 gap-1.5"
 					>
 						<Calendar class="h-3.5 w-3.5" />
 						ฐานสูตร BOM
-					</a>
+					</Button>
 					<Button onclick={openCreateDialog} class="min-h-11 gap-1.5">
 						<Plus class="h-4 w-4" />
 						สร้างมื้อใหม่
@@ -462,7 +463,7 @@
 				</Card.Content>
 			</Card.Root>
 		{:else}
-			<div class="space-y-4">
+			<Accordion.Root type="multiple" bind:value={expandedSessionIds} class="space-y-4">
 				{#each filteredSessions as session (session._id)}
 					{@const sessionPlans = (plans.data ?? []).filter(
 						(p) => p.meal_session_id === session._id
@@ -470,19 +471,18 @@
 					{@const sessionServices = (services.data ?? []).filter(
 						(s) => s.meal_session_id === session._id
 					)}
+					{@const effStatus = effectiveSessionStatus(session)}
 					{@const progress = computeSessionGroupProgress(session, sessionPlans, sessionServices)}
-					{@const isExpanded = expandedSessionIds.has(session._id)}
+					{@const isExpanded = expandedSessionIds.includes(session._id)}
 
-					<div
+					<Accordion.Item
+						value={session._id}
 						class="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm transition-all duration-200 hover:border-primary/40"
 					>
-						<!-- Card Header (Accordion Button) -->
+						<!-- Card Header (Accordion Trigger) -->
 						<div class="flex items-stretch">
-							<button
-								type="button"
-								onclick={() => toggleSession(session._id)}
-								aria-expanded={isExpanded}
-								class="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-2.5 bg-muted/30 px-3.5 py-2.5 text-left transition-colors hover:bg-muted/60 sm:px-5 sm:py-3 {isExpanded
+							<Accordion.Trigger
+								class="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-2.5 rounded-none bg-muted/30 px-3.5 py-2.5 text-left hover:bg-muted/60 hover:no-underline **:data-[slot=accordion-trigger-icon]:hidden sm:px-5 sm:py-3 {isExpanded
 									? 'border-b'
 									: ''}"
 							>
@@ -519,7 +519,7 @@
 										<h4 class="text-base font-bold text-foreground">{session.name}</h4>
 										<span class="inline-flex items-center gap-1 text-xs text-muted-foreground">
 											<Calendar class="h-3.5 w-3.5" />
-											{session.date}
+											{formatThaiShortDate(session.date)}
 										</span>
 									</div>
 								</div>
@@ -542,13 +542,13 @@
 									</span>
 
 									<!-- Status Badge -->
-									{#if session.status === 'completed'}
+									{#if effStatus === 'completed'}
 										<span
 											class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700"
 										>
 											เสร็จสิ้นแล้ว
 										</span>
-									{:else if session.status === 'cancelled'}
+									{:else if effStatus === 'cancelled'}
 										<span
 											class="rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-medium text-rose-700"
 										>
@@ -562,7 +562,7 @@
 										</span>
 									{/if}
 								</div>
-							</button>
+							</Accordion.Trigger>
 							<Button
 								variant="ghost"
 								size="icon"
@@ -578,328 +578,337 @@
 							</Button>
 						</div>
 
-						{#if isExpanded}
-							{@const currentTab = getActiveTab(session._id)}
-							<div class="space-y-4 p-4 sm:p-5">
-								<!-- 5-Group Target vs Actual Cards -->
-								<div>
-									<div class="mb-2 flex items-center justify-between">
-										<span class="text-xs font-semibold text-muted-foreground">
-											เป้าหมาย 5 กลุ่มความต้องการ (รวม {session.target_headcount.total} จาน)
-										</span>
-									</div>
-
-									<div class="overflow-hidden rounded-lg border">
-										<Table.Root>
-											<Table.Header>
-												<Table.Row class="bg-muted/30 text-2xs">
-													<Table.Head class="px-4 py-2 font-semibold">กลุ่มเป้าหมาย</Table.Head>
-													<Table.Head class="px-3 py-2 text-right font-semibold">
-														จำนวนเป้าหมาย (คน)
-													</Table.Head>
-													<Table.Head class="px-3 py-2 text-right font-semibold">
-														ทำแล้ว (จาน)
-													</Table.Head>
-													<Table.Head class="px-3 py-2 text-center font-semibold">สถานะ</Table.Head>
-												</Table.Row>
-											</Table.Header>
-											<Table.Body>
-												{#each groupKeys as groupKey (groupKey)}
-													{@const item = progress.groups[groupKey]}
-													<Table.Row class="text-xs">
-														<Table.Cell class="px-4 py-2 font-semibold">
-															{TARGET_GROUP_LABELS[groupKey]}
-														</Table.Cell>
-														<Table.Cell class="px-3 py-2 text-right">{item.target}</Table.Cell>
-														<Table.Cell class="px-3 py-2 text-right font-semibold">
-															{item.actualYield}
-														</Table.Cell>
-														<Table.Cell class="px-3 py-2 text-center">
-															<span
-																class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-bold {item.isCompleted
-																	? 'bg-green-100 text-green-800'
-																	: 'bg-amber-100 text-amber-800'}"
-															>
-																{#if item.isCompleted}
-																	<CheckCircle2 class="h-3 w-3" />
-																	ครบแล้ว
-																{:else}
-																	<Clock class="h-3 w-3" />
-																	ยังไม่ครบ
-																{/if}
-															</span>
-														</Table.Cell>
-													</Table.Row>
-												{/each}
-											</Table.Body>
-										</Table.Root>
-									</div>
-								</div>
-
-								<!-- Session Tabs: Plans & Batches vs Service Summary -->
-								<div class="rounded-lg border bg-muted/10">
-									<!-- Tab Header Pill Switches -->
-									<div
-										class="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/30 px-3 py-2"
-									>
-										<div class="flex items-center gap-1.5">
-											<button
-												type="button"
-												class="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors {currentTab ===
-												'plans'
-													? 'bg-background text-foreground shadow-sm'
-													: 'text-muted-foreground hover:bg-muted/60'}"
-												onclick={() => setActiveTab(session._id, 'plans')}
-											>
-												<Utensils class="h-3.5 w-3.5" />
-												ชุดการผลิต & แผนอาหาร ({sessionPlans.length})
-											</button>
-											<button
-												type="button"
-												class="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors {currentTab ===
-												'services'
-													? 'bg-background text-foreground shadow-sm'
-													: 'text-muted-foreground hover:bg-muted/60'}"
-												onclick={() => setActiveTab(session._id, 'services')}
-											>
-												<ClipboardCheck class="h-3.5 w-3.5" />
-												สรุปบริการของมื้อนี้ ({sessionServices.length})
-											</button>
+						<Accordion.Content>
+							{#if isExpanded}
+								{@const currentTab = getActiveTab(session._id)}
+								<div class="space-y-4 p-4 sm:p-5">
+									<!-- 5-Group Target vs Actual Cards -->
+									<div>
+										<div class="mb-2 flex items-center justify-between">
+											<span class="text-xs font-semibold text-muted-foreground">
+												เป้าหมาย 5 กลุ่มความต้องการ (รวม {session.target_headcount.total} จาน)
+											</span>
 										</div>
+
+										<div class="overflow-hidden rounded-lg border">
+											<Table.Root>
+												<Table.Header>
+													<Table.Row class="bg-muted/30 text-2xs">
+														<Table.Head class="px-4 py-2 font-semibold">กลุ่มเป้าหมาย</Table.Head>
+														<Table.Head class="px-3 py-2 text-right font-semibold">
+															จำนวนเป้าหมาย (คน)
+														</Table.Head>
+														<Table.Head class="px-3 py-2 text-right font-semibold">
+															ทำแล้ว (จาน)
+														</Table.Head>
+														<Table.Head class="px-3 py-2 text-center font-semibold"
+															>สถานะ</Table.Head
+														>
+													</Table.Row>
+												</Table.Header>
+												<Table.Body>
+													{#each groupKeys as groupKey (groupKey)}
+														{@const item = progress.groups[groupKey]}
+														<Table.Row class="text-xs">
+															<Table.Cell class="px-4 py-2 font-semibold">
+																{TARGET_GROUP_LABELS[groupKey]}
+															</Table.Cell>
+															<Table.Cell class="px-3 py-2 text-right">{item.target}</Table.Cell>
+															<Table.Cell class="px-3 py-2 text-right font-semibold">
+																{item.actualYield}
+															</Table.Cell>
+															<Table.Cell class="px-3 py-2 text-center">
+																<span
+																	class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-bold {item.isCompleted
+																		? 'bg-green-100 text-green-800'
+																		: 'bg-amber-100 text-amber-800'}"
+																>
+																	{#if item.isCompleted}
+																		<CheckCircle2 class="h-3 w-3" />
+																		ครบแล้ว
+																	{:else}
+																		<Clock class="h-3 w-3" />
+																		ยังไม่ครบ
+																	{/if}
+																</span>
+															</Table.Cell>
+														</Table.Row>
+													{/each}
+												</Table.Body>
+											</Table.Root>
+										</div>
+									</div>
+
+									<!-- Session Tabs: Plans & Batches vs Service Summary -->
+									<div class="rounded-lg border bg-muted/10">
+										<!-- Tab Header Pill Switches -->
+										<Tabs.Root
+											value={currentTab}
+											onValueChange={(v) => setActiveTab(session._id, v as 'plans' | 'services')}
+											class="gap-0 border-b bg-muted/30"
+										>
+											<div class="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
+												<Tabs.List class="h-auto gap-1.5 bg-transparent p-0">
+													<Tabs.Trigger
+														value="plans"
+														class="gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+													>
+														<Utensils class="h-3.5 w-3.5" />
+														ชุดการผลิต & แผนอาหาร ({sessionPlans.length})
+													</Tabs.Trigger>
+													<Tabs.Trigger
+														value="services"
+														class="gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+													>
+														<ClipboardCheck class="h-3.5 w-3.5" />
+														สรุปบริการของมื้อนี้ ({sessionServices.length})
+													</Tabs.Trigger>
+												</Tabs.List>
+
+												{#if currentTab === 'plans'}
+													<a
+														href={resolve(`/back-office/kitchen/production-board/${session._id}`)}
+														class="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+													>
+														<Plus class="h-3.5 w-3.5" /> เพิ่มเมนูผลิต
+													</a>
+												{/if}
+											</div>
+										</Tabs.Root>
 
 										{#if currentTab === 'plans'}
-											<a
-												href={resolve(`/back-office/kitchen/production-board/${session._id}`)}
-												class="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
-											>
-												<Plus class="h-3.5 w-3.5" /> เพิ่มเมนูผลิต
-											</a>
+											<!-- TAB 1: Batches / Plans List -->
+											<div class="p-3">
+												{#if sessionPlans.length === 0}
+													<p class="py-4 text-center text-xs text-muted-foreground">
+														ยังไม่มีเมนูผลิตในมื้อนี้ กด "+ เพิ่มเมนูผลิต" เพื่อตั้งค่า BOM
+														และขอเบิกวัตถุดิบ
+													</p>
+												{:else}
+													<div class="space-y-2">
+														{#each sessionPlans as plan (plan._id)}
+															{@const ticket = ticketByPlanId[plan._id]}
+															{@const planReq = (requisitions.data ?? []).find(
+																(r) => r.meal_plan_id === plan._id
+															)}
+															{@const planSvc = sessionServices.find(
+																(s) => s.meal_plan_id === plan._id
+															)}
+															{@const planReceipt = planSvc
+																? (serviceReceipts.data ?? []).find(
+																		(r) => r.meal_service_id === planSvc._id
+																	)
+																: undefined}
+															{@const planReceiptConfirmed = planReceipt
+																? mealServiceReceiptOutcome(planReceipt) === 'confirmed'
+																: false}
+
+															<div
+																class="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-background px-3 py-2.5 text-xs"
+															>
+																<div class="flex flex-wrap items-center gap-2">
+																	<span class="font-bold text-foreground">
+																		{plan.label ?? 'เมนูมาตรฐาน'}
+																	</span>
+
+																	<!-- Target group chips -->
+																	{#if plan.target_tags && plan.target_tags.length > 0}
+																		<div class="flex flex-wrap gap-1">
+																			{#each plan.target_tags as tag (tag)}
+																				<span
+																					class="rounded bg-secondary px-1.5 py-0.5 text-2xs font-medium text-secondary-foreground"
+																				>
+																					{TARGET_GROUP_LABELS[tag as TargetGroupTag] ?? tag}
+																				</span>
+																			{/each}
+																		</div>
+																	{/if}
+
+																	<span class="text-muted-foreground">
+																		(เป้า {plan.allocated_target ?? plan.headcount.total} จาน)
+																	</span>
+
+																	{#if ticket}
+																		<a
+																			href={resolve(
+																				`/back-office/tickets/${encodeURIComponent(ticket._id)}`
+																			)}
+																			class="font-mono text-2xs font-semibold text-primary hover:underline"
+																			title="เปิดตั๋วเบิกวัตถุดิบ"
+																		>
+																			{ticket.ticket_no}
+																		</a>
+																	{/if}
+																</div>
+
+																<!-- Requisition/Ticket, Service Badges & Actions -->
+																<div class="flex flex-wrap items-center gap-2">
+																	{#if ticket}
+																		{@const status = productionCardStatus(
+																			ticket,
+																			plan,
+																			!!planSvc,
+																			planReceiptConfirmed
+																		)}
+																		<span
+																			class="inline-flex items-center gap-1 rounded px-2 py-0.5 font-mono text-2xs font-bold {status.className}"
+																			title="ตั๋วเบิกวัตถุดิบ"
+																		>
+																			{status.label}
+																		</span>
+																	{:else if planReq}
+																		<span
+																			class="inline-flex items-center gap-1 rounded px-2 py-0.5 font-mono text-2xs font-bold {planReq.status ===
+																			'approved'
+																				? 'bg-green-100 text-green-800'
+																				: planReq.status === 'rejected'
+																					? 'bg-rose-100 text-rose-800'
+																					: 'bg-amber-100 text-amber-800'}"
+																			title="ใบเบิกวัตถุดิบ (ใบเบิกเดิม)"
+																		>
+																			{#if planReq.status === 'approved'}
+																				<Check class="h-3 w-3" />
+																				เบิกวัตถุดิบแล้ว
+																			{:else if planReq.status === 'rejected'}
+																				<XCircle class="h-3 w-3" />
+																				ปฏิเสธคำขอ
+																			{:else}
+																				<Clock class="h-3 w-3" />
+																				รออนุมัติวัตถุดิบ
+																			{/if}
+																		</span>
+																	{/if}
+
+																	<!-- Action Buttons -->
+																	<Button
+																		variant="outline"
+																		size="sm"
+																		href={resolve(
+																			`/back-office/kitchen/production-board/${session._id}?plan_id=${plan._id}&stage=${latestStageFor(ticket, !!planSvc)}`
+																		)}
+																		title="แก้ไขชุดการผลิตนี้"
+																	>
+																		<Pencil class="h-3 w-3" />
+																		จัดการ / สูตร
+																	</Button>
+
+																	<Button
+																		variant="ghost"
+																		size="icon-xs"
+																		href={resolve(
+																			`/back-office/kitchen/production-board/${session._id}?plan_id=${plan._id}`
+																		)}
+																		title="เปิดกระดานการผลิตของชุดนี้"
+																	>
+																		<ChevronRight class="h-4 w-4" />
+																	</Button>
+																</div>
+															</div>
+														{/each}
+													</div>
+												{/if}
+											</div>
+										{:else}
+											<!-- TAB 2: Service Summary of this session -->
+											<div class="p-3">
+												{#if sessionServices.length === 0}
+													<div class="py-6 text-center text-xs text-muted-foreground">
+														<ClipboardCheck class="mx-auto mb-2 h-7 w-7 text-muted-foreground/40" />
+														<p class="font-medium text-foreground">
+															ยังไม่มีการบันทึกผลบริการในมื้อนี้
+														</p>
+														<p class="mt-1 text-2xs">
+															เมื่อคลังอนุมัติวัตถุดิบและปรุงอาหารเสร็จสิ้น สามารถกดปุ่ม
+															"บันทึกผลผลิต (Stage 3)" เพื่อบันทึกยอดแจกจ่ายจริงได้
+														</p>
+													</div>
+												{:else}
+													<div class="overflow-x-auto rounded-md border bg-background">
+														<Table.Root>
+															<Table.Header>
+																<Table.Row class="bg-muted/30 text-2xs">
+																	<Table.Head class="px-4 py-2 font-semibold">แผนต้นทาง</Table.Head>
+																	<Table.Head class="px-3 py-2 text-right font-semibold"
+																		>วางแผน</Table.Head
+																	>
+																	<Table.Head class="px-3 py-2 text-right font-semibold"
+																		>ทำได้จริง</Table.Head
+																	>
+																	<Table.Head class="px-3 py-2 text-right font-semibold"
+																		>เสิร์ฟในศูนย์</Table.Head
+																	>
+																	<Table.Head class="px-3 py-2 text-right font-semibold"
+																		>เสิร์ฟภายนอก</Table.Head
+																	>
+																	<Table.Head class="px-3 py-2 text-right font-semibold"
+																		>เหลือทิ้ง</Table.Head
+																	>
+																	<Table.Head class="px-3 py-2 font-semibold">สถานะ</Table.Head>
+																	<Table.Head class="px-4 py-2 font-semibold"
+																		>ผู้บันทึก / เวลา</Table.Head
+																	>
+																</Table.Row>
+															</Table.Header>
+															<Table.Body class="text-xs">
+																{#each sessionServices as svc (svc._id)}
+																	{@const plan =
+																		sessionPlans.find((p) => p._id === svc.meal_plan_id) ?? null}
+																	{@const v = computeMealVariance(svc, plan)}
+																	<Table.Row>
+																		<Table.Cell class="px-4 py-2 font-medium">
+																			{plan?.label ?? 'เมนูอาหาร'}
+																		</Table.Cell>
+																		<Table.Cell class="px-3 py-2 text-right font-mono">
+																			{v.planned !== null ? `${v.planned} จาน` : '—'}
+																		</Table.Cell>
+																		<Table.Cell
+																			class="px-3 py-2 text-right font-mono font-bold text-foreground"
+																		>
+																			{v.actual_yield} จาน
+																		</Table.Cell>
+																		<Table.Cell
+																			class="px-3 py-2 text-right font-mono text-emerald-700"
+																		>
+																			{v.served}
+																		</Table.Cell>
+																		<Table.Cell
+																			class="px-3 py-2 text-right font-mono text-muted-foreground"
+																		>
+																			{v.external}
+																		</Table.Cell>
+																		<Table.Cell
+																			class="px-3 py-2 text-right font-mono text-amber-700"
+																		>
+																			{v.waste}
+																		</Table.Cell>
+																		<Table.Cell class="px-3 py-2">
+																			<span
+																				class="inline-flex rounded-full border px-2 py-0.5 text-2xs font-semibold {STATUS_CLASS[
+																					v.status
+																				]}"
+																			>
+																				{MEAL_VARIANCE_STATUS_LABELS[v.status]}
+																			</span>
+																		</Table.Cell>
+																		<Table.Cell class="px-4 py-2 text-2xs text-muted-foreground">
+																			<div>{svc.created_by}</div>
+																			<div>{formatThaiDateTime(svc.created_at)}</div>
+																		</Table.Cell>
+																	</Table.Row>
+																{/each}
+															</Table.Body>
+														</Table.Root>
+													</div>
+												{/if}
+											</div>
 										{/if}
 									</div>
-
-									{#if currentTab === 'plans'}
-										<!-- TAB 1: Batches / Plans List -->
-										<div class="p-3">
-											{#if sessionPlans.length === 0}
-												<p class="py-4 text-center text-xs text-muted-foreground">
-													ยังไม่มีเมนูผลิตในมื้อนี้ กด "+ เพิ่มเมนูผลิต" เพื่อตั้งค่า BOM
-													และขอเบิกวัตถุดิบ
-												</p>
-											{:else}
-												<div class="space-y-2">
-													{#each sessionPlans as plan (plan._id)}
-														{@const ticket = ticketByPlanId[plan._id]}
-														{@const planReq = (requisitions.data ?? []).find(
-															(r) => r.meal_plan_id === plan._id
-														)}
-														{@const planSvc = sessionServices.find(
-															(s) => s.meal_plan_id === plan._id
-														)}
-
-														<div
-															class="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-background px-3 py-2.5 text-xs"
-														>
-															<div class="flex flex-wrap items-center gap-2">
-																<span class="font-bold text-foreground">
-																	{plan.label ?? 'เมนูมาตรฐาน'}
-																</span>
-
-																<!-- Target group chips -->
-																{#if plan.target_tags && plan.target_tags.length > 0}
-																	<div class="flex flex-wrap gap-1">
-																		{#each plan.target_tags as tag (tag)}
-																			<span
-																				class="rounded bg-secondary px-1.5 py-0.5 text-2xs font-medium text-secondary-foreground"
-																			>
-																				{TARGET_GROUP_LABELS[tag as TargetGroupTag] ?? tag}
-																			</span>
-																		{/each}
-																	</div>
-																{/if}
-
-																<span class="text-muted-foreground">
-																	(เป้า {plan.allocated_target ?? plan.headcount.total} จาน)
-																</span>
-
-																{#if ticket}
-																	<a
-																		href={resolve(
-																			`/back-office/tickets/${encodeURIComponent(ticket._id)}`
-																		)}
-																		class="font-mono text-2xs font-semibold text-primary hover:underline"
-																		title="เปิดตั๋วเบิกวัตถุดิบ"
-																	>
-																		{ticket.ticket_no}
-																	</a>
-																{/if}
-															</div>
-
-															<!-- Requisition/Ticket, Service Badges & Actions -->
-															<div class="flex flex-wrap items-center gap-2">
-																{#if ticket}
-																	{@const status = productionCardStatus(ticket, plan, !!planSvc)}
-																	<span
-																		class="inline-flex items-center gap-1 rounded px-2 py-0.5 font-mono text-2xs font-bold {status.className}"
-																		title="ตั๋วเบิกวัตถุดิบ"
-																	>
-																		{status.label}
-																	</span>
-																{:else if planReq}
-																	<span
-																		class="inline-flex items-center gap-1 rounded px-2 py-0.5 font-mono text-2xs font-bold {planReq.status ===
-																		'approved'
-																			? 'bg-green-100 text-green-800'
-																			: planReq.status === 'rejected'
-																				? 'bg-rose-100 text-rose-800'
-																				: 'bg-amber-100 text-amber-800'}"
-																		title="ใบเบิกวัตถุดิบ (ใบเบิกเดิม)"
-																	>
-																		{#if planReq.status === 'approved'}
-																			<Check class="h-3 w-3" />
-																			เบิกวัตถุดิบแล้ว
-																		{:else if planReq.status === 'rejected'}
-																			<XCircle class="h-3 w-3" />
-																			ปฏิเสธคำขอ
-																		{:else}
-																			<Clock class="h-3 w-3" />
-																			รออนุมัติวัตถุดิบ
-																		{/if}
-																	</span>
-																{/if}
-
-																{#if planSvc}
-																	<span
-																		class="rounded bg-emerald-50 px-2 py-0.5 text-2xs font-bold text-emerald-700"
-																	>
-																		✓ ปรุงจริง {planSvc.actual_yield ?? 0} จาน (แจก {planSvc.served})
-																	</span>
-																{/if}
-
-																<!-- Action Buttons -->
-																<a
-																	href={resolve(
-																		`/back-office/kitchen/production-board/${session._id}?plan_id=${plan._id}&stage=${latestStageFor(ticket, !!planSvc)}`
-																	)}
-																	class="inline-flex items-center gap-1 rounded border bg-background px-2 py-1 text-2xs font-medium text-foreground transition-colors hover:bg-muted"
-																	title="แก้ไขชุดการผลิตนี้"
-																>
-																	<Pencil class="h-3 w-3" />
-																	จัดการ / สูตร
-																</a>
-
-																<a
-																	href={resolve(
-																		`/back-office/kitchen/production-board/${session._id}?plan_id=${plan._id}`
-																	)}
-																	class="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-																	title="เปิดกระดานการผลิตของชุดนี้"
-																>
-																	<ChevronRight class="h-4 w-4" />
-																</a>
-															</div>
-														</div>
-													{/each}
-												</div>
-											{/if}
-										</div>
-									{:else}
-										<!-- TAB 2: Service Summary of this session -->
-										<div class="p-3">
-											{#if sessionServices.length === 0}
-												<div class="py-6 text-center text-xs text-muted-foreground">
-													<ClipboardCheck class="mx-auto mb-2 h-7 w-7 text-muted-foreground/40" />
-													<p class="font-medium text-foreground">
-														ยังไม่มีการบันทึกผลบริการในมื้อนี้
-													</p>
-													<p class="mt-1 text-2xs">
-														เมื่อคลังอนุมัติวัตถุดิบและปรุงอาหารเสร็จสิ้น สามารถกดปุ่ม "บันทึกผลผลิต
-														(Stage 3)" เพื่อบันทึกยอดแจกจ่ายจริงได้
-													</p>
-												</div>
-											{:else}
-												<div class="overflow-x-auto rounded-md border bg-background">
-													<Table.Root>
-														<Table.Header>
-															<Table.Row class="bg-muted/30 text-2xs">
-																<Table.Head class="px-4 py-2 font-semibold">แผนต้นทาง</Table.Head>
-																<Table.Head class="px-3 py-2 text-right font-semibold"
-																	>วางแผน</Table.Head
-																>
-																<Table.Head class="px-3 py-2 text-right font-semibold"
-																	>ทำได้จริง</Table.Head
-																>
-																<Table.Head class="px-3 py-2 text-right font-semibold"
-																	>เสิร์ฟในศูนย์</Table.Head
-																>
-																<Table.Head class="px-3 py-2 text-right font-semibold"
-																	>เสิร์ฟภายนอก</Table.Head
-																>
-																<Table.Head class="px-3 py-2 text-right font-semibold"
-																	>เหลือทิ้ง</Table.Head
-																>
-																<Table.Head class="px-3 py-2 font-semibold">สถานะ</Table.Head>
-																<Table.Head class="px-4 py-2 font-semibold"
-																	>ผู้บันทึก / เวลา</Table.Head
-																>
-															</Table.Row>
-														</Table.Header>
-														<Table.Body class="text-xs">
-															{#each sessionServices as svc (svc._id)}
-																{@const plan =
-																	sessionPlans.find((p) => p._id === svc.meal_plan_id) ?? null}
-																{@const v = computeMealVariance(svc, plan)}
-																<Table.Row>
-																	<Table.Cell class="px-4 py-2 font-medium">
-																		{plan?.label ?? 'เมนูอาหาร'}
-																	</Table.Cell>
-																	<Table.Cell class="px-3 py-2 text-right font-mono">
-																		{v.planned !== null ? `${v.planned} จาน` : '—'}
-																	</Table.Cell>
-																	<Table.Cell
-																		class="px-3 py-2 text-right font-mono font-bold text-foreground"
-																	>
-																		{v.actual_yield} จาน
-																	</Table.Cell>
-																	<Table.Cell
-																		class="px-3 py-2 text-right font-mono text-emerald-700"
-																	>
-																		{v.served}
-																	</Table.Cell>
-																	<Table.Cell
-																		class="px-3 py-2 text-right font-mono text-muted-foreground"
-																	>
-																		{v.external}
-																	</Table.Cell>
-																	<Table.Cell class="px-3 py-2 text-right font-mono text-amber-700">
-																		{v.waste}
-																	</Table.Cell>
-																	<Table.Cell class="px-3 py-2">
-																		<span
-																			class="inline-flex rounded-full border px-2 py-0.5 text-2xs font-semibold {STATUS_CLASS[
-																				v.status
-																			]}"
-																		>
-																			{MEAL_VARIANCE_STATUS_LABELS[v.status]}
-																		</span>
-																	</Table.Cell>
-																	<Table.Cell class="px-4 py-2 text-2xs text-muted-foreground">
-																		<div>{svc.created_by}</div>
-																		<div>{formatThaiDateTime(svc.created_at)}</div>
-																	</Table.Cell>
-																</Table.Row>
-															{/each}
-														</Table.Body>
-													</Table.Root>
-												</div>
-											{/if}
-										</div>
-									{/if}
 								</div>
-							</div>
-						{/if}
-					</div>
+							{/if}
+						</Accordion.Content>
+					</Accordion.Item>
 				{/each}
-			</div>
+			</Accordion.Root>
 		{/if}
 	</div>
 </div>
@@ -909,7 +918,7 @@
 	<Dialog.Content class="sm:max-w-xl">
 		<Dialog.Header>
 			<Dialog.Title class="text-base font-bold text-foreground sm:text-lg"
-				>สร้างรอบมื้ออาหารใหม่ (New Meal Session)</Dialog.Title
+				>สร้างรอบมื้ออาหารใหม่</Dialog.Title
 			>
 			<Dialog.Description class="text-xs text-muted-foreground sm:text-sm">
 				ระบุช่วงเวลาและเป้าหมายจำนวนจานสำหรับกลุ่มความต้องการพิเศษ 5 กลุ่ม
@@ -934,14 +943,10 @@
 							<Select.Value />
 						</Select.Trigger>
 						<Select.Content>
-							<Select.Item value="breakfast" label="มื้อเช้า (Breakfast)"
-								>มื้อเช้า (Breakfast)</Select.Item
-							>
-							<Select.Item value="lunch" label="มื้อกลางวัน (Lunch)"
-								>มื้อกลางวัน (Lunch)</Select.Item
-							>
-							<Select.Item value="dinner" label="มื้อเย็น (Dinner)">มื้อเย็น (Dinner)</Select.Item>
-							<Select.Item value="snack" label="ของว่าง (Snack)">ของว่าง (Snack)</Select.Item>
+							<Select.Item value="breakfast" label="มื้อเช้า">มื้อเช้า</Select.Item>
+							<Select.Item value="lunch" label="มื้อกลางวัน">มื้อกลางวัน</Select.Item>
+							<Select.Item value="dinner" label="มื้อเย็น">มื้อเย็น</Select.Item>
+							<Select.Item value="snack" label="ของว่าง">ของว่าง</Select.Item>
 						</Select.Content>
 					</Select.Root>
 				</div>
@@ -965,12 +970,11 @@
 					<!-- Standard & Staff Groups -->
 					<div class="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
 						<div class="rounded-lg border bg-background p-2.5 shadow-2xs">
-							<Label class="text-xs font-medium text-foreground">อาหารทั่วไป (Regular)</Label>
+							<Label class="text-xs font-medium text-foreground">อาหารทั่วไป</Label>
 							<Input type="number" min="0" bind:value={countRegular} class="mt-1.5 h-8 text-sm" />
 						</div>
 						<div class="rounded-lg border bg-background p-2.5 shadow-2xs">
-							<Label class="text-xs font-medium text-foreground">เจ้าหน้าที่/อาสา (Volunteer)</Label
-							>
+							<Label class="text-xs font-medium text-foreground">เจ้าหน้าที่/อาสา</Label>
 							<Input type="number" min="0" bind:value={countVolunteer} class="mt-1.5 h-8 text-sm" />
 						</div>
 					</div>
@@ -978,15 +982,15 @@
 					<!-- Dietary / Vulnerable Groups -->
 					<div class="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
 						<div class="rounded-lg border bg-background p-2.5 shadow-2xs">
-							<Label class="text-xs font-medium text-foreground">อาหารฮาลาล (Halal)</Label>
+							<Label class="text-xs font-medium text-foreground">อาหารฮาลาล</Label>
 							<Input type="number" min="0" bind:value={countHalal} class="mt-1.5 h-8 text-sm" />
 						</div>
 						<div class="rounded-lg border bg-background p-2.5 shadow-2xs">
-							<Label class="text-xs font-medium text-foreground">อาหารอ่อน/ผู้สูงอายุ (Soft)</Label>
+							<Label class="text-xs font-medium text-foreground">อาหารอ่อน/ผู้สูงอายุ</Label>
 							<Input type="number" min="0" bind:value={countSoftFood} class="mt-1.5 h-8 text-sm" />
 						</div>
 						<div class="rounded-lg border bg-background p-2.5 shadow-2xs">
-							<Label class="text-xs font-medium text-foreground">ทารก/เด็กอ่อน (Infant)</Label>
+							<Label class="text-xs font-medium text-foreground">ทารก/เด็กอ่อน</Label>
 							<Input type="number" min="0" bind:value={countInfant} class="mt-1.5 h-8 text-sm" />
 						</div>
 					</div>

@@ -153,7 +153,11 @@
 				<AlertDialog.Cancel onclick={() => (pendingAction = null)}>ยกเลิก</AlertDialog.Cancel>
 				<AlertDialog.Action
 					class={confirmMeta.destructive ? 'bg-destructive text-white hover:bg-destructive/90' : ''}
-					onclick={runPendingAction}
+					disabled={refill.isPending || writeOff.isPending || update.isPending}
+					onclick={(e) => {
+						e.preventDefault();
+						runPendingAction();
+					}}
 				>
 					{confirmMeta.actionLabel}
 				</AlertDialog.Action>

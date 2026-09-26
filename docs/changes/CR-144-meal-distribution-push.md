@@ -1,9 +1,10 @@
 ---
 id: CR-144
 title: จัดสรรอาหารปรุงเสร็จส่งจุดแจกจ่าย (Push to POS) — doc ใหม่ meal_distribution_push (MVP, ไม่ผูก stock_ledger)
-status: approved
+status: superseded
+superseded_by: CR-145
 date: 2026-09-25
-updated: 2026-09-25
+updated: 2026-09-26
 requested_by: Project Owner (session ปรับ UI /back-office/tickets/kitchen)
 decided_by: Project Owner
 layer: stable
@@ -22,6 +23,11 @@ affects:
 ---
 
 # CR-144: จัดสรรอาหารปรุงเสร็จส่งจุดแจกจ่าย (Push to POS)
+
+> **Superseded by [CR-145](CR-145-remove-meal-distribution-push.md), 2026-09-26.** Project owner
+> decided the kitchen ticket flow ends at warehouse stock-in (`meal_service_receipt` confirmed =
+> "ส่งมอบเสร็จสิ้น") — the push-to-POS step this CR introduced is removed entirely, not just its
+> `PENDING_DISPATCH` split. Kept below for historical record; do not implement against this doc.
 
 ## 1. Why
 

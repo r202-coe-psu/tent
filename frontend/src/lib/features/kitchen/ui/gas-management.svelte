@@ -78,13 +78,14 @@
 	<!-- Top Navigation Breadcrumb & Header -->
 	<div class="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
 		<div class="flex items-center gap-3">
-			<a
+			<Button
+				variant="outline"
+				size="icon"
 				href={resolve('/back-office/kitchen')}
-				class="inline-flex h-9 w-9 items-center justify-center rounded-lg border bg-background text-muted-foreground shadow-xs transition-colors hover:bg-muted hover:text-foreground"
 				aria-label="กลับสู่ครัวกลาง"
 			>
 				<ArrowLeft class="h-4 w-4" />
-			</a>
+			</Button>
 			<div
 				class="rounded-lg bg-orange-100 p-2 text-orange-600 dark:bg-orange-950/40 dark:text-orange-400"
 			>

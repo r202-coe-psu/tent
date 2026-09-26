@@ -13,7 +13,7 @@
 		toMealPlanMap,
 		type MealVarianceStatus
 	} from '$lib/features/kitchen';
-	import { formatThaiDateTime, formatThaiTime } from '$lib/utils/date';
+	import { formatThaiDateTime, formatThaiShortDate, formatThaiTime } from '$lib/utils/date';
 
 	const STATUS_CLASS: Record<MealVarianceStatus, string> = {
 		on_target: 'border-emerald-200 bg-emerald-50 text-emerald-700',
@@ -76,7 +76,7 @@
 								</p>
 								<p class="text-xs text-muted-foreground">
 									{#if plan?.label}{MEAL_PERIOD_LABELS[svc.meal]} ·
-									{/if}<span class="font-mono tabular-nums">{svc.date}</span>
+									{/if}<span class="font-mono tabular-nums">{formatThaiShortDate(svc.date)}</span>
 								</p>
 								{#if !plan}
 									<p class="text-xs text-slate-500">ไม่มีแผนอ้างอิง</p>
@@ -157,7 +157,7 @@
 									</p>
 									<p class="text-xs text-muted-foreground">
 										{#if plan?.label}{MEAL_PERIOD_LABELS[svc.meal]} ·
-										{/if}<span class="font-mono">{svc.date}</span>
+										{/if}<span class="font-mono">{formatThaiShortDate(svc.date)}</span>
 									</p>
 									{#if !plan}
 										<p class="text-xs text-slate-500">ไม่มีแผนอ้างอิง</p>

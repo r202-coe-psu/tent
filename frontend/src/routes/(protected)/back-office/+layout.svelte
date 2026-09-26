@@ -20,6 +20,20 @@
 		if (currentPath.startsWith('/back-office/households')) {
 			currentPath = '/back-office/evacuee-management';
 		}
+		// Reached from the ticket queue ("จัดการ"), not the kitchen overview — keep
+		// the header label matching where the user came from, not the /kitchen prefix.
+		if (currentPath.startsWith('/back-office/kitchen/receive-stock')) {
+			currentPath = '/back-office/tickets/kitchen';
+		}
+		// Ticket detail (/back-office/tickets/{id}) has no nav entry of its own —
+		// it's a drill-down from the kitchen ticket queue, so it should keep that
+		// queue's header label instead of falling back to the generic default.
+		if (
+			currentPath.startsWith('/back-office/tickets/') &&
+			!currentPath.startsWith('/back-office/tickets/kitchen')
+		) {
+			currentPath = '/back-office/tickets/kitchen';
+		}
 		for (const group of backofficeNavbarGroups) {
 			for (const item of group.items) {
 				if (isGroup(item)) {

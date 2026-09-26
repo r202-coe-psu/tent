@@ -11,6 +11,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { toast } from 'svelte-sonner';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import * as Card from '$lib/components/ui/card';
 	import * as Table from '$lib/components/ui/table';
 	import { Button } from '$lib/components/ui/button';
@@ -105,27 +106,27 @@
 		}
 	}
 
-	async function handleCancel() {
+	let cancelDialogOpen = $state(false);
+
+	async function confirmCancel() {
 		if (!ticket) return;
-		if (!confirm('ยกเลิกตั๋วใบนี้หรือไม่?')) return;
 		try {
 			await cancel.mutateAsync({ ticket });
 			toast.success('ยกเลิกตั๋วแล้ว');
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'ยกเลิกไม่สำเร็จ');
+		} finally {
+			cancelDialogOpen = false;
 		}
 	}
 </script>
 
-<div class="mx-auto max-w-4xl space-y-5 bg-slate-50/60 p-4 sm:p-6">
+<div class="space-y-5 bg-slate-50/60 p-4 sm:p-6">
 	<div class="flex flex-wrap items-center justify-between gap-3">
-		<a
-			href={resolve('/back-office/tickets/kitchen')}
-			class="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
-		>
+		<Button variant="outline" href={resolve('/back-office/tickets/kitchen')} class="gap-1.5">
 			<ArrowLeft class="h-4 w-4" />
 			กลับหน้ารายการ
-		</a>
+		</Button>
 		{#if ticket && HEADER_STATUS_LABEL[ticket.status]}
 			<span
 				class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold {STATUS_CLASS[
@@ -296,7 +297,7 @@
 						variant="ghost"
 						class="text-destructive hover:bg-destructive/10"
 						disabled={cancel.isPending}
-						onclick={handleCancel}
+						onclick={() => (cancelDialogOpen = true)}
 					>
 						ยกเลิกตั๋ว
 					</Button>
@@ -323,3 +324,27 @@
 		</div>
 	{/if}
 </div>
+
+<AlertDialog.Root bind:open={cancelDialogOpen}>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>ยกเลิกตั๋วใบนี้?</AlertDialog.Title>
+			<AlertDialog.Description>
+				คุณต้องการยกเลิกตั๋วใบนี้หรือไม่? กู้คืนไม่ได้
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel disabled={cancel.isPending}>ยกเลิก</AlertDialog.Cancel>
+			<AlertDialog.Action
+				class="bg-destructive text-white hover:bg-destructive/90"
+				disabled={cancel.isPending}
+				onclick={(e) => {
+					e.preventDefault();
+					confirmCancel();
+				}}
+			>
+				{cancel.isPending ? 'กำลังยกเลิก...' : 'ยกเลิกตั๋ว'}
+			</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>

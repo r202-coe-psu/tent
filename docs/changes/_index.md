@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-09-25 # Merged develop (CR-137 shrink master_data) into team-Leader-Implement-Kitchen-Ticket; renumbered the resulting CR-125/126/127/128/130 collisions with develop's own CRs of those numbers to CR-138..144
+updated: 2026-09-26 # CR-145 added, supersedes CR-144 (removes meal_distribution_push / Push-to-POS entirely); previous note: Merged develop (CR-137 shrink master_data) into team-Leader-Implement-Kitchen-Ticket; renumbered the resulting CR-125/126/127/128/130 collisions with develop's own CRs of those numbers to CR-138..144
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 
@@ -158,4 +158,5 @@ note: ดัชนี Change Record ทุกตัว — กติกาอย
 | [CR-141](CR-141-kitchen-ticket-one-click-approve.md) | ตั๋วเบิกวัตถุดิบครัวอนุมัติจบในคลิกเดียว (`PENDING_PICK`→`COMPLETED` รวด) — ยกเลิก CR-139 §2.2 การแยก 3 บทบาท เฉพาะตั๋วประเภท `kitchen` | approved | volatile | 2026-09-25 (approved 2026-09-25) | frontend/src/lib/features/tickets/** |
 | [CR-142](CR-142-meal-service-receipt-gate.md) | เพิ่ม doc type ใหม่ `meal_service_receipt` — ขั้น "รอตรวจรับเข้าคลัง" จริงระหว่างบันทึกผลผลิตครัวกับส่งมอบเสร็จสิ้น (ส่วนขยาย CR-121/CR-141) | approved | stable | 2026-09-25 (approved 2026-09-25) | docs/data/schema.md §2.7.3, frontend/src/lib/features/kitchen/**, tickets/ui/ticket-list.svelte |
 | [CR-143](CR-143-meal-service-receipt-reject.md) | เพิ่มการปฏิเสธรับมอบ (ตีกลับโรงครัว) ให้ `meal_service_receipt` + ผ่อน invariant ให้บันทึกผลผลิตใหม่ได้หลังถูกตีกลับ (ส่วนขยาย CR-142) | approved | stable | 2026-09-25 (approved 2026-09-25) | docs/data/schema.md §2.7.3, frontend/src/lib/features/kitchen/**, tickets/ui/ticket-list.svelte, production-board/[session_id]/+page.svelte |
-| [CR-144](CR-144-meal-distribution-push.md) | จัดสรรอาหารปรุงเสร็จส่งจุดแจกจ่าย (Push to POS) — doc ใหม่ `meal_distribution_push` เฉพาะอาหาร (แยกจาก CR-059/CR-121 distribution engine) | approved | stable | 2026-09-25 (approved 2026-09-25) | docs/data/schema.md §2.7.4, frontend/src/lib/features/kitchen/**, tickets/ui/ticket-list.svelte, back-office/kitchen/distribute/+page.svelte |
+| [CR-144](CR-144-meal-distribution-push.md) | จัดสรรอาหารปรุงเสร็จส่งจุดแจกจ่าย (Push to POS) — doc ใหม่ `meal_distribution_push` เฉพาะอาหาร (แยกจาก CR-059/CR-121 distribution engine) | superseded by CR-145 | stable | 2026-09-25 (approved 2026-09-25, superseded 2026-09-26) | docs/data/schema.md §2.7.4, frontend/src/lib/features/kitchen/**, tickets/ui/ticket-list.svelte, back-office/kitchen/distribute/+page.svelte |
+| [CR-145](CR-145-remove-meal-distribution-push.md) | ตัดฟีเจอร์ push อาหารไปจุดแจกจ่ายทิ้งทั้งหมด (revert CR-144) — ticket flow จบที่คลังตรวจรับเข้าสต็อก | approved | stable | 2026-09-26 (approved 2026-09-26) | docs/data/schema.md §2.7.4, frontend/src/lib/features/kitchen/**, tickets/ui/ticket-list.svelte, back-office/kitchen/production-board/[session_id]/+page.svelte, back-office/kitchen/distribute/** (deleted), shelter-access-design.ts |

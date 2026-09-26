@@ -54,6 +54,9 @@ export const isGasLedgerEntry = (d: unknown): d is GasLedgerEntry =>
 
 /**
  * Computes remaining gas (kg) for a cylinder: capacity_kg + sum of ledger deltas.
+ * Clamped to `capacityKg` — a tank can never physically hold more than its own
+ * capacity, so a double-submitted refill (or any other over-fill) never shows
+ * as over 100% instead of silently masking the bad data.
  */
 export function gasCylinderBalance(
 	entries: readonly GasLedgerEntry[],
@@ -64,7 +67,7 @@ export function gasCylinderBalance(
 	for (const e of entries) {
 		if (e.cylinder_id === cylinderId) remaining = addQty(remaining, e.qty_kg);
 	}
-	return remaining;
+	return qtyGte(remaining, capacityKg) ? persistQty(capacityKg) : remaining;
 }
 
 export type GasCylinderStatus = 'unused' | 'in_use' | 'empty';

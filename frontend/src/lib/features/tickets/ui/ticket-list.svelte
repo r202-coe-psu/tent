@@ -4,15 +4,12 @@
 	import Flame from '@lucide/svelte/icons/flame';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import PackageCheck from '@lucide/svelte/icons/package-check';
-	import Truck from '@lucide/svelte/icons/truck';
 	import Search from '@lucide/svelte/icons/search';
 	import ArrowRight from '@lucide/svelte/icons/arrow-right';
 	import ArrowDown from '@lucide/svelte/icons/arrow-down';
 	import ArrowUp from '@lucide/svelte/icons/arrow-up';
-	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import ChefHat from '@lucide/svelte/icons/chef-hat';
 	import Settings2 from '@lucide/svelte/icons/settings-2';
-	import Plus from '@lucide/svelte/icons/plus';
 	import Layers from '@lucide/svelte/icons/layers';
 	import Info from '@lucide/svelte/icons/info';
 	import ExternalLink from '@lucide/svelte/icons/external-link';
@@ -20,6 +17,7 @@
 	import { resolve } from '$app/paths';
 	import * as Table from '$lib/components/ui/table';
 	import * as Select from '$lib/components/ui/select';
+	import * as Tabs from '$lib/components/ui/tabs';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { useTickets, TICKET_STATUS_LABELS, type TicketStatus } from '$lib/features/tickets';
@@ -27,9 +25,7 @@
 		useMealPlans,
 		useMealServices,
 		useMealServiceReceipts,
-		useMealDistributionPushes,
 		mealServiceReceiptOutcome,
-		mealServicePushRemaining,
 		MEAL_PERIOD_LABELS,
 		toMealPlanMap,
 		type MealPlan,
@@ -37,13 +33,12 @@
 	} from '$lib/features/kitchen';
 	import { useRecipes } from '$lib/features/catalog';
 	import { getShelterCode } from '$lib/db/shelter';
-	import { formatThaiDate, formatThaiTime } from '$lib/utils/date';
+	import { formatThaiShortDate, formatThaiTime } from '$lib/utils/date';
 
 	const tickets = useTickets();
 	const plans = useMealPlans();
 	const services = useMealServices();
 	const receipts = useMealServiceReceipts();
-	const pushes = useMealDistributionPushes();
 	const recipes = useRecipes(() => getShelterCode());
 	const planById = $derived(toMealPlanMap(plans.data));
 
@@ -69,15 +64,10 @@
 	// rows are derived read-only from meal_service + meal_service_receipt: a
 	// service without a matching receipt is "รอตรวจรับเข้าคลัง" (PENDING_RECEIPT,
 	// real state — warehouse hasn't confirmed count yet); once a receipt exists
-	// it becomes "ส่งมอบเสร็จสิ้น" (DELIVERED_IN). "จ่ายออก" rows are the real
-	// requisition_ticket lifecycle unchanged.
-	type RowCategory =
-		| 'PENDING_PICK'
-		| 'COOKING'
-		| 'PENDING_RECEIPT'
-		| 'PENDING_DISPATCH'
-		| 'DELIVERED_IN'
-		| 'OTHER_OUT';
+	// it becomes "ส่งมอบเสร็จสิ้น" (DELIVERED_IN) — the flow ends at warehouse
+	// stock-in, CR-145 removed the CR-144 POS-push split. "จ่ายออก" rows are the
+	// real requisition_ticket lifecycle unchanged.
+	type RowCategory = 'PENDING_PICK' | 'COOKING' | 'PENDING_RECEIPT' | 'DELIVERED_IN' | 'OTHER_OUT';
 	type UnifiedRow = {
 		key: string;
 		code: string;
@@ -164,7 +154,7 @@
 					manageHref:
 						isCookingPhase && plan
 							? resolve(
-									`/back-office/kitchen/production-board/${plan.meal_session_id}?plan_id=${ticket.meal_plan_id}&stage=C&role=warehouse`
+									`/back-office/kitchen/production-board/${plan.meal_session_id}?plan_id=${ticket.meal_plan_id}&stage=C`
 								)
 							: resolve(`/back-office/tickets/${encodeURIComponent(ticket._id)}`)
 				};
@@ -195,7 +185,7 @@
 				statusLabel: 'ครัวกำลังปรุง',
 				statusClass: 'border-orange-200 bg-orange-50 text-orange-900',
 				manageHref: resolve(
-					`/back-office/kitchen/production-board/${plan.meal_session_id}?plan_id=${plan._id}&stage=C&role=warehouse`
+					`/back-office/kitchen/production-board/${plan.meal_session_id}?plan_id=${plan._id}&stage=C`
 				)
 			}));
 
@@ -213,59 +203,30 @@
 			const plan = service.meal_plan_id ? planMap[service.meal_plan_id] : undefined;
 			const receipt = (receipts.data ?? []).find((r) => r.meal_service_id === service._id);
 			const outcome = receipt ? mealServiceReceiptOutcome(receipt) : undefined;
-			const remaining = mealServicePushRemaining(
-				service.actual_yield ?? 0,
-				service._id,
-				pushes.data ?? []
-			);
 			const category: RowCategory =
 				outcome === 'confirmed'
-					? remaining > 0
-						? 'PENDING_DISPATCH'
-						: 'DELIVERED_IN'
+					? 'DELIVERED_IN'
 					: outcome === 'rejected'
 						? 'COOKING'
 						: 'PENDING_RECEIPT';
 			const statusLabel =
 				outcome === 'confirmed'
-					? remaining > 0
-						? 'รอส่งมอบ'
-						: 'ส่งมอบเสร็จสิ้น'
+					? 'ส่งมอบเสร็จสิ้น'
 					: outcome === 'rejected'
 						? 'ถูกตีกลับ - รอปรุงใหม่'
 						: 'รอตรวจรับเข้าคลัง';
 			const statusClass =
 				outcome === 'confirmed'
-					? remaining > 0
-						? 'border-purple-200 bg-purple-50 text-purple-900'
-						: 'border-emerald-200 bg-emerald-50 text-emerald-900'
+					? 'border-emerald-200 bg-emerald-50 text-emerald-900'
 					: outcome === 'rejected'
 						? 'border-red-200 bg-red-50 text-red-900'
 						: 'border-sky-200 bg-sky-50 text-sky-900';
-			// Once the warehouse confirms receipt (outcome === 'confirmed'), this row
-			// stops being "รับเข้า: โรงครัวกลาง -> คลังเสบียงกลาง" (food arriving at the
-			// warehouse) and becomes "จ่ายออก: คลังเสบียงกลาง -> ..." (food waiting to
-			// leave the warehouse for a distribution point, CR-144) — same underlying
-			// meal_service, but the direction/label must track which leg is next.
-			const pushedStations = Array.from(
-				new Set(
-					(pushes.data ?? [])
-						.filter((p) => p.items.some((i) => i.meal_service_id === service._id))
-						.map((p) => p.pos_station)
-				)
-			);
-			const outboundToLabel =
-				remaining <= 0 && pushedStations.length > 0
-					? pushedStations.length > 1
-						? 'หลายจุดแจก'
-						: pushedStations[0]
-					: 'รอเลือกจุดแจก';
 			return {
 				key: `service:${service._id}`,
 				code: `RCV-${service._id.slice(-6).toUpperCase()}`,
-				direction: outcome === 'confirmed' ? ('out' as const) : ('in' as const),
-				fromLabel: outcome === 'confirmed' ? 'คลังเสบียงกลาง' : 'โรงครัวกลาง',
-				toLabel: outcome === 'confirmed' ? outboundToLabel : 'คลังเสบียงกลาง',
+				direction: 'in' as const,
+				fromLabel: 'โรงครัวกลาง',
+				toLabel: 'คลังเสบียงกลาง',
 				missionTitle: `รับอาหารปรุงเสร็จ: ${planLabel(service.meal_plan_id ?? undefined, planMap)}`,
 				recipeChip: recipeChipFor(plan),
 				producedQty: service.actual_yield,
@@ -274,17 +235,11 @@
 				category,
 				statusLabel,
 				statusClass,
-				manageHref:
-					outcome === 'confirmed'
-						? resolve('/back-office/kitchen/distribute') +
-							(service.meal_session_id
-								? `?session=${encodeURIComponent(service.meal_session_id)}`
-								: '')
-						: plan
-							? resolve(
-									`/back-office/kitchen/production-board/${plan.meal_session_id}?plan_id=${service.meal_plan_id}&stage=C&role=warehouse`
-								)
-							: resolve('/back-office/kitchen')
+				manageHref: plan
+					? resolve(
+							`/back-office/kitchen/receive-stock/${plan.meal_session_id}?plan_id=${service.meal_plan_id}`
+						)
+					: resolve('/back-office/kitchen')
 			};
 		});
 
@@ -298,7 +253,21 @@
 	let directionFilter = $state<'ALL' | 'in' | 'out'>('ALL');
 	type DateRangePreset = 'ALL' | 'today' | 'last7' | 'last30';
 	let dateRange = $state<DateRangePreset>('ALL');
-	let statusLabelFilter = $state('ALL');
+	const CATEGORY_FILTER_LABELS: Record<'ALL' | RowCategory, string> = {
+		ALL: 'ทุกสถานะ',
+		PENDING_PICK: 'รอเบิกวัตถุดิบ',
+		COOKING: 'ครัวกำลังปรุง',
+		PENDING_RECEIPT: 'รอตรวจรับเข้าคลัง',
+		DELIVERED_IN: 'ส่งมอบเสร็จสิ้น',
+		OTHER_OUT: 'อื่นๆ'
+	};
+	const CATEGORY_FILTER_OPTIONS: { value: 'ALL' | RowCategory; label: string }[] = [
+		{ value: 'ALL', label: CATEGORY_FILTER_LABELS.ALL },
+		{ value: 'PENDING_PICK', label: CATEGORY_FILTER_LABELS.PENDING_PICK },
+		{ value: 'COOKING', label: CATEGORY_FILTER_LABELS.COOKING },
+		{ value: 'PENDING_RECEIPT', label: CATEGORY_FILTER_LABELS.PENDING_RECEIPT },
+		{ value: 'DELIVERED_IN', label: CATEGORY_FILTER_LABELS.DELIVERED_IN }
+	];
 
 	function isWithinDateRange(dateStr: string, preset: DateRangePreset): boolean {
 		if (preset === 'ALL') return true;
@@ -310,20 +279,11 @@
 		return dateStr >= from && dateStr <= today;
 	}
 
-	const statusLabelOptions = $derived.by(() => {
-		const labels: string[] = [];
-		for (const row of unifiedRows) {
-			if (!labels.includes(row.statusLabel)) labels.push(row.statusLabel);
-		}
-		return labels;
-	});
-
 	const rows = $derived.by(() => {
 		const q = search.trim().toLowerCase();
 		return unifiedRows.filter((row) => {
 			if (categoryFilter !== 'ALL' && row.category !== categoryFilter) return false;
 			if (directionFilter !== 'ALL' && row.direction !== directionFilter) return false;
-			if (statusLabelFilter !== 'ALL' && row.statusLabel !== statusLabelFilter) return false;
 			if (!isWithinDateRange(row.createdAt.slice(0, 10), dateRange)) return false;
 			if (!q) return true;
 			return (
@@ -340,39 +300,15 @@
 		PENDING_PICK: unifiedRows.filter((r) => r.category === 'PENDING_PICK').length,
 		COOKING: unifiedRows.filter((r) => r.category === 'COOKING').length,
 		PENDING_RECEIPT: unifiedRows.filter((r) => r.category === 'PENDING_RECEIPT').length,
-		PENDING_DISPATCH: unifiedRows.filter((r) => r.category === 'PENDING_DISPATCH').length,
 		DELIVERED_IN: unifiedRows.filter((r) => r.category === 'DELIVERED_IN').length
 	});
 
 	const isLoading = $derived(
-		tickets.isPending ||
-			plans.isPending ||
-			services.isPending ||
-			receipts.isPending ||
-			pushes.isPending
+		tickets.isPending || plans.isPending || services.isPending || receipts.isPending
 	);
-	const isFetching = $derived(
-		tickets.isFetching ||
-			plans.isFetching ||
-			services.isFetching ||
-			receipts.isFetching ||
-			pushes.isFetching
-	);
-
-	function refreshAll() {
-		tickets.refetch();
-		plans.refetch();
-		services.refetch();
-		receipts.refetch();
-		pushes.refetch();
-	}
 
 	const hasActiveFilters = $derived(
-		!!search ||
-			dateRange !== 'ALL' ||
-			categoryFilter !== 'ALL' ||
-			directionFilter !== 'ALL' ||
-			statusLabelFilter !== 'ALL'
+		!!search || dateRange !== 'ALL' || categoryFilter !== 'ALL' || directionFilter !== 'ALL'
 	);
 
 	function clearFilters() {
@@ -380,7 +316,6 @@
 		dateRange = 'ALL';
 		categoryFilter = 'ALL';
 		directionFilter = 'ALL';
-		statusLabelFilter = 'ALL';
 	}
 </script>
 
@@ -399,127 +334,84 @@
 					>
 						<ChefHat class="h-7 w-7 text-orange-600" />จัดการคำร้องโรงครัวและเสบียงอาหาร
 					</h1>
-					<p class="mt-2 max-w-2xl text-base leading-relaxed text-slate-600">
-						ระบบประสานงานเบิกวัตถุดิบและแก๊สหุงต้มสำหรับการปรุงอาหารแต่ละมื้อ
+					<p
+						class="mt-2 max-w-2xl text-base leading-relaxed text-slate-600 lg:max-w-none lg:whitespace-nowrap"
+					>
+						ระบบประสานงานเบิกวัตถุดิบสำหรับการปรุงอาหารแต่ละมื้อ
 						พร้อมตรวจรับอาหารปรุงเสร็จ/อาหารบริจาคเข้าสต็อก
 					</p>
-				</div>
-				<div class="flex flex-wrap gap-2">
-					<Button
-						class="min-h-11 gap-2 bg-[#0A2647] hover:bg-[#051930]"
-						onclick={() => goto(resolve('/back-office/kitchen/distribute'))}
-					>
-						<Plus class="h-4 w-4" />จัดสรรอาหารส่งจุดแจก (Push)
-					</Button>
-					<Button
-						variant="outline"
-						class="min-h-11 gap-2"
-						disabled={isFetching}
-						onclick={refreshAll}
-					>
-						<RefreshCw class="h-4 w-4 {isFetching ? 'animate-spin' : ''}" />รีเฟรชสต็อก
-					</Button>
 				</div>
 			</div>
 
 			<!-- Category tabs -->
-			<div class="mt-6 flex flex-wrap gap-2">
-				<button
-					type="button"
-					onclick={() => (categoryFilter = 'ALL')}
-					class="inline-flex min-h-11 items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition {categoryFilter ===
-					'ALL'
-						? 'border-[#0A2647] bg-[#0A2647] text-white'
-						: 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'}"
-				>
-					<Layers class="h-4 w-4" />คำร้องทั้งหมด
-					<span
-						class="rounded-full px-2 py-0.5 text-xs font-bold tabular-nums {categoryFilter === 'ALL'
-							? 'bg-white/20'
-							: 'bg-slate-100 text-slate-700'}">{counts.all}</span
+			<Tabs.Root
+				value={categoryFilter}
+				onValueChange={(v) => (categoryFilter = v as typeof categoryFilter)}
+				class="mt-6 gap-0"
+			>
+				<Tabs.List class="h-auto w-full flex-wrap justify-start gap-2 bg-transparent p-0">
+					<Tabs.Trigger
+						value="ALL"
+						class="min-h-11 flex-none gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-slate-300 data-[state=active]:border-[#0A2647] data-[state=active]:bg-[#0A2647] data-[state=active]:text-white"
 					>
-				</button>
-				<button
-					type="button"
-					onclick={() => (categoryFilter = 'PENDING_PICK')}
-					class="inline-flex min-h-11 items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition {categoryFilter ===
-					'PENDING_PICK'
-						? 'border-amber-400 bg-amber-500 text-white'
-						: 'border-slate-200 bg-white text-slate-700 hover:border-amber-300'}"
-				>
-					<Clock3 class="h-4 w-4" />รอเบิกวัตถุดิบ
-					<span
-						class="rounded-full px-2 py-0.5 text-xs font-bold tabular-nums {categoryFilter ===
-						'PENDING_PICK'
-							? 'bg-white/20'
-							: 'bg-amber-100 text-amber-800'}">{counts.PENDING_PICK}</span
+						<Layers class="h-4 w-4" />คำร้องทั้งหมด
+						<span
+							class="rounded-full px-2 py-0.5 text-xs font-bold tabular-nums {categoryFilter ===
+							'ALL'
+								? 'bg-white/20'
+								: 'bg-slate-100 text-slate-700'}">{counts.all}</span
+						>
+					</Tabs.Trigger>
+					<Tabs.Trigger
+						value="PENDING_PICK"
+						class="min-h-11 flex-none gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-amber-300 data-[state=active]:border-amber-400 data-[state=active]:bg-amber-500 data-[state=active]:text-white"
 					>
-				</button>
-				<button
-					type="button"
-					onclick={() => (categoryFilter = 'COOKING')}
-					class="inline-flex min-h-11 items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition {categoryFilter ===
-					'COOKING'
-						? 'border-orange-400 bg-orange-500 text-white'
-						: 'border-slate-200 bg-white text-slate-700 hover:border-orange-300'}"
-				>
-					<Flame class="h-4 w-4" />ครัวกำลังปรุง
-					<span
-						class="rounded-full px-2 py-0.5 text-xs font-bold tabular-nums {categoryFilter ===
-						'COOKING'
-							? 'bg-white/20'
-							: 'bg-orange-100 text-orange-800'}">{counts.COOKING}</span
+						<Clock3 class="h-4 w-4" />รอเบิกวัตถุดิบ
+						<span
+							class="rounded-full px-2 py-0.5 text-xs font-bold tabular-nums {categoryFilter ===
+							'PENDING_PICK'
+								? 'bg-white/20'
+								: 'bg-amber-100 text-amber-800'}">{counts.PENDING_PICK}</span
+						>
+					</Tabs.Trigger>
+					<Tabs.Trigger
+						value="COOKING"
+						class="min-h-11 flex-none gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-orange-300 data-[state=active]:border-orange-400 data-[state=active]:bg-orange-500 data-[state=active]:text-white"
 					>
-				</button>
-				<button
-					type="button"
-					onclick={() => (categoryFilter = 'PENDING_RECEIPT')}
-					class="inline-flex min-h-11 items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition {categoryFilter ===
-					'PENDING_RECEIPT'
-						? 'border-sky-400 bg-sky-500 text-white'
-						: 'border-slate-200 bg-white text-slate-700 hover:border-sky-300'}"
-				>
-					<PackageCheck class="h-4 w-4" />รอตรวจรับเข้าคลัง
-					<span
-						class="rounded-full px-2 py-0.5 text-xs font-bold tabular-nums {categoryFilter ===
-						'PENDING_RECEIPT'
-							? 'bg-white/20'
-							: 'bg-sky-100 text-sky-800'}">{counts.PENDING_RECEIPT}</span
+						<Flame class="h-4 w-4" />ครัวกำลังปรุง
+						<span
+							class="rounded-full px-2 py-0.5 text-xs font-bold tabular-nums {categoryFilter ===
+							'COOKING'
+								? 'bg-white/20'
+								: 'bg-orange-100 text-orange-800'}">{counts.COOKING}</span
+						>
+					</Tabs.Trigger>
+					<Tabs.Trigger
+						value="PENDING_RECEIPT"
+						class="min-h-11 flex-none gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-sky-300 data-[state=active]:border-sky-400 data-[state=active]:bg-sky-500 data-[state=active]:text-white"
 					>
-				</button>
-				<button
-					type="button"
-					onclick={() => (categoryFilter = 'PENDING_DISPATCH')}
-					class="inline-flex min-h-11 items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition {categoryFilter ===
-					'PENDING_DISPATCH'
-						? 'border-purple-400 bg-purple-500 text-white'
-						: 'border-slate-200 bg-white text-slate-700 hover:border-purple-300'}"
-				>
-					<Truck class="h-4 w-4" />รอส่งมอบ
-					<span
-						class="rounded-full px-2 py-0.5 text-xs font-bold tabular-nums {categoryFilter ===
-						'PENDING_DISPATCH'
-							? 'bg-white/20'
-							: 'bg-purple-100 text-purple-800'}">{counts.PENDING_DISPATCH}</span
+						<PackageCheck class="h-4 w-4" />รอตรวจรับเข้าคลัง
+						<span
+							class="rounded-full px-2 py-0.5 text-xs font-bold tabular-nums {categoryFilter ===
+							'PENDING_RECEIPT'
+								? 'bg-white/20'
+								: 'bg-sky-100 text-sky-800'}">{counts.PENDING_RECEIPT}</span
+						>
+					</Tabs.Trigger>
+					<Tabs.Trigger
+						value="DELIVERED_IN"
+						class="min-h-11 flex-none gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-emerald-300 data-[state=active]:border-emerald-400 data-[state=active]:bg-emerald-500 data-[state=active]:text-white"
 					>
-				</button>
-				<button
-					type="button"
-					onclick={() => (categoryFilter = 'DELIVERED_IN')}
-					class="inline-flex min-h-11 items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition {categoryFilter ===
-					'DELIVERED_IN'
-						? 'border-emerald-400 bg-emerald-500 text-white'
-						: 'border-slate-200 bg-white text-slate-700 hover:border-emerald-300'}"
-				>
-					<CheckCircle2 class="h-4 w-4" />ส่งมอบเสร็จสิ้น
-					<span
-						class="rounded-full px-2 py-0.5 text-xs font-bold tabular-nums {categoryFilter ===
-						'DELIVERED_IN'
-							? 'bg-white/20'
-							: 'bg-emerald-100 text-emerald-800'}">{counts.DELIVERED_IN}</span
-					>
-				</button>
-			</div>
+						<CheckCircle2 class="h-4 w-4" />ส่งมอบเสร็จสิ้น
+						<span
+							class="rounded-full px-2 py-0.5 text-xs font-bold tabular-nums {categoryFilter ===
+							'DELIVERED_IN'
+								? 'bg-white/20'
+								: 'bg-emerald-100 text-emerald-800'}">{counts.DELIVERED_IN}</span
+						>
+					</Tabs.Trigger>
+				</Tabs.List>
+			</Tabs.Root>
 
 			<!-- Search + filters -->
 			<div class="mt-4 flex flex-col gap-2 sm:flex-row">
@@ -569,15 +461,18 @@
 						><Select.Item value="out" label="จ่ายออก">จ่ายออก</Select.Item></Select.Content
 					></Select.Root
 				>
-				<Select.Root type="single" bind:value={statusLabelFilter}
+				<Select.Root
+					type="single"
+					value={categoryFilter}
+					onValueChange={(v) => (categoryFilter = v as typeof categoryFilter)}
 					><Select.Trigger class="min-h-11 sm:w-44"
 						><Select.Value placeholder="ทุกสถานะ"
-							>{statusLabelFilter === 'ALL' ? 'ทุกสถานะ' : statusLabelFilter}</Select.Value
+							>{CATEGORY_FILTER_LABELS[categoryFilter]}</Select.Value
 						></Select.Trigger
 					><Select.Content
-						><Select.Item value="ALL" label="ทุกสถานะ">ทุกสถานะ</Select.Item
-						>{#each statusLabelOptions as label (label)}<Select.Item value={label} {label}
-								>{label}</Select.Item
+						>{#each CATEGORY_FILTER_OPTIONS as option (option.value)}<Select.Item
+								value={option.value}
+								label={option.label}>{option.label}</Select.Item
 							>{/each}</Select.Content
 					></Select.Root
 				>
@@ -672,7 +567,7 @@
 										</div></Table.Cell
 									><Table.Cell
 										><p class="text-sm font-semibold text-slate-700">
-											{formatThaiDate(row.createdAt)}
+											{formatThaiShortDate(row.createdAt)}
 										</p>
 										<p class="text-sm text-slate-400">
 											{formatThaiTime(row.createdAt)}

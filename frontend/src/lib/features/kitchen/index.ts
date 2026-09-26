@@ -114,19 +114,6 @@ export type {
 	FuelCylinderInput
 } from './domain/kitchen';
 
-// Domain — meal distribution push to POS (CR-144)
-export type {
-	MealDistributionPush,
-	MealDistributionPushItem,
-	MealDistributionPushInput
-} from './domain/meal-distribution-push';
-export {
-	mealDistributionPushInputSchema,
-	createMealDistributionPush,
-	isMealDistributionPush,
-	mealServicePushRemaining
-} from './domain/meal-distribution-push';
-
 // Domain — schemas, factories, guards, labels
 export {
 	mealSessionStatusSchema,
@@ -164,6 +151,10 @@ export type {
 	ApproveRequisitionOptions
 } from './data/kitchen.repository';
 export { kitchenRepository } from './data/kitchen.remote';
+export {
+	ensureFuelCylinders,
+	type EnsureFuelCylindersOptions
+} from './application/fuel-cylinder-sync';
 
 // Application — query hooks and live-query wiring
 export {
@@ -195,8 +186,6 @@ export {
 	useMealServiceReceipts,
 	useConfirmMealServiceReceipt,
 	useRejectMealServiceReceipt,
-	useMealDistributionPushes,
-	useCreateMealDistributionPush,
 	useFuelCylinders,
 	useCreateFuelCylinder,
 	useUpdateFuelCylinder,

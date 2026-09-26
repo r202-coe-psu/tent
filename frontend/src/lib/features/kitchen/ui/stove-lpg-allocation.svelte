@@ -164,7 +164,7 @@
 <Card.Root class="border-orange-200 shadow-sm">
 	<Card.Header class="pb-3">
 		<Card.Title class="flex items-center gap-2 text-sm font-bold"
-			><Flame class="h-4 w-4 text-orange-600" />จัดสรรเตาและแก๊ส (Stove & LPG)</Card.Title
+			><Flame class="h-4 w-4 text-orange-600" />จัดสรรเตาและแก๊ส</Card.Title
 		>
 		<Card.Description class="text-xs"
 			>กำหนดถังแก๊สและชั่วโมงปรุง หลังคลังจ่ายวัตถุดิบแล้ว · แสดงยอดที่ต้องใช้เพื่อวางแผนเท่านั้น</Card.Description
