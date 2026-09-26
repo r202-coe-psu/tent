@@ -46,7 +46,6 @@ export const ledgerReasonSchema = z.enum([
 	'transfer_out',
 	'transfer_in',
 	'donation',
-	'purchase',
 	'distribution_return'
 ]);
 export type LedgerReason = z.infer<typeof ledgerReasonSchema>;
@@ -293,7 +292,7 @@ export interface StockTransfer extends BaseDoc {
 	notes?: string;
 }
 
-export type OperationsDoc = StockLedger | Donation | DonationCampaign | Purchase | StockTransfer;
+export type OperationsDoc = StockLedger | Donation | DonationCampaign | StockTransfer;
 
 // ---------------------------------------------------------------- stock_ledger
 
@@ -313,7 +312,6 @@ export type LedgerRefRule = LedgerRefPrefix | readonly LedgerRefPrefix[];
 
 export const REF_PREFIX_BY_REASON: Record<LedgerReason, LedgerRefRule> = {
 	donation: 'donation:',
-	purchase: 'purchase:',
 	requisition: ['requisition_ticket:', 'kitchen_requisition:'],
 	// T-13 mints these; nothing writes `stock_transfer` docs yet.
 	transfer_in: 'stock_transfer:',
@@ -457,16 +455,7 @@ export const stockLedgerDocSchema = z
 		lot: stockLotSchema.optional(),
 		occurred_at: z.string().datetime()
 	})
-	.passthrough()
-	.superRefine((doc, ctx) => {
-		if (doc.schema_v === 2 && doc.reason === 'purchase') {
-			ctx.addIssue({
-				code: z.ZodIssueCode.custom,
-				path: ['reason'],
-				message: 'purchase requires stock_ledger schema_v 3'
-			});
-		}
-	});
+	.passthrough();
 
 /** Parse one persisted ledger entry and fail closed before it contributes to a balance. */
 export function parseStockLedger(input: unknown): StockLedger {
@@ -975,155 +964,6 @@ export function keyDonationReceipt(
 	);
 }
 
-// ---------------------------------------------------------------- purchase
-
-export interface PurchaseItem {
-	item_id: string;
-	qty: string; // qty_str — planning signal only; the real delta lives in stock_ledger
-	unit: string;
-}
-
-/**
- * A procurement record — schema.md §2.16. Like a donation it does NOT become
- * stock on its own: it carries the vendor/PO metadata a ledger row has no room
- * for, and is created in its own step. Staff key the physical count separately
- * via `keyPurchaseReceipt`. There is no `status` (CR-032 dropped the state
- * machine) — "received?" is inferred from ledger rows whose `ref_id` points
- * here. `items` is a planning signal only.
- */
-export interface Purchase extends BaseDoc {
-	type: 'purchase';
-	vendor: string;
-	po_ref?: string;
-	items: PurchaseItem[];
-	occurred_at: Timestamp;
-	note?: string;
-}
-
-export const purchaseInputSchema = z.object({
-	vendor: z.string().trim().min(1),
-	po_ref: z.string().trim().optional(),
-	items: z
-		.array(
-			z.object({
-				item_id: z.string().min(1),
-				qty: qtyStrCoercePositiveSchema,
-				unit: z.string().trim().min(1)
-			})
-		)
-		.min(1, 'A purchase needs at least one item'),
-	occurred_at: z.string().optional(),
-	note: z.string().trim().optional()
-});
-export type PurchaseInput = z.input<typeof purchaseInputSchema>;
-
-export function createPurchase(input: PurchaseInput, ctx: AuthorContext): Purchase {
-	const d = purchaseInputSchema.parse(input);
-	return makeDoc(
-		'purchase',
-		1,
-		{
-			vendor: d.vendor,
-			...(d.po_ref ? { po_ref: d.po_ref } : {}),
-			items: d.items.map((i) => ({ ...i, qty: persistQty(i.qty) })),
-			occurred_at: d.occurred_at ?? now(),
-			...(d.note ? { note: d.note } : {})
-		},
-		ctx
-	);
-}
-
-/**
- * Validator for the lines staff key against a purchase — the form-side mirror of
- * the `CountedItem[]` that `keyPurchaseReceipt` consumes. At least one line is
- * required, matching the repository's refusal to write an empty receipt.
- *
- * `lot.expiry` is deliberately optional here: whether an item is perishable
- * lives in the supply catalog, which the domain layer cannot see, so that check
- * stays with the caller (same split as `receiveInputSchema`).
- */
-export const purchaseReceiptInputSchema = z.object({
-	counted: z
-		.array(
-			z.object({
-				item_id: z.string().min(1),
-				qty: qtyStrCoercePositiveSchema,
-				unit: z.string().trim().min(1),
-				lot: stockLotSchema.optional()
-			})
-		)
-		.min(1, 'A receipt needs at least one counted line')
-});
-export type PurchaseReceiptInput = z.input<typeof purchaseReceiptInputSchema>;
-
-/**
- * Turn a hand counted purchase into stock. This is the ONLY path from a purchase
- * to `stock_ledger`, mirroring `keyDonationReceipt`. Each counted line becomes
- * one positive `purchase` ledger entry referencing the purchase doc — which was
- * already committed in an earlier step, so this is a plain append with no
- * cross-doc write to keep consistent.
- */
-export function keyPurchaseReceipt(
-	purchase: Purchase,
-	counted: CountedItem[],
-	ctx: AuthorContext
-): StockLedger[] {
-	return counted.map((c) =>
-		createStockLedger(
-			{
-				item_id: c.item_id,
-				qty: qtyAbs(c.qty),
-				unit: c.unit,
-				reason: 'purchase',
-				ref_id: purchase._id,
-				...(c.lot ? { lot: c.lot } : {})
-			},
-			ctx
-		)
-	);
-}
-
-/** How much of a purchase has physically arrived — always derived, never stored. */
-export type PurchaseReceiptStatus = 'not_received' | 'partial' | 'received';
-
-/**
- * Derive a purchase's receipt status from the ledger (schema.md §2.16). The doc
- * deliberately has no `status` field: the ledger is the only truth, so the badge
- * can never drift from the balance it is shown next to.
- *
- * Receiving more than ordered still counts as `received` — goods arriving over
- * the ordered amount is normal, and the overage stays visible by comparing the
- * numbers. Lines keyed for items absent from `items` don't move the status.
- */
-export function purchaseReceiptStatus(
-	purchase: Purchase,
-	stockLedgers: StockLedger[]
-): PurchaseReceiptStatus {
-	const receivedByItem = new Map<string, string>();
-	for (const entry of stockLedgers) {
-		if (entry.reason !== 'purchase' || entry.ref_id !== purchase._id) continue;
-		receivedByItem.set(
-			entry.item_id,
-			addQty(receivedByItem.get(entry.item_id) ?? '0', qtyAbs(entry.qty))
-		);
-	}
-
-	if (receivedByItem.size === 0) return 'not_received';
-	const complete = purchase.items.every((item) =>
-		qtyGte(receivedByItem.get(item.item_id) ?? '0', item.qty)
-	);
-	return complete ? 'received' : 'partial';
-}
-
-/**
- * A purchase may only be corrected while nothing has been keyed against it:
- * `items` is what the receipt status and the ordered-vs-actual audit compare
- * against, so editing it mid-receipt would move the goalposts (CR-032).
- */
-export function canEditPurchase(purchase: Purchase, stockLedgers: StockLedger[]): boolean {
-	return purchaseReceiptStatus(purchase, stockLedgers) === 'not_received';
-}
-
 // ---------------------------------------------------------------- transfer
 
 export const transferItemSchema = z.object({
@@ -1566,8 +1406,6 @@ export const isDonation = (d: unknown): d is Donation =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'donation';
 export const isDonationCampaign = (d: unknown): d is DonationCampaign =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'donation_campaign';
-export const isPurchase = (d: unknown): d is Purchase =>
-	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'purchase';
 export const isStockTransfer = (d: unknown): d is StockTransfer =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'stock_transfer';
 

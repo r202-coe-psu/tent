@@ -571,7 +571,6 @@ export interface MealService extends BaseDoc {
 | `transfer_out` | `['stock_transfer:', 'requisition_ticket:']` | ตัดสต็อกโอนย้ายพัสดุข้ามศูนย์ตามตั๋วโอนย้าย |
 | `transfer_in` | `'stock_transfer:'` | รับเข้าจากการโอนย้ายพัสดุข้ามศูนย์ (T-13 / CR-059) |
 | `donation` | `'donation:'` | รับเข้าจากการรับบริจาค (CR-052 / CR-055) |
-| `purchase` | `'purchase:'` | รับเข้าจากการจัดซื้อจัดจ้าง (CR-032) |
 | `adjust` | `null` เสมอ | ปรับยอดสต็อกมือ ไม่มีเอกสารต้นทาง |
 
 #### กฎเหล็กของ Stock Ledger (Invariants)
