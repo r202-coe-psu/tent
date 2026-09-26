@@ -105,6 +105,35 @@ export const TRANSFER_LEDGER_MANGO_INDEXES = [
 	}
 ];
 
+/** Mango index definitions required by Ticket & Distribution queries (schema.md §6 / §8 / CR-121). */
+export const TICKET_DISTRIBUTION_MANGO_INDEXES = [
+	{
+		index: { fields: ['type', 'status', 'requisition_type', 'ticket_no'] },
+		name: 'ticket-type-status-reqtype-ticketno-idx',
+		type: 'json' as const
+	},
+	{
+		index: { fields: ['type', 'status'] },
+		name: 'ticket-type-status-idx',
+		type: 'json' as const
+	},
+	{
+		index: { fields: ['type', 'ticket_id', 'item_id', 'recipient_id', 'status'] },
+		name: 'distlog-type-ticket-item-recipient-status-idx',
+		type: 'json' as const
+	},
+	{
+		index: { fields: ['type', 'recipient_id', 'status'] },
+		name: 'distlog-type-recipient-status-idx',
+		type: 'json' as const
+	},
+	{
+		index: { fields: ['type', 'item_id', 'status'] },
+		name: 'pool-type-itemid-status-idx',
+		type: 'json' as const
+	}
+];
+
 /**
  * Server-side `validate_doc_update` for a shelter db. Enforces the common
  * envelope (schema.md §0) + shelter_code match + allowed doc types, then the
@@ -128,12 +157,72 @@ export function buildValidateDocUpdate(code: string): string {
 	const simulationResourceKinds = JSON.stringify(SOP_RATIO_KIND);
 	return `function (newDoc, oldDoc, userCtx) {
   if (userCtx.roles.indexOf('_admin') !== -1) return;
+  if (newDoc.type === 'unit_of_measure' || (oldDoc && oldDoc.type === 'unit_of_measure')) {
+    throw { forbidden: 'unit_of_measure is central-only' };
+  }
   // Compound Scoped Roles (CR-093): prefer {code}:{cap}, keep legacy bare RoleKey.
   function isRole(cap) {
     return userCtx.roles.indexOf('system_admin') !== -1 ||
       userCtx.roles.indexOf('${code}:' + cap) !== -1 ||
       userCtx.roles.indexOf(cap) !== -1;
   }
+  function parseDecimal4(str) {
+    if (typeof str !== 'string') return NaN;
+    var s = str.trim();
+    if (!/^-?\\d+(\\.\\d{1,4})?$/.test(s)) return NaN;
+    var parts = s.split('.');
+    var intPart = parseInt(parts[0], 10);
+    var fracPart = 0;
+    if (parts.length === 2) {
+      fracPart = parseInt((parts[1] + '0000').slice(0, 4), 10);
+    }
+    var sign = (parts[0].charAt(0) === '-') ? -1 : 1;
+    return intPart * 10000 + (sign * fracPart);
+  }
+  // Ticket-era writes are made directly by authenticated shelter clients, so
+  // these document-local capability checks are the authoritative guard.
+  function canCreateTicket() {
+    return isRole('warehouse_staff') || isRole('supply_coordinator') || isRole('shelter_manager');
+  }
+  function canApproveTicket() {
+    return isRole('shelter_manager');
+  }
+  function canDispatchTicket() {
+    return isRole('warehouse_staff') || isRole('supply_coordinator') || isRole('shelter_manager');
+  }
+  function canPerformFrontlineDistribution() {
+    return isRole('registration_staff') || isRole('supply_coordinator') || isRole('shelter_manager');
+  }
+  function canReceivePhysicalStock() {
+    return isRole('warehouse_staff') || isRole('supply_coordinator') || isRole('shelter_manager');
+  }
+  function sameObjectExcept(previousObject, nextObject, ignoredFields) {
+    var keys = {};
+    var previousKeys = Object.keys(previousObject || {});
+    var nextKeys = Object.keys(nextObject || {});
+    for (var previousKeyIndex = 0; previousKeyIndex < previousKeys.length; previousKeyIndex++) {
+      keys[previousKeys[previousKeyIndex]] = true;
+    }
+    for (var nextKeyIndex = 0; nextKeyIndex < nextKeys.length; nextKeyIndex++) {
+      keys[nextKeys[nextKeyIndex]] = true;
+    }
+    var allKeys = Object.keys(keys);
+    for (var allKeyIndex = 0; allKeyIndex < allKeys.length; allKeyIndex++) {
+      var key = allKeys[allKeyIndex];
+      if (ignoredFields[key]) continue;
+      if ((previousObject || {})[key] !== (nextObject || {})[key]) return false;
+    }
+    return true;
+  }
+  function sameTicketItemExceptAllocation(previousItem, nextItem) {
+    return sameObjectExcept(previousItem, nextItem, { allocated_qty: true });
+  }
+  function sameTicketPayloadExceptSelfUpdateFields(previousTicket, nextTicket) {
+    return sameObjectExcept(previousTicket, nextTicket, {
+      _rev: true, updated_at: true, status: true, items: true, amendments: true
+    });
+  }
+
   // schema.md §1.4 movement, §1.5 screening, §1.7 people_import_log, §2.6 kitchen_requisition,
   // §2.7 meal_service, §2.7.2 gas_ledger (CR-086), §6.2 stock_ledger / audit, CR-059 Phase 3B distribution_issue
   var appendOnly = [
@@ -159,6 +248,9 @@ export function buildValidateDocUpdate(code: string): string {
     var protectedCoordinationDelete = oldDoc && [
       'distribution_issue_idempotency', 'distribution_issue_capacity', 'distribution_one_time_guard', 'distribution_issue_gate'
     ].indexOf(oldDoc.type) !== -1;
+    if (oldDoc && (oldDoc.type === 'distribution_log' || oldDoc.type === 'bulk_return_claim' || oldDoc.type === 'bulk_return_pool')) {
+      throw { forbidden: 'Cannot delete ' + oldDoc.type + ' documents' };
+    }
     if (wasAppendOnly || protectedCoordinationDelete) {
       throw { forbidden: 'Cannot delete append-only ' + oldDoc.type + ' documents' };
     }
@@ -193,17 +285,28 @@ export function buildValidateDocUpdate(code: string): string {
   // kitchen_staff could never actually write a meal plan, requisition, service
   // record, or gas cylinder/ledger without an _admin session (bug found + fixed
   // alongside CR-080).
+  // Volunteers (CR-092/CR-094/CR-095, schema.md §2.8/§2.9/§2.17/§2.18) was
+  // missing here entirely too — same class of bug: the back-office volunteers
+  // UI shipped and worked in dev only because dev testing used an _admin
+  // session; any real session-staff write (walk-in registration, job
+  // create/dispatch, check-in/out, identity approval) 403'd with
+  // "doc type not allowed yet" (bug found + fixed as CR-096).
+  // volunteer_transfer (schema.md §2.20) was cut entirely by CR-104
+  // AC-104-10 -- cross-shelter transfer no longer exists; a volunteer applies
+  // directly to any shelter's jobs via the Job Board instead.
   var allowed = [
     'evacuee', 'household', 'medical', 'screening', 'movement', 'image',
     'people_import_log',
     'donation', 'donation_campaign', 'stock_ledger', 'donation_slot', 'donation_redirect',
     'audit', 'daily_calc', 'simulation', 'purchase', 'referral',
     'meal_plan', 'kitchen_requisition', 'meal_service', 'gas_cylinder_type', 'gas_ledger',
+    'volunteer', 'job', 'job_application', 'shift_assignment',
     'item_category', 'item_master', 'recipe',
     'requirement_group', 'food_sphere_standard', 'replenishment_policy', 'sop_override',
     'distribution_request', 'distribution_batch', 'stock_lot_reservation',
     'distribution_issue', 'distribution_issue_idempotency', 'distribution_issue_capacity', 'distribution_one_time_guard', 'distribution_issue_gate',
-    'daily_sop_assessment'
+    'daily_sop_assessment',
+    'requisition_ticket', 'distribution_log', 'bulk_return_pool', 'bulk_return_claim'
   ];
   if (allowed.indexOf(newDoc.type) === -1) {
     throw { forbidden: 'doc type not allowed yet: ' + newDoc.type };
@@ -532,15 +635,21 @@ export function buildValidateDocUpdate(code: string): string {
     if (!isStaff) {
       throw { forbidden: 'Only warehouse staff or managers can write stock ledger' };
     }
-    if (newDoc.reason === 'distribute' && !isWarehouseOrAdmin) {
-      throw { forbidden: 'Only warehouse staff or system admin can write distribute stock ledger' };
-    }
     if (newDoc.reason === 'distribution_return' && !isWarehouseOrAdmin) {
       throw { forbidden: 'Only warehouse staff or system admin can write distribution return stock ledger' };
     }
     if (newDoc.reason === 'distribute') {
-      if (typeof newDoc.ref_id !== 'string' || !/^distribution_batch:.+/.test(newDoc.ref_id)) {
-        throw { forbidden: 'Distribute stock ledger requires distribution_batch ref_id' };
+      if (typeof newDoc.ref_id !== 'string' || (!/^distribution_batch:.+/.test(newDoc.ref_id) && !/^requisition_ticket:.+/.test(newDoc.ref_id))) {
+        throw { forbidden: 'Distribute stock ledger requires distribution_batch ref_id or requisition_ticket ref_id' };
+      }
+      if (/^requisition_ticket:.+/.test(newDoc.ref_id)) {
+        if (!isStaff) {
+          throw { forbidden: 'Only warehouse staff, supply coordinator, shelter manager, or system admin can write ticket distribute stock ledger' };
+        }
+      } else if (/^distribution_batch:.+/.test(newDoc.ref_id)) {
+        if (!isWarehouseOrAdmin) {
+          throw { forbidden: 'Only warehouse staff or system admin can write distribute stock ledger' };
+        }
       }
       if (typeof newDoc.lot_ref !== 'string' || !/^stock_ledger:.+/.test(newDoc.lot_ref)) {
         throw { forbidden: 'Distribute stock ledger requires physical stock_ledger lot_ref' };
@@ -558,6 +667,18 @@ export function buildValidateDocUpdate(code: string): string {
       }
       if (typeof newDoc.qty !== 'string' || !/^(?:[1-9]\\d*(?:\\.\\d{1,4})?|0\\.(?!0+$)\\d{1,4})$/.test(newDoc.qty)) {
         throw { forbidden: 'Distribution return stock ledger qty must be a positive decimal string' };
+      }
+    }
+    if (newDoc.reason === 'requisition') {
+      if (typeof newDoc.ref_id !== 'string' || (!/^requisition_ticket:.+/.test(newDoc.ref_id) && !/^kitchen_requisition:.+/.test(newDoc.ref_id))) {
+        throw { forbidden: 'Requisition stock ledger requires requisition_ticket or kitchen_requisition ref_id' };
+      }
+    }
+    if (newDoc.reason === 'receive') {
+      if (newDoc.ref_id !== null && typeof newDoc.ref_id !== 'undefined') {
+        if (typeof newDoc.ref_id !== 'string' || (!/^meal_service:.+/.test(newDoc.ref_id) && !/^requisition_ticket:.+/.test(newDoc.ref_id) && !/^distribution_log:.+/.test(newDoc.ref_id) && !/^bulk_return_pool:[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc.ref_id))) {
+          throw { forbidden: 'Receive stock ledger ref_id must reference meal_service, requisition_ticket, distribution_log, or bulk_return_pool' };
+        }
       }
     }
   }
@@ -1001,6 +1122,657 @@ export function buildValidateDocUpdate(code: string): string {
       if (newDoc.shelter_code !== oldDoc.shelter_code) throw { forbidden: 'Cannot change shelter_code' };
       if (newDoc.evacuee_id !== oldDoc.evacuee_id) throw { forbidden: 'Cannot change evacuee_id on one-time guard' };
       if (newDoc.item_id !== oldDoc.item_id) throw { forbidden: 'Cannot change item_id on one-time guard' };
+    }
+  }
+  // 12. CR-121: requisition_ticket validation (Rule 12)
+  if (newDoc.type === 'requisition_ticket') {
+    if (newDoc.schema_v !== 1) {
+      throw { forbidden: 'Unsupported requisition_ticket schema version' };
+    }
+    if (!/^requisition_ticket:[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc._id)) {
+      throw { forbidden: 'requisition_ticket id must be requisition_ticket:{ulid}' };
+    }
+    var allowedReqTypes = ['kitchen', 'food', 'supplies', 'transfer'];
+    if (allowedReqTypes.indexOf(newDoc.requisition_type) === -1) {
+      throw { forbidden: 'Invalid requisition_type: ' + newDoc.requisition_type };
+    }
+    if (!Array.isArray(newDoc.items) || newDoc.items.length === 0) {
+      throw { forbidden: 'requisition_ticket must have at least one item' };
+    }
+    var seenTicketItemIds = {};
+    for (var ti = 0; ti < newDoc.items.length; ti++) {
+      var tItem = newDoc.items[ti];
+      if (!tItem || typeof tItem.item_id !== 'string' || !tItem.item_id) {
+        throw { forbidden: 'requisition_ticket item requires item_id' };
+      }
+      if (seenTicketItemIds[tItem.item_id]) {
+        throw { forbidden: 'requisition_ticket item_id values must be unique' };
+      }
+      seenTicketItemIds[tItem.item_id] = true;
+      var reqQty = parseDecimal4(tItem.requested_qty);
+      var allocQty = parseDecimal4(tItem.allocated_qty);
+      if (isNaN(reqQty) || reqQty <= 0) {
+        throw { forbidden: 'requested_qty must be a positive decimal string' };
+      }
+      if (isNaN(allocQty) || allocQty <= 0) {
+        throw { forbidden: 'allocated_qty must be a positive decimal string' };
+      }
+    }
+    if (oldDoc) {
+      var immutableTicketFields = [
+        '_id', 'type', 'schema_v', 'shelter_code', 'ticket_no', 'requisition_type', 'created_at', 'created_by', 'requested_by'
+      ];
+      for (var f = 0; f < immutableTicketFields.length; f++) {
+        var tf = immutableTicketFields[f];
+        if (newDoc[tf] !== oldDoc[tf]) {
+          throw { forbidden: 'requisition_ticket.' + tf + ' is immutable' };
+        }
+      }
+
+      var oldAmendments = oldDoc.amendments || [];
+      var nextAmendments = newDoc.amendments || [];
+      if (!Array.isArray(oldAmendments) || !Array.isArray(nextAmendments) || nextAmendments.length < oldAmendments.length) {
+        throw { forbidden: 'requisition_ticket amendments must be append-only' };
+      }
+      for (var ai = 0; ai < oldAmendments.length; ai++) {
+        var oldAmendment = oldAmendments[ai];
+        var nextAmendment = nextAmendments[ai];
+        if (!nextAmendment ||
+            nextAmendment.amendment_id !== oldAmendment.amendment_id ||
+            nextAmendment.item_id !== oldAmendment.item_id ||
+            nextAmendment.added_qty !== oldAmendment.added_qty ||
+            nextAmendment.amended_at !== oldAmendment.amended_at ||
+            nextAmendment.amended_by !== oldAmendment.amended_by ||
+            nextAmendment.reason !== oldAmendment.reason) {
+          throw { forbidden: 'requisition_ticket amendment history is immutable' };
+        }
+      }
+      if (
+        nextAmendments.length > oldAmendments.length &&
+        !(oldDoc.status === 'DISTRIBUTING' && newDoc.status === 'DISTRIBUTING')
+      ) {
+        throw { forbidden: 'requisition_ticket amendments may only be appended while DISTRIBUTING' };
+      }
+
+      var actorFields = ['approved_by', 'dispatched_by', 'received_by'];
+      for (var af = 0; af < actorFields.length; af++) {
+        var actorField = actorFields[af];
+        var actorChanged = newDoc[actorField] !== oldDoc[actorField];
+        var isExpectedActorTransition =
+          (actorField === 'approved_by' && oldDoc.status === 'PENDING_PICK' && newDoc.status === 'READY_FOR_DISPATCH') ||
+          (actorField === 'dispatched_by' && oldDoc.status === 'READY_FOR_DISPATCH' && newDoc.status === 'IN_TRANSIT') ||
+          (actorField === 'received_by' && oldDoc.status === 'IN_TRANSIT' && newDoc.status === 'DISTRIBUTING');
+        if (actorChanged && !isExpectedActorTransition) {
+          throw { forbidden: 'requisition_ticket.' + actorField + ' is immutable after introduction' };
+        }
+      }
+
+      var postDistStatuses = ['DISTRIBUTING', 'SHIFT_CLOSED', 'RETURN_PENDING_RECEIPT', 'RETURN_COMPLETED', 'COMPLETED'];
+      if (postDistStatuses.indexOf(oldDoc.status) !== -1) {
+        var nextItemMap = {};
+        for (var ni = 0; ni < newDoc.items.length; ni++) {
+          nextItemMap[newDoc.items[ni].item_id] = newDoc.items[ni];
+        }
+        for (var oi = 0; oi < oldDoc.items.length; oi++) {
+          var oldItem = oldDoc.items[oi];
+          var nextItem = nextItemMap[oldItem.item_id];
+          if (!nextItem || parseDecimal4(nextItem.requested_qty) < parseDecimal4(oldItem.requested_qty)) {
+            throw { forbidden: 'requested_qty cannot be decreased or removed after DISTRIBUTING' };
+          }
+        }
+      }
+
+      if (oldDoc.status === newDoc.status) {
+        if (oldDoc.status === 'PENDING_PICK') {
+          if (!canCreateTicket()) throw { forbidden: 'Only warehouse staff, supply coordinators, shelter managers, or system admins can allocate requisition_ticket items' };
+          if (!sameTicketPayloadExceptSelfUpdateFields(oldDoc, newDoc)) {
+            throw { forbidden: 'PENDING_PICK self-updates may only change item allocation quantities' };
+          }
+          if ((typeof oldDoc.amendments === 'undefined') !== (typeof newDoc.amendments === 'undefined')) {
+            throw { forbidden: 'PENDING_PICK self-updates may only change item allocation quantities' };
+          }
+          if (oldDoc.items.length !== newDoc.items.length) {
+            throw { forbidden: 'PENDING_PICK allocation cannot add or remove ticket items' };
+          }
+          for (var pendingItemIndex = 0; pendingItemIndex < oldDoc.items.length; pendingItemIndex++) {
+            if (!sameTicketItemExceptAllocation(oldDoc.items[pendingItemIndex], newDoc.items[pendingItemIndex])) {
+              throw { forbidden: 'PENDING_PICK allocation cannot change ticket item content' };
+            }
+          }
+        } else if (oldDoc.status === 'DISTRIBUTING') {
+          if (!canDispatchTicket()) throw { forbidden: 'Only warehouse staff, supply coordinators, shelter managers, or system admins can amend requisition_ticket items' };
+          if (!sameTicketPayloadExceptSelfUpdateFields(oldDoc, newDoc)) {
+            throw { forbidden: 'DISTRIBUTING self-updates may only change amendment allocation fields' };
+          }
+          if (oldDoc.items.length !== newDoc.items.length) {
+            throw { forbidden: 'DISTRIBUTING amendments cannot add or remove ticket items' };
+          }
+          if (nextAmendments.length === oldAmendments.length) {
+            // A CAS retry may PUT the already-amended document again; this is a
+            // no-op recovery write, not a second amendment operation.
+            for (var noOpItemIndex = 0; noOpItemIndex < oldDoc.items.length; noOpItemIndex++) {
+              var noOpOldItem = oldDoc.items[noOpItemIndex];
+              var noOpNewItem = newDoc.items[noOpItemIndex];
+              if (!sameTicketItemExceptAllocation(noOpOldItem, noOpNewItem) ||
+                  parseDecimal4(noOpOldItem.allocated_qty) !== parseDecimal4(noOpNewItem.allocated_qty)) {
+                throw { forbidden: 'DISTRIBUTING amendment update must append exactly one amendment' };
+              }
+            }
+          } else {
+            if (nextAmendments.length !== oldAmendments.length + 1) {
+              throw { forbidden: 'DISTRIBUTING amendment update must append exactly one amendment' };
+            }
+          var appendedAmendment = nextAmendments[oldAmendments.length];
+          if (!appendedAmendment ||
+              typeof appendedAmendment.amendment_id !== 'string' ||
+              !/^[0-9A-HJKMNP-TV-Z]{26}$/.test(appendedAmendment.amendment_id) ||
+              typeof appendedAmendment.item_id !== 'string' ||
+              !appendedAmendment.item_id ||
+              typeof appendedAmendment.amended_at !== 'string' ||
+              isNaN(Date.parse(appendedAmendment.amended_at)) ||
+              typeof appendedAmendment.amended_by !== 'string' ||
+              appendedAmendment.amended_by !== userCtx.name ||
+              (typeof appendedAmendment.reason !== 'undefined' &&
+                (typeof appendedAmendment.reason !== 'string' || !appendedAmendment.reason.trim()))) {
+            throw { forbidden: 'New requisition_ticket amendments must bind amended_by to the current actor and contain valid audit fields' };
+          }
+          for (var existingAmendmentIndex = 0; existingAmendmentIndex < oldAmendments.length; existingAmendmentIndex++) {
+            if (oldAmendments[existingAmendmentIndex].amendment_id === appendedAmendment.amendment_id) {
+              throw { forbidden: 'requisition_ticket amendment_id values must be unique' };
+            }
+          }
+          var appendedQty = parseDecimal4(appendedAmendment.added_qty);
+          if (isNaN(appendedQty) || appendedQty <= 0) {
+            throw { forbidden: 'New requisition_ticket amendment added_qty must be positive' };
+          }
+          var appendedItemFound = false;
+          for (var amendmentItemIndex = 0; amendmentItemIndex < oldDoc.items.length; amendmentItemIndex++) {
+            var oldTicketItem = oldDoc.items[amendmentItemIndex];
+            var newTicketItem = newDoc.items[amendmentItemIndex];
+            if (!sameTicketItemExceptAllocation(oldTicketItem, newTicketItem)) {
+              throw { forbidden: 'DISTRIBUTING amendment cannot change ticket item content' };
+            }
+            var oldAllocated = parseDecimal4(oldTicketItem.allocated_qty);
+            var newAllocated = parseDecimal4(newTicketItem.allocated_qty);
+            if (isNaN(oldAllocated) || isNaN(newAllocated)) {
+              throw { forbidden: 'DISTRIBUTING amendment requires valid allocated_qty values' };
+            }
+            var allocationDelta = newAllocated - oldAllocated;
+            var expectedDelta = newTicketItem.item_id === appendedAmendment.item_id ? appendedQty : 0;
+            if (newTicketItem.item_id === appendedAmendment.item_id) appendedItemFound = true;
+            if (allocationDelta < 0 || allocationDelta !== expectedDelta) {
+              throw { forbidden: 'DISTRIBUTING allocated_qty delta must equal appended amendment added_qty' };
+            }
+          }
+          if (!appendedItemFound) {
+            throw { forbidden: 'DISTRIBUTING amendment must reference an existing ticket item' };
+          }
+          }
+        } else {
+          throw { forbidden: 'Same-status requisition_ticket update is not allowed for ' + oldDoc.status };
+        }
+      } else {
+        var validTransitions = {
+          'PENDING_PICK': ['READY_FOR_DISPATCH', 'CANCELLED'],
+          'READY_FOR_DISPATCH': ['IN_TRANSIT', 'CANCELLED'],
+          'IN_TRANSIT': ['DISTRIBUTING', 'COMPLETED'],
+          'DISTRIBUTING': ['SHIFT_CLOSED'],
+          'SHIFT_CLOSED': ['RETURN_PENDING_RECEIPT', 'COMPLETED'],
+          'RETURN_PENDING_RECEIPT': ['RETURN_COMPLETED'],
+          'RETURN_COMPLETED': ['COMPLETED'],
+          'COMPLETED': [],
+          'CANCELLED': []
+        };
+        var targets = validTransitions[oldDoc.status] || [];
+        if (targets.indexOf(newDoc.status) === -1) {
+          throw { forbidden: 'Illegal requisition_ticket transition: ' + oldDoc.status + ' -> ' + newDoc.status };
+        }
+        if (oldDoc.status === 'PENDING_PICK' && newDoc.status === 'READY_FOR_DISPATCH') {
+          if (!canApproveTicket()) throw { forbidden: 'Only shelter managers or system admins can approve requisition_tickets' };
+          if (newDoc.approved_by !== userCtx.name) throw { forbidden: 'requisition_ticket.approved_by must match the current actor' };
+        } else if (oldDoc.status === 'PENDING_PICK' && newDoc.status === 'CANCELLED') {
+          if (!canCreateTicket()) throw { forbidden: 'Only warehouse staff, supply coordinators, shelter managers, or system admins can cancel requisition_tickets' };
+        } else if (oldDoc.status === 'READY_FOR_DISPATCH' && newDoc.status === 'IN_TRANSIT') {
+          if (!canDispatchTicket()) throw { forbidden: 'Only warehouse staff, supply coordinators, shelter managers, or system admins can dispatch requisition_tickets' };
+          if (newDoc.dispatched_by !== userCtx.name) throw { forbidden: 'requisition_ticket.dispatched_by must match the current actor' };
+        } else if (oldDoc.status === 'READY_FOR_DISPATCH' && newDoc.status === 'CANCELLED') {
+          if (!canCreateTicket()) throw { forbidden: 'Only warehouse staff, supply coordinators, shelter managers, or system admins can cancel requisition_tickets' };
+        } else if (oldDoc.status === 'IN_TRANSIT' && newDoc.status === 'DISTRIBUTING') {
+          if (!canPerformFrontlineDistribution()) throw { forbidden: 'Only frontline distribution staff can receive requisition_tickets at distribution points' };
+          if (newDoc.received_by !== userCtx.name) throw { forbidden: 'requisition_ticket.received_by must match the current actor' };
+        } else if (oldDoc.status === 'IN_TRANSIT' && newDoc.status === 'COMPLETED') {
+          if (newDoc.requisition_type !== 'transfer') {
+            throw { forbidden: 'Only transfer requisition_tickets can transition from IN_TRANSIT to COMPLETED' };
+          }
+          if (!canReceivePhysicalStock()) throw { forbidden: 'Only warehouse staff, supply coordinators, shelter managers, or system admins can complete transfer requisition_tickets' };
+        } else if (oldDoc.status === 'DISTRIBUTING' && newDoc.status === 'SHIFT_CLOSED') {
+          if (!canPerformFrontlineDistribution()) throw { forbidden: 'Only frontline distribution staff can close requisition_ticket shifts' };
+        } else if (oldDoc.status === 'SHIFT_CLOSED' && (newDoc.status === 'RETURN_PENDING_RECEIPT' || newDoc.status === 'COMPLETED')) {
+          if (!canPerformFrontlineDistribution()) throw { forbidden: 'Only frontline distribution staff can submit or complete requisition_ticket shifts' };
+        } else if (oldDoc.status === 'RETURN_PENDING_RECEIPT' && newDoc.status === 'RETURN_COMPLETED') {
+          if (!canReceivePhysicalStock()) throw { forbidden: 'Only warehouse staff, supply coordinators, shelter managers, or system admins can receive warehouse returns' };
+        } else if (oldDoc.status === 'RETURN_COMPLETED' && newDoc.status === 'COMPLETED') {
+          if (!canReceivePhysicalStock()) throw { forbidden: 'Only warehouse staff, supply coordinators, shelter managers, or system admins can complete requisition_ticket returns' };
+        }
+      }
+    } else {
+      if (newDoc.status !== 'PENDING_PICK') {
+        throw { forbidden: 'Initial requisition_ticket status must be PENDING_PICK' };
+      }
+      if (!canCreateTicket()) {
+        throw { forbidden: 'Only warehouse staff, supply coordinators, shelter managers, or system admins can create requisition_tickets' };
+      }
+      if (newDoc.created_by !== userCtx.name || newDoc.requested_by !== userCtx.name) {
+        throw { forbidden: 'requisition_ticket created_by and requested_by must match the current actor' };
+      }
+      if (newDoc.approved_by !== undefined || newDoc.dispatched_by !== undefined || newDoc.received_by !== undefined) {
+        throw { forbidden: 'Initial requisition_ticket cannot contain transition actor fields' };
+      }
+      if (Array.isArray(newDoc.amendments) && newDoc.amendments.length > 0) {
+        throw { forbidden: 'Initial requisition_ticket cannot contain amendments' };
+      }
+    }
+  }
+  // 13. CR-121: distribution_log validation (Rules 12-14)
+  if (newDoc.type === 'distribution_log') {
+    if (newDoc.schema_v !== 1) {
+      throw { forbidden: 'Unsupported distribution_log schema version' };
+    }
+    if (!/^distribution_log:[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc._id)) {
+      throw { forbidden: 'distribution_log id must be distribution_log:{ulid}' };
+    }
+    if (typeof newDoc.ticket_id !== 'string' || !/^requisition_ticket:[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc.ticket_id)) {
+      throw { forbidden: 'distribution_log requires requisition_ticket ticket_id' };
+    }
+    if (typeof newDoc.item_id !== 'string' || !newDoc.item_id) {
+      throw { forbidden: 'distribution_log requires item_id' };
+    }
+    if (typeof newDoc.qty !== 'string' || parseDecimal4(newDoc.qty) <= 0) {
+      throw { forbidden: 'distribution_log qty must be a positive decimal string' };
+    }
+    if (typeof newDoc.is_returnable !== 'boolean') {
+      throw { forbidden: 'distribution_log requires boolean is_returnable' };
+    }
+    if (['evacuee', 'volunteer', 'outside'].indexOf(newDoc.recipient_type) === -1) {
+      throw { forbidden: 'Invalid recipient_type: ' + newDoc.recipient_type };
+    }
+    if (newDoc.recipient_type === 'evacuee' && (typeof newDoc.recipient_id !== 'string' || newDoc.recipient_id.indexOf('evacuee:') !== 0)) {
+      throw { forbidden: 'evacuee recipient_id is required' };
+    }
+    if (newDoc.recipient_type === 'volunteer' && (typeof newDoc.recipient_id !== 'string' || newDoc.recipient_id.indexOf('volunteer:') !== 0)) {
+      throw { forbidden: 'volunteer recipient_id is required' };
+    }
+    if (newDoc.recipient_type === 'outside' && typeof newDoc.recipient_id !== 'undefined' && newDoc.recipient_id !== null) {
+      throw { forbidden: 'outside recipients must not carry recipient_id' };
+    }
+    if (oldDoc) {
+      var immutableLogFields = [
+        '_id', 'type', 'schema_v', 'shelter_code', 'ticket_id', 'item_id', 'qty',
+        'recipient_type', 'recipient_id', 'household_id', 'is_returnable',
+        'distributed_at', 'distributed_by', 'created_at', 'created_by'
+      ];
+      for (var lf = 0; lf < immutableLogFields.length; lf++) {
+        var lfName = immutableLogFields[lf];
+        if (newDoc[lfName] !== oldDoc[lfName]) {
+          throw { forbidden: 'distribution_log.' + lfName + ' is immutable after issuance' };
+        }
+      }
+
+      var oldStatus = oldDoc.status;
+      var nextStatus = newDoc.status;
+      if (nextStatus === 'voided') {
+        if (!newDoc.voided_at || !newDoc.voided_by) {
+          throw { forbidden: 'Voided logs require void audit fields' };
+        }
+        var previousReturnedQty = oldDoc.qty_returned === undefined ? 0 : parseDecimal4(oldDoc.qty_returned);
+        if (
+          (oldStatus !== 'fulfilled' && oldStatus !== 'active') ||
+          previousReturnedQty > 0 ||
+          oldDoc.returned_at ||
+          oldDoc.returned_by ||
+          oldDoc.clear_reason ||
+          oldDoc.bulk_pool_id
+        ) {
+          throw { forbidden: 'Cannot void a distribution_log after return or clear activity has begun' };
+        }
+      }
+      var isVoidTransition = nextStatus === 'voided' && (oldStatus === 'fulfilled' || oldStatus === 'active');
+      var isRoutineReturn =
+        (nextStatus === 'partially_returned' || nextStatus === 'returned') &&
+        newDoc.clear_reason === 'routine' &&
+        (oldStatus === 'active' || oldStatus === 'partially_returned');
+      var isBulkReturn =
+        nextStatus === 'returned' &&
+        newDoc.clear_reason === 'bulk_dropoff' &&
+        (oldStatus === 'active' || oldStatus === 'partially_returned');
+      var isNonPhysicalClear =
+        (nextStatus === 'lost' || nextStatus === 'waived') &&
+        (oldStatus === 'active' || oldStatus === 'partially_returned');
+
+      if (isVoidTransition) {
+        if (!canPerformFrontlineDistribution()) throw { forbidden: 'Only frontline distribution staff can void distribution logs' };
+        if (newDoc.voided_by !== userCtx.name) throw { forbidden: 'distribution_log.voided_by must match the current actor' };
+      } else if (isRoutineReturn) {
+        if (!canReceivePhysicalStock()) throw { forbidden: 'Only warehouse staff, supply coordinators, shelter managers, or system admins can record routine physical returns' };
+        if (newDoc.returned_by !== userCtx.name) throw { forbidden: 'distribution_log.returned_by must match the current actor' };
+        if (oldStatus === 'partially_returned' && parseDecimal4(newDoc.qty_returned) <= parseDecimal4(oldDoc.qty_returned)) {
+          throw { forbidden: 'partially_returned distribution_log qty_returned must increase' };
+        }
+      } else if (isBulkReturn || isNonPhysicalClear) {
+        if (!canPerformFrontlineDistribution()) throw { forbidden: 'Only frontline distribution staff can clear distribution logs' };
+        if (newDoc.returned_by !== userCtx.name) throw { forbidden: 'distribution_log.returned_by must match the current actor' };
+      } else {
+        throw { forbidden: 'Illegal distribution_log transition: ' + oldStatus + ' -> ' + nextStatus };
+      }
+
+      var returnClearStatuses = ['partially_returned', 'returned', 'lost', 'waived'];
+      if (returnClearStatuses.indexOf(newDoc.status) !== -1) {
+        if (!newDoc.returned_at || !newDoc.returned_by || !newDoc.clear_reason) {
+          throw { forbidden: 'Loan clear status requires return audit fields' };
+        }
+        if (newDoc.clear_reason === 'bulk_dropoff') {
+          if (typeof newDoc.bulk_pool_id !== 'string' || !/^bulk_return_pool:[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc.bulk_pool_id)) {
+            throw { forbidden: 'bulk_dropoff requires bulk_pool_id' };
+          }
+        }
+        if (newDoc.status === 'lost') {
+          if (newDoc.clear_reason !== 'lost' || !newDoc.notes) {
+            throw { forbidden: 'Lost loans require notes and clear_reason lost' };
+          }
+        }
+        if (newDoc.status === 'waived') {
+          if (newDoc.clear_reason !== 'waived' || !newDoc.notes) {
+            throw { forbidden: 'Waived loans require notes and clear_reason waived' };
+          }
+        }
+        if (newDoc.status === 'returned') {
+          if (['routine', 'bulk_dropoff'].indexOf(newDoc.clear_reason) === -1) {
+            throw { forbidden: 'Returned log must record clear_reason routine or bulk_dropoff' };
+          }
+          if (parseDecimal4(newDoc.qty_returned) !== parseDecimal4(newDoc.qty)) {
+            throw { forbidden: 'Returned log must record full qty_returned' };
+          }
+        }
+        if (newDoc.status === 'partially_returned') {
+          var prQty = parseDecimal4(newDoc.qty_returned);
+          if (isNaN(prQty) || prQty <= 0 || prQty >= parseDecimal4(newDoc.qty)) {
+            throw { forbidden: 'Partial return requires qty_returned greater than zero and less than issued qty' };
+          }
+        }
+      }
+    } else {
+      if (!canPerformFrontlineDistribution()) {
+        throw { forbidden: 'Only frontline distribution staff can create distribution logs' };
+      }
+      if (newDoc.created_by !== userCtx.name || newDoc.distributed_by !== userCtx.name) {
+        throw { forbidden: 'distribution_log created_by and distributed_by must match the current actor' };
+      }
+      if (!newDoc.is_returnable && newDoc.status !== 'fulfilled') {
+        throw { forbidden: 'Non-returnable logs must start as fulfilled' };
+      }
+      if (newDoc.is_returnable && newDoc.status !== 'active') {
+        throw { forbidden: 'Returnable logs must start as active' };
+      }
+    }
+  }
+  // 14. CR-121 / CR-134: bulk_return_pool validation (Rule 14)
+  if (newDoc.type === 'bulk_return_pool') {
+    var canCreatePool = isRole('warehouse_staff') || isRole('supply_coordinator') || isRole('shelter_manager');
+    var canClaimPool = isRole('registration_staff') || isRole('supply_coordinator') || isRole('shelter_manager');
+    var canClosePool = isRole('warehouse_staff') || isRole('supply_coordinator') || isRole('shelter_manager');
+    if (newDoc.schema_v !== 1 && newDoc.schema_v !== 2) {
+      throw { forbidden: 'Unsupported bulk_return_pool schema version' };
+    }
+    if (!/^bulk_return_pool:[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc._id)) {
+      throw { forbidden: 'bulk_return_pool id must be bulk_return_pool:{ulid}' };
+    }
+    if (oldDoc) {
+      if (oldDoc.schema_v === 2 && newDoc.schema_v === 1) {
+        throw { forbidden: 'Cannot downgrade bulk_return_pool from schema_v 2 to 1' };
+      }
+      var immutablePoolFields = [
+        '_id', 'type', 'shelter_code', 'item_id', 'stock_ledger_id', 'total_received_qty', 'created_at', 'created_by'
+      ];
+      for (var pf = 0; pf < immutablePoolFields.length; pf++) {
+        var pfName = immutablePoolFields[pf];
+        if (newDoc[pfName] !== oldDoc[pfName]) {
+          throw { forbidden: 'bulk_return_pool.' + pfName + ' is immutable' };
+        }
+      }
+    }
+    var totalRec = parseDecimal4(newDoc.total_received_qty);
+    var claimed = parseDecimal4(newDoc.claimed_qty);
+    var unclaimed = parseDecimal4(newDoc.unclaimed_quota);
+    if (isNaN(totalRec) || totalRec <= 0) {
+      throw { forbidden: 'bulk_return_pool total_received_qty must be a positive decimal string' };
+    }
+    if (isNaN(claimed) || claimed < 0) {
+      throw { forbidden: 'bulk_return_pool claimed_qty must be a non-negative decimal string' };
+    }
+    if (isNaN(unclaimed) || unclaimed < 0) {
+      throw { forbidden: 'bulk_return_pool unclaimed_quota must be a non-negative decimal string' };
+    }
+    if (claimed + unclaimed !== totalRec) {
+      throw { forbidden: 'claimed_qty + unclaimed_quota must equal total_received_qty' };
+    }
+    if (['ACTIVE', 'EXHAUSTED', 'CLOSED'].indexOf(newDoc.status) === -1) {
+      throw { forbidden: 'Invalid bulk_return_pool status: ' + newDoc.status };
+    }
+    if (newDoc.status === 'ACTIVE' && unclaimed <= 0) {
+      throw { forbidden: 'ACTIVE bulk_return_pool must have remaining quota' };
+    }
+    if (newDoc.status === 'EXHAUSTED' && unclaimed !== 0) {
+      throw { forbidden: 'EXHAUSTED bulk_return_pool must have zero unclaimed quota' };
+    }
+    if (newDoc.schema_v === 2) {
+      if (!Array.isArray(newDoc.claim_ids)) {
+        throw { forbidden: 'bulk_return_pool schema_v 2 requires claim_ids array' };
+      }
+      var seenClaimIds = {};
+      for (var ci = 0; ci < newDoc.claim_ids.length; ci++) {
+        var cid = newDoc.claim_ids[ci];
+        if (typeof cid !== 'string' || !/^bulk_return_claim:[0-9A-HJKMNP-TV-Z]{26}$/.test(cid)) {
+          throw { forbidden: 'Invalid claim_id format in bulk_return_pool: ' + cid };
+        }
+        if (seenClaimIds[cid]) {
+          throw { forbidden: 'Duplicate claim_id in bulk_return_pool: ' + cid };
+        }
+        seenClaimIds[cid] = true;
+      }
+      if (oldDoc && oldDoc.schema_v === 2 && Array.isArray(oldDoc.claim_ids)) {
+        for (var oci = 0; oci < oldDoc.claim_ids.length; oci++) {
+          if (!seenClaimIds[oldDoc.claim_ids[oci]]) {
+            throw { forbidden: 'Cannot remove claim_ids from bulk_return_pool' };
+          }
+        }
+      }
+    }
+    if (oldDoc) {
+      var oldClaimed = parseDecimal4(oldDoc.claimed_qty);
+      var oldUnclaimed = parseDecimal4(oldDoc.unclaimed_quota);
+      if (isNaN(oldClaimed) || isNaN(oldUnclaimed)) {
+        throw { forbidden: 'Existing bulk_return_pool has invalid quota accounting' };
+      }
+      var validPoolTransitions = {
+        ACTIVE: ['ACTIVE', 'EXHAUSTED', 'CLOSED'],
+        EXHAUSTED: ['EXHAUSTED', 'CLOSED'],
+        CLOSED: ['CLOSED']
+      };
+      var allowedPoolStatuses = validPoolTransitions[oldDoc.status] || [];
+      if (allowedPoolStatuses.indexOf(newDoc.status) === -1) {
+        throw { forbidden: 'Invalid bulk_return_pool status transition ' + oldDoc.status + ' -> ' + newDoc.status };
+      }
+
+      if (claimed < oldClaimed) {
+        throw { forbidden: 'bulk_return_pool claimed_qty cannot decrease' };
+      }
+      if (unclaimed > oldUnclaimed) {
+        throw { forbidden: 'bulk_return_pool unclaimed_quota cannot increase' };
+      }
+
+      if (oldDoc.status === 'CLOSED' &&
+          (claimed !== oldClaimed || unclaimed !== oldUnclaimed)) {
+        throw { forbidden: 'CLOSED bulk_return_pool accounting is immutable' };
+      }
+
+      if (oldDoc.schema_v === 1 && newDoc.schema_v === 2) {
+        if (oldDoc.status !== 'ACTIVE' ||
+            newDoc.claim_ids.length !== 1 ||
+            claimed <= oldClaimed ||
+            unclaimed >= oldUnclaimed) {
+          throw { forbidden: 'bulk_return_pool v1 to v2 upgrade must include the first quota claim and claim_id' };
+        }
+      }
+
+      if (newDoc.status === 'CLOSED') {
+        if (!canClosePool) {
+          throw { forbidden: 'Only warehouse staff, supply coordinator, or shelter manager can close bulk return pool' };
+        }
+        if (!newDoc.closed_at || !newDoc.closed_by) {
+          throw { forbidden: 'CLOSED pool requires close audit fields' };
+        }
+      } else if (!canClaimPool) {
+        throw { forbidden: 'Only frontline distribution staff can claim bulk return pool quota' };
+      }
+    } else {
+      if (!canCreatePool) {
+        throw { forbidden: 'Only warehouse staff, supply coordinator, or shelter manager can create bulk return pool' };
+      }
+      if (newDoc.status !== 'ACTIVE') {
+        throw { forbidden: 'Initial bulk_return_pool status must be ACTIVE' };
+      }
+    }
+  }
+  // 15. CR-134: bulk_return_claim validation (Rule 15)
+  if (newDoc.type === 'bulk_return_claim') {
+    var canManageClaim =
+      isRole('registration_staff') ||
+      isRole('supply_coordinator') ||
+      isRole('shelter_manager') ||
+      isRole('system_admin');
+    if (!canManageClaim) {
+      throw { forbidden: 'Only registration staff, supply coordinator, shelter manager, or system admin can manage bulk return claims' };
+    }
+    if (newDoc.schema_v !== 1) {
+      throw { forbidden: 'Unsupported bulk_return_claim schema version' };
+    }
+    if (!/^bulk_return_claim:[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc._id)) {
+      throw { forbidden: 'bulk_return_claim id must be bulk_return_claim:{ulid}' };
+    }
+    if (typeof newDoc.operation_id !== 'string' || !/^[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc.operation_id)) {
+      throw { forbidden: 'bulk_return_claim requires operation_id ULID' };
+    }
+    if (typeof newDoc.distribution_log_id !== 'string' || !/^distribution_log:[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc.distribution_log_id)) {
+      throw { forbidden: 'bulk_return_claim requires distribution_log_id' };
+    }
+    if (newDoc._id !== 'bulk_return_claim:' + newDoc.distribution_log_id.replace('distribution_log:', '')) {
+      throw { forbidden: 'bulk_return_claim id must derive from distribution_log_id' };
+    }
+    if (typeof newDoc.bulk_pool_id !== 'string' || !/^bulk_return_pool:[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc.bulk_pool_id)) {
+      throw { forbidden: 'bulk_return_claim requires bulk_pool_id' };
+    }
+    if (typeof newDoc.item_id !== 'string' || !newDoc.item_id) {
+      throw { forbidden: 'bulk_return_claim requires item_id' };
+    }
+    var claimedQty = parseDecimal4(newDoc.claimed_qty);
+    if (isNaN(claimedQty) || claimedQty <= 0) {
+      throw { forbidden: 'bulk_return_claim claimed_qty must be a positive decimal string' };
+    }
+    var validStatuses = ['CLAIM_INTENT', 'POOL_CLAIMED', 'COMPLETE', 'ABORTED'];
+    if (validStatuses.indexOf(newDoc.status) === -1) {
+      throw { forbidden: 'Invalid bulk_return_claim status: ' + newDoc.status };
+    }
+
+    if (oldDoc) {
+      var permImmutable = [
+        '_id', 'type', 'schema_v', 'shelter_code', 'distribution_log_id', 'item_id', 'created_at', 'created_by'
+      ];
+      for (var pi = 0; pi < permImmutable.length; pi++) {
+        var piName = permImmutable[pi];
+        if (newDoc[piName] !== oldDoc[piName]) {
+          throw { forbidden: 'bulk_return_claim.' + piName + ' is permanently immutable' };
+        }
+      }
+
+      var oldStatus = oldDoc.status;
+      var newStatus = newDoc.status;
+
+      if (oldStatus === newStatus) {
+        if (newDoc.operation_id !== oldDoc.operation_id ||
+            newDoc.bulk_pool_id !== oldDoc.bulk_pool_id ||
+            newDoc.claimed_qty !== oldDoc.claimed_qty) {
+          throw { forbidden: 'Attempt-scoped fields cannot change within the same status' };
+        }
+      } else {
+        var validClaimTransitions = {
+          CLAIM_INTENT: ['POOL_CLAIMED', 'ABORTED'],
+          POOL_CLAIMED: ['COMPLETE'],
+          COMPLETE: [],
+          ABORTED: ['CLAIM_INTENT']
+        };
+        var allowedNext = validClaimTransitions[oldStatus] || [];
+        if (allowedNext.indexOf(newStatus) === -1) {
+          throw { forbidden: 'Invalid bulk_return_claim transition from ' + oldStatus + ' to ' + newStatus };
+        }
+
+        if (oldStatus === 'ABORTED' && newStatus === 'CLAIM_INTENT') {
+          // Allowed: new attempt resets operation_id, bulk_pool_id, claimed_qty, notes, updated_at
+        } else {
+          if (newDoc.operation_id !== oldDoc.operation_id) {
+            throw { forbidden: 'bulk_return_claim.operation_id is immutable during transition ' + oldStatus + ' to ' + newStatus };
+          }
+          if (newDoc.bulk_pool_id !== oldDoc.bulk_pool_id) {
+            throw { forbidden: 'bulk_return_claim.bulk_pool_id is immutable during transition ' + oldStatus + ' to ' + newStatus };
+          }
+          if (newDoc.claimed_qty !== oldDoc.claimed_qty) {
+            throw { forbidden: 'bulk_return_claim.claimed_qty is immutable during transition ' + oldStatus + ' to ' + newStatus };
+          }
+        }
+      }
+    } else {
+      if (newDoc.status !== 'CLAIM_INTENT') {
+        throw { forbidden: 'Initial bulk_return_claim status must be CLAIM_INTENT' };
+      }
+    }
+  }
+  // item_master base_unit invariant guard
+  function isUnitCode(value) {
+    return typeof value === 'string' && /^[a-z][a-z0-9_]{0,15}$/.test(value);
+  }
+  function isLegacyUnitLabel(value) {
+    return typeof value === 'string' && [
+      'ชิ้น', 'หน่วย', 'อัน', 'ตัว', 'ชุด', 'คู่', 'กล่อง', 'แพ็ค', 'ถุง', 'ซอง',
+      'ขวด', 'กระป๋อง', 'เม็ด', 'ก้อน', 'หลอด', 'ม้วน', 'แผ่น', 'ผืน', 'ห่อ', 'ฟอง',
+      'ผล', 'แกลลอน', 'ถัง', 'กรัม', 'กิโลกรัม', 'กก', 'กก.', 'มิลลิลิตร', 'ลิตร', 'เมตร'
+    ].indexOf(value.trim()) !== -1;
+  }
+  function validateUnitField(value, field) {
+    if (value && !isUnitCode(value)) {
+      throw { forbidden: field + ' must match ^[a-z][a-z0-9_]{0,15}$' };
+    }
+  }
+  if (newDoc.type === 'item_master') {
+    var isLegacyBaseUnitUpdate = oldDoc && oldDoc.type === 'item_master' &&
+      oldDoc.base_unit === newDoc.base_unit && isLegacyUnitLabel(newDoc.base_unit);
+    if (newDoc.base_unit && !/^[a-z][a-z0-9_]{0,15}$/.test(newDoc.base_unit) && !isLegacyBaseUnitUpdate) {
+      throw { forbidden: 'base_unit must match ^[a-z][a-z0-9_]{0,15}$' };
+    }
+    validateUnitField(newDoc.default_inventory_uom, 'default_inventory_uom');
+    validateUnitField(newDoc.default_issue_uom, 'default_issue_uom');
+    if (Array.isArray(newDoc.conversions)) {
+      for (var conversionIndex = 0; conversionIndex < newDoc.conversions.length; conversionIndex++) {
+        validateUnitField(newDoc.conversions[conversionIndex].uom_name, 'conversions.uom_name');
+      }
+    }
+  }
+  if (newDoc.type === 'recipe' && Array.isArray(newDoc.ingredients)) {
+    for (var ingredientIndex = 0; ingredientIndex < newDoc.ingredients.length; ingredientIndex++) {
+      validateUnitField(newDoc.ingredients[ingredientIndex].uom, 'ingredients.uom');
+    }
+  }
+  if (newDoc.type === 'donation_campaign' && Array.isArray(newDoc.needs)) {
+    for (var needIndex = 0; needIndex < newDoc.needs.length; needIndex++) {
+      validateUnitField(newDoc.needs[needIndex].unit, 'needs.unit');
     }
   }
 }`;

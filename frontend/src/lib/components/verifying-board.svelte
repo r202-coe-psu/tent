@@ -1,7 +1,13 @@
 <script lang="ts">
 	import PackageCheck from '@lucide/svelte/icons/package-check';
 	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
-	import type { PendingDonationRow } from '$lib/features/donations';
+	import {
+		donationActionRef,
+		donationRefLabel,
+		type PendingDonationRow
+	} from '$lib/features/donations';
+	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 
 	let {
 		requests = [],
@@ -12,11 +18,16 @@
 		loading?: boolean;
 		onVerify: (bookingRef: string) => void;
 	} = $props();
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
 
 	function itemsSummary(req: PendingDonationRow): string {
 		if (req.items.length === 0) return '—';
 		return req.items
-			.map((it) => `${it.free_text ?? it.item_id ?? 'ไม่ระบุ'} ${it.qty} ${it.unit}`)
+			.map(
+				(it) =>
+					`${it.free_text ?? it.item_id ?? 'ไม่ระบุ'} ${it.qty} ${formatUnit(it.unit, units, langState.current)}`
+			)
 			.join(', ');
 	}
 </script>
@@ -39,7 +50,7 @@
 		{#if loading}
 			<p class="px-6 py-12 text-center text-xs text-muted-foreground">กำลังโหลดข้อมูล...</p>
 		{:else}
-			{#each requests as req (req.booking_ref)}
+			{#each requests as req (donationActionRef(req) ?? req.declared_at)}
 				<div class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
 					<div>
 						<div class="flex flex-wrap items-center gap-2">
@@ -49,13 +60,16 @@
 							<span
 								class="rounded border border-border bg-muted/50 px-2 py-0.5 text-2xs font-medium text-muted-foreground"
 							>
-								{req.booking_ref}
+								{donationRefLabel(req)}
 							</span>
 						</div>
 						<p class="mt-1 text-2xs text-muted-foreground">{itemsSummary(req)}</p>
 					</div>
 					<button
-						onclick={() => req.booking_ref && onVerify(req.booking_ref)}
+						onclick={() => {
+							const ref = donationActionRef(req);
+							if (ref) onVerify(ref);
+						}}
 						class="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground shadow-xs transition-colors hover:bg-primary/90"
 					>
 						<ClipboardCheck class="h-3.5 w-3.5" />

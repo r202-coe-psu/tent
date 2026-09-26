@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Component, Snippet } from 'svelte';
 
-	type Accent = 'brand' | 'neutral' | 'accent-purple' | 'muted' | 'danger';
+	type Accent = 'brand' | 'neutral' | 'accent-purple' | 'muted' | 'danger' | 'success';
 
 	interface Props {
 		icon: Component<{ class?: string; size?: number }>;
@@ -9,6 +9,7 @@
 		description: string;
 		accent?: Accent;
 		badge?: string;
+		badgeVariant?: 'primary' | 'success' | 'neutral';
 		actions?: Snippet;
 		href?: string;
 		disabled?: boolean;
@@ -21,6 +22,7 @@
 		description,
 		accent = 'neutral',
 		badge,
+		badgeVariant,
 		actions,
 		href,
 		disabled = false,
@@ -33,8 +35,17 @@
 			neutral: 'bg-muted text-muted-foreground',
 			'accent-purple': 'bg-accent-purple-muted text-accent-purple',
 			muted: 'bg-muted text-foreground',
-			danger: 'bg-danger-muted text-danger'
+			danger: 'bg-danger-muted text-danger',
+			success: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400'
 		}[accent]
+	);
+
+	const badgeClass = $derived(
+		{
+			primary: 'bg-primary-muted text-primary-strong',
+			success: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300',
+			neutral: 'bg-muted text-muted-foreground'
+		}[badgeVariant ?? (accent === 'success' ? 'success' : 'primary')]
 	);
 
 	const cardBorderClass = $derived(
@@ -45,29 +56,31 @@
 {#if href && !disabled}
 	<a
 		{href}
-		class="group relative flex min-h-[320px] flex-col items-start rounded-2xl {cardBorderClass} cursor-pointer bg-card p-6 pt-10 shadow-[0_4px_20px_rgba(0,0,0,0.03)] transition-all hover:-translate-y-1 hover:shadow-md {className}"
+		class="group relative flex min-h-[280px] w-full min-w-0 flex-col items-start rounded-2xl {cardBorderClass} cursor-pointer bg-card p-6 pt-10 shadow-[0_4px_20px_rgba(0,0,0,0.03)] transition-all hover:-translate-y-1 hover:shadow-md xl:min-h-[320px] {className}"
 	>
 		{#if badge}
 			<div
-				class="absolute top-0 right-0 rounded-tr-2xl rounded-bl-xl bg-primary-muted px-3 py-1 text-2xs font-bold text-primary-strong"
+				class="absolute top-0 right-0 rounded-tr-2xl rounded-bl-xl {badgeClass} px-3 py-1 text-2xs font-bold"
 			>
 				{badge}
 			</div>
 		{/if}
 
 		<div
-			class="mt-2 mb-6 flex h-12 w-12 items-center justify-center rounded-xl text-xl {iconWrapperClass} transition-colors group-hover:bg-primary-muted group-hover:text-primary"
+			class="mt-2 mb-6 flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-xl {iconWrapperClass} transition-colors group-hover:bg-primary-muted group-hover:text-primary"
 		>
 			<Icon class="size-5" />
 		</div>
 
-		<h2 class="mb-4 text-xl font-bold text-foreground">{title}</h2>
-		<p class="flex-1 text-sm leading-relaxed text-muted-foreground">
+		<h2 class="mb-4 min-w-0 text-lg font-bold text-balance break-words text-foreground xl:text-xl">
+			{title}
+		</h2>
+		<p class="min-w-0 flex-1 text-sm leading-relaxed break-words text-muted-foreground">
 			{description}
 		</p>
 
 		{#if actions}
-			<div class="mt-6 flex items-center gap-2">
+			<div class="mt-6 flex max-w-full min-w-0 items-center gap-2">
 				{@render actions()}
 			</div>
 		{/if}
@@ -75,31 +88,33 @@
 {:else}
 	<div
 		aria-disabled={disabled || undefined}
-		class="group relative flex min-h-[320px] flex-col items-start rounded-2xl {cardBorderClass} bg-card p-6 pt-10 shadow-[0_4px_20px_rgba(0,0,0,0.03)] transition-all {disabled
+		class="group relative flex min-h-[280px] w-full min-w-0 flex-col items-start rounded-2xl {cardBorderClass} bg-card p-6 pt-10 shadow-[0_4px_20px_rgba(0,0,0,0.03)] transition-all xl:min-h-[320px] {disabled
 			? 'cursor-not-allowed opacity-60'
 			: ''} {className}"
 	>
 		{#if badge}
 			<div
-				class="absolute top-0 right-0 rounded-tr-2xl rounded-bl-xl bg-primary-muted px-3 py-1 text-2xs font-bold text-primary-strong"
+				class="absolute top-0 right-0 rounded-tr-2xl rounded-bl-xl {badgeClass} px-3 py-1 text-2xs font-bold"
 			>
 				{badge}
 			</div>
 		{/if}
 
 		<div
-			class="mt-2 mb-6 flex h-12 w-12 items-center justify-center rounded-xl text-xl {iconWrapperClass} transition-colors"
+			class="mt-2 mb-6 flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-xl {iconWrapperClass} transition-colors"
 		>
 			<Icon class="size-5" />
 		</div>
 
-		<h2 class="mb-4 text-xl font-bold text-foreground">{title}</h2>
-		<p class="flex-1 text-sm leading-relaxed text-muted-foreground">
+		<h2 class="mb-4 min-w-0 text-lg font-bold text-balance break-words text-foreground xl:text-xl">
+			{title}
+		</h2>
+		<p class="min-w-0 flex-1 text-sm leading-relaxed break-words text-muted-foreground">
 			{description}
 		</p>
 
 		{#if actions}
-			<div class="mt-6 flex items-center gap-2">
+			<div class="mt-6 flex max-w-full min-w-0 items-center gap-2">
 				{@render actions()}
 			</div>
 		{/if}

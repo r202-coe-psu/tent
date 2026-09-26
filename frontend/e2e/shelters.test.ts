@@ -1,20 +1,20 @@
 /**
- * E2E Tests: Shelter Form (create/edit wizard) — UI Flow & Route Guard
+ * E2E Tests: Shelter Form (create/edit single-page) — UI Flow & Route Guard
  *
  * Strategy: real BFF for auth guard behavior; the shelter provisioning
  * endpoints (`POST`/`PATCH /api/back-office/shelter[/:code]`) are mocked —
  * unlike users, shelters have no delete endpoint, so a real `POST` here would
  * permanently provision a CouchDB database with no way to clean it up.
- * Mocking keeps this a repeatable test of the wizard's own behavior (step
- * navigation, client validation, submit payload, edit prefill) without
- * depending on or mutating real shelter data.
+ * Mocking keeps this a repeatable test of the form's own behavior (single-page
+ * sections, client validation, submit payload, edit prefill, food points)
+ * without depending on or mutating real shelter data.
  *
  * Coverage:
  * [Guard]  non-admin is redirected away from the create page
  * [Create] client validation blocks submit when required fields are empty
- * [Create] SA can fill the wizard across steps and submit a new shelter
+ * [Create] SA can fill the form and submit a new shelter (incl. food point)
  * [Edit]   form pre-fills from the loaded shelter and PATCHes on save
- * [Nav]    step sidebar navigation enables/disables prev/next correctly
+ * [Nav]    all sections visible; sidebar click scrolls to section
  */
 
 import { test, expect, type Page } from '@playwright/test';
@@ -100,7 +100,7 @@ async function mockShelterDetail(
 		const rows = [
 			{
 				id: `shelter:${code}`,
-				doc: { _id: `shelter:${code}`, type: 'shelter', schema_v: 4, code, ...shelter }
+				doc: { _id: `shelter:${code}`, type: 'shelter', schema_v: 6, code, ...shelter }
 			}
 		];
 		await route.fulfill({
@@ -128,7 +128,20 @@ async function mockShelterDetail(
 
 const BASIC_INFO_HEADING = 'ข้อมูลพื้นฐานและที่ตั้ง';
 const CAPACITY_HEADING = 'ข้อมูลความจุเชิงพื้นที่';
-const LAST_STEP_HEADING = 'นโยบายยานพาหนะ';
+const FOOD_HEADING = 'จุดแจกอาหาร';
+const PARKING_HEADING = 'นโยบายยานพาหนะ';
+
+const SECTION_HEADINGS = [
+	BASIC_INFO_HEADING,
+	CAPACITY_HEADING,
+	'การจัดการโซนและสิ่งอำนวยความสะดวก',
+	FOOD_HEADING,
+	'สถานะสาธารณูปโภคพื้นฐาน',
+	'ข้อมูลการประเมินความเสี่ยงและโครงสร้าง',
+	'นโยบายการรับผู้อพยพและกลุ่มเปราะบาง',
+	'นโยบายทรัพย์สินมีค่า / สัมภาระ',
+	'นโยบายยานพาหนะและการจอดรถ'
+];
 
 test.describe('Shelter Form — Access Guard', () => {
 	test('a non-admin (shelter manager) is redirected away from the create page', async ({
@@ -143,7 +156,7 @@ test.describe('Shelter Form — Access Guard', () => {
 });
 
 test.describe('Shelter Form — Create', () => {
-	test('blocks submit and shows which fields/steps need fixing when required fields are empty', async ({
+	test('blocks submit and shows which fields/sections need fixing when required fields are empty', async ({
 		page
 	}) => {
 		const { wasCalled } = await mockCreate(page, { ok: true, code: 'SH900' });
@@ -158,31 +171,34 @@ test.describe('Shelter Form — Create', () => {
 		await expect(page.getByRole('alert')).toContainText('ยังมีข้อมูลที่ต้องกรอกหรือแก้ไข');
 		await expect(page.getByRole('alert')).toContainText('ชื่อศูนย์พักพิงต้องไม่ว่าง');
 		await expect(page.getByRole('alert')).toContainText(/ความจุ|กรุณาระบุความจุ/);
-		// Jumps to the first invalid step and surfaces the field error inline.
 		await expect(page.getByRole('heading', { name: new RegExp(BASIC_INFO_HEADING) })).toBeVisible();
 		await expect(page.getByText('ชื่อศูนย์พักพิงต้องไม่ว่าง')).toBeVisible();
 		expect(wasCalled()).toBe(false);
 		await expect(page).toHaveURL(/\/back-office\/shelters\/create/);
 	});
 
-	test('SA fills the wizard across steps and creates a new shelter', async ({ page }) => {
+	test('SA fills the single-page form and creates a new shelter with a food point', async ({
+		page
+	}) => {
 		const { getBody } = await mockCreate(page, { ok: true, code: 'SH901' });
 
 		await injectSession(page, SA, sessions[SA.name]);
 		await page.goto('http://localhost:4173/back-office/shelters/create');
 
-		// Step 1 — basic info: shelter name.
 		await expect(page.getByRole('heading', { name: new RegExp(BASIC_INFO_HEADING) })).toBeVisible();
 		await page.getByLabel('ชื่อศูนย์พักพิง').fill('ศูนย์พักพิงทดสอบ E2E');
 
-		// Jump to step 2 (capacity) via the sidebar nav.
 		await page.getByRole('button', { name: CAPACITY_HEADING }).click();
-		await expect(page.getByRole('heading', { name: new RegExp(CAPACITY_HEADING) })).toBeVisible();
+		await expect(page.getByLabel('ความจุสูงสุด')).toBeVisible();
 		await page.getByLabel('ความจุสูงสุด').fill('120');
+
+		await page.getByRole('button', { name: FOOD_HEADING }).click();
+		await expect(page.getByRole('heading', { name: FOOD_HEADING })).toBeVisible();
+		await page.getByRole('button', { name: /เพิ่มจุดแจกอาหาร/ }).click();
+		await page.getByLabel('ชื่อจุดแจกอาหาร').fill('จุดแจกหน้าโรงครัว');
 
 		await page.getByRole('button', { name: 'บันทึกข้อมูล' }).click();
 
-		// List route immediately redirects into edit for the scoped shelter.
 		await page.waitForURL(
 			(url) =>
 				url.pathname === '/back-office/shelters' ||
@@ -190,9 +206,15 @@ test.describe('Shelter Form — Create', () => {
 			{ timeout: 8000 }
 		);
 
-		const body = getBody() as { name: string; capacity: number };
+		const body = getBody() as {
+			name: string;
+			capacity: number;
+			food_distribution_points: { name: string }[];
+		};
 		expect(body.name).toBe('ศูนย์พักพิงทดสอบ E2E');
 		expect(body.capacity).toBe(120);
+		expect(body.food_distribution_points).toHaveLength(1);
+		expect(body.food_distribution_points[0].name).toBe('จุดแจกหน้าโรงครัว');
 	});
 });
 
@@ -211,7 +233,8 @@ test.describe('Shelter Form — Edit', () => {
 			common_areas: { sub_storage: [] },
 			utilities: { communications: [] },
 			risk: {},
-			zones: []
+			zones: [],
+			food_distribution_points: []
 		});
 
 		await injectSession(page, SA, sessions[SA.name]);
@@ -226,7 +249,6 @@ test.describe('Shelter Form — Edit', () => {
 
 		await page.getByRole('button', { name: 'บันทึกข้อมูล' }).click();
 
-		// List route immediately redirects into edit for the scoped shelter.
 		await page.waitForURL(
 			(url) =>
 				url.pathname === '/back-office/shelters' ||
@@ -240,22 +262,24 @@ test.describe('Shelter Form — Edit', () => {
 	});
 });
 
-test.describe('Shelter Form — Step Navigation', () => {
-	test('prev is disabled on the first step and enabled after moving forward; next hides on the last step', async ({
+test.describe('Shelter Form — Single-page Navigation', () => {
+	test('all sections are visible on one page; nav has no prev/next; sidebar scroll works', async ({
 		page
 	}) => {
 		await injectSession(page, SA, sessions[SA.name]);
 		await page.goto('http://localhost:4173/back-office/shelters/create');
 
-		await expect(page.getByRole('button', { name: 'ก่อนหน้า' })).toBeDisabled();
-		await expect(page.getByRole('button', { name: 'ถัดไป' })).toBeVisible();
+		await expect(page.getByRole('button', { name: 'ก่อนหน้า' })).toHaveCount(0);
+		await expect(page.getByRole('button', { name: 'ถัดไป' })).toHaveCount(0);
 
-		await page.getByRole('button', { name: LAST_STEP_HEADING }).click();
-		await expect(page.getByRole('heading', { name: new RegExp(LAST_STEP_HEADING) })).toBeVisible();
-		await expect(page.getByRole('button', { name: 'ถัดไป' })).not.toBeVisible();
-		await expect(page.getByRole('button', { name: 'ก่อนหน้า' })).toBeEnabled();
+		for (const heading of SECTION_HEADINGS) {
+			await expect(page.getByRole('heading', { name: new RegExp(heading) })).toBeVisible();
+		}
 
-		await page.getByRole('button', { name: 'ก่อนหน้า' }).click();
-		await expect(page.getByRole('heading', { name: /นโยบายทรัพย์สิน/ })).toBeVisible();
+		await page.getByRole('button', { name: PARKING_HEADING }).click();
+		await expect(page.locator('#parking-policy')).toBeInViewport();
+
+		await page.getByRole('button', { name: FOOD_HEADING }).click();
+		await expect(page.locator('#food-distribution')).toBeInViewport();
 	});
 });

@@ -9,7 +9,17 @@
  * Secondary-key lookups (by phone, status, …) graduate to Mango `find()` once
  * indexes land (schema.md §6) — a later step.
  */
-import { allDocsByType, deleteDoc, findDocs, getDoc, putDoc } from './couch-db';
+import {
+	allDocsByType,
+	allDocsByTypePage,
+	countDocsByType,
+	deleteDoc,
+	findDocs,
+	getDoc,
+	putDoc,
+	bulkDocs
+} from './couch-db';
+import { clampPage } from './paginate';
 
 export interface PaginatedResult<T> {
 	items: T[];
@@ -27,6 +37,10 @@ export interface Repository {
 		type: string,
 		guard: (d: unknown) => d is T
 	): Promise<T[]>;
+	/**
+	 * Page within a `{type}:` prefix using limited `_all_docs` (docs for the page only).
+	 * Total comes from an ID-only prefix count — no secondary index required.
+	 */
 	pageByType<T extends { _id: string; type: string }>(
 		type: string,
 		guard: (d: unknown) => d is T,
@@ -34,6 +48,7 @@ export interface Repository {
 		pageSize: number
 	): Promise<PaginatedResult<T>>;
 	find<T>(query: { selector: Record<string, unknown>; [key: string]: unknown }): Promise<T[]>;
+	bulkDocs<T extends { _id: string; _rev?: string }>(docs: T[]): Promise<T[]>;
 }
 
 /** Build a {@link Repository} bound to one remote CouchDB database. */
@@ -64,12 +79,14 @@ export function createRemoteRepository(dbName: string): Repository {
 			page: number,
 			pageSize: number
 		): Promise<PaginatedResult<T>> {
-			const matched = await allDocsByType(dbName, type, guard);
-			const total = matched.length;
+			const total = await countDocsByType(dbName, type);
 			const totalPages = Math.max(1, Math.ceil(total / pageSize));
-			const safePage = Math.max(1, Math.min(page, totalPages));
-			const start = (safePage - 1) * pageSize;
-			const items = matched.slice(start, start + pageSize);
+			const safePage = clampPage(page, totalPages);
+			const skip = (safePage - 1) * pageSize;
+			const { items } = await allDocsByTypePage(dbName, type, guard, {
+				limit: pageSize,
+				skip
+			});
 			return { items, total, page: safePage, pageSize, totalPages };
 		},
 
@@ -78,6 +95,11 @@ export function createRemoteRepository(dbName: string): Repository {
 			[key: string]: unknown;
 		}): Promise<T[]> {
 			return findDocs<T>(dbName, query);
+		},
+
+		async bulkDocs<T extends { _id: string; _rev?: string }>(docs: T[]): Promise<T[]> {
+			if (docs.length === 0) return [];
+			return bulkDocs<T>(dbName, docs);
 		}
 	};
 }

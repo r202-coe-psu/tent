@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { QueryClient } from '@tanstack/svelte-query';
-import { CHANGES_FEED_START_DELAY_MS, startStaffCouchSync } from './staff-couch-sync';
+import {
+	CHANGES_FEED_START_DELAY_MS,
+	invalidateQueriesAfterReauth,
+	startStaffCouchSync
+} from './staff-couch-sync';
 
 const probe = vi.fn();
 const startChangesSubscriberMock = vi.fn((dbNames: string[]) => {
@@ -26,10 +30,6 @@ vi.mock('./shelter', () => ({
 vi.mock('$lib/features/shelters', () => ({
 	SHELTER_REGISTRY_DB: 'registry',
 	startSheltersLiveQuery: vi.fn(() => ({ stop: vi.fn() }))
-}));
-
-vi.mock('$lib/features/shelter-import', () => ({
-	startShelterImportLiveQuery: vi.fn(() => ({ stop: vi.fn() }))
 }));
 
 vi.mock('$lib/features/supply', () => ({
@@ -128,5 +128,17 @@ describe('startStaffCouchSync', () => {
 		handle.stop();
 
 		expect(stopSubscriber).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe('invalidateQueriesAfterReauth', () => {
+	it('invalidates all queries so errored fetches retry after login', () => {
+		const invalidateQueries = vi.fn();
+		const client = { invalidateQueries } as unknown as QueryClient;
+
+		invalidateQueriesAfterReauth(client);
+
+		expect(invalidateQueries).toHaveBeenCalledTimes(1);
+		expect(invalidateQueries).toHaveBeenCalledWith();
 	});
 });

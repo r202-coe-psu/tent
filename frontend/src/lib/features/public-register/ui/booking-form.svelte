@@ -7,7 +7,6 @@
 	import { onMount, untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { env } from '$env/dynamic/public';
-	import { Button } from '$lib/components/ui/button';
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Label } from '$lib/components/ui/label';
 	import * as Select from '$lib/components/ui/select/index.js';
@@ -17,47 +16,101 @@
 		useCreateUnassignedRegistration,
 		useShelterPolicy
 	} from '../application/queries';
+	import type { ShelterSummary } from '$lib/features/shelters';
 	import type { BookingTicket } from '../application/booking-store.svelte';
-	import { getLatestStoredTicket, saveTicketToStorage } from '../data/ticket-storage';
+	import { saveTicketToStorage } from '../data/ticket-storage';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
 	import { buildDisclaimerGroups } from '$lib/features/people/domain/disclaimer';
-	import { UNASSIGNED_SHELTER_CODE, isCaptchaKeyConfigured } from '../domain/booking';
-	import type { ShelterSummary } from '$lib/features/shelters/index.js';
+	import { UNASSIGNED_SHELTER_CODE } from '../domain/booking';
 	import { UnifiedRegistrationForm, type UnifiedRegistrationInput } from '$lib/features/people';
+	import { fetchRecaptchaEnabled } from '$lib/api/recaptcha-status';
 
 	interface Props {
 		shelters: (PublicShelterCardModel & { available: number | null })[];
 		lockedShelterCode?: string;
+		initialShelterCode?: string;
 		onbooked: (ticket: BookingTicket) => void;
-		onviewexistingticket?: () => void;
 	}
 
-	let { shelters, lockedShelterCode = '', onbooked, onviewexistingticket }: Props = $props();
+	let { shelters, lockedShelterCode = '', initialShelterCode = '', onbooked }: Props = $props();
 
 	let t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
 
 	const createBooking = useCreateBooking();
 	const createUnassignedRegistration = useCreateUnassignedRegistration();
 	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
-	const captchaEnabled = isCaptchaKeyConfigured(siteKey);
+	let captchaEnabled = $state(false);
 
-	let selectedShelterCode = $state(untrack(() => lockedShelterCode));
+	function resolveInitialShelter(): string {
+		if (lockedShelterCode) return lockedShelterCode;
+		if (initialShelterCode) return initialShelterCode;
+		if (typeof sessionStorage !== 'undefined') {
+			try {
+				const stored = sessionStorage.getItem('pre_register_shelter');
+				if (stored) return stored;
+			} catch {
+				// ignore storage exceptions
+				return '';
+			}
+		}
+		return UNASSIGNED_SHELTER_CODE;
+	}
+
+	let selectedShelterCode = $state(untrack(() => resolveInitialShelter()));
 	let disclaimerAcknowledged = $state(false);
 
+	function updateShelterSelection(code: string) {
+		selectedShelterCode = code;
+		disclaimerAcknowledged = false;
+		if (typeof window !== 'undefined') {
+			const url = new URL(window.location.href);
+			if (code) {
+				url.searchParams.set('shelter', code);
+			} else {
+				url.searchParams.delete('shelter');
+			}
+			window.history.replaceState(window.history.state, '', url.pathname + url.search);
+			try {
+				if (code) {
+					sessionStorage.setItem('pre_register_shelter', code);
+				} else {
+					sessionStorage.removeItem('pre_register_shelter');
+				}
+			} catch {
+				// ignore storage exceptions
+			}
+		}
+	}
+
 	const isUnassigned = $derived(selectedShelterCode === UNASSIGNED_SHELTER_CODE);
-	const bookable = $derived(shelters.filter((s) => s.status !== 'CLOSED'));
+	const bookable = $derived(
+		shelters.filter((s) => s.status !== 'CLOSED' && s.accepts_pre_registration === true)
+	);
 	const selected = $derived(shelters.find((s) => s.code === selectedShelterCode) ?? null);
-	const hasShelter = $derived(selected !== null);
+	const selectedIsBookable = $derived(
+		isUnassigned || bookable.some((s) => s.code === selectedShelterCode)
+	);
+	const hasShelter = $derived(selected !== null && selectedIsBookable);
 	const isShelterOrQueueChosen = $derived(hasShelter || isUnassigned);
+	/** Unassigned flow: confirm stays disabled until disclaimer consent is checked. */
+	const submitDisabled = $derived(isUnassigned && !disclaimerAcknowledged);
 
 	const shelterPolicyQuery = useShelterPolicy(() => selected?.code ?? '');
 	const shelterPolicy = $derived(shelterPolicyQuery.data);
 
-	let latestExistingTicket = $state<BookingTicket | null>(null);
 	onMount(() => {
-		latestExistingTicket = getLatestStoredTicket();
+		void fetchRecaptchaEnabled().then((enabled) => {
+			captchaEnabled = enabled;
+		});
+		if (selectedShelterCode && typeof window !== 'undefined') {
+			const url = new URL(window.location.href);
+			if (url.searchParams.get('shelter') !== selectedShelterCode) {
+				url.searchParams.set('shelter', selectedShelterCode);
+				window.history.replaceState(window.history.state, '', url.pathname + url.search);
+			}
+		}
 	});
 
 	function capacityLabel(s: { capacity: number; available: number | null }): string {
@@ -70,14 +123,19 @@
 		const injected = (window as unknown as { __captchaToken?: string }).__captchaToken || '';
 		if (injected) return injected;
 		if (!captchaEnabled) return '';
-		const win = window as unknown as {
-			grecaptcha?: { execute: (key: string, opts: { action: string }) => Promise<string> };
-		};
+		const win = window;
 		if (win.grecaptcha) {
 			try {
 				const action = isUnassigned ? 'unassigned_register' : 'register';
-				return await win.grecaptcha.execute(siteKey, { action });
+				if (win.grecaptcha.enterprise) {
+					await new Promise<void>((resolve) => win.grecaptcha!.enterprise!.ready(() => resolve()));
+					return await win.grecaptcha.enterprise.execute(siteKey, { action });
+				}
+				if (win.grecaptcha.execute) {
+					return await win.grecaptcha.execute(siteKey, { action });
+				}
 			} catch {
+				// ignore reCAPTCHA execution failure
 				return null;
 			}
 		}
@@ -87,6 +145,11 @@
 	let isSubmitting = $state(false);
 
 	async function handleUnifiedSubmit(unifiedInput: UnifiedRegistrationInput) {
+		if (!isUnassigned && !selectedIsBookable) {
+			const err = 'ศูนย์นี้ยังไม่เปิดรับลงทะเบียนล่วงหน้าจากหน้าสาธารณะ';
+			toast.error(err);
+			throw new Error(err);
+		}
 		if (isUnassigned) {
 			if (!disclaimerAcknowledged) {
 				const err = t.unassignedDisclaimerRequired;
@@ -109,8 +172,10 @@
 
 		isSubmitting = true;
 		try {
+			const enabled = await fetchRecaptchaEnabled();
+			captchaEnabled = enabled;
 			const token = await captchaToken();
-			if (token === null) {
+			if (enabled && !token) {
 				toast.error(t.recaptchaError);
 				throw new Error(t.recaptchaError);
 			}
@@ -138,6 +203,13 @@
 					member_count: res.members?.length ?? unifiedInput.members.length
 				};
 				saveTicketToStorage(ticket);
+				if (typeof sessionStorage !== 'undefined') {
+					try {
+						sessionStorage.removeItem('pre_register_shelter');
+					} catch {
+						// ignore storage exceptions
+					}
+				}
 				onbooked(ticket);
 				return;
 			}
@@ -162,6 +234,13 @@
 				member_count: unifiedInput.members.length
 			};
 			saveTicketToStorage(ticket);
+			if (typeof sessionStorage !== 'undefined') {
+				try {
+					sessionStorage.removeItem('pre_register_shelter');
+				} catch {
+					// ignore storage exceptions
+				}
+			}
 			onbooked(ticket);
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : t.bookingErrorFallback;
@@ -175,7 +254,11 @@
 
 <svelte:head>
 	{#if captchaEnabled}
-		<script src="https://www.google.com/recaptcha/api.js?render={siteKey}" async defer></script>
+		<script
+			src="https://www.google.com/recaptcha/enterprise.js?render={siteKey}"
+			async
+			defer
+		></script>
 	{/if}
 </svelte:head>
 
@@ -194,34 +277,6 @@
 		</div>
 	</div>
 
-	<!-- Existing ticket notice (if any) -->
-	{#if latestExistingTicket && onviewexistingticket}
-		<div
-			class="flex flex-col gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 shadow-2xs sm:flex-row sm:items-center sm:justify-between"
-		>
-			<div class="flex items-center gap-3">
-				<QrCode class="h-5 w-5 shrink-0 text-emerald-600" />
-				<div>
-					<p class="text-sm font-bold text-foreground">
-						มีตั๋วลงทะเบียนเดิมในอุปกรณ์นี้ ({latestExistingTicket.code})
-					</p>
-					<p class="text-xs text-muted-foreground">
-						{latestExistingTicket.shelter_name || latestExistingTicket.shelter_code} · {latestExistingTicket.first_name}
-					</p>
-				</div>
-			</div>
-			<Button
-				type="button"
-				variant="outline"
-				size="sm"
-				class="w-full font-semibold sm:w-auto"
-				onclick={onviewexistingticket}
-			>
-				เปิดดูตั๋วเดิม
-			</Button>
-		</div>
-	{/if}
-
 	<!-- ── 1. ศูนย์พักพิงและผู้ติดต่อหลัก ───────────────────────────────── -->
 	<section class="space-y-5 rounded-2xl border border-border/60 bg-card p-5 shadow-2xs sm:p-6">
 		<div class="flex items-center gap-2.5 border-b border-border/60 pb-3">
@@ -231,10 +286,12 @@
 
 		<div class="space-y-2">
 			<div class="flex items-center justify-between gap-2">
-				<Label>{t.shelterLabel} <span class="text-destructive">*</span></Label>
+				<Label class="text-xs font-semibold text-foreground">
+					{t.shelterLabel} <span class="text-destructive">*</span>
+				</Label>
 				{#if selected && selected.capacity > 0}
 					<span
-						class="rounded-full border border-success/30 bg-success-muted/40 px-2 py-0.5 text-2xs font-bold text-success"
+						class="rounded-full border border-success/30 bg-success-muted/40 px-2 py-0.5 text-2xs font-semibold text-success"
 					>
 						{capacityLabel(selected)}
 					</span>
@@ -243,13 +300,10 @@
 			<Select.Root
 				type="single"
 				value={selectedShelterCode}
-				onValueChange={(v) => {
-					selectedShelterCode = v;
-					disclaimerAcknowledged = false;
-				}}
+				onValueChange={updateShelterSelection}
 				disabled={Boolean(lockedShelterCode)}
 			>
-				<Select.Trigger class="!h-11 w-full font-semibold">
+				<Select.Trigger class="!h-10 w-full text-sm font-semibold">
 					{isUnassigned ? '📍 ไม่ระบุศูนย์พักพิง' : (selected?.name ?? t.selectShelterPlaceholder)}
 				</Select.Trigger>
 				<Select.Content>
@@ -291,12 +345,17 @@
 					<div>
 						<p class="font-bold text-primary">กรณีไม่ระบุศูนย์พักพิง</p>
 						<p class="mt-0.5 text-muted-foreground">
-							ท่านสามารถลงทะเบียนข้อมูลล่วงหน้าไว้ในคิวกลางได้ เมื่อเดินทางถึงศูนย์พักพิง
-							แจ้งเบอร์โทรศัพท์หรือแสดง QR รหัสลงทะเบียนนี้ให้เจ้าหน้าที่ลงทะเบียนประจำศูนย์
-							(ยังไม่ใช่ QR ประตูศูนย์ / Station 1 จนกว่าเจ้าหน้าที่จะรับเข้าศูนย์)
+							การลงทะเบียนล่วงหน้า จะไม่การันตีว่าคุณจะได้เข้าพักในศูนย์
 						</p>
 					</div>
 				</div>
+			{:else if selected && !selectedIsBookable}
+				<p
+					class="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning-muted/40 p-2.5 text-xs text-warning"
+				>
+					<AlertTriangle class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+					<span>ศูนย์นี้ยังไม่เปิดรับลงทะเบียนล่วงหน้าจากหน้าสาธารณะ</span>
+				</p>
 			{:else if selected}
 				<p class="flex items-start gap-1 text-xs text-muted-foreground">
 					<MapPin class="mt-0.5 h-3 w-3 shrink-0" />
@@ -321,9 +380,17 @@
 			channel="public"
 			includeVehiclesAssets={false}
 			pending={isSubmitting}
+			{submitDisabled}
 			enableUnassignedPhoto={isUnassigned}
 			shelterCode={isUnassigned ? '' : selectedShelterCode}
+			shelterName={selected?.name ?? (isUnassigned ? 'ไม่ระบุศูนย์พักพิง' : selectedShelterCode)}
 			onsubmit={handleUnifiedSubmit}
+			onselectshelter={(code, name) => {
+				if (code && selectedShelterCode !== code) {
+					updateShelterSelection(code);
+					toast.success(`เปลี่ยนศูนย์พักพิงเป็น "${name || code}" เรียบร้อยแล้ว`);
+				}
+			}}
 			submitLabel="ยืนยันการลงทะเบียน"
 		>
 			{#snippet children({ household })}

@@ -1,0 +1,692 @@
+<script lang="ts">
+	import { toast } from 'svelte-sonner';
+	import { Html5Qrcode } from 'html5-qrcode';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
+	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import Scan from '@lucide/svelte/icons/scan';
+	import Search from '@lucide/svelte/icons/search';
+	import CameraOff from '@lucide/svelte/icons/camera-off';
+	import AlertCircle from '@lucide/svelte/icons/alert-circle';
+	import Loader from '@lucide/svelte/icons/loader';
+	import LogIn from '@lucide/svelte/icons/log-in';
+	import LogOut from '@lucide/svelte/icons/log-out';
+	import ChevronRight from '@lucide/svelte/icons/chevron-right';
+	import MapPin from '@lucide/svelte/icons/map-pin';
+	import * as Card from '$lib/components/ui/card/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
+	import { Input } from '$lib/components/ui/input/index.js';
+	import ScanSearchModal from './scan-search-modal.svelte';
+	import { useQueryClient } from '@tanstack/svelte-query';
+	import {
+		canCheckInEvacuee,
+		canCheckOutEvacuee,
+		lookupFederatedByScanCode,
+		useCheckInEvacuee,
+		useCheckOutEvacuee,
+		useEvacuees,
+		formatPersonName,
+		normalizeCheckoutRemark,
+		STATUS_LABELS,
+		zoneLabel,
+		type Evacuee,
+		type StayStatus
+	} from '$lib/features/people';
+	import {
+		ClaimDialog,
+		type UnassignedRegistrationSearchHit
+	} from '$lib/features/unassigned-registration';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { getShelterCode } from '$lib/db/shelter';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { useShelter } from '$lib/features/shelters';
+
+	let scanCode = $state('');
+	let isScanning = $state(false);
+	let scanResult = $state<{
+		success: boolean;
+		message: string;
+		evacuee?: Evacuee;
+	} | null>(null);
+	let claimOpen = $state(false);
+	let claimHit = $state<UnassignedRegistrationSearchHit | null>(null);
+
+	let showSearchModal = $state(false);
+
+	// Camera setup
+	let enableCamera = $state(true);
+	let cameraError = $state<string | null>(null);
+
+	let lastScannedCode = '';
+	let lastScanTime = 0;
+
+	const queryClient = useQueryClient();
+	const checkIn = useCheckInEvacuee();
+	const checkOut = useCheckOutEvacuee();
+	const evacueesQuery = useEvacuees();
+	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
+	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
+
+	let selectionOverrideIds = $state<string[] | null>(null);
+	let selectionOverrideForId = $state<string | null>(null);
+
+	const foundEvacuee = $derived(scanResult?.success ? scanResult.evacuee : null);
+	const allEvacuees = $derived(evacueesQuery.data ?? []);
+	const familyMembers = $derived(
+		foundEvacuee?.household_id
+			? allEvacuees.filter((e) => e.household_id === foundEvacuee.household_id)
+			: []
+	);
+
+	const isActionCheckOut = $derived(foundEvacuee ? canCheckOutEvacuee(foundEvacuee) : false);
+	const isActionCheckIn = $derived(foundEvacuee ? canCheckInEvacuee(foundEvacuee) : false);
+
+	const eligibleFamilyMembers = $derived.by(() => {
+		if (!foundEvacuee) return [];
+		if (isActionCheckOut) {
+			return familyMembers.filter((e) => canCheckOutEvacuee(e));
+		}
+		if (isActionCheckIn) {
+			return familyMembers.filter((e) => canCheckInEvacuee(e));
+		}
+		return [];
+	});
+
+	const selectedMemberIds = $derived.by(() => {
+		if (!foundEvacuee) return [];
+		const eligibleIds = eligibleFamilyMembers.map((e) => e._id);
+		if (selectionOverrideForId === foundEvacuee._id && selectionOverrideIds !== null) {
+			const eligible = new Set(eligibleIds);
+			return selectionOverrideIds.filter((id) => eligible.has(id));
+		}
+		return eligibleIds;
+	});
+
+	function setSelectedMemberIds(ids: string[]) {
+		selectionOverrideForId = foundEvacuee?._id ?? null;
+		selectionOverrideIds = ids;
+	}
+
+	function cameraAttachment(node: HTMLDivElement) {
+		const html5QrCode = new Html5Qrcode(node.id);
+
+		html5QrCode
+			.start(
+				{ facingMode: 'environment' },
+				{
+					fps: 10,
+					qrbox: (width, height) => {
+						const minDimension = Math.min(width, height);
+						const qrboxSize = Math.floor(minDimension * 0.7);
+						return {
+							width: qrboxSize,
+							height: qrboxSize
+						};
+					}
+				},
+				(decodedText) => {
+					const scannedValue = decodedText.trim();
+					if (scannedValue) {
+						const now = Date.now();
+						const isDuplicate = scannedValue === lastScannedCode;
+						const cooldown = isDuplicate ? 3000 : 1500;
+
+						if (!isScanning && now - lastScanTime > cooldown) {
+							lastScanTime = now;
+							lastScannedCode = scannedValue;
+
+							if (typeof navigator !== 'undefined' && navigator.vibrate) {
+								navigator.vibrate(100);
+							}
+
+							handleScanSubmit(scannedValue);
+						}
+					}
+				},
+				() => {
+					// Silent error handler for parsing failures
+				}
+			)
+			.catch(() => {
+				cameraError = 'ไม่สามารถเข้าถึงกล้องได้ โปรดตรวจสอบการอนุญาตใช้งานกล้อง';
+			});
+
+		return () => {
+			if (html5QrCode.isScanning) {
+				html5QrCode.stop().catch(() => {
+					// Nothing actionable to surface — the view is unmounting anyway.
+				});
+			}
+		};
+	}
+
+	// Handle scanning / lookup logic
+	async function handleScanSubmit(code: string) {
+		const cleanCode = code.trim();
+		if (!cleanCode) return;
+
+		isScanning = true;
+		scanResult = null;
+
+		try {
+			const result = await lookupFederatedByScanCode(queryClient, cleanCode);
+
+			if (!result) {
+				scanResult = {
+					success: false,
+					message: `ไม่พบข้อมูลผู้ประสบภัยจากรหัส/ชื่อ "${cleanCode}" ในศูนย์ ${getShelterCode()}`
+				};
+				toast.error(`ไม่พบรหัสนี้ในศูนย์ ${getShelterCode()} — โปรดตรวจสอบศูนย์ที่เลือกด้านบน`);
+				return;
+			}
+
+			if (result.source === 'unassigned') {
+				scanResult = {
+					success: false,
+					message: 'พบคิวลงทะเบียนล่วงหน้า (คิวกลาง) — รับเข้าศูนย์ก่อนเช็คอิน/เอาท์'
+				};
+				toast.success('พบคิวลงทะเบียนล่วงหน้า (คิวกลาง)');
+				claimHit = result.hit;
+				claimOpen = true;
+				scanCode = '';
+				return;
+			}
+
+			const evacuee = result.evacuee;
+			scanResult = {
+				success: true,
+				message: 'พบข้อมูลผู้ประสบภัย',
+				evacuee
+			};
+			toast.success(`พบข้อมูล ${formatPersonName(evacuee)}`);
+			scanCode = ''; // Clear input
+		} catch (err) {
+			scanResult = {
+				success: false,
+				message: `เกิดข้อผิดพลาด: ${err instanceof Error ? err.message : String(err)}`
+			};
+			toast.error('เกิดข้อผิดพลาดในการดำเนินการ');
+		} finally {
+			isScanning = false;
+		}
+	}
+
+	async function handleBulkCheckIn() {
+		if (selectedMemberIds.length === 0) return;
+		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
+		const targets = eligibleFamilyMembers.filter((e) => selectedMemberIds.includes(e._id));
+		let zone = foundEvacuee?.current_stay.zone?.trim() ?? '';
+		if (!zone) {
+			const entered = window.prompt('ระบุโซนสำหรับเช็คอิน');
+			if (entered === null) return;
+			zone = entered.trim();
+		}
+		if (!zone) {
+			toast.error('การเช็คอินต้องระบุโซน');
+			return;
+		}
+		try {
+			const promises = targets.map((evacuee) => checkIn.mutateAsync({ evacuee, ctx, zone }));
+			const results = await Promise.allSettled(promises);
+
+			const fulfilledResults = results
+				.filter((r): r is PromiseFulfilledResult<Evacuee> => r.status === 'fulfilled')
+				.map((r) => r.value);
+			const rejectedResults = results
+				.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+				.map((r) => r.reason);
+
+			if (foundEvacuee) {
+				const updatedFound = fulfilledResults.find((r) => r._id === foundEvacuee._id);
+				if (updatedFound && scanResult) {
+					scanResult = { ...scanResult, evacuee: updatedFound };
+				}
+			}
+
+			if (rejectedResults.length === 0) {
+				toast.success(`เช็คอินสำเร็จ ${targets.length} คน`);
+			} else if (fulfilledResults.length > 0) {
+				toast.warning(
+					`เช็คอินสำเร็จ ${fulfilledResults.length} คน, ล้มเหลว ${rejectedResults.length} คน`
+				);
+			} else {
+				const firstError = rejectedResults[0];
+				toast.error(firstError instanceof Error ? firstError.message : 'เช็คอินไม่สำเร็จ');
+			}
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'เช็คอินไม่สำเร็จ');
+		}
+	}
+
+	async function handleBulkCheckOut() {
+		if (selectedMemberIds.length === 0) return;
+		const entered = window.prompt('ระบุเหตุผลการเช็คเอาท์');
+		if (entered === null) return;
+		let reason: string;
+		try {
+			reason = normalizeCheckoutRemark(entered);
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'ต้องระบุเหตุผลการเช็คเอาท์');
+			return;
+		}
+		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
+		const targets = eligibleFamilyMembers.filter((e) => selectedMemberIds.includes(e._id));
+		try {
+			const promises = targets.map((evacuee) => checkOut.mutateAsync({ evacuee, ctx, reason }));
+			const results = await Promise.allSettled(promises);
+
+			const fulfilledResults = results
+				.filter((r): r is PromiseFulfilledResult<Evacuee> => r.status === 'fulfilled')
+				.map((r) => r.value);
+			const rejectedResults = results
+				.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+				.map((r) => r.reason);
+
+			if (foundEvacuee) {
+				const updatedFound = fulfilledResults.find((r) => r._id === foundEvacuee._id);
+				if (updatedFound && scanResult) {
+					scanResult = { ...scanResult, evacuee: updatedFound };
+				}
+			}
+
+			if (rejectedResults.length === 0) {
+				toast.success(`เช็คเอาท์สำเร็จ ${targets.length} คน`);
+			} else if (fulfilledResults.length > 0) {
+				toast.warning(
+					`เช็คเอาท์สำเร็จ ${fulfilledResults.length} คน, ล้มเหลว ${rejectedResults.length} คน`
+				);
+			} else {
+				const firstError = rejectedResults[0];
+				toast.error(firstError instanceof Error ? firstError.message : 'เช็คเอาท์ไม่สำเร็จ');
+			}
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'เช็คเอาท์ไม่สำเร็จ');
+		}
+	}
+
+	// Helper for status label translation
+	function getStatusLabel(status: StayStatus) {
+		return STATUS_LABELS[status] ?? status;
+	}
+</script>
+
+<div class="container mx-auto max-w-4xl px-4 py-8">
+	<!-- Navigation and Title Header -->
+	<div class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+		<div class="flex items-center gap-4">
+			<Button
+				variant="secondary"
+				size="icon"
+				onclick={() => goto(resolve('/onsite'))}
+				class="h-10 w-10 rounded-full"
+				title="กลับ"
+			>
+				<ArrowLeft class="size-5" />
+			</Button>
+			<div>
+				<h1
+					class="flex items-center gap-2 text-xl font-bold text-slate-900 md:text-2xl dark:text-white"
+				>
+					<Scan class="size-5 text-[#0A2647] md:size-6 dark:text-blue-400" />
+					สแกนเข้า-ออกศูนย์ (Check-in / Out)
+				</h1>
+				<p class="mt-0.5 text-xs font-semibold text-slate-500 dark:text-slate-400">
+					สแกนรหัสเพื่อจัดการสถานะผู้พำนัก
+				</p>
+			</div>
+		</div>
+		<div class="flex items-center gap-3">
+			<Button
+				onclick={() => (showSearchModal = true)}
+				class="h-10 rounded-xl bg-[#22C55E] px-4 text-xs font-bold text-white shadow-sm hover:bg-[#16A34A]"
+			>
+				<Search class="mr-1.5 size-3.5" />
+				ค้นหาด้วยชื่อ/เลขบัตร
+			</Button>
+		</div>
+	</div>
+
+	<!-- Main Centered Card Container -->
+	<div class="mx-auto w-full max-w-xl">
+		<!-- Scanner Viewport Card -->
+		<Card.Root class="overflow-hidden border-slate-200 shadow-lg dark:border-slate-800">
+			<Card.Content class="flex flex-col items-center">
+				<!-- Viewfinder Area -->
+				<div
+					class="relative flex aspect-square w-full max-w-[280px] items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950"
+					style="isolation: isolate; transform: translateZ(0);"
+				>
+					{#if enableCamera && !cameraError}
+						<!-- Active Video Stream container for html5-qrcode -->
+						<div
+							id="qr-reader"
+							class="h-full w-full overflow-hidden rounded-2xl [&_video]:h-full! [&_video]:w-full! [&_video]:rounded-2xl! [&_video]:bg-transparent! [&_video]:object-cover!"
+							style="isolation: isolate; transform: translateZ(0);"
+							{@attach cameraAttachment}
+						></div>
+
+						<!-- Scan Reticle Corners -->
+						<div class="pointer-events-none absolute inset-4">
+							<div
+								class="absolute top-0 left-0 h-6 w-6 rounded-tl-md border-t-4 border-l-4 border-white/80"
+							></div>
+							<div
+								class="absolute top-0 right-0 h-6 w-6 rounded-tr-md border-t-4 border-r-4 border-white/80"
+							></div>
+							<div
+								class="absolute bottom-0 left-0 h-6 w-6 rounded-bl-md border-b-4 border-l-4 border-white/80"
+							></div>
+							<div
+								class="absolute right-0 bottom-0 h-6 w-6 rounded-br-md border-r-4 border-b-4 border-white/80"
+							></div>
+						</div>
+					{:else}
+						<!-- Disabled Camera State / Placeholder -->
+						<div class="flex flex-col items-center justify-center p-6 text-center text-slate-400">
+							{#if cameraError}
+								<CameraOff class="mb-3 size-12 animate-bounce text-red-400" />
+								<p class="text-xs font-semibold text-red-400">{cameraError}</p>
+							{:else}
+								<Scan class="mb-4 size-16 text-[#003B71]/30 dark:text-blue-500/20" />
+								<p class="text-xs font-bold text-slate-400">กล้องสแกนเนอร์ปิดอยู่</p>
+								<p class="mt-1 text-2xs text-slate-500">สามารถค้นหาด้วยชื่อหรือพิมพ์รหัสแทนได้</p>
+							{/if}
+						</div>
+					{/if}
+				</div>
+
+				<!-- Instructions -->
+				<div class="mt-6 text-center">
+					<h3 class="text-base font-bold text-slate-800 dark:text-slate-200">
+						สแกนรหัสเพื่อจัดการสถานะ
+					</h3>
+					<p class="mt-2 max-w-sm text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+						ใช้เครื่องสแกนบาร์โค้ดสแกนที่บัตรผู้ประสบภัย หรือพิมพ์รหัสลงในช่องด้านล่าง
+						ระบบจะพาไปยังหน้าจัดการสถานะทันที
+					</p>
+				</div>
+
+				<!-- Manual Input Form -->
+				<form
+					onsubmit={(e) => {
+						e.preventDefault();
+						handleScanSubmit(scanCode);
+					}}
+					class="mt-6 flex w-full max-w-sm gap-2"
+				>
+					<Input
+						type="text"
+						placeholder="กรอกรหัส หรือ สแกน QR..."
+						bind:value={scanCode}
+						disabled={isScanning}
+						class="h-11 flex-1 border-slate-300 bg-slate-50 text-sm dark:border-slate-700 dark:bg-slate-900"
+					/>
+					<Button
+						type="submit"
+						disabled={isScanning || !scanCode}
+						class="h-11 bg-[#003B71] px-5 text-sm font-bold text-white shadow-sm transition-all hover:bg-[#002a50]"
+					>
+						{#if isScanning}
+							<Loader class="mr-1 size-4 animate-spin" />
+						{/if}
+						ตกลง
+					</Button>
+				</form>
+
+				<!-- Scan Result Card -->
+				{#if scanResult}
+					{@const found = scanResult.success ? scanResult.evacuee : undefined}
+					{@const canCheckOut = found?.current_stay ? canCheckOutEvacuee(found) : false}
+					{@const canCheckIn = found?.current_stay ? canCheckInEvacuee(found) : false}
+					{@const isTerminal = found?.current_stay?.status === 'deceased'}
+					<div
+						class="mt-6 w-full max-w-sm animate-in overflow-hidden rounded-2xl border shadow-md transition-all duration-200 fade-in slide-in-from-top-2
+						{scanResult.success
+							? 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'
+							: 'border-red-200 bg-red-50/40 dark:border-red-900/50 dark:bg-red-950/10'}"
+					>
+						{#if scanResult.success && found}
+							<!-- Identity header: name + status are the two things staff must confirm at a glance -->
+							<div
+								class="flex items-start gap-3 px-4 pt-4 pb-3 {canCheckOut
+									? 'bg-emerald-500/5'
+									: isTerminal
+										? 'bg-slate-500/5'
+										: 'bg-amber-500/5'}"
+							>
+								<div
+									class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-lg font-bold {canCheckOut
+										? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+										: isTerminal
+											? 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200'
+											: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'}"
+								>
+									{found.first_name.charAt(0)}
+								</div>
+								<div class="min-w-0 flex-1 pt-0.5">
+									<h4 class="truncate text-base font-bold text-slate-900 dark:text-white">
+										{formatPersonName(found)}
+									</h4>
+									<div class="mt-1.5 flex flex-wrap items-center gap-1.5">
+										<span
+											class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-bold
+											{canCheckOut
+												? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
+												: isTerminal
+													? 'bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-200'
+													: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'}"
+										>
+											<span
+												class="size-1.5 rounded-full {canCheckOut
+													? 'bg-emerald-500'
+													: isTerminal
+														? 'bg-slate-500'
+														: 'bg-amber-500'}"
+											></span>
+											{found.current_stay
+												? getStatusLabel(found.current_stay.status)
+												: 'ไม่มีข้อมูลสถานะ'}
+										</span>
+										{#if found.current_stay?.zone}
+											<span
+												class="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-2xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+											>
+												<MapPin class="size-2.5" />
+												{zoneLabel(found.current_stay.zone, shelterZones)}
+											</span>
+										{/if}
+									</div>
+								</div>
+							</div>
+
+							{#if found.household_id && familyMembers.length > 1}
+								<div
+									class="border-t border-slate-100 bg-slate-50/50 p-4 dark:border-slate-800 dark:bg-slate-900/50"
+								>
+									<div class="mb-3 flex items-center justify-between">
+										<h5 class="text-xs font-bold text-slate-800 dark:text-slate-200">
+											จัดการเช็คอิน/เช็คเอาท์พร้อมกับครอบครัว
+										</h5>
+										<label
+											class="flex cursor-pointer items-center gap-1.5 text-xs font-semibold text-[#003B71] select-none dark:text-blue-400"
+										>
+											<input
+												type="checkbox"
+												checked={selectedMemberIds.length === eligibleFamilyMembers.length &&
+													eligibleFamilyMembers.length > 0}
+												indeterminate={selectedMemberIds.length > 0 &&
+													selectedMemberIds.length < eligibleFamilyMembers.length}
+												disabled={eligibleFamilyMembers.length === 0}
+												onchange={(e) => {
+													if (e.currentTarget.checked) {
+														setSelectedMemberIds(eligibleFamilyMembers.map((m) => m._id));
+													} else {
+														setSelectedMemberIds([]);
+													}
+												}}
+												class="rounded-sm border-slate-300 dark:border-slate-700"
+											/>
+											เลือกทั้งหมด
+										</label>
+									</div>
+									<div class="max-h-48 space-y-2 overflow-y-auto pr-1">
+										{#each familyMembers as member (member._id)}
+											{@const isEligible = isActionCheckOut
+												? canCheckOutEvacuee(member)
+												: isActionCheckIn
+													? canCheckInEvacuee(member)
+													: false}
+											{@const isScanned = member._id === found._id}
+											<label
+												class="flex cursor-pointer items-center justify-between rounded-xl border border-slate-200 bg-white p-2.5 transition-all select-none hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800/50"
+											>
+												<div class="flex min-w-0 items-center gap-2.5">
+													<input
+														type="checkbox"
+														value={member._id}
+														checked={selectedMemberIds.includes(member._id)}
+														disabled={!isEligible}
+														onchange={(e) => {
+															if (e.currentTarget.checked) {
+																setSelectedMemberIds([...selectedMemberIds, member._id]);
+															} else {
+																setSelectedMemberIds(
+																	selectedMemberIds.filter((id) => id !== member._id)
+																);
+															}
+														}}
+														class="rounded-sm border-slate-300 disabled:opacity-50 dark:border-slate-700"
+													/>
+													<span
+														class="truncate text-xs font-semibold text-slate-800 dark:text-slate-200"
+													>
+														{member.first_name}
+														{member.last_name}
+														{#if isScanned}
+															<span
+																class="ml-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-2xs font-bold text-primary"
+																>คนที่สแกน</span
+															>
+														{/if}
+													</span>
+												</div>
+												<span
+													class="rounded-full px-2 py-0.5 text-2xs font-semibold {isEligible
+														? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+														: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'}"
+												>
+													{getStatusLabel(member.current_stay.status)}
+												</span>
+											</label>
+										{/each}
+									</div>
+								</div>
+							{/if}
+
+							<!-- Action row: primary tap target sits on the right, within thumb reach -->
+							<div
+								class="flex items-center gap-2 border-t border-slate-100 p-3 dark:border-slate-800"
+							>
+								<button
+									type="button"
+									onclick={() =>
+										goto(
+											resolve(
+												`/onsite/people/evacuee-profile-view/${found._id}?from=${encodeURIComponent(resolve('/onsite/scan-check-in-out'))}`
+											)
+										)}
+									class="flex h-11 shrink-0 items-center gap-0.5 rounded-xl px-2.5 text-2xs font-bold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+								>
+									โปรไฟล์
+									<ChevronRight class="size-3.5" />
+								</button>
+
+								{#if canCheckOut}
+									<Button
+										class="h-11 flex-1 gap-1.5 rounded-xl bg-red-600 text-sm font-bold text-white shadow-sm transition-all hover:bg-red-700 active:scale-[0.98]"
+										onclick={handleBulkCheckOut}
+										disabled={checkOut.isPending || selectedMemberIds.length === 0}
+									>
+										{#if checkOut.isPending}
+											<Loader class="size-4 animate-spin" />
+										{:else}
+											<LogOut class="size-4" />
+										{/if}
+										เช็คเอาท์
+									</Button>
+								{:else if canCheckIn}
+									<Button
+										class="h-11 flex-1 gap-1.5 rounded-xl bg-[#22C55E] text-sm font-bold text-white shadow-sm transition-all hover:bg-[#16A34A] active:scale-[0.98]"
+										onclick={handleBulkCheckIn}
+										disabled={checkIn.isPending || selectedMemberIds.length === 0}
+									>
+										{#if checkIn.isPending}
+											<Loader class="size-4 animate-spin" />
+										{:else}
+											<LogIn class="size-4" />
+										{/if}
+										เช็คอิน
+									</Button>
+								{:else}
+									<Button
+										disabled
+										class="h-11 flex-1 rounded-xl bg-slate-200 text-sm font-bold text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+									>
+										ไม่สามารถเปลี่ยนสถานะนี้ได้
+									</Button>
+								{/if}
+							</div>
+						{:else}
+							<div class="flex items-center gap-2.5 p-4">
+								<AlertCircle class="size-5 shrink-0 text-red-500" />
+								<div class="min-w-0">
+									<p class="text-xs font-bold text-slate-900 dark:text-white">
+										{scanResult.message}
+									</p>
+									<p class="mt-0.5 text-2xs font-medium text-slate-500 dark:text-slate-400">
+										โปรดตรวจสอบข้อมูลรหัสบัตรประชาชน หรือ QR code ของผู้ประสบภัยอีกครั้ง
+									</p>
+								</div>
+							</div>
+						{/if}
+					</div>
+				{/if}
+			</Card.Content>
+		</Card.Root>
+	</div>
+</div>
+
+<!-- 2. Modal: Search Evacuees -->
+<ScanSearchModal
+	show={showSearchModal}
+	onClose={() => (showSearchModal = false)}
+	onSelect={(evacueeId) => {
+		showSearchModal = false;
+		scanCode = evacueeId;
+		handleScanSubmit(scanCode);
+	}}
+/>
+
+<ClaimDialog
+	bind:open={claimOpen}
+	bind:hit={claimHit}
+	shelterCode={shelterStore.selectedShelterCode ?? getShelterCode()}
+/>
+
+<style>
+	:global(#qr-reader *) {
+		background: transparent !important;
+		background-color: transparent !important;
+		border: none !important;
+	}
+
+	@keyframes scanEffect {
+		0%,
+		100% {
+			top: 10px;
+		}
+		50% {
+			top: calc(100% - 14px);
+		}
+	}
+</style>

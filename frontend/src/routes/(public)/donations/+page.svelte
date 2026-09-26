@@ -11,13 +11,22 @@
 	import SuccessTicket from '$lib/components/public-donor-success-ticket.svelte';
 	import { PublicPageShell } from '$lib/features/public-portal';
 	import { env } from '$env/dynamic/public';
+	import { onMount } from 'svelte';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
+	import { fetchRecaptchaEnabled } from '$lib/api/recaptcha-status';
 
 	const donationStore = setDonationStore();
 	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
+	let captchaEnabled = $state(false);
 	const t = $derived(getTranslation(PUBLIC_DONATIONS_I18N, langState.current));
+
+	onMount(() => {
+		void fetchRecaptchaEnabled().then((enabled) => {
+			captchaEnabled = enabled;
+		});
+	});
 
 	const steps = $derived([
 		{ id: 'needs', icon: AlertTriangle, label: t.step1 },
@@ -48,8 +57,12 @@
 
 <svelte:head>
 	<title>{t.pageTitle}</title>
-	{#if siteKey}
-		<script src="https://www.google.com/recaptcha/api.js?render={siteKey}" async defer></script>
+	{#if captchaEnabled && siteKey}
+		<script
+			src="https://www.google.com/recaptcha/enterprise.js?render={siteKey}"
+			async
+			defer
+		></script>
 	{/if}
 </svelte:head>
 
@@ -105,16 +118,19 @@
 				{#each steps as step, idx (step.id)}
 					{@const isActive = isStepActive(step.id)}
 					{@const isCompleted = activeIndex > idx}
+					{@const isStepDisabled = donationStore.reachedStep < idx + 1}
 					<button
 						type="button"
 						onclick={() => {
 							donationStore.activeTab = step.id;
 						}}
-						disabled={donationStore.reachedStep < idx + 1}
-						class="relative z-10 flex flex-col items-center gap-2 rounded-xl p-1 transition-all sm:flex-row sm:bg-white sm:px-4 sm:py-2.5
+						disabled={isStepDisabled}
+						class="relative z-10 flex flex-col items-center gap-2 rounded-xl bg-white p-1 transition-all sm:flex-row sm:px-4 sm:py-2.5
 							{isActive
 							? 'ring-[#013365]/20 sm:-translate-y-0.5 sm:shadow-md sm:ring-1 sm:ring-black/5'
-							: 'cursor-pointer hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30'}"
+							: isStepDisabled
+								? 'cursor-not-allowed'
+								: 'cursor-pointer hover:bg-slate-50'}"
 					>
 						<div
 							class="flex h-8 w-8 items-center justify-center rounded-full transition-colors sm:h-10 sm:w-10
@@ -122,7 +138,7 @@
 								? 'bg-[#013365] text-white shadow-md'
 								: isCompleted
 									? 'bg-[#013365] text-white'
-									: 'border-2 border-white bg-slate-100 text-slate-400'}"
+									: 'border border-slate-200/80 bg-slate-100 text-slate-400'}"
 						>
 							<step.icon class={isActive || isCompleted ? 'h-[18px] w-[18px]' : 'h-4 w-4'} />
 						</div>
@@ -135,7 +151,7 @@
 							</span>
 							<span
 								class="text-xs font-semibold whitespace-nowrap sm:text-sm
-								{isActive ? 'font-bold text-slate-900' : isCompleted ? 'text-slate-700' : 'text-slate-500'}"
+								{isActive ? 'font-bold text-slate-900' : isCompleted ? 'text-slate-700' : 'text-slate-400'}"
 							>
 								{step.label}
 							</span>

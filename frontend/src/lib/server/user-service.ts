@@ -11,7 +11,7 @@ import {
 	mergeShelterAssignment,
 	shelterCodeFromRoles
 } from '$lib/auth/roles';
-import { validatePassword } from '$lib/server/password-policy';
+import { validatePassword, validateProvisionedPassword } from '$lib/server/password-policy';
 import {
 	hashSecurityAnswer,
 	verifySecurityAnswer,
@@ -32,15 +32,19 @@ import { generateTemporaryPassphrase } from '$lib/server/passphrase-generator';
 
 const USER_PREFIX = 'org.couchdb.user:';
 
-/** Phase 1 MFA IdP — Google OIDC step-up only (CR-124). */
-export type MfaProviderType = 'google';
+/** MFA IdP — Google OIDC (CR-124) and ThaID Digital ID BORA (CR-ThaID). */
+export type MfaProviderType = 'google' | 'thaid';
 
 export interface MfaProvider {
 	type: MfaProviderType;
-	/** Google OIDC `sub` — stable identity; never use email as primary. */
+	/** OIDC `sub` — stable identity; never use email or citizen ID as primary. */
 	subject: string;
-	/** Display-only. */
+	/** Display-only (Google email). */
 	email?: string | null;
+	/** Display-only (ThaID full name in Thai). */
+	name?: string | null;
+	/** Display-only (ThaID masked citizen ID: 1-xxxx-xxxxx-12-3). */
+	pid_masked?: string | null;
 	linked_at: string;
 	verified_at?: string | null;
 }
@@ -69,10 +73,14 @@ export interface UserSummary {
 	must_change_password?: boolean;
 	has_security_question?: boolean;
 	affiliation_tags?: string[];
-	/** CR-124 — true when a Google MFA provider is linked. */
+	/** True when at least one MFA provider (Google or ThaID) is linked. */
 	mfa_enrolled?: boolean;
 	/** CR-124 — linked Google email for display (admin / me). */
 	mfa_google_email?: string | null;
+	/** CR-ThaID — linked ThaID name for display. */
+	mfa_thaid_name?: string | null;
+	/** CR-ThaID — linked ThaID masked PID for display. */
+	mfa_thaid_pid_masked?: string | null;
 }
 
 export async function getCurrentUserProfile(
@@ -136,8 +144,16 @@ export function getGoogleMfa(doc: CouchUserDoc): MfaProvider | null {
 	return providers.find((p) => p.type === 'google') ?? null;
 }
 
+/** Return the ThaID MFA provider on a `_users` doc, or null. */
+export function getThaidMfa(doc: CouchUserDoc): MfaProvider | null {
+	const providers = doc.mfa?.providers;
+	if (!providers?.length) return null;
+	return providers.find((p) => p.type === 'thaid') ?? null;
+}
+
 function toSummary(doc: CouchUserDoc): UserSummary {
 	const google = getGoogleMfa(doc);
+	const thaid = getThaidMfa(doc);
 	return {
 		name: doc.name,
 		roles: doc.roles ?? [],
@@ -146,7 +162,7 @@ function toSummary(doc: CouchUserDoc): UserSummary {
 		personnel_type: doc.personnel_type ?? 'staff',
 		organization: doc.organization ?? null,
 		position: doc.position ?? null,
-		phone: doc.phone ?? doc.name,
+		phone: doc.phone ?? null,
 		email: doc.email ?? null,
 		notes: doc.notes ?? null,
 		volunteer_id: doc.volunteer_id ?? null,
@@ -155,8 +171,10 @@ function toSummary(doc: CouchUserDoc): UserSummary {
 		must_change_password: doc.must_change_password ?? false,
 		has_security_question: Boolean(doc.security_question?.answer_hash),
 		affiliation_tags: doc.affiliation_tags ?? [],
-		mfa_enrolled: Boolean(google),
-		mfa_google_email: google?.email ?? null
+		mfa_enrolled: Boolean(google || thaid),
+		mfa_google_email: google?.email ?? null,
+		mfa_thaid_name: thaid?.name ?? null,
+		mfa_thaid_pid_masked: thaid?.pid_masked ?? null
 	};
 }
 
@@ -199,6 +217,71 @@ async function readUserDoc(name: string, action: string): Promise<CouchUserDoc> 
 	}
 	if (got.status >= 400) throw serviceErrorFromCouch(action, got.status, got.data);
 	return got.data as CouchUserDoc;
+}
+
+const PHONE_LOGIN_RE = /^0\d{9}$/;
+
+function normalizePhone(value: string | null | undefined): string | null {
+	if (value == null) return null;
+	const trimmed = value.trim();
+	return trimmed.length > 0 ? trimmed : null;
+}
+
+/**
+ * When phone is set it must be unique across `_users.phone` and must not collide
+ * with another account's CouchDB `name` (so alternate login stays unambiguous).
+ */
+async function assertPhoneAvailable(
+	phone: string | null,
+	excludeName?: string
+): Promise<string | null> {
+	const normalized = normalizePhone(phone);
+	if (!normalized) return null;
+	if (!PHONE_LOGIN_RE.test(normalized)) {
+		throw new ServiceError('VALIDATION', 'เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลักขึ้นต้นด้วย 0');
+	}
+
+	const docs = await fetchAllUserDocs();
+	for (const doc of docs) {
+		if (excludeName && doc.name === excludeName) continue;
+		if (doc.name === normalized) {
+			throw new ServiceError(
+				'CONFLICT',
+				`เบอร์ "${normalized}" ชนกับ username ของบัญชีอื่น`
+			);
+		}
+		if (doc.phone === normalized) {
+			throw new ServiceError('CONFLICT', `เบอร์ "${normalized}" ถูกใช้โดยบัญชีอื่นแล้ว`);
+		}
+	}
+	return normalized;
+}
+
+/** Resolve a login identifier to CouchDB `name` (username or contact phone). */
+export async function resolveLoginName(identifier: string): Promise<string> {
+	const raw = identifier.trim();
+	if (!raw) return raw;
+
+	try {
+		await readUserDoc(raw, 'resolve login');
+		return raw;
+	} catch (e) {
+		if (!(e instanceof ServiceError) || e.code !== 'VALIDATION') throw e;
+	}
+
+	if (!PHONE_LOGIN_RE.test(raw)) return raw;
+
+	const docs = await fetchAllUserDocs();
+	const match = docs.find((d) => d.phone === raw);
+	return match?.name ?? raw;
+}
+
+/** Find CouchDB username whose contact `phone` matches (or null). */
+export async function findUserNameByPhone(phone: string): Promise<string | null> {
+	const normalized = normalizePhone(phone);
+	if (!normalized || !PHONE_LOGIN_RE.test(normalized)) return null;
+	const docs = await fetchAllUserDocs();
+	return docs.find((d) => d.phone === normalized)?.name ?? null;
 }
 
 /** Create a `_users` login. Caller authorization + role validation happen first. */
@@ -249,7 +332,12 @@ export async function createUser(input: {
 	if (isProtectedBootstrapAdmin({ name, roles }, bootstrap)) {
 		throw new ServiceError('FORBIDDEN', 'Cannot create a user with the bootstrap admin name');
 	}
-	const password = validatePassword(input.password);
+	const password = validateProvisionedPassword(input.password, {
+		phone,
+		personnelType: personnel_type,
+		mustChangePassword: must_change_password
+	});
+	const normalizedPhone = await assertPhoneAvailable(phone ?? null, name);
 	const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', {
 		name,
 		password,
@@ -260,7 +348,7 @@ export async function createUser(input: {
 		personnel_type,
 		organization: organization ?? null,
 		position: position ?? null,
-		phone: phone ?? name,
+		phone: normalizedPhone,
 		email: email ?? null,
 		notes: notes ?? null,
 		volunteer_id: volunteer_id ?? null,
@@ -436,7 +524,9 @@ export async function updateUser(
 		...(input.personnel_type !== undefined ? { personnel_type: input.personnel_type } : {}),
 		...(input.organization !== undefined ? { organization: input.organization } : {}),
 		...(input.position !== undefined ? { position: input.position } : {}),
-		...(input.phone !== undefined ? { phone: input.phone } : {}),
+		...(input.phone !== undefined
+			? { phone: await assertPhoneAvailable(input.phone, name) }
+			: {}),
 		...(input.email !== undefined ? { email: input.email } : {}),
 		...(input.notes !== undefined ? { notes: input.notes } : {}),
 		...(input.volunteer_id !== undefined ? { volunteer_id: input.volunteer_id } : {}),
@@ -515,7 +605,7 @@ export async function updateOwnProfile(
 		patch.display_name = displayName;
 	}
 	if ('phone' in fields) {
-		patch.phone = normalizeOptionalText(fields.phone);
+		patch.phone = await assertPhoneAvailable(normalizeOptionalText(fields.phone), name);
 	}
 	if ('email' in fields) {
 		patch.email = normalizeOptionalText(fields.email);
@@ -584,7 +674,7 @@ export async function getSecurityQuestionChallenge(phoneOrUsername: string): Pro
 	question_id?: string;
 	question_label?: string;
 }> {
-	const name = phoneOrUsername.trim();
+	const name = await resolveLoginName(phoneOrUsername);
 	try {
 		const doc = await readUserDoc(name, 'get security question');
 		if (!doc.security_question?.question_id) {
@@ -611,7 +701,7 @@ export async function verifySecurityQuestionAndResetPassword(
 	rawAnswer: string,
 	newPassword: string
 ): Promise<void> {
-	const name = phoneOrUsername.trim();
+	const name = await resolveLoginName(phoneOrUsername);
 	const doc = await readUserDoc(name, 'verify security question');
 
 	if (!doc.security_question || doc.security_question.question_id !== question_id) {
@@ -788,5 +878,121 @@ export async function touchGoogleMfaVerified(name: string): Promise<void> {
 	const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', updatedDoc);
 	if (res.status >= 400) {
 		throw serviceErrorFromCouch('touch google mfa verified', res.status, res.data);
+	}
+}
+
+/**
+ * Find the single `_users` doc with a ThaID MFA provider matching `subject`.
+ * Returns null when not enrolled / unknown. Uniqueness is enforced at link time.
+ */
+export async function findUserByThaidSubject(subject: string): Promise<CouchUserDoc | null> {
+	const trimmed = subject.trim();
+	if (!trimmed) return null;
+
+	const all = await fetchAllUserDocs();
+	for (const doc of all) {
+		const linked = getThaidMfa(doc);
+		if (linked && linked.subject === trimmed) {
+			return doc;
+		}
+	}
+	return null;
+}
+
+/**
+ * Link a ThaID (DOPA BORA) identity as step-up MFA.
+ * Enforces one ThaID per user and global uniqueness of `subject`.
+ */
+export async function linkThaidMfa(
+	name: string,
+	input: { subject: string; name?: string | null; pid_masked?: string | null }
+): Promise<void> {
+	const subject = input.subject.trim();
+	if (!subject) {
+		throw new ServiceError('VALIDATION', 'ThaID subject is required');
+	}
+
+	const all = await fetchAllUserDocs();
+	for (const other of all) {
+		const linked = getThaidMfa(other);
+		if (linked && linked.subject === subject && other.name !== name) {
+			throw new ServiceError('CONFLICT', 'ThaID account is already linked to another user');
+		}
+	}
+
+	const doc = await readUserDoc(name, 'link thaid mfa');
+	if (getThaidMfa(doc)) {
+		throw new ServiceError('CONFLICT', 'User already has a ThaID MFA provider linked');
+	}
+
+	const now = new Date().toISOString();
+	const provider: MfaProvider = {
+		type: 'thaid',
+		subject,
+		name: input.name ?? null,
+		pid_masked: input.pid_masked ?? null,
+		linked_at: now,
+		verified_at: now
+	};
+
+	const updatedDoc: CouchUserDoc = {
+		...doc,
+		mfa: { providers: [...(doc.mfa?.providers ?? []).filter((p) => p.type !== 'thaid'), provider] }
+	};
+
+	const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', updatedDoc);
+	if (res.status >= 400) throw serviceErrorFromCouch('link thaid mfa', res.status, res.data);
+}
+
+/** Clear ThaID MFA link. Pass `caller` for admin/manager authz; omit for self-service. */
+export async function unlinkThaidMfa(name: string, caller?: Caller): Promise<void> {
+	const doc = await readUserDoc(name, 'unlink thaid mfa');
+
+	if (caller) {
+		if (isProtectedBootstrapAdmin(doc, bootstrapAdminName())) {
+			rejectBootstrapMutation(caller, name, 'unlink thaid mfa');
+		}
+		if (!caller.isSA) {
+			const code = managerMayMutateTarget(caller, doc.roles ?? []);
+			if (!hasShelterScope(doc.roles ?? [], code)) {
+				throw new ServiceError(
+					'FORBIDDEN',
+					'A manager may only unlink MFA for users in their own shelter'
+				);
+			}
+		}
+	}
+
+	if (!getThaidMfa(doc)) {
+		return;
+	}
+
+	const remaining = (doc.mfa?.providers ?? []).filter((p) => p.type !== 'thaid');
+	const updatedDoc: CouchUserDoc = {
+		...doc,
+		mfa: remaining.length > 0 ? { providers: remaining } : null
+	};
+
+	const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', updatedDoc);
+	if (res.status >= 400) throw serviceErrorFromCouch('unlink thaid mfa', res.status, res.data);
+}
+
+/** Update `verified_at` on the linked ThaID provider after a successful step-up or login. */
+export async function touchThaidMfaVerified(name: string): Promise<void> {
+	const doc = await readUserDoc(name, 'touch thaid mfa verified');
+	const thaid = getThaidMfa(doc);
+	if (!thaid) {
+		throw new ServiceError('VALIDATION', 'User is not enrolled in ThaID MFA');
+	}
+
+	const now = new Date().toISOString();
+	const providers = (doc.mfa?.providers ?? []).map((p) =>
+		p.type === 'thaid' ? { ...p, verified_at: now } : p
+	);
+	const updatedDoc: CouchUserDoc = { ...doc, mfa: { providers } };
+
+	const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', updatedDoc);
+	if (res.status >= 400) {
+		throw serviceErrorFromCouch('touch thaid mfa verified', res.status, res.data);
 	}
 }

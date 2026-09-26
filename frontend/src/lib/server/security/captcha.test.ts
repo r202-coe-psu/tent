@@ -1,54 +1,100 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ReCaptchaProvider } from './captcha';
+import type { RecaptchaEnterpriseServiceClient } from '@google-cloud/recaptcha-enterprise';
+import { ReCaptchaEnterpriseProvider } from './captcha';
 
-describe('ReCaptchaProvider', () => {
-	let fetchMock: ReturnType<typeof vi.fn>;
+describe('ReCaptchaEnterpriseProvider', () => {
+	let mockCreateAssessment: ReturnType<typeof vi.fn>;
+	let mockClient: RecaptchaEnterpriseServiceClient;
 
 	beforeEach(() => {
-		fetchMock = vi.fn();
-		vi.stubGlobal('fetch', fetchMock);
+		mockCreateAssessment = vi.fn();
+		mockClient = {
+			projectPath: vi.fn().mockReturnValue('projects/test-project'),
+			createAssessment: mockCreateAssessment
+		} as unknown as RecaptchaEnterpriseServiceClient;
 	});
 
-	it('should return true for valid tokens', async () => {
-		fetchMock.mockResolvedValue({
-			json: () => Promise.resolve({ success: true })
-		});
+	it('should return true for valid token with matching action and high score', async () => {
+		mockCreateAssessment.mockResolvedValue([
+			{
+				tokenProperties: { valid: true, action: 'register' },
+				riskAnalysis: { score: 0.9, reasons: [] }
+			}
+		]);
 
-		const provider = new ReCaptchaProvider('dummy-secret');
-		const result = await provider.verifyToken('valid-token', '127.0.0.1');
+		const provider = new ReCaptchaEnterpriseProvider(
+			{ projectId: 'test-project', siteKey: 'test-site-key' },
+			mockClient
+		);
+		const result = await provider.verifyToken('valid-token', '127.0.0.1', 'register');
 
 		expect(result).toBe(true);
-		expect(fetchMock).toHaveBeenCalledTimes(1);
-
-		const callArgs = fetchMock.mock.calls[0];
-		expect(callArgs[0]).toBe('https://www.google.com/recaptcha/api/siteverify');
-		expect(callArgs[1].body.toString()).toContain('response=valid-token');
+		expect(mockCreateAssessment).toHaveBeenCalledTimes(1);
+		expect(mockCreateAssessment).toHaveBeenCalledWith({
+			assessment: {
+				event: {
+					token: 'valid-token',
+					siteKey: 'test-site-key'
+				}
+			},
+			parent: 'projects/test-project'
+		});
 	});
 
 	it('should return false for missing or empty tokens', async () => {
-		const provider = new ReCaptchaProvider('dummy-secret');
+		const provider = new ReCaptchaEnterpriseProvider('test-project', mockClient);
 		const result = await provider.verifyToken('');
 
 		expect(result).toBe(false);
-		expect(fetchMock).not.toHaveBeenCalled();
+		expect(mockCreateAssessment).not.toHaveBeenCalled();
 	});
 
-	it('should return false if google verification fails', async () => {
-		fetchMock.mockResolvedValue({
-			json: () => Promise.resolve({ success: false, 'error-codes': ['invalid-input-response'] })
-		});
+	it('should return false if token is invalid according to Google', async () => {
+		mockCreateAssessment.mockResolvedValue([
+			{
+				tokenProperties: { valid: false, invalidReason: 'EXPIRED' }
+			}
+		]);
 
-		const provider = new ReCaptchaProvider('dummy-secret');
-		const result = await provider.verifyToken('invalid-token');
+		const provider = new ReCaptchaEnterpriseProvider('test-project', mockClient);
+		const result = await provider.verifyToken('expired-token', '127.0.0.1', 'register');
 
 		expect(result).toBe(false);
 	});
 
-	it('should handle fetch errors gracefully and return false', async () => {
-		fetchMock.mockRejectedValue(new Error('Network error'));
+	it('should return false if action does not match expectedAction', async () => {
+		mockCreateAssessment.mockResolvedValue([
+			{
+				tokenProperties: { valid: true, action: 'wrong_action' },
+				riskAnalysis: { score: 0.9 }
+			}
+		]);
 
-		const provider = new ReCaptchaProvider('dummy-secret');
-		const result = await provider.verifyToken('valid-token');
+		const provider = new ReCaptchaEnterpriseProvider('test-project', mockClient);
+		const result = await provider.verifyToken('valid-token', '127.0.0.1', 'register');
+
+		expect(result).toBe(false);
+	});
+
+	it('should return false if score is below 0.5', async () => {
+		mockCreateAssessment.mockResolvedValue([
+			{
+				tokenProperties: { valid: true, action: 'register' },
+				riskAnalysis: { score: 0.3, reasons: ['AUTOMATION'] }
+			}
+		]);
+
+		const provider = new ReCaptchaEnterpriseProvider('test-project', mockClient);
+		const result = await provider.verifyToken('valid-token', '127.0.0.1', 'register');
+
+		expect(result).toBe(false);
+	});
+
+	it('should handle client errors gracefully and return false', async () => {
+		mockCreateAssessment.mockRejectedValue(new Error('Network error'));
+
+		const provider = new ReCaptchaEnterpriseProvider('test-project', mockClient);
+		const result = await provider.verifyToken('valid-token', '127.0.0.1', 'register');
 
 		expect(result).toBe(false);
 	});

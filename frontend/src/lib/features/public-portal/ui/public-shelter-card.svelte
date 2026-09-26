@@ -42,7 +42,11 @@
 
 	let t = $derived(getTranslation(PUBLIC_SHELTER_CARD_I18N, langState.current));
 
-	let canBook = $derived(Boolean(shelter.code) && shelter.status !== 'CLOSED');
+	let canBook = $derived(
+		Boolean(shelter.code) &&
+			shelter.status !== 'CLOSED' &&
+			shelter.accepts_pre_registration === true
+	);
 
 	let showAllVulnerable = $state(false);
 

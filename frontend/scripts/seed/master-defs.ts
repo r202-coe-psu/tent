@@ -73,7 +73,7 @@ export const MASTER_DATA_DEFS: MasterTypeDef[] = [
 	{
 		type: 'health_condition',
 		items: [
-			{ key: 'diabetes', label: 'เบาหวาน', is_default: true },
+			{ key: 'diabetes', label: 'เบาหวาน' },
 			{ key: 'hypertension', label: 'ความดันโลหิตสูง' },
 			{ key: 'heart_disease', label: 'โรคหัวใจ' },
 			{ key: 'asthma', label: 'หอบหืด' },
@@ -83,16 +83,12 @@ export const MASTER_DATA_DEFS: MasterTypeDef[] = [
 	},
 	{
 		type: 'dietary_restrictions',
-		items: [
-			{ key: 'halal', label: 'อิสลาม (ฮาลาล)', is_default: true },
-			{ key: 'vegetarian', label: 'มังสวิรัติ' },
-			{ key: 'soft_diet', label: 'อาหารอ่อน' }
-		]
+		items: [{ key: 'halal', label: 'อิสลาม (ฮาลาล)', is_default: true }]
 	},
 	{
 		type: 'pet_types',
 		items: [
-			{ key: 'dog', label: 'สุนัข', is_default: true },
+			{ key: 'dog', label: 'สุนัข' },
 			{ key: 'cat', label: 'แมว' },
 			{ key: 'other', label: 'อื่นๆ' }
 		]
@@ -138,6 +134,66 @@ export const MASTER_DATA_DEFS: MasterTypeDef[] = [
 		type: 'community',
 		parent_type: 'municipality_zone',
 		items: HAT_YAI_COMMUNITIES
+	},
+	{
+		type: 'volunteer_skills',
+		items: [
+			{
+				key: 'cooking',
+				label: 'ประกอบอาหาร / ครัวสนาม',
+				category: 'operational',
+				description: 'ช่วยเตรียมวัตถุดิบ ปรุงอาหาร แจกอาหารครัวกลาง',
+				is_default: true
+			},
+			{
+				key: 'logistics',
+				label: 'ขนย้ายสิ่งของ / พลาธิการ',
+				category: 'operational',
+				description: 'ขนย้ายกระสอบทราย ลำเลียงถุงยังชีพ ยกของหนัก'
+			},
+			{
+				key: 'screening',
+				label: 'คัดกรองและสแกนประวัติ',
+				category: 'operational',
+				description: 'ต้อนรับ ลงทะเบียน คัดกรองประวัติผู้ประสบภัยเบื้องต้น'
+			},
+			{
+				key: 'medical',
+				label: 'การแพทย์ / ปฐมพยาบาล',
+				category: 'controlled',
+				description: 'ปฐมพยาบาลเบื้องต้น วัดสัญญาณชีพ (ต้องผ่านการตรวจรับรองใบประกอบวิชาชีพ)'
+			},
+			{
+				key: 'reception',
+				label: 'ประสานงาน / ต้อนรับ',
+				category: 'operational',
+				description: 'ต้อนรับผู้ประสบภัย ประสานงานระหว่างจุดบริการ'
+			},
+			{
+				key: 'distribution',
+				label: 'แจกจ่ายของยังชีพ',
+				category: 'operational',
+				description: 'แจกจ่ายถุงยังชีพ น้ำดื่ม เครื่องอุปโภคบริโภค'
+			},
+			{
+				key: 'sanitation',
+				label: 'ทำความสะอาด / สุขอนามัย',
+				category: 'operational',
+				description: 'ทำความสะอาดพื้นที่ส่วนกลาง ดูแลสุขอนามัยในศูนย์'
+			},
+			{
+				key: 'childcare',
+				label: 'สันทนาการ / ดูแลเด็ก',
+				category: 'operational',
+				description: 'กิจกรรมสันทนาการ ดูแลเด็กและผู้สูงอายุ'
+			},
+			{
+				key: 'transport',
+				label: 'ขับขี่ยานพาหนะ / ขนส่ง',
+				category: 'operational',
+				description: 'ขับขี่ยานพาหนะขนส่งคนและสิ่งของ'
+			}
+		]
 	}
 ];
 
