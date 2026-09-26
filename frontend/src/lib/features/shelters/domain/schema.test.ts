@@ -225,13 +225,13 @@ describe('commonAreasSchema', () => {
 
 	it('rejects empty sub_storage name', () => {
 		expect(() =>
-			commonAreasSchema.parse({ sub_storage: [{ name: '', type: 'general' }] })
+			commonAreasSchema.parse({ sub_storage: [{ id: 's1', name: '', type: 'general' }] })
 		).toThrow();
 	});
 
 	it('accepts sub_storage items', () => {
 		const c = commonAreasSchema.parse({
-			sub_storage: [{ name: 'อาหารแห้ง', type: 'food_dry' }]
+			sub_storage: [{ id: 's1', name: 'อาหารแห้ง', type: 'food_dry' }]
 		});
 		expect(c.sub_storage?.[0]?.type).toBe('food_dry');
 	});
@@ -239,7 +239,15 @@ describe('commonAreasSchema', () => {
 
 describe('subStorageItemSchema', () => {
 	it('rejects empty name', () => {
-		expect(() => subStorageItemSchema.parse({ name: '', type: 'general' })).toThrow();
+		expect(() => subStorageItemSchema.parse({ id: 's1', name: '', type: 'general' })).toThrow();
+	});
+
+	it('requires a non-empty id (schema_v 7 — ledger lots reference it)', () => {
+		expect(() => subStorageItemSchema.parse({ name: 'คลังยา', type: 'general' })).toThrow();
+		expect(() =>
+			subStorageItemSchema.parse({ id: '  ', name: 'คลังยา', type: 'general' })
+		).toThrow();
+		expect(subStorageItemSchema.parse({ id: 's1', name: 'คลังยา', type: 'general' }).id).toBe('s1');
 	});
 });
 
@@ -373,7 +381,7 @@ describe('createShelterSchema / updateShelterSchema', () => {
 				central_kitchen: true,
 				helipad: false,
 				parking_capacity: 30,
-				sub_storage: [{ name: 'อาหารแห้ง', type: 'food_dry' }]
+				sub_storage: [{ id: 's1', name: 'อาหารแห้ง', type: 'food_dry' }]
 			},
 			zones: [{ code: 'Z1', name: 'โซน A', capacity: 100, type: 'general' }]
 		});
@@ -499,7 +507,7 @@ describe('migrateShelterV2ToCurrent', () => {
 		expect(second.operation_status).toBe(first.operation_status);
 	});
 
-	it('is idempotent — calling on current (v6) returns as-is', () => {
+	it('is idempotent — calling on current version returns as-is', () => {
 		const current = migrateShelterV2ToCurrent(v2Master);
 		const again = migrateShelterV2ToCurrent(current);
 		expect(again).toBe(current);
@@ -766,7 +774,7 @@ describe('CR-023 — zone / facilities / common-area additions', () => {
 			isolation_room: true,
 			women_child_friendly_space: false,
 			logistics_area_m2: 150,
-			sub_storage: [{ name: 'S', type: 'general', area_m2: 20 }]
+			sub_storage: [{ id: 's1', name: 'S', type: 'general', area_m2: 20 }]
 		});
 		expect(c.logistics_area_m2).toBe(150);
 		expect(c.sub_storage[0].area_m2).toBe(20);
@@ -809,6 +817,9 @@ describe('CR-023 — migrate v3 → v4 default-fill', () => {
 		expect(m.facilities?.car_toilet_supported).toBeNull();
 		expect(m.risk?.secondary_muster_point).toBeNull();
 		expect(m.zones?.[0].area_m2).toBeNull();
+		expect(m.common_areas?.sub_storage).toEqual([
+			{ id: 'legacy-0', name: 'S', type: 'general', area_m2: null }
+		]);
 	});
 });
 
@@ -931,5 +942,62 @@ describe('isShelterBookable', () => {
 		).toBe(false);
 		expect(isShelterBookable(null)).toBe(false);
 		expect(isShelterBookable({})).toBe(false);
+	});
+});
+
+describe('draft-shelter-storage-points — migrate v6 → v7 sub_storage id back-fill', () => {
+	const v6doc = {
+		_id: 'shelter:x',
+		type: 'shelter' as const,
+		schema_v: 6,
+		code: 'SH001',
+		name: 'X',
+		site_kind: 'evacuation_center' as const,
+		operation_status: 'standby' as const,
+		capacity: 10,
+		zones: [],
+		food_distribution_points: [],
+		common_areas: {
+			sub_storage: [
+				{ id: '01J0000000000000000000000A', name: 'คลังยา', type: 'medical_supplies' },
+				{ name: 'สนามปิงปอง', type: 'food_dry' }
+			]
+		},
+		created_at: '2024-01-01T00:00:00Z',
+		updated_at: '2024-01-01T00:00:00Z'
+	} as unknown as ShelterMasterV2;
+
+	it('bumps a v6 doc to v7 and fills only the missing ids with legacy-<index>', () => {
+		const m = migrateShelterV2ToCurrent(v6doc);
+		expect(m.schema_v).toBe(7);
+		expect(m.common_areas?.sub_storage?.map((p) => p.id)).toEqual([
+			'01J0000000000000000000000A',
+			'legacy-1'
+		]);
+	});
+
+	it('is deterministic — two reads of the same unwritten doc agree on ids', () => {
+		const a = migrateShelterV2ToCurrent(v6doc);
+		const b = migrateShelterV2ToCurrent(v6doc);
+		expect(a.common_areas?.sub_storage).toEqual(b.common_areas?.sub_storage);
+	});
+
+	it('back-fills a doc already stamped v7 that still lacks an id', () => {
+		const stamped = { ...v6doc, schema_v: SHELTER_MASTER_SCHEMA_V } as unknown as ShelterMasterV2;
+		const m = migrateShelterV2ToCurrent(stamped);
+		expect(m).not.toBe(stamped);
+		expect(m.common_areas?.sub_storage?.[1]?.id).toBe('legacy-1');
+	});
+
+	it('returns the same object once every id is present (nothing to write)', () => {
+		const first = migrateShelterV2ToCurrent(v6doc);
+		expect(migrateShelterV2ToCurrent(first)).toBe(first);
+	});
+
+	it('leaves a doc without common_areas alone', () => {
+		const bare = { ...v6doc, common_areas: undefined } as unknown as ShelterMasterV2;
+		const m = migrateShelterV2ToCurrent(bare);
+		expect(m.schema_v).toBe(SHELTER_MASTER_SCHEMA_V);
+		expect(m.common_areas).toBeUndefined();
 	});
 });

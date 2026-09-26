@@ -32,6 +32,46 @@ pipeline {
                         "
                         echo "Deployment process finished successfully!"
                     '''
+
+                }
+            }
+        }
+
+        stage('Trigger Staging E2E') {
+            when {
+                branch 'staging'
+            }
+            steps {
+                catchError(buildResult: 'UNSTABLE', stageResult: 'UNSTABLE', message: 'Unable to enqueue Staging E2E') {
+                    withCredentials([
+                        sshUserPrivateKey(credentialsId: 'tent-staging-ssh', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER'),
+                        string(credentialsId: 'tent-staging-host', variable: 'SSH_HOST'),
+                        string(credentialsId: 'tent-staging-port', variable: 'SSH_PORT')
+                    ]) {
+                        script {
+                            def deployedCommit = sh(
+                                returnStdout: true,
+                                script: '''
+                                    set +x
+                                    ssh -i "$SSH_KEY" -p "$SSH_PORT" -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" \
+                                        "git -C /home/projects/tent rev-parse HEAD"
+                                '''
+                            ).trim()
+
+                            if (!(deployedCommit ==~ /[0-9a-f]{40}/)) {
+                                error("Invalid deployed Staging commit: ${deployedCommit}")
+                            }
+
+                            echo "Queueing tent-e2e-staging for ${deployedCommit}"
+                            build job: 'tent-e2e-staging',
+                                  parameters: [
+                                      string(name: 'DEPLOY_COMMIT', value: deployedCommit),
+                                      string(name: 'STAGING_URL', value: 'https://shelter.importstar.dev')
+                                  ],
+                                  wait: false,
+                                  propagate: false
+                        }
+                    }
                 }
             }
         }

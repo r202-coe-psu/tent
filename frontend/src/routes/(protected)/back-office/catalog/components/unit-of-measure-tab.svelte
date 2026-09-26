@@ -221,6 +221,11 @@
 	}
 
 	const DIMENSION_LABELS: Record<Dimension, { th: string; color: string }> = {
+		energy: {
+			th: 'พลังงาน',
+			color:
+				'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-400 dark:border-orange-800'
+		},
 		count: {
 			th: 'จำนวนนับ',
 			color:
@@ -558,6 +563,7 @@
 								<Select.Item value="mass">น้ำหนัก (mass)</Select.Item>
 								<Select.Item value="volume">ปริมาตร (volume)</Select.Item>
 								<Select.Item value="length">ความยาว (length)</Select.Item>
+								<Select.Item value="energy">พลังงาน (energy)</Select.Item>
 							</Select.Content>
 						</Select.Root>
 					{/if}

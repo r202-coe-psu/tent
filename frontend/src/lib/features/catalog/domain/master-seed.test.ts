@@ -39,8 +39,8 @@ describe('master seed unit-of-measure provisioning', () => {
 			return { status: 201, data: { ok: true } };
 		});
 
-		expect(await seedCatalogUnitOfMeasures()).toBe(27);
-		expect(writes).toHaveLength(27);
+		expect(await seedCatalogUnitOfMeasures()).toBe(FALLBACK_UNIT_DEFINITIONS.length);
+		expect(writes).toHaveLength(FALLBACK_UNIT_DEFINITIONS.length);
 		expect(writes.map((doc) => doc._id)).toEqual(
 			FALLBACK_UNIT_DEFINITIONS.map((unit) => `unit_of_measure:${unit.code}`)
 		);

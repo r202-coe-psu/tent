@@ -23,6 +23,8 @@
 	import PackageMinus from '@lucide/svelte/icons/package-minus';
 	import { qtyGt, qtyGte, qtyIsZero, qtyLte } from '$lib/utils/qty';
 	import { ulid } from '$lib/db/ulid';
+	import { lotStorageLabel } from '../domain/lot-storage';
+	import { useStoragePoints } from '../application/use-storage-points.svelte';
 
 	let {
 		onsuccess,
@@ -32,6 +34,7 @@
 	// Fetch supply catalog items and stock balance
 	const itemsQuery = useSupplyItems();
 	const itemMastersQuery = useItemMasters(() => getShelterCode());
+	const storagePoints = useStoragePoints(() => getShelterCode());
 	const balanceQuery = useStockBalance();
 	const ledgerQuery = useLedger();
 	const distributeMutation = useDistributeStock();
@@ -378,14 +381,14 @@
 									class="h-11 w-full min-w-0 rounded-md border border-input bg-white px-3 text-sm font-medium shadow-xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none sm:h-10"
 								>
 									{activeLot
-										? `📍 ${activeLot.lot?.note || activeLot.lot?.storage_zone || 'คลังหลัก'} ${activeLot.lot?.expiry ? `(หมดอายุ: ${formatExpiry(activeLot.lot.expiry)})` : '(ไม่ระบุวันหมดอายุ)'} ${activeLot.lot?.lot_no ? `[${activeLot.lot.lot_no}]` : ''} - คงเหลือ ${activeLot.qty} ${selectedItem?.unit}`
+										? `📍 ${lotStorageLabel(activeLot.lot, storagePoints.points)} ${activeLot.lot?.expiry ? `(หมดอายุ: ${formatExpiry(activeLot.lot.expiry)})` : '(ไม่ระบุวันหมดอายุ)'} ${activeLot.lot?.lot_no ? `[${activeLot.lot.lot_no}]` : ''} - คงเหลือ ${activeLot.qty} ${selectedItem?.unit}`
 										: 'เลือกสถานที่ / ล็อตที่ต้องการเบิกจ่าย'}
 								</Select.Trigger>
 								<Select.Content>
 									{#each itemLots as lot (lot.lot_ref)}
 										<Select.Item
 											value={lot.lot_ref}
-											label={`📍 ${lot.lot?.note || lot.lot?.storage_zone || 'คลังหลัก'} ${lot.lot?.expiry ? `(หมดอายุ: ${formatExpiry(lot.lot?.expiry)})` : '(ไม่ระบุวันหมดอายุ)'} ${lot.lot?.lot_no ? `[${lot.lot?.lot_no}]` : ''} - คงเหลือ ${lot.qty} ${selectedItem?.unit}`}
+											label={`📍 ${lotStorageLabel(lot.lot, storagePoints.points)} ${lot.lot?.expiry ? `(หมดอายุ: ${formatExpiry(lot.lot?.expiry)})` : '(ไม่ระบุวันหมดอายุ)'} ${lot.lot?.lot_no ? `[${lot.lot?.lot_no}]` : ''} - คงเหลือ ${lot.qty} ${selectedItem?.unit}`}
 										/>
 									{/each}
 								</Select.Content>

@@ -145,7 +145,7 @@ describe('buildValidateDocUpdate', () => {
 	it('includes audit in the allowed doc type whitelist', () => {
 		const validateFn = buildValidateDocUpdate('SH001');
 		expect(validateFn).toContain("'audit'");
-		expect(validateFn).toContain("'purchase'");
+		expect(validateFn).not.toContain("'purchase'");
 		expect(validateFn).toContain("'referral'");
 	});
 
@@ -481,10 +481,9 @@ describe('buildValidateDocUpdate', () => {
 		);
 	});
 
-	// CR-032: purchase docs are written to shelter dbs, so the server-side
-	// whitelist must accept them or every write is rejected as forbidden.
-	it('includes purchase in the allowed doc type whitelist', () => {
-		expect(buildValidateDocUpdate('SH001')).toContain("'purchase'");
+	// CR-138: purchase withdrawn — must not remain on the shelter allowlist.
+	it('excludes purchase from the allowed doc type whitelist', () => {
+		expect(buildValidateDocUpdate('SH001')).not.toContain("'purchase'");
 	});
 
 	// People registration writes household/medical/screening/movement/image after

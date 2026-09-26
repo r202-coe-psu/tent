@@ -16,6 +16,9 @@
 		type ReceiveInput,
 		type WalkInDonationInput
 	} from '../domain/operations';
+	import { storageLotFields, type StoragePointRef } from '../domain/lot-storage';
+	import { useStoragePoints } from '../application/use-storage-points.svelte';
+	import StoragePointSelect from './storage-point-select.svelte';
 	import { useSupplyItems } from '$lib/features/supply';
 	import {
 		itemMasterUnit,
@@ -44,6 +47,7 @@
 	// Fetch supply catalog items
 	const itemsQuery = useSupplyItems();
 	const itemMastersQuery = useItemMasters(() => getShelterCode());
+	const storagePoints = useStoragePoints(() => getShelterCode());
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
 	const receiveMutation = useReceiveStock();
@@ -192,16 +196,30 @@
 	}
 
 	let expiryDate = $state('');
+	/** Chosen storage point id ('' = unspecified / main store). */
+	let storagePointId = $state('');
+
+	// Location goes to `lot.storage_point_id` + `lot.storage_zone` (name snapshot),
+	// never to `lot.note` (draft-shelter-storage-points).
+	function setStoragePoint(point: StoragePointRef | null) {
+		const lot = { ...($formData.lot ?? {}) };
+		delete lot.storage_zone;
+		delete lot.storage_point_id;
+		$formData.lot = { ...lot, ...storageLotFields(point) };
+	}
 
 	// Keep expiryDate and $formData.lot.expiry in sync
 	$effect(() => {
 		const val = expiryDate.trim();
 		if (!$formData.lot) {
 			if (val) {
-				$formData.lot = { expiry: val, note: '' };
+				$formData.lot = { expiry: val };
 			}
-		} else if ($formData.lot.expiry !== val) {
-			$formData.lot.expiry = val || undefined;
+		} else {
+			const current = $formData.lot.expiry ?? '';
+			if (current !== val) {
+				$formData.lot.expiry = val || undefined;
+			}
 		}
 	});
 
@@ -213,6 +231,8 @@
 		isDropdownOpen = false;
 		clearDonation();
 		expiryDate = '';
+		storagePointId = '';
+		setStoragePoint(null);
 	}
 
 	function selectDonation(donation: Donation) {
@@ -670,43 +690,17 @@
 			</div>
 		{/if}
 
-		<!-- Storage Location (lot.note) -->
-		<Form.Field {form} name="lot.note" class="col-span-1 sm:col-span-2">
+		<!-- Storage Location (lot.storage_point_id + lot.storage_zone) -->
+		<Form.Field {form} name="lot.storage_zone" class="col-span-1 sm:col-span-2">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label>สถานที่จัดเก็บในคลัง (โซน/ชั้นวาง)</Form.Label>
-					<Select.Root
-						type="single"
-						value={$formData.lot?.note ?? ''}
-						onValueChange={(val) => {
-							if (!$formData.lot) {
-								$formData.lot = { expiry: '', note: val ?? '' };
-							} else {
-								$formData.lot.note = val ?? '';
-							}
-						}}
-					>
-						<Select.Trigger
-							{...props}
-							class="h-11 w-full min-w-0 rounded-md border border-input bg-white px-3 text-sm font-medium shadow-xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none sm:h-10"
-						>
-							{$formData.lot?.note
-								? $formData.lot.note === 'Zone A'
-									? 'Zone A (ของใช้ทั่วไป)'
-									: $formData.lot.note === 'Zone B'
-										? 'Zone B (ของที่เน่าเสียได้)'
-										: $formData.lot.note === 'Zone C'
-											? 'Zone C (ยาและเวชภัณฑ์)'
-											: $formData.lot.note
-								: 'เลือกโซนที่เก็บ'}
-						</Select.Trigger>
-						<Select.Content>
-							<Select.Item value="" label="เลือกโซนที่เก็บ" />
-							<Select.Item value="Zone A" label="Zone A (ของใช้ทั่วไป)" />
-							<Select.Item value="Zone B" label="Zone B (ของที่เน่าเสียได้)" />
-							<Select.Item value="Zone C" label="Zone C (ยาและเวชภัณฑ์)" />
-						</Select.Content>
-					</Select.Root>
+					<Form.Label>สถานที่จัดเก็บ (จุดเก็บของของศูนย์)</Form.Label>
+					<StoragePointSelect
+						points={storagePoints.points}
+						bind:value={storagePointId}
+						onchange={setStoragePoint}
+						triggerProps={props}
+					/>
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />
