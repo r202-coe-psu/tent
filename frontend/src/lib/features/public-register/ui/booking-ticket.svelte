@@ -2,6 +2,7 @@
 	import CheckCircle from '@lucide/svelte/icons/check-circle';
 	import CircleCheck from '@lucide/svelte/icons/circle-check';
 	import Download from '@lucide/svelte/icons/download';
+	import QrNameTag from '$lib/components/qr-name-tag.svelte';
 	import { generateQrDataUrl } from '$lib/utils/qrcode';
 	import { toast } from 'svelte-sonner';
 	import { Button } from '$lib/components/ui/button';
@@ -147,27 +148,14 @@
 			<p class="hidden text-center text-sm font-bold text-foreground print:block">
 				{isUnassigned ? 'ยังไม่ระบุศูนย์พักพิง' : ticket.shelter_name}
 			</p>
-			{#await qrPromise}
-				<div class="h-44 w-44 animate-pulse rounded-lg bg-muted"></div>
-			{:then qrUrl}
-				<img src={qrUrl} alt={isUnassigned ? t.qrAltUnassigned : t.qrAlt} class="h-44 w-44" />
-			{:catch}
-				<p
-					class="flex h-44 w-44 items-center justify-center rounded-lg bg-muted p-4 text-center text-xs text-muted-foreground"
-				>
-					{isUnassigned ? t.qrErrorFallbackUnassigned : t.qrErrorFallback}
-				</p>
-			{/await}
-
-			<div class="text-center">
-				<p class="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
-					{t.bookerNameLabel}
-				</p>
-				<p class="text-base font-bold text-foreground">{fullName}</p>
-				{#if isUnassigned}
-					<p class="mt-1 font-mono text-xs text-muted-foreground">รหัส: {ticket.code}</p>
-				{/if}
-			</div>
+			<QrNameTag
+				src={qrPromise}
+				alt={isUnassigned ? t.qrAltUnassigned : t.qrAlt}
+				caption={t.bookerNameLabel}
+				name={fullName}
+				detail={isUnassigned ? `รหัส: ${ticket.code}` : undefined}
+				fallback={isUnassigned ? t.qrErrorFallbackUnassigned : t.qrErrorFallback}
+			/>
 		</div>
 
 		<!-- The name lives in the QR block above (it prints); no need to repeat it here. -->
@@ -259,7 +247,7 @@
 			visibility: hidden !important;
 		}
 		#booking-ticket-print,
-		#booking-ticket-print * {
+		#booking-ticket-print :global(*) {
 			visibility: visible !important;
 		}
 		/*
@@ -283,7 +271,7 @@
 			align-items: center;
 			gap: 12px;
 		}
-		#booking-ticket-print img {
+		#booking-ticket-print :global(img) {
 			height: 240px !important;
 			width: 240px !important;
 		}

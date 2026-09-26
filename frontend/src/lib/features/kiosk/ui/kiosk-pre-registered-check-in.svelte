@@ -1,5 +1,4 @@
 <script lang="ts">
-	import QRCode from 'qrcode';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
@@ -8,14 +7,15 @@
 	import QrCode from '@lucide/svelte/icons/qr-code';
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import UsersRound from '@lucide/svelte/icons/users-round';
+	import QrNameTag from '$lib/components/qr-name-tag.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { generateQrDataUrl, qrModuleCount } from '$lib/utils/qrcode';
 	import KioskCheckInWizard from './kiosk-check-in-wizard.svelte';
 	import KioskLookupErrorActions from './kiosk-lookup-error-actions.svelte';
 	import PhoneHouseholdPicker from './phone-household-picker.svelte';
 	import { initialSelection, toExistingReportResults } from '../domain/household-selection';
 	import {
 		KIOSK_LABEL_GAP_MM,
-		KIOSK_LABEL_LAYOUT,
 		KIOSK_LABEL_MM,
 		KIOSK_LABEL_PADDING_MM,
 		KIOSK_LABEL_RIGHT_SAFE_MM,
@@ -261,12 +261,13 @@
 		try {
 			for (const item of items) {
 				if (!item.qr_payload || nextImages[item.evacuee_id]) continue;
-				const size = kioskQrPrintSize(QRCode.create(item.qr_payload, {}).modules.size);
-				const src = await QRCode.toDataURL(item.qr_payload, {
+				const size = kioskQrPrintSize(await qrModuleCount(item.qr_payload));
+				const src = await generateQrDataUrl(item.qr_payload, {
 					width: size.widthPx,
 					margin: size.margin,
 					color: KIOSK_QR_COLOR
 				});
+				if (!src) throw new Error('QR render returned empty');
 				nextImages[item.evacuee_id] = { src, sizeMm: size.sizeMm };
 			}
 			if (generation !== undefined && generation !== lookupGeneration) return false;
@@ -669,7 +670,6 @@
 		<div hidden>
 			<div
 				class="kiosk-print-area"
-				class:stacked={KIOSK_LABEL_LAYOUT === 'stacked'}
 				aria-hidden="true"
 				style:--label-width="{KIOSK_LABEL_MM.width}mm"
 				style:--label-height="{KIOSK_LABEL_MM.height}mm"
@@ -685,16 +685,15 @@
 					)}
 					{@const qr = qrImages[result.evacuee_id]}
 					<div class="wristband" style:--qr-size="{qr?.sizeMm ?? kioskQrBoxMm()}mm">
-						{#if qr}<img
-								class="wristband-qr"
-								src={qr.src}
-								alt="QR ประจำตัวสำหรับใช้ภายในศูนย์"
-							/>{:else}<div class="wristband-qr qr-placeholder">QR</div>{/if}
-						<div class="wristband-text">
-							<p class="wristband-brand">SMART SHELTER</p>
-							<p class="wristband-name">{person ? fullName(person) : ''}</p>
-							<p class="wristband-center">ศูนย์ {lookup?.shelter_code}</p>
-						</div>
+						<QrNameTag
+							variant="label"
+							class="gap-(--label-gap)"
+							src={qr?.src}
+							alt="QR ประจำตัวสำหรับใช้ภายในศูนย์"
+							caption="ชื่อ"
+							name={person ? fullName(person) : ''}
+							detail="ศูนย์ {lookup?.shelter_code ?? ''}"
+						/>
 					</div>
 				{/each}
 			</div>
@@ -725,10 +724,7 @@
 		}
 		.wristband {
 			box-sizing: border-box;
-			display: grid;
-			grid-template-columns: var(--qr-size) minmax(0, 1fr);
-			column-gap: var(--label-gap);
-			align-items: center;
+			display: block;
 			width: var(--label-width);
 			height: var(--label-height);
 			padding: var(--label-padding);
@@ -742,62 +738,6 @@
 		}
 		.wristband:last-child {
 			break-after: auto;
-		}
-		.wristband-qr {
-			display: block;
-			width: var(--qr-size);
-			height: var(--qr-size);
-			image-rendering: pixelated;
-		}
-		.wristband-text {
-			display: flex;
-			flex-direction: column;
-			gap: 1mm;
-			min-width: 0;
-		}
-		.wristband-text p {
-			margin: 0;
-		}
-		.wristband-brand,
-		.wristband-center {
-			font-size: 9pt;
-			line-height: 1.2;
-		}
-		.wristband-brand {
-			font-weight: 700;
-		}
-		.wristband-name {
-			display: -webkit-box;
-			overflow: hidden;
-			font-size: 16pt;
-			font-weight: 800;
-			line-height: 1.35;
-			overflow-wrap: anywhere;
-			-webkit-box-orient: vertical;
-			-webkit-line-clamp: 4;
-			line-clamp: 4;
-		}
-		/* Square/portrait label: QR on top, centred text below (height budget = KIOSK_LABEL_TEXT_MM). */
-		.stacked .wristband {
-			display: flex;
-			flex-direction: column;
-			align-items: center;
-			gap: var(--label-gap);
-			text-align: center;
-		}
-		.stacked .wristband-text {
-			gap: 0.8mm;
-			width: 100%;
-		}
-		.stacked .wristband-name {
-			-webkit-line-clamp: 2;
-			line-clamp: 2;
-		}
-		.qr-placeholder {
-			display: grid;
-			place-items: center;
-			border: 1px solid #000;
-			font-size: 8pt;
 		}
 	}
 </style>

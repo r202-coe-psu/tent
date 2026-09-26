@@ -166,7 +166,7 @@ for i in $(seq 1 "$COUNT"); do
 done
 
 python3 - "$WORK_DIR" "$LABEL_W" "$LABEL_H" "$COUNT" <<'PY'
-import html, sys
+import sys
 from pathlib import Path
 
 work, w, h, count = Path(sys.argv[1]), float(sys.argv[2]), float(sys.argv[3]), int(sys.argv[4])
@@ -176,19 +176,18 @@ labels = []
 for i in range(1, count + 1):
     svg = (work / f"qr_{i}.svg").read_text()
     svg = svg[svg.index("<svg"):]  # drop the XML prolog/doctype so the SVG can be inlined
-    payload = (work / f"qr_{i}.txt").read_text().strip()
     labels.append(
-        f'<div class="label">{svg}<div class="txt"><b>{names[(i - 1) % len(names)]}</b>'
-        f"<small>{html.escape(payload)}</small></div></div>"
+        f'<div class="label">{svg}<div class="txt"><small>ชื่อ</small>'
+        f'<b>{names[(i - 1) % len(names)]}</b><small>ศูนย์ TEST</small></div></div>'
     )
 (work / "index.html").write_text(f"""<!doctype html><html lang="th"><head><meta charset="utf-8"><title>Label print test</title>
 <style>
 @page{{size:{w:g}mm {h:g}mm;margin:0}}
 body{{font-family:sans-serif;margin:16px}}
-.label{{width:{w:g}mm;height:{h:g}mm;box-sizing:border-box;padding:2mm;display:flex;gap:2mm;align-items:center;border:1px dashed #999;margin-bottom:8px;overflow:hidden}}
+.label{{width:{w:g}mm;height:{h:g}mm;box-sizing:border-box;padding:2mm;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0.6mm;text-align:center;border:1px dashed #999;margin-bottom:8px;overflow:hidden}}
 .label svg{{width:{qr_mm:g}mm;height:{qr_mm:g}mm;flex:none;shape-rendering:crispEdges}}
-.txt{{display:flex;flex-direction:column;gap:1mm;font-size:10pt;min-width:0}}
-.txt small{{font-size:6pt;word-break:break-all}}
+.txt{{display:flex;flex-direction:column;gap:0.6mm;font-size:12pt;font-weight:800;line-height:1.3;min-width:0;overflow-wrap:anywhere}}
+.txt small{{font-size:8pt;font-weight:400;line-height:1.2}}
 @media print{{body{{margin:0}}.no-print{{display:none}}.label{{border:0;margin:0;break-after:page}}.label:last-child{{break-after:auto}}}}
 </style></head><body>
 <div class="no-print"><button id="p" style="font-size:20px;padding:12px 24px">พิมพ์ {count} label</button></div>

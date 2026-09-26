@@ -12,8 +12,7 @@ import {
 	KIOSK_QR_MIN_MM,
 	KIOSK_QR_QUIET_ZONE_MODULES,
 	KIOSK_LABEL_GAP_MM,
-	KIOSK_LABEL_LAYOUT,
-	KIOSK_LABEL_SIDE_TEXT_MM,
+	KIOSK_LABEL_TEXT_MM,
 	kioskLabelPageCss,
 	kioskQrBoxMm,
 	kioskQrPrintSize,
@@ -37,22 +36,24 @@ describe('kiosk label size', () => {
 		expect(KIOSK_QR_COLOR).toEqual({ dark: '#000000', light: '#FFFFFF' });
 	});
 
-	it('puts the QR at the left edge and leaves the text column its minimum width', () => {
-		expect(KIOSK_LABEL_LAYOUT).toBe('side');
-		expect(kioskQrBoxMm() + KIOSK_LABEL_GAP_MM + KIOSK_LABEL_SIDE_TEXT_MM).toBeLessThanOrEqual(
+	it('stacks the QR above the text block', () => {
+		expect(kioskQrBoxMm() + KIOSK_LABEL_GAP_MM + KIOSK_LABEL_TEXT_MM).toBeLessThanOrEqual(
+			KIOSK_LABEL_MM.height - KIOSK_LABEL_PADDING_MM * 2
+		);
+		expect(kioskQrBoxMm()).toBeLessThanOrEqual(
 			KIOSK_LABEL_MM.width - KIOSK_LABEL_PADDING_MM * 2 - KIOSK_LABEL_RIGHT_SAFE_MM
 		);
 	});
 });
 
 describe('kioskQrPrintSize', () => {
-	it('maps an evacuee id QR (version 3) to 10 whole dots per module', () => {
+	it('maps an evacuee id QR (version 3) to 8 whole dots per module', () => {
 		const moduleCount = QRCode.create(SAMPLE_EVACUEE_ID, {}).modules.size;
 		expect(moduleCount).toBe(29);
 
 		const size = kioskQrPrintSize(moduleCount);
-		expect(size).toMatchObject({ widthPx: 350, margin: 3, dotsPerModule: 10 });
-		expect(size.sizeMm).toBeCloseTo(43.79, 2);
+		expect(size).toMatchObject({ widthPx: 264, margin: 2, dotsPerModule: 8 });
+		expect(size.sizeMm).toBeCloseTo(33.03, 2);
 	});
 
 	it.each([21, 25, 29, 33, 37])('uses the largest capped whole-dot module for %i modules', (n) => {
@@ -80,7 +81,12 @@ describe('kioskQrPrintSize', () => {
 
 	it('never shifts the visible QR modules off the left edge of the label', () => {
 		const size = kioskQrPrintSize(QRCode.create(SAMPLE_EVACUEE_ID, {}).modules.size);
-		const leftWhiteMm = KIOSK_LABEL_PADDING_MM + dotsToMm(size.margin * size.dotsPerModule);
+		const innerWidth =
+			KIOSK_LABEL_MM.width - KIOSK_LABEL_PADDING_MM * 2 - KIOSK_LABEL_RIGHT_SAFE_MM;
+		const leftWhiteMm =
+			KIOSK_LABEL_PADDING_MM +
+			(innerWidth - size.sizeMm) / 2 +
+			dotsToMm(size.margin * size.dotsPerModule);
 		expect(leftWhiteMm).toBeGreaterThan(KIOSK_LABEL_SHIFT_LEFT_MM);
 	});
 

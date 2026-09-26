@@ -13,20 +13,14 @@ export const KIOSK_LABEL_RIGHT_SAFE_MM = 4;
 export const KIOSK_LABEL_SHIFT_LEFT_MM = 4;
 /** Space between the QR and the text. */
 export const KIOSK_LABEL_GAP_MM = 2;
-/** Side layout: minimum width of the text column right of the QR (brand, name, shelter). */
-export const KIOSK_LABEL_SIDE_TEXT_MM = 24;
-/** Stacked layout: height kept under the QR for brand + 2-line name + shelter. */
+/** Height kept under the QR for caption + 2-line name + shelter. */
 export const KIOSK_LABEL_TEXT_MM = 20;
 export const KIOSK_QR_MIN_MM = 20;
 export const KIOSK_QR_MARGIN_MODULES = 2;
 export const KIOSK_QR_QUIET_ZONE_MODULES = 4;
-/** Caps the QR a little below the full box (10 dots = 1.25 mm modules) so the name column keeps ~30 mm. */
+/** Caps QR modules at 10 printer dots each for crisp thermal output. */
 export const KIOSK_QR_MAX_DOTS_PER_MODULE = 10;
 export const KIOSK_QR_COLOR = { dark: '#000000', light: '#FFFFFF' } as const;
-
-/** 'side' = QR at the left edge, text beside it; 'stacked' = QR on top, text below. */
-export type KioskLabelLayout = 'stacked' | 'side';
-export const KIOSK_LABEL_LAYOUT: KioskLabelLayout = 'side';
 
 const MM_PER_INCH = 25.4;
 const QUIET_ZONE_TOLERANCE_MODULES = 0.05;
@@ -48,13 +42,11 @@ export function dotsToMm(dots: number): number {
 	return (dots / KIOSK_PRINT_DPI) * MM_PER_INCH;
 }
 
-/** Largest square (mm) the QR image may occupy on the label for the current layout. */
+/** Largest square (mm) the QR image may occupy above the label text. */
 export function kioskQrBoxMm(): number {
 	const innerWidth = KIOSK_LABEL_MM.width - KIOSK_LABEL_PADDING_MM * 2 - KIOSK_LABEL_RIGHT_SAFE_MM;
 	const innerHeight = KIOSK_LABEL_MM.height - KIOSK_LABEL_PADDING_MM * 2;
-	return KIOSK_LABEL_LAYOUT === 'stacked'
-		? Math.min(innerWidth, innerHeight - KIOSK_LABEL_GAP_MM - KIOSK_LABEL_TEXT_MM)
-		: Math.min(innerHeight, innerWidth - KIOSK_LABEL_GAP_MM - KIOSK_LABEL_SIDE_TEXT_MM);
+	return Math.min(innerWidth, innerHeight - KIOSK_LABEL_GAP_MM - KIOSK_LABEL_TEXT_MM);
 }
 
 /**
