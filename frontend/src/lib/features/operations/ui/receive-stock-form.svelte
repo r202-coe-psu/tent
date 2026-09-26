@@ -215,8 +215,11 @@
 			if (val) {
 				$formData.lot = { expiry: val };
 			}
-		} else if ($formData.lot.expiry !== val) {
-			$formData.lot.expiry = val || undefined;
+		} else {
+			const current = $formData.lot.expiry ?? '';
+			if (current !== val) {
+				$formData.lot.expiry = val || undefined;
+			}
 		}
 	});
 
@@ -229,6 +232,7 @@
 		clearDonation();
 		expiryDate = '';
 		storagePointId = '';
+		setStoragePoint(null);
 	}
 
 	function selectDonation(donation: Donation) {
