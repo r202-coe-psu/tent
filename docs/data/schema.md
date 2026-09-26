@@ -3,7 +3,7 @@ title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
 updated: 2026-09-26
-note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer; CR-135/CR-136 partner OAuth2 client name/module preset + secret reveal/edit/delete; CR-137 shrink master_data (10→4) + zone/community free text; CR-138 remove purchase doc type + withdraw purchase from stock_ledger.reason; draft-shelter-storage-points (proposed) shelter schema_v 7 + stock_ledger schema_v 5
+note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer; CR-135/CR-136 partner OAuth2 client name/module preset + secret reveal/edit/delete; CR-137 shrink master_data (10→4) + zone/community free text; CR-138 remove purchase doc type + withdraw purchase from stock_ledger.reason
 ---
 
 # Database Schema v5 — field-level
@@ -288,7 +288,7 @@ projection — เป็นข้อมูลหลังบ้านล้ว�
 > **CR-059 Flow 2** — เพิ่ม physical-lot identity `lot_ref` และ `distribution_return` โดยไม่เปลี่ยน
 > `schema_v`. แถวรับเข้าใหม่ทุกแถวกำหนด `lot_ref === _id`; แถว legacy ที่ไม่มี `lot_ref` ยังอ่านได้
 > และใช้ `_id` ของแถวนั้นเป็น virtual lot reference. `lot_no` เป็นป้ายแสดงผลเท่านั้นและห้ามใช้เป็น identity.
-> **schema_v 5** — เพิ่ม `lot.storage_point_id` → `shelter.common_areas.sub_storage[].id` และให้ `lot.storage_zone` เป็นชื่อจุดเก็บ ณ เวลาบันทึก ([draft-shelter-storage-points](../changes/draft-shelter-storage-points.md), proposed). additive ⇒ แถวเดิมไม่ backfill. writer ใหม่ไม่เก็บสถานที่ใน `lot.note`. ผู้เขียน ledger ทุกที่ stamp `schema_v 5` (`createStockLedger`).
+> **schema_v 5** — เพิ่ม `lot.storage_point_id` → `shelter.common_areas.sub_storage[].id` และให้ `lot.storage_zone` เป็นชื่อจุดเก็บ ณ เวลาบันทึก ([CR-139](../changes/CR-139-shelter-storage-points.md)). additive ⇒ แถวเดิมไม่ backfill. writer ใหม่ไม่เก็บสถานที่ใน `lot.note`. ผู้เขียน ledger ทุกที่ stamp `schema_v 5` (`createStockLedger`).
 > **schema_v 4** — เพิ่ม `lot.lot_no` (`L-YYMMDD-XXX`) + `lot.storage_zone` ([CR-088](../changes/CR-088-stock-ledger-lot-storage-zone.md)) — ขั้นตรวจรับบริจาค (T-16 R-16.5) ต้องมีที่เก็บเลขล็อตกับโซนจัดเก็บ. optional ทั้งคู่ ⇒ แถวเก่าไม่ต้อง backfill. `lot_no` ออกโดย **server** ตอนเขียน ledger (`lib/server/lot-number.ts`) ไม่รับจาก client. ผู้เขียน ledger ทุกที่ stamp `schema_v 4` เท่ากัน (`createStockLedger`)
 > **schema_v 3** — historically introduced `purchase` in the reason enum ([CR-032](../changes/CR-032-stock-ledger-purchase-reason.md)); **`purchase` withdrawn by [CR-138](../changes/CR-138-remove-purchase.md)** (no schema_v bump). Writers continue stamping ≥3. schema_v 2 rows remain readable.
 > schema_v 2 — `qty` เป็น `qty_str` (ไม่ใช่ JSON number). CR-038.
@@ -1215,7 +1215,7 @@ backward compatibility ของ CR-059/110; flow ใหม่ใช้ §2.29�
 
 ### 3.1 `shelter` — `shelter:{ulid}`
 
-> **schema_v 7** — `common_areas.sub_storage[].id` บังคับมีค่าเมื่อเขียน; `sub_storage` คือ master "จุดเก็บของ" ของศูนย์ที่ `stock_ledger.lot.storage_point_id` อ้างถึง ([draft-shelter-storage-points](../changes/draft-shelter-storage-points.md), proposed).
+> **schema_v 7** — `common_areas.sub_storage[].id` บังคับมีค่าเมื่อเขียน; `sub_storage` คือ master "จุดเก็บของ" ของศูนย์ที่ `stock_ledger.lot.storage_point_id` อ้างถึง ([CR-139](../changes/CR-139-shelter-storage-points.md)).
 > **schema_v 6** — เพิ่ม `food_distribution_points` (จุดแจกอาหาร — named spot + optional lat/lng; staff-only plane) ([CR-128](../changes/CR-128-shelter-food-distribution-points-and-single-page-form.md)). optional ⇒ doc เดิมไม่ต้อง backfill.
 > **schema_v 5** — เพิ่ม `site_kind` เพื่อแยกศูนย์อพยพกับบ้านพี่เลี้ยงโดยใช้ doc type `shelter` เดิม (CR-067).
 > **schema_v 4** — ขยาย shelter form v4/v5: structured address, project level, key personnel,
@@ -1264,7 +1264,7 @@ backward compatibility ของ CR-059/110; flow ใหม่ใช้ §2.29�
 
 **Migration (schema_v 5 → 6, CR-128):** purely additive — `food_distribution_points` เป็น array ใหม่ default `[]`. Reader ของเอกสาร v5 ที่ไม่มี field ให้ default-fill `[]` แบบ lazy; ไม่บังคับ backfill batch. เมื่อเขียนใหม่ stamp `schema_v: 6`; `scripts/migrate-shelter.ts` re-stamp เอกสารเดิมเป็น v6 พร้อมเติม `[]`. ไม่มี rename/semantic change.
 
-**Migration (schema_v 6 → 7, draft-shelter-storage-points):** reader เติม `common_areas.sub_storage[].id = legacy-<index>` ให้รายการที่ไม่มี `id` แบบ deterministic (อ่านซ้ำได้ค่าเดิมจนกว่าจะเขียน) แล้ว stamp `schema_v: 7`; เขียนใหม่ = persist ค่านั้น. `scripts/migrate-shelter.ts` persist ให้เอกสารเดิมทั้งหมด. ห้าม mint ULID ตอนอ่าน เพราะ ledger อาจอ้าง `id` ที่ไม่เคยถูกเขียนลง doc.
+**Migration (schema_v 6 → 7, CR-139):** reader เติม `common_areas.sub_storage[].id = legacy-<index>` ให้รายการที่ไม่มี `id` แบบ deterministic (อ่านซ้ำได้ค่าเดิมจนกว่าจะเขียน) แล้ว stamp `schema_v: 7`; เขียนใหม่ = persist ค่านั้น. `scripts/migrate-shelter.ts` persist ให้เอกสารเดิมทั้งหมด. ห้าม mint ULID ตอนอ่าน เพราะ ledger อาจอ้าง `id` ที่ไม่เคยถูกเขียนลง doc.
 
 ### 3.2 `config` — `config:app` (singleton)
 

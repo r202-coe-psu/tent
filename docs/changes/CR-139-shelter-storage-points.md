@@ -1,10 +1,10 @@
 ---
-id: draft
+id: CR-139
 title: shelter — ตั้งค่าจุดเก็บของ (common_areas.sub_storage) เป็น master ของศูนย์ และใช้เป็นตัวเลือก "สถานที่จัดเก็บ" ในจัดการสต็อก (stock_ledger.lot.storage_point_id)
-status: proposed
+status: approved
 date: 2026-09-26
-requested_by: ทีม C (Kong) — review หน้าจัดการสต็อก
-decided_by: <เจ้าของโครงการ>
+requested_by: ทีม C — review หน้าจัดการสต็อก
+decided_by: Kong 
 layer: volatile
 affects:
   - docs/data/schema.md §3.1 (schema_v shelter 6 → 7)
@@ -24,7 +24,7 @@ migration: >
   append-only ⇒ ไม่ backfill แถวเดิม
 ---
 
-# draft-shelter-storage-points — จุดเก็บของของศูนย์ → "สถานที่จัดเก็บ" ในจัดการสต็อก
+# CR-139 — จุดเก็บของของศูนย์ → "สถานที่จัดเก็บ" ในจัดการสต็อก
 
 ## สรุป (TL;DR)
 
@@ -174,16 +174,17 @@ export ไว้ใน barrel `$lib/features/operations` แล้ว (มีผ
 
 **ลำดับ merge:** `feat/shelter-storage-locations` → `develop` ก่อน แล้วทีม A rebase/merge `develop` เข้า `team-A-donation` จึงเริ่มแก้
 
-## Open decisions
+## Open decisions (Resolved)
 
-> [NEEDS DECISION N1] หน้าตรวจรับบริจาค: บังคับเลือกจุดเก็บเมื่อศูนย์มีจุดเก็บ ≥1 และไม่บังคับเมื่อไม่มีเลย — หรือคงบังคับทุกกรณีเหมือนเดิม?
+> [DECIDED N1] หน้าตรวจรับบริจาค: บังคับเลือกจุดเก็บเมื่อศูนย์มีจุดเก็บ ≥1 และไม่บังคับเมื่อไม่มีเลย (เลือกคลังหลัก)
 >
-> [NEEDS DECISION N2] ลบจุดเก็บที่ยังมีของคงเหลือ: อนุญาต (ล็อตแสดงชื่อ snapshot ใน `storage_zone`) หรือบล็อกการลบ? — draft นี้ implement แบบ **อนุญาต**
+> [DECIDED N2] ลบจุดเก็บที่ยังมีของคงเหลือ: อนุญาต (ล็อตเดิมยังคงแสดงชื่อ snapshot ใน `storage_zone`)
 >
-> [NEEDS DECISION N3] ชื่อ section: "จุดเก็บของ" หรือ "คลังย่อยและสถานที่จัดเก็บ" (ชื่อเดิม)? — draft นี้ใช้ **"จุดเก็บของ"**
+> [DECIDED N3] ชื่อ section: ใช้ชื่อ **"จุดเก็บของ"**
 
 ## Decision log
 
+- 2026-09-26 — approved โดย Kong ; กำหนดหมายเลข CR-139
 - 2026-09-26 — proposed (branch `feat/shelter-storage-locations`); วิธี track = draft CR ไฟล์ + แก้ code/schema
   บน branch เดียวกัน, PM ตรวจและอนุมัติ (เจ้าของโครงการเลือก)
 - 2026-09-26 — scan-station (FR-11) มอบให้ทีม A ทำใน `team-A-donation` เพื่อเลี่ยง conflict กับงาน rewrite ที่ค้างอยู่
