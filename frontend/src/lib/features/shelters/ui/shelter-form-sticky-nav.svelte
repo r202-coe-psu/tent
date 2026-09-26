@@ -19,6 +19,7 @@
 		sectionsWithErrors,
 		ariaLabel,
 		onNavigate,
+		onCancel,
 		showSave = true,
 		savePending = false,
 		saveDisabled = false
@@ -28,6 +29,7 @@
 		sectionsWithErrors: Set<string> | string[];
 		ariaLabel: string;
 		onNavigate: (id: string) => void;
+		onCancel?: () => void;
 		showSave?: boolean;
 		savePending?: boolean;
 		saveDisabled?: boolean;
@@ -106,22 +108,36 @@
 				</nav>
 			{/if}
 
-			{#if showSave}
-				<div class="w-full min-w-0">
-					<Button
-						type="submit"
-						form="shelter-form"
-						disabled={savePending || saveDisabled}
-						class="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#0A2647] text-sm font-semibold text-white shadow-2xs transition hover:bg-[#051930] active:scale-[0.98]"
-					>
-						{#if savePending}
-							<Loader2 class="size-4 animate-spin" />
-							<span>กำลังบันทึก...</span>
-						{:else}
-							<Save class="size-4" />
-							<span>บันทึกข้อมูล</span>
-						{/if}
-					</Button>
+			{#if showSave || onCancel}
+				<div class="flex w-full min-w-0 items-center gap-2">
+					{#if onCancel}
+						<Button
+							type="button"
+							variant="outline"
+							onclick={onCancel}
+							class="h-11 flex-1 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 active:scale-[0.98]"
+						>
+							ยกเลิก
+						</Button>
+					{/if}
+					{#if showSave}
+						<Button
+							type="submit"
+							form="shelter-form"
+							disabled={savePending || saveDisabled}
+							class="flex h-11 {onCancel
+								? 'flex-[1.6]'
+								: 'w-full'} items-center justify-center gap-2 rounded-xl bg-[#0A2647] text-sm font-semibold text-white shadow-2xs transition hover:bg-[#051930] active:scale-[0.98]"
+						>
+							{#if savePending}
+								<Loader2 class="size-4 animate-spin" />
+								<span>กำลังบันทึก...</span>
+							{:else}
+								<Save class="size-4" />
+								<span>บันทึกข้อมูล</span>
+							{/if}
+						</Button>
+					{/if}
 				</div>
 			{/if}
 		</div>

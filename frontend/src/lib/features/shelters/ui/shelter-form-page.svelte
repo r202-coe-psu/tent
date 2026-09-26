@@ -38,6 +38,8 @@
 	import Briefcase from '@lucide/svelte/icons/briefcase';
 	import Car from '@lucide/svelte/icons/car';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
+	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
+	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import Save from '@lucide/svelte/icons/save';
 	import { Button } from '$lib/components/ui/button/index.js';
 
@@ -53,7 +55,16 @@
 		siteKind?: SiteKind;
 	} = $props();
 
-	const resolvedBasePath = $derived(basePath ?? resolve('/back-office/shelters'));
+	const resolvedBasePath = $derived(basePath ?? resolve('/portal'));
+
+	function handleCancelOrBack(e?: MouseEvent) {
+		if (e) e.preventDefault();
+		if (typeof window !== 'undefined' && window.history.length > 1) {
+			window.history.back();
+		} else {
+			goto(resolvedBasePath);
+		}
+	}
 
 	const shelterQuery = useShelter(() => id);
 	const createMutation = useCreateShelter();
@@ -230,9 +241,6 @@
 		});
 	}
 
-	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
-	import Loader2 from '@lucide/svelte/icons/loader-2';
-
 	const statusBadgeConfig = $derived.by(() => {
 		const status = $formData.operation_status;
 		switch (status) {
@@ -285,6 +293,7 @@
 				<div class="flex min-w-0 items-start gap-3">
 					<a
 						href={resolvedBasePath}
+						onclick={handleCancelOrBack}
 						class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-2xs transition hover:bg-slate-50 hover:text-slate-900"
 						title="กลับหน้ารายการศูนย์พักพิง"
 					>
@@ -318,6 +327,7 @@
 				<div class="flex items-center gap-2.5 pt-0.5 sm:pt-0">
 					<a
 						href={resolvedBasePath}
+						onclick={handleCancelOrBack}
 						class="flex-1 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-center text-sm font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 sm:flex-none"
 					>
 						ยกเลิก
@@ -483,6 +493,7 @@
 			sectionsWithErrors={sectionsWithErrorsSet}
 			ariaLabel="นำทางหมวดหมู่ฟอร์มศูนย์พักพิง"
 			onNavigate={navigateToSection}
+			onCancel={handleCancelOrBack}
 			savePending={isPending}
 			saveDisabled={$submitting || isPending}
 		/>
