@@ -188,6 +188,18 @@
 		</div>
 
 		<div class="flex flex-wrap items-center justify-end gap-2">
+			<!-- Action: Create Ticket (Guarded by RBAC canCreateTicket) -->
+			{#if activeView === 'tickets' && userCanCreate}
+				<button
+					type="button"
+					onclick={() => (isCreateOpen = true)}
+					class="inline-flex shrink-0 items-center gap-2 rounded-xl bg-[#0A2647] px-4 py-2.5 text-sm font-semibold text-white shadow-2xs transition-colors hover:bg-[#051930]"
+				>
+					<Plus class="h-4 w-4" />
+					<span>สร้างใบเบิกจ่าย</span>
+				</button>
+			{/if}
+
 			<div
 				class="flex rounded-xl border border-slate-200 bg-white p-1 shadow-2xs"
 				role="tablist"
@@ -218,18 +230,6 @@
 					จุดรวมคืนพัสดุ
 				</button>
 			</div>
-
-			<!-- Action: Create Ticket (Guarded by RBAC canCreateTicket) -->
-			{#if activeView === 'tickets' && userCanCreate}
-				<button
-					type="button"
-					onclick={() => (isCreateOpen = true)}
-					class="inline-flex shrink-0 items-center gap-2 rounded-xl bg-[#0A2647] px-4 py-2.5 text-sm font-semibold text-white shadow-2xs transition-colors hover:bg-[#051930]"
-				>
-					<Plus class="h-4 w-4" />
-					<span>สร้างใบเบิกจ่าย</span>
-				</button>
-			{/if}
 		</div>
 	</div>
 
