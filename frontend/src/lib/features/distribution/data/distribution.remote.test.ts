@@ -3731,6 +3731,18 @@ describe('DistributionRemoteRepository createRequest (Phase 4B)', () => {
 		expect(allDocs.filter((d) => d.type === 'stock_ledger')).toHaveLength(0);
 	});
 
+	it('canonicalizes a legacy display unit before persisting a request', async () => {
+		const request = await repo.createRequest(
+			{
+				...sampleInput,
+				items: [{ ...sampleInput.items[0], unit: 'ชิ้น' }]
+			},
+			regCtx
+		);
+
+		expect(request.items[0]?.unit).toBe('piece');
+	});
+
 	it.each([
 		['warehouse_staff', warehouseCtx],
 		['kitchen_staff', kitchenCtx],

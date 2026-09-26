@@ -4,6 +4,7 @@ import {
 	createUnitOfMeasure,
 	isUnitOfMeasure,
 	formatUnit,
+	canonicalizeUnitCode,
 	FALLBACK_UNIT_DEFINITIONS,
 	unitCodeSchema,
 	type UnitOfMeasure
@@ -229,6 +230,31 @@ describe('unit-of-measure domain', () => {
 			expect(formatUnit(null)).toBe('');
 			expect(formatUnit(undefined)).toBe('');
 			expect(formatUnit('')).toBe('');
+		});
+	});
+
+	describe('canonicalizeUnitCode', () => {
+		it('maps canonical codes and legacy display labels to the persisted code', () => {
+			expect(canonicalizeUnitCode('piece')).toBe('piece');
+			expect(canonicalizeUnitCode('ชิ้น')).toBe('piece');
+			expect(canonicalizeUnitCode('กิโลกรัม')).toBe('kg');
+		});
+
+		it('uses configured custom UOM labels without introducing a local alias map', () => {
+			const custom: UnitOfMeasure = {
+				_id: 'unit_of_measure:custom_bag',
+				type: 'unit_of_measure',
+				schema_v: 1,
+				code: 'custom_bag',
+				label_th: 'กระสอบพิเศษ',
+				label_en: 'special sack',
+				dimension: 'mass',
+				created_at: '',
+				updated_at: '',
+				created_by: 'system'
+			};
+			expect(canonicalizeUnitCode('กระสอบพิเศษ', [custom])).toBe('custom_bag');
+			expect(canonicalizeUnitCode('special sack', [custom])).toBe('custom_bag');
 		});
 	});
 });

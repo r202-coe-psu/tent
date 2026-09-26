@@ -20,6 +20,7 @@ import {
 import { assertCanPerformFrontlineDistribution, assertCanReceiveWarehouseReturns } from './auth';
 import { StockIntegrityError, TicketStateError, WorkflowValidationError } from './errors';
 import { assertLedgerReplayBase } from './ledger-replay';
+import { resolveCanonicalItemUnits, type CanonicalUnitCatalogRepository } from './canonical-unit';
 
 function assertWarehouseReturnLedgerSemantics(
 	actual: StockLedger,
@@ -52,6 +53,7 @@ export interface ReconciliationDependencies {
 	ticketRepo?: RequisitionTicketRepository;
 	logRepo?: DistributionLogRepository;
 	operationsRepo?: OperationsRepository;
+	catalogRepo?: CanonicalUnitCatalogRepository;
 }
 
 export interface ItemReconciliationSummary {
@@ -241,6 +243,11 @@ export async function receiveWarehouseReturns(
 			`Cannot receive warehouse returns for ticket ${ticketId} in status '${current.status}'; expected RETURN_PENDING_RECEIPT`
 		);
 	}
+	const itemUnits = await resolveCanonicalItemUnits(
+		current.items.map((item) => item.item_id),
+		ctx,
+		deps?.catalogRepo
+	);
 
 	const requestedQuantities = options?.verified_returned_quantities ?? {};
 	const ticketItemIds = new Set(current.items.map((item) => item.item_id));
@@ -296,6 +303,12 @@ export async function receiveWarehouseReturns(
 	}
 
 	const buildExpectedLedger = async (item: TicketItem, qty: string): Promise<StockLedger> => {
+		const unit = itemUnits.get(item.item_id);
+		if (!unit) {
+			throw new StockIntegrityError(
+				`Missing canonical unit for warehouse return item ${item.item_id}`
+			);
+		}
 		const ledgerId = await deriveDeterministicLedgerId(
 			'warehouse_return',
 			current._id,
@@ -305,7 +318,7 @@ export async function receiveWarehouseReturns(
 			{
 				item_id: item.item_id,
 				qty,
-				unit: 'ชิ้น',
+				unit,
 				reason: 'receive',
 				ref_id: current._id,
 				lot: { note: 'distribution_return' },

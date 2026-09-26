@@ -68,6 +68,7 @@ export {
 	dimensionSchema,
 	unitCodeSchema,
 	isCanonicalUnitCode,
+	canonicalizeUnitCode,
 	isLegacyUnitLabel,
 	assertKnownUnitCodes,
 	unitOfMeasureInputSchema,

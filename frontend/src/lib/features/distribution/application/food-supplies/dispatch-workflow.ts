@@ -19,10 +19,12 @@ import { assertCanDispatchTicket } from './auth';
 import { assertPositiveIntegerQty } from './validation';
 import { StockIntegrityError, TicketStateError, WorkflowValidationError } from './errors';
 import { assertLedgerReplayBase } from './ledger-replay';
+import { resolveCanonicalItemUnits, type CanonicalUnitCatalogRepository } from './canonical-unit';
 
 export interface DispatchWorkflowDependencies {
 	ticketRepo?: RequisitionTicketRepository;
 	operationsRepo?: OperationsRepository;
+	catalogRepo?: CanonicalUnitCatalogRepository;
 }
 
 export interface DispatchTicketOptions {
@@ -137,6 +139,11 @@ export async function dispatchTicket(
 			);
 		}
 	}
+	const itemUnits = await resolveCanonicalItemUnits(
+		current.items.map((item) => item.item_id),
+		ctx,
+		deps?.catalogRepo
+	);
 
 	let createdCount = 0;
 	for (const item of current.items) {
@@ -148,11 +155,16 @@ export async function dispatchTicket(
 				? options.item_lots[item.item_id]
 				: ledgerId;
 
+		const unit = itemUnits.get(item.item_id);
+		if (!unit) {
+			throw new StockIntegrityError(`Missing canonical unit for dispatched item ${item.item_id}`);
+		}
+
 		const ledgerEntry = createStockLedger(
 			{
 				item_id: item.item_id,
 				qty: qtyNeg(item.allocated_qty),
-				unit: 'ชิ้น',
+				unit,
 				reason: 'distribute',
 				ref_id: current._id,
 				lot_ref: lotRef,
@@ -228,6 +240,11 @@ export async function amendActiveTicket(
 	if (!targetItem) {
 		throw new WorkflowValidationError(`Item ${input.item_id} does not exist on ticket ${ticketId}`);
 	}
+	const itemUnits = await resolveCanonicalItemUnits([input.item_id], ctx, deps?.catalogRepo);
+	const unit = itemUnits.get(input.item_id);
+	if (!unit) {
+		throw new StockIntegrityError(`Missing canonical unit for amended item ${input.item_id}`);
+	}
 
 	const lotRef =
 		input.lot_ref && input.lot_ref.startsWith('stock_ledger:')
@@ -239,7 +256,7 @@ export async function amendActiveTicket(
 		{
 			item_id: input.item_id,
 			qty: qtyNeg(addedQty),
-			unit: 'ชิ้น',
+			unit,
 			reason: 'distribute',
 			ref_id: current._id,
 			lot_ref: lotRef,

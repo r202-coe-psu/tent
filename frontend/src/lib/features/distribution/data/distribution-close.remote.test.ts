@@ -253,7 +253,12 @@ describe('DistributionRemoteRepository closeBatch (Phase A Step 2)', () => {
 		return saved;
 	}
 
-	function seedIssue(batchId: string, itemId: string, qty: string): DistributionIssue {
+	function seedIssue(
+		batchId: string,
+		itemId: string,
+		qty: string,
+		unit = 'piece'
+	): DistributionIssue {
 		const issueUlid = ulid();
 		const issue: DistributionIssue = {
 			_id: `distribution_issue:${issueUlid}`,
@@ -262,7 +267,7 @@ describe('DistributionRemoteRepository closeBatch (Phase A Step 2)', () => {
 			evacuee_id: `evacuee:${ulid()}`,
 			item_id: itemId,
 			qty,
-			unit: 'piece',
+			unit,
 			distributed_at: '2026-09-01T01:00:00.000Z',
 			distributed_by: 'reg-1',
 			distribution_type_snapshot: 'one_time',
@@ -1092,6 +1097,25 @@ describe('DistributionRemoteRepository closeBatch (Phase A Step 2)', () => {
 			expect(ledger.ref_id).toBe(batch._id);
 			expect(ledger.lot_ref).toBe('stock_ledger:01JLOT00000000000000000001');
 			expect(ledger.shelter_code).toBe('SH001');
+		});
+
+		it('writes a canonical receipt unit when a legacy batch contains a display label', async () => {
+			const batch = seedBatch({
+				items: [
+					{
+						item_id: 'item:blanket',
+						allocated_qty: '40',
+						unit: 'ชิ้น',
+						distribution_type_snapshot: 'one_time'
+					}
+				]
+			});
+			seedIssue(batch._id, 'item:blanket', '30', 'ชิ้น');
+
+			const closed = await repo.closeBatch(batch._id, {}, WAREHOUSE_CTX);
+			const ledger = store.get(closed.return_ledger_ids[0]!);
+
+			expect(ledger?.unit).toBe('piece');
 		});
 
 		it('T3-02: return_qty = 0 emits no ledger', async () => {

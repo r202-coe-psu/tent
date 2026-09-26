@@ -165,6 +165,40 @@ export const FALLBACK_UNIT_DEFINITIONS: FallbackUnitDef[] = [
 	}
 ];
 
+/**
+ * Resolves a persisted or legacy display unit to its canonical UOM code.
+ *
+ * New writes must persist codes (for example `piece`), while this recognises
+ * legacy labels such as `ชิ้น` at controlled read/input boundaries.
+ */
+export function canonicalizeUnitCode(
+	value: unknown,
+	units?: readonly (UnitOfMeasure | FallbackUnitDef)[] | null
+): string | null {
+	if (typeof value !== 'string') return null;
+	const trimmed = value.trim();
+	if (!trimmed) return null;
+	const normalized = trimmed.toLowerCase();
+
+	const configured = units?.find((unit) => {
+		const candidates = [unit.code, unit.label_th, unit.label_th_short, unit.label_en]
+			.filter((candidate): candidate is string => typeof candidate === 'string')
+			.map((candidate) => candidate.trim().toLowerCase());
+		return candidates.includes(normalized);
+	});
+	if (configured) return configured.code.trim().toLowerCase();
+
+	const fallback = FALLBACK_UNIT_DEFINITIONS.find((unit) => {
+		const candidates = [unit.code, unit.label_th, unit.label_th_short, unit.label_en]
+			.filter((candidate): candidate is string => typeof candidate === 'string')
+			.map((candidate) => candidate.trim().toLowerCase());
+		return candidates.includes(normalized);
+	});
+	if (fallback) return fallback.code;
+
+	return isCanonicalUnitCode(trimmed) ? normalized : null;
+}
+
 export const FALLBACK_UNIT_LABELS: Record<string, { th: string; th_short?: string; en: string }> = {
 	...Object.fromEntries(
 		FALLBACK_UNIT_DEFINITIONS.map((u) => [

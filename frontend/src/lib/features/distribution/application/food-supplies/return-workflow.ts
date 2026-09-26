@@ -52,6 +52,7 @@ import {
 } from './errors';
 import { assertLedgerReplayBase } from './ledger-replay';
 import { assertPositiveIntegerQty } from './validation';
+import { resolveCanonicalItemUnits, type CanonicalUnitCatalogRepository } from './canonical-unit';
 
 function assertCounterReturnLedgerReplay(
 	actual: StockLedger,
@@ -81,7 +82,8 @@ function assertCounterReturnLedgerReplay(
 function assertRoutineCounterReceiptAccounting(
 	entries: StockLedger[],
 	log: DistributionLog,
-	ctx: AuthorContext
+	ctx: AuthorContext,
+	unit: string
 ): void {
 	for (const entry of entries) {
 		if (
@@ -90,7 +92,7 @@ function assertRoutineCounterReceiptAccounting(
 			entry.reason !== 'receive' ||
 			entry.ref_id !== log._id ||
 			entry.item_id !== log.item_id ||
-			entry.unit !== 'ชิ้น' ||
+			entry.unit !== unit ||
 			!qtyGt(entry.qty, 0) ||
 			(entry.lot_ref !== undefined && entry.lot_ref !== entry._id) ||
 			(entry.lot?.note !== undefined && entry.lot.note !== 'counter_loan_return')
@@ -109,6 +111,7 @@ export interface ReturnWorkflowDependencies {
 	claimRepo?: BulkReturnClaimRepository;
 	reservationRepo?: LoanReturnReservationRepository;
 	endpointStore?: { active: string; isWritable: boolean };
+	catalogRepo?: CanonicalUnitCatalogRepository;
 }
 
 export interface CounterReturnInput {
@@ -817,7 +820,14 @@ export async function returnLoanAtCounter(
 		(acc, entry) => addQty(acc, entry.qty),
 		'0'
 	);
-	assertRoutineCounterReceiptAccounting(logReceiveEntries, currentLog, ctx);
+	const itemUnits = await resolveCanonicalItemUnits([currentLog.item_id], ctx, deps?.catalogRepo);
+	const unit = itemUnits.get(currentLog.item_id);
+	if (!unit) {
+		throw new StockIntegrityError(
+			`Missing canonical unit for counter return item ${currentLog.item_id}`
+		);
+	}
+	assertRoutineCounterReceiptAccounting(logReceiveEntries, currentLog, ctx, unit);
 
 	if (qtyGt(totalPreviouslyReceived, input.qty_returned)) {
 		throw new StockIntegrityError(
@@ -909,7 +919,7 @@ export async function returnLoanAtCounter(
 		{
 			item_id: currentLog.item_id,
 			qty: deltaToReceive,
-			unit: 'ชิ้น',
+			unit,
 			reason: 'receive',
 			ref_id: logId,
 			lot: { note: 'counter_loan_return' },
@@ -1121,6 +1131,11 @@ export async function createBulkReturnPool(
 	}
 
 	const { poolRepo, operationsRepo } = resolveDependencies(deps, ctx);
+	const itemUnits = await resolveCanonicalItemUnits([input.item_id], ctx, deps?.catalogRepo);
+	const unit = itemUnits.get(input.item_id);
+	if (!unit) {
+		throw new StockIntegrityError(`Missing canonical unit for bulk return item ${input.item_id}`);
+	}
 	const poolId = `bulk_return_pool:${input.operationUlid}`;
 	const ledgerId = `stock_ledger:${input.operationUlid}`;
 
@@ -1130,7 +1145,7 @@ export async function createBulkReturnPool(
 		{
 			item_id: input.item_id,
 			qty: totalReceivedQty,
-			unit: 'ชิ้น',
+			unit,
 			reason: 'receive',
 			ref_id: poolId,
 			lot: { note: 'bulk_return_pool' },

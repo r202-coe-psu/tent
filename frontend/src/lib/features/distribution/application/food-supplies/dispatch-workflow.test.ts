@@ -1,4 +1,27 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+vi.mock('$lib/features/catalog', () => ({
+	catalogRepository: () => ({
+		listItemMasters: async () =>
+			[
+				'item:a',
+				'item:b',
+				'item:blanket',
+				'item:c',
+				'item:curry',
+				'item:lamp',
+				'item:mat',
+				'item:other',
+				'item:rice',
+				'item:soup',
+				'item:water'
+			].map((_id) => ({ _id, base_unit: _id === 'item:rice' ? 'kg' : 'piece' })),
+		listUnitsOfMeasure: async () => []
+	}),
+	itemMasterUnit: (item: { base_unit?: string; unit?: string }) =>
+		item.base_unit ?? item.unit ?? 'piece',
+	canonicalizeUnitCode: (value: unknown) => (value === 'ชิ้น' ? 'piece' : value)
+}));
 import { ulid } from '$lib/db/ulid';
 import type { AuthorContext } from '$lib/db/model';
 import { ConflictError } from '$lib/utils/errors';
@@ -265,12 +288,44 @@ describe('dispatch-workflow', () => {
 		expect(curryEntry.reason).toBe('distribute');
 		expect(curryEntry.ref_id).toBe(ticket._id);
 		expect(curryEntry.qty).toBe('-50');
+		expect(curryEntry.unit).toBe('piece');
 		expect(curryEntry.lot_ref).toBe('stock_ledger:01JLOTCURRY000000000000000');
 
 		const waterEntry = opsRepo.ledger.find((l) => l.item_id === 'item:water')!;
 		expect(waterEntry.reason).toBe('distribute');
 		expect(waterEntry.ref_id).toBe(ticket._id);
 		expect(waterEntry.qty).toBe('-100');
+		expect(waterEntry.unit).toBe('piece');
+	});
+
+	it("uses an item master's non-piece canonical unit for the dispatch ledger", async () => {
+		const ticket = await ticketRepo.create(
+			{
+				ticket_no: 'TKT-SUPPLIES-RICE-0001',
+				requisition_type: 'supplies',
+				source_location: 'warehouse:main',
+				destination_location: 'point:a',
+				items: [
+					{
+						item_id: 'item:rice',
+						item_name: 'Rice',
+						type_class: 'CONSUMABLE',
+						returnable: false,
+						requested_qty: '2',
+						allocated_qty: '2'
+					}
+				]
+			},
+			WH_CTX
+		);
+
+		await dispatchTicket(ticket._id, undefined, WH_CTX, {
+			ticketRepo,
+			operationsRepo: opsRepo as unknown as OperationsRepository
+		});
+
+		expect(opsRepo.ledger).toHaveLength(1);
+		expect(opsRepo.ledger[0]?.unit).toBe('kg');
 	});
 
 	it('authorizes supply_coordinator for ticket dispatch (CR-121 FR-SEC-01 Step 3)', async () => {
@@ -658,7 +713,7 @@ describe('dispatch-workflow', () => {
 				{
 					item_id: 'item:soup',
 					qty: qtyNeg('20'),
-					unit: 'ชิ้น',
+					unit: 'piece',
 					reason: 'distribute',
 					ref_id: ticket._id,
 					lot_ref: `stock_ledger:${amendmentId}`,
@@ -720,7 +775,7 @@ describe('dispatch-workflow', () => {
 				{
 					item_id: 'item:other',
 					qty: qtyNeg('20'),
-					unit: 'ชิ้น',
+					unit: 'piece',
 					reason: 'distribute',
 					ref_id: ticket._id,
 					lot_ref: `stock_ledger:${amendmentId}`,

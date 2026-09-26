@@ -12,6 +12,7 @@ import {
 	WAREHOUSE_STAFF
 } from '$lib/auth/roles';
 import { ConflictError } from '$lib/utils/errors';
+import { canonicalizeUnitCode } from '$lib/features/catalog';
 import {
 	createDistributionBatch,
 	createDistributionRequest,
@@ -101,6 +102,18 @@ function isDistributionRequest(d: unknown): d is DistributionRequest {
 		(d as { type?: string }).type === 'distribution_request' &&
 		typeof (d as { _id?: string })._id === 'string'
 	);
+}
+
+/**
+ * Stock ledger rows are a persistence boundary: units must be canonical UOM
+ * codes even when an older request or batch still carries a legacy label.
+ */
+function canonicalStockLedgerUnit(unit: string, context: string): string {
+	const canonicalUnit = canonicalizeUnitCode(unit);
+	if (!canonicalUnit) {
+		throw new IntegrityError(`${context} has an unrecognised unit: ${unit}`);
+	}
+	return canonicalUnit;
 }
 
 function isDistributionBatch(d: unknown): d is DistributionBatch {
@@ -312,7 +325,7 @@ export class DistributionRemoteRepository implements DistributionRepository {
 				{
 					item_id: item.item_id,
 					allocated_qty: persistQty(qty),
-					unit: item.unit,
+					unit: canonicalStockLedgerUnit(item.unit, `Request item ${item.item_id}`),
 					distribution_type_snapshot: item.distribution_type_snapshot
 				}
 			];
@@ -361,7 +374,7 @@ export class DistributionRemoteRepository implements DistributionRepository {
 			await this.assertPhysicalLot(
 				allocation.lot_ref,
 				allocation.item_id,
-				reqItem.unit,
+				canonicalStockLedgerUnit(reqItem.unit, `Request item ${reqItem.item_id}`),
 				ctx,
 				lots,
 				sourceCache
@@ -437,7 +450,7 @@ export class DistributionRemoteRepository implements DistributionRepository {
 			await this.assertPhysicalLot(
 				allocation.lot_ref,
 				allocation.item_id,
-				requestItem.unit,
+				canonicalStockLedgerUnit(requestItem.unit, `Request item ${requestItem.item_id}`),
 				ctx,
 				lots,
 				sourceCache
@@ -511,7 +524,7 @@ export class DistributionRemoteRepository implements DistributionRepository {
 				_id: ledgerId,
 				item_id: allocation.item_id,
 				qty: qtyNeg(allocation.qty),
-				unit: requestItem.unit,
+				unit: canonicalStockLedgerUnit(requestItem.unit, `Request item ${requestItem.item_id}`),
 				reason: 'distribute',
 				ref_id: batch._id,
 				lot_ref: allocation.lot_ref,
@@ -525,7 +538,16 @@ export class DistributionRemoteRepository implements DistributionRepository {
 		ctx: AuthorContext
 	): Promise<DistributionRequest> {
 		this.assertAuthorizedRequestCreation(ctx);
-		const doc = createDistributionRequest(input, ctx);
+		const doc = createDistributionRequest(
+			{
+				...input,
+				items: input.items.map((item) => ({
+					...item,
+					unit: canonicalStockLedgerUnit(item.unit, `Request item ${item.item_id}`)
+				}))
+			},
+			ctx
+		);
 		return putDocStrict(this.dbName, doc);
 	}
 
@@ -964,12 +986,13 @@ export class DistributionRemoteRepository implements DistributionRepository {
 			const ledgerIdSuffix = `${approvalOperationId}:${idx}`;
 			const ledgerId = `stock_ledger:${ledgerIdSuffix}`;
 			const reqItem = req.items.find((i) => i.item_id === alloc.item_id)!;
+			const unit = canonicalStockLedgerUnit(reqItem.unit, `Request item ${reqItem.item_id}`);
 
 			const ledgerEntry = createLegacyFlow2StockLedger(
 				{
 					item_id: alloc.item_id,
 					qty: qtyNeg(alloc.qty),
-					unit: reqItem.unit,
+					unit,
 					reason: 'distribute',
 					ref_id: batchDoc._id,
 					lot_ref: alloc.lot_ref,
@@ -986,7 +1009,7 @@ export class DistributionRemoteRepository implements DistributionRepository {
 				_id: ledgerId,
 				item_id: alloc.item_id,
 				qty: qtyNeg(alloc.qty),
-				unit: reqItem.unit,
+				unit,
 				reason: 'distribute',
 				ref_id: batchDoc._id,
 				lot_ref: alloc.lot_ref,
@@ -1379,7 +1402,7 @@ export class DistributionRemoteRepository implements DistributionRepository {
 				_id: ledgerId,
 				item_id: row.item_id,
 				qty: persistQty(row.return_qty),
-				unit: item.unit,
+				unit: canonicalStockLedgerUnit(item.unit, `Batch item ${item.item_id}`),
 				reason: 'distribution_return',
 				ref_id: batch._id,
 				lot_ref: row.lot_ref,
@@ -1727,11 +1750,12 @@ export class DistributionRemoteRepository implements DistributionRepository {
 					);
 				}
 
+				const unit = canonicalStockLedgerUnit(batchItem.unit, `Batch item ${batchItem.item_id}`);
 				const returnLedger = createStockLedger(
 					{
 						item_id: row.item_id,
 						qty: persistQty(row.return_qty),
-						unit: batchItem.unit,
+						unit,
 						reason: 'distribution_return',
 						ref_id: batch._id,
 						lot_ref: row.lot_ref,
@@ -1750,7 +1774,7 @@ export class DistributionRemoteRepository implements DistributionRepository {
 					_id: ledgerId,
 					item_id: row.item_id,
 					qty: persistQty(row.return_qty),
-					unit: batchItem.unit,
+					unit,
 					reason: 'distribution_return',
 					ref_id: batch._id,
 					lot_ref: row.lot_ref,
@@ -2298,7 +2322,10 @@ export class DistributionRemoteRepository implements DistributionRepository {
 		if (!batchItem) {
 			throw new ValidationError(`Item ${input.item_id} is not present in distribution batch`);
 		}
-		const authoritativeUnit = batchItem.unit;
+		const authoritativeUnit = canonicalStockLedgerUnit(
+			batchItem.unit,
+			`Batch item ${batchItem.item_id}`
+		);
 		const authoritativeDistributionType = batchItem.distribution_type_snapshot;
 		const idempotencyDocId = await makeIssueIdempotencyDocId(
 			input.batch_id,

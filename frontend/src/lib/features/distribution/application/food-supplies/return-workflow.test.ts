@@ -1,4 +1,17 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+vi.mock('$lib/features/catalog', () => ({
+	catalogRepository: () => ({
+		listItemMasters: async () =>
+			['item:blanket', 'item:cot', 'item:crutches', 'item:fan', 'item:mat', 'item:other'].map(
+				(_id) => ({ _id, base_unit: 'piece' })
+			),
+		listUnitsOfMeasure: async () => []
+	}),
+	itemMasterUnit: (item: { base_unit?: string; unit?: string }) =>
+		item.base_unit ?? item.unit ?? 'piece',
+	canonicalizeUnitCode: (value: unknown) => (value === 'ชิ้น' ? 'piece' : value)
+}));
 import type { AuthorContext } from '$lib/db/model';
 import type {
 	BulkReturnClaim,
@@ -566,6 +579,7 @@ describe('return-workflow', () => {
 		expect(ledgerEntry.reason).toBe('receive');
 		expect(ledgerEntry.ref_id).toBe(log._id);
 		expect(ledgerEntry.qty).toBe('2');
+		expect(ledgerEntry.unit).toBe('piece');
 	});
 
 	it('does not duplicate inbound stock ledger entry on counter return retry', async () => {
@@ -805,7 +819,7 @@ describe('return-workflow', () => {
 			shelter_code: POS_CTX.shelterCode,
 			item_id: 'item:mat',
 			qty: '1',
-			unit: 'ชิ้น',
+			unit: 'piece',
 			reason: 'receive',
 			ref_id: mismatchedReceipt._id,
 			occurred_at: new Date().toISOString(),
@@ -1171,7 +1185,7 @@ describe('return-workflow', () => {
 				shelter_code: POS_CTX.shelterCode,
 				item_id: 'item:blanket',
 				qty: '2',
-				unit: 'ชิ้น',
+				unit: 'piece',
 				reason: 'receive',
 				ref_id: log._id,
 				occurred_at: new Date().toISOString(),
@@ -1186,7 +1200,7 @@ describe('return-workflow', () => {
 				shelter_code: POS_CTX.shelterCode,
 				item_id: 'item:blanket',
 				qty: '2',
-				unit: 'ชิ้น',
+				unit: 'piece',
 				reason: 'receive',
 				ref_id: log._id,
 				occurred_at: new Date().toISOString(),
@@ -1308,7 +1322,7 @@ describe('return-workflow', () => {
 			shelter_code: POS_CTX.shelterCode,
 			item_id: 'item:blanket',
 			qty: '2',
-			unit: 'ชิ้น',
+			unit: 'piece',
 			reason: 'receive',
 			ref_id: log._id,
 			occurred_at: new Date().toISOString(),
@@ -1646,7 +1660,7 @@ describe('return-workflow', () => {
 			created_by: POS_CTX.createdBy,
 			item_id: 'item:other',
 			qty: '3',
-			unit: 'ชิ้น',
+			unit: 'piece',
 			reason: 'receive',
 			ref_id: `bulk_return_pool:${operationUlid}`,
 			lot_ref: `stock_ledger:${operationUlid}`,
@@ -1682,7 +1696,7 @@ describe('return-workflow', () => {
 			created_by: POS_CTX.createdBy,
 			item_id: 'item:cot',
 			qty: '3',
-			unit: 'ชิ้น',
+			unit: 'piece',
 			reason: 'receive',
 			ref_id: `bulk_return_pool:${operationUlid}`,
 			lot_ref: `stock_ledger:${operationUlid}`,
@@ -1837,7 +1851,7 @@ describe('return-workflow', () => {
 				{
 					item_id: input.item_id,
 					qty: input.total_received_qty,
-					unit: 'ชิ้น',
+					unit: 'piece',
 					reason: 'receive',
 					ref_id: poolId,
 					lot: { note: 'bulk_return_pool' },
@@ -1880,7 +1894,7 @@ describe('return-workflow', () => {
 				created_by: POS_CTX.createdBy,
 				item_id: 'item:blanket', // ← wrong item
 				qty: '5',
-				unit: 'ชิ้น',
+				unit: 'piece',
 				reason: 'receive',
 				ref_id: poolId,
 				lot_ref: `stock_ledger:${operationUlid}`,
@@ -4670,7 +4684,7 @@ describe('return-workflow', () => {
 						{
 							item_id: log.item_id,
 							qty: '2',
-							unit: 'ชิ้น',
+							unit: 'piece',
 							reason: 'receive',
 							ref_id: log._id,
 							lot: { note: 'counter_loan_return' }
