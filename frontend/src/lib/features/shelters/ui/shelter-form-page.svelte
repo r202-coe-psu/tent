@@ -277,7 +277,7 @@
 <main class="min-h-screen max-w-full overflow-x-clip bg-[#F8FAFC] text-slate-800 antialiased">
 	<!-- Civic Light Page Header -->
 	<header
-		class="sticky top-[var(--bo-sticky-top)] z-20 border-b border-slate-200 bg-white/95 shadow-xs backdrop-blur-sm"
+		class="relative z-20 border-b border-slate-200 bg-white/95 shadow-xs backdrop-blur-sm sm:sticky sm:top-[var(--bo-sticky-top)]"
 	>
 		<div class="mx-auto max-w-7xl px-4 py-3 sm:px-6 sm:py-3.5 lg:px-8">
 			<div class="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
