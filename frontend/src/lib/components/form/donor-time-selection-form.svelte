@@ -15,7 +15,15 @@
 	import { today, getLocalTimeZone, type DateValue } from '@internationalized/date';
 	import { toast } from 'svelte-sonner';
 	import { onMount } from 'svelte';
-	import { donationPayloadUnit, publicDonationErrorMessage } from '$lib/features/donations';
+	import {
+		DEFAULT_SLOT_WINDOWS,
+		donationPayloadUnit,
+		publicDonationErrorMessage,
+		slotLabel,
+		slotModeForDelivery,
+		useDonationSlots,
+		type SlotAvailability
+	} from '$lib/features/donations';
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { getDonationStore } from '../../../routes/(public)/donations/donation.svelte';
 	import { langState } from '$lib/states/i18n.svelte';
@@ -32,6 +40,47 @@
 	let selectedDate = $state<DateValue>(today(getLocalTimeZone()));
 	let shelters = $state<Array<{ code: string; name: string }>>([]);
 	let isItemsModalOpen = $state(false);
+
+	const selectedDateStr = $derived(selectedDate ? selectedDate.toString() : '');
+
+	// Queue capacity is per shelter per day (schema.md §2.13) — the grid has to ask the
+	// shelter, not guess. `POST /api/public/v1/donations` re-checks the same windows at
+	// submit, so a slot that fills while this form is open still comes back SLOT_FULL.
+	// Two queues, not one: a donor driving up is limited by the counter, a shelter
+	// pickup by the vehicles it has. The wizard asks for the queue the chosen delivery
+	// method actually books into.
+	const slotMode = $derived(slotModeForDelivery(donationStore.deliveryMethod));
+
+	const slotsQuery = useDonationSlots(
+		() => donationStore.shelterCode,
+		() => selectedDateStr,
+		() => slotMode
+	);
+
+	// Until the board answers (and if it cannot), offer the standard windows rather than
+	// an empty grid: an unconfigured window has no ceiling and submit accepts it.
+	const fallbackSlots: SlotAvailability[] = DEFAULT_SLOT_WINDOWS.map((window) => ({
+		label: slotLabel(window.from, window.to),
+		from: window.from,
+		to: window.to,
+		capacity: null,
+		booked: 0,
+		status: 'available'
+	}));
+	// A shelter that publishes no vehicle schedule is not collecting: show its empty
+	// board rather than the drop-off opening hours, which would promise a truck.
+	const timeSlots = $derived(slotsQuery.data ?? (slotMode === 'pickup' ? [] : fallbackSlots));
+	const isLoadingSlots = $derived(slotsQuery.isPending && Boolean(donationStore.shelterCode));
+
+	// A window the donor picked earlier can fill or close before they submit — drop the
+	// selection instead of letting them send a booking the service will reject.
+	$effect(() => {
+		const picked = donationStore.slotTime;
+		if (!picked) return;
+		if (!timeSlots.some((slot) => slot.label === picked && slot.status === 'available')) {
+			donationStore.slotTime = '';
+		}
+	});
 
 	onMount(async () => {
 		try {
@@ -199,14 +248,6 @@
 			donationStore.isSubmitting = false;
 		}
 	}
-
-	const timeSlots = [
-		{ label: '09:00 - 10:00', status: 'available' },
-		{ label: '10:00 - 11:00', status: 'available' },
-		{ label: '13:00 - 14:00', status: 'full' },
-		{ label: '14:00 - 15:00', status: 'available' },
-		{ label: '15:00 - 16:00', status: 'available' }
-	];
 
 	function getDotColor(index: number) {
 		const dots = [
@@ -448,9 +489,15 @@
 						</Popover>
 					</div>
 
+					{#if timeSlots.length === 0}
+						<div class="rounded-xl border-2 border-slate-200 bg-slate-50 p-4 text-center">
+							<p class="text-sm font-bold text-slate-700">{t.slotsPickupUnavailable}</p>
+						</div>
+					{/if}
+
 					<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-						{#each timeSlots as slot (slot.label)}
-							{@const isFull = slot.status === 'full'}
+						{#each timeSlots as slot (slot.from)}
+							{@const isFull = slot.status !== 'available'}
 							{@const isSelected = donationStore.slotTime === slot.label}
 							<button
 								type="button"
@@ -467,7 +514,7 @@
 							>
 								<span class="text-sm font-bold">{slot.label}</span>
 								<span class="text-2xs font-bold {isSelected ? 'text-white/80' : 'text-slate-400'}">
-									{isFull ? t.slotFull : t.slotAvailable}
+									{isLoadingSlots ? t.slotChecking : isFull ? t.slotFull : t.slotAvailable}
 								</span>
 							</button>
 						{/each}

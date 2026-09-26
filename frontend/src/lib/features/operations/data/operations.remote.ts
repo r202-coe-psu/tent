@@ -42,6 +42,7 @@ import {
 	type CancelInfoInput,
 	type DisputeInfoInput
 } from '../domain/operations';
+import { assertDonationSlotDeletable, countSlotBookings } from '../domain/donation-slot';
 import { createAuditEntry, type AuditAction } from '$lib/features/shared';
 import type { OperationsRepository } from './operations.repository';
 import { supplyRepository, type SupplyItem } from '$lib/features/supply';
@@ -580,6 +581,20 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			_rev: existing?._rev ?? slot._rev
 		};
 		return this.repo.put(touch(merged));
+	}
+
+	/**
+	 * Delete a window nobody has booked. Counts against a fresh read of the donations,
+	 * not the screen's copy, so a booking made since the list loaded still blocks it.
+	 */
+	async deleteDonationSlot(slot: DonationSlot): Promise<void> {
+		const [current, donations] = await Promise.all([
+			this.repo.get<DonationSlot>(slot._id),
+			this.listDonations()
+		]);
+		if (!current) return;
+		assertDonationSlotDeletable(current, countSlotBookings(donations, current.date, current.from));
+		await this.repo.remove(current);
 	}
 
 	// --- Transfer methods (CR-059 Flow 1 / T-13) ---

@@ -196,27 +196,23 @@
 
 	<!-- Main Body Content -->
 	<div class="space-y-6 p-6 md:p-8">
-		<!-- Top Notice & Donor Info Grid -->
-		<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-			<!-- Left Warning / Unsolicited Notice Card -->
-			<div
-				class="rounded-2xl border border-rose-200/80 bg-rose-50/50 p-5 dark:border-rose-900/40 dark:bg-rose-950/20"
-			>
-				<div class="flex items-center gap-2 text-xs font-bold text-rose-600 dark:text-rose-400">
-					<AlertTriangle class="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
-					<span>คำชี้แจง / เงื่อนไขตรวจสอบพัสดุพิเศษระวัง</span>
-				</div>
-				<div class="mt-2.5 space-y-1">
-					<p class="text-xs font-bold text-rose-700 dark:text-rose-300">
-						ประเภท: {(request.is_unsolicited ?? true)
-							? 'รายการไม่อยู่ในประกาศ (Unsolicited)'
-							: 'รายการตามประกาศความต้องการ'}
-					</p>
-					<p class="text-xs text-rose-600 dark:text-rose-400">
-						สิ่งของนอกเหนือรายการแจ้งความต้องการ (Unsolicited Donation)
+		<!-- Donor info, plus a notice only when a line is not something the shelter asked for -->
+		<div class="grid grid-cols-1 gap-4 {request.is_unsolicited ? 'md:grid-cols-2' : ''}">
+			{#if request.is_unsolicited}
+				<!-- `is_unsolicited` = some line was typed in by the donor rather than picked
+				     from the shelter's announced needs (no catalog item_id). It used to render
+				     for every request, claiming "Unsolicited" even for announced items. -->
+				<div class="rounded-xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
+					<div class="flex items-center gap-2 text-sm font-semibold text-amber-900">
+						<AlertTriangle class="h-4 w-4 shrink-0 text-amber-600" />
+						<span>มีรายการที่ไม่อยู่ในประกาศของศูนย์</span>
+					</div>
+					<p class="mt-1.5 text-sm leading-relaxed text-amber-900">
+						ผู้บริจาคพิมพ์รายการเอง ไม่ได้เลือกจากความต้องการที่ศูนย์ประกาศ —
+						พิจารณาว่ารับได้หรือไม่ และต้องจับคู่กับรายการในคลังตอนตรวจรับ
 					</p>
 				</div>
-			</div>
+			{/if}
 
 			<!-- Right Donor Contact Card -->
 			<div
@@ -241,31 +237,48 @@
 		</div>
 
 		<!-- Donor Input Items Section -->
-		<div class="space-y-2">
-			<div class="flex items-center gap-2 text-xs font-bold text-foreground">
-				<FileText class="h-4 w-4 text-muted-foreground" />
-				<span>รายการสิ่งของที่ผู้บริจาคแจ้ง (Donor Input)</span>
+		<div class="space-y-3">
+			<div class="flex items-baseline justify-between gap-2">
+				<h3 class="flex items-center gap-2 text-base font-semibold text-slate-800">
+					<FileText class="h-5 w-5 text-slate-400" />
+					รายการสิ่งของที่ผู้บริจาคแจ้ง
+				</h3>
+				{#if declaredItems.length > 0}
+					<span class="shrink-0 text-sm whitespace-nowrap text-slate-500 tabular-nums"
+						>{declaredItems.length} รายการ</span
+					>
+				{/if}
 			</div>
-			<div class="overflow-hidden rounded-2xl border border-border/80 bg-card">
+			<div class="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-2xs">
 				{#if declaredItems.length === 0}
-					<p class="p-4 text-xs text-muted-foreground">ไม่มีรายการสิ่งของระบุ</p>
+					<p class="p-4 text-sm text-slate-500">ไม่มีรายการสิ่งของระบุ</p>
 				{:else}
-					<ul class="divide-y divide-border/60">
+					<ul class="divide-y divide-slate-100">
 						{#each declaredItems as item, idx (`${item.item_id ?? item.free_text ?? 'line'}:${idx}`)}
 							{@const cat = categoryLabel(item.category)}
 							{@const cond = conditionLabel(item.condition)}
-							<li class="flex flex-wrap items-start justify-between gap-2 p-4">
-								<div class="min-w-0 space-y-1.5">
-									<p class="text-xs font-bold text-foreground">
+							<li class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 p-4 sm:px-5">
+								<div class="min-w-0 space-y-2">
+									<p class="text-base font-bold text-slate-900">
 										{item.free_text ?? item.item_id ?? 'สิ่งของ'}
 									</p>
 									{#if cat || cond || !item.item_id}
-										<div class="flex flex-wrap items-center gap-1.5">
+										<div class="flex flex-wrap items-center gap-2">
 											{#if cat}
-												<Badge variant="secondary" class="text-3xs font-medium">{cat}</Badge>
+												<Badge
+													variant="outline"
+													class="border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700"
+												>
+													{cat}
+												</Badge>
 											{/if}
 											{#if cond}
-												<Badge variant="outline" class="text-3xs font-medium">{cond}</Badge>
+												<Badge
+													variant="outline"
+													class="border-sky-200 bg-sky-50 text-xs font-semibold text-sky-900"
+												>
+													{cond}
+												</Badge>
 											{/if}
 											{#if !item.item_id}
 												<!-- No catalog binding — this line cannot become stock as-is
@@ -274,7 +287,7 @@
 												     needs to decide on. -->
 												<Badge
 													variant="outline"
-													class="border-amber-300/80 bg-amber-50 text-3xs font-medium text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+													class="border-amber-200 bg-amber-50 text-xs font-semibold text-amber-900"
 												>
 													ยังไม่จับคู่แคตตาล็อก
 												</Badge>
@@ -282,15 +295,20 @@
 										</div>
 									{/if}
 									{#if item.note?.trim()}
-										<p class="text-2xs leading-relaxed text-muted-foreground">
+										<p class="text-sm leading-relaxed text-slate-600">
 											หมายเหตุ: {item.note.trim()}
 										</p>
 									{/if}
 								</div>
-								<span class="shrink-0 text-xs font-bold whitespace-nowrap text-foreground">
-									{item.qty}
-									{formatUnit(item.unit, units, langState.current)}
-								</span>
+								<div class="shrink-0 text-right">
+									<span class="text-xs text-slate-500">จำนวนที่แจ้ง</span>
+									<p class="text-lg font-bold whitespace-nowrap text-slate-900 tabular-nums">
+										{item.qty}
+										<span class="text-sm font-medium text-slate-600">
+											{formatUnit(item.unit, units, langState.current)}
+										</span>
+									</p>
+								</div>
 							</li>
 						{/each}
 					</ul>
@@ -311,19 +329,24 @@
 				</p>
 			</div>
 
-			<!-- Location / Shelter -->
-			<div class="rounded-2xl border border-border/80 bg-card p-4">
-				<div class="flex items-center gap-2 text-2xs font-bold text-muted-foreground uppercase">
-					<MapPin class="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-					<span>อาคาร/พิกัดเสนอรับเข้า</span>
+			{#if request.pickup_address}
+				<!-- Where the shelter's vehicle goes. Only a pickup booking has one; the
+				     card used to fall back to a made-up "จุดรับบริจาคส่วนหน้า" for the rest. -->
+				<div class="rounded-2xl border border-border/80 bg-card p-4">
+					<div class="flex items-center gap-2 text-2xs font-bold text-muted-foreground uppercase">
+						<MapPin class="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+						<span>ที่อยู่เข้ารับของ</span>
+					</div>
+					<p class="mt-2 text-xs font-bold text-foreground">{request.pickup_address}</p>
 				</div>
-				<p class="mt-2 text-xs font-bold text-foreground">
-					{request.pickup_address || 'จุดรับบริจาคส่วนหน้า'}
-				</p>
-			</div>
+			{/if}
 
 			<!-- Appointment Date -->
-			<div class="rounded-2xl border border-border/80 bg-card p-4 md:col-span-2">
+			<div
+				class="rounded-2xl border border-border/80 bg-card p-4 {request.pickup_address
+					? 'md:col-span-2'
+					: ''}"
+			>
 				<div class="flex items-center gap-2 text-2xs font-bold text-muted-foreground uppercase">
 					<Calendar class="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
 					<span>นัดหมายเสนอขอบริจาค</span>

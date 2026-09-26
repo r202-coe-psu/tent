@@ -71,7 +71,7 @@ export const PUBLIC_DONATIONS_I18N = {
 		emailPlaceholder: 'example@email.com',
 		section2Title: 'ส่วนที่ 2: รายละเอียดสิ่งของบริจาค',
 		section2DescSolicited:
-			'💡 เลือกลบรายการที่ไม่ต้องการบริจาคออก และปรับระบุจำนวนที่คุณต้องการบริจาคได้ตามสะดวก',
+			'เลือกลบรายการที่ไม่ต้องการบริจาคออก และปรับระบุจำนวนที่คุณต้องการบริจาคได้ตามสะดวก',
 		section2DescUnsolicited: 'ระบุรายการสิ่งของที่คุณจะนำมามอบให้',
 		deleteItemAria: 'ลบรายการนี้',
 		categoryLabel: 'หมวดหมู่',
@@ -146,6 +146,9 @@ export const PUBLIC_DONATIONS_I18N = {
 		selectDatePlaceholder: 'เลือกวันที่',
 		slotFull: 'คิวเต็ม (งด)',
 		slotAvailable: 'ว่าง',
+		slotChecking: 'กำลังตรวจสอบคิว...',
+		slotsPickupUnavailable:
+			'ศูนย์นี้ยังไม่เปิดรอบรถเข้ารับของในวันที่เลือก — เลือกวันอื่น หรือเปลี่ยนเป็นนำของมาส่งเอง',
 		backBtn: 'กลับ',
 		submitting: 'กำลังดำเนินการ...',
 		processingBtn: 'กำลังดำเนินการ...',
@@ -433,7 +436,7 @@ export const PUBLIC_DONATIONS_I18N = {
 		emailPlaceholder: 'example@email.com',
 		section2Title: 'Section 2: Donation Items',
 		section2DescSolicited:
-			'💡 Remove items you do not wish to donate and adjust quantities as needed.',
+			'Remove items you do not wish to donate and adjust quantities as needed.',
 		section2DescUnsolicited: 'Specify the items you will provide.',
 		deleteItemAria: 'Delete this item',
 		categoryLabel: 'Category',
@@ -507,6 +510,9 @@ export const PUBLIC_DONATIONS_I18N = {
 		selectDatePlaceholder: 'Select Date',
 		slotFull: 'Full',
 		slotAvailable: 'Available',
+		slotChecking: 'Checking queue...',
+		slotsPickupUnavailable:
+			'This shelter has no pickup runs scheduled on the selected date — pick another date or drop the donation off yourself.',
 		backBtn: 'Back',
 		submitting: 'Submitting...',
 		processingBtn: 'Submitting...',

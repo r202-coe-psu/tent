@@ -3,7 +3,9 @@ import { env } from '$env/dynamic/private';
 import {
 	donationPreDeclarationInputSchema,
 	computeNeeds,
-	pickCampaignForItems
+	pickCampaignForItems,
+	slotAvailabilityFor,
+	slotModeForDelivery
 } from '$lib/features/donations';
 import type { PublicDonationDoc } from '$lib/features/donations';
 import { donationIpLimiter, donationPhoneLimiter } from '$lib/server/security/rate-limiter';
@@ -13,8 +15,7 @@ import { adminRaw } from '$lib/server/couch-admin';
 import { fetchDocs } from '$lib/server/donation-docs';
 import { fastapiBaseUrl, fastapiServiceHeaders, unwrapFastapiError } from '$lib/server/fastapi';
 
-import { isDonationOutstanding } from '$lib/features/operations';
-import type { DonationCampaign, StockLedger } from '$lib/features/operations';
+import type { DonationCampaign, DonationSlot, StockLedger } from '$lib/features/operations';
 
 const captchaProvider = new ReCaptchaProvider(
 	env.RECAPTCHA_PROJECT_ID || env.SECRET_RECAPTCHA_KEY || 'smart-shelter-508719'
@@ -98,27 +99,26 @@ export const POST = async ({ request, getClientAddress }) => {
 		const resolvedCampaignId = pick.campaignId;
 
 		// 3.6 Atomic re-check slot เต็ม/closed → SLOT_FULL
-		if (parsed.data.logistics?.slot) {
-			const { date, from } = parsed.data.logistics.slot;
-			const slotId = `donation_slot:${date}:${from}`;
+		const slotMode = parsed.data.logistics
+			? slotModeForDelivery(parsed.data.logistics.delivery_method)
+			: null;
+		if (parsed.data.logistics?.slot && slotMode) {
+			const { date, from, to } = parsed.data.logistics.slot;
+			const slotId = `donation_slot:${slotMode}:${date}:${from}`;
 			const slotRes = await adminRaw(`/${dbName}/${encodeURIComponent(slotId)}`, 'GET');
 
 			if (slotRes.status === 200) {
-				const slotDoc = slotRes.data as { capacity: number; status: string };
-				if (slotDoc.status === 'closed') {
-					return json({ success: false, error: 'SLOT_FULL' }, { status: 409 });
-				}
-				// A booking holds its place in the queue from the moment it is made until the
-				// goods are keyed in (schema.md §2.13). Since CR-052 that opens at
-				// `pending_review` and walks through `verifying`, so counting `declared`
-				// alone would read every slot as empty and SLOT_FULL would never fire.
-				const bookedCount = donations.filter(
-					(d) =>
-						(isDonationOutstanding(d.status) || d.status === 'received') &&
-						d.logistics?.slot?.date === date &&
-						d.logistics?.slot?.from === from
-				).length;
-				if (bookedCount >= slotDoc.capacity) {
+				// Same verdict the wizard's grid showed (GET .../donations/slots) — one
+				// function, so a window cannot read open there and full here.
+				const slotDoc = slotRes.data as DonationSlot;
+				// `_id` is deterministic per date + start time (schema.md §2.13), so the
+				// requested window IS this doc's identity — count against that rather than
+				// re-reading fields off the doc.
+				const availability = slotAvailabilityFor(
+					{ ...slotDoc, mode: slotMode, date, from, to },
+					donations
+				);
+				if (availability.status !== 'available') {
 					return json({ success: false, error: 'SLOT_FULL' }, { status: 409 });
 				}
 			}

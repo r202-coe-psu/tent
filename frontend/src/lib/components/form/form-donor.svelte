@@ -169,14 +169,12 @@
 	<!-- ส่วนที่ 2: รายละเอียดสิ่งของบริจาค -->
 	<div>
 		<div class="mb-6 flex items-center gap-3 border-b border-slate-100 pb-4">
-			<div class="flex h-10 w-10 items-center justify-center rounded-full bg-[#fff8e1]">
-				<Package class="h-5 w-5 text-[#fbbc04]" />
+			<div class="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50">
+				<Package class="h-5 w-5 text-[#013481]" />
 			</div>
 			<div>
 				<h3 class="text-xl font-bold text-slate-800">{t.section2Title}</h3>
-				<p
-					class="mt-1 inline-block rounded bg-[#013365]/10 px-3 py-1 text-sm font-medium text-[#013365]"
-				>
+				<p class="mt-1 text-sm font-medium text-slate-500">
 					{donationStore.flowMode === 'solicited'
 						? t.section2DescSolicited
 						: t.section2DescUnsolicited}

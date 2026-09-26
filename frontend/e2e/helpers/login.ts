@@ -55,7 +55,7 @@ export async function injectSession(
 	// 2. Navigate to a neutral page first so localStorage is accessible.
 	//    We use `/login` (always accessible) but immediately set localStorage before
 	//    any redirects fire. We must visit a page with the correct origin first.
-	await page.goto('http://localhost:4173/login', { waitUntil: 'domcontentloaded' });
+	await page.goto('/login', { waitUntil: 'domcontentloaded' });
 
 	// 3. Set localStorage with the user identity so authStore.loadCachedUser() succeeds.
 	const sessionUser = { name: user.name, roles: user.roles };

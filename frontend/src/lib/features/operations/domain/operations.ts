@@ -232,12 +232,23 @@ export interface Donation extends BaseDoc {
 	redirect_to_shelter_code?: string | null;
 }
 
+/**
+ * Which queue a window belongs to.
+ *
+ * A donor walking up and the shelter's own truck going out are two different
+ * constraints: the counter can take whoever turns up, the fleet cannot. One
+ * `capacity` covering both would claim 10 donors and 10 truck runs in the same hour.
+ */
+export type DonationSlotMode = 'dropoff' | 'pickup';
+
 export interface DonationSlot extends BaseDoc {
 	type: 'donation_slot';
+	mode: DonationSlotMode;
 	date: string; // YYYY-MM-DD
 	from: string; // HH:mm
 	to: string; // HH:mm
-	capacity: number;
+	/** `null` = no ceiling — the window is open hours, not a queue (drop-off). */
+	capacity: number | null;
 	status: 'open' | 'closed';
 	note?: string;
 }

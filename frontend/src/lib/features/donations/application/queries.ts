@@ -8,6 +8,8 @@ import {
 	type DonationItemEdit
 } from '../data/public-tracking';
 import { fetchShelterNeeds } from '../data/public-needs';
+import { fetchDonationSlots } from '../data/public-slots';
+import type { DonationSlotMode } from '$lib/features/operations';
 
 export const donationTrackingKeys = {
 	all: ['donations', 'tracking'] as const,
@@ -70,5 +72,29 @@ export function useUpdateDonationItems() {
 		// two drift apart.
 		onSuccess: (_data, input) =>
 			queryClient.invalidateQueries({ queryKey: donationTrackingKeys.detail(input.token) })
+	}));
+}
+
+/**
+ * Queue windows for one shelter + date + queue (schema.md §2.13).
+ *
+ * The queue is part of the key because drop-off and pickup are different boards:
+ * switching delivery method has to re-ask, not reuse the other queue's answer.
+ *
+ * Keyed on both, because capacity is per window per day: switching the date or the
+ * shelter must show that day's board, not the one the wizard opened with. Kept
+ * short-lived — other donors book while this form is open, and a window that filled
+ * meanwhile should grey out before the donor submits into a SLOT_FULL.
+ */
+export function useDonationSlots(
+	shelterCode: () => string,
+	date: () => string,
+	mode: () => DonationSlotMode | null
+) {
+	return createQuery(() => ({
+		queryKey: ['public-donation-slots', shelterCode(), date(), mode()],
+		queryFn: () => fetchDonationSlots(shelterCode(), date(), mode() ?? 'dropoff'),
+		enabled: Boolean(shelterCode() && date() && mode()),
+		staleTime: 30_000
 	}));
 }
