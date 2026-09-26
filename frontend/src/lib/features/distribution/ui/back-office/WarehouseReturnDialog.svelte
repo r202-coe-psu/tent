@@ -131,7 +131,7 @@
 			<Dialog.Header>
 				<Dialog.Title class="flex items-center gap-2 text-lg font-bold text-slate-900">
 					<PackageCheck class="h-5 w-5 text-[#0A2647]" />
-					<span>ตรวจรับของคืนเข้าคลังสินค้า (Physical Return Verification)</span>
+					<span>ตรวจรับของคืนเข้าคลังสินค้า</span>
 				</Dialog.Title>
 				<Dialog.Description class="text-xs text-slate-500">
 					ตรวจสอบและบันทึกจำนวนของที่ได้รับคืนจริง ณ ท่ารับของคลังสินค้าสำหรับใบเบิกจ่าย <strong
@@ -146,10 +146,10 @@
 			>
 				<ShieldCheck class="mt-0.5 h-4 w-4 shrink-0 text-sky-700" />
 				<div>
-					<strong>การยืนยันนี้มีผลต่อสต็อกคงคลังจริง (Physical Inventory Receipt)</strong>
+					<strong>การยืนยันนี้มีผลต่อสต็อกคงคลังจริง</strong>
 					<p class="mt-0.5 text-sky-900/80">
-						ระบบจะบันทึกเพิ่มยอดเข้าสต็อกคลังสินค้า (StockLedger เหตุผล receive)
-						ตามจำนวนที่ตรวจรับจริงเท่านั้น จำนวนที่ตรวจรับต้องไม่เกินยอดที่จุดแจกแจ้งส่งคืน
+						ระบบจะบันทึกเพิ่มยอดเข้าสต็อกคลังสินค้าตามจำนวนที่ตรวจรับจริงเท่านั้น
+						จำนวนที่ตรวจรับต้องไม่เกินยอดที่จุดแจกแจ้งส่งคืน
 					</p>
 				</div>
 			</div>

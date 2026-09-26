@@ -27,6 +27,7 @@
 		validateShiftCloseForm
 	} from '../model/shift-reconciliation';
 	import { formatDistributionError } from '../model/distribution-error';
+	import { getTicketStatusLabel } from '../model/ticket-status';
 
 	interface Props {
 		ticket: RequisitionTicket | null;
@@ -116,12 +117,10 @@
 			});
 
 			if (updatedTicket.status === 'COMPLETED') {
-				toast.success(
-					`ปิดรอบแจกจ่ายเรียบร้อยแล้ว: ตั๋ว ${updatedTicket.ticket_no} เสร็จสิ้นสมบูรณ์ (COMPLETED)`
-				);
+				toast.success(`ปิดรอบแจกจ่ายเรียบร้อยแล้ว: ตั๋ว ${updatedTicket.ticket_no} เสร็จสมบูรณ์`);
 			} else {
 				toast.success(
-					`ปิดรอบแจกจ่ายเรียบร้อยแล้ว: ตั๋ว ${updatedTicket.ticket_no} อยู่ในสถานะปิดรอบ (SHIFT_CLOSED)`
+					`ปิดรอบแจกจ่ายเรียบร้อยแล้ว: ตั๋ว ${updatedTicket.ticket_no} อยู่ในสถานะปิดรอบแล้ว`
 				);
 			}
 
@@ -219,7 +218,7 @@
 					<div>
 						<div class="flex items-center gap-2">
 							<span class="text-2xs font-bold tracking-wide text-teal-700 uppercase">
-								ปิดรอบและส่งคืน · Shift Reconciliation
+								ปิดรอบและส่งคืน
 							</span>
 							<span
 								class="rounded-full px-2 py-0.5 font-mono text-2xs font-bold {ticket.status ===
@@ -231,7 +230,7 @@
 											? 'bg-orange-100 text-orange-800'
 											: 'bg-slate-100 text-slate-800'}"
 							>
-								{ticket.status}
+								{getTicketStatusLabel(ticket.status)}
 							</span>
 						</div>
 						<h2 class="text-lg font-bold text-slate-900">
@@ -385,10 +384,10 @@
 							<div class="flex items-start gap-2.5">
 								<CheckCircle2 class="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
 								<div>
-									<p class="font-bold">เส้นทางปิดตั๋วทันที (Zero Physical Returns Fast Path)</p>
+									<p class="font-bold">เส้นทางปิดตั๋วทันที</p>
 									<p class="mt-0.5 text-slate-600">
 										ยอดส่งคืนคลังรวมเป็น 0 ชิ้น ระบบจะปิดรอบและเปลี่ยนสถานะตั๋วเป็น <strong
-											class="text-emerald-800">เสร็จสิ้นสมบูรณ์ (COMPLETED)</strong
+											class="text-emerald-800">เสร็จสมบูรณ์</strong
 										> ทันที โดยไม่ต้องส่งรถกลับคลังกลาง
 									</p>
 								</div>
@@ -405,10 +404,9 @@
 									</p>
 									<p class="mt-0.5 text-slate-600">
 										การปิดรอบจะเปลี่ยนสถานะตั๋วเป็น <strong class="text-purple-800"
-											>ปิดรอบแล้ว (SHIFT_CLOSED)</strong
+											>ปิดรอบแล้ว</strong
 										>
-										จากนั้นเจ้าหน้าที่จะสามารถกดยืนยันส่งคืนพัสดุกลับคลังกลาง (RETURN_PENDING_RECEIPT)
-										ในขั้นตอนถัดไป (ยอดสต็อกคลังยังไม่ถูกเพิ่มจนกว่าคลังจะตรวจรับจริง)
+										จากนั้นเจ้าหน้าที่จะสามารถกดยืนยันส่งคืนพัสดุกลับคลังกลางในขั้นตอนถัดไป (ยอดสต็อกคลังยังไม่ถูกเพิ่มจนกว่าคลังจะตรวจรับจริง)
 									</p>
 								</div>
 							</div>
@@ -448,7 +446,7 @@
 								<span>กำลังบันทึกปิดรอบแจกจ่าย...</span>
 							{:else}
 								<Lock class="h-4 w-4" />
-								<span>ยืนยันปิดรอบแจกจ่าย (Close Shift)</span>
+								<span>ยืนยันปิดรอบแจกจ่าย</span>
 							{/if}
 						</button>
 					</div>
@@ -462,7 +460,7 @@
 						<div class="flex items-start gap-2.5">
 							<Info class="mt-0.5 h-4 w-4 shrink-0 text-purple-600" />
 							<div>
-								<p class="font-bold">ปิดรอบแจกจ่ายเรียบร้อยแล้ว (Shift Closed)</p>
+								<p class="font-bold">ปิดรอบแจกจ่ายเรียบร้อยแล้ว</p>
 								<p class="mt-0.5 text-slate-600">
 									รอบการแจกจ่ายนี้ปิดยอดแล้ว กรุณากดยืนยันส่งคืนพัสดุที่เหลือกลับคลังกลาง
 									เพื่อให้คลังสามารถดำเนินการตรวจรับของจริงเข้าสู่ระบบ
@@ -521,7 +519,7 @@
 								<span>กำลังส่งข้อมูลคืนคลัง...</span>
 							{:else}
 								<Send class="h-4 w-4" />
-								<span>ส่งคืนพัสดุกลับคลังกลาง (Submit Returns to Warehouse)</span>
+								<span>ส่งคืนพัสดุกลับคลังกลาง</span>
 							{/if}
 						</button>
 					</div>
@@ -535,12 +533,10 @@
 						<div class="flex items-start gap-2.5">
 							<Truck class="mt-0.5 h-4 w-4 shrink-0 text-orange-600" />
 							<div>
-								<p class="font-bold">
-									ส่งคืนของแล้ว • รอคลังสินค้าตรวจรับ (Return Pending Receipt)
-								</p>
+								<p class="font-bold">ส่งคืนของแล้ว • รอคลังสินค้าตรวจรับ</p>
 								<p class="mt-0.5 text-slate-600">
-									ของเหลือถูกส่งกลับไปยังคลังแล้ว อยู่ระหว่างรอเจ้าหน้าที่คลังตรวจสอบของจริงที่
-									Dockside และยืนยันรับเข้าสต็อก
+									ของเหลือถูกส่งกลับไปยังคลังแล้ว
+									อยู่ระหว่างรอเจ้าหน้าที่คลังตรวจสอบของจริงและยืนยันรับเข้าสต็อก
 								</p>
 							</div>
 						</div>
@@ -585,13 +581,13 @@
 					</div>
 				</div>
 			{:else if ticket.status === 'RETURN_COMPLETED'}
-				<!-- 4. RETURN COMPLETED (Dockside received) -->
+				<!-- 4. RETURN COMPLETED -->
 				<div class="space-y-4">
 					<div class="rounded-xl border border-teal-200 bg-teal-50/70 p-4 text-xs text-teal-950">
 						<div class="flex items-start gap-2.5">
 							<CheckCircle2 class="mt-0.5 h-4 w-4 shrink-0 text-teal-600" />
 							<div>
-								<p class="font-bold">คลังสินค้าตรวจรับของคืนเรียบร้อยแล้ว (Return Completed)</p>
+								<p class="font-bold">คลังสินค้าตรวจรับของคืนเรียบร้อยแล้ว</p>
 								<p class="mt-0.5 text-slate-600">
 									คลังได้รับของและเพิ่มสต็อกเข้าคลังแล้ว รอปิดตั๋วโดยผู้จัดการคลัง
 								</p>
@@ -608,7 +604,7 @@
 						<div class="flex items-start gap-2.5">
 							<CheckCircle2 class="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
 							<div>
-								<p class="font-bold">ใบเบิกจ่ายนี้เสร็จสิ้นสมบูรณ์แล้ว (Completed)</p>
+								<p class="font-bold">ใบเบิกจ่ายนี้เสร็จสิ้นสมบูรณ์แล้ว</p>
 								<p class="mt-0.5 text-slate-600">
 									การแจกจ่าย การกระทบยอด และการคืนของเสร็จสิ้นสมบูรณ์
 								</p>
@@ -654,9 +650,11 @@
 				<!-- Unsupported Status for Frontline Reconciliation -->
 				<div class="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-xs">
 					<Info class="mx-auto mb-2 h-6 w-6 text-slate-400" />
-					<p class="font-bold text-slate-800">ตั๋วอยู่ในสถานะ {ticket.status}</p>
+					<p class="font-bold text-slate-800">
+						ตั๋วอยู่ในสถานะ {getTicketStatusLabel(ticket.status)}
+					</p>
 					<p class="mt-1 text-slate-500">
-						การปิดรอบและกระทบยอดสามารถดำเนินการได้เมื่อตั๋วอยู่ในสถานะกำลังแจกจ่าย (DISTRIBUTING)
+						การปิดรอบและกระทบยอดสามารถดำเนินการได้เมื่อตั๋วอยู่ในสถานะกำลังแจกจ่ายเท่านั้น
 					</p>
 				</div>
 			{/if}

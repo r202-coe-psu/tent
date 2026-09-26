@@ -43,7 +43,7 @@ export function isTicketReadyForApproval(ticket: RequisitionTicket): {
 	if (ticket.status !== 'PENDING_PICK') {
 		return {
 			ready: false,
-			reason: `ตั๋วต้องอยู่ในสถานะรอจัดของ (PENDING_PICK) ปัจจุบันคือ '${ticket.status}'`
+			reason: `ตั๋วต้องอยู่ในสถานะรอจัดของ ปัจจุบันคือ "${TICKET_STATUS_LABELS[ticket.status] ?? ticket.status}"`
 		};
 	}
 
@@ -160,7 +160,7 @@ export function getLifecycleSteps(status: RequisitionTicketStatus): {
 		{
 			id: 'shift_closed',
 			label: TICKET_STATUS_LABELS.SHIFT_CLOSED,
-			subLabel: 'ปิดรอบแจก / กระทบยอด',
+			subLabel: 'ปิดรอบแจก',
 			state: getStepState(5)
 		},
 		{

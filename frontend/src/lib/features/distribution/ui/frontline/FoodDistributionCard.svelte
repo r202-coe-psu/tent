@@ -18,13 +18,14 @@
 		canPerformFrontlineDistribution,
 		canDispatchTicket
 	} from '../../application/food-supplies/auth';
-	import type { RequisitionTicket, MealPeriod } from '../../domain/food-supplies';
+	import type { RequisitionTicket } from '../../domain/food-supplies';
 	import {
 		checkDuplicateMealAdvisory,
 		getItemCapacitySummary,
 		type FrontlineRecipientSelection
 	} from '../model/frontline-handover';
 	import { formatDistributionError } from '../model/distribution-error';
+	import { getMealPeriodLabel } from '../model/ticket-status';
 	import RecipientSearchPicker from '../common/RecipientSearchPicker.svelte';
 	import MealEntitlementWarning from './MealEntitlementWarning.svelte';
 	import InFlightTopUpDialog from './InFlightTopUpDialog.svelte';
@@ -110,13 +111,6 @@
 			? checkDuplicateMealAdvisory(recipientLogs, ticket.meal)
 			: { isDuplicate: false, priorLog: null }
 	);
-
-	const mealLabels: Record<MealPeriod, string> = {
-		breakfast: 'เช้า (Breakfast)',
-		lunch: 'กลางวัน (Lunch)',
-		dinner: 'เย็น (Dinner)',
-		snack: 'อาหารว่าง (Snack)'
-	};
 
 	const isQtyValid = $derived.by(() => {
 		const res = validatePositiveQuantity(qtyInput);
@@ -235,7 +229,7 @@
 						<span
 							class="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-2xs font-bold text-sky-900"
 						>
-							มื้อ: {mealLabels[ticket.meal] || ticket.meal}
+							มื้อ: {getMealPeriodLabel(ticket.meal)}
 						</span>
 					{/if}
 				</div>
@@ -309,10 +303,10 @@
 		>
 			<AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
 			<div>
-				<p class="font-bold">ตรวจพบประวัติการรับอาหารซ้ำในรอบวัน (Advisory Warning)</p>
+				<p class="font-bold">ตรวจพบประวัติการรับอาหารซ้ำในรอบวัน</p>
 				<p class="mt-0.5 text-2xs text-amber-800">
-					ผู้ประสบภัยรายนี้ได้รับอาหารมื้อ {ticket.meal ? mealLabels[ticket.meal] : ''} ในรอบวันแล้ว หากกดแจกจ่าย
-					ระบบจะแสดงหน้าต่างเพื่อบันทึกเหตุผล Override
+					ผู้ประสบภัยรายนี้ได้รับอาหารมื้อ {ticket.meal ? getMealPeriodLabel(ticket.meal) : ''} ในรอบวันแล้ว
+					หากกดแจกจ่าย ระบบจะแสดงหน้าต่างให้ระบุเหตุผลก่อนแจกซ้ำ
 				</p>
 			</div>
 		</div>

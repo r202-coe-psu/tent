@@ -136,7 +136,7 @@
 <div class="rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs sm:p-5">
 	<div class="flex items-center justify-between border-b border-slate-100 pb-3">
 		<div>
-			<h3 class="text-sm font-bold text-slate-900">การดำเนินการ (Action Panel)</h3>
+			<h3 class="text-sm font-bold text-slate-900">การดำเนินการ</h3>
 			<p class="text-2xs text-slate-500">
 				คำสั่งที่สามารถดำเนินการได้ตามสถานะของตั๋วและสิทธิ์ของผู้ใช้งาน
 			</p>
@@ -272,7 +272,7 @@
 				>
 					<Info class="h-4 w-4 shrink-0 text-blue-600" />
 					<div>
-						<strong>กำลังนำส่ง (In Transit)</strong>
+						<strong>กำลังนำส่ง</strong>
 						<p class="mt-0.5 text-slate-600">
 							สินค้าอยู่ระหว่างการเดินทางไปยัง <strong>{ticket.destination_location}</strong>
 							{#if ticket.driver_name}
@@ -292,10 +292,10 @@
 				>
 					<Info class="h-4 w-4 shrink-0 text-emerald-600" />
 					<div>
-						<strong>เปิดแจกจ่ายแล้ว (Distributing)</strong>
+						<strong>เปิดแจกจ่ายแล้ว</strong>
 						<p class="mt-0.5 text-slate-600">
-							สินค้าพร้อมแจกจ่ายที่จุดบริการ <strong>{ticket.destination_location}</strong> การแจกจ่ายดำเนินการที่สถานี
-							Onsite Distribution
+							สินค้าพร้อมแจกจ่ายที่จุดบริการ <strong>{ticket.destination_location}</strong>
+							การแจกจ่ายดำเนินการที่หน้าจุดแจกจ่ายหน้างาน (Onsite)
 						</p>
 					</div>
 				</div>
@@ -305,7 +305,7 @@
 						href="/onsite"
 						class="inline-flex h-9 items-center gap-2 rounded-xl border border-emerald-300 bg-white px-3.5 text-xs font-semibold text-emerald-800 shadow-2xs transition-colors hover:bg-emerald-50"
 					>
-						<span>ไปยังหน้าจุดแจกจ่าย Onsite</span>
+						<span>ไปยังหน้าจุดแจกจ่าย (Onsite)</span>
 						<ArrowRight class="h-3.5 w-3.5" />
 					</a>
 				</div>
@@ -316,7 +316,7 @@
 			>
 				<Info class="h-4 w-4 shrink-0 text-purple-600" />
 				<div>
-					<strong>ปิดรอบแจกจ่ายแล้ว (Shift Closed)</strong>
+					<strong>ปิดรอบแจกจ่ายแล้ว</strong>
 					<p class="mt-0.5 text-slate-600">
 						จุดแจกปิดรอบและกระทบยอดแล้ว อยู่ระหว่างรอส่งของเหลือคืนคลังสินค้า (ถ้ามี)
 					</p>
@@ -343,7 +343,7 @@
 				>
 					<Info class="h-4 w-4 shrink-0 text-orange-600" />
 					<div>
-						<strong>รอคลังตรวจรับคืน (Returns Pending Receipt)</strong>
+						<strong>รอคลังตรวจรับคืน</strong>
 						<p class="mt-0.5 text-slate-600">
 							ของเหลือถูกส่งกลับมาที่คลังแล้ว
 							{#if canReceiveReturns}
@@ -366,7 +366,7 @@
 							class="inline-flex h-10 items-center gap-2 rounded-xl bg-teal-800 px-4 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-teal-900 disabled:cursor-not-allowed disabled:opacity-50"
 						>
 							<CheckCircle2 class="h-4 w-4" />
-							<span>ปิดตั๋วใบเบิกจ่าย (Complete Ticket)</span>
+							<span>ปิดตั๋วใบเบิกจ่าย</span>
 						</button>
 					{/if}
 				</div>
@@ -376,7 +376,7 @@
 				>
 					<Info class="h-4 w-4 shrink-0 text-teal-600" />
 					<div>
-						<strong>ตรวจรับคืนเรียบร้อยแล้ว (Return Completed)</strong>
+						<strong>ตรวจรับคืนเรียบร้อยแล้ว</strong>
 						<p class="mt-0.5 text-slate-600">
 							คลังบันทึกยอดรับคืนเข้าคลังเรียบร้อยแล้ว
 							{#if canReceiveReturns}
@@ -394,7 +394,7 @@
 			>
 				<CheckCircle2 class="h-4 w-4 shrink-0 text-emerald-600" />
 				<div>
-					<strong>ตั๋วเสร็จสมบูรณ์แล้ว (Read-Only)</strong>
+					<strong>ตั๋วเสร็จสมบูรณ์แล้ว</strong>
 					<p class="mt-0.5 text-slate-500">
 						การแจกจ่าย การกระทบยอด และการคืนของเสร็จสมบูรณ์เรียบร้อยแล้ว เอกสารนี้อยู่ในสถานะปิดรอบ
 					</p>
@@ -406,7 +406,7 @@
 			>
 				<Ban class="h-4 w-4 shrink-0 text-red-600" />
 				<div>
-					<strong>ตั๋วนี้ถูกยกเลิกแล้ว (Read-Only)</strong>
+					<strong>ตั๋วนี้ถูกยกเลิกแล้ว</strong>
 					<p class="mt-0.5 text-red-700">
 						ตั๋วถูกยกเลิกก่อนการปล่อยของ {ticket.notes ? `(เหตุผล: ${ticket.notes})` : ''}
 					</p>
@@ -444,7 +444,7 @@
 			</Dialog.Title>
 			<Dialog.Description class="text-xs text-slate-500">
 				ต้องการอนุมัติใบเบิกจ่าย <strong class="font-mono text-slate-800">{ticket.ticket_no}</strong
-				> ให้เปลี่ยนสถานะเป็น "พร้อมส่งออก" (READY_FOR_DISPATCH) ใช่หรือไม่?
+				> ให้เปลี่ยนสถานะเป็น "พร้อมส่งออก" ใช่หรือไม่?
 			</Dialog.Description>
 		</Dialog.Header>
 
@@ -458,7 +458,7 @@
 				<span class="font-semibold text-slate-800">{ticket.items.length} รายการ</span>
 			</div>
 			<div class="mt-1 flex justify-between">
-				<span class="text-slate-500">ผู้อนุมัติ (Session):</span>
+				<span class="text-slate-500">ผู้อนุมัติ:</span>
 				<span class="font-mono text-slate-800">{authContext?.createdBy ?? '-'}</span>
 			</div>
 		</div>
@@ -511,7 +511,7 @@
 			</Dialog.Title>
 			<Dialog.Description class="text-xs text-slate-500">
 				ยืนยันว่าสินค้าถูกขนส่งมาถึงจุดแจกจ่ายและพร้อมเปิดแจกจ่ายผู้พักพิง (สถานะจะเปลี่ยนเป็น
-				DISTRIBUTING)
+				"กำลังแจกจ่าย")
 			</Dialog.Description>
 		</Dialog.Header>
 
@@ -539,7 +539,7 @@
 				</div>
 			{/if}
 			<div class="flex justify-between border-t border-slate-200/80 pt-2">
-				<span class="text-slate-500">ผู้รับมอบสินค้า (Session):</span>
+				<span class="text-slate-500">ผู้รับมอบสินค้า:</span>
 				<span class="font-mono font-semibold text-slate-800">{authContext?.createdBy ?? '-'}</span>
 			</div>
 		</div>
@@ -589,7 +589,7 @@
 			<Dialog.Description class="text-xs text-slate-500">
 				ต้องการปิดตั๋วใบเบิกจ่าย <strong class="font-mono text-slate-800">{ticket.ticket_no}</strong
 				>
-				ให้เปลี่ยนสถานะเป็น "เสร็จสมบูรณ์" (COMPLETED) ใช่หรือไม่?
+				ให้เปลี่ยนสถานะเป็น "เสร็จสมบูรณ์" ใช่หรือไม่?
 			</Dialog.Description>
 		</Dialog.Header>
 
@@ -606,10 +606,10 @@
 			</div>
 			<div class="flex justify-between">
 				<span class="text-slate-500">สถานะปัจจุบัน:</span>
-				<span class="font-semibold text-teal-800">ตรวจรับคืนเรียบร้อย (RETURN_COMPLETED)</span>
+				<span class="font-semibold text-teal-800">ตรวจรับคืนเรียบร้อย</span>
 			</div>
 			<div class="flex justify-between border-t border-slate-200/80 pt-2">
-				<span class="text-slate-500">ผู้ดำเนินการ (Session):</span>
+				<span class="text-slate-500">ผู้ดำเนินการ:</span>
 				<span class="font-mono text-slate-800">{authContext?.createdBy ?? '-'}</span>
 			</div>
 		</div>

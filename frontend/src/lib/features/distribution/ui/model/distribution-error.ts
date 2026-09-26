@@ -40,6 +40,15 @@ export function isUnsafeRawMessage(msg: string): boolean {
 }
 
 /**
+ * Checks whether a message is written for the end user (contains Thai script).
+ * Application/workflow layer messages are developer-facing (English, raw IDs, raw enum
+ * values) by convention, so they must never be shown to staff as-is.
+ */
+function isUserFacingMessage(msg: string): boolean {
+	return /[ก-๙]/.test(msg);
+}
+
+/**
  * Formats an unknown error into a safe, human-friendly user message.
  * Strictly prevents exposure of CouchDB internals, VDU logic, stack traces, and database identifiers,
  * while preserving safe typed domain/application validation and workflow messages.
@@ -52,7 +61,7 @@ export function formatDistributionError(
 
 	// 1. Distribution Workflow Typed Errors
 	if (err instanceof WorkflowValidationError || err instanceof ReservationSemanticMismatchError) {
-		if (err.message && !isUnsafeRawMessage(err.message)) {
+		if (err.message && isUserFacingMessage(err.message) && !isUnsafeRawMessage(err.message)) {
 			return err.message;
 		}
 		return 'ข้อมูลที่ระบุไม่ถูกต้องตามเงื่อนไข';
@@ -101,7 +110,7 @@ export function formatDistributionError(
 	}
 
 	if (err instanceof ValidationError) {
-		if (err.message && !isUnsafeRawMessage(err.message)) {
+		if (err.message && isUserFacingMessage(err.message) && !isUnsafeRawMessage(err.message)) {
 			return err.message;
 		}
 		return 'ข้อมูลที่ระบุไม่ถูกต้อง';

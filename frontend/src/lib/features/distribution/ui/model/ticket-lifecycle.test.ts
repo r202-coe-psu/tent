@@ -78,7 +78,11 @@ describe('Ticket Lifecycle & Approval Readiness (Slice 5.2)', () => {
 			const ticket = createValidTicket('READY_FOR_DISPATCH');
 			const result = isTicketReadyForApproval(ticket);
 			expect(result.ready).toBe(false);
-			expect(result.reason).toContain('PENDING_PICK');
+			expect(result.reason).toContain('รอจัดของ');
+			expect(result.reason).toContain('พร้อมส่งออก');
+			// Must not leak the raw internal enum value to the user-facing reason.
+			expect(result.reason).not.toContain('PENDING_PICK');
+			expect(result.reason).not.toContain('READY_FOR_DISPATCH');
 		});
 
 		it('returns ready=false when items array is empty', () => {

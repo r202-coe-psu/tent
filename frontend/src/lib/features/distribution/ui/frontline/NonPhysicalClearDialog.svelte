@@ -21,7 +21,8 @@
 		NON_PHYSICAL_CLEAR_REASON_OPTIONS,
 		validateNonPhysicalClear,
 		resolveNonPhysicalRecoveryHydration,
-		isReturnReservationModeCollision
+		isReturnReservationModeCollision,
+		getReturnReservationModeLabel
 	} from '../model/loan-return';
 	import { dialogAccessibility } from '../model/dialog-accessibility';
 	import { formatDistributionError } from '../model/distribution-error';
@@ -172,7 +173,7 @@
 		}
 
 		if (isCrossModeCollision) {
-			localError = `รายการนี้กำลังถูกดำเนินการในโหมด ${operationState?.reservation?.mode} โดย ${operationState?.reservation?.operation_by ?? 'ไม่ระบุ'} ไม่อนุญาตให้ทำรายการซ้อนข้ามโหมด`;
+			localError = `รายการนี้กำลังถูกดำเนินการด้วยวิธี "${getReturnReservationModeLabel(operationState?.reservation?.mode)}" โดย ${operationState?.reservation?.operation_by ?? 'ไม่ระบุ'} ไม่อนุญาตให้ทำรายการซ้อนข้ามวิธี`;
 			return;
 		}
 
@@ -263,7 +264,7 @@
 					</div>
 					<div>
 						<h2 id="non-physical-clear-dialog-title" class="text-base font-bold text-slate-900">
-							ตัดจำหน่ายรายการโดยไม่มีของคืน (Non-Physical Clear)
+							ตัดจำหน่ายรายการโดยไม่มีของคืน
 						</h2>
 						<p id="non-physical-clear-dialog-desc" class="text-xs text-slate-500">
 							{itemName || log.item_id} · รหัสรายการ: <span class="font-mono">{log._id}</span>
@@ -289,11 +290,10 @@
 			>
 				<ShieldAlert class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
 				<div>
-					<p class="font-bold">การตัดจำหน่ายทางธุรการ (Administrative Write-Off)</p>
+					<p class="font-bold">การตัดจำหน่ายทางธุรการ</p>
 					<p class="mt-0.5 text-2xs text-amber-800">
 						การดำเนินการนี้เพื่อปิดภาระการส่งคืนพัสดุของผู้ประสบภัย <strong
-							>โดยจะไม่มีการบันทึกตรวจรับของคืนเข้าคลังสินค้า และไม่เพิ่มยอดสต็อกสินค้า (No Stock
-							Receipt)</strong
+							>โดยจะไม่มีการบันทึกตรวจรับของคืนเข้าคลังสินค้า และไม่เพิ่มยอดสต็อกสินค้า</strong
 						>
 					</p>
 				</div>
@@ -308,12 +308,15 @@
 					<AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
 					<div>
 						<p class="font-bold">
-							รายการนี้กำลังถูกดำเนินการในโหมดอื่น ({operationState?.reservation?.mode})
+							รายการนี้กำลังถูกดำเนินการด้วยวิธีอื่นอยู่ ({getReturnReservationModeLabel(
+								operationState?.reservation?.mode
+							)})
 						</p>
 						<p class="mt-0.5 text-2xs text-red-800">
 							ผู้ทำรายการ: <strong>{operationState?.reservation?.operation_by ?? 'ไม่ระบุ'}</strong>
-							ไม่อนุญาตให้ทำรายการซ้อนข้ามโหมด กรุณาใช้หน้าต่างสำหรับโหมด {operationState
-								?.reservation?.mode} หรือรอจนกว่ารายการเดิมจะสิ้นสุด
+							ไม่อนุญาตให้ทำรายการซ้อนข้ามวิธี กรุณาใช้หน้าต่างสำหรับ {getReturnReservationModeLabel(
+								operationState?.reservation?.mode
+							)} หรือรอจนกว่ารายการเดิมจะสิ้นสุด
 						</p>
 					</div>
 				</div>
@@ -325,9 +328,12 @@
 					<div class="flex items-start gap-2">
 						<AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
 						<div>
-							<p class="font-bold">พบรายการที่อยู่ระหว่างดำเนินการ (In-Flight Pending)</p>
+							<p class="font-bold">พบรายการที่ค้างอยู่ ยังทำไม่เสร็จ</p>
 							<p class="mt-0.5 text-2xs text-amber-800">
-								โหมด: <strong>{operationState.reservation?.mode}</strong> · ผู้ทำรายการ:
+								วิธี: <strong
+									>{getReturnReservationModeLabel(operationState.reservation?.mode)}</strong
+								>
+								· ผู้ทำรายการ:
 								<strong
 									>{operationState.reservation?.operation_by ??
 										operationState.reservation?.created_by ??
@@ -359,10 +365,9 @@
 				>
 					<AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
 					<div>
-						<p class="font-bold">รายการผ่านจุดล็อกแล้ว (Irreversible Forward Recovery)</p>
+						<p class="font-bold">รายการนี้บันทึกลงระบบแล้ว ไม่สามารถยกเลิกได้</p>
 						<p class="mt-0.5 text-2xs text-blue-800">
-							รายการนี้ถูกล็อก (FENCED) แล้ว กำลังรอปิดสถานะรายการตัดจำหน่ายให้สมบูรณ์
-							(ข้อมูลถูกล็อคตามรายการเดิม)
+							กำลังรอปิดสถานะรายการตัดจำหน่ายให้สมบูรณ์ ข้อมูลของรายการเดิมถูกล็อกไว้ไม่ให้แก้ไข
 						</p>
 					</div>
 				</div>
@@ -484,7 +489,7 @@
 							<span>กำลังตัดจำหน่ายรายการ...</span>
 						{:else if isForwardRecovery}
 							<AlertCircle class="h-4 w-4" />
-							<span>ดำเนินการต่อให้สมบูรณ์ (Resume Forward)</span>
+							<span>ดำเนินการต่อให้สมบูรณ์</span>
 						{:else}
 							<FileX class="h-4 w-4" />
 							<span>ยืนยันตัดจำหน่ายรายการ</span>

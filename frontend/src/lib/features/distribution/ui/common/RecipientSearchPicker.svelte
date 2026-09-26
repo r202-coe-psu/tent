@@ -164,7 +164,7 @@
 			<button
 				type="button"
 				disabled
-				title="ระบบทะเบียนจิตอาสายังไม่เปิดใช้งาน (VOLUNTEER_LOOKUP_MISSING)"
+				title="ระบบทะเบียนจิตอาสายังไม่เปิดใช้งาน"
 				class="inline-flex cursor-not-allowed items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-400 opacity-60"
 			>
 				<Lock class="h-3 w-3" />

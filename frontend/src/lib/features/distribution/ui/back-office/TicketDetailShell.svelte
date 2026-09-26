@@ -58,7 +58,7 @@
 			<div class="flex flex-col items-center justify-center p-16 text-center">
 				<Loader2 class="mb-3 h-8 w-8 animate-spin text-[#0A2647]" />
 				<h4 class="text-sm font-semibold text-slate-800">กำลังดึงข้อมูลตั๋วเบิกจ่าย...</h4>
-				<p class="mt-0.5 text-xs text-slate-500">กรุณารอสักครู่ (Remote-First Query)</p>
+				<p class="mt-0.5 text-xs text-slate-500">กรุณารอสักครู่</p>
 			</div>
 		{:else if isError || !ticket}
 			<div class="flex flex-col items-center justify-center p-12 text-center">

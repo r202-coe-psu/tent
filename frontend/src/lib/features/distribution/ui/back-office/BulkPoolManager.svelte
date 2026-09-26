@@ -112,9 +112,7 @@
 				<Package class="h-6 w-6" aria-hidden="true" />
 			</div>
 			<div>
-				<p class="text-2xs font-bold tracking-wide text-violet-700 uppercase">
-					คลังรับคืน · Warehouse Intake
-				</p>
+				<p class="text-2xs font-bold tracking-wide text-violet-700 uppercase">คลังรับคืน</p>
 				<h2 class="text-lg font-bold text-slate-900">จุดรวมคืนพัสดุ (Bulk Return Pools)</h2>
 				<p class="text-xs text-slate-500">ดูโควตาและประวัติการรับคืนของศูนย์ {activeShelterCode}</p>
 			</div>
@@ -249,7 +247,6 @@
 										{/if}
 										{getBulkPoolStatusLabel(pool.status)}
 									</span>
-									<div class="mt-1 font-mono text-2xs text-slate-500">{pool.status}</div>
 								</td>
 								<td class="px-3 py-4 text-right font-mono tabular-nums"
 									>{accounting.totalReceived}</td

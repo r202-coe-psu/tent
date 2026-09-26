@@ -17,6 +17,7 @@
 		useReceiveTicketAtDistributionPoint
 	} from '../../application/queries';
 	import { canPerformFrontlineDistribution } from '../../application/food-supplies/auth';
+	import { getTicketStatusLabel } from '../model/ticket-status';
 	import Lock from '@lucide/svelte/icons/lock';
 	import type { RequisitionTicket } from '../../domain/food-supplies';
 	import FoodDistributionCard from './FoodDistributionCard.svelte';
@@ -377,7 +378,7 @@
 				</h2>
 				<p class="text-xs text-slate-500">
 					เมื่อรถขนส่งเดินทางมาถึงจุดแจกจ่าย ให้เจ้าหน้าที่ตรวจนับจำนวนของจริง
-					และกดยืนยันรับเพื่อเปลี่ยนสถานะเป็น "กำลังแจกจ่าย (DISTRIBUTING)"
+					และกดยืนยันรับเพื่อเปลี่ยนสถานะเป็น "กำลังแจกจ่าย"
 				</p>
 			</div>
 
@@ -388,7 +389,7 @@
 					<Truck class="mb-2 h-10 w-10 text-slate-300" />
 					<p class="font-semibold text-slate-700">ไม่มีตั๋วสินค้าที่กำลังนำส่งในขณะนี้</p>
 					<p class="mt-0.5 text-2xs text-slate-400">
-						ตั๋วที่คลังสินค้าปล่อยรถแล้ว (สถานะ IN_TRANSIT) จะแสดงที่นี่เพื่อให้จุดแจกตรวจรับ
+						ตั๋วที่คลังสินค้าปล่อยรถแล้วและกำลังนำส่ง จะแสดงที่นี่เพื่อให้จุดแจกตรวจรับ
 					</p>
 				</div>
 			{:else}
@@ -412,7 +413,7 @@
 									<span
 										class="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-2xs font-bold text-blue-900"
 									>
-										กำลังนำส่ง (IN_TRANSIT)
+										กำลังนำส่ง
 									</span>
 								</div>
 
@@ -445,7 +446,7 @@
 										<span>กำลังตรวจรับ...</span>
 									{:else}
 										<CheckCircle2 class="h-3.5 w-3.5" />
-										<span>ตรวจรับเข้าจุดแจก (Receive)</span>
+										<span>ตรวจรับเข้าจุดแจก</span>
 									{/if}
 								</button>
 							</div>
@@ -464,8 +465,7 @@
 					<UtensilsCrossed class="mb-3 h-12 w-12 text-slate-300" />
 					<h3 class="text-sm font-bold text-slate-800">ไม่มีตั๋วอาหารที่เปิดแจกจ่ายอยู่ในขณะนี้</h3>
 					<p class="mt-1 max-w-md text-xs text-slate-500">
-						ตั๋วอาหารต้องได้รับการตรวจรับเข้าจุดแจกจ่าย (สถานะ DISTRIBUTING)
-						จึงจะสามารถแจกจ่ายให้ผู้ประสบภัยได้
+						ตั๋วอาหารต้องได้รับการตรวจรับเข้าจุดแจกจ่ายก่อน จึงจะสามารถแจกจ่ายให้ผู้ประสบภัยได้
 					</p>
 					{#if inTransitTickets.some((t) => t.requisition_type === 'food')}
 						<button
@@ -534,8 +534,7 @@
 					<Package class="mb-3 h-12 w-12 text-slate-300" />
 					<h3 class="text-sm font-bold text-slate-800">ไม่มีตั๋วพัสดุที่เปิดแจกจ่ายอยู่ในขณะนี้</h3>
 					<p class="mt-1 max-w-md text-xs text-slate-500">
-						ตั๋วพัสดุต้องได้รับการตรวจรับเข้าจุดแจกจ่าย (สถานะ DISTRIBUTING)
-						จึงจะสามารถแจกจ่ายหรือให้ยืมได้
+						ตั๋วพัสดุต้องได้รับการตรวจรับเข้าจุดแจกจ่ายก่อน จึงจะสามารถแจกจ่ายหรือให้ยืมได้
 					</p>
 					{#if inTransitTickets.some((t) => t.requisition_type === 'supplies')}
 						<button
@@ -612,8 +611,7 @@
 						ไม่มีตั๋วที่เปิดแจกจ่ายหรือรอส่งคืนในขณะนี้
 					</h3>
 					<p class="mt-1 max-w-md text-xs text-slate-500">
-						เมื่อตั๋วได้รับการตรวจรับเข้าจุดแจก (สถานะ DISTRIBUTING)
-						จะสามารถปิดรอบและกระทบยอดได้ที่แท็บนี้
+						เมื่อตั๋วได้รับการตรวจรับเข้าจุดแจกแล้ว จะสามารถปิดรอบและกระทบยอดได้ที่แท็บนี้
 					</p>
 				</div>
 			{:else}
@@ -637,7 +635,9 @@
 								>
 									<span class="truncate">
 										{#if activeReconciliationTicket}
-											{activeReconciliationTicket.ticket_no} [{activeReconciliationTicket.status}] - {activeReconciliationTicket.destination_location}
+											{activeReconciliationTicket.ticket_no} [{getTicketStatusLabel(
+												activeReconciliationTicket.status
+											)}] - {activeReconciliationTicket.destination_location}
 											({activeReconciliationTicket.items.map((i) => i.item_name).join(', ')})
 										{:else}
 											เลือกตั๋วเพื่อกระทบยอด
@@ -648,7 +648,7 @@
 									{#each reconciliationEligibleTickets as t (t._id)}
 										<Select.Item
 											value={t._id}
-											label={`${t.ticket_no} [${t.status}] - ${t.destination_location} (${t.items
+											label={`${t.ticket_no} [${getTicketStatusLabel(t.status)}] - ${t.destination_location} (${t.items
 												.map((i) => i.item_name)
 												.join(', ')})`}
 										/>

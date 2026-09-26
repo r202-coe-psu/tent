@@ -44,8 +44,6 @@
 	const isError = $derived(ticketsQuery.isError);
 	const errorPresentation = $derived(mapDistributionQueryError(ticketsQuery.error));
 
-
-
 	function handleReauth() {
 		if (authStore.isAuthenticated) {
 			backofficeState.requestReauth();
@@ -184,7 +182,7 @@
 			<div>
 				<h1 class="text-2xl font-bold tracking-tight text-slate-900">ระบบเบิกจ่ายพัสดุและอาหาร</h1>
 				<p class="text-xs text-slate-500">
-					ศูนย์ควบคุมตั๋วเบิกจ่ายพัสดุ อาหารปรุงสุก (Ready-Meal) และติดตามของยืม • ศูนย์: {shelterCode}
+					ศูนย์ควบคุมตั๋วเบิกจ่ายพัสดุ อาหารปรุงสุก และติดตามของยืม • ศูนย์: {shelterCode}
 				</p>
 			</div>
 		</div>
@@ -324,9 +322,7 @@
 			{#if isLoading}
 				<div class="rounded-xl border border-slate-200/80 bg-white p-12 text-center shadow-2xs">
 					<RefreshCw class="mx-auto mb-2 h-6 w-6 animate-spin text-slate-400" />
-					<p class="text-sm font-semibold text-slate-800">
-						กำลังดึงข้อมูลตั๋วเบิกจ่ายจาก Remote Database...
-					</p>
+					<p class="text-sm font-semibold text-slate-800">กำลังดึงข้อมูลตั๋วเบิกจ่าย...</p>
 					<p class="mt-0.5 text-xs text-slate-500">กรุณารอสักครู่</p>
 				</div>
 			{:else if isError}

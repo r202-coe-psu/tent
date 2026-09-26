@@ -143,7 +143,7 @@
 					class="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 shadow-2xs"
 				>
 					<span class="h-2 w-2 rounded-full bg-emerald-500"></span>
-					สิทธิ์ตรวจรับคืนเข้าคลัง (WH/SC/SM/SA)
+					สิทธิ์ตรวจรับคืนเข้าคลัง
 				</span>
 			{:else}
 				<span
@@ -164,13 +164,13 @@
 		>
 			<Info class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
 			<div>
-				<p class="font-bold">ข้อมูลสิทธิ์การบันทึกตรวจรับของคืน (Counter Return Authorization)</p>
+				<p class="font-bold">ข้อมูลสิทธิ์การบันทึกตรวจรับของคืน</p>
 				<p class="mt-0.5 text-2xs text-amber-800">
-					เจ้าหน้าที่ส่วนหน้า (REG) สามารถค้นหาและตรวจสอบประวัติการยืม และ<strong
+					เจ้าหน้าที่ส่วนหน้าสามารถค้นหาและตรวจสอบประวัติการยืม และ<strong
 						>บันทึกตัดจำหน่ายรายการ (สูญหาย/ยกเว้น) ได้</strong
 					>
-					แต่การบันทึกรับของคืนจริงเข้าคลังสินค้า (StockLedger reason='receive') ต้องดำเนินการโดยเจ้าหน้าที่คลัง
-					(WH), ผู้ประสานงาน (SC), ผู้จัดการศูนย์ (SM) หรือผู้ดูแลระบบ (SA)
+					แต่การบันทึกรับของคืนจริงเข้าคลังสินค้าต้องดำเนินการโดยเจ้าหน้าที่คลัง ผู้ประสานงาน ผู้จัดการศูนย์
+					หรือผู้ดูแลระบบเท่านั้น
 				</p>
 			</div>
 		</div>
@@ -296,7 +296,7 @@
 								class="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-emerald-600 bg-emerald-600 py-2 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
 							>
 								<RotateCcw class="h-3.5 w-3.5" />
-								<span>รับคืนของจริง (Counter Return)</span>
+								<span>รับคืนของจริง</span>
 							</button>
 
 							<!-- Secondary: Non-Physical Administrative Clear (Lost / Waived) -->
@@ -356,7 +356,7 @@
 								<span class="ml-2 font-mono text-2xs text-slate-400">{pastLoan._id}</span>
 								{#if isBulkCleared}
 									<p class="text-2xs text-purple-700">
-										เคลียร์ผ่านจุดรวบรวม (Bulk Dropoff) · ห้ามรับคืนเข้าคลังซ้ำ (B1 Invariant)
+										เคลียร์ผ่านจุดรวบรวม (Bulk Dropoff) · ห้ามรับคืนเข้าคลังซ้ำ
 									</p>
 								{:else if pastLoan.status === 'lost'}
 									<p class="text-2xs text-red-700">

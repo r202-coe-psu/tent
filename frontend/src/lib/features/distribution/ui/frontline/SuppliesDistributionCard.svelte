@@ -338,7 +338,7 @@
 		<div class="text-2xs text-slate-500">
 			สถานะที่จะบันทึก:
 			<strong class="text-slate-700">
-				{isReturnableItem ? 'active (หนี้สินยืม-คืน)' : 'fulfilled (แจกจ่ายสิ้นเปลือง)'}
+				{isReturnableItem ? 'หนี้สินยืม-คืน' : 'แจกจ่ายสิ้นเปลือง'}
 			</strong>
 		</div>
 

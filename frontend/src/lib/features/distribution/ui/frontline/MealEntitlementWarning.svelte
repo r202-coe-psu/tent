@@ -4,6 +4,7 @@
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import type { MealPeriod } from '../../domain/food-supplies';
+	import { getMealPeriodLabel } from '../model/ticket-status';
 
 	interface Props {
 		open: boolean;
@@ -26,13 +27,6 @@
 	let isConfirmed = $state(false);
 	let overrideReason = $state('');
 	let error = $state<string | null>(null);
-
-	const mealLabels: Record<MealPeriod, string> = {
-		breakfast: 'เช้า',
-		lunch: 'กลางวัน',
-		dinner: 'เย็น',
-		snack: 'อาหารว่าง'
-	};
 
 	function handleConfirm() {
 		const trimmed = overrideReason.trim();
@@ -100,7 +94,7 @@
 				>
 					<p>
 						ผู้ประสบภัย <strong>{recipientLabel}</strong> ได้รับอาหารมื้อ
-						<strong class="text-amber-800">{mealLabels[meal] || meal}</strong> ในรอบวันแล้ว
+						<strong class="text-amber-800">{getMealPeriodLabel(meal)}</strong> ในรอบวันแล้ว
 					</p>
 					{#if priorDistributedAt}
 						<p class="mt-1 text-2xs text-amber-700">
@@ -114,7 +108,7 @@
 
 				<p class="text-xs text-slate-600">
 					ระบบควบคุมการแจกอาหารจำกัด 1 มื้อ ต่อ 1 คน ในรอบวัน หากต้องการแจกซ้ำเป็นกรณีพิเศษ
-					ต้องระบุเหตุผลในการ Override
+					ต้องระบุเหตุผลประกอบ
 				</p>
 
 				<!-- Confirmation & Reason Form -->
@@ -123,7 +117,7 @@
 						class="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-800"
 					>
 						<Checkbox bind:checked={isConfirmed} />
-						<span>ยืนยันแจกซ้ำเป็นกรณีพิเศษ (Override)</span>
+						<span>ยืนยันแจกซ้ำเป็นกรณีพิเศษ</span>
 					</label>
 
 					<div>

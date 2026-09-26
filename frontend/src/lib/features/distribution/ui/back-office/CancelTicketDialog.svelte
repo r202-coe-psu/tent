@@ -78,7 +78,7 @@
 					<span>ยืนยันการยกเลิกใบเบิกจ่าย</span>
 				</Dialog.Title>
 				<Dialog.Description class="text-xs text-red-800/80">
-					การยกเลิกตั๋วเป็นแบบถาวร (CANCELLED) ตั๋วจะไม่สามารถนำมาจัดสรรหรือปล่อยของได้อีก
+					การยกเลิกตั๋วเป็นแบบถาวร ตั๋วจะไม่สามารถนำมาจัดสรรหรือปล่อยของได้อีก
 				</Dialog.Description>
 			</Dialog.Header>
 		</div>

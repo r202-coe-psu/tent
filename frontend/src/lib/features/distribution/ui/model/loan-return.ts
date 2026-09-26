@@ -3,8 +3,10 @@ import {
 	positiveWholeQtySchema,
 	type DistributionLog,
 	type ReturnCondition,
-	type NonPhysicalClearReason
+	type NonPhysicalClearReason,
+	type BulkReturnPoolStatus
 } from '../../domain/food-supplies';
+import { getBulkPoolStatusLabel } from './bulk-pool-manager';
 
 export type { NonPhysicalClearReason };
 
@@ -122,12 +124,12 @@ export const NON_PHYSICAL_CLEAR_REASON_OPTIONS: {
 }[] = [
 	{
 		value: 'lost',
-		label: 'สูญหาย (Lost)',
+		label: 'สูญหาย',
 		description: 'ผู้ประสบภัยทำพัสดุสูญหาย ไม่สามารถนำส่งคืนคลังได้'
 	},
 	{
 		value: 'waived',
-		label: 'ยกเว้นการคืน (Waived)',
+		label: 'ยกเว้นการคืน',
 		description: 'เจ้าหน้าที่พิจารณาอนุมัติยกเว้นการคืนเป็นกรณีพิเศษ'
 	}
 ];
@@ -188,7 +190,7 @@ export function getLoanStatusBadge(log: DistributionLog): LoanStatusBadgeInfo {
 	if (log.status === 'returned') {
 		if (log.clear_reason === 'bulk_dropoff' || log.bulk_pool_id) {
 			return {
-				label: 'เคลียร์ผ่านจุดรวบรวม (Bulk)',
+				label: 'เคลียร์ผ่านจุดรวบรวม',
 				badgeClass: 'border-purple-200 bg-purple-50 text-purple-900'
 			};
 		}
@@ -228,17 +230,17 @@ export const RETURN_CONDITION_OPTIONS: {
 }[] = [
 	{
 		value: 'READY',
-		label: 'สภาพดี / พร้อมใช้งาน (Ready)',
+		label: 'สภาพดี / พร้อมใช้งาน',
 		description: 'พัสดุอยู่ในสภาพสมบูรณ์ พร้อมนำไปแจกจ่ายหรือให้ยืมต่อ'
 	},
 	{
 		value: 'MAINTENANCE',
-		label: 'ต้องซ่อมบำรุง / ทำความสะอาด (Maintenance)',
+		label: 'ต้องซ่อมบำรุง / ทำความสะอาด',
 		description: 'พัสดุต้องทำความสะอาดหรือซ่อมแซมก่อนนำกลับมาใช้งาน'
 	},
 	{
 		value: 'BROKEN',
-		label: 'ชำรุดเสียหาย (Broken)',
+		label: 'ชำรุดเสียหาย',
 		description: 'พัสดุชำรุด ใช้งานไม่ได้ตามปกติ'
 	}
 ];
@@ -281,9 +283,11 @@ export function validateBulkGateClear(
 		return { isValid: false, error: 'กรุณาเลือกจุดรวมคืน (Bulk Return Pool) ที่ต้องการเคลียร์' };
 	}
 	if (selectedPool.status !== 'ACTIVE') {
+		const statusLabel =
+			getBulkPoolStatusLabel(selectedPool.status as BulkReturnPoolStatus) ?? selectedPool.status;
 		return {
 			isValid: false,
-			error: `จุดรวมคืนนี้ไม่อยู่ในสถานะใช้งานได้ (สถานะ: ${selectedPool.status})`
+			error: `จุดรวมคืนนี้ไม่อยู่ในสถานะใช้งานได้ (สถานะ: ${statusLabel})`
 		};
 	}
 	if (!qtyGt(selectedPool.unclaimed_quota, '0')) {
@@ -334,7 +338,7 @@ export function validateBulkForwardRecovery(
 		return { isValid: false, error: 'ไม่พบข้อมูลจุดรวมคืนสำหรับกู้คืนรายการ' };
 	}
 	if (pool.status === 'CLOSED') {
-		return { isValid: false, error: 'จุดรวมคืนนี้ถูกปิดแล้ว (CLOSED) ไม่สามารถกู้คืนรายการได้' };
+		return { isValid: false, error: 'จุดรวมคืนนี้ถูกปิดแล้ว ไม่สามารถกู้คืนรายการได้' };
 	}
 	if (expectedItemId && pool.item_id && pool.item_id !== expectedItemId) {
 		return {
@@ -414,6 +418,23 @@ export function resolveNonPhysicalRecoveryHydration(
 		notes: input.reservation.notes ?? '',
 		hydratedOperationId: input.reservation.operation_id
 	};
+}
+
+/**
+ * Canonical Thai labels for the return-reservation mode (which counter/flow currently
+ * holds an in-progress return for a loan). Single source of truth — reused across the
+ * Counter Return, Non-Physical Clear, and Bulk Gate Clear dialogs so the raw internal
+ * mode value never leaks into user-facing messages.
+ */
+const RETURN_RESERVATION_MODE_LABELS: Record<string, string> = {
+	PHYSICAL: 'ตรวจรับคืนที่เคาน์เตอร์',
+	NON_PHYSICAL: 'ตัดจำหน่ายโดยไม่มีของคืน',
+	BULK: 'เคลียร์ผ่านจุดรวมคืน'
+};
+
+export function getReturnReservationModeLabel(mode: string | null | undefined): string {
+	if (!mode) return 'ไม่ระบุ';
+	return RETURN_RESERVATION_MODE_LABELS[mode] ?? mode;
 }
 
 export function isReturnReservationModeCollision(

@@ -212,8 +212,7 @@
 					สร้างใบเบิกจ่ายพัสดุและอาหาร
 				</Dialog.Title>
 				<Dialog.Description class="text-xs text-slate-500">
-					ออกตั๋วเบิกจ่ายใหม่เพื่อรอให้คลังสินค้าจัดของ (PENDING_PICK)
-					โดยแยกหมวดหมู่อาหารปรุงสุกและพัสดุชัดเจน
+					ออกตั๋วเบิกจ่ายใหม่เพื่อรอให้คลังสินค้าจัดของ โดยแยกหมวดหมู่อาหารปรุงสุกและพัสดุชัดเจน
 				</Dialog.Description>
 			</Dialog.Header>
 		</div>
@@ -245,8 +244,8 @@
 							<Utensils class="h-5 w-5" />
 						</div>
 						<div>
-							<div class="text-sm font-bold text-slate-900">อาหารปรุงสุก (Food)</div>
-							<div class="text-xs text-slate-500">เฉพาะอาหารพร้อมรับประทาน (Ready-Meal)</div>
+							<div class="text-sm font-bold text-slate-900">อาหารปรุงสุก</div>
+							<div class="text-xs text-slate-500">เฉพาะอาหารพร้อมรับประทาน</div>
 						</div>
 					</button>
 
@@ -269,7 +268,7 @@
 							<Package class="h-5 w-5" />
 						</div>
 						<div>
-							<div class="text-sm font-bold text-slate-900">พัสดุและสิ่งของ (Supplies)</div>
+							<div class="text-sm font-bold text-slate-900">พัสดุและสิ่งของ</div>
 							<div class="text-xs text-slate-500">สิ่งของบรรเทาทุกข์ เครื่องนอน และอุปกรณ์</div>
 						</div>
 					</button>
@@ -328,8 +327,7 @@
 						{/each}
 					</div>
 					<p class="mt-1 text-xs text-amber-800/80">
-						ระบบใช้มื้ออาหารในการตรวจสอบสิทธิ์รับอาหารซ้ำของผู้พักพิงในรอบวัน (Thailand
-						Calendar-Day)
+						ระบบใช้มื้ออาหารในการตรวจสอบสิทธิ์รับอาหารซ้ำของผู้พักพิงในรอบวัน
 					</p>
 				</fieldset>
 			{/if}
@@ -361,7 +359,7 @@
 						<Package class="mx-auto mb-2 h-8 w-8 text-slate-400" />
 						<p class="text-xs font-semibold text-slate-700">ยังไม่ได้เลือกรายการในตั๋วนี้</p>
 						<p class="mt-0.5 text-xs text-slate-500">
-							กดปุ่ม "เพิ่มรายการ" ด้านบนเพื่อค้นหาจาก Master Catalog
+							กดปุ่ม "เพิ่มรายการ" ด้านบนเพื่อค้นหาจากรายการสินค้า
 						</p>
 					</div>
 				{:else}
@@ -460,7 +458,7 @@
 		>
 			<div class="flex items-center gap-1.5 text-xs text-slate-500">
 				<AlertCircle class="h-3.5 w-3.5 text-slate-400" />
-				<span>เมื่อสร้างสำเร็จ ตั๋วจะอยู่ในสถานะ "รอจัดของ" (PENDING_PICK)</span>
+				<span>เมื่อสร้างสำเร็จ ตั๋วจะอยู่ในสถานะ "รอจัดของ"</span>
 			</div>
 
 			<div class="flex flex-wrap items-center gap-2">

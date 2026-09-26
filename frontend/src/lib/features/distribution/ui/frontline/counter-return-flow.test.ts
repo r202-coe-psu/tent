@@ -134,7 +134,7 @@ describe('Frontline Loan Return & Routine Counter Return Flow (Slice 5.5A + 5.5B
 			expect(isLoanReturnCandidate(bulkClearedLog)).toBe(false);
 			expect(isBulkClearedLoan(bulkClearedLog)).toBe(true);
 			const badge = getLoanStatusBadge(bulkClearedLog);
-			expect(badge.label).toContain('Bulk');
+			expect(badge.label).toBe('เคลียร์ผ่านจุดรวบรวม');
 		});
 
 		it('produces empty active loan list when recipient has only closed/consumable records', () => {
@@ -375,7 +375,7 @@ describe('Frontline Loan Return & Routine Counter Return Flow (Slice 5.5A + 5.5B
 				expect(isLoanReturnCandidate(clearedViaBulk)).toBe(false);
 				expect(isBulkClearedLoan(clearedViaBulk)).toBe(true);
 				const badge = getLoanStatusBadge(clearedViaBulk);
-				expect(badge.label).toContain('Bulk');
+				expect(badge.label).toBe('เคลียร์ผ่านจุดรวบรวม');
 			});
 		});
 	});

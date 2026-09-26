@@ -28,8 +28,10 @@
 		calculateLoanRemainingQty,
 		isEligibleBulkPool,
 		validateBulkGateClear,
-		validateBulkForwardRecovery
+		validateBulkForwardRecovery,
+		getReturnReservationModeLabel
 	} from '../model/loan-return';
+	import { getBulkPoolStatusLabel } from '../model/bulk-pool-manager';
 	import { dialogAccessibility } from '../model/dialog-accessibility';
 	import { formatDistributionError } from '../model/distribution-error';
 
@@ -219,7 +221,7 @@
 		}
 
 		if (isCrossModeCollision) {
-			localError = `รายการนี้กำลังถูกดำเนินการในโหมด ${operationState?.reservation?.mode} โดย ${operationState?.reservation?.operation_by ?? 'ไม่ระบุ'} ไม่อนุญาตให้ทำรายการซ้อนข้ามโหมด`;
+			localError = `รายการนี้กำลังถูกดำเนินการด้วยวิธี "${getReturnReservationModeLabel(operationState?.reservation?.mode)}" โดย ${operationState?.reservation?.operation_by ?? 'ไม่ระบุ'} ไม่อนุญาตให้ทำรายการซ้อนข้ามวิธี`;
 			return;
 		}
 
@@ -361,12 +363,10 @@
 			>
 				<ShieldAlert class="mt-0.5 h-4 w-4 shrink-0 text-purple-600" />
 				<div>
-					<p class="font-bold">หักโควตาจากคลังรวมคืน (Zero-Second-Restock Invariant)</p>
+					<p class="font-bold">หักโควตาจากคลังรวมคืน</p>
 					<p class="mt-0.5 text-2xs text-purple-900">
 						รายการนี้จะใช้ของที่ถูกส่งคืนเข้าจุดรวบรวมไว้แล้วเพื่อเคลียร์ภาระการยืมของผู้ประสบภัย
-						<strong
-							>โดยไม่มีการรับของคืนเข้าคลังสินค้าซ้ำ และไม่เพิ่มสต็อกซ้ำ (No Stock Receipt)</strong
-						>
+						<strong>โดยไม่มีการรับของคืนเข้าคลังสินค้าซ้ำ และไม่เพิ่มสต็อกซ้ำ</strong>
 					</p>
 				</div>
 			</div>
@@ -380,12 +380,15 @@
 					<AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
 					<div>
 						<p class="font-bold">
-							รายการนี้กำลังถูกดำเนินการในโหมดอื่น ({operationState?.reservation?.mode})
+							รายการนี้กำลังถูกดำเนินการด้วยวิธีอื่นอยู่ ({getReturnReservationModeLabel(
+								operationState?.reservation?.mode
+							)})
 						</p>
 						<p class="mt-0.5 text-2xs text-red-800">
 							ผู้ทำรายการ: <strong>{operationState?.reservation?.operation_by ?? 'ไม่ระบุ'}</strong>
-							ไม่อนุญาตให้ทำรายการซ้อนข้ามโหมด กรุณาใช้หน้าต่างสำหรับโหมด {operationState
-								?.reservation?.mode} หรือรอจนกว่ารายการเดิมจะสิ้นสุด
+							ไม่อนุญาตให้ทำรายการซ้อนข้ามวิธี กรุณาใช้หน้าต่างสำหรับ {getReturnReservationModeLabel(
+								operationState?.reservation?.mode
+							)} หรือรอจนกว่ารายการเดิมจะสิ้นสุด
 						</p>
 					</div>
 				</div>
@@ -397,9 +400,12 @@
 					<div class="flex items-start gap-2">
 						<RotateCcw class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
 						<div>
-							<p class="font-bold">พบรายการที่อยู่ระหว่างดำเนินการ (In-Flight Pending)</p>
+							<p class="font-bold">พบรายการที่ค้างอยู่ ยังทำไม่เสร็จ</p>
 							<p class="mt-0.5 text-2xs text-amber-800">
-								โหมด: <strong>{operationState.reservation?.mode}</strong> · ผู้ทำรายการ:
+								วิธี: <strong
+									>{getReturnReservationModeLabel(operationState.reservation?.mode)}</strong
+								>
+								· ผู้ทำรายการ:
 								<strong
 									>{operationState.reservation?.operation_by ??
 										operationState.reservation?.created_by ??
@@ -431,10 +437,10 @@
 				>
 					<Play class="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
 					<div>
-						<p class="font-bold">รายการผ่านจุดล็อคโควตาแล้ว (Irreversible Forward Recovery)</p>
+						<p class="font-bold">รายการนี้หักโควตาไปแล้ว ไม่สามารถยกเลิกได้</p>
 						<p class="mt-0.5 text-2xs text-blue-800">
-							รายการนี้ถูกล็อก (FENCED) และมีการหักโควตาแล้ว ไม่สามารถยกเลิกได้ กรุณากด "ทำรายการต่อ
-							(Resume Forward)" เพื่อปิดรายการให้เสร็จสมบูรณ์ (ข้อมูลถูกล็อคตามรายการเดิม)
+							ข้อมูลของรายการเดิมถูกล็อกไว้ไม่ให้แก้ไข กรุณากด "ทำรายการต่อ"
+							เพื่อปิดรายการให้เสร็จสมบูรณ์
 						</p>
 					</div>
 				</div>
@@ -554,13 +560,13 @@
 														? 'border-blue-300 bg-blue-100 text-blue-900'
 														: 'border-purple-200 bg-purple-50 text-purple-800'}"
 												>
-													{pool.status}
+													{getBulkPoolStatusLabel(pool.status)}
 												</span>
 												{#if isRecoveryPool}
 													<span
 														class="rounded-full border border-blue-200 bg-blue-50 px-1.5 text-3xs font-bold text-blue-700"
 													>
-														จุดรวมคืนเดิม (FENCED)
+														จุดรวมคืนเดิม
 													</span>
 												{/if}
 											</div>
@@ -587,7 +593,7 @@
 										<span
 											class="shrink-0 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-3xs font-bold text-blue-800"
 										>
-											รายการกู้คืน (Locked)
+											รายการกู้คืน
 										</span>
 									{:else if !hasEnoughQuota}
 										<span
@@ -642,10 +648,10 @@
 							<span>กำลังหักโควตาจุดรวมคืน...</span>
 						{:else if operationState?.phase === 'IRREVERSIBLE_FORWARD_ONLY'}
 							<Play class="h-3.5 w-3.5" />
-							<span>ทำรายการต่อ (Resume Forward)</span>
+							<span>ทำรายการต่อ</span>
 						{:else if operationState?.phase === 'PRE_EFFECT_ABORTABLE'}
 							<Play class="h-3.5 w-3.5" />
-							<span>ทำรายการค้างต่อ (Resume Operation)</span>
+							<span>ทำรายการค้างต่อ</span>
 						{:else}
 							<Archive class="h-3.5 w-3.5" />
 							<span>ยืนยันเคลียร์รายการ ({remainingQty} ชิ้น)</span>

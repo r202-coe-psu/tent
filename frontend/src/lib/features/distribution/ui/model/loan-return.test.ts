@@ -260,7 +260,7 @@ describe('loan-return model helpers', () => {
 					status: 'returned',
 					clear_reason: 'bulk_dropoff'
 				}).label
-			).toContain('Bulk');
+			).toBe('เคลียร์ผ่านจุดรวบรวม');
 			expect(
 				getLoanStatusBadge({
 					...baseLoanLog,

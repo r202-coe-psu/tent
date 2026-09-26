@@ -35,7 +35,7 @@
 			</div>
 			<div class="min-w-0 flex-1">
 				<div class="flex items-center gap-2">
-					<h4 class="text-sm font-bold text-red-900">ตั๋วถูกยกเลิก (CANCELLED)</h4>
+					<h4 class="text-sm font-bold text-red-900">ตั๋วถูกยกเลิก</h4>
 					<span
 						class="rounded-full border border-red-300 bg-red-100 px-2 py-0.5 text-2xs font-semibold text-red-800"
 					>

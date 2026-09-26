@@ -90,7 +90,7 @@
 				</Dialog.Title>
 				<Dialog.Description class="text-xs text-slate-500">
 					{requisitionType === 'food'
-						? 'แสดงเฉพาะรายการอาหารปรุงสุกพร้อมรับประทาน (Ready-Meal) เท่านั้น ไม่อนุญาตให้เบิกวัตถุดิบครัว'
+						? 'แสดงเฉพาะรายการอาหารปรุงสุกพร้อมรับประทานเท่านั้น ไม่อนุญาตให้เบิกวัตถุดิบครัว'
 						: 'แสดงเฉพาะพัสดุ สิ่งของบรรเทาทุกข์ และอุปกรณ์ (ตัดหมวดหมู่อาหารทุกประเภทออก)'}
 				</Dialog.Description>
 			</Dialog.Header>
@@ -114,7 +114,7 @@
 				<div
 					class="flex flex-col items-center justify-center p-8 text-center text-sm text-slate-500"
 				>
-					กำลังโหลดรายการจาก Master Catalog...
+					กำลังโหลดรายการสินค้า...
 				</div>
 			{:else if filteredItems.length === 0}
 				<div class="flex flex-col items-center justify-center p-8 text-center">

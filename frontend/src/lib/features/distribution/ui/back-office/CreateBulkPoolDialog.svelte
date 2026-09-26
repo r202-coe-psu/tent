@@ -161,8 +161,7 @@
 					<span>เปิดจุดรวมคืนพัสดุ (Bulk Return Pool)</span>
 				</Dialog.Title>
 				<Dialog.Description class="mt-1 text-xs text-slate-600">
-					บันทึกการรับคืนพัสดุกองรวมเข้าคลัง (1 StockLedger receipt)
-					เพื่อเปิดโควตาสำหรับตัดรอบคืนของศูนย์ {shelterCode}
+					บันทึกการรับคืนพัสดุกองรวมเข้าคลัง เพื่อเปิดโควตาสำหรับตัดรอบคืนของศูนย์ {shelterCode}
 				</Dialog.Description>
 			</Dialog.Header>
 		</div>
@@ -330,8 +329,7 @@
 					class="h-9 w-full font-mono text-xs shadow-2xs placeholder:text-slate-400"
 				/>
 				<p class="text-2xs text-slate-500">
-					ระบบจะบันทึกรับเข้าคลัง StockLedger 1 รายการ และตั้งต้นโควตาคงเหลือ (unclaimed quota)
-					เท่ากับจำนวนนี้
+					ระบบจะบันทึกรับเข้าคลัง 1 รายการ และตั้งต้นโควตาคงเหลือเท่ากับจำนวนนี้
 				</p>
 			</div>
 

@@ -168,12 +168,11 @@
 					class="rounded-xl border border-indigo-100 bg-indigo-50/50 p-3 text-xs text-indigo-950"
 				>
 					<p>
-						ระบบจะส่งรายการตัดสต็อกคลังสินค้าทันทีแบบ Real-Time และเพิ่มยอดจัดสรร (<code
-							class="font-mono">allocated_qty</code
-						>) บนตั๋วเดิม โดยสถานะตั๋วยังคงเป็น <strong>กำลังแจกจ่าย (DISTRIBUTING)</strong>
+						ระบบจะตัดสต็อกคลังสินค้าทันทีและเพิ่มยอดจัดสรรบนตั๋วเดิม โดยสถานะตั๋วยังคงเป็น
+						<strong>กำลังแจกจ่าย</strong>
 					</p>
 					<p class="mt-1 font-mono text-2xs text-indigo-700">
-						Transaction ID: {amendmentId}
+						รหัสอ้างอิงรายการ: {amendmentId}
 					</p>
 				</div>
 

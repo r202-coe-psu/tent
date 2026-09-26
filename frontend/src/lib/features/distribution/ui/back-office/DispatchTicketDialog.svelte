@@ -103,7 +103,7 @@
 			<Dialog.Header>
 				<Dialog.Title class="flex items-center gap-2 text-lg font-bold text-slate-900">
 					<Truck class="h-5 w-5 text-[#0A2647]" />
-					<span>เลือก Physical Lot และปล่อยรถ (Dispatch)</span>
+					<span>เลือก Physical Lot และปล่อยรถ</span>
 				</Dialog.Title>
 				<Dialog.Description class="text-xs text-slate-500">
 					บันทึกการตัดสต็อกสินค้าจริงตาม Physical Lot (FEFO) และปล่อยสินค้าเดินทางไปยังจุดแจกจ่าย
@@ -231,7 +231,7 @@
 					<span>กำลังบันทึกการปล่อยของ...</span>
 				{:else}
 					<Truck class="h-4 w-4" />
-					<span>ยืนยันปล่อยรถ (Dispatch)</span>
+					<span>ยืนยันปล่อยรถ</span>
 				{/if}
 			</button>
 		</div>

@@ -118,7 +118,7 @@
 			<Dialog.Header>
 				<Dialog.Title class="flex items-center gap-2 text-lg font-bold text-slate-900">
 					<Boxes class="h-5 w-5 text-[#0A2647]" />
-					<span>จัดสรรยอดสินค้า (Allocate Quantities)</span>
+					<span>จัดสรรยอดสินค้า</span>
 				</Dialog.Title>
 				<Dialog.Description class="text-xs text-slate-500">
 					บันทึกจำนวนที่คลังจัดเตรียมจริงสำหรับใบเบิกจ่าย <strong class="font-mono text-slate-700"
@@ -207,8 +207,8 @@
 			>
 				<AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
 				<span>
-					เมื่อจัดสรรยอดเสร็จแล้ว ตั๋วจะยังคงอยู่ในสถานะ "รอจัดของ" (PENDING_PICK)
-					จนกว่าผู้จัดการจะทำการอนุมัติเพื่อเปลี่ยนสถานะเป็น "พร้อมส่งออก" (READY_FOR_DISPATCH)
+					เมื่อจัดสรรยอดเสร็จแล้ว ตั๋วจะยังคงอยู่ในสถานะ "รอจัดของ"
+					จนกว่าผู้จัดการจะทำการอนุมัติเพื่อเปลี่ยนสถานะเป็น "พร้อมส่งออก"
 				</span>
 			</div>
 		</div>
