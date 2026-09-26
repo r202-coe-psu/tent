@@ -9,7 +9,8 @@
 		createProfileSlug,
 		useFoodSphereStandards,
 		useRequirementGroups,
-		useReplenishmentPolicies
+		useReplenishmentPolicies,
+		VISIBLE_SOP_RATIO_KEYS
 	} from '$lib/features/sop-ratios';
 	import {
 		SopTypeList,
@@ -98,7 +99,7 @@
 
 	async function createInitialOverride() {
 		if (!activeMaster || !shelterCode) {
-			toast.error('ไม่สามารถสร้างค่าปรับแต่งได้ เนื่องจากยังโหลดค่ามาตรฐาน EOC ไม่สำเร็จ');
+			toast.error('ไม่สามารถสร้างค่าปรับแต่งได้ เนื่องจากยังโหลดตัวแปรมาตรฐาน Sphere ไม่สำเร็จ');
 			return;
 		}
 		await initialOverrideMutation.mutateAsync({
@@ -183,7 +184,7 @@
 				foodSphereCount={foodSphereQuery.data ? foodSphereQuery.data.length : 0}
 				reqGroupCount={reqGroupQuery.data ? reqGroupQuery.data.length : 0}
 				replenishmentCount={replenishmentQuery.data ? replenishmentQuery.data.length : 0}
-				sphereCount={20}
+				sphereCount={VISIBLE_SOP_RATIO_KEYS.length}
 				alertCount={8}
 			/>
 		{/snippet}

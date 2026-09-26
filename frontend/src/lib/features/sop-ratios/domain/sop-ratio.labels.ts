@@ -85,9 +85,9 @@ export const RATIO_LABELS: Record<
 		description: 'พื้นที่พักพิงต่อคนสำหรับอากาศหนาว (Sphere: 4.5 ตร.ม.)'
 	},
 	m2_per_person_total: {
-		label: 'พื้นที่รวม',
+		label: 'พื้นที่พักพิงรวม',
 		unit: 'ตร.ม./คน',
-		description: 'พื้นที่ค่ายรวมต่อคน (Sphere: 45 ตร.ม.)'
+		description: 'พื้นที่พักพิงรวมต่อคน (Sphere: 45 ตร.ม.)'
 	},
 	max_waterpoint_distance_m: {
 		label: 'ระยะทางไปแหล่งน้ำ',

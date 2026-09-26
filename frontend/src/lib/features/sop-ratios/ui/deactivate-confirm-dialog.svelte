@@ -31,7 +31,7 @@
 				ยืนยันการยกเลิกค่าปรับแต่ง
 			</Dialog.Title>
 			<Dialog.Description class="mt-2 text-sm font-medium text-slate-500">
-				คุณต้องการยกเลิกค่าปรับแต่งและกลับไปใช้ค่ามาตรฐาน EOC สำหรับศูนย์ {shelterCode} ใช่หรือไม่?
+				คุณต้องการยกเลิกค่าปรับแต่งและกลับไปใช้ตัวแปรมาตรฐาน Sphere สำหรับศูนย์ {shelterCode} ใช่หรือไม่?
 			</Dialog.Description>
 		</Dialog.Header>
 		<Dialog.Footer class="mt-6 flex justify-end gap-3">

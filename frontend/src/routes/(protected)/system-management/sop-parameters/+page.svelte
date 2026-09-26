@@ -6,7 +6,8 @@
 		createProfileSlug,
 		useFoodSphereStandards,
 		useRequirementGroups,
-		useReplenishmentPolicies
+		useReplenishmentPolicies,
+		VISIBLE_SOP_RATIO_KEYS
 	} from '$lib/features/sop-ratios';
 	import {
 		SopTypeList,
@@ -131,7 +132,7 @@
 				foodSphereCount={foodSphereQuery.data ? foodSphereQuery.data.length : 0}
 				reqGroupCount={reqGroupQuery.data ? reqGroupQuery.data.length : 0}
 				replenishmentCount={replenishmentQuery.data ? replenishmentQuery.data.length : 0}
-				sphereCount={20}
+				sphereCount={VISIBLE_SOP_RATIO_KEYS.length}
 				alertCount={8}
 			/>
 		{/snippet}

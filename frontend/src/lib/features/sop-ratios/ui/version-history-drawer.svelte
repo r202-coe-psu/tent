@@ -7,6 +7,7 @@
 		type SopOverride,
 		type SopRatioKey,
 		RATIO_LABELS,
+		isVisibleSopRatioKey,
 		createProfileSlug,
 		useSetMasterActive
 	} from '$lib/features/sop-ratios';
@@ -90,7 +91,7 @@
 				<div>
 					<p class="font-bold">เปรียบเทียบค่ามาตรฐานไม่ได้</p>
 					<p class="mt-0.5 text-amber-700/95">
-						ไม่สามารถดึงข้อมูลค่ามาตรฐาน EOC มาเปรียบเทียบได้ในขณะนี้
+						ไม่สามารถดึงข้อมูลตัวแปรมาตรฐาน Sphere มาเปรียบเทียบได้ในขณะนี้
 					</p>
 				</div>
 			</div>
@@ -138,14 +139,14 @@
 
 							<!-- Ratios snapshot -->
 							<div class="mt-2 grid grid-cols-3 gap-2">
-								{#each Object.entries(version.ratios) as [k, v] (k)}
+								{#each Object.entries(version.ratios).filter( ([k]) => isVisibleSopRatioKey(k) ) as [k, v] (k)}
 									{@const isDifferent = activeMaster && v !== activeMaster.ratios[k as SopRatioKey]}
 									<div
 										class="rounded-lg px-2 py-1.5 text-center transition-all {isDifferent
 											? 'bg-amber-500 text-white shadow-sm'
 											: 'bg-slate-50 text-slate-900'}"
 										title={isDifferent
-											? `ค่ามาตรฐาน EOC: ${activeMaster.ratios[k as SopRatioKey]}`
+											? `ตัวแปรมาตรฐาน Sphere: ${activeMaster.ratios[k as SopRatioKey]}`
 											: ''}
 									>
 										<p
