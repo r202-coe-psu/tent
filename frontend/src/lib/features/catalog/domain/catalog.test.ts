@@ -10,7 +10,11 @@ import {
 	createRecipe,
 	isRecipe,
 	recipeInputSchema,
-	mergeCatalogGenerations
+	mergeCatalogGenerations,
+	resolveCategoryId,
+	itemBelongsToCategory,
+	catalogOrigin,
+	canShelterDeleteCatalogDoc
 } from './catalog';
 import type { AuthorContext } from '$lib/db/model';
 
@@ -65,7 +69,42 @@ describe('catalog domain', () => {
 		expect(doc._id).toMatch(/^item_category:[0-9A-HJKMNP-TV-Z]{26}$/);
 		expect(doc.type).toBe('item_category');
 		expect(doc.name).toBe('เครื่องมือแพทย์');
+		expect(doc.is_protected).toBe(false);
 		expect(isItemCategory(doc)).toBe(true);
+	});
+
+	it('resolves category refs by id, system name, and legacy Thai name', () => {
+		const cats = [
+			{
+				_id: 'item_category:food',
+				name: 'อาหารและวัตถุดิบ (Food Ingredients)',
+				system_key: 'FOOD' as const
+			}
+		];
+		expect(resolveCategoryId('item_category:food', cats)).toBe('item_category:food');
+		expect(resolveCategoryId('อาหารและวัตถุดิบ', cats)).toBe('item_category:food');
+		expect(resolveCategoryId('unknown', cats)).toBeUndefined();
+		expect(itemBelongsToCategory({ category: 'อาหารและวัตถุดิบ' }, cats[0])).toBe(true);
+		expect(catalogOrigin({ shelter_code: 'SH001' }, 'SH001')).toBe('local');
+		expect(catalogOrigin({ shelter_code: 'SH001', override: true }, 'SH001')).toBe('override');
+		expect(catalogOrigin({}, 'SH001')).toBe('central');
+		expect(canShelterDeleteCatalogDoc({ shelter_code: 'SH001' }, 'SH001')).toBe(true);
+		expect(canShelterDeleteCatalogDoc({}, 'SH001')).toBe(false);
+	});
+
+	it('rejects duplicate conversion uom codes on one item', () => {
+		expect(() =>
+			itemMasterInputSchema.parse({
+				name: 'ข้าวสาร',
+				base_unit: 'kg',
+				type_class: 'CONSUMABLE',
+				distribution_type: 'recurring',
+				conversions: [
+					{ uom_name: 'bag', multiplier: '5' },
+					{ uom_name: 'bag', multiplier: '50' }
+				]
+			})
+		).toThrow();
 	});
 
 	it('should validate valid recipe input', () => {

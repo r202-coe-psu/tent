@@ -249,7 +249,7 @@
 
 <main class="text-xs text-foreground">
 	<div
-		class="sticky top-[var(--bo-sticky-top)] z-20 flex items-center justify-between border-b border-shelter-border bg-background/95 px-4 py-4 sm:px-6 backdrop-blur-sm"
+		class="sticky top-[var(--bo-sticky-top)] z-20 flex items-center justify-between border-b border-slate-200/80 bg-background/95 px-4 py-4 backdrop-blur-sm sm:px-6"
 	>
 		<div class="flex items-center space-x-2">
 			<a
@@ -259,7 +259,7 @@
 			>
 				<X class="h-4 w-4 text-muted-foreground" />
 			</a>
-			<h1 class="text-2xl font-bold tracking-tight text-foreground">
+			<h1 class="text-2xl font-bold tracking-tight text-[#0A2647]">
 				{isEdit ? 'แก้ไขข้อมูลศูนย์พักพิง' : 'สร้างศูนย์พักพิงใหม่'}
 			</h1>
 		</div>
@@ -298,7 +298,7 @@
 		<div class="flex flex-col gap-6 p-6 md:flex-row" class:pb-28={!usersViewActive}>
 			<!-- Desktop sticky section nav -->
 			<nav
-				class="hidden shrink-0 md:sticky md:top-[calc(var(--shelter-form-sticky-top)+0.5rem)] md:block md:max-h-[calc(100dvh-var(--shelter-form-sticky-top)-1.5rem)] md:w-64 md:self-start md:overflow-y-auto md:rounded-2xl md:border md:border-shelter-border md:bg-background/90 md:p-3 md:shadow-sm md:backdrop-blur-sm"
+				class="hidden shrink-0 md:sticky md:top-[calc(var(--shelter-form-sticky-top)+0.5rem)] md:block md:max-h-[calc(100dvh-var(--shelter-form-sticky-top)-1.5rem)] md:w-64 md:self-start md:overflow-y-auto md:rounded-xl md:border md:border-slate-200/80 md:bg-white md:p-3 md:shadow-2xs"
 			>
 				<div class="mb-3 px-2">
 					<p class="text-xs font-bold tracking-wider text-muted-foreground uppercase">
@@ -316,14 +316,14 @@
 								onclick={() => navigateToSection(s.id)}
 								aria-current={sectionActive ? 'true' : undefined}
 								class={[
-									'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium transition-[background-color,color,box-shadow,transform] duration-200',
+									'flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm font-medium transition-[background-color,color,box-shadow,transform] duration-200',
 									sectionActive
 										? hasError
-											? 'bg-destructive text-white shadow-sm'
-											: 'bg-primary text-white shadow-sm'
+											? 'border-red-200 bg-red-50 font-semibold text-red-900'
+											: 'border-sky-200 bg-sky-50 font-semibold text-[#0A2647]'
 										: hasError
-											? 'bg-destructive/10 text-destructive hover:-translate-y-px hover:bg-destructive/15'
-											: 'text-muted-foreground hover:-translate-y-px hover:bg-muted/50 hover:text-foreground'
+											? 'border-transparent bg-destructive/10 text-destructive hover:-translate-y-px hover:bg-destructive/15'
+											: 'border-transparent text-muted-foreground hover:-translate-y-px hover:bg-slate-50 hover:text-foreground'
 								]}
 							>
 								<Icon class="h-4 w-4 shrink-0" />
@@ -342,10 +342,10 @@
 								onclick={() => (usersViewActive = true)}
 								aria-current={usersViewActive ? 'true' : undefined}
 								class={[
-									'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium transition-[background-color,color,box-shadow,transform] duration-200',
+									'flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm font-medium transition-[background-color,color,box-shadow,transform] duration-200',
 									usersViewActive
-										? 'bg-primary text-white shadow-sm'
-										: 'text-muted-foreground hover:-translate-y-px hover:bg-muted/50 hover:text-foreground'
+										? 'border-sky-200 bg-sky-50 font-semibold text-[#0A2647]'
+										: 'border-transparent text-muted-foreground hover:-translate-y-px hover:bg-slate-50 hover:text-foreground'
 								]}
 							>
 								<UserCog class="h-4 w-4 shrink-0" />

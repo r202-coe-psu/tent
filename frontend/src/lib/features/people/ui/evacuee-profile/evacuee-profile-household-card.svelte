@@ -5,7 +5,7 @@
 	import Users from '@lucide/svelte/icons/users';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { useMasterData } from '$lib/features/master-data';
+	import { useMasterData, formatMasterLabel } from '$lib/features/master-data';
 	import {
 		evacueeAgeYears,
 		formatPersonName,
@@ -38,8 +38,6 @@
 	} = $props();
 
 	const housingTypeQuery = useMasterData(() => 'housing_type');
-	const municipalityZoneQuery = useMasterData(() => 'municipality_zone');
-	const communityQuery = useMasterData(() => 'community');
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
 
@@ -70,21 +68,7 @@
 		const code = household?.housing_type;
 		if (!code) return null;
 		const item = (housingTypeQuery.data?.items ?? []).find((i) => i.code === code);
-		return item?.label ?? code;
-	});
-
-	const municipalityZoneLabel = $derived.by(() => {
-		const code = household?.municipality_zone;
-		if (!code) return null;
-		const item = (municipalityZoneQuery.data?.items ?? []).find((i) => i.code === code);
-		return item?.label ?? code;
-	});
-
-	const communityLabel = $derived.by(() => {
-		const code = household?.community;
-		if (!code) return null;
-		const item = (communityQuery.data?.items ?? []).find((i) => i.code === code);
-		return item?.label ?? code;
+		return item ? formatMasterLabel(item, 'th') : code;
 	});
 
 	const addressLine = $derived.by(() => {
@@ -173,15 +157,15 @@
 						<p class="mt-0.5 text-sm font-medium text-slate-900">{household.residence_landmark}</p>
 					</div>
 				{/if}
-				{#if municipalityZoneLabel || communityLabel}
+				{#if household.municipality_zone || household.community}
 					<div class="sm:col-span-2">
 						<span class="block text-sm font-semibold text-slate-700">เขต / ชุมชน</span>
 						<p class="mt-0.5 text-sm font-medium text-slate-900">
-							{#if municipalityZoneLabel}
-								เขต {municipalityZoneLabel}
+							{#if household.municipality_zone}
+								เขต {household.municipality_zone}
 							{/if}
-							{#if communityLabel}
-								{municipalityZoneLabel ? ' · ' : ''}ชุมชน {communityLabel}
+							{#if household.community}
+								{household.municipality_zone ? ' · ' : ''}ชุมชน {household.community}
 							{/if}
 						</p>
 					</div>

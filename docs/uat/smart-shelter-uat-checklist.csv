@@ -115,10 +115,7 @@ UAT-083,Back-Office,Reorder / Sphere,P1,"SA,SM,WS",/back-office/supply,แท็
 2) ตรวจคำแนะนำเทียบ occupancy",แสดงการวิเคราะห์/reorder ที่สมเหตุสมผล,Not Tested,,,,,Staging,
 UAT-084,Back-Office,SM stock view only,P1,SM,/back-office/supply,SM ดู dashboard ได้ — ตรวจว่า write ledger ถูกจำกัดตามนโยบาย,Login SM (ไม่มี WS),"1) เปิด supply
 2) พยายาม receive/distribute",ดูได้; write ledger ถูกกันถ้าไม่ใช่ WS/SA (ตาม matrix FR-28/29),Not Tested,,,,,Staging,ถ้า UI อนุญาตแต่ backend ปฏิเสธ ให้บันทึก Fail/Note
-UAT-085,Back-Office,Purchase flow,P0,"SA,WS",/back-office/purchases,สร้างใบจัดซื้อแล้วรับเข้าคลังแยก 2 ขั้น,มี catalog,"1) สร้างใบจัดซื้อ
-2) ยังไม่รับของ → สถานะ not_received
-3) รับเข้าคลังบางส่วน/ครบ
-4) ตรวจสถานะ partial/received และ ledger reason:purchase",2 actions แยกกันสำเร็จ; สถานะสะท้อน ledger,Not Tested,,,,,Staging,CR-032 Option A
+UAT-085,Back-Office,Purchase flow,P0,"SA,WS",/back-office/purchases,N/A — purchase feature withdrawn (CR-138),-,-,N/A,N/A,,,,,Staging,Superseded by CR-138; was CR-032 Option A
 UAT-086,Back-Office,Donation intake scan,P0,"SA,WS",/back-office/stock-donations,สแกนรับของบริจาคเข้าคลัง,มี donation declaration/QR จาก public,"1) แท็บสแกนรับของ
 2) สแกน/ยืนยันรับเข้า",รับเข้าสำเร็จ เชื่อมกับ tracking และสต็อกเพิ่ม,Not Tested,,,,,Staging,
 UAT-087,Back-Office,Donation needs board,P1,"SA,WS,SM",/back-office/stock-donations,"จัดการความต้องการบริจาค (cut-off, show-on-home, campaign)",-,"1) แท็บจัดการความต้องการ

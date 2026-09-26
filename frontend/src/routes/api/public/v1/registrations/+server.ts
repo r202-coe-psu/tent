@@ -112,25 +112,15 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 		phone = legacy.phone;
 		nationalId = legacy.national_id ?? null;
 
-		const LEGACY_PET_SPECIES = new Set(['dog', 'cat', 'other']);
 		const pets = legacy.pets.map((pet) => {
-			const isBird = pet.species === 'bird';
-			const isKnown = LEGACY_PET_SPECIES.has(pet.species);
-			const species = (isKnown ? pet.species : 'other') as 'dog' | 'cat' | 'other';
 			const rawNotes = [pet.name, pet.condition, pet.notes]
 				.map((s) => s?.trim())
 				.filter(Boolean)
 				.join(' | ');
-			const notes = isBird
-				? rawNotes || 'นก'
-				: isKnown
-					? rawNotes || undefined
-					: [rawNotes, `ชนิด: ${pet.species}`].filter(Boolean).join(' — ') || undefined;
-
 			return {
-				species,
+				species: pet.species,
 				count: 1,
-				notes,
+				notes: rawNotes || undefined,
 				has_cage: pet.has_cage
 			};
 		});

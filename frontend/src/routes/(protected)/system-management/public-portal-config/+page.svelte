@@ -4,18 +4,14 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { PublicPortalConfigForm } from '$lib/features/public-portal';
-	import ConsoleBanner from '$lib/components/console-banner.svelte';
+	import StaffPageShell from '$lib/components/staff-page-shell.svelte';
+	import StaffHub from '$lib/components/staff-hub.svelte';
+	import StaffSideNav, { type StaffSideNavItem } from '$lib/components/staff-side-nav.svelte';
+	import ExternalLink from '@lucide/svelte/icons/external-link';
 
 	let { data }: { data: PageData } = $props();
 
 	const activeType = $derived(page.url.searchParams.get('type') || 'public');
-
-	const categories = [
-		{ id: 'public', label: 'หน้าเว็บสาธารณะ (Public)', desc: 'FAQ สำหรับหน้าแรก' },
-		{ id: 'registration', label: 'ระบบลงทะเบียน (Registration)', desc: 'FAQ การลงทะเบียน' },
-		{ id: 'volunteer', label: 'อาสาสมัคร (Volunteer)', desc: 'FAQ สมัครอาสาสมัคร' },
-		{ id: 'social', label: 'ช่องทางการติดต่อ (Social Media)', desc: 'ตั้งค่าลิงก์ติดต่อ' }
-	];
 
 	function navigateToType(type: string) {
 		goto(`${resolve('/system-management/public-portal-config')}?type=${encodeURIComponent(type)}`, {
@@ -29,72 +25,66 @@
 		if (type === 'volunteer') return '/volunteers';
 		return '/';
 	}
+
+	const items = $derived<StaffSideNavItem[]>([
+		{
+			id: 'public',
+			label: 'หน้าเว็บสาธารณะ',
+			description: 'FAQ สำหรับหน้าแรก',
+			onclick: () => navigateToType('public')
+		},
+		{
+			id: 'registration',
+			label: 'ระบบลงทะเบียน',
+			description: 'FAQ การลงทะเบียน',
+			onclick: () => navigateToType('registration')
+		},
+		{
+			id: 'volunteer',
+			label: 'อาสาสมัคร',
+			description: 'FAQ สมัครอาสาสมัคร',
+			onclick: () => navigateToType('volunteer')
+		},
+		{
+			id: 'social',
+			label: 'ช่องทางการติดต่อ',
+			description: 'ตั้งค่าลิงก์ติดต่อ',
+			onclick: () => navigateToType('social')
+		}
+	]);
 </script>
 
 <svelte:head>
 	<title>{data.title} - Smart Shelter</title>
 </svelte:head>
 
-<div class="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6">
-	<ConsoleBanner
-		title={data.title}
-		description="จัดการคำถามที่พบบ่อย (FAQ) และลิงก์ติดต่อสำหรับหน้าเว็บไซต์หลักและระบบต่างๆ"
-	/>
+<StaffPageShell
+	title={data.title}
+	description="จัดการคำถามที่พบบ่อย (FAQ) และลิงก์ติดต่อสำหรับหน้าเว็บไซต์หลักและระบบต่างๆ"
+>
+	<StaffHub>
+		{#snippet nav()}
+			<StaffSideNav
+				{items}
+				activeId={activeType}
+				sectionLabel="หมวดหมู่"
+				ariaLabel="หมวดหมู่การตั้งค่า"
+			/>
+		{/snippet}
 
-	<div class="grid grid-cols-1 gap-4 lg:grid-cols-[320px_1fr] lg:gap-6">
-		<aside class="h-fit rounded-xl border bg-card p-4 text-card-foreground shadow-sm">
-			<h2 class="mb-3 text-sm font-semibold text-muted-foreground">หมวดหมู่การตั้งค่า</h2>
-			<nav class="flex flex-col gap-2">
-				{#each categories as cat (cat.id)}
-					{@const isActive = cat.id === activeType}
-					<button
-						type="button"
-						onclick={() => navigateToType(cat.id)}
-						aria-current={isActive ? 'page' : undefined}
-						class="group flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-3 text-left transition
-							{isActive
-							? 'border-transparent bg-primary text-primary-foreground shadow'
-							: 'border-input bg-background hover:bg-accent'}"
-					>
-						<div class="flex-1 text-left">
-							<div class="text-sm leading-tight font-semibold">{cat.label}</div>
-							<div
-								class="mt-1 flex items-center justify-between text-xs {isActive
-									? 'text-primary-foreground/80'
-									: 'text-muted-foreground'}"
-							>
-								<span>{cat.desc}</span>
-							</div>
-						</div>
-					</button>
-					{#if isActive}
-						<a
-							href={getPreviewUrl(cat.id)}
-							target="_blank"
-							rel="noopener noreferrer"
-							class="mt-1 flex items-center justify-center gap-1.5 rounded-lg border border-primary/20 bg-primary/5 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/10"
-						>
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								width="12"
-								height="12"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline
-									points="15 3 21 3 21 9"
-								></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg
-							>
-							ดูการแสดงผลหน้าบ้าน
-						</a>
-					{/if}
-				{/each}
-			</nav>
-		</aside>
-
-		<PublicPortalConfigForm {data} {activeType} />
-	</div>
-</div>
+		<div class="min-w-0 p-4 sm:p-6">
+			<div class="mb-4 flex justify-end">
+				<a
+					href={getPreviewUrl(activeType)}
+					target="_blank"
+					rel="noopener noreferrer"
+					class="inline-flex items-center gap-1.5 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-semibold text-[#0A2647] transition-colors hover:bg-sky-100"
+				>
+					<ExternalLink class="size-3" />
+					ดูการแสดงผลหน้าบ้าน
+				</a>
+			</div>
+			<PublicPortalConfigForm {data} {activeType} />
+		</div>
+	</StaffHub>
+</StaffPageShell>

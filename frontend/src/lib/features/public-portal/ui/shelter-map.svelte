@@ -11,7 +11,7 @@
 	} from 'maplibre-gl';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import type { PublicSiteKind } from '../domain/types';
-	import { resolveMasterLabel } from '../domain/master-labels';
+	import { resolveMasterLabel, toLabelMap } from '../domain/master-labels';
 	import { useShelterTypeLabelMap } from '../application/queries';
 	import { DEFAULT_MAP_STYLE, DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '$lib/constants/maps';
 	import { Button } from '$lib/components/ui/button';
@@ -82,7 +82,8 @@
 		onLocationPick?: (lat: number, lng: number) => void;
 	} = $props();
 
-	const shelterTypeLabels = useShelterTypeLabelMap();
+	const shelterTypeLabelsQuery = useShelterTypeLabelMap();
+	const shelterTypeLabels = $derived(toLabelMap(shelterTypeLabelsQuery.data, langState.current));
 
 	const SEARCH_RADIUS_SOURCE = 'search-radius';
 	const SEARCH_RADIUS_FILL = 'search-radius-fill';
@@ -262,7 +263,7 @@
 						unspecified: 'Unspecified'
 					}
 				: { unspecified: '' };
-		return resolveMasterLabel(type, shelterTypeLabels.data, legacyEn);
+		return resolveMasterLabel(type, shelterTypeLabels, legacyEn);
 	}
 
 	onMount(async () => {
@@ -361,7 +362,8 @@
 		const map = mapInstance;
 
 		// Re-render popups when master-data labels arrive.
-		void shelterTypeLabels.data;
+		void shelterTypeLabelsQuery.data;
+		void shelterTypeLabels;
 
 		closeActivePopup();
 		// Clear old markers
@@ -487,7 +489,7 @@
 					closeOnClick: false,
 					maxWidth: '280px'
 				}).setLngLat(lngLat).setHTML(`
-					<div style="font-size:0.75rem;font-family:'IBM Plex Sans Thai',sans-serif;color:#1e293b;min-width:180px;padding:2px 0;">
+					<div style="font-size:0.75rem;font-family:'IBM Plex Sans Thai Looped','IBM Plex Sans Thai',sans-serif;color:#1e293b;min-width:180px;padding:2px 0;">
 						<strong style="font-size:0.875rem;display:block;margin-bottom:3px;color:#0f172a;line-height:1.3;">${shelter.name}</strong>
 						<div style="margin-bottom:6px;font-size:0.65rem;color:#64748b;font-weight:500;">
 							${getSiteKindText(shelter.site_kind)} · ${shelter.type || shelter.admin_type ? translateAdminType(shelter.type || shelter.admin_type || '') : t.shelter}
@@ -743,6 +745,7 @@
 			0 8px 10px -6px rgba(0, 0, 0, 0.08) !important;
 		border: 1px solid #e2e8f0 !important;
 		font-family:
+			'IBM Plex Sans Thai Looped',
 			'IBM Plex Sans Thai',
 			-apple-system,
 			sans-serif !important;

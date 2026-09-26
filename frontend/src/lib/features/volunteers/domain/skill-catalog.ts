@@ -37,7 +37,8 @@ export interface SkillOption {
  */
 export interface MasterSkillItem {
 	code: string;
-	label: string;
+	label_th: string;
+	label_en: string;
 	status?: string;
 	category?: string;
 	description?: string;
@@ -56,13 +57,23 @@ function isControlledCategory(category: string | undefined): boolean {
 	return category === 'controlled' || category === 'CONTROLLED';
 }
 
+function formatSkillLabel(item: MasterSkillItem, lang: string = 'th'): string {
+	const th = item.label_th?.trim() ?? '';
+	const en = item.label_en?.trim() ?? '';
+	if (lang === 'en') return en || th || item.code;
+	return th || en || item.code;
+}
+
 /** Active master items → options, in the order Master Data lists them. */
-export function skillOptionsFromMaster(items: readonly MasterSkillItem[]): SkillOption[] {
+export function skillOptionsFromMaster(
+	items: readonly MasterSkillItem[],
+	lang: string = 'th'
+): SkillOption[] {
 	return items
 		.filter((item) => item.status !== 'inactive')
 		.map((item) => ({
 			code: item.code,
-			label: item.label,
+			label: formatSkillLabel(item, lang),
 			description: item.description ?? '',
 			icon: isControlledCategory(item.category) ? '🩺' : '✨',
 			controlled: isControlledCategory(item.category)

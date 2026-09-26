@@ -17,6 +17,7 @@
 		"test:watch": "vitest",
 		"test:coverage": "vitest run src/lib/features/resource-calc/domain --coverage --coverage.provider=v8 \"--coverage.include=src/lib/features/resource-calc/domain/**/*.ts\" \"--coverage.exclude=src/lib/features/resource-calc/domain/**/*.test.ts\" --coverage.thresholds.lines=95 --coverage.thresholds.functions=95 --coverage.thresholds.branches=95 --coverage.thresholds.statements=95",
 		"test:e2e": "vite build --mode test && playwright test",
+		"test:e2e:staging": "playwright test --config=playwright.staging.config.ts",
 		"test:e2e:donations": "vite build --mode test && playwright test e2e/donation.test.ts e2e/stock-donations.test.ts",
 		"openapi": "openapi-typescript",
 		"openapi:fetch": "mkdir -p src/lib/api-specs && curl -f http://localhost:9000/openapi.json -o src/lib/api-specs/fastapi.json",
@@ -33,6 +34,8 @@
 		"seed:delete-daily-sop": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/seed-staging.ts --delete-daily-sop",
 		"cleanup:referral-hardening": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/cleanup-referral-hardening.ts",
 		"unseed": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/unseed.ts",
+		"unseed:master": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/unseed.ts --master",
+		"unseed:master-data": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/unseed.ts --master-data",
 		"audit:ledger-refid": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/audit-stock-ledger-refid.ts",
 		"migrate:shelter": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/migrate-shelter.ts",
 		"migrate:volunteer-review": "tsx --tsconfig .svelte-kit/tsconfig.json scripts/migrate-volunteer-review.ts",
@@ -108,5 +111,5 @@
 		"openapi-fetch": "^0.17.0",
 		"qrcode": "^1.5.4"
 	},
-	"packageManager": "pnpm@12.4.1"
+	"packageManager": "pnpm@12.6.0"
 }

@@ -18,7 +18,6 @@
 		HouseholdVehicle,
 		HouseholdPostArrivalAddressForm
 	} from '../../domain/people';
-	import { useMasterData } from '$lib/features/master-data';
 	import { toast } from 'svelte-sonner';
 	import { Html5Qrcode } from 'html5-qrcode';
 
@@ -78,52 +77,9 @@
 
 	const evacueesQuery = useEvacuees();
 	const householdsQuery = useHouseholds();
-	const municipalityZoneQuery = useMasterData(() => 'municipality_zone');
-	const communityQuery = useMasterData(() => 'community');
 
 	// --- Step 3: Address (validated once the address step's form passes Zod validation) ---
 	let addressData = $state<HouseholdPostArrivalAddressForm | null>(savedState?.addressData ?? null);
-
-	// Selection lists show active items only (schema.md §3.3 soft-delete rule) —
-	// except a code the operator already chose. This wizard can be resumed from
-	// sessionStorage long after the draft was made, and dropping a since-deactivated
-	// code would blank the restored selection without telling anyone.
-	function selectItems(
-		all: readonly { code: string; label: string; status: string }[],
-		keep: string | null | undefined
-	) {
-		const active = all.filter((i) => i.status === 'active');
-		const restored =
-			keep && !active.some((i) => i.code === keep) ? all.find((i) => i.code === keep) : undefined;
-		return [...active, ...(restored ? [restored] : [])].map((i) => ({
-			value: i.code,
-			label: i.label
-		}));
-	}
-
-	const municipalityZoneItems = $derived(
-		selectItems(municipalityZoneQuery.data?.items ?? [], addressData?.municipalityZone)
-	);
-	const communityItems = $derived(
-		selectItems(communityQuery.data?.items ?? [], addressData?.community)
-	);
-
-	// The configured default (master_data `is_default`) pre-selects the address
-	// step; the address form applies it only while the operator has not chosen.
-	const defaultMunicipalityZone = $derived(
-		(municipalityZoneQuery.data?.items ?? []).find((z) => z.is_default && z.status === 'active')
-			?.code ?? ''
-	);
-	// Keep the pair coherent: a default ชุมชน whose `parent_code` points at another
-	// เขต would pre-fill an address that contradicts itself, so fall back to none.
-	const defaultCommunity = $derived.by(() => {
-		const c = (communityQuery.data?.items ?? []).find((i) => i.is_default && i.status === 'active');
-		if (!c) return '';
-		if (c.parent_code && defaultMunicipalityZone && c.parent_code !== defaultMunicipalityZone) {
-			return '';
-		}
-		return c.code;
-	});
 
 	const allEvacuees = $derived(evacueesQuery.data ?? []);
 	const allHouseholds = $derived(householdsQuery.data ?? []);
@@ -465,10 +421,6 @@
 		<HouseholdPostArrivalAddress
 			initialData={addressData}
 			{householdLabel}
-			{municipalityZoneItems}
-			{communityItems}
-			{defaultMunicipalityZone}
-			{defaultCommunity}
 			onBack={() => (step = 2)}
 			onNext={(data) => {
 				addressData = data;

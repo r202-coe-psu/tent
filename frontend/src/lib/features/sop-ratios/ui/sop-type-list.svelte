@@ -1,84 +1,76 @@
 <script lang="ts">
+	import StaffSideNav, { type StaffSideNavItem } from '$lib/components/staff-side-nav.svelte';
+
 	export type SopTabType =
-		'sphere_standard' | 'food_sphere_standard' | 'requirement_group' | 'replenishment_policy';
+		| 'sphere_standard'
+		| 'food_sphere_standard'
+		| 'requirement_group'
+		| 'replenishment_policy'
+		| 'alert_threshold';
 
 	let {
 		activeTab = $bindable(),
 		sphereCount = 20,
+		alertCount = 8,
 		reqGroupCount,
 		foodSphereCount,
 		replenishmentCount
 	}: {
 		activeTab: SopTabType;
 		sphereCount?: number;
+		alertCount?: number;
 		reqGroupCount?: number;
 		foodSphereCount?: number;
 		replenishmentCount?: number;
 	} = $props();
 
-	const tabs = $derived<
+	const items = $derived<StaffSideNavItem[]>([
 		{
-			key: SopTabType;
-			label: string;
-			count?: number;
-		}[]
-	>([
-		{
-			key: 'sphere_standard' as const,
-			label: 'ตัวคูณมาตรฐานดำรงชีพ (Sphere Standard)',
-			count: sphereCount
+			id: 'sphere_standard',
+			label: 'ตัวคูณมาตรฐานดำรงชีพ',
+			count: sphereCount,
+			onclick: () => {
+				activeTab = 'sphere_standard';
+			}
 		},
 		{
-			key: 'requirement_group' as const,
+			id: 'alert_threshold',
+			label: 'เกณฑ์การแจ้งเตือน',
+			count: alertCount,
+			onclick: () => {
+				activeTab = 'alert_threshold';
+			}
+		},
+		{
+			id: 'requirement_group',
 			label: 'กลุ่มสำหรับการคำนวณ',
-			count: reqGroupCount
+			count: reqGroupCount,
+			onclick: () => {
+				activeTab = 'requirement_group';
+			}
 		},
 		{
-			key: 'food_sphere_standard' as const,
-			label: 'พารามิเตอร์อ้างอิงสำหรับอาหาร',
-			count: foodSphereCount
+			id: 'food_sphere_standard',
+			label: 'พารามิเตอร์อ้างอิงอาหาร',
+			count: foodSphereCount,
+			onclick: () => {
+				activeTab = 'food_sphere_standard';
+			}
 		},
 		{
-			key: 'replenishment_policy' as const,
+			id: 'replenishment_policy',
 			label: 'นโยบายการเติมสต็อก',
-			count: replenishmentCount
+			count: replenishmentCount,
+			onclick: () => {
+				activeTab = 'replenishment_policy';
+			}
 		}
 	]);
 </script>
 
-<aside class="min-w-0 rounded-xl border bg-card p-4 text-card-foreground shadow-sm">
-	<h2 class="mb-3 text-sm font-semibold text-muted-foreground">ประเภทพารามิเตอร์มาสเตอร์</h2>
-	<nav class="flex flex-col gap-2">
-		{#each tabs as tab (tab.key)}
-			{@const isActive = tab.key === activeTab}
-			<button
-				type="button"
-				onclick={() => {
-					activeTab = tab.key;
-				}}
-				aria-current={isActive ? 'page' : undefined}
-				class="group flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-3 text-left transition
-					{isActive
-					? 'border-transparent bg-primary text-primary-foreground shadow'
-					: 'border-input bg-background hover:bg-accent'}"
-			>
-				<div class="min-w-0 flex-1">
-					<div class="truncate text-sm leading-tight font-semibold">{tab.label}</div>
-					<div
-						class="mt-1 text-xs {isActive ? 'text-primary-foreground/80' : 'text-muted-foreground'}"
-					>
-						{isActive ? 'กำลังแสดงข้อมูล' : 'คลิกเพื่อเลือก'}
-					</div>
-				</div>
-				{#if tab.count !== undefined}
-					<span
-						class="flex h-7 min-w-7 shrink-0 items-center justify-center rounded-full px-2 text-xs font-semibold
-							{isActive ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-foreground'}"
-					>
-						{tab.count}
-					</span>
-				{/if}
-			</button>
-		{/each}
-	</nav>
-</aside>
+<StaffSideNav
+	{items}
+	activeId={activeTab}
+	sectionLabel="ประเภท"
+	ariaLabel="ประเภทพารามิเตอร์มาสเตอร์"
+/>

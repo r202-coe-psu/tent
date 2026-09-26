@@ -34,10 +34,7 @@
 	let search = $state('');
 </script>
 
-<section
-	class="rounded-xl border bg-card p-4 text-card-foreground shadow-sm sm:p-6"
-	aria-label="รายการข้อมูล"
->
+<section class="min-w-0" aria-label="รายการข้อมูล">
 	<header class="mb-6 flex flex-col gap-4">
 		<!-- Row 1: Title + Search -->
 		<div class="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
