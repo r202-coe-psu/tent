@@ -151,19 +151,16 @@ async function main() {
 
 	for (const row of shelterMasters) {
 		const v2 = row.doc;
-		// Mirror `migrateShelterV2ToCurrent`'s own idempotence check: a doc at the
-		// current version still needs a write if an additive field never landed.
-		if (
-			(v2.schema_v ?? 0) >= SHELTER_MASTER_SCHEMA_V &&
-			v2.site_kind &&
-			Array.isArray((v2 as { food_distribution_points?: unknown }).food_distribution_points)
-		) {
+		// `migrateShelterV2ToCurrent` is identity-preserving for a doc already at the
+		// current version with every additive field present, so `===` means "nothing
+		// to write". A current-version doc still gets written when a back-fill (e.g.
+		// `sub_storage[].id`) never landed.
+		const v3 = migrateShelterV2ToCurrent(v2 as never) as unknown as Record<string, unknown>;
+		if ((v3 as unknown) === v2) {
 			console.log(`  ⊘ ${v2.code} (${row.id}) — already v${SHELTER_MASTER_SCHEMA_V}, skip`);
 			skipped++;
 			continue;
 		}
-
-		const v3 = migrateShelterV2ToCurrent(v2 as never) as unknown as Record<string, unknown>;
 
 		console.log(`  → ${v2.code} (${row.id}) v${v2.schema_v} → current`);
 		console.log(`    capacity backfill: ${v3.capacity}`);

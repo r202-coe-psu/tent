@@ -1,5 +1,5 @@
 ---
-id: CR-145
+id: CR-147
 title: ตัดฟีเจอร์จัดสรรอาหารส่งจุดแจกจ่าย (Push to POS) ทิ้งทั้งหมด — ticket flow จบที่คลังตรวจรับเข้าสต็อก
 status: approved
 date: 2026-09-26
@@ -8,7 +8,7 @@ requested_by: Project Owner (session ตรวจ /back-office/tickets/kitchen)
 decided_by: Project Owner
 layer: stable
 supersedes:
-  - CR-144 (จัดสรรอาหารปรุงเสร็จส่งจุดแจกจ่าย — Push to POS)
+  - CR-146 (จัดสรรอาหารปรุงเสร็จส่งจุดแจกจ่าย — Push to POS)
 affects:
   - docs/data/schema.md §2.7.4 (`meal_distribution_push` — ถูกลบ)
   - frontend/src/lib/features/kitchen/domain/meal-distribution-push.ts (ลบไฟล์)
@@ -21,7 +21,7 @@ affects:
   - frontend/src/lib/server/shelter-access-design.ts + shelter-access-design.test.ts
 ---
 
-# CR-145: ตัดฟีเจอร์จัดสรรอาหารส่งจุดแจกจ่าย (Push to POS) ทิ้งทั้งหมด
+# CR-147: ตัดฟีเจอร์จัดสรรอาหารส่งจุดแจกจ่าย (Push to POS) ทิ้งทั้งหมด
 
 ## Why
 
@@ -30,18 +30,18 @@ affects:
 "ส่งมอบเสร็จสิ้น" ทันที ไม่มีขั้นตอนจัดสรรส่งจุดแจกจ่าย (Push to POS) ต่อจากนั้นอีก — คำเดิม
 "จากครัวเข้าคลัง แค่นั้น"
 
-นี่คือการย้อนกลับ [CR-144](CR-144-meal-distribution-push.md) เต็มรูปแบบ (ไม่ใช่แค่ §3.3 ที่แยก
+นี่คือการย้อนกลับ [CR-146](CR-146-meal-distribution-push.md) เต็มรูปแบบ (ไม่ใช่แค่ §3.3 ที่แยก
 หมวด `PENDING_DISPATCH`) — เจ้าของโครงการยืนยันให้ตัดทั้งฟีเจอร์ push-to-POS ทิ้ง ไม่ใช่แค่ย้อน
-กลับไปพฤติกรรมเดิมของ CR-142/CR-143 แล้วเก็บหน้า `/distribute` ไว้เฉยๆ
+กลับไปพฤติกรรมเดิมของ CR-144/CR-145 แล้วเก็บหน้า `/distribute` ไว้เฉยๆ
 
 ## Change
 
-**Before (CR-144):** `meal_service_receipt.outcome='confirmed'` → เช็คยอดคงเหลือที่ยังไม่ได้ push
+**Before (CR-146):** `meal_service_receipt.outcome='confirmed'` → เช็คยอดคงเหลือที่ยังไม่ได้ push
 (`mealServicePushRemaining`) → ถ้าเหลือ > 0 แสดงหมวด "รอส่งมอบ" (`PENDING_DISPATCH`, สีม่วง) พร้อม
 ปุ่มไปหน้า `/back-office/kitchen/distribute` เพื่อสร้าง `meal_distribution_push` doc ใหม่; ถ้า
 push ครบแล้วจึงเป็น "ส่งมอบเสร็จสิ้น" (`DELIVERED_IN`)
 
-**After (CR-145 = กลับไปพฤติกรรม CR-142/CR-143 เดิม แล้วลบฟีเจอร์ push ทิ้ง):**
+**After (CR-147 = กลับไปพฤติกรรม CR-144/CR-145 เดิม แล้วลบฟีเจอร์ push ทิ้ง):**
 `meal_service_receipt.outcome='confirmed'` → ถือเป็น "ส่งมอบเสร็จสิ้น" (`DELIVERED_IN`) ทันที ไม่มี
 การเช็คยอดคงเหลือ ไม่มีหมวด `PENDING_DISPATCH` อีกต่อไป
 
@@ -52,7 +52,7 @@ push ครบแล้วจึงเป็น "ส่งมอบเสร็�
    `useCreateMealDistributionPush`), live-query wiring, barrel exports
 2. **ลบหน้า `/back-office/kitchen/distribute` ทั้งหน้า** (ฟอร์ม push-to-POS + ตาราง push history)
 3. **ticket-list.svelte** — เอาหมวด `PENDING_DISPATCH` ออกจาก `RowCategory`, คืน category
-   derivation ให้ตรงกับ CR-142 เดิม (confirmed → `DELIVERED_IN` เสมอ, ไม่เช็ค remaining), เอาปุ่ม
+   derivation ให้ตรงกับ CR-144 เดิม (confirmed → `DELIVERED_IN` เสมอ, ไม่เช็ค remaining), เอาปุ่ม
    หัวหน้าเพจ "จัดสรรอาหารส่งจุดแจก (Push)" ออก, เอา tab "รอส่งมอบ" ออก, `direction`/`fromLabel`/
    `toLabel`/`manageHref` ของแถว confirmed กลับไปเป็น "รับเข้า: โรงครัวกลาง → คลังเสบียงกลาง" คงที่
    (ไม่มีขา "จ่ายออกไปจุดแจก" อีก)
@@ -65,7 +65,7 @@ push ครบแล้วจึงเป็น "ส่งมอบเสร็�
 ## Impact
 
 - ไม่มี schema_v bump (ทั้ง doc type ถูกลบ ไม่ใช่แก้ field)
-- ไม่กระทบ `RequisitionTicket`/`stock_ledger` — เหมือนเดิมตาม CR-142 §2.3 (synthetic display logic
+- ไม่กระทบ `RequisitionTicket`/`stock_ledger` — เหมือนเดิมตาม CR-144 §2.3 (synthetic display logic
   เท่านั้น)
 - เอกสาร `meal_distribution_push:*` ที่เคยเขียนไปแล้วใน production (ถ้ามี) ไม่ถูกลบออกจาก CouchDB
   (append-only ห้ามลบตาม policy เดิม แม้ตอนนี้จะไม่อยู่ใน allow-list ของ validate_doc_update แล้วก็

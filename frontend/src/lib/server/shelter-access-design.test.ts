@@ -145,7 +145,7 @@ describe('buildValidateDocUpdate', () => {
 	it('includes audit in the allowed doc type whitelist', () => {
 		const validateFn = buildValidateDocUpdate('SH001');
 		expect(validateFn).toContain("'audit'");
-		expect(validateFn).toContain("'purchase'");
+		expect(validateFn).not.toContain("'purchase'");
 		expect(validateFn).toContain("'referral'");
 	});
 
@@ -481,10 +481,9 @@ describe('buildValidateDocUpdate', () => {
 		);
 	});
 
-	// CR-032: purchase docs are written to shelter dbs, so the server-side
-	// whitelist must accept them or every write is rejected as forbidden.
-	it('includes purchase in the allowed doc type whitelist', () => {
-		expect(buildValidateDocUpdate('SH001')).toContain("'purchase'");
+	// CR-138: purchase withdrawn — must not remain on the shelter allowlist.
+	it('excludes purchase from the allowed doc type whitelist', () => {
+		expect(buildValidateDocUpdate('SH001')).not.toContain("'purchase'");
 	});
 
 	// People registration writes household/medical/screening/movement/image after
@@ -673,7 +672,7 @@ describe('buildValidateDocUpdate', () => {
 			}
 		});
 
-		// CR-142/CR-143: no role gate documented for this — any authenticated
+		// CR-144/CR-145: no role gate documented for this — any authenticated
 		// shelter-scoped user may write it (role separation is UI-only via the
 		// dedicated /back-office/kitchen/receive-stock page, not CouchDB-enforced).
 		it('accepts a new meal_service_receipt from any shelter-scoped role', () => {
@@ -2077,7 +2076,7 @@ describe('buildValidateDocUpdate', () => {
 				/system_key is immutable on protected categories/
 			);
 
-			// 3. default_class is editable (CR-138 amends CR-119 FR-04)
+			// 3. default_class is editable (CR-140 amends CR-119 FR-04)
 			expect(() =>
 				compile()({ ...protectedCategory, default_class: 'DURABLE' }, protectedCategory, sysAdmin)
 			).not.toThrow();
@@ -2109,7 +2108,7 @@ describe('buildValidateDocUpdate', () => {
 		});
 	});
 
-	describe('requisition_ticket lifecycle and role rules (CR-121/CR-139, kitchen slice)', () => {
+	describe('requisition_ticket lifecycle and role rules (CR-121/CR-141, kitchen slice)', () => {
 		const MANAGER: UserCtx = { name: 'mgr', roles: ['shelter:SH001', 'shelter_manager'] };
 
 		function newTicket(over: Doc = {}): Doc {
@@ -2209,7 +2208,7 @@ describe('buildValidateDocUpdate', () => {
 			expect(() => compile()(allocated, ticket, WAREHOUSE)).not.toThrow();
 		});
 
-		it('kitchen_staff can edit its own requested_qty while status stays PENDING_PICK (CR-140)', () => {
+		it('kitchen_staff can edit its own requested_qty while status stays PENDING_PICK (CR-142)', () => {
 			const ticket = newTicket();
 			const edited = newTicket({
 				items: [{ ...(ticket.items as Doc[])[0], requested_qty: '45' }]
@@ -2322,7 +2321,7 @@ describe('buildValidateDocUpdate', () => {
 			);
 		});
 
-		it('shelter_manager one-click approves PENDING_PICK → COMPLETED (CR-141)', () => {
+		it('shelter_manager one-click approves PENDING_PICK → COMPLETED (CR-143)', () => {
 			const ticket = newTicket({
 				items: [
 					{
@@ -2345,7 +2344,7 @@ describe('buildValidateDocUpdate', () => {
 			expect(() => compile()(completed, ticket, MANAGER)).not.toThrow();
 		});
 
-		it('rejects one-click approve from kitchen_staff (manager-only, CR-141)', () => {
+		it('rejects one-click approve from kitchen_staff (manager-only, CR-143)', () => {
 			const ticket = newTicket({
 				items: [
 					{

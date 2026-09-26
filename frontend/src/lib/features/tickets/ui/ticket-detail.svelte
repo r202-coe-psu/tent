@@ -68,7 +68,7 @@
 		CANCELLED: 'border border-slate-200 bg-slate-100 text-slate-600'
 	};
 
-	// CR-141: kitchen tickets go PENDING_PICK → COMPLETED in one click, so the
+	// CR-143: kitchen tickets go PENDING_PICK → COMPLETED in one click, so the
 	// header badge reads "จ่ายวัตถุดิบและตัดสต็อกแล้ว" once done — READY_FOR_DISPATCH/
 	// IN_TRANSIT only still show up on tickets created before this change.
 	const HEADER_STATUS_LABEL: Partial<Record<TicketStatus, string>> = {
@@ -162,12 +162,12 @@
 				ตั๋วนี้ถูกยกเลิกแล้ว
 			</div>
 		{:else if ticket.status === 'READY_FOR_DISPATCH' || ticket.status === 'IN_TRANSIT'}
-			<!-- Historical tickets only (created before CR-141) — walk the old 3-role
+			<!-- Historical tickets only (created before CR-143) — walk the old 3-role
 			     path since they're already mid-flight through it. -->
 			<div
 				class="rounded-lg border border-sky-200 bg-sky-50 p-3 text-center text-sm font-semibold text-sky-900"
 			>
-				ตั๋วนี้เปิดก่อนปรับเป็นอนุมัติคลิกเดียว (CR-141) — ดำเนินการต่อตามขั้นตอนเดิม:
+				ตั๋วนี้เปิดก่อนปรับเป็นอนุมัติคลิกเดียว (CR-143) — ดำเนินการต่อตามขั้นตอนเดิม:
 				{TICKET_STATUS_LABELS[ticket.status]}
 			</div>
 		{/if}

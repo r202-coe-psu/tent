@@ -161,7 +161,7 @@ export async function requireKitchen(fetchFn?: typeof fetch) {
 
 /**
  * Requisition ticket guard — requires system_admin, shelter_manager,
- * `warehouse_staff`, or `kitchen_staff` (CR-121/CR-139). Both kitchen and
+ * `warehouse_staff`, or `kitchen_staff` (CR-121/CR-141). Both kitchen and
  * warehouse need to view the ticket queue/detail; which action buttons show is
  * a further per-role UI decision — the real authorization boundary is the
  * CouchDB `validate_doc_update` guard (`shelter-access-design.ts`).

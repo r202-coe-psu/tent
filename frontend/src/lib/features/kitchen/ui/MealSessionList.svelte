@@ -67,7 +67,7 @@
 	const dietCounts = useActiveEvacueeDietCounts();
 	const tickets = useTickets();
 
-	// Per meal_plan_id: the most relevant requisition_ticket (CR-139 write path — the legacy
+	// Per meal_plan_id: the most relevant requisition_ticket (CR-141 write path — the legacy
 	// kitchen_requisition above is frozen/read-only, so plans created after cutover only ever
 	// get a ticket, never a new kitchen_requisition row).
 	const ticketByPlanId = $derived.by(() => {

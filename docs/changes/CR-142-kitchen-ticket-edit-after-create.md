@@ -1,5 +1,5 @@
 ---
-id: CR-140
+id: CR-142
 title: อนุญาตให้ครัวแก้ไขตั๋วเบิกวัตถุดิบ (requisition_ticket ประเภท kitchen) และ meal_plan ที่ผูกกันได้ ขณะตั๋วยัง PENDING_PICK
 status: approved
 date: 2026-09-24
@@ -10,7 +10,7 @@ layer: volatile
 supersedes: []
 extends:
   - CR-121 (RequisitionTicket 4-in-1 — เพิ่ม transition ใหม่สำหรับ `requisition_type: 'kitchen'` เท่านั้น ไม่กระทบ food/supplies/transfer)
-  - CR-139 (Kitchen ticket lifecycle carve-out — ยืนยันว่าการแก้ไขนี้ไม่ใช่ "self-approve/bypass" ตาม §2.2 เพราะยังไม่แตะ `allocated_qty`/สถานะอนุมัติ เป็นแค่การแก้ไขคำขอของตัวเองก่อนคลังเริ่มจัดของ)
+  - CR-141 (Kitchen ticket lifecycle carve-out — ยืนยันว่าการแก้ไขนี้ไม่ใช่ "self-approve/bypass" ตาม §2.2 เพราะยังไม่แตะ `allocated_qty`/สถานะอนุมัติ เป็นแค่การแก้ไขคำขอของตัวเองก่อนคลังเริ่มจัดของ)
 affects:
   - frontend/src/lib/features/tickets/domain/ticket.ts (ฟังก์ชันใหม่ `updateTicketRequestedItems`)
   - frontend/src/lib/features/tickets/data/ticket.repository.ts + ticket.remote.ts (method ใหม่ `updateTicketItems`)
@@ -19,7 +19,7 @@ affects:
   - frontend/src/routes/(protected)/back-office/kitchen/production-board/[session_id]/+page.svelte (ปุ่ม "บันทึกการแก้ไข" ใน Stage A เมื่อ `activePlan` มีอยู่แล้ว)
 ---
 
-# CR-140: แก้ไขตั๋วเบิกวัตถุดิบครัวและ meal_plan ที่ผูกกันได้ ขณะตั๋วยัง PENDING_PICK
+# CR-142: แก้ไขตั๋วเบิกวัตถุดิบครัวและ meal_plan ที่ผูกกันได้ ขณะตั๋วยัง PENDING_PICK
 
 ## 1. Why
 
@@ -48,7 +48,7 @@ affects:
 `allocateTicketItem`) รายการเดิมที่ item_id ตรงกันคง `allocated_qty` เดิมไว้ (ยังไม่มีใครแตะ), item
 ใหม่เริ่มที่ `allocated_qty: '0'` เหมือนตอนสร้างตั๋วครั้งแรก
 
-**ไม่ใช่ self-approve/bypass ตาม CR-139 §2.2** — ฟังก์ชันนี้ไม่แตะ `status`/`approved_by`/
+**ไม่ใช่ self-approve/bypass ตาม CR-141 §2.2** — ฟังก์ชันนี้ไม่แตะ `status`/`approved_by`/
 `allocated_qty` ของรายการเดิม เป็นแค่ครัวแก้คำขอของตัวเองก่อนคลังเริ่มทำงานกับตั๋วนั้น
 
 ### 2.2 แก้ `meal_plan` ที่ status เป็น `confirmed` แล้วได้ (จำกัดเงื่อนไข)
@@ -67,7 +67,7 @@ affects:
 - ไม่ bump `schema_v` ของ `requisition_ticket` หรือ `meal_plan` — ฟิลด์ที่แก้ (`requested_qty`,
   `label`, `target_tags`, `allocated_target`, `recipes`, `gas_usage`) มีอยู่ในสคีมาเดิมแล้วทั้งหมด
   เปลี่ยนแค่ "อนุญาตให้แก้เมื่อไร" ไม่ใช่รูปร่างของ doc
-- ไม่กระทบตั๋วประเภท `food`/`supplies`/`transfer` (ยังใช้ 7 สถานะเต็มตาม CR-121/CR-139 เดิม)
+- ไม่กระทบตั๋วประเภท `food`/`supplies`/`transfer` (ยังใช้ 7 สถานะเต็มตาม CR-121/CR-141 เดิม)
 - ถ้าตั๋วเลย `PENDING_PICK` ไปแล้ว (คลังเริ่มจัดของ/อนุมัติ) ปุ่ม "บันทึกการแก้ไข" ต้องซ่อนหรือ disable
   ที่ Stage A — ครัวต้องประสานงานนอกระบบ (โทร/วิทยุ) ให้คลังแก้ผ่าน "เติมของระหว่างแจก" (CR-121 §3.3)
   แทน ไม่เปิดช่องแก้ทับ `allocated_qty` จากฝั่งครัว

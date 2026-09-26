@@ -19,6 +19,7 @@ export interface DistributionAllocationInput {
 		note?: string;
 		lot_no?: string;
 		storage_zone?: string;
+		storage_point_id?: string;
 	};
 }
 

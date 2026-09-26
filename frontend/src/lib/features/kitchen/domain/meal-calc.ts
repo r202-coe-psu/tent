@@ -220,7 +220,7 @@ export interface TicketItemPayload {
 }
 
 /**
- * Converts a meal plan into requisition_ticket item lines (CR-121/CR-139 —
+ * Converts a meal plan into requisition_ticket item lines (CR-121/CR-141 —
  * replaces `toRequisitionInput` for the ticket flow). References
  * `plan.recipes[].recipe_id` directly as `item_id`, same source
  * `toRequisitionInput` already uses — does not touch `SupplyItem` or

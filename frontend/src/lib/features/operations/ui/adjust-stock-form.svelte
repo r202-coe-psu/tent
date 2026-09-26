@@ -20,6 +20,15 @@
 	import PlusCircle from '@lucide/svelte/icons/plus-circle';
 	import { addQty, subQty } from '$lib/utils/qty';
 	import type { StockLot, StockLedger } from '../domain/operations';
+	import {
+		lotLocationFields,
+		lotStorageKey,
+		lotStorageLabel,
+		storageLotFields,
+		type StoragePointRef
+	} from '../domain/lot-storage';
+	import { useStoragePoints } from '../application/use-storage-points.svelte';
+	import StoragePointSelect from './storage-point-select.svelte';
 
 	let {
 		onsuccess,
@@ -37,6 +46,7 @@
 	const ledgerQuery = useLedger();
 	const adjustMutation = useAdjustStock();
 	const queryClient = useQueryClient();
+	const storagePoints = useStoragePoints(() => getShelterCode());
 
 	// Local State
 	let searchQuery = $state('');
@@ -50,7 +60,9 @@
 	} | null>(null);
 	let container = $state<HTMLDivElement | null>(null);
 	let selectedLotKey = $state<string>('');
-	let customLocation = $state<string>('');
+	/** Storage point for a new lot ('' = unspecified / main store). */
+	let customPointId = $state('');
+	let customPoint = $state<StoragePointRef | null>(null);
 	let customExpiry = $state<string>('');
 	let newQtyInput = $state<string>('');
 	let reason = $state<string>('');
@@ -86,25 +98,25 @@
 		const entries = (ledgerQuery.data as StockLedger[]).filter(
 			(e: StockLedger) => e.item_id === currentItem._id
 		);
-		const lotsMap = new SvelteMap<string, { note: string; expiry: string; qty: string }>();
+		const lotsMap = new SvelteMap<string, { location: StockLot; expiry: string; qty: string }>();
 
+		// Grouped by location (point id, else name — draft-shelter-storage-points)
+		// and expiry; `location` is what an adjustment writes to land in this group.
 		for (const entry of entries) {
-			const note = entry.lot?.note?.trim() || 'คลังหลัก';
 			const expiry = entry.lot?.expiry || '';
-			const key = `${note}||${expiry}`;
-
-			const current = lotsMap.get(key) || { note, expiry, qty: '0' };
-			lotsMap.set(key, {
-				note,
+			const key = `${lotStorageKey(entry.lot)}||${expiry}`;
+			const current = lotsMap.get(key) || {
+				location: lotLocationFields(entry.lot),
 				expiry,
-				qty: addQty(current.qty, entry.qty)
-			});
+				qty: '0'
+			};
+			lotsMap.set(key, { ...current, qty: addQty(current.qty, entry.qty) });
 		}
 
-		return Array.from(lotsMap.values()).map((l) => ({
+		return Array.from(lotsMap, ([key, l]) => ({
 			...l,
-			key: `${l.note}||${l.expiry}`,
-			label: `📍 ${l.note} ${l.expiry ? `(หมดอายุ: ${formatExpiry(l.expiry)})` : '(ไม่ระบุวันหมดอายุ)'} - คงเหลือ ${l.qty} ${currentItem.unit}`
+			key,
+			label: `📍 ${lotStorageLabel(l.location, storagePoints.points)} ${l.expiry ? `(หมดอายุ: ${formatExpiry(l.expiry)})` : '(ไม่ระบุวันหมดอายุ)'} - คงเหลือ ${l.qty} ${currentItem.unit}`
 		}));
 	});
 
@@ -167,6 +179,8 @@
 		isDropdownOpen = false;
 		// Reset form fields
 		selectedLotKey = '';
+		customPointId = '';
+		customPoint = null;
 		newQtyInput = '';
 		adjustmentType = initialAdjustmentType;
 		reason = '';
@@ -177,6 +191,8 @@
 		searchQuery = '';
 		isDropdownOpen = false;
 		selectedLotKey = '';
+		customPointId = '';
+		customPoint = null;
 		newQtyInput = '';
 		adjustmentType = initialAdjustmentType;
 		reason = '';
@@ -192,10 +208,6 @@
 		}
 		if (!selectedLotKey) {
 			toast.error('กรุณาเลือกสถานที่/ล็อต');
-			return;
-		}
-		if (selectedLotKey === 'new' && !customLocation.trim()) {
-			toast.error('กรุณาระบุสถานที่จัดเก็บใหม่');
 			return;
 		}
 		if (selectedItem.perishable && selectedLotKey === 'new' && !customExpiry) {
@@ -215,12 +227,14 @@
 		let lot: StockLot = {};
 		if (selectedLotKey === 'new') {
 			lot = {
-				note: customLocation.trim(),
+				...storageLotFields(customPoint),
 				expiry: customExpiry || undefined
 			};
 		} else if (currentLot) {
+			// Refresh the name snapshot when the lot's point still exists (it may have been renamed).
+			const point = storagePoints.points.find((p) => p.id === currentLot.location.storage_point_id);
 			lot = {
-				note: currentLot.note,
+				...(point ? storageLotFields(point) : currentLot.location),
 				expiry: currentLot.expiry || undefined
 			};
 		}
@@ -424,29 +438,13 @@
 			<!-- Conditional Inputs for New Lot -->
 			{#if selectedLotKey === 'new'}
 				<Field.Root class="col-span-1">
-					<Field.Label for="custom-location"
-						>สถานที่จัดเก็บใหม่ <span class="font-bold text-destructive">*</span></Field.Label
-					>
-					<Select.Root type="single" bind:value={customLocation}>
-						<Select.Trigger
-							id="custom-location"
-							class="h-11 w-full min-w-0 rounded-md border border-input bg-white px-3 text-sm font-medium shadow-xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none sm:h-10"
-						>
-							{customLocation === 'Zone A'
-								? 'Zone A (ของใช้ทั่วไป)'
-								: customLocation === 'Zone B'
-									? 'Zone B (ของที่เน่าเสียได้)'
-									: customLocation === 'Zone C'
-										? 'Zone C (ยาและเวชภัณฑ์)'
-										: customLocation || 'เลือกโซนที่จัดเก็บ'}
-						</Select.Trigger>
-						<Select.Content>
-							<Select.Item value="" label="เลือกโซนที่จัดเก็บ" />
-							<Select.Item value="Zone A" label="Zone A (ของใช้ทั่วไป)" />
-							<Select.Item value="Zone B" label="Zone B (ของที่เน่าเสียได้)" />
-							<Select.Item value="Zone C" label="Zone C (ยาและเวชภัณฑ์)" />
-						</Select.Content>
-					</Select.Root>
+					<Field.Label for="custom-location">สถานที่จัดเก็บใหม่</Field.Label>
+					<StoragePointSelect
+						id="custom-location"
+						points={storagePoints.points}
+						bind:value={customPointId}
+						onchange={(point) => (customPoint = point)}
+					/>
 				</Field.Root>
 				<Field.Root class="col-span-1">
 					<Field.Label for="custom-expiry">

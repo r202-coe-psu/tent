@@ -274,7 +274,7 @@ export const useUpdateMealPlanCalc = () =>
 		}
 	}));
 
-// Confirmed plan edit (CR-140) — caller must have already confirmed the
+// Confirmed plan edit (CR-142) — caller must have already confirmed the
 // linked ticket is still PENDING_PICK (e.g. by updating the ticket first).
 export const useUpdateConfirmedMealPlan = () =>
 	createMutation(() => ({
@@ -366,7 +366,7 @@ export const useRecordMealService = () =>
 			kitchenRepository().recordMealService(input, ctx)
 	}));
 
-// --- MealServiceReceipt (CR-142) ---
+// --- MealServiceReceipt (CR-144) ---
 
 export const useMealServiceReceipts = () =>
 	createQuery(() => ({

@@ -60,12 +60,12 @@
 	}
 
 	// This page combines real data sources into one view, purely for display —
-	// no new persisted doc type beyond `meal_service_receipt` (CR-142). "รับเข้า"
+	// no new persisted doc type beyond `meal_service_receipt` (CR-144). "รับเข้า"
 	// rows are derived read-only from meal_service + meal_service_receipt: a
 	// service without a matching receipt is "รอตรวจรับเข้าคลัง" (PENDING_RECEIPT,
 	// real state — warehouse hasn't confirmed count yet); once a receipt exists
 	// it becomes "ส่งมอบเสร็จสิ้น" (DELIVERED_IN) — the flow ends at warehouse
-	// stock-in, CR-145 removed the CR-144 POS-push split. "จ่ายออก" rows are the
+	// stock-in, CR-147 removed the CR-146 POS-push split. "จ่ายออก" rows are the
 	// real requisition_ticket lifecycle unchanged.
 	type RowCategory = 'PENDING_PICK' | 'COOKING' | 'PENDING_RECEIPT' | 'DELIVERED_IN' | 'OTHER_OUT';
 	type UnifiedRow = {
@@ -103,7 +103,7 @@
 	const unifiedRows = $derived.by((): UnifiedRow[] => {
 		const planMap = planById;
 
-		// A COMPLETED ticket means materials were handed to the kitchen (CR-141),
+		// A COMPLETED ticket means materials were handed to the kitchen (CR-143),
 		// not that the meal is delivered — until meal_service is recorded, the
 		// mission is still in the "ครัวกำลังปรุง" phase, not a finished/success state.
 		const cookingTicketPlanIds = new Set(
@@ -189,7 +189,7 @@
 				)
 			}));
 
-		// Only the latest meal_service per plan matters — a rejected one (CR-143)
+		// Only the latest meal_service per plan matters — a rejected one (CR-145)
 		// is superseded by whatever the kitchen re-records afterwards.
 		const latestServicesByPlan: MealService[] = [];
 		for (const service of services.data ?? []) {

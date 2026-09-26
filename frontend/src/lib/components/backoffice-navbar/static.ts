@@ -14,7 +14,6 @@ import {
 	Warehouse,
 	Calculator,
 	HandHeart,
-	ShoppingCart,
 	MapPin,
 	UtensilsCrossed,
 	FlaskConical,
@@ -83,22 +82,14 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				requiresManager: true
 			},
 			{
-				label: 'คลังสิ่งของและบริจาค',
-				href: null,
-				icon: Package,
-				children: [
-					{ label: 'แผงควบคุมสต็อก', href: resolve('/back-office/supply'), icon: Warehouse },
-					{
-						label: 'กระดานรับบริจาค',
-						href: resolve('/back-office/stock-donations'),
-						icon: HandHeart
-					},
-					{
-						label: 'ใบจัดซื้อ',
-						href: resolve('/back-office/purchases'),
-						icon: ShoppingCart
-					}
-				]
+				label: 'คลัง',
+				href: resolve('/back-office/supply'),
+				icon: Package
+			},
+			{
+				label: 'บริจาค',
+				href: resolve('/back-office/stock-donations'),
+				icon: HandHeart
 			},
 			{
 				label: 'จัดการคำร้องเบิกจ่าย',

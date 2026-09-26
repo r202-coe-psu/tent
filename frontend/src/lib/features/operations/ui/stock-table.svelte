@@ -30,6 +30,9 @@
 	import ReceiveStockForm from './receive-stock-form.svelte';
 	import DistributeStockForm from './distribute-stock-form.svelte';
 	import AdjustStockForm from './adjust-stock-form.svelte';
+	import { lotStorageKey, lotStorageName } from '../domain/lot-storage';
+	import type { StockLot } from '../domain/operations';
+	import { useStoragePoints } from '../application/use-storage-points.svelte';
 	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import MinusCircle from '@lucide/svelte/icons/minus-circle';
 	import Settings from '@lucide/svelte/icons/settings';
@@ -76,6 +79,7 @@
 	let showOverall = $state(false);
 
 	const sheltersQuery = useShelters();
+	const storagePoints = useStoragePoints(() => getShelterCode());
 	const shelterCodes = $derived((sheltersQuery.data ?? []).map((s) => s.code));
 
 	const crossBalanceQuery = useCrossShelterStockBalances(
@@ -172,16 +176,17 @@
 	);
 
 	/**
-	 * Unique locations list extracted from ledger entries
+	 * Location filter options from ledger entries, keyed by `lotStorageKey` so a
+	 * renamed storage point stays one option (draft-shelter-storage-points).
 	 */
 	const uniqueLocations = $derived.by(() => {
-		const locations = new SvelteSet<string>();
+		const locations = new SvelteMap<string, string>();
 		for (const entry of ledger) {
-			if (entry.lot?.note) {
-				locations.add(entry.lot.note.trim());
-			}
+			const key = lotStorageKey(entry.lot);
+			const name = lotStorageName(entry.lot, storagePoints.points);
+			if (key && name && !locations.has(key)) locations.set(key, name);
 		}
-		return Array.from(locations).filter(Boolean);
+		return Array.from(locations, ([key, label]) => ({ key, label }));
 	});
 
 	/**
@@ -194,14 +199,12 @@
 	 * per-lot balance tracking (FIFO/FEFO), which is out of scope for T-11.
 	 */
 	const latestLotByItem = $derived.by(() => {
-		const result: Record<string, { expiry?: string; note?: string }> = {};
+		const result: Record<string, { expiry?: string; lot?: StockLot; location: string | null }> = {};
 		const sorted = [...ledger].sort((a, b) => a.occurred_at.localeCompare(b.occurred_at));
 		for (const entry of sorted) {
-			if (qtyGt(entry.qty, 0) && (entry.lot?.expiry || entry.lot?.note)) {
-				result[entry.item_id] = {
-					expiry: entry.lot?.expiry,
-					note: entry.lot?.note
-				};
+			const location = lotStorageName(entry.lot, storagePoints.points);
+			if (qtyGt(entry.qty, 0) && (entry.lot?.expiry || location)) {
+				result[entry.item_id] = { expiry: entry.lot?.expiry, lot: entry.lot, location };
 			}
 		}
 		return result;
@@ -237,7 +240,7 @@
 
 			// Location Filter
 			if (locationFilter !== 'all') {
-				if (!lot?.note || lot.note.trim() !== locationFilter) return false;
+				if (!lot?.location || lotStorageKey(lot.lot) !== locationFilter) return false;
 			}
 
 			// Status Filter
@@ -557,8 +560,8 @@
 						class="w-full cursor-pointer appearance-none truncate rounded-lg border border-border/80 bg-background py-2.5 pr-8 pl-9 text-sm font-semibold text-foreground shadow-sm transition-all outline-none focus:border-primary"
 					>
 						<option value="all">ทุกสถานที่จัดเก็บ</option>
-						{#each uniqueLocations as loc (loc)}
-							<option value={loc}>{loc}</option>
+						{#each uniqueLocations as loc (loc.key)}
+							<option value={loc.key}>{loc.label}</option>
 						{/each}
 					</select>
 					<div
@@ -679,10 +682,10 @@
 												>
 													{getCategoryLabel(item.category)}
 												</span>
-												{#if lot?.note}
+												{#if lot?.location}
 													<span class="inline-flex items-center gap-1 text-xs text-slate-600">
 														<MapPin class="h-3.5 w-3.5 shrink-0" />
-														{lot.note}
+														{lot.location}
 													</span>
 												{/if}
 											</div>
@@ -854,9 +857,9 @@
 
 											<!-- Storage location -->
 											<Table.Cell class="p-4 text-center">
-												{#if lot?.note}
+												{#if lot?.location}
 													<span class="text-xs text-foreground">
-														{lot.note}
+														{lot.location}
 													</span>
 												{:else}
 													<span class="text-xs text-muted-foreground/40">-</span>

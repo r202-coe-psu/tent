@@ -13,7 +13,7 @@ Role,SA,system_admin,สิทธิ์ทั้งระบบ — System Manag
 Role,SM,shelter_manager,บริหารศูนย์ตน ครอบ REG/KS/WS ในศูนย์
 Role,REG,registration_staff,ลงทะเบียน / check-in-out / ครัวเรือน
 Role,KS,kitchen_staff,แผนอาหาร / เบิกครัว / บันทึกมื้อ
-Role,WS,warehouse_staff,สต็อก / รับจ่าย / จัดซื้อ / รับบริจาค
+Role,WS,warehouse_staff,สต็อก / รับจ่าย / รับบริจาค
 Role,PUB,Public anonymous,หน้าสาธารณะ ไม่ login
 Role,FAM,Family search,สืบค้นญาติแบบ masked
 Role,DN,Donor,บริจาค + track ด้วย token ไม่ login

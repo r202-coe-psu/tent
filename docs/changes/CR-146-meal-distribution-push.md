@@ -1,15 +1,15 @@
 ---
-id: CR-144
+id: CR-146
 title: จัดสรรอาหารปรุงเสร็จส่งจุดแจกจ่าย (Push to POS) — doc ใหม่ meal_distribution_push (MVP, ไม่ผูก stock_ledger)
 status: superseded
-superseded_by: CR-145
+superseded_by: CR-147
 date: 2026-09-25
 updated: 2026-09-26
 requested_by: Project Owner (session ปรับ UI /back-office/tickets/kitchen)
 decided_by: Project Owner
 layer: stable
 extends:
-  - CR-142/CR-143 (meal_service_receipt — ผลผลิตต้องถูก "ยืนยันตรวจรับ" (`outcome=confirmed`) ก่อน
+  - CR-144/CR-145 (meal_service_receipt — ผลผลิตต้องถูก "ยืนยันตรวจรับ" (`outcome=confirmed`) ก่อน
     ถึงจะจัดสรรส่งจุดแจกได้)
 affects:
   - docs/data/schema.md (doc type ใหม่ §2.7.4 `meal_distribution_push`)
@@ -22,9 +22,9 @@ affects:
     เป็นแค่ toast stub — เปลี่ยนเป็นลิงก์ไปหน้าใหม่)
 ---
 
-# CR-144: จัดสรรอาหารปรุงเสร็จส่งจุดแจกจ่าย (Push to POS)
+# CR-146: จัดสรรอาหารปรุงเสร็จส่งจุดแจกจ่าย (Push to POS)
 
-> **Superseded by [CR-145](CR-145-remove-meal-distribution-push.md), 2026-09-26.** Project owner
+> **Superseded by [CR-147](CR-147-remove-meal-distribution-push.md), 2026-09-26.** Project owner
 > decided the kitchen ticket flow ends at warehouse stock-in (`meal_service_receipt` confirmed =
 > "ส่งมอบเสร็จสิ้น") — the push-to-POS step this CR introduced is removed entirely, not just its
 > `PENDING_DISPATCH` split. Kept below for historical record; do not implement against this doc.
@@ -76,7 +76,7 @@ meal_distribution_push.items ที่มี meal_service_id ตรงกัน,
 ก่อนเขียน (เหมือน `dispatchTicket`/`oneStepApproveTicket`) — ห้ามจัดสรรเกินยอดคงเหลือ
 
 **Guard:** `meal_service_id` ที่เลือกได้ต้องมี `meal_service_receipt.outcome = 'confirmed'`
-(CR-142/CR-143) เท่านั้น — ยังไม่ยืนยันตรวจรับ ห้ามจัดสรรออก
+(CR-144/CR-145) เท่านั้น — ยังไม่ยืนยันตรวจรับ ห้ามจัดสรรออก
 
 ### 3.2 UI หน้าใหม่ `/back-office/kitchen/distribute`
 

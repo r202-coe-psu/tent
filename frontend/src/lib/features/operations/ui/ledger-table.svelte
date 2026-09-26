@@ -9,12 +9,15 @@
 	import ArrowDownLeft from '@lucide/svelte/icons/arrow-down-left';
 	import ArrowUpRight from '@lucide/svelte/icons/arrow-up-right';
 	import { qtyGt } from '$lib/utils/qty';
+	import { lotStorageName } from '../domain/lot-storage';
+	import { useStoragePoints } from '../application/use-storage-points.svelte';
 
 	let { filterItemId = undefined }: { filterItemId?: string } = $props();
 
 	// Fetch stock movements ledger
 	const itemsQuery = useSupplyItems();
 	const itemMastersQuery = useItemMasters(() => getShelterCode());
+	const storagePoints = useStoragePoints(() => getShelterCode());
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
 	const allLedgerQuery = useLedger(() => !filterItemId);
@@ -173,8 +176,10 @@
 								<!-- Reference / Lot / Note -->
 								<Table.Cell class="max-w-[220px] truncate text-xs text-muted-foreground">
 									<div class="flex flex-col gap-1 py-1">
-										{#if entry.lot?.note}
-											<span class="text-xs font-medium text-foreground">📍 {entry.lot.note}</span>
+										{#if lotStorageName(entry.lot, storagePoints.points)}
+											<span class="text-xs font-medium text-foreground"
+												>📍 {lotStorageName(entry.lot, storagePoints.points)}</span
+											>
 										{/if}
 										{#if entry.lot?.expiry}
 											<span class="text-2xs font-medium text-muted-foreground/90">
@@ -191,7 +196,7 @@
 												>Ref: {entry.ref_id}</span
 											>
 										{/if}
-										{#if !entry.lot?.note && !entry.lot?.expiry && !entry.ref_id}
+										{#if !lotStorageName(entry.lot, storagePoints.points) && !entry.lot?.expiry && !entry.ref_id}
 											<span class="text-muted-foreground/40">-</span>
 										{/if}
 									</div>

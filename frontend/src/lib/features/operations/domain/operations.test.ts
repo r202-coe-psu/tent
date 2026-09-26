@@ -34,12 +34,6 @@ import {
 	projectStockLotBalances,
 	sortStockLotsByConsumptionOrder,
 	StockLotIntegrityError,
-	createPurchase,
-	keyPurchaseReceipt,
-	purchaseReceiptStatus,
-	canEditPurchase,
-	purchaseReceiptInputSchema,
-	isPurchase,
 	mapNeedItemHeuristic,
 	createTransfer,
 	dispatchTransfer,
@@ -226,22 +220,7 @@ describe('stock_ledger schema_v + reason enum (CR-032)', () => {
 			},
 			ctx
 		);
-		expect(entry.schema_v).toBe(4);
-	});
-
-	it('accepts `purchase` as a valid reason (CR-032)', () => {
-		expect(ledgerReasonSchema.safeParse('purchase').success).toBe(true);
-		const entry = createStockLedger(
-			{
-				item_id: 'item:rice',
-				qty: 5,
-				unit: 'kg',
-				reason: 'purchase',
-				ref_id: 'purchase:01JFIXTUREPURCHASE'
-			},
-			ctx
-		);
-		expect(entry.reason).toBe('purchase');
+		expect(entry.schema_v).toBe(5);
 	});
 
 	it('accepts `distribution_return` as a valid reason (CR-059)', () => {
@@ -266,22 +245,14 @@ describe('stock_ledger schema_v + reason enum (CR-032)', () => {
 		expect(() => parseStockLedger({ ...entry, type: 'donation' })).toThrow();
 	});
 
-	it('reads compatible schema_v 2 ledgers but reserves purchase for schema_v 3', () => {
+	it('reads compatible schema_v 2 ledgers', () => {
 		const entry = createStockLedger(
-			{
-				item_id: 'item:rice',
-				qty: 5,
-				unit: 'kg',
-				reason: 'receive',
-				ref_id: 'distribution_log:fixture'
-			},
+			{ item_id: 'item:rice', qty: '1', unit: 'kg', reason: 'adjust', ref_id: null },
 			ctx
 		);
-
-		expect(parseStockLedger({ ...entry, schema_v: 2 }).schema_v).toBe(2);
-		expect(() => parseStockLedger({ ...entry, schema_v: 2, reason: 'purchase' })).toThrow(
-			/purchase requires stock_ledger schema_v 3/
-		);
+		const legacy = { ...entry, schema_v: 2 as const };
+		expect(parseStockLedger(legacy).schema_v).toBe(2);
+		expect(ledgerReasonSchema.safeParse('purchase').success).toBe(false);
 	});
 });
 
@@ -305,8 +276,7 @@ describe('stock_ledger reason ↔ ref_id invariant (CR-055)', () => {
 		);
 
 	const cases: Record<LedgerReason, { valid: string | null; invalid: string | null }> = {
-		donation: { valid: 'donation:01J', invalid: 'purchase:01J' },
-		purchase: { valid: 'purchase:01J', invalid: 'donation:01J' },
+		donation: { valid: 'donation:01J', invalid: 'stock_transfer:01J' },
 		requisition: { valid: 'kitchen_requisition:01J', invalid: 'donation:01J' },
 		transfer_in: { valid: 'stock_transfer:01J', invalid: 'transfer:01J' },
 		transfer_out: { valid: 'stock_transfer:01J', invalid: null },
@@ -329,9 +299,9 @@ describe('stock_ledger reason ↔ ref_id invariant (CR-055)', () => {
 		});
 	}
 
-	// CR-139 — requisition now accepts either the legacy doc type or the new
+	// CR-141 — requisition now accepts either the legacy doc type or the new
 	// unified ticket, so old rows stay valid while new writes move to tickets.
-	it('accepts requisition with a requisition_ticket: ref_id (CR-139)', () => {
+	it('accepts requisition with a requisition_ticket: ref_id (CR-141)', () => {
 		expect(write('requisition', 'requisition_ticket:01J').ref_id).toBe('requisition_ticket:01J');
 	});
 
@@ -442,196 +412,8 @@ describe('stock_ledger reason ↔ ref_id invariant (CR-055)', () => {
 	});
 });
 
-describe('purchase — createPurchase + keyPurchaseReceipt (CR-032)', () => {
-	it('creates a purchase doc (schema_v 1) carrying vendor and planning items', () => {
-		const purchase = createPurchase(
-			{
-				vendor: 'ACME',
-				po_ref: 'PO-1',
-				items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }]
-			},
-			ctx
-		);
-		expect(purchase.type).toBe('purchase');
-		expect(purchase.schema_v).toBe(1);
-		expect(purchase._id.startsWith('purchase:')).toBe(true);
-		expect(purchase.vendor).toBe('ACME');
-		expect(purchase.po_ref).toBe('PO-1');
-		expect(purchase.items[0].qty).toBe('100'); // persisted as qty_str
-		expect(isPurchase(purchase)).toBe(true);
-	});
-
-	it('omits po_ref and note when they are not supplied', () => {
-		const purchase = createPurchase(
-			{ vendor: 'ACME', items: [{ item_id: 'item:rice', qty: 1, unit: 'kg' }] },
-			ctx
-		);
-		expect(purchase.po_ref).toBeUndefined();
-		expect(purchase.note).toBeUndefined();
-	});
-
-	it('mints one purchase ledger entry per counted line, referencing the purchase', () => {
-		const purchase = createPurchase(
-			{ vendor: 'ACME', items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }] },
-			ctx
-		);
-		const ledger = keyPurchaseReceipt(
-			purchase,
-			[{ item_id: 'item:rice', qty: '90', unit: 'kg' }],
-			ctx
-		);
-		expect(ledger).toHaveLength(1);
-		expect(ledger[0].reason).toBe('purchase');
-		expect(ledger[0].ref_id).toBe(purchase._id);
-		expect(ledger[0].qty).toBe('90'); // counted, not the planned 100
-		expect(ledger[0].schema_v).toBe(4); // lot_ref is optional on the backward-compatible document schema
-	});
-
-	it('rejects a purchase without a vendor or without items', () => {
-		expect(() =>
-			createPurchase({ vendor: '', items: [{ item_id: 'item:rice', qty: 1, unit: 'kg' }] }, ctx)
-		).toThrow();
-		expect(() => createPurchase({ vendor: 'ACME', items: [] }, ctx)).toThrow();
-	});
-});
-
 // schema.md §2.16 — the receipt status is derived from the ledger, never stored,
 // so the badge can't drift from the balance shown beside it (T-14 DoD).
-describe('purchaseReceiptStatus + canEditPurchase (CR-032)', () => {
-	const twoLinePurchase = () =>
-		createPurchase(
-			{
-				vendor: 'ACME',
-				items: [
-					{ item_id: 'item:rice', qty: 100, unit: 'kg' },
-					{ item_id: 'item:sugar', qty: 20, unit: 'kg' }
-				]
-			},
-			ctx
-		);
-
-	it('reports not_received while no ledger row points at the purchase', () => {
-		const purchase = twoLinePurchase();
-		expect(purchaseReceiptStatus(purchase, [])).toBe('not_received');
-		expect(canEditPurchase(purchase, [])).toBe(true);
-	});
-
-	it('ignores ledger rows belonging to another purchase or another reason', () => {
-		const purchase = twoLinePurchase();
-		const other = keyPurchaseReceipt(
-			twoLinePurchase(),
-			[
-				{ item_id: 'item:rice', qty: '100', unit: 'kg' },
-				{ item_id: 'item:sugar', qty: '20', unit: 'kg' }
-			],
-			ctx
-		);
-		// Deliberately mismatched: reason 'donation' pointing at a purchase _id.
-		// CR-055 R2 forbids writing this, so it is assembled directly rather than
-		// through the factory — it stands in for a row written before the invariant
-		// existed, which read paths must still tolerate (R5).
-		const donationRow = {
-			...createStockLedger(
-				{ item_id: 'item:rice', qty: '100', unit: 'kg', reason: 'donation', ref_id: DONATION_REF },
-				ctx
-			),
-			ref_id: purchase._id
-		};
-		expect(purchaseReceiptStatus(purchase, [...other, donationRow])).toBe('not_received');
-	});
-
-	it('reports partial while any ordered item is short, then received once all are met', () => {
-		const purchase = twoLinePurchase();
-		const firstRound = keyPurchaseReceipt(
-			purchase,
-			[{ item_id: 'item:rice', qty: '100', unit: 'kg' }],
-			ctx
-		);
-		expect(purchaseReceiptStatus(purchase, firstRound)).toBe('partial');
-		expect(canEditPurchase(purchase, firstRound)).toBe(false);
-
-		const secondRound = keyPurchaseReceipt(
-			purchase,
-			[{ item_id: 'item:sugar', qty: '20', unit: 'kg' }],
-			ctx
-		);
-		expect(purchaseReceiptStatus(purchase, [...firstRound, ...secondRound])).toBe('received');
-	});
-
-	it('sums multiple rounds for the same item before judging completeness', () => {
-		const purchase = createPurchase(
-			{ vendor: 'ACME', items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }] },
-			ctx
-		);
-		const rows = [
-			...keyPurchaseReceipt(purchase, [{ item_id: 'item:rice', qty: '40', unit: 'kg' }], ctx),
-			...keyPurchaseReceipt(purchase, [{ item_id: 'item:rice', qty: '60', unit: 'kg' }], ctx)
-		];
-		expect(purchaseReceiptStatus(purchase, rows.slice(0, 1))).toBe('partial');
-		expect(purchaseReceiptStatus(purchase, rows)).toBe('received');
-	});
-
-	it('counts receiving more than ordered as received, with no fourth state', () => {
-		const purchase = createPurchase(
-			{ vendor: 'ACME', items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }] },
-			ctx
-		);
-		const rows = keyPurchaseReceipt(
-			purchase,
-			[{ item_id: 'item:rice', qty: '120', unit: 'kg' }],
-			ctx
-		);
-		expect(purchaseReceiptStatus(purchase, rows)).toBe('received');
-	});
-
-	it('does not let an unordered item alone complete the purchase', () => {
-		const purchase = createPurchase(
-			{ vendor: 'ACME', items: [{ item_id: 'item:rice', qty: 100, unit: 'kg' }] },
-			ctx
-		);
-		const rows = keyPurchaseReceipt(
-			purchase,
-			[{ item_id: 'item:soap', qty: '5', unit: 'bar' }],
-			ctx
-		);
-		expect(purchaseReceiptStatus(purchase, rows)).toBe('partial');
-	});
-});
-
-describe('purchaseReceiptInputSchema (CR-032)', () => {
-	it('rejects a receipt with no counted lines', () => {
-		expect(purchaseReceiptInputSchema.safeParse({ counted: [] }).success).toBe(false);
-	});
-
-	it('rejects a non-positive counted quantity', () => {
-		const parsed = purchaseReceiptInputSchema.safeParse({
-			counted: [{ item_id: 'item:rice', qty: 0, unit: 'kg' }]
-		});
-		expect(parsed.success).toBe(false);
-	});
-
-	it('coerces a numeric qty to qty_str and keeps the optional lot', () => {
-		const parsed = purchaseReceiptInputSchema.parse({
-			counted: [
-				{
-					item_id: 'item:rice',
-					qty: 12.5,
-					unit: 'kg',
-					lot: { expiry: '2026-08-01', note: 'Zone A' }
-				}
-			]
-		});
-		expect(parsed.counted[0].qty).toBe('12.5');
-		expect(parsed.counted[0].lot).toEqual({ expiry: '2026-08-01', note: 'Zone A' });
-	});
-
-	it('accepts a line without a lot — expiry is the caller’s check', () => {
-		const parsed = purchaseReceiptInputSchema.parse({
-			counted: [{ item_id: 'item:soap', qty: '5', unit: 'bar' }]
-		});
-		expect(parsed.counted[0].lot).toBeUndefined();
-	});
-});
 
 describe('openNeeds', () => {
 	it('subtracts active donations and drops satisfied needs', () => {
@@ -755,7 +537,7 @@ describe('keyableDonations + keyedDonationIds (CR-055 R4)', () => {
 	it('collects the donation ids that already have a donation ledger row', () => {
 		const keyed = keyedDonationIds([
 			keyedRow('donation:A'),
-			keyedRow('purchase:P', 'purchase'),
+			keyedRow('stock_transfer:P', 'transfer_in'),
 			keyedRow(null, 'adjust')
 		]);
 		expect([...keyed]).toEqual(['donation:A']);
@@ -783,10 +565,9 @@ describe('keyableDonations + keyedDonationIds (CR-055 R4)', () => {
 	});
 
 	it('is not fooled by a ledger row pointing at another doc type', () => {
-		// a `purchase` row carrying a purchase id must not un-offer a donation
-		// that happens to share the suffix
 		const declared = donation({ _id: 'donation:A', status: 'declared' });
-		const offered = keyableDonations([declared], [keyedRow('purchase:A', 'purchase')]);
+		// a transfer_in row must not un-offer a donation
+		const offered = keyableDonations([declared], [keyedRow('stock_transfer:A', 'transfer_in')]);
 		expect(offered.map((d) => d._id)).toEqual(['donation:A']);
 	});
 });
@@ -1800,7 +1581,7 @@ describe('lot numbering (CR-088)', () => {
 			ctx
 		);
 		expect(entry.lot).toEqual({ lot_no: 'L-260825-001', storage_zone: 'A-01' });
-		expect(entry.schema_v).toBe(4);
+		expect(entry.schema_v).toBe(5);
 		expect(parseStockLedger(entry)).toEqual(entry);
 	});
 });
@@ -2010,7 +1791,7 @@ describe('publicItemAggregate (what the donor board really shows)', () => {
 });
 
 describe('new inbound physical-lot identity (CR-059)', () => {
-	it('self-references createReceiveEntry, donation receipt, and purchase receipt rows', () => {
+	it('self-references createReceiveEntry and donation receipt rows', () => {
 		const received = createReceiveEntry(
 			{
 				item_id: 'item:rice',
@@ -2027,19 +1808,9 @@ describe('new inbound physical-lot identity (CR-059)', () => {
 			[{ item_id: 'item:rice', qty: '5', unit: 'kg' }],
 			ctx
 		)[0];
-		const purchase = createPurchase(
-			{ vendor: 'ACME', items: [{ item_id: 'item:rice', qty: '5', unit: 'kg' }] },
-			ctx
-		);
-		const purchased = keyPurchaseReceipt(
-			purchase,
-			[{ item_id: 'item:rice', qty: '5', unit: 'kg' }],
-			ctx
-		)[0];
 
 		expect(received.lot_ref).toBe(received._id);
 		expect(donation.lot_ref).toBe(donation._id);
-		expect(purchased.lot_ref).toBe(purchased._id);
 	});
 
 	it('self-references a positive adjustment because it creates a new inbound lot', () => {

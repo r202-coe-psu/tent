@@ -476,7 +476,7 @@ export async function deployReferralMangoIndexes(db: string): Promise<void> {
 }
 
 /**
- * Idempotent deploy of requisition_ticket Mango indexes (CR-121/CR-139).
+ * Idempotent deploy of requisition_ticket Mango indexes (CR-121/CR-141).
  * CouchDB returns 200 when an identical named index already exists.
  */
 export async function deployRequisitionTicketMangoIndexes(db: string): Promise<void> {

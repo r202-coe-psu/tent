@@ -1,13 +1,11 @@
 /**
- * Staging ops: stock, campaigns, donations, purchases for SH001–SH003.
+ * Staging ops: stock, campaigns, donations for SH001–SH003.
  */
 import { now, type AuthorContext } from '$lib/db/model';
 import {
 	createCampaign,
-	createPurchase,
 	createStockLedger,
-	createWalkInDonation,
-	keyPurchaseReceipt
+	createWalkInDonation
 } from '$lib/features/operations/domain/operations';
 import { createFuelCylinder } from '$lib/features/kitchen/domain/kitchen';
 import { createGasLedgerEntry } from '$lib/features/kitchen/domain/gas-ledger';
@@ -194,33 +192,6 @@ export async function seedStagingOps(): Promise<void> {
 			_id: `donation:seed-st:${code.toLowerCase()}:${i}`
 		}));
 
-		const purchases = [
-			createPurchase(
-				{
-					vendor: 'บริษัท สยามค้าส่ง จำกัด',
-					po_ref: `PO-ST-${code}-0001`,
-					items: [
-						{ item_id: ITEM.rice, qty: '100', unit: 'kg' },
-						{ item_id: ITEM.soap, qty: '60', unit: 'bar' }
-					],
-					note: 'จัดซื้อรอบ staging seed'
-				},
-				ctx
-			)
-		].map((doc, i) => ({
-			...doc,
-			_id: `purchase:seed-st:${code.toLowerCase()}:${i}`
-		}));
-
-		const purchaseReceipts = keyPurchaseReceipt(
-			purchases[0],
-			[{ item_id: ITEM.rice, qty: '100', unit: 'kg' }],
-			ctx
-		).map((doc, i) => ({
-			...doc,
-			_id: `stock_ledger:seed-st:${code.toLowerCase()}:pr-${i}`
-		}));
-
 		// Demo scenario for the catalog "ปรับแต่งแล้ว" (override) flow: SH001 customizes the
 		// central item_master:rice by adding a shelter-specific bulk-sack conversion unit.
 		const itemMasterOverrides =
@@ -327,14 +298,12 @@ export async function seedStagingOps(): Promise<void> {
 			...stockEntries,
 			...campaigns,
 			...donations,
-			...purchases,
-			...purchaseReceipts,
 			...itemMasterOverrides,
 			...fuelCylinders,
 			...gasLedgerEntries
 		]);
 		console.log(
-			`  ✓ ${db}: ${stockEntries.length} stock, ${campaigns.length} campaigns, ${donations.length} donations, ${purchases.length} purchases${itemMasterOverrides.length ? `, ${itemMasterOverrides.length} item_master override` : ''}${fuelCylinders.length ? `, ${fuelCylinders.length} fuel_cylinder` : ''}`
+			`  ✓ ${db}: ${stockEntries.length} stock, ${campaigns.length} campaigns, ${donations.length} donations${itemMasterOverrides.length ? `, ${itemMasterOverrides.length} item_master override` : ''}${fuelCylinders.length ? `, ${fuelCylinders.length} fuel_cylinder` : ''}`
 		);
 	}
 }

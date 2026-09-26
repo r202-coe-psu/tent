@@ -458,7 +458,7 @@ export function createMealService(input: MealServiceInput, ctx: AuthorContext): 
 export const isMealService = (d: unknown): d is MealService =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'meal_service';
 
-// ---- MealServiceReceipt (append-only warehouse receipt decision, CR-142/CR-143) ----
+// ---- MealServiceReceipt (append-only warehouse receipt decision, CR-144/CR-145) ----
 // `meal_service` is append-only (schema.md §1817 invariant) — can't add
 // received_by/received_at/outcome to that doc, so the warehouse's decision is
 // its own doc instead, same pattern as gas_ledger/stock_ledger event rows.
@@ -469,14 +469,14 @@ export type MealServiceReceiptOutcome = z.infer<typeof mealServiceReceiptOutcome
 export interface MealServiceReceipt extends BaseDoc {
 	type: 'meal_service_receipt';
 	meal_service_id: string;
-	// Optional for backward compat — docs written before CR-143 predate this
+	// Optional for backward compat — docs written before CR-145 predate this
 	// field and only ever meant "confirmed"; see mealServiceReceiptOutcome().
 	outcome?: MealServiceReceiptOutcome;
 	received_by: string;
 	reason?: string; // required when outcome = 'rejected'
 }
 
-/** Reads a receipt's outcome, treating a pre-CR-143 doc (no `outcome` field) as 'confirmed'. */
+/** Reads a receipt's outcome, treating a pre-CR-145 doc (no `outcome` field) as 'confirmed'. */
 export function mealServiceReceiptOutcome(receipt: MealServiceReceipt): MealServiceReceiptOutcome {
 	return receipt.outcome ?? 'confirmed';
 }

@@ -105,7 +105,7 @@ export const TRANSFER_LEDGER_MANGO_INDEXES = [
 	}
 ];
 
-/** Mango index definitions required by requisition_ticket list/find (CR-121/CR-139). */
+/** Mango index definitions required by requisition_ticket list/find (CR-121/CR-141). */
 export const REQUISITION_TICKET_MANGO_INDEXES = [
 	{
 		index: { fields: ['type', 'requisition_type', 'status'] },
@@ -285,7 +285,7 @@ export function buildValidateDocUpdate(code: string): string {
     if (newDoc.system_key !== oldDoc.system_key) {
       throw { forbidden: 'system_key is immutable on protected categories' };
     }
-    // CR-138: default_class is editable on protected categories (amends CR-119 FR-04).
+    // CR-140: default_class is editable on protected categories (amends CR-119 FR-04).
     if (newDoc.is_protected !== true) {
       throw { forbidden: 'is_protected flag cannot be removed' };
     }
@@ -324,7 +324,7 @@ export function buildValidateDocUpdate(code: string): string {
     'evacuee', 'household', 'medical', 'screening', 'movement', 'image',
     'people_import_log',
     'donation', 'donation_campaign', 'stock_ledger', 'donation_slot', 'donation_redirect',
-    'audit', 'daily_calc', 'simulation', 'purchase', 'referral',
+    'audit', 'daily_calc', 'simulation', 'referral',
     'meal_session', 'kitchen_counter',
     'meal_plan', 'kitchen_requisition', 'meal_service', 'fuel_cylinder', 'gas_ledger',
     'volunteer', 'job', 'job_application', 'shift_assignment',
@@ -1158,7 +1158,7 @@ export function buildValidateDocUpdate(code: string): string {
     }
   }
   // 11. requisition_ticket lifecycle and role rules — kitchen slice carve-out
-  // (CR-121/CR-139..144). food/supplies/transfer use the fuller CR-121 lifecycle
+  // (CR-121/CR-141..145). food/supplies/transfer use the fuller CR-121 lifecycle
   // (amendments/DISTRIBUTING/frontline distribution) in the next rule below —
   // implemented independently on develop while this carve-out shipped on this
   // branch, so the two are kept as separate requisition_type-gated rules
@@ -1218,7 +1218,7 @@ export function buildValidateDocUpdate(code: string): string {
         !isRole('kitchen_staff')
       ) {
         // warehouse_staff allocates (allocated_qty); kitchen_staff edits its own
-        // request while nothing's been picked yet (CR-140, requested_qty only).
+        // request while nothing's been picked yet (CR-142, requested_qty only).
         throw { forbidden: 'Only warehouse staff, kitchen staff, or system admin can update requisition_ticket items while PENDING_PICK' };
       }
       if (ticketTo === 'READY_FOR_DISPATCH') {
@@ -1243,7 +1243,7 @@ export function buildValidateDocUpdate(code: string): string {
         }
       }
       if (ticketTo === 'COMPLETED' && ticketFrom === 'PENDING_PICK') {
-        // One-click approve (CR-141, requisition_type 'kitchen' only): shelter_manager/
+        // One-click approve (CR-143, requisition_type 'kitchen' only): shelter_manager/
         // system_admin does approve+dispatch+receive in one write, all 3 by-fields same actor.
         if (!isRole('shelter_manager')) {
           throw { forbidden: 'Only shelter manager or system admin can one-click approve a requisition_ticket' };

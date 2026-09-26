@@ -291,7 +291,7 @@ describe('toRequisitionInput — T-26 handoff (CR-022)', () => {
 	});
 });
 
-describe('toTicketItemInput — CR-121/CR-139 ticket handoff', () => {
+describe('toTicketItemInput — CR-121/CR-141 ticket handoff', () => {
 	const plan = (recipes: MealPlan['recipes']): MealPlan => ({
 		_id: 'meal_plan:2026-07-15:lunch',
 		type: 'meal_plan',
