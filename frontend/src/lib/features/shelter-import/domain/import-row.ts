@@ -317,7 +317,7 @@ function resolveInt(raw: RawRow, header: string, sink: ErrorSink): number | null
 
 /** `ชื่อ:ประเภท:ตร.ม.` items separated by `|` → sub_storage entries. */
 function resolveSubStorage(raw: RawRow, sink: ErrorSink) {
-	const out: { name: string; type: SubStorageType; area_m2: number | null }[] = [];
+	const out: { id: string; name: string; type: SubStorageType; area_m2: number | null }[] = [];
 	for (const item of splitMulti(cell(raw, H.sub_storage))) {
 		const [rawName = '', rawType = '', rawArea = ''] = item
 			.split(FIELD_SEPARATOR)
@@ -343,7 +343,8 @@ function resolveSubStorage(raw: RawRow, sink: ErrorSink) {
 			}
 			area = n;
 		}
-		out.push({ name: rawName, type, area_m2: area });
+		// Stock ledger lots reference storage points by id (shelter schema_v 7).
+		out.push({ id: ulid(), name: rawName, type, area_m2: area });
 	}
 	return out;
 }

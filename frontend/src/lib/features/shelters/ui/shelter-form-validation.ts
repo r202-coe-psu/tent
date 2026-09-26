@@ -3,8 +3,10 @@
  */
 
 /**
- * Top-level shelterSchema keys that belong to each single-page form section,
- * keyed by the section anchor id. Key order is the canonical DOM order.
+ * shelterSchema keys that belong to each single-page form section, keyed by the
+ * section anchor id. Key order is the canonical DOM order. A dotted path
+ * (`common_areas.sub_storage`) claims that child away from the section that
+ * lists its parent key.
  */
 export const SHELTER_SECTION_FIELDS: Record<string, readonly string[]> = {
 	'basic-info': [
@@ -29,6 +31,7 @@ export const SHELTER_SECTION_FIELDS: Record<string, readonly string[]> = {
 	capacity: ['capacity', 'area_m2', 'area_type'],
 	'zones-facilities': ['zones', 'facilities', 'common_areas'],
 	'food-distribution': ['food_distribution_points'],
+	'storage-points': ['common_areas.sub_storage'],
 	utilities: ['utilities'],
 	risk: ['risk'],
 	'admission-policy': ['admission_policy'],
@@ -42,16 +45,67 @@ export function topLevelErrorKeys(errors: unknown): string[] {
 	return Object.keys(errors as Record<string, unknown>).filter((key) => key !== '_errors');
 }
 
-/** Section ids that contain at least one errored top-level field, in canonical order. */
+function valueAtPath(record: Record<string, unknown>, path: string): unknown {
+	let node: unknown = record;
+	for (const key of path.split('.')) {
+		if (!node || typeof node !== 'object') return undefined;
+		node = (node as Record<string, unknown>)[key];
+	}
+	return node;
+}
+
+/** Child keys of top-level `field` that a dotted path in another section claims. */
+function claimedChildren(
+	field: string,
+	sectionFields: Record<string, readonly string[]>
+): Set<string> {
+	const prefix = `${field}.`;
+	const out = new Set<string>();
+	for (const fields of Object.values(sectionFields)) {
+		for (const f of fields) if (f.startsWith(prefix)) out.add(f.slice(prefix.length));
+	}
+	return out;
+}
+
+/** The error subtrees a section field owns — minus children claimed elsewhere. */
+function ownedErrorNodes(
+	record: Record<string, unknown>,
+	field: string,
+	sectionFields: Record<string, readonly string[]>
+): unknown[] {
+	if (field.includes('.')) {
+		const node = valueAtPath(record, field);
+		return node === undefined ? [] : [node];
+	}
+	if (!(field in record)) return [];
+	const node = record[field];
+	const claimed = claimedChildren(field, sectionFields);
+	if (claimed.size === 0 || !node || typeof node !== 'object' || Array.isArray(node)) {
+		return [node];
+	}
+	return Object.entries(node as Record<string, unknown>)
+		.filter(([key]) => !claimed.has(key))
+		.map(([, value]) => value);
+}
+
+function fieldHasErrors(
+	record: Record<string, unknown>,
+	field: string,
+	sectionFields: Record<string, readonly string[]>
+): boolean {
+	return ownedErrorNodes(record, field, sectionFields).length > 0;
+}
+
+/** Section ids that contain at least one errored field, in canonical order. */
 export function findInvalidSectionIds(
 	errors: unknown,
 	sectionFields: Record<string, readonly string[]> = SHELTER_SECTION_FIELDS
 ): string[] {
-	const keys = new Set(topLevelErrorKeys(errors));
-	if (keys.size === 0) return [];
+	if (topLevelErrorKeys(errors).length === 0) return [];
+	const record = errors as Record<string, unknown>;
 	const invalid: string[] = [];
 	for (const [sectionId, fields] of Object.entries(sectionFields)) {
-		if (fields.some((field) => keys.has(field))) {
+		if (fields.some((field) => fieldHasErrors(record, field, sectionFields))) {
 			invalid.push(sectionId);
 		}
 	}
@@ -92,7 +146,7 @@ export function collectErrorMessages(errors: unknown): string[] {
 	return out;
 }
 
-/** Messages for a section's top-level fields (e.g. the section being revealed). */
+/** Messages for a section's fields (e.g. the section being revealed). */
 export function collectErrorMessagesForFields(
 	errors: unknown,
 	sectionId: string,
@@ -105,8 +159,8 @@ export function collectErrorMessagesForFields(
 	const out: string[] = [];
 	const seen = new Set<string>();
 	for (const field of fields) {
-		if (field in record) {
-			walkErrorMessages(record[field], out, seen);
+		for (const node of ownedErrorNodes(record, field, sectionFields)) {
+			walkErrorMessages(node, out, seen);
 		}
 	}
 	return out;
@@ -118,7 +172,7 @@ export function sectionHasFieldErrors(
 	sectionFields: Record<string, readonly string[]> = SHELTER_SECTION_FIELDS
 ): boolean {
 	const fields = sectionFields[sectionId];
-	if (!fields) return false;
-	const keys = new Set(topLevelErrorKeys(errors));
-	return fields.some((field) => keys.has(field));
+	if (!fields || topLevelErrorKeys(errors).length === 0) return false;
+	const record = errors as Record<string, unknown>;
+	return fields.some((field) => fieldHasErrors(record, field, sectionFields));
 }

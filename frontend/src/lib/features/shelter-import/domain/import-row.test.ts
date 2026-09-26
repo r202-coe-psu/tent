@@ -266,9 +266,20 @@ describe('validateRow — sub storage list', () => {
 		);
 		expect(r.ok).toBe(true);
 		expect(r.shelter?.common_areas.sub_storage).toEqual([
-			{ name: 'คลังหน้าอาคาร', type: 'food_dry', area_m2: 20 },
-			{ name: 'คลังยา', type: 'medical_supplies', area_m2: null }
+			{ id: expect.any(String), name: 'คลังหน้าอาคาร', type: 'food_dry', area_m2: 20 },
+			{ id: expect.any(String), name: 'คลังยา', type: 'medical_supplies', area_m2: null }
 		]);
+	});
+
+	it('mints a distinct id per storage point (ledger lots reference it)', () => {
+		const r = validateRow(
+			baseRow({ [H.sub_storage]: 'คลังหน้าอาคาร:อาหารแห้ง:20 | คลังยา:เวชภัณฑ์' }),
+			1,
+			emptyLookups()
+		);
+		const ids = (r.shelter?.common_areas.sub_storage ?? []).map((p) => p.id);
+		expect(ids.every((id) => id.length > 0)).toBe(true);
+		expect(new Set(ids).size).toBe(2);
 	});
 
 	it('rejects an unknown storage type', () => {
