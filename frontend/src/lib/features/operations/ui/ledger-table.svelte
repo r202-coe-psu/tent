@@ -176,6 +176,15 @@
 										{#if entry.lot?.note}
 											<span class="text-xs font-medium text-foreground">📍 {entry.lot.note}</span>
 										{/if}
+										{#if entry.lot?.produced_at}
+											<span class="text-2xs font-medium text-muted-foreground/90">
+												จากผลิต: {new Date(entry.lot.produced_at).toLocaleDateString('th-TH', {
+													day: '2-digit',
+													month: 'short',
+													year: '2-digit'
+												})}
+											</span>
+										{/if}
 										{#if entry.lot?.expiry}
 											<span class="text-2xs font-medium text-muted-foreground/90">
 												⌛ หมดอายุ: {new Date(entry.lot.expiry).toLocaleDateString('th-TH', {
@@ -191,7 +200,7 @@
 												>Ref: {entry.ref_id}</span
 											>
 										{/if}
-										{#if !entry.lot?.note && !entry.lot?.expiry && !entry.ref_id}
+										{#if !entry.lot?.note && !entry.lot?.expiry && !entry.lot?.produced_at && !entry.ref_id}
 											<span class="text-muted-foreground/40">-</span>
 										{/if}
 									</div>

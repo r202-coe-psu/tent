@@ -288,7 +288,8 @@ projection — เป็นข้อมูลหลังบ้านล้ว�
 > **CR-059 Flow 2** — เพิ่ม physical-lot identity `lot_ref` และ `distribution_return` โดยไม่เปลี่ยน
 > `schema_v`. แถวรับเข้าใหม่ทุกแถวกำหนด `lot_ref === _id`; แถว legacy ที่ไม่มี `lot_ref` ยังอ่านได้
 > และใช้ `_id` ของแถวนั้นเป็น virtual lot reference. `lot_no` เป็นป้ายแสดงผลเท่านั้นและห้ามใช้เป็น identity.
-> **schema_v 4** — เพิ่ม `lot.lot_no` (`L-YYMMDD-XXX`) + `lot.storage_zone` ([CR-088](../changes/CR-088-stock-ledger-lot-storage-zone.md)) — ขั้นตรวจรับบริจาค (T-16 R-16.5) ต้องมีที่เก็บเลขล็อตกับโซนจัดเก็บ. optional ทั้งคู่ ⇒ แถวเก่าไม่ต้อง backfill. `lot_no` ออกโดย **server** ตอนเขียน ledger (`lib/server/lot-number.ts`) ไม่รับจาก client. ผู้เขียน ledger ทุกที่ stamp `schema_v 4` เท่ากัน (`createStockLedger`)
+> **schema_v 5** — เพิ่ม `lot.produced_at` ([draft-lot-produced-at](../changes/draft-lot-produced-at.md)) — วัน/เวลาผลิตสำหรับนาฬิกา "จากผลิต"; optional ⇒ แถวเก่าไม่ต้อง backfill. ตอนรับเข้าถ้าไม่ส่ง → default = `occurred_at`. Writer ใหม่ stamp `schema_v 5` (`createStockLedger`)
+> **schema_v 4** — เพิ่ม `lot.lot_no` (`L-YYMMDD-XXX`) + `lot.storage_zone` ([CR-088](../changes/CR-088-stock-ledger-lot-storage-zone.md)) — ขั้นตรวจรับบริจาค (T-16 R-16.5) ต้องมีที่เก็บเลขล็อตกับโซนจัดเก็บ. optional ทั้งคู่ ⇒ แถวเก่าไม่ต้อง backfill. `lot_no` ออกโดย **server** ตอนเขียน ledger (`lib/server/lot-number.ts`) ไม่รับจาก client.
 > **schema_v 3** — historically introduced `purchase` in the reason enum ([CR-032](../changes/CR-032-stock-ledger-purchase-reason.md)); **`purchase` withdrawn by [CR-138](../changes/CR-138-remove-purchase.md)** (no schema_v bump). Writers continue stamping ≥3. schema_v 2 rows remain readable.
 > schema_v 2 — `qty` เป็น `qty_str` (ไม่ใช่ JSON number). CR-038.
 
@@ -300,17 +301,18 @@ projection — เป็นข้อมูลหลังบ้านล้ว�
 | `reason` | enum(`receive`,`distribute`,`requisition`,`adjust`,`transfer_out`,`transfer_in`,`donation`,`distribution_return`) | req | `distribution_return` = คืนของที่เหลือจาก batch กลับ physical lot เดิม |
 | `ref_id` | str\|null | ตาม `reason` | doc ต้นเหตุ — **ค่าที่ยอมรับผูกกับ `reason` ตามตาราง "`reason` → `ref_id`" ด้านล่าง** (CR-055) |
 | `lot_ref` | str | opt/ตาม `reason` | stable physical-lot identity → `stock_ledger:{id}`; บังคับสำหรับ `distribute`/`distribution_return`; แถวรับเข้าใหม่ self-reference `_id` (เว้นแต่การรับของแจกเหลือคืนคลัง `reason='receive'` ที่แนะนำให้อ้างอิง `lot_ref` เดิมของล็อตที่เบิกจ่ายเพื่อการสืบย้อนกลับ); legacy อาจไม่มี field |
-| `lot` | {`expiry`:ts?, `note`:str?, `lot_no`:str?, `storage_zone`:str?} | opt | ของหมดอายุได้ (อาหาร/ยา) · `lot_no`/`storage_zone` = CR-088 (ดูตารางย่อยด้านล่าง) |
+| `lot` | {`expiry`:ts?, `note`:str?, `lot_no`:str?, `storage_zone`:str?, `produced_at`:ts?} | opt | ของหมดอายุได้ (อาหาร/ยา) · `lot_no`/`storage_zone` = CR-088 · `produced_at` = draft-lot-produced-at (ดูตารางย่อยด้านล่าง) |
 | `occurred_at` | ts | req | — |
 
-**`lot` (CR-088)**
+**`lot` (CR-088 + draft-lot-produced-at)**
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
-| `expiry` | ts | conditional req | วันหมดอายุ — บังคับเมื่อ `item_master.perishable` หรือเมื่อ `reason='receive'` จาก `meal_service:` (`cooking_completed_at + 4h` ตาม CR-121) |
+| `expiry` | ts | conditional req | วันหมดอายุ — บังคับเมื่อ `item_master.perishable` / `supply_item.perishable` หรือเมื่อ `reason='receive'` จาก `meal_service:` (`cooking_completed_at + 4h` ตาม CR-121); ของทั่วไป UI ไม่บังคับ |
 | `note` | str | conditional req | บันทึกชื่อเมนูเมื่อรับจากครัว (`reason='receive'`), บันทึก `distribution_return` เมื่อรับของเหลือจากตั๋วแจก (CR-121) |
 | `lot_no` | str | conditional req | `L-YYMMDD-XXX` — `YYMMDD` = วันที่รับจริง, `XXX` = ลำดับ 3 หลัก **ต่อวันต่อศูนย์**; บังคับมีค่าเมื่อรับผลผลิตครัว (CR-121) · **label สำหรับคนอ่านเท่านั้น** ไม่มี business rule ใดผูกกับค่านี้ ⇒ การชนกันในเคสรับพร้อมกันให้ป้ายซ้ำ ไม่ทำให้ยอดผิด (CR-088 ยอมรับความเสี่ยงนี้ แลกกับการไม่ต้องมี counter doc) · **server ออกให้เท่านั้น** (`lib/server/lot-number.ts`) — schema ฝั่งรับ input จาก client strip ค่านี้ทิ้ง |
 | `storage_zone` | str | opt | โซนที่เก็บของจริง — free text ≤100 ตัวอักษร, ยังไม่มี master data โซน |
+| `produced_at` | ts | opt | วัน/เวลาผลิต — ใช้โชว์นาฬิกา "จากผลิต"; ตอนรับเข้าถ้าไม่ส่ง → default = `occurred_at` (draft-lot-produced-at); แถวเก่าไม่มี field = ไม่โชว์นาฬิกานั้น |
 
 **Index:** `(item_id, occurred_at)` · `(reason)` · `stock_balance` = **client** Decimal sum ของ `qty` ต่อ item (อย่าพึ่ง CouchDB `_sum` ของ float/string)
 
@@ -337,6 +339,7 @@ projection — เป็นข้อมูลหลังบ้านล้ว�
 **Migration (schema_v 1 → 2):** pre-prod — wipe/re-seed; ไม่มี dual-read บังคับ
 **Migration (schema_v 2 → 3):** additive — เพิ่ม enum value อย่างเดียว ไม่เปลี่ยนโครงสร้าง field; doc `schema_v: 2` เดิมอ่าน/ใช้ได้ปกติ ไม่ต้อง backfill
 **Migration (CR-055/CR-121 — ไม่ bump `schema_v`, คง 4):** ไม่เปลี่ยนรูป doc → ไม่มี backfill; เปลี่ยนค่าที่ยอมรับตอนเขียนตามตาราง `reason` → `ref_id` ด้านบน โดย `receive` รองรับผลผลิตครัวและการรับคืนจาก ticket/log ใหม่. แถวเก่าที่ละเมิดยัง**อ่านได้ปกติ** (`stockBalance` / `calculateReserved` / `LedgerTable` ต้องไม่ throw — CR-055 R5) และแก้ย้อนหลังไม่ได้เพราะ append-only → ถ้าต้องแก้ยอดให้ใช้ correction entry `reason:'adjust'` ตามกติกา T-11. `distribution_return` ยังคงรองรับ batch รุ่นเดิมเพื่อ backward compatibility.
+**Migration (schema_v 4 → 5, draft-lot-produced-at):** additive `lot.produced_at` — แถว `schema_v` ≤4 อ่านได้ปกติโดยไม่มี field; ไม่ backfill; writer ใหม่ stamp `schema_v: 5` และ default `produced_at = occurred_at` ตอนรับเข้าถ้าไม่ระบุ
 
 ### 2.2 `stock_transfer` — [MIGRATED TO central_ops]
 
@@ -1312,7 +1315,7 @@ backward compatibility ของ CR-059/110; flow ใหม่ใช้ §2.29�
 | `owned_house` | บ้านตนเอง | Owned house |
 | `rented_house` | บ้านเช่า | Rented house |
 | `condo` | คอนโดมิเนียม | Condominium |
-| `apartment_dorm` | อพาร์ตเมนต์/หอพัก | Apartment / dormitory |
+| `apartment_dorm` | อะพาร์ตเมนต์/หอพัก | Apartment / dormitory |
 | `homeless` | ไร้ที่อยู่อาศัย / ไม่มีบ้านเลขที่ | Homeless / no house number |
 
 **Item shape:**

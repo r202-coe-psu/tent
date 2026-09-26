@@ -28,7 +28,7 @@ export const DEFAULT_HOUSING_TYPE_ITEMS_TH: HousingTypeSelectItem[] = [
 	{ value: 'owned_house', label: 'บ้านตนเอง' },
 	{ value: 'rented_house', label: 'บ้านเช่า' },
 	{ value: 'condo', label: 'คอนโดมิเนียม' },
-	{ value: 'apartment_dorm', label: 'อพาร์ตเมนต์/หอพัก' },
+	{ value: 'apartment_dorm', label: 'อะพาร์ตเมนต์/หอพัก' },
 	{ value: 'homeless', label: 'ไร้ที่อยู่อาศัยเป็นหลักแหล่ง' }
 ];
 
