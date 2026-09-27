@@ -39,6 +39,9 @@ export function startDistributionLiveQuery(queryClient: QueryClient): SubscribeD
 				[...distributionKeys.shelter(shelterCode), 'bulk_claim']
 			];
 		}
+		if (type === 'loan_return_reservation') {
+			return [distributionKeys.returnOperationStates(shelterCode)];
+		}
 		return [];
 	});
 }

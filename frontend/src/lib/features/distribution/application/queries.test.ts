@@ -311,10 +311,19 @@ describe('Phase 5 Slice 5.0 — Distribution TanStack Query Layer', () => {
 			]);
 		});
 
-		it('generates the pre-existing return-operation-state key shape (not nested under shelter)', () => {
-			expect(distributionKeys.returnOperationState('SH001', 'log_01')).toEqual([
-				'return-operation-state',
+		it('generates the return-operation-state prefix nested under the shelter hierarchy', () => {
+			expect(distributionKeys.returnOperationStates('SH001')).toEqual([
+				'distribution',
 				'SH001',
+				'return_operation_state'
+			]);
+		});
+
+		it('generates the return-operation-state leaf key nested under its own prefix', () => {
+			expect(distributionKeys.returnOperationState('SH001', 'log_01')).toEqual([
+				'distribution',
+				'SH001',
+				'return_operation_state',
 				'log_01'
 			]);
 		});
@@ -707,7 +716,7 @@ describe('Phase 5 Slice 5.0 — Distribution TanStack Query Layer', () => {
 				queryKey: operationsKeys.stockLedgers()
 			});
 			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: ['return-operation-state', 'SH001', 'log_loan']
+				queryKey: distributionKeys.returnOperationState('SH001', 'log_loan')
 			});
 		});
 
@@ -726,7 +735,7 @@ describe('Phase 5 Slice 5.0 — Distribution TanStack Query Layer', () => {
 				queryKey: distributionKeys.log('SH001', 'log_lost')
 			});
 			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: ['return-operation-state', 'SH001', 'log_lost']
+				queryKey: distributionKeys.returnOperationState('SH001', 'log_lost')
 			});
 		});
 
@@ -871,6 +880,10 @@ describe('Phase 5 Slice 5.0 — Distribution TanStack Query Layer', () => {
 			expect(keysForType('bulk_return_claim')).toEqual([
 				['distribution', 'SH001', 'bulk_claims'],
 				['distribution', 'SH001', 'bulk_claim']
+			]);
+
+			expect(keysForType('loan_return_reservation')).toEqual([
+				['distribution', 'SH001', 'return_operation_state']
 			]);
 
 			expect(keysForType('unrelated_doc')).toEqual([]);

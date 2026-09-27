@@ -31,6 +31,8 @@ export const distributionKeys = {
 	shiftReconciliation: (shelterCode: string, ticketId: string) =>
 		[...distributionKeys.shelter(shelterCode), 'shift_reconciliation', ticketId] as const,
 
+	returnOperationStates: (shelterCode: string) =>
+		[...distributionKeys.shelter(shelterCode), 'return_operation_state'] as const,
 	returnOperationState: (shelterCode: string, logId: string) =>
-		['return-operation-state', shelterCode, logId] as const
+		[...distributionKeys.returnOperationStates(shelterCode), logId] as const
 };

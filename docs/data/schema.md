@@ -1194,6 +1194,61 @@ ledger ซ้ำ. การ void ทำได้เฉพาะ issuance ที�
    - CouchDB `validate_doc_update` (VDU) ทำหน้าที่ตรวจสอบความสมบูรณ์เชิงโครงสร้างของเอกสารเดี่ยว (Single-document Invariants) ความถูกต้องของ Schema ชนิดข้อมูล ความเป็น Immutable ของฟิลด์ถาวร และ State Transition ภายในเอกสาร
    - Application Layer (`return-workflow.ts`) ทำหน้าที่ตรวจสอบ Invariant ข้ามเอกสาร (Cross-document Invariants) เช่น การตรวจสอบว่า `claimId` ปรากฏใน `pool.claim_ids` หรือไม่ และความสอดคล้องกับ `distribution_log` เนื่องจาก CouchDB VDU ไม่สามารถ Query ข้อมูลจากเอกสารอื่นได้
 
+### 2.33 `loan_return_reservation` — `loan_return_reservation:{distributionLogUlid}` · **schema_v 1** (CR-134 R4)
+
+Shared Reservation Coordinator ที่รวมทั้ง 3 ช่องทางการปลดภาระของยืม (`PHYSICAL` ที่ด่าน Counter, `BULK` ที่ด่าน Gate ผ่าน `bulk_return_pool`/`bulk_return_claim`, และ `NON_PHYSICAL` สำหรับ lost/waived) ให้อยู่ภายใต้เอกสารประสานงานตัวกลางเดียวกันต่อ 1 `distribution_log` เพื่อปิดช่องว่าง Cross-Flow Race Condition (Inter-Flow Concurrency) ที่ `bulk_return_claim` (§2.32) เพียงลำพังไม่ครอบคลุม (เพราะ §2.32 coordinate เฉพาะช่องทาง BULK). ใช้ CAS Fencing (`RESERVED → FENCED → COMMITTED`) ป้องกัน Stale-Owner เขียนผลกระทบที่ไม่สามารถย้อนกลับได้ (irreversible side effect) ซ้อนกันข้ามช่องทาง.
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `_id` | str | req | `loan_return_reservation:{distributionLogUlid}` — deterministic, derive จาก `distribution_log_id` เท่านั้น (1 ฉบับ/1 `distribution_log`) |
+| `type` | str | req | `'loan_return_reservation'` |
+| `schema_v` | int | req | `1` |
+| `shelter_code` | str | req | ตรงกับ DB `shelter_{shelter_code}` |
+| `distribution_log_id` | str | req | อ้าง `distribution_log:{ulid}` (§2.30); suffix ต้องตรงกับ `_id` ของเอกสารนี้ |
+| `mode` | enum(`PHYSICAL`,`BULK`,`NON_PHYSICAL`) | req | ช่องทางปลดภาระที่จองสิทธิ์ไว้ — attempt-scoped immutable |
+| `status` | enum(`RESERVED`,`FENCED`,`COMMITTED`,`ABORTED`) | req | ดู State Machine ด้านล่าง |
+| `operation_id` | str (ULID) | req | ULID รอบคำสั่งของผู้เรียก (attempt-scoped immutable) |
+| `operation_by` | str | req | username ผู้ถือสิทธิ์ปัจจุบัน (attempt-scoped immutable ระหว่าง attempt เดียวกัน; เปลี่ยนได้เฉพาะตอน reinitialize และต้องตรงกับ actor ปัจจุบัน) |
+| `qty_returned` | qty_str≥0 (whole) | req เมื่อ `mode=PHYSICAL` | ยอดคืนสะสมเป้าหมาย (cumulative target) สำหรับตรวจสอบกับ `distribution_log` ตอน replay |
+| `return_condition` | enum(`READY`,`MAINTENANCE`,`BROKEN`) | req เมื่อ `mode=PHYSICAL` | canonical enum เดียวกับ `distribution_log` (§2.30) |
+| `bulk_pool_id` | str | req เมื่อ `mode=BULK` | อ้าง `bulk_return_pool:{ulid}` (§2.31) |
+| `claimed_qty` | qty_str>0 (whole) | req เมื่อ `mode=BULK` | ยอดที่ตัดโควตาจากพูล — attempt-scoped immutable |
+| `clear_reason` | enum(`lost`,`waived`) | req เมื่อ `mode=NON_PHYSICAL` | เหตุผลการเคลียร์แบบไม่มีของจริงคืน |
+| `notes` | str | opt | หมายเหตุหน้างาน |
+| `created_at` / `created_by` | ts / str | req | เวลาและผู้สร้างเอกสารครั้งแรก — permanently immutable |
+| `updated_at` | ts | req | เวลาที่เปลี่ยนสถานะ/ฟิลด์ล่าสุด |
+
+#### ฟิลด์และความเปลี่ยนแปลง (Field Mutability Classification)
+1. **Permanently Immutable (ห้ามเปลี่ยนแปลงตลอดชีพเอกสาร แม้ตอน reinitialize):**
+   `_id`, `type`, `schema_v`, `shelter_code`, `distribution_log_id`, `created_at`, `created_by`
+2. **Attempt-Scoped Immutable (ล็อกระหว่าง attempt เดียวกัน; อนุญาตให้เปลี่ยนได้เฉพาะตอน reinitialize):**
+   `operation_id`, `mode`, `operation_by`, `qty_returned`, `return_condition`, `bulk_pool_id`, `claimed_qty`, `clear_reason`
+3. **Mutable Lifecycle Fields:** `status`, `updated_at`, `notes`
+
+#### วงจรสถานะ (State Machine)
+```
+RESERVED  → FENCED    (ก่อนเขียนผลกระทบที่ irreversible: stock_ledger receive / ตัดโควตา pool / distribution_log.recordClear)
+FENCED    → COMMITTED (หลังผลกระทบ irreversible เขียนสำเร็จ)
+RESERVED  → ABORTED   (ยกเลิกก่อนเกิดผลกระทบ — อนุญาตเฉพาะเจ้าของสิทธิ์เดิม (`operation_by`/`created_by`) หรือ `shelter_manager`/`system_admin`)
+ABORTED   → RESERVED  (reinitialize รอบคำสั่งใหม่ผ่าน CAS; `operation_by` ต้องตรงกับ actor ปัจจุบันตอน reinitialize)
+COMMITTED → RESERVED  (reinitialize รอบใหม่บน distribution_log เดิม เช่น ยืมซ้ำ/คืนบางส่วนรอบถัดไป; เงื่อนไข operation_by เดียวกับข้างต้น)
+```
+**ข้อห้ามเด็ดขาด:** `FENCED → ABORTED` ถูกปฏิเสธทั้งระดับ Application และ VDU เด็ดขาด — เมื่อเข้าสู่ `FENCED` แล้วต้องเดินหน้า Forward Recovery ไปสู่ `COMMITTED` เท่านั้น ห้าม abort ไม่ว่า role ใด
+
+#### Mode-Specific RBAC (VDU Rule 16, บังคับทุก transition: CREATE/REINITIALIZE/FENCE/COMMIT/ABORT)
+| Mode | อนุญาต | ปฏิเสธ |
+| --- | --- | --- |
+| `PHYSICAL` | `warehouse_staff`, `supply_coordinator`, `shelter_manager`, `system_admin` | `registration_staff` |
+| `BULK` | `registration_staff`, `supply_coordinator`, `shelter_manager`, `system_admin` | `warehouse_staff` |
+| `NON_PHYSICAL` | `registration_staff`, `supply_coordinator`, `shelter_manager`, `system_admin` | `warehouse_staff` |
+
+#### ความเป็นเอกลักษณ์ / Idempotency / การลบ
+- 1 `distribution_log` มีเอกสารจองสิทธิ์ได้ไม่เกิน 1 ฉบับเสมอ (`_id` derive จาก `distribution_log_id` โดยตรง, บังคับด้วย VDU)
+- ห้ามลบเอกสารนี้เด็ดขาด (`newDoc._deleted` ถูก VDU reject เสมอ ไม่ว่า role ใด)
+- ไม่มี Lease หมดอายุอิงเวลาเครื่อง (ไม่มี Trusted Server Clock Authority) — ใช้ CAS Fencing + Pre-Effect Role-Based Abort แทน Lease Semantics
+
+> ใช้ envelope มาตรฐาน `BaseDoc`. อ่าน/เขียนผ่าน `_id` โดยตรง (deterministic) — ไม่ต้องใช้ Mango index.
+
 ### Stock source of truth
 
 `stock_ledger` (§2.1) ยังคงเป็น physical stock source of truth แบบ append-only. สำหรับ flow ใหม่
@@ -1207,7 +1262,7 @@ ledger ซ้ำ. การ void ทำได้เฉพาะ issuance ที�
 เป็นเอกสารประสานงานความคงทนและฟื้นฟูหลังขัดข้อง (Crash Recovery) โดยไม่สร้างแถว `stock_ledger` ซ้ำซ้อน.
 Allocation, reservation, batch reconciliation และ coordination docs เป็น snapshot/coordination เท่านั้น.
 เอกสาร `distribution_request`–`distribution_issue_gate` ใน §2.21–2.28 ยังคงอ่านได้เพื่อ
-backward compatibility ของ CR-059/110; flow ใหม่ใช้ §2.29–2.32 เป็น canonical.
+backward compatibility ของ CR-059/110; flow ใหม่ใช้ §2.29–2.33 เป็น canonical.
 
 ---
 
@@ -2105,6 +2160,7 @@ CR-059 ไม่เพิ่ม Central→Edge fallback หรือ local write
 14. `stock_ledger` reason=`distribute`/`requisition`/`receive` ที่อ้าง ticket หรือ distribution log เขียนได้เฉพาะ role ตาม workflow (อย่างน้อย `warehouse_staff`, `supply_coordinator`, `shelter_manager` หรือ `system_admin`); local validator ตรวจ invariant ที่อยู่ในเอกสารเท่านั้น
 15. `bulk_return_pool` (schema_v 1 และ 2) อยู่ใน whitelist ของ `shelter_*`; schema_v 2 ต้องมี `claim_ids` เป็น array ของ string (ห้ามมี ID ซ้ำ และไม่อนุญาตให้ downgrade เป็น v1); บังคับ `unclaimed_quota >= 0` และ `claimed_qty + unclaimed_quota == total_received_qty` เสมอ; ปฏิเสธการตัดโควตาเมื่อ `unclaimed_quota <= 0`; transition `ACTIVE` → `CLOSED` หรือ `ACTIVE` → `EXHAUSTED` → `CLOSED`; ปิด pool ได้เฉพาะบทบาท `warehouse_staff`, `supply_coordinator` หรือ `shelter_manager`; การอัปเกรด lazy upgrade จาก v1 สู่ v2 ต้องกระทำพร้อมกับการตัดโควตาและเพิ่ม claim_id แรกในเอกสารเดียวกัน
 16. `bulk_return_claim` (schema_v 1) อยู่ใน whitelist ของ `shelter_*`; เอกสารประสานงาน 1 ฉบับต่อ 1 `distribution_log` (`_id: bulk_return_claim:{distributionLogUlid}`); ฟิลด์ `_id`, `type`, `schema_v`, `shelter_code`, `distribution_log_id`, `item_id`, `created_at`, `created_by` เป็น immutable ถาวร; ฟิลด์ `operation_id`, `bulk_pool_id`, `claimed_qty` เป็น attempt-scoped immutable (ห้ามเปลี่ยนระหว่าง attempt, อนุญาตให้เขียนทับได้เฉพาะในการเปลี่ยนผ่าน `ABORTED` → `CLAIM_INTENT` ผ่าน CAS เท่านั้น); transition อนุญาตเฉพาะ `CLAIM_INTENT` → `POOL_CLAIMED` → `COMPLETE`, `CLAIM_INTENT` → `ABORTED`, และ `ABORTED` → `CLAIM_INTENT` (CAS re-initialization); ห้ามเปลี่ยนเป็น `ABORTED` เมื่อเข้าสู่ `POOL_CLAIMED` หรือ `COMPLETE` แล้ว; การเขียนสร้างหรือเปลี่ยนสถานะกระทำได้โดยบทบาทที่ได้รับอนุญาตหน้างาน (`registration_staff`, `warehouse_staff`, `supply_coordinator`, `shelter_manager`, `system_admin`)
+17. `loan_return_reservation` (schema_v 1) อยู่ใน whitelist ของ `shelter_*`; เอกสารประสานงาน 1 ฉบับต่อ 1 `distribution_log` (`_id: loan_return_reservation:{distributionLogUlid}`); ฟิลด์ `_id`, `type`, `schema_v`, `shelter_code`, `distribution_log_id`, `created_at`, `created_by` เป็น immutable ถาวร; ฟิลด์ `operation_id`, `mode`, `operation_by`, `qty_returned`, `return_condition`, `bulk_pool_id`, `claimed_qty`, `clear_reason` เป็น attempt-scoped immutable (เปลี่ยนได้เฉพาะตอน reinitialize `ABORTED`/`COMMITTED` → `RESERVED`); transition อนุญาตเฉพาะ `RESERVED` → `FENCED` → `COMMITTED`, `RESERVED` → `ABORTED`, `ABORTED` → `RESERVED`, และ `COMMITTED` → `RESERVED`; **`FENCED` → `ABORTED` ถูกปฏิเสธเด็ดขาดทุกกรณี**; ห้ามลบเอกสารนี้เด็ดขาด; Mode-specific RBAC บังคับทุก transition ตามตารางใน §2.33; abort จากสถานะ `RESERVED` อนุญาตเฉพาะเจ้าของสิทธิ์เดิม (`operation_by`/`created_by`) หรือ `shelter_manager`/`system_admin`
 
 ---
 
