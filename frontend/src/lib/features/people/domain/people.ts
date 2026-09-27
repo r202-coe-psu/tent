@@ -112,6 +112,7 @@ export type Religion = z.infer<typeof religionSchema>;
 
 export const stayStatusSchema = z.enum([
 	'pre_registered',
+	'kiosk_registered',
 	'arriving',
 	'active',
 	'room_confirmed',
@@ -125,6 +126,7 @@ export type StayStatus = z.infer<typeof stayStatusSchema>;
 
 export const STATUS_LABELS: Record<StayStatus, string> = {
 	pre_registered: 'ลงทะเบียนล่วงหน้า',
+	kiosk_registered: 'ลงทะเบียนที่ตู้ (รอยืนยัน)',
 	arriving: 'รอเข้าพัก',
 	active: 'เข้าพักแล้ว',
 	room_confirmed: 'ยืนยันถึงโซนแล้ว',
@@ -240,6 +242,7 @@ export const cardSnapshotSchema = z.object({
 	postal_code: z.string().optional(),
 	photo_base64: z.string().optional(),
 	scanned_at: z.string(),
+	consented_at: z.string().optional(),
 	device_id: z.string(),
 	station_name: z.string().optional(),
 	expires_at: z.string().optional()
@@ -463,7 +466,12 @@ export function deriveHouseholdStatus(memberStayStatuses: readonly StayStatus[])
 	const present = new Set<StayStatus>(['active', 'room_confirmed', 'temporary_leave']);
 	if (memberStayStatuses.some((status) => present.has(status))) return 'checked_in';
 	if (memberStayStatuses.some((status) => status === 'arriving')) return 'arriving';
-	if (memberStayStatuses.some((status) => status === 'pre_registered')) return 'pre_registered';
+	if (
+		memberStayStatuses.some(
+			(status) => status === 'pre_registered' || status === 'kiosk_registered'
+		)
+	)
+		return 'pre_registered';
 	if (
 		memberStayStatuses.some(
 			(status) => status === 'checked_out' || status === 'transferred' || status === 'deceased'
@@ -1199,7 +1207,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext, id?: stri
 	const person_id = resolvePersonIdOnCreate(d.person_id);
 	return makeDoc(
 		'evacuee',
-		10, // schema_v 10: anonymous cardType + ANON mint (CR-112); 9: arriving (CR-106); 8: draft/card_snapshot (CR-084); 7 = registered_via `web` (CR-070); 6 = stay cancelled (CR-070); 5 = age (CR-057)
+		11, // schema_v 11: kiosk walk-in registration; 10: anonymous cardType + ANON mint (CR-112); 9: arriving (CR-106); 8: draft/card_snapshot (CR-084); 7 = registered_via `web` (CR-070); 6 = stay cancelled (CR-070); 5 = age (CR-057)
 		{
 			first_name: d.first_name,
 			last_name: d.last_name,
@@ -1229,6 +1237,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext, id?: stri
 export function createKioskEvacueeFromCard(
 	cardSnapshot: CardSnapshot,
 	ctx: AuthorContext,
+	photoId?: string,
 	id?: string
 ): Evacuee {
 	const firstName = cardSnapshot.first_name_th || 'ไม่ระบุชื่อ';
@@ -1241,10 +1250,12 @@ export function createKioskEvacueeFromCard(
 			: birthYearBE !== undefined
 				? Math.max(0, currentBEYear() - birthYearBE)
 				: undefined;
+	const persistedCardSnapshot = { ...cardSnapshot };
+	delete persistedCardSnapshot.photo_base64;
 
 	return makeDoc(
 		'evacuee',
-		8,
+		11,
 		{
 			first_name: firstName,
 			last_name: lastName,
@@ -1260,9 +1271,9 @@ export function createKioskEvacueeFromCard(
 			vulnerable_groups: [],
 			special_needs: [],
 			household_id: null,
-			card_snapshot: cardSnapshot,
-			photo: cardSnapshot.photo_base64 ?? null,
-			current_stay: { status: 'pre_registered', zone: null, since: now() },
+			card_snapshot: persistedCardSnapshot,
+			photo: photoId ?? null,
+			current_stay: { status: 'kiosk_registered', zone: null, since: now() },
 			privacy: { search_excluded: false },
 			registered_via: 'kiosk'
 		},
@@ -1571,7 +1582,10 @@ export function assertMovementAllowed(
 
 /** True when an evacuee stay may be cancelled via the hold-cancel path (D-HOLD-CANCEL). */
 export function canCancelEvacueePreRegistration(evacuee: Evacuee): boolean {
-	return evacuee.current_stay.status === 'pre_registered';
+	return (
+		evacuee.current_stay.status === 'pre_registered' ||
+		evacuee.current_stay.status === 'kiosk_registered'
+	);
 }
 
 /** True when a household may be cancelled via the hold-cancel path (D-HOLD-CANCEL). */

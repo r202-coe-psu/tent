@@ -788,7 +788,10 @@
 
 			if (mode === 'report-in') {
 				if (!initialEvacuee) throw new Error('ไม่พบข้อมูลผู้ประสบภัยสำหรับรายงานตัว');
-				if (initialEvacuee.current_stay.status !== 'pre_registered') {
+				if (
+					initialEvacuee.current_stay.status !== 'pre_registered' &&
+					initialEvacuee.current_stay.status !== 'kiosk_registered'
+				) {
 					throw new Error('รายงานตัวได้เฉพาะผู้ที่ลงทะเบียนล่วงหน้า (pre_registered)');
 				}
 
@@ -803,7 +806,9 @@
 				} as Evacuee);
 
 				registeredEvacuee = await persistHouseholdLink(updatedFields, pets, assets, vehicles);
-				registeredEvacuee = await promoteMutation.mutateAsync(registeredEvacuee._id);
+				registeredEvacuee = await promoteMutation.mutateAsync({
+					evacueeId: registeredEvacuee._id
+				});
 				toast.success('รายงานตัวสำเร็จ — สถานะเป็น arriving');
 				await finishCeremony(registeredEvacuee);
 				return;

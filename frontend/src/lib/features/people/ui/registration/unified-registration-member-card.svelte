@@ -97,11 +97,18 @@
 
 	const isReportIn = $derived(mode === 'report-in');
 	const isAlreadyReported = $derived(
-		isReportIn && !!member.stay_status && member.stay_status !== 'pre_registered'
+		isReportIn &&
+			!!member.stay_status &&
+			member.stay_status !== 'pre_registered' &&
+			member.stay_status !== 'kiosk_registered'
 	);
 	const isNewReportInMember = $derived(isReportIn && !member._id);
 	const isToggleableReportIn = $derived(
-		isReportIn && !!member._id && (!member.stay_status || member.stay_status === 'pre_registered')
+		isReportIn &&
+			!!member._id &&
+			(!member.stay_status ||
+				member.stay_status === 'pre_registered' ||
+				member.stay_status === 'kiosk_registered')
 	);
 	const isReportingInSelected = $derived(member.reporting_in ?? true);
 	/** Lock fields when parent says so, or when this member already reported in. */

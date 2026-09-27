@@ -38,7 +38,10 @@
 	const preRegisteredList = $derived.by(() => {
 		const excluded = new Set(excludeIds.filter(Boolean));
 		return allEvacuees.filter(
-			(e) => e.current_stay?.status === 'pre_registered' && !excluded.has(e._id)
+			(e) =>
+				(e.current_stay?.status === 'pre_registered' ||
+					e.current_stay?.status === 'kiosk_registered') &&
+				!excluded.has(e._id)
 		);
 	});
 

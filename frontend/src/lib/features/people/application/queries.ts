@@ -144,7 +144,8 @@ export const useCreateEvacuee = () => {
 export const usePromoteReportIn = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: (evacueeId: string) => peopleRepository().promoteReportIn(evacueeId),
+		mutationFn: ({ evacueeId }: { evacueeId: string }) =>
+			peopleRepository().promoteReportIn(evacueeId),
 		onSuccess: (evacuee) => {
 			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
 			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuee(evacuee._id) });

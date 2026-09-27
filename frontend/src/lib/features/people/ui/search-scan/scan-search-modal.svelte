@@ -14,6 +14,7 @@
 
 	const STATUS_SHORT: Record<StayStatus, string> = {
 		pre_registered: 'รอเช็คอิน',
+		kiosk_registered: 'ที่ตู้',
 		arriving: 'รอจัดโซน',
 		active: 'เช็คอิน',
 		room_confirmed: 'ยืนยันถึงโซน',

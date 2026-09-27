@@ -1085,7 +1085,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 				target_id: evacueeId,
 				reason: 'ยกเลิกการลงทะเบียนล่วงหน้า',
 				context: {
-					previous_status: 'pre_registered',
+					previous_status: evacuee.current_stay.status,
 					next_status: 'cancelled',
 					household_id: evacuee.household_id
 				}
@@ -1101,7 +1101,9 @@ export class PeopleRemoteRepository implements PeopleRepository {
 
 		const members = await this.listHouseholdMembers(household._id);
 		const stillPreRegistered = members.some(
-			(m) => m._id !== evacueeId && m.current_stay.status === 'pre_registered'
+			(m) =>
+				m._id !== evacueeId &&
+				(m.current_stay.status === 'pre_registered' || m.current_stay.status === 'kiosk_registered')
 		);
 		if (stillPreRegistered) return;
 
@@ -1139,7 +1141,10 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		if (!latest || !isEvacuee(latest)) {
 			throw new Error('ไม่พบข้อมูลผู้ประสบภัย');
 		}
-		if (latest.current_stay.status !== 'pre_registered') {
+		if (
+			latest.current_stay.status !== 'pre_registered' &&
+			latest.current_stay.status !== 'kiosk_registered'
+		) {
 			throw new Error('รายงานตัวได้เฉพาะผู้ที่ลงทะเบียนล่วงหน้า (pre_registered)');
 		}
 		const saved = await this.repo.put(
@@ -1268,7 +1273,11 @@ export class PeopleRemoteRepository implements PeopleRepository {
 				}
 
 				let updatedStay = existingEvacuee.current_stay;
-				if (willReportIn && existingEvacuee.current_stay.status === 'pre_registered') {
+				if (
+					willReportIn &&
+					(existingEvacuee.current_stay.status === 'pre_registered' ||
+						existingEvacuee.current_stay.status === 'kiosk_registered')
+				) {
 					updatedStay = {
 						status: 'arriving' as const,
 						zone: null,

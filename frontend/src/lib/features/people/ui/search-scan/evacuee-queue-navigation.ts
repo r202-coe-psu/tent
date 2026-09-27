@@ -23,7 +23,10 @@ export function goToEvacueeProfile(evacuee: Evacuee, from?: string): void {
  * the profile instead, because report-in rejects non-`pre_registered` docs.
  */
 export function openEvacueeRow(evacuee: Evacuee, from?: string): void {
-	if (evacuee.current_stay?.status === 'pre_registered') {
+	if (
+		evacuee.current_stay?.status === 'pre_registered' ||
+		evacuee.current_stay?.status === 'kiosk_registered'
+	) {
 		goToEvacueeReportIn(evacuee);
 		return;
 	}

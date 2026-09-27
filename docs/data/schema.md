@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-09-25
+updated: 2026-09-27
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; CR-134 bulk_return_claim (schema_v 1) and bulk_return_pool (schema_v 2)
 ---
 
@@ -40,9 +40,10 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 
 ### 1.1 `evacuee` — `evacuee:{ulid}`
 
+> **schema_v 11 (proposed; draft CR `draft-kiosk-walk-in-registration`)** — เพิ่ม `kiosk_registered` ใน `current_stay.status` สำหรับผู้ลงทะเบียน walk-in ผ่าน Smart Card Kiosk ที่รอ Station 1 ยืนยัน; เพิ่ม `card_snapshot.consented_at` เพื่อบันทึกเวลายินยอมก่อนอ่านข้อมูลชิปเต็ม
 > **schema_v 10** — `person_id.cardType` เพิ่ม `anonymous` (+ ระบบออก `ANON-{ulid}`); เพิ่ม `vulnerable_groups[]`; stay เพิ่ม `room_confirmed` (CR-112).
 > **schema_v 9** — เพิ่มสถานะ `arriving` ใน `current_stay.status` (CR-106) — ผู้ประสบภัยที่รายงานตัวหน้างานแล้ว อยู่ระหว่างรอตรวจคัดกรองการแพทย์ หรือรอจัดสรรที่พัก (ไม่นับเตียงที่ถูกใช้จริงใน occupancy dashboard จนกว่าจะ check-in เป็น `active`).
-> **schema_v 8** — เพิ่ม `card_snapshot` (CR-084) — สำหรับการสแกนบัตรประชาชน Smart Card Kiosk รอเจ้าหน้าที่คัดกรองและยืนยันตัวตน; Walk-in จาก Kiosk กำหนดสถานะเป็น `pre_registered` และ `registered_via: 'kiosk'`.
+> **schema_v 8** — เพิ่ม `card_snapshot` (CR-084) — สำหรับการสแกนบัตรประชาชน Smart Card Kiosk รอเจ้าหน้าที่คัดกรองและยืนยันตัวตน; ตาม flow รุ่นนั้น Walk-in จาก Kiosk กำหนดสถานะเป็น `pre_registered` และ `registered_via: 'kiosk'`.
 > **schema_v 7** — เพิ่ม `web` ใน `registered_via` (CR-070 D-REG-VIA) — ประชาชนจองเข้าศูนย์เอง
 > ผ่าน public portal (T-71). `api` (inbound, CR-071) ยังไม่เพิ่มในรอบนี้.
 > **schema_v 6** — เพิ่ม `cancelled` ใน `current_stay.status` (CR-070 D-HOLD-CANCEL) — ยกเลิก
@@ -71,10 +72,10 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 | `vulnerable_groups` | [str] | opt | codes จาก master `vulnerable_group` (multi-select); default `[]` — **แยก** จาก `special_needs` (CR-112) |
 | `special_needs` | [str] | opt | free-form, nonempty หลัง trim; default `[]` (CR-046 — เดิม fixed enum; ไม่ผูก whitelist ในโค้ด; **ไม่** ปน taxonomy กลุ่มเปราะบาง) |
 | `emergency_contact` | {`name`:str, `phone`:str, `relation`:str} | opt | — |
-| `household_id` | str\|null | opt | → `household:{ulid}` (null ได้สำหรับ `pre_registered` ก่อนจัดเข้าครัวเรือน) |
+| `household_id` | str\|null | opt | → `household:{ulid}` (null ได้สำหรับ `pre_registered` หรือ `kiosk_registered` ก่อนจัดเข้าครัวเรือน) |
 | `photo` | str\|null | opt | → image:{ulid} (§1.6) (CR-049) null/ไม่มี field = ไม่มีรูป |
-| `card_snapshot` | {...} | opt | snapshot ข้อมูลชิปบัตรและที่อยู่ตามบัตรประชาชน (CR-084) |
-| `current_stay` | {`status`, `zone`, `since`} | req | `status`: enum(`pre_registered`,`arriving`,`active`,`room_confirmed`,`temporary_leave`,`transferred`,`checked_out`,`deceased`,`cancelled`) · `zone`: str\|null · `since`: ts — snapshot เท่านั้น ความจริง = movement · `room_confirmed` = Zone Arrival Confirmation หลัง `active` (CR-112) |
+| `card_snapshot` | {...} | opt | snapshot ข้อมูลชิปบัตรและที่อยู่ตามบัตรประชาชน (CR-084); `consented_at`: ts — เวลาที่ผู้ใช้ยินยอมก่อนอ่านชิปเต็ม (schema_v 11, proposed draft CR `draft-kiosk-walk-in-registration`) |
+| `current_stay` | {`status`, `zone`, `since`} | req | `status`: enum(`pre_registered`,`kiosk_registered`,`arriving`,`active`,`room_confirmed`,`temporary_leave`,`transferred`,`checked_out`,`deceased`,`cancelled`) · `kiosk_registered` = kiosk อ่านชิปเต็มและบันทึกแล้ว รอยืนยันตัวตน/ข้อมูลและรับรายงานตัวที่ Station 1; `zone`: str\|null · `since`: ts — snapshot เท่านั้น ความจริง = movement · `room_confirmed` = Zone Arrival Confirmation หลัง `active` (CR-112) |
 | `privacy` | {`search_excluded`:bool} | req | default `{search_excluded:false}` (opt-out model) |
 | `registered_via` | enum(`kiosk`,`staff`,`backoffice`,`app`,`web`,`import`,`paper`) | req | `kiosk` = Smart Card Kiosk, `staff` = Onsite desk walk-in, `web` = public portal (CR-070), `backoffice` = Admin desk |
 | `anonymized` | bool | sys | default ไม่มี field; purge job ตั้ง `true` พร้อมล้าง PII (§retention data-model §7) |
@@ -83,12 +84,12 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 
 | Metric | Stay set |
 | --- | --- |
-| **Forecast** (คีย์ public `occupancy` / booking gate) | `pre_registered`, `arriving`, `active`, `room_confirmed`, `temporary_leave` |
+| **Forecast** (คีย์ public `occupancy` / booking gate) | `pre_registered`, `kiosk_registered`, `arriving`, `active`, `room_confirmed`, `temporary_leave` |
 | **Present** | `active`, `room_confirmed`, `temporary_leave` |
 | **In-zone** | `room_confirmed` เท่านั้น |
 | Kitchen / SOP / `daily_calc.occupancy_snapshot` | `active` only (ไม่เปลี่ยน) |
 
-ไม่นับ: `transferred`, `checked_out`, `deceased`, `cancelled`
+ไม่นับ: `transferred`, `checked_out`, `deceased`, `cancelled` · `kiosk_registered` ไม่อยู่ใน Present, In-zone หรือ Kitchen/SOP
 
 **Index (kiosk lookup):** `(type, phone)` (`evacuee-type-phone-idx`) · `(type, person_id.number)` (`evacuee-type-person-id-idx`) · `(type, household_id)` (`evacuee-type-household-idx`) · ใช้ exact-value query ตาม draft CR Kiosk Report-in FR-KPC-62..65; index ทั้งสามไม่เปลี่ยน doc shape และไม่ bump `schema_v`
 
@@ -118,6 +119,8 @@ implement — ไม่กระทบ migration นี้
 **Migration (schema_v 8 → 9, CR-106):** purely additive enum — เพิ่ม `arriving` ใน `current_stay.status`; doc เดิม schema_v 8 อ่านได้ตามปกติโดยไม่ต้อง backfill, เมื่อเขียนใหม่ stamp schema_v 9
 
 **Migration (schema_v 9 → 10, CR-112):** purely additive — `anonymous` ใน `cardType`, `vulnerable_groups` default `[]` ตอนอ่าน, `room_confirmed` ใน stay; doc เดิมอ่านได้โดยไม่ต้อง backfill; เขียนใหม่ stamp schema_v 10
+
+**Migration (schema_v 10 → 11, proposed draft CR `draft-kiosk-walk-in-registration`):** additive — เพิ่มค่า `kiosk_registered` ใน `current_stay.status` และ `card_snapshot.consented_at`; เอกสารเดิมอ่านได้โดยไม่ต้อง backfill และเมื่อเขียนใหม่ให้ stamp `schema_v: 11`. เอกสาร `shelter.feature_flags` เพิ่ม `kiosk_walk_in_registration_enabled` แบบ additive โดยไม่มีการ bump schema version ของ `shelter`.
 
 
 ### 1.2 `medical` — `medical:{ulid}` (1 doc ต่อ 1 evacuee)
@@ -171,7 +174,7 @@ implement — ไม่กระทบ migration นี้
 1. if no members OR every member `cancelled` → `cancelled`
 2. else if any member Present (`active` \| `room_confirmed` \| `temporary_leave`) → `checked-in`
 3. else if any member `arriving` → `arriving`
-4. else if any member `pre_registered` → `pre-registered`
+4. else if any member `pre_registered` \| `kiosk_registered` → `pre-registered` (`kiosk_registered` remains a distinct evacuee stay status; household status is compatibility-derived)
 5. else if any member in `checked_out` \| `transferred` \| `deceased` → `checked-out`
 6. else → `cancelled`
 
@@ -229,16 +232,16 @@ Doc type ทั่วไป (ไม่ผูกเฉพาะ evacuee) สำ�
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
 | `filename` | str | req | ชื่อไฟล์ต้นฉบับจาก client |
-| `content_type` | str | req | mime type หลัง compress (`image/webp`) |
-| `width` / `height` | int | req | ขนาดพิกเซลหลัง resize (ด้านยาวสุด ≤ 1024px) |
+| `content_type` | str | req | MIME ของ `full` (`image/webp`; Kiosk JPEG fallback ใช้ `image/jpeg`) |
+| `width` / `height` | int | req | ขนาดพิกเซลหลัง resize; JPEG fallback เก็บขนาดต้นฉบับ |
 | `original_size` / `compressed_size` / `thumbnail_size` | int | req | bytes — ก่อน compress / หลัง compress / thumbnail |
 | `caption` | str | opt | default `''` |
 
-**Attachments:** `full` (WEBP ≤1024px, quality 0.82), `thumb` (WEBP square-crop 200px) — เขียนผ่าน
+**Attachments:** `full` (WEBP ≤1024px, quality 0.82), `thumb` (WEBP square-crop 200px; optional สำหรับ JPEG fallback) — เขียนผ่าน
 `PUT /{db}/{docid}/{attname}?rev=...` (HTTP ตรง). **Writers:** (1) staff onsite — browser AuthSession
 ผ่าน `/couch` proxy; (2) public **shelter booking** — BFF `POST /api/public/v1/registrations/photos`
 → roleless `public_writer` (คืน `image:{ulid}` ให้ `evacuee.photo` / `pets[].image_url`);
-(3) Unassigned claim — FastAPI migrates GridFS `gfs:{oid}` → Couch `image:{ulid}` (CR-113 §9.5).
+(3) Unassigned claim — FastAPI migrates GridFS `gfs:{oid}` → Couch `image:{ulid}` (CR-113 §9.5); (4) Smart Card Kiosk walk-in — `POST /api/v1/scanner/kiosk/register` ใช้ `adminFetch` เขียน `_attachments.full` และ `_attachments.thumb` ใน `PUT` เดียว แล้วใส่ `_id` ลง `evacuee.photo` ก่อนเขียน evacuee (draft CR `draft-kiosk-walk-in-registration`, §7).
 ### 1.7 `people_import_log` — `people_import_log:{ulid}` · **schema_v 1** · **append-only** (CR-071)
 
 Log 1 doc ต่อ 1 batch ของการ import ครัวเรือน+สมาชิกจาก Excel/CSV (T-72). envelope กลาง **มี

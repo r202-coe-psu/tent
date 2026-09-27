@@ -56,6 +56,7 @@
 								active: 'อยู่ในศูนย์',
 								room_confirmed: 'ยืนยันถึงโซนแล้ว',
 								pre_registered: 'ลงทะเบียนล่วงหน้า',
+								kiosk_registered: 'ลงทะเบียนที่ตู้ (รอยืนยัน)',
 								arriving: 'รอจัดโซน',
 								temporary_leave: 'ออกชั่วคราว',
 								transferred: 'ย้ายศูนย์',

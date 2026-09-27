@@ -129,7 +129,9 @@
 
 				<div class="space-y-2.5">
 					{#each searchResults as evacuee (evacuee._id)}
-						{@const isPreReg = evacuee.current_stay.status === 'pre_registered'}
+						{@const isPreReg =
+							evacuee.current_stay.status === 'pre_registered' ||
+							evacuee.current_stay.status === 'kiosk_registered'}
 						{@const regVia = evacuee.registered_via}
 
 						{#if isPreReg}

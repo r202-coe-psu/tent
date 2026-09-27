@@ -96,7 +96,10 @@
 
 	// Summary KPI counts
 	const preRegisteredEvacuees = $derived(
-		allEvacuees.filter((e) => e.current_stay?.status === 'pre_registered')
+		allEvacuees.filter(
+			(e) =>
+				e.current_stay?.status === 'pre_registered' || e.current_stay?.status === 'kiosk_registered'
+		)
 	);
 	const arrivingEvacuees = $derived(
 		allEvacuees.filter((e) => e.current_stay?.status === 'arriving')
@@ -400,6 +403,7 @@
 						>
 							<option value="all">ทุกสถานะ</option>
 							<option value="pre_registered">ลงทะเบียนล่วงหน้า</option>
+							<option value="kiosk_registered">ลงทะเบียนที่ตู้ (รอยืนยัน)</option>
 							<option value="arriving">รอเข้าพัก</option>
 							<option value="active">เข้าพักแล้ว</option>
 							<option value="room_confirmed">ยืนยันถึงโซนแล้ว</option>
@@ -675,7 +679,7 @@
 										{specialNeedsShort(row.special_needs)}
 									</Table.Cell>
 									<Table.Cell class="px-3 py-3">
-										<StayStatusBadge status="pre_registered" size="sm" />
+										<StayStatusBadge status={row.current_stay.status} size="sm" />
 									</Table.Cell>
 									<Table.Cell class="py-3 pr-5 text-right">
 										<div class="flex justify-end gap-1.5">

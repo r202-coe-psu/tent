@@ -21,6 +21,7 @@ vi.mock('$lib/db/repository', async (importOriginal) => {
 
 import { PeopleRemoteRepository, peopleRepository } from './people.remote';
 import type { EvacueeInput } from '../domain/people';
+import { createKioskEvacueeFromCard, type CardSnapshot } from '../domain/people';
 
 const ctx = { shelterCode: 'SH001', createdBy: 'tester' };
 
@@ -1379,6 +1380,30 @@ describe('check-in / check-out', () => {
 	});
 
 	describe('promoteReportIn', () => {
+		it('does not migrate a legacy card photo when the evacuee write fails', async () => {
+			const generated = createKioskEvacueeFromCard(
+				{
+					citizen_id: '1234567890123',
+					photo_base64: 'data:image/jpeg;base64,AA=='
+				} as CardSnapshot,
+				ctx
+			);
+			const evacuee = {
+				...generated,
+				card_snapshot: {
+					...generated.card_snapshot!,
+					photo_base64: 'data:image/jpeg;base64,AA=='
+				}
+			};
+			expect(evacuee.photo).toBeNull();
+			await memoryRepo.put(evacuee);
+			vi.spyOn(memoryRepo, 'put').mockRejectedValueOnce(new Error('write conflict'));
+
+			await expect(repo.promoteReportIn(evacuee._id)).rejects.toThrow('write conflict');
+
+			expect((await repo.getEvacuee(evacuee._id))?.photo).toBeNull();
+		});
+
 		it('promotes pre_registered to arriving with zone null and creates no screening', async () => {
 			const evacuee = await repo.createEvacuee(evInput({ first_name: 'Report' }), ctx);
 			expect(evacuee.current_stay.status).toBe('pre_registered');
@@ -1629,6 +1654,75 @@ describe('submitFamilyReportIn', () => {
 	beforeEach(() => {
 		memoryRepo = createInMemoryRepository();
 		repo = new PeopleRemoteRepository('shelter_sh001');
+	});
+
+	it('links the migrated card image during family report-in', async () => {
+		const registration = await repo.createFamilyRegistration(
+			{
+				members: [
+					{
+						first_name: 'สมชาย',
+						last_name: 'ใจดี',
+						gender: 'male',
+						phone: '0812345678',
+						country: 'THAILAND'
+					}
+				],
+				household: {
+					housing_type: 'owned_house',
+					address_no: '1',
+					subdistrict: 'ในเมือง',
+					district: 'เมือง',
+					province: 'เชียงใหม่',
+					pets: [],
+					vehicles: [],
+					assets: null
+				}
+			},
+			ctx,
+			'public'
+		);
+		const original = registration.members[0]!;
+		await repo.updateEvacuee({
+			...original,
+			current_stay: { status: 'kiosk_registered', zone: null, since: new Date().toISOString() },
+			card_snapshot: {
+				citizen_id: '1234567890123',
+				scanned_at: new Date().toISOString(),
+				device_id: 'KIOSK-01',
+				photo_base64: 'data:image/jpeg;base64,AA=='
+			}
+		});
+
+		const result = await repo.submitFamilyReportIn({
+			householdId: registration.household._id,
+			household: {
+				housing_type: 'owned_house',
+				address_no: '1',
+				subdistrict: 'ในเมือง',
+				district: 'เมือง',
+				province: 'เชียงใหม่',
+				pets: [],
+				vehicles: [],
+				assets: null
+			},
+			members: [
+				{
+					_id: original._id,
+					first_name: 'สมชาย',
+					last_name: 'ใจดี',
+					gender: 'male',
+					phone: '0812345678',
+					photo: 'data:image/jpeg;base64,AA==',
+					country: 'THAILAND',
+					reporting_in: true
+				}
+			],
+			ctx
+		});
+
+		expect(result.members[0]?.photo).toBe('data:image/jpeg;base64,AA==');
+		expect(result.members[0]?.card_snapshot?.photo_base64).toBe('data:image/jpeg;base64,AA==');
 	});
 
 	it('updates household, updates member details, and promotes checked members to arriving', async () => {
