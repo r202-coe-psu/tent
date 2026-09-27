@@ -64,9 +64,10 @@ describe('shelterSchema', () => {
 		expect(withScreening.feature_flags?.allow_pets).toBe(false);
 		expect(withScreening.feature_flags?.accepts_pre_registration).toBe(false);
 		expect(withScreening.feature_flags?.kiosk_phone_check_in_enabled).toBe(false);
+		expect(withScreening.feature_flags?.kiosk_walk_in_registration_enabled).toBe(false);
 	});
 
-	it('defaults kiosk phone check-in off for old shelter feature flags and accepts true', () => {
+	it('defaults kiosk flags off for old shelter feature flags and accepts true', () => {
 		const oldFlags = shelterSchema.parse({
 			...validShelterInput,
 			feature_flags: {
@@ -85,6 +86,12 @@ describe('shelterSchema', () => {
 
 		expect(oldFlags.feature_flags?.kiosk_phone_check_in_enabled).toBe(false);
 		expect(enabled.feature_flags?.kiosk_phone_check_in_enabled).toBe(true);
+		expect(enabled.feature_flags?.kiosk_walk_in_registration_enabled).toBe(false);
+		const walkInEnabled = shelterSchema.parse({
+			...validShelterInput,
+			feature_flags: { kiosk_walk_in_registration_enabled: true }
+		});
+		expect(walkInEnabled.feature_flags?.kiosk_walk_in_registration_enabled).toBe(true);
 	});
 
 	it('preserves sibling feature_flags when enable_medical_screening is toggled in a full object', () => {
@@ -97,7 +104,8 @@ describe('shelterSchema', () => {
 				public_donations_enabled: false,
 				enable_medical_screening: true,
 				accepts_pre_registration: true,
-				kiosk_phone_check_in_enabled: false
+				kiosk_phone_check_in_enabled: false,
+				kiosk_walk_in_registration_enabled: false
 			}
 		});
 		expect(parsed.feature_flags).toEqual({
@@ -107,7 +115,8 @@ describe('shelterSchema', () => {
 			public_donations_enabled: false,
 			enable_medical_screening: true,
 			accepts_pre_registration: true,
-			kiosk_phone_check_in_enabled: false
+			kiosk_phone_check_in_enabled: false,
+			kiosk_walk_in_registration_enabled: false
 		});
 	});
 

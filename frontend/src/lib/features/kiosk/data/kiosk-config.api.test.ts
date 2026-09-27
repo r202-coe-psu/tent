@@ -6,10 +6,16 @@ describe('fetchKioskConfig', () => {
 		const fetchFn = vi
 			.fn<typeof fetch>()
 			.mockResolvedValue(
-				new Response(JSON.stringify({ phone_check_in_enabled: true }), { status: 200 })
+				new Response(
+					JSON.stringify({ phone_check_in_enabled: true, walk_in_registration_enabled: true }),
+					{ status: 200 }
+				)
 			);
 
-		await expect(fetchKioskConfig(fetchFn)).resolves.toEqual({ phoneCheckInEnabled: true });
+		await expect(fetchKioskConfig(fetchFn)).resolves.toEqual({
+			phoneCheckInEnabled: true,
+			walkInRegistrationEnabled: true
+		});
 		expect(fetchFn).toHaveBeenCalledWith(
 			'/api/v1/scanner/kiosk/config',
 			expect.objectContaining({
@@ -22,7 +28,13 @@ describe('fetchKioskConfig', () => {
 	});
 
 	it.each([
-		['disabled', new Response(JSON.stringify({ phone_check_in_enabled: false }), { status: 200 })],
+		[
+			'disabled',
+			new Response(
+				JSON.stringify({ phone_check_in_enabled: false, walk_in_registration_enabled: false }),
+				{ status: 200 }
+			)
+		],
 		['missing flag', new Response(JSON.stringify({}), { status: 200 })],
 		['unauthorized', new Response(null, { status: 401 })],
 		['unavailable', new Response(null, { status: 503 })]
@@ -30,7 +42,8 @@ describe('fetchKioskConfig', () => {
 		await expect(
 			fetchKioskConfig(vi.fn<typeof fetch>().mockResolvedValue(response))
 		).resolves.toEqual({
-			phoneCheckInEnabled: false
+			phoneCheckInEnabled: false,
+			walkInRegistrationEnabled: false
 		});
 	});
 
@@ -40,7 +53,13 @@ describe('fetchKioskConfig', () => {
 			.fn<typeof fetch>()
 			.mockRejectedValue(new DOMException('The operation timed out', 'TimeoutError'));
 
-		await expect(fetchKioskConfig(networkError)).resolves.toEqual({ phoneCheckInEnabled: false });
-		await expect(fetchKioskConfig(timeoutError)).resolves.toEqual({ phoneCheckInEnabled: false });
+		await expect(fetchKioskConfig(networkError)).resolves.toEqual({
+			phoneCheckInEnabled: false,
+			walkInRegistrationEnabled: false
+		});
+		await expect(fetchKioskConfig(timeoutError)).resolves.toEqual({
+			phoneCheckInEnabled: false,
+			walkInRegistrationEnabled: false
+		});
 	});
 });

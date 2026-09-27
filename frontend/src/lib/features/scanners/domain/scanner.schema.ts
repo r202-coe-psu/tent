@@ -112,7 +112,10 @@ export type CreatedScannerDevice = ScannerDeviceSummary & {
 // ---------------------------------------------------------------- Smart Card Data Schema
 
 export const smartCardDataSchema = z.object({
-	citizen_id: z.string().trim().length(13, 'เลขบัตรประชาชนต้องมี 13 หลัก'),
+	citizen_id: z
+		.string()
+		.trim()
+		.regex(/^\d{13}$/, 'เลขบัตรประชาชนต้องเป็นตัวเลข 13 หลัก'),
 	title_th: z.string().trim().default(''),
 	first_name_th: z.string().trim().default(''),
 	last_name_th: z.string().trim().default(''),
@@ -134,7 +137,7 @@ export const smartCardDataSchema = z.object({
 	district: z.string().trim().nullable().default(null),
 	province: z.string().trim().nullable().default(null),
 	postal_code: z.string().trim().nullable().optional().default(null),
-	photo_base64: z.string().nullable().default(null),
+	photo_base64: z.string().max(2_000_000).nullable().default(null),
 	issuer: z.string().trim().nullable().default(null),
 	issue_date: z.string().trim().nullable().default(null),
 	expire_date: z.string().trim().nullable().default(null)

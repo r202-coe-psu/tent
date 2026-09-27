@@ -100,6 +100,8 @@ function configureCheckInCouchMocks(options: { conflictOnId?: string } = {}): vo
 			if (typeof selector.shelter_code === 'string') {
 				docs = docs.filter((doc) => doc.shelter_code === selector.shelter_code);
 			}
+			const personNumber = (selector['person_id.number'] as string | undefined) ?? undefined;
+			if (personNumber) docs = docs.filter((doc) => doc.person_id?.number === personNumber);
 			if (typeof selector.household_id === 'string') {
 				docs = docs.filter((doc) => doc.household_id === selector.household_id);
 			}
@@ -501,7 +503,37 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 				source: 'qr',
 				token: person._id
 			})
-		).toEqual({ kind: 'not_found' });
+		).toEqual({ kind: 'not_found', can_register: false });
+	});
+
+	it('marks a new smart-card lookup as eligible for registration', async () => {
+		configureCheckInCouchMocks();
+		expect(
+			await lookupPreRegisteredEvacuee(shelterCode, {
+				source: 'smart-card',
+				citizen_id: '1234567890123'
+			})
+		).toEqual({ kind: 'not_found', can_register: true });
+		const query = mockAdminFetch.mock.calls.map(
+			([, init]) => JSON.parse(String(init?.body)) as { selector: Record<string, unknown> }
+		)[0];
+		expect(query?.selector).toMatchObject({
+			shelter_code: shelterCode,
+			'person_id.number': '1234567890123'
+		});
+	});
+
+	it('returns a repeat-registration outcome for kiosk_registered records', async () => {
+		evacuees = [
+			evacuee(0, { registered_via: 'kiosk', current_stay: { status: 'kiosk_registered' } })
+		];
+		configureCheckInCouchMocks();
+		expect(
+			await lookupPreRegisteredEvacuee(shelterCode, {
+				source: 'smart-card',
+				citizen_id: '1234567890123'
+			})
+		).toEqual({ kind: 'kiosk_registered' });
 	});
 
 	it('keeps ambiguous card lookup as not_found', async () => {
@@ -511,7 +543,7 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 				shelterCode,
 				kioskGateInputSchema.parse({ source: 'smart-card', citizen_id: '1234567890123' })
 			)
-		).toEqual({ kind: 'not_found' });
+		).toEqual({ kind: 'not_found', can_register: false });
 	});
 });
 

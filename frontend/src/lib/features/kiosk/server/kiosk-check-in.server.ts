@@ -81,13 +81,21 @@ export interface KioskHouseholdCandidate {
 export type KioskLookupOutcome =
 	| ({ kind: 'household'; name_masked: boolean } & KioskLookupResult)
 	| { kind: 'candidates'; shelter_code: string; candidates: KioskHouseholdCandidate[] }
-	| { kind: 'not_found' }
+	| { kind: 'kiosk_registered' }
+	| { kind: 'not_found'; can_register?: boolean }
 	| { kind: 'too_many' };
 
 export class KioskInputError extends Error {
 	constructor() {
 		super('Invalid kiosk gate input');
 		this.name = 'KioskInputError';
+	}
+}
+
+export class KioskLookupUnavailableError extends Error {
+	constructor() {
+		super('Kiosk lookup dependency unavailable');
+		this.name = 'KioskLookupUnavailableError';
 	}
 }
 
@@ -346,19 +354,30 @@ export async function lookupPreRegisteredEvacuee(
 		const doc = await getById(dbName, docId);
 		candidates = doc ? [doc] : [];
 	} else {
-		const result = await adminFetch<{ docs?: unknown[] }>(`/${dbName}/_find`, {
-			method: 'POST',
-			body: JSON.stringify({
-				selector: {
-					type: 'evacuee',
-					'person_id.number': input.citizen_id,
-					shelter_code: shelterCode
-				},
-				limit: 100
-			})
-		});
+		let result: { docs?: unknown[] };
+		try {
+			result = await adminFetch<{ docs?: unknown[] }>(`/${dbName}/_find`, {
+				method: 'POST',
+				body: JSON.stringify({
+					selector: {
+						type: 'evacuee',
+						'person_id.number': input.citizen_id,
+						shelter_code: shelterCode
+					},
+					limit: 101
+				})
+			});
+		} catch {
+			throw new KioskLookupUnavailableError();
+		}
 		candidates = (result.docs ?? []).filter(isEvacueeDoc);
 	}
+
+	if (candidates.some((doc) => doc.current_stay?.status === 'kiosk_registered')) {
+		return { kind: 'kiosk_registered' };
+	}
+	if (candidates.length === 0)
+		return { kind: 'not_found', can_register: input.source === 'smart-card' };
 
 	const eligible = candidates.filter(
 		(doc) =>
@@ -366,7 +385,7 @@ export async function lookupPreRegisteredEvacuee(
 			doc.registered_via === 'web' &&
 			isListedHouseholdMember(doc)
 	);
-	if (eligible.length !== 1) return { kind: 'not_found' };
+	if (eligible.length !== 1) return { kind: 'not_found', can_register: false };
 
 	const primary = eligible[0];
 	const members = await expandHousehold(dbName, primary, shelterCode);

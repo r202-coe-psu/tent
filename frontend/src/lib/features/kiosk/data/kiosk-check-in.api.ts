@@ -1,3 +1,5 @@
+import type { KioskPhotoPayload } from '../domain/kiosk-photo';
+
 export type GateInput =
 	| { source: 'smart-card'; citizen_id: string }
 	| { source: 'qr'; token: string }
@@ -30,7 +32,8 @@ export interface KioskHouseholdCandidate {
 
 export type KioskLookupResponse =
 	| ({ kind: 'household'; name_masked: boolean } & KioskLookupResult)
-	| { kind: 'candidates'; shelter_code: string; candidates: KioskHouseholdCandidate[] };
+	| { kind: 'candidates'; shelter_code: string; candidates: KioskHouseholdCandidate[] }
+	| { kind: 'kiosk_registered'; shelter_code: string };
 
 export interface KioskCheckInMemberResult {
 	evacuee_id: string;
@@ -48,11 +51,32 @@ export interface KioskCheckInBatchResult extends KioskCheckInResult {
 	retryable_evacuee_ids: string[];
 }
 
+export async function registerKioskWalkIn(
+	card: unknown,
+	photo: KioskPhotoPayload | null,
+	consentedAt: string
+): Promise<{ evacuee_id: string }> {
+	return requestWithTimeout(
+		'/api/v1/scanner/kiosk/register',
+		{
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			cache: 'no-store',
+			body: JSON.stringify({ card, photo, consented: true, consented_at: consentedAt })
+		},
+		async (response) => {
+			if (!response.ok) throw await requestError(response);
+			return (await response.json()) as { evacuee_id: string };
+		}
+	);
+}
+
 export class KioskRequestError extends Error {
 	constructor(
 		message: string,
 		readonly status: number,
-		readonly code: string | null
+		readonly code: string | null,
+		readonly canRegister = false
 	) {
 		super(message);
 		this.name = 'KioskRequestError';
@@ -72,6 +96,7 @@ async function requestError(response: Response): Promise<KioskRequestError> {
 		return null;
 	})) as {
 		error?: { message?: unknown; code?: unknown } | unknown;
+		can_register?: unknown;
 	} | null;
 	const nestedMessage =
 		typeof body?.error === 'object' && body.error !== null && 'message' in body.error
@@ -85,7 +110,8 @@ async function requestError(response: Response): Promise<KioskRequestError> {
 	return new KioskRequestError(
 		message,
 		response.status,
-		typeof nestedCode === 'string' ? nestedCode : null
+		typeof nestedCode === 'string' ? nestedCode : null,
+		body?.can_register === true
 	);
 }
 

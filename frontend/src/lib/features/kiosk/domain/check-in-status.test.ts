@@ -13,12 +13,17 @@ describe('isListedHouseholdMember', () => {
 		}
 	);
 
-	it.each(['cancelled', 'checked_out', 'transferred', 'deceased', 'unknown', undefined])(
-		'excludes household members with status %s',
-		(status) => {
-			expect(isListedHouseholdMember({ current_stay: { status } })).toBe(false);
-		}
-	);
+	it.each([
+		'kiosk_registered',
+		'cancelled',
+		'checked_out',
+		'transferred',
+		'deceased',
+		'unknown',
+		undefined
+	])('excludes household members with status %s', (status) => {
+		expect(isListedHouseholdMember({ current_stay: { status } })).toBe(false);
+	});
 
 	it('excludes members who opted out of search', () => {
 		expect(

@@ -360,7 +360,8 @@ export const shelterFeatureFlagsSchema = z.object({
 	public_donations_enabled: z.boolean().default(true),
 	enable_medical_screening: z.boolean().default(false),
 	accepts_pre_registration: z.boolean().default(false),
-	kiosk_phone_check_in_enabled: z.boolean().default(false)
+	kiosk_phone_check_in_enabled: z.boolean().default(false),
+	kiosk_walk_in_registration_enabled: z.boolean().default(false)
 });
 export type ShelterFeatureFlags = z.infer<typeof shelterFeatureFlagsSchema>;
 
@@ -371,7 +372,8 @@ export const DEFAULT_SHELTER_FEATURE_FLAGS: ShelterFeatureFlags = {
 	public_donations_enabled: true,
 	enable_medical_screening: false,
 	accepts_pre_registration: false,
-	kiosk_phone_check_in_enabled: false
+	kiosk_phone_check_in_enabled: false,
+	kiosk_walk_in_registration_enabled: false
 };
 
 // ===== Main shelter schemas (CR-008 + CR-023 v4/v4.1) =====

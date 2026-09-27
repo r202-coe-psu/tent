@@ -1,5 +1,6 @@
 export {
 	KioskInputError,
+	KioskLookupUnavailableError,
 	kioskCheckInInputSchema,
 	kioskGateInputSchema,
 	lookupPreRegisteredEvacuee,

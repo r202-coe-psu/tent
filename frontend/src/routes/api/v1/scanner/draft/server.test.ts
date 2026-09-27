@@ -12,15 +12,13 @@ vi.mock('$lib/features/scanners/server', async () => {
 		...actual,
 		scannerServerRepository: {
 			getDeviceByDeviceId: vi.fn(),
-			updateDeviceLastSeen: vi.fn(),
-			processCardScan: vi.fn()
+			updateDeviceLastSeen: vi.fn()
 		}
 	};
 });
 
 describe('POST /api/v1/scanner/draft', () => {
 	const mockGetDevice = vi.mocked(scannerServerRepository.getDeviceByDeviceId);
-	const mockProcessScan = vi.mocked(scannerServerRepository.processCardScan);
 
 	beforeEach(() => {
 		vi.clearAllMocks();
@@ -156,7 +154,6 @@ describe('POST /api/v1/scanner/draft', () => {
 		expect(res.status).toBe(410);
 		const data = await res.json();
 		expect(data.error.code).toBe('KIOSK_DRAFT_DISABLED');
-		expect(mockProcessScan).not.toHaveBeenCalled();
 	});
 
 	it('does not process card data or trust location fields in the request body', async () => {
@@ -193,6 +190,5 @@ describe('POST /api/v1/scanner/draft', () => {
 
 		const response = await POST({ request } as unknown as RequestEvent);
 		expect(response.status).toBe(410);
-		expect(mockProcessScan).not.toHaveBeenCalled();
 	});
 });

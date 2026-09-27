@@ -46,6 +46,7 @@
 		cardRemoved?: boolean;
 		backHref?: string;
 		onprintbusychange?: (busy: boolean) => void;
+		onregister?: (citizenId: string) => void;
 		onreset: () => void;
 	}
 
@@ -57,6 +58,7 @@
 		cardRemoved = true,
 		backHref,
 		onprintbusychange,
+		onregister,
 		onreset
 	}: Props = $props();
 
@@ -65,6 +67,8 @@
 	let candidateShelterCode = $state('');
 	let lookupError = $state('');
 	let lookupErrorCode = $state<string | null>(null);
+	let canRegister = $state(false);
+	let alreadyKioskRegistered = $state(false);
 	let retryAfterSeconds = $state(0);
 	let isLookingUp = $state(false);
 	let isSubmitting = $state(false);
@@ -139,6 +143,8 @@
 		candidateShelterCode = '';
 		lookupError = '';
 		lookupErrorCode = null;
+		canRegister = false;
+		alreadyKioskRegistered = false;
 		retryAfterSeconds = 0;
 		results = [];
 		retryableIds = [];
@@ -157,6 +163,10 @@
 				candidates = found.candidates;
 				return;
 			}
+			if (found.kind === 'kiosk_registered') {
+				alreadyKioskRegistered = true;
+				return;
+			}
 			lookup = found;
 			const selectableMembers = found.members.filter((member) => member.selectable);
 			if (selectableMembers.length === 0) {
@@ -171,6 +181,7 @@
 			if (error instanceof KioskRequestError) {
 				lookupErrorCode = error.code;
 				lookupError = error.message;
+				canRegister = error.canRegister;
 				if (error.status === 429) retryAfterSeconds = 60;
 			} else {
 				lookupError =
@@ -310,6 +321,7 @@
 
 	function statusLabel(status: string): string {
 		if (status === 'pre_registered') return 'ลงทะเบียนล่วงหน้า';
+		if (status === 'kiosk_registered') return 'ลงทะเบียนที่ตู้ (รอยืนยัน)';
 		if (status === 'arriving') return 'รายงานตัวแล้ว · รอคัดกรอง';
 		if (status === 'room_confirmed') return 'ยืนยันที่พักแล้ว';
 		if (status === 'temporary_leave') return 'ออกไปชั่วคราว';
@@ -406,25 +418,53 @@
 
 	{#if lookupError}
 		<div
-			class="no-print rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-950"
+			class="no-print rounded-2xl border border-amber-200 bg-amber-50 p-5 text-center text-amber-950"
 			role="alert"
 		>
-			<div class="flex items-start gap-3">
-				<CircleAlert class="mt-0.5 h-6 w-6 shrink-0" aria-hidden="true" />
-				<div>
+			<div class="flex flex-col items-center gap-3">
+				<CircleAlert class="h-6 w-6 shrink-0" aria-hidden="true" />
+				<div class="w-full">
 					<h2 class="text-base font-bold">ค้นหาไม่สำเร็จ</h2>
 					<p class="mt-1 text-base leading-relaxed">{lookupError}</p>
 					<KioskLookupErrorActions
 						{lookupErrorCode}
+						{canRegister}
 						{isPhoneGate}
 						{isLookingUp}
 						{retryAfterSeconds}
 						{homeUrl}
 						{backUrl}
 						onretry={retryLookup}
+						onregister={() => {
+							if (input?.source === 'smart-card') onregister?.(input.citizen_id);
+						}}
 						{onreset}
 					/>
 				</div>
+			</div>
+		</div>
+	{/if}
+
+	{#if alreadyKioskRegistered}
+		<div
+			class="no-print rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-950"
+			role="status"
+		>
+			<div class="flex items-start gap-3">
+				<CircleAlert class="mt-0.5 h-6 w-6 shrink-0" aria-hidden="true" />
+				<div>
+					<h2 class="text-base font-bold">ลงทะเบียนที่ตู้แล้ว</h2>
+					<p class="mt-1 text-base leading-relaxed">กรุณาไปพบเจ้าหน้าที่เพื่อยืนยันข้อมูล</p>
+				</div>
+			</div>
+			<div class="mt-4 flex justify-end">
+				<Button
+					type="button"
+					variant="outline"
+					onclick={onreset}
+					class="min-h-12 border-[#CBD5E1] px-5 text-base font-bold text-[#0A2647]"
+					>กลับหน้าแรก</Button
+				>
 			</div>
 		</div>
 	{/if}

@@ -3,7 +3,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 let shelterDb = 'shelter_sh001';
 vi.mock('$lib/db/shelter', () => ({
-	getShelterDb: () => shelterDb
+	getShelterDb: (shelterCode?: string) =>
+		shelterCode ? `shelter_${shelterCode.toLowerCase()}` : shelterDb
 }));
 
 // compressImage's own resize/encode math is covered by image-compress.test.ts;
@@ -268,5 +269,11 @@ describe('imageRepository singleton', () => {
 		shelterDb = 'shelter_sh002';
 		const second = imageRepository();
 		expect(first).not.toBe(second);
+	});
+
+	it('can bind an instance to the caller-provided shelter context', () => {
+		const current = imageRepository('SH002');
+		const active = imageRepository();
+		expect(current).not.toBe(active);
 	});
 });

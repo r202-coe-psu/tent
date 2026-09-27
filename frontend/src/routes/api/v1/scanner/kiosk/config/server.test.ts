@@ -38,7 +38,10 @@ describe('POST /api/v1/scanner/kiosk/config', () => {
 		});
 		mockFindShelter.mockResolvedValue({
 			code: 'SH001',
-			feature_flags: { kiosk_phone_check_in_enabled: true }
+			feature_flags: {
+				kiosk_phone_check_in_enabled: true,
+				kiosk_walk_in_registration_enabled: true
+			}
 		} as never);
 	});
 
@@ -50,7 +53,8 @@ describe('POST /api/v1/scanner/kiosk/config', () => {
 		expect(response.status).toBe(200);
 		expect(await response.json()).toEqual({
 			shelter_code: 'SH001',
-			phone_check_in_enabled: true
+			phone_check_in_enabled: true,
+			walk_in_registration_enabled: true
 		});
 		expect(mockFindShelter).toHaveBeenCalledWith('SH001');
 		expect(response.headers.get('cache-control')).toBe('no-store');

@@ -2,12 +2,13 @@
 title: สเปคระบบอ่านบัตรประชาชนและการลงทะเบียนผู้ประสบภัย (Smart Card Reader & Fast-Track Registration Spec)
 status: active
 created: 2026-08-29
-updated: 2026-09-11
+updated: 2026-09-27
 author: Soravit Sukkarn (Team Lead)
 affects:
   - docs/data/schema.md §1.1
   - docs/adr/0001-decoupled-registration-and-medical-screening-flow.md
   - docs/changes/CR-097-smart-card-evacuee-draft-flow.md
+  - docs/changes/draft-kiosk-walk-in-registration.md
   - frontend/src/lib/features/scanners/
   - frontend/src/lib/features/people/
   - frontend/src/routes/(protected)/onsite/people/
@@ -20,6 +21,28 @@ affects:
 บันทึกข้อมูลชิปบัตรประชาชนสร้าง entity `evacuee` โดยตรง กำหนดสถานะ `current_stay.status = 'pre_registered'`, ระบุ `registered_via: 'kiosk'`, และแนบ `card_snapshot` พร้อมคำนวณอายุและรหัสไปรษณีย์อัตโนมัติ · ข้อมูลไหลเข้าสู่คิว Station 1 (`/onsite/people`) ในแท็บ "รอรับรายงานตัว" (`pre_registered`) พร้อมป้ายและตัวกรองช่องทาง (`RegisteredViaBadge` แยก `kiosk` / `web` / `staff`) · เจ้าหน้าที่กด "รับรายงานตัว" (`/onsite/people/[id]/report-in`) เพื่อตรวจสอบข้อมูลที่ Autofill และ Normalize ที่อยู่เดิมจาก `card_snapshot` หรือใช้ `PullPreRegisteredDialog` เพื่อดึงข้อมูลผู้ลงทะเบียนจากตู้ Kiosk มารวมเป็นสมาชิกในครัวเรือนเดียวกันได้ทันที · บันทึกรับรายงานตัวปรับสถานะเป็น `arriving` และออก Person QR ส่งต่อไป Station 2 (คัดกรองสุขภาพ) และ Station 3 (จัดโซน/Check-in สู่ `active`) ตาม ADR-0001
 
 ---
+
+> **ข้อกำหนดเพิ่มเติม — Kiosk walk-in registration (proposed):** การลงทะเบียน walk-in แบบใหม่
+> ใช้ [draft CR `draft-kiosk-walk-in-registration`](../changes/draft-kiosk-walk-in-registration.md)
+> เป็นแหล่งข้อกำหนด เมื่อ CR นี้ได้รับอนุมัติ ข้อกำหนดเดิมในเอกสารนี้ที่กำหนดให้สร้างสถานะ
+> `pre_registered`, เปิดใช้ `/api/v1/scanner/draft` หรือ reactivate record `cancelled` ให้ถือว่า
+> ถูกแทนที่เฉพาะ flow ลงทะเบียนใหม่ที่ Kiosk; endpoint `/scanner/draft` ยังคงปิดตามแผน
+> implementation. CR ยังไม่มีใน repository ณ วันที่แก้เอกสาร — รายละเอียดนี้จึงเป็นข้อเสนอที่รอ
+> review ไม่ใช่ข้อกำหนดที่อนุมัติแล้ว.
+
+### 0.1 Kiosk walk-in registration — proposed requirements
+
+- ผู้ดูแลศูนย์เปิด/ปิด flow ด้วย `shelter.feature_flags.kiosk_walk_in_registration_enabled`; ค่าเริ่มต้น `false` และไม่มี flag ให้ถือเป็น `false`.
+- เมื่อ smart-card lookup ไม่พบ record และ flag เปิด ให้แสดงปุ่มลงทะเบียนใหม่. ผู้ใช้ต้องยินยอมก่อนเครื่องอ่านข้อมูลชิปเต็ม.
+- ส่งเลขบัตรที่ค้นหาครั้งแรกผ่าน in-memory state เท่านั้น. Browser ต้องเทียบกับเลขบัตรจาก full read ก่อนเรียก register API; ห้ามใส่เลขบัตรใน URL หรือ log.
+- ลงทะเบียนผ่าน `POST /api/v1/scanner/kiosk/register` ด้วย device credentials. Server ต้องผูก shelter จาก device registry และ fail closed เมื่อ lookup/registry อ่านไม่ได้. Request ใช้ `{ card, consented: true, consented_at }`; browser บันทึก `consented_at` ตอนกดยินยอมใน in-memory state.
+- สร้าง `evacuee` ใหม่ต่อหนึ่งบัตรด้วย `schema_v: 11`, `current_stay.status: 'kiosk_registered'`, `registered_via: 'kiosk'`, `household_id: null`, `phone: null` และข้อมูลชิปเต็มใน `card_snapshot` รวม `consented_at`.
+- ห้าม reactivate record เดิมใน flow นี้. หากเลขบัตรมี record ที่ไม่อนุญาตให้ลงทะเบียนซ้ำ ให้ตอบ `409 KIOSK_REGISTRATION_BLOCKED` และแนะนำให้ติดต่อเจ้าหน้าที่.
+- `kiosk_registered` อยู่ใน Forecast เท่านั้น; ไม่นับ Present, In-zone หรือ Kitchen/SOP. ไม่เข้าคิว screening ก่อน Station 1.
+- ที่ Station 1 เจ้าหน้าที่ตรวจและแก้ข้อมูล เติมเบอร์โทรและครัวเรือน แล้วรับรายงานตัวเป็น `arriving`. ย้ายรูปจาก `card_snapshot.photo_base64` ไปเอกสาร `image` และ `evacuee.photo` ตอน submit สำเร็จ.
+- ยกเลิกได้ด้วย flow cancel เดิม. Kiosk ไม่ถามเบอร์โทรและไม่พิมพ์ QR ในสไลซ์นี้.
+
+> รายละเอียด request/response และ error mapping ในรอบ implementation ให้ยึด `docs/data/api-contract.md` §2.1. CR ที่แผนอ้างถึงยังไม่มีใน repository และข้อกำหนดส่วนนี้ยังเป็นข้อเสนอ; ต้องอนุมัติ CR ก่อนเปิด PR.
 
 ## 1. วัตถุประสงค์และภาพรวม (Objectives & Scope)
 
@@ -156,5 +179,3 @@ flowchart TD
    - รายชื่อผู้มีสถานะ `pre_registered` จะไม่แสดงในระบบค้นหาญาติสาธารณะ (Public Directory / Public Portal) เพื่อคุ้มครองข้อมูลส่วนบุคคล
 3. **Data Protection:**
    - ข้อมูลรูปถ่ายหน้าบัตร (`photo_base64`) และที่อยู่ฉบับเต็มถูกจัดเก็บในฐานข้อมูลศูนย์พักพิงที่จำกัดสิทธิ์ (RBAC) และไม่ส่ง `national_id_hash` หรือเลขบัตรตัวเต็มออกสู่ภายนอก
-
-

@@ -93,7 +93,10 @@ describe('POST /api/v1/scanner/kiosk/lookup', () => {
 		mockLookup.mockResolvedValue(household as never);
 		mockFindShelter.mockResolvedValue({
 			code: 'SH001',
-			feature_flags: { kiosk_phone_check_in_enabled: true }
+			feature_flags: {
+				kiosk_phone_check_in_enabled: true,
+				kiosk_walk_in_registration_enabled: true
+			}
 		} as never);
 	});
 
@@ -112,11 +115,33 @@ describe('POST /api/v1/scanner/kiosk/lookup', () => {
 		expect(mockLookup).not.toHaveBeenCalled();
 	});
 
-	it('does not read the shelter flag for QR or smart-card lookups', async () => {
+	it('does not read the shelter flag for QR or matched smart-card lookups', async () => {
 		const response = await send({ source: 'qr', token: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV' });
 
 		expect(response.status).toBe(200);
+		const cardResponse = await send({ source: 'smart-card', citizen_id: '1234567890123' });
+		expect(cardResponse.status).toBe(200);
 		expect(mockFindShelter).not.toHaveBeenCalled();
+	});
+
+	it('checks the walk-in flag only after a smart-card miss', async () => {
+		mockLookup.mockResolvedValueOnce({ kind: 'not_found', can_register: true } as never);
+
+		const response = await send({ source: 'smart-card', citizen_id: '1234567890123' });
+
+		expect(response.status).toBe(404);
+		expect(await response.json()).toMatchObject({ can_register: true });
+		expect(mockFindShelter).toHaveBeenCalledTimes(1);
+	});
+
+	it('fails closed for walk-in registration if the shelter registry is unavailable', async () => {
+		mockLookup.mockResolvedValueOnce({ kind: 'not_found', can_register: true } as never);
+		mockFindShelter.mockRejectedValueOnce(new Error('registry unavailable'));
+
+		const response = await send({ source: 'smart-card', citizen_id: '1234567890123' });
+
+		expect(response.status).toBe(404);
+		expect(await response.json()).toMatchObject({ can_register: false });
 	});
 
 	it('returns 503 when the shelter registry cannot be read for phone lookups', async () => {

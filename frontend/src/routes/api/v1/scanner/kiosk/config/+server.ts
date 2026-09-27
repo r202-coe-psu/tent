@@ -1,7 +1,10 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { scannerServerRepository } from '$lib/features/scanners/server';
-import { isKioskPhoneCheckInEnabled } from '$lib/features/kiosk/config';
+import {
+	isKioskPhoneCheckInEnabled,
+	isKioskWalkInRegistrationEnabled
+} from '$lib/features/kiosk/config';
 import { findMasterByCode } from '$lib/server/shelters.admin';
 import {
 	authenticateScannerDevice,
@@ -25,7 +28,8 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json(
 			{
 				shelter_code: principal.shelter_code,
-				phone_check_in_enabled: isKioskPhoneCheckInEnabled(shelter)
+				phone_check_in_enabled: isKioskPhoneCheckInEnabled(shelter),
+				walk_in_registration_enabled: isKioskWalkInRegistrationEnabled(shelter)
 			},
 			{ status: 200, headers: noStoreHeaders }
 		);

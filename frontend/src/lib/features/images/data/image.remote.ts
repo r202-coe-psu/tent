@@ -144,8 +144,8 @@ let singleton: ImageRepository | null = null;
 let singletonDbName: string | null = null;
 
 /** Repository bound to the current user's active shelter database. */
-export function imageRepository(): ImageRepository {
-	const currentDb = getShelterDb();
+export function imageRepository(shelterCode?: string): ImageRepository {
+	const currentDb = getShelterDb(shelterCode);
 	if (!singleton || singletonDbName !== currentDb) {
 		singleton = new ImageRemoteRepository(currentDb);
 		singletonDbName = currentDb;

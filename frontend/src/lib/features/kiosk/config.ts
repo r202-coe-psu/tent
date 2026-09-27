@@ -8,4 +8,7 @@ export {
 	KIOSK_CONFIG_TIMEOUT_MS,
 	type KioskConfig
 } from './data/kiosk-config.api';
-export { isKioskPhoneCheckInEnabled } from './domain/kiosk-config';
+export {
+	isKioskPhoneCheckInEnabled,
+	isKioskWalkInRegistrationEnabled
+} from './domain/kiosk-config';

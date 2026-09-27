@@ -7,7 +7,10 @@ vi.mock('$lib/features/kiosk/config', () => ({ fetchKioskConfig: vi.fn() }));
 
 describe('kiosk phone route load', () => {
 	it('redirects to kiosk home when the shelter has phone check-in disabled', async () => {
-		vi.mocked(fetchKioskConfig).mockResolvedValueOnce({ phoneCheckInEnabled: false });
+		vi.mocked(fetchKioskConfig).mockResolvedValueOnce({
+			phoneCheckInEnabled: false,
+			walkInRegistrationEnabled: false
+		});
 		const url = new URL(
 			'https://tent.example.go.th/kiosk/phone?shelter_name=Shelter%201&shelter_code=SH001&station_name=Desk%201&device_name=Kiosk%201&device_secret=must-not-forward'
 		);
@@ -29,7 +32,10 @@ describe('kiosk phone route load', () => {
 	});
 
 	it('allows the route only when the shelter setting is enabled', async () => {
-		vi.mocked(fetchKioskConfig).mockResolvedValueOnce({ phoneCheckInEnabled: true });
+		vi.mocked(fetchKioskConfig).mockResolvedValueOnce({
+			phoneCheckInEnabled: true,
+			walkInRegistrationEnabled: false
+		});
 		const url = new URL('https://tent.example.go.th/kiosk/phone?shelter_code=SH001');
 
 		await expect(
@@ -38,7 +44,10 @@ describe('kiosk phone route load', () => {
 	});
 
 	it('fails closed when config cannot be read', async () => {
-		vi.mocked(fetchKioskConfig).mockResolvedValueOnce({ phoneCheckInEnabled: false });
+		vi.mocked(fetchKioskConfig).mockResolvedValueOnce({
+			phoneCheckInEnabled: false,
+			walkInRegistrationEnabled: false
+		});
 		const url = new URL('https://tent.example.go.th/kiosk/phone');
 		let caught: unknown;
 		try {

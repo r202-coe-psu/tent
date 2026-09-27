@@ -3,7 +3,8 @@ import {
 	checkInSelectedMembers,
 	KioskPartialCheckInError,
 	KioskRequestError,
-	lookupPreRegisteredEvacuee
+	lookupPreRegisteredEvacuee,
+	registerKioskWalkIn
 } from './kiosk-check-in.api';
 
 describe('checkInSelectedMembers batching', () => {
@@ -134,5 +135,39 @@ describe('checkInSelectedMembers batching', () => {
 			status: 0,
 			code: 'TIMEOUT'
 		});
+	});
+});
+
+describe('registerKioskWalkIn', () => {
+	afterEach(() => vi.unstubAllGlobals());
+
+	it('sends compressed photo separately from card data', async () => {
+		const photo = {
+			content_type: 'image/webp' as const,
+			full_base64: 'UklGRgAAAABXRUJQ',
+			width: 300,
+			height: 400,
+			original_size: 10,
+			compressed_size: 12,
+			thumbnail_size: 0
+		};
+		const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+			const body = JSON.parse(String(init?.body)) as {
+				card: Record<string, unknown>;
+				photo: unknown;
+			};
+			expect(body.card).not.toHaveProperty('photo_base64');
+			expect(body.photo).toEqual(photo);
+			return new Response(JSON.stringify({ evacuee_id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV' }), {
+				status: 200,
+				headers: { 'content-type': 'application/json' }
+			});
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		await expect(
+			registerKioskWalkIn({ citizen_id: '1234567890123' }, photo, new Date().toISOString())
+		).resolves.toEqual({ evacuee_id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV' });
+		expect(fetchMock).toHaveBeenCalledOnce();
 	});
 });

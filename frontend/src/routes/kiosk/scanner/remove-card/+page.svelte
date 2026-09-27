@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { untrack } from 'svelte';
 	import {
 		buildKioskContextQuery,
@@ -9,6 +11,7 @@
 		KioskPreRegisteredCheckIn,
 		navigateToKioskHome,
 		readKioskDisplayQuery,
+		walkInSession,
 		type GateInput
 	} from '$lib/features/kiosk';
 
@@ -37,6 +40,16 @@
 
 	function returnHome(): void {
 		navigateToKioskHome(contextQuery);
+	}
+
+	function startWalkInRegistration(citizenId: string): void {
+		walkInSession.begin(citizenId);
+		void goto(
+			resolve(
+				`/kiosk/register/consent${contextQuery}` as
+					'/kiosk/register/consent' | `/kiosk/register/consent?${string}`
+			)
+		);
 	}
 
 	function cardEventAttachment() {
@@ -72,5 +85,6 @@
 		{cardRemoved}
 		onprintbusychange={handlePrintBusyChange}
 		onreset={returnHome}
+		onregister={startWalkInRegistration}
 	/>
 </div>

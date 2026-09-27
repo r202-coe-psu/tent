@@ -55,7 +55,9 @@ async function handleStatusCheck(code: string, clientIp: string, fetchFn: typeof
 
 			const stayStatus = doc.current_stay?.status;
 			// Verified = stay is no longer 'pre_registered' (arriving, active, room_confirmed, etc.)
-			const verified = Boolean(stayStatus && stayStatus !== 'pre_registered');
+			const verified = Boolean(
+				stayStatus && stayStatus !== 'pre_registered' && stayStatus !== 'kiosk_registered'
+			);
 
 			return json(
 				{

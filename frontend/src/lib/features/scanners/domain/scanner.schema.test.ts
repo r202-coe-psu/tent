@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { parseThaiSmartCardDate, scannerDeviceInputSchema } from './scanner.schema';
+import {
+	parseThaiSmartCardDate,
+	scannerDeviceInputSchema,
+	smartCardDataSchema
+} from './scanner.schema';
 
 describe('scanner.schema', () => {
 	describe('parseThaiSmartCardDate', () => {
@@ -38,6 +42,23 @@ describe('scanner.schema', () => {
 			};
 			const result = scannerDeviceInputSchema.safeParse(invalid);
 			expect(result.success).toBe(false);
+		});
+	});
+
+	describe('smartCardDataSchema', () => {
+		it('accepts only a 13-digit citizen ID', () => {
+			expect(smartCardDataSchema.safeParse({ citizen_id: '1234567890123' }).success).toBe(true);
+			expect(smartCardDataSchema.safeParse({ citizen_id: '12345678901A3' }).success).toBe(false);
+			expect(smartCardDataSchema.safeParse({ citizen_id: '123456789012' }).success).toBe(false);
+		});
+
+		it('rejects oversized card photo payloads', () => {
+			expect(
+				smartCardDataSchema.safeParse({
+					citizen_id: '1234567890123',
+					photo_base64: 'x'.repeat(2_000_001)
+				}).success
+			).toBe(false);
 		});
 	});
 });

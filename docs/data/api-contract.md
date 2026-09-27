@@ -2,7 +2,7 @@
 title: Smart Shelter — API Contract v1
 status: draft for review
 created: 2026-06-11
-updated: 2026-09-16
+updated: 2026-09-27
 note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration; Partner Data API EXT-001–007 (#214); CR-124 staff Google step-up MFA + Google SSO login (enrolled + mint AuthSession)
 ---
 
@@ -124,7 +124,7 @@ Versioning: path prefix /api/v1 — breaking change = /api/v2
 | `CONFLICT` 409 | ทำซ้ำ/สถานะไม่ให้ทำ |
 | `RATE_LIMITED` 429 | เกิน limit |
 
-### 2.1 Scanner kiosk — shelter configuration และ phone lookup
+### 2.1 Scanner kiosk — shelter configuration, lookup และ walk-in registration
 
 เครื่อง scanner ยืนยันตัวตนด้วย `X-Device-ID` และ `X-Device-Secret` ที่ออกตอน provision เครื่อง
 เส้นทาง `/api/v1/scanner/kiosk/*` ใช้ device credentials แทน staff `AuthSession` และตอบ
@@ -139,17 +139,60 @@ X-Device-Secret: …
 คืนค่าจาก shelter ที่ผูกกับเครื่อง (ไม่รับ `shelter_code` จาก request body):
 
 ```json
-{ "shelter_code": "SH001", "phone_check_in_enabled": false }
+{
+  "shelter_code": "SH001",
+  "phone_check_in_enabled": false,
+  "walk_in_registration_enabled": false
+}
 ```
 
-`phone_check_in_enabled` อ่านจาก `shelter.feature_flags.kiosk_phone_check_in_enabled`;
+`phone_check_in_enabled` อ่านจาก `shelter.feature_flags.kiosk_phone_check_in_enabled` และ
+`walk_in_registration_enabled` อ่านจาก `shelter.feature_flags.kiosk_walk_in_registration_enabled`;
 ไม่มี shelter หรือไม่มี flag ให้ถือเป็น `false` (ค่าเริ่มต้นปิด) ส่วน registry อ่านไม่ได้ตอบ
 `503 DEPENDENCY_UNAVAILABLE`. Kiosk โหลด config เมื่อเข้า `/kiosk` และ `/kiosk/phone`; เมื่อปิดหรืออ่าน
-ไม่สำเร็จจะซ่อนช่องทางเบอร์โทรและนำทางกลับหน้าเลือกวิธี
+ไม่สำเร็จจะซ่อนช่องทางเบอร์โทรและนำทางกลับหน้าเลือกวิธี. เมื่อปิด walk-in registration จะไม่แสดง
+ปุ่มลงทะเบียนใหม่บนผล lookup.
 
 การซ่อนปุ่มเป็นเพียง UX: `POST /api/v1/scanner/kiosk/lookup` ที่ `source: "phone"` ตรวจ flag
 ซ้ำฝั่ง server ก่อน rate limit และ lookup; เมื่อปิดตอบ `403 KIOSK_METHOD_DISABLED`.
-QR และ smart-card lookup ไม่ขึ้นกับ flag นี้. Device auth ไม่ผ่านตอบ `401 DEVICE_AUTH_FAILED`.
+QR และ smart-card lookup ไม่ขึ้นกับ flag เบอร์โทร. Smart-card lookup ตรวจ
+`kiosk_walk_in_registration_enabled` เพื่อกำหนด `can_register`; flag นี้ควบคุมเฉพาะการเริ่ม
+walk-in registration และไม่ปิด lookup หรือ check-in flow เดิม.
+
+`POST /api/v1/scanner/kiosk/register` สร้างผู้ประสบภัยจากการอ่าน Smart Card แบบเต็ม หลังผู้ใช้
+ยินยอมที่ Kiosk:
+
+```http
+POST /api/v1/scanner/kiosk/register
+X-Device-ID: kiosk-sh001-01
+X-Device-Secret: …
+Content-Type: application/json
+```
+
+Request body เป็น `{ "card": <SmartCardData without photo_base64>, "photo": <KioskPhotoPayload|null>, "consented": true, "consented_at": <ISO-8601 UTC> }`.
+เมื่อมีรูป `photo` มี `content_type`, `full_base64`, `thumb_base64?`, `width`, `height`,
+`original_size`, `compressed_size` และ `thumbnail_size`; base64 ไม่มี data URL prefix.
+Browser บันทึก `consented_at` ตอนผู้ใช้กดยินยอมไว้ใน in-memory state; ห้ามใส่ citizen ID ใน URL
+หรือ log. `card` เป็นข้อมูลบัตรแบบเต็มจาก `read_all_data()` รวม citizen ID, ชื่อ, วันเกิด, เพศ และ
+ที่อยู่. รูปจากชิปถูก compress เป็น WEBP พร้อม thumbnail ก่อนส่งใน `photo` แยก; หาก compress ไม่สำเร็จ
+จะส่ง JPEG เดิมโดยไม่มี thumbnail และหากไม่มีรูปหรือรูปเกินขนาดจะลงทะเบียนต่อโดยไม่แนบรูป. Server
+ผูก shelter จาก device registry เท่านั้น, ตรวจ flag ซ้ำ, ตรวจข้อมูลบัตร
+และค้น record เดิมใน shelter นั้นแบบ fail-closed ก่อนสร้าง `evacuee` ที่ `schema_v: 11`,
+`current_stay.status: "kiosk_registered"`, `registered_via: "kiosk"`, `household_id: null`,
+`phone: null`, `card_snapshot.consented_at` และ `photo: image:{ulid}` เมื่อมีรูป. Server ตรวจ
+base64, ขนาด decoded (full ≤300 KB, thumb ≤50 KB) และ magic bytes; สร้าง image document พร้อม
+inline attachments ก่อนเขียน evacuee. หากเขียน evacuee ไม่สำเร็จจะลบ image ที่เพิ่งสร้างแบบ best-effort.
+`card_snapshot` ที่สร้างใหม่ไม่มี `photo_base64`. สำเร็จตอบ
+`{ "status": "created", "evacuee_id": "evacuee:{ulid}" }`. Endpoint ต้องตอบ
+`cache-control: no-store`, `pragma: no-cache`.
+
+การ lookup ที่ไม่มี record อนุญาตให้เริ่มลงทะเบียนเมื่อ flag เปิด โดยส่ง `can_register: true`
+ใน not-found response. เมื่อ flag ปิดให้ส่ง `can_register: false`. Record เดิมที่ไม่อนุญาตให้
+ลงทะเบียนซ้ำตอบ `409 KIOSK_REGISTRATION_BLOCKED`; body ไม่ผ่าน schema ตอบ `400
+INVALID_KIOSK_REGISTRATION`, flag ปิดตอบ `403 KIOSK_REGISTRATION_DISABLED`, limit ต่อ device
+ตอบ `429 KIOSK_RATE_LIMITED`, auth ไม่ผ่านตอบ `401 DEVICE_AUTH_FAILED`, และ registry/database
+อ่านหรือเขียนไม่ได้ตอบ `503` โดยไม่สร้าง record. รายละเอียดนี้ implement ตามค่าที่เสนอในแผน;
+CR ที่แผนอ้างถึงยังไม่มีใน `docs/changes/` และต้องได้รับอนุมัติก่อนเปิด PR.
 
 ## 3. Provisioning (system_admin เท่านั้น)
 

@@ -108,6 +108,8 @@ export const registerLookupIpLimiter = new RateLimiter(60000, 10);
 export const kioskPhoneDeviceLimiter = new RateLimiter(60_000, 10);
 /** Kiosk phone lookup — per normalized phone across devices. */
 export const kioskPhoneNumberLimiter = new RateLimiter(60_000, 5);
+/** Walk-in creation — per authenticated kiosk device. */
+export const kioskRegisterDeviceLimiter = new RateLimiter(60_000, 5);
 
 // Public volunteer board (CR-092 / T-28). Its own buckets so a donation drive and a
 // volunteer callout cannot starve each other.

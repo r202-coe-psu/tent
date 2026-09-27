@@ -23,4 +23,28 @@ describe('KioskLookupErrorActions', () => {
 		expect(result.body).not.toContain('/kiosk/phone?shelter_code=SH001');
 		expect(result.body).toContain('กลับ');
 	});
+
+	it('offers walk-in registration only when the lookup explicitly allows it', () => {
+		const eligible = render(KioskLookupErrorActions, {
+			props: {
+				...defaultProps,
+				isPhoneGate: false,
+				lookupErrorCode: 'PRE_REGISTRATION_NOT_FOUND',
+				canRegister: true,
+				onregister: vi.fn()
+			}
+		});
+		expect(eligible.body).toContain('ลงทะเบียนใหม่');
+
+		const disabled = render(KioskLookupErrorActions, {
+			props: {
+				...defaultProps,
+				isPhoneGate: false,
+				lookupErrorCode: 'PRE_REGISTRATION_NOT_FOUND',
+				canRegister: false,
+				onregister: vi.fn()
+			}
+		});
+		expect(disabled.body).not.toContain('ลงทะเบียนใหม่');
+	});
 });

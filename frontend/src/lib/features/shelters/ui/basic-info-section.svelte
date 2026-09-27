@@ -177,6 +177,13 @@
 		});
 	}
 
+	function setKioskWalkInRegistration(checked: boolean) {
+		ensureFeatureFlags();
+		$formData.feature_flags = patchFeatureFlags($formData.feature_flags, {
+			kiosk_walk_in_registration_enabled: checked
+		});
+	}
+
 	/** Registration toggles — also mirror the related policy sections (pets / luggage / parking). */
 	function setAllowPets(checked: boolean) {
 		const next = applyAllowPets($formData, checked);
@@ -343,6 +350,27 @@
 				onCheckedChange={(v) => setAcceptsPreRegistration(v === true)}
 				{disabled}
 				aria-label="รับลงทะเบียนเข้าพักล่วงหน้าจากหน้าสาธารณะ"
+			/>
+		</div>
+
+		<div
+			class="flex items-center justify-between gap-3 rounded-lg border border-shelter-border bg-background p-4"
+		>
+			<div class="min-w-0 flex-1 space-y-1">
+				<label for="kiosk-walk-in-registration" class="text-sm font-medium text-card-foreground">
+					อนุญาตลงทะเบียนผู้ประสบภัยใหม่ที่ Kiosk
+				</label>
+				<p class="text-xs text-muted-foreground">
+					เปิด: แสดงปุ่มลงทะเบียนใหม่เมื่อไม่พบข้อมูลในศูนย์นี้ · ปิด: ซ่อนช่องทางนี้
+					(ค่าเริ่มต้นปิด)
+				</p>
+			</div>
+			<Switch
+				id="kiosk-walk-in-registration"
+				checked={$formData.feature_flags?.kiosk_walk_in_registration_enabled ?? false}
+				onCheckedChange={(v) => setKioskWalkInRegistration(v === true)}
+				{disabled}
+				aria-label="อนุญาตลงทะเบียนผู้ประสบภัยใหม่ที่ Kiosk"
 			/>
 		</div>
 

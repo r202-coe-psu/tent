@@ -8,8 +8,10 @@
 		retryAfterSeconds: number;
 		homeUrl: string;
 		backUrl: string;
+		canRegister?: boolean;
 		onretry: () => void;
 		onreset: () => void;
+		onregister?: () => void;
 	}
 
 	let {
@@ -19,8 +21,10 @@
 		retryAfterSeconds,
 		homeUrl,
 		backUrl,
+		canRegister = false,
 		onretry,
-		onreset
+		onreset,
+		onregister
 	}: Props = $props();
 
 	const isMethodDisabled = $derived(lookupErrorCode === 'KIOSK_METHOD_DISABLED');
@@ -31,7 +35,15 @@
 	);
 </script>
 
-<div class="mt-4 flex flex-col gap-2 sm:flex-row">
+<div class="mt-4 flex flex-col justify-center gap-2 sm:flex-row">
+	{#if canRegister && onregister}
+		<Button
+			type="button"
+			onclick={onregister}
+			class="min-h-12 bg-[#0A2647] px-5 text-base font-bold text-white hover:bg-[#051930]"
+			>ลงทะเบียนใหม่</Button
+		>
+	{/if}
 	{#if isMethodDisabled}
 		<!-- FR-KPT-24: method was switched off mid-session — no retry, only go home -->
 	{:else if isPhoneLookupMiss}

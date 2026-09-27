@@ -1,4 +1,5 @@
 export { default as KioskShell } from './ui/kiosk-shell.svelte';
+export { default as KioskRegisterConsent } from './ui/kiosk-register-consent.svelte';
 export { default as IdentityMethodSelector } from './ui/identity-method-selector.svelte';
 export { default as KioskQrIdentityScan } from './ui/qr-identity-scan.svelte';
 export { default as KioskPreRegisteredCheckIn } from './ui/kiosk-pre-registered-check-in.svelte';
@@ -18,6 +19,8 @@ export type {
 	KioskCheckInMemberResult
 } from './data/kiosk-check-in.api';
 export { KioskRequestError } from './data/kiosk-check-in.api';
+export { registerKioskWalkIn } from './data/kiosk-check-in.api';
+export { buildKioskPhotoPayload } from './application/kiosk-card-photo';
 export {
 	fetchKioskConfig,
 	KIOSK_CONFIG_TIMEOUT_MS,
@@ -33,6 +36,12 @@ export {
 	type KioskDisplayQueryKey
 } from './domain/display-context';
 export { isKioskPhoneCheckInEnabled } from './domain/kiosk-config';
+export { walkInSession } from './application/walk-in-session.svelte';
+export { registerWalkInCardRead } from './application/walk-in-card-registration';
+export type {
+	WalkInCardRegistrationOutcome,
+	WalkInCardSession
+} from './application/walk-in-card-registration';
 export {
 	IDENTITY_METHODS,
 	visibleIdentityMethods,

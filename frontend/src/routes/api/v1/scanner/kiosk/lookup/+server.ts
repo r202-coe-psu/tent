@@ -5,9 +5,13 @@ import {
 	lookupPreRegisteredEvacuee,
 	kioskGateInputSchema,
 	KioskInputError,
+	KioskLookupUnavailableError,
 	normalizeKioskPhone
 } from '$lib/features/kiosk/server';
-import { isKioskPhoneCheckInEnabled } from '$lib/features/kiosk/config';
+import {
+	isKioskPhoneCheckInEnabled,
+	isKioskWalkInRegistrationEnabled
+} from '$lib/features/kiosk/config';
 import {
 	kioskPhoneDeviceLimiter,
 	kioskPhoneNumberLimiter
@@ -39,6 +43,7 @@ export const POST: RequestHandler = async ({ request }) => {
 				{ status: 400, headers: noStoreHeaders }
 			);
 		}
+		let walkInRegistrationEnabled = false;
 		if (parsed.data.source === 'phone') {
 			let shelter;
 			try {
@@ -88,10 +93,16 @@ export const POST: RequestHandler = async ({ request }) => {
 			}
 		}
 		const result = await lookupPreRegisteredEvacuee(principal.shelter_code, parsed.data);
+		if (result.kind === 'not_found' && parsed.data.source === 'smart-card') {
+			walkInRegistrationEnabled = await findMasterByCode(principal.shelter_code)
+				.then(isKioskWalkInRegistrationEnabled)
+				.catch(() => false);
+		}
 		await scannerServerRepository.updateDeviceLastSeen(principal.registry_id).catch(() => {});
 		if (result.kind === 'not_found') {
 			return json(
 				{
+					can_register: result.can_register === true && walkInRegistrationEnabled,
 					error: {
 						code: 'PRE_REGISTRATION_NOT_FOUND',
 						message: 'ไม่พบผู้ลงทะเบียนล่วงหน้าในศูนย์นี้'
@@ -99,6 +110,9 @@ export const POST: RequestHandler = async ({ request }) => {
 				},
 				{ status: 404, headers: noStoreHeaders }
 			);
+		}
+		if (result.kind === 'kiosk_registered') {
+			return json({ ...result, shelter_code: principal.shelter_code }, { headers: noStoreHeaders });
 		}
 		if (result.kind === 'too_many') {
 			return json(
@@ -113,6 +127,12 @@ export const POST: RequestHandler = async ({ request }) => {
 		}
 		return json(result, { headers: noStoreHeaders });
 	} catch (error) {
+		if (error instanceof KioskLookupUnavailableError) {
+			return json(
+				{ error: { code: 'KIOSK_LOOKUP_UNAVAILABLE', message: 'บริการค้นหาข้อมูลไม่พร้อมใช้งาน' } },
+				{ status: 503, headers: noStoreHeaders }
+			);
+		}
 		if (error instanceof KioskInputError) {
 			return json(
 				{ error: { code: 'INVALID_GATE_INPUT', message: 'ข้อมูลสำหรับค้นหาไม่ถูกต้อง' } },
