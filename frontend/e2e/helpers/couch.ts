@@ -35,6 +35,19 @@ export function couchBootstrapAdmin(): { name: string; password: string } {
 	return { name: decodeURIComponent(m[2]), password: decodeURIComponent(m[3]) };
 }
 
+/**
+ * AuthSession for the CouchDB server admin from `COUCHDB_ADMIN_URL` — the only
+ * identity allowed to provision shelters (`POST /api/back-office/shelter` requires
+ * `_admin`). Pass the result to `injectSession`.
+ */
+export async function bootstrapAdminSession(): Promise<{
+	user: { name: string; roles: string[] };
+	cookie: string;
+}> {
+	const { name, password } = couchBootstrapAdmin();
+	return { user: { name, roles: ['_admin'] }, cookie: await couchLogin(name, password) };
+}
+
 export async function couchReq(
 	method: string,
 	path: string,
@@ -81,6 +94,29 @@ export async function createCouchUser(user: TestUser): Promise<void> {
 	});
 	if (res.status >= 400)
 		throw new Error(`Could not create test user "${name}" (HTTP ${res.status})`);
+}
+
+/**
+ * A freshly minted user has no `security_question`, so the post-login gate (CR-105)
+ * sends it to `/force-setup` before any protected route renders. Seed one so UI
+ * tests exercise the page under test, not the onboarding wizard.
+ */
+export async function completeUserOnboarding(name: string): Promise<void> {
+	const path = `/_users/${USER_PREFIX}${encodeURIComponent(name)}`;
+	const got = await couchReq('GET', path);
+	if (got.status >= 400) throw new Error(`Could not fetch user "${name}" (HTTP ${got.status})`);
+	const res = await couchReq('PUT', path, {
+		...(got.data as Record<string, unknown>),
+		security_question: {
+			question_id: 'high_school',
+			answer_hash: 'e2e'.padEnd(64, '0'),
+			salt: 'e2e'.padEnd(32, '0'),
+			set_at: new Date().toISOString()
+		},
+		must_change_password: false
+	});
+	if (res.status >= 400)
+		throw new Error(`Could not complete onboarding for "${name}" (HTTP ${res.status})`);
 }
 
 /** Delete a user from CouchDB _users. Silently ignores 404 (already gone). */
