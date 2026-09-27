@@ -31,9 +31,11 @@ export { SOURCE_LABELS, SOURCE_OPTIONS };
 export const FOOD_SPHERE_SOURCE_LABELS = SOURCE_LABELS;
 export const FOOD_SPHERE_SOURCE_OPTIONS = SOURCE_OPTIONS;
 
+export const FOOD_SPHERE_STANDARD_SCHEMA_VERSION = 2;
+
 export interface FoodSphereStandard extends CatalogDoc {
 	type: 'food_sphere_standard';
-	schema_v: 1;
+	schema_v: 1 | 2;
 	target_segment: TargetSegment;
 	req_group_id: string; // e.g. "FOOD_ENERGY"
 	daily_demand: number; // > 0

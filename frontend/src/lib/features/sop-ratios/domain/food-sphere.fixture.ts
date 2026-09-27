@@ -4,7 +4,7 @@ export const DEFAULT_FOOD_SPHERE_STANDARDS: FoodSphereStandard[] = [
 	{
 		_id: 'food_sphere_standard:ALL:FOOD_ENERGY',
 		type: 'food_sphere_standard',
-		schema_v: 1,
+		schema_v: 2,
 		target_segment: 'ALL',
 		req_group_id: 'FOOD_ENERGY',
 		daily_demand: 2100,
@@ -19,7 +19,7 @@ export const DEFAULT_FOOD_SPHERE_STANDARDS: FoodSphereStandard[] = [
 	{
 		_id: 'food_sphere_standard:ALL:FOOD_FAT',
 		type: 'food_sphere_standard',
-		schema_v: 1,
+		schema_v: 2,
 		target_segment: 'ALL',
 		req_group_id: 'FOOD_FAT',
 		daily_demand: 40,
@@ -34,7 +34,7 @@ export const DEFAULT_FOOD_SPHERE_STANDARDS: FoodSphereStandard[] = [
 	{
 		_id: 'food_sphere_standard:ALL:FOOD_PROTEIN',
 		type: 'food_sphere_standard',
-		schema_v: 1,
+		schema_v: 2,
 		target_segment: 'ALL',
 		req_group_id: 'FOOD_PROTEIN',
 		daily_demand: 53,
@@ -49,7 +49,7 @@ export const DEFAULT_FOOD_SPHERE_STANDARDS: FoodSphereStandard[] = [
 	{
 		_id: 'food_sphere_standard:INFANT:FOOD_ENERGY',
 		type: 'food_sphere_standard',
-		schema_v: 1,
+		schema_v: 2,
 		target_segment: 'INFANT',
 		req_group_id: 'FOOD_ENERGY',
 		daily_demand: 550,
@@ -64,7 +64,7 @@ export const DEFAULT_FOOD_SPHERE_STANDARDS: FoodSphereStandard[] = [
 	{
 		_id: 'food_sphere_standard:YOUNG_CHILD:FOOD_ENERGY',
 		type: 'food_sphere_standard',
-		schema_v: 1,
+		schema_v: 2,
 		target_segment: 'YOUNG_CHILD',
 		req_group_id: 'FOOD_ENERGY',
 		daily_demand: 1250,
@@ -79,7 +79,7 @@ export const DEFAULT_FOOD_SPHERE_STANDARDS: FoodSphereStandard[] = [
 	{
 		_id: 'food_sphere_standard:YOUNG_CHILD:FOOD_PROTEIN',
 		type: 'food_sphere_standard',
-		schema_v: 1,
+		schema_v: 2,
 		target_segment: 'YOUNG_CHILD',
 		req_group_id: 'FOOD_PROTEIN',
 		daily_demand: 25,
@@ -94,7 +94,7 @@ export const DEFAULT_FOOD_SPHERE_STANDARDS: FoodSphereStandard[] = [
 	{
 		_id: 'food_sphere_standard:ELDERLY:FOOD_ENERGY',
 		type: 'food_sphere_standard',
-		schema_v: 1,
+		schema_v: 2,
 		target_segment: 'ELDERLY',
 		req_group_id: 'FOOD_ENERGY',
 		daily_demand: 1900,
@@ -109,7 +109,7 @@ export const DEFAULT_FOOD_SPHERE_STANDARDS: FoodSphereStandard[] = [
 	{
 		_id: 'food_sphere_standard:ELDERLY:FOOD_PROTEIN',
 		type: 'food_sphere_standard',
-		schema_v: 1,
+		schema_v: 2,
 		target_segment: 'ELDERLY',
 		req_group_id: 'FOOD_PROTEIN',
 		daily_demand: 60,
@@ -124,7 +124,7 @@ export const DEFAULT_FOOD_SPHERE_STANDARDS: FoodSphereStandard[] = [
 	{
 		_id: 'food_sphere_standard:ALL:FOOD_PROTEIN_HALAL',
 		type: 'food_sphere_standard',
-		schema_v: 1,
+		schema_v: 2,
 		target_segment: 'ALL',
 		req_group_id: 'FOOD_PROTEIN_HALAL',
 		daily_demand: 53,
@@ -139,7 +139,7 @@ export const DEFAULT_FOOD_SPHERE_STANDARDS: FoodSphereStandard[] = [
 	{
 		_id: 'food_sphere_standard:YOUNG_CHILD:FOOD_PROTEIN_HALAL',
 		type: 'food_sphere_standard',
-		schema_v: 1,
+		schema_v: 2,
 		target_segment: 'YOUNG_CHILD',
 		req_group_id: 'FOOD_PROTEIN_HALAL',
 		daily_demand: 25,
@@ -154,7 +154,7 @@ export const DEFAULT_FOOD_SPHERE_STANDARDS: FoodSphereStandard[] = [
 	{
 		_id: 'food_sphere_standard:ELDERLY:FOOD_PROTEIN_HALAL',
 		type: 'food_sphere_standard',
-		schema_v: 1,
+		schema_v: 2,
 		target_segment: 'ELDERLY',
 		req_group_id: 'FOOD_PROTEIN_HALAL',
 		daily_demand: 60,
@@ -169,7 +169,7 @@ export const DEFAULT_FOOD_SPHERE_STANDARDS: FoodSphereStandard[] = [
 	{
 		_id: 'food_sphere_standard:ALL:DRINKING_WATER',
 		type: 'food_sphere_standard',
-		schema_v: 1,
+		schema_v: 2,
 		target_segment: 'ALL',
 		req_group_id: 'DRINKING_WATER',
 		daily_demand: 3,
@@ -184,7 +184,7 @@ export const DEFAULT_FOOD_SPHERE_STANDARDS: FoodSphereStandard[] = [
 	{
 		_id: 'food_sphere_standard:YOUNG_CHILD:DRINKING_WATER',
 		type: 'food_sphere_standard',
-		schema_v: 1,
+		schema_v: 2,
 		target_segment: 'YOUNG_CHILD',
 		req_group_id: 'DRINKING_WATER',
 		daily_demand: 1.5,
@@ -199,7 +199,7 @@ export const DEFAULT_FOOD_SPHERE_STANDARDS: FoodSphereStandard[] = [
 	{
 		_id: 'food_sphere_standard:ELDERLY:DRINKING_WATER',
 		type: 'food_sphere_standard',
-		schema_v: 1,
+		schema_v: 2,
 		target_segment: 'ELDERLY',
 		req_group_id: 'DRINKING_WATER',
 		daily_demand: 2.5,

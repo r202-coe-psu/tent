@@ -126,6 +126,7 @@ export {
 	FOOD_SPHERE_SOURCE_OPTIONS,
 	foodSphereStandardInputSchema,
 	isFoodSphereStandard,
+	FOOD_SPHERE_STANDARD_SCHEMA_VERSION,
 	type TargetSegment,
 	type FoodSphereSource,
 	type FoodSphereStandard,

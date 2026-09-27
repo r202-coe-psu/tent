@@ -498,7 +498,9 @@
 <Sheet.Root bind:open={itemSheetOpen}>
 	<Sheet.Content
 		side="right"
-		class="w-full overflow-y-auto sm:max-w-lg {categorySheetOpen ? 'sm:-translate-x-20' : ''}"
+		class="w-full overflow-y-auto sm:max-w-lg {categorySheetOpen
+			? 'sm:-translate-x-20'
+			: ''}"
 	>
 		<Sheet.Header class="border-b border-border px-6 pt-4 pb-4 text-left">
 			<Sheet.Title>

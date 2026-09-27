@@ -2,6 +2,7 @@ import { createRemoteRepository, type Repository } from '$lib/db/repository';
 import { now } from '$lib/db/model';
 import {
 	isFoodSphereStandard,
+	FOOD_SPHERE_STANDARD_SCHEMA_VERSION,
 	type FoodSphereStandard,
 	type FoodSphereStandardInput
 } from '../domain/food-sphere';
@@ -84,7 +85,7 @@ export class FoodSphereRemoteRepository {
 			_id: id,
 			...(existing?._rev ? { _rev: existing._rev } : {}),
 			type: 'food_sphere_standard',
-			schema_v: 1,
+			schema_v: FOOD_SPHERE_STANDARD_SCHEMA_VERSION,
 			target_segment: input.target_segment,
 			req_group_id: input.req_group_id,
 			daily_demand: Number(input.daily_demand),
