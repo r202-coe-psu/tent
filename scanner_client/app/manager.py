@@ -82,6 +82,7 @@ class ScannerClientManager:
         self.waiting_path = "/kiosk/scanner/waiting"
         self.reading_path = "/kiosk/scanner/reading"
         self.remove_card_path = "/kiosk/scanner/remove-card"
+        self.register_card_path = "/kiosk/register/card"
         self.error_path = "/kiosk/scanner/error"
         self.bootstrap_api_url = f"{self.tent_base_url}/api/v1/scanner/bootstrap"
         self._refresh_kiosk_urls()
@@ -220,6 +221,7 @@ class ScannerClientManager:
             "/api/v1/scanner/kiosk/lookup",
             "/api/v1/scanner/kiosk/check-in",
             "/api/v1/scanner/kiosk/config",
+            "/api/v1/scanner/kiosk/register",
         }
 
         headers = dict(request.headers)
@@ -252,6 +254,36 @@ class ScannerClientManager:
             {"eventName": event_name, "citizenId": citizen_id},
         )
 
+    async def _read_full_card_if_register_path(self) -> bool:
+        """Read and hand off a full card only while the registration page is active."""
+        if not self.page or self.page.is_closed() or not self.reader:
+            return False
+        if urllib.parse.urlsplit(self.page.url).path != self.register_card_path:
+            return False
+
+        logger.info("Registration card page is ready; reading full smart-card data")
+        try:
+            card = await asyncio.to_thread(self.reader.read_all_data)
+            await self.page.wait_for_selector(
+                '[data-kiosk-register-ready="true"]', timeout=15000
+            )
+            await self.page.evaluate(
+                "card => window.dispatchEvent(new CustomEvent('kiosk:smart-card-full-read', { detail: card }))",
+                card,
+            )
+            logger.info("Full smart-card data sent to the kiosk registration flow")
+            return True
+        except Exception:
+            logger.error("Full smart-card read or kiosk handoff failed")
+            if self.page and not self.page.is_closed():
+                try:
+                    await self.page.evaluate(
+                        "window.dispatchEvent(new CustomEvent('kiosk:smart-card-full-read-error'))"
+                    )
+                except Exception:
+                    logger.warning("Could not notify the kiosk registration page about the card read error")
+            return False
+
     def _card_inserted_safely(self) -> bool:
         """Reader errors must not trap the kiosk on a result screen."""
         try:
@@ -262,6 +294,7 @@ class ScannerClientManager:
 
     async def _wait_for_home_or_new_card(self) -> bool:
         """Wait for the result screen to close, or restart promptly for the next card."""
+        full_read_attempted = False
         while (
             self.running
             and self.page
@@ -269,8 +302,18 @@ class ScannerClientManager:
             and urllib.parse.urlsplit(self.page.url).path != self.home_path
         ):
             if self._card_inserted_safely():
+                if full_read_attempted:
+                    await asyncio.sleep(0.5)
+                    continue
+                current_path = urllib.parse.urlsplit(self.page.url).path
+                if current_path == self.register_card_path:
+                    full_read_attempted = True
+                    await self._read_full_card_if_register_path()
+                    await asyncio.sleep(0.5)
+                    continue
                 logger.info("New card inserted before returning home; restarting card flow")
                 return True
+            full_read_attempted = False
             await asyncio.sleep(0.5)
         return False
 
@@ -348,6 +391,12 @@ class ScannerClientManager:
                     await asyncio.sleep(self.poll_interval)
                     continue
 
+                if urllib.parse.urlsplit(self.page.url).path == self.register_card_path:
+                    await self._read_full_card_if_register_path()
+                    while self.running and self.reader and self._card_inserted_safely():
+                        await asyncio.sleep(self.poll_interval)
+                    continue
+
                 logger.info("Card detected; reading citizen ID")
                 await self._navigate(self.reading_url)
                 try:
@@ -378,7 +427,15 @@ class ScannerClientManager:
                     )
 
                 logger.info("Waiting for card removal")
+                full_read_attempted = False
                 while self.running and self.reader and self.reader.is_card_inserted():
+                    if (
+                        not full_read_attempted
+                        and self.page
+                        and urllib.parse.urlsplit(self.page.url).path == self.register_card_path
+                    ):
+                        full_read_attempted = True
+                        await self._read_full_card_if_register_path()
                     await asyncio.sleep(self.poll_interval)
 
                 if self.page.is_closed():
@@ -386,6 +443,8 @@ class ScannerClientManager:
                 if urllib.parse.urlsplit(self.page.url).path == self.remove_card_path:
                     await self._dispatch_card_event("kiosk:smart-card-removed")
                     logger.info("Card removed; waiting for staff to complete check-in")
+                    await self._wait_for_home_or_new_card()
+                elif urllib.parse.urlsplit(self.page.url).path != self.home_path:
                     await self._wait_for_home_or_new_card()
                 else:
                     await self._navigate(self.home_url)

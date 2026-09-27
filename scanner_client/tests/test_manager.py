@@ -159,6 +159,7 @@ class FakePage:
         self.client_nav_fails = client_nav_fails
         self.evaluated = []
         self.gotos = []
+        self.waited_selectors = []
 
     def is_closed(self):
         return False
@@ -176,6 +177,14 @@ class FakePage:
     async def goto(self, url, **_kwargs):
         self.gotos.append(url)
         self.url = url
+
+    async def wait_for_selector(self, selector, **_kwargs):
+        self.waited_selectors.append(selector)
+
+
+class EventFakePage(FakePage):
+    async def evaluate(self, script, arg=None):
+        self.evaluated.append((script, arg))
 
 
 class KioskNavigationTests(unittest.IsolatedAsyncioTestCase):
@@ -221,6 +230,30 @@ class FakeReader:
 
 
 class CardRescanTests(unittest.IsolatedAsyncioTestCase):
+    async def test_register_path_reads_each_card_after_removal_and_reinsertion(self):
+        client = manager.ScannerClientManager(valid_config())
+        page = EventFakePage(f"https://tent.example.go.th{client.register_card_path}")
+        client.page = page
+        reads = []
+        client.reader = SimpleNamespace(
+            is_card_inserted=iter([True, False, True, False]).__next__,
+            read_all_data=lambda: reads.append(len(reads)) or {"citizen_id": "1234567890123"},
+        )
+        sleeps = []
+
+        async def return_home_after_second_removal(seconds):
+            sleeps.append(seconds)
+            if len(sleeps) == 4:
+                page.url = client.home_url
+
+        with patch.object(asyncio, "sleep", new=return_home_after_second_removal):
+            saw_new_card = await client._wait_for_home_or_new_card()
+
+        self.assertFalse(saw_new_card)
+        self.assertEqual(len(reads), 2)
+        full_reads = [call for call in page.evaluated if "kiosk:smart-card-full-read" in call[0]]
+        self.assertEqual(len(full_reads), 2)
+
     async def test_wait_for_home_breaks_when_new_card_is_inserted(self):
         client = manager.ScannerClientManager(valid_config())
         client.page = FakePage(client.remove_card_url)
@@ -236,6 +269,43 @@ class CardRescanTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(saw_new_card)
         self.assertEqual(urlparse(client.page.url).path, client.remove_card_path)
         self.assertEqual(sleeps, [0.5])
+
+    async def test_full_card_read_runs_only_on_registration_card_path(self):
+        client = manager.ScannerClientManager(valid_config())
+        page = EventFakePage(client.remove_card_url)
+        client.page = page
+        card = {"citizen_id": "1234567890123", "first_name_th": "Test"}
+        client.reader = SimpleNamespace(read_all_data=lambda: card)
+
+        self.assertFalse(await client._read_full_card_if_register_path())
+        self.assertEqual(page.evaluated, [])
+
+        page.url = f"https://tent.example.go.th{client.register_card_path}"
+        with self.assertLogs(manager.logger, level="INFO") as logs:
+            self.assertTrue(await client._read_full_card_if_register_path())
+
+        self.assertEqual(page.waited_selectors, ['[data-kiosk-register-ready="true"]'])
+        self.assertEqual(page.evaluated[-1][1], card)
+        self.assertIn("kiosk:smart-card-full-read", page.evaluated[-1][0])
+        self.assertTrue(all("1234567890123" not in line for line in logs.output))
+        self.assertTrue(all("Test" not in line for line in logs.output))
+
+    async def test_full_card_read_error_notifies_registration_screen_without_card_data(self):
+        client = manager.ScannerClientManager(valid_config())
+        page = EventFakePage(f"https://tent.example.go.th{client.register_card_path}")
+        client.page = page
+
+        def failed_read():
+            raise OSError("reader failure with private payload")
+
+        client.reader = SimpleNamespace(read_all_data=failed_read)
+
+        with self.assertLogs(manager.logger, level="ERROR") as logs:
+            result = await client._read_full_card_if_register_path()
+
+        self.assertFalse(result)
+        self.assertIn("kiosk:smart-card-full-read-error", page.evaluated[-1][0])
+        self.assertTrue(all("private payload" not in line for line in logs.output))
 
     async def test_wait_for_home_survives_reader_error(self):
         client = manager.ScannerClientManager(valid_config())
@@ -282,6 +352,13 @@ class KioskApiRouteTests(unittest.IsolatedAsyncioTestCase):
                 True,
             ),
             (
+                "same-origin kiosk register POST",
+                "https://tent.example.go.th/api/v1/scanner/kiosk/register",
+                "POST",
+                "https://tent.example.go.th",
+                True,
+            ),
+            (
                 "GET",
                 "https://tent.example.go.th/api/v1/scanner/kiosk/lookup",
                 "GET",
@@ -312,6 +389,13 @@ class KioskApiRouteTests(unittest.IsolatedAsyncioTestCase):
             (
                 "non-allowlisted path",
                 "https://tent.example.go.th/api/v1/scanner/draft",
+                "POST",
+                "https://tent.example.go.th",
+                False,
+            ),
+            (
+                "register path suffix",
+                "https://tent.example.go.th/api/v1/scanner/kiosk/register/extra",
                 "POST",
                 "https://tent.example.go.th",
                 False,
