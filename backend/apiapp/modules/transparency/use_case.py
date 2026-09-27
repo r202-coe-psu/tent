@@ -15,6 +15,7 @@ OPEN_SHELTER_STATUSES = frozenset({"open", "full"})
 # Public metrics occupancy_total = Forecast (CR-112). Kitchen/partner stay active-only.
 OCCUPANCY_STATUSES = (
     "pre_registered",
+    "kiosk_registered",
     "arriving",
     "active",
     "room_confirmed",

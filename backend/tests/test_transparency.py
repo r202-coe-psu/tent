@@ -68,7 +68,7 @@ async def test_transparency_summary_aggregates_mongo(
     await _insert_shelter(db_client, settings, code="SH003", status="full")
     await _insert_shelter(db_client, settings, code="SH004", status="open")
 
-    # Occupancy counts active + pre_registered across all projected shelters,
+    # Occupancy counts active + pre_registered + kiosk_registered across all projected shelters,
     # including standby (people still present).
     await _insert_person(
         db_client, settings, person_id="evacuee:1", shelter_code="SH001", status="active"
@@ -79,6 +79,13 @@ async def test_transparency_summary_aggregates_mongo(
         person_id="evacuee:2",
         shelter_code="SH001",
         status="pre_registered",
+    )
+    await _insert_person(
+        db_client,
+        settings,
+        person_id="evacuee:walkin",
+        shelter_code="SH001",
+        status="kiosk_registered",
     )
     await _insert_person(
         db_client, settings, person_id="evacuee:3", shelter_code="SH002", status="active"
@@ -95,7 +102,7 @@ async def test_transparency_summary_aggregates_mongo(
     assert body["summary"]["shelters_total"] == 4
     # open + full only — standby is projected but not "ready"
     assert body["summary"]["shelters_open"] == 3
-    assert body["summary"]["occupancy_total"] == 3
+    assert body["summary"]["occupancy_total"] == 4
     assert body["summary"]["vulnerable_count"] is None
     assert "last_updated" in body
     assert body["flags"]["public_metrics_occupancy"] is True

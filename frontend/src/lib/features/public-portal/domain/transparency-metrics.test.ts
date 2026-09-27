@@ -43,6 +43,7 @@ describe('transparency metrics', () => {
 describe('occupancy triple (CR-112 Forecast / Present / In-zone)', () => {
 	const rows = [
 		{ key: 'pre_registered', value: 2 },
+		{ key: 'kiosk_registered', value: 4 },
 		{ key: 'arriving', value: 1 },
 		{ key: 'active', value: 3 },
 		{ key: 'room_confirmed', value: 4 },
@@ -53,9 +54,9 @@ describe('occupancy triple (CR-112 Forecast / Present / In-zone)', () => {
 		{ key: 'deceased', value: 1 }
 	];
 
-	it('Forecast occupancy counts pre_registered, arriving, active, room_confirmed, temporary_leave', () => {
-		// 2+1+3+4+1 = 11; terminal statuses excluded
-		expect(sumOccupancyFromStatusRows(rows)).toBe(11);
+	it('Forecast occupancy counts kiosk_registered with pre_registered and present statuses', () => {
+		// 2+4+1+3+4+1 = 15; terminal statuses excluded
+		expect(sumOccupancyFromStatusRows(rows)).toBe(15);
 	});
 
 	it('Present counts active, room_confirmed, temporary_leave only', () => {
@@ -68,7 +69,7 @@ describe('occupancy triple (CR-112 Forecast / Present / In-zone)', () => {
 
 	it('returns the additive triple together', () => {
 		expect(occupancyTripleFromStatusRows(rows)).toEqual({
-			occupancy: 11,
+			occupancy: 15,
 			present: 8,
 			in_zone: 4
 		});

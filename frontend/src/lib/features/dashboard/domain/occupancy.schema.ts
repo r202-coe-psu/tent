@@ -29,6 +29,7 @@ export const OccupancyPayloadSchema = z.object({
 	shelter_code: z.string(),
 	/** Count of evacuees with status = 'pre_registered' (registered, not yet checked in). */
 	pre_registered: z.number().int().nonnegative(),
+	kiosk_registered: z.number().int().nonnegative(),
 	/** Count of evacuees with status = 'active' (physically present in the shelter). */
 	active: z.number().int().nonnegative(),
 	/** Count of evacuees with status = 'temporary_leave' (checked in, temporarily away). */
@@ -58,6 +59,7 @@ export function rowsToOccupancyPayload(
 		counts[row.key] = (counts[row.key] ?? 0) + row.value;
 	}
 	const pre_registered = counts['pre_registered'] ?? 0;
+	const kiosk_registered = counts['kiosk_registered'] ?? 0;
 	const active = counts['active'] ?? 0;
 	const temporary_leave = counts['temporary_leave'] ?? 0;
 	const transferred = counts['transferred'] ?? 0;
@@ -66,11 +68,19 @@ export function rowsToOccupancyPayload(
 	return {
 		shelter_code: shelterCode,
 		pre_registered,
+		kiosk_registered,
 		active,
 		temporary_leave,
 		transferred,
 		checked_out,
 		deceased,
-		total: pre_registered + active + temporary_leave + transferred + checked_out + deceased
+		total:
+			pre_registered +
+			kiosk_registered +
+			active +
+			temporary_leave +
+			transferred +
+			checked_out +
+			deceased
 	};
 }

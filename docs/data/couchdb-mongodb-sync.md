@@ -86,6 +86,10 @@ staff device (PouchDB) ⇄ WAN ⇄ central (CouchDB) ⇄ sync worker (CDC ทั
 // projector: ถ้า evacuee.privacy.search_excluded == true → ลบ doc นี้ออกจาก Mongo (opt-out = หายทั้ง record)
 // ไม่มี: นามสกุลเต็ม, เบอร์ดิบ, medical, national_id plaintext — ไม่ project เด็ดขาด
 
+การเปลี่ยนสูตร projector ของ `checked_in_at` ให้เป็น `null` สำหรับ `pre_registered` และ
+`kiosk_registered` มีผลกับ event ใหม่เท่านั้น; ต้อง bootstrap/reproject `public_persons` เดิม
+หลัง deploy worker เพื่อให้ Mongo สะท้อนสูตรใหม่ด้วย (ติดตามใน CR ของ kiosk walk-in ก่อน deploy).
+
 // public_shelters — shelter list (จาก registry)
 // status: open|full only — closed/inactive shelters are deleted from this collection (not projected as "closed")
 { _id: "SH001", shelter_code: "SH001", registry_id: "shelter:{ulid}", name, status: "open|full",

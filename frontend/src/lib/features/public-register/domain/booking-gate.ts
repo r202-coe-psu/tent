@@ -8,6 +8,7 @@
 /** Stay statuses that still hold a Forecast seat (non-cancelled holds). */
 export const ACTIVE_HOLD_STATUSES = [
 	'pre_registered',
+	'kiosk_registered',
 	'arriving',
 	'active',
 	'room_confirmed',

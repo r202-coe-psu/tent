@@ -149,7 +149,9 @@ export function presentFromCounts(c: Record<string, number>): number {
 
 /** CR-112 Forecast: Present + pre_registered + arriving */
 export function forecastFromCounts(c: Record<string, number>): number {
-	return presentFromCounts(c) + (c.pre_registered ?? 0) + (c.arriving ?? 0);
+	return (
+		presentFromCounts(c) + (c.pre_registered ?? 0) + (c.kiosk_registered ?? 0) + (c.arriving ?? 0)
+	);
 }
 
 /** Thai Buddhist birth year → age band (matches shelter demographics BFF). */

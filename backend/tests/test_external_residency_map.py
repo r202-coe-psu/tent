@@ -14,6 +14,7 @@ def test_checked_in_for_present_statuses():
 def test_checked_out_for_non_present_statuses():
     for status in (
         "pre_registered",
+        "kiosk_registered",
         "arriving",
         "checked_out",
         "transferred",

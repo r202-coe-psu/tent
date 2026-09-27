@@ -182,7 +182,7 @@ async function loadSiteMetrics(filters: OverviewFilters): Promise<SiteMetric[]> 
 			const counts = await occupancyCounts(master.code);
 			const present = presentFromCounts(counts);
 			const forecast = forecastFromCounts(counts);
-			const pre_registered = counts.pre_registered ?? 0;
+			const pre_registered = (counts.pre_registered ?? 0) + (counts.kiosk_registered ?? 0);
 			const capacity = master.capacity ?? 0;
 			const operation_status = resolveOperationStatus(master) ?? 'unknown';
 			const row: OverviewSiteRow = {
@@ -593,12 +593,21 @@ function matchesStayBucket(stayStatus: string, stayBucket?: string): boolean {
 		);
 	}
 	if (stayBucket === 'forecast') {
-		return ['pre_registered', 'arriving', 'active', 'room_confirmed', 'temporary_leave'].includes(
-			stayStatus
-		);
+		return [
+			'pre_registered',
+			'kiosk_registered',
+			'arriving',
+			'active',
+			'room_confirmed',
+			'temporary_leave'
+		].includes(stayStatus);
 	}
 	if (stayBucket === 'pre_registered') {
-		return stayStatus === 'pre_registered' || stayStatus === 'unassigned';
+		return (
+			stayStatus === 'pre_registered' ||
+			stayStatus === 'kiosk_registered' ||
+			stayStatus === 'unassigned'
+		);
 	}
 	if (stayBucket === 'checked_out') {
 		return stayStatus === 'checked_out';
@@ -711,7 +720,7 @@ export async function buildPreRegistrationsList(
 					}
 				}
 
-				let queueStatus = `pre_registered@${master.code}`;
+				let queueStatus = `${stayStatus === 'kiosk_registered' ? 'kiosk_registered' : 'pre_registered'}@${master.code}`;
 				if (stayStatus === 'active') {
 					queueStatus = `checked_in@${master.code}`;
 				} else if (stayStatus === 'room_confirmed') {
@@ -827,7 +836,10 @@ export async function buildBoundEvacueeProfile(
 		throw new ServiceError('VALIDATION', 'Evacuee not found');
 	}
 	const ev = res.data as EvacueeDoc;
-	if (ev.current_stay?.status !== 'pre_registered') {
+	if (
+		ev.current_stay?.status !== 'pre_registered' &&
+		ev.current_stay?.status !== 'kiosk_registered'
+	) {
 		throw new ServiceError(
 			'VALIDATION',
 			'Only pre_registered evacuees are available on this surface'
@@ -864,7 +876,7 @@ export async function buildBoundEvacueeProfile(
 		age: ev.age ?? null,
 		vulnerable_groups: ev.vulnerable_groups ?? [],
 		special_needs: ev.special_needs ?? [],
-		queue_status: `pre_registered@${shelterCode}`,
+		queue_status: `${ev.current_stay?.status === 'kiosk_registered' ? 'kiosk_registered' : 'pre_registered'}@${shelterCode}`,
 		shelter_code: shelterCode,
 		shelter_name: master?.name ?? shelterCode,
 		shelter_href: `/back-office/evacuee-management?shelter=${encodeURIComponent(shelterCode)}`,

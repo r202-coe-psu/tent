@@ -259,20 +259,22 @@ async def test_get_person_shelter_residency_checked_out(
     assert body["checkin_datetime"] == "2026-08-15T09:00:00+07:00"
 
 
-async def test_get_person_shelter_residency_pre_registered_returns_404(
+@pytest.mark.parametrize("stay_status", ["pre_registered", "kiosk_registered"])
+async def test_get_person_shelter_residency_pending_registration_returns_404(
     client: AsyncClient,
     valid_api_key: ApiKey,
     bearer_headers: dict[str, str],
     sample_shelters: list[PublicShelter],
+    stay_status: str,
 ) -> None:
-    cid = "1111222233334"
+    cid = "1111222233334" if stay_status == "pre_registered" else "1111222233335"
     person = PublicPerson(
-        id="evacuee:01HTESTPERSON003",
+        id=f"evacuee:pending-{stay_status}",
         shelter_code="SH001",
         first_name="ผู้จอง",
         last_name_masked="ย***",
         national_id_hash=national_id_hash(cid),
-        status="pre_registered",
+        status=stay_status,
         checked_in_at=None,
         updated_at=datetime.now(UTC),
     )

@@ -14,6 +14,7 @@ def test_map_public_status_includes_arriving_and_room_confirmed():
     """CR-112 — public search allow-list includes Report-in and Zone Arrival."""
     assert map_public_status("arriving") == "arriving"
     assert map_public_status("room_confirmed") == "room_confirmed"
+    assert map_public_status("kiosk_registered") == "kiosk_registered"
     assert map_public_status("active") == "active"
     assert map_public_status("teleported") == "unknown"
 

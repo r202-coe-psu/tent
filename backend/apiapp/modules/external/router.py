@@ -99,7 +99,15 @@ async def get_person_shelter_residency(
     cid_hash = national_id_hash(cleaned_cid)
     person = await PublicPerson.find_one(PublicPerson.national_id_hash == cid_hash)
 
-    if person is None or person.checked_in_at is None or person.status == "pre_registered":
+    if (
+        person is None
+        or person.checked_in_at is None
+        or person.status
+        in {
+            "pre_registered",
+            "kiosk_registered",
+        }
+    ):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"error": {"code": "not_found", "message": "ไม่พบประวัติการเข้าพักของ CID นี้"}},

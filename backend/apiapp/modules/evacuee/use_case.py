@@ -27,6 +27,7 @@ NAME_RESULT_LIMIT = 10
 PUBLIC_STAY_STATUSES = frozenset(
     {
         "pre_registered",
+        "kiosk_registered",
         "arriving",
         "active",
         "room_confirmed",

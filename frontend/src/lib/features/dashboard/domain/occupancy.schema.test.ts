@@ -13,6 +13,7 @@ describe('rowsToOccupancyPayload', () => {
 	it('aggregates all known status keys correctly', () => {
 		const rows = [
 			{ key: 'pre_registered', value: 5 },
+			{ key: 'kiosk_registered', value: 4 },
 			{ key: 'active', value: 10 },
 			{ key: 'temporary_leave', value: 1 },
 			{ key: 'transferred', value: 2 },
@@ -22,18 +23,20 @@ describe('rowsToOccupancyPayload', () => {
 		const result = rowsToOccupancyPayload('SH001', rows);
 		expect(result.shelter_code).toBe('SH001');
 		expect(result.pre_registered).toBe(5);
+		expect(result.kiosk_registered).toBe(4);
 		expect(result.active).toBe(10);
 		expect(result.temporary_leave).toBe(1);
 		expect(result.transferred).toBe(2);
 		expect(result.checked_out).toBe(3);
 		expect(result.deceased).toBe(1);
-		expect(result.total).toBe(22);
+		expect(result.total).toBe(26);
 	});
 
 	it('returns all zeros for empty rows', () => {
 		const result = rowsToOccupancyPayload('SH002', []);
 		expect(result.total).toBe(0);
 		expect(result.pre_registered).toBe(0);
+		expect(result.kiosk_registered).toBe(0);
 		expect(result.active).toBe(0);
 	});
 
@@ -53,6 +56,7 @@ describe('OccupancyPayloadSchema', () => {
 		const valid = {
 			shelter_code: 'SH001',
 			pre_registered: 5,
+			kiosk_registered: 0,
 			active: 10,
 			temporary_leave: 1,
 			transferred: 2,
@@ -67,6 +71,7 @@ describe('OccupancyPayloadSchema', () => {
 		const invalid = {
 			shelter_code: 'SH001',
 			pre_registered: -1,
+			kiosk_registered: 0,
 			active: 0,
 			temporary_leave: 0,
 			transferred: 0,
@@ -83,6 +88,7 @@ describe('OccupancyPayloadSchema', () => {
 		const withPii = {
 			shelter_code: 'SH001',
 			pre_registered: 1,
+			kiosk_registered: 0,
 			active: 0,
 			temporary_leave: 0,
 			transferred: 0,
