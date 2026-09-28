@@ -206,10 +206,9 @@ describe('stockBalance', () => {
 	});
 });
 
-describe('stock_ledger schema_v + reason enum (CR-032)', () => {
-	// `lot_ref` is optional on the persisted contract, so legacy schema_v 4
-	// remains current and every writer continues through `createStockLedger`.
-	it('keeps schema_v 4 for the backward-compatible optional lot_ref field', () => {
+describe('stock_ledger schema_v + reason enum (CR-032 / draft-lot-produced-at)', () => {
+	// Writer stamps schema_v 5; legacy rows through schema_v 4 remain readable.
+	it('stamps schema_v 5 on new ledger rows', () => {
 		const entry = createStockLedger(
 			{
 				item_id: 'item:rice',
@@ -220,7 +219,59 @@ describe('stock_ledger schema_v + reason enum (CR-032)', () => {
 			},
 			ctx
 		);
-		expect(entry.schema_v).toBe(4);
+		expect(entry.schema_v).toBe(5);
+		expect(entry.lot?.produced_at).toBe(entry.occurred_at);
+	});
+
+	it('defaults lot.produced_at to occurred_at on inbound when omitted', () => {
+		const entry = createStockLedger(
+			{
+				item_id: 'item:rice',
+				qty: 5,
+				unit: 'kg',
+				reason: 'receive',
+				ref_id: 'distribution_log:fixture',
+				lot: { note: 'Zone A' },
+				occurred_at: '2026-09-26T08:00:00.000Z'
+			},
+			ctx
+		);
+		expect(entry.lot).toEqual({
+			note: 'Zone A',
+			produced_at: '2026-09-26T08:00:00.000Z'
+		});
+	});
+
+	it('preserves an explicit lot.produced_at', () => {
+		const entry = createStockLedger(
+			{
+				item_id: 'item:rice',
+				qty: 5,
+				unit: 'kg',
+				reason: 'receive',
+				ref_id: 'distribution_log:fixture',
+				lot: { produced_at: '2026-09-20T00:00:00.000Z' },
+				occurred_at: '2026-09-26T08:00:00.000Z'
+			},
+			ctx
+		);
+		expect(entry.lot?.produced_at).toBe('2026-09-20T00:00:00.000Z');
+	});
+
+	it('does not invent produced_at on outbound distribute rows', () => {
+		const entry = createStockLedger(
+			{
+				item_id: 'item:rice',
+				qty: -2,
+				unit: 'kg',
+				reason: 'distribute',
+				ref_id: 'requisition_ticket:fixture',
+				lot_ref: 'stock_ledger:inbound'
+			},
+			ctx
+		);
+		expect(entry.lot).toBeUndefined();
+		expect(entry.schema_v).toBe(5);
 	});
 
 	it('accepts `distribution_return` as a valid reason (CR-059)', () => {
@@ -863,28 +914,31 @@ describe('createReceiveEntry', () => {
 				lot: {
 					expiry: '2026-12-31T00:00:00Z',
 					note: 'Zone A'
-				}
+				},
+				occurred_at: '2026-09-26T08:00:00.000Z'
 			},
 			ctx
 		);
 		expect(entry.lot).toEqual({
 			expiry: '2026-12-31T00:00:00Z',
-			note: 'Zone A'
+			note: 'Zone A',
+			produced_at: '2026-09-26T08:00:00.000Z'
 		});
 	});
 
-	it('accepts empty lot', () => {
+	it('defaults produced_at when lot is omitted on receive', () => {
 		const entry = createReceiveEntry(
 			{
 				item_id: 'item:rice',
 				qty: 10,
 				unit: 'kg',
 				source: 'donation',
-				ref_id: DONATION_REF
+				ref_id: DONATION_REF,
+				occurred_at: '2026-09-26T08:00:00.000Z'
 			},
 			ctx
 		);
-		expect(entry.lot).toBeUndefined();
+		expect(entry.lot).toEqual({ produced_at: '2026-09-26T08:00:00.000Z' });
 	});
 
 	it('permits missing lot.expiry for perishable items (validation is deferred to UI layer)', () => {
@@ -897,12 +951,13 @@ describe('createReceiveEntry', () => {
 				qty: 5,
 				unit: 'ขวด',
 				source: 'donation',
-				ref_id: DONATION_REF
+				ref_id: DONATION_REF,
+				occurred_at: '2026-09-26T08:00:00.000Z'
 				// missing lot.expiry
 			},
 			ctx
 		);
-		expect(entry.lot).toBeUndefined();
+		expect(entry.lot).toEqual({ produced_at: '2026-09-26T08:00:00.000Z' });
 	});
 });
 
@@ -1570,12 +1625,17 @@ describe('lot numbering (CR-088)', () => {
 				unit: 'kg',
 				reason: 'donation',
 				ref_id: 'donation:123',
-				lot: { lot_no: 'L-260825-001', storage_zone: 'A-01' }
+				lot: { lot_no: 'L-260825-001', storage_zone: 'A-01' },
+				occurred_at: '2026-08-25T10:00:00.000Z'
 			},
 			ctx
 		);
-		expect(entry.lot).toEqual({ lot_no: 'L-260825-001', storage_zone: 'A-01' });
-		expect(entry.schema_v).toBe(4);
+		expect(entry.lot).toEqual({
+			lot_no: 'L-260825-001',
+			storage_zone: 'A-01',
+			produced_at: '2026-08-25T10:00:00.000Z'
+		});
+		expect(entry.schema_v).toBe(5);
 		expect(parseStockLedger(entry)).toEqual(entry);
 	});
 });

@@ -8,6 +8,7 @@ import {
 	unitCodeSchema,
 	type UnitOfMeasure
 } from './unit-of-measure';
+import { STANDARD_UOM_OPTIONS } from '$lib/features/sop-ratios';
 
 describe('unit-of-measure domain', () => {
 	const mockCtx = {
@@ -109,7 +110,7 @@ describe('unit-of-measure domain', () => {
 	});
 
 	describe('canonical seed definitions', () => {
-		it('contains the 27 canonical units with deterministic IDs and valid dimensions', () => {
+		it('contains the 30 canonical units with deterministic IDs and valid dimensions', () => {
 			const expectedCodes = [
 				'piece',
 				'unit',
@@ -137,7 +138,10 @@ describe('unit-of-measure domain', () => {
 				'kg',
 				'ml',
 				'l',
-				'm'
+				'm',
+				'mg',
+				'mcg',
+				'kcal'
 			];
 			const expectedDimensions = [
 				...Array.from({ length: 20 }, () => 'count'),
@@ -147,11 +151,14 @@ describe('unit-of-measure domain', () => {
 				'mass',
 				'volume',
 				'volume',
-				'length'
+				'length',
+				'mass',
+				'mass',
+				'energy'
 			];
 
-			expect(FALLBACK_UNIT_DEFINITIONS).toHaveLength(27);
-			expect(new Set(FALLBACK_UNIT_DEFINITIONS.map((unit) => unit.code)).size).toBe(27);
+			expect(FALLBACK_UNIT_DEFINITIONS).toHaveLength(30);
+			expect(new Set(FALLBACK_UNIT_DEFINITIONS.map((unit) => unit.code)).size).toBe(30);
 			expect(FALLBACK_UNIT_DEFINITIONS.map((unit) => unit.code)).toEqual(expectedCodes);
 			expect(
 				FALLBACK_UNIT_DEFINITIONS.every((unit) => unitCodeSchema.safeParse(unit.code).success)
@@ -163,15 +170,18 @@ describe('unit-of-measure domain', () => {
 			expect(FALLBACK_UNIT_DEFINITIONS.filter((unit) => unit.dimension === 'count')).toHaveLength(
 				21
 			);
-			expect(FALLBACK_UNIT_DEFINITIONS.filter((unit) => unit.dimension === 'mass')).toHaveLength(2);
+			expect(FALLBACK_UNIT_DEFINITIONS.filter((unit) => unit.dimension === 'mass')).toHaveLength(4);
 			expect(FALLBACK_UNIT_DEFINITIONS.filter((unit) => unit.dimension === 'volume')).toHaveLength(
 				3
 			);
 			expect(FALLBACK_UNIT_DEFINITIONS.filter((unit) => unit.dimension === 'length')).toHaveLength(
 				1
 			);
+			expect(FALLBACK_UNIT_DEFINITIONS.filter((unit) => unit.dimension === 'energy')).toHaveLength(
+				1
+			);
 			expect(FALLBACK_UNIT_DEFINITIONS.map((unit) => unit.sort_order)).toEqual(
-				Array.from({ length: 27 }, (_, index) => index + 1)
+				Array.from({ length: 30 }, (_, index) => index + 1)
 			);
 		});
 	});
@@ -230,5 +240,56 @@ describe('unit-of-measure domain', () => {
 			expect(formatUnit(undefined)).toBe('');
 			expect(formatUnit('')).toBe('');
 		});
+	});
+});
+
+describe('nutrition units and legacy aliases', () => {
+	it('formats the seeded nutrition units in Thai', () => {
+		expect(formatUnit('kcal', [], 'th')).toBe('กิโลแคลอรี');
+		expect(formatUnit('mg', [], 'th')).toBe('มิลลิกรัม');
+		expect(formatUnit('mcg', [], 'th')).toBe('ไมโครกรัม');
+	});
+
+	it('formats legacy requirement-group units through aliases', () => {
+		expect(formatUnit('gram', [], 'th')).toBe('กรัม');
+		expect(formatUnit('liter', [], 'th')).toBe('ลิตร');
+		expect(formatUnit('litre', [], 'th')).toBe('ลิตร');
+		expect(formatUnit('pcs', [], 'th')).toBe('ชิ้น');
+	});
+
+	it('formats the same units in English and short Thai', () => {
+		expect(formatUnit('gram', [], 'en')).toBe('g');
+		expect(formatUnit('liter', [], 'en')).toBe('L');
+		expect(formatUnit('litre', [], 'en')).toBe('L');
+		expect(formatUnit('kcal', [], 'en')).toBe('kcal');
+		expect(formatUnit('gram', [], 'th', true)).toBe('ก.');
+		expect(formatUnit('mg', [], 'th', true)).toBe('มก.');
+		expect(formatUnit('liter', [], 'th', true)).toBe('ล.');
+		expect(formatUnit('litre', [], 'th', true)).toBe('ล.');
+	});
+
+	it('never leaves a standard requirement-group unit unformatted', () => {
+		for (const option of STANDARD_UOM_OPTIONS) {
+			expect(formatUnit(option.value, [], 'th')).not.toBe(option.value);
+		}
+	});
+
+	it('lets the unit master override an alias', () => {
+		const master: UnitOfMeasure[] = [
+			{
+				_id: 'unit_of_measure:kcal',
+				type: 'unit_of_measure',
+				schema_v: 1,
+				code: 'kcal',
+				label_th: 'กิโลแคลอรี (ศูนย์)',
+				label_en: 'kilocalorie',
+				dimension: 'count',
+				created_at: '2026-09-24T00:00:00.000Z',
+				updated_at: '2026-09-24T00:00:00.000Z',
+				created_by: 'system'
+			} as unknown as UnitOfMeasure
+		];
+		expect(formatUnit('kcal', master, 'th')).toBe('กิโลแคลอรี (ศูนย์)');
+		expect(formatUnit('kcal', master, 'en')).toBe('kilocalorie');
 	});
 });
