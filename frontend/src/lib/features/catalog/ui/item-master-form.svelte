@@ -76,8 +76,6 @@
 		energy: 'พลังงาน'
 	};
 
-	const DIMENSION_ORDER: Dimension[] = ['mass', 'volume', 'length', 'count', 'energy'];
-
 	const form = superForm(
 		defaults(
 			{
@@ -337,9 +335,13 @@
 		return activeUnits.map((unit) => {
 			const dimensionLabel = DIMENSION_LABELS[unit.dimension] ?? unit.dimension;
 			const labelThShort = 'label_th_short' in unit ? unit.label_th_short : undefined;
-			const keywords = [unit.code, unit.label_th, unit.label_en, labelThShort, dimensionLabel].filter(
-				(k): k is string => Boolean(k)
-			);
+			const keywords = [
+				unit.code,
+				unit.label_th,
+				unit.label_en,
+				labelThShort,
+				dimensionLabel
+			].filter((k): k is string => Boolean(k));
 			return {
 				value: unit.code,
 				label: unit.label_th || formatUnit(unit.code, allUnits, langState.current) || unit.code,

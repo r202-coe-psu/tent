@@ -115,8 +115,12 @@ export type FoodDistributionPoint = z.infer<typeof foodDistributionPointSchema>;
 export const facilitiesSchema = z.object({
 	toilets_male: z.coerce.number().int().min(0).nullish(),
 	toilets_female: z.coerce.number().int().min(0).nullish(),
+	toilets_unisex: z.coerce.number().int().min(0).nullish(),
 	toilets_accessible: z.coerce.number().int().min(0).nullish(),
 	showers: z.coerce.number().int().min(0).nullish(),
+	showers_male: z.coerce.number().int().min(0).nullish(),
+	showers_female: z.coerce.number().int().min(0).nullish(),
+	showers_unisex: z.coerce.number().int().min(0).nullish(),
 	water_points: z.coerce.number().int().min(0).nullish(),
 	handwashing_stations: z.coerce.number().int().min(0).nullish(),
 	car_toilet_accessible: z.boolean().nullish(),
