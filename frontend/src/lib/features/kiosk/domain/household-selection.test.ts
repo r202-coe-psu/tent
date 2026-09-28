@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { initialSelection, toExistingReportResults } from './household-selection';
+import {
+	initialReprintSelection,
+	initialSelection,
+	toExistingReportResults
+} from './household-selection';
 
 const members = [
 	{ evacuee_id: 'evacuee:head', is_primary: true, selectable: true, status: 'pre_registered' },
@@ -45,5 +49,16 @@ describe('toExistingReportResults', () => {
 				qr_payload: 'evacuee:arriving'
 			}
 		]);
+	});
+});
+
+describe('initialReprintSelection', () => {
+	it('ticks every prior report that still has a printable QR', () => {
+		const results = toExistingReportResults([
+			{ evacuee_id: 'evacuee:a', is_primary: true, selectable: false, status: 'arriving' },
+			{ evacuee_id: 'evacuee:b', is_primary: false, selectable: false, status: 'room_confirmed' },
+			{ evacuee_id: 'evacuee:c', is_primary: false, selectable: false, status: 'arriving' }
+		]);
+		expect(initialReprintSelection(results)).toEqual(['evacuee:a', 'evacuee:c']);
 	});
 });

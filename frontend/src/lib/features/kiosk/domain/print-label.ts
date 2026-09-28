@@ -7,10 +7,11 @@ export const KIOSK_PRINT_DPI = 203;
 export const KIOSK_LABEL_MM = { width: 80, height: 60 } as const;
 export const KIOSK_LABEL_MAX_WIDTH_MM = 82;
 export const KIOSK_LABEL_PADDING_MM = 2;
-/** Extra right padding: the XP-365B clips the right edge of an 80 mm label. */
-export const KIOSK_LABEL_RIGHT_SAFE_MM = 4;
-/** Shifts the whole label content left to offset the XP-365B printing right of the label centre. */
-export const KIOSK_LABEL_SHIFT_LEFT_MM = 4;
+/**
+ * Horizontal nudge for the whole label content (positive = right). 0 centres it on the label;
+ * tune on the real printer if the XP-365B feeds off-centre.
+ */
+export const KIOSK_LABEL_OFFSET_X_MM = 0;
 /** Space between the QR and the text. */
 export const KIOSK_LABEL_GAP_MM = 2;
 /** Height kept under the QR for caption + 2-line name + shelter. */
@@ -44,7 +45,7 @@ export function dotsToMm(dots: number): number {
 
 /** Largest square (mm) the QR image may occupy above the label text. */
 export function kioskQrBoxMm(): number {
-	const innerWidth = KIOSK_LABEL_MM.width - KIOSK_LABEL_PADDING_MM * 2 - KIOSK_LABEL_RIGHT_SAFE_MM;
+	const innerWidth = KIOSK_LABEL_MM.width - KIOSK_LABEL_PADDING_MM * 2;
 	const innerHeight = KIOSK_LABEL_MM.height - KIOSK_LABEL_PADDING_MM * 2;
 	return Math.min(innerWidth, innerHeight - KIOSK_LABEL_GAP_MM - KIOSK_LABEL_TEXT_MM);
 }
@@ -73,4 +74,62 @@ export function kioskQrPrintSize(moduleCount: number): KioskQrPrintSize {
 
 export function kioskLabelPageCss(): string {
 	return `@page{size:${KIOSK_LABEL_MM.width}mm ${KIOSK_LABEL_MM.height}mm;margin:0}`;
+}
+
+/** Label text styles (pt + unitless line height), shared by the print CSS and the PNG renderer. */
+export const KIOSK_LABEL_TEXT = {
+	caption: { pt: 8, lineHeight: 1.2, weight: 400 },
+	name: { pt: 12, lineHeight: 1.3, weight: 800, maxLines: 2 },
+	detail: { pt: 8, lineHeight: 1.2, weight: 400 }
+} as const;
+export const KIOSK_LABEL_TEXT_ROW_GAP_MM = 0.6;
+
+const PT_PER_INCH = 72;
+
+export function ptToDots(pt: number): number {
+	return (pt / PT_PER_INCH) * KIOSK_PRINT_DPI;
+}
+
+/** Whole-dot canvas size of one label (80×60 mm → 639×480 at 203 dpi). */
+export function kioskLabelDots(): { width: number; height: number } {
+	return {
+		width: Math.round(mmToDots(KIOSK_LABEL_MM.width)),
+		height: Math.round(mmToDots(KIOSK_LABEL_MM.height))
+	};
+}
+
+/**
+ * Greedy line wrap for label text. Thai has no spaces, so `segments` should come from a word
+ * segmenter; a segment wider than the line is split into graphemes. Overflow past `maxLines`
+ * ends the last line with an ellipsis (matching CSS `line-clamp`).
+ */
+export function wrapLabelText(
+	segments: readonly string[],
+	maxWidth: number,
+	measure: (text: string) => number,
+	maxLines: number,
+	splitGraphemes: (text: string) => string[] = (text) => Array.from(text)
+): string[] {
+	const pieces = segments.flatMap((segment) =>
+		measure(segment.trim()) > maxWidth ? splitGraphemes(segment) : [segment]
+	);
+	const lines: string[] = [];
+	let current = '';
+	for (const piece of pieces) {
+		if (current === '' || measure(current + piece) <= maxWidth) {
+			current = (current + piece).trimStart();
+			continue;
+		}
+		lines.push(current.trimEnd());
+		current = piece.trimStart();
+	}
+	if (current) lines.push(current.trimEnd());
+	if (lines.length <= maxLines) return lines;
+
+	const kept = lines.slice(0, maxLines);
+	const graphemes = splitGraphemes(kept[maxLines - 1] ?? '');
+	const withEllipsis = () => `${graphemes.join('').trimEnd()}…`;
+	while (graphemes.length > 0 && measure(withEllipsis()) > maxWidth) graphemes.pop();
+	kept[maxLines - 1] = withEllipsis();
+	return kept;
 }

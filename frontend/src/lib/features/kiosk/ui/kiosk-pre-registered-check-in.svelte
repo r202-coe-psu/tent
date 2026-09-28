@@ -13,13 +13,17 @@
 	import KioskCheckInWizard from './kiosk-check-in-wizard.svelte';
 	import KioskLookupErrorActions from './kiosk-lookup-error-actions.svelte';
 	import PhoneHouseholdPicker from './phone-household-picker.svelte';
-	import { initialSelection, toExistingReportResults } from '../domain/household-selection';
+	import KioskPrintStatus from './kiosk-print-status.svelte';
+	import {
+		initialReprintSelection,
+		initialSelection,
+		toExistingReportResults
+	} from '../domain/household-selection';
 	import {
 		KIOSK_LABEL_GAP_MM,
 		KIOSK_LABEL_MM,
+		KIOSK_LABEL_OFFSET_X_MM,
 		KIOSK_LABEL_PADDING_MM,
-		KIOSK_LABEL_RIGHT_SAFE_MM,
-		KIOSK_LABEL_SHIFT_LEFT_MM,
 		KIOSK_QR_COLOR,
 		kioskLabelPageCss,
 		kioskQrBoxMm,
@@ -37,6 +41,8 @@
 		type KioskEvacueeSummary,
 		type KioskLookupResponse
 	} from '../data/kiosk-check-in.api';
+	import { KioskPrintError, printKioskLabels } from '../data/kiosk-print.api';
+	import { renderKioskLabelPng } from '../application/kiosk-label-image';
 
 	interface Props {
 		input: GateInput | null;
@@ -79,10 +85,16 @@
 	let actionError = $state('');
 	let printError = $state('');
 	let printBusy = $state(false);
+	let printPhase = $state<'idle' | 'printing' | 'done'>('idle');
+	let printedCount = $state(0);
+	/** True when every member had already reported: the visitor picks whose QR to reprint. */
+	let isReprintOnly = $state(false);
+	let printSelectedIds = $state<string[]>([]);
 	let lookupKey = '';
 	let retryGate = $state<GateInput | null>(null);
 	let lookupGeneration = 0;
 
+	const PRINT_DONE_VISIBLE_MS = 2500;
 	const homeUrl = $derived(`/kiosk${contextQuery}`);
 	const backUrl = $derived(backHref ?? homeUrl);
 	const centerMatches = $derived(
@@ -92,6 +104,11 @@
 	const isPhoneGate = $derived(input?.source === 'phone');
 	const successfulResults = $derived(
 		results.filter((result) => result.status === 'checked_in' || result.qr_payload)
+	);
+	const printableResults = $derived(
+		isReprintOnly
+			? successfulResults.filter((result) => printSelectedIds.includes(result.evacuee_id))
+			: successfulResults
 	);
 	const reportedResults = $derived(
 		results.filter(
@@ -150,6 +167,8 @@
 		retryableIds = [];
 		qrImages = {};
 		selectedIds = [];
+		isReprintOnly = false;
+		printSelectedIds = [];
 		isLookingUp = true;
 		try {
 			const found = await lookupPreRegisteredEvacuee(gate);
@@ -171,6 +190,8 @@
 			const selectableMembers = found.members.filter((member) => member.selectable);
 			if (selectableMembers.length === 0) {
 				results = toExistingReportResults(found.members);
+				isReprintOnly = true;
+				printSelectedIds = initialReprintSelection(results);
 				await prepareQrImages(results, generation);
 				if (generation !== lookupGeneration) return;
 				return;
@@ -201,6 +222,13 @@
 		selectedIds = checked
 			? [...new Set([...selectedIds, member.evacuee_id])]
 			: selectedIds.filter((id) => id !== member.evacuee_id);
+	}
+
+	function togglePrint(evacueeId: string, checked: boolean | 'indeterminate'): void {
+		if (checked === 'indeterminate') return;
+		printSelectedIds = checked
+			? [...new Set([...printSelectedIds, evacueeId])]
+			: printSelectedIds.filter((id) => id !== evacueeId);
 	}
 
 	function chooseHousehold(primaryEvacueeId: string): void {
@@ -293,19 +321,54 @@
 	}
 
 	async function printWristbands(): Promise<void> {
-		if (successfulResults.length === 0 || printBusy) return;
+		const toPrint = printableResults;
+		if (toPrint.length === 0 || printBusy) return;
 		printBusy = true;
 		onprintbusychange?.(true);
 		try {
-			const allReady = await prepareQrImages(successfulResults);
-			if (allReady) {
-				await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-				window.print();
+			if (!(await prepareQrImages(toPrint))) return;
+			printedCount = toPrint.length;
+			printPhase = 'printing';
+			const outcome = await printKioskLabels(await renderLabels(toPrint));
+			if (outcome.kind === 'printed') {
+				printPhase = 'done';
+				window.setTimeout(() => {
+					if (printPhase === 'done') printPhase = 'idle';
+				}, PRINT_DONE_VISIBLE_MS);
+				return;
 			}
+			// No scanner client (dev browser / browser print mode): print the CSS labels instead.
+			printPhase = 'idle';
+			await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+			window.print();
+		} catch (error) {
+			printPhase = 'idle';
+			printError =
+				error instanceof KioskPrintError
+					? error.printed > 0
+						? `${error.message} (พิมพ์ออกแล้ว ${error.printed} ดวง)`
+						: error.message
+					: 'สร้าง label สำหรับพิมพ์ไม่สำเร็จ กรุณาลองอีกครั้ง';
 		} finally {
 			printBusy = false;
 			onprintbusychange?.(false);
 		}
+	}
+
+	function renderLabels(items: KioskCheckInMemberResult[]): Promise<string[]> {
+		return Promise.all(
+			items.map((result) => {
+				const person = lookup?.members.find((member) => member.evacuee_id === result.evacuee_id);
+				const qr = qrImages[result.evacuee_id];
+				if (!qr) throw new Error('QR image missing');
+				return renderKioskLabelPng({
+					qrSrc: qr.src,
+					caption: 'ชื่อ',
+					name: person ? fullName(person) : '',
+					detail: `ศูนย์ ${lookup?.shelter_code ?? ''}`
+				});
+			})
+		);
 	}
 
 	// Print labels must be a direct child of <body> so print CSS can drop the whole kiosk screen with
@@ -375,6 +438,10 @@
 			<p class="mt-1 text-base text-slate-700">เลือกผู้ที่มาถึง</p>
 		{:else if candidates.length > 0}
 			<p class="mt-1 text-base text-slate-700">เลือกครัวเรือนของท่าน</p>
+		{:else if isReprintOnly && successfulResults.length > 0}
+			<p class="mt-1 text-base text-slate-700">
+				พบผลรายงานตัวเดิม ไม่มีการบันทึกซ้ำ · เลือกคนที่จะพิมพ์ QR Code
+			</p>
 		{:else if results.some((result) => result.status === 'already_checked_in')}
 			<p class="mt-1 text-base text-slate-700">พบผลรายงานตัวเดิม ไม่มีการบันทึกซ้ำ</p>
 		{:else if results.length > 0}
@@ -634,13 +701,15 @@
 					{/if}
 					<Button
 						type="button"
-						disabled={successfulResults.length === 0 || printBusy || isSubmitting}
+						disabled={printableResults.length === 0 || printBusy || isSubmitting}
 						onclick={printWristbands}
 						class="min-h-12 gap-2 bg-[#0A2647] px-5 text-base font-bold text-white hover:bg-[#051930]"
 					>
 						<Printer class="h-5 w-5" aria-hidden="true" />{printBusy || isSubmitting
 							? 'กำลังเตรียม QR…'
-							: 'พิมพ์ QR Code'}
+							: isReprintOnly
+								? `พิมพ์ QR Code · ${printableResults.length} คน`
+								: 'พิมพ์ QR Code'}
 					</Button>
 					<Button
 						type="button"
@@ -676,7 +745,15 @@
 							? 'border-emerald-200 bg-emerald-50'
 							: 'border-amber-200 bg-amber-50'} p-4"
 					>
-						{#if result.qr_payload || result.status === 'already_checked_in'}<CheckCircle2
+						{#if isReprintOnly && result.qr_payload}<Checkbox
+								checked={printSelectedIds.includes(result.evacuee_id)}
+								onCheckedChange={(checked) => togglePrint(result.evacuee_id, checked)}
+								disabled={printBusy}
+								aria-labelledby={`result-name-${result.evacuee_id}`}
+								aria-describedby={`result-status-${result.evacuee_id}`}
+								class="size-12 bg-white"
+							/>{:else if isReprintOnly}<span class="size-12 shrink-0" aria-hidden="true"
+							></span>{:else if result.qr_payload || result.status === 'already_checked_in'}<CheckCircle2
 								class="h-6 w-6 shrink-0 text-emerald-800"
 								aria-hidden="true"
 							/>{:else}<CircleAlert
@@ -684,10 +761,13 @@
 								aria-hidden="true"
 							/>{/if}
 						<div class="min-w-0 flex-1">
-							<p class="truncate text-base font-bold text-slate-950">
+							<p
+								id={`result-name-${result.evacuee_id}`}
+								class="truncate text-base font-bold text-slate-950"
+							>
 								{person ? fullName(person) : result.evacuee_id}
 							</p>
-							<p class="mt-1 text-sm text-slate-700">
+							<p id={`result-status-${result.evacuee_id}`} class="mt-1 text-sm text-slate-700">
 								{result.status === 'checked_in'
 									? 'รายงานตัวสำเร็จ · รอคัดกรอง'
 									: result.qr_payload
@@ -714,12 +794,11 @@
 				style:--label-width="{KIOSK_LABEL_MM.width}mm"
 				style:--label-height="{KIOSK_LABEL_MM.height}mm"
 				style:--label-padding="{KIOSK_LABEL_PADDING_MM}mm"
-				style:--label-right-safe="{KIOSK_LABEL_RIGHT_SAFE_MM}mm"
-				style:--label-shift-left="{KIOSK_LABEL_SHIFT_LEFT_MM}mm"
+				style:--label-offset-x="{KIOSK_LABEL_OFFSET_X_MM}mm"
 				style:--label-gap="{KIOSK_LABEL_GAP_MM}mm"
 				{@attach mountOnBody}
 			>
-				{#each successfulResults as result (result.evacuee_id)}
+				{#each printableResults as result (result.evacuee_id)}
 					{@const person = lookup?.members.find(
 						(member) => member.evacuee_id === result.evacuee_id
 					)}
@@ -746,6 +825,10 @@
 	</p>
 </section>
 
+{#if printPhase !== 'idle'}
+	<KioskPrintStatus phase={printPhase} count={printedCount} />
+{/if}
+
 <style>
 	.kiosk-print-area {
 		display: none;
@@ -768,8 +851,7 @@
 			width: var(--label-width);
 			height: var(--label-height);
 			padding: var(--label-padding);
-			padding-right: calc(var(--label-padding) + var(--label-right-safe));
-			translate: calc(var(--label-shift-left) * -1) 0;
+			translate: var(--label-offset-x) 0;
 			overflow: hidden;
 			break-after: page;
 			break-inside: avoid;

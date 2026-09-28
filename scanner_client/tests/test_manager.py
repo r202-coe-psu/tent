@@ -458,3 +458,115 @@ class SilentPrintArgsTests(unittest.TestCase):
 
         self.assertIn("--kiosk-printing", args)
         self.assertTrue(any("managed print policies" in line for line in logs.output))
+
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"label"
+
+
+class FakePrintRoute(FakeRoute):
+    def __init__(self, *, url="https://tent.example.go.th/api/v1/scanner/kiosk/print",
+                 origin="https://tent.example.go.th", body=None):
+        super().__init__(url=url, method="POST", headers={"origin": origin})
+        self.request.post_data_buffer = body
+        self.fulfilled = None
+
+    async def fulfill(self, *, status, content_type, headers, body):
+        self.fulfilled = {"status": status, "body": manager.json.loads(body)}
+
+
+def labels_body(*images):
+    encoded = [manager.base64.b64encode(image).decode() for image in images]
+    return manager.json.dumps({"labels": encoded}).encode()
+
+
+class FakeLpProcess:
+    def __init__(self, returncode=0):
+        self.returncode = returncode
+        self.stdin_data = []
+
+    async def communicate(self, data):
+        self.stdin_data.append(data)
+        return b"", b""
+
+
+class KioskPrintRouteTests(unittest.IsolatedAsyncioTestCase):
+    def client(self, **overrides):
+        return manager.ScannerClientManager(valid_config(DEBUG="false", **overrides))
+
+    async def test_prints_each_label_through_lp_stdin_without_reaching_server(self):
+        client = self.client(PRINTER_NAME="label_q")
+        route = FakePrintRoute(body=labels_body(PNG, PNG))
+        process = FakeLpProcess()
+        calls = []
+
+        async def fake_exec(*args, **kwargs):
+            calls.append(args)
+            return process
+
+        with patch.object(manager.asyncio, "create_subprocess_exec", new=fake_exec):
+            await client._route_kiosk_api(route)
+
+        self.assertIsNone(route.continued_headers)
+        self.assertEqual(route.fulfilled, {"status": 200, "body": {"printed": 2}})
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[0][:3], ("lp", "-d", "label_q"))
+        self.assertEqual(calls[0][-1], "-")
+        self.assertEqual(process.stdin_data, [PNG, PNG])
+
+    async def test_rejects_invalid_payloads_without_printing(self):
+        client = self.client()
+        bodies = {
+            "not json": b"nope",
+            "no labels": manager.json.dumps({"labels": []}).encode(),
+            "not png": labels_body(b"GIF89a"),
+            "bad base64": manager.json.dumps({"labels": ["***"]}).encode(),
+            "too many": labels_body(*([PNG] * (manager.KIOSK_PRINT_MAX_LABELS + 1))),
+        }
+
+        async def fail_exec(*_args, **_kwargs):
+            raise AssertionError("lp must not run")
+
+        for name, body in bodies.items():
+            with self.subTest(name=name):
+                route = FakePrintRoute(body=body)
+                with patch.object(manager.asyncio, "create_subprocess_exec", new=fail_exec):
+                    await client._route_kiosk_api(route)
+                self.assertEqual(route.fulfilled["status"], 400)
+
+    async def test_reports_lp_failure(self):
+        client = self.client()
+        route = FakePrintRoute(body=labels_body(PNG))
+
+        async def failing_exec(*_args, **_kwargs):
+            return FakeLpProcess(returncode=1)
+
+        with patch.object(manager.asyncio, "create_subprocess_exec", new=failing_exec):
+            with self.assertLogs(manager.logger, level="ERROR"):
+                await client._route_kiosk_api(route)
+
+        self.assertEqual(route.fulfilled["status"], 502)
+        self.assertEqual(route.fulfilled["body"]["printed"], 0)
+
+    async def test_prints_directly_in_every_mode_without_extra_config(self):
+        cases = {
+            "debug window": manager.ScannerClientManager(valid_config(DEBUG="true")),
+            "silent print off": self.client(KIOSK_SILENT_PRINT="false"),
+        }
+
+        async def fake_exec(*_args, **_kwargs):
+            return FakeLpProcess()
+
+        for name, client in cases.items():
+            with self.subTest(name=name):
+                route = FakePrintRoute(body=labels_body(PNG))
+                with patch.object(manager.asyncio, "create_subprocess_exec", new=fake_exec):
+                    await client._route_kiosk_api(route)
+                self.assertIsNone(route.continued_headers)
+                self.assertEqual(route.fulfilled["status"], 200)
+
+    async def test_foreign_origin_is_never_printed(self):
+        client = self.client()
+        route = FakePrintRoute(origin="https://attacker.example", body=labels_body(PNG))
+        await client._route_kiosk_api(route)
+        self.assertIsNone(route.fulfilled)
+        self.assertNotIn("x-device-id", route.continued_headers)

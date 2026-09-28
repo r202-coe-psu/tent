@@ -37,3 +37,10 @@ export function toExistingReportResults(
 			...(member.status === 'arriving' ? { qr_payload: member.evacuee_id } : {})
 		}));
 }
+
+/** A reprint starts with every member that has a QR ticked; the visitor unticks the rest. */
+export function initialReprintSelection(
+	results: readonly { evacuee_id: string; qr_payload?: string }[]
+): string[] {
+	return results.filter((result) => result.qr_payload).map((result) => result.evacuee_id);
+}

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
+import json
 import logging
 import os
 import re
@@ -31,6 +34,16 @@ logger = logging.getLogger(__name__)
 
 # Chromium managed policies are read from /etc/chromium/policies by the Debian/Pi OS build only.
 SYSTEM_CHROMIUM_PATH = "/usr/bin/chromium"
+
+# The kiosk posts rendered label PNGs here; the scanner client spools them to CUPS itself so
+# Chromium never opens its print preview (--kiosk-printing still flashes it before printing).
+KIOSK_PRINT_PATH = "/api/v1/scanner/kiosk/print"
+KIOSK_PRINT_MAX_LABELS = 20
+KIOSK_PRINT_MAX_PNG_BYTES = 256 * 1024
+KIOSK_PRINT_TIMEOUT_SEC = 20.0
+# Labels are rendered at the printer's 203 dpi, so 1 image px = 1 printer dot.
+KIOSK_PRINT_PPI = 203
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 
 class BootstrapError(RuntimeError):
@@ -63,6 +76,8 @@ class ScannerClientManager:
         self.silent_print = (
             raw_silent_print in ("true", "1", "yes") if raw_silent_print else not self.is_debug
         )
+        # Labels always go straight to this CUPS queue via `lp` (no browser print dialog in any mode).
+        self.printer_name = str(config.get("PRINTER_NAME") or "").strip() or "tent_xprinter"
         self.poll_interval = float(config.get("POLL_INTERVAL", "0.5"))
         self.min_reading_display = 0.6
         self.client_nav_timeout_ms = 5000
@@ -227,19 +242,96 @@ class ScannerClientManager:
         headers = dict(request.headers)
         headers.pop("x-device-id", None)
         headers.pop("x-device-secret", None)
-        if (
-            request.method != "POST"
-            or request_origin != configured_origin
-            or request_url.scheme != configured_url.scheme
-            or request_url.netloc != configured_url.netloc
-            or request_url.path not in allowed_paths
-        ):
+        same_origin_post = (
+            request.method == "POST"
+            and request_origin == configured_origin
+            and request_url.scheme == configured_url.scheme
+            and request_url.netloc == configured_url.netloc
+        )
+        if same_origin_post and request_url.path == KIOSK_PRINT_PATH:
+            await self._fulfill_print(route)
+            return
+        if not same_origin_post or request_url.path not in allowed_paths:
             await route.continue_(headers=headers)
             return
 
         headers["x-device-id"] = self.device_id
         headers["x-device-secret"] = self.device_secret
         await route.continue_(headers=headers)
+
+    async def _fulfill_print(self, route) -> None:
+        """Answer the kiosk print request locally; the server never sees label images."""
+        status, body = await self._print_labels(route.request.post_data_buffer)
+        await route.fulfill(
+            status=status,
+            content_type="application/json",
+            headers={"cache-control": "no-store"},
+            body=json.dumps(body),
+        )
+
+    @staticmethod
+    def _decode_labels(raw: Optional[bytes]) -> Optional[list]:
+        try:
+            payload = json.loads(raw or b"")
+        except (ValueError, UnicodeDecodeError):
+            return None
+        labels = payload.get("labels") if isinstance(payload, dict) else None
+        if not isinstance(labels, list) or not 1 <= len(labels) <= KIOSK_PRINT_MAX_LABELS:
+            return None
+        images = []
+        for label in labels:
+            if not isinstance(label, str) or len(label) > KIOSK_PRINT_MAX_PNG_BYTES * 2:
+                return None
+            try:
+                image = base64.b64decode(label, validate=True)
+            except (binascii.Error, ValueError):
+                return None
+            if len(image) > KIOSK_PRINT_MAX_PNG_BYTES or not image.startswith(PNG_SIGNATURE):
+                return None
+            images.append(image)
+        return images
+
+    async def _print_labels(self, raw: Optional[bytes]) -> tuple[int, Dict[str, Any]]:
+        images = self._decode_labels(raw)
+        if images is None:
+            return 400, {"error": {"code": "INVALID_LABELS", "message": "ข้อมูล label ไม่ถูกต้อง"}}
+
+        printed = 0
+        for image in images:
+            if not await self._spool_label(image):
+                logger.error(f"Label print failed on queue {self.printer_name} ({printed}/{len(images)} sent)")
+                return 502, {
+                    "printed": printed,
+                    "error": {
+                        "code": "PRINT_FAILED",
+                        "message": "ส่งงานพิมพ์ไม่สำเร็จ กรุณาตรวจเครื่องพิมพ์หรือติดต่อเจ้าหน้าที่",
+                    },
+                }
+            printed += 1
+        return 200, {"printed": printed}
+
+    async def _spool_label(self, image: bytes) -> bool:
+        # stdin keeps the label (evacuee name) off disk; the job title carries no personal data.
+        try:
+            process = await asyncio.create_subprocess_exec(
+                "lp",
+                "-d", self.printer_name,
+                "-t", "tent-kiosk-label",
+                "-o", f"ppi={KIOSK_PRINT_PPI}",
+                "-",
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+        except OSError:
+            return False
+        try:
+            await asyncio.wait_for(process.communicate(image), timeout=KIOSK_PRINT_TIMEOUT_SEC)
+        except asyncio.TimeoutError:
+            process.kill()
+            await process.wait()
+            return False
+        return process.returncode == 0
 
     async def _dispatch_card_event(self, event_name: str, citizen_id: Optional[str] = None) -> None:
         if not self.page or self.page.is_closed():
