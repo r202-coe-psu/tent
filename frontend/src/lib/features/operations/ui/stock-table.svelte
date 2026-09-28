@@ -35,8 +35,14 @@
 	import ReceiveStockForm from './receive-stock-form.svelte';
 	import DistributeStockForm from './distribute-stock-form.svelte';
 	import AdjustStockForm from './adjust-stock-form.svelte';
-	import { projectStockLotBalances, StockLotIntegrityError } from '../domain/operations';
+	import {
+		projectStockLotBalances,
+		StockLotIntegrityError,
+		type StockLot
+	} from '../domain/operations';
 	import { formatItemAgeLine, summarizeItemLotAge } from '../domain/lot-age';
+	import { lotStorageKey, lotStorageName } from '../domain/lot-storage';
+	import { useStoragePoints } from '../application/use-storage-points.svelte';
 	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import MinusCircle from '@lucide/svelte/icons/minus-circle';
 	import Settings from '@lucide/svelte/icons/settings';
@@ -73,6 +79,7 @@
 	let showOverall = $state(false);
 
 	const sheltersQuery = useShelters();
+	const storagePoints = useStoragePoints(() => getShelterCode());
 	const shelterCodes = $derived((sheltersQuery.data ?? []).map((s) => s.code));
 
 	const crossBalanceQuery = useCrossShelterStockBalances(
@@ -176,25 +183,27 @@
 		isSA && showOverall ? (crossLedgerQuery.data ?? []) : (ledgerQuery.data ?? [])
 	);
 
+	/**
+	 * Location filter options from ledger entries, keyed by `lotStorageKey` so a
+	 * renamed storage point stays one option (draft-shelter-storage-points).
+	 */
 	const uniqueLocations = $derived.by(() => {
-		const locations = new SvelteSet<string>();
+		const locations = new SvelteMap<string, string>();
 		for (const entry of ledger) {
-			if (entry.lot?.note) {
-				locations.add(entry.lot.note.trim());
-			}
+			const key = lotStorageKey(entry.lot);
+			const name = lotStorageName(entry.lot, storagePoints.points);
+			if (key && name && !locations.has(key)) locations.set(key, name);
 		}
-		return Array.from(locations).filter(Boolean);
+		return Array.from(locations, ([key, label]) => ({ key, label }));
 	});
 
 	const latestLotByItem = $derived.by(() => {
-		const result: Record<string, { expiry?: string; note?: string }> = {};
+		const result: Record<string, { expiry?: string; lot?: StockLot; location: string | null }> = {};
 		const sorted = [...ledger].sort((a, b) => a.occurred_at.localeCompare(b.occurred_at));
 		for (const entry of sorted) {
-			if (qtyGt(entry.qty, 0) && (entry.lot?.expiry || entry.lot?.note)) {
-				result[entry.item_id] = {
-					expiry: entry.lot?.expiry,
-					note: entry.lot?.note
-				};
+			const location = lotStorageName(entry.lot, storagePoints.points);
+			if (qtyGt(entry.qty, 0) && (entry.lot?.expiry || location)) {
+				result[entry.item_id] = { expiry: entry.lot?.expiry, lot: entry.lot, location };
 			}
 		}
 		return result;
@@ -291,7 +300,7 @@
 			const expiring = isExpiringSoon(lot?.expiry);
 
 			if (locationFilter !== 'all') {
-				if (!lot?.note || lot.note.trim() !== locationFilter) return false;
+				if (!lot?.location || lotStorageKey(lot.lot) !== locationFilter) return false;
 			}
 
 			if (statusFilter !== 'all') {
@@ -626,13 +635,16 @@
 								>
 									<span class="inline-flex items-center gap-2 truncate">
 										<MapPin class="h-4 w-4 shrink-0" aria-hidden="true" />
-										{locationFilter === 'all' ? 'ทุกที่เก็บ' : locationFilter}
+										{locationFilter === 'all'
+											? 'ทุกที่เก็บ'
+											: (uniqueLocations.find((l) => l.key === locationFilter)?.label ??
+												locationFilter)}
 									</span>
 								</Select.Trigger>
 								<Select.Content>
 									<Select.Item value="all" label="ทุกที่เก็บ">ทุกที่เก็บ</Select.Item>
-									{#each uniqueLocations as loc (loc)}
-										<Select.Item value={loc} label={loc}>{loc}</Select.Item>
+									{#each uniqueLocations as loc (loc.key)}
+										<Select.Item value={loc.key} label={loc.label}>{loc.label}</Select.Item>
 									{/each}
 								</Select.Content>
 							</Select.Root>
@@ -709,8 +721,8 @@
 							</p>
 							<p class="mt-1.5 text-sm text-slate-500">
 								{getCategoryLabel(item.category)}
-								{#if lot?.note}
-									<span aria-hidden="true"> · </span>{lot.note}
+								{#if lot?.location}
+									<span aria-hidden="true"> · </span>{lot.location}
 								{/if}
 							</p>
 							{#if ageLine}
@@ -768,8 +780,8 @@
 										{getCategoryLabel(item.category)}
 									</Table.Cell>
 									<Table.Cell class="hidden px-4 py-3.5 text-sm text-slate-600 lg:table-cell">
-										{#if lot?.note}
-											{lot.note}
+										{#if lot?.location}
+											{lot.location}
 										{:else}
 											<span class="text-slate-400">—</span>
 										{/if}

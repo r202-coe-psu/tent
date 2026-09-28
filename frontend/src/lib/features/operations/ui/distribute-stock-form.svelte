@@ -36,6 +36,8 @@
 	import { qtyGt, qtyGte, qtyIsZero, qtyLte } from '$lib/utils/qty';
 	import { ulid } from '$lib/db/ulid';
 	import { formatLotClockLine } from '../domain/lot-age';
+	import { lotStorageLabel } from '../domain/lot-storage';
+	import { useStoragePoints } from '../application/use-storage-points.svelte';
 
 	let {
 		onsuccess,
@@ -59,6 +61,7 @@
 	const itemMastersQuery = useItemMasters(() => getShelterCode());
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
+	const storagePoints = useStoragePoints(() => getShelterCode());
 	const balanceQuery = useStockBalance();
 	const ledgerQuery = useLedger();
 	const distributeMutation = useDistributeStock();
@@ -206,7 +209,7 @@
 	});
 
 	function lotLabel(lot: (typeof itemLots)[number]): string {
-		const place = lot.lot?.note || lot.lot?.storage_zone || 'คลังหลัก';
+		const place = lotStorageLabel(lot.lot, storagePoints.points);
 		const no = lot.lot?.lot_no ? ` · ${lot.lot.lot_no}` : '';
 		const clocks = formatLotClockLine(lot);
 		const clockPart = clocks ? ` · ${clocks}` : '';

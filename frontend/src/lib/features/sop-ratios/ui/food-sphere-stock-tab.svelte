@@ -5,7 +5,12 @@
 	import { useItemMasters, formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { useSupplyItems } from '$lib/features/supply';
-	import { useStockBalance, useLedger } from '$lib/features/operations';
+	import {
+		useStockBalance,
+		useLedger,
+		useStoragePoints,
+		lotStorageName
+	} from '$lib/features/operations';
 	import { useFoodSphereStandards } from '../application/food-sphere-queries';
 	import { useRequirementGroups } from '../application/requirement-group-queries';
 	import { useReplenishmentPolicies } from '../application/replenishment-queries';
@@ -53,6 +58,7 @@
 	const supplyItemsQuery = useSupplyItems();
 	const balanceQuery = useStockBalance();
 	const ledgerQuery = useLedger();
+	const storagePoints = useStoragePoints(() => cleanShelterCode);
 	const standardsQuery = useFoodSphereStandards(() => cleanShelterCode);
 	const reqGroupsQuery = useRequirementGroups(() => cleanShelterCode);
 	const policiesQuery = useReplenishmentPolicies(() => cleanShelterCode);
@@ -88,11 +94,10 @@
 		const result: Record<string, { expiry?: string; note?: string }> = {};
 		const sorted = [...ledger].sort((a, b) => a.occurred_at.localeCompare(b.occurred_at));
 		for (const entry of sorted) {
-			if (qtyGt(entry.qty, 0) && (entry.lot?.expiry || entry.lot?.note)) {
-				result[entry.item_id] = {
-					expiry: entry.lot?.expiry,
-					note: entry.lot?.note
-				};
+			// `note` here is the lot's storage location label (draft-shelter-storage-points).
+			const location = lotStorageName(entry.lot, storagePoints.points) ?? undefined;
+			if (qtyGt(entry.qty, 0) && (entry.lot?.expiry || location)) {
+				result[entry.item_id] = { expiry: entry.lot?.expiry, note: location };
 			}
 		}
 		return result;

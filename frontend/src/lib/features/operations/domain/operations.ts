@@ -115,8 +115,16 @@ export interface StockLot {
 	 * cosmetic clash, never a wrong balance. Balances always come from `qty`.
 	 */
 	lot_no?: string;
-	/** Where the goods were physically put away. Free text — no zone master data yet (CR-088). */
+	/**
+	 * Where the goods were physically put away. Since schema_v 5 it is the storage
+	 * point's name AT WRITE TIME (snapshot); older rows hold free text (CR-088).
+	 */
 	storage_zone?: string;
+	/**
+	 * → `shelter.common_areas.sub_storage[].id` of the same shelter (schema_v 5,
+	 * CR-139). Absent = unspecified / main store, or legacy row.
+	 */
+	storage_point_id?: string;
 	/**
 	 * Production timestamp for the "จากผลิต" clock (draft-lot-produced-at).
 	 * On inbound receive, writers default this to `occurred_at` when omitted.
@@ -131,14 +139,20 @@ export const LOT_NO_PATTERN = /^L-\d{6}-\d{3}$/;
  * Single source of truth for the shape of `stock_ledger.lot` (schema.md §2.1) —
  * every ledger/receipt input schema reuses it so the four writers cannot drift.
  */
-export const stockLotSchema = z.object({
-	expiry: z.string().optional(),
-	note: z.string().trim().optional(),
-	lot_no: z.string().regex(LOT_NO_PATTERN, 'lot_no must look like L-YYMMDD-XXX').optional(),
-	storage_zone: z.string().trim().max(100).optional(),
-	/** ISO date or datetime — DatePicker may submit `YYYY-MM-DD`. */
-	produced_at: z.string().optional()
-});
+export const stockLotSchema = z
+	.object({
+		expiry: z.string().optional(),
+		note: z.string().trim().optional(),
+		lot_no: z.string().regex(LOT_NO_PATTERN, 'lot_no must look like L-YYMMDD-XXX').optional(),
+		storage_zone: z.string().trim().max(100).optional(),
+		storage_point_id: z.string().trim().min(1).optional(),
+		/** ISO date or datetime — DatePicker may submit `YYYY-MM-DD`. */
+		produced_at: z.string().optional()
+	})
+	.refine((lot) => !lot.storage_point_id || !!lot.storage_zone, {
+		message: 'storage_point_id requires storage_zone (the point name at write time)',
+		path: ['storage_zone']
+	});
 
 /** `YYMMDD` of a date, in the caller's local time (the lot label is read by staff on site). */
 export function lotDateStamp(date: Date): string {

@@ -60,12 +60,37 @@ describe('shelter-form-validation', () => {
 		expect(SHELTER_SECTION_FIELDS['zones-facilities']).not.toContain('food_distribution_points');
 	});
 
+	it('maps common_areas.sub_storage errors to storage-points, not zones-facilities', () => {
+		const errors = {
+			common_areas: { sub_storage: { '0': { name: ['ชื่อสถานที่จัดเก็บต้องไม่ว่าง'] } } }
+		};
+		expect(findInvalidSectionIds(errors)).toEqual(['storage-points']);
+		expect(sectionHasFieldErrors('storage-points', errors)).toBe(true);
+		expect(sectionHasFieldErrors('zones-facilities', errors)).toBe(false);
+		expect(collectErrorMessagesForFields(errors, 'storage-points')).toEqual([
+			'ชื่อสถานที่จัดเก็บต้องไม่ว่าง'
+		]);
+		expect(collectErrorMessagesForFields(errors, 'zones-facilities')).toEqual([]);
+	});
+
+	it('keeps other common_areas errors on zones-facilities', () => {
+		const errors = {
+			common_areas: {
+				parking_capacity: ['ต้องไม่ติดลบ'],
+				sub_storage: { '0': { name: ['ชื่อสถานที่จัดเก็บต้องไม่ว่าง'] } }
+			}
+		};
+		expect(findInvalidSectionIds(errors)).toEqual(['zones-facilities', 'storage-points']);
+		expect(collectErrorMessagesForFields(errors, 'zones-facilities')).toEqual(['ต้องไม่ติดลบ']);
+	});
+
 	it('keeps the canonical section id order', () => {
 		expect(Object.keys(SHELTER_SECTION_FIELDS)).toEqual([
 			'basic-info',
 			'capacity',
 			'zones-facilities',
 			'food-distribution',
+			'storage-points',
 			'utilities',
 			'risk',
 			'admission-policy',

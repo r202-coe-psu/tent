@@ -16,6 +16,9 @@
 		type ReceiveInput,
 		type WalkInDonationInput
 	} from '../domain/operations';
+	import { storageLotFields, type StoragePointRef } from '../domain/lot-storage';
+	import { useStoragePoints } from '../application/use-storage-points.svelte';
+	import StoragePointSelect from './storage-point-select.svelte';
 	import { useSupplyItems } from '$lib/features/supply';
 	import {
 		itemMasterUnit,
@@ -58,6 +61,7 @@
 	// Fetch supply catalog items
 	const itemsQuery = useSupplyItems();
 	const itemMastersQuery = useItemMasters(() => getShelterCode());
+	const storagePoints = useStoragePoints(() => getShelterCode());
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
 	const receiveMutation = useReceiveStock();
@@ -220,15 +224,30 @@
 		isDropdownOpen = false;
 	}
 
+	/** Chosen storage point id ('' = unspecified / main store). */
+	let storagePointId = $state('');
+
+	// Location goes to `lot.storage_point_id` + `lot.storage_zone` (name snapshot),
+	// never to `lot.note` (draft-shelter-storage-points).
+	function setStoragePoint(point: StoragePointRef | null) {
+		const lot = { ...($formData.lot ?? {}) };
+		delete lot.storage_zone;
+		delete lot.storage_point_id;
+		$formData.lot = { ...lot, ...storageLotFields(point) };
+	}
+
 	// Keep expiryDate and $formData.lot.expiry in sync
 	$effect(() => {
 		const val = expiryDate.trim();
 		if (!$formData.lot) {
 			if (val) {
-				$formData.lot = { expiry: val, note: '' };
+				$formData.lot = { expiry: val };
 			}
-		} else if ($formData.lot.expiry !== val) {
-			$formData.lot.expiry = val || undefined;
+		} else {
+			const current = $formData.lot.expiry ?? '';
+			if (current !== val) {
+				$formData.lot.expiry = val || undefined;
+			}
 		}
 	});
 
@@ -253,6 +272,8 @@
 		clearDonation();
 		expiryDate = '';
 		producedAtDate = '';
+		storagePointId = '';
+		setStoragePoint(null);
 	}
 
 	/** After a successful save: clear qty/lot clocks; clear item unless row-panel pin. */
@@ -260,13 +281,17 @@
 		$formData.qty = '' as unknown as typeof $formData.qty;
 		expiryDate = '';
 		producedAtDate = '';
+		storagePointId = '';
 		if ($formData.lot) {
 			$formData.lot = {
 				...$formData.lot,
 				expiry: undefined,
-				produced_at: undefined
+				produced_at: undefined,
+				storage_zone: undefined,
+				storage_point_id: undefined
 			};
 		}
+		setStoragePoint(null);
 		clearDonation();
 		resetWalkIn();
 		if (!preselectedItemId) {
@@ -587,6 +612,22 @@
 			<Form.FieldErrors />
 		</Form.Field>
 
+		<!-- Storage Location (lot.storage_point_id + lot.storage_zone) -->
+		<Form.Field {form} name="lot.storage_zone" class="col-span-1 sm:col-span-2">
+			<Form.Control>
+				{#snippet children({ props })}
+					<Form.Label>สถานที่จัดเก็บ (จุดเก็บของของศูนย์)</Form.Label>
+					<StoragePointSelect
+						points={storagePoints.points}
+						bind:value={storagePointId}
+						onchange={setStoragePoint}
+						triggerProps={props}
+					/>
+				{/snippet}
+			</Form.Control>
+			<Form.FieldErrors />
+		</Form.Field>
+
 		<Form.Field {form} name="lot.expiry" class="col-span-1 sm:col-span-2">
 			<Form.Control>
 				{#snippet children({ props })}
@@ -807,47 +848,6 @@
 							{/if}
 						</div>
 					{/if}
-
-					<Form.Field {form} name="lot.note" class="col-span-1 sm:col-span-2">
-						<Form.Control>
-							{#snippet children({ props })}
-								<Form.Label>ที่เก็บ</Form.Label>
-								<Select.Root
-									type="single"
-									value={$formData.lot?.note ?? ''}
-									onValueChange={(val) => {
-										if (!$formData.lot) {
-											$formData.lot = { note: val ?? '' };
-										} else {
-											$formData.lot.note = val ?? '';
-										}
-									}}
-								>
-									<Select.Trigger
-										{...props}
-										class="min-h-11 w-full rounded-md border border-input bg-white px-3 text-sm font-medium"
-									>
-										{$formData.lot?.note
-											? $formData.lot.note === 'Zone A'
-												? 'Zone A'
-												: $formData.lot.note === 'Zone B'
-													? 'Zone B'
-													: $formData.lot.note === 'Zone C'
-														? 'Zone C'
-														: $formData.lot.note
-											: 'เลือกโซน'}
-									</Select.Trigger>
-									<Select.Content>
-										<Select.Item value="" label="เลือกโซน" />
-										<Select.Item value="Zone A" label="Zone A" />
-										<Select.Item value="Zone B" label="Zone B" />
-										<Select.Item value="Zone C" label="Zone C" />
-									</Select.Content>
-								</Select.Root>
-							{/snippet}
-						</Form.Control>
-						<Form.FieldErrors />
-					</Form.Field>
 				</div>
 			{/if}
 		</div>

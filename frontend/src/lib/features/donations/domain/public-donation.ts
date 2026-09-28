@@ -90,7 +90,9 @@ export const receiveDonationInputSchema = z.object({
 					.object({
 						expiry: z.string().optional(),
 						note: z.string().trim().optional(),
-						storage_zone: z.string().trim().max(100).optional()
+						storage_zone: z.string().trim().max(100).optional(),
+						// → shelter sub_storage[].id (draft-shelter-storage-points); kept, not stripped
+						storage_point_id: z.string().trim().min(1).optional()
 					})
 					.optional()
 			})
