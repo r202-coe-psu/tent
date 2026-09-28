@@ -96,8 +96,11 @@ describe('kioskQrPrintSize', () => {
 });
 
 describe('kiosk label canvas', () => {
-	it('sizes the canvas in whole printer dots', () => {
-		expect(kioskLabelDots()).toEqual({ width: 639, height: 480 });
+	it('sizes the canvas in whole printer dots that never exceed the page', () => {
+		const dots = kioskLabelDots();
+		expect(dots).toEqual({ width: 639, height: 479 });
+		expect(dots.width).toBeLessThanOrEqual(mmToDots(KIOSK_LABEL_MM.width));
+		expect(dots.height).toBeLessThanOrEqual(mmToDots(KIOSK_LABEL_MM.height));
 	});
 
 	it('converts pt to printer dots', () => {

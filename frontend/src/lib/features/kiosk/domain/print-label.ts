@@ -90,11 +90,15 @@ export function ptToDots(pt: number): number {
 	return (pt / PT_PER_INCH) * KIOSK_PRINT_DPI;
 }
 
-/** Whole-dot canvas size of one label (80×60 mm → 639×480 at 203 dpi). */
+/**
+ * Whole-dot canvas size of one label (80×60 mm → 639×479 at 203 dpi). Rounded down: CUPS
+ * `imagetoraster` splits an image even one dot taller than the page (60 mm = 479.5 dots) across
+ * two labels, cutting the QR in half.
+ */
 export function kioskLabelDots(): { width: number; height: number } {
 	return {
-		width: Math.round(mmToDots(KIOSK_LABEL_MM.width)),
-		height: Math.round(mmToDots(KIOSK_LABEL_MM.height))
+		width: Math.floor(mmToDots(KIOSK_LABEL_MM.width)),
+		height: Math.floor(mmToDots(KIOSK_LABEL_MM.height))
 	};
 }
 
