@@ -15,7 +15,8 @@
  *   OLD_HEAD            active, head of OLD_HH, which still has MOVER in it
  *   PRE                 pre_registered — not checked in yet
  *   LONER               active, no household (homeless path)
- *   PAIR_HEAD, PAIR_MEMBER  active, no household (C6)
+ *   PAIR_HEAD, PAIR_MEMBER  active, no household (C5)
+ *   CONFLICT            active, no household (C7 — the save is refused)
  *
  * Sub-paths covered, in order:
  *
@@ -28,10 +29,13 @@
  *   C3  Staff A groups LONER alone as homeless — geography only, no house number.
  *   C4  Staff A tries to regroup HEAD — now heads C2's household with members,
  *       so HEAD shows as taken.
- *   C6  Staff A (recorded with codegen): a head + one member, housing type and
+ *   C5  Staff A (recorded with codegen): a head + one member, housing type and
  *       landmark, a different subdistrict (→ 90110), then the QR card PDF.
- *   C5  Account switch to the SH001 shelter manager: sees C2's household with all
+ *   C6  Account switch to the SH001 shelter manager: sees C2's household with all
  *       three members; a warehouse-only account is turned away from the page.
+ *   C7  Concurrency: every doc write answers 409 Conflict (injected at the
+ *       browser → CouchDB boundary) — the wizard shows an error toast, stays on
+ *       the zone step, and CONFLICT is left without a household.
  *
  *   A1  Access by role (docs/prd/role-permission-matrix.md, Evacuee / Household
  *       row; guard `requireEvacueeRegistration`): system_admin, the SH001 shelter
@@ -40,6 +44,14 @@
  *   A2  Every other SH001 capability (and a shelter scope with no capability), alone
  *       or combined, is sent away from the page and writes nothing. Each case mints
  *       its own throwaway account, so A1/A2 run independently of the flows above.
+ *   A3  The same denied accounts writing a household straight to CouchDB with
+ *       their own session (no browser, no route guard) must be refused by the
+ *       server. Marked `test.fail` until `validate_doc_update` enforces the
+ *       capability — it currently accepts any `shelter:SH001` member.
+ *
+ * C2 also checks the staff wizard never calls the public plane `/api/public/*`.
+ * Transport + DB helpers live in helpers/households.ts; zone names come from the
+ * seeded SH001 registry doc, never hardcoded.
  *
  * Clean-up (afterAll): every doc in `shelter_sh001` created by the test accounts
  * (seeded evacuees + households, and the households the wizard created) is
@@ -51,7 +63,6 @@
 
 import { test, expect, type Page } from '@playwright/test';
 import {
-	COUCH_BASE,
 	couchReq,
 	createCouchUser,
 	deleteCouchUser,
@@ -61,8 +72,21 @@ import {
 	type TestUser
 } from './helpers/couch';
 import { injectSession, clearSession } from './helpers/login';
+import {
+	conflictOnDocWrites,
+	deleteDocsCreatedBy,
+	findDocs,
+	getDoc,
+	loadShelterZones,
+	putDocAsSession,
+	routeCouchThroughApp,
+	seedSecurityQuestion,
+	SHELTER_DB,
+	trackPublicPlaneCalls,
+	waitForAppSettled,
+	type Zone
+} from './helpers/households';
 
-const SHELTER_DB = 'shelter_sh001';
 const RUN_ID = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const RUN_NUM = String(Date.now()).slice(-7);
 
@@ -114,13 +138,17 @@ const PRE = person('PRE', 'ยังไม่มา', 5);
 const LONER = person('LONER', 'ไร้บ้าน', 6);
 const PAIR_HEAD = person('PAIRHEAD', 'คุณานนท์', 7);
 const PAIR_MEMBER = person('PAIRMEMBER', 'เจนนาม', 8);
+const CONFLICT = person('CONFLICT', 'ชนกัน', 9);
 
 const OLD_HH_ID = `household:E2EPA${RUN_ID.toUpperCase()}OLD`;
 const OLD_HH_LABEL = `ครอบครัว${fullName(OLD_HEAD)}`;
 
-// SH001 master data: Z1 = โซน A (recommended), Z2 = โซน B.
-const RECOMMENDED_ZONE = { code: 'Z1', name: 'โซน A' };
-const OTHER_ZONE = { code: 'Z2', name: 'โซน B' };
+/**
+ * SH001 zones: Z1 is the one the wizard recommends, Z2 the alternative. Names are
+ * read from the seeded registry doc in `beforeAll`; persisted data is checked by code.
+ */
+const RECOMMENDED_ZONE: Zone = { code: 'Z1', name: '' };
+const OTHER_ZONE: Zone = { code: 'Z2', name: '' };
 
 const ADDRESS = {
 	zone: 'เขตเทศบาลนครหาดใหญ่',
@@ -203,6 +231,7 @@ async function seedEvacuees(): Promise<void> {
 			evacueeDoc(LONER, 'active', null),
 			evacueeDoc(PAIR_HEAD, 'active', null),
 			evacueeDoc(PAIR_MEMBER, 'active', null),
+			evacueeDoc(CONFLICT, 'active', null),
 			oldHouseholdDoc()
 		]
 	});
@@ -210,100 +239,6 @@ async function seedEvacuees(): Promise<void> {
 	if (res.status >= 400 || failed.length > 0) {
 		throw new Error(`Seeding evacuees failed (HTTP ${res.status}): ${JSON.stringify(failed)}`);
 	}
-}
-
-// ─── Real-CouchDB helpers (admin, Node side) ───────────────────────────────────
-
-/** The `pnpm preview` server playwright.config.ts starts (its `baseURL`). */
-const APP_BASE_URL = 'http://localhost:4173';
-
-type CouchDoc = Record<string, unknown> & { _id: string; _rev: string };
-
-/**
- * The `test`-mode build points the browser straight at CouchDB (`COUCH_BASE`), which
- * has no CORS locally. Re-send those calls through the preview server's same-origin
- * `/couch` proxy (the `daily-sop.test.ts` pattern) — the data still comes from the real DB.
- */
-async function routeCouchThroughApp(page: Page): Promise<void> {
-	await page.route(`${COUCH_BASE}/**`, async (route) => {
-		const request = route.request();
-		const origin = new URL(request.url());
-		const corsHeaders = {
-			'access-control-allow-origin': APP_BASE_URL,
-			'access-control-allow-credentials': 'true',
-			'access-control-allow-methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
-			'access-control-allow-headers':
-				request.headers()['access-control-request-headers'] ?? 'Content-Type, Accept'
-		};
-		if (request.method() === 'OPTIONS') {
-			await route.fulfill({ status: 204, headers: corsHeaders });
-			return;
-		}
-		try {
-			const response = await route.fetch({
-				url: `${APP_BASE_URL}/couch${origin.pathname}${origin.search}`
-			});
-			await route.fulfill({ response, headers: { ...response.headers(), ...corsHeaders } });
-		} catch {
-			// The page closed mid-request (e.g. a long-poll `_changes` at test end).
-		}
-	});
-}
-
-/**
- * A freshly minted user has no `security_question`, and the post-login gate sends
- * anyone in that state to `/force-setup` before any back-office route renders. Seed
- * one so these tests exercise the wizard and not the onboarding flow.
- */
-async function seedSecurityQuestion(name: string): Promise<void> {
-	const path = `/_users/org.couchdb.user:${encodeURIComponent(name)}`;
-	const got = await couchReq('GET', path);
-	const doc = got.data as Record<string, unknown>;
-	const res = await couchReq('PUT', path, {
-		...doc,
-		security_question: {
-			question_id: 'high_school',
-			answer_hash: 'e2e'.padEnd(64, '0'),
-			salt: 'e2e'.padEnd(32, '0'),
-			set_at: new Date().toISOString()
-		},
-		must_change_password: false
-	});
-	if (res.status >= 400) {
-		throw new Error(`Could not seed security question for "${name}" (HTTP ${res.status})`);
-	}
-}
-
-/** The shell re-renders once the session is verified and the shelter doc arrives — type only after. */
-async function waitForAppSettled(page: Page, shelterCode = 'SH001'): Promise<void> {
-	await expect(page.getByRole('button', { name: 'เลือกศูนย์อพยพ' })).toContainText(shelterCode, {
-		timeout: 20_000
-	});
-}
-
-async function findDocs(selector: Record<string, unknown>): Promise<CouchDoc[]> {
-	const res = await couchReq('POST', `/${SHELTER_DB}/_find`, { selector, limit: 1000 });
-	if (res.status !== 200) throw new Error(`_find on ${SHELTER_DB} failed (HTTP ${res.status})`);
-	return (res.data as { docs: CouchDoc[] }).docs;
-}
-
-async function getDoc(id: string): Promise<CouchDoc> {
-	const res = await couchReq('GET', `/${SHELTER_DB}/${encodeURIComponent(id)}`);
-	if (res.status !== 200) throw new Error(`GET ${SHELTER_DB}/${id} failed (HTTP ${res.status})`);
-	return res.data as CouchDoc;
-}
-
-/**
- * Delete every doc in `shelter_sh001` whose `created_by` is one of `names`. Deleting
- * (not purging) lets the sync worker see the tombstones and drop the Mongo projections too.
- */
-async function deleteDocsCreatedBy(names: string[]): Promise<void> {
-	const docs = await findDocs({ created_by: { $in: names } });
-	if (docs.length === 0) return;
-	const res = await couchReq('POST', `/${SHELTER_DB}/_bulk_docs`, {
-		docs: docs.map((d) => ({ _id: d._id, _rev: d._rev, _deleted: true }))
-	});
-	if (res.status >= 400) throw new Error(`Clean-up _bulk_docs failed (HTTP ${res.status})`);
 }
 
 // ─── Browser helpers ───────────────────────────────────────────────────────────
@@ -383,6 +318,9 @@ test.describe('Household post-arrival grouping — real CouchDB', () => {
 	test.describe.configure({ mode: 'serial' });
 
 	test.beforeAll(async () => {
+		const zones = await loadShelterZones([RECOMMENDED_ZONE.code, OTHER_ZONE.code]);
+		Object.assign(RECOMMENDED_ZONE, zones[RECOMMENDED_ZONE.code]);
+		Object.assign(OTHER_ZONE, zones[OTHER_ZONE.code]);
 		for (const user of USERS) {
 			await createCouchUser(user);
 			await seedSecurityQuestion(user.name);
@@ -440,6 +378,7 @@ test.describe('Household post-arrival grouping — real CouchDB', () => {
 	test('C2 — staff A groups a head, a member and someone moving out of another household', async ({
 		page
 	}) => {
+		const publicPlaneCalls = trackPublicPlaneCalls(page);
 		await openWizardAs(page, STAFF_A);
 
 		// Step 1
@@ -519,6 +458,9 @@ test.describe('Household post-arrival grouping — real CouchDB', () => {
 		await page.getByRole('button', { name: 'เสร็จสิ้นการจัดกลุ่มครอบครัว ✔' }).click();
 		await expect(page).toHaveURL(/\/back-office\/evacuee-management\?tab=household/);
 
+		// The whole staff flow stayed on CouchDB — no PII went near the public plane.
+		expect(publicPlaneCalls, 'no /api/public calls from the staff wizard').toEqual([]);
+
 		// ── Database ──
 		const households = await findDocs({ type: 'household', created_by: STAFF_A.name });
 		expect(households).toHaveLength(1);
@@ -592,7 +534,7 @@ test.describe('Household post-arrival grouping — real CouchDB', () => {
 	});
 
 	// Recorded with `pnpm exec playwright codegen`, then tidied into the suite's helpers.
-	test('C6 — staff A groups a pair with housing type and landmark, then prints the QR card', async ({
+	test('C5 — staff A groups a pair with housing type and landmark, then prints the QR card', async ({
 		page
 	}) => {
 		await openWizardAs(page, STAFF_A);
@@ -652,7 +594,7 @@ test.describe('Household post-arrival grouping — real CouchDB', () => {
 		});
 	});
 
-	test("C5 — the shelter manager sees the grouped household; warehouse staff can't group", async ({
+	test("C6 — the shelter manager sees the grouped household; warehouse staff can't group", async ({
 		page
 	}) => {
 		await routeCouchThroughApp(page);
@@ -668,6 +610,30 @@ test.describe('Household post-arrival grouping — real CouchDB', () => {
 		await page.goto('/back-office/households/new');
 		await expect(page).not.toHaveURL(/\/households\/new/, { timeout: 15_000 });
 		expect(await findDocs({ created_by: WAREHOUSE.name })).toHaveLength(0);
+	});
+
+	test('C7 — a 409 Conflict on save shows an error and persists nothing', async ({ page }) => {
+		await openWizardAs(page, STAFF_A);
+		const refused = await conflictOnDocWrites(page);
+		await pickHead(page, CONFLICT);
+		await nextStep(page).click();
+		await nextStep(page).click();
+		await page.getByRole('button', { name: 'ประเภทที่อยู่อาศัย' }).click();
+		await page.getByRole('option', { name: 'ไร้ที่อยู่อาศัยเป็นหลักแหล่ง' }).click();
+		await fillGeography(page);
+		await nextToAssets(page).click();
+		await nextToZone(page).click();
+		await page.getByRole('button', { name: 'ยืนยันโซนแนะนำ' }).click();
+
+		await expect(page.getByText(/เกิดข้อผิดพลาด/).first()).toBeVisible({ timeout: 10_000 });
+		expect(refused(), 'the save actually hit the conflict').toBeGreaterThan(0);
+		await expect(page.getByRole('button', { name: 'ยืนยันโซนแนะนำ' })).toBeVisible();
+		await expect(
+			page.getByRole('heading', { name: 'จัดกลุ่มครอบครัวและออกรหัสครัวเรือนสำเร็จ!' })
+		).toHaveCount(0);
+
+		expect(await getDoc(CONFLICT.id)).toMatchObject({ household_id: null });
+		expect(await findDocs({ type: 'household', head_evacuee_id: CONFLICT.id })).toHaveLength(0);
 	});
 });
 
@@ -708,6 +674,23 @@ const DENIED: AccessCase[] = [
 	{ tag: 'scope', label: 'shelter scope with no capability', roles: ['shelter:SH001'] }
 ];
 
+/** A minimal household a denied account tries to write straight to CouchDB (A3). */
+function probeHousehold(user: TestUser): Record<string, unknown> & { _id: string } {
+	const now = new Date().toISOString();
+	return {
+		_id: `household:E2EACL${RUN_ID.toUpperCase()}${user.name.length}`,
+		type: 'household',
+		schema_v: 5,
+		shelter_code: 'SH001',
+		created_at: now,
+		updated_at: now,
+		created_by: user.name,
+		label: `ACL probe ${user.name}`,
+		head_evacuee_id: null,
+		status: 'checked_in'
+	};
+}
+
 /** Mint a throwaway account holding `roles`, run `body` as it, then drop the account. */
 async function withAccount(
 	{ tag, roles }: AccessCase,
@@ -724,6 +707,7 @@ async function withAccount(
 		await seedSecurityQuestion(user.name);
 		await body(user, await couchLogin(user.name, user.password));
 	} finally {
+		await deleteDocsCreatedBy([user.name]);
 		await deleteCouchUser(user.name);
 	}
 }
@@ -760,6 +744,21 @@ test.describe('Household post-arrival grouping — who may open the wizard', () 
 				await expect(
 					page.getByRole('heading', { name: '1. ตรวจสอบและเลือกหัวหน้าครัวเรือน' })
 				).toHaveCount(0);
+				expect(await findDocs({ created_by: user.name })).toHaveLength(0);
+			});
+		});
+	}
+
+	for (const access of DENIED) {
+		test(`A3 — CouchDB refuses a household written directly by ${access.label}`, async () => {
+			// Known gap: validate_doc_update (shelter-access-design.ts) lets any
+			// `shelter:SH001` member write people-plane docs; only the client route guard
+			// stops these roles. Remove `test.fail` once the server enforces the matrix.
+			test.fail(true, 'server does not yet enforce household write capability');
+			await withAccount(access, async (user, session) => {
+				const status = await putDocAsSession(session, probeHousehold(user));
+				expect(status, 'denied role must get 401/403 from CouchDB').toBeGreaterThanOrEqual(401);
+				expect(status).toBeLessThanOrEqual(403);
 				expect(await findDocs({ created_by: user.name })).toHaveLength(0);
 			});
 		});
