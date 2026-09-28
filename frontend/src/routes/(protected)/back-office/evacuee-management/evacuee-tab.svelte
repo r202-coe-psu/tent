@@ -19,6 +19,7 @@
 		listMatchingEvacueeIds,
 		canCheckInEvacuee,
 		canCancelEvacueePreRegistration,
+		migrateVulnerableGroupCode,
 		stayStatusSchema,
 		zoneLabel,
 		StayStatusBadge,
@@ -31,7 +32,12 @@
 	import { getShelterCode } from '$lib/db/shelter';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { useShelter } from '$lib/features/shelters';
-	import { useMasterData, formatMasterLabel } from '$lib/features/master-data';
+	import {
+		useMasterData,
+		formatMasterLabel,
+		formatMasterLabelByCode,
+		CR112_VULNERABLE_GROUP_ACTIVE
+	} from '$lib/features/master-data';
 
 	const PAGE_SIZE = 10;
 	let currentPage = $state(1);
@@ -52,12 +58,31 @@
 		label: STATUS_LABELS[value] ?? value
 	}));
 
+	const masterVulnerableItems = $derived(vulnerableGroupQuery.data?.items ?? []);
+
+	function vulnerableGroupLabel(code: string): string {
+		const migrated = migrateVulnerableGroupCode(code);
+		const fromMaster =
+			masterVulnerableItems.find((item) => item.code === migrated) ??
+			masterVulnerableItems.find((item) => item.code === code);
+		if (fromMaster) return formatMasterLabel(fromMaster, 'th');
+		const fallback = CR112_VULNERABLE_GROUP_ACTIVE.find((item) => item.code === migrated);
+		if (fallback) return formatMasterLabel(fallback, 'th');
+		// Hide unresolved legacy ULID codes (`item_*`); keep free-text / semantic unknowns.
+		return formatMasterLabelByCode(migrated, masterVulnerableItems, 'th');
+	}
+
+	function vulnerableGroupChips(evacuee: Evacuee): { code: string; label: string }[] {
+		return (evacuee.vulnerable_groups ?? [])
+			.map((code) => ({ code, label: vulnerableGroupLabel(code) }))
+			.filter((chip) => chip.label.length > 0);
+	}
+
 	const vulnerableTypeOptions = $derived.by(() => {
 		const supported = shelterQuery.data?.admission_policy?.supported_vulnerable_groups ?? [];
-		const masterItems = vulnerableGroupQuery.data?.items ?? [];
 		return supported.map((code) => {
-			const masterItem = masterItems.find((item) => item.code === code);
-			return { value: code, label: masterItem ? formatMasterLabel(masterItem, 'th') : code };
+			const value = migrateVulnerableGroupCode(code);
+			return { value, label: vulnerableGroupLabel(value) || value };
 		});
 	});
 
@@ -435,23 +460,17 @@
 							</div>
 
 							<div class="flex flex-wrap gap-1.5">
-								{#if e.special_needs && e.special_needs.length > 0}
-									{#each e.special_needs as need (need)}
-										{@const masterItem = vulnerableGroupQuery.data?.items.find(
-											(i) => i.code === need
-										)}
-										{@const label = masterItem ? formatMasterLabel(masterItem, 'th') : need}
-										<span
-											class="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-900"
-											>{label}</span
-										>
-									{/each}
+								{#each vulnerableGroupChips(e) as chip (chip.code)}
+									<span
+										class="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-900"
+										>{chip.label}</span
+									>
 								{:else}
 									<span
 										class="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs text-slate-500"
 										>ทั่วไป</span
 									>
-								{/if}
+								{/each}
 							</div>
 
 							<div class="flex flex-col gap-2">
@@ -522,22 +541,16 @@
 							</Table.Cell>
 							<Table.Cell>
 								<div class="flex flex-wrap gap-1">
-									{#if e.special_needs && e.special_needs.length > 0}
-										{#each e.special_needs as need (need)}
-											{@const masterItem = vulnerableGroupQuery.data?.items.find(
-												(i) => i.code === need
-											)}
-											{@const label = masterItem ? formatMasterLabel(masterItem, 'th') : need}
-											<span
-												class="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-2xs font-medium text-amber-700"
-												>{label}</span
-											>
-										{/each}
+									{#each vulnerableGroupChips(e) as chip (chip.code)}
+										<span
+											class="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-2xs font-medium text-amber-700"
+											>{chip.label}</span
+										>
 									{:else}
 										<span class="rounded-full bg-muted px-2.5 py-0.5 text-2xs text-muted-foreground"
 											>ทั่วไป</span
 										>
-									{/if}
+									{/each}
 								</div>
 							</Table.Cell>
 							<Table.Cell>

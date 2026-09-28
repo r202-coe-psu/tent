@@ -26,6 +26,7 @@ export type HouseholdSearchLabels = {
 };
 
 export type EvacueeFilters = {
+	/** Vulnerable-group code (`evacuee.vulnerable_groups`); legacy filter key name. */
 	specialNeed?: string;
 	zone?: string;
 	status?: StayStatus;

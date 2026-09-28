@@ -421,12 +421,12 @@ describe('PeopleRemoteRepository', () => {
 	describe('listEvacueesPaginated filters', () => {
 		it('filters by supported vulnerable type and assigned zone before pagination', async () => {
 			const elderly = await repo.createEvacuee(
-				evInput({ first_name: 'Elder', special_needs: ['elderly'] }),
+				evInput({ first_name: 'Elder', vulnerable_groups: ['elderly'] }),
 				ctx
 			);
 			await repo.checkInEvacuee(elderly, ctx, 'Z1');
 			const pregnant = await repo.createEvacuee(
-				evInput({ first_name: 'Mother', special_needs: ['pregnant'] }),
+				evInput({ first_name: 'Mother', vulnerable_groups: ['pregnant'] }),
 				ctx
 			);
 			await repo.checkInEvacuee(pregnant, ctx, 'Z2');
@@ -438,6 +438,7 @@ describe('PeopleRemoteRepository', () => {
 
 			expect(result.total).toBe(1);
 			expect(result.items[0].first_name).toBe('Elder');
+			expect(result.items[0].vulnerable_groups).toContain('elderly_dependent');
 		});
 
 		it('filters by stay status and returns matching ids', async () => {

@@ -85,7 +85,7 @@
 		</div>
 		<div>
 			<div class="flex items-center gap-2">
-				<span class="text-xs font-bold tracking-wider text-[#0284C7] uppercase">ส่วนที่ 9</span>
+				<span class="text-xs font-bold tracking-wider text-[#0284C7] uppercase">ส่วนที่ 10</span>
 			</div>
 			<h2 class="text-base font-bold text-[#0A2647] sm:text-lg">
 				นโยบายยานพาหนะและการจอดรถ (Vehicle &amp; Parking Policy)
