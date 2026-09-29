@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { SuperForm } from 'sveltekit-superforms';
 	import type { SuperFormData } from 'sveltekit-superforms/client';
-	import type { Zone, Shelter, ZoneType } from '../domain/schema';
+	import type { Zone, Shelter, ZoneType, AreaType } from '../domain/schema';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
