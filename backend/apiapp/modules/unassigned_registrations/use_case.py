@@ -20,7 +20,7 @@ from tent_model.unassigned_registration import (
 )
 
 from ...core.staff_session import StaffSession
-from ...infrastructure.gridfs import load_unassigned_photo, parse_photo_ref
+from ...infrastructure.gridfs import load_unassigned_photo, parse_photo_ref, photo_ref
 from ...utils.masking import (
     mask_last_name,
     mask_phone,
@@ -59,6 +59,7 @@ from .schemas import (
     UnassignedRegistrationDetailResponse,
     UnassignedRegistrationListItem,
     UnassignedRegistrationListResponse,
+    UnassignedRegistrationReviewResponse,
     UnassignedRegistrationSearchHit,
     UnassignedRegistrationSearchResponse,
     UnassignedRegistrationStatsResponse,
@@ -675,6 +676,69 @@ class UnassignedRegistrationsUseCase:
                 },
             )
         return _detail_response(doc)
+
+    async def get_review(self, registration_id: str) -> UnassignedRegistrationReviewResponse:
+        """Open-only pre-claim review (CR-140 addendum) — read-only, no write."""
+        try:
+            doc = await UnassignedRegistration.get(registration_id)
+        except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
+            raise _mongo_unavailable("get_review") from exc
+        if doc is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": {
+                        "code": "NOT_FOUND",
+                        "message": "Unassigned Registration not found",
+                    }
+                },
+            )
+        _ensure_pet_ids(doc)
+        hh = doc.household
+        return UnassignedRegistrationReviewResponse(
+            id=doc.id,
+            reserved_household_id=doc.reserved_household_id,
+            registered_via=doc.registered_via,
+            status=doc.status,
+            created_at=doc.created_at.isoformat(),
+            housing_type=hh.housing_type,
+            residence_landmark=hh.residence_landmark,
+            address_no=hh.address_no,
+            village_no=hh.village_no,
+            subdistrict=hh.subdistrict,
+            district=hh.district,
+            province=hh.province,
+            postal_code=hh.postal_code,
+            label=hh.label,
+            open_members=[_open_member_hit(m) for m in doc.members if m.status == "open"],
+            open_pets=[_open_pet_hit(p) for p in _open_pets(doc)],
+        )
+
+    async def find_open_photo_reference(self, photo_id: str) -> str | None:
+        """Normalize + check `photo_id` is referenced by an open member/pet somewhere.
+
+        Returns the normalized `gfs:{oid}` ref on a match, else ``None`` (caller 404s).
+        """
+        ref = parse_photo_ref(photo_id)
+        if ref is None:
+            return None
+        normalized = photo_ref(ref)
+        try:
+            doc = await UnassignedRegistration.find_one(
+                {
+                    "$or": [
+                        {"members": {"$elemMatch": {"status": "open", "photo": normalized}}},
+                        {
+                            "household.pets": {
+                                "$elemMatch": {"status": "open", "image_url": normalized}
+                            }
+                        },
+                    ]
+                }
+            )
+        except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
+            raise _mongo_unavailable("get_review") from exc
+        return normalized if doc is not None else None
 
     async def search(self, raw_query: str) -> UnassignedRegistrationSearchResponse:
         """Search open members on the Mongo queue (FR-UR-02) — no public_persons."""

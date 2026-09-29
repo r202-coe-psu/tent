@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-09-26 # CR-138 remove purchase; CR-032 superseded
+updated: 2026-09-29 # CR-140 persistent unassigned family + claim-on-report-in-confirm
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 
@@ -153,3 +153,4 @@ note: ดัชนี Change Record ทุกตัว — กติกาอย
 | [CR-137](CR-137-shrink-master-data-types-zone-community-text.md) | Shrink master_data enum (10→4): drop health_condition, dietary_restrictions, pet_types, house_damage, municipality_zone, community; zone/community free text; pets dog|cat|other; remove public pet-types API | approved | volatile | 2026-09-25 | docs/data/schema.md §1.3/§3.1/§3.3, docs/master-data/README.md, master-data domain+seed, registration/household config UI, household+shelter forms, public pet-types BFF |
 | [CR-138](CR-138-remove-purchase.md) | Remove purchase doc type and ใบจัดซื้อ UI — withdraw `purchase` from stock_ledger.reason + CR-055 R2; supersede CR-032 | done | volatile | 2026-09-26 | docs/data/schema.md §2.16/§2.1, operations feature, shelter-access-design, seed, UAT-085, CR-032 |
 | [CR-139](CR-139-shelter-storage-points.md) | shelter — ตั้งค่าจุดเก็บของ (common_areas.sub_storage) เป็น master ของศูนย์ และใช้เป็นตัวเลือก "สถานที่จัดเก็บ" ในจัดการสต็อก (stock_ledger.lot.storage_point_id) | approved | volatile | 2026-09-26 | docs/data/schema.md §3.1/§2.1, frontend/src/lib/features/shelters/**, operations/** |
+| [CR-140](CR-140-persistent-unassigned-family.md) | Unassigned Registration persistent Mongo family (no hard-delete, per-pet claim tracking, reopen on late join) + addendum: claim ทั้งคนและสัตว์เกิดเมื่อยืนยันที่หน้า review Report-in เท่านั้น (ไม่ใช่ตอนติ๊กใน ClaimDialog) — new staff review + photo-read endpoints, no schema_v bump | approved | volatile | 2026-09-29 | docs/data/schema.md §9.5, docs/data/api-contract.md, backend/apiapp/modules/unassigned_registrations/**, frontend/src/lib/features/unassigned-registration/**, frontend routes onsite/unassigned + api/staff/v1/unassigned-registrations |

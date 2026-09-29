@@ -2218,20 +2218,20 @@ partner ODT "นโยบายควบคุมการเข้าถึง�
 
 **Index:** `(client_id, created_at)` · `(location_code)` · `(created_at)` TTL `expireAfterSeconds` 1 ปี
 
-### 9.5 `unassigned_registrations` (MongoDB) — **ใหม่ (CR-113)** · **schema_v 3** ([draft-persistent-unassigned-family](../changes/draft-persistent-unassigned-family.md))
+### 9.5 `unassigned_registrations` (MongoDB) — **ใหม่ (CR-113)** · **schema_v 3** ([CR-140](../changes/CR-140-persistent-unassigned-family.md))
 
 คิวกลาง **Unassigned Registration** — ครัวเรือนที่ลงทะเบียนล่วงหน้าแต่ยังไม่เลือกศูนย์ · **ไม่ใช่** doc ใน `shelter_*` · **ไม่ใช่** Evacuee จน claim · **ไม่** สร้าง stub ใน `public_persons` จน claim + worker project จาก Couch · **ไม่นับ** Forecast รายศูนย์
 
 SoR ของคิวกลางจน claim = Mongo collection นี้ · เขียนตรงจาก FastAPI (ไม่ผ่าน Couch CDC)
 
-> **schema_v 3** — pets มี `pet_id` + claim lifecycle; เอกสาร `open`/`closed` (ไม่ hard-delete หลัง claim ครบ); late join reopen · draft-persistent-unassigned-family  
+> **schema_v 3** — pets มี `pet_id` + claim lifecycle; เอกสาร `open`/`closed` (ไม่ hard-delete หลัง claim ครบ); late join reopen · CR-140  
 > **schema_v 2** — #255 / CR-113 amend (photo GridFS + field parity)  
 > **schema_v 1** — baseline CR-113
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
 | `_id` | str | req | ULID |
-| `schema_v` | int | req | **`3`** for new writes (draft-persistent-unassigned-family); **`1`/`2`** still readable without backfill |
+| `schema_v` | int | req | **`3`** for new writes (CR-140); **`1`/`2`** still readable without backfill |
 | `reserved_household_id` | str | req | `household:{ulid}` จองตั้งแต่สร้าง — ใช้ตอน claim |
 | `members` | [{`reserved_evacuee_id`, `status`, person fields…}] | req | แต่ละคนมี `reserved_evacuee_id` (`evacuee:{ulid}`), `status`: enum(`open`,`claimed`,`cancelled`), + claim meta (`claimed_shelter_code`/`claimed_at`/`claimed_by`), + ฟิลด์คนตามที่ public UnifiedRegistrationForm เก็บ: name, phone, person_id, country, nickname, religion, vulnerable_groups, special_needs, birth_year/age, **emergency_contact** (omit เมื่อ name/phone/relation ว่างทั้งหมด), **photo** (`gfs:{oid}` → GridFS; claim เกิด Couch `image:{ulid}` + `evacuee.photo`). **ไม่** เก็บ medical_* / vehicles / assets บนคิวสาธารณะ |
 | `household` | object | req | housing_type, residence_landmark, geo/address, **pets[]** (ตารางย่อย), … (ไม่รวม vehicles/assets จาก public) |
@@ -2256,7 +2256,7 @@ Couch `household.pets` schema **ไม่เปลี่ยน** — claim appen
 
 **Photo (GridFS):** bucket `unassigned_registration_photos` · `POST /public/v1/unassigned-registrations/photos` · สมาชิกเก็บ `photo: gfs:{oid}` · สัตว์เลี้ยงเก็บ `pets[].image_url: gfs:{oid}` · claim อ่าน GridFS → birth Couch `image:{ulid}` (+ attachments) แล้วตั้ง `evacuee.photo` / `household.pets[].image_url`
 
-**Claim (option B):** staff ติ๊กสมาชิกและ/หรือสัตว์ที่ยัง `open` → **mark claimed ใน Mongo ก่อน** (คน+สัตว์) → birth/append Couch `evacuee`(+`household`[+`image`]) ด้วย reserved ids ที่ `pre_registered` · คัดลอก nickname / religion / emergency_contact เมื่อมี · append เฉพาะ pets ที่ติ๊ก · Couch ล้ม → revert Mongo (คน+สัตว์) · `_bulk_docs` conflict = OK · ที่ไม่ติ๊กคง `open` · เมื่อไม่มี `open` เหลือ → ตั้งเอกสาร `closed` (**ไม่** hard-delete) · late join (`join_registration_id`) เข้าใบเดิมได้แม้ `closed` → reopen เป็น `open` · `JOIN_TARGET_NOT_FOUND` เฉพาะเมื่อไม่มี `_id` · `system_admin` ลบทั้งใบได้ · รายละเอียดดู [CR-113](../changes/CR-113-unassigned-registration-mongo.md) + [draft-persistent-unassigned-family](../changes/draft-persistent-unassigned-family.md)
+**Claim (option B):** staff ติ๊กสมาชิกและ/หรือสัตว์ที่ยัง `open` → **mark claimed ใน Mongo ก่อน** (คน+สัตว์) → birth/append Couch `evacuee`(+`household`[+`image`]) ด้วย reserved ids ที่ `pre_registered` · คัดลอก nickname / religion / emergency_contact เมื่อมี · append เฉพาะ pets ที่ติ๊ก · Couch ล้ม → revert Mongo (คน+สัตว์) · `_bulk_docs` conflict = OK · ที่ไม่ติ๊กคง `open` · เมื่อไม่มี `open` เหลือ → ตั้งเอกสาร `closed` (**ไม่** hard-delete) · late join (`join_registration_id`) เข้าใบเดิมได้แม้ `closed` → reopen เป็น `open` · `JOIN_TARGET_NOT_FOUND` เฉพาะเมื่อไม่มี `_id` · `system_admin` ลบทั้งใบได้ · รายละเอียดดู [CR-113](../changes/CR-113-unassigned-registration-mongo.md) + [CR-140](../changes/CR-140-persistent-unassigned-family.md)
 
 **Migration (schema_v 2 → 3):** additive pet claim fields + `closed` document status — ไม่ backfill batch; อ่าน pets เก่าโดย default `status=open`; เขียนใหม่ stamp `schema_v: 3` + mint `pet_id`
 ### 9.6 `third_party_clients` (MongoDB) — Partner OAuth2 clients (ADR 0002, EXT-001; **CR-135**, **CR-136**)

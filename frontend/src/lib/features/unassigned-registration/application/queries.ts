@@ -17,6 +17,12 @@ import {
 	isOnlineRequiredError,
 	type UnassignedRegistrationSearchHit
 } from '../domain/search';
+import {
+	unassignedHouseholdToUnifiedInput,
+	unassignedMemberToUnifiedMember,
+	unassignedPhotoUrl,
+	type UnassignedRegistrationReview
+} from '../domain/review';
 
 export {
 	CLAIM_DIALOG_DESCRIPTION,
@@ -29,9 +35,12 @@ export {
 	formatOpenMemberName,
 	formatOpenMemberVulnerableGroup,
 	formatOpenPetLabel,
-	isOnlineRequiredError
+	isOnlineRequiredError,
+	unassignedHouseholdToUnifiedInput,
+	unassignedMemberToUnifiedMember,
+	unassignedPhotoUrl
 };
-export type { UnassignedRegistrationSearchHit };
+export type { UnassignedRegistrationSearchHit, UnassignedRegistrationReview };
 export { UnassignedRegistrationApiError } from '../data/unassigned-registration.remote';
 export { pickReportInEvacueeId, toggleMemberSelection, togglePetSelection } from '../domain/claim';
 export type {
@@ -41,7 +50,8 @@ export type {
 
 export const unassignedRegistrationKeys = {
 	all: ['unassigned-registration'] as const,
-	search: (q: string) => [...unassignedRegistrationKeys.all, 'search', q] as const
+	search: (q: string) => [...unassignedRegistrationKeys.all, 'search', q] as const,
+	review: (id: string) => [...unassignedRegistrationKeys.all, 'review', id] as const
 };
 
 /** Staff online search of open Unassigned Registrations (Mongo queue). */
@@ -57,7 +67,14 @@ export function useUnassignedRegistrationSearch(getQuery: () => string) {
 	});
 }
 
-/** Claim ticked open members into the caller's shelter (Couch birth). */
+/**
+ * Claim ticked open members/pets into the caller's shelter (Couch birth).
+ *
+ * CR-140 addendum: this is step 1 of the review page's confirm sequence, not a
+ * standalone user action anymore — the combined "รับเข้าศูนย์สำเร็จ" toast fires from
+ * the review page's confirm handler only after Report-in (or, for a pets-only claim,
+ * this mutation alone) also succeeds. No success toast here to avoid firing it early.
+ */
 export function useClaimUnassignedRegistration() {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
@@ -68,27 +85,27 @@ export function useClaimUnassignedRegistration() {
 			registrationId: string;
 			payload: UnassignedRegistrationClaimRequest;
 		}) => unassignedRegistrationRemote.claimMembers(registrationId, payload),
-		onSuccess: (result) => {
+		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: unassignedRegistrationKeys.all });
 			// Claim births Couch SoR — refresh Station 1 shelter queue.
 			queryClient.invalidateQueries({ queryKey: peopleKeys.all });
-			const peopleCount = result.evacuee_ids.length;
-			const petCount = result.claimed_pets.length;
-			const remaining =
-				result.remaining_open.length + (result.remaining_open_pets?.length ?? 0);
-			const parts: string[] = [];
-			if (peopleCount > 0) parts.push(`${peopleCount} คน`);
-			if (petCount > 0) parts.push(`${petCount} สัตว์`);
-			const claimedLabel = parts.join(' · ') || 'รายการ';
-			toast.success(
-				remaining > 0
-					? `รับเข้าศูนย์ ${claimedLabel} — รายการที่เหลือยังอยู่ในคิวกลาง`
-					: `รับเข้าศูนย์ ${claimedLabel} สำเร็จ — เอกสารคิวกลางเก็บเป็นประวัติ (ไม่ลบ)`
-			);
 		},
 		onError: (error) => {
 			const message = error instanceof Error ? error.message : 'รับสมาชิกเข้าศูนย์ไม่สำเร็จ';
 			toast.error(message);
 		}
 	}));
+}
+
+/** Read-only pre-claim review (CR-140 addendum) — Mongo queue data, writes nothing. */
+export function useUnassignedRegistrationReview(getId: () => string) {
+	return createQuery(() => {
+		const id = getId();
+		return {
+			queryKey: unassignedRegistrationKeys.review(id),
+			queryFn: () => unassignedRegistrationRemote.getReview(id),
+			enabled: id.length > 0,
+			retry: false
+		};
+	});
 }

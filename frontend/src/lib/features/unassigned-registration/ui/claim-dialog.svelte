@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { SvelteURLSearchParams } from 'svelte/reactivity';
 
 	import { Button } from '$lib/components/ui/button';
 	import { Checkbox } from '$lib/components/ui/checkbox';
@@ -15,10 +16,8 @@
 		formatOpenMemberName,
 		formatOpenMemberVulnerableGroup,
 		formatOpenPetLabel,
-		pickReportInEvacueeId,
 		toggleMemberSelection,
 		togglePetSelection,
-		useClaimUnassignedRegistration,
 		type UnassignedRegistrationSearchHit
 	} from '../application/queries';
 	import UnassignedQueueBadge from './unassigned-queue-badge.svelte';
@@ -41,8 +40,6 @@
 	let selectedMemberIds = $state<string[]>([]);
 	let selectedPetIds = $state<string[]>([]);
 
-	const claimMutation = useClaimUnassignedRegistration();
-
 	const activeHitId = $derived(hit?.id ?? null);
 	const openPets = $derived(hit?.open_pets ?? []);
 	const effectiveSelectedIds = $derived(
@@ -51,10 +48,7 @@
 	const effectiveSelectedPetIds = $derived(
 		selectedForHitId === activeHitId ? selectedPetIds : ([] as string[])
 	);
-	const canClaim = $derived(
-		(effectiveSelectedIds.length > 0 || effectiveSelectedPetIds.length > 0) &&
-			!claimMutation.isPending
-	);
+	const canClaim = $derived(effectiveSelectedIds.length > 0 || effectiveSelectedPetIds.length > 0);
 
 	function setMemberChecked(memberId: string, checked: boolean | 'indeterminate') {
 		if (!activeHitId) return;
@@ -82,33 +76,25 @@
 		selectedPetIds = [];
 	}
 
-	async function submitClaim() {
+	/**
+	 * Selection only — claim itself does not happen here anymore (CR-140 addendum).
+	 * Navigate to the review page, which loads this same registration fresh from Mongo
+	 * and only calls claim + Report-in when staff confirm there.
+	 */
+	async function goToReview() {
 		if (!hit || (effectiveSelectedIds.length === 0 && effectiveSelectedPetIds.length === 0)) {
 			return;
 		}
 		const registrationId = hit.id;
-		const memberIds = [...effectiveSelectedIds];
-		const petIds = [...effectiveSelectedPetIds];
-		try {
-			const result = await claimMutation.mutateAsync({
-				registrationId,
-				payload: {
-					...(memberIds.length > 0 ? { member_ids: memberIds } : {}),
-					...(petIds.length > 0 ? { pet_ids: petIds } : {}),
-					...(shelterCode ? { shelter_code: shelterCode } : {})
-				}
-			});
-			const reportInId = pickReportInEvacueeId(result.evacuee_ids);
-			closeDialog();
-			if (reportInId) {
-				await goto(
-					resolve(`/onsite/people/${reportInId}/report-in` as `/onsite/people/${string}/report-in`)
-				);
-			}
-			// else: stay on caller page — mutation toast + peopleKeys invalidate already ran
-		} catch {
-			// toast handled in mutation onError
-		}
+		const params = new SvelteURLSearchParams();
+		if (effectiveSelectedIds.length > 0) params.set('memberIds', effectiveSelectedIds.join(','));
+		if (effectiveSelectedPetIds.length > 0) params.set('petIds', effectiveSelectedPetIds.join(','));
+		if (shelterCode) params.set('shelterCode', shelterCode);
+		const path = resolve(
+			`/onsite/unassigned/${registrationId}/report-in` as `/onsite/unassigned/${string}/report-in`
+		);
+		closeDialog();
+		await goto(`${path}?${params.toString()}`);
 	}
 </script>
 
@@ -120,7 +106,7 @@
 >
 	<Dialog.Content class="flex max-h-[90vh] flex-col gap-4 sm:max-w-md">
 		<Dialog.Header>
-			<Dialog.Title>รับเข้าศูนย์ (claim)</Dialog.Title>
+			<Dialog.Title>เลือกรายการจากคิวกลาง</Dialog.Title>
 			<Dialog.Description>
 				{CLAIM_DIALOG_DESCRIPTION}
 			</Dialog.Description>
@@ -216,12 +202,8 @@
 						{/if}
 						· ที่ไม่ติ๊กยังคง open ในคิวกลาง
 					</p>
-					<Button type="button" disabled={!canClaim} onclick={submitClaim} class="w-full">
-						{#if claimMutation.isPending}
-							กำลังรับเข้าศูนย์...
-						{:else}
-							ยืนยันรับเข้าศูนย์
-						{/if}
+					<Button type="button" disabled={!canClaim} onclick={goToReview} class="w-full">
+						ตรวจสอบรายละเอียด →
 					</Button>
 				</div>
 			</div>

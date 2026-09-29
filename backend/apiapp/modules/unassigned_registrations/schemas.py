@@ -401,3 +401,28 @@ class UnassignedRegistrationClaimResponse(BaseModel):
     claimed_pets: list[ClaimedPetOut] = Field(default_factory=list)
     remaining_open: list[OpenMemberHit]
     remaining_open_pets: list[OpenPetHit] = Field(default_factory=list)
+
+
+class UnassignedRegistrationReviewResponse(BaseModel):
+    """Staff pre-claim review (CR-140 addendum) — open rows only, no write.
+
+    Household carries address fields only (no `pets` — those live in `open_pets`,
+    unlike `HouseholdOut` which embeds every pet with claim status for the SA detail view).
+    """
+
+    id: str
+    reserved_household_id: str
+    registered_via: Literal["web", "staff"]
+    status: str
+    created_at: str
+    housing_type: str | None = None
+    residence_landmark: str | None = None
+    address_no: str | None = None
+    village_no: str | None = None
+    subdistrict: str | None = None
+    district: str | None = None
+    province: str | None = None
+    postal_code: str | None = None
+    label: str | None = None
+    open_members: list[OpenMemberHit]
+    open_pets: list[OpenPetHit] = Field(default_factory=list)

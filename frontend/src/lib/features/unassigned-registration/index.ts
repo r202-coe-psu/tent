@@ -19,6 +19,14 @@ export type {
 	UnassignedRegistrationClaimResponse
 } from './domain/claim';
 
+export type { UnassignedRegistrationReview } from './domain/review';
+export {
+	unassignedHouseholdToUnifiedInput,
+	unassignedMemberToUnifiedMember,
+	unassignedPhotoUrl,
+	unassignedRegistrationReviewSchema
+} from './domain/review';
+
 export {
 	CLAIM_DIALOG_DESCRIPTION,
 	CLAIM_FLOW_STATUS_GUIDANCE,
@@ -51,6 +59,7 @@ export {
 export {
 	unassignedRegistrationKeys,
 	useClaimUnassignedRegistration,
+	useUnassignedRegistrationReview,
 	useUnassignedRegistrationSearch
 } from './application/queries';
 
