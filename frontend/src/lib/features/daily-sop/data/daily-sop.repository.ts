@@ -1,23 +1,28 @@
 import type { AuthorContext } from '$lib/db/model';
-import type { DailySopAssessment, DailySopDraft } from '../domain/daily-sop';
+import type {
+	DailySopRoleAssessment,
+	DailySopRoleCode,
+	DailySopRoleDraft
+} from '../domain/daily-sop';
+import type { SopRatioKey } from '$lib/features/sop-ratios';
 
-export type DailySopAuthorContext = AuthorContext & { assessorName?: string };
+export type DailySopRoleAuthorContext = AuthorContext & {
+	assessorName?: string;
+	sopRatios?: Partial<Record<SopRatioKey, string>>;
+};
 
-export interface DailySopRepository {
-	list(shelterCode: string): Promise<DailySopAssessment[]>;
-	read(id: string): Promise<DailySopAssessment | null>;
-	findByShelterDate(shelterCode: string, date: string): Promise<DailySopAssessment | null>;
-	createCompleted(
-		draft: DailySopDraft,
+export interface DailySopRoleRepository {
+	list(shelterCode: string): Promise<DailySopRoleAssessment[]>;
+	read(id: string): Promise<DailySopRoleAssessment | null>;
+	findByShelterDateRole(
+		shelterCode: string,
 		date: string,
-		ctx: DailySopAuthorContext
-	): Promise<
-		| { kind: 'created'; assessment: DailySopAssessment }
-		| { kind: 'duplicate'; assessment: DailySopAssessment }
-	>;
-	updateCompleted(
-		existing: DailySopAssessment,
-		draft: DailySopDraft,
-		ctx: DailySopAuthorContext
-	): Promise<DailySopAssessment>;
+		role: DailySopRoleCode
+	): Promise<DailySopRoleAssessment | null>;
+	createOrUpdate(
+		role: DailySopRoleCode,
+		draft: DailySopRoleDraft,
+		date: string,
+		ctx: DailySopRoleAuthorContext
+	): Promise<DailySopRoleAssessment>;
 }
