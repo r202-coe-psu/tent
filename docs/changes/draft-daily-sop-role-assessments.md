@@ -4,7 +4,7 @@ title: แบบประเมิน Daily SOP ประจำวันแย�
 status: proposed
 date: 2026-09-26
 updated: 2026-09-30
-requested_by: project owner
+requested_by: Team D
 decided_by: pending
 layer: volatile
 affects:
