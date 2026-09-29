@@ -385,6 +385,34 @@ describe('createShelterSchema / updateShelterSchema', () => {
 		expect(u.name).toBe('new name');
 		expect(u.capacity).toBeUndefined();
 	});
+
+	it('accepts and validates floor_count in shelterSchema', () => {
+		const parsed = shelterSchema.parse({
+			...validShelterInput,
+			floor_count: 2
+		});
+		expect(parsed.floor_count).toBe(2);
+
+		const parsedNull = shelterSchema.parse({
+			...validShelterInput,
+			floor_count: null
+		});
+		expect(parsedNull.floor_count).toBeNull();
+
+		expect(() =>
+			shelterSchema.parse({
+				...validShelterInput,
+				floor_count: 0
+			})
+		).toThrow('จำนวนชั้นต้องอย่างน้อย 1 ชั้น');
+
+		expect(() =>
+			shelterSchema.parse({
+				...validShelterInput,
+				floor_count: 2.5
+			})
+		).toThrow('จำนวนชั้นต้องเป็นจำนวนเต็ม');
+	});
 });
 
 describe('migrateShelterV2ToCurrent', () => {
@@ -433,6 +461,7 @@ describe('migrateShelterV2ToCurrent', () => {
 	it('adds new fields with safe defaults', () => {
 		const migrated = migrateShelterV2ToCurrent(v2Master);
 		expect(migrated.shelter_type).toBeNull();
+		expect(migrated.floor_count).toBeNull();
 		expect(migrated.area_type).toBeNull();
 		expect(migrated.facilities?.car_toilet_accessible).toBeNull();
 		expect(migrated.common_areas?.sub_storage).toEqual([]);

@@ -12,6 +12,7 @@ export const SHELTER_SECTION_FIELDS: Record<string, readonly string[]> = {
 		'site_kind',
 		'operation_status',
 		'shelter_type',
+		'floor_count',
 		'project_level',
 		'location',
 		'contact',
@@ -26,8 +27,7 @@ export const SHELTER_SECTION_FIELDS: Record<string, readonly string[]> = {
 		'key_personnel',
 		'feature_flags'
 	],
-	capacity: ['capacity', 'area_m2', 'area_type'],
-	'zones-facilities': ['zones', 'facilities', 'common_areas'],
+	capacity: ['capacity', 'area_m2', 'area_type', 'zones', 'facilities', 'common_areas'],
 	'food-distribution': ['food_distribution_points'],
 	utilities: ['utilities'],
 	risk: ['risk'],

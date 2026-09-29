@@ -12,7 +12,6 @@
 		shelterSchema,
 		type SiteKind,
 		BasicInfoSection,
-		CapacitySection,
 		ZonesFacilitiesSection,
 		FoodDistributionSection,
 		UtilitiesSection,
@@ -30,7 +29,6 @@
 	import { createScrollSpy } from '$lib/utils/scroll-spy';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Building2 from '@lucide/svelte/icons/building-2';
-	import Users from '@lucide/svelte/icons/users';
 	import UtensilsCrossed from '@lucide/svelte/icons/utensils-crossed';
 	import Zap from '@lucide/svelte/icons/zap';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
@@ -72,8 +70,7 @@
 
 	const sections = [
 		{ id: 'basic-info', label: 'ข้อมูลพื้นฐานและที่ตั้ง', icon: MapPin },
-		{ id: 'capacity', label: 'ข้อมูลความจุเชิงพื้นที่', icon: Building2 },
-		{ id: 'zones-facilities', label: 'โซนและสิ่งอำนวยความสะดวก', icon: Users },
+		{ id: 'capacity', label: 'ความจุ โซน และสิ่งอำนวยความสะดวก', icon: Building2 },
 		{ id: 'food-distribution', label: 'จุดแจกอาหาร', icon: UtensilsCrossed },
 		{ id: 'utilities', label: 'สถานะสาธารณูปโภคพื้นฐาน', icon: Zap },
 		{ id: 'risk', label: 'ประเมินความเสี่ยงและโครงสร้าง', icon: ShieldAlert },
@@ -171,6 +168,7 @@
 				site_kind: d.site_kind,
 				operation_status: d.operation_status,
 				shelter_type: d.shelter_type ?? null,
+				floor_count: d.floor_count ?? null,
 				project_level: d.project_level ?? null,
 				location: d.location ?? {},
 				contact: d.contact ?? {},
@@ -474,7 +472,6 @@
 						{@attach scrollSpy}
 					>
 						<BasicInfoSection {form} {formData} />
-						<CapacitySection {form} {formData} />
 						<ZonesFacilitiesSection {form} {formData} shelterCode={id} />
 						<FoodDistributionSection {form} {formData} />
 						<UtilitiesSection {form} {formData} />
