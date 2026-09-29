@@ -124,7 +124,7 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 					},
 					{
 						label: 'คลังสินค้า',
-						href: resolve('/back-office/catalog'),
+						href: resolve('/back-office/supply?tab=catalog' as '/back-office/supply'),
 						icon: Warehouse
 					},
 					{

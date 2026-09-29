@@ -20,19 +20,37 @@
 		units?: Snippet;
 	} = $props();
 
+	const supplyCatalogHref = resolve('/back-office/supply?tab=catalog' as '/back-office/supply');
+
+	function isItemsTabParam(raw: string | null): boolean {
+		return raw === 'items' || raw === 'item_master' || raw === 'item_category';
+	}
+
 	function normalizeTab(raw: string | null): CatalogTab {
-		if (raw === 'items' || raw === 'item_master' || raw === 'item_category') return 'items';
+		if (isItemsTabParam(raw)) {
+			return scope === 'shelter' ? 'recipes' : 'items';
+		}
 		if (raw === 'recipes' || raw === 'recipe') return 'recipes';
 		if (raw === 'units' || raw === 'unit_of_measure') {
-			return scope === 'central' ? 'units' : 'items';
+			return scope === 'central' ? 'units' : 'recipes';
 		}
-		return 'items';
+		return scope === 'shelter' ? 'recipes' : 'items';
 	}
 
 	const activeTab = $derived(normalizeTab(page.url.searchParams.get('tab')));
 
+	$effect(() => {
+		if (scope !== 'shelter') return;
+		if (!isItemsTabParam(page.url.searchParams.get('tab'))) return;
+		void goto(supplyCatalogHref, { replaceState: true, noScroll: true, keepFocus: true });
+	});
+
 	function selectTab(tab: CatalogTab) {
 		if (tab === 'units' && scope !== 'central') return;
+		if (tab === 'items' && scope === 'shelter') {
+			void goto(supplyCatalogHref, { replaceState: true, noScroll: true, keepFocus: true });
+			return;
+		}
 		if (scope === 'central') {
 			void goto(resolve(`/system-management/catalog?tab=${tab}` as '/system-management/catalog'), {
 				replaceState: true,
@@ -81,9 +99,11 @@
 			{/if}
 		</Tabs.List>
 
-		<Tabs.Content value="items" class="pt-4">
-			<ProductsPanel {basePath} {scope} />
-		</Tabs.Content>
+		{#if scope === 'central'}
+			<Tabs.Content value="items" class="pt-4">
+				<ProductsPanel {basePath} {scope} />
+			</Tabs.Content>
+		{/if}
 
 		<Tabs.Content value="recipes" class="pt-4">
 			{#if recipes}

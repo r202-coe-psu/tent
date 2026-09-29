@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { SuperForm } from 'sveltekit-superforms';
 	import type { SuperFormData } from 'sveltekit-superforms/client';
-	import type { Zone, Shelter, ZoneType, SubStorageType, AreaType } from '../domain/schema';
+	import type { Zone, Shelter, ZoneType } from '../domain/schema';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -195,52 +195,6 @@
 	function deleteZone(code: string) {
 		$formData.zones = $formData.zones.filter((z: Zone) => z.code !== code);
 		toast.success('ลบโซนสำเร็จ');
-	}
-
-	// Sub-storage editing
-	const subStorageOptions: { value: SubStorageType; label: string }[] = [
-		{ value: 'general', label: 'ทั่วไป' },
-		{ value: 'food_dry', label: 'อาหารแห้ง' },
-		{ value: 'drinking_water', label: 'น้ำดื่ม' },
-		{ value: 'medical_supplies', label: 'เวชภัณฑ์' }
-	];
-
-	let newSubStorageName = $state('');
-	let newSubStorageType = $state<SubStorageType>('general');
-	let newSubStorageArea = $state('');
-
-	function addSubStorage() {
-		if (!newSubStorageName.trim()) {
-			toast.error('กรุณากรอกชื่อสถานที่จัดเก็บ');
-			return;
-		}
-		const current = $formData.common_areas.sub_storage ?? [];
-		// Backfill `id` on legacy items so the each-block key stays stable even
-		// when an item is removed from the middle of the list.
-		const withIds = current.map((item) => (item.id ? item : { ...item, id: ulid() }));
-		$formData.common_areas = {
-			...$formData.common_areas,
-			sub_storage: [
-				...withIds,
-				{
-					id: ulid(),
-					name: newSubStorageName.trim(),
-					type: newSubStorageType,
-					area_m2: newSubStorageArea === '' ? null : Number(newSubStorageArea)
-				}
-			]
-		};
-		newSubStorageName = '';
-		newSubStorageType = 'general';
-		newSubStorageArea = '';
-	}
-
-	function removeSubStorage(index: number) {
-		const current = $formData.common_areas.sub_storage ?? [];
-		$formData.common_areas = {
-			...$formData.common_areas,
-			sub_storage: current.filter((_item: unknown, i: number) => i !== index)
-		};
 	}
 </script>
 
@@ -920,79 +874,6 @@
 				/>
 				<span>🧸 พื้นที่สำหรับเด็ก/สตรี (Women &amp; Child Friendly Space)</span>
 			</label>
-		</div>
-
-		<div>
-			<div class="mb-1.5 block text-xs font-bold tracking-wider text-slate-500 uppercase">
-				📦 คลังย่อยและสถานที่จัดเก็บ
-			</div>
-			{#if ($formData.common_areas.sub_storage ?? []).length > 0}
-				<div class="mb-2 space-y-1.5">
-					{#each $formData.common_areas.sub_storage ?? [] as item, i (item.id ?? `legacy-${i}`)}
-						<div
-							class="flex items-center justify-between rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 text-sm shadow-2xs"
-						>
-							<div class="flex items-center gap-2">
-								<span class="font-medium">{item.name}</span>
-								<span class="text-xs text-muted-foreground">
-									({subStorageOptions.find((o) => o.value === item.type)?.label ??
-										item.type}{item.area_m2 ? ` · ${item.area_m2} ตร.ม.` : ''})
-								</span>
-							</div>
-							<Button
-								type="button"
-								variant="ghost"
-								size="icon-sm"
-								onclick={() => removeSubStorage(i)}
-								{disabled}
-								title="ลบ"
-							>
-								<Trash2 class="h-3.5 w-3.5 text-destructive" />
-							</Button>
-						</div>
-					{/each}
-				</div>
-			{/if}
-			<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-				<Input
-					bind:value={newSubStorageName}
-					{disabled}
-					placeholder="ชื่อสถานที่จัดเก็บ (เช่น สนามปิงปอง: เก็บอาหารแห้ง)"
-					class="flex-1 bg-white"
-				/>
-				<div class="flex items-center gap-2">
-					<Input
-						type="number"
-						min="0"
-						step="any"
-						bind:value={newSubStorageArea}
-						{disabled}
-						placeholder="ตร.ม."
-						class="w-20 bg-white sm:w-[100px]"
-					/>
-					<div class="flex-1 sm:w-[180px] sm:flex-none">
-						<Select.Root type="single" bind:value={newSubStorageType} {disabled}>
-							<Select.Trigger
-								class="flex !h-9 w-full items-start rounded-md border border-input bg-white px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4"
-							>
-								<span class="truncate">
-									{subStorageOptions.find((o) => o.value === newSubStorageType)?.label ??
-										'— เลือก —'}
-								</span>
-							</Select.Trigger>
-							<Select.Content>
-								{#each subStorageOptions as opt (opt.value)}
-									<Select.Item value={opt.value} label={opt.label} />
-								{/each}
-							</Select.Content>
-						</Select.Root>
-					</div>
-					<Button type="button" size="sm" onclick={addSubStorage} {disabled} class="shrink-0">
-						<Plus class="h-3.5 w-3.5" />
-						เพิ่ม
-					</Button>
-				</div>
-			</div>
 		</div>
 
 		<div class="grid grid-cols-1 gap-3 md:grid-cols-2">

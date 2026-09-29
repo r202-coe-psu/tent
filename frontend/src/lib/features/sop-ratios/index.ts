@@ -135,6 +135,10 @@ export { calculateTotalDailyDemand, type HeadcountBySegment } from './domain/foo
 // Domain: Requirement Group
 export {
 	STANDARD_UOM_OPTIONS,
+	LEGACY_TO_CANONICAL_UOM,
+	CANONICAL_TO_LEGACY_UOM,
+	toCanonicalUom,
+	toStandardReqGroupUom,
 	itemMapSchema,
 	requirementGroupInputSchema,
 	isRequirementGroup,

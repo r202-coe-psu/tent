@@ -110,6 +110,8 @@ export {
 	type PolicySyncSlice
 } from './domain/feature-flag-policy-sync';
 
+export { SUB_STORAGE_TYPE_LABELS, listStoragePoints } from './domain/storage-points';
+
 export {
 	sumZoneCapacities,
 	capacityAlignment,
@@ -167,6 +169,7 @@ export { default as CapacityFacilitiesSection } from './ui/zones-facilities-sect
 export { default as CapacityZoneGuideline } from './ui/capacity-zone-guideline.svelte';
 export { default as AreaZoneGuideline } from './ui/area-zone-guideline.svelte';
 export { default as FoodDistributionSection } from './ui/food-distribution-section.svelte';
+export { default as StoragePointsSection } from './ui/storage-points-section.svelte';
 export { default as UtilitiesSection } from './ui/utilities-section.svelte';
 export { default as RiskSection } from './ui/risk-section.svelte';
 export { default as AdmissionPolicySection } from './ui/admission-policy-section.svelte';

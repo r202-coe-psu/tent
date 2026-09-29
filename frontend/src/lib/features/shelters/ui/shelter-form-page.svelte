@@ -14,6 +14,7 @@
 		BasicInfoSection,
 		ZonesFacilitiesSection,
 		FoodDistributionSection,
+		StoragePointsSection,
 		UtilitiesSection,
 		RiskSection,
 		AdmissionPolicySection,
@@ -30,6 +31,7 @@
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Building2 from '@lucide/svelte/icons/building-2';
 	import UtensilsCrossed from '@lucide/svelte/icons/utensils-crossed';
+	import Warehouse from '@lucide/svelte/icons/warehouse';
 	import Zap from '@lucide/svelte/icons/zap';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import PawPrint from '@lucide/svelte/icons/paw-print';
@@ -72,6 +74,7 @@
 		{ id: 'basic-info', label: 'ข้อมูลพื้นฐานและที่ตั้ง', icon: MapPin },
 		{ id: 'capacity', label: 'ความจุ โซน และสิ่งอำนวยความสะดวก', icon: Building2 },
 		{ id: 'food-distribution', label: 'จุดแจกอาหาร', icon: UtensilsCrossed },
+		{ id: 'storage-points', label: 'จุดเก็บของ', icon: Warehouse },
 		{ id: 'utilities', label: 'สถานะสาธารณูปโภคพื้นฐาน', icon: Zap },
 		{ id: 'risk', label: 'ประเมินความเสี่ยงและโครงสร้าง', icon: ShieldAlert },
 		{ id: 'admission-policy', label: 'นโยบายการรับผู้อพยพ', icon: PawPrint },
@@ -474,6 +477,7 @@
 						<BasicInfoSection {form} {formData} />
 						<ZonesFacilitiesSection {form} {formData} shelterCode={id} />
 						<FoodDistributionSection {form} {formData} />
+						<StoragePointsSection {form} {formData} />
 						<UtilitiesSection {form} {formData} />
 						<RiskSection {form} {formData} />
 						<AdmissionPolicySection {formData} />
