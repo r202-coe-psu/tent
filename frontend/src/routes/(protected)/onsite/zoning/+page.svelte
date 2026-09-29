@@ -303,12 +303,19 @@
 		applyModifierSelection(index, ctrl, shift);
 	}
 
-	function onRowClick(e: MouseEvent, row: Evacuee) {
+	function onRowClick(e: MouseEvent, row: Evacuee, index: number) {
 		const ctrl = e.ctrlKey || e.metaKey;
 		const shift = e.shiftKey;
 		if (ctrl || shift) {
 			// Selection already applied in onRowMouseDown; never navigate.
 			e.preventDefault();
+			return;
+		}
+		if (selectedIds.length > 0) {
+			// A selection is already active: keep clicks toggling rows instead of
+			// navigating away, so bulk-selecting isn't derailed by a mis-tap.
+			selectedIds = toggleId(selectedIds, row._id);
+			lastClickedIndex = index;
 			return;
 		}
 		openDetail(row._id);
@@ -869,7 +876,7 @@
 										? 'bg-[var(--shelter-accent-blue-bg)]'
 										: ''}"
 									onmousedown={(e) => onRowMouseDown(e, index)}
-									onclick={(e) => onRowClick(e, row)}
+									onclick={(e) => onRowClick(e, row, index)}
 								>
 									<Table.Cell class="py-3 pl-5">
 										<!-- svelte-ignore a11y_no_static_element_interactions -->
