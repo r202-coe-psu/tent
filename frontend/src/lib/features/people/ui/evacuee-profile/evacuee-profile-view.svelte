@@ -163,6 +163,10 @@
 	};
 
 	const evacueeQuery = useEvacuee(() => evacueeId);
+	// Declared before any hook below that reads it in a getter — those hooks'
+	// createQuery() options run eagerly at call time, not lazily on first access,
+	// so referencing `evacuee` before this line throws a TDZ ReferenceError.
+	const evacuee = $derived(evacueeQuery.data ?? null);
 	const householdQuery = useHousehold(
 		() => evacuee?.household_id ?? '',
 		() => !!evacuee?.household_id
@@ -193,7 +197,6 @@
 	const createScreeningMutation = useCreateScreening();
 	const saveImageMutation = useSaveImage();
 
-	const evacuee = $derived(evacueeQuery.data ?? null);
 	const household = $derived(householdQuery.data ?? null);
 	const medical = $derived(medicalQuery.data ?? null);
 	const screening = $derived(
