@@ -1213,6 +1213,20 @@ backward compatibility ของ CR-059/110; flow ใหม่ใช้ §2.29�
 
 ---
 
+### 2.33 `daily_sop_assessment` — Legacy Daily SOP
+
+เอกสารจาก Daily SOP รุ่นก่อน ระบบปัจจุบันไม่สร้างหรือแสดงเอกสารชนิดนี้ และไม่ย้ายข้อมูลให้อัตโนมัติ หากต้องลบข้อมูลเดิม ให้ทำเฉพาะฐาน local ที่ผู้ใช้ระบุ; ไม่มีคำสั่งลบข้อมูล Legacy รวมอยู่ในแอปหรือ seed ปกติ
+
+### 2.34 `daily_sop_role_assessment` — `daily_sop_role_assessment:{shelter_code}:{date}:{role_code}` · **schema_v 1**
+
+แบบประเมินประจำวันหนึ่งเอกสารต่อศูนย์ ต่อวัน และต่อ Role ใน `shelter_{shelter_code}`. การจำแนกชนิดใช้ค่า `type`; ชนิดที่ไม่รู้จักเขียนไม่ได้
+
+แต่ละ control เก็บ `id`, `question`, `check_method`, `pass_criteria`, `record_values`, `metric_spec`, `status` (`Pass` / `Fail` / `Pending` / `null`), `notes`, `observations`, `measured_values`, `checked_by`, `checked_by_name` และ `checked_at`. เมื่อบันทึกแล้ว ห้ามเพิ่ม ลบ เปลี่ยน ID หรือเรียงลำดับ controls ใหม่ และห้ามแก้ snapshot คำถาม/เกณฑ์/metric; เปลี่ยนได้เฉพาะคำตอบและข้อมูลผู้บันทึกตามสิทธิ์ โดยจับคู่ control ด้วย ID ไม่ใช้ตำแหน่ง array. `Fail` และ `Pending` ต้องมีหมายเหตุ
+
+ผู้รับผิดชอบ Role, ผู้จัดการศูนย์พักพิง และผู้ดูแลระบบแก้ผลของวันปัจจุบันได้ตามสิทธิ์; ผู้ใช้ในศูนย์เปิดดูผลของทุก Role ได้ ส่วนวันย้อนหลังเป็น read-only.
+
+---
+
 ## 3. DB `registry` (central-managed → pull ลง device; edge fallback replica)
 
 ### 3.1 `shelter` — `shelter:{ulid}`
