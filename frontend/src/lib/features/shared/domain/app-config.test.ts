@@ -65,4 +65,10 @@ describe('readAppConfig', () => {
 	it('ignores a non-object document', () => {
 		expect(readAppConfig('config:app')).toEqual(APP_CONFIG_DEFAULTS);
 	});
+
+	it('keeps the password form hidden unless explicitly enabled (CR-141)', () => {
+		expect(APP_CONFIG_DEFAULTS.password_login_enabled).toBe(false);
+		expect(readAppConfig({ password_login_enabled: 'yes' }).password_login_enabled).toBe(false);
+		expect(readAppConfig({ password_login_enabled: true }).password_login_enabled).toBe(true);
+	});
 });
