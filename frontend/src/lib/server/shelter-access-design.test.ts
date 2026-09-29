@@ -1,7 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { SOP_RATIO_KEYS, SOP_RATIO_KIND } from '$lib/features/sop-ratios/server';
-import { DAILY_SOP_QUESTIONS } from '$lib/features/daily-sop';
+import { DAILY_SOP_ROLE_QUESTIONS } from '$lib/features/daily-sop';
 import { buildValidateDocUpdate } from './shelter-access-design';
+
+afterEach(() => {
+	vi.useRealTimers();
+});
 
 type UserCtx = { name: string; roles: string[] };
 type Doc = Record<string, unknown>;
@@ -286,107 +290,214 @@ describe('buildValidateDocUpdate', () => {
 		expect(buildValidateDocUpdate('SH001')).toContain("'daily_calc'");
 	});
 
-	it('accepts Daily SOP snapshots and preserves edit boundaries', () => {
-		const dailySop = {
+	it('blocks all normal writes to Legacy Daily SOP and rejects unknown types', () => {
+		const validate = compile();
+		const legacy = {
 			_id: 'daily_sop_assessment:SH001:2026-06-11',
 			type: 'daily_sop_assessment',
 			...envelope,
-			schema_v: 1,
-			assessment_date: '2026-06-11',
-			assessed_at: '2026-06-11T08:00:00.000Z',
-			assessor_name: 'reg',
-			status: 'Completed',
-			progress_percent: 100,
-			pass_percent: 100,
-			risk_label: 'ไม่พบความเสี่ยง',
-			controls: DAILY_SOP_QUESTIONS.map((question) => ({
-				id: question.id,
-				section_id: question.sectionId,
-				question: question.prompt,
-				status: 'Yes',
-				answered: true,
-				checked_by: 'reg',
-				checked_at: '2026-06-11T08:00:00.000Z'
-			})),
-			lifelines: {
-				electricity: 'Operational',
-				water: 'Operational',
-				gas: 'Operational',
-				telecom: 'Operational'
-			}
+			assessment_date: '2026-06-11'
 		};
-		expect(() => compile()(dailySop, null, REGISTRATION)).not.toThrow();
+		expectForbidden(() => validate(legacy, null, REGISTRATION), /doc type not allowed yet/);
+		expectForbidden(
+			() => validate({ ...legacy, updated_at: '2026-06-12T00:00:00.000Z' }, legacy, REGISTRATION),
+			/doc type not allowed yet/
+		);
+		expectForbidden(
+			() => validate({ ...legacy, _deleted: true }, legacy, REGISTRATION),
+			/Legacy Daily SOP documents are read-only/
+		);
 		expect(() =>
-			compile()(
-				{
-					...dailySop,
-					status: 'InProgress',
-					progress_percent: 91,
-					pass_percent: 100,
-					risk_label: 'พบความเสี่ยง',
-					lifelines: { ...dailySop.lifelines, electricity: null },
-					controls: dailySop.controls.map((control, index) =>
-						index === 0 ? { ...control, status: 'Pending', answered: false } : control
-					)
-				},
-				null,
-				REGISTRATION
-			)
+			validate({ ...legacy, _deleted: true }, legacy, { name: 'admin', roles: ['_admin'] })
 		).not.toThrow();
 		expectForbidden(
-			() =>
-				compile()(
-					{
-						...dailySop,
-						controls: dailySop.controls.map((control, index) =>
-							index === 0 ? { ...control, answered: false, status: 'Pending' } : control
-						)
-					},
-					null,
-					REGISTRATION
-				),
-			/Daily SOP status must match answer completion/
+			() => validate({ ...legacy, type: 'daily_sop_unknown' }, null, REGISTRATION),
+			/doc type not allowed yet/
 		);
-		const edited = {
-			...dailySop,
-			updated_at: '2026-07-23T00:00:00.000Z',
-			pass_percent: 95,
-			risk_label: 'พบความเสี่ยง',
-			controls: dailySop.controls.map((control, index) =>
-				index === 0 ? { ...control, status: 'No' } : control
+	});
+
+	it('validates role-owned Daily SOP snapshots and preserves each role/day boundary', () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-09-25T05:00:00.000Z'));
+		const roleQuestions = DAILY_SOP_ROLE_QUESTIONS.filter((question) => question.role === 'REG');
+		const roleAssessment = {
+			_id: 'daily_sop_role_assessment:SH001:2026-09-25:REG',
+			type: 'daily_sop_role_assessment',
+			...envelope,
+			schema_v: 1,
+			created_by: 'reg',
+			assessment_date: '2026-09-25',
+			role_code: 'REG',
+			role_key: 'registration_staff',
+			role_label: 'ลงทะเบียนและข้อมูลผู้พักพิง',
+			assessed_at: '2026-09-25T08:00:00.000Z',
+			assessor_name: 'เจ้าหน้าที่ทะเบียน',
+			status: 'Completed',
+			pass_count: 10,
+			fail_count: 0,
+			pending_count: 0,
+			unanswered_count: 0,
+			controls: roleQuestions.map((question) => ({
+				id: question.id,
+				question: question.prompt,
+				check_method: question.checkMethod,
+				pass_criteria: question.passCriteria,
+				record_values: question.recordValues,
+				metric_spec: null,
+				status: 'Pass',
+				notes: '',
+				observations: '',
+				measured_values: {},
+				checked_by: 'reg',
+				checked_at: '2026-09-25T08:00:00.000Z'
+			}))
+		};
+		const validate = compile();
+		const updatedByManager = {
+			...roleAssessment,
+			pass_count: 9,
+			fail_count: 1,
+			controls: roleAssessment.controls.map((control, index) =>
+				index === 0
+					? {
+							...control,
+							status: 'Fail',
+							notes: 'ติดตามการแก้ไข',
+							checked_by: 'sm',
+							checked_by_name: 'ผู้จัดการศูนย์',
+							checked_at: '2026-09-25T10:00:00.000Z'
+						}
+					: control
 			)
 		};
-		expect(() => compile()(edited, dailySop, REGISTRATION)).not.toThrow();
+		const updatedByAdmin = {
+			...roleAssessment,
+			pass_count: 9,
+			fail_count: 1,
+			controls: roleAssessment.controls.map((control, index) =>
+				index === 1
+					? {
+							...control,
+							status: 'Fail',
+							notes: 'ติดตามการแก้ไข',
+							checked_by: 'admin',
+							checked_by_name: 'ผู้ดูแลระบบ',
+							checked_at: '2026-09-25T10:00:00.000Z'
+						}
+					: control
+			)
+		};
+		expect(() =>
+			validate(roleAssessment, null, { name: 'reg', roles: ['SH001:registration_staff'] })
+		).not.toThrow();
+		expect(() =>
+			validate(updatedByManager, roleAssessment, { name: 'sm', roles: ['SH001:shelter_manager'] })
+		).not.toThrow();
+		expect(() => validate(updatedByAdmin, roleAssessment, ADMIN)).not.toThrow();
 		expectForbidden(
-			() => compile()({ ...edited, assessment_date: '2026-06-12' }, dailySop, REGISTRATION),
-			/Daily SOP identity and creation metadata cannot change/
+			() => validate(roleAssessment, null, { name: 'reg', roles: ['SH001:facility_staff'] }),
+			/requires the role owner or shelter manager/
+		);
+		const oldVersionAssessment = { ...roleAssessment, question_set_version: 'daily-sop-role-v0' };
+		expect(() => validate(oldVersionAssessment, null, REGISTRATION)).not.toThrow();
+		const oldVersionAnswerUpdate = {
+			...oldVersionAssessment,
+			pass_count: 9,
+			fail_count: 1,
+			controls: oldVersionAssessment.controls.map((control, index) =>
+				index === 0
+					? {
+							...control,
+							status: 'Fail',
+							notes: 'ติดตาม',
+							checked_by: 'sm',
+							checked_at: '2026-09-25T10:00:00.000Z'
+						}
+					: control
+			)
+		};
+		expect(() => validate(oldVersionAnswerUpdate, oldVersionAssessment, MANAGER)).not.toThrow();
+		const fewerQuestions = {
+			...roleAssessment,
+			controls: roleAssessment.controls.slice(1),
+			pass_count: 9
+		};
+		expect(() => validate(fewerQuestions, null, REGISTRATION)).not.toThrow();
+		const changedQuestion = {
+			...roleAssessment,
+			controls: roleAssessment.controls.map((control, index) =>
+				index === 0 ? { ...control, question: 'แก้ข้อความใน snapshot' } : control
+			)
+		};
+		expectForbidden(
+			() => validate(changedQuestion, roleAssessment, REGISTRATION),
+			/question snapshot cannot change/
 		);
 		expectForbidden(
 			() =>
-				compile()(
-					{ ...edited, assessor_name: 'another-user', assessed_at: '2026-06-12T00:00:00.000Z' },
-					dailySop,
+				validate(
+					{ ...roleAssessment, controls: [...roleAssessment.controls].reverse() },
+					roleAssessment,
 					REGISTRATION
 				),
-			/Daily SOP identity and creation metadata cannot change/
+			/question order cannot change/
 		);
 		expectForbidden(
 			() =>
-				compile()(
+				validate(
 					{
-						...edited,
-						controls: edited.controls.map((control, index) =>
-							index === 0 ? { ...control, checked_by: '' } : control
-						)
+						...roleAssessment,
+						controls: [
+							...roleAssessment.controls,
+							{ ...roleAssessment.controls[0], id: 'D-REG-NEW' }
+						],
+						pass_count: 11
 					},
-					dailySop,
+					roleAssessment,
 					REGISTRATION
 				),
-			/Daily SOP control shape\/status is invalid/
+			/snapshot cannot change/
+		);
+		const failed = {
+			...roleAssessment,
+			status: 'Completed',
+			pass_count: 9,
+			fail_count: 1,
+			controls: roleAssessment.controls.map((control, index) =>
+				index === 0
+					? {
+							...control,
+							status: 'Fail',
+							checked_by: 'reg',
+							checked_at: '2026-09-25T09:00:00.000Z'
+						}
+					: control
+			)
+		};
+		expectForbidden(
+			() => validate(failed, null, { name: 'reg', roles: ['registration_staff'] }),
+			/require notes/
 		);
 		expectForbidden(
-			() => compile()({ ...dailySop, schema_v: 2 }, null, REGISTRATION),
-			/Daily SOP assessment schema\/status is invalid/
+			() =>
+				validate({ ...roleAssessment, fail_count: 1 }, null, {
+					name: 'reg',
+					roles: ['registration_staff']
+				}),
+			/summary does not match/
+		);
+		expectForbidden(
+			() =>
+				validate({ ...roleAssessment, assessment_date: '2026-09-26' }, null, {
+					name: 'reg',
+					roles: ['registration_staff']
+				}),
+			/id must be shelter\/date\/role/
+		);
+		vi.setSystemTime(new Date('2026-09-26T05:00:00.000Z'));
+		expectForbidden(
+			() => validate(roleAssessment, roleAssessment, MANAGER),
+			/current Bangkok date/
 		);
 	});
 
