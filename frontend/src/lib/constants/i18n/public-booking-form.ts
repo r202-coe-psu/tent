@@ -102,6 +102,8 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		phonePlaceholder: 'เบอร์โทรศัพท์ 10 หลัก',
 		noPhone: 'ไม่มีเบอร์โทรศัพท์',
 		headPhoneRequired: 'กรุณากรอกเบอร์โทรศัพท์ 10 หลักของผู้ติดต่อหลัก',
+		joinPhoneOptionalHelper: 'บ้านนี้มีผู้ติดต่อหลักอยู่แล้ว — กรอกเบอร์ได้ถ้าต้องการ',
+		joinPhoneInvalid: 'กรุณากรอกเบอร์ให้ครบ 10 หลัก หรือเว้นว่าง / เลือกไม่มีเบอร์',
 		specialNeedsLegend: 'ความต้องการพิเศษเฉพาะบุคคล',
 		step3PetsTitle: 'สัตว์เลี้ยงและยานพาหนะที่นำมาด้วย',
 		step3VehiclesTitle: 'ยานพาหนะที่นำมาด้วย',
@@ -370,6 +372,9 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		phonePlaceholder: '10-digit phone number',
 		noPhone: 'No phone number',
 		headPhoneRequired: 'Please enter the primary contact’s 10-digit phone number',
+		joinPhoneOptionalHelper:
+			'This household already has a primary contact — phone is optional',
+		joinPhoneInvalid: 'Enter a full 10-digit phone, leave blank, or choose no phone',
 		specialNeedsLegend: 'Individual Special Needs',
 		step3PetsTitle: 'Pets and Vehicles',
 		step3VehiclesTitle: 'Vehicles',

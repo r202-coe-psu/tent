@@ -60,6 +60,16 @@ const donation = (over: Doc = {}): Doc => ({
 	...over
 });
 
+const evacuee = (over: Doc = {}, stayOver: Doc = {}): Doc => ({
+	_id: 'evacuee:01J',
+	type: 'evacuee',
+	first_name: 'สมชาย',
+	last_name: 'ใจดี',
+	...envelope,
+	current_stay: { status: 'active', zone: 'A1', ...stayOver },
+	...over
+});
+
 const ratios = Object.fromEntries(SOP_RATIO_KEYS.map((key) => [key, '1']));
 const stock = Object.fromEntries(SOP_RATIO_KEYS.map((key) => [key, '1000']));
 const asOf = '2026-08-17T10:00:00.000Z';
@@ -650,6 +660,66 @@ describe('buildValidateDocUpdate', () => {
 					compile()(donation({ status: 'declared' }), donation({ status: 'received' }), WAREHOUSE),
 				/Cannot revert donation status back to declared/
 			);
+		});
+	});
+
+	describe('evacuee zone_change eligibility (CR-106 FR-16 / ZONE_CHANGE_ELIGIBLE_STATUSES)', () => {
+		it('allows a same-status rezone from active', () => {
+			expect(() =>
+				compile()(
+					evacuee({}, { status: 'active', zone: 'B2' }),
+					evacuee({}, { status: 'active', zone: 'A1' }),
+					REGISTRATION
+				)
+			).not.toThrow();
+		});
+
+		it('allows a same-status rezone from room_confirmed', () => {
+			expect(() =>
+				compile()(
+					evacuee({}, { status: 'room_confirmed', zone: 'B2' }),
+					evacuee({}, { status: 'room_confirmed', zone: 'A1' }),
+					REGISTRATION
+				)
+			).not.toThrow();
+		});
+
+		it.each(['checked_out', 'arriving', 'pre_registered', 'temporary_leave'])(
+			'rejects a same-status rezone attempted from %s',
+			(status) => {
+				expectForbidden(
+					() =>
+						compile()(
+							evacuee({}, { status, zone: 'B2' }),
+							evacuee({}, { status, zone: 'A1' }),
+							REGISTRATION
+						),
+					/zone_change requires current_stay.status active or room_confirmed/
+				);
+			}
+		);
+
+		it('does not trigger the zone_change rule when status also changes (e.g. check_in)', () => {
+			expect(() =>
+				compile()(
+					evacuee({}, { status: 'active', zone: 'A1' }),
+					evacuee({}, { status: 'arriving', zone: null }),
+					REGISTRATION
+				)
+			).not.toThrow();
+		});
+
+		it('ignores docs with no zone change at all', () => {
+			expect(() =>
+				compile()(
+					evacuee(
+						{ updated_at: '2026-07-23T00:00:00.000Z' },
+						{ status: 'checked_out', zone: 'A1' }
+					),
+					evacuee({}, { status: 'checked_out', zone: 'A1' }),
+					REGISTRATION
+				)
+			).not.toThrow();
 		});
 	});
 

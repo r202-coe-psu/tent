@@ -44,7 +44,9 @@ describe('claim flow status guidance (#250 follow-up)', () => {
 	});
 
 	it('exposes a short claim-dialog a11y description', () => {
-		expect(CLAIM_DIALOG_DESCRIPTION).toBe('เลือกสมาชิกที่จะรับเข้าศูนย์นี้ แล้วกดยืนยัน');
+		expect(CLAIM_DIALOG_DESCRIPTION).toContain('สมาชิก');
+		expect(CLAIM_DIALOG_DESCRIPTION).toContain('สัตว์เลี้ยง');
+		expect(CLAIM_DIALOG_DESCRIPTION).toContain('ยืนยัน');
 	});
 });
 

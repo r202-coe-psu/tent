@@ -5,7 +5,9 @@ import {
 	hasMinimumResidence,
 	isLeavingLinkedHousehold,
 	matchesResidenceAddress,
+	resolveHeadTransferRevert,
 	resolveHouseholdLeave,
+	resolveSectionEValues,
 	sectionEVisibility,
 	suggestHouseholdsByResidence,
 	filterJoinCandidatesByEvacueeQuery
@@ -363,6 +365,33 @@ describe('sectionEVisibility', () => {
 	});
 });
 
+describe('resolveSectionEValues (save-time readonly enforcement, not just CSS lock)', () => {
+	const edited = { pets: ['edited-pet'], assets: 'edited-asset', vehicles: ['edited-vehicle'] };
+	const existing = { pets: ['old-pet'], assets: 'old-asset', vehicles: ['old-vehicle'] };
+
+	it('uses the edited values when the section is editable', () => {
+		expect(resolveSectionEValues('editable', edited, existing)).toEqual(edited);
+	});
+
+	it('discards edited values and keeps existing ones when readonly', () => {
+		expect(resolveSectionEValues('readonly', edited, existing)).toEqual(existing);
+	});
+
+	it('discards edited values and keeps existing ones when hidden', () => {
+		expect(resolveSectionEValues('hidden', edited, existing)).toEqual(existing);
+	});
+
+	it('falls back to existing assets/vehicles when editable but the form left them empty', () => {
+		expect(
+			resolveSectionEValues(
+				'editable',
+				{ pets: [], assets: null, vehicles: [] },
+				{ pets: ['old-pet'], assets: 'old-asset', vehicles: ['old-vehicle'] }
+			)
+		).toEqual({ pets: [], assets: 'old-asset', vehicles: ['old-vehicle'] });
+	});
+});
+
 describe('resolveHouseholdLeave', () => {
 	it('requires a new head when subject is head and other members remain', () => {
 		expect(
@@ -442,6 +471,24 @@ describe('resolveHouseholdLeave', () => {
 			transferHead: false,
 			newHeadId: null,
 			dissolvePrior: true
+		});
+	});
+});
+
+describe('resolveHeadTransferRevert', () => {
+	it('returns null when there is nothing pending', () => {
+		expect(resolveHeadTransferRevert(null)).toBeNull();
+	});
+
+	it('reverts head_evacuee_id back to the PREVIOUS head, not the newly-assigned one', () => {
+		expect(
+			resolveHeadTransferRevert({
+				householdId: 'household:h1',
+				previousHeadId: 'evacuee:old-head'
+			})
+		).toEqual({
+			id: 'household:h1',
+			patch: { head_evacuee_id: 'evacuee:old-head' }
 		});
 	});
 });

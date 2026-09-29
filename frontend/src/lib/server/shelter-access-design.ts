@@ -86,6 +86,27 @@ export const TRANSFER_MANGO_INDEXES = [
 ];
 
 /**
+ * Mango index definitions backing the scoped-by-evacuee/household `_find` lookups used by
+ * `EvacueeProfileView` (household members, medical/screening/movement history) — without these,
+ * those lookups fall back to a full DB scan as a shelter's people data grows.
+ */
+export const PEOPLE_MANGO_INDEXES = [
+	{
+		index: { fields: ['type', 'household_id'] },
+		name: 'evacuee-type-household-idx',
+		type: 'json' as const
+	},
+	{
+		// Shared by medical/screening/movement lookups scoped to one evacuee_id —
+		// `type` is part of both the index and every selector using it, so one
+		// index covers all three doc types instead of three duplicates.
+		index: { fields: ['type', 'evacuee_id'] },
+		name: 'people-type-evacuee-idx',
+		type: 'json' as const
+	}
+];
+
+/**
  * Mango index definitions required by `stock_ledger` `_find` lookups on a *shelter* DB
  * (CR-059 T-13) — `TransferServerRepository.assertSufficientStock`'s `item_id: { $in }`
  * balance check and `ledgerAlreadyWritten`'s `ref_id` + `item_id` + `reason` idempotency
@@ -623,6 +644,23 @@ export function buildValidateDocUpdate(code: string): string {
   if (newDoc.type === 'donation' && oldDoc) {
     if (oldDoc.status === 'received' && newDoc.status === 'declared') {
       throw { forbidden: 'Cannot revert donation status back to declared' };
+    }
+  }
+  // 2b. zone_change (schema.md §1.4, CR-106 FR-16) must only apply to a person
+  // currently active/room_confirmed. The movement doc that names the action
+  // is append-only and cannot see the evacuee it refers to, so the rule has
+  // to live here instead: a same-status zone change (status unchanged,
+  // zone changed) is the movement-doc signature of a rezone/zone_change —
+  // mirror ZONE_CHANGE_ELIGIBLE_STATUSES in
+  // frontend/src/lib/features/people/domain/people.ts if that list ever changes.
+  if (newDoc.type === 'evacuee' && oldDoc && oldDoc.current_stay && newDoc.current_stay) {
+    var zoneChanged = newDoc.current_stay.zone !== oldDoc.current_stay.zone;
+    var stayStatusUnchanged = newDoc.current_stay.status === oldDoc.current_stay.status;
+    if (zoneChanged && stayStatusUnchanged) {
+      var zoneChangeEligibleStatuses = ['active', 'room_confirmed'];
+      if (zoneChangeEligibleStatuses.indexOf(oldDoc.current_stay.status) === -1) {
+        throw { forbidden: 'zone_change requires current_stay.status active or room_confirmed' };
+      }
     }
   }
   // 3. only warehouse staff / managers may write stock

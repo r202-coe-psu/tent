@@ -13,6 +13,7 @@ import {
 	formatOpenMemberIdentityLine,
 	formatOpenMemberName,
 	formatOpenMemberVulnerableGroup,
+	formatOpenPetLabel,
 	isOnlineRequiredError,
 	type UnassignedRegistrationSearchHit
 } from '../domain/search';
@@ -27,11 +28,12 @@ export {
 	formatOpenMemberIdentityLine,
 	formatOpenMemberName,
 	formatOpenMemberVulnerableGroup,
+	formatOpenPetLabel,
 	isOnlineRequiredError
 };
 export type { UnassignedRegistrationSearchHit };
 export { UnassignedRegistrationApiError } from '../data/unassigned-registration.remote';
-export { pickReportInEvacueeId, toggleMemberSelection } from '../domain/claim';
+export { pickReportInEvacueeId, toggleMemberSelection, togglePetSelection } from '../domain/claim';
 export type {
 	UnassignedRegistrationClaimRequest,
 	UnassignedRegistrationClaimResponse
@@ -70,19 +72,19 @@ export function useClaimUnassignedRegistration() {
 			queryClient.invalidateQueries({ queryKey: unassignedRegistrationKeys.all });
 			// Claim births Couch SoR — refresh Station 1 shelter queue.
 			queryClient.invalidateQueries({ queryKey: peopleKeys.all });
-			const count = result.evacuee_ids.length;
-			const orphanQueueDoc =
-				!result.deleted && result.id != null && result.remaining_open.length === 0;
+			const peopleCount = result.evacuee_ids.length;
+			const petCount = result.claimed_pets.length;
+			const remaining =
+				result.remaining_open.length + (result.remaining_open_pets?.length ?? 0);
+			const parts: string[] = [];
+			if (peopleCount > 0) parts.push(`${peopleCount} คน`);
+			if (petCount > 0) parts.push(`${petCount} สัตว์`);
+			const claimedLabel = parts.join(' · ') || 'รายการ';
 			toast.success(
-				result.deleted
-					? `รับเข้าศูนย์ ${count} คน — เอกสารคิวถูกลบแล้ว`
-					: orphanQueueDoc
-						? `รับเข้าศูนย์ ${count} คน สำเร็จ`
-						: `รับเข้าศูนย์ ${count} คน — สมาชิกที่เหลือยังอยู่ในคิวกลาง`
+				remaining > 0
+					? `รับเข้าศูนย์ ${claimedLabel} — รายการที่เหลือยังอยู่ในคิวกลาง`
+					: `รับเข้าศูนย์ ${claimedLabel} สำเร็จ — เอกสารคิวกลางเก็บเป็นประวัติ (ไม่ลบ)`
 			);
-			if (orphanQueueDoc) {
-				toast.message('เอกสารลงทะเบียนอาจยังค้างในคิวกลาง — ติดต่อผู้ดูแลระบบหากยังเห็นรายการนี้');
-			}
 		},
 		onError: (error) => {
 			const message = error instanceof Error ? error.message : 'รับสมาชิกเข้าศูนย์ไม่สำเร็จ';

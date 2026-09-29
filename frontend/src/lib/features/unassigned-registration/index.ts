@@ -6,6 +6,7 @@
 export type {
 	OpenMemberHit,
 	OpenMemberStatus,
+	OpenPetHit,
 	PersonIdHit,
 	UnassignedRegistrationSearchHit,
 	UnassignedRegistrationSearchResponse
@@ -13,6 +14,7 @@ export type {
 
 export type {
 	ClaimedMemberOut,
+	ClaimedPetOut,
 	UnassignedRegistrationClaimRequest,
 	UnassignedRegistrationClaimResponse
 } from './domain/claim';
@@ -29,11 +31,13 @@ export {
 	formatOpenMemberIdentityLine,
 	formatOpenMemberName,
 	formatOpenMemberVulnerableGroup,
+	formatOpenPetLabel,
 	isOnlineRequiredError
 } from './domain/search';
 export {
 	pickReportInEvacueeId,
 	toggleMemberSelection,
+	togglePetSelection,
 	unassignedRegistrationClaimResponseSchema
 } from './domain/claim';
 

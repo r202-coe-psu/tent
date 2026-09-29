@@ -81,6 +81,7 @@ class MemberInput(BaseModel):
 
 class PetInput(BaseModel):
     species: Literal["dog", "cat", "other"]
+    # New rows: one animal per row (count=1). Legacy count>1 claimed as one unit.
     count: int = Field(default=1, ge=1, le=50)
     notes: str | None = None
     has_cage: bool = False
@@ -96,6 +97,38 @@ class PetInput(BaseModel):
             trimmed = value.strip()
             return trimmed or None
         return value
+
+
+class OpenPetHit(BaseModel):
+    """Open pet surfaced by staff search/detail — claimable."""
+
+    pet_id: str
+    status: Literal["open"] = "open"
+    species: Literal["dog", "cat", "other"]
+    count: int = 1
+    notes: str | None = None
+    has_cage: bool = False
+    image_url: str | None = None
+
+
+class PetCreated(BaseModel):
+    pet_id: str
+    status: Literal["open", "claimed", "cancelled"]
+    species: Literal["dog", "cat", "other"]
+    count: int = 1
+    notes: str | None = None
+    has_cage: bool = False
+    image_url: str | None = None
+    claimed_shelter_code: str | None = None
+    claimed_at: str | None = None
+    claimed_by: str | None = None
+
+
+class ClaimedPetOut(BaseModel):
+    pet_id: str
+    status: Literal["claimed"] = "claimed"
+    species: Literal["dog", "cat", "other"]
+    count: int = 1
 
 
 class HouseholdInput(BaseModel):
@@ -148,7 +181,10 @@ class UnassignedRegistrationCreateRequest(BaseModel):
     registered_via: Literal["web", "staff"] = "web"
     join_registration_id: str | None = Field(
         default=None,
-        description="Append members (and pets) into this open registration's reserved household.",
+        description=(
+            "Append members (and pets) into this registration's reserved household "
+            "(allowed even when document status is closed — reopen on append)."
+        ),
     )
 
 
@@ -258,6 +294,7 @@ class UnassignedRegistrationSearchHit(BaseModel):
     status: str
     created_at: str
     open_members: list[OpenMemberHit]
+    open_pets: list[OpenPetHit] = Field(default_factory=list)
 
 
 class UnassignedRegistrationSearchResponse(BaseModel):
@@ -275,6 +312,7 @@ class HouseholdOut(BaseModel):
     postal_code: str | None = None
     geo: GeoPoint | None = None
     label: str | None = None
+    pets: list[PetCreated] = Field(default_factory=list)
 
 
 class UnassignedRegistrationListItem(BaseModel):
@@ -286,6 +324,8 @@ class UnassignedRegistrationListItem(BaseModel):
     household: HouseholdOut
     open_members: list[OpenMemberHit]
     open_member_count: int
+    open_pets: list[OpenPetHit] = Field(default_factory=list)
+    open_pet_count: int = 0
 
 
 class UnassignedRegistrationListResponse(BaseModel):
@@ -313,14 +353,15 @@ class UnassignedRegistrationStatsResponse(BaseModel):
 
 
 class UnassignedRegistrationClaimRequest(BaseModel):
-    """Staff claim — body selects open member reserved ids (CR-113 / #247)."""
+    """Staff claim — open members and/or pets (draft-persistent-unassigned-family)."""
 
-    member_ids: list[str] = Field(min_length=1, max_length=20)
+    member_ids: list[str] = Field(default_factory=list, max_length=20)
+    pet_ids: list[str] = Field(default_factory=list, max_length=50)
     shelter_code: str | None = None
 
-    @field_validator("member_ids")
+    @field_validator("member_ids", "pet_ids")
     @classmethod
-    def _dedupe_member_ids(cls, value: list[str]) -> list[str]:
+    def _dedupe_ids(cls, value: list[str]) -> list[str]:
         cleaned = [item.strip() for item in value if item and str(item).strip()]
         # Preserve order while dropping duplicates.
         return list(dict.fromkeys(cleaned))
@@ -335,6 +376,12 @@ class UnassignedRegistrationClaimRequest(BaseModel):
             return trimmed or None
         return value
 
+    @model_validator(mode="after")
+    def _require_at_least_one_target(self) -> UnassignedRegistrationClaimRequest:
+        if not self.member_ids and not self.pet_ids:
+            raise ValueError("claim requires at least one member_id or pet_id")
+        return self
+
 
 class ClaimedMemberOut(BaseModel):
     reserved_evacuee_id: str
@@ -346,9 +393,11 @@ class ClaimedMemberOut(BaseModel):
 class UnassignedRegistrationClaimResponse(BaseModel):
     success: bool = True
     id: str | None
-    deleted: bool
+    deleted: bool = False
     shelter_code: str
     household_id: str
     evacuee_ids: list[str]
     claimed: list[ClaimedMemberOut]
+    claimed_pets: list[ClaimedPetOut] = Field(default_factory=list)
     remaining_open: list[OpenMemberHit]
+    remaining_open_pets: list[OpenPetHit] = Field(default_factory=list)

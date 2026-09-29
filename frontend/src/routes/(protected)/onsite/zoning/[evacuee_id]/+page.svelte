@@ -30,6 +30,7 @@
 		canConfirmRoom,
 		isPendingZoneArrivalConfirmation,
 		zoneLabel,
+		movementConflictMessage,
 		type Evacuee,
 		type Screening
 	} from '$lib/features/people';
@@ -180,7 +181,7 @@
 			toast.success('ยืนยันถึงโซนเรียบร้อย');
 			await goto(resolve('/onsite/zoning'));
 		} catch (err: unknown) {
-			toast.error(err instanceof Error ? err.message : 'ยืนยันถึงโซนไม่สำเร็จ');
+			toast.error(movementConflictMessage(err));
 		} finally {
 			submitting = false;
 		}
@@ -198,7 +199,7 @@
 			toast.success(`ยืนยันถึงโซนทั้งครัวเรือน ${confirmed.length} คน`);
 			await goto(resolve('/onsite/zoning'));
 		} catch (err: unknown) {
-			toast.error(err instanceof Error ? err.message : 'ยืนยันถึงโซนไม่สำเร็จ');
+			toast.error(movementConflictMessage(err));
 		} finally {
 			submitting = false;
 		}
@@ -223,7 +224,7 @@
 			);
 			await goto(resolve('/onsite/zoning'));
 		} catch (err: unknown) {
-			toast.error(err instanceof Error ? err.message : 'บันทึกไม่สำเร็จ');
+			toast.error(movementConflictMessage(err));
 		} finally {
 			submitting = false;
 		}

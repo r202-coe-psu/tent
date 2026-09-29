@@ -8,6 +8,7 @@ import {
 	OVERRIDE_NEW_REG_POOL_ERROR_BODY,
 	OVERRIDE_NEW_REG_TITLE,
 	REPORT_IN_CTA_LABEL,
+	deriveDuplicateCheckQuery,
 	hasFederatedIntakeHits,
 	isIntakeNewRegistrationLocked,
 	resolveNewRegistrationCta,
@@ -175,5 +176,62 @@ describe('Station 1 intake search (#251)', () => {
 		expect(OVERRIDE_NEW_REG_POOL_ERROR_BODY).toContain('ตรวจสอบคิวกลางไม่ครบ');
 		expect(OVERRIDE_NEW_REG_CONFIRM).toBe('ยืนยันลงทะเบียนใหม่');
 		expect(OVERRIDE_NEW_REG_CANCEL).toBe('ยกเลิก');
+	});
+});
+
+describe('deriveDuplicateCheckQuery (walk-in /new hard-lock re-check)', () => {
+	it('prefers the identity document number over phone and name', () => {
+		expect(
+			deriveDuplicateCheckQuery({
+				first_name: 'สมชาย',
+				last_name: 'ใจดี',
+				phone: '0812345678',
+				person_id: { number: '1234567890123' }
+			})
+		).toBe('1234567890123');
+	});
+
+	it('falls back to phone when there is no identity document number', () => {
+		expect(
+			deriveDuplicateCheckQuery({
+				first_name: 'สมชาย',
+				last_name: 'ใจดี',
+				phone: '0812345678',
+				person_id: { number: '' }
+			})
+		).toBe('0812345678');
+	});
+
+	it('falls back to full name when neither identity number nor phone is present', () => {
+		expect(
+			deriveDuplicateCheckQuery({
+				first_name: 'สมชาย',
+				last_name: 'ใจดี',
+				phone: null,
+				person_id: null
+			})
+		).toBe('สมชาย ใจดี');
+	});
+
+	it('trims a mononym (empty last_name) to just the first name', () => {
+		expect(
+			deriveDuplicateCheckQuery({
+				first_name: 'Somchai',
+				last_name: '',
+				phone: null,
+				person_id: undefined
+			})
+		).toBe('Somchai');
+	});
+
+	it('returns null when there is nothing at all to search on', () => {
+		expect(
+			deriveDuplicateCheckQuery({
+				first_name: '',
+				last_name: '',
+				phone: null,
+				person_id: null
+			})
+		).toBeNull();
 	});
 });

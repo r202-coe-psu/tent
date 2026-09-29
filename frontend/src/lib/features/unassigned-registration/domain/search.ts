@@ -20,7 +20,8 @@ export const CLAIM_FLOW_STATUS_GUIDANCE =
 	'รับเข้าศูนย์จะสร้าง Evacuee ใน Couch ที่สถานะ ลงทะเบียนล่วงหน้า (pre_registered) จากนั้นเปิดหน้า รายงานตัว (Report-in) เพื่อยืนยันข้อมูล แล้วเลื่อนเป็น มาถึงศูนย์ / รอคัดกรอง (arriving)';
 
 /** Short a11y description for the claim dialog (not the status-flow lecture). */
-export const CLAIM_DIALOG_DESCRIPTION = 'เลือกสมาชิกที่จะรับเข้าศูนย์นี้ แล้วกดยืนยัน';
+export const CLAIM_DIALOG_DESCRIPTION =
+	'เลือกสมาชิกและสัตว์เลี้ยงที่ยัง open จะรับเข้าศูนย์นี้ แล้วกดยืนยัน';
 
 const personIdHitSchema = z.object({
 	cardType: z.enum(['national_id', 'passport', 'pink_card', 'other', 'anonymous']),
@@ -41,8 +42,19 @@ export const openMemberHitSchema = z.object({
 	special_needs: z.array(z.string())
 });
 
+export const openPetHitSchema = z.object({
+	pet_id: z.string(),
+	status: z.literal('open'),
+	species: z.enum(['dog', 'cat', 'other']),
+	count: z.number().int().positive(),
+	notes: z.string().nullable().optional(),
+	has_cage: z.boolean().optional(),
+	image_url: z.string().nullable().optional()
+});
+
 export type PersonIdHit = z.infer<typeof personIdHitSchema>;
 export type OpenMemberHit = z.infer<typeof openMemberHitSchema>;
+export type OpenPetHit = z.infer<typeof openPetHitSchema>;
 export type OpenMemberStatus = OpenMemberHit['status'];
 
 const CARD_TYPE_LABELS: Record<PersonIdHit['cardType'], string> = {
@@ -58,6 +70,12 @@ const GENDER_LABELS: Record<string, string> = {
 	female: 'หญิง'
 };
 
+const PET_SPECIES_LABELS: Record<OpenPetHit['species'], string> = {
+	dog: 'สุนัข',
+	cat: 'แมว',
+	other: 'อื่น ๆ'
+};
+
 export interface UnassignedRegistrationSearchHit {
 	id: string;
 	reserved_household_id: string;
@@ -65,6 +83,7 @@ export interface UnassignedRegistrationSearchHit {
 	status: string;
 	created_at: string;
 	open_members: OpenMemberHit[];
+	open_pets?: OpenPetHit[];
 }
 
 export interface UnassignedRegistrationSearchResponse {
@@ -102,6 +121,13 @@ export function formatOpenMemberIdentityLine(member: OpenMemberHit): string {
 /** Gender · country for claim-dialog demographics line. */
 export function formatOpenMemberDemographicsLine(member: OpenMemberHit): string {
 	return `${formatOpenMemberGender(member.gender)} · ${member.country}`;
+}
+
+export function formatOpenPetLabel(pet: OpenPetHit): string {
+	const species = PET_SPECIES_LABELS[pet.species] ?? pet.species;
+	const countPart = pet.count > 1 ? ` ×${pet.count}` : '';
+	const notes = pet.notes?.trim();
+	return notes ? `${species}${countPart} (${notes})` : `${species}${countPart}`;
 }
 
 /** Thai-locale date+time for claim registration header. */

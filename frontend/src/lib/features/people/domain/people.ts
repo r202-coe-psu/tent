@@ -9,6 +9,7 @@ import {
 	registeredViaSchema
 } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
+import { ConflictError } from '$lib/utils/errors';
 
 /**
  * People domain — the registration baseline (FR-4..13).
@@ -350,6 +351,45 @@ export function migratePetGroups(pets: readonly (LegacyPetGroup | PetGroup)[]): 
 	return pets.map(migratePetGroup);
 }
 
+const PET_SPECIES_LABELS: Record<PetGroup['species'], string> = {
+	dog: 'สุนัข',
+	cat: 'แมว',
+	other: 'อื่นๆ'
+};
+
+export function petSpeciesLabel(species: PetGroup['species']): string {
+	return PET_SPECIES_LABELS[species];
+}
+
+/**
+ * Groups pet entries by species and sums their counts, so duplicate
+ * same-species entries (e.g. two `cat` rows) render as one "แมว 2" instead
+ * of two separate "แมว 1" chips.
+ */
+export function groupPetsBySpecies(
+	pets: readonly PetGroup[]
+): { species: PetGroup['species']; count: number; hasCage: boolean }[] {
+	const order: PetGroup['species'][] = ['dog', 'cat', 'other'];
+	const totals = new Map<
+		PetGroup['species'],
+		{ species: PetGroup['species']; count: number; hasCage: boolean }
+	>();
+	for (const pet of pets) {
+		const existing = totals.get(pet.species);
+		if (existing) {
+			existing.count += pet.count;
+			existing.hasCage = existing.hasCage || Boolean(pet.has_cage);
+		} else {
+			totals.set(pet.species, {
+				species: pet.species,
+				count: pet.count,
+				hasCage: Boolean(pet.has_cage)
+			});
+		}
+	}
+	return order.filter((species) => totals.has(species)).map((species) => totals.get(species)!);
+}
+
 export interface Household extends BaseDoc {
 	type: 'household';
 	label: string;
@@ -516,12 +556,16 @@ export interface Screening extends BaseDoc {
 	type: 'screening';
 	evacuee_id: string;
 	symptoms: string[];
-	temperature_c: number | null;
 	track: CareTrack;
-	needs_referral: boolean;
 	notes?: string;
 	screened_at: Timestamp;
+	/** @deprecated CR-106 2026-09-07 — legacy-read only, never set by new writes. */
+	temperature_c?: number | null;
+	/** @deprecated CR-106 2026-09-07 — legacy-read only, never set by new writes. */
+	needs_referral?: boolean;
+	/** @deprecated CR-106 2026-09-07 — legacy-read only, never set by new writes. */
 	triage_level?: TriageLevel | null;
+	/** @deprecated CR-106 2026-09-07 — legacy-read only, never set by new writes. */
 	vital_signs?: {
 		blood_pressure_sys?: number | null;
 		blood_pressure_dia?: number | null;
@@ -681,7 +725,6 @@ export const householdPreRegisterEvacueeSchema = evacueeInputSchema.extend({
 
 export const medicalInputSchema = z.object({
 	evacuee_id: z.string().min(1),
-	blood_group: bloodGroupSchema.optional(),
 	conditions: z.array(z.string().trim().min(1)).default([]),
 	medications: z.array(z.string().trim().min(1)).default([]),
 	allergies: z.array(z.string().trim().min(1)).default([]),
@@ -993,7 +1036,9 @@ export const evacueeAddressEditFormSchema = z
 		province: z.string().trim(),
 		district: z.string().trim(),
 		subdistrict: z.string().trim(),
-		postalCode: z.string().trim()
+		postalCode: z.string().trim(),
+		municipalityZone: z.string().trim().default(''),
+		community: z.string().trim().default('')
 	})
 	.superRefine((data, ctx) => {
 		const hasLocation = Boolean(
@@ -1093,27 +1138,19 @@ export const movementInputSchema = z.object({
 });
 export type MovementInput = z.input<typeof movementInputSchema>;
 
-export const vitalSignsInputSchema = z.object({
-	blood_pressure_sys: z.coerce.number().nullable().optional(),
-	blood_pressure_dia: z.coerce.number().nullable().optional(),
-	heart_rate: z.coerce.number().nullable().optional(),
-	spo2_percent: z.coerce.number().nullable().optional()
-});
-
+/**
+ * CR-106 2026-09-07 amendment: triage_level / vital_signs / temperature_c /
+ * needs_referral are deprecated — a NEW screening write must never set them.
+ * Old docs that already have these fields stay legacy-readable via the
+ * `Screening` interface (no backfill, no forced removal); this input schema
+ * just stops accepting them from any caller (Station 2 form or otherwise).
+ */
 export const screeningInputSchema = z.object({
 	evacuee_id: z.string().min(1),
 	symptoms: z.array(z.string().trim().min(1)).default([]),
-	temperature_c: z.coerce.number().nullable().default(null),
 	track: careTrackSchema,
-	needs_referral: z.boolean().default(false),
 	notes: z.string().trim().optional(),
-	screened_at: z.string().optional(),
-	triage_level: triageLevelSchema.nullable().optional(),
-	blood_pressure_sys: z.coerce.number().nullable().optional(),
-	blood_pressure_dia: z.coerce.number().nullable().optional(),
-	heart_rate: z.coerce.number().nullable().optional(),
-	spo2_percent: z.coerce.number().nullable().optional(),
-	vital_signs: vitalSignsInputSchema.optional()
+	screened_at: z.string().optional()
 });
 export type ScreeningInput = z.input<typeof screeningInputSchema>;
 
@@ -1280,7 +1317,6 @@ export function createMedical(input: MedicalInput, ctx: AuthorContext, id?: stri
 		1,
 		{
 			evacuee_id: d.evacuee_id,
-			...(d.blood_group ? { blood_group: d.blood_group } : {}),
 			conditions: d.conditions,
 			medications: d.medications,
 			allergies: d.allergies,
@@ -1390,34 +1426,18 @@ export function createMovement(input: MovementInput, ctx: AuthorContext): Moveme
 
 export function createScreening(input: ScreeningInput, ctx: AuthorContext): Screening {
 	const d = screeningInputSchema.parse(input);
-	const hasVitals =
-		d.blood_pressure_sys !== undefined ||
-		d.blood_pressure_dia !== undefined ||
-		d.heart_rate !== undefined ||
-		d.spo2_percent !== undefined ||
-		d.vital_signs !== undefined;
-	const vital_signs = hasVitals
-		? {
-				blood_pressure_sys: d.blood_pressure_sys ?? d.vital_signs?.blood_pressure_sys ?? null,
-				blood_pressure_dia: d.blood_pressure_dia ?? d.vital_signs?.blood_pressure_dia ?? null,
-				heart_rate: d.heart_rate ?? d.vital_signs?.heart_rate ?? null,
-				spo2_percent: d.spo2_percent ?? d.vital_signs?.spo2_percent ?? null
-			}
-		: undefined;
 
+	// CR-106 2026-09-07: never stamp temperature_c / needs_referral / triage_level /
+	// vital_signs on a new doc — those fields are legacy-read only now.
 	return makeDoc(
 		'screening',
 		2,
 		{
 			evacuee_id: d.evacuee_id,
 			symptoms: d.symptoms,
-			temperature_c: d.temperature_c,
 			track: d.track,
-			needs_referral: d.needs_referral,
 			...(d.notes ? { notes: d.notes } : {}),
-			screened_at: d.screened_at ?? now(),
-			triage_level: d.triage_level ?? null,
-			...(vital_signs ? { vital_signs } : {})
+			screened_at: d.screened_at ?? now()
 		},
 		ctx
 	);
@@ -1567,6 +1587,20 @@ export function assertMovementAllowed(
 	if (action === 'mark_deceased' && !canMarkDeceased(evacuee) && status !== 'deceased') {
 		throw new Error(`ไม่สามารถบันทึกเสียชีวิตจากสถานะ ${status} ได้`);
 	}
+}
+
+/**
+ * Friendly Thai copy for a movement/zone-assignment write conflict — the
+ * checkIn/checkOut/confirmRoom/changeZone/recordMovement repo methods now
+ * fetch the latest document before writing (people.remote.ts), so a genuine
+ * concurrent write surfaces as a real CouchDB 409 (`ConflictError`) instead
+ * of being silently overwritten.
+ */
+export function movementConflictMessage(err: unknown): string {
+	if (err instanceof ConflictError) {
+		return 'ข้อมูลถูกแก้ไขจากที่อื่นแล้ว กรุณาโหลดข้อมูลใหม่แล้วลองอีกครั้ง';
+	}
+	return err instanceof Error ? err.message : 'บันทึกไม่สำเร็จ';
 }
 
 /** True when an evacuee stay may be cancelled via the hold-cancel path (D-HOLD-CANCEL). */

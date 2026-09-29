@@ -56,6 +56,32 @@ export type SectionEVisibility = {
 	allow: { pets: boolean; assets: boolean; vehicles: boolean };
 };
 
+export type SectionEValues<Pet, Asset, Vehicle> = {
+	pets: Pet[];
+	assets: Asset | null;
+	vehicles: Vehicle[];
+};
+
+/**
+ * The pets/assets/vehicles write payload for a household save. When Section E
+ * isn't in `editable` mode (hidden, or readonly because the flag is off but
+ * old data exists), the form's own edited values must never reach the save —
+ * the CSS-level readonly lock on the inputs is not itself an enforcement
+ * mechanism, this is (registration-shell.svelte's persistHouseholdLink).
+ */
+export function resolveSectionEValues<Pet, Asset, Vehicle>(
+	mode: SectionEVisibility['mode'],
+	edited: SectionEValues<Pet, Asset, Vehicle>,
+	existing: SectionEValues<Pet, Asset, Vehicle>
+): SectionEValues<Pet, Asset, Vehicle> {
+	if (mode !== 'editable') return existing;
+	return {
+		pets: edited.pets,
+		assets: edited.assets || existing.assets || null,
+		vehicles: edited.vehicles.length ? edited.vehicles : (existing.vehicles ?? [])
+	};
+}
+
 export function sectionEVisibility(
 	flags: SectionEFlags,
 	existingData: SectionEExistingData
@@ -91,6 +117,17 @@ export type HouseholdLeaveResult =
 	| { ok: true; transferHead: false; newHeadId: null; dissolvePrior: boolean }
 	| { ok: false; reason: 'new_head_required' | 'invalid_new_head' };
 
+/**
+ * `dissolvePrior` is a UI-facing signal, not an instruction to execute —
+ * nothing reads it directly. The old household is actually retired by
+ * `PeopleRemoteRepository.cancelHouseholdIfEmpty` (people.remote.ts), which
+ * `updateEvacuee`/`patchEvacuee` already call whenever `household_id` changes
+ * (registration-shell.svelte's leave flow always changes it). It re-checks
+ * live membership from the DB rather than trusting this client-side guess, so
+ * don't wire a second, competing dissolve call off this field — that would
+ * just race the one that already runs.
+ */
+
 export function resolveHouseholdLeave(input: HouseholdLeaveInput): HouseholdLeaveResult {
 	const isHead = input.headId === input.subjectId;
 	const otherMembers = input.memberIds.filter((id) => id !== input.subjectId);
@@ -119,6 +156,24 @@ export function resolveHouseholdLeave(input: HouseholdLeaveInput): HouseholdLeav
 		newHeadId: null,
 		dissolvePrior: otherMembers.length === 0
 	};
+}
+
+export type PendingHeadTransfer = { householdId: string; previousHeadId: string | null };
+
+/**
+ * A household leave that transfers headship and then moves the leaver out is
+ * two separate writes (registration-shell.svelte's persistHouseholdLink — a
+ * single bulk write isn't used here because the leaver's destination
+ * household is resolved through several other branches, keep/join/create, in
+ * between). If the second write never lands, the old household must not keep
+ * a transferred-away head with the original leaver still stuck on it — this
+ * computes the compensating patch to send back.
+ */
+export function resolveHeadTransferRevert(
+	pending: PendingHeadTransfer | null
+): { id: string; patch: { head_evacuee_id: string | null } } | null {
+	if (!pending) return null;
+	return { id: pending.householdId, patch: { head_evacuee_id: pending.previousHeadId } };
 }
 
 /** Auto Household label — UI never shows a label field (FR-03b-H). */

@@ -37,12 +37,25 @@ export const publicUnassignedRegistrationRequestSchema = z
 		disclaimerAcknowledged: z.boolean().optional()
 	})
 	.superRefine((value, ctx) => {
-		const headPhone = value.members[0]?.phone?.trim();
-		if (!headPhone || !/^0\d{8,9}$/.test(headPhone.replace(/[-\s]/g, ''))) {
+		const joining = Boolean(value.join_match_token?.trim());
+		const headPhone = value.members[0]?.phone?.trim() ?? '';
+		if (!headPhone) {
+			if (!joining) {
+				ctx.addIssue({
+					code: 'custom',
+					path: ['members', 0, 'phone'],
+					message: 'กรุณากรอกเบอร์โทรศัพท์ 10 หลักของผู้ติดต่อหลัก'
+				});
+			}
+			return;
+		}
+		if (!/^0\d{8,9}$/.test(headPhone.replace(/[-\s]/g, ''))) {
 			ctx.addIssue({
 				code: 'custom',
 				path: ['members', 0, 'phone'],
-				message: 'กรุณากรอกเบอร์โทรศัพท์ 10 หลักของผู้ติดต่อหลัก'
+				message: joining
+					? 'กรุณากรอกเบอร์ให้ครบ 10 หลัก หรือเว้นว่าง / เลือกไม่มีเบอร์'
+					: 'กรุณากรอกเบอร์โทรศัพท์ 10 หลักของผู้ติดต่อหลัก'
 			});
 		}
 	});
@@ -155,6 +168,8 @@ export type UnassignedRegistrationErrorCode =
 	| 'INVALID_INPUT'
 	| 'INVALID_ANONYMOUS_ID'
 	| 'INVALID_PHOTO_REF'
+	| 'INVALID_JOIN_TOKEN'
+	| 'JOIN_TARGET_NOT_FOUND'
 	| 'RATE_LIMITED'
 	| 'CAPTCHA_REQUIRED'
 	| 'CAPTCHA_FAILED'
@@ -171,6 +186,10 @@ export function unassignedRegistrationErrorMessage(code: string | undefined): st
 			return 'รหัสนิรนามไม่ถูกต้อง';
 		case 'INVALID_PHOTO_REF':
 			return 'รหัสรูปถ่ายไม่ถูกต้อง กรุณาอัปโหลดใหม่';
+		case 'INVALID_JOIN_TOKEN':
+			return 'ลิงก์เข้าร่วมครอบครัวหมดอายุหรือไม่ถูกต้อง กรุณาค้นหาครอบครัวใหม่แล้วเลือกอีกครั้ง';
+		case 'JOIN_TARGET_NOT_FOUND':
+			return 'ไม่พบครอบครัวที่เลือก กรุณาเลือกครอบครัวใหม่ก่อนส่ง';
 		case 'RATE_LIMITED':
 			return 'ส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่';
 		case 'CAPTCHA_REQUIRED':

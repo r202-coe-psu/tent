@@ -48,6 +48,7 @@
 		toggleId,
 		selectRange,
 		applyRowClickSelection,
+		movementConflictMessage,
 		type Evacuee,
 		type ZoningQueueTab
 	} from '$lib/features/people';
@@ -339,7 +340,7 @@
 			await confirmRoomMutation.mutateAsync({ evacuee: target, ctx: authorCtx() });
 			toast.success(`ยืนยันถึงโซน: ${formatPersonName(target)}`);
 		} catch (err: unknown) {
-			toast.error(err instanceof Error ? err.message : 'ยืนยันถึงโซนไม่สำเร็จ');
+			toast.error(movementConflictMessage(err));
 		}
 	}
 
@@ -589,7 +590,7 @@
 								handleCodeInput(barcodeInput);
 							}
 						}}
-						class="h-12 rounded-xl bg-slate-50 pl-11 font-mono text-xs"
+						class="h-12 rounded-xl bg-slate-50 pl-11 text-xs tabular-nums"
 					/>
 				</div>
 				<Button
@@ -887,7 +888,7 @@
 									<Table.Cell class="py-3 font-semibold text-slate-900">
 										{formatPersonName(row)}
 									</Table.Cell>
-									<Table.Cell class="px-3 py-3 font-mono text-xs text-slate-600">
+									<Table.Cell class="px-3 py-3 text-xs text-slate-600 tabular-nums">
 										{maskNationalId(row.person_id?.number)}
 									</Table.Cell>
 									<Table.Cell class="px-3 py-3">
