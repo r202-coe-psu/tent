@@ -16,6 +16,7 @@ import { adminRaw, ServiceError } from './couch-admin';
 import { buildSecurityMutationLock, type SecurityMutationLock } from './security-mutation-lock';
 import {
 	buildValidateDocUpdate,
+	PEOPLE_MANGO_INDEXES,
 	REFERRAL_MANGO_INDEXES,
 	TRANSFER_LEDGER_MANGO_INDEXES
 } from './shelter-access-design';
@@ -34,7 +35,11 @@ import {
 } from '$lib/features/shelters/server';
 import { deployShelterViewsFn } from '$lib/features/shelters/server/deploy';
 
-export { REFERRAL_MANGO_INDEXES, TRANSFER_LEDGER_MANGO_INDEXES } from './shelter-access-design';
+export {
+	PEOPLE_MANGO_INDEXES,
+	REFERRAL_MANGO_INDEXES,
+	TRANSFER_LEDGER_MANGO_INDEXES
+} from './shelter-access-design';
 
 export interface ViewResult {
 	rows: { key: string; value: number }[];
@@ -477,6 +482,24 @@ export async function deployReferralMangoIndexes(db: string): Promise<void> {
  */
 export async function deployTransferLedgerMangoIndexes(db: string): Promise<void> {
 	for (const def of TRANSFER_LEDGER_MANGO_INDEXES) {
+		const res = await adminRaw(`/${db}/_index`, 'POST', def);
+		if (res.status >= 400) {
+			const detail = (res.data as { reason?: string; error?: string } | null) ?? {};
+			throw new ServiceError(
+				'INTERNAL',
+				`Mango index ${def.name} deploy failed (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+			);
+		}
+	}
+}
+
+/**
+ * Idempotent deploy of the Mango indexes backing `EvacueeProfileView`'s scoped-by-evacuee/
+ * household lookups (household members, medical/screening/movement history). CouchDB returns
+ * 200 when an identical named index already exists.
+ */
+export async function deployPeopleMangoIndexes(db: string): Promise<void> {
+	for (const def of PEOPLE_MANGO_INDEXES) {
 		const res = await adminRaw(`/${db}/_index`, 'POST', def);
 		if (res.status >= 400) {
 			const detail = (res.data as { reason?: string; error?: string } | null) ?? {};

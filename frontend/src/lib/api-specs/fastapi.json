@@ -1013,6 +1013,41 @@
 				}
 			}
 		},
+		"/v1/admin/thirdparty-clients/{client_row_id}/regenerate-secret": {
+			"post": {
+				"tags": ["External"],
+				"summary": "Regenerate Client Secret",
+				"description": "Issue a new secret for this `client_id`, invalidating the old one immediately.\nRefused (409) once the client is revoked — same as scope edits.",
+				"operationId": "regenerate_client_secret_v1_admin_thirdparty_clients__client_row_id__regenerate_secret_post",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "client_row_id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Client Row Id" }
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ThirdPartyClientCreateResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
 		"/v1/admin/thirdparty-clients/{client_row_id}": {
 			"patch": {
 				"tags": ["External"],
@@ -1093,7 +1128,6 @@
 			"get": {
 				"tags": ["External"],
 				"summary": "Reveal Client Secret",
-				"description": "Decrypt and return the plaintext secret. The BFF gates this behind the caller\nre-entering their own CouchDB password — this endpoint itself only enforces the\nsame `EXTERNAL_API_SECRET` bearer as every other route on this router.",
 				"operationId": "reveal_client_secret_v1_admin_thirdparty_clients__client_row_id__secret_get",
 				"security": [{ "HTTPBearer": [] }],
 				"parameters": [
@@ -1740,6 +1774,100 @@
 						"content": {
 							"application/json": {
 								"schema": { "$ref": "#/components/schemas/UnassignedRegistrationListResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/staff/v1/unassigned-registrations/photos/{photo_id}": {
+			"get": {
+				"tags": ["Unassigned Registrations (Staff)"],
+				"summary": "Get Unassigned Registration Photo",
+				"description": "Staff-only photo read (CR-140 addendum) — only if still referenced by an open row.",
+				"operationId": "get_unassigned_registration_photo_staff_v1_unassigned_registrations_photos__photo_id__get",
+				"parameters": [
+					{
+						"name": "photo_id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Photo Id" }
+					},
+					{
+						"name": "Cookie",
+						"in": "header",
+						"required": false,
+						"schema": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Cookie" }
+					},
+					{
+						"name": "AuthSession",
+						"in": "cookie",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string" }, { "type": "null" }],
+							"title": "Authsession"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": { "application/json": { "schema": {} } }
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/staff/v1/unassigned-registrations/{registration_id}/review": {
+			"get": {
+				"tags": ["Unassigned Registrations (Staff)"],
+				"summary": "Review Unassigned Registration",
+				"description": "Read-only pre-claim review (CR-140 addendum) — open rows only, writes nothing.",
+				"operationId": "review_unassigned_registration_staff_v1_unassigned_registrations__registration_id__review_get",
+				"parameters": [
+					{
+						"name": "registration_id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Registration Id" }
+					},
+					{
+						"name": "Cookie",
+						"in": "header",
+						"required": false,
+						"schema": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Cookie" }
+					},
+					{
+						"name": "AuthSession",
+						"in": "cookie",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string" }, { "type": "null" }],
+							"title": "Authsession"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/UnassignedRegistrationReviewResponse" }
 							}
 						}
 					},
@@ -2498,6 +2626,22 @@
 				"required": ["reserved_evacuee_id", "first_name", "last_name"],
 				"title": "ClaimedMemberOut"
 			},
+			"ClaimedPetOut": {
+				"properties": {
+					"pet_id": { "type": "string", "title": "Pet Id" },
+					"status": {
+						"type": "string",
+						"const": "claimed",
+						"title": "Status",
+						"default": "claimed"
+					},
+					"species": { "type": "string", "enum": ["dog", "cat", "other"], "title": "Species" },
+					"count": { "type": "integer", "title": "Count", "default": 1 }
+				},
+				"type": "object",
+				"required": ["pet_id", "species"],
+				"title": "ClaimedPetOut"
+			},
 			"ConfigResponse": {
 				"properties": {
 					"faqs": {
@@ -2887,7 +3031,12 @@
 						"title": "Postal Code"
 					},
 					"geo": { "anyOf": [{ "$ref": "#/components/schemas/GeoPoint" }, { "type": "null" }] },
-					"label": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Label" }
+					"label": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Label" },
+					"pets": {
+						"items": { "$ref": "#/components/schemas/PetCreated" },
+						"type": "array",
+						"title": "Pets"
+					}
 				},
 				"type": "object",
 				"title": "HouseholdOut"
@@ -3518,6 +3667,21 @@
 				"title": "OpenMemberHit",
 				"description": "Open member surfaced by staff search — claimable (not claimed/cancelled)."
 			},
+			"OpenPetHit": {
+				"properties": {
+					"pet_id": { "type": "string", "title": "Pet Id" },
+					"status": { "type": "string", "const": "open", "title": "Status", "default": "open" },
+					"species": { "type": "string", "enum": ["dog", "cat", "other"], "title": "Species" },
+					"count": { "type": "integer", "title": "Count", "default": 1 },
+					"notes": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Notes" },
+					"has_cage": { "type": "boolean", "title": "Has Cage", "default": false },
+					"image_url": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Image Url" }
+				},
+				"type": "object",
+				"required": ["pet_id", "species"],
+				"title": "OpenPetHit",
+				"description": "Open pet surfaced by staff search/detail — claimable."
+			},
 			"PaginatedAnnouncements": {
 				"properties": {
 					"items": {
@@ -3571,6 +3735,39 @@
 				"required": ["cardType"],
 				"title": "PersonIdOut",
 				"description": "Person id on create responses — distinct from request PersonIdInput."
+			},
+			"PetCreated": {
+				"properties": {
+					"pet_id": { "type": "string", "title": "Pet Id" },
+					"status": {
+						"type": "string",
+						"enum": ["open", "claimed", "cancelled"],
+						"title": "Status"
+					},
+					"species": { "type": "string", "enum": ["dog", "cat", "other"], "title": "Species" },
+					"count": { "type": "integer", "title": "Count", "default": 1 },
+					"notes": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Notes" },
+					"has_cage": { "type": "boolean", "title": "Has Cage", "default": false },
+					"image_url": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Image Url"
+					},
+					"claimed_shelter_code": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Claimed Shelter Code"
+					},
+					"claimed_at": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Claimed At"
+					},
+					"claimed_by": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Claimed By"
+					}
+				},
+				"type": "object",
+				"required": ["pet_id", "status", "species"],
+				"title": "PetCreated"
 			},
 			"PetInput": {
 				"properties": {
@@ -4332,8 +4529,7 @@
 				"properties": { "client_secret": { "type": "string", "title": "Client Secret" } },
 				"type": "object",
 				"required": ["client_secret"],
-				"title": "ThirdPartyClientSecretResponse",
-				"description": "Decrypted plaintext secret — ``GET .../secret``, gated upstream by the BFF's\nown-password re-auth (CR-136)."
+				"title": "ThirdPartyClientSecretResponse"
 			},
 			"ThirdPartyClientUpdateRequest": {
 				"properties": {
@@ -4527,8 +4723,13 @@
 						"items": { "type": "string" },
 						"type": "array",
 						"maxItems": 20,
-						"minItems": 1,
 						"title": "Member Ids"
+					},
+					"pet_ids": {
+						"items": { "type": "string" },
+						"type": "array",
+						"maxItems": 50,
+						"title": "Pet Ids"
 					},
 					"shelter_code": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
@@ -4536,15 +4737,14 @@
 					}
 				},
 				"type": "object",
-				"required": ["member_ids"],
 				"title": "UnassignedRegistrationClaimRequest",
-				"description": "Staff claim — body selects open member reserved ids (CR-113 / #247)."
+				"description": "Staff claim — open members and/or pets (draft-persistent-unassigned-family)."
 			},
 			"UnassignedRegistrationClaimResponse": {
 				"properties": {
 					"success": { "type": "boolean", "title": "Success", "default": true },
 					"id": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Id" },
-					"deleted": { "type": "boolean", "title": "Deleted" },
+					"deleted": { "type": "boolean", "title": "Deleted", "default": false },
 					"shelter_code": { "type": "string", "title": "Shelter Code" },
 					"household_id": { "type": "string", "title": "Household Id" },
 					"evacuee_ids": { "items": { "type": "string" }, "type": "array", "title": "Evacuee Ids" },
@@ -4553,16 +4753,25 @@
 						"type": "array",
 						"title": "Claimed"
 					},
+					"claimed_pets": {
+						"items": { "$ref": "#/components/schemas/ClaimedPetOut" },
+						"type": "array",
+						"title": "Claimed Pets"
+					},
 					"remaining_open": {
 						"items": { "$ref": "#/components/schemas/OpenMemberHit" },
 						"type": "array",
 						"title": "Remaining Open"
+					},
+					"remaining_open_pets": {
+						"items": { "$ref": "#/components/schemas/OpenPetHit" },
+						"type": "array",
+						"title": "Remaining Open Pets"
 					}
 				},
 				"type": "object",
 				"required": [
 					"id",
-					"deleted",
 					"shelter_code",
 					"household_id",
 					"evacuee_ids",
@@ -4590,7 +4799,7 @@
 					"join_registration_id": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Join Registration Id",
-						"description": "Append members (and pets) into this open registration's reserved household."
+						"description": "Append members (and pets) into this registration's reserved household (allowed even when document status is closed — reopen on append)."
 					}
 				},
 				"type": "object",
@@ -4677,7 +4886,13 @@
 						"type": "array",
 						"title": "Open Members"
 					},
-					"open_member_count": { "type": "integer", "title": "Open Member Count" }
+					"open_member_count": { "type": "integer", "title": "Open Member Count" },
+					"open_pets": {
+						"items": { "$ref": "#/components/schemas/OpenPetHit" },
+						"type": "array",
+						"title": "Open Pets"
+					},
+					"open_pet_count": { "type": "integer", "title": "Open Pet Count", "default": 0 }
 				},
 				"type": "object",
 				"required": [
@@ -4708,6 +4923,67 @@
 				"required": ["items", "total", "open_member_count", "limit", "offset"],
 				"title": "UnassignedRegistrationListResponse"
 			},
+			"UnassignedRegistrationReviewResponse": {
+				"properties": {
+					"id": { "type": "string", "title": "Id" },
+					"reserved_household_id": { "type": "string", "title": "Reserved Household Id" },
+					"registered_via": {
+						"type": "string",
+						"enum": ["web", "staff"],
+						"title": "Registered Via"
+					},
+					"status": { "type": "string", "title": "Status" },
+					"created_at": { "type": "string", "title": "Created At" },
+					"housing_type": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Housing Type"
+					},
+					"residence_landmark": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Residence Landmark"
+					},
+					"address_no": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Address No"
+					},
+					"village_no": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Village No"
+					},
+					"subdistrict": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Subdistrict"
+					},
+					"district": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "District" },
+					"province": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Province" },
+					"postal_code": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Postal Code"
+					},
+					"label": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Label" },
+					"open_members": {
+						"items": { "$ref": "#/components/schemas/OpenMemberHit" },
+						"type": "array",
+						"title": "Open Members"
+					},
+					"open_pets": {
+						"items": { "$ref": "#/components/schemas/OpenPetHit" },
+						"type": "array",
+						"title": "Open Pets"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"reserved_household_id",
+					"registered_via",
+					"status",
+					"created_at",
+					"open_members"
+				],
+				"title": "UnassignedRegistrationReviewResponse",
+				"description": "Staff pre-claim review (CR-140 addendum) — open rows only, no write.\n\nHousehold carries address fields only (no `pets` — those live in `open_pets`,\nunlike `HouseholdOut` which embeds every pet with claim status for the SA detail view)."
+			},
 			"UnassignedRegistrationSearchHit": {
 				"properties": {
 					"id": { "type": "string", "title": "Id" },
@@ -4723,6 +4999,11 @@
 						"items": { "$ref": "#/components/schemas/OpenMemberHit" },
 						"type": "array",
 						"title": "Open Members"
+					},
+					"open_pets": {
+						"items": { "$ref": "#/components/schemas/OpenPetHit" },
+						"type": "array",
+						"title": "Open Pets"
 					}
 				},
 				"type": "object",

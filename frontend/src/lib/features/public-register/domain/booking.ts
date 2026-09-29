@@ -408,7 +408,9 @@ export type PublicBookingErrorCode =
 	| 'SHELTER_REQUIRED'
 	| 'EMPTY_PHOTO'
 	| 'PHOTO_TOO_LARGE'
-	| 'INVALID_INPUT';
+	| 'INVALID_INPUT'
+	| 'INVALID_JOIN_TOKEN'
+	| 'JOIN_TARGET_NOT_FOUND';
 
 const ERROR_COPY: Record<PublicBookingErrorCode, string> = {
 	RATE_LIMITED: 'มีการส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่',
@@ -424,7 +426,10 @@ const ERROR_COPY: Record<PublicBookingErrorCode, string> = {
 	SHELTER_REQUIRED: 'กรุณาเลือกศูนย์พักพิงก่อนอัปโหลดรูป',
 	EMPTY_PHOTO: 'ไม่พบไฟล์รูปภาพ กรุณาเลือกใหม่',
 	PHOTO_TOO_LARGE: 'ไฟล์รูปใหญ่เกินไป กรุณาเลือกไฟล์ที่เล็กกว่า',
-	INVALID_INPUT: 'ข้อมูลไม่ถูกต้อง กรุณาตรวจสอบแล้วลองใหม่'
+	INVALID_INPUT: 'ข้อมูลไม่ถูกต้อง กรุณาตรวจสอบแล้วลองใหม่',
+	INVALID_JOIN_TOKEN:
+		'ลิงก์เข้าร่วมครอบครัวหมดอายุหรือไม่ถูกต้อง กรุณาค้นหาครอบครัวใหม่แล้วเลือกอีกครั้ง',
+	JOIN_TARGET_NOT_FOUND: 'ไม่พบครอบครัวที่เลือก กรุณาเลือกครอบครัวใหม่ก่อนส่ง'
 };
 
 export function publicBookingErrorMessage(code: unknown): string {

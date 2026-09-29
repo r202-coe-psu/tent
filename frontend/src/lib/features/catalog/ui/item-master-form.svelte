@@ -4,13 +4,14 @@
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import * as Select from '$lib/components/ui/select/index.js';
+	import { Combobox } from '$lib/components/ui/combobox/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import {
 		itemMasterInputSchema,
 		itemMasterUpdateInputSchema,
 		resolveCategoryId,
+		catalogOrigin,
 		type ItemMaster,
 		type ItemMasterInput,
 		type TypeClass
@@ -71,10 +72,9 @@
 		mass: 'น้ำหนัก',
 		volume: 'ปริมาตร',
 		length: 'ความยาว',
-		count: 'นับชิ้น'
+		count: 'นับชิ้น',
+		energy: 'พลังงาน'
 	};
-
-	const DIMENSION_ORDER: Dimension[] = ['mass', 'volume', 'length', 'count'];
 
 	const form = superForm(
 		defaults(
@@ -324,15 +324,31 @@
 		return [...list, ...missing];
 	});
 
-	const unitsByDimension = $derived.by(() => {
-		const groups: { dimension: Dimension; label: string; units: typeof activeUnits }[] = [];
-		for (const dim of DIMENSION_ORDER) {
-			const units = activeUnits.filter((u) => u.dimension === dim);
-			if (units.length > 0) {
-				groups.push({ dimension: dim, label: DIMENSION_LABELS[dim], units });
-			}
-		}
-		return groups;
+	type UnitComboboxItem = {
+		value: string;
+		label: string;
+		keywords: string[];
+		dimensionLabel: string;
+	};
+
+	const unitComboboxItems = $derived.by(() => {
+		return activeUnits.map((unit) => {
+			const dimensionLabel = DIMENSION_LABELS[unit.dimension] ?? unit.dimension;
+			const labelThShort = 'label_th_short' in unit ? unit.label_th_short : undefined;
+			const keywords = [
+				unit.code,
+				unit.label_th,
+				unit.label_en,
+				labelThShort,
+				dimensionLabel
+			].filter((k): k is string => Boolean(k));
+			return {
+				value: unit.code,
+				label: unit.label_th || formatUnit(unit.code, allUnits, langState.current) || unit.code,
+				keywords,
+				dimensionLabel
+			} satisfies UnitComboboxItem;
+		});
 	});
 
 	const unitMasterReady = $derived(
@@ -370,6 +386,13 @@
 			if (c.uom_name) codes.push(c.uom_name);
 		});
 		return codes;
+	}
+
+	function unitItemsForConversion(index: number) {
+		const taken = usedUomCodes(index);
+		return unitComboboxItems.filter(
+			(item) => !taken.includes(item.value) || item.value === $formData.conversions[index]?.uom_name
+		);
 	}
 
 	function addConversion() {
@@ -411,6 +434,15 @@
 			? 'space-y-4 rounded-xl border border-border/80 bg-muted/30 p-4'
 			: 'space-y-5 rounded-2xl border border-slate-100 bg-slate-50/60 p-6 dark:border-zinc-800 dark:bg-zinc-900/30'
 	);
+
+	/** Compact/full: deactivate only when scope may soft-close the doc (central admin or local shelter row). */
+	const showDeactivateToggle = $derived.by(() => {
+		if (!isEdit) return false;
+		if (basePath.includes('system-management')) return true;
+		const item = itemMasterQuery.data;
+		if (!item || !shelterCode) return false;
+		return catalogOrigin(item, shelterCode) === 'local';
+	});
 </script>
 
 {#if isLoading}
@@ -528,31 +560,32 @@
 								<Form.Label class="text-sm font-semibold">
 									หน่วยฐาน <span class="text-destructive">*</span>
 								</Form.Label>
-								<Select.Root
-									type="single"
-									value={$formData.base_unit}
-									onValueChange={(value) => ($formData.base_unit = value)}
+								<Combobox
+									items={unitComboboxItems}
+									bind:value={$formData.base_unit}
+									placeholder="-- เลือกหน่วย --"
+									searchPlaceholder="ค้นหาหน่วย..."
+									emptyText="ไม่พบหน่วย"
 									disabled={isEdit || !unitMasterReady}
+									class="h-11 w-full rounded-xl"
+									controlProps={props}
 								>
-									<Select.Trigger {...props} class="h-11 w-full rounded-xl">
-										{activeUnits.find((u) => u.code === $formData.base_unit)?.label_th ??
-											'-- เลือกหน่วย --'}
-									</Select.Trigger>
-									<Select.Content>
-										{#each unitsByDimension as group (group.dimension)}
-											<div class="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-												{group.label}
-											</div>
-											{#each group.units as unit (unit.code)}
-												<Select.Item value={unit.code} label={unit.label_th}>
-													{unit.label_th}
-												</Select.Item>
-											{/each}
-										{/each}
-									</Select.Content>
-								</Select.Root>
+									{#snippet children({ item })}
+										<div class="flex min-w-0 flex-col">
+											<span class="truncate text-sm">{item.label}</span>
+											<span class="truncate text-xs text-muted-foreground"
+												>{item.value} · {item.dimensionLabel}</span
+											>
+										</div>
+									{/snippet}
+								</Combobox>
 							{/snippet}
 						</Form.Control>
+						{#if isEdit}
+							<p class="text-xs text-muted-foreground">
+								หน่วยฐานไม่สามารถเปลี่ยนได้หลังสร้างแล้ว เพื่อรักษาความสอดคล้องกับประวัติคลัง
+							</p>
+						{/if}
 						<Form.FieldErrors class="text-xs font-semibold text-destructive" />
 					</Form.Field>
 
@@ -573,36 +606,30 @@
 						</div>
 
 						{#each $formData.conversions as conversion, i (i)}
-							{@const taken = usedUomCodes(i)}
 							<div class="space-y-2 rounded-xl border border-border bg-background p-3">
 								<div class="flex flex-wrap items-center gap-2 text-sm">
 									<span class="text-muted-foreground">1</span>
-									<Select.Root
-										type="single"
-										value={conversion.uom_name}
-										onValueChange={(value) => {
-											$formData.conversions[i].uom_name = value;
-										}}
+									<Combobox
+										items={unitItemsForConversion(i)}
+										bind:value={
+											() => conversion.uom_name,
+											(v) => {
+												$formData.conversions[i].uom_name = v;
+											}
+										}
+										placeholder="หน่วย"
+										searchPlaceholder="ค้นหาหน่วย..."
+										emptyText="ไม่พบหน่วย"
 										disabled={!unitMasterReady}
+										class="h-10 min-w-[7rem] rounded-lg"
 									>
-										<Select.Trigger class="h-10 min-w-[7rem] rounded-lg">
-											{activeUnits.find((u) => u.code === conversion.uom_name)?.label_th ?? 'หน่วย'}
-										</Select.Trigger>
-										<Select.Content>
-											{#each unitsByDimension as group (group.dimension)}
-												<div class="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-													{group.label}
-												</div>
-												{#each group.units as unit (unit.code)}
-													{#if !taken.includes(unit.code) || unit.code === conversion.uom_name}
-														<Select.Item value={unit.code} label={unit.label_th}>
-															{unit.label_th}
-														</Select.Item>
-													{/if}
-												{/each}
-											{/each}
-										</Select.Content>
-									</Select.Root>
+										{#snippet children({ item })}
+											<div class="flex min-w-0 flex-col">
+												<span class="truncate text-sm">{item.label}</span>
+												<span class="truncate text-xs text-muted-foreground">{item.value}</span>
+											</div>
+										{/snippet}
+									</Combobox>
 									<span class="text-muted-foreground">=</span>
 									<Input
 										type="number"
@@ -968,7 +995,7 @@
 				</details>
 			{/if}
 
-			{#if isEdit && !compact}
+			{#if showDeactivateToggle}
 				<section class={sectionClass}>
 					<div class="flex items-center justify-between gap-3">
 						<div class="space-y-0.5">

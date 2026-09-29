@@ -7,6 +7,7 @@ import {
 	createScreening,
 	applyMovementToStay,
 	assertMovementAllowed,
+	movementConflictMessage,
 	canCheckInEvacuee,
 	canCheckOutEvacuee,
 	canChangeEvacueeZone,
@@ -59,10 +60,14 @@ import {
 	housingTypeSchema,
 	householdInputSchema,
 	migratePetGroup,
-	migratePetGroups
+	migratePetGroups,
+	groupPetsBySpecies,
+	petSpeciesLabel
 } from './people';
 import type { AuthorContext } from '$lib/db/model';
+import type { ScreeningInput, StayStatus } from './people';
 import { isUlid } from '$lib/db/ulid';
+import { ConflictError } from '$lib/utils/errors';
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'staff1' };
 
@@ -921,6 +926,61 @@ describe('movement → current_stay', () => {
 		expect(() => applyMovementToStay(active, m)).toThrow(/โซนปลายทาง/);
 	});
 
+	it('bulk rezone candidate filter (canChangeEvacueeZone) excludes discharged household members', () => {
+		const base = createEvacuee(
+			{ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null },
+			ctx
+		);
+		const withStatus = (status: StayStatus) => ({
+			...base,
+			current_stay: { status, zone: 'Z1', since: base.current_stay.since }
+		});
+		// A household mid-rezone: some still on-site, some already discharged/left.
+		const household = [
+			withStatus('active'),
+			withStatus('room_confirmed'),
+			withStatus('checked_out'),
+			withStatus('transferred'),
+			withStatus('deceased')
+		];
+		const candidates = household.filter(canChangeEvacueeZone);
+		expect(candidates.map((e) => e.current_stay.status)).toEqual(['active', 'room_confirmed']);
+	});
+
+	it('never drops or nulls household_id across check_in, confirm_room, zone_change, and check_out (FR-14)', () => {
+		const e = {
+			...createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx),
+			household_id: 'household:shared'
+		};
+
+		const checkedIn = applyMovementToStay(
+			e,
+			createMovement({ evacuee_id: e._id, action: 'check_in', zone: 'Z1' }, ctx)
+		);
+		expect(checkedIn.household_id).toBe('household:shared');
+
+		const confirmed = applyMovementToStay(
+			checkedIn,
+			createMovement({ evacuee_id: e._id, action: 'confirm_room', zone: 'Z1' }, ctx)
+		);
+		expect(confirmed.household_id).toBe('household:shared');
+
+		const rezoned = applyMovementToStay(
+			confirmed,
+			createMovement({ evacuee_id: e._id, action: 'zone_change', zone: 'Z2' }, ctx)
+		);
+		expect(rezoned.household_id).toBe('household:shared');
+
+		const checkedOut = applyMovementToStay(
+			rezoned,
+			createMovement(
+				{ evacuee_id: e._id, action: 'check_out', zone: null, reason: 'กลับบ้าน' },
+				ctx
+			)
+		);
+		expect(checkedOut.household_id).toBe('household:shared');
+	});
+
 	it('allows check_in from eligible stay statuses only', () => {
 		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
 		expect(canCheckInEvacuee(e)).toBe(true); // pre_registered
@@ -953,6 +1013,16 @@ describe('movement → current_stay', () => {
 		};
 		expect(() => assertMovementAllowed(confirmed, 'transfer_out')).not.toThrow();
 		expect(() => assertMovementAllowed(confirmed, 'leave_temporary')).not.toThrow();
+	});
+
+	it('movementConflictMessage gives friendly Thai copy for a write conflict, and falls through otherwise', () => {
+		expect(movementConflictMessage(new ConflictError('evacuee:01J'))).toBe(
+			'ข้อมูลถูกแก้ไขจากที่อื่นแล้ว กรุณาโหลดข้อมูลใหม่แล้วลองอีกครั้ง'
+		);
+		expect(movementConflictMessage(new Error('การเช็คอินต้องระบุโซน'))).toBe(
+			'การเช็คอินต้องระบุโซน'
+		);
+		expect(movementConflictMessage('not an error')).toBe('บันทึกไม่สำเร็จ');
 	});
 
 	it('rejects check_in without a zone', () => {
@@ -1077,7 +1147,9 @@ describe('triageLevelSchema and screeningInputSchema', () => {
 		expect(() => triageLevelSchema.parse('blue')).toThrow();
 	});
 
-	it('screeningInputSchema accepts triage_level and vital signs', () => {
+	it('screeningInputSchema no longer accepts triage_level or vital signs on new input (CR-106 2026-09-07)', () => {
+		// Extra/legacy keys on the raw input are silently dropped, not thrown on —
+		// a caller still sending them (an old client, a stale form) must not 422.
 		const parsed = screeningInputSchema.parse({
 			evacuee_id: 'evacuee:01J',
 			track: 'normal',
@@ -1086,58 +1158,46 @@ describe('triageLevelSchema and screeningInputSchema', () => {
 			blood_pressure_dia: 80,
 			heart_rate: 75,
 			spo2_percent: 98
-		});
-		expect(parsed.triage_level).toBe('yellow');
-		expect(parsed.blood_pressure_sys).toBe(120);
-		expect(parsed.blood_pressure_dia).toBe(80);
-		expect(parsed.heart_rate).toBe(75);
-		expect(parsed.spo2_percent).toBe(98);
-	});
-
-	it('screeningInputSchema allows null or omitted triage_level and vitals', () => {
-		const parsed = screeningInputSchema.parse({
-			evacuee_id: 'evacuee:01J',
-			track: 'normal',
-			triage_level: null
-		});
-		expect(parsed.triage_level).toBeNull();
-		expect(parsed.blood_pressure_sys).toBeUndefined();
+		} as never);
+		expect(parsed).not.toHaveProperty('triage_level');
+		expect(parsed).not.toHaveProperty('blood_pressure_sys');
+		expect(parsed).not.toHaveProperty('vital_signs');
+		expect(parsed).not.toHaveProperty('temperature_c');
+		expect(parsed).not.toHaveProperty('needs_referral');
 	});
 });
 
 describe('createScreening', () => {
-	it('defaults the screening time to now when omitted, stamps schema_v: 2 and triage_level: null', () => {
+	it('defaults the screening time to now when omitted and stamps schema_v: 2', () => {
 		const s = createScreening({ evacuee_id: 'evacuee:x', track: 'fast_track' }, ctx);
 		expect(s.type).toBe('screening');
 		expect(s.schema_v).toBe(2);
-		expect(s.triage_level).toBeNull();
-		expect(s.vital_signs).toBeUndefined();
-		expect(s.needs_referral).toBe(false);
 		expect(s.symptoms).toEqual([]);
 		expect(typeof s.screened_at).toBe('string');
 	});
 
-	it('stamps schema_v: 2, triage_level, and vital signs when provided', () => {
-		const s = createScreening(
-			{
-				evacuee_id: 'evacuee:x',
-				track: 'fast_track',
-				triage_level: 'red',
-				blood_pressure_sys: 140,
-				blood_pressure_dia: 90,
-				heart_rate: 105,
-				spo2_percent: 92
-			},
-			ctx
-		);
-		expect(s.schema_v).toBe(2);
-		expect(s.triage_level).toBe('red');
-		expect(s.vital_signs).toEqual({
+	it('never stamps temperature_c, needs_referral, triage_level, or vital_signs on a new doc (CR-106 2026-09-07 amendment)', () => {
+		// A stale caller might still send these legacy fields — they must be
+		// ignored, not persisted. Cast the whole literal since ScreeningInput
+		// no longer declares them.
+		const staleInput = {
+			evacuee_id: 'evacuee:x',
+			track: 'fast_track',
+			symptoms: ['fever'],
+			triage_level: 'red',
 			blood_pressure_sys: 140,
 			blood_pressure_dia: 90,
 			heart_rate: 105,
-			spo2_percent: 92
-		});
+			spo2_percent: 92,
+			temperature_c: 39,
+			needs_referral: true
+		} as unknown as ScreeningInput;
+		const s = createScreening(staleInput, ctx);
+		expect(s.schema_v).toBe(2);
+		expect(s).not.toHaveProperty('triage_level');
+		expect(s).not.toHaveProperty('vital_signs');
+		expect(s).not.toHaveProperty('temperature_c');
+		expect(s).not.toHaveProperty('needs_referral');
 	});
 });
 
@@ -1189,6 +1249,34 @@ describe('pet species dog|cat|other', () => {
 			{ species: 'other', count: 1, notes: 'นก' },
 			{ species: 'cat', count: 1 }
 		]);
+	});
+
+	it('groupPetsBySpecies sums duplicate same-species entries into one group', () => {
+		expect(
+			groupPetsBySpecies([
+				{ species: 'cat', count: 1 },
+				{ species: 'cat', count: 1 }
+			])
+		).toEqual([{ species: 'cat', count: 2, hasCage: false }]);
+
+		expect(
+			groupPetsBySpecies([
+				{ species: 'dog', count: 1, has_cage: true },
+				{ species: 'dog', count: 2 },
+				{ species: 'cat', count: 1 }
+			])
+		).toEqual([
+			{ species: 'dog', count: 3, hasCage: true },
+			{ species: 'cat', count: 1, hasCage: false }
+		]);
+
+		expect(groupPetsBySpecies([])).toEqual([]);
+	});
+
+	it('petSpeciesLabel returns Thai labels for each species', () => {
+		expect(petSpeciesLabel('dog')).toBe('สุนัข');
+		expect(petSpeciesLabel('cat')).toBe('แมว');
+		expect(petSpeciesLabel('other')).toBe('อื่นๆ');
 	});
 });
 

@@ -77,11 +77,6 @@ function unitReferencesDoc(doc: AnyDoc, code: string): boolean {
 	if (doc.type === 'stock_ledger') {
 		return same(doc.unit);
 	}
-	if (doc.type === 'purchase') {
-		return (Array.isArray(doc.items) ? doc.items : []).some(
-			(item) => !!item && typeof item === 'object' && same((item as { unit?: unknown }).unit)
-		);
-	}
 	if (doc.type === 'stock_transfer') {
 		return (Array.isArray(doc.items) ? doc.items : []).some(
 			(item) => !!item && typeof item === 'object' && same((item as { unit?: unknown }).unit)
@@ -618,13 +613,7 @@ export class CatalogRemoteRepository implements CatalogRepository {
 			}
 		}
 
-		const referenceTypes = [
-			'item_master',
-			'recipe',
-			'donation_campaign',
-			'stock_ledger',
-			'purchase'
-		];
+		const referenceTypes = ['item_master', 'recipe', 'donation_campaign', 'stock_ledger'];
 		for (const database of databases) {
 			const repository = database === CATALOG_DB ? this.repo : createRemoteRepository(database);
 			for (const type of referenceTypes) {

@@ -50,26 +50,44 @@
 
 	// Search & Pagination
 	let q = $state('');
+	let showDeactivated = $state(false);
 	const PAGE_SIZE = 10;
 	let currentPage = $state(1);
 
 	const filteredAll = $derived.by(() => {
 		const items = query.data ?? [];
 		const needle = q.trim().toLowerCase();
-		if (!needle) return items;
-		return items.filter(
-			(u) =>
+		return items.filter((u) => {
+			if (!showDeactivated && u.deactivated) return false;
+			if (!needle) return true;
+			return (
 				u.code.toLowerCase().includes(needle) ||
 				u.label_th.toLowerCase().includes(needle) ||
 				(u.label_th_short && u.label_th_short.toLowerCase().includes(needle)) ||
 				u.label_en.toLowerCase().includes(needle) ||
 				u.dimension.toLowerCase().includes(needle)
-		);
+			);
+		});
 	});
 
 	const total = $derived(filteredAll.length);
 	const totalPages = $derived(Math.max(1, Math.ceil(total / PAGE_SIZE)));
 	const clampedPage = $derived(Math.max(1, Math.min(currentPage, totalPages)));
+	const hiddenDeactivatedCount = $derived.by(() => {
+		if (showDeactivated) return 0;
+		const needle = q.trim().toLowerCase();
+		return (query.data ?? []).filter((u) => {
+			if (!u.deactivated) return false;
+			if (!needle) return true;
+			return (
+				u.code.toLowerCase().includes(needle) ||
+				u.label_th.toLowerCase().includes(needle) ||
+				(u.label_th_short && u.label_th_short.toLowerCase().includes(needle)) ||
+				u.label_en.toLowerCase().includes(needle) ||
+				u.dimension.toLowerCase().includes(needle)
+			);
+		}).length;
+	});
 
 	const paginatedItems = $derived.by(() => {
 		const start = (clampedPage - 1) * PAGE_SIZE;
@@ -77,7 +95,9 @@
 	});
 
 	$effect(() => {
-		if (q) currentPage = 1;
+		void q;
+		void showDeactivated;
+		currentPage = 1;
 	});
 
 	// Unified Create / Edit Form State
@@ -221,6 +241,11 @@
 	}
 
 	const DIMENSION_LABELS: Record<Dimension, { th: string; color: string }> = {
+		energy: {
+			th: 'พลังงาน',
+			color:
+				'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-400 dark:border-orange-800'
+		},
 		count: {
 			th: 'จำนวนนับ',
 			color:
@@ -255,9 +280,19 @@
 				{isSystemManagement
 					? `หน่วยนับมาตรฐานของระบบกลาง (${total} รายการ)`
 					: `รายการหน่วยนับสากลที่ใช้บันทึกสต็อกและควบคุมคำนวณในคลัง (${total} รายการ)`}
+				{#if hiddenDeactivatedCount > 0}
+					· ซ่อน {hiddenDeactivatedCount} รายการที่ปิดใช้งาน
+				{/if}
 			</p>
 		</div>
-		<div class="flex items-center gap-2">
+		<div class="flex flex-wrap items-center gap-3">
+			<label
+				for="show-deactivated-units"
+				class="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground"
+			>
+				<Checkbox id="show-deactivated-units" bind:checked={showDeactivated} />
+				<span>แสดงรายการที่ปิดใช้งาน</span>
+			</label>
 			<div class="relative w-full sm:w-64">
 				<Search class="absolute top-2.5 left-2.5 h-4 w-4 text-muted-foreground" />
 				<Input
@@ -558,6 +593,7 @@
 								<Select.Item value="mass">น้ำหนัก (mass)</Select.Item>
 								<Select.Item value="volume">ปริมาตร (volume)</Select.Item>
 								<Select.Item value="length">ความยาว (length)</Select.Item>
+								<Select.Item value="energy">พลังงาน (energy)</Select.Item>
 							</Select.Content>
 						</Select.Root>
 					{/if}
