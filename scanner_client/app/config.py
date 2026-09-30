@@ -1,3 +1,4 @@
+import ipaddress
 import os
 from pathlib import Path
 from typing import Mapping, Any
@@ -39,6 +40,23 @@ PLACEHOLDER_VALUES = {
     "<device-id>",
     "<one-time-key>",
 }
+
+LOOPBACK_HOSTNAMES = {"localhost"}
+
+
+def _is_trusted_plaintext_host(hostname: str) -> bool:
+    """HTTP is only auto-allowed for loopback / private-LAN hosts — the on-site edge
+    fallback and dev boxes. A DNS hostname (e.g. a public domain) must use HTTPS unless
+    ALLOW_INSECURE_HTTP is set, so a typo'd scheme cannot silently send the device secret,
+    citizen IDs and photos in cleartext on a network that is not actually private."""
+    if hostname in LOOPBACK_HOSTNAMES:
+        return True
+    try:
+        address = ipaddress.ip_address(hostname)
+    except ValueError:
+        return False
+    return address.is_loopback or address.is_private or address.is_link_local
+
 
 def load_config(
     env_path: str | os.PathLike[str] = ".env",
@@ -89,6 +107,16 @@ def validate_config(config: Mapping[str, Any]) -> dict[str, Any]:
         raise ScannerConfigError("TENT_BASE_URL must be an absolute HTTP(S) URL")
     if _is_placeholder(parsed.hostname or "") or "<" in (parsed.hostname or ""):
         raise ScannerConfigError("TENT_BASE_URL is still a placeholder")
+    allow_insecure_http = _clean(config.get("ALLOW_INSECURE_HTTP")).lower() in ("1", "true", "yes")
+    if (
+        parsed.scheme == "http"
+        and not _is_trusted_plaintext_host(parsed.hostname)
+        and not allow_insecure_http
+    ):
+        raise ScannerConfigError(
+            "TENT_BASE_URL must use HTTPS for a named host "
+            "(set ALLOW_INSECURE_HTTP=true only for a trusted internal network)"
+        )
     validated = dict(config)
     validated.update(
         {
