@@ -20,7 +20,9 @@ export type KioskLabelContent = {
 
 /** Thermal heads print dots, not greys: anything darker than this becomes black. */
 const INK_THRESHOLD = 160;
-const FONT_FAMILY = 'sans-serif';
+/** Matches the app's typography stack (`$lib/tokens/typography.ts`) so Thai glyphs render
+ * instead of the generic sans-serif fallback's tofu boxes on a kiosk without a system Thai font. */
+const FONT_FAMILY = "'IBM Plex Sans Thai', sans-serif";
 
 function loadImage(src: string): Promise<HTMLImageElement> {
 	const image = new Image();
@@ -61,7 +63,23 @@ export async function renderKioskLabelPng(label: KioskLabelContent): Promise<str
 	const context = canvas.getContext('2d', { willReadFrequently: true });
 	if (!context) throw new Error('Canvas 2D is unavailable');
 
-	const [qr] = await Promise.all([loadImage(label.qrSrc), document.fonts.ready]);
+	const rows = [
+		{ text: label.caption, style: KIOSK_LABEL_TEXT.caption, maxLines: 1 },
+		{ text: label.name, style: KIOSK_LABEL_TEXT.name, maxLines: KIOSK_LABEL_TEXT.name.maxLines },
+		{ text: label.detail, style: KIOSK_LABEL_TEXT.detail, maxLines: 1 }
+	];
+	const rowFonts = rows.map(
+		(row) => `${row.style.weight} ${ptToDots(row.style.pt)}px ${FONT_FAMILY}`
+	);
+
+	// `document.fonts.ready` only waits for faces already in flight — it won't fetch a
+	// weight/family this canvas hasn't drawn yet. `fillText` is synchronous, so without an
+	// explicit `load()` the first print can race the font fetch and draw with the fallback face.
+	const [qr] = await Promise.all([
+		loadImage(label.qrSrc),
+		document.fonts.ready,
+		...rowFonts.map((font) => document.fonts.load(font).catch(() => undefined))
+	]);
 	const padding = mmToDots(KIOSK_LABEL_PADDING_MM);
 	const centerX = width / 2 + mmToDots(KIOSK_LABEL_OFFSET_X_MM);
 	const maxTextWidth = width - padding * 2;
@@ -78,11 +96,6 @@ export async function renderKioskLabelPng(label: KioskLabelContent): Promise<str
 	context.fillStyle = '#000000';
 	context.textAlign = 'center';
 	context.textBaseline = 'middle';
-	const rows = [
-		{ text: label.caption, style: KIOSK_LABEL_TEXT.caption, maxLines: 1 },
-		{ text: label.name, style: KIOSK_LABEL_TEXT.name, maxLines: KIOSK_LABEL_TEXT.name.maxLines },
-		{ text: label.detail, style: KIOSK_LABEL_TEXT.detail, maxLines: 1 }
-	];
 	for (const [index, row] of rows.entries()) {
 		if (index > 0) y += mmToDots(KIOSK_LABEL_TEXT_ROW_GAP_MM);
 		const fontSize = ptToDots(row.style.pt);
