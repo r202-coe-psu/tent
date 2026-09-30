@@ -6,16 +6,19 @@
  * the throw-away staff users (helpers/couch.ts), seeding their security question (as in
  * stock-donations.test.ts), and the teardown that deletes the people this run created.
  *
- * Four serial tests, the same two flows with SH001's pre-registration and Station 2 switches ON,
- * then OFF:
- *   ON  1.1 walk-in (search → new/joined household → zone, QR → Station 2 → 3 → scan out/in)
+ * Four serial tests, the same two flows with SH001's switches ON, then pre-registration and
+ * Station 2 OFF:
+ *   ON  (every switch on: pre-registration, Station 2, pets, assets, vehicles)
+ *       1.1 walk-in (search → new/joined household → pet, vehicle, assets, zone, QR → Station 2 → 3
+ *           → scan out/in)
  *       1.2 pre-register on the public site (screen A) → report-in by search + QR scan at the desk
  *           (screen B) → Station 2 → 3 → scan out
- *   OFF 1.3 walk-in; Station 2 is skipped
+ *   OFF (pre-registration and Station 2 off; pets/assets/vehicles stay as the ON run left them)
+ *       1.3 walk-in; Station 2 is skipped
  *       1.4 public booking is refused → central queue (screen A) → desk claims by search + QR scan
  *           (screen B) → Station 3 → scan out
- * Pet, vehicle and asset steps run only if the shelter already has those switches on; otherwise
- * the step is skipped and annotated in the report.
+ * Pet, vehicle and asset steps run when their switch is on and are skipped (annotated in the
+ * report) when it is off.
  * After each toggle change the run waits SYNC_WORKER_DELAY_MS (default 10 s, E2E_SYNC_DELAY_MS).
  *
  * Needs: the stack up (`docker compose up -d`) with FastAPI built from this checkout
@@ -26,11 +29,11 @@
  *     pnpm preview &
  *   pnpm playwright test e2e/registration-evacuee.test.ts     # E2E_DEBUG=1 logs 4xx/5xx responses
  *
- * Side effects: the two switches and reCAPTCHA are restored afterwards (not if the run is killed).
- * Pets/assets/vehicles are never flipped: saving them rewrites the shelter's pet/luggage/parking
- * policies. People can't be deleted from the UI, so afterAll tombstones them through CouchDB admin
- * (evacuee, household, medical, movement, screening, audit), matched on this run's Tst… last-name
- * tag. Public POSTs allow 3/min/IP, so a run waits ~1 min once.
+ * Side effects: the switches and reCAPTCHA are flipped back afterwards (not if the run is killed),
+ * but saving pets/assets/vehicles rewrites the shelter's pet/luggage/parking policies and flipping
+ * the switch back does not undo that. People can't be deleted from the UI, so afterAll tombstones
+ * them through CouchDB admin (evacuee, household, medical, movement, screening, audit), matched on
+ * this run's Tst… last-name tag. Public POSTs allow 3/min/IP, so a run waits ~1 min once.
  */
 
 import { createRequire } from 'node:module';
@@ -120,12 +123,6 @@ const TOGGLE_SELECTOR: Record<keyof Toggles, string> = {
 	vehicles: '#allow-vehicles'
 };
 const TOGGLE_KEYS = Object.keys(TOGGLE_SELECTOR) as Array<keyof Toggles>;
-/**
- * The only switches the run changes. Saving pets / assets / vehicles rewrites the shelter's pet,
- * luggage and parking policies, so those are read as found and their steps skipped when off.
- */
-type FlippedToggle = 'preRegistration' | 'medical';
-const FLIPPED_KEYS: FlippedToggle[] = ['preRegistration', 'medical'];
 
 async function openShelterEditor(page: Page): Promise<void> {
 	await page.goto('/back-office/shelters/edit/SH001');
@@ -142,11 +139,12 @@ async function readToggles(page: Page): Promise<Toggles> {
 }
 
 /** Flip the switches that differ from `target`, save, reload and return what the page shows. */
-async function setToggles(page: Page, target: Pick<Toggles, FlippedToggle>): Promise<Toggles> {
+async function setToggles(page: Page, target: Partial<Toggles>): Promise<Toggles> {
 	await openShelterEditor(page);
 	let changed = false;
-	for (const key of FLIPPED_KEYS) {
+	for (const key of TOGGLE_KEYS) {
 		const want = target[key];
+		if (want === undefined) continue;
 		const sw = page.locator(TOGGLE_SELECTOR[key]);
 		if ((await sw.getAttribute('aria-checked')) === String(want)) continue;
 		await sw.click();
@@ -619,8 +617,15 @@ interface Run {
 	/** Keeps house numbers apart so "join household" finds only this pass's family. */
 	house: number;
 }
-const ON_TARGET = { preRegistration: true, medical: true };
-const OFF_TARGET = { preRegistration: false, medical: false };
+const ON_TARGET: Toggles = {
+	preRegistration: true,
+	medical: true,
+	pets: true,
+	assets: true,
+	vehicles: true
+};
+/** Pets / assets / vehicles are left as the ON run set them, so saving doesn't rewrite policies twice. */
+const OFF_TARGET: Partial<Toggles> = { preRegistration: false, medical: false };
 /** Placeholder; `applyToggles` replaces it with what the edit page shows before any flow runs. */
 const NOT_READ_YET: Toggles = {
 	preRegistration: false,
@@ -1279,20 +1284,20 @@ test.describe('Registration stations 1 → 3 (real stack, via UI)', () => {
 		test.info().annotations.push({ type: 'test data tag', description: RUN_TAG });
 	});
 
-	async function applyToggles(browser: Browser, run: Run, target: Pick<Toggles, FlippedToggle>) {
+	async function applyToggles(browser: Browser, run: Run, target: Partial<Toggles>) {
 		const manager = await openAsStaff(browser, MEDIC, sessions.medic);
 		run.flags = await setToggles(manager, target);
 		await waitForSyncWorker(manager);
 		await manager.context().close();
 	}
 
-	test.describe('SH001 pre-registration + Station 2 ON', () => {
+	test.describe('SH001 all switches ON', () => {
 		test.beforeAll(async ({ browser }) => {
 			test.setTimeout(180_000);
 			await applyToggles(browser, ON, ON_TARGET);
 		});
 
-		test('1.1 walk-in: Station 1 (new + joined household; pet/vehicle/assets if the shelter allows) → Station 2 → Station 3 → scan check-out/in', async ({
+		test('1.1 walk-in: Station 1 (new + joined household, pet, vehicle, assets) → Station 2 → Station 3 → scan check-out/in', async ({
 			browser
 		}) => {
 			test.setTimeout(300_000);
