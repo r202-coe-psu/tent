@@ -67,7 +67,6 @@ class BootstrapUnavailableError(BootstrapError):
     pass
 
 
-
 class ScannerClientManager:
     """Manages Smart Card Reader hardware polling and Playwright Kiosk display"""
 
