@@ -179,6 +179,11 @@ show_status() {
     else
         ok "CUPS ปิด remote admin / remote any / sharing"
     fi
+    if cupsctl 2>/dev/null | grep -qiE '^PreserveJobFiles=(No|0)$'; then
+        ok "CUPS ไม่เก็บไฟล์ label ค้างใน /var/spool/cups (PreserveJobFiles=No)"
+    else
+        bad "CUPS อาจเก็บไฟล์ label (ชื่อ + QR) ค้างใน /var/spool/cups — รัน setup ซ้ำเพื่อตั้ง PreserveJobFiles=No"
+    fi
     if [ -f "$POLICY_DST" ]; then ok "Chromium policy ติดตั้งแล้ว ($POLICY_DST)"; else bad "ไม่มี Chromium policy ($POLICY_DST)"; fi
     if [ -x /usr/bin/chromium ]; then ok "มี /usr/bin/chromium"; else warn "ไม่มี /usr/bin/chromium — policy จะไม่มีผลกับ browser อื่น"; fi
     if id -nG | tr ' ' '\n' | grep -qx lpadmin; then
@@ -206,6 +211,9 @@ info "[1/7] ติดตั้ง CUPS + qrencode"
 sudo apt-get install -y cups cups-client cups-filters qrencode
 sudo systemctl enable --now cups
 sudo cupsctl --no-remote-admin --no-remote-any --no-share-printers # FR-P16
+# CUPS keeps a copy of every print job's document (the label PNG — name + QR) under
+# /var/spool/cups by default; PreserveJobFiles=No deletes it once the job completes.
+sudo cupsctl PreserveJobFiles=No
 
 # 2) Official Xprinter driver
 info "[2/7] Driver Xprinter"
