@@ -98,6 +98,7 @@ class ScannerClientManager:
         self.reading_path = "/kiosk/scanner/reading"
         self.remove_card_path = "/kiosk/scanner/remove-card"
         self.register_card_path = "/kiosk/register/card"
+        self.register_path_prefix = "/kiosk/register/"
         self.error_path = "/kiosk/scanner/error"
         self.bootstrap_api_url = f"{self.tent_base_url}/api/v1/scanner/bootstrap"
         self._refresh_kiosk_urls()
@@ -394,13 +395,17 @@ class ScannerClientManager:
             and urllib.parse.urlsplit(self.page.url).path != self.home_path
         ):
             if self._card_inserted_safely():
-                if full_read_attempted:
-                    await asyncio.sleep(0.5)
-                    continue
                 current_path = urllib.parse.urlsplit(self.page.url).path
                 if current_path == self.register_card_path:
-                    full_read_attempted = True
-                    await self._read_full_card_if_register_path()
+                    if not full_read_attempted:
+                        full_read_attempted = True
+                        await self._read_full_card_if_register_path()
+                    await asyncio.sleep(0.5)
+                    continue
+                if current_path.startswith(self.register_path_prefix):
+                    # Later walk-in steps (consent, done, ...) are not a card read screen — a
+                    # card left in (or re-inserted into) the reader here must not restart the
+                    # lookup flow out from under the person filling in consent.
                     await asyncio.sleep(0.5)
                     continue
                 logger.info("New card inserted before returning home; restarting card flow")

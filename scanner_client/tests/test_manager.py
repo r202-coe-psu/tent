@@ -307,6 +307,24 @@ class CardRescanTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("kiosk:smart-card-full-read-error", page.evaluated[-1][0])
         self.assertTrue(all("private payload" not in line for line in logs.output))
 
+    async def test_card_inserted_on_consent_page_does_not_restart_the_lookup_flow(self):
+        # Regression test: a card left in the reader (or re-inserted) on any walk-in step
+        # after /card — e.g. /kiosk/register/consent — must not be treated as "a new card",
+        # which would restart the lookup flow out from under the person filling in consent.
+        client = manager.ScannerClientManager(valid_config())
+        page = FakePage("https://tent.example.go.th/kiosk/register/consent")
+        client.page = page
+        client.reader = FakeReader(states=[True, True, False])
+
+        async def return_home_eventually(seconds):
+            if client.reader.states == []:
+                page.url = client.home_url
+
+        with patch.object(asyncio, "sleep", new=return_home_eventually):
+            saw_new_card = await client._wait_for_home_or_new_card()
+
+        self.assertFalse(saw_new_card)
+
     async def test_wait_for_home_survives_reader_error(self):
         client = manager.ScannerClientManager(valid_config())
         client.page = FakePage(client.remove_card_url)
