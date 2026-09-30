@@ -44,30 +44,30 @@
 			>ลงทะเบียนใหม่</Button
 		>
 	{/if}
-	{#if isMethodDisabled}
-		<!-- FR-KPT-24: method was switched off mid-session — no retry, only go home -->
-	{:else if isPhoneLookupMiss}
-		<Button
-			type="button"
-			onclick={onreset}
-			class="min-h-12 bg-[#0A2647] px-5 text-base font-bold text-white hover:bg-[#051930]"
-			>กรอกเบอร์ใหม่</Button
-		>
-	{:else}
-		<Button
-			type="button"
-			disabled={isLookingUp || retryAfterSeconds > 0}
-			onclick={onretry}
-			class="min-h-12 bg-[#0A2647] px-5 text-base font-bold text-white hover:bg-[#051930]"
-		>
-			{#if retryAfterSeconds > 0}
-				ลองอีกครั้งใน {retryAfterSeconds} วินาที
-			{:else if isLookingUp}
-				กำลังค้นหา…
-			{:else}
-				ลองอีกครั้ง
-			{/if}
-		</Button>
+	{#if !isMethodDisabled}
+		{#if isPhoneLookupMiss}
+			<Button
+				type="button"
+				onclick={onreset}
+				class="min-h-12 bg-[#0A2647] px-5 text-base font-bold text-white hover:bg-[#051930]"
+				>กรอกเบอร์ใหม่</Button
+			>
+		{:else}
+			<Button
+				type="button"
+				disabled={isLookingUp || retryAfterSeconds > 0}
+				onclick={onretry}
+				class="min-h-12 bg-[#0A2647] px-5 text-base font-bold text-white hover:bg-[#051930]"
+			>
+				{#if retryAfterSeconds > 0}
+					ลองอีกครั้งใน {retryAfterSeconds} วินาที
+				{:else if isLookingUp}
+					กำลังค้นหา…
+				{:else}
+					ลองอีกครั้ง
+				{/if}
+			</Button>
+		{/if}
 	{/if}
 	<Button
 		href={isMethodDisabled ? homeUrl : backUrl}
