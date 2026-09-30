@@ -36,8 +36,10 @@ logger = logging.getLogger(__name__)
 # Chromium managed policies are read from /etc/chromium/policies by the Debian/Pi OS build only.
 SYSTEM_CHROMIUM_PATH = "/usr/bin/chromium"
 
-# The kiosk posts rendered label PNGs here; the scanner client spools them to CUPS itself so
-# Chromium never opens its print preview (--kiosk-printing still flashes it before printing).
+# The kiosk posts rendered label PNGs here; the scanner client spools them to CUPS itself
+# (see _print_labels) so Chromium's print preview is never invoked for labels. --kiosk-printing
+# (_build_browser_args) is unrelated to this path now — it only guards a stray window.print()
+# from ever showing a dialog if something outside this route ever calls it.
 KIOSK_PRINT_PATH = "/api/v1/scanner/kiosk/print"
 KIOSK_PRINT_MAX_LABELS = 20
 KIOSK_PRINT_MAX_PNG_BYTES = 256 * 1024
@@ -586,7 +588,8 @@ class ScannerClientManager:
         ]
 
         if self.silent_print:
-            # Print straight to the CUPS default printer (the label queue) without the print preview.
+            # Labels print via CUPS directly (_print_labels), not through Chromium — this only
+            # suppresses the print-preview dialog if a page ever calls window.print() itself.
             base_args.append("--kiosk-printing")
             if self.executable_path != SYSTEM_CHROMIUM_PATH:
                 logger.warning(
