@@ -107,6 +107,10 @@
 		onsubmit,
 		onselectshelter,
 		onDirtyChange,
+		/** Increment from parent to clear a stale public join selection (bad token / missing target). */
+		joinResetKey = 0,
+		/** Shelter codes that accept public pre-registration (fallback when chip lacks the flag). */
+		bookableShelterCodes = [],
 		children
 	}: {
 		channel?: UnifiedRegistrationChannel;
@@ -132,6 +136,8 @@
 		) => Promise<void> | void;
 		onselectshelter?: (shelterCode: string, shelterName?: string) => void;
 		onDirtyChange?: (dirty: boolean) => void;
+		joinResetKey?: number;
+		bookableShelterCodes?: string[];
 		children?: import('svelte').Snippet<[{ household: UnifiedRegistrationInput['household'] }]>;
 	} = $props();
 
@@ -328,6 +334,11 @@
 			return;
 		}
 
+		// Active join: skip rematch. HMAC match_tokens rotate on every matchResidence call, so
+		// re-running (e.g. typing head phone) would mint new tokens and wipe the selection. Read
+		// joinMatchToken without untrack so clearing ("สร้างใหม่แทน") re-enters and rematches.
+		if (joinMatchToken) return;
+
 		const form: ResidenceFields = {
 			housing_type: household.housing_type,
 			residence_landmark: household.residence_landmark,
@@ -347,7 +358,6 @@
 			publicMatchChips = [];
 			residenceSuggestPending = false;
 			residenceSuggestCheckedEmpty = false;
-			if (untrack(() => joinMatchToken)) clearJoinSelection();
 			return;
 		}
 
@@ -381,16 +391,12 @@
 		residenceSuggestPending = true;
 		residenceSuggestCheckedEmpty = false;
 		let ignore = false;
-		const selectedToken = untrack(() => joinMatchToken);
 		const timer = setTimeout(() => {
 			void matchResidence(request).then((result) => {
 				if (ignore) return;
 				publicMatchChips = result.matches;
 				residenceSuggestPending = false;
 				residenceSuggestCheckedEmpty = result.matches.length === 0;
-				if (selectedToken && !result.matches.some((m) => m.match_token === selectedToken)) {
-					clearJoinSelection();
-				}
 			});
 		}, 350);
 
@@ -627,11 +633,27 @@
 		selectedMatchChip = null;
 	}
 
+	$effect(() => {
+		if (joinResetKey > 0) {
+			clearJoinSelection();
+		}
+	});
+
 	function confirmOnsiteJoin(suggestion: ResidenceMatchCandidate) {
 		joinHouseholdId = suggestion._id;
 		joinMatchToken = null;
 		joinSelectedSummary = suggestion.label?.trim() || formatResidenceSummary(suggestion);
 		markDirty();
+	}
+
+	function canJoinPublicChip(chip: ResidenceMatchChip): boolean {
+		// Mongo-queue family — always append-join (including after closed / claim).
+		if (!chip.is_in_shelter) return true;
+
+		// Shelter Couch HH hard-join only when that shelter accepts public pre-registration.
+		if (chip.accepts_pre_registration === true) return true;
+		const code = chip.shelter_code?.trim();
+		return Boolean(code && bookableShelterCodes.includes(code));
 	}
 
 	function confirmPublicJoin(chip: ResidenceMatchChip) {
@@ -804,6 +826,11 @@
 		}
 		household.pets = syncPetsToHousehold(petItems);
 
+		// Empty phone → null so phoneSchema accepts optional join / 「ไม่มีเบอร์」.
+		for (const m of members) {
+			if (!m.phone?.trim()) m.phone = null;
+		}
+
 		const payload: UnifiedRegistrationInput = {
 			members,
 			household: {
@@ -832,8 +859,15 @@
 		}
 
 		if (channel === 'public') {
-			const headPhone = members[0]?.phone?.trim();
-			if (!headPhone || !/^0\d{8,9}$/.test(headPhone.replace(/[-\s]/g, ''))) {
+			const headPhone = members[0]?.phone?.trim() ?? '';
+			const phoneOk = !headPhone || /^0\d{8,9}$/.test(headPhone.replace(/[-\s]/g, ''));
+			if (hasJoinSelection) {
+				if (headPhone && !phoneOk) {
+					memberFieldErrors = { 0: { phone: t.joinPhoneInvalid } };
+					await revealValidation(t.joinPhoneInvalid);
+					return;
+				}
+			} else if (!headPhone || !/^0\d{8,9}$/.test(headPhone.replace(/[-\s]/g, ''))) {
 				memberFieldErrors = { 0: { phone: t.headPhoneRequired } };
 				await revealValidation(t.headPhoneRequired);
 				return;
@@ -1066,14 +1100,12 @@
 									class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/20 bg-background/80 p-2 text-2xs"
 								>
 									<span class="text-muted-foreground">
-										📍 ครอบครัวนี้อยู่ที่: <strong class="text-foreground"
+										มีสมาชิกครอบครัวนี้อยู่ที่ศูนย์:
+										<strong class="text-foreground"
 											>{selectedMatchChip.shelter_name || selectedMatchChip.shelter_code}</strong
 										>
-										{#if !shelterCode}
-											(คุณกำลังลงทะเบียนในคิวส่วนกลาง — ข้อมูลจะเชื่อมโยงข้ามศูนย์ให้อัตโนมัติ)
-										{:else}
-											(ข้อมูลจะเชื่อมโยงข้ามศูนย์พักพิงให้อัตโนมัติ)
-										{/if}
+										— แนะนำไปติดต่อที่ศูนย์หรือแจ้งเจ้าหน้าที่ รวมทีหลังที่ศูนย์ได้ · การเข้าร่วมนี้เพิ่มชื่อเข้าคิวกลางใบเดิม
+										ไม่ใช่เข้าศูนย์อัตโนมัติ
 									</span>
 									{#if onselectshelter}
 										<Button
@@ -1087,7 +1119,7 @@
 													selectedMatchChip!.shelter_name ?? undefined
 												)}
 										>
-											ต้องการย้ายไปศูนย์นี้ด้วย
+											ดูศูนย์นี้
 										</Button>
 									{/if}
 								</div>
@@ -1179,10 +1211,19 @@
 													</span>
 												{/if}
 
-												<!-- Shelter name -->
-												{#if chip.shelter_name}
+												<!-- Shelter recommend copy -->
+												{#if chip.is_in_shelter && chip.shelter_name}
 													<span class="text-2xs text-muted-foreground">
-														อยู่ที่: {chip.shelter_name}
+														มีครอบครัวที่ศูนย์ {chip.shelter_name} แล้ว
+														{#if !canJoinPublicChip(chip)}
+															— ศูนย์นี้ยังไม่เปิดรับลงทะเบียนล่วงหน้าจากเว็บ
+														{/if}
+													</span>
+												{:else if chip.shelter_code || chip.shelter_name}
+													<span class="text-2xs text-muted-foreground">
+														มีสมาชิกครอบครัวนี้อยู่ที่ศูนย์
+														{chip.shelter_name || chip.shelter_code} แล้ว — แนะนำไปที่ศูนย์หรือแจ้งเจ้าหน้าที่
+														· กดเข้าร่วมเพื่อเพิ่มชื่อเข้าคิวกลางใบเดิม
 													</span>
 												{/if}
 
@@ -1217,15 +1258,24 @@
 												</div>
 											</div>
 
-											<Button
-												type="button"
-												size="sm"
-												variant="outline"
-												disabled={fieldsLocked}
-												onclick={() => confirmPublicJoin(chip)}
-											>
-												เข้าร่วม
-											</Button>
+											{#if canJoinPublicChip(chip)}
+												<Button
+													type="button"
+													size="sm"
+													variant="outline"
+													disabled={fieldsLocked}
+													onclick={() => confirmPublicJoin(chip)}
+												>
+													{chip.is_in_shelter ? 'เข้าร่วม' : 'เข้าร่วมคิวกลาง'}
+												</Button>
+											{:else}
+												<p class="max-w-[14rem] text-right text-2xs text-muted-foreground">
+													ศูนย์{chip.shelter_name
+														? ` ${chip.shelter_name}`
+														: ''}ยังไม่เปิดรับลงทะเบียนล่วงหน้า —
+													แนะนำติดต่อที่ศูนย์หรือแจ้งเจ้าหน้าที่
+												</p>
+											{/if}
 										</div>
 									</li>
 								{/each}

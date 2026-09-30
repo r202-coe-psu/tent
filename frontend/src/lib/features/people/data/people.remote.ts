@@ -35,6 +35,7 @@ import {
 	isActiveHouseholdStatus,
 	canCancelEvacueePreRegistration,
 	replacePersonId,
+	migrateVulnerableGroupCode,
 	migrateVulnerableGroupCodes,
 	listPendingZoneArrivalConfirmations,
 	type Medical,
@@ -235,7 +236,11 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		const q = search?.trim();
 		let matched = q ? all.filter((e) => matchesEvacueeSearch(e, q)) : all;
 		if (filters?.specialNeed) {
-			matched = matched.filter((e) => e.special_needs.some((need) => need === filters.specialNeed));
+			// Filter key kept as `specialNeed` for callers; matches `vulnerable_groups` (CR-112).
+			const want = migrateVulnerableGroupCode(filters.specialNeed);
+			matched = matched.filter((e) =>
+				migrateVulnerableGroupCodes(e.vulnerable_groups ?? []).includes(want)
+			);
 		}
 		if (filters?.zone) {
 			matched = matched.filter((e) => e.current_stay.zone === filters.zone);
@@ -836,7 +841,11 @@ export class PeopleRemoteRepository implements PeopleRepository {
 	async updateMedical(medical: Medical): Promise<Medical> {
 		const latest = await this.repo.get<Medical>(medical._id);
 		if (!latest) throw new Error('ไม่พบข้อมูลสุขภาพ');
-		return this.repo.put(touch({ ...medical, _rev: latest._rev }));
+		// Merge onto the fresh doc rather than overwriting it outright — safe
+		// today because the sole caller (recordMedicalScreening) already
+		// pre-merges, but a future partial-object caller must not silently
+		// wipe fields it didn't intend to touch.
+		return this.repo.put(touch({ ...latest, ...medical, _rev: latest._rev }));
 	}
 
 	async patchMedical(id: string, patch: MedicalPatch): Promise<Medical> {
@@ -850,12 +859,38 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		if (latest) await this.repo.remove(latest);
 	}
 
+	async getMedicalByEvacuee(evacueeId: string): Promise<Medical | null> {
+		const medicals = await this.repo.find<Medical>({
+			selector: { type: 'medical', evacuee_id: evacueeId },
+			limit: 1
+		});
+		return medicals.find(isMedical) ?? null;
+	}
+
 	listMovements(): Promise<Movement[]> {
 		return this.repo.allByType('movement', isMovement);
 	}
 
+	async listMovementsByEvacuee(evacueeId: string): Promise<Movement[]> {
+		// CouchDB's Mango default limit is 25 — explicit limit avoids silently
+		// truncating a long-lived evacuee's append-only movement history.
+		const movements = await this.repo.find<Movement>({
+			selector: { type: 'movement', evacuee_id: evacueeId },
+			limit: 10_000
+		});
+		return movements.filter(isMovement);
+	}
+
 	listScreenings(): Promise<Screening[]> {
 		return this.repo.allByType('screening', isScreening);
+	}
+
+	async listScreeningsByEvacuee(evacueeId: string): Promise<Screening[]> {
+		const screenings = await this.repo.find<Screening>({
+			selector: { type: 'screening', evacuee_id: evacueeId },
+			limit: 10_000
+		});
+		return screenings.filter(isScreening);
 	}
 
 	async getPendingScreeningEvacuees(shelterCode?: string): Promise<Evacuee[]> {
@@ -878,28 +913,38 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		});
 	}
 
+	/** Re-fetches the evacuee so movement eligibility and the applied patch are
+	 *  built from the current document, not a possibly-stale caller-provided
+	 *  copy — otherwise a concurrent edit (by anyone, on any field) made
+	 *  between page-load and this write is silently clobbered, and CouchDB's
+	 *  own conflict detection never gets a chance to fire (see people.remote.test.ts). */
+	private async fetchLatestOrThrow(evacueeId: string): Promise<Evacuee> {
+		const latest = await this.repo.get<Evacuee>(evacueeId);
+		if (!latest) {
+			throw new Error('ไม่พบข้อมูลผู้ประสบภัย (อาจถูกลบไปแล้ว)');
+		}
+		return latest;
+	}
+
 	async checkInEvacuee(evacuee: Evacuee, ctx: AuthorContext, zone: string): Promise<Evacuee> {
 		const nextZone = zone.trim();
 		if (!nextZone) {
 			throw new Error('การเช็คอินต้องระบุโซน');
 		}
-		assertMovementAllowed(evacuee, 'check_in');
+		const latest = await this.fetchLatestOrThrow(evacuee._id);
+		assertMovementAllowed(latest, 'check_in');
 		const movement = createMovement(
-			{ evacuee_id: evacuee._id, action: 'check_in', zone: nextZone },
+			{ evacuee_id: latest._id, action: 'check_in', zone: nextZone },
 			ctx
 		);
 		await this.repo.put(movement);
-
-		const latest = await this.repo.get<Evacuee>(evacuee._id);
-		const updated = await this.repo.put(
-			applyMovementToStay({ ...evacuee, _rev: latest?._rev ?? evacuee._rev }, movement)
-		);
+		const updated = await this.repo.put(applyMovementToStay(latest, movement));
 		await this.refreshDerivedHouseholdStatus(updated.household_id);
 		return updated;
 	}
 
 	/** Record a check-out movement, then apply it to the evacuee's current_stay.
-	 *  Fetches the latest _rev first to avoid stale-revision conflicts from live sync.
+	 *  Fetches the latest revision first (see fetchLatestOrThrow).
 	 *  Check-out requires a nonempty trimmed reason/notes (CR-112). */
 	async checkOutEvacuee(
 		evacuee: Evacuee,
@@ -907,36 +952,32 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		opts: { reason?: string; notes?: string } = {}
 	): Promise<Evacuee> {
 		const reason = (opts.reason ?? opts.notes ?? '').trim();
-		assertMovementAllowed(evacuee, 'check_out', { reason });
+		const latest = await this.fetchLatestOrThrow(evacuee._id);
+		assertMovementAllowed(latest, 'check_out', { reason });
 		const movement = createMovement(
-			{ evacuee_id: evacuee._id, action: 'check_out', zone: null, reason },
+			{ evacuee_id: latest._id, action: 'check_out', zone: null, reason },
 			ctx
 		);
 		await this.repo.put(movement);
-		const latest = await this.repo.get<Evacuee>(evacuee._id);
-		const updated = await this.repo.put(
-			applyMovementToStay({ ...evacuee, _rev: latest?._rev ?? evacuee._rev }, movement)
-		);
+		const updated = await this.repo.put(applyMovementToStay(latest, movement));
 		await this.refreshDerivedHouseholdStatus(updated.household_id);
 		return updated;
 	}
 
 	/** Zone Arrival Confirmation: active → room_confirmed (CR-112). */
 	async confirmRoom(evacuee: Evacuee, ctx: AuthorContext): Promise<Evacuee> {
-		assertMovementAllowed(evacuee, 'confirm_room');
+		const latest = await this.fetchLatestOrThrow(evacuee._id);
+		assertMovementAllowed(latest, 'confirm_room');
 		const movement = createMovement(
 			{
-				evacuee_id: evacuee._id,
+				evacuee_id: latest._id,
 				action: 'confirm_room',
-				zone: evacuee.current_stay.zone
+				zone: latest.current_stay.zone
 			},
 			ctx
 		);
 		await this.repo.put(movement);
-		const latest = await this.repo.get<Evacuee>(evacuee._id);
-		const updated = await this.repo.put(
-			applyMovementToStay({ ...evacuee, _rev: latest?._rev ?? evacuee._rev }, movement)
-		);
+		const updated = await this.repo.put(applyMovementToStay(latest, movement));
 		await this.refreshDerivedHouseholdStatus(updated.household_id);
 		return updated;
 	}
@@ -963,43 +1004,39 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		if (!nextZone) {
 			throw new Error('การเปลี่ยนโซนต้องระบุโซนปลายทาง');
 		}
-		assertMovementAllowed(evacuee, 'zone_change');
+		const latest = await this.fetchLatestOrThrow(evacuee._id);
+		assertMovementAllowed(latest, 'zone_change');
 		const movement = createMovement(
-			{ evacuee_id: evacuee._id, action: 'zone_change', zone: nextZone },
+			{ evacuee_id: latest._id, action: 'zone_change', zone: nextZone },
 			ctx
 		);
 		await this.repo.put(movement);
-		const latest = await this.repo.get<Evacuee>(evacuee._id);
-		const updated = await this.repo.put(
-			applyMovementToStay({ ...evacuee, _rev: latest?._rev ?? evacuee._rev }, movement)
-		);
+		const updated = await this.repo.put(applyMovementToStay(latest, movement));
 		await this.refreshDerivedHouseholdStatus(updated.household_id);
 		return updated;
 	}
 
 	/** Record a non-check-in/out movement, then apply it to the evacuee's current_stay.
-	 *  Fetches the latest _rev first to avoid stale-revision conflicts from live sync. */
+	 *  Fetches the latest revision first (see fetchLatestOrThrow). */
 	async recordMovement(
 		evacuee: Evacuee,
 		action: Exclude<MovementAction, 'check_in' | 'check_out' | 'confirm_room'>,
 		ctx: AuthorContext,
 		opts?: { reason?: string }
 	): Promise<Evacuee> {
-		assertMovementAllowed(evacuee, action, opts);
+		const latest = await this.fetchLatestOrThrow(evacuee._id);
+		assertMovementAllowed(latest, action, opts);
 		const movement = createMovement(
 			{
-				evacuee_id: evacuee._id,
+				evacuee_id: latest._id,
 				action,
-				zone: evacuee.current_stay.zone,
+				zone: latest.current_stay.zone,
 				...(opts?.reason ? { reason: opts.reason } : {})
 			},
 			ctx
 		);
 		await this.repo.put(movement);
-		const latest = await this.repo.get<Evacuee>(evacuee._id);
-		const updated = await this.repo.put(
-			applyMovementToStay({ ...evacuee, _rev: latest?._rev ?? evacuee._rev }, movement)
-		);
+		const updated = await this.repo.put(applyMovementToStay(latest, movement));
 		await this.refreshDerivedHouseholdStatus(updated.household_id);
 		return updated;
 	}

@@ -71,8 +71,19 @@ export const peopleKeys = {
 			{ page, pageSize, search, labelsKey, filtersKey }
 		] as const,
 	medicals: () => [...peopleKeys.all, 'medicals', getShelterCode()] as const,
+	medicalByEvacuee: (evacueeId: string) =>
+		[...peopleKeys.medicals(), 'by-evacuee', evacueeId] as const,
 	movements: () => [...peopleKeys.all, 'movements', getShelterCode()] as const,
+	movementsByEvacuee: (evacueeId: string) =>
+		[...peopleKeys.movements(), 'by-evacuee', evacueeId] as const,
 	screenings: () => [...peopleKeys.all, 'screenings', getShelterCode()] as const,
+	screeningsByEvacuee: (evacueeId: string) =>
+		[...peopleKeys.screenings(), 'by-evacuee', evacueeId] as const,
+	// Nested under households() (not household(id)) so invalidating the household
+	// list — which every household-mutating mutation already does — also
+	// invalidates this member listing (TanStack Query prefix-matches by default).
+	householdMembers: (householdId: string) =>
+		[...peopleKeys.households(), 'members', householdId] as const,
 	pendingScreening: (shelterCode = getShelterCode()) =>
 		[...peopleKeys.all, 'pending-screening', shelterCode] as const
 };
@@ -623,16 +634,47 @@ export const useMedicals = () =>
 		queryFn: () => peopleRepository().listMedicals()
 	}));
 
+export const useMedicalByEvacuee = (id: () => string, enabled: () => boolean = () => true) =>
+	createQuery(() => ({
+		queryKey: peopleKeys.medicalByEvacuee(id()),
+		queryFn: () => peopleRepository().getMedicalByEvacuee(id()),
+		enabled: enabled() && !!id()
+	}));
+
 export const useMovements = () =>
 	createQuery(() => ({
 		queryKey: peopleKeys.movements(),
 		queryFn: () => peopleRepository().listMovements()
 	}));
 
+export const useMovementsByEvacuee = (id: () => string, enabled: () => boolean = () => true) =>
+	createQuery(() => ({
+		queryKey: peopleKeys.movementsByEvacuee(id()),
+		queryFn: () => peopleRepository().listMovementsByEvacuee(id()),
+		enabled: enabled() && !!id()
+	}));
+
 export const useScreenings = () =>
 	createQuery(() => ({
 		queryKey: peopleKeys.screenings(),
 		queryFn: () => peopleRepository().listScreenings()
+	}));
+
+export const useScreeningsByEvacuee = (id: () => string, enabled: () => boolean = () => true) =>
+	createQuery(() => ({
+		queryKey: peopleKeys.screeningsByEvacuee(id()),
+		queryFn: () => peopleRepository().listScreeningsByEvacuee(id()),
+		enabled: enabled() && !!id()
+	}));
+
+export const useHouseholdMembers = (
+	householdId: () => string | undefined,
+	enabled: () => boolean = () => true
+) =>
+	createQuery(() => ({
+		queryKey: peopleKeys.householdMembers(householdId() ?? ''),
+		queryFn: () => peopleRepository().listHouseholdMembers(householdId() ?? ''),
+		enabled: enabled() && !!householdId()
 	}));
 
 export function startPeopleLiveQuery(queryClient: QueryClient): SubscribeDataChangesHandle {

@@ -2,7 +2,13 @@
 	import { onDestroy } from 'svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { zoneLabel } from '../../index';
-	import { maskNationalId, type Evacuee, type Household } from '../../domain/people';
+	import {
+		maskNationalId,
+		groupPetsBySpecies,
+		petSpeciesLabel,
+		type Evacuee,
+		type Household
+	} from '../../domain/people';
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -93,6 +99,7 @@
 	let showQrModal = $state(false);
 
 	const hasPets = $derived(!!(createdHousehold.pets && createdHousehold.pets.length > 0));
+	const groupedPets = $derived(groupPetsBySpecies(createdHousehold.pets ?? []));
 	const hasVehicles = $derived(
 		!!(createdHousehold.vehicles && createdHousehold.vehicles.length > 0)
 	);
@@ -188,17 +195,12 @@
 				<div class="col-span-1 sm:col-span-2">
 					<span class="text-xs text-muted-foreground">สัตว์เลี้ยงที่พามาด้วย</span>
 					<div class="mt-1 flex flex-wrap gap-1.5">
-						{#each createdHousehold.pets as pet, i (i)}
-							{@const speciesMap = {
-								dog: 'สุนัข',
-								cat: 'แมว',
-								other: 'สัตว์เลี้ยงอื่นๆ'
-							}}
+						{#each groupedPets as pet (pet.species)}
 							<span
 								class="rounded border border-amber-200/50 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
 							>
-								{speciesMap[pet.species] || pet.species}: {pet.count} ตัว
-								{#if pet.has_cage}
+								{petSpeciesLabel(pet.species)}: {pet.count} ตัว
+								{#if pet.hasCage}
 									(มีกรง)
 								{/if}
 							</span>

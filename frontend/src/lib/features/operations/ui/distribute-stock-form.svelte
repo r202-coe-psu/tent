@@ -15,23 +15,53 @@
 		StockLotIntegrityError
 	} from '../domain/operations';
 	import { useSupplyItems } from '$lib/features/supply';
-	import { itemMasterUnit, useItemMasters } from '$lib/features/catalog';
+	import {
+		itemMasterUnit,
+		useItemMasters,
+		formatUnit,
+		useUnitsOfMeasure,
+		itemSelectableUoms,
+		defaultIssueUom,
+		toLedgerQtyUnit,
+		qtyToBaseUnit,
+		type PackagingSource
+	} from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { useDistributeStock, useStockBalance, useLedger } from '../application/queries';
 	import { toast } from 'svelte-sonner';
 	import PackageMinus from '@lucide/svelte/icons/package-minus';
+	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import { qtyGt, qtyGte, qtyIsZero, qtyLte } from '$lib/utils/qty';
 	import { ulid } from '$lib/db/ulid';
+	import { formatLotClockLine } from '../domain/lot-age';
+	import { lotStorageLabel } from '../domain/lot-storage';
+	import { useStoragePoints } from '../application/use-storage-points.svelte';
 
 	let {
 		onsuccess,
 		preselectedItemId = undefined
-	}: { onsuccess?: () => void; preselectedItemId?: string } = $props();
+	}: {
+		onsuccess?: (result?: { keepOpen: true; summary?: string }) => void;
+		preselectedItemId?: string;
+	} = $props();
+
+	type StockFormItem = PackagingSource & {
+		_id: string;
+		name: string;
+		unit: string;
+	};
+
+	let lastSuccess = $state<string | null>(null);
+	let moreOpen = $state(false);
 
 	// Fetch supply catalog items and stock balance
 	const itemsQuery = useSupplyItems();
 	const itemMastersQuery = useItemMasters(() => getShelterCode());
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
+	const storagePoints = useStoragePoints(() => getShelterCode());
 	const balanceQuery = useStockBalance();
 	const ledgerQuery = useLedger();
 	const distributeMutation = useDistributeStock();
@@ -39,7 +69,7 @@
 	// Local state for searchable items combobox
 	let searchQuery = $state('');
 	let isDropdownOpen = $state(false);
-	let selectedItem = $state<{ _id: string; name: string; unit: string } | null>(null);
+	let selectedItem = $state<StockFormItem | null>(null);
 	let container = $state<HTMLDivElement | null>(null);
 
 	const currentStock = $derived.by(() => {
@@ -68,16 +98,23 @@
 	const maxLotQty = $derived(activeLot ? activeLot.qty : currentStock);
 
 	const isQtyOverStock = $derived.by(() => {
-		if (!$formData.qty) return false;
+		if (!$formData.qty || !selectedItem) return false;
 		try {
-			return qtyGt($formData.qty, maxLotQty);
+			const inBase = qtyToBaseUnit($formData.qty, $formData.unit, selectedItem);
+			return qtyGt(inBase, maxLotQty);
 		} catch {
 			return true;
 		}
 	});
 
-	const items = $derived.by(() => {
-		const supplyItems = itemsQuery.data ?? [];
+	const items = $derived.by((): StockFormItem[] => {
+		const supplyItems = (itemsQuery.data ?? []).map((item) => ({
+			_id: item._id,
+			name: item.name,
+			unit: item.unit,
+			base_unit: item.unit,
+			conversions: [] as { uom_name: string; multiplier: string }[]
+		}));
 		const itemMasters = itemMastersQuery.data ?? [];
 
 		const mappedItemMasters = itemMasters
@@ -85,14 +122,17 @@
 			.map((im) => ({
 				_id: im._id,
 				name: im.name,
-				category: im.category || 'other',
 				unit: itemMasterUnit(im),
-				reorder_level: null,
-				perishable: false
+				base_unit: itemMasterUnit(im),
+				conversions: im.conversions ?? [],
+				default_inventory_uom: im.default_inventory_uom,
+				default_issue_uom: im.default_issue_uom
 			}));
 
 		return [...supplyItems, ...mappedItemMasters];
 	});
+
+	const unitOptions = $derived(selectedItem ? itemSelectableUoms(selectedItem) : []);
 
 	// Filter items based on search query
 	const filteredItems = $derived.by(() => {
@@ -104,7 +144,7 @@
 	const form = superForm(
 		defaults(
 			{
-				ref_id: `distribution_batch:direct-${ulid()}`,
+				ref_id: `requisition_ticket:direct-${ulid()}`,
 				lot_ref: ''
 			},
 			zod4(distributeInputSchema)
@@ -124,10 +164,18 @@
 					return;
 				}
 
-				// Validate sufficient stock in selected lot
-				if (qtyGt(validated.data.qty, maxLotQty)) {
+				// Validate sufficient stock in selected lot (ledger qty is always base_unit)
+				const packaging = selectedItem ?? { base_unit: validated.data.unit, conversions: [] };
+				let qtyInBase: string;
+				try {
+					qtyInBase = qtyToBaseUnit(validated.data.qty, validated.data.unit, packaging);
+				} catch {
+					toast.error('หน่วยที่เลือกไม่ถูกต้องสำหรับสินค้านี้');
+					return;
+				}
+				if (qtyGt(qtyInBase, maxLotQty)) {
 					toast.error(
-						`ยอดคงเหลือในล็อตนี้ไม่เพียงพอ (มี ${maxLotQty} ต้องการแจกจ่าย ${validated.data.qty})`
+						`ยอดคงเหลือในล็อตนี้ไม่เพียงพอ (มี ${maxLotQty} ${formatUnit(itemMasterUnit(packaging), units, langState.current)} ต้องการแจกจ่าย ${validated.data.qty} ${formatUnit(validated.data.unit, units, langState.current)})`
 					);
 					return;
 				}
@@ -138,6 +186,16 @@
 	);
 
 	const { form: formData, submitting, reset } = form;
+
+	const selectedUnitLabel = $derived(
+		formatUnit($formData.unit, units, langState.current) || $formData.unit || 'เลือกหน่วย'
+	);
+	const baseUnitLabel = $derived(
+		selectedItem
+			? formatUnit(itemMasterUnit(selectedItem), units, langState.current) ||
+					itemMasterUnit(selectedItem)
+			: ''
+	);
 
 	// Auto-select the first lot (FEFO) when item lots load or change
 	$effect(() => {
@@ -150,25 +208,19 @@
 		}
 	});
 
-	function formatExpiry(expiryStr: string | undefined): string {
-		if (!expiryStr) return '-';
-		try {
-			return new Date(expiryStr).toLocaleDateString('th-TH', {
-				day: '2-digit',
-				month: 'short',
-				year: '2-digit'
-			});
-		} catch {
-			return expiryStr;
-		}
+	function lotLabel(lot: (typeof itemLots)[number]): string {
+		const place = lotStorageLabel(lot.lot, storagePoints.points);
+		const no = lot.lot?.lot_no ? ` · ${lot.lot.lot_no}` : '';
+		const clocks = formatLotClockLine(lot);
+		const clockPart = clocks ? ` · ${clocks}` : '';
+		return `${place}${no} · คงเหลือ ${lot.qty} ${baseUnitLabel}${clockPart}`;
 	}
 
-	// Update locked unit when item is selected
-	function selectItem(item: { _id: string; name: string; unit: string }) {
+	function selectItem(item: StockFormItem) {
 		selectedItem = item;
 		$formData.item_id = item._id;
-		$formData.unit = item.unit;
-		$formData.ref_id = `distribution_batch:direct-${ulid()}`;
+		$formData.unit = defaultIssueUom(item);
+		$formData.ref_id = `requisition_ticket:direct-${ulid()}`;
 		searchQuery = item.name;
 		isDropdownOpen = false;
 	}
@@ -178,12 +230,31 @@
 		$formData.item_id = '';
 		$formData.unit = '';
 		$formData.lot_ref = '';
-		$formData.ref_id = `distribution_batch:direct-${ulid()}`;
+		$formData.ref_id = `requisition_ticket:direct-${ulid()}`;
 		searchQuery = '';
 		isDropdownOpen = false;
 	}
 
-	// Submit handler
+	function resetForNextLine() {
+		$formData.qty = '' as unknown as typeof $formData.qty;
+		$formData.note = '';
+		$formData.lot_ref = '';
+		$formData.ref_id = `requisition_ticket:direct-${ulid()}`;
+		if (!preselectedItemId) {
+			clearSelection();
+			reset({
+				data: {
+					item_id: '',
+					unit: '',
+					qty: '',
+					note: '',
+					ref_id: `requisition_ticket:direct-${ulid()}`,
+					lot_ref: ''
+				}
+			});
+		}
+	}
+
 	async function handleCommit(data: DistributeInput) {
 		const ctx = {
 			shelterCode: getShelterCode(),
@@ -191,25 +262,25 @@
 		};
 
 		if (!data.ref_id) {
-			data.ref_id = `distribution_batch:direct-${ulid()}`;
+			data.ref_id = `requisition_ticket:direct-${ulid()}`;
 		}
 
-		toast.promise(distributeMutation.mutateAsync({ input: data, ctx }), {
-			loading: 'กำลังบันทึกข้อมูล...',
+		const packaging = selectedItem ?? { base_unit: data.unit, conversions: [] };
+		const displayUnit = data.unit;
+		const displayQty = data.qty;
+		const ledger = toLedgerQtyUnit(data.qty, data.unit, packaging);
+		const payload: DistributeInput = { ...data, qty: ledger.qty, unit: ledger.unit };
+
+		toast.promise(distributeMutation.mutateAsync({ input: payload, ctx }), {
+			loading: 'กำลังบันทึก...',
 			success: () => {
-				clearSelection();
-				reset({
-					data: {
-						item_id: '',
-						unit: '',
-						qty: '',
-						note: '',
-						ref_id: `distribution_batch:direct-${ulid()}`,
-						lot_ref: ''
-					}
-				});
-				if (onsuccess) onsuccess();
-				return 'บันทึกการแจกจ่ายสำเร็จ!';
+				const name = selectedItem?.name ?? data.item_id;
+				const unitLabel = formatUnit(displayUnit, units, langState.current) || displayUnit;
+				const summary = `${name} −${displayQty} ${unitLabel}`;
+				lastSuccess = `เบิกแล้ว: ${summary}`;
+				resetForNextLine();
+				onsuccess?.({ keepOpen: true, summary });
+				return 'เบิกแล้ว';
 			},
 			error: (err: unknown) =>
 				err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการบันทึกข้อมูล'
@@ -243,43 +314,48 @@
 <form
 	method="POST"
 	use:form.enhance
-	class="flex flex-col space-y-4 rounded-2xl border border-border/80 bg-card p-5 shadow-md"
+	class="flex flex-col space-y-4 rounded-2xl border border-border/80 bg-card p-4 shadow-md sm:p-5"
 >
-	<div class="mb-2 flex items-center gap-2 border-b border-border/60 pb-3">
-		<PackageMinus class="h-4.5 w-4.5 text-primary" />
-		<h3 class="text-sm font-bold text-foreground">แจกจ่ายพัสดุออก (Outbound Stock Distribute)</h3>
+	<div class="flex items-center gap-2 border-b border-border/60 pb-3">
+		<PackageMinus class="h-4.5 w-4.5 text-primary" aria-hidden="true" />
+		<h3 class="text-sm font-bold text-foreground">เบิกจ่าย</h3>
 	</div>
 
+	{#if lastSuccess}
+		<p
+			class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800"
+			role="status"
+		>
+			{lastSuccess} ✓
+		</p>
+	{/if}
+
 	<Field.FieldGroup class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-		<!-- Searchable Item Selector -->
 		<Form.Field {form} name="item_id" class="relative col-span-1 sm:col-span-2">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label
-						>ค้นหาและเลือกรายการสิ่งของ <span class="font-bold text-destructive">*</span
-						></Form.Label
-					>
+					<Form.Label>สินค้า <span class="font-bold text-destructive">*</span></Form.Label>
 					<div bind:this={container} class="relative w-full">
 						<Input
 							{...props}
-							placeholder="พิมพ์เพื่อค้นหา เช่น ข้าวสาร, น้ำดื่ม..."
+							placeholder="ค้นหา…"
 							bind:value={searchQuery}
 							onfocus={() => !preselectedItemId && (isDropdownOpen = true)}
 							oninput={() => !preselectedItemId && (isDropdownOpen = true)}
 							autocomplete="off"
 							disabled={!!preselectedItemId}
-							class={preselectedItemId
+							class="min-h-11 {preselectedItemId
 								? 'cursor-not-allowed bg-muted font-bold text-muted-foreground'
-								: ''}
+								: ''}"
 						/>
 						{#if selectedItem && !preselectedItemId}
 							<Button
 								type="button"
 								variant="ghost"
-								class="absolute top-1/2 right-1 min-h-11 min-w-11 -translate-y-1/2 px-3 text-sm font-semibold text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
+								class="absolute top-1/2 right-1 min-h-11 min-w-11 -translate-y-1/2 px-3 text-sm font-semibold"
 								onclick={clearSelection}
 							>
-								ล้างค่า
+								ล้าง
 							</Button>
 						{/if}
 
@@ -287,38 +363,32 @@
 							<div
 								id="item-listbox"
 								role="listbox"
-								class="absolute left-0 z-20 mt-1 max-h-60 w-full animate-in overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl duration-150 fade-in slide-in-from-top-1"
+								class="absolute left-0 z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl"
 							>
 								{#if itemsQuery.isLoading || itemMastersQuery.isLoading || balanceQuery.isLoading}
-									<div class="p-3 text-xs font-medium text-muted-foreground">
-										กำลังโหลดข้อมูล...
-									</div>
+									<div class="p-3 text-xs text-muted-foreground">กำลังโหลด…</div>
 								{:else if filteredItems.length === 0}
-									<div class="p-3 text-xs font-medium text-muted-foreground">
-										ไม่พบรายการสิ่งของ
-									</div>
+									<div class="p-3 text-xs text-muted-foreground">ไม่พบสินค้า</div>
 								{:else}
 									{#each filteredItems as item (item._id)}
 										{@const bal = balanceQuery.data?.get(item._id) ?? '0'}
 										<button
 											type="button"
-											class="flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors hover:bg-muted"
+											class="flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium hover:bg-muted"
 											onclick={() => selectItem(item)}
 											disabled={qtyLte(bal, 0)}
 										>
-											<div class="flex items-center gap-2">
-												<span
-													class="font-semibold text-foreground {qtyLte(bal, 0) ? 'opacity-50' : ''}"
-													>{item.name}</span
-												>
-											</div>
 											<span
-												class="rounded-md {qtyGt(bal, 0)
-													? 'border-primary/20 bg-primary/10 text-primary'
-													: 'border-destructive/20 bg-destructive/10 text-destructive'} border px-2 py-0.5 text-xs font-bold"
+												class="font-semibold text-foreground {qtyLte(bal, 0) ? 'opacity-50' : ''}"
+												>{item.name}</span
 											>
-												คงเหลือ: {bal}
-												{item.unit}
+											<span
+												class="rounded-md border px-2 py-0.5 text-xs font-bold {qtyGt(bal, 0)
+													? 'border-primary/20 bg-primary/10 text-primary'
+													: 'border-destructive/20 bg-destructive/10 text-destructive'}"
+											>
+												{bal}
+												{formatUnit(item.unit, units, langState.current) || item.unit}
 											</span>
 										</button>
 									{/each}
@@ -331,65 +401,59 @@
 			<Form.FieldErrors />
 		</Form.Field>
 
-		<!-- Current Stock Info -->
 		{#if selectedItem}
 			<div
 				class="col-span-1 flex items-center justify-between rounded-xl border border-border/50 bg-muted/50 p-3 sm:col-span-2"
 			>
-				<span class="text-sm font-medium text-muted-foreground">ยอดคงเหลือในคลังขณะนี้:</span>
+				<span class="text-sm text-muted-foreground">คงเหลือ</span>
 				<span
 					class="text-sm font-bold {!qtyIsZero(currentStock) && qtyGte(currentStock, 0)
 						? 'text-primary'
 						: 'text-destructive'}"
 				>
 					{currentStock}
-					{selectedItem.unit}
+					{baseUnitLabel}
 				</span>
 			</div>
 
-			<!-- Lot Selector -->
 			<Form.Field {form} name="lot_ref" class="col-span-1 sm:col-span-2">
 				<Form.Control>
 					{#snippet children({ props })}
-						<Form.Label
-							>สถานที่จัดเก็บ / ล็อตที่ต้องการเบิกจ่าย <span class="font-bold text-destructive"
-								>*</span
-							></Form.Label
-						>
+						<Form.Label>ล็อต <span class="font-bold text-destructive">*</span></Form.Label>
 						{#if ledgerQuery.isLoading}
-							<div class="text-xs text-muted-foreground">กำลังโหลดข้อมูลล็อต...</div>
+							<div class="text-xs text-muted-foreground">กำลังโหลดล็อต…</div>
 						{:else if lotProjectionError}
 							<div
 								class="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-xs font-semibold text-destructive"
 							>
-								<p>ข้อมูลประวัติคลังไม่สอดคล้องกัน จึงคำนวณยอดคงเหลือของล็อตไม่ได้</p>
-								<p class="mt-1 font-normal">กรุณาแจ้งผู้ดูแลระบบ: {lotProjectionError}</p>
+								คำนวณยอดล็อตไม่ได้ — {lotProjectionError}
 							</div>
 						{:else if itemLots.length === 0}
 							<div
 								class="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-xs font-semibold text-destructive"
 							>
-								ไม่พบล็อตสินค้าที่มีสต็อกคงเหลือสำหรับเบิกจ่าย
+								ไม่พบล็อตที่มีคงเหลือ
 							</div>
 						{:else}
 							<Select.Root type="single" bind:value={$formData.lot_ref}>
 								<Select.Trigger
 									{...props}
-									class="h-11 w-full min-w-0 rounded-md border border-input bg-white px-3 text-sm font-medium shadow-xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none sm:h-10"
+									class="min-h-11 w-full rounded-md border border-input bg-white px-3 text-left text-sm font-medium"
 								>
-									{activeLot
-										? `📍 ${activeLot.lot?.note || activeLot.lot?.storage_zone || 'คลังหลัก'} ${activeLot.lot?.expiry ? `(หมดอายุ: ${formatExpiry(activeLot.lot.expiry)})` : '(ไม่ระบุวันหมดอายุ)'} ${activeLot.lot?.lot_no ? `[${activeLot.lot.lot_no}]` : ''} - คงเหลือ ${activeLot.qty} ${selectedItem?.unit}`
-										: 'เลือกสถานที่ / ล็อตที่ต้องการเบิกจ่าย'}
+									{activeLot ? lotLabel(activeLot) : 'เลือกล็อต'}
 								</Select.Trigger>
 								<Select.Content>
 									{#each itemLots as lot (lot.lot_ref)}
-										<Select.Item
-											value={lot.lot_ref}
-											label={`📍 ${lot.lot?.note || lot.lot?.storage_zone || 'คลังหลัก'} ${lot.lot?.expiry ? `(หมดอายุ: ${formatExpiry(lot.lot?.expiry)})` : '(ไม่ระบุวันหมดอายุ)'} ${lot.lot?.lot_no ? `[${lot.lot?.lot_no}]` : ''} - คงเหลือ ${lot.qty} ${selectedItem?.unit}`}
-										/>
+										<Select.Item value={lot.lot_ref} label={lotLabel(lot)} />
 									{/each}
 								</Select.Content>
 							</Select.Root>
+							{#if activeLot}
+								{@const clocks = formatLotClockLine(activeLot)}
+								{#if clocks}
+									<p class="mt-1.5 text-xs text-muted-foreground">{clocks}</p>
+								{/if}
+							{/if}
 						{/if}
 					{/snippet}
 				</Form.Control>
@@ -397,60 +461,102 @@
 			</Form.Field>
 		{/if}
 
-		<!-- Quantity -->
 		<Form.Field {form} name="qty" class="col-span-1">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label>จำนวนที่แจกจ่าย <span class="font-bold text-destructive">*</span></Form.Label>
+					<Form.Label>จำนวน <span class="font-bold text-destructive">*</span></Form.Label>
 					<Input
 						{...props}
 						type="number"
-						placeholder="ระบุจำนวน"
+						placeholder="0"
 						min="0.01"
-						max={maxLotQty || undefined}
 						step="any"
 						bind:value={$formData.qty}
-						class="font-mono font-bold"
+						class="min-h-11 font-mono font-bold"
 					/>
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />
 		</Form.Field>
 
-		<!-- Unit (Locked) -->
 		<Form.Field {form} name="unit" class="col-span-1">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label>หน่วยนับ</Form.Label>
-					<Input
-						{...props}
-						placeholder="ระบบจะล็อกอัตโนมัติ"
-						bind:value={$formData.unit}
-						readonly
-						disabled
-					/>
+					<Form.Label>หน่วย <span class="font-bold text-destructive">*</span></Form.Label>
+					{#if !selectedItem}
+						<Input
+							{...props}
+							placeholder="เลือกสินค้าก่อน"
+							value=""
+							readonly
+							disabled
+							class="min-h-11"
+						/>
+					{:else if unitOptions.length <= 1}
+						<Input {...props} value={selectedUnitLabel} readonly disabled class="min-h-11" />
+					{:else}
+						<Select.Root
+							type="single"
+							value={$formData.unit}
+							onValueChange={(val) => {
+								if (val) $formData.unit = val;
+							}}
+						>
+							<Select.Trigger
+								{...props}
+								class="min-h-11 w-full rounded-md border border-input bg-white px-3 text-sm font-medium"
+							>
+								{selectedUnitLabel}
+							</Select.Trigger>
+							<Select.Content>
+								{#each unitOptions as option (option.code)}
+									<Select.Item
+										value={option.code}
+										label={formatUnit(option.code, units, langState.current) || option.code}
+									/>
+								{/each}
+							</Select.Content>
+						</Select.Root>
+					{/if}
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />
 		</Form.Field>
 
-		<!-- Destination / Note -->
-		<Form.Field {form} name="note" class="col-span-1 sm:col-span-2">
-			<Form.Control>
-				{#snippet children({ props })}
-					<Form.Label>สถานที่ปลายทาง หรือ ผู้รับ (ระบุรายละเอียด)</Form.Label>
-					<Input
-						{...props}
-						placeholder="เช่น แจกจ่ายโซนเต็นท์ A, หรือระบุชื่อผู้รับ..."
-						bind:value={$formData.note}
-					/>
-				{/snippet}
-			</Form.Control>
-			<Form.FieldErrors />
-		</Form.Field>
+		<div class="col-span-1 sm:col-span-2">
+			<button
+				type="button"
+				class="flex min-h-11 w-full items-center justify-between rounded-lg border border-border/60 bg-muted/30 px-3 text-sm font-semibold"
+				onclick={() => (moreOpen = !moreOpen)}
+				aria-expanded={moreOpen}
+			>
+				<span>เพิ่มเติม</span>
+				<ChevronDown
+					class="h-4 w-4 transition-transform {moreOpen ? 'rotate-180' : ''}"
+					aria-hidden="true"
+				/>
+			</button>
+			{#if moreOpen}
+				<div class="mt-3">
+					<Form.Field {form} name="note" class="col-span-1 sm:col-span-2">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label>ปลายทาง / ผู้รับ</Form.Label>
+								<Input
+									{...props}
+									placeholder="เช่น โซนเต็นท์ A"
+									bind:value={$formData.note}
+									class="min-h-11"
+								/>
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
+				</div>
+			{/if}
+		</div>
 
-		<!-- Submit Button -->
-		<div class="col-span-1 pt-3 sm:col-span-2">
+		<div class="col-span-1 pt-1 sm:col-span-2">
 			<Form.Button
 				size="lg"
 				disabled={$submitting ||
@@ -458,9 +564,9 @@
 					!qtyGt(currentStock, 0) ||
 					itemLots.length === 0 ||
 					isQtyOverStock}
-				class="w-full font-bold"
+				class="min-h-11 w-full font-bold"
 			>
-				{$submitting ? 'กำลังบันทึกรายการ...' : 'บันทึกการแจกจ่ายพัสดุ'}
+				{$submitting ? 'กำลังบันทึก…' : 'บันทึกแล้วเบิกชิ้นถัดไป'}
 			</Form.Button>
 		</div>
 	</Field.FieldGroup>
