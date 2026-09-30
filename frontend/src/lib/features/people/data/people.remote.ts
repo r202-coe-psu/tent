@@ -1145,7 +1145,9 @@ export class PeopleRemoteRepository implements PeopleRepository {
 			latest.current_stay.status !== 'pre_registered' &&
 			latest.current_stay.status !== 'kiosk_registered'
 		) {
-			throw new Error('รายงานตัวได้เฉพาะผู้ที่ลงทะเบียนล่วงหน้า (pre_registered)');
+			throw new Error(
+				'รายงานตัวได้เฉพาะผู้ที่ลงทะเบียนล่วงหน้าหรือลงทะเบียนที่ตู้ (pre_registered / kiosk_registered)'
+			);
 		}
 		const saved = await this.repo.put(
 			touch({

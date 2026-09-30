@@ -842,7 +842,7 @@ export async function buildBoundEvacueeProfile(
 	) {
 		throw new ServiceError(
 			'VALIDATION',
-			'Only pre_registered evacuees are available on this surface'
+			'Only pre_registered or kiosk_registered evacuees are available on this surface'
 		);
 	}
 	const masters = (await listShelterMasters()).map(migrate);

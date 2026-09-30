@@ -44,7 +44,7 @@ export const GET: RequestHandler = async ({ params, request }) => {
 		}
 
 		// Query the occupancy view with group=true to get per-status counts.
-		// All keys: 'pre_registered' | 'active' | 'temporary_leave' | 'transferred' | 'checked_out' | 'deceased'
+		// All keys: 'pre_registered' | 'kiosk_registered' | 'active' | 'temporary_leave' | 'transferred' | 'checked_out' | 'deceased'
 		const res = await adminRaw(`/${db}/_design/app/_view/occupancy?group=true`, 'GET');
 
 		if (res.status === 404) {
