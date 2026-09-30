@@ -9,6 +9,7 @@ import { adminFetch } from '$lib/server/couch-admin';
 import { shelterDbName } from '$lib/server/shelter-access-design';
 import { makeDoc } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
+import { createHash } from 'node:crypto';
 import {
 	detectImageMime,
 	isCanonicalBase64,
@@ -122,7 +123,67 @@ async function deleteKioskCardImage(
 	await adminFetch(`/${dbName}/${encodeURIComponent(image.id)}?${query}`, { method: 'DELETE' });
 }
 
-const locks = new Map<string, Promise<void>>();
+/** Age after which an unreleased kiosk registration lock is treated as abandoned (crash, not a live request). */
+const LOCK_STALE_AFTER_MS = 30_000;
+
+function isHttpConflict(e: unknown): boolean {
+	return typeof e === 'object' && e !== null && (e as { status?: unknown }).status === 409;
+}
+
+function kioskRegistrationLockId(shelterCode: string, citizenId: string): string {
+	const key = `${shelterCode}:${citizenId}`;
+	return `kiosk_reg_lock:${createHash('sha256').update(key).digest('hex')}`;
+}
+
+/**
+ * Reclaim a lock doc left behind by a crashed request. Returns true if a stale
+ * doc was found and deleted (caller should retry the acquire once).
+ */
+async function reclaimStaleLock(dbName: string, lockId: string): Promise<boolean> {
+	const existing = await adminFetch<{ _rev?: string; created_at?: string }>(
+		`/${dbName}/${encodeURIComponent(lockId)}`
+	).catch(() => null);
+	if (!existing?._rev || !existing.created_at) return false;
+	if (Date.now() - Date.parse(existing.created_at) <= LOCK_STALE_AFTER_MS) return false;
+	await adminFetch(`/${dbName}/${encodeURIComponent(lockId)}?rev=${existing._rev}`, {
+		method: 'DELETE'
+	}).catch(() => {});
+	return true;
+}
+
+/**
+ * Acquire a cross-worker registration lock backed by a CouchDB doc with a
+ * deterministic `_id`: CouchDB rejects the second concurrent create with 409,
+ * which works across `node:cluster` workers (an in-memory `Map` does not —
+ * each worker has its own).
+ */
+async function acquireKioskRegistrationLock(dbName: string, lockId: string): Promise<string> {
+	for (let attempt = 0; attempt < 2; attempt++) {
+		try {
+			const res = await adminFetch<{ rev?: string }>(`/${dbName}/${encodeURIComponent(lockId)}`, {
+				method: 'PUT',
+				body: JSON.stringify({ type: 'kiosk_reg_lock', created_at: new Date().toISOString() })
+			});
+			if (!res.rev) throw new Error('CouchDB did not return a lock revision');
+			return res.rev;
+		} catch (e) {
+			if (!isHttpConflict(e)) throw e;
+			if (attempt === 0 && (await reclaimStaleLock(dbName, lockId))) continue;
+			throw new KioskRegistrationBlockedError();
+		}
+	}
+	throw new KioskRegistrationBlockedError();
+}
+
+async function releaseKioskRegistrationLock(
+	dbName: string,
+	lockId: string,
+	rev: string
+): Promise<void> {
+	await adminFetch(`/${dbName}/${encodeURIComponent(lockId)}?rev=${rev}`, {
+		method: 'DELETE'
+	}).catch(() => {});
+}
 
 /** Create one new kiosk walk-in record after consent; existing records are never reused. */
 export async function registerKioskWalkIn(
@@ -134,15 +195,10 @@ export async function registerKioskWalkIn(
 	consentedAt: string
 ): Promise<Evacuee> {
 	const citizenId = cardInput.citizen_id;
-	const key = `${shelterCode}:${citizenId}`;
-	const previous = locks.get(key) ?? Promise.resolve();
-	let release!: () => void;
-	const current = new Promise<void>((resolve) => (release = resolve));
-	const queued = previous.then(() => current);
-	locks.set(key, queued);
-	await previous;
+	const dbName = shelterDbName(shelterCode);
+	const lockId = kioskRegistrationLockId(shelterCode, citizenId);
+	const lockRev = await acquireKioskRegistrationLock(dbName, lockId);
 	try {
-		const dbName = shelterDbName(shelterCode);
 		const found = await adminFetch<{ docs?: unknown[] }>(`/${dbName}/_find`, {
 			method: 'POST',
 			body: JSON.stringify({
@@ -190,7 +246,7 @@ export async function registerKioskWalkIn(
 			district: cardInput.district ?? undefined,
 			province: cardInput.province ?? undefined,
 			postal_code: postalCode ?? undefined,
-			scanned_at: consentedAt,
+			scanned_at: new Date().toISOString(),
 			consented_at: consentedAt,
 			device_id: deviceId,
 			station_name: stationName
@@ -215,7 +271,6 @@ export async function registerKioskWalkIn(
 		}
 		return evacuee;
 	} finally {
-		release();
-		if (locks.get(key) === queued) locks.delete(key);
+		await releaseKioskRegistrationLock(dbName, lockId, lockRev);
 	}
 }
