@@ -858,7 +858,7 @@
 			overflow: hidden;
 			break-after: page;
 			break-inside: avoid;
-			font-family: sans-serif;
+			font-family: 'IBM Plex Sans Thai', sans-serif;
 			color: #000;
 		}
 		.wristband:last-child {
