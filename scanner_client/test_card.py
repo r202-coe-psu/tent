@@ -1,5 +1,9 @@
 """
 สคริปต์สำหรับทดสอบอ่านข้อมูลบัตรประชาชนไทยผ่าน Terminal (CLI Test Inspector)
+
+Manual hardware inspector, not an automated test — it blocks forever waiting for a
+physical card reader. Named `inspect_reader` (not `test_*`) so pytest never collects
+it; run directly with `python test_card.py`.
 """
 import sys
 import time
@@ -8,7 +12,7 @@ from pprint import pprint
 from app.scard import ThaiSmartCardReader
 
 
-def test_reader():
+def inspect_reader():
     print("=" * 60)
     print("🔌 เริ่มต้นทดสอบเครื่องอ่านบัตรประชาชนไทย (Thai Smart Card Reader)")
     print("=" * 60)
@@ -55,4 +59,4 @@ def test_reader():
 
 
 if __name__ == "__main__":
-    test_reader()
+    inspect_reader()
