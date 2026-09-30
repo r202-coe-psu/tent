@@ -34,7 +34,9 @@
 	const tokenPattern = /^evacuee:[0-7][0-9A-HJKMNP-TV-Z]{25}$/i;
 
 	$effect(() => {
-		if (!gate) return;
+		// Starts as soon as the camera is up, not only after a scan resolves `gate` — otherwise an
+		// unattended kiosk can sit with the camera open indefinitely waiting for a scan that never
+		// comes.
 		untrack(() => idleTimeout.start());
 		return () => idleTimeout.stop();
 	});
