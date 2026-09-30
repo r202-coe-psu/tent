@@ -17,7 +17,7 @@
 </script>
 
 <nav class="kiosk-check-in-wizard px-1" aria-label="ขั้นตอนรายงานตัว">
-	<div class="mb-2 flex items-center justify-between gap-3 text-sm">
+	<div class="mb-2 flex items-center justify-between gap-3 text-sm kiosk-portrait:text-lg">
 		<p class="truncate font-semibold text-[#0A2647]" aria-live="polite">
 			ขั้น {currentStep} จาก 5 · {currentLabel}
 		</p>
@@ -62,5 +62,12 @@
 
 	.progress-dash {
 		height: clamp(0.5rem, 0.7vw, 0.85rem);
+	}
+
+	/* The vw-based height above only reaches ~7.5px at 1080 wide. */
+	@media screen and (orientation: portrait) and (min-height: 1200px) {
+		.progress-dash {
+			height: 0.6rem;
+		}
 	}
 </style>

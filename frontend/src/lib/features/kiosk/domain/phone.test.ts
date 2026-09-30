@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
 	formatPhoneForDisplay,
+	isKioskPhoneSubmittable,
 	normalizeKioskPhone,
+	phoneEntryHint,
 	phoneSuffixForLog,
 	phoneVariants
 } from './phone';
@@ -35,5 +37,31 @@ describe('phone variants and display helpers', () => {
 		expect(formatPhoneForDisplay('0812345678')).toBe('081-234-5678');
 		expect(formatPhoneForDisplay('021234567')).toBe('02-123-4567');
 		expect(formatPhoneForDisplay('08123')).toBe('08123');
+	});
+});
+
+describe('isKioskPhoneSubmittable', () => {
+	it.each(['0812345678', '021234567'])('accepts %s', (phone) => {
+		expect(isKioskPhoneSubmittable(phone)).toBe(true);
+	});
+
+	it.each(['', '08123', '8123456789', '66812345678'])('rejects %s', (phone) => {
+		expect(isKioskPhoneSubmittable(phone)).toBe(false);
+	});
+});
+
+describe('phoneEntryHint', () => {
+	it('stays quiet before any digit is typed', () => {
+		expect(phoneEntryHint('')).toBeNull();
+	});
+
+	it('explains the requirement while the number is incomplete', () => {
+		expect(phoneEntryHint('08123')).toBe('กรอกให้ครบ 9–10 หลัก ขึ้นต้นด้วย 0');
+		expect(phoneEntryHint('8123456789')).toBe('กรอกให้ครบ 9–10 หลัก ขึ้นต้นด้วย 0');
+	});
+
+	it('clears once the number can be searched', () => {
+		expect(phoneEntryHint('0812345678')).toBeNull();
+		expect(phoneEntryHint('021234567')).toBeNull();
 	});
 });

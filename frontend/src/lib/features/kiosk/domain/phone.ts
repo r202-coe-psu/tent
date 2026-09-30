@@ -25,3 +25,17 @@ export function formatPhoneForDisplay(digits: string): string {
 	}
 	return digits;
 }
+
+/** A phone the kiosk can search with: canonical and written the local way (leading 0). */
+export function isKioskPhoneSubmittable(phone: string): boolean {
+	return normalizeKioskPhone(phone) !== null && phone.startsWith('0');
+}
+
+/**
+ * Why the search button is still disabled — null when nothing is typed yet or the number is
+ * ready, so the kiosk only nags after the visitor has started entering digits.
+ */
+export function phoneEntryHint(phone: string): string | null {
+	if (phone.length === 0 || isKioskPhoneSubmittable(phone)) return null;
+	return 'กรอกให้ครบ 9–10 หลัก ขึ้นต้นด้วย 0';
+}

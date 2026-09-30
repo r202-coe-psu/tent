@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
+	import Delete from '@lucide/svelte/icons/delete';
 
 	interface Props {
 		value?: string;
@@ -95,6 +96,7 @@
 		onclick={() => removeDigit(true)}
 		class="min-h-16 rounded-lg border-slate-300 bg-slate-50 text-base font-bold text-slate-800 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2"
 	>
+		<Delete class="hidden kiosk-portrait:inline" aria-hidden="true" />
 		ลบ
 	</Button>
 </div>

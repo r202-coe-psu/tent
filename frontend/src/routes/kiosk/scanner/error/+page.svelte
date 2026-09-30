@@ -42,7 +42,7 @@
 			<div>
 				<h1
 					id="scanner-error-title"
-					class="text-xl font-extrabold tracking-tight text-[#0A2647] sm:text-2xl"
+					class="text-xl font-extrabold tracking-tight text-[#0A2647] sm:text-2xl kiosk-portrait:text-4xl"
 				>
 					อ่านบัตรไม่สำเร็จ
 				</h1>

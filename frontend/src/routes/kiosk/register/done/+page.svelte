@@ -44,7 +44,9 @@
 		>
 			<CheckCircle2 class="h-9 w-9" aria-hidden="true" />
 		</div>
-		<h1 class="mt-5 text-2xl font-bold text-emerald-950">ลงทะเบียนสำเร็จ</h1>
+		<h1 class="mt-5 text-2xl font-bold text-emerald-950 kiosk-portrait:text-4xl">
+			ลงทะเบียนสำเร็จ
+		</h1>
 		<p class="mt-2 text-lg text-slate-700">
 			กรุณานำบัตรออกจากเครื่อง แล้วไปพบเจ้าหน้าที่เพื่อยืนยันข้อมูลและรายงานตัว
 		</p>

@@ -9,6 +9,8 @@ describe('IdentityMethodSelector', () => {
 		});
 
 		expect(result.body).toContain('grid-cols-2');
+		expect(result.body).toContain('kiosk-portrait:grid-cols-1');
+		expect(result.body).toContain('--method-count: 4');
 		expect(result.body).toContain('เบอร์โทรศัพท์');
 		expect(result.body.match(/class="method-card/g)).toHaveLength(4);
 		expect(result.body).not.toContain('data-single-row');
@@ -20,6 +22,8 @@ describe('IdentityMethodSelector', () => {
 		});
 
 		expect(result.body).toContain('grid-cols-3');
+		expect(result.body).toContain('kiosk-portrait:grid-cols-1');
+		expect(result.body).toContain('--method-count: 3');
 		expect(result.body).toContain('data-single-row=""');
 		expect(result.body).not.toContain('เบอร์โทรศัพท์');
 		expect(result.body.match(/class="method-card/g)).toHaveLength(3);

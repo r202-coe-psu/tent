@@ -16,7 +16,10 @@
 	>
 		ก่อนเริ่มลงทะเบียน
 	</div>
-	<h1 id="consent-title" class="text-2xl font-bold text-[#0A2647] sm:text-3xl">
+	<h1
+		id="consent-title"
+		class="text-2xl font-bold text-[#0A2647] sm:text-3xl kiosk-portrait:text-4xl"
+	>
 		ยินยอมให้อ่านข้อมูลจากบัตรประชาชน
 	</h1>
 	<div class="mt-4 space-y-3 text-base leading-relaxed text-slate-700">

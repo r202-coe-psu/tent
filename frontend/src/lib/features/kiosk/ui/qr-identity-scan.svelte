@@ -142,7 +142,10 @@
 		</div>
 
 		<header class="text-center">
-			<h1 id="qr-title" class="text-2xl font-extrabold tracking-tight text-[#0A2647] sm:text-3xl">
+			<h1
+				id="qr-title"
+				class="text-2xl font-extrabold tracking-tight text-[#0A2647] sm:text-3xl kiosk-portrait:text-4xl"
+			>
 				สแกน QR ลงทะเบียน
 			</h1>
 		</header>

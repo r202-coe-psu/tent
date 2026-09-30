@@ -8,7 +8,7 @@
 	import KioskCheckInWizard from './kiosk-check-in-wizard.svelte';
 	import KioskNumpad from './kiosk-numpad.svelte';
 	import KioskPreRegisteredCheckIn from './kiosk-pre-registered-check-in.svelte';
-	import { formatPhoneForDisplay, normalizeKioskPhone } from '../domain/phone';
+	import { formatPhoneForDisplay, isKioskPhoneSubmittable, phoneEntryHint } from '../domain/phone';
 	import type { GateInput } from '../data/kiosk-check-in.api';
 	import { KioskIdleTimeout, KIOSK_IDLE_TIMEOUT_MS } from './kiosk-idle-timeout.svelte.js';
 
@@ -20,7 +20,8 @@
 	let { contextQuery, displayShelterCode }: Props = $props();
 	let phone = $state('');
 	let gate = $state<GateInput | null>(null);
-	const isValid = $derived(normalizeKioskPhone(phone) !== null && phone.startsWith('0'));
+	const isValid = $derived(isKioskPhoneSubmittable(phone));
+	const entryHint = $derived(phoneEntryHint(phone));
 	const displayPhone = $derived(formatPhoneForDisplay(phone));
 	const homeUrl = $derived(resolve(`/kiosk${contextQuery as `?${string}`}`));
 	const phoneUrl = $derived(resolve(`/kiosk/phone${contextQuery as `?${string}`}`));
@@ -77,21 +78,34 @@
 				href={homeUrl}
 				variant="ghost"
 				aria-label="กลับหน้าเริ่มต้น"
-				class="min-h-11 gap-2 px-3 text-base font-semibold text-[#0A2647] focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2"
+				class="min-h-11 gap-2 px-3 text-base font-semibold text-[#0A2647] focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 kiosk-portrait:min-h-16 kiosk-portrait:px-5 kiosk-portrait:text-xl"
 			>
 				<ArrowLeft class="h-5 w-5" aria-hidden="true" />กลับ
 			</Button>
 		</div>
+		<!-- sr-only is out of flow, so landscape layout is unchanged; portrait shows it as the page title. -->
+		<header class="sr-only text-center kiosk-portrait:not-sr-only kiosk-portrait:mt-4">
+			<h1 class="font-extrabold tracking-tight text-[#0A2647] kiosk-portrait:text-4xl">
+				กรอกเบอร์โทรศัพท์
+			</h1>
+		</header>
 		<section
-			class="phone-entry mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col gap-2"
+			class="phone-entry mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col gap-2 kiosk-portrait:mt-4 kiosk-portrait:max-w-xl kiosk-portrait:flex-none kiosk-portrait:gap-5"
 			aria-label="ค้นหาด้วยเบอร์โทรศัพท์"
 		>
 			<header class="text-center">
-				<p class="mt-1 text-base text-slate-700">ใช้เบอร์ที่กรอกตอนลงทะเบียนล่วงหน้า</p>
+				<p class="mt-1 text-base text-slate-700 kiosk-portrait:text-xl">
+					ใช้เบอร์ที่กรอกตอนลงทะเบียนล่วงหน้า
+				</p>
 			</header>
 
 			<output
-				class="flex min-h-14 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-2xl font-bold text-slate-950 tabular-nums"
+				class={[
+					'flex min-h-14 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-2xl font-bold text-slate-950 tabular-nums kiosk-portrait:min-h-20 kiosk-portrait:rounded-2xl kiosk-portrait:border-2',
+					displayPhone
+						? 'kiosk-portrait:text-4xl'
+						: 'kiosk-portrait:text-2xl kiosk-portrait:font-semibold kiosk-portrait:text-slate-400'
+				]}
 				aria-label="เบอร์โทรศัพท์ที่กรอก"
 				aria-live="polite"
 			>
@@ -107,12 +121,21 @@
 					type="button"
 					disabled={!isValid}
 					onclick={startLookup}
-					class="min-h-12 w-full gap-2 bg-[#0A2647] text-base font-bold text-white hover:bg-[#051930] focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2"
+					class="min-h-12 w-full gap-2 bg-[#0A2647] text-base font-bold text-white hover:bg-[#051930] focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 kiosk-portrait:min-h-16 kiosk-portrait:text-xl"
 				>
 					<Search class="h-5 w-5" aria-hidden="true" />ค้นหา
 				</Button>
 			</div>
-			<p class="phone-entry-hint text-center text-sm leading-snug text-slate-600">
+			<!-- Portrait only: says why the search button is disabled. Hidden (and unread) in landscape. -->
+			<p
+				class="hidden min-h-7 text-center text-lg font-semibold text-amber-900 kiosk-portrait:block"
+				aria-live="polite"
+			>
+				{entryHint ?? ''}
+			</p>
+			<p
+				class="phone-entry-hint text-center text-sm leading-snug text-slate-600 kiosk-portrait:text-lg"
+			>
 				ไม่มีเบอร์? ใช้ QR หรือบัตรประชาชน หรือติดต่อเจ้าหน้าที่
 			</p>
 		</section>
@@ -161,6 +184,47 @@
 		.phone-entry-hint {
 			font-size: 0.75rem;
 			line-height: 1.2;
+		}
+	}
+
+	/* 24" portrait: a fixed-size numpad (5.5rem keys, ~2:1) instead of stretching to the screen. */
+	@media screen and (orientation: portrait) and (min-height: 1200px) {
+		/* Button forces svg to size-4 unless the class list mentions "size-", which would also
+		   resize the landscape icons — so icons are scaled here instead (specificity beats it). */
+		.phone-entry-back-row :global(a svg) {
+			width: 1.5rem;
+			height: 1.5rem;
+		}
+
+		.phone-entry-search :global(button svg),
+		.phone-entry-numpad :global(button svg) {
+			width: 1.5rem;
+			height: 1.5rem;
+		}
+
+		.phone-entry-numpad {
+			flex: none;
+		}
+
+		.phone-entry-numpad :global([role='group']) {
+			flex: none;
+			grid-template-rows: repeat(4, 5.5rem);
+			gap: 0.75rem;
+		}
+
+		.phone-entry-numpad :global(button) {
+			border-width: 2px;
+			border-radius: 0.75rem;
+		}
+
+		.phone-entry-numpad :global(button[aria-label^='ตัวเลข']) {
+			font-size: 2.5rem;
+			line-height: 1;
+		}
+
+		.phone-entry-numpad :global(button:not([aria-label^='ตัวเลข'])) {
+			font-size: 1.25rem;
+			line-height: 1.4;
 		}
 	}
 </style>

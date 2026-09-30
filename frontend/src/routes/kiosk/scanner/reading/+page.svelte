@@ -37,7 +37,7 @@
 		</div>
 		<h1
 			id="reading-title"
-			class="mt-4 text-2xl font-extrabold tracking-tight text-[#0A2647] sm:text-3xl"
+			class="mt-4 text-2xl font-extrabold tracking-tight text-[#0A2647] sm:text-3xl kiosk-portrait:text-4xl"
 		>
 			กำลังอ่านบัตร
 		</h1>

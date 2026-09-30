@@ -101,7 +101,7 @@
 		>
 			<CreditCard class="h-8 w-8" aria-hidden="true" />
 		</div>
-		<h1 class="mt-5 text-2xl font-bold text-[#0A2647]">เสียบบัตรประชาชน</h1>
+		<h1 class="mt-5 text-2xl font-bold text-[#0A2647] kiosk-portrait:text-4xl">เสียบบัตรประชาชน</h1>
 		<p class="mt-2 text-base text-slate-700">
 			เสียบบัตรของผู้ที่ต้องการลงทะเบียน ระบบจะอ่านข้อมูลจากชิปโดยอัตโนมัติ
 		</p>

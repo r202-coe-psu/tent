@@ -32,7 +32,7 @@
 	<header class="text-center">
 		<h1
 			id="waiting-title"
-			class="text-2xl font-extrabold tracking-tight text-[#0A2647] sm:text-3xl"
+			class="text-2xl font-extrabold tracking-tight text-[#0A2647] sm:text-3xl kiosk-portrait:text-4xl"
 		>
 			เสียบบัตรประชาชน
 		</h1>

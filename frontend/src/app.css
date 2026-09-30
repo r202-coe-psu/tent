@@ -4,6 +4,13 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Kiosk 24" portrait (1080×1920) — must match KIOSK_PORTRAIT_MEDIA in features/kiosk/domain/kiosk-layout.ts */
+@custom-variant kiosk-portrait {
+	@media screen and (orientation: portrait) and (min-height: 1200px) {
+		@slot;
+	}
+}
+
 :root {
 	/* Fixed testing banner (bottom) — keep in sync with testing-banner.svelte height */
 	--testing-banner-height: 1.625rem;

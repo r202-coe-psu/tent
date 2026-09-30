@@ -3,6 +3,7 @@
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import Clock3 from '@lucide/svelte/icons/clock-3';
 	import Tent from '@lucide/svelte/icons/tent';
+	import { KIOSK_COMPACT_MEDIA } from '../domain/kiosk-layout';
 
 	interface Props {
 		shelterName: string;
@@ -26,7 +27,7 @@
 	let compactHeader = $state(false);
 
 	$effect(() => {
-		const media = window.matchMedia('(max-height: 650px)');
+		const media = window.matchMedia(KIOSK_COMPACT_MEDIA);
 		const updateCompactHeader = () => {
 			compactHeader = media.matches;
 		};
@@ -49,24 +50,29 @@
 </script>
 
 <div
+	data-kiosk-shell
 	class="flex min-h-svh w-full flex-col bg-[#F8FAFC] pb-[var(--testing-banner-height)] font-sans text-slate-900 selection:bg-[#0A2647] selection:text-white"
 >
 	{#if !compactHeader}
 		<header
-			class="flex min-h-14 shrink-0 items-center border-b border-slate-200 bg-white px-3 py-2 sm:px-5"
+			class="flex min-h-14 shrink-0 items-center border-b border-slate-200 bg-white px-3 py-2 sm:px-5 kiosk-portrait:min-h-20 kiosk-portrait:px-6 kiosk-portrait:py-3"
 		>
 			<div class="mx-auto flex w-full max-w-5xl items-center justify-between gap-3">
 				<div class="flex min-w-0 items-center gap-2.5">
 					<div
-						class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#0A2647] text-white"
+						class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#0A2647] text-white kiosk-portrait:h-12 kiosk-portrait:w-12"
 						aria-hidden="true"
 					>
-						<Tent class="h-5 w-5" />
+						<Tent class="h-5 w-5 kiosk-portrait:h-7 kiosk-portrait:w-7" />
 					</div>
 					<div class="min-w-0">
-						<p class="truncate text-sm leading-tight font-extrabold text-[#0A2647]">SmartShelter</p>
 						<p
-							class="truncate text-sm leading-tight font-medium text-slate-600"
+							class="truncate text-sm leading-tight font-extrabold text-[#0A2647] kiosk-portrait:text-lg"
+						>
+							SmartShelter
+						</p>
+						<p
+							class="truncate text-sm leading-tight font-medium text-slate-600 kiosk-portrait:text-lg"
 							aria-label={`ศูนย์พักพิง ${shelterName} ${shelterCode} จุดบริการ ${stationName} เครื่อง ${deviceName}`}
 						>
 							{shelterName}{#if shelterCode}<span aria-hidden="true"> · {shelterCode}</span>{/if}
@@ -77,17 +83,23 @@
 				<div class="flex shrink-0 items-center gap-2">
 					{#if showClock}
 						<div
-							class="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 text-sm text-slate-700"
+							class="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 text-sm text-slate-700 kiosk-portrait:min-h-12 kiosk-portrait:px-3 kiosk-portrait:text-base"
 							aria-label={`เวลาปัจจุบัน ${dateString} ${timeString}`}
 						>
-							<Clock3 class="h-4 w-4 text-[#0A2647]" aria-hidden="true" />
+							<Clock3
+								class="h-4 w-4 text-[#0A2647] kiosk-portrait:h-5 kiosk-portrait:w-5"
+								aria-hidden="true"
+							/>
 							<span class="font-bold tabular-nums">{timeString}</span>
 						</div>
 					{/if}
 					<div
-						class="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 text-sm font-bold text-emerald-900"
+						class="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 text-sm font-bold text-emerald-900 kiosk-portrait:min-h-12 kiosk-portrait:px-4 kiosk-portrait:text-base"
 					>
-						<CheckCircle2 class="h-4 w-4 text-emerald-700" aria-hidden="true" />
+						<CheckCircle2
+							class="h-4 w-4 text-emerald-700 kiosk-portrait:h-5 kiosk-portrait:w-5"
+							aria-hidden="true"
+						/>
 						<span>พร้อม</span>
 					</div>
 				</div>
@@ -106,7 +118,9 @@
 		</div>
 	{/if}
 
-	<main class="kiosk-main flex w-full flex-1 flex-col items-center px-3 sm:px-5">
+	<main
+		class="kiosk-main flex w-full flex-1 flex-col items-center px-3 sm:px-5 kiosk-portrait:px-6"
+	>
 		<div class="flex min-h-0 w-full max-w-5xl flex-1 flex-col">
 			{@render children?.()}
 		</div>
@@ -121,6 +135,19 @@
 	@media (max-height: 650px) {
 		.kiosk-main {
 			padding-block: 0.25rem;
+		}
+	}
+
+	/* 24" portrait: raise the app's 18px root (app.css) to 20px at 1080 wide while a kiosk screen
+	   is mounted; the floor keeps narrower portrait screens at the base size. Media-query rem
+	   units ignore this (they use the 16px initial size). */
+	@media screen and (orientation: portrait) and (min-height: 1200px) {
+		:global(html:has([data-kiosk-shell])) {
+			font-size: clamp(18px, calc(100vw / 54), 22px);
+		}
+
+		.kiosk-main {
+			padding-block: 1.5rem;
 		}
 	}
 </style>
