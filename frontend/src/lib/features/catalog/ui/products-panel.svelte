@@ -1,9 +1,14 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
+	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
+	import { SvelteURLSearchParams } from 'svelte/reactivity';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { isSystemAdmin, isShelterManager, isWarehouseStaff } from '$lib/auth/roles';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import * as Sheet from '$lib/components/ui/sheet/index.js';
@@ -63,18 +68,29 @@
 
 	let selectedCategoryId = $state<string | null>(null);
 	let itemSearch = $state('');
+	let showDeactivated = $state(false);
+
+	const visibleCategories = $derived(
+		showDeactivated ? categories : categories.filter((cat) => !cat.deactivated)
+	);
 
 	const effectiveCategoryId = $derived.by(() => {
-		if (selectedCategoryId && categories.some((c) => c._id === selectedCategoryId)) {
+		if (selectedCategoryId && visibleCategories.some((c) => c._id === selectedCategoryId)) {
 			return selectedCategoryId;
 		}
-		return categories[0]?._id ?? null;
+		return visibleCategories[0]?._id ?? null;
 	});
 
-	const selectedCategory = $derived(categories.find((c) => c._id === effectiveCategoryId) ?? null);
+	const selectedCategory = $derived(
+		visibleCategories.find((c) => c._id === effectiveCategoryId) ?? null
+	);
 
 	function categoryCount(cat: ItemCategory): number {
-		return items.filter((item) => itemBelongsToCategory(item, cat)).length;
+		return items.filter((item) => {
+			if (!itemBelongsToCategory(item, cat)) return false;
+			if (!showDeactivated && item.deactivated) return false;
+			return true;
+		}).length;
 	}
 
 	const filteredItems = $derived.by(() => {
@@ -82,9 +98,16 @@
 		const needle = itemSearch.trim().toLowerCase();
 		return items.filter((item) => {
 			if (!itemBelongsToCategory(item, selectedCategory)) return false;
+			if (!showDeactivated && item.deactivated) return false;
 			if (!needle) return true;
 			return item.name.toLowerCase().includes(needle);
 		});
+	});
+
+	const hiddenDeactivatedCount = $derived.by(() => {
+		if (showDeactivated || !selectedCategory) return 0;
+		return items.filter((item) => itemBelongsToCategory(item, selectedCategory) && item.deactivated)
+			.length;
 	});
 
 	function originLabel(item: ItemMaster): string {
@@ -116,6 +139,10 @@
 	let editingItemId = $state('');
 
 	function openCreateItem() {
+		if (!selectedCategory) {
+			toast.error('กรุณาเพิ่มหมวดสินค้าก่อนสร้างสินค้า');
+			return;
+		}
 		editingItemId = '';
 		itemSheetMode = 'create';
 		itemSheetOpen = true;
@@ -131,6 +158,31 @@
 		itemSheetOpen = false;
 		editingItemId = '';
 	}
+
+	function clearCreateActionParam() {
+		if (page.url.searchParams.get('action') !== 'create') return;
+		const params = new SvelteURLSearchParams(page.url.searchParams);
+		params.delete('action');
+		const qs = params.toString();
+		const path = `${page.url.pathname}${qs ? `?${qs}` : ''}${page.url.hash}`;
+		void goto(resolve(path as '/back-office/supply'), {
+			replaceState: true,
+			keepFocus: true,
+			noScroll: true
+		});
+	}
+
+	$effect(() => {
+		if (page.url.searchParams.get('action') !== 'create') return;
+		if (categoriesQuery.isLoading) return;
+
+		if (canWrite && selectedCategory) {
+			openCreateItem();
+		} else if (canWrite) {
+			toast.error('กรุณาเพิ่มหมวดสินค้าก่อนสร้างสินค้า');
+		}
+		clearCreateActionParam();
+	});
 
 	// —— category sheet ——
 	let categorySheetOpen = $state(false);
@@ -172,12 +224,13 @@
 		return canWrite;
 	}
 
-	function itemActionKind(item: ItemMaster): 'delete' | 'reset' | 'toggle' | 'none' {
+	function itemActionKind(item: ItemMaster): 'delete' | 'reset' | 'toggle' | 'central' | 'none' {
 		if (!canEditItem(item)) return 'none';
 		if (scope === 'central') return 'toggle';
 		const origin = catalogOrigin(item, shelterCode);
 		if (origin === 'local') return 'delete';
 		if (origin === 'override') return 'reset';
+		if (origin === 'central') return 'central';
 		return 'none';
 	}
 
@@ -281,7 +334,7 @@
 		if (!pendingAction) return '';
 		if (pendingAction.kind === 'reset') return 'คืนค่ามาตรฐาน';
 		if (pendingAction.kind === 'deactivate') return 'ปิดใช้งานรายการ';
-		return 'ลบรายการ';
+		return 'ปิดใช้งานรายการ';
 	});
 
 	const confirmBody = $derived.by(() => {
@@ -291,9 +344,15 @@
 			return `ต้องการคืนค่ามาตรฐานของ "${name}" หรือไม่? การปรับแต่งของศูนย์จะถูกลบ`;
 		}
 		if (pendingAction.kind === 'deactivate') {
-			return `ต้องการปิดใช้งาน "${name}" หรือไม่?`;
+			return `ต้องการปิดใช้งาน "${name}" หรือไม่? รายการจะไม่แสดงในการเลือกใหม่ แต่ประวัติเก่ายังอยู่`;
 		}
-		return `ต้องการลบ "${name}" หรือไม่?`;
+		return `ต้องการปิดใช้งาน "${name}" หรือไม่? หากยังไม่มีประวัติในคลัง ระบบจะลบรายการออกถาวร แต่ถ้ามีการใช้ไปแล้วจะเปลี่ยนเป็นปิดใช้งานแทน`;
+	});
+
+	const confirmButtonLabel = $derived.by(() => {
+		if (!pendingAction) return 'ยืนยัน';
+		if (pendingAction.kind === 'reset') return 'ยืนยันคืนค่า';
+		return 'ยืนยันปิดใช้งาน';
 	});
 </script>
 
@@ -316,9 +375,11 @@
 			<p class="py-4 text-center text-xs text-muted-foreground">กำลังโหลด...</p>
 		{:else if categories.length === 0}
 			<p class="py-4 text-center text-xs text-muted-foreground">ยังไม่มีหมวดสินค้า</p>
+		{:else if visibleCategories.length === 0}
+			<p class="py-4 text-center text-xs text-muted-foreground">ไม่มีหมวดที่ใช้งาน</p>
 		{:else}
 			<ul class="flex max-h-64 flex-col gap-1 overflow-y-auto lg:max-h-[min(70vh,32rem)]">
-				{#each categories as cat (cat._id)}
+				{#each visibleCategories as cat (cat._id)}
 					{@const selected = effectiveCategoryId === cat._id}
 					<li>
 						<div
@@ -380,7 +441,13 @@
 				<h2 class="text-base font-semibold">
 					{selectedCategory?.name ?? 'รายการสินค้า'}
 				</h2>
-				<p class="text-xs text-muted-foreground">{filteredItems.length} รายการ</p>
+				<p class="text-xs text-muted-foreground">
+					{filteredItems.length} รายการ{#if hiddenDeactivatedCount > 0}
+						<span class="text-muted-foreground/80">
+							· ซ่อน {hiddenDeactivatedCount} รายการที่ปิดใช้งาน
+						</span>
+					{/if}
+				</p>
 			</div>
 			<div class="flex flex-wrap items-center gap-2">
 				<div class="relative min-w-[10rem] flex-1 sm:max-w-xs">
@@ -389,6 +456,13 @@
 					/>
 					<Input bind:value={itemSearch} placeholder="ค้นหาสินค้า..." class="h-9 pl-8" />
 				</div>
+				<label
+					for="show-deactivated-items"
+					class="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground"
+				>
+					<Checkbox id="show-deactivated-items" bind:checked={showDeactivated} />
+					<span>แสดงรายการที่ปิดใช้งาน</span>
+				</label>
 				{#if canWrite && selectedCategory}
 					<Button size="sm" class="gap-1" onclick={openCreateItem}>
 						<Plus class="h-4 w-4" />
@@ -443,11 +517,11 @@
 												size="icon-sm"
 												variant="ghost"
 												class="cursor-pointer text-destructive"
-												title="ลบ"
-												aria-label="ลบ {item.name}"
+												title="ปิดใช้งาน"
+												aria-label="ปิดใช้งาน {item.name}"
 												onclick={() => requestItemAction(item, 'delete')}
 											>
-												<Trash2 class="size-3.5" />
+												<Ban class="size-3.5" />
 											</Button>
 										{:else if action === 'reset'}
 											<Button
@@ -482,6 +556,10 @@
 													<Ban class="size-3.5" />
 												</Button>
 											{/if}
+										{:else if action === 'central'}
+											<span class="max-w-[8rem] text-right text-xs text-muted-foreground">
+												จัดการที่ส่วนกลาง
+											</span>
 										{/if}
 									</div>
 								</Table.Cell>
@@ -554,10 +632,10 @@
 		<Dialog.Footer class="gap-2">
 			<Button variant="outline" onclick={() => (confirmOpen = false)}>ยกเลิก</Button>
 			<Button
-				variant={pendingAction?.kind === 'deactivate' ? 'default' : 'destructive'}
+				variant={pendingAction?.kind === 'reset' ? 'default' : 'destructive'}
 				onclick={confirmPendingAction}
 			>
-				ยืนยัน
+				{confirmButtonLabel}
 			</Button>
 		</Dialog.Footer>
 	</Dialog.Content>

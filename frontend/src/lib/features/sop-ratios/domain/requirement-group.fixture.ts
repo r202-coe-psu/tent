@@ -31,7 +31,7 @@ export const DEFAULT_REQUIREMENT_GROUPS: RequirementGroup[] = [
 		item_maps: [
 			{
 				item_id: 'item_master:egg',
-				base_uom: 'piece',
+				base_uom: 'egg',
 				conversion_factor: 6.3,
 				share_percent: 50
 			},
@@ -63,7 +63,7 @@ export const DEFAULT_REQUIREMENT_GROUPS: RequirementGroup[] = [
 			},
 			{
 				item_id: 'item_master:egg',
-				base_uom: 'piece',
+				base_uom: 'egg',
 				conversion_factor: 6.3,
 				share_percent: 30
 			}

@@ -13,8 +13,6 @@ export type {
 	DonationCampaign,
 	CampaignNeed,
 	CountedItem,
-	Purchase,
-	PurchaseItem,
 	OperationsDoc,
 	LedgerReason,
 	DonationStatus,
@@ -49,17 +47,7 @@ export {
 	createStockLedger,
 	createWalkInDonation,
 	createCampaign,
-	createPurchase,
 	keyDonationReceipt,
-	keyPurchaseReceipt,
-	purchaseReceiptStatus,
-	canEditPurchase,
-	purchaseInputSchema,
-	purchaseReceiptInputSchema,
-	isPurchase,
-	type PurchaseInput,
-	type PurchaseReceiptInput,
-	type PurchaseReceiptStatus,
 	receiveDonation,
 	expireDonation,
 	canTransitionDonation,
@@ -110,7 +98,29 @@ export {
 	receivedItemSchema,
 	type ReceivedItemInput
 } from './domain/operations';
+export {
+	formatThaiDuration,
+	formatAgeInStock,
+	formatTimeSinceProduced,
+	formatTimeUntilExpiry,
+	formatLotClockLine,
+	formatItemAgeLine,
+	summarizeItemLotAge,
+	ageInStockMs,
+	timeSinceProducedMs,
+	timeUntilExpiryMs,
+	type ItemLotAgeSummary
+} from './domain/lot-age';
 export { deriveDeterministicLedgerId } from './domain/deterministic-ledger-id';
+export {
+	DEFAULT_STORAGE_LABEL,
+	lotStorageName,
+	lotStorageLabel,
+	lotStorageKey,
+	lotLocationFields,
+	storageLotFields,
+	type StoragePointRef
+} from './domain/lot-storage';
 
 // Data — repository contract + remote CouchDB binding
 export type { OperationsRepository } from './data/operations.repository';
@@ -131,10 +141,6 @@ export {
 	useCreateCampaign,
 	useReceiveWalkInDonation,
 	useUpdateCampaign,
-	usePurchases,
-	useCreatePurchase,
-	useUpdatePurchase,
-	useReceivePurchase,
 	useTransfers,
 	useTransfer,
 	useCreateTransfer,
@@ -148,6 +154,7 @@ export {
 	startOperationsLiveQuery
 } from './application/queries';
 export { useDonationNeedsBoard } from './application/use-donation-needs-board.svelte';
+export { useStoragePoints } from './application/use-storage-points.svelte';
 export type { NeedItem } from './application/need-item.types';
 
 // UI components
@@ -156,8 +163,6 @@ export { default as DistributeStockForm } from './ui/distribute-stock-form.svelt
 export { default as LedgerTable } from './ui/ledger-table.svelte';
 export { default as StockTable } from './ui/stock-table.svelte';
 export { default as AdjustStockForm } from './ui/adjust-stock-form.svelte';
-export { default as PurchaseForm } from './ui/PurchaseForm.svelte';
-export { default as PurchaseReceiptForm } from './ui/PurchaseReceiptForm.svelte';
-export { default as PurchaseTable } from './ui/PurchaseTable.svelte';
+export { default as StoragePointSelect } from './ui/storage-point-select.svelte';
 export { default as TransferForm } from './ui/transfer-form.svelte';
 export { default as TransferList } from './ui/transfer-list.svelte';

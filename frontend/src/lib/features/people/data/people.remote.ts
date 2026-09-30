@@ -35,6 +35,7 @@ import {
 	isActiveHouseholdStatus,
 	canCancelEvacueePreRegistration,
 	replacePersonId,
+	migrateVulnerableGroupCode,
 	migrateVulnerableGroupCodes,
 	listPendingZoneArrivalConfirmations,
 	type Medical,
@@ -235,7 +236,11 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		const q = search?.trim();
 		let matched = q ? all.filter((e) => matchesEvacueeSearch(e, q)) : all;
 		if (filters?.specialNeed) {
-			matched = matched.filter((e) => e.special_needs.some((need) => need === filters.specialNeed));
+			// Filter key kept as `specialNeed` for callers; matches `vulnerable_groups` (CR-112).
+			const want = migrateVulnerableGroupCode(filters.specialNeed);
+			matched = matched.filter((e) =>
+				migrateVulnerableGroupCodes(e.vulnerable_groups ?? []).includes(want)
+			);
 		}
 		if (filters?.zone) {
 			matched = matched.filter((e) => e.current_stay.zone === filters.zone);

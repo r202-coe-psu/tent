@@ -7,6 +7,7 @@
 	// Component
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
@@ -52,6 +53,7 @@
 	const PAGE_SIZE = 10;
 	let currentPage = $state(1);
 	let q = $state('');
+	let showDeactivated = $state(false);
 
 	const query = useRecipes(() => shelterCode);
 	const deleteMutation = useDeleteRecipe();
@@ -107,11 +109,23 @@
 	const filteredAll = $derived.by(() => {
 		const items = query.data ?? [];
 		const needle = q.trim().toLowerCase();
-		if (!needle) return items;
-		return items.filter((e) => e.label.toLowerCase().includes(needle));
+		return items.filter((e) => {
+			if (!showDeactivated && e.deactivated) return false;
+			if (!needle) return true;
+			return e.label.toLowerCase().includes(needle);
+		});
 	});
 	const total = $derived(filteredAll.length);
 	const totalPages = $derived(Math.max(1, Math.ceil(total / PAGE_SIZE)));
+	const hiddenDeactivatedCount = $derived.by(() => {
+		if (showDeactivated) return 0;
+		const needle = q.trim().toLowerCase();
+		return (query.data ?? []).filter((e) => {
+			if (!e.deactivated) return false;
+			if (!needle) return true;
+			return e.label.toLowerCase().includes(needle);
+		}).length;
+	});
 
 	const paginatedItems = $derived.by(() => {
 		const start = (currentPage - 1) * PAGE_SIZE;
@@ -119,7 +133,9 @@
 	});
 
 	$effect(() => {
-		if (q) currentPage = 1;
+		void q;
+		void showDeactivated;
+		currentPage = 1;
 	});
 
 	let viewMode = $state<'list' | 'create' | 'edit'>('list');
@@ -143,10 +159,24 @@
 
 {#if viewMode === 'list'}
 	<div class="flex w-full flex-col gap-4">
-		<div class="flex items-center justify-between gap-4">
-			<span class="text-md font-bold">รายการข้อมูล ({total})</span>
-			<div class="item-center flex gap-2">
-				<div class="relative w-72">
+		<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+			<div>
+				<span class="text-md font-bold">รายการข้อมูล ({total})</span>
+				{#if hiddenDeactivatedCount > 0}
+					<p class="text-xs text-muted-foreground">
+						ซ่อน {hiddenDeactivatedCount} รายการที่ปิดใช้งาน
+					</p>
+				{/if}
+			</div>
+			<div class="flex flex-wrap items-center gap-3">
+				<label
+					for="show-deactivated-recipes"
+					class="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground"
+				>
+					<Checkbox id="show-deactivated-recipes" bind:checked={showDeactivated} />
+					<span>แสดงรายการที่ปิดใช้งาน</span>
+				</label>
+				<div class="relative w-72 max-w-full">
 					<Search class="absolute top-2.5 left-2.5 h-4 w-4 text-muted-foreground" />
 					<Input bind:value={q} type="search" placeholder="ค้นหา..." class="pl-9" />
 				</div>

@@ -1,13 +1,11 @@
 /**
- * Staging ops: stock, campaigns, donations, purchases for SH001–SH003.
+ * Staging ops: stock, campaigns, donations for SH001–SH003.
  */
 import type { AuthorContext } from '$lib/db/model';
 import {
 	createCampaign,
-	createPurchase,
 	createStockLedger,
-	createWalkInDonation,
-	keyPurchaseReceipt
+	createWalkInDonation
 } from '$lib/features/operations/domain/operations';
 import { shelterDbName } from '$lib/server/shelter-access-design';
 import { prefixRangeEnd } from '../t31-seed-support';
@@ -172,42 +170,9 @@ export async function seedStagingOps(): Promise<void> {
 			_id: `donation:seed-st:${code.toLowerCase()}:${i}`
 		}));
 
-		const purchases = [
-			createPurchase(
-				{
-					vendor: 'บริษัท สยามค้าส่ง จำกัด',
-					po_ref: `PO-ST-${code}-0001`,
-					items: [
-						{ item_id: ITEM.rice, qty: '100', unit: 'kg' },
-						{ item_id: ITEM.soap, qty: '60', unit: 'bar' }
-					],
-					note: 'จัดซื้อรอบ staging seed'
-				},
-				ctx
-			)
-		].map((doc, i) => ({
-			...doc,
-			_id: `purchase:seed-st:${code.toLowerCase()}:${i}`
-		}));
-
-		const purchaseReceipts = keyPurchaseReceipt(
-			purchases[0],
-			[{ item_id: ITEM.rice, qty: '100', unit: 'kg' }],
-			ctx
-		).map((doc, i) => ({
-			...doc,
-			_id: `stock_ledger:seed-st:${code.toLowerCase()}:pr-${i}`
-		}));
-
-		await bulkDocs(db, [
-			...stockEntries,
-			...campaigns,
-			...donations,
-			...purchases,
-			...purchaseReceipts
-		]);
+		await bulkDocs(db, [...stockEntries, ...campaigns, ...donations]);
 		console.log(
-			`  ✓ ${db}: ${stockEntries.length} stock, ${campaigns.length} campaigns, ${donations.length} donations, ${purchases.length} purchases`
+			`  ✓ ${db}: ${stockEntries.length} stock, ${campaigns.length} campaigns, ${donations.length} donations`
 		);
 	}
 }
