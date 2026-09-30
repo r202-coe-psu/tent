@@ -446,10 +446,6 @@ class KioskApiRouteTests(unittest.IsolatedAsyncioTestCase):
                     self.assertNotIn("x-device-secret", route.continued_headers)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class SilentPrintArgsTests(unittest.TestCase):
     def build(self, **overrides):
         with patch.object(manager.ScannerClientManager, "_resolve_executable_path", return_value=manager.SYSTEM_CHROMIUM_PATH):
@@ -617,3 +613,7 @@ class KioskPrintRouteTests(unittest.IsolatedAsyncioTestCase):
         await client._route_kiosk_api(route)
         self.assertIsNone(route.fulfilled)
         self.assertNotIn("x-device-id", route.continued_headers)
+
+
+if __name__ == "__main__":
+    unittest.main()
