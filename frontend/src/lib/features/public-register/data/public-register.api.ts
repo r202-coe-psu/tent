@@ -30,10 +30,52 @@ export type PublicUnifiedBookingPayload = UnifiedRegistrationInput & {
 	disclaimerAcknowledged?: boolean;
 };
 
+/** BFF error with machine-readable `code` for join-clear / field mapping. */
+export class PublicApiError extends Error {
+	readonly code: string;
+	constructor(code: string, message: string) {
+		super(message);
+		this.name = 'PublicApiError';
+		this.code = code;
+	}
+}
+
+export function isJoinSelectionInvalidError(err: unknown): boolean {
+	return (
+		err instanceof PublicApiError &&
+		(err.code === 'INVALID_JOIN_TOKEN' || err.code === 'JOIN_TARGET_NOT_FOUND')
+	);
+}
+
+function firstFlattenedFieldMessage(details: unknown): string | null {
+	if (!details || typeof details !== 'object') return null;
+	const d = details as {
+		formErrors?: unknown;
+		fieldErrors?: Record<string, unknown>;
+	};
+	if (Array.isArray(d.formErrors)) {
+		const form = d.formErrors.find((m) => typeof m === 'string' && m.trim());
+		if (typeof form === 'string') return form;
+	}
+	for (const value of Object.values(d.fieldErrors ?? {})) {
+		if (!Array.isArray(value)) continue;
+		const msg = value.find((m) => typeof m === 'string' && m.trim());
+		if (typeof msg === 'string') return msg;
+	}
+	return null;
+}
+
+type ErrorEnvelope = { error?: unknown; details?: unknown };
+
 /** Turn the BFF's `{ success:false, error }` envelope into a Thai-language Error. */
-async function bookingError(res: Response): Promise<Error> {
-	const body = (await res.json().catch(() => null)) as { error?: unknown } | null;
-	return new Error(publicBookingErrorMessage(body?.error));
+async function bookingError(res: Response): Promise<PublicApiError> {
+	const body = (await res.json().catch(() => null)) as ErrorEnvelope | null;
+	const code = typeof body?.error === 'string' ? body.error : 'WRITE_FAILED';
+	if (code === 'INVALID_INPUT') {
+		const fieldMsg = firstFlattenedFieldMessage(body?.details);
+		if (fieldMsg) return new PublicApiError(code, fieldMsg);
+	}
+	return new PublicApiError(code, publicBookingErrorMessage(code));
 }
 
 export async function createBooking(
@@ -68,9 +110,14 @@ export type PublicUnassignedRegistrationPayload = UnifiedRegistrationInput & {
 	disclaimerAcknowledged?: boolean;
 };
 
-async function unassignedRegistrationError(res: Response): Promise<Error> {
-	const body = (await res.json().catch(() => null)) as { error?: unknown } | null;
-	return new Error(unassignedRegistrationErrorMessage(body?.error as string | undefined));
+async function unassignedRegistrationError(res: Response): Promise<PublicApiError> {
+	const body = (await res.json().catch(() => null)) as ErrorEnvelope | null;
+	const code = typeof body?.error === 'string' ? body.error : 'WRITE_FAILED';
+	if (code === 'INVALID_INPUT') {
+		const fieldMsg = firstFlattenedFieldMessage(body?.details);
+		if (fieldMsg) return new PublicApiError(code, fieldMsg);
+	}
+	return new PublicApiError(code, unassignedRegistrationErrorMessage(code));
 }
 
 /**
@@ -96,6 +143,8 @@ export type ResidenceMatchChip = {
 	shelter_code?: string | null;
 	shelter_name?: string | null;
 	is_in_shelter?: boolean;
+	/** When true with `is_in_shelter`, public join button may be shown. */
+	accepts_pre_registration?: boolean;
 	primary_contact_masked?: string | null;
 	matched_member_masked?: string | null;
 	member_count?: number;

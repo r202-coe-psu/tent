@@ -75,7 +75,7 @@
 		if (!household) return null;
 		const parts = [
 			household.address_no || '',
-			household.village_no ? `หมู่ที่ ${household.village_no}` : '',
+			household.village_no || '',
 			household.subdistrict ? `ต.${household.subdistrict}` : '',
 			household.district ? `อ.${household.district}` : '',
 			household.province ? `จ.${household.province}` : '',

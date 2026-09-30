@@ -2,7 +2,7 @@
 title: Smart Shelter — API Contract v1
 status: draft for review
 created: 2026-06-11
-updated: 2026-09-16
+updated: 2026-09-29
 note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration; Partner Data API EXT-001–007 (#214); CR-124 staff Google step-up MFA + Google SSO login (enrolled + mint AuthSession)
 ---
 
@@ -250,12 +250,16 @@ TTL **ไม่รีเซ็ต** — `expires_at` ยังนับจาก
 | Method | Path | Auth |
 | --- | --- | --- |
 | POST | `/public/v1/unassigned-registrations/photos` | public BFF + secret — GridFS face/pet photo (#255); returns `photo_id` (`gfs:{oid}`) |
-| POST | `/public/v1/unassigned-registrations` | public BFF + secret — body mirrors public UnifiedRegistration fields (+ member `photo` / pet `image_url` refs); `schema_v: 2` |
-| GET | `/staff/v1/unassigned-registrations/search?q=` | staff session |
-| POST | `/staff/v1/unassigned-registrations/{id}/claim` | staff + shelter scope — copies nickname/religion/emergency_contact; GridFS member `photo` + pet `image_url` → Couch `image:{ulid}` |
+| POST | `/public/v1/unassigned-registrations` | public BFF + secret — body mirrors public UnifiedRegistration fields (+ member `photo` / pet `image_url` refs); `schema_v: 3`; optional `join_registration_id` appends into existing family (incl. closed → reopen) |
+| GET | `/staff/v1/unassigned-registrations/search?q=` | staff session — open members + open pets |
+| GET | `/staff/v1/unassigned-registrations/{id}/review` | `require_registration_staff` — read-only pre-claim review (CR-140 addendum); open members/pets + household address only (no `pets[]` claim-status list); writes nothing |
+| GET | `/staff/v1/unassigned-registrations/photos/{photo_id}` | `require_registration_staff` — streams GridFS bytes (CR-140 addendum); 404 unless `photo_id` is still referenced by an **open** member `photo` or pet `image_url` |
+| POST | `/staff/v1/unassigned-registrations/{id}/claim` | staff + shelter scope — body `member_ids` and/or `pet_ids`; copies nickname/religion/emergency_contact; GridFS member `photo` + pet `image_url` → Couch `image:{ulid}`; append claimed pets onto existing Couch HH |
 | DELETE | `/staff/v1/unassigned-registrations/{id}` | `system_admin` only |
 
-Claim = Mongo mark แล้ว birth Couch (option B — ดู [CR-113](../changes/CR-113-unassigned-registration-mongo.md)); shape: `schema.md` §9.5. Full-claim Mongo delete เป็น best-effort: ถ้า delete ล้มหลัง birth สำเร็จ ตอบ 200 ด้วย `deleted: false` และ `id` ของเอกสาร orphan (ไม่ 503). Public browser เรียกผ่าน SvelteKit BFF เท่านั้น (ไม่ตรง FastAPI).
+Claim = Mongo mark (คน+สัตว์) แล้ว birth/append Couch (option B — ดู [CR-113](../changes/CR-113-unassigned-registration-mongo.md) + [CR-140](../changes/CR-140-persistent-unassigned-family.md)); shape: `schema.md` §9.5. เมื่อไม่มี `open` เหลือ → เอกสาร `closed` (**ไม่** hard-delete); `deleted` เสมอ `false`. Public browser เรียกผ่าน SvelteKit BFF เท่านั้น (ไม่ตรง FastAPI).
+
+**CR-140 addendum:** Staff claim UI ไม่เรียก `POST .../claim` ทันทีที่ติ๊กเลือก — ไปหน้า review (`GET .../{id}/review`, อ่านอย่างเดียว) ก่อนเสมอ; `POST .../claim` ถูกเรียกเมื่อ staff กดยืนยันในหน้านั้นเท่านั้น (ดู [CR-140](../changes/CR-140-persistent-unassigned-family.md) addendum ท้ายไฟล์).
 
 ### 5.3 Partner Data API — OAuth2 `/external` (EXT-001–007, #214)
 

@@ -60,7 +60,7 @@ describe('unassignedRegistrationClaimResponseSchema', () => {
 	};
 
 	it('parses a full claim response', () => {
-		expect(unassignedRegistrationClaimResponseSchema.parse(valid)).toEqual(valid);
+		expect(unassignedRegistrationClaimResponseSchema.parse(valid)).toMatchObject(valid);
 	});
 
 	it('parses orphan full-claim response (deleted false with id)', () => {
@@ -70,7 +70,21 @@ describe('unassignedRegistrationClaimResponseSchema', () => {
 			deleted: false,
 			remaining_open: []
 		};
-		expect(unassignedRegistrationClaimResponseSchema.parse(orphan)).toEqual(orphan);
+		expect(unassignedRegistrationClaimResponseSchema.parse(orphan)).toMatchObject(orphan);
+	});
+
+	it('parses pets-only claim response', () => {
+		const petsOnly = {
+			...valid,
+			evacuee_ids: [],
+			claimed: [],
+			claimed_pets: [
+				{ pet_id: 'pet:1', status: 'claimed' as const, species: 'dog' as const, count: 1 }
+			],
+			remaining_open: [],
+			remaining_open_pets: []
+		};
+		expect(unassignedRegistrationClaimResponseSchema.parse(petsOnly)).toMatchObject(petsOnly);
 	});
 
 	it('rejects a response missing claimed members', () => {

@@ -7,6 +7,10 @@ import {
 	type UnassignedRegistrationClaimRequest,
 	type UnassignedRegistrationClaimResponse
 } from '../domain/claim';
+import {
+	unassignedRegistrationReviewSchema,
+	type UnassignedRegistrationReview
+} from '../domain/review';
 import type { UnassignedRegistrationSearchResponse } from '../domain/search';
 import type { UnassignedRegistrationRepository } from './unassigned-registration.repository';
 
@@ -92,6 +96,29 @@ export const unassignedRegistrationRemote: UnassignedRegistrationRepository = {
 			throw new UnassignedRegistrationApiError(
 				'CLAIM_FAILED',
 				'รูปแบบคำตอบรับเข้าศูนย์ไม่ถูกต้อง',
+				response.status
+			);
+		}
+		return parsed.data;
+	},
+
+	async getReview(registrationId: string): Promise<UnassignedRegistrationReview> {
+		const response = await fetch(
+			`/api/staff/v1/unassigned-registrations/${encodeURIComponent(registrationId)}/review`,
+			{
+				credentials: 'include',
+				headers: { Accept: 'application/json' }
+			}
+		);
+		const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+		if (!response.ok || !body) {
+			throw errorFromBody(body, response.status, 'REVIEW_FAILED', 'โหลดข้อมูลตรวจสอบไม่สำเร็จ');
+		}
+		const parsed = unassignedRegistrationReviewSchema.safeParse(body);
+		if (!parsed.success) {
+			throw new UnassignedRegistrationApiError(
+				'REVIEW_FAILED',
+				'รูปแบบข้อมูลตรวจสอบไม่ถูกต้อง',
 				response.status
 			);
 		}
