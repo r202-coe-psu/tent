@@ -247,7 +247,13 @@ sudo rm -f /tmp/origin_*.bmp /tmp/dithered_*.bmp /tmp/prnimg_*.bmp /tmp/xxxxx.lo
 
 # 4) Privacy: the driver's postinst adds a root cron that copies print images to /var/log/prnlog
 info "[4/7] ลบ cron mvimg.sh + /var/log/prnlog"
-{ sudo crontab -l 2>/dev/null || true; } | { grep -v 'mvimg.sh' || true; } | sudo crontab -
+# `|| true` on its own would swallow a real read failure (not just "no crontab yet") and hand
+# `sudo crontab -` an empty stream, wiping the whole root crontab — only rewrite it on a real read.
+if crontab_out="$(sudo crontab -l 2>&1)"; then
+    printf '%s\n' "$crontab_out" | grep -v 'mvimg.sh' | sudo crontab -
+elif ! grep -q "no crontab" <<<"$crontab_out"; then
+    warn "ตรวจ root crontab ไม่ได้ (ต้องใช้ sudo) — ข้ามการลบ mvimg.sh cron"
+fi
 sudo rm -rf /var/log/prnlog
 
 # 5) Find the printer (lpinfo scans backends slowly — retry)
