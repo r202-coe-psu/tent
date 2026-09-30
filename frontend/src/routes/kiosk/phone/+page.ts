@@ -1,11 +1,11 @@
 import { resolve } from '$app/paths';
 import { redirect } from '@sveltejs/kit';
-import { fetchKioskConfig } from '$lib/features/kiosk/config';
 import {
 	buildKioskContextQuery,
+	fetchKioskConfig,
 	getKioskDisplayContext,
 	readKioskDisplayQuery
-} from '$lib/features/kiosk';
+} from '$lib/features/kiosk/config';
 import type { PageLoad } from './$types';
 
 export const load: PageLoad = async ({ url, fetch }) => {

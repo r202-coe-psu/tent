@@ -3,7 +3,12 @@ import { isRedirect } from '@sveltejs/kit';
 import { fetchKioskConfig } from '$lib/features/kiosk/config';
 import { load } from './+page';
 
-vi.mock('$lib/features/kiosk/config', () => ({ fetchKioskConfig: vi.fn() }));
+vi.mock('$lib/features/kiosk/config', async () => {
+	const actual = await vi.importActual<typeof import('$lib/features/kiosk/config')>(
+		'$lib/features/kiosk/config'
+	);
+	return { ...actual, fetchKioskConfig: vi.fn() };
+});
 
 describe('kiosk phone route load', () => {
 	it('redirects to kiosk home when the shelter has phone check-in disabled', async () => {

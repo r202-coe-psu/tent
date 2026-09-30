@@ -12,3 +12,12 @@ export {
 	isKioskPhoneCheckInEnabled,
 	isKioskWalkInRegistrationEnabled
 } from './domain/kiosk-config';
+export {
+	buildKioskContextQuery,
+	getKioskDisplayContext,
+	KIOSK_DISPLAY_QUERY_KEYS,
+	readKioskDisplayQuery,
+	type KioskDisplayContext,
+	type KioskDisplayQuery,
+	type KioskDisplayQueryKey
+} from './domain/display-context';
