@@ -1,15 +1,21 @@
-import { describe, expect, it, vi } from 'vitest';
-import { ConflictError } from '$lib/utils/errors';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-	DAILY_SOP_QUESTIONS,
-	LIFELINE_KEYS,
-	answerControl,
-	createEmptyDraft,
-	type DailySopAssessment
+	createEmptyRoleDraft,
+	dailySopBangkokDate,
+	dailySopRoleAssessmentSchema,
+	questionsForRole,
+	roleDraftFromAssessment
 } from '../domain/daily-sop';
-import { buildDailySopId, DailySopRemoteRepository } from './daily-sop.remote';
+import { buildDailySopRoleId, DailySopRoleRemoteRepository } from './daily-sop.remote';
+import { validRatios } from '$lib/features/sop-ratios/domain/sop-ratio.fixture';
 
-const ctx = { shelterCode: 'SH001', createdBy: 'sa01' };
+const ctx = {
+	shelterCode: 'SH001',
+	createdBy: 'fac01',
+	assessorName: 'ผู้ตรวจสถานที่',
+	roles: ['SH001:facility_staff'],
+	sopRatios: validRatios
+};
 
 vi.mock('$lib/db/couch-db', () => ({
 	allDocsByType: vi.fn(),
@@ -17,185 +23,173 @@ vi.mock('$lib/db/couch-db', () => ({
 	putDocStrict: vi.fn()
 }));
 
-describe('Daily SOP repository contract', () => {
-	it('builds one deterministic id per shelter and date', () => {
-		expect(buildDailySopId('SH001', '2026-06-11')).toBe('daily_sop_assessment:SH001:2026-06-11');
+describe('Daily SOP role repository', () => {
+	afterEach(() => {
+		vi.useRealTimers();
 	});
 
-	it('requires at least one selected status before writing', async () => {
-		const repository = new DailySopRemoteRepository('shelter_sh001');
-		await expect(repository.createCompleted(createEmptyDraft(), '2026-06-11', ctx)).rejects.toThrow(
-			'at least one selected status'
-		);
-	});
-
-	it('persists an in-progress record after the first selected answer', async () => {
+	beforeEach(async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-09-25T00:00:00.000Z'));
 		const couch = await import('$lib/db/couch-db');
-		const draft = answerControl(
-			createEmptyDraft(),
-			'sop-reg-1',
-			'Pending',
-			ctx.createdBy,
-			'2026-06-11T08:01:00.000Z'
-		);
-		vi.mocked(couch.putDocStrict).mockImplementationOnce(async (_db, doc) => doc);
-		const result = await new DailySopRemoteRepository('shelter_sh001').createCompleted(
-			draft,
-			'2026-06-11',
-			{ ...ctx, assessorName: 'นายสมชาย ใจดี' }
-		);
-		if (result.kind === 'created') {
-			expect(result.assessment.schema_v).toBe(1);
-			expect(result.assessment.status).toBe('InProgress');
-			expect(result.assessment.assessor_name).toBe('นายสมชาย ใจดี');
-			expect(result.assessment.created_by).toBe('sa01');
-			expect(result.assessment.controls[0]).toMatchObject({ status: 'Pending', answered: true });
-			expect(result.assessment.controls[1].answered).toBe(false);
-			expect(result.assessment.lifelines.electricity).toBeNull();
-		}
+		vi.mocked(couch.allDocsByType).mockResolvedValue([]);
+		vi.mocked(couch.getDoc).mockResolvedValue(null);
+		vi.mocked(couch.putDocStrict).mockImplementation(async (_db, doc) => ({
+			...doc,
+			_rev: '1-created'
+		}));
 	});
 
-	it('returns the existing snapshot when CouchDB reports a duplicate', async () => {
-		const couch = await import('$lib/db/couch-db');
-		const draft = createEmptyDraft();
-		DAILY_SOP_QUESTIONS.forEach((question) => (draft.controls[question.id] = 'Pass'));
-		LIFELINE_KEYS.forEach((key) => (draft.lifelines[key] = 'Operational'));
-		const existing = {
-			_id: buildDailySopId('SH001', '2026-06-11'),
-			type: 'daily_sop_assessment',
-			schema_v: 1,
-			shelter_code: 'SH001',
-			assessment_date: '2026-06-11',
-			assessed_at: '2026-06-11T15:00:00.000Z',
-			assessor_name: ctx.createdBy,
-			status: 'Completed',
-			progress_percent: 100,
-			pass_percent: 100,
-			risk_label: 'ไม่พบความเสี่ยง',
-			controls: DAILY_SOP_QUESTIONS.map((question) => ({
-				id: question.id,
-				section_id: question.sectionId,
-				question: question.prompt,
-				status: 'Yes',
-				answered: true,
-				checked_by: ctx.createdBy,
-				checked_at: '2026-06-11T15:00:00.000Z'
-			})),
-			lifelines: {
-				electricity: 'Operational',
-				water: 'Operational',
-				gas: 'Operational',
-				telecom: 'Operational'
-			},
-			created_at: '2026-06-11T15:00:00.000Z',
-			updated_at: '2026-06-11T15:00:00.000Z',
-			created_by: ctx.createdBy
-		};
-		vi.mocked(couch.putDocStrict).mockRejectedValueOnce(new ConflictError());
-		vi.mocked(couch.getDoc).mockResolvedValueOnce(existing);
-		const result = await new DailySopRemoteRepository('shelter_sh001').createCompleted(
+	it('builds one deterministic assessment id for each shelter, day, and role', () => {
+		expect(buildDailySopRoleId('SH001', '2026-09-25', 'FAC')).toBe(
+			'daily_sop_role_assessment:SH001:2026-09-25:FAC'
+		);
+	});
+
+	it('persists a role-specific snapshot with the active parameter threshold and no source references', async () => {
+		const draft = createEmptyRoleDraft('FAC');
+		for (const question of questionsForRole('FAC')) draft[question.id].status = 'Pass';
+		draft['D-FAC-01'].measured_values = { usableArea: 350, occupants: 100 };
+		const result = await new DailySopRoleRemoteRepository('shelter_sh001').createOrUpdate(
+			'FAC',
 			draft,
-			'2026-06-11',
+			'2026-09-25',
 			ctx
 		);
-		expect(result.kind).toBe('duplicate');
-		expect(result.assessment._id).toBe(existing._id);
+		expect(result._id).toBe(buildDailySopRoleId('SH001', '2026-09-25', 'FAC'));
+		expect(result).not.toHaveProperty('question_set_version');
+		expect(result.status).toBe('Completed');
+		expect(result.controls).toHaveLength(15);
+		expect(result.controls[0]).toMatchObject({
+			id: 'D-FAC-01',
+			question: 'พื้นที่พักอาศัยสุทธิต่อผู้พักพิงไม่น้อยกว่า 3.5 ตร.ม./คน หรือไม่',
+			measured_values: { usableArea: 350, occupants: 100 },
+			pass_criteria: 'พื้นที่สุทธิ ÷ ผู้พักพิง ≥ 3.5 ตร.ม./คน',
+			metric_spec: {
+				threshold: '3.5 ตร.ม./คน',
+				parameter: { key: 'm2_per_person_living', value: '3.5' }
+			}
+		});
+		expect(result.controls[0].metric_spec).not.toHaveProperty('formula');
+		expect(result.controls[0]).not.toHaveProperty('source_refs');
+		expect(result.created_by).toBe(ctx.createdBy);
+		expect(result.assessor_name).toBe(ctx.assessorName);
+		expect(result.controls[0].checked_by).toBe(ctx.createdBy);
+		expect(result.controls[0].checked_by_name).toBe(ctx.assessorName);
+		expect(result.controls[0].checked_at).toBe(result.assessed_at);
+
+		const historicalCopy = dailySopRoleAssessmentSchema.parse({
+			...result,
+			question_set_version: 'daily-sop-role-v0',
+			pass_count: result.pass_count - 1,
+			unanswered_count: 0,
+			controls: result.controls
+				.slice(0, -1)
+				.map((control, index) =>
+					index === 0 ? { ...control, question: 'ถ้อยคำที่บันทึกไว้ตอนประเมิน' } : control
+				)
+		});
+		expect(historicalCopy.controls[0].question).toBe('ถ้อยคำที่บันทึกไว้ตอนประเมิน');
+		expect(historicalCopy.controls).toHaveLength(14);
+		expect(historicalCopy.question_set_version).toBe('daily-sop-role-v0');
 	});
 
-	it('persists explicitly selected Pending answers and non-operational Lifelines', async () => {
+	it('allows writes only for the current Bangkok date', async () => {
+		const repo = new DailySopRoleRemoteRepository('shelter_sh001');
+		const today = dailySopBangkokDate();
+		const yesterday = new Date(`${today}T05:00:00.000Z`);
+		yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+		const tomorrow = new Date(`${today}T05:00:00.000Z`);
+		tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+		const dateValue = (value: Date) => value.toISOString().slice(0, 10);
+		await expect(
+			repo.createOrUpdate('FAC', createEmptyRoleDraft('FAC'), dateValue(yesterday), ctx)
+		).rejects.toThrow('other dates are read-only');
+		await expect(
+			repo.createOrUpdate('FAC', createEmptyRoleDraft('FAC'), dateValue(tomorrow), ctx)
+		).rejects.toThrow('other dates are read-only');
+	});
+
+	it('requires the role owner or manager and rejects Fail without a note', async () => {
+		const repo = new DailySopRoleRemoteRepository('shelter_sh001');
+		const draft = createEmptyRoleDraft('FAC');
+		draft['D-FAC-01'].status = 'Fail';
+		await expect(
+			repo.createOrUpdate('FAC', draft, '2026-09-25', {
+				shelterCode: 'SH001',
+				createdBy: 'reg01',
+				roles: ['SH001:registration_staff']
+			})
+		).rejects.toThrow('Unauthorized');
+		await expect(repo.createOrUpdate('FAC', draft, '2026-09-25', ctx)).rejects.toThrow('notes');
+	});
+
+	it('updates answers without changing the saved question snapshot', async () => {
 		const couch = await import('$lib/db/couch-db');
-		const draft = createEmptyDraft();
-		DAILY_SOP_QUESTIONS.forEach((question) => {
-			draft.controls[question.id] = 'Pending';
-			draft.answeredControls[question.id] = true;
-		});
-		LIFELINE_KEYS.forEach((key) => (draft.lifelines[key] = 'Interrupted'));
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-09-25T00:00:00.000Z'));
+		const firstDraft = createEmptyRoleDraft('FAC');
+		for (const question of questionsForRole('FAC')) firstDraft[question.id].status = 'Pass';
+		const saved = await new DailySopRoleRemoteRepository('shelter_sh001').createOrUpdate(
+			'FAC',
+			firstDraft,
+			'2026-09-25',
+			ctx
+		);
+		const existing = {
+			...saved,
+			question_set_version: 'daily-sop-role-v0',
+			pass_count: saved.pass_count - 1,
+			controls: saved.controls
+				.slice(0, -1)
+				.map((control, index) =>
+					index === 0 ? { ...control, question: 'ถ้อยคำเดิมของคำถาม' } : control
+				),
+			_rev: '2-current'
+		};
+		const draft = roleDraftFromAssessment(existing);
+		const originalChangedAt = existing.controls.find(
+			(control) => control.id === 'D-FAC-01'
+		)!.checked_at;
+		const originalUnchanged = existing.controls.find((control) => control.id === 'D-FAC-02')!;
+		vi.mocked(couch.getDoc).mockResolvedValueOnce(existing);
 		vi.mocked(couch.putDocStrict).mockImplementationOnce(async (_db, doc) => ({
 			...doc,
-			_rev: '1-pending'
+			_rev: '3-updated'
 		}));
-
-		const result = await new DailySopRemoteRepository('shelter_sh001').createCompleted(
+		vi.setSystemTime(new Date('2026-09-25T03:00:00.000Z'));
+		draft['D-FAC-01'].status = 'Fail';
+		draft['D-FAC-01'].notes = 'พื้นที่บางส่วนใช้เป็นที่เก็บของ';
+		const updated = await new DailySopRoleRemoteRepository('shelter_sh001').createOrUpdate(
+			'FAC',
 			draft,
-			'2026-06-12',
-			ctx
-		);
-		expect(result.kind).toBe('created');
-		if (result.kind === 'created') {
-			expect(result.assessment.progress_percent).toBe(100);
-			expect(result.assessment.pass_percent).toBe(0);
-			expect(result.assessment.controls[0].status).toBe('Pending');
-			expect(result.assessment.risk_label).toBe('พบความเสี่ยง');
-		}
-	});
-
-	it('updates an existing snapshot with any control and lifeline status', async () => {
-		const couch = await import('$lib/db/couch-db');
-		const existing = {
-			_id: buildDailySopId('SH001', '2026-06-11'),
-			_rev: '3-revision',
-			type: 'daily_sop_assessment',
-			schema_v: 1,
-			shelter_code: 'SH001',
-			assessment_date: '2026-06-11',
-			assessed_at: '2026-06-11T15:00:00.000Z',
-			assessor_name: ctx.createdBy,
-			status: 'Completed',
-			progress_percent: 100,
-			pass_percent: 100,
-			risk_label: 'ไม่พบความเสี่ยง',
-			controls: DAILY_SOP_QUESTIONS.map((question) => ({
-				id: question.id,
-				section_id: question.sectionId,
-				question: question.prompt,
-				status: 'Yes' as const,
-				answered: true,
-				checked_by: ctx.createdBy,
-				checked_at: '2026-06-11T15:00:00.000Z'
-			})),
-			lifelines: {
-				electricity: 'Operational' as const,
-				water: 'Operational' as const,
-				gas: 'Operational' as const,
-				telecom: 'Operational' as const
-			},
-			created_at: '2026-06-11T15:00:00.000Z',
-			updated_at: '2026-06-11T15:00:00.000Z',
-			created_by: ctx.createdBy
-		} satisfies DailySopAssessment;
-		let draft = createEmptyDraft();
-		draft = answerControl(
-			draft,
-			DAILY_SOP_QUESTIONS[0].id,
-			'Fail',
-			'staff01',
-			'2026-08-31T12:11:00.000Z'
-		);
-		draft.lifelines.electricity = 'Critical';
-		vi.mocked(couch.putDocStrict).mockImplementationOnce(async (_db, doc) => doc);
-
-		const updated = await new DailySopRemoteRepository('shelter_sh001').updateCompleted(
-			existing,
-			draft,
-			ctx
+			'2026-09-25',
+			{
+				shelterCode: 'SH001',
+				createdBy: 'manager01',
+				assessorName: 'ผู้จัดการรอบบ่าย',
+				roles: ['SH001:shelter_manager'],
+				sopRatios: validRatios
+			}
 		);
 		expect(updated._id).toBe(existing._id);
-		expect(updated.schema_v).toBe(1);
-		expect(updated._rev).toBe(existing._rev);
-		expect(updated.assessed_at).toBe(existing.assessed_at);
-		expect(updated.assessor_name).toBe(existing.assessor_name);
-		expect(updated.created_at).toBe(existing.created_at);
-		expect(updated.created_by).toBe(existing.created_by);
-		expect(updated.controls[0].status).toBe('No');
-		expect(updated.controls[0]).toMatchObject({
-			checked_by: 'staff01',
-			checked_at: '2026-08-31T12:11:00.000Z'
+		expect(updated._rev).toBe('3-updated');
+		expect(updated.question_set_version).toBe('daily-sop-role-v0');
+		expect(updated.controls).toHaveLength(14);
+		expect(updated.controls[0].question).toBe('ถ้อยคำเดิมของคำถาม');
+		expect(updated.fail_count).toBe(1);
+		expect(updated.controls.find((control) => control.id === 'D-FAC-01')).toMatchObject({
+			checked_by: 'manager01',
+			checked_by_name: 'ผู้จัดการรอบบ่าย',
+			checked_at: '2026-09-25T03:00:00.000Z'
 		});
-		expect(updated.controls[1]).toMatchObject({
+		expect(updated.controls.find((control) => control.id === 'D-FAC-01')!.checked_at).not.toBe(
+			originalChangedAt
+		);
+		expect(updated.controls.find((control) => control.id === 'D-FAC-02')).toMatchObject({
 			checked_by: ctx.createdBy,
-			checked_at: '2026-06-11T15:00:00.000Z'
+			checked_by_name: ctx.assessorName,
+			checked_at: originalUnchanged.checked_at
 		});
-		expect(updated.lifelines.electricity).toBe('Critical');
-		expect(couch.putDocStrict).toHaveBeenCalled();
 	});
 });
