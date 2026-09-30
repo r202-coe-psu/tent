@@ -4,6 +4,7 @@
 		type SopMaster,
 		type SopOverride,
 		SOP_RATIO_KEYS,
+		VISIBLE_SOP_RATIO_KEYS,
 		type SopRatioKey,
 		RATIO_LABELS,
 		sopProfileFormSchema,
@@ -164,7 +165,7 @@
 						/>
 					</div>
 				{/if}
-				{#each SOP_RATIO_KEYS as key (key)}
+				{#each VISIBLE_SOP_RATIO_KEYS as key (key)}
 					{@const meta = RATIO_LABELS[key]}
 					<div class="rounded-2xl border border-black/[0.06] bg-slate-50/60 p-4">
 						<div class="mb-2 flex items-center justify-between">

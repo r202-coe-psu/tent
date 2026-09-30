@@ -372,8 +372,7 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		phonePlaceholder: '10-digit phone number',
 		noPhone: 'No phone number',
 		headPhoneRequired: 'Please enter the primary contact’s 10-digit phone number',
-		joinPhoneOptionalHelper:
-			'This household already has a primary contact — phone is optional',
+		joinPhoneOptionalHelper: 'This household already has a primary contact — phone is optional',
 		joinPhoneInvalid: 'Enter a full 10-digit phone, leave blank, or choose no phone',
 		specialNeedsLegend: 'Individual Special Needs',
 		step3PetsTitle: 'Pets and Vehicles',

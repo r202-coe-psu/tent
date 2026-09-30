@@ -179,7 +179,7 @@
 				{channel}
 				excludeIds={members.map((m) => m._id).filter((id): id is string => Boolean(id))}
 				fieldErrors={memberFieldErrors[index]}
-				isJoiningExistingHousehold={isJoiningExistingHousehold}
+				{isJoiningExistingHousehold}
 				primaryContactPhone={isJoiningExistingHousehold
 					? primaryContactPhone
 					: (members[0]?.phone ?? null)}

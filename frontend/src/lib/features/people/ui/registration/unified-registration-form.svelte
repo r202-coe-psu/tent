@@ -1104,8 +1104,8 @@
 										<strong class="text-foreground"
 											>{selectedMatchChip.shelter_name || selectedMatchChip.shelter_code}</strong
 										>
-										— แนะนำไปติดต่อที่ศูนย์หรือแจ้งเจ้าหน้าที่ รวมทีหลังที่ศูนย์ได้ ·
-										การเข้าร่วมนี้เพิ่มชื่อเข้าคิวกลางใบเดิม ไม่ใช่เข้าศูนย์อัตโนมัติ
+										— แนะนำไปติดต่อที่ศูนย์หรือแจ้งเจ้าหน้าที่ รวมทีหลังที่ศูนย์ได้ · การเข้าร่วมนี้เพิ่มชื่อเข้าคิวกลางใบเดิม
+										ไม่ใช่เข้าศูนย์อัตโนมัติ
 									</span>
 									{#if onselectshelter}
 										<Button
@@ -1222,8 +1222,8 @@
 												{:else if chip.shelter_code || chip.shelter_name}
 													<span class="text-2xs text-muted-foreground">
 														มีสมาชิกครอบครัวนี้อยู่ที่ศูนย์
-														{chip.shelter_name || chip.shelter_code} แล้ว —
-														แนะนำไปที่ศูนย์หรือแจ้งเจ้าหน้าที่ · กดเข้าร่วมเพื่อเพิ่มชื่อเข้าคิวกลางใบเดิม
+														{chip.shelter_name || chip.shelter_code} แล้ว — แนะนำไปที่ศูนย์หรือแจ้งเจ้าหน้าที่
+														· กดเข้าร่วมเพื่อเพิ่มชื่อเข้าคิวกลางใบเดิม
 													</span>
 												{/if}
 
@@ -1270,8 +1270,10 @@
 												</Button>
 											{:else}
 												<p class="max-w-[14rem] text-right text-2xs text-muted-foreground">
-													ศูนย์{chip.shelter_name ? ` ${chip.shelter_name}` : ''}ยังไม่เปิดรับลงทะเบียนล่วงหน้า
-													— แนะนำติดต่อที่ศูนย์หรือแจ้งเจ้าหน้าที่
+													ศูนย์{chip.shelter_name
+														? ` ${chip.shelter_name}`
+														: ''}ยังไม่เปิดรับลงทะเบียนล่วงหน้า —
+													แนะนำติดต่อที่ศูนย์หรือแจ้งเจ้าหน้าที่
 												</p>
 											{/if}
 										</div>
