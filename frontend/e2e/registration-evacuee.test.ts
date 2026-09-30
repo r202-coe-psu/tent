@@ -3,17 +3,19 @@
  * driven only through the UI — no direct database writes. SH001's toggles are flipped on the
  * shelter edit page, reCAPTCHA on /system-management/security, ids are read from the printed
  * Person QRs, and statuses are asserted from the Station 1 search row. The only Couch calls are
- * the throw-away staff users (helpers/couch.ts) and seeding their security question, as in
- * stock-donations.test.ts.
+ * the throw-away staff users (helpers/couch.ts), seeding their security question (as in
+ * stock-donations.test.ts), and the teardown that deletes the people this run created.
  *
- * Four serial tests, the same two flows under two states of SH001's toggles:
- *   ON  1.1 walk-in (search → new/joined household → pet, vehicle, assets, zone, QR → Station 2 → 3
- *           → scan out/in)
+ * Four serial tests, the same two flows with SH001's pre-registration and Station 2 switches ON,
+ * then OFF:
+ *   ON  1.1 walk-in (search → new/joined household → zone, QR → Station 2 → 3 → scan out/in)
  *       1.2 pre-register on the public site (screen A) → report-in by search + QR scan at the desk
  *           (screen B) → Station 2 → 3 → scan out
- *   OFF 1.3 walk-in without pet/vehicle/assets; Station 2 is skipped
+ *   OFF 1.3 walk-in; Station 2 is skipped
  *       1.4 public booking is refused → central queue (screen A) → desk claims by search + QR scan
  *           (screen B) → Station 3 → scan out
+ * Pet, vehicle and asset steps run only if the shelter already has those switches on; otherwise
+ * the step is skipped and annotated in the report.
  * After each toggle change the run waits SYNC_WORKER_DELAY_MS (default 10 s, E2E_SYNC_DELAY_MS).
  *
  * Needs: the stack up (`docker compose up -d`) with FastAPI built from this checkout
@@ -24,11 +26,11 @@
  *     pnpm preview &
  *   pnpm playwright test e2e/registration-evacuee.test.ts     # E2E_DEBUG=1 logs 4xx/5xx responses
  *
- * Side effects: toggles and reCAPTCHA are restored afterwards (not if the run is killed), but the
- * pets/assets/vehicles switches rewrite the shelter's pet/luggage/parking policies and that is not
- * undone; E2E_KEEP_POLICIES=1 flips only pre-registration + Station 2. People can't be deleted
- * from the UI, so they stay, checked out, with Tst… last names. Public POSTs allow 3/min/IP, so a
- * run waits ~1 min once.
+ * Side effects: the two switches and reCAPTCHA are restored afterwards (not if the run is killed).
+ * Pets/assets/vehicles are never flipped: saving them rewrites the shelter's pet/luggage/parking
+ * policies. People can't be deleted from the UI, so afterAll tombstones them through CouchDB admin
+ * (evacuee, household, medical, movement, screening, audit), matched on this run's Tst… last-name
+ * tag. Public POSTs allow 3/min/IP, so a run waits ~1 min once.
  */
 
 import { createRequire } from 'node:module';
@@ -118,9 +120,12 @@ const TOGGLE_SELECTOR: Record<keyof Toggles, string> = {
 	vehicles: '#allow-vehicles'
 };
 const TOGGLE_KEYS = Object.keys(TOGGLE_SELECTOR) as Array<keyof Toggles>;
-/** E2E_KEEP_POLICIES=1 flips only these two (the others rewrite shelter policies). */
-const FLIPPED_KEYS: Array<keyof Toggles> =
-	process.env.E2E_KEEP_POLICIES === '1' ? ['preRegistration', 'medical'] : TOGGLE_KEYS;
+/**
+ * The only switches the run changes. Saving pets / assets / vehicles rewrites the shelter's pet,
+ * luggage and parking policies, so those are read as found and their steps skipped when off.
+ */
+type FlippedToggle = 'preRegistration' | 'medical';
+const FLIPPED_KEYS: FlippedToggle[] = ['preRegistration', 'medical'];
 
 async function openShelterEditor(page: Page): Promise<void> {
 	await page.goto('/back-office/shelters/edit/SH001');
@@ -137,12 +142,11 @@ async function readToggles(page: Page): Promise<Toggles> {
 }
 
 /** Flip the switches that differ from `target`, save, reload and return what the page shows. */
-async function setToggles(page: Page, target: Partial<Toggles>): Promise<Toggles> {
+async function setToggles(page: Page, target: Pick<Toggles, FlippedToggle>): Promise<Toggles> {
 	await openShelterEditor(page);
 	let changed = false;
 	for (const key of FLIPPED_KEYS) {
 		const want = target[key];
-		if (want === undefined) continue;
 		const sw = page.locator(TOGGLE_SELECTOR[key]);
 		if ((await sw.getAttribute('aria-checked')) === String(want)) continue;
 		await sw.click();
@@ -199,6 +203,74 @@ async function createStaffUser(user: TestUser): Promise<void> {
 	});
 	if (res.status >= 400)
 		throw new Error(`Could not finish setup for "${user.name}" (${res.status})`);
+}
+
+// ─── Teardown — delete the data this run created ───────────────────────────────
+
+const SHELTER_DB = 'shelter_sh001';
+const EVACUEE_RANGE = { $gt: 'evacuee:', $lt: 'evacuee:￰' };
+
+interface CouchDoc {
+	_id: string;
+	_rev: string;
+	household_id?: string | null;
+}
+
+async function findDocs(selector: Record<string, unknown>): Promise<CouchDoc[]> {
+	const res = await couchReq('POST', `/${SHELTER_DB}/_find`, { selector, limit: 100_000 });
+	if (res.status >= 400) throw new Error(`_find on ${SHELTER_DB} failed (${res.status})`);
+	return (res.data as { docs?: CouchDoc[] }).docs ?? [];
+}
+
+/**
+ * Delete every doc this run created. Plain deletes (tombstones), not `_purge`: the sync worker only
+ * sees deletes in `_changes`. People are matched on RUN_TAG in the last name, so nobody else in
+ * SH001 is touched; a household is kept if anyone from outside this run still lives in it.
+ */
+async function deleteRunData(): Promise<number> {
+	const evacuees = await findDocs({ _id: EVACUEE_RANGE, last_name: { $regex: RUN_TAG } });
+	if (evacuees.length === 0) return 0;
+	const evacueeIds = new Set(evacuees.map((d) => d._id));
+	const householdIds = [
+		...new Set(evacuees.map((d) => d.household_id).filter((id): id is string => Boolean(id)))
+	];
+
+	const residents = householdIds.length
+		? await findDocs({ _id: EVACUEE_RANGE, household_id: { $in: householdIds } })
+		: [];
+	const sharedHouseholds = new Set(
+		residents.filter((d) => !evacueeIds.has(d._id)).map((d) => d.household_id)
+	);
+	const ownHouseholdIds = householdIds.filter((id) => !sharedHouseholds.has(id));
+
+	const ids = [...evacueeIds];
+	const [households, perEvacuee, audits] = await Promise.all([
+		ownHouseholdIds.length ? findDocs({ _id: { $in: ownHouseholdIds } }) : [],
+		// medical, movement, screening
+		findDocs({ evacuee_id: { $in: ids } }),
+		findDocs({ target_id: { $in: [...ids, ...ownHouseholdIds] } })
+	]);
+
+	const docs = new Map<string, CouchDoc>();
+	for (const doc of [...evacuees, ...households, ...perEvacuee, ...audits]) docs.set(doc._id, doc);
+
+	const res = await couchReq('POST', `/${SHELTER_DB}/_bulk_docs`, {
+		docs: [...docs.values()].map(({ _id, _rev }) => ({ _id, _rev, _deleted: true }))
+	});
+	if (res.status >= 400) throw new Error(`_bulk_docs on ${SHELTER_DB} failed (${res.status})`);
+	const failed = (res.data as Array<{ id: string; error?: string; reason?: string }>).filter(
+		(r) => r.error
+	);
+	if (failed.length > 0) {
+		throw new Error(
+			`Could not delete ${failed.length}/${docs.size} docs: ` +
+				failed
+					.slice(0, 3)
+					.map((f) => `${f.id} (${f.error}: ${f.reason})`)
+					.join(', ')
+		);
+	}
+	return docs.size;
 }
 
 /** E2E_DEBUG=1: print every 4xx/5xx response. */
@@ -547,24 +619,20 @@ interface Run {
 	/** Keeps house numbers apart so "join household" finds only this pass's family. */
 	house: number;
 }
-const ALL_ON: Toggles = {
-	preRegistration: true,
-	medical: true,
-	pets: true,
-	assets: true,
-	vehicles: true
-};
-const ALL_OFF: Toggles = {
+const ON_TARGET = { preRegistration: true, medical: true };
+const OFF_TARGET = { preRegistration: false, medical: false };
+/** Placeholder; `applyToggles` replaces it with what the edit page shows before any flow runs. */
+const NOT_READ_YET: Toggles = {
 	preRegistration: false,
 	medical: false,
 	pets: false,
 	assets: false,
 	vehicles: false
 };
-const ON: Run = { mode: 'On', flags: ALL_ON, tag: `${RUN_TAG}On`, seed: SEED, house: 0 };
+const ON: Run = { mode: 'On', flags: NOT_READ_YET, tag: `${RUN_TAG}On`, seed: SEED, house: 0 };
 const OFF: Run = {
 	mode: 'Off',
-	flags: ALL_OFF,
+	flags: NOT_READ_YET,
 	tag: `${RUN_TAG}Off`,
 	seed: SEED + 500,
 	house: 100
@@ -1195,6 +1263,11 @@ test.describe('Registration stations 1 → 3 (real stack, via UI)', () => {
 				console.error('Failed to restore recaptcha:', err);
 			}
 		}
+		try {
+			console.log(`Deleted ${await deleteRunData()} docs created by run ${RUN_TAG}`);
+		} catch (err) {
+			console.error(`Failed to delete test data (tag ${RUN_TAG}):`, err);
+		}
 		await Promise.allSettled([
 			deleteCouchUser(REGISTRAR.name),
 			deleteCouchUser(MEDIC.name),
@@ -1206,20 +1279,20 @@ test.describe('Registration stations 1 → 3 (real stack, via UI)', () => {
 		test.info().annotations.push({ type: 'test data tag', description: RUN_TAG });
 	});
 
-	async function applyToggles(browser: Browser, run: Run, target: Toggles) {
+	async function applyToggles(browser: Browser, run: Run, target: Pick<Toggles, FlippedToggle>) {
 		const manager = await openAsStaff(browser, MEDIC, sessions.medic);
 		run.flags = await setToggles(manager, target);
 		await waitForSyncWorker(manager);
 		await manager.context().close();
 	}
 
-	test.describe('SH001 toggles ON', () => {
+	test.describe('SH001 pre-registration + Station 2 ON', () => {
 		test.beforeAll(async ({ browser }) => {
 			test.setTimeout(180_000);
-			await applyToggles(browser, ON, ALL_ON);
+			await applyToggles(browser, ON, ON_TARGET);
 		});
 
-		test('1.1 walk-in: Station 1 (new + joined household) → Station 2 → Station 3 → scan check-out/in', async ({
+		test('1.1 walk-in: Station 1 (new + joined household; pet/vehicle/assets if the shelter allows) → Station 2 → Station 3 → scan check-out/in', async ({
 			browser
 		}) => {
 			test.setTimeout(300_000);
@@ -1234,20 +1307,20 @@ test.describe('Registration stations 1 → 3 (real stack, via UI)', () => {
 		});
 	});
 
-	test.describe('SH001 toggles OFF', () => {
+	test.describe('SH001 pre-registration + Station 2 OFF', () => {
 		test.beforeAll(async ({ browser }) => {
 			test.setTimeout(180_000);
-			await applyToggles(browser, OFF, ALL_OFF);
+			await applyToggles(browser, OFF, OFF_TARGET);
 		});
 
-		test('1.3 walk-in [toggles off]: no pet/vehicle/assets, Station 2 skipped → Station 3 → scan check-out/in', async ({
+		test('1.3 walk-in [switches off]: Station 2 skipped → Station 3 → scan check-out/in', async ({
 			browser
 		}) => {
 			test.setTimeout(300_000);
 			await walkInFlow(browser, OFF, sessions);
 		});
 
-		test('1.4 pre-register [toggles off]: public booking refused → central queue (screen A) → claim by search + QR scan (screen B) → Station 3', async ({
+		test('1.4 pre-register [switches off]: public booking refused → central queue (screen A) → claim by search + QR scan (screen B) → Station 3', async ({
 			browser
 		}) => {
 			test.setTimeout(420_000);
