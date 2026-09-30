@@ -12,7 +12,7 @@ class TransparencySummary(BaseModel):
     shelters_open: int = Field(ge=0, description="status in {open, full}")
     occupancy_total: int | None = Field(
         default=None,
-        description="active + pre_registered across projected shelters (CR-070)",
+        description="active + pre_registered + kiosk_registered across projected shelters (CR-070)",
     )
     vulnerable_count: int | None = Field(
         default=None,
