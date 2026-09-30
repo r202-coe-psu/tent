@@ -41,8 +41,9 @@
 		type KioskEvacueeSummary,
 		type KioskLookupResponse
 	} from '../data/kiosk-check-in.api';
-	import { KioskPrintError, printKioskLabels } from '../data/kiosk-print.api';
+	import { printKioskLabels } from '../data/kiosk-print.api';
 	import { renderKioskLabelPng } from '../application/kiosk-label-image';
+	import { runKioskPrintFlow } from '../application/kiosk-print-flow';
 
 	interface Props {
 		input: GateInput | null;
@@ -329,26 +330,28 @@
 			if (!(await prepareQrImages(toPrint))) return;
 			printedCount = toPrint.length;
 			printPhase = 'printing';
-			const outcome = await printKioskLabels(await renderLabels(toPrint));
-			if (outcome.kind === 'printed') {
+			const result = await runKioskPrintFlow({
+				renderLabels: () => renderLabels(toPrint),
+				printLabels: printKioskLabels,
+				// No scanner client (dev browser / browser print mode): print the CSS labels instead.
+				fallbackPrint: async () => {
+					await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+					window.print();
+				}
+			});
+			if (result.kind === 'printed') {
 				printPhase = 'done';
 				window.setTimeout(() => {
 					if (printPhase === 'done') printPhase = 'idle';
 				}, PRINT_DONE_VISIBLE_MS);
 				return;
 			}
-			// No scanner client (dev browser / browser print mode): print the CSS labels instead.
+			if (result.kind === 'fallback') {
+				printPhase = 'idle';
+				return;
+			}
 			printPhase = 'idle';
-			await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-			window.print();
-		} catch (error) {
-			printPhase = 'idle';
-			printError =
-				error instanceof KioskPrintError
-					? error.printed > 0
-						? `${error.message} (พิมพ์ออกแล้ว ${error.printed} ดวง)`
-						: error.message
-					: 'สร้าง label สำหรับพิมพ์ไม่สำเร็จ กรุณาลองอีกครั้ง';
+			printError = result.message;
 		} finally {
 			printBusy = false;
 			onprintbusychange?.(false);
