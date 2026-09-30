@@ -7,12 +7,6 @@ from app.config import ScannerConfigError, load_and_validate_config, load_config
 
 
 class ScannerConfigTests(unittest.TestCase):
-    BASE_CONFIG = {
-        "TENT_BASE_URL": "https://tent.example.go.th",
-        "DEVICE_ID": "kiosk-01",
-        "DEVICE_SECRET": "real-secret",
-    }
-
     def test_env_file_loads_and_process_environment_overrides(self):
         with tempfile.TemporaryDirectory() as directory:
             env_path = Path(directory) / ".env"
