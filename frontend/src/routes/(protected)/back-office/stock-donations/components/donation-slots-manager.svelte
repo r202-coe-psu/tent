@@ -23,6 +23,7 @@
 		createDonationSlot,
 		editDonationSlot,
 		parseCapacityInput,
+		slotMode,
 		slotsOnDate,
 		useDonationSlotSchedule,
 		useDeleteDonationSlot,
@@ -94,7 +95,7 @@
 	});
 
 	function bookedOn(slot: DonationSlot): number {
-		return slotBookedCount(donations, slot.date, slot.from);
+		return slotBookedCount(donations, slotMode(slot), slot.date, slot.from);
 	}
 
 	async function persist(slot: DonationSlot, message: string) {

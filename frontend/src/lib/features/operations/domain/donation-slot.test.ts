@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
 	assertDonationSlotDeletable,
+	bookingQueue,
 	countSlotBookings,
 	createDonationSlot,
 	donationSlotId,
@@ -98,6 +99,14 @@ describe('createDonationSlot', () => {
 });
 
 describe('editDonationSlot', () => {
+	it('edits a window written before the queue split as drop-off', () => {
+		const { mode: _mode, ...legacy } = slot({ capacity: null });
+		void _mode;
+		const after = editDonationSlot(legacy as unknown as DonationSlot, { status: 'closed' });
+		expect(after.status).toBe('closed');
+		expect(after.mode).toBe('dropoff');
+	});
+
 	it('keeps identity, applies the patch and bumps updated_at', () => {
 		const before = slot();
 		const after = editDonationSlot(before, { capacity: 12, status: 'closed' });
@@ -148,12 +157,36 @@ describe('countSlotBookings', () => {
 			booking('rejected'),
 			booking('expired')
 		];
-		expect(countSlotBookings(donations, '2026-09-22', '09:00')).toBe(4);
+		expect(countSlotBookings(donations, 'dropoff', '2026-09-22', '09:00')).toBe(4);
 	});
 
 	it('matches on date and start time only', () => {
 		const donations = [booking('declared', '10:00'), booking('declared', '09:00', '2026-09-23')];
-		expect(countSlotBookings(donations, '2026-09-22', '09:00')).toBe(0);
+		expect(countSlotBookings(donations, 'dropoff', '2026-09-22', '09:00')).toBe(0);
+	});
+});
+
+describe('bookingQueue / countSlotBookings per queue', () => {
+	const at = (method: string | undefined, status = 'declared') => ({
+		status: status as never,
+		logistics: {
+			...(method ? { delivery_method: method } : {}),
+			slot: { date: '2026-09-22', from: '09:00' }
+		}
+	});
+
+	it('maps each delivery method to its queue; a parcel books none', () => {
+		expect(bookingQueue('self_dropoff')).toBe('dropoff');
+		expect(bookingQueue('shelter_pickup')).toBe('pickup');
+		expect(bookingQueue('parcel')).toBeNull();
+		// Written before the split: no method, reads as drop-off (FR-DS-9).
+		expect(bookingQueue(undefined)).toBe('dropoff');
+	});
+
+	it('does not let a drop-off booking use up a truck trip at the same hour', () => {
+		const donations = [at('self_dropoff'), at('shelter_pickup'), at('parcel'), at(undefined)];
+		expect(countSlotBookings(donations, 'pickup', '2026-09-22', '09:00')).toBe(1);
+		expect(countSlotBookings(donations, 'dropoff', '2026-09-22', '09:00')).toBe(2);
 	});
 });
 

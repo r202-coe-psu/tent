@@ -98,14 +98,29 @@ export const POST = async ({ request, getClientAddress }) => {
 		}
 		const resolvedCampaignId = pick.campaignId;
 
-		// 3.6 Atomic re-check slot เต็ม/closed → SLOT_FULL
+		// 3.6 Re-check the chosen window: full or closed → SLOT_FULL.
+		// Not atomic — two submits can both read the last place free before either
+		// syncs back into CouchDB (tracked by the race e2e, needs a Mongo counter).
 		const slotMode = parsed.data.logistics
 			? slotModeForDelivery(parsed.data.logistics.delivery_method)
 			: null;
-		if (parsed.data.logistics?.slot && slotMode) {
-			const { date, from, to } = parsed.data.logistics.slot;
-			const slotId = `donation_slot:${slotMode}:${date}:${from}`;
-			const slotRes = await adminRaw(`/${dbName}/${encodeURIComponent(slotId)}`, 'GET');
+		const requested = parsed.data.logistics?.slot;
+		// A truck trip only exists where the shelter published one, so a pickup with no
+		// window — or a window with no doc behind it — is refused rather than waved
+		// through. A drop-off with no doc is fine: it is one of the standard hours.
+		if (slotMode === 'pickup' && !requested) {
+			return json({ success: false, error: 'SLOT_REQUIRED' }, { status: 422 });
+		}
+		if (requested && slotMode) {
+			const { date, from, to } = requested;
+			const lookup = async (id: string) => adminRaw(`/${dbName}/${encodeURIComponent(id)}`, 'GET');
+			let slotRes = await lookup(`donation_slot:${slotMode}:${date}:${from}`);
+			// A drop-off window written before the queue split has no mode in its id
+			// (`donation_slot:{date}:{from}`) and still reads as drop-off (FR-DS-9) — the
+			// availability grid shows it, so the re-check has to find it too.
+			if (slotRes.status === 404 && slotMode === 'dropoff') {
+				slotRes = await lookup(`donation_slot:${date}:${from}`);
+			}
 
 			if (slotRes.status === 200) {
 				// Same verdict the wizard's grid showed (GET .../donations/slots) — one
@@ -121,6 +136,13 @@ export const POST = async ({ request, getClientAddress }) => {
 				if (availability.status !== 'available') {
 					return json({ success: false, error: 'SLOT_FULL' }, { status: 409 });
 				}
+			} else if (slotRes.status === 404) {
+				if (slotMode === 'pickup') {
+					return json({ success: false, error: 'SLOT_UNAVAILABLE' }, { status: 409 });
+				}
+			} else {
+				// Could not tell — fail closed rather than book a window we could not check.
+				return json({ success: false, error: 'SLOTS_UNAVAILABLE' }, { status: 503 });
 			}
 		}
 

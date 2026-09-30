@@ -42,7 +42,7 @@ import {
 	type CancelInfoInput,
 	type DisputeInfoInput
 } from '../domain/operations';
-import { assertDonationSlotDeletable, countSlotBookings } from '../domain/donation-slot';
+import { assertDonationSlotDeletable, countSlotBookings, slotMode } from '../domain/donation-slot';
 import { createAuditEntry, type AuditAction } from '$lib/features/shared';
 import type { OperationsRepository } from './operations.repository';
 import { supplyRepository, type SupplyItem } from '$lib/features/supply';
@@ -593,7 +593,10 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			this.listDonations()
 		]);
 		if (!current) return;
-		assertDonationSlotDeletable(current, countSlotBookings(donations, current.date, current.from));
+		assertDonationSlotDeletable(
+			current,
+			countSlotBookings(donations, slotMode(current), current.date, current.from)
+		);
 		await this.repo.remove(current);
 	}
 

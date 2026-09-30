@@ -106,7 +106,9 @@ export function editDonationSlot(
 	}
 ): DonationSlot {
 	const merged = donationSlotInputSchema.parse({
-		mode: slot.mode,
+		// A window written before the queue split has no `mode` and reads as drop-off
+		// (FR-DS-9) — without the default, editing or closing it failed validation.
+		mode: slotMode(slot),
 		date: slot.date,
 		from: slot.from,
 		to: patch.to ?? slot.to,
@@ -120,6 +122,7 @@ export function editDonationSlot(
 	void _previous;
 	return touch({
 		...rest,
+		mode: merged.mode,
 		to: merged.to,
 		capacity: merged.capacity,
 		status: merged.status,
@@ -130,12 +133,29 @@ export function editDonationSlot(
 /** What `countSlotBookings` reads off a donation. */
 export interface SlotBookingLike {
 	status: DonationStatus;
-	logistics?: { slot?: { date: string; from: string } | null } | null;
+	logistics?: {
+		delivery_method?: string | null;
+		slot?: { date: string; from: string } | null;
+	} | null;
 }
 
 /**
- * How many bookings already hold a place in one window (date + start time — the key a
- * booking's `logistics.slot` points at, schema.md §2.3/§2.13).
+ * The queue a delivery method books into (draft CR donation-slot-queue-split §C-4):
+ * bringing it in yourself uses the counter, a shelter pickup uses the truck, a parcel
+ * uses neither. A booking with no method predates the split and reads as drop-off,
+ * the same way a slot with no `mode` does (FR-DS-9).
+ */
+export function bookingQueue(deliveryMethod: string | null | undefined): DonationSlotMode | null {
+	if (deliveryMethod === 'shelter_pickup') return 'pickup';
+	if (deliveryMethod === 'self_dropoff' || !deliveryMethod) return 'dropoff';
+	return null;
+}
+
+/**
+ * How many bookings already hold a place in one window of one queue. A booking points
+ * at its window by date + start time (schema.md §2.3/§2.13) and at its queue through
+ * `delivery_method` — the two queues share start times (the truck's "whole day" uses
+ * the standard windows), so without the queue a drop-off booking would use up a trip.
  *
  * A booking holds it from the moment it is made until staff key the goods in, so
  * `pending_review`/`verifying` count as well as `declared`/`received` (CR-052) —
@@ -143,12 +163,14 @@ export interface SlotBookingLike {
  */
 export function countSlotBookings(
 	donations: readonly SlotBookingLike[],
+	mode: DonationSlotMode,
 	date: string,
 	from: string
 ): number {
 	return donations.filter(
 		(d) =>
 			(isDonationOutstanding(d.status) || d.status === 'received') &&
+			bookingQueue(d.logistics?.delivery_method) === mode &&
 			d.logistics?.slot?.date === date &&
 			d.logistics?.slot?.from === from
 	).length;

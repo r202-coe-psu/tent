@@ -126,6 +126,9 @@ export function isDonorEditable(status: DonationStatus): boolean {
 const PUBLIC_DONATION_ERROR_MESSAGES: Record<string, string> = {
 	NEED_FULL: 'รายการนี้รับบริจาคครบแล้ว กรุณาเลือกรายการอื่น',
 	SLOT_FULL: 'คิวจัดส่งเต็มแล้ว กรุณาเลือกช่วงเวลาอื่น',
+	SLOT_REQUIRED: 'กรุณาเลือกรอบรถที่ศูนย์เปิดให้ไปรับของ',
+	SLOT_UNAVAILABLE: 'ช่วงเวลาที่เลือกไม่เปิดรับแล้ว กรุณาเลือกช่วงเวลาอื่น',
+	SLOTS_UNAVAILABLE: 'ตรวจสอบคิวไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
 	SHELTER_NOT_FOUND: 'ไม่พบศูนย์พักพิงที่เลือก',
 	SHELTER_CLOSED: 'ศูนย์พักพิงนี้ปิดรับบริจาคชั่วคราว',
 	RATE_LIMITED: 'คุณส่งคำขอบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่'

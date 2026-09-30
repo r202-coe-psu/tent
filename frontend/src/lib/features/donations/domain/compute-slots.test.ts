@@ -32,6 +32,13 @@ function booking(status: string, from = '09:00', date = DATE) {
 	} as unknown as PublicDonationDoc;
 }
 
+function pickupAt(status: string, from = '09:00', date = DATE) {
+	return {
+		status,
+		logistics: { delivery_method: 'shelter_pickup', slot: { date, from, to: '10:00' } }
+	} as unknown as PublicDonationDoc;
+}
+
 describe('slotBookedCount', () => {
 	it('counts outstanding and received bookings in the same window', () => {
 		const donations = [
@@ -40,7 +47,7 @@ describe('slotBookedCount', () => {
 			booking('verifying'),
 			booking('received')
 		];
-		expect(slotBookedCount(donations, DATE, '09:00')).toBe(4);
+		expect(slotBookedCount(donations, 'dropoff', DATE, '09:00')).toBe(4);
 	});
 
 	it('ignores bookings that released the place, other windows and other dates', () => {
@@ -51,20 +58,26 @@ describe('slotBookedCount', () => {
 			booking('declared', '13:00'),
 			booking('declared', '09:00', '2026-09-23')
 		];
-		expect(slotBookedCount(donations, DATE, '09:00')).toBe(0);
+		expect(slotBookedCount(donations, 'dropoff', DATE, '09:00')).toBe(0);
+	});
+
+	it('counts only the queue the booking was made in', () => {
+		const donations = [booking('declared'), pickupAt('declared'), pickupAt('verifying')];
+		expect(slotBookedCount(donations, 'dropoff', DATE, '09:00')).toBe(1);
+		expect(slotBookedCount(donations, 'pickup', DATE, '09:00')).toBe(2);
 	});
 });
 
 describe('slotAvailabilityFor', () => {
 	it('is available while bookings are under capacity', () => {
-		const result = slotAvailabilityFor(slot({ capacity: 2 }), [booking('declared')]);
+		const result = slotAvailabilityFor(slot({ capacity: 2 }), [pickupAt('declared')]);
 		expect(result).toMatchObject({ label: '09:00 - 10:00', booked: 1, status: 'available' });
 	});
 
 	it('turns full once bookings reach capacity', () => {
 		const result = slotAvailabilityFor(slot({ capacity: 2 }), [
-			booking('declared'),
-			booking('received')
+			pickupAt('declared'),
+			pickupAt('received')
 		]);
 		expect(result.status).toBe('full');
 	});
@@ -98,7 +111,7 @@ describe('computeSlotAvailability', () => {
 			slot({ from: '13:00', to: '14:00', capacity: 1 }),
 			slot({ from: '09:00', to: '10:00', capacity: 1 })
 		];
-		const result = computeSlotAvailability(DATE, 'pickup', slots, [booking('declared', '13:00')]);
+		const result = computeSlotAvailability(DATE, 'pickup', slots, [pickupAt('declared', '13:00')]);
 
 		expect(result.map((s) => s.label)).toEqual(['09:00 - 10:00', '13:00 - 14:00']);
 		expect(result.map((s) => s.status)).toEqual(['available', 'full']);
@@ -144,14 +157,23 @@ describe('computeSlotAvailability', () => {
 	});
 
 	it('keeps the two queues apart at the same hour', () => {
+		// The truck's "whole day" uses the standard windows, so both queues share 09:00.
+		// A drop-off booking must not use up the trip, nor a pickup booking the counter.
 		const slots = [
 			slot({ from: '09:00', to: '10:00', capacity: 1 }),
-			slot({ from: '09:00', to: '10:00', mode: 'dropoff', capacity: null })
+			slot({ from: '09:00', to: '10:00', mode: 'dropoff', capacity: 1 })
 		];
-		const donations = [booking('declared', '09:00')];
+		const dropoffBooking = [booking('declared', '09:00')];
+		expect(computeSlotAvailability(DATE, 'pickup', slots, dropoffBooking)[0].status).toBe(
+			'available'
+		);
+		expect(computeSlotAvailability(DATE, 'dropoff', slots, dropoffBooking)[0].status).toBe('full');
 
-		expect(computeSlotAvailability(DATE, 'pickup', slots, donations)[0].status).toBe('full');
-		expect(computeSlotAvailability(DATE, 'dropoff', slots, donations)[0].status).toBe('available');
+		const pickupBooking = [pickupAt('declared', '09:00')];
+		expect(computeSlotAvailability(DATE, 'pickup', slots, pickupBooking)[0].status).toBe('full');
+		expect(computeSlotAvailability(DATE, 'dropoff', slots, pickupBooking)[0].status).toBe(
+			'available'
+		);
 	});
 
 	it('caps only the drop-off hour the shelter capped', () => {

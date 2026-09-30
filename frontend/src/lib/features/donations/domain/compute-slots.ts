@@ -1,5 +1,5 @@
 import type { DonationSlot, DonationSlotMode, DonationStatus } from '$lib/features/operations';
-import { countSlotBookings, slotsOnDate } from '$lib/features/operations';
+import { bookingQueue, countSlotBookings, slotMode, slotsOnDate } from '$lib/features/operations';
 
 /**
  * Drop-off / pickup queue availability (schema.md §2.13, DN-5).
@@ -60,7 +60,10 @@ export function slotLabel(from: string, to: string): string {
  */
 export interface SlotBooking {
 	status: DonationStatus;
-	logistics?: { slot?: { date: string; from: string; to: string } | null } | null;
+	logistics?: {
+		delivery_method?: string | null;
+		slot?: { date: string; from: string; to: string } | null;
+	} | null;
 }
 
 /**
@@ -69,10 +72,11 @@ export interface SlotBooking {
  */
 export function slotBookedCount(
 	donations: readonly SlotBooking[],
+	mode: DonationSlotMode,
 	date: string,
 	from: string
 ): number {
-	return countSlotBookings(donations, date, from);
+	return countSlotBookings(donations, mode, date, from);
 }
 
 /** Availability of one configured window. A `null` capacity never reads as full. */
@@ -80,7 +84,7 @@ export function slotAvailabilityFor(
 	slot: DonationSlot,
 	donations: readonly SlotBooking[]
 ): SlotAvailability {
-	const booked = slotBookedCount(donations, slot.date, slot.from);
+	const booked = slotBookedCount(donations, slotMode(slot), slot.date, slot.from);
 	const capacity = slot.capacity ?? null;
 	const status: SlotStatus =
 		slot.status === 'closed'
@@ -144,7 +148,7 @@ export function computeSlotAvailability(
 		from: window.from,
 		to: window.to,
 		capacity: null,
-		booked: slotBookedCount(donations, date, window.from),
+		booked: slotBookedCount(donations, 'dropoff', date, window.from),
 		status: 'available' as const
 	}));
 
@@ -159,7 +163,6 @@ export function computeSlotAvailability(
 export function slotModeForDelivery(
 	method: 'self_dropoff' | 'parcel' | 'shelter_pickup'
 ): DonationSlotMode | null {
-	if (method === 'self_dropoff') return 'dropoff';
-	if (method === 'shelter_pickup') return 'pickup';
-	return null;
+	// One mapping — the slot count reads the same one (`bookingQueue` in operations).
+	return bookingQueue(method);
 }

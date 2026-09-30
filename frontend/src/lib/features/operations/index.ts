@@ -126,6 +126,7 @@ export {
 // Domain — donation queue slots (DN-5 · schema.md §2.13)
 export {
 	assertDonationSlotDeletable,
+	bookingQueue,
 	countSlotBookings,
 	createDonationSlot,
 	editDonationSlot,

@@ -63,7 +63,10 @@ describe('GET /api/public/v1/donations/slots', () => {
 					_id: 'donation:d1',
 					type: 'donation',
 					status: 'pending_review',
-					logistics: { slot: { date: '2026-09-22', from: '09:00', to: '10:00' } }
+					logistics: {
+						delivery_method: 'shelter_pickup',
+						slot: { date: '2026-09-22', from: '09:00', to: '10:00' }
+					}
 				}
 			]);
 		});
