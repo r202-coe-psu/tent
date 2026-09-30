@@ -535,8 +535,8 @@ async function refreshHouseholdStatus(
 			method: 'PUT',
 			body: JSON.stringify({ ...household, status, updated_at: now() })
 		});
-	} catch {
+	} catch (err) {
 		// The evacuee write is authoritative; a later read can repair this derived projection.
-		console.warn('[Kiosk Check-in] Household status refresh failed');
+		console.warn('[Kiosk Check-in] Household status refresh failed', err);
 	}
 }
