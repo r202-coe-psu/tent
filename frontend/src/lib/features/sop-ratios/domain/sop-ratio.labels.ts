@@ -87,7 +87,7 @@ export const RATIO_LABELS: Record<
 	m2_per_person_total: {
 		label: 'พื้นที่พักพิงรวม',
 		unit: 'ตร.ม./คน',
-		description: 'พื้นที่พักพิงรวมต่อคน (Sphere: 45 ตร.ม.)'
+		description: 'พื้นที่พักพิงรวมต่อคน (Sphere: 3.5 ตร.ม.)'
 	},
 	max_waterpoint_distance_m: {
 		label: 'ระยะทางไปแหล่งน้ำ',
