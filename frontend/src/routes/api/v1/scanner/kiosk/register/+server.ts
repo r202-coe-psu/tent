@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { scannerServerRepository } from '$lib/features/scanners/server';
 import { findMasterByCode } from '$lib/server/shelters.admin';
+import { ServiceError } from '$lib/server/couch-admin';
 import { isKioskWalkInRegistrationEnabled } from '$lib/features/kiosk/config';
 import {
 	KioskRegistrationBlockedError,
@@ -95,6 +96,17 @@ export const POST: RequestHandler = async ({ request }) => {
 		if (error instanceof ScannerDependencyError) {
 			return json(
 				{ error: { code: DEPENDENCY_UNAVAILABLE, message: 'บริการ kiosk ไม่พร้อมใช้งาน' } },
+				{ status: 503, headers: noStoreHeaders }
+			);
+		}
+		if (error instanceof ServiceError) {
+			return json(
+				{
+					error: {
+						code: DEPENDENCY_UNAVAILABLE,
+						message: 'ไม่สามารถตรวจสอบข้อมูลศูนย์พักพิงได้ กรุณาลองใหม่'
+					}
+				},
 				{ status: 503, headers: noStoreHeaders }
 			);
 		}

@@ -6,6 +6,7 @@ import {
 	ScannerAuthError
 } from '$lib/server/scanners/device-credentials';
 import { findMasterByCode } from '$lib/server/shelters.admin';
+import { ServiceError } from '$lib/server/couch-admin';
 import {
 	KioskRegistrationBlockedError,
 	registerKioskWalkIn
@@ -161,5 +162,13 @@ describe('POST /api/v1/scanner/kiosk/register', () => {
 		const response = await POST(request(validBody));
 		expect(response.status).toBe(409);
 		expect((await response.json()).error.code).toBe('KIOSK_REGISTRATION_BLOCKED');
+	});
+
+	it('reports the shelter registry as unavailable separately from a write failure', async () => {
+		mockFindShelter.mockRejectedValue(new ServiceError('INTERNAL', 'Could not read registry'));
+		const response = await POST(request(validBody));
+		expect(response.status).toBe(503);
+		expect((await response.json()).error.code).toBe('DEPENDENCY_UNAVAILABLE');
+		expect(mockRegister).not.toHaveBeenCalled();
 	});
 });
