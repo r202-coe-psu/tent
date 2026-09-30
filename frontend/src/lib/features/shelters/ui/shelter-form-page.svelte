@@ -41,6 +41,7 @@
 	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import Save from '@lucide/svelte/icons/save';
+	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
 	import { Button } from '$lib/components/ui/button/index.js';
 
 	let {
@@ -326,6 +327,17 @@
 
 				<!-- Mobile Row 3 / Desktop Right Column -->
 				<div class="flex items-center gap-2.5 pt-0.5 sm:pt-0">
+					{#if isEdit && id}
+						<a
+							href={resolve(
+								`/back-office/shelters/readiness/${encodeURIComponent(id)}` as '/back-office/shelters'
+							)}
+							class="inline-flex items-center gap-1.5 rounded-lg border border-sky-300 bg-sky-50 px-3.5 py-2 text-center text-sm font-semibold text-sky-900 shadow-2xs transition hover:bg-sky-100 sm:flex-none"
+						>
+							<ClipboardCheck class="h-4 w-4 text-sky-700" />
+							<span>แบบประเมินความพร้อม (Readiness)</span>
+						</a>
+					{/if}
 					<a
 						href={resolvedBasePath}
 						onclick={handleCancelOrBack}
