@@ -62,7 +62,7 @@
 </script>
 
 <Dialog.Root bind:open>
-	<Dialog.Content class="sm:max-w-[560px]">
+	<Dialog.Content class="max-h-[90dvh] gap-3 overflow-y-auto sm:max-w-[560px]">
 		<Dialog.Header>
 			<Dialog.Title
 				class="flex items-center gap-2 text-xl font-bold {isNew
@@ -78,7 +78,7 @@
 		</Dialog.Header>
 
 		{#if device}
-			<div class="space-y-4 py-2">
+			<div class="min-w-0 space-y-4 py-2">
 				<div class="rounded-xl border border-sky-200 bg-sky-50 p-3.5 text-sm text-sky-900">
 					<div class="flex items-start gap-2">
 						<ShieldAlert class="mt-0.5 h-4 w-4 shrink-0 text-sky-700" />
@@ -93,14 +93,14 @@
 				</div>
 
 				<div class="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-					<div class="rounded-lg border border-slate-200 bg-slate-50 p-3">
+					<div class="min-w-0 rounded-lg border border-slate-200 bg-slate-50 p-3">
 						<span class="text-muted-foreground">Device ID / ชื่อ:</span>
-						<p class="font-mono font-semibold text-foreground">{device.device_id}</p>
+						<p class="font-mono font-semibold break-all text-foreground">{device.device_id}</p>
 						<p class="text-xs text-muted-foreground">{device.name}</p>
 					</div>
-					<div class="rounded-lg border border-slate-200 bg-slate-50 p-3">
+					<div class="min-w-0 rounded-lg border border-slate-200 bg-slate-50 p-3">
 						<span class="text-muted-foreground">ศูนย์พักพิง / จุดบริการ:</span>
-						<p class="font-mono font-semibold text-foreground">
+						<p class="font-mono font-semibold break-all text-foreground">
 							{device.shelter_code}
 						</p>
 						<p class="text-xs text-muted-foreground">{device.station_name}</p>
@@ -111,20 +111,20 @@
 					<label for="device-secret" class="text-sm font-semibold text-slate-700">
 						Device Secret (รหัสความปลอดภัย):
 					</label>
-					<div class="flex gap-2">
+					<div class="flex flex-col gap-2 sm:flex-row">
 						<Input
 							id="device-secret"
 							readonly
 							value={secretValue}
 							placeholder="แสดงครั้งเดียวหลังสร้างอุปกรณ์"
-							class="bg-slate-50 font-mono text-xs select-all"
+							class="min-w-0 flex-1 bg-slate-50 font-mono text-xs select-all"
 						/>
 						<Button
 							variant="outline"
 							size="sm"
 							onclick={copySecret}
 							disabled={!secretValue}
-							class="shrink-0 gap-1.5"
+							class="min-h-11 shrink-0 gap-1.5 sm:min-h-9"
 						>
 							{#if copied}
 								<Check class="h-4 w-4 text-emerald-500" />
@@ -143,7 +143,7 @@
 				</div>
 
 				<div class="space-y-1.5">
-					<div class="flex items-center justify-between">
+					<div class="flex flex-wrap items-center justify-between gap-1">
 						<label for="env-snippet" class="text-xs font-semibold text-muted-foreground">
 							ตัวอย่างไฟล์ .env สำหรับ scanner_client:
 						</label>
@@ -164,7 +164,7 @@
 					</div>
 					<pre
 						id="env-snippet"
-						class="overflow-x-auto rounded-lg border border-slate-200 bg-slate-50 p-3 font-mono text-xs text-slate-800">{envSnippet ||
+						class="max-w-full overflow-x-auto rounded-lg border border-slate-200 bg-slate-50 p-3 font-mono text-xs break-all whitespace-pre-wrap text-slate-800">{envSnippet ||
 							'จะแสดงเมื่อสร้างอุปกรณ์ใหม่เท่านั้น'}</pre>
 				</div>
 			</div>
