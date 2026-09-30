@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-09-26
+updated: 2026-09-29
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer; CR-135/CR-136 partner OAuth2 client name/module preset + secret reveal/edit/delete; CR-137 shrink master_data (10→4) + zone/community free text; CR-138 remove purchase doc type + withdraw purchase from stock_ledger.reason
 ---
 
@@ -2218,29 +2218,47 @@ partner ODT "นโยบายควบคุมการเข้าถึง�
 
 **Index:** `(client_id, created_at)` · `(location_code)` · `(created_at)` TTL `expireAfterSeconds` 1 ปี
 
-### 9.5 `unassigned_registrations` (MongoDB) — **ใหม่ (CR-113)**
+### 9.5 `unassigned_registrations` (MongoDB) — **ใหม่ (CR-113)** · **schema_v 3** ([CR-140](../changes/CR-140-persistent-unassigned-family.md))
 
 คิวกลาง **Unassigned Registration** — ครัวเรือนที่ลงทะเบียนล่วงหน้าแต่ยังไม่เลือกศูนย์ · **ไม่ใช่** doc ใน `shelter_*` · **ไม่ใช่** Evacuee จน claim · **ไม่** สร้าง stub ใน `public_persons` จน claim + worker project จาก Couch · **ไม่นับ** Forecast รายศูนย์
 
 SoR ของคิวกลางจน claim = Mongo collection นี้ · เขียนตรงจาก FastAPI (ไม่ผ่าน Couch CDC)
 
+> **schema_v 3** — pets มี `pet_id` + claim lifecycle; เอกสาร `open`/`closed` (ไม่ hard-delete หลัง claim ครบ); late join reopen · CR-140  
+> **schema_v 2** — #255 / CR-113 amend (photo GridFS + field parity)  
+> **schema_v 1** — baseline CR-113
+
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
 | `_id` | str | req | ULID |
-| `schema_v` | int | req | **`2`** for new writes (#255 / CR-113 amend); **`1`** still readable without backfill |
+| `schema_v` | int | req | **`3`** for new writes (CR-140); **`1`/`2`** still readable without backfill |
 | `reserved_household_id` | str | req | `household:{ulid}` จองตั้งแต่สร้าง — ใช้ตอน claim |
-| `members` | [{`reserved_evacuee_id`, `status`, person fields…}] | req | แต่ละคนมี `reserved_evacuee_id` (`evacuee:{ulid}`), `status`: enum(`open`,`claimed`,`cancelled`), + ฟิลด์คนตามที่ public UnifiedRegistrationForm เก็บ: name, phone, person_id, country, nickname, religion, vulnerable_groups, special_needs, birth_year/age, **emergency_contact** (omit เมื่อ name/phone/relation ว่างทั้งหมด), **photo** (`gfs:{oid}` → GridFS; claim เกิด Couch `image:{ulid}` + `evacuee.photo`). **ไม่** เก็บ medical_* / vehicles / assets บนคิวสาธารณะ |
-| `household` | object | req | housing_type, residence_landmark, geo/address, pets (`species`/`count`/`notes`/`has_cage`/`image_url` where `image_url` is optional `gfs:{oid}`), … (ไม่รวม vehicles/assets จาก public) |
-| `status` | str | opt | สรุประดับเอกสาร (derive จาก members ได้) |
+| `members` | [{`reserved_evacuee_id`, `status`, person fields…}] | req | แต่ละคนมี `reserved_evacuee_id` (`evacuee:{ulid}`), `status`: enum(`open`,`claimed`,`cancelled`), + claim meta (`claimed_shelter_code`/`claimed_at`/`claimed_by`), + ฟิลด์คนตามที่ public UnifiedRegistrationForm เก็บ: name, phone, person_id, country, nickname, religion, vulnerable_groups, special_needs, birth_year/age, **emergency_contact** (omit เมื่อ name/phone/relation ว่างทั้งหมด), **photo** (`gfs:{oid}` → GridFS; claim เกิด Couch `image:{ulid}` + `evacuee.photo`). **ไม่** เก็บ medical_* / vehicles / assets บนคิวสาธารณะ |
+| `household` | object | req | housing_type, residence_landmark, geo/address, **pets[]** (ตารางย่อย), … (ไม่รวม vehicles/assets จาก public) |
+| `status` | enum(`open`,`closed`) | req | **`open`** เมื่อมีสมาชิกหรือสัตว์ `open` ≥1 · **`closed`** เมื่อไม่มี `open` เหลือ (history) — **ห้าม** hard-delete หลัง claim; `system_admin` purge ทั้งใบยังได้ · reader เก่าที่เห็น `claimed`/`partial_claim` ถือเทียบเท่าไม่มี `open` สำหรับ list/stats จนกว่าจะ reopen |
 | `registered_via` | enum(`web`,`staff`,…) | req | ช่องทางสร้าง |
 | `created_at` | ts | req | — |
 
-**Indexes:** unique partial บน identity ของสมาชิกที่ยัง `open` (national_id / passport / ANON; เบอร์ตามกฎกันซ้ำ) · `(created_at)` · member status
+**`household.pets[]` (Mongo queue — schema_v 3):**
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `pet_id` | str | req (เขียนใหม่) | `pet:{ulid}` — stable ต่อแถว; ของเก่าไม่มี → mint ตอน claim ครั้งถัดไป |
+| `status` | enum(`open`,`claimed`,`cancelled`) | req (เขียนใหม่) | ของเก่าไม่มี → ถือ **`open`** จน claim |
+| `species` | enum(`dog`,`cat`,`other`) | req | — |
+| `count` | int≥1 | req | ของใหม่บังคับ `1` ต่อแถว; legacy `count>1` = claim ทั้งแถวเป็นหน่วยเดียว (v1) |
+| `notes` / `has_cage` / `image_url` | … | opt | `image_url` = optional `gfs:{oid}` |
+| `claimed_shelter_code` / `claimed_at` / `claimed_by` | … | opt | ตั้งตอน claim |
+
+Couch `household.pets` schema **ไม่เปลี่ยน** — claim append เฉพาะสัตว์ที่ติ๊กเข้า HH ที่ศูนย์นั้น
+
+**Indexes:** unique partial บน identity ของสมาชิกที่ยัง `open` (national_id / passport / ANON; เบอร์ตามกฎกันซ้ำ) · `(created_at)` · member status · (optional) pet status
 
 **Photo (GridFS):** bucket `unassigned_registration_photos` · `POST /public/v1/unassigned-registrations/photos` · สมาชิกเก็บ `photo: gfs:{oid}` · สัตว์เลี้ยงเก็บ `pets[].image_url: gfs:{oid}` · claim อ่าน GridFS → birth Couch `image:{ulid}` (+ attachments) แล้วตั้ง `evacuee.photo` / `household.pets[].image_url`
 
-**Claim (option B):** staff ติ๊กสมาชิก `open` → **mark claimed ใน Mongo ก่อน** → birth Couch `evacuee`(+`household`[+`image`]) ด้วย reserved ids ที่ `pre_registered` · คัดลอก nickname / religion / emergency_contact เมื่อมี · Couch ล้ม → revert Mongo · `_bulk_docs` conflict = OK · คนไม่ติ๊กคง `open` · เมื่อไม่มี `open` เหลือ → best-effort hard-delete · `system_admin` ลบทั้งใบได้ขณะเป็นคิวกลาง · รายละเอียดดู [CR-113](../changes/CR-113-unassigned-registration-mongo.md)
+**Claim (option B):** staff ติ๊กสมาชิกและ/หรือสัตว์ที่ยัง `open` → **mark claimed ใน Mongo ก่อน** (คน+สัตว์) → birth/append Couch `evacuee`(+`household`[+`image`]) ด้วย reserved ids ที่ `pre_registered` · คัดลอก nickname / religion / emergency_contact เมื่อมี · append เฉพาะ pets ที่ติ๊ก · Couch ล้ม → revert Mongo (คน+สัตว์) · `_bulk_docs` conflict = OK · ที่ไม่ติ๊กคง `open` · เมื่อไม่มี `open` เหลือ → ตั้งเอกสาร `closed` (**ไม่** hard-delete) · late join (`join_registration_id`) เข้าใบเดิมได้แม้ `closed` → reopen เป็น `open` · `JOIN_TARGET_NOT_FOUND` เฉพาะเมื่อไม่มี `_id` · `system_admin` ลบทั้งใบได้ · รายละเอียดดู [CR-113](../changes/CR-113-unassigned-registration-mongo.md) + [CR-140](../changes/CR-140-persistent-unassigned-family.md)
 
+**Migration (schema_v 2 → 3):** additive pet claim fields + `closed` document status — ไม่ backfill batch; อ่าน pets เก่าโดย default `status=open`; เขียนใหม่ stamp `schema_v: 3` + mint `pet_id`
 ### 9.6 `third_party_clients` (MongoDB) — Partner OAuth2 clients (ADR 0002, EXT-001; **CR-135**, **CR-136**)
 
 Credential ของระบบพันธมิตร (M6/M7) สำหรับ `POST /external/token` (`grant_type=client_credentials`) ·

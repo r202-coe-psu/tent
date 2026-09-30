@@ -60,6 +60,29 @@ export function shelterHitStatusLabel(status: StayStatus): string {
 	return STATUS_LABELS[status] ?? status;
 }
 
+/** Minimal shape needed to derive a duplicate-check search string from a member card. */
+export interface DuplicateCheckMember {
+	first_name?: string | null;
+	last_name?: string | null;
+	phone?: string | null;
+	person_id?: { number?: string | null } | null;
+}
+
+/**
+ * Derive the single best search string to federated-search before a walk-in
+ * `/new` submit (#251 hard anti-dupe — must also gate the actual write, not
+ * just the Station 1 search-first UI). Mirrors what staff would type into
+ * the Station 1 search box: identity document number > phone > full name.
+ */
+export function deriveDuplicateCheckQuery(member: DuplicateCheckMember): string | null {
+	const idNumber = member.person_id?.number?.trim();
+	if (idNumber) return idNumber;
+	const phone = member.phone?.trim();
+	if (phone) return phone;
+	const name = `${member.first_name ?? ''} ${member.last_name ?? ''}`.trim();
+	return name || null;
+}
+
 /** True when at least one plane still has hits (hard anti-dupe predicate). */
 export function hasFederatedIntakeHits(
 	localHitCount: number,

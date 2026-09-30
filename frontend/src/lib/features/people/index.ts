@@ -48,6 +48,8 @@ export {
 	migratePetGroup,
 	migratePetGroups,
 	isMeaningfulOtherPetNotes,
+	petSpeciesLabel,
+	groupPetsBySpecies,
 	genderSchema,
 	religionSchema,
 	stayStatusSchema,
@@ -77,6 +79,7 @@ export {
 	createMovement,
 	createScreening,
 	assertMovementAllowed,
+	movementConflictMessage,
 	canCheckInEvacuee,
 	canCheckOutEvacuee,
 	canChangeEvacueeZone,
@@ -179,8 +182,10 @@ export {
 	hasFederatedIntakeHits,
 	isIntakeNewRegistrationLocked,
 	resolveNewRegistrationCta,
+	deriveDuplicateCheckQuery,
 	type ShelterHitAction,
-	type NewRegistrationCtaKind
+	type NewRegistrationCtaKind,
+	type DuplicateCheckMember
 } from './domain/intake-search';
 
 export {
@@ -272,6 +277,7 @@ export {
 	type FederatedScanLookupDeps,
 	useHouseholds,
 	useHousehold,
+	useHouseholdMembers,
 	useHouseholdsPaginated,
 	listMatchingEvacueeIds,
 	listMatchingHouseholdIds,
@@ -289,8 +295,11 @@ export {
 	useDeleteMedical,
 	usePatchEvacuee,
 	useMedicals,
+	useMedicalByEvacuee,
 	useMovements,
+	useMovementsByEvacuee,
 	useScreenings,
+	useScreeningsByEvacuee,
 	startPeopleLiveQuery
 } from './application/queries';
 

@@ -114,12 +114,17 @@ export function touch<T extends { updated_at: Timestamp }>(doc: T): T {
 
 // ---------------------------------------------------------------- shared zod
 
-/** Thai-friendly phone field: UI requires it, but "ไม่มี" maps to null. */
+/** Thai-friendly phone field: empty / 「ไม่มี」→ null; otherwise digits only. */
 export const phoneSchema = z
-	.string({ error: 'กรุณากรอกเบอร์โทรศัพท์' })
-	.trim()
-	.regex(/^[0-9]+$/, 'กรุณากรอกเบอร์โทรศัพท์เป็นตัวเลขเท่านั้น')
-	.nullable();
+	.union([
+		z.null(),
+		z.literal(''),
+		z
+			.string({ error: 'กรุณากรอกเบอร์โทรศัพท์' })
+			.trim()
+			.regex(/^[0-9]+$/, 'กรุณากรอกเบอร์โทรศัพท์เป็นตัวเลขเท่านั้น')
+	])
+	.transform((val): string | null => (val === '' || val === null ? null : val));
 
 /**
  * Reusable enum for the registration channel.
