@@ -8,6 +8,7 @@ import logging
 import os
 import re
 import shutil
+import time
 import urllib.parse
 from typing import Any, Dict, Optional
 
@@ -41,6 +42,12 @@ KIOSK_PRINT_PATH = "/api/v1/scanner/kiosk/print"
 KIOSK_PRINT_MAX_LABELS = 20
 KIOSK_PRINT_MAX_PNG_BYTES = 256 * 1024
 KIOSK_PRINT_TIMEOUT_SEC = 20.0
+# The frontend's fetch to KIOSK_PRINT_PATH (kiosk-print.api.ts) times out at 30s; with up to
+# KIOSK_PRINT_MAX_LABELS labels at KIOSK_PRINT_TIMEOUT_SEC each, a slow run could otherwise blow
+# past that and the browser would show "failed" while labels keep printing, inviting a re-tap
+# that duplicates labels. Stop starting new labels once this overall budget is spent instead, and
+# report what printed so far so the UI can show a clear partial result.
+KIOSK_PRINT_OVERALL_DEADLINE_SEC = 25.0
 # Labels are rendered at the printer's 203 dpi, so 1 image px = 1 printer dot.
 KIOSK_PRINT_PPI = 203
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
@@ -297,8 +304,20 @@ class ScannerClientManager:
         if images is None:
             return 400, {"error": {"code": "INVALID_LABELS", "message": "ข้อมูล label ไม่ถูกต้อง"}}
 
+        deadline = time.monotonic() + KIOSK_PRINT_OVERALL_DEADLINE_SEC
         printed = 0
         for image in images:
+            if time.monotonic() >= deadline:
+                logger.error(
+                    f"Label print deadline exceeded on queue {self.printer_name} ({printed}/{len(images)} sent)"
+                )
+                return 502, {
+                    "printed": printed,
+                    "error": {
+                        "code": "PRINT_TIMEOUT",
+                        "message": "พิมพ์ label ช้ากว่ากำหนด กรุณาลองอีกครั้ง",
+                    },
+                }
             if not await self._spool_label(image):
                 logger.error(f"Label print failed on queue {self.printer_name} ({printed}/{len(images)} sent)")
                 return 502, {

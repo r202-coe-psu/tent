@@ -565,6 +565,35 @@ class KioskPrintRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(route.fulfilled["status"], 502)
         self.assertEqual(route.fulfilled["body"]["printed"], 0)
 
+    async def test_stops_printing_once_the_overall_deadline_is_exceeded(self):
+        # Regression test: the frontend's fetch to KIOSK_PRINT_PATH times out at 30s: with up to
+        # KIOSK_PRINT_MAX_LABELS labels, printing must not silently run past that and leave the
+        # browser showing "failed" while labels keep spooling underneath it.
+        client = self.client()
+        route = FakePrintRoute(body=labels_body(PNG, PNG, PNG))
+        process = FakeLpProcess()
+        clock = [0.0]
+
+        async def fake_exec(*_args, **_kwargs):
+            return process
+
+        async def advance_clock_past_the_deadline(_data):
+            clock[0] += manager.KIOSK_PRINT_OVERALL_DEADLINE_SEC
+            return b"", b""
+
+        process.communicate = advance_clock_past_the_deadline
+
+        with (
+            patch.object(manager.asyncio, "create_subprocess_exec", new=fake_exec),
+            patch.object(manager.time, "monotonic", new=lambda: clock[0]),
+            self.assertLogs(manager.logger, level="ERROR"),
+        ):
+            await client._route_kiosk_api(route)
+
+        self.assertEqual(route.fulfilled["status"], 502)
+        self.assertEqual(route.fulfilled["body"]["printed"], 1)
+        self.assertEqual(route.fulfilled["body"]["error"]["code"], "PRINT_TIMEOUT")
+
     async def test_prints_directly_in_every_mode_without_extra_config(self):
         cases = {
             "debug window": manager.ScannerClientManager(valid_config(DEBUG="true")),
