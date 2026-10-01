@@ -26,6 +26,7 @@
 	import { UNASSIGNED_SHELTER_CODE } from '../domain/booking';
 	import { UnifiedRegistrationForm, type UnifiedRegistrationInput } from '$lib/features/people';
 	import { fetchRecaptchaEnabled } from '$lib/api/recaptcha-status';
+	import { isJoinSelectionInvalidError } from '../data/public-register.api';
 
 	interface Props {
 		shelters: (PublicShelterCardModel & { available: number | null })[];
@@ -42,6 +43,8 @@
 	const createUnassignedRegistration = useCreateUnassignedRegistration();
 	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
 	let captchaEnabled = $state(false);
+	/** Bumped on join-token/target API failures so UnifiedRegistrationForm clears the chip. */
+	let joinResetKey = $state(0);
 
 	function resolveInitialShelter(): string {
 		if (lockedShelterCode) return lockedShelterCode;
@@ -245,6 +248,9 @@
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : t.bookingErrorFallback;
 			toast.error(msg);
+			if (isJoinSelectionInvalidError(err)) {
+				joinResetKey += 1;
+			}
 			throw err;
 		} finally {
 			isSubmitting = false;
@@ -384,6 +390,8 @@
 			enableUnassignedPhoto={isUnassigned}
 			shelterCode={isUnassigned ? '' : selectedShelterCode}
 			shelterName={selected?.name ?? (isUnassigned ? 'ไม่ระบุศูนย์พักพิง' : selectedShelterCode)}
+			bookableShelterCodes={bookable.map((s) => s.code)}
+			{joinResetKey}
 			onsubmit={handleUnifiedSubmit}
 			onselectshelter={(code, name) => {
 				if (code && selectedShelterCode !== code) {

@@ -14,20 +14,33 @@ export const UNASSIGNED_QUEUE_BADGE_SHORT = 'คิวกลาง';
 
 /**
  * Shared Station 1 claim-flow copy (banner + claim dialog).
- * Claim births Couch at `pre_registered` (CR-113); Report-in submit sets `arriving` (CR-106).
+ * Ticking here only selects — claim + Couch birth happen later, when staff confirm
+ * on the review/Report-in page (CR-140 addendum). Nothing is written until that confirm.
  */
 export const CLAIM_FLOW_STATUS_GUIDANCE =
-	'รับเข้าศูนย์จะสร้าง Evacuee ใน Couch ที่สถานะ ลงทะเบียนล่วงหน้า (pre_registered) จากนั้นเปิดหน้า รายงานตัว (Report-in) เพื่อยืนยันข้อมูล แล้วเลื่อนเป็น มาถึงศูนย์ / รอคัดกรอง (arriving)';
+	'เลือกสมาชิกและสัตว์เลี้ยงที่จะรับเข้าศูนย์นี้ แล้วไปหน้าตรวจสอบรายละเอียด — ยังไม่มีการรับเข้าศูนย์จนกว่าจะกดยืนยันในหน้านั้น จากนั้นจึงสร้าง Evacuee ใน Couch (pre_registered) แล้วเลื่อนเป็น มาถึงศูนย์ / รอคัดกรอง (arriving) ทันที';
 
 /** Short a11y description for the claim dialog (not the status-flow lecture). */
-export const CLAIM_DIALOG_DESCRIPTION = 'เลือกสมาชิกที่จะรับเข้าศูนย์นี้ แล้วกดยืนยัน';
+export const CLAIM_DIALOG_DESCRIPTION =
+	'เลือกสมาชิกและสัตว์เลี้ยงที่ยัง open — ยังไม่รับเข้าศูนย์ตอนนี้ ต้องตรวจสอบรายละเอียดอีกขั้นก่อน';
 
 const personIdHitSchema = z.object({
 	cardType: z.enum(['national_id', 'passport', 'pink_card', 'other', 'anonymous']),
 	number: z.string().nullable()
 });
 
-/** Owner of the open-member search/claim hit shape — claim imports this. */
+const emergencyContactHitSchema = z.object({
+	name: z.string(),
+	phone: z.string(),
+	relation: z.string()
+});
+
+/**
+ * Owner of the open-member search/claim hit shape — claim + review import this.
+ * `nickname`/`religion`/`emergency_contact`/`photo`/`birth_year`/`age` are optional here
+ * (search cards don't render them) but present on the FastAPI `OpenMemberHit` payload —
+ * the review page (CR-140 addendum) needs them to prefill the full registration form.
+ */
 export const openMemberHitSchema = z.object({
 	reserved_evacuee_id: z.string(),
 	status: z.literal('open'),
@@ -38,11 +51,28 @@ export const openMemberHitSchema = z.object({
 	person_id: personIdHitSchema.nullable(),
 	country: z.string(),
 	vulnerable_groups: z.array(z.string()),
-	special_needs: z.array(z.string())
+	special_needs: z.array(z.string()),
+	nickname: z.string().nullable().optional(),
+	religion: z.string().nullable().optional(),
+	emergency_contact: emergencyContactHitSchema.nullable().optional(),
+	photo: z.string().nullable().optional(),
+	birth_year: z.number().int().nullable().optional(),
+	age: z.number().int().nullable().optional()
+});
+
+export const openPetHitSchema = z.object({
+	pet_id: z.string(),
+	status: z.literal('open'),
+	species: z.enum(['dog', 'cat', 'other']),
+	count: z.number().int().positive(),
+	notes: z.string().nullable().optional(),
+	has_cage: z.boolean().optional(),
+	image_url: z.string().nullable().optional()
 });
 
 export type PersonIdHit = z.infer<typeof personIdHitSchema>;
 export type OpenMemberHit = z.infer<typeof openMemberHitSchema>;
+export type OpenPetHit = z.infer<typeof openPetHitSchema>;
 export type OpenMemberStatus = OpenMemberHit['status'];
 
 const CARD_TYPE_LABELS: Record<PersonIdHit['cardType'], string> = {
@@ -58,6 +88,12 @@ const GENDER_LABELS: Record<string, string> = {
 	female: 'หญิง'
 };
 
+const PET_SPECIES_LABELS: Record<OpenPetHit['species'], string> = {
+	dog: 'สุนัข',
+	cat: 'แมว',
+	other: 'อื่น ๆ'
+};
+
 export interface UnassignedRegistrationSearchHit {
 	id: string;
 	reserved_household_id: string;
@@ -65,6 +101,7 @@ export interface UnassignedRegistrationSearchHit {
 	status: string;
 	created_at: string;
 	open_members: OpenMemberHit[];
+	open_pets?: OpenPetHit[];
 }
 
 export interface UnassignedRegistrationSearchResponse {
@@ -102,6 +139,13 @@ export function formatOpenMemberIdentityLine(member: OpenMemberHit): string {
 /** Gender · country for claim-dialog demographics line. */
 export function formatOpenMemberDemographicsLine(member: OpenMemberHit): string {
 	return `${formatOpenMemberGender(member.gender)} · ${member.country}`;
+}
+
+export function formatOpenPetLabel(pet: OpenPetHit): string {
+	const species = PET_SPECIES_LABELS[pet.species] ?? pet.species;
+	const countPart = pet.count > 1 ? ` ×${pet.count}` : '';
+	const notes = pet.notes?.trim();
+	return notes ? `${species}${countPart} (${notes})` : `${species}${countPart}`;
 }
 
 /** Thai-locale date+time for claim registration header. */

@@ -9,7 +9,11 @@ from typing import Protocol
 
 import httpx
 from fastapi import HTTPException, status
-from tent_model.unassigned_registration import UnassignedMember, UnassignedRegistration
+from tent_model.unassigned_registration import (
+    UnassignedMember,
+    UnassignedPet,
+    UnassignedRegistration,
+)
 
 from ...core.config import settings
 
@@ -44,8 +48,13 @@ class CouchBirthPort(Protocol):
         evacuee_docs: list[dict],
         cookie_header: str | None,
         image_payloads: list[CouchImagePayload] | None = None,
+        append_pets: list[dict] | None = None,
     ) -> None:
-        """Write household (if absent) + evacuees (+ optional images) into shelter_{code}."""
+        """Write household (if absent) + evacuees (+ optional images) into shelter_{code}.
+
+        When household already exists and ``append_pets`` is non-empty, merge those
+        Couch pet rows onto ``household.pets`` (draft-persistent-unassigned-family).
+        """
 
 
 def shelter_db_name(shelter_code: str) -> str:
@@ -65,6 +74,24 @@ def _household_label(doc: UnassignedRegistration, head: UnassignedMember) -> str
     return f"ครอบครัว{joined}" if joined else "ครอบครัวผู้ลงทะเบียนล่วงหน้า"
 
 
+def build_couch_pet(
+    pet: UnassignedPet,
+    *,
+    image_url: str | None = None,
+) -> dict:
+    """Couch household.pets[] row — no pet_id/status (Couch schema unchanged)."""
+    pet_body: dict = {
+        "species": pet.species,
+        "count": pet.count,
+        "has_cage": pet.has_cage,
+    }
+    if pet.notes:
+        pet_body["notes"] = pet.notes
+    if image_url:
+        pet_body["image_url"] = image_url
+    return pet_body
+
+
 def build_couch_household(
     doc: UnassignedRegistration,
     head: UnassignedMember,
@@ -72,23 +99,20 @@ def build_couch_household(
     actor: str,
     now: datetime,
     *,
-    pet_image_urls: dict[int, str] | None = None,
+    pets: list[UnassignedPet] | None = None,
+    pet_image_urls: dict[str, str] | None = None,
 ) -> dict:
+    """Build household doc for first birth. `pets` = only rows claimed in this request."""
     hh = doc.household
     ts = _iso(now)
-    pets_out: list[dict] = []
-    for index, pet in enumerate(hh.pets):
-        pet_body: dict = {
-            "species": pet.species,
-            "count": pet.count,
-            "has_cage": pet.has_cage,
-        }
-        if pet.notes:
-            pet_body["notes"] = pet.notes
-        image_url = (pet_image_urls or {}).get(index)
-        if image_url:
-            pet_body["image_url"] = image_url
-        pets_out.append(pet_body)
+    selected = pets if pets is not None else []
+    pets_out = [
+        build_couch_pet(
+            pet,
+            image_url=(pet_image_urls or {}).get(pet.pet_id or "") if pet.pet_id else None,
+        )
+        for pet in selected
+    ]
     return {
         "_id": doc.reserved_household_id,
         "type": "household",
@@ -261,6 +285,7 @@ class HttpCouchBirth:
         evacuee_docs: list[dict],
         cookie_header: str | None,
         image_payloads: list[CouchImagePayload] | None = None,
+        append_pets: list[dict] | None = None,
     ) -> None:
         couch_url = (settings.COUCHDB_URL or "").rstrip("/")
         if not couch_url:
@@ -286,6 +311,26 @@ class HttpCouchBirth:
                     raise CouchBirthError(
                         f"Could not read household in {db}: HTTP {existing.status_code}"
                     )
+                elif append_pets:
+                    # HH already at this shelter — append claimed pets onto existing pets[].
+                    try:
+                        existing_body = existing.json()
+                    except ValueError as exc:
+                        raise CouchBirthError("Couch household GET returned invalid JSON") from exc
+                    if not isinstance(existing_body, dict):
+                        raise CouchBirthError("Couch household GET returned unexpected payload")
+                    rev = existing_body.get("_rev")
+                    if not isinstance(rev, str) or not rev:
+                        raise CouchBirthError("Couch household missing _rev for pet append")
+                    merged = deepcopy(existing_body)
+                    current_pets = merged.get("pets")
+                    if not isinstance(current_pets, list):
+                        current_pets = []
+                    merged["pets"] = [*current_pets, *append_pets]
+                    merged["updated_at"] = household_doc.get("updated_at") or merged.get(
+                        "updated_at"
+                    )
+                    docs.insert(0, merged)
 
                 # Image metadata docs go in the same bulk write; attachments follow.
                 for payload in image_payloads or []:
@@ -388,6 +433,7 @@ class InMemoryCouchBirth:
         evacuee_docs: list[dict],
         cookie_header: str | None,
         image_payloads: list[CouchImagePayload] | None = None,
+        append_pets: list[dict] | None = None,
     ) -> None:
         if self.fail_next is not None:
             err = self.fail_next
@@ -399,6 +445,13 @@ class InMemoryCouchBirth:
         household_id = household_doc["_id"]
         if household_id not in shelter_docs:
             shelter_docs[household_id] = deepcopy(household_doc)
+            counts[household_id] = counts.get(household_id, 0) + 1
+        elif append_pets:
+            existing = shelter_docs[household_id]
+            current = existing.get("pets")
+            if not isinstance(current, list):
+                current = []
+            existing["pets"] = [*current, *deepcopy(append_pets)]
             counts[household_id] = counts.get(household_id, 0) + 1
         for doc in evacuee_docs:
             doc_id = doc["_id"]

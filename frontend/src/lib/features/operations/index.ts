@@ -98,6 +98,19 @@ export {
 	receivedItemSchema,
 	type ReceivedItemInput
 } from './domain/operations';
+export {
+	formatThaiDuration,
+	formatAgeInStock,
+	formatTimeSinceProduced,
+	formatTimeUntilExpiry,
+	formatLotClockLine,
+	formatItemAgeLine,
+	summarizeItemLotAge,
+	ageInStockMs,
+	timeSinceProducedMs,
+	timeUntilExpiryMs,
+	type ItemLotAgeSummary
+} from './domain/lot-age';
 export { deriveDeterministicLedgerId } from './domain/deterministic-ledger-id';
 export {
 	DEFAULT_STORAGE_LABEL,

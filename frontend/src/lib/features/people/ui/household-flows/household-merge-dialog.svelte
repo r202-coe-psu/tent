@@ -9,7 +9,6 @@
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
-	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import {
@@ -149,11 +148,6 @@
 								<span class="text-sm font-bold text-foreground">
 									{hh.label || 'ครอบครัว'}
 								</span>
-								{#if hh.status}
-									<Badge variant="outline" class="text-2xs capitalize">
-										{hh.status}
-									</Badge>
-								{/if}
 							</div>
 							<p class="text-xs text-muted-foreground">
 								{[

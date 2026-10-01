@@ -12,9 +12,17 @@ import {
 	recipeInputSchema,
 	mergeCatalogGenerations,
 	resolveCategoryId,
+	resolveCategoryLabel,
 	itemBelongsToCategory,
 	catalogOrigin,
-	canShelterDeleteCatalogDoc
+	canShelterDeleteCatalogDoc,
+	itemSelectableUoms,
+	qtyToBaseUnit,
+	qtyFromBaseUnit,
+	toLedgerQtyUnit,
+	defaultInventoryUom,
+	defaultIssueUom,
+	packagingMultiplier
 } from './catalog';
 import type { AuthorContext } from '$lib/db/model';
 
@@ -90,6 +98,22 @@ describe('catalog domain', () => {
 		expect(catalogOrigin({}, 'SH001')).toBe('central');
 		expect(canShelterDeleteCatalogDoc({ shelter_code: 'SH001' }, 'SH001')).toBe(true);
 		expect(canShelterDeleteCatalogDoc({}, 'SH001')).toBe(false);
+	});
+
+	it('resolveCategoryLabel returns human-readable names for system ids', () => {
+		expect(resolveCategoryLabel('item_category:food')).toBe('อาหารและวัตถุดิบ (Food Ingredients)');
+		expect(resolveCategoryLabel('อาหารและวัตถุดิบ')).toBe('อาหารและวัตถุดิบ (Food Ingredients)');
+		expect(
+			resolveCategoryLabel('item_category:food', [
+				{
+					_id: 'item_category:food',
+					name: 'อาหารและวัตถุดิบ',
+					system_key: 'FOOD'
+				}
+			])
+		).toBe('อาหารและวัตถุดิบ');
+		expect(resolveCategoryLabel('unknown-cat')).toBe('unknown-cat');
+		expect(resolveCategoryLabel('')).toBe('');
 	});
 
 	it('rejects duplicate conversion uom codes on one item', () => {
@@ -420,5 +444,46 @@ describe('mergeCatalogGenerations', () => {
 		);
 		expect(merged).toHaveLength(1);
 		expect(merged[0]._id).toBe('item:soap');
+	});
+});
+
+describe('packaging UOM conversion', () => {
+	const rice = {
+		base_unit: 'kg',
+		conversions: [
+			{ uom_name: 'bag', multiplier: '5' },
+			{ uom_name: 'sack', multiplier: '50' }
+		],
+		default_inventory_uom: 'sack',
+		default_issue_uom: 'bag'
+	};
+
+	it('lists base plus each packaging UOM once', () => {
+		expect(itemSelectableUoms(rice).map((o) => o.code)).toEqual(['kg', 'bag', 'sack']);
+		expect(itemSelectableUoms(rice).find((o) => o.code === 'sack')?.multiplier).toBe('50');
+	});
+
+	it('converts packaging qty to base units for ledger write', () => {
+		expect(qtyToBaseUnit('2', 'sack', rice)).toBe('100');
+		expect(toLedgerQtyUnit('2', 'sack', rice)).toEqual({ qty: '100', unit: 'kg' });
+		expect(qtyFromBaseUnit('100', 'sack', rice)).toBe('2');
+	});
+
+	it('defaults receive/issue UOMs when they are selectable', () => {
+		expect(defaultInventoryUom(rice)).toBe('sack');
+		expect(defaultIssueUom(rice)).toBe('bag');
+		expect(defaultInventoryUom({ base_unit: 'piece', conversions: [] })).toBe('piece');
+		expect(
+			defaultIssueUom({
+				base_unit: 'kg',
+				conversions: [{ uom_name: 'bag', multiplier: '5' }],
+				default_issue_uom: 'missing'
+			})
+		).toBe('kg');
+	});
+
+	it('rejects unknown packaging codes', () => {
+		expect(() => qtyToBaseUnit('1', 'crate', rice)).toThrow(/Unknown unit/);
+		expect(packagingMultiplier(rice, 'kg')).toBe('1');
 	});
 });

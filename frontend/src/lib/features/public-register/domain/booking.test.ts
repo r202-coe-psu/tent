@@ -504,6 +504,8 @@ describe('publicBookingErrorMessage', () => {
 	it('maps known codes to Thai copy', () => {
 		expect(publicBookingErrorMessage('SHELTER_CLOSED')).toContain('ปิดรับ');
 		expect(publicBookingErrorMessage('RATE_LIMITED')).toContain('ถี่เกินไป');
+		expect(publicBookingErrorMessage('INVALID_JOIN_TOKEN')).toContain('เข้าร่วมครอบครัว');
+		expect(publicBookingErrorMessage('JOIN_TARGET_NOT_FOUND')).toContain('ไม่พบครอบครัว');
 	});
 
 	it('falls back for anything unrecognised', () => {

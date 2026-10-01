@@ -48,6 +48,7 @@
 		toggleId,
 		selectRange,
 		applyRowClickSelection,
+		movementConflictMessage,
 		type Evacuee,
 		type ZoningQueueTab
 	} from '$lib/features/people';
@@ -302,12 +303,19 @@
 		applyModifierSelection(index, ctrl, shift);
 	}
 
-	function onRowClick(e: MouseEvent, row: Evacuee) {
+	function onRowClick(e: MouseEvent, row: Evacuee, index: number) {
 		const ctrl = e.ctrlKey || e.metaKey;
 		const shift = e.shiftKey;
 		if (ctrl || shift) {
 			// Selection already applied in onRowMouseDown; never navigate.
 			e.preventDefault();
+			return;
+		}
+		if (selectedIds.length > 0) {
+			// A selection is already active: keep clicks toggling rows instead of
+			// navigating away, so bulk-selecting isn't derailed by a mis-tap.
+			selectedIds = toggleId(selectedIds, row._id);
+			lastClickedIndex = index;
 			return;
 		}
 		openDetail(row._id);
@@ -339,7 +347,7 @@
 			await confirmRoomMutation.mutateAsync({ evacuee: target, ctx: authorCtx() });
 			toast.success(`ยืนยันถึงโซน: ${formatPersonName(target)}`);
 		} catch (err: unknown) {
-			toast.error(err instanceof Error ? err.message : 'ยืนยันถึงโซนไม่สำเร็จ');
+			toast.error(movementConflictMessage(err));
 		}
 	}
 
@@ -589,7 +597,7 @@
 								handleCodeInput(barcodeInput);
 							}
 						}}
-						class="h-12 rounded-xl bg-slate-50 pl-11 font-mono text-xs"
+						class="h-12 rounded-xl bg-slate-50 pl-11 text-xs tabular-nums"
 					/>
 				</div>
 				<Button
@@ -868,7 +876,7 @@
 										? 'bg-[var(--shelter-accent-blue-bg)]'
 										: ''}"
 									onmousedown={(e) => onRowMouseDown(e, index)}
-									onclick={(e) => onRowClick(e, row)}
+									onclick={(e) => onRowClick(e, row, index)}
 								>
 									<Table.Cell class="py-3 pl-5">
 										<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -887,7 +895,7 @@
 									<Table.Cell class="py-3 font-semibold text-slate-900">
 										{formatPersonName(row)}
 									</Table.Cell>
-									<Table.Cell class="px-3 py-3 font-mono text-xs text-slate-600">
+									<Table.Cell class="px-3 py-3 text-xs text-slate-600 tabular-nums">
 										{maskNationalId(row.person_id?.number)}
 									</Table.Cell>
 									<Table.Cell class="px-3 py-3">

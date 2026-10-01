@@ -2,7 +2,7 @@
 title: Smart Shelter — Master Data Seed SSoT
 status: draft
 created: 2026-09-17
-updated: 2026-09-25
+updated: 2026-09-26
 language: th
 ---
 
@@ -18,7 +18,7 @@ language: th
 
 | พื้นที่    | ข้อมูลที่ seed สร้าง                                                                                  |
 | ---------- | ----------------------------------------------------------------------------------------------------- |
-| `registry` | global `master_data` 4 เอกสาร รวมรายการ seed 31 รายการ (CR-137)                                         |
+| `registry` | global `master_data` 4 เอกสาร รวมรายการ seed 36 รายการ (CR-137 + shelter_type expand)                 |
 | `registry` | `config:app` 1 singleton พร้อมค่า default                                                             |
 | `registry` | `config:public_portal` 1 singleton พร้อมค่า default FAQ 13 รายการ (ช่องทางติดต่อเว้นว่างไว้ ไม่ seed) |
 | `catalog`  | `unit_of_measure` 30, `item_category` 10, `item_master` 34, `recipe` 6                               |
@@ -62,7 +62,7 @@ language: th
 | Author                           | `seed`                             |
 | Global scope                     | ไม่มี `shelter_code`               |
 | จำนวน master types               | 4 (CR-137)                         |
-| จำนวนรายการใน canonical seed set | 31                                 |
+| จำนวนรายการใน canonical seed set | 36                                 |
 
 Global seed ใช้ `enforceOneDefault()` เพื่อให้แต่ละ master type มีรายการที่เป็น default ได้ไม่เกินหนึ่งรายการ หากเอกสารเดิมมีรายการที่ไม่มีอยู่ใน canonical seed set ระบบจะเก็บรายการเดิมไว้ เว้นแต่เข้าเงื่อนไข migration ใน §1.4 ดังนั้น ตารางด้านล่างจึงเป็น **รายการที่ seed กำหนด** ไม่ใช่รายการทั้งหมดที่อาจมีอยู่ใน database แล้ว
 
@@ -107,7 +107,7 @@ Global seed ใช้ `enforceOneDefault()` เพื่อให้แต่ล
 | `owned_house`    | บ้านตนเอง                         | Owned house | **ใช่** |
 | `rented_house`   | บ้านเช่า                          | Rented house | —       |
 | `condo`          | คอนโดมิเนียม                      | Condominium | —       |
-| `apartment_dorm` | อพาร์ตเมนต์/หอพัก                 | Apartment / dormitory | —       |
+| `apartment_dorm` | อะพาร์ตเมนต์/หอพัก                | Apartment / dormitory | —       |
 | `homeless`       | ไร้ที่อยู่อาศัย / ไม่มีบ้านเลขที่ | Homeless / no house number | —       |
 
 #### `shelter_type` — ประเภทศูนย์พักพิง
@@ -118,7 +118,12 @@ Global seed ใช้ `enforceOneDefault()` เพื่อให้แต่ล
 | `community_hall`      | ศาลาประชาคม | Community hall | —       |
 | `temple`              | วัด         | Temple | —       |
 | `government_building` | อาคารราชการ | Government building | —       |
-| `sports_centre`       | ศูนย์กีฬา   | Sports centre | —       |
+| `sports_centre`       | ศูนย์กีฬา              | Sports centre | —       |
+| `mosque`              | มัสยิด                 | Mosque | —       |
+| `college_university`  | วิทยาลัย/มหาวิทยาลัย   | College / university | —       |
+| `dormitory`           | หอพัก                  | Dormitory | —       |
+| `hotel`               | โรงแรม                 | Hotel | —       |
+| `condo_apartment`     | คอนโด/อะพาร์ตเมนต์     | Condo / apartment | —       |
 
 #### `volunteer_skills` — ทักษะมาตรฐานจิตอาสา
 
@@ -255,7 +260,7 @@ code เสมอ. หากไม่มีค่า default เฉพาะ ร
 | `_id` | name | category | base_unit | type_class | conversions | inventory / issue uom | storage / shelf life | properties / flags |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `item_master:{ulid}` | ข้าวสาร | `item_category:food` | `kg` | `CONSUMABLE` | `bag` (x50) | `bag` / kg | DRY / 365 วัน | ผูก `FOOD_ENERGY` |
-| `item_master:{ulid}` | ไข่ไก่ | `item_category:food` | `piece` | `CONSUMABLE` | `pack` (x30) | `pack` / piece | DRY / 21 วัน | ผูก `FOOD_PROTEIN` |
+| `item_master:{ulid}` | ไข่ไก่ | `item_category:food` | `egg` | `CONSUMABLE` | `pack` (x30) | `pack` / egg | DRY / 21 วัน | ผูก `FOOD_PROTEIN` |
 | `item_master:{ulid}` | ผักรวม | `item_category:food` | `kg` | `CONSUMABLE` | — | kg / kg | CHILLED / 5 วัน | — |
 | `item_master:{ulid}` | ปลากระป๋อง | `item_category:food` | `can` | `CONSUMABLE` | `pack` (x10), `box` (x100) | `box` / can | DRY / 730 วัน | `dietary: ['HALAL']` |
 | `item_master:{ulid}` | เนื้อไก่สด | `item_category:food` | `kg` | `CONSUMABLE` | — | kg / kg | CHILLED / 3 วัน | `dietary: ['HALAL']` |
@@ -282,10 +287,10 @@ code เสมอ. หากไม่มีค่า default เฉพาะ ร
 | `item_master:{ulid}` | ถุงมือ | `item_category:volunteer_ppe` | `pair` | `EQUIPMENT` | — | — / — | — | `returnable: true`, `asset_status: 'READY'` |
 | `item_master:{ulid}` | ข้าวกล่องทั่วไป | `item_category:ready_meal` | `box` | `CONSUMABLE` | — | box / box | DRY / 1 วัน | `distribution_type: 'recurring'` |
 | `item_master:{ulid}` | ข้าวกล่องฮาลาล | `item_category:ready_meal` | `box` | `CONSUMABLE` | — | box / box | DRY / 1 วัน | `distribution_type: 'recurring'`, `dietary: ['HALAL']` |
-| `item_master:{ulid}` | ผ้าห่มกันหนาว | `item_category:bedding` | `piece` | `DURABLE` | `bundle` (x10) | `bundle` / piece | — | `returnable: true`, `qty_per_person: 1`, `one_time` |
-| `item_master:{ulid}` | เสื่อปูนอน | `item_category:bedding` | `piece` | `DURABLE` | `bundle` (x10) | `bundle` / piece | — | `returnable: true`, `qty_per_person: 1`, `one_time` |
+| `item_master:{ulid}` | ผ้าห่มกันหนาว | `item_category:bedding` | `cloth` | `DURABLE` | `bundle` (x10) | `bundle` / cloth | — | `returnable: true`, `qty_per_person: 1`, `one_time` |
+| `item_master:{ulid}` | เสื่อปูนอน | `item_category:bedding` | `cloth` | `DURABLE` | `bundle` (x10) | `bundle` / cloth | — | `returnable: true`, `qty_per_person: 1`, `one_time` |
 | `item_master:{ulid}` | เต็นท์ครอบครัว | `item_category:bedding` | `piece` | `DURABLE` | — | piece / piece | — | `returnable: true`, `qty_per_person: 1`, `one_time` |
-| `item_master:{ulid}` | มุ้ง | `item_category:bedding` | `piece` | `DURABLE` | — | piece / piece | — | `returnable: true`, `qty_per_person: 1`, `one_time` |
+| `item_master:{ulid}` | มุ้ง | `item_category:bedding` | `cloth` | `DURABLE` | — | cloth / cloth | — | `returnable: true`, `qty_per_person: 1`, `one_time` |
 | `item_master:{ulid}` | ถังแก๊สหุงต้ม LPG 15 กก. | `item_category:fuel_energy` | `cylinder` | `CONSUMABLE` | — | cylinder / cylinder | — | `fuel_type: 'LPG'`, `capacity_kg: '15'`, `burn_rate: '0.35'` |
 | `item_master:{ulid}` | ถุงยังชีพธารน้ำใจ | `item_category:kits` | `set` | `CONSUMABLE` | — | set / set | DRY / 180 วัน | `distribution_type: 'one_time'` |
 
@@ -295,11 +300,11 @@ code เสมอ. หากไม่มีค่า default เฉพาะ ร
 
 | `_id` | label | ingredients |
 | --- | --- | --- |
-| `recipe:{ulid}` | ข้าวไข่เจียว | ข้าวสาร 0.2 kg; ไข่ไก่ 2 piece; น้ำมันพืช 0.02 bottle |
+| `recipe:{ulid}` | ข้าวไข่เจียว | ข้าวสาร 0.2 kg; ไข่ไก่ 2 egg; น้ำมันพืช 0.02 bottle |
 | `recipe:{ulid}` | ข้าวต้มไก่สับ | ข้าวสาร 0.15 kg; เนื้อไก่สด 0.1 kg; เกลือ 0.005 kg |
 | `recipe:{ulid}` | ข้าวกะเพราไก่สับ | ข้าวสาร 0.2 kg; เนื้อไก่สด 0.15 kg; น้ำมันพืช 0.02 bottle; น้ำปลา 0.01 bottle |
 | `recipe:{ulid}` | ข้าวไก่ผัดกระเทียม | ข้าวสาร 0.2 kg; เนื้อไก่สด 0.15 kg; น้ำมันพืช 0.02 bottle; น้ำปลา 0.01 bottle |
-| `recipe:{ulid}` | ข้าวไข่พะโล้ไก่ | ข้าวสาร 0.2 kg; ไข่ไก่ 2 piece; เนื้อไก่สด 0.1 kg; น้ำตาลทราย 0.02 kg; น้ำปลา 0.01 bottle |
+| `recipe:{ulid}` | ข้าวไข่พะโล้ไก่ | ข้าวสาร 0.2 kg; ไข่ไก่ 2 egg; เนื้อไก่สด 0.1 kg; น้ำตาลทราย 0.02 kg; น้ำปลา 0.01 bottle |
 | `recipe:{ulid}` | ข้าวปลากระป๋องทรงเครื่อง | ข้าวสาร 0.2 kg; ปลากระป๋อง 0.5 can; น้ำมันพืช 0.02 bottle; น้ำปลา 0.01 bottle |
 
 ## 3. SOP ratio seed
@@ -353,8 +358,8 @@ code เสมอ. หากไม่มีค่า default เฉพาะ ร
 | `_id`                                  | name                             | standard_uom | item map                                                                                                          |
 | -------------------------------------- | -------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------- |
 | `requirement_group:FOOD_ENERGY`        | กลุ่มแป้งและพลังงานหลัก          | `kcal`       | ข้าวสาร (`kg`), factor `3600`, share `100%`                                                                       |
-| `requirement_group:FOOD_PROTEIN`       | กลุ่มโปรตีนและเนื้อสัตว์         | `gram`       | ไข่ไก่ (`piece`), factor `6.3`, share `50%`<br/>ปลากระป๋อง (`can`), factor `17`, share `50%`                      |
-| `requirement_group:FOOD_PROTEIN_HALAL` | กลุ่มโปรตีนและเนื้อสัตว์ (ฮาลาล) | `gram`       | เนื้อไก่สด (`kg`), factor `200`, share `70%`<br/>ไข่ไก่ (`piece`), factor `6.3`, share `30%`                      |
+| `requirement_group:FOOD_PROTEIN`       | กลุ่มโปรตีนและเนื้อสัตว์         | `gram`       | ไข่ไก่ (`egg`), factor `6.3`, share `50%`<br/>ปลากระป๋อง (`can`), factor `17`, share `50%`                      |
+| `requirement_group:FOOD_PROTEIN_HALAL` | กลุ่มโปรตีนและเนื้อสัตว์ (ฮาลาล) | `gram`       | เนื้อไก่สด (`kg`), factor `200`, share `70%`<br/>ไข่ไก่ (`egg`), factor `6.3`, share `30%`                      |
 | `requirement_group:FOOD_FAT`           | กลุ่มน้ำมันและไขมัน              | `gram`       | น้ำมันพืช (`bottle`), factor `900`, share `100%`                                                                  |
 | `requirement_group:DRINKING_WATER`     | กลุ่มน้ำดื่มสะอาด                | `liter`      | น้ำดื่ม 600 มล. (`bottle`), factor `0.6`, share `70%`<br/>น้ำดื่มถัง 5 ลิตร (`bottle`), factor `5.0`, share `30%` |
 

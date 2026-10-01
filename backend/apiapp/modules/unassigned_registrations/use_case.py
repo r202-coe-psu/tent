@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from fastapi import HTTPException, status
 from pymongo.errors import DuplicateKeyError, PyMongoError
 from tent_model.unassigned_registration import (
+    UNASSIGNED_SCHEMA_V,
     EmergencyContact,
     PersonId,
     UnassignedHousehold,
@@ -19,7 +20,7 @@ from tent_model.unassigned_registration import (
 )
 
 from ...core.staff_session import StaffSession
-from ...infrastructure.gridfs import load_unassigned_photo, parse_photo_ref
+from ...infrastructure.gridfs import load_unassigned_photo, parse_photo_ref, photo_ref
 from ...utils.masking import (
     mask_last_name,
     mask_phone,
@@ -34,18 +35,23 @@ from .couch_birth import (
     build_couch_evacuee,
     build_couch_household,
     build_couch_image,
+    build_couch_pet,
     couch_unavailable,
     get_couch_birth,
 )
 from .schemas import (
     ClaimedMemberOut,
+    ClaimedPetOut,
     EmergencyContactOut,
     HouseholdOut,
     MemberCreated,
     MemberInput,
     OpenMemberHit,
+    OpenPetHit,
     PersonIdInput,
     PersonIdOut,
+    PetCreated,
+    PetInput,
     UnassignedRegistrationClaimRequest,
     UnassignedRegistrationClaimResponse,
     UnassignedRegistrationCreateRequest,
@@ -53,6 +59,7 @@ from .schemas import (
     UnassignedRegistrationDetailResponse,
     UnassignedRegistrationListItem,
     UnassignedRegistrationListResponse,
+    UnassignedRegistrationReviewResponse,
     UnassignedRegistrationSearchHit,
     UnassignedRegistrationSearchResponse,
     UnassignedRegistrationStatsResponse,
@@ -73,6 +80,7 @@ class ClaimMarkParams:
 
     registration_id: str
     member_ids: list[str]
+    pet_ids: list[str]
     shelter_code: str
     actor: str
     claimed_at: datetime
@@ -87,9 +95,44 @@ class ClaimRevertParams:
 
     registration_id: str
     member_ids: list[str]
+    pet_ids: list[str]
     open_person_id_numbers: list[str]
     open_phones: list[str]
     document_status: str
+
+
+def _new_pet_id() -> str:
+    return f"pet:{new_ulid()}"
+
+
+def _build_pet(input_pet: PetInput) -> UnassignedPet:
+    # Prefer one animal per row for new writes (count may still be >1 for rare clients).
+    return UnassignedPet(
+        pet_id=_new_pet_id(),
+        status="open",
+        species=input_pet.species,
+        count=input_pet.count,
+        notes=input_pet.notes,
+        has_cage=input_pet.has_cage,
+        image_url=_normalize_photo_ref(input_pet.image_url),
+    )
+
+
+def _ensure_pet_ids(doc: UnassignedRegistration) -> bool:
+    """Mint pet_id on legacy rows lacking one. Returns True if any field changed."""
+    changed = False
+    for pet in doc.household.pets or []:
+        if not pet.pet_id:
+            pet.pet_id = _new_pet_id()
+            changed = True
+        if pet.status is None:
+            pet.status = "open"
+            changed = True
+    return changed
+
+
+def _open_pets(doc: UnassignedRegistration) -> list[UnassignedPet]:
+    return [p for p in (doc.household.pets or []) if p.is_open()]
 
 
 def _is_anonymous_id(value: str) -> bool:
@@ -157,6 +200,29 @@ def _open_identity_keys(
                     )
                 seen_phones.add(phone)
                 phones.append(phone)
+    return person_ids, phones
+
+
+def _existing_identity_keys(
+    members: list[UnassignedMember],
+) -> tuple[set[str], set[str]]:
+    """Person-id numbers and phones across *every* member, regardless of status.
+
+    Unlike `_open_identity_keys` (open-only — feeds the Mongo unique-index
+    fields, which intentionally free up once a member is claimed elsewhere),
+    this is used to guard a *join*: a late joiner must not be allowed to reuse
+    the identity of someone already on this same document, even if that
+    someone has already been claimed into Couch.
+    """
+    person_ids: set[str] = set()
+    phones: set[str] = set()
+    for member in members:
+        if member.person_id and member.person_id.number:
+            key = member.person_id.number.strip().upper()
+            if key:
+                person_ids.add(key)
+        if member.phone:
+            phones.add(member.phone)
     return person_ids, phones
 
 
@@ -331,22 +397,13 @@ class UnassignedRegistrationsUseCase:
             province=payload.household.province,
             postal_code=payload.household.postal_code,
             geo=payload.household.geo,
-            pets=[
-                UnassignedPet(
-                    species=pet.species,
-                    count=pet.count,
-                    notes=pet.notes,
-                    has_cage=pet.has_cage,
-                    image_url=_normalize_photo_ref(pet.image_url),
-                )
-                for pet in payload.household.pets
-            ],
+            pets=[_build_pet(pet) for pet in payload.household.pets],
             label=payload.household.label,
         )
 
         doc = UnassignedRegistration(
             id=new_ulid(),
-            schema_v=2,
+            schema_v=UNASSIGNED_SCHEMA_V,
             reserved_household_id=f"household:{new_ulid()}",
             members=members,
             household=household,
@@ -378,32 +435,43 @@ class UnassignedRegistrationsUseCase:
     async def _join_existing(
         self, payload: UnassignedRegistrationCreateRequest, join_id: str
     ) -> UnassignedRegistrationCreateResponse:
-        """Append members (+ pets) into an existing open reserved household."""
+        """Append members (+ pets) into an existing family doc (open or closed → reopen)."""
         try:
             doc = await UnassignedRegistration.get(join_id)
         except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
             raise _mongo_unavailable("join") from exc
 
-        if doc is None or doc.status != "open":
+        if doc is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={"error": "JOIN_TARGET_NOT_FOUND"},
             )
 
+        _ensure_pet_ids(doc)
+
+        existing_person_ids, existing_phones = _existing_identity_keys(doc.members)
         new_members = [_build_member(m) for m in payload.members]
+        for member in new_members:
+            key = (
+                member.person_id.number.strip().upper()
+                if member.person_id and member.person_id.number
+                else ""
+            )
+            if key and key in existing_person_ids:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={"error": "DUPLICATE_OPEN_IDENTITY"},
+                )
+            if member.phone and member.phone in existing_phones:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={"error": "DUPLICATE_OPEN_IDENTITY"},
+                )
+
         combined = list(doc.members) + new_members
         open_person_ids, open_phones = _open_identity_keys(combined)
 
-        append_pets = [
-            UnassignedPet(
-                species=pet.species,
-                count=pet.count,
-                notes=pet.notes,
-                has_cage=pet.has_cage,
-                image_url=_normalize_photo_ref(pet.image_url),
-            )
-            for pet in payload.household.pets
-        ]
+        append_pets = [_build_pet(pet) for pet in payload.household.pets]
         if append_pets:
             existing_pets = list(doc.household.pets or [])
             doc.household.pets = existing_pets + append_pets
@@ -411,6 +479,10 @@ class UnassignedRegistrationsUseCase:
         doc.members = combined
         doc.open_person_id_numbers = open_person_ids
         doc.open_phones = open_phones
+        # Late join always reopens the family document.
+        doc.status = "open"
+        if doc.schema_v < UNASSIGNED_SCHEMA_V:
+            doc.schema_v = UNASSIGNED_SCHEMA_V
 
         try:
             await doc.save()
@@ -438,7 +510,7 @@ class UnassignedRegistrationsUseCase:
         """Return registrations whose Residence matches — ids + non-PII chips only."""
         try:
             docs = await UnassignedRegistration.find(
-                {"status": {"$in": ["open", "claimed", "partial_claim"]}}
+                {"status": {"$in": ["open", "closed", "claimed", "partial_claim"]}}
             ).to_list()
         except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
             raise _mongo_unavailable("residence_match") from exc
@@ -447,19 +519,25 @@ class UnassignedRegistrationsUseCase:
 
         matches: list[UnassignedResidenceMatchHit] = []
         for doc in docs:
+            # Match ANY member phone (open or claimed). Uniqueness still uses
+            # open_phones only; residence-match must find closed/history docs so
+            # late joiners can append via join_registration_id.
             phone_match = False
             matched_member_str: str | None = None
-            if query_phone and query_phone in doc.open_phones:
-                phone_match = True
-                head = doc.members[0] if doc.members else None
-                head_phone = normalize_phone(head.phone) if (head and head.phone) else ""
-                if head_phone != query_phone:
-                    for m in doc.members:
-                        if m.phone and normalize_phone(m.phone) == query_phone:
+            if query_phone:
+                for m in doc.members:
+                    if not m.phone:
+                        continue
+                    if normalize_phone(m.phone) != query_phone:
+                        continue
+                    phone_match = True
+                    head = doc.members[0] if doc.members else None
+                    head_phone = normalize_phone(head.phone) if (head and head.phone) else ""
+                    if head is None or m.reserved_evacuee_id != head.reserved_evacuee_id:
+                        if head_phone != query_phone:
                             first_char = m.first_name[0] if m.first_name else ""
-                            masked_p = mask_phone(m.phone)
-                            matched_member_str = f"คุณ{first_char}*** ({masked_p})"
-                            break
+                            matched_member_str = f"คุณ{first_char}*** ({mask_phone(m.phone)})"
+                    break
 
             residence_match = _residence_matches(payload, doc.household)
             if not phone_match and not residence_match:
@@ -557,7 +635,8 @@ class UnassignedRegistrationsUseCase:
             if subdistrict and (hh.subdistrict or "").strip() != subdistrict.strip():
                 continue
             open_members = [m for m in doc.members if m.status == "open"]
-            if not open_members:
+            open_pet_rows = _open_pets(doc)
+            if not open_members and not open_pet_rows:
                 continue
             if query:
                 if not (
@@ -598,6 +677,69 @@ class UnassignedRegistrationsUseCase:
             )
         return _detail_response(doc)
 
+    async def get_review(self, registration_id: str) -> UnassignedRegistrationReviewResponse:
+        """Open-only pre-claim review (CR-140 addendum) — read-only, no write."""
+        try:
+            doc = await UnassignedRegistration.get(registration_id)
+        except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
+            raise _mongo_unavailable("get_review") from exc
+        if doc is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": {
+                        "code": "NOT_FOUND",
+                        "message": "Unassigned Registration not found",
+                    }
+                },
+            )
+        _ensure_pet_ids(doc)
+        hh = doc.household
+        return UnassignedRegistrationReviewResponse(
+            id=doc.id,
+            reserved_household_id=doc.reserved_household_id,
+            registered_via=doc.registered_via,
+            status=doc.status,
+            created_at=doc.created_at.isoformat(),
+            housing_type=hh.housing_type,
+            residence_landmark=hh.residence_landmark,
+            address_no=hh.address_no,
+            village_no=hh.village_no,
+            subdistrict=hh.subdistrict,
+            district=hh.district,
+            province=hh.province,
+            postal_code=hh.postal_code,
+            label=hh.label,
+            open_members=[_open_member_hit(m) for m in doc.members if m.status == "open"],
+            open_pets=[_open_pet_hit(p) for p in _open_pets(doc)],
+        )
+
+    async def find_open_photo_reference(self, photo_id: str) -> str | None:
+        """Normalize + check `photo_id` is referenced by an open member/pet somewhere.
+
+        Returns the normalized `gfs:{oid}` ref on a match, else ``None`` (caller 404s).
+        """
+        ref = parse_photo_ref(photo_id)
+        if ref is None:
+            return None
+        normalized = photo_ref(ref)
+        try:
+            doc = await UnassignedRegistration.find_one(
+                {
+                    "$or": [
+                        {"members": {"$elemMatch": {"status": "open", "photo": normalized}}},
+                        {
+                            "household.pets": {
+                                "$elemMatch": {"status": "open", "image_url": normalized}
+                            }
+                        },
+                    ]
+                }
+            )
+        except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
+            raise _mongo_unavailable("get_review") from exc
+        return normalized if doc is not None else None
+
     async def search(self, raw_query: str) -> UnassignedRegistrationSearchResponse:
         """Search open members on the Mongo queue (FR-UR-02) — no public_persons."""
         query = raw_query.strip()
@@ -612,6 +754,7 @@ class UnassignedRegistrationsUseCase:
 
         results: list[UnassignedRegistrationSearchHit] = []
         for doc in docs:
+            _ensure_pet_ids(doc)
             open_members = [
                 _open_member_hit(m)
                 for m in doc.members
@@ -622,7 +765,14 @@ class UnassignedRegistrationsUseCase:
                 # member text-match — still include all open members.
                 if _identity_keys_match(doc, query) or doc.id == query.strip():
                     open_members = [_open_member_hit(m) for m in doc.members if m.status == "open"]
-            if not open_members:
+            open_pet_hits = [_open_pet_hit(p) for p in _open_pets(doc)]
+            if not open_members and not open_pet_hits:
+                continue
+            # Only surface pet-only hits when query matched the registration id / keys
+            # (or there was an open-member match on this doc).
+            if not open_members and not (
+                _identity_keys_match(doc, query) or doc.id == query.strip()
+            ):
                 continue
             results.append(
                 UnassignedRegistrationSearchHit(
@@ -632,6 +782,7 @@ class UnassignedRegistrationsUseCase:
                     status=doc.status,
                     created_at=doc.created_at.isoformat(),
                     open_members=open_members,
+                    open_pets=open_pet_hits,
                 )
             )
         return UnassignedRegistrationSearchResponse(results=results)
@@ -665,9 +816,10 @@ class UnassignedRegistrationsUseCase:
         *,
         cookie_header: str | None,
     ) -> UnassignedRegistrationClaimResponse:
-        """Partial/full claim → Couch birth at pre_registered (FR-UR-03/04)."""
+        """Partial/full claim → Couch birth at pre_registered (FR-UR-03/04 + pets)."""
         shelter_code = _resolve_claim_shelter(session, payload.shelter_code)
-        member_ids = payload.member_ids
+        member_ids = list(payload.member_ids)
+        pet_ids = list(payload.pet_ids)
 
         try:
             doc = await UnassignedRegistration.get(registration_id)
@@ -684,7 +836,15 @@ class UnassignedRegistrationsUseCase:
                 },
             )
 
+        if _ensure_pet_ids(doc):
+            try:
+                await doc.save()
+            except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
+                raise _mongo_unavailable("claim") from exc
+
         by_id = {m.reserved_evacuee_id: m for m in doc.members}
+        by_pet_id = {p.pet_id: p for p in (doc.household.pets or []) if p.pet_id}
+
         missing = [mid for mid in member_ids if mid not in by_id]
         if missing:
             raise HTTPException(
@@ -693,6 +853,19 @@ class UnassignedRegistrationsUseCase:
                     "error": {
                         "code": "MEMBER_NOT_FOUND",
                         "message": "One or more member ids are not on this registration",
+                    }
+                },
+            )
+
+        missing_pets = [pid for pid in pet_ids if pid not in by_pet_id]
+        if missing_pets:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": {
+                        "code": "PET_NOT_FOUND",
+                        "message": "One or more pet ids are not on this registration",
+                        "pet_ids": missing_pets,
                     }
                 },
             )
@@ -710,6 +883,21 @@ class UnassignedRegistrationsUseCase:
                 },
             )
 
+        already_claimed_pets = [
+            pid for pid in pet_ids if by_pet_id[pid].effective_status() == "claimed"
+        ]
+        if already_claimed_pets:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": {
+                        "code": "PET_ALREADY_CLAIMED",
+                        "message": "One or more pets were already claimed",
+                        "pet_ids": already_claimed_pets,
+                    }
+                },
+            )
+
         not_open = [mid for mid in member_ids if by_id[mid].status != "open"]
         if not_open:
             raise HTTPException(
@@ -723,26 +911,69 @@ class UnassignedRegistrationsUseCase:
                 },
             )
 
+        pets_not_open = [pid for pid in pet_ids if not by_pet_id[pid].is_open()]
+        if pets_not_open:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": {
+                        "code": "PET_NOT_OPEN",
+                        "message": "Only open pets can be claimed",
+                        "pet_ids": pets_not_open,
+                    }
+                },
+            )
+
         claim_targets = [by_id[mid] for mid in member_ids]
+        claim_pet_targets = [by_pet_id[pid] for pid in pet_ids]
         member_id_set = set(member_ids)
+        pet_id_set = set(pet_ids)
         now = datetime.now(UTC)
-        remaining_before_write = [
+
+        remaining_members = [
             m
             for m in doc.members
             if m.status == "open" and m.reserved_evacuee_id not in member_id_set
         ]
-        next_open_ids, next_open_phones = _open_identity_keys(remaining_before_write)
+        remaining_pets = [
+            p
+            for p in (doc.household.pets or [])
+            if p.is_open() and (p.pet_id or "") not in pet_id_set
+        ]
+        next_open_ids, next_open_phones = _open_identity_keys(remaining_members)
+        next_doc_status = "open" if remaining_members or remaining_pets else "closed"
+
+        # Pets-only claim still needs a head for first household birth.
+        head_member: UnassignedMember | None = claim_targets[0] if claim_targets else None
+        if head_member is None:
+            head_member = next(
+                (m for m in doc.members if m.status == "claimed"),
+                None,
+            ) or (doc.members[0] if doc.members else None)
+        if head_member is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail={
+                    "error": {
+                        "code": "NO_HOUSEHOLD_HEAD",
+                        "message": (
+                            "Cannot claim pets without a household member on the registration"
+                        ),
+                    }
+                },
+            )
 
         # Option B: atomic Mongo mark/lock first, then Couch birth (revert on failure).
         mark = ClaimMarkParams(
             registration_id=doc.id,
             member_ids=member_ids,
+            pet_ids=pet_ids,
             shelter_code=shelter_code,
             actor=session.name,
             claimed_at=now,
             open_person_id_numbers=next_open_ids,
             open_phones=next_open_phones,
-            document_status="open" if remaining_before_write else "claimed",
+            document_status=next_doc_status,
         )
         claimed = await _atomic_mark_claimed(mark)
         if not claimed:
@@ -751,14 +982,14 @@ class UnassignedRegistrationsUseCase:
                 detail={
                     "error": {
                         "code": "ALREADY_CLAIMED",
-                        "message": "One or more members were already claimed",
+                        "message": "One or more members or pets were already claimed",
                     }
                 },
             )
 
         # Resolve GridFS face + pet photos → Couch image:{ulid} before birth (#255).
         photo_by_member: dict[str, str] = {}
-        pet_image_urls: dict[int, str] = {}
+        pet_image_urls: dict[str, str] = {}
         image_payloads: list[CouchImagePayload] = []
 
         async def _append_gridfs_image(photo_ref: str, *, label: str) -> str | None:
@@ -802,19 +1033,24 @@ class UnassignedRegistrationsUseCase:
             if image_id:
                 photo_by_member[member.reserved_evacuee_id] = image_id
 
-        for index, pet in enumerate(doc.household.pets):
-            if not pet.image_url:
+        for pet in claim_pet_targets:
+            if not pet.image_url or not pet.pet_id:
                 continue
-            image_id = await _append_gridfs_image(pet.image_url, label=f"pet[{index}]")
+            image_id = await _append_gridfs_image(pet.image_url, label=pet.pet_id)
             if image_id:
-                pet_image_urls[index] = image_id
+                pet_image_urls[pet.pet_id] = image_id
 
+        couch_pets = [
+            build_couch_pet(pet, image_url=pet_image_urls.get(pet.pet_id or ""))
+            for pet in claim_pet_targets
+        ]
         household_doc = build_couch_household(
             doc,
-            claim_targets[0],
+            head_member,
             shelter_code,
             session.name,
             now,
+            pets=claim_pet_targets,
             pet_image_urls=pet_image_urls or None,
         )
 
@@ -838,12 +1074,14 @@ class UnassignedRegistrationsUseCase:
                 evacuee_docs=evacuee_docs,
                 cookie_header=cookie_header,
                 image_payloads=image_payloads,
+                append_pets=couch_pets if claim_pet_targets else None,
             )
         except CouchBirthError as exc:
             await _atomic_revert_claim(
                 ClaimRevertParams(
                     registration_id=doc.id,
                     member_ids=member_ids,
+                    pet_ids=pet_ids,
                     open_person_id_numbers=list(doc.open_person_id_numbers),
                     open_phones=list(doc.open_phones),
                     document_status=doc.status,
@@ -861,31 +1099,16 @@ class UnassignedRegistrationsUseCase:
             )
             for m in claim_targets
         ]
-
-        if not remaining_before_write:
-            # Best-effort hard-delete after Couch birth (CR-113). On failure keep
-            # claim success — orphan claimed doc stays trackable via id.
-            deleted = False
-            try:
-                refreshed = await UnassignedRegistration.get(registration_id)
-                if refreshed is not None:
-                    await refreshed.delete()
-                deleted = True
-            except PyMongoError, ConnectionError, TimeoutError, OSError:
-                logger.exception(
-                    "Unassigned Registration %s claim succeeded but Mongo delete failed",
-                    registration_id,
-                )
-            return UnassignedRegistrationClaimResponse(
-                id=None if deleted else registration_id,
-                deleted=deleted,
-                shelter_code=shelter_code,
-                household_id=doc.reserved_household_id,
-                evacuee_ids=member_ids,
-                claimed=claimed_out,
-                remaining_open=[],
+        claimed_pets_out = [
+            ClaimedPetOut(
+                pet_id=p.pet_id or "",
+                species=p.species,
+                count=p.count,
             )
+            for p in claim_pet_targets
+        ]
 
+        # Retain Mongo document always (no hard-delete after full claim).
         return UnassignedRegistrationClaimResponse(
             id=doc.id,
             deleted=False,
@@ -893,7 +1116,9 @@ class UnassignedRegistrationsUseCase:
             household_id=doc.reserved_household_id,
             evacuee_ids=member_ids,
             claimed=claimed_out,
-            remaining_open=[_open_member_hit(m) for m in remaining_before_write],
+            claimed_pets=claimed_pets_out,
+            remaining_open=[_open_member_hit(m) for m in remaining_members],
+            remaining_open_pets=[_open_pet_hit(p) for p in remaining_pets],
         )
 
 
@@ -935,63 +1160,106 @@ def _resolve_claim_shelter(session: StaffSession, requested: str | None) -> str:
 
 async def _atomic_mark_claimed(params: ClaimMarkParams) -> bool:
     collection = UnassignedRegistration.get_pymongo_collection()
-    result = await collection.update_one(
-        {
-            "_id": params.registration_id,
-            "$and": [
-                {
-                    "members": {
-                        "$elemMatch": {
-                            "reserved_evacuee_id": mid,
-                            "status": "open",
-                        }
+    and_clauses: list[dict] = []
+    for mid in params.member_ids:
+        and_clauses.append(
+            {
+                "members": {
+                    "$elemMatch": {
+                        "reserved_evacuee_id": mid,
+                        "status": "open",
                     }
                 }
-                for mid in params.member_ids
-            ],
-        },
-        {
-            "$set": {
-                "members.$[m].status": "claimed",
-                "members.$[m].claimed_shelter_code": params.shelter_code,
-                "members.$[m].claimed_by": params.actor,
-                "members.$[m].claimed_at": params.claimed_at,
-                "open_person_id_numbers": params.open_person_id_numbers,
-                "open_phones": params.open_phones,
-                "status": params.document_status,
             }
-        },
-        array_filters=[
+        )
+    for pid in params.pet_ids:
+        and_clauses.append(
+            {
+                "household.pets": {
+                    "$elemMatch": {
+                        "pet_id": pid,
+                        "status": "open",
+                    }
+                }
+            }
+        )
+
+    set_fields: dict = {
+        "open_person_id_numbers": params.open_person_id_numbers,
+        "open_phones": params.open_phones,
+        "status": params.document_status,
+        "schema_v": UNASSIGNED_SCHEMA_V,
+    }
+    array_filters: list[dict] = []
+    if params.member_ids:
+        set_fields["members.$[m].status"] = "claimed"
+        set_fields["members.$[m].claimed_shelter_code"] = params.shelter_code
+        set_fields["members.$[m].claimed_by"] = params.actor
+        set_fields["members.$[m].claimed_at"] = params.claimed_at
+        array_filters.append(
             {
                 "m.reserved_evacuee_id": {"$in": params.member_ids},
                 "m.status": "open",
             }
-        ],
+        )
+    if params.pet_ids:
+        set_fields["household.pets.$[p].status"] = "claimed"
+        set_fields["household.pets.$[p].claimed_shelter_code"] = params.shelter_code
+        set_fields["household.pets.$[p].claimed_by"] = params.actor
+        set_fields["household.pets.$[p].claimed_at"] = params.claimed_at
+        array_filters.append(
+            {
+                "p.pet_id": {"$in": params.pet_ids},
+                "p.status": "open",
+            }
+        )
+
+    filter_query: dict = {"_id": params.registration_id}
+    if and_clauses:
+        filter_query["$and"] = and_clauses
+
+    result = await collection.update_one(
+        filter_query,
+        {"$set": set_fields},
+        array_filters=array_filters or None,
     )
     return result.modified_count == 1
 
 
 async def _atomic_revert_claim(params: ClaimRevertParams) -> None:
     collection = UnassignedRegistration.get_pymongo_collection()
-    await collection.update_one(
-        {"_id": params.registration_id},
-        {
-            "$set": {
-                "members.$[m].status": "open",
-                "members.$[m].claimed_shelter_code": None,
-                "members.$[m].claimed_by": None,
-                "members.$[m].claimed_at": None,
-                "open_person_id_numbers": params.open_person_id_numbers,
-                "open_phones": params.open_phones,
-                "status": params.document_status,
-            }
-        },
-        array_filters=[
+    set_fields: dict = {
+        "open_person_id_numbers": params.open_person_id_numbers,
+        "open_phones": params.open_phones,
+        "status": params.document_status,
+    }
+    array_filters: list[dict] = []
+    if params.member_ids:
+        set_fields["members.$[m].status"] = "open"
+        set_fields["members.$[m].claimed_shelter_code"] = None
+        set_fields["members.$[m].claimed_by"] = None
+        set_fields["members.$[m].claimed_at"] = None
+        array_filters.append(
             {
                 "m.reserved_evacuee_id": {"$in": params.member_ids},
                 "m.status": "claimed",
             }
-        ],
+        )
+    if params.pet_ids:
+        set_fields["household.pets.$[p].status"] = "open"
+        set_fields["household.pets.$[p].claimed_shelter_code"] = None
+        set_fields["household.pets.$[p].claimed_by"] = None
+        set_fields["household.pets.$[p].claimed_at"] = None
+        array_filters.append(
+            {
+                "p.pet_id": {"$in": params.pet_ids},
+                "p.status": "claimed",
+            }
+        )
+    await collection.update_one(
+        {"_id": params.registration_id},
+        {"$set": set_fields},
+        array_filters=array_filters or None,
     )
 
 
@@ -1130,6 +1398,34 @@ def _open_member_hit(member: UnassignedMember) -> OpenMemberHit:
     )
 
 
+def _open_pet_hit(pet: UnassignedPet) -> OpenPetHit:
+    return OpenPetHit(
+        pet_id=pet.pet_id or "",
+        status="open",
+        species=pet.species,
+        count=pet.count,
+        notes=pet.notes,
+        has_cage=pet.has_cage,
+        image_url=pet.image_url,
+    )
+
+
+def _pet_response(pet: UnassignedPet) -> PetCreated:
+    claimed_at = pet.claimed_at.isoformat() if pet.claimed_at else None
+    return PetCreated(
+        pet_id=pet.pet_id or "",
+        status=pet.effective_status(),
+        species=pet.species,
+        count=pet.count,
+        notes=pet.notes,
+        has_cage=pet.has_cage,
+        image_url=pet.image_url,
+        claimed_shelter_code=pet.claimed_shelter_code,
+        claimed_at=claimed_at,
+        claimed_by=pet.claimed_by,
+    )
+
+
 def _household_out(household: UnassignedHousehold) -> HouseholdOut:
     return HouseholdOut(
         housing_type=household.housing_type,
@@ -1142,11 +1438,14 @@ def _household_out(household: UnassignedHousehold) -> HouseholdOut:
         postal_code=household.postal_code,
         geo=household.geo,
         label=household.label,
+        pets=[_pet_response(p) for p in (household.pets or [])],
     )
 
 
 def _list_item(doc: UnassignedRegistration) -> UnassignedRegistrationListItem:
+    _ensure_pet_ids(doc)
     open_members = [_open_member_hit(m) for m in doc.members if m.status == "open"]
+    open_pets = [_open_pet_hit(p) for p in _open_pets(doc)]
     return UnassignedRegistrationListItem(
         id=doc.id,
         reserved_household_id=doc.reserved_household_id,
@@ -1156,10 +1455,13 @@ def _list_item(doc: UnassignedRegistration) -> UnassignedRegistrationListItem:
         household=_household_out(doc.household),
         open_members=open_members,
         open_member_count=len(open_members),
+        open_pets=open_pets,
+        open_pet_count=len(open_pets),
     )
 
 
 def _detail_response(doc: UnassignedRegistration) -> UnassignedRegistrationDetailResponse:
+    _ensure_pet_ids(doc)
     return UnassignedRegistrationDetailResponse(
         id=doc.id,
         schema_v=doc.schema_v,
