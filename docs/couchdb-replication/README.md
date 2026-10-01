@@ -1,11 +1,11 @@
 # POC — CouchDB replication ระหว่าง server (central ⇄ edge)
 
 POC นี้ใช้ทดสอบว่า CouchDB 2 ตัว (**central** และ **edge @ศูนย์**) sync ข้อมูลกันได้ตามที่ออกแบบไว้ใน
-[`docs/data/data-model.md` §1](../../docs/data/data-model.md) และ
-[CR-064 edge disaster continuity](../../docs/changes/CR-064-edge-disaster-continuity.md)
+[`docs/data/data-model.md` §1](../data/data-model.md) และ
+[CR-064 edge disaster continuity](../changes/CR-064-edge-disaster-continuity.md)
 ได้แก่ sync ปกติ, ตอน WAN ขาด, การไล่ backlog ตอน WAN กลับมา และ conflict
 
-> 📘 คู่มือ setup central / edge แบบแยกขั้นตอน พร้อมแหล่งอ้างอิง: [SETUP.md](SETUP.md)
+> 📘 คู่มือ setup แยกตามเครื่อง: [SETUP-CENTRAL.md](SETUP-CENTRAL.md) · [SETUP-EDGE.md](SETUP-EDGE.md)
 
 > ⚠️ POC นี้ใช้ทดลองเท่านั้น ห้ามนำ credential / config ไปใช้ใน production
 > และแยกจาก dev stack หลัก (`docker-compose.yml` ที่ root ใช้ port `5984`) — POC ใช้ port `5985` / `5986`
@@ -50,6 +50,21 @@ couch-central :5985         couch-edge :5986 ── network: lan
 | `shelter_sh001` | central ⇄ edge | two-way (ใช้ replication doc 2 ตัว คือ pull + push) |
 | `_users`        | central → edge | filtered ด้วย selector`roles` มี `shelter:SH001`   |
 
+### ทำไมต้องตั้งค่าแบบนี้ (หลักการ)
+
+| หลักการ | ผลต่อการ setup |
+| --- | --- |
+| **edge เป็นฝ่ายเปิด connection** — edge อยู่หลัง NAT ของศูนย์ central เรียกเข้าไม่ได้ | job ทุกตัวอยู่ใน `_replicator` ของ **edge** · central ไม่ต้องตั้ง job อะไร แค่เปิดทางให้ edge เข้ามา |
+| **replication คือ HTTP ปกติ** (`_changes`, `_revs_diff`, `_bulk_get`, `_bulk_docs`) | วิ่งผ่าน nginx ได้ แต่ต้องตั้ง nginx ไม่ให้ buffer, รับ body ใหญ่, timeout ยาว |
+| **job ใช้สิทธิ์ของ user ที่ใส่ไว้** เหมือน client ทั่วไป | ต้องมี replication user ต่อศูนย์ที่ central (ไม่ใช้ admin เพราะรหัสผ่านถูกเก็บ plaintext ที่ edge) |
+| **`_security` ไม่ถูก replicate** | edge ต้องตั้ง `_security` ของตัวเอง (`edge-init.sh` ทำให้) |
+| **cutover ทำที่ DNS ของ LAN** (OD-2) — domain แอปชี้มาที่ edge ตอน WAN ขาด | replication ต้องใช้ hostname อื่น (`sync.*`) ที่ไม่ถูก override ไม่งั้น edge replicate วนเข้าตัวเอง (README T9) |
+| **checkpoint** เก็บใน `_local/*` ทั้งสองฝั่ง | WAN กลับมาแล้ว job ไล่ต่อจากจุดเดิมเอง ไม่ต้องสั่ง |
+| **cookie ผูกกับ `secret`** ของแต่ละ CouchDB | edge ใช้ `secret` ของตัวเอง → login ใหม่ตอน cutover (OD-3) |
+
+📖 [Replication intro](https://docs.couchdb.org/en/stable/replication/intro.html) ·
+[Replication protocol](https://docs.couchdb.org/en/stable/replication/protocol.html)
+
 ---
 
 ## 3. Setup
@@ -90,7 +105,7 @@ networks:
 ### 3.2 เปิด server + ตั้งค่า single node
 
 ```bash
-cd poc/couchdb-replication
+cd docs/couchdb-replication
 docker compose up -d
 
 export C=http://admin:password@localhost:5985   # central (จาก host)
@@ -358,12 +373,12 @@ replication user, นาฬิกาของแต่ละเครื่อ�
 
 ### 5.2 Setup
 
-ทำตาม [SETUP.md](SETUP.md) (ไฟล์อยู่ใน repo แล้ว — สรุปสั้นที่ [README root "Edge @ศูนย์"](../../README.md)):
+ทำตาม [SETUP-CENTRAL.md](SETUP-CENTRAL.md) และ [SETUP-EDGE.md](SETUP-EDGE.md) (ไฟล์อยู่ใน repo แล้ว — สรุปสั้นที่ [README root "Edge @ศูนย์"](../../README.md)):
 
 | server | ขั้นตอน | ไฟล์ |
 | --- | --- | --- |
-| A — central | SETUP §3 (C1–C4: DNS + cert, host nginx `sync.*`, `repl_sh001`) | host nginx (นอก repo) · [`nginx/sync.conf`](../../nginx/sync.conf) |
-| B — edge | SETUP §4 (E1–E5) แล้วตรวจตาม SETUP §5 | [`docker-compose.edge.yml`](../../docker-compose.edge.yml) + ไฟล์ที่เกี่ยวข้อง |
+| A — central | SETUP-CENTRAL ขั้น 1–5 (ข้อมูลศูนย์, `repl_sh001`, DNS + cert + host nginx `sync.*`) | host nginx (นอก repo) · [`nginx/sync.conf`](../../nginx/sync.conf) |
+| B — edge | SETUP-EDGE ขั้น 1–6 (config, `.env`, `up`, ตรวจ sync) | [`docker-compose.edge.yml`](../../docker-compose.edge.yml) + ไฟล์ที่เกี่ยวข้อง |
 
 จากนั้นรันคำสั่งทดสอบทั้งหมดจาก shell ของ **server B**:
 
@@ -476,13 +491,13 @@ sudo timedatectl set-ntp true
 credential ใน `_replicator` ของ edge อยู่ในเครื่องที่ตั้งในศูนย์ จึงไม่ควรเป็น central admin
 เคสนี้ดูว่าถ้าใช้ user ที่มีสิทธิ์น้อยที่สุด job ไหนจะใช้ไม่ได้
 
-setup โหมด B ([SETUP.md](SETUP.md) §3.4) ใช้ `repl_sh001` กับ `registry` / `catalog` / `shelter_*` อยู่แล้ว
+setup โหมด B ([SETUP-CENTRAL.md](SETUP-CENTRAL.md) ขั้น 3) ใช้ `repl_sh001` กับ `registry` / `catalog` / `shelter_*` อยู่แล้ว
 (`_security` ของ central เพิ่ม role ด้วย `add_member_role` — ห้าม PUT ทับ) เคสนี้ทดลองให้ job `_users` ใช้ `repl_sh001` ด้วย
 
 ```bash
 # ที่ server B (root ของ repo): ให้ job _users ใช้ repl_sh001 แทน central admin
 sed -i 's/^CENTRAL_USERS_REPL_USER=.*/CENTRAL_USERS_REPL_USER=repl_sh001/; s/^CENTRAL_USERS_REPL_PASSWORD=.*/CENTRAL_USERS_REPL_PASSWORD=pw-repl/' .env
-kick users_sh001_pull                                        # SETUP §6
+kick users_sh001_pull                                        # SETUP-EDGE.md "งานประจำ"
 docker compose -f docker-compose.edge.yml run --rm edge-init
 ```
 
@@ -532,25 +547,55 @@ docker logs couch-edge 2>&1 | grep -i replicat   # log ฝั่ง replicator
 
 ## 7. บันทึกผล
 
-| Test                                                      | ผ่าน/ไม่ผ่าน | เวลา sync | ข้อสังเกต                                                                       |
-| --------------------------------------------------------- | ----------------------- | ------------- | ---------------------------------------------------------------------------------------- |
-| T1 one-way                                                |                         |               |                                                                                          |
-| T2 two-way                                                |                         |               |                                                                                          |
-| T3 filtered`_users` + login                             |                         |               |                                                                                          |
-| T4 WAN cut / restore (1 นาที / 10 นาที / 1 ชม.) |                         |               |                                                                                          |
-| T5 conflict                                               |                         |               | winner ตรงกับ`updated_at` ล่าสุด?                                          |
-| T6 ULID retry                                             |                         |               | rev ตรงกัน?                                                                        |
-| T7`_security` / design doc                              |                         |               |                                                                                          |
-| T8 backlog 20k                                            |                         |               |                                                                                          |
-| T4 ข้าม server (DROP /`tc netem`)                   |                         |               | กี่วินาทีกว่า job เป็น`crashing` · resume ใช้เวลาเท่าไร |
-| T8 ข้าม server (ลิงก์จริง /`tc netem`)     |                         |               |                                                                                          |
-| T9 DNS cutover                                            |                         |               | hostname ของ replication ยังชี้ central?                                        |
-| T10a นาฬิกาอุปกรณ์เพี้ยน               |                         |               | LWW เลือกผิดตัว?                                                              |
-| T10b นาฬิกา server edge เพี้ยน                |                         |               | error TLS ที่เห็น                                                                 |
-| T11 non-admin replication user                            |                         |               | job ไหนต้องใช้สิทธิ์ admin                                               |
+ทดสอบ 2026-10-01 บน **lab 2 เครื่อง**: central = laptop (dev stack, CouchDB 3.5, `http://<IP>:5984`) · edge = mini PC (`docker-compose.edge.yml`)
+เชื่อมผ่าน wifi เดียวกัน ไม่มี TLS · ศูนย์ SH001 (1,193 doc ใน `shelter_sh001`) · ขั้นตอน: [SETUP-CENTRAL.md](SETUP-CENTRAL.md) / [SETUP-EDGE.md](SETUP-EDGE.md)
+"จำลอง" = ทดสอบบนเครื่องเดียวด้วยไฟล์ชุดเดียวกัน ไม่ใช่ 2 เครื่อง
+
+| Test | ผ่าน/ไม่ผ่าน | เวลา sync | ข้อสังเกต |
+| --- | --- | --- | --- |
+| T1 one-way (`registry`) | ✅ ผ่าน (lab 2 เครื่อง) | ≤ 5 วินาที (ความละเอียดการวัด 5 วินาที) | doc `sync_probe` ที่เขียนที่ central ใน `registry` ไปถึง edge · job `registry_pull` เป็นขาเข้าอย่างเดียว ไม่มี push · staff เขียน `registry` ที่ edge ไม่ได้ (`forbidden: read-only replica on edge`) — ส่วนนี้ทดสอบแบบจำลอง |
+| T2 two-way (`shelter_sh001`) | ✅ ผ่าน (lab 2 เครื่อง) | ดึงเริ่มต้น 1,193 doc ครบก่อนการตรวจครั้งแรกหลังเริ่ม job (ไม่ได้จับเวลา) · doc ใหม่ ≤ 5 วินาที | central → edge ✅ (`sync_probe`) · edge → central ✅ (`shelter_sh001` ที่ central 1,193 → 1,194 หลังเขียนทดสอบที่ edge, เห็น `_bulk_docs` ใน log ของ central) |
+| T3 filtered `_users` + login | ✅ ผ่าน (lab 2 เครื่อง) | — | `staff01` และ user ที่สร้างใหม่ที่ central login ที่ edge ได้ · user ศูนย์อื่น (`staff_b`) **ไม่** ถูก sync และ cookie ของ central ใช้ที่ edge ไม่ได้ (ส่วนนี้จำลอง) |
+| T4 WAN cut / restore (1 นาที / 10 นาที / 1 ชม.) | ⚠️ ผลสำคัญ แต่ไม่ใช่การทดสอบแบบควบคุม | ดูข้อสังเกต | ช่วง ~1.5 ชม. ที่สองเครื่องไม่คุยกัน (13:47–15:15 UTC ไม่ทราบสาเหตุ) → job ฝั่งดึง 4 ตัว `crashing` `error_count=8` และ **ไม่กลับมาเอง** เมื่อเครือข่ายคืน (ติด exponential backoff) · `push` ทำงานต่อเมื่อมีการเขียนใหม่ · หลัง "เตะ" job ข้อมูลมาถึง ≤ 5 วินาที · ด้วย `edge-watchdog` (จำลอง central ล่ม → กลับ): เตะภายใน 1 วินาทีหลัง `/_up` ตอบ และข้อมูลมาถึง ≤ 5 วินาที · **ยังไม่ได้วัดตามช่วง 1 / 10 / 60 นาที** |
+| T5 conflict | ยังไม่ได้ทดสอบ | | winner ตรงกับ `updated_at` ล่าสุด? |
+| T6 ULID retry | ยังไม่ได้ทดสอบ | | rev ตรงกัน? |
+| T7 `_security` / design doc | ยังไม่ได้ทดสอบโดยตรง | | setup อาศัยข้อสมมติว่า `_security` ไม่ถูก replicate จึงให้ `edge-init.sh` ตั้งเองทุกครั้ง · design doc ของ central (`_design/app`, `_design/access`) มี `validate_doc_update` ที่ยอมให้ `_admin` เขียน ซึ่งเป็นสิทธิ์ที่ replicator ฝั่ง edge ใช้เขียนลง DB ตัวเอง |
+| T8 backlog 20k | ยังไม่ได้ทดสอบ | | |
+| T4 ข้าม server (DROP / `tc netem`) | ยังไม่ได้ทดสอบ | | กี่วินาทีกว่า job เป็น `crashing` · resume ใช้เวลาเท่าไร |
+| T8 ข้าม server (ลิงก์จริง / `tc netem`) | ยังไม่ได้ทดสอบ | | |
+| T9 DNS cutover | ยังไม่ได้ทดสอบ | | lab ใช้ IP ตรง ไม่ได้ผ่าน `sync.*` |
+| T10a นาฬิกาอุปกรณ์เพี้ยน | ยังไม่ได้ทดสอบ | | LWW เลือกผิดตัว? |
+| T10b นาฬิกา server edge เพี้ยน | ยังไม่ได้ทดสอบ | | lab ใช้ `http://` จึงไม่มี TLS ให้ทดสอบ |
+| T11 non-admin replication user | ✅ ผ่านบางส่วน (lab 2 เครื่อง) | — | `repl_sh001` (ไม่ใช่ admin) ใช้ได้กับ `registry` / `catalog` / `shelter_sh001` ทั้ง pull และ push · ได้ 403 กับ `shelter_sh002` และ `_users` · **job `_users` ต้องใช้ central admin** (ยืนยันแล้ว) · การ push `_design/*` ด้วย user นี้ ยังไม่ได้ทดสอบ |
+
+### ข้อค้นพบจาก lab (ไม่อยู่ในแผนเดิมของ T1–T11)
+
+| # | ข้อค้นพบ | ผลต่อ runbook / spec |
+| --- | --- | --- |
+| F1 | **Backoff ของ replicator:** job ฝั่งดึงที่ล้มติดกันหลายครั้งรอนานขึ้นเป็นเท่าตัวทุกครั้ง ไม่กลับมาเองเมื่อ central กลับ แม้ฝั่งส่ง (push) ยังทำงาน → edge ไม่ได้ข้อมูลใหม่จาก central โดยไม่มี error ในแอป | ต้องมีกลไกเตะ job บน edge — ทำเป็น `edge-watchdog` แล้ว (ทดสอบแบบจำลอง) · ควรเป็นข้อกำหนดของ runbook CR-064 และเพิ่ม alert เมื่อ job ฝั่งดึง `crashing` นานเกินกำหนด |
+| F2 | **Auth lockout:** CouchDB 3.5 default `chttpd_auth_lockout = enforce` นับรหัสผิดต่อ (user, IP) เกิน 5 ครั้งตอบ **403** ต่อไปแม้ใส่รหัสถูก นาน 5 นาที (`max_lifetime`) job ที่ retry ด้วยรหัสผิดทำให้เกิดเอง (log ของ central: `Authentication rejected for locked-out user`) อาการ: 401 → 403 | การหมุนรหัส `repl_<code>` ที่ central ต้องอัปเดต edge และเตะ job พร้อมกัน · watchdog จึงไม่เตะ job ที่โดนปฏิเสธรหัส |
+| F3 | **หมุน/แก้ user ที่ central ทำให้ session ของ job ที่ edge ใช้ไม่ได้** (job ที่ไม่ได้ถูกลบก็ล้มตาม) | ใส่ไว้ในคำเตือนของ `scripts/central-repl-user.sh --rotate` |
+| F4 | **`replication_auth_error` ครอบ 2 เรื่อง:** รหัสถูกปฏิเสธ (`session_request_unauthorized` / `forbidden`) และต่อ central ไม่ได้ (`session_request_failed`: nxdomain, conn_failed) | ใช้แยกว่าเตะ job ได้หรือไม่ |
+| F5 | `edge-init.sh` ข้าม job ที่มีอยู่แล้ว → แก้ `.env` แล้ว job เก่ายังถือรหัสเดิม ต้องลบ job ก่อน | ระบุไว้ใน SETUP-EDGE "งานประจำ" |
+| F6 | ตัวแปรใน shell ชนะ `.env` ของ docker compose (เช่น `export COUCHDB_PASSWORD=...` ค้างอยู่) | ให้ `unset` ก่อนรัน compose |
+| F7 | หลังสร้าง job ครั้งแรก รายการใน `_scheduler/docs` ว่าง ~30 วินาทีก่อน replicator หยิบ | ระบุไว้ใน SETUP-EDGE |
+| F8 | `_security` จริงของ DB มี member อื่น (เช่น `public_writer`) — PUT ทับจะลบทิ้ง | ใช้อ่าน-แก้-เขียนกลับ (`add_member_role` / `scripts/central-repl-user.sh`) |
+
+### คำถามเปิด (ต้องให้เจ้าของโครงการตัดสิน ไม่ใช่แค่ config)
+
+1. **cert ของ domain แอปที่ edge** — ตอน cutover browser ยังเปิด `https://<domain แอป>` แต่ถูกชี้มาที่ edge
+   edge จึงต้องมี cert ที่ valid ของ domain แอป **ตอน WAN ขาด** ไม่อย่างนั้น browser บล็อกและ cookie / PWA ใช้ไม่ได้
+   ทางเลือก: ออก cert ด้วย DNS-01 ที่ central แล้ว sync ไฟล์ลง edge เป็นระยะ หรือ internal CA
+   (ต้องลง CA ทุกเครื่องในศูนย์) — `nginx-edge` ตอนนี้ฟังแค่ :80 · ยังไม่มีใน
+   [gap checklist §7.A](../features/edge-disaster-continuity-idea.md)
+2. **credential ของ job `_users`** — ยังต้องเป็น central admin เพราะ user ทั่วไปอ่าน `_users` ไม่ได้ (T11)
+3. **CR-064 ยังรอ owner approve** — ไฟล์ edge / `nginx/sync.conf` ใน repo เป็นส่วนของ work package 3 ต้องผ่าน review ก่อน deploy
+
+ข้อค้นพบ F1–F3 กระทบ runbook ของ CR-064 (WP5) และเกณฑ์ "ops UI สถานะต่อ shelter" (OD-4: ต้องเห็น job ฝั่งดึงค้าง) —
+ควรยกให้เจ้าของโครงการตัดสินใจ
 
 ถ้าผล POC ทำให้ต้องแก้ spec (เช่น `data-model.md` §1 / §5 หรือ runbook ของ CR-064) ต้องทำตาม
-[`docs/change-management.md`](../../docs/change-management.md) — ถามเจ้าของโครงการก่อนว่าจะ track แบบไหน
+[`docs/change-management.md`](../change-management.md) — ถามเจ้าของโครงการก่อนว่าจะ track แบบไหน
 
 ---
 
@@ -570,5 +615,5 @@ sudo timedatectl set-ntp true
 docker compose -f docker-compose.edge.yml down
 
 # server A (central) — ลบ server block sync.* ใน host nginx แล้ว reload, ลบ DNS record,
-# ลบ user repl_sh001 และ role repl:SH001 ออกจาก _security (SETUP §7)
+# ลบ user repl_sh001 และ role repl:SH001 ออกจาก _security (SETUP-CENTRAL.md "ถอดออกหลังทดสอบ")
 ```

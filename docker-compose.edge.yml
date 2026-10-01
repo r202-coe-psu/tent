@@ -1,16 +1,27 @@
 # Edge appliance @ศูนย์ (CR-064 OD-1): CouchDB + nginx `/couch` + staff SPA (Node)
 # — ไม่มี FastAPI / MongoDB / sync worker / import worker (public plane อยู่ที่ central เท่านั้น)
 #
-# ตั้งต้นจาก docker-compose.production.yml; คำอธิบายแต่ละส่วน: poc/couchdb-replication/SETUP.md §4
+# ตั้งต้นจาก docker-compose.production.yml; คำอธิบายแต่ละส่วน: docs/couchdb-replication/SETUP-EDGE.md
 # บน edge server (clone repo นี้):
 #   cp .env.edge.example .env && cp couchdb-edge-example.ini couchdb-edge.ini   # แล้วแก้ค่า
 #   docker compose -f docker-compose.edge.yml up -d
 
 name: tent-edge
 
+# Env shared by the services that (re)create the replication jobs: edge-init and edge-watchdog
+x-edge-job-env: &edge-job-env
+  COUCHDB_USER: ${COUCHDB_USER}
+  COUCHDB_PASSWORD: ${COUCHDB_PASSWORD}
+  SHELTER_CODE: ${SHELTER_CODE:?SHELTER_CODE is required}
+  SYNC_URL: ${SYNC_URL:?SYNC_URL is required}
+  CENTRAL_REPL_USER: ${CENTRAL_REPL_USER:?CENTRAL_REPL_USER is required}
+  CENTRAL_REPL_PASSWORD: ${CENTRAL_REPL_PASSWORD:?CENTRAL_REPL_PASSWORD is required}
+  CENTRAL_USERS_REPL_USER: ${CENTRAL_USERS_REPL_USER:-}
+  CENTRAL_USERS_REPL_PASSWORD: ${CENTRAL_USERS_REPL_PASSWORD:-}
+
 services:
   couchdb:
-    # ชื่อนี้ใช้ในคำสั่งทดสอบของ poc/couchdb-replication/README.md §5 (wan_down, T9, T10)
+    # ชื่อนี้ใช้ในคำสั่งทดสอบของ docs/couchdb-replication/README.md §5 (wan_down, T9, T10)
     container_name: couch-edge
     image: couchdb:3.5 # ต้องตรงกับ central — edge ตรวจรหัสผ่านจาก hash ที่ replicate มา
     ulimits:
@@ -72,19 +83,31 @@ services:
     depends_on:
       couchdb-init:
         condition: service_completed_successfully
-    environment:
-      COUCHDB_USER: ${COUCHDB_USER}
-      COUCHDB_PASSWORD: ${COUCHDB_PASSWORD}
-      SHELTER_CODE: ${SHELTER_CODE:?SHELTER_CODE is required}
-      SYNC_URL: ${SYNC_URL:?SYNC_URL is required}
-      CENTRAL_REPL_USER: ${CENTRAL_REPL_USER:?CENTRAL_REPL_USER is required}
-      CENTRAL_REPL_PASSWORD: ${CENTRAL_REPL_PASSWORD:?CENTRAL_REPL_PASSWORD is required}
-      CENTRAL_USERS_REPL_USER: ${CENTRAL_USERS_REPL_USER:-}
-      CENTRAL_USERS_REPL_PASSWORD: ${CENTRAL_USERS_REPL_PASSWORD:-}
+    environment: *edge-job-env
     volumes:
       - ./scripts/edge-init.sh:/edge-init.sh:ro
     entrypoint: ["sh", "/edge-init.sh"]
     restart: "no"
+
+  # Restarts replication jobs that CouchDB left in exponential backoff after a WAN/central outage
+  # (scripts/edge-watchdog.sh). Skips auth errors and waits for central's /_up before touching anything.
+  edge-watchdog:
+    container_name: couch-edge-watchdog
+    image: curlimages/curl:latest
+    depends_on:
+      edge-init:
+        condition: service_completed_successfully
+    environment:
+      <<: *edge-job-env
+      WATCHDOG_INTERVAL: ${WATCHDOG_INTERVAL:-60}
+      WATCHDOG_MIN_ERRORS: ${WATCHDOG_MIN_ERRORS:-3}
+      WATCHDOG_COOLDOWN: ${WATCHDOG_COOLDOWN:-300}
+      WATCHDOG_DRY_RUN: ${WATCHDOG_DRY_RUN:-0}
+    volumes:
+      - ./scripts/edge-init.sh:/edge-init.sh:ro
+      - ./scripts/edge-watchdog.sh:/edge-watchdog.sh:ro
+    entrypoint: ["sh", "/edge-watchdog.sh"]
+    restart: unless-stopped
 
   frontend:
     container_name: tent-frontend-edge

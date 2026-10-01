@@ -219,11 +219,11 @@ location /public-api/ {
 ตัวอย่างเต็มสำหรับ compose-nginx อยู่ที่ [`nginx/nginx.conf`](nginx/nginx.conf)
 (`docker-compose.staging.yml` / `docker-compose.production.yml` — proxy ไป `http://fastapi:9000`)
 
-## Edge @ศูนย์ (central ⇄ edge replication, CR-064)
+## Edge @ศูนย์ (central ⇄ edge replication)
 
 Edge server ที่ศูนย์ replicate กับ central ผ่าน hostname แยก `sync.<domain>` — **ห้ามใช้ domain ของแอป**
 เพราะตอน WAN ขาด LAN DNS ของศูนย์จะชี้ domain แอปมาที่ edge แล้ว job จะ replicate วนเข้าตัวเอง
-คำอธิบายทีละส่วนและลำดับการติดตั้ง: [`poc/couchdb-replication/SETUP.md`](poc/couchdb-replication/SETUP.md)
+คู่มือทีละขั้น (ทำอะไร / ทำไม / ตรวจยังไง): ฝั่ง central [`SETUP-CENTRAL.md`](docs/couchdb-replication/SETUP-CENTRAL.md) · ฝั่ง edge [`SETUP-EDGE.md`](docs/couchdb-replication/SETUP-EDGE.md)
 
 **Central** — เพิ่ม DNS `sync.<domain>` + cert (`certbot certonly --nginx -d sync.<domain>`) แล้วเพิ่ม server block
 ใน host nginx (stack `*.no-nginx.yml` — CouchDB bind `COUCHDB_BIND_IP:COUCHDB_PORT`):
@@ -266,6 +266,8 @@ docker logs couch-edge-provision                # scripts/edge-init.sh: DB + _se
 
 [`docker-compose.edge.yml`](docker-compose.edge.yml) = CouchDB + staff SPA + nginx ([`nginx-edge/`](nginx-edge/))
 ไม่มี FastAPI / MongoDB / worker (OD-1) — public plane และ `/external/` ตอบ unavailable ระหว่าง edge-only
+
+service `edge-watchdog` ใน stack เดียวกันเตะ replication job ที่ค้างอยู่ใน backoff หลัง WAN/central ขาดนาน ([`scripts/edge-watchdog.sh`](scripts/edge-watchdog.sh) — รายละเอียดใน SETUP-EDGE.md หัวข้อ "Watchdog")
 
 ## แหล่งอ้างอิง
 

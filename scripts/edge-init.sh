@@ -6,7 +6,7 @@
 #   3. _replicator jobs: registry / catalog / shelter pull, shelter push, filtered _users pull
 #
 # Idempotent: DB ที่มีอยู่แล้ว (412) และ doc ที่มีอยู่แล้ว (409) จะถูกข้าม — ถ้าจะเปลี่ยน credential
-# ของ job ให้ลบ doc ใน _replicator ก่อน (poc/couchdb-replication/SETUP.md §6 `kick`)
+# ของ job ให้ลบ doc ใน _replicator ก่อน (docs/couchdb-replication/SETUP-EDGE.md หัวข้อ "งานประจำ" `kick`)
 # แล้วรัน `docker compose -f docker-compose.edge.yml run --rm edge-init`
 set -eu
 
