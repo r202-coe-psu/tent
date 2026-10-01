@@ -12,8 +12,8 @@
 | | **Lab** (ทดลอง ไม่มี cert) | **จริง** (staging / production) |
 | --- | --- | --- |
 | central คือ | laptop / mini PC ที่รัน dev stack (`docker-compose.yml`) | server ที่ deploy ด้วย `docker-compose.{staging,production}[.no-nginx].yml` |
-| edge เข้าถึงด้วย | `http://<IP ของ central>:5984` ตรง ๆ | `https://sync.<domain>` ผ่าน nginx |
-| ต้องมี DNS / cert | ไม่ต้อง | ต้อง |
+| edge เข้าถึงด้วย | `http://<IP ของ central>:5984` ตรง ๆ | `https://<domain>/sync` ผ่าน nginx เดิมของแอป |
+| ต้องมี DNS / cert เพิ่ม | ไม่ต้อง | ไม่ต้อง (ใช้ domain และ cert ของแอปที่มีอยู่) |
 | ต้องทำขั้น | 1 → 2 → 3 → 4A → 5 | 1 → 2 → 3 → 4B → 5 |
 | ความเสี่ยง | รหัสผ่านและข้อมูลวิ่งแบบไม่เข้ารหัส ใช้ได้เฉพาะ LAN ที่เชื่อถือได้ | — |
 
@@ -164,49 +164,38 @@ sudo ufw allow from <IP ของ edge> to any port 5984 proto tcp
 > ⚠️ CouchDB ของ dev stack เปิดให้ทั้ง LAN เข้าด้วย admin ที่มีรหัสผ่านใน `.env` และรหัสผ่านวิ่งแบบ `http://`
 > ใช้ได้เฉพาะ lab ปิด ห้ามข้ามอินเทอร์เน็ต · IP จาก DHCP อาจเปลี่ยน ถ้า edge sync ไม่ได้หลังเปิดเครื่องใหม่ให้เช็ก IP ก่อน
 
-## ขั้น 4B — จริง: เปิดทางผ่าน `sync.<domain>` (nginx + TLS)
+## ขั้น 4B — จริง: เปิดทางผ่าน `https://<domain>/sync` (nginx เดิมของแอป)
 
-**ทำไมต้องมี hostname แยก ไม่ใช้ `https://<domain แอป>/couch/` ที่มีอยู่แล้ว:** ตอน WAN ขาด DNS ของ LAN ในศูนย์จะชี้
-domain แอปมาที่ edge (CR-064 OD-2) container ของ edge ใช้ DNS เดียวกัน ถ้า job ใช้ domain แอป มันจะวิ่งเข้า edge ตัวเอง
-แล้ว replicate วนเข้า DB ตัวเอง **โดยไม่มี error ให้เห็น** — `sync.*` ต้องเป็นชื่อที่ LAN DNS ไม่ override ([README T9](README.md))
+edge ยิงหา central ที่ path `/sync` บน domain เดียวกับแอป จึง**ไม่ต้องขอ DNS หรือ cert เพิ่ม** — แค่เพิ่ม `location` เดียวใน server block ของแอป
 
-**1) DNS + cert**
+**ข้อควรรู้ตอน cutover (ข้อเสียของการใช้ domain เดียวกับแอป):** ตอน WAN ขาด ผู้ดูแลศูนย์สลับ LAN DNS ให้ domain แอปชี้ไป edge (CR-064 OD-2)
+ช่วงนั้น job ของ edge ยิง `https://<domain>/sync` เข้า edge ตัวเอง (nginx ของ edge ฟังแค่ :80 จึง TLS ล้ม) job จึง `crashing` โดยไม่มีข้อมูลเสียหาย
+ตอน WAN กลับ **sync จะกลับมาหลังผู้ดูแล cutback (คืน DNS)** เท่านั้น แล้ว `edge-watchdog` เตะ job ให้ภายใน `WATCHDOG_INTERVAL` ([SETUP-EDGE.md](SETUP-EDGE.md) หัวข้อ Watchdog)
+ดังนั้น runbook ของศูนย์ต้องมีขั้น cutback ที่ทำทันทีที่ WAN กลับ · แยก rate limit / firewall เฉพาะ sync ทำยากกว่าแบบ subdomain เพราะอยู่ใน server block เดียวกับแอป
 
-```bash
-# DNS A record: sync.<domain> → public IP ของ central แล้ว
-sudo certbot certonly --nginx -d sync.<domain>
-```
-
-**2) ใส่ server block** — ขึ้นกับว่า stack ที่ deploy มี nginx ใน compose หรือไม่:
+**1) ใส่ `location` ใน server block ของแอป** — ขึ้นกับว่า stack ที่ deploy มี nginx ใน compose หรือไม่:
 
 | stack | nginx ที่ต้องแก้ | proxy_pass ไปที่ |
 | --- | --- | --- |
-| `*.no-nginx.yml` (Jenkins ใช้) | **host nginx** (นอก repo — ใส่เองบน server) | `http://127.0.0.1:5984` |
-| `docker-compose.{staging,production}.yml` (มี nginx ใน compose) | host nginx **และ** [`nginx/sync.conf`](../../nginx/sync.conf) (อยู่ใน repo แล้ว ถูก mount เข้า `conf.d` อัตโนมัติ) | host nginx → `http://127.0.0.1:80` · compose nginx → `couchdb:5984` |
+| `*.no-nginx.yml` (Jenkins ใช้) | **host nginx** (นอก repo — ใส่เองบน server ใน server block ของ domain แอป) | `http://127.0.0.1:5984/` |
+| `docker-compose.{staging,production}.yml` (มี nginx ใน compose) | [`nginx/nginx.conf`](../../nginx/nginx.conf) มี `location /sync/` อยู่แล้ว ไม่ต้องทำอะไร (ถ้ามี host nginx อยู่หน้า ให้ส่งต่อ `/sync/` ไปที่ nginx ใน compose ตามปกติ) | `couchdb:5984/` |
 
-server block ของ host nginx:
+ที่ host nginx ใส่ใน server block ของ domain แอป (ที่มี `listen 443 ssl` และ cert ของแอปอยู่แล้ว):
 
 ```nginx
-server {
-    listen 443 ssl;
-    server_name sync.<domain>;                                              # (1)
-    ssl_certificate     /etc/letsencrypt/live/sync.<domain>/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/sync.<domain>/privkey.pem;
-    client_max_body_size 64M;                                               # (2)
+    location ^~ /sync/_utils { return 404; }                                # (3)
 
-    location /_utils { return 404; }                                        # (3)
-
-    location / {
-        proxy_pass http://127.0.0.1:5984;                                   # (4)
+    location /sync/ {
+        client_max_body_size 64M;                                           # (1)
+        proxy_pass http://127.0.0.1:5984/;                                  # (2)
         proxy_http_version 1.1;
-        proxy_set_header Host $host;                                        # (5)
+        proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_buffering off;                                                # (6)
-        proxy_read_timeout 300s;                                            # (7)
+        proxy_buffering off;                                                # (4)
+        proxy_read_timeout 300s;                                            # (5)
         proxy_send_timeout 300s;
     }
-}
 ```
 
 ```bash
@@ -215,17 +204,18 @@ sudo nginx -t && sudo systemctl reload nginx
 
 | # | บรรทัด | ทำไม / ถ้าไม่ใส่จะเกิดอะไร |
 | --- | --- | --- |
-| 1 | `server_name sync.<domain>` | แยก traffic ของ replication ออกจากแอป |
-| 2 | `client_max_body_size 64M` | replicator ส่ง `_bulk_docs` ทีละ 500 doc ค่าที่เล็กไป → `413` แล้ว job `crashing` |
-| 3 | ปิด `/_utils` | replication ไม่ใช้ Fauxton ไม่ต้องเปิดเป็นช่องทางเพิ่ม |
-| 4 | `proxy_pass` ไม่มี `/` ท้าย | ส่ง path ตรง (`/shelter_sh001/_changes`) ต่างจาก `/couch/` ของแอปที่ตัด prefix |
-| 5 | `Host $host` | กรณี compose nginx: ให้เลือก block `sync.conf` ได้ ถ้าไม่ส่งต่อจะตกไป block ของแอปและได้ HTML แทน JSON |
-| 6 | `proxy_buffering off` | `_changes` แบบ continuous ต้องส่งต่อทันที ถ้า buffer ข้อมูลจะมาช้าหรือค้าง |
-| 7 | `proxy_read_timeout 300s` | default 60s สั้นไปสำหรับ request ที่ค้างรอ `_changes` |
+| 1 | `client_max_body_size 64M` | replicator ส่ง `_bulk_docs` ทีละ 500 doc ค่าที่เล็กไป → `413` แล้ว job `crashing` (ค่า 10M ของแอปไม่พอ จึงตั้งเฉพาะ location นี้) |
+| 2 | `proxy_pass …:5984/` **มี `/` ท้าย** | ตัด prefix `/sync` ออกก่อนส่งให้ CouchDB (เหมือน `/couch/` ของแอป) ทดสอบแล้วว่า doc id ที่มี `/` (`a%2Fb`) และ `_design/…` replicate ผ่าน |
+| 3 | ปิด `/sync/_utils` | replication ไม่ใช้ Fauxton ไม่ต้องเปิดเป็นช่องทางเพิ่ม |
+| 4 | `proxy_buffering off` | `_changes` แบบ continuous ต้องส่งต่อทันที ถ้า buffer ข้อมูลจะมาช้าหรือค้าง |
+| 5 | `proxy_read_timeout 300s` | default 60s สั้นไปสำหรับ request ที่ค้างรอ `_changes` |
 
-ค่า 2, 6, 7 ต้องตั้ง **ทุกชั้นที่ผ่าน** (host nginx และ `nginx/sync.conf`) ชั้นไหนเล็กกว่าจะเป็นตัวจำกัด
+ค่า 1, 4, 5 ต้องตั้ง **ทุกชั้นที่ผ่าน** (host nginx และ nginx ใน compose ถ้ามีทั้งคู่) ชั้นไหนเล็กกว่าจะเป็นตัวจำกัด
 
-**3) ค่าที่ edge จะใช้:** `SYNC_URL=https://sync.<domain>`
+> **ฝั่ง edge ต้องตั้ง `auth_plugins = couch_replicator_auth_noop`** (อยู่ใน `couchdb-edge-example.ini` แล้ว): replicator ปกติขอ session ที่ `<host>/_session`
+> โดย**ตัด path `/sync` ทิ้ง** คำขอนั้นจึงไปตกที่เว็บแอปแทน CouchDB แล้ว job ล้มด้วย `session_unexpected_result` — ตั้งค่านี้ให้ใช้ Basic auth ตรง ๆ แทน
+
+**2) ค่าที่ edge จะใช้:** `SYNC_URL=https://<domain>/sync`
 
 📖 [Certbot nginx](https://eff-certbot.readthedocs.io/en/stable/using.html#nginx) ·
 [nginx proxy module](https://nginx.org/en/docs/http/ngx_http_proxy_module.html) ·
@@ -240,7 +230,7 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ```bash
 curl -s <SYNC_URL>/_up
-# {"seeds":{},"status":"ok"}   — ถ้าเป็น HTML = Host ไม่ถูกส่งต่อ / server_name ไม่ตรง (ขั้น 4B)
+# {"seeds":{},"status":"ok"}   — ถ้าเป็น HTML = location /sync/ ยังไม่มี/ไม่ถูกโหลด หรือ proxy_pass ไม่มี / ท้าย (ขั้น 4B)
 
 curl -s -u repl_sh001:'<รหัสผ่านขั้น 3>' <SYNC_URL>/shelter_sh001
 # JSON ข้อมูล DB (doc_count ฯลฯ)  — ถ้า unauthorized = รหัสผิด / ขั้น 3 ไม่ครบ
@@ -267,7 +257,7 @@ curl -s -u repl_sh001:'<รหัสผ่านขั้น 3>' <SYNC_URL>/shel
 | --- | --- |
 | service `couchdb` ใน compose | ไม่ต้องเปิด port เพิ่ม (จริง: เข้าทาง nginx · lab: dev stack เปิดอยู่แล้ว) |
 | `couchdb-session.ini` / `secret` | edge ใช้ `secret` ของตัวเอง → cookie ข้ามฝั่งไม่ได้ ต้อง login ใหม่ตอน cutover (OD-3) |
-| `/couch` ของแอป | แอปใช้ตามเดิม ไม่เกี่ยวกับ `sync.*` |
+| `/couch` ของแอป | แอปใช้ตามเดิม ไม่เกี่ยวกับ `/sync` |
 | frontend / fastapi / worker | replication คือ CouchDB คุยกับ CouchDB แอปไม่เกี่ยว |
 | job replication | อยู่ที่ edge ทั้งหมด |
 | staff user | user ที่มี role `shelter:SH001` อยู่แล้วจะถูก sync ลง edge เอง |
@@ -294,7 +284,7 @@ curl -s -u repl_sh001:'<รหัสผ่านขั้น 3>' <SYNC_URL>/shel
 scripts/central-repl-user.sh SH001 --remove
 ```
 
-จริง: ลบ server block `sync.*` ใน host nginx แล้ว reload · ลบ DNS record · Lab: ปิด firewall rule
+จริง: ลบ `location /sync/` ใน host nginx แล้ว reload · Lab: ปิด firewall rule
 
 ---
 
@@ -304,7 +294,7 @@ scripts/central-repl-user.sh SH001 --remove
 | --- | --- |
 | [`docs/data/data-model.md` §1, §6](../data/data-model.md) | topology และ `_security` / `_users` |
 | [`docs/changes/CR-064-edge-disaster-continuity.md`](../changes/CR-064-edge-disaster-continuity.md) | OD-1..OD-5 |
-| [`nginx/sync.conf`](../../nginx/sync.conf) · [`nginx/nginx.conf`](../../nginx/nginx.conf) | nginx ของ compose stack |
+| [`nginx/nginx.conf`](../../nginx/nginx.conf) | nginx ของ compose stack (`location /sync/`) |
 | [Replication intro](https://docs.couchdb.org/en/stable/replication/intro.html) · [protocol](https://docs.couchdb.org/en/stable/replication/protocol.html) | หลักการ `_changes` / `_revs_diff` / `_bulk_docs` |
 | [`/{db}/_security`](https://docs.couchdb.org/en/stable/api/database/security.html) | สิทธิ์ของ DB |
 | [`[chttpd_auth]`](https://docs.couchdb.org/en/stable/config/auth.html) | secret และ cookie |

@@ -18,7 +18,7 @@
 | นาฬิกาตรง (NTP เปิด) | `timedatectl` — นาฬิกาเพี้ยนทำให้ TLS ล้มตอนต่อ `https://` |
 | ค่าจาก central 4 กลุ่ม | ตาราง "ค่าที่ต้องส่งให้ฝั่ง edge" ท้าย [SETUP-CENTRAL.md](SETUP-CENTRAL.md) |
 
-เลือกแบบเหมือนที่เลือกฝั่ง central: **Lab** (`http://<IP central>:5984`, ไม่มี cert) หรือ **จริง** (`https://sync.<domain>`)
+เลือกแบบเหมือนที่เลือกฝั่ง central: **Lab** (`http://<IP central>:5984`, ไม่มี cert) หรือ **จริง** (`https://<domain>/sync` — path บน domain ของแอป)
 
 ---
 
@@ -27,7 +27,7 @@
 **ทำไม:** ถ้าต่อไม่ติดตั้งแต่ตรงนี้ job ทุกตัวจะ `crashing` และหาสาเหตุยากกว่ามาก
 
 ```bash
-SYNC_URL=http://<IP ของ central>:5984        # จริง: https://sync.<domain>
+SYNC_URL=http://<IP ของ central>:5984        # จริง: https://<domain>/sync
 curl -s $SYNC_URL/_up                        # {"seeds":{},"status":"ok"}
 curl -s -u repl_sh001:'<รหัสผ่าน>' $SYNC_URL/shelter_sh001     # JSON ข้อมูล DB
 ```
@@ -68,10 +68,11 @@ sed -i "s/change-me-edge-secret/$(openssl rand -hex 16)/" couchdb-edge.ini
 | --- | --- |
 | `secret` ของ edge เอง | ใช้เซ็น cookie `AuthSession` — **ต้องต่างจาก central** ทำให้ cookie ข้ามฝั่งไม่ได้ staff ต้อง login ใหม่ตอน cutover (OD-3 — ทดสอบแล้วว่าเป็นแบบนั้น) · BFF ของ edge อ่านค่านี้ผ่าน admin API เพื่อ mint session |
 | ไม่มี `[admins]` | admin ของ edge มาจาก `COUCHDB_USER` / `COUCHDB_PASSWORD` ใน `.env` คนละรหัสกับ central — **ห้ามใช้ `couchdb-session.ini` ของ central** เพราะฝัง hash ของ admin และ secret ของ central ไว้ |
-| `[replicator] verify_ssl_certificates = true` | default ของ CouchDB 3.5 คือ `false` = ไม่ตรวจ cert ของ central เลย · **มีผลเฉพาะตอนต่อ `https://`** แบบ Lab (`http://`) จึงไม่ต้องแก้ |
+| `[replicator] auth_plugins = couch_replicator_auth_noop` | **จำเป็นเมื่อ `SYNC_URL` มี path (`/sync`)**: replicator ปกติขอ session ที่ `<host>/_session` โดยตัด path ทิ้ง คำขอไปตกที่เว็บแอปแทน CouchDB แล้ว job ล้มด้วย `session_unexpected_result` ค่านี้ให้ส่ง Basic auth ตรง ๆ · ไม่มีผลกับ `http://<IP>:5984` |
+| `[replicator] verify_ssl_certificates` | ไฟล์ตัวอย่างตั้งเป็น `false` (ใช้กับ Lab) · **แบบจริง (`https://`) ต้องเปลี่ยนเป็น `true`** แล้ว restart CouchDB ไม่งั้นไม่ตรวจ cert ของ central เลย · มีผลเฉพาะตอนต่อ `https://` |
 | `ssl_trusted_certificates_file` | CA bundle ที่มีอยู่ใน image แล้ว |
 
-ถ้าต่อ `https://` ด้วย self-signed cert ใน lab ให้เปลี่ยนเป็น `verify_ssl_certificates = false` (แล้ว restart CouchDB) — อย่าปิดบน edge จริง
+ถ้าต่อ `https://` ด้วย self-signed cert ใน lab ให้คง `verify_ssl_certificates = false` — อย่าปิดบน edge จริง
 
 ค่าเสริมใน `[replicator]` เมื่อ WAN ของศูนย์ช้า: `connection_timeout` (30000 ms), `retries_per_request` (5),
 `worker_batch_size` (500 — ลดแล้ว body เล็กลง checkpoint ถี่ขึ้น), `checkpoint_interval` (30000 ms)
@@ -93,7 +94,7 @@ cp .env.edge.example .env
 | --- | --- | --- | --- |
 | `COUCHDB_USER` / `COUCHDB_PASSWORD` | `admin` / รหัสใหม่ | เหมือนกัน | admin ของ CouchDB ที่ edge — **คนละรหัสกับ central** |
 | `SHELTER_CODE` | `SH001` | รหัสศูนย์นี้ | กำหนด DB `shelter_<code>`, role `shelter:<CODE>`, ชื่อ job |
-| `SYNC_URL` | `http://172.30.91.220:5984` | `https://sync.<domain>` | ที่อยู่ central — **ห้ามใช้ domain แอป** (replicate วนเข้าตัวเองตอน cutover) |
+| `SYNC_URL` | `http://172.30.91.220:5984` | `https://<domain>/sync` | ที่อยู่ central · แบบจริงเป็น path บน domain ของแอป ตอน cutover (LAN DNS ชี้ domain แอปมาที่ edge) job จะล้มจนกว่า cutback ดู "ตอน cutover / cutback" |
 | `CENTRAL_REPL_USER` / `_PASSWORD` | `repl_sh001` / รหัสที่ `scripts/central-repl-user.sh` พิมพ์ให้ (SETUP-CENTRAL ขั้น 3) | เหมือนกัน | ใช้กับ `registry`, `catalog`, `shelter_*` · **ต้องเป็น `repl_<code>` ไม่ใช่บัญชีล็อกอินแอปอย่าง `sh1-admin`** (central ตอบ 403 และ role ไม่ตรงกับ `_security`) |
 | `CENTRAL_USERS_REPL_USER` / `_PASSWORD` | `admin` / รหัส admin ของ central | เหมือนกัน | ใช้กับ job `_users` · **เว้นว่าง = ไม่สร้าง job นี้ staff จะ login ที่ edge ไม่ได้** |
 | `PUBLIC_ORIGIN` | `http://<IP ของ edge>` | domain แอป (เหมือน central) | URL ที่ browser เปิด · ฝังตอน build frontend |
@@ -269,7 +270,7 @@ docker compose -f docker-compose.edge.yml run --rm edge-init
 | --- | --- |
 | state `crashing` และ `error_count` ≥ `WATCHDOG_MIN_ERRORS` (3) | ไม่ยุ่งกับการล้มชั่วคราวครั้งสองครั้ง |
 | error **ไม่ใช่** central ปฏิเสธรหัสผ่าน (`session_request_unauthorized` 401 / `session_request_forbidden` 403) | เตะไม่ช่วยอะไร และทุกครั้งที่ลองใหม่นับเข้าระบบล็อกเอาต์ของ CouchDB (รหัสผิดเกิน 5 ครั้ง → 403 นาน 5 นาที) ต้องแก้ `.env` เอง |
-| `GET <SYNC_URL>/_up` ของ central ตอบ | ถ้า central ยังไม่กลับ เตะไปก็ล้มซ้ำ |
+| `GET <SYNC_URL>/_up` ตอบเป็น JSON ของ CouchDB (`"status":"ok"`) | ถ้า central ยังไม่กลับ เตะไปก็ล้มซ้ำ · ตรวจเนื้อหา ไม่ใช่แค่ HTTP 200 เพราะถ้า LAN DNS ยังชี้ domain แอปมาที่ edge คำขอจะตกไปที่เว็บแอปของ edge ซึ่งตอบ 200 (HTML) |
 | job นั้นไม่ได้ถูกเตะภายใน `WATCHDOG_COOLDOWN` (300 วินาที) | กันเตะวน |
 
 หมายเหตุ: CouchDB ห่อ error ของการต่อ central ไม่ได้ (`nxdomain`, `conn_failed`, `connection closed`) ไว้ใน `replication_auth_error` ด้วย
@@ -311,10 +312,11 @@ docker logs -f couch-edge-watchdog          # ดูการทำงาน
 | `crashing` + `session_request_forbidden` (403) ทั้งที่รหัสน่าจะถูก | **ถูกล็อกเอาต์**: CouchDB 3.5 นับรหัสผิดต่อ (user, IP) ถ้าเกิน 5 ครั้งจะตอบ 403 ต่อไปแม้รหัสถูกแล้ว (`chttpd_auth_lockout` default `enforce`) · job ที่ retry ด้วยรหัสผิดเองก็ทำให้เกิดได้ เห็นใน log ของ central ว่า `Authentication rejected for locked-out user` | แก้รหัสให้ถูกก่อน แล้วรอ **5 นาที** นับจากความผิดพลาดครั้งแรก (`max_lifetime`) หรือ restart CouchDB ของ central เพื่อล้างตาราง · อย่าลบ/สร้าง job ซ้ำ ๆ ระหว่างรอ เพราะ job ที่รหัสยังผิดจะทำให้ล็อกต่อ |
 | `crashing` + `nxdomain` / `econnrefused` / timeout | `SYNC_URL` ผิด, central ปิด, firewall | ขั้น 1 |
 | `crashing` + error certificate | cert ยังไม่ออก / self-signed / นาฬิกา edge เพี้ยน | ขั้น 3 (`verify_ssl_certificates`) · NTP |
-| ได้ HTML แทน JSON | `SYNC_URL` ชี้ domain แอป หรือ nginx ของ central ไม่ส่ง `Host` | ใช้ `sync.*` · SETUP-CENTRAL ขั้น 4B |
+| ได้ HTML แทน JSON | `location /sync/` ยังไม่มีบน central, `proxy_pass` ไม่มี `/` ท้าย หรือ LAN DNS ยังชี้ domain แอปมาที่ edge (cutover ยังไม่ cutback) | SETUP-CENTRAL ขั้น 4B · ตรวจว่า `<domain>` resolve ได้ IP ของ central |
 | `413` ใน history ของ job | `client_max_body_size` ที่ central เล็กไป | SETUP-CENTRAL ขั้น 4B ข้อ (2) หรือลด `worker_batch_size` |
 | job ฝั่งดึงเป็น `crashing` `error_count` สูงอยู่นาน ทั้งที่ central กลับมาแล้ว (central → edge ไม่ sync, edge → central ยังได้) | CouchDB เพิ่มเวลารอเป็นเท่าตัวทุกครั้งที่ล้ม | `edge-watchdog` เตะให้เอง · ทำเองได้ด้วย `kick` ด้านบน · ดู "Watchdog" |
-| `running` แต่ doc ไม่ถึง central | `SYNC_URL` เป็น domain แอปที่ LAN DNS ชี้มาที่ edge (วนเข้าตัวเอง) | ใช้ hostname sync แยก ([README T9](README.md)) |
+| `crashing` + `session_unexpected_result` ... `/_session` | ไม่ได้ตั้ง `auth_plugins = couch_replicator_auth_noop` ใน `couchdb-edge.ini` ทั้งที่ `SYNC_URL` มี path | ขั้น 3 แล้ว restart CouchDB ของ edge · เตะ job |
+| `crashing` หลัง WAN กลับ ทั้งที่ central ปกติ | LAN DNS ยังชี้ domain แอปมาที่ edge (ยังไม่ cutback) job ยิงเข้า edge ตัวเอง ([README T9](README.md)) | cutback คืน DNS แล้ว `edge-watchdog` เตะให้เอง |
 | staff login ที่ edge ไม่ได้ | ไม่ได้ตั้ง `CENTRAL_USERS_REPL_*` หรือไม่ใช่ admin, หรือ CouchDB คนละ version | ขั้น 4 · ใช้ `couchdb:3.5` ทั้งสองฝั่ง |
 | `edge-init` ขึ้น `FAILED ... (HTTP 4xx/5xx)` | ดูข้อความหลัง `FAILED` — ส่วนใหญ่ central ต่อไม่ได้ หรือ JSON เพี้ยนเพราะรหัสผ่านมี `"` / `\` | แก้ `.env` แล้วรัน `edge-init` ซ้ำ (รันซ้ำได้) |
 | list job ว่างหลัง `up` | replicator ยังไม่หยิบ job | รอ ~30 วินาที |
@@ -324,6 +326,23 @@ docker logs -f couch-edge-watchdog          # ดูการทำงาน
 
 📖 [Replication states](https://docs.couchdb.org/en/stable/replication/replicator.html#replication-states) ·
 [`/_scheduler/*`, `/_active_tasks`](https://docs.couchdb.org/en/stable/api/server/common.html)
+
+---
+
+## ตอน cutover / cutback (แบบ path `/sync`)
+
+`SYNC_URL=https://<domain>/sync` ใช้ชื่อเดียวกับแอป จึงมีผลตามนี้:
+
+| ช่วง | LAN DNS ของ `<domain>` | job ของ edge |
+| --- | --- | --- |
+| ปกติ | central | `running` |
+| WAN ขาด ก่อน cutover | central (แต่ต่อไม่ได้) | `crashing` (เข้า central ไม่ได้) — ปกติ |
+| cutover | **edge** | `crashing` — ยิงเข้า edge ตัวเอง (nginx edge ฟังแค่ :80 จึง TLS ล้ม) ไม่มีข้อมูลเสียหาย |
+| WAN กลับแต่ **ยังไม่ cutback** | **edge** | ยัง `crashing` — **sync ยังไม่กลับ** |
+| cutback (คืน DNS) | central | watchdog เตะ job ภายใน `WATCHDOG_INTERVAL` แล้ว sync ต่อจาก checkpoint เดิม |
+
+ข้อสรุปสำหรับ runbook ของศูนย์: **cutback ต้องทำทันทีที่ WAN กลับ** เพราะเป็นขั้นที่ทำให้ sync กลับมา
+(ข้อมูลที่เขียนที่ edge ระหว่างนั้นไม่หาย — ขึ้น central หลัง cutback) · ยังไม่ได้ทดสอบกับ DNS ศูนย์จริง (README T9)
 
 ---
 

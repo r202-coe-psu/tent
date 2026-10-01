@@ -177,7 +177,7 @@ if [ -n "$new_pw" ]; then
 Put these in the edge server's .env (shown once — store the password now):
 
   SHELTER_CODE=${CODE_UC}
-  SYNC_URL=http://<this host's IP>:5984        # lab; real: https://sync.<domain>
+  SYNC_URL=http://<this host's IP>:5984        # lab; real: https://<domain>/sync
   CENTRAL_REPL_USER=${REPL_USER}
   CENTRAL_REPL_PASSWORD=${new_pw}
   CENTRAL_USERS_REPL_USER=<central admin>      # job _users still needs admin (docs/couchdb-replication/README.md "คำถามเปิด" ข้อ 2)

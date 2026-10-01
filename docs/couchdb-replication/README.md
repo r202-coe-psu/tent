@@ -58,7 +58,7 @@ couch-central :5985         couch-edge :5986 ── network: lan
 | **replication คือ HTTP ปกติ** (`_changes`, `_revs_diff`, `_bulk_get`, `_bulk_docs`) | วิ่งผ่าน nginx ได้ แต่ต้องตั้ง nginx ไม่ให้ buffer, รับ body ใหญ่, timeout ยาว |
 | **job ใช้สิทธิ์ของ user ที่ใส่ไว้** เหมือน client ทั่วไป | ต้องมี replication user ต่อศูนย์ที่ central (ไม่ใช้ admin เพราะรหัสผ่านถูกเก็บ plaintext ที่ edge) |
 | **`_security` ไม่ถูก replicate** | edge ต้องตั้ง `_security` ของตัวเอง (`edge-init.sh` ทำให้) |
-| **cutover ทำที่ DNS ของ LAN** (OD-2) — domain แอปชี้มาที่ edge ตอน WAN ขาด | replication ต้องใช้ hostname อื่น (`sync.*`) ที่ไม่ถูก override ไม่งั้น edge replicate วนเข้าตัวเอง (README T9) |
+| **cutover ทำที่ DNS ของ LAN** (OD-2) — domain แอปชี้มาที่ edge ตอน WAN ขาด | job ที่ใช้ `https://<domain>/sync` จะยิงเข้า edge ตัวเองช่วง cutover จึงล้มจนกว่า cutback แล้ว `edge-watchdog` เตะให้ (README T9) — sync ไม่ได้อยู่แล้วตอน WAN ขาด |
 | **checkpoint** เก็บใน `_local/*` ทั้งสองฝั่ง | WAN กลับมาแล้ว job ไล่ต่อจากจุดเดิมเอง ไม่ต้องสั่ง |
 | **cookie ผูกกับ `secret`** ของแต่ละ CouchDB | edge ใช้ `secret` ของตัวเอง → login ใหม่ตอน cutover (OD-3) |
 
@@ -359,15 +359,15 @@ replication user, นาฬิกาของแต่ละเครื่อ�
  server A — central (stack เดิม *.no-nginx.yml)   server B — edge @ศูนย์ (หลัง NAT)
 ┌──────────────────────────────────┐   internet  ┌──────────────────────────────┐
 │ host nginx :443 (TLS)            │ ◀────────── │ couch-edge                   │
-│  sync.example.com                │   HTTPS     │  _replicator (ทุก job)       │
+│  app.example.com/sync/           │   HTTPS     │  _replicator (ทุก job)       │
 │   └─▶ CouchDB 127.0.0.1:5984     │ (edge เป็น   │ nginx (LAN) ─▶ SPA / /couch  │
 │                                  │  ฝ่ายเปิด)   │ 127.0.0.1:5984 = $E          │
 └──────────────────────────────────┘             └──────────────────────────────┘
 ```
 
-- central ใช้ host nginx ที่มีอยู่แล้ว แค่เพิ่ม server block ของ `sync.example.com` — CouchDB ยัง bind `127.0.0.1`
+- central ใช้ host nginx ที่มีอยู่แล้ว แค่เพิ่ม `location /sync/` ใน server block ของแอป — CouchDB ยัง bind `127.0.0.1` ไม่ต้องมี DNS/cert เพิ่ม
 - edge ไม่ต้องมี public IP และไม่ต้องเปิด port ขาเข้าจาก WAN
-- `sync.example.com` = hostname ที่ใช้**เฉพาะ replication** ต้องแยกจาก domain ของแอป (ดู T9)
+- `app.example.com/sync` ใช้ domain เดียวกับแอป: ตอน cutover job ยิงเข้า edge ตัวเองและล้ม จนกว่า cutback (ดู T9)
 - ถ้ายังไม่มี domain จริง ใช้ VPN แทนได้ (เช่น WireGuard หรือ Tailscale) แล้วตั้ง `SYNC_URL` ของ edge
   เป็น IP ภายใน VPN ของ central (ต้องให้ nginx ของ central รับที่ IP นั้นด้วย)
 
@@ -377,14 +377,14 @@ replication user, นาฬิกาของแต่ละเครื่อ�
 
 | server | ขั้นตอน | ไฟล์ |
 | --- | --- | --- |
-| A — central | SETUP-CENTRAL ขั้น 1–5 (ข้อมูลศูนย์, `repl_sh001`, DNS + cert + host nginx `sync.*`) | host nginx (นอก repo) · [`nginx/sync.conf`](../../nginx/sync.conf) |
+| A — central | SETUP-CENTRAL ขั้น 1–5 (ข้อมูลศูนย์, `repl_sh001`, `location /sync/` ใน host nginx) | host nginx (นอก repo) · [`nginx/nginx.conf`](../../nginx/nginx.conf) (stack ที่มี nginx ใน compose) |
 | B — edge | SETUP-EDGE ขั้น 1–6 (config, `.env`, `up`, ตรวจ sync) | [`docker-compose.edge.yml`](../../docker-compose.edge.yml) + ไฟล์ที่เกี่ยวข้อง |
 
 จากนั้นรันคำสั่งทดสอบทั้งหมดจาก shell ของ **server B**:
 
 ```bash
 export E=http://admin:<COUCHDB_PASSWORD ใน .env ของ edge>@localhost:5984
-export C=https://admin:<COUCHDB_PASSWORD ของ central>@sync.example.com
+export C=https://admin:<COUCHDB_PASSWORD ของ central>@app.example.com/sync
 curl -s "$C/_up"; echo   # ต้องได้ {"status":"ok",...} ผ่าน TLS
 ```
 
@@ -397,7 +397,7 @@ curl -s "$C/_up"; echo   # ต้องได้ {"status":"ok",...} ผ่า�
 (T5/T6 ต้องใช้)
 
 ```bash
-CENTRAL_IP=$(getent ahostsv4 sync.example.com | awk 'NR==1{print $1}')
+CENTRAL_IP=$(getent ahostsv4 app.example.com | awk 'NR==1{print $1}')
 EDGE_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' couch-edge)
 
 wan_down() { sudo iptables -I DOCKER-USER -s "$EDGE_IP" -d "$CENTRAL_IP" -j DROP; }
@@ -418,42 +418,36 @@ sudo tc qdisc add dev <wan-if> root netem delay 300ms 50ms loss 5% rate 2mbit
 sudo tc qdisc del dev <wan-if> root
 ```
 
-### T9 — DNS cutover ต้องไม่ทำให้ edge replicate เข้าหาตัวเอง
+### T9 — DNS cutover: job ล้มอย่างปลอดภัย แล้วกลับมาหลัง cutback
 
 ตาม CR-064 OD-2 ตอน WAN หรือ central ล่ม DNS ใน LAN ของศูนย์จะชี้ **domain ของแอป** มาที่ edge
-container edge ใช้ resolver ของ host ซึ่งก็คือ DNS ของ LAN ดังนั้นถ้า replication doc ใช้ domain
-เดียวกับแอป พอ cutover แล้ว job จะวิ่งมาหา edge เอง ไม่ไปถึง central
+`SYNC_URL=https://app.example.com/sync` ใช้ domain เดียวกับแอป จึงต้องยืนยันว่าช่วง cutover job **ล้มโดยไม่ทำให้ข้อมูลเสีย**
+และ **กลับมา sync เองหลัง cutback** (ไม่ใช้ `dns:` / `extra_hosts` ปัก IP)
 
 ```bash
-# 1) จำลอง LAN DNS cutover: เปิด extra_hosts ของ service couchdb ใน docker-compose.edge.yml (root ของ repo)
+# 1) จำลอง LAN DNS cutover: เปิด extra_hosts ของ service couchdb ใน docker-compose.edge.yml (บรรทัดคอมเมนต์ "POC T9")
 export EDGE_LAN_IP=<ip-lan-ของ-server-B>
-docker compose -f docker-compose.edge.yml up -d   # recreate container
+docker compose -f docker-compose.edge.yml up -d   # recreate couchdb
+docker exec couch-edge getent ahostsv4 app.example.com    # ต้องได้ EDGE_LAN_IP (ไม่ใช่ central)
 
-# 2) domain แอป → edge แต่ hostname ของ replication ต้องยังชี้ central
-docker exec couch-edge getent ahostsv4 app.example.com    # ต้องได้ EDGE_LAN_IP
-docker exec couch-edge getent ahostsv4 sync.example.com   # ต้องได้ CENTRAL_IP
+# 2) job ต้องล้ม (ยิงเข้า edge ตัวเอง) ไม่ใช่ running แบบเงียบ ๆ — ใช้ st.py/สคริปต์ดูสถานะเดิม หรือ:
+curl -s "$E/_scheduler/docs/_replicator" | python3 -c 'import sys,json;[print(d["doc_id"],d["state"],d.get("error_count")) for d in json.load(sys.stdin)["docs"]]'
+curl -s -X PUT "$E/shelter_sh001/evacuee:01POCDNSCUTOVER0000000001" -d '{"type":"evacuee","first_name":"ระหว่าง cutover"}'   # เขียนที่ edge ได้ปกติ
 
-# 3) ยืนยันว่า replication ยังถึง central
-curl -s -X PUT "$E/shelter_sh001/evacuee:01POCDNSCUTOVER0000000001" -d '{"type":"evacuee","first_name":"หลัง cutover"}'
+# 3) cutback: เอา extra_hosts ออก แล้ว recreate
+docker compose -f docker-compose.edge.yml up -d
+docker exec couch-edge getent ahostsv4 app.example.com    # ต้องได้ CENTRAL_IP
+
+# 4) watchdog ต้องเตะ job เอง (ดู log) แล้ว doc จากขั้น 2 ถึง central
+docker logs -f couch-edge-watchdog
 wait_doc $C shelter_sh001 evacuee:01POCDNSCUTOVER0000000001
-
-# 4) (เคสผิด) replication ที่ใช้ domain แอป
-AUTH='{"basic":{"username":"admin","password":"password"}}'
-curl -s -X PUT "$E/_replicator/sh001_push_bad" -H 'Content-Type: application/json' -d "{
-  \"source\": {\"url\": \"http://127.0.0.1:5984/shelter_sh001\", \"auth\": $AUTH},
-  \"target\": {\"url\": \"https://app.example.com/shelter_sh001\", \"auth\": $AUTH},
-  \"continuous\": true
-}"; echo
-sleep 10
-curl -s "$E/_scheduler/docs/_replicator/sh001_push_bad" | python3 -m json.tool
-curl -s -X DELETE "$E/_replicator/sh001_push_bad?rev=$(curl -s "$E/_replicator/sh001_push_bad" | python3 -c 'import sys,json;print(json.load(sys.stdin)["_rev"])')"
 ```
 
-**ผ่านเมื่อ:** ขั้น 2–3 ผ่าน และขั้น 4 แสดงว่า job ไปถึง edge แทน central
+**ผ่านเมื่อ:** ขั้น 2 job เป็น `crashing` และเขียนที่ edge ได้ · ขั้น 4 หลัง cutback watchdog เตะ job (log `deleted, will be recreated`)
+และ doc ถึง central โดยไม่ต้องทำอะไรมือ · จดเวลาจาก cutback ถึง doc ถึง central
 
-> ใน POC ไม่มี nginx ที่ edge เคสผิดจึงแค่ `crashing` (ไม่มีอะไรรับที่ 443) แต่ appliance จริงมี
-> nginx `/couch` (OD-1) job จะ **replicate วนเข้า DB ตัวเองโดยไม่มี error** ซึ่งตรวจพบได้ยากกว่ามาก
-> — ต้องจดไว้เป็นข้อกำหนดของ runbook: replication ต้องใช้ hostname หรือ resolver ที่ LAN DNS ไม่ override
+> ระหว่างช่วง "WAN กลับแต่ยังไม่ cutback" sync จะไม่กลับ — ต้องเป็นข้อกำหนดของ runbook ศูนย์ว่า cutback ทำทันทีที่ WAN กลับ
+> ถ้า domain แอปที่ edge ตอบ 200 (HTML) แทน central watchdog จะไม่ถูกหลอก เพราะตรวจว่า `/_up` เป็น JSON `"status":"ok"` ของ CouchDB
 
 ### T10 — นาฬิกาเพี้ยน
 
@@ -563,7 +557,7 @@ docker logs couch-edge 2>&1 | grep -i replicat   # log ฝั่ง replicator
 | T8 backlog 20k | ยังไม่ได้ทดสอบ | | |
 | T4 ข้าม server (DROP / `tc netem`) | ยังไม่ได้ทดสอบ | | กี่วินาทีกว่า job เป็น `crashing` · resume ใช้เวลาเท่าไร |
 | T8 ข้าม server (ลิงก์จริง / `tc netem`) | ยังไม่ได้ทดสอบ | | |
-| T9 DNS cutover | ยังไม่ได้ทดสอบ | | lab ใช้ IP ตรง ไม่ได้ผ่าน `sync.*` |
+| T9 DNS cutover | ยังไม่ได้ทดสอบ | | lab ใช้ IP ตรง ไม่ได้ผ่าน `/sync` บน domain แอป |
 | T10a นาฬิกาอุปกรณ์เพี้ยน | ยังไม่ได้ทดสอบ | | LWW เลือกผิดตัว? |
 | T10b นาฬิกา server edge เพี้ยน | ยังไม่ได้ทดสอบ | | lab ใช้ `http://` จึงไม่มี TLS ให้ทดสอบ |
 | T11 non-admin replication user | ✅ ผ่านบางส่วน (lab 2 เครื่อง) | — | `repl_sh001` (ไม่ใช่ admin) ใช้ได้กับ `registry` / `catalog` / `shelter_sh001` ทั้ง pull และ push · ได้ 403 กับ `shelter_sh002` และ `_users` · **job `_users` ต้องใช้ central admin** (ยืนยันแล้ว) · การ push `_design/*` ด้วย user นี้ ยังไม่ได้ทดสอบ |
@@ -580,6 +574,7 @@ docker logs couch-edge 2>&1 | grep -i replicat   # log ฝั่ง replicator
 | F6 | ตัวแปรใน shell ชนะ `.env` ของ docker compose (เช่น `export COUCHDB_PASSWORD=...` ค้างอยู่) | ให้ `unset` ก่อนรัน compose |
 | F7 | หลังสร้าง job ครั้งแรก รายการใน `_scheduler/docs` ว่าง ~30 วินาทีก่อน replicator หยิบ | ระบุไว้ใน SETUP-EDGE |
 | F8 | `_security` จริงของ DB มี member อื่น (เช่น `public_writer`) — PUT ทับจะลบทิ้ง | ใช้อ่าน-แก้-เขียนกลับ (`add_member_role` / `scripts/central-repl-user.sh`) |
+| F9 | replicator ขอ session ที่ `<host>/_session` โดยตัด path ทิ้ง — ถ้า `SYNC_URL` มี path (`https://<domain>/sync`) คำขอนั้นไปตกที่เว็บแอป (ทดสอบกับ nginx จำลอง: `session_unexpected_result ... 502`) job ล้มทั้งที่ `/sync/_up` ปกติ | ตั้ง `[replicator] auth_plugins = couch_replicator_auth_noop` ใน `couchdb-edge.ini` (ใช้ Basic auth ตรง ๆ) ทดสอบแล้ว: registry + design doc + id ที่มี `%2F` replicate ผ่าน `/sync/` ได้ · ไม่มีผลกับ `http://<IP>:5984` |
 
 ### คำถามเปิด (ต้องให้เจ้าของโครงการตัดสิน ไม่ใช่แค่ config)
 
@@ -589,7 +584,7 @@ docker logs couch-edge 2>&1 | grep -i replicat   # log ฝั่ง replicator
    (ต้องลง CA ทุกเครื่องในศูนย์) — `nginx-edge` ตอนนี้ฟังแค่ :80 · ยังไม่มีใน
    [gap checklist §7.A](../features/edge-disaster-continuity-idea.md)
 2. **credential ของ job `_users`** — ยังต้องเป็น central admin เพราะ user ทั่วไปอ่าน `_users` ไม่ได้ (T11)
-3. **CR-064 ยังรอ owner approve** — ไฟล์ edge / `nginx/sync.conf` ใน repo เป็นส่วนของ work package 3 ต้องผ่าน review ก่อน deploy
+3. **CR-064 ยังรอ owner approve** — ไฟล์ edge / `location /sync/` ใน `nginx/nginx.conf` ใน repo เป็นส่วนของ work package 3 ต้องผ่าน review ก่อน deploy
 
 ข้อค้นพบ F1–F3 กระทบ runbook ของ CR-064 (WP5) และเกณฑ์ "ops UI สถานะต่อ shelter" (OD-4: ต้องเห็น job ฝั่งดึงค้าง) —
 ควรยกให้เจ้าของโครงการตัดสินใจ
@@ -614,6 +609,6 @@ wan_up 2>/dev/null; sudo tc qdisc del dev <wan-if> root 2>/dev/null
 sudo timedatectl set-ntp true
 docker compose -f docker-compose.edge.yml down
 
-# server A (central) — ลบ server block sync.* ใน host nginx แล้ว reload, ลบ DNS record,
+# server A (central) — ลบ location /sync/ ใน host nginx แล้ว reload,
 # ลบ user repl_sh001 และ role repl:SH001 ออกจาก _security (SETUP-CENTRAL.md "ถอดออกหลังทดสอบ")
 ```

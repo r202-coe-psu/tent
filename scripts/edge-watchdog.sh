@@ -12,7 +12,9 @@
 #     = 403, which also covers CouchDB's auth lockout): restarting cannot fix those and every retry feeds
 #     chttpd_auth_lockout (5 failures -> 403 for 5 minutes). Connectivity errors that CouchDB also wraps in
 #     replication_auth_error (session_request_failed: nxdomain, conn_failed, connection closed) DO qualify.
-#   - central answers GET <SYNC_URL>/_up (otherwise restarting would just crash again)
+#   - central answers GET <SYNC_URL>/_up with CouchDB's JSON {"status":"ok"} (otherwise restarting would just crash
+#     again; a bare HTTP 200 is not enough — if the app's domain resolves to this edge, /sync/_up lands on the
+#     edge's web app and returns HTML)
 #   - this job was not restarted within the last WATCHDOG_COOLDOWN seconds
 # "Restart" = delete the job doc, then re-run edge-init.sh (idempotent) which recreates it from the
 # current environment.
@@ -36,6 +38,9 @@ INIT_SCRIPT="${EDGE_INIT_SCRIPT:-/edge-init.sh}"
 mkdir -p "$STATE_DIR"
 
 log() { echo "$(date -u +%FT%TZ) edge-watchdog: $*"; }
+
+# central_up — true only if CouchDB itself answers (not whatever web server the name currently points at)
+central_up() { curl -sf -m 5 "$CEN/_up" 2>/dev/null | grep -q '"status":"ok"'; }
 
 # field <name> <json line> — first string value of "name":"..."
 field() { printf '%s' "$2" | sed -n "s/.*\"$1\":\"\\([^\"]*\\)\".*/\\1/p" | head -1; }
@@ -78,8 +83,8 @@ pass() {
 
 	[ -s "$todo" ] || return
 
-	if ! curl -sf -m 5 "$CEN/_up" >/dev/null; then
-		log "jobs stuck ($(cut -d' ' -f1 "$todo" | tr '\n' ' ')) but central $CEN/_up is not answering — leaving them"
+	if ! central_up; then
+		log "jobs stuck ($(cut -d' ' -f1 "$todo" | tr '\n' ' ')) but central $CEN/_up is not answering as CouchDB — leaving them"
 		return
 	fi
 
