@@ -4,6 +4,7 @@ import {
 	APP_CONFIG_DEFAULTS,
 	APP_CONFIG_DOC_ID,
 	appConfigSchema,
+	bannerPatchSchema,
 	readAppConfig,
 	type AppConfig
 } from '$lib/features/shared';
@@ -76,11 +77,13 @@ export const GET: RequestHandler = async ({ request }) => {
 	}
 };
 
+// Banner fields use the strict schema: the reader's `.catch` defaults would silently accept bad input.
 const patchSchema = appConfigSchema
 	.pick({ recaptcha_enabled: true, thaid_registration_enabled: true, password_login_enabled: true })
-	.partial();
+	.partial()
+	.extend(bannerPatchSchema.partial().shape);
 
-/** PUT { recaptcha_enabled? } — SA-only merge into config:app. */
+/** PUT { recaptcha_enabled?, banner_*? … } — SA-only merge into config:app. */
 export const PUT: RequestHandler = async ({ request }) => {
 	try {
 		const caller = await requireSystemAdmin(request.headers.get('cookie'));
