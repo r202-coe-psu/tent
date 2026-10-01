@@ -1273,6 +1273,9 @@ backward compatibility ของ CR-059/110; flow ใหม่ใช้ §2.29�
 | Field | ชนิด | default | หมายเหตุ |
 | --- | --- | --- | --- |
 | `public_otp_required` | bool | `false` | risk-based — เปิดเมื่อโดน spam |
+| `recaptcha_enabled` | bool | `true` | operator kill-switch reCAPTCHA; ต้องมี key ใน env ด้วยเมื่อ ON |
+| `thaid_registration_enabled` | bool | `true` | operator kill-switch ThaID ทุก mode ยกเว้น `stepup` (pre-register, login, link, member_scan) |
+| `password_login_enabled` | bool | `false` | แสดงฟอร์ม username/password บน `/login`; OFF = แสดงเฉพาะ Google/ThaID — `/admin-login` ใช้ได้เสมอ ([CR-141](../changes/CR-141-oauth-first-login-link.md)) |
 | `duplicate_hint_threshold` | num 0–1 | `0.8` | soft-match registration |
 | `donation_reservation_ttl_hours` | int | `72` | — |
 | `device_db_ttl_days` | int | `30` | อายุ local db บน device |

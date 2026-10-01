@@ -77,7 +77,7 @@ export const GET: RequestHandler = async ({ request }) => {
 };
 
 const patchSchema = appConfigSchema
-	.pick({ recaptcha_enabled: true, thaid_registration_enabled: true })
+	.pick({ recaptcha_enabled: true, thaid_registration_enabled: true, password_login_enabled: true })
 	.partial();
 
 /** PUT { recaptcha_enabled? } — SA-only merge into config:app. */

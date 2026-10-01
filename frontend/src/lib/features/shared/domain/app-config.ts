@@ -20,6 +20,8 @@ export const appConfigSchema = z.object({
 	recaptcha_enabled: z.boolean().catch(true),
 	/** Operator kill-switch for ThaiD Digital ID registration on public pre-register page. */
 	thaid_registration_enabled: z.boolean().catch(true),
+	/** Show username/password on `/login` (CR-141). OFF = OAuth only; `/admin-login` always shows it. */
+	password_login_enabled: z.boolean().catch(false),
 	duplicate_hint_threshold: z.coerce.number().min(0).max(1).catch(0.8),
 	donation_reservation_ttl_hours: z.coerce.number().int().positive().catch(72),
 	device_db_ttl_days: z.coerce.number().int().positive().catch(30),
@@ -28,6 +30,10 @@ export const appConfigSchema = z.object({
 });
 
 export type AppConfig = z.infer<typeof appConfigSchema>;
+
+/** Fields an SA may change via `PUT /api/v1/app-config`. */
+export type AppConfigPatchKey =
+	'recaptcha_enabled' | 'thaid_registration_enabled' | 'password_login_enabled';
 
 export const APP_CONFIG_DEFAULTS: AppConfig = appConfigSchema.parse({});
 
