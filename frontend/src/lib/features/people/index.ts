@@ -183,6 +183,9 @@ export {
 	isIntakeNewRegistrationLocked,
 	resolveNewRegistrationCta,
 	deriveDuplicateCheckQuery,
+	deriveDuplicateCheckQueries,
+	duplicateCheckKey,
+	type DuplicateCheckQuery,
 	type ShelterHitAction,
 	type NewRegistrationCtaKind,
 	type DuplicateCheckMember
@@ -245,7 +248,7 @@ export {
 } from './domain/birth-calendar';
 
 export type { PeopleRepository, EvacueeFilters, HouseholdFilters } from './data/people.repository';
-export { peopleRepository } from './data/people.remote';
+export { peopleRepository, isRegistrationCompensationIncomplete } from './data/people.remote';
 export { getShelterCode, getShelterDb } from '$lib/db/shelter';
 
 // Application — TanStack Query hooks + changes-feed live-query wiring

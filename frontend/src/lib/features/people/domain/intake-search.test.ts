@@ -9,6 +9,8 @@ import {
 	OVERRIDE_NEW_REG_TITLE,
 	REPORT_IN_CTA_LABEL,
 	deriveDuplicateCheckQuery,
+	deriveDuplicateCheckQueries,
+	duplicateCheckKey,
 	hasFederatedIntakeHits,
 	isIntakeNewRegistrationLocked,
 	resolveNewRegistrationCta,
@@ -224,6 +226,17 @@ describe('deriveDuplicateCheckQuery (walk-in /new hard-lock re-check)', () => {
 		).toBe('Somchai');
 	});
 
+	it('skips a system-minted Anonymous ID and falls back to phone / name', () => {
+		expect(
+			deriveDuplicateCheckQuery({
+				first_name: 'สมหญิง',
+				last_name: 'ไม่มีบัตร',
+				phone: null,
+				person_id: { number: 'ANON-01JABCDEFGHJKMNPQRSTVWXYZ0' }
+			})
+		).toBe('สมหญิง ไม่มีบัตร');
+	});
+
 	it('returns null when there is nothing at all to search on', () => {
 		expect(
 			deriveDuplicateCheckQuery({
@@ -233,5 +246,64 @@ describe('deriveDuplicateCheckQuery (walk-in /new hard-lock re-check)', () => {
 				person_id: null
 			})
 		).toBeNull();
+	});
+});
+
+describe('deriveDuplicateCheckQueries (every member, not just members[0])', () => {
+	it('derives one query per member and keeps their indexes', () => {
+		expect(
+			deriveDuplicateCheckQueries([
+				{ first_name: 'หัว', last_name: 'บ้าน', phone: '0811111111', person_id: null },
+				{ first_name: 'ลูก', last_name: 'คนโต', phone: null, person_id: null },
+				{ first_name: '', last_name: '', phone: null, person_id: null }
+			])
+		).toEqual([
+			{ query: '0811111111', memberIndexes: [0] },
+			{ query: 'ลูก คนโต', memberIndexes: [1] }
+		]);
+	});
+
+	it('searches a shared family phone once but keeps every member index', () => {
+		expect(
+			deriveDuplicateCheckQueries([
+				{ first_name: 'ก', phone: '0811111111' },
+				{ first_name: 'ข', phone: '0811111111' }
+			])
+		).toEqual([{ query: '0811111111', memberIndexes: [0, 1] }]);
+	});
+
+	it('checks anonymous members by name', () => {
+		expect(
+			deriveDuplicateCheckQueries([
+				{
+					first_name: 'สมหญิง',
+					last_name: '',
+					person_id: { number: 'ANON-01JABCDEFGHJKMNPQRSTVWXYZ0' }
+				}
+			])
+		).toEqual([{ query: 'สมหญิง', memberIndexes: [0] }]);
+	});
+});
+
+describe('duplicateCheckKey', () => {
+	it('is order-independent so re-ordering cards keeps the override', () => {
+		const a = [
+			{ query: 'x', memberIndexes: [0] },
+			{ query: 'y', memberIndexes: [1] }
+		];
+		const b = [
+			{ query: 'y', memberIndexes: [0] },
+			{ query: 'x', memberIndexes: [1] }
+		];
+		expect(duplicateCheckKey(a)).toBe(duplicateCheckKey(b));
+	});
+
+	it('changes when a query is added', () => {
+		expect(duplicateCheckKey([{ query: 'x', memberIndexes: [0] }])).not.toBe(
+			duplicateCheckKey([
+				{ query: 'x', memberIndexes: [0] },
+				{ query: 'z', memberIndexes: [1] }
+			])
+		);
 	});
 });

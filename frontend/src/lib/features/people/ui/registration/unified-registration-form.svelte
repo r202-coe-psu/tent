@@ -6,10 +6,8 @@
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import Search from '@lucide/svelte/icons/search';
-	import GitMerge from '@lucide/svelte/icons/git-merge';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import { onMount, tick, untrack } from 'svelte';
-	import { SvelteSet } from 'svelte/reactivity';
 	import { toast } from 'svelte-sonner';
 	import type { ZodIssue } from 'zod';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -34,7 +32,6 @@
 	import ThaidActionButton from './thaid-action-button.svelte';
 	import type { ThaiDAutofillProfile } from '../../domain/thaid-profile';
 	import { fetchThaidRegistrationStatus } from '$lib/api/thaid-status';
-	import HouseholdMergeDialog from '../household-flows/household-merge-dialog.svelte';
 	import { readRegistrationStickyTopPx } from './registration-sticky-offset';
 	import {
 		applyIntersectionEntries,
@@ -42,14 +39,12 @@
 		pickActiveSectionId
 	} from './registration-scroll-spy';
 	import {
-		createPetCard,
 		parseInitialPets,
 		syncPetsToHousehold,
 		type PetCardItem
 	} from './unified-registration-pets';
 	import {
 		blankUnifiedMember,
-		evacueeToUnifiedMember,
 		unifiedRegistrationInputSchema,
 		type MemberPhotoUploadMode,
 		type UnifiedMemberWithMeta,
@@ -57,13 +52,7 @@
 		type UnifiedRegistrationInput,
 		type UnifiedHouseholdInput
 	} from '../../domain/unified-registration';
-	import type {
-		Evacuee,
-		Household,
-		HousingType,
-		HouseholdVehicle,
-		PetGroup
-	} from '../../domain/people';
+	import type { HousingType, HouseholdVehicle, PetGroup } from '../../domain/people';
 	import {
 		hasMinimumResidence,
 		type ResidenceFields,
@@ -230,10 +219,6 @@
 
 	/** Quick search bar for member phone (household search enhancement). */
 	let searchPhoneQuery = $state('');
-
-	/** Household merge dialog state. */
-	let mergeDialogOpen = $state(false);
-	let absorbedHouseholdIds = $state<string[]>([]);
 
 	/** Currently selected match chip from public residence match (for address prefill & pets). */
 	let selectedMatchChip = $state<ResidenceMatchChip | null>(null);
@@ -731,36 +716,6 @@
 		}
 	});
 
-	/** Absorb another household into the current form (merge-in-form). */
-	function handleAbsorbHouseholdIntoForm(sourceHousehold: Household, sourceMembers: Evacuee[]) {
-		// Add absorbed household ID for post-submit merge marking
-		absorbedHouseholdIds = [...absorbedHouseholdIds, sourceHousehold._id];
-
-		// Convert source evacuees to unified members and append
-		const converted = sourceMembers.map((ev) => evacueeToUnifiedMember(ev));
-		members = [...members, ...converted];
-
-		// Merge pets from source household
-		const sourcePets = (sourceHousehold.pets ?? []) as PetGroup[];
-		if (sourcePets.length > 0) {
-			const existingSpecies = new SvelteSet(petItems.map((p) => p.species));
-			let nextId = Math.max(0, ...petItems.map((p) => p.id)) + 1;
-			for (const pg of sourcePets) {
-				const species = pg.species as 'dog' | 'cat' | 'other';
-				if (!existingSpecies.has(species)) {
-					const card = createPetCard(species, nextId++);
-					card.details = pg.notes ?? '';
-					if (species === 'other') card.customSpecies = pg.species;
-					petItems = [...petItems, card];
-					existingSpecies.add(species);
-				}
-			}
-			household.pets = syncPetsToHousehold(petItems);
-		}
-
-		markDirty();
-	}
-
 	function continueCreateDespiteSuggest() {
 		clearJoinSelection();
 		markDirty();
@@ -990,19 +945,6 @@
 										: 'ค้นหาครอบครัวด้วยเบอร์โทรศัพท์'}
 								</span>
 							</p>
-							{#if channel === 'onsite'}
-								<Button
-									type="button"
-									size="sm"
-									variant="outline"
-									disabled={fieldsLocked}
-									class="gap-1.5"
-									onclick={() => (mergeDialogOpen = true)}
-								>
-									<GitMerge class="size-3.5" />
-									ค้นหาเพื่อรวม 2 ครอบครัว
-								</Button>
-							{/if}
 						</div>
 						<div class="relative w-full">
 							<Input
@@ -1385,11 +1327,3 @@
 		</div>
 	</div>
 </form>
-
-<!-- Household Merge Dialog (onsite in-form absorb) -->
-{#if channel === 'onsite'}
-	<HouseholdMergeDialog
-		bind:open={mergeDialogOpen}
-		onAbsorbIntoForm={handleAbsorbHouseholdIntoForm}
-	/>
-{/if}
