@@ -88,10 +88,10 @@ done
 $IS_ROOT || warn "ไม่ได้รันด้วย sudo — ข้อมูล serial port / dmesg / lpinfo จะไม่ครบ"
 
 missing=()
-for t in lsusb openssl curl lpstat pcsc_scan v4l2-ctl xxd; do have "$t" || missing+=("$t"); done
+for t in lsusb openssl curl lpstat pcsc_scan v4l2-ctl; do have "$t" || missing+=("$t"); done
 if [ ${#missing[@]} -gt 0 ]; then
     warn "ไม่มีเครื่องมือ: ${missing[*]} — ส่วนที่เกี่ยวข้องจะถูกข้าม"
-    echo "   ติดตั้ง: sudo apt install usbutils openssl curl cups-client pcsc-tools v4l-utils xxd"
+    echo "   ติดตั้ง: sudo apt install usbutils openssl curl cups-client pcsc-tools v4l-utils"
 fi
 
 # ------------------------------------------------------------------------------
@@ -153,27 +153,30 @@ fi
 
 # ------------------------------------------------------------------------------
 section "Serial / Parallel ports"
+# sysfs "type" is the UART type (0 = PORT_UNKNOWN = placeholder with no hardware); works without root
+# and on kernels where /proc/tty/driver/serial is missing.
+for t in /sys/class/tty/ttyS*; do
+    [ -r "$t/type" ] || continue
+    [ "$(cat "$t/type")" != "0" ] || continue
+    p="/dev/$(basename "$t")"
+    REAL_SERIAL+=("$p")
+    echo "  $p  uart-type=$(cat "$t/type") io=$(cat "$t/port" 2>/dev/null) irq=$(cat "$t/irq" 2>/dev/null)"
+done
+# Modem lines (CTS/DSR/CD) asserted usually means something is plugged in and powered — root only.
 if $IS_ROOT && [ -r /proc/tty/driver/serial ]; then
     while read -r line; do
         num="${line%%:*}"
-        [[ "$num" =~ ^[0-9]+$ ]] || continue
-        if [[ "$line" == *"uart:unknown"* ]]; then
-            continue # placeholder ports with no hardware
-        fi
-        REAL_SERIAL+=("/dev/ttyS$num")
-        echo "  /dev/ttyS$num  ${line#*: }"
-        # CTS/DSR/CD asserted usually means something is plugged in and powered.
-        [[ "$line" =~ (CTS|DSR|CD) ]] && echo -e "             ${GREEN}→ มีสัญญาณ handshake — น่าจะมีอุปกรณ์ต่ออยู่${NC}"
+        [[ "$num" =~ ^[0-9]+$ ]] && [[ "$line" != *"uart:unknown"* ]] || continue
+        [[ "$line" =~ (CTS|DSR|CD) ]] &&
+            echo -e "  /dev/ttyS$num ${GREEN}→ มีสัญญาณ handshake (${BASH_REMATCH[0]}) — น่าจะมีอุปกรณ์ต่ออยู่${NC}"
     done </proc/tty/driver/serial
-else
-    echo "  /dev/ttyS* มี $(find /dev -maxdepth 1 -name 'ttyS*' | wc -l) ตัว (รัน sudo เพื่อแยก port จริงออกจาก placeholder)"
 fi
 for p in /dev/ttyUSB* /dev/ttyACM*; do
     [ -e "$p" ] || continue
     REAL_SERIAL+=("$p")
     echo "  $p  ($(udevadm info -q property -n "$p" 2>/dev/null | sed -n 's/^ID_MODEL=//p'))"
 done
-[ ${#REAL_SERIAL[@]} -eq 0 ] && $IS_ROOT && info "ไม่พบ serial port จริง"
+[ ${#REAL_SERIAL[@]} -eq 0 ] && info "ไม่พบ serial port จริง"
 for p in /dev/lp* /dev/usb/lp*; do [ -e "$p" ] && echo "  $p (parallel/USB printer)"; done
 if $IS_ROOT; then
     dmesg 2>/dev/null | grep -E 'ttyS[0-9]+ at|parport[0-9]|usblp|lp[0-9]:' | sed 's/^/  dmesg: /'
@@ -278,7 +281,7 @@ if $PROBE_PRINTER; then
             for b in 9600 19200 38400 115200; do
                 stty -F "$p" "$b" raw -echo cs8 -cstopb -parenb clocal -crtscts 2>/dev/null || continue
                 # DLE EOT 1 = real-time status; any reply byte means a printer is listening at this baud.
-                reply="$(timeout 2 bash -c "exec 3<>'$p'; printf '\x10\x04\x01' >&3; timeout 1 head -c 8 <&3" 2>/dev/null | xxd -p)"
+                reply="$(timeout 2 bash -c "exec 3<>'$p'; printf '\x10\x04\x01' >&3; timeout 1 head -c 8 <&3" 2>/dev/null | od -An -tx1 | tr -d ' \n')"
                 printf '\x1b@TEST %s %s baud\n\n\n\n' "$p" "$b" | timeout 3 tee "$p" >/dev/null 2>&1
                 if [ -n "$reply" ]; then
                     ok "$p @ $b ตอบกลับ 0x$reply → น่าจะเป็น printer ESC/POS"
