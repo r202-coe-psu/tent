@@ -68,6 +68,14 @@ STATUS_TEXT = {
 }
 
 
+ATR_HINT = """
+   เครื่องตรวจเจอบัตร (สวิตช์ในช่อง) แต่ชิปไม่ตอบ — ตรวจตามนี้:
+   1. กลับด้านบัตร: ลองเสียบให้ด้านชิปหงาย/คว่ำ และเอาด้านชิปเข้าก่อน (ทุกแบบ)
+   2. เสียบให้สุดช่อง · เช็ดหน้าสัมผัสชิปให้สะอาด
+   3. ลองบัตรชิปใบอื่น (บัตรประชาชนใบอื่น / บัตร ATM แบบมีชิป) — ถ้าทุกใบไม่ผ่าน = ปัญหาที่ช่อง/โมดูล
+   (status 0x11 ไม่มีในเอกสารผู้ขาย — ถ้าลองครบแล้วยังไม่ได้ ให้ถามผู้ขายพร้อมแนบ output นี้)"""
+
+
 class ProtocolError(RuntimeError):
     pass
 
@@ -232,6 +240,18 @@ def read_cid(reader: Reader, show_cid: bool) -> None:
     print(f"   select type: status {status_text(reply.status)}")
     reply = reader.command(CMD_ICC_GETATR, bytes([SLOT_MAIN]))
     if reply.status != 0x00:
+        print(
+            f"   ATR ครั้งแรก: status {status_text(reply.status)} → ตัดไฟ/จ่ายไฟบัตรใหม่ (18 02) แล้วลองอีกครั้ง"
+        )
+        for act in (0x00, 0x01):
+            power = reader.command(CMD_ICC_SLOT_PWR, bytes([SLOT_MAIN, act]))
+            print(
+                f"   slot power {'on' if act else 'off'}: status {status_text(power.status)}"
+            )
+            time.sleep(0.3)
+        reply = reader.command(CMD_ICC_GETATR, bytes([SLOT_MAIN]))
+    if reply.status != 0x00:
+        print(ATR_HINT)
         raise ProtocolError(f"ขอ ATR ไม่สำเร็จ: status {status_text(reply.status)}")
     atr = reply.data
     print(f"✅ ATR {atr.hex(' ')}")
