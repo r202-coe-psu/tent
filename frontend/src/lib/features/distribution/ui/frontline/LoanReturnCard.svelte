@@ -30,6 +30,7 @@
 		calculateLoanRemainingQty,
 		getLoanStatusBadge
 	} from '../model/loan-return';
+	import { RETURN_ACTION_HELP } from '../model/bulk-return-copy';
 	import CounterReturnDialog from './CounterReturnDialog.svelte';
 	import NonPhysicalClearDialog from './NonPhysicalClearDialog.svelte';
 	import BulkGateClearDialog from './BulkGateClearDialog.svelte';
@@ -289,42 +290,51 @@
 						</div>
 
 						<!-- Action Buttons (Physical Return & Non-Physical Clear) -->
-						<div class="mt-4 space-y-2 border-t border-slate-100 pt-3">
+						<div class="mt-4 space-y-2.5 border-t border-slate-100 pt-3">
 							<!-- Primary: Physical Counter Return -->
-							<Button
-								type="button"
-								variant="default"
-								onclick={() => handleOpenReturn(loan)}
-								disabled={!canReturnStock}
-								class="h-auto w-full rounded-xl bg-emerald-600 py-2 text-xs font-bold hover:bg-emerald-700"
-							>
-								<RotateCcw class="h-3.5 w-3.5" />
-								<span>รับคืนของจริง</span>
-							</Button>
+							<div>
+								<Button
+									type="button"
+									variant="default"
+									onclick={() => handleOpenReturn(loan)}
+									disabled={!canReturnStock}
+									class="h-auto w-full rounded-xl bg-emerald-600 py-2 text-xs font-bold hover:bg-emerald-700"
+								>
+									<RotateCcw class="h-3.5 w-3.5" />
+									<span>รับคืนจากผู้ยืม</span>
+								</Button>
+								<p class="mt-1 px-1 text-2xs text-slate-500">{RETURN_ACTION_HELP.counter}</p>
+							</div>
 
 							<!-- Secondary: Non-Physical Administrative Clear (Lost / Waived) -->
-							<Button
-								type="button"
-								variant="outline"
-								onclick={() => handleOpenClear(loan)}
-								disabled={!canFrontline}
-								class="h-auto w-full rounded-xl border-slate-200 bg-slate-50 py-2 text-xs font-bold text-slate-700 hover:border-slate-300 hover:bg-slate-100 hover:text-slate-700"
-							>
-								<FileX class="h-3.5 w-3.5 text-slate-500" />
-								<span>ตัดรายการโดยไม่มีของคืน (สูญหาย/ยกเว้น)</span>
-							</Button>
+							<div>
+								<Button
+									type="button"
+									variant="outline"
+									onclick={() => handleOpenClear(loan)}
+									disabled={!canFrontline}
+									class="h-auto w-full rounded-xl border-slate-200 bg-slate-50 py-2 text-xs font-bold text-slate-700 hover:border-slate-300 hover:bg-slate-100 hover:text-slate-700"
+								>
+									<FileX class="h-3.5 w-3.5 text-slate-500" />
+									<span>ปิดรายการโดยไม่มีของคืน (สูญหาย/ยกเว้น)</span>
+								</Button>
+								<p class="mt-1 px-1 text-2xs text-slate-500">{RETURN_ACTION_HELP.nonPhysical}</p>
+							</div>
 
 							<!-- Tertiary: CR-134 Bulk Gate Clearance -->
-							<Button
-								type="button"
-								variant="outline"
-								onclick={() => handleOpenBulkClear(loan)}
-								disabled={!canFrontline}
-								class="h-auto w-full rounded-xl border-purple-200 bg-purple-50 py-2 text-xs font-bold text-purple-800 hover:border-purple-300 hover:bg-purple-100 hover:text-purple-800"
-							>
-								<Archive class="h-3.5 w-3.5 text-purple-600" />
-								<span>เคลียร์จากจุดรวมคืน</span>
-							</Button>
+							<div>
+								<Button
+									type="button"
+									variant="outline"
+									onclick={() => handleOpenBulkClear(loan)}
+									disabled={!canFrontline}
+									class="h-auto w-full rounded-xl border-purple-200 bg-purple-50 py-2 text-xs font-bold text-purple-800 hover:border-purple-300 hover:bg-purple-100 hover:text-purple-800"
+								>
+									<Archive class="h-3.5 w-3.5 text-purple-600" />
+									<span>จับคู่กับกองรับคืน</span>
+								</Button>
+								<p class="mt-1 px-1 text-2xs text-slate-500">{RETURN_ACTION_HELP.bulk}</p>
+							</div>
 						</div>
 					</div>
 				{/each}
@@ -361,7 +371,7 @@
 								<span class="ml-2 font-mono text-2xs text-slate-400">{pastLoan._id}</span>
 								{#if isBulkCleared}
 									<p class="text-2xs text-purple-700">
-										เคลียร์ผ่านจุดรวบรวม (Bulk Dropoff) · ห้ามรับคืนเข้าคลังซ้ำ
+										จับคู่กับกองรับคืนแล้ว · ห้ามรับคืนเข้าคลังซ้ำ
 									</p>
 								{:else if pastLoan.status === 'lost'}
 									<p class="text-2xs text-red-700">

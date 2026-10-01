@@ -38,7 +38,7 @@ describe('formatDistributionError', () => {
 
 	it('formats InsufficientPoolQuotaError into a user-friendly quota message', () => {
 		const err = new InsufficientPoolQuotaError('Insufficient pool quota for clearance');
-		expect(formatDistributionError(err)).toContain('จำนวนของที่จุดรวมคืนไม่เพียงพอ');
+		expect(formatDistributionError(err)).toContain('จำนวนที่รอจับคู่ในกองรับคืนไม่เพียงพอ');
 	});
 
 	it('formats ConcurrencyCollisionError into a user-friendly collision message', () => {

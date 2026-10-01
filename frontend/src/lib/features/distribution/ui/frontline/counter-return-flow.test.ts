@@ -134,7 +134,7 @@ describe('Frontline Loan Return & Routine Counter Return Flow (Slice 5.5A + 5.5B
 			expect(isLoanReturnCandidate(bulkClearedLog)).toBe(false);
 			expect(isBulkClearedLoan(bulkClearedLog)).toBe(true);
 			const badge = getLoanStatusBadge(bulkClearedLog);
-			expect(badge.label).toBe('เคลียร์ผ่านจุดรวบรวม');
+			expect(badge.label).toBe('จับคู่กับกองรับคืนแล้ว');
 		});
 
 		it('produces empty active loan list when recipient has only closed/consumable records', () => {
@@ -349,14 +349,14 @@ describe('Frontline Loan Return & Routine Counter Return Flow (Slice 5.5A + 5.5B
 			it('rejects submission when no pool is selected', () => {
 				const validation = validateBulkGateClear(null, '5');
 				expect(validation.isValid).toBe(false);
-				expect(validation.error).toContain('เลือกจุดรวมคืน');
+				expect(validation.error).toContain('เลือกกองรับคืน');
 			});
 
 			it('rejects submission when selected pool has insufficient quota', () => {
 				const smallPool = { ...mockPool, unclaimed_quota: '2' };
 				const validation = validateBulkGateClear(smallPool, '5');
 				expect(validation.isValid).toBe(false);
-				expect(validation.error).toContain('ไม่เพียงพอกับยอดคงค้าง');
+				expect(validation.error).toContain('เหลือรอจับคู่');
 			});
 		});
 
@@ -375,7 +375,7 @@ describe('Frontline Loan Return & Routine Counter Return Flow (Slice 5.5A + 5.5B
 				expect(isLoanReturnCandidate(clearedViaBulk)).toBe(false);
 				expect(isBulkClearedLoan(clearedViaBulk)).toBe(true);
 				const badge = getLoanStatusBadge(clearedViaBulk);
-				expect(badge.label).toBe('เคลียร์ผ่านจุดรวบรวม');
+				expect(badge.label).toBe('จับคู่กับกองรับคืนแล้ว');
 			});
 		});
 	});

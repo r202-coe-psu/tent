@@ -261,7 +261,7 @@ describe('loan-return model helpers', () => {
 					status: 'returned',
 					clear_reason: 'bulk_dropoff'
 				}).label
-			).toBe('เคลียร์ผ่านจุดรวบรวม');
+			).toBe('จับคู่กับกองรับคืนแล้ว');
 			expect(
 				getLoanStatusBadge({
 					...baseLoanLog,
@@ -338,25 +338,30 @@ describe('loan-return model helpers', () => {
 		it('rejects when no pool is selected', () => {
 			const res = validateBulkGateClear(null, '3');
 			expect(res.isValid).toBe(false);
-			expect(res.error).toContain('เลือกจุดรวมคืน');
+			expect(res.error).toContain('เลือกกองรับคืน');
 		});
 
 		it('rejects when selected pool is not ACTIVE', () => {
 			const res = validateBulkGateClear({ status: 'EXHAUSTED', unclaimed_quota: '0' }, '3');
 			expect(res.isValid).toBe(false);
-			expect(res.error).toContain('ไม่อยู่ในสถานะใช้งานได้');
+			expect(res.error).toContain('ไม่พร้อมใช้งาน');
 		});
 
 		it('rejects when selected pool has zero quota', () => {
 			const res = validateBulkGateClear({ status: 'ACTIVE', unclaimed_quota: '0' }, '3');
 			expect(res.isValid).toBe(false);
-			expect(res.error).toContain('ไม่มีโควตาคงเหลือ');
+			expect(res.error).toContain('ไม่มีของเหลือรอจับคู่');
 		});
 
 		it('rejects when requiredQty exceeds unclaimed_quota', () => {
 			const res = validateBulkGateClear(activePool, '6');
 			expect(res.isValid).toBe(false);
-			expect(res.error).toContain('ไม่เพียงพอกับยอดคงค้าง');
+			expect(res.error).toContain('เหลือรอจับคู่');
+		});
+
+		it('never uses the allocation-sounding word "โควตาไม่พอ" in validation copy', () => {
+			const res = validateBulkGateClear(activePool, '6');
+			expect(res.error).not.toContain('โควตาไม่พอ');
 		});
 	});
 
@@ -381,13 +386,13 @@ describe('loan-return model helpers', () => {
 		it('rejects when recovery pool is null/missing', () => {
 			const res = validateBulkForwardRecovery({ pool: null, expectedItemId: 'item:fan' });
 			expect(res.isValid).toBe(false);
-			expect(res.error).toContain('ไม่พบข้อมูลจุดรวมคืน');
+			expect(res.error).toContain('ไม่พบข้อมูลกองรับคืน');
 		});
 
 		it('returns loading error when isLoading is true', () => {
 			const res = validateBulkForwardRecovery({ pool: null, isLoading: true });
 			expect(res.isValid).toBe(false);
-			expect(res.error).toContain('กำลังโหลดข้อมูลจุดรวมคืน');
+			expect(res.error).toContain('กำลังโหลดข้อมูลกองรับคืน');
 		});
 
 		it('rejects when recovery pool is CLOSED', () => {

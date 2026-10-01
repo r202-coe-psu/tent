@@ -254,7 +254,7 @@ export function getLoanStatusBadge(log: DistributionLog): LoanStatusBadgeInfo {
 	if (log.status === 'returned') {
 		if (log.clear_reason === 'bulk_dropoff' || log.bulk_pool_id) {
 			return {
-				label: 'เคลียร์ผ่านจุดรวบรวม',
+				label: 'จับคู่กับกองรับคืนแล้ว',
 				badgeClass: 'border-purple-200 bg-purple-50 text-purple-900'
 			};
 		}
@@ -344,23 +344,23 @@ export function validateBulkGateClear(
 	requiredQty: string
 ): BulkGateClearValidationResult {
 	if (!selectedPool) {
-		return { isValid: false, error: 'กรุณาเลือกจุดรวมคืน (Bulk Return Pool) ที่ต้องการเคลียร์' };
+		return { isValid: false, error: 'กรุณาเลือกกองรับคืนที่ต้องการจับคู่' };
 	}
 	if (selectedPool.status !== 'ACTIVE') {
 		const statusLabel =
 			getBulkPoolStatusLabel(selectedPool.status as BulkReturnPoolStatus) ?? selectedPool.status;
 		return {
 			isValid: false,
-			error: `จุดรวมคืนนี้ไม่อยู่ในสถานะใช้งานได้ (สถานะ: ${statusLabel})`
+			error: `กองรับคืนนี้ไม่พร้อมใช้งาน (สถานะ: ${statusLabel})`
 		};
 	}
 	if (!qtyGt(selectedPool.unclaimed_quota, '0')) {
-		return { isValid: false, error: 'จุดรวมคืนนี้ไม่มีโควตาคงเหลือแล้ว' };
+		return { isValid: false, error: 'กองรับคืนนี้ไม่มีของเหลือรอจับคู่แล้ว' };
 	}
 	if (!qtyLte(requiredQty, selectedPool.unclaimed_quota)) {
 		return {
 			isValid: false,
-			error: `โควตาคงเหลือของจุดรวมคืน (${selectedPool.unclaimed_quota}) ไม่เพียงพอกับยอดคงค้าง (${requiredQty})`
+			error: `กองนี้เหลือรอจับคู่ ${selectedPool.unclaimed_quota} ชิ้น แต่รายการนี้ต้องใช้ ${requiredQty} ชิ้น`
 		};
 	}
 	return { isValid: true };
@@ -396,18 +396,18 @@ export function validateBulkForwardRecovery(
 		: false;
 
 	if (isLoading) {
-		return { isValid: false, error: 'กำลังโหลดข้อมูลจุดรวมคืนสำหรับกู้คืนรายการ' };
+		return { isValid: false, error: 'กำลังโหลดข้อมูลกองรับคืนสำหรับกู้คืนรายการ' };
 	}
 	if (!pool) {
-		return { isValid: false, error: 'ไม่พบข้อมูลจุดรวมคืนสำหรับกู้คืนรายการ' };
+		return { isValid: false, error: 'ไม่พบข้อมูลกองรับคืนสำหรับกู้คืนรายการ' };
 	}
 	if (pool.status === 'CLOSED') {
-		return { isValid: false, error: 'จุดรวมคืนนี้ถูกปิดแล้ว ไม่สามารถกู้คืนรายการได้' };
+		return { isValid: false, error: 'กองรับคืนนี้ถูกปิดแล้ว ไม่สามารถกู้คืนรายการได้' };
 	}
 	if (expectedItemId && pool.item_id && pool.item_id !== expectedItemId) {
 		return {
 			isValid: false,
-			error: `จุดรวมคืนที่กู้คืน (${pool.item_id}) ไม่ตรงกับสินค้าในรายการยืม (${expectedItemId})`
+			error: `กองรับคืนที่กู้คืน (${pool.item_id}) ไม่ตรงกับสินค้าในรายการยืม (${expectedItemId})`
 		};
 	}
 	return { isValid: true };
@@ -492,8 +492,8 @@ export function resolveNonPhysicalRecoveryHydration(
  */
 const RETURN_RESERVATION_MODE_LABELS: Record<string, string> = {
 	PHYSICAL: 'ตรวจรับคืนที่เคาน์เตอร์',
-	NON_PHYSICAL: 'ตัดจำหน่ายโดยไม่มีของคืน',
-	BULK: 'เคลียร์ผ่านจุดรวมคืน'
+	NON_PHYSICAL: 'ปิดรายการโดยไม่มีของคืน',
+	BULK: 'จับคู่กับกองรับคืน'
 };
 
 export function getReturnReservationModeLabel(mode: string | null | undefined): string {

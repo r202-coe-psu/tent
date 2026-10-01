@@ -6,6 +6,7 @@ import { validateWholeItemInput } from '../../domain/food-supplies';
 import type { CreateBulkPoolInput } from '../../application/food-supplies/return-workflow';
 import { canReceivePhysicalStock } from '../../application/food-supplies/auth';
 import { isAnyFoodCategory } from './catalog-eligibility';
+import { BULK_RETURN_STATUS_LABELS } from './bulk-return-copy';
 
 export type BulkPoolStatusFilter = 'ALL' | BulkReturnPoolStatus;
 
@@ -31,9 +32,7 @@ export const BULK_POOL_STATUS_FILTERS: readonly BulkPoolStatusFilter[] = [
 
 export const BULK_POOL_STATUS_LABELS: Record<BulkPoolStatusFilter, string> = {
 	ALL: 'ทั้งหมด',
-	ACTIVE: 'ใช้งานอยู่',
-	EXHAUSTED: 'โควตาหมด',
-	CLOSED: 'ปิดแล้ว'
+	...BULK_RETURN_STATUS_LABELS
 };
 
 export function getBulkPoolStatusLabel(status: BulkReturnPoolStatus): string {

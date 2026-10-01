@@ -118,7 +118,7 @@
 				shelterCode
 			});
 
-			toast.success('เปิดจุดรวมคืนพัสดุเรียบร้อยแล้ว');
+			toast.success('เปิดกองรับคืนพัสดุเรียบร้อยแล้ว');
 			resetForm();
 			open = false;
 			onSuccess?.(pool);
@@ -126,7 +126,7 @@
 			// CRITICAL: Preserve form state and operationUlid on failure so user can retry safely
 			const msg = formatDistributionError(
 				err,
-				'เกิดข้อผิดพลาดในการสร้างจุดรวมคืน กรุณาลองใหม่อีกครั้ง'
+				'เกิดข้อผิดพลาดในการเปิดกองรับคืนพัสดุ กรุณาลองใหม่อีกครั้ง'
 			);
 			submitError = msg;
 			toast.error(msg);
@@ -158,10 +158,11 @@
 					>
 						<PackagePlus class="h-5 w-5" aria-hidden="true" />
 					</div>
-					<span>เปิดจุดรวมคืนพัสดุ (Bulk Return Pool)</span>
+					<span>เปิดกองรับคืนพัสดุ</span>
 				</Dialog.Title>
 				<Dialog.Description class="mt-1 text-xs text-slate-600">
-					บันทึกการรับคืนพัสดุกองรวมเข้าคลัง เพื่อเปิดโควตาสำหรับตัดรอบคืนของศูนย์ {shelterCode}
+					บันทึกพัสดุที่รับคืนเข้าคลังแล้ว เพื่อเปิดกองสำหรับจับคู่กับรายการยืมของศูนย์ {shelterCode}
+					ภายหลัง
 				</Dialog.Description>
 			</Dialog.Header>
 		</div>
@@ -174,7 +175,7 @@
 					<div class="flex items-start gap-2">
 						<AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-red-600" aria-hidden="true" />
 						<div class="flex-1">
-							<p class="font-bold">เกิดข้อผิดพลาดในการเปิดจุดรวมคืน</p>
+							<p class="font-bold">เกิดข้อผิดพลาดในการเปิดกองรับคืนพัสดุ</p>
 							<p class="mt-0.5 text-red-800">{submitError}</p>
 							<p class="mt-1 text-2xs text-red-600">
 								ข้อมูลและรหัสรายการ (ID) ถูกเก็บรักษาไว้แล้ว สามารถกดลองใหม่ได้ทันที
@@ -270,7 +271,7 @@
 						placeholder="เลือกสินค้าที่ต้องการรับคืน..."
 						searchPlaceholder="ค้นหาชื่อสินค้า หรือ SKU..."
 						emptyText={eligibleItems.length === 0
-							? 'ไม่มีรายการสินค้าที่สามารถเปิดจุดรวมคืนได้ในศูนย์นี้'
+							? 'ไม่มีรายการสินค้าที่สามารถเปิดกองรับคืนได้ในศูนย์นี้'
 							: 'ไม่พบสินค้าบรรเทาทุกข์ที่ตรงกับการค้นหา'}
 						controlProps={{ id: 'bulk-pool-item-search' }}
 						class="h-9 w-full text-xs shadow-2xs"
@@ -299,7 +300,7 @@
 			<!-- Received Quantity Input -->
 			<div class="space-y-1.5">
 				<label for="bulk-pool-qty" class="block text-xs font-bold text-slate-700">
-					จำนวนที่รับคืนเข้ารวม ({selectedItem?.base_unit ?? 'ชิ้น'})
+					จำนวนที่รับคืน ({selectedItem?.base_unit ?? 'ชิ้น'})
 					<span class="text-red-500">*</span>
 				</label>
 				<Input
@@ -313,7 +314,8 @@
 					class="h-9 w-full font-mono text-xs shadow-2xs placeholder:text-slate-400"
 				/>
 				<p class="text-2xs text-slate-500">
-					ระบบจะบันทึกรับเข้าคลัง 1 รายการ และตั้งต้นโควตาคงเหลือเท่ากับจำนวนนี้
+					กรอกจำนวนพัสดุจริงที่ตรวจนับได้
+					ระบบจะรับจำนวนนี้เข้าคลังและเปิดกองสำหรับรอจับคู่กับรายการยืม
 				</p>
 			</div>
 
@@ -358,7 +360,7 @@
 					<span>กำลังบันทึกรับเข้าคลัง...</span>
 				{:else}
 					<PackagePlus class="h-3.5 w-3.5" aria-hidden="true" />
-					<span>เปิดจุดรวมคืนพัสดุ</span>
+					<span>เปิดกองรับคืนพัสดุ</span>
 				{/if}
 			</Button>
 		</div>

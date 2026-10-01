@@ -85,9 +85,9 @@ describe('Bulk Pool Manager model (Slice 5.5E-1 Read-Only)', () => {
 	});
 
 	it('provides textual status labels', () => {
-		expect(getBulkPoolStatusLabel('ACTIVE')).toBe('ใช้งานอยู่');
-		expect(getBulkPoolStatusLabel('EXHAUSTED')).toBe('โควตาหมด');
-		expect(getBulkPoolStatusLabel('CLOSED')).toBe('ปิดแล้ว');
+		expect(getBulkPoolStatusLabel('ACTIVE')).toBe('พร้อมจับคู่');
+		expect(getBulkPoolStatusLabel('EXHAUSTED')).toBe('จับคู่ครบแล้ว');
+		expect(getBulkPoolStatusLabel('CLOSED')).toBe('ปิดกองแล้ว');
 	});
 
 	it('distinguishes loading, repository empty, and empty search results', () => {

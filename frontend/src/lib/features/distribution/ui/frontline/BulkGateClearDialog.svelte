@@ -34,6 +34,11 @@
 	} from '../model/loan-return';
 	import { getBulkPoolStatusLabel } from '../model/bulk-pool-manager';
 	import { formatDistributionError } from '../model/distribution-error';
+	import {
+		BULK_RETURN_ACCOUNTING_LABELS,
+		BULK_GATE_CLEAR_EXPLANATION
+	} from '../model/bulk-return-copy';
+	import InfoDetailPopover from '../shared/InfoDetailPopover.svelte';
 
 	interface Props {
 		open?: boolean;
@@ -230,12 +235,12 @@
 
 		if (!canClearLoan) {
 			localError =
-				'คุณไม่มีสิทธิ์ในการเคลียร์รายการยืมที่จุดรวมคืน (ต้องการสิทธิ์เจ้าหน้าที่ส่วนหน้า/ผู้ประสานงาน/ผู้จัดการศูนย์)';
+				'คุณไม่มีสิทธิ์ในการจับคู่รายการยืมกับกองรับคืน (ต้องการสิทธิ์เจ้าหน้าที่ส่วนหน้า/ผู้ประสานงาน/ผู้จัดการศูนย์)';
 			return;
 		}
 
 		if (!effectivePool) {
-			localError = 'กรุณาเลือกจุดรวมคืน (Bulk Return Pool) ที่ต้องการเคลียร์';
+			localError = 'กรุณาเลือกกองรับคืนที่ต้องการจับคู่';
 			return;
 		}
 
@@ -267,7 +272,7 @@
 				ticketId: submitted.ticketId
 			});
 
-			const successMsg = `เคลียร์รายการจากจุดรวมคืนสำเร็จ: ${submitted.itemName} (ตัดยอดคงค้าง ${submitted.remainingQty} ชิ้น · หักโควตาจากคลังรวม)`;
+			const successMsg = `จับคู่กับกองรับคืนสำเร็จ: ${submitted.itemName} (ปิดยอดค้างคืน ${submitted.remainingQty} ชิ้น)`;
 
 			toast.success(successMsg);
 			onsuccess?.(result);
@@ -275,7 +280,7 @@
 		} catch (err) {
 			localError = formatDistributionError(
 				err,
-				'ไม่สามารถเคลียร์รายการจากจุดรวมคืนได้ กรุณาลองใหม่อีกครั้ง'
+				'ไม่สามารถจับคู่กับกองรับคืนได้ กรุณาลองใหม่อีกครั้ง'
 			);
 		}
 	}
@@ -326,10 +331,18 @@
 					>
 						<Archive class="h-5 w-5" />
 					</div>
-					<div>
-						<Dialog.Title class="text-base font-bold text-slate-900">
-							เคลียร์รายการจากจุดรวมคืน
-						</Dialog.Title>
+					<div class="flex-1">
+						<div class="flex items-center gap-1.5">
+							<Dialog.Title class="text-base font-bold text-slate-900">
+								จับคู่รายการยืมกับกองรับคืน
+							</Dialog.Title>
+							<InfoDetailPopover
+								label={BULK_GATE_CLEAR_EXPLANATION.title}
+								title={BULK_GATE_CLEAR_EXPLANATION.title}
+							>
+								{BULK_GATE_CLEAR_EXPLANATION.body}
+							</InfoDetailPopover>
+						</div>
 						<Dialog.Description class="text-xs text-slate-500">
 							{itemName || log.item_id} · รหัสรายการ: <span class="font-mono">{log._id}</span>
 						</Dialog.Description>
@@ -344,10 +357,9 @@
 			>
 				<ShieldAlert class="mt-0.5 h-4 w-4 shrink-0 text-purple-600" />
 				<div>
-					<p class="font-bold">หักโควตาจากคลังรวมคืน</p>
+					<p class="font-bold">เลือกกองพัสดุคืนที่ตรงกับรายการนี้</p>
 					<p class="mt-0.5 text-2xs text-purple-900">
-						รายการนี้จะใช้ของที่ถูกส่งคืนเข้าจุดรวบรวมไว้แล้วเพื่อเคลียร์ภาระการยืมของผู้ประสบภัย
-						<strong>โดยไม่มีการรับของคืนเข้าคลังสินค้าซ้ำ และไม่เพิ่มสต็อกซ้ำ</strong>
+						ระบบจะนำจำนวนที่รอจับคู่มาปิดภาระยืม <strong>โดยไม่รับของเข้าคลังซ้ำ</strong>
 					</p>
 				</div>
 			</div>
@@ -418,10 +430,11 @@
 				>
 					<Play class="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
 					<div>
-						<p class="font-bold">รายการนี้หักโควตาไปแล้ว ไม่สามารถยกเลิกได้</p>
+						<p class="font-bold">
+							กองรับคืนนี้ถูกนำไปจับคู่กับรายการนี้แล้วบางส่วน จึงไม่สามารถยกเลิกหรือเปลี่ยนกองได้
+						</p>
 						<p class="mt-0.5 text-2xs text-blue-800">
-							ข้อมูลของรายการเดิมถูกล็อกไว้ไม่ให้แก้ไข กรุณากด "ทำรายการต่อ"
-							เพื่อปิดรายการให้เสร็จสมบูรณ์
+							กรุณาทำรายการต่อให้เสร็จ เพื่อให้ยอดของคืนและภาระยืมตรงกัน
 						</p>
 					</div>
 				</div>
@@ -454,7 +467,7 @@
 							for="bulk-pool-selection"
 							class="text-2xs font-bold tracking-wider text-slate-700 uppercase"
 						>
-							เลือกจุดรวมคืน (Bulk Return Pool) <span class="text-red-500">*</span>
+							เลือกกองรับคืน <span class="text-red-500">*</span>
 						</label>
 						{#if poolsQuery.isPending}
 							<span class="inline-flex items-center gap-1 text-2xs text-slate-400">
@@ -468,7 +481,7 @@
 							class="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 py-6 text-xs text-slate-500"
 						>
 							<Loader class="h-4 w-4 animate-spin text-purple-600" />
-							<span>กำลังค้นหาจุดรวบรวมของคืนที่พร้อมใช้งาน...</span>
+							<span>กำลังค้นหากองรับคืนที่พร้อมใช้งาน...</span>
 						</div>
 					{:else if poolsQuery.isError}
 						<div
@@ -477,7 +490,7 @@
 						>
 							<AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
 							<div>
-								<p class="font-bold">ไม่สามารถดึงข้อมูลจุดรวมคืนได้</p>
+								<p class="font-bold">ไม่สามารถดึงข้อมูลกองรับคืนได้</p>
 								<p class="text-2xs text-red-700">
 									{formatDistributionError(
 										poolsQuery.error,
@@ -491,9 +504,9 @@
 							class="flex flex-col items-center justify-center rounded-xl border border-dashed border-amber-200 bg-amber-50/50 p-4 text-center text-xs text-amber-900"
 						>
 							<Layers class="mb-1.5 h-6 w-6 text-amber-500" />
-							<p class="font-bold">ไม่พบจุดรวบรวมของคืนที่มีโควตาคงเหลือ</p>
+							<p class="font-bold">ไม่พบกองรับคืนที่มีของเหลือรอจับคู่</p>
 							<p class="mt-0.5 text-2xs text-amber-700">
-								ไม่มีกองของคืนรวมสำหรับสินค้านี้ที่มีสถานะ ACTIVE หรือมีโควตาเหลืออยู่
+								ไม่มีกองรับคืนสำหรับสินค้านี้ที่ยังมีของเหลือรอจับคู่
 								กรุณาใช้วิธีรับคืนที่เคาน์เตอร์ปกติ
 							</p>
 						</div>
@@ -547,7 +560,7 @@
 													<span
 														class="rounded-full border border-blue-200 bg-blue-50 px-1.5 text-3xs font-bold text-blue-700"
 													>
-														จุดรวมคืนเดิม
+														กองรับคืนเดิม
 													</span>
 												{/if}
 											</div>
@@ -555,8 +568,14 @@
 												<p class="text-2xs text-slate-500">{pool.notes}</p>
 											{/if}
 											<div class="flex items-center gap-3 pt-1 text-2xs text-slate-500">
-												<span>รับรวม: <strong>{pool.total_received_qty}</strong></span>
-												<span>เคลียร์แล้ว: <strong>{pool.claimed_qty}</strong></span>
+												<span
+													>{BULK_RETURN_ACCOUNTING_LABELS.totalReceived}:
+													<strong>{pool.total_received_qty}</strong></span
+												>
+												<span
+													>{BULK_RETURN_ACCOUNTING_LABELS.claimed}:
+													<strong>{pool.claimed_qty}</strong></span
+												>
 												<span
 													class="font-bold {isRecoveryPool
 														? 'text-blue-700'
@@ -564,7 +583,7 @@
 															? 'text-purple-700'
 															: 'text-amber-700'}"
 												>
-													โควตาเหลือ: {pool.unclaimed_quota} ชิ้น
+													{BULK_RETURN_ACCOUNTING_LABELS.remaining}: {pool.unclaimed_quota} ชิ้น
 												</span>
 											</div>
 										</div>
@@ -580,7 +599,8 @@
 										<span
 											class="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-3xs font-bold text-amber-800"
 										>
-											โควตาไม่พอ ({pool.unclaimed_quota} &lt; {remainingQty})
+											กองนี้เหลือรอจับคู่ {pool.unclaimed_quota} ชิ้น แต่รายการนี้ต้องใช้ {remainingQty}
+											ชิ้น
 										</span>
 									{:else if isSelected}
 										<CheckCircle2 class="h-4 w-4 shrink-0 text-purple-600" />
@@ -627,7 +647,7 @@
 					>
 						{#if bulkClaimMutation.isPending}
 							<Loader class="h-3.5 w-3.5 animate-spin" />
-							<span>กำลังหักโควตาจุดรวมคืน...</span>
+							<span>กำลังจับคู่กับกองรับคืน...</span>
 						{:else if operationState?.phase === 'IRREVERSIBLE_FORWARD_ONLY'}
 							<Play class="h-3.5 w-3.5" />
 							<span>ทำรายการต่อ</span>
@@ -636,7 +656,7 @@
 							<span>ทำรายการค้างต่อ</span>
 						{:else}
 							<Archive class="h-3.5 w-3.5" />
-							<span>ยืนยันเคลียร์รายการ ({remainingQty} ชิ้น)</span>
+							<span>ยืนยันจับคู่ ({remainingQty} ชิ้น)</span>
 						{/if}
 					</Button>
 				</div>

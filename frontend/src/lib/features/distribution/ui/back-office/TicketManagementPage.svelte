@@ -217,7 +217,7 @@
 						value="bulk_pools"
 						class="h-auto flex-none rounded-lg border-transparent px-3 py-2 text-xs font-semibold whitespace-nowrap text-slate-600 shadow-none transition-colors hover:bg-slate-50 data-[state=active]:bg-violet-700 data-[state=active]:text-white data-[state=active]:shadow-none"
 					>
-						จุดรวมคืนพัสดุ
+						กองรับคืนพัสดุ
 					</Tabs.Trigger>
 				</Tabs.List>
 			</Tabs.Root>

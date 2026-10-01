@@ -68,7 +68,7 @@ export function formatDistributionError(
 	}
 
 	if (err instanceof InsufficientPoolQuotaError) {
-		return 'จำนวนของที่จุดรวมคืนไม่เพียงพอหรือมีการเปลี่ยนแปลงจากจุดอื่น กรุณาตรวจสอบจำนวนล่าสุดแล้วลองใหม่';
+		return 'จำนวนที่รอจับคู่ในกองรับคืนไม่เพียงพอ หรือมีการเปลี่ยนแปลงจากที่อื่น กรุณาตรวจสอบจำนวนล่าสุดแล้วลองใหม่';
 	}
 
 	if (err instanceof ConcurrencyCollisionError) {
@@ -140,7 +140,7 @@ export function formatDistributionError(
 			return 'ข้อมูลรายการนี้มีการเปลี่ยนแปลงจากจุดอื่น กรุณาตรวจสอบยอดล่าสุดก่อนทำรายการใหม่';
 		}
 		if (/unclaimed quota|insufficient.*quota|EXHAUSTED|CLOSED/i.test(rawMessage)) {
-			return 'จำนวนของที่จุดรวมคืนไม่เพียงพอหรือมีการเปลี่ยนแปลงจากจุดอื่น กรุณาตรวจสอบจำนวนล่าสุดแล้วลองใหม่';
+			return 'จำนวนที่รอจับคู่ในกองรับคืนไม่เพียงพอ หรือมีการเปลี่ยนแปลงจากที่อื่น กรุณาตรวจสอบจำนวนล่าสุดแล้วลองใหม่';
 		}
 		if (/being processed|concurrency/i.test(rawMessage)) {
 			return 'รายการนี้กำลังถูกประมวลผลโดยคำขออื่น กรุณารอสักครู่แล้วตรวจสอบสถานะล่าสุดก่อนลองใหม่';
