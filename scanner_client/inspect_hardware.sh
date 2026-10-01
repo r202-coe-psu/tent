@@ -54,7 +54,9 @@ exec > >(tee >(sed -u 's/\x1b\[[0-9;]*m//g' >"$REPORT")) 2>&1
 
 # Known devices (VID:PID) — keep in sync with setup_printer.sh / README.
 XP365B_ID="1fc9:2016"
-HOUSESMART_QR_ID="0483:4c43"
+CROWN_QR_ID="0461:4d81"      # kiosk3: CROWN Barcode KeyBorad FS (HID keyboard wedge) — lsusb mislabels as a Dell mouse
+KIOSK_ESCPOS_ID="28e9:5812"  # kiosk3: built-in receipt printer with cutter ("Printer in FS Mode", usblp)
+HOUSESMART_ID="0483:4c43"    # kiosk3: card reader module (YE XIN EF-011C socket) — vendor HID protocol (0xAA frames), not CCID
 
 FOUND_QR=""
 FOUND_PRINTER=""
@@ -118,9 +120,15 @@ for dev in /sys/bus/usb/devices/*; do
     if [ "$id" = "$XP365B_ID" ]; then
         role="Label printer XP-365B (รองรับใน setup_printer.sh)"
         FOUND_PRINTER="USB $id XP-365B"
-    elif [ "$id" = "$HOUSESMART_QR_ID" ]; then
-        role="QR reader HOUSESmart (keyboard wedge)"
-        FOUND_QR="USB $id HOUSESmart"
+    elif [ "$id" = "$CROWN_QR_ID" ]; then
+        role="QR reader CROWN (keyboard wedge)"
+        FOUND_QR="USB $id CROWN"
+    elif [ "$id" = "$KIOSK_ESCPOS_ID" ]; then
+        role="Receipt printer ESC/POS + cutter (ยังไม่รองรับใน setup_printer.sh)"
+        FOUND_PRINTER="USB $id receipt printer"
+    elif [ "$id" = "$HOUSESMART_ID" ]; then
+        role="เครื่องอ่านบัตร HOUSESmart (HID โปรโตคอลเฉพาะ — ไม่ใช่ PC/SC, scard.py ใช้ไม่ได้)"
+        FOUND_CARD="USB $id HOUSESmart (HID vendor protocol — ต้องมี protocol/SDK หรือสลับเป็น CCID)"
     elif [[ "$classes" == *" 07 "* ]]; then
         role="Printer (USB printer class)"
         FOUND_PRINTER="${FOUND_PRINTER:-USB $id $name}"
