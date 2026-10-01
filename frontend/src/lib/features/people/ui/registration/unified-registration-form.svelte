@@ -746,7 +746,23 @@
 		};
 	}
 
-	async function revealValidation(message: string, messages: string[] = []) {
+	/** Section that owns a Zod issue — the scroll fallback when no field carries `aria-invalid`. */
+	function sectionForIssue(issue: ZodIssue | undefined): FormSectionId {
+		const [root, key] = issue?.path ?? [];
+		if (root !== 'household') return 'members';
+		return key === 'pets' || key === 'vehicles' ? key : 'address';
+	}
+
+	/**
+	 * Lists every issue in the summary banner, then takes the user straight to the
+	 * first invalid field (same for public and staff). Errors with no field to
+	 * point at land on `fallbackSection`, or on the banner when none is given.
+	 */
+	async function revealValidation(
+		message: string,
+		messages: string[] = [],
+		fallbackSection?: FormSectionId
+	) {
 		formError = message;
 		validationMessages = messages.length > 0 ? messages : [message];
 		toast.error(message, {
@@ -754,17 +770,21 @@
 			duration: 6000
 		});
 		await tick();
-		formRootEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		if (focusFirstInvalid()) return;
+		if (fallbackSection) scrollToSection(fallbackSection);
+		else formRootEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+	}
+
+	function focusFirstInvalid(): boolean {
+		const firstInvalid = formRootEl?.querySelector<HTMLElement>('[aria-invalid="true"]');
+		if (!firstInvalid) return false;
+		firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+		requestAnimationFrame(() => firstInvalid.focus({ preventScroll: true }));
+		return true;
 	}
 
 	function jumpToFirstError() {
-		const firstInvalid = formRootEl?.querySelector<HTMLElement>('[aria-invalid="true"]');
-		if (firstInvalid) {
-			firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
-			requestAnimationFrame(() => firstInvalid.focus({ preventScroll: true }));
-			return;
-		}
-		scrollToSection('members');
+		if (!focusFirstInvalid()) scrollToSection('members');
 	}
 
 	async function handleSubmit(e: Event) {
@@ -774,8 +794,7 @@
 		for (const p of petItems) {
 			if (p.species === 'other' && !p.customSpecies.trim()) {
 				memberFieldErrors = {};
-				await revealValidation(t.petOtherSpeciesRequired);
-				scrollToSection('pets');
+				await revealValidation(t.petOtherSpeciesRequired, [], 'pets');
 				return;
 			}
 		}
@@ -809,7 +828,7 @@
 			const mapped = mapZodIssues(result.error.issues);
 			memberFieldErrors = mapped.memberErrors;
 			const first = mapped.messages[0] ?? t.validationError;
-			await revealValidation(first, mapped.messages);
+			await revealValidation(first, mapped.messages, sectionForIssue(result.error.issues[0]));
 			return;
 		}
 
@@ -819,12 +838,12 @@
 			if (hasJoinSelection) {
 				if (headPhone && !phoneOk) {
 					memberFieldErrors = { 0: { phone: t.joinPhoneInvalid } };
-					await revealValidation(t.joinPhoneInvalid);
+					await revealValidation(t.joinPhoneInvalid, [], 'members');
 					return;
 				}
 			} else if (!headPhone || !/^0\d{8,9}$/.test(headPhone.replace(/[-\s]/g, ''))) {
 				memberFieldErrors = { 0: { phone: t.headPhoneRequired } };
-				await revealValidation(t.headPhoneRequired);
+				await revealValidation(t.headPhoneRequired, [], 'members');
 				return;
 			}
 		}
@@ -833,8 +852,11 @@
 			const reportingCount = members.filter((m) => m.reporting_in).length;
 			if (reportingCount === 0) {
 				memberFieldErrors = {};
-				await revealValidation('กรุณาเลือกสมาชิกอย่างน้อย 1 คนที่มารายงานตัวในรอบนี้');
-				scrollToSection('members');
+				await revealValidation(
+					'กรุณาเลือกสมาชิกอย่างน้อย 1 คนที่มารายงานตัวในรอบนี้',
+					[],
+					'members'
+				);
 				return;
 			}
 		}

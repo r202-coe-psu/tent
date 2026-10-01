@@ -63,7 +63,7 @@
 
 		storedTicketsCount = getStoredTickets().length;
 		if (anyVerified) {
-			toast.info('ตั๋วการจองได้รับการยืนยันเข้าศูนย์พักพิงแล้ว ระบบได้ลบข้อมูลออกจากอุปกรณ์');
+			toast.info('ใบลงทะเบียนได้รับการยืนยันเข้าศูนย์พักพิงแล้ว ระบบได้ลบข้อมูลออกจากอุปกรณ์');
 		}
 	}
 
@@ -137,7 +137,7 @@
 				onclick={() => (activeTab = 'form')}
 			>
 				<ClipboardCheck class="size-4" />
-				<span>{ticket ? 'ตั๋วการจอง' : 'ลงทะเบียนใหม่'}</span>
+				<span>{ticket ? 'ใบลงทะเบียน' : 'ลงทะเบียนใหม่'}</span>
 			</button>
 			<button
 				type="button"
@@ -154,7 +154,7 @@
 				}}
 			>
 				<History class="size-4" />
-				<span>ประวัติการจองของฉัน</span>
+				<span>ใบลงทะเบียนของฉัน</span>
 				{#if storedTicketsCount > 0}
 					<span
 						class="flex size-5 animate-pulse items-center justify-center rounded-full bg-primary text-2xs font-bold text-primary-foreground"
@@ -196,7 +196,7 @@
 						removeStoredTicket(code);
 						ticket = null;
 						storedTicketsCount = getStoredTickets().length;
-						toast.success('นำตั๋วไปยืนยันแล้ว ระบบได้ลบข้อมูลออกจากอุปกรณ์เรียบร้อย');
+						toast.success('ยืนยันที่ศูนย์แล้ว ระบบได้ลบใบลงทะเบียนออกจากอุปกรณ์เรียบร้อย');
 					}}
 				/>
 			</div>
@@ -215,7 +215,7 @@
 					class="gap-2 text-muted-foreground hover:text-foreground"
 				>
 					<History class="size-4" />
-					<span>ดูตั๋วลงทะเบียนทั้งหมดที่บันทึกไว้</span>
+					<span>ดูใบลงทะเบียนทั้งหมดที่บันทึกไว้</span>
 				</Button>
 			</div>
 		</div>
