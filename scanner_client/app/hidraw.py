@@ -75,8 +75,12 @@ def find_nodes(vid_pid: str, sysfs: Path | None = None) -> list[HidNode]:
             continue
         if f"HID_ID=0003:{vid}:{pid}" not in uevent.upper():
             continue
-        iface_file = device.resolve().parent / "bInterfaceNumber"
-        interface = iface_file.read_text().strip() if iface_file.exists() else "?"
+        try:
+            interface = (
+                (device.resolve().parent / "bInterfaceNumber").read_text().strip()
+            )
+        except OSError:
+            interface = "?"
         try:
             descriptor = (device / "report_descriptor").read_bytes()
         except OSError:

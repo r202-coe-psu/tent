@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { Html5Qrcode } from 'html5-qrcode';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -11,8 +11,9 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import KioskCheckInWizard from './kiosk-check-in-wizard.svelte';
 	import type { GateInput } from '../data/kiosk-check-in.api';
-	import { fetchKioskHardware, type KioskHardware } from '../data/kiosk-hardware.api';
+	import { loadKioskHardware } from '../application/kiosk-qr-input';
 	import { selectCameraId } from '../domain/kiosk-camera';
+	import { qrInputPlan, type KioskHardware } from '../domain/kiosk-hardware';
 	import { createKeyboardWedge } from '../domain/keyboard-wedge';
 	import KioskPreRegisteredCheckIn from './kiosk-pre-registered-check-in.svelte';
 	import { KioskIdleTimeout, KIOSK_IDLE_TIMEOUT_MS } from './kiosk-idle-timeout.svelte.js';
@@ -31,11 +32,8 @@
 	// Null until the scanner client has answered: the camera must not open before we know
 	// whether this machine reads QR codes with it, a USB reader, or both.
 	let hardware = $state<KioskHardware | null>(null);
-	const cameraEnabled = $derived(hardware !== null && hardware.qrInput !== 'reader');
-	const readerOnly = $derived(hardware?.qrInput === 'reader');
-	const wedge = $derived(
-		hardware && hardware.qrInput !== 'camera' ? createKeyboardWedge(hardware.readerMaxGapMs) : null
-	);
+	const plan = $derived(qrInputPlan(hardware));
+	const wedge = $derived(plan.readerEnabled ? createKeyboardWedge(plan.readerMaxGapMs) : null);
 
 	const backUrl = $derived(resolve(`/kiosk${contextQuery as `?${string}`}`));
 	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, () => {
@@ -53,9 +51,9 @@
 		return () => idleTimeout.stop();
 	});
 
-	$effect(() => {
+	onMount(() => {
 		let cancelled = false;
-		void fetchKioskHardware().then((result) => {
+		void loadKioskHardware().then((result) => {
 			if (!cancelled) hardware = result;
 		});
 		return () => {
@@ -70,19 +68,24 @@
 	function handleKeydown(event: KeyboardEvent): void {
 		recordActivity();
 		if (!wedge || event.repeat) return;
-		const text = wedge.push(event.key, event.timeStamp);
+		const text = wedge.push(
+			{ key: event.key, code: event.code, shiftKey: event.shiftKey },
+			event.timeStamp
+		);
 		if (text === null) return;
 		// Enter would otherwise also activate whichever button has focus (e.g. "กลับ").
 		event.preventDefault();
 		handleScan(text);
 	}
 
-	async function pickCameraSource(): Promise<string | { facingMode: 'environment' }> {
+	async function pickCameraSource(
+		cameraLabel: string | null
+	): Promise<string | { facingMode: 'environment' }> {
 		const fallback = { facingMode: 'environment' } as const;
-		if (!hardware?.cameraLabel) return fallback;
+		if (!cameraLabel) return fallback;
 		try {
 			const cameras = await Html5Qrcode.getCameras();
-			return selectCameraId(cameras, hardware.cameraLabel) ?? fallback;
+			return selectCameraId(cameras, cameraLabel) ?? fallback;
 		} catch {
 			return fallback;
 		}
@@ -110,10 +113,10 @@
 		if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(100);
 	}
 
-	function cameraAttachment(node: HTMLDivElement) {
+	const cameraAttachment = (cameraLabel: string | null) => (node: HTMLDivElement) => {
 		const reader = new Html5Qrcode(node.id);
 		let isMounted = true;
-		pickCameraSource()
+		pickCameraSource(cameraLabel)
 			.then((source) =>
 				reader.start(
 					source,
@@ -139,7 +142,7 @@
 			isMounted = false;
 			if (reader.isScanning) reader.stop().catch(() => {});
 		};
-	}
+	};
 
 	function retryCamera(): void {
 		cameraError = '';
@@ -202,24 +205,26 @@
 				class="qr-camera-frame relative mx-auto w-full max-w-sm overflow-hidden rounded-xl border border-slate-200 bg-slate-900"
 			>
 				<div class="relative aspect-square w-full overflow-hidden">
-					{#if cameraEnabled}
+					{#if plan.cameraEnabled}
 						{#key cameraAttempt}
 							<div
 								id={cameraReaderId}
-								{@attach cameraAttachment}
+								{@attach cameraAttachment(hardware?.cameraLabel ?? null)}
 								class="absolute inset-0 h-full w-full overflow-hidden [&_video]:h-full! [&_video]:w-full! [&_video]:object-cover!"
 								aria-label="ภาพจากกล้องสแกน QR"
 							></div>
 						{/key}
 					{/if}
-					{#if readerOnly}
+					{#if plan.pending || plan.readerOnly}
 						<div
-							class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#F8FAFC] px-4 text-center"
+							class="absolute inset-0 flex items-center justify-center bg-[#F8FAFC] px-4"
+							aria-hidden="true"
 						>
-							<ScanQrCode class="h-12 w-12 text-[#0A2647]" aria-hidden="true" />
-							<p class="text-lg font-semibold text-slate-700">ยิง QR ที่เครื่องอ่านด้านล่างจอ</p>
+							<ScanQrCode
+								class={['h-12 w-12', plan.pending ? 'text-slate-400' : 'text-[#0A2647]']}
+							/>
 						</div>
-					{:else if cameraEnabled && !cameraError}
+					{:else if plan.cameraEnabled && !cameraError}
 						<div class="pointer-events-none absolute inset-[10%]" aria-hidden="true">
 							<span
 								class="absolute top-0 left-0 h-8 w-8 rounded-tl-lg border-t-4 border-l-4 border-white"
@@ -240,6 +245,9 @@
 						>
 							<CameraOff class="h-9 w-9 text-slate-500" aria-hidden="true" />
 							<p class="text-base font-semibold text-slate-700" role="status">{cameraError}</p>
+							{#if plan.readerEnabled}
+								<p class="text-base text-slate-600">ยังใช้เครื่องอ่าน QR ได้</p>
+							{/if}
 							<Button
 								type="button"
 								onclick={retryCamera}
@@ -250,14 +258,21 @@
 					{/if}
 				</div>
 			</div>
-			{#if !readerOnly}
-				<p
-					class="qr-scan-hint mt-3 text-center text-base font-semibold text-slate-700"
-					aria-live="polite"
-				>
+			<p
+				class={[
+					'qr-scan-hint mt-3 text-center font-semibold text-slate-700',
+					plan.readerOnly ? 'text-lg' : 'text-base'
+				]}
+				aria-live="polite"
+			>
+				{#if plan.pending}
+					กำลังเตรียม…
+				{:else if plan.readerOnly}
+					ยิง QR ที่เครื่องอ่านด้านล่างจอ
+				{:else}
 					วาง QR ในกรอบ
-				</p>
-			{/if}
+				{/if}
+			</p>
 			{#if scanNotice}
 				<div
 					class="mt-3 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-950"

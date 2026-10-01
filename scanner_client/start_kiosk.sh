@@ -56,6 +56,7 @@ PRINTER_NAME="${PRINTER_NAME:-$(sed -n 's/^PRINTER_NAME=//p' "$SCRIPT_DIR/.env" 
 PRINTER_NAME="${PRINTER_NAME:-tent_xprinter}"
 # PRINTER_BACKEND=escpos writes straight to /dev/usb/lpN — there is no CUPS queue to enable.
 PRINTER_BACKEND="${PRINTER_BACKEND:-$(sed -n 's/^PRINTER_BACKEND=//p' "$SCRIPT_DIR/.env" 2>/dev/null | tail -1 | tr -d '"'\''[:space:]')}"
+PRINTER_BACKEND="$(printf '%s' "$PRINTER_BACKEND" | tr '[:upper:]' '[:lower:]')"
 if [ "$PRINTER_BACKEND" != "escpos" ] && command -v cupsenable >/dev/null 2>&1 && lpstat -p "$PRINTER_NAME" >/dev/null 2>&1; then
     cupsenable "$PRINTER_NAME" >> "$LOG_FILE" 2>&1 || echo "[$(date)] cupsenable $PRINTER_NAME failed (user needs lpadmin group)" >> "$LOG_FILE"
 fi

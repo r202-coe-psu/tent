@@ -106,7 +106,9 @@ def ping(transport: RfproTransport) -> None:
     step("1) ขอ version ของเครื่องอ่าน (00 00)")
     reply = transport.command(CMD_HW_VER)
     text = reply.data.decode("ascii", errors="replace")
-    print(f"✅ status {status_text(reply.status)} · data {reply.data.hex(' ')} · '{text}'")
+    print(
+        f"✅ status {status_text(reply.status)} · data {reply.data.hex(' ')} · '{text}'"
+    )
     print("   → การห่อ frame ลง HID report ถูกต้อง")
 
     step("2) สถานะบัตรที่ช่องหลัก (18 00)")
@@ -145,7 +147,9 @@ def read_cid(transport: RfproTransport, show_cid: bool) -> None:
         )
         for act in (0x00, 0x01):
             power = transport.command(CMD_ICC_SLOT_PWR, bytes([SLOT_MAIN, act]))
-            print(f"   slot power {'on' if act else 'off'}: status {status_text(power.status)}")
+            print(
+                f"   slot power {'on' if act else 'off'}: status {status_text(power.status)}"
+            )
             time.sleep(0.3)
         reply = transport.command(CMD_ICC_GETATR, bytes([SLOT_MAIN]))
     if reply.status != 0x00:
@@ -205,8 +209,14 @@ def main() -> None:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("command", nargs="?", default="all", choices=["all", "ping"])
-    parser.add_argument("--full", action="store_true", help="อ่านทั้งใบ แสดงเฉพาะความยาว field + เวลา (S0-6)")
-    parser.add_argument("--id", default=DEFAULT_ID, help=f"VID:PID (default {DEFAULT_ID})")
+    parser.add_argument(
+        "--full",
+        action="store_true",
+        help="อ่านทั้งใบ แสดงเฉพาะความยาว field + เวลา (S0-6)",
+    )
+    parser.add_argument(
+        "--id", default=DEFAULT_ID, help=f"VID:PID (default {DEFAULT_ID})"
+    )
     parser.add_argument("--verbose", action="store_true", help="แสดงคำสั่ง/คำตอบ")
     parser.add_argument("--show-cid", action="store_true", help="แสดงเลขบัตรเต็ม")
     args = parser.parse_args()
@@ -227,7 +237,7 @@ def main() -> None:
                 read_full(transport)
             else:
                 read_cid(transport, args.show_cid)
-    except (RfproError, InspectError, RuntimeError) as error:
+    except (RfproError, InspectError, RuntimeError, ValueError) as error:
         print(f"\n❌ {error}")
         print("   ลองใหม่ด้วย --verbose แล้วส่งผลให้ทีม dev")
         sys.exit(1)

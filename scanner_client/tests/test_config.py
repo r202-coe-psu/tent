@@ -84,21 +84,23 @@ class ScannerConfigTests(unittest.TestCase):
         self.assertEqual(config["TENT_BASE_URL"], "https://tent.example.go.th")
 
 
-class HardwareConfigTests(unittest.TestCase):
-    BASE = {
-        "TENT_BASE_URL": "https://tent.example.go.th",
-        "DEVICE_ID": "kiosk-01",
-        "DEVICE_SECRET": "real-secret",
-    }
+HARDWARE_TEST_BASE = {
+    "TENT_BASE_URL": "https://tent.example.go.th",
+    "DEVICE_ID": "kiosk-01",
+    "DEVICE_SECRET": "real-secret",
+}
 
+
+class HardwareConfigTests(unittest.TestCase):
     def validate(self, **overrides):
-        return validate_config({**self.BASE, **overrides})
+        return validate_config({**HARDWARE_TEST_BASE, **overrides})
 
     def test_unset_hardware_keys_keep_the_original_raspberry_pi_behaviour(self):
         config = self.validate()
 
         self.assertEqual(config["PRINTER_BACKEND"], "cups")
         self.assertEqual(config["PRINTER_WIDTH_DOTS"], "576")
+        self.assertEqual(config["PRINTER_CUT_FEED_MM"], "15")
         self.assertEqual(config["KIOSK_QR_INPUT"], "camera")
         self.assertEqual(config["CARD_READER"], "pcsc")
         self.assertEqual(config["CARD_READER_USB_ID"], "0483:4c43")
@@ -108,6 +110,7 @@ class HardwareConfigTests(unittest.TestCase):
             PRINTER_BACKEND="ESCPOS",
             PRINTER_USB_ID="28E9:5812",
             PRINTER_WIDTH_DOTS="576",
+            PRINTER_CUT_FEED_MM="18",
             KIOSK_QR_INPUT="Reader",
             KIOSK_QR_READER_MAX_GAP_MS="40",
             KIOSK_CAMERA_LABEL=" JSK-RGB ",
@@ -117,6 +120,7 @@ class HardwareConfigTests(unittest.TestCase):
 
         self.assertEqual(config["PRINTER_BACKEND"], "escpos")
         self.assertEqual(config["PRINTER_USB_ID"], "28e9:5812")
+        self.assertEqual(config["PRINTER_CUT_FEED_MM"], "18")
         self.assertEqual(config["KIOSK_QR_INPUT"], "reader")
         self.assertEqual(config["KIOSK_QR_READER_MAX_GAP_MS"], "40")
         self.assertEqual(config["KIOSK_CAMERA_LABEL"], "JSK-RGB")
@@ -138,6 +142,8 @@ class HardwareConfigTests(unittest.TestCase):
             "width below range": {"PRINTER_WIDTH_DOTS": "376"},
             "width above range": {"PRINTER_WIDTH_DOTS": "840"},
             "width not multiple of 8": {"PRINTER_WIDTH_DOTS": "580"},
+            "cut feed not integer": {"PRINTER_CUT_FEED_MM": "1.5"},
+            "cut feed above range": {"PRINTER_CUT_FEED_MM": "41"},
             "qr input": {"KIOSK_QR_INPUT": "bluetooth"},
             "qr gap below range": {"KIOSK_QR_READER_MAX_GAP_MS": "5"},
             "qr gap above range": {"KIOSK_QR_READER_MAX_GAP_MS": "101"},
@@ -146,9 +152,8 @@ class HardwareConfigTests(unittest.TestCase):
             "card reader usb id": {"CARD_READER": "rfpro", "CARD_READER_USB_ID": "4c43"},
         }
         for name, overrides in cases.items():
-            with self.subTest(name=name):
-                with self.assertRaises(ScannerConfigError):
-                    self.validate(**overrides)
+            with self.subTest(name=name), self.assertRaises(ScannerConfigError):
+                self.validate(**overrides)
 
     def test_error_messages_name_the_key_but_not_secrets(self):
         with self.assertRaises(ScannerConfigError) as raised:

@@ -13,6 +13,11 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+
+class ReaderLostError(RuntimeError):
+    """The reader hardware vanished (USB unplugged). Unlike a card error it must reach the
+    manager, which then drops the reader and waits for it again instead of showing a read error."""
+
 # Thai Smart Card Applet APDU
 SELECT = [0x00, 0xA4, 0x04, 0x00, 0x08]
 THAI_CARD_AID = [0xA0, 0x00, 0x00, 0x00, 0x54, 0x48, 0x00, 0x01]
@@ -94,6 +99,9 @@ class ThaiSmartCardReader:
             data, sw1, sw2 = self.connection.transmit(SELECT + THAI_CARD_AID)
             logger.debug(f"Select Applet Response: {sw1:02X} {sw2:02X}")
             return True
+        except ReaderLostError:
+            # Must precede NoCardException: without pyscard that name is an alias of Exception.
+            raise
         except NoCardException:
             logger.debug("No card inserted.")
             return False
@@ -175,6 +183,8 @@ class ThaiSmartCardReader:
             if data:
                 return bytes(bytearray(data))
             return None
+        except ReaderLostError:
+            raise
         except Exception as e:
             logger.error(f"Error extracting photo: {e}")
             return None

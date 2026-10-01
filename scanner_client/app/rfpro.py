@@ -15,11 +15,12 @@ import os
 import select
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
+from app.config import DEFAULT_CARD_READER_USB_ID
 from app.hidraw import HidNode, find_nodes
-from app.scard import ThaiSmartCardReader
+from app.scard import ReaderLostError, ThaiSmartCardReader
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ SLOT_MAIN = 0x00
 CARD_CPU_7816 = 0x0C
 SLOT_POWER_OFF = 0x00
 SLOT_POWER_ON = 0x01
-DEFAULT_USB_ID = "0483:4c43"
+DEFAULT_USB_ID = DEFAULT_CARD_READER_USB_ID
 COMMAND_TIMEOUT_SEC = 3.0
 POWER_CYCLE_SETTLE_SEC = 0.3
 # STX + INX + LEN(2) + CHK around the LEN bytes; replies are far smaller than this cap.
@@ -45,7 +46,14 @@ CMD_ICC_SLOT_PWR = b"\x18\x02"
 CMD_ICC_GETATR = b"\x18\x80"
 CMD_ICC_APDU = b"\x18\x81"
 ALLOWED_CMDS = frozenset(
-    {CMD_HW_VER, CMD_ICC_ST, CMD_ICC_SEL, CMD_ICC_SLOT_PWR, CMD_ICC_GETATR, CMD_ICC_APDU}
+    {
+        CMD_HW_VER,
+        CMD_ICC_ST,
+        CMD_ICC_SEL,
+        CMD_ICC_SLOT_PWR,
+        CMD_ICC_GETATR,
+        CMD_ICC_APDU,
+    }
 )
 
 
@@ -61,7 +69,7 @@ class RfproCardError(RfproError):
     """The module answered but the card is absent or did not respond."""
 
 
-class RfproDeviceLostError(RfproError):
+class RfproDeviceLostError(RfproError, ReaderLostError):
     """The HID node vanished or failed (USB unplugged); the reader must be re-opened."""
 
 
@@ -76,7 +84,13 @@ def build_frame(inx: int, cmd: bytes, data: bytes = b"") -> bytes:
     """AA · INX · LEN(BE, = DEVICE+CMD+DATA) · DEVICE 0000 · CMD · DATA · XOR(INX..DATA)."""
     if cmd not in ALLOWED_CMDS:
         raise ValueError(f"command {cmd.hex()} is not in the read-only allowlist")
-    body = bytes([inx & 0xFF]) + (4 + len(data)).to_bytes(2, "big") + b"\x00\x00" + cmd + data
+    body = (
+        bytes([inx & 0xFF])
+        + (4 + len(data)).to_bytes(2, "big")
+        + b"\x00\x00"
+        + cmd
+        + data
+    )
     return bytes([STX]) + body + bytes([_xor(body)])
 
 
@@ -135,8 +149,12 @@ class RfproTransport:
         self.tracer: Callable[[str, bytes, int | None, bytes], None] | None = None
 
     @classmethod
-    def open(cls, usb_id: str = DEFAULT_USB_ID) -> "RfproTransport":
-        nodes = [n for n in find_nodes(usb_id) if any(kind == "Output" for kind, _ in n.reports)]
+    def open(cls, usb_id: str = DEFAULT_USB_ID) -> RfproTransport:
+        nodes = [
+            n
+            for n in find_nodes(usb_id)
+            if any(kind == "Output" for kind, _ in n.reports)
+        ]
         if not nodes:
             raise RfproDeviceLostError(f"card reader {usb_id} not found")
         node = nodes[0]
@@ -152,7 +170,7 @@ class RfproTransport:
         return cls._for_node(fd, node)
 
     @classmethod
-    def _for_node(cls, fd: int, node: HidNode) -> "RfproTransport":
+    def _for_node(cls, fd: int, node: HidNode) -> RfproTransport:
         report_id = next((rid for kind, rid in node.reports if kind == "Output"), 0)
         return cls(
             fd,
@@ -175,7 +193,9 @@ class RfproTransport:
 
     def _lost(self, error: OSError) -> RfproDeviceLostError:
         self._close_locked()
-        return RfproDeviceLostError(f"card reader I/O failed: {error.strerror or 'error'}")
+        return RfproDeviceLostError(
+            f"card reader I/O failed: {error.strerror or 'error'}"
+        )
 
     def _read_report(self, timeout: float) -> bytes | None:
         assert self._fd is not None
@@ -196,14 +216,21 @@ class RfproTransport:
         assert self._fd is not None
         for start in range(0, len(frame), self._out_size):
             chunk = frame[start : start + self._out_size]
-            os.write(self._fd, bytes([self._report_id]) + chunk.ljust(self._out_size, b"\x00"))
+            os.write(
+                self._fd,
+                bytes([self._report_id]) + chunk.ljust(self._out_size, b"\x00"),
+            )
 
-    def command(self, cmd: bytes, data: bytes = b"", timeout: float | None = None) -> Reply:
+    def command(
+        self, cmd: bytes, data: bytes = b"", timeout: float | None = None
+    ) -> Reply:
         with self._lock:
             if self._fd is None:
                 raise RfproDeviceLostError("card reader is closed")
             self._inx = (self._inx % 255) + 1
-            frame = build_frame(self._inx, cmd, data)  # rejects commands outside the allowlist
+            frame = build_frame(
+                self._inx, cmd, data
+            )  # rejects commands outside the allowlist
             budget = self._timeout if timeout is None else timeout
             try:
                 self._drain()
@@ -215,8 +242,40 @@ class RfproTransport:
                 raise self._lost(error) from error
             if self.tracer:
                 self.tracer("RX", cmd, reply.status, reply.data)
-            logger.debug("rfpro cmd=%s status=%02x data_len=%d", cmd.hex(), reply.status, len(reply.data))
+            logger.debug(
+                "rfpro cmd=%s status=%02x data_len=%d",
+                cmd.hex(),
+                reply.status,
+                len(reply.data),
+            )
             return reply
+
+    @staticmethod
+    def _extract(buf: bytes) -> tuple[Reply | None, bytes]:
+        """Next complete frame in `buf`. A corrupt frame is skipped by resyncing on the next
+        STX, so one bad report does not fail the whole command."""
+        while buf:
+            try:
+                reply = parse_frame(buf)
+            except RfproProtocolError:
+                nxt = buf.find(bytes([STX]), 1)
+                buf = buf[nxt:] if nxt > 0 else b""
+                continue
+            return (reply, b"") if reply is not None else (None, buf)
+        return None, b""
+
+    @staticmethod
+    def _is_interleaved_heartbeat(report: bytes) -> bool:
+        """A heartbeat can land between the reports of a longer reply. Only a report that is
+        itself a complete, checksum-valid heartbeat frame counts: a continuation chunk that
+        merely starts with 0xAA will not."""
+        if report[:1] != bytes([STX]):
+            return False
+        try:
+            frame = parse_frame(report)
+        except RfproProtocolError:
+            return False
+        return frame is not None and frame.cmd == HEARTBEAT
 
     def _await_reply(self, cmd: bytes, budget: float) -> Reply:
         deadline = time.monotonic() + budget
@@ -225,21 +284,24 @@ class RfproTransport:
             report = self._read_report(left)
             if report is None:
                 break
+            if buf and self._is_interleaved_heartbeat(report):
+                continue
             if not buf:
                 # A frame starts at STX; anything before it (padding, strays) is dropped.
                 start = report.find(bytes([STX]))
                 if start < 0:
                     continue
                 report = report[start:]
-            buf += report
-            reply = parse_frame(buf)
+            reply, buf = self._extract(buf + report)
             if reply is None:
-                continue  # the frame spans more reports
-            buf = b""
-            if reply.cmd == HEARTBEAT or reply.cmd != cmd:
+                continue  # the frame spans more reports (or the fragment was corrupt)
+            # The device echoes INX, so a late reply to an earlier command is not ours.
+            if reply.cmd == HEARTBEAT or reply.cmd != cmd or reply.inx != self._inx:
                 continue
             return reply
-        raise RfproProtocolError(f"no reply to command {cmd.hex()} within {budget:.0f}s")
+        raise RfproProtocolError(
+            f"no reply to command {cmd.hex()} within {budget:.0f}s"
+        )
 
 
 class RfproConnection:
@@ -263,7 +325,9 @@ class RfproConnection:
                 time.sleep(POWER_CYCLE_SETTLE_SEC)
             reply = self._transport.command(CMD_ICC_GETATR, bytes([SLOT_MAIN]))
         if reply.status != 0x00 or not reply.data:
-            raise RfproCardError(f"card did not answer reset (status 0x{reply.status:02x})")
+            raise RfproCardError(
+                f"card did not answer reset (status 0x{reply.status:02x})"
+            )
         self._atr = list(reply.data)
 
     def getATR(self) -> list[int]:
@@ -282,7 +346,9 @@ class RfproConnection:
 class RfproThaiCardReader(ThaiSmartCardReader):
     """Thai national ID reader on the RFpro module; same API as the PC/SC reader."""
 
-    def __init__(self, usb_id: str = DEFAULT_USB_ID, transport: RfproTransport | None = None):
+    def __init__(
+        self, usb_id: str = DEFAULT_USB_ID, transport: RfproTransport | None = None
+    ):
         self.transport = transport or RfproTransport.open(usb_id)
         super().__init__(connection=RfproConnection(self.transport))
         self._poll_failures = 0

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+import { DEFAULT_KIOSK_HARDWARE } from '../domain/kiosk-hardware';
 import {
-	DEFAULT_KIOSK_HARDWARE,
 	fetchKioskHardware,
 	KIOSK_HARDWARE_PATH,
 	KIOSK_HARDWARE_TIMEOUT_MS
@@ -30,6 +30,23 @@ describe('fetchKioskHardware', () => {
 			})
 		);
 		expect(KIOSK_HARDWARE_TIMEOUT_MS).toBe(3_000);
+	});
+
+	it('treats a blank label as no label', async () => {
+		const result = await fetchKioskHardware(
+			vi
+				.fn<typeof fetch>()
+				.mockResolvedValue(json({ qr_input: 'both', camera_label: '  ', reader_max_gap_ms: 50 }))
+		);
+		expect(result.cameraLabel).toBeNull();
+	});
+
+	it('falls back to the default when the body is not an object', async () => {
+		for (const body of [5, []]) {
+			await expect(
+				fetchKioskHardware(vi.fn<typeof fetch>().mockResolvedValue(json(body)))
+			).resolves.toEqual(DEFAULT_KIOSK_HARDWARE);
+		}
 	});
 
 	it('treats a missing label as no label', async () => {

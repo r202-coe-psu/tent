@@ -1,23 +1,13 @@
+import {
+	DEFAULT_KIOSK_HARDWARE,
+	DEFAULT_READER_MAX_GAP_MS,
+	MAX_READER_GAP_MS,
+	MIN_READER_GAP_MS,
+	type KioskHardware
+} from '../domain/kiosk-hardware';
+
 export const KIOSK_HARDWARE_PATH = '/api/v1/scanner/kiosk/hardware';
 export const KIOSK_HARDWARE_TIMEOUT_MS = 3_000;
-
-export type KioskQrInput = 'camera' | 'reader' | 'both';
-
-export type KioskHardware = {
-	qrInput: KioskQrInput;
-	cameraLabel: string | null;
-	readerMaxGapMs: number;
-};
-
-const DEFAULT_READER_MAX_GAP_MS = 50;
-const MIN_READER_GAP_MS = 10;
-const MAX_READER_GAP_MS = 100;
-
-export const DEFAULT_KIOSK_HARDWARE: KioskHardware = {
-	qrInput: 'camera',
-	cameraLabel: null,
-	readerMaxGapMs: DEFAULT_READER_MAX_GAP_MS
-};
 
 /**
  * Per-machine hardware settings, answered by the scanner client on the kiosk itself. Without one

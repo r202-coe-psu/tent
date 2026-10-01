@@ -29,44 +29,70 @@ from tests.test_manager import FakePage, valid_config
 
 OUT_SIZE = 32
 HEARTBEAT = b"\xff\xff"
-ATR_3B79 = bytes.fromhex("3b7996000054480000")  # "TH NID"-style ATR, GET RESPONSE P2 = 00
+ATR_3B79 = bytes.fromhex(
+    "3b7996000054480000"
+)  # "TH NID"-style ATR, GET RESPONSE P2 = 00
 ATR_3B67 = bytes.fromhex("3b67000000")  # older cards: GET RESPONSE P2 = 01
 CID = "3101234567891"
 
 
 def reply_frame(inx: int, cmd: bytes, status: int, data: bytes = b"") -> bytes:
-    body = bytes([inx]) + (5 + len(data)).to_bytes(2, "big") + b"\x00\x00" + cmd + bytes([status]) + data
+    body = (
+        bytes([inx])
+        + (5 + len(data)).to_bytes(2, "big")
+        + b"\x00\x00"
+        + cmd
+        + bytes([status])
+        + data
+    )
     checksum = 0
     for byte in body:
         checksum ^= byte
     return b"\xaa" + body + bytes([checksum])
 
 
-def reports(frame: bytes):
-    return [frame[i : i + OUT_SIZE].ljust(OUT_SIZE, b"\x00") for i in range(0, len(frame), OUT_SIZE)]
+def reports(frame: bytes, size: int = OUT_SIZE):
+    return [
+        frame[i : i + size].ljust(size, b"\x00") for i in range(0, len(frame), size)
+    ]
 
 
 class FakeHidDevice:
     """The device end of a SOCK_SEQPACKET pair: one datagram = one HID report."""
 
-    def __init__(self, handler, *, heartbeats=False):
-        self.client, self.peer = socket.socketpair(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+    def __init__(
+        self, handler=None, *, heartbeats=False, raw=None, report_id=None, size=OUT_SIZE
+    ):
+        """`raw(inx, cmd, data)` returns the exact reports to send (for malformed-traffic tests);
+        `report_id` prefixes every reply report, like a hidraw node with numbered reports."""
+        self.client, self.peer = socket.socketpair(
+            socket.AF_UNIX, socket.SOCK_SEQPACKET
+        )
         self.handler = handler
         self.heartbeats = heartbeats
+        self.raw = raw
+        self.report_id = report_id
+        self.size = size
         self.commands: list[tuple[bytes, bytes]] = []
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._serve, daemon=True)
         self._thread.start()
 
     def transport(self, timeout=1.0) -> RfproTransport:
-        return RfproTransport(self.client.detach(), out_size=OUT_SIZE, timeout=timeout)
+        return RfproTransport(
+            self.client.detach(),
+            report_id=self.report_id or 0,
+            out_size=self.size,
+            has_report_ids=self.report_id is not None,
+            timeout=timeout,
+        )
 
     def _serve(self):
         self.peer.settimeout(0.05)
         while not self._stop.is_set():
             try:
                 report = self.peer.recv(512)
-            except socket.timeout:
+            except TimeoutError:
                 continue
             except OSError:
                 return
@@ -76,17 +102,25 @@ class FakeHidDevice:
             length = int.from_bytes(frame[2:4], "big")
             inx, cmd, data = frame[1], frame[6:8], frame[8 : 4 + length]
             self.commands.append((cmd, data))
-            answer = self.handler(cmd, data)
-            if answer is None:
-                continue  # simulate a device that never answers
-            status, payload = answer
             try:
+                if self.raw is not None:
+                    for chunk in self.raw(inx, cmd, data):
+                        self._send(chunk)
+                    continue
+                answer = self.handler(cmd, data)
+                if answer is None:
+                    continue  # simulate a device that never answers
+                status, payload = answer
                 if self.heartbeats:
-                    self.peer.send(reports(reply_frame(0, HEARTBEAT, 0))[0])
-                for chunk in reports(reply_frame(inx, cmd, status, payload)):
-                    self.peer.send(chunk)
+                    self._send(reports(reply_frame(0, HEARTBEAT, 0), self.size)[0])
+                for chunk in reports(reply_frame(inx, cmd, status, payload), self.size):
+                    self._send(chunk)
             except OSError:
                 return
+
+    def _send(self, report: bytes) -> None:
+        prefix = b"" if self.report_id is None else bytes([self.report_id])
+        self.peer.send(prefix + report)
 
     def close(self):
         self._stop.set()
@@ -149,8 +183,18 @@ class FakeThaiCard:
 class FrameTests(unittest.TestCase):
     def test_requests_match_the_vendor_document_examples(self):
         cases = {
-            "18 00 card state": (0xBB, CMD_ICC_ST, b"\x00", "AA BB 00 05 00 00 18 00 00 A6"),
-            "18 01 select type": (0xBB, CMD_ICC_SEL, b"\x00\x0c", "AA BB 00 06 00 00 18 01 00 0C A8"),
+            "18 00 card state": (
+                0xBB,
+                CMD_ICC_ST,
+                b"\x00",
+                "AA BB 00 05 00 00 18 00 00 A6",
+            ),
+            "18 01 select type": (
+                0xBB,
+                CMD_ICC_SEL,
+                b"\x00\x0c",
+                "AA BB 00 06 00 00 18 01 00 0C A8",
+            ),
             "18 81 APDU": (
                 0x00,
                 CMD_ICC_APDU,
@@ -163,11 +207,15 @@ class FrameTests(unittest.TestCase):
                 self.assertEqual(build_frame(inx, cmd, data), bytes.fromhex(expected))
 
     def test_parses_the_vendor_apdu_reply_example(self):
-        raw = bytes.fromhex("AA 00 00 0F 00 00 18 81 00 20 C9 24 32 20 36 81 7F 90 00 11")
+        raw = bytes.fromhex(
+            "AA 00 00 0F 00 00 18 81 00 20 C9 24 32 20 36 81 7F 90 00 11"
+        )
 
         reply = parse_frame(raw)
 
-        self.assertEqual(reply, Reply(inx=0, cmd=CMD_ICC_APDU, status=0, data=raw[9:-1]))
+        self.assertEqual(
+            reply, Reply(inx=0, cmd=CMD_ICC_APDU, status=0, data=raw[9:-1])
+        )
         self.assertEqual(reply.data[-2:], b"\x90\x00")
 
     def test_incomplete_frames_wait_and_bad_checksums_raise(self):
@@ -180,9 +228,8 @@ class FrameTests(unittest.TestCase):
     def test_commands_outside_the_allowlist_never_reach_the_wire(self):
         # 00 01 reboot, 00 04 write flash, 00 07 change baud (vendor command table).
         for cmd in (b"\x00\x01", b"\x00\x04", b"\x00\x07", b"\x18\x82"):
-            with self.subTest(cmd=cmd.hex()):
-                with self.assertRaises(ValueError):
-                    build_frame(1, cmd)
+            with self.subTest(cmd=cmd.hex()), self.assertRaises(ValueError):
+                build_frame(1, cmd)
 
         device = FakeHidDevice(lambda *_: (0, b""))
         self.addCleanup(device.close)
@@ -214,6 +261,73 @@ class TransportTests(unittest.TestCase):
 
         with self.assertRaises(RfproProtocolError):
             transport.command(CMD_HW_VER)
+
+    def test_heartbeat_between_the_reports_of_one_reply_is_skipped(self):
+        payload = bytes(range(100))
+
+        def raw(inx, cmd, data):
+            first, *rest = reports(reply_frame(inx, cmd, 0, payload))
+            return [first, *reports(reply_frame(0, HEARTBEAT, 0)), *rest]
+
+        device = FakeHidDevice(raw=raw)
+        self.addCleanup(device.close)
+        transport = device.transport()
+        self.addCleanup(transport.close)
+
+        self.assertEqual(transport.command(CMD_ICC_APDU, b"\x00\x00").data, payload)
+
+    def test_continuation_report_that_starts_with_stx_is_not_mistaken_for_a_heartbeat(
+        self,
+    ):
+        payload = bytearray(range(100))
+        payload[23] = 0xAA  # frame byte 32 = first byte of the 2nd report
+        device = FakeHidDevice(lambda cmd, data: (0, bytes(payload)))
+        self.addCleanup(device.close)
+        transport = device.transport()
+        self.addCleanup(transport.close)
+
+        self.assertEqual(
+            transport.command(CMD_ICC_APDU, b"\x00\x00").data, bytes(payload)
+        )
+
+    def test_a_late_reply_with_an_older_inx_is_ignored(self):
+        def raw(inx, cmd, data):
+            stale = reply_frame((inx - 1) % 256 or 255, cmd, 0, b"stale")
+            return [*reports(stale), *reports(reply_frame(inx, cmd, 0, b"fresh"))]
+
+        device = FakeHidDevice(raw=raw)
+        self.addCleanup(device.close)
+        transport = device.transport()
+        self.addCleanup(transport.close)
+
+        self.assertEqual(transport.command(CMD_ICC_APDU, b"\x00\x00").data, b"fresh")
+
+    def test_corrupt_frames_are_skipped_instead_of_failing_the_command(self):
+        def raw(inx, cmd, data):
+            bad_checksum = bytearray(reply_frame(inx, cmd, 0, b"junk"))
+            bad_checksum[-1] ^= 0xFF
+            bad_length = b"\xaa" + bytes(31)  # STX then LEN = 0
+            good = reply_frame(inx, cmd, 0, b"good")
+            return [*reports(bytes(bad_checksum)), bad_length, *reports(good)]
+
+        device = FakeHidDevice(raw=raw)
+        self.addCleanup(device.close)
+        transport = device.transport()
+        self.addCleanup(transport.close)
+
+        self.assertEqual(transport.command(CMD_ICC_APDU, b"\x00\x00").data, b"good")
+
+    def test_numbered_reports_are_prefixed_on_write_and_stripped_on_read(self):
+        payload = bytes(range(80))
+        device = FakeHidDevice(lambda cmd, data: (0, payload), report_id=1, size=64)
+        self.addCleanup(device.close)
+        transport = device.transport()
+        self.addCleanup(transport.close)
+
+        reply = transport.command(CMD_ICC_APDU, b"\x00\x00")
+
+        self.assertEqual(reply.data, payload)
+        self.assertEqual(device.commands, [(CMD_ICC_APDU, b"\x00\x00")])
 
     def test_unplugged_device_raises_device_lost(self):
         device = FakeHidDevice(lambda *_: (0, b""))
@@ -332,6 +446,16 @@ class ReaderTests(unittest.TestCase):
         self.assertTrue(photo.startswith("data:image/jpeg;base64,"))
         self.assertEqual(base64.b64decode(photo.split(",", 1)[1]), card.photo)
 
+    def test_unplugging_during_a_read_surfaces_as_a_lost_reader_not_a_card_error(self):
+        from app.scard import ReaderLostError
+
+        _, device, reader = self.reader()
+        device.peer.close()  # USB pulled between the poll and the read
+
+        for read in (reader.read_citizen_id, reader.read_all_data):
+            with self.subTest(read=read.__name__), self.assertRaises(ReaderLostError):
+                read()
+
     def test_missing_card_raises_instead_of_hanging(self):
         _, _, reader = self.reader(FakeThaiCard(present=False))
 
@@ -339,7 +463,9 @@ class ReaderTests(unittest.TestCase):
             reader.read_citizen_id()
 
     def test_unanswered_polls_eventually_report_the_reader_as_lost(self):
-        device = FakeHidDevice(lambda cmd, data: (0, b"fw") if cmd == CMD_HW_VER else None)
+        device = FakeHidDevice(
+            lambda cmd, data: (0, b"fw") if cmd == CMD_HW_VER else None
+        )
         self.addCleanup(device.close)
         reader = RfproThaiCardReader(transport=device.transport(timeout=0.05))
         self.addCleanup(reader.close)
@@ -404,7 +530,9 @@ class ManagerWiringTests(unittest.IsolatedAsyncioTestCase):
         ):
             self.assertFalse(await client.init_reader())
 
-        self.assertTrue(any("rfpro" in line and "not found" in line for line in logs.output))
+        self.assertTrue(
+            any("rfpro" in line and "not found" in line for line in logs.output)
+        )
 
     async def test_unplugged_reader_is_dropped_and_waited_for_again(self):
         client = manager.ScannerClientManager(valid_config(CARD_READER="rfpro"))

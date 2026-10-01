@@ -14,8 +14,14 @@ import urllib.parse
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from app.escpos import label_to_escpos
-
+from app.config import (
+    DEFAULT_CARD_READER_USB_ID,
+    DEFAULT_PRINTER_CUT_FEED_MM,
+    DEFAULT_PRINTER_WIDTH_DOTS,
+    DEFAULT_QR_READER_GAP_MS,
+)
+from app.rfpro import RfproThaiCardReader
+from app.scard import ReaderLostError, ThaiSmartCardReader
 
 try:
     import httpx
@@ -30,13 +36,6 @@ except ImportError:  # pragma: no cover - production installs playwright
     BrowserContext = Any  # type: ignore[misc,assignment]
     Page = Any  # type: ignore[misc,assignment]
 
-try:
-    from app.scard import ThaiSmartCardReader
-except ImportError:  # pragma: no cover - tests can exercise bootstrap without a card reader
-    ThaiSmartCardReader = Any  # type: ignore[misc,assignment]
-
-from app.rfpro import RfproDeviceLostError, RfproThaiCardReader
-
 logger = logging.getLogger(__name__)
 
 # Chromium managed policies are read from /etc/chromium/policies by the Debian/Pi OS build only.
@@ -50,7 +49,6 @@ KIOSK_PRINT_PATH = "/api/v1/scanner/kiosk/print"
 # Per-machine hardware settings for the kiosk page (QR input, camera choice). Answered locally
 # like the print path — never forwarded to the server and never given the device credential.
 KIOSK_HARDWARE_PATH = "/api/v1/scanner/kiosk/hardware"
-DEFAULT_QR_READER_MAX_GAP_MS = 50
 KIOSK_PRINT_MAX_LABELS = 20
 KIOSK_PRINT_MAX_PNG_BYTES = 256 * 1024
 KIOSK_PRINT_TIMEOUT_SEC = 20.0
@@ -67,7 +65,9 @@ PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 # Kernel usblp exposes printers as /dev/usb/lpN; sysfs lists them with their USB ids.
 USBMISC_SYSFS = Path("/sys/class/usbmisc")
 USB_DEV_DIR = Path("/dev/usb")
-DEFAULT_PRINTER_WIDTH_DOTS = 576
+# Paths this client answers itself; a request that is not a same-origin POST gets a local 404
+# so it never reaches the server (and its access log).
+LOCAL_ONLY_PATHS = frozenset({KIOSK_PRINT_PATH, KIOSK_HARDWARE_PATH})
 
 
 class BootstrapError(RuntimeError):
@@ -109,16 +109,19 @@ class ScannerClientManager:
         self.printer_width_dots = int(
             config.get("PRINTER_WIDTH_DOTS") or DEFAULT_PRINTER_WIDTH_DOTS
         )
+        self.printer_cut_feed_mm = int(
+            config.get("PRINTER_CUT_FEED_MM") or DEFAULT_PRINTER_CUT_FEED_MM
+        )
         self._escpos_lock = asyncio.Lock()
         # How /kiosk/qr reads QR codes: camera, a USB keyboard-wedge reader, or both.
         self.qr_input = str(config.get("KIOSK_QR_INPUT") or "camera").strip().lower()
         self.camera_label = str(config.get("KIOSK_CAMERA_LABEL") or "").strip()
         self.qr_reader_max_gap_ms = int(
-            config.get("KIOSK_QR_READER_MAX_GAP_MS") or DEFAULT_QR_READER_MAX_GAP_MS
+            config.get("KIOSK_QR_READER_MAX_GAP_MS") or DEFAULT_QR_READER_GAP_MS
         )
         # `pcsc` (default) reads through pcscd; `rfpro` talks to the HID module on kiosk3.
         self.card_reader = str(config.get("CARD_READER") or "pcsc").strip().lower()
-        self.card_reader_usb_id = str(config.get("CARD_READER_USB_ID") or "").strip() or "0483:4c43"
+        self.card_reader_usb_id = str(config.get("CARD_READER_USB_ID") or "").strip() or DEFAULT_CARD_READER_USB_ID
         self.poll_interval = float(config.get("POLL_INTERVAL", "0.5"))
         self.min_reading_display = 0.6
         self.client_nav_timeout_ms = 5000
@@ -269,7 +272,11 @@ class ScannerClientManager:
         """Attempt to initialize the Smart Card Reader driver"""
         while self.running:
             try:
-                self.reader = await asyncio.to_thread(self._create_reader)
+                if self.card_reader == "rfpro":
+                    # Opening the HID node can block up to a command timeout: keep it off the loop.
+                    self.reader = await asyncio.to_thread(self._create_reader)
+                else:
+                    self.reader = self._create_reader()
                 logger.info("Smart Card Reader ready.")
                 return True
             except Exception as e:
@@ -308,6 +315,14 @@ class ScannerClientManager:
             return
         if same_origin_post and request_url.path == KIOSK_HARDWARE_PATH:
             await self._fulfill_hardware(route)
+            return
+        if request_url.path in LOCAL_ONLY_PATHS:
+            await route.fulfill(
+                status=404,
+                content_type="application/json",
+                headers={"cache-control": "no-store"},
+                body=json.dumps({"error": {"code": "NOT_FOUND"}}),
+            )
             return
         if not same_origin_post or request_url.path not in allowed_paths:
             await route.continue_(headers=headers)
@@ -427,7 +442,7 @@ class ScannerClientManager:
             return False
         return process.returncode == 0
 
-    def _find_printer_device(self) -> Optional[Path]:
+    def _find_printer_device(self) -> Path | None:
         """Resolve the printer's device node. Looked up per label: replugging changes lpN."""
         if self.printer_device:
             return Path(self.printer_device)
@@ -452,8 +467,11 @@ class ScannerClientManager:
     def _send_escpos(self, image: bytes, timeout: float) -> bool:
         """Blocking: convert, locate and write one label. Runs in a worker thread."""
         try:
-            data = label_to_escpos(image, self.printer_width_dots)
-        except ValueError:
+            # Imported here so CUPS-only machines never load Pillow just to start the kiosk.
+            from app.escpos import label_to_escpos
+
+            data = label_to_escpos(image, self.printer_width_dots, self.printer_cut_feed_mm)
+        except Exception:  # noqa: BLE001 - Pillow raises DecompressionBombError and others outside ValueError
             logger.error("Label image could not be converted for the ESC/POS printer")
             return False
         device = self._find_printer_device()
@@ -510,8 +528,12 @@ class ScannerClientManager:
                     asyncio.to_thread(self._send_escpos, image, KIOSK_PRINT_TIMEOUT_SEC),
                     timeout=KIOSK_PRINT_TIMEOUT_SEC + 1.0,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.error("ESC/POS print timed out")
+                return False
+            except Exception:  # noqa: BLE001
+                # The route must always answer: an escaped exception leaves /print hanging.
+                logger.error("ESC/POS print failed unexpectedly")
                 return False
 
     async def _dispatch_card_event(self, event_name: str, citizen_id: Optional[str] = None) -> None:
@@ -546,6 +568,8 @@ class ScannerClientManager:
             )
             logger.info("Full smart-card data sent to the kiosk registration flow")
             return True
+        except ReaderLostError:
+            raise  # the polling loop drops the reader and waits for the hardware
         except Exception:
             logger.error("Full smart-card read or kiosk handoff failed")
             if self.page and not self.page.is_closed():
@@ -557,10 +581,19 @@ class ScannerClientManager:
                     logger.warning("Could not notify the kiosk registration page about the card read error")
             return False
 
-    def _card_inserted_safely(self) -> bool:
+    async def _card_inserted(self) -> bool:
+        """Poll the reader off the event loop: an HID reader can block for seconds."""
+        reader = self.reader
+        return bool(reader and await asyncio.to_thread(reader.is_card_inserted))
+
+    async def _card_inserted_safely(self) -> bool:
         """Reader errors must not trap the kiosk on a result screen."""
         try:
-            return bool(self.reader and self.reader.is_card_inserted())
+            return await self._card_inserted()
+        except ReaderLostError:
+            logger.warning("Smart Card Reader disconnected; waiting for the hardware")
+            self._drop_reader()
+            return False
         except Exception:
             logger.warning("Card reader poll failed while waiting for kiosk home")
             return False
@@ -574,7 +607,7 @@ class ScannerClientManager:
             and not self.page.is_closed()
             and urllib.parse.urlsplit(self.page.url).path != self.home_path
         ):
-            if self._card_inserted_safely():
+            if await self._card_inserted_safely():
                 current_path = urllib.parse.urlsplit(self.page.url).path
                 if current_path == self.register_card_path:
                     if not full_read_attempted:
@@ -664,13 +697,13 @@ class ScannerClientManager:
                 continue
 
             try:
-                if not self.reader.is_card_inserted():
+                if not await self._card_inserted():
                     await asyncio.sleep(self.poll_interval)
                     continue
 
                 if urllib.parse.urlsplit(self.page.url).path == self.register_card_path:
                     await self._read_full_card_if_register_path()
-                    while self.running and self.reader and self._card_inserted_safely():
+                    while self.running and self.reader and await self._card_inserted_safely():
                         await asyncio.sleep(self.poll_interval)
                     continue
 
@@ -694,6 +727,8 @@ class ScannerClientManager:
                     )
                     await self._dispatch_card_event("kiosk:smart-card-read", citizen_id)
                     logger.info("Smart-card identity sent to the shared kiosk lookup flow")
+                except ReaderLostError:
+                    raise
                 except Exception:
                     logger.error("Smart-card read or kiosk handoff failed")
                     await self._navigate(
@@ -705,7 +740,7 @@ class ScannerClientManager:
 
                 logger.info("Waiting for card removal")
                 full_read_attempted = False
-                while self.running and self.reader and self.reader.is_card_inserted():
+                while self.running and self.reader and await self._card_inserted():
                     if (
                         not full_read_attempted
                         and self.page
@@ -725,9 +760,12 @@ class ScannerClientManager:
                     await self._wait_for_home_or_new_card()
                 else:
                     await self._navigate(self.home_url)
-            except RfproDeviceLostError:
+            except ReaderLostError:
                 logger.warning("Smart Card Reader disconnected; waiting for the hardware")
                 self._drop_reader()
+                if urllib.parse.urlsplit(self.page.url).path != self.home_path:
+                    # Don't strand the person on a reading screen that can no longer finish.
+                    await self._navigate(self.home_url)
                 await asyncio.sleep(1.0)
             except Exception:
                 logger.error("Scanner card polling loop failed")

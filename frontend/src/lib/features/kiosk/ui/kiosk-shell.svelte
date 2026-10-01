@@ -1,8 +1,13 @@
 <script lang="ts">
-	import type { Snippet } from 'svelte';
+	import { onMount, type Snippet } from 'svelte';
+	import { page } from '$app/state';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import Clock3 from '@lucide/svelte/icons/clock-3';
 	import Tent from '@lucide/svelte/icons/tent';
+	import { installReaderKeyGuard } from '../application/reader-key-guard';
+	import { loadKioskHardware } from '../application/kiosk-qr-input';
+	import { KIOSK_QR_PATH } from '../domain/identity-method';
+	import { qrInputPlan } from '../domain/kiosk-hardware';
 	import { KIOSK_COMPACT_MEDIA } from '../domain/kiosk-layout';
 
 	interface Props {
@@ -34,6 +39,24 @@
 		updateCompactHeader();
 		media.addEventListener('change', updateCompactHeader);
 		return () => media.removeEventListener('change', updateCompactHeader);
+	});
+	// A USB QR reader types into whatever has focus (the phone numpad would take the code's
+	// digits and its Enter would press "search"), so on machines that have one, the keys of a
+	// reader burst are swallowed everywhere except /kiosk/qr, which reads the reader itself.
+	onMount(() => {
+		let destroyed = false;
+		let removeGuard: (() => void) | undefined;
+		void loadKioskHardware().then((hardware) => {
+			const plan = qrInputPlan(hardware);
+			if (destroyed || !plan.readerEnabled) return;
+			removeGuard = installReaderKeyGuard(window, plan.readerMaxGapMs, () =>
+				page.url.pathname.startsWith(KIOSK_QR_PATH)
+			);
+		});
+		return () => {
+			destroyed = true;
+			removeGuard?.();
+		};
 	});
 	$effect(() => {
 		if (!showClock) return;

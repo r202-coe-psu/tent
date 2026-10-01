@@ -22,9 +22,8 @@ import select
 import sys
 import time
 
+from app.config import DEFAULT_CARD_READER_USB_ID as DEFAULT_ID
 from app.hidraw import HidNode, find_nodes
-
-DEFAULT_ID = "0483:4c43"
 
 
 def hexs(data: bytes) -> str:

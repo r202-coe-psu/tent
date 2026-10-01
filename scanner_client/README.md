@@ -470,6 +470,7 @@ tail -f /tmp/kiosk_autostart.log
 PRINTER_BACKEND=escpos
 PRINTER_USB_ID=28e9:5812
 PRINTER_WIDTH_DOTS=576
+PRINTER_CUT_FEED_MM=15         # หัวพิมพ์ → ใบมีด (มม.)
 KIOSK_QR_INPUT=reader          # camera | reader | both
 # KIOSK_CAMERA_LABEL=JSK-RGB   # ใช้กับ camera/both: เลือกกล้องที่ชื่อมีข้อความนี้
 CARD_READER=rfpro
@@ -498,8 +499,9 @@ sudo udevadm control --reload && sudo udevadm trigger
 | `PRINTER_USB_ID` | `VID:PID` (hex) — หา `/dev/usb/lpN` จาก sysfs **ทุกครั้งที่พิมพ์** เลยถอด-เสียบ USB แล้วเลข `lpN` เปลี่ยนก็พิมพ์ต่อได้ | — |
 | `PRINTER_DEVICE` | path ตรง ๆ (ใช้แทน `PRINTER_USB_ID` ถ้าตั้ง) | — |
 | `PRINTER_WIDTH_DOTS` | ความกว้างหัวพิมพ์ (80 มม. ≈ 576) | `576` |
+| `PRINTER_CUT_FEED_MM` | ระยะเลื่อนกระดาษจากหัวพิมพ์ถึงใบมีดก่อนตัด (0–40 มม.) · ตัดโดนเนื้อหา → เพิ่ม · ขอบล่างยาว → ลด | `15` |
 
-- ใช้ label PNG ขนาดเดิม (80×60 มม.) — ตัดขอบขาว, ย่อให้พอดีหัวพิมพ์ (ไม่ขยาย), จัดกึ่งกลาง แล้วส่ง `GS v 0` + ตัดกระดาษ `GS V B 0` ตรงเข้า device (ไม่ผ่าน CUPS, ไม่เขียน label ลง disk)
+- ใช้ label PNG ขนาดเดิม (80×60 มม.) — ตัดขอบขาว, ย่อให้พอดีหัวพิมพ์ (ไม่ขยาย), จัดกึ่งกลาง แล้วส่ง `GS v 0` + เลื่อนกระดาษ `ESC J` (`PRINTER_CUT_FEED_MM`) + ตัด `ESC i` ตรงเข้า device (ไม่ใช้ `GS V` เพราะ printer ตู้ใหญ่ผูก `GS V` กับ black mark → เลื่อนกระดาษ ~17 ซม. ต่อดวงบนม้วนธรรมดา) (ไม่ผ่าน CUPS, ไม่เขียน label ลง disk)
 - เปิดสวิตช์เครื่องพิมพ์แยกต่างหากด้วย ไม่เช่นนั้นจะได้ `PRINT_FAILED` (log: `ESC/POS printer … not found`)
 - log `No permission to open /dev/usb/lpN` = user ยังไม่อยู่ใน group `lp` (ดูคำสั่งด้านบน)
 - ทดสอบพิมพ์/วัดความกว้างจริง: `sudo ./inspect_hardware.sh --test-printer`

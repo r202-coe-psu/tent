@@ -1,7 +1,10 @@
 import asyncio
 import io
 import os
+import subprocess
+import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -10,6 +13,7 @@ from unittest.mock import patch
 
 from app import manager
 from app.escpos import label_to_escpos
+from app.scard import ReaderLostError
 
 
 class FakeResponse:
@@ -612,12 +616,18 @@ class KioskPrintRouteTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIsNone(route.continued_headers)
                 self.assertEqual(route.fulfilled["status"], 200)
 
-    async def test_foreign_origin_is_never_printed(self):
+    async def test_foreign_origin_is_never_printed_nor_forwarded_to_the_server(self):
         client = self.client()
         route = FakePrintRoute(origin="https://attacker.example", body=labels_body(PNG))
-        await client._route_kiosk_api(route)
-        self.assertIsNone(route.fulfilled)
-        self.assertNotIn("x-device-id", route.continued_headers)
+
+        async def fail_exec(*_args, **_kwargs):
+            raise AssertionError("lp must not run")
+
+        with patch.object(manager.asyncio, "create_subprocess_exec", new=fail_exec):
+            await client._route_kiosk_api(route)
+
+        self.assertEqual(route.fulfilled["status"], 404)  # answered locally, AC-Q8
+        self.assertIsNone(route.continued_headers)
 
 
 def real_png():
@@ -771,6 +781,82 @@ class EscposPrintRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(route.fulfilled["status"], 502)
         self.assertTrue(any("group lp" in line for line in logs.output))
 
+    async def test_oversized_or_bomb_png_gets_an_answer_instead_of_hanging(self):
+        from PIL import Image
+
+        sysfs, dev = self.fake_usb_printers(("lp3", "28e9:5812"))
+        client = self.client(PRINTER_USB_ID="28e9:5812")
+        buffer = io.BytesIO()
+        Image.new("1", (14000, 14000), 1).save(buffer, format="PNG")  # ~50 KB, declares 196M px
+        self.assertLess(len(buffer.getvalue()), manager.KIOSK_PRINT_MAX_PNG_BYTES)
+
+        with self.assertLogs(manager.logger, level="ERROR"):
+            route = await self.print_with(client, sysfs, dev, labels_body(buffer.getvalue()))
+
+        self.assertEqual(route.fulfilled["status"], 502)
+        self.assertEqual(route.fulfilled["body"]["printed"], 0)
+        self.assertEqual(route.fulfilled["body"]["error"]["code"], "PRINT_FAILED")
+
+    async def test_any_unexpected_error_still_fulfils_the_route(self):
+        sysfs, dev = self.fake_usb_printers(("lp3", "28e9:5812"))
+        client = self.client(PRINTER_USB_ID="28e9:5812")
+
+        with (
+            patch.object(client, "_send_escpos", side_effect=RuntimeError("boom")),
+            self.assertLogs(manager.logger, level="ERROR"),
+        ):
+            route = await self.print_with(client, sysfs, dev, labels_body(real_png()))
+
+        self.assertEqual(route.fulfilled["status"], 502)
+
+    async def test_printer_that_never_becomes_writable_times_out(self):
+        sysfs, dev = self.fake_usb_printers(("lp3", "28e9:5812"))
+        client = self.client(PRINTER_USB_ID="28e9:5812")
+
+        with (
+            patch.object(manager.select, "select", return_value=([], [], [])),
+            patch.object(manager, "USBMISC_SYSFS", sysfs),
+            patch.object(manager, "USB_DEV_DIR", dev),
+            self.assertLogs(manager.logger, level="ERROR") as logs,
+        ):
+            started = time.monotonic()
+            ok = await asyncio.to_thread(client._send_escpos, real_png(), 0.2)
+
+        self.assertFalse(ok)
+        self.assertLess(time.monotonic() - started, 2.0)
+        self.assertEqual((dev / "lp3").stat().st_size, 0)  # nothing was written
+        self.assertTrue(any("timed out" in line for line in logs.output))
+
+    async def test_would_block_write_is_retried_until_it_goes_through(self):
+        sysfs, dev = self.fake_usb_printers(("lp3", "28e9:5812"))
+        client = self.client(PRINTER_USB_ID="28e9:5812")
+        real_write = os.write
+        attempts = []
+
+        def flaky_write(fd, data):
+            attempts.append(len(data))
+            if len(attempts) == 1:
+                raise BlockingIOError
+            return real_write(fd, data)
+
+        with patch.object(manager.os, "write", side_effect=flaky_write):
+            route = await self.print_with(client, sysfs, dev, labels_body(real_png()))
+
+        self.assertEqual(route.fulfilled["status"], 200)
+        self.assertGreaterEqual(len(attempts), 2)
+        self.assertEqual((dev / "lp3").read_bytes(), label_to_escpos(real_png(), 576))
+
+    async def test_default_backend_never_loads_pillow(self):
+        code = (
+            "import sys; import app.manager as m; "
+            "c = m.ScannerClientManager({'TENT_BASE_URL': 'https://t.example', 'DEVICE_ID': 'd', "
+            "'DEVICE_SECRET': 's'}); print('PIL' in sys.modules)"
+        )
+        out = await asyncio.to_thread(
+            subprocess.run, [sys.executable, "-c", code], capture_output=True, text=True, check=True
+        )
+        self.assertEqual(out.stdout.strip(), "False")
+
     async def test_default_backend_still_spools_through_lp(self):
         client = manager.ScannerClientManager(valid_config(DEBUG="false"))
         route = FakePrintRoute(body=labels_body(PNG))
@@ -848,7 +934,7 @@ class KioskHardwareRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(captured["headers"]["cache-control"], "no-store")
         self.assertEqual(captured["content_type"], "application/json")
 
-    async def test_foreign_origin_or_get_is_not_answered_and_gets_no_credentials(self):
+    async def test_foreign_origin_or_get_gets_a_local_404_and_never_reaches_the_server(self):
         client = manager.ScannerClientManager(valid_config())
         foreign = FakeHardwareRoute(origin="https://attacker.example")
         get = FakeHardwareRoute()
@@ -856,9 +942,109 @@ class KioskHardwareRouteTests(unittest.IsolatedAsyncioTestCase):
 
         for route in (foreign, get):
             await client._route_kiosk_api(route)
-            self.assertIsNone(route.fulfilled)
-            self.assertNotIn("x-device-id", route.continued_headers)
-            self.assertNotIn("x-device-secret", route.continued_headers)
+            self.assertEqual(route.fulfilled["status"], 404)
+            self.assertNotIn("qr_input", route.fulfilled["body"])
+            self.assertIsNone(route.continued_headers)  # not forwarded: no server access log
+
+
+class CardPollTests(unittest.IsolatedAsyncioTestCase):
+    async def test_a_slow_reader_poll_does_not_stall_other_kiosk_routes(self):
+        client = manager.ScannerClientManager(valid_config())
+
+        def slow_poll():
+            time.sleep(0.3)  # an HID reader that is slow to answer
+            return True
+
+        client.reader = SimpleNamespace(is_card_inserted=slow_poll)
+        route = FakeHardwareRoute()
+        order = []
+
+        async def poll():
+            await client._card_inserted_safely()
+            order.append("poll")
+
+        async def serve():
+            await asyncio.sleep(0.05)
+            await client._route_kiosk_api(route)
+            order.append("route")
+
+        await asyncio.gather(poll(), serve())
+
+        self.assertEqual(route.fulfilled["status"], 200)
+        self.assertEqual(order, ["route", "poll"])
+
+    async def test_lost_reader_is_dropped_immediately_without_repeating_the_warning(self):
+        client = manager.ScannerClientManager(valid_config(CARD_READER="rfpro"))
+        closed = []
+
+        class Unplugged:
+            def is_card_inserted(self):
+                raise ReaderLostError("gone")
+
+            def close(self):
+                closed.append(True)
+
+        client.reader = Unplugged()
+
+        with self.assertLogs(manager.logger, level="WARNING") as logs:
+            first = await client._card_inserted_safely()
+            second = await client._card_inserted_safely()  # reader is already None
+
+        self.assertEqual((first, second), (False, False))
+        self.assertIsNone(client.reader)
+        self.assertEqual(closed, [True])
+        self.assertEqual(len(logs.output), 1)
+
+
+class ReaderLostDuringReadTests(unittest.IsolatedAsyncioTestCase):
+    async def run_loop_with(self, client, reader):
+        init_calls = []
+
+        async def fake_init_reader():
+            init_calls.append(True)
+            if len(init_calls) == 1:
+                client.reader = reader
+            else:
+                client.running = False
+            return True
+
+        async def no_sleep(_seconds):
+            return None
+
+        with (
+            patch.object(client, "init_reader", new=fake_init_reader),
+            patch.object(asyncio, "sleep", new=no_sleep),
+            self.assertLogs(manager.logger, level="WARNING"),
+        ):
+            await client.card_reading_loop()
+        return init_calls
+
+    async def test_unplugging_mid_read_waits_for_the_reader_instead_of_showing_a_read_error(self):
+        client = manager.ScannerClientManager(valid_config(CARD_READER="rfpro"))
+        client.page = FakePage(client.home_url)
+
+        class UnpluggedWhileReading:
+            closed = False
+
+            def is_card_inserted(self):
+                return True
+
+            def read_citizen_id(self):
+                raise ReaderLostError("gone")
+
+            def close(self):
+                self.closed = True
+
+        reader = UnpluggedWhileReading()
+
+        init_calls = await self.run_loop_with(client, reader)
+
+        self.assertEqual(len(init_calls), 2)  # waited for the hardware again
+        self.assertTrue(reader.closed)
+        self.assertIsNone(client.reader)
+        visited = [urlparse(url).path for url in client.page.evaluated if isinstance(url, str)]
+        self.assertNotIn(client.error_path, visited)  # no "อ่านข้อมูลบัตรไม่สำเร็จ" screen
+        self.assertEqual(urlparse(client.page.url).path, client.home_path)  # not stranded on reading
 
 
 if __name__ == "__main__":

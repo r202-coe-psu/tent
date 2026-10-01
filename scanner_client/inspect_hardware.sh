@@ -336,7 +336,7 @@ PY
     fi
     if [ -n "$qr" ]; then
         ok "ได้รับ ${#qr} ตัวอักษร: ${qr:0:80}"
-        [ -n "${qr_gap:-}" ] && [ "$qr_gap" != "-" ] && info "ช่วงห่างระหว่างตัวอักษรสูงสุด: ${qr_gap} ms (ใช้ตั้ง WEDGE_MAX_GAP_MS)"
+        [ -n "${qr_gap:-}" ] && [ "$qr_gap" != "-" ] && info "ช่วงห่างระหว่างตัวอักษรสูงสุด: ${qr_gap} ms (ใช้ตั้ง KIOSK_QR_READER_MAX_GAP_MS)"
         case "$qr_enter" in
         yes) ok "scanner ส่ง Enter ต่อท้าย" ;;
         no) warn "scanner ไม่ส่ง Enter ต่อท้าย — หน้า kiosk ที่รอ Enter จะไม่รู้ว่าสแกนจบ (ตั้ง suffix CR/Enter ด้วย config barcode ในคู่มือ CROWN)" ;;
@@ -404,7 +404,7 @@ out.write(GS + b"(k\x03\x001E1")                 # error correction M
 out.write(GS + b"(k" + bytes([n & 0xFF, n >> 8]) + b"1P0" + qr)
 out.write(GS + b"(k\x03\x001Q0")
 out.write(b"\n" + ESC + b"a\x00" + b"(no QR above = no native QR; print as image instead)\n")
-out.write(GS + b"VB\x00")                        # feed past the cutter, then cut
+out.write(ESC + b"J\x78" + ESC + b"i")           # feed 15 mm past the cutter, cut (not GS V: black-mark tied)
 PY
             ok "ส่งงานแล้ว — ดูกระดาษ:"
             echo "   1) แถบดำยาวกี่มม. = ความกว้างพิมพ์จริง (~48 มม. = กระดาษ 58, ~72 มม. = กระดาษ 80)"

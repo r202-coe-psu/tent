@@ -11,10 +11,20 @@ from PIL import Image, UnidentifiedImageError
 ESC_INIT = b"\x1b@\x1c."
 # GS v 0 m xL xH yL yH d1..dk — raster bit image, normal density (m = 0).
 GS_RASTER = b"\x1dv0\x00"
-# GS V B 0 — feed to the cutting position, then full cut.
-GS_FEED_CUT = b"\x1dVB\x00"
+# ESC J n — feed n dots (1 dot = 0.125 mm at 203 dpi), n <= 255 per command.
+ESC_FEED = b"\x1bJ"
+# ESC i — full cut right now. The kiosk3 printer's SDK (TxPrnMod TX_PURECUT_FULL) uses this
+# because its GS V cuts are tied to black-mark detection: on plain roll paper GS V B 0 hunted
+# for a mark and fed ~17 cm per label. So the label is fed past the cutter explicitly instead.
+ESC_CUT = b"\x1bi"
+DOTS_PER_MM = 8
+# Print-head-to-cutter distance on kiosk3; PRINTER_CUT_FEED_MM overrides it per printer model.
+DEFAULT_CUT_FEED_MM = 15
 
 THRESHOLD = 128
+# Labels are ~640x480 px. A tiny PNG can still declare a huge canvas (decompression bomb), so
+# the size is checked from the header before any pixel data is decoded.
+MAX_LABEL_PIXELS = 4_000_000
 # Printers with small buffers (GD32 class) drop long raster blocks, so images go out in bands.
 MAX_BAND_ROWS = 255
 
@@ -23,9 +33,17 @@ def _load_ink_mask(png: bytes) -> Image.Image:
     """1-bit-valued 'L' image: 255 where a dot is printed (dark), 0 elsewhere."""
     try:
         with Image.open(io.BytesIO(png)) as source:
+            if source.width * source.height > MAX_LABEL_PIXELS:
+                raise ValueError("label image is too large")
             source.load()
             rgba = source.convert("RGBA")
-    except (UnidentifiedImageError, OSError, SyntaxError, ValueError) as error:
+    except (
+        UnidentifiedImageError,
+        Image.DecompressionBombError,
+        OSError,
+        SyntaxError,
+        ValueError,
+    ) as error:
         raise ValueError("label image is not a readable PNG") from error
     # Transparent pixels must read as paper, not as black.
     page = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
@@ -34,11 +52,25 @@ def _load_ink_mask(png: bytes) -> Image.Image:
     return gray.point(lambda value: 255 if value < THRESHOLD else 0)
 
 
-def label_to_escpos(png: bytes, width_dots: int) -> bytes:
+def feed_and_cut(cut_feed_mm: int) -> bytes:
+    """Feed the last printed row past the cutter, then cut (independent of black-mark mode)."""
+    out = bytearray()
+    dots = cut_feed_mm * DOTS_PER_MM
+    while dots > 0:
+        step = min(dots, 255)
+        out += ESC_FEED + bytes([step])
+        dots -= step
+    return bytes(out + ESC_CUT)
+
+
+def label_to_escpos(
+    png: bytes, width_dots: int, cut_feed_mm: int = DEFAULT_CUT_FEED_MM
+) -> bytes:
     """Render a label PNG as ESC/POS bytes that fit a print head `width_dots` wide.
 
     Blank margins are trimmed, content wider than the head is scaled down (never up) with
-    nearest-neighbour so QR modules stay hard-edged, and the result is centred.
+    nearest-neighbour so QR modules stay hard-edged, and the result is centred. The paper is
+    then fed `cut_feed_mm` (print head to cutter) and cut.
     """
     if width_dots <= 0 or width_dots % 8:
         raise ValueError("width_dots must be a positive multiple of 8")
@@ -67,5 +99,5 @@ def label_to_escpos(png: bytes, width_dots: int) -> bytes:
         out += GS_RASTER
         out += row_bytes.to_bytes(2, "little") + rows.to_bytes(2, "little")
         out += raster[top * row_bytes : (top + rows) * row_bytes]
-    out += GS_FEED_CUT
+    out += feed_and_cut(cut_feed_mm)
     return bytes(out)
