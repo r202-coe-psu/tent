@@ -219,6 +219,54 @@ location /public-api/ {
 ตัวอย่างเต็มสำหรับ compose-nginx อยู่ที่ [`nginx/nginx.conf`](nginx/nginx.conf)
 (`docker-compose.staging.yml` / `docker-compose.production.yml` — proxy ไป `http://fastapi:9000`)
 
+## Edge @ศูนย์ (central ⇄ edge replication, CR-064)
+
+Edge server ที่ศูนย์ replicate กับ central ผ่าน hostname แยก `sync.<domain>` — **ห้ามใช้ domain ของแอป**
+เพราะตอน WAN ขาด LAN DNS ของศูนย์จะชี้ domain แอปมาที่ edge แล้ว job จะ replicate วนเข้าตัวเอง
+คำอธิบายทีละส่วนและลำดับการติดตั้ง: [`poc/couchdb-replication/SETUP.md`](poc/couchdb-replication/SETUP.md)
+
+**Central** — เพิ่ม DNS `sync.<domain>` + cert (`certbot certonly --nginx -d sync.<domain>`) แล้วเพิ่ม server block
+ใน host nginx (stack `*.no-nginx.yml` — CouchDB bind `COUCHDB_BIND_IP:COUCHDB_PORT`):
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name sync.<domain>;
+    ssl_certificate     /etc/letsencrypt/live/sync.<domain>/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/sync.<domain>/privkey.pem;
+    client_max_body_size 64M;                 # replicator _bulk_docs
+
+    location /_utils { return 404; }
+
+    location / {
+        proxy_pass http://127.0.0.1:5984;     # compose-nginx stack: http://127.0.0.1:80 (nginx/sync.conf)
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;                  # continuous _changes
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+}
+```
+
+stack ที่ใช้ compose nginx (`docker-compose.{staging,production}.yml`) มี [`nginx/sync.conf`](nginx/sync.conf)
+รับ `sync.*` อยู่แล้ว — host nginx แค่ส่งต่อไป `127.0.0.1:80` พร้อม `Host` เดิม
+และต้องมี replication user ต่อศูนย์ (`repl_<code>`) ที่เป็น member ของ `registry` / `catalog` / `shelter_<code>`
+
+**Edge** — clone repo บน edge server แล้ว:
+
+```bash
+cp .env.edge.example .env                       # SHELTER_CODE, SYNC_URL, credential
+cp couchdb-edge-example.ini couchdb-edge.ini    # secret ของ edge: openssl rand -hex 16
+docker compose -f docker-compose.edge.yml up -d
+docker logs couch-edge-provision                # scripts/edge-init.sh: DB + _security + replication jobs
+```
+
+[`docker-compose.edge.yml`](docker-compose.edge.yml) = CouchDB + staff SPA + nginx ([`nginx-edge/`](nginx-edge/))
+ไม่มี FastAPI / MongoDB / worker (OD-1) — public plane และ `/external/` ตอบ unavailable ระหว่าง edge-only
+
 ## แหล่งอ้างอิง
 
 - ข้อเสนอโครงการฉบับสมบูรณ์: [docs/source/psu-smart-shelter-f-20260522.txt](docs/source/psu-smart-shelter-f-20260522.txt)

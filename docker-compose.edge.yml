@@ -1,0 +1,134 @@
+# Edge appliance @ศูนย์ (CR-064 OD-1): CouchDB + nginx `/couch` + staff SPA (Node)
+# — ไม่มี FastAPI / MongoDB / sync worker / import worker (public plane อยู่ที่ central เท่านั้น)
+#
+# ตั้งต้นจาก docker-compose.production.yml; คำอธิบายแต่ละส่วน: poc/couchdb-replication/SETUP.md §4
+# บน edge server (clone repo นี้):
+#   cp .env.edge.example .env && cp couchdb-edge-example.ini couchdb-edge.ini   # แล้วแก้ค่า
+#   docker compose -f docker-compose.edge.yml up -d
+
+name: tent-edge
+
+services:
+  couchdb:
+    # ชื่อนี้ใช้ในคำสั่งทดสอบของ poc/couchdb-replication/README.md §5 (wan_down, T9, T10)
+    container_name: couch-edge
+    image: couchdb:3.5 # ต้องตรงกับ central — edge ตรวจรหัสผ่านจาก hash ที่ replicate มา
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    environment:
+      COUCHDB_USER: ${COUCHDB_USER:?COUCHDB_USER is required}
+      COUCHDB_PASSWORD: ${COUCHDB_PASSWORD:?COUCHDB_PASSWORD is required}
+    volumes:
+      - ${EDGE_COUCHDB_DATA:-../deployment/tent-edge/couchdb/data}:/opt/couchdb/data
+      # secret + replicator TLS ของ edge เอง — ห้ามใช้ couchdb-session.ini ของ central
+      - ./couchdb-edge.ini:/opt/couchdb/etc/local.d/session.ini
+    ports:
+      # admin / debug จาก shell ของ edge server เท่านั้น — staff เข้าผ่าน nginx /couch
+      - "127.0.0.1:${EDGE_COUCHDB_PORT:-5984}:5984"
+    # POC T9: จำลอง LAN DNS ที่ cutover domain ของแอปมาที่ edge
+    # extra_hosts:
+    #   - "app.example.com:${EDGE_LAN_IP}"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5984/_up"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  # Creates system DBs (_users, _replicator). Idempotent — เหมือน production
+  couchdb-init:
+    container_name: couch-edge-init
+    image: curlimages/curl:latest
+    depends_on:
+      couchdb:
+        condition: service_healthy
+    environment:
+      COUCHDB_USER: ${COUCHDB_USER}
+      COUCHDB_PASSWORD: ${COUCHDB_PASSWORD}
+    restart: "no"
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        CODE=$$(curl -s -o /tmp/couch-init.out -w '%{http_code}' -X POST \
+          "http://$${COUCHDB_USER}:$${COUCHDB_PASSWORD}@couchdb:5984/_cluster_setup" \
+          -H "Content-Type: application/json" \
+          -d "{\"action\":\"enable_single_node\",\"bind_address\":\"0.0.0.0\",\"username\":\"$${COUCHDB_USER}\",\"password\":\"$${COUCHDB_PASSWORD}\",\"port\":5984}")
+        cat /tmp/couch-init.out || true
+        case "$$CODE" in
+          200|201) echo "CouchDB single-node setup OK" ;;
+          400|409) echo "CouchDB already set up (HTTP $$CODE) — skipping" ;;
+          *) echo "CouchDB cluster setup failed (HTTP $$CODE)"; exit 1 ;;
+        esac
+
+  # DB ของศูนย์ + _security + guard read-only + _replicator jobs (scripts/edge-init.sh). Idempotent
+  edge-init:
+    container_name: couch-edge-provision
+    image: curlimages/curl:latest
+    depends_on:
+      couchdb-init:
+        condition: service_completed_successfully
+    environment:
+      COUCHDB_USER: ${COUCHDB_USER}
+      COUCHDB_PASSWORD: ${COUCHDB_PASSWORD}
+      SHELTER_CODE: ${SHELTER_CODE:?SHELTER_CODE is required}
+      SYNC_URL: ${SYNC_URL:?SYNC_URL is required}
+      CENTRAL_REPL_USER: ${CENTRAL_REPL_USER:?CENTRAL_REPL_USER is required}
+      CENTRAL_REPL_PASSWORD: ${CENTRAL_REPL_PASSWORD:?CENTRAL_REPL_PASSWORD is required}
+      CENTRAL_USERS_REPL_USER: ${CENTRAL_USERS_REPL_USER:-}
+      CENTRAL_USERS_REPL_PASSWORD: ${CENTRAL_USERS_REPL_PASSWORD:-}
+    volumes:
+      - ./scripts/edge-init.sh:/edge-init.sh:ro
+    entrypoint: ["sh", "/edge-init.sh"]
+    restart: "no"
+
+  frontend:
+    container_name: tent-frontend-edge
+    image: ${FRONTEND_IMAGE:-tent/frontend:latest}
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        PUBLIC_APP_TITLE: ${PUBLIC_APP_TITLE:-Tent}
+        # domain เดียวกับ central — cutover ทำที่ DNS (CR-064 OD-2)
+        PUBLIC_COUCHDB_URL: ${PUBLIC_ORIGIN:-http://localhost}
+        PUBLIC_COUCH_PROXY: /couch
+        PUBLIC_RECAPTCHA_SITE_KEY: ${PUBLIC_RECAPTCHA_SITE_KEY:-}
+    environment:
+      ORIGIN: ${PUBLIC_ORIGIN:-http://localhost}
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
+      # Server-only — ชี้ CouchDB ของ edge เอง
+      COUCHDB_ADMIN_URL: http://${COUCHDB_USER}:${COUCHDB_PASSWORD}@couchdb:5984
+      # ไม่ตั้ง FASTAPI_INTERNAL_URL / EXTERNAL_API_SECRET / COUCHDB_PUBLIC_WRITER_URL /
+      # SHELTER_IMPORT_WORKER_TOKEN / OAuth — public plane, import และ step-up MFA เป็นงานของ central
+      # (route เหล่านั้นจะ fail ตอนเรียก ซึ่งตรงกับ degraded mode ของ CR-064)
+    depends_on:
+      couchdb:
+        condition: service_healthy
+      couchdb-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    restart: unless-stopped
+
+  nginx:
+    container_name: tent-nginx-edge
+    image: nginx:alpine
+    ports:
+      # IP ฝั่ง LAN ของ server B — ห้ามเปิดออก WAN
+      - "${EDGE_LAN_IP:-127.0.0.1}:${EDGE_HTTP_PORT:-80}:80"
+    volumes:
+      # แยกจาก ./nginx เพราะ nginx.conf proxy /external/ → fastapi ซึ่งไม่มีที่ edge (nginx จะ start ไม่ขึ้น)
+      - ./nginx-edge:/etc/nginx/conf.d:ro
+    depends_on:
+      - frontend
+      - couchdb
+    restart: unless-stopped
