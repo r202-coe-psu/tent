@@ -9,7 +9,9 @@
 # Usage: sudo ./inspect_hardware.sh [options]
 #   --probe-printer  ยิงคำสั่ง ESC/POS ไปที่ serial (ttyS/ttyUSB/ttyACM) ทุก baud ที่ใช้บ่อย + /dev/lp*
 #                    → ถามสถานะ (DLE EOT 1) และ "พิมพ์กระดาษทดสอบ" (ข้อความบอกพอร์ต/baud ที่ถูก)
-#   --qr             รอให้ยิง QR 1 ครั้ง (15 วิ) เพื่อทดสอบโหมด keyboard wedge — ต้องรันบนจอ kiosk
+#   --qr             รอให้ยิง QR 1 ครั้ง (15 วิ) — อ่านจาก hidraw ของ CROWN (ใช้ผ่าน SSH ได้) + บอกว่ามี Enter ต่อท้ายไหม
+#   --test-printer   พิมพ์หน้าทดสอบ ESC/POS ที่ printer USB ในตู้: ภาพ raster (วิธีเดียวกับที่ระบบจะใช้),
+#                    ไม้บรรทัดวัดความกว้างกระดาษ, QR แบบ native (GS ( k) แล้วตัดกระดาษ
 #   --no-network     ข้ามการตรวจเน็ต/SSL ไป GitHub
 #   --out FILE       ที่เก็บ report (default: /tmp/kiosk-hw-<hostname>-<เวลา>.txt)
 # ==============================================================================
@@ -30,6 +32,7 @@ section() { echo -e "\n${BOLD}━━━ $* ━━━${NC}"; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
 PROBE_PRINTER=false
+TEST_PRINTER=false
 TEST_QR=false
 CHECK_NET=true
 REPORT="/tmp/kiosk-hw-$(hostname)-$(date +%Y%m%d-%H%M%S).txt"
@@ -38,9 +41,10 @@ while [ $# -gt 0 ]; do
     case "$1" in
     --probe-printer) PROBE_PRINTER=true; shift ;;
     --qr) TEST_QR=true; shift ;;
+    --test-printer) TEST_PRINTER=true; shift ;;
     --no-network) CHECK_NET=false; shift ;;
     --out) REPORT="${2:?--out ต้องมีชื่อไฟล์}"; shift 2 ;;
-    -h | --help) sed -n '2,16p' "$0"; exit 0 ;;
+    -h | --help) sed -n '2,18p' "$0"; exit 0 ;;
     *) bad "ไม่รู้จัก option: $1 (ดู --help)"; exit 1 ;;
     esac
 done
@@ -270,16 +274,144 @@ fi
 # ------------------------------------------------------------------------------
 if $TEST_QR; then
     section "ทดสอบ QR reader"
-    info "ยิง QR ใส่เครื่องอ่านภายใน 15 วินาที (หน้าต่าง terminal นี้ต้องมี focus)..."
-    if read -r -t 15 qr </dev/tty; then
+    # Prefer the reader's hidraw node: no terminal focus needed (works over SSH) and it shows
+    # whether the scanner appends Enter. Falls back to reading the keyboard-wedge text from the tty.
+    qr_hidraw=""
+    for h in /sys/class/hidraw/hidraw*; do
+        if grep -qi "^HID_ID=0003:0000${CROWN_QR_ID%%:*}:0000${CROWN_QR_ID##*:}$" "$h/device/uevent" 2>/dev/null; then
+            qr_hidraw="/dev/$(basename "$h")"
+            break
+        fi
+    done
+    if [ -n "$qr_hidraw" ] && $IS_ROOT && have python3; then
+        info "ยิง QR ภายใน 15 วินาที (อ่านจาก $qr_hidraw — ไม่ต้องมี focus)..."
+        qr_out="$(python3 - "$qr_hidraw" <<'PY'
+import os, select, sys, time
+
+# USB HID keyboard usage IDs → US layout (what a keyboard-wedge scanner emits).
+lo = "abcdefghijklmnopqrstuvwxyz1234567890"
+up = "ABCDEFGHIJKLMNOPQRSTUVWXYZ!@#$%^&*()"
+sp = {44: " ", 45: "-", 46: "=", 47: "[", 48: "]", 49: "\\", 51: ";", 52: "'", 53: "`", 54: ",", 55: ".", 56: "/"}
+ss = {44: " ", 45: "_", 46: "+", 47: "{", 48: "}", 49: "|", 51: ":", 52: '"', 53: "~", 54: "<", 55: ">", 56: "?"}
+fd = os.open(sys.argv[1], os.O_RDONLY)
+out, got, enter = [], False, "no"
+deadline = time.monotonic() + 15
+while (left := deadline - time.monotonic()) > 0:
+    # After the first key, 0.5 s of silence ends the scan (covers scanners with no Enter suffix).
+    ready, _, _ = select.select([fd], [], [], min(left, 0.5) if got else left)
+    if not ready:
+        if got:
+            break
+        continue
+    rep = os.read(fd, 64)
+    if len(rep) < 3 or rep[2] == 0:
+        continue
+    got = True
+    shift = bool(rep[0] & 0x22)
+    key = rep[2]
+    if key in (40, 88):  # Enter / keypad Enter
+        enter = "yes"
+        break
+    if 4 <= key <= 39:
+        out.append((up if shift else lo)[key - 4])
+    elif key in sp:
+        out.append((ss if shift else sp)[key])
+    else:
+        out.append(f"<{key:02x}>")
+print(f"{enter}\t{''.join(out)}")
+PY
+)"
+        qr_enter="${qr_out%%$'\t'*}"
+        qr="${qr_out#*$'\t'}"
+    else
+        info "ยิง QR ภายใน 15 วินาที (หน้าต่าง terminal นี้ต้องมี focus)..."
+        qr=""
+        qr_enter="unknown"
+        # read keeps partial input on timeout — that is the "no Enter suffix" case.
+        if read -r -t 15 qr </dev/tty; then qr_enter="yes"; elif [ -n "$qr" ]; then qr_enter="no"; fi
+    fi
+    if [ -n "$qr" ]; then
         ok "ได้รับ ${#qr} ตัวอักษร: ${qr:0:80}"
+        case "$qr_enter" in
+        yes) ok "scanner ส่ง Enter ต่อท้าย" ;;
+        no) warn "scanner ไม่ส่ง Enter ต่อท้าย — หน้า kiosk ที่รอ Enter จะไม่รู้ว่าสแกนจบ (ตั้ง suffix CR/Enter ด้วย config barcode ในคู่มือ CROWN)" ;;
+        esac
+        [[ "$qr" == *"<"*">"* ]] && warn "มี key code ที่แปลงไม่ได้ (<xx>) — อาจเป็นอักษรนอก US layout"
         FOUND_QR="${FOUND_QR:-keyboard wedge (ไม่รู้ VID:PID)}"
     else
-        bad "ไม่ได้รับข้อมูล — reader อาจไม่ได้อยู่โหมด keyboard หรือ terminal ไม่มี focus"
+        bad "ไม่ได้รับข้อมูลภายใน 15 วินาที"
     fi
 fi
 
 # ------------------------------------------------------------------------------
+if $TEST_PRINTER; then
+    section "ทดสอบ printer ESC/POS (raster + QR + ตัดกระดาษ)"
+    # usbmisc lpN → its USB device's VID:PID; picks the kiosk's built-in printer, not any USB printer.
+    esc_dev=""
+    for l in /sys/class/usbmisc/lp*; do
+        [ -e "$l/device/../idVendor" ] || continue
+        if [ "$(cat "$l/device/../idVendor"):$(cat "$l/device/../idProduct")" = "$KIOSK_ESCPOS_ID" ]; then
+            esc_dev="/dev/usb/$(basename "$l")"
+            break
+        fi
+    done
+    if ! $IS_ROOT; then
+        bad "ต้องรันด้วย sudo — ข้าม"
+    elif [ -z "$esc_dev" ]; then
+        bad "ไม่พบ printer $KIOSK_ESCPOS_ID — เปิด printer แล้วลองใหม่"
+    elif ! have python3; then
+        bad "ไม่มี python3 — ข้าม"
+    else
+        info "พิมพ์หน้าทดสอบไปที่ $esc_dev ..."
+        if python3 - <<'PY' | timeout 10 tee "$esc_dev" >/dev/null; then
+import sys
+
+out = sys.stdout.buffer
+ESC, GS = b"\x1b", b"\x1d"
+
+def raster(width_dots: int, rows: list[bytes]) -> bytes:
+    # GS v 0: 1-bit raster, MSB = leftmost dot — the same command an image backend would send.
+    w = width_dots // 8
+    return GS + b"v0\x00" + bytes([w & 0xFF, w >> 8, len(rows) & 0xFF, len(rows) >> 8]) + b"".join(rows)
+
+def row(width_dots: int, black) -> bytes:
+    data = bytearray(width_dots // 8)
+    for x in range(width_dots):
+        if black(x):
+            data[x // 8] |= 0x80 >> (x % 8)
+    return bytes(data)
+
+W = 576  # 80 mm paper @ 203 dpi; a 58 mm head prints only the first 384 dots (or wraps)
+bar = [row(W, lambda x: True)] * 24
+ruler = [row(W, lambda x: x % 64 < 3 or 380 <= x < 388)] * 48
+
+qr = b"evacuee:TEST-0001"
+n = len(qr) + 3
+out.write(ESC + b"@" + ESC + b"a\x00")
+out.write(b"TENT kiosk printer test\n1) Width ruler: tick = 8 mm, thick tick = 48 mm\n")
+out.write(raster(W, bar + ruler))
+out.write(b"\nBar length = printable width (58mm paper ~48mm, 80mm ~72mm)\n\n")
+out.write(b"2) Native QR (GS ( k) - should scan as evacuee:TEST-0001\n")
+out.write(ESC + b"a\x01")
+out.write(GS + b"(k\x04\x001A2\x00")             # model 2
+out.write(GS + b"(k\x03\x001C\x06")              # module size 6 dots
+out.write(GS + b"(k\x03\x001E1")                 # error correction M
+out.write(GS + b"(k" + bytes([n & 0xFF, n >> 8]) + b"1P0" + qr)
+out.write(GS + b"(k\x03\x001Q0")
+out.write(b"\n" + ESC + b"a\x00" + b"(no QR above = no native QR; print as image instead)\n")
+out.write(GS + b"VB\x00")                        # feed past the cutter, then cut
+PY
+            ok "ส่งงานแล้ว — ดูกระดาษ:"
+            echo "   1) แถบดำยาวกี่มม. = ความกว้างพิมพ์จริง (~48 มม. = กระดาษ 58, ~72 มม. = กระดาษ 80)"
+            echo "      ถ้าแถบขาดเป็นสองบรรทัด/ภาพเพี้ยน = หัวพิมพ์แคบกว่า 576 dots (กระดาษ 58 มม.)"
+            echo "   2) มี QR ไหม + ยิงด้วย CROWN ได้ evacuee:TEST-0001 ไหม"
+            echo "   3) ตัดกระดาษหลังข้อความสุดท้ายโดยไม่ตัดข้อความ"
+        else
+            bad "ส่งงานไป $esc_dev ไม่สำเร็จ/timeout"
+        fi
+    fi
+fi
+
 if $PROBE_PRINTER; then
     section "Probe printer (ESC/POS)"
     if ! $IS_ROOT; then
