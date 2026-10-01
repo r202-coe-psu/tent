@@ -211,7 +211,9 @@
 
 			<form onsubmit={handleSubmit} class="mt-4 space-y-4">
 				<div class="space-y-1.5">
-					<Label for="gas-name" class="text-sm font-semibold text-slate-700">ชื่อประเภทเตา/แก๊ส</Label>
+					<Label for="gas-name" class="text-sm font-semibold text-slate-700"
+						>ชื่อประเภทเตา/แก๊ส</Label
+					>
 					<Input
 						id="gas-name"
 						placeholder="เช่น เตาแก๊สแรงดันสูง + ถัง 15kg"
@@ -405,10 +407,10 @@
 										</div>
 									</Table.Cell>
 									<Table.Cell class="text-right tabular-nums">{g.capacity_kg} kg</Table.Cell>
-									<Table.Cell class="text-right tabular-nums text-sky-700"
+									<Table.Cell class="text-right text-sky-700 tabular-nums"
 										>{g.burn_rate_kg_per_hour} kg/ชม.</Table.Cell
 									>
-									<Table.Cell class="text-right tabular-nums text-orange-700"
+									<Table.Cell class="text-right text-orange-700 tabular-nums"
 										>x{g.time_multiplier}</Table.Cell
 									>
 									<Table.Cell>
@@ -417,7 +419,8 @@
 										>
 									</Table.Cell>
 									<Table.Cell class="text-right tabular-nums">{used} kg</Table.Cell>
-									<Table.Cell class="text-right font-medium tabular-nums">{remaining} kg</Table.Cell>
+									<Table.Cell class="text-right font-medium tabular-nums">{remaining} kg</Table.Cell
+									>
 									<Table.Cell class="text-right">
 										<div class="flex justify-end gap-1.5">
 											<button
@@ -510,8 +513,11 @@
 					</div>
 				</div>
 				<Dialog.Footer class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-					<Button type="button" variant="outline" class="min-h-11 w-full sm:w-auto" onclick={closeEdit}
-						>ยกเลิก</Button
+					<Button
+						type="button"
+						variant="outline"
+						class="min-h-11 w-full sm:w-auto"
+						onclick={closeEdit}>ยกเลิก</Button
 					>
 					<Button
 						class="min-h-11 w-full sm:w-auto"
@@ -546,8 +552,11 @@
 					/>
 				</div>
 				<Dialog.Footer class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-					<Button type="button" variant="outline" class="min-h-11 w-full sm:w-auto" onclick={closeRefill}
-						>ยกเลิก</Button
+					<Button
+						type="button"
+						variant="outline"
+						class="min-h-11 w-full sm:w-auto"
+						onclick={closeRefill}>ยกเลิก</Button
 					>
 					<Button
 						class="min-h-11 w-full sm:w-auto"

@@ -1,7 +1,12 @@
 <script lang="ts">
 	import BackofficeNavbar from '$lib/components/backoffice-navbar.svelte';
 	import type { LayoutProps } from './$types';
-	import { backofficeNavbarGroups, isGroup } from '$lib/components/backoffice-navbar/static';
+	import {
+		backofficeNavbarGroups,
+		isGroup,
+		type BackofficeNavbarNode,
+		type BackofficeNavbarLeaf
+	} from '$lib/components/backoffice-navbar/static';
 	import { page } from '$app/state';
 	import { backofficeState } from '$lib/stores/backoffice.svelte';
 	import { endpointStore } from '$lib/stores/endpoint.svelte';
@@ -14,6 +19,22 @@
 	let { children }: LayoutProps = $props();
 	let reauthOpen = $state(false);
 
+	function findMatchingLeaf(
+		node: BackofficeNavbarNode,
+		currentPath: string
+	): BackofficeNavbarLeaf | null {
+		if (isGroup(node)) {
+			for (const child of node.children) {
+				const match = findMatchingLeaf(child, currentPath);
+				if (match) return match;
+			}
+			return null;
+		}
+		if (node.href && currentPath.startsWith(node.href)) {
+			return node;
+		}
+		return null;
+	}
 	// Find the current page info (label, icon) dynamically
 	const currentPageNode = $derived.by(() => {
 		let currentPath = page.url.pathname;
@@ -22,17 +43,8 @@
 		}
 		for (const group of backofficeNavbarGroups) {
 			for (const item of group.items) {
-				if (isGroup(item)) {
-					for (const child of item.children) {
-						if (child.href && currentPath.startsWith(child.href)) {
-							return child;
-						}
-					}
-				} else {
-					if (item.href && currentPath.startsWith(item.href)) {
-						return item;
-					}
-				}
+				const match = findMatchingLeaf(item, currentPath);
+				if (match) return match;
 			}
 		}
 		return null;
@@ -71,7 +83,7 @@
 	<div class="flex w-full min-w-0 flex-1 flex-col">
 		<!-- Sticky under mobile hamburger bar (< lg); flush top when sidebar is visible -->
 		<header
-			class="sticky z-30 flex shrink-0 flex-col border-b border-sidebar-border bg-card top-[var(--bo-mobile-nav-height)] lg:top-0"
+			class="sticky top-[var(--bo-mobile-nav-height)] z-30 flex shrink-0 flex-col border-b border-sidebar-border bg-card lg:top-0"
 		>
 			<div class="flex h-16 min-h-16 items-center gap-2 px-4 sm:px-6">
 				<PageIcon class="size-4 shrink-0 text-primary" />

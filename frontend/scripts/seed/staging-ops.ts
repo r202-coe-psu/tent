@@ -5,7 +5,8 @@ import type { AuthorContext } from '$lib/db/model';
 import {
 	createCampaign,
 	createStockLedger,
-	createWalkInDonation
+	createWalkInDonation,
+	createLegacyFlow2StockLedger
 } from '$lib/features/operations/domain/operations';
 import { shelterDbName } from '$lib/server/shelter-access-design';
 import { prefixRangeEnd } from '../t31-seed-support';
@@ -45,7 +46,7 @@ export async function seedStagingOps(): Promise<void> {
 		// manual receive writes. `receive` now requires a meal_service / requisition /
 		// distribution_log / bulk_return_pool ref (CR-121) and would be refused.
 		const stockEntries = [
-			createStockLedger(
+			createLegacyFlow2StockLedger(
 				{
 					item_id: ITEM.rice,
 					qty: scale(code, 500, 300, 150),
@@ -55,7 +56,7 @@ export async function seedStagingOps(): Promise<void> {
 				},
 				ctx
 			),
-			createStockLedger(
+			createLegacyFlow2StockLedger(
 				{
 					item_id: ITEM.water,
 					qty: scale(code, 1200, 800, 400),
@@ -65,7 +66,7 @@ export async function seedStagingOps(): Promise<void> {
 				},
 				ctx
 			),
-			createStockLedger(
+			createLegacyFlow2StockLedger(
 				{
 					item_id: ITEM.paracetamol,
 					qty: '2000',
@@ -79,7 +80,7 @@ export async function seedStagingOps(): Promise<void> {
 				{ item_id: ITEM.soap, qty: '300', unit: 'bar', reason: 'adjust', ref_id: null },
 				ctx
 			),
-			createStockLedger(
+			createLegacyFlow2StockLedger(
 				{
 					item_id: ITEM.blanket,
 					qty: scale(code, 200, 120, 60),
