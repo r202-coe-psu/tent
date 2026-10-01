@@ -122,7 +122,7 @@ async function returnPhysical(
 		.getByText(item.name, { exact: true })
 		.locator('xpath=ancestor::div[contains(@class, "rounded-xl")][1]');
 	await expect(loanCard).toBeVisible();
-	await loanCard.getByRole('button', { name: /รับคืนของจริง/ }).click();
+	await loanCard.getByRole('button', { name: 'รับคืนจากผู้ยืม' }).click();
 	const dialog = page.getByRole('dialog', { name: /ตรวจรับคืนพัสดุเข้าคลัง/ });
 	await dialog.getByLabel(/จำนวนที่ตรวจรับคืนครั้งนี้/).fill(quantity);
 	await dialog.getByRole('button', { name: /ยืนยันตรวจรับคืนเข้าคลัง/ }).click();
