@@ -1,10 +1,15 @@
 import asyncio
+import io
+import os
+import tempfile
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 from unittest.mock import patch
 
 from app import manager
+from app.escpos import label_to_escpos
 
 
 class FakeResponse:
@@ -613,6 +618,224 @@ class KioskPrintRouteTests(unittest.IsolatedAsyncioTestCase):
         await client._route_kiosk_api(route)
         self.assertIsNone(route.fulfilled)
         self.assertNotIn("x-device-id", route.continued_headers)
+
+
+def real_png():
+    from PIL import Image
+
+    image = Image.new("RGB", (200, 80), "white")
+    image.paste("black", (10, 10, 190, 70))
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+class EscposPrintRouteTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def fake_usb_printers(self, *printers):
+        """Build a fake /sys/class/usbmisc + /dev/usb; printers = (name, 'vid:pid')."""
+        sysfs, dev = self.root / "usbmisc", self.root / "dev-usb"
+        sysfs.mkdir(exist_ok=True)
+        dev.mkdir(exist_ok=True)
+        for name, usb_id in printers:
+            usb_device = self.root / "usb" / name
+            interface = usb_device / "1-2:1.0"
+            interface.mkdir(parents=True)
+            vendor, product = usb_id.split(":")
+            (usb_device / "idVendor").write_text(vendor + "\n")
+            (usb_device / "idProduct").write_text(product + "\n")
+            (sysfs / name).mkdir()
+            os.symlink(interface, sysfs / name / "device")
+            (dev / name).touch()
+        return sysfs, dev
+
+    def client(self, **overrides):
+        config = {"PRINTER_BACKEND": "escpos", "DEBUG": "false", **overrides}
+        return manager.ScannerClientManager(valid_config(**config))
+
+    async def print_with(self, client, sysfs, dev, body):
+        route = FakePrintRoute(body=body)
+
+        async def no_lp(*_args, **_kwargs):
+            raise AssertionError("lp must not run for the escpos backend")
+
+        with (
+            patch.object(manager, "USBMISC_SYSFS", sysfs),
+            patch.object(manager, "USB_DEV_DIR", dev),
+            patch.object(manager.asyncio, "create_subprocess_exec", new=no_lp),
+        ):
+            await client._route_kiosk_api(route)
+        return route
+
+    async def test_finds_the_printer_by_usb_id_among_other_lp_devices(self):
+        sysfs, dev = self.fake_usb_printers(("lp0", "03f0:1234"), ("lp3", "28e9:5812"))
+        client = self.client(PRINTER_USB_ID="28e9:5812")
+
+        route = await self.print_with(client, sysfs, dev, labels_body(real_png(), real_png()))
+
+        self.assertEqual(route.fulfilled, {"status": 200, "body": {"printed": 2}})
+        # A regular file stands in for the device, so the 2nd label overwrites the 1st at offset 0.
+        self.assertEqual((dev / "lp3").read_bytes(), label_to_escpos(real_png(), 576))
+        self.assertEqual((dev / "lp0").read_bytes(), b"")
+
+    async def test_lookup_is_repeated_per_label_so_replug_does_not_need_a_restart(self):
+        sysfs, dev = self.fake_usb_printers(("lp3", "28e9:5812"))
+        client = self.client(PRINTER_USB_ID="28e9:5812")
+        await self.print_with(client, sysfs, dev, labels_body(real_png()))
+
+        # Replug: the same printer now enumerates as lp5.
+        (sysfs / "lp3" / "device").unlink()
+        (sysfs / "lp3").rmdir()
+        self.fake_usb_printers(("lp5", "28e9:5812"))
+        route = await self.print_with(client, sysfs, dev, labels_body(real_png()))
+
+        self.assertEqual(route.fulfilled["status"], 200)
+        self.assertGreater((dev / "lp5").stat().st_size, 0)
+
+    async def test_missing_printer_returns_print_failed_and_logs_no_label_content(self):
+        sysfs, dev = self.fake_usb_printers(("lp0", "03f0:1234"))
+        client = self.client(PRINTER_USB_ID="28e9:5812")
+
+        with self.assertLogs(manager.logger, level="ERROR") as logs:
+            route = await self.print_with(client, sysfs, dev, labels_body(real_png()))
+
+        self.assertEqual(route.fulfilled["status"], 502)
+        self.assertEqual(route.fulfilled["body"]["printed"], 0)
+        self.assertEqual(route.fulfilled["body"]["error"]["code"], "PRINT_FAILED")
+        self.assertTrue(any("not found" in line for line in logs.output))
+
+    async def test_explicit_device_path_overrides_usb_id_lookup(self):
+        sysfs, dev = self.fake_usb_printers()
+        target = self.root / "printer.bin"
+        target.touch()
+        client = self.client(PRINTER_DEVICE=str(target), PRINTER_USB_ID="28e9:5812")
+
+        route = await self.print_with(client, sysfs, dev, labels_body(real_png()))
+
+        self.assertEqual(route.fulfilled["status"], 200)
+        self.assertGreater(target.stat().st_size, 0)
+
+    async def test_unusable_device_path_and_unconvertible_label_fail_with_printed_count(self):
+        sysfs, dev = self.fake_usb_printers()
+        cases = {
+            "device path missing": (str(self.root / "nope"), labels_body(real_png())),
+            # Passes the route's PNG-signature check but cannot be decoded.
+            "label not decodable": (str(self.root / "ok.bin"), labels_body(PNG)),
+        }
+        (self.root / "ok.bin").touch()
+        for name, (device, body) in cases.items():
+            with self.subTest(name=name):
+                client = self.client(PRINTER_DEVICE=device)
+                with self.assertLogs(manager.logger, level="ERROR"):
+                    route = await self.print_with(client, sysfs, dev, body)
+                self.assertEqual(route.fulfilled["status"], 502)
+                self.assertEqual(route.fulfilled["body"]["printed"], 0)
+
+    async def test_permission_error_tells_the_operator_to_join_group_lp(self):
+        sysfs, dev = self.fake_usb_printers(("lp3", "28e9:5812"))
+        client = self.client(PRINTER_USB_ID="28e9:5812")
+
+        with (
+            patch.object(manager.os, "open", side_effect=PermissionError),
+            self.assertLogs(manager.logger, level="ERROR") as logs,
+        ):
+            route = await self.print_with(client, sysfs, dev, labels_body(real_png()))
+
+        self.assertEqual(route.fulfilled["status"], 502)
+        self.assertTrue(any("group lp" in line for line in logs.output))
+
+    async def test_default_backend_still_spools_through_lp(self):
+        client = manager.ScannerClientManager(valid_config(DEBUG="false"))
+        route = FakePrintRoute(body=labels_body(PNG))
+        calls = []
+
+        async def fake_exec(*args, **_kwargs):
+            calls.append(args)
+            return FakeLpProcess()
+
+        with patch.object(manager.asyncio, "create_subprocess_exec", new=fake_exec):
+            await client._route_kiosk_api(route)
+
+        self.assertEqual(route.fulfilled["status"], 200)
+        self.assertEqual(calls[0][:3], ("lp", "-d", "tent_xprinter"))
+
+    async def test_label_files_are_not_left_on_disk(self):
+        sysfs, dev = self.fake_usb_printers(("lp3", "28e9:5812"))
+        client = self.client(PRINTER_USB_ID="28e9:5812")
+        before = set(self.root.rglob("*"))
+
+        await self.print_with(client, sysfs, dev, labels_body(real_png()))
+
+        self.assertEqual(set(self.root.rglob("*")), before)
+
+
+class FakeHardwareRoute(FakePrintRoute):
+    def __init__(self, **kwargs):
+        super().__init__(url="https://tent.example.go.th/api/v1/scanner/kiosk/hardware", **kwargs)
+
+
+class KioskHardwareRouteTests(unittest.IsolatedAsyncioTestCase):
+    async def test_answers_locally_with_the_machine_settings_and_no_credentials(self):
+        client = manager.ScannerClientManager(
+            valid_config(
+                KIOSK_QR_INPUT="both",
+                KIOSK_CAMERA_LABEL="JSK-RGB",
+                KIOSK_QR_READER_MAX_GAP_MS="40",
+            )
+        )
+        route = FakeHardwareRoute()
+
+        await client._route_kiosk_api(route)
+
+        self.assertIsNone(route.continued_headers)  # never forwarded to the server
+        self.assertEqual(route.fulfilled["status"], 200)
+        self.assertEqual(
+            route.fulfilled["body"],
+            {"qr_input": "both", "camera_label": "JSK-RGB", "reader_max_gap_ms": 40},
+        )
+        body = manager.json.dumps(route.fulfilled["body"])
+        self.assertNotIn(client.device_id, body)
+        self.assertNotIn(client.device_secret, body)
+
+    async def test_unconfigured_machine_reports_the_camera_default(self):
+        route = FakeHardwareRoute()
+
+        await manager.ScannerClientManager(valid_config())._route_kiosk_api(route)
+
+        self.assertEqual(
+            route.fulfilled["body"],
+            {"qr_input": "camera", "camera_label": None, "reader_max_gap_ms": 50},
+        )
+
+    async def test_response_is_not_cacheable(self):
+        client = manager.ScannerClientManager(valid_config())
+        captured = {}
+
+        class CapturingRoute(FakeHardwareRoute):
+            async def fulfill(self, *, status, content_type, headers, body):
+                captured.update(headers=headers, content_type=content_type)
+                await super().fulfill(status=status, content_type=content_type, headers=headers, body=body)
+
+        await client._route_kiosk_api(CapturingRoute())
+
+        self.assertEqual(captured["headers"]["cache-control"], "no-store")
+        self.assertEqual(captured["content_type"], "application/json")
+
+    async def test_foreign_origin_or_get_is_not_answered_and_gets_no_credentials(self):
+        client = manager.ScannerClientManager(valid_config())
+        foreign = FakeHardwareRoute(origin="https://attacker.example")
+        get = FakeHardwareRoute()
+        get.request.method = "GET"
+
+        for route in (foreign, get):
+            await client._route_kiosk_api(route)
+            self.assertIsNone(route.fulfilled)
+            self.assertNotIn("x-device-id", route.continued_headers)
+            self.assertNotIn("x-device-secret", route.continued_headers)
 
 
 if __name__ == "__main__":

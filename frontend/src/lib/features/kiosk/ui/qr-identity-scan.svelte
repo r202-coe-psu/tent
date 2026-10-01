@@ -6,10 +6,14 @@
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import CameraOff from '@lucide/svelte/icons/camera-off';
+	import ScanQrCode from '@lucide/svelte/icons/scan-qr-code';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import KioskCheckInWizard from './kiosk-check-in-wizard.svelte';
 	import type { GateInput } from '../data/kiosk-check-in.api';
+	import { fetchKioskHardware, type KioskHardware } from '../data/kiosk-hardware.api';
+	import { selectCameraId } from '../domain/kiosk-camera';
+	import { createKeyboardWedge } from '../domain/keyboard-wedge';
 	import KioskPreRegisteredCheckIn from './kiosk-pre-registered-check-in.svelte';
 	import { KioskIdleTimeout, KIOSK_IDLE_TIMEOUT_MS } from './kiosk-idle-timeout.svelte.js';
 
@@ -24,6 +28,14 @@
 	let scanNotice = $state('');
 	let cameraAttempt = $state(0);
 	let lastScanTime = 0;
+	// Null until the scanner client has answered: the camera must not open before we know
+	// whether this machine reads QR codes with it, a USB reader, or both.
+	let hardware = $state<KioskHardware | null>(null);
+	const cameraEnabled = $derived(hardware !== null && hardware.qrInput !== 'reader');
+	const readerOnly = $derived(hardware?.qrInput === 'reader');
+	const wedge = $derived(
+		hardware && hardware.qrInput !== 'camera' ? createKeyboardWedge(hardware.readerMaxGapMs) : null
+	);
 
 	const backUrl = $derived(resolve(`/kiosk${contextQuery as `?${string}`}`));
 	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, () => {
@@ -41,8 +53,39 @@
 		return () => idleTimeout.stop();
 	});
 
+	$effect(() => {
+		let cancelled = false;
+		void fetchKioskHardware().then((result) => {
+			if (!cancelled) hardware = result;
+		});
+		return () => {
+			cancelled = true;
+		};
+	});
+
 	function recordActivity(): void {
 		idleTimeout.recordActivity();
+	}
+
+	function handleKeydown(event: KeyboardEvent): void {
+		recordActivity();
+		if (!wedge || event.repeat) return;
+		const text = wedge.push(event.key, event.timeStamp);
+		if (text === null) return;
+		// Enter would otherwise also activate whichever button has focus (e.g. "กลับ").
+		event.preventDefault();
+		handleScan(text);
+	}
+
+	async function pickCameraSource(): Promise<string | { facingMode: 'environment' }> {
+		const fallback = { facingMode: 'environment' } as const;
+		if (!hardware?.cameraLabel) return fallback;
+		try {
+			const cameras = await Html5Qrcode.getCameras();
+			return selectCameraId(cameras, hardware.cameraLabel) ?? fallback;
+		} catch {
+			return fallback;
+		}
 	}
 
 	function handlePrintBusyChange(busy: boolean): void {
@@ -70,18 +113,20 @@
 	function cameraAttachment(node: HTMLDivElement) {
 		const reader = new Html5Qrcode(node.id);
 		let isMounted = true;
-		reader
-			.start(
-				{ facingMode: 'environment' },
-				{
-					fps: 10,
-					qrbox: (width, height) => {
-						const size = Math.floor(Math.min(width, height) * 0.72);
-						return { width: size, height: size };
-					}
-				},
-				(decodedText) => handleScan(decodedText),
-				() => {}
+		pickCameraSource()
+			.then((source) =>
+				reader.start(
+					source,
+					{
+						fps: 10,
+						qrbox: (width, height) => {
+							const size = Math.floor(Math.min(width, height) * 0.72);
+							return { width: size, height: size };
+						}
+					},
+					(decodedText) => handleScan(decodedText),
+					() => {}
+				)
 			)
 			.then(() => {
 				if (!isMounted && reader.isScanning) reader.stop().catch(() => {});
@@ -114,7 +159,7 @@
 	<title>สแกน QR — SmartShelter Kiosk</title>
 </svelte:head>
 
-<svelte:window onpointerdown={recordActivity} onkeydown={recordActivity} />
+<svelte:window onpointerdown={recordActivity} onkeydown={handleKeydown} />
 
 {#if gate}
 	<KioskPreRegisteredCheckIn
@@ -157,15 +202,24 @@
 				class="qr-camera-frame relative mx-auto w-full max-w-sm overflow-hidden rounded-xl border border-slate-200 bg-slate-900"
 			>
 				<div class="relative aspect-square w-full overflow-hidden">
-					{#key cameraAttempt}
+					{#if cameraEnabled}
+						{#key cameraAttempt}
+							<div
+								id={cameraReaderId}
+								{@attach cameraAttachment}
+								class="absolute inset-0 h-full w-full overflow-hidden [&_video]:h-full! [&_video]:w-full! [&_video]:object-cover!"
+								aria-label="ภาพจากกล้องสแกน QR"
+							></div>
+						{/key}
+					{/if}
+					{#if readerOnly}
 						<div
-							id={cameraReaderId}
-							{@attach cameraAttachment}
-							class="absolute inset-0 h-full w-full overflow-hidden [&_video]:h-full! [&_video]:w-full! [&_video]:object-cover!"
-							aria-label="ภาพจากกล้องสแกน QR"
-						></div>
-					{/key}
-					{#if !cameraError}
+							class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#F8FAFC] px-4 text-center"
+						>
+							<ScanQrCode class="h-12 w-12 text-[#0A2647]" aria-hidden="true" />
+							<p class="text-lg font-semibold text-slate-700">ยิง QR ที่เครื่องอ่านด้านล่างจอ</p>
+						</div>
+					{:else if cameraEnabled && !cameraError}
 						<div class="pointer-events-none absolute inset-[10%]" aria-hidden="true">
 							<span
 								class="absolute top-0 left-0 h-8 w-8 rounded-tl-lg border-t-4 border-l-4 border-white"
@@ -180,7 +234,7 @@
 								class="absolute right-0 bottom-0 h-8 w-8 rounded-br-lg border-r-4 border-b-4 border-white"
 							></span>
 						</div>
-					{:else}
+					{:else if cameraError}
 						<div
 							class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#F8FAFC] px-4 text-center"
 						>
@@ -196,12 +250,14 @@
 					{/if}
 				</div>
 			</div>
-			<p
-				class="qr-scan-hint mt-3 text-center text-base font-semibold text-slate-700"
-				aria-live="polite"
-			>
-				วาง QR ในกรอบ
-			</p>
+			{#if !readerOnly}
+				<p
+					class="qr-scan-hint mt-3 text-center text-base font-semibold text-slate-700"
+					aria-live="polite"
+				>
+					วาง QR ในกรอบ
+				</p>
+			{/if}
 			{#if scanNotice}
 				<div
 					class="mt-3 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-950"

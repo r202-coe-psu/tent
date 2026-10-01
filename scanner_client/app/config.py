@@ -1,5 +1,6 @@
 import ipaddress
 import os
+import re
 from pathlib import Path
 from typing import Mapping, Any
 from urllib.parse import urlparse
@@ -42,6 +43,16 @@ PLACEHOLDER_VALUES = {
 }
 
 LOOPBACK_HOSTNAMES = {"localhost"}
+
+USB_ID_PATTERN = re.compile(r"[0-9a-fA-F]{4}:[0-9a-fA-F]{4}")
+PRINTER_BACKENDS = ("cups", "escpos")
+PRINTER_WIDTH_RANGE = (384, 832)
+DEFAULT_PRINTER_WIDTH_DOTS = 576
+KIOSK_QR_INPUTS = ("camera", "reader", "both")
+QR_READER_GAP_RANGE_MS = (10, 100)
+DEFAULT_QR_READER_GAP_MS = 50
+CARD_READERS = ("pcsc", "rfpro")
+DEFAULT_CARD_READER_USB_ID = "0483:4c43"
 
 
 def _is_trusted_plaintext_host(hostname: str) -> bool:
@@ -88,6 +99,74 @@ def _is_placeholder(value: str) -> bool:
     )
 
 
+def _choice(config: Mapping[str, Any], key: str, allowed: tuple[str, ...], default: str) -> str:
+    value = _clean(config.get(key)).lower() or default
+    if value not in allowed:
+        raise ScannerConfigError(f"{key} must be one of: {', '.join(allowed)}")
+    return value
+
+
+def _usb_id(config: Mapping[str, Any], key: str, default: str = "") -> str:
+    value = _clean(config.get(key)) or default
+    if value and not USB_ID_PATTERN.fullmatch(value):
+        raise ScannerConfigError(f"{key} must look like VID:PID in hex, e.g. 0483:4c43")
+    return value.lower()
+
+
+def _bounded_int(
+    config: Mapping[str, Any], key: str, default: int, bounds: tuple[int, int]
+) -> int:
+    raw = _clean(config.get(key))
+    try:
+        value = int(raw) if raw else default
+    except ValueError:
+        raise ScannerConfigError(f"{key} must be an integer") from None
+    if not bounds[0] <= value <= bounds[1]:
+        raise ScannerConfigError(f"{key} must be between {bounds[0]} and {bounds[1]}")
+    return value
+
+
+def validate_hardware_config(config: Mapping[str, Any]) -> dict[str, str]:
+    """Validate per-machine printer / QR reader / card reader settings.
+
+    Unset keys keep the original Raspberry Pi behaviour (CUPS, camera, PC/SC). Returns the
+    normalised values to merge into the config; messages name keys only, never values.
+    """
+
+    backend = _choice(config, "PRINTER_BACKEND", PRINTER_BACKENDS, "cups")
+    printer_usb_id = _usb_id(config, "PRINTER_USB_ID")
+    printer_device = _clean(config.get("PRINTER_DEVICE"))
+    width_dots = _bounded_int(
+        config, "PRINTER_WIDTH_DOTS", DEFAULT_PRINTER_WIDTH_DOTS, PRINTER_WIDTH_RANGE
+    )
+    if width_dots % 8:
+        raise ScannerConfigError("PRINTER_WIDTH_DOTS must be a multiple of 8")
+    if backend == "escpos" and not (printer_usb_id or printer_device):
+        raise ScannerConfigError(
+            "PRINTER_BACKEND=escpos requires PRINTER_USB_ID or PRINTER_DEVICE"
+        )
+
+    qr_input = _choice(config, "KIOSK_QR_INPUT", KIOSK_QR_INPUTS, "camera")
+    reader_gap_ms = _bounded_int(
+        config, "KIOSK_QR_READER_MAX_GAP_MS", DEFAULT_QR_READER_GAP_MS, QR_READER_GAP_RANGE_MS
+    )
+
+    card_reader = _choice(config, "CARD_READER", CARD_READERS, "pcsc")
+    card_reader_usb_id = _usb_id(config, "CARD_READER_USB_ID", DEFAULT_CARD_READER_USB_ID)
+
+    return {
+        "PRINTER_BACKEND": backend,
+        "PRINTER_USB_ID": printer_usb_id,
+        "PRINTER_DEVICE": printer_device,
+        "PRINTER_WIDTH_DOTS": str(width_dots),
+        "KIOSK_QR_INPUT": qr_input,
+        "KIOSK_CAMERA_LABEL": _clean(config.get("KIOSK_CAMERA_LABEL")),
+        "KIOSK_QR_READER_MAX_GAP_MS": str(reader_gap_ms),
+        "CARD_READER": card_reader,
+        "CARD_READER_USB_ID": card_reader_usb_id,
+    }
+
+
 def validate_config(config: Mapping[str, Any]) -> dict[str, Any]:
     """Validate required scanner credentials before browser or reader startup."""
 
@@ -123,6 +202,7 @@ def validate_config(config: Mapping[str, Any]) -> dict[str, Any]:
             "TENT_BASE_URL": base_url,
             "DEVICE_ID": device_id,
             "DEVICE_SECRET": device_secret,
+            **validate_hardware_config(config),
         }
     )
     return validated

@@ -295,6 +295,7 @@ sp = {44: " ", 45: "-", 46: "=", 47: "[", 48: "]", 49: "\\", 51: ";", 52: "'", 5
 ss = {44: " ", 45: "_", 46: "+", 47: "{", 48: "}", 49: "|", 51: ":", 52: '"', 53: "~", 54: "<", 55: ">", 56: "?"}
 fd = os.open(sys.argv[1], os.O_RDONLY)
 out, got, enter = [], False, "no"
+presses = []  # key-press timestamps → inter-key gap (wedge vs human typing threshold)
 deadline = time.monotonic() + 15
 while (left := deadline - time.monotonic()) > 0:
     # After the first key, 0.5 s of silence ends the scan (covers scanners with no Enter suffix).
@@ -307,6 +308,7 @@ while (left := deadline - time.monotonic()) > 0:
     if len(rep) < 3 or rep[2] == 0:
         continue
     got = True
+    presses.append(time.monotonic())
     shift = bool(rep[0] & 0x22)
     key = rep[2]
     if key in (40, 88):  # Enter / keypad Enter
@@ -318,20 +320,23 @@ while (left := deadline - time.monotonic()) > 0:
         out.append((ss if shift else sp)[key])
     else:
         out.append(f"<{key:02x}>")
-print(f"{enter}\t{''.join(out)}")
+gaps = [b - a for a, b in zip(presses, presses[1:])]
+max_gap = f"{max(gaps) * 1000:.0f}" if gaps else "-"
+print(f"{enter}\t{max_gap}\t{''.join(out)}")
 PY
 )"
-        qr_enter="${qr_out%%$'\t'*}"
-        qr="${qr_out#*$'\t'}"
+        IFS=$'\t' read -r qr_enter qr_gap qr <<<"$qr_out"
     else
         info "ยิง QR ภายใน 15 วินาที (หน้าต่าง terminal นี้ต้องมี focus)..."
         qr=""
+        qr_gap=""
         qr_enter="unknown"
         # read keeps partial input on timeout — that is the "no Enter suffix" case.
         if read -r -t 15 qr </dev/tty; then qr_enter="yes"; elif [ -n "$qr" ]; then qr_enter="no"; fi
     fi
     if [ -n "$qr" ]; then
         ok "ได้รับ ${#qr} ตัวอักษร: ${qr:0:80}"
+        [ -n "${qr_gap:-}" ] && [ "$qr_gap" != "-" ] && info "ช่วงห่างระหว่างตัวอักษรสูงสุด: ${qr_gap} ms (ใช้ตั้ง WEDGE_MAX_GAP_MS)"
         case "$qr_enter" in
         yes) ok "scanner ส่ง Enter ต่อท้าย" ;;
         no) warn "scanner ไม่ส่ง Enter ต่อท้าย — หน้า kiosk ที่รอ Enter จะไม่รู้ว่าสแกนจบ (ตั้ง suffix CR/Enter ด้วย config barcode ในคู่มือ CROWN)" ;;

@@ -56,7 +56,15 @@ CMD_PHOTOS = [
 class ThaiSmartCardReader:
     """Hardware driver interface for Thai National ID Smart Card Reader via PC/SC"""
 
-    def __init__(self, reader_index: int = 0):
+    def __init__(self, reader_index: int = 0, connection: Any = None):
+        """`connection` lets a subclass supply a non-PC/SC transport that offers the same
+        connect() / getATR() / transmit() API; the APDU and decoding logic below is shared."""
+        self.req_prefix = [0x00, 0xC0, 0x00, 0x00]
+        if connection is not None:
+            self.reader = None
+            self.connection = connection
+            return
+
         if readers is None:
             raise RuntimeError("pyscard is not installed. Please install pyscard and pcscd.")
 
@@ -69,7 +77,6 @@ class ThaiSmartCardReader:
 
         self.reader = available_readers[reader_index]
         self.connection = self.reader.createConnection()
-        self.req_prefix = [0x00, 0xC0, 0x00, 0x00]
         logger.info(f"Initialized Smart Card Reader: {self.reader}")
 
     def connect(self) -> bool:

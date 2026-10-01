@@ -7,10 +7,14 @@ import json
 import logging
 import os
 import re
+import select
 import shutil
 import time
 import urllib.parse
+from pathlib import Path
 from typing import Any, Dict, Optional
+
+from app.escpos import label_to_escpos
 
 
 try:
@@ -31,6 +35,8 @@ try:
 except ImportError:  # pragma: no cover - tests can exercise bootstrap without a card reader
     ThaiSmartCardReader = Any  # type: ignore[misc,assignment]
 
+from app.rfpro import RfproDeviceLostError, RfproThaiCardReader
+
 logger = logging.getLogger(__name__)
 
 # Chromium managed policies are read from /etc/chromium/policies by the Debian/Pi OS build only.
@@ -41,6 +47,10 @@ SYSTEM_CHROMIUM_PATH = "/usr/bin/chromium"
 # (_build_browser_args) is unrelated to this path now — it only guards a stray window.print()
 # from ever showing a dialog if something outside this route ever calls it.
 KIOSK_PRINT_PATH = "/api/v1/scanner/kiosk/print"
+# Per-machine hardware settings for the kiosk page (QR input, camera choice). Answered locally
+# like the print path — never forwarded to the server and never given the device credential.
+KIOSK_HARDWARE_PATH = "/api/v1/scanner/kiosk/hardware"
+DEFAULT_QR_READER_MAX_GAP_MS = 50
 KIOSK_PRINT_MAX_LABELS = 20
 KIOSK_PRINT_MAX_PNG_BYTES = 256 * 1024
 KIOSK_PRINT_TIMEOUT_SEC = 20.0
@@ -53,6 +63,11 @@ KIOSK_PRINT_OVERALL_DEADLINE_SEC = 25.0
 # Labels are rendered at the printer's 203 dpi, so 1 image px = 1 printer dot.
 KIOSK_PRINT_PPI = 203
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+
+# Kernel usblp exposes printers as /dev/usb/lpN; sysfs lists them with their USB ids.
+USBMISC_SYSFS = Path("/sys/class/usbmisc")
+USB_DEV_DIR = Path("/dev/usb")
+DEFAULT_PRINTER_WIDTH_DOTS = 576
 
 
 class BootstrapError(RuntimeError):
@@ -86,6 +101,24 @@ class ScannerClientManager:
         )
         # Labels always go straight to this CUPS queue via `lp` (no browser print dialog in any mode).
         self.printer_name = str(config.get("PRINTER_NAME") or "").strip() or "tent_xprinter"
+        # `cups` (default, Raspberry Pi + XP-365B) spools through lp; `escpos` writes the raster
+        # straight to the printer's usblp device. Values are validated in app.config.
+        self.printer_backend = str(config.get("PRINTER_BACKEND") or "cups").strip().lower()
+        self.printer_usb_id = str(config.get("PRINTER_USB_ID") or "").strip().lower()
+        self.printer_device = str(config.get("PRINTER_DEVICE") or "").strip()
+        self.printer_width_dots = int(
+            config.get("PRINTER_WIDTH_DOTS") or DEFAULT_PRINTER_WIDTH_DOTS
+        )
+        self._escpos_lock = asyncio.Lock()
+        # How /kiosk/qr reads QR codes: camera, a USB keyboard-wedge reader, or both.
+        self.qr_input = str(config.get("KIOSK_QR_INPUT") or "camera").strip().lower()
+        self.camera_label = str(config.get("KIOSK_CAMERA_LABEL") or "").strip()
+        self.qr_reader_max_gap_ms = int(
+            config.get("KIOSK_QR_READER_MAX_GAP_MS") or DEFAULT_QR_READER_MAX_GAP_MS
+        )
+        # `pcsc` (default) reads through pcscd; `rfpro` talks to the HID module on kiosk3.
+        self.card_reader = str(config.get("CARD_READER") or "pcsc").strip().lower()
+        self.card_reader_usb_id = str(config.get("CARD_READER_USB_ID") or "").strip() or "0483:4c43"
         self.poll_interval = float(config.get("POLL_INTERVAL", "0.5"))
         self.min_reading_display = 0.6
         self.client_nav_timeout_ms = 5000
@@ -220,16 +253,29 @@ class ScannerClientManager:
         logger.info("ℹ️  No system Chromium binary detected. Falling back to Playwright bundled browser.")
         return None
 
+    def _create_reader(self):
+        if self.card_reader == "rfpro":
+            return RfproThaiCardReader(self.card_reader_usb_id)
+        return ThaiSmartCardReader()
+
+    def _drop_reader(self) -> None:
+        """Forget a reader whose hardware vanished so init_reader() waits for it again."""
+        reader, self.reader = self.reader, None
+        close = getattr(reader, "close", None)
+        if callable(close):
+            close()
+
     async def init_reader(self) -> bool:
         """Attempt to initialize the Smart Card Reader driver"""
         while self.running:
             try:
-                self.reader = ThaiSmartCardReader()
+                self.reader = await asyncio.to_thread(self._create_reader)
                 logger.info("Smart Card Reader ready.")
                 return True
             except Exception as e:
-                del e
-                logger.warning("Waiting for Smart Card Reader hardware")
+                # rfpro errors name the missing permission/device; pyscard's never carry card data.
+                hint = f": {e}" if self.card_reader == "rfpro" and str(e) else ""
+                logger.warning(f"Waiting for Smart Card Reader hardware ({self.card_reader}){hint}")
                 self.reader = None
                 await asyncio.sleep(2.0)
         return False
@@ -260,6 +306,9 @@ class ScannerClientManager:
         if same_origin_post and request_url.path == KIOSK_PRINT_PATH:
             await self._fulfill_print(route)
             return
+        if same_origin_post and request_url.path == KIOSK_HARDWARE_PATH:
+            await self._fulfill_hardware(route)
+            return
         if not same_origin_post or request_url.path not in allowed_paths:
             await route.continue_(headers=headers)
             return
@@ -267,6 +316,21 @@ class ScannerClientManager:
         headers["x-device-id"] = self.device_id
         headers["x-device-secret"] = self.device_secret
         await route.continue_(headers=headers)
+
+    async def _fulfill_hardware(self, route) -> None:
+        """Tell the kiosk page how this machine reads QR codes. No credentials in the body."""
+        await route.fulfill(
+            status=200,
+            content_type="application/json",
+            headers={"cache-control": "no-store"},
+            body=json.dumps(
+                {
+                    "qr_input": self.qr_input,
+                    "camera_label": self.camera_label or None,
+                    "reader_max_gap_ms": self.qr_reader_max_gap_ms,
+                }
+            ),
+        )
 
     async def _fulfill_print(self, route) -> None:
         """Answer the kiosk print request locally; the server never sees label images."""
@@ -300,6 +364,13 @@ class ScannerClientManager:
             images.append(image)
         return images
 
+    @property
+    def _print_target(self) -> str:
+        """Log-safe name of where labels go (never label content)."""
+        if self.printer_backend == "escpos":
+            return f"escpos:{self.printer_device or self.printer_usb_id}"
+        return f"queue {self.printer_name}"
+
     async def _print_labels(self, raw: Optional[bytes]) -> tuple[int, Dict[str, Any]]:
         images = self._decode_labels(raw)
         if images is None:
@@ -310,7 +381,7 @@ class ScannerClientManager:
         for image in images:
             if time.monotonic() >= deadline:
                 logger.error(
-                    f"Label print deadline exceeded on queue {self.printer_name} ({printed}/{len(images)} sent)"
+                    f"Label print deadline exceeded on {self._print_target} ({printed}/{len(images)} sent)"
                 )
                 return 502, {
                     "printed": printed,
@@ -320,7 +391,7 @@ class ScannerClientManager:
                     },
                 }
             if not await self._spool_label(image):
-                logger.error(f"Label print failed on queue {self.printer_name} ({printed}/{len(images)} sent)")
+                logger.error(f"Label print failed on {self._print_target} ({printed}/{len(images)} sent)")
                 return 502, {
                     "printed": printed,
                     "error": {
@@ -332,6 +403,8 @@ class ScannerClientManager:
         return 200, {"printed": printed}
 
     async def _spool_label(self, image: bytes) -> bool:
+        if self.printer_backend == "escpos":
+            return await self._write_escpos(image)
         # stdin keeps the label (evacuee name) off disk; the job title carries no personal data.
         try:
             process = await asyncio.create_subprocess_exec(
@@ -353,6 +426,85 @@ class ScannerClientManager:
             await process.wait()
             return False
         return process.returncode == 0
+
+    def _find_printer_device(self) -> Optional[Path]:
+        """Resolve the printer's device node. Looked up per label: replugging changes lpN."""
+        if self.printer_device:
+            return Path(self.printer_device)
+        wanted = self.printer_usb_id
+        if not wanted:
+            return None
+        try:
+            entries = sorted(USBMISC_SYSFS.glob("lp*"))
+        except OSError:
+            return None
+        for entry in entries:
+            usb_device = Path(os.path.realpath(entry / "device")).parent
+            try:
+                vendor = (usb_device / "idVendor").read_text().strip().lower()
+                product = (usb_device / "idProduct").read_text().strip().lower()
+            except OSError:
+                continue
+            if f"{vendor}:{product}" == wanted:
+                return USB_DEV_DIR / entry.name
+        return None
+
+    def _send_escpos(self, image: bytes, timeout: float) -> bool:
+        """Blocking: convert, locate and write one label. Runs in a worker thread."""
+        try:
+            data = label_to_escpos(image, self.printer_width_dots)
+        except ValueError:
+            logger.error("Label image could not be converted for the ESC/POS printer")
+            return False
+        device = self._find_printer_device()
+        if device is None:
+            logger.error(f"ESC/POS printer {self.printer_usb_id or '(no id)'} not found; is it on and plugged in?")
+            return False
+        deadline = time.monotonic() + timeout
+        try:
+            # Non-blocking + select keeps this thread bounded by `deadline` even if the
+            # printer stalls, so a timed-out job cannot linger and interleave with the next.
+            fd = os.open(device, os.O_WRONLY | os.O_NONBLOCK)
+        except PermissionError:
+            logger.error(
+                f"No permission to open {device}: add the kiosk user to group lp "
+                "(sudo usermod -aG lp <user>), then log in again"
+            )
+            return False
+        except OSError as error:
+            logger.error(f"Cannot open ESC/POS printer {device}: {error.strerror or 'error'}")
+            return False
+        try:
+            view = memoryview(data)
+            while view:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    logger.error(f"ESC/POS write to {device} timed out")
+                    return False
+                _, writable, _ = select.select([], [fd], [], remaining)
+                if not writable:
+                    continue
+                try:
+                    view = view[os.write(fd, view) :]
+                except BlockingIOError:
+                    continue
+            return True
+        except OSError as error:
+            logger.error(f"ESC/POS write to {device} failed: {error.strerror or 'error'}")
+            return False
+        finally:
+            os.close(fd)
+
+    async def _write_escpos(self, image: bytes) -> bool:
+        async with self._escpos_lock:
+            try:
+                return await asyncio.wait_for(
+                    asyncio.to_thread(self._send_escpos, image, KIOSK_PRINT_TIMEOUT_SEC),
+                    timeout=KIOSK_PRINT_TIMEOUT_SEC + 1.0,
+                )
+            except asyncio.TimeoutError:
+                logger.error("ESC/POS print timed out")
+                return False
 
     async def _dispatch_card_event(self, event_name: str, citizen_id: Optional[str] = None) -> None:
         if not self.page or self.page.is_closed():
@@ -565,6 +717,10 @@ class ScannerClientManager:
                     await self._wait_for_home_or_new_card()
                 else:
                     await self._navigate(self.home_url)
+            except RfproDeviceLostError:
+                logger.warning("Smart Card Reader disconnected; waiting for the hardware")
+                self._drop_reader()
+                await asyncio.sleep(1.0)
             except Exception:
                 logger.error("Scanner card polling loop failed")
                 await asyncio.sleep(1.0)

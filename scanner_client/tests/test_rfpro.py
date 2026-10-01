@@ -1,0 +1,448 @@
+import asyncio
+import base64
+import logging
+import socket
+import threading
+import unittest
+from unittest.mock import patch
+
+from app import manager, rfpro
+from app.rfpro import (
+    CMD_HW_VER,
+    CMD_ICC_APDU,
+    CMD_ICC_GETATR,
+    CMD_ICC_SEL,
+    CMD_ICC_SLOT_PWR,
+    CMD_ICC_ST,
+    Reply,
+    RfproCardError,
+    RfproConnection,
+    RfproDeviceLostError,
+    RfproProtocolError,
+    RfproThaiCardReader,
+    RfproTransport,
+    build_frame,
+    parse_frame,
+)
+from app.scard import CMD_CID, CMD_PHOTOS, CMD_THFULLNAME, THAI_CARD_AID
+from tests.test_manager import FakePage, valid_config
+
+OUT_SIZE = 32
+HEARTBEAT = b"\xff\xff"
+ATR_3B79 = bytes.fromhex("3b7996000054480000")  # "TH NID"-style ATR, GET RESPONSE P2 = 00
+ATR_3B67 = bytes.fromhex("3b67000000")  # older cards: GET RESPONSE P2 = 01
+CID = "3101234567891"
+
+
+def reply_frame(inx: int, cmd: bytes, status: int, data: bytes = b"") -> bytes:
+    body = bytes([inx]) + (5 + len(data)).to_bytes(2, "big") + b"\x00\x00" + cmd + bytes([status]) + data
+    checksum = 0
+    for byte in body:
+        checksum ^= byte
+    return b"\xaa" + body + bytes([checksum])
+
+
+def reports(frame: bytes):
+    return [frame[i : i + OUT_SIZE].ljust(OUT_SIZE, b"\x00") for i in range(0, len(frame), OUT_SIZE)]
+
+
+class FakeHidDevice:
+    """The device end of a SOCK_SEQPACKET pair: one datagram = one HID report."""
+
+    def __init__(self, handler, *, heartbeats=False):
+        self.client, self.peer = socket.socketpair(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+        self.handler = handler
+        self.heartbeats = heartbeats
+        self.commands: list[tuple[bytes, bytes]] = []
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._serve, daemon=True)
+        self._thread.start()
+
+    def transport(self, timeout=1.0) -> RfproTransport:
+        return RfproTransport(self.client.detach(), out_size=OUT_SIZE, timeout=timeout)
+
+    def _serve(self):
+        self.peer.settimeout(0.05)
+        while not self._stop.is_set():
+            try:
+                report = self.peer.recv(512)
+            except socket.timeout:
+                continue
+            except OSError:
+                return
+            if not report:
+                return
+            frame = report[1:]  # drop the report id
+            length = int.from_bytes(frame[2:4], "big")
+            inx, cmd, data = frame[1], frame[6:8], frame[8 : 4 + length]
+            self.commands.append((cmd, data))
+            answer = self.handler(cmd, data)
+            if answer is None:
+                continue  # simulate a device that never answers
+            status, payload = answer
+            try:
+                if self.heartbeats:
+                    self.peer.send(reports(reply_frame(0, HEARTBEAT, 0))[0])
+                for chunk in reports(reply_frame(inx, cmd, status, payload)):
+                    self.peer.send(chunk)
+            except OSError:
+                return
+
+    def close(self):
+        self._stop.set()
+        self._thread.join(timeout=1)
+        self.peer.close()
+
+
+class FakeThaiCard:
+    """Answers the module's commands and the Thai ID applet's APDUs."""
+
+    def __init__(self, atr=ATR_3B79, present=True, atr_failures=0):
+        self.atr = atr
+        self.present = present
+        self.atr_failures = atr_failures
+        self.pending = b""
+        self.get_response_p2: list[int] = []
+        self.photo = bytes(range(256)) * 19  # 4864 bytes -> 20 chunks of up to 255
+        self.fields = {
+            tuple(CMD_CID): CID.encode(),
+            tuple(CMD_THFULLNAME): "นาย#สมชาย##ใจดี".encode("tis-620"),
+        }
+        for index, apdu in enumerate(CMD_PHOTOS):
+            self.fields[tuple(apdu)] = self.photo[index * 255 : (index + 1) * 255]
+
+    def __call__(self, cmd, data):
+        if cmd == CMD_HW_VER:
+            return 0x00, b"C2-CEU-PRO V1.15.31.c"
+        if cmd == CMD_ICC_ST:
+            return 0x00, bytes([0x01 if self.present else 0x00])
+        if cmd == CMD_ICC_SEL:
+            return 0x00, b""
+        if cmd == CMD_ICC_SLOT_PWR:
+            return 0x00, b""
+        if cmd == CMD_ICC_GETATR:
+            if not self.present:
+                return 0x20, b""
+            if self.atr_failures:
+                self.atr_failures -= 1
+                return 0x11, b""
+            return 0x00, self.atr
+        if cmd == CMD_ICC_APDU:
+            return 0x00, self._apdu(list(data[1:]))
+        return 0x03, b""
+
+    def _apdu(self, apdu):
+        if apdu[:2] == [0x00, 0xA4]:  # SELECT
+            assert apdu[5:] == THAI_CARD_AID
+            return b"\x90\x00"
+        if apdu[:2] == [0x00, 0xC0]:  # GET RESPONSE
+            self.get_response_p2.append(apdu[3])
+            return self.pending + b"\x90\x00"
+        field = self.fields.get(tuple(apdu))
+        if field is None:
+            self.pending = b""
+            return b"\x6a\x82"
+        self.pending = field
+        return bytes([0x61, len(field)])
+
+
+class FrameTests(unittest.TestCase):
+    def test_requests_match_the_vendor_document_examples(self):
+        cases = {
+            "18 00 card state": (0xBB, CMD_ICC_ST, b"\x00", "AA BB 00 05 00 00 18 00 00 A6"),
+            "18 01 select type": (0xBB, CMD_ICC_SEL, b"\x00\x0c", "AA BB 00 06 00 00 18 01 00 0C A8"),
+            "18 81 APDU": (
+                0x00,
+                CMD_ICC_APDU,
+                b"\x00" + bytes.fromhex("0084000008"),
+                "AA 00 00 0A 00 00 18 81 00 00 84 00 00 08 1F",
+            ),
+        }
+        for name, (inx, cmd, data, expected) in cases.items():
+            with self.subTest(name=name):
+                self.assertEqual(build_frame(inx, cmd, data), bytes.fromhex(expected))
+
+    def test_parses_the_vendor_apdu_reply_example(self):
+        raw = bytes.fromhex("AA 00 00 0F 00 00 18 81 00 20 C9 24 32 20 36 81 7F 90 00 11")
+
+        reply = parse_frame(raw)
+
+        self.assertEqual(reply, Reply(inx=0, cmd=CMD_ICC_APDU, status=0, data=raw[9:-1]))
+        self.assertEqual(reply.data[-2:], b"\x90\x00")
+
+    def test_incomplete_frames_wait_and_bad_checksums_raise(self):
+        raw = reply_frame(1, CMD_ICC_ST, 0, b"\x01")
+
+        self.assertIsNone(parse_frame(raw[:6]))
+        with self.assertRaises(RfproProtocolError):
+            parse_frame(raw[:-1] + bytes([raw[-1] ^ 0xFF]))
+
+    def test_commands_outside_the_allowlist_never_reach_the_wire(self):
+        # 00 01 reboot, 00 04 write flash, 00 07 change baud (vendor command table).
+        for cmd in (b"\x00\x01", b"\x00\x04", b"\x00\x07", b"\x18\x82"):
+            with self.subTest(cmd=cmd.hex()):
+                with self.assertRaises(ValueError):
+                    build_frame(1, cmd)
+
+        device = FakeHidDevice(lambda *_: (0, b""))
+        self.addCleanup(device.close)
+        transport = device.transport()
+        self.addCleanup(transport.close)
+        with self.assertRaises(ValueError):
+            transport.command(b"\x00\x01")
+        self.assertEqual(device.commands, [])
+
+
+class TransportTests(unittest.TestCase):
+    def test_skips_heartbeats_and_joins_replies_that_span_reports(self):
+        payload = bytes(range(150))
+        device = FakeHidDevice(lambda cmd, data: (0, payload), heartbeats=True)
+        self.addCleanup(device.close)
+        transport = device.transport()
+        self.addCleanup(transport.close)
+
+        reply = transport.command(CMD_ICC_APDU, b"\x00\x00")
+
+        self.assertEqual(reply.cmd, CMD_ICC_APDU)
+        self.assertEqual(reply.data, payload)
+
+    def test_unanswered_command_times_out(self):
+        device = FakeHidDevice(lambda *_: None)
+        self.addCleanup(device.close)
+        transport = device.transport(timeout=0.2)
+        self.addCleanup(transport.close)
+
+        with self.assertRaises(RfproProtocolError):
+            transport.command(CMD_HW_VER)
+
+    def test_unplugged_device_raises_device_lost(self):
+        device = FakeHidDevice(lambda *_: (0, b""))
+        transport = device.transport()
+        device.close()  # peer closes: reads return EOF / writes fail
+
+        with self.assertRaises(RfproDeviceLostError):
+            transport.command(CMD_HW_VER)
+        with self.assertRaises(RfproDeviceLostError):  # and stays closed
+            transport.command(CMD_HW_VER)
+
+
+def make_reader(card: FakeThaiCard, **kwargs):
+    device = FakeHidDevice(card, **kwargs)
+    transport = device.transport()
+    reader = RfproThaiCardReader(transport=transport)
+    return device, reader
+
+
+class ConnectionTests(unittest.TestCase):
+    def setUp(self):
+        patcher = patch.object(rfpro, "POWER_CYCLE_SETTLE_SEC", 0)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def connection(self, card):
+        device = FakeHidDevice(card)
+        self.addCleanup(device.close)
+        transport = device.transport()
+        self.addCleanup(transport.close)
+        return device, RfproConnection(transport)
+
+    def test_connect_selects_cpu_card_and_returns_the_atr(self):
+        device, connection = self.connection(FakeThaiCard())
+
+        connection.connect()
+
+        self.assertEqual(bytes(connection.getATR()), ATR_3B79)
+        self.assertEqual(
+            [cmd for cmd, _ in device.commands], [CMD_ICC_SEL, CMD_ICC_GETATR]
+        )
+        self.assertEqual(device.commands[0][1], b"\x00\x0c")
+
+    def test_atr_failure_power_cycles_once_then_succeeds(self):
+        device, connection = self.connection(FakeThaiCard(atr_failures=1))
+
+        connection.connect()
+
+        self.assertEqual(
+            device.commands[2:],
+            [
+                (CMD_ICC_SLOT_PWR, b"\x00\x00"),
+                (CMD_ICC_SLOT_PWR, b"\x00\x01"),
+                (CMD_ICC_GETATR, b"\x00"),
+            ],
+        )
+
+    def test_two_atr_failures_raise(self):
+        _, connection = self.connection(FakeThaiCard(atr_failures=2))
+
+        with self.assertRaises(RfproCardError):
+            connection.connect()
+
+    def test_transmit_splits_data_and_status_words(self):
+        _, connection = self.connection(FakeThaiCard())
+
+        data, sw1, sw2 = connection.transmit(list(CMD_CID))
+
+        self.assertEqual((data, sw1, sw2), ([], 0x61, 13))
+
+
+class ReaderTests(unittest.TestCase):
+    def setUp(self):
+        patcher = patch.object(rfpro, "POWER_CYCLE_SETTLE_SEC", 0)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def reader(self, card=None, **kwargs):
+        card = card or FakeThaiCard()
+        device, reader = make_reader(card, **kwargs)
+        self.addCleanup(device.close)
+        self.addCleanup(reader.close)
+        return card, device, reader
+
+    def test_poll_reports_card_state_without_resetting_the_card(self):
+        card, device, reader = self.reader()
+        device.commands.clear()
+
+        self.assertTrue(reader.is_card_inserted())
+        card.present = False
+        self.assertFalse(reader.is_card_inserted())
+
+        self.assertEqual([cmd for cmd, _ in device.commands], [CMD_ICC_ST, CMD_ICC_ST])
+
+    def test_read_citizen_id_returns_the_13_digit_number(self):
+        _, _, reader = self.reader()
+
+        self.assertEqual(reader.read_citizen_id(), CID)
+
+    def test_get_response_p2_follows_the_atr(self):
+        for atr, expected_p2 in ((ATR_3B79, 0x00), (ATR_3B67, 0x01)):
+            with self.subTest(atr=atr.hex()):
+                card, _, reader = self.reader(FakeThaiCard(atr=atr))
+                reader.read_citizen_id()
+                self.assertEqual(card.get_response_p2, [expected_p2])
+
+    def test_read_all_data_returns_every_field_and_the_full_photo(self):
+        card, _, reader = self.reader(heartbeats=True)
+        # Fields this fake card does not store answer 6A 82 -> empty strings, like a blank record.
+        data = reader.read_all_data()
+
+        self.assertEqual(data["citizen_id"], CID)
+        self.assertEqual(data["first_name_th"], "สมชาย")
+        self.assertEqual(data["last_name_th"], "ใจดี")
+        photo = data["photo_base64"]
+        self.assertTrue(photo.startswith("data:image/jpeg;base64,"))
+        self.assertEqual(base64.b64decode(photo.split(",", 1)[1]), card.photo)
+
+    def test_missing_card_raises_instead_of_hanging(self):
+        _, _, reader = self.reader(FakeThaiCard(present=False))
+
+        with self.assertRaises(RuntimeError):
+            reader.read_citizen_id()
+
+    def test_unanswered_polls_eventually_report_the_reader_as_lost(self):
+        device = FakeHidDevice(lambda cmd, data: (0, b"fw") if cmd == CMD_HW_VER else None)
+        self.addCleanup(device.close)
+        reader = RfproThaiCardReader(transport=device.transport(timeout=0.05))
+        self.addCleanup(reader.close)
+
+        results = []
+        for _ in range(rfpro.MAX_POLL_FAILURES - 1):
+            results.append(reader.is_card_inserted())
+        with self.assertRaises(RfproDeviceLostError):
+            reader.is_card_inserted()
+
+        self.assertEqual(results, [False] * (rfpro.MAX_POLL_FAILURES - 1))
+
+    def test_no_card_data_reaches_the_logs(self):
+        with self.assertLogs(level=logging.DEBUG) as logs:
+            _, _, reader = self.reader()
+            reader.is_card_inserted()
+            reader.read_all_data()
+
+        text = "\n".join(logs.output)
+        for secret in (CID, "สมชาย", "ใจดี"):
+            self.assertNotIn(secret, text)
+        self.assertIn("C2-CEU-PRO V1.15.31.c", text)  # firmware version is logged (R8)
+
+
+class ManagerWiringTests(unittest.IsolatedAsyncioTestCase):
+    def test_rfpro_setting_selects_the_hid_reader(self):
+        client = manager.ScannerClientManager(
+            valid_config(CARD_READER="rfpro", CARD_READER_USB_ID="0483:4c43")
+        )
+        with patch.object(manager, "RfproThaiCardReader") as rfpro_reader:
+            created = client._create_reader()
+
+        rfpro_reader.assert_called_once_with("0483:4c43")
+        self.assertIs(created, rfpro_reader.return_value)
+
+    def test_default_setting_keeps_the_pcsc_reader(self):
+        client = manager.ScannerClientManager(valid_config())
+        with (
+            patch.object(manager, "ThaiSmartCardReader") as pcsc_reader,
+            patch.object(manager, "RfproThaiCardReader") as rfpro_reader,
+        ):
+            created = client._create_reader()
+
+        pcsc_reader.assert_called_once_with()
+        rfpro_reader.assert_not_called()
+        self.assertIs(created, pcsc_reader.return_value)
+
+    async def test_init_reader_names_the_reader_type_it_is_waiting_for(self):
+        client = manager.ScannerClientManager(valid_config(CARD_READER="rfpro"))
+
+        def not_plugged_in():
+            client.running = False
+            raise RfproDeviceLostError("card reader 0483:4c43 not found")
+
+        async def no_sleep(_seconds):
+            return None
+
+        with (
+            patch.object(client, "_create_reader", new=not_plugged_in),
+            patch.object(asyncio, "sleep", new=no_sleep),
+            self.assertLogs(manager.logger, level="WARNING") as logs,
+        ):
+            self.assertFalse(await client.init_reader())
+
+        self.assertTrue(any("rfpro" in line and "not found" in line for line in logs.output))
+
+    async def test_unplugged_reader_is_dropped_and_waited_for_again(self):
+        client = manager.ScannerClientManager(valid_config(CARD_READER="rfpro"))
+        client.page = FakePage(client.home_url)
+        closed = []
+
+        class UnpluggedReader:
+            def is_card_inserted(self):
+                raise RfproDeviceLostError("gone")
+
+            def close(self):
+                closed.append(True)
+
+        init_calls = []
+
+        async def fake_init_reader():
+            init_calls.append(True)
+            if len(init_calls) == 1:
+                client.reader = UnpluggedReader()
+            else:
+                client.running = False
+            return True
+
+        async def no_sleep(_seconds):
+            return None
+
+        with (
+            patch.object(client, "init_reader", new=fake_init_reader),
+            patch.object(asyncio, "sleep", new=no_sleep),
+            self.assertLogs(manager.logger, level="WARNING") as logs,
+        ):
+            await client.card_reading_loop()
+
+        self.assertEqual(closed, [True])
+        self.assertEqual(len(init_calls), 2)
+        self.assertIsNone(client.reader)
+        self.assertTrue(any("disconnected" in line for line in logs.output))
+
+
+if __name__ == "__main__":
+    unittest.main()

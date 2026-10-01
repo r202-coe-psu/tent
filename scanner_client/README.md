@@ -18,8 +18,9 @@
    - [Step 7: ทดสอบรันระบบ](#step-7-ทดสอบรันระบบ)
 4. [การตั้งค่าให้รันอัตโนมัติเมื่อเปิดเครื่อง (Autostart on Boot)](#-การตั้งค่าให้รันอัตโนมัติเมื่อเปิดเครื่อง-autostart-on-boot)
 5. [การตั้งค่าจอแสดงผลแนวตั้งและการป้องกันจอดับ (Display Optimization)](#-การตั้งค่าจอแสดงผลแนวตั้งและการป้องกันจอดับ-display-optimization)
-6. [เครื่องพิมพ์ Label XP-365B (USB Label Printer)](#-เครื่องพิมพ์-label-xp-365b-usb-label-printer)
-7. [การแก้ไขปัญหาที่พบบ่อย (Troubleshooting & FAQ)](#-การแก้ไขปัญหาที่พบบ่อย-troubleshooting--faq)
+6. [ตู้ใหญ่ kiosk3 (ESC/POS + เครื่องอ่าน QR + เครื่องอ่านบัตร RFpro)](#-ตู้ใหญ่-kiosk3-escpos--เครื่องอ่าน-qr--เครื่องอ่านบัตร-rfpro)
+7. [เครื่องพิมพ์ Label XP-365B (USB Label Printer)](#-เครื่องพิมพ์-label-xp-365b-usb-label-printer)
+8. [การแก้ไขปัญหาที่พบบ่อย (Troubleshooting & FAQ)](#-การแก้ไขปัญหาที่พบบ่อย-troubleshooting--faq)
 
 ---
 
@@ -458,6 +459,76 @@ tail -f /tmp/kiosk_autostart.log
   ไปที่เมนู **Raspberry Pi Menu** $\rightarrow$ **Preferences** $\rightarrow$ **Screen Configuration** $\rightarrow$ คลิกขวาที่หน้าจอ $\rightarrow$ **Orientation** $\rightarrow$ เลือก `Right (90°)` หรือ `Left (270°)` $\rightarrow$ กด Apply
 - **ผ่านไฟล์ `/boot/firmware/cmdline.txt` (สำหรับ HDMI Display):**
   เพิ่มค่า `video=HDMI-A-1:1080x1920M@60,rotate=90` ต่อท้ายบรรทัด
+
+---
+
+## 🖥️ ตู้ใหญ่ kiosk3 (ESC/POS + เครื่องอ่าน QR + เครื่องอ่านบัตร RFpro)
+
+ตู้ที่สั่งทำ (ELSKY M219FN-2C) ใช้ฮาร์ดแวร์ต่างจาก Raspberry Pi + XP-365B ตั้งค่าทั้งหมดใน `scanner_client/.env` ของเครื่องนั้น — **ตู้ที่ไม่ตั้งค่าเหล่านี้ทำงานเหมือนเดิมทุกอย่าง** (`PRINTER_BACKEND=cups` · `KIOSK_QR_INPUT=camera` · `CARD_READER=pcsc`)
+
+```env
+PRINTER_BACKEND=escpos
+PRINTER_USB_ID=28e9:5812
+PRINTER_WIDTH_DOTS=576
+KIOSK_QR_INPUT=reader          # camera | reader | both
+# KIOSK_CAMERA_LABEL=JSK-RGB   # ใช้กับ camera/both: เลือกกล้องที่ชื่อมีข้อความนี้
+CARD_READER=rfpro
+CARD_READER_USB_ID=0483:4c43
+```
+
+ค่าผิดรูปแบบ (นอก enum, VID:PID ผิด, ความกว้างนอก 384–832 หรือหาร 8 ไม่ลงตัว) ทำให้ `scanner_client` หยุดตั้งแต่เริ่ม (exit 78) พร้อมบอกชื่อ key ที่ผิด
+
+### ครั้งแรกของแต่ละเครื่อง (นอก `.env`)
+
+```bash
+# เครื่องพิมพ์: /dev/usb/lp* เป็น root:lp 0660
+sudo usermod -aG lp kiosk
+# เครื่องอ่านบัตร: /dev/hidraw* เป็น root 0600 → ให้ group plugdev อ่าน/เขียนเฉพาะโมดูลนี้
+echo 'SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="4c43", GROUP="plugdev", MODE="0660"' \
+  | sudo tee /etc/udev/rules.d/70-tent-card-reader.rules
+sudo udevadm control --reload && sudo udevadm trigger
+# แล้ว logout/login ใหม่ (user kiosk ต้องอยู่ใน plugdev)
+```
+
+### เครื่องพิมพ์ใบเสร็จ ESC/POS (ตู้ใหญ่)
+
+| key | ค่า | default |
+| :-- | :-- | :-- |
+| `PRINTER_BACKEND` | `cups` \| `escpos` | `cups` |
+| `PRINTER_USB_ID` | `VID:PID` (hex) — หา `/dev/usb/lpN` จาก sysfs **ทุกครั้งที่พิมพ์** เลยถอด-เสียบ USB แล้วเลข `lpN` เปลี่ยนก็พิมพ์ต่อได้ | — |
+| `PRINTER_DEVICE` | path ตรง ๆ (ใช้แทน `PRINTER_USB_ID` ถ้าตั้ง) | — |
+| `PRINTER_WIDTH_DOTS` | ความกว้างหัวพิมพ์ (80 มม. ≈ 576) | `576` |
+
+- ใช้ label PNG ขนาดเดิม (80×60 มม.) — ตัดขอบขาว, ย่อให้พอดีหัวพิมพ์ (ไม่ขยาย), จัดกึ่งกลาง แล้วส่ง `GS v 0` + ตัดกระดาษ `GS V B 0` ตรงเข้า device (ไม่ผ่าน CUPS, ไม่เขียน label ลง disk)
+- เปิดสวิตช์เครื่องพิมพ์แยกต่างหากด้วย ไม่เช่นนั้นจะได้ `PRINT_FAILED` (log: `ESC/POS printer … not found`)
+- log `No permission to open /dev/usb/lpN` = user ยังไม่อยู่ใน group `lp` (ดูคำสั่งด้านบน)
+- ทดสอบพิมพ์/วัดความกว้างจริง: `sudo ./inspect_hardware.sh --test-printer`
+
+### เครื่องอ่าน QR แบบ HID (CROWN) และกล้อง
+
+| key | ค่า | default |
+| :-- | :-- | :-- |
+| `KIOSK_QR_INPUT` | `camera` (กล้องอย่างเดียว) \| `reader` (เครื่องอ่านอย่างเดียว ไม่ขอสิทธิ์กล้อง) \| `both` | `camera` |
+| `KIOSK_CAMERA_LABEL` | ข้อความในชื่อกล้อง (ไม่สนตัวพิมพ์) เช่น `JSK-RGB`; ไม่เจอ → กล้องหลังตามเดิม | — |
+| `KIOSK_QR_READER_MAX_GAP_MS` | ช่วงห่างสูงสุดระหว่างตัวอักษรที่นับว่าเป็นเครื่องอ่าน 10–100 ms (วัดด้วย `sudo ./inspect_hardware.sh --qr`; ใช้ค่าสูงสุด × 2) | `50` |
+
+เครื่องอ่านต้องพิมพ์แบบ keyboard (US layout) และปิดท้ายด้วย Enter หน้า `/kiosk/qr` จะรับข้อความที่พิมพ์เร็วและยาวอย่างน้อย 8 ตัวอักษรเท่านั้น — แป้นพิมพ์ที่คนกดช้า ๆ ไม่ถูกนับเป็นการสแกน หน้าเว็บอ่านค่าเหล่านี้จาก `scanner_client` ในเครื่อง (`POST /api/v1/scanner/kiosk/hardware` ไม่ส่งต่อไป server และไม่มี credential)
+
+### เครื่องอ่านบัตร RFpro (ตู้ใหญ่)
+
+โมดูล HOUSESmart `0483:4c43` (firmware `C2-CEU-PRO V1.15.31.c`) เป็น HID แบบเฉพาะผู้ขาย **ไม่ใช่ PC/SC** (`pcscd`/`pyscard` มองไม่เห็น) — `app/rfpro.py` คุย protocol ของผู้ขายผ่าน `/dev/hidraw*` แล้วใช้ APDU ชุดเดียวกับ `app/scard.py` (flow lookup/ลงทะเบียนด้วยบัตรไม่เปลี่ยน)
+
+- ตั้ง `CARD_READER=rfpro` (+ `CARD_READER_USB_ID` ถ้าไม่ใช่ `0483:4c43`) และทำ udev rule ด้านบน
+- เสียบบัตรให้ **ด้านชิปเข้าก่อนและสุดช่อง** — เสียบไม่สุด/กลับด้านจะได้ error "อ่านข้อมูลบัตรไม่สำเร็จ" เสียบใหม่แล้วอ่านได้
+- ถอด USB ของโมดูล → log `Smart Card Reader disconnected; waiting for the hardware` เสียบกลับแล้วใช้ต่อได้โดยไม่ restart
+- driver ส่งได้เฉพาะคำสั่งอ่านที่อยู่ใน allowlist (ไม่มี reboot / เขียน flash / เปลี่ยน baud) และไม่ log ข้อมูลบัตรทุกระดับ
+- ตรวจ/วัดเวลา (ต้อง `sudo`, รันในโฟลเดอร์ `scanner_client`):
+
+```bash
+sudo python3 inspect_card_rfpro.py ping            # version + สถานะบัตร (ไม่ต้องมีบัตร)
+sudo python3 inspect_card_rfpro.py                 # ถึงอ่านเลขบัตร (ปิดบังกลางเลข; --show-cid เพื่อดูเต็ม)
+sudo python3 inspect_card_rfpro.py --full          # อ่านทั้งใบ: แสดงเฉพาะความยาวแต่ละ field + เวลา
+```
 
 ---
 
