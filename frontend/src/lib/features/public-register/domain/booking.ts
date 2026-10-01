@@ -105,19 +105,12 @@ export const housingTypeSchema = z.enum([
 export type HousingType = z.infer<typeof housingTypeSchema>;
 
 /**
- * A pet's species, as a `master_data:pet_types` item `code` (CR-010 phase 2)
- * rather than a fixed enum — shelters configure their own accepted species via
- * master data (global list plus per-shelter overrides), so the wire format is
- * "whatever code `/api/public/v1/config/pet-types` offered" and not a closed
- * set of literals known at compile time. Still bounded and non-empty so a
- * malformed or oversized value cannot slip through — just not tied to the
- * master-data `code` regex, which is an implementation detail of that feature.
+ * Pet species — closed domain enum `dog | cat | other` (CR-137). Not driven by
+ * master data; public booking and household docs use the same fixed set.
  */
-export const publicBookingPetSpeciesSchema = z
-	.string({ error: 'กรุณาเลือกชนิดสัตว์เลี้ยง' })
-	.trim()
-	.min(1, 'กรุณาเลือกชนิดสัตว์เลี้ยง')
-	.max(40, 'รหัสชนิดสัตว์เลี้ยงยาวเกินไป');
+export const publicBookingPetSpeciesSchema = z.enum(['dog', 'cat', 'other'], {
+	error: 'กรุณาเลือกชนิดสัตว์เลี้ยง'
+});
 
 /** A pet travelling with the household — mirrors `household.pets[]` (CR-016 / CR-112). */
 export const publicBookingPetSchema = z.object({
@@ -132,9 +125,8 @@ export const publicBookingPetSchema = z.object({
 /**
  * A vehicle the household drives to the shelter — mirrors `household.vehicles[]`
  * (people domain, schema_v 4), so the citizen-entered value lands in the field
- * staff already read on the household profile. Kept to the same closed enum:
- * unlike pet species (master-data driven, CR-049), vehicle type is still a fixed
- * set in the household schema and this form must not widen it unilaterally.
+ * staff already read on the household profile. Closed enum matching the household
+ * schema; this form must not widen it unilaterally.
  *
  * `license_plate` is optional — the plate is what lets staff manage parking, but
  * a citizen fleeing at night may not have it to hand, and the household schema
@@ -240,7 +232,7 @@ export const publicBookingInputSchema = z.object({
 		.min(1, 'ต้องมีผู้เข้าพักอย่างน้อย 1 คน')
 		// A single booking is a household, not a mass import — cap it so one request
 		// cannot reserve an entire shelter.
-		.max(20, 'จองได้สูงสุด 20 คนต่อครั้ง กรุณาติดต่อเจ้าหน้าที่หากมีมากกว่านี้'),
+		.max(20, 'ลงทะเบียนได้สูงสุด 20 คนต่อครั้ง กรุณาติดต่อเจ้าหน้าที่หากมีมากกว่านี้'),
 	pets: z.array(publicBookingPetSchema).max(20, 'ระบุสัตว์เลี้ยงได้สูงสุด 20 ตัว').default([]),
 	vehicles: z.array(publicBookingVehicleSchema).max(10, 'ระบุยานพาหนะได้สูงสุด 10 คัน').default([]),
 	asset_description: z.string().trim().max(500, 'ข้อมูลทรัพย์สินยาวเกินไป').optional().default(''),
@@ -294,13 +286,8 @@ export function toEvacueeInputs(input: PublicBookingInput, householdId: string) 
 	});
 }
 
-/**
- * The staff `household.pets[].species` enum (`docs/data/schema.md` §1.3, CR-016) —
- * still the pre-master-data fixed set. Wiring configured `pet_types` codes all
- * the way into that schema is CR-010 phase 2 and has not happened yet, so it is
- * a documented spec value this feature must not widen unilaterally.
- */
-const LEGACY_HOUSEHOLD_PET_SPECIES = new Set(['dog', 'cat', 'other']);
+/** Closed pet species set shared with household schema (CR-137: dog | cat | other). */
+const HOUSEHOLD_PET_SPECIES = new Set(['dog', 'cat', 'other']);
 
 /**
  * Map a booking onto the staff `HouseholdInput` shape (CR-076: everyone gets one).
@@ -316,18 +303,15 @@ export function toHouseholdInput(input: PublicBookingInput, headEvacueeId: strin
 		housing_type: input.address.housing_type ?? null,
 		residence_landmark: input.address.residence_landmark ?? null,
 		pets: input.pets.map((pet) => {
-			const isBird = pet.species === 'bird';
-			const isKnownSpecies = LEGACY_HOUSEHOLD_PET_SPECIES.has(pet.species);
+			const isKnownSpecies = HOUSEHOLD_PET_SPECIES.has(pet.species);
 			const species = (isKnownSpecies ? pet.species : 'other') as 'dog' | 'cat' | 'other';
 			const rawNotes = [pet.name, pet.condition, pet.notes]
 				.map((s) => s?.trim())
 				.filter(Boolean)
 				.join(' | ');
-			const notes = isBird
-				? rawNotes || 'นก'
-				: isKnownSpecies
-					? rawNotes || undefined
-					: [rawNotes, `ชนิด: ${pet.species}`].filter(Boolean).join(' — ') || undefined;
+			const notes = isKnownSpecies
+				? rawNotes || undefined
+				: [rawNotes, `ชนิด: ${pet.species}`].filter(Boolean).join(' — ') || undefined;
 			return {
 				species,
 				count: pet.count || 1,
@@ -404,7 +388,11 @@ export function isCaptchaKeyConfigured(key: string | undefined | null): boolean 
 }
 
 export const publicBookingLookupSchema = z.object({
-	code: z.string({ error: 'กรุณากรอกรหัสการจอง' }).trim().min(1, 'กรุณากรอกรหัสการจอง').max(64),
+	code: z
+		.string({ error: 'กรุณากรอกรหัสการลงทะเบียน' })
+		.trim()
+		.min(1, 'กรุณากรอกรหัสการลงทะเบียน')
+		.max(64),
 	phone: bookingPhoneSchema
 });
 
@@ -424,7 +412,9 @@ export type PublicBookingErrorCode =
 	| 'SHELTER_REQUIRED'
 	| 'EMPTY_PHOTO'
 	| 'PHOTO_TOO_LARGE'
-	| 'INVALID_INPUT';
+	| 'INVALID_INPUT'
+	| 'INVALID_JOIN_TOKEN'
+	| 'JOIN_TARGET_NOT_FOUND';
 
 const ERROR_COPY: Record<PublicBookingErrorCode, string> = {
 	RATE_LIMITED: 'มีการส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่',
@@ -434,13 +424,16 @@ const ERROR_COPY: Record<PublicBookingErrorCode, string> = {
 	SHELTER_CLOSED: 'ศูนย์พักพิงนี้ปิดรับผู้เข้าพักแล้ว กรุณาเลือกศูนย์อื่น',
 	CAPACITY_EXCEEDED: 'ศูนย์พักพิงนี้เต็มตามจำนวนคาดการณ์แล้ว กรุณาเลือกศูนย์อื่น',
 	DUPLICATE_HOLD:
-		'มีการจองค้างอยู่แล้วสำหรับเบอร์หรือบัตรนี้ กรุณาใช้รหัสจองเดิมหรือติดต่อเจ้าหน้าที่',
-	BOOKING_NOT_FOUND: 'ไม่พบการจองที่ตรงกับรหัสและเบอร์โทรนี้',
-	WRITE_FAILED: 'บันทึกการจองไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
+		'มีการลงทะเบียนล่วงหน้าค้างอยู่แล้วสำหรับเบอร์หรือบัตรนี้ กรุณาใช้ใบลงทะเบียนเดิมหรือติดต่อเจ้าหน้าที่',
+	BOOKING_NOT_FOUND: 'ไม่พบการลงทะเบียนที่ตรงกับรหัสและเบอร์โทรนี้',
+	WRITE_FAILED: 'บันทึกการลงทะเบียนไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
 	SHELTER_REQUIRED: 'กรุณาเลือกศูนย์พักพิงก่อนอัปโหลดรูป',
 	EMPTY_PHOTO: 'ไม่พบไฟล์รูปภาพ กรุณาเลือกใหม่',
 	PHOTO_TOO_LARGE: 'ไฟล์รูปใหญ่เกินไป กรุณาเลือกไฟล์ที่เล็กกว่า',
-	INVALID_INPUT: 'ข้อมูลไม่ถูกต้อง กรุณาตรวจสอบแล้วลองใหม่'
+	INVALID_INPUT: 'ข้อมูลไม่ถูกต้อง กรุณาตรวจสอบแล้วลองใหม่',
+	INVALID_JOIN_TOKEN:
+		'ลิงก์เข้าร่วมครอบครัวหมดอายุหรือไม่ถูกต้อง กรุณาค้นหาครอบครัวใหม่แล้วเลือกอีกครั้ง',
+	JOIN_TARGET_NOT_FOUND: 'ไม่พบครอบครัวที่เลือก กรุณาเลือกครอบครัวใหม่ก่อนส่ง'
 };
 
 export function publicBookingErrorMessage(code: unknown): string {

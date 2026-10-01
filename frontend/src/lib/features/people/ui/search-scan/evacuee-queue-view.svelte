@@ -20,7 +20,7 @@
 	import * as Table from '$lib/components/ui/table';
 	import { paginateItems } from '$lib/db/paginate';
 	import { getShelterCode } from '$lib/db/shelter';
-	import { useMasterData } from '$lib/features/master-data';
+	import { useMasterData, formatMasterLabel } from '$lib/features/master-data';
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 
@@ -198,7 +198,10 @@
 		if (!needs?.length) return '—';
 		return needs
 			.slice(0, 2)
-			.map((n) => vulnerableGroupQuery.data?.items.find((i) => i.code === n)?.label ?? n)
+			.map((n) => {
+				const item = vulnerableGroupQuery.data?.items.find((i) => i.code === n);
+				return item ? formatMasterLabel(item, 'th') : n;
+			})
 			.join(', ');
 	}
 

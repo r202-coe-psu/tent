@@ -43,9 +43,12 @@ export {
 	publicPortalKeys,
 	useFamilySearchMutation,
 	usePublicShelters,
+	useShelterTypeLabels,
 	useShelterTypeLabelMap,
+	useVulnerableGroupLabels,
 	useVulnerableGroupLabelMap
 } from './application/queries';
+export type { MasterLabelOption } from './domain/master-labels';
 
 export {
 	publicConfigBodySchema,

@@ -6,6 +6,8 @@
 		useDeleteAnnouncement
 	} from '$lib/features/announcements';
 	import type { Announcement } from '$lib/features/announcements';
+	import StaffPageShell from '$lib/components/staff-page-shell.svelte';
+	import { spatial } from '$lib/tokens';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
@@ -150,25 +152,18 @@
 	<title>{t.pageTitle} — SmartShelter</title>
 </svelte:head>
 
-<div class="mx-6 flex flex-1 flex-col gap-8 p-6 md:p-8">
-	<div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-		<div>
-			<h2 class="text-3xl font-bold tracking-tight text-foreground">{t.pageTitle}</h2>
-			<p class="mt-2 text-muted-foreground">
-				จัดการข้อความประกาศแจ้งเตือนที่จะเผยแพร่บนระบบสาธารณะ
-				เพื่อให้ประชาชนได้รับทราบข้อมูลที่สำคัญ
-			</p>
-		</div>
-		<Button
-			onclick={openCreateDialog}
-			class="shrink-0 bg-primary text-primary-foreground shadow-md transition-all hover:bg-primary/90"
-		>
+<StaffPageShell
+	title={t.pageTitle}
+	description="จัดการข้อความประกาศแจ้งเตือนที่จะเผยแพร่บนระบบสาธารณะ เพื่อให้ประชาชนได้รับทราบข้อมูลที่สำคัญ"
+>
+	{#snippet actions()}
+		<Button onclick={openCreateDialog} class="btn-primary-brand shrink-0">
 			<Plus class="mr-2 h-4 w-4" />
 			สร้างประกาศใหม่
 		</Button>
-	</div>
+	{/snippet}
 
-	<div class="overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
+	<div class={spatial.container.staffPageCard}>
 		<Table.Root class="w-full table-fixed">
 			<Table.Header class="bg-muted/50">
 				<Table.Row class="hover:bg-transparent">
@@ -299,7 +294,7 @@
 		</Table.Root>
 
 		{#if totalPages > 1}
-			<div class="mt-2 flex justify-center border-t border-border/60 bg-muted/20 py-4">
+			<div class="mt-2 flex justify-center border-t border-slate-200/80 bg-muted/20 py-4">
 				<Pagination.Root
 					bind:page={() => clampedPage, (p) => (currentPage = p)}
 					count={total}
@@ -324,7 +319,7 @@
 			</div>
 		{/if}
 	</div>
-</div>
+</StaffPageShell>
 
 <Dialog.Root bind:open={isDialogOpen}>
 	<Dialog.Content class="overflow-hidden p-0 sm:max-w-[500px]">
@@ -416,7 +411,7 @@
 		</div>
 		<div class="flex items-center justify-end gap-2 border-t border-border bg-muted/30 p-4">
 			<Button variant="ghost" onclick={() => (isDialogOpen = false)}>{t.btnCancel}</Button>
-			<Button onclick={handleSave} disabled={isSaving} class="min-w-[100px]">
+			<Button onclick={handleSave} disabled={isSaving} class="btn-primary-brand min-w-[100px]">
 				{#if isSaving}
 					<div
 						class="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent"

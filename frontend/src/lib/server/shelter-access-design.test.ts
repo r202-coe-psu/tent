@@ -60,6 +60,16 @@ const donation = (over: Doc = {}): Doc => ({
 	...over
 });
 
+const evacuee = (over: Doc = {}, stayOver: Doc = {}): Doc => ({
+	_id: 'evacuee:01J',
+	type: 'evacuee',
+	first_name: 'สมชาย',
+	last_name: 'ใจดี',
+	...envelope,
+	current_stay: { status: 'active', zone: 'A1', ...stayOver },
+	...over
+});
+
 const ratios = Object.fromEntries(SOP_RATIO_KEYS.map((key) => [key, '1']));
 const stock = Object.fromEntries(SOP_RATIO_KEYS.map((key) => [key, '1000']));
 const asOf = '2026-08-17T10:00:00.000Z';
@@ -145,7 +155,7 @@ describe('buildValidateDocUpdate', () => {
 	it('includes audit in the allowed doc type whitelist', () => {
 		const validateFn = buildValidateDocUpdate('SH001');
 		expect(validateFn).toContain("'audit'");
-		expect(validateFn).toContain("'purchase'");
+		expect(validateFn).not.toContain("'purchase'");
 		expect(validateFn).toContain("'referral'");
 	});
 
@@ -481,10 +491,9 @@ describe('buildValidateDocUpdate', () => {
 		);
 	});
 
-	// CR-032: purchase docs are written to shelter dbs, so the server-side
-	// whitelist must accept them or every write is rejected as forbidden.
-	it('includes purchase in the allowed doc type whitelist', () => {
-		expect(buildValidateDocUpdate('SH001')).toContain("'purchase'");
+	// CR-138: purchase withdrawn — must not remain on the shelter allowlist.
+	it('excludes purchase from the allowed doc type whitelist', () => {
+		expect(buildValidateDocUpdate('SH001')).not.toContain("'purchase'");
 	});
 
 	// People registration writes household/medical/screening/movement/image after
@@ -651,6 +660,66 @@ describe('buildValidateDocUpdate', () => {
 					compile()(donation({ status: 'declared' }), donation({ status: 'received' }), WAREHOUSE),
 				/Cannot revert donation status back to declared/
 			);
+		});
+	});
+
+	describe('evacuee zone_change eligibility (CR-106 FR-16 / ZONE_CHANGE_ELIGIBLE_STATUSES)', () => {
+		it('allows a same-status rezone from active', () => {
+			expect(() =>
+				compile()(
+					evacuee({}, { status: 'active', zone: 'B2' }),
+					evacuee({}, { status: 'active', zone: 'A1' }),
+					REGISTRATION
+				)
+			).not.toThrow();
+		});
+
+		it('allows a same-status rezone from room_confirmed', () => {
+			expect(() =>
+				compile()(
+					evacuee({}, { status: 'room_confirmed', zone: 'B2' }),
+					evacuee({}, { status: 'room_confirmed', zone: 'A1' }),
+					REGISTRATION
+				)
+			).not.toThrow();
+		});
+
+		it.each(['checked_out', 'arriving', 'pre_registered', 'temporary_leave'])(
+			'rejects a same-status rezone attempted from %s',
+			(status) => {
+				expectForbidden(
+					() =>
+						compile()(
+							evacuee({}, { status, zone: 'B2' }),
+							evacuee({}, { status, zone: 'A1' }),
+							REGISTRATION
+						),
+					/zone_change requires current_stay.status active or room_confirmed/
+				);
+			}
+		);
+
+		it('does not trigger the zone_change rule when status also changes (e.g. check_in)', () => {
+			expect(() =>
+				compile()(
+					evacuee({}, { status: 'active', zone: 'A1' }),
+					evacuee({}, { status: 'arriving', zone: null }),
+					REGISTRATION
+				)
+			).not.toThrow();
+		});
+
+		it('ignores docs with no zone change at all', () => {
+			expect(() =>
+				compile()(
+					evacuee(
+						{ updated_at: '2026-07-23T00:00:00.000Z' },
+						{ status: 'checked_out', zone: 'A1' }
+					),
+					evacuee({}, { status: 'checked_out', zone: 'A1' }),
+					REGISTRATION
+				)
+			).not.toThrow();
 		});
 	});
 
@@ -2937,6 +3006,71 @@ describe('buildValidateDocUpdate', () => {
 					/shelter_code must be SH001/
 				);
 			});
+		});
+	});
+
+	describe('shelter_readiness_assessment VDU validation', () => {
+		const validAssessment: Doc = {
+			_id: 'shelter_readiness_assessment:SH001:2026-09-30T10-00-00Z',
+			type: 'shelter_readiness_assessment',
+			schema_v: 1,
+			shelter_code: 'SH001',
+			tier: 'community',
+			header: {
+				shelter_name: 'ศูนย์ 1',
+				operating_agency: 'อบต.',
+				max_capacity: 100,
+				phone_contact: '012',
+				building_type: 'โรงเรียน',
+				location_address: '123',
+				assessor_name: 'test',
+				assessed_date: '2026-09-30'
+			},
+			status: 'draft',
+			verdict: null,
+			justification_note: '',
+			summary: {
+				total_items: 38,
+				answered_items: 0,
+				fully_ready_count: 0,
+				partial_count: 0,
+				none_count: 0,
+				unassessed_count: 38,
+				mandatory_unanswered_count: 38,
+				mandatory_none_count: 0
+			},
+			items: [],
+			created_by: 'reg',
+			created_at: '2026-09-30T10:00:00.000Z',
+			updated_at: '2026-09-30T10:00:00.000Z',
+			edit_history: []
+		};
+
+		it('allows creating valid shelter_readiness_assessment', () => {
+			expect(() => compile()(validAssessment, null, REGISTRATION)).not.toThrow();
+		});
+
+		it('rejects cross-shelter readiness assessment', () => {
+			expectForbidden(
+				() => compile()({ ...validAssessment, shelter_code: 'SH002' }, null, REGISTRATION),
+				/shelter_code must be SH001/
+			);
+		});
+
+		it('rejects assessment with mismatched id prefix', () => {
+			expectForbidden(
+				() =>
+					compile()({ ...validAssessment, _id: 'assessment:SH001:2026-09-30' }, null, REGISTRATION),
+				/Shelter readiness assessment id must start with shelter_readiness_assessment:SH001:/
+			);
+		});
+
+		it('rejects assessment when created_at or created_by is modified', () => {
+			expectForbidden(
+				() =>
+					compile()({ ...validAssessment, created_by: 'hacker' }, validAssessment, REGISTRATION),
+				/Shelter readiness assessment identity and creation metadata cannot change/
+			);
 		});
 	});
 });

@@ -119,11 +119,11 @@
 </script>
 
 {#if viewMode === 'list'}
-	<section class="min-w-0 rounded-xl border bg-card p-4 text-card-foreground shadow-sm sm:p-6">
+	<section class="min-w-0">
 		<header class="mb-6 flex flex-col gap-4">
 			<div class="flex w-full flex-col gap-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
 				<div>
-					<h1 class="text-xl font-semibold">นโยบายการเติมสต็อก</h1>
+					<h2 class="text-lg font-bold">นโยบายการเติมสต็อก</h2>
 					<p class="text-sm text-muted-foreground">
 						กำหนดระยะเวลารอคอยสินค้า, รอบการสั่งซื้อ และจุดวิกฤต
 					</p>

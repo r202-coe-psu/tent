@@ -86,7 +86,7 @@ export const PUBLIC_SHELTER_DETAILS_I18N = {
 		medicalZone: 'โซนปฐมพยาบาล',
 		zonePrefix: 'โซน',
 		backToShelters: 'ย้อนกลับหน้าตรวจสอบสถานะ',
-		bookThisShelter: 'จองที่ศูนย์นี้',
+		bookThisShelter: 'ลงทะเบียนล่วงหน้าที่ศูนย์นี้',
 		shelterDetailSubtitle: 'SMARTSHELTER • ข้อมูลศูนย์พักพิงฉบับสมบูรณ์',
 		shelterNotFound: 'ไม่พบข้อมูลศูนย์พักพิง',
 		shelterNotFoundDesc: 'ขออภัย ข้อมูลที่คุณต้องการค้นหาอาจถูกลบหรือไม่มีอยู่ในระบบ',
@@ -179,7 +179,7 @@ export const PUBLIC_SHELTER_DETAILS_I18N = {
 		medicalZone: 'Medical Zone',
 		zonePrefix: 'Zone',
 		backToShelters: 'Back to Shelter Status',
-		bookThisShelter: 'Book This Shelter',
+		bookThisShelter: 'Pre-register at This Shelter',
 		shelterDetailSubtitle: 'SMARTSHELTER • Complete Shelter Information',
 		shelterNotFound: 'Shelter Not Found',
 		shelterNotFoundDesc:

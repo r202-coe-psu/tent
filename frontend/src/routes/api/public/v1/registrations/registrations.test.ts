@@ -46,6 +46,11 @@ vi.mock('$lib/features/public-register/booking-gate.server', () => ({
 	findConflictingHold: vi.fn(async () => null)
 }));
 
+const verifyResidenceMatchToken = vi.fn();
+vi.mock('$lib/features/public-register/residence-match-token.server', () => ({
+	verifyResidenceMatchToken: (...args: unknown[]) => verifyResidenceMatchToken(...args)
+}));
+
 const verifyToken = vi.fn<(token: string, ip?: string, action?: string) => Promise<boolean>>();
 vi.mock('$lib/server/security/captcha', () => ({
 	ReCaptchaProvider: class {
@@ -127,6 +132,8 @@ describe('POST /api/public/v1/registrations', () => {
 		vi.mocked(readForecastOccupancy).mockResolvedValue(0);
 		vi.mocked(findConflictingHold).mockReset();
 		vi.mocked(findConflictingHold).mockResolvedValue(null);
+		verifyResidenceMatchToken.mockReset();
+		verifyResidenceMatchToken.mockReturnValue(null);
 	});
 
 	it('422 when the contact first name is blank', async () => {
@@ -371,21 +378,14 @@ describe('POST /api/public/v1/registrations', () => {
 			});
 		});
 
-		// `species` is a shelter-configured `pet_types` code (master data), not a
-		// fixed enum — a shelter can offer species beyond the legacy dog/cat/bird/
-		// other set. The request must still validate (422 would silently break
-		// booking for that shelter's citizens), even though the value has no
-		// special meaning to the household schema.
-		it('accepts a pet species outside the legacy dog/cat/bird/other set', async () => {
+		// Species is a closed domain enum dog|cat|other (CR-137) — values outside
+		// that set must 422 at the public booking boundary.
+		it('422 when a pet species is outside dog|cat|other', async () => {
 			const res = await POST(
 				event({ ...FAMILY, pets: [{ species: 'rabbit', notes: 'กระต่าย', has_cage: false }] })
 			);
-			expect(res.status).toBe(201);
-
-			const { household } = writtenDocs();
-			expect(household.pets).toEqual([
-				{ species: 'other', count: 1, notes: 'กระต่าย — ชนิด: rabbit', has_cage: false }
-			]);
+			expect(res.status).toBe(422);
+			expect(bulkAsPublicWriter).not.toHaveBeenCalled();
 		});
 
 		it('422 when a pet has no species selected', async () => {
@@ -645,7 +645,7 @@ describe('POST /api/public/v1/registrations', () => {
 			]);
 		});
 
-		it('422 when primary contact phone is missing in unified payload', async () => {
+		it('422 when primary contact phone is missing in unified payload (create)', async () => {
 			const invalidPayload = {
 				shelter_code: 'SH001',
 				captchaToken: 'tok',
@@ -671,6 +671,38 @@ describe('POST /api/public/v1/registrations', () => {
 			const res = await POST(event(invalidPayload));
 			expect(res.status).toBe(422);
 			expect((await res.json()).error).toBe('INVALID_INPUT');
+		});
+
+		it('does not 422 for empty phone when join_match_token is present (token gate runs)', async () => {
+			vi.mocked(findMasterByCode).mockResolvedValue(OPEN_SHELTER as never);
+			verifyResidenceMatchToken.mockReturnValue(null);
+
+			const joinPayload = {
+				shelter_code: 'SH001',
+				captchaToken: 'tok',
+				join_match_token: 'bad.token',
+				members: [
+					{
+						first_name: 'สมเกียรติ',
+						last_name: 'รักสงบ',
+						gender: 'male',
+						phone: ''
+					}
+				],
+				household: {
+					address_no: '99/1',
+					subdistrict: 'คอหงส์',
+					district: 'หาดใหญ่',
+					province: 'สงขลา',
+					postal_code: '90110',
+					pets: [],
+					vehicles: []
+				}
+			};
+
+			const res = await POST(event(joinPayload));
+			expect(res.status).toBe(400);
+			expect((await res.json()).error).toBe('INVALID_JOIN_TOKEN');
 		});
 	});
 });

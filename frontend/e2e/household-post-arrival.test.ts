@@ -105,7 +105,8 @@ const MOCK_EXISTING_HOUSEHOLD = {
 	_id: 'household:existing-456',
 	_rev: '1-mock',
 	type: 'household',
-	label: 'ครอบครัวขัดแย้ง มีบ้าน',
+	label_th: 'ครอบครัวขัดแย้ง มีบ้าน',
+	label_en: 'ครอบครัวขัดแย้ง มีบ้าน',
 	head_evacuee_id: 'evacuee:conflict-123',
 	status: 'checked_in',
 	vehicles: [],
@@ -135,15 +136,21 @@ test.describe('Household Post-arrival Grouping', () => {
 	async function setupPage(page: Page, initialDocs: CouchDoc[] = []) {
 		await mockCouchRoutes(page, { withRegistryShelter: true });
 
-		// Mock master data routes for municipality_zone and community
+		// Mock master data (housing_type optional for address step)
 		await page.route('**/api/back-office/master-data/*', async (route) => {
 			const type = new URL(route.request().url()).pathname.split('/').pop();
 			const items =
-				type === 'municipality_zone'
-					? [{ code: 'zone_1', label: 'โซน 1' }]
-					: type === 'community'
-						? [{ code: 'community_1', label: 'ชุมชน 1' }]
-						: [];
+				type === 'housing_type'
+					? [
+							{
+								code: 'house',
+								label_th: 'บ้านเดี่ยว',
+								label_en: 'บ้านเดี่ยว',
+								is_default: true,
+								status: 'active'
+							}
+						]
+					: [];
 			await route.fulfill({
 				status: 200,
 				contentType: 'application/json',
@@ -235,13 +242,9 @@ test.describe('Household Post-arrival Grouping', () => {
 			timeout: 10_000
 		});
 
-		// Select municipality_zone
-		await page.getByPlaceholder('เลือกเขตเทศบาล...').click();
-		await page.getByRole('button', { name: 'โซน 1' }).click();
-
-		// Select community
-		await page.getByPlaceholder('เลือกชุมชน...').click();
-		await page.getByRole('button', { name: 'ชุมชน 1' }).click();
+		// Fill free-text municipality_zone / community (CR-137)
+		await page.getByPlaceholder('ระบุเขตเทศบาล...').fill('โซน 1');
+		await page.getByPlaceholder('ระบุชุมชน...').fill('ชุมชน 1');
 
 		// Address fields
 		await page.getByPlaceholder('เช่น 12/3').fill('99/1');

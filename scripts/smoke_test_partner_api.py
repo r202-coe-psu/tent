@@ -115,7 +115,9 @@ class SmokeTestRunner:
         self.client_secret: Optional[str] = self.provided_client_secret
         self.access_token: Optional[str] = None
 
-        self.results: List[Tuple[str, str, bool, str]] = []  # (issue, test_name, passed, detail)
+        self.results: List[Tuple[str, str, bool, str]] = (
+            []
+        )  # (issue, test_name, passed, detail)
 
     def partner_path(self, path: str) -> str:
         """Join api_prefix with a FastAPI partner path like /external/token."""
@@ -196,7 +198,9 @@ class SmokeTestRunner:
     # Scenario 1: Issue #215 (EXT-001 OAuth2 Token Minting & Client Admin)
     # -------------------------------------------------------------------------
     def test_issue_215_auth(self) -> bool:
-        self.log(f"\n{BOLD}======================================================{RESET}")
+        self.log(
+            f"\n{BOLD}======================================================{RESET}"
+        )
         self.log(f"{BOLD}Testing Issue #215: EXT-001 OAuth2 Client & Auth Flow{RESET}")
         self.log(f"{BOLD}======================================================{RESET}")
 
@@ -251,7 +255,9 @@ class SmokeTestRunner:
             "client_id": self.created_client_id,
             "client_secret": self.client_secret,
         }
-        status, data = self.http_request("POST", self.partner_path("/external/token"), body=token_payload)
+        status, data = self.http_request(
+            "POST", self.partner_path("/external/token"), body=token_payload
+        )
 
         token = data.get("access_token")
         expires_in = data.get("expires_in")
@@ -279,7 +285,9 @@ class SmokeTestRunner:
             "client_id": self.created_client_id,
             "client_secret": "wrong-secret",
         }
-        status, data = self.http_request("POST", self.partner_path("/external/token"), body=bad_token_payload)
+        status, data = self.http_request(
+            "POST", self.partner_path("/external/token"), body=bad_token_payload
+        )
         err_code = get_error_code(data)
         if status == 401 and err_code == "invalid_client":
             self.record_result(
@@ -301,7 +309,9 @@ class SmokeTestRunner:
             "client_id": self.created_client_id,
             "client_secret": self.client_secret,
         }
-        status, data = self.http_request("POST", self.partner_path("/external/token"), body=bad_grant_payload)
+        status, data = self.http_request(
+            "POST", self.partner_path("/external/token"), body=bad_grant_payload
+        )
         err_code = get_error_code(data)
         if status == 400 and err_code == "unsupported_grant_type":
             self.record_result(
@@ -323,18 +333,24 @@ class SmokeTestRunner:
     # Scenario 2: Issue #216 (EXT-002 & EXT-003 Location Master & DOPA codes)
     # -------------------------------------------------------------------------
     def test_issue_216_locations(self) -> bool:
-        self.log(f"\n{BOLD}======================================================{RESET}")
+        self.log(
+            f"\n{BOLD}======================================================{RESET}"
+        )
         self.log(f"{BOLD}Testing Issue #216: Location Master & DOPA Codes{RESET}")
         self.log(f"{BOLD}======================================================{RESET}")
 
         if not self.access_token:
-            self.record_result("#216", "Location Master endpoints", False, "Missing access token")
+            self.record_result(
+                "#216", "Location Master endpoints", False, "Missing access token"
+            )
             return False
 
         headers = {"Authorization": f"Bearer {self.access_token}"}
 
         # 2.1 List Locations (EXT-002)
-        status, data = self.http_request("GET", self.partner_path("/external/locations"), headers=headers)
+        status, data = self.http_request(
+            "GET", self.partner_path("/external/locations"), headers=headers
+        )
         result = data.get("result", [])
 
         if status == 200 and data.get("status") == 200 and isinstance(result, list):
@@ -391,7 +407,9 @@ class SmokeTestRunner:
         # 2.3 Single Location Detail (EXT-003)
         target_code = self.shelter_code or "SH001"
         status, data = self.http_request(
-            "GET", self.partner_path(f"/external/locations/{target_code}"), headers=headers
+            "GET",
+            self.partner_path(f"/external/locations/{target_code}"),
+            headers=headers,
         )
         if status == 200 and data.get("result", {}).get("location_code") == target_code:
             loc_data = data["result"]
@@ -412,7 +430,9 @@ class SmokeTestRunner:
 
         # 2.4 Negative: Unknown location returns 404
         status, data = self.http_request(
-            "GET", self.partner_path("/external/locations/NON_EXISTENT_999"), headers=headers
+            "GET",
+            self.partner_path("/external/locations/NON_EXISTENT_999"),
+            headers=headers,
         )
         err_code = get_error_code(data)
         if status == 404 and err_code == "location_not_found":
@@ -432,7 +452,9 @@ class SmokeTestRunner:
         # 2.5 Scope Protection: Request without token returns 401/403
         status, _ = self.http_request("GET", self.partner_path("/external/locations"))
         if status in (401, 403):
-            self.record_result("#216", "Unauthenticated request rejected with 401/403", True)
+            self.record_result(
+                "#216", "Unauthenticated request rejected with 401/403", True
+            )
         else:
             self.record_result(
                 "#216",
@@ -447,19 +469,25 @@ class SmokeTestRunner:
     # Scenario 3: Issue #217 (EXT-005 Occupancy Projection & Demographics)
     # -------------------------------------------------------------------------
     def test_issue_217_occupancy(self) -> bool:
-        self.log(f"\n{BOLD}======================================================{RESET}")
+        self.log(
+            f"\n{BOLD}======================================================{RESET}"
+        )
         self.log(f"{BOLD}Testing Issue #217: EXT-005 Occupancy Projection{RESET}")
         self.log(f"{BOLD}======================================================{RESET}")
 
         if not self.access_token:
-            self.record_result("#217", "Occupancy endpoint", False, "Missing access token")
+            self.record_result(
+                "#217", "Occupancy endpoint", False, "Missing access token"
+            )
             return False
 
         headers = {"Authorization": f"Bearer {self.access_token}"}
         target_code = self.shelter_code or "SH001"
 
         status, data = self.http_request(
-            "GET", self.partner_path(f"/external/locations/{target_code}/occupancy"), headers=headers
+            "GET",
+            self.partner_path(f"/external/locations/{target_code}/occupancy"),
+            headers=headers,
         )
 
         res = data.get("result", {})
@@ -501,7 +529,9 @@ class SmokeTestRunner:
     # Scenario 4: Issue #218 (EXT-004 Stock Projection & M6 Mapping)
     # -------------------------------------------------------------------------
     def test_issue_218_stock(self) -> bool:
-        self.log(f"\n{BOLD}======================================================{RESET}")
+        self.log(
+            f"\n{BOLD}======================================================{RESET}"
+        )
         self.log(f"{BOLD}Testing Issue #218: EXT-004 Shelter Stock Projection{RESET}")
         self.log(f"{BOLD}======================================================{RESET}")
 
@@ -513,13 +543,19 @@ class SmokeTestRunner:
         target_code = self.shelter_code or "SH001"
 
         status, data = self.http_request(
-            "GET", self.partner_path(f"/external/locations/{target_code}/stock"), headers=headers
+            "GET",
+            self.partner_path(f"/external/locations/{target_code}/stock"),
+            headers=headers,
         )
 
         res = data.get("result", {})
         items = res.get("items", [])
 
-        if status == 200 and res.get("location_code") == target_code and isinstance(items, list):
+        if (
+            status == 200
+            and res.get("location_code") == target_code
+            and isinstance(items, list)
+        ):
             self.record_result(
                 "#218",
                 "GET .../stock returns location stock envelope",
@@ -563,16 +599,22 @@ class SmokeTestRunner:
     # Scenario 5: Issue #219 (EXT-006 Cross-Location Summary)
     # -------------------------------------------------------------------------
     def test_issue_219_summary(self) -> bool:
-        self.log(f"\n{BOLD}======================================================{RESET}")
+        self.log(
+            f"\n{BOLD}======================================================{RESET}"
+        )
         self.log(f"{BOLD}Testing Issue #219: EXT-006 Cross-Location Summary{RESET}")
         self.log(f"{BOLD}======================================================{RESET}")
 
         if not self.access_token:
-            self.record_result("#219", "Summary endpoint", False, "Missing access token")
+            self.record_result(
+                "#219", "Summary endpoint", False, "Missing access token"
+            )
             return False
 
         headers = {"Authorization": f"Bearer {self.access_token}"}
-        status, data = self.http_request("GET", self.partner_path("/external/summary"), headers=headers)
+        status, data = self.http_request(
+            "GET", self.partner_path("/external/summary"), headers=headers
+        )
 
         res = data.get("result", {})
         locs = res.get("locations", [])
@@ -610,12 +652,16 @@ class SmokeTestRunner:
     # Scenario 6: Issue #220 (EXT-007 Occupants Scaffold & PDPA Governance)
     # -------------------------------------------------------------------------
     def test_issue_220_occupants_pdpa(self) -> bool:
-        self.log(f"\n{BOLD}======================================================{RESET}")
+        self.log(
+            f"\n{BOLD}======================================================{RESET}"
+        )
         self.log(f"{BOLD}Testing Issue #220: EXT-007 Occupants & PDPA Audit{RESET}")
         self.log(f"{BOLD}======================================================{RESET}")
 
         if not self.access_token:
-            self.record_result("#220", "Occupants endpoint", False, "Missing access token")
+            self.record_result(
+                "#220", "Occupants endpoint", False, "Missing access token"
+            )
             return False
 
         headers = {"Authorization": f"Bearer {self.access_token}"}
@@ -623,7 +669,9 @@ class SmokeTestRunner:
 
         # 6.1 Missing purpose rejected with 400
         status, data = self.http_request(
-            "GET", self.partner_path(f"/external/locations/{target_code}/occupants"), headers=headers
+            "GET",
+            self.partner_path(f"/external/locations/{target_code}/occupants"),
+            headers=headers,
         )
         err_code = get_error_code(data)
         if status == 400 and err_code == "missing_purpose":
@@ -643,7 +691,8 @@ class SmokeTestRunner:
         # 6.2 Scope gate: 403 without occupancy-pii-read, or 200 envelope when granted
         status, data = self.http_request(
             "GET",
-            self.partner_path(f"/external/locations/{target_code}/occupants") + "?purpose=emergency_rationing",
+            self.partner_path(f"/external/locations/{target_code}/occupants")
+            + "?purpose=emergency_rationing",
             headers=headers,
         )
         err_code = get_error_code(data)
@@ -687,14 +736,20 @@ class SmokeTestRunner:
             return True
 
         if self.keep_client:
-            self.log(f"\n{YELLOW}Skipping client cleanup (--keep-client specified){RESET}")
+            self.log(
+                f"\n{YELLOW}Skipping client cleanup (--keep-client specified){RESET}"
+            )
             return True
 
         if not self.created_client_row_id or not self.created_client_id:
             return True
 
-        self.log(f"\n{BOLD}======================================================{RESET}")
-        self.log(f"{BOLD}Testing Client Revocation & Cleanup (Issue #215 Lifecycle){RESET}")
+        self.log(
+            f"\n{BOLD}======================================================{RESET}"
+        )
+        self.log(
+            f"{BOLD}Testing Client Revocation & Cleanup (Issue #215 Lifecycle){RESET}"
+        )
         self.log(f"{BOLD}======================================================{RESET}")
 
         # 7.1 Revoke Client
@@ -704,7 +759,11 @@ class SmokeTestRunner:
             headers={"Authorization": f"Bearer {self.admin_secret}"},
         )
         client_data = data.get("client", {})
-        if status == 200 and data.get("success") is True and client_data.get("is_active") is False:
+        if (
+            status == 200
+            and data.get("success") is True
+            and client_data.get("is_active") is False
+        ):
             self.record_result(
                 "#215",
                 "Admin API revokes third-party client (is_active=False)",
@@ -725,7 +784,9 @@ class SmokeTestRunner:
             "client_id": self.created_client_id,
             "client_secret": self.client_secret,
         }
-        status, data = self.http_request("POST", self.partner_path("/external/token"), body=token_payload)
+        status, data = self.http_request(
+            "POST", self.partner_path("/external/token"), body=token_payload
+        )
         err_code = get_error_code(data)
         if status == 401 and err_code == "invalid_client":
             self.record_result(
@@ -753,12 +814,20 @@ class SmokeTestRunner:
             if self.use_provided_credentials
             else "admin provision (+ EXTERNAL_API_SECRET)"
         )
-        self.log(f"\n{BOLD}================================================================={RESET}")
-        self.log(f"{BOLD}{CYAN}SMOKE TEST SUITE: Smart Shelter Partner API (Issues #214-#220){RESET}")
+        self.log(
+            f"\n{BOLD}================================================================={RESET}"
+        )
+        self.log(
+            f"{BOLD}{CYAN}SMOKE TEST SUITE: Smart Shelter Partner API (Issues #214-#220){RESET}"
+        )
         self.log(f"{BOLD}Target Host: {self.base_url}{RESET}")
-        self.log(f"{BOLD}API prefix: {self.api_prefix or '(none — direct FastAPI paths)'}{RESET}")
+        self.log(
+            f"{BOLD}API prefix: {self.api_prefix or '(none — direct FastAPI paths)'}{RESET}"
+        )
         self.log(f"{BOLD}Mode: {mode}{RESET}")
-        self.log(f"{BOLD}================================================================={RESET}")
+        self.log(
+            f"{BOLD}================================================================={RESET}"
+        )
 
         # Connectivity: public plane has no /v1/health — probe partner path instead.
         probe_path = self.partner_path("/external/locations")
@@ -792,7 +861,9 @@ class SmokeTestRunner:
                 f"(not bare /external). Local FastAPI: --api-prefix ''.{RESET}"
             )
             return 1
-        self.log_verbose(f"Probe GET {probe_path} → HTTP {status} (expect 401 without token)")
+        self.log_verbose(
+            f"Probe GET {probe_path} → HTTP {status} (expect 401 without token)"
+        )
 
         # Execute tests sequentially
         self.test_issue_215_auth()
@@ -811,9 +882,15 @@ class SmokeTestRunner:
         passed_count = sum(1 for _, _, p, _ in self.results if p)
         failed_count = total - passed_count
 
-        self.log(f"\n\n{BOLD}================================================================={RESET}")
-        self.log(f"{BOLD}                     SMOKE TEST SUMMARY REPORT                   {RESET}")
-        self.log(f"{BOLD}================================================================={RESET}")
+        self.log(
+            f"\n\n{BOLD}================================================================={RESET}"
+        )
+        self.log(
+            f"{BOLD}                     SMOKE TEST SUMMARY REPORT                   {RESET}"
+        )
+        self.log(
+            f"{BOLD}================================================================={RESET}"
+        )
 
         # Summary by Issue
         issue_map = {
@@ -832,17 +909,25 @@ class SmokeTestRunner:
                 # Issue 214 is implicitly tested by envelope & schema across all checks
                 if issue_id == "#214":
                     status_badge = f"{GREEN}PASS{RESET}"
-                    self.log(f"  [{status_badge}] {BOLD}{issue_id}{RESET} - {issue_name} (Verified via ADR 0002 envelopes)")
+                    self.log(
+                        f"  [{status_badge}] {BOLD}{issue_id}{RESET} - {issue_name} (Verified via ADR 0002 envelopes)"
+                    )
                 continue
 
             all_passed = all(p for _, _, p, _ in tests)
             status_badge = f"{GREEN}PASS{RESET}" if all_passed else f"{RED}FAIL{RESET}"
             p_sub = sum(1 for _, _, p, _ in tests if p)
-            self.log(f"  [{status_badge}] {BOLD}{issue_id}{RESET} - {issue_name} ({p_sub}/{len(tests)} checks passed)")
+            self.log(
+                f"  [{status_badge}] {BOLD}{issue_id}{RESET} - {issue_name} ({p_sub}/{len(tests)} checks passed)"
+            )
 
         self.log(f"-----------------------------------------------------------------")
-        self.log(f"Total Checks: {BOLD}{total}{RESET} | Passed: {GREEN}{passed_count}{RESET} | Failed: {RED}{failed_count}{RESET} | Duration: {elapsed:.2f}s")
-        self.log(f"{BOLD}================================================================={RESET}\n")
+        self.log(
+            f"Total Checks: {BOLD}{total}{RESET} | Passed: {GREEN}{passed_count}{RESET} | Failed: {RED}{failed_count}{RESET} | Duration: {elapsed:.2f}s"
+        )
+        self.log(
+            f"{BOLD}================================================================={RESET}\n"
+        )
 
         return 0 if failed_count == 0 else 1
 
@@ -924,7 +1009,11 @@ def main():
             "(or PARTNER_CLIENT_ID and PARTNER_CLIENT_SECRET), or neither for admin mode."
         )
 
-    if not client_id and "localhost" not in args.base_url and "127.0.0.1" not in args.base_url:
+    if (
+        not client_id
+        and "localhost" not in args.base_url
+        and "127.0.0.1" not in args.base_url
+    ):
         print(
             f"{YELLOW}Warning:{RESET} admin provision mode against {args.base_url} "
             "usually fails — /v1/admin/* is not public. "
@@ -949,4 +1038,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

@@ -78,7 +78,8 @@ const SHELTER_DOC = {
 const SKILL_ITEMS = [
 	{
 		code: 'cooking',
-		label: 'ประกอบอาหาร / ครัวสนาม',
+		label_th: 'ประกอบอาหาร / ครัวสนาม',
+		label_en: 'Kitchen / field kitchen',
 		category: 'operational',
 		description: 'เตรียมและแจกจ่ายอาหาร',
 		is_default: true,

@@ -233,7 +233,8 @@ async function controlledSkills(shelterCode: string): Promise<Set<string>> {
 		for (const item of master?.items ?? []) {
 			if (item.category === 'controlled' && item.status !== 'inactive') {
 				values.add(item.code.trim().toLowerCase());
-				values.add(item.label.trim().toLowerCase());
+				values.add(item.label_th.trim().toLowerCase());
+				values.add(item.label_en.trim().toLowerCase());
 			}
 		}
 	} catch {

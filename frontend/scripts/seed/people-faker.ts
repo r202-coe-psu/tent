@@ -3,7 +3,7 @@
  */
 import { fakerTH } from '@faker-js/faker';
 import type { Gender, Religion, StayStatus } from '$lib/features/people/domain/people';
-import { COMMUNITY_KEYS, HOUSING_TYPE_KEYS } from './master-defs';
+import { HOUSING_TYPE_KEYS, SAMPLE_COMMUNITY_LABELS, SAMPLE_ZONE_LABELS } from './master-defs';
 
 /** Deterministic seed so re-runs produce the same Thai names after a wipe. */
 export const STAGING_FAKER_SEED = 20260912;
@@ -68,9 +68,11 @@ export type GeneratedPersonProfile = {
 	special_needs: string[];
 	status: StayStatus;
 	registered_via: (typeof CHANNELS)[number];
-	communityKey: string;
+	/** Free-text community label (CR-137 — not a master code). */
+	communityLabel: string;
 	housingTypeKey: (typeof HOUSING_TYPE_KEYS)[number];
-	zoneKey: 'zone_1' | 'zone_2' | 'zone_3' | 'zone_4';
+	/** Free-text municipality zone label (CR-137 — not a master code). */
+	zoneLabel: string;
 };
 
 function ageToVgKeys(age: number, faker: typeof fakerTH): string[] {
@@ -104,13 +106,8 @@ export function generatePersonProfile(
 	const age = faker.number.int({ min: 0, max: 90 });
 	const birth_year = new Date().getFullYear() + 543 - age;
 
-	const communityKey = COMMUNITY_KEYS[index % COMMUNITY_KEYS.length];
-	const ci = COMMUNITY_KEYS.indexOf(communityKey);
-	// Derive zone from community index ranges (9 + 7 + 11 + 9)
-	let zoneKey: GeneratedPersonProfile['zoneKey'] = 'zone_1';
-	if (ci >= 9 && ci < 16) zoneKey = 'zone_2';
-	else if (ci >= 16 && ci < 27) zoneKey = 'zone_3';
-	else if (ci >= 27) zoneKey = 'zone_4';
+	const communityLabel = SAMPLE_COMMUNITY_LABELS[index % SAMPLE_COMMUNITY_LABELS.length];
+	const zoneLabel = SAMPLE_ZONE_LABELS[index % SAMPLE_ZONE_LABELS.length];
 
 	let vgKeys = ageToVgKeys(age, faker);
 	// pregnant only for female/other adults
@@ -137,9 +134,9 @@ export function generatePersonProfile(
 			: [],
 		status,
 		registered_via: CHANNELS[index % CHANNELS.length],
-		communityKey,
+		communityLabel,
 		housingTypeKey: faker.helpers.arrayElement([...HOUSING_TYPE_KEYS]),
-		zoneKey
+		zoneLabel
 	};
 }
 

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { MasterDataItem } from '$lib/features/master-data';
+	import { formatMasterLabel } from '$lib/features/master-data';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 
@@ -36,7 +37,9 @@
 				class="space-y-3 rounded-xl border border-border/80 bg-muted/40 p-4 text-xs leading-relaxed text-foreground"
 			>
 				<p>
-					คุณแน่ใจหรือไม่ว่าต้องการลบทักษะ <span class="font-bold text-danger">"{item.label}"</span>
+					คุณแน่ใจหรือไม่ว่าต้องการลบทักษะ <span class="font-bold text-danger"
+						>"{formatMasterLabel(item, 'th')}"</span
+					>
 					(รหัส <code class="font-mono font-semibold">{item.code}</code>) ออกจากระบบ Master Data?
 				</p>
 				<p class="text-muted-foreground">⚠️ ทักษะนี้จะถูกนำออกจากรายการ Master Data ทันที</p>

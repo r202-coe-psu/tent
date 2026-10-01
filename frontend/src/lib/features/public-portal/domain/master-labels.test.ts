@@ -2,14 +2,21 @@ import { describe, expect, it } from 'vitest';
 import { resolveMasterLabel, toLabelMap } from './master-labels';
 
 describe('toLabelMap', () => {
-	it('indexes code → label and skips empty rows', () => {
+	it('indexes code → label by language and skips empty rows', () => {
 		expect(
-			toLabelMap([
-				{ code: 'item_a', label: 'ผู้สูงอายุ' },
-				{ code: '', label: 'x' },
-				{ code: 'item_b', label: '' }
-			])
+			toLabelMap(
+				[
+					{ code: 'item_a', label_th: 'ผู้สูงอายุ', label_en: 'Elderly' },
+					{ code: '', label_th: 'x', label_en: 'x' },
+					{ code: 'item_b', label_th: '', label_en: '' }
+				],
+				'th'
+			)
 		).toEqual({ item_a: 'ผู้สูงอายุ' });
+
+		expect(
+			toLabelMap([{ code: 'item_a', label_th: 'ผู้สูงอายุ', label_en: 'Elderly' }], 'en')
+		).toEqual({ item_a: 'Elderly' });
 	});
 
 	it('returns an empty object for nullish input', () => {

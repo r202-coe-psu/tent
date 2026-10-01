@@ -25,11 +25,10 @@
 		type UserSummary
 	} from '../data/users.api';
 	import { usersKeys } from '../application/queries';
-	import {
-		usersListBaseFromPathname,
-		withUsersView
-	} from '../domain/user-edit-path';
+	import { usersListBaseFromPathname, withUsersView } from '../domain/user-edit-path';
 	import { UserPlus, KeyRound, Copy, Check, ShieldAlert, Unlink } from '@lucide/svelte';
+	import StaffPageShell from '$lib/components/staff-page-shell.svelte';
+	import { spatial } from '$lib/tokens';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
@@ -140,11 +139,19 @@
 	function goCreate() {
 		const listBase = usersListBaseFromPathname(page.url.pathname);
 		const from = withUsersView(page.url.pathname, page.url.search);
-		const path =
-			listBase === '/system-management/users'
-				? resolve('/system-management/users/new')
-				: resolve('/back-office/users/new');
-		void goto(`${path}?from=${encodeURIComponent(from)}`);
+		if (listBase === '/system-management/users') {
+			void goto(
+				resolve(
+					`/system-management/users/new?from=${encodeURIComponent(from)}` as '/system-management/users/new'
+				)
+			);
+		} else {
+			void goto(
+				resolve(
+					`/back-office/users/new?from=${encodeURIComponent(from)}` as '/back-office/users/new'
+				)
+			);
+		}
 	}
 
 	function confirmDelete(name: string) {
@@ -270,134 +277,108 @@
 	});
 </script>
 
-<div class={['mx-auto', compact ? 'max-w-none' : 'container max-w-[1200px] p-4 sm:p-6']}>
-	<div
-		class={[
-			'flex flex-col items-stretch justify-between gap-4 sm:flex-row sm:items-center',
-			compact ? 'mb-4' : 'mb-8'
-		]}
-	>
-		<div class="flex min-w-0 items-center gap-4">
-			<div class="shrink-0 text-blue-900/80">
-				<UserPlus class={compact ? 'h-6 w-6' : 'h-8 w-8'} />
-			</div>
-			<div class="min-w-0">
-				<h2 class={compact ? 'text-lg font-bold' : 'text-xl font-bold text-slate-900 sm:text-2xl'}>
-					จัดการผู้ใช้งาน (User Management)
-				</h2>
-				<p class="mt-1 text-sm text-muted-foreground">ค้นหา เพิ่ม และจัดการสิทธิ์บุคลากรในระบบ</p>
-			</div>
-		</div>
-
-		<Button
-			class="w-full shrink-0 rounded-lg bg-[#0f2d5c] px-5 py-5 font-semibold text-white hover:bg-[#0a1e3f] sm:w-auto"
-			onclick={goCreate}
+{#snippet userFiltersAndTable()}
+	<div class={spatial.container.staffPageCard}>
+		<form
+			class="border-b border-slate-200/80 p-4 sm:p-6"
+			onsubmit={(e) => {
+				e.preventDefault();
+				applyFilters();
+			}}
 		>
-			<span class="mr-2">+</span> เพิ่มผู้ใช้ใหม่
-		</Button>
-	</div>
+			<div
+				class={[
+					'grid w-full grid-cols-1 gap-3 sm:grid-cols-2',
+					!effectiveLock ? 'lg:grid-cols-5' : 'lg:grid-cols-4'
+				]}
+			>
+				<div class="w-full min-w-0 space-y-2 sm:col-span-2">
+					<label for="user-query-filter" class="text-xs font-semibold text-foreground">ค้นหา</label>
+					<Input
+						id="user-query-filter"
+						type="search"
+						placeholder="ชื่อผู้ใช้, เบอร์โทร หรือชื่อ-นามสกุล"
+						bind:value={queryDraft}
+						class="h-11 min-h-11 rounded-xl border-input bg-background px-3 shadow-xs"
+					/>
+				</div>
 
-	<form
-		class={compact ? 'mb-4' : 'mb-6'}
-		onsubmit={(e) => {
-			e.preventDefault();
-			applyFilters();
-		}}
-	>
-		<div
-			class={[
-				'grid w-full grid-cols-1 gap-3 sm:grid-cols-2',
-				!effectiveLock ? 'lg:grid-cols-5' : 'lg:grid-cols-4'
-			]}
-		>
-			<div class="w-full min-w-0 space-y-2 sm:col-span-2">
-				<label for="user-query-filter" class="text-xs font-semibold text-foreground">ค้นหา</label>
-				<Input
-					id="user-query-filter"
-					type="search"
-					placeholder="ชื่อผู้ใช้, เบอร์โทร หรือชื่อ-นามสกุล"
-					bind:value={queryDraft}
-					class="h-11 min-h-11 rounded-xl border-input bg-background px-3 shadow-xs"
-				/>
-			</div>
+				{#if !effectiveLock}
+					<div class="w-full min-w-0 space-y-2">
+						<label for="user-shelter-filter" class="text-xs font-semibold text-foreground"
+							>ศูนย์อพยพ</label
+						>
+						<Select.Root type="single" bind:value={shelterDraft}>
+							<Select.Trigger
+								id="user-shelter-filter"
+								class="h-11 min-h-11 w-full min-w-0 rounded-xl border-input bg-background px-3 shadow-xs data-[size=default]:h-11"
+								aria-label="ศูนย์อพยพ"
+							>
+								<span class="truncate">
+									{shelterFilterOptions.find((option) => option.value === shelterDraft)?.label ??
+										'ทั้งหมด'}
+								</span>
+							</Select.Trigger>
+							<Select.Content>
+								{#each shelterFilterOptions as option (option.value)}
+									<Select.Item value={option.value} label={option.label} />
+								{/each}
+							</Select.Content>
+						</Select.Root>
+					</div>
+				{/if}
 
-			{#if !effectiveLock}
 				<div class="w-full min-w-0 space-y-2">
-					<label for="user-shelter-filter" class="text-xs font-semibold text-foreground"
-						>ศูนย์อพยพ</label
-					>
-					<Select.Root type="single" bind:value={shelterDraft}>
+					<label for="user-role-filter" class="text-xs font-semibold text-foreground">บทบาท</label>
+					<Select.Root type="single" bind:value={roleDraft}>
 						<Select.Trigger
-							id="user-shelter-filter"
+							id="user-role-filter"
 							class="h-11 min-h-11 w-full min-w-0 rounded-xl border-input bg-background px-3 shadow-xs data-[size=default]:h-11"
-							aria-label="ศูนย์อพยพ"
+							aria-label="บทบาท"
 						>
 							<span class="truncate">
-								{shelterFilterOptions.find((option) => option.value === shelterDraft)?.label ??
-									'ทั้งหมด'}
+								{roleFilterOptions.find((option) => option.value === roleDraft)?.label ?? 'ทั้งหมด'}
 							</span>
 						</Select.Trigger>
 						<Select.Content>
-							{#each shelterFilterOptions as option (option.value)}
+							{#each roleFilterOptions as option (option.value)}
 								<Select.Item value={option.value} label={option.label} />
 							{/each}
 						</Select.Content>
 					</Select.Root>
 				</div>
-			{/if}
 
-			<div class="w-full min-w-0 space-y-2">
-				<label for="user-role-filter" class="text-xs font-semibold text-foreground">บทบาท</label>
-				<Select.Root type="single" bind:value={roleDraft}>
-					<Select.Trigger
-						id="user-role-filter"
-						class="h-11 min-h-11 w-full min-w-0 rounded-xl border-input bg-background px-3 shadow-xs data-[size=default]:h-11"
-						aria-label="บทบาท"
-					>
-						<span class="truncate">
-							{roleFilterOptions.find((option) => option.value === roleDraft)?.label ?? 'ทั้งหมด'}
-						</span>
-					</Select.Trigger>
-					<Select.Content>
-						{#each roleFilterOptions as option (option.value)}
-							<Select.Item value={option.value} label={option.label} />
-						{/each}
-					</Select.Content>
-				</Select.Root>
+				<div class="w-full min-w-0 space-y-2">
+					<label for="user-type-filter" class="text-xs font-semibold text-foreground">ประเภท</label>
+					<Select.Root type="single" bind:value={typeDraft}>
+						<Select.Trigger
+							id="user-type-filter"
+							class="h-11 min-h-11 w-full min-w-0 rounded-xl border-input bg-background px-3 shadow-xs data-[size=default]:h-11"
+							aria-label="ประเภท"
+						>
+							<span class="truncate">
+								{typeFilterOptions.find((option) => option.value === typeDraft)?.label ?? 'ทั้งหมด'}
+							</span>
+						</Select.Trigger>
+						<Select.Content>
+							{#each typeFilterOptions as option (option.value)}
+								<Select.Item value={option.value} label={option.label} />
+							{/each}
+						</Select.Content>
+					</Select.Root>
+				</div>
 			</div>
 
-			<div class="w-full min-w-0 space-y-2">
-				<label for="user-type-filter" class="text-xs font-semibold text-foreground">ประเภท</label>
-				<Select.Root type="single" bind:value={typeDraft}>
-					<Select.Trigger
-						id="user-type-filter"
-						class="h-11 min-h-11 w-full min-w-0 rounded-xl border-input bg-background px-3 shadow-xs data-[size=default]:h-11"
-						aria-label="ประเภท"
-					>
-						<span class="truncate">
-							{typeFilterOptions.find((option) => option.value === typeDraft)?.label ?? 'ทั้งหมด'}
-						</span>
-					</Select.Trigger>
-					<Select.Content>
-						{#each typeFilterOptions as option (option.value)}
-							<Select.Item value={option.value} label={option.label} />
-						{/each}
-					</Select.Content>
-				</Select.Root>
+			<div class="mt-3 flex justify-end">
+				<Button
+					type="submit"
+					class="btn-primary-brand h-11 w-full rounded-xl px-6 font-semibold sm:w-auto"
+				>
+					ค้นหา
+				</Button>
 			</div>
-		</div>
+		</form>
 
-		<div class="mt-3 flex justify-end">
-			<Button
-				type="submit"
-				class="h-11 w-full rounded-xl bg-[#0f2d5c] px-6 font-semibold text-white hover:bg-[#0a1e3f] sm:w-auto"
-			>
-				ค้นหา
-			</Button>
-		</div>
-	</form>
-
-	<div class="overflow-hidden rounded-2xl border bg-white shadow-xs">
 		{#if usersQuery.isLoading}
 			<div class="p-8 text-center text-sm text-muted-foreground">กำลังโหลดข้อมูลผู้ใช้งาน...</div>
 		{:else if usersQuery.isError}
@@ -414,10 +395,55 @@
 				onunlinkmfa={handleOpenUnlinkMfa}
 				pending={deleteMutation.isPending || unlinkingMfa}
 			/>
-			<PaginationControls bind:page={currentPage} count={filteredUsers.length} perPage={PAGE_SIZE} />
+			<PaginationControls
+				bind:page={currentPage}
+				count={filteredUsers.length}
+				perPage={PAGE_SIZE}
+			/>
 		{/if}
 	</div>
-</div>
+{/snippet}
+
+{#if compact}
+	<div class="max-w-none">
+		<div class="mb-4 flex flex-col items-stretch justify-between gap-4 sm:flex-row sm:items-center">
+			<div class="flex min-w-0 items-center gap-4">
+				<div class="shrink-0 text-blue-900/80">
+					<UserPlus class="h-6 w-6" />
+				</div>
+				<div class="min-w-0">
+					<h2 class="text-lg font-bold">จัดการผู้ใช้งาน (User Management)</h2>
+					<p class="mt-1 text-sm text-muted-foreground">ค้นหา เพิ่ม และจัดการสิทธิ์บุคลากรในระบบ</p>
+				</div>
+			</div>
+
+			<Button
+				class="btn-primary-brand w-full shrink-0 rounded-lg px-5 py-5 font-semibold sm:w-auto"
+				onclick={goCreate}
+			>
+				<span class="mr-2">+</span> เพิ่มผู้ใช้ใหม่
+			</Button>
+		</div>
+
+		{@render userFiltersAndTable()}
+	</div>
+{:else}
+	<StaffPageShell
+		title="จัดการผู้ใช้งาน (User Management)"
+		description="ค้นหา เพิ่ม และจัดการสิทธิ์บุคลากรในระบบ"
+	>
+		{#snippet actions()}
+			<Button
+				class="btn-primary-brand shrink-0 rounded-lg px-5 py-5 font-semibold"
+				onclick={goCreate}
+			>
+				<span class="mr-2">+</span> เพิ่มผู้ใช้ใหม่
+			</Button>
+		{/snippet}
+
+		{@render userFiltersAndTable()}
+	</StaffPageShell>
+{/if}
 
 <!-- Unlink MFA Confirmation Dialog -->
 <Dialog.Root bind:open={unlinkMfaDialogOpen}>
@@ -512,7 +538,9 @@
 			<span class="text-xs font-bold tracking-wider text-amber-800 uppercase"
 				>รหัสผ่านชั่วคราว (One-Time Passphrase)</span
 			>
-			<div class="mt-2 break-all font-mono text-2xl font-extrabold tracking-wide text-slate-900 select-all">
+			<div
+				class="mt-2 font-mono text-2xl font-extrabold tracking-wide break-all text-slate-900 select-all"
+			>
 				{temporaryPassword}
 			</div>
 		</div>
@@ -533,7 +561,7 @@
 				{/if}
 			</Button>
 			<Button
-				class="bg-[#0f2d5c] text-white hover:bg-[#0a1e3f]"
+				class="btn-primary-brand"
 				onclick={() => {
 					resetResultDialogOpen = false;
 					temporaryPassword = null;

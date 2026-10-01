@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
-	import { CR112_VULNERABLE_GROUP_ACTIVE } from '$lib/features/master-data';
+	import { CR112_VULNERABLE_GROUP_ACTIVE, formatMasterLabel } from '$lib/features/master-data';
 	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
@@ -69,7 +69,9 @@
 					{disabled}
 					class="size-4 shrink-0"
 				/>
-				<span class="leading-tight">{vulnerableLabel(item.code, item.label)}</span>
+				<span class="leading-tight"
+					>{vulnerableLabel(item.code, formatMasterLabel(item, langState.current))}</span
+				>
 			</label>
 		{/each}
 	</div>

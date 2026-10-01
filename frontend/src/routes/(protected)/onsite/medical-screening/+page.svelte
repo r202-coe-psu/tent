@@ -40,7 +40,7 @@
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { paginateItems } from '$lib/db/paginate';
 	import { getShelterCode } from '$lib/db/shelter';
-	import { useMasterData } from '$lib/features/master-data';
+	import { useMasterData, formatMasterLabel } from '$lib/features/master-data';
 	import {
 		buildMedicalScreeningPath,
 		classifyScreeningQueueTab,
@@ -184,8 +184,8 @@
 	};
 
 	function getSpecialNeedLabel(need: string): string {
-		const fromMaster = vulnerableGroupQuery.data?.items.find((i) => i.code === need)?.label;
-		if (fromMaster) return fromMaster;
+		const masterItem = vulnerableGroupQuery.data?.items.find((i) => i.code === need);
+		if (masterItem) return formatMasterLabel(masterItem, 'th');
 		const fromLegacy = SPECIAL_NEED_LABELS[need];
 		if (fromLegacy) return fromLegacy;
 		if (need.startsWith('item_')) return '—';

@@ -30,11 +30,12 @@
 		canConfirmRoom,
 		isPendingZoneArrivalConfirmation,
 		zoneLabel,
+		movementConflictMessage,
 		type Evacuee,
 		type Screening
 	} from '$lib/features/people';
 	import { useShelter } from '$lib/features/shelters';
-	import { useMasterData } from '$lib/features/master-data';
+	import { useMasterData, formatMasterLabel } from '$lib/features/master-data';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
@@ -82,8 +83,8 @@
 	};
 
 	function getSpecialNeedLabel(need: string): string {
-		const fromMaster = vulnerableGroupQuery.data?.items.find((i) => i.code === need)?.label;
-		if (fromMaster) return fromMaster;
+		const masterItem = vulnerableGroupQuery.data?.items.find((i) => i.code === need);
+		if (masterItem) return formatMasterLabel(masterItem, 'th');
 		return SPECIAL_NEED_LABELS[need] ?? need;
 	}
 
@@ -180,7 +181,7 @@
 			toast.success('ยืนยันถึงโซนเรียบร้อย');
 			await goto(resolve('/onsite/zoning'));
 		} catch (err: unknown) {
-			toast.error(err instanceof Error ? err.message : 'ยืนยันถึงโซนไม่สำเร็จ');
+			toast.error(movementConflictMessage(err));
 		} finally {
 			submitting = false;
 		}
@@ -198,7 +199,7 @@
 			toast.success(`ยืนยันถึงโซนทั้งครัวเรือน ${confirmed.length} คน`);
 			await goto(resolve('/onsite/zoning'));
 		} catch (err: unknown) {
-			toast.error(err instanceof Error ? err.message : 'ยืนยันถึงโซนไม่สำเร็จ');
+			toast.error(movementConflictMessage(err));
 		} finally {
 			submitting = false;
 		}
@@ -223,7 +224,7 @@
 			);
 			await goto(resolve('/onsite/zoning'));
 		} catch (err: unknown) {
-			toast.error(err instanceof Error ? err.message : 'บันทึกไม่สำเร็จ');
+			toast.error(movementConflictMessage(err));
 		} finally {
 			submitting = false;
 		}

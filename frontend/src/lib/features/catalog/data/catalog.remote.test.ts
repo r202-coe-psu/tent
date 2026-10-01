@@ -390,6 +390,50 @@ describe('CatalogRemoteRepository', () => {
 			const removed = await repo.getItemCategory(category._id, 'SH001');
 			expect(removed).toBeNull();
 		});
+
+		it('rejects shelter delete of a central item master', async () => {
+			const item = await repo.createItemMaster(
+				{
+					name: 'สินค้าส่วนกลางห้ามลบ',
+					base_unit: 'piece',
+					distribution_type: 'recurring',
+					type_class: 'CONSUMABLE',
+					dietary: []
+				},
+				ctx
+			);
+
+			await expect(repo.deleteItemMaster(item._id, 'SH001')).rejects.toThrow(
+				'ไม่อนุญาตให้ลบรายการส่วนกลางจากศูนย์พักพิง'
+			);
+
+			const stillThere = await repo.getItemMaster(item._id);
+			expect(stillThere).not.toBeNull();
+			expect(stillThere?.deactivated).not.toBe(true);
+		});
+
+		it('rejects delete of protected system categories', async () => {
+			const id = 'item_category:food';
+			await getDb('catalog').put({
+				_id: id,
+				type: 'item_category',
+				name: 'อาหารและวัตถุดิบ',
+				system_key: 'FOOD',
+				default_class: 'CONSUMABLE',
+				is_protected: true,
+				schema_v: 2,
+				created_at: '2026-09-01T00:00:00.000Z',
+				updated_at: '2026-09-01T00:00:00.000Z',
+				created_by: 'seed'
+			});
+
+			await expect(repo.deleteItemCategory(id)).rejects.toThrow(
+				'ไม่อนุญาตให้ลบหมวดหมู่ระบบมาตรฐาน'
+			);
+			await expect(repo.deleteItemCategory(id, 'SH001')).rejects.toThrow(
+				'ไม่อนุญาตให้ลบหมวดหมู่ระบบมาตรฐาน'
+			);
+		});
 	});
 
 	describe('UnitOfMeasure & AC-03 validation in repository', () => {
