@@ -278,6 +278,34 @@
 			</Form.Control>
 			<Form.FieldErrors />
 		</Form.Field>
+
+		<Form.Field {form} name="floor_count">
+			<Form.Control>
+				{#snippet children({ props })}
+					<Form.Label>จำนวนชั้น</Form.Label>
+					<div class="flex">
+						<Input
+							{...props}
+							type="number"
+							min="1"
+							step="1"
+							value={$formData.floor_count ?? ''}
+							oninput={(e) =>
+								($formData.floor_count =
+									e.currentTarget.value === '' ? null : Number(e.currentTarget.value))}
+							{disabled}
+							placeholder="เช่น 1 หรือ 2"
+							class="rounded-r-none"
+						/>
+						<span
+							class="flex items-center rounded-r-md border border-l-0 border-input bg-muted px-3 text-xs text-muted-foreground"
+							>ชั้น</span
+						>
+					</div>
+				{/snippet}
+			</Form.Control>
+			<Form.FieldErrors />
+		</Form.Field>
 	</div>
 
 	<Form.Field {form} name="project_level">

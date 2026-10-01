@@ -3008,4 +3008,69 @@ describe('buildValidateDocUpdate', () => {
 			});
 		});
 	});
+
+	describe('shelter_readiness_assessment VDU validation', () => {
+		const validAssessment: Doc = {
+			_id: 'shelter_readiness_assessment:SH001:2026-09-30T10-00-00Z',
+			type: 'shelter_readiness_assessment',
+			schema_v: 1,
+			shelter_code: 'SH001',
+			tier: 'community',
+			header: {
+				shelter_name: 'ศูนย์ 1',
+				operating_agency: 'อบต.',
+				max_capacity: 100,
+				phone_contact: '012',
+				building_type: 'โรงเรียน',
+				location_address: '123',
+				assessor_name: 'test',
+				assessed_date: '2026-09-30'
+			},
+			status: 'draft',
+			verdict: null,
+			justification_note: '',
+			summary: {
+				total_items: 38,
+				answered_items: 0,
+				fully_ready_count: 0,
+				partial_count: 0,
+				none_count: 0,
+				unassessed_count: 38,
+				mandatory_unanswered_count: 38,
+				mandatory_none_count: 0
+			},
+			items: [],
+			created_by: 'reg',
+			created_at: '2026-09-30T10:00:00.000Z',
+			updated_at: '2026-09-30T10:00:00.000Z',
+			edit_history: []
+		};
+
+		it('allows creating valid shelter_readiness_assessment', () => {
+			expect(() => compile()(validAssessment, null, REGISTRATION)).not.toThrow();
+		});
+
+		it('rejects cross-shelter readiness assessment', () => {
+			expectForbidden(
+				() => compile()({ ...validAssessment, shelter_code: 'SH002' }, null, REGISTRATION),
+				/shelter_code must be SH001/
+			);
+		});
+
+		it('rejects assessment with mismatched id prefix', () => {
+			expectForbidden(
+				() =>
+					compile()({ ...validAssessment, _id: 'assessment:SH001:2026-09-30' }, null, REGISTRATION),
+				/Shelter readiness assessment id must start with shelter_readiness_assessment:SH001:/
+			);
+		});
+
+		it('rejects assessment when created_at or created_by is modified', () => {
+			expectForbidden(
+				() =>
+					compile()({ ...validAssessment, created_by: 'hacker' }, validAssessment, REGISTRATION),
+				/Shelter readiness assessment identity and creation metadata cannot change/
+			);
+		});
+	});
 });
