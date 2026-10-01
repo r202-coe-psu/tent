@@ -2,8 +2,8 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-09-30
-note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer; CR-130 Food Sphere target segments & bump food_sphere_standard schema_v 1→2; CR-135/CR-136 partner OAuth2 client name/module preset + secret reveal/edit/delete; CR-137 shrink master_data (10→4) + zone/community free text; CR-138 remove purchase doc type + withdraw purchase from stock_ledger.reason
+updated: 2026-10-01
+note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer; CR-130 Food Sphere target segments & bump food_sphere_standard schema_v 1→2; CR-135/CR-136 partner OAuth2 client name/module preset + secret reveal/edit/delete; CR-137 shrink master_data (10→4) + zone/community free text; CR-138 remove purchase doc type + withdraw purchase from stock_ledger.reason; CR-142 system banner settings on config:app (config:app.banner_*, no schema_v bump)
 ---
 
 # Database Schema v5 — field-level
@@ -1281,6 +1281,9 @@ backward compatibility ของ CR-059/110; flow ใหม่ใช้ §2.29�
 | `device_db_ttl_days` | int | `30` | อายุ local db บน device |
 | `retention_months_after_close` | int | `3` | PDPA purge |
 | `fam_search_max_results` | int | `10` | — |
+| `banner_enabled` | bool | `false` | ([CR-142](../changes/CR-142-configurable-system-banner.md)) system banner master switch (bottom of every route); แสดงเมื่อ ON **และ** `banner_message` ไม่ว่าง |
+| `banner_message` | string ≤120 | `''` | trim, ห้ามขึ้นบรรทัดใหม่; ว่าง = ไม่แสดง banner แม้ `banner_enabled=true` |
+| `banner_variant` | enum `success\|warning\|destructive\|info` | `warning` | สี banner; ค่านอก enum → reader fallback `warning`, PUT reject (422) |
 
 ---
 

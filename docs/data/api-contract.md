@@ -2,7 +2,7 @@
 title: Smart Shelter — API Contract v1
 status: draft for review
 created: 2026-06-11
-updated: 2026-09-29
+updated: 2026-10-01
 note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration; Partner Data API EXT-001–007 (#214); CR-124 staff Google step-up MFA + Google SSO login (enrolled + mint AuthSession)
 ---
 
@@ -77,6 +77,7 @@ DELETE /couch/_session          → logout
   GET      /api/v1/auth/oauth/thaid/callback    → แลก code (Basic Auth), อ่าน sub/name/pid; link / step-up / mint login
   POST     /api/v1/auth/oauth/thaid/unlink      → ถอดการผูก ThaID (self หรือ admin ตามสิทธิ์)
   GET      /api/public/v1/login-methods          → { password, google, thaid } สำหรับหน้า login (CR-141)
+  GET      /api/public/v1/system-banner          → { enabled, message, variant } สำหรับ system banner (อ่าน config:app.banner_*; no-store, ไม่ auth)
   GET      /api/v1/auth/link-account/pending     → { provider, display } จาก pending_link หรือ 401 (CR-141)
   DELETE   /api/v1/auth/link-account/pending     → ยกเลิก / ลบ pending_link (CR-141)
   POST     /api/v1/auth/link-account             → verify password + ผูก provider + mint session (CR-141)
