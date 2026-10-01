@@ -232,7 +232,7 @@ export const publicBookingInputSchema = z.object({
 		.min(1, 'ต้องมีผู้เข้าพักอย่างน้อย 1 คน')
 		// A single booking is a household, not a mass import — cap it so one request
 		// cannot reserve an entire shelter.
-		.max(20, 'จองได้สูงสุด 20 คนต่อครั้ง กรุณาติดต่อเจ้าหน้าที่หากมีมากกว่านี้'),
+		.max(20, 'ลงทะเบียนได้สูงสุด 20 คนต่อครั้ง กรุณาติดต่อเจ้าหน้าที่หากมีมากกว่านี้'),
 	pets: z.array(publicBookingPetSchema).max(20, 'ระบุสัตว์เลี้ยงได้สูงสุด 20 ตัว').default([]),
 	vehicles: z.array(publicBookingVehicleSchema).max(10, 'ระบุยานพาหนะได้สูงสุด 10 คัน').default([]),
 	asset_description: z.string().trim().max(500, 'ข้อมูลทรัพย์สินยาวเกินไป').optional().default(''),
@@ -388,7 +388,11 @@ export function isCaptchaKeyConfigured(key: string | undefined | null): boolean 
 }
 
 export const publicBookingLookupSchema = z.object({
-	code: z.string({ error: 'กรุณากรอกรหัสการจอง' }).trim().min(1, 'กรุณากรอกรหัสการจอง').max(64),
+	code: z
+		.string({ error: 'กรุณากรอกรหัสการลงทะเบียน' })
+		.trim()
+		.min(1, 'กรุณากรอกรหัสการลงทะเบียน')
+		.max(64),
 	phone: bookingPhoneSchema
 });
 
@@ -420,9 +424,9 @@ const ERROR_COPY: Record<PublicBookingErrorCode, string> = {
 	SHELTER_CLOSED: 'ศูนย์พักพิงนี้ปิดรับผู้เข้าพักแล้ว กรุณาเลือกศูนย์อื่น',
 	CAPACITY_EXCEEDED: 'ศูนย์พักพิงนี้เต็มตามจำนวนคาดการณ์แล้ว กรุณาเลือกศูนย์อื่น',
 	DUPLICATE_HOLD:
-		'มีการจองค้างอยู่แล้วสำหรับเบอร์หรือบัตรนี้ กรุณาใช้รหัสจองเดิมหรือติดต่อเจ้าหน้าที่',
-	BOOKING_NOT_FOUND: 'ไม่พบการจองที่ตรงกับรหัสและเบอร์โทรนี้',
-	WRITE_FAILED: 'บันทึกการจองไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
+		'มีการลงทะเบียนล่วงหน้าค้างอยู่แล้วสำหรับเบอร์หรือบัตรนี้ กรุณาใช้ใบลงทะเบียนเดิมหรือติดต่อเจ้าหน้าที่',
+	BOOKING_NOT_FOUND: 'ไม่พบการลงทะเบียนที่ตรงกับรหัสและเบอร์โทรนี้',
+	WRITE_FAILED: 'บันทึกการลงทะเบียนไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
 	SHELTER_REQUIRED: 'กรุณาเลือกศูนย์พักพิงก่อนอัปโหลดรูป',
 	EMPTY_PHOTO: 'ไม่พบไฟล์รูปภาพ กรุณาเลือกใหม่',
 	PHOTO_TOO_LARGE: 'ไฟล์รูปใหญ่เกินไป กรุณาเลือกไฟล์ที่เล็กกว่า',

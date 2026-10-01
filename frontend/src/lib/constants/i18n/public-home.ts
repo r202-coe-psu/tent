@@ -9,9 +9,9 @@ export const PUBLIC_HOME_I18N = {
 		regTitle: 'สำหรับผู้ประสบภัย',
 		regBadge: 'ด่วนที่สุด',
 		regDesc:
-			'ค้นหาศูนย์พักพิงที่เปิดรับ ตรวจสอบจำนวนที่ว่าง และจองสิทธิ์เข้าพักล่วงหน้าเพื่อจัดสรรพื้นที่ ยา และอาหาร',
+			'ค้นหาศูนย์พักพิงที่เปิดรับ ตรวจสอบจำนวนที่ว่าง และลงทะเบียนล่วงหน้าเพื่อให้ศูนย์จัดเตรียมพื้นที่ ยา และอาหาร',
 		regBtn1: 'ดูศูนย์พักพิงและที่ว่าง',
-		regBtn2: 'จองเข้าพักล่วงหน้า',
+		regBtn2: 'ลงทะเบียนล่วงหน้า',
 		donateTitle: 'สำหรับผู้ใจบุญ / บริจาค',
 		donateBadge: 'Wishlist',
 		donateDesc:
@@ -53,9 +53,9 @@ export const PUBLIC_HOME_I18N = {
 		regTitle: 'For Evacuees',
 		regBadge: 'Urgent',
 		regDesc:
-			'Find open shelters, check real-time available capacity, and pre-book shelter admission for accommodation, medicine, and food.',
+			'Find open shelters, check real-time available capacity, and pre-register so the shelter can prepare space, medicine, and food.',
 		regBtn1: 'Find Shelters & Capacity',
-		regBtn2: 'Pre-book Stay',
+		regBtn2: 'Pre-register',
 		donateTitle: 'For Donors',
 		donateBadge: 'Wishlist',
 		donateDesc:

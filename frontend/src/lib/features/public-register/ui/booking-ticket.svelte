@@ -103,7 +103,7 @@
 			<CircleCheck class="mt-0.5 h-5 w-5 shrink-0 text-success" />
 			<div>
 				<p class="text-sm font-bold text-foreground">
-					{isUnassigned ? t.unassignedSuccessTitle : t.successHeaderTitle}
+					{t.successHeaderTitle}
 				</p>
 				<p class="mt-0.5 text-xs text-muted-foreground">
 					{isUnassigned ? t.unassignedSuccessDesc : t.successHeaderDesc}
@@ -121,9 +121,7 @@
 			<p class="mt-1 text-base font-bold">
 				{isUnassigned ? 'ไม่ระบุศูนย์พักพิง' : ticket.shelter_name}
 			</p>
-			{#if isUnassigned}
-				<p class="text-xs opacity-80">รหัสลงทะเบียน: {ticket.code}</p>
-			{:else}
+			{#if !isUnassigned}
 				<p class="text-xs opacity-80">{t.shelterCodeLabel} {ticket.shelter_code}</p>
 			{/if}
 		</div>
@@ -131,9 +129,9 @@
 		<!--
 			Printable target: only this block should end up on paper (QR + the holder's
 			name + shelter name — no wristband chrome, no accent bars, no ID-card panels).
-			The booking code is deliberately not shown: it is the evacuee ULID the QR
-			already carries — unreadable to a human, and meaningless to the marshal at
-			the gate, who matches the person in front of them against the name.
+			The code is deliberately not shown (shelter and unassigned tickets alike):
+			it is the ULID / registration id the QR already carries — unreadable to a
+			human, and staff find the person by QR, name or phone, never by typing it.
 			The `booking-ticket-print` id is picked up by the @media print isolation
 			below (same visibility-hidden-then-override idiom as evacuee-qr-modal.svelte),
 			so it stays visible while the rest of the page (header banner, dl, page
@@ -164,10 +162,8 @@
 					{t.bookerNameLabel}
 				</p>
 				<p class="text-base font-bold text-foreground">{fullName}</p>
-				{#if isUnassigned}
-					<p class="mt-1 font-mono text-xs text-muted-foreground">รหัส: {ticket.code}</p>
-				{/if}
 			</div>
+			<p class="text-center text-sm font-semibold text-foreground">{t.showQrInstruction}</p>
 		</div>
 
 		<!-- The name lives in the QR block above (it prints); no need to repeat it here. -->
@@ -189,18 +185,6 @@
 				</div>
 			{/if}
 		</dl>
-
-		{#if isUnassigned}
-			<div class="border-t border-indigo-500/20 bg-indigo-500/10 p-4 text-xs text-foreground">
-				<p class="font-bold text-indigo-700 dark:text-indigo-300">
-					{t.unassignedNextStepsTitle}
-				</p>
-				<p class="mt-1 text-muted-foreground">
-					{t.unassignedNextStepsBody}
-					(รหัสอ้างอิง: <strong>{ticket.code}</strong>)
-				</p>
-			</div>
-		{/if}
 	</div>
 
 	<div class="flex flex-wrap items-center justify-center gap-3 print:hidden">
@@ -216,7 +200,7 @@
 				onclick={() => onVerified?.(ticket.code)}
 			>
 				<CheckCircle class="h-4 w-4 text-emerald-600" />
-				<span>นำตั๋วไปยืนยันแล้ว (ลบตั๋ว)</span>
+				<span>ยืนยันที่ศูนย์แล้ว (ลบใบลงทะเบียน)</span>
 			</Button>
 		{/if}
 	</div>
