@@ -3,12 +3,7 @@ import type { RequestHandler } from './$types';
 import { env } from '$env/dynamic/private';
 import { serviceError, ServiceError, verifyCredentials } from '$lib/server/couch-admin';
 import { mintLoginSession } from '$lib/server/google-oauth';
-import {
-	clearPendingLinkCookie,
-	maskSubject,
-	readPendingLink,
-	type PendingLink
-} from '$lib/server/pending-link';
+import { clearPendingLinkCookie, readPendingLink } from '$lib/server/pending-link';
 import { ReCaptchaProvider } from '$lib/server/security/captcha';
 import { resolveRecaptchaGate, verifyRecaptchaOrSkip } from '$lib/server/security/recaptcha-gate';
 import { linkAccountIpLimiter, linkAccountNonceLimiter } from '$lib/server/security/rate-limiter';
@@ -29,26 +24,6 @@ const captchaProvider = new ReCaptchaProvider(
 /** One message for wrong password, unknown user and ineligible account (FR-16/17). */
 const REJECTED = 'ไม่สามารถเชื่อมบัญชีนี้ได้ กรุณาตรวจสอบข้อมูลหรือติดต่อผู้ดูแลระบบ';
 
-type LinkResult =
-	| 'linked'
-	| 'expired'
-	| 'rate_limited'
-	| 'captcha_failed'
-	| 'bad_credentials'
-	| 'not_eligible'
-	| 'conflict';
-
-function audit(link: PendingLink | null, result: LinkResult, user?: string, detail?: string) {
-	console.warn('[auth-link]', {
-		at: new Date().toISOString(),
-		provider: link?.provider ?? null,
-		sub: link ? maskSubject(link.sub) : null,
-		user: user ?? null,
-		result,
-		...(detail ? { detail } : {})
-	});
-}
-
 function reject(code: string, message: string, status: number): Response {
 	return json({ error: { code, message } }, { status });
 }
@@ -61,14 +36,12 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
 	const link = readPendingLink(cookies);
 	try {
 		if (!link) {
-			audit(null, 'expired');
 			return reject('LINK_EXPIRED', 'หมดเวลาการเชื่อมบัญชี กรุณาเข้าสู่ระบบใหม่อีกครั้ง', 401);
 		}
 
 		const ip = getClientAddress();
 		if (!linkAccountIpLimiter.check(ip) || !linkAccountNonceLimiter.check(link.nonce)) {
 			clearPendingLinkCookie(cookies);
-			audit(link, 'rate_limited');
 			return reject('RATE_LIMITED', 'ลองหลายครั้งเกินไป กรุณาเข้าสู่ระบบใหม่อีกครั้ง', 429);
 		}
 
@@ -93,7 +66,6 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
 				provider: captchaProvider
 			});
 			if (!captcha.ok) {
-				audit(link, 'captcha_failed', undefined, captcha.error);
 				return reject(
 					captcha.error,
 					'การยืนยันตัวตนไม่ผ่าน กรุณารีเฟรชหน้าแล้วลองใหม่',
@@ -107,7 +79,6 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
 			await verifyCredentials(name, password);
 		} catch (e) {
 			if (e instanceof ServiceError && e.code === 'UNAUTHENTICATED') {
-				audit(link, 'bad_credentials', name);
 				return reject('LINK_REJECTED', REJECTED, 401);
 			}
 			throw e;
@@ -116,7 +87,6 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
 		const doc = await readUserDocForLink(name);
 		const eligibility = doc ? assessLinkEligibility(doc) : 'not_new';
 		if (!doc || eligibility !== 'ok') {
-			audit(link, 'not_eligible', name, eligibility);
 			return reject('LINK_REJECTED', REJECTED, 403);
 		}
 
@@ -133,7 +103,6 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
 		} catch (e) {
 			if (e instanceof ServiceError && e.code === 'CONFLICT') {
 				clearPendingLinkCookie(cookies);
-				audit(link, 'conflict', doc.name);
 				return reject('CONFLICT', 'บัญชีนี้ถูกเชื่อมกับผู้ใช้อื่นแล้ว กรุณาติดต่อผู้ดูแลระบบ', 409);
 			}
 			throw e;
@@ -142,7 +111,6 @@ export const POST: RequestHandler = async ({ request, cookies, getClientAddress 
 		// `salt` is checked by assessLinkEligibility and unchanged by the link write.
 		await mintLoginSession(cookies, doc.name, doc.salt as string);
 		clearPendingLinkCookie(cookies);
-		audit(link, 'linked', doc.name);
 		return json({ ok: true });
 	} catch (e) {
 		return serviceError(e);
