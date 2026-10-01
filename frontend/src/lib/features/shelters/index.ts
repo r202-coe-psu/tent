@@ -120,6 +120,16 @@ export {
 	type CapacityAlignment
 } from './domain/capacity-guide';
 
+export {
+	sumZoneAreas,
+	sumCommonAreas,
+	areaAlignment,
+	canSyncAreaFromZones,
+	type ZoneAreaLike,
+	type CommonAreasLike,
+	type AreaAlignment
+} from './domain/area-guide';
+
 // Data layer (public)
 export {
 	createShelter,
@@ -155,6 +165,9 @@ export { default as ShelterList } from './ui/shelter-list.svelte';
 export { default as BasicInfoSection } from './ui/basic-info-section.svelte';
 export { default as CapacitySection } from './ui/capacity-section.svelte';
 export { default as ZonesFacilitiesSection } from './ui/zones-facilities-section.svelte';
+export { default as CapacityFacilitiesSection } from './ui/zones-facilities-section.svelte';
+export { default as CapacityZoneGuideline } from './ui/capacity-zone-guideline.svelte';
+export { default as AreaZoneGuideline } from './ui/area-zone-guideline.svelte';
 export { default as FoodDistributionSection } from './ui/food-distribution-section.svelte';
 export { default as StoragePointsSection } from './ui/storage-points-section.svelte';
 export { default as UtilitiesSection } from './ui/utilities-section.svelte';

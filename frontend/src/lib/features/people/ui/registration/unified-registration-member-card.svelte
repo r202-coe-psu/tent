@@ -64,7 +64,7 @@
 		excludeIds = [],
 		fieldErrors,
 		isJoiningExistingHousehold = false,
-		primaryContactPhone: _primaryContactPhone = null,
+		primaryContactPhone = null,
 		onRemove,
 		onReportingInChange,
 		onApplyZoneToAll,
@@ -93,9 +93,7 @@
 	const title = $derived(isPrimary ? t.primaryContact : `${t.memberLabel} ${index + 1}`);
 	const photoInputId = $derived(`unified-member-photo-${index}`);
 	const showPhotoUpload = $derived(photoUpload !== 'none');
-	const hideNoPhone = $derived(
-		channel === 'public' && index === 0 && !isJoiningExistingHousehold
-	);
+	const hideNoPhone = $derived(channel === 'public' && index === 0 && !isJoiningExistingHousehold);
 
 	const isReportIn = $derived(mode === 'report-in');
 	const isAlreadyReported = $derived(
@@ -630,7 +628,11 @@
 			disabled={fieldsDisabled}
 			{hideNoPhone}
 			phoneOptional={isJoiningExistingHousehold}
-			phoneHelperText={isJoiningExistingHousehold ? t.joinPhoneOptionalHelper : ''}
+			phoneHelperText={isJoiningExistingHousehold
+				? primaryContactPhone
+					? `${t.joinPhoneOptionalHelper} (${primaryContactPhone})`
+					: t.joinPhoneOptionalHelper
+				: ''}
 			idPrefix="member-{index}"
 			errors={fieldErrors}
 		/>

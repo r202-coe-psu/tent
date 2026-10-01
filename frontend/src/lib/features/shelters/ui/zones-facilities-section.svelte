@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { SuperForm } from 'sveltekit-superforms';
 	import type { SuperFormData } from 'sveltekit-superforms/client';
-	import type { Zone, Shelter, ZoneType } from '../domain/schema';
+	import type { Zone, Shelter, ZoneType, AreaType } from '../domain/schema';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -17,8 +17,9 @@
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import Power from '@lucide/svelte/icons/power';
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
-	import Users from '@lucide/svelte/icons/users';
+	import Building2 from '@lucide/svelte/icons/building-2';
 	import CapacityZoneGuideline from './capacity-zone-guideline.svelte';
+	import AreaZoneGuideline from './area-zone-guideline.svelte';
 
 	let {
 		form,
@@ -32,9 +33,20 @@
 		disabled?: boolean;
 	} = $props();
 
+	const areaTypeOptions: { value: AreaType; label: string }[] = [
+		{ value: 'indoor', label: 'อาคารปิด (Indoor)' },
+		{ value: 'outdoor', label: 'ลานเปิด (Outdoor)' },
+		{ value: 'hybrid', label: 'แบบผสม (Hybrid)' }
+	];
+
 	function syncCapacityFromZones(zoneSum: number) {
 		$formData.capacity = zoneSum;
 		toast.success(`ปรับความจุศูนย์เป็น ${zoneSum} คน ตามผลรวมโซนแล้ว`);
+	}
+
+	function syncAreaFromZones(areaSum: number) {
+		$formData.area_m2 = areaSum;
+		toast.success(`ปรับพื้นที่ใช้สอยรวมเป็น ${areaSum} ตร.ม. ตามผลรวมโซนแล้ว`);
 	}
 
 	const totalToilets = $derived(
@@ -187,33 +199,137 @@
 </script>
 
 <section
-	id="zones-facilities"
+	id="capacity"
 	class="shelter-form-scroll-mt mb-6 space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs transition-shadow hover:shadow-sm sm:p-8"
 >
 	<div class="flex items-center gap-3 border-b border-slate-100 pb-4">
 		<div
 			class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#0A2647]/5 text-[#0A2647]"
 		>
-			<Users class="h-5 w-5" />
+			<Building2 class="h-5 w-5" />
 		</div>
 		<div>
 			<div class="flex items-center gap-2">
-				<span class="text-xs font-bold tracking-wider text-[#0284C7] uppercase">ส่วนที่ 3</span>
+				<span class="text-xs font-bold tracking-wider text-[#0284C7] uppercase">ส่วนที่ 2</span>
 			</div>
 			<h2 class="text-base font-bold text-[#0A2647] sm:text-lg">
-				การจัดการโซนและสิ่งอำนวยความสะดวก
+				ข้อมูลความจุ โซน และสิ่งอำนวยความสะดวก
 			</h2>
 		</div>
 	</div>
 
-	<CapacityZoneGuideline
-		shelterCapacity={$formData.capacity}
-		zones={$formData.zones}
-		{disabled}
-		onSyncFromZones={syncCapacityFromZones}
-	/>
+	<!-- 2a. ข้อมูลความจุเชิงพื้นที่ -->
+	<div class="space-y-4">
+		<div>
+			<h3 class="text-sm font-bold text-card-foreground">
+				ข้อมูลความจุเชิงพื้นที่ (Capacity & Area)
+			</h3>
+			<p class="text-xs text-muted-foreground">
+				กำหนดความจุสูงสุด ขนาดพื้นที่ใช้สอย และประเภทของพื้นที่อาคาร
+			</p>
+		</div>
 
-	<!-- 3a. Living Zones — section shell + row borders only (≤2 card layers) -->
+		<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+			<Form.Field {form} name="capacity">
+				<Form.Control>
+					{#snippet children({ props })}
+						<Form.Label
+							>ความจุสูงสุด (Max Capacity)<span class="text-destructive">*</span></Form.Label
+						>
+						<div class="flex">
+							<Input
+								{...props}
+								type="number"
+								bind:value={$formData.capacity}
+								{disabled}
+								placeholder="เช่น 150"
+								class="rounded-r-none"
+							/>
+							<span
+								class="flex items-center rounded-r-md border border-l-0 border-input bg-muted px-3 text-xs text-muted-foreground"
+								>คน</span
+							>
+						</div>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
+
+			<Form.Field {form} name="area_m2">
+				<Form.Control>
+					{#snippet children({ props })}
+						<Form.Label>พื้นที่ใช้สอยรวม (Total Area)</Form.Label>
+						<div class="flex">
+							<Input
+								{...props}
+								type="number"
+								step="any"
+								value={$formData.area_m2 ?? ''}
+								oninput={(e) =>
+									($formData.area_m2 =
+										e.currentTarget.value === '' ? null : Number(e.currentTarget.value))}
+								{disabled}
+								placeholder="0"
+								class="rounded-r-none"
+							/>
+							<span
+								class="flex items-center rounded-r-md border border-l-0 border-input bg-muted px-3 text-xs text-muted-foreground"
+								>ตร.ม.</span
+							>
+						</div>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
+
+			<Form.Field {form} name="area_type">
+				<Form.Control>
+					{#snippet children({ props })}
+						<Form.Label>สถานะพื้นที่อาคาร</Form.Label>
+						<Select.Root
+							type="single"
+							bind:value={
+								() => $formData.area_type ?? '',
+								(v) => ($formData.area_type = (v || null) as typeof $formData.area_type)
+							}
+							{disabled}
+						>
+							<Select.Trigger
+								{...props}
+								class="flex !h-9 w-full items-start rounded-md border border-input bg-background px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4"
+							>
+								{areaTypeOptions.find((o) => o.value === $formData.area_type)?.label ?? '— เลือก —'}
+							</Select.Trigger>
+							<Select.Content>
+								{#each areaTypeOptions as opt (opt.value)}
+									<Select.Item value={opt.value} label={opt.label} />
+								{/each}
+							</Select.Content>
+						</Select.Root>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
+		</div>
+	</div>
+
+	<div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+		<CapacityZoneGuideline
+			shelterCapacity={$formData.capacity}
+			zones={$formData.zones}
+			{disabled}
+			onSyncFromZones={syncCapacityFromZones}
+		/>
+		<AreaZoneGuideline
+			shelterArea={$formData.area_m2}
+			zones={$formData.zones}
+			commonAreas={$formData.common_areas}
+			{disabled}
+			onSyncFromZones={syncAreaFromZones}
+		/>
+	</div>
+
+	<!-- 2b. Living Zones — section shell + row borders only (≤2 card layers) -->
 	<div class="flex items-center justify-between gap-3">
 		<h3 class="text-sm font-bold text-card-foreground">การตั้งค่าโซนที่พัก (Living Zones)</h3>
 		<Button

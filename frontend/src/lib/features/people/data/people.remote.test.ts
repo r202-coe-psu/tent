@@ -19,7 +19,12 @@ vi.mock('$lib/db/repository', async (importOriginal) => {
 	};
 });
 
-import { PeopleRemoteRepository, peopleRepository } from './people.remote';
+import {
+	PeopleRemoteRepository,
+	peopleRepository,
+	isRegistrationCompensationIncomplete
+} from './people.remote';
+import { UlidReservation } from '$lib/db/ulid-reservation';
 import type { EvacueeInput, Medical } from '../domain/people';
 
 const ctx = { shelterCode: 'SH001', createdBy: 'tester' };
@@ -512,6 +517,28 @@ describe('PeopleRemoteRepository', () => {
 			const hits = await repo.searchEvacuees('081-234-5678');
 			expect(hits).toHaveLength(1);
 			expect(hits[0].first_name).toBe('Somchai');
+		});
+
+		it('searchEvacueesMany answers every query from one evacuee scan', async () => {
+			const scan = vi.spyOn(memoryRepo, 'allByType');
+			const hits = await repo.searchEvacueesMany([
+				'0812345678',
+				' Malee Suksan ',
+				'nobody',
+				'0812345678'
+			]);
+
+			expect(scan).toHaveBeenCalledTimes(1);
+			expect([...hits.keys()]).toEqual(['0812345678', 'Malee Suksan', 'nobody']);
+			expect(hits.get('0812345678')?.map((e) => e.first_name)).toEqual(['Somchai']);
+			expect(hits.get('Malee Suksan')?.map((e) => e.first_name)).toEqual(['Malee']);
+			expect(hits.get('nobody')).toEqual([]);
+		});
+
+		it('searchEvacueesMany skips the scan when every query is blank', async () => {
+			const scan = vi.spyOn(memoryRepo, 'allByType');
+			expect((await repo.searchEvacueesMany(['', '  '])).size).toBe(0);
+			expect(scan).not.toHaveBeenCalled();
 		});
 	});
 
@@ -1538,6 +1565,129 @@ describe('check-in / check-out', () => {
 			const hh = await repo.getHousehold(household._id);
 			expect(hh?.status).toBe('arriving');
 		});
+	});
+});
+
+describe('createFamilyRegistration network-failure resilience (go-live S4)', () => {
+	let repo: PeopleRemoteRepository;
+	let offline = false;
+
+	const familyInput = {
+		members: [
+			{
+				first_name: 'สมชาย',
+				last_name: 'ใจดี',
+				gender: 'male' as const,
+				phone: '0812345678',
+				country: 'THAILAND'
+			},
+			{
+				first_name: 'สมหญิง',
+				last_name: 'ใจดี',
+				gender: 'female' as const,
+				phone: null,
+				country: 'THAILAND'
+			}
+		],
+		household: {
+			housing_type: 'owned_house' as const,
+			address_no: '12/3',
+			subdistrict: 'หาดใหญ่',
+			district: 'หาดใหญ่',
+			province: 'สงขลา',
+			pets: [],
+			vehicles: [],
+			assets: null
+		}
+	};
+
+	/**
+	 * Couch-like `_bulk_docs`: a doc without `_rev` whose `_id` already exists is
+	 * a 409 (treated as success, like `couch-db.ts` bulkDocs). `commitThenDrop`
+	 * commits that many docs, then fails as if the connection dropped.
+	 */
+	function couchLikeRepo(opts: { commitThenDrop?: number } = {}) {
+		const base = createInMemoryRepository();
+		let dropsLeft = opts.commitThenDrop == null ? 0 : 1;
+		const offlineGuard =
+			<A extends unknown[], R>(fn: (...args: A) => Promise<R>) =>
+			(...args: A) => {
+				if (offline) return Promise.reject(new Error('Failed to fetch'));
+				return fn(...args);
+			};
+		return {
+			...base,
+			get: offlineGuard(base.get.bind(base)),
+			find: offlineGuard(base.find.bind(base)),
+			remove: offlineGuard(base.remove.bind(base)),
+			async bulkDocs<T extends { _id: string; _rev?: string }>(docs: T[]): Promise<T[]> {
+				const saved: T[] = [];
+				for (const [i, doc] of docs.entries()) {
+					if (dropsLeft > 0 && i === opts.commitThenDrop) {
+						dropsLeft--;
+						offline = true;
+						throw new Error('Failed to fetch');
+					}
+					const existing = await base.get<T>(doc._id);
+					saved.push(existing && !doc._rev ? doc : await base.put(doc));
+				}
+				return saved;
+			}
+		};
+	}
+
+	async function countDocs(type: string) {
+		const anyDoc = (doc: unknown): doc is { _id: string; type: string } => doc != null;
+		return (await memoryRepo.allByType(type, anyDoc)).length;
+	}
+
+	beforeEach(() => {
+		offline = false;
+	});
+
+	it('keeps the original save error and flags it when cleanup cannot reach CouchDB', async () => {
+		memoryRepo = couchLikeRepo({ commitThenDrop: 2 });
+		repo = new PeopleRemoteRepository('shelter_sh001');
+
+		const err = await repo
+			.createFamilyRegistration(familyInput, ctx, 'onsite')
+			.catch((e: unknown) => e);
+
+		expect((err as Error).message).toBe('Failed to fetch');
+		expect(isRegistrationCompensationIncomplete(err)).toBe(true);
+	});
+
+	it('does not flag the error when cleanup removed everything it created', async () => {
+		memoryRepo = createInMemoryRepository();
+		vi.spyOn(memoryRepo, 'bulkDocs').mockRejectedValueOnce(new Error('bulkDocs: 1 doc(s) failed'));
+		repo = new PeopleRemoteRepository('shelter_sh001');
+
+		const err = await repo
+			.createFamilyRegistration(familyInput, ctx, 'onsite')
+			.catch((e: unknown) => e);
+
+		expect(isRegistrationCompensationIncomplete(err)).toBe(false);
+		expect(await countDocs('evacuee')).toBe(0);
+		expect(await countDocs('household')).toBe(0);
+	});
+
+	it('a resubmit with the same reservation completes the family instead of duplicating it', async () => {
+		memoryRepo = couchLikeRepo({ commitThenDrop: 2 });
+		repo = new PeopleRemoteRepository('shelter_sh001');
+		const ids = new UlidReservation();
+
+		await expect(repo.createFamilyRegistration(familyInput, ctx, 'onsite', ids)).rejects.toThrow();
+		expect(await countDocs('evacuee')).toBe(1); // household + member 0 committed, cleanup offline
+
+		offline = false;
+		const result = await repo.createFamilyRegistration(familyInput, ctx, 'onsite', ids);
+
+		expect(await countDocs('household')).toBe(1);
+		expect(await countDocs('evacuee')).toBe(2);
+		expect(result.members.map((m) => m.household_id)).toEqual([
+			result.household._id,
+			result.household._id
+		]);
 	});
 });
 

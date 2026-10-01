@@ -327,6 +327,7 @@ export function buildValidateDocUpdate(code: string): string {
     'distribution_request', 'distribution_batch', 'stock_lot_reservation',
     'distribution_issue', 'distribution_issue_idempotency', 'distribution_issue_capacity', 'distribution_one_time_guard', 'distribution_issue_gate',
     'daily_sop_assessment',
+    'shelter_readiness_assessment',
     'requisition_ticket', 'distribution_log', 'bulk_return_pool', 'bulk_return_claim'
   ];
   if (allowed.indexOf(newDoc.type) === -1) {
@@ -638,6 +639,23 @@ export function buildValidateDocUpdate(code: string): string {
     var expectedRisk = isCompleteDailySop && passedControlCount === 19 && allOperational ? 'ไม่พบความเสี่ยง' : 'พบความเสี่ยง';
     if (newDoc.progress_percent !== expectedProgress || newDoc.pass_percent !== expectedPass || newDoc.risk_label !== expectedRisk) {
       throw { forbidden: 'Daily SOP summary is inconsistent with answers' };
+    }
+  }
+  // Shelter Readiness SOP Assessment
+  if (newDoc.type === 'shelter_readiness_assessment') {
+    if (oldDoc && (
+        newDoc._id !== oldDoc._id ||
+        newDoc.type !== oldDoc.type ||
+        newDoc.shelter_code !== oldDoc.shelter_code ||
+        newDoc.created_at !== oldDoc.created_at ||
+        newDoc.created_by !== oldDoc.created_by)) {
+      throw { forbidden: 'Shelter readiness assessment identity and creation metadata cannot change' };
+    }
+    if (newDoc.schema_v !== 1 || ['draft', 'submitted'].indexOf(newDoc.status) === -1) {
+      throw { forbidden: 'Shelter readiness assessment schema/status is invalid' };
+    }
+    if (newDoc._id.indexOf('shelter_readiness_assessment:' + newDoc.shelter_code + ':') !== 0) {
+      throw { forbidden: 'Shelter readiness assessment id must start with shelter_readiness_assessment:' + newDoc.shelter_code + ':' };
     }
   }
   // 2. donation status is forward-only — no going back to declared

@@ -16,7 +16,8 @@ import {
 	HandHeart,
 	MapPin,
 	UtensilsCrossed,
-	FlaskConical
+	FlaskConical,
+	ClipboardCheck
 } from '@lucide/svelte/icons';
 
 type Leaf = {
@@ -63,15 +64,14 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 		title: '2. บริหารทรัพยากร',
 		items: [
 			{
+				label: 'การประเมินความพร้อมศูนย์ (Readiness SOP)',
+				href: resolve('/back-office/shelters/readiness' as '/back-office/shelters'),
+				icon: ClipboardCheck
+			},
+			{
 				label: 'การประเมินประจำวัน (Daily SOP)',
 				href: resolve('/back-office/dailysop'),
 				icon: ClipboardList
-			},
-			{
-				label: 'คำนวณความต้องการทรัพยากร',
-				href: resolve('/back-office/resource-dashboard'),
-				icon: Calculator,
-				requiresManager: true
 			},
 			{
 				label: 'จำลองสถานการณ์ SOP',
