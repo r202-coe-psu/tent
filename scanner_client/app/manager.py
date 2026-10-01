@@ -488,6 +488,14 @@ class ScannerClientManager:
                     view = view[os.write(fd, view) :]
                 except BlockingIOError:
                     continue
+            # usblp accepts a non-blocking write as soon as the URB is queued, and close() unlinks
+            # any URB still in flight: the label's tail (with GS V B 0) is dropped, the printer is
+            # left waiting mid-raster and the next job prints as garbage. usblp only reports
+            # POLLOUT once the last write URB has completed, so wait for that before closing.
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or not select.select([], [fd], [], remaining)[1]:
+                logger.error(f"ESC/POS write to {device} did not finish before the timeout")
+                return False
             return True
         except OSError as error:
             logger.error(f"ESC/POS write to {device} failed: {error.strerror or 'error'}")

@@ -682,6 +682,29 @@ class EscposPrintRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((dev / "lp3").read_bytes(), label_to_escpos(real_png(), 576))
         self.assertEqual((dev / "lp0").read_bytes(), b"")
 
+    async def test_waits_for_the_last_write_to_drain_before_closing_the_printer(self):
+        # usblp kills an in-flight URB on close(): closing before POLLOUT loses the label's tail
+        # (and its cut command), so a printer that never drains must fail the job, not "print".
+        sysfs, dev = self.fake_usb_printers(("lp3", "28e9:5812"))
+        client = self.client(PRINTER_USB_ID="28e9:5812")
+        calls = []
+
+        def fake_select(_r, w, _x, _timeout):
+            calls.append(bool(w))
+            writes_done = (dev / "lp3").stat().st_size > 0
+            return ([], [] if writes_done else w, [])
+
+        with (
+            patch.object(manager.select, "select", side_effect=fake_select),
+            self.assertLogs(manager.logger, level="ERROR") as logs,
+        ):
+            route = await self.print_with(client, sysfs, dev, labels_body(real_png()))
+
+        self.assertEqual(route.fulfilled["status"], 502)
+        self.assertEqual(route.fulfilled["body"]["printed"], 0)
+        self.assertGreaterEqual(len(calls), 2)  # one before the write, one drain wait after it
+        self.assertTrue(any("did not finish" in line for line in logs.output))
+
     async def test_lookup_is_repeated_per_label_so_replug_does_not_need_a_restart(self):
         sysfs, dev = self.fake_usb_printers(("lp3", "28e9:5812"))
         client = self.client(PRINTER_USB_ID="28e9:5812")

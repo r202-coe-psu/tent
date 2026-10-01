@@ -6,7 +6,9 @@ import io
 
 from PIL import Image, UnidentifiedImageError
 
-ESC_INIT = b"\x1b@"
+# ESC @ resets the printer; FS . leaves Chinese (Kanji) character mode, which kiosk printers
+# often power up in — so any stray byte prints as a single character, not as Chinese glyphs.
+ESC_INIT = b"\x1b@\x1c."
 # GS v 0 m xL xH yL yH d1..dk — raster bit image, normal density (m = 0).
 GS_RASTER = b"\x1dv0\x00"
 # GS V B 0 — feed to the cutting position, then full cut.
