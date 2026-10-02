@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-09-26 # Merged origin/develop into team-Leader-Implement-Kitchen-Ticket; renumbered CR-138..145 to CR-140..147 to de-collide with develop's own CR-138 (remove purchase) and CR-139 (shelter storage points)
+updated: 2026-10-02 # CR-143 stock redesign rules
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 
