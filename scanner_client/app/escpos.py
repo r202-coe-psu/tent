@@ -22,9 +22,10 @@ DOTS_PER_MM = 8
 DEFAULT_CUT_FEED_MM = 15
 # kiosk3 label: every cut strip is exactly this long, cut to cut (KIOSK_LABEL_MM height).
 LABEL_LENGTH_MM = 60
-# Paper kiosk3 feeds on its own around ESC i: a 60 mm strip measured 75 mm before this was
-# subtracted. Re-measure (strip length - LABEL_LENGTH_MM) if PRINTER_CUT_FEED_MM changes.
-CUT_EXTRA_MM = 15
+# Paper kiosk3 feeds on its own around ESC i: with 15 here the 2nd label measured 55 mm.
+# Measure from the 2nd label on (the 1st starts wherever the paper was last cut or torn) and
+# re-measure (strip length - LABEL_LENGTH_MM) if PRINTER_CUT_FEED_MM changes.
+CUT_EXTRA_MM = 10
 
 THRESHOLD = 128
 # Labels are ~640x480 px. A tiny PNG can still declare a huge canvas (decompression bomb), so
