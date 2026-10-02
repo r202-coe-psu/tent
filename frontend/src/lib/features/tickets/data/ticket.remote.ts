@@ -130,12 +130,7 @@ export class TicketRemoteRepository implements TicketRepository {
 	}
 
 	async dispatchTicket(ticket: RequisitionTicket, ctx: AuthorContext): Promise<RequisitionTicket> {
-		// LPG is temporarily excluded from dispatch. Keep ticket flow usable while
-		// cylinder allocation is paused; do not validate or consume gas stock.
-		const dispatched = {
-			...markTicketDispatched(ticket, ctx),
-			gas_drawdown: []
-		};
+		const dispatched = markTicketDispatched(ticket, ctx);
 
 		// 1. Check stock balance for every line before writing anything.
 		const ledger = await this.repo.allByType<StockLedger>('stock_ledger', isStockLedger);

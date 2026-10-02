@@ -102,12 +102,6 @@ export interface MealPlanRecipe {
 	unit?: string;
 }
 
-// Planned gas cylinder consumption for a meal plan.
-export interface MealPlanGasUsage {
-	cylinder_id: string;
-	consumption_kg: string; // qty_str
-}
-
 export interface MealPlan extends BaseDoc {
 	type: 'meal_plan';
 	date: string;
@@ -120,7 +114,6 @@ export interface MealPlan extends BaseDoc {
 	cooking_started_at?: Timestamp;
 	override_reason?: string | null;
 	calc_source?: MealCalcSource | null;
-	gas_usage?: MealPlanGasUsage[];
 	meal_session_id?: string | null;
 	target_tags?: string[];
 	allocated_target?: number;
@@ -160,14 +153,6 @@ export const mealPlanInputSchema = z.object({
 		})
 		.nullable()
 		.optional(),
-	gas_usage: z
-		.array(
-			z.object({
-				cylinder_id: z.string().min(1),
-				consumption_kg: qtyStrCoercePositiveSchema
-			})
-		)
-		.optional(),
 	meal_session_id: z.string().nullable().optional(),
 	target_tags: z.array(z.string()).optional(),
 	allocated_target: z.number().int().min(0).optional()
@@ -189,14 +174,6 @@ export function createMealPlan(input: MealPlanInput, ctx: AuthorContext): MealPl
 			...(d.label != null ? { label: d.label } : {}),
 			...(d.override_reason != null ? { override_reason: d.override_reason } : {}),
 			...(d.calc_source != null ? { calc_source: d.calc_source } : {}),
-			...(d.gas_usage != null
-				? {
-						gas_usage: d.gas_usage.map((g) => ({
-							cylinder_id: g.cylinder_id,
-							consumption_kg: persistQty(g.consumption_kg)
-						}))
-					}
-				: {}),
 			...(d.meal_session_id !== undefined ? { meal_session_id: d.meal_session_id } : {}),
 			...(d.target_tags != null ? { target_tags: d.target_tags } : {}),
 			...(d.allocated_target != null ? { allocated_target: d.allocated_target } : {})
@@ -219,18 +196,12 @@ export interface KitchenRequisitionItem {
 	unit: string;
 }
 
-export interface KitchenRequisitionGasDrawdown {
-	cylinder_id: string;
-	qty_kg: string; // qty_str
-}
-
 export interface KitchenRequisition extends BaseDoc {
 	type: 'kitchen_requisition';
 	status: KitchenRequisitionStatus;
 	meal_plan_id: string | null;
 	meal_session_id?: string | null;
 	items: KitchenRequisitionItem[];
-	gas_drawdown?: KitchenRequisitionGasDrawdown[];
 	ledger_ids: string[];
 	requested_at: Timestamp;
 	issued_at?: Timestamp;
@@ -256,15 +227,7 @@ export const kitchenRequisitionInputSchema = z.object({
 					message: 'qty_issued cannot exceed qty_requested'
 				})
 		)
-		.min(1, 'At least one item required'),
-	gas_drawdown: z
-		.array(
-			z.object({
-				cylinder_id: z.string().min(1),
-				qty_kg: qtyStrCoercePositiveSchema
-			})
-		)
-		.optional()
+		.min(1, 'At least one item required')
 });
 export type KitchenRequisitionInput = z.input<typeof kitchenRequisitionInputSchema>;
 
@@ -287,14 +250,6 @@ export function createKitchenRequisition(
 				qty_requested: persistQty(i.qty_requested),
 				qty_issued: persistQty(i.qty_issued)
 			})),
-			...(d.gas_drawdown
-				? {
-						gas_drawdown: d.gas_drawdown.map((g) => ({
-							cylinder_id: g.cylinder_id,
-							qty_kg: persistQty(g.qty_kg)
-						}))
-					}
-				: {}),
 			ledger_ids: ledgerIds,
 			requested_at: nowStr,
 			issued_at: nowStr,
@@ -317,15 +272,7 @@ export const pendingRequisitionInputSchema = z.object({
 				unit: z.string().trim().min(1)
 			})
 		)
-		.min(1, 'At least one item required'),
-	gas_drawdown: z
-		.array(
-			z.object({
-				cylinder_id: z.string().min(1),
-				qty_kg: qtyStrCoercePositiveSchema
-			})
-		)
-		.optional()
+		.min(1, 'At least one item required')
 });
 export type PendingRequisitionInput = z.input<typeof pendingRequisitionInputSchema>;
 
@@ -347,14 +294,6 @@ export function createPendingRequisition(
 				qty_requested: persistQty(i.qty_requested),
 				qty_issued: persistQty(i.qty_issued)
 			})),
-			...(d.gas_drawdown
-				? {
-						gas_drawdown: d.gas_drawdown.map((g) => ({
-							cylinder_id: g.cylinder_id,
-							qty_kg: persistQty(g.qty_kg)
-						}))
-					}
-				: {}),
 			ledger_ids: [],
 			requested_at: nowStr,
 			issued_at: undefined,
@@ -409,7 +348,6 @@ export interface MealService extends BaseDoc {
 	meal_session_id?: string | null;
 	// Portions produced by the kitchen (distinct from served).
 	actual_yield?: number;
-	actual_gas_used_kg?: string;
 	served: number;
 	waste: number;
 	external: MealServiceExternal;
@@ -422,7 +360,6 @@ export const mealServiceInputSchema = z.object({
 	meal_plan_id: z.string().nullable().default(null),
 	meal_session_id: z.string().nullable().optional(),
 	actual_yield: z.number().int().min(0).nullable().optional(),
-	actual_gas_used_kg: qtyStrCoercePositiveSchema.optional(),
 	served: z.number().int().min(0),
 	waste: z.number().int().min(0),
 	external: z.object({
@@ -445,7 +382,6 @@ export function createMealService(input: MealServiceInput, ctx: AuthorContext): 
 			...(d.meal_session_id !== undefined ? { meal_session_id: d.meal_session_id } : {}),
 			// Preserve 0 as a valid recorded yield.
 			...(d.actual_yield != null ? { actual_yield: d.actual_yield } : {}),
-			...(d.actual_gas_used_kg ? { actual_gas_used_kg: persistQty(d.actual_gas_used_kg) } : {}),
 			served: d.served,
 			waste: d.waste,
 			external: d.external,
@@ -461,7 +397,7 @@ export const isMealService = (d: unknown): d is MealService =>
 // ---- MealServiceReceipt (append-only warehouse receipt decision, CR-144/CR-145) ----
 // `meal_service` is append-only (schema.md §1817 invariant) — can't add
 // received_by/received_at/outcome to that doc, so the warehouse's decision is
-// its own doc instead, same pattern as gas_ledger/stock_ledger event rows.
+// its own doc instead, same pattern as stock_ledger event rows.
 
 export const mealServiceReceiptOutcomeSchema = z.enum(['confirmed', 'rejected']);
 export type MealServiceReceiptOutcome = z.infer<typeof mealServiceReceiptOutcomeSchema>;
@@ -504,61 +440,4 @@ export const isMealServiceReceipt = (d: unknown): d is MealServiceReceipt =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'meal_service_receipt';
 
 export type KitchenDoc =
-	| MealSession
-	| MealPlan
-	| KitchenRequisition
-	| KitchenCounter
-	| MealService
-	| MealServiceReceipt
-	| FuelCylinder;
-
-// ---- FuelCylinder (schema.md §2.7.1, CR-120) — one physical gas tank ----
-// Replaces GasCylinderType (CR-120): a fuel_cylinder is one numbered physical
-// tank, not a spec/type. Status (unused/in_use/empty) is always computed from
-// gas_ledger balance (gas-ledger.ts gasCylinderStatus) — never persisted here.
-
-export interface FuelCylinder extends BaseDoc {
-	type: 'fuel_cylinder';
-	item_master_id: string; // FK item_master in item_category:fuel_energy
-	cylinder_code: string; // e.g. "LPG-01", unique per shelter (case-insensitive)
-	name: string;
-	capacity_kg: string; // qty_str
-	burn_rate_kg_per_hour: string; // qty_str
-	time_multiplier: string; // qty_str
-	tare_weight_kg?: string; // qty_str — empty-tank weight for physical weigh-checks
-	deactivated?: boolean; // true = retired/broken, hidden from kitchen pickers
-}
-
-export const fuelCylinderInputSchema = z.object({
-	item_master_id: z.string().min(1, 'Item master required'),
-	cylinder_code: z.string().trim().min(1, 'Cylinder code required'),
-	name: z.string().trim().min(1, 'Name required'),
-	capacity_kg: qtyStrCoercePositiveSchema,
-	burn_rate_kg_per_hour: qtyStrCoercePositiveSchema,
-	time_multiplier: qtyStrCoercePositiveSchema.default('1'),
-	tare_weight_kg: qtyStrCoercePositiveSchema.optional(),
-	deactivated: z.boolean().optional()
-});
-export type FuelCylinderInput = z.input<typeof fuelCylinderInputSchema>;
-
-export function createFuelCylinder(input: FuelCylinderInput, ctx: AuthorContext): FuelCylinder {
-	const d = fuelCylinderInputSchema.parse(input);
-	return makeDoc(
-		'fuel_cylinder',
-		1,
-		{
-			item_master_id: d.item_master_id,
-			cylinder_code: d.cylinder_code,
-			name: d.name,
-			capacity_kg: persistQty(d.capacity_kg),
-			burn_rate_kg_per_hour: persistQty(d.burn_rate_kg_per_hour),
-			time_multiplier: persistQty(d.time_multiplier),
-			...(d.tare_weight_kg ? { tare_weight_kg: persistQty(d.tare_weight_kg) } : {}),
-			...(d.deactivated !== undefined ? { deactivated: d.deactivated } : {})
-		},
-		ctx
-	);
-}
-
-export const isFuelCylinder = (d: unknown): d is FuelCylinder =>
-	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'fuel_cylinder';
+	MealSession | MealPlan | KitchenRequisition | KitchenCounter | MealService | MealServiceReceipt;

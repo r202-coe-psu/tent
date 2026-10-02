@@ -51,15 +51,6 @@ describe('createTicket', () => {
 		expect(ticket.destination_location).toBe('kitchen');
 	});
 
-	it('persists gas_drawdown when supplied', () => {
-		const ticket = createTicket(
-			{ ...baseInput(), gas_drawdown: [{ cylinder_id: 'fuel_cylinder:01J', qty_kg: '2' }] },
-			'TKT-KITCHEN-0001',
-			ctx
-		);
-		expect(ticket.gas_drawdown).toEqual([{ cylinder_id: 'fuel_cylinder:01J', qty_kg: '2' }]);
-	});
-
 	it('rejects an empty items array', () => {
 		expect(() => createTicket({ ...baseInput(), items: [] }, 'TKT-KITCHEN-0001', ctx)).toThrow();
 	});

@@ -656,7 +656,7 @@ describe('buildValidateDocUpdate', () => {
 	// Module D (kitchen) was missing from the whitelist entirely — kitchen_staff
 	// could never actually write any of these without an _admin session, even
 	// though requireKitchen() lets them into the UI (bug found + fixed alongside
-	// CR-080's gas_ledger addition).
+	// CR-080).
 	describe('kitchen doc types (schema.md §2.5-§2.7.2)', () => {
 		it('includes every kitchen doc type in the allowed whitelist', () => {
 			const validateFn = buildValidateDocUpdate('SH001');
@@ -664,8 +664,6 @@ describe('buildValidateDocUpdate', () => {
 				'meal_plan',
 				'kitchen_requisition',
 				'meal_service',
-				'fuel_cylinder',
-				'gas_ledger',
 				'meal_service_receipt'
 			] as const) {
 				expect(validateFn).toContain(`'${type}'`);
@@ -728,61 +726,17 @@ describe('buildValidateDocUpdate', () => {
 			).not.toThrow();
 		});
 
-		it('accepts a new fuel_cylinder from kitchen_staff', () => {
-			expect(() =>
-				compile()(
-					{
-						_id: 'fuel_cylinder:01J',
-						type: 'fuel_cylinder',
-						...envelope,
-						schema_v: 1,
-						item_master_id: 'item_master:lpg_15kg',
-						cylinder_code: 'LPG-01',
-						name: 'ถังทดสอบ',
-						capacity_kg: '15',
-						burn_rate_kg_per_hour: '0.5',
-						time_multiplier: '1'
-					},
-					null,
-					KITCHEN
-				)
-			).not.toThrow();
-		});
-
-		it('accepts a new gas_ledger entry from kitchen_staff', () => {
-			expect(() =>
-				compile()(
-					{
-						_id: 'gas_ledger:01J',
-						type: 'gas_ledger',
-						...envelope,
-						schema_v: 1,
-						cylinder_id: 'fuel_cylinder:01J',
-						qty_kg: '-2',
-						reason: 'consumption',
-						ref_id: null,
-						occurred_at: envelope.created_at
-					},
-					null,
-					KITCHEN
-				)
-			).not.toThrow();
-		});
-
 		it.each(['meal_session', 'kitchen_counter'])('includes %s in the allowed whitelist', (type) => {
 			expect(buildValidateDocUpdate('SH001')).toContain(`'${type}'`);
 		});
 
-		it.each(['meal_service', 'gas_ledger'])(
-			'rejects updating an existing %s (append-only)',
-			(type) => {
-				const doc = { ...envelope, schema_v: 1, _id: `${type}:01J`, type };
-				expectForbidden(
-					() => compile()({ ...doc, touched: true }, doc, KITCHEN),
-					new RegExp(`Cannot update append-only ${type}`)
-				);
-			}
-		);
+		it.each(['meal_service'])('rejects updating an existing %s (append-only)', (type) => {
+			const doc = { ...envelope, schema_v: 1, _id: `${type}:01J`, type };
+			expectForbidden(
+				() => compile()({ ...doc, touched: true }, doc, KITCHEN),
+				new RegExp(`Cannot update append-only ${type}`)
+			);
+		});
 
 		it('allows updating a pending kitchen_requisition', () => {
 			const doc = {
@@ -809,7 +763,7 @@ describe('buildValidateDocUpdate', () => {
 			);
 		});
 
-		it.each(['kitchen_requisition', 'meal_service', 'gas_ledger'])(
+		it.each(['kitchen_requisition', 'meal_service'])(
 			'rejects deleting an existing %s (append-only)',
 			(type) => {
 				const doc = { ...envelope, schema_v: 1, _id: `${type}:01J`, type };
@@ -819,22 +773,6 @@ describe('buildValidateDocUpdate', () => {
 				);
 			}
 		);
-
-		it('allows updating an existing fuel_cylinder (mutable, LWW)', () => {
-			const doc = {
-				...envelope,
-				schema_v: 1,
-				_id: 'fuel_cylinder:01J',
-				type: 'fuel_cylinder',
-				item_master_id: 'item_master:lpg_15kg',
-				cylinder_code: 'LPG-01',
-				name: 'ถังทดสอบ',
-				capacity_kg: '15',
-				burn_rate_kg_per_hour: '0.5',
-				time_multiplier: '1'
-			};
-			expect(() => compile()({ ...doc, capacity_kg: '20' }, doc, KITCHEN)).not.toThrow();
-		});
 	});
 
 	// Volunteers (CR-092/CR-094/CR-095) shipped without an entry here — every

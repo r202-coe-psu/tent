@@ -7,11 +7,10 @@ import type {
 	KitchenRequisitionInput,
 	MealService,
 	MealServiceInput,
-	MealServiceReceipt,
-	FuelCylinder,
-	FuelCylinderInput
+	MealServiceReceipt
 } from '../domain/kitchen';
-import type { GasLedgerEntry } from '../domain/gas-ledger';
+import type { ResolvedYieldLine } from '../domain/kitchen-yield-receipt';
+import type { StockLedger } from '$lib/features/operations';
 import type { AuthorContext } from '$lib/db/model';
 
 export interface CreatePendingRequisitionParams {
@@ -25,16 +24,11 @@ export interface CreatePendingRequisitionParams {
 			qty_issued?: string;
 			unit: string;
 		}>;
-		gas_drawdown?: Array<{
-			cylinder_id: string;
-			qty_kg: string;
-		}>;
 	};
 }
 
 export interface ApproveRequisitionOptions {
 	partial_items?: Array<{ item_id: string; qty_issued: string }>;
-	switched_gas?: Array<{ cylinder_id: string; qty_kg: string }>;
 }
 
 export interface KitchenRepository {
@@ -52,11 +46,6 @@ export interface KitchenRepository {
 	getMealPlan(date: string, meal: string): Promise<MealPlan | null>;
 	listMealPlans(): Promise<MealPlan[]>;
 	confirmMealPlan(plan: MealPlan): Promise<MealPlan>;
-	updateMealPlanGasUsage(
-		plan: MealPlan,
-		gasUsage: NonNullable<MealPlan['gas_usage']>,
-		cookingStartedAt?: MealPlan['cooking_started_at']
-	): Promise<MealPlan>;
 	// Draft-only — a confirmed plan may already be requisitioned/serviced, so
 	// editing or deleting it would orphan those records' meal_plan_id reference.
 	updateMealPlanDraft(
@@ -68,11 +57,14 @@ export interface KitchenRepository {
 			| 'calc_source'
 			| 'override_reason'
 			| 'label'
-			| 'gas_usage'
 			| 'meal_session_id'
 			| 'target_tags'
 			| 'allocated_target'
 		>
+	): Promise<MealPlan>;
+	startMealPlanCooking(
+		plan: MealPlan,
+		cookingStartedAt: NonNullable<MealPlan['cooking_started_at']>
 	): Promise<MealPlan>;
 	deleteMealPlanDraft(plan: MealPlan): Promise<void>;
 	// Confirmed plans (a ticket already references them) — only while that
@@ -82,13 +74,7 @@ export interface KitchenRepository {
 		plan: MealPlan,
 		patch: Pick<
 			MealPlan,
-			| 'headcount'
-			| 'recipes'
-			| 'calc_source'
-			| 'label'
-			| 'gas_usage'
-			| 'target_tags'
-			| 'allocated_target'
+			'headcount' | 'recipes' | 'calc_source' | 'label' | 'target_tags' | 'allocated_target'
 		>
 	): Promise<MealPlan>;
 
@@ -110,7 +96,7 @@ export interface KitchenRepository {
 	): Promise<KitchenRequisition>;
 	getKitchenRequisitionById(id: string): Promise<KitchenRequisition | null>;
 
-	// Issues requisition and records associated stock and gas ledger entries.
+	// Issues requisition and records associated stock ledger entries.
 	issueRequisition(input: KitchenRequisitionInput, ctx: AuthorContext): Promise<KitchenRequisition>;
 	listRequisitions(): Promise<KitchenRequisition[]>;
 
@@ -129,22 +115,21 @@ export interface KitchenRepository {
 	// of cooked output; append-only, rejects a second decision for a meal_service
 	// that already has one.
 	confirmMealServiceReceipt(mealServiceId: string, ctx: AuthorContext): Promise<MealServiceReceipt>;
+	/**
+	 * Confirm receipt AND take the cooked food into stock: one
+	 * `stock_ledger` row per (item, storage point) plus the confirmed receipt,
+	 * written together. Ledger ids are derived from the meal_service so a retry
+	 * never receives the same food twice.
+	 */
+	confirmMealServiceReceiptWithYield(
+		service: MealService,
+		lines: readonly ResolvedYieldLine[],
+		ctx: AuthorContext
+	): Promise<{ receipt: MealServiceReceipt; ledger: StockLedger[] }>;
 	rejectMealServiceReceipt(
 		mealServiceId: string,
 		reason: string,
 		ctx: AuthorContext
 	): Promise<MealServiceReceipt>;
 	listMealServiceReceipts(): Promise<MealServiceReceipt[]>;
-
-	// Fuel cylinder — one physical gas tank (schema.md §2.7.1, CR-120).
-	createFuelCylinder(input: FuelCylinderInput, ctx: AuthorContext): Promise<FuelCylinder>;
-	listFuelCylinders(): Promise<FuelCylinder[]>;
-	updateFuelCylinder(doc: FuelCylinder, input: FuelCylinderInput): Promise<FuelCylinder>;
-	deleteFuelCylinder(doc: FuelCylinder): Promise<void>;
-
-	// Gas ledger operations.
-	listGasLedger(): Promise<GasLedgerEntry[]>;
-	refillGasCylinder(cylinderId: string, qtyKg: string, ctx: AuthorContext): Promise<GasLedgerEntry>;
-	// Writes off remaining gas balance to zero. Throws if cylinder is already empty.
-	writeOffGasCylinder(cylinderId: string, ctx: AuthorContext): Promise<GasLedgerEntry>;
 }

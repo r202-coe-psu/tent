@@ -10,13 +10,10 @@ import {
 	createMealSession,
 	createMealService,
 	createMealServiceReceipt,
-	createFuelCylinder,
-	fuelCylinderInputSchema,
 	isMealPlan,
 	isKitchenRequisition,
 	isMealService,
 	isMealServiceReceipt,
-	isFuelCylinder,
 	isMealSession,
 	type MealPlan,
 	type MealPlanInput,
@@ -25,25 +22,23 @@ import {
 	type MealService,
 	type MealServiceInput,
 	type MealServiceReceipt,
-	type FuelCylinder,
-	type FuelCylinderInput,
 	type MealSession,
 	type MealSessionInput
 } from '../domain/kitchen';
 import {
-	createGasLedgerEntry,
-	isGasLedgerEntry,
-	gasCylinderBalance,
-	maxRefillKg,
-	type GasLedgerEntry
-} from '../domain/gas-ledger';
-import {
 	createStockLedger,
+	deriveDeterministicLedgerId,
 	stockBalance,
+	storageLotFields,
 	isStockLedger,
 	type StockLedger
 } from '$lib/features/operations';
-import { persistQty, qtyGt, qtyLte, qtyNeg } from '$lib/utils/qty';
+import {
+	kitchenYieldExpiry,
+	mergeYieldLines,
+	type ResolvedYieldLine
+} from '../domain/kitchen-yield-receipt';
+import { persistQty, qtyGt, qtyNeg } from '$lib/utils/qty';
 import type {
 	KitchenRepository,
 	CreatePendingRequisitionParams,
@@ -120,28 +115,6 @@ export class KitchenRemoteRepository implements KitchenRepository {
 			}
 		}
 
-		// Verify sufficient gas cylinder balance for planned consumption.
-		const plan = input.meal_plan_id ? await this.getMealPlanById(input.meal_plan_id) : null;
-		const gasUsage = plan?.gas_usage ?? [];
-		if (gasUsage.length > 0) {
-			const [types, gasLedger] = await Promise.all([
-				this.listFuelCylinders(),
-				this.listGasLedger()
-			]);
-			for (const g of gasUsage) {
-				const cyl = types.find((t) => t._id === g.cylinder_id);
-				if (!cyl) {
-					throw new Error(`issueRequisition: gas cylinder ${g.cylinder_id} not found`);
-				}
-				const remaining = gasCylinderBalance(gasLedger, g.cylinder_id, cyl.capacity_kg);
-				if (qtyGt(g.consumption_kg, remaining)) {
-					throw new Error(
-						`issueRequisition: cannot draw ${g.consumption_kg} kg from "${cyl.name}" — only ${remaining} kg remaining`
-					);
-				}
-			}
-		}
-
 		// Mint ledger document IDs before saving requisition and ledger entries.
 		const ledgerUlids = issuedItems.map(() => ulid());
 		const ledgerIds = ledgerUlids.map((id) => makeDocId('stock_ledger', id));
@@ -161,19 +134,7 @@ export class KitchenRemoteRepository implements KitchenRepository {
 				ledgerUlids[i]
 			)
 		);
-		const gasLedgerEntries = gasUsage.map((g) =>
-			createGasLedgerEntry(
-				{
-					cylinder_id: g.cylinder_id,
-					qty_kg: qtyNeg(g.consumption_kg),
-					reason: 'consumption',
-					ref_id: requisition._id
-				},
-				ctx
-			)
-		);
-
-		await bulkDocs(this.dbName, [requisition, ...ledgerEntries, ...gasLedgerEntries]);
+		await bulkDocs(this.dbName, [requisition, ...ledgerEntries]);
 		return requisition;
 	}
 
@@ -238,16 +199,7 @@ export class KitchenRemoteRepository implements KitchenRepository {
 			};
 		});
 
-		// 2. Update gas_drawdown if switched_gas provided
-		let updatedGas = requisition.gas_drawdown ?? [];
-		if (options?.switched_gas && options.switched_gas.length > 0) {
-			updatedGas = options.switched_gas.map((g) => ({
-				cylinder_id: g.cylinder_id,
-				qty_kg: persistQty(g.qty_kg)
-			}));
-		}
-
-		// 3. Check stock balance
+		// 2. Check stock balance
 		const issuedItems = updatedItems.filter((i) => qtyGt(i.qty_issued, '0'));
 		if (issuedItems.length > 0) {
 			const ledger = await this.repo.allByType<StockLedger>('stock_ledger', isStockLedger);
@@ -262,27 +214,7 @@ export class KitchenRemoteRepository implements KitchenRepository {
 			}
 		}
 
-		// 4. Check gas balance
-		if (updatedGas.length > 0) {
-			const [types, gasLedger] = await Promise.all([
-				this.listFuelCylinders(),
-				this.listGasLedger()
-			]);
-			for (const g of updatedGas) {
-				const cyl = types.find((t) => t._id === g.cylinder_id);
-				if (!cyl) {
-					throw new Error(`approveKitchenRequisition: gas cylinder ${g.cylinder_id} not found`);
-				}
-				const remaining = gasCylinderBalance(gasLedger, g.cylinder_id, cyl.capacity_kg);
-				if (qtyGt(g.qty_kg, remaining)) {
-					throw new Error(
-						`approveKitchenRequisition: cannot draw ${g.qty_kg} kg from "${cyl.name}" — only ${remaining} kg remaining`
-					);
-				}
-			}
-		}
-
-		// 5. Generate stock ledger entries
+		// 3. Generate stock ledger entries
 		const ts = now();
 		const stockLedgerUlids = issuedItems.map(() => ulid());
 		const stockLedgerIds = stockLedgerUlids.map((id) => makeDocId('stock_ledger', id));
@@ -301,34 +233,18 @@ export class KitchenRemoteRepository implements KitchenRepository {
 			)
 		);
 
-		// 6. Generate gas ledger entries
-		const gasLedgerEntries = updatedGas.map((g) =>
-			createGasLedgerEntry(
-				{
-					cylinder_id: g.cylinder_id,
-					qty_kg: qtyNeg(g.qty_kg),
-					reason: 'consumption',
-					ref_id: requisition._id
-				},
-				authCtx
-			)
-		);
-		const gasLedgerIds = gasLedgerEntries.map((g) => g._id);
-		const allLedgerIds = [...stockLedgerIds, ...gasLedgerIds];
-
-		// 7. Update requisition doc
+		// 4. Update requisition doc
 		const approvedRequisition: KitchenRequisition = {
 			...requisition,
 			status: 'approved',
 			items: updatedItems,
-			gas_drawdown: updatedGas,
-			ledger_ids: allLedgerIds,
+			ledger_ids: stockLedgerIds,
 			approved_at: ts,
 			approved_by: approver || authCtx.createdBy || 'warehouse_staff',
 			updated_at: ts
 		};
 
-		// 8. If linked to meal_plan, confirm the meal_plan
+		// 5. If linked to meal_plan, confirm the meal_plan
 		let confirmedPlan: MealPlan | null = null;
 		if (requisition.meal_plan_id) {
 			const plan = await this.getMealPlanById(requisition.meal_plan_id);
@@ -340,7 +256,6 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		await bulkDocs(this.dbName, [
 			approvedRequisition,
 			...stockLedgerEntries,
-			...gasLedgerEntries,
 			...(confirmedPlan ? [confirmedPlan] : [])
 		]);
 
@@ -383,39 +298,7 @@ export class KitchenRemoteRepository implements KitchenRepository {
 				}
 			}
 		}
-		const service = createMealService(input, ctx);
-		const plan = input.meal_plan_id ? await this.getMealPlanById(input.meal_plan_id) : null;
-		const gasUsage = plan?.gas_usage ?? [];
-		if (gasUsage.length === 0) return this.repo.put(service);
-
-		const [cylinders, gasLedger] = await Promise.all([
-			this.listFuelCylinders(),
-			this.listGasLedger()
-		]);
-		for (const usage of gasUsage) {
-			const cylinder = cylinders.find((item) => item._id === usage.cylinder_id);
-			if (!cylinder)
-				throw new Error(`recordMealService: gas cylinder ${usage.cylinder_id} not found`);
-			const remaining = gasCylinderBalance(gasLedger, cylinder._id, cylinder.capacity_kg);
-			if (qtyGt(usage.consumption_kg, remaining)) {
-				throw new Error(
-					`recordMealService: cannot consume ${usage.consumption_kg} kg from "${cylinder.name}" — only ${remaining} kg remaining`
-				);
-			}
-		}
-		const gasLedgerEntries = gasUsage.map((usage) =>
-			createGasLedgerEntry(
-				{
-					cylinder_id: usage.cylinder_id,
-					qty_kg: qtyNeg(usage.consumption_kg),
-					reason: 'consumption',
-					ref_id: plan?._id ?? null
-				},
-				ctx
-			)
-		);
-		await bulkDocs(this.dbName, [service, ...gasLedgerEntries]);
-		return service;
+		return this.repo.put(createMealService(input, ctx));
 	}
 
 	// Finds the latest meal service recorded for a specific meal plan (ulid
@@ -452,6 +335,70 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		return this.repo.put(createMealServiceReceipt(mealServiceId, 'confirmed', ctx));
 	}
 
+	async confirmMealServiceReceiptWithYield(
+		service: MealService,
+		lines: readonly ResolvedYieldLine[],
+		ctx: AuthorContext
+	): Promise<{ receipt: MealServiceReceipt; ledger: StockLedger[] }> {
+		if (lines.length === 0) {
+			throw new Error('confirmMealServiceReceiptWithYield: at least one line is required');
+		}
+		await this.assertNoExistingReceipt(service._id);
+
+		// The same item at the same point collapses to one row, so each row has
+		// exactly one derived id. A later retry of this call derives the same ids.
+		const merged = mergeYieldLines(lines);
+		const expiry = kitchenYieldExpiry(service);
+		const entries = await Promise.all(
+			merged.map(async (line) =>
+				createStockLedger(
+					{
+						item_id: line.item_id,
+						qty: line.qty,
+						unit: line.unit,
+						reason: 'receive',
+						ref_id: service._id,
+						lot: {
+							expiry,
+							note: line.item_name,
+							...storageLotFields(line.storage_point ?? null)
+						}
+					},
+					ctx,
+					await deriveDeterministicLedgerId(
+						'kitchen_yield',
+						service._id,
+						line.item_id,
+						line.storage_point?.id ?? ''
+					)
+				)
+			)
+		);
+
+		// A row left by an earlier attempt (ledger written, receipt not) is not
+		// written again; one that disagrees with what we are about to write means
+		// the lines changed under a retry, which must not silently double-count.
+		const pending: StockLedger[] = [];
+		const received: StockLedger[] = [];
+		for (const entry of entries) {
+			const existing = await this.repo.get<StockLedger>(entry._id);
+			if (!existing) {
+				pending.push(entry);
+				continue;
+			}
+			if (existing.item_id !== entry.item_id || existing.qty !== entry.qty) {
+				throw new Error(
+					`confirmMealServiceReceiptWithYield: ${entry._id} already holds ${existing.qty} of ${existing.item_id}`
+				);
+			}
+			received.push(existing);
+		}
+
+		const receipt = createMealServiceReceipt(service._id, 'confirmed', ctx);
+		await bulkDocs(this.dbName, [...pending, receipt]);
+		return { receipt, ledger: [...received, ...pending] };
+	}
+
 	async rejectMealServiceReceipt(
 		mealServiceId: string,
 		reason: string,
@@ -472,24 +419,16 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		return this.repo.put({ ...touch(plan), status: 'confirmed' });
 	}
 
-	async updateMealPlanGasUsage(
+	async startMealPlanCooking(
 		plan: MealPlan,
-		gasUsage: NonNullable<MealPlan['gas_usage']>,
-		cookingStartedAt?: MealPlan['cooking_started_at']
+		cookingStartedAt: NonNullable<MealPlan['cooking_started_at']>
 	): Promise<MealPlan> {
-		const next = { ...touch(plan) };
-		if (gasUsage.length > 0) next.gas_usage = gasUsage;
-		else delete next.gas_usage;
-		if (cookingStartedAt) next.cooking_started_at = cookingStartedAt;
-		return this.repo.put(next);
+		return this.repo.put({ ...touch(plan), cooking_started_at: cookingStartedAt });
 	}
 
 	async updateMealPlanDraft(
 		plan: MealPlan,
-		patch: Pick<
-			MealPlan,
-			'headcount' | 'recipes' | 'calc_source' | 'override_reason' | 'label' | 'gas_usage'
-		>
+		patch: Pick<MealPlan, 'headcount' | 'recipes' | 'calc_source' | 'override_reason' | 'label'>
 	): Promise<MealPlan> {
 		if (plan.status !== 'draft') {
 			throw new Error('updateMealPlanDraft: only draft plans can be edited');
@@ -497,7 +436,6 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		const next = { ...touch(plan), ...patch };
 		// Delete keys explicitly set to undefined in patch.
 		if (patch.label === undefined) delete next.label;
-		if (patch.gas_usage === undefined) delete next.gas_usage;
 		return this.repo.put(next);
 	}
 
@@ -505,13 +443,7 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		plan: MealPlan,
 		patch: Pick<
 			MealPlan,
-			| 'headcount'
-			| 'recipes'
-			| 'calc_source'
-			| 'label'
-			| 'gas_usage'
-			| 'target_tags'
-			| 'allocated_target'
+			'headcount' | 'recipes' | 'calc_source' | 'label' | 'target_tags' | 'allocated_target'
 		>
 	): Promise<MealPlan> {
 		if (plan.status !== 'confirmed') {
@@ -519,7 +451,6 @@ export class KitchenRemoteRepository implements KitchenRepository {
 		}
 		const next = { ...touch(plan), ...patch };
 		if (patch.label === undefined) delete next.label;
-		if (patch.gas_usage === undefined) delete next.gas_usage;
 		return this.repo.put(next);
 	}
 
@@ -528,67 +459,6 @@ export class KitchenRemoteRepository implements KitchenRepository {
 			throw new Error('deleteMealPlanDraft: only draft plans can be deleted');
 		}
 		await this.repo.remove(plan);
-	}
-
-	createFuelCylinder(input: FuelCylinderInput, ctx: AuthorContext): Promise<FuelCylinder> {
-		return this.repo.put(createFuelCylinder(input, ctx));
-	}
-
-	listFuelCylinders(): Promise<FuelCylinder[]> {
-		return this.repo.allByType('fuel_cylinder', isFuelCylinder);
-	}
-
-	updateFuelCylinder(doc: FuelCylinder, input: FuelCylinderInput): Promise<FuelCylinder> {
-		const d = fuelCylinderInputSchema.parse(input);
-		return this.repo.put(touch({ ...doc, ...d }));
-	}
-
-	async deleteFuelCylinder(doc: FuelCylinder): Promise<void> {
-		await this.repo.remove(doc);
-	}
-
-	listGasLedger(): Promise<GasLedgerEntry[]> {
-		return this.repo.allByType('gas_ledger', isGasLedgerEntry);
-	}
-
-	async refillGasCylinder(
-		cylinderId: string,
-		qtyKg: string,
-		ctx: AuthorContext
-	): Promise<GasLedgerEntry> {
-		const [types, gasLedger] = await Promise.all([this.listFuelCylinders(), this.listGasLedger()]);
-		const cyl = types.find((t) => t._id === cylinderId);
-		if (!cyl) {
-			throw new Error(`refillGasCylinder: cylinder ${cylinderId} not found`);
-		}
-		const remaining = gasCylinderBalance(gasLedger, cylinderId, cyl.capacity_kg);
-		const room = maxRefillKg(remaining, cyl.capacity_kg);
-		if (qtyGt(qtyKg, room)) {
-			throw new Error(
-				`refillGasCylinder: refilling ${qtyKg} kg would exceed "${cyl.name}"'s capacity — only ${room} kg of room left`
-			);
-		}
-		return this.repo.put(
-			createGasLedgerEntry({ cylinder_id: cylinderId, qty_kg: qtyKg, reason: 'refill' }, ctx)
-		);
-	}
-
-	async writeOffGasCylinder(cylinderId: string, ctx: AuthorContext): Promise<GasLedgerEntry> {
-		const [types, gasLedger] = await Promise.all([this.listFuelCylinders(), this.listGasLedger()]);
-		const cyl = types.find((t) => t._id === cylinderId);
-		if (!cyl) {
-			throw new Error(`writeOffGasCylinder: cylinder ${cylinderId} not found`);
-		}
-		const remaining = gasCylinderBalance(gasLedger, cylinderId, cyl.capacity_kg);
-		if (qtyLte(remaining, 0)) {
-			throw new Error(`writeOffGasCylinder: "${cyl.name}" is already empty — nothing to write off`);
-		}
-		return this.repo.put(
-			createGasLedgerEntry(
-				{ cylinder_id: cylinderId, qty_kg: qtyNeg(remaining), reason: 'adjust' },
-				ctx
-			)
-		);
 	}
 }
 

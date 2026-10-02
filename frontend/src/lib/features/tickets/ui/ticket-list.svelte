@@ -64,7 +64,7 @@
 	// rows are derived read-only from meal_service + meal_service_receipt: a
 	// service without a matching receipt is "รอตรวจรับเข้าคลัง" (PENDING_RECEIPT,
 	// real state — warehouse hasn't confirmed count yet); once a receipt exists
-	// it becomes "ส่งมอบเสร็จสิ้น" (DELIVERED_IN) — the flow ends at warehouse
+	// it becomes "รับเข้าคลังแล้ว" (DELIVERED_IN) — the flow ends at warehouse
 	// stock-in, CR-147 removed the CR-146 POS-push split. "จ่ายออก" rows are the
 	// real requisition_ticket lifecycle unchanged.
 	type RowCategory = 'PENDING_PICK' | 'COOKING' | 'PENDING_RECEIPT' | 'DELIVERED_IN' | 'OTHER_OUT';
@@ -211,7 +211,7 @@
 						: 'PENDING_RECEIPT';
 			const statusLabel =
 				outcome === 'confirmed'
-					? 'ส่งมอบเสร็จสิ้น'
+					? 'รับเข้าคลังแล้ว'
 					: outcome === 'rejected'
 						? 'ถูกตีกลับ - รอปรุงใหม่'
 						: 'รอตรวจรับเข้าคลัง';
@@ -258,7 +258,7 @@
 		PENDING_PICK: 'รอเบิกวัตถุดิบ',
 		COOKING: 'ครัวกำลังปรุง',
 		PENDING_RECEIPT: 'รอตรวจรับเข้าคลัง',
-		DELIVERED_IN: 'ส่งมอบเสร็จสิ้น',
+		DELIVERED_IN: 'รับเข้าคลังแล้ว',
 		OTHER_OUT: 'อื่นๆ'
 	};
 	const CATEGORY_FILTER_OPTIONS: { value: 'ALL' | RowCategory; label: string }[] = [
@@ -402,7 +402,7 @@
 						value="DELIVERED_IN"
 						class="min-h-11 flex-none gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-emerald-300 data-[state=active]:border-emerald-400 data-[state=active]:bg-emerald-500 data-[state=active]:text-white"
 					>
-						<CheckCircle2 class="h-4 w-4" />ส่งมอบเสร็จสิ้น
+						<CheckCircle2 class="h-4 w-4" />รับเข้าคลังแล้ว
 						<span
 							class="rounded-full px-2 py-0.5 text-xs font-bold tabular-nums {categoryFilter ===
 							'DELIVERED_IN'

@@ -35,8 +35,12 @@ vi.mock('$lib/db/couch-db', async (importOriginal) => {
 // sveltekit-superforms adapter chain.
 vi.mock('$lib/features/operations', async () => {
 	const domain = await import('../../operations/domain/operations');
+	const lotStorage = await import('../../operations/domain/lot-storage');
+	const ledgerId = await import('../../operations/domain/deterministic-ledger-id');
 	return {
 		createStockLedger: domain.createStockLedger,
+		deriveDeterministicLedgerId: ledgerId.deriveDeterministicLedgerId,
+		storageLotFields: lotStorage.storageLotFields,
 		stockBalance: domain.stockBalance,
 		isStockLedger: domain.isStockLedger
 	};
@@ -429,39 +433,6 @@ describe('KitchenRemoteRepository.recordMealService — record + read back (T-27
 	});
 });
 
-describe('KitchenRemoteRepository.gasCylinderType — CRUD', () => {
-	let repo: KitchenRemoteRepository;
-
-	beforeEach(() => {
-		memoryRepo = createInMemoryRepository();
-		repo = new KitchenRemoteRepository('shelter_sh001');
-	});
-
-	const input = {
-		item_master_id: 'item_master:lpg_15kg',
-		cylinder_code: 'LPG-01',
-		name: 'เตาแรงดันสูง + ถัง 15kg',
-		capacity_kg: '15',
-		burn_rate_kg_per_hour: '0.5',
-		time_multiplier: '1'
-	};
-
-	it('create → list → update → delete round-trips', async () => {
-		const created = await repo.createFuelCylinder(input, ctx);
-		expect(created.type).toBe('fuel_cylinder');
-
-		const listed = await repo.listFuelCylinders();
-		expect(listed).toHaveLength(1);
-
-		const updated = await repo.updateFuelCylinder(created, { ...input, capacity_kg: '48' });
-		expect(updated.capacity_kg).toBe('48');
-		expect(updated.updated_at >= created.updated_at).toBe(true);
-
-		await repo.deleteFuelCylinder(updated);
-		expect(await repo.listFuelCylinders()).toHaveLength(0);
-	});
-});
-
 // Requisition (deduct stock) → service record → variance summary. Bypasses the SOP-calc plan entrypoint
 // (createMealPlan directly with recipes) so it stays green regardless of
 // unrelated sop-ratios breakage elsewhere.
@@ -564,7 +535,7 @@ describe('T-27 demo chain — requisition → service record → variance', () =
 	});
 });
 
-describe('KitchenRemoteRepository — gas cylinder ledger (CR-085)', () => {
+describe('KitchenRemoteRepository — issueRequisition', () => {
 	let repo: KitchenRemoteRepository;
 
 	beforeEach(async () => {
@@ -573,75 +544,7 @@ describe('KitchenRemoteRepository — gas cylinder ledger (CR-085)', () => {
 		await seedStock('item:rice', 100);
 	});
 
-	async function planWithGas(cylinderId: string, consumptionKg: string, date: string) {
-		const plan = await repo.createMealPlan(
-			{
-				date,
-				meal: 'dinner',
-				headcount: { total: 10, halal: 0, soft_food: 0, infant: 0 },
-				recipes: [{ recipe_id: 'ingredient:rice', planned_qty: 1000 }],
-				gas_usage: [{ cylinder_id: cylinderId, consumption_kg: consumptionKg }]
-			},
-			ctx
-		);
-		return repo.confirmMealPlan(plan);
-	}
-
-	it('issueRequisition writes a gas_ledger consumption entry alongside the food ledger', async () => {
-		const cyl = await repo.createFuelCylinder(
-			{
-				item_master_id: 'item_master:lpg_15kg',
-				cylinder_code: 'LPG-01',
-				name: 'ถังทดสอบ',
-				capacity_kg: '15',
-				burn_rate_kg_per_hour: '0.5',
-				time_multiplier: '1'
-			},
-			ctx
-		);
-		const plan = await planWithGas(cyl._id, '2', '2026-08-22');
-
-		const reqInput = toRequisitionInput(plan);
-		const issued = reqInput.items.map((i) => ({ ...i, qty_issued: i.qty_requested }));
-		const requisition = await repo.issueRequisition({ meal_plan_id: plan._id, items: issued }, ctx);
-
-		const gasLedger = await repo.listGasLedger();
-		expect(gasLedger).toHaveLength(1);
-		expect(gasLedger[0].cylinder_id).toBe(cyl._id);
-		expect(gasLedger[0].qty_kg).toBe('-2');
-		expect(gasLedger[0].reason).toBe('consumption');
-		expect(gasLedger[0].ref_id).toBe(requisition._id);
-	});
-
-	it('cannot draw more gas than remains — throws and writes nothing at all (all-or-nothing)', async () => {
-		const cyl = await repo.createFuelCylinder(
-			{
-				item_master_id: 'item_master:lpg_15kg',
-				cylinder_code: 'LPG-01',
-				name: 'ถังเล็ก',
-				capacity_kg: '5',
-				burn_rate_kg_per_hour: '0.5',
-				time_multiplier: '1'
-			},
-			ctx
-		);
-		const plan = await planWithGas(cyl._id, '10', '2026-08-22'); // more than the 5 kg capacity
-
-		const reqInput = toRequisitionInput(plan);
-		const issued = reqInput.items.map((i) => ({ ...i, qty_issued: i.qty_requested }));
-
-		await expect(
-			repo.issueRequisition({ meal_plan_id: plan._id, items: issued }, ctx)
-		).rejects.toThrow(/only 5 kg remaining/);
-
-		expect(await repo.listGasLedger()).toHaveLength(0);
-		expect(await repo.listRequisitions()).toHaveLength(0);
-		// The food side didn't get written either — same atomic guarantee.
-		const ledger = await memoryRepo.allByType('stock_ledger', isStockLedger);
-		expect(ledger.filter((d) => d.reason === 'requisition')).toHaveLength(0);
-	});
-
-	it('a plan with no gas_usage issues normally with no gas_ledger writes', async () => {
+	it('issues a confirmed plan and writes the food ledger', async () => {
 		const plan = await repo.createMealPlan(
 			{
 				date: '2026-08-22',
@@ -654,136 +557,10 @@ describe('KitchenRemoteRepository — gas cylinder ledger (CR-085)', () => {
 		await repo.confirmMealPlan(plan);
 		const reqInput = toRequisitionInput(plan);
 		const issued = reqInput.items.map((i) => ({ ...i, qty_issued: i.qty_requested }));
-		await repo.issueRequisition({ meal_plan_id: plan._id, items: issued }, ctx);
+		const requisition = await repo.issueRequisition({ meal_plan_id: plan._id, items: issued }, ctx);
 
-		expect(await repo.listGasLedger()).toHaveLength(0);
-	});
-
-	it('refillGasCylinder tops up a partially-used tank', async () => {
-		const cyl = await repo.createFuelCylinder(
-			{
-				item_master_id: 'item_master:lpg_15kg',
-				cylinder_code: 'LPG-01',
-				name: 'ถังเติม',
-				capacity_kg: '15',
-				burn_rate_kg_per_hour: '0.5',
-				time_multiplier: '1'
-			},
-			ctx
-		);
-		// Consume 10 kg by hand (equivalent to a prior requisition).
-		await memoryRepo.put({
-			_id: `gas_ledger:seed-${cyl._id}`,
-			type: 'gas_ledger',
-			schema_v: 1,
-			cylinder_id: cyl._id,
-			qty_kg: '-10',
-			reason: 'consumption',
-			ref_id: null,
-			occurred_at: new Date().toISOString()
-		});
-
-		const refill = await repo.refillGasCylinder(cyl._id, '5', ctx);
-		expect(refill.qty_kg).toBe('5');
-		expect(refill.reason).toBe('refill');
-
-		const gasLedger = await repo.listGasLedger();
-		expect(gasLedger).toHaveLength(2);
-	});
-
-	it('refillGasCylinder rejects a refill that would overflow the tank', async () => {
-		const cyl = await repo.createFuelCylinder(
-			{
-				item_master_id: 'item_master:lpg_15kg',
-				cylinder_code: 'LPG-01',
-				name: 'ถังเติม',
-				capacity_kg: '15',
-				burn_rate_kg_per_hour: '0.5',
-				time_multiplier: '1'
-			},
-			ctx
-		);
-		await memoryRepo.put({
-			_id: `gas_ledger:seed-${cyl._id}`,
-			type: 'gas_ledger',
-			schema_v: 1,
-			cylinder_id: cyl._id,
-			qty_kg: '-10', // remaining = 5 kg, room = 10 kg
-			reason: 'consumption',
-			ref_id: null,
-			occurred_at: new Date().toISOString()
-		});
-
-		await expect(repo.refillGasCylinder(cyl._id, '11', ctx)).rejects.toThrow(
-			/only 10 kg of room left/
-		);
-	});
-
-	// CR-085 addendum — a dust remainder can never be drawn to 0 through
-	// consumption (all-or-nothing), so writeOffGasCylinder is the only path.
-	it('writeOffGasCylinder zeroes out a dust remainder', async () => {
-		const cyl = await repo.createFuelCylinder(
-			{
-				item_master_id: 'item_master:lpg_15kg',
-				cylinder_code: 'LPG-01',
-				name: 'ถังเล็ก',
-				capacity_kg: '4',
-				burn_rate_kg_per_hour: '0.3',
-				time_multiplier: '1'
-			},
-			ctx
-		);
-		await memoryRepo.put({
-			_id: `gas_ledger:seed-${cyl._id}`,
-			type: 'gas_ledger',
-			schema_v: 1,
-			cylinder_id: cyl._id,
-			qty_kg: '-3.999', // remaining = 0.001 kg — too small for any real requisition to hit exactly
-			reason: 'consumption',
-			ref_id: null,
-			occurred_at: new Date().toISOString()
-		});
-
-		const adjustEntry = await repo.writeOffGasCylinder(cyl._id, ctx);
-		expect(adjustEntry.reason).toBe('adjust');
-		expect(adjustEntry.qty_kg).toBe('-0.001');
-		expect(adjustEntry.ref_id).toBeNull();
-
-		const gasLedger = await repo.listGasLedger();
-		expect(gasLedger).toHaveLength(2);
-	});
-
-	it('writeOffGasCylinder rejects a cylinder that is already empty', async () => {
-		const cyl = await repo.createFuelCylinder(
-			{
-				item_master_id: 'item_master:lpg_15kg',
-				cylinder_code: 'LPG-01',
-				name: 'ถังหมดแล้ว',
-				capacity_kg: '4',
-				burn_rate_kg_per_hour: '0.3',
-				time_multiplier: '1'
-			},
-			ctx
-		);
-		await memoryRepo.put({
-			_id: `gas_ledger:seed-${cyl._id}`,
-			type: 'gas_ledger',
-			schema_v: 1,
-			cylinder_id: cyl._id,
-			qty_kg: '-4',
-			reason: 'consumption',
-			ref_id: null,
-			occurred_at: new Date().toISOString()
-		});
-
-		await expect(repo.writeOffGasCylinder(cyl._id, ctx)).rejects.toThrow(/already empty/);
-		expect(await repo.listGasLedger()).toHaveLength(1); // nothing new written
-	});
-
-	it('writeOffGasCylinder rejects an unknown cylinder', async () => {
-		await expect(repo.writeOffGasCylinder('fuel_cylinder:missing', ctx)).rejects.toThrow(
-			/not found/
-		);
+		const ledger = await memoryRepo.allByType('stock_ledger', isStockLedger);
+		expect(ledger.filter((d) => d.ref_id === requisition._id).length).toBeGreaterThan(0);
 	});
 });
 
@@ -898,54 +675,26 @@ describe('KitchenRemoteRepository — Requisition Workflow', () => {
 		expect(reqLedger?.reason).toBe('requisition');
 	});
 
-	it('approveKitchenRequisition handles partial issue (D12) and gas cylinder switch (D15)', async () => {
+	it('approveKitchenRequisition handles partial issue (D12)', async () => {
 		await seedStock('item:beef', 100);
-		const cyl1 = await repo.createFuelCylinder(
-			{
-				item_master_id: 'item_master:lpg_15kg',
-				cylinder_code: 'LPG-01',
-				name: 'ถัง 1',
-				capacity_kg: '15',
-				burn_rate_kg_per_hour: '0.5',
-				time_multiplier: '1'
-			},
-			ctx
-		);
-		const cyl2 = await repo.createFuelCylinder(
-			{
-				item_master_id: 'item_master:lpg_15kg',
-				cylinder_code: 'LPG-02',
-				name: 'ถัง 2',
-				capacity_kg: '15',
-				burn_rate_kg_per_hour: '0.5',
-				time_multiplier: '1'
-			},
-			ctx
-		);
-
 		const { requisition } = await repo.createPendingRequisition(
 			{
 				requisitionInput: {
-					items: [{ item_id: 'item:beef', qty_requested: '20', unit: 'kg' }],
-					gas_drawdown: [{ cylinder_id: cyl1._id, qty_kg: '2' }]
+					items: [{ item_id: 'item:beef', qty_requested: '20', unit: 'kg' }]
 				}
 			},
 			ctx
 		);
 
-		// Warehouse issues 15 instead of 20, and switches to cylinder 2
+		// Warehouse issues 15 instead of 20
 		const approved = await repo.approveKitchenRequisition(
 			requisition._id,
 			'warehouse_officer',
-			{
-				partial_items: [{ item_id: 'item:beef', qty_issued: '15' }],
-				switched_gas: [{ cylinder_id: cyl2._id, qty_kg: '2' }]
-			},
+			{ partial_items: [{ item_id: 'item:beef', qty_issued: '15' }] },
 			ctx
 		);
 
 		expect(approved.items[0].qty_issued).toBe('15');
-		expect(approved.gas_drawdown?.[0].cylinder_id).toBe(cyl2._id);
 
 		// Verify stock ledger was cut for 15, not 20
 		const ledgers = await memoryRepo.allByType('stock_ledger', isStockLedger);
@@ -975,5 +724,135 @@ describe('KitchenRemoteRepository — Requisition Workflow', () => {
 		await expect(
 			repo.approveKitchenRequisition(requisition._id, 'warehouse_officer', undefined, ctx)
 		).rejects.toThrow(/already rejected/);
+	});
+});
+
+describe('KitchenRemoteRepository.confirmMealServiceReceiptWithYield (cooked food → stock)', () => {
+	let repo: KitchenRemoteRepository;
+
+	const resolved = (
+		item_id: string,
+		qty: string,
+		extra: Partial<{ storage_point: { id: string; name: string }; unit: string }> = {}
+	) => ({ item_id, qty, unit: 'box', item_name: `เมนู ${item_id}`, ...extra });
+
+	async function recordService() {
+		return repo.recordMealService(
+			{
+				date: '2026-07-15',
+				meal: 'dinner' as const,
+				meal_plan_id: 'meal_plan:01ARZ3NDEKTSV4RRFFQ69G5FAV',
+				actual_yield: 120,
+				served: 0,
+				waste: 0,
+				external: { volunteers: 0, outside_evacuees: 0 }
+			},
+			ctx
+		);
+	}
+
+	const ledgerRows = async () =>
+		(await memoryRepo.allByType('stock_ledger', isStockLedger)).filter(
+			(r) => r.reason === 'receive'
+		);
+
+	beforeEach(() => {
+		memoryRepo = createInMemoryRepository();
+		repo = new KitchenRemoteRepository('shelter_sh001');
+	});
+
+	it('writes one receive row per line plus a confirmed receipt', async () => {
+		const service = await recordService();
+		const { receipt, ledger } = await repo.confirmMealServiceReceiptWithYield(
+			service,
+			[
+				resolved('item_master:A', '80', { storage_point: { id: 'p1', name: 'ตู้เย็น 1' } }),
+				resolved('item_master:B', '40')
+			],
+			ctx
+		);
+
+		expect(receipt.outcome).toBe('confirmed');
+		expect(receipt.meal_service_id).toBe(service._id);
+		expect(ledger).toHaveLength(2);
+
+		const rows = await ledgerRows();
+		expect(rows).toHaveLength(2);
+		const a = rows.find((r) => r.item_id === 'item_master:A')!;
+		expect(a.qty).toBe('80');
+		expect(a.unit).toBe('box');
+		expect(a.ref_id).toBe(service._id);
+		expect(a.lot?.note).toBe('เมนู item_master:A');
+		expect(a.lot?.storage_point_id).toBe('p1');
+		expect(a.lot?.storage_zone).toBe('ตู้เย็น 1');
+		expect(a.lot_ref).toBe(a._id);
+		expect(rows.find((r) => r.item_id === 'item_master:B')!.lot?.storage_point_id).toBeUndefined();
+	});
+
+	it('stamps lot.expiry four hours after the service was recorded', async () => {
+		const service = await recordService();
+		await repo.confirmMealServiceReceiptWithYield(service, [resolved('item_master:A', '120')], ctx);
+
+		const [row] = await ledgerRows();
+		const hours =
+			(new Date(row.lot!.expiry!).getTime() - new Date(service.created_at).getTime()) / 3_600_000;
+		expect(hours).toBe(4);
+	});
+
+	it('merges repeated lines for the same item and point into one row', async () => {
+		const service = await recordService();
+		await repo.confirmMealServiceReceiptWithYield(
+			service,
+			[resolved('item_master:A', '30'), resolved('item_master:A', '20')],
+			ctx
+		);
+
+		const rows = await ledgerRows();
+		expect(rows).toHaveLength(1);
+		expect(rows[0].qty).toBe('50');
+	});
+
+	it('refuses a second decision for the same meal_service', async () => {
+		const service = await recordService();
+		await repo.confirmMealServiceReceiptWithYield(service, [resolved('item_master:A', '10')], ctx);
+
+		await expect(
+			repo.confirmMealServiceReceiptWithYield(service, [resolved('item_master:A', '10')], ctx)
+		).rejects.toThrow(/already has a receipt decision/);
+		expect(await ledgerRows()).toHaveLength(1);
+	});
+
+	it('does not double-receive when a retry follows a half-finished attempt', async () => {
+		const service = await recordService();
+		const lines = [resolved('item_master:A', '10'), resolved('item_master:B', '5')];
+		const first = await repo.confirmMealServiceReceiptWithYield(service, lines, ctx);
+
+		// Simulate "ledger written, receipt lost": drop the receipt, keep the rows.
+		await memoryRepo.remove(first.receipt);
+
+		const retry = await repo.confirmMealServiceReceiptWithYield(service, lines, ctx);
+		expect(await ledgerRows()).toHaveLength(2);
+		expect(retry.ledger.map((r) => r._id).sort()).toEqual(first.ledger.map((r) => r._id).sort());
+	});
+
+	it('rejects a retry whose quantity no longer matches the row already written', async () => {
+		const service = await recordService();
+		const first = await repo.confirmMealServiceReceiptWithYield(
+			service,
+			[resolved('item_master:A', '10')],
+			ctx
+		);
+		await memoryRepo.remove(first.receipt);
+
+		await expect(
+			repo.confirmMealServiceReceiptWithYield(service, [resolved('item_master:A', '99')], ctx)
+		).rejects.toThrow(/already holds 10/);
+	});
+
+	it('requires at least one line', async () => {
+		const service = await recordService();
+		await expect(repo.confirmMealServiceReceiptWithYield(service, [], ctx)).rejects.toThrow(
+			/at least one line/
+		);
 	});
 });

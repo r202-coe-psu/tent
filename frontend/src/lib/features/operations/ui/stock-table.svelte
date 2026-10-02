@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { useQueryClient } from '@tanstack/svelte-query';
 	import { resolve } from '$app/paths';
 	import { SvelteSet, SvelteMap } from 'svelte/reactivity';
 	import {
@@ -18,9 +17,8 @@
 		useUnitsOfMeasure
 	} from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
-	import { useFuelCylinders, ensureFuelCylinders, kitchenKeys } from '$lib/features/kitchen';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { isSystemAdmin, isShelterManager, isWarehouseStaff } from '$lib/auth/roles';
+	import { isSystemAdmin } from '$lib/auth/roles';
 	import { useShelters } from '$lib/features/shelters';
 	import { getShelterCode } from '$lib/db/shelter';
 	import * as Table from '$lib/components/ui/table/index.js';
@@ -58,12 +56,9 @@
 	let { occupancy = 120, initialCategory }: { occupancy?: number; initialCategory?: string } =
 		$props();
 
-	const queryClient = useQueryClient();
-
 	// ─── Queries ──────────────────────────────────────────────────────────────
 	const itemsQuery = useSupplyItems();
 	const itemMastersQuery = useItemMasters(() => getShelterCode());
-	const fuelCylindersQuery = useFuelCylinders();
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
 	const balanceQuery = useStockBalance();
@@ -75,7 +70,6 @@
 	// ─── Roles and Cross-Shelter States ───────────────────────────────────────
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
-	const canManageFuel = $derived(isSA || isShelterManager(roles) || isWarehouseStaff(roles));
 	let showOverall = $state(false);
 
 	const sheltersQuery = useShelters();
@@ -326,42 +320,6 @@
 		supplies: 'Supplies',
 		fuel: 'Fuel'
 	};
-
-	// Self-healing reconciliation: if a fuel_energy item's ledger balance ever
-	// gets ahead of its fuel_cylinder count (a past write failed partway, or
-	// two adjustments raced), top the cylinders up automatically the next time
-	// this table has both queries loaded — instead of the gap sitting there
-	// forever waiting for a lucky adjustment that never revisits it.
-	$effect(() => {
-		if (!canManageFuel || balanceQuery.isPending || fuelCylindersQuery.isPending) return;
-		const cylinders = fuelCylindersQuery.data ?? [];
-		const byItem = new SvelteMap<string, number>();
-		for (const c of cylinders) {
-			byItem.set(c.item_master_id, (byItem.get(c.item_master_id) ?? 0) + 1);
-		}
-		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'system' };
-		const itemMasters = itemMastersQuery.data ?? [];
-		for (const item of items) {
-			if (item.category !== 'item_category:fuel_energy') continue;
-			const target = Math.floor(Number(balance.get(item._id) ?? '0'));
-			if (target > (byItem.get(item._id) ?? 0)) {
-				const master = itemMasters.find((im) => im._id === item._id);
-				ensureFuelCylinders(item._id, target, ctx, {
-					capacityKg: master?.capacity_kg,
-					burnRateKgPerHour: master?.burn_rate_kg_per_hour,
-					timeMultiplier: master?.time_multiplier
-				})
-					.then((created) => {
-						if (created > 0) {
-							queryClient.invalidateQueries({ queryKey: kitchenKeys.fuelCylinders() });
-						}
-					})
-					.catch((err) =>
-						console.error('ensureFuelCylinders reconciliation failed', item._id, err)
-					);
-			}
-		}
-	});
 
 	// calculate reorder level and evaluate status
 	const itemsWithCalculatedStatus = $derived(

@@ -1,12 +1,11 @@
 // UI components
 export { default as MealPlanList } from './ui/meal-plan-list.svelte';
 export { default as MealPlanForm } from './ui/meal-plan-form.svelte';
-export { default as GasManagement } from './ui/gas-management.svelte';
 export { default as RequisitionHistory } from './ui/requisition-history.svelte';
 export { default as MealServiceForm } from './ui/meal-service-form.svelte';
 export { default as MealServiceSummary } from './ui/meal-service-summary.svelte';
 export { default as MealSessionList } from './ui/MealSessionList.svelte';
-export { default as StoveLpgAllocation } from './ui/stove-lpg-allocation.svelte';
+export { default as YieldReceiptLines } from './ui/yield-receipt-lines.svelte';
 
 // Domain — meal calculation and requisition
 export {
@@ -42,6 +41,23 @@ export type {
 	SessionGroupProgress
 } from './domain/meal-calc';
 
+// Application — receive-stock form draft (survives the "create new item" detour)
+export { saveYieldDraft, loadYieldDraft, clearYieldDraft } from './application/yield-draft';
+
+// Domain — warehouse receipt of cooked food into stock
+export {
+	KITCHEN_YIELD_SHELF_LIFE_HOURS,
+	kitchenYieldExpiry,
+	toYieldReceiptInput,
+	yieldReceiptInputSchema,
+	yieldTotal
+} from './domain/kitchen-yield-receipt';
+export type {
+	YieldDraftLine,
+	YieldReceiptInput,
+	YieldReceiptLineInput
+} from './domain/kitchen-yield-receipt';
+
 // Domain — plan vs actual variance
 export {
 	computeMealVariance,
@@ -49,32 +65,6 @@ export {
 	MEAL_VARIANCE_STATUS_LABELS
 } from './domain/meal-variance';
 export type { MealVariance, MealVarianceStatus } from './domain/meal-variance';
-
-// Domain — gas consumption
-export {
-	calculateGasConsumptionKg,
-	cylindersNeeded,
-	cookingHoursFromConsumptionKg,
-	calculateMaxCookingHours,
-	calculateCookingHoursFromPortions
-} from './domain/gas-calc';
-export type { GasBurnCoefficients } from './domain/gas-calc';
-
-// Domain — gas cylinder stock ledger
-export {
-	gasLedgerReasonSchema,
-	createGasLedgerEntry,
-	isGasLedgerEntry,
-	gasCylinderBalance,
-	gasCylinderStatus,
-	maxRefillKg
-} from './domain/gas-ledger';
-export type {
-	GasLedgerEntry,
-	GasLedgerInput,
-	GasLedgerReason,
-	GasCylinderStatus
-} from './domain/gas-ledger';
 
 // Domain — occupancy to headcount
 export {
@@ -94,11 +84,9 @@ export type {
 	MealPlan,
 	MealPlanHeadcount,
 	MealPlanRecipe,
-	MealPlanGasUsage,
 	KitchenRequisition,
 	KitchenRequisitionStatus,
 	KitchenRequisitionItem,
-	KitchenRequisitionGasDrawdown,
 	MealService,
 	MealServiceExternal,
 	MealServiceReceipt,
@@ -109,9 +97,7 @@ export type {
 	MealPlanInput,
 	KitchenRequisitionInput,
 	PendingRequisitionInput,
-	MealServiceInput,
-	FuelCylinder,
-	FuelCylinderInput
+	MealServiceInput
 } from './domain/kitchen';
 
 // Domain — schemas, factories, guards, labels
@@ -133,9 +119,6 @@ export {
 	createMealService,
 	isMealPlan,
 	isKitchenRequisition,
-	fuelCylinderInputSchema,
-	createFuelCylinder,
-	isFuelCylinder,
 	isMealService,
 	mealServiceReceiptOutcomeSchema,
 	createMealServiceReceipt,
@@ -151,10 +134,6 @@ export type {
 	ApproveRequisitionOptions
 } from './data/kitchen.repository';
 export { kitchenRepository } from './data/kitchen.remote';
-export {
-	ensureFuelCylinders,
-	type EnsureFuelCylindersOptions
-} from './application/fuel-cylinder-sync';
 
 // Application — query hooks and live-query wiring
 export {
@@ -170,7 +149,7 @@ export {
 	useCreateMealPlan,
 	useCreateMealPlanCalc,
 	useConfirmMealPlan,
-	useUpdateMealPlanGasUsage,
+	useStartMealPlanCooking,
 	useUpdateMealPlanCalc,
 	useUpdateConfirmedMealPlan,
 	useDeleteMealPlanDraft,
@@ -185,13 +164,7 @@ export {
 	useRecordMealService,
 	useMealServiceReceipts,
 	useConfirmMealServiceReceipt,
+	useConfirmMealServiceYield,
 	useRejectMealServiceReceipt,
-	useFuelCylinders,
-	useCreateFuelCylinder,
-	useUpdateFuelCylinder,
-	useDeleteFuelCylinder,
-	useGasLedger,
-	useRefillGasCylinder,
-	useWriteOffGasCylinder,
 	startKitchenLiveQuery
 } from './application/queries';

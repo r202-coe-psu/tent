@@ -14,7 +14,7 @@ vi.mock('$lib/db/repository', async (importOriginal) => {
 	return { ...actual, createRemoteRepository: () => memoryRepo };
 });
 
-// dispatchTicket writes the ticket + stock_ledger + gas_ledger via bulkDocs,
+// dispatchTicket writes the ticket + stock_ledger via bulkDocs,
 // which bypasses the Repository abstraction — route it through the same
 // in-memory store so those rows are readable via repo.get/allByType.
 vi.mock('$lib/db/couch-db', async (importOriginal) => {
@@ -41,20 +41,14 @@ vi.mock('$lib/features/operations', async () => {
 	};
 });
 vi.mock('$lib/features/kitchen', async () => {
-	const gasLedger = await import('../../kitchen/domain/gas-ledger');
 	const kitchen = await import('../../kitchen/domain/kitchen');
 	return {
-		createGasLedgerEntry: gasLedger.createGasLedgerEntry,
-		isGasLedgerEntry: gasLedger.isGasLedgerEntry,
-		gasCylinderBalance: gasLedger.gasCylinderBalance,
-		isFuelCylinder: kitchen.isFuelCylinder,
 		isMealPlan: kitchen.isMealPlan
 	};
 });
 
 import { TicketRemoteRepository } from './ticket.remote';
 import { isStockLedger, type StockLedger } from '../../operations/domain/operations';
-import { isGasLedgerEntry, type GasLedgerEntry } from '../../kitchen/domain/gas-ledger';
 
 const ctx = { shelterCode: 'SH001', createdBy: 'kitchen_staff' };
 const managerCtx = { shelterCode: 'SH001', createdBy: 'shelter_manager' };
@@ -75,24 +69,6 @@ async function seedStock(item_id: string, qty: string | number, unit = 'kg') {
 		updated_at: new Date().toISOString(),
 		created_by: 'seed',
 		occurred_at: new Date().toISOString()
-	});
-}
-
-async function seedFuelCylinder(id: string, capacityKg: string) {
-	await memoryRepo.put({
-		_id: id,
-		type: 'fuel_cylinder',
-		schema_v: 1,
-		item_master_id: 'item_master:lpg_15kg',
-		cylinder_code: 'LPG-01',
-		name: 'ถังทดสอบ',
-		capacity_kg: capacityKg,
-		burn_rate_kg_per_hour: '0.5',
-		time_multiplier: '1',
-		shelter_code: 'SH001',
-		created_at: new Date().toISOString(),
-		updated_at: new Date().toISOString(),
-		created_by: 'seed'
 	});
 }
 
@@ -188,41 +164,6 @@ describe('dispatchTicket', () => {
 		);
 		const ledger = await memoryRepo.allByType<StockLedger>('stock_ledger', isStockLedger);
 		expect(ledger.filter((l) => l.reason === 'requisition')).toHaveLength(0);
-	});
-
-	it('skips gas drawdown and gas ledger while LPG dispatch is paused', async () => {
-		await seedStock('item_master:rice', '100');
-		await seedFuelCylinder('fuel_cylinder:01J', '15');
-		const created = await repo.createTicket(
-			{ ...baseInput(), gas_drawdown: [{ cylinder_id: 'fuel_cylinder:01J', qty_kg: '2' }] },
-			ctx
-		);
-		const allocated = await repo.allocateTicketItem(created, 'item_master:rice', '30');
-		const approved = await repo.approveTicket(allocated, managerCtx);
-
-		const dispatched = await repo.dispatchTicket(approved, warehouseCtx);
-		expect(dispatched.status).toBe('IN_TRANSIT');
-		expect(dispatched.gas_drawdown).toEqual([]);
-
-		const gasLedger = await memoryRepo.allByType<GasLedgerEntry>('gas_ledger', isGasLedgerEntry);
-		expect(gasLedger).toHaveLength(0);
-	});
-
-	it('dispatches even when gas drawdown exceeds cylinder balance', async () => {
-		await seedStock('item_master:rice', '100');
-		await seedFuelCylinder('fuel_cylinder:01J', '1'); // less than the 2 kg drawn
-		const created = await repo.createTicket(
-			{ ...baseInput(), gas_drawdown: [{ cylinder_id: 'fuel_cylinder:01J', qty_kg: '2' }] },
-			ctx
-		);
-		const allocated = await repo.allocateTicketItem(created, 'item_master:rice', '30');
-		const approved = await repo.approveTicket(allocated, managerCtx);
-
-		const dispatched = await repo.dispatchTicket(approved, warehouseCtx);
-		expect(dispatched.status).toBe('IN_TRANSIT');
-		expect(dispatched.gas_drawdown).toEqual([]);
-		const ledger = await memoryRepo.allByType<StockLedger>('stock_ledger', isStockLedger);
-		expect(ledger.filter((l) => l.reason === 'requisition')).toHaveLength(1);
 	});
 });
 

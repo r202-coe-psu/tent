@@ -8,24 +8,17 @@
 		useMealSession,
 		useMealPlans,
 		useCreateMealPlan,
-		useUpdateMealPlanGasUsage,
+		useStartMealPlanCooking,
 		useUpdateConfirmedMealPlan,
 		useMealServices,
 		useRecordMealService,
 		useMealServiceReceipts,
 		mealServiceReceiptOutcome,
-		useFuelCylinders,
-		useGasLedger,
-		gasCylinderBalance,
-		calculateGasConsumptionKg,
-		calculateMaxCookingHours,
-		calculateCookingHoursFromPortions,
 		sumHeadcountByTags,
 		getActiveTagsFromSession,
 		TARGET_GROUP_LABELS,
 		MEAL_PERIOD_LABELS,
-		type TargetGroupTag,
-		type MealPlanGasUsage
+		type TargetGroupTag
 	} from '$lib/features/kitchen';
 	import {
 		useTickets,
@@ -42,10 +35,11 @@
 	import * as Tabs from '$lib/components/ui/tabs';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
+	import Combobox from '$lib/components/ui/combobox/combobox.svelte';
 	import { Label } from '$lib/components/ui/label';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { toast } from 'svelte-sonner';
-	import { addQty, qtyGt } from '$lib/utils/qty';
+	import { qtyGt } from '$lib/utils/qty';
 	import { formatThaiDateTime, formatThaiShortDate } from '$lib/utils/date';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import ChefHat from '@lucide/svelte/icons/chef-hat';
@@ -53,10 +47,8 @@
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import Clock from '@lucide/svelte/icons/clock';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
-	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import XCircle from '@lucide/svelte/icons/x-circle';
 	import Check from '@lucide/svelte/icons/check';
-	import ArrowRight from '@lucide/svelte/icons/arrow-right';
 	import Sparkles from '@lucide/svelte/icons/sparkles';
 	import PackageCheck from '@lucide/svelte/icons/package-check';
 	import Plus from '@lucide/svelte/icons/plus';
@@ -73,8 +65,6 @@
 	const services = useMealServices();
 	const serviceReceipts = useMealServiceReceipts();
 	const tickets = useTickets();
-	const gasTypes = useFuelCylinders();
-	const gasLedger = useGasLedger();
 	const recipes = useRecipes(() => getShelterCode());
 	const itemMasters = useItemMasters(() => getShelterCode());
 	const supplyItems = useSupplyItems();
@@ -83,7 +73,7 @@
 	const getItemName = (id: string) => getItemDisplayName(id, itemMasters.data, supplyItems.data);
 
 	const createMealPlanMutation = useCreateMealPlan();
-	const updateMealPlanGasUsageMutation = useUpdateMealPlanGasUsage();
+	const startCookingMutation = useStartMealPlanCooking();
 	const updateConfirmedMealPlanMutation = useUpdateConfirmedMealPlan();
 	const createTicketMutation = useCreateTicket();
 	const updateTicketItemsMutation = useUpdateTicketItems();
@@ -169,105 +159,12 @@
 			selectedRecipeId = '';
 			isIngredientsManuallyEdited = false;
 			ingredientsList = calculateRecipeIngredients('', allocatedTarget);
-			gasRows.forEach((r) => (r.isManuallyEdited = false));
 		}
 	}
 	let menuLabel = $state('');
 	let allocatedTarget = $state(50);
 	let targetTags = $state<TargetGroupTag[]>(['regular']);
 	let isEveryone = $state(false);
-
-	// Stove and LPG allocation (Multi-cylinder support)
-	interface GasAllocationRow {
-		cylinder_id: string;
-		hours: string;
-		isManuallyEdited?: boolean;
-	}
-
-	let gasRows = $state<GasAllocationRow[]>([
-		{ cylinder_id: '', hours: '1.5', isManuallyEdited: false }
-	]);
-
-	function getMaxHoursForCylinder(cylinderId: string): number {
-		const cyl = (gasTypes.data ?? []).find((t) => t._id === cylinderId);
-		if (!cyl) return 999;
-		const remainingKg = gasCylinderBalance(gasLedger.data ?? [], cyl._id, cyl.capacity_kg);
-		return parseFloat(calculateMaxCookingHours(remainingKg, cyl));
-	}
-
-	function spillOverExcessGas() {
-		if (gasRows.length <= 1) return;
-		const max0 = getMaxHoursForCylinder(gasRows[0].cylinder_id);
-		const curr0 = parseFloat(gasRows[0].hours) || 0;
-		if (curr0 <= max0) return;
-
-		const excessHours = Math.round((curr0 - max0) * 10) / 10;
-		gasRows[0].hours = max0.toFixed(1);
-
-		let remainingToDistribute = excessHours;
-		for (let i = 1; i < gasRows.length; i++) {
-			if (i === gasRows.length - 1) {
-				gasRows[i].hours = remainingToDistribute.toFixed(1);
-				gasRows[i].isManuallyEdited = true;
-				remainingToDistribute = 0;
-			} else {
-				const maxI = getMaxHoursForCylinder(gasRows[i].cylinder_id);
-				const give = Math.min(remainingToDistribute, maxI);
-				gasRows[i].hours = give.toFixed(1);
-				gasRows[i].isManuallyEdited = true;
-				remainingToDistribute = Math.round((remainingToDistribute - give) * 10) / 10;
-			}
-		}
-		toast.success(`โอนส่วนเกิน ${excessHours} ชม. ไปยังเตาถัดไปเรียบร้อยแล้ว`);
-	}
-
-	function distributeRecipeHours(totalHours: number) {
-		if (gasRows.length === 0) return;
-		let remaining = totalHours;
-		for (let i = 0; i < gasRows.length; i++) {
-			if (i === gasRows.length - 1) {
-				gasRows[i].hours = Math.max(0, Math.round(remaining * 10) / 10).toFixed(1);
-				remaining = 0;
-			} else {
-				const maxH = getMaxHoursForCylinder(gasRows[i].cylinder_id);
-				const give = Math.min(remaining, maxH);
-				gasRows[i].hours = Math.max(0, Math.round(give * 10) / 10).toFixed(1);
-				remaining = Math.max(0, Math.round((remaining - give) * 10) / 10);
-			}
-		}
-	}
-
-	function addGasRow() {
-		const types = gasTypes.data ?? [];
-		const usedIds = new Set(gasRows.map((r) => r.cylinder_id).filter(Boolean));
-		const nextCyl = types.find((t) => !usedIds.has(t._id));
-		const nextCylId = nextCyl?._id ?? types[0]?._id ?? '';
-
-		let newRowHours = '1.0';
-		if (gasRows.length > 0) {
-			const max0 = getMaxHoursForCylinder(gasRows[0].cylinder_id);
-			const curr0 = parseFloat(gasRows[0].hours) || 0;
-			if (curr0 > max0) {
-				const excessHours = Math.round((curr0 - max0) * 10) / 10;
-				gasRows[0].hours = max0.toFixed(1);
-				newRowHours = excessHours.toFixed(1);
-				toast.info(
-					`จัดสรรเตาแรก ${max0.toFixed(1)} ชม. และโอนส่วนเกิน ${excessHours} ชม. มายังเตาใหม่นี้`
-				);
-			}
-		}
-
-		gasRows.push({
-			cylinder_id: nextCylId,
-			hours: newRowHours,
-			isManuallyEdited: true
-		});
-	}
-
-	function removeGasRow(index: number) {
-		if (gasRows.length <= 1 || index === 0) return;
-		gasRows.splice(index, 1);
-	}
 
 	function getHeadcountForTag(tag: TargetGroupTag): number {
 		return sumHeadcountByTags(session?.target_headcount, [tag]);
@@ -299,12 +196,7 @@
 	let lastLoadedPlanId = $state<string | null>(null);
 
 	$effect(() => {
-		// Wait for fuel cylinders to load before reconstructing gasRows from
-		// activePlan.gas_usage — cylinder_id → burn_rate_kg_per_hour lookups
-		// below silently fail while gasTypes.data is still undefined, baking a
-		// wrong fallback ('1.0' h) into state that a later cylinder-list load
-		// can no longer correct (lastLoadedPlanId already latched).
-		if (activePlan && activePlan._id !== lastLoadedPlanId && gasTypes.data) {
+		if (activePlan && activePlan._id !== lastLoadedPlanId) {
 			lastLoadedPlanId = activePlan._id;
 			menuLabel = activePlan.label ?? '';
 			allocatedTarget = activePlan.allocated_target ?? activePlan.headcount?.total ?? 50;
@@ -319,33 +211,6 @@
 			selectedRecipeId = planRecipeId && planRecipeId !== 'recipe:custom' ? planRecipeId : '';
 			recipeMode = selectedRecipeId ? 'bom' : 'custom';
 			cookingStarted = !!activePlan.cooking_started_at;
-			if (activePlan.gas_usage && activePlan.gas_usage.length > 0) {
-				const repairedRows = repairLegacyGasRows(
-					activePlan.gas_usage,
-					activePlan.recipes?.[0]?.recipe_id ?? selectedRecipeId,
-					allocatedTarget
-				);
-				gasRows =
-					repairedRows ??
-					activePlan.gas_usage.map((gu) => {
-						const cyl = (gasTypes.data ?? []).find((t) => t._id === gu.cylinder_id);
-						let hrs = '1.0';
-						if (cyl && cyl.burn_rate_kg_per_hour) {
-							const consumption = parseFloat(gu.consumption_kg) || 0;
-							const rate = parseFloat(cyl.burn_rate_kg_per_hour) || 1;
-							hrs = (Math.round((consumption / rate) * 10) / 10).toFixed(1);
-						}
-						return {
-							cylinder_id: gu.cylinder_id,
-							hours: hrs,
-							isManuallyEdited: true
-						};
-					});
-			} else {
-				const defaultCylId = gasTypes.data?.[0]?._id ?? '';
-				gasRows = [{ cylinder_id: defaultCylId, hours: '1.5', isManuallyEdited: false }];
-			}
-
 			const ticketForPlan = (tickets.data ?? []).find(
 				(t) => t.meal_plan_id === activePlan._id && t.status !== 'CANCELLED'
 			);
@@ -376,19 +241,6 @@
 			isIngredientsManuallyEdited = false;
 			ingredientsList = calculateRecipeIngredients('', allocatedTarget);
 			showAddIngredient = false;
-			const defaultCylId = gasTypes.data?.[0]?._id ?? '';
-			gasRows = [{ cylinder_id: defaultCylId, hours: '1.5', isManuallyEdited: false }];
-		}
-	});
-
-	// Auto-select first gas cylinder when types load
-	$effect(() => {
-		if (gasTypes.data && gasTypes.data.length > 0) {
-			if (gasRows.length === 0) {
-				gasRows = [{ cylinder_id: gasTypes.data[0]._id, hours: '1.5', isManuallyEdited: false }];
-			} else if (!gasRows[0].cylinder_id) {
-				gasRows[0].cylinder_id = gasTypes.data[0]._id;
-			}
 		}
 	});
 
@@ -424,54 +276,6 @@
 		}
 	}
 
-	function calculateCookingHoursFromRecipe(recipeId: string, portions: number): string | null {
-		const recipe = (recipes.data ?? []).find((r) => r._id === recipeId);
-		// Legacy seed rows used standard_portions=1, which made 233 portions
-		// look like 233 cooking hours. Treat that sentinel as 50 portions/hour.
-		if (recipe && Number(recipe.standard_portions) <= 1 && portions > 1) {
-			return Math.max(0.1, Math.round((portions / 50) * 10) / 10).toFixed(1);
-		}
-		return calculateCookingHoursFromPortions(recipe, portions);
-	}
-
-	function repairLegacyGasRows(
-		stored: MealPlanGasUsage[],
-		recipeId: string,
-		portions: number
-	): GasAllocationRow[] | null {
-		// The legacy bug only ever produced a single gas_usage row (multi-cylinder
-		// support didn't exist yet when it happened) — real multi-row data must
-		// never be collapsed down to one row here.
-		if (stored.length !== 1) return null;
-		const firstCylinderId = stored[0]?.cylinder_id;
-		const cylinder = (gasTypes.data ?? []).find((item) => item._id === firstCylinderId);
-		if (!cylinder) return null;
-		// Legacy fingerprint: a single tank can never physically hold more gas
-		// than its own capacity — real recordings never exceed that. Anything
-		// under capacity is genuine data; leave it alone.
-		if (Number(stored[0].consumption_kg) <= Number(cylinder.capacity_kg)) return null;
-		const expectedHours =
-			calculateCookingHoursFromRecipe(recipeId, portions) ??
-			(portions > 0 ? Math.max(0.1, portions / 50).toFixed(1) : null);
-		if (!expectedHours) return null;
-		return [{ cylinder_id: cylinder._id, hours: expectedHours, isManuallyEdited: false }];
-	}
-
-	let repairedGasPlanId = $state<string | null>(null);
-	$effect(() => {
-		if (!activePlan || repairedGasPlanId === activePlan._id || !activePlan.gas_usage?.length)
-			return;
-		const repaired = repairLegacyGasRows(
-			activePlan.gas_usage,
-			activePlan.recipes?.[0]?.recipe_id ?? selectedRecipeId,
-			allocatedTarget
-		);
-		if (repaired) {
-			gasRows = repaired;
-			repairedGasPlanId = activePlan._id;
-		}
-	});
-
 	function handleRecipeChange(e: Event) {
 		const target = e.target as HTMLSelectElement;
 		selectedRecipeId = target.value;
@@ -481,14 +285,6 @@
 		}
 		isIngredientsManuallyEdited = false;
 		ingredientsList = calculateRecipeIngredients(target.value, allocatedTarget);
-
-		if (gasRows.length > 0) {
-			gasRows.forEach((r) => (r.isManuallyEdited = false));
-			const autoHours = calculateCookingHoursFromRecipe(target.value, allocatedTarget);
-			if (autoHours !== null) {
-				distributeRecipeHours(parseFloat(autoHours));
-			}
-		}
 	}
 
 	interface IngredientRow {
@@ -538,19 +334,6 @@
 		}
 	});
 
-	// Synchronize cooking hours with recipe & portions when not manually customized
-	$effect(() => {
-		const recId = selectedRecipeId;
-		const target = allocatedTarget;
-		void recipes.data;
-		if (gasRows.length > 0 && !gasRows[0].isManuallyEdited && target > 0 && recId) {
-			const autoHours = calculateCookingHoursFromRecipe(recId, target);
-			if (autoHours !== null) {
-				distributeRecipeHours(parseFloat(autoHours));
-			}
-		}
-	});
-
 	function resetIngredientsToRecipe() {
 		isIngredientsManuallyEdited = false;
 		ingredientsList = calculateRecipeIngredients(selectedRecipeId, allocatedTarget);
@@ -563,10 +346,17 @@
 		ingredientsList = ingredientsList.filter((_, i) => i !== index);
 	}
 
-	function handleNewItemSelect(e: Event) {
-		const target = e.target as HTMLSelectElement;
-		newItemId = target.value;
-		const master = (itemMasters.data ?? []).find((m) => m._id === target.value);
+	const ingredientComboItems = $derived(
+		(itemMasters.data ?? []).map((item) => ({
+			value: item._id,
+			label: `${item.name} (${item.base_unit})`,
+			keywords: [item.name]
+		}))
+	);
+
+	function handleNewItemSelect(id: string) {
+		newItemId = id;
+		const master = (itemMasters.data ?? []).find((m) => m._id === id);
 		if (master) {
 			newUnit = master.base_unit || 'kg';
 		}
@@ -603,69 +393,6 @@
 		toast.success(`เพิ่ม ${master?.name || 'วัตถุดิบ'} เรียบร้อยแล้ว`);
 	}
 
-	// Calculate gas requirements per row and total
-	const gasRowsAnalysis = $derived.by(() => {
-		return gasRows.map((row) => {
-			const cyl = (gasTypes.data ?? []).find((t) => t._id === row.cylinder_id);
-			const hours = parseFloat(row.hours) || 0;
-			const consumptionKg = cyl
-				? calculateGasConsumptionKg(hours, {
-						burn_rate_kg_per_hour: cyl.burn_rate_kg_per_hour,
-						time_multiplier: cyl.time_multiplier
-					})
-				: '0';
-			const remainingKg = cyl
-				? gasCylinderBalance(gasLedger.data ?? [], cyl._id, cyl.capacity_kg)
-				: '0';
-			const isInsufficient = cyl ? qtyGt(consumptionKg, remainingKg) : false;
-
-			return {
-				...row,
-				cylinder: cyl,
-				consumptionKg,
-				remainingKg,
-				isInsufficient
-			};
-		});
-	});
-
-	const totalEstimatedGasKg = $derived.by(() => {
-		const total = gasRowsAnalysis.reduce((sum, r) => sum + (parseFloat(r.consumptionKg) || 0), 0);
-		return (Math.round(total * 100) / 100).toFixed(2);
-	});
-
-	// Backward-compatibility alias for Stage C fallback
-	const estimatedGasKg = $derived(totalEstimatedGasKg);
-
-	// Older demo plans stored the number of portions as cooking hours (233 h),
-	// producing an impossible 116.5 kg estimate. Keep valid custom allocations,
-	// but repair that legacy shape from the recipe's standard production rate.
-	const plannedGasUsageForStage = $derived.by(() => {
-		const stored = activePlan?.gas_usage ?? [];
-		const recipeId = activePlan?.recipes?.[0]?.recipe_id ?? selectedRecipeId;
-		const expectedHours =
-			calculateCookingHoursFromRecipe(recipeId, allocatedTarget) ??
-			(allocatedTarget > 0 ? Math.max(0.1, allocatedTarget / 50).toFixed(1) : null);
-		const firstCylinderId = stored[0]?.cylinder_id || gasRows[0]?.cylinder_id;
-		const cylinder = (gasTypes.data ?? []).find((item) => item._id === firstCylinderId);
-		if (!expectedHours || !cylinder) return stored;
-		const expectedKg = calculateGasConsumptionKg(Number(expectedHours), cylinder);
-		return [{ cylinder_id: cylinder._id, consumption_kg: expectedKg }];
-	});
-
-	const plannedGasRequiredKg = $derived(
-		plannedGasUsageForStage.reduce((total, item) => addQty(total, item.consumption_kg), '0')
-	);
-	const allocatedGasKg = $derived(
-		gasRowsAnalysis.reduce((total, row) => addQty(total, row.consumptionKg), '0')
-	);
-	const isGasAllocationIncomplete = $derived(
-		qtyGt(plannedGasRequiredKg, 0) && qtyGt(plannedGasRequiredKg, allocatedGasKg)
-	);
-	const isGasInsufficient = $derived(
-		gasRowsAnalysis.some((r) => r.isInsufficient) || isGasAllocationIncomplete
-	);
-
 	// Submit Stage A ➔ Create Requisition
 	async function handleCreateRequisition() {
 		if (!session) return;
@@ -689,26 +416,6 @@
 
 		const chosenRecipe = (recipes.data ?? []).find((r) => r._id === selectedRecipeId);
 		const finalLabel = menuLabel.trim() || chosenRecipe?.label || 'เมนูประกอบอาหาร';
-
-		// Validate gas rows
-		const hasInvalidGasRow = gasRows.some((r) => !r.cylinder_id || Number(r.hours) <= 0);
-		if (hasInvalidGasRow) {
-			toast.error('กรุณาเลือกถังแก๊สและระบุชั่วโมงการใช้งานให้ถูกต้องทุกแถว');
-			return;
-		}
-
-		const cylinderIds = gasRows.map((r) => r.cylinder_id).filter(Boolean);
-		if (new Set(cylinderIds).size !== cylinderIds.length) {
-			toast.error('มีถังแก๊สซ้ำกัน กรุณาเลือกถังแก๊สที่ไม่ซ้ำกันในแต่ละแถว');
-			return;
-		}
-
-		const gasUsage: MealPlanGasUsage[] = gasRowsAnalysis
-			.filter((r) => r.cylinder_id && Number(r.consumptionKg) > 0)
-			.map((r) => ({
-				cylinder_id: r.cylinder_id,
-				consumption_kg: r.consumptionKg
-			}));
 
 		const ctx = {
 			shelterCode: getShelterCode(),
@@ -737,8 +444,7 @@
 					},
 					recipes: chosenRecipe
 						? [{ recipe_id: chosenRecipe._id, planned_qty: allocatedTarget }]
-						: [{ recipe_id: 'recipe:custom', planned_qty: allocatedTarget }],
-					gas_usage: gasUsage.length > 0 ? gasUsage : undefined
+						: [{ recipe_id: 'recipe:custom', planned_qty: allocatedTarget }]
 				},
 				ctx
 			});
@@ -752,8 +458,6 @@
 						unit: ing.unit,
 						requested_qty: ing.needed
 					}))
-					// LPG dispatch paused temporarily. Keep gas_usage on meal plan
-					// for planning, but do not put gas on requisition ticket.
 				},
 				ctx
 			});
@@ -799,24 +503,6 @@
 		const chosenRecipe = (recipes.data ?? []).find((r) => r._id === selectedRecipeId);
 		const finalLabel = menuLabel.trim() || chosenRecipe?.label || 'เมนูประกอบอาหาร';
 
-		const hasInvalidGasRow = gasRows.some((r) => !r.cylinder_id || Number(r.hours) <= 0);
-		if (hasInvalidGasRow) {
-			toast.error('กรุณาเลือกถังแก๊สและระบุชั่วโมงการใช้งานให้ถูกต้องทุกแถว');
-			return;
-		}
-		const cylinderIds = gasRows.map((r) => r.cylinder_id).filter(Boolean);
-		if (new Set(cylinderIds).size !== cylinderIds.length) {
-			toast.error('มีถังแก๊สซ้ำกัน กรุณาเลือกถังแก๊สที่ไม่ซ้ำกันในแต่ละแถว');
-			return;
-		}
-
-		const gasUsage: MealPlanGasUsage[] = gasRowsAnalysis
-			.filter((r) => r.cylinder_id && Number(r.consumptionKg) > 0)
-			.map((r) => ({
-				cylinder_id: r.cylinder_id,
-				consumption_kg: r.consumptionKg
-			}));
-
 		try {
 			await updateTicketItemsMutation.mutateAsync({
 				ticket: activeTicket,
@@ -842,8 +528,7 @@
 					},
 					recipes: chosenRecipe
 						? [{ recipe_id: chosenRecipe._id, planned_qty: allocatedTarget }]
-						: [{ recipe_id: 'recipe:custom', planned_qty: allocatedTarget }],
-					gas_usage: gasUsage.length > 0 ? gasUsage : undefined
+						: [{ recipe_id: 'recipe:custom', planned_qty: allocatedTarget }]
 				}
 			});
 
@@ -876,7 +561,6 @@
 	let wastePortions = $state(2);
 	let extVolunteers = $state(0);
 	let extOutside = $state(0);
-	let actualGasUsedKg = $state('');
 	let serviceNotes = $state('');
 	let cookingStarted = $state(false);
 
@@ -889,12 +573,10 @@
 				wastePortions = activeService.waste;
 				extVolunteers = activeService.external?.volunteers ?? 0;
 				extOutside = activeService.external?.outside_evacuees ?? 0;
-				actualGasUsedKg = activeService.actual_gas_used_kg ?? '';
 			} else {
 				yieldActualPortions = activePlan?.allocated_target ?? allocatedTarget;
 				servedInShelter = activePlan?.allocated_target ?? allocatedTarget;
 				wastePortions = 0;
-				actualGasUsedKg = estimatedGasKg;
 			}
 		}
 	});
@@ -916,7 +598,7 @@
 				icon: CheckCircle2,
 				badgeClass: 'bg-emerald-100 text-emerald-800',
 				dotClass: 'bg-emerald-100 text-emerald-600',
-				badgeLabel: 'ส่งมอบเสร็จสิ้น',
+				badgeLabel: 'รับเข้าคลังแล้ว',
 				title: 'คลังตรวจรับเข้าสต็อกเรียบร้อยแล้ว',
 				description: 'ผลผลิตถูกนำเข้ารายการคลังสินค้าแล้ว — จบขั้นตอนการส่งมอบ'
 			};
@@ -949,16 +631,12 @@
 			badgeLabel: 'วัตถุดิบพร้อมปรุง',
 			title: 'วัตถุดิบพร้อมประกอบอาหารเรียบร้อยแล้ว',
 			description:
-				'วัตถุดิบและแก๊สหุงต้มตรวจรับเข้าโรงครัวเรียบร้อยแล้ว กดปุ่ม "เริ่มปรุงอาหาร" ด้านล่างเพื่อเปลี่ยนสถานะเป็นกำลังผลิตจริง หรือระบุจำนวนผลผลิตจริงเมื่อประกอบอาหารเสร็จ'
+				'วัตถุดิบตรวจรับเข้าโรงครัวเรียบร้อยแล้ว กดปุ่ม "เริ่มปรุงอาหาร" ด้านล่างเพื่อเปลี่ยนสถานะเป็นกำลังผลิตจริง หรือระบุจำนวนผลผลิตจริงเมื่อประกอบอาหารเสร็จ'
 		};
 	});
 
 	async function handleRecordService() {
 		if (!session || !activePlanId) return;
-		if (isGasInsufficient) {
-			toast.error('แก๊สไม่เพียงพอ กรุณาเพิ่มถังหรือปรับชั่วโมงปรุงก่อนบันทึก');
-			return;
-		}
 		if (yieldActualPortions < 0) {
 			toast.error('กรุณาระบุจำนวนจานที่ปรุงได้จริง');
 			return;
@@ -970,17 +648,6 @@
 		}
 
 		try {
-			if (activePlan) {
-				await updateMealPlanGasUsageMutation.mutateAsync({
-					plan: activePlan,
-					gasUsage: gasRowsAnalysis
-						.filter((row) => row.cylinder_id && Number(row.consumptionKg) > 0)
-						.map((row) => ({
-							cylinder_id: row.cylinder_id,
-							consumption_kg: row.consumptionKg
-						}))
-				});
-			}
 			await recordServiceMutation.mutateAsync({
 				input: {
 					date: session.date,
@@ -990,7 +657,6 @@
 					actual_yield: Number(yieldActualPortions),
 					served: Number(servedInShelter),
 					waste: Number(wastePortions),
-					actual_gas_used_kg: actualGasUsedKg ? String(actualGasUsedKg) : undefined,
 					external: {
 						volunteers: Number(extVolunteers || 0),
 						outside_evacuees: Number(extOutside || 0)
@@ -1012,18 +678,12 @@
 	async function handleStartCooking() {
 		if (!activePlan) return;
 		try {
-			await updateMealPlanGasUsageMutation.mutateAsync({
+			await startCookingMutation.mutateAsync({
 				plan: activePlan,
-				gasUsage: gasRowsAnalysis
-					.filter((row) => row.cylinder_id && Number(row.consumptionKg) > 0)
-					.map((row) => ({
-						cylinder_id: row.cylinder_id,
-						consumption_kg: row.consumptionKg
-					})),
 				cookingStartedAt: new Date().toISOString()
 			});
 			cookingStarted = true;
-			toast.success('เริ่มปรุงอาหารแล้ว — ถังแก๊สเปลี่ยนเป็นกำลังใช้');
+			toast.success('เริ่มปรุงอาหารแล้ว');
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'เริ่มปรุงอาหารไม่สำเร็จ');
 		}
@@ -1387,16 +1047,15 @@
 							<div class="grid grid-cols-1 gap-2 sm:grid-cols-12">
 								<div class="sm:col-span-6">
 									<Label class="text-2xs text-muted-foreground">เลือกวัตถุดิบ</Label>
-									<select
+									<Combobox
+										items={ingredientComboItems}
 										value={newItemId}
-										onchange={handleNewItemSelect}
-										class="mt-1 flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
-									>
-										<option value="">-- เลือกวัตถุดิบ --</option>
-										{#each itemMasters.data ?? [] as item (item._id)}
-											<option value={item._id}>{item.name} ({item.base_unit})</option>
-										{/each}
-									</select>
+										onValueChange={handleNewItemSelect}
+										placeholder="-- เลือกวัตถุดิบ --"
+										searchPlaceholder="ค้นหาวัตถุดิบ..."
+										emptyText="ไม่พบวัตถุดิบ"
+										class="mt-1 h-8 px-2 text-xs"
+									/>
 								</div>
 								<div class="sm:col-span-3">
 									<Label class="text-2xs text-muted-foreground">จำนวน</Label>
@@ -1412,9 +1071,11 @@
 								<div class="sm:col-span-3">
 									<Label class="text-2xs text-muted-foreground">หน่วย</Label>
 									<Input
-										bind:value={newUnit}
+										value={newUnit}
+										readonly
+										tabindex={-1}
 										placeholder="หน่วย"
-										class="mt-1 h-8 text-xs text-muted-foreground"
+										class="mt-1 h-8 bg-muted text-xs text-muted-foreground"
 									/>
 								</div>
 							</div>
@@ -1465,309 +1126,6 @@
 					</p>
 				</Card.Content>
 			</Card.Root>
-
-			{#if false}
-				<!-- Moved to Stage C: Stove & LPG Gas Allocation -->
-				<Card.Root class="border shadow-sm">
-					<Card.Header class="pb-3">
-						<Card.Title class="flex items-center gap-2 text-sm font-bold">
-							<Flame class="h-4 w-4 text-orange-600" />
-							3. จัดสรรเตาและแก๊ส
-						</Card.Title>
-						<Card.Description class="text-xs">
-							ระบุชั่วโมงปรุงเพื่อประเมินปริมาณแก๊สที่ต้องใช้
-						</Card.Description>
-					</Card.Header>
-					<Card.Content class="space-y-3 text-xs">
-						<!-- Multi-cylinder Rows -->
-						<div class="space-y-2.5">
-							{#each gasRows as row, idx (idx)}
-								{@const analysis = gasRowsAnalysis[idx]}
-								{@const isRow0 = idx === 0}
-								{@const autoHours =
-									isRow0 && selectedRecipeId
-										? calculateCookingHoursFromRecipe(selectedRecipeId, allocatedTarget)
-										: null}
-
-								<div class="space-y-2 rounded-lg border bg-card/60 p-3 shadow-xs">
-									<div class="flex items-center justify-between border-b pb-1.5">
-										<div class="flex items-center gap-1.5">
-											<span
-												class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-2xs font-bold text-orange-700"
-											>
-												{idx + 1}
-											</span>
-											<span class="font-medium text-foreground">
-												เตา / ถังแก๊สที่ {idx + 1}
-											</span>
-											{#if isRow0}
-												<span class="rounded bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground"
-													>เตาหลัก</span
-												>
-											{/if}
-										</div>
-
-										<div class="flex items-center gap-1.5">
-											{#if isRow0 && row.isManuallyEdited && autoHours !== null}
-												<Button
-													variant="link"
-													size="sm"
-													class="h-auto gap-1 p-0 text-2xs"
-													onclick={() => {
-														gasRows.forEach((r) => (r.isManuallyEdited = false));
-														distributeRecipeHours(parseFloat(autoHours!));
-													}}
-												>
-													<RotateCcw class="h-3 w-3" />
-													คืนค่าตามสูตร ({autoHours} ชม.)
-												</Button>
-											{/if}
-											{#if idx > 0}
-												<Button
-													variant="ghost"
-													size="icon-sm"
-													class="text-muted-foreground hover:bg-rose-50 hover:text-rose-600"
-													onclick={() => removeGasRow(idx)}
-													title="ลบแถวนี้"
-												>
-													<Trash2 class="h-3.5 w-3.5" />
-												</Button>
-											{/if}
-										</div>
-									</div>
-
-									<div class="space-y-2">
-										<div>
-											<Label class="text-2xs text-muted-foreground">เลือกถังแก๊ส</Label>
-											<select
-												bind:value={row.cylinder_id}
-												class="mt-1 flex h-8 w-full rounded-md border border-input bg-background px-2.5 py-1 text-xs shadow-xs focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
-											>
-												<option value="" disabled>-- เลือกถังแก๊ส --</option>
-												{#each gasTypes.data ?? [] as cyl (cyl._id)}
-													{@const isUsedElsewhere = gasRows.some(
-														(r, rIdx) => rIdx !== idx && r.cylinder_id === cyl._id
-													)}
-													{@const remaining = gasCylinderBalance(
-														gasLedger.data ?? [],
-														cyl._id,
-														cyl.capacity_kg
-													)}
-													<option value={cyl._id} disabled={isUsedElsewhere}>
-														{cyl.name} (คงเหลือ {remaining} / {cyl.capacity_kg} kg){isUsedElsewhere
-															? ' - เลือกแล้ว'
-															: ''}
-													</option>
-												{/each}
-											</select>
-										</div>
-
-										<div>
-											<Label class="text-2xs text-muted-foreground">ชั่วโมงใช้งาน (ชม.)</Label>
-											<Input
-												type="number"
-												step="0.1"
-												min="0.1"
-												bind:value={row.hours}
-												oninput={() => (row.isManuallyEdited = true)}
-												class="mt-1 h-8 text-xs"
-												placeholder="1.0"
-											/>
-										</div>
-									</div>
-
-									<!-- Row Gas Sub-summary -->
-									{#if analysis}
-										<div
-											class="flex items-center justify-between rounded bg-muted/30 px-2.5 py-1.5 text-2xs"
-										>
-											<span class="text-muted-foreground">
-												ใช้ประมาณ: <strong class="font-mono text-foreground"
-													>{analysis.consumptionKg} kg</strong
-												>
-											</span>
-											<span class="text-muted-foreground">
-												คงเหลือ: <strong
-													class="font-mono {analysis.isInsufficient
-														? 'text-rose-600'
-														: 'text-emerald-600'}">{analysis.remainingKg} kg</strong
-												>
-											</span>
-										</div>
-										{#if analysis.isInsufficient}
-											<div
-												class="flex flex-col gap-1.5 rounded bg-rose-50 px-2.5 py-1.5 text-2xs text-rose-700 sm:flex-row sm:items-center sm:justify-between"
-											>
-												<div class="flex items-center gap-1">
-													<AlertTriangle class="h-3.5 w-3.5 shrink-0 text-rose-600" />
-													<span>
-														แก๊สในถังนี้ไม่พอ (ต้องการ {analysis.consumptionKg} kg แต่เหลือ {analysis.remainingKg}
-														kg)
-													</span>
-												</div>
-												{#if isRow0}
-													{@const max0 = getMaxHoursForCylinder(row.cylinder_id)}
-													{@const excess = Math.max(
-														0,
-														Math.round(((parseFloat(row.hours) || 0) - max0) * 10) / 10
-													)}
-													{#if gasRows.length > 1}
-														<Button
-															variant="secondary"
-															size="sm"
-															class="h-auto shrink-0 gap-1 bg-rose-200/70 py-0.5 font-semibold text-rose-800 hover:bg-rose-200"
-															onclick={spillOverExcessGas}
-														>
-															<ArrowRight class="h-3 w-3" />
-															โอนส่วนเกิน ({excess} ชม.) ไปเตาอื่น
-														</Button>
-													{:else if (gasTypes.data ?? []).length > 1}
-														<Button
-															variant="secondary"
-															size="sm"
-															class="h-auto shrink-0 gap-1 bg-rose-200/70 py-0.5 font-semibold text-rose-800 hover:bg-rose-200"
-															onclick={addGasRow}
-														>
-															<Plus class="h-3 w-3" />
-															เพิ่มเตาและโอนส่วนเกินอัตโนมัติ
-														</Button>
-													{/if}
-												{/if}
-											</div>
-										{/if}
-									{/if}
-								</div>
-							{/each}
-						</div>
-
-						<!-- Add cylinder button -->
-						{#if (gasTypes.data ?? []).length > gasRows.length}
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								class="w-full gap-1.5 border-dashed text-xs text-muted-foreground hover:text-foreground"
-								onclick={addGasRow}
-							>
-								<Plus class="h-3.5 w-3.5" />
-								เพิ่มเตา / ถังแก๊สอีกถัง ({gasRows.length} / {(gasTypes.data ?? []).length})
-							</Button>
-						{/if}
-
-						<!-- Recipe Rate Note -->
-						{#if selectedRecipeId}
-							{@const chosen = (recipes.data ?? []).find((r) => r._id === selectedRecipeId)}
-							{#if chosen && parseFloat(chosen!.standard_portions) > 0 && parseFloat(chosen!.standard_duration_hours) > 0}
-								{@const stdPortions = parseFloat(chosen!.standard_portions)}
-								{@const stdHours = parseFloat(chosen!.standard_duration_hours)}
-								{@const rate = Math.round((stdPortions / stdHours) * 10) / 10}
-								<p class="text-2xs text-muted-foreground">
-									คำนวณจากสูตร: กำลังผลิต {rate} จาน/ชม. (มาตรฐาน {stdPortions} จาน ต่อ {stdHours} ชม.)
-								</p>
-							{/if}
-						{/if}
-
-						<!-- Total Allocation Summary -->
-						<div class="space-y-2 rounded-lg border bg-muted/20 p-3">
-							<div class="flex items-center justify-between">
-								<span class="text-muted-foreground">จำนวนถังแก๊สที่ใช้:</span>
-								<span class="font-mono font-bold text-foreground">{gasRows.length} ถัง</span>
-							</div>
-							<div class="flex items-center justify-between">
-								<span class="text-muted-foreground">ประเมินแก๊สรวมที่ต้องใช้:</span>
-								<span class="font-mono font-bold text-foreground">{totalEstimatedGasKg} kg</span>
-							</div>
-							{#if isGasInsufficient}
-								<div
-									class="flex flex-col gap-1.5 rounded bg-rose-50 p-2.5 text-2xs text-rose-700 sm:flex-row sm:items-center sm:justify-between"
-								>
-									<div class="flex items-center gap-1.5">
-										<AlertTriangle class="h-4 w-4 shrink-0 text-rose-600" />
-										<span>มีถังแก๊สที่ไม่เพียงพอต่อการปรุงอาหาร</span>
-									</div>
-									{#if gasRows.length > 1 && gasRowsAnalysis[0]?.isInsufficient}
-										<Button
-											variant="secondary"
-											size="sm"
-											class="h-auto shrink-0 gap-1 bg-rose-200/70 font-semibold text-rose-800 hover:bg-rose-200"
-											onclick={spillOverExcessGas}
-										>
-											<ArrowRight class="h-3 w-3" />
-											กระจายชั่วโมงตามความจุถัง (โอนส่วนเกินเตาแรก)
-										</Button>
-									{/if}
-								</div>
-							{/if}
-						</div>
-
-						{#if activeTicket}
-							<div class="space-y-2 rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs">
-								<div class="flex items-center justify-between">
-									<span class="font-semibold text-foreground"
-										>สถานะตั๋วเบิก {activeTicket!.ticket_no}:</span
-									>
-									<span
-										class="font-semibold {activeTicket!.status === 'COMPLETED'
-											? 'text-green-700'
-											: activeTicket!.status === 'CANCELLED'
-												? 'text-rose-700'
-												: 'text-amber-700'}"
-									>
-										{TICKET_STATUS_LABELS[activeTicket!.status]}
-									</span>
-								</div>
-							</div>
-
-							<div class="flex flex-col gap-2 pt-3">
-								{#if activeTicket!.status === 'COMPLETED'}
-									<Button
-										class="w-full gap-2 bg-green-600 font-semibold text-white shadow-sm hover:bg-green-700"
-										onclick={() => (currentStage = 'C')}
-									>
-										<CheckCircle2 class="h-4 w-4" />
-										ไปยังบันทึกผลผลิต (Stage 3)
-									</Button>
-								{/if}
-								{#if activeTicket!.status === 'PENDING_PICK'}
-									<Button
-										class="w-full gap-2 font-semibold shadow-sm"
-										onclick={handleSaveEdits}
-										disabled={updateTicketItemsMutation.isPending ||
-											updateConfirmedMealPlanMutation.isPending}
-									>
-										<Check class="h-4 w-4" />
-										{updateTicketItemsMutation.isPending ||
-										updateConfirmedMealPlanMutation.isPending
-											? 'กำลังบันทึกการแก้ไข...'
-											: 'บันทึกการแก้ไข'}
-									</Button>
-								{/if}
-								<Button
-									variant="outline"
-									class="w-full gap-2 text-xs font-semibold"
-									onclick={() => (currentStage = 'B')}
-								>
-									<ArrowRight class="h-4 w-4" />
-									ไปยังตรวจสอบการเบิก
-								</Button>
-							</div>
-						{:else}
-							<div class="pt-4">
-								<Button
-									class="w-full gap-2 font-semibold shadow-sm"
-									onclick={handleCreateRequisition}
-									disabled={createMealPlanMutation.isPending || createTicketMutation.isPending}
-								>
-									<Sparkles class="h-4 w-4" />
-									{createMealPlanMutation.isPending || createTicketMutation.isPending
-										? 'กำลังเปิดตั๋วเบิก...'
-										: 'สร้างใบเบิกวัตถุดิบ'}
-								</Button>
-							</div>
-						{/if}
-					</Card.Content>
-				</Card.Root>
-			{/if}
 		</div>
 
 		{#if !activeTicket}
@@ -1877,7 +1235,7 @@
 						<div class="flex-1">
 							<h4 class="font-bold">คลังปล่อยของแล้ว พร้อมยืนยันรับวัตถุดิบ</h4>
 							<p class="mt-1 text-xs text-green-700">
-								ปล่อยของโดย: {activeTicket.dispatched_by} · ตัดสต็อกวัตถุดิบแล้ว (ข้าม LPG ชั่วคราว)
+								ปล่อยของโดย: {activeTicket.dispatched_by} · ตัดสต็อกวัตถุดิบแล้ว
 							</p>
 							<div class="mt-2.5">
 								<Button
@@ -1936,27 +1294,6 @@
 						</Table.Body>
 					</Table.Root>
 				</div>
-
-				<!-- Gas Drawdown Table -->
-				{#if activeTicket?.gas_drawdown && activeTicket.gas_drawdown.length > 0}
-					<div class="rounded-lg border">
-						<div
-							class="flex items-center gap-1.5 border-b bg-muted/40 px-3 py-2 font-semibold text-foreground"
-						>
-							<Flame class="h-3.5 w-3.5 text-orange-600" />
-							แก๊สหุงต้มที่ขอเบิก
-						</div>
-						<div class="space-y-1 p-3 text-xs">
-							{#each activeTicket.gas_drawdown as g (g.cylinder_id)}
-								{@const cyl = (gasTypes.data ?? []).find((t) => t._id === g.cylinder_id)}
-								<div class="flex items-center justify-between">
-									<span>{cyl?.name ?? g.cylinder_id}</span>
-									<span class="font-mono font-bold">{g.qty_kg} kg</span>
-								</div>
-							{/each}
-						</div>
-					</div>
-				{/if}
 
 				<!-- Action Buttons -->
 				<div class="flex flex-wrap items-center justify-end gap-2 pt-2">
@@ -2023,7 +1360,6 @@
 									<h4 class="font-bold">บันทึกผลการผลิตและตรวจรับเข้าคลังเรียบร้อยแล้ว</h4>
 									<p class="mt-1 text-xs text-green-700">
 										บันทึกเมื่อ {formatThaiDateTime(activeService.created_at)} โดย {activeService.created_by}
-										— ส่งมอบเสร็จสิ้น
 									</p>
 								</div>
 							</div>
@@ -2032,11 +1368,11 @@
 						{#if !isServiceFinalized && !cookingStarted}
 							<Button
 								class="w-full gap-2 bg-orange-600 font-semibold text-white hover:bg-orange-700"
-								disabled={updateMealPlanGasUsageMutation.isPending}
+								disabled={startCookingMutation.isPending}
 								onclick={handleStartCooking}
 							>
 								<Flame class="h-4 w-4" />
-								{updateMealPlanGasUsageMutation.isPending ? 'กำลังเริ่มปรุง...' : 'เริ่มปรุงอาหาร'}
+								{startCookingMutation.isPending ? 'กำลังเริ่มปรุง...' : 'เริ่มปรุงอาหาร'}
 							</Button>
 						{/if}
 
@@ -2121,13 +1457,10 @@
 								<Button
 									class="gap-1.5 bg-primary shadow-sm"
 									onclick={handleRecordService}
-									disabled={recordServiceMutation.isPending || isGasInsufficient || !cookingStarted}
-									title={!cookingStarted
-										? 'กดเริ่มปรุงอาหารก่อน'
-										: isGasInsufficient
-											? 'แก๊สไม่เพียงพอสำหรับชั่วโมงปรุงที่ระบุ'
-											: undefined}
+									disabled={recordServiceMutation.isPending || !cookingStarted}
+									title={!cookingStarted ? 'กดเริ่มปรุงอาหารก่อน' : undefined}
 								>
+									>
 									<Check class="h-4 w-4" />
 									{recordServiceMutation.isPending
 										? 'กำลังบันทึก...'

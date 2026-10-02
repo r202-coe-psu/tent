@@ -43,11 +43,6 @@ export interface TicketItem {
 	allocated_qty: string; // qty_str >= 0 — '0' until warehouse picks (CR-141)
 }
 
-export interface TicketGasDrawdown {
-	cylinder_id: string; // fuel_cylinder._id
-	qty_kg: string; // qty_str > 0
-}
-
 export interface RequisitionTicket extends BaseDoc {
 	type: 'requisition_ticket';
 	schema_v: 1;
@@ -62,7 +57,6 @@ export interface RequisitionTicket extends BaseDoc {
 	dispatched_by?: string;
 	received_by?: string;
 	items: TicketItem[];
-	gas_drawdown?: TicketGasDrawdown[];
 	notes?: string;
 }
 
@@ -76,18 +70,11 @@ export const ticketItemInputSchema = z.object({
 });
 export type TicketItemInput = z.input<typeof ticketItemInputSchema>;
 
-export const ticketGasDrawdownInputSchema = z.object({
-	cylinder_id: z.string().min(1),
-	qty_kg: qtyStrCoercePositiveSchema
-});
-export type TicketGasDrawdownInput = z.input<typeof ticketGasDrawdownInputSchema>;
-
 export const createTicketInputSchema = z.object({
 	meal_plan_id: z.string().min(1),
 	source_location: z.string().trim().min(1).default('warehouse:main'),
 	destination_location: z.string().trim().min(1).default('kitchen'),
-	items: z.array(ticketItemInputSchema).min(1, 'At least one item required'),
-	gas_drawdown: z.array(ticketGasDrawdownInputSchema).optional()
+	items: z.array(ticketItemInputSchema).min(1, 'At least one item required')
 });
 export type CreateTicketInput = z.input<typeof createTicketInputSchema>;
 
@@ -114,15 +101,7 @@ export function createTicket(
 				unit: i.unit,
 				requested_qty: persistQty(i.requested_qty),
 				allocated_qty: '0'
-			})),
-			...(d.gas_drawdown
-				? {
-						gas_drawdown: d.gas_drawdown.map((g) => ({
-							cylinder_id: g.cylinder_id,
-							qty_kg: persistQty(g.qty_kg)
-						}))
-					}
-				: {})
+			}))
 		},
 		ctx
 	) as RequisitionTicket;
@@ -198,7 +177,6 @@ export function oneStepApproveTicket(
 	return {
 		...touch(ticket),
 		items,
-		gas_drawdown: [],
 		status: 'COMPLETED',
 		approved_by: ctx.createdBy,
 		dispatched_by: ctx.createdBy,

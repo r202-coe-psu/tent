@@ -31,10 +31,10 @@ export interface TicketRepository {
 	// PENDING_PICK → READY_FOR_DISPATCH (shelter_manager/system_admin only — VDU-enforced).
 	approveTicket(ticket: RequisitionTicket, ctx: AuthorContext): Promise<RequisitionTicket>;
 
-	// READY_FOR_DISPATCH → IN_TRANSIT. Checks stock + gas balance, then writes the
-	// ticket status update alongside stock_ledger/gas_ledger rows in one bulkDocs
+	// READY_FOR_DISPATCH → IN_TRANSIT. Checks stock balance, then writes the
+	// ticket status update alongside stock_ledger rows in one bulkDocs
 	// call (mirrors kitchen.remote.ts's approveKitchenRequisition). Throws before
-	// any write if either balance is insufficient (all-or-nothing).
+	// any write if balance is insufficient (all-or-nothing).
 	dispatchTicket(ticket: RequisitionTicket, ctx: AuthorContext): Promise<RequisitionTicket>;
 
 	// IN_TRANSIT → COMPLETED — kitchen confirms receipt.

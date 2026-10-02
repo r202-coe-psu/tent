@@ -28,9 +28,6 @@
 		toTicketItemInput,
 		MealPlanForm,
 		MealServiceForm,
-		useFuelCylinders,
-		useGasLedger,
-		gasCylinderBalance,
 		type MealPlan,
 		type MealPlanRecipe
 	} from '$lib/features/kitchen';
@@ -43,15 +40,12 @@
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { qtyGt } from '$lib/utils/qty';
 	import { formatThaiTime, formatThaiShortDate } from '$lib/utils/date';
 
 	const plans = useMealPlans();
 	const supplyItems = useSupplyItems();
 	const itemMasters = useItemMasters(() => getShelterCode());
 	const stockBalance = useStockBalance();
-	const gasTypes = useFuelCylinders();
-	const gasLedger = useGasLedger();
 	let createOpen = $state(false);
 	let createDefaultMode = $state<'sop' | 'recipe' | 'custom'>('sop');
 
@@ -202,13 +196,6 @@
 			);
 			return;
 		}
-		// Block confirming if gas balance is insufficient.
-		if (gasShortfalls(plan).length > 0) {
-			toast.error(
-				'ยืนยันไม่ได้ — ถังแก๊สบางใบเหลือไม่พอตามที่แผนนี้คำนวณไว้ เติมแก๊สหรือแก้แผนก่อนแล้วค่อยยืนยัน'
-			);
-			return;
-		}
 		try {
 			await confirm.mutateAsync(plan);
 			toast.success(
@@ -241,22 +228,6 @@
 		const onHand = Number(stockBalance.data?.get(stock?.item_id ?? recipe.recipe_id) ?? '0');
 		const onHandDisplayUnit = stock ? onHand * stock.recipe_per_stock_unit : onHand;
 		return Math.max(0, recipe.planned_qty - onHandDisplayUnit);
-	}
-
-	// Identifies gas cylinders with shortfalls for the plan.
-	function gasShortfalls(
-		plan: MealPlan
-	): { name: string; remaining: string; consumption_kg: string }[] {
-		if (!plan.gas_usage?.length) return [];
-		return plan.gas_usage
-			.map((g) => {
-				const cyl = (gasTypes.data ?? []).find((t) => t._id === g.cylinder_id);
-				const remaining = cyl
-					? gasCylinderBalance(gasLedger.data ?? [], g.cylinder_id, cyl.capacity_kg)
-					: '0';
-				return { name: cyl?.name ?? g.cylinder_id, remaining, consumption_kg: g.consumption_kg };
-			})
-			.filter((g) => qtyGt(g.consumption_kg, g.remaining));
 	}
 </script>
 
@@ -362,15 +333,6 @@
 												{/if}
 											</p>
 										{/each}
-										{#each gasShortfalls(plan) as g (g.name)}
-											<p
-												class="mt-0.5 flex items-center gap-1 text-xs text-amber-600"
-												title="ถังแก๊สเหลือไม่พอตามที่แผนนี้คำนวณไว้ — เติมแก๊สหรือแก้แผนก่อนเบิก"
-											>
-												<TriangleAlert class="h-3 w-3 shrink-0" />
-												แก๊ส {g.name}: เหลือ {g.remaining} kg (ต้องใช้ {g.consumption_kg} kg)
-											</p>
-										{/each}
 										{#if plan.override_reason}
 											<p class="mt-0.5 text-xs text-amber-700" title={plan.override_reason}>
 												⚑ แก้ยอด: {plan.override_reason}
@@ -415,7 +377,7 @@
 									</Table.Cell>
 									<Table.Cell class="px-6 text-center">
 										{#if stage === 'draft'}
-											{@const blocked = isBomSourced(plan) || gasShortfalls(plan).length > 0}
+											{@const blocked = isBomSourced(plan)}
 											<div class="flex items-center justify-center gap-1.5">
 												<Button
 													size="sm"
@@ -423,7 +385,7 @@
 													onclick={() => handleConfirm(plan)}
 													disabled={confirm.isPending || blocked}
 													title={blocked
-														? 'มีคำเตือนในแผนนี้ (วัตถุดิบยังไม่เชื่อมสต็อก หรือแก๊สไม่พอ) — แก้ก่อนยืนยัน'
+														? 'มีคำเตือนในแผนนี้ (วัตถุดิบยังไม่เชื่อมสต็อก) — แก้ก่อนยืนยัน'
 														: undefined}
 												>
 													ยืนยันแผน

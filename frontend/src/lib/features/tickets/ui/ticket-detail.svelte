@@ -2,7 +2,6 @@
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import PackageCheck from '@lucide/svelte/icons/package-check';
-	import Flame from '@lucide/svelte/icons/flame';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import CalendarClock from '@lucide/svelte/icons/calendar-clock';
 	import User from '@lucide/svelte/icons/user';
@@ -263,25 +262,6 @@
 				</Table.Root>
 			</Card.Content>
 		</Card.Root>
-
-		{#if ticket.gas_drawdown && ticket.gas_drawdown.length > 0}
-			<Card.Root class="rounded-2xl border border-orange-200 bg-white shadow-xs">
-				<Card.Header class="border-b pb-4">
-					<Card.Title class="flex items-center gap-2 text-base font-bold text-slate-900">
-						<Flame class="h-4 w-4 text-orange-600" />
-						แก๊สหุงต้มที่ขอเบิก
-					</Card.Title>
-				</Card.Header>
-				<Card.Content class="space-y-2 pt-4 text-sm">
-					{#each ticket.gas_drawdown as g (g.cylinder_id)}
-						<div class="flex items-center justify-between rounded-lg bg-orange-50 px-3 py-2">
-							<span class="font-medium text-slate-700">{g.cylinder_id}</span>
-							<span class="font-semibold text-orange-800 tabular-nums">{g.qty_kg} kg</span>
-						</div>
-					{/each}
-				</Card.Content>
-			</Card.Root>
-		{/if}
 
 		<!-- Action bar — role-gated client-side for UX; the CouchDB validate_doc_update
 		     guard (shelter-access-design.ts) is the real authorization boundary. -->

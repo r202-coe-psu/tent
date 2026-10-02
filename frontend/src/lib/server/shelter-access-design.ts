@@ -238,10 +238,10 @@ export function buildValidateDocUpdate(code: string): string {
   }
 
   // schema.md §1.4 movement, §1.5 screening, §1.7 people_import_log, §2.6 kitchen_requisition,
-  // §2.7 meal_service, §2.7.2 gas_ledger (CR-086), §6.2 stock_ledger / audit, CR-059 Phase 3B distribution_issue
+  // §2.7 meal_service, §6.2 stock_ledger / audit, CR-059 Phase 3B distribution_issue
   var appendOnly = [
     'stock_ledger', 'audit', 'movement', 'screening', 'people_import_log',
-    'meal_service', 'meal_service_receipt', 'gas_ledger',
+    'meal_service', 'meal_service_receipt',
     'distribution_issue', 'distribution_issue_idempotency'
   ];
   var wasAppendOnly = oldDoc && appendOnly.indexOf(oldDoc.type) !== -1;
@@ -309,7 +309,7 @@ export function buildValidateDocUpdate(code: string): string {
   // createEvacuee succeeds, then household/screening PUT is forbidden.
   // Kitchen (Module D, schema.md §2.5-§2.7.2) was missing here entirely —
   // kitchen_staff could never actually write a meal plan, requisition, service
-  // record, or gas cylinder/ledger without an _admin session (bug found + fixed
+  // record without an _admin session (bug found + fixed
   // alongside CR-080).
   // Volunteers (CR-092/CR-094/CR-095, schema.md §2.8/§2.9/§2.17/§2.18) was
   // missing here entirely too — same class of bug: the back-office volunteers
@@ -326,7 +326,7 @@ export function buildValidateDocUpdate(code: string): string {
     'donation', 'donation_campaign', 'stock_ledger', 'donation_slot', 'donation_redirect',
     'audit', 'daily_calc', 'simulation', 'referral',
     'meal_session', 'kitchen_counter',
-    'meal_plan', 'kitchen_requisition', 'meal_service', 'fuel_cylinder', 'gas_ledger',
+    'meal_plan', 'kitchen_requisition', 'meal_service',
     'volunteer', 'job', 'job_application', 'shift_assignment',
     'item_category', 'item_master', 'recipe',
     'requirement_group', 'food_sphere_standard', 'replenishment_policy', 'sop_override',

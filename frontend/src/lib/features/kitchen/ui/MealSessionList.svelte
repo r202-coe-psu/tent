@@ -11,6 +11,7 @@
 		computeSessionGroupProgress,
 		computeMealVariance,
 		mealServiceReceiptOutcome,
+		MEAL_PERIOD_LABELS,
 		MEAL_VARIANCE_STATUS_LABELS,
 		TARGET_GROUP_LABELS,
 		type MealSession,
@@ -26,6 +27,7 @@
 		type TicketStatus,
 		type RequisitionTicket
 	} from '$lib/features/tickets';
+	import DatePicker from '$lib/components/date-picker.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { formatThaiShortDate } from '$lib/utils/date';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -138,7 +140,7 @@
 		}
 		if (hasService) {
 			if (receiptConfirmed) {
-				return { label: 'ส่งมอบเสร็จสิ้น', className: 'bg-emerald-100 text-emerald-800' };
+				return { label: 'รับเข้าคลังแล้ว', className: 'bg-emerald-100 text-emerald-800' };
 			}
 			return { label: 'รอคลังตรวจรับเข้าสต็อก', className: 'bg-amber-100 text-amber-800' };
 		}
@@ -934,13 +936,14 @@
 			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 				<div>
 					<Label for="session-date" class="text-xs font-medium">วันที่</Label>
-					<Input id="session-date" type="date" bind:value={formDate} class="mt-1.5 h-9 text-sm" />
+					<DatePicker id="session-date" bind:value={formDate} class="mt-1.5 !h-9" />
 				</div>
 				<div>
 					<Label for="session-meal" class="text-xs font-medium">ช่วงมื้อ</Label>
 					<Select.Root type="single" value={formMeal} onValueChange={handleMealChange}>
-						<Select.Trigger id="session-meal" class="mt-1.5 min-h-11 w-full text-sm">
-							<Select.Value />
+						<Select.Trigger id="session-meal" class="mt-1.5 !h-9 w-full text-sm">
+							<Select.Value placeholder="เลือกช่วงมื้อ">{MEAL_PERIOD_LABELS[formMeal]}</Select.Value
+							>
 						</Select.Trigger>
 						<Select.Content>
 							<Select.Item value="breakfast" label="มื้อเช้า">มื้อเช้า</Select.Item>

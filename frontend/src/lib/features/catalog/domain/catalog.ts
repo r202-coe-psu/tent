@@ -254,9 +254,8 @@ export interface ItemMaster extends CatalogDoc {
 	returnable?: boolean;
 	asset_status?: AssetStatus;
 
-	// item_category:fuel_energy specific fields (physical tank spec — a
-	// fuel_cylinder auto-created for this item should always match these, not
-	// a hardcoded guess).
+	// item_category:fuel_energy specific fields (physical tank spec) — plain
+	// item_master data, no longer tied to per-tank documents.
 	fuel_type?: string;
 	capacity_kg?: string;
 	burn_rate_kg_per_hour?: string;

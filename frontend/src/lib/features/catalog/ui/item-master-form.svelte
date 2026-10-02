@@ -5,6 +5,7 @@
 	import * as Field from '$lib/components/ui/field/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import {
@@ -35,6 +36,7 @@
 		isEdit = false,
 		basePath = '/back-office/catalog',
 		defaultCategoryId = undefined,
+		lockCategory = false,
 		compact = false,
 		onsuccess
 	}: {
@@ -42,8 +44,11 @@
 		isEdit?: boolean;
 		basePath?: string;
 		defaultCategoryId?: string;
+		/** Pin the category to `defaultCategoryId` (callers that only create one kind of item). */
+		lockCategory?: boolean;
 		compact?: boolean;
-		onsuccess?: () => void;
+		/** Called after a save; a create passes the stored item so callers can select it. */
+		onsuccess?: (saved?: ItemMaster) => void;
 	} = $props();
 
 	const shelterCode = $derived(
@@ -66,6 +71,39 @@
 		{ value: 'DURABLE', label: 'สิ่งของคงทน' },
 		{ value: 'EQUIPMENT', label: 'อุปกรณ์' }
 	];
+
+	const STORAGE_OPTIONS = [
+		{ value: 'DRY', label: 'ของแห้ง' },
+		{ value: 'CHILLED', label: 'แช่เย็น' },
+		{ value: 'FROZEN', label: 'แช่แข็ง' },
+		{ value: 'CONTROLLED_MED', label: 'ควบคุมพิเศษ/ยา' }
+	] as const;
+	const DIETARY_OPTIONS = [
+		{ value: 'NONE', label: 'ไม่มี' },
+		{ value: 'HALAL', label: 'ฮาลาล' },
+		{ value: 'VEGAN', label: 'วีแกน' }
+	] as const;
+	const GENDER_OPTIONS = [
+		{ value: 'ALL', label: 'ทุกเพศ' },
+		{ value: 'MALE', label: 'ชาย' },
+		{ value: 'FEMALE', label: 'หญิง' }
+	] as const;
+	const AGE_OPTIONS = [
+		{ value: 'ALL', label: 'ทุกวัย' },
+		{ value: 'INFANT', label: 'ทารก' },
+		{ value: 'CHILD', label: 'เด็ก' },
+		{ value: 'ELDERLY', label: 'ผู้สูงอายุ' }
+	] as const;
+	const DISTRIBUTION_OPTIONS = [
+		{ value: 'recurring', label: 'แจกซ้ำได้ตามรอบ' },
+		{ value: 'one_time', label: 'แจกครั้งเดียวต่อคน' }
+	] as const;
+	const ASSET_OPTIONS = [
+		{ value: 'READY', label: 'พร้อมใช้งาน' },
+		{ value: 'IN_USE', label: 'กำลังใช้งาน' },
+		{ value: 'MAINTENANCE', label: 'บำรุงรักษา' },
+		{ value: 'BROKEN', label: 'ชำรุด' }
+	] as const;
 
 	const DIMENSION_LABELS: Record<Dimension, string> = {
 		mass: 'น้ำหนัก',
@@ -249,9 +287,9 @@
 					createMutation.mutate(
 						{ input: submitData as ItemMasterInput, ctx, shelterCode },
 						{
-							onSuccess: () => {
+							onSuccess: (saved) => {
 								toast.success(`เพิ่มข้อมูล ${validated.data.name} สำเร็จ`);
-								onsuccess?.();
+								onsuccess?.(saved);
 							},
 							onError: (err: Error) => toast.error(err.message)
 						}
@@ -382,6 +420,13 @@
 		);
 	});
 
+	const categoryOptions = $derived(
+		availableCategories.map((cat) => ({
+			value: cat._id,
+			label: `${cat.name}${cat.deactivated ? ' (ปิดใช้งาน)' : ''}`
+		}))
+	);
+
 	const selectedCategory = $derived(availableCategories.find((c) => c._id === $formData.category));
 
 	const isFuelEnergy = $derived(
@@ -450,6 +495,26 @@
 	);
 </script>
 
+{#snippet optionSelect(
+	props: Record<string, unknown>,
+	value: string | undefined,
+	options: readonly { value: string; label: string }[],
+	onChange: (value: string) => void,
+	placeholder = '',
+	disabled = false
+)}
+	<Select.Root type="single" value={value ?? ''} onValueChange={onChange} {disabled}>
+		<Select.Trigger {...props} class="w-full data-[size=default]:h-11 sm:data-[size=default]:h-10">
+			{options.find((o) => o.value === value)?.label ?? placeholder}
+		</Select.Trigger>
+		<Select.Content>
+			{#each options as option (option.value)}
+				<Select.Item value={option.value} label={option.label}>{option.label}</Select.Item>
+			{/each}
+		</Select.Content>
+	</Select.Root>
+{/snippet}
+
 {#if isLoading}
 	<div class="py-12 text-center text-sm text-muted-foreground">กำลังโหลดข้อมูลสินค้า...</div>
 {:else}
@@ -478,7 +543,7 @@
 								{...props}
 								bind:value={$formData.name}
 								placeholder="เช่น ข้าวสาร, น้ำดื่ม"
-								class="h-11 rounded-xl"
+								class="h-11 sm:h-10"
 							/>
 						{/snippet}
 					</Form.Control>
@@ -489,23 +554,47 @@
 					<Form.Control>
 						{#snippet children({ props })}
 							<Form.Label class="text-sm font-semibold">หมวดสินค้า</Form.Label>
-							<select
-								{...props}
-								value={$formData.category}
-								onchange={(e) => onCategoryChange(e.currentTarget.value)}
-								class="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none"
-							>
-								<option value="">-- เลือกหมวด --</option>
-								{#each availableCategories as cat (cat._id)}
-									<option value={cat._id}>
-										{cat.name}{cat.deactivated ? ' (ปิดใช้งาน)' : ''}
-									</option>
-								{/each}
-							</select>
+							{@render optionSelect(
+								props,
+								$formData.category,
+								categoryOptions,
+								onCategoryChange,
+								'-- เลือกหมวด --',
+								lockCategory && !!defaultCategoryId
+							)}
 						{/snippet}
 					</Form.Control>
 					<Form.FieldErrors class="text-xs font-semibold text-destructive" />
 				</Form.Field>
+
+				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+					<Form.Field {form} name="sku" class={fieldClass}>
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label class="text-sm font-semibold">รหัสสินค้า</Form.Label>
+								<Input
+									{...props}
+									bind:value={$formData.sku}
+									placeholder="เช่น RICE-001"
+									class="h-11 sm:h-10"
+								/>
+							{/snippet}
+						</Form.Control>
+					</Form.Field>
+					<Form.Field {form} name="description" class={fieldClass}>
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label class="text-sm font-semibold">รายละเอียด</Form.Label>
+								<Input
+									{...props}
+									bind:value={$formData.description}
+									placeholder="เช่น ข้าวสารหอมมะลิ บรรจุถุง"
+									class="h-11 sm:h-10"
+								/>
+							{/snippet}
+						</Form.Control>
+					</Form.Field>
+				</div>
 
 				<Form.Field {form} name="type_class" class={fieldClass}>
 					<Form.Control>
@@ -516,43 +605,23 @@
 							<input type="hidden" {...props} bind:value={$formData.type_class} />
 							<div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
 								{#each TYPE_CLASS_OPTIONS as opt (opt.value)}
-									<button
+									<Button
 										type="button"
+										variant="outline"
 										onclick={() => ($formData.type_class = opt.value)}
-										class="rounded-xl border px-3 py-2.5 text-left text-sm font-medium transition-colors {$formData.type_class ===
+										class="h-auto justify-start px-3 py-2.5 text-left font-medium {$formData.type_class ===
 										opt.value
 											? 'border-primary bg-primary/5 ring-1 ring-primary'
-											: 'border-border hover:bg-muted/60'}"
+											: ''}"
 									>
 										{opt.label}
-									</button>
+									</Button>
 								{/each}
 							</div>
 						{/snippet}
 					</Form.Control>
 					<Form.FieldErrors class="text-xs font-semibold text-destructive" />
 				</Form.Field>
-
-				{#if !compact}
-					<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-						<Form.Field {form} name="sku" class={fieldClass}>
-							<Form.Control>
-								{#snippet children({ props })}
-									<Form.Label class="text-sm font-semibold">รหัสสินค้า</Form.Label>
-									<Input {...props} bind:value={$formData.sku} class="h-11 rounded-xl" />
-								{/snippet}
-							</Form.Control>
-						</Form.Field>
-						<Form.Field {form} name="description" class={fieldClass}>
-							<Form.Control>
-								{#snippet children({ props })}
-									<Form.Label class="text-sm font-semibold">รายละเอียด</Form.Label>
-									<Input {...props} bind:value={$formData.description} class="h-11 rounded-xl" />
-								{/snippet}
-							</Form.Control>
-						</Form.Field>
-					</div>
-				{/if}
 			</section>
 
 			{#if showUnits}
@@ -571,7 +640,10 @@
 									onValueChange={(value) => ($formData.base_unit = value)}
 									disabled={isEdit || !unitMasterReady}
 								>
-									<Select.Trigger {...props} class="h-11 w-full rounded-xl">
+									<Select.Trigger
+										{...props}
+										class="w-full data-[size=default]:h-11 sm:data-[size=default]:h-10"
+									>
 										{activeUnits.find((u) => u.code === $formData.base_unit)?.label_th ??
 											'-- เลือกหน่วย --'}
 									</Select.Trigger>
@@ -750,7 +822,7 @@
 										step="any"
 										min={0}
 										bind:value={$formData.capacity_kg}
-										class="h-11 rounded-xl"
+										class="h-11 sm:h-10"
 									/>
 								{/snippet}
 							</Form.Control>
@@ -769,7 +841,7 @@
 										step="any"
 										min={0}
 										bind:value={$formData.burn_rate_kg_per_hour}
-										class="h-11 rounded-xl"
+										class="h-11 sm:h-10"
 									/>
 								{/snippet}
 							</Form.Control>
@@ -788,7 +860,7 @@
 										step="any"
 										min={0}
 										bind:value={$formData.time_multiplier}
-										class="h-11 rounded-xl"
+										class="h-11 sm:h-10"
 									/>
 								{/snippet}
 							</Form.Control>
@@ -818,7 +890,7 @@
 													const val = e.currentTarget.value;
 													$formData.shelf_life_days = val === '' ? undefined : Number(val);
 												}}
-												class="h-11 rounded-xl"
+												class="h-11 sm:h-10"
 											/>
 										{/snippet}
 									</Form.Control>
@@ -828,16 +900,12 @@
 									<Form.Control>
 										{#snippet children({ props })}
 											<Form.Label class="text-sm font-semibold">การจัดเก็บ</Form.Label>
-											<select
-												{...props}
-												bind:value={$formData.storage_type}
-												class="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"
-											>
-												<option value="DRY">ของแห้ง</option>
-												<option value="CHILLED">แช่เย็น</option>
-												<option value="FROZEN">แช่แข็ง</option>
-												<option value="CONTROLLED_MED">ควบคุมพิเศษ/ยา</option>
-											</select>
+											{@render optionSelect(
+												props,
+												$formData.storage_type,
+												STORAGE_OPTIONS,
+												(v) => ($formData.storage_type = v as typeof $formData.storage_type)
+											)}
 										{/snippet}
 									</Form.Control>
 								</Form.Field>
@@ -851,7 +919,7 @@
 													{...props}
 													bind:value={$formData.allergens}
 													placeholder="เช่น ถั่ว, นม"
-													class="h-11 rounded-xl"
+													class="h-11 sm:h-10"
 												/>
 											{/snippet}
 										</Form.Control>
@@ -861,19 +929,12 @@
 										<Form.Control>
 											{#snippet children({ props })}
 												<Form.Label class="text-sm font-semibold">ข้อจำกัดด้านอาหาร</Form.Label>
-												<select
-													{...props}
-													value={$formData.dietary?.[0] ?? 'NONE'}
-													onchange={(e) => {
-														const val = e.currentTarget.value;
-														$formData.dietary = val === 'NONE' ? [] : [val as 'HALAL' | 'VEGAN'];
-													}}
-													class="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"
-												>
-													<option value="NONE">ไม่มี</option>
-													<option value="HALAL">ฮาลาล</option>
-													<option value="VEGAN">วีแกน</option>
-												</select>
+												{@render optionSelect(
+													props,
+													$formData.dietary?.[0] ?? 'NONE',
+													DIETARY_OPTIONS,
+													(v) => ($formData.dietary = v === 'NONE' ? [] : [v as 'HALAL' | 'VEGAN'])
+												)}
 											{/snippet}
 										</Form.Control>
 									</Form.Field>
@@ -883,15 +944,12 @@
 									<Form.Control>
 										{#snippet children({ props })}
 											<Form.Label class="text-sm font-semibold">เพศที่ใช้ได้</Form.Label>
-											<select
-												{...props}
-												bind:value={$formData.target_gender}
-												class="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"
-											>
-												<option value="ALL">ทุกเพศ</option>
-												<option value="MALE">ชาย</option>
-												<option value="FEMALE">หญิง</option>
-											</select>
+											{@render optionSelect(
+												props,
+												$formData.target_gender,
+												GENDER_OPTIONS,
+												(v) => ($formData.target_gender = v as typeof $formData.target_gender)
+											)}
 										{/snippet}
 									</Form.Control>
 								</Form.Field>
@@ -900,16 +958,12 @@
 									<Form.Control>
 										{#snippet children({ props })}
 											<Form.Label class="text-sm font-semibold">ช่วงวัย</Form.Label>
-											<select
-												{...props}
-												bind:value={$formData.age_group}
-												class="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"
-											>
-												<option value="ALL">ทุกวัย</option>
-												<option value="INFANT">ทารก</option>
-												<option value="CHILD">เด็ก</option>
-												<option value="ELDERLY">ผู้สูงอายุ</option>
-											</select>
+											{@render optionSelect(
+												props,
+												$formData.age_group,
+												AGE_OPTIONS,
+												(v) => ($formData.age_group = v as typeof $formData.age_group)
+											)}
 										{/snippet}
 									</Form.Control>
 								</Form.Field>
@@ -918,14 +972,13 @@
 									<Form.Control>
 										{#snippet children({ props })}
 											<Form.Label class="text-sm font-semibold">ประเภทการแจก</Form.Label>
-											<select
-												{...props}
-												bind:value={$formData.distribution_type}
-												class="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"
-											>
-												<option value="recurring">แจกซ้ำได้ตามรอบ</option>
-												<option value="one_time">แจกครั้งเดียวต่อคน</option>
-											</select>
+											{@render optionSelect(
+												props,
+												$formData.distribution_type,
+												DISTRIBUTION_OPTIONS,
+												(v) =>
+													($formData.distribution_type = v as typeof $formData.distribution_type)
+											)}
 										{/snippet}
 									</Form.Control>
 								</Form.Field>
@@ -946,7 +999,7 @@
 													const val = e.currentTarget.value;
 													$formData.qty_per_person = val === '' ? undefined : Number(val);
 												}}
-												class="h-11 rounded-xl"
+												class="h-11 sm:h-10"
 											/>
 										{/snippet}
 									</Form.Control>
@@ -975,15 +1028,12 @@
 									<Form.Control>
 										{#snippet children({ props })}
 											<Form.Label class="text-sm font-semibold">เพศที่ใช้ได้</Form.Label>
-											<select
-												{...props}
-												bind:value={$formData.target_gender}
-												class="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"
-											>
-												<option value="ALL">ทุกเพศ</option>
-												<option value="MALE">ชาย</option>
-												<option value="FEMALE">หญิง</option>
-											</select>
+											{@render optionSelect(
+												props,
+												$formData.target_gender,
+												GENDER_OPTIONS,
+												(v) => ($formData.target_gender = v as typeof $formData.target_gender)
+											)}
 										{/snippet}
 									</Form.Control>
 								</Form.Field>
@@ -992,16 +1042,12 @@
 									<Form.Control>
 										{#snippet children({ props })}
 											<Form.Label class="text-sm font-semibold">ช่วงวัย</Form.Label>
-											<select
-												{...props}
-												bind:value={$formData.age_group}
-												class="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"
-											>
-												<option value="ALL">ทุกวัย</option>
-												<option value="INFANT">ทารก</option>
-												<option value="CHILD">เด็ก</option>
-												<option value="ELDERLY">ผู้สูงอายุ</option>
-											</select>
+											{@render optionSelect(
+												props,
+												$formData.age_group,
+												AGE_OPTIONS,
+												(v) => ($formData.age_group = v as typeof $formData.age_group)
+											)}
 										{/snippet}
 									</Form.Control>
 								</Form.Field>
@@ -1010,14 +1056,13 @@
 									<Form.Control>
 										{#snippet children({ props })}
 											<Form.Label class="text-sm font-semibold">ประเภทการแจก</Form.Label>
-											<select
-												{...props}
-												bind:value={$formData.distribution_type}
-												class="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"
-											>
-												<option value="recurring">แจกซ้ำได้ตามรอบ</option>
-												<option value="one_time">แจกครั้งเดียวต่อคน</option>
-											</select>
+											{@render optionSelect(
+												props,
+												$formData.distribution_type,
+												DISTRIBUTION_OPTIONS,
+												(v) =>
+													($formData.distribution_type = v as typeof $formData.distribution_type)
+											)}
 										{/snippet}
 									</Form.Control>
 								</Form.Field>
@@ -1027,44 +1072,15 @@
 								<Form.Control>
 									{#snippet children({ props })}
 										<Form.Label class="text-sm font-semibold">สถานะครุภัณฑ์</Form.Label>
-										<select
-											{...props}
-											bind:value={$formData.asset_status}
-											class="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"
-										>
-											<option value="READY">พร้อมใช้งาน</option>
-											<option value="IN_USE">กำลังใช้งาน</option>
-											<option value="MAINTENANCE">บำรุงรักษา</option>
-											<option value="BROKEN">ชำรุด</option>
-										</select>
+										{@render optionSelect(
+											props,
+											$formData.asset_status,
+											ASSET_OPTIONS,
+											(v) => ($formData.asset_status = v as typeof $formData.asset_status)
+										)}
 									{/snippet}
 								</Form.Control>
 							</Form.Field>
-						{/if}
-
-						{#if compact}
-							<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-								<Form.Field {form} name="sku" class={fieldClass}>
-									<Form.Control>
-										{#snippet children({ props })}
-											<Form.Label class="text-sm font-semibold">รหัสสินค้า</Form.Label>
-											<Input {...props} bind:value={$formData.sku} class="h-11 rounded-xl" />
-										{/snippet}
-									</Form.Control>
-								</Form.Field>
-								<Form.Field {form} name="description" class={fieldClass}>
-									<Form.Control>
-										{#snippet children({ props })}
-											<Form.Label class="text-sm font-semibold">รายละเอียด</Form.Label>
-											<Input
-												{...props}
-												bind:value={$formData.description}
-												class="h-11 rounded-xl"
-											/>
-										{/snippet}
-									</Form.Control>
-								</Form.Field>
-							</div>
 						{/if}
 					</div>
 				</details>
@@ -1074,9 +1090,9 @@
 				<section class={sectionClass}>
 					<div class="flex items-center justify-between gap-3">
 						<div class="space-y-0.5">
-							<label for="deactivated-toggle" class="cursor-pointer text-sm font-semibold">
+							<Label for="deactivated-toggle" class="cursor-pointer text-sm font-semibold">
 								ปิดการใช้งาน
-							</label>
+							</Label>
 							<p class="text-xs text-muted-foreground">
 								รายการที่ปิดจะไม่แสดงในการเลือกใหม่ แต่ประวัติเก่ายังอยู่
 							</p>
@@ -1093,14 +1109,10 @@
 			{/if}
 
 			<div class="flex items-center gap-3 pt-1">
-				<Button variant="outline" type="button" onclick={onsuccess} class="rounded-xl">
+				<Button variant="outline" type="button" onclick={() => onsuccess?.()}>
 					{compact ? 'ยกเลิก' : 'ยกเลิกและย้อนกลับ'}
 				</Button>
-				<Button
-					type="submit"
-					disabled={$submitting || isPending || !unitMasterReady}
-					class="rounded-xl"
-				>
+				<Button type="submit" disabled={$submitting || isPending || !unitMasterReady}>
 					{#if $submitting || isPending}
 						กำลังบันทึก...
 					{:else if isEdit}

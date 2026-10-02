@@ -354,13 +354,12 @@ describe('createMealSession', () => {
 });
 
 describe('createPendingRequisition & Migration Guard', () => {
-	it('creates pending requisition with gas_drawdown', () => {
+	it('creates pending requisition', () => {
 		const req = createPendingRequisition(
 			{
 				meal_plan_id: 'meal_plan:01J',
 				meal_session_id: 'meal_session:01J',
-				items: [{ item_id: 'item:rice', qty_requested: '50', qty_issued: '0', unit: 'kg' }],
-				gas_drawdown: [{ cylinder_id: 'fuel_cylinder:01J', qty_kg: '1.5' }]
+				items: [{ item_id: 'item:rice', qty_requested: '50', qty_issued: '0', unit: 'kg' }]
 			},
 			ctx
 		);
@@ -368,8 +367,6 @@ describe('createPendingRequisition & Migration Guard', () => {
 		expect(req.schema_v).toBe(3);
 		expect(req.status).toBe('pending');
 		expect(req.ledger_ids).toEqual([]);
-		expect(req.gas_drawdown).toHaveLength(1);
-		expect(req.gas_drawdown?.[0].qty_kg).toBe('1.5');
 	});
 
 	it('migration guard coerces legacy requisition without status to approved (D1)', () => {

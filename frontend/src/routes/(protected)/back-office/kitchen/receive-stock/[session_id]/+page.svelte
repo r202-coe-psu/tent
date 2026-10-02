@@ -4,6 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { toast } from 'svelte-sonner';
 	import * as Card from '$lib/components/ui/card';
+	import * as Dialog from '$lib/components/ui/dialog';
 	import { Button } from '$lib/components/ui/button';
 	import { Label } from '$lib/components/ui/label';
 	import { Textarea } from '$lib/components/ui/textarea';
@@ -14,11 +15,22 @@
 		useMealPlans,
 		useMealServices,
 		useMealServiceReceipts,
-		useConfirmMealServiceReceipt,
+		useConfirmMealServiceYield,
 		useRejectMealServiceReceipt,
 		mealServiceReceiptOutcome,
-		MEAL_PERIOD_LABELS
+		toYieldReceiptInput,
+		yieldReceiptInputSchema,
+		yieldTotal,
+		loadYieldDraft,
+		clearYieldDraft,
+		YieldReceiptLines,
+		MEAL_PERIOD_LABELS,
+		type YieldDraftLine
 	} from '$lib/features/kitchen';
+	import { useStoragePoints } from '$lib/features/operations';
+	import { ItemMasterForm, systemCategoryId, type ItemMaster } from '$lib/features/catalog';
+	import { isShelterManager, isSystemAdmin, isWarehouseStaff } from '$lib/auth/roles';
+	import { ulid } from '$lib/db/ulid';
 	import { useTickets } from '$lib/features/tickets';
 	import { formatThaiDate, formatThaiDateTime } from '$lib/utils/date';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
@@ -73,8 +85,59 @@
 		sessionQuery.isPending || plans.isPending || services.isPending || serviceReceipts.isPending
 	);
 
-	const confirmReceiptMutation = useConfirmMealServiceReceipt();
+	const confirmYieldMutation = useConfirmMealServiceYield();
 	const rejectReceiptMutation = useRejectMealServiceReceipt();
+	const storagePoints = useStoragePoints(() => getShelterCode());
+
+	// Same roles the database lets write stock_ledger (kitchen_staff may look, not receive).
+	const canReceiveStock = $derived.by(() => {
+		const roles = authStore.user?.roles ?? [];
+		const shelter = getShelterCode();
+		return (
+			isSystemAdmin(roles) || isShelterManager(roles, shelter) || isWarehouseStaff(roles, shelter)
+		);
+	});
+
+	// Receive lines. Seeded once per meal_service: from the draft kept across the
+	// "create new item" detour, else one line carrying the kitchen's whole yield.
+	let lines = $state<YieldDraftLine[]>([]);
+	let seededFor: string | null = null;
+
+	function blankLine(qty = ''): YieldDraftLine {
+		return { key: ulid(), item_id: '', qty, storage_point_id: '' };
+	}
+
+	$effect(() => {
+		const service = activeService;
+		if (!service || seededFor === service._id) return;
+		seededFor = service._id;
+		const draft = loadYieldDraft(service._id);
+		const restored = draft ?? [blankLine(String(service.actual_yield ?? ''))];
+
+		lines = restored;
+	});
+
+	const receivedTotal = $derived(
+		yieldTotal(lines.map((l) => ({ qty: Number.isFinite(Number(l.qty)) ? l.qty || '0' : '0' })))
+	);
+
+	// "Create a new item" modal — the saved item is selected on the row that asked for it.
+	let createItemOpen = $state(false);
+	let createItemLineKey = $state<string | null>(null);
+
+	function handleCreateNewItem(lineKey: string) {
+		createItemLineKey = lineKey;
+		createItemOpen = true;
+	}
+
+	function handleItemCreated(saved?: ItemMaster) {
+		if (saved) {
+			const row = lines.find((l) => l.key === createItemLineKey);
+			if (row) row.item_id = saved._id;
+		}
+		createItemOpen = false;
+		createItemLineKey = null;
+	}
 
 	let showRejectForm = $state(false);
 	let rejectReason = $state('');
@@ -85,8 +148,15 @@
 
 	async function handleConfirmServiceReceipt() {
 		if (!activeService) return;
+		const input = toYieldReceiptInput(lines, storagePoints.points);
+		const parsed = yieldReceiptInputSchema.safeParse(input);
+		if (!parsed.success) {
+			toast.error(parsed.error.issues[0]?.message ?? 'กรอกรายการรับเข้าไม่ครบ');
+			return;
+		}
 		try {
-			await confirmReceiptMutation.mutateAsync({ mealServiceId: activeService._id, ctx: ctx() });
+			await confirmYieldMutation.mutateAsync({ service: activeService, input, ctx: ctx() });
+			clearYieldDraft(activeService._id);
 			toast.success('ยืนยันตรวจรับเข้าสต็อกแล้ว');
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'ยืนยันตรวจรับไม่สำเร็จ');
@@ -196,12 +266,6 @@
 								{activeService.external.outside_evacuees} จาน
 							</p>
 						</div>
-						<div>
-							<p class="text-muted-foreground">แก๊สหุงต้มที่ใช้จริง</p>
-							<p class="mt-0.5 font-semibold text-foreground tabular-nums">
-								{activeService.actual_gas_used_kg ?? '—'} kg
-							</p>
-						</div>
 					</div>
 					{#if activeService.notes}
 						<div class="mt-3 border-t pt-3">
@@ -230,7 +294,7 @@
 					>
 						<CheckCircle2 class="h-5 w-5 shrink-0 text-green-600" />
 						<div>
-							<h4 class="font-bold">ตรวจรับเข้าคลังเรียบร้อยแล้ว — ส่งมอบเสร็จสิ้น</h4>
+							<h4 class="font-bold">ตรวจรับเข้าคลังเรียบร้อยแล้ว</h4>
 							{#if activeServiceReceipt}
 								<p class="mt-1 text-xs text-green-700">
 									ยืนยันเมื่อ {formatThaiDateTime(activeServiceReceipt.created_at)} โดย
@@ -242,15 +306,27 @@
 				{:else}
 					<div class="space-y-3 rounded-xl border border-sky-200 bg-sky-50 p-4">
 						<h4 class="text-sm font-bold text-sky-950">ดำเนินการตรวจรับมอบเสบียง</h4>
+						<YieldReceiptLines
+							bind:lines
+							points={storagePoints.points}
+							expectedTotal={activeService.actual_yield}
+							disabled={!canReceiveStock || confirmYieldMutation.isPending}
+							oncreatenew={handleCreateNewItem}
+						/>
+						{#if !canReceiveStock}
+							<p class="text-xs font-semibold text-amber-800">
+								เฉพาะเจ้าหน้าที่คลังหรือผู้จัดการศูนย์เท่านั้นที่ตรวจรับเข้าสต็อกได้
+							</p>
+						{/if}
 						<Button
 							class="w-full gap-2 bg-emerald-600 font-semibold text-white hover:bg-emerald-700"
-							disabled={confirmReceiptMutation.isPending}
+							disabled={!canReceiveStock || confirmYieldMutation.isPending}
 							onclick={handleConfirmServiceReceipt}
 						>
 							<PackageCheck class="h-4 w-4" />
-							{confirmReceiptMutation.isPending
+							{confirmYieldMutation.isPending
 								? 'กำลังยืนยัน...'
-								: `ยืนยันตรวจรับเข้าสต็อก (${activeService.actual_yield ?? 0} กล่อง)`}
+								: `ยืนยันตรวจรับเข้าสต็อก (รวม ${receivedTotal})`}
 						</Button>
 						{#if !showRejectForm}
 							<Button
@@ -304,3 +380,28 @@
 		</Card.Root>
 	{/if}
 </div>
+
+<Dialog.Root bind:open={createItemOpen}>
+	<Dialog.Content class="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+		<Dialog.Header>
+			<Dialog.Title>สร้างชนิดอาหารปรุงสำเร็จ</Dialog.Title>
+			<Dialog.Description>
+				บันทึกแล้วระบบจะเลือกรายการนี้ให้ในแถวที่กำลังกรอกโดยอัตโนมัติ
+			</Dialog.Description>
+		</Dialog.Header>
+		{#if canReceiveStock}
+			<ItemMasterForm
+				defaultCategoryId={systemCategoryId('READY_MEAL')}
+				lockCategory
+				compact
+				onsuccess={handleItemCreated}
+			/>
+		{:else}
+			<p
+				class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-900"
+			>
+				เฉพาะเจ้าหน้าที่คลังหรือผู้จัดการศูนย์เท่านั้นที่สร้างชนิดของใหม่ได้
+			</p>
+		{/if}
+	</Dialog.Content>
+</Dialog.Root>

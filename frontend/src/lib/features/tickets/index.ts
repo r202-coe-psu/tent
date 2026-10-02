@@ -6,10 +6,8 @@ export type {
 	RequisitionType,
 	TicketStatus,
 	TicketItem,
-	TicketGasDrawdown,
 	CreateTicketInput,
-	TicketItemInput,
-	TicketGasDrawdownInput
+	TicketItemInput
 } from './domain/ticket';
 
 // Domain — schemas, factories, guards, labels
