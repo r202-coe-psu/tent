@@ -1,5 +1,9 @@
 import type { Donation, DonationCampaign, StockLedger } from '$lib/features/operations';
-import { isDonationOutstanding, keyedDonationIds, stockBalance } from '$lib/features/operations';
+import {
+	isDonationOutstanding,
+	keyedDonationIds,
+	stockBalance
+} from '$lib/features/operations/server';
 import { addQty, subQty, qtyGt } from '$lib/utils/qty';
 
 /**

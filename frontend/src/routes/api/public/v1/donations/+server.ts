@@ -6,7 +6,7 @@ import {
 	pickCampaignForItems,
 	slotAvailabilityFor,
 	slotModeForDelivery
-} from '$lib/features/donations';
+} from '$lib/features/donations/server';
 import type { PublicDonationDoc } from '$lib/features/donations';
 import { donationIpLimiter, donationPhoneLimiter } from '$lib/server/security/rate-limiter';
 import { ReCaptchaProvider } from '$lib/server/security/captcha';

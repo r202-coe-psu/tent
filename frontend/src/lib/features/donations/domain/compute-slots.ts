@@ -1,5 +1,10 @@
 import type { DonationSlot, DonationSlotMode, DonationStatus } from '$lib/features/operations';
-import { bookingQueue, countSlotBookings, slotMode, slotsOnDate } from '$lib/features/operations';
+import {
+	bookingQueue,
+	countSlotBookings,
+	slotMode,
+	slotsOnDate
+} from '$lib/features/operations/server';
 
 /**
  * Drop-off / pickup queue availability (schema.md §2.13, DN-5).

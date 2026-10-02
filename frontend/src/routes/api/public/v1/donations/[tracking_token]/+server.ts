@@ -4,7 +4,7 @@ import { adminRaw } from '$lib/server/couch-admin';
 import { putAsPublicWriter } from '$lib/server/couch-public-writer';
 import { sha256Hex } from '$lib/db/hash';
 import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
-import { isDonorEditable } from '$lib/features/donations';
+import { isDonorEditable } from '$lib/features/donations/server';
 import type { PublicDonationDoc } from '$lib/features/donations';
 
 function shelterDbFromToken(token: string): string | null {

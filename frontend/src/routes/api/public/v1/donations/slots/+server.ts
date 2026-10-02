@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { computeSlotAvailability } from '$lib/features/donations';
+import { computeSlotAvailability } from '$lib/features/donations/server';
 import type { DonationSlotMode } from '$lib/features/operations';
 import type { PublicDonationDoc } from '$lib/features/donations';
 import type { DonationSlot } from '$lib/features/operations';
