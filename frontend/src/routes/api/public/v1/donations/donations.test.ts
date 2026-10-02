@@ -138,6 +138,8 @@ describe('POST /api/public/v1/donations', () => {
 		const [, init] = vi.mocked(fetch).mock.calls[0]!;
 		const body = JSON.parse(String((init as RequestInit).body));
 		expect(body.campaign_id).toBe('donation_campaign:c1');
+		// No window picked → nothing for FastAPI's slot counter to hold.
+		expect(body.slot_hold).toBeUndefined();
 	});
 
 	it('forwards shelter_pickup logistics to FastAPI', async () => {
@@ -196,6 +198,95 @@ describe('POST /api/public/v1/donations', () => {
 		const body = JSON.parse(String((init as RequestInit).body));
 		expect(body.logistics.delivery_method).toBe('shelter_pickup');
 		expect(body.logistics.pickup_address).toBe('123/45 Sukhumvit Rd, Bangkok');
+		// A capped window goes to FastAPI as a hold: its counter makes the SLOT_FULL call
+		// the CouchDB count above cannot make atomically.
+		expect(body.slot_hold).toEqual({
+			mode: 'pickup',
+			date: '2026-06-27',
+			from: '10:00',
+			capacity: 2,
+			booked: 0
+		});
+	});
+
+	it('sends no slot hold for an uncapped drop-off window', async () => {
+		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+			if (method === 'GET' && path.includes('donation_campaign:')) {
+				return Promise.resolve({ status: 200, data: { rows: [] } });
+			}
+			// Opening hours with no ceiling (FR-DS-3): the window never fills.
+			if (method === 'GET' && path.includes('donation_slot')) {
+				return Promise.resolve({ status: 200, data: { capacity: null, status: 'open' } });
+			}
+			if (method === 'GET' && path.includes('donation:')) {
+				return Promise.resolve({ status: 200, data: { rows: [] } });
+			}
+			return Promise.resolve({ status: 404, data: {} });
+		});
+		mockFastapiCreate();
+
+		const response = await POST({
+			request: {
+				json: () =>
+					Promise.resolve({
+						...validPayload,
+						logistics: {
+							delivery_method: 'self_dropoff',
+							slot: { date: '2026-06-27', from: '09:00', to: '10:00' }
+						}
+					})
+			},
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as PostEvent);
+
+		expect(response.status).toBe(200);
+		const [, init] = vi.mocked(fetch).mock.calls[0]!;
+		const body = JSON.parse(String((init as RequestInit).body));
+		expect(body.slot_hold).toBeUndefined();
+	});
+
+	it('passes a FastAPI SLOT_FULL through when the counter refuses the last place', async () => {
+		// The CouchDB count still read the window open — the booking that took the last
+		// place has not synced yet. FastAPI's counter saw it and refused.
+		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+			if (method === 'GET' && path.includes('donation_campaign:')) {
+				return Promise.resolve({ status: 200, data: { rows: [] } });
+			}
+			if (method === 'GET' && path.includes('donation_slot')) {
+				return Promise.resolve({ status: 200, data: { capacity: 1, status: 'open' } });
+			}
+			if (method === 'GET' && path.includes('donation:')) {
+				return Promise.resolve({ status: 200, data: { rows: [] } });
+			}
+			return Promise.resolve({ status: 404, data: {} });
+		});
+		// FastAPI's error envelope wraps the HTTPException detail in `errors[]`.
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: false,
+				status: 409,
+				json: async () => ({ success: false, errors: [{ success: false, error: 'SLOT_FULL' }] })
+			})
+		);
+
+		const response = await POST({
+			request: {
+				json: () =>
+					Promise.resolve({
+						...validPayload,
+						logistics: {
+							delivery_method: 'self_dropoff',
+							slot: { date: '2026-06-27', from: '09:00', to: '10:00' }
+						}
+					})
+			},
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as PostEvent);
+
+		const data = await response.json();
+		expect(response.status).toBe(409);
+		expect(data.error).toBe('SLOT_FULL');
 	});
 
 	it('returns 409 NEED_FULL if the item need target is already fully met', async () => {

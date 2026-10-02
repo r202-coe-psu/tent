@@ -1235,3 +1235,146 @@ async def test_dropping_a_line_still_releases_it(
 
     assert await _reserved("item:soap") == Decimal("10")
     assert await _reserved("item:blanket") == Decimal("0")
+
+
+# --- capped queue windows: SLOT_FULL decided atomically (public-tier-flow-spec) ---
+
+_SLOT_ID = "SH001:pickup:2026-06-27:10:00"
+
+
+def _slot_booking(index: int, *, capacity: int = 1, booked: int = 0) -> dict:
+    return {
+        "shelter_code": "SH001",
+        "donor": {"name": f"Donor {index}", "phone": "0812345678"},
+        "items": [{"free_text": "ข้าวสาร", "qty": 1, "unit": "kg"}],
+        "logistics": {
+            "delivery_method": "shelter_pickup",
+            "slot": {"date": "2026-06-27", "from": "10:00", "to": "11:00"},
+        },
+        "slot_hold": {
+            "mode": "pickup",
+            "date": "2026-06-27",
+            "from": "10:00",
+            "capacity": capacity,
+            "booked": booked,
+        },
+    }
+
+
+async def _slot_booked() -> int:
+    from tent_model.donation_slot_counter import DonationSlotCounter
+
+    counter = await DonationSlotCounter.get(_SLOT_ID)
+    return counter.booked if counter else 0
+
+
+async def test_two_donors_racing_for_the_last_trip_get_one_place(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """The race e2e's pickup case, at the service: both pass the BFF's CouchDB count,
+    so only the counter stands between them and a double-booked truck."""
+    donation_router._rate_buckets.clear()
+
+    responses = await asyncio.gather(
+        *[
+            client.post("/public/v1/donations", headers=auth_headers, json=_slot_booking(i))
+            for i in range(2)
+        ]
+    )
+
+    statuses = sorted(r.status_code for r in responses)
+    assert statuses == [201, 409], [r.text for r in responses]
+    loser = next(r for r in responses if r.status_code == 409)
+    assert loser.json()["errors"][0]["error"] == "SLOT_FULL"
+    assert await _slot_booked() == 1
+    # The refused booking leaves no staging row holding a place it never got.
+    buffers = await DonationBuffer.find(DonationBuffer.slot_counter_id == _SLOT_ID).to_list()
+    assert len(buffers) == 1
+
+
+async def test_many_donors_never_overfill_a_capped_window(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    donation_router._rate_buckets.clear()
+
+    responses = await asyncio.gather(
+        *[
+            client.post(
+                "/public/v1/donations", headers=auth_headers, json=_slot_booking(i, capacity=3)
+            )
+            for i in range(8)
+        ]
+    )
+
+    assert sum(r.status_code == 201 for r in responses) == 3
+    assert sum(r.status_code == 409 for r in responses) == 5
+    assert await _slot_booked() == 3
+
+
+async def test_places_taken_before_the_counter_existed_still_count(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """The first booking seeds the counter from the CouchDB count the BFF sends, so a
+    window already full from older bookings refuses rather than starting from 0."""
+    donation_router._rate_buckets.clear()
+
+    response = await client.post(
+        "/public/v1/donations",
+        headers=auth_headers,
+        json=_slot_booking(0, capacity=2, booked=2),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["errors"][0]["error"] == "SLOT_FULL"
+    assert await _slot_booked() == 2
+
+
+async def test_slot_full_hands_the_quota_back(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """Quota is reserved before the place, so a refused place must release it."""
+    donation_router._rate_buckets.clear()
+    await _seed_counter("10")
+    payload = _slot_booking(0, capacity=1, booked=1)
+    payload["campaign_id"] = "donation_campaign:c1"
+    payload["items"] = [{"item_id": "item:rice", "free_text": "ข้าวสาร", "qty": 4, "unit": "kg"}]
+
+    response = await client.post("/public/v1/donations", headers=auth_headers, json=payload)
+
+    assert response.status_code == 409
+    assert await _reserved() == Decimal("0")
+
+
+async def test_cancel_gives_the_place_back(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    donation_router._rate_buckets.clear()
+    created = await client.post("/public/v1/donations", headers=auth_headers, json=_slot_booking(0))
+    assert created.status_code == 201
+    assert await _slot_booked() == 1
+
+    token = created.json()["tracking_token"]
+    cancelled = await client.delete(f"/public/v1/donations/{token}", headers=auth_headers)
+    assert cancelled.status_code == 200, cancelled.text
+    assert await _slot_booked() == 0
+
+    donation_router._rate_buckets.clear()
+    again = await client.post("/public/v1/donations", headers=auth_headers, json=_slot_booking(1))
+    assert again.status_code == 201
+
+
+async def test_a_booking_without_a_hold_takes_no_place(
+    client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
+) -> None:
+    """Uncapped windows send no hold — they never get a counter."""
+    donation_router._rate_buckets.clear()
+    payload = _slot_booking(0)
+    del payload["slot_hold"]
+
+    response = await client.post("/public/v1/donations", headers=auth_headers, json=payload)
+
+    assert response.status_code == 201
+    buffer = await DonationBuffer.find_one(
+        DonationBuffer.booking_ref == response.json()["booking_ref"]
+    )
+    assert buffer is not None and buffer.slot_counter_id is None

@@ -11,6 +11,7 @@ from decimal import Decimal
 from tent_model import (
     DonationBuffer,
     DonationNeedCounter,
+    DonationSlotCounter,
     DonorBuffer,
     counter_id,
     reserve_quota,
@@ -87,15 +88,15 @@ async def test_cancel_after_sync_releases_quota(db: None) -> None:
         shelter_code=SHELTER,
         campaign_id=CAMPAIGN,
         item_id="item:rice",
-        qty=Decimal("6"),
+        qty=Decimal(6),
         now=datetime.now(UTC),
     )
     await _buffer()
 
     released = await settle_donation_quota(_doc("cancelled"), now=datetime.now(UTC))
 
-    assert released == Decimal("6")
-    assert await _reserved() == Decimal("0")
+    assert released == Decimal(6)
+    assert await _reserved() == Decimal(0)
     assert await _current_status() == "cancelled"
 
 
@@ -106,7 +107,7 @@ async def test_replaying_the_same_change_does_not_release_twice(db: None) -> Non
         shelter_code=SHELTER,
         campaign_id=CAMPAIGN,
         item_id="item:rice",
-        qty=Decimal("10"),
+        qty=Decimal(10),
         now=datetime.now(UTC),
     )
     await _buffer()
@@ -115,10 +116,10 @@ async def test_replaying_the_same_change_does_not_release_twice(db: None) -> Non
     await settle_donation_quota(_doc("cancelled"), now=now)
     released_again = await settle_donation_quota(_doc("cancelled"), now=now)
 
-    assert released_again == Decimal("0")
+    assert released_again == Decimal(0)
     # 10 reserved − 6 released once. A second release would have left 0 and let four
     # more units of rice be booked against a target that is already spoken for.
-    assert await _reserved() == Decimal("4")
+    assert await _reserved() == Decimal(4)
 
 
 async def test_receiving_keeps_the_quota_but_updates_the_buffer(db: None) -> None:
@@ -129,15 +130,15 @@ async def test_receiving_keeps_the_quota_but_updates_the_buffer(db: None) -> Non
         shelter_code=SHELTER,
         campaign_id=CAMPAIGN,
         item_id="item:rice",
-        qty=Decimal("6"),
+        qty=Decimal(6),
         now=datetime.now(UTC),
     )
     await _buffer()
 
     released = await settle_donation_quota(_doc("received"), now=datetime.now(UTC))
 
-    assert released == Decimal("0")
-    assert await _reserved() == Decimal("6")
+    assert released == Decimal(0)
+    assert await _reserved() == Decimal(6)
     # purge_expired_buffers releases only for "declared" — this is what makes it skip.
     assert await _current_status() == "received"
 
@@ -148,15 +149,15 @@ async def test_cancelling_a_received_donation_releases(db: None) -> None:
         shelter_code=SHELTER,
         campaign_id=CAMPAIGN,
         item_id="item:rice",
-        qty=Decimal("6"),
+        qty=Decimal(6),
         now=datetime.now(UTC),
     )
     await _buffer(status="received")
 
     released = await settle_donation_quota(_doc("cancelled"), now=datetime.now(UTC))
 
-    assert released == Decimal("6")
-    assert await _reserved() == Decimal("0")
+    assert released == Decimal(6)
+    assert await _reserved() == Decimal(0)
 
 
 async def test_expiring_releases(db: None) -> None:
@@ -166,13 +167,15 @@ async def test_expiring_releases(db: None) -> None:
         shelter_code=SHELTER,
         campaign_id=CAMPAIGN,
         item_id="item:rice",
-        qty=Decimal("6"),
+        qty=Decimal(6),
         now=datetime.now(UTC),
     )
     await _buffer()
 
-    assert await settle_donation_quota(_doc("expired"), now=datetime.now(UTC)) == Decimal("6")
-    assert await _reserved() == Decimal("0")
+    assert await settle_donation_quota(
+        _doc("expired"), now=datetime.now(UTC)
+    ) == Decimal(6)
+    assert await _reserved() == Decimal(0)
 
 
 async def test_purged_buffer_is_not_released_again(db: None) -> None:
@@ -182,12 +185,14 @@ async def test_purged_buffer_is_not_released_again(db: None) -> None:
         shelter_code=SHELTER,
         campaign_id=CAMPAIGN,
         item_id="item:rice",
-        qty=Decimal("6"),
+        qty=Decimal(6),
         now=datetime.now(UTC),
     )
 
-    assert await settle_donation_quota(_doc("cancelled"), now=datetime.now(UTC)) == Decimal("0")
-    assert await _reserved() == Decimal("6")
+    assert await settle_donation_quota(
+        _doc("cancelled"), now=datetime.now(UTC)
+    ) == Decimal(0)
+    assert await _reserved() == Decimal(6)
 
 
 async def test_staff_walk_in_donation_is_ignored(db: None) -> None:
@@ -195,7 +200,7 @@ async def test_staff_walk_in_donation_is_ignored(db: None) -> None:
     await _seed()
     assert await settle_donation_quota(
         _doc("cancelled", token_hash=None), now=datetime.now(UTC)
-    ) == Decimal("0")
+    ) == Decimal(0)
 
 
 async def test_item_without_reserved_qty_is_skipped(db: None) -> None:
@@ -203,7 +208,9 @@ async def test_item_without_reserved_qty_is_skipped(db: None) -> None:
     await _seed()
     await _buffer(reserved_qty=None)
 
-    assert await settle_donation_quota(_doc("cancelled"), now=datetime.now(UTC)) == Decimal("0")
+    assert await settle_donation_quota(
+        _doc("cancelled"), now=datetime.now(UTC)
+    ) == Decimal(0)
     assert await _current_status() == "cancelled"
 
 
@@ -211,7 +218,9 @@ async def test_donation_outside_any_campaign_is_skipped(db: None) -> None:
     await _seed()
     await _buffer(campaign_id=None)
 
-    assert await settle_donation_quota(_doc("cancelled"), now=datetime.now(UTC)) == Decimal("0")
+    assert await settle_donation_quota(
+        _doc("cancelled"), now=datetime.now(UTC)
+    ) == Decimal(0)
     assert await _current_status() == "cancelled"
 
 
@@ -219,8 +228,12 @@ async def test_missing_status_leaves_the_buffer_alone(db: None) -> None:
     await _seed()
     await _buffer()
 
-    malformed = {"_id": DONATION_ID, "type": "donation", "tracking_token_hash": TOKEN_HASH}
-    assert await settle_donation_quota(malformed, now=datetime.now(UTC)) == Decimal("0")
+    malformed = {
+        "_id": DONATION_ID,
+        "type": "donation",
+        "tracking_token_hash": TOKEN_HASH,
+    }
+    assert await settle_donation_quota(malformed, now=datetime.now(UTC)) == Decimal(0)
     # Never write a null status onto the buffer — the guards downstream read it.
     assert await _current_status() == "declared"
 
@@ -285,7 +298,9 @@ async def test_a_walk_in_outside_any_campaign_holds_nothing(db: None) -> None:
 
 async def test_free_text_only_walk_in_holds_nothing(db: None) -> None:
     """No item_id means no counter to attribute it to."""
-    ran, calls = await _reconcile_calls(_walk_in(items=[{"free_text": "ข้าวสาร", "qty": "5"}]))
+    ran, calls = await _reconcile_calls(
+        _walk_in(items=[{"free_text": "ข้าวสาร", "qty": "5"}])
+    )
     assert ran is False
     assert calls == 0
 
@@ -301,3 +316,56 @@ async def test_a_received_walk_in_still_counts(db: None) -> None:
     """Goods in hand consume the target just as a pledge does (CR-061)."""
     ran, _ = await _reconcile_calls(_walk_in(status="received"))
     assert ran is True
+
+
+# --- queue place (DonationSlotCounter) follows the same transitions ---
+
+SLOT = "SH001:pickup:2026-06-27:10:00"
+
+
+async def _hold_place(*, booked: int = 1) -> None:
+    now = datetime.now(UTC)
+    await DonationSlotCounter(
+        id=SLOT, booked=booked, created_at=now, updated_at=now
+    ).insert()
+
+
+async def _booked() -> int:
+    counter = await DonationSlotCounter.get(SLOT)
+    assert counter is not None
+    return counter.booked
+
+
+async def _slot_buffer(status: str = "pending_review") -> None:
+    buffer = await _buffer(status, campaign_id=None, reserved_qty=None)
+    buffer.slot_counter_id = SLOT
+    await buffer.save()
+
+
+async def test_rejecting_a_booking_frees_its_place(db: None) -> None:
+    """Staff reject in CouchDB — the truck place must come back for the next donor."""
+    await _hold_place()
+    await _slot_buffer()
+
+    await settle_donation_quota(_doc("rejected"), now=datetime.now(UTC))
+
+    assert await _booked() == 0
+
+
+async def test_replaying_a_reject_does_not_free_a_second_place(db: None) -> None:
+    await _hold_place(booked=2)
+    await _slot_buffer()
+
+    await settle_donation_quota(_doc("rejected"), now=datetime.now(UTC))
+    await settle_donation_quota(_doc("rejected"), now=datetime.now(UTC))
+
+    assert await _booked() == 1
+
+
+async def test_receiving_keeps_the_place(db: None) -> None:
+    await _hold_place()
+    await _slot_buffer()
+
+    await settle_donation_quota(_doc("received"), now=datetime.now(UTC))
+
+    assert await _booked() == 1

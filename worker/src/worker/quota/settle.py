@@ -32,7 +32,7 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from tent_model import DonationBuffer, release_quota
+from tent_model import DonationBuffer, release_quota, release_slot
 
 from worker.quota.reconcile import QUOTA_HOLDING_STATUSES, reconcile_shelter
 
@@ -42,9 +42,9 @@ logger = logging.getLogger(__name__)
 async def _release_reservation(buffer: DonationBuffer, *, now: datetime) -> Decimal:
     """Give back every quantity this donation reserved. Returns the total released."""
     if not buffer.campaign_id:
-        return Decimal("0")
+        return Decimal(0)
 
-    total = Decimal("0")
+    total = Decimal(0)
     for item in buffer.items_declared:
         item_id = item.get("item_id")
         raw = item.get("reserved_qty")
@@ -56,7 +56,9 @@ async def _release_reservation(buffer: DonationBuffer, *, now: datetime) -> Deci
             qty = Decimal(str(raw))
         except InvalidOperation:
             logger.warning(
-                "Unparseable reserved_qty %r on donation %s — skipping release", raw, buffer.id
+                "Unparseable reserved_qty %r on donation %s — skipping release",
+                raw,
+                buffer.id,
             )
             continue
         await release_quota(
@@ -83,25 +85,34 @@ async def settle_donation_quota(doc: dict[str, Any], *, now: datetime) -> Decima
     token_hash = doc.get("tracking_token_hash")
     if not token_hash:
         # Staff walk-in: never went through the public reserve path, holds no counter.
-        return Decimal("0")
+        return Decimal(0)
 
     new_status = doc.get("status")
     if not isinstance(new_status, str) or not new_status:
-        return Decimal("0")
+        return Decimal(0)
 
-    buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == token_hash)
+    buffer = await DonationBuffer.find_one(
+        DonationBuffer.tracking_token_hash == token_hash
+    )
     if buffer is None:
         # Retention already purged the row — and released the quota on its way out.
-        return Decimal("0")
+        return Decimal(0)
     if buffer.status == new_status:
         # Nothing moved — skip the write. Not load-bearing for correctness (the
         # transition check below already makes a replay a no-op), just a guard against
         # a pointless Mongo write on every donation change row.
-        return Decimal("0")
+        return Decimal(0)
 
-    released = Decimal("0")
-    if buffer.status in QUOTA_HOLDING_STATUSES and new_status not in QUOTA_HOLDING_STATUSES:
+    released = Decimal(0)
+    if (
+        buffer.status in QUOTA_HOLDING_STATUSES
+        and new_status not in QUOTA_HOLDING_STATUSES
+    ):
         released = await _release_reservation(buffer, now=now)
+        # The queue place is held by the same statuses as the quota (frontend
+        # `countSlotBookings`), so it goes back on the same transition.
+        if buffer.slot_counter_id:
+            await release_slot(counter_id=buffer.slot_counter_id, now=now)
         if released:
             logger.info(
                 "Released %s reserved qty for donation %s (%s → %s)",

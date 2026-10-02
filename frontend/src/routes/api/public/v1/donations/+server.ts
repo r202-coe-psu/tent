@@ -15,7 +15,12 @@ import { adminRaw } from '$lib/server/couch-admin';
 import { fetchDocs } from '$lib/server/donation-docs';
 import { fastapiBaseUrl, fastapiServiceHeaders, unwrapFastapiError } from '$lib/server/fastapi';
 
-import type { DonationCampaign, DonationSlot, StockLedger } from '$lib/features/operations';
+import type {
+	DonationCampaign,
+	DonationSlot,
+	DonationSlotMode,
+	StockLedger
+} from '$lib/features/operations';
 
 const captchaProvider = new ReCaptchaProvider(
 	env.RECAPTCHA_PROJECT_ID || env.SECRET_RECAPTCHA_KEY || 'smart-shelter-508719'
@@ -99,12 +104,18 @@ export const POST = async ({ request, getClientAddress }) => {
 		const resolvedCampaignId = pick.campaignId;
 
 		// 3.6 Re-check the chosen window: full or closed → SLOT_FULL.
-		// Not atomic — two submits can both read the last place free before either
-		// syncs back into CouchDB (tracked by the race e2e, needs a Mongo counter).
+		// Not atomic on its own — two submits can both read the last place free before
+		// either syncs back into CouchDB. A capped window therefore also goes to FastAPI
+		// as `slot_hold`, whose Mongo counter makes the final SLOT_FULL call.
 		const slotMode = parsed.data.logistics
 			? slotModeForDelivery(parsed.data.logistics.delivery_method)
 			: null;
 		const requested = parsed.data.logistics?.slot;
+		// Set when the window has a ceiling: FastAPI takes the place on its atomic
+		// counter, which is what actually refuses the second of two simultaneous bookings.
+		let slotHold:
+			| { mode: DonationSlotMode; date: string; from: string; capacity: number; booked: number }
+			| undefined;
 		// A truck trip only exists where the shelter published one, so a pickup with no
 		// window — or a window with no doc behind it — is refused rather than waved
 		// through. A drop-off with no doc is fine: it is one of the standard hours.
@@ -136,6 +147,15 @@ export const POST = async ({ request, getClientAddress }) => {
 				if (availability.status !== 'available') {
 					return json({ success: false, error: 'SLOT_FULL' }, { status: 409 });
 				}
+				if (availability.capacity !== null) {
+					slotHold = {
+						mode: slotMode,
+						date,
+						from,
+						capacity: availability.capacity,
+						booked: availability.booked
+					};
+				}
 			} else if (slotRes.status === 404) {
 				if (slotMode === 'pickup') {
 					return json({ success: false, error: 'SLOT_UNAVAILABLE' }, { status: 409 });
@@ -155,7 +175,8 @@ export const POST = async ({ request, getClientAddress }) => {
 				campaign_id: resolvedCampaignId,
 				donor: parsed.data.donor,
 				items: parsed.data.items,
-				logistics: parsed.data.logistics
+				logistics: parsed.data.logistics,
+				slot_hold: slotHold
 			})
 		});
 

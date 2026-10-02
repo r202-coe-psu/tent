@@ -139,12 +139,9 @@ test('two donors race for the last pickup trip → only one gets it', async ({
 	browser,
 	request
 }) => {
-	// KNOWN BUG: both donors get the trip. The BFF counts bookings in CouchDB, but the
-	// winner only reaches CouchDB after FastAPI → Mongo → sync worker, so for a few
-	// seconds the loser's count cannot see it (`api/public/v1/donations/+server.ts`
-	// reads at :78, re-checks at :101-122, writes via FastAPI at :128). Reproduced 3/3.
-	// Expected to fail until fixed; Playwright flags it once it passes.
-	test.fail();
+	// The BFF's CouchDB count cannot see the winner for a few seconds — it reaches
+	// CouchDB only after FastAPI → Mongo → sync worker — so both donors pass it. The
+	// place is decided by FastAPI's slot counter (`slot_hold`), which sees both.
 	// Any open need at the shelter will do — the fight is over the truck, not the item.
 	const need = (await publicNeedsBoard(request))
 		.find((s) => s.code === shelter.code)!
@@ -197,12 +194,7 @@ test('two donors race for the last place in a capped drop-off window → only on
 }) => {
 	// Drop-off windows are normally uncapped, but staff may put a ceiling on a busy one
 	// (the slot screen's "จำกัดจำนวนคิว"). That ceiling goes through the same BFF
-	// count-then-write as the pickup trip above, and leaks the same way.
-	// KNOWN BUG (same root cause as the pickup race): both donors get the one place.
-	// Reproduced 3/3. A donor booking a few seconds AFTER the first is blocked (the
-	// window reads full), so the ceiling itself works — only simultaneous bookings slip
-	// through. Expected to fail until fixed; Playwright flags it once it passes.
-	test.fail();
+	// count as the pickup trip above, so it is held by the same FastAPI slot counter.
 	const need = (await publicNeedsBoard(request))
 		.find((s) => s.code === shelter.code)!
 		.needs.find((n) => n.status === 'open' && Number(n.qty_needed) >= 2);
