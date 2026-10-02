@@ -79,10 +79,10 @@ class LabelToEscposTests(unittest.TestCase):
         _, _, payload = bands[0]
         self.assertEqual(row_bits(payload, 576 // 8, 0), "1" * 576)
 
-    def test_label_length_cap_scales_tall_content_down_keeping_aspect_ratio(self):
-        # 60 mm strip - 15 mm cutter margin = 45 mm = 360 rows for the content.
+    def test_label_length_scales_tall_content_down_keeping_aspect_ratio(self):
+        # 60 mm strip - 15 mm ESC J feed = 45 mm = 360 rows for the content.
         data = label_to_escpos(
-            block_png((640, 480), (0, 0, 576, 432)), 576, cut_feed_mm=15, max_length_mm=60
+            block_png((640, 480), (0, 0, 576, 432)), 576, cut_feed_mm=15, label_length_mm=60
         )
 
         bands = parse_bands(data)
@@ -91,16 +91,43 @@ class LabelToEscposTests(unittest.TestCase):
         # 576x432 -> 480x360, centred: 48 blank dots each side.
         self.assertEqual(row_bits(bands[0][2], 72, 0), "0" * 48 + "1" * 480 + "0" * 48)
 
-    def test_label_length_cap_leaves_short_content_and_zero_means_no_limit(self):
-        png = block_png((640, 480), (0, 0, 576, 432))
-        for name, (max_length_mm, rows) in {"fits": (80, 432), "no limit": (0, 432)}.items():
-            with self.subTest(name=name):
-                data = label_to_escpos(png, 576, cut_feed_mm=15, max_length_mm=max_length_mm)
-                self.assertEqual(sum(r for _, r, _ in parse_bands(data)), rows)
+    def test_label_length_pads_short_content_so_every_strip_is_exactly_that_long(self):
+        data = label_to_escpos(
+            block_png((640, 480), (0, 0, 576, 200)), 576, cut_feed_mm=15, label_length_mm=60
+        )
 
-    def test_label_length_cap_must_exceed_the_cut_feed(self):
-        with self.assertRaises(ValueError):
-            label_to_escpos(block_png((64, 64), (0, 0, 32, 32)), 576, cut_feed_mm=15, max_length_mm=15)
+        bands = parse_bands(data)
+        payload = b"".join(band for _, _, band in bands)
+
+        self.assertEqual(sum(rows for _, rows, _ in bands), 360)
+        # 200 ink rows centred in 360: 80 blank rows above and below.
+        self.assertEqual(row_bits(payload, 72, 79), "0" * 576)
+        self.assertEqual(row_bits(payload, 72, 80), "1" * 576)
+        self.assertEqual(row_bits(payload, 72, 279), "1" * 576)
+        self.assertEqual(row_bits(payload, 72, 280), "0" * 576)
+
+    def test_cut_extra_shortens_the_content_by_what_the_printer_feeds_itself(self):
+        # kiosk3 feeds ~15 mm on its own at the cut: 60 - 15 - 15 = 30 mm = 240 rows.
+        data = label_to_escpos(
+            block_png((640, 480), (0, 0, 576, 432)),
+            576,
+            cut_feed_mm=15,
+            label_length_mm=60,
+            cut_extra_mm=15,
+        )
+
+        self.assertEqual(sum(rows for _, rows, _ in parse_bands(data)), 240)
+
+    def test_zero_label_length_keeps_the_trimmed_content_height(self):
+        data = label_to_escpos(block_png((640, 480), (0, 0, 576, 432)), 576, cut_feed_mm=15)
+
+        self.assertEqual(sum(rows for _, rows, _ in parse_bands(data)), 432)
+
+    def test_label_length_must_exceed_the_feeds(self):
+        png = block_png((64, 64), (0, 0, 32, 32))
+        for name, extra in {"feed only": 0, "feed + extra": 5}.items():
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                label_to_escpos(png, 576, cut_feed_mm=15, label_length_mm=15 + extra, cut_extra_mm=extra)
 
     def test_later_labels_in_a_batch_skip_the_reset_but_keep_feed_and_cut(self):
         png = block_png((64, 64), (0, 0, 32, 32))

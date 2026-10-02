@@ -18,7 +18,6 @@ from typing import Any, Dict, Optional
 from app.config import (
     DEFAULT_CARD_READER_USB_ID,
     DEFAULT_PRINTER_CUT_FEED_MM,
-    DEFAULT_PRINTER_LABEL_LENGTH_MM,
     DEFAULT_PRINTER_WIDTH_DOTS,
     DEFAULT_QR_READER_GAP_MS,
 )
@@ -62,6 +61,10 @@ KIOSK_PRINT_TIMEOUT_SEC = 20.0
 KIOSK_PRINT_OVERALL_DEADLINE_SEC = 25.0
 # Labels are rendered at the printer's 203 dpi, so 1 image px = 1 printer dot.
 KIOSK_PRINT_PPI = 203
+# Pause between ESC/POS labels of one print: the device write returns once the printer has the
+# bytes, not once it has printed and cut, and kiosk3 drops a cut when the next label arrives
+# mid-cut (two people came out as one strip). 2 s keeps ~10 labels inside the overall deadline.
+ESCPOS_LABEL_PAUSE_SEC = 2.0
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 # Kernel usblp exposes printers as /dev/usb/lpN; sysfs lists them with their USB ids.
@@ -113,10 +116,6 @@ class ScannerClientManager:
         )
         self.printer_cut_feed_mm = int(
             config.get("PRINTER_CUT_FEED_MM") or DEFAULT_PRINTER_CUT_FEED_MM
-        )
-        raw_label_length = str(config.get("PRINTER_LABEL_LENGTH_MM") or "").strip()
-        self.printer_label_length_mm = (
-            int(raw_label_length) if raw_label_length else DEFAULT_PRINTER_LABEL_LENGTH_MM
         )
         self._escpos_lock = asyncio.Lock()
         # How /kiosk/qr reads QR codes: camera, a USB keyboard-wedge reader, or both.
@@ -400,6 +399,9 @@ class ScannerClientManager:
         deadline = time.monotonic() + KIOSK_PRINT_OVERALL_DEADLINE_SEC
         printed = 0
         for index, image in enumerate(images):
+            if index and self.printer_backend == "escpos":
+                # Let the previous label finish printing and cutting first.
+                await asyncio.sleep(ESCPOS_LABEL_PAUSE_SEC)
             if time.monotonic() >= deadline:
                 logger.error(
                     f"Label print deadline exceeded on {self._print_target} ({printed}/{len(images)} sent)"
@@ -474,14 +476,15 @@ class ScannerClientManager:
         """Blocking: convert, locate and write one label. Runs in a worker thread."""
         try:
             # Imported here so CUPS-only machines never load Pillow just to start the kiosk.
-            from app.escpos import label_to_escpos
+            from app.escpos import CUT_EXTRA_MM, LABEL_LENGTH_MM, label_to_escpos
 
             data = label_to_escpos(
                 image,
                 self.printer_width_dots,
                 self.printer_cut_feed_mm,
-                self.printer_label_length_mm,
+                LABEL_LENGTH_MM,
                 init,
+                CUT_EXTRA_MM,
             )
         except Exception:  # noqa: BLE001 - Pillow raises DecompressionBombError and others outside ValueError
             logger.error("Label image could not be converted for the ESC/POS printer")

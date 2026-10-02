@@ -101,7 +101,6 @@ class HardwareConfigTests(unittest.TestCase):
         self.assertEqual(config["PRINTER_BACKEND"], "cups")
         self.assertEqual(config["PRINTER_WIDTH_DOTS"], "576")
         self.assertEqual(config["PRINTER_CUT_FEED_MM"], "15")
-        self.assertEqual(config["PRINTER_LABEL_LENGTH_MM"], "60")
         self.assertEqual(config["KIOSK_QR_INPUT"], "camera")
         self.assertEqual(config["CARD_READER"], "pcsc")
         self.assertEqual(config["CARD_READER_USB_ID"], "0483:4c43")
@@ -112,7 +111,6 @@ class HardwareConfigTests(unittest.TestCase):
             PRINTER_USB_ID="28E9:5812",
             PRINTER_WIDTH_DOTS="576",
             PRINTER_CUT_FEED_MM="18",
-            PRINTER_LABEL_LENGTH_MM="0",
             KIOSK_QR_INPUT="Reader",
             KIOSK_QR_READER_MAX_GAP_MS="40",
             KIOSK_CAMERA_LABEL=" JSK-RGB ",
@@ -123,7 +121,6 @@ class HardwareConfigTests(unittest.TestCase):
         self.assertEqual(config["PRINTER_BACKEND"], "escpos")
         self.assertEqual(config["PRINTER_USB_ID"], "28e9:5812")
         self.assertEqual(config["PRINTER_CUT_FEED_MM"], "18")
-        self.assertEqual(config["PRINTER_LABEL_LENGTH_MM"], "0")
         self.assertEqual(config["KIOSK_QR_INPUT"], "reader")
         self.assertEqual(config["KIOSK_QR_READER_MAX_GAP_MS"], "40")
         self.assertEqual(config["KIOSK_CAMERA_LABEL"], "JSK-RGB")
@@ -147,9 +144,6 @@ class HardwareConfigTests(unittest.TestCase):
             "width not multiple of 8": {"PRINTER_WIDTH_DOTS": "580"},
             "cut feed not integer": {"PRINTER_CUT_FEED_MM": "1.5"},
             "cut feed above range": {"PRINTER_CUT_FEED_MM": "41"},
-            "label length not integer": {"PRINTER_LABEL_LENGTH_MM": "6cm"},
-            "label length above range": {"PRINTER_LABEL_LENGTH_MM": "201"},
-            "label length leaves no content": {"PRINTER_LABEL_LENGTH_MM": "30"},
             "qr input": {"KIOSK_QR_INPUT": "bluetooth"},
             "qr gap below range": {"KIOSK_QR_READER_MAX_GAP_MS": "5"},
             "qr gap above range": {"KIOSK_QR_READER_MAX_GAP_MS": "101"},
