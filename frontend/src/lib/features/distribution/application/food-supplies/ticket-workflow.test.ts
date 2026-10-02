@@ -491,4 +491,88 @@ describe('ticket-workflow', () => {
 		const untouched = await repo.get(ticket._id);
 		expect(untouched?.status).toBe('PENDING_PICK');
 	});
+
+	describe('Whole-item quantity input validation', () => {
+		it('rejects fractional requested_qty and allocated_qty at creation', async () => {
+			await expect(
+				createRequisitionTicket(
+					{
+						ticket_no: 'TKT-FOOD-0001',
+						requisition_type: 'food',
+						meal: 'lunch',
+						source_location: 'warehouse:main',
+						destination_location: 'point:a',
+						items: [
+							{
+								item_id: 'item:meal1',
+								item_name: 'Meal',
+								type_class: 'CONSUMABLE',
+								requested_qty: '1.5',
+								allocated_qty: '1.5'
+							}
+						]
+					},
+					WH_CTX,
+					repo
+				)
+			).rejects.toThrow(/positive whole number/);
+		});
+
+		it('rejects creating a ticket with scientific notation requested_qty', async () => {
+			await expect(
+				createRequisitionTicket(
+					{
+						ticket_no: 'TKT-FOOD-0001',
+						requisition_type: 'food',
+						meal: 'lunch',
+						source_location: 'warehouse:main',
+						destination_location: 'point:a',
+						items: [
+							{
+								item_id: 'item:meal1',
+								item_name: 'Meal',
+								type_class: 'CONSUMABLE',
+								requested_qty: '1e2',
+								allocated_qty: '1e2'
+							}
+						]
+					},
+					WH_CTX,
+					repo
+				)
+			).rejects.toThrow(/must be a positive whole number/);
+		});
+
+		it('rejects fractional allocated_qty before persistence', async () => {
+			const ticket = await createRequisitionTicket(
+				{
+					ticket_no: 'TKT-FOOD-0001',
+					requisition_type: 'food',
+					meal: 'dinner',
+					source_location: 'warehouse:main',
+					destination_location: 'point:a',
+					items: [
+						{
+							item_id: 'item:meal1',
+							item_name: 'Meal',
+							type_class: 'CONSUMABLE',
+							requested_qty: '50',
+							allocated_qty: '50'
+						}
+					]
+				},
+				WH_CTX,
+				repo
+			);
+
+			await expect(
+				allocateTicketItems(
+					ticket._id,
+					[{ item_id: 'item:meal1', allocated_qty: '2.25' }],
+					WH_CTX,
+					repo
+				)
+			).rejects.toThrow(/positive whole number/);
+		});
+	});
 });

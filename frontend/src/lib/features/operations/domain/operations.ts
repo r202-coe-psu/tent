@@ -115,8 +115,21 @@ export interface StockLot {
 	 * cosmetic clash, never a wrong balance. Balances always come from `qty`.
 	 */
 	lot_no?: string;
-	/** Where the goods were physically put away. Free text — no zone master data yet (CR-088). */
+	/**
+	 * Where the goods were physically put away. Since schema_v 5 it is the storage
+	 * point's name AT WRITE TIME (snapshot); older rows hold free text (CR-088).
+	 */
 	storage_zone?: string;
+	/**
+	 * → `shelter.common_areas.sub_storage[].id` of the same shelter (schema_v 5,
+	 * CR-139). Absent = unspecified / main store, or legacy row.
+	 */
+	storage_point_id?: string;
+	/**
+	 * Production timestamp for the "จากผลิต" clock (draft-lot-produced-at).
+	 * On inbound receive, writers default this to `occurred_at` when omitted.
+	 */
+	produced_at?: Timestamp;
 }
 
 /** `L-YYMMDD-XXX` — `YYMMDD` = receive date, `XXX` = 3-digit per-day per-shelter sequence. */
@@ -126,12 +139,20 @@ export const LOT_NO_PATTERN = /^L-\d{6}-\d{3}$/;
  * Single source of truth for the shape of `stock_ledger.lot` (schema.md §2.1) —
  * every ledger/receipt input schema reuses it so the four writers cannot drift.
  */
-export const stockLotSchema = z.object({
-	expiry: z.string().optional(),
-	note: z.string().trim().optional(),
-	lot_no: z.string().regex(LOT_NO_PATTERN, 'lot_no must look like L-YYMMDD-XXX').optional(),
-	storage_zone: z.string().trim().max(100).optional()
-});
+export const stockLotSchema = z
+	.object({
+		expiry: z.string().optional(),
+		note: z.string().trim().optional(),
+		lot_no: z.string().regex(LOT_NO_PATTERN, 'lot_no must look like L-YYMMDD-XXX').optional(),
+		storage_zone: z.string().trim().max(100).optional(),
+		storage_point_id: z.string().trim().min(1).optional(),
+		/** ISO date or datetime — DatePicker may submit `YYYY-MM-DD`. */
+		produced_at: z.string().optional()
+	})
+	.refine((lot) => !lot.storage_point_id || !!lot.storage_zone, {
+		message: 'storage_point_id requires storage_zone (the point name at write time)',
+		path: ['storage_zone']
+	});
 
 /** `YYMMDD` of a date, in the caller's local time (the lot label is read by staff on site). */
 export function lotDateStamp(date: Date): string {
@@ -438,7 +459,7 @@ export const stockLedgerDocSchema = z
 		_id: z.string().regex(/^stock_ledger:/),
 		_rev: z.string().optional(),
 		type: z.literal('stock_ledger'),
-		schema_v: z.union([z.literal(2), z.literal(3), z.literal(4)]),
+		schema_v: z.union([z.literal(2), z.literal(3), z.literal(4), z.literal(5)]),
 		shelter_code: z.string().min(1),
 		created_at: z.string().datetime(),
 		updated_at: z.string().datetime(),
@@ -477,9 +498,22 @@ function createParsedStockLedger(
 	ctx: AuthorContext,
 	id?: string
 ): StockLedger {
+	const occurredAt = d.occurred_at ?? now();
+	// New inbound lots (qty > 0, not a distribution return) stamp produced_at
+	// from occurred_at when the caller omits it (draft-lot-produced-at).
+	const isNewInboundLot = qtyGt(persistQty(d.qty), 0) && d.reason !== 'distribution_return';
+	let lot = d.lot;
+	if (isNewInboundLot) {
+		if (!lot) {
+			lot = { produced_at: occurredAt };
+		} else if (!lot.produced_at) {
+			lot = { ...lot, produced_at: occurredAt };
+		}
+	}
+
 	const entry = makeDoc(
 		'stock_ledger',
-		4,
+		5,
 		{
 			item_id: d.item_id,
 			qty: persistQty(d.qty),
@@ -487,8 +521,8 @@ function createParsedStockLedger(
 			reason: d.reason,
 			ref_id: d.ref_id,
 			...(d.lot_ref ? { lot_ref: d.lot_ref } : {}),
-			...(d.lot ? { lot: d.lot } : {}),
-			occurred_at: d.occurred_at ?? now()
+			...(lot ? { lot } : {}),
+			occurred_at: occurredAt
 		},
 		ctx,
 		id
@@ -497,7 +531,6 @@ function createParsedStockLedger(
 	// Every newly-created inbound physical lot establishes its identity at write
 	// time. A distribution return reuses the original lot instead of becoming a
 	// new physical lot. Legacy persisted rows remain readable without this field.
-	const isNewInboundLot = qtyGt(entry.qty, 0) && entry.reason !== 'distribution_return';
 	if (!isNewInboundLot) return entry;
 	if (d.lot_ref && d.lot_ref !== entry._id) {
 		throw new Error('New inbound stock ledger lot_ref must equal its own _id');

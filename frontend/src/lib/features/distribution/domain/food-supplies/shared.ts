@@ -34,3 +34,98 @@ export function thailandCalendarDay(isoTimestampOrDate: string | Date = new Date
 		typeof isoTimestampOrDate === 'string' ? new Date(isoTimestampOrDate) : isoTimestampOrDate;
 	return new Date(d.getTime() + THAILAND_UTC_OFFSET_MS).toISOString().slice(0, 10);
 }
+
+export interface WholeItemValidationResult {
+	isValid: boolean;
+	value?: string;
+	normalized: string | null;
+	error?: string;
+}
+
+export interface WholeItemValidationOptions {
+	allowZero?: boolean;
+}
+
+const WHOLE_NUMBER_STRING_RE = /^0*\d+$/;
+const POSITIVE_WHOLE_NUMBER_RE = /^0*[1-9]\d*$/;
+
+export const positiveWholeQtySchema = z
+	.string()
+	.trim()
+	.regex(POSITIVE_WHOLE_NUMBER_RE, 'Quantity must be a positive whole number')
+	.transform((value) => value.replace(/^0+/, ''));
+
+export const nonNegativeWholeQtySchema = z
+	.string()
+	.trim()
+	.regex(WHOLE_NUMBER_STRING_RE, 'Quantity must be a non-negative whole number')
+	.transform((value) => value.replace(/^0+/, '') || '0');
+
+export const positiveWholeQtyCoerceSchema = z
+	.union([z.string(), z.number()])
+	.transform((value, ctx) => {
+		const parsed = positiveWholeQtySchema.safeParse(String(value));
+		if (!parsed.success) {
+			ctx.addIssue({ code: 'custom', message: 'Quantity must be a positive whole number' });
+			return z.NEVER;
+		}
+		return parsed.data;
+	});
+
+export const nonNegativeWholeQtyCoerceSchema = z
+	.union([z.string(), z.number()])
+	.transform((value, ctx) => {
+		const parsed = nonNegativeWholeQtySchema.safeParse(String(value));
+		if (!parsed.success) {
+			ctx.addIssue({ code: 'custom', message: 'Quantity must be a non-negative whole number' });
+			return z.NEVER;
+		}
+		return parsed.data;
+	});
+
+/**
+ * Validates a count quantity without rounding or floating-point conversion.
+ * Leading zeroes are canonicalized textually; decimal/scientific notation is rejected.
+ */
+export function validateWholeItemInput(
+	raw: string,
+	options?: WholeItemValidationOptions
+): WholeItemValidationResult {
+	const trimmed = (raw ?? '').trim();
+	if (!trimmed) {
+		return { isValid: false, normalized: null, error: 'กรุณาระบุจำนวน' };
+	}
+
+	if (!WHOLE_NUMBER_STRING_RE.test(trimmed)) {
+		if (/^-/.test(trimmed)) {
+			return {
+				isValid: false,
+				normalized: null,
+				error: options?.allowZero ? 'จำนวนต้องไม่ติดลบ (≥ 0)' : 'จำนวนต้องมากกว่า 0'
+			};
+		}
+		return {
+			isValid: false,
+			normalized: null,
+			error: /\./.test(trimmed)
+				? options?.allowZero
+					? 'จำนวนต้องเป็นจำนวนเต็ม เช่น 0, 1, 2, 3'
+					: 'จำนวนต้องเป็นจำนวนเต็ม เช่น 1, 2, 3'
+				: 'จำนวนต้องเป็นตัวเลขจำนวนเต็มที่ถูกต้อง'
+		};
+	}
+
+	const value = trimmed.replace(/^0+/, '') || '0';
+	if (value === '0' && !options?.allowZero) {
+		return {
+			isValid: false,
+			normalized: null,
+			error: 'จำนวนต้องมากกว่า 0'
+		};
+	}
+	return {
+		isValid: true,
+		value,
+		normalized: value
+	};
+}

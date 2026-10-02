@@ -6,7 +6,13 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Switch } from '$lib/components/ui/switch/index.js';
-	import { SOP_RATIO_KEYS, RATIO_LABELS, type SopRatioKey } from '$lib/features/sop-ratios';
+	import {
+		SOP_RATIO_KEYS,
+		VISIBLE_SOP_RATIO_KEYS,
+		RATIO_LABELS,
+		isVisibleSopRatioKey,
+		type SopRatioKey
+	} from '$lib/features/sop-ratios';
 	import {
 		scenarioInputSchema,
 		type RatioOverrides,
@@ -38,7 +44,7 @@
 	type RatioGroupId = 'water' | 'food' | 'sanitation' | 'shelter' | 'workforce';
 	type RatioGroup = { id: RatioGroupId; label: string; keys: readonly SopRatioKey[] };
 
-	const ratioGroups: readonly RatioGroup[] = [
+	const allRatioGroups: readonly RatioGroup[] = [
 		{
 			id: 'water',
 			label: 'น้ำและจุดบริการ',
@@ -73,6 +79,10 @@
 		},
 		{ id: 'workforce', label: 'กำลังคน', keys: ['people_per_volunteer'] }
 	];
+	// Only the Sphere variables kept by the 2026-09-16 requirement can be adjusted (display-only filter).
+	const ratioGroups: readonly RatioGroup[] = allRatioGroups
+		.map((group) => ({ ...group, keys: group.keys.filter((key) => isVisibleSopRatioKey(key)) }))
+		.filter((group) => group.keys.length > 0);
 
 	let enabledOverrides = $state<Partial<Record<SopRatioKey, boolean>>>({});
 	let ratioValues = $state<RatioOverrides>({});
@@ -84,7 +94,7 @@
 	const visibleRatioKeys = $derived.by(() => {
 		const query = ratioSearch.trim().toLocaleLowerCase('th-TH');
 		if (query)
-			return SOP_RATIO_KEYS.filter((key) => {
+			return VISIBLE_SOP_RATIO_KEYS.filter((key) => {
 				const meta = RATIO_LABELS[key];
 				return `${meta.label} ${meta.unit} ${meta.description}`
 					.toLocaleLowerCase('th-TH')
@@ -249,7 +259,7 @@
 				<div>
 					<div class="ratio-summary-title-row">
 						<h3 id="ratio-summary-title">ปรับอัตรามาตรฐาน</h3>
-						<span>{enabledKeys.length}/{SOP_RATIO_KEYS.length}</span>
+						<span>{enabledKeys.length}/{VISIBLE_SOP_RATIO_KEYS.length}</span>
 					</div>
 					<p>
 						{enabledKeys.length === 0

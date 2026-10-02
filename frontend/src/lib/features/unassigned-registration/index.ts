@@ -6,6 +6,7 @@
 export type {
 	OpenMemberHit,
 	OpenMemberStatus,
+	OpenPetHit,
 	PersonIdHit,
 	UnassignedRegistrationSearchHit,
 	UnassignedRegistrationSearchResponse
@@ -13,9 +14,18 @@ export type {
 
 export type {
 	ClaimedMemberOut,
+	ClaimedPetOut,
 	UnassignedRegistrationClaimRequest,
 	UnassignedRegistrationClaimResponse
 } from './domain/claim';
+
+export type { UnassignedRegistrationReview } from './domain/review';
+export {
+	unassignedHouseholdToUnifiedInput,
+	unassignedMemberToUnifiedMember,
+	unassignedPhotoUrl,
+	unassignedRegistrationReviewSchema
+} from './domain/review';
 
 export {
 	CLAIM_DIALOG_DESCRIPTION,
@@ -29,11 +39,13 @@ export {
 	formatOpenMemberIdentityLine,
 	formatOpenMemberName,
 	formatOpenMemberVulnerableGroup,
+	formatOpenPetLabel,
 	isOnlineRequiredError
 } from './domain/search';
 export {
 	pickReportInEvacueeId,
 	toggleMemberSelection,
+	togglePetSelection,
 	unassignedRegistrationClaimResponseSchema
 } from './domain/claim';
 
@@ -47,6 +59,7 @@ export {
 export {
 	unassignedRegistrationKeys,
 	useClaimUnassignedRegistration,
+	useUnassignedRegistrationReview,
 	useUnassignedRegistrationSearch
 } from './application/queries';
 

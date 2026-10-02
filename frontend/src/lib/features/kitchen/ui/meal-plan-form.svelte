@@ -473,7 +473,14 @@
 			<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 				<div class="space-y-1.5">
 					<Label for="mp-date">วันที่</Label>
-					<Input id="mp-date" type="date" class="min-h-11 sm:min-h-9" bind:value={date} required disabled={isEdit} />
+					<Input
+						id="mp-date"
+						type="date"
+						class="min-h-11 sm:min-h-9"
+						bind:value={date}
+						required
+						disabled={isEdit}
+					/>
 				</div>
 				<div class="space-y-1.5">
 					<Label for="mp-meal">มื้ออาหาร</Label>
@@ -621,15 +628,33 @@
 			<div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
 				<div class="space-y-1.5">
 					<Label for="mp-halal" class="text-xs">ฮาลาล</Label>
-					<Input id="mp-halal" type="number" min="0" class="min-h-11 sm:min-h-9" bind:value={halal} />
+					<Input
+						id="mp-halal"
+						type="number"
+						min="0"
+						class="min-h-11 sm:min-h-9"
+						bind:value={halal}
+					/>
 				</div>
 				<div class="space-y-1.5">
 					<Label for="mp-soft" class="text-xs">อาหารอ่อน</Label>
-					<Input id="mp-soft" type="number" min="0" class="min-h-11 sm:min-h-9" bind:value={softFood} />
+					<Input
+						id="mp-soft"
+						type="number"
+						min="0"
+						class="min-h-11 sm:min-h-9"
+						bind:value={softFood}
+					/>
 				</div>
 				<div class="space-y-1.5">
 					<Label for="mp-infant" class="text-xs">ทารก</Label>
-					<Input id="mp-infant" type="number" min="0" class="min-h-11 sm:min-h-9" bind:value={infant} />
+					<Input
+						id="mp-infant"
+						type="number"
+						min="0"
+						class="min-h-11 sm:min-h-9"
+						bind:value={infant}
+					/>
 				</div>
 			</div>
 
@@ -800,9 +825,7 @@
 				{/if}
 			</div>
 
-			<Dialog.Footer
-				class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"
-			>
+			<Dialog.Footer class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
 				<Button
 					type="button"
 					variant="outline"

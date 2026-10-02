@@ -8,6 +8,16 @@ import { shelterStore } from '$lib/stores/shelter.svelte';
  * only as a last resort (e.g. system_admin with no shelter scope).
  */
 export function getShelterCode(): string {
+	return resolveShelterCode() ?? 'SH001';
+}
+
+/**
+ * Same resolution order as {@link getShelterCode} but without the 'SH001'
+ * last resort — `null` when no shelter is selected or scoped. Write paths that
+ * must never land in the wrong shelter (walk-in registration) use this and
+ * block the form instead of guessing.
+ */
+export function resolveShelterCode(): string | null {
 	if (shelterStore.selectedShelterCode) {
 		return shelterStore.selectedShelterCode;
 	}
@@ -15,7 +25,7 @@ export function getShelterCode(): string {
 		return shelterStore.listDefaultCode;
 	}
 	const roles = authStore.user?.roles ?? [];
-	return shelterCodeFromRoles(roles) ?? 'SH001';
+	return shelterCodeFromRoles(roles) ?? null;
 }
 
 /** The CouchDB database name for the current user's shelter. */

@@ -6,7 +6,7 @@
 	import { QueryClientProvider } from '@tanstack/svelte-query';
 	import { Toaster } from '$lib/components/ui/sonner/index.js';
 	import { PUBLIC_APP_TITLE } from '$env/static/public';
-	import TestingBanner from '$lib/components/testing-banner.svelte';
+	import SystemBannerHost from '$lib/components/system-banner-host.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { scrollAppToTop } from '$lib/utils/scroll-app-to-top';
 
@@ -62,5 +62,5 @@
 
 <QueryClientProvider client={data.queryClient}>
 	{@render children?.()}
-	<TestingBanner />
+	<SystemBannerHost />
 </QueryClientProvider>

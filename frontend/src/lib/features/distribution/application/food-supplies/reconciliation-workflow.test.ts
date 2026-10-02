@@ -1,4 +1,17 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+vi.mock('$lib/features/catalog', () => ({
+	catalogRepository: () => ({
+		listItemMasters: async () =>
+			['item:a', 'item:b', 'item:blanket', 'item:c', 'item:mat', 'item:meal', 'item:rice'].map(
+				(_id) => ({ _id, base_unit: 'piece' })
+			),
+		listUnitsOfMeasure: async () => []
+	}),
+	itemMasterUnit: (item: { base_unit?: string; unit?: string }) =>
+		item.base_unit ?? item.unit ?? 'piece',
+	canonicalizeUnitCode: (value: unknown) => (value === 'ชิ้น' ? 'piece' : value)
+}));
 import { ulid } from '$lib/db/ulid';
 import type { AuthorContext } from '$lib/db/model';
 import type {
@@ -442,6 +455,7 @@ describe('reconciliation-workflow', () => {
 		expect(ledger.reason).toBe('receive');
 		expect(ledger.ref_id).toBe(ticket._id);
 		expect(ledger.qty).toBe('4');
+		expect(ledger.unit).toBe('piece');
 	});
 
 	it('does not create a receipt when the final warehouse count is zero', async () => {
@@ -675,7 +689,7 @@ describe('reconciliation-workflow', () => {
 					operationsRepo: opsRepo as unknown as OperationsRepository
 				}
 			)
-		).rejects.toThrow(/non-negative decimal string/);
+		).rejects.toThrow(/non-negative whole number/);
 		expect(opsRepo.ledger).toHaveLength(0);
 
 		await expect(

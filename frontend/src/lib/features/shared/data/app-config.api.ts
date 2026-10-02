@@ -1,4 +1,4 @@
-import type { AppConfig } from '../domain/app-config';
+import type { AppConfig, AppConfigPatchKey } from '../domain/app-config';
 
 export type AppConfigResponse = {
 	config: AppConfig;
@@ -24,7 +24,7 @@ export async function fetchAppConfig(fetchFn: typeof fetch = fetch): Promise<App
 }
 
 export async function updateAppConfig(
-	patch: Partial<Pick<AppConfig, 'recaptcha_enabled' | 'thaid_registration_enabled'>>,
+	patch: Partial<Pick<AppConfig, AppConfigPatchKey>>,
 	fetchFn: typeof fetch = fetch
 ): Promise<AppConfig> {
 	const res = await fetchFn('/api/v1/app-config', {

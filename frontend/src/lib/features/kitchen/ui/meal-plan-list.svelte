@@ -349,7 +349,9 @@
 {#snippet planActions(plan: MealPlan, stage: PlanStage, stacked = false)}
 	{#if stage === 'draft'}
 		{@const blocked = isBomSourced(plan) || gasShortfalls(plan).length > 0}
-		<div class={stacked ? 'flex w-full flex-col gap-2' : 'flex items-center justify-center gap-1.5'}>
+		<div
+			class={stacked ? 'flex w-full flex-col gap-2' : 'flex items-center justify-center gap-1.5'}
+		>
 			<Button
 				size="sm"
 				variant="outline"
@@ -377,7 +379,9 @@
 					size="sm"
 					variant="outline"
 					title="ลบแผน (draft)"
-					class="text-destructive hover:text-destructive {stacked ? 'min-h-11 min-w-11 flex-1' : ''}"
+					class="text-destructive hover:text-destructive {stacked
+						? 'min-h-11 min-w-11 flex-1'
+						: ''}"
 					onclick={() => openDeleteConfirm(plan)}
 					disabled={deletePlan.isPending}
 				>
@@ -436,9 +440,7 @@
 
 	<!-- Table / card list -->
 	<Card.Root class="border border-slate-200/80 shadow-2xs">
-		<Card.Header
-			class="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"
-		>
+		<Card.Header class="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
 			<div class="flex items-start gap-3">
 				<div class="rounded-lg border border-sky-200 bg-sky-50 p-2">
 					<ClipboardList class="h-4 w-4 text-sky-600" />
@@ -453,7 +455,10 @@
 				</div>
 			</div>
 			<div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-				<Button onclick={() => openCreate('recipe')} class="min-h-11 w-full rounded-lg px-5 sm:w-auto">
+				<Button
+					onclick={() => openCreate('recipe')}
+					class="min-h-11 w-full rounded-lg px-5 sm:w-auto"
+				>
 					<Play class="mr-1.5 h-3.5 w-3.5" />
 					เพิ่มสูตรมาตรฐาน (BOM)
 				</Button>
@@ -538,7 +543,9 @@
 										{@render planRecipes(plan)}
 									</Table.Cell>
 									<Table.Cell class="px-6 text-right">
-										<p class="font-semibold tabular-nums">{plan.headcount.total.toLocaleString()}</p>
+										<p class="font-semibold tabular-nums">
+											{plan.headcount.total.toLocaleString()}
+										</p>
 										<p class="text-xs text-muted-foreground">คน</p>
 									</Table.Cell>
 									<Table.Cell class="px-6 text-center">

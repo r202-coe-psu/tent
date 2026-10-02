@@ -89,3 +89,22 @@ async def clean_db(request: pytest.FixtureRequest, settings: Settings):
         yield
     finally:
         await client.close()
+
+
+@pytest.fixture(autouse=True)
+def _reset_unassigned_registrations_rate_limit():
+    """Reset the in-process sliding-window rate limiter between tests.
+
+    `_rate_buckets` is a module-level dict in
+    `unassigned_registrations/router.py` that persists for the whole pytest
+    process (not per-test), so requests from earlier tests in the same run
+    accumulate against the same client IP key. Enough tests hitting
+    `/public/v1/unassigned-registrations*` / staff claim endpoints in one
+    session eventually trips the 30-requests/60s limit and a later,
+    unrelated test gets a spurious 429 — reset it so each test starts clean.
+    """
+    from apiapp.modules.unassigned_registrations.router import _rate_buckets
+
+    _rate_buckets.clear()
+    yield
+    _rate_buckets.clear()

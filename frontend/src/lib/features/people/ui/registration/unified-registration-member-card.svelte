@@ -93,7 +93,7 @@
 	const title = $derived(isPrimary ? t.primaryContact : `${t.memberLabel} ${index + 1}`);
 	const photoInputId = $derived(`unified-member-photo-${index}`);
 	const showPhotoUpload = $derived(photoUpload !== 'none');
-	const hideNoPhone = $derived(channel === 'public' && index === 0);
+	const hideNoPhone = $derived(channel === 'public' && index === 0 && !isJoiningExistingHousehold);
 
 	const isReportIn = $derived(mode === 'report-in');
 	const isAlreadyReported = $derived(
@@ -630,8 +630,8 @@
 			phoneOptional={isJoiningExistingHousehold}
 			phoneHelperText={isJoiningExistingHousehold
 				? primaryContactPhone
-					? `หากไม่ระบุเบอร์โทรศัพท์ จะใช้เบอร์ติดต่อของผู้ติดต่อหลัก (${primaryContactPhone}) แทนโดยอัตโนมัติ`
-					: 'หากไม่ระบุเบอร์โทรศัพท์ จะใช้เบอร์ติดต่อของผู้ติดต่อหลักครอบครัวนี้แทนโดยอัตโนมัติ'
+					? `${t.joinPhoneOptionalHelper} (${primaryContactPhone})`
+					: t.joinPhoneOptionalHelper
 				: ''}
 			idPrefix="member-{index}"
 			errors={fieldErrors}

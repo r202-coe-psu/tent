@@ -103,14 +103,16 @@
 								<Badge variant="outline" class={STATUS_CLASS[v.status]}
 									>{MEAL_VARIANCE_STATUS_LABELS[v.status]}</Badge
 								>
-								<p class="mt-0.5 text-xs tabular-nums text-muted-foreground">
+								<p class="mt-0.5 text-xs text-muted-foreground tabular-nums">
 									{v.variance_pct === null
 										? '—'
 										: `${v.variance_pct >= 0 ? '+' : ''}${v.variance_pct.toFixed(1)}%`}
 								</p>
 							</div>
 						</div>
-						<div class="grid grid-cols-2 gap-2 rounded-xl border border-slate-200/80 bg-slate-50/80 p-3 text-center text-xs">
+						<div
+							class="grid grid-cols-2 gap-2 rounded-xl border border-slate-200/80 bg-slate-50/80 p-3 text-center text-xs"
+						>
 							<div>
 								<p class="text-muted-foreground">วางแผน</p>
 								<p class="font-semibold tabular-nums">
@@ -204,7 +206,7 @@
 									<Badge variant="outline" class={STATUS_CLASS[v.status]}
 										>{MEAL_VARIANCE_STATUS_LABELS[v.status]}</Badge
 									>
-									<p class="mt-0.5 text-xs tabular-nums text-muted-foreground">
+									<p class="mt-0.5 text-xs text-muted-foreground tabular-nums">
 										{v.variance_pct === null
 											? '—'
 											: `${v.variance_pct >= 0 ? '+' : ''}${v.variance_pct.toFixed(1)}%`}

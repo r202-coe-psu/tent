@@ -245,10 +245,7 @@ async function assertPhoneAvailable(
 	for (const doc of docs) {
 		if (excludeName && doc.name === excludeName) continue;
 		if (doc.name === normalized) {
-			throw new ServiceError(
-				'CONFLICT',
-				`เบอร์ "${normalized}" ชนกับ username ของบัญชีอื่น`
-			);
+			throw new ServiceError('CONFLICT', `เบอร์ "${normalized}" ชนกับ username ของบัญชีอื่น`);
 		}
 		if (doc.phone === normalized) {
 			throw new ServiceError('CONFLICT', `เบอร์ "${normalized}" ถูกใช้โดยบัญชีอื่นแล้ว`);
@@ -524,9 +521,7 @@ export async function updateUser(
 		...(input.personnel_type !== undefined ? { personnel_type: input.personnel_type } : {}),
 		...(input.organization !== undefined ? { organization: input.organization } : {}),
 		...(input.position !== undefined ? { position: input.position } : {}),
-		...(input.phone !== undefined
-			? { phone: await assertPhoneAvailable(input.phone, name) }
-			: {}),
+		...(input.phone !== undefined ? { phone: await assertPhoneAvailable(input.phone, name) } : {}),
 		...(input.email !== undefined ? { email: input.email } : {}),
 		...(input.notes !== undefined ? { notes: input.notes } : {}),
 		...(input.volunteer_id !== undefined ? { volunteer_id: input.volunteer_id } : {}),
@@ -994,5 +989,36 @@ export async function touchThaidMfaVerified(name: string): Promise<void> {
 	const res = await adminRaw(`/_users/${userDocId(name)}`, 'PUT', updatedDoc);
 	if (res.status >= 400) {
 		throw serviceErrorFromCouch('touch thaid mfa verified', res.status, res.data);
+	}
+}
+
+/** Why a `_users` doc may / may not be linked from `/login/link` (CR-141 FR-16). */
+export type LinkEligibility = 'ok' | 'bootstrap' | 'not_new' | 'has_provider' | 'missing_salt';
+
+/**
+ * Pure eligibility check for link-on-first-login (CR-141).
+ *
+ * Only a fresh, admin-provisioned account qualifies: still on its temporary password
+ * (`must_change_password`) and with no provider linked yet. That keeps an attacker who
+ * learns an active user's password from permanently binding their own OAuth identity.
+ */
+export function assessLinkEligibility(
+	doc: CouchUserDoc,
+	bootstrapName: string = bootstrapAdminName()
+): LinkEligibility {
+	if (isProtectedBootstrapAdmin(doc, bootstrapName)) return 'bootstrap';
+	if (doc.must_change_password !== true) return 'not_new';
+	if (doc.mfa?.providers?.length) return 'has_provider';
+	if (typeof doc.salt !== 'string' || !doc.salt) return 'missing_salt';
+	return 'ok';
+}
+
+/** Read a `_users` doc for link-on-first-login; null when it does not exist. */
+export async function readUserDocForLink(name: string): Promise<CouchUserDoc | null> {
+	try {
+		return await readUserDoc(name, 'read user for link');
+	} catch (e) {
+		if (e instanceof ServiceError && e.code === 'VALIDATION') return null;
+		throw e;
 	}
 }
