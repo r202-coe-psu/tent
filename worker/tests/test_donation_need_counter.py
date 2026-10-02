@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 import bson
+import pytest
 from tent_model import (
     DonationNeedCounter,
     ReserveResult,
@@ -12,8 +13,10 @@ from tent_model import (
     release_quota,
     reserve_quota,
     seed_counter,
+    set_qty_target,
 )
 
+import worker.mongo.donation_need_counter as counter_module
 from worker.mongo import apply_need_counters
 from worker.projectors.donation_need_counter import plan_need_counters
 
@@ -334,3 +337,92 @@ async def test_concurrent_reserve_and_release_settle_consistently(db: None) -> N
     # 10 held + 10 reserved - 10 released; every release has stock to take under any
     # interleaving, so the total is fixed regardless of ordering.
     assert await _reserved() == Decimal(10)
+
+
+# --- booking racing a target decrease (draft-quota-ceiling-follows-campaign-target AC-07) ---
+
+
+async def test_booking_between_read_and_write_blocks_the_lower(
+    db: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A booking landing after the realign read must not be stranded over the ceiling.
+
+    Target 100 → 30 with 20 reserved: the pre-check reads 20 and decides APPLY. A donor
+    then books 50 — FastAPI checks it against the still-current 100 and accepts. The
+    write must now refuse, or the counter ends at 70 reserved under a ceiling of 30.
+    """
+    await _seed(_campaign([{"item_id": "item:rice", "qty_target": "100"}]))
+    now = datetime.now(UTC)
+    await _reserve("20", now)
+
+    real_set_qty_target = counter_module.set_qty_target
+
+    async def booking_lands_first(**kwargs: object) -> bool:
+        assert await _reserve("50", now) is ReserveResult.RESERVED
+        return await real_set_qty_target(**kwargs)
+
+    monkeypatch.setattr(counter_module, "set_qty_target", booking_lands_first)
+
+    created, realigned = await _seed(
+        _campaign([{"item_id": "item:rice", "qty_target": "30"}])
+    )
+    assert (created, realigned) == (0, 0)
+
+    rice = await _get("item:rice")
+    assert rice is not None
+    assert rice.qty_target == Decimal(100)
+    assert rice.reserved_qty == Decimal(70)
+
+
+async def test_lower_landing_first_refuses_the_late_booking(db: None) -> None:
+    """The other ordering: the ceiling drops to 30 first, so the 50 booking is NEED_FULL."""
+    await _seed(_campaign([{"item_id": "item:rice", "qty_target": "100"}]))
+    now = datetime.now(UTC)
+    await _reserve("20", now)
+
+    await _seed(_campaign([{"item_id": "item:rice", "qty_target": "30"}]))
+
+    assert await _reserve("50", now) is ReserveResult.NEED_FULL
+    rice = await _get("item:rice")
+    assert rice is not None
+    assert rice.qty_target == Decimal(30)
+    assert rice.reserved_qty == Decimal(20)
+
+
+async def test_set_qty_target_refuses_landing_below_reserved(db: None) -> None:
+    """The guard lives in the update itself — a stale caller cannot bypass it."""
+    await _seed(_campaign([{"item_id": "item:rice", "qty_target": "100"}]))
+    now = datetime.now(UTC)
+    await _reserve("70", now)
+
+    moved = await set_qty_target(
+        shelter_code=SHELTER,
+        campaign_id=CAMPAIGN,
+        item_id="item:rice",
+        expected=bson.Decimal128("100"),
+        new_value=Decimal(30),
+        now=now,
+    )
+
+    assert moved is False
+    rice = await _get("item:rice")
+    assert rice is not None
+    assert rice.qty_target == Decimal(100)
+
+
+async def test_concurrent_bookings_and_lower_never_strand_reservations(
+    db: None,
+) -> None:
+    """Bookings storming a target decrease: whatever wins, reserved never exceeds target."""
+    await _seed(_campaign([{"item_id": "item:rice", "qty_target": "100"}]))
+    now = datetime.now(UTC)
+    await _reserve("20", now)
+
+    await asyncio.gather(
+        _seed(_campaign([{"item_id": "item:rice", "qty_target": "30"}])),
+        *[_reserve("5", now) for _ in range(20)],
+    )
+
+    rice = await _get("item:rice")
+    assert rice is not None
+    assert rice.reserved_qty <= rice.qty_target
