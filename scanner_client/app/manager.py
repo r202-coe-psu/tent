@@ -573,16 +573,22 @@ class ScannerClientManager:
         if urllib.parse.urlsplit(self.page.url).path != self.register_card_path:
             return False
 
-        logger.info("Registration card page is ready; reading full smart-card data")
-        stage = "read"
+        stage = "handoff"
         try:
+            # The page must be listening before the read starts so it can show the reading
+            # state: a full read takes ~20-30s, and a card pulled out early loses the photo.
+            await self.page.wait_for_selector(
+                '[data-kiosk-register-ready="true"]', timeout=15000
+            )
+            await self.page.evaluate(
+                "window.dispatchEvent(new CustomEvent('kiosk:smart-card-reading'))"
+            )
+            logger.info("Registration card page is ready; reading full smart-card data")
+            stage = "read"
             started_at = time.monotonic()
             card = await asyncio.to_thread(self.reader.read_all_data)
             logger.info("Full smart-card read finished in %.1fs", time.monotonic() - started_at)
             stage = "handoff"
-            await self.page.wait_for_selector(
-                '[data-kiosk-register-ready="true"]', timeout=15000
-            )
             await self.page.evaluate(
                 "card => window.dispatchEvent(new CustomEvent('kiosk:smart-card-full-read', { detail: card }))",
                 card,

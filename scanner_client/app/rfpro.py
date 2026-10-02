@@ -411,6 +411,20 @@ class RfproThaiCardReader(ThaiSmartCardReader):
         data, _, _ = self.connection.transmit(self.req_prefix + [sw2])
         return data
 
+    def _read_photo_piece(self, offset: int, length: int) -> list[int]:
+        """`_read_piece` that accepts only exactly `length` bytes with SW 90 00."""
+        _, sw1, sw2 = self.connection.transmit(
+            [0x80, 0xB0, (offset >> 8) & 0xFF, offset & 0xFF, 0x02, 0x00, length]
+        )
+        if sw1 != 0x61 or sw2 != length:
+            raise RfproCardError(f"photo piece not served (SW {sw1:02x} {sw2:02x})")
+        data, sw1, sw2 = self.connection.transmit(self.req_prefix + [length])
+        if (sw1, sw2) != (0x90, 0x00) or len(data) != length:
+            raise RfproCardError(
+                f"short photo piece ({len(data)} of {length} bytes, SW {sw1:02x} {sw2:02x})"
+            )
+        return data
+
     def transmit_cmd(self, cmd: list[int]) -> list[int]:
         """Same as the PC/SC reader, but a field longer than one report is read in pieces."""
         if len(cmd) != 7 or cmd[:2] != [0x80, 0xB0] or cmd[-1] <= self.piece_size:
@@ -425,10 +439,12 @@ class RfproThaiCardReader(ThaiSmartCardReader):
         return data
 
     def get_photo_bytes(self) -> bytes | None:
-        """The 20 photo chunks, each read in pieces. A chunk the card does not answer is skipped
-        (as in the PC/SC reader); a photo that takes longer than PHOTO_BUDGET_SEC is dropped.
-        A piece the module rejects is retried after resetting the card, so one bad exchange in
-        the ~260 pieces does not cost the whole photo."""
+        """The 20 photo chunks, each read in pieces; a photo that takes longer than
+        PHOTO_BUDGET_SEC is dropped. A piece the module rejects, or that comes back short, is
+        retried after resetting the card, so one bad exchange in the ~260 pieces does not cost
+        the whole photo. A gap would shift every later byte of the JPEG (kiosk3 stored a
+        5078-byte photo, 22 bytes short, with most of the face blank), so a photo that cannot
+        be read whole is dropped rather than kept damaged."""
         deadline = time.monotonic() + PHOTO_BUDGET_SEC
         recoveries = 0
         data: list[int] = []
@@ -442,7 +458,7 @@ class RfproThaiCardReader(ThaiSmartCardReader):
                         )
                         return None
                     try:
-                        piece = self._read_piece(
+                        piece = self._read_photo_piece(
                             offset + start, min(self.piece_size, cmd[-1] - start)
                         )
                         break
@@ -464,10 +480,8 @@ class RfproThaiCardReader(ThaiSmartCardReader):
                         if not self.connect():
                             logger.error("Card photo could not be read: card did not answer reset")
                             return None
-                if piece is None:
-                    break
                 data.extend(piece)
-        return bytes(data) or None
+        return bytes(data)
 
     def is_card_inserted(self) -> bool:
         """Poll the slot switch only — never resets the card on each poll."""

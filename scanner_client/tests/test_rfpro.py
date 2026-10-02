@@ -224,6 +224,23 @@ class FlakyPhotoCard(FakeThaiCard):
         return super().__call__(cmd, data)
 
 
+class ShortPhotoPieceCard(FakeThaiCard):
+    """Serves the first piece of photo chunk 5 two bytes short, like the 5078-byte photo kiosk3
+    stored after a retry."""
+
+    def __init__(self, failures: int, **kwargs):
+        super().__init__(**kwargs)
+        self.failures = failures
+
+    def _apdu(self, apdu):
+        answer = super()._apdu(apdu)
+        offset = (apdu[2] << 8) | apdu[3] if apdu[:2] == [0x80, 0xB0] else None
+        if self.failures and offset == FlakyPhotoCard.FAILING_OFFSET:
+            self.failures -= 1
+            self.pending = self.pending[:-2]
+        return answer
+
+
 class FrameTests(unittest.TestCase):
     def test_requests_match_the_vendor_document_examples(self):
         cases = {
@@ -575,6 +592,24 @@ class ReaderTests(unittest.TestCase):
         self.assertTrue(photo.startswith(card.photo))
         self.assertEqual(card.failures, 0)
         self.assertIn(CMD_ICC_GETATR, [cmd for cmd, _ in device.commands])  # the card was reset
+
+    def test_a_short_photo_piece_is_read_again_instead_of_leaving_a_gap(self):
+        card, _, reader = self.reader(ShortPhotoPieceCard(failures=1))
+        reader.connect()
+
+        with self.assertLogs(rfpro.logger, level="WARNING"):
+            photo = reader.get_photo_bytes()
+
+        self.assertEqual(len(photo), 20 * 255)
+        self.assertTrue(photo.startswith(card.photo))
+        self.assertEqual(card.failures, 0)
+
+    def test_photo_that_keeps_coming_back_short_is_dropped_not_stored_damaged(self):
+        _, _, reader = self.reader(ShortPhotoPieceCard(failures=99))
+        reader.connect()
+
+        with self.assertLogs(rfpro.logger, level="ERROR"):
+            self.assertIsNone(reader.get_photo_bytes())
 
     def test_photo_is_dropped_when_the_module_keeps_rejecting_a_piece(self):
         card, _, reader = self.reader(FlakyPhotoCard(failures=99))

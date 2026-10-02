@@ -25,8 +25,11 @@
 	);
 	const contextQuery = $derived(buildKioskContextQuery(displayContext));
 	let ready = $state(false);
+	/** scanner_client is reading the chip (~20-30s); pulling the card now loses the photo. */
+	let cardReading = $state(false);
 	let reading = $state(false);
 	let error = $state('');
+	const busy = $derived(cardReading || reading);
 	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, returnHome);
 	onMount(() => {
 		if (!walkInSession.citizenId || !walkInSession.consented) {
@@ -34,17 +37,26 @@
 			return;
 		}
 		idleTimeout.start();
+		const onCardReading = () => {
+			cardReading = true;
+			error = '';
+			idleTimeout.setPaused(true);
+		};
 		const onCardRead = (event: Event) => void handleFullRead(event);
 		const onCardReadError = () => {
+			cardReading = false;
 			reading = false;
+			idleTimeout.setPaused(false);
 			error = 'อ่านข้อมูลบัตรไม่สำเร็จ กรุณานำบัตรออกแล้วเสียบใหม่';
 		};
+		window.addEventListener('kiosk:smart-card-reading', onCardReading);
 		window.addEventListener('kiosk:smart-card-full-read', onCardRead);
 		window.addEventListener('kiosk:smart-card-full-read-error', onCardReadError);
 		ready = true;
 		return () => {
 			idleTimeout.stop();
 			ready = false;
+			window.removeEventListener('kiosk:smart-card-reading', onCardReading);
 			window.removeEventListener('kiosk:smart-card-full-read', onCardRead);
 			window.removeEventListener('kiosk:smart-card-full-read-error', onCardReadError);
 		};
@@ -59,8 +71,13 @@
 	async function handleFullRead(event: Event) {
 		if (reading) return;
 		const card = (event as CustomEvent<SmartCardData>).detail;
-		if (!card || typeof card.citizen_id !== 'string') return;
+		cardReading = false;
+		if (!card || typeof card.citizen_id !== 'string') {
+			idleTimeout.setPaused(false);
+			return;
+		}
 		reading = true;
+		idleTimeout.setPaused(true);
 		error = '';
 		const outcome = await registerWalkInCardRead(
 			card,
@@ -82,6 +99,7 @@
 		} else {
 			if (outcome.kind === 'mismatch' || outcome.kind === 'error') error = outcome.message;
 			reading = false;
+			idleTimeout.setPaused(false);
 		}
 	}
 </script>
@@ -101,14 +119,39 @@
 		>
 			<CreditCard class="h-8 w-8" aria-hidden="true" />
 		</div>
-		<h1 class="mt-5 text-2xl font-bold text-[#0A2647] kiosk-portrait:text-4xl">เสียบบัตรประชาชน</h1>
-		<p class="mt-2 text-base text-slate-700">
-			เสียบบัตรของผู้ที่ต้องการลงทะเบียน (หากเสียบค้างอยู่แล้ว ไม่ต้องถอด)
-			ระบบจะอ่านข้อมูลจากชิปโดยอัตโนมัติ
-		</p>
-		{#if reading}<p class="mt-5 text-base font-semibold text-sky-900" role="status">
-				กำลังอ่านและบันทึกข้อมูล…
-			</p>{/if}
+		{#if busy}
+			<h1 class="mt-5 text-2xl font-bold text-[#0A2647] kiosk-portrait:text-4xl">
+				{cardReading ? 'กำลังอ่านข้อมูลบัตร' : 'กำลังบันทึกข้อมูล'}
+			</h1>
+			<div
+				class="mt-4 inline-flex min-h-12 items-center justify-center gap-3 rounded-xl border border-slate-200 bg-[#F8FAFC] px-4 text-base font-semibold text-slate-800"
+				role="status"
+				aria-live="polite"
+				data-testid="kiosk-register-card-busy"
+			>
+				<span
+					class="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-[#0A2647] motion-reduce:animate-none"
+					aria-hidden="true"
+				></span>
+				{cardReading ? 'กรุณารอสักครู่ อาจใช้เวลาประมาณ 30 วินาที' : 'กรุณารอสักครู่'}
+			</div>
+			{#if cardReading}
+				<div
+					class="mx-auto mt-5 flex max-w-xl items-center justify-center gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-lg font-bold text-amber-950"
+				>
+					<CircleAlert class="h-6 w-6 shrink-0" aria-hidden="true" />
+					<p>อย่าดึงบัตรออก จนกว่าระบบจะอ่านเสร็จ</p>
+				</div>
+			{/if}
+		{:else}
+			<h1 class="mt-5 text-2xl font-bold text-[#0A2647] kiosk-portrait:text-4xl">
+				เสียบบัตรประชาชน
+			</h1>
+			<p class="mt-2 text-base text-slate-700">
+				เสียบบัตรของผู้ที่ต้องการลงทะเบียน (หากเสียบค้างอยู่แล้ว ไม่ต้องถอด)
+				ระบบจะอ่านข้อมูลจากชิปโดยอัตโนมัติ
+			</p>
+		{/if}
 		{#if error}<div
 				class="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-left text-amber-950"
 				role="alert"
@@ -119,8 +162,12 @@
 				</div>
 			</div>{/if}
 		<div class="mt-6">
-			<Button type="button" variant="outline" onclick={returnHome} class="min-h-12 px-6"
-				>ยกเลิก</Button
+			<Button
+				type="button"
+				variant="outline"
+				onclick={returnHome}
+				disabled={busy}
+				class="min-h-12 px-6">ยกเลิก</Button
 			>
 		</div>
 	</section>

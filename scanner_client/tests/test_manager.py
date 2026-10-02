@@ -300,6 +300,26 @@ class CardRescanTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(all("1234567890123" not in line for line in logs.output))
         self.assertTrue(all("Test" not in line for line in logs.output))
 
+    async def test_registration_page_is_told_the_read_started_before_it_starts(self):
+        # Without this the page shows "insert card" for the whole ~20-30s read and people pull
+        # the card out mid-photo.
+        client = manager.ScannerClientManager(valid_config())
+        page = EventFakePage(f"https://tent.example.go.th{client.register_card_path}")
+        client.page = page
+        events_before_read = []
+
+        def read_all_data():
+            events_before_read.extend(script for script, _ in page.evaluated)
+            return {"citizen_id": "1234567890123"}
+
+        client.reader = SimpleNamespace(read_all_data=read_all_data)
+
+        self.assertTrue(await client._read_full_card_if_register_path())
+
+        self.assertEqual(len(events_before_read), 1)
+        self.assertIn("kiosk:smart-card-reading", events_before_read[0])
+        self.assertNotIn("detail", events_before_read[0])  # no card data in the start signal
+
     async def test_full_card_read_error_notifies_registration_screen_without_card_data(self):
         client = manager.ScannerClientManager(valid_config())
         page = EventFakePage(f"https://tent.example.go.th{client.register_card_path}")
