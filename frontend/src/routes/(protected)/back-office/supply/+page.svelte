@@ -1,5 +1,10 @@
 <script lang="ts">
-	import { StockTable, TransferForm, TransferList } from '$lib/features/operations';
+	import {
+		STOCK_PARAM_KEYS,
+		StockTable,
+		TransferForm,
+		TransferList
+	} from '$lib/features/operations';
 	import { ProductsPanel } from '$lib/features/catalog';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
@@ -65,6 +70,9 @@
 		params.set('tab', tab);
 		if (tab !== 'catalog') {
 			params.delete('action');
+		}
+		if (tab !== 'inventory') {
+			for (const key of STOCK_PARAM_KEYS) params.delete(key);
 		}
 		const qs = params.toString();
 		void goto(resolve(`/back-office/supply${qs ? `?${qs}` : ''}` as '/back-office/supply'), {

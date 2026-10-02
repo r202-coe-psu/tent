@@ -162,6 +162,8 @@ export { default as ReceiveStockForm } from './ui/receive-stock-form.svelte';
 export { default as DistributeStockForm } from './ui/distribute-stock-form.svelte';
 export { default as LedgerTable } from './ui/ledger-table.svelte';
 export { default as StockTable } from './ui/stock-table.svelte';
+/** Query keys owned by the stock table — the page strips them when leaving the stock tab. */
+export { STOCK_PARAM_KEYS } from './ui/stock/stock-url-state';
 export { default as AdjustStockForm } from './ui/adjust-stock-form.svelte';
 export { default as StoragePointSelect } from './ui/storage-point-select.svelte';
 export { default as TransferForm } from './ui/transfer-form.svelte';
