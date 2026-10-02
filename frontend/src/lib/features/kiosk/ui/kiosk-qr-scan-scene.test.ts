@@ -13,8 +13,8 @@ describe('KioskQrScanScene', () => {
 	it('sizes the QR per screen profile from a single width variable', () => {
 		const { body } = render(KioskQrScanScene);
 
-		expect(body).toContain('[--w:8.5rem]');
-		expect(body).toContain('kiosk-portrait:[--w:16rem]');
+		expect(body).toContain('[--w:9rem]');
+		expect(body).toContain('kiosk-portrait:[--w:17rem]');
 	});
 
 	it('draws the same QR on every render', () => {

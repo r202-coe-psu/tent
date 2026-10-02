@@ -103,7 +103,8 @@
 		</div>
 		<h1 class="mt-5 text-2xl font-bold text-[#0A2647] kiosk-portrait:text-4xl">เสียบบัตรประชาชน</h1>
 		<p class="mt-2 text-base text-slate-700">
-			เสียบบัตรของผู้ที่ต้องการลงทะเบียน ระบบจะอ่านข้อมูลจากชิปโดยอัตโนมัติ
+			เสียบบัตรของผู้ที่ต้องการลงทะเบียน (หากเสียบค้างอยู่แล้ว ไม่ต้องถอด)
+			ระบบจะอ่านข้อมูลจากชิปโดยอัตโนมัติ
 		</p>
 		{#if reading}<p class="mt-5 text-base font-semibold text-sky-900" role="status">
 				กำลังอ่านและบันทึกข้อมูล…

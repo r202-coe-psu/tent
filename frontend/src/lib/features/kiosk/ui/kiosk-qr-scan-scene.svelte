@@ -36,7 +36,7 @@
 	the screen. The text next to it carries the instruction, so the scene is hidden from assistive
 	tech. Everything scales from --w (QR width).
 -->
-<div class="qr-scene [--w:8.5rem] kiosk-portrait:[--w:16rem]" aria-hidden="true">
+<div class="qr-scene [--w:9rem] kiosk-portrait:[--w:17rem]" aria-hidden="true">
 	<div class="viewfinder">
 		<span class="corner tl"></span>
 		<span class="corner tr"></span>
@@ -68,21 +68,21 @@
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		width: calc(var(--w) * 1.5);
+		width: calc(var(--w) * 2);
 		max-width: 100%;
 	}
 
 	.viewfinder {
 		position: relative;
-		width: calc(var(--w) * 1.22);
-		height: calc(var(--w) * 1.22);
-		padding: calc(var(--w) * 0.11);
+		width: calc(var(--w) * 1.9);
+		height: calc(var(--w) * 1);
+		padding: calc(var(--w) * 0.08);
 	}
 
 	.corner {
 		position: absolute;
-		width: calc(var(--w) * 0.2);
-		height: calc(var(--w) * 0.2);
+		width: calc(var(--w) * 0.17);
+		height: calc(var(--w) * 0.17);
 		border: 0 solid #0284c7;
 	}
 
@@ -122,6 +122,9 @@
 		position: relative;
 		width: 100%;
 		height: 100%;
+		display: flex;
+		justify-content: center;
+		padding: calc(var(--w) * 0.05);
 		overflow: hidden;
 		border: 0.0625rem solid rgb(10 38 71 / 0.18);
 		border-radius: calc(var(--w) * 0.05);
@@ -130,15 +133,15 @@
 
 	.qr {
 		display: block;
-		width: 100%;
 		height: 100%;
+		aspect-ratio: 1;
 	}
 
 	.beam {
 		position: absolute;
 		right: 0;
 		left: 0;
-		height: calc(var(--w) * 0.22);
+		height: calc(var(--w) * 0.16);
 		background: linear-gradient(
 			to bottom,
 			rgb(2 132 199 / 0) 0%,
@@ -168,7 +171,7 @@
 
 	@keyframes sweep {
 		0% {
-			top: calc(var(--w) * -0.22);
+			top: calc(var(--w) * -0.16);
 		}
 		100% {
 			top: 100%;

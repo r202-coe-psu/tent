@@ -429,7 +429,7 @@
 							? 'รอเสียบบัตร'
 							: 'กำลังค้นหา'}
 		</h1>
-		{#if cardMode && !cardRemoved && input && results.length === 0}
+		{#if cardMode && !cardRemoved && input && results.length === 0 && !lookupError}
 			<p class="mt-1 text-base font-semibold text-slate-700">ถอดบัตรเพื่อยืนยัน</p>
 		{:else if cardMode && !input}
 			<p class="mt-1 text-base text-slate-700">เสียบบัตรเพื่อค้นหา</p>
@@ -448,7 +448,7 @@
 		{/if}
 	</header>
 
-	{#if cardMode && !cardRemoved && input && results.length === 0}
+	{#if cardMode && !cardRemoved && input && results.length === 0 && !lookupError}
 		<div
 			class="no-print flex items-center gap-4 rounded-2xl border border-sky-200 bg-sky-50 p-5 text-sky-950"
 			role="status"
