@@ -9,6 +9,8 @@ import {
 } from './import-log';
 
 const body: ShelterImportLogBody = {
+	job_id: 'shelter_import_job:01JTESTJOB',
+	attempt: 1,
 	source: 'shelter',
 	filename: 'shelters.xlsx',
 	imported_by: 'admin',
@@ -38,7 +40,9 @@ describe('shelter_import_log', () => {
 	it('stamps the registry envelope with a type-prefixed id', () => {
 		const doc = createShelterImportLog(body, 'admin');
 		expect(doc.type).toBe('shelter_import_log');
-		expect(doc.schema_v).toBe(2);
+		expect(doc.schema_v).toBe(3);
+		expect(doc.job_id).toBe(body.job_id);
+		expect(doc.attempt).toBe(1);
 		expect(doc._id.startsWith('shelter_import_log:')).toBe(true);
 		expect(doc.created_by).toBe('admin');
 		expect(doc.created_at).toBe(doc.updated_at);
@@ -74,6 +78,11 @@ describe('createShelterImportLog — bounded row detail', () => {
 		expect(doc.results).toHaveLength(MAX_LOGGED_RESULTS);
 		expect(doc.total_rows).toBe(many.length);
 		expect(doc.success_count).toBe(many.length);
+	});
+
+	it('accepts a caller-supplied id for an idempotent terminal write', () => {
+		const doc = createShelterImportLog(body, 'admin', '01JLOG');
+		expect(doc._id).toBe('shelter_import_log:01JLOG');
 	});
 
 	it('truncates a long error message so cell text does not land in the audit doc whole', () => {

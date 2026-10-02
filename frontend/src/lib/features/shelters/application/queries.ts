@@ -117,13 +117,15 @@ export const useCloseZone = () => {
 		}: {
 			code: string;
 			zoneCode: string;
+			zoneName?: string;
 			reason?: string;
 			closedBy?: string;
 		}) => closeZone(code, zoneCode, reason, closedBy),
 		onSuccess: (_, variables) => {
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.detail(variables.code) });
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.all });
-			toast.success(`ปิดโซน ${variables.zoneCode} ของศูนย์ ${variables.code} เรียบร้อย`);
+			const label = variables.zoneName?.trim() || variables.zoneCode;
+			toast.success(`ปิดโซน ${label} ของศูนย์ ${variables.code} เรียบร้อย`);
 		},
 		onError: (err: Error) => {
 			toast.error(err.message || 'ไม่สามารถปิดโซนได้');
@@ -141,12 +143,14 @@ export const useReopenZone = () => {
 		}: {
 			code: string;
 			zoneCode: string;
+			zoneName?: string;
 			reopenedBy?: string;
 		}) => reopenZone(code, zoneCode, reopenedBy),
 		onSuccess: (_, variables) => {
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.detail(variables.code) });
 			queryClient.invalidateQueries({ queryKey: sheltersKeys.all });
-			toast.success(`เปิดโซน ${variables.zoneCode} ของศูนย์ ${variables.code} อีกครั้ง`);
+			const label = variables.zoneName?.trim() || variables.zoneCode;
+			toast.success(`เปิดโซน ${label} ของศูนย์ ${variables.code} อีกครั้ง`);
 		},
 		onError: (err: Error) => {
 			toast.error(err.message || 'ไม่สามารถเปิดโซนได้');

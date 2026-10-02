@@ -11,7 +11,11 @@ from typing import Any
 from fastapi import HTTPException, status
 from pymongo.errors import DuplicateKeyError
 from tent_model.donation_buffer import DonationBuffer, DonorBuffer
-from tent_model.donation_need_counter_ops import ReserveResult, release_quota, reserve_quota
+from tent_model.donation_need_counter_ops import (
+    ReserveResult,
+    release_quota,
+    reserve_quota,
+)
 from tent_model.public_donation import DeclaredItem, PublicDonation
 from tent_model.public_shelter import PublicShelter
 
@@ -451,7 +455,7 @@ class DonationsUseCase:
                     received_summary=donation.received_summary,
                     updated_at=donation.updated_at,
                     donor=_donor_from_buffer(buffer) if buffer else {},
-                    logistics=dict(buffer.logistics) if buffer and buffer.logistics else None,
+                    logistics=(dict(buffer.logistics) if buffer and buffer.logistics else None),
                     expires_at=buffer.expires_at if buffer else None,
                     revisions=list(buffer.revisions) if buffer else [],
                 )
@@ -600,7 +604,10 @@ class DonationsUseCase:
         if not items:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail={"success": False, "error": "A donation needs at least one item"},
+                detail={
+                    "success": False,
+                    "error": "A donation needs at least one item",
+                },
             )
 
         now = datetime.now(UTC)
@@ -640,7 +647,11 @@ class DonationsUseCase:
                     if result is ReserveResult.NEED_FULL:
                         raise HTTPException(
                             status_code=status.HTTP_409_CONFLICT,
-                            detail={"success": False, "error": "NEED_FULL", "item_id": item_id},
+                            detail={
+                                "success": False,
+                                "error": "NEED_FULL",
+                                "item_id": item_id,
+                            },
                         )
                     if result is ReserveResult.NOT_SEEDED:
                         logger.warning(

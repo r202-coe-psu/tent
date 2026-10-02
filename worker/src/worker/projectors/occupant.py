@@ -28,15 +28,50 @@ def compute_age_range(age: float | None) -> str:
     except ValueError, TypeError:
         return "unknown"
 
-    if val < 5:
-        return "0-4"
-    if val < 18:
-        return "5-17"
+    if val < 0:
+        return "unknown"
+    if val < 1:
+        return "<1"
+    if val < 6:
+        return "1-5"
+    if val < 12:
+        return "6-11"
+    if val < 20:
+        return "12-19"
     if val < 60:
-        return "18-59"
-    if val < 70:
-        return "60-69"
-    return "70+"
+        return "20-59"
+    return "60+"
+
+
+BIRTH_YEAR_ERA_OFFSET = 543  # ค.ศ. → พ.ศ.
+MIN_VALID_AGE = 0
+MAX_VALID_AGE = 130
+
+
+def resolve_age(doc: dict[str, Any]) -> float | None:
+    """Registration only ever stores `age` when staff type it in directly (CR-057) —
+    every evacuee otherwise carries `birth_year` (พ.ศ.), so that's the field to fall
+    back to rather than reporting every occupant as "unknown".
+
+    A staff typo (negative `age`, or a `birth_year` in the future / implausibly far
+    in the past) must not silently project as a valid bracket — reject out-of-range
+    values here instead of letting `compute_age_range` bucket them."""
+    age = doc.get("age")
+    if (
+        isinstance(age, (int, float))
+        and not isinstance(age, bool)
+        and MIN_VALID_AGE <= age <= MAX_VALID_AGE
+    ):
+        return age
+
+    birth_year = doc.get("birth_year")
+    if isinstance(birth_year, (int, float)) and not isinstance(birth_year, bool):
+        current_year_be = datetime.now(UTC).year + BIRTH_YEAR_ERA_OFFSET
+        calculated_age = current_year_be - birth_year
+        if MIN_VALID_AGE <= calculated_age <= MAX_VALID_AGE:
+            return calculated_age
+
+    return None
 
 
 def mask_occupant_name(first_name: str | None, last_name: str | None) -> str:
@@ -75,7 +110,7 @@ def project_shelter_occupant(
     last_name = doc.get("last_name")
     name_masked = mask_occupant_name(first_name, last_name)
 
-    age_range = compute_age_range(doc.get("age"))
+    age_range = compute_age_range(resolve_age(doc))
     gender = doc.get("gender")
 
     special_needs = doc.get("special_needs") or []

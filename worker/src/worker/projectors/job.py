@@ -34,7 +34,7 @@ def _updated_at(doc: dict[str, Any]) -> datetime.datetime:
         return datetime.datetime.now(datetime.UTC)
     try:
         return isoparse(raw)
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return datetime.datetime.now(datetime.UTC)
 
 
@@ -44,7 +44,7 @@ def _int(value: Any, default: int = 0) -> int:
         return default
     try:
         return int(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return default
 
 

@@ -39,16 +39,29 @@ function mockFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Respon
 		const endkeyRaw = params.get('endkey');
 		const startkey = startkeyRaw ? JSON.parse(startkeyRaw) : '';
 		const endkey = endkeyRaw ? JSON.parse(endkeyRaw) : '\uffff';
-		const docs = [...db.values()].filter((doc) => {
-			const id = (doc as { _id: string })._id;
-			return id >= startkey && id <= endkey;
-		});
+		const limitRaw = params.get('limit');
+		const skipRaw = params.get('skip');
+		const includeDocs = params.get('include_docs') !== 'false';
+		const limit = limitRaw != null ? Number(limitRaw) : undefined;
+		const skip = skipRaw != null ? Number(skipRaw) : 0;
+
+		let docs = [...db.values()]
+			.filter((doc) => {
+				const id = (doc as { _id: string })._id;
+				return id >= startkey && id <= endkey;
+			})
+			.sort((a, b) => (a as { _id: string })._id.localeCompare((b as { _id: string })._id));
+
+		if (skip > 0) docs = docs.slice(skip);
+		if (limit != null && Number.isFinite(limit)) docs = docs.slice(0, limit);
+
 		return Promise.resolve(
 			new Response(
 				JSON.stringify({
 					rows: docs.map((doc) => ({
 						id: (doc as { _id: string })._id,
-						doc
+						value: { rev: (doc as { _rev?: string })._rev ?? '1-x' },
+						...(includeDocs ? { doc } : {})
 					}))
 				}),
 				{ status: 200 }
@@ -153,6 +166,26 @@ describe('createRemoteRepository', () => {
 		const notes = await repo.allByType('note', isNote);
 		expect(notes).toHaveLength(2);
 		expect(notes.every(isNote)).toBe(true);
+	});
+
+	it('pageByType returns a limited page without loading every doc body for the prefix', async () => {
+		for (let i = 0; i < 5; i++) {
+			await repo.put(newNote(`n${i}`));
+		}
+
+		const page1 = await repo.pageByType('note', isNote, 1, 2);
+		expect(page1.total).toBe(5);
+		expect(page1.totalPages).toBe(3);
+		expect(page1.page).toBe(1);
+		expect(page1.items).toHaveLength(2);
+
+		const page2 = await repo.pageByType('note', isNote, 2, 2);
+		expect(page2.page).toBe(2);
+		expect(page2.items).toHaveLength(2);
+		expect(page2.items.map((n) => n._id)).not.toEqual(page1.items.map((n) => n._id));
+
+		const page3 = await repo.pageByType('note', isNote, 3, 2);
+		expect(page3.items).toHaveLength(1);
 	});
 
 	it('put with a live _rev updates instead of conflicting', async () => {

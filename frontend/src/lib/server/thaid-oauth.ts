@@ -11,8 +11,10 @@ import { ServiceError } from '$lib/server/couch-admin';
 // eslint-disable-next-line no-restricted-imports -- server-safe domain import; barrel pulls client UI / qrcode
 import {
 	type ThaiDAutofillProfile,
-	stripThaiTitle
+	stripThaiTitle,
+	cleanAreaPrefix
 } from '$lib/features/people/domain/thaid-profile';
+import { lookupZipcode } from './thailand-location';
 
 export type { ThaiDAutofillProfile };
 
@@ -58,6 +60,7 @@ export function getThaidOAuthConfig(): {
 	clientSecret: string;
 	authUrl: string;
 	tokenUrl: string;
+	userinfoUrl: string;
 } {
 	const clientId = env.THAID_OAUTH_CLIENT_ID?.trim();
 	const clientSecret = env.THAID_OAUTH_CLIENT_SECRET?.trim();
@@ -68,8 +71,12 @@ export function getThaidOAuthConfig(): {
 		env.THAID_OAUTH_AUTH_URL?.trim() || 'https://imauthsbx.bora.dopa.go.th/api/v2/oauth2/auth/';
 	const tokenUrl =
 		env.THAID_OAUTH_TOKEN_URL?.trim() || 'https://imauthsbx.bora.dopa.go.th/api/v2/oauth2/token/';
+	const userinfoUrl =
+		env.THAID_OAUTH_USERINFO_URL?.trim() ||
+		tokenUrl.replace(/\/token\/?$/, '/userinfo/') ||
+		'https://imauthsbx.bora.dopa.go.th/api/v2/oauth2/userinfo/';
 
-	return { clientId, clientSecret, authUrl, tokenUrl };
+	return { clientId, clientSecret, authUrl, tokenUrl, userinfoUrl };
 }
 
 export function resolveThaidRedirectUri(url: URL): string {
@@ -193,7 +200,8 @@ export function buildThaidAuthorizeUrl(opts: {
 	const base = opts.authUrl || 'https://imauthsbx.bora.dopa.go.th/api/v2/oauth2/auth/';
 	const defaultScope =
 		opts.mode === 'register' || opts.mode === 'member_scan'
-			? env.THAID_OAUTH_SCOPE?.trim() || 'openid pid name birthdate address'
+			? env.THAID_OAUTH_SCOPE?.trim() ||
+				'openid pid name birthdate gender address house_address given_name family_name title'
 			: 'pid name openid';
 	const params = new URLSearchParams({
 		response_type: 'code',
@@ -212,8 +220,14 @@ export async function exchangeThaidCode(opts: {
 	clientId: string;
 	clientSecret: string;
 	tokenUrl?: string;
+	userinfoUrl?: string;
 }): Promise<ThaidClaims> {
 	const tokenUrl = opts.tokenUrl || 'https://imauthsbx.bora.dopa.go.th/api/v2/oauth2/token/';
+	const userinfoUrl =
+		opts.userinfoUrl ||
+		env.THAID_OAUTH_USERINFO_URL?.trim() ||
+		tokenUrl.replace(/\/token\/?$/, '/userinfo/') ||
+		'https://imauthsbx.bora.dopa.go.th/api/v2/oauth2/userinfo/';
 	const basicAuth = Buffer.from(`${opts.clientId}:${opts.clientSecret}`, 'utf8').toString('base64');
 
 	const body = new URLSearchParams({
@@ -279,13 +293,50 @@ export async function exchangeThaidCode(opts: {
 		pid = tokenData.pid;
 	}
 
+	// In OpenID Connect (and DOPA specifically), demographic & address claims
+	// are returned from the UserInfo endpoint using the bearer access_token
+	let userinfoClaims: Record<string, unknown> = {};
+	if (tokenData.access_token) {
+		try {
+			const userinfoRes = await fetch(userinfoUrl, {
+				method: 'GET',
+				headers: {
+					Authorization: `Bearer ${tokenData.access_token}`,
+					Accept: 'application/json'
+				}
+			});
+			if (userinfoRes.ok) {
+				const json = (await userinfoRes.json().catch(() => null)) as Record<string, unknown> | null;
+				if (json && typeof json === 'object') {
+					userinfoClaims = json;
+					if (!sub && typeof userinfoClaims.sub === 'string' && userinfoClaims.sub) {
+						sub = userinfoClaims.sub;
+					}
+					if (!name && typeof userinfoClaims.name === 'string' && userinfoClaims.name) {
+						name = userinfoClaims.name;
+					}
+					if (!pid && typeof userinfoClaims.pid === 'string' && userinfoClaims.pid) {
+						pid = userinfoClaims.pid;
+					}
+				}
+			} else {
+				console.warn(
+					`[thaid-oauth] UserInfo fetch returned HTTP ${userinfoRes.status} from ${userinfoUrl}`
+				);
+			}
+		} catch (err) {
+			console.warn('[thaid-oauth] Error calling ThaID UserInfo endpoint:', err);
+		}
+	}
+
 	if (!sub) {
 		throw new ServiceError('VALIDATION', 'ThaID did not return a valid subject identifier');
 	}
 
 	const raw: Record<string, unknown> = {
 		...tokenData,
-		...idTokenClaims
+		...idTokenClaims,
+		...userinfoClaims
 	};
 
 	return {
@@ -342,6 +393,74 @@ export function consumeCitizenClaimCookie(cookies: Cookies): ThaiDAutofillProfil
 	}
 }
 
+/**
+ * Parse plain-text Thai formatted address string into components
+ * e.g. "99/1 หมู่ 4 ตำบลช้างเผือก อำเภอเมืองเชียงใหม่ จังหวัดเชียงใหม่ 50300"
+ */
+export function parseThaiAddressText(text: string): {
+	address_no?: string;
+	village_no?: string;
+	subdistrict?: string;
+	district?: string;
+	province?: string;
+	postal_code?: string;
+} {
+	const trimmed = text.trim();
+	if (!trimmed) return {};
+
+	const result: {
+		address_no?: string;
+		village_no?: string;
+		subdistrict?: string;
+		district?: string;
+		province?: string;
+		postal_code?: string;
+	} = {};
+
+	// 1. Extract 5-digit postal code
+	const zipMatch = trimmed.match(/(?:รหัสไปรษณีย์\s*)?(\b\d{5}\b)/);
+	if (zipMatch) {
+		result.postal_code = zipMatch[1];
+	}
+
+	// 2. Extract province (จังหวัด / จ.)
+	const provMatch = trimmed.match(/(?:จังหวัด|จ\.)\s*([^\s,0-9]+)/);
+	if (provMatch) {
+		result.province = cleanAreaPrefix(provMatch[1]);
+	}
+
+	// 3. Extract district (อำเภอ / เขต / อ.)
+	const distMatch = trimmed.match(/(?:อำเภอ|เขต|อ\.)\s*([^\s,0-9]+)/);
+	if (distMatch) {
+		result.district = cleanAreaPrefix(distMatch[1]);
+	}
+
+	// 4. Extract subdistrict (ตำบล / แขวง / ต.)
+	const subMatch = trimmed.match(/(?:ตำบล|แขวง|ต\.)\s*([^\s,0-9]+)/);
+	if (subMatch) {
+		result.subdistrict = cleanAreaPrefix(subMatch[1]);
+	}
+
+	// 5. Extract village_no (หมู่ที่ / หมู่ / ม.)
+	const mooMatch = trimmed.match(/(?:หมู่ที่|หมู่|ม\.)\s*([0-9]+)/);
+	if (mooMatch) {
+		result.village_no = mooMatch[1];
+	}
+
+	// 6. Extract house/street number: everything before village/subdistrict/district/province keywords
+	const headMatch = trimmed.split(
+		/(?:หมู่ที่|หมู่|ม\.|ตำบล|ต\.|แขวง|อำเภอ|อ\.|เขต|จังหวัด|จ\.)/
+	)[0];
+	if (headMatch) {
+		const cleanedNo = headMatch.replace(/^(?:บ้านเลขที่|เลขที่)\s*/, '').trim();
+		if (cleanedNo) {
+			result.address_no = cleanedNo;
+		}
+	}
+
+	return result;
+}
+
 export function parseThaidCitizenClaims(claims: ThaidClaims): ThaiDAutofillProfile {
 	const raw = claims.raw ?? {};
 	const pid = (claims.pid ?? (typeof raw.pid === 'string' ? raw.pid : '')).replace(/\D/g, '');
@@ -353,11 +472,34 @@ export function parseThaidCitizenClaims(claims: ThaidClaims): ThaiDAutofillProfi
 	const givenName = typeof raw.given_name === 'string' ? raw.given_name.trim() : '';
 	const familyName = typeof raw.family_name === 'string' ? raw.family_name.trim() : '';
 
-	const rawGender = typeof raw.gender === 'string' ? raw.gender.toLowerCase() : '';
-	if (rawGender === 'male' || rawGender === '1' || rawGender === 'm') {
+	const rawGender =
+		typeof raw.gender === 'string'
+			? raw.gender.trim().toLowerCase()
+			: typeof raw.gender === 'number'
+				? String(raw.gender)
+				: typeof raw.sex === 'string'
+					? raw.sex.trim().toLowerCase()
+					: typeof raw.sex === 'number'
+						? String(raw.sex)
+						: '';
+
+	if (rawGender === 'male' || rawGender === '1' || rawGender === 'm' || rawGender === 'ชาย') {
 		gender = 'male';
-	} else if (rawGender === 'female' || rawGender === '2' || rawGender === 'f') {
+	} else if (
+		rawGender === 'female' ||
+		rawGender === '2' ||
+		rawGender === 'f' ||
+		rawGender === 'หญิง'
+	) {
 		gender = 'female';
+	}
+
+	// If gender is still 'other', check title claim
+	if (gender === 'other' && typeof raw.title === 'string' && raw.title) {
+		const titleInferred = stripThaiTitle(raw.title).inferredGender;
+		if (titleInferred) {
+			gender = titleInferred;
+		}
 	}
 
 	if (givenName) {
@@ -378,11 +520,11 @@ export function parseThaidCitizenClaims(claims: ThaidClaims): ThaiDAutofillProfi
 		lastName = parts.slice(1).join(' ') ?? '';
 	}
 
-	// Birthdate / age parsing
+	// Birthdate / age parsing — do not assume hardcoded age 30 when omitted
 	const currentCeYear = new Date().getFullYear();
 	const currentBeYear = currentCeYear + 543;
-	let birthYear = currentBeYear - 30; // sensible adult default if omitted
-	let age = 30;
+	let birthYear = 0;
+	let age = 0;
 
 	const rawBirth =
 		typeof raw.birthdate === 'string'
@@ -405,7 +547,7 @@ export function parseThaidCitizenClaims(claims: ThaidClaims): ThaiDAutofillProfi
 		}
 	}
 
-	// Address mapping
+	// Address mapping: support house_address, address (OIDC standard / DOPA), and formatted strings
 	const address = {
 		address_no: '',
 		village_no: '',
@@ -415,46 +557,182 @@ export function parseThaidCitizenClaims(claims: ThaidClaims): ThaiDAutofillProfi
 		postal_code: ''
 	};
 
-	if (raw.address && typeof raw.address === 'object') {
-		const a = raw.address as Record<string, unknown>;
-		address.address_no =
-			typeof a.house_no === 'string'
-				? a.house_no
-				: typeof a.address_no === 'string'
-					? a.address_no
-					: '';
-		address.village_no =
-			typeof a.village_no === 'string' ? a.village_no : typeof a.moo === 'string' ? a.moo : '';
-		address.subdistrict =
-			typeof a.subdistrict === 'string'
-				? a.subdistrict
-				: typeof a.tambon === 'string'
-					? a.tambon
-					: '';
-		address.district =
-			typeof a.district === 'string' ? a.district : typeof a.amphur === 'string' ? a.amphur : '';
-		address.province =
-			typeof a.province === 'string'
-				? a.province
-				: typeof a.changwat === 'string'
-					? a.changwat
-					: '';
-		address.postal_code =
-			typeof a.postal_code === 'string'
-				? a.postal_code
-				: typeof a.postcode === 'string'
-					? a.postcode
-					: '';
-	} else if (typeof raw.formatted_address === 'string' && raw.formatted_address) {
-		address.address_no = raw.formatted_address;
+	const parseIfJson = (val: unknown): unknown => {
+		if (typeof val === 'string' && val.trim().startsWith('{')) {
+			try {
+				return JSON.parse(val.trim());
+			} catch {
+				return val;
+			}
+		}
+		return val;
+	};
+
+	const houseAddressVal = parseIfJson(raw.house_address);
+	const addressVal = parseIfJson(raw.address);
+
+	// 1. Check for #-delimited raw format (DOPA scope 19 / scope 5: เลขที่#หมู่ที่#ตรอก#ซอย#ถนน#ตำบล#อำเภอ#จังหวัด)
+	const hashDelimited =
+		typeof houseAddressVal === 'string' && houseAddressVal.includes('#')
+			? houseAddressVal
+			: houseAddressVal &&
+				  typeof houseAddressVal === 'object' &&
+				  typeof (houseAddressVal as Record<string, unknown>).raw === 'string' &&
+				  ((houseAddressVal as Record<string, unknown>).raw as string).includes('#')
+				? ((houseAddressVal as Record<string, unknown>).raw as string)
+				: typeof addressVal === 'string' && addressVal.includes('#')
+					? addressVal
+					: addressVal &&
+						  typeof addressVal === 'object' &&
+						  typeof (addressVal as Record<string, unknown>).raw === 'string' &&
+						  ((addressVal as Record<string, unknown>).raw as string).includes('#')
+						? ((addressVal as Record<string, unknown>).raw as string)
+						: null;
+
+	if (hashDelimited) {
+		const parts = hashDelimited.split('#').map((p) => p.trim());
+		address.address_no = parts[0] ?? '';
+		address.village_no = parts[1] ?? '';
+		// parts[2]=ตรอก, parts[3]=ซอย, parts[4]=ถนน
+		address.subdistrict = cleanAreaPrefix(parts[5] ?? '');
+		address.district = cleanAreaPrefix(parts[6] ?? '');
+		address.province = cleanAreaPrefix(parts[7] ?? '');
 	}
 
-	const phone =
+	// 2. Check address objects (DOPA Thai schema & OIDC standard address schema)
+	const applyAddressObject = (obj: Record<string, unknown>) => {
+		if (!address.address_no) {
+			const no =
+				typeof obj.house_no === 'string'
+					? obj.house_no
+					: typeof obj.address_no === 'string'
+						? obj.address_no
+						: typeof obj.street_address === 'string'
+							? obj.street_address
+							: typeof obj.houseNo === 'string'
+								? obj.houseNo
+								: '';
+			if (no) address.address_no = no.trim();
+		}
+		if (!address.village_no) {
+			const v =
+				typeof obj.village_no === 'string'
+					? obj.village_no
+					: typeof obj.moo === 'string'
+						? obj.moo
+						: typeof obj.villageNo === 'string'
+							? obj.villageNo
+							: typeof obj.moo_no === 'string'
+								? obj.moo_no
+								: '';
+			if (v) address.village_no = v.trim();
+		}
+		if (!address.subdistrict) {
+			const sub =
+				typeof obj.subdistrict === 'string'
+					? obj.subdistrict
+					: typeof obj.tambon === 'string'
+						? obj.tambon
+						: typeof obj.subDistrict === 'string'
+							? obj.subDistrict
+							: typeof obj.locality === 'string'
+								? obj.locality
+								: '';
+			if (sub) address.subdistrict = cleanAreaPrefix(sub);
+		}
+		if (!address.district) {
+			const dist =
+				typeof obj.district === 'string'
+					? obj.district
+					: typeof obj.amphur === 'string'
+						? obj.amphur
+						: typeof obj.amphoe === 'string'
+							? obj.amphoe
+							: typeof obj.districtName === 'string'
+								? obj.districtName
+								: '';
+			if (dist) address.district = cleanAreaPrefix(dist);
+		}
+		if (!address.province) {
+			const prov =
+				typeof obj.province === 'string'
+					? obj.province
+					: typeof obj.changwat === 'string'
+						? obj.changwat
+						: typeof obj.region === 'string'
+							? obj.region
+							: typeof obj.provinceName === 'string'
+								? obj.provinceName
+								: '';
+			if (prov) address.province = cleanAreaPrefix(prov);
+		}
+		if (!address.postal_code) {
+			const zip =
+				typeof obj.postal_code === 'string'
+					? obj.postal_code
+					: typeof obj.postcode === 'string'
+						? obj.postcode
+						: typeof obj.zipcode === 'string'
+							? obj.zipcode
+							: typeof obj.postalCode === 'string'
+								? obj.postalCode
+								: typeof obj.zip_code === 'string'
+									? obj.zip_code
+									: '';
+			if (zip) address.postal_code = zip.trim();
+		}
+	};
+
+	if (houseAddressVal && typeof houseAddressVal === 'object') {
+		applyAddressObject(houseAddressVal as Record<string, unknown>);
+	}
+	if (addressVal && typeof addressVal === 'object') {
+		applyAddressObject(addressVal as Record<string, unknown>);
+	}
+
+	// 3. If fields are still missing or address_no is empty, parse formatted string
+	const formattedCandidate =
+		typeof raw.formatted_address === 'string' && raw.formatted_address
+			? raw.formatted_address
+			: typeof addressVal === 'string' && !addressVal.includes('#')
+				? addressVal
+				: typeof houseAddressVal === 'string' && !houseAddressVal.includes('#')
+					? houseAddressVal
+					: houseAddressVal &&
+						  typeof houseAddressVal === 'object' &&
+						  typeof (houseAddressVal as Record<string, unknown>).formatted === 'string'
+						? ((houseAddressVal as Record<string, unknown>).formatted as string)
+						: addressVal &&
+							  typeof addressVal === 'object' &&
+							  typeof (addressVal as Record<string, unknown>).formatted === 'string'
+							? ((addressVal as Record<string, unknown>).formatted as string)
+							: null;
+
+	if (formattedCandidate) {
+		const parsed = parseThaiAddressText(formattedCandidate);
+		if (!address.address_no && parsed.address_no) address.address_no = parsed.address_no;
+		if (!address.village_no && parsed.village_no) address.village_no = parsed.village_no;
+		if (!address.subdistrict && parsed.subdistrict) address.subdistrict = parsed.subdistrict;
+		if (!address.district && parsed.district) address.district = parsed.district;
+		if (!address.province && parsed.province) address.province = parsed.province;
+		if (!address.postal_code && parsed.postal_code) address.postal_code = parsed.postal_code;
+		// If address_no is still blank, assign the raw string as fallback
+		if (!address.address_no) address.address_no = formattedCandidate.trim();
+	}
+
+	// 4. Resolve postal code automatically if missing but province and subdistrict are known
+	if (!address.postal_code && address.province && address.subdistrict) {
+		address.postal_code =
+			lookupZipcode(address.province, address.district, address.subdistrict) ?? '';
+	}
+
+	const rawPhone =
 		typeof raw.phone_number === 'string'
 			? raw.phone_number
 			: typeof raw.phone === 'string'
 				? raw.phone
 				: null;
+	const phone = rawPhone ? rawPhone.replace(/[-\s]/g, '').trim() || null : null;
 
 	return {
 		id: `thaid-${pid || claims.sub}`,

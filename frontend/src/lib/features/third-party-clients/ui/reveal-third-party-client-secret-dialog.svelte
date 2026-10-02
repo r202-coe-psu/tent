@@ -3,7 +3,11 @@
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import Copy from '@lucide/svelte/icons/copy';
 	import { toast } from 'svelte-sonner';
-	import type { CreatedThirdPartyClient } from '../domain/third-party-client';
+	import {
+		partnerModuleLabel,
+		thirdPartyClientDisplayName,
+		type CreatedThirdPartyClient
+	} from '../domain/third-party-client';
 
 	let {
 		open = $bindable(false),
@@ -13,12 +17,11 @@
 		created?: CreatedThirdPartyClient | null;
 	} = $props();
 
-	async function copySecret() {
-		const secret = created?.client_secret;
-		if (!secret) return;
+	async function copyValue(value: string | undefined, label: string) {
+		if (!value) return;
 		try {
-			await navigator.clipboard.writeText(secret);
-			toast.success('Client secret copied to clipboard');
+			await navigator.clipboard.writeText(value);
+			toast.success(`${label} copied to clipboard`);
 		} catch {
 			toast.error('Could not copy to clipboard');
 		}
@@ -32,7 +35,7 @@
 <Dialog.Root bind:open={() => open, handleOpenChange}>
 	<Dialog.Content class="overflow-hidden p-0 sm:max-w-[520px]">
 		<div class="border-b border-border bg-muted/30 p-6 pb-4">
-			<Dialog.Title class="text-xl">Copy the client secret</Dialog.Title>
+			<Dialog.Title class="text-xl">Copy the client credentials</Dialog.Title>
 			<Dialog.Description class="mt-1.5">
 				This is the only time the full secret is shown. Copy it now and store it securely.
 			</Dialog.Description>
@@ -40,23 +43,46 @@
 		{#if created}
 			<div class="grid gap-4 p-6">
 				<div class="grid gap-1 text-sm">
-					<span class="font-mono font-semibold text-foreground">{created.client_id}</span>
-					<span class="text-muted-foreground">Name: {created.module_name}</span>
-				</div>
-				<div
-					class="flex items-start gap-2 rounded-lg border border-border bg-muted/40 p-3 font-mono text-sm break-all"
-				>
-					<span class="flex-1 select-all">{created.client_secret}</span>
-					<Button
-						type="button"
-						variant="secondary"
-						size="icon"
-						class="shrink-0"
-						onclick={copySecret}
-						aria-label="Copy client secret"
+					<span class="font-semibold text-foreground">{thirdPartyClientDisplayName(created)}</span>
+					<span class="text-muted-foreground"
+						>Module: {partnerModuleLabel(created.module_name)}</span
 					>
-						<Copy class="h-4 w-4" />
-					</Button>
+				</div>
+				<div class="grid gap-1.5">
+					<span class="text-xs font-semibold text-muted-foreground">Client ID</span>
+					<div
+						class="flex items-start gap-2 rounded-lg border border-border bg-muted/40 p-3 font-mono text-sm break-all"
+					>
+						<span class="flex-1 select-all">{created.client_id}</span>
+						<Button
+							type="button"
+							variant="secondary"
+							size="icon"
+							class="shrink-0"
+							onclick={() => copyValue(created?.client_id, 'Client ID')}
+							aria-label="Copy client ID"
+						>
+							<Copy class="h-4 w-4" />
+						</Button>
+					</div>
+				</div>
+				<div class="grid gap-1.5">
+					<span class="text-xs font-semibold text-muted-foreground">Client secret</span>
+					<div
+						class="flex items-start gap-2 rounded-lg border border-border bg-muted/40 p-3 font-mono text-sm break-all"
+					>
+						<span class="flex-1 select-all">{created.client_secret}</span>
+						<Button
+							type="button"
+							variant="secondary"
+							size="icon"
+							class="shrink-0"
+							onclick={() => copyValue(created?.client_secret, 'Client secret')}
+							aria-label="Copy client secret"
+						>
+							<Copy class="h-4 w-4" />
+						</Button>
+					</div>
 				</div>
 				<p class="text-xs text-muted-foreground">
 					Exchange <code class="rounded bg-muted px-1">client_id</code> +

@@ -7,8 +7,11 @@ export type { ShelterSummary };
 
 const SHELTER_ENDPOINT = '/api/back-office/shelter';
 
-export async function listShelters(): Promise<ShelterSummary[]> {
-	const shelters = await serviceFetch<ShelterSummary[]>(SHELTER_ENDPOINT);
+export async function listShelters(init: RequestInit = {}): Promise<ShelterSummary[]> {
+	const shelters = await serviceFetch<ShelterSummary[]>(SHELTER_ENDPOINT, {
+		cache: 'no-store',
+		...init
+	});
 	if (shelters.length > 0 && !shelterStore.listDefaultCode) {
 		shelterStore.listDefaultCode = shelters[0].code;
 	}

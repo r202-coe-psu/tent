@@ -1,6 +1,8 @@
-import { requireAdmin } from '$lib/guards/auth';
+import { redirect } from '@sveltejs/kit';
+import { resolve } from '$app/paths';
 import type { PageLoad } from './$types';
 
-export const load = (async ({ fetch }) => {
-	await requireAdmin(fetch);
+/** Legacy URL → Master Data hub */
+export const load = (() => {
+	redirect(302, resolve('/system-management/master-data?type=shelter_type'));
 }) satisfies PageLoad;

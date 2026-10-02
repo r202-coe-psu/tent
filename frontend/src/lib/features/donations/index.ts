@@ -9,10 +9,14 @@ export type {
 export {
 	receiveDonationInputSchema,
 	publicDonationErrorMessage,
-	isDonorEditable
+	isDonorEditable,
+	donationPayloadUnit,
+	linesMissingExpiry
 } from './domain/public-donation';
+export type { DonationUnitSource, ExpiryCheckLine } from './domain/public-donation';
 export type { ReceiveDonationInput } from './domain/public-donation';
-export type { PendingDonationRow } from './domain/back-office';
+export type { PendingDonationRow, WalkInIntakeInput } from './domain/back-office';
+export { walkInIntakeInputSchema, donationActionRef, donationRefLabel } from './domain/back-office';
 
 // Domain — redirect ticket (R-16.4 · CR-087)
 export type { DonationRedirect, DonationRedirectInput } from './domain/donation-redirect';
@@ -57,10 +61,12 @@ export { carryItemIds, type BareItem } from './domain/carry-item-ids';
 export {
 	donationPreDeclarationInputSchema,
 	isDonationPreDeclaration,
+	donorCategoryFromCatalog,
 	PUBLIC_DONATION_CATEGORIES
 } from './domain/donation';
 
 // Data + application — public tracking (BFF, not publicClient)
+export { fetchShelterNeeds, type PublicShelterNeed } from './data/public-needs';
 export {
 	cancelDonation,
 	fetchDonationTracking,
@@ -71,6 +77,7 @@ export {
 } from './data/public-tracking';
 export {
 	donationTrackingKeys,
+	usePublicShelterNeeds,
 	useCancelDonation,
 	useDonationTracking,
 	useDonationTrackSearch,

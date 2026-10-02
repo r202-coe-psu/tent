@@ -47,6 +47,7 @@ device app  ⇄ WAN ⇄  central (CouchDB)
 | --- | --- | --- | --- | --- | --- |
 | `shelter_{shelter_code}` | ✓ (ทุกศูนย์) | ✓ (เฉพาะศูนย์ตน) | no disconnected read cache (status-only when unreachable) | app write/read ผ่าน central (live+retry) | app failover read/write ผ่าน edge เฉพาะ outage · edge ⇄ central sync backlog |
 | `registry` | ✓ master | ✓ replica | no disconnected read cache (status-only when unreachable) | app read จาก central (pull/read-through) | central → edge; app read จาก edge เฉพาะ outage |
+| `shelter_import_audit` | ✓ private | — | no browser access | server-side `adminRaw` + SA-only BFF | — |
 | `catalog` | ✓ master | ✓ replica | no disconnected read cache (status-only when unreachable) | app read จาก central (pull/read-through) | central → edge; app read จาก edge เฉพาะ outage |
 | `_users` | ✓ master | ✓ **filtered replica** (เฉพาะ user ของศูนย์ตน) | — | central `_session` | central → edge (selector by role `shelter:{id}`) เพื่อ fallback login |
 | `central_ops` | ✓ เท่านั้น | — | — | central-only service/read model & cross-tenant store | — (search_audit, export_job, `counter:shelter`, `referral`) |

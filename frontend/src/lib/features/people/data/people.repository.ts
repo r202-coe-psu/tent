@@ -1,3 +1,4 @@
+import type { UlidReservation } from '$lib/db/ulid-reservation';
 import type { AuthorContext } from '$lib/db/model';
 import type { PaginatedResult } from '$lib/db/repository';
 import type {
@@ -26,6 +27,7 @@ export type HouseholdSearchLabels = {
 };
 
 export type EvacueeFilters = {
+	/** Vulnerable-group code (`evacuee.vulnerable_groups`); legacy filter key name. */
 	specialNeed?: string;
 	zone?: string;
 	status?: StayStatus;
@@ -69,6 +71,8 @@ export type HouseholdPatch = Partial<
 		| 'postal_code'
 		| 'housing_type'
 		| 'residence_landmark'
+		| 'municipality_zone'
+		| 'community'
 		| 'vehicles'
 		| 'assets'
 		| 'pets'
@@ -143,6 +147,11 @@ export interface PeopleRepository {
 
 	/** Search evacuees by name, phone, or national ID. */
 	searchEvacuees(query: string): Promise<Evacuee[]>;
+	/**
+	 * Run several searches against a single evacuee scan — the walk-in
+	 * duplicate check across every member card. Keyed by the trimmed query.
+	 */
+	searchEvacueesMany(queries: readonly string[]): Promise<Map<string, Evacuee[]>>;
 
 	/** Mint a screening from input + author context and persist it. */
 	createScreening(input: ScreeningInput, ctx: AuthorContext): Promise<Screening>;
@@ -193,10 +202,16 @@ export interface PeopleRepository {
 	patchMedical(id: string, patch: MedicalPatch): Promise<Medical>;
 	/** Remove a medical record, used to compensate a failed multi-document health save. */
 	deleteMedical(id: string): Promise<void>;
+	/** This evacuee's medical record via the evacuee_id Mango index, or `null` when absent. */
+	getMedicalByEvacuee(evacueeId: string): Promise<Medical | null>;
 	/** Every movement record in this shelter database. */
 	listMovements(): Promise<Movement[]>;
+	/** This evacuee's movement history, resolved through the evacuee_id Mango index. */
+	listMovementsByEvacuee(evacueeId: string): Promise<Movement[]>;
 	/** Every screening record in this shelter database. */
 	listScreenings(): Promise<Screening[]>;
+	/** This evacuee's screening records, resolved through the evacuee_id Mango index. */
+	listScreeningsByEvacuee(evacueeId: string): Promise<Screening[]>;
 	/** Evacuees awaiting medical screening in the shelter (arriving or pre_registered without screening doc). */
 	getPendingScreeningEvacuees(shelterCode?: string): Promise<Evacuee[]>;
 
@@ -237,7 +252,8 @@ export interface PeopleRepository {
 	recordMovement(
 		evacuee: Evacuee,
 		action: Exclude<MovementAction, 'check_in' | 'check_out' | 'confirm_room'>,
-		ctx: AuthorContext
+		ctx: AuthorContext,
+		opts?: { reason?: string }
 	): Promise<Evacuee>;
 	/**
 	 * Cancel a pre-registered household: set household → `cancelled` and cascade
@@ -263,7 +279,9 @@ export interface PeopleRepository {
 	createFamilyRegistration(
 		input: UnifiedRegistrationInput,
 		ctx: AuthorContext,
-		channel?: UnifiedRegistrationChannel
+		channel?: UnifiedRegistrationChannel,
+		/** Reuse across retries of the same input so a resubmit cannot mint a second family. */
+		ids?: UlidReservation
 	): Promise<{
 		household: Household;
 		members: Evacuee[];

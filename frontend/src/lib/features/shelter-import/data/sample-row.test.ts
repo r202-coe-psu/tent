@@ -33,6 +33,10 @@ function toZoneRows(zones: Record<string, string | number>[]): RawSheetRow[] {
 	return zones.map((cells, i) => ({ ref: '1', line: i + 1, cells: toRawRow(cells) }));
 }
 
+function toFoodPointRows(points: Record<string, string | number>[]): RawSheetRow[] {
+	return points.map((cells, i) => ({ ref: '1', line: i + 1, cells: toRawRow(cells) }));
+}
+
 describe('buildSampleWorkbook', () => {
 	it('leaves ประเภทศูนย์พักพิง empty when no shelter_type master data exists', () => {
 		const sample = buildSampleWorkbook(emptyMasters());
@@ -48,12 +52,14 @@ describe('buildSampleWorkbook', () => {
 		const sample = buildSampleWorkbook(mastersWithShelterType());
 		const raw = toRawRow(sample.shelter);
 		const zoneRows = toZoneRows(sample.zones);
+		const foodPointRows = toFoodPointRows(sample.foodDistributionPoints);
 
-		const result = validateRow(raw, 1, lookupsWithShelterType(), zoneRows);
+		const result = validateRow(raw, 1, lookupsWithShelterType(), zoneRows, foodPointRows, true);
 
 		expect(result.errors).toEqual([]);
 		expect(result.ok).toBe(true);
 		expect(result.shelter).toBeDefined();
+		expect(result.foodDistributionPointsProvided).toBe(true);
 	});
 
 	it('produces the expected zones', () => {
@@ -65,6 +71,23 @@ describe('buildSampleWorkbook', () => {
 		expect(result.shelter?.zones).toHaveLength(2);
 		expect(result.shelter?.zones.map((z) => z.code)).toEqual(['A', 'B']);
 		expect(result.shelter?.zones.reduce((sum, z) => sum + z.capacity, 0)).toBe(150);
+	});
+
+	it('produces the expected food distribution points and mints a missing id', () => {
+		const sample = buildSampleWorkbook(emptyMasters());
+		const result = validateRow(
+			toRawRow(sample.shelter),
+			1,
+			emptyLookups(),
+			[],
+			toFoodPointRows(sample.foodDistributionPoints),
+			true
+		);
+
+		expect(result.ok).toBe(true);
+		expect(result.shelter?.food_distribution_points).toHaveLength(1);
+		expect(result.shelter?.food_distribution_points[0].name).toContain('จุดแจกอาหาร');
+		expect(result.shelter?.food_distribution_points[0].id).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
 	});
 
 	it('produces the expected pet conditions across categories', () => {

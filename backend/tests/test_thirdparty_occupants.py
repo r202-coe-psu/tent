@@ -128,7 +128,7 @@ async def test_get_occupants_with_scope_returns_real_data_and_pagination(
         shelter_code="SH001",
         occupant_ref="OCC-0001-0042",
         name_masked="สมชาย ใ.",
-        age_range="60-69",
+        age_range="60+",
         gender="male",
         care_flags=["bedridden"],
         checked_in_at=now,
@@ -139,7 +139,7 @@ async def test_get_occupants_with_scope_returns_real_data_and_pagination(
         shelter_code="SH001",
         occupant_ref="OCC-0001-0043",
         name_masked="มาลี ส.",
-        age_range="18-59",
+        age_range="20-59",
         gender="female",
         care_flags=[],
         checked_in_at=now,
@@ -157,7 +157,7 @@ async def test_get_occupants_with_scope_returns_real_data_and_pagination(
     assert len(data["result"]) == 1
     assert data["result"][0]["occupant_ref"] == "OCC-0001-0042"
     assert data["result"][0]["name_masked"] == "สมชาย ใ."
-    assert data["result"][0]["age_range"] == "60-69"
+    assert data["result"][0]["age_range"] == "60+"
     assert data["result"][0]["gender"] == "male"
     assert data["result"][0]["care_flags"] == ["bedridden"]
     assert "pagination" in data

@@ -73,26 +73,28 @@
 </svelte:head>
 
 <div class="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 md:px-6">
-	<header class="flex items-center gap-4">
-		<Button
-			variant="secondary"
-			size="icon"
-			onclick={() => goto(resolve('/onsite'))}
-			class="h-10 w-10 rounded-full"
-			title="กลับ"
+	<header class="flex items-center gap-3">
+		<a
+			href={resolve('/onsite')}
+			class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-600 shadow-2xs transition-colors hover:bg-slate-50"
+			aria-label="กลับหน้าหลักระบบส่วนหน้า"
 		>
-			<ArrowLeft class="size-5" />
-		</Button>
+			<ArrowLeft class="size-4" />
+		</a>
 		<div>
-			<h1 class="flex items-center gap-2 text-xl font-bold text-foreground md:text-2xl">
-				<Search class="size-5 text-primary md:size-6" />
-				ค้นหาและแก้ไขข้อมูลผู้พักพิง
-			</h1>
-			<p class="mt-0.5 text-xs font-semibold text-muted-foreground">Search &amp; Update</p>
+			<div class="flex items-center gap-2">
+				<Search class="size-6 text-[#0A2647]" />
+				<h1 class="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">
+					ค้นหาและแก้ไขข้อมูลผู้พักพิง
+				</h1>
+			</div>
+			<p class="mt-0.5 text-xs text-slate-500">
+				Search &amp; Update — ค้นหาด้วยชื่อ เลขบัตร เบอร์โทร หรือสแกน QR
+			</p>
 		</div>
 	</header>
 
-	<Card.Root class="rounded-2xl border-border shadow-sm">
+	<Card.Root class="rounded-2xl border border-slate-200/80 bg-white shadow-xs">
 		<Card.Content class="px-5 py-5">
 			<form
 				onsubmit={(e) => {
@@ -107,7 +109,7 @@
 						type="text"
 						placeholder="ระบุเลขบัตรประชาชน / เบอร์โทรศัพท์ / ชื่อ-นามสกุล..."
 						bind:value={queryText}
-						class="h-12 rounded-xl bg-muted/50 pl-11 text-sm focus-visible:border-primary"
+						class="h-12 rounded-xl bg-slate-50 pl-11 text-sm focus-visible:border-primary"
 					/>
 				</div>
 
@@ -133,6 +135,7 @@
 	</Card.Root>
 
 	<Station1EvacueeQueue
+		initialTab="all"
 		{enableMedical}
 		{canMedical}
 		{canZoning}

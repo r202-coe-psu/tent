@@ -43,9 +43,12 @@ export {
 	publicPortalKeys,
 	useFamilySearchMutation,
 	usePublicShelters,
+	useShelterTypeLabels,
 	useShelterTypeLabelMap,
+	useVulnerableGroupLabels,
 	useVulnerableGroupLabelMap
 } from './application/queries';
+export type { MasterLabelOption } from './domain/master-labels';
 
 export {
 	publicConfigBodySchema,
@@ -53,6 +56,7 @@ export {
 	type PublicConfigBody,
 	type FaqItem
 } from './domain/config';
+export { DEFAULT_PUBLIC_PORTAL_CONFIG } from './domain/config.fixture';
 export { default as PublicPortalConfigForm } from './ui/public-portal-config-form.svelte';
 export {
 	requestUserPosition,

@@ -114,6 +114,26 @@ export async function requireAdmin(cookie: string | null): Promise<string> {
 }
 
 /**
+ * Authorize a cross-shelter back-office operation as an app system admin or
+ * CouchDB server admin. Unlike {@link requireAdmin}, this accepts the app's
+ * `system_admin` role as well as CouchDB's `_admin` role.
+ */
+export async function requireSystemAdmin(cookie: string | null): Promise<Caller> {
+	const { base } = adminConfig();
+	const res = await fetch(`${base}/_session`, {
+		headers: { Accept: 'application/json', ...(cookie ? { Cookie: cookie } : {}) }
+	});
+	const data = (await res.json().catch(() => null)) as {
+		userCtx?: { name: string | null; roles: string[] };
+	} | null;
+	const name = data?.userCtx?.name;
+	const roles = data?.userCtx?.roles ?? [];
+	if (!name) throw error(401, 'Authentication required');
+	if (!isSystemAdmin(roles)) throw error(403, 'System admin privileges required');
+	return { name, roles, isSA: true, shelterCode: shelterCodeFromRoles(roles) };
+}
+
+/**
  * Authorize a shelter-scoped write: SA can edit any shelter; shelter_manager
  * may only edit shelters matching their own `shelterCode` scope. Resolves the
  * caller from the session cookie and returns the {@link Caller} so the handler
@@ -291,6 +311,54 @@ export async function requireShelterScopeOrSA(
 	if (caller.isSA) return caller;
 	if (hasShelterScope(caller.roles, code)) return caller;
 	throw error(403, `Caller is not in shelter "${code}" scope`);
+}
+
+/**
+ * Re-verify the CALLER'S OWN password against central CouchDB `_session` — a step-up
+ * gate for a sensitive action while already logged in (e.g. revealing a partner client
+ * secret), distinct from {@link requireAdmin}/{@link authorizeUserWrite} which only
+ * check the existing session cookie. The username always comes from that existing
+ * session, never from the request body, so this can only confirm "you are who your
+ * cookie says" — never let a caller probe a different account's password.
+ *
+ * Deliberately does not forward CouchDB's `Set-Cookie` response back to the browser:
+ * this is a one-off confirmation, not a new login, and must not disturb the caller's
+ * active session.
+ *
+ * Throws {@link ServiceError} (`UNAUTHENTICATED`) on a missing session or wrong
+ * password. Callers should rate-limit this — a real password oracle otherwise.
+ */
+export async function verifyOwnPassword(cookie: string | null, password: string): Promise<void> {
+	const caller = await authorizeUserWrite(cookie);
+	const { base } = adminConfig();
+	const res = await fetch(`${base}/_session`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+		body: JSON.stringify({ name: caller.name, password })
+	});
+	if (!res.ok) {
+		throw new ServiceError('UNAUTHENTICATED', 'Incorrect password');
+	}
+}
+
+/**
+ * Check `name` + `password` against central `_session` without a prior session
+ * (CR-141 link-on-first-login). Like {@link verifyOwnPassword}, CouchDB's `Set-Cookie`
+ * is not forwarded — the caller mints its own session after further checks.
+ *
+ * Throws {@link ServiceError} (`UNAUTHENTICATED`) on a wrong password or unknown
+ * user. A password oracle — callers must rate-limit.
+ */
+export async function verifyCredentials(name: string, password: string): Promise<void> {
+	const { base } = adminConfig();
+	const res = await fetch(`${base}/_session`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+		body: JSON.stringify({ name, password })
+	});
+	if (!res.ok) {
+		throw new ServiceError('UNAUTHENTICATED', 'Incorrect username or password');
+	}
 }
 
 /**

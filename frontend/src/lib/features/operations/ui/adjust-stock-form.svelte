@@ -1,5 +1,10 @@
 <script lang="ts">
 	import { Input } from '$lib/components/ui/input/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
+	import { DatePicker } from '$lib/components/ui/date-picker/index.js';
+	import * as Field from '$lib/components/ui/field/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
+	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { useSupplyItems } from '$lib/features/supply';
 	import { itemMasterUnit, useItemMasters } from '$lib/features/catalog';
 	import { authStore } from '$lib/stores/auth.svelte';
@@ -12,17 +17,35 @@
 	import PlusCircle from '@lucide/svelte/icons/plus-circle';
 	import { addQty, subQty } from '$lib/utils/qty';
 	import type { StockLot, StockLedger } from '../domain/operations';
+	import {
+		lotLocationFields,
+		lotStorageKey,
+		lotStorageLabel,
+		storageLotFields,
+		type StoragePointRef
+	} from '../domain/lot-storage';
+	import { useStoragePoints } from '../application/use-storage-points.svelte';
+	import StoragePointSelect from './storage-point-select.svelte';
 
 	let {
 		onsuccess,
-		preselectedItemId = undefined
-	}: { onsuccess?: () => void; preselectedItemId?: string } = $props();
+		preselectedItemId = undefined,
+		initialAdjustmentType = 'write_off'
+	}: {
+		onsuccess?: (result?: { keepOpen: true; summary?: string }) => void;
+		preselectedItemId?: string;
+		initialAdjustmentType?: 'write_off' | 'add';
+	} = $props();
+
+	let lastSuccess = $state<string | null>(null);
+	let moreOpen = $state(false);
 
 	// Queries & Mutations
 	const itemsQuery = useSupplyItems();
 	const itemMastersQuery = useItemMasters(() => getShelterCode());
 	const ledgerQuery = useLedger();
 	const adjustMutation = useAdjustStock();
+	const storagePoints = useStoragePoints(() => getShelterCode());
 
 	// Local State
 	let searchQuery = $state('');
@@ -35,11 +58,11 @@
 	} | null>(null);
 	let container = $state<HTMLDivElement | null>(null);
 	let selectedLotKey = $state<string>('');
-	let customLocation = $state<string>('');
+	/** Storage point for a new lot ('' = unspecified / main store). */
+	let customPointId = $state('');
+	let customPoint = $state<StoragePointRef | null>(null);
 	let customExpiry = $state<string>('');
-
 	let newQtyInput = $state<string>('');
-	let adjustmentType = $state<'write_off' | 'add'>('write_off');
 	let reason = $state<string>('');
 
 	const items = $derived.by(() => {
@@ -73,25 +96,25 @@
 		const entries = (ledgerQuery.data as StockLedger[]).filter(
 			(e: StockLedger) => e.item_id === currentItem._id
 		);
-		const lotsMap = new SvelteMap<string, { note: string; expiry: string; qty: string }>();
+		const lotsMap = new SvelteMap<string, { location: StockLot; expiry: string; qty: string }>();
 
+		// Grouped by location (point id, else name — draft-shelter-storage-points)
+		// and expiry; `location` is what an adjustment writes to land in this group.
 		for (const entry of entries) {
-			const note = entry.lot?.note?.trim() || 'คลังหลัก';
 			const expiry = entry.lot?.expiry || '';
-			const key = `${note}||${expiry}`;
-
-			const current = lotsMap.get(key) || { note, expiry, qty: '0' };
-			lotsMap.set(key, {
-				note,
+			const key = `${lotStorageKey(entry.lot)}||${expiry}`;
+			const current = lotsMap.get(key) || {
+				location: lotLocationFields(entry.lot),
 				expiry,
-				qty: addQty(current.qty, entry.qty)
-			});
+				qty: '0'
+			};
+			lotsMap.set(key, { ...current, qty: addQty(current.qty, entry.qty) });
 		}
 
-		return Array.from(lotsMap.values()).map((l) => ({
+		return Array.from(lotsMap, ([key, l]) => ({
 			...l,
-			key: `${l.note}||${l.expiry}`,
-			label: `📍 ${l.note} ${l.expiry ? `(หมดอายุ: ${formatExpiry(l.expiry)})` : '(ไม่ระบุวันหมดอายุ)'} - คงเหลือ ${l.qty} ${currentItem.unit}`
+			key,
+			label: `📍 ${lotStorageLabel(l.location, storagePoints.points)} ${l.expiry ? `(หมดอายุ: ${formatExpiry(l.expiry)})` : '(ไม่ระบุวันหมดอายุ)'} - คงเหลือ ${l.qty} ${currentItem.unit}`
 		}));
 	});
 
@@ -103,6 +126,19 @@
 		if (!newQtyInput || isNaN(Number(newQtyInput))) return '0';
 		const base = selectedLotKey === 'new' ? '0' : currentLotQty;
 		return subQty(newQtyInput, base);
+	});
+
+	// svelte-ignore state_referenced_locally
+	let adjustmentType = $state<'write_off' | 'add'>(initialAdjustmentType);
+
+	// Watch newQtyInput to auto-set adjustmentType
+	$effect(() => {
+		const delta = Number(deltaQty);
+		if (delta < 0) {
+			adjustmentType = 'write_off';
+		} else if (delta > 0) {
+			adjustmentType = 'add';
+		}
 	});
 
 	const isSubmitting = $derived(adjustMutation.isPending);
@@ -127,8 +163,10 @@
 		isDropdownOpen = false;
 		// Reset form fields
 		selectedLotKey = '';
+		customPointId = '';
+		customPoint = null;
 		newQtyInput = '';
-		adjustmentType = 'write_off';
+		adjustmentType = initialAdjustmentType;
 		reason = '';
 	}
 
@@ -137,22 +175,27 @@
 		searchQuery = '';
 		isDropdownOpen = false;
 		selectedLotKey = '';
+		customPointId = '';
+		customPoint = null;
 		newQtyInput = '';
-		adjustmentType = 'write_off';
+		adjustmentType = initialAdjustmentType;
 		reason = '';
+		customExpiry = '';
 	}
 
-	// Watch newQtyInput to auto-set adjustmentType
-	$effect(() => {
-		const delta = Number(deltaQty);
-		if (delta < 0) {
-			adjustmentType = 'write_off';
-		} else if (delta > 0) {
-			adjustmentType = 'add';
+	function resetForNextLine() {
+		selectedLotKey = '';
+		newQtyInput = '';
+		reason = '';
+		customPointId = '';
+		customPoint = null;
+		customExpiry = '';
+		adjustmentType = initialAdjustmentType;
+		if (!preselectedItemId) {
+			clearSelection();
 		}
-	});
+	}
 
-	// Submit
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
 
@@ -162,10 +205,6 @@
 		}
 		if (!selectedLotKey) {
 			toast.error('กรุณาเลือกสถานที่/ล็อต');
-			return;
-		}
-		if (selectedLotKey === 'new' && !customLocation.trim()) {
-			toast.error('กรุณาระบุสถานที่จัดเก็บใหม่');
 			return;
 		}
 		if (selectedItem.perishable && selectedLotKey === 'new' && !customExpiry) {
@@ -189,12 +228,14 @@
 		let lot: StockLot = {};
 		if (selectedLotKey === 'new') {
 			lot = {
-				note: customLocation.trim(),
+				...storageLotFields(customPoint),
 				expiry: customExpiry || undefined
 			};
 		} else if (currentLot) {
+			// Refresh the name snapshot when the lot's point still exists (it may have been renamed).
+			const point = storagePoints.points.find((p) => p.id === currentLot.location.storage_point_id);
 			lot = {
-				note: currentLot.note,
+				...(point ? storageLotFields(point) : currentLot.location),
 				expiry: currentLot.expiry || undefined
 			};
 		}
@@ -214,11 +255,15 @@
 		};
 
 		toast.promise(adjustMutation.mutateAsync({ input, ctx }), {
-			loading: 'กำลังปรับปรุงสต๊อก...',
+			loading: 'กำลังบันทึก...',
 			success: () => {
-				clearSelection();
-				if (onsuccess) onsuccess();
-				return 'ปรับปรุงยอดสต๊อกสำเร็จ!';
+				const name = selectedItem?.name ?? input.item_id;
+				const signed = Number(deltaQty) > 0 ? `+${deltaQty}` : `${deltaQty}`;
+				const summary = `${name} ${signed} ${selectedItem?.unit ?? ''}`;
+				lastSuccess = `ปรับยอดแล้ว: ${summary}`;
+				resetForNextLine();
+				onsuccess?.({ keepOpen: true, summary });
+				return 'ปรับยอดแล้ว';
 			},
 			error: (err: unknown) =>
 				err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการปรับปรุงยอด'
@@ -250,63 +295,71 @@
 
 <form
 	onsubmit={handleSubmit}
-	class="flex flex-col space-y-4 rounded-2xl border border-border/80 bg-card p-5 shadow-md"
+	class="flex flex-col space-y-4 rounded-2xl border border-border/80 bg-card p-4 shadow-md sm:p-5"
 >
-	<div class="mb-2 flex items-center gap-2 border-b border-border/60 pb-3">
-		<Settings class="h-4.5 w-4.5 text-primary" />
-		<h3 class="text-sm font-bold text-foreground">ปรับปรุงยอดสต๊อก (Stock Adjustment)</h3>
+	<div class="flex items-center gap-2 border-b border-border/60 pb-3">
+		<Settings class="h-4.5 w-4.5 text-primary" aria-hidden="true" />
+		<h3 class="text-sm font-bold text-foreground">ปรับปรุง</h3>
 	</div>
 
-	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-		<!-- Searchable Item Selector -->
-		<div class="relative col-span-1 sm:col-span-2">
-			<label for="item-search" class="text-xs font-bold text-foreground"
-				>ค้นหาและเลือกรายการสิ่งของ</label
+	{#if lastSuccess}
+		<p
+			class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800"
+			role="status"
+		>
+			{lastSuccess} ✓
+		</p>
+	{/if}
+
+	<Field.FieldGroup class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+		<Field.Root class="relative col-span-1 sm:col-span-2">
+			<Field.Label for="item-search"
+				>สินค้า <span class="font-bold text-destructive">*</span></Field.Label
 			>
-			<div bind:this={container} class="relative mt-1 w-full">
+			<div bind:this={container} class="relative w-full">
 				<Input
 					id="item-search"
-					placeholder="พิมพ์เพื่อค้นหา เช่น ข้าวสาร, น้ำดื่ม..."
+					placeholder="ค้นหา…"
 					bind:value={searchQuery}
 					onfocus={() => !preselectedItemId && (isDropdownOpen = true)}
 					oninput={() => !preselectedItemId && (isDropdownOpen = true)}
 					autocomplete="off"
 					disabled={!!preselectedItemId}
-					class={[
-						'h-10 w-full rounded-xl border border-border/80 bg-background px-3 shadow-sm transition outline-none focus:border-primary focus:ring-1 focus:ring-primary/20',
-						preselectedItemId ? 'cursor-not-allowed bg-muted font-bold text-muted-foreground' : ''
-					]}
+					class="min-h-11 {preselectedItemId
+						? 'cursor-not-allowed bg-muted font-bold text-muted-foreground'
+						: ''}"
 				/>
 				{#if selectedItem && !preselectedItemId}
-					<button
+					<Button
 						type="button"
-						class="absolute top-1/2 right-3 -translate-y-1/2 cursor-pointer text-xs font-bold text-muted-foreground transition-colors hover:text-foreground"
+						variant="ghost"
+						class="absolute top-1/2 right-1 min-h-11 min-w-11 -translate-y-1/2 px-3 text-sm font-semibold"
 						onclick={clearSelection}
 					>
-						ล้างค่า
-					</button>
+						ล้าง
+					</Button>
 				{/if}
 
 				{#if isDropdownOpen}
 					<div
-						class="absolute left-0 z-20 mt-1 max-h-60 w-full animate-in overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl duration-150 fade-in slide-in-from-top-1"
+						class="absolute left-0 z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl"
 					>
 						{#if itemsQuery.isLoading || itemMastersQuery.isLoading}
-							<div class="p-3 text-xs font-medium text-muted-foreground">กำลังโหลดข้อมูล...</div>
+							<div class="p-3 text-xs text-muted-foreground">กำลังโหลด…</div>
 						{:else if filteredItems.length === 0}
-							<div class="p-3 text-xs font-medium text-muted-foreground">ไม่พบรายการสิ่งของ</div>
+							<div class="p-3 text-xs text-muted-foreground">ไม่พบสินค้า</div>
 						{:else}
 							{#each filteredItems as item (item._id)}
 								<button
 									type="button"
-									class="flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors hover:bg-muted"
+									class="flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium hover:bg-muted"
 									onclick={() => selectItem(item)}
 								>
 									<span class="font-semibold text-foreground">{item.name}</span>
 									<span
 										class="rounded-md border border-border/60 bg-muted px-2 py-0.5 text-xs text-muted-foreground"
 									>
-										หน่วย: {item.unit}
+										{item.unit}
 									</span>
 								</button>
 							{/each}
@@ -314,73 +367,68 @@
 					</div>
 				{/if}
 			</div>
-		</div>
+		</Field.Root>
 
 		{#if selectedItem}
-			<!-- Lot / Location selector -->
-			<div class="col-span-1 sm:col-span-2">
-				<label for="lot-select" class="text-xs font-bold text-foreground"
-					>สถานที่และล็อตที่ต้องการปรับปรุง *</label
+			<Field.Root class="col-span-1 sm:col-span-2">
+				<Field.Label for="lot-select"
+					>ล็อต <span class="font-bold text-destructive">*</span></Field.Label
 				>
-				<select
-					id="lot-select"
-					bind:value={selectedLotKey}
-					class="mt-1 h-10 w-full cursor-pointer rounded-xl border border-border/80 bg-background px-3 text-sm font-semibold text-foreground shadow-sm outline-none focus:border-primary"
-				>
-					<option value="" disabled>-- เลือกสถานที่ / ล็อตที่พบเจอปัญหา --</option>
-					{#each itemLots as lot (lot.key)}
-						<option value={lot.key}>{lot.label}</option>
-					{/each}
-					<option value="new">➕ สร้าง/ปรับปรุงสถานที่อื่นนอกเหนือจากนี้...</option>
-				</select>
-			</div>
+				<Select.Root type="single" bind:value={selectedLotKey}>
+					<Select.Trigger
+						id="lot-select"
+						class="min-h-11 w-full rounded-md border border-input bg-white px-3 text-sm font-medium"
+					>
+						{selectedLotKey === 'new'
+							? 'สร้างที่เก็บใหม่…'
+							: (itemLots.find((lot) => lot.key === selectedLotKey)?.label ?? 'เลือกล็อต')}
+					</Select.Trigger>
+					<Select.Content>
+						{#each itemLots as lot (lot.key)}
+							<Select.Item value={lot.key} label={lot.label} />
+						{/each}
+						<Select.Item value="new" label="สร้างที่เก็บใหม่…" />
+					</Select.Content>
+				</Select.Root>
+			</Field.Root>
 
-			<!-- Conditional Inputs for New Lot -->
 			{#if selectedLotKey === 'new'}
-				<div class="col-span-1">
-					<label for="custom-location" class="text-xs font-bold text-foreground"
-						>สถานที่จัดเก็บใหม่ *</label
-					>
-					<select
+				<Field.Root class="col-span-1">
+					<Field.Label for="custom-location">สถานที่จัดเก็บใหม่</Field.Label>
+					<StoragePointSelect
 						id="custom-location"
-						bind:value={customLocation}
-						class="mt-1 h-10 w-full cursor-pointer rounded-xl border border-border/80 bg-background px-3 text-sm font-semibold text-foreground shadow-sm outline-none focus:border-primary"
-					>
-						<option value="">เลือกโซนที่จัดเก็บ</option>
-						<option value="Zone A">Zone A (ของใช้ทั่วไป)</option>
-						<option value="Zone B">Zone B (ของที่เน่าเสียได้)</option>
-						<option value="Zone C">Zone C (ยาและเวชภัณฑ์)</option>
-					</select>
-				</div>
-				<div class="col-span-1">
-					<label for="custom-expiry" class="text-xs font-bold text-foreground">
-						วันหมดอายุใหม่
-						{#if selectedItem.perishable}
-							<span class="font-bold text-rose-500">* (ของเสียง่าย บังคับกรอก)</span>
-						{/if}
-					</label>
-					<Input
-						id="custom-expiry"
-						type="date"
-						bind:value={customExpiry}
-						class="mt-1 h-10 w-full rounded-xl border border-border/80 bg-background px-3 text-sm font-semibold shadow-sm transition outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+						points={storagePoints.points}
+						bind:value={customPointId}
+						onchange={(point) => (customPoint = point)}
 					/>
-				</div>
+				</Field.Root>
+				<Field.Root class="col-span-1">
+					<Field.Label for="custom-expiry">
+						วันหมดอายุ
+						{#if selectedItem.perishable}
+							<span class="font-bold text-destructive">*</span>
+						{:else}
+							<span class="font-normal text-muted-foreground">(ไม่บังคับ)</span>
+						{/if}
+					</Field.Label>
+					<DatePicker id="custom-expiry" ariaLabel="วันหมดอายุ" bind:value={customExpiry} />
+				</Field.Root>
 			{/if}
 
 			{#if selectedLotKey}
-				<!-- Quantity Input -->
-				<div class="col-span-1">
-					<label for="new-qty" class="text-xs font-bold text-foreground">จำนวนใหม่ *</label>
-					<div class="relative mt-1">
+				<Field.Root class="col-span-1">
+					<Field.Label for="new-qty"
+						>จำนวนใหม่ <span class="font-bold text-destructive">*</span></Field.Label
+					>
+					<div class="relative">
 						<Input
 							id="new-qty"
 							type="number"
-							placeholder="ระบุจำนวนใหม่"
+							placeholder="0"
 							min="0"
 							step="any"
 							bind:value={newQtyInput}
-							class="h-10 w-full rounded-xl border border-border/80 bg-background pr-16 pl-3 font-mono text-sm font-bold shadow-sm transition outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+							class="min-h-11 pr-16 font-mono font-bold"
 						/>
 						<span
 							class="absolute top-1/2 right-3 -translate-y-1/2 text-xs font-bold text-muted-foreground"
@@ -388,122 +436,115 @@
 							{selectedItem.unit}
 						</span>
 					</div>
-				</div>
+				</Field.Root>
 
-				<!-- Issuer (Disabled) -->
-				<div class="col-span-1">
-					<label for="issuer" class="text-xs font-bold text-foreground">ผู้ดำเนินการ (Issuer)</label
-					>
-					<Input
-						id="issuer"
-						value={authStore.user?.name || 'เจ้าหน้าที่คลังสินค้า (Admin)'}
-						disabled
-						class="mt-1 h-10 w-full cursor-not-allowed rounded-xl border border-border/80 bg-muted px-3 font-semibold text-muted-foreground shadow-sm"
-					/>
-				</div>
-
-				<!-- Delta preview & Type display -->
 				<div
-					class="col-span-1 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border/50 bg-muted/40 p-4 sm:col-span-2"
+					class="col-span-1 flex items-center justify-between gap-3 rounded-xl border border-border/50 bg-muted/40 p-3 sm:col-span-1"
 				>
-					<div class="flex flex-col gap-0.5">
-						<span class="text-xs font-medium text-muted-foreground">คำนวณการปรับยอด (Delta):</span>
-						{#if selectedLotKey !== 'new'}
-							<span class="text-2xs text-muted-foreground/80">
-								(ยอดเดิมในคลัง: {currentLotQty}
-								{selectedItem.unit})
-							</span>
-						{/if}
-					</div>
-					<div class="flex items-center gap-3">
-						<span
-							class={[
-								'rounded-lg border px-3 py-1 font-mono text-lg font-black',
-								Number(deltaQty) < 0
-									? 'border-rose-500/20 bg-rose-500/10 text-rose-600'
-									: Number(deltaQty) > 0
-										? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600'
-										: 'border-border bg-muted text-muted-foreground'
-							]}
-						>
-							{Number(deltaQty) > 0 ? '+' : ''}{deltaQty}
-							{selectedItem.unit}
-						</span>
-					</div>
-				</div>
-
-				<!-- Adjustment Type (Toggle Group) -->
-				<div class="col-span-1 sm:col-span-2">
-					<span class="block text-xs font-bold text-foreground">ประเภทการปรับปรุง</span>
-					<div class="mt-2 grid grid-cols-2 gap-3">
-						<button
-							type="button"
-							onclick={() => {
-								if (Number(deltaQty) > 0) {
-									toast.error('ไม่สามารถเลือกประเภทเขียนทิ้งเมื่อจำนวนใหม่มากกว่าจำนวนเดิม');
-									return;
-								}
-								adjustmentType = 'write_off';
-							}}
-							disabled={Number(deltaQty) > 0}
-							class={[
-								'flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 text-sm font-bold transition-all',
-								adjustmentType === 'write_off'
-									? 'border-rose-500 bg-rose-500/5 text-rose-600'
-									: 'border-border bg-card text-muted-foreground hover:bg-muted/50',
-								Number(deltaQty) > 0 ? 'cursor-not-allowed opacity-40' : ''
-							]}
-						>
-							<MinusCircle class="h-4 w-4" />
-							เขียนทิ้ง/ชำรุด
-						</button>
-						<button
-							type="button"
-							onclick={() => {
-								if (Number(deltaQty) < 0) {
-									toast.error('ไม่สามารถเลือกประเภทปรับยอดเพิ่มเมื่อจำนวนใหม่น้อยกว่าจำนวนเดิม');
-									return;
-								}
-								adjustmentType = 'add';
-							}}
-							disabled={Number(deltaQty) < 0}
-							class={[
-								'flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 text-sm font-bold transition-all',
-								adjustmentType === 'add'
-									? 'border-primary bg-primary/5 text-primary'
-									: 'border-border bg-card text-muted-foreground hover:bg-muted/50',
-								Number(deltaQty) < 0 ? 'cursor-not-allowed opacity-40' : ''
-							]}
-						>
-							<PlusCircle class="h-4 w-4" />
-							ปรับยอดเพิ่ม
-						</button>
-					</div>
-				</div>
-
-				<!-- Reason / Note -->
-				<div class="col-span-1 sm:col-span-2">
-					<label for="reason" class="text-xs font-bold text-foreground">เหตุผล / หมายเหตุ *</label>
-					<textarea
-						id="reason"
-						placeholder="เช่น ถุงข้าวสารเปียกน้ำฝนสาด หรือ ค้นพบสินค้าตกหล่นระหว่างตรวจนับ"
-						bind:value={reason}
-						rows="3"
-						class="mt-1 w-full rounded-xl border border-border/80 bg-background p-3 text-sm font-semibold shadow-sm transition outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
-					></textarea>
-				</div>
-
-				<!-- Submit Button -->
-				<div class="col-span-1 pt-3 sm:col-span-2">
-					<button
-						type="submit"
-						disabled={isSubmitting || deltaQty === '0' || !reason.trim()}
-						class="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-slate-900 text-sm font-extrabold text-white shadow-md transition-all duration-300 hover:scale-[1.02] hover:bg-slate-800 hover:shadow-lg active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+					<span class="text-xs text-muted-foreground">ปรับยอด</span>
+					<span
+						class={[
+							'rounded-lg border px-3 py-1 font-mono text-base font-black',
+							Number(deltaQty) < 0
+								? 'border-rose-500/20 bg-rose-500/10 text-rose-600'
+								: Number(deltaQty) > 0
+									? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600'
+									: 'border-border bg-muted text-muted-foreground'
+						]}
 					>
-						{isSubmitting ? 'กำลังบันทึกยอด...' : 'ยืนยันทำรายการ ปรับปรุงยอด'}
+						{Number(deltaQty) > 0 ? '+' : ''}{deltaQty}
+					</span>
+				</div>
+
+				<div class="col-span-1 sm:col-span-2">
+					<button
+						type="button"
+						class="flex min-h-11 w-full items-center justify-between rounded-lg border border-border/60 bg-muted/30 px-3 text-sm font-semibold"
+						onclick={() => (moreOpen = !moreOpen)}
+						aria-expanded={moreOpen}
+					>
+						<span>เพิ่มเติม</span>
+						<span class="text-xs text-muted-foreground"
+							>{moreOpen ? 'ซ่อน' : 'เหตุผล · ประเภท'}</span
+						>
 					</button>
+					{#if moreOpen}
+						<div class="mt-3 space-y-4">
+							<div class="grid grid-cols-2 gap-3">
+								<Button
+									type="button"
+									variant={adjustmentType === 'write_off' ? 'destructive' : 'outline'}
+									size="lg"
+									onclick={() => {
+										if (Number(deltaQty) > 0) {
+											toast.error('จำนวนใหม่มากกว่าเดิม — ใช้ปรับยอดเพิ่ม');
+											return;
+										}
+										adjustmentType = 'write_off';
+									}}
+									disabled={Number(deltaQty) > 0}
+									class="min-h-11 font-bold"
+								>
+									<MinusCircle class="h-4 w-4" />
+									เขียนทิ้ง
+								</Button>
+								<Button
+									type="button"
+									variant={adjustmentType === 'add' ? 'default' : 'outline'}
+									size="lg"
+									onclick={() => {
+										if (Number(deltaQty) < 0) {
+											toast.error('จำนวนใหม่น้อยกว่าเดิม — ใช้เขียนทิ้ง');
+											return;
+										}
+										adjustmentType = 'add';
+									}}
+									disabled={Number(deltaQty) < 0}
+									class="min-h-11 font-bold"
+								>
+									<PlusCircle class="h-4 w-4" />
+									ปรับเพิ่ม
+								</Button>
+							</div>
+							<Field.Root>
+								<Field.Label for="reason"
+									>เหตุผล <span class="font-bold text-destructive">*</span></Field.Label
+								>
+								<Textarea
+									id="reason"
+									placeholder="เช่น ของเสีย / พบตกหล่น"
+									bind:value={reason}
+									rows={2}
+								/>
+							</Field.Root>
+						</div>
+					{:else}
+						<!-- reason still required: show compact when collapsed -->
+						<Field.Root class="mt-3">
+							<Field.Label for="reason-compact"
+								>เหตุผล <span class="font-bold text-destructive">*</span></Field.Label
+							>
+							<Textarea
+								id="reason-compact"
+								placeholder="เช่น ของเสีย / พบตกหล่น"
+								bind:value={reason}
+								rows={2}
+							/>
+						</Field.Root>
+					{/if}
+				</div>
+
+				<div class="col-span-1 pt-1 sm:col-span-2">
+					<Button
+						type="submit"
+						size="lg"
+						disabled={isSubmitting || deltaQty === '0' || !reason.trim()}
+						class="min-h-11 w-full font-bold"
+					>
+						{isSubmitting ? 'กำลังบันทึก…' : 'บันทึกแล้วปรับชิ้นถัดไป'}
+					</Button>
 				</div>
 			{/if}
 		{/if}
-	</div>
+	</Field.FieldGroup>
 </form>

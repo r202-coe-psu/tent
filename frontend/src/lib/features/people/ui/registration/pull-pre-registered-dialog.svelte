@@ -32,7 +32,7 @@
 	let searchQuery = $state('');
 	let channelFilter = $state<'all' | 'kiosk' | 'web'>('all');
 
-	const evacueesQuery = useEvacuees();
+	const evacueesQuery = useEvacuees(() => open);
 	const allEvacuees = $derived(evacueesQuery.data ?? []);
 
 	const preRegisteredList = $derived.by(() => {

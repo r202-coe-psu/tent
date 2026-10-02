@@ -38,7 +38,7 @@
 		for (const t of current) {
 			try {
 				const res = await checkTicketStatus(t.code);
-				if (res.verified) {
+				if (res.verified || res.notFound) {
 					removeStoredTicket(t.code);
 					removedAny = true;
 				}
@@ -52,13 +52,13 @@
 				selectedTicket = null;
 			}
 			onTicketsChange?.();
-			toast.info('ตั๋วการจองได้รับการยืนยันเข้าศูนย์พักพิงแล้ว ระบบได้ลบข้อมูลออกจากอุปกรณ์');
+			toast.info('ใบลงทะเบียนได้รับการยืนยันเข้าศูนย์พักพิงแล้ว ระบบได้ลบข้อมูลออกจากอุปกรณ์');
 		}
 	}
 
 	function handleRemove(code: string, e?: MouseEvent) {
 		e?.stopPropagation();
-		if (confirm('คุณต้องการลบตั๋วการจองนี้ออกจากเครื่องหรือไม่?')) {
+		if (confirm('คุณต้องการลบใบลงทะเบียนนี้ออกจากเครื่องหรือไม่?')) {
 			removeStoredTicket(code);
 			tickets = getStoredTickets();
 			if (selectedTicket?.code === code) {
@@ -72,7 +72,7 @@
 		e?.stopPropagation();
 		if (
 			confirm(
-				'คุณได้นำตั๋วนี้ไปรายงานตัวยืนยันเข้าพักที่ศูนย์แล้วใช่หรือไม่?\n\nระบบจะลบข้อมูลตั๋วนี้ออกจากอุปกรณ์'
+				'คุณได้นำใบลงทะเบียนนี้ไปรายงานตัวยืนยันเข้าพักที่ศูนย์แล้วใช่หรือไม่?\n\nระบบจะลบใบลงทะเบียนนี้ออกจากอุปกรณ์'
 			)
 		) {
 			removeStoredTicket(code);
@@ -81,7 +81,7 @@
 				selectedTicket = null;
 			}
 			onTicketsChange?.();
-			toast.success('นำตั๋วไปยืนยันแล้ว ระบบได้ลบข้อมูลตั๋วนี้ออกจากอุปกรณ์เรียบร้อย');
+			toast.success('ยืนยันที่ศูนย์แล้ว ระบบได้ลบใบลงทะเบียนนี้ออกจากอุปกรณ์เรียบร้อย');
 		}
 	}
 
@@ -98,10 +98,20 @@
 				}
 				onTicketsChange?.();
 				toast.success(
-					'ตั๋วนี้ได้รับการยืนยันเข้าศูนย์พักพิงแล้ว ระบบได้ลบข้อมูลออกจากอุปกรณ์เรียบร้อย'
+					'ใบลงทะเบียนนี้ได้รับการยืนยันเข้าศูนย์พักพิงแล้ว ระบบได้ลบข้อมูลออกจากอุปกรณ์เรียบร้อย'
+				);
+			} else if (res.notFound) {
+				removeStoredTicket(code);
+				tickets = getStoredTickets();
+				if (selectedTicket?.code === code) {
+					selectedTicket = null;
+				}
+				onTicketsChange?.();
+				toast.info(
+					'ไม่พบใบลงทะเบียนนี้ในระบบ (อาจหมดอายุหรือถูกลบแล้ว) ระบบได้ลบข้อมูลออกจากอุปกรณ์'
 				);
 			} else {
-				toast.info('ตั๋วนี้ยังอยู่ระหว่างรอการยืนยันเข้าพักที่ศูนย์');
+				toast.info('ใบลงทะเบียนนี้ยังอยู่ระหว่างรอการยืนยันเข้าพักที่ศูนย์');
 			}
 		} catch {
 			toast.error('ไม่สามารถตรวจสอบสถานะได้ในขณะนี้');
@@ -131,7 +141,7 @@
 				class="inline-flex cursor-pointer items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground"
 			>
 				<ArrowLeft class="size-4" />
-				<span>กลับไปยังรายการตั๋วทั้งหมด</span>
+				<span>กลับไปยังรายการใบลงทะเบียนทั้งหมด</span>
 			</button>
 
 			<BookingTicketView
@@ -143,10 +153,9 @@
 	{:else}
 		<div class="flex items-center justify-between">
 			<div>
-				<h2 class="text-lg font-bold text-foreground">ตั๋วลงทะเบียนที่บันทึกไว้ในอุปกรณ์นี้</h2>
+				<h2 class="text-lg font-bold text-foreground">ใบลงทะเบียนที่บันทึกไว้ในอุปกรณ์นี้</h2>
 				<p class="text-xs text-muted-foreground">
-					แตะที่ตั๋วเพื่อเปิดแสดง QR Code สำหรับแสดงต่อเจ้าหน้าที่ลงทะเบียนประจำศูนย์
-					เพื่อยืนยันการเข้าพัก
+					แตะที่ใบลงทะเบียนเพื่อเปิด QR Code สำหรับแสดงต่อเจ้าหน้าที่ เพื่อยืนยันการเข้าพัก
 				</p>
 			</div>
 			{#if onNewBooking}
@@ -164,15 +173,15 @@
 				>
 					<QrCode class="size-6" />
 				</div>
-				<p class="text-sm font-bold text-foreground">ไม่พบตั๋วการจองในอุปกรณ์นี้</p>
+				<p class="text-sm font-bold text-foreground">ไม่พบใบลงทะเบียนในอุปกรณ์นี้</p>
 				<p class="mt-1 text-xs text-muted-foreground">
-					เมื่อคุณจองเข้าศูนย์พักพิงล่วงหน้าสำเร็จ ตั๋วและรหัส QR จะถูกบันทึกไว้ที่นี่โดยอัตโนมัติ
+					เมื่อคุณลงทะเบียนล่วงหน้าสำเร็จ ใบลงทะเบียนและ QR Code จะถูกบันทึกไว้ที่นี่โดยอัตโนมัติ
 				</p>
 				{#if onNewBooking}
 					<div class="mt-5">
 						<Button onclick={onNewBooking} class="font-semibold">
 							<Plus class="mr-1.5 size-4" />
-							<span>เริ่มการจองเข้าศูนย์ล่วงหน้า</span>
+							<span>เริ่มลงทะเบียนล่วงหน้า</span>
 						</Button>
 					</div>
 				{/if}
@@ -205,7 +214,7 @@
 										: t.code}
 								</span>
 								<span class="text-sm font-bold text-foreground">
-									{[t.first_name, t.last_name].filter(Boolean).join(' ') || 'ผู้จอง'}
+									{[t.first_name, t.last_name].filter(Boolean).join(' ') || 'ผู้ลงทะเบียน'}
 								</span>
 							</div>
 
@@ -230,7 +239,7 @@
 								type="button"
 								variant="outline"
 								size="sm"
-								title="ตรวจสอบว่าตั๋วได้รับการยืนยันที่ศูนย์แล้วหรือยัง"
+								title="ตรวจสอบว่าใบลงทะเบียนได้รับการยืนยันที่ศูนย์แล้วหรือยัง"
 								class="h-8 gap-1 px-2 text-xs font-semibold"
 								disabled={checkingCode === t.code}
 								onclick={(e) => handleCheckStatus(t.code, e)}
@@ -242,7 +251,7 @@
 								type="button"
 								variant="secondary"
 								size="sm"
-								title="ยืนยันว่านำตั๋วไปใช้งานแล้ว และลบออกจากอุปกรณ์"
+								title="ยืนยันว่านำใบลงทะเบียนไปใช้งานแล้ว และลบออกจากอุปกรณ์"
 								class="h-8 gap-1 px-2.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 dark:text-emerald-300 dark:hover:bg-emerald-950/50"
 								onclick={(e) => handleConfirmVerified(t.code, e)}
 							>
@@ -253,7 +262,7 @@
 								type="button"
 								variant="ghost"
 								size="icon-sm"
-								aria-label="ลบตั๋ว"
+								aria-label="ลบใบลงทะเบียน"
 								class="text-muted-foreground hover:text-destructive"
 								onclick={(e) => handleRemove(t.code, e)}
 							>

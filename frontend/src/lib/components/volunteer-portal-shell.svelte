@@ -1,6 +1,5 @@
 <script lang="ts">
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
-	import HeartHandshake from '@lucide/svelte/icons/heart-handshake';
 	import { resolve } from '$app/paths';
 	import type { Snippet } from 'svelte';
 	import { PORTAL_SESSION_KEY, PORTAL_TOKEN_HANDOFF_KEY } from '$lib/features/volunteer-portal';
@@ -28,14 +27,14 @@
 				class="flex min-w-0 items-center gap-3"
 				aria-label="กลับหน้าหลัก"
 			>
-				<div
-					class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white/10 text-white"
-				>
-					<HeartHandshake class="size-6" strokeWidth={1.8} />
-				</div>
+				<img
+					src="/logo.png"
+					alt="PSU Smart Shelter"
+					class="size-10 shrink-0 rounded-xl object-contain"
+				/>
 				<div class="min-w-0">
 					<p class="truncate text-base font-extrabold tracking-tight sm:text-lg">
-						ระบบบริการจิตอาสา
+						PSU Smart Shelter
 					</p>
 					<p
 						class="line-clamp-2 text-[11px] leading-snug font-medium whitespace-normal text-blue-100 sm:text-xs"

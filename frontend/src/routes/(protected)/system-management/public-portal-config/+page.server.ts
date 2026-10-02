@@ -1,4 +1,8 @@
-import { publicConfigBodySchema, type PublicConfigBody } from '$lib/features/public-portal';
+import {
+	publicConfigBodySchema,
+	DEFAULT_PUBLIC_PORTAL_CONFIG,
+	type PublicConfigBody
+} from '$lib/features/public-portal';
 import type { PageServerLoad, Actions } from './$types';
 import { adminRaw, authorizeUserWrite, ServiceError } from '$lib/server/couch-admin';
 import { fail, error } from '@sveltejs/kit';
@@ -20,22 +24,7 @@ export const load: PageServerLoad = async ({ request }) => {
 	// Fetch existing config
 	const { status, data } = await adminRaw(CONFIG_DOC_PATH, 'GET');
 
-	let initialData: PublicConfigBody = {
-		faqs: {
-			public: [
-				{
-					id: '1',
-					question: 'วิธีการลงทะเบียนผู้ประสบภัยต้องทำอย่างไร?',
-					answer: 'สามารถลงทะเบียนได้ที่ศูนย์พักพิง หรือให้ญาติลงทะเบียนผ่านระบบนี้ล่วงหน้าได้',
-					is_published: true,
-					order: 0
-				}
-			]
-		},
-		phone_number: '',
-		line_oa_url: '',
-		facebook_url: ''
-	};
+	let initialData: PublicConfigBody = structuredClone(DEFAULT_PUBLIC_PORTAL_CONFIG);
 
 	if (status === 200 && data) {
 		initialData = data as typeof initialData;

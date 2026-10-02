@@ -64,6 +64,7 @@
 		excludeIds = [],
 		fieldErrors,
 		isJoiningExistingHousehold = false,
+		primaryContactPhone = null,
 		onRemove,
 		onReportingInChange,
 		onApplyZoneToAll,
@@ -80,6 +81,7 @@
 		excludeIds?: string[];
 		fieldErrors?: Record<string, string | undefined>;
 		isJoiningExistingHousehold?: boolean;
+		primaryContactPhone?: string | null;
 		onRemove?: () => void;
 		onReportingInChange?: (reportingIn: boolean) => void;
 		onApplyZoneToAll?: (zoneCode: string) => void;
@@ -91,7 +93,7 @@
 	const title = $derived(isPrimary ? t.primaryContact : `${t.memberLabel} ${index + 1}`);
 	const photoInputId = $derived(`unified-member-photo-${index}`);
 	const showPhotoUpload = $derived(photoUpload !== 'none');
-	const hideNoPhone = $derived(channel === 'public' && index === 0);
+	const hideNoPhone = $derived(channel === 'public' && index === 0 && !isJoiningExistingHousehold);
 
 	const isReportIn = $derived(mode === 'report-in');
 	const isAlreadyReported = $derived(
@@ -627,7 +629,9 @@
 			{hideNoPhone}
 			phoneOptional={isJoiningExistingHousehold}
 			phoneHelperText={isJoiningExistingHousehold
-				? 'หากไม่ระบุเบอร์โทรศัพท์ จะใช้เบอร์ติดต่อของผู้ติดต่อหลักครอบครัวนี้แทนโดยอัตโนมัติ'
+				? primaryContactPhone
+					? `${t.joinPhoneOptionalHelper} (${primaryContactPhone})`
+					: t.joinPhoneOptionalHelper
 				: ''}
 			idPrefix="member-{index}"
 			errors={fieldErrors}
@@ -757,8 +761,10 @@
 	{/if}
 </section>
 
-<PullPreRegisteredDialog
-	bind:open={pullDialogOpen}
-	{excludeIds}
-	onselect={handlePopulateFromQueue}
-/>
+{#if channel === 'onsite' && isReportIn}
+	<PullPreRegisteredDialog
+		bind:open={pullDialogOpen}
+		{excludeIds}
+		onselect={handlePopulateFromQueue}
+	/>
+{/if}

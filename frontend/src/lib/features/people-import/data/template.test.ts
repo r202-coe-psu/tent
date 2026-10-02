@@ -8,14 +8,9 @@ import {
 	type TemplateMasters
 } from './template';
 
-const MASTERS: TemplateMasters = {
-	municipality_zone: [{ value: 'Z1', label: 'เขต 1' }],
-	community: [{ value: 'C1', label: 'ชุมชนริมน้ำ' }]
-};
+const EMPTY_MASTERS: TemplateMasters = {};
 
-const NO_MASTERS: TemplateMasters = { municipality_zone: [], community: [] };
-
-async function generateAndParse(masters: TemplateMasters = NO_MASTERS) {
+async function generateAndParse(masters: TemplateMasters = EMPTY_MASTERS) {
 	const blob = await buildPeopleTemplateBlob(masters, { withSample: true });
 	const file = new File([await blob.arrayBuffer()], 'template.xlsx');
 	return parsePeopleWorkbook(file);
@@ -71,7 +66,7 @@ describe('xlsx template → parse round trip', () => {
 		const ExcelJS = (await import('exceljs')).default;
 		const wb = new ExcelJS.Workbook();
 		await wb.xlsx.load(
-			await (await buildPeopleTemplateBlob(NO_MASTERS, { withSample: true })).arrayBuffer()
+			await (await buildPeopleTemplateBlob(EMPTY_MASTERS, { withSample: true })).arrayBuffer()
 		);
 		wb.worksheets.forEach((ws, i) => (ws.name = `Sheet${i + 1}`));
 
@@ -82,17 +77,15 @@ describe('xlsx template → parse round trip', () => {
 		expect(households[0].cells[H.first_name]).toBeTruthy();
 	});
 
-	it('only pre-fills master-data cells the shelter actually has', async () => {
-		const withMasters = await generateAndParse(MASTERS);
-		expect(withMasters.households[0].cells[H.municipality_zone]).toBe('เขต 1');
-
-		const without = await generateAndParse(NO_MASTERS);
-		expect(without.households[0].cells[H.municipality_zone]).toBe('');
+	it('always pre-fills free-text zone and community in the sample (CR-137)', async () => {
+		const { households } = await generateAndParse();
+		expect(households[0].cells[H.municipality_zone]).toBe('เขตเทศบาลนครหาดใหญ่ 1');
+		expect(households[0].cells[H.community]).toBe('ชุมชนริมน้ำ');
 	});
 });
 
 describe('csv template → parse round trip', () => {
-	async function parseCsvTemplate(masters: TemplateMasters = NO_MASTERS) {
+	async function parseCsvTemplate(masters: TemplateMasters = EMPTY_MASTERS) {
 		const blob = buildPeopleCsvTemplateBlob(masters, { withSample: true });
 		return parsePeopleWorkbook(new File([await blob.text()], 'template.csv'));
 	}
@@ -123,7 +116,7 @@ describe('csv template → parse round trip', () => {
 
 describe('csv template shape', () => {
 	it('marks required columns in the header text so the parser strips them back', async () => {
-		const text = await buildPeopleCsvTemplateBlob(NO_MASTERS).text();
+		const text = await buildPeopleCsvTemplateBlob(EMPTY_MASTERS).text();
 		const header = text.replace(/^\uFEFF/, '').split('\r\n')[0];
 
 		expect(header).toContain(`${H.first_name} *`);

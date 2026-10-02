@@ -18,7 +18,7 @@
 	});
 
 	function selectTab(tab: TabKey) {
-		void goto(`${resolve('/back-office/evacuee-management')}?tab=${tab}`, {
+		void goto(resolve(`/back-office/evacuee-management?tab=${tab}`), {
 			replaceState: true,
 			keepFocus: true,
 			noScroll: true
@@ -30,14 +30,23 @@
 	<title>จัดการผู้ประสบภัย · SmartShelter</title>
 </svelte:head>
 
-<div class="flex flex-col">
-	<!-- Tab nav sticks under the back-office page header (h-16 / top-0). -->
-	<div class="sticky top-16 z-20 border-b border-border bg-background px-6 pt-4">
-		<nav class="flex gap-1">
+<!--
+  --bo-evacuee-tabs-height: sticky tab strip (pt-4 + min-h-11 tabs ≈ 3.75rem).
+  --bo-evacuee-selection-top: selection bars in tab bodies stick under BO chrome + tabs.
+-->
+<div
+	class="flex flex-col"
+	style="--bo-evacuee-tabs-height: 3.75rem; --bo-evacuee-selection-top: calc(var(--bo-sticky-top) + var(--bo-evacuee-tabs-height));"
+>
+	<!-- Tab nav sticks under BO chrome; offset via --bo-sticky-top (app.css). -->
+	<div
+		class="sticky top-[var(--bo-sticky-top)] z-20 border-b border-border bg-background px-4 pt-4 sm:px-6"
+	>
+		<nav class="-mx-1 flex gap-1 overflow-x-auto px-1">
 			<button
 				type="button"
 				onclick={() => selectTab('dashboard')}
-				class="flex items-center gap-2 border-b-2 px-4 pb-3 text-sm font-medium transition-colors
+				class="flex min-h-11 shrink-0 items-center gap-2 border-b-2 px-4 pb-3 text-sm font-medium transition-colors
 					{activeTab === 'dashboard'
 					? 'border-primary text-primary'
 					: 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'}"
@@ -48,7 +57,7 @@
 			<button
 				type="button"
 				onclick={() => selectTab('evacuee')}
-				class="flex items-center gap-2 border-b-2 px-4 pb-3 text-sm font-medium transition-colors
+				class="flex min-h-11 shrink-0 items-center gap-2 border-b-2 px-4 pb-3 text-sm font-medium transition-colors
 					{activeTab === 'evacuee'
 					? 'border-primary text-primary'
 					: 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'}"
@@ -59,7 +68,7 @@
 			<button
 				type="button"
 				onclick={() => selectTab('household')}
-				class="flex items-center gap-2 border-b-2 px-4 pb-3 text-sm font-medium transition-colors
+				class="flex min-h-11 shrink-0 items-center gap-2 border-b-2 px-4 pb-3 text-sm font-medium transition-colors
 					{activeTab === 'household'
 					? 'border-primary text-primary'
 					: 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'}"

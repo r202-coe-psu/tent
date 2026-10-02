@@ -14,6 +14,17 @@ import {
 type GetEvent = Parameters<typeof GET>[0];
 type PostEvent = Parameters<typeof POST>[0];
 
+const { adminRaw, verifyToken, providerProjectId } = vi.hoisted(() => ({
+	adminRaw: vi.fn(),
+	verifyToken: vi.fn<(token: string, ip?: string, action?: string) => Promise<boolean>>(),
+	providerProjectId: { value: '' }
+}));
+
+vi.mock('$app/environment', () => ({
+	dev: false,
+	browser: false
+}));
+
 vi.mock('$lib/server/security/rate-limiter', () => ({
 	volunteerTicketLimiter: { check: vi.fn(() => true) },
 	volunteerApplyIpLimiter: { check: vi.fn(() => true) },
@@ -22,19 +33,26 @@ vi.mock('$lib/server/security/rate-limiter', () => ({
 
 vi.mock('$lib/server/security/captcha', () => ({
 	ReCaptchaProvider: class {
-		verifyToken() {
-			return Promise.resolve(true);
+		constructor(projectId: string) {
+			providerProjectId.value = projectId;
+		}
+
+		verifyToken(token: string, ip?: string, action?: string) {
+			return verifyToken(token, ip, action);
 		}
 	}
 }));
 
 vi.mock('$env/dynamic/private', () => ({
 	env: {
-		SECRET_RECAPTCHA_KEY: 'test-recaptcha-secret',
+		RECAPTCHA_PROJECT_ID: 'smart-shelter-508719',
+		SECRET_RECAPTCHA_KEY: '',
 		FASTAPI_INTERNAL_URL: 'http://localhost:9000',
 		EXTERNAL_API_SECRET: 'test-external-secret'
 	}
 }));
+
+vi.mock('$lib/server/couch-admin', () => ({ adminRaw }));
 
 vi.mock('$lib/features/volunteers/server/public-application', () => ({
 	applyPublicVolunteerApplication: vi.fn(),
@@ -65,6 +83,13 @@ describe('GET /api/public/v1/volunteer/jobs', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		vi.mocked(volunteerTicketLimiter.check).mockReturnValue(true);
+		vi.mocked(volunteerApplyIpLimiter.check).mockReturnValue(true);
+		vi.mocked(volunteerApplyPhoneLimiter.check).mockReturnValue(true);
+		verifyToken.mockResolvedValue(true);
+		adminRaw.mockResolvedValue({
+			status: 200,
+			data: { _id: 'config:app', type: 'config', recaptcha_enabled: true }
+		});
 	});
 
 	it('forwards the board request with the service credential and never caches it', async () => {
@@ -162,6 +187,42 @@ describe('POST /api/public/v1/volunteer/jobs/[id]/apply', () => {
 			phone: '0812345678',
 			skills: ['cooking']
 		});
+		expect(providerProjectId.value).toBe('smart-shelter-508719');
+		expect(verifyToken).toHaveBeenCalledWith('dummy-token', '127.0.0.1', 'volunteer_apply');
+	});
+
+	it('requires a CAPTCHA token when the shared gate is enabled', async () => {
+		const { response, fetch } = post({ ...validApplication, captchaToken: undefined });
+
+		expect((await response).status).toBe(400);
+		expect(fetch).not.toHaveBeenCalled();
+		expect(applyPublicVolunteerApplication).not.toHaveBeenCalled();
+	});
+
+	it('blocks the application when CAPTCHA verification fails', async () => {
+		verifyToken.mockResolvedValue(false);
+		const { response, fetch } = post(validApplication);
+
+		expect((await response).status).toBe(403);
+		expect(fetch).not.toHaveBeenCalled();
+		expect(applyPublicVolunteerApplication).not.toHaveBeenCalled();
+	});
+
+	it('skips CAPTCHA when the operator disables the shared gate', async () => {
+		adminRaw.mockResolvedValue({
+			status: 200,
+			data: { _id: 'config:app', type: 'config', recaptcha_enabled: false }
+		});
+		vi.mocked(applyPublicVolunteerApplication).mockResolvedValue({
+			tracking_token: 'TKT-VOL-1',
+			status: 'confirmed',
+			job_id: 'job:1'
+		});
+
+		const { response } = post({ ...validApplication, captchaToken: undefined });
+
+		expect((await response).status).toBe(201);
+		expect(verifyToken).not.toHaveBeenCalled();
 	});
 
 	it('rejects a malformed application before spending any budget', async () => {

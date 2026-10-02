@@ -4,7 +4,14 @@
  */
 
 // Domain — documents
-export type { Recipe, Ingredient, ItemCategory, ItemMaster } from './domain/catalog';
+export type {
+	Recipe,
+	Ingredient,
+	ItemCategory,
+	ItemMaster,
+	SystemCategoryKey,
+	SystemItemCategoryDef
+} from './domain/catalog';
 export type {
 	Dimension,
 	UnitOfMeasure,
@@ -25,6 +32,15 @@ export {
 
 // Domain — input schemas + factories + transitions + guards
 export {
+	// System categories (CR-119)
+	SYSTEM_CATEGORY_KEYS,
+	SYSTEM_ITEM_CATEGORIES,
+	systemCategoryId,
+	resolveCategoryId,
+	resolveCategoryLabel,
+	itemBelongsToCategory,
+	catalogOrigin,
+	canShelterDeleteCatalogDoc,
 	// Item Category
 	itemCategoryInputSchema,
 	type ItemCategoryInput,
@@ -39,6 +55,17 @@ export {
 	isItemMaster,
 	itemMasterUnit,
 	DEFAULT_ITEM_UNIT,
+	itemSelectableUoms,
+	packagingMultiplier,
+	qtyToBaseUnit,
+	qtyFromBaseUnit,
+	defaultInventoryUom,
+	defaultIssueUom,
+	toLedgerQtyUnit,
+	type PackagingUomOption,
+	type PackagingSource,
+	mergeCatalogGenerations,
+	type CatalogEntry,
 	// Recipe
 	recipeInputSchema,
 	type RecipeInput,
@@ -51,6 +78,7 @@ export {
 	dimensionSchema,
 	unitCodeSchema,
 	isCanonicalUnitCode,
+	canonicalizeUnitCode,
 	isLegacyUnitLabel,
 	assertKnownUnitCodes,
 	unitOfMeasureInputSchema,
@@ -102,6 +130,8 @@ export {
 
 // UI — feature components
 export { default as CatalogFormPage } from './ui/catalog-form-page.svelte';
+export { default as CatalogWorkspace } from './ui/catalog-workspace.svelte';
+export { default as ProductsPanel } from './ui/products-panel.svelte';
 export { default as ItemCategoryForm } from './ui/item-category-form.svelte';
 export { default as ItemMasterForm } from './ui/item-master-form.svelte';
 export { default as RecipeForm } from './ui/recipe-form.svelte';

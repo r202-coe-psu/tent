@@ -33,15 +33,40 @@ describe('PUBLIC_DONATIONS_I18N dictionary', () => {
 		const en = PUBLIC_DONATIONS_I18N.en;
 
 		expect(th.needsCount).toContain('{count}');
-		expect(th.needsCount).toContain('{pct}');
 		expect(en.needsCount).toContain('{count}');
-		expect(en.needsCount).toContain('{pct}');
 
 		expect(th.needShortage).toContain('{qty}');
 		expect(th.needShortage).toContain('{unit}');
-		expect(th.needShortage).toContain('{pending}');
 		expect(en.needShortage).toContain('{qty}');
 		expect(en.needShortage).toContain('{unit}');
-		expect(en.needShortage).toContain('{pending}');
+	});
+
+	/**
+	 * The board's progress figures come from the projection (`qty_target`, `on_hand`,
+	 * `reserved`), and each has its own labelled line. They were once invented in the
+	 * component (`target = qty × 2`, `reserved = 0`), so every card read the same 50%
+	 * and "จองไว้ 0".
+	 *
+	 * The shortage sentence stays a shortage sentence: it must not fold a reserved or
+	 * received figure back into itself, which is the shape that hid the fake numbers
+	 * inside ordinary-looking copy.
+	 */
+	it('keeps the shortage line to the shortage', () => {
+		for (const locale of [PUBLIC_DONATIONS_I18N.th, PUBLIC_DONATIONS_I18N.en]) {
+			expect(locale.needShortage).not.toContain('{pending}');
+			expect(locale.needShortage).not.toContain('{received}');
+			expect(locale.needShortage).not.toContain('{target}');
+		}
+	});
+
+	it('offers a progress variant of the shelter line, used only when a target exists', () => {
+		for (const locale of [PUBLIC_DONATIONS_I18N.th, PUBLIC_DONATIONS_I18N.en]) {
+			// Plain variant for a board with no published target — no percentage to show.
+			expect(locale.needsCount).toContain('{count}');
+			expect(locale.needsCount).not.toContain('{pct}');
+			// …and the variant that does carry one.
+			expect(locale.needsCountWithProgress).toContain('{count}');
+			expect(locale.needsCountWithProgress).toContain('{pct}');
+		}
 	});
 });

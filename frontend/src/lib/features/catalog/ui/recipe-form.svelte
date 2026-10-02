@@ -77,8 +77,8 @@
 						return;
 					}
 					if (basePath.includes('back-office') && !itemRecipeQuery.data.shelter_code) {
-						// eslint-disable-next-line @typescript-eslint/no-unused-vars
 						const { _rev, ...recipeData } = itemRecipeQuery.data;
+						void _rev;
 						const overrideDoc = {
 							...recipeData,
 							...submitData,
@@ -160,13 +160,11 @@
 {:else}
 	<form method="POST" use:form.enhance class="space-y-6">
 		<div class="space-y-2">
-			<span class="text-sm font-semibold text-slate-800 dark:text-slate-200">
-				หมวดหมู่ข้อมูล (Type)
-			</span>
+			<span class="text-sm font-semibold text-slate-800 dark:text-slate-200"> ประเภทข้อมูล </span>
 			<div
 				class="w-full rounded-xl border border-slate-100/50 bg-slate-100/70 px-4 py-3.5 text-sm font-medium text-slate-500 dark:border-zinc-800 dark:bg-zinc-800 dark:text-zinc-400"
 			>
-				สูตรอาหารมาตรฐาน (Recipe)
+				สูตรอาหาร
 			</div>
 		</div>
 
@@ -176,7 +174,7 @@
 				<Form.Control>
 					{#snippet children({ props })}
 						<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200">
-							Label (ชื่อแสดงผลภาษาไทย) <span class="font-bold text-red-500">*</span>
+							ชื่อสูตรอาหาร <span class="font-bold text-red-500">*</span>
 						</Form.Label>
 						<Input
 							{...props}

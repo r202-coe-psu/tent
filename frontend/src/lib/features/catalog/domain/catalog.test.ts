@@ -9,7 +9,20 @@ import {
 	itemCategoryInputSchema,
 	createRecipe,
 	isRecipe,
-	recipeInputSchema
+	recipeInputSchema,
+	mergeCatalogGenerations,
+	resolveCategoryId,
+	resolveCategoryLabel,
+	itemBelongsToCategory,
+	catalogOrigin,
+	canShelterDeleteCatalogDoc,
+	itemSelectableUoms,
+	qtyToBaseUnit,
+	qtyFromBaseUnit,
+	toLedgerQtyUnit,
+	defaultInventoryUom,
+	defaultIssueUom,
+	packagingMultiplier
 } from './catalog';
 import type { AuthorContext } from '$lib/db/model';
 
@@ -64,7 +77,58 @@ describe('catalog domain', () => {
 		expect(doc._id).toMatch(/^item_category:[0-9A-HJKMNP-TV-Z]{26}$/);
 		expect(doc.type).toBe('item_category');
 		expect(doc.name).toBe('เครื่องมือแพทย์');
+		expect(doc.is_protected).toBe(false);
 		expect(isItemCategory(doc)).toBe(true);
+	});
+
+	it('resolves category refs by id, system name, and legacy Thai name', () => {
+		const cats = [
+			{
+				_id: 'item_category:food',
+				name: 'อาหารและวัตถุดิบ (Food Ingredients)',
+				system_key: 'FOOD' as const
+			}
+		];
+		expect(resolveCategoryId('item_category:food', cats)).toBe('item_category:food');
+		expect(resolveCategoryId('อาหารและวัตถุดิบ', cats)).toBe('item_category:food');
+		expect(resolveCategoryId('unknown', cats)).toBeUndefined();
+		expect(itemBelongsToCategory({ category: 'อาหารและวัตถุดิบ' }, cats[0])).toBe(true);
+		expect(catalogOrigin({ shelter_code: 'SH001' }, 'SH001')).toBe('local');
+		expect(catalogOrigin({ shelter_code: 'SH001', override: true }, 'SH001')).toBe('override');
+		expect(catalogOrigin({}, 'SH001')).toBe('central');
+		expect(canShelterDeleteCatalogDoc({ shelter_code: 'SH001' }, 'SH001')).toBe(true);
+		expect(canShelterDeleteCatalogDoc({}, 'SH001')).toBe(false);
+	});
+
+	it('resolveCategoryLabel returns human-readable names for system ids', () => {
+		expect(resolveCategoryLabel('item_category:food')).toBe('อาหารและวัตถุดิบ (Food Ingredients)');
+		expect(resolveCategoryLabel('อาหารและวัตถุดิบ')).toBe('อาหารและวัตถุดิบ (Food Ingredients)');
+		expect(
+			resolveCategoryLabel('item_category:food', [
+				{
+					_id: 'item_category:food',
+					name: 'อาหารและวัตถุดิบ',
+					system_key: 'FOOD'
+				}
+			])
+		).toBe('อาหารและวัตถุดิบ');
+		expect(resolveCategoryLabel('unknown-cat')).toBe('unknown-cat');
+		expect(resolveCategoryLabel('')).toBe('');
+	});
+
+	it('rejects duplicate conversion uom codes on one item', () => {
+		expect(() =>
+			itemMasterInputSchema.parse({
+				name: 'ข้าวสาร',
+				base_unit: 'kg',
+				type_class: 'CONSUMABLE',
+				distribution_type: 'recurring',
+				conversions: [
+					{ uom_name: 'bag', multiplier: '5' },
+					{ uom_name: 'bag', multiplier: '50' }
+				]
+			})
+		).toThrow();
 	});
 
 	it('should validate valid recipe input', () => {
@@ -325,5 +389,101 @@ describe('catalog domain', () => {
 				type_class: 'CONSUMABLE' as const
 			})
 		).toThrow(/Base unit must be a valid lowercase English code/);
+	});
+});
+
+// `item_master` replaces `supply_item` (schema.md §4.2) but the migration has not
+// run, so the seed carries both generations of the same goods. Item pickers listed
+// the two sources back to back and showed "ข้าวสาร (kg)" twice — with no way to see
+// which id was being bound.
+describe('mergeCatalogGenerations', () => {
+	const supply = [
+		{ _id: 'item:rice', name: 'ข้าวสาร', unit: 'kg', category: 'food', perishable: false },
+		{ _id: 'item:water', name: 'น้ำดื่ม', unit: 'bottle', category: 'water', perishable: false }
+	];
+	const masters = [
+		{ _id: 'item_master:rice', name: 'ข้าวสาร', base_unit: 'kg', category: 'food' },
+		{ _id: 'item_master:canned-fish', name: 'ปลากระป๋อง', base_unit: 'can', category: 'food' }
+	];
+
+	it('lists each item once', () => {
+		const merged = mergeCatalogGenerations(supply, masters);
+		expect(merged.map((m) => m.name)).toEqual(['ข้าวสาร', 'น้ำดื่ม', 'ปลากระป๋อง']);
+	});
+
+	// Every stock_ledger row and campaign need in the data is an `item:` id; binding a
+	// new campaign to `item_master:rice` would open a second donor card for rice.
+	it('keeps the legacy id when the same item exists in both generations', () => {
+		const merged = mergeCatalogGenerations(supply, masters);
+		expect(merged.find((m) => m.name === 'ข้าวสาร')?._id).toBe('item:rice');
+	});
+
+	it('keeps an item_master that has no legacy twin', () => {
+		const merged = mergeCatalogGenerations(supply, masters);
+		expect(merged.find((m) => m.name === 'ปลากระป๋อง')?._id).toBe('item_master:canned-fish');
+	});
+
+	it('resolves the item_master unit through base_unit', () => {
+		const merged = mergeCatalogGenerations([], masters);
+		expect(merged.find((m) => m.name === 'ปลากระป๋อง')?.unit).toBe('can');
+	});
+
+	it('drops deactivated item masters', () => {
+		const merged = mergeCatalogGenerations(
+			[],
+			[{ _id: 'item_master:old', name: 'เลิกใช้', base_unit: 'ชิ้น', deactivated: true }]
+		);
+		expect(merged).toEqual([]);
+	});
+
+	// Names arrive from two different seeds; a stray space must not defeat the match.
+	it('matches names ignoring case and surrounding space', () => {
+		const merged = mergeCatalogGenerations(
+			[{ _id: 'item:soap', name: ' สบู่ก้อน ', unit: 'bar', category: 'hygiene' }],
+			[{ _id: 'item_master:soap', name: 'สบู่ก้อน', base_unit: 'bar' }]
+		);
+		expect(merged).toHaveLength(1);
+		expect(merged[0]._id).toBe('item:soap');
+	});
+});
+
+describe('packaging UOM conversion', () => {
+	const rice = {
+		base_unit: 'kg',
+		conversions: [
+			{ uom_name: 'bag', multiplier: '5' },
+			{ uom_name: 'sack', multiplier: '50' }
+		],
+		default_inventory_uom: 'sack',
+		default_issue_uom: 'bag'
+	};
+
+	it('lists base plus each packaging UOM once', () => {
+		expect(itemSelectableUoms(rice).map((o) => o.code)).toEqual(['kg', 'bag', 'sack']);
+		expect(itemSelectableUoms(rice).find((o) => o.code === 'sack')?.multiplier).toBe('50');
+	});
+
+	it('converts packaging qty to base units for ledger write', () => {
+		expect(qtyToBaseUnit('2', 'sack', rice)).toBe('100');
+		expect(toLedgerQtyUnit('2', 'sack', rice)).toEqual({ qty: '100', unit: 'kg' });
+		expect(qtyFromBaseUnit('100', 'sack', rice)).toBe('2');
+	});
+
+	it('defaults receive/issue UOMs when they are selectable', () => {
+		expect(defaultInventoryUom(rice)).toBe('sack');
+		expect(defaultIssueUom(rice)).toBe('bag');
+		expect(defaultInventoryUom({ base_unit: 'piece', conversions: [] })).toBe('piece');
+		expect(
+			defaultIssueUom({
+				base_unit: 'kg',
+				conversions: [{ uom_name: 'bag', multiplier: '5' }],
+				default_issue_uom: 'missing'
+			})
+		).toBe('kg');
+	});
+
+	it('rejects unknown packaging codes', () => {
+		expect(() => qtyToBaseUnit('1', 'crate', rice)).toThrow(/Unknown unit/);
+		expect(packagingMultiplier(rice, 'kg')).toBe('1');
 	});
 });

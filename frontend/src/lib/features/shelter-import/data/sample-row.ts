@@ -36,6 +36,8 @@ export interface SampleWorkbook {
 	shelter: Record<string, string | number>;
 	/** one entry per zone row, header -> value. */
 	zones: Record<string, string | number>[];
+	/** one entry per food distribution point row, header -> value. */
+	foodDistributionPoints: Record<string, string | number>[];
 }
 
 /** Look up a choice's label by its value — throws on drift instead of silently mismatching. */
@@ -165,5 +167,14 @@ export function buildSampleWorkbook(masters: TemplateMasters): SampleWorkbook {
 		}
 	];
 
-	return { shelter, zones };
+	const foodDistributionPoints: Record<string, string | number>[] = [
+		{
+			[H.food_point_name]: 'จุดแจกอาหารหน้าอาคารอเนกประสงค์',
+			[H.food_point_note]: 'เปิด 11:00–13:00 น.',
+			[H.food_point_lat]: 7.0088,
+			[H.food_point_lng]: 100.4751
+		}
+	];
+
+	return { shelter, zones, foodDistributionPoints };
 }

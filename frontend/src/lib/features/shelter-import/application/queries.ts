@@ -1,39 +1,75 @@
-import {
-	createMutation,
-	createQuery,
-	useQueryClient,
-	type QueryClient
-} from '@tanstack/svelte-query';
+import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
 import { toast } from 'svelte-sonner';
-import {
-	subscribeDataChanges,
-	type SubscribeDataChangesHandle
-} from '$lib/db/subscribe-data-changes';
-import { createShelter, getShelter, updateShelter, sheltersKeys } from '$lib/features/shelters';
-import { SHELTER_IMPORT_LOG_TYPE } from '../domain/import-log';
-import { createShelterImportLog, type ImportRowResult } from '../domain/import-log';
-import { buildUpdatePayload, type RowValidation } from '../domain/import-row';
-import type { DuplicateMatch } from '../domain/duplicates';
-import { IMPORT_LOG_REGISTRY_DB, listImportLogs, writeImportLog } from '../data/import-log.remote';
+import { serviceFetch } from '$lib/api/service';
+import type { RowValidation } from '../domain/import-row';
+import { listImportLogs } from '../data/import-log.remote';
+
+export type ImportJobStatus = 'queued' | 'running' | 'completed' | 'completed_with_errors';
+export type ImportItemStatus =
+	'pending' | 'running' | 'created' | 'updated' | 'skipped' | 'failed' | 'validation_error';
+
+export interface ImportJobItem {
+	row: number;
+	name: string | null;
+	status: ImportItemStatus;
+	code?: string;
+	errors?: { column: string; message: string; sheet?: string; line?: number }[];
+	attempts: number;
+	max_attempts?: number;
+	dead_lettered_at?: string;
+}
+
+export interface ImportJob {
+	_id: string;
+	_rev?: string;
+	filename: string;
+	imported_by: string;
+	status: ImportJobStatus;
+	total: number;
+	pending: number;
+	running: number;
+	succeeded: number;
+	failed: number;
+	skipped: number;
+	attempt?: number;
+	started_at?: string;
+	finished_at?: string;
+}
+
+export interface ImportJobSummary {
+	job: ImportJob;
+	items: ImportJobItem[];
+}
+
+export interface CreateImportJobResponse {
+	jobId: string;
+}
+
+export function isImportJobTerminal(status: ImportJobStatus | undefined): boolean {
+	return status === 'completed' || status === 'completed_with_errors';
+}
 
 /**
  * Shelter Excel import — TanStack Query wiring (CR-039).
  *
- * The import mutation POSTs valid rows one at a time (the back-office endpoint
- * mints codes as `max(SHxxx)+1`, so parallel writes would collide), records the
- * per-row outcome in a `shelter_import_log`, then invalidates the shelter list.
- * Log reactivity rides the `registry` changes feed — no polling.
+ * The import mutation creates a durable server-side job. A worker processes
+ * each row sequentially and the job query polls its per-row status.
  */
 
 export const shelterImportKeys = {
 	all: ['shelter-import'] as const,
-	logs: () => [...shelterImportKeys.all, 'logs'] as const
+	logs: () => [...shelterImportKeys.all, 'logs'] as const,
+	job: (jobId: string | null) => [...shelterImportKeys.all, 'job', jobId] as const
 };
 
 export function useImportLogs() {
 	return createQuery(() => ({
 		queryKey: shelterImportKeys.logs(),
-		queryFn: () => listImportLogs()
+		queryFn: () => listImportLogs(),
+		// Import history is an audit view; do not keep a previous visit's list
+		// as the source of truth when the page is opened again.
+		staleTime: 0,
+		refetchOnMount: 'always'
 	}));
 }
 
@@ -41,112 +77,94 @@ export type DuplicateAction = 'skip' | 'update';
 
 export interface ImportSheltersInput {
 	filename: string;
-	importedBy: string;
 	rows: RowValidation[];
-	/** row number -> the existing shelter it duplicates */
-	duplicates: Map<number, DuplicateMatch>;
 	/** what to do with those rows */
 	duplicateAction: DuplicateAction;
+	/** Stable for this import attempt; callers must reuse it when retrying a lost response. */
+	idempotencyKey: string;
+}
+
+const INITIAL_JOB_POLL_MS = 2000;
+const MAX_JOB_POLL_MS = 10_000;
+const jobPollStates = new Map<string, { etag?: string; delay: number; data?: ImportJobSummary }>();
+
+function jobPollDelay(jobId: string): number {
+	return jobPollStates.get(jobId)?.delay ?? INITIAL_JOB_POLL_MS;
+}
+
+async function fetchImportJob(jobId: string): Promise<ImportJobSummary> {
+	const previous = jobPollStates.get(jobId);
+	const headers: Record<string, string> = {
+		'Content-Type': 'application/json',
+		Accept: 'application/json'
+	};
+	if (previous?.etag) headers['If-None-Match'] = previous.etag;
+	const res = await fetch(`/api/back-office/shelter-import/jobs/${encodeURIComponent(jobId)}`, {
+		credentials: 'include',
+		headers
+	});
+	if (res.status === 304) {
+		if (!previous?.data) throw new Error('Import job returned not-modified without cached data');
+		jobPollStates.set(jobId, {
+			...previous,
+			delay: Math.min(previous.delay * 2, MAX_JOB_POLL_MS)
+		});
+		return previous.data;
+	}
+	const data = (await res.json().catch(() => null)) as
+		(ImportJobSummary & { error?: { message?: string; description?: string } }) | null;
+	if (!res.ok) {
+		const message = data?.error?.message || `Request failed (${res.status})`;
+		const description = data?.error?.description;
+		throw new Error(description ? `${message} — ${description}` : message);
+	}
+	const etag = res.headers.get('etag') ?? (data?.job._rev ? `"${data.job._rev}"` : undefined);
+	const unchanged = Boolean(previous?.etag && etag && previous.etag === etag);
+	if (isImportJobTerminal(data?.job.status)) {
+		jobPollStates.delete(jobId);
+	} else {
+		jobPollStates.set(jobId, {
+			etag,
+			data: data as ImportJobSummary,
+			delay: unchanged ? Math.min(previous!.delay * 2, MAX_JOB_POLL_MS) : INITIAL_JOB_POLL_MS
+		});
+	}
+	return data as ImportJobSummary;
+}
+
+export function useImportJob(jobId: () => string | null) {
+	return createQuery(() => ({
+		queryKey: shelterImportKeys.job(jobId()),
+		enabled: Boolean(jobId()),
+		queryFn: () => fetchImportJob(jobId()!),
+		refetchOnWindowFocus: true,
+		refetchInterval: (query: { state: { data?: ImportJobSummary } }) =>
+			isImportJobTerminal(query.state.data?.job.status) ? false : jobPollDelay(jobId()!)
+	}));
 }
 
 export function useImportShelters() {
-	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: async ({
-			filename,
-			importedBy,
-			rows,
-			duplicates,
-			duplicateAction
-		}: ImportSheltersInput) => {
-			const started_at = new Date().toISOString();
-			const results: ImportRowResult[] = [];
-			for (const r of rows) {
-				if (!r.ok || !r.shelter) {
-					results.push({ row: r.row, name: r.name, status: 'validation_error', errors: r.errors });
-					continue;
-				}
-				const duplicate = duplicates.get(r.row);
-				try {
-					if (duplicate && duplicateAction === 'skip') {
-						results.push({
-							row: r.row,
-							name: r.name,
-							status: 'skipped_duplicate',
-							code: duplicate.existingCode,
-							existing_code: duplicate.existingCode
-						});
-						continue;
-					}
-					if (duplicate && duplicateAction === 'update') {
-						// Re-read the stored doc so the fields the workbook cannot express
-						// survive the PATCH (see `buildUpdatePayload`).
-						const existing = await getShelter(duplicate.existingCode);
-						await updateShelter(duplicate.existingCode, buildUpdatePayload(r.shelter, existing));
-						results.push({
-							row: r.row,
-							name: r.name,
-							status: 'updated',
-							code: duplicate.existingCode,
-							existing_code: duplicate.existingCode
-						});
-						continue;
-					}
-					const res = await createShelter(r.shelter);
-					results.push({ row: r.row, name: r.name, status: 'created', code: res.code });
-				} catch (e) {
-					results.push({
+		mutationFn: async (input: ImportSheltersInput) => {
+			const { filename, rows, duplicateAction, idempotencyKey } = input;
+			return serviceFetch<CreateImportJobResponse>('/api/back-office/shelter-import/jobs', {
+				method: 'POST',
+				headers: { 'Idempotency-Key': idempotencyKey },
+				body: JSON.stringify({
+					filename,
+					duplicate_action: duplicateAction,
+					rows: rows.map((r) => ({
 						row: r.row,
 						name: r.name,
-						status: 'server_error',
-						errors: [{ column: '-', message: e instanceof Error ? e.message : 'สร้างไม่สำเร็จ' }]
-					});
-				}
-			}
-			const finished_at = new Date().toISOString();
-			const created_count = results.filter((x) => x.status === 'created').length;
-			const updated_count = results.filter((x) => x.status === 'updated').length;
-			const skipped_count = results.filter((x) => x.status === 'skipped_duplicate').length;
-			const success_count = created_count + updated_count;
-			const error_count = results.filter(
-				(x) => x.status === 'validation_error' || x.status === 'server_error'
-			).length;
-			const log = createShelterImportLog(
-				{
-					source: 'shelter',
-					filename,
-					imported_by: importedBy,
-					total_rows: rows.length,
-					success_count,
-					updated_count,
-					skipped_count,
-					error_count,
-					results,
-					started_at,
-					finished_at
-				},
-				importedBy
-			);
-			await writeImportLog(log);
-			return log;
+						shelter: r.shelter,
+						errors: r.errors,
+						food_distribution_points_present: r.foodDistributionPointsProvided === true
+					}))
+				})
+			});
 		},
-		onSuccess: (log) => {
-			queryClient.invalidateQueries({ queryKey: sheltersKeys.all });
-			queryClient.invalidateQueries({ queryKey: shelterImportKeys.logs() });
-			// Build the summary from whichever outcomes actually occurred, so a
-			// run that only skipped duplicates never reads "อัปเดต 0 แห่ง".
-			const created = log.success_count - log.updated_count;
-			const parts: string[] = [];
-			if (created > 0 || log.success_count === 0) parts.push(`นำเข้า ${created} แห่ง`);
-			if (log.updated_count > 0) parts.push(`อัปเดต ${log.updated_count} แห่ง`);
-			if (log.skipped_count > 0) parts.push(`ข้าม ${log.skipped_count} แห่ง (ชื่อซ้ำ)`);
-			if (log.error_count > 0) parts.push(`ล้มเหลว ${log.error_count} แถว`);
-
-			if (log.error_count > 0) {
-				toast.warning(`${parts.join(', ')} — ดูรายละเอียดในประวัติการนำเข้า`);
-			} else {
-				toast.success(parts.join(', '));
-			}
+		onSuccess: () => {
+			toast.success('รับรายการนำเข้าแล้ว — ระบบกำลังประมวลผลทีละศูนย์');
 		},
 		onError: (e: unknown) => {
 			toast.error(e instanceof Error ? e.message : 'นำเข้าไม่สำเร็จ');
@@ -154,9 +172,18 @@ export function useImportShelters() {
 	}));
 }
 
-/** Wire the `registry` changes feed → import-log query invalidation. */
-export function startShelterImportLiveQuery(queryClient: QueryClient): SubscribeDataChangesHandle {
-	return subscribeDataChanges(queryClient, IMPORT_LOG_REGISTRY_DB, (type) =>
-		type === SHELTER_IMPORT_LOG_TYPE ? [shelterImportKeys.logs()] : []
-	);
+export function useRetryImportJob() {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (jobId: string) =>
+			serviceFetch<ImportJobSummary>(
+				`/api/back-office/shelter-import/jobs/${encodeURIComponent(jobId)}/retry`,
+				{ method: 'POST' }
+			),
+		onSuccess: (_summary, jobId) => {
+			queryClient.invalidateQueries({ queryKey: shelterImportKeys.job(jobId) });
+			toast.success('ส่งรายการที่ล้มเหลวกลับเข้าคิวแล้ว');
+		},
+		onError: (e: unknown) => toast.error(e instanceof Error ? e.message : 'ส่งรายการซ้ำไม่สำเร็จ')
+	}));
 }

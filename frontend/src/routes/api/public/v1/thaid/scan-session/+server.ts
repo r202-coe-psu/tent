@@ -9,14 +9,16 @@ export const prerender = false;
  * Creates a temporary cross-device scan session for adding a household member.
  */
 export const POST: RequestHandler = async ({ url }) => {
-	const session = createScanSession(300); // 5 minutes TTL
+	const ttlSeconds = 900; // 15 minutes TTL
+	const session = createScanSession(ttlSeconds);
 	const qrUrl = `${url.origin}/api/v1/auth/oauth/thaid/start?mode=member_scan&session_id=${session.id}`;
 
 	return json(
 		{
 			sessionId: session.id,
 			qrUrl,
-			expiresAt: session.expiresAt
+			expiresAt: session.expiresAt,
+			ttlSeconds
 		},
 		{
 			headers: {

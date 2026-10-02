@@ -152,6 +152,20 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 			expect(result.body).toContain('ไม่มีเบอร์โทรศัพท์');
 		});
 
+		it('marks phone optional and shows helper when joining a household', () => {
+			const result = render(PersonalInfoFields, {
+				props: {
+					hideNoPhone: false,
+					phoneOptional: true,
+					phoneHelperText: 'บ้านนี้มีผู้ติดต่อหลักอยู่แล้ว — กรอกเบอร์ได้ถ้าต้องการ',
+					phone: ''
+				}
+			});
+			expect(result.body).toContain('(ทางเลือก)');
+			expect(result.body).toContain('บ้านนี้มีผู้ติดต่อหลักอยู่แล้ว');
+			expect(result.body).toContain('ไม่มีเบอร์โทรศัพท์');
+		});
+
 		it('sets card-number maxlength from selected card type', () => {
 			const national = render(PersonalInfoFields, {
 				props: {
@@ -333,6 +347,19 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 				}
 			});
 			expect(homeless.body).toContain('ไร้ที่อยู่อาศัยเป็นหลักแหล่ง');
+		});
+
+		it('shows pre-reg semantic housing_type label even without master data', () => {
+			// Regression: claim → onsite must keep CR-112 code display when master
+			// is unavailable or ULID-only (see housing-type-ui.test.ts for master mismatch).
+			const result = render(HouseholdAddressFields, {
+				props: {
+					housing_type: 'condo',
+					loadMasterHousingTypes: false
+				}
+			});
+			expect(result.body).toContain('คอนโด');
+			expect(result.body).not.toContain('— เลือกประเภทที่อยู่อาศัย —');
 		});
 	});
 

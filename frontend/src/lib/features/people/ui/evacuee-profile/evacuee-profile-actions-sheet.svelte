@@ -3,7 +3,6 @@
 	import { resolve } from '$app/paths';
 	import ExternalLink from '@lucide/svelte/icons/external-link';
 	import MapPin from '@lucide/svelte/icons/map-pin';
-	import Pencil from '@lucide/svelte/icons/pencil';
 	import Printer from '@lucide/svelte/icons/printer';
 	import * as Sheet from '$lib/components/ui/sheet';
 	import {
@@ -13,7 +12,9 @@
 		type Medical,
 		type Screening
 	} from '$lib/features/people';
-	import { useMasterData } from '$lib/features/master-data';
+	import { useShelter } from '$lib/features/shelters';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { getShelterCode } from '$lib/db/shelter';
 	import EvacueePhoto from '../shared/evacuee-photo.svelte';
 
 	interface StatusInfo {
@@ -32,12 +33,7 @@
 		readonly,
 		onOpenZoneModal,
 		onOpenStatusModal,
-		onOpenQrModal,
-		onOpenPersonalEdit,
-		onOpenEmergencyEdit,
-		onOpenHealthEdit,
-		onOpenHouseholdEdit,
-		onOpenAssetsEdit
+		onOpenQrModal
 	}: {
 		open: boolean;
 		evacuee: Evacuee;
@@ -48,14 +44,10 @@
 		onOpenZoneModal: () => void;
 		onOpenStatusModal: () => void;
 		onOpenQrModal: () => void;
-		onOpenPersonalEdit: () => void;
-		onOpenEmergencyEdit: () => void;
-		onOpenHealthEdit: () => void;
-		onOpenHouseholdEdit: () => void;
-		onOpenAssetsEdit: () => void;
 	} = $props();
 
-	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
+	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
+	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
 
 	const displayName = $derived(formatPersonName(evacuee));
 	const hasIllnessAlert = $derived(
@@ -63,12 +55,7 @@
 			(screening !== null && screening.symptoms.length > 0) ||
 			medical?.track === 'fast_track'
 	);
-	const vulnerableGroups = $derived(evacuee.vulnerable_groups ?? []);
 	const specialNeeds = $derived(evacuee.special_needs ?? []);
-
-	function vulnerableLabel(code: string): string {
-		return vulnerableGroupQuery.data?.items.find((i) => i.code === code)?.label ?? code;
-	}
 
 	function runAction(action: () => void) {
 		open = false;
@@ -109,38 +96,29 @@
 								class="inline-flex items-center gap-1 rounded-md border border-slate-200/80 bg-slate-50 px-2 py-0.5 text-xs font-semibold text-slate-700"
 							>
 								<MapPin class="size-3 shrink-0 text-[#0A2647]" />
-								โซน {zoneLabel(evacuee.current_stay.zone)}
+								โซน {zoneLabel(evacuee.current_stay.zone, shelterZones)}
 							</span>
 						</div>
 
-						<!-- Row 2: vulnerable + special needs tags -->
-						<div class="flex flex-wrap items-center gap-1.5">
-							{#if hasIllnessAlert}
-								<span
-									class="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700"
-								>
-									เฝ้าระวังสุขภาพ
-								</span>
-							{/if}
-							{#each vulnerableGroups as code (code)}
-								<span
-									class="inline-flex max-w-full items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800"
-								>
-									{vulnerableLabel(code)}
-								</span>
-							{/each}
-							{#each specialNeeds as need (need)}
-								<span
-									class="inline-flex max-w-full items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-900"
-								>
-									{need}
-								</span>
-							{/each}
-							{#if !hasIllnessAlert && vulnerableGroups.length === 0 && specialNeeds.length === 0}
-								<span class="text-xs text-slate-400 italic">ไม่ระบุกลุ่มเปราะบาง / ความต้องการ</span
-								>
-							{/if}
-						</div>
+						<!-- Row 2: health alert + special needs (vulnerable groups live on health card) -->
+						{#if hasIllnessAlert || specialNeeds.length > 0}
+							<div class="flex flex-wrap items-center gap-1.5">
+								{#if hasIllnessAlert}
+									<span
+										class="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700"
+									>
+										เฝ้าระวังสุขภาพ
+									</span>
+								{/if}
+								{#each specialNeeds as need (need)}
+									<span
+										class="inline-flex max-w-full items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-900"
+									>
+										{need}
+									</span>
+								{/each}
+							</div>
+						{/if}
 					</div>
 				</div>
 			</section>
@@ -172,52 +150,6 @@
 						<Printer class="size-4 opacity-75" />
 						พิมพ์ QR
 					</button>
-
-					<p class="pt-1 text-xs font-bold tracking-wide text-slate-500 uppercase">แก้ไข</p>
-					<div
-						class="divide-y divide-slate-200/80 overflow-hidden rounded-xl border border-slate-200/80 bg-white"
-					>
-						<button
-							type="button"
-							onclick={() => runAction(onOpenPersonalEdit)}
-							class="flex min-h-10 w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none focus-visible:ring-inset"
-						>
-							<Pencil class="size-3.5 text-slate-500" />
-							บุคคล
-						</button>
-						<button
-							type="button"
-							onclick={() => runAction(onOpenEmergencyEdit)}
-							class="flex min-h-10 w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none focus-visible:ring-inset"
-						>
-							<Pencil class="size-3.5 text-slate-500" />
-							ฉุกเฉิน
-						</button>
-						<button
-							type="button"
-							onclick={() => runAction(onOpenHealthEdit)}
-							class="flex min-h-10 w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none focus-visible:ring-inset"
-						>
-							<Pencil class="size-3.5 text-slate-500" />
-							สุขภาพ
-						</button>
-						<button
-							type="button"
-							onclick={() => runAction(onOpenHouseholdEdit)}
-							class="flex min-h-10 w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none focus-visible:ring-inset"
-						>
-							<Pencil class="size-3.5 text-slate-500" />
-							ครัวเรือน
-						</button>
-						<button
-							type="button"
-							onclick={() => runAction(onOpenAssetsEdit)}
-							class="flex min-h-10 w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none focus-visible:ring-inset"
-						>
-							<Pencil class="size-3.5 text-slate-500" />
-							สินทรัพย์
-						</button>
-					</div>
 				{:else}
 					<button
 						type="button"

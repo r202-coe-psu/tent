@@ -1,9 +1,9 @@
 ---
 id: CR-032
 title: "Add purchase doc type + purchase reason to stock_ledger"
-status: approved
+status: superseded
 date: 2026-07-05
-updated: 2026-07-25 # amend: §Change ข้อ 6 (purchase เข้า allowlist ของ validate_doc_update) + แก้ข้อเท็จจริงเรื่อง validate_doc_update
+updated: 2026-09-26 # superseded by CR-138 — purchase feature withdrawn
 requested_by: development team C
 decided_by: project owner
 layer: volatile
@@ -22,6 +22,9 @@ affects:
   - (superseded 2026-07-25) frontend/src/lib/features/operations/ui/ReceiveStockForm.svelte — Option A ไม่แตะฟอร์มนี้
 ---
 # CR-032 — Add purchase doc type + purchase reason to stock_ledger
+
+> [!WARNING]
+> **Superseded by [CR-138](CR-138-remove-purchase.md)** (2026-09-26) — purchase doc type, `stock_ledger.reason: purchase`, UI/route/seed ถูกถอนทั้งก้อน. เก็บเอกสารนี้เป็นประวัติเท่านั้น.
 
 > [!NOTE]
 > **สรุป (TL;DR):** เพิ่ม doc type `purchase` (`purchase:{ulid}`) **และ** ค่า `purchase` ใน `stock_ledger.reason` enum เพื่อรองรับการรับสต็อกจากแหล่ง "จัดซื้อจัดจ้าง" แยกจากเงินบริจาค · ledger ของจัดซื้อเขียน `reason: 'purchase'` + `ref_id: 'purchase:{ulid}'` **ตาม pattern เดียวกับ donation** · schema_v stock_ledger 2→3, purchase 1 · **อนุมัติแล้ว 2026-07-24 (@net-lynx sign-off ในแชท — แนว doc type + enum)** · role/permission = เหมือน FR-28 receive (`warehouse_staff` + SA; SM ไม่เขียน ledger ตรงตาม §3) · **design = Option A (donation-style 2 สเต็ป, เคาะ 2026-07-25)**: purchase doc เกิดคนละ action กับตอน key รับเข้า → **ไม่มี cross-doc atomic write** และ purchase **ไม่ใช่** ค่าใน `receiveSourceSchema` · **สถานะ implement: slice 2/3 เสร็จ** (reason enum + `schema_v` 3 · doc type §2.16 · domain + data + application layer พร้อม test) — เหลือ **slice 3/3**: UI surface (กติกาเคาะครบ §UX decisions) + `seed.ts` + **§Change ข้อ 6 `purchase` เข้า allowlist ของ `validate_doc_update` (blocker — ไม่แก้ = พังบน shelter จริง)**

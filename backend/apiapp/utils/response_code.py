@@ -34,9 +34,7 @@ _SEPARATORS = re.compile(r"[\s-]+")
 def new_response_code() -> str:
     """A fresh code in display form, e.g. ``4K7-2M9``."""
     chars = [secrets.choice(_ALPHABET) for _ in range(_LENGTH)]
-    return "-".join(
-        "".join(chars[i : i + _GROUP_SIZE]) for i in range(0, _LENGTH, _GROUP_SIZE)
-    )
+    return "-".join("".join(chars[i : i + _GROUP_SIZE]) for i in range(0, _LENGTH, _GROUP_SIZE))
 
 
 def normalize_response_code(value: str) -> str:

@@ -34,6 +34,9 @@ import { fileURLToPath } from 'node:url';
 
 import {
 	REF_PREFIX_BY_REASON,
+	isCanonicalLedgerRef,
+	isLegacyFlow2LedgerRef,
+	type LedgerRefRule,
 	type LedgerReason
 } from '$lib/features/operations/domain/operations';
 
@@ -159,8 +162,8 @@ async function* ledgerDocs(db: string): AsyncGenerator<LedgerDoc> {
 
 // ─── the rule under audit ─────────────────────────────────────────────────────
 
-/** `undefined` = `reason` is not a value the R2 table knows about at all. */
-function expectedPrefix(reason: string | undefined): string | null | undefined {
+/** `undefined` = `reason` is not a value the table knows about at all. */
+function expectedRule(reason: string | undefined): LedgerRefRule | undefined {
 	if (reason === undefined) return undefined;
 	if (!Object.prototype.hasOwnProperty.call(REF_PREFIX_BY_REASON, reason)) return undefined;
 	return REF_PREFIX_BY_REASON[reason as LedgerReason];
@@ -168,21 +171,21 @@ function expectedPrefix(reason: string | undefined): string | null | undefined {
 
 /** Returns why the row violates the R2 table, or `null` when it conforms. */
 function violationOf(doc: LedgerDoc): string | null {
-	const expected = expectedPrefix(doc.reason);
+	const rule = expectedRule(doc.reason);
 	const found = JSON.stringify(doc.ref_id ?? null);
 
-	if (expected === undefined) {
+	if (rule === undefined) {
 		return `reason ${JSON.stringify(doc.reason ?? null)} is not in the R2 table`;
 	}
-	if (expected === null) {
-		// a row written before `ref_id` was always stamped reads as absent, not wrong
-		return doc.ref_id === null || doc.ref_id === undefined
-			? null
-			: `expected ref_id null, found ${found}`;
+	const accepted = Array.isArray(rule) ? rule : [rule];
+	if (isCanonicalLedgerRef(doc.reason as LedgerReason, doc.ref_id ?? null)) return null;
+	const prefixes = accepted.filter((value): value is string => typeof value === 'string');
+	if (isLegacyFlow2LedgerRef(doc.reason as LedgerReason, doc.ref_id ?? null)) {
+		return 'legacy-compatible but not canonical-valid; keep readable and do not use for new writes';
 	}
-	return typeof doc.ref_id === 'string' && doc.ref_id.startsWith(expected)
-		? null
-		: `expected ref_id starting with '${expected}', found ${found}`;
+	const expected =
+		prefixes.length > 0 ? prefixes.map((prefix) => `'${prefix}'`).join(' or ') : 'null';
+	return `expected ref_id starting with ${expected}, found ${found}`;
 }
 
 // ─── report ───────────────────────────────────────────────────────────────────

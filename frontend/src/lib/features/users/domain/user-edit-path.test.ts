@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	safeReturnPath,
+	userCreateHref,
 	userEditHref,
 	usersListBaseFromPathname,
 	withUsersView
@@ -27,6 +28,15 @@ describe('userEditHref', () => {
 		expect(userEditHref('/back-office/users', '0812345678')).toBe('/back-office/users/0812345678');
 		expect(userEditHref('/back-office/users', 'user/name', '/back-office/users')).toBe(
 			'/back-office/users/user%2Fname?from=%2Fback-office%2Fusers'
+		);
+	});
+});
+
+describe('userCreateHref', () => {
+	it('builds /new with optional return path', () => {
+		expect(userCreateHref('/back-office/users')).toBe('/back-office/users/new');
+		expect(userCreateHref('/system-management/users', '/system-management/users')).toBe(
+			'/system-management/users/new?from=%2Fsystem-management%2Fusers'
 		);
 	});
 });

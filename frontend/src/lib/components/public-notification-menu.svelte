@@ -23,7 +23,6 @@
 		class: customClass = ''
 	}: Props = $props();
 
-	let fetchedAnnouncements = $state<Announcement[]>([]);
 	let modalOpen = $state(false);
 	let buttonEl = $state<HTMLElement | null>(null);
 	let menuEl = $state<HTMLElement | null>(null);
@@ -31,25 +30,11 @@
 	const isEn = $derived(langState.current === 'en');
 	const t = $derived(getTranslation(PUBLIC_ALERTS_PANEL_I18N, langState.current));
 
-	const announcements = $derived(
-		propAnnouncements && propAnnouncements.length > 0 ? propAnnouncements : fetchedAnnouncements
-	);
+	const announcements = $derived(propAnnouncements);
 	const announcementsCount = $derived(announcements.length);
 	const hasEmergency = $derived(announcements.some((a) => a.severity === 'emergency'));
 
-	onMount(async () => {
-		if (propAnnouncements.length === 0) {
-			try {
-				const res = await fetch('/api/public/v1/announcements');
-				if (res.ok) {
-					const data = await res.json();
-					fetchedAnnouncements = (data.items as Announcement[]) || [];
-				}
-			} catch (e) {
-				console.error('Failed to fetch announcements in PublicNotificationMenu', e);
-			}
-		}
-
+	onMount(() => {
 		if (typeof window !== 'undefined' && window.location.hash === '#announcements') {
 			menuOpen = true;
 		}

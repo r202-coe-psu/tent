@@ -92,7 +92,7 @@ async def run_volunteer_profile_inbound_loop(
     while not stop_event.is_set():
         try:
             pending = await VolunteerProfileUpdateBuffer.find(
-                VolunteerProfileUpdateBuffer.synced_to_couch == False  # noqa: E712
+                VolunteerProfileUpdateBuffer.synced_to_couch == False
             ).to_list()
             for update in pending:
                 if stop_event.is_set():

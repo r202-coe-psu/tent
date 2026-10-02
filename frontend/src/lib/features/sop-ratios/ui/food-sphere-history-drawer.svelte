@@ -5,7 +5,7 @@
 	import { fade, fly } from 'svelte/transition';
 	import { formatThaiDateTime } from '$lib/utils/date';
 	import { getSourceLabel } from '$lib/utils/source';
-	import type { FoodSphereStandard } from '../domain/food-sphere';
+	import { TARGET_SEGMENT_LABELS, type FoodSphereStandard } from '../domain/food-sphere';
 
 	interface Props {
 		standard: FoodSphereStandard;
@@ -63,7 +63,9 @@
 			<div class="mt-3 space-y-1 text-sm">
 				<div class="flex justify-between">
 					<span class="text-muted-foreground">กลุ่มเป้าหมาย:</span>
-					<span class="font-medium">{standard.target_segment}</span>
+					<span class="font-medium"
+						>{TARGET_SEGMENT_LABELS[standard.target_segment] ?? standard.target_segment}</span
+					>
 				</div>
 				<div class="flex justify-between">
 					<span class="text-muted-foreground">กลุ่มสารอาหาร:</span>

@@ -23,7 +23,7 @@ export const validRatios: Record<SopRatioKey, string> = {
 	people_per_dining_point_child: '10',
 	m2_per_person_living: '3.5',
 	m2_per_person_living_cold: '4.5',
-	m2_per_person_total: '45',
+	m2_per_person_total: '3.5',
 	max_waterpoint_distance_m: '500',
 	max_queue_minutes: '30',
 	people_per_volunteer: '50'

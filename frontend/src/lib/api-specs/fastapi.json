@@ -1013,6 +1013,151 @@
 				}
 			}
 		},
+		"/v1/admin/thirdparty-clients/{client_row_id}/regenerate-secret": {
+			"post": {
+				"tags": ["External"],
+				"summary": "Regenerate Client Secret",
+				"description": "Issue a new secret for this `client_id`, invalidating the old one immediately.\nRefused (409) once the client is revoked — same as scope edits.",
+				"operationId": "regenerate_client_secret_v1_admin_thirdparty_clients__client_row_id__regenerate_secret_post",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "client_row_id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Client Row Id" }
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ThirdPartyClientCreateResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/v1/admin/thirdparty-clients/{client_row_id}": {
+			"patch": {
+				"tags": ["External"],
+				"summary": "Update Client Scopes",
+				"description": "Edit `allowed_scopes` — refused (409) once the client is revoked.",
+				"operationId": "update_client_scopes_v1_admin_thirdparty_clients__client_row_id__patch",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "client_row_id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Client Row Id" }
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/ThirdPartyClientUpdateRequest" }
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ThirdPartyClientPublic" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			},
+			"delete": {
+				"tags": ["External"],
+				"summary": "Delete Client",
+				"description": "Soft-delete — only once already revoked (409 otherwise). Never hard-deletes.",
+				"operationId": "delete_client_v1_admin_thirdparty_clients__client_row_id__delete",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "client_row_id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Client Row Id" }
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ThirdPartyClientDeleteResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/v1/admin/thirdparty-clients/{client_row_id}/secret": {
+			"get": {
+				"tags": ["External"],
+				"summary": "Reveal Client Secret",
+				"operationId": "reveal_client_secret_v1_admin_thirdparty_clients__client_row_id__secret_get",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "client_row_id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Client Row Id" }
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ThirdPartyClientSecretResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
 		"/external/locations": {
 			"get": {
 				"tags": ["External"],
@@ -1422,6 +1567,41 @@
 				"security": [{ "HTTPBearer": [] }]
 			}
 		},
+		"/public/v1/unassigned-registrations/residence-match": {
+			"post": {
+				"tags": ["Unassigned Registrations"],
+				"summary": "Match Unassigned Residence",
+				"description": "Service-to-service Residence match — ids + landmark/housing_type only (no member PII).",
+				"operationId": "match_unassigned_residence_public_v1_unassigned_registrations_residence_match_post",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/UnassignedResidenceMatchRequest" }
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/UnassignedResidenceMatchResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
+		},
 		"/staff/v1/unassigned-registrations/search": {
 			"get": {
 				"tags": ["Unassigned Registrations (Staff)"],
@@ -1594,6 +1774,100 @@
 						"content": {
 							"application/json": {
 								"schema": { "$ref": "#/components/schemas/UnassignedRegistrationListResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/staff/v1/unassigned-registrations/photos/{photo_id}": {
+			"get": {
+				"tags": ["Unassigned Registrations (Staff)"],
+				"summary": "Get Unassigned Registration Photo",
+				"description": "Staff-only photo read (CR-140 addendum) — only if still referenced by an open row.",
+				"operationId": "get_unassigned_registration_photo_staff_v1_unassigned_registrations_photos__photo_id__get",
+				"parameters": [
+					{
+						"name": "photo_id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Photo Id" }
+					},
+					{
+						"name": "Cookie",
+						"in": "header",
+						"required": false,
+						"schema": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Cookie" }
+					},
+					{
+						"name": "AuthSession",
+						"in": "cookie",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string" }, { "type": "null" }],
+							"title": "Authsession"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": { "application/json": { "schema": {} } }
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/staff/v1/unassigned-registrations/{registration_id}/review": {
+			"get": {
+				"tags": ["Unassigned Registrations (Staff)"],
+				"summary": "Review Unassigned Registration",
+				"description": "Read-only pre-claim review (CR-140 addendum) — open rows only, writes nothing.",
+				"operationId": "review_unassigned_registration_staff_v1_unassigned_registrations__registration_id__review_get",
+				"parameters": [
+					{
+						"name": "registration_id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Registration Id" }
+					},
+					{
+						"name": "Cookie",
+						"in": "header",
+						"required": false,
+						"schema": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Cookie" }
+					},
+					{
+						"name": "AuthSession",
+						"in": "cookie",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string" }, { "type": "null" }],
+							"title": "Authsession"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/UnassignedRegistrationReviewResponse" }
 							}
 						}
 					},
@@ -2352,6 +2626,22 @@
 				"required": ["reserved_evacuee_id", "first_name", "last_name"],
 				"title": "ClaimedMemberOut"
 			},
+			"ClaimedPetOut": {
+				"properties": {
+					"pet_id": { "type": "string", "title": "Pet Id" },
+					"status": {
+						"type": "string",
+						"const": "claimed",
+						"title": "Status",
+						"default": "claimed"
+					},
+					"species": { "type": "string", "enum": ["dog", "cat", "other"], "title": "Species" },
+					"count": { "type": "integer", "title": "Count", "default": 1 }
+				},
+				"type": "object",
+				"required": ["pet_id", "species"],
+				"title": "ClaimedPetOut"
+			},
 			"ConfigResponse": {
 				"properties": {
 					"faqs": {
@@ -2741,7 +3031,12 @@
 						"title": "Postal Code"
 					},
 					"geo": { "anyOf": [{ "$ref": "#/components/schemas/GeoPoint" }, { "type": "null" }] },
-					"label": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Label" }
+					"label": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Label" },
+					"pets": {
+						"items": { "$ref": "#/components/schemas/PetCreated" },
+						"type": "array",
+						"title": "Pets"
+					}
 				},
 				"type": "object",
 				"title": "HouseholdOut"
@@ -3223,8 +3518,13 @@
 					"item_id": { "type": "string", "title": "Item Id" },
 					"name": { "type": "string", "title": "Name" },
 					"qty_needed": { "type": "string", "title": "Qty Needed" },
+					"qty_target": { "type": "string", "title": "Qty Target", "default": "0" },
+					"on_hand": { "type": "string", "title": "On Hand", "default": "0" },
+					"reserved": { "type": "string", "title": "Reserved", "default": "0" },
 					"unit": { "type": "string", "title": "Unit" },
-					"status": { "type": "string", "title": "Status" }
+					"status": { "type": "string", "title": "Status" },
+					"urgency": { "type": "string", "title": "Urgency", "default": "normal" },
+					"category": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Category" }
 				},
 				"type": "object",
 				"required": ["item_id", "name", "qty_needed", "unit", "status"],
@@ -3367,6 +3667,21 @@
 				"title": "OpenMemberHit",
 				"description": "Open member surfaced by staff search — claimable (not claimed/cancelled)."
 			},
+			"OpenPetHit": {
+				"properties": {
+					"pet_id": { "type": "string", "title": "Pet Id" },
+					"status": { "type": "string", "const": "open", "title": "Status", "default": "open" },
+					"species": { "type": "string", "enum": ["dog", "cat", "other"], "title": "Species" },
+					"count": { "type": "integer", "title": "Count", "default": 1 },
+					"notes": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Notes" },
+					"has_cage": { "type": "boolean", "title": "Has Cage", "default": false },
+					"image_url": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Image Url" }
+				},
+				"type": "object",
+				"required": ["pet_id", "species"],
+				"title": "OpenPetHit",
+				"description": "Open pet surfaced by staff search/detail — claimable."
+			},
 			"PaginatedAnnouncements": {
 				"properties": {
 					"items": {
@@ -3420,6 +3735,39 @@
 				"required": ["cardType"],
 				"title": "PersonIdOut",
 				"description": "Person id on create responses — distinct from request PersonIdInput."
+			},
+			"PetCreated": {
+				"properties": {
+					"pet_id": { "type": "string", "title": "Pet Id" },
+					"status": {
+						"type": "string",
+						"enum": ["open", "claimed", "cancelled"],
+						"title": "Status"
+					},
+					"species": { "type": "string", "enum": ["dog", "cat", "other"], "title": "Species" },
+					"count": { "type": "integer", "title": "Count", "default": 1 },
+					"notes": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Notes" },
+					"has_cage": { "type": "boolean", "title": "Has Cage", "default": false },
+					"image_url": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Image Url"
+					},
+					"claimed_shelter_code": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Claimed Shelter Code"
+					},
+					"claimed_at": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Claimed At"
+					},
+					"claimed_by": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Claimed By"
+					}
+				},
+				"type": "object",
+				"required": ["pet_id", "status", "species"],
+				"title": "PetCreated"
 			},
 			"PetInput": {
 				"properties": {
@@ -4048,7 +4396,11 @@
 			},
 			"ThirdPartyClientCreateRequest": {
 				"properties": {
-					"client_id": { "type": "string", "minLength": 1, "title": "Client Id" },
+					"name": { "type": "string", "maxLength": 100, "minLength": 1, "title": "Name" },
+					"description": {
+						"anyOf": [{ "type": "string", "maxLength": 500 }, { "type": "null" }],
+						"title": "Description"
+					},
 					"module_name": { "type": "string", "minLength": 1, "title": "Module Name" },
 					"allowed_scopes": {
 						"items": { "type": "string" },
@@ -4058,13 +4410,19 @@
 					}
 				},
 				"type": "object",
-				"required": ["client_id", "module_name", "allowed_scopes"],
-				"title": "ThirdPartyClientCreateRequest"
+				"required": ["name", "module_name", "allowed_scopes"],
+				"title": "ThirdPartyClientCreateRequest",
+				"description": "``client_id`` is generated server-side (``tpc_…``) — not accepted from the caller."
 			},
 			"ThirdPartyClientCreateResponse": {
 				"properties": {
 					"id": { "type": "string", "title": "Id" },
 					"client_id": { "type": "string", "title": "Client Id" },
+					"name": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Name" },
+					"description": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Description"
+					},
 					"module_name": { "type": "string", "title": "Module Name" },
 					"allowed_scopes": {
 						"items": { "type": "string" },
@@ -4072,6 +4430,10 @@
 						"title": "Allowed Scopes"
 					},
 					"is_active": { "type": "boolean", "title": "Is Active" },
+					"deleted_at": {
+						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
+						"title": "Deleted At"
+					},
 					"created_at": { "type": "string", "format": "date-time", "title": "Created At" },
 					"updated_at": { "type": "string", "format": "date-time", "title": "Updated At" },
 					"client_secret": { "type": "string", "title": "Client Secret" }
@@ -4080,15 +4442,27 @@
 				"required": [
 					"id",
 					"client_id",
+					"name",
+					"description",
 					"module_name",
 					"allowed_scopes",
 					"is_active",
+					"deleted_at",
 					"created_at",
 					"updated_at",
 					"client_secret"
 				],
 				"title": "ThirdPartyClientCreateResponse",
 				"description": "Create response — plaintext ``client_secret`` is returned once."
+			},
+			"ThirdPartyClientDeleteResponse": {
+				"properties": {
+					"success": { "type": "boolean", "title": "Success", "default": true },
+					"client": { "$ref": "#/components/schemas/ThirdPartyClientPublic" }
+				},
+				"type": "object",
+				"required": ["client"],
+				"title": "ThirdPartyClientDeleteResponse"
 			},
 			"ThirdPartyClientListResponse": {
 				"properties": {
@@ -4107,6 +4481,11 @@
 				"properties": {
 					"id": { "type": "string", "title": "Id" },
 					"client_id": { "type": "string", "title": "Client Id" },
+					"name": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Name" },
+					"description": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Description"
+					},
 					"module_name": { "type": "string", "title": "Module Name" },
 					"allowed_scopes": {
 						"items": { "type": "string" },
@@ -4114,6 +4493,10 @@
 						"title": "Allowed Scopes"
 					},
 					"is_active": { "type": "boolean", "title": "Is Active" },
+					"deleted_at": {
+						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
+						"title": "Deleted At"
+					},
 					"created_at": { "type": "string", "format": "date-time", "title": "Created At" },
 					"updated_at": { "type": "string", "format": "date-time", "title": "Updated At" }
 				},
@@ -4121,14 +4504,17 @@
 				"required": [
 					"id",
 					"client_id",
+					"name",
+					"description",
 					"module_name",
 					"allowed_scopes",
 					"is_active",
+					"deleted_at",
 					"created_at",
 					"updated_at"
 				],
 				"title": "ThirdPartyClientPublic",
-				"description": "Client metadata without the secret hash."
+				"description": "Client metadata without the secret hash/ciphertext."
 			},
 			"ThirdPartyClientRevokeResponse": {
 				"properties": {
@@ -4138,6 +4524,26 @@
 				"type": "object",
 				"required": ["client"],
 				"title": "ThirdPartyClientRevokeResponse"
+			},
+			"ThirdPartyClientSecretResponse": {
+				"properties": { "client_secret": { "type": "string", "title": "Client Secret" } },
+				"type": "object",
+				"required": ["client_secret"],
+				"title": "ThirdPartyClientSecretResponse"
+			},
+			"ThirdPartyClientUpdateRequest": {
+				"properties": {
+					"allowed_scopes": {
+						"items": { "type": "string" },
+						"type": "array",
+						"minItems": 1,
+						"title": "Allowed Scopes"
+					}
+				},
+				"type": "object",
+				"required": ["allowed_scopes"],
+				"title": "ThirdPartyClientUpdateRequest",
+				"description": "``PATCH`` body — scopes only. Refused (409) once the client is revoked."
 			},
 			"TicketFindItem": {
 				"properties": {
@@ -4317,8 +4723,13 @@
 						"items": { "type": "string" },
 						"type": "array",
 						"maxItems": 20,
-						"minItems": 1,
 						"title": "Member Ids"
+					},
+					"pet_ids": {
+						"items": { "type": "string" },
+						"type": "array",
+						"maxItems": 50,
+						"title": "Pet Ids"
 					},
 					"shelter_code": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
@@ -4326,15 +4737,14 @@
 					}
 				},
 				"type": "object",
-				"required": ["member_ids"],
 				"title": "UnassignedRegistrationClaimRequest",
-				"description": "Staff claim — body selects open member reserved ids (CR-113 / #247)."
+				"description": "Staff claim — open members and/or pets (draft-persistent-unassigned-family)."
 			},
 			"UnassignedRegistrationClaimResponse": {
 				"properties": {
 					"success": { "type": "boolean", "title": "Success", "default": true },
 					"id": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Id" },
-					"deleted": { "type": "boolean", "title": "Deleted" },
+					"deleted": { "type": "boolean", "title": "Deleted", "default": false },
 					"shelter_code": { "type": "string", "title": "Shelter Code" },
 					"household_id": { "type": "string", "title": "Household Id" },
 					"evacuee_ids": { "items": { "type": "string" }, "type": "array", "title": "Evacuee Ids" },
@@ -4343,16 +4753,25 @@
 						"type": "array",
 						"title": "Claimed"
 					},
+					"claimed_pets": {
+						"items": { "$ref": "#/components/schemas/ClaimedPetOut" },
+						"type": "array",
+						"title": "Claimed Pets"
+					},
 					"remaining_open": {
 						"items": { "$ref": "#/components/schemas/OpenMemberHit" },
 						"type": "array",
 						"title": "Remaining Open"
+					},
+					"remaining_open_pets": {
+						"items": { "$ref": "#/components/schemas/OpenPetHit" },
+						"type": "array",
+						"title": "Remaining Open Pets"
 					}
 				},
 				"type": "object",
 				"required": [
 					"id",
-					"deleted",
 					"shelter_code",
 					"household_id",
 					"evacuee_ids",
@@ -4376,6 +4795,11 @@
 						"enum": ["web", "staff"],
 						"title": "Registered Via",
 						"default": "web"
+					},
+					"join_registration_id": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Join Registration Id",
+						"description": "Append members (and pets) into this registration's reserved household (allowed even when document status is closed — reopen on append)."
 					}
 				},
 				"type": "object",
@@ -4462,7 +4886,13 @@
 						"type": "array",
 						"title": "Open Members"
 					},
-					"open_member_count": { "type": "integer", "title": "Open Member Count" }
+					"open_member_count": { "type": "integer", "title": "Open Member Count" },
+					"open_pets": {
+						"items": { "$ref": "#/components/schemas/OpenPetHit" },
+						"type": "array",
+						"title": "Open Pets"
+					},
+					"open_pet_count": { "type": "integer", "title": "Open Pet Count", "default": 0 }
 				},
 				"type": "object",
 				"required": [
@@ -4493,6 +4923,67 @@
 				"required": ["items", "total", "open_member_count", "limit", "offset"],
 				"title": "UnassignedRegistrationListResponse"
 			},
+			"UnassignedRegistrationReviewResponse": {
+				"properties": {
+					"id": { "type": "string", "title": "Id" },
+					"reserved_household_id": { "type": "string", "title": "Reserved Household Id" },
+					"registered_via": {
+						"type": "string",
+						"enum": ["web", "staff"],
+						"title": "Registered Via"
+					},
+					"status": { "type": "string", "title": "Status" },
+					"created_at": { "type": "string", "title": "Created At" },
+					"housing_type": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Housing Type"
+					},
+					"residence_landmark": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Residence Landmark"
+					},
+					"address_no": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Address No"
+					},
+					"village_no": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Village No"
+					},
+					"subdistrict": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Subdistrict"
+					},
+					"district": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "District" },
+					"province": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Province" },
+					"postal_code": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Postal Code"
+					},
+					"label": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Label" },
+					"open_members": {
+						"items": { "$ref": "#/components/schemas/OpenMemberHit" },
+						"type": "array",
+						"title": "Open Members"
+					},
+					"open_pets": {
+						"items": { "$ref": "#/components/schemas/OpenPetHit" },
+						"type": "array",
+						"title": "Open Pets"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"reserved_household_id",
+					"registered_via",
+					"status",
+					"created_at",
+					"open_members"
+				],
+				"title": "UnassignedRegistrationReviewResponse",
+				"description": "Staff pre-claim review (CR-140 addendum) — open rows only, no write.\n\nHousehold carries address fields only (no `pets` — those live in `open_pets`,\nunlike `HouseholdOut` which embeds every pet with claim status for the SA detail view)."
+			},
 			"UnassignedRegistrationSearchHit": {
 				"properties": {
 					"id": { "type": "string", "title": "Id" },
@@ -4508,6 +4999,11 @@
 						"items": { "$ref": "#/components/schemas/OpenMemberHit" },
 						"type": "array",
 						"title": "Open Members"
+					},
+					"open_pets": {
+						"items": { "$ref": "#/components/schemas/OpenPetHit" },
+						"type": "array",
+						"title": "Open Pets"
 					}
 				},
 				"type": "object",
@@ -4541,6 +5037,98 @@
 				"type": "object",
 				"required": ["open_registrations", "open_members"],
 				"title": "UnassignedRegistrationStatsResponse"
+			},
+			"UnassignedResidenceMatchHit": {
+				"properties": {
+					"id": { "type": "string", "title": "Id" },
+					"landmark": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Landmark" },
+					"housing_type": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Housing Type"
+					},
+					"claimed_shelter_code": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Claimed Shelter Code"
+					},
+					"claimed_household_id": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Claimed Household Id"
+					},
+					"status": { "type": "string", "title": "Status", "default": "open" },
+					"primary_contact_name_masked": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Primary Contact Name Masked"
+					},
+					"matched_member_masked": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Matched Member Masked"
+					},
+					"member_count": { "type": "integer", "title": "Member Count", "default": 0 },
+					"pets": {
+						"items": { "additionalProperties": true, "type": "object" },
+						"type": "array",
+						"title": "Pets"
+					},
+					"household_address": {
+						"anyOf": [{ "additionalProperties": true, "type": "object" }, { "type": "null" }],
+						"title": "Household Address"
+					}
+				},
+				"type": "object",
+				"required": ["id"],
+				"title": "UnassignedResidenceMatchHit"
+			},
+			"UnassignedResidenceMatchRequest": {
+				"properties": {
+					"housing_type": {
+						"anyOf": [
+							{
+								"type": "string",
+								"enum": ["owned_house", "rented_house", "condo", "apartment_dorm", "homeless"]
+							},
+							{ "type": "null" }
+						],
+						"title": "Housing Type"
+					},
+					"residence_landmark": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Residence Landmark"
+					},
+					"address_no": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Address No"
+					},
+					"village_no": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Village No"
+					},
+					"subdistrict": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Subdistrict"
+					},
+					"district": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "District" },
+					"province": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Province" },
+					"postal_code": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Postal Code"
+					},
+					"phone": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Phone" }
+				},
+				"type": "object",
+				"title": "UnassignedResidenceMatchRequest",
+				"description": "Service-to-service residence match — no member PII in response."
+			},
+			"UnassignedResidenceMatchResponse": {
+				"properties": {
+					"matches": {
+						"items": { "$ref": "#/components/schemas/UnassignedResidenceMatchHit" },
+						"type": "array",
+						"title": "Matches"
+					}
+				},
+				"type": "object",
+				"required": ["matches"],
+				"title": "UnassignedResidenceMatchResponse"
 			},
 			"ValidationError": {
 				"properties": {

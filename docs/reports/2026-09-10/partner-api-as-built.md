@@ -1,9 +1,9 @@
 ---
 title: Partner Data API — As-Built (EXT-001–EXT-007)
 status: as-built
-version: 1.5
+version: 1.6
 created: 2026-09-10
-updated: 2026-09-16
+updated: 2026-09-18
 audience: M6 Resource Logistics / M7 Command Center (EOC) partners
 note: Self-contained as-built for partner integration; email this file alone.
 ---
@@ -12,7 +12,7 @@ note: Self-contained as-built for partner integration; email this file alone.
 
 เอกสารนี้อธิบาย **พฤติกรรมจริงของ API** ที่ Smart Shelter เปิดให้ระบบพันธมิตร (M6 / M7) เรียกใช้ และเป็น **สัญญา as-built ที่ใช้ผูก integration สำหรับ M6/M7** — พอส่งไฟล์นี้ฉบับเดียวโดยไม่ต้องอ้างเอกสารภายในอื่น
 
-**วันที่เอกสาร:** 2026-09-16 · **เวอร์ชัน:** 1.5
+**วันที่เอกสาร:** 2026-09-18 · **เวอร์ชัน:** 1.6
 
 ---
 
@@ -548,7 +548,7 @@ curl -sS 'https://shelter.importstar.dev/public-api/external/locations/SH001/occ
     {
       "occupant_ref": "OCC-01HXYZ1234567890ABCDEF",
       "name_masked": "สมชาย ใ.",
-      "age_range": "60-69",
+      "age_range": "60+",
       "gender": "male",
       "care_flags": ["bedridden"],
       "checked_in_at": "2026-08-10T18:40:00+00:00"
@@ -569,7 +569,7 @@ curl -sS 'https://shelter.importstar.dev/public-api/external/locations/SH001/occ
 | --- | --- | --- | --- |
 | `occupant_ref` | string | no | รหัสอ้างอิงภายใน (ไม่ใช่เลขบัตรประชาชน) |
 | `name_masked` | string | no | ชื่อจริง + อักษรแรกของนามสกุล เช่น `สมชาย ใ.` |
-| `age_range` | string | no | ช่วงอายุ เช่น `0-4`, `5-17`, `18-59`, `60-69`, `70+` |
+| `age_range` | string | no | ช่วงอายุ เช่น `<1`, `1-5`, `6-11`, `12-19`, `20-59`, `60+` (หรือ `unknown`) |
 | `gender` | string\|null | yes | `male` \| `female` \| `other` |
 | `care_flags` | string[] | no | หมวดความต้องการพิเศษ เช่น `["bedridden"]` |
 | `checked_in_at` | datetime\|null | yes | เวลาที่เริ่มเข้าพัก |

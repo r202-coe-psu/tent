@@ -1,3 +1,7 @@
+import { formatMasterLabel } from '$lib/features/master-data';
+
+export type MasterLabelOption = { code: string; label_th: string; label_en: string };
+
 /**
  * Resolve a master-data code (ULID `item_…` or legacy free-text) to a display
  * label for the public portal. Public shelter payloads keep codes as-is;
@@ -5,11 +9,16 @@
  * config endpoints.
  */
 export function toLabelMap(
-	items: { code: string; label: string }[] | null | undefined
+	items: readonly MasterLabelOption[] | null | undefined,
+	lang: string = 'th'
 ): Record<string, string> {
 	const map: Record<string, string> = {};
 	for (const item of items ?? []) {
-		if (item.code && item.label) map[item.code] = item.label;
+		if (!item.code) continue;
+		const label = formatMasterLabel(item, lang);
+		// Empty bilingual text would otherwise fall back to the raw code — skip.
+		if (!item.label_th?.trim() && !item.label_en?.trim()) continue;
+		if (label) map[item.code] = label;
 	}
 	return map;
 }

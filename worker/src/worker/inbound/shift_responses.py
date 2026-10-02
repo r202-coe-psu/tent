@@ -35,7 +35,9 @@ async def _apply_response(couch: CouchClient, response: ShiftResponseBuffer) -> 
     if doc is None:
         # Staff deleted the assignment between the offer and the answer. Nothing to
         # patch and nothing to retry — mark it done so the row stops being polled.
-        logger.warning("Shift assignment %s is gone — dropping its response", response.id)
+        logger.warning(
+            "Shift assignment %s is gone — dropping its response", response.id
+        )
         response.synced_to_couch = True
         await response.save()
         return True
@@ -58,7 +60,9 @@ async def _apply_response(couch: CouchClient, response: ShiftResponseBuffer) -> 
     if not result.get("ok"):
         # Most likely a revision conflict with a staff edit — leave it for the next
         # pass, which re-reads the document.
-        logger.warning("CouchDB did not accept shift response %s: %s", response.id, result)
+        logger.warning(
+            "CouchDB did not accept shift response %s: %s", response.id, result
+        )
         return False
 
     response.synced_to_couch = True
@@ -73,7 +77,7 @@ async def run_shift_response_inbound_loop(
     while not stop_event.is_set():
         try:
             pending = await ShiftResponseBuffer.find(
-                ShiftResponseBuffer.synced_to_couch == False  # noqa: E712
+                ShiftResponseBuffer.synced_to_couch == False
             ).to_list()
             for response in pending:
                 if stop_event.is_set():

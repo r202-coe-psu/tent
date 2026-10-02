@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import StaffPageShell from '$lib/components/staff-page-shell.svelte';
 	import { EvacueeProfileView } from '$lib/features/people';
 	import { shelterStore, persistSelectedShelter } from '$lib/stores/shelter.svelte';
 
@@ -29,22 +30,18 @@
 	<title>ข้อมูลผู้พักพิง · Pre-registration · SmartShelter</title>
 </svelte:head>
 
-<div class="mx-auto w-full max-w-7xl min-w-0 space-y-6 p-4 md:p-6">
-	<button
-		onclick={() => goto(resolve('/system-management/pre-registrations'))}
-		class="mb-4 inline-flex cursor-pointer items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-	>
-		<ArrowLeft class="size-4" />
-		<span>ย้อนกลับ</span>
-	</button>
-
-	<h1
-		class="min-w-0 text-2xl font-bold tracking-tight break-words text-slate-900 md:text-3xl dark:text-slate-50"
-	>
-		ข้อมูลผู้พักพิง
-	</h1>
+<StaffPageShell title="ข้อมูลผู้พักพิง" maxWidth="7xl">
+	{#snippet actions()}
+		<button
+			onclick={() => goto(resolve('/system-management/pre-registrations'))}
+			class="inline-flex cursor-pointer items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+		>
+			<ArrowLeft class="size-4" />
+			<span>ย้อนกลับ</span>
+		</button>
+	{/snippet}
 
 	{#if shelterReady && evacueeId}
 		<EvacueeProfileView {evacueeId} />
 	{/if}
-</div>
+</StaffPageShell>

@@ -147,6 +147,22 @@ describe('POST /api/back-office/donations/[query]/redirect', () => {
 		});
 	});
 
+	// Staff open the boxes at the counter, and that is where the wrong size or the
+	// item this shelter has no room for turns up — turning the delivery away then must
+	// work exactly as it does before it arrives, and still leave no stock behind.
+	it('redirects a delivery already being checked in, without writing stock', async () => {
+		mockCouch({ ...baseDonation, status: 'verifying' } as PublicDonationDoc);
+
+		const response = await POST(postEvent({ target_shelter_code: 'SH002' }));
+
+		expect(response.status).toBe(200);
+		const allDocs = batches().flatMap((b) => b.docs);
+		expect(allDocs.filter((d) => d.type === 'stock_ledger')).toHaveLength(0);
+		expect(allDocs.filter((d) => d.type === 'donation_redirect')).toHaveLength(1);
+		const put = vi.mocked(adminRaw).mock.calls.find((c) => c[1] === 'PUT');
+		expect(put?.[2]).toMatchObject({ status: 'redirected', redirect_to_shelter_code: 'SH002' });
+	});
+
 	it('rejects a status that cannot be redirected', async () => {
 		mockCouch({ ...baseDonation, status: 'received' } as PublicDonationDoc);
 

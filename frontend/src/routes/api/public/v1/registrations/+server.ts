@@ -68,13 +68,25 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 				household: unifiedRegistrationInputSchema.shape.household
 			})
 			.superRefine((data, ctx) => {
-				const head = data.members[0];
-				const headPhone = head?.phone?.trim();
-				if (!headPhone || !/^0\d{8,9}$/.test(headPhone.replace(/[-\s]/g, ''))) {
+				const joining = Boolean(data.join_match_token?.trim());
+				const headPhone = data.members[0]?.phone?.trim() ?? '';
+				if (!headPhone) {
+					if (!joining) {
+						ctx.addIssue({
+							code: 'custom',
+							path: ['members', 0, 'phone'],
+							message: 'กรุณากรอกเบอร์โทรศัพท์ 10 หลักของผู้ติดต่อหลัก'
+						});
+					}
+					return;
+				}
+				if (!/^0\d{8,9}$/.test(headPhone.replace(/[-\s]/g, ''))) {
 					ctx.addIssue({
 						code: 'custom',
 						path: ['members', 0, 'phone'],
-						message: 'กรุณากรอกเบอร์โทรศัพท์ 10 หลักของผู้ติดต่อหลัก'
+						message: joining
+							? 'กรุณากรอกเบอร์ให้ครบ 10 หลัก หรือเว้นว่าง / เลือกไม่มีเบอร์'
+							: 'กรุณากรอกเบอร์โทรศัพท์ 10 หลักของผู้ติดต่อหลัก'
 					});
 				}
 			});
@@ -89,10 +101,13 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 
 		shelterCode = parsed.data.shelter_code;
 		captchaToken = parsed.data.captchaToken;
-		phone = parsed.data.members[0].phone!.trim();
+		phone = (parsed.data.members[0]?.phone ?? '').trim();
 		nationalId = parsed.data.members[0].person_id?.number?.trim() || null;
 		unifiedInput = {
-			members: parsed.data.members,
+			members: parsed.data.members.map((m) => ({
+				...m,
+				phone: m.phone?.trim() ? m.phone.trim() : null
+			})),
 			household: parsed.data.household,
 			...(parsed.data.join_match_token ? { join_match_token: parsed.data.join_match_token } : {})
 		};
@@ -112,25 +127,15 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 		phone = legacy.phone;
 		nationalId = legacy.national_id ?? null;
 
-		const LEGACY_PET_SPECIES = new Set(['dog', 'cat', 'other']);
 		const pets = legacy.pets.map((pet) => {
-			const isBird = pet.species === 'bird';
-			const isKnown = LEGACY_PET_SPECIES.has(pet.species);
-			const species = (isKnown ? pet.species : 'other') as 'dog' | 'cat' | 'other';
 			const rawNotes = [pet.name, pet.condition, pet.notes]
 				.map((s) => s?.trim())
 				.filter(Boolean)
 				.join(' | ');
-			const notes = isBird
-				? rawNotes || 'นก'
-				: isKnown
-					? rawNotes || undefined
-					: [rawNotes, `ชนิด: ${pet.species}`].filter(Boolean).join(' — ') || undefined;
-
 			return {
-				species,
+				species: pet.species,
 				count: 1,
-				notes,
+				notes: rawNotes || undefined,
 				has_cage: pet.has_cage
 			};
 		});
@@ -183,7 +188,8 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 
 	// 2. Rate limit on both axes before doing any work.
 	const ip = getClientAddress();
-	if (!registerIpLimiter.check(ip) || !registerPhoneLimiter.check(phone)) {
+	const phoneLimited = phone ? !registerPhoneLimiter.check(phone) : false;
+	if (!registerIpLimiter.check(ip) || phoneLimited) {
 		return json({ success: false, error: 'RATE_LIMITED' }, { status: 429, headers: noStore });
 	}
 

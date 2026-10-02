@@ -9,9 +9,6 @@ import type {
 	Donation,
 	WalkInDonationInput,
 	DonationSlot,
-	Purchase,
-	PurchaseInput,
-	CountedItem,
 	StockTransfer,
 	TransferInput,
 	TransferFilter,
@@ -32,6 +29,13 @@ export interface OperationsRepository {
 	 * Persist a new stock ledger entry (append-only).
 	 */
 	addLedgerEntry(entry: StockLedger): Promise<StockLedger>;
+
+	/**
+	 * Fetch a single stock ledger entry by exact document ID.
+	 * Returns null if not found. Used for deterministic LEDGER_ONLY recovery
+	 * after a ConflictError from addLedgerEntry.
+	 */
+	getLedgerEntry(id: string): Promise<StockLedger | null>;
 
 	/**
 	 * Retrieve all stock ledger entries in the current shelter database.
@@ -70,7 +74,8 @@ export interface OperationsRepository {
 
 	/**
 	 * Process and persist an outbound stock distribute entry.
-	 * Will throw an error if there is insufficient stock.
+	 * Will throw an error if the selected physical lot is missing, mismatched, or
+	 * does not have enough stock.
 	 */
 	distributeStock(input: DistributeInput, ctx: AuthorContext): Promise<StockLedger>;
 
@@ -96,33 +101,6 @@ export interface OperationsRepository {
 	listDonationSlots(): Promise<DonationSlot[]>;
 	getDonationSlot(id: string): Promise<DonationSlot | null>;
 	updateDonationSlot(slot: DonationSlot): Promise<DonationSlot>;
-
-	// Purchase methods (CR-032) — procurement is a two-step flow, mirroring
-	// donation: the doc is declared first, the physical count is keyed later.
-
-	/** Persist a new procurement record. Creates no stock on its own. */
-	createPurchase(input: PurchaseInput, ctx: AuthorContext): Promise<Purchase>;
-
-	listPurchases(): Promise<Purchase[]>;
-	getPurchase(id: string): Promise<Purchase | null>;
-
-	/**
-	 * Correct a purchase that has not been keyed against yet. Rejects once any
-	 * ledger row references it — `items` is what the receipt status compares
-	 * against (schema.md §2.16). There is no cancel/delete.
-	 */
-	updatePurchase(purchase: Purchase): Promise<Purchase>;
-
-	/**
-	 * Key a physical count against an already-committed purchase: appends one
-	 * `purchase` ledger entry per counted line, each referencing the purchase doc.
-	 * Returns the entries written.
-	 */
-	receivePurchase(
-		purchase: Purchase,
-		counted: CountedItem[],
-		ctx: AuthorContext
-	): Promise<StockLedger[]>;
 
 	// --- Transfer methods (CR-059 Flow 1 / T-13) ---
 	// `stock_transfer` lives in `central_ops`, not this shelter's DB — every method here goes

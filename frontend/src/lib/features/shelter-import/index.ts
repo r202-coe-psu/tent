@@ -14,6 +14,7 @@ export {
 	SHELTER_SHEETS,
 	MAIN_SHEET_NAME,
 	ZONE_SHEET_NAME,
+	FOOD_DISTRIBUTION_SHEET_NAME,
 	MASTER_COLUMNS,
 	MULTI_SEPARATOR,
 	FIELD_SEPARATOR,
@@ -45,7 +46,9 @@ export {
 } from './domain/columns';
 export {
 	buildMasterLookup,
+	buildUpdatePayload,
 	emptyLookups,
+	orphanFoodDistributionRows,
 	orphanZoneRows,
 	validateRow,
 	validateRows,
@@ -60,6 +63,7 @@ export {
 	type RowValidation,
 	type ShelterInput
 } from './domain/import-row';
+export { normalizeShelterName } from './domain/duplicates';
 export {
 	createShelterImportLog,
 	isShelterImportLog,
@@ -74,15 +78,22 @@ export {
 // Data — template generation, parsing, persistence
 export { buildShelterTemplateBlob, type TemplateMasters } from './data/template';
 export { parseShelterWorkbook } from './data/parse';
-export { listImportLogs, writeImportLog, IMPORT_LOG_REGISTRY_DB } from './data/import-log.remote';
+export { listImportLogs, IMPORT_LOG_AUDIT_DB } from './data/import-log.remote';
 
-// Application — TanStack Query hooks + live-sync
+// Application — TanStack Query hooks
 export {
 	shelterImportKeys,
 	useImportLogs,
 	useImportShelters,
-	startShelterImportLiveQuery,
-	type ImportSheltersInput
+	useImportJob,
+	useRetryImportJob,
+	isImportJobTerminal,
+	type ImportSheltersInput,
+	type ImportJob,
+	type ImportJobItem,
+	type ImportJobSummary,
+	type ImportJobStatus,
+	type ImportItemStatus
 } from './application/queries';
 
 // UI

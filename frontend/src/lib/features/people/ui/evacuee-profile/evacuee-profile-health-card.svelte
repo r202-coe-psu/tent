@@ -6,7 +6,11 @@
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import type { Evacuee, Medical, Screening } from '$lib/features/people';
 	import { EWAR_SYMPTOM_GROUPS } from '$lib/features/people';
-	import { CR112_VULNERABLE_GROUP_ACTIVE, useMasterData } from '$lib/features/master-data';
+	import {
+		CR112_VULNERABLE_GROUP_ACTIVE,
+		formatMasterLabel,
+		useMasterData
+	} from '$lib/features/master-data';
 
 	let {
 		evacuee,
@@ -32,10 +36,10 @@
 
 	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
 	function vulnerableLabel(code: string): string {
-		const fromMaster = vulnerableGroupQuery.data?.items.find((i) => i.code === code)?.label;
-		if (fromMaster) return fromMaster;
-		const fallback = CR112_VULNERABLE_GROUP_ACTIVE.find((i) => i.code === code)?.label;
-		return fallback ?? code;
+		const fromMaster = vulnerableGroupQuery.data?.items.find((i) => i.code === code);
+		if (fromMaster) return formatMasterLabel(fromMaster, 'th');
+		const fallback = CR112_VULNERABLE_GROUP_ACTIVE.find((i) => i.code === code);
+		return fallback ? formatMasterLabel(fallback, 'th') : code;
 	}
 
 	const careTrack = $derived(medical?.track ?? screening?.track ?? 'normal');

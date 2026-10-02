@@ -9,6 +9,7 @@
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import { loginSchema } from '../domain/schema';
+	import { resolveLoginIdentifier } from '../data/resolve-login';
 	import { toast } from 'svelte-sonner';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -16,6 +17,8 @@
 	import { LANDING_ROUTE, resolvePostLoginDestination } from '$lib/guards/auth';
 	import { fetchAuthStatus, googleOAuthStartHref, thaidOAuthStartHref } from '$lib/features/users';
 	import { fetchRecaptchaEnabled } from '$lib/api/recaptcha-status';
+	import { fetchLoginMethods } from '$lib/api/login-methods';
+	import { executeLoginCaptcha } from '../data/recaptcha';
 	import GoogleSignInButton from './google-sign-in-button.svelte';
 	import ThaIdSignInButton from './thaid-sign-in-button.svelte';
 	import Eye from '@lucide/svelte/icons/eye';
@@ -24,11 +27,17 @@
 	let {
 		navigateOnSuccess = true,
 		onSuccess,
-		showCard = true
+		showCard = true,
+		passwordMode = 'auto'
 	}: {
 		navigateOnSuccess?: boolean;
 		onSuccess?: () => void;
 		showCard?: boolean;
+		/**
+		 * `auto` — username/password only when `config:app.password_login_enabled` (CR-141);
+		 * `always` — `/admin-login` and re-auth.
+		 */
+		passwordMode?: 'auto' | 'always';
 	} = $props();
 
 	let showPassword = $state(false);
@@ -36,50 +45,41 @@
 	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
 	/** Stay false until GET /api/public/v1/recaptcha confirms ON — avoids injecting enterprise.js early. */
 	let captchaEnabled = $state(false);
+	/** Stay false until GET /api/public/v1/login-methods confirms ON. */
+	let passwordLoginEnabled = $state(false);
+	let googleEnabled = $state(false);
+	let thaidEnabled = $state(false);
+	const showPasswordForm = $derived(passwordMode === 'always' || passwordLoginEnabled);
 
 	const RECAPTCHA_ERROR = 'ระบบยืนยันตัวตน (reCAPTCHA) ขัดข้อง กรุณาลองใหม่อีกครั้ง';
 	const CAPTCHA_FAILED = 'การยืนยันตัวตนไม่ผ่าน กรุณารีเฟรชหน้าแล้วลองใหม่';
 
-	async function captchaToken(): Promise<string | null> {
-		const injected = window.__captchaToken || '';
-		if (injected) return injected;
-		if (!captchaEnabled) return '';
-		const win = window;
-		if (win.grecaptcha) {
-			try {
-				const action = 'login';
-				if (win.grecaptcha.enterprise) {
-					await new Promise<void>((resolve) => win.grecaptcha!.enterprise!.ready(() => resolve()));
-					return await win.grecaptcha.enterprise.execute(siteKey, { action });
-				}
-				if (win.grecaptcha.execute) {
-					return await win.grecaptcha.execute(siteKey, { action });
-				}
-			} catch {
-				return null;
-			}
-		}
-		return '';
+	function captchaToken(): Promise<string | null> {
+		return executeLoginCaptcha(siteKey, captchaEnabled);
 	}
 
 	onMount(() => {
 		void fetchRecaptchaEnabled().then((enabled) => {
 			captchaEnabled = enabled;
 		});
+		void fetchLoginMethods().then((m) => {
+			passwordLoginEnabled = m.password;
+			googleEnabled = m.google;
+			thaidEnabled = m.thaid;
+		});
 
 		const err = page.url.searchParams.get('error');
 		if (!err) return;
 
-		if (err === 'google_not_linked') {
-			toast.error(
-				'บัญชี Google นี้ยังไม่ได้ผูกกับระบบ — กรุณาเข้าสู่ระบบด้วยรหัสผ่านแล้วผูก Google ใน Settings'
-			);
-		} else if (err === 'thaid_not_linked') {
-			toast.error(
-				'บัญชี ThaID นี้ยังไม่ได้ผูกกับระบบ — กรุณาเข้าสู่ระบบด้วยรหัสผ่านแล้วผูก ThaID ใน Settings'
-			);
+		// CR-141 FR-26 — never point at the hidden password route from here.
+		if (err === 'google_not_linked' || err === 'thaid_not_linked') {
+			toast.error('บัญชีนี้ยังไม่ได้เชื่อมกับระบบ กรุณาติดต่อผู้ดูแลระบบ');
+		} else if (err === 'link_expired') {
+			toast.error('หมดเวลาการเชื่อมบัญชี กรุณาเข้าสู่ระบบใหม่อีกครั้ง');
 		} else if (err === 'thaid_login_failed') {
 			toast.error('ไม่สามารถเข้าสู่ระบบด้วย ThaID ได้ กรุณาลองอีกครั้ง');
+		} else if (err === 'thaid_disabled') {
+			toast.error('ระบบ ThaiD Digital ID ถูกปิดใช้งานชั่วคราว');
 		} else if (err === 'invalid_state' || err === 'google_login_failed') {
 			toast.error('ไม่สามารถเข้าสู่ระบบได้ กรุณาลองอีกครั้ง');
 		} else if (err.startsWith('oauth_')) {
@@ -122,8 +122,9 @@
 						}
 					}
 
+					const name = await resolveLoginIdentifier(form.data.username);
 					await authStore.login({
-						name: form.data.username,
+						name,
 						password: form.data.password
 					});
 					reset();
@@ -163,96 +164,102 @@
 
 {#snippet fields()}
 	<form method="POST" use:form.enhance class="flex flex-col gap-4">
-		<div class="flex flex-col gap-3.5">
-			<Form.Field {form} name="username">
-				<Form.Control>
-					{#snippet children({ props })}
-						<Form.Label class="text-sm font-semibold text-slate-700"
-							>ชื่อผู้ใช้ / เบอร์โทรศัพท์ (Username)</Form.Label
-						>
-						<Input
-							{...props}
-							bind:value={$formData.username}
-							placeholder="เช่น 0812345678"
-							autocomplete="username"
-							class="h-11"
-						/>
-					{/snippet}
-				</Form.Control>
-				<Form.FieldErrors />
-			</Form.Field>
-
-			<Form.Field {form} name="password">
-				<Form.Control>
-					{#snippet children({ props })}
-						<div class="flex items-center justify-between">
+		{#if showPasswordForm}
+			<div class="flex flex-col gap-3.5">
+				<Form.Field {form} name="username">
+					<Form.Control>
+						{#snippet children({ props })}
 							<Form.Label class="text-sm font-semibold text-slate-700"
-								>รหัสผ่าน (Password)</Form.Label
+								>Username หรือเบอร์โทรศัพท์</Form.Label
 							>
-							<a
-								href="/forgot-password"
-								class="text-xs font-semibold text-blue-600 hover:text-blue-800 hover:underline"
-							>
-								ลืมรหัสผ่าน?
-							</a>
-						</div>
-						<div class="relative">
 							<Input
 								{...props}
-								type={showPassword ? 'text' : 'password'}
-								bind:value={$formData.password}
-								placeholder="กรอกรหัสผ่านของคุณ"
-								autocomplete="current-password"
-								class="h-11 pr-10"
+								bind:value={$formData.username}
+								placeholder="เช่น staff01 หรือ 0812345678"
+								autocomplete="username"
+								class="h-11"
 							/>
-							<Button
-								type="button"
-								variant="ghost"
-								size="icon"
-								class="absolute top-0 right-0 h-full px-3 hover:bg-transparent"
-								aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
-								onclick={() => (showPassword = !showPassword)}
-							>
-								{#if showPassword}
-									<EyeOff class="size-4 text-muted-foreground" />
-								{:else}
-									<Eye class="size-4 text-muted-foreground" />
-								{/if}
-							</Button>
-						</div>
-					{/snippet}
-				</Form.Control>
-				<Form.FieldErrors />
-			</Form.Field>
-		</div>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
 
-		<div class="flex flex-col gap-2 pt-0.5">
-			<Form.Button
-				disabled={$submitting}
-				class="h-11 w-full rounded-xl bg-[#0A2647] font-semibold text-white transition-colors hover:bg-[#051930]"
-			>
-				เข้าสู่ระบบ (Login)
-			</Form.Button>
-
-			{#if captchaEnabled}
-				<p class="text-center text-xs text-muted-foreground">
-					เว็บไซต์นี้มีการป้องกันด้วย reCAPTCHA
-				</p>
-			{/if}
-		</div>
-
-		<div class="relative my-0.5">
-			<div class="absolute inset-0 flex items-center" aria-hidden="true">
-				<div class="w-full border-t border-slate-200"></div>
+				<Form.Field {form} name="password">
+					<Form.Control>
+						{#snippet children({ props })}
+							<div class="flex items-center justify-between">
+								<Form.Label class="text-sm font-semibold text-slate-700"
+									>รหัสผ่าน (Password)</Form.Label
+								>
+								<a
+									href={resolve('/forgot-password')}
+									class="text-xs font-semibold text-blue-600 hover:text-blue-800 hover:underline"
+								>
+									ลืมรหัสผ่าน?
+								</a>
+							</div>
+							<div class="relative">
+								<Input
+									{...props}
+									type={showPassword ? 'text' : 'password'}
+									bind:value={$formData.password}
+									placeholder="กรอกรหัสผ่านของคุณ"
+									autocomplete="current-password"
+									class="h-11 pr-10"
+								/>
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon"
+									class="absolute top-0 right-0 h-full px-3 hover:bg-transparent"
+									aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
+									onclick={() => (showPassword = !showPassword)}
+								>
+									{#if showPassword}
+										<EyeOff class="size-4 text-muted-foreground" />
+									{:else}
+										<Eye class="size-4 text-muted-foreground" />
+									{/if}
+								</Button>
+							</div>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
 			</div>
-			<div class="relative flex justify-center text-xs">
-				<span class="bg-white px-2 font-medium text-slate-500">หรือ</span>
+
+			<div class="flex flex-col gap-2 pt-0.5">
+				<Form.Button
+					disabled={$submitting}
+					class="h-11 w-full rounded-xl bg-[#0A2647] font-semibold text-white transition-colors hover:bg-[#051930]"
+				>
+					เข้าสู่ระบบ (Login)
+				</Form.Button>
+
+				{#if captchaEnabled}
+					<p class="text-center text-xs text-muted-foreground">
+						เว็บไซต์นี้มีการป้องกันด้วย reCAPTCHA
+					</p>
+				{/if}
 			</div>
-		</div>
+
+			<div class="relative my-0.5">
+				<div class="absolute inset-0 flex items-center" aria-hidden="true">
+					<div class="w-full border-t border-slate-200"></div>
+				</div>
+				<div class="relative flex justify-center text-xs">
+					<span class="bg-white px-2 font-medium text-slate-500">หรือ</span>
+				</div>
+			</div>
+		{/if}
 
 		<div class="flex flex-col gap-2.5">
-			<GoogleSignInButton href={googleOAuthStartHref('login')} class="h-11 text-sm font-medium" />
-			<ThaIdSignInButton href={thaidOAuthStartHref('login')} class="h-11 text-sm font-medium" />
+			{#if googleEnabled}
+				<GoogleSignInButton href={googleOAuthStartHref('login')} class="h-11 text-sm font-medium" />
+			{/if}
+			{#if thaidEnabled}
+				<ThaIdSignInButton href={thaidOAuthStartHref('login')} class="h-11 text-sm font-medium" />
+			{/if}
 		</div>
 	</form>
 {/snippet}

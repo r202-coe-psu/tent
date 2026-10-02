@@ -36,15 +36,18 @@ describe('unassigned queue badges (#250)', () => {
 	});
 });
 
-describe('claim flow status guidance (#250 follow-up)', () => {
-	it('states claim creates pre_registered then Report-in advances to arriving', () => {
-		expect(CLAIM_FLOW_STATUS_GUIDANCE).toBe(
-			'รับเข้าศูนย์จะสร้าง Evacuee ใน Couch ที่สถานะ ลงทะเบียนล่วงหน้า (pre_registered) จากนั้นเปิดหน้า รายงานตัว (Report-in) เพื่อยืนยันข้อมูล แล้วเลื่อนเป็น มาถึงศูนย์ / รอคัดกรอง (arriving)'
-		);
+describe('claim flow status guidance (CR-140 addendum — claim on Report-in confirm)', () => {
+	it('states selection alone writes nothing until confirmed on the review page', () => {
+		expect(CLAIM_FLOW_STATUS_GUIDANCE).toContain('ยังไม่มีการรับเข้าศูนย์');
+		expect(CLAIM_FLOW_STATUS_GUIDANCE).toContain('ตรวจสอบรายละเอียด');
+		expect(CLAIM_FLOW_STATUS_GUIDANCE).toContain('pre_registered');
+		expect(CLAIM_FLOW_STATUS_GUIDANCE).toContain('arriving');
 	});
 
-	it('exposes a short claim-dialog a11y description', () => {
-		expect(CLAIM_DIALOG_DESCRIPTION).toBe('เลือกสมาชิกที่จะรับเข้าศูนย์นี้ แล้วกดยืนยัน');
+	it('exposes a short claim-dialog a11y description that does not promise admission yet', () => {
+		expect(CLAIM_DIALOG_DESCRIPTION).toContain('สมาชิก');
+		expect(CLAIM_DIALOG_DESCRIPTION).toContain('สัตว์เลี้ยง');
+		expect(CLAIM_DIALOG_DESCRIPTION).toContain('ยังไม่รับเข้าศูนย์');
 	});
 });
 

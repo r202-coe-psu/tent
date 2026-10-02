@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { POST } from './+server';
 import { GET as getDetail } from './[id]/+server';
 import { completeScanSession, _resetSessionsForTest } from '$lib/server/thaid-scan-session';
-import type { ThaiDAutofillProfile } from '$lib/features/people/domain/thaid-profile';
+import type { ThaiDAutofillProfile } from '$lib/features/people';
 
 const mockProfile: ThaiDAutofillProfile = {
 	id: 'thaid-1234567890123',
@@ -44,6 +44,7 @@ describe('Scan Session API endpoints', () => {
 		const data = await res.json();
 		expect(data.sessionId).toBeDefined();
 		expect(data.expiresAt).toBeGreaterThan(Date.now());
+		expect(data.ttlSeconds).toBe(900);
 		expect(data.qrUrl).toBe(
 			`https://shelter.test/api/v1/auth/oauth/thaid/start?mode=member_scan&session_id=${data.sessionId}`
 		);

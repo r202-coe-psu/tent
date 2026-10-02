@@ -24,7 +24,7 @@
 <div
 	class="{sticky
 		? 'sticky bottom-0 z-30 -mx-1 border-t border-border bg-background/95 px-3 py-3.5 backdrop-blur-sm sm:px-4'
-		: 'px-0 pt-2 pb-0'} {align === 'center'
+		: 'px-0 py-0'} {align === 'center'
 		? 'flex items-center justify-center'
 		: 'flex items-center justify-end'}"
 >

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { computeNeeds, pickCampaignForItems } from './compute-needs';
+import { forceCutOffNeed, isDonationOutstanding } from '$lib/features/operations';
 import type {
 	StockLedger,
 	CampaignNeed,
@@ -479,5 +480,58 @@ describe('computeNeeds across the CR-052 statuses', () => {
 				campaignId: 'camp-1'
 			}
 		);
+	});
+});
+
+/**
+ * R-22.2 — a manual force cut-off closes the door on NEW bookings; it must not touch
+ * bookings donors already made. Nothing in the code path does, and this test is here
+ * to keep it that way: closing a need is a campaign-only edit, so the day someone
+ * "tidies up" by cancelling outstanding donations alongside it, this goes red.
+ */
+describe('force cut-off leaves bookings already in the queue alone (R-22.2)', () => {
+	const bookings = () => [
+		donation('donation:pending', 'c1', 'pending_review', [{ item_id: 'item:rice', qty: '30' }]),
+		donation('donation:verifying', 'c1', 'verifying', [{ item_id: 'item:rice', qty: '20' }])
+	];
+
+	it('closes the need without changing any donation doc', () => {
+		const before = bookings();
+		const snapshot = JSON.stringify(before);
+		const closed = forceCutOffNeed(
+			campaign('c1', [need('item:rice', '100')]),
+			'item:rice',
+			'คลังเต็ม'
+		);
+
+		expect(closed.needs.find((n) => n.item_id === 'item:rice')?.status).toBe('closed');
+		expect(JSON.stringify(before)).toBe(snapshot);
+		for (const don of before) expect(isDonationOutstanding(don.status)).toBe(true);
+	});
+
+	it('reports nothing left to book while the closed need still owes the donors goods', () => {
+		const closed = forceCutOffNeed(
+			campaign('c1', [need('item:rice', '100')]),
+			'item:rice',
+			'คลังเต็ม'
+		);
+		const { remaining, itemCampaign } = computeNeeds([closed], bookings());
+
+		// 0 = "take no more", not "the 50 kg on their way stopped counting": the two
+		// bookings stay outstanding above, so quota release stays a job for cancel /
+		// expiry / redirect / reject only.
+		expect(remaining.get('item:rice')).toBe('0');
+		expect(itemCampaign.has('item:rice')).toBe(false);
+	});
+
+	it('still refuses a new booking for the closed item', () => {
+		const closed = forceCutOffNeed(
+			campaign('c1', [need('item:rice', '100')]),
+			'item:rice',
+			'คลังเต็ม'
+		);
+		const { campaignRemaining } = computeNeeds([closed], bookings());
+		const pick = pickCampaignForItems(campaignRemaining, [{ item_id: 'item:rice', qty: '1' }]);
+		expect(pick).toEqual({ ok: false, itemId: 'item:rice' });
 	});
 });

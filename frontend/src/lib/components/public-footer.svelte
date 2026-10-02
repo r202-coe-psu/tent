@@ -1,9 +1,12 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { onMount } from 'svelte';
 	import Building from '@lucide/svelte/icons/building';
 	import ExternalLink from '@lucide/svelte/icons/external-link';
 	import Mail from '@lucide/svelte/icons/mail';
+	import { PUBLIC_POLICY_I18N, PUBLIC_TERM_I18N } from '$lib/constants/i18n';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
 
 	export interface PublicFooterConfig {
 		line_oa_url?: string;
@@ -16,42 +19,19 @@
 
 	let { configData }: Props = $props();
 
-	let fetchedConfig = $state<PublicFooterConfig | null>(null);
-
 	const pageConfig = $derived(page.data?.configData as PublicFooterConfig | undefined);
 
 	const effectiveConfig = $derived<PublicFooterConfig>({
-		line_oa_url:
-			configData?.line_oa_url || pageConfig?.line_oa_url || fetchedConfig?.line_oa_url || '',
-		facebook_url:
-			configData?.facebook_url || pageConfig?.facebook_url || fetchedConfig?.facebook_url || ''
-	});
-
-	onMount(async () => {
-		if (
-			!configData?.line_oa_url &&
-			!configData?.facebook_url &&
-			!pageConfig?.line_oa_url &&
-			!pageConfig?.facebook_url
-		) {
-			try {
-				const res = await fetch('/api/public/v1/config/faqs?category=public');
-				if (res.ok) {
-					const data = await res.json();
-					fetchedConfig = {
-						line_oa_url: data.line_oa_url || '',
-						facebook_url: data.facebook_url || ''
-					};
-				}
-			} catch (e) {
-				console.error('Failed to fetch public config in footer', e);
-			}
-		}
+		line_oa_url: configData?.line_oa_url || pageConfig?.line_oa_url || '',
+		facebook_url: configData?.facebook_url || pageConfig?.facebook_url || ''
 	});
 
 	const hasLineOa = $derived(Boolean(effectiveConfig.line_oa_url?.trim()));
 	const hasFacebook = $derived(Boolean(effectiveConfig.facebook_url?.trim()));
 	const hasOnlineChannels = $derived(hasLineOa || hasFacebook);
+
+	const termT = $derived(getTranslation(PUBLIC_TERM_I18N, langState.current));
+	const policyT = $derived(getTranslation(PUBLIC_POLICY_I18N, langState.current));
 </script>
 
 <footer class="border-t border-[#0A2647] bg-[#0A2647] text-white antialiased">
@@ -145,6 +125,21 @@
 			<p>
 				© 2026 SmartShelter • คุ้มครองข้อมูลตาม พ.ร.บ. PDPA •
 				ปฏิบัติการร่วมศูนย์ประสานงานช่วยเหลือผู้ประสบภัย
+			</p>
+			<p class="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+				<a
+					href={resolve('/policy')}
+					class="underline-offset-2 transition-colors hover:text-white hover:underline"
+				>
+					{policyT.footerLink}
+				</a>
+				<span class="text-white/30" aria-hidden="true">·</span>
+				<a
+					href={resolve('/term')}
+					class="underline-offset-2 transition-colors hover:text-white hover:underline"
+				>
+					{termT.footerLink}
+				</a>
 			</p>
 		</div>
 	</div>

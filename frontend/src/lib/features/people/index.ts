@@ -48,6 +48,8 @@ export {
 	migratePetGroup,
 	migratePetGroups,
 	isMeaningfulOtherPetNotes,
+	petSpeciesLabel,
+	groupPetsBySpecies,
 	genderSchema,
 	religionSchema,
 	stayStatusSchema,
@@ -77,6 +79,7 @@ export {
 	createMovement,
 	createScreening,
 	assertMovementAllowed,
+	movementConflictMessage,
 	canCheckInEvacuee,
 	canCheckOutEvacuee,
 	canChangeEvacueeZone,
@@ -106,6 +109,7 @@ export {
 	formatPersonName,
 	matchesEvacueeSearch,
 	zoneLabel,
+	type ZoneLabelSource,
 	evacueeAgeYears,
 	EWAR_SYMPTOM_GROUPS,
 	isEvacuee,
@@ -119,6 +123,16 @@ export {
 	type MovementInput,
 	type ScreeningInput
 } from './domain/people';
+
+export {
+	CR112_HOUSING_TYPE_CODES,
+	DEFAULT_HOUSING_TYPE_ITEMS_TH,
+	buildHousingTypeSelectItems,
+	setHousingTypeFromSelect,
+	housingTypeLabelForCode,
+	type HousingTypeSelectItem,
+	type MasterHousingItem
+} from './domain/housing-type-ui';
 
 export {
 	nextQueueLabel,
@@ -142,6 +156,14 @@ export {
 } from './domain/scan-lookup';
 
 export {
+	toggleId,
+	selectRange,
+	applyRowClickSelection,
+	type ApplyRowClickSelectionInput,
+	type ApplyRowClickSelectionResult
+} from './domain/row-selection';
+
+export {
 	REPORT_IN_CTA_LABEL,
 	NEW_REGISTRATION_CTA_LABEL,
 	INTAKE_SEARCH_PLACEHOLDER,
@@ -160,8 +182,13 @@ export {
 	hasFederatedIntakeHits,
 	isIntakeNewRegistrationLocked,
 	resolveNewRegistrationCta,
+	deriveDuplicateCheckQuery,
+	deriveDuplicateCheckQueries,
+	duplicateCheckKey,
+	type DuplicateCheckQuery,
 	type ShelterHitAction,
-	type NewRegistrationCtaKind
+	type NewRegistrationCtaKind,
+	type DuplicateCheckMember
 } from './domain/intake-search';
 
 export {
@@ -221,7 +248,7 @@ export {
 } from './domain/birth-calendar';
 
 export type { PeopleRepository, EvacueeFilters, HouseholdFilters } from './data/people.repository';
-export { peopleRepository } from './data/people.remote';
+export { peopleRepository, isRegistrationCompensationIncomplete } from './data/people.remote';
 export { getShelterCode, getShelterDb } from '$lib/db/shelter';
 
 // Application — TanStack Query hooks + changes-feed live-query wiring
@@ -253,6 +280,7 @@ export {
 	type FederatedScanLookupDeps,
 	useHouseholds,
 	useHousehold,
+	useHouseholdMembers,
 	useHouseholdsPaginated,
 	listMatchingEvacueeIds,
 	listMatchingHouseholdIds,
@@ -270,8 +298,11 @@ export {
 	useDeleteMedical,
 	usePatchEvacuee,
 	useMedicals,
+	useMedicalByEvacuee,
 	useMovements,
+	useMovementsByEvacuee,
 	useScreenings,
+	useScreeningsByEvacuee,
 	startPeopleLiveQuery
 } from './application/queries';
 

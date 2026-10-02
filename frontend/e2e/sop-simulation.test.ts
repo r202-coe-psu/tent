@@ -133,7 +133,7 @@ test.describe('T-42 SOP what-if simulation', () => {
 
 			await page.getByRole('tab', { name: /ปรับเกณฑ์ใน Scenario/ }).click();
 			await page.getByRole('button', { name: 'เลือกค่าที่จะปรับ' }).click();
-			await page.getByRole('switch', { name: 'เปลี่ยนค่า น้ำ (รวม)' }).click();
+			await page.getByRole('switch', { name: 'เปลี่ยนค่า ก๊อกน้ำ' }).click();
 			await page.getByLabel('อัตราใน Scenario').fill('18');
 			await page.getByRole('button', { name: 'เสร็จสิ้น' }).click();
 
@@ -161,7 +161,7 @@ test.describe('T-42 SOP what-if simulation', () => {
 
 			await page.getByRole('tab', { name: /ปรับเกณฑ์ใน Scenario/ }).click();
 			await page.getByRole('button', { name: 'เลือกค่าที่จะปรับ' }).click();
-			await page.getByRole('switch', { name: 'เปลี่ยนค่า น้ำ (รวม)' }).click();
+			await page.getByRole('switch', { name: 'เปลี่ยนค่า ก๊อกน้ำ' }).click();
 			await page.getByLabel('อัตราใน Scenario').fill('18');
 			await page.getByRole('button', { name: 'เสร็จสิ้น' }).click();
 			await page.getByLabel(/ชื่อสถานการณ์/).fill(`กด Enter ${Date.now()}`);
@@ -185,7 +185,7 @@ test.describe('T-42 SOP what-if simulation', () => {
 
 			await page.getByRole('tab', { name: /ปรับเกณฑ์ใน Scenario/ }).click();
 			await page.getByRole('button', { name: 'เลือกค่าที่จะปรับ' }).click();
-			await page.getByRole('switch', { name: 'เปลี่ยนค่า น้ำ (รวม)' }).click();
+			await page.getByRole('switch', { name: 'เปลี่ยนค่า ก๊อกน้ำ' }).click();
 			await page.getByLabel('อัตราใน Scenario').fill('');
 			await page.getByRole('button', { name: 'เสร็จสิ้น' }).click();
 			await page.getByLabel(/ชื่อสถานการณ์/).fill(`ค่าว่าง ${Date.now()}`);

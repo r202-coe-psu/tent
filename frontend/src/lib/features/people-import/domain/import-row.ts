@@ -10,7 +10,6 @@ import {
 	GENDER_CHOICES,
 	H,
 	HOUSEHOLD_HEADER_TO_SHEET,
-	MASTER_COLUMNS,
 	MEMBER_PATH_TO_HEADER,
 	MEMBER_SHEET_NAME,
 	PATH_TO_HEADER,
@@ -18,8 +17,7 @@ import {
 	RELIGION_CHOICES,
 	SPECIAL_NEED_CHOICES,
 	VEHICLE_TYPE_CHOICES,
-	type EnumChoice,
-	type MasterColumn
+	type EnumChoice
 } from './columns';
 import { findInFileDuplicates, personDuplicateKey } from './duplicates';
 
@@ -113,7 +111,7 @@ export interface MasterLookup {
 	codes: Set<string>;
 }
 
-export type Lookups = Record<MasterColumn, MasterLookup>;
+export type Lookups = Record<string, MasterLookup>;
 
 /** Build a {@link MasterLookup} from a master_data items array. Pure. */
 export function buildMasterLookup(items: readonly { code: string; label: string }[]): MasterLookup {
@@ -126,13 +124,9 @@ export function buildMasterLookup(items: readonly { code: string; label: string 
 	return { byLabel, codes };
 }
 
-function emptyLookup(): MasterLookup {
-	return { byLabel: new Map(), codes: new Set() };
-}
-
-/** An empty lookup set — for tests / when master data is unavailable. */
+/** An empty lookup set — CR-137: zone/community are free text (no master lookups). */
 export function emptyLookups(): Lookups {
-	return Object.fromEntries(MASTER_COLUMNS.map((t) => [t, emptyLookup()])) as Lookups;
+	return {};
 }
 
 // ===== cell readers =====
@@ -246,21 +240,6 @@ function resolveMultiEnum<T extends string>(
 		if (!out.includes(match.value)) out.push(match.value);
 	}
 	return out;
-}
-
-function resolveMaster(
-	raw: RawRow,
-	header: string,
-	lookup: MasterLookup,
-	sink: ErrorSink
-): string | null {
-	const value = cell(raw, header);
-	if (value === '') return null;
-	if (lookup.codes.has(value)) return value;
-	const code = lookup.byLabel.get(value);
-	if (code) return code;
-	sink.push(header, `ไม่พบ "${value}" ในรายการ${header}ของศูนย์นี้`);
-	return null;
 }
 
 /** Plain integer parse — the caller decides what an out-of-range value means. */
@@ -447,7 +426,7 @@ function validateMembers(rows: readonly RawSheetRow[]): {
 export function validateRow(
 	raw: RawRow,
 	row: number,
-	lookups: Lookups,
+	_lookups: Lookups,
 	memberRows: readonly RawSheetRow[] = []
 ): RowValidation {
 	const sink = createSink(null);
@@ -465,8 +444,8 @@ export function validateRow(
 		// Locked by CR-071 / T-72 — no per-row status column exists.
 		status: 'pre_registered' as const,
 		checkout_destination: null,
-		municipality_zone: resolveMaster(raw, H.municipality_zone, lookups.municipality_zone, sink),
-		community: resolveMaster(raw, H.community, lookups.community, sink),
+		municipality_zone: strOrNull(cell(raw, H.municipality_zone)),
+		community: strOrNull(cell(raw, H.community)),
 		pets: resolvePets(raw, sink),
 		vehicles: resolveVehicles(raw, sink),
 		assets: assetDescription ? { description: assetDescription, image_url: null } : null,

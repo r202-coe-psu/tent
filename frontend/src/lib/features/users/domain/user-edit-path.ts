@@ -11,6 +11,13 @@ export function userEditHref(listBase: string, name: string, from?: string): str
 	return `${path}?from=${encodeURIComponent(from)}`;
 }
 
+/** Dedicated create page (mirrors edit return-path query). */
+export function userCreateHref(listBase: string, from?: string): string {
+	const path = `${listBase}/new`;
+	if (!from) return path;
+	return `${path}?from=${encodeURIComponent(from)}`;
+}
+
 /** Same-origin relative path only — blocks protocol-relative and external URLs. */
 export function safeReturnPath(from: string | null | undefined, fallback: string): string {
 	if (!from || !from.startsWith('/') || from.startsWith('//') || from.includes('://')) {

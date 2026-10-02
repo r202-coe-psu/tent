@@ -60,3 +60,12 @@ export function stripThaiTitle(rawText: string): {
 	}
 	return { cleanedText: trimmed };
 }
+
+/**
+ * Strips Thai administrative area prefixes (ตำบล, แขวง, อำเภอ, เขต, จังหวัด, etc.)
+ * so the cleaned name directly matches dropdown keys in Thailand Location Registry.
+ */
+export function cleanAreaPrefix(name?: string | null): string {
+	if (!name) return '';
+	return name.replace(/^(ตำบล|แขวง|อำเภอ|เขต|จังหวัด|ต\.|อ\.|จ\.)/, '').trim();
+}

@@ -121,15 +121,18 @@ describe('POST /api/public/v1/registrations/status', () => {
 		});
 	});
 
-	it('returns 404 when ticket is not found in Couch or Mongo', async () => {
+	it('returns 200 with notFound: true when ticket is not found in Couch or Mongo', async () => {
 		vi.mocked(adminRaw).mockResolvedValue({ status: 404, data: null });
 		const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 404 });
 		const event = postEvent({ code: ULID });
 		event.fetch = fetchMock;
 
 		const res = await POST(event);
-		expect(res.status).toBe(404);
+		expect(res.status).toBe(200);
 		const body = await res.json();
+		expect(body.success).toBe(true);
+		expect(body.notFound).toBe(true);
+		expect(body.verified).toBe(false);
 		expect(body.error).toBe('BOOKING_NOT_FOUND');
 	});
 });

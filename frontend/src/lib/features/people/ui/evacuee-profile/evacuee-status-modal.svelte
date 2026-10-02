@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
+	import { toast } from 'svelte-sonner';
 	import X from '@lucide/svelte/icons/x';
 	import CheckCircle from '@lucide/svelte/icons/check-circle';
 	import { resolveStatusChangeAction, type Evacuee, type StayStatus } from '$lib/features/people';
@@ -9,6 +11,14 @@
 		colorClass: string;
 		dotClass: string;
 	}
+
+	/** Manual picker targets only — transferred / terminal / intake statuses are excluded. */
+	const MANUAL_STATUS_OPTIONS: readonly StayStatus[] = [
+		'active',
+		'room_confirmed',
+		'temporary_leave',
+		'checked_out'
+	];
 
 	let {
 		show,
@@ -21,19 +31,57 @@
 		evacuee: Evacuee;
 		statusConfig: Partial<Record<StayStatus, StatusConfig>>;
 		onClose: () => void;
-		onUpdateStatus: (status: StayStatus) => Promise<void>;
+		onUpdateStatus: (status: StayStatus, reason?: string) => Promise<void>;
 	} = $props();
 
-	// Same gating pattern as the back-office evacuee list (canCheckInEvacuee, …):
-	// only offer statuses actually reachable from the current stay status, so an
-	// invalid movement can never be picked in the first place.
+	// Pending choice + reason reset when this instance mounts (parent remounts on
+	// open / evacuee id change via `{#key}`).
+	let pendingStatus = $state<StayStatus>(untrack(() => evacuee.current_stay.status));
+	let reason = $state('');
+	let saving = $state(false);
+
 	const selectableOptions = $derived(
-		Object.entries(statusConfig).filter(
-			([statusKey]) =>
+		MANUAL_STATUS_OPTIONS.flatMap((statusKey) => {
+			const reachable =
 				statusKey === evacuee.current_stay.status ||
-				resolveStatusChangeAction(evacuee.current_stay.status, statusKey as StayStatus) !== null
-		)
+				resolveStatusChangeAction(evacuee.current_stay.status, statusKey) !== null;
+			const cfg = statusConfig[statusKey];
+			if (!reachable || !cfg) return [];
+			return [[statusKey, cfg] as const];
+		})
 	);
+
+	const needsReason = $derived(
+		pendingStatus === 'temporary_leave' || pendingStatus === 'checked_out'
+	);
+
+	const confirmDisabled = $derived(saving || pendingStatus === evacuee.current_stay.status);
+
+	function selectStatus(statusKey: StayStatus) {
+		if (saving) return;
+		pendingStatus = statusKey;
+		if (statusKey !== 'temporary_leave' && statusKey !== 'checked_out') {
+			reason = '';
+		}
+	}
+
+	async function handleConfirm() {
+		if (confirmDisabled) return;
+		if (needsReason && !reason.trim()) {
+			toast.error(
+				pendingStatus === 'checked_out'
+					? 'การเช็คเอาท์ต้องระบุเหตุผลหรือหมายเหตุ'
+					: 'การออกชั่วคราวต้องระบุเหตุผล'
+			);
+			return;
+		}
+		saving = true;
+		try {
+			await onUpdateStatus(pendingStatus, needsReason ? reason.trim() : undefined);
+		} finally {
+			saving = false;
+		}
+	}
 </script>
 
 {#if show}
@@ -49,39 +97,71 @@
 					แก้ไขสถานะการพักพิง (Stay status)
 				</h3>
 				<button
+					type="button"
 					onclick={onClose}
-					class="cursor-pointer rounded-lg p-1 text-muted-foreground transition-colors hover:text-foreground"
+					disabled={saving}
+					class="cursor-pointer rounded-lg p-1 text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
 				>
 					<X class="size-5" />
 				</button>
 			</div>
 
-			<div class="space-y-2">
+			<div class="space-y-2" role="radiogroup" aria-label="สถานะการพักพิง">
 				{#each selectableOptions as [statusKey, cfg] (statusKey)}
 					<button
-						onclick={() => onUpdateStatus(statusKey as StayStatus)}
-						class="flex w-full cursor-pointer items-center justify-between rounded-xl border border-border p-3.5 font-semibold transition-all hover:border-primary hover:bg-slate-50 dark:hover:bg-slate-900 {evacuee
-							.current_stay.status === statusKey
+						type="button"
+						role="radio"
+						aria-checked={pendingStatus === statusKey}
+						onclick={() => selectStatus(statusKey)}
+						disabled={saving}
+						class="flex w-full cursor-pointer items-center justify-between rounded-xl border p-3.5 font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-60 {pendingStatus ===
+						statusKey
 							? 'border-primary bg-primary/5 text-primary'
-							: 'bg-background'}"
+							: 'border-border bg-background hover:border-primary hover:bg-slate-50 dark:hover:bg-slate-900'}"
 					>
 						<div class="flex items-center gap-2">
 							<span class="size-2 rounded-full {cfg.dotClass}"></span>
 							<span class="text-sm">{cfg.label}</span>
 						</div>
-						{#if evacuee.current_stay.status === statusKey}
+						{#if pendingStatus === statusKey}
 							<CheckCircle class="size-5 shrink-0 text-primary" />
 						{/if}
 					</button>
 				{/each}
 			</div>
 
+			{#if needsReason}
+				<div class="space-y-1.5">
+					<label for="evacuee-status-reason" class="text-xs font-semibold text-foreground">
+						เหตุผล <span class="text-destructive">*</span>
+					</label>
+					<textarea
+						id="evacuee-status-reason"
+						bind:value={reason}
+						disabled={saving}
+						rows={3}
+						placeholder="ระบุเหตุผล เช่น กลับบ้านชั่วคราว / ย้ายออก"
+						class="w-full resize-y rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:outline-none disabled:opacity-60"
+					></textarea>
+				</div>
+			{/if}
+
 			<div class="flex justify-end gap-2 border-t border-border pt-3">
 				<button
+					type="button"
 					onclick={onClose}
-					class="cursor-pointer rounded-xl border border-border bg-background px-4 py-2 text-xs font-semibold text-slate-800 transition-colors hover:bg-muted dark:text-slate-200"
+					disabled={saving}
+					class="cursor-pointer rounded-xl border border-border bg-background px-4 py-2 text-xs font-semibold text-slate-800 transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50 dark:text-slate-200"
 				>
 					ยกเลิก
+				</button>
+				<button
+					type="button"
+					onclick={handleConfirm}
+					disabled={confirmDisabled}
+					class="cursor-pointer rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
+				>
+					{saving ? 'กำลังบันทึก...' : 'ยืนยัน'}
 				</button>
 			</div>
 		</div>

@@ -143,21 +143,24 @@ async function mockPortalApi(page: Page) {
 const SKILLS = [
 	{
 		code: 'cooking',
-		label: 'ประกอบอาหาร / ครัวสนาม',
+		label_th: 'ประกอบอาหาร / ครัวสนาม',
+		label_en: 'Kitchen / field kitchen',
 		category: 'operational',
 		description: '',
 		is_default: true
 	},
 	{
 		code: 'driver',
-		label: 'ขับขี่ยานพาหนะ / ขนส่ง',
+		label_th: 'ขับขี่ยานพาหนะ / ขนส่ง',
+		label_en: 'Driving / transport',
 		category: 'operational',
 		description: '',
 		is_default: false
 	},
 	{
 		code: 'medical',
-		label: 'การแพทย์ / ปฐมพยาบาล',
+		label_th: 'การแพทย์ / ปฐมพยาบาล',
+		label_en: 'Medical / first aid',
 		category: 'controlled',
 		description: '',
 		is_default: false
