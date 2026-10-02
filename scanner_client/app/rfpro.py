@@ -44,6 +44,9 @@ REPLY_FRAME_OVERHEAD = 12
 # Reading the photo piece by piece is slow; past this the photo is dropped and registration
 # goes on without it.
 PHOTO_BUDGET_SEC = 30.0
+# Card resets allowed while reading one photo. kiosk3 saw a single photo piece fail with an
+# undocumented status (0x44) mid-read; dropping the photo for one bad piece lost it entirely.
+MAX_PHOTO_RECOVERIES = 3
 # Consecutive unanswered polls before the module is treated as gone so the manager re-opens it.
 MAX_POLL_FAILURES = 3
 
@@ -411,29 +414,46 @@ class RfproThaiCardReader(ThaiSmartCardReader):
 
     def get_photo_bytes(self) -> bytes | None:
         """The 20 photo chunks, each read in pieces. A chunk the card does not answer is skipped
-        (as in the PC/SC reader); a photo that takes longer than PHOTO_BUDGET_SEC is dropped."""
+        (as in the PC/SC reader); a photo that takes longer than PHOTO_BUDGET_SEC is dropped.
+        A piece the module rejects is retried after resetting the card, so one bad exchange in
+        the ~260 pieces does not cost the whole photo."""
         deadline = time.monotonic() + PHOTO_BUDGET_SEC
+        recoveries = 0
         data: list[int] = []
-        try:
-            for cmd in CMD_PHOTOS:
-                offset = (cmd[2] << 8) | cmd[3]
-                for start in range(0, cmd[-1], self.piece_size):
+        for cmd in CMD_PHOTOS:
+            offset = (cmd[2] << 8) | cmd[3]
+            for start in range(0, cmd[-1], self.piece_size):
+                while True:
                     if time.monotonic() > deadline:
                         logger.warning(
                             "Card photo skipped: not read within %.0fs", PHOTO_BUDGET_SEC
                         )
                         return None
-                    piece = self._read_piece(
-                        offset + start, min(self.piece_size, cmd[-1] - start)
-                    )
-                    if piece is None:
+                    try:
+                        piece = self._read_piece(
+                            offset + start, min(self.piece_size, cmd[-1] - start)
+                        )
                         break
-                    data.extend(piece)
-        except ReaderLostError:
-            raise
-        except RfproError as error:
-            logger.error("Card photo could not be read: %s", error)
-            return None
+                    except ReaderLostError:
+                        raise
+                    except RfproError as error:
+                        if recoveries >= MAX_PHOTO_RECOVERIES:
+                            logger.error("Card photo could not be read: %s", error)
+                            return None
+                        recoveries += 1
+                        logger.warning(
+                            "Card photo piece failed (%s); resetting the card and retrying (%d/%d)",
+                            error,
+                            recoveries,
+                            MAX_PHOTO_RECOVERIES,
+                        )
+                        # A reset drops the applet selection; connect() resets and re-selects.
+                        if not self.connect():
+                            logger.error("Card photo could not be read: card did not answer reset")
+                            return None
+                if piece is None:
+                    break
+                data.extend(piece)
         return bytes(data) or None
 
     def is_card_inserted(self) -> bool:

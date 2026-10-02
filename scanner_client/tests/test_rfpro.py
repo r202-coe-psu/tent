@@ -202,6 +202,28 @@ class FakeThaiCard:
         return bytes([0x61, len(field)])
 
 
+class FlakyPhotoCard(FakeThaiCard):
+    """Rejects the first piece of photo chunk 5 at module level, like kiosk3's status 0x44."""
+
+    FAILING_OFFSET = (CMD_PHOTOS[4][2] << 8) | CMD_PHOTOS[4][3]
+
+    def __init__(self, failures: int, **kwargs):
+        super().__init__(**kwargs)
+        self.failures = failures
+
+    def __call__(self, cmd, data):
+        apdu = list(data[1:])
+        if (
+            cmd == CMD_ICC_APDU
+            and self.failures
+            and apdu[:2] == [0x80, 0xB0]
+            and ((apdu[2] << 8) | apdu[3]) == self.FAILING_OFFSET
+        ):
+            self.failures -= 1
+            return 0x44, b""
+        return super().__call__(cmd, data)
+
+
 class FrameTests(unittest.TestCase):
     def test_requests_match_the_vendor_document_examples(self):
         cases = {
@@ -521,6 +543,28 @@ class ReaderTests(unittest.TestCase):
             rfpro.logger, level="WARNING"
         ):
             self.assertIsNone(reader.get_photo_bytes())
+
+    def test_a_photo_piece_the_module_rejects_is_retried_after_a_card_reset(self):
+        # kiosk3: one photo piece answered status 0x44 and the whole photo was dropped.
+        card, device, reader = self.reader(FlakyPhotoCard(failures=1))
+        reader.connect()
+        device.commands.clear()
+
+        with self.assertLogs(rfpro.logger, level="WARNING"):
+            photo = reader.get_photo_bytes()
+
+        self.assertIsNotNone(photo)
+        self.assertTrue(photo.startswith(card.photo))
+        self.assertEqual(card.failures, 0)
+        self.assertIn(CMD_ICC_GETATR, [cmd for cmd, _ in device.commands])  # the card was reset
+
+    def test_photo_is_dropped_when_the_module_keeps_rejecting_a_piece(self):
+        card, _, reader = self.reader(FlakyPhotoCard(failures=99))
+        reader.connect()
+
+        with self.assertLogs(rfpro.logger, level="ERROR"):
+            self.assertIsNone(reader.get_photo_bytes())
+        self.assertEqual(card.failures, 99 - rfpro.MAX_PHOTO_RECOVERIES - 1)
 
     def test_unplugging_during_a_read_surfaces_as_a_lost_reader_not_a_card_error(self):
         from app.scard import ReaderLostError
