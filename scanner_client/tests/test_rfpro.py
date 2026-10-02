@@ -24,7 +24,7 @@ from app.rfpro import (
     build_frame,
     parse_frame,
 )
-from app.scard import CMD_CID, CMD_PHOTOS, CMD_THFULLNAME, THAI_CARD_AID
+from app.scard import CMD_ADDRESS, CMD_CID, CMD_PHOTOS, CMD_THFULLNAME, THAI_CARD_AID
 from tests.test_manager import FakePage, valid_config
 
 OUT_SIZE = 32
@@ -141,8 +141,12 @@ class FakeHidDevice:
 class FakeThaiCard:
     """Answers the module's commands and the Thai ID applet's APDUs."""
 
-    def __init__(self, atr=ATR_3B79, present=True, atr_failures=0, atr_silences=0):
+    def __init__(
+        self, atr=ATR_3B79, present=True, atr_failures=0, atr_silences=0, drops_leading_ins=False
+    ):
         self.atr = atr
+        # kiosk3's module swallows a first data byte equal to GET RESPONSE's INS (C0).
+        self.drops_leading_ins = drops_leading_ins
         self.present = present
         self.atr_failures = atr_failures
         self.atr_silences = atr_silences
@@ -190,7 +194,10 @@ class FakeThaiCard:
             return b"\x90\x00"
         if apdu[:2] == [0x00, 0xC0]:  # GET RESPONSE
             self.get_response_p2.append(apdu[3])
-            return self.pending + b"\x90\x00"
+            data = self.pending
+            if self.drops_leading_ins and data[:1] == b"\xc0":
+                data = data[1:]
+            return data + b"\x90\x00"
         field = self.fields.get(tuple(apdu))
         if field is None and apdu[:2] == [0x80, 0xB0]:
             offset = (apdu[2] << 8) | apdu[3]
@@ -592,6 +599,29 @@ class ReaderTests(unittest.TestCase):
         self.assertTrue(photo.startswith(card.photo))
         self.assertEqual(card.failures, 0)
         self.assertIn(CMD_ICC_GETATR, [cmd for cmd, _ in device.commands])  # the card was reset
+
+    def test_a_photo_piece_starting_with_c0_is_restored_on_a_module_that_drops_it(self):
+        # The fake photo has a piece that starts with C0 (chunk 8, piece 10); without the fix
+        # that piece came back 19 of 20 bytes, every time.
+        card, _, reader = self.reader(FakeThaiCard(drops_leading_ins=True))
+        reader.connect()
+
+        photo = reader.get_photo_bytes()
+
+        self.assertIsNotNone(photo)
+        self.assertEqual(len(photo), 20 * 255)
+        self.assertTrue(photo.startswith(card.photo))
+
+    def test_a_text_field_keeps_a_tho_phu_that_starts_a_piece(self):
+        # C0 is "ภ" in TIS-620: an address with ภ right at a 20-byte piece boundary lost it.
+        card = FakeThaiCard(drops_leading_ins=True)
+        address = ("1#" + "x" * 18 + "ภูเก็ต").encode("tis-620")
+        offset = (CMD_ADDRESS[2] << 8) | CMD_ADDRESS[3]
+        card.memory[offset : offset + len(address)] = address
+        _, _, reader = self.reader(card)
+        reader.connect()
+
+        self.assertIn("ภูเก็ต", reader.decode_tis620(reader.transmit_cmd(list(CMD_ADDRESS))))
 
     def test_a_short_photo_piece_is_read_again_instead_of_leaving_a_gap(self):
         card, _, reader = self.reader(ShortPhotoPieceCard(failures=1))

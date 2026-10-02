@@ -47,6 +47,10 @@ PHOTO_BUDGET_SEC = 30.0
 # Card resets allowed while reading one photo. kiosk3 saw a single photo piece fail with an
 # undocumented status (0x44) mid-read; dropping the photo for one bad piece lost it entirely.
 MAX_PHOTO_RECOVERIES = 3
+# INS of GET RESPONSE. Under T=0 the card echoes it as the ACK procedure byte; this module also
+# swallows a FIRST DATA byte equal to it (kiosk3: the 20-byte piece at 0x0a9a came back 19 bytes,
+# SW 90 00; a 2-byte read from 0x0a99 showed the missing byte is C0). C0 is "ภ" in TIS-620.
+GET_RESPONSE_INS = 0xC0
 # Consecutive unanswered polls before the module is treated as gone so the manager re-opens it.
 MAX_POLL_FAILURES = 3
 
@@ -409,6 +413,23 @@ class RfproThaiCardReader(ThaiSmartCardReader):
         if sw1 != 0x61:
             return None
         data, _, _ = self.connection.transmit(self.req_prefix + [sw2])
+        return self._restore_leading_ins(offset, sw2, data)
+
+    def _restore_leading_ins(self, offset: int, expected: int, data: list[int]) -> list[int]:
+        """Put back a leading C0 the module swallowed (see GET_RESPONSE_INS), but only once a
+        read starting one byte earlier shows the byte at `offset` really is C0: in that read it
+        is no longer the first byte (or, if the byte before is C0 too, that one is swallowed
+        instead), so it comes back as the last byte."""
+        if len(data) != expected - 1 or offset == 0:
+            return data
+        _, sw1, sw2 = self.connection.transmit(
+            [0x80, 0xB0, ((offset - 1) >> 8) & 0xFF, (offset - 1) & 0xFF, 0x02, 0x00, 2]
+        )
+        if sw1 != 0x61:
+            return data
+        probe, _, _ = self.connection.transmit(self.req_prefix + [sw2])
+        if probe and probe[-1] == GET_RESPONSE_INS:
+            return [GET_RESPONSE_INS, *data]
         return data
 
     def _read_photo_piece(self, offset: int, length: int) -> list[int]:
@@ -419,6 +440,7 @@ class RfproThaiCardReader(ThaiSmartCardReader):
         if sw1 != 0x61 or sw2 != length:
             raise RfproCardError(f"photo piece not served (SW {sw1:02x} {sw2:02x})")
         data, sw1, sw2 = self.connection.transmit(self.req_prefix + [length])
+        data = self._restore_leading_ins(offset, length, data)
         if (sw1, sw2) != (0x90, 0x00) or len(data) != length:
             raise RfproCardError(
                 f"short photo piece ({len(data)} of {length} bytes, SW {sw1:02x} {sw2:02x})"
