@@ -176,9 +176,20 @@ test.describe('kiosk layout — walk-in registration', () => {
 		await page.locator('[data-kiosk-register-ready="true"]').waitFor({ state: 'attached' });
 		await expect(page.getByRole('heading', { name: 'เสียบบัตรประชาชน' })).toBeVisible();
 
+		// The full read takes ~20-30s; the screen must say so, or people pull the card mid-photo.
+		const cancel = page.getByRole('button', { name: 'ยกเลิก' });
+		await dispatchKioskEvent(page, 'kiosk:smart-card-reading');
+		await expect(page.getByRole('heading', { name: 'กำลังอ่านข้อมูลบัตร' })).toBeVisible();
+		await expect(page.getByText('อย่าดึงบัตรออก จนกว่าระบบจะอ่านเสร็จ')).toBeVisible();
+		await expect(cancel).toBeDisabled();
+
 		await dispatchKioskEvent(page, 'kiosk:smart-card-full-read-error');
 		await expect(page.getByRole('alert')).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'เสียบบัตรประชาชน' })).toBeVisible();
+		await expect(cancel).toBeEnabled();
 
+		await dispatchKioskEvent(page, 'kiosk:smart-card-reading');
+		await expect(page.getByRole('alert')).toBeHidden();
 		await dispatchKioskEvent(page, 'kiosk:smart-card-full-read', { citizen_id: KIOSK_CITIZEN_ID });
 		await expect(page.getByRole('heading', { name: 'ลงทะเบียนสำเร็จ' })).toBeVisible();
 	});

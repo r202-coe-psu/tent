@@ -476,7 +476,7 @@ class ScannerClientManager:
         """Blocking: convert, locate and write one label. Runs in a worker thread."""
         try:
             # Imported here so CUPS-only machines never load Pillow just to start the kiosk.
-            from app.escpos import CUT_EXTRA_MM, LABEL_LENGTH_MM, label_to_escpos
+            from app.escpos import LABEL_LENGTH_MM, label_to_escpos
 
             data = label_to_escpos(
                 image,
@@ -484,7 +484,6 @@ class ScannerClientManager:
                 self.printer_cut_feed_mm,
                 LABEL_LENGTH_MM,
                 init,
-                CUT_EXTRA_MM,
             )
         except Exception:  # noqa: BLE001 - Pillow raises DecompressionBombError and others outside ValueError
             logger.error("Label image could not be converted for the ESC/POS printer")

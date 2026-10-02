@@ -12,7 +12,7 @@ from urllib.parse import parse_qs, urlparse
 from unittest.mock import patch
 
 from app import manager
-from app.escpos import CUT_EXTRA_MM, ESC_INIT, LABEL_LENGTH_MM, label_to_escpos
+from app.escpos import ESC_INIT, LABEL_LENGTH_MM, label_to_escpos
 from app.rfpro import RfproProtocolError
 from app.scard import ReaderLostError
 
@@ -755,8 +755,8 @@ class EscposPrintRouteTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(route.fulfilled, {"status": 200, "body": {"printed": 2}})
         # ESC @ only before the first label: a reset right after a cut makes kiosk3 drop that cut.
-        first = label_to_escpos(real_png(), 576, 15, LABEL_LENGTH_MM, cut_extra_mm=CUT_EXTRA_MM)
-        rest = label_to_escpos(real_png(), 576, 15, LABEL_LENGTH_MM, init=False, cut_extra_mm=CUT_EXTRA_MM)
+        first = label_to_escpos(real_png(), 576, 0, LABEL_LENGTH_MM)
+        rest = label_to_escpos(real_png(), 576, 0, LABEL_LENGTH_MM, init=False)
         self.assertEqual((dev / "lp3").read_bytes(), first + rest)
         self.assertTrue(first.startswith(ESC_INIT))
         self.assertNotIn(ESC_INIT, rest)
@@ -940,7 +940,7 @@ class EscposPrintRouteTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(route.fulfilled["status"], 200)
         self.assertGreaterEqual(len(attempts), 2)
-        self.assertEqual((dev / "lp3").read_bytes(), label_to_escpos(real_png(), 576, 15, LABEL_LENGTH_MM, cut_extra_mm=CUT_EXTRA_MM))
+        self.assertEqual((dev / "lp3").read_bytes(), label_to_escpos(real_png(), 576, 0, LABEL_LENGTH_MM))
 
     async def test_default_backend_never_loads_pillow(self):
         code = (

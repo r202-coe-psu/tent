@@ -100,7 +100,7 @@ class HardwareConfigTests(unittest.TestCase):
 
         self.assertEqual(config["PRINTER_BACKEND"], "cups")
         self.assertEqual(config["PRINTER_WIDTH_DOTS"], "576")
-        self.assertEqual(config["PRINTER_CUT_FEED_MM"], "15")
+        self.assertEqual(config["PRINTER_CUT_FEED_MM"], "0")
         self.assertEqual(config["KIOSK_QR_INPUT"], "camera")
         self.assertEqual(config["CARD_READER"], "pcsc")
         self.assertEqual(config["CARD_READER_USB_ID"], "0483:4c43")
