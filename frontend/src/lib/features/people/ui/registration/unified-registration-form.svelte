@@ -6,10 +6,8 @@
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import Search from '@lucide/svelte/icons/search';
-	import GitMerge from '@lucide/svelte/icons/git-merge';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import { onMount, tick, untrack } from 'svelte';
-	import { SvelteSet } from 'svelte/reactivity';
 	import { toast } from 'svelte-sonner';
 	import type { ZodIssue } from 'zod';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -34,7 +32,6 @@
 	import ThaidActionButton from './thaid-action-button.svelte';
 	import type { ThaiDAutofillProfile } from '../../domain/thaid-profile';
 	import { fetchThaidRegistrationStatus } from '$lib/api/thaid-status';
-	import HouseholdMergeDialog from '../household-flows/household-merge-dialog.svelte';
 	import { readRegistrationStickyTopPx } from './registration-sticky-offset';
 	import {
 		applyIntersectionEntries,
@@ -42,14 +39,12 @@
 		pickActiveSectionId
 	} from './registration-scroll-spy';
 	import {
-		createPetCard,
 		parseInitialPets,
 		syncPetsToHousehold,
 		type PetCardItem
 	} from './unified-registration-pets';
 	import {
 		blankUnifiedMember,
-		evacueeToUnifiedMember,
 		unifiedRegistrationInputSchema,
 		type MemberPhotoUploadMode,
 		type UnifiedMemberWithMeta,
@@ -57,13 +52,7 @@
 		type UnifiedRegistrationInput,
 		type UnifiedHouseholdInput
 	} from '../../domain/unified-registration';
-	import type {
-		Evacuee,
-		Household,
-		HousingType,
-		HouseholdVehicle,
-		PetGroup
-	} from '../../domain/people';
+	import type { HousingType, HouseholdVehicle, PetGroup } from '../../domain/people';
 	import {
 		hasMinimumResidence,
 		type ResidenceFields,
@@ -230,10 +219,6 @@
 
 	/** Quick search bar for member phone (household search enhancement). */
 	let searchPhoneQuery = $state('');
-
-	/** Household merge dialog state. */
-	let mergeDialogOpen = $state(false);
-	let absorbedHouseholdIds = $state<string[]>([]);
 
 	/** Currently selected match chip from public residence match (for address prefill & pets). */
 	let selectedMatchChip = $state<ResidenceMatchChip | null>(null);
@@ -731,36 +716,6 @@
 		}
 	});
 
-	/** Absorb another household into the current form (merge-in-form). */
-	function handleAbsorbHouseholdIntoForm(sourceHousehold: Household, sourceMembers: Evacuee[]) {
-		// Add absorbed household ID for post-submit merge marking
-		absorbedHouseholdIds = [...absorbedHouseholdIds, sourceHousehold._id];
-
-		// Convert source evacuees to unified members and append
-		const converted = sourceMembers.map((ev) => evacueeToUnifiedMember(ev));
-		members = [...members, ...converted];
-
-		// Merge pets from source household
-		const sourcePets = (sourceHousehold.pets ?? []) as PetGroup[];
-		if (sourcePets.length > 0) {
-			const existingSpecies = new SvelteSet(petItems.map((p) => p.species));
-			let nextId = Math.max(0, ...petItems.map((p) => p.id)) + 1;
-			for (const pg of sourcePets) {
-				const species = pg.species as 'dog' | 'cat' | 'other';
-				if (!existingSpecies.has(species)) {
-					const card = createPetCard(species, nextId++);
-					card.details = pg.notes ?? '';
-					if (species === 'other') card.customSpecies = pg.species;
-					petItems = [...petItems, card];
-					existingSpecies.add(species);
-				}
-			}
-			household.pets = syncPetsToHousehold(petItems);
-		}
-
-		markDirty();
-	}
-
 	function continueCreateDespiteSuggest() {
 		clearJoinSelection();
 		markDirty();
@@ -791,7 +746,23 @@
 		};
 	}
 
-	async function revealValidation(message: string, messages: string[] = []) {
+	/** Section that owns a Zod issue — the scroll fallback when no field carries `aria-invalid`. */
+	function sectionForIssue(issue: ZodIssue | undefined): FormSectionId {
+		const [root, key] = issue?.path ?? [];
+		if (root !== 'household') return 'members';
+		return key === 'pets' || key === 'vehicles' ? key : 'address';
+	}
+
+	/**
+	 * Lists every issue in the summary banner, then takes the user straight to the
+	 * first invalid field (same for public and staff). Errors with no field to
+	 * point at land on `fallbackSection`, or on the banner when none is given.
+	 */
+	async function revealValidation(
+		message: string,
+		messages: string[] = [],
+		fallbackSection?: FormSectionId
+	) {
 		formError = message;
 		validationMessages = messages.length > 0 ? messages : [message];
 		toast.error(message, {
@@ -799,17 +770,21 @@
 			duration: 6000
 		});
 		await tick();
-		formRootEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		if (focusFirstInvalid()) return;
+		if (fallbackSection) scrollToSection(fallbackSection);
+		else formRootEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+	}
+
+	function focusFirstInvalid(): boolean {
+		const firstInvalid = formRootEl?.querySelector<HTMLElement>('[aria-invalid="true"]');
+		if (!firstInvalid) return false;
+		firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+		requestAnimationFrame(() => firstInvalid.focus({ preventScroll: true }));
+		return true;
 	}
 
 	function jumpToFirstError() {
-		const firstInvalid = formRootEl?.querySelector<HTMLElement>('[aria-invalid="true"]');
-		if (firstInvalid) {
-			firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
-			requestAnimationFrame(() => firstInvalid.focus({ preventScroll: true }));
-			return;
-		}
-		scrollToSection('members');
+		if (!focusFirstInvalid()) scrollToSection('members');
 	}
 
 	async function handleSubmit(e: Event) {
@@ -819,8 +794,7 @@
 		for (const p of petItems) {
 			if (p.species === 'other' && !p.customSpecies.trim()) {
 				memberFieldErrors = {};
-				await revealValidation(t.petOtherSpeciesRequired);
-				scrollToSection('pets');
+				await revealValidation(t.petOtherSpeciesRequired, [], 'pets');
 				return;
 			}
 		}
@@ -854,7 +828,7 @@
 			const mapped = mapZodIssues(result.error.issues);
 			memberFieldErrors = mapped.memberErrors;
 			const first = mapped.messages[0] ?? t.validationError;
-			await revealValidation(first, mapped.messages);
+			await revealValidation(first, mapped.messages, sectionForIssue(result.error.issues[0]));
 			return;
 		}
 
@@ -864,12 +838,12 @@
 			if (hasJoinSelection) {
 				if (headPhone && !phoneOk) {
 					memberFieldErrors = { 0: { phone: t.joinPhoneInvalid } };
-					await revealValidation(t.joinPhoneInvalid);
+					await revealValidation(t.joinPhoneInvalid, [], 'members');
 					return;
 				}
 			} else if (!headPhone || !/^0\d{8,9}$/.test(headPhone.replace(/[-\s]/g, ''))) {
 				memberFieldErrors = { 0: { phone: t.headPhoneRequired } };
-				await revealValidation(t.headPhoneRequired);
+				await revealValidation(t.headPhoneRequired, [], 'members');
 				return;
 			}
 		}
@@ -878,8 +852,11 @@
 			const reportingCount = members.filter((m) => m.reporting_in).length;
 			if (reportingCount === 0) {
 				memberFieldErrors = {};
-				await revealValidation('กรุณาเลือกสมาชิกอย่างน้อย 1 คนที่มารายงานตัวในรอบนี้');
-				scrollToSection('members');
+				await revealValidation(
+					'กรุณาเลือกสมาชิกอย่างน้อย 1 คนที่มารายงานตัวในรอบนี้',
+					[],
+					'members'
+				);
 				return;
 			}
 		}
@@ -990,19 +967,6 @@
 										: 'ค้นหาครอบครัวด้วยเบอร์โทรศัพท์'}
 								</span>
 							</p>
-							{#if channel === 'onsite'}
-								<Button
-									type="button"
-									size="sm"
-									variant="outline"
-									disabled={fieldsLocked}
-									class="gap-1.5"
-									onclick={() => (mergeDialogOpen = true)}
-								>
-									<GitMerge class="size-3.5" />
-									ค้นหาเพื่อรวม 2 ครอบครัว
-								</Button>
-							{/if}
 						</div>
 						<div class="relative w-full">
 							<Input
@@ -1104,8 +1068,8 @@
 										<strong class="text-foreground"
 											>{selectedMatchChip.shelter_name || selectedMatchChip.shelter_code}</strong
 										>
-										— แนะนำไปติดต่อที่ศูนย์หรือแจ้งเจ้าหน้าที่ รวมทีหลังที่ศูนย์ได้ ·
-										การเข้าร่วมนี้เพิ่มชื่อเข้าคิวกลางใบเดิม ไม่ใช่เข้าศูนย์อัตโนมัติ
+										— แนะนำไปติดต่อที่ศูนย์หรือแจ้งเจ้าหน้าที่ รวมทีหลังที่ศูนย์ได้ · การเข้าร่วมนี้เพิ่มชื่อเข้าคิวกลางใบเดิม
+										ไม่ใช่เข้าศูนย์อัตโนมัติ
 									</span>
 									{#if onselectshelter}
 										<Button
@@ -1222,8 +1186,8 @@
 												{:else if chip.shelter_code || chip.shelter_name}
 													<span class="text-2xs text-muted-foreground">
 														มีสมาชิกครอบครัวนี้อยู่ที่ศูนย์
-														{chip.shelter_name || chip.shelter_code} แล้ว —
-														แนะนำไปที่ศูนย์หรือแจ้งเจ้าหน้าที่ · กดเข้าร่วมเพื่อเพิ่มชื่อเข้าคิวกลางใบเดิม
+														{chip.shelter_name || chip.shelter_code} แล้ว — แนะนำไปที่ศูนย์หรือแจ้งเจ้าหน้าที่
+														· กดเข้าร่วมเพื่อเพิ่มชื่อเข้าคิวกลางใบเดิม
 													</span>
 												{/if}
 
@@ -1270,8 +1234,10 @@
 												</Button>
 											{:else}
 												<p class="max-w-[14rem] text-right text-2xs text-muted-foreground">
-													ศูนย์{chip.shelter_name ? ` ${chip.shelter_name}` : ''}ยังไม่เปิดรับลงทะเบียนล่วงหน้า
-													— แนะนำติดต่อที่ศูนย์หรือแจ้งเจ้าหน้าที่
+													ศูนย์{chip.shelter_name
+														? ` ${chip.shelter_name}`
+														: ''}ยังไม่เปิดรับลงทะเบียนล่วงหน้า —
+													แนะนำติดต่อที่ศูนย์หรือแจ้งเจ้าหน้าที่
 												</p>
 											{/if}
 										</div>
@@ -1383,11 +1349,3 @@
 		</div>
 	</div>
 </form>
-
-<!-- Household Merge Dialog (onsite in-form absorb) -->
-{#if channel === 'onsite'}
-	<HouseholdMergeDialog
-		bind:open={mergeDialogOpen}
-		onAbsorbIntoForm={handleAbsorbHouseholdIntoForm}
-	/>
-{/if}

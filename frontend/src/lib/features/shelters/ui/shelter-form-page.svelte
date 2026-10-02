@@ -12,7 +12,6 @@
 		shelterSchema,
 		type SiteKind,
 		BasicInfoSection,
-		CapacitySection,
 		ZonesFacilitiesSection,
 		FoodDistributionSection,
 		StoragePointsSection,
@@ -31,7 +30,6 @@
 	import { createScrollSpy } from '$lib/utils/scroll-spy';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Building2 from '@lucide/svelte/icons/building-2';
-	import Users from '@lucide/svelte/icons/users';
 	import UtensilsCrossed from '@lucide/svelte/icons/utensils-crossed';
 	import Warehouse from '@lucide/svelte/icons/warehouse';
 	import Zap from '@lucide/svelte/icons/zap';
@@ -43,6 +41,7 @@
 	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import Save from '@lucide/svelte/icons/save';
+	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
 	import { Button } from '$lib/components/ui/button/index.js';
 
 	let {
@@ -74,8 +73,7 @@
 
 	const sections = [
 		{ id: 'basic-info', label: 'ข้อมูลพื้นฐานและที่ตั้ง', icon: MapPin },
-		{ id: 'capacity', label: 'ข้อมูลความจุเชิงพื้นที่', icon: Building2 },
-		{ id: 'zones-facilities', label: 'โซนและสิ่งอำนวยความสะดวก', icon: Users },
+		{ id: 'capacity', label: 'ความจุ โซน และสิ่งอำนวยความสะดวก', icon: Building2 },
 		{ id: 'food-distribution', label: 'จุดแจกอาหาร', icon: UtensilsCrossed },
 		{ id: 'storage-points', label: 'จุดเก็บของ', icon: Warehouse },
 		{ id: 'utilities', label: 'สถานะสาธารณูปโภคพื้นฐาน', icon: Zap },
@@ -174,6 +172,7 @@
 				site_kind: d.site_kind,
 				operation_status: d.operation_status,
 				shelter_type: d.shelter_type ?? null,
+				floor_count: d.floor_count ?? null,
 				project_level: d.project_level ?? null,
 				location: d.location ?? {},
 				contact: d.contact ?? {},
@@ -328,6 +327,17 @@
 
 				<!-- Mobile Row 3 / Desktop Right Column -->
 				<div class="flex items-center gap-2.5 pt-0.5 sm:pt-0">
+					{#if isEdit && id}
+						<a
+							href={resolve(
+								`/back-office/shelters/readiness/${encodeURIComponent(id)}` as '/back-office/shelters'
+							)}
+							class="inline-flex items-center gap-1.5 rounded-lg border border-sky-300 bg-sky-50 px-3.5 py-2 text-center text-sm font-semibold text-sky-900 shadow-2xs transition hover:bg-sky-100 sm:flex-none"
+						>
+							<ClipboardCheck class="h-4 w-4 text-sky-700" />
+							<span>แบบประเมินความพร้อม (Readiness)</span>
+						</a>
+					{/if}
 					<a
 						href={resolvedBasePath}
 						onclick={handleCancelOrBack}
@@ -477,7 +487,6 @@
 						{@attach scrollSpy}
 					>
 						<BasicInfoSection {form} {formData} />
-						<CapacitySection {form} {formData} />
 						<ZonesFacilitiesSection {form} {formData} shelterCode={id} />
 						<FoodDistributionSection {form} {formData} />
 						<StoragePointsSection {form} {formData} />

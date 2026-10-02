@@ -1,3 +1,4 @@
+import type { UlidReservation } from '$lib/db/ulid-reservation';
 import {
 	createMutation,
 	createQuery,
@@ -432,12 +433,14 @@ export const useCreateFamilyRegistration = () => {
 		mutationFn: ({
 			input,
 			ctx,
-			channel = 'onsite'
+			channel = 'onsite',
+			ids
 		}: {
 			input: UnifiedRegistrationInput;
 			ctx: AuthorContext;
 			channel?: UnifiedRegistrationChannel;
-		}) => peopleRepository().createFamilyRegistration(input, ctx, channel),
+			ids?: UlidReservation;
+		}) => peopleRepository().createFamilyRegistration(input, ctx, channel, ids),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
 			queryClient.invalidateQueries({ queryKey: peopleKeys.households() });

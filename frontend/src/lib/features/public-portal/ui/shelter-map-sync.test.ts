@@ -10,7 +10,7 @@ describe('Shelter Map Synchronization & Booking UI Logic', () => {
 	});
 
 	it('provides required i18n keys for map popup actions and card selection', () => {
-		expect(PUBLIC_SHELTER_MAP_I18N.th.preRegister).toBe('ลงทะเบียนจองล่วงหน้า');
+		expect(PUBLIC_SHELTER_MAP_I18N.th.preRegister).toBe('ลงทะเบียนล่วงหน้า');
 		expect(PUBLIC_SHELTER_MAP_I18N.th.viewDetails).toBe('ดูรายละเอียด');
 		expect(PUBLIC_SHELTER_MAP_I18N.th.shelterClosed).toBe('ศูนย์ปิดแล้ว');
 

@@ -7,3 +7,11 @@ export { default as ThaIdSignInButton } from './ui/thaid-sign-in-button.svelte';
 export { default as LogoutButton } from './ui/logout-button.svelte';
 export { default as ReauthDialog } from './ui/reauth-dialog.svelte';
 export { default as SessionExpiredBar } from './ui/session-expired-bar.svelte';
+export { default as LinkAccountForm } from './ui/link-account-form.svelte';
+export {
+	fetchPendingLink,
+	cancelPendingLink,
+	linkAccount,
+	LinkAccountError,
+	type PendingLinkInfo
+} from './data/link-account';

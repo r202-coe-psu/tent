@@ -50,6 +50,11 @@ export function getGoogleOAuthConfig(): { clientId: string; clientSecret: string
 	return { clientId, clientSecret };
 }
 
+/** True when Google OAuth env is present — drives the login button (CR-141). */
+export function isGoogleConfigured(): boolean {
+	return Boolean(env.GOOGLE_OAUTH_CLIENT_ID?.trim() && env.GOOGLE_OAUTH_CLIENT_SECRET?.trim());
+}
+
 export function resolveGoogleRedirectUri(url: URL): string {
 	const configured = env.GOOGLE_OAUTH_REDIRECT_URI?.trim();
 	if (configured) return configured;
@@ -216,6 +221,17 @@ export function setAuthSessionCookie(cookies: Cookies, value: string): void {
 		secure: cookieSecure(),
 		maxAge: AUTH_SESSION_MAX_AGE_SEC
 	});
+}
+
+/** Mint `AuthSession` + `mfa_ok` for `name` — the OAuth factor was just verified. */
+export async function mintLoginSession(
+	cookies: Cookies,
+	name: string,
+	salt: string
+): Promise<void> {
+	const [secret, algo] = await Promise.all([fetchCouchAuthSecret(), fetchCouchAuthHashAlgorithm()]);
+	setAuthSessionCookie(cookies, mintAuthSessionCookie(name, salt, secret, algo));
+	setMfaOkCookie(cookies, name);
 }
 
 /** Decide whether a `_users` doc can mint a Google-login session (Option C). */

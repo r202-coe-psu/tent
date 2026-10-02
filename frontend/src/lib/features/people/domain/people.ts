@@ -1407,7 +1407,7 @@ export function migrateHouseholdToV5(doc: Household): Household {
 	};
 }
 
-export function createMovement(input: MovementInput, ctx: AuthorContext): Movement {
+export function createMovement(input: MovementInput, ctx: AuthorContext, id?: string): Movement {
 	const d = movementInputSchema.parse(input);
 	return makeDoc(
 		'movement',
@@ -1420,7 +1420,8 @@ export function createMovement(input: MovementInput, ctx: AuthorContext): Moveme
 			...(d.reason ? { reason: d.reason } : {}),
 			occurred_at: d.occurred_at ?? now()
 		},
-		ctx
+		ctx,
+		id
 	);
 }
 

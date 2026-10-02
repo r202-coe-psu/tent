@@ -17,7 +17,9 @@ export async function resolveLoginIdentifier(identifier: string): Promise<string
 		});
 		if (!res.ok) return trimmed;
 		const data = (await res.json()) as { name?: unknown };
-		return typeof data.name === 'string' && data.name.trim().length > 0 ? data.name.trim() : trimmed;
+		return typeof data.name === 'string' && data.name.trim().length > 0
+			? data.name.trim()
+			: trimmed;
 	} catch {
 		return trimmed;
 	}

@@ -2,8 +2,8 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-09-29
-note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer; CR-135/CR-136 partner OAuth2 client name/module preset + secret reveal/edit/delete; CR-137 shrink master_data (10→4) + zone/community free text; CR-138 remove purchase doc type + withdraw purchase from stock_ledger.reason
+updated: 2026-10-01
+note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer; CR-130 Food Sphere target segments & bump food_sphere_standard schema_v 1→2; CR-135/CR-136 partner OAuth2 client name/module preset + secret reveal/edit/delete; CR-137 shrink master_data (10→4) + zone/community free text; CR-138 remove purchase doc type + withdraw purchase from stock_ledger.reason; CR-142 system banner settings on config:app (config:app.banner_*, no schema_v bump)
 ---
 
 # Database Schema v5 — field-level
@@ -848,7 +848,7 @@ open → escalated
 > **ห้ามเขียน `stock_ledger` ที่ศูนย์ต้นทาง** ตอนส่งต่อ — ของยังไม่เคยเข้าคลังที่ไหน (R-16.4 acceptance).
 > **Index:** `(status)` · `(origin_shelter_code)`
 >
-> **หมายเหตุ:** สำหรับเอกสารเกณฑ์โภชนาการและการเติมสต็อกเสบียงระดับศูนย์ (`source = SHELTER_OVERRIDE`) ได้แก่ `food_sphere_standard`, `requirement_group`, และ `replenishment_policy` ให้ดูโครงสร้างฟิลด์ในหมวด [§4.6–§4.8](#46-food_sphere_standard--food_sphere_standardtarget_segmentreq_group_id--schema_v-1)
+> **หมายเหตุ:** สำหรับเอกสารเกณฑ์โภชนาการและการเติมสต็อกเสบียงระดับศูนย์ (`source = SHELTER_OVERRIDE`) ได้แก่ `food_sphere_standard`, `requirement_group`, และ `replenishment_policy` ให้ดูโครงสร้างฟิลด์ในหมวด [§4.6–§4.8](#46-food_sphere_standard--food_sphere_standardtarget_segmentreq_group_id--schema_v-2)
 
 ---
 
@@ -1196,6 +1196,61 @@ ledger ซ้ำ. การ void ทำได้เฉพาะ issuance ที�
    - CouchDB `validate_doc_update` (VDU) ทำหน้าที่ตรวจสอบความสมบูรณ์เชิงโครงสร้างของเอกสารเดี่ยว (Single-document Invariants) ความถูกต้องของ Schema ชนิดข้อมูล ความเป็น Immutable ของฟิลด์ถาวร และ State Transition ภายในเอกสาร
    - Application Layer (`return-workflow.ts`) ทำหน้าที่ตรวจสอบ Invariant ข้ามเอกสาร (Cross-document Invariants) เช่น การตรวจสอบว่า `claimId` ปรากฏใน `pool.claim_ids` หรือไม่ และความสอดคล้องกับ `distribution_log` เนื่องจาก CouchDB VDU ไม่สามารถ Query ข้อมูลจากเอกสารอื่นได้
 
+### 2.33 `loan_return_reservation` — `loan_return_reservation:{distributionLogUlid}` · **schema_v 1** (CR-134 R4)
+
+Shared Reservation Coordinator ที่รวมทั้ง 3 ช่องทางการปลดภาระของยืม (`PHYSICAL` ที่ด่าน Counter, `BULK` ที่ด่าน Gate ผ่าน `bulk_return_pool`/`bulk_return_claim`, และ `NON_PHYSICAL` สำหรับ lost/waived) ให้อยู่ภายใต้เอกสารประสานงานตัวกลางเดียวกันต่อ 1 `distribution_log` เพื่อปิดช่องว่าง Cross-Flow Race Condition (Inter-Flow Concurrency) ที่ `bulk_return_claim` (§2.32) เพียงลำพังไม่ครอบคลุม (เพราะ §2.32 coordinate เฉพาะช่องทาง BULK). ใช้ CAS Fencing (`RESERVED → FENCED → COMMITTED`) ป้องกัน Stale-Owner เขียนผลกระทบที่ไม่สามารถย้อนกลับได้ (irreversible side effect) ซ้อนกันข้ามช่องทาง.
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `_id` | str | req | `loan_return_reservation:{distributionLogUlid}` — deterministic, derive จาก `distribution_log_id` เท่านั้น (1 ฉบับ/1 `distribution_log`) |
+| `type` | str | req | `'loan_return_reservation'` |
+| `schema_v` | int | req | `1` |
+| `shelter_code` | str | req | ตรงกับ DB `shelter_{shelter_code}` |
+| `distribution_log_id` | str | req | อ้าง `distribution_log:{ulid}` (§2.30); suffix ต้องตรงกับ `_id` ของเอกสารนี้ |
+| `mode` | enum(`PHYSICAL`,`BULK`,`NON_PHYSICAL`) | req | ช่องทางปลดภาระที่จองสิทธิ์ไว้ — attempt-scoped immutable |
+| `status` | enum(`RESERVED`,`FENCED`,`COMMITTED`,`ABORTED`) | req | ดู State Machine ด้านล่าง |
+| `operation_id` | str (ULID) | req | ULID รอบคำสั่งของผู้เรียก (attempt-scoped immutable) |
+| `operation_by` | str | req | username ผู้ถือสิทธิ์ปัจจุบัน (attempt-scoped immutable ระหว่าง attempt เดียวกัน; เปลี่ยนได้เฉพาะตอน reinitialize และต้องตรงกับ actor ปัจจุบัน) |
+| `qty_returned` | qty_str≥0 (whole) | req เมื่อ `mode=PHYSICAL` | ยอดคืนสะสมเป้าหมาย (cumulative target) สำหรับตรวจสอบกับ `distribution_log` ตอน replay |
+| `return_condition` | enum(`READY`,`MAINTENANCE`,`BROKEN`) | req เมื่อ `mode=PHYSICAL` | canonical enum เดียวกับ `distribution_log` (§2.30) |
+| `bulk_pool_id` | str | req เมื่อ `mode=BULK` | อ้าง `bulk_return_pool:{ulid}` (§2.31) |
+| `claimed_qty` | qty_str>0 (whole) | req เมื่อ `mode=BULK` | ยอดที่ตัดโควตาจากพูล — attempt-scoped immutable |
+| `clear_reason` | enum(`lost`,`waived`) | req เมื่อ `mode=NON_PHYSICAL` | เหตุผลการเคลียร์แบบไม่มีของจริงคืน |
+| `notes` | str | opt | หมายเหตุหน้างาน |
+| `created_at` / `created_by` | ts / str | req | เวลาและผู้สร้างเอกสารครั้งแรก — permanently immutable |
+| `updated_at` | ts | req | เวลาที่เปลี่ยนสถานะ/ฟิลด์ล่าสุด |
+
+#### ฟิลด์และความเปลี่ยนแปลง (Field Mutability Classification)
+1. **Permanently Immutable (ห้ามเปลี่ยนแปลงตลอดชีพเอกสาร แม้ตอน reinitialize):**
+   `_id`, `type`, `schema_v`, `shelter_code`, `distribution_log_id`, `created_at`, `created_by`
+2. **Attempt-Scoped Immutable (ล็อกระหว่าง attempt เดียวกัน; อนุญาตให้เปลี่ยนได้เฉพาะตอน reinitialize):**
+   `operation_id`, `mode`, `operation_by`, `qty_returned`, `return_condition`, `bulk_pool_id`, `claimed_qty`, `clear_reason`
+3. **Mutable Lifecycle Fields:** `status`, `updated_at`, `notes`
+
+#### วงจรสถานะ (State Machine)
+```
+RESERVED  → FENCED    (ก่อนเขียนผลกระทบที่ irreversible: stock_ledger receive / ตัดโควตา pool / distribution_log.recordClear)
+FENCED    → COMMITTED (หลังผลกระทบ irreversible เขียนสำเร็จ)
+RESERVED  → ABORTED   (ยกเลิกก่อนเกิดผลกระทบ — อนุญาตเฉพาะเจ้าของสิทธิ์เดิม (`operation_by`/`created_by`) หรือ `shelter_manager`/`system_admin`)
+ABORTED   → RESERVED  (reinitialize รอบคำสั่งใหม่ผ่าน CAS; `operation_by` ต้องตรงกับ actor ปัจจุบันตอน reinitialize)
+COMMITTED → RESERVED  (reinitialize รอบใหม่บน distribution_log เดิม เช่น ยืมซ้ำ/คืนบางส่วนรอบถัดไป; เงื่อนไข operation_by เดียวกับข้างต้น)
+```
+**ข้อห้ามเด็ดขาด:** `FENCED → ABORTED` ถูกปฏิเสธทั้งระดับ Application และ VDU เด็ดขาด — เมื่อเข้าสู่ `FENCED` แล้วต้องเดินหน้า Forward Recovery ไปสู่ `COMMITTED` เท่านั้น ห้าม abort ไม่ว่า role ใด
+
+#### Mode-Specific RBAC (VDU Rule 16, บังคับทุก transition: CREATE/REINITIALIZE/FENCE/COMMIT/ABORT)
+| Mode | อนุญาต | ปฏิเสธ |
+| --- | --- | --- |
+| `PHYSICAL` | `warehouse_staff`, `supply_coordinator`, `shelter_manager`, `system_admin` | `registration_staff` |
+| `BULK` | `registration_staff`, `supply_coordinator`, `shelter_manager`, `system_admin` | `warehouse_staff` |
+| `NON_PHYSICAL` | `registration_staff`, `supply_coordinator`, `shelter_manager`, `system_admin` | `warehouse_staff` |
+
+#### ความเป็นเอกลักษณ์ / Idempotency / การลบ
+- 1 `distribution_log` มีเอกสารจองสิทธิ์ได้ไม่เกิน 1 ฉบับเสมอ (`_id` derive จาก `distribution_log_id` โดยตรง, บังคับด้วย VDU)
+- ห้ามลบเอกสารนี้เด็ดขาด (`newDoc._deleted` ถูก VDU reject เสมอ ไม่ว่า role ใด)
+- ไม่มี Lease หมดอายุอิงเวลาเครื่อง (ไม่มี Trusted Server Clock Authority) — ใช้ CAS Fencing + Pre-Effect Role-Based Abort แทน Lease Semantics
+
+> ใช้ envelope มาตรฐาน `BaseDoc`. อ่าน/เขียนผ่าน `_id` โดยตรง (deterministic) — ไม่ต้องใช้ Mango index.
+
 ### Stock source of truth
 
 `stock_ledger` (§2.1) ยังคงเป็น physical stock source of truth แบบ append-only. สำหรับ flow ใหม่
@@ -1209,7 +1264,7 @@ ledger ซ้ำ. การ void ทำได้เฉพาะ issuance ที�
 เป็นเอกสารประสานงานความคงทนและฟื้นฟูหลังขัดข้อง (Crash Recovery) โดยไม่สร้างแถว `stock_ledger` ซ้ำซ้อน.
 Allocation, reservation, batch reconciliation และ coordination docs เป็น snapshot/coordination เท่านั้น.
 เอกสาร `distribution_request`–`distribution_issue_gate` ใน §2.21–2.28 ยังคงอ่านได้เพื่อ
-backward compatibility ของ CR-059/110; flow ใหม่ใช้ §2.29–2.32 เป็น canonical.
+backward compatibility ของ CR-059/110; flow ใหม่ใช้ §2.29–2.33 เป็น canonical.
 
 ---
 
@@ -1273,11 +1328,17 @@ backward compatibility ของ CR-059/110; flow ใหม่ใช้ §2.29�
 | Field | ชนิด | default | หมายเหตุ |
 | --- | --- | --- | --- |
 | `public_otp_required` | bool | `false` | risk-based — เปิดเมื่อโดน spam |
+| `recaptcha_enabled` | bool | `true` | operator kill-switch reCAPTCHA; ต้องมี key ใน env ด้วยเมื่อ ON |
+| `thaid_registration_enabled` | bool | `true` | operator kill-switch ThaID ทุก mode ยกเว้น `stepup` (pre-register, login, link, member_scan) |
+| `password_login_enabled` | bool | `false` | แสดงฟอร์ม username/password บน `/login`; OFF = แสดงเฉพาะ Google/ThaID — `/admin-login` ใช้ได้เสมอ ([CR-141](../changes/CR-141-oauth-first-login-link.md)) |
 | `duplicate_hint_threshold` | num 0–1 | `0.8` | soft-match registration |
 | `donation_reservation_ttl_hours` | int | `72` | — |
 | `device_db_ttl_days` | int | `30` | อายุ local db บน device |
 | `retention_months_after_close` | int | `3` | PDPA purge |
 | `fam_search_max_results` | int | `10` | — |
+| `banner_enabled` | bool | `false` | ([CR-142](../changes/CR-142-configurable-system-banner.md)) system banner master switch (bottom of every route); แสดงเมื่อ ON **และ** `banner_message` ไม่ว่าง |
+| `banner_message` | string ≤120 | `''` | trim, ห้ามขึ้นบรรทัดใหม่; ว่าง = ไม่แสดง banner แม้ `banner_enabled=true` |
+| `banner_variant` | enum `success\|warning\|destructive\|info` | `warning` | สี banner; ค่านอก enum → reader fallback `warning`, PUT reject (422) |
 
 ---
 
@@ -1701,20 +1762,20 @@ provisioning เท่านั้น. `value` คือเลขล่าสุ
 | `updated_at` | str | req | เวลา ISO-8601 UTC |
 | `updated_by` | str | req | ผู้ดำเนินการอัปเดต |
 
-### 4.6 `food_sphere_standard` — `food_sphere_standard:{target_segment}:{req_group_id}` · **schema_v 1**
+### 4.6 `food_sphere_standard` — `food_sphere_standard:{target_segment}:{req_group_id}` · **schema_v 2**
 
-> **schema_v 1** — กำหนดเกณฑ์มาตรฐานปริมาณความต้องการสารอาหารและเสบียงต่อคนต่อวัน อ้างอิงตามมาตรฐาน Sphere Handbook (CR-058, CR-095)
+> **schema_v 2 (CR-130)** — กำหนดเกณฑ์มาตรฐานปริมาณความต้องการสารอาหารและเสบียงต่อคนต่อวัน อ้างอิงตามมาตรฐาน Sphere Handbook (CR-058, CR-095, CR-130)
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
-| `_id` | str | req | รูปแบบ `"food_sphere_standard:{target_segment}:{req_group_id}"` เช่น `"food_sphere_standard:ALL:FOOD_ENERGY"` หรือ `"food_sphere_standard:INFANT_0_6:FOOD_ENERGY"` |
+| `_id` | str | req | รูปแบบ `"food_sphere_standard:{target_segment}:{req_group_id}"` เช่น `"food_sphere_standard:ALL:FOOD_ENERGY"` หรือ `"food_sphere_standard:INFANT:FOOD_ENERGY"` |
 | `_rev` | str | sys | MVCC revision ของ CouchDB |
 | `type` | str | req | บังคับเป็น `"food_sphere_standard"` |
-| `schema_v` | int | req | เวอร์ชันของสกีมา เริ่มต้น `1` |
-| `target_segment` | enum(`ALL`,`INFANT_0_6`,`INFANT_6_23`,`CHILD_2_5`,`PREGNANT`,`LACTATING`,`ELDERLY`) | req | กลุ่มเป้าหมายประชากร |
+| `schema_v` | int | req | เวอร์ชันของสกีมา ปัจจุบัน `2` (CR-130; bump จาก 1 เนื่องจากเปลี่ยน enum target_segment และ `_id`) |
+| `target_segment` | enum(`ALL`,`INFANT`,`YOUNG_CHILD`,`OLDER_CHILD`,`TEEN`,`ADULT`,`ELDERLY`) | req | กลุ่มเป้าหมายประชากร (ปรับตามช่วงอายุจริงในระบบ evacuee ตาม CR-130) |
 | `req_group_id` | str | req | รหัสกลุ่มความต้องการ (Raw group ID เช่น `"FOOD_ENERGY"`, `"FOOD_FAT"`, `"FOOD_PROTEIN"` อ้างอิงเอกสาร `requirement_group:{group_id}`) |
 | `daily_demand` | num>0 | req | ปริมาณความต้องการต่อคนต่อวัน (> 0) เช่น `2100` |
-| `standard_uom` | str | opt | หน่วยนับมาตรฐานที่แสดงผล (ดึงค่าตั้งต้นจาก `requirement_group.standard_uom`) เช่น `"kcal"`, `"gram"` |
+| `standard_uom` | str | opt | หน่วยนับมาตรฐานที่แสดงผล (ดึงค่าตั้งต้นจาก `requirement_group.standard_uom`) เช่น `"kcal"`, `"gram"`, `"liter"` |
 | `effective_date` | str | req | วันที่มีผลบังคับใช้ รูปแบบ ISO Date (`YYYY-MM-DD`) |
 | `status` | enum(`active`,`inactive`) | req | สถานะการใช้งาน: `active` = นำไปคำนวณ demand, `inactive` = ปิดการใช้งาน (Soft-deleted) (ค่าเริ่มต้น `active`, read fallback `active`) |
 | `source` | enum(`SPHERE_BASELINE`,`SHELTER_OVERRIDE`) | req | แหล่งที่มา: `SPHERE_BASELINE` (ส่วนกลางใน catalog DB) หรือ `SHELTER_OVERRIDE` (เฉพาะศูนย์ใน `shelter_{shelter_code}` DB) |
@@ -1728,7 +1789,7 @@ provisioning เท่านั้น. `value` คือเลขล่าสุ
 - **การกู้คืน (Reactivate):** รองรับ action ให้ผู้ใช้เปิดใช้งานกลับมาเป็น `status: 'active'` ได้ตลอดเวลา
 - **Dropdown & Form rules:** ฟอร์มสร้างใหม่กรองเฉพาะ `status === 'active'`; ฟอร์มแก้ไขและตารางประวัติ/Audit trail ไม่กรองทิ้ง สามารถ resolve ค่าเดิมได้แม้เป็น inactive
 - **Calculation Engine (`food-sphere-calc.ts`):** กรองเฉพาะเกณฑ์ที่ `(s.status ?? 'active') === 'active'` หากกลุ่มใดไม่มีเกณฑ์ active ให้ demand เป็น `0`
-- **Backward compatibility:** Additive `schema_v: 1` ไม่ bump เวอร์ชัน, read-time fallback เป็น `'active'`, ไม่ต้อง batch migration
+- **Migration (CR-130 schema_v 1 → 2):** รูปเอกสารที่ persist เปลี่ยน enum และ `_id` จึงใช้แนวทาง unseed + seed ใหม่ (`pnpm unseed:master && pnpm seed:master`) เพื่อสร้างเอกสาร `schema_v: 2` ทั้งหมด; ใน runtime เอกสาร `schema_v: 1` ที่ค้างอยู่ยังสามารถอ่านได้โดยไม่ throw แต่จะไม่ถูกนำไปคำนวณหาก target_segment ไม่ตรงกับ enum ใหม่
 
 **Index & Views:**
 - Primary Key lookup: `food_sphere_standard:{target_segment}:{req_group_id}`
@@ -2107,6 +2168,7 @@ CR-059 ไม่เพิ่ม Central→Edge fallback หรือ local write
 14. `stock_ledger` reason=`distribute`/`requisition`/`receive` ที่อ้าง ticket หรือ distribution log เขียนได้เฉพาะ role ตาม workflow (อย่างน้อย `warehouse_staff`, `supply_coordinator`, `shelter_manager` หรือ `system_admin`); local validator ตรวจ invariant ที่อยู่ในเอกสารเท่านั้น
 15. `bulk_return_pool` (schema_v 1 และ 2) อยู่ใน whitelist ของ `shelter_*`; schema_v 2 ต้องมี `claim_ids` เป็น array ของ string (ห้ามมี ID ซ้ำ และไม่อนุญาตให้ downgrade เป็น v1); บังคับ `unclaimed_quota >= 0` และ `claimed_qty + unclaimed_quota == total_received_qty` เสมอ; ปฏิเสธการตัดโควตาเมื่อ `unclaimed_quota <= 0`; transition `ACTIVE` → `CLOSED` หรือ `ACTIVE` → `EXHAUSTED` → `CLOSED`; ปิด pool ได้เฉพาะบทบาท `warehouse_staff`, `supply_coordinator` หรือ `shelter_manager`; การอัปเกรด lazy upgrade จาก v1 สู่ v2 ต้องกระทำพร้อมกับการตัดโควตาและเพิ่ม claim_id แรกในเอกสารเดียวกัน
 16. `bulk_return_claim` (schema_v 1) อยู่ใน whitelist ของ `shelter_*`; เอกสารประสานงาน 1 ฉบับต่อ 1 `distribution_log` (`_id: bulk_return_claim:{distributionLogUlid}`); ฟิลด์ `_id`, `type`, `schema_v`, `shelter_code`, `distribution_log_id`, `item_id`, `created_at`, `created_by` เป็น immutable ถาวร; ฟิลด์ `operation_id`, `bulk_pool_id`, `claimed_qty` เป็น attempt-scoped immutable (ห้ามเปลี่ยนระหว่าง attempt, อนุญาตให้เขียนทับได้เฉพาะในการเปลี่ยนผ่าน `ABORTED` → `CLAIM_INTENT` ผ่าน CAS เท่านั้น); transition อนุญาตเฉพาะ `CLAIM_INTENT` → `POOL_CLAIMED` → `COMPLETE`, `CLAIM_INTENT` → `ABORTED`, และ `ABORTED` → `CLAIM_INTENT` (CAS re-initialization); ห้ามเปลี่ยนเป็น `ABORTED` เมื่อเข้าสู่ `POOL_CLAIMED` หรือ `COMPLETE` แล้ว; การเขียนสร้างหรือเปลี่ยนสถานะกระทำได้โดยบทบาทที่ได้รับอนุญาตหน้างาน (`registration_staff`, `warehouse_staff`, `supply_coordinator`, `shelter_manager`, `system_admin`)
+17. `loan_return_reservation` (schema_v 1) อยู่ใน whitelist ของ `shelter_*`; เอกสารประสานงาน 1 ฉบับต่อ 1 `distribution_log` (`_id: loan_return_reservation:{distributionLogUlid}`); ฟิลด์ `_id`, `type`, `schema_v`, `shelter_code`, `distribution_log_id`, `created_at`, `created_by` เป็น immutable ถาวร; ฟิลด์ `operation_id`, `mode`, `operation_by`, `qty_returned`, `return_condition`, `bulk_pool_id`, `claimed_qty`, `clear_reason` เป็น attempt-scoped immutable (เปลี่ยนได้เฉพาะตอน reinitialize `ABORTED`/`COMMITTED` → `RESERVED`); transition อนุญาตเฉพาะ `RESERVED` → `FENCED` → `COMMITTED`, `RESERVED` → `ABORTED`, `ABORTED` → `RESERVED`, และ `COMMITTED` → `RESERVED`; **`FENCED` → `ABORTED` ถูกปฏิเสธเด็ดขาดทุกกรณี**; ห้ามลบเอกสารนี้เด็ดขาด; Mode-specific RBAC บังคับทุก transition ตามตารางใน §2.33; abort จากสถานะ `RESERVED` อนุญาตเฉพาะเจ้าของสิทธิ์เดิม (`operation_by`/`created_by`) หรือ `shelter_manager`/`system_admin`
 
 ---
 

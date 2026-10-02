@@ -1,6 +1,7 @@
 import type { AuthorContext } from '$lib/db/model';
 import { now } from '$lib/db/model';
-import { addQty, parseQty, qtyGt, qtyLte, qtyStrNonNegativeSchema, subQty } from '$lib/utils/qty';
+import { addQty, parseQty, qtyGt, qtyLte, subQty } from '$lib/utils/qty';
+import { nonNegativeWholeQtySchema } from '../../domain/food-supplies';
 import {
 	createStockLedger,
 	deriveDeterministicLedgerId,
@@ -19,6 +20,7 @@ import {
 import { assertCanPerformFrontlineDistribution, assertCanReceiveWarehouseReturns } from './auth';
 import { StockIntegrityError, TicketStateError, WorkflowValidationError } from './errors';
 import { assertLedgerReplayBase } from './ledger-replay';
+import { resolveCanonicalItemUnits, type CanonicalUnitCatalogRepository } from './canonical-unit';
 
 function assertWarehouseReturnLedgerSemantics(
 	actual: StockLedger,
@@ -51,6 +53,7 @@ export interface ReconciliationDependencies {
 	ticketRepo?: RequisitionTicketRepository;
 	logRepo?: DistributionLogRepository;
 	operationsRepo?: OperationsRepository;
+	catalogRepo?: CanonicalUnitCatalogRepository;
 }
 
 export interface ItemReconciliationSummary {
@@ -240,6 +243,11 @@ export async function receiveWarehouseReturns(
 			`Cannot receive warehouse returns for ticket ${ticketId} in status '${current.status}'; expected RETURN_PENDING_RECEIPT`
 		);
 	}
+	const itemUnits = await resolveCanonicalItemUnits(
+		current.items.map((item) => item.item_id),
+		ctx,
+		deps?.catalogRepo
+	);
 
 	const requestedQuantities = options?.verified_returned_quantities ?? {};
 	const ticketItemIds = new Set(current.items.map((item) => item.item_id));
@@ -254,26 +262,27 @@ export async function receiveWarehouseReturns(
 	const verifiedByItem = new Map<string, string>();
 	for (const item of current.items) {
 		const rawVerified = requestedQuantities[item.item_id] ?? item.returned_qty ?? '0';
-		const parsedVerified = qtyStrNonNegativeSchema.safeParse(rawVerified);
+		const parsedVerified = nonNegativeWholeQtySchema.safeParse(rawVerified);
 		if (!parsedVerified.success) {
 			throw new WorkflowValidationError(
-				`Warehouse verified return for ${item.item_id} must be a non-negative decimal string`
+				`Warehouse verified return for ${item.item_id} must be a non-negative whole number`
 			);
 		}
+		const verifiedQty = parsedVerified.data;
 
 		const expectedReturn = item.returned_qty ?? '0';
 		const remainingAfterDistribution = subQty(item.allocated_qty, item.distributed_qty ?? '0');
-		if (!qtyLte(parsedVerified.data, expectedReturn)) {
+		if (!qtyLte(verifiedQty, expectedReturn)) {
 			throw new WorkflowValidationError(
 				`Warehouse verified return for ${item.item_id} cannot exceed the ${expectedReturn} sent from the shift`
 			);
 		}
-		if (!qtyLte(parsedVerified.data, remainingAfterDistribution)) {
+		if (!qtyLte(verifiedQty, remainingAfterDistribution)) {
 			throw new StockIntegrityError(
 				`Warehouse verified return for ${item.item_id} exceeds its ${remainingAfterDistribution} ticket remainder`
 			);
 		}
-		verifiedByItem.set(item.item_id, parsedVerified.data);
+		verifiedByItem.set(item.item_id, verifiedQty);
 	}
 
 	// Idempotency check against existing receive ledger entries for this ticket
@@ -294,6 +303,12 @@ export async function receiveWarehouseReturns(
 	}
 
 	const buildExpectedLedger = async (item: TicketItem, qty: string): Promise<StockLedger> => {
+		const unit = itemUnits.get(item.item_id);
+		if (!unit) {
+			throw new StockIntegrityError(
+				`Missing canonical unit for warehouse return item ${item.item_id}`
+			);
+		}
 		const ledgerId = await deriveDeterministicLedgerId(
 			'warehouse_return',
 			current._id,
@@ -303,7 +318,7 @@ export async function receiveWarehouseReturns(
 			{
 				item_id: item.item_id,
 				qty,
-				unit: 'ชิ้น',
+				unit,
 				reason: 'receive',
 				ref_id: current._id,
 				lot: { note: 'distribution_return' },
