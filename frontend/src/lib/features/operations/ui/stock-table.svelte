@@ -145,8 +145,11 @@
 		quickActionOpen = true;
 	}
 
-	function onMovementSuccess() {
-		// Keep overlay/panel open for the next line — forms reset themselves.
+	function onMovementSuccess(result?: { keepOpen?: boolean }) {
+		// Keep overlay/panel open for the next line unless the form asked to close.
+		if (result?.keepOpen === false) {
+			quickActionOpen = false;
+		}
 	}
 
 	const quickActionTitle = $derived(
@@ -160,8 +163,8 @@
 		quickActionKind === 'receive'
 			? 'บันทึกรับพัสดุเข้าคลัง'
 			: quickActionKind === 'distribute'
-				? 'บันทึกเบิกจ่ายพัสดุออกจากคลัง'
-				: 'ปรับยอดสต็อกในคลัง'
+				? 'ระบบเลือกล็อตที่หมดอายุก่อนให้อัตโนมัติ'
+				: 'กรอกจำนวนที่นับได้จริง แล้วระบบจะคำนวณส่วนต่างให้อัตโนมัติ'
 	);
 
 	const items = $derived.by(() => {
@@ -618,6 +621,7 @@
 				{:else if quickActionKind === 'distribute'}
 					<DistributeStockForm
 						preselectedItemId={quickActionItemId}
+						{occupancy}
 						onsuccess={onMovementSuccess}
 					/>
 				{:else}
@@ -642,7 +646,11 @@
 			{#if quickActionKind === 'receive'}
 				<ReceiveStockForm preselectedItemId={quickActionItemId} onsuccess={onMovementSuccess} />
 			{:else if quickActionKind === 'distribute'}
-				<DistributeStockForm preselectedItemId={quickActionItemId} onsuccess={onMovementSuccess} />
+				<DistributeStockForm
+					preselectedItemId={quickActionItemId}
+					{occupancy}
+					onsuccess={onMovementSuccess}
+				/>
 			{:else}
 				<AdjustStockForm preselectedItemId={quickActionItemId} onsuccess={onMovementSuccess} />
 			{/if}

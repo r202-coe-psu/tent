@@ -43,8 +43,15 @@
 	import { toast } from 'svelte-sonner';
 	import PackagePlus from '@lucide/svelte/icons/package-plus';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
+	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
+	import HandHelping from '@lucide/svelte/icons/hand-helping';
+	import Package from '@lucide/svelte/icons/package';
+	import { SvelteDate } from 'svelte/reactivity';
 
-	export type MovementFormSuccess = { keepOpen: true; summary?: string };
+	export type MovementFormSuccess = { keepOpen: boolean; summary?: string };
+
+	/** UI-only source cards — still maps to `source: 'donation' | 'manual'`. */
+	type SourceMode = 'donation_ticket' | 'walk_in' | 'manual';
 
 	let {
 		onsuccess,
@@ -64,10 +71,10 @@
 	const ledgersQuery = useStockLedgers();
 	const walkInMutation = useReceiveWalkInDonation();
 
-	let lastSuccess = $state<string | null>(null);
 	let moreOpen = $state(false);
 	let producedAtDate = $state('');
 	let expiryDate = $state('');
+	let sourceMode = $state<SourceMode>('manual');
 
 	let selectedItemId = $state('');
 	let selectedItem = $state<StockFormItem | null>(null);
@@ -119,6 +126,32 @@
 			.join(', ');
 		const ticket = donation.booking_ref ? ` (${donation.booking_ref})` : '';
 		return [`${donation.donor.name}${ticket}`, when, goods].filter(Boolean).join(' · ');
+	}
+
+	function sourceCardClass(active: boolean) {
+		return [
+			'flex min-h-11 w-full flex-col items-start gap-1 rounded-xl border-2 px-3 py-3 text-left transition-colors',
+			active
+				? 'border-[#0284C7] bg-sky-50 text-sky-950'
+				: 'border-border bg-card text-foreground hover:border-slate-400'
+		].join(' ');
+	}
+
+	function setSourceMode(mode: SourceMode) {
+		sourceMode = mode;
+		if (mode === 'manual') {
+			$formData.source = 'manual';
+			clearDonation();
+			resetWalkIn();
+			return;
+		}
+		$formData.source = 'donation';
+		if (mode === 'donation_ticket') {
+			resetWalkIn();
+			return;
+		}
+		clearDonation();
+		isWalkInOpen = true;
 	}
 
 	const form = superForm(defaults({ source: 'manual' }, zod4(receiveInputSchema)), {
@@ -250,6 +283,9 @@
 		setStoragePoint(null);
 		clearDonation();
 		resetWalkIn();
+		if (sourceMode === 'walk_in') {
+			isWalkInOpen = true;
+		}
 		if (!preselectedItemId) {
 			clearSelection();
 			reset({ data: { source: $formData.source || 'manual' } });
@@ -270,10 +306,13 @@
 		isDonationDropdownOpen = false;
 	}
 
-	// Quick expiry date buttons (+3d / +7d)
-	function setQuickExpiry(days: number) {
-		const formatted = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-		setExpiryDate(formatted);
+	/** Quick expiry shortcuts: +7ว / +6ด / +1ปี */
+	function setQuickExpiry(offset: { days?: number; months?: number; years?: number }) {
+		const d = new SvelteDate();
+		if (offset.years) d.setFullYear(d.getFullYear() + offset.years);
+		if (offset.months) d.setMonth(d.getMonth() + offset.months);
+		if (offset.days) d.setDate(d.getDate() + offset.days);
+		setExpiryDate(d.toISOString().split('T')[0] ?? '');
 	}
 
 	// Submit handler
@@ -295,7 +334,6 @@
 				const name = selectedItem?.name ?? data.item_id;
 				const unitLabel = formatUnit(displayUnit, units, langState.current) || displayUnit;
 				const summary = `${name} +${displayQty} ${unitLabel}`;
-				lastSuccess = `รับเข้าแล้ว: ${summary}`;
 				resetForNextLine();
 				onsuccess?.({ keepOpen: true, summary });
 				return 'รับเข้าแล้ว';
@@ -323,7 +361,6 @@
 			success: () => {
 				const unitLabel = formatUnit(displayUnit, units, langState.current) || displayUnit;
 				const summary = `${donation.donor.name} · ${selectedItem?.name ?? data.item_id} +${displayQty} ${unitLabel}`;
-				lastSuccess = `รับเข้าแล้ว: ${summary}`;
 				resetForNextLine();
 				onsuccess?.({ keepOpen: true, summary });
 				return 'รับเข้าแล้ว';
@@ -415,16 +452,165 @@
 		<h3 class="text-sm font-bold text-foreground">รับเข้า</h3>
 	</div>
 
-	{#if lastSuccess}
-		<p
-			class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800"
-			role="status"
-		>
-			{lastSuccess} ✓
-		</p>
-	{/if}
-
 	<Field.FieldGroup class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+		<div class="col-span-1 space-y-2 sm:col-span-2">
+			<p class="text-sm font-bold text-foreground">1 · ของมาจากไหน</p>
+			<div class="grid grid-cols-1 gap-2 sm:grid-cols-3" role="radiogroup" aria-label="ที่มา">
+				<button
+					type="button"
+					role="radio"
+					aria-checked={sourceMode === 'donation_ticket'}
+					class={sourceCardClass(sourceMode === 'donation_ticket')}
+					onclick={() => setSourceMode('donation_ticket')}
+				>
+					<span class="flex items-center gap-2 text-sm font-bold">
+						<ClipboardList class="h-4 w-4 shrink-0" aria-hidden="true" />
+						ใบบริจาค
+					</span>
+					<span class="text-xs font-medium text-muted-foreground">
+						{#if openDonations.length > 0}
+							รอรับ {openDonations.length} ใบ
+						{:else}
+							เลือกจากใบจอง
+						{/if}
+					</span>
+				</button>
+				<button
+					type="button"
+					role="radio"
+					aria-checked={sourceMode === 'walk_in'}
+					class={sourceCardClass(sourceMode === 'walk_in')}
+					onclick={() => setSourceMode('walk_in')}
+				>
+					<span class="flex items-center gap-2 text-sm font-bold">
+						<HandHelping class="h-4 w-4 shrink-0" aria-hidden="true" />
+						บริจาคหน้างาน
+					</span>
+					<span class="text-xs font-medium text-muted-foreground">ระบุชื่อผู้บริจาค</span>
+				</button>
+				<button
+					type="button"
+					role="radio"
+					aria-checked={sourceMode === 'manual'}
+					class={sourceCardClass(sourceMode === 'manual')}
+					onclick={() => setSourceMode('manual')}
+				>
+					<span class="flex items-center gap-2 text-sm font-bold">
+						<Package class="h-4 w-4 shrink-0" aria-hidden="true" />
+						รับเข้าอื่นๆ
+					</span>
+					<span class="text-xs font-medium text-muted-foreground">รับเข้าคลังทั่วไป</span>
+				</button>
+			</div>
+		</div>
+
+		{#if sourceMode === 'donation_ticket'}
+			<Form.Field {form} name="ref_id" class="relative col-span-1 sm:col-span-2">
+				<Form.Control>
+					{#snippet children({ props })}
+						<Form.Label>อ้างอิงบริจาค <span class="font-bold text-destructive">*</span></Form.Label>
+						<div bind:this={donationContainer} class="relative w-full">
+							<Input
+								{...props}
+								placeholder="ค้นหาใบบริจาค…"
+								bind:value={donationSearch}
+								onfocus={() => (isDonationDropdownOpen = true)}
+								oninput={() => {
+									isDonationDropdownOpen = true;
+									if (selectedDonation) {
+										selectedDonation = null;
+										$formData.ref_id = null;
+									}
+								}}
+								role="combobox"
+								aria-expanded={isDonationDropdownOpen}
+								aria-controls="donation-listbox"
+								aria-haspopup="listbox"
+								autocomplete="off"
+								class="min-h-11"
+							/>
+							{#if selectedDonation}
+								<Button
+									type="button"
+									variant="ghost"
+									size="xs"
+									class="absolute top-1/2 right-2 -translate-y-1/2"
+									onclick={clearDonation}
+								>
+									ล้าง
+								</Button>
+							{/if}
+
+							{#if isDonationDropdownOpen}
+								<div
+									id="donation-listbox"
+									role="listbox"
+									class="absolute left-0 z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl"
+								>
+									{#if donationsQuery.isLoading || ledgersQuery.isLoading}
+										<div class="p-3 text-xs text-muted-foreground">กำลังโหลด…</div>
+									{:else if filteredDonations.length === 0}
+										<div class="p-3 text-xs text-muted-foreground">
+											ไม่มีใบบริจาครอรับ — ลองบริจาคหน้างาน
+										</div>
+									{:else}
+										{#each filteredDonations as donation (donation._id)}
+											<button
+												type="button"
+												role="option"
+												aria-selected={selectedDonation?._id === donation._id}
+												class="flex w-full cursor-pointer flex-col gap-0.5 rounded-lg px-3 py-2.5 text-left hover:bg-muted"
+												onclick={() => selectDonation(donation)}
+											>
+												<span class="text-sm font-semibold text-foreground">
+													{donation.donor.name}
+												</span>
+												<span class="text-xs text-muted-foreground">{donationLabel(donation)}</span>
+											</button>
+										{/each}
+									{/if}
+								</div>
+							{/if}
+						</div>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
+		{/if}
+
+		{#if sourceMode === 'walk_in'}
+			<div
+				class="col-span-1 flex flex-col gap-3 rounded-xl border border-dashed border-border bg-muted/40 p-4 sm:col-span-2"
+			>
+				<span class="text-xs font-bold text-foreground">บริจาคหน้างาน</span>
+				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+					<div>
+						<Label for="walkin-donor-name" class="mb-1.5 block text-xs font-medium">
+							ชื่อผู้บริจาค <span class="font-bold text-destructive">*</span>
+						</Label>
+						<Input
+							id="walkin-donor-name"
+							placeholder="ชื่อ"
+							bind:value={walkInDonorName}
+							class="min-h-11"
+						/>
+					</div>
+					<div>
+						<Label for="walkin-donor-phone" class="mb-1.5 block text-xs font-medium">
+							เบอร์โทร
+						</Label>
+						<Input
+							id="walkin-donor-phone"
+							placeholder="ไม่บังคับ"
+							inputmode="numeric"
+							bind:value={walkInDonorPhone}
+							class="min-h-11"
+						/>
+					</div>
+				</div>
+			</div>
+		{/if}
+
 		<Form.Field {form} name="item_id" class="relative col-span-1 sm:col-span-2">
 			<Form.Control>
 				{#snippet children({ props })}
@@ -513,20 +699,6 @@
 			<Form.FieldErrors />
 		</Form.Field>
 
-		<Form.Field {form} name="lot.produced_at" class="col-span-1 sm:col-span-2">
-			<Form.Control>
-				{#snippet children({ props })}
-					<Form.Label>วันผลิต</Form.Label>
-					<DatePicker
-						{...props}
-						bind:value={() => producedAtDate, setProducedAtDate}
-						placeholder="วันนี้ = เข้าคลัง"
-					/>
-				{/snippet}
-			</Form.Control>
-			<Form.FieldErrors />
-		</Form.Field>
-
 		<!-- Storage Location (lot.storage_point_id + lot.storage_zone) -->
 		<Form.Field {form} name="lot.storage_zone" class="col-span-1 sm:col-span-2">
 			<Form.Control>
@@ -555,22 +727,30 @@
 								<span class="font-normal text-muted-foreground">(ไม่บังคับ)</span>
 							{/if}
 						</Form.Label>
-						<div class="flex gap-2">
+						<div class="flex flex-wrap gap-2">
 							<Button
 								type="button"
 								variant="outline"
 								class="min-h-11 min-w-[48px] rounded-lg px-3 text-xs font-bold"
-								onclick={() => setQuickExpiry(3)}
+								onclick={() => setQuickExpiry({ days: 7 })}
 							>
-								+3 วัน
+								+7ว
 							</Button>
 							<Button
 								type="button"
 								variant="outline"
 								class="min-h-11 min-w-[48px] rounded-lg px-3 text-xs font-bold"
-								onclick={() => setQuickExpiry(7)}
+								onclick={() => setQuickExpiry({ months: 6 })}
 							>
-								+7 วัน
+								+6ด
+							</Button>
+							<Button
+								type="button"
+								variant="outline"
+								class="min-h-11 min-w-[48px] rounded-lg px-3 text-xs font-bold"
+								onclick={() => setQuickExpiry({ years: 1 })}
+							>
+								+1ปี
 							</Button>
 						</div>
 					</div>
@@ -591,7 +771,7 @@
 				onclick={() => (moreOpen = !moreOpen)}
 				aria-expanded={moreOpen}
 			>
-				<span>เพิ่มเติม</span>
+				<span>ตัวเลือกเพิ่มเติม</span>
 				<ChevronDown
 					class="h-4 w-4 transition-transform {moreOpen ? 'rotate-180' : ''}"
 					aria-hidden="true"
@@ -600,173 +780,19 @@
 
 			{#if moreOpen}
 				<div class="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
-					<Form.Field {form} name="source" class="col-span-1 sm:col-span-2">
+					<Form.Field {form} name="lot.produced_at" class="col-span-1 sm:col-span-2">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>ที่มา <span class="font-bold text-destructive">*</span></Form.Label>
-								<Select.Root
-									type="single"
-									bind:value={$formData.source}
-									onValueChange={(val) => {
-										if (val && val !== 'donation') {
-											clearDonation();
-											resetWalkIn();
-										}
-									}}
-								>
-									<Select.Trigger
-										{...props}
-										class="min-h-11 w-full rounded-md border border-input bg-white px-3 text-sm font-medium"
-									>
-										{$formData.source === 'manual' ? 'รับเข้าคลัง' : 'บริจาค'}
-									</Select.Trigger>
-									<Select.Content>
-										<Select.Item value="donation" label="บริจาค" />
-										<Select.Item value="manual" label="รับเข้าคลัง" />
-									</Select.Content>
-								</Select.Root>
+								<Form.Label>วันผลิต</Form.Label>
+								<DatePicker
+									{...props}
+									bind:value={() => producedAtDate, setProducedAtDate}
+									placeholder="วันนี้ = เข้าคลัง"
+								/>
 							{/snippet}
 						</Form.Control>
 						<Form.FieldErrors />
 					</Form.Field>
-
-					{#if $formData.source === 'donation' && !isWalkIn}
-						<Form.Field {form} name="ref_id" class="relative col-span-1 sm:col-span-2">
-							<Form.Control>
-								{#snippet children({ props })}
-									<Form.Label
-										>อ้างอิงบริจาค <span class="font-bold text-destructive">*</span></Form.Label
-									>
-									<div bind:this={donationContainer} class="relative w-full">
-										<Input
-											{...props}
-											placeholder="ค้นหาใบบริจาค…"
-											bind:value={donationSearch}
-											onfocus={() => (isDonationDropdownOpen = true)}
-											oninput={() => {
-												isDonationDropdownOpen = true;
-												if (selectedDonation) {
-													selectedDonation = null;
-													$formData.ref_id = null;
-												}
-											}}
-											role="combobox"
-											aria-expanded={isDonationDropdownOpen}
-											aria-controls="donation-listbox"
-											aria-haspopup="listbox"
-											autocomplete="off"
-											class="min-h-11"
-										/>
-										{#if selectedDonation}
-											<Button
-												type="button"
-												variant="ghost"
-												size="xs"
-												class="absolute top-1/2 right-2 -translate-y-1/2"
-												onclick={clearDonation}
-											>
-												ล้าง
-											</Button>
-										{/if}
-
-										{#if isDonationDropdownOpen}
-											<div
-												id="donation-listbox"
-												role="listbox"
-												class="absolute left-0 z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl"
-											>
-												{#if donationsQuery.isLoading || ledgersQuery.isLoading}
-													<div class="p-3 text-xs text-muted-foreground">กำลังโหลด…</div>
-												{:else if filteredDonations.length === 0}
-													<div class="p-3 text-xs text-muted-foreground">
-														ไม่มีใบบริจาครอรับ — ใช้บริจาคหน้างานด้านล่าง
-													</div>
-												{:else}
-													{#each filteredDonations as donation (donation._id)}
-														<button
-															type="button"
-															role="option"
-															aria-selected={selectedDonation?._id === donation._id}
-															class="flex w-full cursor-pointer flex-col gap-0.5 rounded-lg px-3 py-2.5 text-left hover:bg-muted"
-															onclick={() => selectDonation(donation)}
-														>
-															<span class="text-sm font-semibold text-foreground">
-																{donation.donor.name}
-															</span>
-															<span class="text-xs text-muted-foreground"
-																>{donationLabel(donation)}</span
-															>
-														</button>
-													{/each}
-												{/if}
-											</div>
-										{/if}
-									</div>
-								{/snippet}
-							</Form.Control>
-							<Form.FieldErrors />
-						</Form.Field>
-					{/if}
-
-					{#if $formData.source === 'donation'}
-						<div class="col-span-1 sm:col-span-2">
-							{#if isWalkInOpen}
-								<div
-									class="flex flex-col gap-3 rounded-xl border border-dashed border-border bg-muted/40 p-4"
-								>
-									<div class="flex items-center justify-between">
-										<span class="text-xs font-bold text-foreground">บริจาคหน้างาน</span>
-										<Button
-											type="button"
-											variant="ghost"
-											class="min-h-11 px-4 text-sm font-semibold"
-											onclick={resetWalkIn}
-										>
-											เลือกจากใบแทน
-										</Button>
-									</div>
-									<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-										<div>
-											<Label for="walkin-donor-name" class="mb-1.5 block text-xs font-medium">
-												ชื่อผู้บริจาค <span class="font-bold text-destructive">*</span>
-											</Label>
-											<Input
-												id="walkin-donor-name"
-												placeholder="ชื่อ"
-												bind:value={walkInDonorName}
-												class="min-h-11"
-											/>
-										</div>
-										<div>
-											<Label for="walkin-donor-phone" class="mb-1.5 block text-xs font-medium">
-												เบอร์โทร
-											</Label>
-											<Input
-												id="walkin-donor-phone"
-												placeholder="ไม่บังคับ"
-												inputmode="numeric"
-												bind:value={walkInDonorPhone}
-												class="min-h-11"
-											/>
-										</div>
-									</div>
-								</div>
-							{:else}
-								<Button
-									type="button"
-									variant="link"
-									size="sm"
-									class="h-auto p-0 text-xs font-bold"
-									onclick={() => {
-										clearDonation();
-										isWalkInOpen = true;
-									}}
-								>
-									ไม่มีใบจอง? บริจาคหน้างาน
-								</Button>
-							{/if}
-						</div>
-					{/if}
 				</div>
 			{/if}
 		</div>

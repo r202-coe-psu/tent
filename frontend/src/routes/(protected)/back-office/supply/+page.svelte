@@ -4,8 +4,7 @@
 		LedgerTable,
 		STOCK_PARAM_KEYS,
 		StockTable,
-		TransferForm,
-		TransferList,
+		TransferTab,
 		usePendingTransferCount
 	} from '$lib/features/operations';
 	import { ProductsPanel } from '$lib/features/catalog';
@@ -189,9 +188,8 @@
 			<FoodSphereStockTab {occupancy} {shelterCode} />
 		</div>
 	{:else if activeTab === 'transfer'}
-		<div class="flex animate-in flex-col gap-6 duration-300 fade-in slide-in-from-bottom-2">
-			<TransferForm />
-			<TransferList />
+		<div class="animate-in duration-300 fade-in slide-in-from-bottom-2">
+			<TransferTab />
 		</div>
 	{/if}
 </div>

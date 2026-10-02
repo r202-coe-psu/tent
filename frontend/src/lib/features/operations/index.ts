@@ -179,3 +179,4 @@ export { default as ItemCombobox } from './ui/item-combobox.svelte';
 export { default as StoragePointSelect } from './ui/storage-point-select.svelte';
 export { default as TransferForm } from './ui/transfer-form.svelte';
 export { default as TransferList } from './ui/transfer-list.svelte';
+export { default as TransferTab } from './ui/transfer-tab.svelte';

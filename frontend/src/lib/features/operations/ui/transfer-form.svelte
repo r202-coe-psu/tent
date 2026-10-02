@@ -8,10 +8,22 @@
 	import { z } from 'zod';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { useCreateTransfer } from '../application/queries';
-	import { useUnitsOfMeasure } from '$lib/features/catalog';
+	import { useCreateTransfer, useStockBalance } from '../application/queries';
+	import { useStockFormItems } from '../application/use-stock-form-items.svelte';
+	import type { StockFormItem } from '../domain/stock-form-items';
+	import ItemCombobox from './item-combobox.svelte';
+	import {
+		formatUnit,
+		useUnitsOfMeasure,
+		itemSelectableUoms,
+		defaultIssueUom,
+		qtyToBaseUnit
+	} from '$lib/features/catalog';
+	import { useShelters } from '$lib/features/shelters';
+	import { langState } from '$lib/states/i18n.svelte';
 	import { toast } from 'svelte-sonner';
 	import Truck from '@lucide/svelte/icons/truck';
+	import { qtyGt, qtyLte, subQty } from '$lib/utils/qty';
 
 	let { onsuccess }: { onsuccess?: () => void } = $props();
 
@@ -20,14 +32,27 @@
 
 	const createMutation = useCreateTransfer();
 	const unitsQuery = useUnitsOfMeasure();
-	const activeUnits = $derived((unitsQuery.data ?? []).filter((unit) => !unit.deactivated));
+	const units = $derived(unitsQuery.data ?? []);
+	const sheltersQuery = useShelters();
+	const stockItems = useStockFormItems(() => getShelterCode());
+	const balanceQuery = useStockBalance();
+
+	const ownShelter = getShelterCode();
+	const destinationShelters = $derived(
+		(sheltersQuery.data ?? []).filter((s) => s.code !== ownShelter)
+	);
+	const items = $derived(stockItems.items);
+	const balanceByItemId = $derived(balanceQuery.data ?? new Map<string, string>());
+
+	let selectedItemId = $state('');
+	let selectedItem = $state<StockFormItem | null>(null);
 
 	// Interim single-item form schema — the domain's `transferInputSchema` takes an `items[]`
 	// array (split-lot allocation across multiple lots/items is out of scope this round; see
 	// CR-059's "field ละเอียด" note). Mapped into a one-item TransferInput on submit.
 	const transferFormSchema = z.object({
 		to_shelter: z.string().trim().min(1, 'กรุณาระบุศูนย์ปลายทาง'),
-		item_id: z.string().trim().min(1, 'กรุณาระบุรหัสสิ่งของ'),
+		item_id: z.string().trim().min(1, 'กรุณาระบุสินค้า'),
 		qty: z.coerce.number().positive('จำนวนต้องมากกว่า 0'),
 		unit: z.string().trim().min(1, 'กรุณาระบุหน่วยนับ'),
 		notes: z.string().trim().optional()
@@ -48,7 +73,51 @@
 
 	const { form: formData, submitting } = form;
 
+	const unitOptions = $derived(selectedItem ? itemSelectableUoms(selectedItem) : []);
+	const selectedUnitLabel = $derived(
+		formatUnit($formData.unit, units, langState.current) || $formData.unit || 'เลือกหน่วย'
+	);
+	const currentStock = $derived.by(() => {
+		if (!selectedItem) return '0';
+		return balanceByItemId.get(selectedItem._id) ?? '0';
+	});
+	const remainingAfterTransfer = $derived.by(() => {
+		if (!selectedItem || !$formData.qty) return null;
+		try {
+			const inBase = qtyToBaseUnit(String($formData.qty), $formData.unit, selectedItem);
+			if (qtyGt(inBase, currentStock)) return 'over' as const;
+			return subQty(currentStock, inBase);
+		} catch {
+			return null;
+		}
+	});
+	const selectedShelterLabel = $derived.by(() => {
+		const shelter = destinationShelters.find((s) => s.code === $formData.to_shelter);
+		if (!shelter) return 'เลือกศูนย์ปลายทาง';
+		return `${shelter.name} (${shelter.code})`;
+	});
+
+	function selectItem(item: StockFormItem | null) {
+		selectedItem = item;
+		selectedItemId = item?._id ?? '';
+		$formData.item_id = item?._id ?? '';
+		$formData.unit = item ? defaultIssueUom(item) : '';
+	}
+
 	async function handleCreate(data: z.infer<typeof transferFormSchema>) {
+		if (selectedItem) {
+			try {
+				const inBase = qtyToBaseUnit(String(data.qty), data.unit, selectedItem);
+				if (qtyGt(inBase, currentStock)) {
+					toast.error('จำนวนเกินยอดคงเหลือในศูนย์นี้');
+					return;
+				}
+			} catch {
+				toast.error('หน่วยที่เลือกไม่ถูกต้องสำหรับสินค้านี้');
+				return;
+			}
+		}
+
 		const input = {
 			from_shelter: getShelterCode(),
 			to_shelter: data.to_shelter,
@@ -60,7 +129,8 @@
 		toast.promise(createMutation.mutateAsync({ input, ctx }), {
 			loading: 'กำลังสร้างคำร้องโอนย้าย...',
 			success: () => {
-				if (onsuccess) onsuccess();
+				selectItem(null);
+				onsuccess?.();
 				return 'สร้างคำร้องโอนย้ายสำเร็จ!';
 			},
 			error: (err: unknown) =>
@@ -74,81 +144,35 @@
 	use:form.enhance
 	class="flex flex-col space-y-4 rounded-2xl border border-border/80 bg-card p-5 shadow-md"
 >
-	<div class="mb-2 flex items-center gap-2 border-b border-border/60 pb-3">
-		<Truck class="h-4.5 w-4.5 text-primary" />
-		<h3 class="text-sm font-bold text-foreground">
-			สร้างคำร้องโอนย้ายข้ามศูนย์ (Inter-Shelter Transfer)
-		</h3>
+	<div class="mb-1 flex flex-col gap-1 border-b border-border/60 pb-3">
+		<div class="flex items-center gap-2">
+			<Truck class="h-4.5 w-4.5 text-primary" aria-hidden="true" />
+			<h3 class="text-sm font-bold text-foreground">สร้างคำขอโอนออก</h3>
+		</div>
+		<p class="text-xs text-muted-foreground">ส่งคำขอไปยังศูนย์อื่น — ต้นทางอนุมัติส่งมอบทีหลัง</p>
 	</div>
 
-	<Field.FieldGroup class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-		<Form.Field {form} name="to_shelter" class="col-span-1">
+	<Field.FieldGroup class="grid grid-cols-1 gap-4">
+		<Form.Field {form} name="to_shelter">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label class="text-xs font-bold text-foreground">ศูนย์ปลายทาง (รหัสศูนย์)</Form.Label
-					>
-					<Input
-						{...props}
-						placeholder="เช่น SH002"
-						bind:value={$formData.to_shelter}
-						class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 text-sm font-semibold shadow-sm transition outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
-					/>
-				{/snippet}
-			</Form.Control>
-			<Form.FieldErrors />
-		</Form.Field>
-
-		<Form.Field {form} name="item_id" class="col-span-1">
-			<Form.Control>
-				{#snippet children({ props })}
-					<Form.Label class="text-xs font-bold text-foreground">รหัสสิ่งของ (Item ID)</Form.Label>
-					<Input
-						{...props}
-						placeholder="เช่น item:rice"
-						bind:value={$formData.item_id}
-						class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 text-sm font-semibold shadow-sm transition outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
-					/>
-				{/snippet}
-			</Form.Control>
-			<Form.FieldErrors />
-		</Form.Field>
-
-		<Form.Field {form} name="qty" class="col-span-1">
-			<Form.Control>
-				{#snippet children({ props })}
-					<Form.Label class="text-xs font-bold text-foreground">จำนวน</Form.Label>
-					<Input
-						{...props}
-						type="number"
-						min="0.01"
-						step="any"
-						placeholder="ระบุจำนวน"
-						bind:value={$formData.qty}
-						class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 font-mono text-sm font-bold shadow-sm transition outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
-					/>
-				{/snippet}
-			</Form.Control>
-			<Form.FieldErrors />
-		</Form.Field>
-
-		<Form.Field {form} name="unit" class="col-span-1">
-			<Form.Control>
-				{#snippet children({ props })}
-					<Form.Label class="text-xs font-bold text-foreground">หน่วยนับ</Form.Label>
+					<Form.Label>ศูนย์ปลายทาง <span class="font-bold text-destructive">*</span></Form.Label>
 					<Select.Root
 						type="single"
-						value={$formData.unit}
-						onValueChange={(value) => ($formData.unit = value)}
-						disabled={unitsQuery.isLoading || unitsQuery.isError || activeUnits.length === 0}
+						value={$formData.to_shelter}
+						onValueChange={(value) => {
+							if (value) $formData.to_shelter = value;
+						}}
+						disabled={sheltersQuery.isLoading || destinationShelters.length === 0}
 					>
-						<Select.Trigger {...props} class="h-10 w-full rounded-xl">
-							{activeUnits.find((unit) => unit.code === $formData.unit)?.label_th ??
-								'-- เลือกหน่วยนับ --'}
+						<Select.Trigger {...props} class="min-h-11 w-full">
+							{selectedShelterLabel}
 						</Select.Trigger>
 						<Select.Content>
-							{#each activeUnits as unit (unit.code)}
-								<Select.Item value={unit.code} label={`${unit.label_th} (${unit.code})`}>
-									{unit.label_th} ({unit.code})
+							{#each destinationShelters as shelter (shelter.code)}
+								<Select.Item value={shelter.code} label={`${shelter.name} (${shelter.code})`}>
+									{shelter.name}
+									<span class="ml-1 font-mono text-xs text-muted-foreground">{shelter.code}</span>
 								</Select.Item>
 							{/each}
 						</Select.Content>
@@ -158,27 +182,123 @@
 			<Form.FieldErrors />
 		</Form.Field>
 
-		<Form.Field {form} name="notes" class="col-span-1 sm:col-span-2">
+		<Form.Field {form} name="item_id" class="relative">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label class="text-xs font-bold text-foreground">หมายเหตุ (ถ้ามี)</Form.Label>
-					<Input
-						{...props}
-						placeholder="รายละเอียดเพิ่มเติม"
-						bind:value={$formData.notes}
-						class="h-10 w-full rounded-xl border border-border/80 bg-background px-3 text-sm font-semibold shadow-sm transition outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+					<Form.Label>สินค้า <span class="font-bold text-destructive">*</span></Form.Label>
+					<ItemCombobox
+						id={props.id}
+						name={props.name}
+						aria-invalid={props['aria-invalid']}
+						aria-describedby={props['aria-describedby']}
+						{items}
+						bind:value={selectedItemId}
+						isLoading={stockItems.isLoading || balanceQuery.isLoading}
+						{balanceByItemId}
+						disableWhenEmpty={true}
+						formatBalanceUnit={(item) =>
+							formatUnit(item.unit, units, langState.current) || item.unit}
+						onSelect={selectItem}
 					/>
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />
 		</Form.Field>
 
-		<div class="col-span-1 pt-3 sm:col-span-2">
+		<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+			<Form.Field {form} name="qty">
+				<Form.Control>
+					{#snippet children({ props })}
+						<Form.Label>จำนวน <span class="font-bold text-destructive">*</span></Form.Label>
+						<Input
+							{...props}
+							type="number"
+							min="0.01"
+							step="any"
+							placeholder="ระบุจำนวน"
+							bind:value={$formData.qty}
+							class="min-h-11 font-mono font-bold"
+						/>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
+
+			<Form.Field {form} name="unit">
+				<Form.Control>
+					{#snippet children({ props })}
+						<Form.Label>หน่วย <span class="font-bold text-destructive">*</span></Form.Label>
+						{#if !selectedItem}
+							<Input
+								{...props}
+								placeholder="เลือกสินค้าก่อน"
+								value=""
+								readonly
+								disabled
+								class="min-h-11"
+							/>
+						{:else if unitOptions.length <= 1}
+							<Input {...props} value={selectedUnitLabel} readonly disabled class="min-h-11" />
+						{:else}
+							<Select.Root
+								type="single"
+								value={$formData.unit}
+								onValueChange={(value) => {
+									if (value) $formData.unit = value;
+								}}
+							>
+								<Select.Trigger {...props} class="min-h-11 w-full">
+									{selectedUnitLabel}
+								</Select.Trigger>
+								<Select.Content>
+									{#each unitOptions as option (option.code)}
+										<Select.Item
+											value={option.code}
+											label={formatUnit(option.code, units, langState.current) || option.code}
+										/>
+									{/each}
+								</Select.Content>
+							</Select.Root>
+						{/if}
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
+		</div>
+
+		<p class="text-xs text-muted-foreground">
+			หน่วยแสดงเฉพาะที่สินค้าใช้ได้
+			{#if remainingAfterTransfer === 'over'}
+				· <span class="font-semibold text-destructive">เกินยอดคงเหลือ</span>
+			{:else if remainingAfterTransfer !== null && selectedItem}
+				· <span class="font-semibold text-foreground"
+					>หลังโอนจะเหลือ {remainingAfterTransfer}
+					{formatUnit(selectedItem.unit, units, langState.current) || selectedItem.unit}</span
+				>
+			{/if}
+		</p>
+
+		<Form.Field {form} name="notes">
+			<Form.Control>
+				{#snippet children({ props })}
+					<Form.Label>หมายเหตุ (ถ้ามี)</Form.Label>
+					<Input
+						{...props}
+						placeholder="รายละเอียดเพิ่มเติม"
+						bind:value={$formData.notes}
+						class="min-h-11"
+					/>
+				{/snippet}
+			</Form.Control>
+			<Form.FieldErrors />
+		</Form.Field>
+
+		<div class="pt-1">
 			<Form.Button
-				disabled={$submitting || offline}
-				class="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary text-sm font-extrabold text-primary-foreground shadow-md transition-all duration-300 hover:scale-[1.02] hover:bg-primary/95 hover:shadow-lg active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+				disabled={$submitting || offline || !selectedItem || qtyLte(currentStock, 0)}
+				class="min-h-11 w-full font-bold"
 			>
-				{$submitting ? 'กำลังบันทึกรายการ...' : 'สร้างคำร้องโอนย้าย'}
+				{$submitting ? 'กำลังบันทึก…' : 'ส่งคำขอโอน'}
 			</Form.Button>
 		</div>
 	</Field.FieldGroup>
