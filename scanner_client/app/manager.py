@@ -17,7 +17,6 @@ from typing import Any, Dict, Optional
 
 from app.config import (
     DEFAULT_CARD_READER_USB_ID,
-    DEFAULT_PRINTER_CUT_FEED_MM,
     DEFAULT_PRINTER_WIDTH_DOTS,
     DEFAULT_QR_READER_GAP_MS,
 )
@@ -113,9 +112,6 @@ class ScannerClientManager:
         self.printer_device = str(config.get("PRINTER_DEVICE") or "").strip()
         self.printer_width_dots = int(
             config.get("PRINTER_WIDTH_DOTS") or DEFAULT_PRINTER_WIDTH_DOTS
-        )
-        self.printer_cut_feed_mm = int(
-            config.get("PRINTER_CUT_FEED_MM") or DEFAULT_PRINTER_CUT_FEED_MM
         )
         self._escpos_lock = asyncio.Lock()
         # How /kiosk/qr reads QR codes: camera, a USB keyboard-wedge reader, or both.
@@ -479,11 +475,7 @@ class ScannerClientManager:
             from app.escpos import LABEL_LENGTH_MM, label_to_escpos
 
             data = label_to_escpos(
-                image,
-                self.printer_width_dots,
-                self.printer_cut_feed_mm,
-                LABEL_LENGTH_MM,
-                init,
+                image, self.printer_width_dots, label_length_mm=LABEL_LENGTH_MM, init=init
             )
         except Exception:  # noqa: BLE001 - Pillow raises DecompressionBombError and others outside ValueError
             logger.error("Label image could not be converted for the ESC/POS printer")

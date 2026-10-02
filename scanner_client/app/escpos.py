@@ -19,7 +19,9 @@ ESC_FEED = b"\x1bJ"
 # for a mark and fed ~17 cm per label. So the label is fed past the cutter explicitly instead.
 ESC_CUT = b"\x1bi"
 DOTS_PER_MM = 8
-# Feed before the cut; kiosk3 needs none (see ESC_FEED). PRINTER_CUT_FEED_MM overrides it.
+# Feed before the cut; kiosk3 cuts cleanly with none (see ESC_FEED). If the cutter ever clips
+# the bottom line, raise this (each mm here feeds ~1.7 mm on kiosk3) — it counts toward
+# LABEL_LENGTH_MM, so the content shrinks to keep the strip length.
 DEFAULT_CUT_FEED_MM = 0
 # kiosk3 label: every cut strip is exactly this long, cut to cut (KIOSK_LABEL_MM height).
 LABEL_LENGTH_MM = 60
