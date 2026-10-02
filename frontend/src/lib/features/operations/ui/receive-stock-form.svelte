@@ -19,16 +19,13 @@
 	import { storageLotFields, type StoragePointRef } from '../domain/lot-storage';
 	import { useStoragePoints } from '../application/use-storage-points.svelte';
 	import StoragePointSelect from './storage-point-select.svelte';
-	import { useSupplyItems } from '$lib/features/supply';
+	import ItemCombobox from './item-combobox.svelte';
 	import {
-		itemMasterUnit,
-		useItemMasters,
 		formatUnit,
 		useUnitsOfMeasure,
 		itemSelectableUoms,
 		defaultInventoryUom,
-		toLedgerQtyUnit,
-		type PackagingSource
+		toLedgerQtyUnit
 	} from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
@@ -38,29 +35,24 @@
 		useDonations,
 		useReceiveStock,
 		useReceiveWalkInDonation,
+		useStockBalance,
 		useStockLedgers
 	} from '../application/queries';
+	import { useStockFormItems } from '../application/use-stock-form-items.svelte';
+	import type { StockFormItem } from '../domain/stock-form-items';
 	import { toast } from 'svelte-sonner';
 	import PackagePlus from '@lucide/svelte/icons/package-plus';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 
 	export type MovementFormSuccess = { keepOpen: true; summary?: string };
 
-	type StockFormItem = PackagingSource & {
-		_id: string;
-		name: string;
-		unit: string;
-		perishable?: boolean;
-	};
-
 	let {
 		onsuccess,
 		preselectedItemId = undefined
 	}: { onsuccess?: (result?: MovementFormSuccess) => void; preselectedItemId?: string } = $props();
 
-	// Fetch supply catalog items
-	const itemsQuery = useSupplyItems();
-	const itemMastersQuery = useItemMasters(() => getShelterCode());
+	const stockItems = useStockFormItems(() => getShelterCode());
+	const balanceQuery = useStockBalance();
 	const storagePoints = useStoragePoints(() => getShelterCode());
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
@@ -74,11 +66,8 @@
 	let producedAtDate = $state('');
 	let expiryDate = $state('');
 
-	// Local state for searchable items combobox
-	let searchQuery = $state('');
-	let isDropdownOpen = $state(false);
+	let selectedItemId = $state('');
 	let selectedItem = $state<StockFormItem | null>(null);
-	let container = $state<HTMLDivElement | null>(null);
 
 	// Donation picker (CR-055 R4) — replaces the free-text `ref_id` box. Its own
 	// container so the shared click-outside handler can close either dropdown.
@@ -94,43 +83,10 @@
 	let walkInDonorName = $state('');
 	let walkInDonorPhone = $state('');
 
-	const items = $derived.by((): StockFormItem[] => {
-		const supplyItems = (itemsQuery.data ?? []).map((item) => ({
-			_id: item._id,
-			name: item.name,
-			unit: item.unit,
-			base_unit: item.unit,
-			conversions: [] as { uom_name: string; multiplier: string }[],
-			perishable: item.perishable
-		}));
-		const itemMasters = itemMastersQuery.data ?? [];
-
-		const mappedItemMasters = itemMasters
-			.filter((im) => !im.deactivated)
-			.map((im) => ({
-				_id: im._id,
-				name: im.name,
-				unit: itemMasterUnit(im),
-				base_unit: itemMasterUnit(im),
-				conversions: im.conversions ?? [],
-				default_inventory_uom: im.default_inventory_uom,
-				default_issue_uom: im.default_issue_uom,
-				perishable: false
-			}));
-
-		return [...supplyItems, ...mappedItemMasters];
-	});
-
+	const items = $derived(stockItems.items);
 	const unitOptions = $derived(selectedItem ? itemSelectableUoms(selectedItem) : []);
-
-	// Filter items based on search query
-	const filteredItems = $derived.by(() => {
-		if (!searchQuery) return items;
-		const query = searchQuery.toLowerCase().trim();
-		return items.filter((i) => i.name.toLowerCase().includes(query));
-	});
-
 	const itemNameById = $derived(new Map(items.map((i) => [i._id, i.name])));
+	const balanceByItemId = $derived(balanceQuery.data ?? new Map<string, string>());
 
 	/**
 	 * Donations still owing stock. The picker exists so `ref_id` can only ever be
@@ -218,10 +174,9 @@
 	// Update locked unit when item is selected
 	function selectItem(item: StockFormItem) {
 		selectedItem = item;
+		selectedItemId = item._id;
 		$formData.item_id = item._id;
 		$formData.unit = defaultInventoryUom(item);
-		searchQuery = item.name;
-		isDropdownOpen = false;
 	}
 
 	/** Chosen storage point id ('' = unspecified / main store). */
@@ -236,42 +191,40 @@
 		$formData.lot = { ...lot, ...storageLotFields(point) };
 	}
 
-	// Keep expiryDate and $formData.lot.expiry in sync
-	$effect(() => {
-		const val = expiryDate.trim();
+	function setExpiryDate(val: string) {
+		expiryDate = val;
+		const trimmed = val.trim();
 		if (!$formData.lot) {
-			if (val) {
-				$formData.lot = { expiry: val };
-			}
-		} else {
-			const current = $formData.lot.expiry ?? '';
-			if (current !== val) {
-				$formData.lot.expiry = val || undefined;
-			}
+			if (trimmed) $formData.lot = { expiry: trimmed };
+			return;
 		}
-	});
+		const current = $formData.lot.expiry ?? '';
+		if (current !== trimmed) {
+			$formData.lot.expiry = trimmed || undefined;
+		}
+	}
 
-	// Keep producedAtDate and $formData.lot.produced_at in sync (empty → domain defaults to occurred_at)
-	$effect(() => {
-		const val = producedAtDate.trim();
+	/** Empty → domain defaults produced_at to occurred_at. */
+	function setProducedAtDate(val: string) {
+		producedAtDate = val;
+		const trimmed = val.trim();
 		if (!$formData.lot) {
-			if (val) {
-				$formData.lot = { produced_at: val };
-			}
-		} else if (($formData.lot.produced_at ?? '') !== val) {
-			$formData.lot.produced_at = val || undefined;
+			if (trimmed) $formData.lot = { produced_at: trimmed };
+			return;
 		}
-	});
+		if (($formData.lot.produced_at ?? '') !== trimmed) {
+			$formData.lot.produced_at = trimmed || undefined;
+		}
+	}
 
 	function clearSelection() {
 		selectedItem = null;
+		selectedItemId = '';
 		$formData.item_id = '';
 		$formData.unit = '';
-		searchQuery = '';
-		isDropdownOpen = false;
 		clearDonation();
-		expiryDate = '';
-		producedAtDate = '';
+		setExpiryDate('');
+		setProducedAtDate('');
 		storagePointId = '';
 		setStoragePoint(null);
 	}
@@ -279,8 +232,8 @@
 	/** After a successful save: clear qty/lot clocks; clear item unless row-panel pin. */
 	function resetForNextLine() {
 		$formData.qty = '' as unknown as typeof $formData.qty;
-		expiryDate = '';
-		producedAtDate = '';
+		setExpiryDate('');
+		setProducedAtDate('');
 		storagePointId = '';
 		if ($formData.lot) {
 			$formData.lot = {
@@ -317,7 +270,7 @@
 	// Quick expiry date buttons (+3d / +7d)
 	function setQuickExpiry(days: number) {
 		const formatted = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-		expiryDate = formatted;
+		setExpiryDate(formatted);
 	}
 
 	// Submit handler
@@ -396,12 +349,9 @@
 		}
 	});
 
-	// Click outside a combobox closes its dropdown
+	// Click outside donation picker closes its dropdown
 	function handleClickOutside(event: MouseEvent) {
 		const target = event.target as Node;
-		if (container && !container.contains(target)) {
-			isDropdownOpen = false;
-		}
 		if (donationContainer && !donationContainer.contains(target)) {
 			isDonationDropdownOpen = false;
 		}
@@ -476,65 +426,23 @@
 			<Form.Control>
 				{#snippet children({ props })}
 					<Form.Label>สินค้า <span class="font-bold text-destructive">*</span></Form.Label>
-					<div bind:this={container} class="relative w-full">
-						<Input
-							{...props}
-							placeholder="ค้นหา…"
-							bind:value={searchQuery}
-							onfocus={() => !preselectedItemId && (isDropdownOpen = true)}
-							oninput={() => !preselectedItemId && (isDropdownOpen = true)}
-							role="combobox"
-							aria-expanded={isDropdownOpen}
-							aria-controls="item-listbox"
-							aria-haspopup="listbox"
-							autocomplete="off"
-							disabled={!!preselectedItemId}
-							class="min-h-11 {preselectedItemId
-								? 'cursor-not-allowed bg-muted font-bold text-muted-foreground'
-								: ''}"
-						/>
-						{#if selectedItem && !preselectedItemId}
-							<Button
-								type="button"
-								variant="ghost"
-								class="absolute top-1/2 right-1 min-h-11 min-w-11 -translate-y-1/2 px-3 text-sm font-semibold text-muted-foreground hover:text-foreground"
-								onclick={clearSelection}
-							>
-								ล้าง
-							</Button>
-						{/if}
-
-						{#if isDropdownOpen}
-							<div
-								id="item-listbox"
-								role="listbox"
-								class="absolute left-0 z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl"
-							>
-								{#if itemsQuery.isLoading || itemMastersQuery.isLoading}
-									<div class="p-3 text-xs text-muted-foreground">กำลังโหลด…</div>
-								{:else if filteredItems.length === 0}
-									<div class="p-3 text-xs text-muted-foreground">ไม่พบสินค้า</div>
-								{:else}
-									{#each filteredItems as item (item._id)}
-										<button
-											type="button"
-											role="option"
-											aria-selected={selectedItem?._id === item._id}
-											class="flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium hover:bg-muted"
-											onclick={() => selectItem(item)}
-										>
-											<span class="font-semibold text-foreground">{item.name}</span>
-											<span
-												class="rounded-md border border-border/60 bg-muted px-2 py-0.5 text-xs text-muted-foreground"
-											>
-												{formatUnit(item.unit, units, langState.current)}
-											</span>
-										</button>
-									{/each}
-								{/if}
-							</div>
-						{/if}
-					</div>
+					<ItemCombobox
+						id={props.id}
+						name={props.name}
+						aria-invalid={props['aria-invalid']}
+						aria-describedby={props['aria-describedby']}
+						{items}
+						bind:value={selectedItemId}
+						disabled={!!preselectedItemId}
+						isLoading={stockItems.isLoading}
+						{balanceByItemId}
+						formatBalanceUnit={(item) =>
+							formatUnit(item.unit, units, langState.current) || item.unit}
+						onSelect={(item) => {
+							if (item) selectItem(item);
+							else clearSelection();
+						}}
+					/>
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />
@@ -606,7 +514,11 @@
 			<Form.Control>
 				{#snippet children({ props })}
 					<Form.Label>วันผลิต</Form.Label>
-					<DatePicker {...props} bind:value={producedAtDate} placeholder="วันนี้ = เข้าคลัง" />
+					<DatePicker
+						{...props}
+						bind:value={() => producedAtDate, setProducedAtDate}
+						placeholder="วันนี้ = เข้าคลัง"
+					/>
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />
@@ -659,7 +571,11 @@
 							</Button>
 						</div>
 					</div>
-					<DatePicker {...props} bind:value={expiryDate} placeholder="วว/ดด/ปปปป" />
+					<DatePicker
+						{...props}
+						bind:value={() => expiryDate, setExpiryDate}
+						placeholder="วว/ดด/ปปปป"
+					/>
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />

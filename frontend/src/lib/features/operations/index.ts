@@ -155,6 +155,12 @@ export {
 } from './application/queries';
 export { useDonationNeedsBoard } from './application/use-donation-needs-board.svelte';
 export { useStoragePoints } from './application/use-storage-points.svelte';
+export { useStockFormItems } from './application/use-stock-form-items.svelte';
+export {
+	toStockFormItems,
+	filterStockFormItems,
+	type StockFormItem
+} from './domain/stock-form-items';
 export type { NeedItem } from './application/need-item.types';
 
 // UI components
@@ -165,6 +171,7 @@ export { default as StockTable } from './ui/stock-table.svelte';
 /** Query keys owned by the stock table — the page strips them when leaving the stock tab. */
 export { STOCK_PARAM_KEYS } from './ui/stock/stock-url-state';
 export { default as AdjustStockForm } from './ui/adjust-stock-form.svelte';
+export { default as ItemCombobox } from './ui/item-combobox.svelte';
 export { default as StoragePointSelect } from './ui/storage-point-select.svelte';
 export { default as TransferForm } from './ui/transfer-form.svelte';
 export { default as TransferList } from './ui/transfer-list.svelte';
