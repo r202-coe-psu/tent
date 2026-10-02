@@ -58,6 +58,9 @@
 		preselectedItemId = undefined
 	}: { onsuccess?: (result?: MovementFormSuccess) => void; preselectedItemId?: string } = $props();
 
+	// Session expired (`needsReauth`): every save button is off until the user signs in again.
+	const offline = $derived(authStore.needsReauth);
+
 	// Fetch supply catalog items
 	const itemsQuery = useSupplyItems();
 	const itemMastersQuery = useItemMasters(() => getShelterCode());
@@ -853,7 +856,7 @@
 		</div>
 
 		<div class="col-span-1 pt-1 sm:col-span-2">
-			<Form.Button size="lg" disabled={$submitting} class="min-h-11 w-full font-bold">
+			<Form.Button size="lg" disabled={$submitting || offline} class="min-h-11 w-full font-bold">
 				{$submitting ? 'กำลังบันทึก…' : 'บันทึกแล้วรับชิ้นถัดไป'}
 			</Form.Button>
 		</div>

@@ -47,6 +47,9 @@
 		preselectedItemId?: string;
 	} = $props();
 
+	// Session expired (`needsReauth`): every save button is off until the user signs in again.
+	const offline = $derived(authStore.needsReauth);
+
 	type StockFormItem = PackagingSource & {
 		_id: string;
 		name: string;
@@ -559,7 +562,8 @@
 		<div class="col-span-1 pt-1 sm:col-span-2">
 			<Form.Button
 				size="lg"
-				disabled={$submitting ||
+				disabled={offline ||
+					$submitting ||
 					!$formData.qty ||
 					!qtyGt(currentStock, 0) ||
 					itemLots.length === 0 ||

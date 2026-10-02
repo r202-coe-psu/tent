@@ -9,6 +9,7 @@
 	let {
 		row,
 		readonly = false,
+		offline = false,
 		onopen,
 		onreceive,
 		ondistribute
@@ -16,6 +17,8 @@
 		row: StockDisplayRow;
 		/** Cross-shelter totals are view-only: no opening the item, no receive/distribute. */
 		readonly?: boolean;
+		/** Session expired: the row stays openable but its receive / distribute buttons are off. */
+		offline?: boolean;
 		onopen: (row: StockDisplayRow) => void;
 		onreceive: (row: StockDisplayRow) => void;
 		ondistribute: (row: StockDisplayRow) => void;
@@ -96,7 +99,7 @@
 		<RowActions
 			itemName={row.name}
 			layout="inline"
-			disabled={readonly}
+			disabled={readonly || offline}
 			onreceive={() => onreceive(row)}
 			ondistribute={() => ondistribute(row)}
 		/>

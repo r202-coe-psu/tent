@@ -37,6 +37,9 @@
 		initialAdjustmentType?: 'write_off' | 'add';
 	} = $props();
 
+	// Session expired (`needsReauth`): every save button is off until the user signs in again.
+	const offline = $derived(authStore.needsReauth);
+
 	let lastSuccess = $state<string | null>(null);
 	let moreOpen = $state(false);
 
@@ -538,7 +541,7 @@
 					<Button
 						type="submit"
 						size="lg"
-						disabled={isSubmitting || deltaQty === '0' || !reason.trim()}
+						disabled={offline || isSubmitting || deltaQty === '0' || !reason.trim()}
 						class="min-h-11 w-full font-bold"
 					>
 						{isSubmitting ? 'กำลังบันทึก…' : 'บันทึกแล้วปรับชิ้นถัดไป'}

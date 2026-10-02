@@ -5,6 +5,7 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { authStore } from '$lib/stores/auth.svelte';
 	import {
 		useTransfers,
 		useDispatchTransfer,
@@ -36,6 +37,9 @@
 	const resumeMutation = useResumeTransfer();
 
 	const ownShelter = getShelterCode();
+
+	// Session expired (`needsReauth`): every action button is off until the user signs in again.
+	const offline = $derived(authStore.needsReauth);
 
 	const STATUS_LABEL: Record<TransferStatus, string> = {
 		requested: 'รอส่งมอบ',
@@ -240,21 +244,21 @@
 								{#if isOutgoing(t) && t.status === 'requested'}
 									<button
 										onclick={() => openDispatch(t)}
-										disabled={outgoingBusy}
+										disabled={outgoingBusy || offline}
 										class={buttonVariants({ size: 'sm' })}
 									>
 										<Truck class="mr-1 h-3.5 w-3.5" />อนุมัติส่งมอบ
 									</button>
 									<button
 										onclick={() => openReason(t, 'dispute')}
-										disabled={outgoingBusy}
+										disabled={outgoingBusy || offline}
 										class={buttonVariants({ size: 'sm', variant: 'outline' })}
 									>
 										<CirclePause class="mr-1 h-3.5 w-3.5" />คัดค้าน/ระงับ
 									</button>
 									<button
 										onclick={() => openReason(t, 'cancel')}
-										disabled={outgoingBusy}
+										disabled={outgoingBusy || offline}
 										class={buttonVariants({ size: 'sm', variant: 'outline' })}
 									>
 										<Ban class="mr-1 h-3.5 w-3.5" />ยกเลิก
@@ -262,7 +266,7 @@
 								{:else if isOutgoing(t) && t.status === 'disputed'}
 									<button
 										onclick={() => handleResume(t)}
-										disabled={outgoingBusy}
+										disabled={outgoingBusy || offline}
 										class={buttonVariants({ size: 'sm' })}
 									>
 										<CirclePlay class="mr-1 h-3.5 w-3.5" />กลับมาดำเนินการต่อ
@@ -270,7 +274,7 @@
 								{:else if !isOutgoing(t) && t.status === 'shipped'}
 									<button
 										onclick={() => handleReceive(t)}
-										disabled={receiveMutation.isPending}
+										disabled={receiveMutation.isPending || offline}
 										class={buttonVariants({ size: 'sm' })}
 									>
 										<PackageCheck class="mr-1 h-3.5 w-3.5" />ยืนยันรับเข้า
@@ -322,7 +326,11 @@
 			>
 				ปิด
 			</Button>
-			<Button variant="destructive" onclick={handleReasonConfirm} disabled={reasonPending}>
+			<Button
+				variant="destructive"
+				onclick={handleReasonConfirm}
+				disabled={reasonPending || offline}
+			>
 				{reasonPending ? reasonCopy.pendingLabel : reasonCopy.confirmLabel}
 			</Button>
 		</Dialog.Footer>
