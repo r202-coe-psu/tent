@@ -17,9 +17,7 @@ import {
 	MapPin,
 	UtensilsCrossed,
 	FlaskConical,
-	ArrowLeftRight,
-	ClipboardCheck,
-	Siren
+	ClipboardCheck
 } from '@lucide/svelte/icons';
 
 type Leaf = {
@@ -96,13 +94,16 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				href: null,
 				icon: ClipboardList,
 				children: [
-					{ label: 'เบิก-คืนพัสดุหน้างาน', href: null, icon: ArrowLeftRight },
+					{
+						label: 'จัดการเบิกจ่ายพัสดุและอาหาร',
+						href: resolve('/back-office/distribution'),
+						icon: ClipboardList
+					},
 					{
 						label: 'โรงครัวและเสบียงอาหาร',
 						href: resolve('/back-office/tickets/kitchen'),
 						icon: UtensilsCrossed
-					},
-					{ label: 'จ่ายช่วยเหลือนอกศูนย์ & EOC', href: null, icon: Siren }
+					}
 				]
 			},
 			{
