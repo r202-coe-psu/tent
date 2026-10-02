@@ -12,7 +12,6 @@ from app.escpos import (
     MAX_LABEL_PIXELS,
     feed_and_cut,
     label_to_escpos,
-    labels_to_escpos,
 )
 
 DEFAULT_TAIL = feed_and_cut(DEFAULT_CUT_FEED_MM)
@@ -132,35 +131,15 @@ class LabelToEscposTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             label_to_escpos(block_png((64, 64), (0, 0, 32, 32)), 576, cut_feed_mm=15, label_length_mm=15)
 
-    def test_a_batch_is_one_strip_of_equal_slots_cut_once_at_the_end(self):
-        png = block_png((640, 480), (0, 0, 576, 200))
-
-        data = labels_to_escpos([png, png], 576, label_length_mm=60, self_feed_mm=10)
-
-        bands = parse_bands(data)
-        payload = b"".join(band for _, _, band in bands)
-        # 60 mm slot (480 rows) + last label 60 - 10 mm self feed (400 rows) = 120 mm of paper.
-        self.assertEqual(sum(rows for _, rows, _ in bands), 880)
-        self.assertEqual(data.count(ESC_INIT), 1)
-        self.assertEqual(data.count(ESC_CUT), 1)
-        # Same offset in every slot (200 ink rows centred in the 400-row budget), 60 mm apart.
-        for slot_top in (0, 480):
-            self.assertEqual(row_bits(payload, 72, slot_top + 99), "0" * 576)
-            self.assertEqual(row_bits(payload, 72, slot_top + 100), "1" * 576)
-            self.assertEqual(row_bits(payload, 72, slot_top + 299), "1" * 576)
-            self.assertEqual(row_bits(payload, 72, slot_top + 300), "0" * 576)
-
-    def test_single_label_is_a_batch_of_one(self):
+    def test_later_labels_in_a_batch_skip_the_reset_but_keep_feed_and_cut(self):
         png = block_png((64, 64), (0, 0, 32, 32))
 
-        self.assertEqual(
-            label_to_escpos(png, 576, label_length_mm=60, self_feed_mm=10),
-            labels_to_escpos([png], 576, label_length_mm=60, self_feed_mm=10),
-        )
+        first = label_to_escpos(png, 576)
+        later = label_to_escpos(png, 576, init=False)
 
-    def test_empty_batch_is_rejected(self):
-        with self.assertRaises(ValueError):
-            labels_to_escpos([], 576)
+        self.assertEqual(first, ESC_INIT + later)
+        self.assertTrue(later.startswith(GS_RASTER))
+        self.assertTrue(later.endswith(DEFAULT_TAIL))
 
     def test_tall_image_is_split_into_bands_of_at_most_255_rows(self):
         data = label_to_escpos(block_png((100, 600), (0, 0, 100, 600)), 576)

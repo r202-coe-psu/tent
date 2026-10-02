@@ -70,8 +70,38 @@ def feed_and_cut(cut_feed_mm: int) -> bytes:
     return bytes(out + ESC_CUT)
 
 
-def _fit_content(png: bytes, width_dots: int, max_rows: int) -> Image.Image:
-    """Trimmed ink mask, scaled down (never up) to the head width and to `max_rows` (0 = any)."""
+def label_to_escpos(
+    png: bytes,
+    width_dots: int,
+    cut_feed_mm: int = DEFAULT_CUT_FEED_MM,
+    label_length_mm: int = 0,
+    init: bool = True,
+    self_feed_mm: int = 0,
+) -> bytes:
+    """Render a label PNG as ESC/POS bytes that fit a print head `width_dots` wide.
+
+    Blank margins are trimmed, content wider than the head is scaled down (never up) with
+    nearest-neighbour so QR modules stay hard-edged, and the result is centred. The paper is
+    then fed `cut_feed_mm` (print head to cutter) and cut.
+
+    Paper advances content + `cut_feed_mm` + `self_feed_mm` (what the printer feeds by itself
+    on the cut) between two cuts; the head-to-cutter stretch only moves the content within the
+    strip. Measure from the 2nd label: the 1st starts wherever the paper was last cut or torn.
+    With `label_length_mm` (0 = content height) every strip is exactly that long: content is
+    scaled down to fit or padded with blank rows above and below.
+
+    `init=False` leaves out ESC @ for every label after the first in a batch: the device write
+    returns once the printer has the bytes, not once it has cut, so a reset sent straight after
+    lands mid-cut and the printer drops that cut — two people came out as one uncut strip.
+    """
+    if width_dots <= 0 or width_dots % 8:
+        raise ValueError("width_dots must be a positive multiple of 8")
+    max_rows = (
+        (label_length_mm - cut_feed_mm - self_feed_mm) * DOTS_PER_MM if label_length_mm else 0
+    )
+    if label_length_mm and max_rows <= 0:
+        raise ValueError("label_length_mm must be longer than cut_feed_mm + self_feed_mm")
+
     ink = _load_ink_mask(png)
     box = ink.getbbox()
     if box is None:
@@ -84,77 +114,22 @@ def _fit_content(png: bytes, width_dots: int, max_rows: int) -> Image.Image:
     if max_rows and content.height > max_rows:
         width = max(1, round(content.width * max_rows / content.height))
         content = content.resize((width, max_rows), Image.NEAREST)
-    return content
 
-
-def _raster(canvas: Image.Image) -> bytes:
-    """GS v 0 bands for an ink-mask canvas whose width is a multiple of 8."""
+    canvas = Image.new("L", (width_dots, max_rows or content.height), 0)
+    canvas.paste(
+        content, ((width_dots - content.width) // 2, (canvas.height - content.height) // 2)
+    )
     # PIL packs mode "1" MSB-first with 1 = white; ESC/POS wants 1 = printed dot, which is
     # exactly the ink mask (255 -> bit 1), so pack the mask directly.
-    raster = canvas.convert("1", dither=Image.Dither.NONE).tobytes()
-    row_bytes = canvas.width // 8
-    out = bytearray()
+    packed = canvas.convert("1", dither=Image.Dither.NONE)
+    row_bytes = width_dots // 8
+    raster = packed.tobytes()
+
+    out = bytearray(ESC_INIT if init else b"")
     for top in range(0, canvas.height, MAX_BAND_ROWS):
         rows = min(MAX_BAND_ROWS, canvas.height - top)
         out += GS_RASTER
         out += row_bytes.to_bytes(2, "little") + rows.to_bytes(2, "little")
         out += raster[top * row_bytes : (top + rows) * row_bytes]
-    return bytes(out)
-
-
-def labels_to_escpos(
-    pngs: list[bytes],
-    width_dots: int,
-    cut_feed_mm: int = DEFAULT_CUT_FEED_MM,
-    label_length_mm: int = 0,
-    self_feed_mm: int = 0,
-) -> bytes:
-    """Render label PNGs as one ESC/POS strip, cut once after the last label.
-
-    Each label is trimmed, scaled down (never up) to the head width with nearest-neighbour so
-    QR modules stay hard-edged, and centred. The labels print back to back, then the paper is
-    fed `cut_feed_mm` and cut: one cut per print, because kiosk3 drifted when it cut between
-    people.
-
-    With `label_length_mm` (0 = content height) every label takes exactly that much paper, so
-    N people make an N x `label_length_mm` strip. The cut adds `cut_feed_mm` + `self_feed_mm`
-    (what the printer feeds by itself on the cut) after the last label, so its content fits in
-    `label_length_mm - cut_feed_mm - self_feed_mm`; every label uses that budget at the same
-    offset, and the others are padded below to the full length. Measure from a cut edge made by
-    this code: the first strip starts wherever the paper was last cut or torn.
-    """
-    if width_dots <= 0 or width_dots % 8:
-        raise ValueError("width_dots must be a positive multiple of 8")
-    if not pngs:
-        raise ValueError("at least one label is required")
-    content_rows = (
-        (label_length_mm - cut_feed_mm - self_feed_mm) * DOTS_PER_MM if label_length_mm else 0
-    )
-    if label_length_mm and content_rows <= 0:
-        raise ValueError("label_length_mm must be longer than cut_feed_mm + self_feed_mm")
-
-    contents = [_fit_content(png, width_dots, content_rows) for png in pngs]
-    out = bytearray(ESC_INIT)
-    for index, content in enumerate(contents):
-        if label_length_mm:
-            last = index == len(contents) - 1
-            height = content_rows if last else label_length_mm * DOTS_PER_MM
-            top = (content_rows - content.height) // 2
-        else:
-            height, top = content.height, 0
-        canvas = Image.new("L", (width_dots, height), 0)
-        canvas.paste(content, ((width_dots - content.width) // 2, top))
-        out += _raster(canvas)
     out += feed_and_cut(cut_feed_mm)
     return bytes(out)
-
-
-def label_to_escpos(
-    png: bytes,
-    width_dots: int,
-    cut_feed_mm: int = DEFAULT_CUT_FEED_MM,
-    label_length_mm: int = 0,
-    self_feed_mm: int = 0,
-) -> bytes:
-    """One label as its own strip (see `labels_to_escpos`)."""
-    return labels_to_escpos([png], width_dots, cut_feed_mm, label_length_mm, self_feed_mm)
