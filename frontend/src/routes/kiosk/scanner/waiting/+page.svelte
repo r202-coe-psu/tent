@@ -1,8 +1,6 @@
 <script lang="ts">
-	import ArrowDown from '@lucide/svelte/icons/arrow-down';
-	import CreditCard from '@lucide/svelte/icons/credit-card';
 	import { page } from '$app/state';
-	import { KioskBackButton, KioskCheckInWizard } from '$lib/features/kiosk';
+	import { KioskBackButton, KioskCardInsertScene, KioskCheckInWizard } from '$lib/features/kiosk';
 
 	const backUrl = $derived(`/kiosk${page.url.search}`);
 </script>
@@ -27,69 +25,21 @@
 		>
 			เสียบบัตรประชาชน
 		</h1>
-		<p class="mt-1 text-base font-semibold text-slate-700">หงายชิปขึ้น</p>
+		<p class="mt-1 text-base font-semibold text-slate-700 kiosk-portrait:text-xl">
+			คว่ำบัตรลง · หงายชิปขึ้น
+		</p>
 	</header>
 
-	<main class="waiting-card-stage mx-auto flex w-full flex-col items-center">
-		<div
-			class="waiting-card flex w-full flex-col overflow-hidden rounded-2xl border-2 border-[#0A2647] bg-[#0A2647] shadow-2xs"
-		>
-			<div
-				class="waiting-card-body flex min-h-0 flex-1 flex-col bg-white p-4 sm:p-6"
-				aria-label="ตัวอย่างบัตรประชาชน หงายชิปขึ้น"
-			>
-				<div class="flex items-center justify-between">
-					<div
-						class="flex h-3 w-14 overflow-hidden rounded border border-slate-200"
-						aria-hidden="true"
-					>
-						<div class="w-1/5 bg-red-600"></div>
-						<div class="w-1/5 bg-white"></div>
-						<div class="w-1/5 bg-[#0A2647]"></div>
-						<div class="w-1/5 bg-white"></div>
-						<div class="w-1/5 bg-red-600"></div>
-					</div>
-					<CreditCard class="h-5 w-5 text-[#0A2647]" aria-hidden="true" />
-				</div>
-				<div class="waiting-card-details flex min-h-0 flex-1 items-center gap-4">
-					<div
-						class="flex h-14 w-[4.5rem] shrink-0 items-center justify-center rounded-lg border-2 border-amber-400 bg-amber-300"
-						aria-label="ชิปสีทอง"
-					>
-						<div class="grid grid-cols-2 gap-1" aria-hidden="true">
-							{#each [1, 2, 3, 4] as cell (cell)}
-								<span class="h-3 w-5 rounded-sm border border-amber-700/70 bg-amber-500/50"></span>
-							{/each}
-						</div>
-					</div>
-					<div class="flex-1 space-y-2" aria-hidden="true">
-						<div class="h-3 w-4/5 rounded bg-slate-300"></div>
-						<div class="h-2.5 w-full rounded bg-slate-200"></div>
-						<div class="h-2.5 w-3/5 rounded bg-slate-200"></div>
-					</div>
-				</div>
-				<div class="border-t border-slate-200 pt-3 text-sm font-semibold text-slate-500">
-					SMART CARD
-				</div>
-			</div>
-
-			<div
-				class="waiting-card-action flex min-h-16 w-full items-center justify-center gap-3 px-4 py-3 text-base font-bold text-white"
-			>
-				<ArrowDown
-					class="h-5 w-5 animate-bounce motion-reduce:animate-none"
-					aria-hidden="true"
-				/>เสียบบัตรจนสุด
-			</div>
-		</div>
+	<main class="flex w-full flex-col items-center kiosk-portrait:mt-6">
+		<KioskCardInsertScene />
 
 		<div
-			class="waiting-status mt-4 flex min-h-12 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-base font-semibold text-slate-700"
+			class="waiting-status mt-4 flex min-h-12 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-base font-semibold text-slate-700 kiosk-portrait:mt-6 kiosk-portrait:min-h-16 kiosk-portrait:gap-3 kiosk-portrait:rounded-2xl kiosk-portrait:px-7 kiosk-portrait:text-xl"
 			role="status"
 			aria-live="polite"
 		>
 			<span
-				class="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-[#0A2647] motion-reduce:animate-none"
+				class="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-[#0A2647] motion-reduce:animate-none kiosk-portrait:h-6 kiosk-portrait:w-6 kiosk-portrait:border-3"
 				aria-hidden="true"
 			></span>
 			รออ่านบัตร · อย่าถอดบัตร
@@ -98,26 +48,9 @@
 </section>
 
 <style>
-	.waiting-card-stage {
-		width: min(100%, 24rem, max(17rem, calc((100svh - 18rem) * 1.55)));
-	}
-
-	.waiting-card {
-		aspect-ratio: 1.55 / 1;
-	}
-
 	@media (max-height: 650px) {
 		.waiting-page {
 			gap: 0.25rem;
-		}
-
-		.waiting-card-body {
-			padding: 0.75rem;
-		}
-
-		.waiting-card-action {
-			min-height: 2.75rem;
-			padding-block: 0.375rem;
 		}
 
 		.waiting-status {

@@ -5,6 +5,7 @@ export { default as KioskQrIdentityScan } from './ui/qr-identity-scan.svelte';
 export { default as KioskPreRegisteredCheckIn } from './ui/kiosk-pre-registered-check-in.svelte';
 export { default as KioskCheckInWizard } from './ui/kiosk-check-in-wizard.svelte';
 export { default as KioskBackButton } from './ui/kiosk-back-button.svelte';
+export { default as KioskCardInsertScene } from './ui/kiosk-card-insert-scene.svelte';
 export { default as KioskNumpad } from './ui/kiosk-numpad.svelte';
 export { default as KioskPhoneIdentityEntry } from './ui/phone-identity-entry.svelte';
 export { default as PhoneHouseholdPicker } from './ui/phone-household-picker.svelte';
