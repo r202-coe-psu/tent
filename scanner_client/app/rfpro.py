@@ -20,7 +20,7 @@ from dataclasses import dataclass
 
 from app.config import DEFAULT_CARD_READER_USB_ID
 from app.hidraw import HidNode, find_nodes
-from app.scard import ReaderLostError, ThaiSmartCardReader
+from app.scard import CMD_PHOTOS, ReaderLostError, ThaiSmartCardReader
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +36,14 @@ POWER_CYCLE_SETTLE_SEC = 0.3
 # STX + INX + LEN(2) + CHK around the LEN bytes; replies are far smaller than this cap.
 FRAME_OVERHEAD = 5
 MAX_FRAME_LEN = 1024
+# The module returns a reply as ONE input report: of a longer frame only the first report arrives
+# (seen on kiosk3: a 112-byte frame delivered 32 bytes, nothing after). A reply frame is
+# STX+INX+LEN(2)+DEVICE(2)+CMD(2)+STATUS+CHK = 10 bytes around the card data, and the card's
+# SW1 SW2 ride inside that data, so a report holds in_size - 12 bytes of card data.
+REPLY_FRAME_OVERHEAD = 12
+# Reading the photo piece by piece is slow; past this the photo is dropped and registration
+# goes on without it.
+PHOTO_BUDGET_SEC = 30.0
 # Consecutive unanswered polls before the module is treated as gone so the manager re-opens it.
 MAX_POLL_FAILURES = 3
 
@@ -135,12 +143,14 @@ class RfproTransport:
         report_id: int = 0,
         out_size: int = 32,
         has_report_ids: bool = False,
+        in_size: int = 32,
         timeout: float = COMMAND_TIMEOUT_SEC,
     ) -> None:
         self._fd: int | None = fd
         self._report_id = report_id
         self._out_size = out_size
         self._has_report_ids = has_report_ids
+        self.in_size = in_size
         self._timeout = timeout
         self._inx = 0
         self._lock = threading.Lock()
@@ -172,11 +182,13 @@ class RfproTransport:
     @classmethod
     def _for_node(cls, fd: int, node: HidNode) -> RfproTransport:
         report_id = next((rid for kind, rid in node.reports if kind == "Output"), 0)
+        input_id = next((rid for kind, rid in node.reports if kind == "Input"), 0)
         return cls(
             fd,
             report_id=report_id,
             out_size=node.output_bytes(report_id) or 64,
             has_report_ids=node.has_report_ids,
+            in_size=node.input_bytes(input_id) or 32,
         )
 
     def close(self) -> None:
@@ -358,6 +370,8 @@ class RfproThaiCardReader(ThaiSmartCardReader):
         self.transport = transport or RfproTransport.open(usb_id)
         super().__init__(connection=RfproConnection(self.transport))
         self._poll_failures = 0
+        # Most card data one reply can carry; a longer field is read in pieces of this size.
+        self.piece_size = max(1, self.transport.in_size - REPLY_FRAME_OVERHEAD)
         try:
             version = self.transport.command(CMD_HW_VER)
         except RfproError:
@@ -370,6 +384,57 @@ class RfproThaiCardReader(ThaiSmartCardReader):
 
     def close(self) -> None:
         self.transport.close()
+
+    def _read_piece(self, offset: int, length: int) -> list[int] | None:
+        """READ BINARY of `length` bytes at `offset` + GET RESPONSE; None if the card has no data
+        there (SW1 is not 61)."""
+        _, sw1, sw2 = self.connection.transmit(
+            [0x80, 0xB0, (offset >> 8) & 0xFF, offset & 0xFF, 0x02, 0x00, length]
+        )
+        if sw1 != 0x61:
+            return None
+        data, _, _ = self.connection.transmit(self.req_prefix + [sw2])
+        return data
+
+    def transmit_cmd(self, cmd: list[int]) -> list[int]:
+        """Same as the PC/SC reader, but a field longer than one report is read in pieces."""
+        if len(cmd) != 7 or cmd[:2] != [0x80, 0xB0] or cmd[-1] <= self.piece_size:
+            return super().transmit_cmd(cmd)
+        offset = (cmd[2] << 8) | cmd[3]
+        data: list[int] = []
+        for start in range(0, cmd[-1], self.piece_size):
+            piece = self._read_piece(offset + start, min(self.piece_size, cmd[-1] - start))
+            if piece is None:  # the PC/SC path also takes what the card gave, whatever its SW
+                break
+            data.extend(piece)
+        return data
+
+    def get_photo_bytes(self) -> bytes | None:
+        """The 20 photo chunks, each read in pieces. A chunk the card does not answer is skipped
+        (as in the PC/SC reader); a photo that takes longer than PHOTO_BUDGET_SEC is dropped."""
+        deadline = time.monotonic() + PHOTO_BUDGET_SEC
+        data: list[int] = []
+        try:
+            for cmd in CMD_PHOTOS:
+                offset = (cmd[2] << 8) | cmd[3]
+                for start in range(0, cmd[-1], self.piece_size):
+                    if time.monotonic() > deadline:
+                        logger.warning(
+                            "Card photo skipped: not read within %.0fs", PHOTO_BUDGET_SEC
+                        )
+                        return None
+                    piece = self._read_piece(
+                        offset + start, min(self.piece_size, cmd[-1] - start)
+                    )
+                    if piece is None:
+                        break
+                    data.extend(piece)
+        except ReaderLostError:
+            raise
+        except RfproError as error:
+            logger.error("Card photo could not be read: %s", error)
+            return None
+        return bytes(data) or None
 
     def is_card_inserted(self) -> bool:
         """Poll the slot switch only — never resets the card on each poll."""

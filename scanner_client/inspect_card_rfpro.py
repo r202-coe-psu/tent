@@ -22,8 +22,10 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import time
+from pathlib import Path
 
 from app.hidraw import find_nodes
 from app.rfpro import (
@@ -278,6 +280,38 @@ def long_reply(transport: RfproTransport, usb_id: str) -> None:
         print(f"   {'✅' if valid else '❌'} checksum · {name}")
 
 
+def other_openers(dev: str, proc: Path = Path("/proc")) -> list[tuple[int, str]]:
+    """Other processes holding `dev` open. hidraw delivers every input report to every opener,
+    and the kiosk resets the card as soon as it sees one inserted, so a run beside it measures
+    the kiosk's traffic mixed with its own. Reading other users' fds needs root."""
+    found = []
+    for entry in proc.iterdir():
+        if not entry.name.isdigit() or int(entry.name) == os.getpid():
+            continue
+        try:
+            held = any(os.readlink(fd) == dev for fd in (entry / "fd").iterdir())
+            command = (entry / "cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace")
+        except OSError:
+            continue
+        if held:
+            found.append((int(entry.name), command.strip()[:80]))
+    return found
+
+
+def refuse_if_busy(usb_id: str) -> None:
+    node = next((n for n in find_nodes(usb_id) if any(k == "Output" for k, _ in n.reports)), None)
+    busy = other_openers(node.dev) if node else []
+    if not busy:
+        return
+    lines = "\n".join(f"   pid {pid}: {command}" for pid, command in busy)
+    sys.exit(
+        f"❌ มี process อื่นเปิด {node.dev} อยู่ (น่าจะเป็น kiosk) — ผลที่วัดจะปนกับคำสั่งของ process นั้น\n"
+        f"{lines}\n"
+        "   หยุด kiosk ก่อน: pkill -f start_kiosk.sh; pkill -f 'main.py'\n"
+        "   (ตู้ล็อกหน้าจอจะเปิด kiosk ใหม่เองใน 30 วิ — รันทันทีหลังหยุด; หรือใส่ --force ถ้ารู้ตัวว่ายอมรับผลปนกัน)"
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -292,9 +326,14 @@ def main() -> None:
         "--id", default=DEFAULT_ID, help=f"VID:PID (default {DEFAULT_ID})"
     )
     parser.add_argument("--verbose", action="store_true", help="แสดงคำสั่ง/คำตอบ")
+    parser.add_argument(
+        "--force", action="store_true", help="รันต่อแม้มี process อื่นเปิดเครื่องอ่านอยู่"
+    )
     parser.add_argument("--show-cid", action="store_true", help="แสดงเลขบัตรเต็ม")
     args = parser.parse_args()
 
+    if not args.force:
+        refuse_if_busy(args.id)
     # No root check: run it as the kiosk user to prove the udev permission works the same way
     # the kiosk opens the device. The transport error says whether it is permission or absence.
     try:

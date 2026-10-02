@@ -61,7 +61,14 @@ class FakeHidDevice:
     """The device end of a SOCK_SEQPACKET pair: one datagram = one HID report."""
 
     def __init__(
-        self, handler=None, *, heartbeats=False, raw=None, report_id=None, size=OUT_SIZE
+        self,
+        handler=None,
+        *,
+        heartbeats=False,
+        raw=None,
+        report_id=None,
+        size=OUT_SIZE,
+        single_report=False,
     ):
         """`raw(inx, cmd, data)` returns the exact reports to send (for malformed-traffic tests);
         `report_id` prefixes every reply report, like a hidraw node with numbered reports."""
@@ -73,6 +80,8 @@ class FakeHidDevice:
         self.raw = raw
         self.report_id = report_id
         self.size = size
+        # kiosk3 behaviour: of a reply longer than one input report only the first arrives.
+        self.single_report = single_report
         self.commands: list[tuple[bytes, bytes]] = []
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._serve, daemon=True)
@@ -113,7 +122,8 @@ class FakeHidDevice:
                 status, payload = answer
                 if self.heartbeats:
                     self._send(reports(reply_frame(0, HEARTBEAT, 0), self.size)[0])
-                for chunk in reports(reply_frame(inx, cmd, status, payload), self.size):
+                chunks = reports(reply_frame(inx, cmd, status, payload), self.size)
+                for chunk in chunks[:1] if self.single_report else chunks:
                     self._send(chunk)
             except OSError:
                 return
@@ -145,6 +155,11 @@ class FakeThaiCard:
         }
         for index, apdu in enumerate(CMD_PHOTOS):
             self.fields[tuple(apdu)] = self.photo[index * 255 : (index + 1) * 255]
+        # Piecewise reads (offset, length) are served from this image; unstored space is blank.
+        self.memory = bytearray(b" " * 0x1600)
+        for apdu, field in self.fields.items():
+            offset = (apdu[2] << 8) | apdu[3]
+            self.memory[offset : offset + len(field)] = field
 
     def __call__(self, cmd, data):
         if cmd == CMD_HW_VER:
@@ -177,6 +192,9 @@ class FakeThaiCard:
             self.get_response_p2.append(apdu[3])
             return self.pending + b"\x90\x00"
         field = self.fields.get(tuple(apdu))
+        if field is None and apdu[:2] == [0x80, 0xB0]:
+            offset = (apdu[2] << 8) | apdu[3]
+            field = bytes(self.memory[offset : offset + apdu[-1]]) or None
         if field is None:
             self.pending = b""
             return b"\x6a\x82"
@@ -469,7 +487,40 @@ class ReaderTests(unittest.TestCase):
         self.assertEqual(data["last_name_th"], "ใจดี")
         photo = data["photo_base64"]
         self.assertTrue(photo.startswith("data:image/jpeg;base64,"))
-        self.assertEqual(base64.b64decode(photo.split(",", 1)[1]), card.photo)
+        # The last chunk is short; the piece reads that run past it return blank card space.
+        self.assertTrue(base64.b64decode(photo.split(",", 1)[1]).startswith(card.photo))
+
+    def test_read_all_data_survives_a_module_that_returns_one_report_per_reply(self):
+        # kiosk3: a 100-byte answer is a 112-byte frame, and only its first 32 bytes arrive.
+        card, device, reader = self.reader(single_report=True)
+
+        data = reader.read_all_data()
+
+        self.assertEqual(data["citizen_id"], CID)
+        self.assertEqual(data["full_name_th"], "นาย สมชาย ใจดี")
+        self.assertTrue(base64.b64decode(data["photo_base64"].split(",", 1)[1]).startswith(card.photo))
+        apdus = [d for c, d in device.commands if c == CMD_ICC_APDU][1:]  # after SELECT
+        self.assertLessEqual(max(d[-1] for d in apdus), reader.piece_size)  # no Le above a piece
+
+    def test_fields_that_fit_one_report_are_read_in_a_single_command(self):
+        _, device, reader = self.reader(single_report=True)
+        device.commands.clear()
+
+        reader.transmit_cmd(list(CMD_CID))
+
+        self.assertEqual(len([1 for c, _ in device.commands if c == CMD_ICC_APDU]), 2)
+
+    def test_piece_size_follows_the_input_report_size(self):
+        _, _, reader = self.reader()
+        self.assertEqual(reader.piece_size, 20)  # 32-byte report - 12 bytes of frame and SW
+
+    def test_photo_is_dropped_when_it_takes_longer_than_the_budget(self):
+        _, _, reader = self.reader()
+
+        with patch.object(rfpro, "PHOTO_BUDGET_SEC", -1), self.assertLogs(
+            rfpro.logger, level="WARNING"
+        ):
+            self.assertIsNone(reader.get_photo_bytes())
 
     def test_unplugging_during_a_read_surfaces_as_a_lost_reader_not_a_card_error(self):
         from app.scard import ReaderLostError

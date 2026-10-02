@@ -31,6 +31,10 @@ class HidNode:
         info = self.reports.get(("Output", report_id))
         return (info.bits + 7) // 8 if info else 0
 
+    def input_bytes(self, report_id: int) -> int:
+        info = self.reports.get(("Input", report_id))
+        return (info.bits + 7) // 8 if info else 0
+
 
 def parse_descriptor(desc: bytes) -> dict[tuple[str, int], ReportInfo]:
     """Sum report sizes per (main item kind, report id) from HID short items."""
