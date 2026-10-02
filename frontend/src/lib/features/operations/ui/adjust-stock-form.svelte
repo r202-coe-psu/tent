@@ -5,11 +5,14 @@
 	import * as Field from '$lib/components/ui/field/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
-	import { useSupplyItems } from '$lib/features/supply';
-	import { itemMasterUnit, useItemMasters } from '$lib/features/catalog';
+	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
-	import { useLedger, useAdjustStock } from '../application/queries';
+	import { useLedger, useAdjustStock, useStockBalance } from '../application/queries';
+	import { useStockFormItems } from '../application/use-stock-form-items.svelte';
+	import type { StockFormItem } from '../domain/stock-form-items';
+	import ItemCombobox from './item-combobox.svelte';
+	import { langState } from '$lib/states/i18n.svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { toast } from 'svelte-sonner';
 	import Settings from '@lucide/svelte/icons/settings';
@@ -43,23 +46,16 @@
 	let lastSuccess = $state<string | null>(null);
 	let moreOpen = $state(false);
 
-	// Queries & Mutations
-	const itemsQuery = useSupplyItems();
-	const itemMastersQuery = useItemMasters(() => getShelterCode());
+	const stockItems = useStockFormItems(() => getShelterCode());
+	const balanceQuery = useStockBalance();
 	const ledgerQuery = useLedger();
 	const adjustMutation = useAdjustStock();
 	const storagePoints = useStoragePoints(() => getShelterCode());
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
 
-	// Local State
-	let searchQuery = $state('');
-	let isDropdownOpen = $state(false);
-	let selectedItem = $state<{
-		_id: string;
-		name: string;
-		unit: string;
-		perishable?: boolean;
-	} | null>(null);
-	let container = $state<HTMLDivElement | null>(null);
+	let selectedItemId = $state('');
+	let selectedItem = $state<StockFormItem | null>(null);
 	let selectedLotKey = $state<string>('');
 	/** Storage point for a new lot ('' = unspecified / main store). */
 	let customPointId = $state('');
@@ -68,29 +64,8 @@
 	let newQtyInput = $state<string>('');
 	let reason = $state<string>('');
 
-	const items = $derived.by(() => {
-		const supplyItems = itemsQuery.data ?? [];
-		const itemMasters = itemMastersQuery.data ?? [];
-
-		const mappedItemMasters = itemMasters
-			.filter((im) => !im.deactivated)
-			.map((im) => ({
-				_id: im._id,
-				name: im.name,
-				category: im.category || 'other',
-				unit: itemMasterUnit(im),
-				reorder_level: null,
-				perishable: false
-			}));
-
-		return [...supplyItems, ...mappedItemMasters];
-	});
-
-	const filteredItems = $derived.by(() => {
-		if (!searchQuery) return items;
-		const query = searchQuery.toLowerCase().trim();
-		return items.filter((i) => i.name.toLowerCase().includes(query));
-	});
+	const items = $derived(stockItems.items);
+	const balanceByItemId = $derived(balanceQuery.data ?? new Map<string, string>());
 
 	// Calculate balance of each lot for selectedItem
 	const itemLots = $derived.by(() => {
@@ -131,17 +106,15 @@
 		return subQty(newQtyInput, base);
 	});
 
+	// Preferred type when delta is zero (buttons / reset); otherwise derived from delta.
 	// svelte-ignore state_referenced_locally
-	let adjustmentType = $state<'write_off' | 'add'>(initialAdjustmentType);
+	let preferredAdjustmentType = $state<'write_off' | 'add'>(initialAdjustmentType);
 
-	// Watch newQtyInput to auto-set adjustmentType
-	$effect(() => {
+	const adjustmentType = $derived.by(() => {
 		const delta = Number(deltaQty);
-		if (delta < 0) {
-			adjustmentType = 'write_off';
-		} else if (delta > 0) {
-			adjustmentType = 'add';
-		}
+		if (delta < 0) return 'write_off' as const;
+		if (delta > 0) return 'add' as const;
+		return preferredAdjustmentType;
 	});
 
 	const isSubmitting = $derived(adjustMutation.isPending);
@@ -160,28 +133,26 @@
 		}
 	}
 
-	function selectItem(item: typeof selectedItem) {
+	function selectItem(item: StockFormItem) {
 		selectedItem = item;
-		searchQuery = item?.name ?? '';
-		isDropdownOpen = false;
+		selectedItemId = item._id;
 		// Reset form fields
 		selectedLotKey = '';
 		customPointId = '';
 		customPoint = null;
 		newQtyInput = '';
-		adjustmentType = initialAdjustmentType;
+		preferredAdjustmentType = initialAdjustmentType;
 		reason = '';
 	}
 
 	function clearSelection() {
 		selectedItem = null;
-		searchQuery = '';
-		isDropdownOpen = false;
+		selectedItemId = '';
 		selectedLotKey = '';
 		customPointId = '';
 		customPoint = null;
 		newQtyInput = '';
-		adjustmentType = initialAdjustmentType;
+		preferredAdjustmentType = initialAdjustmentType;
 		reason = '';
 		customExpiry = '';
 	}
@@ -193,7 +164,7 @@
 		customPointId = '';
 		customPoint = null;
 		customExpiry = '';
-		adjustmentType = initialAdjustmentType;
+		preferredAdjustmentType = initialAdjustmentType;
 		if (!preselectedItemId) {
 			clearSelection();
 		}
@@ -286,15 +257,7 @@
 			selectItem(item);
 		}
 	});
-
-	function handleClickOutside(event: MouseEvent) {
-		if (container && !container.contains(event.target as Node)) {
-			isDropdownOpen = false;
-		}
-	}
 </script>
-
-<svelte:document onclick={handleClickOutside} />
 
 <form
 	onsubmit={handleSubmit}
@@ -319,57 +282,19 @@
 			<Field.Label for="item-search"
 				>สินค้า <span class="font-bold text-destructive">*</span></Field.Label
 			>
-			<div bind:this={container} class="relative w-full">
-				<Input
-					id="item-search"
-					placeholder="ค้นหา…"
-					bind:value={searchQuery}
-					onfocus={() => !preselectedItemId && (isDropdownOpen = true)}
-					oninput={() => !preselectedItemId && (isDropdownOpen = true)}
-					autocomplete="off"
-					disabled={!!preselectedItemId}
-					class="min-h-11 {preselectedItemId
-						? 'cursor-not-allowed bg-muted font-bold text-muted-foreground'
-						: ''}"
-				/>
-				{#if selectedItem && !preselectedItemId}
-					<Button
-						type="button"
-						variant="ghost"
-						class="absolute top-1/2 right-1 min-h-11 min-w-11 -translate-y-1/2 px-3 text-sm font-semibold"
-						onclick={clearSelection}
-					>
-						ล้าง
-					</Button>
-				{/if}
-
-				{#if isDropdownOpen}
-					<div
-						class="absolute left-0 z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl"
-					>
-						{#if itemsQuery.isLoading || itemMastersQuery.isLoading}
-							<div class="p-3 text-xs text-muted-foreground">กำลังโหลด…</div>
-						{:else if filteredItems.length === 0}
-							<div class="p-3 text-xs text-muted-foreground">ไม่พบสินค้า</div>
-						{:else}
-							{#each filteredItems as item (item._id)}
-								<button
-									type="button"
-									class="flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium hover:bg-muted"
-									onclick={() => selectItem(item)}
-								>
-									<span class="font-semibold text-foreground">{item.name}</span>
-									<span
-										class="rounded-md border border-border/60 bg-muted px-2 py-0.5 text-xs text-muted-foreground"
-									>
-										{item.unit}
-									</span>
-								</button>
-							{/each}
-						{/if}
-					</div>
-				{/if}
-			</div>
+			<ItemCombobox
+				id="item-search"
+				{items}
+				bind:value={selectedItemId}
+				disabled={!!preselectedItemId}
+				isLoading={stockItems.isLoading}
+				{balanceByItemId}
+				formatBalanceUnit={(item) => formatUnit(item.unit, units, langState.current) || item.unit}
+				onSelect={(item) => {
+					if (item) selectItem(item);
+					else clearSelection();
+				}}
+			/>
 		</Field.Root>
 
 		{#if selectedItem}
@@ -483,7 +408,7 @@
 											toast.error('จำนวนใหม่มากกว่าเดิม — ใช้ปรับยอดเพิ่ม');
 											return;
 										}
-										adjustmentType = 'write_off';
+										preferredAdjustmentType = 'write_off';
 									}}
 									disabled={Number(deltaQty) > 0}
 									class="min-h-11 font-bold"
@@ -500,7 +425,7 @@
 											toast.error('จำนวนใหม่น้อยกว่าเดิม — ใช้เขียนทิ้ง');
 											return;
 										}
-										adjustmentType = 'add';
+										preferredAdjustmentType = 'add';
 									}}
 									disabled={Number(deltaQty) < 0}
 									class="min-h-11 font-bold"

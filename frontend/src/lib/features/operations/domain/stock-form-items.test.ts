@@ -1,0 +1,133 @@
+import { describe, expect, it } from 'vitest';
+import { filterStockFormItems, toStockFormItems } from './stock-form-items';
+
+describe('toStockFormItems', () => {
+	it('maps supply items with empty conversions and base_unit equal to unit', () => {
+		const items = toStockFormItems(
+			[{ _id: 'item:rice', name: 'Rice', unit: 'kg', perishable: true }],
+			[]
+		);
+		expect(items).toEqual([
+			{
+				_id: 'item:rice',
+				name: 'Rice',
+				unit: 'kg',
+				base_unit: 'kg',
+				conversions: [],
+				perishable: true
+			}
+		]);
+	});
+
+	it('maps active item masters with packaging fields and sku', () => {
+		const items = toStockFormItems(
+			[],
+			[
+				{
+					_id: 'item_master:water',
+					name: 'Water',
+					base_unit: 'bottle',
+					sku: 'WAT-01',
+					conversions: [{ uom_name: 'pack', multiplier: '6' }],
+					default_inventory_uom: 'pack',
+					default_issue_uom: 'bottle'
+				}
+			]
+		);
+		expect(items).toEqual([
+			{
+				_id: 'item_master:water',
+				name: 'Water',
+				unit: 'bottle',
+				base_unit: 'bottle',
+				conversions: [{ uom_name: 'pack', multiplier: '6' }],
+				default_inventory_uom: 'pack',
+				default_issue_uom: 'bottle',
+				perishable: false,
+				sku: 'WAT-01'
+			}
+		]);
+	});
+
+	it('drops deactivated item masters', () => {
+		const items = toStockFormItems(
+			[],
+			[
+				{
+					_id: 'item_master:old',
+					name: 'Old',
+					base_unit: 'piece',
+					conversions: [],
+					deactivated: true
+				},
+				{
+					_id: 'item_master:live',
+					name: 'Live',
+					base_unit: 'piece',
+					conversions: []
+				}
+			]
+		);
+		expect(items.map((i) => i._id)).toEqual(['item_master:live']);
+	});
+
+	it('merges supply items then item masters', () => {
+		const items = toStockFormItems(
+			[{ _id: 'item:a', name: 'A', unit: 'kg', perishable: false }],
+			[{ _id: 'item_master:b', name: 'B', base_unit: 'piece', conversions: [] }]
+		);
+		expect(items.map((i) => i._id)).toEqual(['item:a', 'item_master:b']);
+	});
+});
+
+describe('filterStockFormItems', () => {
+	const items = toStockFormItems(
+		[{ _id: 'item:rice', name: 'ข้าวสาร', unit: 'kg', perishable: false }],
+		[
+			{
+				_id: 'item_master:water',
+				name: 'น้ำดื่ม',
+				base_unit: 'bottle',
+				sku: 'WAT-01',
+				conversions: []
+			}
+		]
+	);
+
+	it('returns all items when query is empty', () => {
+		expect(filterStockFormItems(items, '')).toEqual(items);
+		expect(filterStockFormItems(items, '   ')).toEqual(items);
+	});
+
+	it('matches by name case-insensitively', () => {
+		expect(filterStockFormItems(items, 'ข้าว').map((i) => i._id)).toEqual(['item:rice']);
+	});
+
+	it('matches by sku case-insensitively', () => {
+		expect(filterStockFormItems(items, 'wat-01').map((i) => i._id)).toEqual(['item_master:water']);
+	});
+
+	it('matches fuzzy typos in the name', () => {
+		expect(filterStockFormItems(items, 'ขวาสาร').map((i) => i._id)).toEqual(['item:rice']);
+		expect(filterStockFormItems(items, 'ข้าวสา').map((i) => i._id)).toContain('item:rice');
+	});
+
+	it('matches sku without separators', () => {
+		expect(filterStockFormItems(items, 'WAT01').map((i) => i._id)).toEqual(['item_master:water']);
+	});
+
+	it('returns no items for an unrelated query', () => {
+		expect(filterStockFormItems(items, 'xyzzy')).toEqual([]);
+	});
+
+	it('ranks closer name matches before weaker ones', () => {
+		const mixed = toStockFormItems(
+			[
+				{ _id: 'item:a', name: 'ถุงมือยาง', unit: 'pair', perishable: false },
+				{ _id: 'item:b', name: 'ถุงมือผ้า', unit: 'pair', perishable: false }
+			],
+			[]
+		);
+		expect(filterStockFormItems(mixed, 'ถุงมือยาง').map((i) => i._id)[0]).toBe('item:a');
+	});
+});

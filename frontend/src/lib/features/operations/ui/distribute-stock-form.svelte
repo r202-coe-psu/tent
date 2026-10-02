@@ -2,7 +2,6 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
-	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
@@ -14,26 +13,26 @@
 		type StockLedger,
 		StockLotIntegrityError
 	} from '../domain/operations';
-	import { useSupplyItems } from '$lib/features/supply';
 	import {
 		itemMasterUnit,
-		useItemMasters,
 		formatUnit,
 		useUnitsOfMeasure,
 		itemSelectableUoms,
 		defaultIssueUom,
 		toLedgerQtyUnit,
-		qtyToBaseUnit,
-		type PackagingSource
+		qtyToBaseUnit
 	} from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { useDistributeStock, useStockBalance, useLedger } from '../application/queries';
+	import { useStockFormItems } from '../application/use-stock-form-items.svelte';
+	import type { StockFormItem } from '../domain/stock-form-items';
+	import ItemCombobox from './item-combobox.svelte';
 	import { toast } from 'svelte-sonner';
 	import PackageMinus from '@lucide/svelte/icons/package-minus';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
-	import { qtyGt, qtyGte, qtyIsZero, qtyLte } from '$lib/utils/qty';
+	import { qtyGt, qtyGte, qtyIsZero } from '$lib/utils/qty';
 	import { ulid } from '$lib/db/ulid';
 	import { formatLotClockLine } from '../domain/lot-age';
 	import { lotStorageLabel } from '../domain/lot-storage';
@@ -50,18 +49,10 @@
 	// Session expired (`needsReauth`): every save button is off until the user signs in again.
 	const offline = $derived(authStore.needsReauth);
 
-	type StockFormItem = PackagingSource & {
-		_id: string;
-		name: string;
-		unit: string;
-	};
-
 	let lastSuccess = $state<string | null>(null);
 	let moreOpen = $state(false);
 
-	// Fetch supply catalog items and stock balance
-	const itemsQuery = useSupplyItems();
-	const itemMastersQuery = useItemMasters(() => getShelterCode());
+	const stockItems = useStockFormItems(() => getShelterCode());
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
 	const storagePoints = useStoragePoints(() => getShelterCode());
@@ -69,11 +60,11 @@
 	const ledgerQuery = useLedger();
 	const distributeMutation = useDistributeStock();
 
-	// Local state for searchable items combobox
-	let searchQuery = $state('');
-	let isDropdownOpen = $state(false);
+	let selectedItemId = $state('');
 	let selectedItem = $state<StockFormItem | null>(null);
-	let container = $state<HTMLDivElement | null>(null);
+
+	const items = $derived(stockItems.items);
+	const balanceByItemId = $derived(balanceQuery.data ?? new Map<string, string>());
 
 	const currentStock = $derived.by(() => {
 		if (!selectedItem || !balanceQuery.data) return '0';
@@ -110,39 +101,7 @@
 		}
 	});
 
-	const items = $derived.by((): StockFormItem[] => {
-		const supplyItems = (itemsQuery.data ?? []).map((item) => ({
-			_id: item._id,
-			name: item.name,
-			unit: item.unit,
-			base_unit: item.unit,
-			conversions: [] as { uom_name: string; multiplier: string }[]
-		}));
-		const itemMasters = itemMastersQuery.data ?? [];
-
-		const mappedItemMasters = itemMasters
-			.filter((im) => !im.deactivated)
-			.map((im) => ({
-				_id: im._id,
-				name: im.name,
-				unit: itemMasterUnit(im),
-				base_unit: itemMasterUnit(im),
-				conversions: im.conversions ?? [],
-				default_inventory_uom: im.default_inventory_uom,
-				default_issue_uom: im.default_issue_uom
-			}));
-
-		return [...supplyItems, ...mappedItemMasters];
-	});
-
 	const unitOptions = $derived(selectedItem ? itemSelectableUoms(selectedItem) : []);
-
-	// Filter items based on search query
-	const filteredItems = $derived.by(() => {
-		if (!searchQuery) return items;
-		const query = searchQuery.toLowerCase().trim();
-		return items.filter((i) => i.name.toLowerCase().includes(query));
-	});
 
 	const form = superForm(
 		defaults(
@@ -221,21 +180,19 @@
 
 	function selectItem(item: StockFormItem) {
 		selectedItem = item;
+		selectedItemId = item._id;
 		$formData.item_id = item._id;
 		$formData.unit = defaultIssueUom(item);
 		$formData.ref_id = `requisition_ticket:direct-${ulid()}`;
-		searchQuery = item.name;
-		isDropdownOpen = false;
 	}
 
 	function clearSelection() {
 		selectedItem = null;
+		selectedItemId = '';
 		$formData.item_id = '';
 		$formData.unit = '';
 		$formData.lot_ref = '';
 		$formData.ref_id = `requisition_ticket:direct-${ulid()}`;
-		searchQuery = '';
-		isDropdownOpen = false;
 	}
 
 	function resetForNextLine() {
@@ -303,16 +260,7 @@
 			selectItem(item);
 		}
 	});
-
-	// Click outside container closes dropdown
-	function handleClickOutside(event: MouseEvent) {
-		if (container && !container.contains(event.target as Node)) {
-			isDropdownOpen = false;
-		}
-	}
 </script>
-
-<svelte:document onclick={handleClickOutside} />
 
 <form
 	method="POST"
@@ -338,67 +286,24 @@
 			<Form.Control>
 				{#snippet children({ props })}
 					<Form.Label>สินค้า <span class="font-bold text-destructive">*</span></Form.Label>
-					<div bind:this={container} class="relative w-full">
-						<Input
-							{...props}
-							placeholder="ค้นหา…"
-							bind:value={searchQuery}
-							onfocus={() => !preselectedItemId && (isDropdownOpen = true)}
-							oninput={() => !preselectedItemId && (isDropdownOpen = true)}
-							autocomplete="off"
-							disabled={!!preselectedItemId}
-							class="min-h-11 {preselectedItemId
-								? 'cursor-not-allowed bg-muted font-bold text-muted-foreground'
-								: ''}"
-						/>
-						{#if selectedItem && !preselectedItemId}
-							<Button
-								type="button"
-								variant="ghost"
-								class="absolute top-1/2 right-1 min-h-11 min-w-11 -translate-y-1/2 px-3 text-sm font-semibold"
-								onclick={clearSelection}
-							>
-								ล้าง
-							</Button>
-						{/if}
-
-						{#if isDropdownOpen}
-							<div
-								id="item-listbox"
-								role="listbox"
-								class="absolute left-0 z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl"
-							>
-								{#if itemsQuery.isLoading || itemMastersQuery.isLoading || balanceQuery.isLoading}
-									<div class="p-3 text-xs text-muted-foreground">กำลังโหลด…</div>
-								{:else if filteredItems.length === 0}
-									<div class="p-3 text-xs text-muted-foreground">ไม่พบสินค้า</div>
-								{:else}
-									{#each filteredItems as item (item._id)}
-										{@const bal = balanceQuery.data?.get(item._id) ?? '0'}
-										<button
-											type="button"
-											class="flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium hover:bg-muted"
-											onclick={() => selectItem(item)}
-											disabled={qtyLte(bal, 0)}
-										>
-											<span
-												class="font-semibold text-foreground {qtyLte(bal, 0) ? 'opacity-50' : ''}"
-												>{item.name}</span
-											>
-											<span
-												class="rounded-md border px-2 py-0.5 text-xs font-bold {qtyGt(bal, 0)
-													? 'border-primary/20 bg-primary/10 text-primary'
-													: 'border-destructive/20 bg-destructive/10 text-destructive'}"
-											>
-												{bal}
-												{formatUnit(item.unit, units, langState.current) || item.unit}
-											</span>
-										</button>
-									{/each}
-								{/if}
-							</div>
-						{/if}
-					</div>
+					<ItemCombobox
+						id={props.id}
+						name={props.name}
+						aria-invalid={props['aria-invalid']}
+						aria-describedby={props['aria-describedby']}
+						{items}
+						bind:value={selectedItemId}
+						disabled={!!preselectedItemId}
+						isLoading={stockItems.isLoading || balanceQuery.isLoading}
+						{balanceByItemId}
+						disableWhenEmpty={true}
+						formatBalanceUnit={(item) =>
+							formatUnit(item.unit, units, langState.current) || item.unit}
+						onSelect={(item) => {
+							if (item) selectItem(item);
+							else clearSelection();
+						}}
+					/>
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />
