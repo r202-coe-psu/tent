@@ -1,10 +1,8 @@
 <script lang="ts">
 	import ArrowDown from '@lucide/svelte/icons/arrow-down';
-	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import CreditCard from '@lucide/svelte/icons/credit-card';
 	import { page } from '$app/state';
-	import { Button } from '$lib/components/ui/button/index.js';
-	import { KioskCheckInWizard } from '$lib/features/kiosk';
+	import { KioskBackButton, KioskCheckInWizard } from '$lib/features/kiosk';
 
 	const backUrl = $derived(`/kiosk${page.url.search}`);
 </script>
@@ -18,15 +16,8 @@
 	aria-labelledby="waiting-title"
 >
 	<KioskCheckInWizard currentStep={2} />
-	<div class="waiting-back flex justify-start">
-		<Button
-			href={backUrl}
-			variant="ghost"
-			aria-label="กลับหน้าเริ่มต้น"
-			class="min-h-11 gap-2 px-3 text-base font-semibold text-[#0A2647] focus-visible:ring-2 focus-visible:ring-[#0A2647]"
-		>
-			<ArrowLeft class="h-5 w-5" aria-hidden="true" />กลับ
-		</Button>
+	<div class="flex justify-start">
+		<KioskBackButton href={backUrl} />
 	</div>
 
 	<header class="text-center">
@@ -118,10 +109,6 @@
 	@media (max-height: 650px) {
 		.waiting-page {
 			gap: 0.25rem;
-		}
-
-		.waiting-back :global(a) {
-			min-height: 2.5rem;
 		}
 
 		.waiting-card-body {

@@ -4,11 +4,11 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
-	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import CameraOff from '@lucide/svelte/icons/camera-off';
 	import ScanQrCode from '@lucide/svelte/icons/scan-qr-code';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import KioskBackButton from './kiosk-back-button.svelte';
 	import KioskCheckInWizard from './kiosk-check-in-wizard.svelte';
 	import type { GateInput } from '../data/kiosk-check-in.api';
 	import { loadKioskHardware } from '../application/kiosk-qr-input';
@@ -179,14 +179,7 @@
 	>
 		<KioskCheckInWizard currentStep={2} />
 		<div class="qr-scan-back flex justify-start">
-			<Button
-				href={backUrl}
-				variant="ghost"
-				aria-label="กลับหน้าเริ่มต้น"
-				class="min-h-11 gap-2 px-3 text-base font-semibold text-[#0A2647] focus-visible:ring-2 focus-visible:ring-[#0A2647]"
-			>
-				<ArrowLeft class="h-5 w-5" aria-hidden="true" />กลับ
-			</Button>
+			<KioskBackButton href={backUrl} />
 		</div>
 
 		<header class="text-center">

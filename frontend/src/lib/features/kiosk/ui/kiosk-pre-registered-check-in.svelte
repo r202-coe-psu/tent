@@ -1,5 +1,4 @@
 <script lang="ts">
-	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import CreditCard from '@lucide/svelte/icons/credit-card';
@@ -44,6 +43,7 @@
 	import { printKioskLabels } from '../data/kiosk-print.api';
 	import { renderKioskLabelPng } from '../application/kiosk-label-image';
 	import { runKioskPrintFlow } from '../application/kiosk-print-flow';
+	import KioskBackButton from './kiosk-back-button.svelte';
 
 	interface Props {
 		input: GateInput | null;
@@ -407,15 +407,11 @@
 <section class="mx-auto flex w-full max-w-5xl flex-col gap-3" aria-labelledby="check-in-title">
 	<KioskCheckInWizard currentStep={wizardStep} />
 	<div class="no-print flex justify-start">
-		<Button
+		<KioskBackButton
 			href={backUrl}
-			variant="ghost"
 			onclick={isPhoneGate ? onreset : undefined}
-			aria-label={isPhoneGate ? 'กลับไปกรอกเบอร์' : 'กลับหน้าเริ่มต้น'}
-			class="min-h-11 gap-2 px-3 text-base font-semibold text-[#0A2647] focus-visible:ring-2 focus-visible:ring-[#0A2647]"
-		>
-			<ArrowLeft class="h-5 w-5" aria-hidden="true" />กลับ
-		</Button>
+			label={isPhoneGate ? 'กลับไปกรอกเบอร์' : 'กลับหน้าเริ่มต้น'}
+		/>
 	</div>
 
 	<header class="text-center">

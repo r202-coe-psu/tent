@@ -316,6 +316,51 @@ async function rootFontSize(page: Page) {
 	return page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).fontSize));
 }
 
+type BackButtonSize = { height: number; fontSize: number; icon: number };
+
+/** Walks every step that shows a back button (steps 2–4 of each method) and measures it. */
+async function backButtonSizes(page: Page): Promise<Record<string, BackButtonSize>> {
+	await mockKioskApi(page, { lookup: { kind: 'household', members: 4 } });
+	const sizes: Record<string, BackButtonSize> = {};
+	const measure = async (step: string, name: string) => {
+		const back = page.getByRole('link', { name });
+		await expect(back).toBeVisible();
+		sizes[step] = await back.evaluate((node) => ({
+			height: node.getBoundingClientRect().height,
+			fontSize: parseFloat(getComputedStyle(node).fontSize),
+			icon: node.querySelector('svg')?.getBoundingClientRect().width ?? 0
+		}));
+	};
+
+	await page.goto(`/kiosk/phone${KIOSK_QUERY}`);
+	await measure('phone entry', 'กลับหน้าเริ่มต้น');
+	await searchByPhone(page);
+	await expect(page.getByRole('heading', { name: 'เลือกสมาชิก' })).toBeVisible();
+	await measure('phone members', 'กลับไปกรอกเบอร์');
+
+	for (const [step, path] of [
+		['qr scan', '/kiosk/qr'],
+		['card waiting', '/kiosk/scanner/waiting'],
+		['card reading', '/kiosk/scanner/reading'],
+		['card error', '/kiosk/scanner/error']
+	] as const) {
+		await page.goto(`${path}${KIOSK_QUERY}`);
+		await measure(step, 'กลับหน้าเริ่มต้น');
+	}
+
+	await page.goto(`/kiosk/scanner/remove-card${KIOSK_QUERY}`);
+	await page.locator('[data-kiosk-card-ready="true"]').waitFor({ state: 'attached' });
+	await dispatchKioskEvent(page, 'kiosk:smart-card-read', { citizenId: KIOSK_CITIZEN_ID });
+	await expect(page.getByRole('heading', { name: 'เลือกสมาชิก' })).toBeVisible();
+	await measure('card members', 'กลับหน้าเริ่มต้น');
+	return sizes;
+}
+
+function expectSameBackButton(sizes: Record<string, BackButtonSize>) {
+	const [first] = Object.values(sizes);
+	for (const [step, size] of Object.entries(sizes)) expect(size, step).toEqual(first);
+}
+
 for (const [name, viewport] of [
 	['1024×600', LANDSCAPE],
 	['1365×800 (DSF 0.75)', LANDSCAPE_DSF075]
@@ -339,6 +384,10 @@ for (const [name, viewport] of [
 			await expect(page.getByText('กรอกให้ครบ 9–10 หลัก ขึ้นต้นด้วย 0')).toBeHidden();
 			expect(await rootFontSize(page)).toBe(BASE_ROOT_FONT_SIZE);
 			expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
+		});
+
+		test('every back button has the same size', async ({ page }) => {
+			expectSameBackButton(await backButtonSizes(page));
 		});
 	});
 }
@@ -425,6 +474,13 @@ test.describe('kiosk portrait 1080×1920 — acceptance', () => {
 		sizes['check-in'] = await titleSize();
 
 		expect(new Set(Object.values(sizes)), JSON.stringify(sizes)).toEqual(new Set([45]));
+	});
+
+	test('every back button uses the same size, and a large one', async ({ page }) => {
+		const sizes = await backButtonSizes(page);
+		expectSameBackButton(sizes);
+		// min-h-16 at the 20px root, in line with the other touch targets (≥ 72).
+		expect(Object.values(sizes)[0].height).toBeGreaterThanOrEqual(72);
 	});
 
 	test('AC-L3/L4/L6/L7/L9/L15 phone entry is a fixed, mid-screen numpad', async ({ page }) => {

@@ -3,8 +3,8 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import Search from '@lucide/svelte/icons/search';
+	import KioskBackButton from './kiosk-back-button.svelte';
 	import KioskCheckInWizard from './kiosk-check-in-wizard.svelte';
 	import KioskNumpad from './kiosk-numpad.svelte';
 	import KioskPreRegisteredCheckIn from './kiosk-pre-registered-check-in.svelte';
@@ -73,15 +73,8 @@
 {:else}
 	<div class="phone-entry-page mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col gap-3">
 		<KioskCheckInWizard currentStep={2} step2Label="กรอกเบอร์" />
-		<div class="phone-entry-back-row flex justify-start">
-			<Button
-				href={homeUrl}
-				variant="ghost"
-				aria-label="กลับหน้าเริ่มต้น"
-				class="min-h-11 gap-2 px-3 text-base font-semibold text-[#0A2647] focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 kiosk-portrait:min-h-16 kiosk-portrait:px-5 kiosk-portrait:text-xl"
-			>
-				<ArrowLeft class="h-5 w-5" aria-hidden="true" />กลับ
-			</Button>
+		<div class="flex justify-start">
+			<KioskBackButton href={homeUrl} />
 		</div>
 		<!-- sr-only is out of flow, so landscape layout is unchanged; portrait shows it as the page title. -->
 		<header class="sr-only text-center kiosk-portrait:not-sr-only kiosk-portrait:mt-4">
@@ -191,11 +184,6 @@
 	@media screen and (orientation: portrait) and (min-height: 1200px) {
 		/* Button forces svg to size-4 unless the class list mentions "size-", which would also
 		   resize the landscape icons — so icons are scaled here instead (specificity beats it). */
-		.phone-entry-back-row :global(a svg) {
-			width: 1.5rem;
-			height: 1.5rem;
-		}
-
 		.phone-entry-search :global(button svg),
 		.phone-entry-numpad :global(button svg) {
 			width: 1.5rem;
