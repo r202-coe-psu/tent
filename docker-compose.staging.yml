@@ -49,7 +49,10 @@ services:
 
   mongodb:
     container_name: tent-mongodb-staging
-    image: mongo:7
+    image: mongo:8.0
+    # Workaround: kernel ≥6.19 + MongoDB 8 TCMalloc rseq crash (exit 139).
+    environment:
+      - GLIBC_TUNABLES=glibc.pthread.rseq=1
     volumes:
       - /mnt/tent-data/mongodb/data:/data/db
     # No port binding — reachable only inside Docker network
@@ -161,6 +164,8 @@ services:
       SHELTER_IMPORT_WORKER_URL: http://frontend:3000
       SHELTER_IMPORT_WORKER_TOKEN: ${SHELTER_IMPORT_WORKER_TOKEN:?SHELTER_IMPORT_WORKER_TOKEN is required}
     command: ["pnpm", "import-worker"]
+    healthcheck:
+      disable: true
     restart: unless-stopped
 
   nginx:

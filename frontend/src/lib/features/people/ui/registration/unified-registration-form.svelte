@@ -6,10 +6,8 @@
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import Search from '@lucide/svelte/icons/search';
-	import GitMerge from '@lucide/svelte/icons/git-merge';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import { onMount, tick, untrack } from 'svelte';
-	import { SvelteSet } from 'svelte/reactivity';
 	import { toast } from 'svelte-sonner';
 	import type { ZodIssue } from 'zod';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -34,7 +32,6 @@
 	import ThaidActionButton from './thaid-action-button.svelte';
 	import type { ThaiDAutofillProfile } from '../../domain/thaid-profile';
 	import { fetchThaidRegistrationStatus } from '$lib/api/thaid-status';
-	import HouseholdMergeDialog from '../household-flows/household-merge-dialog.svelte';
 	import { readRegistrationStickyTopPx } from './registration-sticky-offset';
 	import {
 		applyIntersectionEntries,
@@ -42,14 +39,12 @@
 		pickActiveSectionId
 	} from './registration-scroll-spy';
 	import {
-		createPetCard,
 		parseInitialPets,
 		syncPetsToHousehold,
 		type PetCardItem
 	} from './unified-registration-pets';
 	import {
 		blankUnifiedMember,
-		evacueeToUnifiedMember,
 		unifiedRegistrationInputSchema,
 		type MemberPhotoUploadMode,
 		type UnifiedMemberWithMeta,
@@ -57,13 +52,7 @@
 		type UnifiedRegistrationInput,
 		type UnifiedHouseholdInput
 	} from '../../domain/unified-registration';
-	import type {
-		Evacuee,
-		Household,
-		HousingType,
-		HouseholdVehicle,
-		PetGroup
-	} from '../../domain/people';
+	import type { HousingType, HouseholdVehicle, PetGroup } from '../../domain/people';
 	import {
 		hasMinimumResidence,
 		type ResidenceFields,
@@ -107,6 +96,10 @@
 		onsubmit,
 		onselectshelter,
 		onDirtyChange,
+		/** Increment from parent to clear a stale public join selection (bad token / missing target). */
+		joinResetKey = 0,
+		/** Shelter codes that accept public pre-registration (fallback when chip lacks the flag). */
+		bookableShelterCodes = [],
 		children
 	}: {
 		channel?: UnifiedRegistrationChannel;
@@ -132,6 +125,8 @@
 		) => Promise<void> | void;
 		onselectshelter?: (shelterCode: string, shelterName?: string) => void;
 		onDirtyChange?: (dirty: boolean) => void;
+		joinResetKey?: number;
+		bookableShelterCodes?: string[];
 		children?: import('svelte').Snippet<[{ household: UnifiedRegistrationInput['household'] }]>;
 	} = $props();
 
@@ -224,10 +219,6 @@
 
 	/** Quick search bar for member phone (household search enhancement). */
 	let searchPhoneQuery = $state('');
-
-	/** Household merge dialog state. */
-	let mergeDialogOpen = $state(false);
-	let absorbedHouseholdIds = $state<string[]>([]);
 
 	/** Currently selected match chip from public residence match (for address prefill & pets). */
 	let selectedMatchChip = $state<ResidenceMatchChip | null>(null);
@@ -328,6 +319,11 @@
 			return;
 		}
 
+		// Active join: skip rematch. HMAC match_tokens rotate on every matchResidence call, so
+		// re-running (e.g. typing head phone) would mint new tokens and wipe the selection. Read
+		// joinMatchToken without untrack so clearing ("สร้างใหม่แทน") re-enters and rematches.
+		if (joinMatchToken) return;
+
 		const form: ResidenceFields = {
 			housing_type: household.housing_type,
 			residence_landmark: household.residence_landmark,
@@ -347,7 +343,6 @@
 			publicMatchChips = [];
 			residenceSuggestPending = false;
 			residenceSuggestCheckedEmpty = false;
-			if (untrack(() => joinMatchToken)) clearJoinSelection();
 			return;
 		}
 
@@ -381,16 +376,12 @@
 		residenceSuggestPending = true;
 		residenceSuggestCheckedEmpty = false;
 		let ignore = false;
-		const selectedToken = untrack(() => joinMatchToken);
 		const timer = setTimeout(() => {
 			void matchResidence(request).then((result) => {
 				if (ignore) return;
 				publicMatchChips = result.matches;
 				residenceSuggestPending = false;
 				residenceSuggestCheckedEmpty = result.matches.length === 0;
-				if (selectedToken && !result.matches.some((m) => m.match_token === selectedToken)) {
-					clearJoinSelection();
-				}
 			});
 		}, 350);
 
@@ -627,11 +618,27 @@
 		selectedMatchChip = null;
 	}
 
+	$effect(() => {
+		if (joinResetKey > 0) {
+			clearJoinSelection();
+		}
+	});
+
 	function confirmOnsiteJoin(suggestion: ResidenceMatchCandidate) {
 		joinHouseholdId = suggestion._id;
 		joinMatchToken = null;
 		joinSelectedSummary = suggestion.label?.trim() || formatResidenceSummary(suggestion);
 		markDirty();
+	}
+
+	function canJoinPublicChip(chip: ResidenceMatchChip): boolean {
+		// Mongo-queue family — always append-join (including after closed / claim).
+		if (!chip.is_in_shelter) return true;
+
+		// Shelter Couch HH hard-join only when that shelter accepts public pre-registration.
+		if (chip.accepts_pre_registration === true) return true;
+		const code = chip.shelter_code?.trim();
+		return Boolean(code && bookableShelterCodes.includes(code));
 	}
 
 	function confirmPublicJoin(chip: ResidenceMatchChip) {
@@ -709,36 +716,6 @@
 		}
 	});
 
-	/** Absorb another household into the current form (merge-in-form). */
-	function handleAbsorbHouseholdIntoForm(sourceHousehold: Household, sourceMembers: Evacuee[]) {
-		// Add absorbed household ID for post-submit merge marking
-		absorbedHouseholdIds = [...absorbedHouseholdIds, sourceHousehold._id];
-
-		// Convert source evacuees to unified members and append
-		const converted = sourceMembers.map((ev) => evacueeToUnifiedMember(ev));
-		members = [...members, ...converted];
-
-		// Merge pets from source household
-		const sourcePets = (sourceHousehold.pets ?? []) as PetGroup[];
-		if (sourcePets.length > 0) {
-			const existingSpecies = new SvelteSet(petItems.map((p) => p.species));
-			let nextId = Math.max(0, ...petItems.map((p) => p.id)) + 1;
-			for (const pg of sourcePets) {
-				const species = pg.species as 'dog' | 'cat' | 'other';
-				if (!existingSpecies.has(species)) {
-					const card = createPetCard(species, nextId++);
-					card.details = pg.notes ?? '';
-					if (species === 'other') card.customSpecies = pg.species;
-					petItems = [...petItems, card];
-					existingSpecies.add(species);
-				}
-			}
-			household.pets = syncPetsToHousehold(petItems);
-		}
-
-		markDirty();
-	}
-
 	function continueCreateDespiteSuggest() {
 		clearJoinSelection();
 		markDirty();
@@ -769,7 +746,23 @@
 		};
 	}
 
-	async function revealValidation(message: string, messages: string[] = []) {
+	/** Section that owns a Zod issue — the scroll fallback when no field carries `aria-invalid`. */
+	function sectionForIssue(issue: ZodIssue | undefined): FormSectionId {
+		const [root, key] = issue?.path ?? [];
+		if (root !== 'household') return 'members';
+		return key === 'pets' || key === 'vehicles' ? key : 'address';
+	}
+
+	/**
+	 * Lists every issue in the summary banner, then takes the user straight to the
+	 * first invalid field (same for public and staff). Errors with no field to
+	 * point at land on `fallbackSection`, or on the banner when none is given.
+	 */
+	async function revealValidation(
+		message: string,
+		messages: string[] = [],
+		fallbackSection?: FormSectionId
+	) {
 		formError = message;
 		validationMessages = messages.length > 0 ? messages : [message];
 		toast.error(message, {
@@ -777,17 +770,21 @@
 			duration: 6000
 		});
 		await tick();
-		formRootEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		if (focusFirstInvalid()) return;
+		if (fallbackSection) scrollToSection(fallbackSection);
+		else formRootEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+	}
+
+	function focusFirstInvalid(): boolean {
+		const firstInvalid = formRootEl?.querySelector<HTMLElement>('[aria-invalid="true"]');
+		if (!firstInvalid) return false;
+		firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+		requestAnimationFrame(() => firstInvalid.focus({ preventScroll: true }));
+		return true;
 	}
 
 	function jumpToFirstError() {
-		const firstInvalid = formRootEl?.querySelector<HTMLElement>('[aria-invalid="true"]');
-		if (firstInvalid) {
-			firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
-			requestAnimationFrame(() => firstInvalid.focus({ preventScroll: true }));
-			return;
-		}
-		scrollToSection('members');
+		if (!focusFirstInvalid()) scrollToSection('members');
 	}
 
 	async function handleSubmit(e: Event) {
@@ -797,12 +794,16 @@
 		for (const p of petItems) {
 			if (p.species === 'other' && !p.customSpecies.trim()) {
 				memberFieldErrors = {};
-				await revealValidation(t.petOtherSpeciesRequired);
-				scrollToSection('pets');
+				await revealValidation(t.petOtherSpeciesRequired, [], 'pets');
 				return;
 			}
 		}
 		household.pets = syncPetsToHousehold(petItems);
+
+		// Empty phone → null so phoneSchema accepts optional join / 「ไม่มีเบอร์」.
+		for (const m of members) {
+			if (!m.phone?.trim()) m.phone = null;
+		}
 
 		const payload: UnifiedRegistrationInput = {
 			members,
@@ -827,15 +828,22 @@
 			const mapped = mapZodIssues(result.error.issues);
 			memberFieldErrors = mapped.memberErrors;
 			const first = mapped.messages[0] ?? t.validationError;
-			await revealValidation(first, mapped.messages);
+			await revealValidation(first, mapped.messages, sectionForIssue(result.error.issues[0]));
 			return;
 		}
 
 		if (channel === 'public') {
-			const headPhone = members[0]?.phone?.trim();
-			if (!headPhone || !/^0\d{8,9}$/.test(headPhone.replace(/[-\s]/g, ''))) {
+			const headPhone = members[0]?.phone?.trim() ?? '';
+			const phoneOk = !headPhone || /^0\d{8,9}$/.test(headPhone.replace(/[-\s]/g, ''));
+			if (hasJoinSelection) {
+				if (headPhone && !phoneOk) {
+					memberFieldErrors = { 0: { phone: t.joinPhoneInvalid } };
+					await revealValidation(t.joinPhoneInvalid, [], 'members');
+					return;
+				}
+			} else if (!headPhone || !/^0\d{8,9}$/.test(headPhone.replace(/[-\s]/g, ''))) {
 				memberFieldErrors = { 0: { phone: t.headPhoneRequired } };
-				await revealValidation(t.headPhoneRequired);
+				await revealValidation(t.headPhoneRequired, [], 'members');
 				return;
 			}
 		}
@@ -844,8 +852,11 @@
 			const reportingCount = members.filter((m) => m.reporting_in).length;
 			if (reportingCount === 0) {
 				memberFieldErrors = {};
-				await revealValidation('กรุณาเลือกสมาชิกอย่างน้อย 1 คนที่มารายงานตัวในรอบนี้');
-				scrollToSection('members');
+				await revealValidation(
+					'กรุณาเลือกสมาชิกอย่างน้อย 1 คนที่มารายงานตัวในรอบนี้',
+					[],
+					'members'
+				);
 				return;
 			}
 		}
@@ -956,19 +967,6 @@
 										: 'ค้นหาครอบครัวด้วยเบอร์โทรศัพท์'}
 								</span>
 							</p>
-							{#if channel === 'onsite'}
-								<Button
-									type="button"
-									size="sm"
-									variant="outline"
-									disabled={fieldsLocked}
-									class="gap-1.5"
-									onclick={() => (mergeDialogOpen = true)}
-								>
-									<GitMerge class="size-3.5" />
-									ค้นหาเพื่อรวม 2 ครอบครัว
-								</Button>
-							{/if}
 						</div>
 						<div class="relative w-full">
 							<Input
@@ -1066,14 +1064,12 @@
 									class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/20 bg-background/80 p-2 text-2xs"
 								>
 									<span class="text-muted-foreground">
-										📍 ครอบครัวนี้อยู่ที่: <strong class="text-foreground"
+										มีสมาชิกครอบครัวนี้อยู่ที่ศูนย์:
+										<strong class="text-foreground"
 											>{selectedMatchChip.shelter_name || selectedMatchChip.shelter_code}</strong
 										>
-										{#if !shelterCode}
-											(คุณกำลังลงทะเบียนในคิวส่วนกลาง — ข้อมูลจะเชื่อมโยงข้ามศูนย์ให้อัตโนมัติ)
-										{:else}
-											(ข้อมูลจะเชื่อมโยงข้ามศูนย์พักพิงให้อัตโนมัติ)
-										{/if}
+										— แนะนำไปติดต่อที่ศูนย์หรือแจ้งเจ้าหน้าที่ รวมทีหลังที่ศูนย์ได้ · การเข้าร่วมนี้เพิ่มชื่อเข้าคิวกลางใบเดิม
+										ไม่ใช่เข้าศูนย์อัตโนมัติ
 									</span>
 									{#if onselectshelter}
 										<Button
@@ -1087,7 +1083,7 @@
 													selectedMatchChip!.shelter_name ?? undefined
 												)}
 										>
-											ต้องการย้ายไปศูนย์นี้ด้วย
+											ดูศูนย์นี้
 										</Button>
 									{/if}
 								</div>
@@ -1179,10 +1175,19 @@
 													</span>
 												{/if}
 
-												<!-- Shelter name -->
-												{#if chip.shelter_name}
+												<!-- Shelter recommend copy -->
+												{#if chip.is_in_shelter && chip.shelter_name}
 													<span class="text-2xs text-muted-foreground">
-														อยู่ที่: {chip.shelter_name}
+														มีครอบครัวที่ศูนย์ {chip.shelter_name} แล้ว
+														{#if !canJoinPublicChip(chip)}
+															— ศูนย์นี้ยังไม่เปิดรับลงทะเบียนล่วงหน้าจากเว็บ
+														{/if}
+													</span>
+												{:else if chip.shelter_code || chip.shelter_name}
+													<span class="text-2xs text-muted-foreground">
+														มีสมาชิกครอบครัวนี้อยู่ที่ศูนย์
+														{chip.shelter_name || chip.shelter_code} แล้ว — แนะนำไปที่ศูนย์หรือแจ้งเจ้าหน้าที่
+														· กดเข้าร่วมเพื่อเพิ่มชื่อเข้าคิวกลางใบเดิม
 													</span>
 												{/if}
 
@@ -1217,15 +1222,24 @@
 												</div>
 											</div>
 
-											<Button
-												type="button"
-												size="sm"
-												variant="outline"
-												disabled={fieldsLocked}
-												onclick={() => confirmPublicJoin(chip)}
-											>
-												เข้าร่วม
-											</Button>
+											{#if canJoinPublicChip(chip)}
+												<Button
+													type="button"
+													size="sm"
+													variant="outline"
+													disabled={fieldsLocked}
+													onclick={() => confirmPublicJoin(chip)}
+												>
+													{chip.is_in_shelter ? 'เข้าร่วม' : 'เข้าร่วมคิวกลาง'}
+												</Button>
+											{:else}
+												<p class="max-w-[14rem] text-right text-2xs text-muted-foreground">
+													ศูนย์{chip.shelter_name
+														? ` ${chip.shelter_name}`
+														: ''}ยังไม่เปิดรับลงทะเบียนล่วงหน้า —
+													แนะนำติดต่อที่ศูนย์หรือแจ้งเจ้าหน้าที่
+												</p>
+											{/if}
 										</div>
 									</li>
 								{/each}
@@ -1335,11 +1349,3 @@
 		</div>
 	</div>
 </form>
-
-<!-- Household Merge Dialog (onsite in-form absorb) -->
-{#if channel === 'onsite'}
-	<HouseholdMergeDialog
-		bind:open={mergeDialogOpen}
-		onAbsorbIntoForm={handleAbsorbHouseholdIntoForm}
-	/>
-{/if}

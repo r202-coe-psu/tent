@@ -3,6 +3,7 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Switch } from '$lib/components/ui/switch/index.js';
 	import { clearThaidStatusCache } from '$lib/api/thaid-status';
+	import { clearLoginMethodsCache } from '$lib/api/login-methods';
 	import { useAppConfig, useUpdateAppConfig } from '../application/app-config-queries';
 
 	const configQuery = useAppConfig();
@@ -16,6 +17,7 @@
 		try {
 			await updateMutation.mutateAsync({ thaid_registration_enabled: next });
 			clearThaidStatusCache();
+			clearLoginMethodsCache();
 			toast.success(
 				next ? 'เปิดใช้งาน ThaiD Digital ID ในระบบแล้ว' : 'ปิดใช้งาน ThaiD Digital ID ในระบบแล้ว'
 			);

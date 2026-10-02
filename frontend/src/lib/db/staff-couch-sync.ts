@@ -1,5 +1,6 @@
 import type { QueryClient } from '@tanstack/svelte-query';
 import { startCatalogMasterLiveQuery } from '$lib/features/catalog';
+import { startDistributionLiveQuery } from '$lib/features/distribution';
 import { startKitchenLiveQuery } from '$lib/features/kitchen';
 import { startOperationsLiveQuery } from '$lib/features/operations';
 import { startPeopleLiveQuery } from '$lib/features/people';
@@ -41,7 +42,8 @@ export const STAFF_LIVE_QUERY_STARTERS: readonly LiveQueryStarter[] = [
 	startSopRatioLiveQuery,
 	startDailyCalcLiveQuery,
 	startReferralsLiveQuery,
-	startVolunteersLiveQuery
+	startVolunteersLiveQuery,
+	startDistributionLiveQuery
 ];
 
 export interface StartStaffCouchSyncOptions {

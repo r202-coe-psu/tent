@@ -18,7 +18,7 @@
 	<div class="flex items-center justify-between border-b border-border pb-3">
 		<h3 class="flex items-center gap-2 text-base font-black text-slate-800 dark:text-slate-200">
 			<MapPin class="size-5 text-primary" />
-			ข้อมูลที่อยู่และพิกัดศูนย์พักพิง
+			ข้อมูลที่อยู่
 		</h3>
 		<Button variant="outline" size="sm" onclick={onOpenAddressModal}>
 			<Pencil class="mr-1.5 size-3.5" /> แก้ไขที่อยู่
@@ -30,7 +30,9 @@
 			<Label class="text-xs text-muted-foreground">บ้านเลขที่ / หมู่</Label>
 			<p class="text-sm font-semibold text-slate-800">
 				{household.address_no || '—'}
-				{#if household.village_no}หมู่ที่ {household.village_no}{/if}
+				{#if household.village_no}
+					{household.village_no}
+				{/if}
 			</p>
 		</div>
 		<div class="space-y-1">

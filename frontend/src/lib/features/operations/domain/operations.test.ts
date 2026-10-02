@@ -206,10 +206,9 @@ describe('stockBalance', () => {
 	});
 });
 
-describe('stock_ledger schema_v + reason enum (CR-032)', () => {
-	// `lot_ref` is optional on the persisted contract, so legacy schema_v 4
-	// remains current and every writer continues through `createStockLedger`.
-	it('keeps schema_v 4 for the backward-compatible optional lot_ref field', () => {
+describe('stock_ledger schema_v + reason enum (CR-032 / draft-lot-produced-at)', () => {
+	// Writer stamps schema_v 5; legacy rows through schema_v 4 remain readable.
+	it('stamps schema_v 5 on new ledger rows', () => {
 		const entry = createStockLedger(
 			{
 				item_id: 'item:rice',
@@ -220,6 +219,58 @@ describe('stock_ledger schema_v + reason enum (CR-032)', () => {
 			},
 			ctx
 		);
+		expect(entry.schema_v).toBe(5);
+		expect(entry.lot?.produced_at).toBe(entry.occurred_at);
+	});
+
+	it('defaults lot.produced_at to occurred_at on inbound when omitted', () => {
+		const entry = createStockLedger(
+			{
+				item_id: 'item:rice',
+				qty: 5,
+				unit: 'kg',
+				reason: 'receive',
+				ref_id: 'distribution_log:fixture',
+				lot: { note: 'Zone A' },
+				occurred_at: '2026-09-26T08:00:00.000Z'
+			},
+			ctx
+		);
+		expect(entry.lot).toEqual({
+			note: 'Zone A',
+			produced_at: '2026-09-26T08:00:00.000Z'
+		});
+	});
+
+	it('preserves an explicit lot.produced_at', () => {
+		const entry = createStockLedger(
+			{
+				item_id: 'item:rice',
+				qty: 5,
+				unit: 'kg',
+				reason: 'receive',
+				ref_id: 'distribution_log:fixture',
+				lot: { produced_at: '2026-09-20T00:00:00.000Z' },
+				occurred_at: '2026-09-26T08:00:00.000Z'
+			},
+			ctx
+		);
+		expect(entry.lot?.produced_at).toBe('2026-09-20T00:00:00.000Z');
+	});
+
+	it('does not invent produced_at on outbound distribute rows', () => {
+		const entry = createStockLedger(
+			{
+				item_id: 'item:rice',
+				qty: -2,
+				unit: 'kg',
+				reason: 'distribute',
+				ref_id: 'requisition_ticket:fixture',
+				lot_ref: 'stock_ledger:inbound'
+			},
+			ctx
+		);
+		expect(entry.lot).toBeUndefined();
 		expect(entry.schema_v).toBe(5);
 	});
 
@@ -869,28 +920,31 @@ describe('createReceiveEntry', () => {
 				lot: {
 					expiry: '2026-12-31T00:00:00Z',
 					note: 'Zone A'
-				}
+				},
+				occurred_at: '2026-09-26T08:00:00.000Z'
 			},
 			ctx
 		);
 		expect(entry.lot).toEqual({
 			expiry: '2026-12-31T00:00:00Z',
-			note: 'Zone A'
+			note: 'Zone A',
+			produced_at: '2026-09-26T08:00:00.000Z'
 		});
 	});
 
-	it('accepts empty lot', () => {
+	it('defaults produced_at when lot is omitted on receive', () => {
 		const entry = createReceiveEntry(
 			{
 				item_id: 'item:rice',
 				qty: 10,
 				unit: 'kg',
 				source: 'donation',
-				ref_id: DONATION_REF
+				ref_id: DONATION_REF,
+				occurred_at: '2026-09-26T08:00:00.000Z'
 			},
 			ctx
 		);
-		expect(entry.lot).toBeUndefined();
+		expect(entry.lot).toEqual({ produced_at: '2026-09-26T08:00:00.000Z' });
 	});
 
 	it('permits missing lot.expiry for perishable items (validation is deferred to UI layer)', () => {
@@ -903,12 +957,13 @@ describe('createReceiveEntry', () => {
 				qty: 5,
 				unit: 'ขวด',
 				source: 'donation',
-				ref_id: DONATION_REF
+				ref_id: DONATION_REF,
+				occurred_at: '2026-09-26T08:00:00.000Z'
 				// missing lot.expiry
 			},
 			ctx
 		);
-		expect(entry.lot).toBeUndefined();
+		expect(entry.lot).toEqual({ produced_at: '2026-09-26T08:00:00.000Z' });
 	});
 });
 
@@ -1576,11 +1631,16 @@ describe('lot numbering (CR-088)', () => {
 				unit: 'kg',
 				reason: 'donation',
 				ref_id: 'donation:123',
-				lot: { lot_no: 'L-260825-001', storage_zone: 'A-01' }
+				lot: { lot_no: 'L-260825-001', storage_zone: 'A-01' },
+				occurred_at: '2026-08-25T10:00:00.000Z'
 			},
 			ctx
 		);
-		expect(entry.lot).toEqual({ lot_no: 'L-260825-001', storage_zone: 'A-01' });
+		expect(entry.lot).toEqual({
+			lot_no: 'L-260825-001',
+			storage_zone: 'A-01',
+			produced_at: '2026-08-25T10:00:00.000Z'
+		});
 		expect(entry.schema_v).toBe(5);
 		expect(parseStockLedger(entry)).toEqual(entry);
 	});
@@ -1972,6 +2032,49 @@ describe('projectStockLotBalances', () => {
 		const balances = projectStockLotBalances([source, out, returned]);
 		expect(balances).toHaveLength(1);
 		expect(balances[0]).toMatchObject({ lot_ref: source.lot_ref, qty: '3' });
+	});
+
+	it('projects matching canonical units through dispatch and return without a lot-integrity error', () => {
+		const source = createStockLedger(
+			{
+				item_id: 'item:blanket',
+				qty: '10',
+				unit: 'piece',
+				reason: 'receive',
+				ref_id: 'distribution_log:fixture',
+				occurred_at: '2026-01-01T00:00:00Z'
+			},
+			ctx,
+			'PIECE-IN'
+		);
+		const dispatched = createDistributeEntry(
+			{
+				item_id: 'item:blanket',
+				qty: '1',
+				unit: 'piece',
+				ref_id: 'requisition_ticket:fixture',
+				lot_ref: source.lot_ref!,
+				occurred_at: '2026-01-02T00:00:00Z'
+			},
+			ctx,
+			'PIECE-OUT'
+		);
+		const returned = createDistributionReturnEntry(
+			{
+				item_id: 'item:blanket',
+				qty: '1',
+				unit: 'piece',
+				ref_id: 'distribution_batch:fixture',
+				lot_ref: source.lot_ref!,
+				occurred_at: '2026-01-03T00:00:00Z'
+			},
+			ctx,
+			'PIECE-RETURN'
+		);
+
+		expect(projectStockLotBalances([source, dispatched, returned])).toMatchObject([
+			{ item_id: 'item:blanket', unit: 'piece', qty: '10' }
+		]);
 	});
 
 	it('fails closed for impossible legacy history', () => {

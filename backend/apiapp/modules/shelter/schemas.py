@@ -31,6 +31,9 @@ class ShelterItem(BaseModel):
     vulnerable_groups: list[str] | None = None
     admin_type: str | None = None
     accepts_pre_registration: bool = False
+    readiness_status: str | None = None
+    readiness_tier: str | None = None
+    readiness_assessed_at: datetime | None = None
     updated_at: datetime
 
 

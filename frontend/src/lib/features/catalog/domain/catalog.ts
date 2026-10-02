@@ -1,6 +1,12 @@
 import { z } from 'zod';
 import { catalogDoc, type CatalogDoc, type AuthorContext } from '$lib/db/model';
-import { persistQty, qtyStrCoercePositiveSchema } from '$lib/utils/qty';
+import {
+	parseQty,
+	persistQty,
+	qtyGt,
+	qtyStrCoercePositiveSchema,
+	type QtyValue
+} from '$lib/utils/qty';
 import { isCanonicalUnitCode, isLegacyUnitLabel, unitCodeSchema } from './unit-of-measure';
 
 // ---------------------------------------------------------------- enums
@@ -139,6 +145,18 @@ export function systemCategoryId(key: SystemCategoryKey): string {
 	return `item_category:${key.toLowerCase()}`;
 }
 
+function findSystemCategoryDef(categoryRef: string): SystemItemCategoryDef | undefined {
+	const trimmed = categoryRef.trim();
+	if (!trimmed) return undefined;
+	return SYSTEM_ITEM_CATEGORIES.find(
+		(def) =>
+			def.id === trimmed ||
+			def.name === trimmed ||
+			def.legacy_names.includes(trimmed) ||
+			def.key === trimmed
+	);
+}
+
 /**
  * Resolve a stored `item_master.category` value (id or legacy Thai name) to a category `_id`.
  */
@@ -156,19 +174,40 @@ export function resolveCategoryId(
 	const byName = categories.find((c) => c.name === trimmed);
 	if (byName) return byName._id;
 
-	const system = SYSTEM_ITEM_CATEGORIES.find(
-		(def) =>
-			def.id === trimmed ||
-			def.name === trimmed ||
-			def.legacy_names.includes(trimmed) ||
-			def.key === trimmed
-	);
+	const system = findSystemCategoryDef(trimmed);
 	if (system) {
 		const live = categories.find((c) => c._id === system.id || c.system_key === system.key);
 		return live?._id ?? system.id;
 	}
 
 	return undefined;
+}
+
+/**
+ * Human-readable category label for UI (never raw `item_category:*` ids when known).
+ * Prefers live catalog names, then system defs, then the original ref.
+ */
+export function resolveCategoryLabel(
+	categoryRef: string | undefined | null,
+	categories: readonly Pick<ItemCategory, '_id' | 'name' | 'system_key'>[] = []
+): string {
+	if (!categoryRef) return '';
+	const trimmed = categoryRef.trim();
+	if (!trimmed) return '';
+
+	const byId = categories.find((c) => c._id === trimmed);
+	if (byId) return byId.name;
+
+	const byName = categories.find((c) => c.name === trimmed);
+	if (byName) return byName.name;
+
+	const system = findSystemCategoryDef(trimmed);
+	if (system) {
+		const live = categories.find((c) => c._id === system.id || c.system_key === system.key);
+		return live?.name ?? system.name;
+	}
+
+	return trimmed;
 }
 
 /** True when an item belongs to the given category (id or legacy name). */
@@ -290,6 +329,112 @@ export const DEFAULT_ITEM_UNIT = 'piece';
  */
 export function itemMasterUnit(item: { base_unit?: string; unit?: string }): string {
 	return item.base_unit || item.unit || DEFAULT_ITEM_UNIT;
+}
+
+/**
+ * Packaging / alternate UOMs on an item master (`conversions[]`) plus the base unit.
+ * Stock ledger rows always store qty in {@link itemMasterUnit}; UI may collect in a
+ * packaging UOM and convert via {@link qtyToBaseUnit} before write (§2.1).
+ */
+export type PackagingUomOption = {
+	code: string;
+	/** How many base units equal one of this UOM (`1` for the base itself). */
+	multiplier: string;
+};
+
+export type PackagingSource = {
+	base_unit?: string;
+	unit?: string;
+	conversions?: readonly { uom_name: string; multiplier: string }[];
+	default_inventory_uom?: string;
+	default_issue_uom?: string;
+};
+
+/** Selectable receive/issue units: base + each packaging conversion. */
+export function itemSelectableUoms(item: PackagingSource): PackagingUomOption[] {
+	const base = itemMasterUnit(item);
+	const options: PackagingUomOption[] = [{ code: base, multiplier: '1' }];
+	const seen = new Set([base.trim().toLowerCase()]);
+
+	for (const conversion of item.conversions ?? []) {
+		const code = conversion.uom_name?.trim();
+		if (!code) continue;
+		const key = code.toLowerCase();
+		if (seen.has(key)) continue;
+		try {
+			if (!qtyGt(conversion.multiplier, 0)) continue;
+		} catch {
+			continue;
+		}
+		seen.add(key);
+		options.push({ code, multiplier: persistQty(conversion.multiplier) });
+	}
+	return options;
+}
+
+export function packagingMultiplier(item: PackagingSource, uomCode: string): string | null {
+	const needle = uomCode.trim().toLowerCase();
+	if (!needle) return null;
+	return (
+		itemSelectableUoms(item).find((option) => option.code.trim().toLowerCase() === needle)
+			?.multiplier ?? null
+	);
+}
+
+/** Convert a qty entered in `selectedUom` into `item` base units. */
+export function qtyToBaseUnit(qty: QtyValue, selectedUom: string, item: PackagingSource): string {
+	const multiplier = packagingMultiplier(item, selectedUom);
+	if (multiplier == null) {
+		throw new Error(`Unknown unit "${selectedUom}" for item (expected base or packaging UOM)`);
+	}
+	return persistQty(parseQty(qty).times(multiplier));
+}
+
+/** Convert a base-unit qty into `selectedUom` for display. */
+export function qtyFromBaseUnit(
+	baseQty: QtyValue,
+	selectedUom: string,
+	item: PackagingSource
+): string {
+	const multiplier = packagingMultiplier(item, selectedUom);
+	if (multiplier == null) {
+		throw new Error(`Unknown unit "${selectedUom}" for item (expected base or packaging UOM)`);
+	}
+	return persistQty(parseQty(baseQty).div(multiplier));
+}
+
+function pickDefaultUom(item: PackagingSource, preferred: string | undefined): string {
+	const options = itemSelectableUoms(item);
+	const base = itemMasterUnit(item);
+	if (preferred?.trim()) {
+		const hit = options.find(
+			(option) => option.code.trim().toLowerCase() === preferred.trim().toLowerCase()
+		);
+		if (hit) return hit.code;
+	}
+	return options[0]?.code ?? base;
+}
+
+/** Default unit on receive forms (`default_inventory_uom`, else base). */
+export function defaultInventoryUom(item: PackagingSource): string {
+	return pickDefaultUom(item, item.default_inventory_uom);
+}
+
+/** Default unit on distribute/issue forms (`default_issue_uom`, else base). */
+export function defaultIssueUom(item: PackagingSource): string {
+	return pickDefaultUom(item, item.default_issue_uom);
+}
+
+/** Ledger write shape: qty + unit always in item base_unit (§2.1). */
+export function toLedgerQtyUnit(
+	qty: QtyValue,
+	selectedUom: string,
+	item: PackagingSource
+): { qty: string; unit: string } {
+	return {
+		qty: qtyToBaseUnit(qty, selectedUom, item),
+		unit: itemMasterUnit(item)
+	};
 }
 
 // ---------------------------------------------------------------- catalog generations

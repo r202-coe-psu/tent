@@ -63,10 +63,15 @@
 
 	// For LayerChart grouping
 	const seriesKeys = ['checkin', 'checkout'];
+
+	// The x-axis is a category (band) scale, so LayerChart renders one tick per
+	// bar with no automatic thinning — over a long daily range that's 30-60+
+	// overlapping date labels. Skip every Nth label so at most ~10 show at once.
+	const xAxisTickStep = $derived(Math.max(1, Math.ceil(chartData.length / 10)));
 </script>
 
 <div class="h-full w-full">
-	<div class="mb-2 flex items-center justify-end gap-4 text-xs">
+	<div class="mb-2 flex flex-wrap items-center justify-end gap-x-4 gap-y-1 text-xs">
 		{#each Object.entries(chartConfig) as [key, config] (key)}
 			<div class="flex items-center gap-1.5">
 				<div class="h-3 w-3 rounded-full" style="background-color: {config.color}"></div>
@@ -85,12 +90,14 @@
 			]}
 			seriesLayout="group"
 			xScale={scaleBand().paddingInner(0.2).paddingOuter(0.1)}
+			padding={{ left: 32, bottom: 28 }}
 			props={{
 				bars: {
 					radius: 4,
 					strokeWidth: 0
 				},
 				xAxis: {
+					ticks: xAxisTickStep,
 					tickLabelProps: {
 						class: 'text-2xs fill-muted-foreground',
 						dy: 10

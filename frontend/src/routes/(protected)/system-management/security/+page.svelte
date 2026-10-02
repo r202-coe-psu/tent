@@ -1,7 +1,7 @@
 <script lang="ts">
 	import StaffPageShell from '$lib/components/staff-page-shell.svelte';
 	import { spatial } from '$lib/tokens';
-	import { RecaptchaSettings, ThaidSettings } from '$lib/features/shared';
+	import { PasswordLoginSettings, RecaptchaSettings, ThaidSettings } from '$lib/features/shared';
 </script>
 
 <svelte:head>
@@ -16,6 +16,9 @@
 			</div>
 			<div class="px-5 py-4 sm:px-6">
 				<ThaidSettings />
+			</div>
+			<div class="px-5 py-4 sm:px-6">
+				<PasswordLoginSettings />
 			</div>
 		</div>
 	</div>

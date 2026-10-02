@@ -50,11 +50,11 @@
 		{#each displayCountries as [countryCode, count] (countryCode)}
 			{@const ratio = total > 0 ? (count / total) * 100 : 0}
 			<div class="flex flex-col gap-1.5">
-				<div class="flex justify-between text-sm">
-					<span class="font-medium text-foreground">
+				<div class="flex justify-between gap-2 text-sm">
+					<span class="min-w-0 truncate font-medium text-foreground">
 						{countryCode === 'UNKNOWN' ? 'ไม่ระบุ' : getCountryName(countryCode)}
 					</span>
-					<span class="text-muted-foreground">{count} คน ({ratio.toFixed(1)}%)</span>
+					<span class="shrink-0 text-muted-foreground">{count} คน ({ratio.toFixed(1)}%)</span>
 				</div>
 				<!-- Progress Bar -->
 				<div class="h-2 w-full overflow-hidden rounded-full bg-secondary">

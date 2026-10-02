@@ -1,20 +1,19 @@
 import { z } from 'zod';
 import { type AuthorContext, type BaseDoc, makeDoc, now } from '$lib/db/model';
-import {
-	parseQty,
-	qtyGt,
-	qtyLte,
-	qtyStrNonNegativeSchema,
-	qtyStrPositiveSchema,
-	qtyStrCoercePositiveSchema
-} from '$lib/utils/qty';
+import { addQty, parseQty, qtyGt, qtyLte, subQty } from '$lib/utils/qty';
 import {
 	bulkReturnPoolIdSchema,
 	distributionLogIdSchema,
 	foodSuppliesBaseDocShape,
 	mealPeriodSchema,
-	requisitionTicketIdSchema
+	type MealPeriod,
+	positiveWholeQtySchema,
+	nonNegativeWholeQtySchema,
+	positiveWholeQtyCoerceSchema,
+	requisitionTicketIdSchema,
+	thailandCalendarDay
 } from './shared';
+import type { TicketItem } from './requisition-ticket';
 
 export const distributionRecipientTypeSchema = z.enum(['evacuee', 'volunteer', 'outside']);
 export type DistributionRecipientType = z.infer<typeof distributionRecipientTypeSchema>;
@@ -41,14 +40,14 @@ const distributionLogFields = {
 	item_id: z.string().min(1),
 	meal_service_id: z.string().min(1).optional(),
 	recipe_id: z.string().min(1).optional(),
-	qty: qtyStrPositiveSchema,
+	qty: positiveWholeQtySchema,
 	recipient_type: distributionRecipientTypeSchema,
 	recipient_id: z.string().min(1).nullable().optional(),
 	household_id: z.string().min(1).optional(),
 	meal: mealPeriodSchema.optional(),
 	is_returnable: z.boolean(),
 	status: distributionLogStatusSchema,
-	qty_returned: qtyStrNonNegativeSchema.optional(),
+	qty_returned: nonNegativeWholeQtySchema.optional(),
 	condition_on_return: returnConditionSchema.optional(),
 	clear_reason: loanClearReasonSchema.optional(),
 	bulk_pool_id: bulkReturnPoolIdSchema.optional(),
@@ -221,7 +220,7 @@ export const distributionLogInputSchema = z
 		item_id: z.string().min(1),
 		meal_service_id: z.string().min(1).optional(),
 		recipe_id: z.string().min(1).optional(),
-		qty: qtyStrCoercePositiveSchema,
+		qty: positiveWholeQtyCoerceSchema,
 		recipient_type: distributionRecipientTypeSchema,
 		recipient_id: z.string().min(1).nullable().optional(),
 		household_id: z.string().min(1).optional(),
@@ -325,4 +324,51 @@ export function assertDistributionLogCanBeVoided(log: DistributionLog): void {
 			`Cannot void distribution log ${log._id} after return or clear activity has begun`
 		);
 	}
+}
+
+/**
+ * Pure predicate checking whether a DistributionLog represents a duplicate meal distribution
+ * for the specified meal period on the specified Thailand calendar day.
+ * Ignores voided logs and returnable loans.
+ */
+export function isDuplicateMealDistributionLog(
+	log: Pick<DistributionLog, 'status' | 'is_returnable' | 'meal' | 'distributed_at'>,
+	targetMeal: MealPeriod,
+	referenceIsoOrDate: string | Date = new Date().toISOString()
+): boolean {
+	if (log.status === 'voided' || log.is_returnable || !log.meal) {
+		return false;
+	}
+	return (
+		log.meal === targetMeal &&
+		thailandCalendarDay(log.distributed_at) === thailandCalendarDay(referenceIsoOrDate)
+	);
+}
+
+/**
+ * Calculates the total distributed quantity for a specific ticket item from a list of logs.
+ * Defensively filters by ticket_id, item_id, and excludes voided logs.
+ */
+export function calculateDistributedQtyForTicketItem(
+	ticketId: string,
+	itemId: string,
+	logs: readonly DistributionLog[]
+): string {
+	const validLogs = logs.filter(
+		(log) => log.ticket_id === ticketId && log.item_id === itemId && log.status !== 'voided'
+	);
+	return validLogs.reduce((acc, log) => addQty(acc, log.qty), '0');
+}
+
+/**
+ * Calculates remaining in-hand quantity for a ticket item given its allocated quantity and logs.
+ */
+export function calculateInHandQtyForTicketItem(
+	ticketId: string,
+	targetItem: Pick<TicketItem, 'item_id' | 'allocated_qty'>,
+	logs: readonly DistributionLog[]
+): string {
+	const totalDistributed = calculateDistributedQtyForTicketItem(ticketId, targetItem.item_id, logs);
+	const allocated = targetItem.allocated_qty || '0';
+	return subQty(allocated, totalDistributed);
 }

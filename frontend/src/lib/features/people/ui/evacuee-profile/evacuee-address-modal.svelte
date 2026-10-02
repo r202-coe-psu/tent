@@ -3,6 +3,8 @@
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 	import X from '@lucide/svelte/icons/x';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { Input } from '$lib/components/ui/input/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
 	import { evacueeAddressEditFormSchema, type Household } from '$lib/features/people';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
@@ -25,6 +27,8 @@
 			district: string;
 			province: string;
 			postalCode: string;
+			municipalityZone: string;
+			community: string;
 		}) => Promise<void>;
 	} = $props();
 
@@ -34,12 +38,23 @@
 	let district = $state(untrack(() => household.district ?? ''));
 	let province = $state(untrack(() => household.province ?? ''));
 	let postalCode = $state(untrack(() => household.postal_code ?? ''));
+	let municipalityZone = $state(untrack(() => household.municipality_zone ?? ''));
+	let community = $state(untrack(() => household.community ?? ''));
 	let formError = $state('');
 	let saving = $state(false);
 
 	const form = superForm(
 		defaults(
-			untrack(() => ({ addressNo, villageNo, province, district, subdistrict, postalCode })),
+			untrack(() => ({
+				addressNo,
+				villageNo,
+				province,
+				district,
+				subdistrict,
+				postalCode,
+				municipalityZone,
+				community
+			})),
 			zod4(evacueeAddressEditFormSchema)
 		),
 		{
@@ -47,7 +62,16 @@
 			validators: zod4(evacueeAddressEditFormSchema),
 			resetForm: false,
 			onSubmit: () => {
-				$formData = { addressNo, villageNo, province, district, subdistrict, postalCode };
+				$formData = {
+					addressNo,
+					villageNo,
+					province,
+					district,
+					subdistrict,
+					postalCode,
+					municipalityZone,
+					community
+				};
 			},
 			onUpdate: async ({ form: validated }) => {
 				if (!validated.valid || saving) return;
@@ -74,6 +98,8 @@
 		district = household.district ?? '';
 		province = household.province ?? '';
 		postalCode = household.postal_code ?? '';
+		municipalityZone = household.municipality_zone ?? '';
+		community = household.community ?? '';
 		formError = '';
 	});
 </script>
@@ -108,6 +134,37 @@
 				</header>
 
 				<div class="max-h-[min(68vh,560px)] space-y-6 overflow-y-auto px-5 py-5 sm:px-6">
+					<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+						<div class="space-y-1.5">
+							<Label for="municipality-zone" class="text-xs font-semibold text-foreground">
+								เขตเทศบาล
+							</Label>
+							<Input
+								id="municipality-zone"
+								bind:value={municipalityZone}
+								disabled={saving}
+								placeholder="ระบุเขตเทศบาล..."
+								class="h-9"
+							/>
+							{#if $errors.municipalityZone?.[0]}
+								<p class="text-2xs text-destructive">{$errors.municipalityZone[0]}</p>
+							{/if}
+						</div>
+						<div class="space-y-1.5">
+							<Label for="community" class="text-xs font-semibold text-foreground">ชุมชน</Label>
+							<Input
+								id="community"
+								bind:value={community}
+								disabled={saving}
+								placeholder="ระบุชุมชน..."
+								class="h-9"
+							/>
+							{#if $errors.community?.[0]}
+								<p class="text-2xs text-destructive">{$errors.community[0]}</p>
+							{/if}
+						</div>
+					</div>
+
 					<HouseholdAddressFields
 						bind:address_no={addressNo}
 						bind:village_no={villageNo}

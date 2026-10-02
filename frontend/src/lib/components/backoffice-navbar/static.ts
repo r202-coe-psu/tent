@@ -18,6 +18,7 @@ import {
 	UtensilsCrossed,
 	FlaskConical,
 	ArrowLeftRight,
+	ClipboardCheck,
 	Siren
 } from '@lucide/svelte/icons';
 
@@ -30,7 +31,7 @@ type Leaf = {
 };
 
 type Group = Leaf & {
-	children: Leaf[];
+	children: BackofficeNavbarNode[];
 };
 
 export type BackofficeNavbarNode = Leaf | Group;
@@ -65,15 +66,14 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 		title: '2. บริหารทรัพยากร',
 		items: [
 			{
+				label: 'การประเมินความพร้อมศูนย์ (Readiness SOP)',
+				href: resolve('/back-office/shelters/readiness' as '/back-office/shelters'),
+				icon: ClipboardCheck
+			},
+			{
 				label: 'การประเมินประจำวัน (Daily SOP)',
 				href: resolve('/back-office/dailysop'),
 				icon: ClipboardList
-			},
-			{
-				label: 'คำนวณความต้องการทรัพยากร',
-				href: resolve('/back-office/resource-dashboard'),
-				icon: Calculator,
-				requiresManager: true
 			},
 			{
 				label: 'จำลองสถานการณ์ SOP',
@@ -140,7 +140,7 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 					},
 					{
 						label: 'คลังสินค้า',
-						href: resolve('/back-office/catalog'),
+						href: resolve('/back-office/supply?tab=catalog' as '/back-office/supply'),
 						icon: Warehouse
 					},
 					{

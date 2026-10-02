@@ -99,9 +99,10 @@ services:
   mongo-wipe:
     profiles: ["reset", "mongo-wipe"]
     container_name: tent-mongo-wipe
-    image: mongo:7
+    image: mongo:8.0
     environment:
       DATABASE_URI: ${DATABASE_URI:-mongodb://mongodb:27017/tentdb}
+      GLIBC_TUNABLES: glibc.pthread.rseq=1
     depends_on:
       mongodb:
         condition: service_healthy

@@ -318,7 +318,7 @@ export function useSetOverrideInactive(shelterCode?: string | (() => string)) {
 			},
 			onSuccess: () => {
 				queryClient.invalidateQueries({ queryKey: sopRatioKeys.all });
-				toast.success('ยกเลิกค่าปรับแต่งเฉพาะศูนย์สำเร็จ (กลับไปใช้ค่ามาตรฐาน EOC)');
+				toast.success('ยกเลิกค่าปรับแต่งเฉพาะศูนย์สำเร็จ (กลับไปใช้ตัวแปรมาตรฐาน Sphere)');
 			},
 			onError: () => {
 				toast.error('ไม่สามารถยกเลิกค่าปรับแต่งเฉพาะศูนย์ได้');

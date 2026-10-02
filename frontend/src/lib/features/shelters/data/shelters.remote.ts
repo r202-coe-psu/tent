@@ -38,6 +38,7 @@ function masterToSummary(master: ShelterMaster): ShelterSummary {
 		operation_status: master.operation_status ?? 'standby',
 		capacity: master.capacity ?? 0,
 		shelter_type: master.shelter_type ?? null,
+		floor_count: master.floor_count ?? null,
 		project_level: master.project_level ?? null,
 		location: master.location ?? {},
 		contact: master.contact ?? {},

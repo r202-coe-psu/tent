@@ -122,9 +122,14 @@ export interface StockLot {
 	storage_zone?: string;
 	/**
 	 * → `shelter.common_areas.sub_storage[].id` of the same shelter (schema_v 5,
-	 * draft-shelter-storage-points). Absent = unspecified / main store, or legacy row.
+	 * CR-139). Absent = unspecified / main store, or legacy row.
 	 */
 	storage_point_id?: string;
+	/**
+	 * Production timestamp for the "จากผลิต" clock (draft-lot-produced-at).
+	 * On inbound receive, writers default this to `occurred_at` when omitted.
+	 */
+	produced_at?: Timestamp;
 }
 
 /** `L-YYMMDD-XXX` — `YYMMDD` = receive date, `XXX` = 3-digit per-day per-shelter sequence. */
@@ -140,7 +145,9 @@ export const stockLotSchema = z
 		note: z.string().trim().optional(),
 		lot_no: z.string().regex(LOT_NO_PATTERN, 'lot_no must look like L-YYMMDD-XXX').optional(),
 		storage_zone: z.string().trim().max(100).optional(),
-		storage_point_id: z.string().trim().min(1).optional()
+		storage_point_id: z.string().trim().min(1).optional(),
+		/** ISO date or datetime — DatePicker may submit `YYYY-MM-DD`. */
+		produced_at: z.string().optional()
 	})
 	.refine((lot) => !lot.storage_point_id || !!lot.storage_zone, {
 		message: 'storage_point_id requires storage_zone (the point name at write time)',
@@ -493,6 +500,19 @@ function createParsedStockLedger(
 	ctx: AuthorContext,
 	id?: string
 ): StockLedger {
+	const occurredAt = d.occurred_at ?? now();
+	// New inbound lots (qty > 0, not a distribution return) stamp produced_at
+	// from occurred_at when the caller omits it (draft-lot-produced-at).
+	const isNewInboundLot = qtyGt(persistQty(d.qty), 0) && d.reason !== 'distribution_return';
+	let lot = d.lot;
+	if (isNewInboundLot) {
+		if (!lot) {
+			lot = { produced_at: occurredAt };
+		} else if (!lot.produced_at) {
+			lot = { ...lot, produced_at: occurredAt };
+		}
+	}
+
 	const entry = makeDoc(
 		'stock_ledger',
 		5,
@@ -503,8 +523,8 @@ function createParsedStockLedger(
 			reason: d.reason,
 			ref_id: d.ref_id,
 			...(d.lot_ref ? { lot_ref: d.lot_ref } : {}),
-			...(d.lot ? { lot: d.lot } : {}),
-			occurred_at: d.occurred_at ?? now()
+			...(lot ? { lot } : {}),
+			occurred_at: occurredAt
 		},
 		ctx,
 		id
@@ -513,7 +533,6 @@ function createParsedStockLedger(
 	// Every newly-created inbound physical lot establishes its identity at write
 	// time. A distribution return reuses the original lot instead of becoming a
 	// new physical lot. Legacy persisted rows remain readable without this field.
-	const isNewInboundLot = qtyGt(entry.qty, 0) && entry.reason !== 'distribution_return';
 	if (!isNewInboundLot) return entry;
 	if (d.lot_ref && d.lot_ref !== entry._id) {
 		throw new Error('New inbound stock ledger lot_ref must equal its own _id');

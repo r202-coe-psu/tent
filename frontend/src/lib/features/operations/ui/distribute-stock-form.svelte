@@ -2,8 +2,8 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
-	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import {
@@ -14,36 +14,69 @@
 		type StockLedger,
 		StockLotIntegrityError
 	} from '../domain/operations';
-	import { useSupplyItems } from '$lib/features/supply';
-	import { itemMasterUnit, useItemMasters } from '$lib/features/catalog';
+	import { dailyConsumption, daysOfCover, resolveReorderThreshold } from '../domain/stock-summary';
+	import {
+		itemMasterUnit,
+		formatUnit,
+		useUnitsOfMeasure,
+		itemSelectableUoms,
+		defaultIssueUom,
+		toLedgerQtyUnit,
+		qtyToBaseUnit,
+		qtyFromBaseUnit
+	} from '$lib/features/catalog';
+	import { useSupplyItems, useThresholdOverrides } from '$lib/features/supply';
+	import { langState } from '$lib/states/i18n.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { useDistributeStock, useStockBalance, useLedger } from '../application/queries';
+	import { useStockFormItems } from '../application/use-stock-form-items.svelte';
+	import type { StockFormItem } from '../domain/stock-form-items';
+	import ItemCombobox from './item-combobox.svelte';
 	import { toast } from 'svelte-sonner';
 	import PackageMinus from '@lucide/svelte/icons/package-minus';
-	import { qtyGt, qtyGte, qtyIsZero, qtyLte } from '$lib/utils/qty';
+	import Minus from '@lucide/svelte/icons/minus';
+	import Plus from '@lucide/svelte/icons/plus';
+	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
+	import { qtyGt, qtyGte, qtyIsZero, qtyLte, addQty, subQty, persistQty } from '$lib/utils/qty';
 	import { ulid } from '$lib/db/ulid';
+	import { formatLotClockLine } from '../domain/lot-age';
 	import { lotStorageLabel } from '../domain/lot-storage';
 	import { useStoragePoints } from '../application/use-storage-points.svelte';
 
+	const DEST_PRESETS = ['ครัวกลาง', 'โซนเต็นท์ A', 'โซนเต็นท์ B', 'ห้องพยาบาล'] as const;
+	const QTY_CHIPS = [10, 20, 50] as const;
+
 	let {
 		onsuccess,
-		preselectedItemId = undefined
-	}: { onsuccess?: () => void; preselectedItemId?: string } = $props();
+		preselectedItemId = undefined,
+		occupancy = 0
+	}: {
+		onsuccess?: (result?: { keepOpen: boolean; summary?: string }) => void;
+		preselectedItemId?: string;
+		occupancy?: number;
+	} = $props();
 
-	// Fetch supply catalog items and stock balance
-	const itemsQuery = useSupplyItems();
-	const itemMastersQuery = useItemMasters(() => getShelterCode());
+	// Session expired (`needsReauth`): every save button is off until the user signs in again.
+	const offline = $derived(authStore.needsReauth);
+
+	const stockItems = useStockFormItems(() => getShelterCode());
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
 	const storagePoints = useStoragePoints(() => getShelterCode());
 	const balanceQuery = useStockBalance();
 	const ledgerQuery = useLedger();
 	const distributeMutation = useDistributeStock();
+	const supplyItemsQuery = useSupplyItems();
+	const overridesQuery = useThresholdOverrides();
 
-	// Local state for searchable items combobox
-	let searchQuery = $state('');
-	let isDropdownOpen = $state(false);
-	let selectedItem = $state<{ _id: string; name: string; unit: string } | null>(null);
-	let container = $state<HTMLDivElement | null>(null);
+	let selectedItemId = $state('');
+	let selectedItem = $state<StockFormItem | null>(null);
+	let noteInputEl = $state<HTMLInputElement | null>(null);
+	let keepOpenOnSuccess = $state(true);
+
+	const items = $derived(stockItems.items);
+	const balanceByItemId = $derived(balanceQuery.data ?? new Map<string, string>());
 
 	const currentStock = $derived.by(() => {
 		if (!selectedItem || !balanceQuery.data) return '0';
@@ -70,44 +103,79 @@
 	const activeLot = $derived(itemLots.find((l) => l.lot_ref === $formData.lot_ref));
 	const maxLotQty = $derived(activeLot ? activeLot.qty : currentStock);
 
-	const isQtyOverStock = $derived.by(() => {
-		if (!$formData.qty) return false;
+	const maxQtyInUnit = $derived.by(() => {
+		if (!selectedItem || !$formData.unit) return '0';
 		try {
-			return qtyGt($formData.qty, maxLotQty);
+			return qtyFromBaseUnit(maxLotQty, $formData.unit, selectedItem);
+		} catch {
+			return maxLotQty;
+		}
+	});
+
+	const isQtyOverStock = $derived.by(() => {
+		if (!$formData.qty || !selectedItem) return false;
+		try {
+			const inBase = qtyToBaseUnit($formData.qty, $formData.unit, selectedItem);
+			return qtyGt(inBase, maxLotQty);
 		} catch {
 			return true;
 		}
 	});
 
-	const items = $derived.by(() => {
-		const supplyItems = itemsQuery.data ?? [];
-		const itemMasters = itemMastersQuery.data ?? [];
+	const unitOptions = $derived(selectedItem ? itemSelectableUoms(selectedItem) : []);
 
-		const mappedItemMasters = itemMasters
-			.filter((im) => !im.deactivated)
-			.map((im) => ({
-				_id: im._id,
-				name: im.name,
-				category: im.category || 'other',
-				unit: itemMasterUnit(im),
-				reorder_level: null,
-				perishable: false
-			}));
-
-		return [...supplyItems, ...mappedItemMasters];
+	const reorderPolicy = $derived.by(() => {
+		const current = selectedItem;
+		if (!current) return null;
+		const supply = (supplyItemsQuery.data ?? []).find((s) => s._id === current._id);
+		const override = (overridesQuery.data ?? []).find((o) => o.item_id === current._id);
+		if (!supply && !override) return null;
+		return {
+			item: supply
+				? {
+						reorder_level: supply.reorder_level,
+						consumption_rate: supply.consumption_rate,
+						target_reserve_days: supply.target_reserve_days,
+						timeframe: supply.timeframe
+					}
+				: {},
+			override: override
+				? {
+						reorder_level: override.reorder_level,
+						consumption_rate: override.consumption_rate,
+						target_reserve_days: override.target_reserve_days
+					}
+				: null
+		};
 	});
 
-	// Filter items based on search query
-	const filteredItems = $derived.by(() => {
-		if (!searchQuery) return items;
-		const query = searchQuery.toLowerCase().trim();
-		return items.filter((i) => i.name.toLowerCase().includes(query));
+	const afterDistributeWarning = $derived.by(() => {
+		if (!selectedItem || !reorderPolicy || !$formData.qty) return null;
+		try {
+			const inBase = qtyToBaseUnit($formData.qty, $formData.unit, selectedItem);
+			const remaining = subQty(currentStock, inBase);
+			const threshold = resolveReorderThreshold(
+				occupancy,
+				reorderPolicy.item,
+				reorderPolicy.override
+			);
+			if (!threshold || !qtyLte(remaining, threshold)) return null;
+			const daily = dailyConsumption(occupancy, reorderPolicy.item, reorderPolicy.override);
+			const cover = daysOfCover(remaining, daily);
+			return {
+				remaining,
+				threshold,
+				coverDays: cover
+			};
+		} catch {
+			return null;
+		}
 	});
 
 	const form = superForm(
 		defaults(
 			{
-				ref_id: `distribution_batch:direct-${ulid()}`,
+				ref_id: `requisition_ticket:direct-${ulid()}`,
 				lot_ref: ''
 			},
 			zod4(distributeInputSchema)
@@ -127,10 +195,18 @@
 					return;
 				}
 
-				// Validate sufficient stock in selected lot
-				if (qtyGt(validated.data.qty, maxLotQty)) {
+				// Validate sufficient stock in selected lot (ledger qty is always base_unit)
+				const packaging = selectedItem ?? { base_unit: validated.data.unit, conversions: [] };
+				let qtyInBase: string;
+				try {
+					qtyInBase = qtyToBaseUnit(validated.data.qty, validated.data.unit, packaging);
+				} catch {
+					toast.error('หน่วยที่เลือกไม่ถูกต้องสำหรับสินค้านี้');
+					return;
+				}
+				if (qtyGt(qtyInBase, maxLotQty)) {
 					toast.error(
-						`ยอดคงเหลือในล็อตนี้ไม่เพียงพอ (มี ${maxLotQty} ต้องการแจกจ่าย ${validated.data.qty})`
+						`ยอดคงเหลือในล็อตนี้ไม่เพียงพอ (มี ${maxLotQty} ${formatUnit(itemMasterUnit(packaging), units, langState.current)} ต้องการแจกจ่าย ${validated.data.qty} ${formatUnit(validated.data.unit, units, langState.current)})`
 					);
 					return;
 				}
@@ -141,6 +217,31 @@
 	);
 
 	const { form: formData, submitting, reset } = form;
+
+	const selectedUnitLabel = $derived(
+		formatUnit($formData.unit, units, langState.current) || $formData.unit || 'เลือกหน่วย'
+	);
+	const baseUnitLabel = $derived(
+		selectedItem
+			? formatUnit(itemMasterUnit(selectedItem), units, langState.current) ||
+					itemMasterUnit(selectedItem)
+			: ''
+	);
+
+	const submitQtyLabel = $derived.by(() => {
+		const qty = $formData.qty;
+		if (!qty || Number(qty) <= 0) return selectedUnitLabel;
+		return `${qty} ${selectedUnitLabel}`;
+	});
+
+	function chipClass(active: boolean) {
+		return [
+			'inline-flex min-h-11 shrink-0 items-center rounded-full px-3.5 text-sm font-semibold transition-colors',
+			active
+				? 'border-2 border-[#0284C7] bg-sky-50 text-sky-900'
+				: 'border border-slate-300 bg-white text-slate-700 hover:border-slate-400'
+		].join(' ');
+	}
 
 	// Auto-select the first lot (FEFO) when item lots load or change
 	$effect(() => {
@@ -153,40 +254,80 @@
 		}
 	});
 
-	function formatExpiry(expiryStr: string | undefined): string {
-		if (!expiryStr) return '-';
-		try {
-			return new Date(expiryStr).toLocaleDateString('th-TH', {
-				day: '2-digit',
-				month: 'short',
-				year: '2-digit'
-			});
-		} catch {
-			return expiryStr;
-		}
+	function lotLabel(lot: (typeof itemLots)[number]): string {
+		const place = lotStorageLabel(lot.lot, storagePoints.points);
+		const no = lot.lot?.lot_no ? ` · ${lot.lot.lot_no}` : '';
+		const clocks = formatLotClockLine(lot);
+		const clockPart = clocks ? ` · ${clocks}` : '';
+		return `${place}${no} · คงเหลือ ${lot.qty} ${baseUnitLabel}${clockPart}`;
 	}
 
-	// Update locked unit when item is selected
-	function selectItem(item: { _id: string; name: string; unit: string }) {
+	function selectItem(item: StockFormItem) {
 		selectedItem = item;
+		selectedItemId = item._id;
 		$formData.item_id = item._id;
-		$formData.unit = item.unit;
-		$formData.ref_id = `distribution_batch:direct-${ulid()}`;
-		searchQuery = item.name;
-		isDropdownOpen = false;
+		$formData.unit = defaultIssueUom(item);
+		$formData.ref_id = `requisition_ticket:direct-${ulid()}`;
 	}
 
 	function clearSelection() {
 		selectedItem = null;
+		selectedItemId = '';
 		$formData.item_id = '';
 		$formData.unit = '';
 		$formData.lot_ref = '';
-		$formData.ref_id = `distribution_batch:direct-${ulid()}`;
-		searchQuery = '';
-		isDropdownOpen = false;
+		$formData.ref_id = `requisition_ticket:direct-${ulid()}`;
 	}
 
-	// Submit handler
+	function resetForNextLine() {
+		$formData.qty = '' as unknown as typeof $formData.qty;
+		$formData.note = '';
+		$formData.lot_ref = '';
+		$formData.ref_id = `requisition_ticket:direct-${ulid()}`;
+		if (!preselectedItemId) {
+			clearSelection();
+			reset({
+				data: {
+					item_id: '',
+					unit: '',
+					qty: '',
+					note: '',
+					ref_id: `requisition_ticket:direct-${ulid()}`,
+					lot_ref: ''
+				}
+			});
+		}
+	}
+
+	function setQty(value: string) {
+		try {
+			const capped = qtyGt(value, maxQtyInUnit) ? maxQtyInUnit : value;
+			$formData.qty = persistQty(capped) as unknown as typeof $formData.qty;
+		} catch {
+			$formData.qty = value as unknown as typeof $formData.qty;
+		}
+	}
+
+	function stepQty(delta: number) {
+		const current =
+			$formData.qty && !Number.isNaN(Number($formData.qty)) ? String($formData.qty) : '0';
+		const next = delta >= 0 ? addQty(current, delta) : subQty(current, Math.abs(delta));
+		if (qtyLte(next, 0)) {
+			$formData.qty = '' as unknown as typeof $formData.qty;
+			return;
+		}
+		setQty(next);
+	}
+
+	function setDestination(label: string | null) {
+		if (label === null) {
+			$formData.note = '';
+			queueMicrotask(() => noteInputEl?.focus());
+			return;
+		}
+		$formData.note = label;
+	}
+
 	async function handleCommit(data: DistributeInput) {
 		const ctx = {
 			shelterCode: getShelterCode(),
@@ -194,25 +335,25 @@
 		};
 
 		if (!data.ref_id) {
-			data.ref_id = `distribution_batch:direct-${ulid()}`;
+			data.ref_id = `requisition_ticket:direct-${ulid()}`;
 		}
 
-		toast.promise(distributeMutation.mutateAsync({ input: data, ctx }), {
-			loading: 'กำลังบันทึกข้อมูล...',
+		const packaging = selectedItem ?? { base_unit: data.unit, conversions: [] };
+		const displayUnit = data.unit;
+		const displayQty = data.qty;
+		const ledger = toLedgerQtyUnit(data.qty, data.unit, packaging);
+		const payload: DistributeInput = { ...data, qty: ledger.qty, unit: ledger.unit };
+		const shouldKeepOpen = keepOpenOnSuccess;
+
+		toast.promise(distributeMutation.mutateAsync({ input: payload, ctx }), {
+			loading: 'กำลังบันทึก...',
 			success: () => {
-				clearSelection();
-				reset({
-					data: {
-						item_id: '',
-						unit: '',
-						qty: '',
-						note: '',
-						ref_id: `distribution_batch:direct-${ulid()}`,
-						lot_ref: ''
-					}
-				});
-				if (onsuccess) onsuccess();
-				return 'บันทึกการแจกจ่ายสำเร็จ!';
+				const name = selectedItem?.name ?? data.item_id;
+				const unitLabel = formatUnit(displayUnit, units, langState.current) || displayUnit;
+				const summary = `${name} −${displayQty} ${unitLabel}`;
+				resetForNextLine();
+				onsuccess?.({ keepOpen: shouldKeepOpen, summary });
+				return 'เบิกแล้ว';
 			},
 			error: (err: unknown) =>
 				err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการบันทึกข้อมูล'
@@ -233,166 +374,110 @@
 		}
 	});
 
-	// Click outside container closes dropdown
-	function handleClickOutside(event: MouseEvent) {
-		if (container && !container.contains(event.target as Node)) {
-			isDropdownOpen = false;
-		}
-	}
+	const canSubmit = $derived(
+		!offline &&
+			!$submitting &&
+			!!$formData.qty &&
+			qtyGt(currentStock, 0) &&
+			itemLots.length > 0 &&
+			!isQtyOverStock
+	);
 </script>
-
-<svelte:document onclick={handleClickOutside} />
 
 <form
 	method="POST"
 	use:form.enhance
-	class="flex flex-col space-y-4 rounded-2xl border border-border/80 bg-card p-5 shadow-md"
+	class="flex flex-col space-y-4 rounded-2xl border border-border/80 bg-card p-4 shadow-md sm:p-5"
 >
-	<div class="mb-2 flex items-center gap-2 border-b border-border/60 pb-3">
-		<PackageMinus class="h-4.5 w-4.5 text-primary" />
-		<h3 class="text-sm font-bold text-foreground">แจกจ่ายพัสดุออก (Outbound Stock Distribute)</h3>
+	<div class="flex flex-col gap-1 border-b border-border/60 pb-3">
+		<div class="flex items-center gap-2">
+			<PackageMinus class="h-4.5 w-4.5 text-primary" aria-hidden="true" />
+			<h3 class="text-sm font-bold text-foreground">เบิกจ่าย</h3>
+		</div>
+		<p class="text-xs text-muted-foreground">ระบบเลือกล็อตที่หมดอายุก่อนให้อัตโนมัติ</p>
 	</div>
 
 	<Field.FieldGroup class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-		<!-- Searchable Item Selector -->
 		<Form.Field {form} name="item_id" class="relative col-span-1 sm:col-span-2">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label
-						>ค้นหาและเลือกรายการสิ่งของ <span class="font-bold text-destructive">*</span
-						></Form.Label
-					>
-					<div bind:this={container} class="relative w-full">
-						<Input
-							{...props}
-							placeholder="พิมพ์เพื่อค้นหา เช่น ข้าวสาร, น้ำดื่ม..."
-							bind:value={searchQuery}
-							onfocus={() => !preselectedItemId && (isDropdownOpen = true)}
-							oninput={() => !preselectedItemId && (isDropdownOpen = true)}
-							autocomplete="off"
-							disabled={!!preselectedItemId}
-							class={preselectedItemId
-								? 'cursor-not-allowed bg-muted font-bold text-muted-foreground'
-								: ''}
-						/>
-						{#if selectedItem && !preselectedItemId}
-							<Button
-								type="button"
-								variant="ghost"
-								class="absolute top-1/2 right-1 min-h-11 min-w-11 -translate-y-1/2 px-3 text-sm font-semibold text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none"
-								onclick={clearSelection}
-							>
-								ล้างค่า
-							</Button>
-						{/if}
-
-						{#if isDropdownOpen}
-							<div
-								id="item-listbox"
-								role="listbox"
-								class="absolute left-0 z-20 mt-1 max-h-60 w-full animate-in overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl duration-150 fade-in slide-in-from-top-1"
-							>
-								{#if itemsQuery.isLoading || itemMastersQuery.isLoading || balanceQuery.isLoading}
-									<div class="p-3 text-xs font-medium text-muted-foreground">
-										กำลังโหลดข้อมูล...
-									</div>
-								{:else if filteredItems.length === 0}
-									<div class="p-3 text-xs font-medium text-muted-foreground">
-										ไม่พบรายการสิ่งของ
-									</div>
-								{:else}
-									{#each filteredItems as item (item._id)}
-										{@const bal = balanceQuery.data?.get(item._id) ?? '0'}
-										<button
-											type="button"
-											class="flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors hover:bg-muted"
-											onclick={() => selectItem(item)}
-											disabled={qtyLte(bal, 0)}
-										>
-											<div class="flex items-center gap-2">
-												<span
-													class="font-semibold text-foreground {qtyLte(bal, 0) ? 'opacity-50' : ''}"
-													>{item.name}</span
-												>
-											</div>
-											<span
-												class="rounded-md {qtyGt(bal, 0)
-													? 'border-primary/20 bg-primary/10 text-primary'
-													: 'border-destructive/20 bg-destructive/10 text-destructive'} border px-2 py-0.5 text-xs font-bold"
-											>
-												คงเหลือ: {bal}
-												{item.unit}
-											</span>
-										</button>
-									{/each}
-								{/if}
-							</div>
-						{/if}
-					</div>
+					<Form.Label>สินค้า <span class="font-bold text-destructive">*</span></Form.Label>
+					<ItemCombobox
+						id={props.id}
+						name={props.name}
+						aria-invalid={props['aria-invalid']}
+						aria-describedby={props['aria-describedby']}
+						{items}
+						bind:value={selectedItemId}
+						disabled={!!preselectedItemId}
+						isLoading={stockItems.isLoading || balanceQuery.isLoading}
+						{balanceByItemId}
+						disableWhenEmpty={true}
+						formatBalanceUnit={(item) =>
+							formatUnit(item.unit, units, langState.current) || item.unit}
+						onSelect={(item) => {
+							if (item) selectItem(item);
+							else clearSelection();
+						}}
+					/>
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />
 		</Form.Field>
 
-		<!-- Current Stock Info -->
 		{#if selectedItem}
 			<div
 				class="col-span-1 flex items-center justify-between rounded-xl border border-border/50 bg-muted/50 p-3 sm:col-span-2"
 			>
-				<span class="text-sm font-medium text-muted-foreground">ยอดคงเหลือในคลังขณะนี้:</span>
+				<span class="text-sm text-muted-foreground">คงเหลือ</span>
 				<span
 					class="text-sm font-bold {!qtyIsZero(currentStock) && qtyGte(currentStock, 0)
 						? 'text-primary'
 						: 'text-destructive'}"
 				>
 					{currentStock}
-					{selectedItem.unit}
+					{baseUnitLabel}
 				</span>
 			</div>
 
-			<!-- Lot Selector -->
 			<Form.Field {form} name="lot_ref" class="col-span-1 sm:col-span-2">
 				<Form.Control>
 					{#snippet children({ props })}
-						<Form.Label
-							>สถานที่จัดเก็บ / ล็อตที่ต้องการเบิกจ่าย <span class="font-bold text-destructive"
-								>*</span
-							></Form.Label
-						>
+						<Form.Label>ล็อต <span class="font-bold text-destructive">*</span></Form.Label>
 						{#if ledgerQuery.isLoading}
-							<div class="text-xs text-muted-foreground">กำลังโหลดข้อมูลล็อต...</div>
+							<div class="text-xs text-muted-foreground">กำลังโหลดล็อต…</div>
 						{:else if lotProjectionError}
 							<div
 								class="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-xs font-semibold text-destructive"
 							>
-								<p>ข้อมูลประวัติคลังไม่สอดคล้องกัน จึงคำนวณยอดคงเหลือของล็อตไม่ได้</p>
-								<p class="mt-1 font-normal">กรุณาแจ้งผู้ดูแลระบบ: {lotProjectionError}</p>
+								คำนวณยอดล็อตไม่ได้ — {lotProjectionError}
 							</div>
 						{:else if itemLots.length === 0}
 							<div
 								class="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-xs font-semibold text-destructive"
 							>
-								ไม่พบล็อตสินค้าที่มีสต็อกคงเหลือสำหรับเบิกจ่าย
+								ไม่พบล็อตที่มีคงเหลือ
 							</div>
 						{:else}
 							<Select.Root type="single" bind:value={$formData.lot_ref}>
 								<Select.Trigger
 									{...props}
-									class="h-11 w-full min-w-0 rounded-md border border-input bg-white px-3 text-sm font-medium shadow-xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none sm:h-10"
+									class="min-h-11 w-full rounded-md border border-input bg-white px-3 text-left text-sm font-medium"
 								>
-									{activeLot
-										? `📍 ${lotStorageLabel(activeLot.lot, storagePoints.points)} ${activeLot.lot?.expiry ? `(หมดอายุ: ${formatExpiry(activeLot.lot.expiry)})` : '(ไม่ระบุวันหมดอายุ)'} ${activeLot.lot?.lot_no ? `[${activeLot.lot.lot_no}]` : ''} - คงเหลือ ${activeLot.qty} ${selectedItem?.unit}`
-										: 'เลือกสถานที่ / ล็อตที่ต้องการเบิกจ่าย'}
+									{activeLot ? lotLabel(activeLot) : 'เลือกล็อต'}
 								</Select.Trigger>
 								<Select.Content>
 									{#each itemLots as lot (lot.lot_ref)}
-										<Select.Item
-											value={lot.lot_ref}
-											label={`📍 ${lotStorageLabel(lot.lot, storagePoints.points)} ${lot.lot?.expiry ? `(หมดอายุ: ${formatExpiry(lot.lot?.expiry)})` : '(ไม่ระบุวันหมดอายุ)'} ${lot.lot?.lot_no ? `[${lot.lot?.lot_no}]` : ''} - คงเหลือ ${lot.qty} ${selectedItem?.unit}`}
-										/>
+										<Select.Item value={lot.lot_ref} label={lotLabel(lot)} />
 									{/each}
 								</Select.Content>
 							</Select.Root>
+							{#if activeLot}
+								{@const clocks = formatLotClockLine(activeLot)}
+								{#if clocks}
+									<p class="mt-1.5 text-xs text-muted-foreground">{clocks}</p>
+								{/if}
+							{/if}
 						{/if}
 					{/snippet}
 				</Form.Control>
@@ -400,70 +485,189 @@
 			</Form.Field>
 		{/if}
 
-		<!-- Quantity -->
-		<Form.Field {form} name="qty" class="col-span-1">
-			<Form.Control>
-				{#snippet children({ props })}
-					<Form.Label>จำนวนที่แจกจ่าย <span class="font-bold text-destructive">*</span></Form.Label>
-					<Input
-						{...props}
-						type="number"
-						placeholder="ระบุจำนวน"
-						min="0.01"
-						max={maxLotQty || undefined}
-						step="any"
-						bind:value={$formData.qty}
-						class="font-mono font-bold"
-					/>
-				{/snippet}
-			</Form.Control>
-			<Form.FieldErrors />
-		</Form.Field>
+		<div class="col-span-1 space-y-2 sm:col-span-2">
+			<Form.Label>จำนวน <span class="font-bold text-destructive">*</span></Form.Label>
+			<div class="flex flex-wrap items-stretch gap-2">
+				<div
+					class="flex min-w-0 flex-1 items-stretch overflow-hidden rounded-lg border border-input"
+				>
+					<Button
+						type="button"
+						variant="ghost"
+						class="h-auto min-h-11 rounded-none px-3"
+						onclick={() => stepQty(-1)}
+						disabled={!selectedItem}
+						aria-label="ลดจำนวน"
+					>
+						<Minus class="h-4 w-4" />
+					</Button>
+					<Form.Field {form} name="qty" class="min-w-0 flex-1 space-y-0">
+						<Form.Control>
+							{#snippet children({ props })}
+								<Input
+									{...props}
+									type="number"
+									placeholder="0"
+									min="0.01"
+									step="any"
+									bind:value={$formData.qty}
+									class="min-h-11 rounded-none border-0 border-x border-input font-mono font-bold shadow-none focus-visible:ring-0"
+								/>
+							{/snippet}
+						</Form.Control>
+						<Form.FieldErrors />
+					</Form.Field>
+					<Button
+						type="button"
+						variant="ghost"
+						class="h-auto min-h-11 rounded-none px-3"
+						onclick={() => stepQty(1)}
+						disabled={!selectedItem}
+						aria-label="เพิ่มจำนวน"
+					>
+						<Plus class="h-4 w-4" />
+					</Button>
+				</div>
 
-		<!-- Unit (Locked) -->
-		<Form.Field {form} name="unit" class="col-span-1">
-			<Form.Control>
-				{#snippet children({ props })}
-					<Form.Label>หน่วยนับ</Form.Label>
-					<Input
-						{...props}
-						placeholder="ระบบจะล็อกอัตโนมัติ"
-						bind:value={$formData.unit}
-						readonly
-						disabled
-					/>
-				{/snippet}
-			</Form.Control>
-			<Form.FieldErrors />
-		</Form.Field>
+				<Form.Field {form} name="unit" class="w-28 shrink-0 space-y-0 sm:w-32">
+					<Form.Control>
+						{#snippet children({ props })}
+							{#if !selectedItem}
+								<Input {...props} placeholder="หน่วย" value="" readonly disabled class="min-h-11" />
+							{:else if unitOptions.length <= 1}
+								<Input {...props} value={selectedUnitLabel} readonly disabled class="min-h-11" />
+							{:else}
+								<Select.Root
+									type="single"
+									value={$formData.unit}
+									onValueChange={(val) => {
+										if (val) $formData.unit = val;
+									}}
+								>
+									<Select.Trigger
+										{...props}
+										class="min-h-11 w-full rounded-md border border-input bg-white px-3 text-sm font-medium"
+									>
+										{selectedUnitLabel}
+									</Select.Trigger>
+									<Select.Content>
+										{#each unitOptions as option (option.code)}
+											<Select.Item
+												value={option.code}
+												label={formatUnit(option.code, units, langState.current) || option.code}
+											/>
+										{/each}
+									</Select.Content>
+								</Select.Root>
+							{/if}
+						{/snippet}
+					</Form.Control>
+				</Form.Field>
+			</div>
+			<div class="flex flex-wrap gap-2 pt-1">
+				{#each QTY_CHIPS as chip (chip)}
+					<button
+						type="button"
+						class={chipClass(String($formData.qty) === String(chip))}
+						disabled={!selectedItem}
+						onclick={() => setQty(String(chip))}
+					>
+						{chip}
+					</button>
+				{/each}
+				<button
+					type="button"
+					class={chipClass(
+						String($formData.qty) === String(maxQtyInUnit) && qtyGt(maxQtyInUnit, 0)
+					)}
+					disabled={!selectedItem || qtyLte(maxQtyInUnit, 0)}
+					onclick={() => setQty(maxQtyInUnit)}
+				>
+					ทั้งหมด ({maxQtyInUnit})
+				</button>
+			</div>
+		</div>
 
-		<!-- Destination / Note -->
-		<Form.Field {form} name="note" class="col-span-1 sm:col-span-2">
-			<Form.Control>
-				{#snippet children({ props })}
-					<Form.Label>สถานที่ปลายทาง หรือ ผู้รับ (ระบุรายละเอียด)</Form.Label>
-					<Input
-						{...props}
-						placeholder="เช่น แจกจ่ายโซนเต็นท์ A, หรือระบุชื่อผู้รับ..."
-						bind:value={$formData.note}
-					/>
-				{/snippet}
-			</Form.Control>
-			<Form.FieldErrors />
-		</Form.Field>
+		<div class="col-span-1 space-y-2 sm:col-span-2">
+			<Form.Label>เบิกให้ใคร / ไปที่ไหน</Form.Label>
+			<div class="flex flex-wrap gap-2">
+				{#each DEST_PRESETS as preset (preset)}
+					<button
+						type="button"
+						class={chipClass($formData.note === preset)}
+						onclick={() => setDestination(preset)}
+					>
+						{preset}
+					</button>
+				{/each}
+				<button
+					type="button"
+					class={chipClass(
+						!!$formData.note && !(DEST_PRESETS as readonly string[]).includes($formData.note)
+					)}
+					onclick={() => setDestination(null)}
+				>
+					อื่นๆ...
+				</button>
+			</div>
+			<Form.Field {form} name="note" class="pt-1">
+				<Form.Control>
+					{#snippet children({ props })}
+						<Input
+							{...props}
+							bind:ref={noteInputEl}
+							placeholder="ปลายทาง / ผู้รับ (ไม่บังคับ)"
+							bind:value={$formData.note}
+							class="min-h-11"
+						/>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
+		</div>
 
-		<!-- Submit Button -->
-		<div class="col-span-1 pt-3 sm:col-span-2">
+		{#if afterDistributeWarning}
+			<div
+				class="col-span-1 flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950 sm:col-span-2"
+				role="status"
+			>
+				<AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
+				<div>
+					<p class="font-bold">ยอดหลังเบิกจะต่ำกว่าเกณฑ์</p>
+					<p class="text-xs font-medium text-amber-900/80">
+						เหลือ {afterDistributeWarning.remaining}
+						{baseUnitLabel} (เกณฑ์ {afterDistributeWarning.threshold}
+						{baseUnitLabel})
+						{#if afterDistributeWarning.coverDays !== null}
+							· ครอบคลุมประมาณ {afterDistributeWarning.coverDays} วัน
+						{/if}
+					</p>
+				</div>
+			</div>
+		{/if}
+
+		<div class="col-span-1 flex flex-col gap-2 pt-1 sm:col-span-2 sm:flex-row">
+			<Button
+				type="submit"
+				variant="outline"
+				size="lg"
+				disabled={!canSubmit}
+				class="min-h-11 flex-1 font-bold"
+				onclick={() => {
+					keepOpenOnSuccess = true;
+				}}
+			>
+				{$submitting ? 'กำลังบันทึก…' : 'บันทึกแล้วเบิกรายการถัดไป'}
+			</Button>
 			<Form.Button
 				size="lg"
-				disabled={$submitting ||
-					!$formData.qty ||
-					!qtyGt(currentStock, 0) ||
-					itemLots.length === 0 ||
-					isQtyOverStock}
-				class="w-full font-bold"
+				disabled={!canSubmit}
+				class="min-h-11 flex-1 font-bold"
+				onclick={() => {
+					keepOpenOnSuccess = false;
+				}}
 			>
-				{$submitting ? 'กำลังบันทึกรายการ...' : 'บันทึกการแจกจ่ายพัสดุ'}
+				{$submitting ? 'กำลังบันทึก…' : `เบิก ${submitQtyLabel}`}
 			</Form.Button>
 		</div>
 	</Field.FieldGroup>

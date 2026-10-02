@@ -20,6 +20,7 @@
 	const vehicles = $derived(household?.vehicles ?? []);
 	const pets = $derived(household?.pets ?? []);
 	const valuables = $derived(household?.assets?.description?.trim() || null);
+	const hasAny = $derived(vehicles.length > 0 || pets.length > 0 || Boolean(valuables));
 
 	const vehicleLabel = (type: 'car' | 'motorcycle' | 'other') =>
 		type === 'car' ? 'รถยนต์' : type === 'motorcycle' ? 'จักรยานยนต์' : 'อื่นๆ';
@@ -61,22 +62,22 @@
 		<p class="py-4 text-center text-sm text-slate-500 italic">
 			ยังไม่มีข้อมูลครัวเรือนสำหรับแสดงทรัพย์สิน
 		</p>
+	{:else if !hasAny}
+		<p class="py-4 text-center text-sm text-slate-500 italic">ไม่มีรายการ</p>
 	{:else}
 		<div class="space-y-5">
 			<!-- Vehicles -->
-			<div class="space-y-2">
-				<div class="flex items-center gap-2">
-					<Car class="size-4 text-slate-500" />
-					<span class="text-sm font-bold text-slate-900">ยานพาหนะ</span>
-					{#if vehicles.length > 0}
+			{#if vehicles.length > 0}
+				<div class="space-y-2">
+					<div class="flex items-center gap-2">
+						<Car class="size-4 text-slate-500" />
+						<span class="text-sm font-bold text-slate-900">ยานพาหนะ</span>
 						<span
 							class="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-semibold text-slate-700 tabular-nums"
 						>
 							{vehicles.length}
 						</span>
-					{/if}
-				</div>
-				{#if vehicles.length > 0}
+					</div>
 					<div class="space-y-2">
 						{#each vehicles as vehicle, i (`${vehicle.type}-${vehicle.license_plate ?? ''}-${i}`)}
 							<div
@@ -93,23 +94,17 @@
 							</div>
 						{/each}
 					</div>
-				{:else}
-					<div
-						class="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-sm text-slate-500 italic"
-					>
-						ไม่มียานพาหนะที่นำมาด้วย
-					</div>
-				{/if}
-			</div>
+				</div>
+			{/if}
 
 			<!-- Pets -->
-			<div class="space-y-2">
-				<div class="flex items-center gap-2">
-					<PawPrint class="size-4 text-slate-500" />
-					<span class="text-sm font-bold text-slate-900">สัตว์เลี้ยง</span>
-				</div>
+			{#if pets.length > 0}
+				<div class="space-y-2">
+					<div class="flex items-center gap-2">
+						<PawPrint class="size-4 text-slate-500" />
+						<span class="text-sm font-bold text-slate-900">สัตว์เลี้ยง</span>
+					</div>
 
-				{#if pets.length > 0}
 					<div class="space-y-2">
 						{#each pets as pet, i (`${pet.species}-${i}`)}
 							{@const previewSrc = petPreviewSrc(pet.image_url)}
@@ -153,35 +148,23 @@
 							</div>
 						{/each}
 					</div>
-				{:else}
-					<div
-						class="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-sm text-slate-500 italic"
-					>
-						ไม่มีสัตว์เลี้ยงที่นำมาด้วย
-					</div>
-				{/if}
-			</div>
+				</div>
+			{/if}
 
 			<!-- Valuables -->
-			<div class="space-y-2">
-				<div class="flex items-center gap-2">
-					<Package class="size-4 text-slate-500" />
-					<span class="text-sm font-bold text-slate-900">สัมภาระ / สิ่งของมีค่า</span>
-				</div>
-				{#if valuables}
+			{#if valuables}
+				<div class="space-y-2">
+					<div class="flex items-center gap-2">
+						<Package class="size-4 text-slate-500" />
+						<span class="text-sm font-bold text-slate-900">สัมภาระ / สิ่งของมีค่า</span>
+					</div>
 					<div
 						class="rounded-xl border border-slate-200/80 bg-slate-50 p-3 text-sm font-medium break-words text-slate-800"
 					>
 						{valuables}
 					</div>
-				{:else}
-					<div
-						class="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-sm text-slate-500 italic"
-					>
-						ไม่มีสัมภาระหรือสิ่งของมีค่าที่บันทึกไว้
-					</div>
-				{/if}
-			</div>
+				</div>
+			{/if}
 		</div>
 	{/if}
 </section>

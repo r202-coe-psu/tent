@@ -1,20 +1,8 @@
 <script lang="ts">
-	import { MealSessionList, startKitchenLiveQuery } from '$lib/features/kitchen';
-	import { startOperationsLiveQuery } from '$lib/features/operations';
-	import { useQueryClient } from '@tanstack/svelte-query';
+	import { MealSessionList } from '$lib/features/kitchen';
 
-	const queryClient = useQueryClient();
-
-	$effect(() => {
-		const kitchen = startKitchenLiveQuery(queryClient);
-		// Requisitions deduct stock via stock_ledger — keep on-hand balances live
-		// so the requisition dialog and history reflect the current stock.
-		const operations = startOperationsLiveQuery(queryClient);
-		return () => {
-			kitchen.stop();
-			operations.stop();
-		};
-	});
+	// Live query subscribers (kitchen + operations) are already registered globally
+	// via STAFF_LIVE_QUERY_STARTERS in the (protected) layout — no per-page subscription needed.
 </script>
 
 <svelte:head>

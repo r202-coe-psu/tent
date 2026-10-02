@@ -38,6 +38,7 @@ export {
 	SYSTEM_ITEM_CATEGORIES,
 	systemCategoryId,
 	resolveCategoryId,
+	resolveCategoryLabel,
 	itemBelongsToCategory,
 	catalogOrigin,
 	canShelterDeleteCatalogDoc,
@@ -55,6 +56,15 @@ export {
 	isItemMaster,
 	itemMasterUnit,
 	DEFAULT_ITEM_UNIT,
+	itemSelectableUoms,
+	packagingMultiplier,
+	qtyToBaseUnit,
+	qtyFromBaseUnit,
+	defaultInventoryUom,
+	defaultIssueUom,
+	toLedgerQtyUnit,
+	type PackagingUomOption,
+	type PackagingSource,
 	mergeCatalogGenerations,
 	type CatalogEntry,
 	// Recipe
@@ -69,6 +79,7 @@ export {
 	dimensionSchema,
 	unitCodeSchema,
 	isCanonicalUnitCode,
+	canonicalizeUnitCode,
 	isLegacyUnitLabel,
 	assertKnownUnitCodes,
 	unitOfMeasureInputSchema,
@@ -125,3 +136,23 @@ export { default as ProductsPanel } from './ui/products-panel.svelte';
 export { default as ItemCategoryForm } from './ui/item-category-form.svelte';
 export { default as ItemMasterForm } from './ui/item-master-form.svelte';
 export { default as RecipeForm } from './ui/recipe-form.svelte';
+export { default as MasterBadge } from './ui/master/master-badge.svelte';
+export { default as MasterFilterBar } from './ui/master/master-filter-bar.svelte';
+export { default as MasterPager } from './ui/master/master-pager.svelte';
+export { useMasterPaging } from './ui/master/use-master-paging.svelte';
+export {
+	MASTER_PAGE_SIZE,
+	ORIGIN_LABELS,
+	ORIGIN_TONES,
+	filterUnits,
+	hiddenDeactivatedUnits,
+	filterRecipes,
+	hiddenDeactivatedRecipes,
+	ingredientSummary,
+	pageSlice,
+	type CatalogOriginKey,
+	type MasterBadgeTone,
+	type OriginFilter,
+	type UnitFilter,
+	type RecipeFilter
+} from './ui/master/master-view';
