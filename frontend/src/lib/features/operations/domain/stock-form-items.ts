@@ -1,3 +1,4 @@
+import Fuse from 'fuse.js';
 import { itemMasterUnit, type PackagingSource } from '$lib/features/catalog';
 
 /** Item row for receive / distribute / adjust pickers (and A6 transfer). */
@@ -67,15 +68,58 @@ export function toStockFormItems(
 	return [...mappedSupply, ...mappedMasters];
 }
 
-/** Case-insensitive match on item name or SKU. Empty/whitespace query returns all. */
+/** Strip separators so `WAT-01` and `WAT01` compare equal under fuzzy search. */
+function normalizeSku(sku: string): string {
+	return sku.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+}
+
+type StockFormSearchDoc = StockFormItem & { skuNorm: string };
+
+const FUSE_OPTIONS: Fuse.IFuseOptions<StockFormSearchDoc> = {
+	keys: [
+		{ name: 'name', weight: 0.7 },
+		{ name: 'sku', weight: 0.2 },
+		{ name: 'skuNorm', weight: 0.1 }
+	],
+	threshold: 0.4,
+	ignoreLocation: true,
+	includeScore: true
+};
+
+function toSearchDocs(items: readonly StockFormItem[]): StockFormSearchDoc[] {
+	return items.map((item) => ({
+		...item,
+		skuNorm: item.sku ? normalizeSku(item.sku) : ''
+	}));
+}
+
+/**
+ * Fuzzy filter on item name or SKU (typos + separator-insensitive SKU).
+ * Empty/whitespace query returns all items in original order; otherwise ranked by score.
+ */
 export function filterStockFormItems(
 	items: readonly StockFormItem[],
 	query: string
 ): StockFormItem[] {
-	const needle = query.toLowerCase().trim();
+	const needle = query.trim();
 	if (!needle) return [...items];
-	return items.filter((item) => {
-		if (item.name.toLowerCase().includes(needle)) return true;
-		return (item.sku ?? '').toLowerCase().includes(needle);
+
+	const fuse = new Fuse(toSearchDocs(items), FUSE_OPTIONS);
+	const results = fuse.search(needle);
+
+	// Also search the normalized needle so `WAT01` hits `skuNorm` of `WAT-01`.
+	const normalizedNeedle = normalizeSku(needle);
+	if (normalizedNeedle && normalizedNeedle !== needle.toLowerCase()) {
+		const seen = new Set(results.map((r) => r.item._id));
+		for (const extra of fuse.search(normalizedNeedle)) {
+			if (!seen.has(extra.item._id)) results.push(extra);
+		}
+		results.sort((a, b) => (a.score ?? 1) - (b.score ?? 1));
+	}
+
+	return results.map(({ item }) => {
+		const { skuNorm, ...rest } = item;
+		void skuNorm;
+		return rest;
 	});
 }

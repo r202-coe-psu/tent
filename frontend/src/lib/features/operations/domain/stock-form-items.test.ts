@@ -106,4 +106,28 @@ describe('filterStockFormItems', () => {
 	it('matches by sku case-insensitively', () => {
 		expect(filterStockFormItems(items, 'wat-01').map((i) => i._id)).toEqual(['item_master:water']);
 	});
+
+	it('matches fuzzy typos in the name', () => {
+		expect(filterStockFormItems(items, 'ขวาสาร').map((i) => i._id)).toEqual(['item:rice']);
+		expect(filterStockFormItems(items, 'ข้าวสา').map((i) => i._id)).toContain('item:rice');
+	});
+
+	it('matches sku without separators', () => {
+		expect(filterStockFormItems(items, 'WAT01').map((i) => i._id)).toEqual(['item_master:water']);
+	});
+
+	it('returns no items for an unrelated query', () => {
+		expect(filterStockFormItems(items, 'xyzzy')).toEqual([]);
+	});
+
+	it('ranks closer name matches before weaker ones', () => {
+		const mixed = toStockFormItems(
+			[
+				{ _id: 'item:a', name: 'ถุงมือยาง', unit: 'pair', perishable: false },
+				{ _id: 'item:b', name: 'ถุงมือผ้า', unit: 'pair', perishable: false }
+			],
+			[]
+		);
+		expect(filterStockFormItems(mixed, 'ถุงมือยาง').map((i) => i._id)[0]).toBe('item:a');
+	});
 });
