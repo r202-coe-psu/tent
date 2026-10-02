@@ -113,6 +113,15 @@ class LabelToEscposTests(unittest.TestCase):
         self.assertEqual(row_bits(payload, 72, 339), "1" * 576)
         self.assertEqual(row_bits(payload, 72, 340), "0" * 576)
 
+    def test_label_length_leaves_room_for_what_the_printer_feeds_itself(self):
+        # kiosk3 feeds 10 mm by itself on ESC i: 60 - 10 = 50 mm = 400 rows for the content.
+        data = label_to_escpos(
+            block_png((640, 800), (0, 0, 576, 768)), 576, label_length_mm=60, self_feed_mm=10
+        )
+
+        self.assertEqual(sum(rows for _, rows, _ in parse_bands(data)), 400)
+        self.assertTrue(data.endswith(ESC_CUT))
+
     def test_zero_label_length_keeps_the_trimmed_content_height(self):
         data = label_to_escpos(block_png((640, 480), (0, 0, 576, 432)), 576)
 

@@ -13,6 +13,8 @@ Usage:
   --device /dev/usb/lp3    ใช้ path ตรง ๆ แทนการหาจาก --usb-id (default 28e9:5812)
   --feed-mm 15             ระยะ ESC J ก่อนตัดของเทสต์ 1–3 (default 15 = PRINTER_CUT_FEED_MM)
   --black-mark             เพิ่มเทสต์ 6: GS V B 0 (ผูกกับ black mark — บนม้วนธรรมดาเลื่อน ~17 ซม.)
+  7                        label จริงจาก app/escpos.py (ต้องใช้ .venv/bin/python): กรอบสูง 50 มม.
+                           → แถบที่ตัดต้องยาว LABEL_LENGTH_MM (60) และเส้นบน-ล่างห่างกัน 50 มม.
 
 Reading the results:
   * test 0 (calibrate): distance from the bottom line to the cut edge = head-to-cutter distance
@@ -83,6 +85,31 @@ def tests(feed_mm: float, black_mark: bool) -> dict[int, tuple[str, bytes]]:
     return table
 
 
+def app_label() -> bytes:
+    """Two 1 mm bars 50 mm apart, sent exactly the way the kiosk sends a label."""
+    import io
+
+    from PIL import Image
+
+    from app.escpos import CUT_SELF_FEED_MM, DEFAULT_CUT_FEED_MM, LABEL_LENGTH_MM, label_to_escpos
+
+    image = Image.new("L", (WIDTH_DOTS, 50 * DOTS_PER_MM), 255)
+    image.paste(0, (0, 0, WIDTH_DOTS, DOTS_PER_MM))
+    image.paste(0, (0, image.height - DOTS_PER_MM, WIDTH_DOTS, image.height))
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    print(
+        f"  app: LABEL_LENGTH_MM={LABEL_LENGTH_MM} DEFAULT_CUT_FEED_MM={DEFAULT_CUT_FEED_MM} "
+        f"CUT_SELF_FEED_MM={CUT_SELF_FEED_MM}"
+    )
+    return label_to_escpos(
+        buffer.getvalue(),
+        WIDTH_DOTS,
+        label_length_mm=LABEL_LENGTH_MM,
+        self_feed_mm=CUT_SELF_FEED_MM,
+    )
+
+
 def find_device(usb_id: str) -> Path | None:
     for entry in sorted(USBMISC_SYSFS.glob("lp*")):
         usb_device = Path(os.path.realpath(entry / "device")).parent
@@ -114,6 +141,7 @@ def main() -> int:
     args = parser.parse_args()
 
     table = tests(args.feed_mm, args.black_mark)
+    table[7] = ("app label (60 mm strip, bars 50 mm apart)", b"")
     if args.list:
         for number, (name, _) in table.items():
             print(f"  {number}: {name}")
@@ -136,7 +164,7 @@ def main() -> int:
             input("  Enter = เทสต์ถัดไป (Ctrl+C = หยุด) ")
         print(f"▸ TEST {number}: {name}")
         try:
-            send(device, strip(number, name, tail))
+            send(device, app_label() if number == 7 else strip(number, name, tail))
         except PermissionError:
             print(f"❌ ไม่มีสิทธิ์เขียน {device}: sudo usermod -aG lp $USER แล้ว login ใหม่ (หรือรันด้วย sudo)", file=sys.stderr)
             return 1

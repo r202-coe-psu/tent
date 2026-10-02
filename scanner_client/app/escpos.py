@@ -11,20 +11,22 @@ from PIL import Image, UnidentifiedImageError
 ESC_INIT = b"\x1b@\x1c."
 # GS v 0 m xL xH yL yH d1..dk — raster bit image, normal density (m = 0).
 GS_RASTER = b"\x1dv0\x00"
-# ESC J n — feed n motion units, n <= 255 per command. Sent as 0.125 mm dots, but kiosk3 moves
-# ~0.21 mm (1/120 in) per unit: 15 mm asked fed ~25 mm. It cuts fine with no feed at all.
+# ESC J n — feed n dots (1 dot = 0.125 mm at 203 dpi), n <= 255 per command.
 ESC_FEED = b"\x1bJ"
 # ESC i — full cut right now. The kiosk3 printer's SDK (TxPrnMod TX_PURECUT_FULL) uses this
 # because its GS V cuts are tied to black-mark detection: on plain roll paper GS V B 0 hunted
 # for a mark and fed ~17 cm per label. So the label is fed past the cutter explicitly instead.
 ESC_CUT = b"\x1bi"
 DOTS_PER_MM = 8
-# Feed before the cut; kiosk3 cuts cleanly with none (see ESC_FEED). If the cutter ever clips
-# the bottom line, raise this (each mm here feeds ~1.7 mm on kiosk3) — it counts toward
-# LABEL_LENGTH_MM, so the content shrinks to keep the strip length.
+# Feed before the cut; kiosk3 needs none (it feeds on its own, see CUT_SELF_FEED_MM). If the
+# cutter ever clips the bottom line, raise this — it counts toward LABEL_LENGTH_MM, so the
+# content shrinks to keep the strip length.
 DEFAULT_CUT_FEED_MM = 0
 # kiosk3 label: every cut strip is exactly this long, cut to cut (KIOSK_LABEL_MM height).
 LABEL_LENGTH_MM = 60
+# Paper kiosk3 feeds by itself on ESC i. Measured on 2026-10-02: strip = content + ESC J + 10 mm
+# (240 rows + 15 mm -> 55, 360 rows + 15 mm -> 70, 480 rows + 0 -> 70).
+CUT_SELF_FEED_MM = 10
 
 THRESHOLD = 128
 # Labels are ~640x480 px. A tiny PNG can still declare a huge canvas (decompression bomb), so
@@ -74,6 +76,7 @@ def label_to_escpos(
     cut_feed_mm: int = DEFAULT_CUT_FEED_MM,
     label_length_mm: int = 0,
     init: bool = True,
+    self_feed_mm: int = 0,
 ) -> bytes:
     """Render a label PNG as ESC/POS bytes that fit a print head `width_dots` wide.
 
@@ -81,9 +84,10 @@ def label_to_escpos(
     nearest-neighbour so QR modules stay hard-edged, and the result is centred. The paper is
     then fed `cut_feed_mm` (print head to cutter) and cut.
 
-    Paper advances content + `cut_feed_mm` between two cuts (the head-to-cutter stretch only moves
-    the content within the strip; measure from the 2nd label, the 1st starts wherever the paper
-    was last cut or torn). With `label_length_mm` (0 = content height) every strip is exactly that long: content is
+    Paper advances content + `cut_feed_mm` + `self_feed_mm` (what the printer feeds by itself
+    on the cut) between two cuts; the head-to-cutter stretch only moves the content within the
+    strip. Measure from the 2nd label: the 1st starts wherever the paper was last cut or torn.
+    With `label_length_mm` (0 = content height) every strip is exactly that long: content is
     scaled down to fit or padded with blank rows above and below.
 
     `init=False` leaves out ESC @ for every label after the first in a batch: the device write
@@ -93,10 +97,10 @@ def label_to_escpos(
     if width_dots <= 0 or width_dots % 8:
         raise ValueError("width_dots must be a positive multiple of 8")
     max_rows = (
-        (label_length_mm - cut_feed_mm) * DOTS_PER_MM if label_length_mm else 0
+        (label_length_mm - cut_feed_mm - self_feed_mm) * DOTS_PER_MM if label_length_mm else 0
     )
     if label_length_mm and max_rows <= 0:
-        raise ValueError("label_length_mm must be longer than cut_feed_mm")
+        raise ValueError("label_length_mm must be longer than cut_feed_mm + self_feed_mm")
 
     ink = _load_ink_mask(png)
     box = ink.getbbox()
