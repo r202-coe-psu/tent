@@ -12,7 +12,7 @@ from urllib.parse import parse_qs, urlparse
 from unittest.mock import patch
 
 from app import manager
-from app.escpos import CUT_SELF_FEED_MM, ESC_INIT, LABEL_LENGTH_MM, label_to_escpos
+from app.escpos import CUT_SELF_FEED_MM, LABEL_LENGTH_MM, labels_to_escpos
 from app.rfpro import RfproProtocolError
 from app.scard import ReaderLostError
 
@@ -697,10 +697,6 @@ def real_png():
 
 class EscposPrintRouteTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        # Multi-label tests must not really wait between labels.
-        no_pause = patch.object(manager, "ESCPOS_LABEL_PAUSE_SEC", 0)
-        no_pause.start()
-        self.addCleanup(no_pause.stop)
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
@@ -730,6 +726,12 @@ class EscposPrintRouteTests(unittest.IsolatedAsyncioTestCase):
         }
         return manager.ScannerClientManager(valid_config(**config))
 
+    @staticmethod
+    def strip(*pngs):
+        return labels_to_escpos(
+            list(pngs), 576, label_length_mm=LABEL_LENGTH_MM, self_feed_mm=CUT_SELF_FEED_MM
+        )
+
     async def print_with(self, client, sysfs, dev, body):
         route = FakePrintRoute(body=body)
 
@@ -748,45 +750,31 @@ class EscposPrintRouteTests(unittest.IsolatedAsyncioTestCase):
         sysfs, dev = self.fake_usb_printers(("lp0", "03f0:1234"), ("lp3", "28e9:5812"))
         client = self.client(PRINTER_USB_ID="28e9:5812")
 
-        # A regular file stands in for the device: append so every label's bytes are kept.
-        real_open = os.open
-        with patch.object(manager.os, "open", side_effect=lambda path, flags: real_open(path, flags | os.O_APPEND)):
-            route = await self.print_with(client, sysfs, dev, labels_body(real_png(), real_png()))
+        route = await self.print_with(client, sysfs, dev, labels_body(real_png(), real_png()))
 
         self.assertEqual(route.fulfilled, {"status": 200, "body": {"printed": 2}})
-        # ESC @ only before the first label: a reset right after a cut makes kiosk3 drop that cut.
-        first = label_to_escpos(real_png(), 576, 0, LABEL_LENGTH_MM, self_feed_mm=CUT_SELF_FEED_MM)
-        rest = label_to_escpos(real_png(), 576, 0, LABEL_LENGTH_MM, init=False, self_feed_mm=CUT_SELF_FEED_MM)
-        self.assertEqual((dev / "lp3").read_bytes(), first + rest)
-        self.assertTrue(first.startswith(ESC_INIT))
-        self.assertNotIn(ESC_INIT, rest)
+        self.assertEqual((dev / "lp3").read_bytes(), self.strip(real_png(), real_png()))
         self.assertEqual((dev / "lp0").read_bytes(), b"")
 
-    async def test_pauses_between_labels_so_each_person_is_cut_off(self):
-        # The write returns once kiosk3 has the bytes; the next label arriving mid-cut drops the cut.
+    async def test_a_household_is_one_write_cut_once_at_the_end(self):
+        # kiosk3 drifted when it cut between people: the whole print is one strip, one cut.
         sysfs, dev = self.fake_usb_printers(("lp3", "28e9:5812"))
         client = self.client(PRINTER_USB_ID="28e9:5812")
-        events = []
+        sends = []
         real_send = client._send_escpos
 
-        def record_send(image, timeout, init=True):
-            events.append("label")
-            return real_send(image, timeout, init)
+        def record_send(images, timeout):
+            sends.append(len(images))
+            return real_send(images, timeout)
 
-        async def fake_sleep(seconds):
-            events.append(seconds)
-
-        with (
-            patch.object(manager, "ESCPOS_LABEL_PAUSE_SEC", 1.5),
-            patch.object(client, "_send_escpos", side_effect=record_send),
-            patch.object(manager.asyncio, "sleep", new=fake_sleep),
-        ):
+        with patch.object(client, "_send_escpos", side_effect=record_send):
             route = await self.print_with(
                 client, sysfs, dev, labels_body(real_png(), real_png(), real_png())
             )
 
         self.assertEqual(route.fulfilled, {"status": 200, "body": {"printed": 3}})
-        self.assertEqual(events, ["label", 1.5, "label", 1.5, "label"])
+        self.assertEqual(sends, [3])
+        self.assertEqual((dev / "lp3").read_bytes().count(b"\x1bi"), 1)
 
     async def test_waits_for_the_last_write_to_drain_before_closing_the_printer(self):
         # usblp kills an in-flight URB on close(): closing before POLLOUT loses the label's tail
@@ -916,7 +904,7 @@ class EscposPrintRouteTests(unittest.IsolatedAsyncioTestCase):
             self.assertLogs(manager.logger, level="ERROR") as logs,
         ):
             started = time.monotonic()
-            ok = await asyncio.to_thread(client._send_escpos, real_png(), 0.2)
+            ok = await asyncio.to_thread(client._send_escpos, [real_png()], 0.2)
 
         self.assertFalse(ok)
         self.assertLess(time.monotonic() - started, 2.0)
@@ -940,7 +928,7 @@ class EscposPrintRouteTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(route.fulfilled["status"], 200)
         self.assertGreaterEqual(len(attempts), 2)
-        self.assertEqual((dev / "lp3").read_bytes(), label_to_escpos(real_png(), 576, 0, LABEL_LENGTH_MM, self_feed_mm=CUT_SELF_FEED_MM))
+        self.assertEqual((dev / "lp3").read_bytes(), self.strip(real_png()))
 
     async def test_default_backend_never_loads_pillow(self):
         code = (
