@@ -15,6 +15,9 @@
 
 	let { onsuccess }: { onsuccess?: () => void } = $props();
 
+	// Session expired (`needsReauth`): every save button is off until the user signs in again.
+	const offline = $derived(authStore.needsReauth);
+
 	const createMutation = useCreateTransfer();
 	const unitsQuery = useUnitsOfMeasure();
 	const activeUnits = $derived((unitsQuery.data ?? []).filter((unit) => !unit.deactivated));
@@ -172,7 +175,7 @@
 
 		<div class="col-span-1 pt-3 sm:col-span-2">
 			<Form.Button
-				disabled={$submitting}
+				disabled={$submitting || offline}
 				class="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary text-sm font-extrabold text-primary-foreground shadow-md transition-all duration-300 hover:scale-[1.02] hover:bg-primary/95 hover:shadow-lg active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
 			>
 				{$submitting ? 'กำลังบันทึกรายการ...' : 'สร้างคำร้องโอนย้าย'}

@@ -20,6 +20,7 @@
 		row,
 		lots,
 		shelterCode,
+		offline = false,
 		onaction
 	}: {
 		open?: boolean;
@@ -27,6 +28,8 @@
 		/** Every lot of this item (zero-qty lots are dropped here). */
 		lots: readonly StockLotBalance[];
 		shelterCode: string;
+		/** Session expired: reading stays available, the movement buttons are off. */
+		offline?: boolean;
 		onaction: (kind: ItemDetailAction) => void;
 	} = $props();
 
@@ -96,6 +99,8 @@
 							'receive'
 								? 'bg-[#0A2647] text-white hover:bg-[#051930]'
 								: 'border-slate-300 bg-white text-slate-800 shadow-2xs'}"
+							disabled={offline}
+							title={offline ? 'เซสชันหมดอายุ — เข้าสู่ระบบใหม่เพื่อบันทึก' : undefined}
 							onclick={() => onaction(action.kind)}
 						>
 							<action.icon class="h-4 w-4" aria-hidden="true" />

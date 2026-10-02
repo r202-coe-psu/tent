@@ -111,6 +111,7 @@ export {
 	timeUntilExpiryMs,
 	type ItemLotAgeSummary
 } from './domain/lot-age';
+export { countPendingTransfers, isTransferPending } from './domain/transfer-pending';
 export { deriveDeterministicLedgerId } from './domain/deterministic-ledger-id';
 export {
 	DEFAULT_STORAGE_LABEL,
@@ -143,6 +144,7 @@ export {
 	useUpdateCampaign,
 	useTransfers,
 	useTransfer,
+	usePendingTransferCount,
 	useCreateTransfer,
 	useDispatchTransfer,
 	useReceiveTransfer,
@@ -164,6 +166,8 @@ export { default as LedgerTable } from './ui/ledger-table.svelte';
 export { default as StockTable } from './ui/stock-table.svelte';
 /** Query keys owned by the stock table — the page strips them when leaving the stock tab. */
 export { STOCK_PARAM_KEYS } from './ui/stock/stock-url-state';
+/** Query keys owned by the movements tab — the page strips them when leaving it. */
+export { LEDGER_PARAM_KEYS } from './ui/ledger/ledger-url-state';
 export { default as AdjustStockForm } from './ui/adjust-stock-form.svelte';
 export { default as StoragePointSelect } from './ui/storage-point-select.svelte';
 export { default as TransferForm } from './ui/transfer-form.svelte';

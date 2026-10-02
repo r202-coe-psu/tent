@@ -337,6 +337,10 @@
 	// Cross-shelter totals are view-only: opening an item or moving stock would act on one shelter.
 	const readonly = $derived(isSA && showOverall);
 
+	// Session expired (`needsReauth`): reading still works, every write button is off.
+	const offline = $derived(authStore.needsReauth);
+	const OFFLINE_HINT = 'เซสชันหมดอายุ — เข้าสู่ระบบใหม่เพื่อบันทึก';
+
 	function clearFilters() {
 		updateUrl({ q: '', cat: 'all', loc: 'all', status: 'all' });
 	}
@@ -355,6 +359,8 @@
 				<Button
 					type="button"
 					class="min-h-11 gap-2 rounded-lg bg-[#0A2647] px-4 text-sm font-semibold text-white hover:bg-[#051930]"
+					disabled={offline}
+					title={offline ? OFFLINE_HINT : undefined}
 					onclick={() => openQuickAction('receive')}
 				>
 					<ArrowDownToLine class="h-4 w-4" aria-hidden="true" />
@@ -364,6 +370,8 @@
 					type="button"
 					variant="outline"
 					class="min-h-11 gap-2 rounded-lg border-slate-300 px-4 text-sm font-semibold text-slate-800 shadow-2xs"
+					disabled={offline}
+					title={offline ? OFFLINE_HINT : undefined}
 					onclick={() => openQuickAction('distribute')}
 				>
 					<ArrowUpFromLine class="h-4 w-4" aria-hidden="true" />
@@ -373,6 +381,8 @@
 					type="button"
 					variant="outline"
 					class="min-h-11 gap-2 rounded-lg border-slate-300 px-4 text-sm font-semibold text-slate-800 shadow-2xs"
+					disabled={offline}
+					title={offline ? OFFLINE_HINT : undefined}
 					onclick={() => openQuickAction('adjust')}
 				>
 					<SlidersHorizontal class="h-4 w-4" aria-hidden="true" />
@@ -483,6 +493,7 @@
 							<StockCard
 								{row}
 								{readonly}
+								{offline}
 								onopen={(r) => openDetail(r._id)}
 								onreceive={(r) => openQuickAction('receive', r._id)}
 								ondistribute={(r) => openQuickAction('distribute', r._id)}
@@ -515,6 +526,7 @@
 								<StockRow
 									{row}
 									{readonly}
+									{offline}
 									onopen={(r) => openDetail(r._id)}
 									onreceive={(r) => openQuickAction('receive', r._id)}
 									ondistribute={(r) => openQuickAction('distribute', r._id)}
@@ -548,6 +560,8 @@
 	<Button
 		type="button"
 		class="min-h-12 rounded-lg bg-[#0A2647] text-sm font-semibold text-white hover:bg-[#051930]"
+		disabled={offline}
+		title={offline ? OFFLINE_HINT : undefined}
 		onclick={() => openQuickAction('receive')}
 	>
 		รับเข้า
@@ -556,6 +570,8 @@
 		type="button"
 		variant="outline"
 		class="min-h-12 rounded-lg border-slate-300 text-sm font-semibold text-slate-800"
+		disabled={offline}
+		title={offline ? OFFLINE_HINT : undefined}
 		onclick={() => openQuickAction('distribute')}
 	>
 		เบิกจ่าย
@@ -564,6 +580,8 @@
 		type="button"
 		variant="outline"
 		class="min-h-12 rounded-lg border-slate-300 text-sm font-semibold text-slate-800"
+		disabled={offline}
+		title={offline ? OFFLINE_HINT : undefined}
 		onclick={() => openQuickAction('adjust')}
 	>
 		ตรวจนับ
@@ -575,6 +593,7 @@
 	row={selectedManageItem}
 	lots={selectedItemId ? (lotsByItem.get(selectedItemId) ?? []) : []}
 	shelterCode={getShelterCode()}
+	{offline}
 	onaction={(kind) => openQuickAction(kind, selectedItemId ?? undefined)}
 />
 
