@@ -131,10 +131,11 @@ class FakeHidDevice:
 class FakeThaiCard:
     """Answers the module's commands and the Thai ID applet's APDUs."""
 
-    def __init__(self, atr=ATR_3B79, present=True, atr_failures=0):
+    def __init__(self, atr=ATR_3B79, present=True, atr_failures=0, atr_silences=0):
         self.atr = atr
         self.present = present
         self.atr_failures = atr_failures
+        self.atr_silences = atr_silences
         self.pending = b""
         self.get_response_p2: list[int] = []
         self.photo = bytes(range(256)) * 19  # 4864 bytes -> 20 chunks of up to 255
@@ -157,6 +158,9 @@ class FakeThaiCard:
         if cmd == CMD_ICC_GETATR:
             if not self.present:
                 return 0x20, b""
+            if self.atr_silences:
+                self.atr_silences -= 1
+                return None  # the module never answers this reset
             if self.atr_failures:
                 self.atr_failures -= 1
                 return 0x11, b""
@@ -353,10 +357,10 @@ class ConnectionTests(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
-    def connection(self, card):
+    def connection(self, card, timeout=1.0):
         device = FakeHidDevice(card)
         self.addCleanup(device.close)
-        transport = device.transport()
+        transport = device.transport(timeout=timeout)
         self.addCleanup(transport.close)
         return device, RfproConnection(transport)
 
@@ -384,6 +388,27 @@ class ConnectionTests(unittest.TestCase):
                 (CMD_ICC_GETATR, b"\x00"),
             ],
         )
+
+    def test_unanswered_atr_request_power_cycles_once_then_succeeds(self):
+        device, connection = self.connection(FakeThaiCard(atr_silences=1), timeout=0.2)
+
+        connection.connect()
+
+        self.assertEqual(bytes(connection.getATR()), ATR_3B79)
+        self.assertEqual(
+            device.commands[2:],
+            [
+                (CMD_ICC_SLOT_PWR, b"\x00\x00"),
+                (CMD_ICC_SLOT_PWR, b"\x00\x01"),
+                (CMD_ICC_GETATR, b"\x00"),
+            ],
+        )
+
+    def test_atr_request_unanswered_even_after_the_power_cycle_raises(self):
+        _, connection = self.connection(FakeThaiCard(atr_silences=2), timeout=0.2)
+
+        with self.assertRaises(RfproProtocolError):
+            connection.connect()
 
     def test_two_atr_failures_raise(self):
         _, connection = self.connection(FakeThaiCard(atr_failures=2))

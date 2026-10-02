@@ -1,5 +1,5 @@
 """
-ทดสอบอ่านบัตรประชาชนผ่านเครื่องอ่าน HID ของตู้ kiosk3 (RFpro/comPro protocol) — ต้องรันด้วย sudo
+ทดสอบอ่านบัตรประชาชนผ่านเครื่องอ่าน HID ของตู้ kiosk3 (RFpro/comPro protocol) — ต้องมีสิทธิ์ /dev/hidraw* (./setup_card_reader.sh หรือ sudo)
 
 Manual hardware inspector for the HOUSESmart 0483:4c43 card reader (YE XIN EF-011C socket).
 Uses the same driver as the kiosk (`app/rfpro.py`: frame codec, command allowlist, hidraw
@@ -21,7 +21,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 import time
 
@@ -221,12 +220,14 @@ def main() -> None:
     parser.add_argument("--show-cid", action="store_true", help="แสดงเลขบัตรเต็ม")
     args = parser.parse_args()
 
-    if os.geteuid() != 0:
-        sys.exit("❌ ต้องรันด้วย sudo (อ่าน/เขียน /dev/hidraw*)")
+    # No root check: run it as the kiosk user to prove the udev permission works the same way
+    # the kiosk opens the device. The transport error says whether it is permission or absence.
     try:
         transport = RfproTransport.open(args.id)
     except RfproError as error:
-        sys.exit(f"❌ {error} — เสียบ USB ของโมดูลแล้วลองใหม่")
+        sys.exit(
+            f"❌ {error}\n   ตรวจสิทธิ์: ./setup_card_reader.sh --status · หรือเสียบ USB ของโมดูลแล้วลองใหม่"
+        )
     if args.verbose:
         transport.tracer = make_tracer(args.show_cid)
 

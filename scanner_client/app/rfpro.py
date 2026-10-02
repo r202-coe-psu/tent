@@ -316,8 +316,14 @@ class RfproConnection:
         return self._transport.command(CMD_ICC_GETATR, bytes([SLOT_MAIN]))
 
     def connect(self) -> None:
-        reply = self._select_and_reset()
-        if reply.status != 0x00:
+        try:
+            reply: Reply | None = self._select_and_reset()
+        except RfproProtocolError:
+            # A card still sliding in when the slot switch trips can leave the first reset
+            # unanswered (seen on kiosk3: no reply to 18 80 for the whole command timeout).
+            # The wait already gave it time to seat, so treat it like a refused reset.
+            reply = None
+        if reply is None or reply.status != 0x00:
             # Some insertions answer a bare reset with an undocumented status (seen: 0x11);
             # cycling slot power once clears it.
             for action in (SLOT_POWER_OFF, SLOT_POWER_ON):
