@@ -512,6 +512,24 @@ class ReaderTests(unittest.TestCase):
         # The last chunk is short; the piece reads that run past it return blank card space.
         self.assertTrue(base64.b64decode(photo.split(",", 1)[1]).startswith(card.photo))
 
+    def test_read_all_data_starts_from_a_cold_power_up_like_a_reinserted_card(self):
+        # kiosk3: a card left in since the ID read only read in full after a re-insert.
+        _, device, reader = self.reader()
+        reader.read_citizen_id()
+        device.commands.clear()
+
+        reader.read_all_data()
+
+        self.assertEqual(
+            device.commands[:4],
+            [
+                (CMD_ICC_SLOT_PWR, b"\x00\x00"),
+                (CMD_ICC_SLOT_PWR, b"\x00\x01"),
+                (CMD_ICC_SEL, b"\x00\x0c"),
+                (CMD_ICC_GETATR, b"\x00"),
+            ],
+        )
+
     def test_read_all_data_survives_a_module_that_returns_one_report_per_reply(self):
         # kiosk3: a 100-byte answer is a 112-byte frame, and only its first 32 bytes arrive.
         card, device, reader = self.reader(single_report=True)

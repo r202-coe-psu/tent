@@ -330,6 +330,13 @@ class RfproConnection:
         self._transport.command(CMD_ICC_SEL, bytes([SLOT_MAIN, CARD_CPU_7816]))
         return self._transport.command(CMD_ICC_GETATR, bytes([SLOT_MAIN]))
 
+    def power_cycle(self) -> None:
+        """Cut and restore slot power: electrically the same as pulling the card and
+        re-inserting it."""
+        for action in (SLOT_POWER_OFF, SLOT_POWER_ON):
+            self._transport.command(CMD_ICC_SLOT_PWR, bytes([SLOT_MAIN, action]))
+            time.sleep(POWER_CYCLE_SETTLE_SEC)
+
     def connect(self) -> None:
         try:
             reply: Reply | None = self._select_and_reset()
@@ -341,9 +348,7 @@ class RfproConnection:
         if reply is None or reply.status != 0x00:
             # Some insertions answer a bare reset with an undocumented status (seen: 0x11);
             # cycling slot power once clears it.
-            for action in (SLOT_POWER_OFF, SLOT_POWER_ON):
-                self._transport.command(CMD_ICC_SLOT_PWR, bytes([SLOT_MAIN, action]))
-                time.sleep(POWER_CYCLE_SETTLE_SEC)
+            self.power_cycle()
             reply = self._transport.command(CMD_ICC_GETATR, bytes([SLOT_MAIN]))
         if reply.status != 0x00 or not reply.data:
             raise RfproCardError(
@@ -387,6 +392,13 @@ class RfproThaiCardReader(ThaiSmartCardReader):
 
     def close(self) -> None:
         self.transport.close()
+
+    def read_all_data(self) -> dict:
+        """A card left in since the ID read only read in full on kiosk3 after being pulled and
+        re-inserted (the photo failed mid-way with 0x44 / 0x41, then 0x20). Start the full read
+        from a cold power-up, as a re-insert would."""
+        self.connection.power_cycle()
+        return super().read_all_data()
 
     def _read_piece(self, offset: int, length: int) -> list[int] | None:
         """READ BINARY of `length` bytes at `offset` + GET RESPONSE; None if the card has no data
@@ -447,7 +459,8 @@ class RfproThaiCardReader(ThaiSmartCardReader):
                             recoveries,
                             MAX_PHOTO_RECOVERIES,
                         )
-                        # A reset drops the applet selection; connect() resets and re-selects.
+                        # Cold reset, then connect() resets and re-selects the applet.
+                        self.connection.power_cycle()
                         if not self.connect():
                             logger.error("Card photo could not be read: card did not answer reset")
                             return None
