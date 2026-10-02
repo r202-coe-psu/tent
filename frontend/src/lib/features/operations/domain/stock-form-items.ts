@@ -1,4 +1,4 @@
-import Fuse from 'fuse.js';
+import Fuse, { type IFuseOptions } from 'fuse.js';
 import { itemMasterUnit, type PackagingSource } from '$lib/features/catalog';
 
 /** Item row for receive / distribute / adjust pickers (and A6 transfer). */
@@ -75,7 +75,7 @@ function normalizeSku(sku: string): string {
 
 type StockFormSearchDoc = StockFormItem & { skuNorm: string };
 
-const FUSE_OPTIONS: Fuse.IFuseOptions<StockFormSearchDoc> = {
+const FUSE_OPTIONS: IFuseOptions<StockFormSearchDoc> = {
 	keys: [
 		{ name: 'name', weight: 0.7 },
 		{ name: 'sku', weight: 0.2 },
