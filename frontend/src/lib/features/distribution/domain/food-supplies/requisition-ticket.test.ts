@@ -35,7 +35,7 @@ function ticketInput(requisition_type: 'food' | 'supplies' = 'food') {
 	};
 }
 
-describe('Food & Supplies RequisitionTicket contract (CR-121)', () => {
+describe('Food & Supplies RequisitionTicket contract ', () => {
 	it('creates canonical Food and Supplies Tickets with a pending-pick initial state', () => {
 		const food = createFlow2RequisitionTicket(ticketInput('food'), ctx, ULID);
 		const supplies = createFlow2RequisitionTicket(ticketInput('supplies'), ctx, ULID);
@@ -188,7 +188,7 @@ describe('Food & Supplies RequisitionTicket contract (CR-121)', () => {
 		).toThrow(/cannot be decreased/);
 	});
 
-	it('requires appended amendments to match the Decimal allocation increase of their existing item', () => {
+	it('requires appended amendments to match the whole-unit allocation increase of their existing item', () => {
 		const previous = requisitionTicketDocSchema.parse({
 			...createFlow2RequisitionTicket(ticketInput(), ctx, ULID),
 			status: 'DISTRIBUTING'
@@ -196,14 +196,14 @@ describe('Food & Supplies RequisitionTicket contract (CR-121)', () => {
 		const amendment = {
 			amendment_id: '01J00000000000000000000001',
 			item_id: 'item:rice',
-			added_qty: '0.1',
+			added_qty: '1',
 			amended_at: '2026-09-16T00:00:00.000Z',
 			amended_by: 'staff:warehouse'
 		};
 		expect(() =>
 			assertRequisitionTicketMutation(previous, {
 				...previous,
-				items: [{ ...previous.items[0], allocated_qty: '10.1' }],
+				items: [{ ...previous.items[0], allocated_qty: '11' }],
 				amendments: [amendment]
 			})
 		).not.toThrow();
@@ -213,7 +213,7 @@ describe('Food & Supplies RequisitionTicket contract (CR-121)', () => {
 		expect(() =>
 			assertRequisitionTicketMutation(previous, {
 				...previous,
-				items: [{ ...previous.items[0], allocated_qty: '10.2' }],
+				items: [{ ...previous.items[0], allocated_qty: '12' }],
 				amendments: [amendment]
 			})
 		).toThrow(/allocated_qty increase/);

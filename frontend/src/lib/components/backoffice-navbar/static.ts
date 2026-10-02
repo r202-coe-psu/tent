@@ -29,7 +29,7 @@ type Leaf = {
 };
 
 type Group = Leaf & {
-	children: Leaf[];
+	children: BackofficeNavbarNode[];
 };
 
 export type BackofficeNavbarNode = Leaf | Group;
@@ -88,6 +88,11 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				label: 'บริจาค',
 				href: resolve('/back-office/stock-donations'),
 				icon: HandHeart
+			},
+			{
+				label: 'จัดการเบิกจ่ายพัสดุและอาหาร',
+				href: resolve('/back-office/distribution'),
+				icon: ClipboardList
 			},
 			{
 				label: 'ครัวกลางและอาหาร',
