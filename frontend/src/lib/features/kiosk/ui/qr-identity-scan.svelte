@@ -10,6 +10,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import KioskBackButton from './kiosk-back-button.svelte';
 	import KioskCheckInWizard from './kiosk-check-in-wizard.svelte';
+	import KioskQrScanScene from './kiosk-qr-scan-scene.svelte';
 	import type { GateInput } from '../data/kiosk-check-in.api';
 	import { loadKioskHardware } from '../application/kiosk-qr-input';
 	import { selectCameraId } from '../domain/kiosk-camera';
@@ -194,74 +195,78 @@
 		<section
 			class="qr-scan-card rounded-2xl border border-slate-200 bg-white p-3 shadow-2xs sm:p-4"
 		>
-			<div
-				class="qr-camera-frame relative mx-auto w-full max-w-sm overflow-hidden rounded-xl border border-slate-200 bg-slate-900"
-			>
-				<div class="relative aspect-square w-full overflow-hidden">
-					{#if plan.cameraEnabled}
-						{#key cameraAttempt}
-							<div
-								id={cameraReaderId}
-								{@attach cameraAttachment(hardware?.cameraLabel ?? null)}
-								class="absolute inset-0 h-full w-full overflow-hidden [&_video]:h-full! [&_video]:w-full! [&_video]:object-cover!"
-								aria-label="ภาพจากกล้องสแกน QR"
-							></div>
-						{/key}
-					{/if}
-					{#if plan.pending || plan.readerOnly}
-						<div
-							class="absolute inset-0 flex items-center justify-center bg-[#F8FAFC] px-4"
-							aria-hidden="true"
-						>
-							<ScanQrCode
-								class={['h-12 w-12', plan.pending ? 'text-slate-400' : 'text-[#0A2647]']}
-							/>
-						</div>
-					{:else if plan.cameraEnabled && !cameraError}
-						<div class="pointer-events-none absolute inset-[10%]" aria-hidden="true">
-							<span
-								class="absolute top-0 left-0 h-8 w-8 rounded-tl-lg border-t-4 border-l-4 border-white"
-							></span>
-							<span
-								class="absolute top-0 right-0 h-8 w-8 rounded-tr-lg border-t-4 border-r-4 border-white"
-							></span>
-							<span
-								class="absolute bottom-0 left-0 h-8 w-8 rounded-bl-lg border-b-4 border-l-4 border-white"
-							></span>
-							<span
-								class="absolute right-0 bottom-0 h-8 w-8 rounded-br-lg border-r-4 border-b-4 border-white"
-							></span>
-						</div>
-					{:else if cameraError}
-						<div
-							class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#F8FAFC] px-4 text-center"
-						>
-							<CameraOff class="h-9 w-9 text-slate-500" aria-hidden="true" />
-							<p class="text-base font-semibold text-slate-700" role="status">{cameraError}</p>
-							{#if plan.readerEnabled}
-								<p class="text-base text-slate-600">ยังใช้เครื่องอ่าน QR ได้</p>
-							{/if}
-							<Button
-								type="button"
-								onclick={retryCamera}
-								class="min-h-12 gap-2 bg-[#0A2647] px-4 text-base font-bold text-white hover:bg-[#051930]"
-								><RefreshCw class="h-5 w-5" aria-hidden="true" />ลองอีกครั้ง</Button
-							>
-						</div>
-					{/if}
+			{#if plan.readerOnly}
+				<div class="flex flex-col items-center pt-1 kiosk-portrait:pt-4">
+					<KioskQrScanScene />
 				</div>
-			</div>
+			{:else}
+				<div
+					class="qr-camera-frame relative mx-auto w-full max-w-sm overflow-hidden rounded-xl border border-slate-200 bg-slate-900"
+				>
+					<div class="relative aspect-square w-full overflow-hidden">
+						{#if plan.cameraEnabled}
+							{#key cameraAttempt}
+								<div
+									id={cameraReaderId}
+									{@attach cameraAttachment(hardware?.cameraLabel ?? null)}
+									class="absolute inset-0 h-full w-full overflow-hidden [&_video]:h-full! [&_video]:w-full! [&_video]:object-cover!"
+									aria-label="ภาพจากกล้องสแกน QR"
+								></div>
+							{/key}
+						{/if}
+						{#if plan.pending}
+							<div
+								class="absolute inset-0 flex items-center justify-center bg-[#F8FAFC] px-4"
+								aria-hidden="true"
+							>
+								<ScanQrCode class="h-12 w-12 text-slate-400" />
+							</div>
+						{:else if plan.cameraEnabled && !cameraError}
+							<div class="pointer-events-none absolute inset-[10%]" aria-hidden="true">
+								<span
+									class="absolute top-0 left-0 h-8 w-8 rounded-tl-lg border-t-4 border-l-4 border-white"
+								></span>
+								<span
+									class="absolute top-0 right-0 h-8 w-8 rounded-tr-lg border-t-4 border-r-4 border-white"
+								></span>
+								<span
+									class="absolute bottom-0 left-0 h-8 w-8 rounded-bl-lg border-b-4 border-l-4 border-white"
+								></span>
+								<span
+									class="absolute right-0 bottom-0 h-8 w-8 rounded-br-lg border-r-4 border-b-4 border-white"
+								></span>
+							</div>
+						{:else if cameraError}
+							<div
+								class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#F8FAFC] px-4 text-center"
+							>
+								<CameraOff class="h-9 w-9 text-slate-500" aria-hidden="true" />
+								<p class="text-base font-semibold text-slate-700" role="status">{cameraError}</p>
+								{#if plan.readerEnabled}
+									<p class="text-base text-slate-600">ยังใช้เครื่องอ่าน QR ได้</p>
+								{/if}
+								<Button
+									type="button"
+									onclick={retryCamera}
+									class="min-h-12 gap-2 bg-[#0A2647] px-4 text-base font-bold text-white hover:bg-[#051930]"
+									><RefreshCw class="h-5 w-5" aria-hidden="true" />ลองอีกครั้ง</Button
+								>
+							</div>
+						{/if}
+					</div>
+				</div>
+			{/if}
 			<p
 				class={[
 					'qr-scan-hint mt-3 text-center font-semibold text-slate-700',
-					plan.readerOnly ? 'text-lg' : 'text-base'
+					plan.readerOnly ? 'text-xl kiosk-portrait:text-3xl' : 'text-base'
 				]}
 				aria-live="polite"
 			>
 				{#if plan.pending}
 					กำลังเตรียม…
 				{:else if plan.readerOnly}
-					ยิง QR ที่เครื่องอ่านด้านล่างจอ
+					สแกน QR ที่เครื่องสแกนด้านล่างจอ
 				{:else}
 					วาง QR ในกรอบ
 				{/if}
