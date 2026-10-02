@@ -105,6 +105,7 @@
 		"decimal.js": "^10.6.0",
 		"events": "^3.3.0",
 		"exceljs": "^4.4.0",
+		"fuse.js": "^7.5.0",
 		"html2canvas-pro": "^2.2.3",
 		"html5-qrcode": "^2.3.8",
 		"jsonwebtoken": "^9.0.3",
