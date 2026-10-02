@@ -10,6 +10,7 @@ import re
 import select
 import shutil
 import time
+import traceback
 import urllib.parse
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -20,7 +21,7 @@ from app.config import (
     DEFAULT_PRINTER_WIDTH_DOTS,
     DEFAULT_QR_READER_GAP_MS,
 )
-from app.rfpro import RfproThaiCardReader
+from app.rfpro import RfproError, RfproThaiCardReader
 from app.scard import ReaderLostError, ThaiSmartCardReader
 
 try:
@@ -549,6 +550,22 @@ class ScannerClientManager:
             {"eventName": event_name, "citizenId": citizen_id},
         )
 
+    @staticmethod
+    def _describe_failure(error: BaseException) -> str:
+        """Where and what failed, never the message: card reads handle personal data.
+
+        Reader errors (RfproError) only ever carry command names and status codes, so their
+        text is kept; for anything else only the type and the innermost code location are named.
+        """
+        text = type(error).__name__
+        if isinstance(error, RfproError):
+            text += f" ({error})"
+        frames = traceback.extract_tb(error.__traceback__)
+        if frames:
+            last = frames[-1]
+            text += f" at {os.path.basename(last.filename)}:{last.lineno} in {last.name}"
+        return text
+
     async def _read_full_card_if_register_path(self) -> bool:
         """Read and hand off a full card only while the registration page is active."""
         if not self.page or self.page.is_closed() or not self.reader:
@@ -557,8 +574,12 @@ class ScannerClientManager:
             return False
 
         logger.info("Registration card page is ready; reading full smart-card data")
+        stage = "read"
         try:
+            started_at = time.monotonic()
             card = await asyncio.to_thread(self.reader.read_all_data)
+            logger.info("Full smart-card read finished in %.1fs", time.monotonic() - started_at)
+            stage = "handoff"
             await self.page.wait_for_selector(
                 '[data-kiosk-register-ready="true"]', timeout=15000
             )
@@ -570,8 +591,12 @@ class ScannerClientManager:
             return True
         except ReaderLostError:
             raise  # the polling loop drops the reader and waits for the hardware
-        except Exception:
-            logger.error("Full smart-card read or kiosk handoff failed")
+        except Exception as error:
+            logger.error(
+                "Full smart-card read or kiosk handoff failed at %s: %s",
+                stage,
+                self._describe_failure(error),
+            )
             if self.page and not self.page.is_closed():
                 try:
                     await self.page.evaluate(

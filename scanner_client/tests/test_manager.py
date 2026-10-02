@@ -13,6 +13,7 @@ from unittest.mock import patch
 
 from app import manager
 from app.escpos import label_to_escpos
+from app.rfpro import RfproProtocolError
 from app.scard import ReaderLostError
 
 
@@ -315,6 +316,40 @@ class CardRescanTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result)
         self.assertIn("kiosk:smart-card-full-read-error", page.evaluated[-1][0])
         self.assertTrue(all("private payload" not in line for line in logs.output))
+
+    async def test_full_card_read_failure_log_names_the_stage_and_the_reader_error(self):
+        client = manager.ScannerClientManager(valid_config())
+        client.page = EventFakePage(f"https://tent.example.go.th{client.register_card_path}")
+
+        def unanswered():
+            raise RfproProtocolError("no reply to command 1881 within 3s")
+
+        client.reader = SimpleNamespace(read_all_data=unanswered)
+
+        with self.assertLogs(manager.logger, level="ERROR") as logs:
+            self.assertFalse(await client._read_full_card_if_register_path())
+
+        line = "\n".join(logs.output)
+        self.assertIn("failed at read: RfproProtocolError (no reply to command 1881 within 3s)", line)
+        self.assertIn("test_manager.py", line)  # innermost code location, no message for others
+
+    async def test_full_card_handoff_failure_is_reported_as_the_handoff_stage(self):
+        client = manager.ScannerClientManager(valid_config())
+        page = EventFakePage(f"https://tent.example.go.th{client.register_card_path}")
+        client.page = page
+        client.reader = SimpleNamespace(read_all_data=lambda: {"citizen_id": "1234567890123"})
+
+        async def never_ready(*_args, **_kwargs):
+            raise TimeoutError("page secret 1234567890123")
+
+        page.wait_for_selector = never_ready
+
+        with self.assertLogs(manager.logger, level="ERROR") as logs:
+            self.assertFalse(await client._read_full_card_if_register_path())
+
+        line = "\n".join(logs.output)
+        self.assertIn("failed at handoff: TimeoutError at", line)
+        self.assertNotIn("1234567890123", line)
 
     async def test_card_inserted_on_consent_page_does_not_restart_the_lookup_flow(self):
         # Regression test: a card left in the reader (or re-inserted) on any walk-in step
