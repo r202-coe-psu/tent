@@ -399,7 +399,7 @@ class ScannerClientManager:
 
         deadline = time.monotonic() + KIOSK_PRINT_OVERALL_DEADLINE_SEC
         printed = 0
-        for image in images:
+        for index, image in enumerate(images):
             if time.monotonic() >= deadline:
                 logger.error(
                     f"Label print deadline exceeded on {self._print_target} ({printed}/{len(images)} sent)"
@@ -411,7 +411,7 @@ class ScannerClientManager:
                         "message": "พิมพ์ label ช้ากว่ากำหนด กรุณาลองอีกครั้ง",
                     },
                 }
-            if not await self._spool_label(image):
+            if not await self._spool_label(image, first=index == 0):
                 logger.error(f"Label print failed on {self._print_target} ({printed}/{len(images)} sent)")
                 return 502, {
                     "printed": printed,
@@ -423,9 +423,9 @@ class ScannerClientManager:
             printed += 1
         return 200, {"printed": printed}
 
-    async def _spool_label(self, image: bytes) -> bool:
+    async def _spool_label(self, image: bytes, first: bool = True) -> bool:
         if self.printer_backend == "escpos":
-            return await self._write_escpos(image)
+            return await self._write_escpos(image, init=first)
         # stdin keeps the label (evacuee name) off disk; the job title carries no personal data.
         try:
             process = await asyncio.create_subprocess_exec(
@@ -470,7 +470,7 @@ class ScannerClientManager:
                 return USB_DEV_DIR / entry.name
         return None
 
-    def _send_escpos(self, image: bytes, timeout: float) -> bool:
+    def _send_escpos(self, image: bytes, timeout: float, init: bool = True) -> bool:
         """Blocking: convert, locate and write one label. Runs in a worker thread."""
         try:
             # Imported here so CUPS-only machines never load Pillow just to start the kiosk.
@@ -481,6 +481,7 @@ class ScannerClientManager:
                 self.printer_width_dots,
                 self.printer_cut_feed_mm,
                 self.printer_label_length_mm,
+                init,
             )
         except Exception:  # noqa: BLE001 - Pillow raises DecompressionBombError and others outside ValueError
             logger.error("Label image could not be converted for the ESC/POS printer")
@@ -532,11 +533,11 @@ class ScannerClientManager:
         finally:
             os.close(fd)
 
-    async def _write_escpos(self, image: bytes) -> bool:
+    async def _write_escpos(self, image: bytes, init: bool = True) -> bool:
         async with self._escpos_lock:
             try:
                 return await asyncio.wait_for(
-                    asyncio.to_thread(self._send_escpos, image, KIOSK_PRINT_TIMEOUT_SEC),
+                    asyncio.to_thread(self._send_escpos, image, KIOSK_PRINT_TIMEOUT_SEC, init),
                     timeout=KIOSK_PRINT_TIMEOUT_SEC + 1.0,
                 )
             except TimeoutError:

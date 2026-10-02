@@ -68,6 +68,7 @@ def label_to_escpos(
     width_dots: int,
     cut_feed_mm: int = DEFAULT_CUT_FEED_MM,
     max_length_mm: int = 0,
+    init: bool = True,
 ) -> bytes:
     """Render a label PNG as ESC/POS bytes that fit a print head `width_dots` wide.
 
@@ -78,6 +79,10 @@ def label_to_escpos(
     A cut strip is `cut_feed_mm` + content long: the head-to-cutter stretch left after the
     previous cut becomes this label's top margin. `max_length_mm` (0 = no limit) caps the strip
     by scaling content taller than `max_length_mm - cut_feed_mm` down.
+
+    `init=False` leaves out ESC @ for every label after the first in a batch: the device write
+    returns once the printer has the bytes, not once it has cut, so a reset sent straight after
+    lands mid-cut and the printer drops that cut — two people came out as one uncut strip.
     """
     if width_dots <= 0 or width_dots % 8:
         raise ValueError("width_dots must be a positive multiple of 8")
@@ -106,7 +111,7 @@ def label_to_escpos(
     row_bytes = width_dots // 8
     raster = packed.tobytes()
 
-    out = bytearray(ESC_INIT)
+    out = bytearray(ESC_INIT if init else b"")
     for top in range(0, canvas.height, MAX_BAND_ROWS):
         rows = min(MAX_BAND_ROWS, canvas.height - top)
         out += GS_RASTER

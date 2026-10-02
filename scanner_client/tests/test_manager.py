@@ -12,7 +12,7 @@ from urllib.parse import parse_qs, urlparse
 from unittest.mock import patch
 
 from app import manager
-from app.escpos import label_to_escpos
+from app.escpos import ESC_INIT, label_to_escpos
 from app.rfpro import RfproProtocolError
 from app.scard import ReaderLostError
 
@@ -740,11 +740,18 @@ class EscposPrintRouteTests(unittest.IsolatedAsyncioTestCase):
         sysfs, dev = self.fake_usb_printers(("lp0", "03f0:1234"), ("lp3", "28e9:5812"))
         client = self.client(PRINTER_USB_ID="28e9:5812")
 
-        route = await self.print_with(client, sysfs, dev, labels_body(real_png(), real_png()))
+        # A regular file stands in for the device: append so every label's bytes are kept.
+        real_open = os.open
+        with patch.object(manager.os, "open", side_effect=lambda path, flags: real_open(path, flags | os.O_APPEND)):
+            route = await self.print_with(client, sysfs, dev, labels_body(real_png(), real_png()))
 
         self.assertEqual(route.fulfilled, {"status": 200, "body": {"printed": 2}})
-        # A regular file stands in for the device, so the 2nd label overwrites the 1st at offset 0.
-        self.assertEqual((dev / "lp3").read_bytes(), label_to_escpos(real_png(), 576))
+        # ESC @ only before the first label: a reset right after a cut makes kiosk3 drop that cut.
+        first = label_to_escpos(real_png(), 576, 15, 60)
+        rest = label_to_escpos(real_png(), 576, 15, 60, init=False)
+        self.assertEqual((dev / "lp3").read_bytes(), first + rest)
+        self.assertTrue(first.startswith(ESC_INIT))
+        self.assertNotIn(ESC_INIT, rest)
         self.assertEqual((dev / "lp0").read_bytes(), b"")
 
     async def test_waits_for_the_last_write_to_drain_before_closing_the_printer(self):

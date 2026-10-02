@@ -102,6 +102,16 @@ class LabelToEscposTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             label_to_escpos(block_png((64, 64), (0, 0, 32, 32)), 576, cut_feed_mm=15, max_length_mm=15)
 
+    def test_later_labels_in_a_batch_skip_the_reset_but_keep_feed_and_cut(self):
+        png = block_png((64, 64), (0, 0, 32, 32))
+
+        first = label_to_escpos(png, 576)
+        later = label_to_escpos(png, 576, init=False)
+
+        self.assertEqual(first, ESC_INIT + later)
+        self.assertTrue(later.startswith(GS_RASTER))
+        self.assertTrue(later.endswith(DEFAULT_TAIL))
+
     def test_tall_image_is_split_into_bands_of_at_most_255_rows(self):
         data = label_to_escpos(block_png((100, 600), (0, 0, 100, 600)), 576)
 
