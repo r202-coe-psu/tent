@@ -38,16 +38,22 @@
 	import {
 		projectStockLotBalances,
 		StockLotIntegrityError,
-		type StockLot
+		type StockLotBalance
 	} from '../domain/operations';
+	import {
+		deriveStockQtyStatus,
+		groupLotsByItem,
+		resolveReorderThreshold,
+		summarizeItemStock,
+		type ItemStockSummary
+	} from '../domain/stock-summary';
 	import { formatItemAgeLine, summarizeItemLotAge } from '../domain/lot-age';
 	import { lotStorageKey, lotStorageName } from '../domain/lot-storage';
 	import { useStoragePoints } from '../application/use-storage-points.svelte';
 	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import MinusCircle from '@lucide/svelte/icons/minus-circle';
 	import Settings from '@lucide/svelte/icons/settings';
-	import { qtyGt, qtyLte, addQty } from '$lib/utils/qty';
-	import { calculateReorderLevel } from '$lib/features/supply/domain/threshold-calc';
+	import { qtyGt, addQty } from '$lib/utils/qty';
 	import { IsMobile } from '$lib/hooks/is-mobile.svelte';
 	import Plus from '@lucide/svelte/icons/plus';
 	import Search from '@lucide/svelte/icons/search';
@@ -197,50 +203,49 @@
 		return Array.from(locations, ([key, label]) => ({ key, label }));
 	});
 
-	const latestLotByItem = $derived.by(() => {
-		const result: Record<string, { expiry?: string; lot?: StockLot; location: string | null }> = {};
-		const sorted = [...ledger].sort((a, b) => a.occurred_at.localeCompare(b.occurred_at));
-		for (const entry of sorted) {
-			const location = lotStorageName(entry.lot, storagePoints.points);
-			if (qtyGt(entry.qty, 0) && (entry.lot?.expiry || location)) {
-				result[entry.item_id] = { expiry: entry.lot?.expiry, lot: entry.lot, location };
-			}
+	/** Remaining lots per item — every lot, so an old lot near expiry is never hidden. */
+	const lotsByItem = $derived.by(() => {
+		try {
+			return groupLotsByItem(projectStockLotBalances(ledger));
+		} catch (error) {
+			if (!(error instanceof StockLotIntegrityError)) throw error;
+			return new SvelteMap<string, StockLotBalance[]>();
 		}
+	});
+
+	const stockSummaryByItem = $derived.by(() => {
+		const result = new SvelteMap<string, ItemStockSummary>();
+		for (const [itemId, lots] of lotsByItem) result.set(itemId, summarizeItemStock(lots));
 		return result;
 	});
 
 	const ageLineByItem = $derived.by(() => {
 		const result = new SvelteMap<string, string>();
-		try {
-			const balances = projectStockLotBalances(ledger);
-			const byItem = new SvelteMap<string, typeof balances>();
-			for (const bal of balances) {
-				const list = byItem.get(bal.item_id) ?? [];
-				list.push(bal);
-				byItem.set(bal.item_id, list);
-			}
-			for (const [itemId, lots] of byItem) {
-				const line = formatItemAgeLine(summarizeItemLotAge(lots));
-				if (line) result.set(itemId, line);
-			}
-		} catch (error) {
-			if (!(error instanceof StockLotIntegrityError)) throw error;
+		for (const [itemId, lots] of lotsByItem) {
+			const line = formatItemAgeLine(summarizeItemLotAge(lots));
+			if (line) result.set(itemId, line);
 		}
 		return result;
 	});
 
-	function isExpiringSoon(expiryStr: string | undefined, days = 7): boolean {
-		if (!expiryStr) return false;
-		const exp = Date.parse(expiryStr);
-		if (Number.isNaN(exp)) return false;
-		return exp - Date.now() <= days * 86_400_000 && exp > Date.now();
-	}
-
-	function isExpired(expiryStr: string | undefined): boolean {
-		if (!expiryStr) return false;
-		const exp = Date.parse(expiryStr);
-		return !Number.isNaN(exp) && exp <= Date.now();
-	}
+	/** Location label: the single storage point, or the first one plus a count. */
+	const locationLabelByItem = $derived.by(() => {
+		const result = new SvelteMap<string, string>();
+		for (const [itemId, lots] of lotsByItem) {
+			const names = [
+				...new Set(
+					lots
+						.filter((l) => qtyGt(l.qty, 0))
+						.map((l) => lotStorageName(l.lot, storagePoints.points))
+						.filter((n): n is string => !!n)
+				)
+			];
+			if (names.length > 0) {
+				result.set(itemId, names.length === 1 ? names[0] : `${names[0]} +${names.length - 1}`);
+			}
+		}
+		return result;
+	});
 
 	let { occupancy = 120 } = $props();
 
@@ -248,42 +253,14 @@
 		items.map((item) => {
 			const qtyOnHand = balance.get(item._id) ?? '0';
 			const itemOverride = overrides.find((o) => o.item_id === item._id);
-
-			let reorderThreshold: string | null = null;
-
-			if (itemOverride) {
-				if (itemOverride.consumption_rate && itemOverride.target_reserve_days) {
-					reorderThreshold = calculateReorderLevel(occupancy, {
-						consumption_rate: itemOverride.consumption_rate,
-						target_reserve_days: itemOverride.target_reserve_days,
-						timeframe: item.timeframe || 'daily'
-					});
-				} else if (itemOverride.reorder_level !== null) {
-					reorderThreshold = String(itemOverride.reorder_level);
-				}
-			}
-
-			if (reorderThreshold === null) {
-				reorderThreshold = calculateReorderLevel(occupancy, item);
-			}
-
-			if (reorderThreshold === null && item.reorder_level !== null) {
-				reorderThreshold = String(item.reorder_level);
-			}
-
-			let status: 'normal' | 'low' | 'empty' = 'normal';
-
-			if (qtyLte(qtyOnHand, 0)) {
-				status = 'empty';
-			} else if (reorderThreshold !== null && qtyLte(qtyOnHand, reorderThreshold)) {
-				status = 'low';
-			}
+			const reorderThreshold = resolveReorderThreshold(occupancy, item, itemOverride);
 
 			return {
 				...item,
 				qtyOnHand,
 				reorderThreshold,
-				status
+				status: deriveStockQtyStatus(qtyOnHand, reorderThreshold),
+				expiryState: stockSummaryByItem.get(item._id)?.expiryState ?? 'none'
 			};
 		})
 	);
@@ -295,12 +272,12 @@
 				return false;
 			if (categoryFilter !== 'all' && item.category !== categoryFilter) return false;
 
-			const lot = latestLotByItem[item._id];
-			const expired = isExpired(lot?.expiry);
-			const expiring = isExpiringSoon(lot?.expiry);
+			const expired = item.expiryState === 'expired';
+			const expiring = item.expiryState === 'expiring';
 
 			if (locationFilter !== 'all') {
-				if (!lot?.location || lotStorageKey(lot.lot) !== locationFilter) return false;
+				const keys = stockSummaryByItem.get(item._id)?.storageKeys ?? [];
+				if (!keys.includes(locationFilter)) return false;
 			}
 
 			if (statusFilter !== 'all') {
@@ -360,9 +337,8 @@
 		for (const item of itemsWithCalculatedStatus) {
 			if (item.status === 'low') low += 1;
 			if (item.status === 'empty') empty += 1;
-			const lot = latestLotByItem[item._id];
-			if (isExpired(lot?.expiry)) expired += 1;
-			else if (isExpiringSoon(lot?.expiry)) expiring += 1;
+			if (item.expiryState === 'expired') expired += 1;
+			else if (item.expiryState === 'expiring') expiring += 1;
 		}
 		return {
 			all: itemsWithCalculatedStatus.length,
@@ -692,10 +668,10 @@
 					</div>
 				{:else}
 					{#each paginatedItems as item (item._id)}
-						{@const lot = latestLotByItem[item._id]}
+						{@const location = locationLabelByItem.get(item._id)}
 						{@const ageLine = ageLineByItem.get(item._id)}
-						{@const expired = isExpired(lot?.expiry)}
-						{@const expiring = isExpiringSoon(lot?.expiry)}
+						{@const expired = item.expiryState === 'expired'}
+						{@const expiring = item.expiryState === 'expiring'}
 						{@const display = resolveDisplayStatus(item.status, expired, expiring)}
 						<button
 							type="button"
@@ -721,8 +697,8 @@
 							</p>
 							<p class="mt-1.5 text-sm text-slate-500">
 								{getCategoryLabel(item.category)}
-								{#if lot?.location}
-									<span aria-hidden="true"> · </span>{lot.location}
+								{#if location}
+									<span aria-hidden="true"> · </span>{location}
 								{/if}
 							</p>
 							{#if ageLine}
@@ -757,10 +733,10 @@
 							</Table.Row>
 						{:else}
 							{#each paginatedItems as item (item._id)}
-								{@const lot = latestLotByItem[item._id]}
+								{@const location = locationLabelByItem.get(item._id)}
 								{@const ageLine = ageLineByItem.get(item._id)}
-								{@const expired = isExpired(lot?.expiry)}
-								{@const expiring = isExpiringSoon(lot?.expiry)}
+								{@const expired = item.expiryState === 'expired'}
+								{@const expiring = item.expiryState === 'expiring'}
 								{@const display = resolveDisplayStatus(item.status, expired, expiring)}
 								<Table.Row
 									class="min-h-12 cursor-pointer transition-colors hover:bg-slate-50/80 {showOverall
@@ -780,8 +756,8 @@
 										{getCategoryLabel(item.category)}
 									</Table.Cell>
 									<Table.Cell class="hidden px-4 py-3.5 text-sm text-slate-600 lg:table-cell">
-										{#if lot?.location}
-											{lot.location}
+										{#if location}
+											{location}
 										{:else}
 											<span class="text-slate-400">—</span>
 										{/if}
