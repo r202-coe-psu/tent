@@ -14,6 +14,7 @@ Usage:
   sudo python3 inspect_card_rfpro.py            # ทุกขั้น: version → สถานะบัตร → รอเสียบบัตร → ATR → อ่านเลขบัตร
   sudo python3 inspect_card_rfpro.py ping       # ขั้น 1–2 อย่างเดียว (ไม่ต้องมีบัตร)
   sudo python3 inspect_card_rfpro.py --full     # S0-6: อ่านทั้งใบ แสดงเฉพาะความยาวแต่ละ field + เวลา (ไม่แสดงข้อมูล)
+  python3 inspect_card_rfpro.py long-reply --verbose  # ดึงคำตอบยาว 1 รายการ (ชื่อไทย) แล้วรายงานเฉพาะโครงสร้างแพ็กเก็ต HID
   --verbose     แสดงคำสั่ง/คำตอบ (ข้อมูลบัตรใน APDU reply ถูกปิด เว้นแต่ใส่ --show-cid)
   --show-cid    แสดงเลขบัตรเต็ม (default ปิดบังกลางเลข)
 """
@@ -24,6 +25,7 @@ import argparse
 import sys
 import time
 
+from app.hidraw import find_nodes
 from app.rfpro import (
     CARD_CPU_7816,
     CMD_HW_VER,
@@ -34,11 +36,15 @@ from app.rfpro import (
     CMD_ICC_ST,
     HEARTBEAT,
     SLOT_MAIN,
+    RfproConnection,
     RfproError,
     RfproThaiCardReader,
     RfproTransport,
+    _xor,
+    build_frame,
+    parse_frame,
 )
-from app.scard import SELECT, THAI_CARD_AID
+from app.scard import CMD_THFULLNAME, SELECT, THAI_CARD_AID
 from inspect_card_hid import DEFAULT_ID
 
 APDU_SELECT_THAI = bytes(SELECT + THAI_CARD_AID)
@@ -203,11 +209,80 @@ def read_full(transport: RfproTransport) -> None:
     print(f"✅ อ่านครบทั้งใบใน {elapsed:.1f} วิ (AC-C3: ลงทะเบียนต้องไม่เกินค่านี้ + 20%)")
 
 
+def long_reply(transport: RfproTransport, usb_id: str) -> None:
+    """Capture the raw HID reports of one long APDU reply and print only their structure.
+
+    Diagnoses replies that span several reports: counts, sizes, the length the frame declares
+    versus the bytes that arrived, and which reassembly layouts give a valid checksum. No card
+    data is printed (only the 9 header bytes of the frame, which carry no card content)."""
+    wait_for_card(transport)
+    nodes = [n for n in find_nodes(usb_id) if any(k == "Output" for k, _ in n.reports)]
+    if nodes:
+        info = nodes[0].reports.get(("Input", next((r for k, r in nodes[0].reports if k == "Input"), 0)))
+        print(f"   descriptor: Input report {(info.bits + 7) // 8 if info else '?'} bytes")
+
+    step("4) ดึงคำตอบยาว: ชื่อไทย (GET RESPONSE ~100 bytes)")
+    connection = RfproConnection(transport)
+    connection.connect()
+    connection.transmit(list(APDU_SELECT_THAI))
+    _, sw1, sw2 = connection.transmit(list(CMD_THFULLNAME))
+    print(f"   อ่านชื่อ → SW {sw1:02X} {sw2:02X} (ต้องเป็น 61 xx)")
+    atr = bytes(connection.getATR())
+    get_response = bytes([0x00, 0xC0, 0x00, 0x01 if atr[:2] == b"\x3b\x67" else 0x00, sw2])
+
+    started = time.monotonic()
+    reports: list[tuple[float, bytes]] = []
+    with transport._lock:
+        transport._inx = (transport._inx % 255) + 1
+        frame = build_frame(
+            transport._inx, CMD_ICC_APDU, bytes([SLOT_MAIN]) + get_response
+        )
+        transport._drain()
+        transport._write(frame)
+        while time.monotonic() - started < 4.0:
+            report = transport._read_report(0.25)
+            if report is not None:
+                reports.append((time.monotonic() - started, report))
+
+    data_reports = []
+    for number, (at, report) in enumerate(reports):
+        try:
+            frame = parse_frame(report) if report[:1] == b"\xaa" else None
+        except RfproError:
+            frame = None
+        is_heartbeat = frame is not None and frame.cmd == HEARTBEAT
+        kind = "heartbeat" if is_heartbeat else "data"
+        print(f"   report {number}: {len(report)} bytes · {kind} · +{at * 1000:.0f} ms")
+        if not is_heartbeat:
+            data_reports.append(report)
+    if not data_reports:
+        raise InspectError("ไม่มี report ข้อมูลตอบกลับเลยใน 4 วินาที (ไม่ใช่แค่ตกหล่น: เครื่องไม่ส่งอะไรมา)")
+
+    first = data_reports[0]
+    start = first.find(b"\xaa")
+    if start < 0 or len(first) < start + 4:
+        raise InspectError("report แรกไม่มี STX/ความยาว")
+    declared = int.from_bytes(first[start + 2 : start + 4], "big") + 5
+    print(f"   header (9 bytes): {first[start : start + 9].hex(' ')}")
+    stream = first[start:] + b"".join(data_reports[1:])
+    print(f"   เฟรมประกาศความยาว {declared} bytes · ได้รับจริง {len(stream)} bytes ({len(data_reports)} reports)")
+
+    layouts = {
+        "ต่อกันตรง ๆ (โค้ดปัจจุบัน)": first[start:] + b"".join(data_reports[1:]),
+        "ตัด 1 byte หน้า report ต่อเนื่อง": first[start:] + b"".join(r[1:] for r in data_reports[1:]),
+        "ตัด 2 bytes หน้า report ต่อเนื่อง": first[start:] + b"".join(r[2:] for r in data_reports[1:]),
+    }
+    for name, joined in layouts.items():
+        chunk = joined[:declared]
+        valid = len(chunk) == declared and _xor(chunk[1:-1]) == chunk[-1]
+        print(f"   {'✅' if valid else '❌'} checksum · {name}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("command", nargs="?", default="all", choices=["all", "ping"])
+    parser.add_argument("command", nargs="?", default="all", choices=["all", "ping", "long-reply"])
     parser.add_argument(
         "--full",
         action="store_true",
@@ -233,7 +308,9 @@ def main() -> None:
 
     try:
         ping(transport)
-        if args.command == "all":
+        if args.command == "long-reply":
+            long_reply(transport, args.id)
+        elif args.command == "all":
             if args.full:
                 read_full(transport)
             else:
