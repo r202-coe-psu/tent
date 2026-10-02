@@ -50,6 +50,11 @@ PRINTER_WIDTH_RANGE = (384, 832)
 DEFAULT_PRINTER_WIDTH_DOTS = 576
 PRINTER_CUT_FEED_RANGE_MM = (0, 40)
 DEFAULT_PRINTER_CUT_FEED_MM = 15
+# Whole cut strip (top margin from the cutter + content); 0 = no limit. 60 mm = KIOSK_LABEL_MM.
+PRINTER_LABEL_LENGTH_RANGE_MM = (0, 200)
+DEFAULT_PRINTER_LABEL_LENGTH_MM = 60
+# Keeps a scannable QR when the cap is set: the content always gets at least this much paper.
+MIN_PRINTER_CONTENT_MM = 20
 KIOSK_QR_INPUTS = ("camera", "reader", "both")
 QR_READER_GAP_RANGE_MS = (10, 100)
 DEFAULT_QR_READER_GAP_MS = 50
@@ -146,6 +151,16 @@ def validate_hardware_config(config: Mapping[str, Any]) -> dict[str, str]:
     cut_feed_mm = _bounded_int(
         config, "PRINTER_CUT_FEED_MM", DEFAULT_PRINTER_CUT_FEED_MM, PRINTER_CUT_FEED_RANGE_MM
     )
+    label_length_mm = _bounded_int(
+        config,
+        "PRINTER_LABEL_LENGTH_MM",
+        DEFAULT_PRINTER_LABEL_LENGTH_MM,
+        PRINTER_LABEL_LENGTH_RANGE_MM,
+    )
+    if label_length_mm and label_length_mm - cut_feed_mm < MIN_PRINTER_CONTENT_MM:
+        raise ScannerConfigError(
+            f"PRINTER_LABEL_LENGTH_MM must be 0 or at least PRINTER_CUT_FEED_MM + {MIN_PRINTER_CONTENT_MM}"
+        )
     if backend == "escpos" and not (printer_usb_id or printer_device):
         raise ScannerConfigError(
             "PRINTER_BACKEND=escpos requires PRINTER_USB_ID or PRINTER_DEVICE"
@@ -165,6 +180,7 @@ def validate_hardware_config(config: Mapping[str, Any]) -> dict[str, str]:
         "PRINTER_DEVICE": printer_device,
         "PRINTER_WIDTH_DOTS": str(width_dots),
         "PRINTER_CUT_FEED_MM": str(cut_feed_mm),
+        "PRINTER_LABEL_LENGTH_MM": str(label_length_mm),
         "KIOSK_QR_INPUT": qr_input,
         "KIOSK_CAMERA_LABEL": _clean(config.get("KIOSK_CAMERA_LABEL")),
         "KIOSK_QR_READER_MAX_GAP_MS": str(reader_gap_ms),

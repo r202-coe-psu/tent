@@ -79,6 +79,29 @@ class LabelToEscposTests(unittest.TestCase):
         _, _, payload = bands[0]
         self.assertEqual(row_bits(payload, 576 // 8, 0), "1" * 576)
 
+    def test_label_length_cap_scales_tall_content_down_keeping_aspect_ratio(self):
+        # 60 mm strip - 15 mm cutter margin = 45 mm = 360 rows for the content.
+        data = label_to_escpos(
+            block_png((640, 480), (0, 0, 576, 432)), 576, cut_feed_mm=15, max_length_mm=60
+        )
+
+        bands = parse_bands(data)
+
+        self.assertEqual(sum(rows for _, rows, _ in bands), 360)
+        # 576x432 -> 480x360, centred: 48 blank dots each side.
+        self.assertEqual(row_bits(bands[0][2], 72, 0), "0" * 48 + "1" * 480 + "0" * 48)
+
+    def test_label_length_cap_leaves_short_content_and_zero_means_no_limit(self):
+        png = block_png((640, 480), (0, 0, 576, 432))
+        for name, (max_length_mm, rows) in {"fits": (80, 432), "no limit": (0, 432)}.items():
+            with self.subTest(name=name):
+                data = label_to_escpos(png, 576, cut_feed_mm=15, max_length_mm=max_length_mm)
+                self.assertEqual(sum(r for _, r, _ in parse_bands(data)), rows)
+
+    def test_label_length_cap_must_exceed_the_cut_feed(self):
+        with self.assertRaises(ValueError):
+            label_to_escpos(block_png((64, 64), (0, 0, 32, 32)), 576, cut_feed_mm=15, max_length_mm=15)
+
     def test_tall_image_is_split_into_bands_of_at_most_255_rows(self):
         data = label_to_escpos(block_png((100, 600), (0, 0, 100, 600)), 576)
 

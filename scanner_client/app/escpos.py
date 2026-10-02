@@ -64,16 +64,26 @@ def feed_and_cut(cut_feed_mm: int) -> bytes:
 
 
 def label_to_escpos(
-    png: bytes, width_dots: int, cut_feed_mm: int = DEFAULT_CUT_FEED_MM
+    png: bytes,
+    width_dots: int,
+    cut_feed_mm: int = DEFAULT_CUT_FEED_MM,
+    max_length_mm: int = 0,
 ) -> bytes:
     """Render a label PNG as ESC/POS bytes that fit a print head `width_dots` wide.
 
     Blank margins are trimmed, content wider than the head is scaled down (never up) with
     nearest-neighbour so QR modules stay hard-edged, and the result is centred. The paper is
     then fed `cut_feed_mm` (print head to cutter) and cut.
+
+    A cut strip is `cut_feed_mm` + content long: the head-to-cutter stretch left after the
+    previous cut becomes this label's top margin. `max_length_mm` (0 = no limit) caps the strip
+    by scaling content taller than `max_length_mm - cut_feed_mm` down.
     """
     if width_dots <= 0 or width_dots % 8:
         raise ValueError("width_dots must be a positive multiple of 8")
+    max_rows = (max_length_mm - cut_feed_mm) * DOTS_PER_MM if max_length_mm else 0
+    if max_length_mm and max_rows <= 0:
+        raise ValueError("max_length_mm must be longer than cut_feed_mm")
 
     ink = _load_ink_mask(png)
     box = ink.getbbox()
@@ -84,6 +94,9 @@ def label_to_escpos(
     if content.width > width_dots:
         height = max(1, round(content.height * width_dots / content.width))
         content = content.resize((width_dots, height), Image.NEAREST)
+    if max_rows and content.height > max_rows:
+        width = max(1, round(content.width * max_rows / content.height))
+        content = content.resize((width, max_rows), Image.NEAREST)
 
     canvas = Image.new("L", (width_dots, content.height), 0)
     canvas.paste(content, ((width_dots - content.width) // 2, 0))
