@@ -131,3 +131,42 @@ describe('filterStockFormItems', () => {
 		expect(filterStockFormItems(mixed, 'ถุงมือยาง').map((i) => i._id)[0]).toBe('item:a');
 	});
 });
+
+describe('barcode lookup', () => {
+	const items = toStockFormItems(
+		[],
+		[
+			{
+				_id: 'item_master:milk',
+				name: 'นมถั่วเหลือง',
+				base_unit: 'box',
+				conversions: [
+					{ uom_name: 'pack', multiplier: '12', barcode: '8850000000999' },
+					{ uom_name: 'box', multiplier: '1', barcode: '8850000000012' }
+				]
+			},
+			{ _id: 'item_master:water', name: 'น้ำดื่ม', base_unit: 'bottle', conversions: [] }
+		]
+	);
+
+	it('keeps barcodes on the packaging rows', () => {
+		expect(items[0].conversions?.[1].barcode).toBe('8850000000012');
+	});
+
+	it('puts the item with a matching barcode first', () => {
+		expect(filterStockFormItems(items, '8850000000012').map((i) => i._id)).toEqual([
+			'item_master:milk'
+		]);
+		const hits = filterStockFormItems(items, ' 8850000000999 ');
+		expect(hits[0]._id).toBe('item_master:milk');
+	});
+
+	it('does not duplicate an item that also matches by name', () => {
+		const out = filterStockFormItems(items, 'นม');
+		expect(out.filter((i) => i._id === 'item_master:milk')).toHaveLength(1);
+	});
+
+	it('returns nothing for an unknown barcode', () => {
+		expect(filterStockFormItems(items, '0000000000000')).toEqual([]);
+	});
+});

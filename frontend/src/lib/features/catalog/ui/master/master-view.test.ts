@@ -4,6 +4,7 @@ import type { UnitOfMeasure } from '../../domain/unit-of-measure';
 import {
 	categoryItemCount,
 	clampPage,
+	countScopeChips,
 	filterItems,
 	filterRecipes,
 	filterUnits,
@@ -11,6 +12,8 @@ import {
 	hiddenDeactivatedRecipes,
 	hiddenDeactivatedUnits,
 	ingredientSummary,
+	isIncompleteItem,
+	isNewItem,
 	pageRange,
 	pageSlice,
 	unitLines,
@@ -125,6 +128,21 @@ describe('unitLines', () => {
 		).toEqual(['กล่อง', '1 แพ็ค = 12 กล่อง', '1 ลัง = 48 กล่อง']);
 	});
 
+	it('does not print the base-unit barcode row as a pack size', () => {
+		expect(
+			unitLines(
+				{
+					base_unit: 'box',
+					conversions: [
+						{ uom_name: 'pack', multiplier: '12' },
+						{ uom_name: 'box', multiplier: '1', barcode: '8850000000012' }
+					]
+				},
+				fmt
+			)
+		).toEqual(['กล่อง', '1 แพ็ค = 12 กล่อง']);
+	});
+
 	it('skips incomplete conversions and shows a dash without a base unit', () => {
 		expect(
 			unitLines({ base_unit: '', conversions: [{ uom_name: 'pack', multiplier: '' }] }, fmt)
@@ -178,6 +196,106 @@ describe('filterItems', () => {
 	it('counts items per category', () => {
 		expect(categoryItemCount(items, drink, false)).toBe(1);
 		expect(categoryItemCount(items, drink, true)).toBe(2);
+	});
+});
+
+describe('scope chips', () => {
+	const complete: Partial<ItemMaster> = {
+		sku: 'X-1',
+		conversions: [{ uom_name: 'pack', multiplier: '12' }],
+		shelf_life_days: 90,
+		storage_type: 'DRY',
+		allergens: 'none',
+		target_gender: 'ALL'
+	};
+	const done = item({
+		_id: 'item_master:done',
+		name: 'ครบ',
+		type_class: 'CONSUMABLE',
+		shelter_code: SH,
+		...complete
+	});
+	const gappy = item({
+		_id: 'item_master:gappy',
+		name: 'ไม่ครบ',
+		type_class: 'CONSUMABLE',
+		shelter_code: SH
+	});
+	const overridden = item({
+		_id: 'item_master:ovr',
+		name: 'ปรับแต่ง',
+		type_class: 'CONSUMABLE',
+		shelter_code: SH,
+		override: true
+	});
+	const central = item({ _id: 'item_master:cen', name: 'กลาง', type_class: 'CONSUMABLE' });
+	const closed = item({
+		_id: 'item_master:closed',
+		name: 'ปิด',
+		type_class: 'CONSUMABLE',
+		shelter_code: SH,
+		deactivated: true
+	});
+	const all = [done, gappy, overridden, central, closed];
+	const ids = (rows: { _id: string }[]) => rows.map((r) => r._id);
+
+	it('incomplete lists only the shelter’s own items with gaps', () => {
+		expect(isIncompleteItem(gappy, SH)).toBe(true);
+		expect(isIncompleteItem(done, SH)).toBe(false);
+		expect(isIncompleteItem(central, SH)).toBe(false);
+		expect(isIncompleteItem(overridden, SH)).toBe(false);
+		expect(ids(filterItems(all, [], { ...NO_FILTER, scope: 'incomplete' }, SH))).toEqual([
+			'item_master:gappy'
+		]);
+	});
+
+	it('central scope counts every item with gaps', () => {
+		expect(isIncompleteItem(central, null)).toBe(true);
+	});
+
+	it('local and central chips split on origin, central including overrides', () => {
+		expect(ids(filterItems(all, [], { ...NO_FILTER, scope: 'local' }, SH))).toEqual([
+			'item_master:done',
+			'item_master:gappy'
+		]);
+		expect(ids(filterItems(all, [], { ...NO_FILTER, scope: 'central' }, SH))).toEqual([
+			'item_master:cen',
+			'item_master:ovr'
+		]);
+	});
+
+	it('counts each chip under the other filters, ignoring the chip itself', () => {
+		expect(countScopeChips(all, [], NO_FILTER, SH)).toEqual({
+			all: 4,
+			incomplete: 1,
+			local: 2,
+			central: 2
+		});
+		// the active chip does not change the counts
+		expect(countScopeChips(all, [], { ...NO_FILTER, scope: 'central' }, SH).all).toBe(4);
+		// search narrows every count; deactivated items count only when shown
+		expect(countScopeChips(all, [], { ...NO_FILTER, q: 'ไม่ครบ' }, SH)).toMatchObject({
+			all: 1,
+			incomplete: 1,
+			local: 1,
+			central: 0
+		});
+		expect(countScopeChips(all, [], { ...NO_FILTER, showDeactivated: true }, SH).all).toBe(5);
+	});
+});
+
+describe('isNewItem', () => {
+	const now = Date.parse('2026-10-03T12:00:00Z');
+
+	it('is true within 24 hours of creation', () => {
+		expect(isNewItem({ created_at: '2026-10-03T10:58:00Z' }, now)).toBe(true);
+		expect(isNewItem({ created_at: '2026-10-02T12:00:01Z' }, now)).toBe(true);
+	});
+
+	it('is false after a day, for the future and for bad dates', () => {
+		expect(isNewItem({ created_at: '2026-10-02T12:00:00Z' }, now)).toBe(false);
+		expect(isNewItem({ created_at: '2026-10-04T00:00:00Z' }, now)).toBe(false);
+		expect(isNewItem({ created_at: '' }, now)).toBe(false);
 	});
 });
 

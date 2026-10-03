@@ -338,7 +338,7 @@ export type PackagingUomOption = {
 export type PackagingSource = {
 	base_unit?: string;
 	unit?: string;
-	conversions?: readonly { uom_name: string; multiplier: string }[];
+	conversions?: readonly { uom_name: string; multiplier: string; barcode?: string }[];
 	default_inventory_uom?: string;
 	default_issue_uom?: string;
 };
