@@ -165,7 +165,7 @@
 					type="button"
 					onclick={toggleLanguage}
 					class="inline-flex cursor-pointer items-center justify-center rounded-full border border-slate-300 bg-white px-2.5 py-0.5 text-xs font-bold text-[#0A2647] shadow-2xs transition-all hover:border-slate-400 hover:bg-slate-50 active:scale-95"
-					aria-label={langState.current === 'th' ? 'Switch to English' : 'เปลี่ยนเป็นภาษาไทย'}
+					aria-label={t.switchLanguageAria}
 				>
 					{langState.current === 'th' ? 'EN' : 'TH'}
 				</button>
@@ -175,7 +175,7 @@
 				type="button"
 				class="flex items-center justify-center rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted"
 				onclick={toggleMobileMenu}
-				aria-label={mobileMenuOpen ? 'ปิดเมนู' : 'เปิดเมนู'}
+				aria-label={mobileMenuOpen ? t.closeMenu : t.openMenu}
 				aria-expanded={mobileMenuOpen}
 				aria-controls="public-mobile-nav"
 			>
@@ -371,7 +371,7 @@
 					type="button"
 					onclick={toggleLanguage}
 					class="inline-flex cursor-pointer items-center justify-center rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-bold text-[#0A2647] shadow-2xs transition-all hover:border-slate-400 hover:bg-slate-50 active:scale-95 2xl:px-3.5"
-					aria-label={langState.current === 'th' ? 'Switch to English' : 'เปลี่ยนเป็นภาษาไทย'}
+					aria-label={t.switchLanguageAria}
 				>
 					{langState.current === 'th' ? 'EN' : 'TH'}
 				</button>
@@ -383,7 +383,7 @@
 	<Sheet.Root bind:open={mobileMenuOpen}>
 		<Sheet.Content id="public-mobile-nav" side="right" class="gap-0 p-0">
 			<Sheet.Header class="border-b p-4 pr-14">
-				<Sheet.Title>เมนู</Sheet.Title>
+				<Sheet.Title>{t.menuTitle}</Sheet.Title>
 			</Sheet.Header>
 			<nav class="flex flex-col gap-1 p-4">
 				<button

@@ -147,6 +147,28 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		unassignedDisclaimerAck:
 			'ข้าพเจ้ารับทราบเงื่อนไขการใช้งานระบบ และยินยอมให้เก็บข้อมูลตามที่ระบุเพื่อการลงทะเบียนล่วงหน้า',
 		unassignedDisclaimerRequired: 'กรุณายืนยันการรับทราบเงื่อนไขการใช้งานระบบก่อนส่งข้อมูล',
+		capacityAvailable: (available: number, capacity: number, unit: string) =>
+			`ว่าง ${available} / ${capacity} ${unit}`,
+		shelterNotBookable: 'ศูนย์นี้ยังไม่เปิดรับลงทะเบียนล่วงหน้าจากหน้าสาธารณะ',
+		shelterDisclaimerRequired:
+			'กรุณากดยืนยันการรับทราบเงื่อนไขและมาตรการด้านความปลอดภัยของศูนย์พักพิง',
+		registerSuccess: 'ลงทะเบียนสำเร็จ',
+		unassignedShelterName: 'ไม่ระบุศูนย์พักพิง',
+		guidanceTitle: '💡 ลงทะเบียนล่วงหน้าเพื่อความสะดวกและรวดเร็ว',
+		guidanceDesc:
+			'เมื่อลงทะเบียนเรียบร้อยแล้ว ท่านสามารถแจ้งเบอร์โทรศัพท์หรือแสดง QR Code ต่อเจ้าหน้าที่ลงทะเบียนประจำศูนย์ เพื่อยืนยันการเข้าพักได้ทันที',
+		unassignedOption: '📍 ไม่ระบุศูนย์พักพิง',
+		unassignedOptionHint: 'ลงทะเบียนล่วงหน้าโดยไม่ระบุศูนย์ (ยืนยันศูนย์เมื่อเดินทางถึง)',
+		unassignedNoticeTitle: 'กรณีไม่ระบุศูนย์พักพิง',
+		unassignedNoticeDesc: 'การลงทะเบียนล่วงหน้า จะไม่การันตีว่าคุณจะได้เข้าพักในศูนย์',
+		shelterChangedToast: (name: string) => `เปลี่ยนศูนย์พักพิงเป็น "${name}" เรียบร้อยแล้ว`,
+		submitRegistration: 'ยืนยันการลงทะเบียน',
+		shelterSafetyTitle: 'เงื่อนไขและมาตรการความปลอดภัยของศูนย์พักพิง',
+		shelterSafetyAck:
+			'ข้าพเจ้ารับทราบและยินยอมปฏิบัติตามเงื่อนไขและมาตรการด้านความปลอดภัยของศูนย์พักพิงทุกประการ',
+		chooseShelterTitle: 'กรุณาเลือกศูนย์พักพิง',
+		chooseShelterDesc:
+			'เลือกศูนย์พักพิงที่ท่านต้องการเข้าพัก หรือเลือก "ไม่ระบุศูนย์พักพิง" เพื่อดำเนินการลงทะเบียน',
 		// Unified form sections
 		sectionNavAria: 'ส่วนของแบบฟอร์มลงทะเบียน',
 		sectionAddress: 'ข้อมูลที่อยู่อาศัย',
@@ -441,6 +463,27 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		unassignedDisclaimerAck:
 			'I acknowledge these system terms and consent to storing this information for advance registration.',
 		unassignedDisclaimerRequired: 'Please acknowledge the system terms before submitting.',
+		capacityAvailable: (available: number, capacity: number, unit: string) =>
+			`${available} / ${capacity} ${unit} free`,
+		shelterNotBookable: 'This shelter is not accepting public pre-registration yet.',
+		shelterDisclaimerRequired: "Please acknowledge the shelter's conditions and safety rules.",
+		registerSuccess: 'Registration successful',
+		unassignedShelterName: 'No shelter selected',
+		guidanceTitle: '💡 Pre-register for a faster check-in',
+		guidanceDesc:
+			'Once registered, give your phone number or show the QR code to the registration staff at the shelter to confirm your stay right away.',
+		unassignedOption: '📍 No shelter selected',
+		unassignedOptionHint: 'Pre-register without choosing a shelter (confirm one when you arrive)',
+		unassignedNoticeTitle: 'Registering without a shelter',
+		unassignedNoticeDesc: 'Pre-registration does not guarantee you a place in a shelter.',
+		shelterChangedToast: (name: string) => `Shelter changed to "${name}"`,
+		submitRegistration: 'Submit registration',
+		shelterSafetyTitle: 'Shelter conditions and safety rules',
+		shelterSafetyAck:
+			"I acknowledge and agree to follow all of the shelter's conditions and safety rules.",
+		chooseShelterTitle: 'Please choose a shelter',
+		chooseShelterDesc:
+			'Choose the shelter you want to stay at, or choose "No shelter selected" to continue registering.',
 		sectionNavAria: 'Registration form sections',
 		sectionAddress: 'Residence',
 		sectionAddressDesc: 'Housing type and previous family address',
