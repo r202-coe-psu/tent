@@ -34,7 +34,6 @@
 	import type { StockFormItem } from '../domain/stock-form-items';
 	import ItemCombobox from './item-combobox.svelte';
 	import { toast } from 'svelte-sonner';
-	import PackageMinus from '@lucide/svelte/icons/package-minus';
 	import Minus from '@lucide/svelte/icons/minus';
 	import Plus from '@lucide/svelte/icons/plus';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
@@ -384,19 +383,7 @@
 	);
 </script>
 
-<form
-	method="POST"
-	use:form.enhance
-	class="flex flex-col space-y-4 rounded-2xl border border-border/80 bg-card p-4 shadow-md sm:p-5"
->
-	<div class="flex flex-col gap-1 border-b border-border/60 pb-3">
-		<div class="flex items-center gap-2">
-			<PackageMinus class="h-4.5 w-4.5 text-primary" aria-hidden="true" />
-			<h3 class="text-sm font-bold text-foreground">เบิกจ่าย</h3>
-		</div>
-		<p class="text-xs text-muted-foreground">ระบบเลือกล็อตที่หมดอายุก่อนให้อัตโนมัติ</p>
-	</div>
-
+<form method="POST" use:form.enhance class="flex flex-col space-y-4">
 	<Field.FieldGroup class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 		<Form.Field {form} name="item_id" class="relative col-span-1 sm:col-span-2">
 			<Form.Control>
@@ -647,7 +634,9 @@
 			</div>
 		{/if}
 
-		<div class="col-span-1 flex flex-col gap-2 pt-1 sm:col-span-2 sm:flex-row">
+		<div
+			class="sticky bottom-0 z-10 col-span-1 -mx-4 -mb-4 flex flex-col gap-2 border-t border-slate-200 bg-slate-50 px-4 py-4 sm:col-span-2 sm:-mx-6 sm:-mb-6 sm:flex-row sm:justify-end sm:px-6"
+		>
 			<Button
 				type="submit"
 				variant="outline"

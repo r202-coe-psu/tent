@@ -41,7 +41,6 @@
 	import { useStockFormItems } from '../application/use-stock-form-items.svelte';
 	import type { StockFormItem } from '../domain/stock-form-items';
 	import { toast } from 'svelte-sonner';
-	import PackagePlus from '@lucide/svelte/icons/package-plus';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import HandHelping from '@lucide/svelte/icons/hand-helping';
@@ -454,16 +453,7 @@
 
 <svelte:document onclick={handleClickOutside} />
 
-<form
-	method="POST"
-	use:form.enhance
-	class="flex flex-col space-y-4 rounded-2xl border border-border/80 bg-card p-4 shadow-md sm:p-5"
->
-	<div class="flex items-center gap-2 border-b border-border/60 pb-3">
-		<PackagePlus class="h-4.5 w-4.5 text-primary" aria-hidden="true" />
-		<h3 class="text-sm font-bold text-foreground">รับเข้า</h3>
-	</div>
-
+<form method="POST" use:form.enhance class="flex flex-col space-y-4">
 	<Field.FieldGroup class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 		<div class="col-span-1 space-y-2 sm:col-span-2">
 			<p class="text-sm font-bold text-foreground">1 · ของมาจากไหน</p>
@@ -827,7 +817,9 @@
 			{/if}
 		</div>
 
-		<div class="col-span-1 pt-1 sm:col-span-2">
+		<div
+			class="sticky bottom-0 z-10 col-span-1 -mx-4 -mb-4 border-t border-slate-200 bg-slate-50 px-4 py-4 sm:col-span-2 sm:-mx-6 sm:-mb-6 sm:px-6"
+		>
 			<Form.Button size="lg" disabled={$submitting || offline} class="min-h-11 w-full font-bold">
 				{$submitting ? 'กำลังบันทึก…' : 'บันทึกแล้วรับชิ้นถัดไป'}
 			</Form.Button>

@@ -25,7 +25,6 @@
 	import { useShelters } from '$lib/features/shelters';
 	import { getShelterCode } from '$lib/db/shelter';
 	import * as Table from '$lib/components/ui/table/index.js';
-	import * as Dialog from '$lib/components/ui/dialog';
 	import * as Sheet from '$lib/components/ui/sheet';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import PaginationControls from '$lib/components/pagination-controls.svelte';
@@ -600,49 +599,30 @@
 	onaction={(kind) => openQuickAction(kind, selectedItemId ?? undefined)}
 />
 
-<!-- Quick receive / distribute / adjust (header buttons: no preselect; row buttons: item preselected) -->
-{#if isMobileViewport.current}
-	<Sheet.Root bind:open={quickActionOpen}>
-		<Sheet.Content
-			side="bottom"
-			class="flex h-[100dvh] max-h-[100dvh] flex-col gap-0 overflow-hidden rounded-none border-0 p-0 pb-[env(safe-area-inset-bottom)]"
-		>
-			<Sheet.Header class="shrink-0 border-b border-slate-200/80 px-4 py-4 pr-12 text-left">
-				<Sheet.Title class="text-xl font-bold text-slate-900">
-					{quickActionTitle}
-				</Sheet.Title>
-				<Sheet.Description class="text-sm text-slate-500">
-					{quickActionDescription}
-				</Sheet.Description>
-			</Sheet.Header>
-			<div class="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
-				{#if quickActionKind === 'receive'}
-					<ReceiveStockForm preselectedItemId={quickActionItemId} onsuccess={onMovementSuccess} />
-				{:else if quickActionKind === 'distribute'}
-					<DistributeStockForm
-						preselectedItemId={quickActionItemId}
-						{occupancy}
-						onsuccess={onMovementSuccess}
-					/>
-				{:else}
-					<AdjustStockForm preselectedItemId={quickActionItemId} onsuccess={onMovementSuccess} />
-				{/if}
-			</div>
-		</Sheet.Content>
-	</Sheet.Root>
-{:else}
-	<Dialog.Root bind:open={quickActionOpen}>
-		<Dialog.Content
-			class="max-h-[92vh] w-full overflow-y-auto rounded-2xl border border-slate-200/80 bg-white p-4 shadow-md sm:max-w-lg sm:p-6"
-		>
-			<Dialog.Header class="mb-4 border-b border-slate-200/80 pb-4">
-				<Dialog.Title class="text-xl font-bold text-slate-900">
-					{quickActionTitle}
-				</Dialog.Title>
-				<Dialog.Description class="text-sm text-slate-500">
-					{quickActionDescription}
-				</Dialog.Description>
-			</Dialog.Header>
+<!-- Quick receive / distribute / adjust (header buttons: no preselect; row buttons: item preselected).
+	Desktop: right side sheet (receive 760px, others 600px); mobile: full-height bottom sheet. -->
+<Sheet.Root bind:open={quickActionOpen}>
+	<Sheet.Content
+		side={isMobileViewport.current ? 'bottom' : 'right'}
+		class={[
+			'flex flex-col gap-0 overflow-hidden border-0 p-0 pb-[env(safe-area-inset-bottom)]',
+			isMobileViewport.current
+				? 'h-[100dvh] max-h-[100dvh] rounded-none'
+				: [
+						'h-[100dvh] w-full sm:max-w-none md:border-l',
+						quickActionKind === 'receive' ? 'md:w-[47.5rem]' : 'md:w-[37.5rem]'
+					]
+		]}
+	>
+		<Sheet.Header class="shrink-0 border-b border-slate-200/80 px-4 py-4 pr-14 text-left sm:px-6">
+			<Sheet.Title class="text-xl font-bold text-slate-900">
+				{quickActionTitle}
+			</Sheet.Title>
+			<Sheet.Description class="text-sm text-slate-500">
+				{quickActionDescription}
+			</Sheet.Description>
+		</Sheet.Header>
+		<div class="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
 			{#if quickActionKind === 'receive'}
 				<ReceiveStockForm preselectedItemId={quickActionItemId} onsuccess={onMovementSuccess} />
 			{:else if quickActionKind === 'distribute'}
@@ -654,6 +634,6 @@
 			{:else}
 				<AdjustStockForm preselectedItemId={quickActionItemId} onsuccess={onMovementSuccess} />
 			{/if}
-		</Dialog.Content>
-	</Dialog.Root>
-{/if}
+		</div>
+	</Sheet.Content>
+</Sheet.Root>
