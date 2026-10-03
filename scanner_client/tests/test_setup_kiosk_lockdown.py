@@ -136,12 +136,36 @@ class KioskSessionIdTests(unittest.TestCase):
 
 class SessionScriptTests(unittest.TestCase):
     def test_loops_start_kiosk_and_skips_while_locked(self):
-        body = run_helper('session_script_content "/opt/tent/scanner_client/start_kiosk.sh"')
+        body = run_helper(
+            'session_script_content "/opt/tent/scanner_client/start_kiosk.sh" '
+            '"/opt/tent/scanner_client/maintenance_hotkey.py"'
+        )
         self.assertTrue(body.startswith("#!/bin/sh\n# Managed by tent scanner_client/setup_kiosk_lockdown.sh"))
         self.assertIn('flock -n "/tmp/smart_shelter_kiosk.lock" true', body)
         self.assertIn('"/opt/tent/scanner_client/start_kiosk.sh"', body)
         self.assertIn("while true; do", body)
         subprocess.run(["sh", "-n"], input=body, text=True, check=True)
+
+    def test_starts_maintenance_hotkey_in_background_with_real_path(self):
+        body = run_helper(
+            'session_script_content "/opt/tent/scanner_client/start_kiosk.sh" '
+            '"/opt/tent/scanner_client/maintenance_hotkey.py"'
+        )
+        hotkey_line = 'python3 "/opt/tent/scanner_client/maintenance_hotkey.py" >>"/tmp/kiosk_maintenance_hotkey.log" 2>&1'
+        self.assertIn(hotkey_line, body)
+        self.assertIn(") &", body)
+        # The hotkey loop is started before the foreground kiosk loop, which never returns.
+        self.assertLess(body.index(hotkey_line), body.index('flock -n "/tmp/smart_shelter_kiosk.lock"'))
+
+
+class MaintenanceTerminalScriptTests(unittest.TestCase):
+    def test_terminal_script_is_valid_bash_and_requires_password(self):
+        script = SCRIPT.parent / "maintenance_terminal.sh"
+        subprocess.run(["bash", "-n", str(script)], check=True)
+        body = script.read_text()
+        self.assertIn('su -l "$USER_NAME"', body)
+        self.assertNotIn("exec bash", body)
+        self.assertNotIn("exec sh", body)
 
 
 if __name__ == "__main__":
