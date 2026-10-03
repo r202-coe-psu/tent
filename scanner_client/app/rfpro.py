@@ -4,7 +4,7 @@ Implements the vendor frame format (RFpro SDK `通用协议规则`) and the cont
 (`接触式IC卡功能指令`) over /dev/hidraw, then reuses the Thai ID APDU logic of ThaiSmartCardReader.
 
 Only an allowlist of commands can ever be written to the device: the read-only ones plus
-ICC SET_BAUD (18 82, card-side speed, opt-in and not persisted by the module). The vendor's
+ICC SET_BAUD / PPS (18 82 / 18 83, card-side speed: opt-in, not persisted by the module). The vendor's
 reboot / flash-write / device baud-rate commands are unreachable from here. Card data (APDU
 payloads, ID number, names, address) is never logged — only command, status and lengths.
 """
@@ -62,6 +62,7 @@ CMD_ICC_SLOT_PWR = b"\x18\x02"
 CMD_ICC_GETATR = b"\x18\x80"
 CMD_ICC_APDU = b"\x18\x81"
 CMD_ICC_SET_BAUD = b"\x18\x82"
+CMD_ICC_PPS = b"\x18\x83"
 ALLOWED_CMDS = frozenset(
     {
         CMD_HW_VER,
@@ -71,13 +72,14 @@ ALLOWED_CMDS = frozenset(
         CMD_ICC_GETATR,
         CMD_ICC_APDU,
         CMD_ICC_SET_BAUD,
+        CMD_ICC_PPS,
     }
 )
 # Card-side speeds the module accepts (vendor doc 接触式IC卡功能指令 §CMD_ICC_SET_BAUD); 9600 is
 # what it resets to on every restart, so only a higher speed is ever sent.
 DEFAULT_CARD_BAUD = 9600
-# 38400 sent BEFORE the ATR (the vendor doc's order) left the Thai ID card on kiosk3 not answering
-# reset, so the kiosk stays at 9600. Kept for experiments (inspect_card_rfpro.py --baud 38400).
+# The kiosk asks for this; a card that does not answer reset at it drops the connection back to
+# 9600 (see RfproConnection.connect).
 FAST_CARD_BAUD = 38400
 CARD_BAUDS = (DEFAULT_CARD_BAUD, FAST_CARD_BAUD)
 
@@ -425,7 +427,7 @@ class RfproThaiCardReader(ThaiSmartCardReader):
         self,
         usb_id: str = DEFAULT_USB_ID,
         transport: RfproTransport | None = None,
-        baud: int = DEFAULT_CARD_BAUD,
+        baud: int = FAST_CARD_BAUD,
     ):
         self.transport = transport or RfproTransport.open(usb_id)
         super().__init__(connection=RfproConnection(self.transport, baud))

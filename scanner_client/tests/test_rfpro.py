@@ -11,6 +11,7 @@ from app.rfpro import (
     CMD_HW_VER,
     CMD_ICC_APDU,
     CMD_ICC_GETATR,
+    CMD_ICC_PPS,
     CMD_ICC_SEL,
     CMD_ICC_SET_BAUD,
     CMD_ICC_SLOT_PWR,
@@ -147,6 +148,8 @@ class FakeThaiCard:
     ):
         self.atr = atr
         self.bauds: list[int] = []
+        self.pps: list[int] = []
+        self.accepted_pps = {0x11, 0x13, 0x96}
         self.set_baud_status = 0x00
         # kiosk3's module swallows a first data byte equal to GET RESPONSE's INS (C0).
         self.drops_leading_ins = drops_leading_ins
@@ -177,6 +180,9 @@ class FakeThaiCard:
             return 0x00, b""
         if cmd == CMD_ICC_SLOT_PWR:
             return 0x00, b""
+        if cmd == CMD_ICC_PPS:
+            self.pps.append(data[2])
+            return (0x00 if data[2] in self.accepted_pps else 0x03), b""
         if cmd == CMD_ICC_SET_BAUD:
             self.bauds.append(int.from_bytes(data[1:], "big"))
             return self.set_baud_status, b""
@@ -301,8 +307,8 @@ class FrameTests(unittest.TestCase):
 
     def test_commands_outside_the_allowlist_never_reach_the_wire(self):
         # 00 01 reboot, 00 04 write flash, 00 07 change the device's own baud (vendor command
-        # table), 18 83 PPS (not used: the card's speed is set with 18 82 only).
-        for cmd in (b"\x00\x01", b"\x00\x04", b"\x00\x07", b"\x18\x83"):
+        # table).
+        for cmd in (b"\x00\x01", b"\x00\x04", b"\x00\x07"):
             with self.subTest(cmd=cmd.hex()), self.assertRaises(ValueError):
                 build_frame(1, cmd)
 
@@ -417,7 +423,7 @@ class TransportTests(unittest.TestCase):
 
 def make_reader(card: FakeThaiCard, baud: int = 9600, **kwargs):
     """`baud` is 9600 here so tests count only the commands they care about; the production
-    default is covered by test_the_reader_defaults_to_the_modules_own_9600_and_sends_no_set_baud."""
+    default (38400) is covered by test_the_reader_defaults_to_the_fast_card_baud."""
     device = FakeHidDevice(card, **kwargs)
     transport = device.transport()
     reader = RfproThaiCardReader(transport=transport, baud=baud)
@@ -447,6 +453,35 @@ class ConnectionTests(unittest.TestCase):
             [cmd for cmd, _ in device.commands], [CMD_ICC_SEL, CMD_ICC_GETATR]
         )
         self.assertEqual(device.commands[0][1], b"\x00\x0c")
+
+    def test_pps_request_matches_the_vendor_document_example(self):
+        # SDK 接触式IC卡功能指令: AA 00 00 0B 00 00 18 83 00 10 11 00 00 00 00 91
+        frame = build_frame(0, CMD_ICC_PPS, bytes([0x00, 0x10, 0x11, 0, 0, 0, 0]))
+        self.assertEqual(frame.hex(" "), "aa 00 00 0b 00 00 18 83 00 10 11 00 00 00 00 91")
+
+    def test_pps_sweep_reports_each_candidate_and_restores_the_module(self):
+        import contextlib
+        import io
+
+        import inspect_card_rfpro
+
+        card = FakeThaiCard()
+        device = FakeHidDevice(card)
+        self.addCleanup(device.close)
+        transport = device.transport()
+        self.addCleanup(transport.close)
+        out = io.StringIO()
+
+        with patch.object(inspect_card_rfpro.time, "sleep"), contextlib.redirect_stdout(out):
+            inspect_card_rfpro.pps_sweep(transport)
+
+        text = out.getvalue()
+        self.assertEqual(card.pps, [0x11, 0x12, 0x13, 0x13, 0x14, 0x94, 0x96])
+        self.assertIn("✅ ข้อมูลตรง PPS 13  Fi372 Di4", text)
+        self.assertIn("❌ PPS 12  Fi372 Di2", text)  # the fake module refuses it
+        self.assertIn("เร็วที่สุดที่ข้อมูลตรง", text)
+        self.assertEqual(device.commands[-2][0], CMD_ICC_SET_BAUD)  # back to 9600
+        self.assertEqual(device.commands[-1], (CMD_ICC_SLOT_PWR, b"\x00\x00"))
 
     def test_default_baud_never_sends_set_baud(self):
         device, connection = self.connection(FakeThaiCard())
@@ -606,7 +641,7 @@ class ReaderTests(unittest.TestCase):
 
         self.assertEqual([cmd for cmd, _ in device.commands], [CMD_ICC_ST, CMD_ICC_ST])
 
-    def test_the_reader_defaults_to_the_modules_own_9600_and_sends_no_set_baud(self):
+    def test_the_reader_defaults_to_the_fast_card_baud(self):
         card = FakeThaiCard()
         device = FakeHidDevice(card)
         self.addCleanup(device.close)
@@ -615,7 +650,7 @@ class ReaderTests(unittest.TestCase):
 
         reader.read_citizen_id()
 
-        self.assertEqual(card.bauds, [])
+        self.assertEqual(card.bauds, [38400])
 
     def test_the_reader_passes_its_baud_to_every_reset_of_a_full_read(self):
         card = FakeThaiCard()
