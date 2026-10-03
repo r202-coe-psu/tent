@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import os
 import sys
 import time
 
@@ -94,6 +95,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--lib", required=True, help="path to the SDK's x64/libcomPro.so")
     args = parser.parse_args()
+    if not os.path.isfile(args.lib):
+        # An empty path would make ctypes load this very process and fail with a confusing
+        # "undefined symbol: lc_init_ex".
+        sys.exit(f"--lib {args.lib!r} is not a file: copy x64/libcomPro.so from the SDK to this machine")
 
     vendor = Vendor(args.lib)
     dev = open_reader(vendor)
