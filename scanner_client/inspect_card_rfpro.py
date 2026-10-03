@@ -14,7 +14,7 @@ Usage:
   sudo python3 inspect_card_rfpro.py            # ทุกขั้น: version → สถานะบัตร → รอเสียบบัตร → ATR → อ่านเลขบัตร
   sudo python3 inspect_card_rfpro.py ping       # ขั้น 1–2 อย่างเดียว (ไม่ต้องมีบัตร)
   sudo python3 inspect_card_rfpro.py --full     # S0-6: อ่านทั้งใบ แสดงเฉพาะความยาวแต่ละ field + เวลา (ไม่แสดงข้อมูล)
-  sudo python3 inspect_card_rfpro.py --full --baud 9600    # เทียบเวลากับค่าเริ่มต้นของโมดูล (default ของ inspector/kiosk = 38400)
+  sudo python3 inspect_card_rfpro.py --full --baud 38400   # ทดลองเท่านั้น: บน kiosk3 บัตรไม่ตอบรีเซ็ตที่ 38400 (default ของ inspector/kiosk = 9600)
   sudo python3 inspect_card_rfpro.py pps-sweep  # ลอง PPS (18 83) หลายค่าหลัง ATR เทียบความเร็ว/ความถูกต้อง แล้วบอกค่าที่เร็วที่สุด
   python3 inspect_card_rfpro.py long-reply --verbose  # ดึงคำตอบยาว 1 รายการ (ชื่อไทย) แล้วรายงานเฉพาะโครงสร้างแพ็กเก็ต HID
   --verbose     แสดงคำสั่ง/คำตอบ (ข้อมูลบัตรใน APDU reply ถูกปิด เว้นแต่ใส่ --show-cid)
@@ -47,6 +47,7 @@ from app.rfpro import (
     SLOT_MAIN,
     RfproConnection,
     RfproError,
+    RfproProtocolError,
     RfproThaiCardReader,
     RfproTransport,
     _xor,
@@ -148,7 +149,7 @@ def wait_for_card(transport: RfproTransport) -> None:
     raise InspectError("ไม่พบบัตรภายใน 30 วิ")
 
 
-def read_cid(transport: RfproTransport, show_cid: bool, baud: int = FAST_CARD_BAUD) -> None:
+def read_cid(transport: RfproTransport, show_cid: bool, baud: int = DEFAULT_CARD_BAUD) -> None:
     wait_for_card(transport)
 
     step("4) เลือกบัตร CPU ISO 7816 (18 01) + รีเซ็ตบัตร (18 80)")
@@ -206,7 +207,7 @@ def read_cid(transport: RfproTransport, show_cid: bool, baud: int = FAST_CARD_BA
     print(f"   status {status_text(reply.status)}")
 
 
-def read_full(transport: RfproTransport, baud: int = FAST_CARD_BAUD) -> None:
+def read_full(transport: RfproTransport, baud: int = DEFAULT_CARD_BAUD) -> None:
     """S0-6: read the whole card through the kiosk driver; print lengths and timing only."""
     wait_for_card(transport)
     step(f"4) อ่านข้อมูลทั้งใบด้วย driver เดียวกับ kiosk (card baud {baud}; ไม่แสดงข้อมูลบัตร)")
@@ -320,9 +321,19 @@ def pps_sweep(transport: RfproTransport) -> None:
         )
         if same and pps1 is not None and (best is None or ms < best[0]):
             best = (ms, label)
-    # Leave the module and card as the kiosk expects.
-    transport.command(CMD_ICC_SET_BAUD, bytes([SLOT_MAIN]) + DEFAULT_CARD_BAUD.to_bytes(4, "big"))
-    transport.command(CMD_ICC_SLOT_PWR, bytes([SLOT_MAIN, 0x00]))
+    # Leave the module and card as the kiosk expects. A candidate the module could not follow
+    # can leave it unresponsive for a few seconds, so give each restore step a second chance.
+    for cmd, data in (
+        (CMD_ICC_SET_BAUD, bytes([SLOT_MAIN]) + DEFAULT_CARD_BAUD.to_bytes(4, "big")),
+        (CMD_ICC_SLOT_PWR, bytes([SLOT_MAIN, 0x00])),
+    ):
+        for attempt in range(2):
+            try:
+                transport.command(cmd, data)
+                break
+            except RfproProtocolError:
+                if attempt:
+                    print("⚠️  โมดูลไม่ตอบตอนคืนค่า — ถอด/เสียบ USB ของตัวอ่านใหม่ก่อนใช้ต่อ")
     if best:
         print(f"\n➡️  เร็วที่สุดที่ข้อมูลตรง: {best[1]} ({best[0]:.1f} ms/ชิ้น)")
     else:
@@ -447,8 +458,8 @@ def main() -> None:
         "--baud",
         type=int,
         choices=CARD_BAUDS,
-        default=FAST_CARD_BAUD,
-        help=f"ความเร็วสายระหว่างโมดูลกับบัตร (default {FAST_CARD_BAUD} = ค่าที่ kiosk ใช้; {DEFAULT_CARD_BAUD} = ค่าเริ่มต้นของโมดูลไว้เทียบ)",
+        default=DEFAULT_CARD_BAUD,
+        help=f"ความเร็วสายระหว่างโมดูลกับบัตร (default {DEFAULT_CARD_BAUD} = ค่าที่ kiosk ใช้; {FAST_CARD_BAUD} ทดลองเท่านั้น — kiosk3 บัตรไม่ตอบรีเซ็ต)",
     )
     parser.add_argument("--verbose", action="store_true", help="แสดงคำสั่ง/คำตอบ")
     parser.add_argument(
