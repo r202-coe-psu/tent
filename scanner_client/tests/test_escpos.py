@@ -242,8 +242,11 @@ class AlignToBlackMarkTests(unittest.TestCase):
     def test_sets_cut_offset_then_cuts_at_the_mark(self):
         data = align_to_black_mark(3)
 
-        # ESC @ FS . | GS ( F 4 0 a=2 m=0 24 dots | GS V B 0
-        self.assertEqual(data, ESC_INIT + b"\x1d(F\x04\x00\x02\x00\x18\x00" + b"\x1dVB\x00")
+        # ESC @ FS . | GS ( F 4 0 a=2 m=0 24 dots | GS FF | GS V B 0
+        self.assertEqual(
+            data,
+            ESC_INIT + b"\x1d(F\x04\x00\x02\x00\x18\x00" + b"\x1d\x0c" + b"\x1dVB\x00",
+        )
 
     def test_negative_offset_cuts_before_the_mark(self):
         data = align_to_black_mark(-2.5)

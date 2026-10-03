@@ -13,6 +13,10 @@ Usage:
   --device /dev/usb/lp3    ใช้ path ตรง ๆ แทนการหาจาก --usb-id (default 28e9:5812)
   --feed-mm 15             ระยะ ESC J ก่อนตัดของเทสต์ 1–3 (default 15 = PRINTER_CUT_FEED_MM)
   --black-mark             เพิ่มเทสต์ 6: GS V B 0 (ผูกกับ black mark — บนม้วนธรรมดาเลื่อน ~17 ซม.)
+  8 9 10                   หา black mark (ส่งคำสั่งเปล่า ๆ ไม่พิมพ์อะไร) — ดูว่ากระดาษหยุดตรงไหน
+                           8 = GS FF อย่างเดียว · 9 = GS FF + ตัด · 10 = เหมือน 9 แต่ตั้งให้ตัดช้าลง 20 มม.
+                           ลองทั้งแบบไม่มีมาร์ค (หยุดตรงเส้นประเอง = เซนเซอร์เห็นรูเส้นประ) และแบบขีดมาร์ค
+                           9 กับ 10 ตัดห่างกัน ~20 มม. = เครื่องใช้ค่า GS ( F จริง
   7                        label จริงจาก app/escpos.py (ต้องใช้ .venv/bin/python): กรอบสูง 50 มม.
                            → แถบที่ตัดต้องยาว LABEL_LENGTH_MM (60) และเส้นบน-ล่างห่างกัน 50 มม.
 
@@ -85,6 +89,19 @@ def tests(feed_mm: float, black_mark: bool) -> dict[int, tuple[str, bytes]]:
     return table
 
 
+def bm_offset(mm: float) -> bytes:
+    """GS ( F 4 0 a=2 m=0 n — cut position relative to black-mark detection (SDK TX_BM_TEAR)."""
+    return b"\x1d(F\x04\x00\x02\x00" + round(mm * DOTS_PER_MM).to_bytes(2, "little")
+
+
+# Sent as-is (no printed strip in front): a strip would move the paper before the hunt starts.
+RAW_TESTS = {
+    8: ("GS FF only: hunt mark, no cut", b"\x1d\x0c"),
+    9: ("GS FF + GS V B 0: hunt mark, cut", b"\x1d\x0c\x1dVB\x00"),
+    10: ("GS ( F +20mm + GS FF + GS V B 0", bm_offset(20) + b"\x1d\x0c\x1dVB\x00"),
+}
+
+
 def app_label() -> bytes:
     """Two 1 mm bars 50 mm apart, sent exactly the way the kiosk sends a label."""
     import io
@@ -142,6 +159,7 @@ def main() -> int:
 
     table = tests(args.feed_mm, args.black_mark)
     table[7] = ("app label (60 mm strip, bars 50 mm apart)", b"")
+    table.update(RAW_TESTS)
     if args.list:
         for number, (name, _) in table.items():
             print(f"  {number}: {name}")
@@ -164,7 +182,13 @@ def main() -> int:
             input("  Enter = เทสต์ถัดไป (Ctrl+C = หยุด) ")
         print(f"▸ TEST {number}: {name}")
         try:
-            send(device, app_label() if number == 7 else strip(number, name, tail))
+            if number == 7:
+                data = app_label()
+            elif number in RAW_TESTS:
+                data = ESC_INIT + tail
+            else:
+                data = strip(number, name, tail)
+            send(device, data)
         except PermissionError:
             print(f"❌ ไม่มีสิทธิ์เขียน {device}: sudo usermod -aG lp $USER แล้ว login ใหม่ (หรือรันด้วย sudo)", file=sys.stderr)
             return 1

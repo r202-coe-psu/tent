@@ -21,7 +21,9 @@ ESC_CUT = b"\x1bi"
 GS_BLACK_MARK_OFFSET = b"\x1d(F\x04\x00"
 BLACK_MARK_CUT = 2
 BLACK_MARK_MAX_OFFSET_DOTS = 1500
-# GS V B 0 — feed to the cut position after the next black mark, then cut.
+# GS FF — hunt for the next black mark (SDK TX_CHK_BMARK). GS V B alone does not look for one.
+GS_FEED_TO_BLACK_MARK = b"\x1d\x0c"
+# GS V B 0 — feed to the cut position set by GS ( F, then cut.
 GS_CUT_AT_BLACK_MARK = b"\x1dVB\x00"
 DOTS_PER_MM = 8
 # Feed before the cut; kiosk3 needs none (it feeds on its own, see CUT_SELF_FEED_MM). If the
@@ -117,8 +119,8 @@ def align_to_black_mark(cut_offset_mm: float = 0) -> bytes:
     up with the perforations. `cut_offset_mm` moves the cut relative to where the printer
     detects the mark (+ = later). Bytes from the TxPrnMod SDK: TX_SET_BMARK(TX_BM_TEAR) ->
     GS ( F 4 0 2 m nL nH (SDK always sends m = 0; m = 1 for a negative offset is the Epson
-    meaning, untested on kiosk3), TX_CUT(TX_CUT_FULL) -> GS V B n. With no mark in reach the
-    printer gives up after ~17 cm and cuts anyway.
+    meaning, untested on kiosk3), TX_CHK_BMARK -> GS FF, TX_CUT(TX_CUT_FULL) -> GS V B n.
+    GS V B 0 without GS FF cut at the same spot every time on kiosk3, ignoring the mark.
     """
     dots = round(abs(cut_offset_mm) * DOTS_PER_MM)
     if dots > BLACK_MARK_MAX_OFFSET_DOTS:
@@ -129,6 +131,7 @@ def align_to_black_mark(cut_offset_mm: float = 0) -> bytes:
         + GS_BLACK_MARK_OFFSET
         + bytes([BLACK_MARK_CUT, direction])
         + dots.to_bytes(2, "little")
+        + GS_FEED_TO_BLACK_MARK
         + GS_CUT_AT_BLACK_MARK
     )
 
