@@ -1,11 +1,11 @@
 ---
-id: draft
+id: CR-129
 title: เพดานโควตาผู้บริจาคต้องขยับตามเป้าหมายแคมเปญ — ยกเลิก CR-060 FR-2
-status: proposed
+status: approved
 date: 2026-09-16
-updated: 2026-10-02 # แก้ race ตอนลดเพดาน (FR-2 เป็น conditional update) + ระบุว่าไม่นับ on_hand_qty + เพิ่ม AC-07
+updated: 2026-10-03 # approved โดยเจ้าของโครงการ (PR #287) + รันเลข CR-129 และลงทะเบียนใน _index.md
 requested_by: เจ้าของโครงการ (พบระหว่างตรวจฟอร์ม Edit Campaign — alert บอกว่าแก้เป้าแล้วโควตาไม่ขยับ)
-decided_by: <รอเจ้าของโครงการ>
+decided_by: เจ้าของโครงการ (2026-10-03, PR #287)
 layer: volatile
 affects:
   - docs/changes/CR-060-donation-need-counter-worker-seed.md (ยกเลิก FR-2, แก้ Decision log)
@@ -19,7 +19,7 @@ why: FR-2 ตรึงเพดานโควตาไว้ตั้งแต�
 migration: N/A ต่อ schema_v — ไม่เปลี่ยนรูป doc; counter ที่ค้างอยู่จะถูกดึงให้ตรงเองเมื่อแคมเปญนั้นถูกแก้ครั้งถัดไป หรือสั่ง `donation-quota recalculate --targets` ทันที
 ---
 
-# draft — เพดานโควตาผู้บริจาคต้องขยับตามเป้าหมายแคมเปญ
+# CR-129 — เพดานโควตาผู้บริจาคต้องขยับตามเป้าหมายแคมเปญ
 
 ## สรุป (TL;DR)
 
@@ -137,8 +137,8 @@ apply_need_counters()
 
 ## Impact
 
-- **ยกเลิก CR-060 FR-2** — ต้องแก้ CR-060 ให้ชี้มาที่ `draft-quota-ceiling-follows-campaign-target`
-  (เปลี่ยนเป็นเลข CR หลัง approved) และแก้ Decision log ที่ระบุว่าปิด gap ได้ด้วย CLI เท่านั้น
+- **ยกเลิก CR-060 FR-2** — แก้ CR-060 ให้ชี้มาที่ [CR-129](CR-129-quota-ceiling-follows-campaign-target.md)
+  และแก้ Decision log ที่ระบุว่าปิด gap ได้ด้วย CLI เท่านั้น
 - `set_qty_target` (`tent-model`) เพิ่มเงื่อนไข `reserved_qty` ใน filter — CLI `--targets` ได้ guard
   แบบ atomic ไปด้วย
 - เทสต์ `test_replaying_campaign_does_not_move_qty_target` (ซึ่ง pin FR-2 ไว้) ถูกแทนที่ด้วยชุดใหม่:
@@ -184,3 +184,4 @@ uv run --project worker donation-quota recalculate --shelter <CODE> --targets
 - 2026-10-02 — review พบว่าโค้ดที่ merge ไปแล้ว (`a9820c2f`) มี race ระหว่างการจองกับการลดเพดาน
   (อ่าน `reserved_qty` แล้วค่อยเขียน) แก้ FR-2 ให้เป็น conditional update และเพิ่ม AC-07
   เจ้าของโครงการเลือกไม่นับ `on_hand_qty` ใน guard นี้ (เหตุผลใน §Why) — โค้ดแก้แยก PR
+- 2026-10-03 — approved โดยเจ้าของโครงการ ผ่าน PR review #287 — รันเลข CR-129 และลงทะเบียนใน `docs/changes/_index.md` (ยกเลิก CR-060 FR-2 อย่างเป็นทางการ)
