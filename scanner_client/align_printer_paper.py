@@ -21,6 +21,11 @@
   4. ถ้ายังคลาด X มม. ใส่ม้วนใหม่แล้วรันซ้ำพร้อม --trim-mm X (+ = ให้ตัดเลื่อนลึกเข้าไปในม้วน)
   ถ้าไม่ได้ฉีกตรงเส้นประ: ใช้ระยะจากขอบที่โดนมีดตัดของเศษ ถึงเส้นประที่ใกล้ขอบนั้นที่สุดแทน
 
+ตัดทีละนิดเพื่อขยับรอยตัดเอง (--cut-mm): ตัดชิ้นยาวเท่าที่สั่งออกมาหนึ่งชิ้น
+  python3 align_printer_paper.py --cut-mm 10   # ชิ้น 1 ซม. (ตัดเฉย ๆ — เครื่องเลื่อนเอง 10 มม.)
+  python3 align_printer_paper.py --cut-mm 1    # ชิ้น 1 มม. (ถอยกระดาษ 9 มม. ก่อนตัด — ยังไม่เคยลองบนเครื่องจริง)
+  ชิ้นสั้นกว่า 10 มม. ต้องถอยกระดาษ จึงสั้นได้สุด ~0 มม. (ถอยได้ไม่เกิน 10 มม.)
+
 ตรวจผลทั้งสองวิธี: python3 inspect_printer_cut.py 7 → ดวงที่ออกมาต้องตัดตรงเส้นประทั้งสองขอบ
 """
 
@@ -30,7 +35,13 @@ import argparse
 import sys
 from pathlib import Path
 
-from app.escpos import CUT_SELF_FEED_MM, LABEL_LENGTH_MM, align_to_black_mark, align_to_perforation
+from app.escpos import (
+    CUT_SELF_FEED_MM,
+    LABEL_LENGTH_MM,
+    align_to_black_mark,
+    align_to_perforation,
+    cut_strip,
+)
 from inspect_printer_cut import find_device, send
 
 
@@ -39,13 +50,21 @@ def main() -> int:
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--mark", action="store_true", help="หามาร์คดำที่ขีดไว้แล้วตัดตรงนั้น")
     mode.add_argument("--stub-mm", type=float, help="ความยาวเศษที่เครื่องตัดทิ้งตอนใส่กระดาษ")
+    mode.add_argument("--cut-mm", type=float, help="ตัดชิ้นยาวเท่านี้ออกมาหนึ่งชิ้น (ขยับรอยตัดเอง)")
     parser.add_argument("--cut-offset-mm", type=float, default=0, help="--mark: เลื่อนรอยตัด (+ = ตัดช้าลง)")
     parser.add_argument("--trim-mm", type=float, default=0, help="--stub-mm: ชดเชยที่ยังคลาด (+ = ตัดช้าลง)")
     parser.add_argument("--device", type=Path)
     parser.add_argument("--usb-id", default="28e9:5812")
     args = parser.parse_args()
 
-    if args.mark:
+    if args.cut_mm is not None:
+        try:
+            data = cut_strip(args.cut_mm)
+        except ValueError:
+            print("❌ --cut-mm ต้องมากกว่า 0 (ถอยกระดาษได้ไม่เกิน 10 มม.)", file=sys.stderr)
+            return 1
+        summary = f"ตัดชิ้นยาว {args.cut_mm:g} มม."
+    elif args.mark:
         try:
             data = align_to_black_mark(args.cut_offset_mm)
         except ValueError:

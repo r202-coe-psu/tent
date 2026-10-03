@@ -13,6 +13,9 @@ ESC_INIT = b"\x1b@\x1c."
 GS_RASTER = b"\x1dv0\x00"
 # ESC J n — feed n dots (1 dot = 0.125 mm at 203 dpi), n <= 255 per command.
 ESC_FEED = b"\x1bJ"
+# ESC j n — feed backwards n dots (SDK TX_FEED_REV). Kept short: the paper can slip off the roller.
+ESC_FEED_REV = b"\x1bj"
+MAX_REVERSE_MM = 10
 # ESC i — full cut right now. The kiosk3 printer's SDK (TxPrnMod TX_PURECUT_FULL) uses this
 # because its GS V cuts are tied to black-mark detection: on plain roll paper GS V B 0 hunted
 # for a mark and fed ~17 cm per label. So the label is fed past the cutter explicitly instead.
@@ -107,6 +110,25 @@ def align_to_perforation(
     while dots > 0:
         step = min(dots, 255)
         out += ESC_FEED + bytes([step])
+        dots -= step
+    return bytes(out + ESC_CUT)
+
+
+def cut_strip(length_mm: float, self_feed_mm: int = CUT_SELF_FEED_MM) -> bytes:
+    """Cut a strip `length_mm` long off the roll (manual nudging while lining up the cut).
+
+    ESC i feeds `self_feed_mm` on its own, so longer strips feed the rest forward first and
+    shorter ones back the paper up first (ESC j; untested on kiosk3, at most MAX_REVERSE_MM).
+    """
+    dots = round((length_mm - self_feed_mm) * DOTS_PER_MM)
+    if length_mm <= 0 or -dots > MAX_REVERSE_MM * DOTS_PER_MM:
+        raise ValueError("length_mm is out of range")
+    command = ESC_FEED if dots > 0 else ESC_FEED_REV
+    out = bytearray(ESC_INIT)
+    dots = abs(dots)
+    while dots > 0:
+        step = min(dots, 255)
+        out += command + bytes([step])
         dots -= step
     return bytes(out + ESC_CUT)
 

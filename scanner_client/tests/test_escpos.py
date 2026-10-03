@@ -12,6 +12,7 @@ from app.escpos import (
     MAX_LABEL_PIXELS,
     align_to_black_mark,
     align_to_perforation,
+    cut_strip,
     feed_and_cut,
     label_to_escpos,
 )
@@ -256,6 +257,23 @@ class AlignToBlackMarkTests(unittest.TestCase):
     def test_offset_beyond_printer_range_is_rejected(self):
         with self.assertRaises(ValueError):
             align_to_black_mark(200)
+
+
+class CutStripTests(unittest.TestCase):
+    def test_strip_as_long_as_the_self_feed_is_a_bare_cut(self):
+        self.assertEqual(cut_strip(10, self_feed_mm=10), ESC_INIT + ESC_CUT)
+
+    def test_longer_strip_feeds_the_rest_forward(self):
+        self.assertEqual(cut_strip(15, self_feed_mm=10), ESC_INIT + ESC_FEED + bytes([40]) + ESC_CUT)
+
+    def test_shorter_strip_backs_the_paper_up_first(self):
+        # 1 mm strip: back up 9 mm (72 dots) so ESC i's own 10 mm leaves 1 mm.
+        self.assertEqual(cut_strip(1, self_feed_mm=10), ESC_INIT + b"\x1bj" + bytes([72]) + ESC_CUT)
+
+    def test_non_positive_length_is_rejected(self):
+        for length in (0, -1):
+            with self.subTest(length=length), self.assertRaises(ValueError):
+                cut_strip(length)
 
 
 if __name__ == "__main__":
