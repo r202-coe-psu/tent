@@ -20,7 +20,8 @@ async def _realign_existing(seed: NeedCounterSeed, *, now: datetime) -> bool:
     Returns ``True`` when the ceiling actually moved.
 
     The optimistic filter inside ``set_qty_target`` carries the ``qty_target`` read a
-    moment ago, so a concurrent move loses rather than overwrites; the next campaign
+    moment ago and re-checks ``reserved_qty`` against the new ceiling, so a concurrent
+    move or a booking landing in between loses rather than overwrites; the next campaign
     edit — or the recalculation CLI — settles it. A miss is logged, not retried here:
     retrying inside a CDC handler would block the change feed on a contended counter.
     """
@@ -38,10 +39,9 @@ async def _realign_existing(seed: NeedCounterSeed, *, now: datetime) -> bool:
         wanted=seed.qty_target,
         # Only the stored figure is available here. Unlike the CLI this path cannot
         # recompute from `DonationBuffer` — a full donation scan per campaign edit would
-        # put the change feed behind the shelter's write rate. Staleness is one-sided
-        # and safe: `reserved_qty` is `$inc`-ed by FastAPI the instant a booking is
-        # accepted, so a value read here can only be BEHIND, never ahead, and a refusal
-        # computed from it is conservative.
+        # put the change feed behind the shelter's write rate. This read is a pre-filter,
+        # not the guarantee: a booking `$inc`-ed after it would make an APPLY here wrong,
+        # which is why `set_qty_target` re-checks `reserved_qty` inside the update.
         reserved=doc["reserved_qty"].to_decimal(),
     )
 
@@ -73,10 +73,12 @@ async def _realign_existing(seed: NeedCounterSeed, *, now: datetime) -> bool:
     )
     if not moved:
         logger.warning(
-            "qty_target for %s/%s/%s moved concurrently — left at its current value",
+            "qty_target for %s/%s/%s not moved to %s — target changed or reservations "
+            "rose above it concurrently; left at its current value",
             seed.shelter_code,
             seed.campaign_id,
             seed.item_id,
+            seed.qty_target,
         )
     return moved
 

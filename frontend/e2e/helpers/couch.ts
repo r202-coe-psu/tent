@@ -118,6 +118,30 @@ export async function couchLogin(name: string, password: string): Promise<string
 
 // ─── Pre-built role sets ───────────────────────────────────────────────────────
 
+/**
+ * A freshly minted user has no `security_question`, and the post-login gate sends
+ * anyone in that state to `/force-setup` before any back-office route renders. Seed
+ * one so tests exercise the page under test and not the onboarding wizard.
+ */
+export async function seedSecurityQuestion(name: string): Promise<void> {
+	const path = `/_users/org.couchdb.user:${encodeURIComponent(name)}`;
+	const got = await couchReq('GET', path);
+	const doc = got.data as Record<string, unknown>;
+	const res = await couchReq('PUT', path, {
+		...doc,
+		security_question: {
+			question_id: 'high_school',
+			answer_hash: 'e2e'.padEnd(64, '0'),
+			salt: 'e2e'.padEnd(32, '0'),
+			set_at: new Date().toISOString()
+		},
+		must_change_password: false
+	});
+	if (res.status >= 400) {
+		throw new Error(`Could not seed security question for "${name}" (HTTP ${res.status})`);
+	}
+}
+
 /** Roles for a System Admin user. */
 export const SA_ROLES = ['system_admin'];
 

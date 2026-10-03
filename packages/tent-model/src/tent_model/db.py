@@ -9,6 +9,7 @@ from pymongo import AsyncMongoClient
 from tent_model.api_key import ApiKey
 from tent_model.donation_buffer import DonationBuffer
 from tent_model.donation_need_counter import DonationNeedCounter
+from tent_model.donation_slot_counter import DonationSlotCounter
 from tent_model.public_announcement import PublicAnnouncement
 from tent_model.public_donation import PublicDonation
 from tent_model.public_job import PublicJob
@@ -43,6 +44,7 @@ ALL_DOCUMENTS = [
     PublicNeed,
     DonationBuffer,
     DonationNeedCounter,
+    DonationSlotCounter,
     RetentionAudit,
     SearchAudit,
     PublicAnnouncement,

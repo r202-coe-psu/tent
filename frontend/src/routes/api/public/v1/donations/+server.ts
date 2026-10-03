@@ -3,8 +3,10 @@ import { env } from '$env/dynamic/private';
 import {
 	donationPreDeclarationInputSchema,
 	computeNeeds,
-	pickCampaignForItems
-} from '$lib/features/donations';
+	pickCampaignForItems,
+	slotAvailabilityFor,
+	slotModeForDelivery
+} from '$lib/features/donations/server';
 import type { PublicDonationDoc } from '$lib/features/donations';
 import { donationIpLimiter, donationPhoneLimiter } from '$lib/server/security/rate-limiter';
 import { ReCaptchaProvider } from '$lib/server/security/captcha';
@@ -13,8 +15,12 @@ import { adminRaw } from '$lib/server/couch-admin';
 import { fetchDocs } from '$lib/server/donation-docs';
 import { fastapiBaseUrl, fastapiServiceHeaders, unwrapFastapiError } from '$lib/server/fastapi';
 
-import { isDonationOutstanding } from '$lib/features/operations';
-import type { DonationCampaign, StockLedger } from '$lib/features/operations';
+import type {
+	DonationCampaign,
+	DonationSlot,
+	DonationSlotMode,
+	StockLedger
+} from '$lib/features/operations';
 
 const captchaProvider = new ReCaptchaProvider(
 	env.RECAPTCHA_PROJECT_ID || env.SECRET_RECAPTCHA_KEY || 'smart-shelter-508719'
@@ -97,30 +103,66 @@ export const POST = async ({ request, getClientAddress }) => {
 		}
 		const resolvedCampaignId = pick.campaignId;
 
-		// 3.6 Atomic re-check slot เต็ม/closed → SLOT_FULL
-		if (parsed.data.logistics?.slot) {
-			const { date, from } = parsed.data.logistics.slot;
-			const slotId = `donation_slot:${date}:${from}`;
-			const slotRes = await adminRaw(`/${dbName}/${encodeURIComponent(slotId)}`, 'GET');
+		// 3.6 Re-check the chosen window: full or closed → SLOT_FULL.
+		// Not atomic on its own — two submits can both read the last place free before
+		// either syncs back into CouchDB. A capped window therefore also goes to FastAPI
+		// as `slot_hold`, whose Mongo counter makes the final SLOT_FULL call.
+		const slotMode = parsed.data.logistics
+			? slotModeForDelivery(parsed.data.logistics.delivery_method)
+			: null;
+		const requested = parsed.data.logistics?.slot;
+		// Set when the window has a ceiling: FastAPI takes the place on its atomic
+		// counter, which is what actually refuses the second of two simultaneous bookings.
+		let slotHold:
+			| { mode: DonationSlotMode; date: string; from: string; capacity: number; booked: number }
+			| undefined;
+		// A truck trip only exists where the shelter published one, so a pickup with no
+		// window — or a window with no doc behind it — is refused rather than waved
+		// through. A drop-off with no doc is fine: it is one of the standard hours.
+		if (slotMode === 'pickup' && !requested) {
+			return json({ success: false, error: 'SLOT_REQUIRED' }, { status: 422 });
+		}
+		if (requested && slotMode) {
+			const { date, from, to } = requested;
+			const lookup = async (id: string) => adminRaw(`/${dbName}/${encodeURIComponent(id)}`, 'GET');
+			let slotRes = await lookup(`donation_slot:${slotMode}:${date}:${from}`);
+			// A drop-off window written before the queue split has no mode in its id
+			// (`donation_slot:{date}:{from}`) and still reads as drop-off (FR-DS-9) — the
+			// availability grid shows it, so the re-check has to find it too.
+			if (slotRes.status === 404 && slotMode === 'dropoff') {
+				slotRes = await lookup(`donation_slot:${date}:${from}`);
+			}
 
 			if (slotRes.status === 200) {
-				const slotDoc = slotRes.data as { capacity: number; status: string };
-				if (slotDoc.status === 'closed') {
+				// Same verdict the wizard's grid showed (GET .../donations/slots) — one
+				// function, so a window cannot read open there and full here.
+				const slotDoc = slotRes.data as DonationSlot;
+				// `_id` is deterministic per date + start time (schema.md §2.13), so the
+				// requested window IS this doc's identity — count against that rather than
+				// re-reading fields off the doc.
+				const availability = slotAvailabilityFor(
+					{ ...slotDoc, mode: slotMode, date, from, to },
+					donations
+				);
+				if (availability.status !== 'available') {
 					return json({ success: false, error: 'SLOT_FULL' }, { status: 409 });
 				}
-				// A booking holds its place in the queue from the moment it is made until the
-				// goods are keyed in (schema.md §2.13). Since CR-052 that opens at
-				// `pending_review` and walks through `verifying`, so counting `declared`
-				// alone would read every slot as empty and SLOT_FULL would never fire.
-				const bookedCount = donations.filter(
-					(d) =>
-						(isDonationOutstanding(d.status) || d.status === 'received') &&
-						d.logistics?.slot?.date === date &&
-						d.logistics?.slot?.from === from
-				).length;
-				if (bookedCount >= slotDoc.capacity) {
-					return json({ success: false, error: 'SLOT_FULL' }, { status: 409 });
+				if (availability.capacity !== null) {
+					slotHold = {
+						mode: slotMode,
+						date,
+						from,
+						capacity: availability.capacity,
+						booked: availability.booked
+					};
 				}
+			} else if (slotRes.status === 404) {
+				if (slotMode === 'pickup') {
+					return json({ success: false, error: 'SLOT_UNAVAILABLE' }, { status: 409 });
+				}
+			} else {
+				// Could not tell — fail closed rather than book a window we could not check.
+				return json({ success: false, error: 'SLOTS_UNAVAILABLE' }, { status: 503 });
 			}
 		}
 
@@ -133,7 +175,8 @@ export const POST = async ({ request, getClientAddress }) => {
 				campaign_id: resolvedCampaignId,
 				donor: parsed.data.donor,
 				items: parsed.data.items,
-				logistics: parsed.data.logistics
+				logistics: parsed.data.logistics,
+				slot_hold: slotHold
 			})
 		});
 

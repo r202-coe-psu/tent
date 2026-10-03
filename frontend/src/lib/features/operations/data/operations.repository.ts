@@ -101,6 +101,8 @@ export interface OperationsRepository {
 	listDonationSlots(): Promise<DonationSlot[]>;
 	getDonationSlot(id: string): Promise<DonationSlot | null>;
 	updateDonationSlot(slot: DonationSlot): Promise<DonationSlot>;
+	/** Refuses while any booking holds a place in the window (`assertDonationSlotDeletable`). */
+	deleteDonationSlot(slot: DonationSlot): Promise<void>;
 
 	// --- Transfer methods (CR-059 Flow 1 / T-13) ---
 	// `stock_transfer` lives in `central_ops`, not this shelter's DB — every method here goes

@@ -2764,6 +2764,9 @@
 						"anyOf": [{ "additionalProperties": true, "type": "object" }, { "type": "null" }],
 						"title": "Logistics"
 					},
+					"slot_hold": {
+						"anyOf": [{ "$ref": "#/components/schemas/SlotHold" }, { "type": "null" }]
+					},
 					"captchaToken": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Captchatoken"
@@ -4229,6 +4232,18 @@
 						"title": "Accepts Pre Registration",
 						"default": false
 					},
+					"readiness_status": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Readiness Status"
+					},
+					"readiness_tier": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Readiness Tier"
+					},
+					"readiness_assessed_at": {
+						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
+						"title": "Readiness Assessed At"
+					},
 					"updated_at": { "type": "string", "format": "date-time", "title": "Updated At" }
 				},
 				"type": "object",
@@ -4286,6 +4301,19 @@
 				"type": "object",
 				"required": ["type"],
 				"title": "ShelterZoneDetail"
+			},
+			"SlotHold": {
+				"properties": {
+					"mode": { "type": "string", "enum": ["dropoff", "pickup"], "title": "Mode" },
+					"date": { "type": "string", "title": "Date" },
+					"from": { "type": "string", "title": "From" },
+					"capacity": { "type": "integer", "exclusiveMinimum": 0.0, "title": "Capacity" },
+					"booked": { "type": "integer", "minimum": 0.0, "title": "Booked" }
+				},
+				"type": "object",
+				"required": ["mode", "date", "from", "capacity", "booked"],
+				"title": "SlotHold",
+				"description": "The capped queue window a booking takes a place in, as the BFF read it.\n\nSent only when the window has a ceiling. ``capacity`` is the window's current\nceiling and ``booked`` the places CouchDB already shows held — the counter is seeded\nfrom it on the window's first booking. The BFF is the only caller (service secret),\nso both figures come from CouchDB, not from the donor."
 			},
 			"StockErrorDetail": {
 				"properties": {

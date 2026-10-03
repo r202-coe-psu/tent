@@ -2,6 +2,8 @@ from tent_model.api_key import ApiKey
 from tent_model.db import ALL_DOCUMENTS, close_db, init_db
 from tent_model.donation_buffer import DonationBuffer, DonorBuffer
 from tent_model.donation_need_counter import DonationNeedCounter
+from tent_model.donation_slot_counter import DonationSlotCounter
+from tent_model.donation_slot_counter_ops import release_slot, reserve_slot, slot_counter_id
 from tent_model.donation_need_counter_ops import (
 	ReserveResult,
 	counter_id,
@@ -73,6 +75,7 @@ __all__ = [
 	"DeclaredItem",
 	"DonationBuffer",
 	"DonationNeedCounter",
+	"DonationSlotCounter",
 	"DonorBuffer",
 	"DutyWindow",
 	"GeoJsonPoint",
@@ -118,8 +121,10 @@ __all__ = [
 	"init_db",
 	"release_job_slot",
 	"release_quota",
+	"release_slot",
 	"reserve_job_slot",
 	"reserve_quota",
+	"reserve_slot",
 	"seed_counter",
 	"seed_job_shift_slot",
 	"seed_job_slot",
@@ -127,4 +132,5 @@ __all__ = [
 	"set_qty_target",
 	"set_reserved_qty",
 	"shift_slot_id",
+	"slot_counter_id",
 ]

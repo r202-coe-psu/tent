@@ -107,17 +107,30 @@ export const isDonationPreDeclaration = (d: unknown): d is DonationPreDeclaratio
  * field empty rather than guess — an empty category is honest, a wrong one is not.
  */
 export function donorCategoryFromCatalog(category?: string | null): string | undefined {
-	switch (category?.trim().toLowerCase()) {
+	// `item_master.category` is a reference to the category doc (`item_category:wash`);
+	// legacy `supply_item.category` is the bare code (`hygiene`). Read both.
+	const code = category
+		?.trim()
+		.toLowerCase()
+		.replace(/^item_category:/, '');
+	switch (code) {
 		case 'food':
 		case 'water':
+		case 'ready_meal':
 			return 'food';
 		case 'clothing':
 		case 'bedding':
 			return 'clothing';
 		case 'medicine':
+		case 'medical':
 			return 'medicine';
 		case 'hygiene':
+		case 'wash':
 		case 'equipment':
+		case 'kits':
+		case 'special_care':
+		case 'volunteer_ppe':
+		case 'fuel_energy':
 			return 'supply';
 		case 'other':
 			return 'other';

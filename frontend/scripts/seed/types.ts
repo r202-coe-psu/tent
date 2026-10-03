@@ -44,16 +44,26 @@ export const masterLabel = (m: MasterLookup, type: MasterDataType, key: string) 
 export const masterLabels = (m: MasterLookup, type: MasterDataType, ...keys: string[]) =>
 	keys.map((key) => masterLabel(m, type, key));
 
-/** Catalog supply-item IDs referenced by ops seed. */
-export const ITEM = {
-	rice: 'item:rice',
-	water: 'item:water',
-	paracetamol: 'item:paracetamol',
-	soap: 'item:soap',
-	blanket: 'item:blanket',
-	egg: 'item:egg',
-	vegetable: 'item:vegetable'
+/**
+ * Catalog items the ops seed stocks and asks for, by `item_master.name`.
+ *
+ * Names, not ids: the master seed mints `item_master:<ulid>` and keeps an existing doc's
+ * id by matching its name (`master-seed.ts`), so the name is the stable key. The ops seed
+ * resolves these to ids at run time (`staging-ops.ts`). The legacy `item:*` ids it used
+ * to hard-code are gone from the catalog, and every write that checks the catalog —
+ * receiving a donation, editing a campaign — refused them.
+ */
+export const ITEM_NAME = {
+	rice: 'ข้าวสาร',
+	water: 'น้ำดื่ม 600 มล.',
+	paracetamol: 'ยาพาราเซตามอล 500 มก.',
+	soap: 'สบู่ก้อน',
+	blanket: 'ผ้าห่มกันหนาว',
+	egg: 'ไข่ไก่',
+	vegetable: 'ผักรวม'
 } as const;
+
+export type ItemKey = keyof typeof ITEM_NAME;
 
 export const SH001_CODE = 'SH001';
 export const SH002_CODE = 'SH002';

@@ -1,6 +1,10 @@
 /// <reference types="node" />
 import { defineConfig, devices } from '@playwright/test';
 
+// Point at an already-running server (e.g. `pnpm dev` on :5173) instead of spawning
+// mock-api + `pnpm preview`.
+const baseURL = process.env.PW_BASE_URL;
+
 export default defineConfig({
 	testDir: './e2e',
 	fullyParallel: true,
@@ -11,7 +15,7 @@ export default defineConfig({
 	workers: process.env.CI ? 1 : undefined,
 	reporter: 'html',
 	use: {
-		baseURL: 'http://localhost:4173',
+		baseURL: baseURL ?? 'http://localhost:4173',
 		trace: 'on-first-retry',
 		video: process.env.PW_VIDEO ? 'on' : 'off',
 		launchOptions: {
@@ -20,23 +24,26 @@ export default defineConfig({
 		}
 	},
 	projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
-	webServer: [
-		{
-			command: 'node e2e/mock-api.js',
-			url: 'http://localhost:9001/v1/health',
-			reuseExistingServer: !process.env.CI,
-			timeout: 15_000
-		},
-		{
-			// Pass the admin URL so the SvelteKit BFF can reach CouchDB.
-			// COUCHDB_ADMIN_URL can be overridden via CI env; defaults to local dev value.
-			command: `COUCHDB_ADMIN_URL=${process.env.COUCHDB_ADMIN_URL ?? 'http://admin:password@localhost:5984'} pnpm preview`,
-			url: 'http://localhost:4173',
-			reuseExistingServer: !process.env.CI,
-			timeout: 60_000,
-			env: {
-				COUCHDB_ADMIN_URL: process.env.COUCHDB_ADMIN_URL ?? 'http://admin:password@localhost:5984'
-			}
-		}
-	]
+	webServer: baseURL
+		? undefined
+		: [
+				{
+					command: 'node e2e/mock-api.js',
+					url: 'http://localhost:9001/v1/health',
+					reuseExistingServer: !process.env.CI,
+					timeout: 15_000
+				},
+				{
+					// Pass the admin URL so the SvelteKit BFF can reach CouchDB.
+					// COUCHDB_ADMIN_URL can be overridden via CI env; defaults to local dev value.
+					command: `COUCHDB_ADMIN_URL=${process.env.COUCHDB_ADMIN_URL ?? 'http://admin:password@localhost:5984'} pnpm preview`,
+					url: 'http://localhost:4173',
+					reuseExistingServer: !process.env.CI,
+					timeout: 60_000,
+					env: {
+						COUCHDB_ADMIN_URL:
+							process.env.COUCHDB_ADMIN_URL ?? 'http://admin:password@localhost:5984'
+					}
+				}
+			]
 });

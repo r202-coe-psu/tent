@@ -16,6 +16,7 @@ from tent_model import (
     PublicShelter,
     RetentionAudit,
     release_quota,
+    release_slot,
 )
 
 from worker.couch.client import CouchClient
@@ -173,6 +174,11 @@ async def purge_expired_buffers(job_run_id: str) -> None:
                     qty=Decimal(reserved_qty),
                     now=now,
                 )
+        # The queue place times out with the reservation — a window does not stay full
+        # for a donor who never came. Not nested under `campaign_id`: a booking with no
+        # campaign item still takes a place in a capped window.
+        if is_donation_outstanding(donation.status) and donation.slot_counter_id:
+            await release_slot(counter_id=donation.slot_counter_id, now=now)
 
         await _audit_and_delete(
             job_run_id=job_run_id,
