@@ -2973,6 +2973,22 @@
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Residence Landmark"
 					},
+					"dorm_name": {
+						"anyOf": [{ "type": "string", "maxLength": 120 }, { "type": "null" }],
+						"title": "Dorm Name"
+					},
+					"dorm_building": {
+						"anyOf": [{ "type": "string", "maxLength": 120 }, { "type": "null" }],
+						"title": "Dorm Building"
+					},
+					"dorm_floor": {
+						"anyOf": [{ "type": "string", "maxLength": 120 }, { "type": "null" }],
+						"title": "Dorm Floor"
+					},
+					"dorm_room": {
+						"anyOf": [{ "type": "string", "maxLength": 120 }, { "type": "null" }],
+						"title": "Dorm Room"
+					},
 					"address_no": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Address No"
@@ -3011,6 +3027,22 @@
 					"residence_landmark": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Residence Landmark"
+					},
+					"dorm_name": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Dorm Name"
+					},
+					"dorm_building": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Dorm Building"
+					},
+					"dorm_floor": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Dorm Floor"
+					},
+					"dorm_room": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Dorm Room"
 					},
 					"address_no": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
@@ -3456,6 +3488,14 @@
 					"age": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "Age" },
 					"nickname": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Nickname" },
 					"religion": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Religion" },
+					"religion_other": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Religion Other"
+					},
+					"disability_other_detail": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Disability Other Detail"
+					},
 					"emergency_contact": {
 						"anyOf": [{ "$ref": "#/components/schemas/EmergencyContactOut" }, { "type": "null" }]
 					},
@@ -3504,6 +3544,14 @@
 					"age": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "Age" },
 					"nickname": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Nickname" },
 					"religion": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Religion" },
+					"religion_other": {
+						"anyOf": [{ "type": "string", "maxLength": 60 }, { "type": "null" }],
+						"title": "Religion Other"
+					},
+					"disability_other_detail": {
+						"anyOf": [{ "type": "string", "maxLength": 120 }, { "type": "null" }],
+						"title": "Disability Other Detail"
+					},
 					"emergency_contact": {
 						"anyOf": [{ "$ref": "#/components/schemas/EmergencyContactInput" }, { "type": "null" }]
 					},
@@ -3652,6 +3700,14 @@
 					},
 					"nickname": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Nickname" },
 					"religion": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Religion" },
+					"religion_other": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Religion Other"
+					},
+					"disability_other_detail": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Disability Other Detail"
+					},
 					"emergency_contact": {
 						"anyOf": [{ "$ref": "#/components/schemas/EmergencyContactOut" }, { "type": "null" }]
 					},
@@ -3774,7 +3830,7 @@
 					"species": { "type": "string", "enum": ["dog", "cat", "other"], "title": "Species" },
 					"count": {
 						"type": "integer",
-						"maximum": 50.0,
+						"maximum": 10.0,
 						"minimum": 1.0,
 						"title": "Count",
 						"default": 1
@@ -4228,6 +4284,18 @@
 						"type": "boolean",
 						"title": "Accepts Pre Registration",
 						"default": false
+					},
+					"readiness_status": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Readiness Status"
+					},
+					"readiness_tier": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Readiness Tier"
+					},
+					"readiness_assessed_at": {
+						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
+						"title": "Readiness Assessed At"
 					},
 					"updated_at": { "type": "string", "format": "date-time", "title": "Updated At" }
 				},
@@ -4941,6 +5009,22 @@
 					"residence_landmark": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Residence Landmark"
+					},
+					"dorm_name": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Dorm Name"
+					},
+					"dorm_building": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Dorm Building"
+					},
+					"dorm_floor": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Dorm Floor"
+					},
+					"dorm_room": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Dorm Room"
 					},
 					"address_no": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],

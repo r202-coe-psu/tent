@@ -16,6 +16,10 @@ export const unassignedRegistrationReviewSchema = z.object({
 	created_at: z.string(),
 	housing_type: z.string().nullable().optional(),
 	residence_landmark: z.string().nullable().optional(),
+	dorm_name: z.string().nullable().optional(),
+	dorm_building: z.string().nullable().optional(),
+	dorm_floor: z.string().nullable().optional(),
+	dorm_room: z.string().nullable().optional(),
 	address_no: z.string().nullable().optional(),
 	village_no: z.string().nullable().optional(),
 	subdistrict: z.string().nullable().optional(),
@@ -79,6 +83,10 @@ export function unassignedMemberToUnifiedMember(member: OpenMemberHit): UnifiedM
 		photo: unassignedPhotoUrl(member.photo),
 		country: member.country ?? 'THAILAND',
 		religion: asMemberReligion(member.religion),
+		religion_other: member.religion_other ?? null,
+		disability_other_detail: member.disability_other_detail ?? null,
+		// Checked at public submit — an unchanged number skips the checksum again (CR-148 FR-03)
+		original_person_number: member.person_id?.number ?? null,
 		stay_status: 'pre_registered',
 		reporting_in: true,
 		zone: null
@@ -98,6 +106,10 @@ export function unassignedHouseholdToUnifiedInput(
 	return {
 		housing_type: (review.housing_type as UnifiedHouseholdInput['housing_type']) ?? 'owned_house',
 		residence_landmark: review.residence_landmark ?? null,
+		dorm_name: review.dorm_name ?? null,
+		dorm_building: review.dorm_building ?? null,
+		dorm_floor: review.dorm_floor ?? null,
+		dorm_room: review.dorm_room ?? null,
 		address_no: review.address_no ?? null,
 		village_no: review.village_no ?? null,
 		subdistrict: review.subdistrict ?? null,

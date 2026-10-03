@@ -2,8 +2,8 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
-	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import {
@@ -14,63 +14,68 @@
 		type StockLedger,
 		StockLotIntegrityError
 	} from '../domain/operations';
-	import { useSupplyItems } from '$lib/features/supply';
+	import { dailyConsumption, daysOfCover, resolveReorderThreshold } from '../domain/stock-summary';
 	import {
 		itemMasterUnit,
-		useItemMasters,
 		formatUnit,
 		useUnitsOfMeasure,
 		itemSelectableUoms,
 		defaultIssueUom,
 		toLedgerQtyUnit,
 		qtyToBaseUnit,
-		type PackagingSource
+		qtyFromBaseUnit
 	} from '$lib/features/catalog';
+	import { useSupplyItems, useThresholdOverrides } from '$lib/features/supply';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { useDistributeStock, useStockBalance, useLedger } from '../application/queries';
+	import { useStockFormItems } from '../application/use-stock-form-items.svelte';
+	import type { StockFormItem } from '../domain/stock-form-items';
+	import ItemCombobox from './item-combobox.svelte';
 	import { toast } from 'svelte-sonner';
-	import PackageMinus from '@lucide/svelte/icons/package-minus';
-	import ChevronDown from '@lucide/svelte/icons/chevron-down';
-	import { qtyGt, qtyGte, qtyIsZero, qtyLte } from '$lib/utils/qty';
+	import Minus from '@lucide/svelte/icons/minus';
+	import Plus from '@lucide/svelte/icons/plus';
+	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
+	import { qtyGt, qtyGte, qtyIsZero, qtyLte, addQty, subQty, persistQty } from '$lib/utils/qty';
 	import { ulid } from '$lib/db/ulid';
 	import { formatLotClockLine } from '../domain/lot-age';
 	import { lotStorageLabel } from '../domain/lot-storage';
 	import { useStoragePoints } from '../application/use-storage-points.svelte';
 
+	const DEST_PRESETS = ['ครัวกลาง', 'โซนเต็นท์ A', 'โซนเต็นท์ B', 'ห้องพยาบาล'] as const;
+	const QTY_CHIPS = [10, 20, 50] as const;
+
 	let {
 		onsuccess,
-		preselectedItemId = undefined
+		preselectedItemId = undefined,
+		occupancy = 0
 	}: {
-		onsuccess?: (result?: { keepOpen: true; summary?: string }) => void;
+		onsuccess?: (result?: { keepOpen: boolean; summary?: string }) => void;
 		preselectedItemId?: string;
+		occupancy?: number;
 	} = $props();
 
-	type StockFormItem = PackagingSource & {
-		_id: string;
-		name: string;
-		unit: string;
-	};
+	// Session expired (`needsReauth`): every save button is off until the user signs in again.
+	const offline = $derived(authStore.needsReauth);
 
-	let lastSuccess = $state<string | null>(null);
-	let moreOpen = $state(false);
-
-	// Fetch supply catalog items and stock balance
-	const itemsQuery = useSupplyItems();
-	const itemMastersQuery = useItemMasters(() => getShelterCode());
+	const stockItems = useStockFormItems(() => getShelterCode());
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
 	const storagePoints = useStoragePoints(() => getShelterCode());
 	const balanceQuery = useStockBalance();
 	const ledgerQuery = useLedger();
 	const distributeMutation = useDistributeStock();
+	const supplyItemsQuery = useSupplyItems();
+	const overridesQuery = useThresholdOverrides();
 
-	// Local state for searchable items combobox
-	let searchQuery = $state('');
-	let isDropdownOpen = $state(false);
+	let selectedItemId = $state('');
 	let selectedItem = $state<StockFormItem | null>(null);
-	let container = $state<HTMLDivElement | null>(null);
+	let noteInputEl = $state<HTMLInputElement | null>(null);
+	let keepOpenOnSuccess = $state(true);
+
+	const items = $derived(stockItems.items);
+	const balanceByItemId = $derived(balanceQuery.data ?? new Map<string, string>());
 
 	const currentStock = $derived.by(() => {
 		if (!selectedItem || !balanceQuery.data) return '0';
@@ -97,6 +102,15 @@
 	const activeLot = $derived(itemLots.find((l) => l.lot_ref === $formData.lot_ref));
 	const maxLotQty = $derived(activeLot ? activeLot.qty : currentStock);
 
+	const maxQtyInUnit = $derived.by(() => {
+		if (!selectedItem || !$formData.unit) return '0';
+		try {
+			return qtyFromBaseUnit(maxLotQty, $formData.unit, selectedItem);
+		} catch {
+			return maxLotQty;
+		}
+	});
+
 	const isQtyOverStock = $derived.by(() => {
 		if (!$formData.qty || !selectedItem) return false;
 		try {
@@ -107,38 +121,54 @@
 		}
 	});
 
-	const items = $derived.by((): StockFormItem[] => {
-		const supplyItems = (itemsQuery.data ?? []).map((item) => ({
-			_id: item._id,
-			name: item.name,
-			unit: item.unit,
-			base_unit: item.unit,
-			conversions: [] as { uom_name: string; multiplier: string }[]
-		}));
-		const itemMasters = itemMastersQuery.data ?? [];
-
-		const mappedItemMasters = itemMasters
-			.filter((im) => !im.deactivated)
-			.map((im) => ({
-				_id: im._id,
-				name: im.name,
-				unit: itemMasterUnit(im),
-				base_unit: itemMasterUnit(im),
-				conversions: im.conversions ?? [],
-				default_inventory_uom: im.default_inventory_uom,
-				default_issue_uom: im.default_issue_uom
-			}));
-
-		return [...supplyItems, ...mappedItemMasters];
-	});
-
 	const unitOptions = $derived(selectedItem ? itemSelectableUoms(selectedItem) : []);
 
-	// Filter items based on search query
-	const filteredItems = $derived.by(() => {
-		if (!searchQuery) return items;
-		const query = searchQuery.toLowerCase().trim();
-		return items.filter((i) => i.name.toLowerCase().includes(query));
+	const reorderPolicy = $derived.by(() => {
+		const current = selectedItem;
+		if (!current) return null;
+		const supply = (supplyItemsQuery.data ?? []).find((s) => s._id === current._id);
+		const override = (overridesQuery.data ?? []).find((o) => o.item_id === current._id);
+		if (!supply && !override) return null;
+		return {
+			item: supply
+				? {
+						reorder_level: supply.reorder_level,
+						consumption_rate: supply.consumption_rate,
+						target_reserve_days: supply.target_reserve_days,
+						timeframe: supply.timeframe
+					}
+				: {},
+			override: override
+				? {
+						reorder_level: override.reorder_level,
+						consumption_rate: override.consumption_rate,
+						target_reserve_days: override.target_reserve_days
+					}
+				: null
+		};
+	});
+
+	const afterDistributeWarning = $derived.by(() => {
+		if (!selectedItem || !reorderPolicy || !$formData.qty) return null;
+		try {
+			const inBase = qtyToBaseUnit($formData.qty, $formData.unit, selectedItem);
+			const remaining = subQty(currentStock, inBase);
+			const threshold = resolveReorderThreshold(
+				occupancy,
+				reorderPolicy.item,
+				reorderPolicy.override
+			);
+			if (!threshold || !qtyLte(remaining, threshold)) return null;
+			const daily = dailyConsumption(occupancy, reorderPolicy.item, reorderPolicy.override);
+			const cover = daysOfCover(remaining, daily);
+			return {
+				remaining,
+				threshold,
+				coverDays: cover
+			};
+		} catch {
+			return null;
+		}
 	});
 
 	const form = superForm(
@@ -197,6 +227,21 @@
 			: ''
 	);
 
+	const submitQtyLabel = $derived.by(() => {
+		const qty = $formData.qty;
+		if (!qty || Number(qty) <= 0) return selectedUnitLabel;
+		return `${qty} ${selectedUnitLabel}`;
+	});
+
+	function chipClass(active: boolean) {
+		return [
+			'inline-flex min-h-11 shrink-0 items-center rounded-full px-3.5 text-sm font-semibold transition-colors',
+			active
+				? 'border-2 border-[#0284C7] bg-sky-50 text-sky-900'
+				: 'border border-slate-300 bg-white text-slate-700 hover:border-slate-400'
+		].join(' ');
+	}
+
 	// Auto-select the first lot (FEFO) when item lots load or change
 	$effect(() => {
 		if (itemLots.length > 0) {
@@ -218,21 +263,19 @@
 
 	function selectItem(item: StockFormItem) {
 		selectedItem = item;
+		selectedItemId = item._id;
 		$formData.item_id = item._id;
 		$formData.unit = defaultIssueUom(item);
 		$formData.ref_id = `requisition_ticket:direct-${ulid()}`;
-		searchQuery = item.name;
-		isDropdownOpen = false;
 	}
 
 	function clearSelection() {
 		selectedItem = null;
+		selectedItemId = '';
 		$formData.item_id = '';
 		$formData.unit = '';
 		$formData.lot_ref = '';
 		$formData.ref_id = `requisition_ticket:direct-${ulid()}`;
-		searchQuery = '';
-		isDropdownOpen = false;
 	}
 
 	function resetForNextLine() {
@@ -255,6 +298,35 @@
 		}
 	}
 
+	function setQty(value: string) {
+		try {
+			const capped = qtyGt(value, maxQtyInUnit) ? maxQtyInUnit : value;
+			$formData.qty = persistQty(capped) as unknown as typeof $formData.qty;
+		} catch {
+			$formData.qty = value as unknown as typeof $formData.qty;
+		}
+	}
+
+	function stepQty(delta: number) {
+		const current =
+			$formData.qty && !Number.isNaN(Number($formData.qty)) ? String($formData.qty) : '0';
+		const next = delta >= 0 ? addQty(current, delta) : subQty(current, Math.abs(delta));
+		if (qtyLte(next, 0)) {
+			$formData.qty = '' as unknown as typeof $formData.qty;
+			return;
+		}
+		setQty(next);
+	}
+
+	function setDestination(label: string | null) {
+		if (label === null) {
+			$formData.note = '';
+			queueMicrotask(() => noteInputEl?.focus());
+			return;
+		}
+		$formData.note = label;
+	}
+
 	async function handleCommit(data: DistributeInput) {
 		const ctx = {
 			shelterCode: getShelterCode(),
@@ -270,6 +342,7 @@
 		const displayQty = data.qty;
 		const ledger = toLedgerQtyUnit(data.qty, data.unit, packaging);
 		const payload: DistributeInput = { ...data, qty: ledger.qty, unit: ledger.unit };
+		const shouldKeepOpen = keepOpenOnSuccess;
 
 		toast.promise(distributeMutation.mutateAsync({ input: payload, ctx }), {
 			loading: 'กำลังบันทึก...',
@@ -277,9 +350,8 @@
 				const name = selectedItem?.name ?? data.item_id;
 				const unitLabel = formatUnit(displayUnit, units, langState.current) || displayUnit;
 				const summary = `${name} −${displayQty} ${unitLabel}`;
-				lastSuccess = `เบิกแล้ว: ${summary}`;
 				resetForNextLine();
-				onsuccess?.({ keepOpen: true, summary });
+				onsuccess?.({ keepOpen: shouldKeepOpen, summary });
 				return 'เบิกแล้ว';
 			},
 			error: (err: unknown) =>
@@ -301,101 +373,41 @@
 		}
 	});
 
-	// Click outside container closes dropdown
-	function handleClickOutside(event: MouseEvent) {
-		if (container && !container.contains(event.target as Node)) {
-			isDropdownOpen = false;
-		}
-	}
+	const canSubmit = $derived(
+		!offline &&
+			!$submitting &&
+			!!$formData.qty &&
+			qtyGt(currentStock, 0) &&
+			itemLots.length > 0 &&
+			!isQtyOverStock
+	);
 </script>
 
-<svelte:document onclick={handleClickOutside} />
-
-<form
-	method="POST"
-	use:form.enhance
-	class="flex flex-col space-y-4 rounded-2xl border border-border/80 bg-card p-4 shadow-md sm:p-5"
->
-	<div class="flex items-center gap-2 border-b border-border/60 pb-3">
-		<PackageMinus class="h-4.5 w-4.5 text-primary" aria-hidden="true" />
-		<h3 class="text-sm font-bold text-foreground">เบิกจ่าย</h3>
-	</div>
-
-	{#if lastSuccess}
-		<p
-			class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800"
-			role="status"
-		>
-			{lastSuccess} ✓
-		</p>
-	{/if}
-
+<form method="POST" use:form.enhance class="flex flex-col space-y-4">
 	<Field.FieldGroup class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 		<Form.Field {form} name="item_id" class="relative col-span-1 sm:col-span-2">
 			<Form.Control>
 				{#snippet children({ props })}
 					<Form.Label>สินค้า <span class="font-bold text-destructive">*</span></Form.Label>
-					<div bind:this={container} class="relative w-full">
-						<Input
-							{...props}
-							placeholder="ค้นหา…"
-							bind:value={searchQuery}
-							onfocus={() => !preselectedItemId && (isDropdownOpen = true)}
-							oninput={() => !preselectedItemId && (isDropdownOpen = true)}
-							autocomplete="off"
-							disabled={!!preselectedItemId}
-							class="min-h-11 {preselectedItemId
-								? 'cursor-not-allowed bg-muted font-bold text-muted-foreground'
-								: ''}"
-						/>
-						{#if selectedItem && !preselectedItemId}
-							<Button
-								type="button"
-								variant="ghost"
-								class="absolute top-1/2 right-1 min-h-11 min-w-11 -translate-y-1/2 px-3 text-sm font-semibold"
-								onclick={clearSelection}
-							>
-								ล้าง
-							</Button>
-						{/if}
-
-						{#if isDropdownOpen}
-							<div
-								id="item-listbox"
-								role="listbox"
-								class="absolute left-0 z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl"
-							>
-								{#if itemsQuery.isLoading || itemMastersQuery.isLoading || balanceQuery.isLoading}
-									<div class="p-3 text-xs text-muted-foreground">กำลังโหลด…</div>
-								{:else if filteredItems.length === 0}
-									<div class="p-3 text-xs text-muted-foreground">ไม่พบสินค้า</div>
-								{:else}
-									{#each filteredItems as item (item._id)}
-										{@const bal = balanceQuery.data?.get(item._id) ?? '0'}
-										<button
-											type="button"
-											class="flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium hover:bg-muted"
-											onclick={() => selectItem(item)}
-											disabled={qtyLte(bal, 0)}
-										>
-											<span
-												class="font-semibold text-foreground {qtyLte(bal, 0) ? 'opacity-50' : ''}"
-												>{item.name}</span
-											>
-											<span
-												class="rounded-md border px-2 py-0.5 text-xs font-bold {qtyGt(bal, 0)
-													? 'border-primary/20 bg-primary/10 text-primary'
-													: 'border-destructive/20 bg-destructive/10 text-destructive'}"
-											>
-												{bal}
-												{formatUnit(item.unit, units, langState.current) || item.unit}
-											</span>
-										</button>
-									{/each}
-								{/if}
-							</div>
-						{/if}
-					</div>
+					<ItemCombobox
+						id={props.id}
+						name={props.name}
+						aria-invalid={props['aria-invalid']}
+						aria-describedby={props['aria-describedby']}
+						{items}
+						allowCreate
+						bind:value={selectedItemId}
+						disabled={!!preselectedItemId}
+						isLoading={stockItems.isLoading || balanceQuery.isLoading}
+						{balanceByItemId}
+						disableWhenEmpty={true}
+						formatBalanceUnit={(item) =>
+							formatUnit(item.unit, units, langState.current) || item.unit}
+						onSelect={(item) => {
+							if (item) selectItem(item);
+							else clearSelection();
+						}}
+					/>
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />
@@ -461,112 +473,191 @@
 			</Form.Field>
 		{/if}
 
-		<Form.Field {form} name="qty" class="col-span-1">
-			<Form.Control>
-				{#snippet children({ props })}
-					<Form.Label>จำนวน <span class="font-bold text-destructive">*</span></Form.Label>
-					<Input
-						{...props}
-						type="number"
-						placeholder="0"
-						min="0.01"
-						step="any"
-						bind:value={$formData.qty}
-						class="min-h-11 font-mono font-bold"
-					/>
-				{/snippet}
-			</Form.Control>
-			<Form.FieldErrors />
-		</Form.Field>
-
-		<Form.Field {form} name="unit" class="col-span-1">
-			<Form.Control>
-				{#snippet children({ props })}
-					<Form.Label>หน่วย <span class="font-bold text-destructive">*</span></Form.Label>
-					{#if !selectedItem}
-						<Input
-							{...props}
-							placeholder="เลือกสินค้าก่อน"
-							value=""
-							readonly
-							disabled
-							class="min-h-11"
-						/>
-					{:else if unitOptions.length <= 1}
-						<Input {...props} value={selectedUnitLabel} readonly disabled class="min-h-11" />
-					{:else}
-						<Select.Root
-							type="single"
-							value={$formData.unit}
-							onValueChange={(val) => {
-								if (val) $formData.unit = val;
-							}}
-						>
-							<Select.Trigger
-								{...props}
-								class="min-h-11 w-full rounded-md border border-input bg-white px-3 text-sm font-medium"
-							>
-								{selectedUnitLabel}
-							</Select.Trigger>
-							<Select.Content>
-								{#each unitOptions as option (option.code)}
-									<Select.Item
-										value={option.code}
-										label={formatUnit(option.code, units, langState.current) || option.code}
-									/>
-								{/each}
-							</Select.Content>
-						</Select.Root>
-					{/if}
-				{/snippet}
-			</Form.Control>
-			<Form.FieldErrors />
-		</Form.Field>
-
-		<div class="col-span-1 sm:col-span-2">
-			<button
-				type="button"
-				class="flex min-h-11 w-full items-center justify-between rounded-lg border border-border/60 bg-muted/30 px-3 text-sm font-semibold"
-				onclick={() => (moreOpen = !moreOpen)}
-				aria-expanded={moreOpen}
-			>
-				<span>เพิ่มเติม</span>
-				<ChevronDown
-					class="h-4 w-4 transition-transform {moreOpen ? 'rotate-180' : ''}"
-					aria-hidden="true"
-				/>
-			</button>
-			{#if moreOpen}
-				<div class="mt-3">
-					<Form.Field {form} name="note" class="col-span-1 sm:col-span-2">
+		<div class="col-span-1 space-y-2 sm:col-span-2">
+			<Form.Label>จำนวน <span class="font-bold text-destructive">*</span></Form.Label>
+			<div class="flex flex-wrap items-stretch gap-2">
+				<div
+					class="flex min-w-0 flex-1 items-stretch overflow-hidden rounded-lg border border-input"
+				>
+					<Button
+						type="button"
+						variant="ghost"
+						class="h-auto min-h-11 rounded-none px-3"
+						onclick={() => stepQty(-1)}
+						disabled={!selectedItem}
+						aria-label="ลดจำนวน"
+					>
+						<Minus class="h-4 w-4" />
+					</Button>
+					<Form.Field {form} name="qty" class="min-w-0 flex-1 space-y-0">
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label>ปลายทาง / ผู้รับ</Form.Label>
 								<Input
 									{...props}
-									placeholder="เช่น โซนเต็นท์ A"
-									bind:value={$formData.note}
-									class="min-h-11"
+									type="number"
+									placeholder="0"
+									min="0.01"
+									step="any"
+									bind:value={$formData.qty}
+									class="min-h-11 rounded-none border-0 border-x border-input font-mono font-bold shadow-none focus-visible:ring-0"
 								/>
 							{/snippet}
 						</Form.Control>
 						<Form.FieldErrors />
 					</Form.Field>
+					<Button
+						type="button"
+						variant="ghost"
+						class="h-auto min-h-11 rounded-none px-3"
+						onclick={() => stepQty(1)}
+						disabled={!selectedItem}
+						aria-label="เพิ่มจำนวน"
+					>
+						<Plus class="h-4 w-4" />
+					</Button>
 				</div>
-			{/if}
+
+				<Form.Field {form} name="unit" class="w-28 shrink-0 space-y-0 sm:w-32">
+					<Form.Control>
+						{#snippet children({ props })}
+							{#if !selectedItem}
+								<Input {...props} placeholder="หน่วย" value="" readonly disabled class="min-h-11" />
+							{:else if unitOptions.length <= 1}
+								<Input {...props} value={selectedUnitLabel} readonly disabled class="min-h-11" />
+							{:else}
+								<Select.Root
+									type="single"
+									value={$formData.unit}
+									onValueChange={(val) => {
+										if (val) $formData.unit = val;
+									}}
+								>
+									<Select.Trigger
+										{...props}
+										class="min-h-11 w-full rounded-md border border-input bg-white px-3 text-sm font-medium"
+									>
+										{selectedUnitLabel}
+									</Select.Trigger>
+									<Select.Content>
+										{#each unitOptions as option (option.code)}
+											<Select.Item
+												value={option.code}
+												label={formatUnit(option.code, units, langState.current) || option.code}
+											/>
+										{/each}
+									</Select.Content>
+								</Select.Root>
+							{/if}
+						{/snippet}
+					</Form.Control>
+				</Form.Field>
+			</div>
+			<div class="flex flex-wrap gap-2 pt-1">
+				{#each QTY_CHIPS as chip (chip)}
+					<button
+						type="button"
+						class={chipClass(String($formData.qty) === String(chip))}
+						disabled={!selectedItem}
+						onclick={() => setQty(String(chip))}
+					>
+						{chip}
+					</button>
+				{/each}
+				<button
+					type="button"
+					class={chipClass(
+						String($formData.qty) === String(maxQtyInUnit) && qtyGt(maxQtyInUnit, 0)
+					)}
+					disabled={!selectedItem || qtyLte(maxQtyInUnit, 0)}
+					onclick={() => setQty(maxQtyInUnit)}
+				>
+					ทั้งหมด ({maxQtyInUnit})
+				</button>
+			</div>
 		</div>
 
-		<div class="col-span-1 pt-1 sm:col-span-2">
+		<div class="col-span-1 space-y-2 sm:col-span-2">
+			<Form.Label>เบิกให้ใคร / ไปที่ไหน</Form.Label>
+			<div class="flex flex-wrap gap-2">
+				{#each DEST_PRESETS as preset (preset)}
+					<button
+						type="button"
+						class={chipClass($formData.note === preset)}
+						onclick={() => setDestination(preset)}
+					>
+						{preset}
+					</button>
+				{/each}
+				<button
+					type="button"
+					class={chipClass(
+						!!$formData.note && !(DEST_PRESETS as readonly string[]).includes($formData.note)
+					)}
+					onclick={() => setDestination(null)}
+				>
+					อื่นๆ...
+				</button>
+			</div>
+			<Form.Field {form} name="note" class="pt-1">
+				<Form.Control>
+					{#snippet children({ props })}
+						<Input
+							{...props}
+							bind:ref={noteInputEl}
+							placeholder="ปลายทาง / ผู้รับ (ไม่บังคับ)"
+							bind:value={$formData.note}
+							class="min-h-11"
+						/>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
+		</div>
+
+		{#if afterDistributeWarning}
+			<div
+				class="col-span-1 flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950 sm:col-span-2"
+				role="status"
+			>
+				<AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
+				<div>
+					<p class="font-bold">ยอดหลังเบิกจะต่ำกว่าเกณฑ์</p>
+					<p class="text-xs font-medium text-amber-900/80">
+						เหลือ {afterDistributeWarning.remaining}
+						{baseUnitLabel} (เกณฑ์ {afterDistributeWarning.threshold}
+						{baseUnitLabel})
+						{#if afterDistributeWarning.coverDays !== null}
+							· ครอบคลุมประมาณ {afterDistributeWarning.coverDays} วัน
+						{/if}
+					</p>
+				</div>
+			</div>
+		{/if}
+
+		<div
+			class="sticky bottom-0 z-10 col-span-1 -mx-4 -mb-4 flex flex-col gap-2 border-t border-slate-200 bg-slate-50 px-4 py-4 sm:col-span-2 sm:-mx-6 sm:-mb-6 sm:flex-row sm:justify-end sm:px-6"
+		>
+			<Button
+				type="submit"
+				variant="outline"
+				size="lg"
+				disabled={!canSubmit}
+				class="min-h-11 flex-1 font-bold"
+				onclick={() => {
+					keepOpenOnSuccess = true;
+				}}
+			>
+				{$submitting ? 'กำลังบันทึก…' : 'บันทึกแล้วเบิกรายการถัดไป'}
+			</Button>
 			<Form.Button
 				size="lg"
-				disabled={$submitting ||
-					!$formData.qty ||
-					!qtyGt(currentStock, 0) ||
-					itemLots.length === 0 ||
-					isQtyOverStock}
-				class="min-h-11 w-full font-bold"
+				disabled={!canSubmit}
+				class="min-h-11 flex-1 font-bold"
+				onclick={() => {
+					keepOpenOnSuccess = false;
+				}}
 			>
-				{$submitting ? 'กำลังบันทึก…' : 'บันทึกแล้วเบิกชิ้นถัดไป'}
+				{$submitting ? 'กำลังบันทึก…' : `เบิก ${submitQtyLabel}`}
 			</Form.Button>
 		</div>
 	</Field.FieldGroup>

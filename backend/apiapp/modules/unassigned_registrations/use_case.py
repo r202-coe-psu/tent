@@ -40,6 +40,7 @@ from .couch_birth import (
     get_couch_birth,
 )
 from .schemas import (
+    PETS_MAX_COUNT,
     ClaimedMemberOut,
     ClaimedPetOut,
     EmergencyContactOut,
@@ -273,6 +274,8 @@ def _build_member(input_member: MemberInput) -> UnassignedMember:
         age=input_member.age,
         nickname=input_member.nickname,
         religion=input_member.religion,
+        religion_other=input_member.religion_other,
+        disability_other_detail=input_member.disability_other_detail,
         emergency_contact=_normalize_emergency_contact(input_member.emergency_contact),
         photo=_normalize_photo_ref(input_member.photo),
     )
@@ -367,6 +370,8 @@ def _member_response(member: UnassignedMember) -> MemberCreated:
         age=member.age,
         nickname=member.nickname,
         religion=member.religion,
+        religion_other=member.religion_other,
+        disability_other_detail=member.disability_other_detail,
         emergency_contact=_emergency_out(member),
         photo=member.photo,
     )
@@ -390,6 +395,10 @@ class UnassignedRegistrationsUseCase:
         household = UnassignedHousehold(
             housing_type=payload.household.housing_type,
             residence_landmark=payload.household.residence_landmark,
+            dorm_name=payload.household.dorm_name,
+            dorm_building=payload.household.dorm_building,
+            dorm_floor=payload.household.dorm_floor,
+            dorm_room=payload.household.dorm_room,
             address_no=payload.household.address_no,
             village_no=payload.household.village_no,
             subdistrict=payload.household.subdistrict,
@@ -473,6 +482,15 @@ class UnassignedRegistrationsUseCase:
 
         append_pets = [_build_pet(pet) for pet in payload.household.pets]
         if append_pets:
+            # CR-148 FR-08 — cap applies to the whole household, not just this request.
+            kept_total = sum(
+                p.count for p in (doc.household.pets or []) if p.effective_status() != "cancelled"
+            )
+            if kept_total + sum(p.count for p in append_pets) > PETS_MAX_COUNT:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail={"error": "PETS_LIMIT_EXCEEDED", "max": PETS_MAX_COUNT},
+                )
             existing_pets = list(doc.household.pets or [])
             doc.household.pets = existing_pets + append_pets
 
@@ -564,6 +582,10 @@ class UnassignedRegistrationsUseCase:
             hh_addr = {
                 "housing_type": doc.household.housing_type,
                 "residence_landmark": doc.household.residence_landmark,
+                "dorm_name": doc.household.dorm_name,
+                "dorm_building": doc.household.dorm_building,
+                "dorm_floor": doc.household.dorm_floor,
+                "dorm_room": doc.household.dorm_room,
                 "address_no": doc.household.address_no,
                 "village_no": doc.household.village_no,
                 "subdistrict": doc.household.subdistrict,
@@ -703,6 +725,10 @@ class UnassignedRegistrationsUseCase:
             created_at=doc.created_at.isoformat(),
             housing_type=hh.housing_type,
             residence_landmark=hh.residence_landmark,
+            dorm_name=hh.dorm_name,
+            dorm_building=hh.dorm_building,
+            dorm_floor=hh.dorm_floor,
+            dorm_room=hh.dorm_room,
             address_no=hh.address_no,
             village_no=hh.village_no,
             subdistrict=hh.subdistrict,
@@ -1391,6 +1417,8 @@ def _open_member_hit(member: UnassignedMember) -> OpenMemberHit:
         special_needs=list(member.special_needs),
         nickname=member.nickname,
         religion=member.religion,
+        religion_other=member.religion_other,
+        disability_other_detail=member.disability_other_detail,
         emergency_contact=_emergency_out(member),
         photo=member.photo,
         birth_year=member.birth_year,
@@ -1430,6 +1458,10 @@ def _household_out(household: UnassignedHousehold) -> HouseholdOut:
     return HouseholdOut(
         housing_type=household.housing_type,
         residence_landmark=household.residence_landmark,
+        dorm_name=household.dorm_name,
+        dorm_building=household.dorm_building,
+        dorm_floor=household.dorm_floor,
+        dorm_room=household.dorm_room,
         address_no=household.address_no,
         village_no=household.village_no,
         subdistrict=household.subdistrict,

@@ -7,7 +7,6 @@
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import HeartPulse from '@lucide/svelte/icons/heart-pulse';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
-	import MapPin from '@lucide/svelte/icons/map-pin';
 	import QrCode from '@lucide/svelte/icons/qr-code';
 	import { onDestroy } from 'svelte';
 	import { toast } from 'svelte-sonner';
@@ -30,8 +29,7 @@
 		PersonalInfoFields,
 		EmergencyContactFields,
 		SpecialNeedsFields,
-		VulnerableGroupsFields,
-		ZoneSelectionFields
+		VulnerableGroupsFields
 	} from '../forms/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
@@ -67,7 +65,6 @@
 		primaryContactPhone = null,
 		onRemove,
 		onReportingInChange,
-		onApplyZoneToAll,
 		onScanThaiD
 	}: {
 		member: UnifiedMemberWithMeta;
@@ -84,7 +81,6 @@
 		primaryContactPhone?: string | null;
 		onRemove?: () => void;
 		onReportingInChange?: (reportingIn: boolean) => void;
-		onApplyZoneToAll?: (zoneCode: string) => void;
 		onScanThaiD?: () => void;
 	} = $props();
 
@@ -624,6 +620,7 @@
 			bind:age
 			bind:gender={member.gender}
 			bind:religion={member.religion}
+			bind:religion_other={member.religion_other}
 			bind:country={member.country}
 			disabled={fieldsDisabled}
 			{hideNoPhone}
@@ -670,6 +667,7 @@
 					<span class="text-2xs text-muted-foreground">{t.vulnerableMultiHint}</span>
 					<VulnerableGroupsFields
 						bind:vulnerable_groups={member.vulnerable_groups}
+						bind:disability_other_detail={member.disability_other_detail}
 						disabled={fieldsDisabled}
 						idPrefix="vg-{index}"
 						label=""
@@ -696,69 +694,6 @@
 			</Accordion.Content>
 		</Accordion.Item>
 	</Accordion.Root>
-
-	{#if channel === 'onsite'}
-		<div class="space-y-3 rounded-xl border border-border/80 bg-muted/20 p-3.5 sm:p-4">
-			<div class="flex flex-wrap items-center justify-between gap-2">
-				<div class="flex items-center gap-2">
-					<MapPin class="size-4 text-primary" />
-					<h4 class="text-xs font-semibold text-foreground sm:text-sm">การจัดโซนพักอาศัย</h4>
-					{#if !member.zone}
-						<Badge variant="outline" class="text-2xs font-normal text-muted-foreground">
-							จัดโซนภายหลัง (Unassigned)
-						</Badge>
-					{/if}
-				</div>
-				{#if isPrimary && onApplyZoneToAll}
-					<Button
-						type="button"
-						variant="outline"
-						size="sm"
-						class="h-7 text-2xs"
-						disabled={fieldsDisabled || !member.zone}
-						onclick={() => onApplyZoneToAll?.(member.zone ?? '')}
-					>
-						ใช้โซนนี้กับทุกคนในบ้าน
-					</Button>
-				{/if}
-			</div>
-
-			<ZoneSelectionFields
-				bind:selected_zone={
-					() => member.zone ?? '',
-					(v) => {
-						member.zone = v || null;
-					}
-				}
-				evacuee={{
-					_id: member._id ?? '',
-					household_id: '',
-					shelter_code: shelterCode || '',
-					first_name: member.first_name || '',
-					last_name: member.last_name || '',
-					gender: member.gender === 'male' || member.gender === 'female' ? member.gender : 'other',
-					phone: member.phone ?? null,
-					vulnerable_groups: member.vulnerable_groups ?? [],
-					special_needs: member.special_needs ?? [],
-					current_stay: {
-						status: member.stay_status ?? 'arriving',
-						zone: member.zone ?? null,
-						since: ''
-					},
-					country: 'THAILAND',
-					religion: 'unknown',
-					registered_via: 'staff',
-					schema_v: 4,
-					created_at: '',
-					updated_at: '',
-					created_by: '',
-					type: 'evacuee',
-					privacy: { search_excluded: false }
-				}}
-				disabled={fieldsDisabled}
-			/>
-		</div>
-	{/if}
 </section>
 
 {#if channel === 'onsite' && isReportIn}

@@ -8,7 +8,7 @@ export default defineConfig({
 	retries: process.env.CI ? 2 : 0,
 	// User management access-control tests call CouchDB directly (no parallelism
 	// issues since each test uses unique usernames with a RUN_ID suffix).
-	workers: process.env.CI ? 1 : undefined,
+	workers: 1,
 	reporter: 'html',
 	use: {
 		baseURL: 'http://localhost:4173',
@@ -35,7 +35,8 @@ export default defineConfig({
 			reuseExistingServer: !process.env.CI,
 			timeout: 60_000,
 			env: {
-				COUCHDB_ADMIN_URL: process.env.COUCHDB_ADMIN_URL ?? 'http://admin:password@localhost:5984'
+				COUCHDB_ADMIN_URL: process.env.COUCHDB_ADMIN_URL ?? 'http://admin:password@localhost:5984',
+				SECRET_RECAPTCHA_KEY: process.env.SECRET_RECAPTCHA_KEY ?? 'e2e-recaptcha-secret'
 			}
 		}
 	]

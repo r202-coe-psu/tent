@@ -25,11 +25,10 @@
 	import { useShelters } from '$lib/features/shelters';
 	import { getShelterCode } from '$lib/db/shelter';
 	import * as Table from '$lib/components/ui/table/index.js';
-	import * as Dialog from '$lib/components/ui/dialog';
 	import * as Sheet from '$lib/components/ui/sheet';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import PaginationControls from '$lib/components/pagination-controls.svelte';
-	import LedgerTable from './ledger-table.svelte';
+	import ItemDetailSheet from './item-detail-sheet.svelte';
 	import ReceiveStockForm from './receive-stock-form.svelte';
 	import DistributeStockForm from './distribute-stock-form.svelte';
 	import AdjustStockForm from './adjust-stock-form.svelte';
@@ -70,14 +69,10 @@
 	} from '../domain/stock-summary';
 	import { lotStorageKey, lotStorageName } from '../domain/lot-storage';
 	import { useStoragePoints } from '../application/use-storage-points.svelte';
-	import MinusCircle from '@lucide/svelte/icons/minus-circle';
-	import Settings from '@lucide/svelte/icons/settings';
 	import { qtyGt, addQty } from '$lib/utils/qty';
 	import { IsMobile } from '$lib/hooks/is-mobile.svelte';
 	import Plus from '@lucide/svelte/icons/plus';
 	import Boxes from '@lucide/svelte/icons/boxes';
-	import Clock from '@lucide/svelte/icons/clock';
-	import PlusCircle from '@lucide/svelte/icons/plus-circle';
 	import ArrowDownToLine from '@lucide/svelte/icons/arrow-down-to-line';
 	import ArrowUpFromLine from '@lucide/svelte/icons/arrow-up-from-line';
 	import SlidersHorizontal from '@lucide/svelte/icons/sliders-horizontal';
@@ -132,17 +127,15 @@
 	}
 
 	let selectedItemId = $state<string | null>(null);
-	let isManageModalOpen = $state(false);
-	let activeModalTab = $state<'history' | 'checkin' | 'distribute' | 'adjust'>('checkin');
+	let detailOpen = $state(false);
 	let quickActionOpen = $state(false);
 	let quickActionKind = $state<'receive' | 'distribute' | 'adjust'>('receive');
 	let quickActionItemId = $state<string | undefined>(undefined);
 	const isMobileViewport = new IsMobile();
 
-	function openManage(itemId: string, tab: typeof activeModalTab = 'checkin') {
+	function openDetail(itemId: string) {
 		selectedItemId = itemId;
-		activeModalTab = tab;
-		isManageModalOpen = true;
+		detailOpen = true;
 	}
 
 	function openQuickAction(kind: 'receive' | 'distribute' | 'adjust', itemId?: string) {
@@ -151,8 +144,11 @@
 		quickActionOpen = true;
 	}
 
-	function onMovementSuccess() {
-		// Keep overlay/panel open for the next line — forms reset themselves.
+	function onMovementSuccess(result?: { keepOpen?: boolean }) {
+		// Keep overlay/panel open for the next line unless the form asked to close.
+		if (result?.keepOpen === false) {
+			quickActionOpen = false;
+		}
 	}
 
 	const quickActionTitle = $derived(
@@ -166,8 +162,8 @@
 		quickActionKind === 'receive'
 			? 'บันทึกรับพัสดุเข้าคลัง'
 			: quickActionKind === 'distribute'
-				? 'บันทึกเบิกจ่ายพัสดุออกจากคลัง'
-				: 'ปรับยอดสต็อกในคลัง'
+				? 'ระบบเลือกล็อตที่หมดอายุก่อนให้อัตโนมัติ'
+				: 'กรอกจำนวนที่นับได้จริง แล้วระบบจะคำนวณส่วนต่างให้อัตโนมัติ'
 	);
 
 	const items = $derived.by(() => {
@@ -343,6 +339,10 @@
 	// Cross-shelter totals are view-only: opening an item or moving stock would act on one shelter.
 	const readonly = $derived(isSA && showOverall);
 
+	// Session expired (`needsReauth`): reading still works, every write button is off.
+	const offline = $derived(authStore.needsReauth);
+	const OFFLINE_HINT = 'เซสชันหมดอายุ — เข้าสู่ระบบใหม่เพื่อบันทึก';
+
 	function clearFilters() {
 		updateUrl({ q: '', cat: 'all', loc: 'all', status: 'all' });
 	}
@@ -361,6 +361,8 @@
 				<Button
 					type="button"
 					class="min-h-11 gap-2 rounded-lg bg-[#0A2647] px-4 text-sm font-semibold text-white hover:bg-[#051930]"
+					disabled={offline}
+					title={offline ? OFFLINE_HINT : undefined}
 					onclick={() => openQuickAction('receive')}
 				>
 					<ArrowDownToLine class="h-4 w-4" aria-hidden="true" />
@@ -370,6 +372,8 @@
 					type="button"
 					variant="outline"
 					class="min-h-11 gap-2 rounded-lg border-slate-300 px-4 text-sm font-semibold text-slate-800 shadow-2xs"
+					disabled={offline}
+					title={offline ? OFFLINE_HINT : undefined}
 					onclick={() => openQuickAction('distribute')}
 				>
 					<ArrowUpFromLine class="h-4 w-4" aria-hidden="true" />
@@ -379,6 +383,8 @@
 					type="button"
 					variant="outline"
 					class="min-h-11 gap-2 rounded-lg border-slate-300 px-4 text-sm font-semibold text-slate-800 shadow-2xs"
+					disabled={offline}
+					title={offline ? OFFLINE_HINT : undefined}
 					onclick={() => openQuickAction('adjust')}
 				>
 					<SlidersHorizontal class="h-4 w-4" aria-hidden="true" />
@@ -489,7 +495,8 @@
 							<StockCard
 								{row}
 								{readonly}
-								onopen={(r) => openManage(r._id)}
+								{offline}
+								onopen={(r) => openDetail(r._id)}
 								onreceive={(r) => openQuickAction('receive', r._id)}
 								ondistribute={(r) => openQuickAction('distribute', r._id)}
 							/>
@@ -521,7 +528,8 @@
 								<StockRow
 									{row}
 									{readonly}
-									onopen={(r) => openManage(r._id)}
+									{offline}
+									onopen={(r) => openDetail(r._id)}
 									onreceive={(r) => openQuickAction('receive', r._id)}
 									ondistribute={(r) => openQuickAction('distribute', r._id)}
 								/>
@@ -554,6 +562,8 @@
 	<Button
 		type="button"
 		class="min-h-12 rounded-lg bg-[#0A2647] text-sm font-semibold text-white hover:bg-[#051930]"
+		disabled={offline}
+		title={offline ? OFFLINE_HINT : undefined}
 		onclick={() => openQuickAction('receive')}
 	>
 		รับเข้า
@@ -562,6 +572,8 @@
 		type="button"
 		variant="outline"
 		class="min-h-12 rounded-lg border-slate-300 text-sm font-semibold text-slate-800"
+		disabled={offline}
+		title={offline ? OFFLINE_HINT : undefined}
 		onclick={() => openQuickAction('distribute')}
 	>
 		เบิกจ่าย
@@ -570,197 +582,58 @@
 		type="button"
 		variant="outline"
 		class="min-h-12 rounded-lg border-slate-300 text-sm font-semibold text-slate-800"
+		disabled={offline}
+		title={offline ? OFFLINE_HINT : undefined}
 		onclick={() => openQuickAction('adjust')}
 	>
 		ตรวจนับ
 	</Button>
 </div>
 
-{#snippet manageHeader()}
-	{#if selectedManageItem}
-		<div class="space-y-1">
-			<div class="flex items-center gap-2 text-xl font-bold text-slate-900">
-				<Boxes class="h-5 w-5 text-teal-700" aria-hidden="true" />
-				{selectedManageItem.name}
-			</div>
-			<p class="text-base font-semibold text-slate-800 tabular-nums">
-				ยอดใช้ได้ {selectedManageItem.qtyOnHand}
-				<span class="text-sm font-normal text-slate-500">
-					{selectedManageItem.unitLabel}
-				</span>
-			</p>
-		</div>
-	{/if}
-{/snippet}
+<ItemDetailSheet
+	bind:open={detailOpen}
+	row={selectedManageItem}
+	lots={selectedItemId ? (lotsByItem.get(selectedItemId) ?? []) : []}
+	shelterCode={getShelterCode()}
+	{offline}
+	onaction={(kind) => openQuickAction(kind, selectedItemId ?? undefined)}
+/>
 
-{#snippet manageBody()}
-	<div class="grid grid-cols-1 gap-8 lg:grid-cols-12">
-		<div class="flex flex-col gap-6 lg:col-span-5 lg:border-r lg:border-slate-200/80 lg:pr-6">
-			<div class="flex items-center gap-2 border-b border-slate-200/60 pb-3">
-				<span class="text-sm font-bold text-slate-900">จัดการด่วน</span>
-			</div>
-
-			<div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-				<button
-					type="button"
-					onclick={() => (activeModalTab = 'distribute')}
-					class="flex min-h-11 flex-col items-center justify-center gap-2 rounded-xl border px-3 py-4 text-center transition-all {activeModalTab ===
-					'distribute'
-						? 'border-teal-600 bg-teal-600 font-bold text-white shadow-xs'
-						: 'border-slate-200 bg-slate-50 text-slate-800 hover:bg-slate-100'}"
-				>
-					<MinusCircle
-						class="h-5 w-5 {activeModalTab === 'distribute' ? 'text-white' : 'text-orange-500'}"
-						aria-hidden="true"
-					/>
-					<span class="text-xs font-bold whitespace-nowrap">เบิกจ่าย</span>
-				</button>
-				<button
-					type="button"
-					onclick={() => (activeModalTab = 'checkin')}
-					class="flex min-h-11 flex-col items-center justify-center gap-2 rounded-xl border px-3 py-4 text-center transition-all {activeModalTab ===
-					'checkin'
-						? 'border-teal-600 bg-teal-600 font-bold text-white shadow-xs'
-						: 'border-slate-200 bg-slate-50 text-slate-800 hover:bg-slate-100'}"
-				>
-					<PlusCircle
-						class="h-5 w-5 {activeModalTab === 'checkin' ? 'text-white' : 'text-emerald-500'}"
-						aria-hidden="true"
-					/>
-					<span class="text-xs font-bold whitespace-nowrap">รับเข้า</span>
-				</button>
-				<button
-					type="button"
-					onclick={() => (activeModalTab = 'adjust')}
-					class="flex min-h-11 flex-col items-center justify-center gap-2 rounded-xl border px-3 py-4 text-center transition-all {activeModalTab ===
-					'adjust'
-						? 'border-teal-600 bg-teal-600 font-bold text-white shadow-xs'
-						: 'border-slate-200 bg-slate-50 text-slate-800 hover:bg-slate-100'}"
-				>
-					<Settings
-						class="h-5 w-5 {activeModalTab === 'adjust' ? 'text-white' : 'text-sky-600'}"
-						aria-hidden="true"
-					/>
-					<span class="text-xs font-bold whitespace-nowrap">ปรับปรุง</span>
-				</button>
-			</div>
-
-			<div class="mt-2 flex-1">
-				{#if selectedItemId}
-					{#if activeModalTab === 'checkin'}
-						<ReceiveStockForm preselectedItemId={selectedItemId} onsuccess={onMovementSuccess} />
-					{:else if activeModalTab === 'distribute'}
-						<DistributeStockForm preselectedItemId={selectedItemId} onsuccess={onMovementSuccess} />
-					{:else if activeModalTab === 'adjust'}
-						<AdjustStockForm preselectedItemId={selectedItemId} onsuccess={onMovementSuccess} />
-					{/if}
-				{/if}
-			</div>
-		</div>
-
-		<div class="flex flex-col gap-4 lg:col-span-7">
-			<div class="flex items-center gap-2 border-b border-slate-200/60 pb-3">
-				<Clock class="h-4 w-4 text-slate-500" aria-hidden="true" />
-				<span class="text-sm font-bold text-slate-900">ประวัติการเคลื่อนไหว</span>
-			</div>
-			<div class="max-h-[60vh] overflow-y-auto">
-				{#if selectedItemId}
-					<LedgerTable filterItemId={selectedItemId} />
-				{/if}
-			</div>
-		</div>
-	</div>
-{/snippet}
-
-{#if isMobileViewport.current}
-	<Sheet.Root bind:open={isManageModalOpen}>
-		<Sheet.Content
-			side="bottom"
-			class="flex h-[100dvh] max-h-[100dvh] flex-col gap-0 overflow-hidden rounded-none border-0 p-0 pb-[env(safe-area-inset-bottom)]"
-		>
-			<Sheet.Header class="shrink-0 border-b border-slate-200/80 px-4 py-4 pr-12 text-left">
-				<Sheet.Title class="sr-only">จัดการสต็อก</Sheet.Title>
-				<Sheet.Description class="sr-only">รับเข้า เบิกจ่าย หรือปรับปรุงยอดสต็อก</Sheet.Description>
-				{@render manageHeader()}
-			</Sheet.Header>
-			<div class="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
-				{@render manageBody()}
-			</div>
-		</Sheet.Content>
-	</Sheet.Root>
-{:else}
-	<Dialog.Root bind:open={isManageModalOpen}>
-		<Dialog.Content
-			class="max-h-[92vh] w-full overflow-y-auto rounded-2xl border border-slate-200/80 bg-white p-4 shadow-md sm:max-w-2xl sm:p-6 lg:max-w-5xl"
-		>
-			<Dialog.Header class="mb-4 border-b border-slate-200/80 pb-4">
-				{#if selectedManageItem}
-					<Dialog.Title class="flex items-center gap-2 text-xl font-bold text-slate-900">
-						<Boxes class="h-5 w-5 text-teal-700" aria-hidden="true" />
-						{selectedManageItem.name}
-					</Dialog.Title>
-					<Dialog.Description class="mt-1 text-base font-semibold text-slate-800 tabular-nums">
-						ยอดใช้ได้ {selectedManageItem.qtyOnHand}
-						<span class="text-sm font-normal text-slate-500">
-							{selectedManageItem.unitLabel}
-						</span>
-					</Dialog.Description>
-				{/if}
-			</Dialog.Header>
-			{@render manageBody()}
-		</Dialog.Content>
-	</Dialog.Root>
-{/if}
-
-<!-- Quick receive / distribute / adjust (header buttons: no preselect; row buttons: item preselected) -->
-{#if isMobileViewport.current}
-	<Sheet.Root bind:open={quickActionOpen}>
-		<Sheet.Content
-			side="bottom"
-			class="flex h-[100dvh] max-h-[100dvh] flex-col gap-0 overflow-hidden rounded-none border-0 p-0 pb-[env(safe-area-inset-bottom)]"
-		>
-			<Sheet.Header class="shrink-0 border-b border-slate-200/80 px-4 py-4 pr-12 text-left">
-				<Sheet.Title class="text-xl font-bold text-slate-900">
-					{quickActionTitle}
-				</Sheet.Title>
-				<Sheet.Description class="text-sm text-slate-500">
-					{quickActionDescription}
-				</Sheet.Description>
-			</Sheet.Header>
-			<div class="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
-				{#if quickActionKind === 'receive'}
-					<ReceiveStockForm preselectedItemId={quickActionItemId} onsuccess={onMovementSuccess} />
-				{:else if quickActionKind === 'distribute'}
-					<DistributeStockForm
-						preselectedItemId={quickActionItemId}
-						onsuccess={onMovementSuccess}
-					/>
-				{:else}
-					<AdjustStockForm preselectedItemId={quickActionItemId} onsuccess={onMovementSuccess} />
-				{/if}
-			</div>
-		</Sheet.Content>
-	</Sheet.Root>
-{:else}
-	<Dialog.Root bind:open={quickActionOpen}>
-		<Dialog.Content
-			class="max-h-[92vh] w-full overflow-y-auto rounded-2xl border border-slate-200/80 bg-white p-4 shadow-md sm:max-w-lg sm:p-6"
-		>
-			<Dialog.Header class="mb-4 border-b border-slate-200/80 pb-4">
-				<Dialog.Title class="text-xl font-bold text-slate-900">
-					{quickActionTitle}
-				</Dialog.Title>
-				<Dialog.Description class="text-sm text-slate-500">
-					{quickActionDescription}
-				</Dialog.Description>
-			</Dialog.Header>
+<!-- Quick receive / distribute / adjust (header buttons: no preselect; row buttons: item preselected).
+	Desktop: right side sheet (receive 760px, others 600px); mobile: full-height bottom sheet. -->
+<Sheet.Root bind:open={quickActionOpen}>
+	<Sheet.Content
+		side={isMobileViewport.current ? 'bottom' : 'right'}
+		class={[
+			'flex flex-col gap-0 overflow-hidden border-0 p-0 pb-[env(safe-area-inset-bottom)]',
+			isMobileViewport.current
+				? 'h-[100dvh] max-h-[100dvh] rounded-none'
+				: [
+						'h-[100dvh] w-full sm:max-w-none md:border-l',
+						quickActionKind === 'receive' ? 'md:w-[47.5rem]' : 'md:w-[37.5rem]'
+					]
+		]}
+	>
+		<Sheet.Header class="shrink-0 border-b border-slate-200/80 px-4 py-4 pr-14 text-left sm:px-6">
+			<Sheet.Title class="text-xl font-bold text-slate-900">
+				{quickActionTitle}
+			</Sheet.Title>
+			<Sheet.Description class="text-sm text-slate-500">
+				{quickActionDescription}
+			</Sheet.Description>
+		</Sheet.Header>
+		<div class="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
 			{#if quickActionKind === 'receive'}
 				<ReceiveStockForm preselectedItemId={quickActionItemId} onsuccess={onMovementSuccess} />
 			{:else if quickActionKind === 'distribute'}
-				<DistributeStockForm preselectedItemId={quickActionItemId} onsuccess={onMovementSuccess} />
+				<DistributeStockForm
+					preselectedItemId={quickActionItemId}
+					{occupancy}
+					onsuccess={onMovementSuccess}
+				/>
 			{:else}
 				<AdjustStockForm preselectedItemId={quickActionItemId} onsuccess={onMovementSuccess} />
 			{/if}
-		</Dialog.Content>
-	</Dialog.Root>
-{/if}
+		</div>
+	</Sheet.Content>
+</Sheet.Root>

@@ -7,6 +7,7 @@ import {
 	deployPeopleMangoIndexes,
 	deployRegistryDesign,
 	deployReferralMangoIndexes,
+	deployRequisitionTicketMangoIndexes,
 	deployShelterViews,
 	deployTransferLedgerMangoIndexes,
 	findMasterByCode,
@@ -330,6 +331,9 @@ async function provisionShelterUnlocked(
 	await assertActive?.();
 	await deployPeopleMangoIndexes(db);
 	steps.push({ step: 'people-mango', status: 200 });
+	await assertActive?.();
+	await deployRequisitionTicketMangoIndexes(db);
+	steps.push({ step: 'requisition-ticket-mango', status: 200 });
 
 	await assertActive?.();
 	const registry = await adminRaw(`/${SHELTER_REGISTRY_DB}`, 'PUT');
