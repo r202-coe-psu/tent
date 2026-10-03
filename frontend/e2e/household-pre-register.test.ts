@@ -172,7 +172,7 @@ const HEAD_P6: HeadInput = {
 	emergencyPhone: '0867778888'
 };
 
-const HEAD_P8: HeadInput = {
+const HEAD_P7: HeadInput = {
 	nationalId: nationalId('55555'),
 	firstName: 'สมชาย',
 	lastName: `ชาติฉกาจ${RUN_ID}`,
@@ -188,7 +188,7 @@ const HEAD_CONFLICT: HeadInput = {
 	emergencyName: 'ชนะ บันทึกซ้ำ',
 	emergencyPhone: '0864445566'
 };
-const MEMBER_P8 = {
+const MEMBER_P7 = {
 	nationalId: nationalId('66666'),
 	firstName: 'สมหญิง',
 	lastName: `ชาติฉกาจ${RUN_ID}`,
@@ -209,7 +209,7 @@ const P4_ADDRESS: AddressInput = {
 	villageNo: 'หมู่ 5'
 };
 
-const P8_ADDRESS: AddressInput = {
+const P7_ADDRESS: AddressInput = {
 	zone: 'เทศบาล 1',
 	community: 'ชุมชนหาดใหญ่',
 	addressNo: `${RUN_NUM}/3`,
@@ -333,10 +333,13 @@ test.describe('Household pre-registration — real CouchDB', () => {
 	});
 
 	test.afterAll(async () => {
-		await deleteDocsCreatedBy(USERS.map((u) => u.name));
-		const leftovers = await findDocs({ created_by: { $in: USERS.map((u) => u.name) } });
-		expect(leftovers, 'clean-up left no test docs behind').toHaveLength(0);
-		for (const user of USERS) await deleteCouchUser(user.name);
+		try {
+			await deleteDocsCreatedBy(USERS.map((u) => u.name));
+			const leftovers = await findDocs({ created_by: { $in: USERS.map((u) => u.name) } });
+			expect(leftovers, 'clean-up left no test docs behind').toHaveLength(0);
+		} finally {
+			for (const user of USERS) await deleteCouchUser(user.name);
+		}
 	});
 
 	test.afterEach(async ({ page }) => {
@@ -660,7 +663,7 @@ test.describe('Household pre-registration — real CouchDB', () => {
 		await openWizardAs(page, STAFF_A);
 
 		// Step 1: optional head detail — nickname, birth year (age derives), a condition.
-		await fillHead(page, HEAD_P8);
+		await fillHead(page, HEAD_P7);
 		await page.getByRole('textbox', { name: 'ชื่อเล่น' }).fill('ชาย');
 		await page.getByRole('textbox', { name: 'เช่น 2530' }).fill('2500');
 		await expect(page.getByRole('textbox', { name: 'อายุ' })).not.toHaveValue('');
@@ -674,10 +677,10 @@ test.describe('Household pre-registration — real CouchDB', () => {
 		await page.getByRole('button', { name: 'ประเภทที่อยู่อาศัย' }).click();
 		await page.getByRole('option', { name: 'บ้านตนเอง' }).click();
 		await page.getByRole('textbox', { name: 'จุดสังเกตที่อยู่' }).fill('ปากซอย');
-		await page.getByRole('textbox', { name: 'บ้านเลขที่ *' }).fill(P8_ADDRESS.addressNo);
+		await page.getByRole('textbox', { name: 'บ้านเลขที่ *' }).fill(P7_ADDRESS.addressNo);
 		await page
 			.getByRole('textbox', { name: 'หมู่ที่ / ตรอก / ซอย / ถนน *' })
-			.fill(P8_ADDRESS.villageNo);
+			.fill(P7_ADDRESS.villageNo);
 		await pickFromSearchSelect(page, 'เลือกจังหวัด...', 'สงขลา');
 		await pickFromSearchSelect(page, 'เลือกอำเภอ...', 'หาดใหญ่');
 		await pickFromSearchSelect(page, 'เลือกตำบล...', 'คลองแห');
@@ -686,8 +689,8 @@ test.describe('Household pre-registration — real CouchDB', () => {
 		// Forgot the zone/community — blocked until they are filled in.
 		await nextToAssets(page).click();
 		await expect(page.getByText('กรุณาระบุเขตการปกครอง')).toBeVisible();
-		await page.getByRole('textbox', { name: 'เขตการปกครอง *' }).fill(P8_ADDRESS.zone);
-		await page.getByRole('textbox', { name: 'ชุมชน *' }).fill(P8_ADDRESS.community);
+		await page.getByRole('textbox', { name: 'เขตการปกครอง *' }).fill(P7_ADDRESS.zone);
+		await page.getByRole('textbox', { name: 'ชุมชน *' }).fill(P7_ADDRESS.community);
 		await nextToAssets(page).click();
 
 		// Step 3 → 4: peek at the other zones, go back to the recommended one.
@@ -704,17 +707,17 @@ test.describe('Household pre-registration — real CouchDB', () => {
 			.filter({ has: page.getByRole('heading', { name: 'ลงทะเบียนสมาชิกคนใหม่ในครอบครัว' }) });
 		await memberForm
 			.getByRole('textbox', { name: 'เลขประจำตัวประชาชน' })
-			.fill(MEMBER_P8.nationalId);
+			.fill(MEMBER_P7.nationalId);
 		await memberForm
 			.getByRole('textbox', { name: 'ชื่อ (First Name) *' })
-			.fill(MEMBER_P8.firstName);
-		await memberForm.getByRole('textbox', { name: 'นามสกุล (Last Name)' }).fill(MEMBER_P8.lastName);
+			.fill(MEMBER_P7.firstName);
+		await memberForm.getByRole('textbox', { name: 'นามสกุล (Last Name)' }).fill(MEMBER_P7.lastName);
 		await memberForm.getByRole('textbox', { name: 'อายุ' }).fill('58');
 		await memberForm.getByRole('button', { name: 'เพศ *' }).click();
 		await page.getByRole('option', { name: 'หญิง (Female)' }).click();
 		await memberForm
 			.getByRole('textbox', { name: 'เบอร์โทรศัพท์ยืนยันตัวตน *' })
-			.fill(MEMBER_P8.phone);
+			.fill(MEMBER_P7.phone);
 		await memberForm.getByRole('button', { name: '🤰 ครรภ์' }).click();
 		await memberForm.getByRole('button', { name: 'เพิ่มสมาชิกเข้าร่วมครัวเรือน' }).click();
 		await expectSummary(page, 2);
@@ -729,7 +732,7 @@ test.describe('Household pre-registration — real CouchDB', () => {
 		await expect(page).toHaveURL(/\/back-office\/evacuee-management\?tab=household/);
 
 		// ── Database ──
-		const head = await findEvacueeByNationalId(HEAD_P8.nationalId);
+		const head = await findEvacueeByNationalId(HEAD_P7.nationalId);
 		expect(head).toMatchObject({ nickname: 'ชาย', birth_year: 2500 });
 		const [medical] = await findDocs({ type: 'medical', evacuee_id: head._id });
 		expect(medical).toMatchObject({ conditions: ['โรคหอบ'], created_by: STAFF_A.name });
@@ -739,13 +742,13 @@ test.describe('Household pre-registration — real CouchDB', () => {
 			residence_landmark: 'ปากซอย',
 			subdistrict: 'คลองแห',
 			postal_code: '90110',
-			municipality_zone: P8_ADDRESS.zone
+			municipality_zone: P7_ADDRESS.zone
 		});
 
-		const member = await findEvacueeByNationalId(MEMBER_P8.nationalId);
+		const member = await findEvacueeByNationalId(MEMBER_P7.nationalId);
 		expect(member).toMatchObject({
 			household_id: head.household_id,
-			phone: MEMBER_P8.phone,
+			phone: MEMBER_P7.phone,
 			gender: 'female',
 			vulnerable_groups: ['pregnant'],
 			current_stay: { zone: RECOMMENDED_ZONE.code }
@@ -846,7 +849,7 @@ const DENIED: AccessCase[] = [
 function probeHousehold(user: TestUser): Record<string, unknown> & { _id: string } {
 	const now = new Date().toISOString();
 	return {
-		_id: `household:E2EACL${RUN_ID.toUpperCase()}${user.name.length}`,
+		_id: `household:E2EACL_${user.name}`,
 		type: 'household',
 		schema_v: 5,
 		shelter_code: 'SH001',

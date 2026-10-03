@@ -331,9 +331,14 @@ test.describe('Household post-arrival grouping — real CouchDB', () => {
 
 	test.afterAll(async () => {
 		const names = USERS.map((u) => u.name);
-		await deleteDocsCreatedBy(names);
-		expect(await findDocs({ created_by: { $in: names } }), 'clean-up left nothing').toHaveLength(0);
-		for (const user of USERS) await deleteCouchUser(user.name);
+		try {
+			await deleteDocsCreatedBy(names);
+			expect(await findDocs({ created_by: { $in: names } }), 'clean-up left nothing').toHaveLength(
+				0
+			);
+		} finally {
+			for (const user of USERS) await deleteCouchUser(user.name);
+		}
 	});
 
 	test.afterEach(async ({ page }) => {
@@ -678,7 +683,7 @@ const DENIED: AccessCase[] = [
 function probeHousehold(user: TestUser): Record<string, unknown> & { _id: string } {
 	const now = new Date().toISOString();
 	return {
-		_id: `household:E2EACL${RUN_ID.toUpperCase()}${user.name.length}`,
+		_id: `household:E2EACL_${user.name}`,
 		type: 'household',
 		schema_v: 5,
 		shelter_code: 'SH001',
