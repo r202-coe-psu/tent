@@ -1846,9 +1846,12 @@ export const isScreening = (d: unknown): d is Screening =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'screening';
 
 export interface EwarSymptom {
+	/** Persisted in `Screening.symptoms` — never rename. */
 	id: string;
 	emoji: string;
+	/** Plain-Thai checkbox text staff read first. */
 	label: string;
+	/** Clinical / English term shown small under the label. */
 	sublabel?: string;
 }
 
@@ -1864,17 +1867,20 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 			{
 				id: 'acute_watery_diarrhea',
 				emoji: '💧',
-				label: 'อุจจาระร่วงเฉียบพลันแบบเป็นน้ำ/อหิวาตกโรค (Acute watery diarrhoea / Cholera)'
+				label: 'ท้องเสียถ่ายเป็นน้ำ (สงสัยอหิวาต์)',
+				sublabel: 'อุจจาระร่วงเฉียบพลัน · Acute watery diarrhoea / Cholera'
 			},
 			{
 				id: 'acute_bloody_diarrhea',
 				emoji: '🩸',
-				label: 'ท้องร่วงเป็นเลือด/โรคบิด (Acute bloody diarrhoea / Shigellosis)'
+				label: 'ถ่ายเป็นมูกเลือด (สงสัยโรคบิด)',
+				sublabel: 'ท้องร่วงเป็นเลือด · Acute bloody diarrhoea / Shigellosis'
 			},
 			{
 				id: 'typhoid',
 				emoji: '🌡️',
-				label: 'ไทฟอยด์ (Typhoid)'
+				label: 'ไข้ไทฟอยด์',
+				sublabel: 'Typhoid'
 			}
 		]
 	},
@@ -1884,7 +1890,8 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 			{
 				id: 'acute_respiratory',
 				emoji: '😷',
-				label: 'การติดเชื้อระบบทางเดินหายใจเฉียบพลัน (Acute respiratory infection)'
+				label: 'ติดเชื้อทางเดินหายใจเฉียบพลัน (ไอ เจ็บคอ หายใจลำบาก)',
+				sublabel: 'Acute respiratory infection'
 			}
 		]
 	},
@@ -1894,12 +1901,14 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 			{
 				id: 'malaria',
 				emoji: '🤒',
-				label: 'ไข้มาลาเรีย (Malaria)'
+				label: 'ไข้มาลาเรีย',
+				sublabel: 'Malaria'
 			},
 			{
 				id: 'dengue',
 				emoji: '🦟',
-				label: 'ไข้เลือดออก (Dengue)'
+				label: 'ไข้เลือดออก',
+				sublabel: 'Dengue'
 			}
 		]
 	},
@@ -1909,22 +1918,26 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 			{
 				id: 'measles',
 				emoji: '🔴',
-				label: 'โรคหัด (Measles)'
+				label: 'โรคหัด (ไข้ร่วมกับผื่น)',
+				sublabel: 'Measles'
 			},
 			{
 				id: 'meningitis',
 				emoji: '🧠',
-				label: 'เยื่อหุ้มสมองอักเสบ (Meningitis)'
+				label: 'เยื่อหุ้มสมองอักเสบ (ไข้ ปวดหัว คอแข็ง)',
+				sublabel: 'Meningitis'
 			},
 			{
 				id: 'diphtheria',
 				emoji: '🗣️',
-				label: 'คอตีบ (Diphtheria)'
+				label: 'คอตีบ',
+				sublabel: 'Diphtheria'
 			},
 			{
 				id: 'pertussis',
 				emoji: '😮‍💨',
-				label: 'ไอกรน (Pertussis)'
+				label: 'ไอกรน (ไอเป็นชุด ๆ)',
+				sublabel: 'Pertussis'
 			}
 		]
 	},
@@ -1934,12 +1947,14 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 			{
 				id: 'acute_jaundice_syndrome',
 				emoji: '🟡',
-				label: 'ภาวะดีซ่านเฉียบพลัน (Acute Jaundice Syndrome)'
+				label: 'ตัวเหลือง ตาเหลืองเฉียบพลัน',
+				sublabel: 'ภาวะดีซ่านเฉียบพลัน · Acute jaundice syndrome'
 			},
 			{
 				id: 'Hepatitis A or E',
 				emoji: '🦠',
-				label: 'ไวรัสตับอักเสบชนิด เอ หรือ อี (Hepatitis A or E)'
+				label: 'ไวรัสตับอักเสบ เอ หรือ อี',
+				sublabel: 'Hepatitis A or E'
 			}
 		]
 	},
@@ -1949,17 +1964,20 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 			{
 				id: 'acute_flaccid_paralysis',
 				emoji: '🦿',
-				label: 'ภาวะกล้ามเนื้ออ่อนปวกเปียกเฉียบพลันหรือโรคโปลิโอ (Acute Flaccid Paralysis / Polio)'
+				label: 'แขนขาอ่อนแรงเฉียบพลัน (สงสัยโปลิโอ)',
+				sublabel: 'กล้ามเนื้ออ่อนปวกเปียกเฉียบพลัน · Acute flaccid paralysis / Polio'
 			},
 			{
 				id: 'tetanus',
 				emoji: '🩹',
-				label: 'บาดทะยัก (Tetanus)'
+				label: 'บาดทะยัก',
+				sublabel: 'Tetanus'
 			},
 			{
 				id: 'acute_haemorrhagic_fever_syndrome',
 				emoji: '🩸',
-				label: 'กลุ่มอาการไข้เลือดออกรุงแรง (Acute Haemorrhagic Fever Syndrome)'
+				label: 'ไข้ร่วมกับเลือดออกผิดปกติ',
+				sublabel: 'กลุ่มอาการไข้เลือดออกรุนแรง · Acute haemorrhagic fever syndrome'
 			}
 		]
 	},
@@ -1969,17 +1987,19 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 			{
 				id: 'high_fever',
 				emoji: '🔥',
-				label: 'อาการไข้สูงกว่า 38.5 องศาเซลเซียส'
+				label: 'ไข้สูงเกิน 38.5 °C'
 			},
 			{
 				id: 'trauma',
 				emoji: '💥',
-				label: 'การบาดเจ็บ (Trauma)'
+				label: 'ได้รับบาดเจ็บ',
+				sublabel: 'Trauma'
 			},
 			{
 				id: 'chemical_poisoning',
 				emoji: '☠️',
-				label: 'สารเคมีเป็นพิษ (Chemical Poisoning)'
+				label: 'ได้รับสารเคมี / สารพิษ',
+				sublabel: 'Chemical poisoning'
 			}
 		]
 	}
