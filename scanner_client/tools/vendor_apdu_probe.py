@@ -1,6 +1,8 @@
 """
-Probe: does the vendor's libcomPro.so get a full 255-byte APDU reply from the RFpro/HOUSESmart
-module (0483:4c43) in ONE command, and how long does the whole Thai-ID photo take that way?
+Probe: how many bytes of one APDU reply does the vendor's libcomPro.so get from the RFpro/
+HOUSESmart module (0483:4c43), and how long does the whole Thai-ID photo take with the largest
+piece that works? (A 255-byte reply failed with API error 383 = checksum error, i.e. the
+reply arrived truncated, so this walks the sizes up to find the limit.)
 
 Our own driver (app/rfpro.py, over /dev/hidraw*) only ever receives the first 32-byte input
 report of a reply, so it reads the photo in 20-byte pieces (~17 s). The vendor SDK's own demo
@@ -61,19 +63,66 @@ class Vendor:
         return bytes(reply[: rlen.value])
 
 
-def timed(label: str, vendor: Vendor, dev: int, command: bytes) -> bytes:
+PHOTO_START = 0x017B
+PHOTO_LENGTH = 255 * PHOTO_CHUNKS
+LADDER = (20, 21, 24, 32, 48, 64, 100, 128, 200, 255)
+
+
+def reset_card(vendor: Vendor, dev: int) -> bytes:
+    vendor.lib.lc_iccSelCardType(dev, 0, 0x0C)
+    atr = (ctypes.c_ubyte * 64)()
+    atr_len = ctypes.c_ubyte(0)
+    if vendor.lib.lc_iccGetATR(dev, 0, atr, ctypes.byref(atr_len)) != 0:
+        raise RuntimeError("ATR failed")
+    return bytes(atr[: atr_len.value])
+
+
+def read_piece(vendor: Vendor, dev: int, get_response: bytes, offset: int, length: int) -> bytes:
+    """READ BINARY of `length` bytes at `offset` + GET RESPONSE, like app/rfpro.py's pieces."""
+    vendor.apdu(dev, bytes([0x80, 0xB0, offset >> 8, offset & 0xFF, 0x02, 0x00, length]))
+    return vendor.apdu(dev, get_response + bytes([length]))
+
+
+def ladder(vendor: Vendor, dev: int, atr: bytes) -> None:
+    """Find the largest piece the vendor library reads correctly, then time the whole photo with
+    it. A failed size is reported and the card is reset before the next one."""
+    # Same GET RESPONSE rule as app/scard.py: ATR 3B 67 cards use P2 = 01.
+    get_response = bytes([0x00, 0xC0, 0x00, 0x01 if atr[:2] == b"\x3b\x67" else 0x00])
+    print("piece sizes (READ BINARY + GET RESPONSE, same Le):")
+    best = 0
+    for length in LADDER:
+        started = time.monotonic()
+        try:
+            vendor.apdu(dev, THAI_SELECT)
+            reply = read_piece(vendor, dev, get_response, PHOTO_START, length)
+            ok = len(reply) == length + 2 and reply[-2:] == b"\x90\x00"
+            verdict = "OK" if ok else f"short/odd ({len(reply)} bytes, SW {reply[-2:].hex().upper()})"
+        except RuntimeError as error:
+            ok, verdict = False, str(error)
+            try:
+                reset_card(vendor, dev)
+            except RuntimeError:
+                print("  (card did not answer reset after the error — stopping)")
+                break
+        print(f"  Le {length:3d}: {verdict:<44} {(time.monotonic() - started) * 1000:5.0f} ms")
+        if ok:
+            best = length
+    if best <= 0:
+        print(">> no piece size worked")
+        return
+    print(f">> largest piece that worked: {best} bytes")
+
+    print(f"whole photo in pieces of {best}:")
+    vendor.apdu(dev, THAI_SELECT)
     started = time.monotonic()
-    try:
-        reply = vendor.apdu(dev, command)
-    except RuntimeError as error:
-        print(f"  {label:<28} {error} ({(time.monotonic() - started) * 1000:.0f} ms)")
-        raise
-    sw = reply[-2:].hex().upper() if len(reply) >= 2 else "----"
-    print(
-        f"  {label:<28} reply {len(reply):3d} bytes  SW {sw}  "
-        f"{(time.monotonic() - started) * 1000:.0f} ms"
-    )
-    return reply
+    total = failed = 0
+    for offset in range(PHOTO_START, PHOTO_START + PHOTO_LENGTH, best):
+        length = min(best, PHOTO_START + PHOTO_LENGTH - offset)
+        try:
+            total += len(read_piece(vendor, dev, get_response, offset, length)) - 2
+        except RuntimeError:
+            failed += 1
+    print(f">> {total} photo bytes in {time.monotonic() - started:.1f} s, {failed} failed pieces")
 
 
 def open_reader(vendor: Vendor) -> int:
@@ -106,36 +155,10 @@ def main() -> None:
         state = ctypes.c_ubyte(0)
         if vendor.lib.lc_iccGetCardState(dev, 0, ctypes.byref(state)) != 0 or not state.value & 1:
             sys.exit("no card in the slot")
-        vendor.lib.lc_iccSelCardType(dev, 0, 0x0C)
-        atr = (ctypes.c_ubyte * 64)()
-        atr_len = ctypes.c_ubyte(0)
-        if vendor.lib.lc_iccGetATR(dev, 0, atr, ctypes.byref(atr_len)) != 0:
-            sys.exit("ATR failed")
-        atr_bytes = bytes(atr[: atr_len.value])
+        atr_bytes = reset_card(vendor, dev)
         print(f"ATR ({len(atr_bytes)} bytes): {atr_bytes.hex(' ').upper()}")
 
-        # Same GET RESPONSE rule as app/scard.py: ATR 3B 67 cards use P2 = 01.
-        get_response = bytes([0x00, 0xC0, 0x00, 0x01 if atr_bytes[:2] == b"\x3b\x67" else 0x00, 0xFF])
-
-        print("one chunk, as the card allows it:")
-        timed("SELECT applet", vendor, dev, THAI_SELECT)
-        timed("READ BINARY photo 1 (Le FF)", vendor, dev, bytes([0x80, 0xB0, 0x01, 0x7B, 0x02, 0x00, 0xFF]))
-        reply = timed("GET RESPONSE (Le FF)", vendor, dev, get_response)
-        verdict = "WORKS" if len(reply) >= 100 else "does NOT arrive"
-        print(f">> long reply {verdict} ({len(reply)} bytes; 257 = 255 data + SW)")
-
-        print(f"whole photo, {PHOTO_CHUNKS} chunks of 255:")
-        started = time.monotonic()
-        total = failed = 0
-        for index in range(PHOTO_CHUNKS):
-            try:
-                vendor.apdu(dev, bytes([0x80, 0xB0, index + 1, 0x7B - index, 0x02, 0x00, 0xFF]))
-                data = vendor.apdu(dev, get_response)
-            except RuntimeError:
-                failed += 1
-                continue
-            total += max(len(data) - 2, 0)
-        print(f">> {total} photo bytes in {time.monotonic() - started:.1f} s, {failed} failed chunks")
+        ladder(vendor, dev, atr_bytes)
     finally:
         vendor.lib.lc_exit(dev)
 
