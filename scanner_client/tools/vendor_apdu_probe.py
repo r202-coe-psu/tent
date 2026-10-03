@@ -83,6 +83,21 @@ def read_piece(vendor: Vendor, dev: int, get_response: bytes, offset: int, lengt
     return vendor.apdu(dev, get_response + bytes([length]))
 
 
+def trace_pair(vendor: Vendor, dev: int, atr: bytes) -> None:
+    """Two pieces, so an strace of this run is short: Le 48 worked and Le 32 failed (error 383)."""
+    get_response = bytes([0x00, 0xC0, 0x00, 0x01 if atr[:2] == b"\x3b\x67" else 0x00])
+    vendor.apdu(dev, THAI_SELECT)
+    for length in (48, 32):
+        print(f"--- Le {length}", flush=True)
+        try:
+            reply = read_piece(vendor, dev, get_response, PHOTO_START, length)
+            print(f"    reply {len(reply)} bytes, SW {reply[-2:].hex().upper()}", flush=True)
+        except RuntimeError as error:
+            print(f"    {error}", flush=True)
+            reset_card(vendor, dev)
+            vendor.apdu(dev, THAI_SELECT)
+
+
 def ladder(vendor: Vendor, dev: int, atr: bytes) -> None:
     """Find the largest piece the vendor library reads correctly, then time the whole photo with
     it. A failed size is reported and the card is reset before the next one."""
@@ -143,6 +158,11 @@ def open_reader(vendor: Vendor) -> int:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--lib", required=True, help="path to the SDK's x64/libcomPro.so")
+    parser.add_argument(
+        "--trace",
+        action="store_true",
+        help="only one piece that works (Le 48) and one that fails (Le 32), for a short strace",
+    )
     args = parser.parse_args()
     if not os.path.isfile(args.lib):
         # An empty path would make ctypes load this very process and fail with a confusing
@@ -158,7 +178,10 @@ def main() -> None:
         atr_bytes = reset_card(vendor, dev)
         print(f"ATR ({len(atr_bytes)} bytes): {atr_bytes.hex(' ').upper()}")
 
-        ladder(vendor, dev, atr_bytes)
+        if args.trace:
+            trace_pair(vendor, dev, atr_bytes)
+        else:
+            ladder(vendor, dev, atr_bytes)
     finally:
         vendor.lib.lc_exit(dev)
 
