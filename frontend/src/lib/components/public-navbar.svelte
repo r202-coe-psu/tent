@@ -147,6 +147,15 @@
 
 		<!-- Compact controls: phone + tablet + iPad Pro mid-range (hamburger through xl) -->
 		<div class="flex shrink-0 items-center gap-1 sm:gap-2 xl:hidden">
+			<!-- Primary public action stays visible on phones (not only inside the hamburger) -->
+			<a
+				href={resolve('/pre-register')}
+				class="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-lg bg-[#0A2647] px-2.5 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-[#051930] focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none sm:px-3 sm:text-sm"
+			>
+				<ClipboardPenLine class="h-4 w-4" aria-hidden="true" />
+				{t.registerShort}
+			</a>
+
 			<!-- Notification Bell Button (Mobile) -->
 			<PublicNotificationMenu variant="navbar" {announcements} bind:menuOpen={alertsMenuOpen} />
 
@@ -407,6 +416,19 @@
 				</a>
 
 				<a
+					href={resolve('/pre-register')}
+					onclick={closeMobileMenu}
+					class="flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+						'/pre-register'
+					)
+						? 'bg-primary-muted text-primary'
+						: 'text-muted-foreground'}"
+				>
+					<ClipboardPenLine class="h-5 w-5" />
+					{t.preRegister}
+				</a>
+
+				<a
 					href={resolve('/shelters')}
 					onclick={closeMobileMenu}
 					class="flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
@@ -430,19 +452,6 @@
 				>
 					<Search class="h-5 w-5" />
 					{t.search}
-				</a>
-
-				<a
-					href={resolve('/pre-register')}
-					onclick={closeMobileMenu}
-					class="flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
-						'/pre-register'
-					)
-						? 'bg-primary-muted text-primary'
-						: 'text-muted-foreground'}"
-				>
-					<ClipboardPenLine class="h-5 w-5" />
-					{t.preRegister}
 				</a>
 
 				<a

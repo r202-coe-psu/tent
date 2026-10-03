@@ -406,10 +406,10 @@ async function decodeQrImage(page: Page, img: Locator): Promise<string> {
 
 /** On the print screen, read each member's evacuee id from their Person QR. */
 async function idsFromPrintScreen(page: Page, people: Person[]): Promise<Record<string, string>> {
-	await expect(page.getByRole('heading', { name: 'พิมพ์บัตรประจำตัวครอบครัว' })).toBeVisible({
+	await expect(page.getByRole('heading', { name: 'ลงทะเบียนสำเร็จ' })).toBeVisible({
 		timeout: 30_000
 	});
-	await expect(page.getByText(new RegExp(`· ${people.length} คน`))).toBeVisible();
+	await expect(page.getByText(`${people.length} คน`, { exact: true })).toBeVisible();
 	const ids: Record<string, string> = {};
 	for (const p of people) {
 		const qr = page.getByAltText(`QR Code สำหรับ ${fullName(p)}`);
@@ -421,7 +421,8 @@ async function idsFromPrintScreen(page: Page, people: Person[]): Promise<Record<
 }
 
 async function finishPrintScreen(page: Page): Promise<void> {
-	await page.getByRole('button', { name: 'เสร็จสิ้น / กลับคิว' }).click();
+	// Rendered in the summary card and the sticky bar — either works
+	await page.getByRole('button', { name: 'กลับคิวทะเบียน' }).first().click();
 	await expect(page).toHaveURL(/\/onsite\/people$/);
 }
 
@@ -463,7 +464,7 @@ async function screenEvacuee(page: Page, evacueeId: string, fill: ScreeningFill)
 		await page.getByRole('checkbox', { name: symptom }).click();
 	}
 	await page.getByRole('button', { name: 'บันทึกผลคัดกรอง' }).click();
-	await expect(page.getByRole('heading', { name: 'บันทึกผลการคัดกรองแล้ว' })).toBeVisible({
+	await expect(page.getByRole('heading', { name: 'บันทึกผลคัดกรองแล้ว' })).toBeVisible({
 		timeout: 20_000
 	});
 }
@@ -491,7 +492,7 @@ async function assignZone(page: Page, evacueeId: string, zoneName: string): Prom
 	await page.goto(`/onsite/zoning/${evacueeId}`);
 	await expect(page.getByText('Station 3', { exact: true })).toBeVisible({ timeout: 20_000 });
 	await page.locator('div.grid button', { hasText: zoneName }).first().click();
-	await page.getByRole('button', { name: 'ยืนยันจัดที่พักและเช็คอิน' }).click();
+	await page.getByRole('button', { name: 'จัดเข้าโซน (รอยืนยันถึงโซน)' }).click();
 	await expect(page).toHaveURL(/\/onsite\/zoning$/, { timeout: 20_000 });
 }
 
@@ -833,7 +834,7 @@ async function walkInFlow(browser: Browser, run: Run, s: Sessions) {
 		await desk.locator('div.grid button', { hasText: ZONE_GYM_1 }).first().click();
 		// The relative is still waiting → offered as a companion.
 		await desk.getByRole('checkbox').first().click();
-		await desk.getByRole('button', { name: 'ยืนยันจัดที่พักและเช็คอิน' }).click();
+		await desk.getByRole('button', { name: 'จัดเข้าโซน (รอยืนยันถึงโซน)' }).click();
 		await expect(desk).toHaveURL(/\/onsite\/zoning$/, { timeout: 20_000 });
 		await expectStay(desk, head, STATUS.active, ZONE_GYM_1);
 		await expectStay(desk, relative, STATUS.active, ZONE_GYM_1);
@@ -1156,7 +1157,7 @@ async function preRegisterFlow(browser: Browser, run: Run, s: Sessions) {
 					fill: {
 						conditions: 'โรคหอบหืด',
 						notes: 'ไอ มีไข้ต่ำ',
-						ewarSymptoms: [/การติดเชื้อระบบทางเดินหายใจเฉียบพลัน/]
+						ewarSymptoms: [/ติดเชื้อทางเดินหายใจเฉียบพลัน/]
 					}
 				},
 				{ id: ids[soloTraveller.firstName], fill: { conditions: 'ไม่มี' } }
