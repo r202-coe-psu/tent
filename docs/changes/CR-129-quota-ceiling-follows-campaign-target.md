@@ -4,8 +4,8 @@ title: เพดานโควตาผู้บริจาคต้องข�
 status: approved
 date: 2026-09-16
 updated: 2026-10-03 # approved โดยเจ้าของโครงการ (PR #287) + รันเลข CR-129 และลงทะเบียนใน _index.md
-requested_by: เจ้าของโครงการ (พบระหว่างตรวจฟอร์ม Edit Campaign — alert บอกว่าแก้เป้าแล้วโควตาไม่ขยับ)
-decided_by: เจ้าของโครงการ (2026-10-03, PR #287)
+requested_by: Kan คุณานนต์ หนูแสง + เจ้าของโครงการ (พบระหว่างตรวจฟอร์ม Edit Campaign — alert บอกว่าแก้เป้าแล้วโควตาไม่ขยับ)
+decided_by: Soravit Sukkarn
 layer: volatile
 affects:
   - docs/changes/CR-060-donation-need-counter-worker-seed.md (ยกเลิก FR-2, แก้ Decision log)
@@ -54,10 +54,10 @@ CR-060 §Decision log เรียกอาการนี้เองว่า 
 FR-2 กำหนดว่า `qty_target` เขียนด้วย `$setOnInsert` เท่านั้น ด้วยเหตุผล 2 ข้อ
 (`seed_counter` docstring) — ตรวจโค้ดจริงแล้วทั้งสองข้อไม่ผูกมัด:
 
-| เหตุผลเดิม | ผลการตรวจ |
-| --- | --- |
-| "กันเพดานขยับใต้ booking ที่กำลังวิ่ง" | การจอง (FastAPI) กับการเขียนเพดาน (worker) atomic แค่ทีละคำสั่ง แต่ขั้น "อ่าน `reserved_qty` → ตัดสิน → เขียน" ของ worker มีสองจังหวะ booking แทรกตรงกลางได้ เหตุผลนี้จึง**ยังใช้อยู่** แต่แก้ได้โดยไม่ต้องตรึงเพดาน: ใส่เงื่อนไขยอดจองไว้ใน filter ของ update ตัวเดียวกัน (ดู FR-2) |
-| "replay จาก checkpoint เก่าเป็น no-op โดยอัตโนมัติ" | `_changes` ถูกอ่านด้วย `include_docs=true` (`couch/client.py`) ซึ่งคืน **revision ปัจจุบัน** ไม่ใช่ของ ณ sequence นั้น → replay เขียนค่าปัจจุบัน ไม่ใช่ค่าย้อนหลัง; `set_qty_target` ยังมี optimistic filter (`qty_target: expected`) ซ้อนอีกชั้น |
+| เหตุผลเดิม                                          | ผลการตรวจ                                                                                                                                                                                                                                                                            |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| "กันเพดานขยับใต้ booking ที่กำลังวิ่ง"              | การจอง (FastAPI) กับการเขียนเพดาน (worker) atomic แค่ทีละคำสั่ง แต่ขั้น "อ่าน `reserved_qty` → ตัดสิน → เขียน" ของ worker มีสองจังหวะ booking แทรกตรงกลางได้ เหตุผลนี้จึง**ยังใช้อยู่** แต่แก้ได้โดยไม่ต้องตรึงเพดาน: ใส่เงื่อนไขยอดจองไว้ใน filter ของ update ตัวเดียวกัน (ดู FR-2) |
+| "replay จาก checkpoint เก่าเป็น no-op โดยอัตโนมัติ" | `_changes` ถูกอ่านด้วย `include_docs=true` (`couch/client.py`) ซึ่งคืน **revision ปัจจุบัน** ไม่ใช่ของ ณ sequence นั้น → replay เขียนค่าปัจจุบัน ไม่ใช่ค่าย้อนหลัง; `set_qty_target` ยังมี optimistic filter (`qty_target: expected`) ซ้อนอีกชั้น                                    |
 
 **สิ่งที่ต้องกันจริงมีข้อเดียว** — ลดเพดานต่ำกว่า `reserved_qty` ซึ่งทำให้ invariant
 `reserved_qty ≤ qty_target` พัง และ guard ตัวนั้น **เขียนไว้แล้ว** ที่ `quota/reconcile.py`
@@ -184,4 +184,4 @@ uv run --project worker donation-quota recalculate --shelter <CODE> --targets
 - 2026-10-02 — review พบว่าโค้ดที่ merge ไปแล้ว (`a9820c2f`) มี race ระหว่างการจองกับการลดเพดาน
   (อ่าน `reserved_qty` แล้วค่อยเขียน) แก้ FR-2 ให้เป็น conditional update และเพิ่ม AC-07
   เจ้าของโครงการเลือกไม่นับ `on_hand_qty` ใน guard นี้ (เหตุผลใน §Why) — โค้ดแก้แยก PR
-- 2026-10-03 — approved โดยเจ้าของโครงการ ผ่าน PR review #287 — รันเลข CR-129 และลงทะเบียนใน `docs/changes/_index.md` (ยกเลิก CR-060 FR-2 อย่างเป็นทางการ)
+- 2026-10-03 — approved โดย Soravit Sukkarn (ตัวแทนเจ้าของโครงการ) ผ่าน PR review #287 — รันเลข CR-129 และลงทะเบียนใน `docs/changes/_index.md` (ยกเลิก CR-060 FR-2 อย่างเป็นทางการ)

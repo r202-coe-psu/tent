@@ -91,6 +91,31 @@ export {
 	formatUnit
 } from './domain/unit-of-measure';
 
+// Domain — quick-create, similarity, barcode, permissions
+export { findSimilarItems, missingOptionalFields } from './domain/item-similarity';
+export {
+	normalizeBarcode,
+	looksLikeBarcode,
+	findItemByBarcode,
+	itemBarcodes,
+	barcodeOwner,
+	isBaseUnitRow,
+	splitBaseBarcode,
+	mergeBaseBarcode,
+	type BarcodeSource,
+	type BarcodeMatch
+} from './domain/item-barcode';
+export {
+	QUICK_CREATE_DEFAULT_STORAGE,
+	quickCreateTypeClass,
+	validateQuickCreate,
+	buildQuickCreateInput,
+	type QuickCreateDraft,
+	type QuickCreateErrors,
+	type ItemMasterInitialValues
+} from './domain/quick-create';
+export { canWriteShelterCatalog } from './domain/catalog-permissions';
+
 // Data — repository contract + remote CouchDB binding
 export type { CatalogRepository } from './data/catalog.repository';
 export { catalogRepository, CATALOG_DB } from './data/catalog.remote';
@@ -135,6 +160,7 @@ export { default as CatalogWorkspace } from './ui/catalog-workspace.svelte';
 export { default as ProductsPanel } from './ui/products-panel.svelte';
 export { default as ItemCategoryForm } from './ui/item-category-form.svelte';
 export { default as ItemMasterForm } from './ui/item-master-form.svelte';
+export { default as QuickCreateItemDialog } from './ui/quick-create-item-dialog.svelte';
 export { default as RecipeForm } from './ui/recipe-form.svelte';
 export { default as MasterBadge } from './ui/master/master-badge.svelte';
 export { default as MasterFilterBar } from './ui/master/master-filter-bar.svelte';
@@ -150,6 +176,8 @@ export {
 	hiddenDeactivatedRecipes,
 	ingredientSummary,
 	pageSlice,
+	isNewItem,
+	isIncompleteItem,
 	type CatalogOriginKey,
 	type MasterBadgeTone,
 	type OriginFilter,

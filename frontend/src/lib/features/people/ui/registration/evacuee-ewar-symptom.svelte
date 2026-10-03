@@ -395,7 +395,12 @@
 								</span>
 								<span class="flex min-w-0 items-start gap-2">
 									<span class="text-base leading-none">{symptom.emoji}</span>
-									<span class="leading-snug">{symptom.label}</span>
+									<span class="flex min-w-0 flex-col leading-snug">
+										<span>{symptom.label}</span>
+										{#if symptom.sublabel}
+											<span class="text-xs text-muted-foreground">{symptom.sublabel}</span>
+										{/if}
+									</span>
 								</span>
 							</button>
 						{/each}

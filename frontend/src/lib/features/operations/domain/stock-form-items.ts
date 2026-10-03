@@ -1,5 +1,5 @@
 import Fuse, { type IFuseOptions } from 'fuse.js';
-import { itemMasterUnit, type PackagingSource } from '$lib/features/catalog';
+import { findItemByBarcode, itemMasterUnit, type PackagingSource } from '$lib/features/catalog';
 
 /** Item row for receive / distribute / adjust pickers (and A6 transfer). */
 export type StockFormItem = PackagingSource & {
@@ -25,7 +25,7 @@ export type StockFormMasterSource = {
 	base_unit?: string;
 	unit?: string;
 	sku?: string;
-	conversions?: readonly { uom_name: string; multiplier: string }[];
+	conversions?: readonly { uom_name: string; multiplier: string; barcode?: string }[];
 	default_inventory_uom?: string;
 	default_issue_uom?: string;
 	deactivated?: boolean;
@@ -96,6 +96,7 @@ function toSearchDocs(items: readonly StockFormItem[]): StockFormSearchDoc[] {
 /**
  * Fuzzy filter on item name or SKU (typos + separator-insensitive SKU).
  * Empty/whitespace query returns all items in original order; otherwise ranked by score.
+ * An item whose barcode equals the query (a scanner typing into the box) always comes first.
  */
 export function filterStockFormItems(
 	items: readonly StockFormItem[],
@@ -117,9 +118,13 @@ export function filterStockFormItems(
 		results.sort((a, b) => (a.score ?? 1) - (b.score ?? 1));
 	}
 
-	return results.map(({ item }) => {
+	const ranked = results.map(({ item }) => {
 		const { skuNorm, ...rest } = item;
 		void skuNorm;
 		return rest;
 	});
+
+	const scanned = findItemByBarcode(items, needle)?.item;
+	if (!scanned) return ranked;
+	return [scanned, ...ranked.filter((item) => item._id !== scanned._id)];
 }

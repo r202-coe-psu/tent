@@ -42,7 +42,9 @@ import {
 	type Medical,
 	type MedicalInput,
 	type Movement,
-	type MovementAction
+	type MovementAction,
+	dormFieldsFor,
+	memberExtrasFor
 } from '../domain/people';
 import {
 	planFamilyRegistration,
@@ -1284,8 +1286,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 					community: null,
 					housing_type: householdInput.housing_type ?? null,
 					residence_landmark: householdInput.residence_landmark ?? null,
-					address_no:
-						householdInput.housing_type === 'homeless' ? null : (householdInput.address_no ?? null),
+					...dormFieldsFor(householdInput),
 					village_no: householdInput.village_no ?? null,
 					subdistrict: householdInput.subdistrict ?? null,
 					district: householdInput.district ?? null,
@@ -1310,8 +1311,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 				...existingHousehold,
 				housing_type: householdInput.housing_type ?? null,
 				residence_landmark: householdInput.residence_landmark ?? null,
-				address_no:
-					householdInput.housing_type === 'homeless' ? null : (householdInput.address_no ?? null),
+				...dormFieldsFor(householdInput),
 				village_no: householdInput.village_no ?? null,
 				subdistrict: householdInput.subdistrict ?? null,
 				district: householdInput.district ?? null,
@@ -1399,6 +1399,12 @@ export class PeopleRemoteRepository implements PeopleRepository {
 					photo: m.photo ?? existingEvacuee.photo,
 					country: m.country ?? existingEvacuee.country,
 					religion: m.religion ?? existingEvacuee.religion,
+					...memberExtrasFor({
+						religion: m.religion ?? existingEvacuee.religion,
+						religion_other: m.religion_other,
+						vulnerable_groups: m.vulnerable_groups ?? [],
+						disability_other_detail: m.disability_other_detail
+					}),
 					current_stay: updatedStay
 				});
 

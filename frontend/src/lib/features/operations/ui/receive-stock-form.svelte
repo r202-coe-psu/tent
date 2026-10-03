@@ -41,12 +41,12 @@
 	import { useStockFormItems } from '../application/use-stock-form-items.svelte';
 	import type { StockFormItem } from '../domain/stock-form-items';
 	import { toast } from 'svelte-sonner';
-	import PackagePlus from '@lucide/svelte/icons/package-plus';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import HandHelping from '@lucide/svelte/icons/hand-helping';
 	import Package from '@lucide/svelte/icons/package';
 	import { SvelteDate } from 'svelte/reactivity';
+	import { tick } from 'svelte';
 
 	export type MovementFormSuccess = { keepOpen: boolean; summary?: string };
 
@@ -78,6 +78,16 @@
 
 	let selectedItemId = $state('');
 	let selectedItem = $state<StockFormItem | null>(null);
+
+	// Set when the item was just created from the picker: shows the "ใหม่" badge and moves
+	// focus to the quantity field so the user can keep typing.
+	let justCreatedItemId = $state('');
+	let qtyInput = $state<HTMLInputElement | null>(null);
+
+	async function focusQty() {
+		await tick();
+		qtyInput?.focus();
+	}
 
 	// Donation picker (CR-055 R4) — replaces the free-text `ref_id` box. Its own
 	// container so the shared click-outside handler can close either dropdown.
@@ -256,6 +266,7 @@
 	function clearSelection() {
 		selectedItem = null;
 		selectedItemId = '';
+		justCreatedItemId = '';
 		$formData.item_id = '';
 		$formData.unit = '';
 		clearDonation();
@@ -442,16 +453,7 @@
 
 <svelte:document onclick={handleClickOutside} />
 
-<form
-	method="POST"
-	use:form.enhance
-	class="flex flex-col space-y-4 rounded-2xl border border-border/80 bg-card p-4 shadow-md sm:p-5"
->
-	<div class="flex items-center gap-2 border-b border-border/60 pb-3">
-		<PackagePlus class="h-4.5 w-4.5 text-primary" aria-hidden="true" />
-		<h3 class="text-sm font-bold text-foreground">รับเข้า</h3>
-	</div>
-
+<form method="POST" use:form.enhance class="flex flex-col space-y-4">
 	<Field.FieldGroup class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 		<div class="col-span-1 space-y-2 sm:col-span-2">
 			<p class="text-sm font-bold text-foreground">1 · ของมาจากไหน</p>
@@ -614,22 +616,39 @@
 		<Form.Field {form} name="item_id" class="relative col-span-1 sm:col-span-2">
 			<Form.Control>
 				{#snippet children({ props })}
-					<Form.Label>สินค้า <span class="font-bold text-destructive">*</span></Form.Label>
+					<Form.Label>
+						สินค้า <span class="font-bold text-destructive">*</span>
+						{#if justCreatedItemId && justCreatedItemId === selectedItemId}
+							<span class="ml-2 rounded-full bg-sky-600 px-2 py-0.5 text-xs font-bold text-white"
+								>ใหม่</span
+							>
+						{/if}
+					</Form.Label>
 					<ItemCombobox
 						id={props.id}
 						name={props.name}
 						aria-invalid={props['aria-invalid']}
 						aria-describedby={props['aria-describedby']}
 						{items}
+						allowCreate
 						bind:value={selectedItemId}
 						disabled={!!preselectedItemId}
 						isLoading={stockItems.isLoading}
 						{balanceByItemId}
 						formatBalanceUnit={(item) =>
 							formatUnit(item.unit, units, langState.current) || item.unit}
-						onSelect={(item) => {
-							if (item) selectItem(item);
-							else clearSelection();
+						onSelect={(item, meta) => {
+							if (!item) {
+								clearSelection();
+								return;
+							}
+							selectItem(item);
+							// A scanned pack barcode names the unit it was printed on.
+							if (meta?.uom) $formData.unit = meta.uom;
+							if (meta?.created) {
+								justCreatedItemId = item._id;
+								void focusQty();
+							}
 						}}
 					/>
 				{/snippet}
@@ -643,6 +662,7 @@
 					<Form.Label>จำนวน <span class="font-bold text-destructive">*</span></Form.Label>
 					<Input
 						{...props}
+						bind:ref={qtyInput}
 						type="number"
 						placeholder="0"
 						min="0.01"
@@ -797,7 +817,9 @@
 			{/if}
 		</div>
 
-		<div class="col-span-1 pt-1 sm:col-span-2">
+		<div
+			class="sticky bottom-0 z-10 col-span-1 -mx-4 -mb-4 border-t border-slate-200 bg-slate-50 px-4 py-4 sm:col-span-2 sm:-mx-6 sm:-mb-6 sm:px-6"
+		>
 			<Form.Button size="lg" disabled={$submitting || offline} class="min-h-11 w-full font-bold">
 				{$submitting ? 'กำลังบันทึก…' : 'บันทึกแล้วรับชิ้นถัดไป'}
 			</Form.Button>

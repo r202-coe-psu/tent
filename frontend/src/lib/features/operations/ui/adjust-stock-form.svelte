@@ -15,7 +15,6 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { toast } from 'svelte-sonner';
-	import Settings from '@lucide/svelte/icons/settings';
 	import { addQty, subQty, qtyAbs } from '$lib/utils/qty';
 	import type { StockLot, StockLedger } from '../domain/operations';
 	import {
@@ -300,20 +299,7 @@
 	});
 </script>
 
-<form
-	onsubmit={handleSubmit}
-	class="flex flex-col space-y-4 rounded-2xl border border-border/80 bg-card p-4 shadow-md sm:p-5"
->
-	<div class="flex flex-col gap-1 border-b border-border/60 pb-3">
-		<div class="flex items-center gap-2">
-			<Settings class="h-4.5 w-4.5 text-primary" aria-hidden="true" />
-			<h3 class="text-sm font-bold text-foreground">ปรับยอด / ตรวจนับ</h3>
-		</div>
-		<p class="text-xs text-muted-foreground">
-			กรอกจำนวนที่นับได้จริง แล้วระบบจะคำนวณส่วนต่างให้อัตโนมัติ
-		</p>
-	</div>
-
+<form onsubmit={handleSubmit} class="flex flex-col space-y-4">
 	<Field.FieldGroup class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 		<Field.Root class="relative col-span-1 sm:col-span-2">
 			<Field.Label for="item-search"
@@ -322,6 +308,7 @@
 			<ItemCombobox
 				id="item-search"
 				{items}
+				allowCreate
 				bind:value={selectedItemId}
 				disabled={!!preselectedItemId}
 				isLoading={stockItems.isLoading}
@@ -493,7 +480,9 @@
 					รอบตรวจนับหลายรายการยังไม่พร้อมในเวอร์ชันนี้ — ปรับทีละล็อตไปก่อน
 				</div>
 
-				<div class="col-span-1 pt-1 sm:col-span-2">
+				<div
+					class="sticky bottom-0 z-10 col-span-1 -mx-4 -mb-4 border-t border-slate-200 bg-slate-50 px-4 py-4 sm:col-span-2 sm:-mx-6 sm:-mb-6 sm:px-6"
+				>
 					<Button
 						type="submit"
 						size="lg"

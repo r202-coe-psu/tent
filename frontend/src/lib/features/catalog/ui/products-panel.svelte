@@ -5,7 +5,7 @@
 	import { resolve } from '$app/paths';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { isSystemAdmin, isShelterManager, isWarehouseStaff } from '$lib/auth/roles';
+	import { isSystemAdmin } from '$lib/auth/roles';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
@@ -14,6 +14,8 @@
 	import Plus from '@lucide/svelte/icons/plus';
 	import Boxes from '@lucide/svelte/icons/boxes';
 	import { catalogOrigin, resolveCategoryLabel, type ItemMaster } from '../domain/catalog';
+	import { canWriteShelterCatalog } from '../domain/catalog-permissions';
+	import { missingOptionalFields } from '../domain/item-similarity';
 	import { formatUnit } from '../domain/unit-of-measure';
 	import {
 		useItemCategories,
@@ -31,35 +33,41 @@
 	import MasterCategories from './master/master-categories.svelte';
 	import { useMasterPaging } from './master/use-master-paging.svelte';
 	import {
+		countScopeChips,
 		filterItems,
 		hiddenDeactivatedItems,
+		isIncompleteItem,
+		isNewItem,
 		MASTER_PAGE_SIZE,
-		ORIGIN_LABELS,
 		pageSlice,
+		SCOPE_CHIP_LABELS,
 		unitLines,
-		type CatalogOriginKey,
 		type ItemFilter,
 		type ItemSheetAction,
 		type ItemSheetMode,
 		type MasterItemRow as MasterItemRowData,
-		type OriginFilter
+		type ScopeChip
 	} from './master/master-view';
 
 	let {
 		basePath,
-		scope
+		scope,
+		stockByItemId
 	}: {
 		basePath: string;
 		scope: 'central' | 'shelter';
+		/**
+		 * On-hand quantity per item id (base unit). Passed in by the page because the stock
+		 * ledger belongs to `operations`, which depends on this feature. Omit for no stock column.
+		 */
+		stockByItemId?: ReadonlyMap<string, string>;
 	} = $props();
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
 	const shelterCode = $derived(scope === 'central' ? null : getShelterCode());
 
-	const canWrite = $derived(
-		isSA || (scope === 'shelter' && (isShelterManager(roles) || isWarehouseStaff(roles)))
-	);
+	const canWrite = $derived(scope === 'central' ? isSA : canWriteShelterCatalog(roles));
 
 	const categoriesQuery = useItemCategories(() => shelterCode);
 	const itemsQuery = useItemMasters(() => shelterCode);
@@ -76,16 +84,28 @@
 	// —— filters (local state: the supply page owns the query string) ——
 	let q = $state('');
 	let categoryId = $state('all');
-	let origin = $state<OriginFilter>('all');
+	let scopeChip = $state<ScopeChip>('all');
 	let showDeactivated = $state(false);
 
-	const filter = $derived<ItemFilter>({ q, categoryId, origin, showDeactivated });
+	const filter = $derived<ItemFilter>({
+		q,
+		categoryId,
+		origin: 'all',
+		showDeactivated,
+		scope: scopeChip
+	});
 	const filtered = $derived(filterItems(items, categories, filter, shelterCode));
 	const hiddenCount = $derived(hiddenDeactivatedItems(items, categories, filter, shelterCode));
-	const filtersActive = $derived(q.trim() !== '' || categoryId !== 'all' || origin !== 'all');
+	const filtersActive = $derived(q.trim() !== '' || categoryId !== 'all' || scopeChip !== 'all');
+
+	// A shelter sees all four chips; the central catalog has no "ของศูนย์นี้" / "ส่วนกลาง" split.
+	const scopeChips = $derived<ScopeChip[]>(
+		scope === 'central' ? ['all', 'incomplete'] : ['all', 'incomplete', 'local', 'central']
+	);
+	const chipCounts = $derived(countScopeChips(items, categories, filter, shelterCode));
 
 	const paging = useMasterPaging(
-		() => JSON.stringify([q, categoryId, origin, showDeactivated]),
+		() => JSON.stringify([q, categoryId, scopeChip, showDeactivated]),
 		() => filtered.length
 	);
 
@@ -95,20 +115,15 @@
 			.map((c) => ({ value: c._id, label: c.name }))
 			.sort((a, b) => a.label.localeCompare(b.label, 'th'))
 	);
-	const originOptions = (Object.keys(ORIGIN_LABELS) as CatalogOriginKey[]).map((k) => ({
-		value: k,
-		label: ORIGIN_LABELS[k]
-	}));
 
 	function onFilterSelect(id: string, value: string) {
 		if (id === 'category') categoryId = value;
-		else if (id === 'origin') origin = value as OriginFilter;
 	}
 
 	function clearFilters() {
 		q = '';
 		categoryId = 'all';
-		origin = 'all';
+		scopeChip = 'all';
 	}
 
 	const formatCode = (code: string) => formatUnit(code, units, langState.current);
@@ -117,20 +132,35 @@
 		return item.category ? resolveCategoryLabel(item.category, categories) || item.category : '';
 	}
 
-	const pageRows = $derived<MasterItemRowData[]>(
-		pageSlice(filtered, paging.page, MASTER_PAGE_SIZE).map((item) => ({
-			item,
-			categoryLabel: categoryLabelOf(item),
-			unitLines: unitLines(item, formatCode),
-			origin: catalogOrigin(item, shelterCode)
-		}))
-	);
+	const showStock = $derived(scope === 'shelter' && stockByItemId !== undefined);
+
+	function stockOf(item: ItemMaster): string {
+		const qty = stockByItemId?.get(item._id) ?? '0';
+		return `${qty} ${formatCode(item.base_unit)}`.trim();
+	}
 
 	// —— permissions ——
 	function canEditItem(item: ItemMaster): boolean {
 		if (scope === 'central') return isSA && !item.shelter_code;
 		return canWrite;
 	}
+
+	const pageRows = $derived<MasterItemRowData[]>(
+		pageSlice(filtered, paging.page, MASTER_PAGE_SIZE).map((item) => {
+			// Gaps only matter where the user can fix them: a shelter cannot edit a central item.
+			const incomplete = isIncompleteItem(item, shelterCode);
+			return {
+				item,
+				categoryLabel: categoryLabelOf(item),
+				unitLines: unitLines(item, formatCode),
+				origin: catalogOrigin(item, shelterCode),
+				missing: incomplete ? missingOptionalFields(item) : [],
+				isNew: isNewItem(item),
+				stock: showStock ? stockOf(item) : null,
+				canFill: incomplete && canEditItem(item)
+			};
+		})
+	);
 
 	function itemActionKind(item: ItemMaster): ItemSheetAction {
 		if (!canEditItem(item)) return 'none';
@@ -158,20 +188,22 @@
 		sheetOpen = true;
 	}
 
+	function openEditItem(row: MasterItemRowData) {
+		selectedId = row.item._id;
+		sheetMode = 'edit';
+		sheetOpen = true;
+	}
+
 	function openCreateItem() {
-		if (!defaultCategoryId) {
-			toast.error('กรุณาเพิ่มหมวดสินค้าก่อนสร้างสินค้า');
-			return;
-		}
 		selectedId = '';
 		sheetMode = 'create';
 		sheetOpen = true;
 	}
 
-	function clearCreateActionParam() {
-		if (page.url.searchParams.get('action') !== 'create') return;
+	function clearUrlParam(key: string) {
+		if (!page.url.searchParams.has(key)) return;
 		const params = new SvelteURLSearchParams(page.url.searchParams);
-		params.delete('action');
+		params.delete(key);
 		const qs = params.toString();
 		const path = `${page.url.pathname}${qs ? `?${qs}` : ''}${page.url.hash}`;
 		void goto(resolve(path as '/back-office/supply'), {
@@ -190,7 +222,22 @@
 			view = 'items';
 			openCreateItem();
 		}
-		clearCreateActionParam();
+		clearUrlParam('action');
+	});
+
+	// The "เติมข้อมูลเสริมทีหลัง" toast links here with `?edit=<item id>`.
+	$effect(() => {
+		const editId = page.url.searchParams.get('edit');
+		if (!editId || itemsQuery.isLoading) return;
+
+		const item = items.find((i) => i._id === editId);
+		if (item && canEditItem(item)) {
+			view = 'items';
+			selectedId = item._id;
+			sheetMode = 'edit';
+			sheetOpen = true;
+		}
+		clearUrlParam('edit');
 	});
 
 	// —— deactivate / reset / delete ——
@@ -328,17 +375,31 @@
 						prefix: 'หมวด',
 						value: categoryId,
 						options: categoryOptions
-					},
-					{
-						id: 'origin',
-						label: 'กรองที่มา',
-						prefix: 'ที่มา',
-						value: origin,
-						options: originOptions
 					}
 				]}
 				onselect={onFilterSelect}
 			/>
+
+			<div
+				role="group"
+				aria-label="กรองรายการด่วน"
+				class="flex flex-wrap gap-2 border-b border-slate-200/80 px-3 py-2.5 md:px-4"
+			>
+				{#each scopeChips as chip (chip)}
+					<button
+						type="button"
+						aria-pressed={scopeChip === chip}
+						onclick={() => (scopeChip = chip)}
+						class="inline-flex min-h-11 items-center gap-1.5 rounded-full px-3.5 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none {scopeChip ===
+						chip
+							? 'border-2 border-sky-600 bg-sky-50 font-semibold text-sky-900'
+							: 'border border-slate-300 bg-white font-medium text-slate-700 hover:bg-slate-50'}"
+					>
+						{SCOPE_CHIP_LABELS[chip]}
+						<strong class="font-bold tabular-nums">{chipCounts[chip]}</strong>
+					</button>
+				{/each}
+			</div>
 
 			{#if itemsQuery.isLoading}
 				<div class="flex-1 space-y-3 p-4">
@@ -390,7 +451,7 @@
 				{:else}
 					<ul class="space-y-2.5 p-3 md:hidden">
 						{#each pageRows as row (row.item._id)}
-							<li><MasterItemCard {row} onopen={openItem} /></li>
+							<li><MasterItemCard {row} onopen={openItem} onfill={openEditItem} /></li>
 						{/each}
 					</ul>
 
@@ -401,15 +462,19 @@
 									<Table.Head class="px-4 py-3">สินค้า</Table.Head>
 									<Table.Head class="px-4 py-3">หน่วย / บรรจุ</Table.Head>
 									<Table.Head class="px-4 py-3">ที่มา</Table.Head>
+									<Table.Head class="px-4 py-3">ยังขาด</Table.Head>
+									{#if showStock}
+										<Table.Head class="px-4 py-3 text-right">ในคลังตอนนี้</Table.Head>
+									{/if}
 									<Table.Head class="px-4 py-3">สถานะ</Table.Head>
-									<Table.Head class="w-10 px-3 py-3">
-										<span class="sr-only">เปิดรายละเอียด</span>
+									<Table.Head class="px-3 py-3">
+										<span class="sr-only">จัดการ / เปิดรายละเอียด</span>
 									</Table.Head>
 								</Table.Row>
 							</Table.Header>
 							<Table.Body class="divide-y divide-slate-100">
 								{#each pageRows as row (row.item._id)}
-									<MasterItemRow {row} onopen={openItem} />
+									<MasterItemRow {row} onopen={openItem} onfill={openEditItem} />
 								{/each}
 							</Table.Body>
 						</Table.Root>

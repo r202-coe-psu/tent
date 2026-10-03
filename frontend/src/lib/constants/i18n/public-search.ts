@@ -88,3 +88,41 @@ export const PUBLIC_SEARCH_I18N = {
 		of: 'of'
 	}
 } as const;
+
+export const PUBLIC_FAMILY_SEARCH_I18N = {
+	th: {
+		title: 'ค้นหาผู้พักพิง',
+		description: 'ค้นด้วยชื่อ นามสกุล หรือเบอร์โทรศัพท์ — ผลลัพธ์ถูกปกปิดข้อมูลบางส่วนตาม PDPA',
+		placeholder: 'ชื่อ นามสกุล หรือเบอร์โทรศัพท์',
+		queryAria: 'คำค้นหา',
+		searching: 'กำลังค้นหา…',
+		search: 'ค้นหา',
+		tooShort: 'กรุณากรอกข้อมูลอย่างน้อย 3 ตัวอักษร',
+		networkError: 'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้',
+		noResults: 'ไม่พบผู้ที่ตรงกับคำค้นหา — ลองใช้ชื่อเต็มหรือเบอร์โทรศัพท์',
+		genderMale: 'ชาย',
+		genderFemale: 'หญิง',
+		genderOther: 'อื่นๆ',
+		noShelter: 'ไม่ระบุศูนย์',
+		noTime: 'ไม่ระบุเวลา',
+		timeSuffix: ' น.'
+	},
+	en: {
+		title: 'Search evacuees',
+		description:
+			'Search by first name, last name, or phone number. Results are partly masked under the PDPA.',
+		placeholder: 'First name, last name, or phone number',
+		queryAria: 'Search query',
+		searching: 'Searching…',
+		search: 'Search',
+		tooShort: 'Please enter at least 3 characters',
+		networkError: 'Could not connect to the server',
+		noResults: 'No one matches your search. Try a full name or phone number.',
+		genderMale: 'Male',
+		genderFemale: 'Female',
+		genderOther: 'Other',
+		noShelter: 'Shelter not specified',
+		noTime: 'Time not specified',
+		timeSuffix: ''
+	}
+} as const;

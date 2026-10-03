@@ -1,12 +1,12 @@
 <script lang="ts">
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Combobox } from '$lib/components/ui/combobox/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
-	import { Label } from '$lib/components/ui/label/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import {
@@ -19,8 +19,13 @@
 		type TypeClass
 	} from '../domain/catalog';
 	import { formatUnit, type Dimension } from '../domain/unit-of-measure';
+	import { barcodeOwner, mergeBaseBarcode, splitBaseBarcode } from '../domain/item-barcode';
+	import type { ItemMasterInitialValues } from '../domain/quick-create';
+
+	type UomConversionRow = ItemMaster['conversions'][number];
 	import {
 		useItemMaster,
+		useItemMasters,
 		useCreateItemMaster,
 		useUpdateItemMaster,
 		useItemCategories,
@@ -40,6 +45,7 @@
 		defaultCategoryId = undefined,
 		lockCategory = false,
 		compact = false,
+		initialValues = undefined,
 		onsuccess
 	}: {
 		id?: string;
@@ -49,7 +55,9 @@
 		/** Pin the category to `defaultCategoryId` (callers that only create one kind of item). */
 		lockCategory?: boolean;
 		compact?: boolean;
-		/** Called after a save; a create passes the stored item so callers can select it. */
+		/** Create only: start from these values (e.g. handed over by quick-create). */
+		initialValues?: ItemMasterInitialValues;
+		/** Called with the saved doc; with no argument when the user cancels. */
 		onsuccess?: (saved?: ItemMaster) => void;
 	} = $props();
 
@@ -65,6 +73,7 @@
 	);
 	const itemCategoriesQuery = useItemCategories(() => shelterCode ?? null);
 	const unitsOfMeasureQuery = useUnitsOfMeasure();
+	const allItemsQuery = useItemMasters(() => shelterCode ?? null);
 	const createMutation = useCreateItemMaster();
 	const updateMutation = useUpdateItemMaster();
 
@@ -115,6 +124,9 @@
 		energy: 'พลังงาน'
 	};
 
+	/** Barcode of the base unit — kept out of `conversions` while editing, merged back on save. */
+	let baseBarcode = $state('');
+
 	const form = superForm(
 		defaults(
 			{
@@ -157,9 +169,10 @@
 					createdBy: authStore.user?.name ?? 'unknown'
 				};
 
-				const conversions = (validated.data.conversions || []).filter(
+				const packRows = (validated.data.conversions || []).filter(
 					(c) => c.uom_name && c.uom_name.trim() !== ''
 				);
+				const conversions = mergeBaseBarcode(packRows, validated.data.base_unit ?? '', baseBarcode);
 
 				const submitData: Record<string, unknown> = {
 					...validated.data,
@@ -265,9 +278,9 @@
 							override: true
 						};
 						updateMutation.mutate(overrideDoc, {
-							onSuccess: () => {
+							onSuccess: (saved) => {
 								toast.success(`ปรับแต่งรายการ ${validated.data.name} สำหรับศูนย์นี้สำเร็จ`);
-								onsuccess?.();
+								onsuccess?.(saved);
 							},
 							onError: (err: Error) => toast.error(err.message)
 						});
@@ -277,9 +290,9 @@
 							...submitData
 						};
 						updateMutation.mutate(updatedDoc, {
-							onSuccess: () => {
+							onSuccess: (saved) => {
 								toast.success(`ปรับปรุงข้อมูล ${validated.data.name} สำเร็จ`);
-								onsuccess?.();
+								onsuccess?.(saved);
 							},
 							onError: (err: Error) => toast.error(err.message)
 						});
@@ -320,10 +333,14 @@
 			$formData.sku = item.sku || '';
 			$formData.description = item.description || '';
 			$formData.base_unit = item.base_unit || '';
-			$formData.conversions =
+			const split = splitBaseBarcode(
 				item.conversions && item.conversions.length > 0
-					? JSON.parse(JSON.stringify(item.conversions))
-					: [];
+					? (JSON.parse(JSON.stringify(item.conversions)) as UomConversionRow[])
+					: [],
+				item.base_unit || ''
+			);
+			$formData.conversions = split.packRows;
+			baseBarcode = split.baseBarcode;
 			$formData.default_inventory_uom = item.default_inventory_uom || '';
 			$formData.default_issue_uom = item.default_issue_uom || '';
 			$formData.distribution_type = item.distribution_type || 'recurring';
@@ -342,6 +359,30 @@
 			$formData.burn_rate_kg_per_hour = item.burn_rate_kg_per_hour || '';
 			$formData.time_multiplier = item.time_multiplier || '1';
 		}
+	});
+
+	// Seed a new item with what quick-create already collected (once).
+	let appliedInitial = false;
+	$effect(() => {
+		if (isEdit || appliedInitial || !initialValues) return;
+		appliedInitial = true;
+		const init = initialValues;
+		const split = splitBaseBarcode(init.conversions ?? [], init.base_unit ?? '');
+		if (init.name !== undefined) $formData.name = init.name;
+		if (init.category !== undefined) $formData.category = init.category;
+		if (init.type_class) $formData.type_class = init.type_class;
+		if (init.base_unit !== undefined) $formData.base_unit = init.base_unit;
+		$formData.conversions = split.packRows.map((row) => ({
+			uom_name: row.uom_name,
+			multiplier: row.multiplier,
+			barcode: row.barcode ?? ''
+		}));
+		baseBarcode = init.barcode ?? split.baseBarcode;
+		if (init.default_inventory_uom !== undefined) {
+			$formData.default_inventory_uom = init.default_inventory_uom;
+		}
+		if (init.storage_type) $formData.storage_type = init.storage_type;
+		appliedDefaultCategory = true;
 	});
 
 	// Prefill category + type_class on create
@@ -509,6 +550,12 @@
 			choices.push({ code: c.uom_name, label });
 		}
 		return choices;
+	}
+
+	/** Another item that already uses this barcode — a warning, never a block. */
+	function barcodeConflict(code: string | undefined): string | null {
+		if (!code?.trim()) return null;
+		return barcodeOwner(allItemsQuery.data ?? [], code, isEdit ? id : undefined)?.name ?? null;
 	}
 
 	const fieldClass = $derived(compact ? 'space-y-2' : 'space-y-2');
@@ -696,6 +743,26 @@
 						<Form.FieldErrors class="text-xs font-semibold text-destructive" />
 					</Form.Field>
 
+					<div class="space-y-2">
+						<Label for="base-unit-barcode" class="text-sm font-semibold">
+							บาร์โค้ดหน่วยฐาน
+							<span class="font-normal text-muted-foreground">(ไม่บังคับ)</span>
+						</Label>
+						<Input
+							id="base-unit-barcode"
+							bind:value={baseBarcode}
+							inputmode="numeric"
+							autocomplete="off"
+							placeholder="สแกนหรือพิมพ์บาร์โค้ดที่ตัวสินค้า"
+							class="h-11 rounded-xl"
+						/>
+						{#if barcodeConflict(baseBarcode)}
+							<p class="text-xs font-semibold text-amber-900">
+								บาร์โค้ดนี้ใช้กับ “{barcodeConflict(baseBarcode)}” อยู่แล้ว
+							</p>
+						{/if}
+					</div>
+
 					<div class="space-y-3">
 						<div class="flex items-center justify-between">
 							<span class="text-sm font-semibold">หน่วยแปลง</span>
@@ -759,6 +826,24 @@
 									>
 										<Trash2 class="h-4 w-4" />
 									</Button>
+								</div>
+								<div class="space-y-1">
+									<Input
+										aria-label="บาร์โค้ดของหน่วยนี้"
+										placeholder="บาร์โค้ดของหน่วยนี้ (ไม่บังคับ)"
+										inputmode="numeric"
+										autocomplete="off"
+										value={conversion.barcode ?? ''}
+										oninput={(e) => {
+											$formData.conversions[i].barcode = e.currentTarget.value;
+										}}
+										class="h-10 rounded-lg"
+									/>
+									{#if barcodeConflict(conversion.barcode)}
+										<p class="text-xs font-semibold text-amber-900">
+											บาร์โค้ดนี้ใช้กับ “{barcodeConflict(conversion.barcode)}” อยู่แล้ว
+										</p>
+									{/if}
 								</div>
 								<div class="flex flex-wrap gap-2">
 									<button
@@ -1134,7 +1219,7 @@
 			{/if}
 
 			<div class="flex items-center gap-3 pt-1">
-				<Button variant="outline" type="button" onclick={() => onsuccess?.()}>
+				<Button variant="outline" type="button" onclick={() => onsuccess?.()} class="rounded-xl">
 					{compact ? 'ยกเลิก' : 'ยกเลิกและย้อนกลับ'}
 				</Button>
 				<Button type="submit" disabled={$submitting || isPending || !unitMasterReady}>

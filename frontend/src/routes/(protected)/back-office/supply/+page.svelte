@@ -5,7 +5,8 @@
 		STOCK_PARAM_KEYS,
 		StockTable,
 		TransferTab,
-		usePendingTransferCount
+		usePendingTransferCount,
+		useStockBalance
 	} from '$lib/features/operations';
 	import { ProductsPanel } from '$lib/features/catalog';
 	import { authStore } from '$lib/stores/auth.svelte';
@@ -30,6 +31,9 @@
 
 	const occupancyQuery = useDashboardOccupancy(() => shelterCode);
 	const occupancy = $derived(occupancyQuery.data?.active ?? 0);
+
+	// The master list shows on-hand quantity; the ledger lives in `operations`, so the page joins them.
+	const balanceQuery = useStockBalance();
 
 	const pendingTransfers = usePendingTransferCount();
 	const pendingCount = $derived(pendingTransfers.data ?? 0);
@@ -177,7 +181,7 @@
 		</div>
 	{:else if activeTab === 'catalog'}
 		<div class="animate-in duration-300 fade-in slide-in-from-bottom-2">
-			<ProductsPanel basePath={catalogBasePath} scope="shelter" />
+			<ProductsPanel basePath={catalogBasePath} scope="shelter" stockByItemId={balanceQuery.data} />
 		</div>
 	{:else if activeTab === 'sphere'}
 		<div class="animate-in duration-300 fade-in slide-in-from-bottom-2">

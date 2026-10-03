@@ -27,6 +27,7 @@
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_FILTER_PANEL_I18N } from '$lib/constants/i18n';
 	import { langState } from '$lib/states/i18n.svelte';
+	import { shelterTypeLabel } from '../domain/master-labels';
 
 	interface Filters {
 		search?: string;
@@ -422,23 +423,7 @@
 	}
 
 	function translateAdminType(type: string): string {
-		if (langState.current !== 'en') return type;
-		const map: Record<string, string> = {
-			วัด: 'Temple',
-			โรงเรียน: 'School',
-			ศาลาประชาคม: 'Community Hall',
-			ศูนย์กีฬา: 'Sports Centre',
-			อาคารราชการ: 'Government Building',
-			หน่วยงานราชการ: 'Government Agency',
-			ศูนย์อพยพ: 'Evacuation Center',
-			มหาวิทยาลัย: 'University',
-			มัสยิด: 'Mosque',
-			โบสถ์: 'Church',
-			พื้นที่เอกชน: 'Private Area',
-			อื่นๆ: 'Other',
-			unspecified: 'Unspecified'
-		};
-		return map[type] || type;
+		return shelterTypeLabel(type, undefined, langState.current);
 	}
 </script>
 
