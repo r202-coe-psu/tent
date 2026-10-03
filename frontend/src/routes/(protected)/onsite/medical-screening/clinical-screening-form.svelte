@@ -223,6 +223,7 @@
 			</div>
 
 			<VulnerableGroupsFields
+				showDisabilityDetail={false}
 				bind:vulnerable_groups
 				disabled={isSubmitting}
 				idPrefix="med-vg"

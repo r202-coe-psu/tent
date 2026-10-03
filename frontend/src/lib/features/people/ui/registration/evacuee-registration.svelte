@@ -458,6 +458,7 @@
 				<h3 class="text-base font-bold text-foreground">กลุ่มเปราะบาง (Vulnerable Groups)</h3>
 			</div>
 			<VulnerableGroupsFields
+				showDisabilityDetail={false}
 				bind:vulnerable_groups={$formData.vulnerable_groups}
 				disabled={$submitting || pending}
 				idPrefix="reg-vg"
