@@ -511,7 +511,22 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 	);
 	const rev = getStatus === 200 ? (existingDdoc as { _rev: string })._rev : undefined;
 	const validateFn = `function (newDoc, oldDoc, userCtx) {
-  if (userCtx.roles.indexOf('_admin') !== -1 || userCtx.roles.indexOf('system_admin') !== -1) {
+  if (userCtx.roles.indexOf('_admin') !== -1) {
+    return;
+  }
+  if (oldDoc && oldDoc.type === 'item_category' && oldDoc.is_protected === true) {
+    if (newDoc._deleted === true) {
+      throw({ forbidden: 'Cannot delete system protected category: ' + oldDoc._id });
+    }
+    if (newDoc.system_key !== oldDoc.system_key) {
+      throw({ forbidden: 'system_key is immutable on protected categories' });
+    }
+    // CR-140: default_class is editable on protected categories (amends CR-119 FR-04).
+    if (newDoc.is_protected !== true) {
+      throw({ forbidden: 'is_protected flag cannot be removed' });
+    }
+  }
+  if (userCtx.roles.indexOf('system_admin') !== -1) {
     return;
   }
   if (oldDoc && oldDoc.shelter_code !== newDoc.shelter_code) {

@@ -101,6 +101,7 @@ services:
       THIRDPARTY_JWT_SIGNING_KEY: ${THIRDPARTY_JWT_SIGNING_KEY}
       THIRDPARTY_SECRET_SALT: ${THIRDPARTY_SECRET_SALT:-salt-change-this-on-prod}
       COUCHDB_URL: ${COUCHDB_URL:-http://couchdb:5984}
+      FASTAPI_WORKERS: ${FASTAPI_WORKERS:-4}
     restart: unless-stopped
 
   frontend:
