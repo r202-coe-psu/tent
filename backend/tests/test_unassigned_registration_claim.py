@@ -1061,3 +1061,73 @@ async def test_legacy_pet_without_pet_id_defaults_open_and_is_claimable(
     assert pets_claim.status_code == 200
     hh = couch_birth.docs_for("SH001")[doc.reserved_household_id]
     assert hh["pets"][0]["count"] == 2
+
+
+async def test_review_and_claim_carry_cr148_fields(
+    authed_client: AsyncClient,
+    couch_birth: InMemoryCouchBirth,
+) -> None:
+    """CR-148 FR-18 — review exposes new fields; claim copies them into Couch."""
+    member = UnassignedMember(
+        reserved_evacuee_id=f"evacuee:{new_ulid()}",
+        status="open",
+        first_name="สมชาย",
+        last_name="ใจดี",
+        gender="male",
+        phone="0812345678",
+        person_id=PersonId(cardType="national_id", number="1234567890123"),
+        country="THAILAND",
+        religion="other",
+        religion_other="ซิกข์",
+        vulnerable_groups=["disability_other"],
+        disability_other_detail="ไม่ได้ยินข้างซ้าย",
+    )
+    doc = UnassignedRegistration(
+        id=new_ulid(),
+        schema_v=3,
+        reserved_household_id=f"household:{new_ulid()}",
+        members=[member],
+        household=UnassignedHousehold(
+            housing_type="apartment_dorm",
+            dorm_name="หอสุขใจ",
+            dorm_building="B",
+            dorm_floor="3",
+            dorm_room="305",
+            address_no="305 หอสุขใจ อาคาร B ชั้น 3",
+            subdistrict="คอหงส์",
+            district="หาดใหญ่",
+            province="สงขลา",
+            postal_code="90110",
+            pets=[],
+        ),
+        status="open",
+        registered_via="web",
+        created_at=datetime.now(UTC),
+        open_person_id_numbers=["1234567890123"],
+        open_phones=["0812345678"],
+    )
+    await doc.insert()
+
+    review = await authed_client.get(f"/staff/v1/unassigned-registrations/{doc.id}/review")
+    assert review.status_code == 200
+    review_body = review.json()
+    assert review_body["dorm_name"] == "หอสุขใจ"
+    assert review_body["dorm_room"] == "305"
+    assert review_body["open_members"][0]["religion_other"] == "ซิกข์"
+    assert review_body["open_members"][0]["disability_other_detail"] == "ไม่ได้ยินข้างซ้าย"
+
+    response = await authed_client.post(
+        f"/staff/v1/unassigned-registrations/{doc.id}/claim",
+        json={"member_ids": [member.reserved_evacuee_id]},
+    )
+    assert response.status_code == 200
+    born = couch_birth.docs_for("SH001")
+    evacuee = born[member.reserved_evacuee_id]
+    assert evacuee["religion"] == "other"
+    assert evacuee["religion_other"] == "ซิกข์"
+    assert evacuee["disability_other_detail"] == "ไม่ได้ยินข้างซ้าย"
+    household = born[doc.reserved_household_id]
+    assert household["dorm_name"] == "หอสุขใจ"
+    assert household["dorm_building"] == "B"
+    assert household["dorm_floor"] == "3"
+    assert household["dorm_room"] == "305"

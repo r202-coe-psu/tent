@@ -54,6 +54,8 @@ export const openMemberHitSchema = z.object({
 	special_needs: z.array(z.string()),
 	nickname: z.string().nullable().optional(),
 	religion: z.string().nullable().optional(),
+	religion_other: z.string().nullable().optional(),
+	disability_other_detail: z.string().nullable().optional(),
 	emergency_contact: emergencyContactHitSchema.nullable().optional(),
 	photo: z.string().nullable().optional(),
 	birth_year: z.number().int().nullable().optional(),

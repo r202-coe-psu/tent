@@ -21,7 +21,14 @@ export {
 	migrateVulnerableGroupCodes,
 	admissionSupportsVulnerableGroup,
 	isActiveHouseholdStatus,
-	ACTIVE_HOUSEHOLD_STATUSES
+	ACTIVE_HOUSEHOLD_STATUSES,
+	refineMemberRules,
+	memberExtrasFor,
+	dormFieldsFor,
+	isBirthYearBEValid,
+	MAX_AGE_YEARS,
+	PETS_MAX_COUNT,
+	totalPetCount
 } from './domain/people';
 
 export {

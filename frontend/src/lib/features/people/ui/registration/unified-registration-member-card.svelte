@@ -620,6 +620,7 @@
 			bind:age
 			bind:gender={member.gender}
 			bind:religion={member.religion}
+			bind:religion_other={member.religion_other}
 			bind:country={member.country}
 			disabled={fieldsDisabled}
 			{hideNoPhone}
@@ -666,6 +667,7 @@
 					<span class="text-2xs text-muted-foreground">{t.vulnerableMultiHint}</span>
 					<VulnerableGroupsFields
 						bind:vulnerable_groups={member.vulnerable_groups}
+						bind:disability_other_detail={member.disability_other_detail}
 						disabled={fieldsDisabled}
 						idPrefix="vg-{index}"
 						label=""
