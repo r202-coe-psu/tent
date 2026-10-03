@@ -6,14 +6,15 @@ Uses the same driver as the kiosk (`app/rfpro.py`: frame codec, command allowlis
 transport), so a pass here means the kiosk driver works on this machine. Not an automated
 test; run directly from scanner_client/.
 
-Only the driver's read-only command allowlist is ever sent (no flash/baud/reboot commands):
+Only the driver's command allowlist is ever sent (no flash/reboot commands; --baud adds 18 82):
   00 00 hardware version · 18 00 card state · 18 01 select card type · 18 02 slot power
-  18 80 reset card (ATR) · 18 81 APDU (SELECT Thai ID applet, read CID, GET RESPONSE only)
+  18 80 reset card (ATR) · 18 82 card baud (38400 by default) · 18 81 APDU (SELECT Thai ID applet, read CID, GET RESPONSE only)
 
 Usage:
   sudo python3 inspect_card_rfpro.py            # ทุกขั้น: version → สถานะบัตร → รอเสียบบัตร → ATR → อ่านเลขบัตร
   sudo python3 inspect_card_rfpro.py ping       # ขั้น 1–2 อย่างเดียว (ไม่ต้องมีบัตร)
   sudo python3 inspect_card_rfpro.py --full     # S0-6: อ่านทั้งใบ แสดงเฉพาะความยาวแต่ละ field + เวลา (ไม่แสดงข้อมูล)
+  sudo python3 inspect_card_rfpro.py --full --baud 9600    # เทียบเวลากับค่าเริ่มต้นของโมดูล (default ของ inspector/kiosk = 38400)
   python3 inspect_card_rfpro.py long-reply --verbose  # ดึงคำตอบยาว 1 รายการ (ชื่อไทย) แล้วรายงานเฉพาะโครงสร้างแพ็กเก็ต HID
   --verbose     แสดงคำสั่ง/คำตอบ (ข้อมูลบัตรใน APDU reply ถูกปิด เว้นแต่ใส่ --show-cid)
   --show-cid    แสดงเลขบัตรเต็ม (default ปิดบังกลางเลข)
@@ -34,8 +35,12 @@ from app.rfpro import (
     CMD_ICC_APDU,
     CMD_ICC_GETATR,
     CMD_ICC_SEL,
+    CMD_ICC_SET_BAUD,
     CMD_ICC_SLOT_PWR,
     CMD_ICC_ST,
+    DEFAULT_CARD_BAUD,
+    FAST_CARD_BAUD,
+    CARD_BAUDS,
     HEARTBEAT,
     SLOT_MAIN,
     RfproConnection,
@@ -141,12 +146,17 @@ def wait_for_card(transport: RfproTransport) -> None:
     raise InspectError("ไม่พบบัตรภายใน 30 วิ")
 
 
-def read_cid(transport: RfproTransport, show_cid: bool) -> None:
+def read_cid(transport: RfproTransport, show_cid: bool, baud: int = FAST_CARD_BAUD) -> None:
     wait_for_card(transport)
 
     step("4) เลือกบัตร CPU ISO 7816 (18 01) + รีเซ็ตบัตร (18 80)")
     reply = transport.command(CMD_ICC_SEL, bytes([SLOT_MAIN, CARD_CPU_7816]))
     print(f"   select type: status {status_text(reply.status)}")
+    if baud != DEFAULT_CARD_BAUD:
+        reply = transport.command(
+            CMD_ICC_SET_BAUD, bytes([SLOT_MAIN]) + baud.to_bytes(4, "big")
+        )
+        print(f"   set card baud {baud} (18 82): status {status_text(reply.status)}")
     reply = transport.command(CMD_ICC_GETATR, bytes([SLOT_MAIN]))
     if reply.status != 0x00:
         print(
@@ -158,6 +168,8 @@ def read_cid(transport: RfproTransport, show_cid: bool) -> None:
                 f"   slot power {'on' if act else 'off'}: status {status_text(power.status)}"
             )
             time.sleep(0.3)
+        if baud != DEFAULT_CARD_BAUD:
+            transport.command(CMD_ICC_SET_BAUD, bytes([SLOT_MAIN]) + baud.to_bytes(4, "big"))
         reply = transport.command(CMD_ICC_GETATR, bytes([SLOT_MAIN]))
     if reply.status != 0x00:
         print(ATR_HINT)
@@ -192,13 +204,25 @@ def read_cid(transport: RfproTransport, show_cid: bool) -> None:
     print(f"   status {status_text(reply.status)}")
 
 
-def read_full(transport: RfproTransport) -> None:
+def read_full(transport: RfproTransport, baud: int = FAST_CARD_BAUD) -> None:
     """S0-6: read the whole card through the kiosk driver; print lengths and timing only."""
     wait_for_card(transport)
-    step("4) อ่านข้อมูลทั้งใบด้วย driver เดียวกับ kiosk (ไม่แสดงข้อมูลบัตร)")
-    reader = RfproThaiCardReader(transport=transport)
+    step(f"4) อ่านข้อมูลทั้งใบด้วย driver เดียวกับ kiosk (card baud {baud}; ไม่แสดงข้อมูลบัตร)")
+    reader = RfproThaiCardReader(transport=transport, baud=baud)
+    commands = 0
+    send = transport.command
+
+    def counted(*args, **kwargs):
+        nonlocal commands
+        commands += 1
+        return send(*args, **kwargs)
+
+    transport.command = counted
     started = time.monotonic()
-    card = reader.read_all_data()
+    try:
+        card = reader.read_all_data()
+    finally:
+        transport.command = send
     elapsed = time.monotonic() - started
     for key, value in card.items():
         if value in (None, ""):
@@ -208,6 +232,7 @@ def read_full(transport: RfproTransport) -> None:
         else:
             size = f"{len(str(value))} ตัวอักษร"
         print(f"   {key:<16} {size}")
+    print(f"   {commands} คำสั่ง · เฉลี่ย {elapsed / max(commands, 1) * 1000:.0f} ms/คำสั่ง")
     print(f"✅ อ่านครบทั้งใบใน {elapsed:.1f} วิ (AC-C3: ลงทะเบียนต้องไม่เกินค่านี้ + 20%)")
 
 
@@ -325,6 +350,13 @@ def main() -> None:
     parser.add_argument(
         "--id", default=DEFAULT_ID, help=f"VID:PID (default {DEFAULT_ID})"
     )
+    parser.add_argument(
+        "--baud",
+        type=int,
+        choices=CARD_BAUDS,
+        default=FAST_CARD_BAUD,
+        help=f"ความเร็วสายระหว่างโมดูลกับบัตร (default {FAST_CARD_BAUD} = ค่าที่ kiosk ใช้; 9600 = ค่าเริ่มต้นของโมดูลไว้เทียบ)",
+    )
     parser.add_argument("--verbose", action="store_true", help="แสดงคำสั่ง/คำตอบ")
     parser.add_argument(
         "--force", action="store_true", help="รันต่อแม้มี process อื่นเปิดเครื่องอ่านอยู่"
@@ -351,9 +383,9 @@ def main() -> None:
             long_reply(transport, args.id)
         elif args.command == "all":
             if args.full:
-                read_full(transport)
+                read_full(transport, args.baud)
             else:
-                read_cid(transport, args.show_cid)
+                read_cid(transport, args.show_cid, args.baud)
     except (RfproError, InspectError, RuntimeError, ValueError) as error:
         print(f"\n❌ {error}")
         print("   ลองใหม่ด้วย --verbose แล้วส่งผลให้ทีม dev")
