@@ -117,10 +117,27 @@
 				>กู้คืนรหัสผ่าน (Forgot Password)</Card.Title
 			>
 			<Card.Description class="text-xs text-slate-500">
-				{step === 1
-					? 'กรอกเบอร์โทรศัพท์เพื่อตอบคำถามความปลอดภัย'
-					: 'ตอบคำถามความปลอดภัยและตั้งรหัสผ่านใหม่'}
+				กู้คืนด้วยคำถามความปลอดภัยที่ตั้งไว้ในบัญชี (ไม่มีการส่งรหัส OTP)
 			</Card.Description>
+			<ol
+				class="flex items-center justify-center gap-2 pt-1 text-xs"
+				aria-label="ขั้นตอนกู้คืนรหัสผ่าน"
+			>
+				{#each [{ n: 1, label: 'ระบุบัญชี' }, { n: 2, label: 'ตอบคำถาม + ตั้งรหัสใหม่' }] as s (s.n)}
+					<li
+						class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-semibold {step ===
+						s.n
+							? 'border-[#0A2647] bg-[#0A2647] text-white'
+							: step > s.n
+								? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+								: 'border-slate-200 bg-white text-slate-500'}"
+						aria-current={step === s.n ? 'step' : undefined}
+					>
+						<span class="tabular-nums">{step > s.n ? '✓' : s.n}</span>
+						{s.label}
+					</li>
+				{/each}
+			</ol>
 		</Card.Header>
 
 		<Card.Content class="p-6">
@@ -162,7 +179,7 @@
 						disabled={loading || !phone.trim()}
 						class="h-11 w-full bg-[#0f2d5c] font-bold text-white hover:bg-[#0a1e3f]"
 					>
-						{#if loading}กำลังตรวจสอบ...{:else}ตรวจสอบคำถามความปลอดภัย{/if}
+						{#if loading}กำลังตรวจสอบ...{:else}ถัดไป: ตอบคำถามความปลอดภัย{/if}
 					</Button>
 
 					<div class="pt-2 text-center">
@@ -258,7 +275,7 @@
 						disabled={loading || !answer.trim() || !newPassword}
 						class="h-11 w-full bg-emerald-700 font-bold text-white hover:bg-emerald-800"
 					>
-						{#if loading}กำลังบันทึก...{:else}รีเซ็ตรหัสผ่านและเข้าสู่ระบบ{/if}
+						{#if loading}กำลังบันทึก...{:else}ตั้งรหัสผ่านใหม่และเข้าสู่ระบบ{/if}
 					</Button>
 
 					<div class="flex items-center justify-between pt-1 text-xs">
@@ -272,7 +289,7 @@
 								confirmPassword = '';
 							}}
 						>
-							เปลี่ยนเบอร์โทร
+							← เปลี่ยนบัญชี / เบอร์โทร
 						</button>
 						<a href="/login" class="font-semibold text-blue-600 hover:underline">
 							กลับหน้าเข้าสู่ระบบ

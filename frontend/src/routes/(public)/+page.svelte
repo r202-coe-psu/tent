@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { PageData } from './$types';
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { SvelteMap } from 'svelte/reactivity';
 	import Search from '@lucide/svelte/icons/search';
 	import Package from '@lucide/svelte/icons/package';
@@ -11,6 +12,8 @@
 	import Inbox from '@lucide/svelte/icons/inbox';
 	import Info from '@lucide/svelte/icons/info';
 	import Construction from '@lucide/svelte/icons/construction';
+	import ClipboardPen from '@lucide/svelte/icons/clipboard-pen';
+	import MapPin from '@lucide/svelte/icons/map-pin';
 
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Button } from '$lib/components/ui/button';
@@ -241,6 +244,27 @@
 				{t.heroSubtitle}
 			</p>
 		</div>
+
+		<!-- Primary CTA: pre-register (most important public action), shelter search as quick link -->
+		<div
+			class="mx-auto mt-6 flex max-w-4xl flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-center"
+		>
+			<a
+				href={resolve('/pre-register')}
+				class="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white px-6 text-base font-bold text-[#0A2647] shadow-xs transition-colors hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#0A2647] focus-visible:outline-none sm:text-lg"
+			>
+				<ClipboardPen class="h-5 w-5" aria-hidden="true" />
+				{t.registerCta}
+			</a>
+			<a
+				href={resolve('/shelters')}
+				class="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/60 px-6 text-base font-semibold text-white transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#0A2647] focus-visible:outline-none"
+			>
+				<MapPin class="h-5 w-5" aria-hidden="true" />
+				{t.findShelterQuick}
+			</a>
+		</div>
+		<p class="mt-2 text-center text-xs text-white/75 sm:text-sm">{t.registerCtaHint}</p>
 
 		<!-- 2 Quick Action Cards Inside Hero Area -->
 		<div class="mx-auto mt-7 grid max-w-4xl grid-cols-1 gap-4 text-left sm:grid-cols-2">
