@@ -20,11 +20,13 @@ import type {
 	AdjustInput,
 	TransferInput,
 	TransferFilter,
+	StockTransfer,
 	WalkInDonationInput,
 	DispatchInfoInput,
 	CancelInfoInput,
 	DisputeInfoInput
 } from '../domain/operations';
+import { countPendingTransfers } from '../domain/transfer-pending';
 
 export const operationsKeys = {
 	all: ['operations'] as const,
@@ -229,6 +231,17 @@ export const useTransfers = (filter?: TransferFilter) =>
 	createQuery(() => ({
 		queryKey: operationsKeys.transfers(),
 		queryFn: () => operationsRepository().listTransfers(filter)
+	}));
+
+/**
+ * Number of transfers waiting on THIS shelter (tab badge). Shares `useTransfers`'
+ * cache entry (same key, unfiltered), so it adds no request beside `TransferList`.
+ */
+export const usePendingTransferCount = () =>
+	createQuery(() => ({
+		queryKey: operationsKeys.transfers(),
+		queryFn: () => operationsRepository().listTransfers(),
+		select: (transfers: StockTransfer[]) => countPendingTransfers(transfers, getShelterCode())
 	}));
 
 export const useTransfer = (id: () => string, enabled: () => boolean = () => true) =>

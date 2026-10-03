@@ -25,6 +25,7 @@
 		EVACUEE_PAGE_I18N,
 		type Evacuee,
 		type Household,
+		type IntakeNextStation,
 		type SaveFailureReport,
 		type UnifiedRegistrationInput
 	} from '$lib/features/people';
@@ -208,6 +209,31 @@
 		completed = null;
 		goto(resolve('/onsite/people'));
 	}
+
+	/** Single person → open their station form directly; a family → that station's queue. */
+	function goToNextStation(station: IntakeNextStation) {
+		if (!completed) return;
+		isNavigatingAfterSave = true;
+		const only = completed.members.length === 1 ? completed.members[0] : null;
+		if (station === 'medical') {
+			if (only) goto(resolve(`/onsite/medical-screening/${only._id}`));
+			else goto(resolve('/onsite/medical-screening'));
+			return;
+		}
+		if (only) goto(resolve(`/onsite/zoning/${only._id}`));
+		else goto(resolve('/onsite/zoning'));
+	}
+
+	/** Fresh form in place: the `{#if completed}` swap remounts UnifiedRegistrationForm. */
+	function registerAnother() {
+		completed = null;
+		saveError = null;
+		isDirty = false;
+		isNavigatingAfterSave = false;
+		idReservation = null;
+		overrideConfirmedForKey = '';
+		window.scrollTo({ top: 0 });
+	}
 </script>
 
 <svelte:head>
@@ -220,6 +246,8 @@
 			household={completed.household}
 			members={completed.members}
 			onDone={backToQueue}
+			onNextStation={goToNextStation}
+			onRegisterAnother={registerAnother}
 		/>
 	{:else}
 		<button

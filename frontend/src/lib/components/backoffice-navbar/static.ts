@@ -90,9 +90,21 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				icon: HandHeart
 			},
 			{
-				label: 'จัดการเบิกจ่ายพัสดุและอาหาร',
-				href: resolve('/back-office/distribution'),
-				icon: ClipboardList
+				label: 'จัดการคำร้องเบิกจ่าย',
+				href: null,
+				icon: ClipboardList,
+				children: [
+					{
+						label: 'จัดการเบิกจ่ายพัสดุและอาหาร',
+						href: resolve('/back-office/distribution'),
+						icon: ClipboardList
+					},
+					{
+						label: 'โรงครัวและเสบียงอาหาร',
+						href: resolve('/back-office/tickets/kitchen'),
+						icon: UtensilsCrossed
+					}
+				]
 			},
 			{
 				label: 'ครัวกลางและอาหาร',
