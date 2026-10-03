@@ -417,7 +417,7 @@ class TransportTests(unittest.TestCase):
 
 def make_reader(card: FakeThaiCard, baud: int = 9600, **kwargs):
     """`baud` is 9600 here so tests count only the commands they care about; the production
-    default (38400) is covered by test_the_reader_defaults_to_the_fast_card_baud."""
+    default is covered by test_the_reader_defaults_to_the_modules_own_9600_and_sends_no_set_baud."""
     device = FakeHidDevice(card, **kwargs)
     transport = device.transport()
     reader = RfproThaiCardReader(transport=transport, baud=baud)
@@ -606,7 +606,7 @@ class ReaderTests(unittest.TestCase):
 
         self.assertEqual([cmd for cmd, _ in device.commands], [CMD_ICC_ST, CMD_ICC_ST])
 
-    def test_the_reader_defaults_to_the_fast_card_baud(self):
+    def test_the_reader_defaults_to_the_modules_own_9600_and_sends_no_set_baud(self):
         card = FakeThaiCard()
         device = FakeHidDevice(card)
         self.addCleanup(device.close)
@@ -615,7 +615,7 @@ class ReaderTests(unittest.TestCase):
 
         reader.read_citizen_id()
 
-        self.assertEqual(card.bauds, [38400])
+        self.assertEqual(card.bauds, [])
 
     def test_the_reader_passes_its_baud_to_every_reset_of_a_full_read(self):
         card = FakeThaiCard()

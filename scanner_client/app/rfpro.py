@@ -76,6 +76,8 @@ ALLOWED_CMDS = frozenset(
 # Card-side speeds the module accepts (vendor doc 接触式IC卡功能指令 §CMD_ICC_SET_BAUD); 9600 is
 # what it resets to on every restart, so only a higher speed is ever sent.
 DEFAULT_CARD_BAUD = 9600
+# 38400 sent BEFORE the ATR (the vendor doc's order) left the Thai ID card on kiosk3 not answering
+# reset, so the kiosk stays at 9600. Kept for experiments (inspect_card_rfpro.py --baud 38400).
 FAST_CARD_BAUD = 38400
 CARD_BAUDS = (DEFAULT_CARD_BAUD, FAST_CARD_BAUD)
 
@@ -423,7 +425,7 @@ class RfproThaiCardReader(ThaiSmartCardReader):
         self,
         usb_id: str = DEFAULT_USB_ID,
         transport: RfproTransport | None = None,
-        baud: int = FAST_CARD_BAUD,
+        baud: int = DEFAULT_CARD_BAUD,
     ):
         self.transport = transport or RfproTransport.open(usb_id)
         super().__init__(connection=RfproConnection(self.transport, baud))
