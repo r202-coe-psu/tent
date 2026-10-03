@@ -1,7 +1,7 @@
 ---
 id: CR-148
 title: Pre-register validation hardening + religion/disability "other" + dorm address fields
-status: approved
+status: done
 date: 2026-10-03
 requested_by: usability test feedback (public pre-register + Station 1 registration)
 decided_by: project owner
@@ -135,3 +135,4 @@ affects:
 
 - 2026-10-03 — proposed (draft; owner เลือก track แบบ CR ไฟล์เดียว รวมทุกข้อ pre-register)
 - 2026-10-03 — approved — `PETS_MAX_COUNT = 10`; อายุ/ปีเกิด ±1; `address_no` = ค่าสรุปหอพัก; รันเลข CR-148 (ข้าม 144–147 ที่ schema.md note อ้างถึงแล้ว)
+- 2026-10-03 — done — frontend (domain/BFF/UI) + FastAPI unassigned registrations + couch_birth; OpenAPI regenerated; tests: frontend `pnpm test`, backend `pytest tests`, worker `pytest`
