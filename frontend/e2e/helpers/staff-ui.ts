@@ -105,7 +105,15 @@ export async function registerHouseholdViaUi(
 	}
 
 	await page.getByRole('button', { name: 'บันทึกลงทะเบียนทั้งครอบครัว' }).last().click();
-	await expect(page.getByText(`ลงทะเบียนครอบครัว ${members.length} คน สำเร็จ`)).toBeVisible();
+	// The possible-duplicate check may interpose a confirm dialog; the E2E people are distinct.
+	const confirmNew = page.getByRole('alertdialog').getByRole('button', {
+		name: 'ยืนยันลงทะเบียนใหม่',
+		exact: true
+	});
+	const success = page.getByText(`ลงทะเบียนครอบครัว ${members.length} คน สำเร็จ`);
+	await expect(confirmNew.or(success)).toBeVisible();
+	if (await confirmNew.isVisible()) await confirmNew.click();
+	await expect(success).toBeVisible();
 }
 
 /** Back office → donation board → "Special Request" with the default Critical urgency. */
