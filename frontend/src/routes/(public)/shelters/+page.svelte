@@ -613,6 +613,7 @@
 						action="/shelters"
 						bind:userLat={liveUserLat}
 						bind:userLng={liveUserLng}
+						idPrefix="mobile-"
 						class="h-auto max-h-none border-0 bg-transparent p-0 shadow-none"
 						onClose={() => (mobileFilterOpen = false)}
 					/>

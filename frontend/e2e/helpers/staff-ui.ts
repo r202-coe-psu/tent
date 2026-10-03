@@ -21,10 +21,15 @@ export interface ShelterForm {
 export async function createShelterViaUi(page: Page, shelter: ShelterForm): Promise<string> {
 	await page.goto('/system-management/shelters/create');
 	await page.getByRole('textbox', { name: 'ชื่อศูนย์พักพิง *' }).fill(shelter.name);
-	if (shelter.siteKind === 'host_house') {
-		await page.getByRole('button', { name: 'ชนิดสถานที่ *' }).click();
-		await page.getByRole('option', { name: 'บ้านพี่เลี้ยง (Host House)' }).click();
-	}
+	await page.getByRole('button', { name: 'ชนิดสถานที่ *' }).click();
+	await page
+		.getByRole('option', {
+			name:
+				shelter.siteKind === 'host_house'
+					? 'บ้านพี่เลี้ยง (Host House)'
+					: 'ศูนย์อพยพ (Evacuation Center)'
+		})
+		.click();
 	await page.getByRole('button', { name: 'สถานะการปฏิบัติการ (Operating Status)' }).click();
 	await page.getByRole('option', { name: 'เปิดรับผู้อพยพ (Active)' }).click();
 	await page.getByRole('spinbutton', { name: 'ละติจูด (Latitude)' }).fill(String(shelter.lat));

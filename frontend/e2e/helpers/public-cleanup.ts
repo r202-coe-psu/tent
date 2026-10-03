@@ -76,9 +76,13 @@ export async function teardownShelter(code: string): Promise<void> {
 			async () => (await publicShelterStatus(code)) !== 'open'
 		);
 		const rev = (closed.data as { rev: string }).rev;
-		await couchReq('DELETE', `${path}?rev=${rev}`);
+		const delDoc = await couchReq('DELETE', `${path}?rev=${rev}`);
+		if (delDoc.status >= 400 && delDoc.status !== 404)
+			console.warn(`delete master doc ${path} returned HTTP ${delDoc.status}`);
 	}
-	await couchReq('DELETE', `/shelter_${code.toLowerCase()}`);
+	const delDb = await couchReq('DELETE', `/shelter_${code.toLowerCase()}`);
+	if (delDb.status >= 400 && delDb.status !== 404)
+		console.warn(`delete database shelter_${code.toLowerCase()} returned HTTP ${delDb.status}`);
 }
 
 /** Number of public search hits for `query` via the BFF. */

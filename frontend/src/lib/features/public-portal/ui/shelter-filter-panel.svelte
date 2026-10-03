@@ -65,6 +65,7 @@
 		userLat = $bindable(''),
 		userLng = $bindable(''),
 		class: className = '',
+		idPrefix = '',
 		onClose
 	}: {
 		filters?: Filters;
@@ -73,6 +74,8 @@
 		userLat?: string;
 		userLng?: string;
 		class?: string;
+		/** Prefix for element ids so two mounted panels (desktop + drawer) never collide. */
+		idPrefix?: string;
 		onClose?: () => void;
 	} = $props();
 
@@ -476,7 +479,7 @@
 			<div class="space-y-4">
 				<!-- Search -->
 				<div class="space-y-1.5">
-					<Label for="search" class="text-xs font-semibold text-muted-foreground"
+					<Label for={`${idPrefix}search`} class="text-xs font-semibold text-muted-foreground"
 						>{t.searchLabel}</Label
 					>
 					<div class="relative">
@@ -493,11 +496,12 @@
 				</div>
 				<!-- Province -->
 				<div class="w-full space-y-1.5">
-					<Label for="province" class="text-xs font-semibold text-muted-foreground"
+					<Label for={`${idPrefix}province`} class="text-xs font-semibold text-muted-foreground"
 						>{t.provinceLabel}</Label
 					>
 					<SearchSelect
 						name="province"
+						id={`${idPrefix}province`}
 						placeholder={t.provincePlaceholder}
 						bind:value={selectedProvince}
 						options={provincesList}
@@ -507,11 +511,12 @@
 
 				<!-- District -->
 				<div class="w-full space-y-1.5">
-					<Label for="district" class="text-xs font-semibold text-muted-foreground"
+					<Label for={`${idPrefix}district`} class="text-xs font-semibold text-muted-foreground"
 						>{t.districtLabel}</Label
 					>
 					<SearchSelect
 						name="district"
+						id={`${idPrefix}district`}
 						placeholder={t.districtPlaceholder}
 						bind:value={selectedDistrict}
 						options={districtsList}
@@ -521,11 +526,12 @@
 
 				<!-- Sub-district -->
 				<div class="w-full space-y-1.5">
-					<Label for="subdistrict" class="text-xs font-semibold text-muted-foreground"
+					<Label for={`${idPrefix}subdistrict`} class="text-xs font-semibold text-muted-foreground"
 						>{t.subdistrictLabel}</Label
 					>
 					<SearchSelect
 						name="subdistrict"
+						id={`${idPrefix}subdistrict`}
 						placeholder={t.subdistrictPlaceholder}
 						bind:value={selectedSubdistrict}
 						options={subdistrictsList}
@@ -535,11 +541,11 @@
 
 				<!-- Site kind -->
 				<div class="space-y-1.5">
-					<Label for="site_kind" class="text-xs font-semibold text-muted-foreground"
+					<Label for={`${idPrefix}site_kind`} class="text-xs font-semibold text-muted-foreground"
 						>{t.siteKindLabel}</Label
 					>
 					<Select.Root type="single" name="site_kind" bind:value={selectedSiteKind}>
-						<Select.Trigger id="site_kind" class="w-full rounded-xl">
+						<Select.Trigger id={`${idPrefix}site_kind`} class="w-full rounded-xl">
 							<Select.Value placeholder={t.siteKindPlaceholder} />
 						</Select.Trigger>
 						<Select.Content>
@@ -552,10 +558,11 @@
 
 				<!-- Building type -->
 				<div class="space-y-1.5">
-					<Label for="type" class="text-xs font-semibold text-muted-foreground">{t.typeLabel}</Label
+					<Label for={`${idPrefix}type`} class="text-xs font-semibold text-muted-foreground"
+						>{t.typeLabel}</Label
 					>
 					<Select.Root type="single" name="type" bind:value={selectedType}>
-						<Select.Trigger id="type" class="w-full rounded-xl">
+						<Select.Trigger id={`${idPrefix}type`} class="w-full rounded-xl">
 							<Select.Value placeholder={t.typePlaceholder} />
 						</Select.Trigger>
 						<Select.Content>
@@ -622,8 +629,8 @@
 				</div>
 
 				<!-- Hidden geolocation inputs -->
-				<input type="hidden" name="user_lat" id="user_lat" value={userLat} />
-				<input type="hidden" name="user_lng" id="user_lng" value={userLng} />
+				<input type="hidden" name="user_lat" id={`${idPrefix}user_lat`} value={userLat} />
+				<input type="hidden" name="user_lng" id={`${idPrefix}user_lng`} value={userLng} />
 
 				<!-- Capacity Switch Card -->
 				<div class="flex items-start gap-4 rounded-xl border border-border bg-card p-4 shadow-sm">
@@ -637,7 +644,7 @@
 					/>
 					<div class="flex flex-col gap-1">
 						<Label
-							for="hide_full_ui"
+							for={`${idPrefix}hide_full_ui`}
 							class="cursor-pointer text-sm leading-tight font-bold text-foreground"
 							>{t.hideFullTitle}</Label
 						>
