@@ -11,13 +11,15 @@
 # are set for the kiosk user (gsettings); /etc/issue shows hostname + IP above the TTY login prompt.
 #
 # Run as a normal user (NOT with sudo); the script calls sudo itself. Applies at the next login:
-#   sudo systemctl restart gdm   (or reboot)
+# add --restart (or run: sudo systemctl restart gdm / reboot).
 #
-# Usage: ./setup_kiosk_lockdown.sh [--user NAME] [--status | --disable | --help]
+# Usage: ./setup_kiosk_lockdown.sh [--user NAME] [--restart] [--status | --disable | --help]
 #   (none)        install packages, write the kiosk script, enable Ctrl+Alt+F1..F6 + IP on
-#                 the TTY login, set autologin + kiosk session
+#                 the TTY login, set autologin + kiosk session, then print --status
 #   --status      checks only, change nothing (exit 1 when not locked)
 #   --disable     maintenance: autologin into the previous (normal GNOME) session instead
+#   --restart     after install/--disable succeeds, restart gdm so it applies now. This ends
+#                 the session on the kiosk screen (a terminal open there closes) — SSH stays.
 #   --user NAME   the autologin kiosk user (default: the user running this script)
 # ==============================================================================
 set -uo pipefail
@@ -315,6 +317,13 @@ install_lockdown() {
     session_id="$(kiosk_session_id)" || { bad "ไม่พบ session GNOME Kiosk Script หลังติดตั้ง"; exit 1; }
     ok "session: $session_id"
 
+    local vt_before
+    vt_before="$(kiosk_gsettings get "$VT_KEYS_SCHEMA" switch-to-session-3 2>/dev/null)"
+    if [ "$vt_before" = "$(vt_keybinding_value 3)" ]; then
+        info "ค่าเดิมของ Ctrl+Alt+F3 ถูกอยู่แล้ว ($vt_before) — ถ้าเคยกดไม่ได้ สาเหตุไม่ใช่ค่านี้ (ดูหลัง restart)"
+    else
+        info "ค่าเดิมของ Ctrl+Alt+F3: ${vt_before:-ไม่มี/อ่านไม่ได้} → จะตั้งเป็น $(vt_keybinding_value 3)"
+    fi
     set_vt_keys
     case $? in
     0) ok "เปิด Ctrl+Alt+F1..F6 (สลับ TTY) ให้ $KIOSK_USER" ;;
@@ -349,9 +358,26 @@ install_lockdown() {
         bad "ตั้งค่าไม่ครบ — ดูข้อความด้านบน"
         exit 1
     fi
-    ok "ล็อก kiosk แล้ว — มีผลตอน login ครั้งถัดไป: sudo systemctl restart gdm (หรือ reboot)"
+    ok "ล็อก kiosk แล้ว"
     info "เข้า TTY ในโหมดล็อก: เสียบคีย์บอร์ด → Ctrl+Alt+F3 (หน้า login แสดง IP) · กลับหน้า kiosk: Ctrl+Alt+F1 หรือ F2"
-    info "กลับเป็น desktop ปกติ: ./setup_kiosk_lockdown.sh --disable (ดู README หัวข้อ \"ล็อกไม่ให้ออกจากหน้า kiosk\")"
+    info "กลับเป็น desktop ปกติ: ./setup_kiosk_lockdown.sh --disable --restart"
+
+    echo
+    info "ตรวจค่าที่ตั้ง (--status):"
+    show_status
+    if $FAILED; then
+        exit 1
+    fi
+}
+
+# Applies the change now. Last step on purpose: it ends the graphical session on the kiosk screen.
+restart_gdm() {
+    if [ "$RESTART" != true ]; then
+        info "มีผลตอน login ครั้งถัดไป: ./setup_kiosk_lockdown.sh --restart หรือ sudo systemctl restart gdm (หรือ reboot)"
+        return 0
+    fi
+    info "restart gdm — จอตู้จะดับแป๊บหนึ่ง (SSH ไม่หลุด)"
+    sudo systemctl restart gdm && ok "restart gdm แล้ว" || { bad "restart gdm ไม่สำเร็จ"; exit 1; }
 }
 
 disable_lockdown() {
@@ -359,18 +385,19 @@ disable_lockdown() {
     sudo -v || { echo "ต้องใช้สิทธิ์ sudo" >&2; exit 1; }
     as_kiosk test -s "$PREV_SESSION_FILE" && previous="$(as_kiosk head -1 "$PREV_SESSION_FILE")"
     set_session "$previous" && ok "session ตอน login → $previous" || { bad "ตั้ง session ไม่สำเร็จ"; exit 1; }
-    warn "autologin ยังเปิดอยู่ — ตอนนี้ใครเปิดเครื่องก็เข้า desktop ได้ ซ่อมเสร็จแล้วล็อกกลับด้วย ./setup_kiosk_lockdown.sh"
-    info "มีผลตอน login ครั้งถัดไป: sudo systemctl restart gdm (หรือ reboot)"
+    warn "autologin ยังเปิดอยู่ — ตอนนี้ใครเปิดเครื่องก็เข้า desktop ได้ ซ่อมเสร็จแล้วล็อกกลับด้วย ./setup_kiosk_lockdown.sh --restart"
 }
 
 main() {
     local command="install"
     KIOSK_USER="$(id -un)"
+    RESTART=false
     while [ $# -gt 0 ]; do
         case "$1" in
         --status | -s) command="status"; shift ;;
         --disable | -d) command="disable"; shift ;;
         --user) KIOSK_USER="${2:?--user ต้องมีชื่อ user}"; shift 2 ;;
+        --restart | -r) RESTART=true; shift ;;
         -h | --help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;;
         *) echo "ไม่รู้จัก option: $1 (ดู --help)" >&2; exit 1 ;;
         esac
@@ -386,9 +413,13 @@ main() {
     info "kiosk user: $KIOSK_USER ($KIOSK_HOME)"
 
     case "$command" in
-    status) show_status; $FAILED && exit 1 || exit 0 ;;
-    disable) disable_lockdown ;;
-    install) install_lockdown ;;
+    status)
+        [ "$RESTART" = true ] && warn "--restart ใช้กับ --status ไม่ได้ (ไม่ได้ restart)"
+        show_status
+        $FAILED && exit 1 || exit 0
+        ;;
+    disable) disable_lockdown && restart_gdm ;;
+    install) install_lockdown && restart_gdm ;;
     esac
 }
 
