@@ -408,6 +408,7 @@
 						aria-invalid={props['aria-invalid']}
 						aria-describedby={props['aria-describedby']}
 						{items}
+						allowCreate
 						bind:value={selectedItemId}
 						disabled={!!preselectedItemId}
 						isLoading={stockItems.isLoading || balanceQuery.isLoading}

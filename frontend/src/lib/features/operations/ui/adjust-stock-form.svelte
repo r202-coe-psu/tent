@@ -322,6 +322,7 @@
 			<ItemCombobox
 				id="item-search"
 				{items}
+				allowCreate
 				bind:value={selectedItemId}
 				disabled={!!preselectedItemId}
 				isLoading={stockItems.isLoading}

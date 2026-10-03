@@ -1,4 +1,6 @@
 import { catalogOrigin, itemBelongsToCategory } from '../../domain/catalog';
+import { isBaseUnitRow } from '../../domain/item-barcode';
+import { missingOptionalFields } from '../../domain/item-similarity';
 import type { ItemCategory, ItemMaster, Recipe } from '../../domain/catalog';
 import type { Dimension, UnitOfMeasure } from '../../domain/unit-of-measure';
 
@@ -22,6 +24,14 @@ export interface MasterItemRow {
 	categoryLabel: string;
 	unitLines: string[];
 	origin: CatalogOriginKey;
+	/** Optional fields still empty, shown when the user could fill them in. */
+	missing: string[];
+	/** Created within the last day. */
+	isNew: boolean;
+	/** On-hand quantity with its unit; `null` when the list has no stock column. */
+	stock: string | null;
+	/** Offer "เติมข้อมูล": the user may edit this item and it has gaps. */
+	canFill: boolean;
 }
 
 export type FilterOption = { value: string; label: string };
@@ -98,10 +108,20 @@ export function unitLines(
 ): string[] {
 	const base = format(item.base_unit);
 	const lines = (item.conversions ?? [])
-		.filter((c) => c.uom_name && c.multiplier)
+		.filter((c) => c.uom_name && c.multiplier && !isBaseUnitRow(c, item.base_unit ?? ''))
 		.map((c) => `1 ${format(c.uom_name)} = ${c.multiplier} ${base}`);
 	return [base || '—', ...lines];
 }
+
+/** Quick filter chips above the item list. `central` includes shelter overrides of central items. */
+export type ScopeChip = 'all' | 'incomplete' | 'local' | 'central';
+
+export const SCOPE_CHIP_LABELS: Record<ScopeChip, string> = {
+	all: 'ทั้งหมด',
+	incomplete: 'ข้อมูลไม่ครบ',
+	local: 'ของศูนย์นี้',
+	central: 'ส่วนกลาง'
+};
 
 export interface ItemFilter {
 	q: string;
@@ -109,6 +129,38 @@ export interface ItemFilter {
 	categoryId: string;
 	origin: OriginFilter;
 	showDeactivated: boolean;
+	/** Quick chip; omitted means 'all'. */
+	scope?: ScopeChip;
+}
+
+/**
+ * "ข้อมูลไม่ครบ": the item lacks optional fields the user can still fill in. In a
+ * shelter only its own items count — it cannot edit a central item, only override it.
+ */
+export function isIncompleteItem(item: ItemMaster, shelterCode: string | null): boolean {
+	if (shelterCode && catalogOrigin(item, shelterCode) !== 'local') return false;
+	return missingOptionalFields(item).length > 0;
+}
+
+function matchesScope(item: ItemMaster, scope: ScopeChip, shelterCode: string | null): boolean {
+	switch (scope) {
+		case 'all':
+			return true;
+		case 'incomplete':
+			return isIncompleteItem(item, shelterCode);
+		case 'local':
+			return catalogOrigin(item, shelterCode) === 'local';
+		case 'central':
+			return catalogOrigin(item, shelterCode) !== 'local';
+	}
+}
+
+const NEW_ITEM_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/** Created within the last 24 hours — drives the "ใหม่" badge. */
+export function isNewItem(item: Pick<ItemMaster, 'created_at'>, now: number = Date.now()): boolean {
+	const created = Date.parse(item.created_at);
+	return Number.isFinite(created) && now - created >= 0 && now - created < NEW_ITEM_WINDOW_MS;
 }
 
 function matchesItem(
@@ -122,6 +174,7 @@ function matchesItem(
 		if (!category || !itemBelongsToCategory(item, category)) return false;
 	}
 	if (filter.origin !== 'all' && catalogOrigin(item, shelterCode) !== filter.origin) return false;
+	if (!matchesScope(item, filter.scope ?? 'all', shelterCode)) return false;
 	return matchesText(filter.q.trim().toLowerCase(), item.name, item.sku);
 }
 
@@ -151,6 +204,28 @@ export function hiddenDeactivatedItems(
 	if (filter.showDeactivated) return 0;
 	return items.filter((i) => i.deactivated && matchesItem(i, categories, filter, shelterCode))
 		.length;
+}
+
+/**
+ * Count per quick chip. Search, category and the deactivated switch still apply, but
+ * the chip itself does not, so every chip shows what it would list if picked.
+ */
+export function countScopeChips(
+	items: readonly ItemMaster[],
+	categories: readonly ItemCategory[],
+	filter: ItemFilter,
+	shelterCode: string | null
+): Record<ScopeChip, number> {
+	const counts: Record<ScopeChip, number> = { all: 0, incomplete: 0, local: 0, central: 0 };
+	for (const item of items) {
+		if (!filter.showDeactivated && item.deactivated) continue;
+		if (!matchesItem(item, categories, { ...filter, scope: 'all' }, shelterCode)) continue;
+		counts.all++;
+		for (const chip of ['incomplete', 'local', 'central'] as const) {
+			if (matchesScope(item, chip, shelterCode)) counts[chip]++;
+		}
+	}
+	return counts;
 }
 
 /** Items per category, ignoring search and deactivated ones unless `showDeactivated`. */
