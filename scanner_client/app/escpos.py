@@ -17,6 +17,12 @@ ESC_FEED = b"\x1bJ"
 # because its GS V cuts are tied to black-mark detection: on plain roll paper GS V B 0 hunted
 # for a mark and fed ~17 cm per label. So the label is fed past the cutter explicitly instead.
 ESC_CUT = b"\x1bi"
+# GS ( F 4 0 a m nL nH — black-mark offset; a = 1 print start, a = 2 cut position.
+GS_BLACK_MARK_OFFSET = b"\x1d(F\x04\x00"
+BLACK_MARK_CUT = 2
+BLACK_MARK_MAX_OFFSET_DOTS = 1500
+# GS V B 0 — feed to the cut position after the next black mark, then cut.
+GS_CUT_AT_BLACK_MARK = b"\x1dVB\x00"
 DOTS_PER_MM = 8
 # Feed before the cut; kiosk3 needs none (it feeds on its own, see CUT_SELF_FEED_MM). If the
 # cutter ever clips the bottom line, raise this — it counts toward LABEL_LENGTH_MM, so the
@@ -68,6 +74,63 @@ def feed_and_cut(cut_feed_mm: int) -> bytes:
         out += ESC_FEED + bytes([step])
         dots -= step
     return bytes(out + ESC_CUT)
+
+
+def align_to_perforation(
+    stub_mm: float,
+    label_length_mm: int = LABEL_LENGTH_MM,
+    self_feed_mm: int = CUT_SELF_FEED_MM,
+    trim_mm: float = 0,
+) -> bytes:
+    """Bring the roll's next perforation to the cutter after paper loading, and cut there.
+
+    On paper load kiosk3 feeds and cuts a stub off on its own, so the cutter ends up mid-label.
+    `stub_mm` is the length of that stub when the roll was torn at a perforation before
+    loading (or, in general, the distance from the stub's cut edge back to the nearest
+    perforation on it). The next perforation is then `label_length_mm - stub_mm % length`
+    past the cutter. ESC i adds `self_feed_mm` on its own, so a gap shorter than that skips
+    one more label. `trim_mm` corrects what is still off after a run (+ = cut later).
+    Returns b"" when the cutter already sits on a perforation.
+    """
+    if label_length_mm <= self_feed_mm:
+        raise ValueError("label_length_mm must be longer than self_feed_mm")
+    gap = (label_length_mm - stub_mm % label_length_mm + trim_mm) % label_length_mm
+    dots = round(gap * DOTS_PER_MM)
+    if dots == 0 or dots == label_length_mm * DOTS_PER_MM:
+        return b""
+    while dots < self_feed_mm * DOTS_PER_MM:
+        dots += label_length_mm * DOTS_PER_MM
+    dots -= self_feed_mm * DOTS_PER_MM
+    out = bytearray(ESC_INIT)
+    while dots > 0:
+        step = min(dots, 255)
+        out += ESC_FEED + bytes([step])
+        dots -= step
+    return bytes(out + ESC_CUT)
+
+
+def align_to_black_mark(cut_offset_mm: float = 0) -> bytes:
+    """Feed to a hand-drawn black mark and cut there (realign after loading a perforated roll).
+
+    The roll has no printed marks, so one is drawn at a perforation before loading; this hunts
+    for it with the printer's black-mark sensor and cuts, after which every 60 mm strip lines
+    up with the perforations. `cut_offset_mm` moves the cut relative to where the printer
+    detects the mark (+ = later). Bytes from the TxPrnMod SDK: TX_SET_BMARK(TX_BM_TEAR) ->
+    GS ( F 4 0 2 m nL nH (SDK always sends m = 0; m = 1 for a negative offset is the Epson
+    meaning, untested on kiosk3), TX_CUT(TX_CUT_FULL) -> GS V B n. With no mark in reach the
+    printer gives up after ~17 cm and cuts anyway.
+    """
+    dots = round(abs(cut_offset_mm) * DOTS_PER_MM)
+    if dots > BLACK_MARK_MAX_OFFSET_DOTS:
+        raise ValueError("cut_offset_mm is out of range")
+    direction = 1 if cut_offset_mm < 0 else 0
+    return (
+        ESC_INIT
+        + GS_BLACK_MARK_OFFSET
+        + bytes([BLACK_MARK_CUT, direction])
+        + dots.to_bytes(2, "little")
+        + GS_CUT_AT_BLACK_MARK
+    )
 
 
 def label_to_escpos(

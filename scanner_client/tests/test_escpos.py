@@ -10,6 +10,8 @@ from app.escpos import (
     ESC_INIT,
     GS_RASTER,
     MAX_LABEL_PIXELS,
+    align_to_black_mark,
+    align_to_perforation,
     feed_and_cut,
     label_to_escpos,
 )
@@ -189,6 +191,68 @@ class LabelToEscposTests(unittest.TestCase):
         for width in (0, 100, -8):
             with self.subTest(width=width), self.assertRaises(ValueError):
                 label_to_escpos(png, width)
+
+
+def fed_dots(data: bytes) -> int:
+    """Total ESC J feed in an init + feeds + cut job."""
+    assert data.startswith(ESC_INIT) and data.endswith(ESC_CUT)
+    body = data[len(ESC_INIT) : -len(ESC_CUT)]
+    total = 0
+    while body:
+        assert body.startswith(ESC_FEED), body[:4]
+        total += body[2]
+        body = body[3:]
+    return total
+
+
+class AlignToPerforationTests(unittest.TestCase):
+    def test_feeds_to_next_perforation_minus_the_cut_self_feed(self):
+        # 23 mm stub -> perforation 37 mm past the cutter; ESC i adds 10 mm itself.
+        data = align_to_perforation(23, label_length_mm=60, self_feed_mm=10)
+
+        self.assertEqual(fed_dots(data), 27 * 8)
+
+    def test_stub_longer_than_a_label_uses_the_remainder(self):
+        data = align_to_perforation(83, label_length_mm=60, self_feed_mm=10)
+
+        self.assertEqual(fed_dots(data), 27 * 8)
+
+    def test_gap_shorter_than_self_feed_skips_one_more_label(self):
+        # 55 mm stub -> perforation 5 mm away, but ESC i alone moves 10 mm: go to the next one.
+        data = align_to_perforation(55, label_length_mm=60, self_feed_mm=10)
+
+        self.assertEqual(fed_dots(data), 55 * 8)
+
+    def test_trim_shifts_the_cut(self):
+        data = align_to_perforation(23, label_length_mm=60, self_feed_mm=10, trim_mm=-2)
+
+        self.assertEqual(fed_dots(data), 25 * 8)
+
+    def test_already_on_a_perforation_sends_nothing(self):
+        for stub in (0, 60, 120):
+            with self.subTest(stub=stub):
+                self.assertEqual(align_to_perforation(stub, label_length_mm=60), b"")
+
+    def test_label_must_be_longer_than_self_feed(self):
+        with self.assertRaises(ValueError):
+            align_to_perforation(10, label_length_mm=10, self_feed_mm=10)
+
+
+class AlignToBlackMarkTests(unittest.TestCase):
+    def test_sets_cut_offset_then_cuts_at_the_mark(self):
+        data = align_to_black_mark(3)
+
+        # ESC @ FS . | GS ( F 4 0 a=2 m=0 24 dots | GS V B 0
+        self.assertEqual(data, ESC_INIT + b"\x1d(F\x04\x00\x02\x00\x18\x00" + b"\x1dVB\x00")
+
+    def test_negative_offset_cuts_before_the_mark(self):
+        data = align_to_black_mark(-2.5)
+
+        self.assertIn(b"\x1d(F\x04\x00\x02\x01\x14\x00", data)
+
+    def test_offset_beyond_printer_range_is_rejected(self):
+        with self.assertRaises(ValueError):
+            align_to_black_mark(200)
 
 
 if __name__ == "__main__":
