@@ -79,6 +79,26 @@ export function classifyScreeningQueueTab(
 }
 
 /**
+ * Next person for the Station 2 「คนถัดไปในคิว」 button: first `arriving` person still waiting
+ * for screening (queue order), skipping `excludeId`. Pre-registered people are not on site yet,
+ * so they are never auto-opened.
+ */
+export function nextScreeningQueueEvacuee<T extends Evacuee>(
+	evacuees: readonly T[],
+	screenedEvacueeIds: Set<string>,
+	excludeId?: string | null
+): T | null {
+	return (
+		evacuees.find(
+			(e) =>
+				e._id !== excludeId &&
+				e.current_stay?.status === 'arriving' &&
+				classifyScreeningQueueTab(e, screenedEvacueeIds) === 'pending'
+		) ?? null
+	);
+}
+
+/**
  * Station 3 queue tab classification ("Cleared for Zoning" = pending).
  * - pending (รอจัด / พร้อมจัดโซน): arriving, zone null; when flag on also requires a screening doc
  * - awaiting_confirm (รอยืนยันถึงโซน): active with zone — Zone Arrival Confirmation pending

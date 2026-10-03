@@ -264,7 +264,9 @@ export function planFamilyRegistration(
 	const memberInputs: EvacueeInput[] = parsed.members.map((member) => ({
 		...member,
 		household_id: mode === 'join' ? targetHouseholdId : null,
-		status: member.zone ? 'active' : status,
+		// Registration never zones / checks in (ADR-0001): zoning happens at Station 3 only
+		zone: null,
+		status,
 		registered_via
 	}));
 

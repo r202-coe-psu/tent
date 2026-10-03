@@ -8,6 +8,7 @@ import {
 	formatQueueWait,
 	isInShelterStatus,
 	nextQueueLabel,
+	nextScreeningQueueEvacuee,
 	parseZoningQrCode,
 	recommendZoneKind,
 	sortByZoningQueueSince,
@@ -215,6 +216,29 @@ describe('classifyScreeningQueueTab', () => {
 				new Set(['evacuee:1'])
 			)
 		).toBeNull();
+	});
+});
+
+describe('nextScreeningQueueEvacuee', () => {
+	it('returns the first arriving unscreened person, skipping the one just saved', () => {
+		const list = [
+			ev({ status: 'pre_registered', id: 'evacuee:p' }),
+			ev({ status: 'arriving', id: 'evacuee:a' }),
+			ev({ status: 'arriving', id: 'evacuee:b' }),
+			ev({ status: 'arriving', id: 'evacuee:c' })
+		];
+		expect(nextScreeningQueueEvacuee(list, new Set(['evacuee:b']), 'evacuee:a')?._id).toBe(
+			'evacuee:c'
+		);
+		expect(nextScreeningQueueEvacuee(list, new Set())?._id).toBe('evacuee:a');
+	});
+
+	it('returns null when only pre-registered or screened people remain', () => {
+		const list = [
+			ev({ status: 'pre_registered', id: 'evacuee:p' }),
+			ev({ status: 'arriving', id: 'evacuee:a' })
+		];
+		expect(nextScreeningQueueEvacuee(list, new Set(['evacuee:a']))).toBeNull();
 	});
 });
 

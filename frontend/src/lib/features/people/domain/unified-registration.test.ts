@@ -230,6 +230,15 @@ describe('unified registration — family plan', () => {
 		expect(plan.householdInput.label).toContain('หัว');
 	});
 
+	it('never zones at registration — a submitted zone is dropped and status stays arriving', () => {
+		const plan = planFamilyRegistration(
+			validInput({ members: [validMember({ zone: 'Z1' })] }),
+			'onsite'
+		);
+		expect(plan.memberInputs[0]?.zone).toBeNull();
+		expect(plan.memberInputs[0]?.status).toBe('arriving');
+	});
+
 	it('plans public channel members as pre_registered', () => {
 		const plan = planFamilyRegistration(validInput(), 'public');
 		expect(plan.memberInputs[0]?.status).toBe('pre_registered');

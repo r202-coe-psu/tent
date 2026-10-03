@@ -138,6 +138,7 @@ export {
 	nextQueueLabel,
 	classifyZoningQueueTab,
 	classifyScreeningQueueTab,
+	nextScreeningQueueEvacuee,
 	recommendZoneKind,
 	countPresentOccupantsByZone,
 	parseZoningQrCode,
@@ -335,7 +336,14 @@ export { default as HouseholdForm } from './ui/household-form/household-form.sve
 export { default as HouseholdFormPage } from './ui/household-form/household-form-page.svelte';
 export { default as HouseholdPostArrival } from './ui/household-flows/household-post-arrival.svelte';
 export { default as EvacueeWristbandSuccess } from './ui/registration/evacuee-wristband-success.svelte';
-export { default as FamilyBatchPrint } from './ui/registration/family-batch-print.svelte';
+export {
+	default as FamilyBatchPrint,
+	type IntakeNextStation
+} from './ui/registration/family-batch-print.svelte';
+export {
+	default as StationCompletionSummary,
+	type StationSummaryFact
+} from './ui/shared/station-completion-summary.svelte';
 export { default as UnifiedRegistrationForm } from './ui/registration/unified-registration-form.svelte';
 export type { ThaiDAutofillProfile, ThaiDAutofillAddress } from './domain/thaid-profile';
 export { stripThaiTitle } from './domain/thaid-profile';
