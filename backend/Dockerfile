@@ -38,4 +38,4 @@ USER app
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 	CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9000/v1/health', timeout=3)"
 
-CMD ["fastapi", "run", "apiapp/main.py", "--host", "0.0.0.0", "--port", "9000"]
+CMD ["sh", "-c", "fastapi run apiapp/main.py --host 0.0.0.0 --port 9000 --workers ${FASTAPI_WORKERS:-4}"]

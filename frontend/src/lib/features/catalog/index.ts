@@ -19,6 +19,7 @@ export type {
 	UnitOfMeasureUpdateInput,
 	FallbackUnitDef
 } from './domain/unit-of-measure';
+export { getItemDisplayName, type NamedItem } from './domain/item-name';
 
 // Domain — deletion policy & utilities
 export {

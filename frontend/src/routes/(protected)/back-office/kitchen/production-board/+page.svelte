@@ -19,7 +19,7 @@
 		<Hammer class="h-8 w-8 text-muted-foreground" />
 	</div>
 	<div>
-		<h1 class="text-lg font-bold">กระดานการผลิต (Production Board)</h1>
+		<h1 class="text-lg font-bold">กระดานการผลิต</h1>
 		<p class="mt-1 max-w-md text-sm text-muted-foreground">
 			ฟีเจอร์จัดการสูตรมาตรฐาน (BOM) และการผลิตต่อมื้อกำลังพัฒนา —
 			จะเปิดใช้งานเมื่อเชื่อมต่อกับข้อมูลแผนอาหารจริงแล้ว
