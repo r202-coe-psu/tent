@@ -1,22 +1,22 @@
 ---
-id: draft
+id: CR-149
 title: Kiosk walk-in registration — เสียบบัตรแล้วไม่พบข้อมูล → ลงทะเบียนใหม่ที่ตู้ (stay status `kiosk_registered`)
-status: proposed
+status: approved
 date: 2026-09-27
 created: 2026-09-27
-updated: 2026-09-27
+updated: 2026-10-03
 requested_by: ทีม kiosk (branch feat/pre-register_kiosk)
-decided_by: Project Owner (รอเคาะ)
+decided_by: Jakee Indapanya (GitHub net-lynx), Project Owner — อนุมัติ 2026-10-03 (Asia/Bangkok)
+decision_date: 2026-10-03
 layer: volatile
 amends:
   - docs/changes/draft-kiosk-pre-registration-check-in.md §3 (แถว "ลงทะเบียน walk-in ที่ kiosk" ย้ายจากนอกขอบเขต → ในขอบเขต เฉพาะช่องทางบัตร) · §1 ข้อ 3 (PDPA — อ่านเฉพาะเลข 13 หลัก → อ่านเต็มหลังได้ consent)
   - docs/features/smart-card-registration-spec.md FR-CARD-01..04 (สร้าง evacuee จากบัตรกลับมา แต่ผ่านปุ่ม + consent และใช้สถานะใหม่)
 affects:
   - docs/data/schema.md §1.1 evacuee — `current_stay.status` += `kiosk_registered` · occupancy metrics table · household status derive
-  - schema_v evacuee 10 → 11
+  - schema_v evacuee 11 → 12
   - docs/data/schema.md shelter `feature_flags` += `kiosk_walk_in_registration_enabled` (additive, ไม่ bump shelter schema_v — ตาม pattern `kiosk_phone_check_in_enabled`)
   - docs/data/api-contract.md §2.1 — lookup `can_register` + outcome `kiosk_registered` · endpoint ใหม่ `POST /api/v1/scanner/kiosk/register`
-  - docs/features/kiosk-walk-in-registration-implementation-plan.md (แผน implement + impact map ราย file)
   - frontend/src/lib/features/people/{domain,data,ui} (enum, labels, badge, derive, Station 1 transitions)
   - frontend/src/lib/features/kiosk/{domain,data,server,ui} · frontend/src/routes/kiosk/** · frontend/src/routes/api/v1/scanner/kiosk/{lookup,register}
   - frontend/src/lib/features/scanners/server.ts (reuse `processCardScan` mapping) · features/shelters (flag)
@@ -27,17 +27,24 @@ why: >
   ผู้ประสบภัยที่ไม่ได้ลงทะเบียนล่วงหน้าเสียบบัตรที่ kiosk แล้วได้แค่ "ไม่พบข้อมูล" ต้องไปต่อคิว Station 1
   และให้เจ้าหน้าที่พิมพ์ข้อมูลจากบัตรเองทั้งหมด kiosk มีเครื่องอ่านชิปอยู่แล้ว จึงสร้าง record เบื้องต้นจากบัตรได้ทันที
   โดยให้ผู้ใช้กดยืนยันเองก่อน และติดสถานะแยกให้เจ้าหน้าที่รู้ว่ายังไม่ได้ตรวจสอบ
-migration: purely additive enum — doc schema_v ≤10 อ่านได้โดยไม่ backfill; เขียนใหม่ stamp schema_v 11
+migration: >
+  purely additive enum — doc schema_v ≤11 อ่านได้โดยไม่ backfill; เขียนใหม่ stamp schema_v 12.
+  ร่างเดิมเขียน 10→11; CR-148 ใช้ schema_v 11 ไปแล้วบน develop (2026-10-03)
+note: >
+  ไฟล์แผน implement docs/features/kiosk-walk-in-registration-implementation-plan.md ไม่มีใน repo
+  จึงไม่ได้อยู่ใน change นี้
 ---
 
-# ร่าง CR: Kiosk walk-in registration (`kiosk_registered`)
+# CR-149: Kiosk walk-in registration (`kiosk_registered`)
+
+> **สถานะ:** approved เป็น spec เมื่อ 2026-10-03 (Asia/Bangkok) โดย Project Owner Jakee Indapanya (GitHub net-lynx) · ยังไม่ implement
 
 > **สรุป (TL;DR)**
 >
 > - **เปลี่ยนอะไร:** ช่องทางบัตรประชาชนของ kiosk — ถ้าเลข 13 หลักไม่มี record ใด ๆ ในศูนย์ ให้แสดงปุ่ม「ลงทะเบียนใหม่」→ หน้า consent → อ่านชิปเต็ม (ชื่อ เพศ วันเกิด ที่อยู่ รูป) → สร้าง `evacuee` ใหม่ `current_stay.status = 'kiosk_registered'`, `registered_via: 'kiosk'`, `household_id: null`, `phone: null`
 > - **เพื่อใคร / ทำไม:** walk-in ไม่ต้องให้เจ้าหน้าที่พิมพ์ข้อมูลบัตรเอง · Station 1 เห็นคิว「ลงทะเบียนที่ตู้ (รอยืนยัน)」แยกชัด แล้วเติมเบอร์/ครัวเรือนก่อนส่งต่อ (`kiosk_registered → arriving`)
 > - **Dev ต้อง build:** enum ใหม่ + label/badge/metric ทุกจุด · lookup แยก "ไม่มี record" กับ "มีแต่ไม่เข้าเงื่อนไข" · endpoint `POST /api/v1/scanner/kiosk/register` · UI consent/เสียบบัตร/ผล · `scanner_client` อ่านเต็มเมื่ออยู่หน้าลงทะเบียน · Station 1 รับ `kiosk_registered` เป็นสถานะต้นทาง
-> - **กระทบ schema / scope:** evacuee `schema_v 10 → 11` (additive) · shelter flag ใหม่ (additive) · กลับทิศบางส่วนของ draft kiosk pre-registration check-in §1.3/§3 · อยู่นอก phase ปัจจุบัน → backlog จนกว่าเจ้าของสั่ง
+> - **กระทบ schema / scope:** evacuee `schema_v 11 → 12` (additive; CR-148 ใช้ 10→11 ไปแล้ว) · shelter flag ใหม่ (additive) · กลับทิศบางส่วนของ draft kiosk pre-registration check-in §1.3/§3 · อยู่นอก phase ปัจจุบัน → backlog จนกว่าเจ้าของสั่ง implement
 
 ---
 
@@ -49,7 +56,7 @@ migration: purely additive enum — doc schema_v ≤10 อ่านได้โ�
    - record ซ้อนกับผู้จองเว็บ → ปุ่มแสดงเฉพาะเมื่อ **ไม่มี record ใดเลย** ของเลขบัตรนี้ในศูนย์ (FR-KWR-02)
    - ปะปนกับผู้จองล่วงหน้าใน `pre_registered` → ใช้สถานะแยก `kiosk_registered` (FR-KWR-20)
    - PDPA อ่านเกินจำเป็น → อ่านเต็มเฉพาะหลังผู้ใช้กดลงทะเบียนและยินยอม (FR-KWR-10..12)
-4. **ทำไมเป็น stay status ไม่ใช่แค่ `registered_via`:** `registered_via` บอกช่องทาง ไม่บอกตำแหน่งใน pipeline · ถ้าใช้ `arriving` + `registered_via:'kiosk'` คิว screening/zone จะรับคนที่ยังไม่มีเบอร์และครัวเรือนต่อทันที (ข้าม Station 1) — สถานะแยกทำให้ทุก query บังคับได้ด้วย status เดียว
+4. **ทำไมเป็น stay status ไม่ใช่แค่ `registered_via`:** `registered_via` บอกช่องทาง ไม่บอกตำแหน่งใน pipeline · ถ้าใช้ `arriving` + `registered_via:'kiosk'` คิว screening/zone จะรับคนที่ยังไม่มีเบอร์และครัวเรือนต่อทันที (ข้าม Station 1) — สถานะแยกทำให้ทุก query บังคับได้ด้วย status เดียว · Project Owner เคาะให้ใช้ชื่อ `kiosk_registered` (Q10)
 
 ---
 
@@ -76,7 +83,7 @@ migration: purely additive enum — doc schema_v ≤10 อ่านได้โ�
 | สร้าง evacuee รายบุคคล (`household_id: null`) | สร้าง/เลือกครัวเรือนบน kiosk · เพิ่มสมาชิกที่ไม่มีบัตร                                         |
 | Station 1 ยืนยันและเติมข้อมูล → `arriving`    | กรอกเบอร์ / คัดกรองสุขภาพบน kiosk                                                              |
 | Shelter flag เปิด/ปิด (FR-KWR-01)             | ค้นใน Unassigned pool (Mongo) จาก kiosk — ให้ Station 1 federated search (CR-115) จับตอนยืนยัน |
-| — (พิมพ์ QR label: Q4 พักไว้ ไม่อยู่ในรอบนี้) | Kiosk edge/offline                                                                             |
+| — (พิมพ์ QR label: มติ Q4 พักไว้ ไม่อยู่ในรอบนี้) | Kiosk edge/offline                                                                             |
 
 ---
 
@@ -116,7 +123,7 @@ migration: purely additive enum — doc schema_v ≤10 อ่านได้โ�
 | FR-KWR-15  | Body = `smartCardDataSchema` + `consent: true` (literal) · ผิด schema → 400 `INVALID_GATE_INPUT`                                                                                                                                                                                                                                                                                                                                                                        |
 | FR-KWR-16  | Device auth เดียวกับ `/kiosk/*` · shelter มาจากเครื่องเท่านั้น · flag ปิด → 403 `KIOSK_METHOD_DISABLED` · rate limit ต่อเครื่อง → 429 `KIOSK_RATE_LIMITED` + `retry-after` · `cache-control: no-store`                                                                                                                                                                                                                                                                  |
 | FR-KWR-17  | Server ค้นเลขบัตรซ้ำก่อนเขียนทุกครั้ง: ไม่มี → สร้าง (201) · มี `kiosk_registered` → 200 คืน doc เดิม `created:false` (idempotent) · มี record อื่น → 409 `KIOSK_REGISTRATION_BLOCKED` · Couch error → 503                                                                                                                                                                                                                                                              |
-| FR-KWR-18  | Doc ที่สร้าง: `schema_v: 11`, `registered_via:'kiosk'`, `current_stay:{status:'kiosk_registered', zone:null, since:now}`, `household_id:null`, `phone:null`, `country:'THAILAND'`, `person_id:{cardType:'national_id', number}`, ชื่อ/เพศ/`birth_year` (พ.ศ.)/`age` จากบัตร, `card_snapshot` ตาม `cardSnapshotSchema` (รวมที่อยู่ + `photo_base64`) + `consented_at` (ts ที่กดยินยอม, additive), `privacy:{search_excluded:false}`, `created_by` = principal ของเครื่อง |
+| FR-KWR-18  | Doc ที่สร้าง: `schema_v: 12`, `registered_via:'kiosk'`, `current_stay:{status:'kiosk_registered', zone:null, since:now}`, `household_id:null`, `phone:null`, `country:'THAILAND'`, `person_id:{cardType:'national_id', number}`, ชื่อ/เพศ/`birth_year` (พ.ศ.)/`age` จากบัตร, `card_snapshot` ตาม `cardSnapshotSchema` (รวมที่อยู่ + `photo_base64`) + `consented_at` (ts ที่กดยินยอม, additive), `privacy:{search_excluded:false}`, `created_by` = principal ของเครื่อง |
 | FR-KWR-19  | Response: `{ shelter_code, created, member: KioskEvacueeSummary, qr_payload: 'evacuee:<ULID>' }` · ไม่มี PII เกิน FR-KPC-25                                                                                                                                                                                                                                                                                                                                             |
 | FR-KWR-19a | `scanner_client` allowlist เติม credential ให้ path นี้ (FR-KPC-06)                                                                                                                                                                                                                                                                                                                                                                                                     |
 
@@ -146,8 +153,8 @@ migration: purely additive enum — doc schema_v ≤10 อ่านได้โ�
 | ID        | Requirement                                                                                                                                                                              |
 | :-------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | FR-KWR-40 | ไม่พบ + `can_register:true` → กล่องสีเหลือง「ไม่พบข้อมูลลงทะเบียนล่วงหน้า」+ ปุ่มหลัก「ลงทะเบียนใหม่」+ ปุ่ม「กลับ」 · `can_register:false` → ข้อความ「กรุณาติดต่อเจ้าหน้าที่」+「กลับ」 |
-| FR-KWR-41 | สำเร็จ → สีเขียว「ลงทะเบียนสำเร็จ กรุณาไปพบเจ้าหน้าที่ที่จุดลงทะเบียน」+ ชื่อ (นามสกุลปิดบางส่วน) + ปุ่มพิมพ์ QR label (⏸ Q4 พักไว้ — ยังไม่ทำ)                                          |
-| FR-KWR-42 | เสียบบัตรซ้ำ (FR-KWR-03) → สีเหลือง「ท่านลงทะเบียนที่ตู้แล้ว กรุณาไปพบเจ้าหน้าที่」+ พิมพ์ QR ซ้ำได้ (⏸ Q4 พักไว้ — ยังไม่ทำ) · ไม่สร้าง doc ใหม่                                        |
+| FR-KWR-41 | สำเร็จ → สีเขียว「ลงทะเบียนสำเร็จ กรุณาไปพบเจ้าหน้าที่ที่จุดลงทะเบียน」+ ชื่อ (นามสกุลปิดบางส่วน) + ปุ่มพิมพ์ QR label (มติ Q4: พักไว้ — ยังไม่ทำในรอบนี้)                              |
+| FR-KWR-42 | เสียบบัตรซ้ำ (FR-KWR-03) → สีเหลือง「ท่านลงทะเบียนที่ตู้แล้ว กรุณาไปพบเจ้าหน้าที่」+ พิมพ์ QR ซ้ำได้ (มติ Q4: พักไว้ — ยังไม่ทำในรอบนี้) · ไม่สร้าง doc ใหม่                            |
 | FR-KWR-43 | 409 `KIOSK_REGISTRATION_BLOCKED` → 「กรุณาติดต่อเจ้าหน้าที่」 · 503 → 「ระบบไม่พร้อม ลองใหม่」                                                                                           |
 | FR-KWR-44 | ใช้งานครบโดยไม่ scroll ที่ 1024×600 และ 540×960 (FR-KPC-13)                                                                                                                              |
 
@@ -156,7 +163,7 @@ migration: purely additive enum — doc schema_v ≤10 อ่านได้โ�
 ## 5. Acceptance
 
 - **AC-KWR-01** flag ปิด: ไม่พบ record → ไม่มีปุ่มลงทะเบียน · เรียก `/register` ตรง → 403
-- **AC-KWR-02** flag เปิด, เลขบัตรไม่มีในศูนย์ → ปุ่มขึ้น → consent → เสียบบัตร → doc ใหม่ `kiosk_registered` + `card_snapshot` ครบ + `schema_v 11`
+- **AC-KWR-02** flag เปิด, เลขบัตรไม่มีในศูนย์ → ปุ่มขึ้น → consent → เสียบบัตร → doc ใหม่ `kiosk_registered` + `card_snapshot` ครบ + `schema_v 12`
 - **AC-KWR-03** กดยกเลิกที่ consent → ไม่มีการอ่านเต็ม (log scanner_client ไม่มี `read_all_data`) ไม่มี doc
 - **AC-KWR-04** เสียบบัตรซ้ำหลังลงทะเบียน → outcome `kiosk_registered` ไม่เกิด doc ที่ 2 · เรียก `/register` ซ้ำ → 200 `created:false`
 - **AC-KWR-05** เลขบัตรมี record staff/`checked_out`/`cancelled` → ไม่มีปุ่ม · `/register` → 409
@@ -164,13 +171,13 @@ migration: purely additive enum — doc schema_v ≤10 อ่านได้โ�
 - **AC-KWR-07** Station 1 เห็นแถว → เติมเบอร์ + ครัวเรือน → `arriving` · household ที่มีแต่สมาชิก `kiosk_registered` derive เป็น `pre-registered` ไม่ใช่ `cancelled`
 - **AC-KWR-08** Dashboard Forecast นับเพิ่ม 1 · Present/Kitchen ไม่เปลี่ยน · `/external/v1` residency ของ CID นี้ → 404
 - **AC-KWR-09** Couch ล่มระหว่าง lookup/register → 503 ไม่สร้าง doc
-- **DoD:** `pnpm lint` · `pnpm check` 0 error · `pnpm test` · `svelte-autofixer` ทุก `.svelte` ที่แตะ · `uv run pytest` (`backend/`, `worker/`, `scanner_client/`) · ทดสอบบน kiosk จริงตามแผน §8
+- **DoD:** `pnpm lint` · `pnpm check` 0 error · `pnpm test` · `svelte-autofixer` ทุก `.svelte` ที่แตะ · `uv run pytest` (`backend/`, `worker/`, `scanner_client/`) · ทดสอบบน kiosk จริง (ไฟล์แผน implement ไม่อยู่ใน change นี้)
 
 ---
 
 ## 6. Impact
 
-รายละเอียดราย file (~40 จุด) อยู่ใน [implementation plan §3](../features/kiosk-walk-in-registration-implementation-plan.md#3-impact-map). สรุป:
+ไฟล์แผน implement `docs/features/kiosk-walk-in-registration-implementation-plan.md` ไม่มีใน repo จึงไม่ได้อยู่ใน change นี้. สรุป:
 
 | พื้นที่          | กระทบ                                                                                                                                                                                            |
 | :--------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -185,44 +192,58 @@ migration: purely additive enum — doc schema_v ≤10 อ่านได้โ�
 
 ## 7. Migration
 
-- **evacuee schema_v 10 → 11:** purely additive enum `kiosk_registered` · doc เดิมอ่านได้ไม่ต้อง backfill · เขียนใหม่ stamp 11 · `validate_doc_update` ไม่มี enum stay status (ไม่ต้อง redeploy design doc) · view `occupancy` emit status ตรงตัว → key ใหม่โผล่เอง
+- **evacuee schema_v 11 → 12:** purely additive enum `kiosk_registered` · doc เดิมอ่านได้ไม่ต้อง backfill · เขียนใหม่ stamp 12 · `validate_doc_update` ไม่มี enum stay status (ไม่ต้อง redeploy design doc) · view `occupancy` emit status ตรงตัว → key ใหม่โผล่เอง
+- ร่างเดิมระบุ `schema_v 10 → 11` · บน `develop` วันที่ 2026-10-03 [CR-148](CR-148-pre-register-validation-and-fields.md) stamp evacuee `schema_v 11` ไปแล้ว (`religion_other`, `disability_other_detail`) ดังนั้น enum นี้ใช้เลขถัดไป
 - **shelter `feature_flags.kiosk_walk_in_registration_enabled`:** additive, ไม่มี key = `false`, ไม่ bump
 - **Mongo projection:** `public_*` รับค่า status ใหม่เป็น string อยู่แล้ว · backend set ที่ enumerate ต้องอัปเดตก่อน deploy worker ที่เขียนค่านี้ (ลำดับ deploy: backend → frontend)
 
 ---
 
-## 8. ข้อเสนอให้ Project Owner เคาะ
+## 8. มติ Project Owner
 
-ทุกข้อด้านล่างเป็น **ข้อเสนอของทีม kiosk** — ยังไม่มีข้อใดเคาะ · ค่าที่เสนอเขียนลง requirement ข้างบนแล้ว ถ้า PO เคาะต่างให้แก้ FR ที่อ้าง
+Project Owner Jakee Indapanya (GitHub net-lynx) เคาะทุกข้อด้านล่างเมื่อ **2026-10-03 (Asia/Bangkok)** ตรงตามข้อเสนอของทีม kiosk. ค่าเหล่านี้เป็นข้อกำหนดแล้ว และถูกเข้ารหัสไว้ใน requirement ด้านบน.
 
-| #   | คำถาม                                                                                                    | ข้อเสนอของทีม                                                                                                               | FR                   |
+| #   | คำถาม                                                                                                    | มติ                                                                                                                         | FR                   |
 | :-- | :------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------- | :------------------- |
-| Q1  | มี shelter flag เปิด/ปิด walk-in ที่ kiosk หรือเปิดทุกศูนย์                                              | flag ค่าเริ่มต้นปิด (ทีมยังหารืออยู่)                                                                                       | FR-KWR-01            |
-| Q2  | นับ `kiosk_registered` ใน occupancy ชุดไหน                                                               | Forecast เท่านั้น (เหมือน `arriving`)                                                                                       | FR-KWR-22            |
-| Q3  | kiosk ลงทะเบียนแบบบัตรละ 1 คน หรือเสียบต่อกันหลายใบเป็นครอบครัว                                          | A — บัตรละ 1 คน `household_id: null` · Station 1 รวมครัวเรือน (§8.1)                                                        | FR-KWR-23, FR-KWR-31 |
+| Q1  | มี shelter flag เปิด/ปิด walk-in ที่ kiosk หรือเปิดทุกศูนย์                                              | flag ต่อศูนย์ `kiosk_walk_in_registration_enabled` ค่าเริ่มต้นปิด (ไม่มี key = `false`)                                     | FR-KWR-01            |
+| Q2  | นับ `kiosk_registered` ใน occupancy ชุดไหน                                                               | Forecast เท่านั้น (ไม่นับ Present / In-zone / Kitchen / `daily_calc`)                                                       | FR-KWR-22            |
+| Q3  | kiosk ลงทะเบียนแบบบัตรละ 1 คน หรือเสียบต่อกันหลายใบเป็นครอบครัว                                          | A — บัตรละ 1 คน `household_id: null` · Station 1 รวมครัวเรือนภายหลัง (§8.1) · ไม่ใช้ B และไม่ใช้ C                          | FR-KWR-23, FR-KWR-31 |
 | Q4  | พิมพ์ QR label ให้ walk-in หลังลงทะเบียนไหม                                                              | พักไว้ ไม่อยู่ในรอบนี้                                                                                                      | FR-KWR-41/42         |
-| Q5  | เลขบัตรที่มี record `cancelled`/`checked_out` อยู่แล้ว — ให้ kiosk เปิด record เดิมใช้ใหม่แบบ CR-097 ไหม | ไม่เปิดใช้ใหม่ — ส่งไปเจ้าหน้าที่                                                                                           | FR-KWR-04/17         |
+| Q5  | เลขบัตรที่มี record `cancelled`/`checked_out` อยู่แล้ว — ให้ kiosk เปิด record เดิมใช้ใหม่แบบ CR-097 ไหม | ไม่เปิดใช้ใหม่ — ส่งไปเจ้าหน้าที่ · ไม่มีปุ่มลงทะเบียน                                                                      | FR-KWR-04/17         |
 | Q6  | เจ้าหน้าที่ยกเลิก/ปฏิเสธ `kiosk_registered` ได้ไหม                                                       | ได้ — ใช้ flow ยกเลิก pre-registration เดิม → `cancelled` (audit `previous_status` ตามค่าจริง)                              | FR-KWR-21            |
-| Q7  | เก็บหลักฐาน consent ไหม และลบรูปจากบัตรเมื่อไร                                                           | เก็บ `card_snapshot.consented_at` · ลบ `photo_base64` ตอน Station 1 submit โดยย้ายรูปไป `evacuee.photo`                     | FR-KWR-18, FR-KWR-33 |
-| Q8  | `kiosk_registered` เข้าคิวคัดกรองสุขภาพได้เลยไหม                                                         | ไม่ได้ — ต้องผ่าน Station 1 ก่อน                                                                                            | FR-KWR-26            |
-| Q10 | ชื่อสถานะ                                                                                                | `kiosk_registered` (ทางเลือกอื่น: `kiosk_walk_in`, `kiosk_pending`, `self_registered`, หรือไม่เพิ่มสถานะ — ดู Decision log) | FR-KWR-20            |
-| Q11 | ข้อมูลที่อ่านจากบัตรหลัง consent                                                                         | เต็มแบบ CR-097 (ชื่อ เพศ วันเกิด ที่อยู่ รูป) · ทางเลือกอื่น: ขั้นต่ำ (ไม่เก็บที่อยู่/รูป)                                  | FR-KWR-10, FR-KWR-18 |
-| Q12 | ถามเบอร์โทรบน kiosk ไหม                                                                                  | ไม่ถาม — `phone: null` ให้ Station 1 เติม                                                                                   | FR-KWR-18, FR-KWR-31 |
-| Q13 | วิธี track การเปลี่ยน                                                                                    | draft CR ไฟล์นี้ + implementation plan                                                                                      | —                    |
+| Q7  | เก็บหลักฐาน consent ไหม และลบรูปจากบัตรเมื่อไร                                                           | เก็บ `card_snapshot.consented_at` · ตอน Station 1 submit ย้าย `photo_base64` ไป `evacuee.photo` แล้วลบออกจาก `card_snapshot` ในการเขียนเดียวกัน · field อื่นคงไว้ | FR-KWR-18, FR-KWR-33 |
+| Q8  | `kiosk_registered` เข้าคิวคัดกรองสุขภาพได้เลยไหม                                                         | ไม่ได้ — ต้องเป็น `arriving` ก่อน (ผ่าน Station 1)                                                                          | FR-KWR-26            |
+| Q10 | ชื่อสถานะ                                                                                                | `kiosk_registered` · ไม่ใช้ `arriving` + `registered_via` อย่างเดียว · ไม่ใช้ชื่อ `kiosk_walk_in`, `kiosk_pending`, `self_registered` | FR-KWR-20            |
+| Q11 | ข้อมูลที่อ่านจากบัตรหลัง consent                                                                         | เต็มแบบ CR-097 (ชื่อ เพศ วันเกิด ที่อยู่ รูป) · ไม่ใช้ชุดขั้นต่ำ                                                            | FR-KWR-10, FR-KWR-18 |
+| Q12 | ถามเบอร์โทรบน kiosk ไหม                                                                                  | ไม่ถาม — `phone: null` · Station 1 เติมเบอร์ (หรือ「ไม่มี」) ก่อน promote เป็น `arriving`                                   | FR-KWR-18, FR-KWR-31 |
+| Q13 | วิธี track การเปลี่ยน                                                                                    | ไฟล์ CR นี้ · แผน implement ไม่มีใน repo จึงไม่ได้อยู่ใน change นี้                                                         | —                    |
 
-### 8.1 Q3 — ทางเลือกเรื่องครัวเรือน (ทีมเสนอ A)
+### 8.1 Q3 — ครัวเรือน: เคาะทางเลือก A
 
 | ทางเลือก                                       | kiosk ทำอะไร                                                                                                                                                                     | ข้อดี                                                                                                           | ข้อเสีย                                                                                                                                   |
 | :--------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------- |
-| **A. บัตรละ 1 คน** ⭐ เสนอ                     | สร้าง evacuee ทีละคน `household_id: null`                                                                                                                                        | ง่ายสุด · ไม่มี field ใหม่                                                                                      | Station 1 ต้องค้นหาและรวมสมาชิกทีละคนเอง (`PullPreRegisteredDialog`)                                                                      |
-| **B. เสียบต่อเนื่อง + group id**               | หลังลงทะเบียนสำเร็จมีปุ่ม「ลงทะเบียนคนในครอบครัวต่อ」→ consent + เสียบบัตรคนถัดไป · ทุกคนในรอบเดียวกันได้ `card_snapshot.kiosk_group_id` เดียวกัน · **ไม่สร้าง `household` doc** | Station 1 ดึงทั้งกลุ่มได้ครั้งเดียว แล้วสร้างครัวเรือนตอน submit · ไม่มีครัวเรือนที่ยังไม่ผ่านการตรวจค้างในระบบ | เพิ่ม field (additive ใน `card_snapshot`) · kiosk flow ยาวขึ้น                                                                            |
-| **C. เสียบต่อเนื่อง + สร้าง household ที่ตู้** | สร้าง `household` จริง (label อัตโนมัติ, หัวหน้า = คนแรก) แล้วผูกทุกคน                                                                                                           | Station 1 เห็นครัวเรือนทันที                                                                                    | ครัวเรือนยังไม่ผ่านการตรวจ (คนแปลกหน้าที่ต่อคิวกันอาจถูกรวม) · ยกเลิกแล้วเหลือ household กำพร้า · ที่อยู่ตามบัตรไม่ใช่ Residence (CR-106) |
+| **A. บัตรละ 1 คน** ⭐ เคาะแล้ว                 | สร้าง evacuee ทีละคน `household_id: null`                                                                                                                                        | ง่ายสุด · ไม่มี field ใหม่                                                                                      | Station 1 ต้องค้นหาและรวมสมาชิกทีละคนเอง (`PullPreRegisteredDialog`)                                                                      |
+| **B. เสียบต่อเนื่อง + group id** — ไม่ใช้      | หลังลงทะเบียนสำเร็จมีปุ่ม「ลงทะเบียนคนในครอบครัวต่อ」→ consent + เสียบบัตรคนถัดไป · ทุกคนในรอบเดียวกันได้ `card_snapshot.kiosk_group_id` เดียวกัน · **ไม่สร้าง `household` doc** | Station 1 ดึงทั้งกลุ่มได้ครั้งเดียว แล้วสร้างครัวเรือนตอน submit · ไม่มีครัวเรือนที่ยังไม่ผ่านการตรวจค้างในระบบ | เพิ่ม field (additive ใน `card_snapshot`) · kiosk flow ยาวขึ้น                                                                            |
+| **C. เสียบต่อเนื่อง + สร้าง household ที่ตู้** — ไม่ใช้ | สร้าง `household` จริง (label อัตโนมัติ, หัวหน้า = คนแรก) แล้วผูกทุกคน                                                                                                           | Station 1 เห็นครัวเรือนทันที                                                                                    | ครัวเรือนยังไม่ผ่านการตรวจ (คนแปลกหน้าที่ต่อคิวกันอาจถูกรวม) · ยกเลิกแล้วเหลือ household กำพร้า · ที่อยู่ตามบัตรไม่ใช่ Residence (CR-106) |
 
-ทุกทางเลือก: เด็กหรือคนที่ไม่มีบัตร Station 1 เป็นคนเพิ่ม · consent ต้องทำรายคน (เจ้าของบัตรแต่ละใบ) · FR-KWR-23 (derive ไม่ตกเป็น `cancelled`) ยังต้องมีไว้กันพลาด แม้ A/B จะไม่ผูกครัวเรือนที่ kiosk
+ทุกทางเลือก: เด็กหรือคนที่ไม่มีบัตร Station 1 เป็นคนเพิ่ม · consent ต้องทำรายคน (เจ้าของบัตรแต่ละใบ) · FR-KWR-23 (derive ไม่ตกเป็น `cancelled`) ยังต้องมีไว้กันพลาด แม้ A จะไม่ผูกครัวเรือนที่ kiosk
 
 ---
 
 ## Decision log
 
-- 2026-09-27 — proposed โดยทีม kiosk · ข้อเสนอทั้งหมดอยู่ใน §8 (Q1–Q8, Q10–Q13) รอ Project Owner เคาะ · Q3 ทีมเสนอ A (B group id / C สร้าง household ที่ตู้ — เหตุผลที่ไม่เสนอ §8.1)
-- ทางเลือกที่ทีมไม่เสนอ (PO เลือกแทนได้): ใช้ `arriving` + `registered_via:'kiosk'` โดยไม่เพิ่ม status (ไม่ bump schema_v แต่คิว screening/zone จะรับคนที่ยังไม่ผ่าน Station 1) · ชื่อ `kiosk_walk_in` / `kiosk_pending` / `self_registered`
+- 2026-09-27 — proposed โดยทีม kiosk · ข้อเสนอเดิมครอบคลุม Q1–Q8 และ Q10–Q13 · Q3 ทีมเสนอ A
+- 2026-10-03 (Asia/Bangkok) — **Project Owner Jakee Indapanya (GitHub net-lynx) เคาะทุกข้อและอนุมัติ spec นี้ (`status: approved`)** · ยังไม่ implement
+  - Q1: per-shelter feature flag `kiosk_walk_in_registration_enabled`, default off (missing key = false)
+  - Q2: `kiosk_registered` นับใน Forecast เท่านั้น ไม่นับ Present / In-zone / Kitchen / `daily_calc`
+  - Q3: ทางเลือก A — บัตรประชาชนหนึ่งใบ หนึ่งคน `household_id` null · Station 1 ผูกครัวเรือนทีหลัง · ไม่ใช้ B (group id) และไม่ใช้ C (สร้าง household ที่ตู้)
+  - Q4: พิมพ์ QR label พักไว้ ไม่อยู่ในรอบนี้
+  - Q5: record ที่ `cancelled` หรือ `checked_out` ของบัตรเดิมไม่ถูกเปิดใช้ใหม่ · ส่งไปเจ้าหน้าที่ · ไม่มีปุ่มลงทะเบียน
+  - Q6: เจ้าหน้าที่ยกเลิก/ปฏิเสธ `kiosk_registered` → `cancelled` ได้ ด้วย flow ยกเลิก pre-registration เดิม · audit `previous_status` ตามค่าจริง
+  - Q7: เก็บ `card_snapshot.consented_at` · ตอน Station 1 submit ย้าย `photo_base64` ไปเป็น image doc และ `evacuee.photo` แล้วลบ `photo_base64` ออกจาก `card_snapshot` ในการเขียนเดียวกัน · field อื่นใน `card_snapshot` คงไว้
+  - Q8: `kiosk_registered` ไม่เข้าคิวคัดกรองสุขภาพหรือจัดโซนจนกว่าสถานะเป็น `arriving`
+  - Q10: ชื่อสถานะคือ `kiosk_registered` · ไม่ใช้ `arriving` คู่กับ `registered_via` อย่างเดียว · ไม่เปลี่ยนชื่อเป็น `kiosk_walk_in`, `kiosk_pending`, หรือ `self_registered`
+  - Q11: หลัง consent อ่านบัตรเต็มแบบ CR-097 (ชื่อ เพศ วันเกิด ที่อยู่ รูป) ไม่ใช่ชุดขั้นต่ำ
+  - Q12: ไม่ถามเบอร์โทรบน kiosk · `phone` เป็น null · Station 1 เติมเบอร์ (หรือ「ไม่มี」) ก่อน promote เป็น `arriving`
+  - Q13: track การเปลี่ยนด้วยไฟล์ CR นี้ · ไฟล์แผน `docs/features/kiosk-walk-in-registration-implementation-plan.md` ไม่มีใน repo จึงไม่ได้อยู่ใน change นี้
+- 2026-10-03 — รันเลข CR-149 จาก `docs/changes/_index.md` บน `develop` (เลขที่จัดสรรล่าสุดคือ CR-148; ไม่ใช้ช่องว่าง 131–133 และ 144–147) · evacuee `schema_v` ที่ร่างไว้ 10→11 ถูก CR-148 ใช้ไปแล้ว จึงเป็น 11→12
