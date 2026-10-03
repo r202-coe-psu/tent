@@ -1,14 +1,19 @@
 import { expect, type Page } from '@playwright/test';
 import { ulid } from '../../src/lib/db/ulid';
 import {
+	allDocuments,
 	couchLogin,
 	couchReq,
 	createCouchUser,
 	deleteCouchUser,
-	COUCH_BASE,
+	deleteDocument,
+	getDocument,
+	putDocument,
+	seedSecurityQuestion,
 	SA_ROLES,
 	SM_SH001_ROLES,
 	STAFF_SH001_ROLES,
+	type CouchDocument,
 	type TestUser
 } from '../helpers/couch';
 import { clearSession, injectSession } from '../helpers/login';
@@ -19,40 +24,10 @@ export const CATALOG_DB = 'catalog';
 export const POINTER_ID = 'sop_profile_active:global';
 export const BACK_OFFICE_SOP_PATH = '/back-office/sop-parameters';
 export const SYSTEM_SOP_PATH = '/system-management/sop-parameters';
-const APP_BASE_URL = 'http://localhost:4173';
 const SHELTER_STORAGE_KEY = 'tent.activeShelterCode';
+const CLEANUP_PASSES = 3;
 
-export type CouchDocument = Record<string, unknown> & { _id: string; _rev?: string };
 export type Ratios = Record<string, string>;
-
-export async function routeBrowserCouchThroughApp(page: Page): Promise<void> {
-	await page.route(`${COUCH_BASE}/**`, async (route) => {
-		const request = route.request();
-		const origin = new URL(request.url());
-		const allowOrigin = new URL(APP_BASE_URL).origin;
-		const corsHeaders = {
-			'access-control-allow-origin': allowOrigin,
-			'access-control-allow-credentials': 'true',
-			'access-control-allow-methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
-			'access-control-allow-headers':
-				request.headers()['access-control-request-headers'] ?? 'Content-Type, Accept',
-			'access-control-expose-headers': 'ETag, Location, Content-Type'
-		};
-
-		if (request.method() === 'OPTIONS') {
-			await route.fulfill({ status: 204, headers: corsHeaders });
-			return;
-		}
-
-		const response = await route.fetch({
-			url: `${APP_BASE_URL}/couch${origin.pathname}${origin.search}`
-		});
-		await route.fulfill({
-			response,
-			headers: { ...response.headers(), ...corsHeaders }
-		});
-	});
-}
 
 export interface ScenarioUser extends TestUser {
 	session: string;
@@ -66,25 +41,6 @@ export interface SopScenario {
 	staff: ScenarioUser;
 	pointerSnapshot: CouchDocument | null;
 	ownedDocumentIds: Set<string>;
-}
-
-async function seedSecurityQuestion(name: string): Promise<void> {
-	const path = `/_users/org.couchdb.user:${encodeURIComponent(name)}`;
-	const got = await couchReq('GET', path);
-	if (got.status >= 400 || !got.data || typeof got.data !== 'object') {
-		throw new Error(`Could not load E2E user ${name} for setup`);
-	}
-	const res = await couchReq('PUT', path, {
-		...(got.data as Record<string, unknown>),
-		security_question: {
-			question_id: 'high_school',
-			answer_hash: 'e2e'.padEnd(64, '0'),
-			salt: 'e2e'.padEnd(32, '0'),
-			set_at: new Date().toISOString()
-		},
-		must_change_password: false
-	});
-	if (res.status >= 400) throw new Error(`Could not finish E2E user setup for ${name}`);
 }
 
 async function createScenarioUser(
@@ -138,12 +94,20 @@ async function restorePointer(scenario: SopScenario): Promise<void> {
 	if (!pointsAtOwned) return;
 
 	const path = `/${CATALOG_DB}/${encodeURIComponent(POINTER_ID)}`;
-	const res = scenario.pointerSnapshot
-		? await couchReq('PUT', path, { ...scenario.pointerSnapshot, _rev: current._rev })
-		: await couchReq('DELETE', `${path}?rev=${encodeURIComponent(current._rev!)}`);
-	if (res.status >= 400) {
-		throw new Error(`Could not restore the active SOP master pointer (HTTP ${res.status})`);
+	let rev = current._rev;
+	let status = 0;
+	for (let pass = 1; pass <= CLEANUP_PASSES; pass += 1) {
+		const res = scenario.pointerSnapshot
+			? await couchReq('PUT', path, { ...scenario.pointerSnapshot, _rev: rev })
+			: await couchReq('DELETE', `${path}?rev=${encodeURIComponent(rev!)}`);
+		status = res.status;
+		if (status < 400 || status === 404) return;
+		if (status !== 409) break;
+		const latest = await getDocument(CATALOG_DB, POINTER_ID);
+		if (!latest) return;
+		rev = latest._rev;
 	}
+	throw new Error(`Could not restore the active SOP master pointer (HTTP ${status})`);
 }
 
 export async function cleanupSopScenario(scenario: SopScenario): Promise<void> {
@@ -158,7 +122,7 @@ export async function cleanupSopScenario(scenario: SopScenario): Promise<void> {
 	}
 
 	for (const db of [CATALOG_DB, SHELTER_DB]) {
-		for (let pass = 0; pass < 3; pass += 1) {
+		for (let pass = 1; pass <= CLEANUP_PASSES; pass += 1) {
 			let documents: CouchDocument[];
 			try {
 				documents = await allDocuments(db);
@@ -171,6 +135,7 @@ export async function cleanupSopScenario(scenario: SopScenario): Promise<void> {
 			);
 			if (owned.length === 0) break;
 			const results = await Promise.allSettled(owned.map((doc) => deleteDocument(db, doc)));
+			if (pass < CLEANUP_PASSES) continue;
 			for (const result of results) if (result.status === 'rejected') collect(result.reason);
 		}
 	}
@@ -242,7 +207,7 @@ export async function seedActiveE2eMaster(
 		slug,
 		ratios,
 		version: 1,
-		active: false
+		active: true
 	};
 	await putDocument(CATALOG_DB, profile);
 	scenario.ownedDocumentIds.add(profile._id);
@@ -286,46 +251,9 @@ export async function switchAccount(
 
 // ─── CouchDB access ──────────────────────────────────────────────────────────
 
-export async function getDocument(db: string, id: string): Promise<CouchDocument | null> {
-	const res = await couchReq('GET', `/${db}/${encodeURIComponent(id)}`);
-	if (res.status === 404) return null;
-	if (res.status >= 400 || !res.data || typeof res.data !== 'object') {
-		throw new Error(`Could not read ${id} from ${db} (HTTP ${res.status})`);
-	}
-	return res.data as CouchDocument;
-}
-
 export async function findDocuments(
 	db: string,
 	predicate: (doc: CouchDocument) => boolean
 ): Promise<CouchDocument[]> {
 	return (await allDocuments(db)).filter(predicate);
-}
-
-async function putDocument(db: string, doc: CouchDocument): Promise<void> {
-	const res = await couchReq('PUT', `/${db}/${encodeURIComponent(doc._id)}`, doc);
-	if (res.status >= 400) {
-		throw new Error(`Could not seed ${doc._id} in ${db} (HTTP ${res.status})`);
-	}
-}
-
-async function allDocuments(db: string): Promise<CouchDocument[]> {
-	const res = await couchReq('GET', `/${db}/_all_docs?include_docs=true`);
-	if (res.status >= 400 || !res.data || typeof res.data !== 'object') {
-		throw new Error(`Could not list ${db} during E2E setup/cleanup`);
-	}
-	const rows = (res.data as { rows?: Array<{ doc?: CouchDocument }> }).rows ?? [];
-	return rows.flatMap((row) => (row.doc ? [row.doc] : []));
-}
-
-async function deleteDocument(db: string, doc: CouchDocument): Promise<void> {
-	const rev = doc._rev;
-	if (typeof rev !== 'string') return;
-	const res = await couchReq(
-		'DELETE',
-		`/${db}/${encodeURIComponent(doc._id)}?rev=${encodeURIComponent(rev)}`
-	);
-	if (res.status >= 400 && res.status !== 404) {
-		throw new Error(`Could not remove E2E document ${doc._id} (HTTP ${res.status})`);
-	}
 }

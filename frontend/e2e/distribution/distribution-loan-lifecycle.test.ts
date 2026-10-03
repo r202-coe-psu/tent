@@ -12,7 +12,6 @@ import {
 	createDistributionScenario,
 	findShelterDocuments,
 	getShelterDocument,
-	routeBrowserCouchThroughApp,
 	seedDistributingTicket,
 	seedItemWithStock,
 	seedRecipient,
@@ -20,6 +19,7 @@ import {
 	type SeededItem,
 	type SeededRecipient
 } from './distribution';
+import { routeBrowserCouchThroughApp } from '../helpers/couch';
 
 const LOAN_QTY = '5';
 const PARTIAL_RETURN_QTY = '2';

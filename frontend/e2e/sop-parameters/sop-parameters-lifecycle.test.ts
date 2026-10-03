@@ -1,20 +1,18 @@
 import { expect, test, type Page } from '@playwright/test';
+import { getDocument, routeBrowserCouchThroughApp, type CouchDocument } from '../helpers/couch';
 import { clearSession } from '../helpers/login';
 import {
 	activeMasterRatios,
 	CATALOG_DB,
 	findDocuments,
 	foreignActiveOverrides,
-	getDocument,
 	POINTER_ID,
-	routeBrowserCouchThroughApp,
 	seedActiveE2eMaster,
 	SHELTER_CODE,
 	SHELTER_DB,
 	switchAccount,
 	SYSTEM_SOP_PATH,
-	withSopScenario,
-	type CouchDocument
+	withSopScenario
 } from './sop-parameters';
 
 test.describe.configure({ mode: 'serial' });
