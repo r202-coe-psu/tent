@@ -15,6 +15,7 @@ import {
 	readForecastOccupancy
 } from '$lib/features/public-register/booking-gate.server';
 import {
+	refineMemberRules,
 	unifiedRegistrationInputSchema,
 	type UnifiedRegistrationInput
 } from '$lib/features/people/server';
@@ -68,6 +69,8 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 				household: unifiedRegistrationInputSchema.shape.household
 			})
 			.superRefine((data, ctx) => {
+				// `.shape.members` skips the unified schema's own superRefine — re-apply member rules (CR-148)
+				data.members.forEach((member, index) => refineMemberRules(member, ctx, ['members', index]));
 				const joining = Boolean(data.join_match_token?.trim());
 				const headPhone = data.members[0]?.phone?.trim() ?? '';
 				if (!headPhone) {

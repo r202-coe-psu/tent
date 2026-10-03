@@ -5,9 +5,14 @@ import {
 	classifyScreeningQueueTab,
 	classifyZoningQueueTab,
 	countPresentOccupantsByZone,
+	formatQueueWait,
+	isInShelterStatus,
 	nextQueueLabel,
+	nextScreeningQueueEvacuee,
 	parseZoningQrCode,
-	recommendZoneKind
+	recommendZoneKind,
+	sortByZoningQueueSince,
+	zoningQueueSince
 } from './intake-pipeline';
 
 function ev(partial: {
@@ -97,6 +102,35 @@ describe('nextQueueLabel', () => {
 			})
 		).toBe('พักแล้ว');
 	});
+
+	it('ignores a stale zone on an arriving record', () => {
+		expect(
+			nextQueueLabel(ev({ status: 'arriving', zone: 'Z1' }), {
+				enableMedicalScreening: true,
+				hasScreening: false
+			})
+		).toBe('รอแพทย์');
+		expect(
+			nextQueueLabel(ev({ status: 'arriving', zone: 'Z1' }), {
+				enableMedicalScreening: true,
+				hasScreening: true
+			})
+		).toBe('รอโซน');
+	});
+});
+
+describe('isInShelterStatus', () => {
+	it('includes active and room_confirmed only', () => {
+		expect(isInShelterStatus(ev({ status: 'active', zone: 'Z1' }))).toBe(true);
+		expect(isInShelterStatus(ev({ status: 'room_confirmed', zone: 'Z1' }))).toBe(true);
+	});
+
+	it('excludes reported-in (arriving) and pre-registered people', () => {
+		expect(isInShelterStatus(ev({ status: 'arriving' }))).toBe(false);
+		expect(isInShelterStatus(ev({ status: 'arriving', zone: 'Z1' }))).toBe(false);
+		expect(isInShelterStatus(ev({ status: 'pre_registered' }))).toBe(false);
+		expect(isInShelterStatus(ev({ status: 'temporary_leave', zone: 'Z1' }))).toBe(false);
+	});
 });
 
 describe('classifyZoningQueueTab', () => {
@@ -185,6 +219,29 @@ describe('classifyScreeningQueueTab', () => {
 	});
 });
 
+describe('nextScreeningQueueEvacuee', () => {
+	it('returns the first arriving unscreened person, skipping the one just saved', () => {
+		const list = [
+			ev({ status: 'pre_registered', id: 'evacuee:p' }),
+			ev({ status: 'arriving', id: 'evacuee:a' }),
+			ev({ status: 'arriving', id: 'evacuee:b' }),
+			ev({ status: 'arriving', id: 'evacuee:c' })
+		];
+		expect(nextScreeningQueueEvacuee(list, new Set(['evacuee:b']), 'evacuee:a')?._id).toBe(
+			'evacuee:c'
+		);
+		expect(nextScreeningQueueEvacuee(list, new Set())?._id).toBe('evacuee:a');
+	});
+
+	it('returns null when only pre-registered or screened people remain', () => {
+		const list = [
+			ev({ status: 'pre_registered', id: 'evacuee:p' }),
+			ev({ status: 'arriving', id: 'evacuee:a' })
+		];
+		expect(nextScreeningQueueEvacuee(list, new Set(['evacuee:a']))).toBeNull();
+	});
+});
+
 describe('recommendZoneKind', () => {
 	it('recommends quarantine when EWAR surveillance symptoms are present (CR-106)', () => {
 		expect(
@@ -251,5 +308,48 @@ describe('countPresentOccupantsByZone', () => {
 describe('buildZoningPath', () => {
 	it('builds path-only deep link', () => {
 		expect(buildZoningPath('evacuee:1')).toBe('/onsite/zoning/evacuee:1');
+	});
+
+	it('adds focus=zone for scan hand-off', () => {
+		expect(buildZoningPath('evacuee:1', { focusZone: true })).toBe(
+			'/onsite/zoning/evacuee:1?focus=zone'
+		);
+	});
+});
+
+describe('zoningQueueSince / sortByZoningQueueSince', () => {
+	it('prefers the latest screening time over updated_at', () => {
+		const e = ev({ status: 'arriving' });
+		expect(zoningQueueSince(e, '2026-09-04T10:00:00.000Z')).toBe('2026-09-04T10:00:00.000Z');
+		expect(zoningQueueSince(e)).toBe('2026-09-03T00:00:00.000Z');
+	});
+
+	it('orders oldest waiting first without mutating input', () => {
+		const a = ev({ status: 'arriving', id: 'evacuee:a' });
+		const b = ev({ status: 'arriving', id: 'evacuee:b' });
+		const input = [a, b];
+		const sorted = sortByZoningQueueSince(input, {
+			'evacuee:a': '2026-09-04T12:00:00.000Z',
+			'evacuee:b': '2026-09-04T08:00:00.000Z'
+		});
+		expect(sorted.map((e) => e._id)).toEqual(['evacuee:b', 'evacuee:a']);
+		expect(input.map((e) => e._id)).toEqual(['evacuee:a', 'evacuee:b']);
+	});
+});
+
+describe('formatQueueWait', () => {
+	const now = new Date('2026-09-04T12:00:00.000Z');
+
+	it('formats minutes, hours and days', () => {
+		expect(formatQueueWait('2026-09-04T11:59:40.000Z', now)).toBe('เพิ่งเข้าคิว');
+		expect(formatQueueWait('2026-09-04T11:55:00.000Z', now)).toBe('รอ 5 นาที');
+		expect(formatQueueWait('2026-09-04T10:00:00.000Z', now)).toBe('รอ 2 ชม.');
+		expect(formatQueueWait('2026-09-04T09:50:00.000Z', now)).toBe('รอ 2 ชม. 10 นาที');
+		expect(formatQueueWait('2026-09-03T09:00:00.000Z', now)).toBe('รอ 1 วัน 3 ชม.');
+	});
+
+	it('returns — for missing or invalid input', () => {
+		expect(formatQueueWait(null, now)).toBe('—');
+		expect(formatQueueWait('not-a-date', now)).toBe('—');
 	});
 });

@@ -18,6 +18,7 @@ import {
 	buildValidateDocUpdate,
 	PEOPLE_MANGO_INDEXES,
 	REFERRAL_MANGO_INDEXES,
+	REQUISITION_TICKET_MANGO_INDEXES,
 	TRANSFER_LEDGER_MANGO_INDEXES
 } from './shelter-access-design';
 import {
@@ -464,6 +465,23 @@ export async function redeployShelterAccessDesign(
  */
 export async function deployReferralMangoIndexes(db: string): Promise<void> {
 	for (const def of REFERRAL_MANGO_INDEXES) {
+		const res = await adminRaw(`/${db}/_index`, 'POST', def);
+		if (res.status >= 400) {
+			const detail = (res.data as { reason?: string; error?: string } | null) ?? {};
+			throw new ServiceError(
+				'INTERNAL',
+				`Mango index ${def.name} deploy failed (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+			);
+		}
+	}
+}
+
+/**
+ * Idempotent deploy of requisition_ticket Mango indexes (CR-121/CR-141).
+ * CouchDB returns 200 when an identical named index already exists.
+ */
+export async function deployRequisitionTicketMangoIndexes(db: string): Promise<void> {
+	for (const def of REQUISITION_TICKET_MANGO_INDEXES) {
 		const res = await adminRaw(`/${db}/_index`, 'POST', def);
 		if (res.status >= 400) {
 			const detail = (res.data as { reason?: string; error?: string } | null) ?? {};

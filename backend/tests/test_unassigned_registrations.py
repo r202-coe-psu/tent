@@ -1020,3 +1020,204 @@ async def test_join_target_not_found_returns_404(
     )
     assert response.status_code == 404
     assert response.json()["errors"][0]["error"] == "JOIN_TARGET_NOT_FOUND"
+
+
+# --------------------------------------------------------------- CR-148 FR-18
+
+_DORM_HOUSEHOLD: dict = {
+    "housing_type": "apartment_dorm",
+    "address_no": "305 หอสุขใจ อาคาร B ชั้น 3",
+    "subdistrict": "คอหงส์",
+    "district": "หาดใหญ่",
+    "province": "สงขลา",
+    "postal_code": "90110",
+    "pets": [],
+}
+
+
+async def test_create_round_trips_cr148_member_fields(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    payload = _create_payload()
+    payload["members"][0].update(
+        {
+            "religion": "other",
+            "religion_other": "  ซิกข์  ",
+            "vulnerable_groups": ["disability_other"],
+            "disability_other_detail": " ไม่ได้ยินข้างซ้าย ",
+        }
+    )
+    response = await client.post(
+        "/public/v1/unassigned-registrations", headers=auth_headers, json=payload
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["members"][0]["religion_other"] == "ซิกข์"
+    assert body["members"][0]["disability_other_detail"] == "ไม่ได้ยินข้างซ้าย"
+
+    stored = await UnassignedRegistration.get(body["id"])
+    assert stored is not None
+    assert stored.members[0].religion_other == "ซิกข์"
+    assert stored.members[0].disability_other_detail == "ไม่ได้ยินข้างซ้าย"
+
+
+async def test_create_drops_orphan_cr148_member_details(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    payload = _create_payload()
+    payload["members"][0].update(
+        {
+            "religion": "buddhist",
+            "religion_other": "ซิกข์",
+            "vulnerable_groups": ["elderly"],
+            "disability_other_detail": "ไม่ได้ยิน",
+        }
+    )
+    response = await client.post(
+        "/public/v1/unassigned-registrations", headers=auth_headers, json=payload
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["members"][0]["religion_other"] is None
+    assert body["members"][0]["disability_other_detail"] is None
+    stored = await UnassignedRegistration.get(body["id"])
+    assert stored is not None
+    assert stored.members[0].religion_other is None
+    assert stored.members[0].disability_other_detail is None
+
+
+async def test_create_rejects_religion_other_over_60_chars(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    payload = _create_payload()
+    payload["members"][0].update({"religion": "other", "religion_other": "ก" * 61})
+    response = await client.post(
+        "/public/v1/unassigned-registrations", headers=auth_headers, json=payload
+    )
+    assert response.status_code == 422
+    assert await UnassignedRegistration.count() == 0
+
+
+async def test_create_persists_dorm_fields_for_apartment_dorm(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    household = {
+        **_DORM_HOUSEHOLD,
+        "dorm_name": " หอสุขใจ ",
+        "dorm_building": "B",
+        "dorm_floor": "3",
+        "dorm_room": "305",
+    }
+    response = await client.post(
+        "/public/v1/unassigned-registrations",
+        headers=auth_headers,
+        json=_create_payload(household=household),
+    )
+    assert response.status_code == 201
+    stored = await UnassignedRegistration.get(response.json()["id"])
+    assert stored is not None
+    assert stored.household.dorm_name == "หอสุขใจ"
+    assert stored.household.dorm_building == "B"
+    assert stored.household.dorm_floor == "3"
+    assert stored.household.dorm_room == "305"
+
+
+@pytest.mark.parametrize("missing", ["dorm_name", "dorm_room"])
+async def test_create_rejects_apartment_dorm_without_required_dorm_fields(
+    client: AsyncClient, auth_headers: dict[str, str], missing: str
+) -> None:
+    household = {**_DORM_HOUSEHOLD, "dorm_name": "หอสุขใจ", "dorm_room": "305"}
+    household[missing] = "   "
+    response = await client.post(
+        "/public/v1/unassigned-registrations",
+        headers=auth_headers,
+        json=_create_payload(household=household),
+    )
+    assert response.status_code == 422
+    assert await UnassignedRegistration.count() == 0
+
+
+async def test_create_clears_dorm_fields_for_other_housing_types(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    payload = _create_payload()
+    payload["household"].update(
+        {"dorm_name": "หอสุขใจ", "dorm_building": "B", "dorm_floor": "3", "dorm_room": "305"}
+    )
+    response = await client.post(
+        "/public/v1/unassigned-registrations", headers=auth_headers, json=payload
+    )
+    assert response.status_code == 201
+    stored = await UnassignedRegistration.get(response.json()["id"])
+    assert stored is not None
+    hh = stored.household
+    assert (hh.dorm_name, hh.dorm_building, hh.dorm_floor, hh.dorm_room) == (
+        None,
+        None,
+        None,
+        None,
+    )
+
+
+async def test_create_rejects_pet_total_over_10(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    payload = _create_payload()
+    payload["household"]["pets"] = [{"species": "dog", "count": 6}, {"species": "cat", "count": 5}]
+    response = await client.post(
+        "/public/v1/unassigned-registrations", headers=auth_headers, json=payload
+    )
+    assert response.status_code == 422
+    assert await UnassignedRegistration.count() == 0
+
+
+async def test_create_rejects_pet_row_count_over_10(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    payload = _create_payload()
+    payload["household"]["pets"] = [{"species": "dog", "count": 11}]
+    response = await client.post(
+        "/public/v1/unassigned-registrations", headers=auth_headers, json=payload
+    )
+    assert response.status_code == 422
+
+
+async def test_create_allows_pet_total_of_exactly_10(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    payload = _create_payload()
+    payload["household"]["pets"] = [{"species": "dog", "count": 1} for _ in range(10)]
+    response = await client.post(
+        "/public/v1/unassigned-registrations", headers=auth_headers, json=payload
+    )
+    assert response.status_code == 201
+
+
+async def test_join_rejects_pets_pushing_household_over_10(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    first_payload = _create_payload()
+    first_payload["household"]["pets"] = [{"species": "dog", "count": 1} for _ in range(9)]
+    first = await client.post(
+        "/public/v1/unassigned-registrations", headers=auth_headers, json=first_payload
+    )
+    assert first.status_code == 201
+
+    join_payload = _create_payload(join_registration_id=first.json()["id"])
+    join_payload["members"][0].update(
+        {
+            "first_name": "สมหญิง",
+            "phone": "0899999999",
+            "person_id": {"cardType": "national_id", "number": "9876543210987"},
+        }
+    )
+    join_payload["household"]["pets"] = [{"species": "cat", "count": 1} for _ in range(2)]
+    joined = await client.post(
+        "/public/v1/unassigned-registrations", headers=auth_headers, json=join_payload
+    )
+    assert joined.status_code == 422
+    assert joined.json()["errors"][0]["error"] == "PETS_LIMIT_EXCEEDED"
+    stored = await UnassignedRegistration.get(first.json()["id"])
+    assert stored is not None
+    assert len(stored.household.pets) == 9
+    assert len(stored.members) == 1

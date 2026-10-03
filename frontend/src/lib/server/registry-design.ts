@@ -49,7 +49,7 @@ export function buildRegistryValidateDocUpdate(): string {
  * descending with `limit=1` to bootstrap the shelter-code sequence without a
  * full registry scan.
  * `by_normalized_name` — normalized shelter names for duplicate detection on the import
- * path without loading the whole registry for every item (CR-126).
+ * path without loading the whole registry for every item (CR-141).
  */
 export function buildRegistryDesignDoc(): RegistryDesignDoc {
 	return {

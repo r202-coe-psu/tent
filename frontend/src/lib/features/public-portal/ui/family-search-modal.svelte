@@ -6,6 +6,9 @@
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Input } from '$lib/components/ui/input';
+	import { PUBLIC_FAMILY_SEARCH_I18N } from '$lib/constants/i18n';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { formatDate, getTranslation } from '$lib/utils/i18n';
 	import { familySearch } from '../data/public-api';
 	import { searchResultKey } from '../domain/mappers';
 	import StayStatusChip from './stay-status-chip.svelte';
@@ -17,25 +20,31 @@
 
 	let { open = $bindable(false) }: Props = $props();
 
+	const t = $derived(getTranslation(PUBLIC_FAMILY_SEARCH_I18N, langState.current));
+
 	let query = $state('');
 	let isLoading = $state(false);
 	let results = $state<FamilySearchResult[] | null>(null);
-	let error = $state('');
+	/** A server message when there is one; otherwise a copy key so it follows the language toggle. */
+	let error = $state<{ message: string } | 'tooShort' | 'networkError' | null>(null);
+	const errorText = $derived(
+		error === null ? '' : typeof error === 'string' ? t[error] : error.message
+	);
 
 	async function performSearch() {
 		if (query.trim().length < 3) {
-			error = 'กรุณากรอกข้อมูลอย่างน้อย 3 ตัวอักษร';
+			error = 'tooShort';
 			return;
 		}
 		isLoading = true;
-		error = '';
+		error = null;
 		results = null;
 
 		try {
 			const data = await familySearch(query.trim());
 			results = data.results;
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้';
+			error = e instanceof Error && e.message ? { message: e.message } : 'networkError';
 		} finally {
 			isLoading = false;
 		}
@@ -49,15 +58,17 @@
 	}
 
 	function genderLabel(gender: string | null | undefined) {
-		if (gender === 'male') return 'ชาย';
-		if (gender === 'female') return 'หญิง';
-		return 'อื่นๆ';
+		if (gender === 'male') return t.genderMale;
+		if (gender === 'female') return t.genderFemale;
+		return t.genderOther;
 	}
 
 	function formatDateTime(iso: string | null | undefined) {
-		if (!iso) return 'ไม่ระบุเวลา';
-		const d = new Date(iso);
-		return Number.isNaN(d.getTime()) ? 'ไม่ระบุเวลา' : `${d.toLocaleString('th-TH')} น.`;
+		const formatted = formatDate(iso, langState.current, {
+			dateStyle: 'medium',
+			timeStyle: 'short'
+		});
+		return formatted ? `${formatted}${t.timeSuffix}` : t.noTime;
 	}
 </script>
 
@@ -66,10 +77,10 @@
 		<Dialog.Header>
 			<Dialog.Title class="flex items-center gap-2 text-lg">
 				<Search class="h-5 w-5 text-primary" />
-				ค้นหาผู้พักพิง
+				{t.title}
 			</Dialog.Title>
 			<Dialog.Description>
-				ค้นด้วยชื่อ นามสกุล หรือเบอร์โทรศัพท์ — ผลลัพธ์ถูกปกปิดข้อมูลบางส่วนตาม PDPA
+				{t.description}
 			</Dialog.Description>
 		</Dialog.Header>
 
@@ -77,27 +88,27 @@
 			<Input
 				bind:value={query}
 				onkeydown={onKeydown}
-				placeholder="ชื่อ นามสกุล หรือเบอร์โทรศัพท์"
-				aria-label="คำค้นหา"
+				placeholder={t.placeholder}
+				aria-label={t.queryAria}
 			/>
 			<Button type="button" onclick={performSearch} disabled={isLoading}>
-				{isLoading ? 'กำลังค้นหา…' : 'ค้นหา'}
+				{isLoading ? t.searching : t.search}
 			</Button>
 		</div>
 
-		{#if error}
+		{#if errorText}
 			<p
 				class="rounded-xl border border-danger/30 bg-danger-muted/40 p-3 text-sm text-danger"
 				role="alert"
 			>
-				{error}
+				{errorText}
 			</p>
 		{/if}
 
 		{#if results}
 			{#if results.length === 0}
 				<p class="rounded-xl bg-muted/50 p-6 text-center text-sm text-muted-foreground">
-					ไม่พบผู้ที่ตรงกับคำค้นหา — ลองใช้ชื่อเต็มหรือเบอร์โทรศัพท์
+					{t.noResults}
 				</p>
 			{:else}
 				<ul class="space-y-2">
@@ -112,7 +123,7 @@
 							</p>
 							<p class="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
 								<MapPin class="h-3 w-3" />
-								{result.shelter_name ?? 'ไม่ระบุศูนย์'}
+								{result.shelter_name ?? t.noShelter}
 							</p>
 							<p class="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
 								<Clock class="h-3 w-3" />

@@ -163,7 +163,7 @@ describe('vulnerable_groups vs special_needs', () => {
 		);
 		expect(e.vulnerable_groups).toEqual(['wheelchair', 'pregnant']);
 		expect(e.special_needs).toEqual(['ใช้ออกซิเจน']);
-		expect(e.schema_v).toBe(10);
+		expect(e.schema_v).toBe(11);
 
 		const bare = createEvacuee(
 			{ first_name: 'A', last_name: 'B', gender: 'other', phone: null },
@@ -236,7 +236,7 @@ describe('Anonymous ID', () => {
 			},
 			ctx
 		);
-		expect(a.schema_v).toBe(10);
+		expect(a.schema_v).toBe(11);
 		expect(a.person_id?.cardType).toBe('anonymous');
 		expect(isAnonymousId(a.person_id?.number ?? '')).toBe(true);
 		expect(b.person_id?.number).not.toBe(a.person_id?.number);
@@ -274,11 +274,11 @@ describe('Anonymous ID', () => {
 		);
 		const replaced = replacePersonId(e, {
 			cardType: 'national_id',
-			number: '1103700123456'
+			number: '1103700123458'
 		});
 		expect(replaced.person_id).toEqual({
 			cardType: 'national_id',
-			number: '1103700123456'
+			number: '1103700123458'
 		});
 		expect(replaced._id).toBe(e._id);
 		expect(isAnonymousId(replaced.person_id?.number ?? '')).toBe(false);
@@ -305,7 +305,7 @@ describe('createEvacuee', () => {
 		);
 		expect(e._id.startsWith('evacuee:')).toBe(true);
 		expect(e.type).toBe('evacuee');
-		expect(e.schema_v).toBe(10);
+		expect(e.schema_v).toBe(11);
 		expect(e.shelter_code).toBe('SH001');
 		expect(e.created_by).toBe('staff1');
 		expect(e.created_at).toBe(e.updated_at);
@@ -318,7 +318,7 @@ describe('createEvacuee', () => {
 		expect(isEvacuee(e)).toBe(true);
 	});
 
-	it('stamps schema_v: 10 and supports status arriving', () => {
+	it('stamps schema_v: 11 and supports status arriving', () => {
 		const e = createEvacuee(
 			{
 				first_name: 'วิภา',
@@ -329,13 +329,13 @@ describe('createEvacuee', () => {
 			},
 			ctx
 		);
-		expect(e.schema_v).toBe(10);
+		expect(e.schema_v).toBe(11);
 		expect(e.current_stay.status).toBe('arriving');
 	});
 
 	it('creates evacuee from card snapshot with schema_v 8, status pre_registered, and registered_via kiosk', () => {
 		const card = {
-			citizen_id: '1234567890123',
+			citizen_id: '1234567890121',
 			title_th: 'นาย',
 			first_name_th: 'สมศักดิ์',
 			last_name_th: 'รักชาติ',
@@ -357,13 +357,13 @@ describe('createEvacuee', () => {
 		expect(kioskEv.current_stay.status).toBe('pre_registered');
 		expect(kioskEv.household_id).toBeNull();
 		expect(kioskEv.registered_via).toBe('kiosk');
-		expect(kioskEv.person_id?.number).toBe('1234567890123');
+		expect(kioskEv.person_id?.number).toBe('1234567890121');
 		expect(kioskEv.card_snapshot?.station_name).toBe('จุดสแกน Kiosk 1');
 	});
 
 	it('creates draft evacuee and calculates age automatically from birth_year_ce when age is not provided', () => {
 		const card = {
-			citizen_id: '1234567890123',
+			citizen_id: '1234567890121',
 			first_name_th: 'วิชัย',
 			last_name_th: 'ใจดี',
 			birth_year_ce: 1996,
@@ -563,19 +563,27 @@ describe('evacueeInputSchema birth_year', () => {
 	it('rejects a birth_year implying an age over 150 years', () => {
 		const currentBEYear = new Date().getFullYear() + 543;
 		const minBirthYearBE = currentBEYear - 150;
-		const result = evacueeInputSchema.safeParse({ ...base, birth_year: minBirthYearBE });
+		const result = evacueeInputSchema.safeParse({ ...base, birth_year: minBirthYearBE - 1 });
 		expect(result.success).toBe(false);
 		if (!result.success) {
 			expect(result.error.issues.map((i) => i.message)).toContain(
-				`ปีเกิด (พ.ศ.) ต้องมากกว่า ${minBirthYearBE}`
+				`ปีเกิด (พ.ศ.) ต้องอยู่ระหว่าง ${minBirthYearBE}–${currentBEYear}`
 			);
 		}
 	});
 
-	it('accepts a birth_year implying an age of exactly 150 years', () => {
+	it('accepts a birth_year implying an age of exactly 150 years (CR-148 inclusive bound)', () => {
 		const currentBEYear = new Date().getFullYear() + 543;
-		const result = evacueeInputSchema.safeParse({ ...base, birth_year: currentBEYear - 150 + 1 });
+		const result = evacueeInputSchema.safeParse({ ...base, birth_year: currentBEYear - 150 });
 		expect(result.success).toBe(true);
+	});
+
+	it('rejects a birth_year that is not 4 digits (CR-148)', () => {
+		const result = evacueeInputSchema.safeParse({ ...base, birth_year: 253 });
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			expect(result.error.issues.map((i) => i.message)).toContain('กรุณากรอกปีเกิด 4 หลัก');
+		}
 	});
 
 	it('accepts a newborn — birth_year equal to the current year (age 0)', () => {
@@ -590,7 +598,7 @@ describe('evacueeInputSchema birth_year', () => {
 		expect(result.success).toBe(false);
 		if (!result.success) {
 			expect(result.error.issues.map((i) => i.message)).toContain(
-				'ปีเกิด (พ.ศ.) ต้องไม่เป็นปีในอนาคต'
+				`ปีเกิด (พ.ศ.) ต้องอยู่ระหว่าง ${currentBEYear - 150}–${currentBEYear}`
 			);
 		}
 	});
@@ -1294,7 +1302,7 @@ describe('household housing_type and homeless Residence', () => {
 			},
 			ctx
 		);
-		expect(h.schema_v).toBe(5);
+		expect(h.schema_v).toBe(6);
 		expect(h.housing_type).toBe('owned_house');
 		expect(h.residence_landmark).toBe('ใกล้สะพาน');
 		expect(housingTypeSchema.parse('homeless')).toBe('homeless');
@@ -1372,7 +1380,7 @@ describe('createHousehold', () => {
 
 		expect(h._id.startsWith('household:')).toBe(true);
 		expect(h.type).toBe('household');
-		expect(h.schema_v).toBe(5);
+		expect(h.schema_v).toBe(6);
 		expect(h.status).toBe('arriving');
 		expect(h.checkout_destination).toBeNull();
 		expect(h.shelter_code).toBe('SH001');
