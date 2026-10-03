@@ -219,6 +219,50 @@ location /public-api/ {
 ตัวอย่างเต็มสำหรับ compose-nginx อยู่ที่ [`nginx/nginx.conf`](nginx/nginx.conf)
 (`docker-compose.staging.yml` / `docker-compose.production.yml` — proxy ไป `http://fastapi:9000`)
 
+## Edge @ศูนย์ (central ⇄ edge replication)
+
+Edge server ที่ศูนย์ replicate กับ central ผ่าน path `/sync` บน domain ของแอป (`SYNC_URL=https://<domain>/sync`)
+ไม่ต้องขอ DNS หรือ cert เพิ่ม ข้อควรรู้: ตอน cutover (LAN DNS ชี้ domain แอปมาที่ edge) job จะยิงเข้า edge ตัวเองและล้ม
+จนกว่าจะ cutback — หลังคืน DNS แล้ว `edge-watchdog` เตะ job ให้เอง (ตอน WAN ขาด sync ไม่ได้อยู่แล้ว)
+คู่มือทีละขั้น (ทำอะไร / ทำไม / ตรวจยังไง): ฝั่ง central [`SETUP-CENTRAL.md`](docs/couchdb-replication/SETUP-CENTRAL.md) · ฝั่ง edge [`SETUP-EDGE.md`](docs/couchdb-replication/SETUP-EDGE.md)
+
+**Central** — เพิ่ม `location /sync/` ใน server block ของแอปที่มีอยู่แล้วใน host nginx
+(stack `*.no-nginx.yml` — CouchDB bind `COUCHDB_BIND_IP:COUCHDB_PORT`) แล้ว `nginx -t && systemctl reload nginx`:
+
+```nginx
+    location ^~ /sync/_utils { return 404; }
+
+    location /sync/ {
+        client_max_body_size 64M;                 # replicator _bulk_docs
+        proxy_pass http://127.0.0.1:5984/;        # มี / ท้าย = ตัด /sync ออก
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;                      # continuous _changes
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+```
+
+stack ที่ใช้ compose nginx (`docker-compose.{staging,production}.yml`) มี `location /sync/` ใน
+[`nginx/nginx.conf`](nginx/nginx.conf) อยู่แล้ว และต้องมี replication user ต่อศูนย์ (`repl_<code>`)
+ที่เป็น member ของ `registry` / `catalog` / `shelter_<code>` (`scripts/central-repl-user.sh`)
+
+**Edge** — clone repo บน edge server แล้ว:
+
+```bash
+cp .env.edge.example .env                       # SHELTER_CODE, SYNC_URL, credential
+cp couchdb-edge-example.ini couchdb-edge.ini    # secret ของ edge: openssl rand -hex 16 (มี auth_plugins=noop ที่ path /sync ต้องใช้)
+docker compose -f docker-compose.edge.yml up -d
+docker logs couch-edge-provision                # scripts/edge-init.sh: DB + _security + replication jobs
+```
+
+[`docker-compose.edge.yml`](docker-compose.edge.yml) = CouchDB + staff SPA + nginx ([`nginx-edge/`](nginx-edge/))
+ไม่มี FastAPI / MongoDB / worker (OD-1) — public plane และ `/external/` ตอบ unavailable ระหว่าง edge-only
+
+service `edge-watchdog` ใน stack เดียวกันเตะ replication job ที่ค้างอยู่ใน backoff หลัง WAN/central ขาดนาน ([`scripts/edge-watchdog.sh`](scripts/edge-watchdog.sh) — รายละเอียดใน SETUP-EDGE.md หัวข้อ "Watchdog")
+
 ## แหล่งอ้างอิง
 
 - ข้อเสนอโครงการฉบับสมบูรณ์: [docs/source/psu-smart-shelter-f-20260522.txt](docs/source/psu-smart-shelter-f-20260522.txt)
