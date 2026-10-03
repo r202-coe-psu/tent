@@ -3,7 +3,7 @@ id: CR-124
 title: Staff Google MFA + SSO login for linked accounts (Phase 1 step-up; Phase 2 Google login)
 status: done
 date: 2026-09-15
-updated: 2026-09-16
+updated: 2026-09-29
 requested_by: hosting policy / ทีม
 decided_by: project owner (Phase 1 approve 2026-09-15; Phase 2 scope 2026-09-16 — amend CR + option C + mint AuthSession; Phase 2 implement done 2026-09-16)
 layer: stable
@@ -185,7 +185,7 @@ sequenceDiagram
 ### 3.7 Phase 2 — Google login (enrolled only) + mint cookie
 
 - **FR-09 (Login button):** หน้า login (`login-form.svelte`) มีปุ่ม Google ที่เริ่ม `mode=login` (เช่น `GET /api/v1/auth/oauth/google/start?mode=login`)
-- **FR-09a (Not enrolled):** ถ้า `sub` ไม่ตรงกับ `_users` ใดที่มี Google linked → **ไม่** mint session; redirect กลับ `/login` พร้อม error ที่ UI แสดงด้วย toast (เช่น ต้อง login ด้วยรหัสผ่านแล้วผูก Google ใน Settings)
+- **FR-09a (Not enrolled):** _(superseded by [CR-141](CR-141-oauth-first-login-link.md) — not-linked `sub` → `pending_link` → `/login/link`)_ ถ้า `sub` ไม่ตรงกับ `_users` ใดที่มี Google linked → **ไม่** mint session; redirect กลับ `/login` พร้อม error ที่ UI แสดงด้วย toast (เช่น ต้อง login ด้วยรหัสผ่านแล้วผูก Google ใน Settings)
 - **FR-09b (Mint AuthSession):** เมื่อพบ user ที่ enrolled แล้ว BFF ต้องสร้าง cookie `AuthSession` ที่ CouchDB ยอมรับ โดย:
   1. อ่าน cookie auth secret จาก CouchDB config (`chttpd_auth` / `couch_httpd_auth` — ชื่อ section ตามเวอร์ชันที่ deploy ใช้)
   2. อ่าน `salt` จากเอกสาร `_users` ของ user นั้น

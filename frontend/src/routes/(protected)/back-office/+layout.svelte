@@ -1,7 +1,12 @@
 <script lang="ts">
 	import BackofficeNavbar from '$lib/components/backoffice-navbar.svelte';
 	import type { LayoutProps } from './$types';
-	import { backofficeNavbarGroups, isGroup } from '$lib/components/backoffice-navbar/static';
+	import {
+		backofficeNavbarGroups,
+		isGroup,
+		type BackofficeNavbarNode,
+		type BackofficeNavbarLeaf
+	} from '$lib/components/backoffice-navbar/static';
 	import { page } from '$app/state';
 	import { backofficeState } from '$lib/stores/backoffice.svelte';
 	import { endpointStore } from '$lib/stores/endpoint.svelte';
@@ -14,25 +19,46 @@
 	let { children }: LayoutProps = $props();
 	let reauthOpen = $state(false);
 
+	function findMatchingLeaf(
+		node: BackofficeNavbarNode,
+		currentPath: string
+	): BackofficeNavbarLeaf | null {
+		if (isGroup(node)) {
+			for (const child of node.children) {
+				const match = findMatchingLeaf(child, currentPath);
+				if (match) return match;
+			}
+			return null;
+		}
+		if (node.href && currentPath.startsWith(node.href)) {
+			return node;
+		}
+		return null;
+	}
 	// Find the current page info (label, icon) dynamically
 	const currentPageNode = $derived.by(() => {
 		let currentPath = page.url.pathname;
 		if (currentPath.startsWith('/back-office/households')) {
 			currentPath = '/back-office/evacuee-management';
 		}
+		// Reached from the ticket queue ("จัดการ"), not the kitchen overview — keep
+		// the header label matching where the user came from, not the /kitchen prefix.
+		if (currentPath.startsWith('/back-office/kitchen/receive-stock')) {
+			currentPath = '/back-office/tickets/kitchen';
+		}
+		// Ticket detail (/back-office/tickets/{id}) has no nav entry of its own —
+		// it's a drill-down from the kitchen ticket queue, so it should keep that
+		// queue's header label instead of falling back to the generic default.
+		if (
+			currentPath.startsWith('/back-office/tickets/') &&
+			!currentPath.startsWith('/back-office/tickets/kitchen')
+		) {
+			currentPath = '/back-office/tickets/kitchen';
+		}
 		for (const group of backofficeNavbarGroups) {
 			for (const item of group.items) {
-				if (isGroup(item)) {
-					for (const child of item.children) {
-						if (child.href && currentPath.startsWith(child.href)) {
-							return child;
-						}
-					}
-				} else {
-					if (item.href && currentPath.startsWith(item.href)) {
-						return item;
-					}
-				}
+				const match = findMatchingLeaf(item, currentPath);
+				if (match) return match;
 			}
 		}
 		return null;

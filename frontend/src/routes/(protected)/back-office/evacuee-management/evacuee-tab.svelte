@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import PaginationControls from '$lib/components/pagination-controls.svelte';
+	import LoadingScreen from '$lib/components/loading-screen.svelte';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
@@ -397,9 +398,7 @@
 
 	<!-- List -->
 	{#if query.isLoading}
-		<div class="flex items-center justify-center py-16">
-			<p class="text-sm text-muted-foreground">กำลังโหลดข้อมูล...</p>
-		</div>
+		<LoadingScreen />
 	{:else if query.isError}
 		<div
 			class="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"

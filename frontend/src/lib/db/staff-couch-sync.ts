@@ -1,5 +1,6 @@
 import type { QueryClient } from '@tanstack/svelte-query';
 import { startCatalogMasterLiveQuery } from '$lib/features/catalog';
+import { startDistributionLiveQuery } from '$lib/features/distribution';
 import { startKitchenLiveQuery } from '$lib/features/kitchen';
 import { startOperationsLiveQuery } from '$lib/features/operations';
 import { startPeopleLiveQuery } from '$lib/features/people';
@@ -9,6 +10,7 @@ import { startDailyCalcLiveQuery } from '$lib/features/resource-calc';
 import { SHELTER_REGISTRY_DB, startSheltersLiveQuery } from '$lib/features/shelters';
 import { startSopRatioLiveQuery } from '$lib/features/sop-ratios';
 import { CATALOG_DB, startCatalogLiveQuery } from '$lib/features/supply';
+import { startTicketsLiveQuery } from '$lib/features/tickets';
 import { startVolunteersLiveQuery } from '$lib/features/volunteers';
 import { endpointStore } from '$lib/stores/endpoint.svelte';
 import { startChangesSubscriber, type ChangesSubscriberHandle } from './changes-subscriber';
@@ -36,10 +38,12 @@ export const STAFF_LIVE_QUERY_STARTERS: readonly LiveQueryStarter[] = [
 	startPeopleImportLiveQuery,
 	startOperationsLiveQuery,
 	startKitchenLiveQuery,
+	startTicketsLiveQuery,
 	startSopRatioLiveQuery,
 	startDailyCalcLiveQuery,
 	startReferralsLiveQuery,
-	startVolunteersLiveQuery
+	startVolunteersLiveQuery,
+	startDistributionLiveQuery
 ];
 
 export interface StartStaffCouchSyncOptions {
