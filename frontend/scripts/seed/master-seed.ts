@@ -511,7 +511,22 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 	);
 	const rev = getStatus === 200 ? (existingDdoc as { _rev: string })._rev : undefined;
 	const validateFn = `function (newDoc, oldDoc, userCtx) {
-  if (userCtx.roles.indexOf('_admin') !== -1 || userCtx.roles.indexOf('system_admin') !== -1) {
+  if (userCtx.roles.indexOf('_admin') !== -1) {
+    return;
+  }
+  if (oldDoc && oldDoc.type === 'item_category' && oldDoc.is_protected === true) {
+    if (newDoc._deleted === true) {
+      throw({ forbidden: 'Cannot delete system protected category: ' + oldDoc._id });
+    }
+    if (newDoc.system_key !== oldDoc.system_key) {
+      throw({ forbidden: 'system_key is immutable on protected categories' });
+    }
+    // CR-140: default_class is editable on protected categories (amends CR-119 FR-04).
+    if (newDoc.is_protected !== true) {
+      throw({ forbidden: 'is_protected flag cannot be removed' });
+    }
+  }
+  if (userCtx.roles.indexOf('system_admin') !== -1) {
     return;
   }
   if (oldDoc && oldDoc.shelter_code !== newDoc.shelter_code) {
@@ -666,12 +681,12 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		{
 			name: 'ไข่ไก่',
 			category: 'item_category:food',
-			base_unit: 'piece',
+			base_unit: 'egg',
 			type_class: 'CONSUMABLE',
 			extra: {
 				conversions: [{ uom_name: 'pack', multiplier: '30' }],
 				default_inventory_uom: 'pack',
-				default_issue_uom: 'piece',
+				default_issue_uom: 'egg',
 				storage_type: 'DRY',
 				shelf_life_days: 21
 			}
@@ -996,12 +1011,12 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		{
 			name: 'ผ้าห่มกันหนาว',
 			category: 'item_category:bedding',
-			base_unit: 'piece',
+			base_unit: 'cloth',
 			type_class: 'DURABLE',
 			extra: {
 				conversions: [{ uom_name: 'bundle', multiplier: '10' }],
 				default_inventory_uom: 'bundle',
-				default_issue_uom: 'piece',
+				default_issue_uom: 'cloth',
 				returnable: true,
 				qty_per_person: 1,
 				distribution_type: 'one_time'
@@ -1010,12 +1025,12 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		{
 			name: 'เสื่อปูนอน',
 			category: 'item_category:bedding',
-			base_unit: 'piece',
+			base_unit: 'cloth',
 			type_class: 'DURABLE',
 			extra: {
 				conversions: [{ uom_name: 'bundle', multiplier: '10' }],
 				default_inventory_uom: 'bundle',
-				default_issue_uom: 'piece',
+				default_issue_uom: 'cloth',
 				returnable: true,
 				qty_per_person: 1,
 				distribution_type: 'one_time'
@@ -1037,11 +1052,11 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		{
 			name: 'มุ้ง',
 			category: 'item_category:bedding',
-			base_unit: 'piece',
+			base_unit: 'cloth',
 			type_class: 'DURABLE',
 			extra: {
-				default_inventory_uom: 'piece',
-				default_issue_uom: 'piece',
+				default_inventory_uom: 'cloth',
+				default_issue_uom: 'cloth',
 				returnable: true,
 				qty_per_person: 1,
 				distribution_type: 'one_time'
@@ -1079,6 +1094,14 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 		Boolean(id && /^item_master:[0-9A-HJKMNP-TV-Z]{26}$/.test(id));
 	const legacyItemMasterDocsToDelete: Array<{ _id: string; _rev: string }> = [];
 
+	/** Canonical semantic UOM corrections: piece → egg/cloth (1:1 count; safe to overwrite). */
+	const FORCE_BASE_UNIT_FROM_PIECE: ReadonlyMap<string, 'egg' | 'cloth'> = new Map([
+		['ไข่ไก่', 'egg'],
+		['ผ้าห่มกันหนาว', 'cloth'],
+		['เสื่อปูนอน', 'cloth'],
+		['มุ้ง', 'cloth']
+	]);
+
 	const itemMasters = itemMastersDef.map((def) => {
 		const existing = existingItemMastersByName.get(def.name);
 		let id: string;
@@ -1104,15 +1127,27 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 			typeof def.extra?.default_issue_uom === 'string'
 				? def.extra.default_issue_uom
 				: def.base_unit;
+		const forcedBaseUnit = FORCE_BASE_UNIT_FROM_PIECE.get(def.name);
+		const existingBaseNormalized =
+			normalizeKnownSeedUnitCode(existing?.base_unit, existingUnitCodes) ??
+			normalizeLegacyBaseUnit(existing?.base_unit);
+		const shouldForceBaseUnit =
+			forcedBaseUnit !== undefined &&
+			def.base_unit === forcedBaseUnit &&
+			(existingBaseNormalized === 'piece' || existingBaseNormalized === undefined);
+		const existingBaseUnit = shouldForceBaseUnit ? undefined : existingBaseNormalized;
 		const existingInventoryUom =
 			normalizeKnownSeedUnitCode(existing?.default_inventory_uom, existingUnitCodes) ??
 			configuredInventoryUom;
+		const existingIssueNormalized = normalizeKnownSeedUnitCode(
+			existing?.default_issue_uom,
+			existingUnitCodes
+		);
 		const existingIssueUom =
-			normalizeKnownSeedUnitCode(existing?.default_issue_uom, existingUnitCodes) ??
-			configuredIssueUom;
-		const existingBaseUnit =
-			normalizeKnownSeedUnitCode(existing?.base_unit, existingUnitCodes) ??
-			normalizeLegacyBaseUnit(existing?.base_unit);
+			shouldForceBaseUnit &&
+			(existingIssueNormalized === 'piece' || existingIssueNormalized === undefined)
+				? configuredIssueUom
+				: (existingIssueNormalized ?? configuredIssueUom);
 		const conversions = resolveItemMasterConversions(
 			existing?.conversions,
 			def.extra?.conversions,
@@ -1169,7 +1204,7 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 			label: 'ข้าวไข่เจียว',
 			ingredients: [
 				{ name: 'ข้าวสาร', quantity: '0.2', uom: 'kg' },
-				{ name: 'ไข่ไก่', quantity: '2', uom: 'piece' },
+				{ name: 'ไข่ไก่', quantity: '2', uom: 'egg' },
 				{ name: 'น้ำมันพืช', quantity: '0.02', uom: 'bottle' }
 			]
 		},
@@ -1203,7 +1238,7 @@ export async function seedCatalog(): Promise<Map<string, string>> {
 			label: 'ข้าวไข่พะโล้ไก่',
 			ingredients: [
 				{ name: 'ข้าวสาร', quantity: '0.2', uom: 'kg' },
-				{ name: 'ไข่ไก่', quantity: '2', uom: 'piece' },
+				{ name: 'ไข่ไก่', quantity: '2', uom: 'egg' },
 				{ name: 'เนื้อไก่สด', quantity: '0.1', uom: 'kg' },
 				{ name: 'น้ำตาลทราย', quantity: '0.02', uom: 'kg' },
 				{ name: 'น้ำปลา', quantity: '0.01', uom: 'bottle' }

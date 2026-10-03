@@ -41,3 +41,32 @@ export function resolveMasterLabel(
 	if (code.startsWith('item_')) return '';
 	return code;
 }
+
+/**
+ * English names for shelter types stored as free Thai text before the
+ * master-data registry existed. Thai needs no table: the stored text is Thai.
+ */
+const LEGACY_SHELTER_TYPE_EN: Record<string, string> = {
+	วัด: 'Temple',
+	โรงเรียน: 'School',
+	ศาลาประชาคม: 'Community Hall',
+	ศูนย์กีฬา: 'Sports Centre',
+	อาคารราชการ: 'Government Building',
+	หน่วยงานราชการ: 'Government Agency',
+	ศูนย์อพยพ: 'Evacuation Center',
+	มหาวิทยาลัย: 'University',
+	มัสยิด: 'Mosque',
+	โบสถ์: 'Church',
+	พื้นที่เอกชน: 'Private Area',
+	อื่นๆ: 'Other',
+	unspecified: 'Unspecified'
+};
+
+/** Display label for a shelter type code, in the given language. */
+export function shelterTypeLabel(
+	code: string | null | undefined,
+	labels: Record<string, string> | undefined,
+	lang: string = 'th'
+): string {
+	return resolveMasterLabel(code, labels, lang === 'en' ? LEGACY_SHELTER_TYPE_EN : undefined);
+}

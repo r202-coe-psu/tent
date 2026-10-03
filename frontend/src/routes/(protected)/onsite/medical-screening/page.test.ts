@@ -328,7 +328,7 @@ describe('ClinicalScreeningForm component', () => {
 
 		// Section 2: Vulnerable Groups (editable checkbox grid)
 		expect(result.body).toContain('2. กลุ่มเปราะบาง (Vulnerable Groups)');
-		expect(result.body).toContain('เลือกได้หลายรายการ (ไม่บังคับ)');
+		expect(result.body).toContain('เลือกได้หลายข้อ');
 		expect(result.body).toContain('ผู้ใช้วีลแชร์');
 		expect(result.body).toContain('ผู้ป่วยติดเตียง');
 		expect(result.body).toContain('id="med-vg-wheelchair"');

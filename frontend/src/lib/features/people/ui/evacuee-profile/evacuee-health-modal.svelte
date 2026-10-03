@@ -264,6 +264,7 @@
 						</div>
 
 						<VulnerableGroupsFields
+							showDisabilityDetail={false}
 							bind:vulnerable_groups={vulnerableGroups}
 							disabled={saving}
 							idPrefix="edit-vg"

@@ -48,10 +48,11 @@
 				<a
 					href={resolve('/')}
 					onclick={leavePortal}
-					class="hidden items-center gap-1.5 rounded-full bg-white/10 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-white/20 sm:flex"
+					class="flex min-h-11 items-center gap-1.5 rounded-full bg-white/10 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none sm:px-4"
 				>
-					<ArrowLeft class="size-3.5" />
-					กลับหน้าหลัก
+					<ArrowLeft class="size-4 sm:size-3.5" aria-hidden="true" />
+					<span class="sm:hidden">กลับ</span>
+					<span class="hidden sm:inline">กลับหน้าหลัก</span>
 				</a>
 			</div>
 		</div>

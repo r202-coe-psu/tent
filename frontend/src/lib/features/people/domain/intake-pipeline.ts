@@ -15,7 +15,7 @@ export type ZoningRecommendKind = 'quarantine' | 'vulnerable' | 'general';
 /**
  * 「คิวถัดไป」 column for Station 1 registration desk.
  * Flag on: arriving without screening → รอแพทย์; arriving with screening (or any arriving when
- * flag off) and no zone → รอโซน; active + zone → รอยืนยันถึงโซน; room_confirmed /
+ * flag off) → รอโซน (a stale zone on arriving is ignored); active + zone → รอยืนยันถึงโซน; room_confirmed /
  * temporary_leave (and other legacy zoned stays) → พักแล้ว.
  */
 export function nextQueueLabel(
@@ -26,6 +26,14 @@ export function nextQueueLabel(
 	const zone = evacuee.current_stay?.zone;
 	const hasZone = zone != null && zone !== '';
 
+	// Arriving wins over a stale zone left on legacy / hand-edited docs — still in the intake pipeline
+	if (status === 'arriving') {
+		if (opts.enableMedicalScreening && !opts.hasScreening) {
+			return 'รอแพทย์';
+		}
+		return 'รอโซน';
+	}
+
 	if (status === 'active' && hasZone) {
 		return 'รอยืนยันถึงโซน';
 	}
@@ -34,18 +42,20 @@ export function nextQueueLabel(
 		return 'พักแล้ว';
 	}
 
-	if (status === 'arriving') {
-		if (opts.enableMedicalScreening && !opts.hasScreening) {
-			return 'รอแพทย์';
-		}
-		return 'รอโซน';
-	}
-
 	if (status === 'pre_registered') {
 		return '—';
 	}
 
 	return '—';
+}
+
+/**
+ * 「พักในศูนย์แล้ว」 on the Station 1 desk: checked in (active) or zone arrival confirmed.
+ * Never includes arriving / pre_registered — those are still in the intake pipeline.
+ */
+export function isInShelterStatus(evacuee: Evacuee): boolean {
+	const status = evacuee.current_stay?.status;
+	return status === 'active' || status === 'room_confirmed';
 }
 
 /**
@@ -66,6 +76,26 @@ export function classifyScreeningQueueTab(
 		return 'screened';
 	}
 	return 'pending';
+}
+
+/**
+ * Next person for the Station 2 「คนถัดไปในคิว」 button: first `arriving` person still waiting
+ * for screening (queue order), skipping `excludeId`. Pre-registered people are not on site yet,
+ * so they are never auto-opened.
+ */
+export function nextScreeningQueueEvacuee<T extends Evacuee>(
+	evacuees: readonly T[],
+	screenedEvacueeIds: Set<string>,
+	excludeId?: string | null
+): T | null {
+	return (
+		evacuees.find(
+			(e) =>
+				e._id !== excludeId &&
+				e.current_stay?.status === 'arriving' &&
+				classifyScreeningQueueTab(e, screenedEvacueeIds) === 'pending'
+		) ?? null
+	);
 }
 
 /**
@@ -194,6 +224,45 @@ export function parseZoningQrCode(input: string): string | null {
 	return trimmed;
 }
 
-export function buildZoningPath(evacueeId: string): string {
-	return `/onsite/zoning/${evacueeId}`;
+export function buildZoningPath(evacueeId: string, opts: { focusZone?: boolean } = {}): string {
+	const path = `/onsite/zoning/${evacueeId}`;
+	return opts.focusZone ? `${path}?focus=zone` : path;
+}
+
+/**
+ * When a person joined the Station 3 「พร้อมจัดโซน」 queue: their latest screening time when
+ * medical screening produced one, otherwise the last update of the arriving record.
+ */
+export function zoningQueueSince(evacuee: Evacuee, latestScreeningAt?: string | null): string {
+	return latestScreeningAt || evacuee.updated_at || evacuee.created_at;
+}
+
+/** Oldest-waiting first for the 「พร้อมจัดโซน」 queue. Does not mutate the input. */
+export function sortByZoningQueueSince<T extends Evacuee>(
+	evacuees: readonly T[],
+	latestScreeningAt: Readonly<Record<string, string>>
+): T[] {
+	return [...evacuees].sort((a, b) =>
+		zoningQueueSince(a, latestScreeningAt[a._id]).localeCompare(
+			zoningQueueSince(b, latestScreeningAt[b._id])
+		)
+	);
+}
+
+/** 「รอ 5 นาที」 / 「รอ 2 ชม. 10 นาที」 / 「รอ 1 วัน 3 ชม.」 — elapsed time since `sinceIso`. */
+export function formatQueueWait(sinceIso: string | null | undefined, now: Date): string {
+	if (!sinceIso) return '—';
+	const since = new Date(sinceIso).getTime();
+	if (Number.isNaN(since)) return '—';
+	const minutes = Math.max(0, Math.floor((now.getTime() - since) / 60_000));
+	if (minutes < 1) return 'เพิ่งเข้าคิว';
+	if (minutes < 60) return `รอ ${minutes} นาที`;
+	const hours = Math.floor(minutes / 60);
+	if (hours < 24) {
+		const rest = minutes % 60;
+		return rest > 0 ? `รอ ${hours} ชม. ${rest} นาที` : `รอ ${hours} ชม.`;
+	}
+	const days = Math.floor(hours / 24);
+	const restHours = hours % 24;
+	return restHours > 0 ? `รอ ${days} วัน ${restHours} ชม.` : `รอ ${days} วัน`;
 }

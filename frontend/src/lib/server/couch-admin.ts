@@ -342,6 +342,26 @@ export async function verifyOwnPassword(cookie: string | null, password: string)
 }
 
 /**
+ * Check `name` + `password` against central `_session` without a prior session
+ * (CR-141 link-on-first-login). Like {@link verifyOwnPassword}, CouchDB's `Set-Cookie`
+ * is not forwarded — the caller mints its own session after further checks.
+ *
+ * Throws {@link ServiceError} (`UNAUTHENTICATED`) on a wrong password or unknown
+ * user. A password oracle — callers must rate-limit.
+ */
+export async function verifyCredentials(name: string, password: string): Promise<void> {
+	const { base } = adminConfig();
+	const res = await fetch(`${base}/_session`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+		body: JSON.stringify({ name, password })
+	});
+	if (!res.ok) {
+		throw new ServiceError('UNAUTHENTICATED', 'Incorrect username or password');
+	}
+}
+
+/**
  * Enforce what a caller may grant a new/edited user (least privilege). The
  * requested `roles[]` is validated against the caller — never trusted:
  *  - Minting `system_admin`: caller must be SA-equivalent (`system_admin` or

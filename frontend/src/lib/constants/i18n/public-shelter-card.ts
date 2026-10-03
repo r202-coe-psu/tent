@@ -51,7 +51,7 @@ export const PUBLIC_SHELTER_CARD_I18N = {
 		viewDetails: 'View Details',
 		navigate: 'Navigate',
 		preRegister: 'Pre-register',
-		preRegisterClosed: 'Shelter closed — booking unavailable',
+		preRegisterClosed: 'Shelter closed — pre-registration unavailable',
 		generalVulnerable: 'General Vulnerable',
 		quarantine: 'Quarantine',
 		wheelchair: 'Wheelchair User',

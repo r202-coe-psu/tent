@@ -134,7 +134,7 @@ describe('publicBookingInputSchema', () => {
 
 	it('accepts an optional 13-digit national id and rejects a malformed one', () => {
 		expect(
-			publicBookingInputSchema.safeParse({ ...VALID, national_id: '1234567890123' }).success
+			publicBookingInputSchema.safeParse({ ...VALID, national_id: '1234567890121' }).success
 		).toBe(true);
 		expect(publicBookingInputSchema.safeParse({ ...VALID, national_id: '123' }).success).toBe(
 			false
@@ -212,7 +212,7 @@ describe('publicBookingPetSpeciesSchema (dog | cat | other)', () => {
 describe('toEvacueeInputs → createEvacuee', () => {
 	const input = publicBookingInputSchema.parse({
 		...VALID,
-		national_id: '1234567890123',
+		national_id: '1234567890121',
 		members: [
 			CONTACT,
 			{ first_name: 'สมหญิง', last_name: 'ใจดี', gender: 'female', special_needs: ['ผู้สูงอายุ'] },
@@ -231,7 +231,7 @@ describe('toEvacueeInputs → createEvacuee', () => {
 
 		expect(evacuees).toHaveLength(3);
 		for (const e of evacuees) {
-			expect(e.schema_v).toBe(10);
+			expect(e.schema_v).toBe(11);
 			expect(e.registered_via).toBe('web');
 
 			expect(e.current_stay.status).toBe('pre_registered');
@@ -246,7 +246,7 @@ describe('toEvacueeInputs → createEvacuee', () => {
 		const evacuees = toEvacueeInputs(input, 'household:H1').map((i) => createEvacuee(i, ctx));
 
 		expect(evacuees[0].phone).toBe('0812345678');
-		expect(evacuees[0].person_id).toEqual({ cardType: 'national_id', number: '1234567890123' });
+		expect(evacuees[0].person_id).toEqual({ cardType: 'national_id', number: '1234567890121' });
 		// Members are reachable through the contact — they have no phone of their own.
 		expect(evacuees[1].phone).toBeNull();
 		expect(evacuees[1].person_id?.number ?? '').toBe('');
@@ -504,6 +504,8 @@ describe('publicBookingErrorMessage', () => {
 	it('maps known codes to Thai copy', () => {
 		expect(publicBookingErrorMessage('SHELTER_CLOSED')).toContain('ปิดรับ');
 		expect(publicBookingErrorMessage('RATE_LIMITED')).toContain('ถี่เกินไป');
+		expect(publicBookingErrorMessage('INVALID_JOIN_TOKEN')).toContain('เข้าร่วมครอบครัว');
+		expect(publicBookingErrorMessage('JOIN_TARGET_NOT_FOUND')).toContain('ไม่พบครอบครัว');
 	});
 
 	it('falls back for anything unrecognised', () => {
@@ -566,7 +568,7 @@ describe('CR-112 / CR-113 alignment', () => {
 				{
 					...CONTACT,
 					phone: '0899999999',
-					person_id: { cardType: 'national_id', number: '1234567890123' },
+					person_id: { cardType: 'national_id', number: '1234567890121' },
 					vulnerable_groups: ['elderly', 'pwd'],
 					special_needs: ['ต้องการวีลแชร์']
 				},
@@ -587,7 +589,7 @@ describe('CR-112 / CR-113 alignment', () => {
 		expect(evacuees[0].phone).toBe('0899999999');
 		expect(evacuees[0].person_id).toEqual({
 			cardType: 'national_id',
-			number: '1234567890123'
+			number: '1234567890121'
 		});
 		expect(evacuees[0].vulnerable_groups).toEqual(['elderly', 'pwd']);
 		expect(evacuees[0].special_needs).toEqual(['ต้องการวีลแชร์']);

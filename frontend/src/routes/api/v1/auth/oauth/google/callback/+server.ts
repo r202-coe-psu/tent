@@ -23,6 +23,7 @@ import {
 	touchGoogleMfaVerified,
 	type CouchUserDoc
 } from '$lib/server/user-service';
+import { setPendingLinkCookie } from '$lib/server/pending-link';
 
 export const prerender = false;
 
@@ -84,9 +85,14 @@ export const GET: RequestHandler = async ({ url, fetch, cookies }) => {
 			const user = await findUserByGoogleSubject(claims.sub);
 			const resolved = resolveGoogleLoginUser(user);
 			if (!resolved.ok) {
-				loginErrorRedirect(
-					resolved.reason === 'missing_salt' ? 'google_login_failed' : 'google_not_linked'
-				);
+				if (resolved.reason === 'missing_salt') loginErrorRedirect('google_login_failed');
+				// CR-141 — not linked yet: offer link-on-first-login instead of an error.
+				setPendingLinkCookie(cookies, {
+					provider: 'google',
+					sub: claims.sub,
+					email: claims.email ?? null
+				});
+				throw redirect(302, '/login/link');
 			}
 
 			const [secret, algo] = await Promise.all([

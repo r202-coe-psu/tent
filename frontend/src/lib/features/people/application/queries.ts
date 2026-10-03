@@ -1,3 +1,4 @@
+import type { UlidReservation } from '$lib/db/ulid-reservation';
 import {
 	createMutation,
 	createQuery,
@@ -71,8 +72,19 @@ export const peopleKeys = {
 			{ page, pageSize, search, labelsKey, filtersKey }
 		] as const,
 	medicals: () => [...peopleKeys.all, 'medicals', getShelterCode()] as const,
+	medicalByEvacuee: (evacueeId: string) =>
+		[...peopleKeys.medicals(), 'by-evacuee', evacueeId] as const,
 	movements: () => [...peopleKeys.all, 'movements', getShelterCode()] as const,
+	movementsByEvacuee: (evacueeId: string) =>
+		[...peopleKeys.movements(), 'by-evacuee', evacueeId] as const,
 	screenings: () => [...peopleKeys.all, 'screenings', getShelterCode()] as const,
+	screeningsByEvacuee: (evacueeId: string) =>
+		[...peopleKeys.screenings(), 'by-evacuee', evacueeId] as const,
+	// Nested under households() (not household(id)) so invalidating the household
+	// list — which every household-mutating mutation already does — also
+	// invalidates this member listing (TanStack Query prefix-matches by default).
+	householdMembers: (householdId: string) =>
+		[...peopleKeys.households(), 'members', householdId] as const,
 	pendingScreening: (shelterCode = getShelterCode()) =>
 		[...peopleKeys.all, 'pending-screening', shelterCode] as const
 };
@@ -203,9 +215,10 @@ export const useCheckInEvacuee = () => {
 	return createMutation(() => ({
 		mutationFn: ({ evacuee, ctx, zone }: { evacuee: Evacuee; ctx: AuthorContext; zone: string }) =>
 			peopleRepository().checkInEvacuee(evacuee, ctx, zone),
-		onSuccess: (updated) => {
+		// onSettled: the evacuee doc may be saved even when the household refresh then 409s
+		onSettled: (_updated, _err, { evacuee }) => {
 			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
-			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(updated._id) });
+			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(evacuee._id) });
 			qc.invalidateQueries({ queryKey: peopleKeys.households() });
 			qc.invalidateQueries({ queryKey: peopleKeys.movements() });
 		}
@@ -239,9 +252,9 @@ export const useConfirmRoom = () => {
 	return createMutation(() => ({
 		mutationFn: ({ evacuee, ctx }: { evacuee: Evacuee; ctx: AuthorContext }) =>
 			peopleRepository().confirmRoom(evacuee, ctx),
-		onSuccess: (updated) => {
+		onSettled: (_updated, _err, { evacuee }) => {
 			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
-			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(updated._id) });
+			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(evacuee._id) });
 			qc.invalidateQueries({ queryKey: peopleKeys.movements() });
 			qc.invalidateQueries({ queryKey: peopleKeys.households() });
 		}
@@ -260,10 +273,12 @@ export const useConfirmRoomForHousehold = () => {
 			evacuees: readonly Evacuee[];
 			ctx: AuthorContext;
 		}) => peopleRepository().confirmRoomForHousehold(householdId, evacuees, ctx),
-		onSuccess: (confirmed) => {
+		onSettled: (_confirmed, _err, { householdId, evacuees }) => {
 			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
-			for (const updated of confirmed) {
-				qc.invalidateQueries({ queryKey: peopleKeys.evacuee(updated._id) });
+			for (const member of evacuees) {
+				if (member.household_id === householdId) {
+					qc.invalidateQueries({ queryKey: peopleKeys.evacuee(member._id) });
+				}
 			}
 			qc.invalidateQueries({ queryKey: peopleKeys.movements() });
 			qc.invalidateQueries({ queryKey: peopleKeys.households() });
@@ -276,10 +291,11 @@ export const useChangeEvacueeZone = () => {
 	return createMutation(() => ({
 		mutationFn: ({ evacuee, ctx, zone }: { evacuee: Evacuee; ctx: AuthorContext; zone: string }) =>
 			peopleRepository().changeEvacueeZone(evacuee, ctx, zone),
-		onSuccess: (updated) => {
+		onSettled: (_updated, _err, { evacuee }) => {
 			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
-			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(updated._id) });
+			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(evacuee._id) });
 			qc.invalidateQueries({ queryKey: peopleKeys.movements() });
+			qc.invalidateQueries({ queryKey: peopleKeys.households() });
 		}
 	}));
 };
@@ -421,12 +437,14 @@ export const useCreateFamilyRegistration = () => {
 		mutationFn: ({
 			input,
 			ctx,
-			channel = 'onsite'
+			channel = 'onsite',
+			ids
 		}: {
 			input: UnifiedRegistrationInput;
 			ctx: AuthorContext;
 			channel?: UnifiedRegistrationChannel;
-		}) => peopleRepository().createFamilyRegistration(input, ctx, channel),
+			ids?: UlidReservation;
+		}) => peopleRepository().createFamilyRegistration(input, ctx, channel, ids),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: peopleKeys.evacuees() });
 			queryClient.invalidateQueries({ queryKey: peopleKeys.households() });
@@ -623,16 +641,47 @@ export const useMedicals = () =>
 		queryFn: () => peopleRepository().listMedicals()
 	}));
 
+export const useMedicalByEvacuee = (id: () => string, enabled: () => boolean = () => true) =>
+	createQuery(() => ({
+		queryKey: peopleKeys.medicalByEvacuee(id()),
+		queryFn: () => peopleRepository().getMedicalByEvacuee(id()),
+		enabled: enabled() && !!id()
+	}));
+
 export const useMovements = () =>
 	createQuery(() => ({
 		queryKey: peopleKeys.movements(),
 		queryFn: () => peopleRepository().listMovements()
 	}));
 
+export const useMovementsByEvacuee = (id: () => string, enabled: () => boolean = () => true) =>
+	createQuery(() => ({
+		queryKey: peopleKeys.movementsByEvacuee(id()),
+		queryFn: () => peopleRepository().listMovementsByEvacuee(id()),
+		enabled: enabled() && !!id()
+	}));
+
 export const useScreenings = () =>
 	createQuery(() => ({
 		queryKey: peopleKeys.screenings(),
 		queryFn: () => peopleRepository().listScreenings()
+	}));
+
+export const useScreeningsByEvacuee = (id: () => string, enabled: () => boolean = () => true) =>
+	createQuery(() => ({
+		queryKey: peopleKeys.screeningsByEvacuee(id()),
+		queryFn: () => peopleRepository().listScreeningsByEvacuee(id()),
+		enabled: enabled() && !!id()
+	}));
+
+export const useHouseholdMembers = (
+	householdId: () => string | undefined,
+	enabled: () => boolean = () => true
+) =>
+	createQuery(() => ({
+		queryKey: peopleKeys.householdMembers(householdId() ?? ''),
+		queryFn: () => peopleRepository().listHouseholdMembers(householdId() ?? ''),
+		enabled: enabled() && !!householdId()
 	}));
 
 export function startPeopleLiveQuery(queryClient: QueryClient): SubscribeDataChangesHandle {

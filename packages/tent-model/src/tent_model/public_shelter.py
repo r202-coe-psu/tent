@@ -30,6 +30,17 @@ class OccupancyBreakdown(BaseModel):
     disabled: int = 0
 
 
+class PublicShelterReadinessSummary(BaseModel):
+    latest_assessment_id: str | None = None
+    verdict: str | None = None
+    tier: str | None = None
+    score_pct: float = 0.0
+    completed_items: int = 0
+    total_items: int = 0
+    assessed_at: datetime | None = None
+    assessed_by: str | None = None
+
+
 class PublicShelter(Document):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -60,6 +71,7 @@ class PublicShelter(Document):
     closed_at: datetime | None = None
     occupancy_total: int = 0
     occupancy_breakdown: OccupancyBreakdown = Field(default_factory=OccupancyBreakdown)
+    readiness: PublicShelterReadinessSummary | None = None
     raw_data: dict[str, Any] = Field(default_factory=dict)
     updated_at: datetime
 

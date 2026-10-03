@@ -39,8 +39,8 @@ describe('master seed unit-of-measure provisioning', () => {
 			return { status: 201, data: { ok: true } };
 		});
 
-		expect(await seedCatalogUnitOfMeasures()).toBe(27);
-		expect(writes).toHaveLength(27);
+		expect(await seedCatalogUnitOfMeasures()).toBe(FALLBACK_UNIT_DEFINITIONS.length);
+		expect(writes).toHaveLength(FALLBACK_UNIT_DEFINITIONS.length);
 		expect(writes.map((doc) => doc._id)).toEqual(
 			FALLBACK_UNIT_DEFINITIONS.map((unit) => `unit_of_measure:${unit.code}`)
 		);
@@ -256,7 +256,9 @@ describe('master seed unit-of-measure provisioning', () => {
 			conversions: [{ uom_name: 'bag', multiplier: '50' }]
 		});
 		expect(eggs).toMatchObject({
+			base_unit: 'egg',
 			default_inventory_uom: 'case',
+			default_issue_uom: 'egg',
 			conversions: [{ uom_name: 'case', multiplier: '30' }]
 		});
 		expect(vest).toMatchObject({
@@ -264,7 +266,7 @@ describe('master seed unit-of-measure provisioning', () => {
 			default_issue_uom: 'case'
 		});
 		expect(fishSauce).toMatchObject({ category: 'item_category:food', base_unit: 'bottle' });
-		expect(mosquitoNet).toMatchObject({ category: 'item_category:bedding', base_unit: 'piece' });
+		expect(mosquitoNet).toMatchObject({ category: 'item_category:bedding', base_unit: 'cloth' });
 		const categories = couch.putDoc.mock.calls
 			.map(([, doc]) => doc as Record<string, unknown>)
 			.filter((doc) => doc.type === 'item_category');
@@ -363,7 +365,7 @@ describe('food sphere seed parameters', () => {
 		expect(proteinGroup?.item_maps).toEqual([
 			{
 				item_id: 'item_master:01HXYZ1234567890ABCDEFGH02',
-				base_uom: 'piece',
+				base_uom: 'egg',
 				conversion_factor: 6.3,
 				share_percent: 50
 			},

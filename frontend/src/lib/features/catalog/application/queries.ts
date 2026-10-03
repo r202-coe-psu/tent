@@ -186,7 +186,11 @@ export const useCreateItemMaster = () => {
 			enforceWriteAccess(shelterCode);
 			return catalogRepository().createItemMaster(input, ctx, shelterCode);
 		},
-		onSuccess: () => {
+		onSuccess: (created, { shelterCode }) => {
+			// Seed the list so the new item can be picked before the refetch lands.
+			queryClient.setQueryData<ItemMaster[]>(catalogKeys.itemmasters(shelterCode), (old) =>
+				old ? [...old.filter((item) => item._id !== created._id), created] : old
+			);
 			queryClient.invalidateQueries({ queryKey: catalogKeys.all });
 		}
 	}));
