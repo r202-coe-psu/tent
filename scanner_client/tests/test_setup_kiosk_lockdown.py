@@ -136,36 +136,48 @@ class KioskSessionIdTests(unittest.TestCase):
 
 class SessionScriptTests(unittest.TestCase):
     def test_loops_start_kiosk_and_skips_while_locked(self):
-        body = run_helper(
-            'session_script_content "/opt/tent/scanner_client/start_kiosk.sh" '
-            '"/opt/tent/scanner_client/maintenance_hotkey.py"'
-        )
+        body = run_helper('session_script_content "/opt/tent/scanner_client/start_kiosk.sh"')
         self.assertTrue(body.startswith("#!/bin/sh\n# Managed by tent scanner_client/setup_kiosk_lockdown.sh"))
         self.assertIn('flock -n "/tmp/smart_shelter_kiosk.lock" true', body)
         self.assertIn('"/opt/tent/scanner_client/start_kiosk.sh"', body)
         self.assertIn("while true; do", body)
         subprocess.run(["sh", "-n"], input=body, text=True, check=True)
 
-    def test_starts_maintenance_hotkey_in_background_with_real_path(self):
-        body = run_helper(
-            'session_script_content "/opt/tent/scanner_client/start_kiosk.sh" '
-            '"/opt/tent/scanner_client/maintenance_hotkey.py"'
+
+class VtKeybindingTests(unittest.TestCase):
+    def test_binds_ctrl_alt_function_key_to_the_same_vt(self):
+        self.assertEqual(run_helper("vt_keybinding_value 3"), "['<Primary><Alt>F3']")
+
+    def test_covers_vt_1_to_6(self):
+        self.assertEqual(run_helper('echo "${VT_NUMBERS[@]}"').strip(), "1 2 3 4 5 6")
+
+
+class IssueIpLineTests(unittest.TestCase):
+    LINE = r"SmartShelter kiosk: \n   IP: \4   (Ctrl+Alt+F1/F2 = back to the kiosk screen)"
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.issue = Path(self.tmp.name) / "issue"
+
+    def with_ip_line(self) -> str:
+        return run_helper(f'issue_with_ip_line "{self.issue}"')
+
+    def test_keeps_agetty_escapes_literal_after_debian_banner(self):
+        self.issue.write_text("Debian GNU/Linux forky/sid \\n \\l\n\n")
+        self.assertEqual(
+            self.with_ip_line(), "Debian GNU/Linux forky/sid \\n \\l\n\n" + self.LINE + "\n\n"
         )
-        hotkey_line = 'python3 "/opt/tent/scanner_client/maintenance_hotkey.py" >>"/tmp/kiosk_maintenance_hotkey.log" 2>&1'
-        self.assertIn(hotkey_line, body)
-        self.assertIn(") &", body)
-        # The hotkey loop is started before the foreground kiosk loop, which never returns.
-        self.assertLess(body.index(hotkey_line), body.index('flock -n "/tmp/smart_shelter_kiosk.lock"'))
 
+    def test_is_idempotent(self):
+        self.issue.write_text("Debian GNU/Linux forky/sid \\n \\l\n\n")
+        once = self.with_ip_line()
+        self.issue.write_text(once)
+        self.assertEqual(self.with_ip_line(), once)
+        self.assertEqual(once.count(self.LINE), 1)
 
-class MaintenanceTerminalScriptTests(unittest.TestCase):
-    def test_terminal_script_is_valid_bash_and_requires_password(self):
-        script = SCRIPT.parent / "maintenance_terminal.sh"
-        subprocess.run(["bash", "-n", str(script)], check=True)
-        body = script.read_text()
-        self.assertIn('su -l "$USER_NAME"', body)
-        self.assertNotIn("exec bash", body)
-        self.assertNotIn("exec sh", body)
+    def test_creates_line_when_issue_is_missing(self):
+        self.assertEqual(self.with_ip_line(), self.LINE + "\n\n")
 
 
 if __name__ == "__main__":

@@ -7,15 +7,15 @@
 # Shell, no overview, no gestures, no panel. The only app on screen is
 # ~/.local/bin/gnome-kiosk-script, which keeps scanner_client/start_kiosk.sh running.
 # Display rotation keeps coming from the user's ~/.config/monitors.xml (not touched here).
-# GNOME Kiosk has no shortcuts and no Ctrl+Alt+F3, so the session also runs maintenance_hotkey.py:
-# Ctrl+Alt+Shift+T opens a terminal (foot) that shows hostname/IP and asks for the password.
+# Text TTYs for maintenance: GNOME Kiosk is built on mutter, whose Ctrl+Alt+F1..F6 VT-switch keys
+# are set for the kiosk user (gsettings); /etc/issue shows hostname + IP above the TTY login prompt.
 #
 # Run as a normal user (NOT with sudo); the script calls sudo itself. Applies at the next login:
 #   sudo systemctl restart gdm   (or reboot)
 #
 # Usage: ./setup_kiosk_lockdown.sh [--user NAME] [--status | --disable | --help]
-#   (none)        install packages, add the user to group input, write the kiosk script,
-#                 set autologin + kiosk session
+#   (none)        install packages, write the kiosk script, enable Ctrl+Alt+F1..F6 + IP on
+#                 the TTY login, set autologin + kiosk session
 #   --status      checks only, change nothing (exit 1 when not locked)
 #   --disable     maintenance: autologin into the previous (normal GNOME) session instead
 #   --user NAME   the autologin kiosk user (default: the user running this script)
@@ -24,17 +24,20 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 KIOSK_SCRIPT="$SCRIPT_DIR/start_kiosk.sh"
-HOTKEY_SCRIPT="$SCRIPT_DIR/maintenance_hotkey.py"
-TERMINAL_SCRIPT="$SCRIPT_DIR/maintenance_terminal.sh"
-APT_PACKAGES=(gnome-kiosk gnome-kiosk-script-session foot)
-# Read access to /dev/input/event* for the maintenance hotkey (read-only, never grabbed).
-INPUT_GROUP="input"
+APT_PACKAGES=(gnome-kiosk gnome-kiosk-script-session)
 SESSION_DIRS=(/usr/share/wayland-sessions /usr/share/xsessions)
 GDM_CONF="/etc/gdm3/daemon.conf"
 LOCK_FILE="/tmp/smart_shelter_kiosk.lock"
-HOTKEY_LOG="/tmp/kiosk_maintenance_hotkey.log"
 MANAGED_MARK="# Managed by tent scanner_client/setup_kiosk_lockdown.sh"
 FALLBACK_SESSION="gnome"
+# mutter (GNOME Shell and GNOME Kiosk) switches VTs itself on Wayland; the kernel does not while a
+# compositor owns the keyboard. Values equal the GNOME defaults, so a normal session is unaffected.
+VT_KEYS_SCHEMA="org.gnome.mutter.wayland.keybindings"
+VT_NUMBERS=(1 2 3 4 5 6)
+ISSUE_FILE="/etc/issue"
+# agetty expands \n = hostname, \4 = IPv4 of the first configured interface. /etc/issue has no
+# comment syntax, so this exact line is also how the script recognises its own addition.
+ISSUE_LINE='SmartShelter kiosk: \n   IP: \4   (Ctrl+Alt+F1/F2 = back to the kiosk screen)'
 
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -97,20 +100,37 @@ gdm_with_autologin() {
     ' "$source"
 }
 
-# Prints the ~/.local/bin/gnome-kiosk-script body for start_kiosk.sh at $1 and
-# maintenance_hotkey.py at $2.
+# Prints the gsettings value that binds Ctrl+Alt+F<n> to "switch to VT n".
+vt_keybinding_value() {
+    printf "['<Primary><Alt>F%s']" "$1"
+}
+
+# Prints an issue file ($1, may be missing) with ISSUE_LINE as its last line: any earlier copy of
+# the line is removed first, so re-runs never stack it. A blank line separates it from the
+# distribution banner.
+issue_with_ip_line() {
+    local source="$1"
+    [ -f "$source" ] || source=/dev/null
+    # Passed through the environment: awk -v would turn \n and \4 into control characters.
+    ISSUE_LINE="$ISSUE_LINE" awk '
+        BEGIN { line = ENVIRON["ISSUE_LINE"] }
+        $0 == line { next }
+        { lines[++n] = $0 }
+        END {
+            while (n > 0 && lines[n] == "") n--
+            for (i = 1; i <= n; i++) print lines[i]
+            if (n > 0) print ""
+            print line
+            print ""
+        }
+    ' "$source"
+}
+
+# Prints the ~/.local/bin/gnome-kiosk-script body for start_kiosk.sh at $1.
 session_script_content() {
     cat <<EOF
 #!/bin/sh
 $MANAGED_MARK - rerun it instead of editing.
-# Maintenance hotkey (Ctrl+Alt+Shift+T -> terminal): independent of main.py/Chromium so it still
-# works when bootstrap fails and the screen is black. Restarted if it ever exits.
-(
-    while true; do
-        python3 "$2" >>"$HOTKEY_LOG" 2>&1
-        sleep 5
-    done
-) &
 # GNOME Kiosk keeps this as the only app on screen. start_kiosk.sh supervises main.py; this loop
 # only covers start_kiosk.sh itself exiting (exit 78/79 = .env/credential problem: retry so a fix
 # over SSH recovers without a reboot). Skip while the XDG-autostart copy already holds the lock.
@@ -135,6 +155,52 @@ as_kiosk() {
         sudo -n "$@"
     fi
 }
+# Runs a command AS the kiosk user (not root) — gsettings must write that user's own dconf.
+as_kiosk_user() {
+    if [ "$KIOSK_USER" = "$(id -un)" ]; then
+        "$@"
+    else
+        sudo -n -u "$KIOSK_USER" "$@"
+    fi
+}
+
+# gsettings for the kiosk user: through the live session bus when the user is logged in (the
+# running session sees the change), otherwise a throw-away bus that still writes ~/.config/dconf.
+kiosk_gsettings() {
+    local bus="/run/user/$(id -u "$KIOSK_USER")/bus"
+    if [ -S "$bus" ]; then
+        as_kiosk_user env DBUS_SESSION_BUS_ADDRESS="unix:path=$bus" gsettings "$@"
+    else
+        as_kiosk_user dbus-run-session -- gsettings "$@"
+    fi
+}
+
+vt_keys_enabled() {
+    local n
+    for n in "${VT_NUMBERS[@]}"; do
+        [ "$(kiosk_gsettings get "$VT_KEYS_SCHEMA" "switch-to-session-$n" 2>/dev/null)" = "$(vt_keybinding_value "$n")" ] ||
+            return 1
+    done
+}
+
+set_vt_keys() {
+    local n
+    kiosk_gsettings list-keys "$VT_KEYS_SCHEMA" >/dev/null 2>&1 || return 2
+    for n in "${VT_NUMBERS[@]}"; do
+        kiosk_gsettings set "$VT_KEYS_SCHEMA" "switch-to-session-$n" "$(vt_keybinding_value "$n")" || return 1
+    done
+}
+
+set_issue_ip() {
+    local tmp status
+    [ -f "$ISSUE_FILE" ] && ! sudo test -f "$ISSUE_FILE.tent-bak" && sudo cp -p "$ISSUE_FILE" "$ISSUE_FILE.tent-bak"
+    tmp="$(mktemp)" || return 1
+    issue_with_ip_line "$ISSUE_FILE" >"$tmp" && sudo install -m 644 "$tmp" "$ISSUE_FILE"
+    status=$?
+    rm -f "$tmp"
+    return $status
+}
+
 account_path() { echo "/org/freedesktop/Accounts/User$(id -u "$1")"; }
 
 current_session() {
@@ -185,8 +251,6 @@ install_as_kiosk() {
     return $status
 }
 
-in_input_group() { id -nG "$KIOSK_USER" | tr ' ' '\n' | grep -qx "$INPUT_GROUP"; }
-
 packages_missing() {
     local pkg
     for pkg in "${APT_PACKAGES[@]}"; do
@@ -211,8 +275,10 @@ show_status() {
         bad "ยังไม่มี $SESSION_SCRIPT"
     fi
 
-    in_input_group && ok "อยู่ใน group $INPUT_GROUP (ปุ่ม Ctrl+Alt+Shift+T อ่านคีย์บอร์ดได้)" ||
-        bad "$KIOSK_USER ไม่อยู่ใน group $INPUT_GROUP — ปุ่มเปิด terminal จะใช้ไม่ได้"
+    vt_keys_enabled && ok "Ctrl+Alt+F1..F6 สลับ TTY ได้ (gsettings $VT_KEYS_SCHEMA)" ||
+        bad "ยังไม่ได้ตั้ง Ctrl+Alt+F1..F6 สำหรับ $KIOSK_USER"
+    grep -qxF "$ISSUE_LINE" "$ISSUE_FILE" 2>/dev/null && ok "หน้า login ของ TTY แสดง hostname + IP ($ISSUE_FILE)" ||
+        warn "หน้า login ของ TTY ยังไม่แสดง IP ($ISSUE_FILE)"
 
     autologin="$(gdm_autologin_user "$GDM_CONF")"
     [ "$autologin" = "$KIOSK_USER" ] && ok "GDM autologin: $KIOSK_USER" ||
@@ -229,18 +295,12 @@ show_status() {
 install_lockdown() {
     local missing session_id session
     sudo -v || { echo "ต้องใช้สิทธิ์ sudo" >&2; exit 1; }
-    local file
-    for file in "$KIOSK_SCRIPT" "$TERMINAL_SCRIPT"; do
-        [ -x "$file" ] || chmod +x "$file" 2>/dev/null || { bad "ไม่พบ $file"; exit 1; }
-    done
-    [ -f "$HOTKEY_SCRIPT" ] || { bad "ไม่พบ $HOTKEY_SCRIPT"; exit 1; }
+    [ -x "$KIOSK_SCRIPT" ] || chmod +x "$KIOSK_SCRIPT" 2>/dev/null || { bad "ไม่พบ $KIOSK_SCRIPT"; exit 1; }
     systemctl list-unit-files gdm.service 2>/dev/null | grep -q '^gdm' ||
         { bad "เครื่องนี้ไม่ได้ใช้ GDM — script นี้ทำมาสำหรับตู้ใหญ่ (GNOME)"; exit 1; }
-    if [ "$KIOSK_USER" != "$(id -un)" ]; then
-        for file in "$KIOSK_SCRIPT" "$TERMINAL_SCRIPT"; do
-            sudo -u "$KIOSK_USER" test -x "$file" ||
-                { bad "$KIOSK_USER รัน $file ไม่ได้ (สิทธิ์ไฟล์/โฟลเดอร์)"; exit 1; }
-        done
+    if [ "$KIOSK_USER" != "$(id -un)" ] && ! sudo -u "$KIOSK_USER" test -x "$KIOSK_SCRIPT"; then
+        bad "$KIOSK_USER รัน $KIOSK_SCRIPT ไม่ได้ (สิทธิ์ไฟล์/โฟลเดอร์)"
+        exit 1
     fi
 
     missing="$(packages_missing | xargs)"
@@ -255,14 +315,16 @@ install_lockdown() {
     session_id="$(kiosk_session_id)" || { bad "ไม่พบ session GNOME Kiosk Script หลังติดตั้ง"; exit 1; }
     ok "session: $session_id"
 
-    if in_input_group; then
-        ok "$KIOSK_USER อยู่ใน group $INPUT_GROUP แล้ว"
-    else
-        sudo usermod -aG "$INPUT_GROUP" "$KIOSK_USER" && ok "เพิ่ม $KIOSK_USER เข้า group $INPUT_GROUP (มีผลตอน login ครั้งถัดไป)" ||
-            bad "เพิ่ม group $INPUT_GROUP ไม่สำเร็จ — ปุ่มเปิด terminal จะใช้ไม่ได้"
-    fi
+    set_vt_keys
+    case $? in
+    0) ok "เปิด Ctrl+Alt+F1..F6 (สลับ TTY) ให้ $KIOSK_USER" ;;
+    2) bad "ไม่มี schema $VT_KEYS_SCHEMA — Ctrl+Alt+F3 จะใช้ไม่ได้ (เข้าเครื่องได้ทาง SSH เท่านั้น)" ;;
+    *) bad "ตั้ง Ctrl+Alt+F1..F6 ไม่สำเร็จ (gsettings)" ;;
+    esac
+    set_issue_ip && ok "หน้า login ของ TTY แสดง hostname + IP ($ISSUE_FILE, backup: $ISSUE_FILE.tent-bak)" ||
+        warn "แก้ $ISSUE_FILE ไม่สำเร็จ — TTY จะไม่แสดง IP"
 
-    session_script_content "$KIOSK_SCRIPT" "$HOTKEY_SCRIPT" | install_as_kiosk 755 "$SESSION_SCRIPT" &&
+    session_script_content "$KIOSK_SCRIPT" | install_as_kiosk 755 "$SESSION_SCRIPT" &&
         ok "เขียน $SESSION_SCRIPT" || bad "เขียน $SESSION_SCRIPT ไม่สำเร็จ"
     # Stops gnome-initial-setup from appearing inside the kiosk session.
     install_as_kiosk 644 "$KIOSK_HOME/.config/gnome-initial-setup-done" </dev/null ||
@@ -288,7 +350,7 @@ install_lockdown() {
         exit 1
     fi
     ok "ล็อก kiosk แล้ว — มีผลตอน login ครั้งถัดไป: sudo systemctl restart gdm (หรือ reboot)"
-    info "terminal ฉุกเฉินในโหมดล็อก: เสียบคีย์บอร์ดแล้วกด Ctrl+Alt+Shift+T (log: $HOTKEY_LOG)"
+    info "เข้า TTY ในโหมดล็อก: เสียบคีย์บอร์ด → Ctrl+Alt+F3 (หน้า login แสดง IP) · กลับหน้า kiosk: Ctrl+Alt+F1 หรือ F2"
     info "กลับเป็น desktop ปกติ: ./setup_kiosk_lockdown.sh --disable (ดู README หัวข้อ \"ล็อกไม่ให้ออกจากหน้า kiosk\")"
 }
 
