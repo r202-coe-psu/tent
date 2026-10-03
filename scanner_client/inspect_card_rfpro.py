@@ -486,6 +486,15 @@ def main() -> None:
         print("   ลองใหม่ด้วย --verbose แล้วส่งผลให้ทีม dev")
         sys.exit(1)
     finally:
+        if args.baud != DEFAULT_CARD_BAUD and args.command in ("all",):
+            # The module keeps the speed it was given until it restarts; leave it at 9600 so a
+            # kiosk (or the next run) that does not send 18 82 still reads.
+            try:
+                transport.command(
+                    CMD_ICC_SET_BAUD, bytes([SLOT_MAIN]) + DEFAULT_CARD_BAUD.to_bytes(4, "big")
+                )
+            except RfproError:
+                pass
         transport.close()
 
 
