@@ -1,3 +1,4 @@
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -135,21 +136,45 @@ class KioskSessionIdTests(unittest.TestCase):
 
 
 class SessionScriptTests(unittest.TestCase):
+    def session_script(self) -> str:
+        return run_helper(
+            'session_script_content "/opt/tent/scanner_client/start_kiosk.sh" '
+            '"/opt/tent/scanner_client/maintenance_hotkey.py"'
+        )
+
     def test_loops_start_kiosk_and_skips_while_locked(self):
-        body = run_helper('session_script_content "/opt/tent/scanner_client/start_kiosk.sh"')
+        body = self.session_script()
         self.assertTrue(body.startswith("#!/bin/sh\n# Managed by tent scanner_client/setup_kiosk_lockdown.sh"))
         self.assertIn('flock -n "/tmp/smart_shelter_kiosk.lock" true', body)
         self.assertIn('"/opt/tent/scanner_client/start_kiosk.sh"', body)
         self.assertIn("while true; do", body)
         subprocess.run(["sh", "-n"], input=body, text=True, check=True)
 
+    def test_starts_vt_hotkey_in_background_before_the_kiosk_loop(self):
+        body = self.session_script()
+        hotkey_line = 'python3 "/opt/tent/scanner_client/maintenance_hotkey.py" >>"/tmp/kiosk_maintenance_hotkey.log" 2>&1'
+        self.assertIn(hotkey_line, body)
+        self.assertIn(") &", body)
+        # The kiosk loop never returns, so the hotkey loop must be started before it.
+        self.assertLess(body.index(hotkey_line), body.index('flock -n "/tmp/smart_shelter_kiosk.lock"'))
 
-class VtKeybindingTests(unittest.TestCase):
-    def test_binds_ctrl_alt_function_key_to_the_same_vt(self):
-        self.assertEqual(run_helper("vt_keybinding_value 3"), "['<Primary><Alt>F3']")
 
-    def test_covers_vt_1_to_6(self):
-        self.assertEqual(run_helper('echo "${VT_NUMBERS[@]}"').strip(), "1 2 3 4 5 6")
+class SudoersRuleTests(unittest.TestCase):
+    def test_allows_only_chvt_1_to_6_without_password(self):
+        self.assertEqual(run_helper("sudoers_chvt_rule kiosk"), "kiosk ALL=(root) NOPASSWD: /usr/bin/chvt [1-6]\n")
+
+    def test_hotkey_and_sudoers_use_the_same_chvt_path(self):
+        import maintenance_hotkey
+
+        self.assertEqual(run_helper('echo "$CHVT"').strip(), maintenance_hotkey.CHVT)
+
+    @unittest.skipUnless(shutil.which("visudo") or Path("/usr/sbin/visudo").exists(), "visudo not installed")
+    def test_rule_passes_visudo(self):
+        visudo = shutil.which("visudo") or "/usr/sbin/visudo"
+        with tempfile.NamedTemporaryFile("w", suffix=".sudoers") as rule:
+            rule.write(run_helper("sudoers_chvt_rule kiosk"))
+            rule.flush()
+            subprocess.run([visudo, "-cqf", rule.name], check=True)
 
 
 class IssueIpLineTests(unittest.TestCase):

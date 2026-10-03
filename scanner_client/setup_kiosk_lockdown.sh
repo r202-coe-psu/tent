@@ -7,15 +7,16 @@
 # Shell, no overview, no gestures, no panel. The only app on screen is
 # ~/.local/bin/gnome-kiosk-script, which keeps scanner_client/start_kiosk.sh running.
 # Display rotation keeps coming from the user's ~/.config/monitors.xml (not touched here).
-# Text TTYs for maintenance: GNOME Kiosk is built on mutter, whose Ctrl+Alt+F1..F6 VT-switch keys
-# are set for the kiosk user (gsettings); /etc/issue shows hostname + IP above the TTY login prompt.
+# Text TTYs for maintenance: GNOME Kiosk does not switch VTs on Ctrl+Alt+F<n> (GNOME Shell does), so
+# the session also runs maintenance_hotkey.py, which reads the keyboard (group input) and runs
+# `sudo -n chvt <n>` (sudoers: chvt 1-6 only). /etc/issue shows hostname + IP on the TTY login.
 #
 # Run as a normal user (NOT with sudo); the script calls sudo itself. Applies at the next login:
 # add --restart (or run: sudo systemctl restart gdm / reboot).
 #
 # Usage: ./setup_kiosk_lockdown.sh [--user NAME] [--restart] [--status | --disable | --help]
-#   (none)        install packages, write the kiosk script, enable Ctrl+Alt+F1..F6 + IP on
-#                 the TTY login, set autologin + kiosk session, then print --status
+#   (none)        install packages, Ctrl+Alt+F1..F6 (group input + sudoers chvt), IP on the TTY
+#                 login, write the kiosk script, set autologin + kiosk session, print --status
 #   --status      checks only, change nothing (exit 1 when not locked)
 #   --disable     maintenance: autologin into the previous (normal GNOME) session instead
 #   --restart     after install/--disable succeeds, restart gdm so it applies now. This ends
@@ -26,16 +27,18 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 KIOSK_SCRIPT="$SCRIPT_DIR/start_kiosk.sh"
+HOTKEY_SCRIPT="$SCRIPT_DIR/maintenance_hotkey.py"
 APT_PACKAGES=(gnome-kiosk gnome-kiosk-script-session)
 SESSION_DIRS=(/usr/share/wayland-sessions /usr/share/xsessions)
 GDM_CONF="/etc/gdm3/daemon.conf"
 LOCK_FILE="/tmp/smart_shelter_kiosk.lock"
+HOTKEY_LOG="/tmp/kiosk_maintenance_hotkey.log"
 MANAGED_MARK="# Managed by tent scanner_client/setup_kiosk_lockdown.sh"
 FALLBACK_SESSION="gnome"
-# mutter (GNOME Shell and GNOME Kiosk) switches VTs itself on Wayland; the kernel does not while a
-# compositor owns the keyboard. Values equal the GNOME defaults, so a normal session is unaffected.
-VT_KEYS_SCHEMA="org.gnome.mutter.wayland.keybindings"
-VT_NUMBERS=(1 2 3 4 5 6)
+# Ctrl+Alt+F1..F6: read access to /dev/input/event* (read-only, never grabbed) + root for chvt.
+INPUT_GROUP="input"
+CHVT="/usr/bin/chvt"
+SUDOERS_FILE="/etc/sudoers.d/tent-kiosk-chvt"
 ISSUE_FILE="/etc/issue"
 # agetty expands \n = hostname, \4 = IPv4 of the first configured interface. /etc/issue has no
 # comment syntax, so this exact line is also how the script recognises its own addition.
@@ -102,9 +105,10 @@ gdm_with_autologin() {
     ' "$source"
 }
 
-# Prints the gsettings value that binds Ctrl+Alt+F<n> to "switch to VT n".
-vt_keybinding_value() {
-    printf "['<Primary><Alt>F%s']" "$1"
+# Prints the sudoers rule letting user $1 switch to VT 1-6 without a password — and nothing else
+# (the `[1-6]` argument pattern rejects other arguments such as -f or a second VT number).
+sudoers_chvt_rule() {
+    printf '%s ALL=(root) NOPASSWD: %s [1-6]\n' "$1" "$CHVT"
 }
 
 # Prints an issue file ($1, may be missing) with ISSUE_LINE as its last line: any earlier copy of
@@ -128,11 +132,20 @@ issue_with_ip_line() {
     ' "$source"
 }
 
-# Prints the ~/.local/bin/gnome-kiosk-script body for start_kiosk.sh at $1.
+# Prints the ~/.local/bin/gnome-kiosk-script body for start_kiosk.sh at $1 and
+# maintenance_hotkey.py at $2.
 session_script_content() {
     cat <<EOF
 #!/bin/sh
 $MANAGED_MARK - rerun it instead of editing.
+# Ctrl+Alt+F1..F6 -> text TTY: independent of main.py/Chromium so it still works when bootstrap
+# fails and the screen is black. Restarted if it ever exits.
+(
+    while true; do
+        python3 "$2" >>"$HOTKEY_LOG" 2>&1
+        sleep 5
+    done
+) &
 # GNOME Kiosk keeps this as the only app on screen. start_kiosk.sh supervises main.py; this loop
 # only covers start_kiosk.sh itself exiting (exit 78/79 = .env/credential problem: retry so a fix
 # over SSH recovers without a reboot). Skip while the XDG-autostart copy already holds the lock.
@@ -157,40 +170,30 @@ as_kiosk() {
         sudo -n "$@"
     fi
 }
-# Runs a command AS the kiosk user (not root) — gsettings must write that user's own dconf.
-as_kiosk_user() {
+
+in_input_group() { id -nG "$KIOSK_USER" | tr ' ' '\n' | grep -qx "$INPUT_GROUP"; }
+
+# Same user: ask sudo itself (no password needed to list a NOPASSWD rule). Another user: compare
+# the installed file, which needs cached sudo credentials.
+sudoers_chvt_installed() {
     if [ "$KIOSK_USER" = "$(id -un)" ]; then
-        "$@"
+        sudo -n -l "$CHVT" 3 >/dev/null 2>&1
     else
-        sudo -n -u "$KIOSK_USER" "$@"
+        [ "$(sudo -n cat "$SUDOERS_FILE" 2>/dev/null)" = "$(sudoers_chvt_rule "$KIOSK_USER")" ]
     fi
 }
 
-# gsettings for the kiosk user: through the live session bus when the user is logged in (the
-# running session sees the change), otherwise a throw-away bus that still writes ~/.config/dconf.
-kiosk_gsettings() {
-    local bus="/run/user/$(id -u "$KIOSK_USER")/bus"
-    if [ -S "$bus" ]; then
-        as_kiosk_user env DBUS_SESSION_BUS_ADDRESS="unix:path=$bus" gsettings "$@"
-    else
-        as_kiosk_user dbus-run-session -- gsettings "$@"
-    fi
-}
-
-vt_keys_enabled() {
-    local n
-    for n in "${VT_NUMBERS[@]}"; do
-        [ "$(kiosk_gsettings get "$VT_KEYS_SCHEMA" "switch-to-session-$n" 2>/dev/null)" = "$(vt_keybinding_value "$n")" ] ||
-            return 1
-    done
-}
-
-set_vt_keys() {
-    local n
-    kiosk_gsettings list-keys "$VT_KEYS_SCHEMA" >/dev/null 2>&1 || return 2
-    for n in "${VT_NUMBERS[@]}"; do
-        kiosk_gsettings set "$VT_KEYS_SCHEMA" "switch-to-session-$n" "$(vt_keybinding_value "$n")" || return 1
-    done
+# Writes the sudoers drop-in only after `visudo -c` accepts it — a broken file in sudoers.d can
+# lock sudo out for everyone.
+set_sudoers_chvt() {
+    local tmp status
+    tmp="$(mktemp)" || return 1
+    sudoers_chvt_rule "$KIOSK_USER" >"$tmp" &&
+        sudo visudo -cqf "$tmp" &&
+        sudo install -m 440 -o root -g root "$tmp" "$SUDOERS_FILE"
+    status=$?
+    rm -f "$tmp"
+    return $status
 }
 
 set_issue_ip() {
@@ -277,8 +280,10 @@ show_status() {
         bad "ยังไม่มี $SESSION_SCRIPT"
     fi
 
-    vt_keys_enabled && ok "Ctrl+Alt+F1..F6 สลับ TTY ได้ (gsettings $VT_KEYS_SCHEMA)" ||
-        bad "ยังไม่ได้ตั้ง Ctrl+Alt+F1..F6 สำหรับ $KIOSK_USER"
+    in_input_group && ok "อยู่ใน group $INPUT_GROUP (ตัวรับปุ่ม Ctrl+Alt+F1..F6 อ่านคีย์บอร์ดได้)" ||
+        bad "$KIOSK_USER ไม่อยู่ใน group $INPUT_GROUP — Ctrl+Alt+F1..F6 จะใช้ไม่ได้"
+    sudoers_chvt_installed && ok "sudoers: $KIOSK_USER รัน chvt 1-6 ได้ ($SUDOERS_FILE)" ||
+        bad "ยังไม่มี $SUDOERS_FILE — Ctrl+Alt+F1..F6 จะสลับ TTY ไม่ได้"
     grep -qxF "$ISSUE_LINE" "$ISSUE_FILE" 2>/dev/null && ok "หน้า login ของ TTY แสดง hostname + IP ($ISSUE_FILE)" ||
         warn "หน้า login ของ TTY ยังไม่แสดง IP ($ISSUE_FILE)"
 
@@ -298,6 +303,8 @@ install_lockdown() {
     local missing session_id session
     sudo -v || { echo "ต้องใช้สิทธิ์ sudo" >&2; exit 1; }
     [ -x "$KIOSK_SCRIPT" ] || chmod +x "$KIOSK_SCRIPT" 2>/dev/null || { bad "ไม่พบ $KIOSK_SCRIPT"; exit 1; }
+    [ -f "$HOTKEY_SCRIPT" ] || { bad "ไม่พบ $HOTKEY_SCRIPT"; exit 1; }
+    [ -x "$CHVT" ] || { bad "ไม่พบ $CHVT (แพ็กเกจ kbd)"; exit 1; }
     systemctl list-unit-files gdm.service 2>/dev/null | grep -q '^gdm' ||
         { bad "เครื่องนี้ไม่ได้ใช้ GDM — script นี้ทำมาสำหรับตู้ใหญ่ (GNOME)"; exit 1; }
     if [ "$KIOSK_USER" != "$(id -un)" ] && ! sudo -u "$KIOSK_USER" test -x "$KIOSK_SCRIPT"; then
@@ -317,23 +324,18 @@ install_lockdown() {
     session_id="$(kiosk_session_id)" || { bad "ไม่พบ session GNOME Kiosk Script หลังติดตั้ง"; exit 1; }
     ok "session: $session_id"
 
-    local vt_before
-    vt_before="$(kiosk_gsettings get "$VT_KEYS_SCHEMA" switch-to-session-3 2>/dev/null)"
-    if [ "$vt_before" = "$(vt_keybinding_value 3)" ]; then
-        info "ค่าเดิมของ Ctrl+Alt+F3 ถูกอยู่แล้ว ($vt_before) — ถ้าเคยกดไม่ได้ สาเหตุไม่ใช่ค่านี้ (ดูหลัง restart)"
+    if in_input_group; then
+        ok "$KIOSK_USER อยู่ใน group $INPUT_GROUP แล้ว"
     else
-        info "ค่าเดิมของ Ctrl+Alt+F3: ${vt_before:-ไม่มี/อ่านไม่ได้} → จะตั้งเป็น $(vt_keybinding_value 3)"
+        sudo usermod -aG "$INPUT_GROUP" "$KIOSK_USER" && ok "เพิ่ม $KIOSK_USER เข้า group $INPUT_GROUP (มีผลตอน login ครั้งถัดไป)" ||
+            bad "เพิ่ม group $INPUT_GROUP ไม่สำเร็จ — Ctrl+Alt+F1..F6 จะใช้ไม่ได้"
     fi
-    set_vt_keys
-    case $? in
-    0) ok "เปิด Ctrl+Alt+F1..F6 (สลับ TTY) ให้ $KIOSK_USER" ;;
-    2) bad "ไม่มี schema $VT_KEYS_SCHEMA — Ctrl+Alt+F3 จะใช้ไม่ได้ (เข้าเครื่องได้ทาง SSH เท่านั้น)" ;;
-    *) bad "ตั้ง Ctrl+Alt+F1..F6 ไม่สำเร็จ (gsettings)" ;;
-    esac
+    set_sudoers_chvt && ok "sudoers: $KIOSK_USER รัน chvt 1-6 ได้โดยไม่ต้องใส่รหัส ($SUDOERS_FILE)" ||
+        bad "ติดตั้ง $SUDOERS_FILE ไม่สำเร็จ (visudo ไม่ผ่าน?) — Ctrl+Alt+F1..F6 จะสลับ TTY ไม่ได้"
     set_issue_ip && ok "หน้า login ของ TTY แสดง hostname + IP ($ISSUE_FILE, backup: $ISSUE_FILE.tent-bak)" ||
         warn "แก้ $ISSUE_FILE ไม่สำเร็จ — TTY จะไม่แสดง IP"
 
-    session_script_content "$KIOSK_SCRIPT" | install_as_kiosk 755 "$SESSION_SCRIPT" &&
+    session_script_content "$KIOSK_SCRIPT" "$HOTKEY_SCRIPT" | install_as_kiosk 755 "$SESSION_SCRIPT" &&
         ok "เขียน $SESSION_SCRIPT" || bad "เขียน $SESSION_SCRIPT ไม่สำเร็จ"
     # Stops gnome-initial-setup from appearing inside the kiosk session.
     install_as_kiosk 644 "$KIOSK_HOME/.config/gnome-initial-setup-done" </dev/null ||
@@ -359,7 +361,7 @@ install_lockdown() {
         exit 1
     fi
     ok "ล็อก kiosk แล้ว"
-    info "เข้า TTY ในโหมดล็อก: เสียบคีย์บอร์ด → Ctrl+Alt+F3 (หน้า login แสดง IP) · กลับหน้า kiosk: Ctrl+Alt+F1 หรือ F2"
+    info "เข้า TTY ในโหมดล็อก: เสียบคีย์บอร์ด → Ctrl+Alt+F3 (หน้า login แสดง IP) · กลับหน้า kiosk: Ctrl+Alt+F1 หรือ F2 · log: $HOTKEY_LOG"
     info "กลับเป็น desktop ปกติ: ./setup_kiosk_lockdown.sh --disable --restart"
 
     echo
