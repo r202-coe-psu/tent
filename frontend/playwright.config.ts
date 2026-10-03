@@ -1,6 +1,8 @@
 /// <reference types="node" />
 import { defineConfig, devices } from '@playwright/test';
 
+const APP_BASE_URL = process.env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:4173';
+
 export default defineConfig({
 	testDir: './e2e',
 	fullyParallel: true,
@@ -11,7 +13,7 @@ export default defineConfig({
 	workers: 1,
 	reporter: 'html',
 	use: {
-		baseURL: 'http://localhost:4173',
+		baseURL: APP_BASE_URL,
 		trace: 'on-first-retry',
 		video: process.env.PW_VIDEO ? 'on' : 'off',
 		launchOptions: {
@@ -31,7 +33,7 @@ export default defineConfig({
 			// Pass the admin URL so the SvelteKit BFF can reach CouchDB.
 			// COUCHDB_ADMIN_URL can be overridden via CI env; defaults to local dev value.
 			command: `COUCHDB_ADMIN_URL=${process.env.COUCHDB_ADMIN_URL ?? 'http://admin:password@localhost:5984'} pnpm preview`,
-			url: 'http://localhost:4173',
+			url: APP_BASE_URL,
 			reuseExistingServer: !process.env.CI,
 			timeout: 60_000,
 			env: {
