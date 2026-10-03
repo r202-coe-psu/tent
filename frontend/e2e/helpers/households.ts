@@ -202,6 +202,12 @@ export async function deleteDocsCreatedBy(names: string[], db = SHELTER_DB): Pro
 		docs: docs.map((d) => ({ _id: d._id, _rev: d._rev, _deleted: true }))
 	});
 	if (res.status >= 400) throw new Error(`Clean-up _bulk_docs failed (HTTP ${res.status})`);
+	// `_bulk_docs` answers 201 even when single docs are refused (e.g. a 409 conflict).
+	const refused = (res.data as { id: string; error?: string }[]).filter((r) => r.error);
+	if (refused.length > 0) {
+		const ids = refused.map((r) => `${r.id} (${r.error})`).join(', ');
+		throw new Error(`Clean-up could not delete ${refused.length} doc(s): ${ids}`);
+	}
 }
 
 // ─── Browser ───────────────────────────────────────────────────────────────────
