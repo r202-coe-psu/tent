@@ -215,9 +215,10 @@ export const useCheckInEvacuee = () => {
 	return createMutation(() => ({
 		mutationFn: ({ evacuee, ctx, zone }: { evacuee: Evacuee; ctx: AuthorContext; zone: string }) =>
 			peopleRepository().checkInEvacuee(evacuee, ctx, zone),
-		onSuccess: (updated) => {
+		// onSettled: the evacuee doc may be saved even when the household refresh then 409s
+		onSettled: (_updated, _err, { evacuee }) => {
 			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
-			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(updated._id) });
+			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(evacuee._id) });
 			qc.invalidateQueries({ queryKey: peopleKeys.households() });
 			qc.invalidateQueries({ queryKey: peopleKeys.movements() });
 		}
@@ -251,9 +252,9 @@ export const useConfirmRoom = () => {
 	return createMutation(() => ({
 		mutationFn: ({ evacuee, ctx }: { evacuee: Evacuee; ctx: AuthorContext }) =>
 			peopleRepository().confirmRoom(evacuee, ctx),
-		onSuccess: (updated) => {
+		onSettled: (_updated, _err, { evacuee }) => {
 			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
-			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(updated._id) });
+			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(evacuee._id) });
 			qc.invalidateQueries({ queryKey: peopleKeys.movements() });
 			qc.invalidateQueries({ queryKey: peopleKeys.households() });
 		}
@@ -272,10 +273,12 @@ export const useConfirmRoomForHousehold = () => {
 			evacuees: readonly Evacuee[];
 			ctx: AuthorContext;
 		}) => peopleRepository().confirmRoomForHousehold(householdId, evacuees, ctx),
-		onSuccess: (confirmed) => {
+		onSettled: (_confirmed, _err, { householdId, evacuees }) => {
 			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
-			for (const updated of confirmed) {
-				qc.invalidateQueries({ queryKey: peopleKeys.evacuee(updated._id) });
+			for (const member of evacuees) {
+				if (member.household_id === householdId) {
+					qc.invalidateQueries({ queryKey: peopleKeys.evacuee(member._id) });
+				}
 			}
 			qc.invalidateQueries({ queryKey: peopleKeys.movements() });
 			qc.invalidateQueries({ queryKey: peopleKeys.households() });
@@ -288,10 +291,11 @@ export const useChangeEvacueeZone = () => {
 	return createMutation(() => ({
 		mutationFn: ({ evacuee, ctx, zone }: { evacuee: Evacuee; ctx: AuthorContext; zone: string }) =>
 			peopleRepository().changeEvacueeZone(evacuee, ctx, zone),
-		onSuccess: (updated) => {
+		onSettled: (_updated, _err, { evacuee }) => {
 			qc.invalidateQueries({ queryKey: [...peopleKeys.all, 'evacuees'] });
-			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(updated._id) });
+			qc.invalidateQueries({ queryKey: peopleKeys.evacuee(evacuee._id) });
 			qc.invalidateQueries({ queryKey: peopleKeys.movements() });
+			qc.invalidateQueries({ queryKey: peopleKeys.households() });
 		}
 	}));
 };
