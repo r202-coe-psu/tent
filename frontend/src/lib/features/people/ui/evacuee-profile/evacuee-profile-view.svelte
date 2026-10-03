@@ -542,6 +542,7 @@
 					person_id: { cardType: data.cardType, number: data.cardNumber || undefined },
 					country: data.country,
 					religion: data.religion,
+					religion_other: data.religion === 'other' ? data.religionOther || null : null,
 					photo
 				}
 			});

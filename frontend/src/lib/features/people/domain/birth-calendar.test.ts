@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
 	ageFromBirthYearBE,
+	birthYearDisplayProblem,
+	birthYearDisplayRange,
 	currentYearBE,
 	defaultBirthCalendar,
 	toDisplayBirthYear,
@@ -32,5 +34,24 @@ describe('birth-calendar', () => {
 		const displayCe = toDisplayBirthYear(be, 'CE');
 		expect(toPersistBirthYearBE(displayCe, 'CE')).toBe(be);
 		expect(ageFromBirthYearBE(toPersistBirthYearBE(displayCe, 'CE'))).toBe(ageFromBirthYearBE(be));
+	});
+});
+
+describe('birthYearDisplayProblem (CR-148 FR-04 / FR-07)', () => {
+	const now = new Date('2026-10-03T00:00:00Z');
+
+	it('reports digits and range problems in the active calendar', () => {
+		expect(birthYearDisplayProblem('253', 'BE', now)).toBe('digits');
+		expect(birthYearDisplayProblem('2533', 'BE', now)).toBeNull();
+		expect(birthYearDisplayProblem('2419', 'BE', now)).toBeNull();
+		expect(birthYearDisplayProblem('2418', 'BE', now)).toBe('range');
+		expect(birthYearDisplayProblem('1990', 'CE', now)).toBeNull();
+		expect(birthYearDisplayProblem('2533', 'CE', now)).toBe('range');
+		expect(birthYearDisplayProblem('', 'CE', now)).toBeNull();
+	});
+
+	it('gives the accepted range per calendar', () => {
+		expect(birthYearDisplayRange('BE', now)).toEqual({ min: 2419, max: 2569 });
+		expect(birthYearDisplayRange('CE', now)).toEqual({ min: 1876, max: 2026 });
 	});
 });

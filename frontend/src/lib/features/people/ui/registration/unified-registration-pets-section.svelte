@@ -23,7 +23,7 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
-	import { isMeaningfulOtherPetNotes } from '../../domain/people';
+	import { PETS_MAX_COUNT, isMeaningfulOtherPetNotes } from '../../domain/people';
 	import type { UnifiedRegistrationChannel } from '../../domain/unified-registration';
 	import {
 		forgetPhotoPreview,
@@ -116,7 +116,7 @@
 
 	function addPet(species: 'dog' | 'cat' | 'other') {
 		if (pending) return;
-		if (petItems.length >= 20) {
+		if (petItems.length >= PETS_MAX_COUNT) {
 			toast.error(t.petMaxReached);
 			return;
 		}
@@ -306,13 +306,16 @@
 				>
 					<span class="text-xs font-medium text-foreground">
 						{totalPetCount > 0 ? `รายการสัตว์เลี้ยง (${totalPetCount} ตัว)` : 'เพิ่มสัตว์เลี้ยง'}
+						{#if petItems.length >= PETS_MAX_COUNT}
+							<span class="ml-1 font-normal text-amber-800">· {t.petMaxReached}</span>
+						{/if}
 					</span>
 					<div class="flex flex-wrap items-center gap-1.5">
 						<Button
 							type="button"
 							variant="outline"
 							size="sm"
-							disabled={pending || petItems.length >= 20}
+							disabled={pending || petItems.length >= PETS_MAX_COUNT}
 							onclick={() => addPet('dog')}
 							class="h-8 gap-1 text-xs"
 						>
@@ -323,7 +326,7 @@
 							type="button"
 							variant="outline"
 							size="sm"
-							disabled={pending || petItems.length >= 20}
+							disabled={pending || petItems.length >= PETS_MAX_COUNT}
 							onclick={() => addPet('cat')}
 							class="h-8 gap-1 text-xs"
 						>
@@ -334,7 +337,7 @@
 							type="button"
 							variant="outline"
 							size="sm"
-							disabled={pending || petItems.length >= 20}
+							disabled={pending || petItems.length >= PETS_MAX_COUNT}
 							onclick={() => addPet('other')}
 							class="h-8 gap-1 text-xs"
 						>
@@ -356,7 +359,7 @@
 								type="button"
 								variant="outline"
 								size="sm"
-								disabled={pending || petItems.length >= 20}
+								disabled={pending || petItems.length >= PETS_MAX_COUNT}
 								onclick={() => addPet('dog')}
 								class="h-8 gap-1 text-xs"
 							>
@@ -367,7 +370,7 @@
 								type="button"
 								variant="outline"
 								size="sm"
-								disabled={pending || petItems.length >= 20}
+								disabled={pending || petItems.length >= PETS_MAX_COUNT}
 								onclick={() => addPet('cat')}
 								class="h-8 gap-1 text-xs"
 							>
@@ -378,7 +381,7 @@
 								type="button"
 								variant="outline"
 								size="sm"
-								disabled={pending || petItems.length >= 20}
+								disabled={pending || petItems.length >= PETS_MAX_COUNT}
 								onclick={() => addPet('other')}
 								class="h-8 gap-1 text-xs"
 							>
