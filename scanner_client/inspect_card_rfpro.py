@@ -37,6 +37,7 @@ from app.rfpro import (
     CMD_ICC_SEL,
     CMD_ICC_SLOT_PWR,
     CMD_ICC_ST,
+    CMD_NEXT_REPORT,
     HEARTBEAT,
     SLOT_MAIN,
     RfproConnection,
@@ -194,12 +195,46 @@ def read_cid(transport: RfproTransport, show_cid: bool) -> None:
 
 
 def read_full(transport: RfproTransport) -> None:
-    """S0-6: read the whole card through the kiosk driver; print lengths and timing only."""
+    """S0-6: read the whole card through the kiosk driver; print lengths and timing only,
+    split into card reset, photo and everything else so it is clear where the seconds go."""
     wait_for_card(transport)
     step("4) อ่านข้อมูลทั้งใบด้วย driver เดียวกับ kiosk (ไม่แสดงข้อมูลบัตร)")
     reader = RfproThaiCardReader(transport=transport)
+
+    spent: dict[str, float] = {"reset": 0.0, "photo": 0.0}
+
+    def timed(bucket: str, fn):
+        def wrapper(*args, **kwargs):
+            began = time.monotonic()
+            try:
+                return fn(*args, **kwargs)
+            finally:
+                spent[bucket] += time.monotonic() - began
+
+        return wrapper
+
+    reader.connection.power_cycle = timed("reset", reader.connection.power_cycle)
+    reader.connect = timed("reset", reader.connect)
+    reader.get_photo_bytes = timed("photo", reader.get_photo_bytes)
+
+    commands = {"all": 0, "next_report": 0}
+    send, write = transport.command, transport._write
+
+    def counted(*args, **kwargs):
+        commands["all"] += 1
+        return send(*args, **kwargs)
+
+    def counted_write(frame: bytes) -> None:
+        # The page requests are written by the transport itself, inside a command.
+        commands["next_report"] += frame[6:8] == CMD_NEXT_REPORT
+        write(frame)
+
+    transport.command, transport._write = counted, counted_write
     started = time.monotonic()
-    card = reader.read_all_data()
+    try:
+        card = reader.read_all_data()
+    finally:
+        transport.command, transport._write = send, write
     elapsed = time.monotonic() - started
     for key, value in card.items():
         if value in (None, ""):
@@ -209,6 +244,15 @@ def read_full(transport: RfproTransport) -> None:
         else:
             size = f"{len(str(value))} ตัวอักษร"
         print(f"   {key:<16} {size}")
+    rest = elapsed - spent["reset"] - spent["photo"]
+    print(
+        f"   แยกเวลา: ตัดไฟ/รีเซ็ตบัตร {spent['reset']:.1f} วิ · รูป {spent['photo']:.1f} วิ · "
+        f"ข้อความและอื่น ๆ {rest:.1f} วิ"
+    )
+    print(
+        f"   คำสั่งทั้งหมด {commands['all']} (ขอหน้าถัดไป FE FF {commands['next_report']}) · "
+        f"เฉลี่ย {elapsed / max(commands['all'], 1) * 1000:.0f} ms/คำสั่ง · piece_size {reader.piece_size}"
+    )
     print(f"✅ อ่านครบทั้งใบใน {elapsed:.1f} วิ (AC-C3: ลงทะเบียนต้องไม่เกินค่านี้ + 20%)")
 
 

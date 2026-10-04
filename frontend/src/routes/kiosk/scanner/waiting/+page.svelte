@@ -1,6 +1,11 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { KioskBackButton, KioskCardInsertScene, KioskCheckInWizard } from '$lib/features/kiosk';
+	import {
+		KioskBackButton,
+		KioskCardInsertScene,
+		KioskCheckInWizard,
+		KioskReaderPointer
+	} from '$lib/features/kiosk';
 
 	const backUrl = $derived(`/kiosk${page.url.search}`);
 </script>
@@ -10,7 +15,7 @@
 </svelte:head>
 
 <section
-	class="waiting-page mx-auto flex w-full max-w-3xl flex-col gap-3"
+	class="waiting-page mx-auto flex w-full max-w-3xl flex-1 flex-col gap-3"
 	aria-labelledby="waiting-title"
 >
 	<KioskCheckInWizard currentStep={2} />
@@ -18,34 +23,40 @@
 		<KioskBackButton href={backUrl} />
 	</div>
 
-	<header class="text-center">
-		<h1
-			id="waiting-title"
-			class="text-2xl font-extrabold tracking-tight text-[#0A2647] sm:text-3xl kiosk-portrait:text-4xl"
-		>
-			เสียบบัตรประชาชน
-		</h1>
-		<p class="mt-1 text-base font-semibold text-slate-700 kiosk-portrait:text-xl">
-			คว่ำบัตรลง · หงายชิปขึ้น
-		</p>
-	</header>
+	<div
+		class="flex flex-1 flex-col justify-center gap-4 pb-28 kiosk-portrait:gap-6 kiosk-portrait:pb-96 kiosk-compact:gap-2 kiosk-compact:pb-0"
+	>
+		<header class="text-center">
+			<h1
+				id="waiting-title"
+				class="text-2xl font-extrabold tracking-tight text-[#0A2647] sm:text-3xl kiosk-portrait:text-4xl"
+			>
+				เสียบบัตรประชาชน
+			</h1>
+			<p class="mt-1 text-base font-semibold text-slate-700 kiosk-portrait:text-xl">
+				คว่ำบัตรลง · เอาด้านบาร์โค้ดเข้า
+			</p>
+		</header>
 
-	<main class="flex w-full flex-col items-center kiosk-portrait:mt-6">
-		<KioskCardInsertScene />
+		<main class="flex w-full flex-col items-center">
+			<KioskCardInsertScene />
 
-		<div
-			class="waiting-status mt-4 flex min-h-12 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-base font-semibold text-slate-700 kiosk-portrait:mt-6 kiosk-portrait:min-h-16 kiosk-portrait:gap-3 kiosk-portrait:rounded-2xl kiosk-portrait:px-7 kiosk-portrait:text-xl"
-			role="status"
-			aria-live="polite"
-		>
-			<span
-				class="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-[#0A2647] motion-reduce:animate-none kiosk-portrait:h-6 kiosk-portrait:w-6 kiosk-portrait:border-3"
-				aria-hidden="true"
-			></span>
-			รออ่านบัตร · อย่าถอดบัตร
-		</div>
-	</main>
+			<div
+				class="waiting-status mt-4 flex min-h-12 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-base font-semibold text-slate-700 kiosk-portrait:mt-6 kiosk-portrait:min-h-16 kiosk-portrait:gap-3 kiosk-portrait:rounded-2xl kiosk-portrait:px-7 kiosk-portrait:text-xl"
+				role="status"
+				aria-live="polite"
+			>
+				<span
+					class="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-[#0A2647] motion-reduce:animate-none kiosk-portrait:h-6 kiosk-portrait:w-6 kiosk-portrait:border-3"
+					aria-hidden="true"
+				></span>
+				รออ่านบัตร · อย่าถอดบัตร
+			</div>
+		</main>
+	</div>
 </section>
+
+<KioskReaderPointer side="left" label="ช่องเสียบบัตร" />
 
 <style>
 	@media (max-height: 650px) {

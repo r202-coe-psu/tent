@@ -19,6 +19,7 @@
 4. [การตั้งค่าให้รันอัตโนมัติเมื่อเปิดเครื่อง (Autostart on Boot)](#-การตั้งค่าให้รันอัตโนมัติเมื่อเปิดเครื่อง-autostart-on-boot)
 5. [การตั้งค่าจอแสดงผลแนวตั้งและการป้องกันจอดับ (Display Optimization)](#-การตั้งค่าจอแสดงผลแนวตั้งและการป้องกันจอดับ-display-optimization)
 6. [ตู้ใหญ่ kiosk3 (ESC/POS + เครื่องอ่าน QR + เครื่องอ่านบัตร RFpro)](#-ตู้ใหญ่-kiosk3-escpos--เครื่องอ่าน-qr--เครื่องอ่านบัตร-rfpro)
+   - [ล็อกไม่ให้ออกจากหน้า kiosk (ตู้ใหญ่)](#ล็อกไม่ให้ออกจากหน้า-kiosk-ตู้ใหญ่)
 7. [เครื่องพิมพ์ Label XP-365B (USB Label Printer)](#-เครื่องพิมพ์-label-xp-365b-usb-label-printer)
 8. [การแก้ไขปัญหาที่พบบ่อย (Troubleshooting & FAQ)](#-การแก้ไขปัญหาที่พบบ่อย-troubleshooting--faq)
 
@@ -466,11 +467,36 @@ tail -f /tmp/kiosk_autostart.log
 
 ตู้ที่สั่งทำ (ELSKY M219FN-2C) ใช้ฮาร์ดแวร์ต่างจาก Raspberry Pi + XP-365B ตั้งค่าทั้งหมดใน `scanner_client/.env` ของเครื่องนั้น — **ตู้ที่ไม่ตั้งค่าเหล่านี้ทำงานเหมือนเดิมทุกอย่าง** (`PRINTER_BACKEND=cups` · `KIOSK_QR_INPUT=camera` · `CARD_READER=pcsc`)
 
+### ตั้งค่าตู้ใหญ่ทั้งหมดด้วยคำสั่งเดียว
+
+รันด้วย user ของ kiosk (**ไม่ต้องใส่ sudo** — script เรียก sudo เอง) · รันซ้ำได้ · แต่ละขั้นรายงาน ✅/⚠️/❌
+
+```bash
+cd ~/tent/scanner_client
+./setup_big_kiosk.sh                 # ติดตั้ง/ตั้งค่าทั้งหมด
+sudo reboot                          # ให้สิทธิ์ group lp / plugdev มีผล
+./setup_big_kiosk.sh --status        # ตรวจอย่างเดียว ไม่แก้อะไร
+./setup_big_kiosk.sh --status --test-print   # + พิมพ์หน้าทดสอบ
+```
+
+| ขั้น | ทำอะไร |
+| --- | --- |
+| 1 | ตรวจฮาร์ดแวร์: printer `28e9:5812`, QR `0461:4d81`, เครื่องอ่านบัตร `0483:4c43` |
+| 2 | `apt install` แพ็กเกจระบบ (ข้ามได้ด้วย `--skip-apt`) |
+| 3 | สร้าง `.venv` + `pip install -r requirements.txt` (ข้ามได้ด้วย `--skip-venv`) |
+| 4 | `.env`: เพิ่มเฉพาะค่าฮาร์ดแวร์ที่ยังไม่มี + `chmod 600` · **ไม่เขียน `TENT_BASE_URL` / `DEVICE_ID` / `DEVICE_SECRET`** — แจ้งให้กรอกเองจาก System Management |
+| 5 | เพิ่ม user เข้า group `lp` (printer) |
+| 6 | `./setup_card_reader.sh` (udev rule + group `plugdev`) |
+| 7 | ปิด `cups-browsed` (กัน printer ในเครือข่ายโผล่เข้ามาเอง) |
+| 8 | `./setup_autostart.sh` |
+| 9 | ปิด sleep/suspend ของระบบ · GNOME: ปิดจอดับ/ล็อกจอ · X11: `xset s off -dpms` ตอน login |
+
+ไม่ทำ: `setup_printer.sh` (XP-365B เท่านั้น) และการตั้งค่าในตัว printer (โหมด black mark ทำให้ตัดกระดาษ ~17 ซม./ใบ — ต้องตั้งที่ printer ตามคู่มือผู้ขาย)
+
 ```env
 PRINTER_BACKEND=escpos
 PRINTER_USB_ID=28e9:5812
 PRINTER_WIDTH_DOTS=576
-PRINTER_CUT_FEED_MM=15         # หัวพิมพ์ → ใบมีด (มม.)
 KIOSK_QR_INPUT=reader          # camera | reader | both
 # KIOSK_CAMERA_LABEL=JSK-RGB   # ใช้กับ camera/both: เลือกกล้องที่ชื่อมีข้อความนี้
 CARD_READER=rfpro
@@ -485,10 +511,9 @@ CARD_READER_USB_ID=0483:4c43
 # เครื่องพิมพ์: /dev/usb/lp* เป็น root:lp 0660
 sudo usermod -aG lp kiosk
 # เครื่องอ่านบัตร: /dev/hidraw* เป็น root 0600 → ให้ group plugdev อ่าน/เขียนเฉพาะโมดูลนี้
-echo 'SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="4c43", GROUP="plugdev", MODE="0660"' \
-  | sudo tee /etc/udev/rules.d/70-tent-card-reader.rules
-sudo udevadm control --reload && sudo udevadm trigger
-# แล้ว logout/login ใหม่ (user kiosk ต้องอยู่ใน plugdev)
+./setup_card_reader.sh            # udev rule + group plugdev + ตรวจสิทธิ์ (รันซ้ำได้)
+./setup_card_reader.sh --status   # ตรวจอย่างเดียว ไม่แก้อะไร
+# แล้ว logout/login ใหม่ → ทดสอบโดยไม่ใช้ sudo: python3 inspect_card_rfpro.py ping
 ```
 
 ### เครื่องพิมพ์ใบเสร็จ ESC/POS (ตู้ใหญ่)
@@ -499,9 +524,11 @@ sudo udevadm control --reload && sudo udevadm trigger
 | `PRINTER_USB_ID` | `VID:PID` (hex) — หา `/dev/usb/lpN` จาก sysfs **ทุกครั้งที่พิมพ์** เลยถอด-เสียบ USB แล้วเลข `lpN` เปลี่ยนก็พิมพ์ต่อได้ | — |
 | `PRINTER_DEVICE` | path ตรง ๆ (ใช้แทน `PRINTER_USB_ID` ถ้าตั้ง) | — |
 | `PRINTER_WIDTH_DOTS` | ความกว้างหัวพิมพ์ (80 มม. ≈ 576) | `576` |
-| `PRINTER_CUT_FEED_MM` | ระยะเลื่อนกระดาษจากหัวพิมพ์ถึงใบมีดก่อนตัด (0–40 มม.) · ตัดโดนเนื้อหา → เพิ่ม · ขอบล่างยาว → ลด | `15` |
 
-- ใช้ label PNG ขนาดเดิม (80×60 มม.) — ตัดขอบขาว, ย่อให้พอดีหัวพิมพ์ (ไม่ขยาย), จัดกึ่งกลาง แล้วส่ง `GS v 0` + เลื่อนกระดาษ `ESC J` (`PRINTER_CUT_FEED_MM`) + ตัด `ESC i` ตรงเข้า device (ไม่ใช้ `GS V` เพราะ printer ตู้ใหญ่ผูก `GS V` กับ black mark → เลื่อนกระดาษ ~17 ซม. ต่อดวงบนม้วนธรรมดา) (ไม่ผ่าน CUPS, ไม่เขียน label ลง disk)
+- ใช้ label PNG ขนาดเดิม (80×60 มม.) — ตัดขอบขาว, ย่อให้พอดีหัวพิมพ์ (ไม่ขยาย) จัดกึ่งกลาง แล้วส่ง `GS v 0` + ตัด `ESC i` ทันที (ไม่เลื่อนกระดาษก่อนตัด) ตรงเข้า device (ไม่ใช้ `GS V` เพราะ printer ตู้ใหญ่ผูก `GS V` กับ black mark → เลื่อนกระดาษ ~17 ซม. ต่อดวงบนม้วนธรรมดา) (ไม่ผ่าน CUPS, ไม่เขียน label ลง disk)
+- ความยาวต่อดวงและการรอระหว่างคนกำหนดเป็นค่าคงที่ในโค้ด (ไม่ต้องตั้งใน `.env`): ทุกดวงยาว 60 มม. จากรอยตัดถึงรอยตัด (`LABEL_LENGTH_MM` ใน `app/escpos.py` — เนื้อหาที่สูงเกินถูกย่อ, ที่สั้นกว่าเติมที่ว่างบน-ล่าง) · หักระยะที่ printer kiosk3 เลื่อนกระดาษเองตอนตัด 10 มม. (`CUT_SELF_FEED_MM`) จึงเหลือให้เนื้อหา 50 มม. · ถ้าใบมีดตัดโดนบรรทัดล่าง เพิ่ม `DEFAULT_CUT_FEED_MM` ใน `app/escpos.py` · วัดจากดวงที่ 2 เป็นต้นไป เพราะดวงแรกเริ่มจากรอยตัด/ฉีกครั้งก่อน · รอ 2 วินาทีระหว่างแต่ละคน (`ESCPOS_LABEL_PAUSE_SEC` ใน `app/manager.py`) ไม่เช่นนั้น printer ไม่ตัดดวงก่อน
+- สติกเกอร์เส้นประ 60 มม. คร่อมเส้นประหลังใส่ม้วนใหม่ (เครื่องเลื่อน + ตัดเศษทิ้งเองตอนใส่): ฉีกปลายม้วนตรงเส้นประก่อนใส่ วัดความยาวเศษที่ถูกตัดทิ้ง แล้วรัน `venv/bin/python align_printer_paper.py --stub-mm <มม.>` หรือขีดมาร์คดำชิดเส้นประแล้วรัน `--mark` ให้เซนเซอร์ black mark หาเอง — รายละเอียดอยู่หัวไฟล์
+- ไม่ตัด / ยาวผิดปกติ: รัน `python3 inspect_printer_cut.py` แล้วดูว่าคำสั่งตัดตัวไหนใช้ได้ และวัดระยะหัวพิมพ์ → ใบมีด (เทสต์ 0)
 - เปิดสวิตช์เครื่องพิมพ์แยกต่างหากด้วย ไม่เช่นนั้นจะได้ `PRINT_FAILED` (log: `ESC/POS printer … not found`)
 - log `No permission to open /dev/usb/lpN` = user ยังไม่อยู่ใน group `lp` (ดูคำสั่งด้านบน)
 - ทดสอบพิมพ์/วัดความกว้างจริง: `sudo ./inspect_hardware.sh --test-printer`
@@ -520,10 +547,11 @@ sudo udevadm control --reload && sudo udevadm trigger
 
 โมดูล HOUSESmart `0483:4c43` (firmware `C2-CEU-PRO V1.15.31.c`) เป็น HID แบบเฉพาะผู้ขาย **ไม่ใช่ PC/SC** (`pcscd`/`pyscard` มองไม่เห็น) — `app/rfpro.py` คุย protocol ของผู้ขายผ่าน `/dev/hidraw*` แล้วใช้ APDU ชุดเดียวกับ `app/scard.py` (flow lookup/ลงทะเบียนด้วยบัตรไม่เปลี่ยน)
 
-- ตั้ง `CARD_READER=rfpro` (+ `CARD_READER_USB_ID` ถ้าไม่ใช่ `0483:4c43`) และทำ udev rule ด้านบน
+- ตั้ง `CARD_READER=rfpro` (+ `CARD_READER_USB_ID` ถ้าไม่ใช่ `0483:4c43`) และรัน `./setup_card_reader.sh` ด้านบน
 - เสียบบัตรให้ **ด้านชิปเข้าก่อนและสุดช่อง** — เสียบไม่สุด/กลับด้านจะได้ error "อ่านข้อมูลบัตรไม่สำเร็จ" เสียบใหม่แล้วอ่านได้
 - ถอด USB ของโมดูล → log `Smart Card Reader disconnected; waiting for the hardware` เสียบกลับแล้วใช้ต่อได้โดยไม่ restart
-- driver ส่งได้เฉพาะคำสั่งอ่านที่อยู่ใน allowlist (ไม่มี reboot / เขียน flash / เปลี่ยน baud) และไม่ log ข้อมูลบัตรทุกระดับ
+- โมดูลตอบกลับเป็น input report ขนาด 32 ไบต์ ถ้าเฟรมคำตอบยาวกว่านั้นมันส่งมาแค่ report แรก และต้อง**ขอหน้าถัดไปทีละหน้าด้วยคำสั่ง `FE FF`** (`AA <INX เดิม> 00 04 00 00 FE FF <CHK>` — ไม่มีในเอกสารผู้ผลิต พบจากการจับทราฟฟิก USB ด้วย usbmon ของไลบรารีผู้ผลิต) `RfproTransport` ทำให้เองเมื่อเฟรมยังไม่ครบ จึงอ่านชื่อ/ที่อยู่/รูปได้ทีละ 255 ไบต์ (วัดบน kiosk3: Le 255 = 9 report, ข้อมูลตรง) — รูปจาก ~17 วินาทีเหลือ ~8 วินาที (เวลาส่วนใหญ่คือสายบัตร 9600 baud ~1.25 ms/ไบต์) ถ้าหน้าถัดไปไม่มา driver ถอยกลับไปอ่านชิ้นละ 20 ไบต์เองและ log `reading in 20-byte pieces` · `inspect_card_rfpro.py paged-reply` ตรวจการอ่านหลายหน้าที่ Le 20…255 · อ่านรูปเกิน 30 วินาทีจะข้ามรูปแล้วลงทะเบียนต่อโดยไม่มีรูป
+- driver ส่งได้เฉพาะคำสั่งอ่านที่อยู่ใน allowlist (ไม่มี reboot / เขียน flash / เปลี่ยน baud) และไม่ log ข้อมูลบัตรทุกระดับ · ความเร็วสายโมดูล↔บัตรคงที่ 9600 — ลองแล้วบน kiosk3 (2026-10-03): `18 82` SET_BAUD 38400 ก่อน ATR ทำให้บัตรไม่ตอบรีเซ็ต (status `0xf8`), PPS (`18 83`) เร็วกว่า 9600 โมดูลรับคำสั่งแต่ APDU ถัดไปไม่ตอบ จึงเร่งสายบัตรไม่ได้ · อ่านรูปชิ้นละ 20 ไบต์ ≈ 66 ms/ชิ้น ≈ 17 วินาที
 - ตรวจ/วัดเวลา (ต้อง `sudo`, รันในโฟลเดอร์ `scanner_client`):
 
 ```bash
@@ -531,6 +559,122 @@ sudo python3 inspect_card_rfpro.py ping            # version + สถานะ�
 sudo python3 inspect_card_rfpro.py                 # ถึงอ่านเลขบัตร (ปิดบังกลางเลข; --show-cid เพื่อดูเต็ม)
 sudo python3 inspect_card_rfpro.py --full          # อ่านทั้งใบ: แสดงเฉพาะความยาวแต่ละ field + เวลา
 ```
+
+### ล็อกไม่ให้ออกจากหน้า kiosk (ตู้ใหญ่)
+
+ใน session GNOME ปกติ **ปัดจอแล้วออกจาก Chromium ได้** (เปิดหน้า Activities / top bar ของ GNOME) — `--kiosk` ของ Chromium กันไม่ได้เพราะท่าปัดเป็นของ GNOME Shell. `setup_kiosk_lockdown.sh` แก้ที่ต้นเหตุ: ตั้ง GDM ให้ **login อัตโนมัติ** เข้า session **GNOME Kiosk Script** (แพ็กเกจ `gnome-kiosk` + `gnome-kiosk-script-session`) ซึ่ง **ไม่มี GNOME Shell เลย** — ไม่มี overview / ท่าปัดจอ / top bar / dock บนจอมีแค่ Chromium ของ kiosk ถ้า Chromium ปิดจะเห็นจอดำ (ไม่ใช่ desktop) แล้วเปิดใหม่เอง
+
+ใช้กับตู้ใหญ่ (Debian + GDM) เท่านั้น — ตู้ Raspberry Pi (labwc) ไม่ต้องใช้
+
+อธิบายการทำงานของ script ทีละส่วน (autologin, session, ไฟล์ที่แตะ, ความปลอดภัย): [`kiosk_lockdown_autologin.md`](kiosk_lockdown_autologin.md)
+
+#### ติดตั้ง (ครั้งแรก)
+
+รันด้วย user ของ kiosk (**ไม่ต้องใส่ sudo**) หลัง `./setup_big_kiosk.sh` ทำงานได้แล้ว และควรทดสอบ kiosk ใน desktop ปกติให้ผ่านก่อน (อ่านบัตร / QR / พิมพ์)
+
+```bash
+cd ~/tent/scanner_client
+./setup_kiosk_lockdown.sh --restart  # ติดตั้ง + ตั้งค่า → แสดง --status ให้เอง → restart gdm (จอดับแป๊บแล้วเข้า kiosk)
+./setup_kiosk_lockdown.sh --status   # ตรวจซ้ำภายหลัง: ทุกบรรทัดต้องเป็น ✅
+```
+
+> ⚠️ `--restart` (= `sudo systemctl restart gdm`) จะปิด session ที่เปิดอยู่บนจอตู้ทันที — สั่งผ่าน SSH ได้ (SSH ไม่หลุด) · ไม่ใส่ `--restart` = มีผลตอน login/reboot ครั้งถัดไป · ระหว่างติดตั้ง script แสดงค่าเดิมของปุ่ม `Ctrl+Alt+F3` ให้ด้วย
+
+ตรวจหลัง restart: เข้าหน้า `/kiosk` เองโดยไม่ต้องใส่รหัส · ปัดจอทุกทิศ/หลายนิ้วแล้วไม่ออก · จอยังเป็นแนวตั้ง · แตะปุ่มตรงจุด · อ่านบัตร/สแกน QR/พิมพ์ได้
+
+#### script ทำอะไรกับเครื่อง
+
+| ทำอะไร | ที่ไหน |
+| --- | --- |
+| `apt install gnome-kiosk gnome-kiosk-script-session` (ถ้ายังไม่มี) | ระบบ |
+| เพิ่ม user เข้า group `input` + ให้รัน `chvt 1-6` ได้โดยไม่ต้องใส่รหัส (สำหรับ `Ctrl+Alt+F1..F6`) | ระบบ · `/etc/sudoers.d/tent-kiosk-chvt` |
+| ให้หน้า login ของ TTY แสดง hostname + IP | `/etc/issue` (backup: `issue.tent-bak`) |
+| เขียนแอปเดียวของ session: วนเปิด `start_kiosk.sh` (ถ้าหลุดจะเปิดใหม่ทุก 30 วินาที) + เปิด `maintenance_hotkey.py` (ตัวรับ `Ctrl+Alt+F1..F6`) ไว้เบื้องหลัง | `~/.local/bin/gnome-kiosk-script` |
+| ข้ามหน้า Welcome ของ GNOME ใน session kiosk | `~/.config/gnome-initial-setup-done` |
+| จำ session เดิม (เช่น `gnome`) ไว้ใช้ตอน `--disable` | `~/.config/tent-kiosk-lockdown.prev-session` |
+| ตั้ง session ตอน login ของ user เป็น kiosk (ผ่าน AccountsService) | `/var/lib/AccountsService/users/<user>` |
+| เปิด autologin (`AutomaticLoginEnable=true`, `AutomaticLogin=<user>`) + backup ครั้งแรก | `/etc/gdm3/daemon.conf` (backup: `daemon.conf.tent-bak`) |
+
+ไม่แตะ: การหมุนจอ (`~/.config/monitors.xml` เดิมใช้ต่อ), `.env`, XDG autostart เดิม (ยังอยู่ — `flock` กันเปิดซ้อน)
+
+#### Autologin ทำงานอย่างไร
+
+GDM มี 2 ค่าที่แยกกัน — script ตั้งให้ทั้งคู่:
+
+1. **login ให้ใคร** — `/etc/gdm3/daemon.conf` ใต้ `[daemon]` (ค่าเริ่มต้นของ Debian เป็น comment = ปิดอยู่). หน้า Settings → Users → Automatic Login ของ GNOME ก็เขียนไฟล์นี้
+   ```ini
+   [daemon]
+   AutomaticLoginEnable=true
+   AutomaticLogin=kiosk
+   ```
+2. **เข้า session ไหน** — GDM ใช้ session ล่าสุดที่จำไว้ให้ user (`Session=` ใน `/var/lib/AccountsService/users/kiosk`) ไม่ใช่ใน `daemon.conf`. เทียบได้กับกดรูปเฟือง ⚙ ที่หน้า login แล้วเลือก "Kiosk Script"
+
+script เปลี่ยน session เป็น kiosk **ก่อน** เปิด autologin — ถ้าติดตั้งไม่สำเร็จครึ่งทาง เครื่องจะไม่ autologin เข้า desktop ที่ปัดออกได้
+
+#### กลับเป็นหน้า desktop ปกติ (ซ่อมบำรุง)
+
+**ทางที่ 1 — ผ่าน SSH (แนะนำ)**
+```bash
+cd ~/tent/scanner_client
+./setup_kiosk_lockdown.sh --disable --restart  # จอตู้เข้า desktop GNOME ปกติ (kiosk ยังเปิดผ่าน XDG autostart)
+# ... ซ่อม ...
+./setup_kiosk_lockdown.sh --restart            # ล็อกกลับ
+```
+
+**ทางที่ 2 — ที่ตู้ ใช้คีย์บอร์ด USB (ไม่รู้ IP / SSH ไม่ได้)**: เสียบคีย์บอร์ด → **`Ctrl+Alt+F3`** → หน้า login ตัวอักษรแสดง hostname + IP (เอาไป SSH ต่อได้เลย) → login (ชื่อ + รหัสผ่าน) → รันคำสั่งชุดเดียวกับทางที่ 1 · กลับหน้า kiosk: `Ctrl+Alt+F1` หรือ `F2` (ดูหัวข้อถัดไป)
+
+**ทางที่ 3 — ถ้า script ใช้ไม่ได้ (ทำมือ)**
+```bash
+sudo busctl call org.freedesktop.Accounts /org/freedesktop/Accounts/User$(id -u kiosk) \
+  org.freedesktop.Accounts.User SetSession s gnome
+sudo systemctl restart gdm
+```
+
+> ⚠️ ระหว่าง `--disable` autologin ยังเปิดอยู่ — **ใครเปิดเครื่องก็เข้า desktop ได้โดยไม่ต้องใส่รหัส** ซ่อมเสร็จต้องล็อกกลับทุกครั้ง (`./setup_kiosk_lockdown.sh --restart`) · ถ้ากดเลือก session "GNOME" เองที่หน้า login GDM จะจำค่านั้นไว้เหมือนกัน — ต้องล็อกกลับเช่นกัน
+
+**ปิด autologin ด้วย** (ให้เครื่องขึ้นหน้า login ใส่รหัสทุกครั้ง): คืนไฟล์ backup
+```bash
+sudo cp /etc/gdm3/daemon.conf.tent-bak /etc/gdm3/daemon.conf
+./setup_kiosk_lockdown.sh --disable --restart
+```
+
+#### เข้า TTY ในโหมดล็อก (`Ctrl+Alt+F3`)
+
+ใน kiosk session shortcut ของ GNOME (`Ctrl+Alt+T`, `Alt+F2`, `Super`) ใช้ไม่ได้ เพราะโปรแกรมที่คอยฟังปุ่มเหล่านั้น (GNOME Shell / gnome-settings-daemon) ไม่ได้รัน — เหตุผลเดียวกับที่ปัดจอออกไม่ได้. `Ctrl+Alt+F1..F6` ก็เช่นกัน: บน Wayland kernel ไม่สลับ VT เอง และ gnome-kiosk ไม่ทำแทน (ยืนยันบน kiosk3: `sudo chvt 3` ได้ แต่ปุ่มไม่ได้) จึงมี `maintenance_hotkey.py` อ่านปุ่มจาก kernel แล้วสั่ง `sudo chvt N` ให้:
+
+1. เสียบคีย์บอร์ด USB → `Ctrl+Alt+F3` (คีย์บอร์ดเล็ก/laptop อาจต้อง `Fn+Ctrl+Alt+F3`)
+2. หน้าจอตัวอักษรแสดง `SmartShelter kiosk: <hostname>   IP: <ip>` — **ไม่ต้อง login ก็เห็น IP** → เอาไป SSH ต่อได้
+3. login ด้วยชื่อ + รหัสผ่าน เพื่อใช้ shell ที่ตู้
+4. กลับหน้า kiosk: `Ctrl+Alt+F1` หรือ `Ctrl+Alt+F2`
+
+- ใช้ได้แม้จอดำ (bootstrap ล้ม / Chromium ไม่ขึ้น) เพราะไม่ได้ผ่าน Chromium
+- ไม่ยึดคีย์บอร์ด (QR reader ใช้ได้ตามเดิม) และไม่ log ปุ่มที่กด · sudo อนุญาตแค่ `chvt 1`..`chvt 6`
+- กดแล้วไม่มีอะไรเกิดขึ้น → ดู `/tmp/kiosk_maintenance_hotkey.log` ผ่าน SSH
+
+รายละเอียด: [`kiosk_lockdown_autologin.md` §7.6](kiosk_lockdown_autologin.md#76-เข้า-tty-ในโหมดล็อก-ctrlaltf3)
+
+#### ใช้กับ user อื่น (`--user`)
+
+ถ้าแยก user ดูแลเครื่อง (มี sudo) กับ user ของ kiosk (ไม่มี sudo) — รันจาก user ดูแลเครื่อง:
+```bash
+./setup_kiosk_lockdown.sh --user kiosk
+./setup_kiosk_lockdown.sh --user kiosk --status
+./setup_kiosk_lockdown.sh --user kiosk --disable --restart
+```
+user ของ kiosk ต้องรัน `scanner_client/start_kiosk.sh` ได้ (script ตรวจให้ก่อนติดตั้ง)
+
+#### แก้ปัญหา
+
+| อาการ | สาเหตุ / วิธีแก้ |
+| --- | --- |
+| `--status`: `session ตอน login: gnome — ยังไม่ได้ล็อก kiosk` | ยังไม่ได้ติดตั้ง หรือมีคนเลือก session GNOME ที่หน้า login — รัน `./setup_kiosk_lockdown.sh --restart` |
+| กด `Ctrl+Alt+F3` แล้วไม่มีอะไรเกิดขึ้น | ลอง `Fn+Ctrl+Alt+F3` · ผ่าน SSH: `cat /tmp/kiosk_maintenance_hotkey.log` — `not in the 'input' group` = ยังไม่ได้ restart gdm หลังติดตั้ง · `chvt 3 failed` = ไม่มี sudoers rule (รัน `./setup_kiosk_lockdown.sh --restart`) |
+| `ไม่พบ session GNOME Kiosk Script` | แพ็กเกจไม่ครบ: `sudo apt install gnome-kiosk gnome-kiosk-script-session` แล้ว `ls /usr/share/wayland-sessions/` |
+| `apt install ไม่สำเร็จ` | เน็ต PSU ต้อง login captive portal ก่อน |
+| หลัง restart ขึ้นหน้า text editor แทน kiosk | `~/.local/bin/gnome-kiosk-script` หาย (gnome-kiosk สร้างตัวอย่างแทน) — รัน `./setup_kiosk_lockdown.sh` ใหม่ |
+| จอดำค้าง ไม่ขึ้น kiosk | ดู `cat /tmp/kiosk_autostart.log` — exit 78/79 = `.env` ผิด/credential ใช้ไม่ได้ แก้ `.env` ผ่าน SSH แล้วรอ ≤ 30 วินาที (ไม่ต้อง reboot) |
+| จอกลายเป็นแนวนอน / แตะไม่ตรงปุ่ม | session kiosk ใช้ `~/.config/monitors.xml` ของ user — ตั้งการหมุนจอใน desktop ปกติ (`--disable`) ที่ Settings → Displays แล้วล็อกกลับ |
+| GDM ไม่ขึ้นเลยหลังติดตั้ง | SSH เข้ามา: `sudo cp /etc/gdm3/daemon.conf.tent-bak /etc/gdm3/daemon.conf && sudo systemctl restart gdm` |
 
 ---
 

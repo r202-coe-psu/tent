@@ -11,13 +11,17 @@
 		getKioskDisplayContext,
 		KioskIdleTimeout,
 		KIOSK_IDLE_TIMEOUT_MS,
+		KioskCardReadProgress,
 		KioskCheckInWizard,
+		advanceCardReadPercent,
 		buildKioskPhotoPayload,
 		navigateToKioskHome,
+		parseCardReadProgress,
 		readKioskDisplayQuery,
 		registerKioskWalkIn,
 		registerWalkInCardRead,
-		walkInSession
+		walkInSession,
+		type CardReadStage
 	} from '$lib/features/kiosk';
 	import type { SmartCardData } from '$lib/features/scanners';
 	const displayContext = $derived(
@@ -29,7 +33,12 @@
 	let cardReading = $state(false);
 	let reading = $state(false);
 	let error = $state('');
+	/** How far the chip read is, 0–100; scanner_client reports it as `kiosk:smart-card-progress`. */
+	let readPercent = $state(0);
+	let readPhase = $state<'data' | 'photo'>('data');
 	const busy = $derived(cardReading || reading);
+	const stage = $derived<CardReadStage>(reading ? 'saving' : readPhase);
+	const percent = $derived(reading ? 100 : readPercent);
 	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, returnHome);
 	onMount(() => {
 		if (!walkInSession.citizenId || !walkInSession.consented) {
@@ -39,8 +48,16 @@
 		idleTimeout.start();
 		const onCardReading = () => {
 			cardReading = true;
+			readPercent = 0;
+			readPhase = 'data';
 			error = '';
 			idleTimeout.setPaused(true);
+		};
+		const onCardProgress = (event: Event) => {
+			const progress = parseCardReadProgress((event as CustomEvent).detail);
+			if (!progress || !cardReading) return;
+			readPhase = progress.phase;
+			readPercent = advanceCardReadPercent(readPercent, progress);
 		};
 		const onCardRead = (event: Event) => void handleFullRead(event);
 		const onCardReadError = () => {
@@ -50,6 +67,7 @@
 			error = 'อ่านข้อมูลบัตรไม่สำเร็จ กรุณานำบัตรออกแล้วเสียบใหม่';
 		};
 		window.addEventListener('kiosk:smart-card-reading', onCardReading);
+		window.addEventListener('kiosk:smart-card-progress', onCardProgress);
 		window.addEventListener('kiosk:smart-card-full-read', onCardRead);
 		window.addEventListener('kiosk:smart-card-full-read-error', onCardReadError);
 		ready = true;
@@ -57,6 +75,7 @@
 			idleTimeout.stop();
 			ready = false;
 			window.removeEventListener('kiosk:smart-card-reading', onCardReading);
+			window.removeEventListener('kiosk:smart-card-progress', onCardProgress);
 			window.removeEventListener('kiosk:smart-card-full-read', onCardRead);
 			window.removeEventListener('kiosk:smart-card-full-read-error', onCardReadError);
 		};
@@ -107,43 +126,38 @@
 <svelte:head><title>เสียบบัตรประชาชน — SmartShelter Kiosk</title></svelte:head>
 <svelte:window onpointerdown={activity} onkeydown={activity} />
 <div
-	class="mx-auto w-full max-w-5xl space-y-4 py-3"
+	class="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 py-3"
 	data-kiosk-register-ready={ready ? 'true' : 'false'}
 >
 	<KioskCheckInWizard currentStep={3} step2Label="อ่านบัตร" />
+	<!-- Busy: tighter padding so the progress, the warning and "ยกเลิก" fit the 1024×600 panel. -->
 	<section
-		class="mx-auto mt-6 w-full max-w-3xl rounded-2xl border border-sky-200 bg-white p-6 text-center shadow-2xs sm:p-10"
+		class={[
+			'mx-auto mt-6 w-full max-w-3xl rounded-2xl border border-sky-200 bg-white p-6 text-center shadow-2xs',
+			busy ? 'kiosk-portrait:p-10' : 'sm:p-10'
+		]}
 	>
-		<div
-			class="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-sky-200 bg-sky-50 text-sky-900"
-		>
-			<CreditCard class="h-8 w-8" aria-hidden="true" />
-		</div>
 		{#if busy}
-			<h1 class="mt-5 text-2xl font-bold text-[#0A2647] kiosk-portrait:text-4xl">
+			<h1 class="text-2xl font-bold text-[#0A2647] kiosk-portrait:text-4xl">
 				{cardReading ? 'กำลังอ่านข้อมูลบัตร' : 'กำลังบันทึกข้อมูล'}
 			</h1>
-			<div
-				class="mt-4 inline-flex min-h-12 items-center justify-center gap-3 rounded-xl border border-slate-200 bg-[#F8FAFC] px-4 text-base font-semibold text-slate-800"
-				role="status"
-				aria-live="polite"
-				data-testid="kiosk-register-card-busy"
-			>
-				<span
-					class="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-[#0A2647] motion-reduce:animate-none"
-					aria-hidden="true"
-				></span>
-				{cardReading ? 'กรุณารอสักครู่ อาจใช้เวลาประมาณ 30 วินาที' : 'กรุณารอสักครู่'}
+			<div class="mt-4 kiosk-portrait:mt-6">
+				<KioskCardReadProgress {percent} {stage} />
 			</div>
 			{#if cardReading}
 				<div
-					class="mx-auto mt-5 flex max-w-xl items-center justify-center gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-lg font-bold text-amber-950"
+					class="mx-auto mt-4 flex max-w-xl items-center justify-center gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-lg font-bold text-amber-950 kiosk-portrait:mt-6 kiosk-portrait:p-4"
 				>
 					<CircleAlert class="h-6 w-6 shrink-0" aria-hidden="true" />
 					<p>อย่าดึงบัตรออก จนกว่าระบบจะอ่านเสร็จ</p>
 				</div>
 			{/if}
 		{:else}
+			<div
+				class="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-sky-200 bg-sky-50 text-sky-900"
+			>
+				<CreditCard class="h-8 w-8" aria-hidden="true" />
+			</div>
 			<h1 class="mt-5 text-2xl font-bold text-[#0A2647] kiosk-portrait:text-4xl">
 				เสียบบัตรประชาชน
 			</h1>

@@ -427,12 +427,12 @@ class RfproThaiCardReader(ThaiSmartCardReader):
     def close(self) -> None:
         self.transport.close()
 
-    def read_all_data(self) -> dict:
+    def read_all_data(self, progress=None) -> dict:
         """A card left in since the ID read only read in full on kiosk3 after being pulled and
         re-inserted (the photo failed mid-way with 0x44 / 0x41, then 0x20). Start the full read
         from a cold power-up, as a re-insert would."""
         self.connection.power_cycle()
-        return super().read_all_data()
+        return super().read_all_data(progress)
 
     def _read_piece(self, offset: int, length: int) -> list[int] | None:
         """READ BINARY of `length` bytes at `offset` + GET RESPONSE; None if the card has no data
@@ -567,6 +567,7 @@ class RfproThaiCardReader(ThaiSmartCardReader):
                             logger.error("Card photo could not be read: card did not answer reset")
                             return None
                 data.extend(piece)
+            self._report("photo", CMD_PHOTOS.index(cmd) + 1, len(CMD_PHOTOS))
         return bytes(data)
 
     def is_card_inserted(self) -> bool:

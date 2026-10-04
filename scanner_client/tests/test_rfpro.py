@@ -314,6 +314,28 @@ class FrameTests(unittest.TestCase):
         frame = build_frame(6, CMD_NEXT_REPORT)
         self.assertEqual(frame.hex(" "), "aa 06 00 04 00 00 fe ff 03")
 
+    def test_full_read_report_splits_the_time_and_counts_the_page_requests(self):
+        import contextlib
+        import io
+
+        import inspect_card_rfpro
+
+        card = FakeThaiCard()
+        device = FakeHidDevice(card, paged=True)
+        self.addCleanup(device.close)
+        transport = device.transport()
+        self.addCleanup(transport.close)
+        out = io.StringIO()
+
+        with patch.object(rfpro, "POWER_CYCLE_SETTLE_SEC", 0), contextlib.redirect_stdout(out):
+            inspect_card_rfpro.read_full(transport)
+
+        text = out.getvalue()
+        self.assertIn("แยกเวลา: ตัดไฟ/รีเซ็ตบัตร", text)
+        self.assertRegex(text, r"ขอหน้าถัดไป FE FF [1-9]\d*\)")
+        self.assertIn("piece_size 255", text)
+        self.assertIn("✅ อ่านครบทั้งใบ", text)
+
     def test_paged_reply_reads_every_size_and_reports_pages(self):
         import contextlib
         import io
@@ -591,6 +613,26 @@ class ReaderTests(unittest.TestCase):
                 card, _, reader = self.reader(FakeThaiCard(atr=atr))
                 reader.read_citizen_id()
                 self.assertEqual(card.get_response_p2, [expected_p2])
+
+    def test_read_all_data_reports_progress_for_the_fields_then_each_photo_chunk(self):
+        _, _, reader = self.reader()
+        seen = []
+
+        reader.read_all_data(lambda phase, done, total: seen.append((phase, done, total)))
+
+        data = [item for item in seen if item[0] == "data"]
+        photo = [item for item in seen if item[0] == "photo"]
+        self.assertEqual(data, [("data", n, 9) for n in range(0, 10)])
+        self.assertEqual(photo, [("photo", n, 20) for n in range(1, 21)])
+        self.assertEqual(seen.index(("data", 9, 9)) + 1, seen.index(("photo", 1, 20)))
+
+    def test_a_progress_callback_that_raises_does_not_stop_the_read(self):
+        _, _, reader = self.reader()
+
+        def broken(*_):
+            raise RuntimeError("ui gone")
+
+        self.assertEqual(reader.read_all_data(broken)["citizen_id"], CID)
 
     def test_read_all_data_returns_every_field_and_the_full_photo(self):
         card, _, reader = self.reader(heartbeats=True)

@@ -34,7 +34,7 @@
 
 <svelte:head><title>ลงทะเบียนสำเร็จ — SmartShelter Kiosk</title></svelte:head>
 <svelte:window onpointerdown={activity} onkeydown={activity} />
-<div class="mx-auto w-full max-w-5xl space-y-4 py-3">
+<div class="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 py-3">
 	<KioskCheckInWizard currentStep={5} step2Label="ลงทะเบียน" />
 	<section
 		class="mx-auto mt-6 w-full max-w-3xl rounded-2xl border border-emerald-200 bg-white p-6 text-center shadow-2xs sm:p-10"

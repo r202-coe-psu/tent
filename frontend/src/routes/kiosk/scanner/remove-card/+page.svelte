@@ -20,12 +20,11 @@
 	);
 	const contextQuery = $derived(buildKioskContextQuery(displayContext));
 	let gate = $state<GateInput | null>(null);
-	let cardRemoved = $state(false);
 	let ready = $state(false);
 	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, returnHome);
 
 	$effect(() => {
-		if (!gate || !cardRemoved) return;
+		if (!gate) return;
 		untrack(() => idleTimeout.start());
 		return () => idleTimeout.stop();
 	});
@@ -57,17 +56,11 @@
 			const detail = (event as CustomEvent<{ citizenId?: unknown }>).detail;
 			if (typeof detail?.citizenId !== 'string' || !/^\d{13}$/.test(detail.citizenId)) return;
 			gate = { source: 'smart-card', citizen_id: detail.citizenId };
-			cardRemoved = false;
-		};
-		const handleCardRemoved = () => {
-			cardRemoved = true;
 		};
 		window.addEventListener('kiosk:smart-card-read', handleCardRead);
-		window.addEventListener('kiosk:smart-card-removed', handleCardRemoved);
 		ready = true;
 		return () => {
 			window.removeEventListener('kiosk:smart-card-read', handleCardRead);
-			window.removeEventListener('kiosk:smart-card-removed', handleCardRemoved);
 		};
 	}
 </script>
@@ -82,7 +75,6 @@
 		{contextQuery}
 		displayShelterCode={displayContext.shelterCode}
 		cardMode
-		{cardRemoved}
 		onprintbusychange={handlePrintBusyChange}
 		onreset={returnHome}
 		onregister={startWalkInRegistration}

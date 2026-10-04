@@ -1,6 +1,4 @@
 <script lang="ts">
-	import ArrowDown from '@lucide/svelte/icons/arrow-down';
-
 	const SIZE = 21;
 	const FINDER_ORIGINS = [
 		[0, 0],
@@ -31,18 +29,11 @@
 </script>
 
 <!--
-	Decorative loop of a QR code being read by the reader built into the kiosk: a QR drawn inside a
-	scanner viewfinder, a scan line sweeping across it, and an arrow pointing down at the reader below
-	the screen. The text next to it carries the instruction, so the scene is hidden from assistive
+	Decorative loop of a QR code being read by the reader built into the kiosk: a frameless QR, a scan line sweeping across it. The text next to it carries the instruction, so the scene is hidden from assistive
 	tech. Everything scales from --w (QR width).
 -->
 <div class="qr-scene [--w:9rem] kiosk-portrait:[--w:17rem]" aria-hidden="true">
 	<div class="viewfinder">
-		<span class="corner tl"></span>
-		<span class="corner tr"></span>
-		<span class="corner bl"></span>
-		<span class="corner br"></span>
-
 		<div class="qr-card">
 			<svg viewBox="-1 -1 {SIZE + 2} {SIZE + 2}" class="qr" shape-rendering="crispEdges">
 				{#each FINDER_ORIGINS as [fx, fy] (`${fx}-${fy}`)}
@@ -57,9 +48,6 @@
 			<span class="beam"></span>
 		</div>
 	</div>
-
-	<span class="arrow"><ArrowDown class="size-full" strokeWidth={2.75} /></span>
-	<span class="reader-bar"></span>
 </div>
 
 <style>
@@ -74,48 +62,8 @@
 
 	.viewfinder {
 		position: relative;
-		width: calc(var(--w) * 1.9);
-		height: calc(var(--w) * 1);
-		padding: calc(var(--w) * 0.08);
-	}
-
-	.corner {
-		position: absolute;
-		width: calc(var(--w) * 0.17);
-		height: calc(var(--w) * 0.17);
-		border: 0 solid #0284c7;
-	}
-
-	.tl {
-		top: 0;
-		left: 0;
-		border-top-width: calc(var(--w) * 0.032);
-		border-left-width: calc(var(--w) * 0.032);
-		border-top-left-radius: calc(var(--w) * 0.06);
-	}
-
-	.tr {
-		top: 0;
-		right: 0;
-		border-top-width: calc(var(--w) * 0.032);
-		border-right-width: calc(var(--w) * 0.032);
-		border-top-right-radius: calc(var(--w) * 0.06);
-	}
-
-	.bl {
-		bottom: 0;
-		left: 0;
-		border-bottom-width: calc(var(--w) * 0.032);
-		border-left-width: calc(var(--w) * 0.032);
-		border-bottom-left-radius: calc(var(--w) * 0.06);
-	}
-
-	.br {
-		right: 0;
-		bottom: 0;
-		border-right-width: calc(var(--w) * 0.032);
-		border-bottom-width: calc(var(--w) * 0.032);
-		border-bottom-right-radius: calc(var(--w) * 0.06);
+		width: var(--w);
+		height: var(--w);
 	}
 
 	.qr-card {
@@ -124,17 +72,14 @@
 		height: 100%;
 		display: flex;
 		justify-content: center;
-		padding: calc(var(--w) * 0.05);
 		overflow: hidden;
-		border: 0.0625rem solid rgb(10 38 71 / 0.18);
-		border-radius: calc(var(--w) * 0.05);
 		background: #ffffff;
 	}
 
 	.qr {
 		display: block;
+		width: 100%;
 		height: 100%;
-		aspect-ratio: 1;
 	}
 
 	.beam {
@@ -152,23 +97,6 @@
 		animation: sweep 2.6s ease-in-out infinite;
 	}
 
-	.arrow {
-		width: calc(var(--w) * 0.2);
-		height: calc(var(--w) * 0.2);
-		margin-top: calc(var(--w) * 0.04);
-		color: #0a2647;
-		animation: nudge 1s ease-in-out infinite;
-	}
-
-	/* Stands in for the kiosk's real reader window just below the screen edge. */
-	.reader-bar {
-		width: calc(var(--w) * 1.05);
-		height: calc(var(--w) * 0.045);
-		margin-top: calc(var(--w) * 0.02);
-		border-radius: 999px;
-		background: #0a2647;
-	}
-
 	@keyframes sweep {
 		0% {
 			top: calc(var(--w) * -0.16);
@@ -178,19 +106,9 @@
 		}
 	}
 
-	@keyframes nudge {
-		50% {
-			transform: translateY(calc(var(--w) * 0.05));
-		}
-	}
-
 	@media (prefers-reduced-motion: reduce) {
 		.beam {
 			top: 45%;
-			animation: none;
-		}
-
-		.arrow {
 			animation: none;
 		}
 	}

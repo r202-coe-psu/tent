@@ -76,62 +76,64 @@
 		<div class="flex justify-start">
 			<KioskBackButton href={homeUrl} />
 		</div>
-		<!-- sr-only is out of flow, so landscape layout is unchanged; portrait shows it as the page title. -->
-		<header class="sr-only text-center kiosk-portrait:not-sr-only kiosk-portrait:mt-4">
-			<h1 class="font-extrabold tracking-tight text-[#0A2647] kiosk-portrait:text-4xl">
-				กรอกเบอร์โทรศัพท์
-			</h1>
-		</header>
-		<section
-			class="phone-entry mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col gap-2 kiosk-portrait:mt-4 kiosk-portrait:max-w-xl kiosk-portrait:flex-none kiosk-portrait:gap-5"
-			aria-label="ค้นหาด้วยเบอร์โทรศัพท์"
-		>
-			<header class="text-center">
-				<p class="mt-1 text-base text-slate-700 kiosk-portrait:text-xl">
-					ใช้เบอร์ที่กรอกตอนลงทะเบียนล่วงหน้า
-				</p>
+		<div class="flex min-h-0 flex-1 flex-col gap-3 kiosk-portrait:justify-start">
+			<!-- sr-only is out of flow, so landscape layout is unchanged; portrait shows it as the page title. -->
+			<header class="sr-only text-center kiosk-portrait:not-sr-only kiosk-portrait:mt-4">
+				<h1 class="font-extrabold tracking-tight text-[#0A2647] kiosk-portrait:text-4xl">
+					กรอกเบอร์โทรศัพท์
+				</h1>
 			</header>
-
-			<output
-				class={[
-					'flex min-h-14 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-2xl font-bold text-slate-950 tabular-nums kiosk-portrait:min-h-20 kiosk-portrait:rounded-2xl kiosk-portrait:border-2',
-					displayPhone
-						? 'kiosk-portrait:text-4xl'
-						: 'kiosk-portrait:text-2xl kiosk-portrait:font-semibold kiosk-portrait:text-slate-400'
-				]}
-				aria-label="เบอร์โทรศัพท์ที่กรอก"
-				aria-live="polite"
+			<section
+				class="phone-entry mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col gap-2 kiosk-portrait:mt-4 kiosk-portrait:max-w-xl kiosk-portrait:flex-none kiosk-portrait:gap-5"
+				aria-label="ค้นหาด้วยเบอร์โทรศัพท์"
 			>
-				{displayPhone || 'เบอร์โทรศัพท์'}
-			</output>
+				<header class="text-center">
+					<p class="mt-1 text-base text-slate-700 kiosk-portrait:text-xl">
+						ใช้เบอร์ที่กรอกตอนลงทะเบียนล่วงหน้า
+					</p>
+				</header>
 
-			<div class="phone-entry-numpad flex min-h-0 flex-1 flex-col">
-				<KioskNumpad bind:value={phone} maxLength={10} onsubmit={startLookup} />
-			</div>
-
-			<div class="phone-entry-search">
-				<Button
-					type="button"
-					disabled={!isValid}
-					onclick={startLookup}
-					class="min-h-12 w-full gap-2 bg-[#0A2647] text-base font-bold text-white hover:bg-[#051930] focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 kiosk-portrait:min-h-16 kiosk-portrait:text-xl"
+				<output
+					class={[
+						'flex min-h-14 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-2xl font-bold text-slate-950 tabular-nums kiosk-portrait:min-h-20 kiosk-portrait:rounded-2xl kiosk-portrait:border-2',
+						displayPhone
+							? 'kiosk-portrait:text-4xl'
+							: 'kiosk-portrait:text-2xl kiosk-portrait:font-semibold kiosk-portrait:text-slate-400'
+					]}
+					aria-label="เบอร์โทรศัพท์ที่กรอก"
+					aria-live="polite"
 				>
-					<Search class="h-5 w-5" aria-hidden="true" />ค้นหา
-				</Button>
-			</div>
-			<!-- Portrait only: says why the search button is disabled. Hidden (and unread) in landscape. -->
-			<p
-				class="hidden min-h-7 text-center text-lg font-semibold text-amber-900 kiosk-portrait:block"
-				aria-live="polite"
-			>
-				{entryHint ?? ''}
-			</p>
-			<p
-				class="phone-entry-hint text-center text-sm leading-snug text-slate-600 kiosk-portrait:text-lg"
-			>
-				ไม่มีเบอร์? ใช้ QR หรือบัตรประชาชน หรือติดต่อเจ้าหน้าที่
-			</p>
-		</section>
+					{displayPhone || 'เบอร์โทรศัพท์'}
+				</output>
+
+				<div class="phone-entry-numpad flex min-h-0 flex-1 flex-col">
+					<KioskNumpad bind:value={phone} maxLength={10} onsubmit={startLookup} />
+				</div>
+
+				<div class="phone-entry-search">
+					<Button
+						type="button"
+						disabled={!isValid}
+						onclick={startLookup}
+						class="min-h-12 w-full gap-2 bg-[#0A2647] text-base font-bold text-white hover:bg-[#051930] focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 kiosk-portrait:min-h-16 kiosk-portrait:text-xl"
+					>
+						<Search class="h-5 w-5" aria-hidden="true" />ค้นหา
+					</Button>
+				</div>
+				<!-- Portrait only: says why the search button is disabled. Hidden (and unread) in landscape. -->
+				<p
+					class="hidden min-h-7 text-center text-lg font-semibold text-amber-900 kiosk-portrait:block"
+					aria-live="polite"
+				>
+					{entryHint ?? ''}
+				</p>
+				<p
+					class="phone-entry-hint text-center text-sm leading-snug text-slate-600 kiosk-portrait:text-lg"
+				>
+					ไม่มีเบอร์? ใช้ QR หรือบัตรประชาชน หรือติดต่อเจ้าหน้าที่
+				</p>
+			</section>
+		</div>
 	</div>
 {/if}
 

@@ -247,7 +247,7 @@ class CardRescanTests(unittest.IsolatedAsyncioTestCase):
         reads = []
         client.reader = SimpleNamespace(
             is_card_inserted=iter([True, False, True, False]).__next__,
-            read_all_data=lambda: reads.append(len(reads)) or {"citizen_id": "1234567890123"},
+            read_all_data=lambda progress=None: reads.append(len(reads)) or {"citizen_id": "1234567890123"},
         )
         sleeps = []
 
@@ -285,7 +285,7 @@ class CardRescanTests(unittest.IsolatedAsyncioTestCase):
         page = EventFakePage(client.remove_card_url)
         client.page = page
         card = {"citizen_id": "1234567890123", "first_name_th": "Test"}
-        client.reader = SimpleNamespace(read_all_data=lambda: card)
+        client.reader = SimpleNamespace(read_all_data=lambda progress=None: card)
 
         self.assertFalse(await client._read_full_card_if_register_path())
         self.assertEqual(page.evaluated, [])
@@ -308,7 +308,7 @@ class CardRescanTests(unittest.IsolatedAsyncioTestCase):
         client.page = page
         events_before_read = []
 
-        def read_all_data():
+        def read_all_data(progress=None):
             events_before_read.extend(script for script, _ in page.evaluated)
             return {"citizen_id": "1234567890123"}
 
@@ -320,12 +320,59 @@ class CardRescanTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("kiosk:smart-card-reading", events_before_read[0])
         self.assertNotIn("detail", events_before_read[0])  # no card data in the start signal
 
+    async def test_registration_page_is_sent_the_read_progress_as_it_advances(self):
+        client = manager.ScannerClientManager(valid_config())
+        page = EventFakePage(f"https://tent.example.go.th{client.register_card_path}")
+        client.page = page
+
+        def read_all_data(progress=None):
+            progress("data", 9, 9)  # called on the reader's thread, like the real read
+            progress("photo", 3, 20)
+            return {"citizen_id": "1234567890123"}
+
+        client.reader = SimpleNamespace(read_all_data=read_all_data)
+
+        self.assertTrue(await client._read_full_card_if_register_path())
+        await asyncio.sleep(0.05)
+
+        sent = [arg for script, arg in page.evaluated if "kiosk:smart-card-progress" in script]
+        self.assertEqual(
+            sent,
+            [
+                {"phase": "data", "done": 9, "total": 9},
+                {"phase": "photo", "done": 3, "total": 20},
+            ],
+        )
+
+    async def test_a_progress_update_that_fails_never_breaks_the_read(self):
+        client = manager.ScannerClientManager(valid_config())
+        page = EventFakePage(f"https://tent.example.go.th{client.register_card_path}")
+
+        async def evaluate(script, arg=None):
+            if "smart-card-progress" in script:
+                raise RuntimeError("page went away")
+            page.evaluated.append((script, arg))
+
+        page.evaluate = evaluate
+        client.page = page
+
+        def read_all_data(progress=None):
+            progress("photo", 1, 20)
+            return {"citizen_id": "1234567890123"}
+
+        client.reader = SimpleNamespace(read_all_data=read_all_data)
+
+        self.assertTrue(await client._read_full_card_if_register_path())
+        await asyncio.sleep(0.05)
+
+        self.assertIn("kiosk:smart-card-full-read", page.evaluated[-1][0])
+
     async def test_full_card_read_error_notifies_registration_screen_without_card_data(self):
         client = manager.ScannerClientManager(valid_config())
         page = EventFakePage(f"https://tent.example.go.th{client.register_card_path}")
         client.page = page
 
-        def failed_read():
+        def failed_read(progress=None):
             raise OSError("reader failure with private payload")
 
         client.reader = SimpleNamespace(read_all_data=failed_read)
@@ -341,7 +388,7 @@ class CardRescanTests(unittest.IsolatedAsyncioTestCase):
         client = manager.ScannerClientManager(valid_config())
         client.page = EventFakePage(f"https://tent.example.go.th{client.register_card_path}")
 
-        def unanswered():
+        def unanswered(progress=None):
             raise RfproProtocolError("no reply to command 1881 within 3s")
 
         client.reader = SimpleNamespace(read_all_data=unanswered)
@@ -357,7 +404,7 @@ class CardRescanTests(unittest.IsolatedAsyncioTestCase):
         client = manager.ScannerClientManager(valid_config())
         page = EventFakePage(f"https://tent.example.go.th{client.register_card_path}")
         client.page = page
-        client.reader = SimpleNamespace(read_all_data=lambda: {"citizen_id": "1234567890123"})
+        client.reader = SimpleNamespace(read_all_data=lambda progress=None: {"citizen_id": "1234567890123"})
 
         async def never_ready(*_args, **_kwargs):
             raise TimeoutError("page secret 1234567890123")
