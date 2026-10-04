@@ -21,7 +21,7 @@
 				if (from) {
 					goto(from);
 				} else {
-					goto(resolve('/back-office/evacuee-management'));
+					goto(resolve('/back-office/evacuee-management?tab=evacuee'));
 				}
 			}}
 			class="mb-4 inline-flex cursor-pointer items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"

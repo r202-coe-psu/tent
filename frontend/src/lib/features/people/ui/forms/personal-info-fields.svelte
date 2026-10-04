@@ -13,8 +13,11 @@
 		type Gender,
 		type Religion
 	} from '$lib/features/people';
+	import { sanitizePhoneTyping } from '$lib/db/model';
 	import {
 		ageFromBirthYearBE,
+		birthYearDisplayProblem,
+		birthYearDisplayRange,
 		currentYearBE,
 		defaultBirthCalendar,
 		toDisplayBirthYear,
@@ -43,6 +46,8 @@
 		age = $bindable<number | string | undefined>(),
 		gender = $bindable<Gender | ''>(''),
 		religion = $bindable<Religion>('unknown'),
+		/** Free text when religion is「อื่นๆ」 (CR-148). */
+		religion_other = $bindable<string | null | undefined>(null),
 		country = $bindable('THAILAND'),
 		disabled = false,
 		/** Hide「ไม่มีเบอร์」— public primary contact must enter a phone. */
@@ -62,6 +67,7 @@
 		age?: number | string | undefined;
 		gender?: Gender | '';
 		religion?: Religion;
+		religion_other?: string | null;
 		country?: string;
 		disabled?: boolean;
 		hideNoPhone?: boolean;
@@ -104,7 +110,9 @@
 						? t.religionMuslim
 						: value === 'christian'
 							? t.religionChristian
-							: t.religionUnknown
+							: value === 'other'
+								? t.religionOther
+								: t.religionUnknown
 		}))
 	);
 
@@ -133,6 +141,21 @@
 	const displayBirthYear = $derived(
 		beYearParsed == null ? '' : String(toDisplayBirthYear(beYearParsed, calendar))
 	);
+
+	// CR-148 FR-07: speak in the calendar the user is typing in, not always พ.ศ.
+	const birthYearError = $derived.by(() => {
+		const schemaError = errors?.birthYear ?? errors?.birth_year;
+		if (!schemaError) return '';
+		const problem = birthYearDisplayProblem(displayBirthYear, calendar);
+		if (problem === 'digits') return t.birthYearDigitsError;
+		if (problem === 'range') {
+			const { min, max } = birthYearDisplayRange(calendar);
+			return (calendar === 'BE' ? t.birthYearRangeErrorBE : t.birthYearRangeErrorCE)
+				.replace('{min}', String(min))
+				.replace('{max}', String(max));
+		}
+		return schemaError;
+	});
 
 	function digits(value: string): string {
 		return value.replace(/\D/g, '');
@@ -179,7 +202,7 @@
 
 	function onPhoneInput(e: Event) {
 		const target = e.currentTarget as HTMLInputElement;
-		phone = digits(target.value).slice(0, 10);
+		phone = sanitizePhoneTyping(target.value);
 	}
 
 	const showMononymHint = $derived(
@@ -308,12 +331,14 @@
 					placeholder={activeCardType === 'national_id'
 						? t.cardNumberPlaceholderNational
 						: t.cardNumberPlaceholderOther}
-					aria-invalid={!!(errors?.cardNumber || errors?.number)}
-					class="h-9 {errors?.cardNumber || errors?.number ? errClass : ''}"
+					aria-invalid={!!(errors?.cardNumber || errors?.number || errors?.person_id)}
+					class="h-9 {errors?.cardNumber || errors?.number || errors?.person_id ? errClass : ''}"
 				/>
 			{/if}
-			{#if errors?.cardNumber || errors?.number}
-				<p class="text-2xs text-destructive">{errors.cardNumber ?? errors.number}</p>
+			{#if errors?.cardNumber || errors?.number || errors?.person_id}
+				<p class="text-2xs text-destructive">
+					{errors.cardNumber ?? errors.number ?? errors.person_id}
+				</p>
 			{/if}
 		</div>
 	</div>
@@ -362,12 +387,13 @@
 				oninput={(e) => updateBirthYearDisplay((e.currentTarget as HTMLInputElement).value)}
 				{disabled}
 				inputmode="numeric"
+				maxlength={4}
 				placeholder={calendar === 'BE' ? t.birthYearPlaceholderBE : t.birthYearPlaceholderCE}
-				aria-invalid={!!(errors?.birthYear || errors?.birth_year)}
-				class="h-9 {errors?.birthYear || errors?.birth_year ? errClass : ''}"
+				aria-invalid={!!birthYearError}
+				class="h-9 {birthYearError ? errClass : ''}"
 			/>
-			{#if errors?.birthYear || errors?.birth_year}
-				<p class="text-2xs text-destructive">{errors.birthYear ?? errors.birth_year}</p>
+			{#if birthYearError}
+				<p class="text-2xs text-destructive">{birthYearError}</p>
 			{/if}
 		</div>
 
@@ -465,6 +491,7 @@
 				onValueChange={(val) => {
 					if ((RELIGION_UI_VALUES as readonly string[]).includes(val)) {
 						religion = val as (typeof RELIGION_UI_VALUES)[number];
+						if (val !== 'other') religion_other = null;
 					}
 				}}
 				{disabled}
@@ -478,6 +505,22 @@
 					{/each}
 				</Select.Content>
 			</Select.Root>
+			{#if religionSelectValue === 'other'}
+				<Label for={fid('religion-other')} class="sr-only">{t.religionOtherLabel}</Label>
+				<Input
+					id={fid('religion-other')}
+					value={religion_other ?? ''}
+					oninput={(e) => (religion_other = (e.currentTarget as HTMLInputElement).value)}
+					{disabled}
+					maxlength={60}
+					placeholder={t.religionOtherPlaceholder}
+					aria-invalid={!!errors?.religion_other}
+					class="h-9 {errors?.religion_other ? errClass : ''}"
+				/>
+				{#if errors?.religion_other}
+					<p class="text-2xs text-destructive">{errors.religion_other}</p>
+				{/if}
+			{/if}
 		</div>
 	</div>
 
@@ -497,8 +540,8 @@
 				value={phone}
 				oninput={onPhoneInput}
 				disabled={disabled || (!hideNoPhone && no_phone)}
-				inputmode="numeric"
-				maxlength={10}
+				inputmode="tel"
+				maxlength={15}
 				autocomplete="tel"
 				placeholder={t.phonePlaceholder}
 				aria-invalid={!!errors?.phone}
@@ -506,6 +549,8 @@
 			/>
 			{#if phoneHelperText}
 				<p class="text-2xs text-muted-foreground">{phoneHelperText}</p>
+			{:else if !no_phone}
+				<p class="text-2xs text-muted-foreground">{t.phoneIntlHint}</p>
 			{/if}
 			{#if errors?.phone}
 				<p class="text-2xs text-destructive">{errors.phone}</p>

@@ -60,6 +60,16 @@ const donation = (over: Doc = {}): Doc => ({
 	...over
 });
 
+const evacuee = (over: Doc = {}, stayOver: Doc = {}): Doc => ({
+	_id: 'evacuee:01J',
+	type: 'evacuee',
+	first_name: 'สมชาย',
+	last_name: 'ใจดี',
+	...envelope,
+	current_stay: { status: 'active', zone: 'A1', ...stayOver },
+	...over
+});
+
 const ratios = Object.fromEntries(SOP_RATIO_KEYS.map((key) => [key, '1']));
 const stock = Object.fromEntries(SOP_RATIO_KEYS.map((key) => [key, '1000']));
 const asOf = '2026-08-17T10:00:00.000Z';
@@ -145,7 +155,7 @@ describe('buildValidateDocUpdate', () => {
 	it('includes audit in the allowed doc type whitelist', () => {
 		const validateFn = buildValidateDocUpdate('SH001');
 		expect(validateFn).toContain("'audit'");
-		expect(validateFn).toContain("'purchase'");
+		expect(validateFn).not.toContain("'purchase'");
 		expect(validateFn).toContain("'referral'");
 	});
 
@@ -481,10 +491,9 @@ describe('buildValidateDocUpdate', () => {
 		);
 	});
 
-	// CR-032: purchase docs are written to shelter dbs, so the server-side
-	// whitelist must accept them or every write is rejected as forbidden.
-	it('includes purchase in the allowed doc type whitelist', () => {
-		expect(buildValidateDocUpdate('SH001')).toContain("'purchase'");
+	// CR-138: purchase withdrawn — must not remain on the shelter allowlist.
+	it('excludes purchase from the allowed doc type whitelist', () => {
+		expect(buildValidateDocUpdate('SH001')).not.toContain("'purchase'");
 	});
 
 	// People registration writes household/medical/screening/movement/image after
@@ -654,10 +663,70 @@ describe('buildValidateDocUpdate', () => {
 		});
 	});
 
+	describe('evacuee zone_change eligibility (CR-106 FR-16 / ZONE_CHANGE_ELIGIBLE_STATUSES)', () => {
+		it('allows a same-status rezone from active', () => {
+			expect(() =>
+				compile()(
+					evacuee({}, { status: 'active', zone: 'B2' }),
+					evacuee({}, { status: 'active', zone: 'A1' }),
+					REGISTRATION
+				)
+			).not.toThrow();
+		});
+
+		it('allows a same-status rezone from room_confirmed', () => {
+			expect(() =>
+				compile()(
+					evacuee({}, { status: 'room_confirmed', zone: 'B2' }),
+					evacuee({}, { status: 'room_confirmed', zone: 'A1' }),
+					REGISTRATION
+				)
+			).not.toThrow();
+		});
+
+		it.each(['checked_out', 'arriving', 'pre_registered', 'temporary_leave'])(
+			'rejects a same-status rezone attempted from %s',
+			(status) => {
+				expectForbidden(
+					() =>
+						compile()(
+							evacuee({}, { status, zone: 'B2' }),
+							evacuee({}, { status, zone: 'A1' }),
+							REGISTRATION
+						),
+					/zone_change requires current_stay.status active or room_confirmed/
+				);
+			}
+		);
+
+		it('does not trigger the zone_change rule when status also changes (e.g. check_in)', () => {
+			expect(() =>
+				compile()(
+					evacuee({}, { status: 'active', zone: 'A1' }),
+					evacuee({}, { status: 'arriving', zone: null }),
+					REGISTRATION
+				)
+			).not.toThrow();
+		});
+
+		it('ignores docs with no zone change at all', () => {
+			expect(() =>
+				compile()(
+					evacuee(
+						{ updated_at: '2026-07-23T00:00:00.000Z' },
+						{ status: 'checked_out', zone: 'A1' }
+					),
+					evacuee({}, { status: 'checked_out', zone: 'A1' }),
+					REGISTRATION
+				)
+			).not.toThrow();
+		});
+	});
+
 	// Module D (kitchen) was missing from the whitelist entirely — kitchen_staff
 	// could never actually write any of these without an _admin session, even
 	// though requireKitchen() lets them into the UI (bug found + fixed alongside
-	// CR-080's gas_ledger addition).
+	// CR-080).
 	describe('kitchen doc types (schema.md §2.5-§2.7.2)', () => {
 		it('includes every kitchen doc type in the allowed whitelist', () => {
 			const validateFn = buildValidateDocUpdate('SH001');
@@ -665,11 +734,47 @@ describe('buildValidateDocUpdate', () => {
 				'meal_plan',
 				'kitchen_requisition',
 				'meal_service',
-				'gas_cylinder_type',
-				'gas_ledger'
+				'meal_service_receipt'
 			] as const) {
 				expect(validateFn).toContain(`'${type}'`);
 			}
+		});
+
+		// CR-144/CR-145: no role gate documented for this — any authenticated
+		// shelter-scoped user may write it (role separation is UI-only via the
+		// dedicated /back-office/kitchen/receive-stock page, not CouchDB-enforced).
+		it('accepts a new meal_service_receipt from any shelter-scoped role', () => {
+			expect(() =>
+				compile()(
+					{
+						_id: 'meal_service_receipt:01J',
+						type: 'meal_service_receipt',
+						...envelope,
+						schema_v: 1,
+						meal_service_id: 'meal_service:01J',
+						outcome: 'confirmed',
+						received_by: 'reg'
+					},
+					null,
+					REGISTRATION
+				)
+			).not.toThrow();
+		});
+
+		it('rejects updating an existing meal_service_receipt (append-only)', () => {
+			const receipt = {
+				_id: 'meal_service_receipt:01J',
+				type: 'meal_service_receipt',
+				...envelope,
+				schema_v: 1,
+				meal_service_id: 'meal_service:01J',
+				outcome: 'confirmed',
+				received_by: 'reg'
+			};
+			expectForbidden(
+				() => compile()({ ...receipt, outcome: 'rejected' }, receipt, REGISTRATION),
+				/Cannot update append-only meal_service_receipt/
+			);
 		});
 
 		it('accepts a new meal_plan from kitchen_staff', () => {
@@ -691,57 +796,44 @@ describe('buildValidateDocUpdate', () => {
 			).not.toThrow();
 		});
 
-		it('accepts a new gas_cylinder_type from kitchen_staff', () => {
-			expect(() =>
-				compile()(
-					{
-						_id: 'gas_cylinder_type:01J',
-						type: 'gas_cylinder_type',
-						...envelope,
-						schema_v: 2,
-						name: 'ถังทดสอบ',
-						capacity_kg: '15',
-						burn_rate_kg_per_hour: '0.5',
-						time_multiplier: '1'
-					},
-					null,
-					KITCHEN
-				)
-			).not.toThrow();
+		it.each(['meal_session', 'kitchen_counter'])('includes %s in the allowed whitelist', (type) => {
+			expect(buildValidateDocUpdate('SH001')).toContain(`'${type}'`);
 		});
 
-		it('accepts a new gas_ledger entry from kitchen_staff', () => {
-			expect(() =>
-				compile()(
-					{
-						_id: 'gas_ledger:01J',
-						type: 'gas_ledger',
-						...envelope,
-						schema_v: 1,
-						cylinder_id: 'gas_cylinder_type:01J',
-						qty_kg: '-2',
-						reason: 'consumption',
-						ref_id: null,
-						occurred_at: envelope.created_at
-					},
-					null,
-					KITCHEN
-				)
-			).not.toThrow();
+		it.each(['meal_service'])('rejects updating an existing %s (append-only)', (type) => {
+			const doc = { ...envelope, schema_v: 1, _id: `${type}:01J`, type };
+			expectForbidden(
+				() => compile()({ ...doc, touched: true }, doc, KITCHEN),
+				new RegExp(`Cannot update append-only ${type}`)
+			);
 		});
 
-		it.each(['kitchen_requisition', 'meal_service', 'gas_ledger'])(
-			'rejects updating an existing %s (append-only)',
-			(type) => {
-				const doc = { ...envelope, schema_v: 1, _id: `${type}:01J`, type };
-				expectForbidden(
-					() => compile()({ ...doc, touched: true }, doc, KITCHEN),
-					new RegExp(`Cannot update append-only ${type}`)
-				);
-			}
-		);
+		it('allows updating a pending kitchen_requisition', () => {
+			const doc = {
+				...envelope,
+				schema_v: 3,
+				_id: 'kitchen_requisition:01J',
+				type: 'kitchen_requisition',
+				status: 'pending'
+			};
+			expect(() => compile()({ ...doc, status: 'approved' }, doc, KITCHEN)).not.toThrow();
+		});
 
-		it.each(['kitchen_requisition', 'meal_service', 'gas_ledger'])(
+		it('rejects updating an approved kitchen_requisition', () => {
+			const doc = {
+				...envelope,
+				schema_v: 3,
+				_id: 'kitchen_requisition:01J',
+				type: 'kitchen_requisition',
+				status: 'approved'
+			};
+			expectForbidden(
+				() => compile()({ ...doc, touched: true }, doc, KITCHEN),
+				/Cannot update finalized kitchen_requisition/
+			);
+		});
+
+		it.each(['kitchen_requisition', 'meal_service'])(
 			'rejects deleting an existing %s (append-only)',
 			(type) => {
 				const doc = { ...envelope, schema_v: 1, _id: `${type}:01J`, type };
@@ -751,20 +843,6 @@ describe('buildValidateDocUpdate', () => {
 				);
 			}
 		);
-
-		it('allows updating an existing gas_cylinder_type (mutable, LWW)', () => {
-			const doc = {
-				...envelope,
-				schema_v: 2,
-				_id: 'gas_cylinder_type:01J',
-				type: 'gas_cylinder_type',
-				name: 'ถังทดสอบ',
-				capacity_kg: '15',
-				burn_rate_kg_per_hour: '0.5',
-				time_multiplier: '1'
-			};
-			expect(() => compile()({ ...doc, capacity_kg: '20' }, doc, KITCHEN)).not.toThrow();
-		});
 	});
 
 	// Volunteers (CR-092/CR-094/CR-095) shipped without an entry here — every
@@ -1975,6 +2053,395 @@ describe('buildValidateDocUpdate', () => {
 				/Cannot change evacuee_id on one-time guard/
 			);
 		});
+
+		it('CR-119: rejects delete and immutable field mutations on protected item_category', () => {
+			const protectedCategory: Doc = {
+				_id: 'item_category:food',
+				type: 'item_category',
+				schema_v: 2,
+				shelter_code: 'SH001',
+				name: 'อาหารและวัตถุดิบ (Food Ingredients)',
+				system_key: 'FOOD',
+				default_class: 'CONSUMABLE',
+				description: 'คำอธิบายเดิม',
+				is_protected: true,
+				created_at: '2026-09-15T00:00:00.000Z',
+				updated_at: '2026-09-15T00:00:00.000Z',
+				created_by: 'system'
+			};
+
+			const sysAdmin: UserCtx = { name: 'sa', roles: ['system_admin'] };
+
+			// 1. Delete rejection
+			expectForbidden(
+				() => compile()({ _id: 'item_category:food', _deleted: true }, protectedCategory, sysAdmin),
+				/Cannot delete system protected category/
+			);
+
+			// 2. system_key immutable
+			expectForbidden(
+				() => compile()({ ...protectedCategory, system_key: 'WATER' }, protectedCategory, sysAdmin),
+				/system_key is immutable on protected categories/
+			);
+
+			// 3. default_class is editable (CR-140 amends CR-119 FR-04)
+			expect(() =>
+				compile()({ ...protectedCategory, default_class: 'DURABLE' }, protectedCategory, sysAdmin)
+			).not.toThrow();
+
+			// 4. is_protected flag removal rejected
+			expectForbidden(
+				() => compile()({ ...protectedCategory, is_protected: false }, protectedCategory, sysAdmin),
+				/is_protected flag cannot be removed/
+			);
+
+			// 5. Updating name or description is permitted
+			expect(() =>
+				compile()(
+					{
+						...protectedCategory,
+						name: 'อาหารและวัตถุดิบสด',
+						description: 'คำอธิบายปรับปรุงใหม่'
+					},
+					protectedCategory,
+					sysAdmin
+				)
+			).not.toThrow();
+
+			// 6. _admin bypass
+			const adminCtx: UserCtx = { name: 'admin', roles: ['_admin'] };
+			expect(() =>
+				compile()({ _id: 'item_category:food', _deleted: true }, protectedCategory, adminCtx)
+			).not.toThrow();
+		});
+	});
+
+	describe('requisition_ticket lifecycle and role rules (CR-121/CR-141, kitchen slice)', () => {
+		const MANAGER: UserCtx = { name: 'mgr', roles: ['shelter:SH001', 'shelter_manager'] };
+
+		function newTicket(over: Doc = {}): Doc {
+			return {
+				_id: 'requisition_ticket:01J',
+				type: 'requisition_ticket',
+				...envelope,
+				schema_v: 1,
+				created_by: 'kt',
+				ticket_no: 'TKT-KITCHEN-0001',
+				requisition_type: 'kitchen',
+				status: 'PENDING_PICK',
+				meal_plan_id: 'meal_plan:01J',
+				source_location: 'warehouse:main',
+				destination_location: 'kitchen',
+				requested_by: 'kt',
+				items: [
+					{
+						item_id: 'item_master:rice',
+						item_name: 'ข้าวสาร',
+						unit: 'kg',
+						requested_qty: '30',
+						allocated_qty: '0'
+					}
+				],
+				...over
+			};
+		}
+
+		it('accepts a new ticket from kitchen_staff with allocated_qty "0"', () => {
+			expect(() => compile()(newTicket(), null, KITCHEN)).not.toThrow();
+		});
+
+		it('rejects a new ticket from a non-kitchen role', () => {
+			expectForbidden(
+				() => compile()(newTicket(), null, WAREHOUSE),
+				/Only kitchen staff or system admin can open/
+			);
+		});
+
+		it('a "food" requisition_type is not rejected by the kitchen-only guard (handled by the general CR-121 rule instead)', () => {
+			expectForbidden(
+				() => compile()(newTicket({ requisition_type: 'food' }), null, KITCHEN),
+				/requisition_ticket id must be requisition_ticket:\{ulid\}/
+			);
+		});
+
+		it('rejects a genuinely invalid requisition_type', () => {
+			expectForbidden(
+				() =>
+					compile()(
+						newTicket({
+							_id: 'requisition_ticket:01J8Z9K5N7QXR3T6V8W0Y2A4B6',
+							requisition_type: 'bogus'
+						}),
+						null,
+						KITCHEN
+					),
+				/Invalid requisition_type: bogus/
+			);
+		});
+
+		it('rejects a new ticket that already carries lifecycle metadata', () => {
+			expectForbidden(
+				() => compile()(newTicket({ approved_by: 'mgr' }), null, KITCHEN),
+				/cannot contain lifecycle metadata/
+			);
+		});
+
+		it('rejects a new ticket with a non-zero allocated_qty line', () => {
+			expectForbidden(
+				() =>
+					compile()(
+						newTicket({
+							items: [
+								{
+									item_id: 'item_master:rice',
+									item_name: 'ข้าวสาร',
+									unit: 'kg',
+									requested_qty: '30',
+									allocated_qty: '5'
+								}
+							]
+						}),
+						null,
+						KITCHEN
+					),
+				/must start allocated_qty "0"/
+			);
+		});
+
+		it('warehouse_staff can allocate items while status stays PENDING_PICK', () => {
+			const ticket = newTicket();
+			const allocated = newTicket({
+				items: [{ ...(ticket.items as Doc[])[0], allocated_qty: '30' }]
+			});
+			expect(() => compile()(allocated, ticket, WAREHOUSE)).not.toThrow();
+		});
+
+		it('kitchen_staff can edit its own requested_qty while status stays PENDING_PICK (CR-142)', () => {
+			const ticket = newTicket();
+			const edited = newTicket({
+				items: [{ ...(ticket.items as Doc[])[0], requested_qty: '45' }]
+			});
+			expect(() => compile()(edited, ticket, KITCHEN)).not.toThrow();
+		});
+
+		it('rejects PENDING_PICK item updates from a role with neither warehouse_staff nor kitchen_staff', () => {
+			const ticket = newTicket();
+			const allocated = newTicket({
+				items: [{ ...(ticket.items as Doc[])[0], allocated_qty: '30' }]
+			});
+			expectForbidden(
+				() => compile()(allocated, ticket, REGISTRATION),
+				/Only warehouse staff, kitchen staff, or system admin can update requisition_ticket items/
+			);
+		});
+
+		it('shelter_manager approves PENDING_PICK → READY_FOR_DISPATCH once every line is allocated', () => {
+			const ticket = newTicket({
+				items: [
+					{
+						item_id: 'item_master:rice',
+						item_name: 'ข้าวสาร',
+						unit: 'kg',
+						requested_qty: '30',
+						allocated_qty: '30'
+					}
+				]
+			});
+			const approved = { ...ticket, status: 'READY_FOR_DISPATCH', approved_by: 'mgr' };
+			expect(() => compile()(approved, ticket, MANAGER)).not.toThrow();
+		});
+
+		it('rejects approval from warehouse_staff (manager-only, AC-TKT-03.1)', () => {
+			const ticket = newTicket({
+				items: [
+					{
+						item_id: 'item_master:rice',
+						item_name: 'ข้าวสาร',
+						unit: 'kg',
+						requested_qty: '30',
+						allocated_qty: '30'
+					}
+				]
+			});
+			const approved = { ...ticket, status: 'READY_FOR_DISPATCH', approved_by: 'ws' };
+			expectForbidden(
+				() => compile()(approved, ticket, WAREHOUSE),
+				/Only shelter manager or system admin can approve/
+			);
+		});
+
+		it('rejects approval while any line is still allocated_qty 0', () => {
+			const ticket = newTicket();
+			const approved = { ...ticket, status: 'READY_FOR_DISPATCH', approved_by: 'mgr' };
+			expectForbidden(
+				() => compile()(approved, ticket, MANAGER),
+				/needs allocated_qty > 0 before approval/
+			);
+		});
+
+		it('warehouse_staff dispatches READY_FOR_DISPATCH → IN_TRANSIT', () => {
+			const ready = newTicket({
+				status: 'READY_FOR_DISPATCH',
+				approved_by: 'mgr',
+				items: [
+					{
+						item_id: 'item_master:rice',
+						item_name: 'ข้าวสาร',
+						unit: 'kg',
+						requested_qty: '30',
+						allocated_qty: '30'
+					}
+				]
+			});
+			const dispatched = { ...ready, status: 'IN_TRANSIT', dispatched_by: 'ws' };
+			expect(() => compile()(dispatched, ready, WAREHOUSE)).not.toThrow();
+		});
+
+		it('rejects dispatch from a non-warehouse role', () => {
+			const ready = newTicket({ status: 'READY_FOR_DISPATCH', approved_by: 'mgr' });
+			const dispatched = { ...ready, status: 'IN_TRANSIT', dispatched_by: 'kt' };
+			expectForbidden(
+				() => compile()(dispatched, ready, KITCHEN),
+				/Only warehouse staff or system admin can dispatch/
+			);
+		});
+
+		it('kitchen_staff receives IN_TRANSIT → COMPLETED', () => {
+			const inTransit = newTicket({
+				status: 'IN_TRANSIT',
+				approved_by: 'mgr',
+				dispatched_by: 'ws'
+			});
+			const received = { ...inTransit, status: 'COMPLETED', received_by: 'kt' };
+			expect(() => compile()(received, inTransit, KITCHEN)).not.toThrow();
+		});
+
+		it('rejects a double-receive (COMPLETED is terminal)', () => {
+			const completed = newTicket({
+				status: 'COMPLETED',
+				approved_by: 'mgr',
+				dispatched_by: 'ws',
+				received_by: 'kt'
+			});
+			expectForbidden(
+				() => compile()({ ...completed, received_by: 'kt2' }, completed, KITCHEN),
+				/Invalid requisition_ticket transition from COMPLETED to COMPLETED/
+			);
+		});
+
+		it('shelter_manager one-click approves PENDING_PICK → COMPLETED (CR-143)', () => {
+			const ticket = newTicket({
+				items: [
+					{
+						item_id: 'item_master:rice',
+						item_name: 'ข้าวสาร',
+						unit: 'kg',
+						requested_qty: '30',
+						allocated_qty: '0'
+					}
+				]
+			});
+			const completed = {
+				...ticket,
+				status: 'COMPLETED',
+				items: [{ ...(ticket.items as Doc[])[0], allocated_qty: '30' }],
+				approved_by: 'mgr',
+				dispatched_by: 'mgr',
+				received_by: 'mgr'
+			};
+			expect(() => compile()(completed, ticket, MANAGER)).not.toThrow();
+		});
+
+		it('rejects one-click approve from kitchen_staff (manager-only, CR-143)', () => {
+			const ticket = newTicket({
+				items: [
+					{
+						item_id: 'item_master:rice',
+						item_name: 'ข้าวสาร',
+						unit: 'kg',
+						requested_qty: '30',
+						allocated_qty: '0'
+					}
+				]
+			});
+			const completed = {
+				...ticket,
+				status: 'COMPLETED',
+				items: [{ ...(ticket.items as Doc[])[0], allocated_qty: '30' }],
+				approved_by: 'kt',
+				dispatched_by: 'kt',
+				received_by: 'kt'
+			};
+			expectForbidden(
+				() => compile()(completed, ticket, KITCHEN),
+				/Only shelter manager or system admin can one-click approve/
+			);
+		});
+
+		it('rejects one-click approve while any line is still allocated_qty 0', () => {
+			const ticket = newTicket();
+			const completed = {
+				...ticket,
+				status: 'COMPLETED',
+				approved_by: 'mgr',
+				dispatched_by: 'mgr',
+				received_by: 'mgr'
+			};
+			expectForbidden(
+				() => compile()(completed, ticket, MANAGER),
+				/needs allocated_qty > 0 before approval/
+			);
+		});
+
+		it('kitchen_staff can cancel while PENDING_PICK', () => {
+			const ticket = newTicket();
+			const cancelled = { ...ticket, status: 'CANCELLED' };
+			expect(() => compile()(cancelled, ticket, KITCHEN)).not.toThrow();
+		});
+
+		it('rejects cancel from a role with no ticket authority', () => {
+			const ticket = newTicket();
+			const cancelled = { ...ticket, status: 'CANCELLED' };
+			expectForbidden(() => compile()(cancelled, ticket, REGISTRATION), /Not authorized to cancel/);
+		});
+
+		it('rejects changing meal_plan_id once created', () => {
+			const ticket = newTicket();
+			expectForbidden(
+				() => compile()({ ...ticket, meal_plan_id: 'meal_plan:other' }, ticket, WAREHOUSE),
+				/Cannot change meal_plan_id/
+			);
+		});
+
+		it('rejects modifying items while dispatching (items freeze once past PENDING_PICK)', () => {
+			const ready = newTicket({
+				status: 'READY_FOR_DISPATCH',
+				approved_by: 'mgr',
+				items: [
+					{
+						item_id: 'item_master:rice',
+						item_name: 'ข้าวสาร',
+						unit: 'kg',
+						requested_qty: '30',
+						allocated_qty: '30'
+					}
+				]
+			});
+			const tampered = {
+				...ready,
+				status: 'IN_TRANSIT',
+				dispatched_by: 'ws',
+				items: [{ ...(ready.items as Doc[])[0], allocated_qty: '999' }]
+			};
+			expectForbidden(
+				() => compile()(tampered, ready, WAREHOUSE),
+				/Cannot modify requisition_ticket items once past PENDING_PICK/
+			);
+		});
+
+		it.each(['requisition_ticket'])('includes %s in the allowed whitelist', (type) => {
+			expect(buildValidateDocUpdate('SH001')).toContain(`'${type}'`);
+		});
 	});
 
 	describe('Ticket-era Flow 2 VDU rules (Rules 12-14 / CR-121)', () => {
@@ -2167,6 +2634,40 @@ describe('buildValidateDocUpdate', () => {
 							WAREHOUSE
 						),
 					/PENDING_PICK allocation cannot change ticket item content/
+				);
+			});
+
+			it('allows PENDING_PICK allocation update when oldDoc contains CouchDB _revisions metadata', () => {
+				// CouchDB injects `_revisions` into oldDoc during validate_doc_update,
+				// whereas client PUT payloads omit it.
+				const oldDocWithRevisions = {
+					...validTicket,
+					items: [{ ...validTicket.items[0], requested_qty: '120', allocated_qty: '120' }],
+					_revisions: {
+						start: 1,
+						ids: ['9f074e91ec73990aedb5e46a117186d0']
+					}
+				};
+				const newDocWithoutRevisions = {
+					...validTicket,
+					updated_at: '2026-09-01T00:05:00.000Z',
+					items: [{ ...validTicket.items[0], requested_qty: '120', allocated_qty: '100' }]
+				};
+
+				// Valid allocation 120 -> 100 must be accepted
+				expect(() =>
+					compile()(newDocWithoutRevisions, oldDocWithRevisions, WAREHOUSE)
+				).not.toThrow();
+
+				// Unrelated business field mutation (e.g. destination_location) must still be rejected
+				expectForbidden(
+					() =>
+						compile()(
+							{ ...newDocWithoutRevisions, destination_location: 'distribution_point:other' },
+							oldDocWithRevisions,
+							WAREHOUSE
+						),
+					/PENDING_PICK self-updates may only change item allocation quantities/
 				);
 			});
 
@@ -2809,6 +3310,349 @@ describe('buildValidateDocUpdate', () => {
 			});
 		});
 
+		describe('bulk_return_claim VDU validation (Rule 15)', () => {
+			const STAFF_A: UserCtx = { name: 'staff_a', roles: ['shelter:SH001', 'registration_staff'] };
+			const STAFF_B: UserCtx = { name: 'staff_b', roles: ['shelter:SH001', 'supply_coordinator'] };
+
+			const claimFor = (creator: UserCtx, over: Doc = {}): Doc => ({
+				_id: 'bulk_return_claim:01J00000000000000000000002',
+				type: 'bulk_return_claim',
+				schema_v: 1,
+				shelter_code: 'SH001',
+				created_at: '2026-09-01T00:00:00.000Z',
+				updated_at: '2026-09-01T00:00:00.000Z',
+				created_by: creator.name,
+				operation_id: '01J00000000000000000000001',
+				distribution_log_id: 'distribution_log:01J00000000000000000000002',
+				bulk_pool_id: 'bulk_return_pool:01J00000000000000000000001',
+				item_id: 'item:wheelchair',
+				claimed_qty: '1',
+				status: 'CLAIM_INTENT',
+				...over
+			});
+
+			it('allows claim create when created_by matches userCtx.name', () => {
+				const claim = claimFor(STAFF_A);
+				expect(() => compile()(claim, null, STAFF_A)).not.toThrow();
+			});
+
+			it('rejects claim create when created_by is forged', () => {
+				const claim = claimFor(STAFF_A);
+				expectForbidden(
+					() => compile()(claim, null, STAFF_B),
+					/bulk_return_claim\.created_by must match the current actor/
+				);
+			});
+
+			it('allows recovery/advance by Staff B while preserving original created_by', () => {
+				const originalClaim = claimFor(STAFF_A);
+				const advancedClaim = {
+					...originalClaim,
+					status: 'POOL_CLAIMED',
+					updated_at: '2026-09-01T01:00:00.000Z'
+				};
+				expect(() => compile()(advancedClaim, originalClaim, STAFF_B)).not.toThrow();
+			});
+
+			it('rejects modifying created_by during claim update', () => {
+				const originalClaim = claimFor(STAFF_A);
+				const hijackedClaim = {
+					...originalClaim,
+					created_by: STAFF_B.name,
+					status: 'POOL_CLAIMED',
+					updated_at: '2026-09-01T01:00:00.000Z'
+				};
+				expectForbidden(
+					() => compile()(hijackedClaim, originalClaim, STAFF_B),
+					/bulk_return_claim\.created_by is permanently immutable/
+				);
+			});
+		});
+
+		describe('loan_return_reservation VDU validation (Rule 16)', () => {
+			const WAREHOUSE_ACTOR: UserCtx = { name: 'wh1', roles: ['shelter:SH001', 'warehouse_staff'] };
+			const REG_ACTOR: UserCtx = { name: 'reg1', roles: ['shelter:SH001', 'registration_staff'] };
+			const COORD_ACTOR: UserCtx = {
+				name: 'coord1',
+				roles: ['shelter:SH001', 'supply_coordinator']
+			};
+			const MGR_ACTOR: UserCtx = { name: 'mgr1', roles: ['shelter:SH001', 'shelter_manager'] };
+			const ADMIN_ACTOR: UserCtx = { name: 'admin1', roles: ['system_admin'] };
+			const UNAUTH_ACTOR: UserCtx = { name: 'unauth1', roles: ['shelter:SH001', 'kitchen_staff'] };
+
+			const resFor = (
+				creator: UserCtx,
+				mode: 'PHYSICAL' | 'BULK' | 'NON_PHYSICAL' = 'PHYSICAL',
+				over: Doc = {}
+			): Doc => ({
+				_id: 'loan_return_reservation:01J00000000000000000000002',
+				type: 'loan_return_reservation',
+				schema_v: 1,
+				shelter_code: 'SH001',
+				created_at: '2026-09-01T00:00:00.000Z',
+				updated_at: '2026-09-01T00:00:00.000Z',
+				created_by: creator.name,
+				operation_by: creator.name,
+				operation_id: '01J00000000000000000000001',
+				distribution_log_id: 'distribution_log:01J00000000000000000000002',
+				mode,
+				status: 'RESERVED',
+				...(mode === 'PHYSICAL'
+					? { qty_returned: '1', return_condition: 'READY' }
+					: mode === 'BULK'
+						? { bulk_pool_id: 'bulk_return_pool:01J00000000000000000000001', claimed_qty: '1' }
+						: { clear_reason: 'lost' }),
+				...over
+			});
+
+			it('enforces mode-specific RBAC for PHYSICAL reservation create (WH/SC/SM/SA allowed; REG rejected)', () => {
+				for (const actor of [WAREHOUSE_ACTOR, COORD_ACTOR, MGR_ACTOR, ADMIN_ACTOR]) {
+					const res = resFor(actor, 'PHYSICAL');
+					expect(() => compile()(res, null, actor)).not.toThrow();
+				}
+				const regRes = resFor(REG_ACTOR, 'PHYSICAL');
+				expectForbidden(
+					() => compile()(regRes, null, REG_ACTOR),
+					/Role cannot manage loan return reservations in PHYSICAL mode/
+				);
+			});
+
+			it('enforces mode-specific RBAC for BULK reservation create (REG/SC/SM/SA allowed; WH rejected)', () => {
+				for (const actor of [REG_ACTOR, COORD_ACTOR, MGR_ACTOR, ADMIN_ACTOR]) {
+					const res = resFor(actor, 'BULK');
+					expect(() => compile()(res, null, actor)).not.toThrow();
+				}
+				const whRes = resFor(WAREHOUSE_ACTOR, 'BULK');
+				expectForbidden(
+					() => compile()(whRes, null, WAREHOUSE_ACTOR),
+					/Role cannot manage loan return reservations in BULK mode/
+				);
+			});
+
+			it('enforces mode-specific RBAC for NON_PHYSICAL reservation create (REG/SC/SM/SA allowed; WH rejected)', () => {
+				for (const actor of [REG_ACTOR, COORD_ACTOR, MGR_ACTOR, ADMIN_ACTOR]) {
+					const res = resFor(actor, 'NON_PHYSICAL');
+					expect(() => compile()(res, null, actor)).not.toThrow();
+				}
+				const whRes = resFor(WAREHOUSE_ACTOR, 'NON_PHYSICAL');
+				expectForbidden(
+					() => compile()(whRes, null, WAREHOUSE_ACTOR),
+					/Role cannot manage loan return reservations in NON_PHYSICAL mode/
+				);
+			});
+
+			it('rejects reservation create when created_by is forged', () => {
+				const res = resFor(WAREHOUSE_ACTOR, 'PHYSICAL');
+				expectForbidden(
+					() => compile()(res, null, COORD_ACTOR),
+					/loan_return_reservation\.created_by must match the current actor/
+				);
+			});
+
+			it('rejects reservation create from unauthorized role', () => {
+				const res = resFor(UNAUTH_ACTOR, 'PHYSICAL');
+				expectForbidden(
+					() => compile()(res, null, UNAUTH_ACTOR),
+					/Role cannot manage loan return reservations in PHYSICAL mode/
+				);
+			});
+
+			it('allows cross-actor advance to FENCED and COMMITTED while preserving original created_by', () => {
+				const original = resFor(WAREHOUSE_ACTOR, 'PHYSICAL');
+				const fenced = {
+					...original,
+					status: 'FENCED',
+					updated_at: '2026-09-01T00:30:00.000Z'
+				};
+				expect(() => compile()(fenced, original, WAREHOUSE_ACTOR)).not.toThrow();
+
+				const committed = {
+					...fenced,
+					status: 'COMMITTED',
+					updated_at: '2026-09-01T01:00:00.000Z'
+				};
+				expect(() => compile()(committed, fenced, COORD_ACTOR)).not.toThrow();
+			});
+
+			it('enforces mode RBAC on FENCE and COMMIT transitions', () => {
+				const original = resFor(WAREHOUSE_ACTOR, 'PHYSICAL');
+				const fenced = {
+					...original,
+					status: 'FENCED',
+					updated_at: '2026-09-01T00:30:00.000Z'
+				};
+				// REG actor cannot FENCE a PHYSICAL reservation
+				expectForbidden(
+					() => compile()(fenced, original, REG_ACTOR),
+					/Role cannot manage loan return reservations in PHYSICAL mode/
+				);
+
+				// WH actor can FENCE
+				expect(() => compile()(fenced, original, WAREHOUSE_ACTOR)).not.toThrow();
+
+				const committed = {
+					...fenced,
+					status: 'COMMITTED',
+					updated_at: '2026-09-01T01:00:00.000Z'
+				};
+				// REG actor cannot COMMIT a PHYSICAL reservation
+				expectForbidden(
+					() => compile()(committed, fenced, REG_ACTOR),
+					/Role cannot manage loan return reservations in PHYSICAL mode/
+				);
+			});
+
+			it('forbids aborting a FENCED reservation (must proceed forward)', () => {
+				const original = resFor(WAREHOUSE_ACTOR, 'PHYSICAL');
+				const fenced = {
+					...original,
+					status: 'FENCED',
+					updated_at: '2026-09-01T00:30:00.000Z'
+				};
+				expectForbidden(
+					() => compile()({ ...fenced, status: 'ABORTED' }, fenced, WAREHOUSE_ACTOR),
+					/Invalid loan_return_reservation transition from FENCED to ABORTED/
+				);
+			});
+
+			it('rejects mutating created_by during reservation transition', () => {
+				const original = resFor(WAREHOUSE_ACTOR, 'PHYSICAL');
+				const hijacked = {
+					...original,
+					created_by: COORD_ACTOR.name,
+					status: 'COMMITTED',
+					updated_at: '2026-09-01T01:00:00.000Z'
+				};
+				expectForbidden(
+					() => compile()(hijacked, original, COORD_ACTOR),
+					/loan_return_reservation\.created_by is permanently immutable/
+				);
+			});
+
+			it('rejects changing mode or operation_id while reservation is active', () => {
+				const original = resFor(COORD_ACTOR, 'PHYSICAL');
+				const modeChanged = {
+					...original,
+					mode: 'BULK',
+					bulk_pool_id: 'bulk_return_pool:01J00000000000000000000001',
+					claimed_qty: '1',
+					status: 'FENCED',
+					updated_at: '2026-09-01T00:30:00.000Z'
+				};
+				expectForbidden(
+					() => compile()(modeChanged, original, COORD_ACTOR),
+					/loan_return_reservation\.mode cannot be changed while active/
+				);
+
+				const opIdChanged = {
+					...original,
+					operation_id: '01J00000000000000000000099',
+					status: 'FENCED',
+					updated_at: '2026-09-01T00:30:00.000Z'
+				};
+				expectForbidden(
+					() => compile()(opIdChanged, original, COORD_ACTOR),
+					/loan_return_reservation\.operation_id cannot be changed while active/
+				);
+			});
+
+			it('enforces valid status transitions and allows reinitialization from ABORTED and COMMITTED with mode-specific RBAC', () => {
+				const original = resFor(WAREHOUSE_ACTOR, 'PHYSICAL');
+				const committed = {
+					...original,
+					status: 'COMMITTED',
+					updated_at: '2026-09-01T01:00:00.000Z'
+				};
+				// COMMITTED -> ABORTED is invalid
+				expectForbidden(
+					() => compile()({ ...committed, status: 'ABORTED' }, committed, WAREHOUSE_ACTOR),
+					/Invalid loan_return_reservation transition from COMMITTED to ABORTED/
+				);
+
+				// COMMITTED -> RESERVED as BULK is valid for REG_ACTOR
+				const reinitFromCommitted = {
+					...committed,
+					operation_id: '01J00000000000000000000099',
+					operation_by: REG_ACTOR.name,
+					mode: 'BULK',
+					bulk_pool_id: 'bulk_return_pool:01J00000000000000000000001',
+					claimed_qty: '1',
+					status: 'RESERVED',
+					updated_at: '2026-09-01T02:00:00.000Z'
+				};
+				expect(() => compile()(reinitFromCommitted, committed, REG_ACTOR)).not.toThrow();
+
+				// COMMITTED -> RESERVED as BULK is rejected for WAREHOUSE_ACTOR (WH cannot do BULK)
+				const whReinitBulk = {
+					...committed,
+					operation_id: '01J00000000000000000000099',
+					operation_by: WAREHOUSE_ACTOR.name,
+					mode: 'BULK',
+					bulk_pool_id: 'bulk_return_pool:01J00000000000000000000001',
+					claimed_qty: '1',
+					status: 'RESERVED',
+					updated_at: '2026-09-01T02:00:00.000Z'
+				};
+				expectForbidden(
+					() => compile()(whReinitBulk, committed, WAREHOUSE_ACTOR),
+					/Role cannot manage loan return reservations in BULK mode/
+				);
+			});
+
+			it('validates canonical return_condition (READY, MAINTENANCE, BROKEN) and rejects legacy conditions', () => {
+				for (const cond of ['READY', 'MAINTENANCE', 'BROKEN']) {
+					const valid = resFor(WAREHOUSE_ACTOR, 'PHYSICAL', { return_condition: cond });
+					expect(() => compile()(valid, null, WAREHOUSE_ACTOR)).not.toThrow();
+				}
+				for (const legacy of ['good', 'damaged', 'unusable', 'OTHER']) {
+					const invalid = resFor(WAREHOUSE_ACTOR, 'PHYSICAL', { return_condition: legacy });
+					expectForbidden(
+						() => compile()(invalid, null, WAREHOUSE_ACTOR),
+						/PHYSICAL loan_return_reservation requires valid return_condition/
+					);
+				}
+			});
+
+			it('allows pre-effect abort from RESERVED only by operation owner, shelter_manager, or system_admin', () => {
+				const original = resFor(WAREHOUSE_ACTOR, 'PHYSICAL');
+				const aborted = {
+					...original,
+					status: 'ABORTED',
+					updated_at: '2026-09-01T00:15:00.000Z'
+				};
+
+				// Original creator/operation owner can abort
+				expect(() => compile()(aborted, original, WAREHOUSE_ACTOR)).not.toThrow();
+
+				// Shelter manager can abort
+				expect(() => compile()(aborted, original, MGR_ACTOR)).not.toThrow();
+
+				// System admin can abort
+				expect(() => compile()(aborted, original, ADMIN_ACTOR)).not.toThrow();
+
+				// Another warehouse staff (different actor, not manager/admin) cannot abort
+				const otherWhActor: UserCtx = { name: 'wh2', roles: ['shelter:SH001', 'warehouse_staff'] };
+				expectForbidden(
+					() => compile()(aborted, original, otherWhActor),
+					/Only operation owner, shelter_manager, or system_admin can abort a RESERVED reservation/
+				);
+
+				// Supply coordinator (not manager/admin, not owner) cannot abort
+				expectForbidden(
+					() => compile()(aborted, original, COORD_ACTOR),
+					/Only operation owner, shelter_manager, or system_admin can abort a RESERVED reservation/
+				);
+			});
+
+			it('rejects deleting loan_return_reservation documents', () => {
+				const doc = resFor(WAREHOUSE_ACTOR, 'PHYSICAL');
+				expectForbidden(
+					() => compile()({ _id: doc._id, _deleted: true }, doc, ADMIN_ACTOR),
+					/Cannot delete loan_return_reservation documents/
+				);
+			});
+		});
+
 		describe('stock_ledger reason/ref VDU alignment (Rule 13)', () => {
 			const SUPPLY_COORD: UserCtx = { name: 'sc', roles: ['shelter:SH001', 'supply_coordinator'] };
 			const SHELTER_MGR: UserCtx = { name: 'sm', roles: ['shelter:SH001', 'shelter_manager'] };
@@ -2937,6 +3781,71 @@ describe('buildValidateDocUpdate', () => {
 					/shelter_code must be SH001/
 				);
 			});
+		});
+	});
+
+	describe('shelter_readiness_assessment VDU validation', () => {
+		const validAssessment: Doc = {
+			_id: 'shelter_readiness_assessment:SH001:2026-09-30T10-00-00Z',
+			type: 'shelter_readiness_assessment',
+			schema_v: 1,
+			shelter_code: 'SH001',
+			tier: 'community',
+			header: {
+				shelter_name: 'ศูนย์ 1',
+				operating_agency: 'อบต.',
+				max_capacity: 100,
+				phone_contact: '012',
+				building_type: 'โรงเรียน',
+				location_address: '123',
+				assessor_name: 'test',
+				assessed_date: '2026-09-30'
+			},
+			status: 'draft',
+			verdict: null,
+			justification_note: '',
+			summary: {
+				total_items: 38,
+				answered_items: 0,
+				fully_ready_count: 0,
+				partial_count: 0,
+				none_count: 0,
+				unassessed_count: 38,
+				mandatory_unanswered_count: 38,
+				mandatory_none_count: 0
+			},
+			items: [],
+			created_by: 'reg',
+			created_at: '2026-09-30T10:00:00.000Z',
+			updated_at: '2026-09-30T10:00:00.000Z',
+			edit_history: []
+		};
+
+		it('allows creating valid shelter_readiness_assessment', () => {
+			expect(() => compile()(validAssessment, null, REGISTRATION)).not.toThrow();
+		});
+
+		it('rejects cross-shelter readiness assessment', () => {
+			expectForbidden(
+				() => compile()({ ...validAssessment, shelter_code: 'SH002' }, null, REGISTRATION),
+				/shelter_code must be SH001/
+			);
+		});
+
+		it('rejects assessment with mismatched id prefix', () => {
+			expectForbidden(
+				() =>
+					compile()({ ...validAssessment, _id: 'assessment:SH001:2026-09-30' }, null, REGISTRATION),
+				/Shelter readiness assessment id must start with shelter_readiness_assessment:SH001:/
+			);
+		});
+
+		it('rejects assessment when created_at or created_by is modified', () => {
+			expectForbidden(
+				() =>
+					compile()({ ...validAssessment, created_by: 'hacker' }, validAssessment, REGISTRATION),
+				/Shelter readiness assessment identity and creation metadata cannot change/
+			);
 		});
 	});
 });

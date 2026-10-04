@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import PaginationControls from '$lib/components/pagination-controls.svelte';
+	import LoadingScreen from '$lib/components/loading-screen.svelte';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
@@ -20,9 +21,10 @@
 		listMatchingHouseholdIds,
 		canCancelHouseholdPreRegistration,
 		householdStatusSchema,
+		groupPetsBySpecies,
+		petSpeciesLabel,
 		type HouseholdStatus
 	} from '$lib/features/people';
-	import { useMasterData } from '$lib/features/master-data';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { canCancelHold } from '$lib/auth/roles';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -76,23 +78,10 @@
 	}));
 
 	const allEvacueesQuery = useEvacuees();
-	const municipalityZoneQuery = useMasterData(() => 'municipality_zone');
-	const communityQuery = useMasterData(() => 'community');
 	const cancelHousehold = useCancelPreRegistration();
 
-	const municipalityZoneLabels = $derived(
-		Object.fromEntries(
-			(municipalityZoneQuery.data?.items ?? []).map((item) => [item.code, item.label])
-		)
-	);
-	const communityLabels = $derived(
-		Object.fromEntries((communityQuery.data?.items ?? []).map((item) => [item.code, item.label]))
-	);
-
-	const searchLabels = $derived({
-		municipalityZone: municipalityZoneLabels,
-		community: communityLabels
-	});
+	/** Free-text zone/community — search matches stored strings directly (CR-137). */
+	const searchLabels = { municipalityZone: {}, community: {} };
 
 	const filters = $derived({
 		status: (selectedStatus || undefined) as HouseholdStatus | undefined
@@ -315,9 +304,7 @@
 
 	<!-- List -->
 	{#if householdsQuery.isLoading}
-		<div class="flex items-center justify-center py-16">
-			<p class="text-sm text-muted-foreground">กำลังโหลดข้อมูล...</p>
-		</div>
+		<LoadingScreen />
 	{:else if householdsQuery.isError}
 		<div
 			class="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
@@ -397,13 +384,13 @@
 									{#if h.municipality_zone}
 										<span
 											class="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs font-medium text-sky-900"
-											>{municipalityZoneLabels[h.municipality_zone] ?? h.municipality_zone}</span
+											>{h.municipality_zone}</span
 										>
 									{/if}
 									{#if h.community}
 										<span
 											class="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-900"
-											>{communityLabels[h.community] ?? h.community}</span
+											>{h.community}</span
 										>
 									{/if}
 								{:else}
@@ -413,12 +400,10 @@
 
 							{#if h.pets && h.pets.length > 0}
 								<div class="flex flex-wrap gap-1.5">
-									{#each h.pets as p, i (`${h._id}-pet-${i}`)}
-										{@const petLabel =
-											p.species === 'dog' ? 'สุนัข' : p.species === 'cat' ? 'แมว' : 'สัตว์เลี้ยง'}
+									{#each groupPetsBySpecies(h.pets) as p (`${h._id}-pet-${p.species}`)}
 										<span
 											class="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-semibold text-slate-700"
-											>{petLabel} {p.count}</span
+											>{petSpeciesLabel(p.species)} {p.count}</span
 										>
 									{/each}
 								</div>
@@ -496,13 +481,13 @@
 										{#if h.municipality_zone}
 											<span
 												class="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-2xs font-medium text-blue-700"
-												>{municipalityZoneLabels[h.municipality_zone] ?? h.municipality_zone}</span
+												>{h.municipality_zone}</span
 											>
 										{/if}
 										{#if h.community}
 											<span
 												class="rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-2xs font-medium text-green-700"
-												>{communityLabels[h.community] ?? h.community}</span
+												>{h.community}</span
 											>
 										{/if}
 									{:else}
@@ -513,12 +498,10 @@
 							<Table.Cell>
 								<div class="flex flex-wrap gap-1">
 									{#if h.pets && h.pets.length > 0}
-										{#each h.pets as p, i (`${h._id}-pet-${i}`)}
-											{@const petEmoji =
-												p.species === 'dog' ? '🐶' : p.species === 'cat' ? '🐱' : '🐾'}
+										{#each groupPetsBySpecies(h.pets) as p (`${h._id}-pet-${p.species}`)}
 											<span
 												class="rounded-full bg-secondary px-2 py-0.5 text-2xs font-semibold text-secondary-foreground"
-												>{petEmoji} {p.count}</span
+												>{petSpeciesLabel(p.species)} {p.count}</span
 											>
 										{/each}
 									{:else}

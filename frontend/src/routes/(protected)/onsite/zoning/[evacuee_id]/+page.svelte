@@ -21,6 +21,7 @@
 		useConfirmRoom,
 		useConfirmRoomForHousehold,
 		ZoneSelectionFields,
+		StayStatusBadge,
 		maskNationalId,
 		formatPersonName,
 		classifyZoningQueueTab,
@@ -30,16 +31,17 @@
 		canConfirmRoom,
 		isPendingZoneArrivalConfirmation,
 		zoneLabel,
+		movementConflictMessage,
 		type Evacuee,
 		type Screening
 	} from '$lib/features/people';
 	import { useShelter } from '$lib/features/shelters';
-	import { useMasterData } from '$lib/features/master-data';
+	import { useMasterData, formatMasterLabel } from '$lib/features/master-data';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
 
-	let { data }: { data: { evacueeId: string } } = $props();
+	let { data }: { data: { evacueeId: string; focusZone?: boolean } } = $props();
 
 	const evacueeId = $derived(data.evacueeId);
 	const evacueeQuery = useEvacuee(() => evacueeId);
@@ -82,13 +84,14 @@
 	};
 
 	function getSpecialNeedLabel(need: string): string {
-		const fromMaster = vulnerableGroupQuery.data?.items.find((i) => i.code === need)?.label;
-		if (fromMaster) return fromMaster;
+		const masterItem = vulnerableGroupQuery.data?.items.find((i) => i.code === need);
+		if (masterItem) return formatMasterLabel(masterItem, 'th');
 		return SPECIAL_NEED_LABELS[need] ?? need;
 	}
 
 	const isAwaitingConfirm = $derived(!!evacuee && isPendingZoneArrivalConfirmation(evacuee));
-	const isRezone = $derived(!!evacuee && canChangeEvacueeZone(evacuee) && !isAwaitingConfirm);
+	// Already checked in (active / room_confirmed): the zone action is a zone_change, never a check-in
+	const isRezone = $derived(!!evacuee && canChangeEvacueeZone(evacuee));
 	const canConfirmArrival = $derived(!!evacuee && isAwaitingConfirm && canConfirmRoom(evacuee));
 
 	const pendingHouseholdMembers = $derived.by((): Evacuee[] => {
@@ -121,6 +124,23 @@
 	let companionDraft = $state<string[]>([]);
 	let companionDraftEvacueeId = $state<string | null>(null);
 	let submitting = $state(false);
+	// Awaiting arrival confirmation: zone change is a secondary action, hidden until asked for
+	let rezoneOpenFor = $state<string | null>(null);
+	const showZoneEditor = $derived(!isAwaitingConfirm || rezoneOpenFor === evacueeId);
+
+	type StageStep = { key: string; label: string; done: boolean };
+	const stageSteps = $derived.by((): StageStep[] => {
+		if (!evacuee) return [];
+		const status = evacuee.current_stay.status;
+		const zoned = isRezone;
+		const steps: StageStep[] = [];
+		if (enableMedical) {
+			steps.push({ key: 'screened', label: 'คัดกรองแล้ว', done: !!latestScreening || zoned });
+		}
+		steps.push({ key: 'zoned', label: 'จัดเข้าโซน', done: zoned });
+		steps.push({ key: 'confirmed', label: 'ยืนยันถึงโซน', done: status === 'room_confirmed' });
+		return steps;
+	});
 
 	const selectedZone = $derived(
 		zoneDraftEvacueeId === evacueeId && zoneDraft !== null
@@ -139,6 +159,33 @@
 		)
 	);
 	const isolationDefault = $derived(recommendKind === 'quarantine');
+	const currentZone = $derived(evacuee?.current_stay.zone?.trim() ?? '');
+	// A zone_change to the same zone writes nothing meaningful — block it
+	const zoneChanged = $derived(!!selectedZone.trim() && selectedZone.trim() !== currentZone);
+	/**
+	 * Intake steps this person has not passed yet. UI guard only (the domain still allows check-in
+	 * from pre_registered) — keeps a scanned QR from skipping report-in or medical screening.
+	 */
+	const intakeBlock = $derived.by((): 'not_reported' | 'not_screened' | null => {
+		if (!evacuee || isRezone) return null;
+		const status = evacuee.current_stay.status;
+		if (status === 'pre_registered') return 'not_reported';
+		if (status === 'arriving' && enableMedical && !screeningsQuery.isPending && !latestScreening) {
+			return 'not_screened';
+		}
+		return null;
+	});
+	const canSubmitZone = $derived(!intakeBlock && (isRezone ? zoneChanged : !!selectedZone.trim()));
+
+	// Scan hand-off (?focus=zone): bring the zone step into view and flash it once
+	let zoneHighlight = $state(false);
+	function focusZoneStep(node: HTMLElement) {
+		if (!data.focusZone) return;
+		node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+		zoneHighlight = true;
+		const timer = setTimeout(() => (zoneHighlight = false), 2500);
+		return () => clearTimeout(timer);
+	}
 
 	const occupantCounts = $derived(countPresentOccupantsByZone(allEvacuees));
 	const householdLabel = $derived(
@@ -167,6 +214,7 @@
 
 	async function applyZone(target: Evacuee, zone: string) {
 		if (canChangeEvacueeZone(target)) {
+			if (target.current_stay.zone?.trim() === zone) return;
 			return changeZoneMutation.mutateAsync({ evacuee: target, ctx: authorCtx(), zone });
 		}
 		return checkInMutation.mutateAsync({ evacuee: target, ctx: authorCtx(), zone });
@@ -177,10 +225,10 @@
 		submitting = true;
 		try {
 			await confirmRoomMutation.mutateAsync({ evacuee, ctx: authorCtx() });
-			toast.success('ยืนยันถึงโซนเรียบร้อย');
+			toast.success('ยืนยันถึงโซนแล้ว');
 			await goto(resolve('/onsite/zoning'));
 		} catch (err: unknown) {
-			toast.error(err instanceof Error ? err.message : 'ยืนยันถึงโซนไม่สำเร็จ');
+			toast.error(movementConflictMessage(err));
 		} finally {
 			submitting = false;
 		}
@@ -198,7 +246,7 @@
 			toast.success(`ยืนยันถึงโซนทั้งครัวเรือน ${confirmed.length} คน`);
 			await goto(resolve('/onsite/zoning'));
 		} catch (err: unknown) {
-			toast.error(err instanceof Error ? err.message : 'ยืนยันถึงโซนไม่สำเร็จ');
+			toast.error(movementConflictMessage(err));
 		} finally {
 			submitting = false;
 		}
@@ -207,6 +255,14 @@
 	async function handleSubmit() {
 		if (!evacuee || !selectedZone.trim()) {
 			toast.error('กรุณาเลือกโซนที่พัก');
+			return;
+		}
+		if (intakeBlock) {
+			toast.error('ยังจัดโซนไม่ได้ — ต้องผ่านขั้นตอนก่อนหน้าให้ครบก่อน');
+			return;
+		}
+		if (!canSubmitZone) {
+			toast.error('โซนที่เลือกเป็นโซนเดิม — เลือกโซนใหม่ก่อนบันทึกการย้าย');
 			return;
 		}
 		submitting = true;
@@ -218,12 +274,12 @@
 			}
 			toast.success(
 				isRezone
-					? `ย้ายโซนเป็น ${zoneLabel(selectedZone, shelterZones)} เรียบร้อย`
-					: `จัดที่พักโซน ${zoneLabel(selectedZone, shelterZones)} และเช็คอินเรียบร้อย`
+					? `ย้ายโซนเป็น ${zoneLabel(selectedZone, shelterZones)} แล้ว`
+					: `จัดเข้าโซน ${zoneLabel(selectedZone, shelterZones)} แล้ว — รอยืนยันถึงโซน`
 			);
 			await goto(resolve('/onsite/zoning'));
 		} catch (err: unknown) {
-			toast.error(err instanceof Error ? err.message : 'บันทึกไม่สำเร็จ');
+			toast.error(movementConflictMessage(err));
 		} finally {
 			submitting = false;
 		}
@@ -235,17 +291,20 @@
 </svelte:head>
 
 <div class="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6 md:px-6">
-	<div class="flex items-center gap-3">
-		<a
-			href={resolve('/onsite/zoning')}
-			class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-		>
-			<ArrowLeft class="size-4" />
-		</a>
+	<a
+		href={resolve('/onsite/zoning')}
+		class="inline-flex w-fit items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+	>
+		<ArrowLeft class="size-4" />
+		กลับไปรายการจัดโซน
+	</a>
+	<div class="-mt-3 flex items-center gap-3">
 		<div>
 			<div class="flex items-center gap-2">
 				<MapPin class="size-5 text-amber-600" />
-				<h1 class="text-xl font-bold">{isRezone ? 'ย้ายโซนที่พัก' : 'จัดสรรที่พัก'}</h1>
+				<h1 class="text-xl font-bold">
+					{isAwaitingConfirm ? 'ยืนยันถึงโซน' : isRezone ? 'ย้ายโซนที่พัก' : 'จัดสรรที่พัก'}
+				</h1>
 				<Badge variant="outline">Station 3</Badge>
 			</div>
 		</div>
@@ -258,16 +317,54 @@
 	{:else if !evacuee}
 		<Card.Root class="p-6">
 			<p class="text-sm text-muted-foreground">ไม่พบผู้ประสบภัยรหัสนี้</p>
-			<Button class="mt-4" variant="outline" href={resolve('/onsite/zoning')}>กลับคิว</Button>
+			<Button class="mt-4" variant="outline" href={resolve('/onsite/zoning')}>
+				<ArrowLeft class="mr-1.5 size-4" />
+				กลับไปรายการจัดโซน
+			</Button>
 		</Card.Root>
 	{:else}
 		<Card.Root class="border-border p-5 shadow-sm">
 			<div class="mb-4 space-y-2">
-				<p class="text-lg font-bold">{formatPersonName(evacuee)}</p>
+				<div class="flex flex-wrap items-center gap-2">
+					<p class="text-lg font-bold">{formatPersonName(evacuee)}</p>
+					{#if isAwaitingConfirm}
+						<Badge
+							variant="outline"
+							class="border-amber-500/40 bg-amber-500/15 text-amber-800 dark:text-amber-200"
+						>
+							รอยืนยันถึงโซน · {zoneLabel(currentZone, shelterZones)}
+						</Badge>
+					{:else if evacuee.current_stay.status === 'room_confirmed'}
+						<Badge
+							variant="outline"
+							class="border-emerald-500/40 bg-emerald-500/15 text-emerald-800 dark:text-emerald-200"
+						>
+							ยืนยันแล้ว · {zoneLabel(currentZone, shelterZones)}
+						</Badge>
+					{:else}
+						<StayStatusBadge status={evacuee.current_stay.status} />
+					{/if}
+				</div>
 				<p class="text-xs text-muted-foreground">
-					บัตร {maskNationalId(evacuee.person_id?.number)} · สถานะ {evacuee.current_stay.status} · ครอบครัว
-					{householdLabel}
+					บัตร {maskNationalId(evacuee.person_id?.number)} · ครอบครัว {householdLabel}
 				</p>
+				<ol
+					class="flex flex-wrap items-center gap-1.5 pt-1 text-xs"
+					aria-label="ขั้นตอนจัดสรรที่พัก"
+				>
+					{#each stageSteps as step, i (step.key)}
+						{#if i > 0}
+							<li aria-hidden="true" class="text-muted-foreground">→</li>
+						{/if}
+						<li
+							class="rounded-full border px-2 py-0.5 {step.done
+								? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200'
+								: 'border-border text-muted-foreground'}"
+						>
+							{step.done ? '✓ ' : ''}{step.label}
+						</li>
+					{/each}
+				</ol>
 				<div class="flex flex-wrap items-center gap-2">
 					{#if latestScreening?.symptoms && latestScreening.symptoms.length > 0}
 						<Badge
@@ -305,69 +402,127 @@
 				{/if}
 			</div>
 
-			<ZoneSelectionFields
-				bind:selected_zone={() => selectedZone, setSelectedZone}
-				{evacuee}
-				ewar_symptoms={latestScreening?.symptoms}
-				occupant_counts={occupantCounts}
-				shelter_zones={shelterQuery.data?.zones}
-			/>
-
-			{#if companionCandidates.length > 0}
-				<div class="mt-6 space-y-3 border-t border-border pt-4">
-					<p class="text-sm font-semibold">
-						{isRezone ? 'ย้ายสมาชิกครัวเรือนที่พักอยู่ด้วย' : 'จัดโซนสมาชิกครัวเรือนที่รอจัดด้วย'}
+			{#if intakeBlock === 'not_reported'}
+				<div
+					role="alert"
+					class="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-100"
+				>
+					<p class="font-semibold">ยังไม่รายงานตัว — จัดโซนไม่ได้</p>
+					<p class="mt-0.5 text-xs">
+						คนนี้ลงทะเบียนล่วงหน้าไว้แต่ยังไม่ได้รายงานตัวที่สถานี 1 ให้รายงานตัวก่อน แล้วจึงจัดโซน
 					</p>
-					<p class="text-2xs text-muted-foreground">
-						เลือกเฉพาะคน — ไม่ตัด household_id · คนละโซนได้เมื่อจำเป็น (เช่น กักตัว)
-					</p>
-					{#each companionCandidates as member (member._id)}
-						{@const checked = selectedCompanionIds.includes(member._id)}
-						<label class="flex items-center gap-3 rounded-lg border border-border p-3">
-							<Checkbox
-								{checked}
-								onCheckedChange={(v) => toggleCompanion(member._id, v === true)}
-							/>
-							<div class="min-w-0 flex-1">
-								<p class="text-sm font-medium">{formatPersonName(member)}</p>
-								<p class="text-2xs text-muted-foreground">
-									{member.current_stay.status}
-									{#if member.current_stay.zone}
-										· {zoneLabel(member.current_stay.zone, shelterZones)}{/if}
-								</p>
-							</div>
-						</label>
-					{/each}
+					<Button
+						class="mt-2"
+						size="sm"
+						variant="outline"
+						href={resolve(`/onsite/people/${evacuee._id}/report-in`)}
+					>
+						ไปรายงานตัว (สถานี 1)
+					</Button>
+				</div>
+			{:else if intakeBlock === 'not_screened'}
+				<div
+					role="alert"
+					class="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-100"
+				>
+					<p class="font-semibold">ยังไม่ผ่านคัดกรองแพทย์ — จัดโซนไม่ได้</p>
+					<p class="mt-0.5 text-xs">ศูนย์นี้เปิดคัดกรองแพทย์ ให้ส่งไปสถานี 2 ก่อน แล้วจึงจัดโซน</p>
+					<Button
+						class="mt-2"
+						size="sm"
+						variant="outline"
+						href={resolve(`/onsite/medical-screening/${evacuee._id}`)}
+					>
+						ไปคัดกรองแพทย์ (สถานี 2)
+					</Button>
 				</div>
 			{/if}
 
-			<div class="mt-6 flex flex-wrap gap-2">
-				{#if canConfirmArrival}
-					<Button onclick={handleConfirmArrival} disabled={submitting}>
-						{#if submitting}
-							<Loader2 class="mr-2 size-4 animate-spin" />
-						{/if}
-						ยืนยันถึงโซน
-					</Button>
-					{#if evacuee.household_id}
-						<Button
-							variant="secondary"
-							onclick={handleConfirmHouseholdArrival}
-							disabled={submitting}
-						>
-							ยืนยันทั้งครัวเรือน
-						</Button>
+			<div
+				{@attach focusZoneStep}
+				class="-m-2 rounded-xl p-2 transition-shadow duration-500 {zoneHighlight
+					? 'ring-2 ring-amber-500/60'
+					: 'ring-0'}"
+			>
+				{#if showZoneEditor}
+					<ZoneSelectionFields
+						bind:selected_zone={() => selectedZone, setSelectedZone}
+						{evacuee}
+						ewar_symptoms={latestScreening?.symptoms}
+						occupant_counts={occupantCounts}
+						shelter_zones={shelterQuery.data?.zones}
+					/>
+
+					{#if companionCandidates.length > 0}
+						<div class="mt-6 space-y-3 border-t border-border pt-4">
+							<p class="text-sm font-semibold">
+								{isRezone
+									? 'ย้ายสมาชิกครัวเรือนที่พักอยู่ด้วย'
+									: 'จัดโซนสมาชิกครัวเรือนที่รอจัดด้วย'}
+							</p>
+							<p class="text-2xs text-muted-foreground">
+								เลือกเฉพาะคน — ไม่ตัด household_id · คนละโซนได้เมื่อจำเป็น (เช่น กักตัว)
+							</p>
+							{#each companionCandidates as member (member._id)}
+								{@const checked = selectedCompanionIds.includes(member._id)}
+								<label class="flex items-center gap-3 rounded-lg border border-border p-3">
+									<Checkbox
+										{checked}
+										onCheckedChange={(v) => toggleCompanion(member._id, v === true)}
+									/>
+									<div class="min-w-0 flex-1">
+										<p class="text-sm font-medium">{formatPersonName(member)}</p>
+										<p class="text-2xs text-muted-foreground">
+											{member.current_stay.status}
+											{#if member.current_stay.zone}
+												· {zoneLabel(member.current_stay.zone, shelterZones)}{/if}
+										</p>
+									</div>
+								</label>
+							{/each}
+						</div>
 					{/if}
 				{/if}
-				<Button onclick={handleSubmit} disabled={submitting || !selectedZone}>
-					{#if submitting}
-						<Loader2 class="mr-2 size-4 animate-spin" />
+
+				<div class="mt-6 flex flex-wrap gap-2">
+					{#if canConfirmArrival}
+						<Button onclick={handleConfirmArrival} disabled={submitting}>
+							{#if submitting}
+								<Loader2 class="mr-2 size-4 animate-spin" />
+							{/if}
+							ยืนยันถึงโซน
+						</Button>
+						{#if evacuee.household_id}
+							<Button
+								variant="secondary"
+								onclick={handleConfirmHouseholdArrival}
+								disabled={submitting}
+							>
+								ยืนยันทั้งครัวเรือน
+							</Button>
+						{/if}
 					{/if}
-					{isRezone ? 'บันทึกการย้ายโซน' : 'ยืนยันจัดที่พักและเช็คอิน'}
-				</Button>
-				<Button variant="outline" href={resolve('/onsite/zoning')} disabled={submitting}>
-					กลับคิว
-				</Button>
+					{#if showZoneEditor}
+						<Button
+							variant={isAwaitingConfirm ? 'outline' : 'default'}
+							onclick={handleSubmit}
+							disabled={submitting || !canSubmitZone}
+						>
+							{#if submitting}
+								<Loader2 class="mr-2 size-4 animate-spin" />
+							{/if}
+							{isRezone ? 'บันทึกการย้ายโซน' : 'จัดเข้าโซน (รอยืนยันถึงโซน)'}
+						</Button>
+					{:else}
+						<Button
+							variant="outline"
+							onclick={() => (rezoneOpenFor = evacueeId)}
+							disabled={submitting}
+						>
+							ย้ายโซน…
+						</Button>
+					{/if}
+				</div>
 			</div>
 		</Card.Root>
 	{/if}

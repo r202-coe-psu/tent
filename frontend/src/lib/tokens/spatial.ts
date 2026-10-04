@@ -6,6 +6,17 @@
 export const spatial = {
 	container: {
 		page: 'mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-10 sm:py-16 space-y-12 sm:space-y-16',
+		/**
+		 * Staff / system-management page shell (Master Data density).
+		 * Denser than marketing `page` — use via StaffPageShell, not public portals.
+		 */
+		staffPage: 'w-full min-w-0 space-y-6 px-4 py-8 sm:px-6 lg:px-8',
+		/**
+		 * Page chrome card (no inner padding) — tables, master-detail splits.
+		 * Left-nav / master-detail pages must use StaffHub (one staffPageCard + flush
+		 * StaffSideNav), not two separate `card` surfaces with gap between them.
+		 */
+		staffPageCard: 'overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-2xs',
 		card: 'rounded-xl border border-slate-200/80 bg-white p-5 shadow-2xs',
 		section: 'rounded-2xl border border-slate-200/80 bg-white p-6 sm:p-10 shadow-2xs space-y-6',
 		modal: 'rounded-2xl border border-slate-200/80 bg-white p-6 shadow-md max-w-lg w-full'

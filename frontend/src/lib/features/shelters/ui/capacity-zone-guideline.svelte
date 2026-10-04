@@ -42,9 +42,9 @@
 </script>
 
 <Alert
-	class="border-shelter-border bg-muted/40 {alignment === 'zones_over'
-		? 'border-amber-300 bg-amber-50/80'
-		: ''}"
+	class="rounded-xl border border-slate-200/80 bg-slate-50/70 {alignment === 'zones_over'
+		? 'border-amber-200 bg-amber-50/80 text-amber-900'
+		: 'text-slate-800'}"
 >
 	<Info class="h-4 w-4" />
 	<AlertTitle class="text-sm font-semibold">แนวทางความจุ (Max Capacity)</AlertTitle>

@@ -29,15 +29,8 @@ const SHELTERS = {
 
 const GROUPS = {
 	groups: [
-		{ code: 'vg_elderly', label: 'ผู้สูงอายุ' },
-		{ code: 'vg_bedridden', label: 'ผู้ป่วยติดเตียง' }
-	]
-};
-
-const PET_TYPES = {
-	petTypes: [
-		{ code: 'dog', label: 'สุนัข', is_default: true },
-		{ code: 'cat', label: 'แมว', is_default: false }
+		{ code: 'vg_elderly', label_th: 'ผู้สูงอายุ', label_en: 'Elderly' },
+		{ code: 'vg_bedridden', label_th: 'ผู้ป่วยติดเตียง', label_en: 'Bedridden' }
 	]
 };
 
@@ -71,9 +64,6 @@ async function mockReferenceData(page: Page) {
 	);
 	await page.route('**/api/public/v1/config/vulnerable-groups', (route) =>
 		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(GROUPS) })
-	);
-	await page.route('**/api/public/v1/config/pet-types**', (route) =>
-		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(PET_TYPES) })
 	);
 	await page.route('**/api/public/v1/config/shelter-policy**', (route) =>
 		route.fulfill({
@@ -175,6 +165,31 @@ async function openBooking(page: Page) {
 }
 
 test.describe('Public shelter booking (T-71 / CR-070)', () => {
+	test('a failed submit jumps straight to the first invalid field', async ({ page }) => {
+		await mockReferenceData(page);
+		let posted = false;
+		await page.route('**/api/public/v1/registrations', (route) => {
+			posted = true;
+			return route.abort();
+		});
+
+		await openBooking(page);
+		await selectShelter(page, /ไม่ระบุศูนย์พักพิง/);
+		await fillAddress(page);
+		await page.locator('#member-0-first-name').fill('สมชาย');
+		await page.locator('#member-0-last-name').fill('ใจดี');
+		await page.locator('#member-0-gender-male').click({ force: true });
+		await page.getByLabel(/ข้าพเจ้ารับทราบเงื่อนไขการใช้งานระบบ/).check();
+
+		// The sticky summary aside repeats the submit button; use the one in the form body.
+		await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last().click();
+
+		// No extra "go to field" click needed — the missing phone is focused on submit.
+		await expect(page.locator('#member-0-phone')).toBeFocused();
+		await expect(page.locator('#member-0-phone')).toBeInViewport();
+		expect(posted).toBe(false);
+	});
+
 	test('books a solo stay from the landing page and shows the QR ticket', async ({ page }) => {
 		await mockReferenceData(page);
 
@@ -377,7 +392,7 @@ test.describe('Public shelter booking (T-71 / CR-070)', () => {
 		);
 
 		await page.goto('/shelters/SH001');
-		await page.getByRole('link', { name: 'จองที่ศูนย์นี้' }).first().click();
+		await page.getByRole('link', { name: 'ลงทะเบียนล่วงหน้าที่ศูนย์นี้' }).first().click();
 		await page.waitForURL('**/pre-register?shelter=SH001');
 
 		const trigger = page.getByRole('button', { name: /เทศบาลนครหาดใหญ่/ });
@@ -457,11 +472,13 @@ test.describe('Public unassigned registration (#255 / CR-113)', () => {
 		await expect(page.locator('#member-0-no-phone')).toHaveCount(0);
 
 		await page.getByLabel(/ข้าพเจ้ารับทราบเงื่อนไขการใช้งานระบบ/).check();
-		await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).click();
+		await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last().click();
 
 		await expect(page.getByText('ลงทะเบียนล่วงหน้าสำเร็จ')).toBeVisible();
-		await expect(page.getByAltText(/คิวกลาง|queue/i)).toBeVisible();
-		await expect(page.getByText('01JUNASSIGNEDREG0000000001', { exact: true })).toBeVisible();
+		await expect(page.getByAltText('QR สำหรับแสดงต่อเจ้าหน้าที่ลงทะเบียนประจำศูนย์')).toBeVisible();
+		await expect(page.getByText('แสดง QR Code นี้ต่อเจ้าหน้าที่ เพื่อรับเข้าศูนย์')).toBeVisible();
+		// The registration id rides in the QR only — never printed for a human to read.
+		await expect(page.getByText('01JUNASSIGNEDREG0000000001')).toHaveCount(0);
 
 		expect(submitted).toMatchObject({
 			disclaimerAcknowledged: true,

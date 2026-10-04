@@ -216,11 +216,14 @@
 				<ShieldAlert class="size-4 text-primary" />
 				<div>
 					<h3 class="text-sm font-bold text-foreground">2. กลุ่มเปราะบาง (Vulnerable Groups)</h3>
-					<p class="text-xs text-muted-foreground">เลือกได้หลายรายการ (ไม่บังคับ)</p>
+					<p class="text-xs text-muted-foreground">
+						ติ๊กทุกข้อที่ตรงกับผู้ประสบภัย — เลือกได้หลายข้อ · ไม่ตรงข้อไหนเลยให้เว้นว่าง
+					</p>
 				</div>
 			</div>
 
 			<VulnerableGroupsFields
+				showDisabilityDetail={false}
 				bind:vulnerable_groups
 				disabled={isSubmitting}
 				idPrefix="med-vg"
@@ -236,7 +239,9 @@
 					<h3 class="text-sm font-bold text-foreground">
 						3. ความต้องการเพิ่มเติม (Additional needs)
 					</h3>
-					<p class="text-xs text-muted-foreground">แท็กทั่วไปหรือเพิ่มความต้องการเอง (ไม่บังคับ)</p>
+					<p class="text-xs text-muted-foreground">
+						กดเลือกแท็กที่ตรง หรือพิมพ์เพิ่มเอง — เลือกได้หลายข้อ · ไม่มีให้เว้นว่าง
+					</p>
 				</div>
 			</div>
 
@@ -252,7 +257,9 @@
 						4. อาการเฝ้าระวังทางระบาดวิทยา (EWAR Surveillance Symptoms)
 					</h3>
 					<p class="text-xs text-muted-foreground">
-						กลุ่มอาการเฝ้าระวังโรคระบาด — หากไม่มีอาการไม่ต้องติ๊กเลือก (ไม่บังคับเลือกอาการ)
+						ติ๊กเฉพาะอาการที่พบตอนนี้ — เลือกได้หลายข้อ · <strong class="font-semibold"
+							>ไม่มีอาการ ไม่ต้องเลือก</strong
+						> (ถ้าติ๊กอาการใด ระบบจะแนะนำโซนกักตัวที่สถานี 3)
 					</p>
 				</div>
 			</div>

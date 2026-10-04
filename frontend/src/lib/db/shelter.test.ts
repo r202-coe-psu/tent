@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { getShelterCode, getShelterDb } from './shelter';
+import { getShelterCode, getShelterDb, resolveShelterCode } from './shelter';
 import { shelterStore } from '$lib/stores/shelter.svelte';
 
 let mockRoles: string[] = [];
@@ -16,6 +16,7 @@ vi.mock('$lib/stores/auth.svelte', () => ({
 describe('shelter database config', () => {
 	beforeEach(() => {
 		shelterStore.selectedShelterCode = undefined;
+		shelterStore.listDefaultCode = undefined;
 		mockRoles = [];
 	});
 
@@ -39,5 +40,22 @@ describe('shelter database config', () => {
 
 		expect(getShelterCode()).toBe('SH001');
 		expect(getShelterDb()).toBe('shelter_sh001');
+	});
+
+	it('resolveShelterCode returns null instead of SH001 when nothing scopes a shelter', () => {
+		mockRoles = ['user', 'system_admin'];
+
+		expect(resolveShelterCode()).toBeNull();
+	});
+
+	it('resolveShelterCode follows the same order as getShelterCode', () => {
+		mockRoles = ['user', 'shelter:SH003'];
+		expect(resolveShelterCode()).toBe('SH003');
+
+		shelterStore.listDefaultCode = 'SH004';
+		expect(resolveShelterCode()).toBe('SH004');
+
+		shelterStore.selectedShelterCode = 'SH005';
+		expect(resolveShelterCode()).toBe('SH005');
 	});
 });

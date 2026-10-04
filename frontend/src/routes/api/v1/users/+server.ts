@@ -89,8 +89,9 @@ export const POST: RequestHandler = async ({ request }) => {
 		const affiliation_tags = Array.isArray(body.affiliation_tags)
 			? body.affiliation_tags.filter((t): t is string => typeof t === 'string')
 			: [];
-		const must_change_password =
-			typeof body.must_change_password === 'boolean' ? body.must_change_password : false;
+		// CR-141 FR-23 — every provisioned account starts on a temporary password, so its owner
+		// can link Google/ThaID on first login (`/login/link`) and must then pass force-setup.
+		const must_change_password = true;
 
 		if (name.length < 3) throw new ServiceError('VALIDATION', 'name must be at least 3 characters');
 		const validPassword = validateProvisionedPassword(password, {

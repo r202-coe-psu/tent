@@ -1,15 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { resolveMasterLabel, toLabelMap } from './master-labels';
+import { resolveMasterLabel, shelterTypeLabel, toLabelMap } from './master-labels';
 
 describe('toLabelMap', () => {
-	it('indexes code → label and skips empty rows', () => {
+	it('indexes code → label by language and skips empty rows', () => {
 		expect(
-			toLabelMap([
-				{ code: 'item_a', label: 'ผู้สูงอายุ' },
-				{ code: '', label: 'x' },
-				{ code: 'item_b', label: '' }
-			])
+			toLabelMap(
+				[
+					{ code: 'item_a', label_th: 'ผู้สูงอายุ', label_en: 'Elderly' },
+					{ code: '', label_th: 'x', label_en: 'x' },
+					{ code: 'item_b', label_th: '', label_en: '' }
+				],
+				'th'
+			)
 		).toEqual({ item_a: 'ผู้สูงอายุ' });
+
+		expect(
+			toLabelMap([{ code: 'item_a', label_th: 'ผู้สูงอายุ', label_en: 'Elderly' }], 'en')
+		).toEqual({ item_a: 'Elderly' });
 	});
 
 	it('returns an empty object for nullish input', () => {
@@ -38,5 +45,21 @@ describe('resolveMasterLabel', () => {
 	it('returns empty for nullish codes', () => {
 		expect(resolveMasterLabel(null, labels)).toBe('');
 		expect(resolveMasterLabel(undefined, labels)).toBe('');
+	});
+});
+
+describe('shelterTypeLabel', () => {
+	it('prefers the master-data label in either language', () => {
+		expect(shelterTypeLabel('item_a', { item_a: 'School' }, 'en')).toBe('School');
+	});
+
+	it('translates legacy Thai free text to English only when the language is en', () => {
+		expect(shelterTypeLabel('วัด', undefined, 'en')).toBe('Temple');
+		expect(shelterTypeLabel('วัด', undefined, 'th')).toBe('วัด');
+	});
+
+	it('hides unknown ULID codes and empty values', () => {
+		expect(shelterTypeLabel('item_missing', {}, 'en')).toBe('');
+		expect(shelterTypeLabel(null, {}, 'th')).toBe('');
 	});
 });

@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { SvelteSet, SvelteMap } from 'svelte/reactivity';
 	import {
 		useStockBalance,
@@ -12,8 +14,10 @@
 	import {
 		itemMasterUnit,
 		useItemMasters,
+		useItemCategories,
 		formatUnit,
-		useUnitsOfMeasure
+		useUnitsOfMeasure,
+		resolveCategoryLabel
 	} from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
@@ -21,36 +25,64 @@
 	import { useShelters } from '$lib/features/shelters';
 	import { getShelterCode } from '$lib/db/shelter';
 	import * as Table from '$lib/components/ui/table/index.js';
-	import * as Dialog from '$lib/components/ui/dialog';
 	import * as Sheet from '$lib/components/ui/sheet';
-	import LedgerTable from './ledger-table.svelte';
+	import { Button } from '$lib/components/ui/button/index.js';
+	import PaginationControls from '$lib/components/pagination-controls.svelte';
+	import ItemDetailSheet from './item-detail-sheet.svelte';
 	import ReceiveStockForm from './receive-stock-form.svelte';
 	import DistributeStockForm from './distribute-stock-form.svelte';
 	import AdjustStockForm from './adjust-stock-form.svelte';
-	import * as Pagination from '$lib/components/ui/pagination/index.js';
-	import MinusCircle from '@lucide/svelte/icons/minus-circle';
-	import Settings from '@lucide/svelte/icons/settings';
-	import { qtyGt, qtyLte, addQty } from '$lib/utils/qty';
-	import { calculateReorderLevel } from '$lib/features/supply/domain/threshold-calc';
+	import AttentionCards from './stock/attention-cards.svelte';
+	import StockFilters from './stock/stock-filters.svelte';
+	import StockRow from './stock/stock-row.svelte';
+	import StockCard from './stock/stock-card.svelte';
+	import {
+		attentionCounts,
+		clampPage,
+		filterRows,
+		hiddenCatalogCount,
+		pageSlice,
+		sortRows,
+		visibleRows,
+		type StockDisplayRow
+	} from './stock/stock-view';
+	import {
+		mergeStockParams,
+		parseStockParams,
+		STOCK_PAGE_SIZE,
+		type StockUrlState
+	} from './stock/stock-url-state';
+	import {
+		projectStockLotBalances,
+		StockLotIntegrityError,
+		type StockLotBalance
+	} from '../domain/operations';
+	import {
+		dailyConsumption,
+		daysOfCover,
+		deriveStockQtyStatus,
+		everStockedItemIds,
+		groupLotsByItem,
+		resolveReorderThreshold,
+		summarizeItemStock,
+		type ItemStockSummary
+	} from '../domain/stock-summary';
+	import { lotStorageKey, lotStorageName } from '../domain/lot-storage';
+	import { useStoragePoints } from '../application/use-storage-points.svelte';
+	import { qtyGt, addQty } from '$lib/utils/qty';
 	import { IsMobile } from '$lib/hooks/is-mobile.svelte';
-
-	// Icon
 	import Plus from '@lucide/svelte/icons/plus';
-	import Search from '@lucide/svelte/icons/search';
-	import Filter from '@lucide/svelte/icons/filter';
-	import ChevronDown from '@lucide/svelte/icons/chevron-down';
-	import ChevronRight from '@lucide/svelte/icons/chevron-right';
-	import Activity from '@lucide/svelte/icons/activity';
 	import Boxes from '@lucide/svelte/icons/boxes';
-	import Clock from '@lucide/svelte/icons/clock';
-	import MapPin from '@lucide/svelte/icons/map-pin';
-	import PlusCircle from '@lucide/svelte/icons/plus-circle';
-	import Eye from '@lucide/svelte/icons/eye';
-	import Pencil from '@lucide/svelte/icons/pencil';
+	import ArrowDownToLine from '@lucide/svelte/icons/arrow-down-to-line';
+	import ArrowUpFromLine from '@lucide/svelte/icons/arrow-up-from-line';
+	import SlidersHorizontal from '@lucide/svelte/icons/sliders-horizontal';
 
-	// ─── Queries ──────────────────────────────────────────────────────────────
+	let { occupancy = 120 }: { occupancy?: number } = $props();
+
 	const itemsQuery = useSupplyItems();
 	const itemMastersQuery = useItemMasters(() => getShelterCode());
+	const itemCategoriesQuery = useItemCategories(() => getShelterCode());
+	const itemCategories = $derived(itemCategoriesQuery.data ?? []);
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
 	const balanceQuery = useStockBalance();
@@ -58,13 +90,14 @@
 	const overridesQuery = useThresholdOverrides();
 
 	const overrides = $derived(overridesQuery.data ?? []);
+	const overrideByItem = $derived(new Map(overrides.map((o) => [o.item_id, o])));
 
-	// ─── Roles and Cross-Shelter States ───────────────────────────────────────
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
 	let showOverall = $state(false);
 
 	const sheltersQuery = useShelters();
+	const storagePoints = useStoragePoints(() => getShelterCode());
 	const shelterCodes = $derived((sheltersQuery.data ?? []).map((s) => s.code));
 
 	const crossBalanceQuery = useCrossShelterStockBalances(
@@ -76,49 +109,63 @@
 		() => isSA && showOverall
 	);
 
-	// ─── States ───────────────────────────────────────────────────────────────
+	// Filter / sort / page live in the URL (`?q=&cat=&loc=&status=&sort=&page=&all=`) so a
+	// reload or a shared link restores the view. Other params (`tab`, …) are preserved.
+	const urlState = $derived(parseStockParams(page.url.searchParams));
 
-	// ─── Filter state ─────────────────────────────────────────────────────────
-	let searchQuery = $state('');
-	let categoryFilter = $state<string>('all');
-	let locationFilter = $state<string | 'all'>('all');
-	let statusFilter = $state<'all' | 'normal' | 'low' | 'empty' | 'expiring' | 'expired'>('all');
+	function updateUrl(patch: Partial<StockUrlState>) {
+		// Any filter / sort change goes back to page 1; only an explicit `page` keeps its value.
+		const next: StockUrlState = { ...urlState, page: 1, ...patch };
+		const params = mergeStockParams(page.url.searchParams, next);
+		const qs = params.toString();
+		if (qs === page.url.searchParams.toString()) return;
+		void goto(resolve(`/back-office/supply${qs ? `?${qs}` : ''}` as '/back-office/supply'), {
+			replaceState: true,
+			keepFocus: true,
+			noScroll: true
+		});
+	}
 
-	// ─── Collapsed groups state ──────────────────────────────────────────────
-	const collapsedGroups = new SvelteSet<string>();
+	let selectedItemId = $state<string | null>(null);
+	let detailOpen = $state(false);
+	let quickActionOpen = $state(false);
+	let quickActionKind = $state<'receive' | 'distribute' | 'adjust'>('receive');
+	let quickActionItemId = $state<string | undefined>(undefined);
+	const isMobileViewport = new IsMobile();
 
-	function toggleGroup(category: string) {
-		if (collapsedGroups.has(category)) {
-			collapsedGroups.delete(category);
-		} else {
-			collapsedGroups.add(category);
+	function openDetail(itemId: string) {
+		selectedItemId = itemId;
+		detailOpen = true;
+	}
+
+	function openQuickAction(kind: 'receive' | 'distribute' | 'adjust', itemId?: string) {
+		quickActionKind = kind;
+		quickActionItemId = itemId;
+		quickActionOpen = true;
+	}
+
+	function onMovementSuccess(result?: { keepOpen?: boolean }) {
+		// Keep overlay/panel open for the next line unless the form asked to close.
+		if (result?.keepOpen === false) {
+			quickActionOpen = false;
 		}
 	}
 
-	// ─── Pagination state ─────────────────────────────────────────────────────
-	const PAGE_SIZE = 10;
-	let currentPage = $state(1);
+	const quickActionTitle = $derived(
+		quickActionKind === 'receive'
+			? 'รับเข้า'
+			: quickActionKind === 'distribute'
+				? 'เบิกจ่าย'
+				: 'ปรับยอด / ตรวจนับ'
+	);
+	const quickActionDescription = $derived(
+		quickActionKind === 'receive'
+			? 'บันทึกรับพัสดุเข้าคลัง'
+			: quickActionKind === 'distribute'
+				? 'ระบบเลือกล็อตที่หมดอายุก่อนให้อัตโนมัติ'
+				: 'กรอกจำนวนที่นับได้จริง แล้วระบบจะคำนวณส่วนต่างให้อัตโนมัติ'
+	);
 
-	$effect(() => {
-		// Reset to page 1 on filter/search/showOverall change
-		void [searchQuery, categoryFilter, locationFilter, statusFilter, showOverall];
-		currentPage = 1;
-	});
-
-	// ─── Modal state ──────────────────────────────────────────────────────────
-	let selectedItemId = $state<string | null>(null);
-	let isManageModalOpen = $state(false);
-	let activeModalTab = $state<'history' | 'checkin' | 'distribute' | 'adjust'>('checkin');
-	/** Below md: full-height Sheet; md+: capped Dialog (Phase 2b). */
-	const isMobileViewport = new IsMobile();
-
-	function openManage(itemId: string, tab: typeof activeModalTab) {
-		selectedItemId = itemId;
-		activeModalTab = tab;
-		isManageModalOpen = true;
-	}
-
-	// ─── Derived data ─────────────────────────────────────────────────────────
 	const items = $derived.by(() => {
 		const supplyItems = (itemsQuery.data ?? []).map((si) => ({
 			...si,
@@ -142,6 +189,7 @@
 
 		return [...supplyItems, ...mappedItemMasters];
 	});
+
 	const balance = $derived.by(() => {
 		if (isSA && showOverall) {
 			const agg = new SvelteMap<string, string>();
@@ -161,109 +209,59 @@
 	);
 
 	/**
-	 * Unique locations list extracted from ledger entries
+	 * Location filter options from ledger entries, keyed by `lotStorageKey` so a
+	 * renamed storage point stays one option (draft-shelter-storage-points).
 	 */
 	const uniqueLocations = $derived.by(() => {
-		const locations = new SvelteSet<string>();
+		const locations = new SvelteMap<string, string>();
 		for (const entry of ledger) {
-			if (entry.lot?.note) {
-				locations.add(entry.lot.note.trim());
-			}
+			const key = lotStorageKey(entry.lot);
+			const name = lotStorageName(entry.lot, storagePoints.points);
+			if (key && name && !locations.has(key)) locations.set(key, name);
 		}
-		return Array.from(locations).filter(Boolean);
+		return Array.from(locations, ([value, label]) => ({ value, label }));
 	});
 
-	/**
-	 * For each item, derive the latest lot info (expiry + storage note) from
-	 * the most-recent POSITIVE ledger entry so the table can show them.
-	 *
-	 * LIMITATION: This picks the last inbound entry's lot per item_id. After a
-	 * full distribute-then-restock cycle the table may briefly show the OLD lot's
-	 * expiry/location until the new receive entry lands. A proper fix requires
-	 * per-lot balance tracking (FIFO/FEFO), which is out of scope for T-11.
-	 */
-	const latestLotByItem = $derived.by(() => {
-		const result: Record<string, { expiry?: string; note?: string }> = {};
-		const sorted = [...ledger].sort((a, b) => a.occurred_at.localeCompare(b.occurred_at));
-		for (const entry of sorted) {
-			if (qtyGt(entry.qty, 0) && (entry.lot?.expiry || entry.lot?.note)) {
-				result[entry.item_id] = {
-					expiry: entry.lot?.expiry,
-					note: entry.lot?.note
-				};
+	/** Remaining lots per item — every lot, so an old lot near expiry is never hidden. */
+	const lotsByItem = $derived.by(() => {
+		try {
+			return groupLotsByItem(projectStockLotBalances(ledger));
+		} catch (error) {
+			if (!(error instanceof StockLotIntegrityError)) throw error;
+			return new SvelteMap<string, StockLotBalance[]>();
+		}
+	});
+
+	const stockSummaryByItem = $derived.by(() => {
+		const result = new SvelteMap<string, ItemStockSummary>();
+		for (const [itemId, lots] of lotsByItem) result.set(itemId, summarizeItemStock(lots));
+		return result;
+	});
+
+	/** Location label: the single storage point, or the first one plus a count. */
+	const locationLabelByItem = $derived.by(() => {
+		const result = new SvelteMap<string, string>();
+		for (const [itemId, lots] of lotsByItem) {
+			const names = [
+				...new Set(
+					lots
+						.filter((l) => qtyGt(l.qty, 0))
+						.map((l) => lotStorageName(l.lot, storagePoints.points))
+						.filter((n): n is string => !!n)
+				)
+			];
+			if (names.length > 0) {
+				result.set(itemId, names.length === 1 ? names[0] : `${names[0]} +${names.length - 1}`);
 			}
 		}
 		return result;
 	});
 
-	/** Check if an expiry date string is within the next `days` days. */
-	function isExpiringSoon(expiryStr: string | undefined, days = 7): boolean {
-		if (!expiryStr) return false;
-		const exp = Date.parse(expiryStr);
-		if (Number.isNaN(exp)) return false;
-		return exp - Date.now() <= days * 86_400_000 && exp > Date.now();
-	}
-
-	function isExpired(expiryStr: string | undefined): boolean {
-		if (!expiryStr) return false;
-		const exp = Date.parse(expiryStr);
-		return !Number.isNaN(exp) && exp <= Date.now();
-	}
-
-	/** Filtered and searched items list. */
-	const displayedItems = $derived.by(() => {
-		const q = searchQuery.toLowerCase().trim();
-		return itemsWithCalculatedStatus.filter((item) => {
-			// Search
-			if (q && !item.name.toLowerCase().includes(q) && !item._id.toLowerCase().includes(q))
-				return false;
-			// Category
-			if (categoryFilter !== 'all' && item.category !== categoryFilter) return false;
-
-			const lot = latestLotByItem[item._id];
-			const expired = isExpired(lot?.expiry);
-			const expiring = isExpiringSoon(lot?.expiry);
-
-			// Location Filter
-			if (locationFilter !== 'all') {
-				if (!lot?.note || lot.note.trim() !== locationFilter) return false;
-			}
-
-			// Status Filter
-			if (statusFilter !== 'all') {
-				if (statusFilter === 'normal' && item.status !== 'normal') return false;
-				if (statusFilter === 'low' && item.status !== 'low') return false;
-				if (statusFilter === 'empty' && item.status !== 'empty') return false;
-				if (statusFilter === 'expired' && !expired) return false;
-				if (statusFilter === 'expiring' && !expiring) return false;
-			}
-			return true;
-		});
-	});
-
-	const paginatedItems = $derived.by(() => {
-		const start = (currentPage - 1) * PAGE_SIZE;
-		return displayedItems.slice(start, start + PAGE_SIZE);
-	});
-
-	const totalPages = $derived(Math.max(1, Math.ceil(displayedItems.length / PAGE_SIZE)));
-
-	const isLoading = $derived(
-		itemsQuery.isLoading ||
-			itemMastersQuery.isLoading ||
-			overridesQuery.isLoading ||
-			(isSA && showOverall
-				? crossBalanceQuery.isLoading || crossLedgerQuery.isLoading
-				: balanceQuery.isLoading || ledgerQuery.isLoading)
-	);
-
-	// ─── Helpers ──────────────────────────────────────────────────────────────
-	function getCategoryStyle(category: string): string {
-		return CATEGORY_STYLES[category as SupplyCategory] || CATEGORY_STYLES.other;
-	}
-
 	function getCategoryLabel(category: string): string {
-		return SUPPLY_CATEGORY_LABELS[category as SupplyCategory] || category;
+		if (category in SUPPLY_CATEGORY_LABELS) {
+			return SUPPLY_CATEGORY_LABELS[category as SupplyCategory];
+		}
+		return resolveCategoryLabel(category, itemCategories) || category;
 	}
 
 	const uniqueCategories = $derived.by(() => {
@@ -281,801 +279,361 @@
 			.sort((a, b) => a.label.localeCompare(b.label, 'th'));
 	});
 
-	const CATEGORY_STYLES: Record<SupplyCategory, string> = {
-		food: 'bg-[#e8f0fe] text-[#0071e3] border-[#d2e3fc] dark:bg-[#0071e3]/10 dark:text-[#66b2ff] dark:border-[#0071e3]/20',
-		water:
-			'bg-[#e6f4ea] text-[#137333] border-[#ceead6] dark:bg-[#137333]/10 dark:text-[#57bb8a] dark:border-[#137333]/20',
-		medicine:
-			'bg-[#fce8e6] text-[#c5221f] border-[#fad2cf] dark:bg-[#c5221f]/10 dark:text-[#ff6b6b] dark:border-[#c5221f]/20',
-		clothing:
-			'bg-[#f3e8fd] text-[#8430ce] border-[#e8d5f9] dark:bg-[#8430ce]/10 dark:text-[#c084fc] dark:border-[#8430ce]/20',
-		hygiene:
-			'bg-[#e2f1f8] text-[#0288d1] border-[#b3e5fc] dark:bg-[#0288d1]/10 dark:text-[#38bdf8] dark:border-[#0288d1]/20',
-		bedding:
-			'bg-[#f1f8e9] text-[#558b2f] border-[#dcedc8] dark:bg-[#558b2f]/10 dark:text-[#a3e635] dark:border-[#558b2f]/20',
-		equipment:
-			'bg-[#f8f9fa] text-[#5f6368] border-[#dadce0] dark:bg-[#f8f9fa]/10 dark:text-[#9ca3af] dark:border-[#dadce0]/20',
-		other:
-			'bg-[#f8f9fa] text-[#5f6368] border-[#dadce0] dark:bg-[#f8f9fa]/10 dark:text-[#9ca3af] dark:border-[#dadce0]/20'
-	};
+	/** "Ever stocked" = at least one ledger row at this shelter; the rest are catalog-only. */
+	const everStocked = $derived(everStockedItemIds(ledger));
 
-	/** English group label for category group header (mockup style). */
-	const CATEGORY_GROUP_EN: Record<string, string> = {
-		food: 'Staple Foods',
-		water: 'Drinking Water',
-		medicine: 'Medicine',
-		clothing: 'Clothing',
-		hygiene: 'Hygiene Supplies',
-		bedding: 'Bedding',
-		equipment: 'Equipment',
-		other: 'General',
-		supplies: 'Supplies',
-		fuel: 'Fuel'
-	};
-
-	// ─── Props ────────────────────────────────────────────────────────────────
-	let { occupancy = 120 } = $props();
-
-	// calculate reorder level and evaluate status
-	const itemsWithCalculatedStatus = $derived(
+	const rows = $derived.by<StockDisplayRow[]>(() =>
 		items.map((item) => {
 			const qtyOnHand = balance.get(item._id) ?? '0';
-
-			// 1. Check if there is a local shelter-specific override for this item
-			const itemOverride = overrides.find((o) => o.item_id === item._id);
-
-			let reorderThreshold: string | null = null;
-
-			if (itemOverride) {
-				if (itemOverride.consumption_rate && itemOverride.target_reserve_days) {
-					reorderThreshold = calculateReorderLevel(occupancy, {
-						consumption_rate: itemOverride.consumption_rate,
-						target_reserve_days: itemOverride.target_reserve_days,
-						timeframe: item.timeframe || 'daily'
-					});
-				} else if (itemOverride.reorder_level !== null) {
-					reorderThreshold = String(itemOverride.reorder_level);
-				}
-			}
-
-			// 2. Fallback to default catalog behavior if no override applies
-			if (reorderThreshold === null) {
-				reorderThreshold = calculateReorderLevel(occupancy, item);
-			}
-
-			if (reorderThreshold === null && item.reorder_level !== null) {
-				reorderThreshold = String(item.reorder_level);
-			}
-
-			let status: 'normal' | 'low' | 'empty' = 'normal';
-
-			if (qtyLte(qtyOnHand, 0)) {
-				status = 'empty';
-			} else if (reorderThreshold !== null && qtyLte(qtyOnHand, reorderThreshold)) {
-				status = 'low';
-			}
-
+			const override = overrideByItem.get(item._id);
+			const reorderThreshold = resolveReorderThreshold(occupancy, item, override);
+			const summary = stockSummaryByItem.get(item._id);
 			return {
-				...item,
+				_id: item._id,
+				name: item.name,
+				category: item.category,
+				categoryLabel: getCategoryLabel(item.category),
+				unitLabel: formatUnit(item.unit, units, langState.current),
 				qtyOnHand,
 				reorderThreshold,
-				status
+				status: deriveStockQtyStatus(qtyOnHand, reorderThreshold),
+				expiryState: summary?.expiryState ?? 'none',
+				earliestExpiry: summary?.earliestExpiry ?? null,
+				storageKeys: summary?.storageKeys ?? [],
+				lotCount: summary?.lotCount ?? 0,
+				locationLabel: locationLabelByItem.get(item._id) ?? null,
+				coverDays: daysOfCover(qtyOnHand, dailyConsumption(occupancy, item, override)),
+				neverReceived: !everStocked.has(item._id)
 			};
 		})
 	);
 
-	// ─── Grouped items by category ───────────────────────────────────────────
-	interface CategoryGroup {
-		category: string;
-		label: string;
-		labelEn: string;
-		items: typeof itemsWithCalculatedStatus;
-		totalQty: string;
-		primaryUnit: string;
-		totalCount: number;
+	// Card counts ignore search / category / location / status so they stay stable while filtering.
+	const counts = $derived(attentionCounts(visibleRows(rows, urlState.all)));
+	const hiddenCount = $derived(urlState.all ? 0 : hiddenCatalogCount(rows));
+
+	const filteredRows = $derived(sortRows(filterRows(rows, urlState), urlState.sort));
+	const currentPage = $derived(clampPage(urlState.page, filteredRows.length, STOCK_PAGE_SIZE));
+	const pageRows = $derived(pageSlice(filteredRows, currentPage, STOCK_PAGE_SIZE));
+	const rangeStart = $derived(
+		filteredRows.length === 0 ? 0 : (currentPage - 1) * STOCK_PAGE_SIZE + 1
+	);
+	const rangeEnd = $derived((currentPage - 1) * STOCK_PAGE_SIZE + pageRows.length);
+
+	const filtersActive = $derived(
+		urlState.q.trim() !== '' ||
+			urlState.cat !== 'all' ||
+			urlState.loc !== 'all' ||
+			urlState.status !== 'all'
+	);
+
+	const isLoading = $derived(
+		itemsQuery.isLoading ||
+			itemMastersQuery.isLoading ||
+			overridesQuery.isLoading ||
+			(isSA && showOverall
+				? crossBalanceQuery.isLoading || crossLedgerQuery.isLoading
+				: balanceQuery.isLoading || ledgerQuery.isLoading)
+	);
+
+	// Cross-shelter totals are view-only: opening an item or moving stock would act on one shelter.
+	const readonly = $derived(isSA && showOverall);
+
+	// Session expired (`needsReauth`): reading still works, every write button is off.
+	const offline = $derived(authStore.needsReauth);
+	const OFFLINE_HINT = 'เซสชันหมดอายุ — เข้าสู่ระบบใหม่เพื่อบันทึก';
+
+	function clearFilters() {
+		updateUrl({ q: '', cat: 'all', loc: 'all', status: 'all' });
 	}
 
-	/**
-	 * Parse a category value that may be an enum key (e.g., 'food') or a display label
-	 * (e.g., 'อาหาร (Food)') into separate Thai and English parts for the group header.
-	 */
-	function parseCategoryForGroup(cat: string): { thai: string; en: string } {
-		// 1. Try enum key match (lowercase)
-		const catLower = cat.toLowerCase();
-		if (SUPPLY_CATEGORY_LABELS[catLower as SupplyCategory]) {
-			return {
-				thai: SUPPLY_CATEGORY_LABELS[catLower as SupplyCategory],
-				en: CATEGORY_GROUP_EN[catLower] ?? catLower.charAt(0).toUpperCase() + catLower.slice(1)
-			};
-		}
-
-		// 2. Try to parse display label format "ThaiName (EnglishName)"
-		const match = cat.match(/^(.+?)\s*\(([^)]+)\)\s*$/);
-		if (match) {
-			const thaiPart = match[1].trim();
-			const enPart = match[2].trim();
-			const enLower = enPart.toLowerCase();
-			return {
-				thai: thaiPart,
-				en: CATEGORY_GROUP_EN[enLower] ?? enPart
-			};
-		}
-
-		// 3. Fallback: use raw value
-		return { thai: cat, en: CATEGORY_GROUP_EN[catLower] ?? cat };
-	}
-
-	const groupedDisplayedItems = $derived.by(() => {
-		const groups = new SvelteMap<string, typeof paginatedItems>();
-		for (const item of paginatedItems) {
-			const cat = item.category || 'other';
-			if (!groups.has(cat)) groups.set(cat, []);
-			groups.get(cat)!.push(item);
-		}
-
-		const result: CategoryGroup[] = [];
-		for (const [cat, catItems] of groups.entries()) {
-			const allItemsInCat = displayedItems.filter((i) => (i.category || 'other') === cat);
-			let totalQty = '0';
-			for (const item of allItemsInCat) {
-				totalQty = addQty(totalQty, item.qtyOnHand);
-			}
-			const parsed = parseCategoryForGroup(cat);
-			result.push({
-				category: cat,
-				label: parsed.thai,
-				labelEn: parsed.en,
-				items: catItems,
-				totalQty,
-				primaryUnit: allItemsInCat[0]?.unit ?? 'UOM',
-				totalCount: allItemsInCat.length
-			});
-		}
-		return result.sort((a, b) => a.label.localeCompare(b.label, 'th'));
-	});
+	const selectedManageItem = $derived(
+		selectedItemId ? rows.find((r) => r._id === selectedItemId) : undefined
+	);
 </script>
 
-<div class="space-y-6">
-	<!-- Main Stock Inventory Card -->
-	<div
-		class="flex h-full min-h-[55vh] flex-col rounded-[24px] border border-border/80 bg-card/85 p-6 shadow-md backdrop-blur-xl transition-all"
-	>
-		<!-- Title Section -->
-		<div
-			class="mb-6 flex flex-col items-start justify-between gap-4 border-b border-border/60 pb-6 md:flex-row md:items-center"
-		>
-			<div>
-				<h2 class="flex items-center gap-2 text-2xl font-bold text-foreground">
-					<Boxes class="h-6 w-6 text-primary" />
-					เบราว์สรายการสินค้าจริงในคลัง (Real-time Inventory)
-				</h2>
-				<p class="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">
-					เบราว์สรายการสินค้า คือ รายการของจริง และยอดคงเหลือในคลังสินค้าจริงในระบบ
-					สำหรับการสืบค้นรายการ สิ่งของในระบบ การจัดการยอดตามมาตรฐาน ความต้องการเสบียง Sphere
-					Standard เท่านั้น
-				</p>
-			</div>
-			<div class="w-full md:w-auto">
-				<a
-					href={resolve('/back-office/catalog?tab=item_master&action=create')}
-					class="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground shadow-xs transition-all duration-200 hover:bg-primary-strong active:scale-[0.97] md:w-auto"
+<div class="space-y-4 pb-20 md:pb-0">
+	<!-- Header + CTAs (the 3 movement buttons move to a bottom bar below md) -->
+	<div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+		<h2 class="text-lg font-bold text-slate-900 sm:text-xl">รายการพัสดุในคลัง</h2>
+		<div class="flex flex-wrap gap-2 md:justify-end">
+			<div class="hidden gap-2 md:flex">
+				<Button
+					type="button"
+					class="min-h-11 gap-2 rounded-lg bg-[#0A2647] px-4 text-sm font-semibold text-white hover:bg-[#051930]"
+					disabled={offline}
+					title={offline ? OFFLINE_HINT : undefined}
+					onclick={() => openQuickAction('receive')}
 				>
-					<Plus class="h-4 w-4" />
-					เพิ่มของใหม่
-				</a>
+					<ArrowDownToLine class="h-4 w-4" aria-hidden="true" />
+					รับเข้า
+				</Button>
+				<Button
+					type="button"
+					variant="outline"
+					class="min-h-11 gap-2 rounded-lg border-slate-300 px-4 text-sm font-semibold text-slate-800 shadow-2xs"
+					disabled={offline}
+					title={offline ? OFFLINE_HINT : undefined}
+					onclick={() => openQuickAction('distribute')}
+				>
+					<ArrowUpFromLine class="h-4 w-4" aria-hidden="true" />
+					เบิกจ่าย
+				</Button>
+				<Button
+					type="button"
+					variant="outline"
+					class="min-h-11 gap-2 rounded-lg border-slate-300 px-4 text-sm font-semibold text-slate-800 shadow-2xs"
+					disabled={offline}
+					title={offline ? OFFLINE_HINT : undefined}
+					onclick={() => openQuickAction('adjust')}
+				>
+					<SlidersHorizontal class="h-4 w-4" aria-hidden="true" />
+					ปรับยอด / ตรวจนับ
+				</Button>
 			</div>
+			<a
+				href={resolve('/back-office/supply?tab=catalog&action=create' as '/back-office/supply')}
+				class="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-4 text-sm font-semibold text-teal-900 shadow-2xs transition-colors hover:bg-teal-100 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none md:w-auto"
+			>
+				<Plus class="h-4 w-4" aria-hidden="true" />
+				เพิ่มของใหม่
+			</a>
 		</div>
+	</div>
 
-		<!-- Filter Bar -->
-		<div
-			class="mb-6 flex flex-col gap-3 rounded-xl border border-border/60 bg-muted/30 p-4 xl:flex-row"
-		>
-			<!-- Search -->
-			<div class="relative min-w-[240px] flex-1">
-				<Search class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-				<input
-					type="text"
-					placeholder="ค้นหารหัสข้อมูล (SKU), ชื่อรายการ..."
-					bind:value={searchQuery}
-					class="w-full rounded-lg border border-border/80 bg-background py-2.5 pr-4 pl-9 text-sm shadow-sm transition-all outline-none focus:border-primary"
-				/>
-			</div>
+	<AttentionCards
+		{counts}
+		selected={urlState.status}
+		onselect={(status) => updateUrl({ status })}
+	/>
 
-			<div class="flex flex-col flex-wrap gap-3 sm:flex-row">
-				<!-- Category Dropdown -->
-				<div class="relative w-full sm:w-48">
-					<Filter
-						class="pointer-events-none absolute top-1/2 left-3 z-10 h-4 w-4 -translate-y-1/2 text-foreground"
-					/>
-					<select
-						bind:value={categoryFilter}
-						class="w-full cursor-pointer appearance-none truncate rounded-lg border border-border/80 bg-background py-2.5 pr-8 pl-9 text-sm font-semibold text-foreground shadow-sm transition-all outline-none focus:border-primary"
-					>
-						<option value="all">หมวดหมู่: ทุกหมวดหมู่</option>
-						{#each uniqueCategories as cat (cat.value)}
-							<option value={cat.value}>{cat.label}</option>
-						{/each}
-					</select>
-					<div
-						class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground"
-					>
-						<ChevronDown class="h-4 w-4" />
-					</div>
-				</div>
+	<div
+		class="flex min-h-[40vh] flex-col rounded-2xl border border-slate-200/80 bg-white shadow-2xs"
+	>
+		<StockFilters
+			q={urlState.q}
+			cat={urlState.cat}
+			loc={urlState.loc}
+			sort={urlState.sort}
+			all={urlState.all}
+			categories={uniqueCategories}
+			locations={uniqueLocations}
+			bind:showOverall
+			canShowOverall={isSA}
+			onchange={updateUrl}
+		/>
 
-				<!-- Location Dropdown -->
-				<div class="relative w-full sm:w-48">
-					<MapPin
-						class="pointer-events-none absolute top-1/2 left-3 z-10 h-4 w-4 -translate-y-1/2 text-foreground"
-					/>
-					<select
-						bind:value={locationFilter}
-						class="w-full cursor-pointer appearance-none truncate rounded-lg border border-border/80 bg-background py-2.5 pr-8 pl-9 text-sm font-semibold text-foreground shadow-sm transition-all outline-none focus:border-primary"
-					>
-						<option value="all">ทุกสถานที่จัดเก็บ</option>
-						{#each uniqueLocations as loc (loc)}
-							<option value={loc}>{loc}</option>
-						{/each}
-					</select>
-					<div
-						class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground"
-					>
-						<ChevronDown class="h-4 w-4" />
-					</div>
-				</div>
-
-				<!-- Status Dropdown -->
-				<div class="relative w-full sm:w-[210px]">
-					<Activity
-						class="pointer-events-none absolute top-1/2 left-3 z-10 h-4 w-4 -translate-y-1/2 text-foreground"
-					/>
-					<select
-						bind:value={statusFilter}
-						class="w-full cursor-pointer appearance-none rounded-lg border border-border/80 bg-background py-2.5 pr-8 pl-9 text-sm font-semibold text-foreground shadow-sm transition-all outline-none focus:border-primary"
-					>
-						<option value="all">สถาณชี้เก็บ: พื้นคลัง</option>
-						<option value="normal">🟢 ปกติ (Healthy)</option>
-						<option value="low">🟡 เฝ้าระวัง (Warning)</option>
-						<option value="empty">🔴 วิกฤตสต๊อก (Critical)</option>
-						<option value="expiring">⏳ เสี่ยงหมดอายุ (Expiring)</option>
-						<option value="expired">❌ หมดอายุแล้ว (Expired)</option>
-					</select>
-					<div
-						class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground"
-					>
-						<ChevronDown class="h-4 w-4" />
-					</div>
-				</div>
-				{#if isSA}
-					<div class="flex items-center gap-2 pl-2">
-						<input
-							type="checkbox"
-							id="show-overall"
-							bind:checked={showOverall}
-							class="h-4 w-4 cursor-pointer rounded border-border bg-background text-primary focus:ring-primary"
-						/>
-						<label for="show-overall" class="cursor-pointer text-xs font-semibold text-foreground">
-							แสดงยอดรวมทุกศูนย์ (Cross-shelter aggregate)
-						</label>
-					</div>
-				{/if}
-			</div>
-		</div>
-
-		<!-- Table -->
 		{#if isLoading}
-			<div class="flex-1 space-y-3">
+			<div class="flex-1 space-y-3 p-4">
 				{#each [0, 1, 2, 3, 4] as i (i)}
-					<div class="h-16 animate-pulse rounded-xl border border-border bg-muted/20"></div>
+					<div class="h-16 animate-pulse rounded-xl border border-slate-200/80 bg-slate-50"></div>
 				{/each}
 			</div>
 		{:else if items.length === 0}
-			<div
-				class="flex flex-1 flex-col items-center justify-center rounded-2xl border border-border/60 bg-muted/10 p-12 text-center"
-			>
-				<Boxes class="mb-4 h-12 w-12 text-muted-foreground/40" />
-				<h3 class="text-base font-semibold text-foreground">ยังไม่มีรายการพัสดุในระบบ</h3>
-				<p class="mt-1 text-sm text-muted-foreground">
-					กรุณาเพิ่มรายการพัสดุในระบบกลาง หรือเปิดการซิงค์ข้อมูล
+			<div class="flex flex-1 flex-col items-center justify-center p-12 text-center">
+				<Boxes class="mb-4 h-12 w-12 text-slate-300" aria-hidden="true" />
+				<h3 class="text-base font-semibold text-slate-900">ยังไม่มีรายการพัสดุในระบบ</h3>
+				<p class="mt-1 text-sm text-slate-500">
+					เพิ่มของใหม่ หรือเปิดแท็บสินค้า (Master) เพื่อเริ่มต้น
 				</p>
 			</div>
 		{:else}
-			<!-- Mobile cards (< md) -->
-			<div class="space-y-3 md:hidden">
-				{#if displayedItems.length === 0}
-					<div
-						class="rounded-xl border border-slate-200/80 bg-white p-8 text-center text-sm font-medium text-slate-500 shadow-2xs"
-					>
-						ไม่พบข้อมูลสิ่งของที่ตรงกับเงื่อนไขการค้นหา
-					</div>
-				{:else}
-					{#each groupedDisplayedItems as group (group.category)}
-						<div class="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-2xs">
-							<button
-								type="button"
-								onclick={() => toggleGroup(group.category)}
-								class="flex min-h-12 w-full cursor-pointer items-center gap-3 bg-slate-50 px-4 py-3 text-left transition-colors hover:bg-slate-100"
-							>
-								<span
-									class="flex items-center text-slate-500 transition-transform duration-200 {collapsedGroups.has(
-										group.category
-									)
-										? ''
-										: 'rotate-90'}"
-								>
-									<ChevronRight class="h-4 w-4" />
-								</span>
-								<span class="text-sm font-bold text-slate-900">
-									กลุ่ม{group.label} ({group.labelEn})
-								</span>
-								<span
-									class="rounded-full border border-teal-200 bg-teal-50 px-2.5 py-0.5 text-xs font-semibold text-teal-900 tabular-nums"
-								>
-									{group.totalCount} รายการ
-								</span>
-							</button>
-
-							{#if !collapsedGroups.has(group.category)}
-								<ul class="divide-y divide-slate-200/80">
-									{#each group.items as item (item._id)}
-										{@const qty = item.qtyOnHand}
-										{@const status = item.status}
-										{@const lot = latestLotByItem[item._id]}
-										{@const expired = isExpired(lot?.expiry)}
-										<li class="space-y-3 p-4">
-											<div class="flex flex-col gap-1">
-												<span class="text-base font-semibold text-slate-900">{item.name}</span>
-												<span class="text-xs text-slate-500 tabular-nums">ID: {item._id}</span>
-											</div>
-											<div class="flex flex-wrap items-center gap-2">
-												<span
-													class="rounded-md border px-2.5 py-1 text-center text-xs font-bold whitespace-nowrap {getCategoryStyle(
-														item.category
-													)}"
-												>
-													{getCategoryLabel(item.category)}
-												</span>
-												{#if lot?.note}
-													<span
-														class="inline-flex items-center gap-1 text-xs text-slate-600"
-													>
-														<MapPin class="h-3.5 w-3.5 shrink-0" />
-														{lot.note}
-													</span>
-												{/if}
-											</div>
-											<div class="grid grid-cols-2 gap-3">
-												<div
-													class="rounded-lg border border-slate-200/80 bg-slate-50/80 p-3"
-												>
-													<p class="text-xs font-semibold text-slate-500">สต็อกทั้งหมด</p>
-													<p class="mt-1 text-lg font-bold text-slate-900 tabular-nums">
-														{qty}
-														<span class="text-xs font-normal text-slate-500"
-															>{formatUnit(item.unit, units, langState.current)}</span
-														>
-													</p>
-												</div>
-												<div
-													class="rounded-lg border border-slate-200/80 bg-white p-3 {expired ||
-													status === 'empty'
-														? 'border-red-200'
-														: status === 'low'
-															? 'border-amber-200'
-															: 'border-emerald-200'}"
-												>
-													<p class="text-xs font-semibold text-slate-500">ใช้งานได้จริง</p>
-													<p
-														class="mt-1 text-lg font-bold tabular-nums {expired ||
-														status === 'empty'
-															? 'text-red-700'
-															: status === 'low'
-																? 'text-amber-800'
-																: 'text-emerald-800'}"
-													>
-														{qty}
-														<span class="text-xs font-normal text-slate-500"
-															>{formatUnit(item.unit, units, langState.current)}</span
-														>
-													</p>
-													{#if status === 'empty'}
-														<p class="mt-1 text-xs font-semibold text-red-700">วิกฤตสต๊อก</p>
-													{:else if status === 'low'}
-														<p class="mt-1 text-xs font-semibold text-amber-800">เฝ้าระวัง</p>
-													{:else if expired}
-														<p class="mt-1 text-xs font-semibold text-red-700">หมดอายุ</p>
-													{:else}
-														<p class="mt-1 text-xs font-semibold text-emerald-800">ปกติ</p>
-													{/if}
-												</div>
-											</div>
-											{#if showOverall}
-												<p class="text-xs font-semibold text-slate-500 italic">(ดูภาพรวม)</p>
-											{:else}
-												<div class="flex flex-col-reverse gap-2 sm:flex-row">
-													<button
-														type="button"
-														onclick={() => openManage(item._id, 'history')}
-														class="flex min-h-11 w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-2xs transition-all hover:bg-slate-50 active:scale-[0.97] sm:flex-1"
-													>
-														<Eye class="h-4 w-4 text-slate-500" /> ดูรายสิน
-													</button>
-													<button
-														type="button"
-														onclick={() => openManage(item._id, 'adjust')}
-														class="flex min-h-11 w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-[#0A2647] px-3 py-2 text-sm font-bold text-white shadow-2xs transition-all hover:bg-[#051930] active:scale-[0.97] sm:flex-1"
-													>
-														<Pencil class="h-4 w-4" /> ปรับปรุงยอด
-													</button>
-												</div>
-											{/if}
-										</li>
-									{/each}
-								</ul>
-							{/if}
-						</div>
-					{/each}
-				{/if}
-			</div>
-
-			<!-- Desktop table (md+) -->
-			<div
-				class="hidden flex-1 overflow-x-auto rounded-2xl border border-border/60 bg-background shadow-sm md:block"
+			<p
+				class="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-slate-100 px-4 py-2.5 text-sm text-slate-600"
 			>
-				<Table.Root class="min-w-[900px] text-xs whitespace-nowrap">
-					<Table.Header class="sticky top-0 z-10 border-b border-border/60 bg-muted/50">
-						<Table.Row class="text-2xs font-bold tracking-wider text-foreground uppercase">
-							<Table.Head class="p-4 px-5">รายการสินค้า (SKU)</Table.Head>
-							<Table.Head class="p-4">หมวดหมู่</Table.Head>
-							<Table.Head class="p-4 text-center">สถานที่จัดเก็บ</Table.Head>
-							<Table.Head class="p-4 text-center">สต็อกทั้งหมด (PHYSICAL ON-HAND)</Table.Head>
-							<Table.Head class="p-4 text-center">ใช้งานได้จริง (USABLE STOCK)</Table.Head>
-							<Table.Head class="w-[200px] p-4 px-5 text-center">จัดการ</Table.Head>
-						</Table.Row>
-					</Table.Header>
-					<Table.Body class="divide-y divide-border/40">
-						{#if displayedItems.length === 0}
-							<Table.Row>
-								<Table.Cell
-									colspan={6}
-									class="p-12 text-center text-sm font-medium text-muted-foreground"
+				<span>
+					กำลังแสดง <strong class="font-semibold text-slate-900 tabular-nums">
+						{filteredRows.length}
+					</strong> รายการ
+				</span>
+				{#if hiddenCount > 0}
+					<span aria-hidden="true" class="text-slate-400">·</span>
+					<span>ซ่อน {hiddenCount} รายการในแคตตาล็อกที่ศูนย์นี้ไม่เคยรับเข้า</span>
+				{/if}
+				{#if filtersActive}
+					<button
+						type="button"
+						onclick={clearFilters}
+						class="min-h-11 rounded px-2 font-semibold text-sky-800 underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none"
+					>
+						ล้างตัวกรอง
+					</button>
+				{/if}
+			</p>
+
+			{#if filteredRows.length === 0}
+				<div class="flex flex-1 flex-col items-center justify-center gap-3 p-12 text-center">
+					{#if !urlState.all && !filtersActive && hiddenCount > 0}
+						<p class="text-sm font-medium text-slate-600">ศูนย์นี้ยังไม่เคยรับสินค้าเข้าคลัง</p>
+						<Button
+							type="button"
+							variant="outline"
+							class="min-h-11 rounded-lg border-slate-300 text-sm font-semibold"
+							onclick={() => updateUrl({ all: true })}
+						>
+							ดูทั้งแคตตาล็อก
+						</Button>
+					{:else}
+						<p class="text-sm font-medium text-slate-500">ไม่พบรายการที่ตรงเงื่อนไข</p>
+						{#if filtersActive}
+							<Button
+								type="button"
+								variant="outline"
+								class="min-h-11 rounded-lg border-slate-300 text-sm font-semibold"
+								onclick={clearFilters}
+							>
+								ล้างตัวกรอง
+							</Button>
+						{/if}
+					{/if}
+				</div>
+			{:else}
+				<!-- Phone cards (< md) -->
+				<ul class="space-y-2.5 p-3 md:hidden">
+					{#each pageRows as row (row._id)}
+						<li>
+							<StockCard
+								{row}
+								{readonly}
+								{offline}
+								onopen={(r) => openDetail(r._id)}
+								onreceive={(r) => openQuickAction('receive', r._id)}
+								ondistribute={(r) => openQuickAction('distribute', r._id)}
+							/>
+						</li>
+					{/each}
+				</ul>
+
+				<!-- Tablet / desktop table (md+): 4 cols → +status (lg) → +location (xl) -->
+				<div class="hidden flex-1 overflow-x-auto md:block">
+					<Table.Root class="text-sm">
+						<Table.Header class="border-b border-slate-200/80 bg-slate-50">
+							<Table.Row class="text-xs font-semibold text-slate-600">
+								<Table.Head class="px-3 py-3 lg:px-4">รายการ</Table.Head>
+								<Table.Head class="px-3 py-3 lg:px-4">
+									คงเหลือ / <span class="xl:hidden">เกณฑ์</span><span class="hidden xl:inline">
+										เกณฑ์สั่งเพิ่ม
+									</span>
+								</Table.Head>
+								<Table.Head class="px-3 py-3 lg:px-4">หมดอายุเร็วสุด</Table.Head>
+								<Table.Head class="hidden px-4 py-3 xl:table-cell">ที่เก็บ</Table.Head>
+								<Table.Head class="hidden px-4 py-3 lg:table-cell">สถานะ</Table.Head>
+								<Table.Head class="px-3 py-3 lg:px-4"
+									><span class="sr-only">จัดการ</span></Table.Head
 								>
-									ไม่พบข้อมูลสิ่งของที่ตรงกับเงื่อนไขการค้นหา
-								</Table.Cell>
 							</Table.Row>
-						{:else}
-							{#each groupedDisplayedItems as group (group.category)}
-								<!-- Category Group Header -->
-								<Table.Row class="border-b border-border/60 bg-[#f8f9fb] dark:bg-muted/30">
-									<Table.Cell colspan={6} class="p-0">
-										<button
-											type="button"
-											onclick={() => toggleGroup(group.category)}
-											class="flex w-full cursor-pointer items-center gap-3 px-5 py-3 text-left transition-colors hover:bg-muted/50"
-										>
-											<span
-												class="flex items-center text-muted-foreground transition-transform duration-200 {collapsedGroups.has(
-													group.category
-												)
-													? ''
-													: 'rotate-90'}"
-											>
-												<ChevronRight class="h-4 w-4" />
-											</span>
-											<span class="text-sm font-bold text-foreground">
-												กลุ่ม{group.label} ({group.labelEn})
-											</span>
-											<span
-												class="rounded-full bg-primary px-2.5 py-0.5 text-2xs font-bold text-primary-foreground"
-											>
-												{group.totalCount} รายการ
-											</span>
-											<span class="ml-4 text-xs font-medium text-muted-foreground">
-												ยอดรวมกลุ่ม {Number(group.totalQty).toLocaleString('th-TH')} UOM
-											</span>
-										</button>
-									</Table.Cell>
-								</Table.Row>
-
-								<!-- Items in this group (shown when not collapsed) -->
-								{#if !collapsedGroups.has(group.category)}
-									{#each group.items as item (item._id)}
-										{@const qty = item.qtyOnHand}
-										{@const status = item.status}
-										{@const lot = latestLotByItem[item._id]}
-										{@const expired = isExpired(lot?.expiry)}
-
-										<Table.Row class="transition-all duration-200 hover:bg-muted/40">
-											<!-- Item name + ID -->
-											<Table.Cell class="p-4 px-5 pl-12">
-												<div class="flex flex-col gap-0.5">
-													<span class="text-sm font-semibold text-foreground">
-														{item.name}
-													</span>
-													<span class="font-mono text-2xs text-muted-foreground">
-														ID: {item._id}
-													</span>
-												</div>
-											</Table.Cell>
-
-											<!-- Category badge -->
-											<Table.Cell class="p-4">
-												<span
-													class="rounded-md border px-2.5 py-1 text-center text-2xs font-bold whitespace-nowrap {getCategoryStyle(
-														item.category
-													)}"
-												>
-													{getCategoryLabel(item.category)}
-												</span>
-											</Table.Cell>
-
-											<!-- Storage location -->
-											<Table.Cell class="p-4 text-center">
-												{#if lot?.note}
-													<span class="text-xs text-foreground">
-														{lot.note}
-													</span>
-												{:else}
-													<span class="text-xs text-muted-foreground/40">-</span>
-												{/if}
-											</Table.Cell>
-
-											<!-- สต็อกทั้งหมด (PHYSICAL ON-HAND) -->
-											<Table.Cell class="p-4 text-center">
-												<span class="text-sm font-bold text-foreground">
-													{qty}
-													<span class="text-2xs font-normal text-muted-foreground"
-														>{formatUnit(item.unit, units, langState.current)}</span
-													>
-												</span>
-											</Table.Cell>
-
-											<!-- ใช้งานได้จริง (USABLE STOCK) -->
-											<Table.Cell class="p-4 text-center">
-												<span
-													class="inline-block rounded-md px-2.5 py-1 text-sm font-bold {expired ||
-													status === 'empty'
-														? 'bg-rose-500/10 text-rose-600'
-														: status === 'low'
-															? 'bg-amber-500/10 text-amber-600'
-															: 'text-[#0b6e4f]'}"
-												>
-													{qty}
-													<span class="text-2xs font-normal text-muted-foreground"
-														>{formatUnit(item.unit, units, langState.current)}</span
-													>
-												</span>
-											</Table.Cell>
-
-											<!-- Action buttons -->
-											<Table.Cell class="p-4 px-5 text-center">
-												{#if showOverall}
-													<span class="text-[11px] font-semibold text-muted-foreground/60 italic">
-														(ดูภาพรวม)
-													</span>
-												{:else}
-													<div class="flex items-center justify-center gap-2">
-														<button
-															type="button"
-															onclick={() => openManage(item._id, 'history')}
-															class="flex cursor-pointer items-center gap-1.5 rounded-lg border border-border/80 bg-background px-3 py-1.5 text-[12px] font-semibold text-foreground shadow-sm transition-all duration-200 hover:bg-muted active:scale-[0.97]"
-														>
-															<Eye class="h-3.5 w-3.5 text-muted-foreground" /> ดูรายสิน
-														</button>
-														<button
-															type="button"
-															onclick={() => openManage(item._id, 'adjust')}
-															class="flex cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[12px] font-bold text-primary-foreground shadow-sm transition-all duration-200 hover:bg-primary-strong active:scale-[0.97]"
-														>
-															<Pencil class="h-3.5 w-3.5" /> ปรับปรุงยอด
-														</button>
-													</div>
-												{/if}
-											</Table.Cell>
-										</Table.Row>
-									{/each}
-								{/if}
+						</Table.Header>
+						<Table.Body class="divide-y divide-slate-100">
+							{#each pageRows as row (row._id)}
+								<StockRow
+									{row}
+									{readonly}
+									{offline}
+									onopen={(r) => openDetail(r._id)}
+									onreceive={(r) => openQuickAction('receive', r._id)}
+									ondistribute={(r) => openQuickAction('distribute', r._id)}
+								/>
 							{/each}
-						{/if}
-					</Table.Body>
-				</Table.Root>
-			</div>
-
-			<!-- Pagination -->
-			{#if totalPages > 1}
-				<div class="mt-4 flex justify-end">
-					<Pagination.Root
-						bind:page={currentPage}
-						count={displayedItems.length}
-						perPage={PAGE_SIZE}
-					>
-						{#snippet children({ pages })}
-							<Pagination.Content>
-								<Pagination.Previous />
-								{#each pages as p, i (i)}
-									<Pagination.Item>
-										{#if p.type === 'page'}
-											<Pagination.Link page={p} isActive={p.value === currentPage} />
-										{:else}
-											<Pagination.Ellipsis />
-										{/if}
-									</Pagination.Item>
-								{/each}
-								<Pagination.Next />
-							</Pagination.Content>
-						{/snippet}
-					</Pagination.Root>
+						</Table.Body>
+					</Table.Root>
 				</div>
-			{/if}
 
-			<!-- Footer summary row -->
-			{#if !isLoading && items.length > 0}
-				{@const emptyCount = itemsWithCalculatedStatus.filter((i) => i.status === 'empty').length}
-				{@const lowCount = itemsWithCalculatedStatus.filter((i) => i.status === 'low').length}
 				<div
-					class="flex flex-col gap-2 rounded-2xl border border-border/60 bg-muted/20 px-4 py-3 text-xs text-muted-foreground shadow-sm sm:flex-row sm:items-center sm:justify-between"
+					class="flex flex-col items-center justify-between gap-3 border-t border-slate-200/80 px-4 py-3 text-sm text-slate-600 sm:flex-row"
 				>
-					<span
-						>แสดง {displayedItems.length} จากทั้งหมด {displayedItems.length} รายการที่ตรงเงื่อนไข (ในคลังมี
-						{items.length} รายการ)</span
-					>
-					<div class="flex flex-wrap gap-3">
-						{#if emptyCount > 0}
-							<span class="font-bold text-rose-600">🔴 หมดแล้ว: {emptyCount} รายการ</span>
-						{/if}
-						{#if lowCount > 0}
-							<span class="font-bold text-amber-600">🟡 ใกล้หมด: {lowCount} รายการ</span>
-						{/if}
-						{#if emptyCount === 0 && lowCount === 0}
-							<span class="font-medium text-emerald-600">🟢 สต็อกปกติทั้งหมด</span>
-						{/if}
-					</div>
+					<span class="tabular-nums">
+						แสดง {rangeStart}–{rangeEnd} จาก {filteredRows.length} รายการ
+					</span>
+					<PaginationControls
+						bind:page={() => currentPage, (p) => updateUrl({ page: p })}
+						count={filteredRows.length}
+						perPage={STOCK_PAGE_SIZE}
+					/>
 				</div>
 			{/if}
-		{/if}
-
-		<!-- Timing note -->
-		{#if !isLoading}
-			<p class="mt-3 text-right text-2xs text-muted-foreground/50">
-				<Clock class="mr-0.5 inline h-3 w-3" />
-				ข้อมูลอัปเดตอัตโนมัติผ่าน event channel
-			</p>
-			<p class="mt-1 text-right text-2xs text-muted-foreground/50">
-				* หมายเหตุ: จุดจัดเก็บและวันหมดอายุจะอ้างอิงจากรายการล่าสุดที่มีการระบุข้อมูล
-			</p>
 		{/if}
 	</div>
 </div>
 
-<!-- Manage / History: Sheet below md, Dialog (≤ max-w-2xl / lg:max-w-5xl) on md+ -->
-{#snippet manageHeader()}
-	{#if selectedItemId}
-		{@const item = items.find((i) => i._id === selectedItemId)}
-		<div class="flex items-center gap-2 text-xl font-bold text-foreground">
-			<Boxes class="h-5 w-5 text-primary" />
-			จัดการสต็อก: {item?.name ?? ''}
+<!-- Movement buttons: bottom bar below md (md+ keeps them in the header) -->
+<div
+	class="fixed inset-x-0 bottom-0 z-30 grid grid-cols-3 gap-2 border-t border-slate-200 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden"
+>
+	<Button
+		type="button"
+		class="min-h-12 rounded-lg bg-[#0A2647] text-sm font-semibold text-white hover:bg-[#051930]"
+		disabled={offline}
+		title={offline ? OFFLINE_HINT : undefined}
+		onclick={() => openQuickAction('receive')}
+	>
+		รับเข้า
+	</Button>
+	<Button
+		type="button"
+		variant="outline"
+		class="min-h-12 rounded-lg border-slate-300 text-sm font-semibold text-slate-800"
+		disabled={offline}
+		title={offline ? OFFLINE_HINT : undefined}
+		onclick={() => openQuickAction('distribute')}
+	>
+		เบิกจ่าย
+	</Button>
+	<Button
+		type="button"
+		variant="outline"
+		class="min-h-12 rounded-lg border-slate-300 text-sm font-semibold text-slate-800"
+		disabled={offline}
+		title={offline ? OFFLINE_HINT : undefined}
+		onclick={() => openQuickAction('adjust')}
+	>
+		ตรวจนับ
+	</Button>
+</div>
+
+<ItemDetailSheet
+	bind:open={detailOpen}
+	row={selectedManageItem}
+	lots={selectedItemId ? (lotsByItem.get(selectedItemId) ?? []) : []}
+	shelterCode={getShelterCode()}
+	{offline}
+	onaction={(kind) => openQuickAction(kind, selectedItemId ?? undefined)}
+/>
+
+<!-- Quick receive / distribute / adjust (header buttons: no preselect; row buttons: item preselected).
+	Desktop: right side sheet (receive 760px, others 600px); mobile: full-height bottom sheet. -->
+<Sheet.Root bind:open={quickActionOpen}>
+	<Sheet.Content
+		side={isMobileViewport.current ? 'bottom' : 'right'}
+		class={[
+			'flex flex-col gap-0 overflow-hidden border-0 p-0 pb-[env(safe-area-inset-bottom)]',
+			isMobileViewport.current
+				? 'h-[100dvh] max-h-[100dvh] rounded-none'
+				: [
+						'h-[100dvh] w-full sm:max-w-none md:border-l',
+						quickActionKind === 'receive' ? 'md:w-[47.5rem]' : 'md:w-[37.5rem]'
+					]
+		]}
+	>
+		<Sheet.Header class="shrink-0 border-b border-slate-200/80 px-4 py-4 pr-14 text-left sm:px-6">
+			<Sheet.Title class="text-xl font-bold text-slate-900">
+				{quickActionTitle}
+			</Sheet.Title>
+			<Sheet.Description class="text-sm text-slate-500">
+				{quickActionDescription}
+			</Sheet.Description>
+		</Sheet.Header>
+		<div class="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+			{#if quickActionKind === 'receive'}
+				<ReceiveStockForm preselectedItemId={quickActionItemId} onsuccess={onMovementSuccess} />
+			{:else if quickActionKind === 'distribute'}
+				<DistributeStockForm
+					preselectedItemId={quickActionItemId}
+					{occupancy}
+					onsuccess={onMovementSuccess}
+				/>
+			{:else}
+				<AdjustStockForm preselectedItemId={quickActionItemId} onsuccess={onMovementSuccess} />
+			{/if}
 		</div>
-		<p class="mt-1 font-mono text-sm text-muted-foreground">
-			ID: {selectedItemId} | หน่วยนับ: {item ? formatUnit(item.unit, units, langState.current) : ''}
-		</p>
-	{/if}
-{/snippet}
-
-{#snippet manageBody()}
-	<div class="grid grid-cols-1 gap-8 lg:grid-cols-12">
-		<!-- Left Panel: Actions -->
-		<div class="flex flex-col gap-6 lg:col-span-5 lg:border-r lg:border-border/60 lg:pr-6">
-			<div class="flex items-center gap-2 border-b border-border/40 pb-3">
-				<span class="text-sm font-bold text-foreground">📊 จัดการด่วน (Quick Actions)</span>
-			</div>
-
-			<!-- Action tabs: stack below sm, 3-col from sm -->
-			<div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-				<button
-					type="button"
-					onclick={() => (activeModalTab = 'distribute')}
-					class="flex min-h-11 flex-col items-center justify-center gap-2 rounded-xl border px-3 py-4 text-center transition-all {activeModalTab ===
-					'distribute'
-						? 'border-[#009262] bg-[#009262] font-bold text-white shadow-md'
-						: 'border-border bg-muted/30 text-foreground hover:bg-muted/70'}"
-				>
-					<MinusCircle
-						class="h-5 w-5 text-orange-500 {activeModalTab === 'distribute' ? 'text-white' : ''}"
-					/>
-					<span class="text-xs font-bold whitespace-nowrap">เบิกจ่ายออก (Issue)</span>
-				</button>
-				<button
-					type="button"
-					onclick={() => (activeModalTab = 'checkin')}
-					class="flex min-h-11 flex-col items-center justify-center gap-2 rounded-xl border px-3 py-4 text-center transition-all {activeModalTab ===
-					'checkin'
-						? 'border-[#009262] bg-[#009262] font-bold text-white shadow-md'
-						: 'border-border bg-muted/30 text-foreground hover:bg-muted/70'}"
-				>
-					<PlusCircle
-						class="h-5 w-5 text-emerald-500 {activeModalTab === 'checkin' ? 'text-white' : ''}"
-					/>
-					<span class="text-xs font-bold whitespace-nowrap">รับเข้า (Receive)</span>
-				</button>
-				<button
-					type="button"
-					onclick={() => (activeModalTab = 'adjust')}
-					class="flex min-h-11 flex-col items-center justify-center gap-2 rounded-xl border px-3 py-4 text-center transition-all {activeModalTab ===
-					'adjust'
-						? 'border-[#009262] bg-[#009262] font-bold text-white shadow-md'
-						: 'border-border bg-muted/30 text-foreground hover:bg-muted/70'}"
-				>
-					<Settings
-						class="h-5 w-5 text-blue-500 {activeModalTab === 'adjust' ? 'text-white' : ''}"
-					/>
-					<span class="text-xs font-bold whitespace-nowrap">ปรับปรุงสต็อก (Adjust)</span>
-				</button>
-			</div>
-
-			<div class="mt-2 flex-1">
-				{#if selectedItemId}
-					{#if activeModalTab === 'checkin'}
-						<ReceiveStockForm preselectedItemId={selectedItemId} onsuccess={() => {}} />
-					{:else if activeModalTab === 'distribute'}
-						<DistributeStockForm preselectedItemId={selectedItemId} onsuccess={() => {}} />
-					{:else if activeModalTab === 'adjust'}
-						<AdjustStockForm preselectedItemId={selectedItemId} onsuccess={() => {}} />
-					{/if}
-				{/if}
-			</div>
-		</div>
-
-		<!-- Right Panel: Ledger -->
-		<div class="flex flex-col gap-4 lg:col-span-7">
-			<div class="flex items-center gap-2 border-b border-border/40 pb-3">
-				<Clock class="h-4 w-4 text-muted-foreground" />
-				<span class="text-sm font-bold text-foreground">⏳ ประวัติการเคลื่อนไหว (Ledger)</span>
-			</div>
-			<div class="max-h-[60vh] overflow-y-auto">
-				{#if selectedItemId}
-					<LedgerTable filterItemId={selectedItemId} />
-				{/if}
-			</div>
-		</div>
-	</div>
-{/snippet}
-
-{#if isMobileViewport.current}
-	<Sheet.Root bind:open={isManageModalOpen}>
-		<Sheet.Content
-			side="bottom"
-			class="flex h-[100dvh] max-h-[100dvh] flex-col gap-0 overflow-hidden rounded-none border-0 p-0 pb-[env(safe-area-inset-bottom)]"
-		>
-			<Sheet.Header class="shrink-0 border-b border-border/60 px-4 py-4 text-left pr-12">
-				<Sheet.Title class="sr-only">จัดการสต็อก</Sheet.Title>
-				<Sheet.Description class="sr-only">รับเข้า เบิกจ่าย หรือปรับปรุงยอดสต็อก</Sheet.Description>
-				{@render manageHeader()}
-			</Sheet.Header>
-			<div class="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
-				{@render manageBody()}
-			</div>
-		</Sheet.Content>
-	</Sheet.Root>
-{:else}
-	<Dialog.Root bind:open={isManageModalOpen}>
-		<Dialog.Content
-			class="max-h-[92vh] w-full overflow-y-auto rounded-2xl border border-border bg-card p-4 shadow-md sm:max-w-2xl sm:p-6 lg:max-w-5xl"
-		>
-			<Dialog.Header class="mb-4 border-b border-border/60 pb-4">
-				{#if selectedItemId}
-					{@const item = items.find((i) => i._id === selectedItemId)}
-					<Dialog.Title class="flex items-center gap-2 text-xl font-bold text-foreground">
-						<Boxes class="h-5 w-5 text-primary" />
-						จัดการสต็อก: {item?.name ?? ''}
-					</Dialog.Title>
-					<Dialog.Description class="mt-1 font-mono text-sm text-muted-foreground">
-						ID: {selectedItemId} | หน่วยนับ: {item
-							? formatUnit(item.unit, units, langState.current)
-							: ''}
-					</Dialog.Description>
-				{/if}
-			</Dialog.Header>
-			{@render manageBody()}
-		</Dialog.Content>
-	</Dialog.Root>
-{/if}
+	</Sheet.Content>
+</Sheet.Root>

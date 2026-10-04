@@ -18,11 +18,12 @@ let canvasHeight = 200;
 const html2canvasMock = vi.fn(async () => ({
 	width: canvasWidth,
 	height: canvasHeight,
-	toDataURL: () => 'data:image/png;base64,mock'
+	toDataURL: () => 'data:image/png;base64,mock',
+	toBlob: (done: (blob: Blob | null) => void) => done(new Blob(['png'], { type: 'image/png' }))
 }));
 vi.mock('html2canvas-pro', () => ({ default: html2canvasMock }));
 
-const { previewElementAsPdf } = await import('./pdf');
+const { previewElementAsPdf, downloadElementAsPng } = await import('./pdf');
 
 describe('previewElementAsPdf', () => {
 	beforeEach(() => {
@@ -178,5 +179,54 @@ describe('previewElementAsPdf', () => {
 		await expect(
 			previewElementAsPdf(element, 'ป้ายข้อมูลผู้พักพิง', { previewWindow })
 		).rejects.toThrow('หน้าต่างตัวอย่าง PDF ถูกปิด');
+	});
+});
+
+describe('downloadElementAsPng', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		vi.restoreAllMocks();
+	});
+
+	it('shares the image as a .png file when the browser can share files', async () => {
+		const share = vi.fn(async () => {});
+		Object.assign(navigator, { canShare: () => true, share });
+
+		await downloadElementAsPng(document.createElement('div'), 'preregister-abc');
+
+		expect(share).toHaveBeenCalledTimes(1);
+		const [{ files }] = share.mock.calls[0] as unknown as [{ files: File[] }];
+		expect(files[0].name).toBe('preregister-abc.png');
+		expect(files[0].type).toBe('image/png');
+	});
+
+	it('treats a dismissed share sheet as done, without a fallback download', async () => {
+		const click = vi.spyOn(HTMLAnchorElement.prototype, 'click');
+		Object.assign(navigator, {
+			canShare: () => true,
+			share: vi.fn(async () => {
+				throw new DOMException('cancelled', 'AbortError');
+			})
+		});
+
+		await downloadElementAsPng(document.createElement('div'), 'ticket');
+
+		expect(click).not.toHaveBeenCalled();
+	});
+
+	it('falls back to an anchor download when sharing files is unsupported', async () => {
+		Object.assign(navigator, { canShare: undefined });
+		URL.createObjectURL = vi.fn(() => 'blob:png');
+		URL.revokeObjectURL = vi.fn();
+		let downloaded = '';
+		vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+			this: HTMLAnchorElement
+		) {
+			downloaded = this.download;
+		});
+
+		await downloadElementAsPng(document.createElement('div'), 'ticket.png');
+
+		expect(downloaded).toBe('ticket.png');
 	});
 });

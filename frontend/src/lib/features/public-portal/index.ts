@@ -22,7 +22,7 @@ export type {
 	PublicSiteKind
 } from './domain/types';
 export { searchResultKey, toPublicShelterCard, toUiShelterStatus } from './domain/mappers';
-export { resolveMasterLabel, toLabelMap } from './domain/master-labels';
+export { resolveMasterLabel, shelterTypeLabel, toLabelMap } from './domain/master-labels';
 export {
 	isInShelterStatus,
 	publicStayStatusLabel,
@@ -43,9 +43,12 @@ export {
 	publicPortalKeys,
 	useFamilySearchMutation,
 	usePublicShelters,
+	useShelterTypeLabels,
 	useShelterTypeLabelMap,
+	useVulnerableGroupLabels,
 	useVulnerableGroupLabelMap
 } from './application/queries';
+export type { MasterLabelOption } from './domain/master-labels';
 
 export {
 	publicConfigBodySchema,

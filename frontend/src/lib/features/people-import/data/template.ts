@@ -7,8 +7,7 @@ import {
 	MULTI_SEPARATOR,
 	SHEETS,
 	type ColumnDef,
-	type EnumChoice,
-	type MasterColumn
+	type EnumChoice
 } from '../domain/columns';
 import { buildSampleCsvRows, buildSampleWorkbook, type SampleWorkbook } from './sample-row';
 import type { CellValue } from 'exceljs';
@@ -23,7 +22,7 @@ import type { CellValue } from 'exceljs';
  * backs every dropdown. Dropdown option lists live on `lists` and are
  * referenced by range — Excel's inline list breaks on the commas and length of
  * the Thai labels. Cells store the human label; the importer resolves
- * label → code on upload.
+ * label → code on upload for enum columns.
  *
  * Required columns are marked by a red " *" appended inside the header cell
  * itself (no separate marker column) — see {@link headerValue}.
@@ -33,13 +32,15 @@ import type { CellValue } from 'exceljs';
  * Multi-value columns get no dropdown — Excel data validation cannot express
  * multi-select — so their options are documented on the README instead.
  *
+ * CR-137: municipality_zone / community are free-text columns (no master dropdown).
+ *
  * `exceljs` is ~1 MB with its own deps (jszip, saxes) and is only needed on
  * this one interactive action, so it is dynamically imported rather than pulled
  * into the shared app bundle via the feature barrel.
  */
 
-/** Master-data option labels injected at download time. */
-export type TemplateMasters = Record<MasterColumn, EnumChoice[]>;
+/** Optional master-data option labels (unused after CR-137; kept for call-site compat). */
+export type TemplateMasters = Record<string, EnumChoice[]>;
 
 /** Optional generator behaviour — `withSample` pre-fills a realistic example. */
 export interface TemplateOptions {
@@ -64,17 +65,15 @@ function colLetter(n: number): string {
 }
 
 /** The option labels backing a column's dropdown, or null when it has none. */
-function choiceLabels(col: ColumnDef, masters: TemplateMasters): string[] | null {
+function choiceLabels(col: ColumnDef): string[] | null {
 	if (col.kind === 'enum') return col.choices?.map((c) => c.label) ?? null;
-	if (col.kind === 'masterdata' && col.masterType)
-		return masters[col.masterType].map((c) => c.label);
 	return null;
 }
 
 /** Every option a column accepts — including multi-value ones (README only). */
-function documentedOptions(col: ColumnDef, masters: TemplateMasters): string[] | null {
+function documentedOptions(col: ColumnDef): string[] | null {
 	if (col.kind === 'multi-enum') return col.choices?.map((c) => c.label) ?? null;
-	return choiceLabels(col, masters);
+	return choiceLabels(col);
 }
 
 function headerFillFor(col: ColumnDef): string {
@@ -121,7 +120,7 @@ export async function buildPeopleTemplateBlob(
 	const ExcelJS = (await import('exceljs')).default;
 	const wb = new ExcelJS.Workbook();
 	wb.creator = 'SmartShelter';
-	const sample: SampleWorkbook | null = options?.withSample ? buildSampleWorkbook(masters) : null;
+	const sample: SampleWorkbook | null = options?.withSample ? buildSampleWorkbook() : null;
 
 	// Hidden option lists — one column per dropdown, referenced by range.
 	const lists = wb.addWorksheet('lists');
@@ -165,7 +164,7 @@ export async function buildPeopleTemplateBlob(
 
 		// Dropdowns — applied as one validation per column range.
 		sheet.columns.forEach((col, i) => {
-			const labels = choiceLabels(col, masters);
+			const labels = choiceLabels(col);
 			if (!labels || labels.length === 0) return;
 			const range = listRange(labels);
 			const physicalCol = i + 1;
@@ -268,7 +267,7 @@ export async function buildPeopleTemplateBlob(
 			// The 1:1 sheets share one join key, documented once under "วิธีใช้"; the
 			// member sheet's is the column people get wrong, so it keeps its own row.
 			if (col.isRef && sheet.kind === 'household') continue;
-			const colOptions = documentedOptions(col, masters);
+			const colOptions = documentedOptions(col);
 			let hint = col.hint;
 			if (colOptions) {
 				hint = colOptions.length
@@ -312,7 +311,7 @@ export function buildPeopleCsvTemplateBlob(
 	const lines = [headers.map(csvField).join(',')];
 
 	if (options?.withSample) {
-		for (const row of buildSampleCsvRows(masters)) {
+		for (const row of buildSampleCsvRows()) {
 			lines.push(CSV_SHEET.columns.map((c) => csvField(row[c.header] ?? '')).join(','));
 		}
 	}

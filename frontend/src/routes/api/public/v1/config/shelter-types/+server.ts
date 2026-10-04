@@ -20,7 +20,11 @@ export const GET: RequestHandler = async () => {
 		const doc = await readMasterDoc('shelter_type');
 		const types = (doc?.items ?? [])
 			.filter((item) => item.status !== 'inactive')
-			.map((item) => ({ code: item.code, label: item.label }));
+			.map((item) => ({
+				code: item.code,
+				label_th: item.label_th,
+				label_en: item.label_en
+			}));
 
 		return json(
 			{ types, shelterTypes: types },

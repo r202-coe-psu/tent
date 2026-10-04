@@ -16,7 +16,8 @@ export const GET: RequestHandler = async ({ url }) => {
 			.filter((item) => item.status !== 'inactive')
 			.map((item) => ({
 				code: item.code,
-				label: item.label,
+				label_th: item.label_th,
+				label_en: item.label_en,
 				category: item.category ?? 'operational',
 				description: item.description ?? '',
 				is_default: item.is_default ?? false
