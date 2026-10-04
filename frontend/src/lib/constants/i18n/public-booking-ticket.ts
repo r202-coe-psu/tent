@@ -19,6 +19,13 @@ export const PUBLIC_BOOKING_TICKET_I18N = {
 		downloadingBtn: 'กำลังสร้างไฟล์…',
 		downloadBtn: 'ดาวน์โหลดใบลงทะเบียน (PDF)',
 		downloadErrorFallback: 'ดาวน์โหลดใบลงทะเบียนไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
+		downloadPngBtn: 'บันทึกเป็นรูปภาพ (PNG)',
+		statusAwaitingShelter: 'รอรับเข้าศูนย์พักพิง',
+		unassignedShelter: 'ไม่ระบุศูนย์พักพิง',
+		unassignedShelterPrint: 'ยังไม่ระบุศูนย์พักพิง',
+		memberCountLabel: 'จำนวนสมาชิก',
+		memberCountValue: (count: number) => `${count} คน`,
+		verifiedBtn: 'ยืนยันที่ศูนย์แล้ว (ลบใบลงทะเบียน)',
 		unassignedSuccessDesc:
 			'ระบบบันทึกข้อมูลเรียบร้อยแล้ว แต่ยังไม่ได้ระบุศูนย์ จึงไม่การันตีที่พัก กรุณาบันทึกใบลงทะเบียนนี้ไว้'
 	},
@@ -42,6 +49,13 @@ export const PUBLIC_BOOKING_TICKET_I18N = {
 		downloadingBtn: 'Generating file…',
 		downloadBtn: 'Download Slip (PDF)',
 		downloadErrorFallback: 'Failed to download slip. Please try again.',
+		downloadPngBtn: 'Save as image (PNG)',
+		statusAwaitingShelter: 'Awaiting shelter admission',
+		unassignedShelter: 'No shelter selected',
+		unassignedShelterPrint: 'No shelter selected yet',
+		memberCountLabel: 'Members',
+		memberCountValue: (count: number) => `${count} ${count === 1 ? 'person' : 'people'}`,
+		verifiedBtn: 'Confirmed at shelter (remove slip)',
 		unassignedSuccessDesc:
 			'Your details are saved, but no shelter was chosen, so a place is not guaranteed. Please keep this slip.'
 	}

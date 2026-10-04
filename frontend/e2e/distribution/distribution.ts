@@ -6,58 +6,23 @@
  * by the browser through the normal application path.
  */
 
-import type { Page } from '@playwright/test';
 import { ulid } from '../../src/lib/db/ulid';
 import {
+	allDocuments,
 	couchLogin,
 	couchReq,
 	createCouchUser,
 	deleteCouchUser,
-	COUCH_BASE,
+	deleteDocument,
+	putDocument,
+	seedSecurityQuestion,
+	type CouchDocument,
 	type TestUser
 } from '../helpers/couch';
 
 export const SHELTER_DB = 'shelter_sh001';
 const CATALOG_DB = 'catalog';
-const APP_BASE_URL = 'http://localhost:4173';
-
 export const SM_DIST_ROLES = ['shelter:SH001', 'shelter_manager'];
-
-/**
- * Route browser requests aimed at CouchDB through the application's /couch proxy,
- * adding CORS headers so cookie-authenticated requests succeed when the test build
- * leaves PUBLIC_COUCH_PROXY empty.
- */
-export async function routeBrowserCouchThroughApp(page: Page): Promise<void> {
-	await page.route(`${COUCH_BASE}/**`, async (route) => {
-		const request = route.request();
-		const origin = new URL(request.url());
-		const allowOrigin = new URL(APP_BASE_URL).origin;
-		const corsHeaders = {
-			'access-control-allow-origin': allowOrigin,
-			'access-control-allow-credentials': 'true',
-			'access-control-allow-methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
-			'access-control-allow-headers':
-				request.headers()['access-control-request-headers'] ?? 'Content-Type, Accept',
-			'access-control-expose-headers': 'ETag, Location, Content-Type'
-		};
-
-		if (request.method() === 'OPTIONS') {
-			await route.fulfill({ status: 204, headers: corsHeaders });
-			return;
-		}
-
-		const response = await route.fetch({
-			url: `${APP_BASE_URL}/couch${origin.pathname}${origin.search}`
-		});
-		await route.fulfill({
-			response,
-			headers: { ...response.headers(), ...corsHeaders }
-		});
-	});
-}
-
-type CouchDocument = Record<string, unknown> & { _id: string; _rev?: string };
 
 export interface DistributionScenario {
 	namespace: string;
@@ -76,26 +41,6 @@ export interface SeededRecipient {
 	recipientId: string;
 	firstName: string;
 	lastName: string;
-}
-
-/** Test users require this setup to avoid the ordinary first-login gate. */
-async function seedSecurityQuestion(name: string): Promise<void> {
-	const path = `/_users/org.couchdb.user:${encodeURIComponent(name)}`;
-	const got = await couchReq('GET', path);
-	if (got.status >= 400 || !got.data || typeof got.data !== 'object') {
-		throw new Error(`Could not load E2E user ${name} for setup`);
-	}
-	const res = await couchReq('PUT', path, {
-		...(got.data as Record<string, unknown>),
-		security_question: {
-			question_id: 'high_school',
-			answer_hash: 'e2e'.padEnd(64, '0'),
-			salt: 'e2e'.padEnd(32, '0'),
-			set_at: new Date().toISOString()
-		},
-		must_change_password: false
-	});
-	if (res.status >= 400) throw new Error(`Could not finish E2E user setup for ${name}`);
 }
 
 export interface CreateDistributionScenarioOptions {
@@ -123,31 +68,6 @@ export async function createDistributionScenario(
 		session: await couchLogin(user.name, user.password),
 		ownedDocumentIds: new Set()
 	};
-}
-
-async function putDocument(db: string, doc: CouchDocument): Promise<void> {
-	const res = await couchReq('PUT', `/${db}/${encodeURIComponent(doc._id)}`, doc);
-	if (res.status >= 400) {
-		throw new Error(`Could not seed ${doc._id} in ${db} (HTTP ${res.status})`);
-	}
-}
-
-async function allDocuments(db: string): Promise<CouchDocument[]> {
-	const res = await couchReq('GET', `/${db}/_all_docs?include_docs=true`);
-	if (res.status >= 400 || !res.data || typeof res.data !== 'object') {
-		throw new Error(`Could not list ${db} during E2E cleanup`);
-	}
-	const rows = (res.data as { rows?: Array<{ doc?: CouchDocument }> }).rows ?? [];
-	return rows.flatMap((row) => (row.doc ? [row.doc] : []));
-}
-
-async function deleteDocument(db: string, doc: CouchDocument): Promise<void> {
-	const rev = doc._rev;
-	if (typeof rev !== 'string') return;
-	const res = await couchReq('DELETE', `/${db}/${encodeURIComponent(doc._id)}?rev=${rev}`);
-	if (res.status >= 400 && res.status !== 404) {
-		throw new Error(`Could not remove E2E document ${doc._id} (HTTP ${res.status})`);
-	}
 }
 
 function registerOwnedDocument(scenario: DistributionScenario, id: string): void {

@@ -23,7 +23,7 @@ function validMember(over: Partial<UnifiedRegistrationInput['members'][number]> 
 		country: 'THAILAND',
 		vulnerable_groups: [] as string[],
 		special_needs: [] as string[],
-		person_id: { cardType: 'national_id' as const, number: '1234567890123' },
+		person_id: { cardType: 'national_id' as const, number: '1234567890121' },
 		emergency_contact: { name: 'สมหญิง', phone: '0899999999', relation: 'คู่สมรส' },
 		...over
 	};
@@ -230,6 +230,15 @@ describe('unified registration — family plan', () => {
 		expect(plan.householdInput.label).toContain('หัว');
 	});
 
+	it('never zones at registration — a submitted zone is dropped and status stays arriving', () => {
+		const plan = planFamilyRegistration(
+			validInput({ members: [validMember({ zone: 'Z1' })] }),
+			'onsite'
+		);
+		expect(plan.memberInputs[0]?.zone).toBeNull();
+		expect(plan.memberInputs[0]?.status).toBe('arriving');
+	});
+
 	it('plans public channel members as pre_registered', () => {
 		const plan = planFamilyRegistration(validInput(), 'public');
 		expect(plan.memberInputs[0]?.status).toBe('pre_registered');
@@ -311,7 +320,7 @@ describe('unified registration — report-in converters', () => {
 			last_name: 'ใจดี',
 			gender: 'male' as const,
 			phone: '0812345678',
-			person_id: { cardType: 'national_id' as const, number: '1234567890123' },
+			person_id: { cardType: 'national_id' as const, number: '1234567890121' },
 			current_stay: {
 				status: 'pre_registered' as const,
 				zone: null,
@@ -346,7 +355,7 @@ describe('unified registration — report-in converters', () => {
 			last_name: 'มณีรัตน์',
 			gender: 'male' as const,
 			card_snapshot: {
-				citizen_id: '1909800123456',
+				citizen_id: '1909800123458',
 				address_no: '12/4',
 				village_no: '3',
 				lane: 'ซอย 5',
@@ -399,7 +408,7 @@ describe('unified registration — report-in converters', () => {
 			birth_year: 2542,
 			age: 27,
 			phone: '0823334455',
-			person_id: { cardType: 'national_id' as const, number: '1809900234567' },
+			person_id: { cardType: 'national_id' as const, number: '1809900234562' },
 			emergency_contact: { name: 'กิตติศักดิ์', phone: '0891112233', relation: 'สามี' },
 			special_needs: ['ต้องการแพมเพิส'],
 			vulnerable_groups: ['pregnant'],
@@ -410,7 +419,7 @@ describe('unified registration — report-in converters', () => {
 			},
 			registered_via: 'kiosk' as const,
 			card_snapshot: {
-				citizen_id: '1809900234567',
+				citizen_id: '1809900234562',
 				photo_base64: 'data:image/jpeg;base64,spousephoto'
 			},
 			created_at: '2026-01-01T00:00:00.000Z',

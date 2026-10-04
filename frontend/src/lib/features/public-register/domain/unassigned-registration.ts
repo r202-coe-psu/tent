@@ -12,7 +12,10 @@
 import { z } from 'zod';
 import type { components } from '$lib/api/openapi';
 import {
+	dormFieldsFor,
 	isBlankEmergencyContact,
+	memberExtrasFor,
+	refineMemberRules,
 	unifiedRegistrationInputSchema,
 	type UnifiedRegistrationInput,
 	type UnifiedRegistrationParsed
@@ -37,6 +40,8 @@ export const publicUnassignedRegistrationRequestSchema = z
 		disclaimerAcknowledged: z.boolean().optional()
 	})
 	.superRefine((value, ctx) => {
+		// `.shape.members` skips the unified schema's own superRefine — re-apply member rules (CR-148)
+		value.members.forEach((member, index) => refineMemberRules(member, ctx, ['members', index]));
 		const joining = Boolean(value.join_match_token?.trim());
 		const headPhone = value.members[0]?.phone?.trim() ?? '';
 		if (!headPhone) {
@@ -127,6 +132,7 @@ export function toUnassignedRegistrationPayload(
 			...(typeof member.age === 'number' ? { age: member.age } : {}),
 			...(nickname ? { nickname } : {}),
 			...(religion ? { religion } : {}),
+			...memberExtrasFor(member),
 			...(emergency ? { emergency_contact: emergency } : {}),
 			...(photo ? { photo } : {})
 		};
@@ -139,7 +145,7 @@ export function toUnassignedRegistrationPayload(
 		household: {
 			housing_type: hh.housing_type ?? null,
 			residence_landmark: hh.residence_landmark ?? null,
-			address_no: hh.housing_type === 'homeless' ? null : (hh.address_no ?? null),
+			...dormFieldsFor(hh),
 			village_no: hh.village_no || null,
 			subdistrict: hh.subdistrict ?? null,
 			district: hh.district ?? null,

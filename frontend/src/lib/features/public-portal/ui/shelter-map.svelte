@@ -11,7 +11,7 @@
 	} from 'maplibre-gl';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import type { PublicSiteKind } from '../domain/types';
-	import { resolveMasterLabel, toLabelMap } from '../domain/master-labels';
+	import { shelterTypeLabel, toLabelMap } from '../domain/master-labels';
 	import { useShelterTypeLabelMap } from '../application/queries';
 	import { DEFAULT_MAP_STYLE, DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '$lib/constants/maps';
 	import { Button } from '$lib/components/ui/button';
@@ -245,25 +245,7 @@
 	}
 
 	function translateAdminType(type: string): string {
-		const legacyEn: Record<string, string> =
-			langState.current === 'en'
-				? {
-						วัด: 'Temple',
-						โรงเรียน: 'School',
-						ศาลาประชาคม: 'Community Hall',
-						ศูนย์กีฬา: 'Sports Centre',
-						อาคารราชการ: 'Government Building',
-						หน่วยงานราชการ: 'Government Agency',
-						ศูนย์อพยพ: 'Evacuation Center',
-						มหาวิทยาลัย: 'University',
-						มัสยิด: 'Mosque',
-						โบสถ์: 'Church',
-						พื้นที่เอกชน: 'Private Area',
-						อื่นๆ: 'Other',
-						unspecified: 'Unspecified'
-					}
-				: { unspecified: '' };
-		return resolveMasterLabel(type, shelterTypeLabels, legacyEn);
+		return shelterTypeLabel(type, shelterTypeLabels, langState.current);
 	}
 
 	onMount(async () => {

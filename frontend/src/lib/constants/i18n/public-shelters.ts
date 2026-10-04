@@ -20,7 +20,10 @@ export const PUBLIC_SHELTERS_I18N = {
 		mapView: 'แผนที่',
 		listView: 'รายการ',
 		filterBtn: 'ตัวกรอง',
-		viewOnMap: 'ดูบนแผนที่'
+		viewOnMap: 'ดูบนแผนที่',
+		searchAndFilter: 'ค้นหาและตัวกรอง',
+		collapseList: 'ย่อรายการศูนย์',
+		sortedByDistance: 'เรียงตามระยะทางใกล้สุด'
 	},
 	en: {
 		pageTitle: 'Check Shelter Status - Smart Shelter',
@@ -43,6 +46,9 @@ export const PUBLIC_SHELTERS_I18N = {
 		mapView: 'Map',
 		listView: 'List',
 		filterBtn: 'Filters',
-		viewOnMap: 'View on Map'
+		viewOnMap: 'View on Map',
+		searchAndFilter: 'Search & Filters',
+		collapseList: 'Collapse shelter list',
+		sortedByDistance: 'Sorted by nearest distance'
 	}
 } as const;

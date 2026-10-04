@@ -1555,6 +1555,14 @@ export interface components {
 				('owned_house' | 'rented_house' | 'condo' | 'apartment_dorm' | 'homeless') | null;
 			/** Residence Landmark */
 			residence_landmark?: string | null;
+			/** Dorm Name */
+			dorm_name?: string | null;
+			/** Dorm Building */
+			dorm_building?: string | null;
+			/** Dorm Floor */
+			dorm_floor?: string | null;
+			/** Dorm Room */
+			dorm_room?: string | null;
 			/** Address No */
 			address_no?: string | null;
 			/** Village No */
@@ -1579,6 +1587,14 @@ export interface components {
 			housing_type?: string | null;
 			/** Residence Landmark */
 			residence_landmark?: string | null;
+			/** Dorm Name */
+			dorm_name?: string | null;
+			/** Dorm Building */
+			dorm_building?: string | null;
+			/** Dorm Floor */
+			dorm_floor?: string | null;
+			/** Dorm Room */
+			dorm_room?: string | null;
 			/** Address No */
 			address_no?: string | null;
 			/** Village No */
@@ -1928,6 +1944,10 @@ export interface components {
 			nickname?: string | null;
 			/** Religion */
 			religion?: string | null;
+			/** Religion Other */
+			religion_other?: string | null;
+			/** Disability Other Detail */
+			disability_other_detail?: string | null;
 			emergency_contact?: components['schemas']['EmergencyContactOut'] | null;
 			/** Photo */
 			photo?: string | null;
@@ -1966,6 +1986,10 @@ export interface components {
 			nickname?: string | null;
 			/** Religion */
 			religion?: string | null;
+			/** Religion Other */
+			religion_other?: string | null;
+			/** Disability Other Detail */
+			disability_other_detail?: string | null;
 			emergency_contact?: components['schemas']['EmergencyContactInput'] | null;
 			/** Photo */
 			photo?: string | null;
@@ -2121,6 +2145,10 @@ export interface components {
 			nickname?: string | null;
 			/** Religion */
 			religion?: string | null;
+			/** Religion Other */
+			religion_other?: string | null;
+			/** Disability Other Detail */
+			disability_other_detail?: string | null;
 			emergency_contact?: components['schemas']['EmergencyContactOut'] | null;
 			/** Photo */
 			photo?: string | null;
@@ -3343,6 +3371,14 @@ export interface components {
 			housing_type?: string | null;
 			/** Residence Landmark */
 			residence_landmark?: string | null;
+			/** Dorm Name */
+			dorm_name?: string | null;
+			/** Dorm Building */
+			dorm_building?: string | null;
+			/** Dorm Floor */
+			dorm_floor?: string | null;
+			/** Dorm Room */
+			dorm_room?: string | null;
 			/** Address No */
 			address_no?: string | null;
 			/** Village No */

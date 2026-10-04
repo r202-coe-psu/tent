@@ -270,13 +270,33 @@
 	>
 		<Card.Header class="gap-1 pb-0 text-center">
 			<Card.Title class="text-xl font-bold text-[#0A2647] sm:text-2xl"
-				>เข้าสู่ระบบ Smart Shelter</Card.Title
+				>เข้าสู่ระบบหลังบ้าน</Card.Title
 			>
 			<Card.Description class="text-xs text-slate-500 sm:text-sm"
 				>ระบบบริหารจัดการศูนย์พักพิงและงานปฏิบัติการฉุกเฉิน</Card.Description
 			>
 		</Card.Header>
-		<Card.Content>
+		<Card.Content class="space-y-4">
+			<div
+				role="note"
+				class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"
+			>
+				<p class="font-semibold">สำหรับเจ้าหน้าที่และผู้ดูแลระบบเท่านั้น</p>
+				<p class="mt-0.5 text-xs">
+					ผู้ประสบภัยไม่ต้องเข้าสู่ระบบ —
+					<a href={resolve('/pre-register')} class="font-semibold underline underline-offset-2"
+						>ลงทะเบียนล่วงหน้า</a
+					>
+					หรือ
+					<a href={resolve('/search')} class="font-semibold underline underline-offset-2"
+						>ค้นหาผู้พักพิง</a
+					>
+					ได้เลย · จิตอาสา
+					<a href={resolve('/volunteers/portal')} class="font-semibold underline underline-offset-2"
+						>เข้าที่นี่</a
+					>
+				</p>
+			</div>
 			{@render fields()}
 		</Card.Content>
 	</Card.Root>
