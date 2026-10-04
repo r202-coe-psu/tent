@@ -1,9 +1,11 @@
 <script lang="ts">
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { Combobox } from '$lib/components/ui/combobox/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
@@ -11,13 +13,19 @@
 		itemMasterInputSchema,
 		itemMasterUpdateInputSchema,
 		resolveCategoryId,
+		catalogOrigin,
 		type ItemMaster,
 		type ItemMasterInput,
 		type TypeClass
 	} from '../domain/catalog';
 	import { formatUnit, type Dimension } from '../domain/unit-of-measure';
+	import { barcodeOwner, mergeBaseBarcode, splitBaseBarcode } from '../domain/item-barcode';
+	import type { ItemMasterInitialValues } from '../domain/quick-create';
+
+	type UomConversionRow = ItemMaster['conversions'][number];
 	import {
 		useItemMaster,
+		useItemMasters,
 		useCreateItemMaster,
 		useUpdateItemMaster,
 		useItemCategories,
@@ -35,15 +43,22 @@
 		isEdit = false,
 		basePath = '/back-office/catalog',
 		defaultCategoryId = undefined,
+		lockCategory = false,
 		compact = false,
+		initialValues = undefined,
 		onsuccess
 	}: {
 		id?: string;
 		isEdit?: boolean;
 		basePath?: string;
 		defaultCategoryId?: string;
+		/** Pin the category to `defaultCategoryId` (callers that only create one kind of item). */
+		lockCategory?: boolean;
 		compact?: boolean;
-		onsuccess?: () => void;
+		/** Create only: start from these values (e.g. handed over by quick-create). */
+		initialValues?: ItemMasterInitialValues;
+		/** Called with the saved doc; with no argument when the user cancels. */
+		onsuccess?: (saved?: ItemMaster) => void;
 	} = $props();
 
 	const shelterCode = $derived(
@@ -58,6 +73,7 @@
 	);
 	const itemCategoriesQuery = useItemCategories(() => shelterCode ?? null);
 	const unitsOfMeasureQuery = useUnitsOfMeasure();
+	const allItemsQuery = useItemMasters(() => shelterCode ?? null);
 	const createMutation = useCreateItemMaster();
 	const updateMutation = useUpdateItemMaster();
 
@@ -67,14 +83,49 @@
 		{ value: 'EQUIPMENT', label: 'อุปกรณ์' }
 	];
 
+	const STORAGE_OPTIONS = [
+		{ value: 'DRY', label: 'ของแห้ง' },
+		{ value: 'CHILLED', label: 'แช่เย็น' },
+		{ value: 'FROZEN', label: 'แช่แข็ง' },
+		{ value: 'CONTROLLED_MED', label: 'ควบคุมพิเศษ/ยา' }
+	] as const;
+	const DIETARY_OPTIONS = [
+		{ value: 'NONE', label: 'ไม่มี' },
+		{ value: 'HALAL', label: 'ฮาลาล' },
+		{ value: 'VEGAN', label: 'วีแกน' }
+	] as const;
+	const GENDER_OPTIONS = [
+		{ value: 'ALL', label: 'ทุกเพศ' },
+		{ value: 'MALE', label: 'ชาย' },
+		{ value: 'FEMALE', label: 'หญิง' }
+	] as const;
+	const AGE_OPTIONS = [
+		{ value: 'ALL', label: 'ทุกวัย' },
+		{ value: 'INFANT', label: 'ทารก' },
+		{ value: 'CHILD', label: 'เด็ก' },
+		{ value: 'ELDERLY', label: 'ผู้สูงอายุ' }
+	] as const;
+	const DISTRIBUTION_OPTIONS = [
+		{ value: 'recurring', label: 'แจกซ้ำได้ตามรอบ' },
+		{ value: 'one_time', label: 'แจกครั้งเดียวต่อคน' }
+	] as const;
+	const ASSET_OPTIONS = [
+		{ value: 'READY', label: 'พร้อมใช้งาน' },
+		{ value: 'IN_USE', label: 'กำลังใช้งาน' },
+		{ value: 'MAINTENANCE', label: 'บำรุงรักษา' },
+		{ value: 'BROKEN', label: 'ชำรุด' }
+	] as const;
+
 	const DIMENSION_LABELS: Record<Dimension, string> = {
 		mass: 'น้ำหนัก',
 		volume: 'ปริมาตร',
 		length: 'ความยาว',
-		count: 'นับชิ้น'
+		count: 'นับชิ้น',
+		energy: 'พลังงาน'
 	};
 
-	const DIMENSION_ORDER: Dimension[] = ['mass', 'volume', 'length', 'count'];
+	/** Barcode of the base unit — kept out of `conversions` while editing, merged back on save. */
+	let baseBarcode = $state('');
 
 	const form = superForm(
 		defaults(
@@ -98,7 +149,10 @@
 				qty_per_person: undefined,
 				returnable: false,
 				asset_status: 'READY',
-				deactivated: false
+				deactivated: false,
+				capacity_kg: '',
+				burn_rate_kg_per_hour: '',
+				time_multiplier: '1'
 			},
 			getValidationAdapter()
 		),
@@ -115,9 +169,10 @@
 					createdBy: authStore.user?.name ?? 'unknown'
 				};
 
-				const conversions = (validated.data.conversions || []).filter(
+				const packRows = (validated.data.conversions || []).filter(
 					(c) => c.uom_name && c.uom_name.trim() !== ''
 				);
+				const conversions = mergeBaseBarcode(packRows, validated.data.base_unit ?? '', baseBarcode);
 
 				const submitData: Record<string, unknown> = {
 					...validated.data,
@@ -133,16 +188,39 @@
 					submitData.default_inventory_uom = validated.data.default_inventory_uom || undefined;
 					submitData.default_issue_uom = validated.data.default_issue_uom || undefined;
 					submitData.distribution_type = validated.data.distribution_type;
-					submitData.shelf_life_days = validated.data.shelf_life_days;
-					submitData.storage_type = validated.data.storage_type;
-					submitData.allergens = validated.data.allergens || undefined;
-					submitData.target_gender = validated.data.target_gender;
-					submitData.age_group = validated.data.age_group;
-					submitData.dietary = validated.data.dietary;
 
 					delete submitData.qty_per_person;
 					delete submitData.returnable;
 					delete submitData.asset_status;
+
+					if (validated.data.category === 'item_category:fuel_energy') {
+						// FUEL_ENERGY contract (CR-119/120/125): lock base_unit, hide/don't
+						// persist unrelated food/distribution fields, persist fuel spec.
+						submitData.base_unit = 'cylinder';
+						submitData.fuel_type = 'LPG';
+						submitData.capacity_kg = validated.data.capacity_kg || undefined;
+						submitData.burn_rate_kg_per_hour = validated.data.burn_rate_kg_per_hour || undefined;
+						submitData.time_multiplier = validated.data.time_multiplier || '1';
+
+						delete submitData.shelf_life_days;
+						delete submitData.storage_type;
+						delete submitData.allergens;
+						delete submitData.target_gender;
+						delete submitData.age_group;
+						submitData.dietary = [];
+					} else {
+						submitData.shelf_life_days = validated.data.shelf_life_days;
+						submitData.storage_type = validated.data.storage_type;
+						submitData.allergens = validated.data.allergens || undefined;
+						submitData.target_gender = validated.data.target_gender;
+						submitData.age_group = validated.data.age_group;
+						submitData.dietary = validated.data.dietary;
+
+						delete submitData.fuel_type;
+						delete submitData.capacity_kg;
+						delete submitData.burn_rate_kg_per_hour;
+						delete submitData.time_multiplier;
+					}
 				} else if (validated.data.type_class === 'DURABLE') {
 					submitData.base_unit = validated.data.base_unit;
 					submitData.conversions = conversions;
@@ -159,6 +237,10 @@
 					delete submitData.allergens;
 					submitData.dietary = [];
 					delete submitData.asset_status;
+					delete submitData.fuel_type;
+					delete submitData.capacity_kg;
+					delete submitData.burn_rate_kg_per_hour;
+					delete submitData.time_multiplier;
 				} else if (validated.data.type_class === 'EQUIPMENT') {
 					submitData.base_unit = validated.data.base_unit || 'piece';
 					submitData.asset_status = validated.data.asset_status || 'READY';
@@ -175,6 +257,10 @@
 					submitData.dietary = [];
 					delete submitData.qty_per_person;
 					delete submitData.returnable;
+					delete submitData.fuel_type;
+					delete submitData.capacity_kg;
+					delete submitData.burn_rate_kg_per_hour;
+					delete submitData.time_multiplier;
 				}
 
 				if (isEdit) {
@@ -192,9 +278,9 @@
 							override: true
 						};
 						updateMutation.mutate(overrideDoc, {
-							onSuccess: () => {
+							onSuccess: (saved) => {
 								toast.success(`ปรับแต่งรายการ ${validated.data.name} สำหรับศูนย์นี้สำเร็จ`);
-								onsuccess?.();
+								onsuccess?.(saved);
 							},
 							onError: (err: Error) => toast.error(err.message)
 						});
@@ -204,9 +290,9 @@
 							...submitData
 						};
 						updateMutation.mutate(updatedDoc, {
-							onSuccess: () => {
+							onSuccess: (saved) => {
 								toast.success(`ปรับปรุงข้อมูล ${validated.data.name} สำเร็จ`);
-								onsuccess?.();
+								onsuccess?.(saved);
 							},
 							onError: (err: Error) => toast.error(err.message)
 						});
@@ -215,9 +301,9 @@
 					createMutation.mutate(
 						{ input: submitData as ItemMasterInput, ctx, shelterCode },
 						{
-							onSuccess: () => {
+							onSuccess: (saved) => {
 								toast.success(`เพิ่มข้อมูล ${validated.data.name} สำเร็จ`);
-								onsuccess?.();
+								onsuccess?.(saved);
 							},
 							onError: (err: Error) => toast.error(err.message)
 						}
@@ -247,10 +333,14 @@
 			$formData.sku = item.sku || '';
 			$formData.description = item.description || '';
 			$formData.base_unit = item.base_unit || '';
-			$formData.conversions =
+			const split = splitBaseBarcode(
 				item.conversions && item.conversions.length > 0
-					? JSON.parse(JSON.stringify(item.conversions))
-					: [];
+					? (JSON.parse(JSON.stringify(item.conversions)) as UomConversionRow[])
+					: [],
+				item.base_unit || ''
+			);
+			$formData.conversions = split.packRows;
+			baseBarcode = split.baseBarcode;
 			$formData.default_inventory_uom = item.default_inventory_uom || '';
 			$formData.default_issue_uom = item.default_issue_uom || '';
 			$formData.distribution_type = item.distribution_type || 'recurring';
@@ -265,7 +355,34 @@
 			$formData.returnable = item.returnable ?? false;
 			$formData.asset_status = item.asset_status || 'READY';
 			$formData.deactivated = item.deactivated ?? false;
+			$formData.capacity_kg = item.capacity_kg || '';
+			$formData.burn_rate_kg_per_hour = item.burn_rate_kg_per_hour || '';
+			$formData.time_multiplier = item.time_multiplier || '1';
 		}
+	});
+
+	// Seed a new item with what quick-create already collected (once).
+	let appliedInitial = false;
+	$effect(() => {
+		if (isEdit || appliedInitial || !initialValues) return;
+		appliedInitial = true;
+		const init = initialValues;
+		const split = splitBaseBarcode(init.conversions ?? [], init.base_unit ?? '');
+		if (init.name !== undefined) $formData.name = init.name;
+		if (init.category !== undefined) $formData.category = init.category;
+		if (init.type_class) $formData.type_class = init.type_class;
+		if (init.base_unit !== undefined) $formData.base_unit = init.base_unit;
+		$formData.conversions = split.packRows.map((row) => ({
+			uom_name: row.uom_name,
+			multiplier: row.multiplier,
+			barcode: row.barcode ?? ''
+		}));
+		baseBarcode = init.barcode ?? split.baseBarcode;
+		if (init.default_inventory_uom !== undefined) {
+			$formData.default_inventory_uom = init.default_inventory_uom;
+		}
+		if (init.storage_type) $formData.storage_type = init.storage_type;
+		appliedDefaultCategory = true;
 	});
 
 	// Prefill category + type_class on create
@@ -324,15 +441,31 @@
 		return [...list, ...missing];
 	});
 
-	const unitsByDimension = $derived.by(() => {
-		const groups: { dimension: Dimension; label: string; units: typeof activeUnits }[] = [];
-		for (const dim of DIMENSION_ORDER) {
-			const units = activeUnits.filter((u) => u.dimension === dim);
-			if (units.length > 0) {
-				groups.push({ dimension: dim, label: DIMENSION_LABELS[dim], units });
-			}
-		}
-		return groups;
+	type UnitComboboxItem = {
+		value: string;
+		label: string;
+		keywords: string[];
+		dimensionLabel: string;
+	};
+
+	const unitComboboxItems = $derived.by(() => {
+		return activeUnits.map((unit) => {
+			const dimensionLabel = DIMENSION_LABELS[unit.dimension] ?? unit.dimension;
+			const labelThShort = 'label_th_short' in unit ? unit.label_th_short : undefined;
+			const keywords = [
+				unit.code,
+				unit.label_th,
+				unit.label_en,
+				labelThShort,
+				dimensionLabel
+			].filter((k): k is string => Boolean(k));
+			return {
+				value: unit.code,
+				label: unit.label_th || formatUnit(unit.code, allUnits, langState.current) || unit.code,
+				keywords,
+				dimensionLabel
+			} satisfies UnitComboboxItem;
+		});
 	});
 
 	const unitMasterReady = $derived(
@@ -344,6 +477,13 @@
 			(cat) => !cat.deactivated || cat._id === $formData.category
 		);
 	});
+
+	const categoryOptions = $derived(
+		availableCategories.map((cat) => ({
+			value: cat._id,
+			label: `${cat.name}${cat.deactivated ? ' (ปิดใช้งาน)' : ''}`
+		}))
+	);
 
 	const selectedCategory = $derived(availableCategories.find((c) => c._id === $formData.category));
 
@@ -370,6 +510,13 @@
 			if (c.uom_name) codes.push(c.uom_name);
 		});
 		return codes;
+	}
+
+	function unitItemsForConversion(index: number) {
+		const taken = usedUomCodes(index);
+		return unitComboboxItems.filter(
+			(item) => !taken.includes(item.value) || item.value === $formData.conversions[index]?.uom_name
+		);
 	}
 
 	function addConversion() {
@@ -405,13 +552,48 @@
 		return choices;
 	}
 
+	/** Another item that already uses this barcode — a warning, never a block. */
+	function barcodeConflict(code: string | undefined): string | null {
+		if (!code?.trim()) return null;
+		return barcodeOwner(allItemsQuery.data ?? [], code, isEdit ? id : undefined)?.name ?? null;
+	}
+
 	const fieldClass = $derived(compact ? 'space-y-2' : 'space-y-2');
 	const sectionClass = $derived(
 		compact
 			? 'space-y-4 rounded-xl border border-border/80 bg-muted/30 p-4'
 			: 'space-y-5 rounded-2xl border border-slate-100 bg-slate-50/60 p-6 dark:border-zinc-800 dark:bg-zinc-900/30'
 	);
+
+	/** Compact/full: deactivate only when scope may soft-close the doc (central admin or local shelter row). */
+	const showDeactivateToggle = $derived.by(() => {
+		if (!isEdit) return false;
+		if (basePath.includes('system-management')) return true;
+		const item = itemMasterQuery.data;
+		if (!item || !shelterCode) return false;
+		return catalogOrigin(item, shelterCode) === 'local';
+	});
 </script>
+
+{#snippet optionSelect(
+	props: Record<string, unknown>,
+	value: string | undefined,
+	options: readonly { value: string; label: string }[],
+	onChange: (value: string) => void,
+	placeholder = '',
+	disabled = false
+)}
+	<Select.Root type="single" value={value ?? ''} onValueChange={onChange} {disabled}>
+		<Select.Trigger {...props} class="w-full data-[size=default]:h-11 sm:data-[size=default]:h-10">
+			{options.find((o) => o.value === value)?.label ?? placeholder}
+		</Select.Trigger>
+		<Select.Content>
+			{#each options as option (option.value)}
+				<Select.Item value={option.value} label={option.label}>{option.label}</Select.Item>
+			{/each}
+		</Select.Content>
+	</Select.Root>
+{/snippet}
 
 {#if isLoading}
 	<div class="py-12 text-center text-sm text-muted-foreground">กำลังโหลดข้อมูลสินค้า...</div>
@@ -441,7 +623,7 @@
 								{...props}
 								bind:value={$formData.name}
 								placeholder="เช่น ข้าวสาร, น้ำดื่ม"
-								class="h-11 rounded-xl"
+								class="h-11 sm:h-10"
 							/>
 						{/snippet}
 					</Form.Control>
@@ -452,23 +634,47 @@
 					<Form.Control>
 						{#snippet children({ props })}
 							<Form.Label class="text-sm font-semibold">หมวดสินค้า</Form.Label>
-							<select
-								{...props}
-								value={$formData.category}
-								onchange={(e) => onCategoryChange(e.currentTarget.value)}
-								class="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none"
-							>
-								<option value="">-- เลือกหมวด --</option>
-								{#each availableCategories as cat (cat._id)}
-									<option value={cat._id}>
-										{cat.name}{cat.deactivated ? ' (ปิดใช้งาน)' : ''}
-									</option>
-								{/each}
-							</select>
+							{@render optionSelect(
+								props,
+								$formData.category,
+								categoryOptions,
+								onCategoryChange,
+								'-- เลือกหมวด --',
+								lockCategory && !!defaultCategoryId
+							)}
 						{/snippet}
 					</Form.Control>
 					<Form.FieldErrors class="text-xs font-semibold text-destructive" />
 				</Form.Field>
+
+				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+					<Form.Field {form} name="sku" class={fieldClass}>
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label class="text-sm font-semibold">รหัสสินค้า</Form.Label>
+								<Input
+									{...props}
+									bind:value={$formData.sku}
+									placeholder="เช่น RICE-001"
+									class="h-11 sm:h-10"
+								/>
+							{/snippet}
+						</Form.Control>
+					</Form.Field>
+					<Form.Field {form} name="description" class={fieldClass}>
+						<Form.Control>
+							{#snippet children({ props })}
+								<Form.Label class="text-sm font-semibold">รายละเอียด</Form.Label>
+								<Input
+									{...props}
+									bind:value={$formData.description}
+									placeholder="เช่น ข้าวสารหอมมะลิ บรรจุถุง"
+									class="h-11 sm:h-10"
+								/>
+							{/snippet}
+						</Form.Control>
+					</Form.Field>
+				</div>
 
 				<Form.Field {form} name="type_class" class={fieldClass}>
 					<Form.Control>
@@ -479,43 +685,23 @@
 							<input type="hidden" {...props} bind:value={$formData.type_class} />
 							<div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
 								{#each TYPE_CLASS_OPTIONS as opt (opt.value)}
-									<button
+									<Button
 										type="button"
+										variant="outline"
 										onclick={() => ($formData.type_class = opt.value)}
-										class="rounded-xl border px-3 py-2.5 text-left text-sm font-medium transition-colors {$formData.type_class ===
+										class="h-auto justify-start px-3 py-2.5 text-left font-medium {$formData.type_class ===
 										opt.value
 											? 'border-primary bg-primary/5 ring-1 ring-primary'
-											: 'border-border hover:bg-muted/60'}"
+											: ''}"
 									>
 										{opt.label}
-									</button>
+									</Button>
 								{/each}
 							</div>
 						{/snippet}
 					</Form.Control>
 					<Form.FieldErrors class="text-xs font-semibold text-destructive" />
 				</Form.Field>
-
-				{#if !compact}
-					<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-						<Form.Field {form} name="sku" class={fieldClass}>
-							<Form.Control>
-								{#snippet children({ props })}
-									<Form.Label class="text-sm font-semibold">รหัสสินค้า</Form.Label>
-									<Input {...props} bind:value={$formData.sku} class="h-11 rounded-xl" />
-								{/snippet}
-							</Form.Control>
-						</Form.Field>
-						<Form.Field {form} name="description" class={fieldClass}>
-							<Form.Control>
-								{#snippet children({ props })}
-									<Form.Label class="text-sm font-semibold">รายละเอียด</Form.Label>
-									<Input {...props} bind:value={$formData.description} class="h-11 rounded-xl" />
-								{/snippet}
-							</Form.Control>
-						</Form.Field>
-					</div>
-				{/if}
 			</section>
 
 			{#if showUnits}
@@ -528,33 +714,54 @@
 								<Form.Label class="text-sm font-semibold">
 									หน่วยฐาน <span class="text-destructive">*</span>
 								</Form.Label>
-								<Select.Root
-									type="single"
-									value={$formData.base_unit}
-									onValueChange={(value) => ($formData.base_unit = value)}
+								<Combobox
+									items={unitComboboxItems}
+									bind:value={$formData.base_unit}
+									placeholder="-- เลือกหน่วย --"
+									searchPlaceholder="ค้นหาหน่วย..."
+									emptyText="ไม่พบหน่วย"
 									disabled={isEdit || !unitMasterReady}
+									class="h-11 w-full rounded-xl"
+									controlProps={props}
 								>
-									<Select.Trigger {...props} class="h-11 w-full rounded-xl">
-										{activeUnits.find((u) => u.code === $formData.base_unit)?.label_th ??
-											'-- เลือกหน่วย --'}
-									</Select.Trigger>
-									<Select.Content>
-										{#each unitsByDimension as group (group.dimension)}
-											<div class="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-												{group.label}
-											</div>
-											{#each group.units as unit (unit.code)}
-												<Select.Item value={unit.code} label={unit.label_th}>
-													{unit.label_th}
-												</Select.Item>
-											{/each}
-										{/each}
-									</Select.Content>
-								</Select.Root>
+									{#snippet children({ item })}
+										<div class="flex min-w-0 flex-col">
+											<span class="truncate text-sm">{item.label}</span>
+											<span class="truncate text-xs text-muted-foreground"
+												>{item.value} · {item.dimensionLabel}</span
+											>
+										</div>
+									{/snippet}
+								</Combobox>
 							{/snippet}
 						</Form.Control>
+						{#if isEdit}
+							<p class="text-xs text-muted-foreground">
+								หน่วยฐานไม่สามารถเปลี่ยนได้หลังสร้างแล้ว เพื่อรักษาความสอดคล้องกับประวัติคลัง
+							</p>
+						{/if}
 						<Form.FieldErrors class="text-xs font-semibold text-destructive" />
 					</Form.Field>
+
+					<div class="space-y-2">
+						<Label for="base-unit-barcode" class="text-sm font-semibold">
+							บาร์โค้ดหน่วยฐาน
+							<span class="font-normal text-muted-foreground">(ไม่บังคับ)</span>
+						</Label>
+						<Input
+							id="base-unit-barcode"
+							bind:value={baseBarcode}
+							inputmode="numeric"
+							autocomplete="off"
+							placeholder="สแกนหรือพิมพ์บาร์โค้ดที่ตัวสินค้า"
+							class="h-11 rounded-xl"
+						/>
+						{#if barcodeConflict(baseBarcode)}
+							<p class="text-xs font-semibold text-amber-900">
+								บาร์โค้ดนี้ใช้กับ “{barcodeConflict(baseBarcode)}” อยู่แล้ว
+							</p>
+						{/if}
+					</div>
 
 					<div class="space-y-3">
 						<div class="flex items-center justify-between">
@@ -573,36 +780,30 @@
 						</div>
 
 						{#each $formData.conversions as conversion, i (i)}
-							{@const taken = usedUomCodes(i)}
 							<div class="space-y-2 rounded-xl border border-border bg-background p-3">
 								<div class="flex flex-wrap items-center gap-2 text-sm">
 									<span class="text-muted-foreground">1</span>
-									<Select.Root
-										type="single"
-										value={conversion.uom_name}
-										onValueChange={(value) => {
-											$formData.conversions[i].uom_name = value;
-										}}
+									<Combobox
+										items={unitItemsForConversion(i)}
+										bind:value={
+											() => conversion.uom_name,
+											(v) => {
+												$formData.conversions[i].uom_name = v;
+											}
+										}
+										placeholder="หน่วย"
+										searchPlaceholder="ค้นหาหน่วย..."
+										emptyText="ไม่พบหน่วย"
 										disabled={!unitMasterReady}
+										class="h-10 min-w-[7rem] rounded-lg"
 									>
-										<Select.Trigger class="h-10 min-w-[7rem] rounded-lg">
-											{activeUnits.find((u) => u.code === conversion.uom_name)?.label_th ?? 'หน่วย'}
-										</Select.Trigger>
-										<Select.Content>
-											{#each unitsByDimension as group (group.dimension)}
-												<div class="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-													{group.label}
-												</div>
-												{#each group.units as unit (unit.code)}
-													{#if !taken.includes(unit.code) || unit.code === conversion.uom_name}
-														<Select.Item value={unit.code} label={unit.label_th}>
-															{unit.label_th}
-														</Select.Item>
-													{/if}
-												{/each}
-											{/each}
-										</Select.Content>
-									</Select.Root>
+										{#snippet children({ item })}
+											<div class="flex min-w-0 flex-col">
+												<span class="truncate text-sm">{item.label}</span>
+												<span class="truncate text-xs text-muted-foreground">{item.value}</span>
+											</div>
+										{/snippet}
+									</Combobox>
 									<span class="text-muted-foreground">=</span>
 									<Input
 										type="number"
@@ -625,6 +826,24 @@
 									>
 										<Trash2 class="h-4 w-4" />
 									</Button>
+								</div>
+								<div class="space-y-1">
+									<Input
+										aria-label="บาร์โค้ดของหน่วยนี้"
+										placeholder="บาร์โค้ดของหน่วยนี้ (ไม่บังคับ)"
+										inputmode="numeric"
+										autocomplete="off"
+										value={conversion.barcode ?? ''}
+										oninput={(e) => {
+											$formData.conversions[i].barcode = e.currentTarget.value;
+										}}
+										class="h-10 rounded-lg"
+									/>
+									{#if barcodeConflict(conversion.barcode)}
+										<p class="text-xs font-semibold text-amber-900">
+											บาร์โค้ดนี้ใช้กับ “{barcodeConflict(conversion.barcode)}” อยู่แล้ว
+										</p>
+									{/if}
 								</div>
 								<div class="flex flex-wrap gap-2">
 									<button
@@ -696,7 +915,72 @@
 				</section>
 			{/if}
 
-			{#if $formData.type_class === 'CONSUMABLE' || $formData.type_class === 'DURABLE' || $formData.type_class === 'EQUIPMENT'}
+			{#if isFuelEnergy}
+				<section class={sectionClass}>
+					<h2 class="text-sm font-bold text-foreground">เชื้อเพลิงและพลังงาน</h2>
+
+					<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+						<Form.Field {form} name="capacity_kg" class={fieldClass}>
+							<Form.Control>
+								{#snippet children({ props })}
+									<Form.Label class="text-sm font-semibold">
+										ความจุถัง (กก.) <span class="text-destructive">*</span>
+									</Form.Label>
+									<Input
+										{...props}
+										type="number"
+										step="any"
+										min={0}
+										bind:value={$formData.capacity_kg}
+										class="h-11 sm:h-10"
+									/>
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors class="text-xs font-semibold text-destructive" />
+						</Form.Field>
+
+						<Form.Field {form} name="burn_rate_kg_per_hour" class={fieldClass}>
+							<Form.Control>
+								{#snippet children({ props })}
+									<Form.Label class="text-sm font-semibold">
+										อัตราสิ้นเปลืองแก๊ส (กก./ชม.) <span class="text-destructive">*</span>
+									</Form.Label>
+									<Input
+										{...props}
+										type="number"
+										step="any"
+										min={0}
+										bind:value={$formData.burn_rate_kg_per_hour}
+										class="h-11 sm:h-10"
+									/>
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors class="text-xs font-semibold text-destructive" />
+						</Form.Field>
+
+						<Form.Field {form} name="time_multiplier" class={fieldClass}>
+							<Form.Control>
+								{#snippet children({ props })}
+									<Form.Label class="text-sm font-semibold"
+										>ตัวคูณเวลาปรุง (Time Multiplier)</Form.Label
+									>
+									<Input
+										{...props}
+										type="number"
+										step="any"
+										min={0}
+										bind:value={$formData.time_multiplier}
+										class="h-11 sm:h-10"
+									/>
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors class="text-xs font-semibold text-destructive" />
+						</Form.Field>
+					</div>
+				</section>
+			{/if}
+
+			{#if !isFuelEnergy && ($formData.type_class === 'CONSUMABLE' || $formData.type_class === 'DURABLE' || $formData.type_class === 'EQUIPMENT')}
 				<details class="rounded-xl border border-border open:bg-muted/20" open={!compact}>
 					<summary class="cursor-pointer px-4 py-3 text-sm font-semibold">
 						รายละเอียดเพิ่มเติม
@@ -716,7 +1000,7 @@
 													const val = e.currentTarget.value;
 													$formData.shelf_life_days = val === '' ? undefined : Number(val);
 												}}
-												class="h-11 rounded-xl"
+												class="h-11 sm:h-10"
 											/>
 										{/snippet}
 									</Form.Control>
@@ -726,16 +1010,12 @@
 									<Form.Control>
 										{#snippet children({ props })}
 											<Form.Label class="text-sm font-semibold">การจัดเก็บ</Form.Label>
-											<select
-												{...props}
-												bind:value={$formData.storage_type}
-												class="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"
-											>
-												<option value="DRY">ของแห้ง</option>
-												<option value="CHILLED">แช่เย็น</option>
-												<option value="FROZEN">แช่แข็ง</option>
-												<option value="CONTROLLED_MED">ควบคุมพิเศษ/ยา</option>
-											</select>
+											{@render optionSelect(
+												props,
+												$formData.storage_type,
+												STORAGE_OPTIONS,
+												(v) => ($formData.storage_type = v as typeof $formData.storage_type)
+											)}
 										{/snippet}
 									</Form.Control>
 								</Form.Field>
@@ -749,7 +1029,7 @@
 													{...props}
 													bind:value={$formData.allergens}
 													placeholder="เช่น ถั่ว, นม"
-													class="h-11 rounded-xl"
+													class="h-11 sm:h-10"
 												/>
 											{/snippet}
 										</Form.Control>
@@ -759,19 +1039,12 @@
 										<Form.Control>
 											{#snippet children({ props })}
 												<Form.Label class="text-sm font-semibold">ข้อจำกัดด้านอาหาร</Form.Label>
-												<select
-													{...props}
-													value={$formData.dietary?.[0] ?? 'NONE'}
-													onchange={(e) => {
-														const val = e.currentTarget.value;
-														$formData.dietary = val === 'NONE' ? [] : [val as 'HALAL' | 'VEGAN'];
-													}}
-													class="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"
-												>
-													<option value="NONE">ไม่มี</option>
-													<option value="HALAL">ฮาลาล</option>
-													<option value="VEGAN">วีแกน</option>
-												</select>
+												{@render optionSelect(
+													props,
+													$formData.dietary?.[0] ?? 'NONE',
+													DIETARY_OPTIONS,
+													(v) => ($formData.dietary = v === 'NONE' ? [] : [v as 'HALAL' | 'VEGAN'])
+												)}
 											{/snippet}
 										</Form.Control>
 									</Form.Field>
@@ -781,15 +1054,12 @@
 									<Form.Control>
 										{#snippet children({ props })}
 											<Form.Label class="text-sm font-semibold">เพศที่ใช้ได้</Form.Label>
-											<select
-												{...props}
-												bind:value={$formData.target_gender}
-												class="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"
-											>
-												<option value="ALL">ทุกเพศ</option>
-												<option value="MALE">ชาย</option>
-												<option value="FEMALE">หญิง</option>
-											</select>
+											{@render optionSelect(
+												props,
+												$formData.target_gender,
+												GENDER_OPTIONS,
+												(v) => ($formData.target_gender = v as typeof $formData.target_gender)
+											)}
 										{/snippet}
 									</Form.Control>
 								</Form.Field>
@@ -798,16 +1068,12 @@
 									<Form.Control>
 										{#snippet children({ props })}
 											<Form.Label class="text-sm font-semibold">ช่วงวัย</Form.Label>
-											<select
-												{...props}
-												bind:value={$formData.age_group}
-												class="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"
-											>
-												<option value="ALL">ทุกวัย</option>
-												<option value="INFANT">ทารก</option>
-												<option value="CHILD">เด็ก</option>
-												<option value="ELDERLY">ผู้สูงอายุ</option>
-											</select>
+											{@render optionSelect(
+												props,
+												$formData.age_group,
+												AGE_OPTIONS,
+												(v) => ($formData.age_group = v as typeof $formData.age_group)
+											)}
 										{/snippet}
 									</Form.Control>
 								</Form.Field>
@@ -816,14 +1082,13 @@
 									<Form.Control>
 										{#snippet children({ props })}
 											<Form.Label class="text-sm font-semibold">ประเภทการแจก</Form.Label>
-											<select
-												{...props}
-												bind:value={$formData.distribution_type}
-												class="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"
-											>
-												<option value="recurring">แจกซ้ำได้ตามรอบ</option>
-												<option value="one_time">แจกครั้งเดียวต่อคน</option>
-											</select>
+											{@render optionSelect(
+												props,
+												$formData.distribution_type,
+												DISTRIBUTION_OPTIONS,
+												(v) =>
+													($formData.distribution_type = v as typeof $formData.distribution_type)
+											)}
 										{/snippet}
 									</Form.Control>
 								</Form.Field>
@@ -844,7 +1109,7 @@
 													const val = e.currentTarget.value;
 													$formData.qty_per_person = val === '' ? undefined : Number(val);
 												}}
-												class="h-11 rounded-xl"
+												class="h-11 sm:h-10"
 											/>
 										{/snippet}
 									</Form.Control>
@@ -873,15 +1138,12 @@
 									<Form.Control>
 										{#snippet children({ props })}
 											<Form.Label class="text-sm font-semibold">เพศที่ใช้ได้</Form.Label>
-											<select
-												{...props}
-												bind:value={$formData.target_gender}
-												class="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"
-											>
-												<option value="ALL">ทุกเพศ</option>
-												<option value="MALE">ชาย</option>
-												<option value="FEMALE">หญิง</option>
-											</select>
+											{@render optionSelect(
+												props,
+												$formData.target_gender,
+												GENDER_OPTIONS,
+												(v) => ($formData.target_gender = v as typeof $formData.target_gender)
+											)}
 										{/snippet}
 									</Form.Control>
 								</Form.Field>
@@ -890,16 +1152,12 @@
 									<Form.Control>
 										{#snippet children({ props })}
 											<Form.Label class="text-sm font-semibold">ช่วงวัย</Form.Label>
-											<select
-												{...props}
-												bind:value={$formData.age_group}
-												class="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"
-											>
-												<option value="ALL">ทุกวัย</option>
-												<option value="INFANT">ทารก</option>
-												<option value="CHILD">เด็ก</option>
-												<option value="ELDERLY">ผู้สูงอายุ</option>
-											</select>
+											{@render optionSelect(
+												props,
+												$formData.age_group,
+												AGE_OPTIONS,
+												(v) => ($formData.age_group = v as typeof $formData.age_group)
+											)}
 										{/snippet}
 									</Form.Control>
 								</Form.Field>
@@ -908,14 +1166,13 @@
 									<Form.Control>
 										{#snippet children({ props })}
 											<Form.Label class="text-sm font-semibold">ประเภทการแจก</Form.Label>
-											<select
-												{...props}
-												bind:value={$formData.distribution_type}
-												class="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"
-											>
-												<option value="recurring">แจกซ้ำได้ตามรอบ</option>
-												<option value="one_time">แจกครั้งเดียวต่อคน</option>
-											</select>
+											{@render optionSelect(
+												props,
+												$formData.distribution_type,
+												DISTRIBUTION_OPTIONS,
+												(v) =>
+													($formData.distribution_type = v as typeof $formData.distribution_type)
+											)}
 										{/snippet}
 									</Form.Control>
 								</Form.Field>
@@ -925,56 +1182,27 @@
 								<Form.Control>
 									{#snippet children({ props })}
 										<Form.Label class="text-sm font-semibold">สถานะครุภัณฑ์</Form.Label>
-										<select
-											{...props}
-											bind:value={$formData.asset_status}
-											class="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"
-										>
-											<option value="READY">พร้อมใช้งาน</option>
-											<option value="IN_USE">กำลังใช้งาน</option>
-											<option value="MAINTENANCE">บำรุงรักษา</option>
-											<option value="BROKEN">ชำรุด</option>
-										</select>
+										{@render optionSelect(
+											props,
+											$formData.asset_status,
+											ASSET_OPTIONS,
+											(v) => ($formData.asset_status = v as typeof $formData.asset_status)
+										)}
 									{/snippet}
 								</Form.Control>
 							</Form.Field>
-						{/if}
-
-						{#if compact}
-							<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-								<Form.Field {form} name="sku" class={fieldClass}>
-									<Form.Control>
-										{#snippet children({ props })}
-											<Form.Label class="text-sm font-semibold">รหัสสินค้า</Form.Label>
-											<Input {...props} bind:value={$formData.sku} class="h-11 rounded-xl" />
-										{/snippet}
-									</Form.Control>
-								</Form.Field>
-								<Form.Field {form} name="description" class={fieldClass}>
-									<Form.Control>
-										{#snippet children({ props })}
-											<Form.Label class="text-sm font-semibold">รายละเอียด</Form.Label>
-											<Input
-												{...props}
-												bind:value={$formData.description}
-												class="h-11 rounded-xl"
-											/>
-										{/snippet}
-									</Form.Control>
-								</Form.Field>
-							</div>
 						{/if}
 					</div>
 				</details>
 			{/if}
 
-			{#if isEdit && !compact}
+			{#if showDeactivateToggle}
 				<section class={sectionClass}>
 					<div class="flex items-center justify-between gap-3">
 						<div class="space-y-0.5">
-							<label for="deactivated-toggle" class="cursor-pointer text-sm font-semibold">
+							<Label for="deactivated-toggle" class="cursor-pointer text-sm font-semibold">
 								ปิดการใช้งาน
-							</label>
+							</Label>
 							<p class="text-xs text-muted-foreground">
 								รายการที่ปิดจะไม่แสดงในการเลือกใหม่ แต่ประวัติเก่ายังอยู่
 							</p>
@@ -991,14 +1219,10 @@
 			{/if}
 
 			<div class="flex items-center gap-3 pt-1">
-				<Button variant="outline" type="button" onclick={onsuccess} class="rounded-xl">
+				<Button variant="outline" type="button" onclick={() => onsuccess?.()} class="rounded-xl">
 					{compact ? 'ยกเลิก' : 'ยกเลิกและย้อนกลับ'}
 				</Button>
-				<Button
-					type="submit"
-					disabled={$submitting || isPending || !unitMasterReady}
-					class="rounded-xl"
-				>
+				<Button type="submit" disabled={$submitting || isPending || !unitMasterReady}>
 					{#if $submitting || isPending}
 						กำลังบันทึก...
 					{:else if isEdit}

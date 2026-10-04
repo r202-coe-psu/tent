@@ -28,12 +28,7 @@ describe('shelter-form-validation', () => {
 	});
 
 	it('maps errored fields onto section ids in canonical order', () => {
-		expect(findInvalidSectionIds(sampleErrors)).toEqual([
-			'basic-info',
-			'capacity',
-			'zones-facilities',
-			'utilities'
-		]);
+		expect(findInvalidSectionIds(sampleErrors)).toEqual(['basic-info', 'capacity', 'utilities']);
 		expect(sectionHasFieldErrors('basic-info', sampleErrors)).toBe(true);
 		expect(sectionHasFieldErrors('risk', sampleErrors)).toBe(false);
 	});
@@ -43,6 +38,13 @@ describe('shelter-form-validation', () => {
 			findInvalidSectionIds({ feature_flags: { enable_medical_screening: ['invalid'] } })
 		).toEqual(['basic-info']);
 		expect(SHELTER_SECTION_FIELDS['basic-info']).toContain('feature_flags');
+	});
+
+	it('maps floor_count errors to basic-info', () => {
+		expect(findInvalidSectionIds({ floor_count: ['จำนวนชั้นต้องเป็นจำนวนเต็ม'] })).toEqual([
+			'basic-info'
+		]);
+		expect(SHELTER_SECTION_FIELDS['basic-info']).toContain('floor_count');
 	});
 
 	it('maps food_distribution_points errors to food-distribution only', () => {
@@ -55,40 +57,39 @@ describe('shelter-form-validation', () => {
 		};
 		expect(findInvalidSectionIds(errors)).toEqual(['food-distribution']);
 		expect(sectionHasFieldErrors('food-distribution', errors)).toBe(true);
-		expect(sectionHasFieldErrors('zones-facilities', errors)).toBe(false);
+		expect(sectionHasFieldErrors('capacity', errors)).toBe(false);
 		expect(SHELTER_SECTION_FIELDS['food-distribution']).toEqual(['food_distribution_points']);
-		expect(SHELTER_SECTION_FIELDS['zones-facilities']).not.toContain('food_distribution_points');
+		expect(SHELTER_SECTION_FIELDS['capacity']).not.toContain('food_distribution_points');
 	});
 
-	it('maps common_areas.sub_storage errors to storage-points, not zones-facilities', () => {
+	it('maps common_areas.sub_storage errors to storage-points, not capacity', () => {
 		const errors = {
 			common_areas: { sub_storage: { '0': { name: ['ชื่อสถานที่จัดเก็บต้องไม่ว่าง'] } } }
 		};
 		expect(findInvalidSectionIds(errors)).toEqual(['storage-points']);
 		expect(sectionHasFieldErrors('storage-points', errors)).toBe(true);
-		expect(sectionHasFieldErrors('zones-facilities', errors)).toBe(false);
+		expect(sectionHasFieldErrors('capacity', errors)).toBe(false);
 		expect(collectErrorMessagesForFields(errors, 'storage-points')).toEqual([
 			'ชื่อสถานที่จัดเก็บต้องไม่ว่าง'
 		]);
-		expect(collectErrorMessagesForFields(errors, 'zones-facilities')).toEqual([]);
+		expect(collectErrorMessagesForFields(errors, 'capacity')).toEqual([]);
 	});
 
-	it('keeps other common_areas errors on zones-facilities', () => {
+	it('keeps other common_areas errors on capacity', () => {
 		const errors = {
 			common_areas: {
 				parking_capacity: ['ต้องไม่ติดลบ'],
 				sub_storage: { '0': { name: ['ชื่อสถานที่จัดเก็บต้องไม่ว่าง'] } }
 			}
 		};
-		expect(findInvalidSectionIds(errors)).toEqual(['zones-facilities', 'storage-points']);
-		expect(collectErrorMessagesForFields(errors, 'zones-facilities')).toEqual(['ต้องไม่ติดลบ']);
+		expect(findInvalidSectionIds(errors)).toEqual(['capacity', 'storage-points']);
+		expect(collectErrorMessagesForFields(errors, 'capacity')).toEqual(['ต้องไม่ติดลบ']);
 	});
 
 	it('keeps the canonical section id order', () => {
 		expect(Object.keys(SHELTER_SECTION_FIELDS)).toEqual([
 			'basic-info',
 			'capacity',
-			'zones-facilities',
 			'food-distribution',
 			'storage-points',
 			'utilities',
@@ -97,7 +98,10 @@ describe('shelter-form-validation', () => {
 			'luggage-policy',
 			'parking-policy'
 		]);
-		expect(SHELTER_SECTION_FIELDS['zones-facilities']).toEqual([
+		expect(SHELTER_SECTION_FIELDS['capacity']).toEqual([
+			'capacity',
+			'area_m2',
+			'area_type',
 			'zones',
 			'facilities',
 			'common_areas'
@@ -118,7 +122,8 @@ describe('shelter-form-validation', () => {
 			'ชื่อศูนย์พักพิงต้องไม่ว่าง'
 		]);
 		expect(collectErrorMessagesForFields(sampleErrors, 'capacity')).toEqual([
-			'ความจุสูงสุดต้องมากกว่า 0'
+			'ความจุสูงสุดต้องมากกว่า 0',
+			'ชื่อโซนต้องไม่ว่าง'
 		]);
 		expect(collectErrorMessagesForFields(sampleErrors, 'risk')).toEqual([]);
 		expect(

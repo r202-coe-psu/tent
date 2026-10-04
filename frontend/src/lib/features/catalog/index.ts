@@ -19,6 +19,7 @@ export type {
 	UnitOfMeasureUpdateInput,
 	FallbackUnitDef
 } from './domain/unit-of-measure';
+export { getItemDisplayName, type NamedItem } from './domain/item-name';
 
 // Domain — deletion policy & utilities
 export {
@@ -37,6 +38,7 @@ export {
 	SYSTEM_ITEM_CATEGORIES,
 	systemCategoryId,
 	resolveCategoryId,
+	resolveCategoryLabel,
 	itemBelongsToCategory,
 	catalogOrigin,
 	canShelterDeleteCatalogDoc,
@@ -54,6 +56,15 @@ export {
 	isItemMaster,
 	itemMasterUnit,
 	DEFAULT_ITEM_UNIT,
+	itemSelectableUoms,
+	packagingMultiplier,
+	qtyToBaseUnit,
+	qtyFromBaseUnit,
+	defaultInventoryUom,
+	defaultIssueUom,
+	toLedgerQtyUnit,
+	type PackagingUomOption,
+	type PackagingSource,
 	mergeCatalogGenerations,
 	type CatalogEntry,
 	// Recipe
@@ -68,6 +79,7 @@ export {
 	dimensionSchema,
 	unitCodeSchema,
 	isCanonicalUnitCode,
+	canonicalizeUnitCode,
 	isLegacyUnitLabel,
 	assertKnownUnitCodes,
 	unitOfMeasureInputSchema,
@@ -78,6 +90,31 @@ export {
 	FALLBACK_UNIT_LABELS,
 	formatUnit
 } from './domain/unit-of-measure';
+
+// Domain — quick-create, similarity, barcode, permissions
+export { findSimilarItems, missingOptionalFields } from './domain/item-similarity';
+export {
+	normalizeBarcode,
+	looksLikeBarcode,
+	findItemByBarcode,
+	itemBarcodes,
+	barcodeOwner,
+	isBaseUnitRow,
+	splitBaseBarcode,
+	mergeBaseBarcode,
+	type BarcodeSource,
+	type BarcodeMatch
+} from './domain/item-barcode';
+export {
+	QUICK_CREATE_DEFAULT_STORAGE,
+	quickCreateTypeClass,
+	validateQuickCreate,
+	buildQuickCreateInput,
+	type QuickCreateDraft,
+	type QuickCreateErrors,
+	type ItemMasterInitialValues
+} from './domain/quick-create';
+export { canWriteShelterCatalog } from './domain/catalog-permissions';
 
 // Data — repository contract + remote CouchDB binding
 export type { CatalogRepository } from './data/catalog.repository';
@@ -123,4 +160,27 @@ export { default as CatalogWorkspace } from './ui/catalog-workspace.svelte';
 export { default as ProductsPanel } from './ui/products-panel.svelte';
 export { default as ItemCategoryForm } from './ui/item-category-form.svelte';
 export { default as ItemMasterForm } from './ui/item-master-form.svelte';
+export { default as QuickCreateItemDialog } from './ui/quick-create-item-dialog.svelte';
 export { default as RecipeForm } from './ui/recipe-form.svelte';
+export { default as MasterBadge } from './ui/master/master-badge.svelte';
+export { default as MasterFilterBar } from './ui/master/master-filter-bar.svelte';
+export { default as MasterPager } from './ui/master/master-pager.svelte';
+export { useMasterPaging } from './ui/master/use-master-paging.svelte';
+export {
+	MASTER_PAGE_SIZE,
+	ORIGIN_LABELS,
+	ORIGIN_TONES,
+	filterUnits,
+	hiddenDeactivatedUnits,
+	filterRecipes,
+	hiddenDeactivatedRecipes,
+	ingredientSummary,
+	pageSlice,
+	isNewItem,
+	isIncompleteItem,
+	type CatalogOriginKey,
+	type MasterBadgeTone,
+	type OriginFilter,
+	type UnitFilter,
+	type RecipeFilter
+} from './ui/master/master-view';

@@ -4,21 +4,19 @@
 	import { toast } from 'svelte-sonner';
 
 	// UI Components
-	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
-	import * as Pagination from '$lib/components/ui/pagination/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import * as Sheet from '$lib/components/ui/sheet/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
 
 	// Icons
-	import Search from '@lucide/svelte/icons/search';
 	import Plus from '@lucide/svelte/icons/plus';
 	import Lock from '@lucide/svelte/icons/lock';
-	import Pencil from '@lucide/svelte/icons/pencil';
-	import Trash2 from '@lucide/svelte/icons/trash-2';
+	import Ruler from '@lucide/svelte/icons/ruler';
 
 	// Feature & Domain
 	import {
@@ -28,6 +26,15 @@
 		useDeleteUnitOfMeasure,
 		unitOfMeasureInputSchema,
 		unitOfMeasureUpdateSchema,
+		MasterBadge,
+		MasterFilterBar,
+		MasterPager,
+		useMasterPaging,
+		filterUnits,
+		hiddenDeactivatedUnits,
+		pageSlice,
+		MASTER_PAGE_SIZE,
+		type MasterBadgeTone,
 		type UnitOfMeasure,
 		type Dimension
 	} from '$lib/features/catalog';
@@ -48,37 +55,26 @@
 	const updateMutation = useUpdateUnitOfMeasure();
 	const deleteMutation = useDeleteUnitOfMeasure();
 
-	// Search & Pagination
+	// Filters (local state) and paging
 	let q = $state('');
-	const PAGE_SIZE = 10;
-	let currentPage = $state(1);
+	let dimension = $state<Dimension | 'all'>('all');
+	let showDeactivated = $state(false);
 
-	const filteredAll = $derived.by(() => {
-		const items = query.data ?? [];
-		const needle = q.trim().toLowerCase();
-		if (!needle) return items;
-		return items.filter(
-			(u) =>
-				u.code.toLowerCase().includes(needle) ||
-				u.label_th.toLowerCase().includes(needle) ||
-				(u.label_th_short && u.label_th_short.toLowerCase().includes(needle)) ||
-				u.label_en.toLowerCase().includes(needle) ||
-				u.dimension.toLowerCase().includes(needle)
-		);
-	});
+	const filter = $derived({ q, dimension, showDeactivated });
+	const filteredAll = $derived(filterUnits(query.data ?? [], filter));
+	const hiddenDeactivatedCount = $derived(hiddenDeactivatedUnits(query.data ?? [], filter));
+	const filtersActive = $derived(q.trim() !== '' || dimension !== 'all');
 
-	const total = $derived(filteredAll.length);
-	const totalPages = $derived(Math.max(1, Math.ceil(total / PAGE_SIZE)));
-	const clampedPage = $derived(Math.max(1, Math.min(currentPage, totalPages)));
+	const paging = useMasterPaging(
+		() => JSON.stringify([q, dimension, showDeactivated]),
+		() => filteredAll.length
+	);
+	const paginatedItems = $derived(pageSlice(filteredAll, paging.page, MASTER_PAGE_SIZE));
 
-	const paginatedItems = $derived.by(() => {
-		const start = (clampedPage - 1) * PAGE_SIZE;
-		return filteredAll.slice(start, start + PAGE_SIZE);
-	});
-
-	$effect(() => {
-		if (q) currentPage = 1;
-	});
+	function clearFilters() {
+		q = '';
+		dimension = 'all';
+	}
 
 	// Unified Create / Edit Form State
 	let formDialogOpen = $state(false);
@@ -220,384 +216,430 @@
 		});
 	}
 
-	const DIMENSION_LABELS: Record<Dimension, { th: string; color: string }> = {
-		count: {
-			th: 'จำนวนนับ',
-			color:
-				'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-800'
-		},
-		mass: {
-			th: 'น้ำหนัก',
-			color:
-				'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800'
-		},
-		volume: {
-			th: 'ปริมาตร',
-			color:
-				'bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-950/30 dark:text-cyan-400 dark:border-cyan-800'
-		},
-		length: {
-			th: 'ความยาว',
-			color:
-				'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/30 dark:text-purple-400 dark:border-purple-800'
-		}
+	const DIMENSION_LABELS: Record<Dimension, { th: string; tone: MasterBadgeTone }> = {
+		energy: { th: 'พลังงาน', tone: 'orange' },
+		count: { th: 'จำนวนนับ', tone: 'blue' },
+		mass: { th: 'น้ำหนัก', tone: 'green' },
+		volume: { th: 'ปริมาตร', tone: 'cyan' },
+		length: { th: 'ความยาว', tone: 'purple' }
 	};
+
+	const DIMENSION_OPTIONS = (Object.keys(DIMENSION_LABELS) as Dimension[]).map((d) => ({
+		value: d,
+		label: DIMENSION_LABELS[d].th
+	}));
 </script>
 
-<div class="flex w-full flex-col gap-4">
-	<!-- Top Bar -->
-	<div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+<div class="space-y-4 pb-20 md:pb-0">
+	<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 		<div>
-			<h2 class="text-base font-bold text-slate-800 dark:text-slate-100">
-				หน่วยนับมาตรฐาน (Unit of Measure)
-			</h2>
-			<p class="text-xs text-muted-foreground">
+			<h2 class="text-lg font-bold text-slate-900">หน่วยนับมาตรฐาน (Unit of Measure)</h2>
+			<p class="text-sm text-slate-600">
 				{isSystemManagement
-					? `หน่วยนับมาตรฐานของระบบกลาง (${total} รายการ)`
-					: `รายการหน่วยนับสากลที่ใช้บันทึกสต็อกและควบคุมคำนวณในคลัง (${total} รายการ)`}
+					? 'หน่วยนับมาตรฐานของระบบกลาง ใช้ร่วมกันทุกศูนย์'
+					: 'หน่วยนับสากลที่ใช้บันทึกสต็อกและคำนวณในคลัง'}
+				{#if !isSA}(อ่านอย่างเดียว){/if}
 			</p>
 		</div>
-		<div class="flex items-center gap-2">
-			<div class="relative w-full sm:w-64">
-				<Search class="absolute top-2.5 left-2.5 h-4 w-4 text-muted-foreground" />
-				<Input
-					bind:value={q}
-					type="search"
-					placeholder="ค้นหาหน่วยนับ..."
-					class="h-9 pl-9 text-xs"
-				/>
-			</div>
-			{#if isSA}
-				<Button
-					size="sm"
-					class="h-9 shrink-0 gap-1.5 text-xs font-semibold"
-					onclick={openCreateDialog}
-				>
-					<Plus class="h-4 w-4" />
-					เพิ่มหน่วยนับ
-				</Button>
-			{/if}
-		</div>
-	</div>
-
-	<!-- Table -->
-	<div
-		class="overflow-x-auto rounded-xl border border-slate-200/80 bg-card shadow-2xs dark:border-zinc-800"
-	>
-		<Table.Root>
-			<Table.Header>
-				<Table.Row class="bg-slate-50/70 dark:bg-zinc-900/50">
-					<Table.Head class="font-bold text-slate-800 dark:text-slate-200"
-						>รหัสหน่วย (Code)</Table.Head
-					>
-					<Table.Head class="font-bold text-slate-800 dark:text-slate-200">ชื่อภาษาไทย</Table.Head>
-					<Table.Head class="font-bold text-slate-800 dark:text-slate-200"
-						>ชื่อภาษาอังกฤษ</Table.Head
-					>
-					<Table.Head class="font-bold text-slate-800 dark:text-slate-200">มิติการวัด</Table.Head>
-					<Table.Head class="text-center font-bold text-slate-800 dark:text-slate-200"
-						>สถานะ</Table.Head
-					>
-					<Table.Head class="w-16 text-center font-bold text-slate-800 dark:text-slate-200"
-						>ลำดับ</Table.Head
-					>
-					{#if isSA}
-						<Table.Head class="w-24 text-center font-bold text-slate-800 dark:text-slate-200"
-							>จัดการ</Table.Head
-						>
-					{/if}
-				</Table.Row>
-			</Table.Header>
-			<Table.Body>
-				{#if query.isLoading}
-					<Table.Row>
-						<Table.Cell
-							colspan={isSA ? 7 : 6}
-							class="py-8 text-center text-sm text-muted-foreground"
-						>
-							กำลังโหลดข้อมูลหน่วยนับ...
-						</Table.Cell>
-					</Table.Row>
-				{:else if filteredAll.length === 0}
-					<Table.Row>
-						<Table.Cell
-							colspan={isSA ? 7 : 6}
-							class="py-8 text-center text-sm text-muted-foreground"
-						>
-							📭 ไม่พบข้อมูลหน่วยนับที่ค้นหา
-						</Table.Cell>
-					</Table.Row>
-				{:else}
-					{#each paginatedItems as item (item._id)}
-						<Table.Row class="hover:bg-slate-50/50 dark:hover:bg-zinc-900/30">
-							<Table.Cell class="text-xs font-bold text-foreground">
-								{item.code}
-							</Table.Cell>
-							<Table.Cell class="text-xs font-semibold text-slate-800 dark:text-slate-200">
-								{item.label_th}
-								{#if item.label_th_short}
-									<span class="ml-1 font-normal text-muted-foreground">({item.label_th_short})</span
-									>
-								{/if}
-							</Table.Cell>
-							<Table.Cell class="text-xs text-slate-600 dark:text-slate-300">
-								{item.label_en}
-							</Table.Cell>
-							<Table.Cell>
-								<span
-									class="inline-flex items-center rounded-md border px-2 py-0.5 text-2xs font-semibold {DIMENSION_LABELS[
-										item.dimension
-									]?.color ?? ''}"
-								>
-									{DIMENSION_LABELS[item.dimension]?.th ?? item.dimension}
-								</span>
-							</Table.Cell>
-							<Table.Cell class="text-center">
-								{#if item.is_protected}
-									<span
-										class="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-2xs font-bold text-slate-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
-										title="หน่วยมาตรฐานของระบบ ไม่สามารถลบหรือเปลี่ยนรหัสได้"
-									>
-										<Lock class="h-3 w-3 text-slate-500" />
-										ระบบล็อก
-									</span>
-								{:else if item.deactivated}
-									<span
-										class="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-2xs font-semibold text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-400"
-									>
-										ปิดใช้งาน
-									</span>
-								{:else}
-									<span
-										class="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-2xs font-semibold text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-400"
-									>
-										พร้อมใช้
-									</span>
-								{/if}
-							</Table.Cell>
-							<Table.Cell class="text-center text-xs text-muted-foreground tabular-nums">
-								{item.sort_order ?? '—'}
-							</Table.Cell>
-							{#if isSA}
-								<Table.Cell class="text-center">
-									<div class="flex items-center justify-center gap-1">
-										<Button
-											variant="ghost"
-											size="icon"
-											class="h-7 w-7 text-slate-600 hover:text-primary dark:text-slate-300"
-											onclick={() => openEditDialog(item)}
-											title="แก้ไขข้อมูลหน่วยนับ"
-										>
-											<Pencil class="h-3.5 w-3.5" />
-										</Button>
-										{#if !item.is_protected}
-											<Button
-												variant="ghost"
-												size="icon"
-												class="h-7 w-7 text-destructive hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/30"
-												onclick={() => openDeleteDialog(item)}
-												title="ลบหน่วยนับ"
-											>
-												<Trash2 class="h-3.5 w-3.5" />
-											</Button>
-										{/if}
-									</div>
-								</Table.Cell>
-							{/if}
-						</Table.Row>
-					{/each}
-				{/if}
-			</Table.Body>
-		</Table.Root>
-	</div>
-
-	<!-- Pagination -->
-	{#if totalPages > 1}
-		<div class="mt-2 flex justify-end">
-			<Pagination.Root
-				bind:page={() => clampedPage, (p) => (currentPage = p)}
-				count={total}
-				perPage={PAGE_SIZE}
+		{#if isSA}
+			<Button
+				type="button"
+				class="hidden min-h-11 gap-2 rounded-lg bg-[#0A2647] px-4 text-sm font-semibold text-white hover:bg-[#051930] md:inline-flex"
+				onclick={openCreateDialog}
 			>
-				{#snippet children({ pages })}
-					<Pagination.Content>
-						<Pagination.Previous />
-						{#each pages as p, i (i)}
-							<Pagination.Item>
-								{#if p.type === 'page'}
-									<Pagination.Link page={p} isActive={p.value === clampedPage} />
+				<Plus class="h-4 w-4" aria-hidden="true" />
+				เพิ่มหน่วยนับ
+			</Button>
+		{/if}
+	</div>
+
+	<div
+		class="flex min-h-[40vh] flex-col rounded-2xl border border-slate-200/80 bg-white shadow-2xs"
+	>
+		<MasterFilterBar
+			bind:q
+			bind:showDeactivated
+			searchLabel="ค้นหาหน่วยนับ"
+			searchPlaceholder="ค้นหารหัส / ชื่อไทย / ชื่ออังกฤษ"
+			switchId="units-show-deactivated"
+			selects={[
+				{
+					id: 'dimension',
+					label: 'กรองมิติการวัด',
+					prefix: 'มิติ',
+					value: dimension,
+					options: DIMENSION_OPTIONS
+				}
+			]}
+			onselect={(_id, value) => (dimension = value as Dimension | 'all')}
+		/>
+
+		{#if query.isLoading}
+			<div class="flex-1 space-y-3 p-4">
+				{#each [0, 1, 2, 3, 4] as i (i)}
+					<div class="h-16 animate-pulse rounded-xl border border-slate-200/80 bg-slate-50"></div>
+				{/each}
+			</div>
+		{:else}
+			<p
+				class="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-slate-100 px-4 py-2.5 text-sm text-slate-600"
+			>
+				<span>
+					กำลังแสดง
+					<strong class="font-semibold text-slate-900 tabular-nums">{filteredAll.length}</strong>
+					หน่วย
+				</span>
+				{#if hiddenDeactivatedCount > 0}
+					<span aria-hidden="true" class="text-slate-400">·</span>
+					<span>ซ่อน {hiddenDeactivatedCount} หน่วยที่ปิดใช้งาน</span>
+				{/if}
+				{#if filtersActive}
+					<button
+						type="button"
+						onclick={clearFilters}
+						class="min-h-11 rounded px-2 font-semibold text-sky-800 underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none"
+					>
+						ล้างตัวกรอง
+					</button>
+				{/if}
+			</p>
+
+			{#if filteredAll.length === 0}
+				<div class="flex flex-1 flex-col items-center justify-center gap-3 p-12 text-center">
+					<Ruler class="h-12 w-12 text-slate-300" aria-hidden="true" />
+					<p class="text-sm font-medium text-slate-500">ไม่พบหน่วยนับที่ตรงเงื่อนไข</p>
+				</div>
+			{:else}
+				<!-- Phone cards -->
+				<ul class="space-y-2.5 p-3 md:hidden">
+					{#each paginatedItems as item (item._id)}
+						<li
+							class="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-2xs {item.deactivated
+								? 'opacity-70'
+								: ''}"
+						>
+							<p class="text-base font-semibold text-slate-900">
+								{item.label_th}{#if item.label_th_short}
+									<span class="font-normal text-slate-500"> ({item.label_th_short})</span>{/if}
+							</p>
+							<p class="mt-0.5 text-sm text-slate-500">{item.code} · {item.label_en}</p>
+							<div class="mt-2 flex flex-wrap gap-1.5">
+								<MasterBadge tone={DIMENSION_LABELS[item.dimension]?.tone ?? 'slate'}>
+									{DIMENSION_LABELS[item.dimension]?.th ?? item.dimension}
+								</MasterBadge>
+								{#if item.is_protected}
+									<MasterBadge tone="slate"
+										><Lock class="h-3 w-3" aria-hidden="true" />ระบบล็อก</MasterBadge
+									>
+								{:else if item.deactivated}
+									<MasterBadge tone="red">ปิดใช้งาน</MasterBadge>
 								{:else}
-									<Pagination.Ellipsis />
+									<MasterBadge tone="green">พร้อมใช้</MasterBadge>
 								{/if}
-							</Pagination.Item>
-						{/each}
-						<Pagination.Next />
-					</Pagination.Content>
-				{/snippet}
-			</Pagination.Root>
-		</div>
-	{/if}
+							</div>
+							{#if isSA}
+								<div class="mt-3 flex flex-wrap gap-2">
+									<Button
+										type="button"
+										variant="outline"
+										class="min-h-11 rounded-lg border-slate-300 text-sm font-semibold"
+										onclick={() => openEditDialog(item)}
+									>
+										แก้ไข
+									</Button>
+									{#if !item.is_protected}
+										<Button
+											type="button"
+											variant="outline"
+											class="min-h-11 rounded-lg border-red-200 text-sm font-semibold text-red-800"
+											onclick={() => openDeleteDialog(item)}
+										>
+											ลบ
+										</Button>
+									{/if}
+								</div>
+							{/if}
+						</li>
+					{/each}
+				</ul>
+
+				<!-- Table (md+) -->
+				<div class="hidden flex-1 overflow-x-auto md:block">
+					<Table.Root class="text-sm">
+						<Table.Header class="border-b border-slate-200/80 bg-slate-50">
+							<Table.Row class="text-xs font-semibold text-slate-600">
+								<Table.Head class="px-4 py-3">รหัส</Table.Head>
+								<Table.Head class="px-4 py-3">ชื่อไทย</Table.Head>
+								<Table.Head class="px-4 py-3">ชื่ออังกฤษ</Table.Head>
+								<Table.Head class="px-4 py-3">มิติการวัด</Table.Head>
+								<Table.Head class="px-4 py-3">สถานะ</Table.Head>
+								<Table.Head class="px-4 py-3 text-right">ลำดับ</Table.Head>
+								{#if isSA}
+									<Table.Head class="px-4 py-3 text-right">จัดการ</Table.Head>
+								{/if}
+							</Table.Row>
+						</Table.Header>
+						<Table.Body class="divide-y divide-slate-100">
+							{#each paginatedItems as item (item._id)}
+								<Table.Row class={item.deactivated ? 'opacity-70' : ''}>
+									<Table.Cell class="px-4 py-3 font-bold text-slate-900">{item.code}</Table.Cell>
+									<Table.Cell class="px-4 py-3 text-base font-semibold text-slate-900">
+										{item.label_th}{#if item.label_th_short}
+											<span class="font-normal text-slate-500"> ({item.label_th_short})</span>{/if}
+									</Table.Cell>
+									<Table.Cell class="px-4 py-3 text-slate-700">{item.label_en}</Table.Cell>
+									<Table.Cell class="px-4 py-3">
+										<MasterBadge tone={DIMENSION_LABELS[item.dimension]?.tone ?? 'slate'}>
+											{DIMENSION_LABELS[item.dimension]?.th ?? item.dimension}
+										</MasterBadge>
+									</Table.Cell>
+									<Table.Cell class="px-4 py-3">
+										{#if item.is_protected}
+											<MasterBadge tone="slate">
+												<Lock class="h-3 w-3" aria-hidden="true" />ระบบล็อก
+											</MasterBadge>
+										{:else if item.deactivated}
+											<MasterBadge tone="red">ปิดใช้งาน</MasterBadge>
+										{:else}
+											<MasterBadge tone="green">พร้อมใช้</MasterBadge>
+										{/if}
+									</Table.Cell>
+									<Table.Cell class="px-4 py-3 text-right text-slate-500 tabular-nums">
+										{item.sort_order ?? '—'}
+									</Table.Cell>
+									{#if isSA}
+										<Table.Cell class="px-4 py-2 text-right">
+											<div class="flex items-center justify-end gap-2">
+												<Button
+													type="button"
+													variant="outline"
+													class="min-h-11 rounded-lg border-slate-300 text-sm font-semibold"
+													onclick={() => openEditDialog(item)}
+												>
+													แก้ไข
+												</Button>
+												{#if item.is_protected}
+													<span class="px-2 text-xs text-slate-400">ลบไม่ได้</span>
+												{:else}
+													<Button
+														type="button"
+														variant="outline"
+														class="min-h-11 rounded-lg border-red-200 text-sm font-semibold text-red-800"
+														onclick={() => openDeleteDialog(item)}
+													>
+														ลบ
+													</Button>
+												{/if}
+											</div>
+										</Table.Cell>
+									{/if}
+								</Table.Row>
+							{/each}
+						</Table.Body>
+					</Table.Root>
+				</div>
+
+				<MasterPager
+					bind:page={paging.page}
+					count={filteredAll.length}
+					perPage={MASTER_PAGE_SIZE}
+					unit="หน่วย"
+				/>
+			{/if}
+		{/if}
+	</div>
 </div>
 
-<!-- CREATE / EDIT DIALOG -->
-<Dialog.Root bind:open={formDialogOpen}>
-	<Dialog.Content class="sm:max-w-[480px]">
-		<Dialog.Header>
-			<Dialog.Title>
+{#if isSA}
+	<div
+		class="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden"
+	>
+		<Button
+			type="button"
+			class="min-h-12 w-full gap-2 rounded-lg bg-[#0A2647] text-base font-semibold text-white hover:bg-[#051930]"
+			onclick={openCreateDialog}
+		>
+			<Plus class="h-4 w-4" aria-hidden="true" />
+			เพิ่มหน่วยนับ
+		</Button>
+	</div>
+{/if}
+
+<!-- CREATE / EDIT SHEET -->
+<Sheet.Root bind:open={formDialogOpen}>
+	<Sheet.Content
+		side="right"
+		class="flex h-[100dvh] w-full flex-col gap-0 overflow-hidden border-0 p-0 pb-[env(safe-area-inset-bottom)] sm:max-w-none md:w-[28rem] md:border-l"
+	>
+		<Sheet.Header class="shrink-0 border-b border-slate-200/80 p-4 pr-12 text-left">
+			<Sheet.Title class="text-xl font-bold text-slate-900">
 				{#if isEdit}
-					แก้ไขหน่วยนับ: <span class="text-primary">{editingUnit?.code}</span>
+					แก้ไขหน่วยนับ: {editingUnit?.code}
 				{:else}
 					เพิ่มหน่วยนับใหม่
 				{/if}
-			</Dialog.Title>
-			<Dialog.Description>
+			</Sheet.Title>
+			<Sheet.Description class="text-sm text-slate-500">
 				{isEdit
 					? 'ปรับปรุงชื่อเรียกและสถานะการใช้งานของหน่วยนับ'
 					: 'กำหนดหน่วยนับมาตรฐานสำหรับใช้งานในรายการสิ่งของและคลังสินค้า'}
-			</Dialog.Description>
-		</Dialog.Header>
+			</Sheet.Description>
+		</Sheet.Header>
 
 		<form
 			onsubmit={(e) => {
 				e.preventDefault();
 				handleSubmit();
 			}}
-			class="mt-4 space-y-4"
+			class="flex min-h-0 flex-1 flex-col"
 		>
-			<Field.Field data-invalid={(!isEdit && !!formErrors.code) || undefined}>
-				<Field.Label for="uom-code">
-					รหัสหน่วย (Unit Code) {#if !isEdit}<span class="text-destructive">*</span>{/if}
-				</Field.Label>
-				<Input
-					id="uom-code"
-					type="text"
-					bind:value={formCode}
-					disabled={isEdit}
-					placeholder="เช่น box, kg, pack"
-					aria-invalid={!isEdit && !!formErrors.code}
-				/>
-				{#if !isEdit && formErrors.code}
-					<Field.Error>{formErrors.code}</Field.Error>
-				{/if}
-				<Field.Description>
-					{isEdit
-						? 'รหัสหน่วยใช้เป็นคีย์อ้างอิงในฐานข้อมูล ไม่สามารถแก้ไขได้'
-						: 'ตัวอักษรภาษาอังกฤษตัวพิมพ์เล็ก ตัวเลข หรือขีดล่าง ไม่สามารถแก้ไขได้ภายหลัง'}
-				</Field.Description>
-			</Field.Field>
-
-			<div class="grid grid-cols-2 gap-3">
-				<Field.Field data-invalid={!!formErrors.label_th || undefined}>
-					<Field.Label for="uom-label-th">
-						ชื่อภาษาไทย <span class="text-destructive">*</span>
+			<div class="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+				<Field.Field data-invalid={(!isEdit && !!formErrors.code) || undefined}>
+					<Field.Label for="uom-code">
+						รหัสหน่วย (Unit Code) {#if !isEdit}<span class="text-destructive">*</span>{/if}
 					</Field.Label>
 					<Input
-						id="uom-label-th"
+						id="uom-code"
 						type="text"
-						bind:value={formLabelTh}
-						placeholder="เช่น กล่อง, กิโลกรัม"
-						aria-invalid={!!formErrors.label_th}
+						bind:value={formCode}
+						disabled={isEdit}
+						placeholder="เช่น box, kg, pack"
+						aria-invalid={!isEdit && !!formErrors.code}
+						class="min-h-11"
 					/>
-					{#if formErrors.label_th}
-						<Field.Error>{formErrors.label_th}</Field.Error>
+					{#if !isEdit && formErrors.code}
+						<Field.Error>{formErrors.code}</Field.Error>
 					{/if}
+					<Field.Description>
+						{isEdit
+							? 'รหัสหน่วยใช้เป็นคีย์อ้างอิงในฐานข้อมูล ไม่สามารถแก้ไขได้'
+							: 'ตัวอักษรภาษาอังกฤษตัวพิมพ์เล็ก ตัวเลข หรือขีดล่าง ไม่สามารถแก้ไขได้ภายหลัง'}
+					</Field.Description>
 				</Field.Field>
 
-				<Field.Field>
-					<Field.Label for="uom-label-th-short">ชื่อย่อภาษาไทย</Field.Label>
-					<Input
-						id="uom-label-th-short"
-						type="text"
-						bind:value={formLabelThShort}
-						placeholder="เช่น กก., ล."
-					/>
-				</Field.Field>
-			</div>
-
-			<Field.Field data-invalid={!!formErrors.label_en || undefined}>
-				<Field.Label for="uom-label-en">
-					ชื่อภาษาอังกฤษ <span class="text-destructive">*</span>
-				</Field.Label>
-				<Input
-					id="uom-label-en"
-					type="text"
-					bind:value={formLabelEn}
-					placeholder="เช่น can, kilogram"
-					aria-invalid={!!formErrors.label_en}
-				/>
-				{#if formErrors.label_en}
-					<Field.Error>{formErrors.label_en}</Field.Error>
-				{/if}
-			</Field.Field>
-
-			<div class="grid grid-cols-2 gap-3">
-				<Field.Field data-invalid={(!isEdit && !!formErrors.dimension) || undefined}>
-					<Field.Label for="uom-dimension">
-						มิติการวัด (Dimension) {#if !isEdit}<span class="text-destructive">*</span>{/if}
-					</Field.Label>
-					{#if isEdit}
+				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+					<Field.Field data-invalid={!!formErrors.label_th || undefined}>
+						<Field.Label for="uom-label-th">
+							ชื่อภาษาไทย <span class="text-destructive">*</span>
+						</Field.Label>
 						<Input
-							id="uom-dimension"
-							value={DIMENSION_LABELS[formDimension]?.th ?? formDimension}
-							disabled
+							id="uom-label-th"
+							type="text"
+							bind:value={formLabelTh}
+							placeholder="เช่น กล่อง, กิโลกรัม"
+							aria-invalid={!!formErrors.label_th}
+							class="min-h-11"
 						/>
-						<Field.Description>มิติการวัดไม่สามารถแก้ไขได้</Field.Description>
-					{:else}
-						<Select.Root
-							type="single"
-							value={formDimension}
-							onValueChange={(value) => {
-								if (value) formDimension = value as Dimension;
-							}}
-						>
-							<Select.Trigger id="uom-dimension" class="w-full">
-								{DIMENSION_LABELS[formDimension]?.th} ({formDimension})
-							</Select.Trigger>
-							<Select.Content>
-								<Select.Item value="count">จำนวนนับ (count)</Select.Item>
-								<Select.Item value="mass">น้ำหนัก (mass)</Select.Item>
-								<Select.Item value="volume">ปริมาตร (volume)</Select.Item>
-								<Select.Item value="length">ความยาว (length)</Select.Item>
-							</Select.Content>
-						</Select.Root>
-					{/if}
-				</Field.Field>
-				<Field.Field>
-					<Field.Label for="uom-sort-order">ลำดับการแสดงผล</Field.Label>
-					<Input
-						id="uom-sort-order"
-						type="number"
-						bind:value={formSortOrder}
-						min="1"
-						class="tabular-nums"
-					/>
-				</Field.Field>
-			</div>
+						{#if formErrors.label_th}
+							<Field.Error>{formErrors.label_th}</Field.Error>
+						{/if}
+					</Field.Field>
 
-			{#if isEdit}
-				<div class="rounded-xl border border-border bg-muted/30 p-3">
-					<Field.Field orientation="horizontal" class="items-start gap-2.5">
-						<Checkbox id="edit-deactivated" bind:checked={formDeactivated} class="mt-0.5" />
-						<Field.Content>
-							<Field.Label for="edit-deactivated" class="cursor-pointer">
-								ปิดการใช้งานหน่วยนี้ (Deactivate)
-							</Field.Label>
-							<Field.Description>
-								หน่วยที่ปิดใช้งานจะไม่ปรากฏให้เลือกในฟอร์มสร้างสินค้าใหม่
-								แต่ยังคงแสดงผลในรายการสินค้าเดิมได้อย่างถูกต้อง
-							</Field.Description>
-						</Field.Content>
+					<Field.Field>
+						<Field.Label for="uom-label-th-short">ชื่อย่อภาษาไทย</Field.Label>
+						<Input
+							id="uom-label-th-short"
+							type="text"
+							bind:value={formLabelThShort}
+							placeholder="เช่น กก., ล."
+							class="min-h-11"
+						/>
 					</Field.Field>
 				</div>
-			{/if}
 
-			<div class="mt-6 flex justify-end gap-2">
-				<Button type="button" variant="outline" size="sm" onclick={() => (formDialogOpen = false)}>
+				<Field.Field data-invalid={!!formErrors.label_en || undefined}>
+					<Field.Label for="uom-label-en">
+						ชื่อภาษาอังกฤษ <span class="text-destructive">*</span>
+					</Field.Label>
+					<Input
+						id="uom-label-en"
+						type="text"
+						bind:value={formLabelEn}
+						placeholder="เช่น can, kilogram"
+						aria-invalid={!!formErrors.label_en}
+						class="min-h-11"
+					/>
+					{#if formErrors.label_en}
+						<Field.Error>{formErrors.label_en}</Field.Error>
+					{/if}
+				</Field.Field>
+
+				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+					<Field.Field data-invalid={(!isEdit && !!formErrors.dimension) || undefined}>
+						<Field.Label for="uom-dimension">
+							มิติการวัด (Dimension) {#if !isEdit}<span class="text-destructive">*</span>{/if}
+						</Field.Label>
+						{#if isEdit}
+							<Input
+								id="uom-dimension"
+								value={DIMENSION_LABELS[formDimension]?.th ?? formDimension}
+								disabled
+								class="min-h-11"
+							/>
+							<Field.Description>มิติการวัดไม่สามารถแก้ไขได้</Field.Description>
+						{:else}
+							<Select.Root
+								type="single"
+								value={formDimension}
+								onValueChange={(value) => {
+									if (value) formDimension = value as Dimension;
+								}}
+							>
+								<Select.Trigger id="uom-dimension" class="min-h-11 w-full">
+									{DIMENSION_LABELS[formDimension]?.th} ({formDimension})
+								</Select.Trigger>
+								<Select.Content>
+									<Select.Item value="count">จำนวนนับ (count)</Select.Item>
+									<Select.Item value="mass">น้ำหนัก (mass)</Select.Item>
+									<Select.Item value="volume">ปริมาตร (volume)</Select.Item>
+									<Select.Item value="length">ความยาว (length)</Select.Item>
+									<Select.Item value="energy">พลังงาน (energy)</Select.Item>
+								</Select.Content>
+							</Select.Root>
+						{/if}
+					</Field.Field>
+					<Field.Field>
+						<Field.Label for="uom-sort-order">ลำดับการแสดงผล</Field.Label>
+						<Input
+							id="uom-sort-order"
+							type="number"
+							bind:value={formSortOrder}
+							min="1"
+							class="min-h-11 tabular-nums"
+						/>
+					</Field.Field>
+				</div>
+
+				{#if isEdit}
+					<div class="rounded-xl border border-slate-200/80 bg-slate-50 p-3">
+						<Field.Field orientation="horizontal" class="items-start gap-2.5">
+							<Checkbox id="edit-deactivated" bind:checked={formDeactivated} class="mt-0.5" />
+							<Field.Content>
+								<Field.Label for="edit-deactivated" class="cursor-pointer">
+									ปิดการใช้งานหน่วยนี้ (Deactivate)
+								</Field.Label>
+								<Field.Description>
+									หน่วยที่ปิดใช้งานจะไม่ปรากฏให้เลือกในฟอร์มสร้างสินค้าใหม่
+									แต่ยังคงแสดงผลในรายการสินค้าเดิมได้อย่างถูกต้อง
+								</Field.Description>
+							</Field.Content>
+						</Field.Field>
+					</div>
+				{/if}
+			</div>
+
+			<div class="grid shrink-0 grid-cols-2 gap-2 border-t border-slate-200/80 p-4">
+				<Button
+					type="button"
+					variant="outline"
+					class="min-h-12 rounded-lg border-slate-300 text-sm font-semibold"
+					onclick={() => (formDialogOpen = false)}
+				>
 					ยกเลิก
 				</Button>
 				<Button
 					type="submit"
-					size="sm"
+					class="min-h-12 rounded-lg bg-[#0A2647] text-sm font-semibold text-white hover:bg-[#051930]"
 					disabled={isEdit ? updateMutation.isPending : createMutation.isPending}
 				>
 					{#if isEdit}
@@ -608,8 +650,8 @@
 				</Button>
 			</div>
 		</form>
-	</Dialog.Content>
-</Dialog.Root>
+	</Sheet.Content>
+</Sheet.Root>
 
 <!-- DELETE CONFIRM DIALOG -->
 <Dialog.Root bind:open={deleteConfirmOpen}>
@@ -621,7 +663,7 @@
 					>{pendingDeleteUnit?.code}</strong
 				>
 				({pendingDeleteUnit?.label_th})?
-				<span class="mt-2 block text-xs text-amber-700 dark:text-amber-400">
+				<span class="mt-2 block text-xs text-amber-700">
 					* โปรดตรวจสอบให้แน่ใจว่าไม่มีรายการสินค้าในแคตตาล็อกกำลังอ้างอิงหน่วยนับนี้
 				</span>
 			</Dialog.Description>
@@ -630,7 +672,7 @@
 			<Button
 				type="button"
 				variant="outline"
-				size="sm"
+				class="min-h-11"
 				onclick={() => {
 					deleteConfirmOpen = false;
 					pendingDeleteUnit = null;
@@ -640,7 +682,7 @@
 			</Button>
 			<Button
 				variant="destructive"
-				size="sm"
+				class="min-h-11"
 				disabled={deleteMutation.isPending}
 				onclick={confirmDelete}
 			>

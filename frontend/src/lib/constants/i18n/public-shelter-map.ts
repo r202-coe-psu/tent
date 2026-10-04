@@ -18,7 +18,7 @@ export const PUBLIC_SHELTER_MAP_I18N = {
 		cancelPlacePin: 'ยกเลิก',
 		evacCenter: 'ศูนย์อพยพ',
 		hostHouse: 'บ้านพี่เลี้ยง',
-		preRegister: 'ลงทะเบียนจองล่วงหน้า',
+		preRegister: 'ลงทะเบียนล่วงหน้า',
 		viewDetails: 'ดูรายละเอียด',
 		shelterClosed: 'ศูนย์ปิดแล้ว'
 	},

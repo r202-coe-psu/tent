@@ -7,10 +7,43 @@ export const STANDARD_UOM_OPTIONS = [
 	{ value: 'gram', label: 'กรัม' },
 	{ value: 'mg', label: 'มิลลิกรัม' },
 	{ value: 'mcg', label: 'ไมโครกรัม' },
-	{ value: 'litre', label: 'ลิตร' },
+	{ value: 'liter', label: 'ลิตร' },
 	{ value: 'ml', label: 'มิลลิลิตร' },
 	{ value: 'piece', label: 'ชิ้น' }
 ] as const;
+
+/**
+ * Maps legacy requirement group UoM codes to canonical UoM codes in the catalog master.
+ */
+export const LEGACY_TO_CANONICAL_UOM: Record<string, string> = {
+	gram: 'g',
+	liter: 'l',
+	litre: 'l',
+	pcs: 'piece'
+};
+
+/**
+ * Maps canonical UoM codes to requirement group standard UoM codes.
+ */
+export const CANONICAL_TO_LEGACY_UOM: Record<string, string> = {
+	g: 'gram',
+	l: 'liter',
+	piece: 'piece'
+};
+
+/**
+ * Normalizes a unit code to canonical master UoM code (e.g. 'gram' -> 'g', 'liter' -> 'l').
+ */
+export function toCanonicalUom(unit: string): string {
+	return LEGACY_TO_CANONICAL_UOM[unit] ?? unit;
+}
+
+/**
+ * Converts a unit code to its requirement group standard representation.
+ */
+export function toStandardReqGroupUom(unit: string): string {
+	return CANONICAL_TO_LEGACY_UOM[unit] ?? unit;
+}
 
 export const itemMapSchema = z.object({
 	item_id: z.string().min(1, 'กรุณาเลือกสิ่งของ'),

@@ -15,6 +15,11 @@
 			<Dialog.Title>เข้าสู่ระบบอีกครั้ง</Dialog.Title>
 			<Dialog.Description>Session หมดอายุแล้ว กรุณาเข้าสู่ระบบเพื่อใช้งานต่อ</Dialog.Description>
 		</Dialog.Header>
-		<LoginForm navigateOnSuccess={false} showCard={false} onSuccess={handleSuccess} />
+		<LoginForm
+			navigateOnSuccess={false}
+			showCard={false}
+			passwordMode="always"
+			onSuccess={handleSuccess}
+		/>
 	</Dialog.Content>
 </Dialog.Root>

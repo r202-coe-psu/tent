@@ -2,23 +2,17 @@
 	import StaffSideNav, { type StaffSideNavItem } from '$lib/components/staff-side-nav.svelte';
 
 	export type SopTabType =
-		| 'sphere_standard'
-		| 'food_sphere_standard'
-		| 'requirement_group'
-		| 'replenishment_policy'
-		| 'alert_threshold';
+		'sphere_standard' | 'food_sphere_standard' | 'requirement_group' | 'replenishment_policy';
 
 	let {
 		activeTab = $bindable(),
 		sphereCount = 20,
-		alertCount = 8,
 		reqGroupCount,
 		foodSphereCount,
 		replenishmentCount
 	}: {
 		activeTab: SopTabType;
 		sphereCount?: number;
-		alertCount?: number;
 		reqGroupCount?: number;
 		foodSphereCount?: number;
 		replenishmentCount?: number;
@@ -31,14 +25,6 @@
 			count: sphereCount,
 			onclick: () => {
 				activeTab = 'sphere_standard';
-			}
-		},
-		{
-			id: 'alert_threshold',
-			label: 'เกณฑ์การแจ้งเตือน',
-			count: alertCount,
-			onclick: () => {
-				activeTab = 'alert_threshold';
 			}
 		},
 		{

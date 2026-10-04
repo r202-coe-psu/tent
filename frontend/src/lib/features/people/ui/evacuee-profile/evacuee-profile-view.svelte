@@ -9,11 +9,13 @@
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 
 	import {
-		useEvacuees,
+		useEvacuee,
+		useHousehold,
+		useHouseholdMembers,
 		useHouseholds,
-		useMedicals,
-		useScreenings,
-		useMovements,
+		useMedicalByEvacuee,
+		useScreeningsByEvacuee,
+		useMovementsByEvacuee,
 		useCreateMedical,
 		usePatchMedical,
 		useDeleteMedical,
@@ -51,6 +53,7 @@
 	import { useShelter } from '$lib/features/shelters';
 	import { useSaveImage } from '$lib/features/images';
 	import { now } from '$lib/db/model';
+	import LoadingScreen from '$lib/components/loading-screen.svelte';
 
 	import EvacueeProfileIdentityRail from './evacuee-profile-identity-rail.svelte';
 	import EvacueeProfileMobileDock from './evacuee-profile-mobile-dock.svelte';
@@ -159,12 +162,28 @@
 		}
 	};
 
-	const evacueesQuery = useEvacuees();
+	const evacueeQuery = useEvacuee(() => evacueeId);
+	// Declared before any hook below that reads it in a getter — those hooks'
+	// createQuery() options run eagerly at call time, not lazily on first access,
+	// so referencing `evacuee` before this line throws a TDZ ReferenceError.
+	const evacuee = $derived(evacueeQuery.data ?? null);
+	const householdQuery = useHousehold(
+		() => evacuee?.household_id ?? '',
+		() => !!evacuee?.household_id
+	);
+	// Full household list is only needed by the "change household" picker modal,
+	// but EvacueeHouseholdModal reads it synchronously on mount (its initial
+	// `setAsHead` computation), so it must already be loaded by then — keep this
+	// eager rather than gating it on the modal being open.
 	const householdsQuery = useHouseholds();
-	const medicalsQuery = useMedicals();
-	const screeningsQuery = useScreenings();
+	const householdMembersQuery = useHouseholdMembers(
+		() => evacuee?.household_id ?? undefined,
+		() => !!evacuee?.household_id
+	);
+	const medicalQuery = useMedicalByEvacuee(() => evacueeId);
+	const screeningsQuery = useScreeningsByEvacuee(() => evacueeId);
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
-	const movementsQuery = useMovements();
+	const movementsQuery = useMovementsByEvacuee(() => evacueeId);
 	const patchEvacueeMutation = usePatchEvacuee();
 	const changeZoneMutation = useChangeEvacueeZone();
 	const patchHouseholdMutation = usePatchHousehold();
@@ -178,21 +197,12 @@
 	const createScreeningMutation = useCreateScreening();
 	const saveImageMutation = useSaveImage();
 
-	const evacuee = $derived(evacueesQuery.data?.find((e) => e._id === evacueeId) ?? null);
-	const household = $derived(
-		evacuee && householdsQuery.data
-			? (householdsQuery.data.find((h) => h._id === evacuee.household_id) ?? null)
-			: null
-	);
-	const medical = $derived(
-		evacuee && medicalsQuery.data
-			? (medicalsQuery.data.find((m) => m.evacuee_id === evacuee._id) ?? null)
-			: null
-	);
+	const household = $derived(householdQuery.data ?? null);
+	const medical = $derived(medicalQuery.data ?? null);
 	const screening = $derived(
-		evacuee && screeningsQuery.data
+		screeningsQuery.data
 			? (screeningsQuery.data
-					.filter((s) => s.evacuee_id === evacuee._id)
+					.slice()
 					.sort((a, b) =>
 						(b.screened_at ?? b.created_at).localeCompare(a.screened_at ?? a.created_at)
 					)[0] ?? null)
@@ -212,18 +222,15 @@
 			: null
 	);
 	const householdMembers = $derived.by(() => {
-		if (!evacuee?.household_id || !evacueesQuery.data) return [];
+		if (!evacuee?.household_id || !householdMembersQuery.data) return [];
 		const headId = household?.head_evacuee_id ?? null;
-		return evacueesQuery.data
-			.filter((e) => e.household_id === evacuee.household_id)
-			.slice()
-			.sort((a, b) => {
-				if (headId) {
-					if (a._id === headId) return -1;
-					if (b._id === headId) return 1;
-				}
-				return formatPersonName(a).localeCompare(formatPersonName(b), 'th');
-			});
+		return householdMembersQuery.data.slice().sort((a, b) => {
+			if (headId) {
+				if (a._id === headId) return -1;
+				if (b._id === headId) return 1;
+			}
+			return formatPersonName(a).localeCompare(formatPersonName(b), 'th');
+		});
 	});
 
 	function viewHouseholdMember(id: string) {
@@ -258,10 +265,8 @@
 
 	// Append-only movement stream for this evacuee, newest first (schema.md §1.1).
 	const movements = $derived(
-		evacuee && movementsQuery.data
-			? movementsQuery.data
-					.filter((m) => m.evacuee_id === evacuee._id)
-					.sort((a, b) => b.occurred_at.localeCompare(a.occurred_at))
+		movementsQuery.data
+			? movementsQuery.data.slice().sort((a, b) => b.occurred_at.localeCompare(a.occurred_at))
 			: []
 	);
 
@@ -296,10 +301,13 @@
 	};
 
 	const isLoading = $derived(
-		evacueesQuery.isLoading ||
-			householdsQuery.isLoading ||
-			medicalsQuery.isLoading ||
-			screeningsQuery.isLoading
+		evacueeQuery.isLoading ||
+			householdQuery.isLoading ||
+			householdMembersQuery.isLoading ||
+			medicalQuery.isLoading ||
+			screeningsQuery.isLoading ||
+			movementsQuery.isLoading ||
+			shelterQuery.isLoading
 	);
 
 	// Audit log — show a limited page of movements at a time, expand on demand
@@ -453,6 +461,8 @@
 		district: string;
 		province: string;
 		postalCode: string;
+		municipalityZone: string;
+		community: string;
 	}) {
 		if (!household) {
 			toast.error('ไม่พบข้อมูลครัวเรือนสำหรับบันทึกที่อยู่');
@@ -467,7 +477,9 @@
 					subdistrict: data.subdistrict || null,
 					district: data.district || null,
 					province: data.province || null,
-					postal_code: data.postalCode || null
+					postal_code: data.postalCode || null,
+					municipality_zone: data.municipalityZone || null,
+					community: data.community || null
 				}
 			});
 			toast.success('แก้ไขที่อยู่ครัวเรือนสำเร็จ');
@@ -530,6 +542,7 @@
 					person_id: { cardType: data.cardType, number: data.cardNumber || undefined },
 					country: data.country,
 					religion: data.religion,
+					religion_other: data.religion === 'other' ? data.religionOther || null : null,
 					photo
 				}
 			});
@@ -639,9 +652,7 @@
 					input: {
 						evacuee_id: evacuee._id,
 						symptoms: nextSymptoms,
-						temperature_c: null,
 						track: data.careTrack,
-						needs_referral: false,
 						notes: nextNotes || undefined
 					},
 					ctx: getActor()
@@ -728,14 +739,7 @@
 </script>
 
 {#if isLoading}
-	<div
-		class="flex flex-col items-center justify-center gap-3 rounded-lg border border-border bg-card py-20"
-	>
-		<div
-			class="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent"
-		></div>
-		<p class="text-sm font-medium text-muted-foreground">กำลังโหลดข้อมูลผู้พักพิง...</p>
-	</div>
+	<LoadingScreen message="กำลังโหลดข้อมูลผู้พักพิง..." />
 {:else if !evacuee}
 	<div class="space-y-4 rounded-lg border border-border bg-card py-16 text-center">
 		<p class="text-base font-semibold text-destructive">ไม่พบข้อมูลผู้พักพิงในระบบ</p>
