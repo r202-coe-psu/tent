@@ -1,12 +1,13 @@
 ---
-id: draft
+id: CR-151
 title: Kiosk — เปลี่ยนจาก "เสียบบัตรเพื่อสร้างผู้ลงทะเบียน" เป็น "รายงานตัวผู้ลงทะเบียนล่วงหน้า" (QR / บัตรประชาชน / เบอร์โทร)
-status: proposed
+status: approved
 date: 2026-09-24
 created: 2026-09-24
-updated: 2026-10-04
+updated: 2026-10-04 # approved และ merge โดย Soravit Sukkar (Team Lead) + รันเลข CR-151 และลงทะเบียนใน _index.md
 requested_by: ทีม kiosk (branch feat/pre-register_kiosk)
-decided_by: เจ้าของโครงการ
+decided_by: Soravit Sukkar (Team Lead)
+decision_date: 2026-10-04
 layer: volatile
 supersedes:
   - docs/changes/CR-097-smart-card-evacuee-draft-flow.md หัวข้อ Change ข้อ 2–3 และ As-Built ข้อ 1 (การสร้าง evacuee จาก kiosk)
@@ -15,7 +16,7 @@ affects:
   - docs/features/smart-card-registration-spec.md (FR-CARD-01..04 → ถูกแทนที่)
   - docs/changes/CR-097-smart-card-evacuee-draft-flow.md (Decision log → ชี้มาที่ CR นี้)
   - docs/data/api-contract.md (เพิ่มหัวข้อ Scanner / Kiosk)
-  - docs/data/schema.md §1.1 index ของ evacuee (ไม่ bump schema_v)
+  - docs/data/schema.md §1.1 index ของ evacuee (คงเดิมที่ schema_v 11; ไม่ bump schema_v)
   - CONTEXT.md (Report-in — ช่องทาง kiosk)
   - frontend/src/lib/features/kiosk/{domain,data,server,ui}
   - frontend/src/routes/kiosk/** (/, /qr, /phone, /scanner/*)
@@ -28,16 +29,16 @@ why: >
   Kiosk แบบเดิม (CR-097) สร้าง evacuee จากบัตรโดยไม่มีครัวเรือนและไม่มีเบอร์ เจ้าหน้าที่ต้องกรอกซ้ำที่ Station 1
   และเกิด record ซ้อนกับผู้จองออนไลน์ kiosk รอบนี้จึงทำหน้าที่เดียว คือรับรายงานตัว (Report-in) ผู้ที่ลงทะเบียนล่วงหน้าทางเว็บแล้ว
   ผ่านช่องทางที่ผู้ประสบภัยมีติดตัว (QR ใบจอง บัตรประชาชน เบอร์โทร)
-migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump schema_v (คงเดิม; ไม่อัปเกรด schema_v; อิงตามเวอร์ชันปัจจุบันของ develop); evacuee ที่ `registered_via:'kiosk'` เดิมยังอยู่ และให้เจ้าหน้าที่จัดการที่ Station 1 (ดู §9)
+migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump schema_v (คงเดิมที่ schema_v 11 ตามเวอร์ชันปัจจุบันของ develop; ไม่ bump เป็น 12 เนื่องจาก CR นี้ไม่มี field ใหม่ และส่วน walk-in ที่ bump เป็น 12 แยกไปอยู่ใน CR-149); evacuee ที่ `registered_via:'kiosk'` เดิมยังอยู่ และให้เจ้าหน้าที่จัดการที่ Station 1 (ดู §9)
 ---
-# ร่าง CR: Kiosk รับรายงานตัวผู้ลงทะเบียนล่วงหน้า
+# CR-151: Kiosk รับรายงานตัวผู้ลงทะเบียนล่วงหน้า
 
 > **สรุป (TL;DR)**
 >
 > - **เปลี่ยนอะไร:** kiosk **เลิกสร้าง** evacuee จากบัตร (`POST /api/v1/scanner/draft` → 410) และเปลี่ยนเป็น **รับรายงานตัว (Report-in)** ผู้จองทางเว็บ (`pre_registered → arriving`) ผ่าน 3 ช่องทาง ได้แก่ QR ใบจอง · บัตรประชาชน (ใช้เลข 13 หลักอย่างเดียว) · เบอร์โทร (กำลังพัฒนา) — ThaiD พักไว้ก่อน
 > - **เพื่อใคร / ทำไม:** ผู้จองล่วงหน้ารายงานตัวเองได้โดยไม่ต้องต่อคิว เลือกสมาชิกครัวเรือนที่มาถึง และรับ QR สายรัดข้อมือ → ลดคิวที่ Station 1 และไม่เกิด record ซ้ำ
 > - **Dev ต้องทำอะไร:** implementation หลัก commit แล้ว; ก่อน release ต้องผ่านการอนุมัติ CR, Svelte autofixer, deploy/`_explain` บน staging และ production และทดสอบ kiosk ตาม M1–M8 รวม AC-KPC-26
-> - **กระทบ schema / scope:** ไม่ bump `schema_v` (คงเดิมตาม develop) · เพิ่มชุด Mango index `KIOSK_LOOKUP_MANGO_INDEXES` 3 ตัว (เบอร์ · เลขบัตร · ครัวเรือน) แยกจาก index ของ referral · แทนที่ส่วนสร้าง evacuee ของ CR-097 และ FR-CARD-01..04 ของ smart-card spec
+> - **กระทบ schema / scope:** ไม่ bump `schema_v` (คงเดิมที่ schema_v 11 ตาม develop ปัจจุบัน) · เพิ่มชุด Mango index `KIOSK_LOOKUP_MANGO_INDEXES` 3 ตัว (เบอร์ · เลขบัตร · ครัวเรือน) แยกจาก index ของ referral · แทนที่ส่วนสร้าง evacuee ของ CR-097 และ FR-CARD-01..04 ของ smart-card spec
 
 ---
 
@@ -65,7 +66,7 @@ migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump
 | สิ่งที่ผู้ใช้ได้รับ   | ข้อความ "กรุณาไปพบเจ้าหน้าที่"                               | QR สายรัดข้อมือ (`evacuee:<ULID>` ไม่มีข้อมูลส่วนบุคคล)                                                 |
 | ขั้นต่อไปของผู้ใช้     | เจ้าหน้าที่เริ่มฟอร์มลงทะเบียนตั้งแต่ Step 1       | ไปคัดกรองและจัดโซนตาม ADR-0001 โดยใช้ QR                                                                       |
 
-**สิ่งที่ไม่เปลี่ยน:** การยืนยันเครื่อง (`X-Device-Id` + `X-Device-Secret`, `scanner_device` อยู่ใน DB `registry`) · flow ของเจ้าหน้าที่ที่ Station 1 · `schema_v` ของ evacuee (คงเดิม; ไม่อัปเกรด schema_v; อิงตามเวอร์ชันปัจจุบันของ develop)
+**สิ่งที่ไม่เปลี่ยน:** การยืนยันเครื่อง (`X-Device-Id` + `X-Device-Secret`, `scanner_device` อยู่ใน DB `registry`) · flow ของเจ้าหน้าที่ที่ Station 1 · `schema_v` ของ evacuee (คงเดิมที่ schema_v 11 ตาม develop ปัจจุบัน)
 
 ---
 
@@ -274,9 +275,9 @@ migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump
 
 | Doc                           | การเปลี่ยน                                                                                                                                                          | schema_v                                                                                                 |
 | :---------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------- |
-| `evacuee`                   | แก้`current_stay` (`pre_registered → arriving`, `zone:null`, `since`) + `updated_at` — ไม่มี field ใหม่                                               | คงเดิม (ไม่อัปเกรด schema_v; อิงตามเวอร์ชันปัจจุบันของ develop) |
-| `household`                 | คำนวณ`status` ใหม่ (ค่าที่ derive มา)                                                                                                                      | คงเดิม                                                                                             |
-| `scanner_device` (registry) | `last_seen_at`                                                                                                                                                              | คงเดิม (1)                                                                                         |
+| `evacuee`                   | แก้`current_stay` (`pre_registered → arriving`, `zone:null`, `since`) + `updated_at` — ไม่มี field ใหม่                                               | คงเดิมที่ schema_v 11 (อิงตาม develop ล่าสุด ณ ปัจจุบัน — CR-148) |
+| `household`                 | คำนวณ`status` ใหม่ (ค่าที่ derive มา)                                                                                                                      | คงเดิมที่ schema_v 6 (อิงตาม develop ล่าสุด — CR-148)                                                             |
+| `scanner_device` (registry) | `last_seen_at`                                                                                                                                                              | คงเดิม (schema_v 1)                                                                                         |
 | Mango index                   | ชุด`KIOSK_LOOKUP_MANGO_INDEXES`: เบอร์ + เลขบัตร + ครัวเรือน (FR-KPC-63) · แยกจาก index ของ referral · ไม่มี field ใหม่ใน doc | —                                                                                                       |
 | `card_snapshot`             | kiosk**เลิกเขียน** · field ยังอยู่ใน schema สำหรับ record เก่า                                                                             | คงเดิม                                                                                             |
 
@@ -284,7 +285,7 @@ migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump
 
 ## 9. การย้ายข้อมูล
 
-- ไม่ bump `schema_v` (คงเดิม; ไม่อัปเกรด schema_v; อิงตามเวอร์ชันปัจจุบันของ develop) · ไม่แก้ doc ที่บันทึกไว้แล้ว
+- ไม่ bump `schema_v` (คงเดิมที่ schema_v 11 ตามเวอร์ชันปัจจุบันของ develop — CR-148; ไม่ bump เป็น 12 ซึ่งเป็นของ walk-in ใน CR-149) · ไม่แก้ doc ที่บันทึกไว้แล้ว
 - evacuee ที่ `registered_via:'kiosk'` ซึ่งสร้างก่อนปิด `/draft` ยังอยู่ใน `shelter_{code}` · kiosk ใหม่ **ไม่** รับรายงานตัวให้ (ค้นเฉพาะ `web`) → ให้เจ้าหน้าที่จัดการที่ Station 1 / `PullPreRegisteredDialog` ตามเดิม
 - Index ใหม่: ศูนย์ใหม่ได้ตอนสร้างศูนย์ · ศูนย์เดิมรัน `pnpm redeploy:access` (dry-run) แล้ว `pnpm redeploy:access --write --confirm` หรือ admin redeploy · ระหว่างที่ยังไม่ deploy `_find` ยังทำงานได้ แต่ต้องไล่อ่านทั้ง DB
 - CouchDB build index ตอนค้นครั้งแรก → redeploy script ยิง query อุ่นเครื่องหลังสร้าง (FR-KPC-64) เพื่อไม่ให้ผู้ใช้คนแรกที่ kiosk ต้องรอ
@@ -382,13 +383,15 @@ migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump
 
 **ผลแก้ review รอบ 2026-10-04 (PR #309 Attempt 1/3):** ปรับปรุงเอกสารตามข้อสังเกตของ PR review:
 
-1. อัปเดตจุดอ้างอิง `schema_v` ของ `evacuee` ใน frontmatter, §2, §8 และ §9 เป็น "คงเดิม (ไม่อัปเกรด schema_v; อิงตามเวอร์ชันปัจจุบันของ develop)" โดยบน develop ขยับไปเป็น 11 (CR-148) และ 12 (CR-149) แล้ว
+1. อัปเดตจุดอ้างอิง `schema_v` ของ `evacuee` ใน frontmatter, §2, §8 และ §9 เป็น "คงเดิมที่ schema_v 11 ตามเวอร์ชันปัจจุบันของ develop" (CR-148) โดยไม่ bump เป็น 12 เนื่องจากไม่มี field ใหม่ (ส่วนขยาย walk-in ที่จองเลข 12 ได้รับการอนุมัติใน CR-149)
 2. เพิ่มหมายเหตุกำกับใน §3 ขอบเขต เชื่อมโยงว่า walk-in ผ่านบัตรประชาชนได้รับการขยายผลและอนุมัติใน [CR-149](CR-149-kiosk-walk-in-registration.md) แล้ว
 3. บันทึกคำเตือนความเสี่ยงด้าน Operation และ Security เรื่อง Audit Trail Gap (FR-KPC-18, G-6) หากเกิดข้อพิพาทสวมสิทธิ์รับ QR สายรัดข้อมือ
 4. ปรับสถานะ G-8 เป็น backlog (`⏸`) ติดตามแก้ไข config window size และ env variables ใน PR ถัดไปของ `scanner_client`
 5. ปรับการอ้างอิงแผน implementation plans ใน affects และ §13 โดยผนวกรวมติดตามข้อกำหนดทั้งหมดภายใน CR นี้ตามมติเจ้าของโครงการ (ไม่เปิดไฟล์แยก)
 
-**Gate ที่ยังรอ:** deploy และตรวจ `_explain` บน staging/production (local `shelter_sh001`–`sh004` ผ่านแล้ว) · ทดสอบ M1–M8 บน kiosk จริง โดยเพิ่มกรณี AC-KPC-26 · ติดตามแก้ไข G-8 ใน PR ถัดไปของ `scanner_client` · เจ้าของโครงการอนุมัติ CR และรันเลขภายหลัง
+**การอนุมัติและ Merge (2026-10-04):** อนุมัติ (approved) และ merge เข้าสู่ `develop` ผ่าน PR #309 โดย Soravit Sukkar (Team Lead) · รันเลข Change Record เป็น **CR-151** และบันทึกลงใน `docs/changes/_index.md`
+
+**Gate ที่ยังรอ:** deploy และตรวจ `_explain` บน staging/production (local `shelter_sh001`–`sh004` ผ่านแล้ว) · ทดสอบ M1–M8 บน kiosk จริง โดยเพิ่มกรณี AC-KPC-26 · ติดตามแก้ไข G-8 ใน PR ถัดไปของ `scanner_client`
 
 ---
 
@@ -436,4 +439,5 @@ migration: ไม่มี — ไม่มี field ใหม่ ไม่ bump
 - 2026-09-24 — ช่องทาง ThaiD **พักไว้** (ปุ่มยังปิดอยู่)
 - 2026-09-24 — รวม `draft-kiosk-phone-report-in.md` เข้ามาใน CR นี้ให้เป็นเอกสารเดียว
 - 2026-10-04 — ปรับปรุงเอกสารตาม PR review (#309): ปรับการอ้างอิง `schema_v` ของ evacuee ให้ระบุคงเดิมตาม develop (ไม่ระบุเลข 10 ที่ล้าสมัย), ระบุหมายเหตุเชื่อมโยง walk-in กับ CR-149, บันทึกคำเตือนความเสี่ยงด้าน audit trail (Audit Trail Gap), ปรับ G-8 เป็น backlog ของ scanner_client, ปรับการอ้างอิง implementation plans ให้ระบุรวมติดตามใน CR นี้ (ตัด phantom paths), และยกเลิกโครงสร้างส่วนถาม-ตอบเดิม โดยผนวกข้อกำหนดและคำตอบของเจ้าของโครงการทั้งหมดเข้าสู่เนื้อหา spec โดยตรง
+- 2026-10-04 — Soravit Sukkar (Team Lead) อนุมัติ (approved) CR-151 และ merge PR #309 เข้า branch develop; ยืนยัน schema_v ของ evacuee คงเดิมที่ 11 (ตาม develop ปัจจุบัน — CR-148) และรันเลข CR-151
 - เหตุผลที่ใช้ `/lookup` เดิมสำหรับเบอร์แทนการสร้าง endpoint ใหม่: allowlist ของ `scanner_client` ครอบคลุมอยู่แล้ว จึงไม่ต้อง deploy ฝั่ง Python ใหม่
