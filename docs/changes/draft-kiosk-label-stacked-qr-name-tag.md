@@ -3,17 +3,16 @@ id: draft
 title: Kiosk label — QR บน / ข้อความล่าง ใช้ component QR + ชื่อ ร่วมกับตั๋ว pre-register
 status: proposed
 date: 2026-09-27
+updated: 2026-10-04
 requested_by: ทีม (kiosk pre-register)
 decided_by: project owner
 layer: volatile
 affects:
-  - docs/features/kiosk-label-qr-name-tag-implementation-plan.md (ใหม่ — implementation plan)
-  - docs/features/kiosk-thermal-printer-implementation-plan.md FR-P8 (+ §7.3 layout)
-  - docs/changes/draft-kiosk-label-printer.md §2 แถว "ขนาด label" (layout ส่วนนี้ถูกแทนที่)
-  - frontend/src/lib/components/qr-name-tag.svelte (ใหม่ — shared)
+  - docs/changes/draft-kiosk-pre-registration-check-in.md (ปรับปรุง layout label ใน kiosk pre-register; รอ merge จาก branch docs-kiosk-pre-register)
+  - frontend/src/lib/components/qr-name-tag.svelte (ใหม่ — shared; ขึ้นกับ branch feat/pre-register_kiosk)
   - frontend/src/lib/utils/qrcode.ts (เพิ่ม qrModuleCount)
-  - frontend/src/lib/features/kiosk/domain/print-label.ts (+ test) — ตัด layout 'side'
-  - frontend/src/lib/features/kiosk/ui/kiosk-pre-registered-check-in.svelte (print markup/CSS)
+  - frontend/src/lib/features/kiosk/domain/print-label.ts (+ test) — ตัด layout 'side' (ขึ้นกับ branch feat/pre-register_kiosk)
+  - frontend/src/lib/features/kiosk/ui/kiosk-pre-registered-check-in.svelte (print markup/CSS; ขึ้นกับ branch feat/pre-register_kiosk)
   - frontend/src/lib/features/public-register/ui/booking-ticket.svelte (ใช้ component ร่วม)
 why: label ของ kiosk กับตั๋ว QR ที่ดาวน์โหลดจากหน้า pre-register เป็นบล็อก "QR + ชื่อ" แบบเดียวกัน แต่เขียน markup และสร้าง QR แยกกันคนละที่ — ต้องการหน้าตาเดียวกันและดูแลที่เดียว
 migration: N/A (ไม่แตะ API / CouchDB / MongoDB / schema_v)
@@ -21,14 +20,15 @@ migration: N/A (ไม่แตะ API / CouchDB / MongoDB / schema_v)
 
 # Kiosk label — QR บน / ข้อความล่าง ใช้ component QR + ชื่อ ร่วมกับตั๋ว pre-register
 
-Implementation plan: [kiosk-label-qr-name-tag-implementation-plan.md](../features/kiosk-label-qr-name-tag-implementation-plan.md)
+> [!NOTE]
+> **Branch Dependency & Retrospective Spec:** เอกสารนี้เป็นการ sync spec ย้อนหลัง (retrospective documentation) สำหรับการปรับปรุง layout label และการแชร์ component ที่เริ่มพัฒนาบน feature branch `feat/pre-register_kiosk` (โฟลเดอร์ `frontend/src/lib/features/kiosk` จะเข้าสู่ `develop` พร้อม feature branch ดังกล่าว)
 
 > **สรุป (TL;DR):**
 >
 > - **เปลี่ยนอะไร:** label 80×60 mm ของ kiosk เปลี่ยนจาก QR ชิดซ้าย / ข้อความขวา → **QR บน / ข้อความล่าง** (`ชื่อ` · ชื่อ-นามสกุล · `ศูนย์ {shelter_code}`) — ตัดบรรทัด `SMART SHELTER`, ไม่แสดง ULID
 > - **เพื่อใคร/ทำไม:** label ของ kiosk และตั๋วที่ดาวน์โหลดจากหน้า pre-register ใช้หน้าตาเดียวกัน · markup "QR + caption + ชื่อ" อยู่ใน component เดียว
 > - **Dev ต้อง build:** `$lib/components/qr-name-tag.svelte` (variant `screen` / `label`) · `qrModuleCount()` ใน `$lib/utils/qrcode.ts` · ย้าย kiosk + `booking-ticket.svelte` มาใช้ component นี้
-> - **กระทบ schema/scope:** ไม่แตะ schema / API / `schema_v` / QR payload (`evacuee:{ULID}` เท่าเดิม) · แก้ FR-P8 ใน plan kiosk printer
+> - **กระทบ schema/scope:** ไม่แตะ schema / API / `schema_v` / QR payload (`evacuee:{ULID}` เท่าเดิม) · ปรับปรุงข้อกำหนด label ใน kiosk pre-register (ผูกกับ feature branch `feat/pre-register_kiosk`)
 
 ---
 
@@ -42,7 +42,7 @@ Implementation plan: [kiosk-label-qr-name-tag-implementation-plan.md](../feature
 | หัวข้อ                                | ก่อน                                                                                                                                                          | หลัง                                                                                                               |
 | :------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------ | :----------------------------------------------------------------------------------------------------------------- |
 | Layout label kiosk                    | `KIOSK_LABEL_LAYOUT = 'side'` — QR ชิดซ้าย, คอลัมน์ข้อความขวา ≥ 24 mm                                                                                         | QR บนกึ่งกลาง, ข้อความล่างกึ่งกลาง (layout เดียว, ตัดตัวเลือก `'side'`)                                            |
-| ข้อความบน label                       | `SMART SHELTER` / ชื่อ-นามสกุล (16pt, ≤ 4 บรรทัด) / `ศูนย์ {code}`                                                                                            | `ชื่อ` (8pt) / ชื่อ-นามสกุล (12pt bold, ≤ 2 บรรทัด) / `ศูนย์ {code}` (8pt)                                         |
+| ข้อความบน label                       | `SMART SHELTER` / ชื่อ-นามสกุล (16pt, ≤ 4 บรรทัด) / `ศูนย์ {code}`                                                                                            | 3 ส่วนข้อมูล (3–4 บรรทัดเมื่อชื่อตัด 2 บรรทัด): `ชื่อ` (8pt) / ชื่อ-นามสกุล (12pt bold, ≤ 2 บรรทัด) / `ศูนย์ {code}` (8pt)            |
 | ขนาด QR (evacuee id, v3 = 29 modules) | 350 px, margin 3, 10 dots/module ≈ 43.8 mm                                                                                                                    | 264 px, margin 2, 8 dots/module ≈ 33.0 mm                                                                          |
 | Markup QR + ชื่อ                      | ไม่มี component — เขียน inline ใน `booking-ticket.svelte` (`#booking-ticket-print`) และเขียนแยกอีกชุดใน `kiosk-pre-registered-check-in.svelte` (`.wristband`) | แยกบล็อก `#booking-ticket-print` ออกมาเป็น `$lib/components/qr-name-tag.svelte` แล้วให้ทั้งสองที่ใช้ component นี้ |
 | สร้าง QR ของ kiosk                    | `import QRCode from 'qrcode'` ตรง                                                                                                                             | `generateQrDataUrl()` + `qrModuleCount()` จาก `$lib/utils/qrcode.ts`                                               |
@@ -50,13 +50,13 @@ Implementation plan: [kiosk-label-qr-name-tag-implementation-plan.md](../feature
 
 ### Requirements
 
-| ID          | Requirement                                                                                                                                                                                                 |
-| :---------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR-P8 (แก้) | Label แสดง QR กึ่งกลางด้านบน + ข้อความกึ่งกลางด้านล่าง 3 บรรทัด: `ชื่อ`, ชื่อ-นามสกุล, `ศูนย์ {shelter_code}`; ชื่อยาวตัดได้สูงสุด 2 บรรทัด ไม่ล้นขอบ; พื้นที่ข้อความใต้ QR ≤ `KIOSK_LABEL_TEXT_MM` (20 mm) |
-| FR-L1       | `qr-name-tag.svelte` รับ `src` (data URL หรือ Promise), `alt`, `caption`, `name`, `detail?`, `fallback?`, `variant` (`screen` \| `label`)                                                                   |
-| FR-L2       | variant `label`: สีดำล้วน, ขนาด QR จาก CSS var `--qr-size` (mm), `image-rendering: pixelated`, ตัวอักษร ≥ 8pt (FR-P9)                                                                                       |
-| FR-L3       | variant `screen`: หน้าตาเดิมของ `#booking-ticket-print` (QR 176 px, placeholder ระหว่างสร้าง, ข้อความ fallback เมื่อสร้าง QR ไม่สำเร็จ)                                                                     |
-| FR-L4       | kiosk ไม่ import `qrcode` ตรง; ขนาด QR ยังคำนวณด้วย `kioskQrPrintSize()` (1 module = จำนวน dot เต็ม, quiet zone ≥ 4 modules — FR-P12)                                                                       |
+| ID                                | Requirement                                                                                                                                                                                                                                                                                              |
+| :-------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR-P8 (แก้ — Kiosk Label Layout) | Label แสดง QR กึ่งกลางด้านบน + ข้อความกึ่งกลางด้านล่าง 3 ส่วนข้อมูล (3–4 บรรทัดเมื่อชื่อตัด 2 บรรทัด): `ชื่อ` (8pt), ชื่อ-นามสกุล (12pt bold, ≤ 2 บรรทัด ไม่ล้นขอบ — ต้องผ่านการ mask นามสกุลบางส่วนตามนโยบายความเป็นส่วนตัว FR-KPC-28), `ศูนย์ {shelter_code}` (8pt); พื้นที่ข้อความใต้ QR ≤ `KIOSK_LABEL_TEXT_MM` (20 mm) |
+| FR-L1       | `qr-name-tag.svelte` รับ `src` (data URL หรือ Promise), `alt`, `caption`, `name`, `detail?`, `fallback?`, `variant` (`screen` \| `label`)                                                                                                   |
+| FR-L2       | variant `label`: สีดำล้วน, ขนาด QR จาก CSS var `--qr-size` (mm), `image-rendering: pixelated`, ตัวอักษร ≥ 8pt; กรณีสร้าง/โหลด QR ไม่สำเร็จหรือไม่มีข้อมูล ให้แสดงกรอบ placeholder ขนาดเท่า QR พร้อมตัวหนังสือ "QR" (8pt) กึ่งกลางกรอบ |
+| FR-L3       | variant `screen`: หน้าตาเดิมของ `#booking-ticket-print` (QR 176 px, placeholder ระหว่างสร้าง, ข้อความ fallback เมื่อสร้าง QR ไม่สำเร็จ)                                                                                                       |
+| FR-L4       | kiosk ไม่ import `qrcode` ตรง; ขนาด QR ยังคำนวณด้วย `kioskQrPrintSize()` (1 module = จำนวน dot เต็ม, quiet zone ≥ 4 modules)                                                                                                                 |
 
 ### Acceptance
 
@@ -66,13 +66,13 @@ Implementation plan: [kiosk-label-qr-name-tag-implementation-plan.md](../feature
 
 ## 3. Impact
 
-| พื้นที่                    | ผลกระทบ                                                                                                                                                                                                                |
-| :------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `features/kiosk`           | `domain/print-label.ts`: ลบ `KIOSK_LABEL_LAYOUT`, `KIOSK_LABEL_SIDE_TEXT_MM`; `kioskQrBoxMm()` เหลือสูตร stacked · print CSS ของ `kiosk-pre-registered-check-in.svelte` เหลือเฉพาะกรอบ label (ขนาด/padding/page break) |
-| `features/public-register` | `booking-ticket.svelte` ใช้ `QrNameTag`; print CSS เปลี่ยน selector ของ `img`/descendant เป็น `:global()` เพราะ element อยู่ใน child component                                                                         |
-| Shared                     | component ใหม่ใน `$lib/components/` (ข้าม feature จึงไม่อยู่ใน `features/*/ui`)                                                                                                                                        |
-| API / DB / QR payload      | ไม่มี                                                                                                                                                                                                                  |
-| Scanner client / CUPS      | ไม่มี (`KIOSK_LABEL_MM` = 80×60 เท่าเดิม)                                                                                                                                                                              |
+| พื้นที่                    | ผลกระทบ                                                                                                                                                                                                                                                           |
+| :------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `features/kiosk`           | `domain/print-label.ts`: ลบ `KIOSK_LABEL_LAYOUT`, `KIOSK_LABEL_SIDE_TEXT_MM`; `kioskQrBoxMm()` เหลือสูตร stacked · print CSS ของ `kiosk-pre-registered-check-in.svelte` เหลือเฉพาะกรอบ label (ขนาด/padding/page break) *(ขึ้นกับ feature branch `feat/pre-register_kiosk`)* |
+| `features/public-register` | `booking-ticket.svelte` ใช้ `QrNameTag`; print CSS เปลี่ยน selector ของ `img`/descendant เป็น `:global()` เพราะ element อยู่ใน child component                                                                                                                   |
+| Shared                     | component ใหม่ใน `$lib/components/` (ข้าม feature จึงไม่อยู่ใน `features/*/ui`)                                                                                                                                                                                   |
+| API / DB / QR payload      | ไม่มี                                                                                                                                                                                                                                                             |
+| Scanner client / CUPS      | ไม่มี (`KIOSK_LABEL_MM` = 80×60 เท่าเดิม)                                                                                                                                                                                                                         |
 
 ## 4. Migration
 
@@ -87,3 +87,5 @@ N/A
 ## Decision log
 
 - 2026-09-27 — proposed; เจ้าของเลือก layout "QR บน / `ชื่อ` + ชื่อ + `ศูนย์ X`, ไม่แสดง ULID" และ track เป็น CR ไฟล์ใหม่
+- 2026-10-04 — ปรับปรุงตาม PR Review (#321): ลบ dead link, ปรับ `affects:` อ้างอิงเอกสารที่มีอยู่จริง (ระบุสถานะรอ merge), ระบุ branch dependency (`feat/pre-register_kiosk`), ขยายความ FR-P8 เรื่องจำนวนบรรทัด (3–4 บรรทัดเมื่อชื่อตัด 2 บรรทัด), FR-L2 พฤติกรรม placeholder บนกระดาษความร้อน, ระบุรหัสเป็น FR-P8 (แก้ — Kiosk Label Layout) ให้ชัดเจน และเพิ่มหมายเหตุนโยบาย Privacy การ mask นามสกุล (FR-KPC-28)
+
