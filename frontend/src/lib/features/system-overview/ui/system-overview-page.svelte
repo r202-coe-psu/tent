@@ -47,7 +47,6 @@
 <StaffPageShell
 	title="ภาพรวมระบบ"
 	description="สรุปสถานะศูนย์ คิวลงทะเบียนล่วงหน้า และการเคลื่อนย้ายทั่วระบบ"
-	maxWidth="7xl"
 >
 	<OverviewFilterBar {filters} onChange={(next) => (filters = next)} />
 

@@ -123,7 +123,13 @@
 								>
 									{#if checked}<Check class="size-2.5" aria-hidden="true" />{/if}
 								</span>
-								<span class="leading-snug">{symptom.label}</span>
+								<span class="flex min-w-0 flex-col leading-snug">
+									<span>{symptom.label}</span>
+									{#if symptom.sublabel}
+										<span class="text-xs font-normal text-muted-foreground">{symptom.sublabel}</span
+										>
+									{/if}
+								</span>
 							</button>
 						{/each}
 					</div>

@@ -40,6 +40,7 @@ export interface ShelterSummary {
 	operation_status: OperationStatus;
 	capacity: number;
 	shelter_type: string | null;
+	floor_count: number | null;
 	project_level: ProjectLevel | null;
 	location: Location;
 	contact: Contact;

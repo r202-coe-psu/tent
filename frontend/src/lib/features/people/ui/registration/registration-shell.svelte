@@ -49,14 +49,17 @@
 	} from '../../domain/people';
 	import {
 		sectionEVisibility,
+		resolveSectionEValues,
 		resolveHouseholdLeave,
+		resolveHeadTransferRevert,
 		autoHouseholdLabel,
 		hasMinimumResidence,
 		defaultHouseholdChoice,
 		isLeavingLinkedHousehold,
 		filterJoinCandidatesByEvacueeQuery,
 		type HouseholdChoice,
-		type ResidenceFields
+		type ResidenceFields,
+		type PendingHeadTransfer
 	} from '../../domain/registration-shell';
 	import {
 		readResidenceSuggestDeps,
@@ -238,6 +241,11 @@
 	let isDirty = $state(false);
 	let isSubmitting = $state(false);
 	let shellError = $state<string | null>(null);
+	/** Set while a household-leave head-transfer has landed but the evacuee
+	 *  hasn't moved out yet — persistHouseholdLink and finishHouseholdLink are
+	 *  two separate writes, so a failure in between must revert the transfer
+	 *  rather than leave a new head with the old head never having left. */
+	let pendingHeadTransfer: PendingHeadTransfer | null = null;
 	let showHandoverSlip = $state(false);
 	let handoverEvacuee = $state<Evacuee | null>(null);
 	let activeSection = $state<FormSectionId>('photo');
@@ -603,6 +611,10 @@
 				);
 			}
 			if (leavePreview.transferHead) {
+				pendingHeadTransfer = {
+					householdId: linkedHousehold._id,
+					previousHeadId: linkedHousehold.head_evacuee_id
+				};
 				await patchHouseholdMutation.mutateAsync({
 					id: linkedHousehold._id,
 					patch: { head_evacuee_id: leavePreview.newHeadId }
@@ -629,39 +641,37 @@
 							postal_code: residenceForm.postal_code || null
 						}
 					: {};
+			const sectionE = resolveSectionEValues(
+				sectionEVis.mode,
+				{ pets, assets, vehicles },
+				{
+					pets: latestHousehold.pets,
+					assets: latestHousehold.assets ?? null,
+					vehicles: latestHousehold.vehicles ?? []
+				}
+			);
 			await updateHouseholdMutation.mutateAsync({
 				...latestHousehold,
 				...residencePatch,
-				pets: sectionEVis.mode === 'editable' ? pets : latestHousehold.pets,
-				assets:
-					sectionEVis.mode === 'editable'
-						? assets || latestHousehold.assets || null
-						: latestHousehold.assets,
-				vehicles:
-					sectionEVis.mode === 'editable'
-						? vehicles.length
-							? vehicles
-							: (latestHousehold.vehicles ?? [])
-						: latestHousehold.vehicles,
+				...sectionE,
 				status: latestHousehold.status === 'pre_registered' ? 'arriving' : latestHousehold.status
 			});
 		} else if (householdChoice === 'join' && selectedHousehold) {
 			householdId = selectedHousehold._id;
 			const latestHousehold = await peopleRepository().getHousehold(selectedHousehold._id);
 			if (!latestHousehold) throw new Error(t.errorHouseholdNotFound);
+			const sectionE = resolveSectionEValues(
+				sectionEVis.mode,
+				{ pets, assets, vehicles },
+				{
+					pets: latestHousehold.pets,
+					assets: latestHousehold.assets ?? null,
+					vehicles: latestHousehold.vehicles ?? []
+				}
+			);
 			await updateHouseholdMutation.mutateAsync({
 				...latestHousehold,
-				pets: sectionEVis.mode === 'editable' ? pets : latestHousehold.pets,
-				assets:
-					sectionEVis.mode === 'editable'
-						? assets || latestHousehold.assets || null
-						: latestHousehold.assets,
-				vehicles:
-					sectionEVis.mode === 'editable'
-						? vehicles.length
-							? vehicles
-							: (latestHousehold.vehicles ?? [])
-						: latestHousehold.vehicles,
+				...sectionE,
 				status: latestHousehold.status === 'pre_registered' ? 'arriving' : latestHousehold.status
 			});
 		} else if (householdChoice === 'create') {
@@ -673,15 +683,18 @@
 				);
 			}
 			const householdLabel = autoHouseholdLabel(formatPersonName(registeredEvacuee));
+			const sectionE = resolveSectionEValues(
+				sectionEVis.mode,
+				{ pets, assets, vehicles },
+				{ pets: [], assets: null, vehicles: [] }
+			);
 			const householdInput: HouseholdInput = {
 				label: householdLabel,
 				head_evacuee_id: registeredEvacuee._id,
 				status: 'arriving',
 				municipality_zone: null,
 				community: null,
-				pets: sectionEVis.mode === 'editable' ? pets : [],
-				assets: sectionEVis.mode === 'editable' ? assets : null,
-				vehicles: sectionEVis.mode === 'editable' ? vehicles : [],
+				...sectionE,
 				notes: '',
 				housing_type: (residenceForm.housing_type as HouseholdInput['housing_type']) ?? null,
 				residence_landmark: residenceForm.residence_landmark || null,
@@ -698,7 +711,7 @@
 			throw new Error(t.errorMustSelectHousehold);
 		}
 
-		return await updateEvacueeMutation.mutateAsync({
+		const updated = await updateEvacueeMutation.mutateAsync({
 			...registeredEvacuee,
 			household_id: householdId,
 			current_stay: {
@@ -707,6 +720,9 @@
 				zone: null
 			}
 		});
+		// The leave (if any) is now fully complete — nothing left to revert.
+		pendingHeadTransfer = null;
+		return updated;
 	}
 
 	async function finishCeremony(finished: Evacuee) {
@@ -820,6 +836,14 @@
 			await finishCeremony(linked);
 		} catch (err) {
 			const repo = peopleRepository();
+			const headRevert = resolveHeadTransferRevert(pendingHeadTransfer);
+			if (headRevert) {
+				// Best-effort revert — the leaver never actually left, so the old
+				// household must not keep a transferred-away head. Doesn't mask
+				// the original error either way.
+				await patchHouseholdMutation.mutateAsync(headRevert).catch(() => {});
+				pendingHeadTransfer = null;
+			}
 			if (createdHouseholdId) {
 				await repo.compensateFailedHouseholdCreate(createdHouseholdId);
 			}

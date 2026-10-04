@@ -168,7 +168,7 @@ async def test_projection_publishes_the_terms_behind_the_shortage():
         "type": "stock_ledger",
         "item_id": "item:water",
         "qty": "20",
-        "reason": "purchase",
+        "reason": "donation",
     }
     couch = _couch([_campaign("a", "100")], [donation, ledger])
 

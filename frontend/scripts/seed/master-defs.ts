@@ -34,7 +34,7 @@ export const MASTER_DATA_DEFS: MasterTypeDef[] = [
 			{ key: 'condo', label_th: 'คอนโดมิเนียม', label_en: 'Condominium' },
 			{
 				key: 'apartment_dorm',
-				label_th: 'อพาร์ตเมนต์/หอพัก',
+				label_th: 'อะพาร์ตเมนต์/หอพัก',
 				label_en: 'Apartment / dormitory'
 			},
 			{
@@ -55,7 +55,20 @@ export const MASTER_DATA_DEFS: MasterTypeDef[] = [
 				label_th: 'อาคารราชการ',
 				label_en: 'Government building'
 			},
-			{ key: 'sports_centre', label_th: 'ศูนย์กีฬา', label_en: 'Sports centre' }
+			{ key: 'sports_centre', label_th: 'ศูนย์กีฬา', label_en: 'Sports centre' },
+			{ key: 'mosque', label_th: 'มัสยิด', label_en: 'Mosque' },
+			{
+				key: 'college_university',
+				label_th: 'วิทยาลัย/มหาวิทยาลัย',
+				label_en: 'College / university'
+			},
+			{ key: 'dormitory', label_th: 'หอพัก', label_en: 'Dormitory' },
+			{ key: 'hotel', label_th: 'โรงแรม', label_en: 'Hotel' },
+			{
+				key: 'condo_apartment',
+				label_th: 'คอนโด/อะพาร์ตเมนต์',
+				label_en: 'Condo / apartment'
+			}
 		]
 	},
 	{

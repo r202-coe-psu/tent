@@ -15,7 +15,8 @@ import {
 	Cpu,
 	LayoutDashboard,
 	ClipboardList,
-	Database
+	Database,
+	Flag
 } from '@lucide/svelte/icons';
 
 type Leaf = {
@@ -102,7 +103,7 @@ export const systemManagementNavbarGroups: SystemManagementNavbarGroup[] = [
 						requiresAdmin: true
 					},
 					{
-						label: 'คลังพัสดุและสิ่งของ',
+						label: 'คลังสินค้า',
 						href: resolve(`${base}/catalog`),
 						icon: Warehouse,
 						requiresAdmin: true
@@ -123,6 +124,12 @@ export const systemManagementNavbarGroups: SystemManagementNavbarGroup[] = [
 						label: 'ความปลอดภัย / reCAPTCHA',
 						href: resolve(`${base}/security`),
 						icon: Shield,
+						requiresAdmin: true
+					},
+					{
+						label: 'แบนเนอร์ระบบ',
+						href: resolve(`${base}/system-banner`),
+						icon: Flag,
 						requiresAdmin: true
 					},
 					{ label: 'งานอาสาสมัคร', href: null, icon: Users },

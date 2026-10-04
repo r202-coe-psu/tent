@@ -50,9 +50,9 @@
 
 	<!-- Sticky Bottom Action Bar -->
 	<div
-		class="fixed right-0 bottom-0 left-0 z-10 border-t border-border/50 bg-background/80 p-4 shadow-[0_-4px_12px_rgba(0,0,0,0.05)] backdrop-blur-md md:left-72"
+		class="fixed right-0 bottom-0 left-0 z-10 border-t border-border/50 bg-background/80 shadow-[0_-4px_12px_rgba(0,0,0,0.05)] backdrop-blur-md md:left-72"
 	>
-		<div class="mx-auto flex max-w-7xl items-center justify-end space-x-4 pr-4">
+		<div class="flex w-full items-center justify-end gap-4 px-4 py-4 sm:px-6 lg:px-8">
 			<Button
 				type="button"
 				variant="ghost"

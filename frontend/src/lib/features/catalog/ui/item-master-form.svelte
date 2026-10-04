@@ -1,22 +1,31 @@
 <script lang="ts">
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { Combobox } from '$lib/components/ui/combobox/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
 	import {
 		itemMasterInputSchema,
 		itemMasterUpdateInputSchema,
+		resolveCategoryId,
+		catalogOrigin,
 		type ItemMaster,
-		type ItemMasterInput
+		type ItemMasterInput,
+		type TypeClass
 	} from '../domain/catalog';
-	import { formatUnit } from '../domain/unit-of-measure';
+	import { formatUnit, type Dimension } from '../domain/unit-of-measure';
+	import { barcodeOwner, mergeBaseBarcode, splitBaseBarcode } from '../domain/item-barcode';
+	import type { ItemMasterInitialValues } from '../domain/quick-create';
 
+	type UomConversionRow = ItemMaster['conversions'][number];
 	import {
 		useItemMaster,
+		useItemMasters,
 		useCreateItemMaster,
 		useUpdateItemMaster,
 		useItemCategories,
@@ -26,20 +35,30 @@
 	import { getShelterCode } from '$lib/db/shelter';
 	import { toast } from 'svelte-sonner';
 	import { langState } from '$lib/states/i18n.svelte';
-
-	// Icons
-	import Info from '@lucide/svelte/icons/info';
+	import Plus from '@lucide/svelte/icons/plus';
+	import Trash2 from '@lucide/svelte/icons/trash-2';
 
 	let {
 		id = '',
 		isEdit = false,
 		basePath = '/back-office/catalog',
+		defaultCategoryId = undefined,
+		lockCategory = false,
+		compact = false,
+		initialValues = undefined,
 		onsuccess
 	}: {
 		id?: string;
 		isEdit?: boolean;
 		basePath?: string;
-		onsuccess?: () => void;
+		defaultCategoryId?: string;
+		/** Pin the category to `defaultCategoryId` (callers that only create one kind of item). */
+		lockCategory?: boolean;
+		compact?: boolean;
+		/** Create only: start from these values (e.g. handed over by quick-create). */
+		initialValues?: ItemMasterInitialValues;
+		/** Called with the saved doc; with no argument when the user cancels. */
+		onsuccess?: (saved?: ItemMaster) => void;
 	} = $props();
 
 	const shelterCode = $derived(
@@ -48,15 +67,65 @@
 	const validationSchema = $derived(isEdit ? itemMasterUpdateInputSchema : itemMasterInputSchema);
 	const getValidationAdapter = () => zod4(validationSchema);
 
-	// Data queries & mutations
 	const itemMasterQuery = useItemMaster(
 		() => id,
 		() => shelterCode ?? null
 	);
 	const itemCategoriesQuery = useItemCategories(() => shelterCode ?? null);
 	const unitsOfMeasureQuery = useUnitsOfMeasure();
+	const allItemsQuery = useItemMasters(() => shelterCode ?? null);
 	const createMutation = useCreateItemMaster();
 	const updateMutation = useUpdateItemMaster();
+
+	const TYPE_CLASS_OPTIONS: { value: TypeClass; label: string }[] = [
+		{ value: 'CONSUMABLE', label: 'วัสดุสิ้นเปลือง' },
+		{ value: 'DURABLE', label: 'สิ่งของคงทน' },
+		{ value: 'EQUIPMENT', label: 'อุปกรณ์' }
+	];
+
+	const STORAGE_OPTIONS = [
+		{ value: 'DRY', label: 'ของแห้ง' },
+		{ value: 'CHILLED', label: 'แช่เย็น' },
+		{ value: 'FROZEN', label: 'แช่แข็ง' },
+		{ value: 'CONTROLLED_MED', label: 'ควบคุมพิเศษ/ยา' }
+	] as const;
+	const DIETARY_OPTIONS = [
+		{ value: 'NONE', label: 'ไม่มี' },
+		{ value: 'HALAL', label: 'ฮาลาล' },
+		{ value: 'VEGAN', label: 'วีแกน' }
+	] as const;
+	const GENDER_OPTIONS = [
+		{ value: 'ALL', label: 'ทุกเพศ' },
+		{ value: 'MALE', label: 'ชาย' },
+		{ value: 'FEMALE', label: 'หญิง' }
+	] as const;
+	const AGE_OPTIONS = [
+		{ value: 'ALL', label: 'ทุกวัย' },
+		{ value: 'INFANT', label: 'ทารก' },
+		{ value: 'CHILD', label: 'เด็ก' },
+		{ value: 'ELDERLY', label: 'ผู้สูงอายุ' }
+	] as const;
+	const DISTRIBUTION_OPTIONS = [
+		{ value: 'recurring', label: 'แจกซ้ำได้ตามรอบ' },
+		{ value: 'one_time', label: 'แจกครั้งเดียวต่อคน' }
+	] as const;
+	const ASSET_OPTIONS = [
+		{ value: 'READY', label: 'พร้อมใช้งาน' },
+		{ value: 'IN_USE', label: 'กำลังใช้งาน' },
+		{ value: 'MAINTENANCE', label: 'บำรุงรักษา' },
+		{ value: 'BROKEN', label: 'ชำรุด' }
+	] as const;
+
+	const DIMENSION_LABELS: Record<Dimension, string> = {
+		mass: 'น้ำหนัก',
+		volume: 'ปริมาตร',
+		length: 'ความยาว',
+		count: 'นับชิ้น',
+		energy: 'พลังงาน'
+	};
+
+	/** Barcode of the base unit — kept out of `conversions` while editing, merged back on save. */
+	let baseBarcode = $state('');
 
 	const form = superForm(
 		defaults(
@@ -66,21 +135,24 @@
 				sku: '',
 				description: '',
 				base_unit: '',
-				conversions: [{ uom_name: '', multiplier: '1', barcode: '' }],
+				conversions: [] as { uom_name: string; multiplier: string; barcode: string }[],
 				default_inventory_uom: '',
 				default_issue_uom: '',
 				distribution_type: 'recurring',
-				type_class: 'CONSUMABLE',
+				type_class: 'CONSUMABLE' as TypeClass,
 				shelf_life_days: undefined,
 				storage_type: 'DRY',
 				allergens: '',
 				target_gender: 'ALL',
 				age_group: 'ALL',
-				dietary: [],
+				dietary: [] as ('HALAL' | 'VEGAN')[],
 				qty_per_person: undefined,
 				returnable: false,
 				asset_status: 'READY',
-				deactivated: false
+				deactivated: false,
+				capacity_kg: '',
+				burn_rate_kg_per_hour: '',
+				time_multiplier: '1'
 			},
 			getValidationAdapter()
 		),
@@ -97,10 +169,10 @@
 					createdBy: authStore.user?.name ?? 'unknown'
 				};
 
-				// Clean up empty strings or values before saving
-				const conversions = (validated.data.conversions || []).filter(
+				const packRows = (validated.data.conversions || []).filter(
 					(c) => c.uom_name && c.uom_name.trim() !== ''
 				);
+				const conversions = mergeBaseBarcode(packRows, validated.data.base_unit ?? '', baseBarcode);
 
 				const submitData: Record<string, unknown> = {
 					...validated.data,
@@ -112,23 +184,46 @@
 
 				if (validated.data.type_class === 'CONSUMABLE') {
 					submitData.base_unit = validated.data.base_unit;
-					submitData.conversions = validated.data.conversions;
+					submitData.conversions = conversions;
 					submitData.default_inventory_uom = validated.data.default_inventory_uom || undefined;
 					submitData.default_issue_uom = validated.data.default_issue_uom || undefined;
 					submitData.distribution_type = validated.data.distribution_type;
-					submitData.shelf_life_days = validated.data.shelf_life_days;
-					submitData.storage_type = validated.data.storage_type;
-					submitData.allergens = validated.data.allergens || undefined;
-					submitData.target_gender = validated.data.target_gender;
-					submitData.age_group = validated.data.age_group;
-					submitData.dietary = validated.data.dietary;
 
 					delete submitData.qty_per_person;
 					delete submitData.returnable;
 					delete submitData.asset_status;
+
+					if (validated.data.category === 'item_category:fuel_energy') {
+						// FUEL_ENERGY contract (CR-119/120/125): lock base_unit, hide/don't
+						// persist unrelated food/distribution fields, persist fuel spec.
+						submitData.base_unit = 'cylinder';
+						submitData.fuel_type = 'LPG';
+						submitData.capacity_kg = validated.data.capacity_kg || undefined;
+						submitData.burn_rate_kg_per_hour = validated.data.burn_rate_kg_per_hour || undefined;
+						submitData.time_multiplier = validated.data.time_multiplier || '1';
+
+						delete submitData.shelf_life_days;
+						delete submitData.storage_type;
+						delete submitData.allergens;
+						delete submitData.target_gender;
+						delete submitData.age_group;
+						submitData.dietary = [];
+					} else {
+						submitData.shelf_life_days = validated.data.shelf_life_days;
+						submitData.storage_type = validated.data.storage_type;
+						submitData.allergens = validated.data.allergens || undefined;
+						submitData.target_gender = validated.data.target_gender;
+						submitData.age_group = validated.data.age_group;
+						submitData.dietary = validated.data.dietary;
+
+						delete submitData.fuel_type;
+						delete submitData.capacity_kg;
+						delete submitData.burn_rate_kg_per_hour;
+						delete submitData.time_multiplier;
+					}
 				} else if (validated.data.type_class === 'DURABLE') {
 					submitData.base_unit = validated.data.base_unit;
-					submitData.conversions = validated.data.conversions;
+					submitData.conversions = conversions;
 					submitData.default_inventory_uom = validated.data.default_inventory_uom || undefined;
 					submitData.default_issue_uom = validated.data.default_issue_uom || undefined;
 					submitData.distribution_type = validated.data.distribution_type;
@@ -142,6 +237,10 @@
 					delete submitData.allergens;
 					submitData.dietary = [];
 					delete submitData.asset_status;
+					delete submitData.fuel_type;
+					delete submitData.capacity_kg;
+					delete submitData.burn_rate_kg_per_hour;
+					delete submitData.time_multiplier;
 				} else if (validated.data.type_class === 'EQUIPMENT') {
 					submitData.base_unit = validated.data.base_unit || 'piece';
 					submitData.asset_status = validated.data.asset_status || 'READY';
@@ -158,16 +257,20 @@
 					submitData.dietary = [];
 					delete submitData.qty_per_person;
 					delete submitData.returnable;
+					delete submitData.fuel_type;
+					delete submitData.capacity_kg;
+					delete submitData.burn_rate_kg_per_hour;
+					delete submitData.time_multiplier;
 				}
 
 				if (isEdit) {
 					if (!itemMasterQuery.data) {
-						toast.error('ไม่พบข้อมูลมาสเตอร์ต้นทาง');
+						toast.error('ไม่พบข้อมูลสินค้าต้นทาง');
 						return;
 					}
 					if (basePath.includes('back-office') && !itemMasterQuery.data.shelter_code) {
-						// eslint-disable-next-line @typescript-eslint/no-unused-vars
 						const { _rev, ...itemData } = itemMasterQuery.data;
+						void _rev;
 						const overrideDoc = {
 							...itemData,
 							...submitData,
@@ -175,9 +278,9 @@
 							override: true
 						};
 						updateMutation.mutate(overrideDoc, {
-							onSuccess: () => {
+							onSuccess: (saved) => {
 								toast.success(`ปรับแต่งรายการ ${validated.data.name} สำหรับศูนย์นี้สำเร็จ`);
-								onsuccess?.();
+								onsuccess?.(saved);
 							},
 							onError: (err: Error) => toast.error(err.message)
 						});
@@ -187,9 +290,9 @@
 							...submitData
 						};
 						updateMutation.mutate(updatedDoc, {
-							onSuccess: () => {
+							onSuccess: (saved) => {
 								toast.success(`ปรับปรุงข้อมูล ${validated.data.name} สำเร็จ`);
-								onsuccess?.();
+								onsuccess?.(saved);
 							},
 							onError: (err: Error) => toast.error(err.message)
 						});
@@ -198,9 +301,9 @@
 					createMutation.mutate(
 						{ input: submitData as ItemMasterInput, ctx, shelterCode },
 						{
-							onSuccess: () => {
+							onSuccess: (saved) => {
 								toast.success(`เพิ่มข้อมูล ${validated.data.name} สำเร็จ`);
-								onsuccess?.();
+								onsuccess?.(saved);
 							},
 							onError: (err: Error) => toast.error(err.message)
 						}
@@ -216,19 +319,28 @@
 		form.options.validators = getValidationAdapter();
 	});
 
-	// Populate form fields when data loads in edit mode
+	let populatedId = $state<string | null>(null);
+	let appliedDefaultCategory = $state(false);
+
 	$effect(() => {
-		if (isEdit && itemMasterQuery.data) {
+		if (isEdit && itemMasterQuery.data && populatedId !== itemMasterQuery.data._id) {
 			const item = itemMasterQuery.data;
+			populatedId = item._id;
+			const cats = itemCategoriesQuery.data ?? [];
+			const resolvedCat = resolveCategoryId(item.category, cats) ?? item.category ?? '';
 			$formData.name = item.name || '';
-			$formData.category = item.category || '';
+			$formData.category = resolvedCat;
 			$formData.sku = item.sku || '';
 			$formData.description = item.description || '';
 			$formData.base_unit = item.base_unit || '';
-			$formData.conversions =
+			const split = splitBaseBarcode(
 				item.conversions && item.conversions.length > 0
-					? JSON.parse(JSON.stringify(item.conversions))
-					: [{ uom_name: '', multiplier: '1', barcode: '' }];
+					? (JSON.parse(JSON.stringify(item.conversions)) as UomConversionRow[])
+					: [],
+				item.base_unit || ''
+			);
+			$formData.conversions = split.packRows;
+			baseBarcode = split.baseBarcode;
 			$formData.default_inventory_uom = item.default_inventory_uom || '';
 			$formData.default_issue_uom = item.default_issue_uom || '';
 			$formData.distribution_type = item.distribution_type || 'recurring';
@@ -243,20 +355,71 @@
 			$formData.returnable = item.returnable ?? false;
 			$formData.asset_status = item.asset_status || 'READY';
 			$formData.deactivated = item.deactivated ?? false;
+			$formData.capacity_kg = item.capacity_kg || '';
+			$formData.burn_rate_kg_per_hour = item.burn_rate_kg_per_hour || '';
+			$formData.time_multiplier = item.time_multiplier || '1';
 		}
 	});
+
+	// Seed a new item with what quick-create already collected (once).
+	let appliedInitial = false;
+	$effect(() => {
+		if (isEdit || appliedInitial || !initialValues) return;
+		appliedInitial = true;
+		const init = initialValues;
+		const split = splitBaseBarcode(init.conversions ?? [], init.base_unit ?? '');
+		if (init.name !== undefined) $formData.name = init.name;
+		if (init.category !== undefined) $formData.category = init.category;
+		if (init.type_class) $formData.type_class = init.type_class;
+		if (init.base_unit !== undefined) $formData.base_unit = init.base_unit;
+		$formData.conversions = split.packRows.map((row) => ({
+			uom_name: row.uom_name,
+			multiplier: row.multiplier,
+			barcode: row.barcode ?? ''
+		}));
+		baseBarcode = init.barcode ?? split.baseBarcode;
+		if (init.default_inventory_uom !== undefined) {
+			$formData.default_inventory_uom = init.default_inventory_uom;
+		}
+		if (init.storage_type) $formData.storage_type = init.storage_type;
+		appliedDefaultCategory = true;
+	});
+
+	// Prefill category + type_class on create
+	$effect(() => {
+		if (isEdit || appliedDefaultCategory) return;
+		const cats = itemCategoriesQuery.data ?? [];
+		if (!defaultCategoryId && cats.length === 0) return;
+
+		const catId = defaultCategoryId ?? '';
+		if (catId) {
+			$formData.category = catId;
+			const cat = cats.find((c) => c._id === catId);
+			if (cat?.default_class) {
+				$formData.type_class = cat.default_class;
+			}
+			appliedDefaultCategory = true;
+		}
+	});
+
+	function onCategoryChange(catId: string) {
+		$formData.category = catId;
+		const cat = availableCategories.find((c) => c._id === catId);
+		if (cat?.default_class) {
+			$formData.type_class = cat.default_class;
+		}
+	}
 
 	const isLoading = $derived(isEdit ? itemMasterQuery.isLoading : false);
 	const isPending = $derived(isEdit ? updateMutation.isPending : createMutation.isPending);
 
-	// Units of measure
 	const allUnits = $derived(unitsOfMeasureQuery.data ?? []);
 	const activeUnits = $derived.by(() => {
 		const selectedCodes = [
 			$formData.base_unit,
 			$formData.default_inventory_uom,
 			$formData.default_issue_uom,
-			...$formData.conversions.map((conversion) => conversion.uom_name)
+			...($formData.conversions ?? []).map((conversion) => conversion.uom_name)
 		].filter((code): code is string => Boolean(code));
 		const list = allUnits.filter((unit) => !unit.deactivated || selectedCodes.includes(unit.code));
 		const missing = selectedCodes
@@ -278,799 +441,770 @@
 		return [...list, ...missing];
 	});
 
-	// Dynamically compute list of UOM choices for defaults in Section 4 and planning unit in Section 5
-	const uomOptions = $derived(activeUnits);
+	type UnitComboboxItem = {
+		value: string;
+		label: string;
+		keywords: string[];
+		dimensionLabel: string;
+	};
+
+	const unitComboboxItems = $derived.by(() => {
+		return activeUnits.map((unit) => {
+			const dimensionLabel = DIMENSION_LABELS[unit.dimension] ?? unit.dimension;
+			const labelThShort = 'label_th_short' in unit ? unit.label_th_short : undefined;
+			const keywords = [
+				unit.code,
+				unit.label_th,
+				unit.label_en,
+				labelThShort,
+				dimensionLabel
+			].filter((k): k is string => Boolean(k));
+			return {
+				value: unit.code,
+				label: unit.label_th || formatUnit(unit.code, allUnits, langState.current) || unit.code,
+				keywords,
+				dimensionLabel
+			} satisfies UnitComboboxItem;
+		});
+	});
+
 	const unitMasterReady = $derived(
 		!unitsOfMeasureQuery.isLoading && !unitsOfMeasureQuery.isError && allUnits.length > 0
 	);
 
 	const availableCategories = $derived.by(() => {
 		return (itemCategoriesQuery.data ?? []).filter(
-			(cat) => !cat.deactivated || cat.name === $formData.category
+			(cat) => !cat.deactivated || cat._id === $formData.category
 		);
 	});
+
+	const categoryOptions = $derived(
+		availableCategories.map((cat) => ({
+			value: cat._id,
+			label: `${cat.name}${cat.deactivated ? ' (ปิดใช้งาน)' : ''}`
+		}))
+	);
+
+	const selectedCategory = $derived(availableCategories.find((c) => c._id === $formData.category));
+
+	const isFuelEnergy = $derived(
+		selectedCategory?.system_key === 'FUEL_ENERGY' ||
+			$formData.category === 'item_category:fuel_energy'
+	);
+
+	const showUnits = $derived(
+		$formData.type_class === 'CONSUMABLE' || $formData.type_class === 'DURABLE'
+	);
+
+	const baseUnitLabel = $derived(
+		activeUnits.find((u) => u.code === $formData.base_unit)?.label_th ||
+			formatUnit($formData.base_unit, allUnits, langState.current) ||
+			'หน่วยฐาน'
+	);
+
+	function usedUomCodes(exceptIndex?: number): string[] {
+		const codes: string[] = [];
+		if ($formData.base_unit) codes.push($formData.base_unit);
+		($formData.conversions ?? []).forEach((c, i) => {
+			if (exceptIndex !== undefined && i === exceptIndex) return;
+			if (c.uom_name) codes.push(c.uom_name);
+		});
+		return codes;
+	}
+
+	function unitItemsForConversion(index: number) {
+		const taken = usedUomCodes(index);
+		return unitComboboxItems.filter(
+			(item) => !taken.includes(item.value) || item.value === $formData.conversions[index]?.uom_name
+		);
+	}
+
+	function addConversion() {
+		$formData.conversions = [
+			...($formData.conversions ?? []),
+			{ uom_name: '', multiplier: '1', barcode: '' }
+		];
+	}
+
+	function removeConversion(index: number) {
+		const removed = $formData.conversions[index]?.uom_name;
+		$formData.conversions = $formData.conversions.filter((_, i) => i !== index);
+		if (removed && $formData.default_inventory_uom === removed) {
+			$formData.default_inventory_uom = '';
+		}
+		if (removed && $formData.default_issue_uom === removed) {
+			$formData.default_issue_uom = '';
+		}
+	}
+
+	function packChoices(): { code: string; label: string }[] {
+		const choices: { code: string; label: string }[] = [];
+		if ($formData.base_unit) {
+			choices.push({ code: $formData.base_unit, label: baseUnitLabel });
+		}
+		for (const c of $formData.conversions ?? []) {
+			if (!c.uom_name || choices.some((choice) => choice.code === c.uom_name)) continue;
+			const label =
+				activeUnits.find((u) => u.code === c.uom_name)?.label_th ??
+				formatUnit(c.uom_name, allUnits, langState.current);
+			choices.push({ code: c.uom_name, label });
+		}
+		return choices;
+	}
+
+	/** Another item that already uses this barcode — a warning, never a block. */
+	function barcodeConflict(code: string | undefined): string | null {
+		if (!code?.trim()) return null;
+		return barcodeOwner(allItemsQuery.data ?? [], code, isEdit ? id : undefined)?.name ?? null;
+	}
+
+	const fieldClass = $derived(compact ? 'space-y-2' : 'space-y-2');
+	const sectionClass = $derived(
+		compact
+			? 'space-y-4 rounded-xl border border-border/80 bg-muted/30 p-4'
+			: 'space-y-5 rounded-2xl border border-slate-100 bg-slate-50/60 p-6 dark:border-zinc-800 dark:bg-zinc-900/30'
+	);
+
+	/** Compact/full: deactivate only when scope may soft-close the doc (central admin or local shelter row). */
+	const showDeactivateToggle = $derived.by(() => {
+		if (!isEdit) return false;
+		if (basePath.includes('system-management')) return true;
+		const item = itemMasterQuery.data;
+		if (!item || !shelterCode) return false;
+		return catalogOrigin(item, shelterCode) === 'local';
+	});
 </script>
+
+{#snippet optionSelect(
+	props: Record<string, unknown>,
+	value: string | undefined,
+	options: readonly { value: string; label: string }[],
+	onChange: (value: string) => void,
+	placeholder = '',
+	disabled = false
+)}
+	<Select.Root type="single" value={value ?? ''} onValueChange={onChange} {disabled}>
+		<Select.Trigger {...props} class="w-full data-[size=default]:h-11 sm:data-[size=default]:h-10">
+			{options.find((o) => o.value === value)?.label ?? placeholder}
+		</Select.Trigger>
+		<Select.Content>
+			{#each options as option (option.value)}
+				<Select.Item value={option.value} label={option.label}>{option.label}</Select.Item>
+			{/each}
+		</Select.Content>
+	</Select.Root>
+{/snippet}
 
 {#if isLoading}
 	<div class="py-12 text-center text-sm text-muted-foreground">กำลังโหลดข้อมูลสินค้า...</div>
 {:else}
-	<form method="POST" use:form.enhance class="space-y-6">
-		<!-- Header showing category type -->
-		<div class="space-y-2">
-			<span class="text-sm font-semibold text-slate-800 dark:text-slate-200">
-				หมวดหมู่ข้อมูล (Type)
-			</span>
-			<div
-				class="w-full rounded-xl border border-slate-100/50 bg-slate-100/70 px-4 py-3.5 text-sm font-medium text-slate-500 dark:border-zinc-800 dark:bg-zinc-800 dark:text-zinc-400"
-			>
-				รายการสิ่งของ (Item Master)
+	<form method="POST" use:form.enhance class="space-y-5">
+		{#if unitsOfMeasureQuery.isError}
+			<div class="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+				โหลดหน่วยนับไม่สำเร็จ จึงยังไม่สามารถบันทึกรายการได้
 			</div>
-		</div>
+		{:else if !unitsOfMeasureQuery.isLoading && allUnits.length === 0}
+			<div class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+				ไม่พบหน่วยนับมาตรฐาน กรุณาให้ผู้ดูแลระบบเตรียมหน่วยนับก่อน
+			</div>
+		{/if}
 
-		<Field.FieldGroup class="space-y-6">
-			{#if unitsOfMeasureQuery.isError}
-				<div class="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
-					โหลดหน่วยนับมาตรฐานไม่สำเร็จ จึงยังไม่สามารถบันทึก Item Master ได้
-				</div>
-			{:else if !unitsOfMeasureQuery.isLoading && allUnits.length === 0}
-				<div class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-					ไม่พบหน่วยนับมาตรฐาน กรุณาให้ผู้ดูแลระบบ seed UOM master ก่อนสร้างรายการ
-				</div>
-			{/if}
-			<!-- ประเภทสิ่งของ (Item Class) -->
-			<Form.Field
-				{form}
-				name="type_class"
-				class="space-y-4 rounded-2xl border border-slate-100 bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-zinc-900/30"
-			>
-				<Form.Control>
-					{#snippet children({ props })}
-						<div class="flex items-center space-x-1">
-							<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200">
-								ประเภทสิ่งของ (Item Class)
-							</Form.Label>
-							<span class="font-bold text-destructive">*</span>
-						</div>
+		<Field.FieldGroup class="space-y-5">
+			<section class={sectionClass}>
+				<h2 class="text-sm font-bold text-foreground">รายการสินค้า</h2>
 
-						<input type="hidden" {...props} bind:value={$formData.type_class} />
-
-						<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
-							<!-- CONSUMABLE -->
-							<button
-								type="button"
-								onclick={() => ($formData.type_class = 'CONSUMABLE')}
-								class="flex flex-col rounded-xl border p-5 text-left transition-all duration-200 focus:outline-none {$formData.type_class ===
-								'CONSUMABLE'
-									? 'border-[#002f6c] bg-[#002f6c]/5 ring-1 ring-[#002f6c] dark:border-blue-500 dark:bg-blue-950/20 dark:ring-blue-500'
-									: 'border-slate-200 bg-white hover:bg-slate-50 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:bg-zinc-900/50'}"
-							>
-								<span class="text-sm font-bold text-slate-800 dark:text-slate-200">CONSUMABLE</span>
-								<span class="mt-1.5 text-xs leading-relaxed text-slate-500 dark:text-zinc-400">
-									วัสดุสิ้นเปลือง / อาหาร (ใช้แล้วหมดไป มีอายุเก็บรักษา)
-								</span>
-							</button>
-
-							<!-- DURABLE -->
-							<button
-								type="button"
-								onclick={() => ($formData.type_class = 'DURABLE')}
-								class="flex flex-col rounded-xl border p-5 text-left transition-all duration-200 focus:outline-none {$formData.type_class ===
-								'DURABLE'
-									? 'border-[#002f6c] bg-[#002f6c]/5 ring-1 ring-[#002f6c] dark:border-blue-500 dark:bg-blue-950/20 dark:ring-blue-500'
-									: 'border-slate-200 bg-white hover:bg-slate-50 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:bg-zinc-900/50'}"
-							>
-								<span class="text-sm font-bold text-slate-800 dark:text-slate-200">DURABLE</span>
-								<span class="mt-1.5 text-xs leading-relaxed text-slate-500 dark:text-zinc-400">
-									วัสดุคงทน (ของใช้คืนได้ เช่น เต็นท์ ผ้าห่ม)
-								</span>
-							</button>
-
-							<!-- EQUIPMENT -->
-							<button
-								type="button"
-								onclick={() => ($formData.type_class = 'EQUIPMENT')}
-								class="flex flex-col rounded-xl border p-5 text-left transition-all duration-200 focus:outline-none {$formData.type_class ===
-								'EQUIPMENT'
-									? 'border-[#002f6c] bg-[#002f6c]/5 ring-1 ring-[#002f6c] dark:border-blue-500 dark:bg-blue-950/20 dark:ring-blue-500'
-									: 'border-slate-200 bg-white hover:bg-slate-50 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:bg-zinc-900/50'}"
-							>
-								<span class="text-sm font-bold text-slate-800 dark:text-slate-200">EQUIPMENT</span>
-								<span class="mt-1.5 text-xs leading-relaxed text-slate-500 dark:text-zinc-400">
-									ครุภัณฑ์ / อุปกรณ์ (รถยนต์ เครื่องสูบน้ำ เตาแก๊ส)
-								</span>
-							</button>
-						</div>
-					{/snippet}
-				</Form.Control>
-				<Form.FieldErrors class="mt-1 text-xs font-semibold text-destructive" />
-			</Form.Field>
-
-			<!-- SECTION 1: ข้อมูลสินค้า (Item Details) -->
-			<section
-				class="space-y-6 rounded-2xl border border-slate-100 bg-slate-50/60 p-6 dark:border-zinc-800 dark:bg-zinc-900/30"
-			>
-				<div
-					class="border-slate-150 flex items-center space-x-2 border-b pb-2 dark:border-zinc-800"
-				>
-					<span
-						class="flex h-6 w-6 items-center justify-center rounded-full bg-[#002f6c]/10 text-xs font-bold text-[#002f6c] dark:bg-blue-900/30 dark:text-blue-400"
-					>
-						1
-					</span>
-					<h2 class="text-base font-bold text-slate-800 dark:text-slate-200">
-						ข้อมูลสินค้า (Item Details)
-					</h2>
-				</div>
-
-				<Form.Field {form} name="name" class="space-y-2">
+				<Form.Field {form} name="name" class={fieldClass}>
 					<Form.Control>
 						{#snippet children({ props })}
-							<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200">
-								ชื่อสินค้า (Item Name) <span class="font-bold text-destructive">*</span>
+							<Form.Label class="text-sm font-semibold">
+								ชื่อ <span class="text-destructive">*</span>
 							</Form.Label>
 							<Input
 								{...props}
 								bind:value={$formData.name}
-								placeholder="เช่น ข้าวหอมมะลิ 100%, น้ำดื่ม 600ml"
-								class="h-12 rounded-xl border border-slate-200/80 px-4 text-sm placeholder:text-slate-400/80 focus-visible:ring-1 focus-visible:ring-ring dark:border-zinc-800 dark:bg-zinc-950"
+								placeholder="เช่น ข้าวสาร, น้ำดื่ม"
+								class="h-11 sm:h-10"
 							/>
 						{/snippet}
 					</Form.Control>
-					<Form.FieldErrors class="mt-1 text-xs font-semibold text-destructive" />
+					<Form.FieldErrors class="text-xs font-semibold text-destructive" />
 				</Form.Field>
 
-				<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-					<Form.Field {form} name="sku" class="space-y-2">
+				<Form.Field {form} name="category" class={fieldClass}>
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label class="text-sm font-semibold">หมวดสินค้า</Form.Label>
+							{@render optionSelect(
+								props,
+								$formData.category,
+								categoryOptions,
+								onCategoryChange,
+								'-- เลือกหมวด --',
+								lockCategory && !!defaultCategoryId
+							)}
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors class="text-xs font-semibold text-destructive" />
+				</Form.Field>
+
+				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+					<Form.Field {form} name="sku" class={fieldClass}>
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200">
-									รหัสสินค้า (SKU)
-								</Form.Label>
+								<Form.Label class="text-sm font-semibold">รหัสสินค้า</Form.Label>
 								<Input
 									{...props}
 									bind:value={$formData.sku}
-									placeholder="เช่น P-001"
-									class="h-12 rounded-xl border border-slate-200/80 px-4 text-sm placeholder:text-slate-400/80 focus-visible:ring-1 focus-visible:ring-ring dark:border-zinc-800 dark:bg-zinc-950"
+									placeholder="เช่น RICE-001"
+									class="h-11 sm:h-10"
 								/>
 							{/snippet}
 						</Form.Control>
-						<Form.FieldErrors class="mt-1 text-xs font-semibold text-destructive" />
 					</Form.Field>
-
-					<Form.Field {form} name="category" class="space-y-2">
+					<Form.Field {form} name="description" class={fieldClass}>
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200">
-									หมวดหมู่ (Category)
-								</Form.Label>
-								<select
+								<Form.Label class="text-sm font-semibold">รายละเอียด</Form.Label>
+								<Input
 									{...props}
-									bind:value={$formData.category}
-									class="h-12 w-full rounded-xl border border-slate-200/80 bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none dark:border-zinc-800 dark:bg-zinc-950"
-								>
-									<option value="" disabled selected>-- เลือกหมวดหมู่ --</option>
-									{#each availableCategories as cat (cat._id)}
-										<option value={cat.name}>
-											{cat.name}{cat.deactivated ? ' (ปิดการใช้งาน)' : ''}
-										</option>
-									{/each}
-								</select>
+									bind:value={$formData.description}
+									placeholder="เช่น ข้าวสารหอมมะลิ บรรจุถุง"
+									class="h-11 sm:h-10"
+								/>
 							{/snippet}
 						</Form.Control>
-						<Form.FieldErrors class="mt-1 text-xs font-semibold text-destructive" />
 					</Form.Field>
 				</div>
 
-				<Form.Field {form} name="description" class="space-y-2">
+				<Form.Field {form} name="type_class" class={fieldClass}>
 					<Form.Control>
 						{#snippet children({ props })}
-							<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200">
-								รายละเอียด / หมายเหตุ (Description)
+							<Form.Label class="text-sm font-semibold">
+								ประเภท <span class="text-destructive">*</span>
 							</Form.Label>
-							<textarea
-								{...props}
-								bind:value={$formData.description}
-								placeholder="เช่น ข้อมูลการจัดเก็บ, จุดเด่นของสินค้า"
-								rows="3"
-								class="flex w-full rounded-xl border border-slate-200/80 bg-transparent px-4 py-3 text-sm placeholder:text-slate-400/80 focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950"
-							></textarea>
+							<input type="hidden" {...props} bind:value={$formData.type_class} />
+							<div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+								{#each TYPE_CLASS_OPTIONS as opt (opt.value)}
+									<Button
+										type="button"
+										variant="outline"
+										onclick={() => ($formData.type_class = opt.value)}
+										class="h-auto justify-start px-3 py-2.5 text-left font-medium {$formData.type_class ===
+										opt.value
+											? 'border-primary bg-primary/5 ring-1 ring-primary'
+											: ''}"
+									>
+										{opt.label}
+									</Button>
+								{/each}
+							</div>
 						{/snippet}
 					</Form.Control>
-					<Form.FieldErrors class="mt-1 text-xs font-semibold text-destructive" />
+					<Form.FieldErrors class="text-xs font-semibold text-destructive" />
 				</Form.Field>
 			</section>
 
-			{#if $formData.type_class === 'CONSUMABLE' || $formData.type_class === 'DURABLE'}
-				<!-- SECTION 2: หน่วยฐาน (Base UOM) -->
-				<section
-					class="space-y-6 rounded-2xl border border-slate-100 bg-slate-50/60 p-6 dark:border-zinc-800 dark:bg-zinc-900/30"
-				>
-					<div
-						class="border-slate-150 flex items-center space-x-2 border-b pb-2 dark:border-zinc-800"
-					>
-						<span
-							class="flex h-6 w-6 items-center justify-center rounded-full bg-[#002f6c]/10 text-xs font-bold text-[#002f6c] dark:bg-blue-900/30 dark:text-blue-400"
-						>
-							2
-						</span>
-						<h2 class="text-base font-bold text-slate-800 dark:text-slate-200">
-							หน่วยฐาน (Base UOM)
-						</h2>
-					</div>
+			{#if showUnits}
+				<section class={sectionClass}>
+					<h2 class="text-sm font-bold text-foreground">หน่วย</h2>
 
-					<!-- Warning message -->
-					<div
-						class="flex items-start space-x-3 rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-amber-800 shadow-xs"
-					>
-						<Info class="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
-						<div class="text-xs leading-relaxed">
-							<span class="font-bold">สำคัญ:</span> กรุณาเลือกหน่วยที่เล็กที่สุดที่จะใช้จัดเก็บในคลัง
-							(เช่น เม็ด, ชิ้น, ซอง) เมื่อบันทึกแล้วจะไม่สามารถแก้ไขได้ เพื่อป้องกันความคลาดเคลื่อนของการคำนวณสต็อกย้อนหลัง
-						</div>
-					</div>
-
-					<Form.Field {form} name="base_unit" class="space-y-2">
+					<Form.Field {form} name="base_unit" class={fieldClass}>
 						<Form.Control>
 							{#snippet children({ props })}
-								<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200">
-									หน่วยที่เล็กที่สุด (Base Unit)
+								<Form.Label class="text-sm font-semibold">
+									หน่วยฐาน <span class="text-destructive">*</span>
 								</Form.Label>
-								<Select.Root
-									type="single"
-									value={$formData.base_unit}
-									onValueChange={(value) => ($formData.base_unit = value)}
+								<Combobox
+									items={unitComboboxItems}
+									bind:value={$formData.base_unit}
+									placeholder="-- เลือกหน่วย --"
+									searchPlaceholder="ค้นหาหน่วย..."
+									emptyText="ไม่พบหน่วย"
 									disabled={isEdit || !unitMasterReady}
+									class="h-11 w-full rounded-xl"
+									controlProps={props}
 								>
-									<Select.Trigger {...props} class="h-12 w-full rounded-xl">
-										{activeUnits.find((unit) => unit.code === $formData.base_unit)?.label_th ??
-											'-- เลือกหน่วยฐาน --'}
-									</Select.Trigger>
-									<Select.Content>
-										{#each activeUnits as unit (unit.code)}
-											<Select.Item value={unit.code} label={`${unit.label_th} (${unit.code})`}>
-												{unit.label_th} ({unit.code})
-											</Select.Item>
-										{/each}
-									</Select.Content>
-								</Select.Root>
+									{#snippet children({ item })}
+										<div class="flex min-w-0 flex-col">
+											<span class="truncate text-sm">{item.label}</span>
+											<span class="truncate text-xs text-muted-foreground"
+												>{item.value} · {item.dimensionLabel}</span
+											>
+										</div>
+									{/snippet}
+								</Combobox>
 							{/snippet}
 						</Form.Control>
-						<Form.FieldErrors class="mt-1 text-xs font-semibold text-destructive" />
+						{#if isEdit}
+							<p class="text-xs text-muted-foreground">
+								หน่วยฐานไม่สามารถเปลี่ยนได้หลังสร้างแล้ว เพื่อรักษาความสอดคล้องกับประวัติคลัง
+							</p>
+						{/if}
+						<Form.FieldErrors class="text-xs font-semibold text-destructive" />
 					</Form.Field>
-				</section>
 
-				<!-- SECTION 3: หน่วยทวีคูณ (Multiple UOMs / Conversions) -->
-				<section
-					class="space-y-6 rounded-2xl border border-slate-100 bg-slate-50/60 p-6 dark:border-zinc-800 dark:bg-zinc-900/30"
-				>
-					<div
-						class="border-slate-150 flex items-center space-x-2 border-b pb-2 dark:border-zinc-800"
-					>
-						<span
-							class="flex h-6 w-6 items-center justify-center rounded-full bg-[#002f6c]/10 text-xs font-bold text-[#002f6c] dark:bg-blue-900/30 dark:text-blue-400"
-						>
-							3
-						</span>
-						<h2 class="text-base font-bold text-slate-800 dark:text-slate-200">
-							หน่วยทวีคูณ (Multiple UOMs / Conversions)
-						</h2>
+					<div class="space-y-2">
+						<Label for="base-unit-barcode" class="text-sm font-semibold">
+							บาร์โค้ดหน่วยฐาน
+							<span class="font-normal text-muted-foreground">(ไม่บังคับ)</span>
+						</Label>
+						<Input
+							id="base-unit-barcode"
+							bind:value={baseBarcode}
+							inputmode="numeric"
+							autocomplete="off"
+							placeholder="สแกนหรือพิมพ์บาร์โค้ดที่ตัวสินค้า"
+							class="h-11 rounded-xl"
+						/>
+						{#if barcodeConflict(baseBarcode)}
+							<p class="text-xs font-semibold text-amber-900">
+								บาร์โค้ดนี้ใช้กับ “{barcodeConflict(baseBarcode)}” อยู่แล้ว
+							</p>
+						{/if}
 					</div>
 
 					<div class="space-y-3">
-						{#if $formData.conversions && $formData.conversions.length > 0}
-							<div
-								class="grid grid-cols-1 items-end gap-6 rounded-2xl border border-slate-200 bg-slate-50/40 p-5 sm:grid-cols-3 dark:border-zinc-800 dark:bg-zinc-950/20"
+						<div class="flex items-center justify-between">
+							<span class="text-sm font-semibold">หน่วยแปลง</span>
+							<Button
+								type="button"
+								size="sm"
+								variant="outline"
+								class="h-8 gap-1"
+								onclick={addConversion}
+								disabled={!unitMasterReady || !$formData.base_unit}
 							>
-								<div>
-									<span class="mb-1.5 block text-xs font-bold text-slate-800 dark:text-slate-200">
-										ชื่อหน่วยทวีคูณ
-									</span>
-									<Select.Root
-										type="single"
-										value={$formData.conversions[0].uom_name}
-										onValueChange={(value) => ($formData.conversions[0].uom_name = value)}
+								<Plus class="h-3.5 w-3.5" />
+								เพิ่ม
+							</Button>
+						</div>
+
+						{#each $formData.conversions as conversion, i (i)}
+							<div class="space-y-2 rounded-xl border border-border bg-background p-3">
+								<div class="flex flex-wrap items-center gap-2 text-sm">
+									<span class="text-muted-foreground">1</span>
+									<Combobox
+										items={unitItemsForConversion(i)}
+										bind:value={
+											() => conversion.uom_name,
+											(v) => {
+												$formData.conversions[i].uom_name = v;
+											}
+										}
+										placeholder="หน่วย"
+										searchPlaceholder="ค้นหาหน่วย..."
+										emptyText="ไม่พบหน่วย"
 										disabled={!unitMasterReady}
+										class="h-10 min-w-[7rem] rounded-lg"
 									>
-										<Select.Trigger
-											class="h-12 rounded-xl border-slate-200/80 bg-white dark:border-zinc-800 dark:bg-zinc-950"
-										>
-											{uomOptions.find((unit) => unit.code === $formData.conversions[0].uom_name)
-												?.label_th ?? '-- เลือกหน่วยทวีคูณ --'}
-										</Select.Trigger>
-										<Select.Content>
-											{#each uomOptions as unit (unit.code)}
-												<Select.Item value={unit.code} label={`${unit.label_th} (${unit.code})`}>
-													{unit.label_th} ({unit.code})
-												</Select.Item>
-											{/each}
-										</Select.Content>
-									</Select.Root>
-								</div>
-								<div>
-									<span class="mb-1.5 block text-xs font-bold text-slate-800 dark:text-slate-200">
-										อัตราส่วน (เท่ากับกี่ หน่วยฐาน)
-									</span>
+										{#snippet children({ item })}
+											<div class="flex min-w-0 flex-col">
+												<span class="truncate text-sm">{item.label}</span>
+												<span class="truncate text-xs text-muted-foreground">{item.value}</span>
+											</div>
+										{/snippet}
+									</Combobox>
+									<span class="text-muted-foreground">=</span>
 									<Input
 										type="number"
 										step="any"
 										min={0}
-										value={$formData.conversions[0].multiplier}
+										value={conversion.multiplier}
 										oninput={(e) => {
 											const val = e.currentTarget.value;
-											$formData.conversions[0].multiplier = val === '' ? '1' : val;
+											$formData.conversions[i].multiplier = val === '' ? '1' : val;
 										}}
-										placeholder="1"
-										class="h-12 rounded-xl border border-slate-200/80 bg-white px-4 text-sm dark:border-zinc-800 dark:bg-zinc-950"
+										class="h-10 w-24 rounded-lg"
 									/>
+									<span class="font-medium">{baseUnitLabel}</span>
+									<Button
+										type="button"
+										size="icon"
+										variant="ghost"
+										class="ml-auto h-8 w-8 text-destructive"
+										onclick={() => removeConversion(i)}
+									>
+										<Trash2 class="h-4 w-4" />
+									</Button>
 								</div>
-								<div>
-									<span class="mb-1.5 block text-xs font-bold text-slate-800 dark:text-slate-200">
-										บาร์โค้ด (Optional)
-									</span>
+								<div class="space-y-1">
 									<Input
-										type="text"
-										bind:value={$formData.conversions[0].barcode}
-										placeholder="สแกนหรือพิมพ์"
-										class="h-12 rounded-xl border border-slate-200/80 bg-white px-4 text-sm dark:border-zinc-800 dark:bg-zinc-950"
+										aria-label="บาร์โค้ดของหน่วยนี้"
+										placeholder="บาร์โค้ดของหน่วยนี้ (ไม่บังคับ)"
+										inputmode="numeric"
+										autocomplete="off"
+										value={conversion.barcode ?? ''}
+										oninput={(e) => {
+											$formData.conversions[i].barcode = e.currentTarget.value;
+										}}
+										class="h-10 rounded-lg"
 									/>
+									{#if barcodeConflict(conversion.barcode)}
+										<p class="text-xs font-semibold text-amber-900">
+											บาร์โค้ดนี้ใช้กับ “{barcodeConflict(conversion.barcode)}” อยู่แล้ว
+										</p>
+									{/if}
 								</div>
+								<div class="flex flex-wrap gap-2">
+									<button
+										type="button"
+										class="rounded-full border px-2.5 py-1 text-xs transition-colors {$formData.default_inventory_uom ===
+										conversion.uom_name
+											? 'border-primary bg-primary/10 font-semibold text-primary'
+											: 'border-border text-muted-foreground hover:bg-muted'}"
+										onclick={() => {
+											$formData.default_inventory_uom =
+												$formData.default_inventory_uom === conversion.uom_name
+													? ''
+													: conversion.uom_name;
+										}}
+										disabled={!conversion.uom_name}
+									>
+										หน่วยรับเข้า
+									</button>
+									<button
+										type="button"
+										class="rounded-full border px-2.5 py-1 text-xs transition-colors {$formData.default_issue_uom ===
+										conversion.uom_name
+											? 'border-primary bg-primary/10 font-semibold text-primary'
+											: 'border-border text-muted-foreground hover:bg-muted'}"
+										onclick={() => {
+											$formData.default_issue_uom =
+												$formData.default_issue_uom === conversion.uom_name
+													? ''
+													: conversion.uom_name;
+										}}
+										disabled={!conversion.uom_name}
+									>
+										หน่วยเบิกจ่าย
+									</button>
+								</div>
+							</div>
+						{/each}
+
+						{#if $formData.base_unit}
+							<div class="flex flex-wrap gap-2 pt-1">
+								<span class="w-full text-xs text-muted-foreground"
+									>หรือใช้หน่วยฐานเป็นค่าเริ่มต้น:</span
+								>
+								{#each packChoices() as choice, choiceIndex (`${choiceIndex}-${choice.code}`)}
+									<button
+										type="button"
+										class="rounded-full border px-2.5 py-1 text-xs transition-colors {$formData.default_inventory_uom ===
+										choice.code
+											? 'border-primary bg-primary/10 font-semibold text-primary'
+											: 'border-border text-muted-foreground hover:bg-muted'}"
+										onclick={() => ($formData.default_inventory_uom = choice.code)}
+									>
+										รับเข้า: {choice.label}
+									</button>
+									<button
+										type="button"
+										class="rounded-full border px-2.5 py-1 text-xs transition-colors {$formData.default_issue_uom ===
+										choice.code
+											? 'border-primary bg-primary/10 font-semibold text-primary'
+											: 'border-border text-muted-foreground hover:bg-muted'}"
+										onclick={() => ($formData.default_issue_uom = choice.code)}
+									>
+										เบิกจ่าย: {choice.label}
+									</button>
+								{/each}
 							</div>
 						{/if}
 					</div>
 				</section>
+			{/if}
 
-				<!-- SECTION 4: การตั้งค่าหน่วยเริ่มต้น (Default Categories / Units) -->
-				<section
-					class="space-y-6 rounded-2xl border border-slate-100 bg-slate-50/60 p-6 dark:border-zinc-800 dark:bg-zinc-900/30"
-				>
-					<div
-						class="border-slate-150 flex items-center space-x-2 border-b pb-2 dark:border-zinc-800"
-					>
-						<span
-							class="flex h-6 w-6 items-center justify-center rounded-full bg-[#002f6c]/10 text-xs font-bold text-[#002f6c] dark:bg-blue-900/30 dark:text-blue-400"
-						>
-							4
-						</span>
-						<h2 class="text-base font-bold text-slate-800 dark:text-slate-200">
-							การตั้งค่าหน่วยเริ่มต้น (Default Categories)
-						</h2>
-					</div>
+			{#if isFuelEnergy}
+				<section class={sectionClass}>
+					<h2 class="text-sm font-bold text-foreground">เชื้อเพลิงและพลังงาน</h2>
 
-					<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-						<Form.Field {form} name="default_inventory_uom" class="space-y-2">
+					<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+						<Form.Field {form} name="capacity_kg" class={fieldClass}>
 							<Form.Control>
 								{#snippet children({ props })}
-									<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200">
-										หน่วยสำหรับจัดเก็บ (Inventory)
+									<Form.Label class="text-sm font-semibold">
+										ความจุถัง (กก.) <span class="text-destructive">*</span>
 									</Form.Label>
-									<Select.Root
-										type="single"
-										value={$formData.default_inventory_uom ?? ''}
-										onValueChange={(value) => ($formData.default_inventory_uom = value)}
-										disabled={!unitMasterReady}
-									>
-										<Select.Trigger {...props} class="h-12 w-full rounded-xl">
-											{uomOptions.find((unit) => unit.code === $formData.default_inventory_uom)
-												?.label_th ?? '-- เลือกหน่วย --'}
-										</Select.Trigger>
-										<Select.Content>
-											<Select.Item value="" label="-- เลือกหน่วย --">-- เลือกหน่วย --</Select.Item>
-											{#each uomOptions as unit (unit.code)}
-												<Select.Item value={unit.code} label={`${unit.label_th} (${unit.code})`}>
-													{unit.label_th} ({unit.code})
-												</Select.Item>
-											{/each}
-										</Select.Content>
-									</Select.Root>
+									<Input
+										{...props}
+										type="number"
+										step="any"
+										min={0}
+										bind:value={$formData.capacity_kg}
+										class="h-11 sm:h-10"
+									/>
 								{/snippet}
 							</Form.Control>
-							<Form.FieldErrors class="mt-1 text-xs font-semibold text-destructive" />
+							<Form.FieldErrors class="text-xs font-semibold text-destructive" />
 						</Form.Field>
 
-						<Form.Field {form} name="default_issue_uom" class="space-y-2">
+						<Form.Field {form} name="burn_rate_kg_per_hour" class={fieldClass}>
 							<Form.Control>
 								{#snippet children({ props })}
-									<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200">
-										หน่วยสำหรับเบิกจ่าย (Issue/Sales)
+									<Form.Label class="text-sm font-semibold">
+										อัตราสิ้นเปลืองแก๊ส (กก./ชม.) <span class="text-destructive">*</span>
 									</Form.Label>
-									<Select.Root
-										type="single"
-										value={$formData.default_issue_uom ?? ''}
-										onValueChange={(value) => ($formData.default_issue_uom = value)}
-										disabled={!unitMasterReady}
-									>
-										<Select.Trigger {...props} class="h-12 w-full rounded-xl">
-											{uomOptions.find((unit) => unit.code === $formData.default_issue_uom)
-												?.label_th ?? '-- เลือกหน่วย --'}
-										</Select.Trigger>
-										<Select.Content>
-											<Select.Item value="" label="-- เลือกหน่วย --">-- เลือกหน่วย --</Select.Item>
-											{#each uomOptions as unit (unit.code)}
-												<Select.Item value={unit.code} label={`${unit.label_th} (${unit.code})`}>
-													{unit.label_th} ({unit.code})
-												</Select.Item>
-											{/each}
-										</Select.Content>
-									</Select.Root>
+									<Input
+										{...props}
+										type="number"
+										step="any"
+										min={0}
+										bind:value={$formData.burn_rate_kg_per_hour}
+										class="h-11 sm:h-10"
+									/>
 								{/snippet}
 							</Form.Control>
-							<Form.FieldErrors class="mt-1 text-xs font-semibold text-destructive" />
+							<Form.FieldErrors class="text-xs font-semibold text-destructive" />
+						</Form.Field>
+
+						<Form.Field {form} name="time_multiplier" class={fieldClass}>
+							<Form.Control>
+								{#snippet children({ props })}
+									<Form.Label class="text-sm font-semibold"
+										>ตัวคูณเวลาปรุง (Time Multiplier)</Form.Label
+									>
+									<Input
+										{...props}
+										type="number"
+										step="any"
+										min={0}
+										bind:value={$formData.time_multiplier}
+										class="h-11 sm:h-10"
+									/>
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors class="text-xs font-semibold text-destructive" />
 						</Form.Field>
 					</div>
 				</section>
 			{/if}
 
-			{#if $formData.type_class === 'CONSUMABLE' || $formData.type_class === 'DURABLE'}
-				<!-- SECTION 5: คุณสมบัติการจัดเก็บและจ่ายแจก (Storage & Distribution) -->
-				<section
-					class="space-y-6 rounded-2xl border border-slate-100 bg-slate-50/60 p-6 dark:border-zinc-800 dark:bg-zinc-900/30"
-				>
-					<div
-						class="border-slate-150 flex items-center space-x-2 border-b pb-2 dark:border-zinc-800"
-					>
-						<span
-							class="flex h-6 w-6 items-center justify-center rounded-full bg-[#002f6c]/10 text-xs font-bold text-[#002f6c] dark:bg-blue-900/30 dark:text-blue-400"
-						>
-							5
-						</span>
-						<h2 class="text-base font-bold text-slate-800 dark:text-slate-200">
-							คุณสมบัติการจัดเก็บและจ่ายแจก (Storage & Distribution)
-						</h2>
-					</div>
-
-					{#if $formData.type_class === 'CONSUMABLE'}
-						<div class="grid grid-cols-1 gap-6 md:grid-cols-2">
-							<!-- Row 1: Shelf Life, Storage Type, Allergens -->
-							<Form.Field {form} name="shelf_life_days" class="space-y-2">
-								<Form.Control>
-									{#snippet children({ props })}
-										<Form.Label
-											class="text-sm font-semibold whitespace-nowrap text-slate-800 dark:text-slate-200"
-										>
-											อายุการเก็บรักษา (วัน) (Shelf Life Days)
-										</Form.Label>
-										<Input
-											{...props}
-											type="number"
-											placeholder="เช่น 180"
-											value={$formData.shelf_life_days ?? ''}
-											oninput={(e) => {
-												const val = e.currentTarget.value;
-												$formData.shelf_life_days = val === '' ? undefined : Number(val);
-											}}
-											class="h-12 rounded-xl border border-slate-200/80 px-4 text-sm dark:border-zinc-800 dark:bg-zinc-950"
-										/>
-									{/snippet}
-								</Form.Control>
-								<Form.FieldErrors class="mt-1 text-xs font-semibold text-destructive" />
-							</Form.Field>
-
-							<Form.Field {form} name="storage_type" class="space-y-2">
-								<Form.Control>
-									{#snippet children({ props })}
-										<Form.Label
-											class="text-sm font-semibold whitespace-nowrap text-slate-800 dark:text-slate-200"
-										>
-											ประเภทการจัดเก็บ (Storage Type)
-										</Form.Label>
-										<select
-											{...props}
-											bind:value={$formData.storage_type}
-											class="h-12 w-full rounded-xl border border-slate-200/80 bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none dark:border-zinc-800 dark:bg-zinc-950"
-										>
-											<option value="" disabled selected>-- เลือกประเภทการจัดเก็บ --</option>
-											<option value="DRY">ของแห้ง (DRY)</option>
-											<option value="CHILLED">แช่เย็น (CHILLED)</option>
-											<option value="FROZEN">แช่แข็ง (FROZEN)</option>
-											<option value="CONTROLLED_MED">ควบคุมพิเศษ/ยา (CONTROLLED_MED)</option>
-										</select>
-									{/snippet}
-								</Form.Control>
-								<Form.FieldErrors class="mt-1 text-xs font-semibold text-destructive" />
-							</Form.Field>
-
-							<Form.Field {form} name="allergens" class="space-y-2">
-								<Form.Control>
-									{#snippet children({ props })}
-										<Form.Label
-											class="text-sm font-semibold whitespace-nowrap text-slate-800 dark:text-slate-200"
-										>
-											สารก่อภูมิแพ้ (Allergens)
-										</Form.Label>
-										<Input
-											{...props}
-											bind:value={$formData.allergens}
-											placeholder="เช่น ถั่ว, นม, แป้งสาลี"
-											class="h-12 rounded-xl border border-slate-200/80 px-4 text-sm placeholder:text-slate-400/80 focus-visible:ring-1 focus-visible:ring-ring dark:border-zinc-800 dark:bg-zinc-950"
-										/>
-									{/snippet}
-								</Form.Control>
-								<Form.FieldErrors class="mt-1 text-xs font-semibold text-destructive" />
-							</Form.Field>
-
-							<!-- Row 2: Target Gender, Age Group, Dietary -->
-							<Form.Field {form} name="target_gender" class="space-y-2">
-								<Form.Control>
-									{#snippet children({ props })}
-										<Form.Label
-											class="text-sm font-semibold whitespace-nowrap text-slate-800 dark:text-slate-200"
-										>
-											เพศที่ใช้ได้ (Target Gender)
-										</Form.Label>
-										<select
-											{...props}
-											bind:value={$formData.target_gender}
-											class="h-12 w-full rounded-xl border border-slate-200/80 bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none dark:border-zinc-800 dark:bg-zinc-950"
-										>
-											<option value="ALL">ทุกเพศ (ALL)</option>
-											<option value="MALE">ชาย (MALE)</option>
-											<option value="FEMALE">หญิง (FEMALE)</option>
-										</select>
-									{/snippet}
-								</Form.Control>
-								<Form.FieldErrors class="mt-1 text-xs font-semibold text-destructive" />
-							</Form.Field>
-
-							<Form.Field {form} name="age_group" class="space-y-2">
-								<Form.Control>
-									{#snippet children({ props })}
-										<Form.Label
-											class="text-sm font-semibold whitespace-nowrap text-slate-800 dark:text-slate-200"
-										>
-											ช่วงวัยที่เหมาะสม (Age Group)
-										</Form.Label>
-										<select
-											{...props}
-											bind:value={$formData.age_group}
-											class="h-12 w-full rounded-xl border border-slate-200/80 bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none dark:border-zinc-800 dark:bg-zinc-950"
-										>
-											<option value="ALL">ทุกวัย (ALL)</option>
-											<option value="INFANT">ทารก (INFANT)</option>
-											<option value="CHILD">เด็ก (CHILD)</option>
-											<option value="ELDERLY">ผู้สูงอายุ (ELDERLY)</option>
-										</select>
-									{/snippet}
-								</Form.Control>
-								<Form.FieldErrors class="mt-1 text-xs font-semibold text-destructive" />
-							</Form.Field>
-
-							<Form.Field {form} name="dietary" class="space-y-2">
-								<Form.Control>
-									{#snippet children({ props })}
-										<Form.Label
-											class="text-sm font-semibold whitespace-nowrap text-slate-800 dark:text-slate-200"
-										>
-											ข้อจำกัดด้านอาหาร (Dietary)
-										</Form.Label>
-										<select
-											{...props}
-											value={$formData.dietary && $formData.dietary.length > 0
-												? $formData.dietary[0]
-												: 'NONE'}
-											onchange={(e) => {
-												const val = e.currentTarget.value;
-												$formData.dietary = val === 'NONE' ? [] : [val as 'HALAL' | 'VEGAN'];
-											}}
-											class="h-12 w-full rounded-xl border border-slate-200/80 bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none dark:border-zinc-800 dark:bg-zinc-950"
-										>
-											<option value="NONE">ไม่มีข้อจำกัด (None)</option>
-											<option value="HALAL">ฮาลาล (Halal)</option>
-											<option value="VEGAN">วีแกน (Vegan)</option>
-										</select>
-									{/snippet}
-								</Form.Control>
-								<Form.FieldErrors class="mt-1 text-xs font-semibold text-destructive" />
-							</Form.Field>
-
-							<!-- Row 3: Distribution Type -->
-							<Form.Field {form} name="distribution_type" class="space-y-2">
-								<Form.Control>
-									{#snippet children({ props })}
-										<Form.Label
-											class="text-sm font-semibold whitespace-nowrap text-slate-800 dark:text-slate-200"
-										>
-											ประเภทการแจก (Distribution Type)
-										</Form.Label>
-										<select
-											{...props}
-											bind:value={$formData.distribution_type}
-											class="h-12 w-full rounded-xl border border-slate-200/80 bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none dark:border-zinc-800 dark:bg-zinc-950"
-										>
-											<option value="recurring">แจกซ้ำได้ตามรอบ (Recurring)</option>
-											<option value="one_time">แจกครั้งเดียวต่อคน (One-Time)</option>
-										</select>
-									{/snippet}
-								</Form.Control>
-								<Form.FieldErrors class="mt-1 text-xs font-semibold text-destructive" />
-							</Form.Field>
-						</div>
-					{:else if $formData.type_class === 'DURABLE'}
-						<div class="grid grid-cols-1 gap-6 md:grid-cols-2">
-							<!-- Row 1: Qty per Person, Returnable -->
-							<Form.Field {form} name="qty_per_person" class="space-y-2">
-								<Form.Control>
-									{#snippet children({ props })}
-										<Form.Label
-											class="text-sm font-semibold whitespace-nowrap text-slate-800 dark:text-slate-200"
-										>
-											จำนวนที่ต้องมีต่อคน (Qty per Person)
-										</Form.Label>
-										<Input
-											{...props}
-											type="number"
-											step="any"
-											min={0}
-											placeholder="เช่น 1, 0.5"
-											value={$formData.qty_per_person ?? ''}
-											oninput={(e) => {
-												const val = e.currentTarget.value;
-												$formData.qty_per_person = val === '' ? undefined : Number(val);
-											}}
-											class="h-12 rounded-xl border border-slate-200/80 px-4 text-sm dark:border-zinc-800 dark:bg-zinc-950"
-										/>
-									{/snippet}
-								</Form.Control>
-								<Form.FieldErrors class="mt-1 text-xs font-semibold text-destructive" />
-							</Form.Field>
-
-							<Form.Field {form} name="returnable" class="space-y-2">
-								<Form.Control>
-									{#snippet children({ props })}
-										<div class="hidden h-[20px] md:block"></div>
-										<div
-											class="flex h-12 items-center space-x-3 rounded-xl border border-slate-200 bg-[#f8fafc]/50 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-950/20"
-										>
-											<Checkbox
+			{#if !isFuelEnergy && ($formData.type_class === 'CONSUMABLE' || $formData.type_class === 'DURABLE' || $formData.type_class === 'EQUIPMENT')}
+				<details class="rounded-xl border border-border open:bg-muted/20" open={!compact}>
+					<summary class="cursor-pointer px-4 py-3 text-sm font-semibold">
+						รายละเอียดเพิ่มเติม
+					</summary>
+					<div class="space-y-4 border-t border-border px-4 py-4">
+						{#if $formData.type_class === 'CONSUMABLE'}
+							<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+								<Form.Field {form} name="shelf_life_days" class={fieldClass}>
+									<Form.Control>
+										{#snippet children({ props })}
+											<Form.Label class="text-sm font-semibold">อายุเก็บรักษา (วัน)</Form.Label>
+											<Input
 												{...props}
-												checked={$formData.returnable}
-												onCheckedChange={(checked) => {
-													$formData.returnable = !!checked;
+												type="number"
+												value={$formData.shelf_life_days ?? ''}
+												oninput={(e) => {
+													const val = e.currentTarget.value;
+													$formData.shelf_life_days = val === '' ? undefined : Number(val);
 												}}
-												class="data-[state=checked]:border-[#002f6c] data-[state=checked]:bg-[#002f6c]"
+												class="h-11 sm:h-10"
 											/>
-											<div class="flex flex-col text-left leading-tight">
-												<span class="text-xs font-bold text-slate-800 dark:text-slate-200">
-													ต้องคืนเมื่อใช้งานเสร็จ
-												</span>
-												<span class="text-[10px] text-slate-500 dark:text-zinc-400">
-													(Returnable)
-												</span>
+										{/snippet}
+									</Form.Control>
+								</Form.Field>
+
+								<Form.Field {form} name="storage_type" class={fieldClass}>
+									<Form.Control>
+										{#snippet children({ props })}
+											<Form.Label class="text-sm font-semibold">การจัดเก็บ</Form.Label>
+											{@render optionSelect(
+												props,
+												$formData.storage_type,
+												STORAGE_OPTIONS,
+												(v) => ($formData.storage_type = v as typeof $formData.storage_type)
+											)}
+										{/snippet}
+									</Form.Control>
+								</Form.Field>
+
+								{#if !isFuelEnergy}
+									<Form.Field {form} name="allergens" class={fieldClass}>
+										<Form.Control>
+											{#snippet children({ props })}
+												<Form.Label class="text-sm font-semibold">สารก่อภูมิแพ้</Form.Label>
+												<Input
+													{...props}
+													bind:value={$formData.allergens}
+													placeholder="เช่น ถั่ว, นม"
+													class="h-11 sm:h-10"
+												/>
+											{/snippet}
+										</Form.Control>
+									</Form.Field>
+
+									<Form.Field {form} name="dietary" class={fieldClass}>
+										<Form.Control>
+											{#snippet children({ props })}
+												<Form.Label class="text-sm font-semibold">ข้อจำกัดด้านอาหาร</Form.Label>
+												{@render optionSelect(
+													props,
+													$formData.dietary?.[0] ?? 'NONE',
+													DIETARY_OPTIONS,
+													(v) => ($formData.dietary = v === 'NONE' ? [] : [v as 'HALAL' | 'VEGAN'])
+												)}
+											{/snippet}
+										</Form.Control>
+									</Form.Field>
+								{/if}
+
+								<Form.Field {form} name="target_gender" class={fieldClass}>
+									<Form.Control>
+										{#snippet children({ props })}
+											<Form.Label class="text-sm font-semibold">เพศที่ใช้ได้</Form.Label>
+											{@render optionSelect(
+												props,
+												$formData.target_gender,
+												GENDER_OPTIONS,
+												(v) => ($formData.target_gender = v as typeof $formData.target_gender)
+											)}
+										{/snippet}
+									</Form.Control>
+								</Form.Field>
+
+								<Form.Field {form} name="age_group" class={fieldClass}>
+									<Form.Control>
+										{#snippet children({ props })}
+											<Form.Label class="text-sm font-semibold">ช่วงวัย</Form.Label>
+											{@render optionSelect(
+												props,
+												$formData.age_group,
+												AGE_OPTIONS,
+												(v) => ($formData.age_group = v as typeof $formData.age_group)
+											)}
+										{/snippet}
+									</Form.Control>
+								</Form.Field>
+
+								<Form.Field {form} name="distribution_type" class={fieldClass}>
+									<Form.Control>
+										{#snippet children({ props })}
+											<Form.Label class="text-sm font-semibold">ประเภทการแจก</Form.Label>
+											{@render optionSelect(
+												props,
+												$formData.distribution_type,
+												DISTRIBUTION_OPTIONS,
+												(v) =>
+													($formData.distribution_type = v as typeof $formData.distribution_type)
+											)}
+										{/snippet}
+									</Form.Control>
+								</Form.Field>
+							</div>
+						{:else if $formData.type_class === 'DURABLE'}
+							<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+								<Form.Field {form} name="qty_per_person" class={fieldClass}>
+									<Form.Control>
+										{#snippet children({ props })}
+											<Form.Label class="text-sm font-semibold">จำนวนต่อคน</Form.Label>
+											<Input
+												{...props}
+												type="number"
+												step="any"
+												min={0}
+												value={$formData.qty_per_person ?? ''}
+												oninput={(e) => {
+													const val = e.currentTarget.value;
+													$formData.qty_per_person = val === '' ? undefined : Number(val);
+												}}
+												class="h-11 sm:h-10"
+											/>
+										{/snippet}
+									</Form.Control>
+								</Form.Field>
+
+								<Form.Field {form} name="returnable" class={fieldClass}>
+									<Form.Control>
+										{#snippet children({ props })}
+											<div
+												class="flex h-11 items-center gap-3 rounded-xl border border-border px-3"
+											>
+												<Checkbox
+													{...props}
+													checked={$formData.returnable}
+													onCheckedChange={(checked) => {
+														$formData.returnable = !!checked;
+													}}
+												/>
+												<span class="text-sm font-medium">ต้องคืนเมื่อใช้งานเสร็จ</span>
 											</div>
-										</div>
-									{/snippet}
-								</Form.Control>
-								<Form.FieldErrors class="mt-1 text-xs font-semibold text-destructive" />
-							</Form.Field>
+										{/snippet}
+									</Form.Control>
+								</Form.Field>
 
-							<!-- Row 2: Target Gender, Age Group -->
-							<Form.Field {form} name="target_gender" class="space-y-2">
+								<Form.Field {form} name="target_gender" class={fieldClass}>
+									<Form.Control>
+										{#snippet children({ props })}
+											<Form.Label class="text-sm font-semibold">เพศที่ใช้ได้</Form.Label>
+											{@render optionSelect(
+												props,
+												$formData.target_gender,
+												GENDER_OPTIONS,
+												(v) => ($formData.target_gender = v as typeof $formData.target_gender)
+											)}
+										{/snippet}
+									</Form.Control>
+								</Form.Field>
+
+								<Form.Field {form} name="age_group" class={fieldClass}>
+									<Form.Control>
+										{#snippet children({ props })}
+											<Form.Label class="text-sm font-semibold">ช่วงวัย</Form.Label>
+											{@render optionSelect(
+												props,
+												$formData.age_group,
+												AGE_OPTIONS,
+												(v) => ($formData.age_group = v as typeof $formData.age_group)
+											)}
+										{/snippet}
+									</Form.Control>
+								</Form.Field>
+
+								<Form.Field {form} name="distribution_type" class={fieldClass}>
+									<Form.Control>
+										{#snippet children({ props })}
+											<Form.Label class="text-sm font-semibold">ประเภทการแจก</Form.Label>
+											{@render optionSelect(
+												props,
+												$formData.distribution_type,
+												DISTRIBUTION_OPTIONS,
+												(v) =>
+													($formData.distribution_type = v as typeof $formData.distribution_type)
+											)}
+										{/snippet}
+									</Form.Control>
+								</Form.Field>
+							</div>
+						{:else if $formData.type_class === 'EQUIPMENT'}
+							<Form.Field {form} name="asset_status" class={fieldClass}>
 								<Form.Control>
 									{#snippet children({ props })}
-										<Form.Label
-											class="text-sm font-semibold whitespace-nowrap text-slate-800 dark:text-slate-200"
-										>
-											เพศที่ใช้ได้ (Target Gender)
-										</Form.Label>
-										<select
-											{...props}
-											bind:value={$formData.target_gender}
-											class="h-12 w-full rounded-xl border border-slate-200/80 bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none dark:border-zinc-800 dark:bg-zinc-950"
-										>
-											<option value="ALL">ทุกเพศ (ALL)</option>
-											<option value="MALE">ชาย (MALE)</option>
-											<option value="FEMALE">หญิง (FEMALE)</option>
-										</select>
+										<Form.Label class="text-sm font-semibold">สถานะครุภัณฑ์</Form.Label>
+										{@render optionSelect(
+											props,
+											$formData.asset_status,
+											ASSET_OPTIONS,
+											(v) => ($formData.asset_status = v as typeof $formData.asset_status)
+										)}
 									{/snippet}
 								</Form.Control>
-								<Form.FieldErrors class="mt-1 text-xs font-semibold text-destructive" />
 							</Form.Field>
-
-							<Form.Field {form} name="age_group" class="space-y-2">
-								<Form.Control>
-									{#snippet children({ props })}
-										<Form.Label
-											class="text-sm font-semibold whitespace-nowrap text-slate-800 dark:text-slate-200"
-										>
-											ช่วงวัยที่เหมาะสม (Age Group)
-										</Form.Label>
-										<select
-											{...props}
-											bind:value={$formData.age_group}
-											class="h-12 w-full rounded-xl border border-slate-200/80 bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none dark:border-zinc-800 dark:bg-zinc-950"
-										>
-											<option value="ALL">ทุกวัย (ALL)</option>
-											<option value="INFANT">ทารก (INFANT)</option>
-											<option value="CHILD">เด็ก (CHILD)</option>
-											<option value="ELDERLY">ผู้สูงอายุ (ELDERLY)</option>
-										</select>
-									{/snippet}
-								</Form.Control>
-								<Form.FieldErrors class="mt-1 text-xs font-semibold text-destructive" />
-							</Form.Field>
-
-							<!-- Row 3: Distribution Type -->
-							<Form.Field {form} name="distribution_type" class="space-y-2">
-								<Form.Control>
-									{#snippet children({ props })}
-										<Form.Label
-											class="text-sm font-semibold whitespace-nowrap text-slate-800 dark:text-slate-200"
-										>
-											ประเภทการแจก (Distribution Type)
-										</Form.Label>
-										<select
-											{...props}
-											bind:value={$formData.distribution_type}
-											class="h-12 w-full rounded-xl border border-slate-200/80 bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none dark:border-zinc-800 dark:bg-zinc-950"
-										>
-											<option value="recurring">แจกซ้ำได้ตามรอบ (Recurring)</option>
-											<option value="one_time">แจกครั้งเดียวต่อคน (One-Time)</option>
-										</select>
-									{/snippet}
-								</Form.Control>
-								<Form.FieldErrors class="mt-1 text-xs font-semibold text-destructive" />
-							</Form.Field>
-						</div>
-					{/if}
-				</section>
-			{/if}
-
-			{#if $formData.type_class === 'EQUIPMENT'}
-				<!-- SECTION 2: สถานะครุภัณฑ์ (Asset Status) -->
-				<section
-					class="space-y-6 rounded-2xl border border-slate-100 bg-slate-50/60 p-6 dark:border-zinc-800 dark:bg-zinc-900/30"
-				>
-					<div
-						class="border-slate-150 flex items-center space-x-2 border-b pb-2 dark:border-zinc-800"
-					>
-						<span
-							class="flex h-6 w-6 items-center justify-center rounded-full bg-[#002f6c]/10 text-xs font-bold text-[#002f6c] dark:bg-blue-900/30 dark:text-blue-400"
-						>
-							2
-						</span>
-						<h2 class="text-base font-bold text-slate-800 dark:text-slate-200">
-							สถานะครุภัณฑ์ (Asset Status)
-						</h2>
+						{/if}
 					</div>
-
-					<Form.Field {form} name="asset_status" class="space-y-2">
-						<Form.Control>
-							{#snippet children({ props })}
-								<Form.Label class="text-sm font-semibold text-slate-800 dark:text-slate-200">
-									สถานะปัจจุบัน
-								</Form.Label>
-								<select
-									{...props}
-									bind:value={$formData.asset_status}
-									class="h-12 w-full rounded-xl border border-slate-200/80 bg-background px-3 text-sm focus:ring-2 focus:ring-ring focus:outline-none dark:border-zinc-800 dark:bg-zinc-950"
-								>
-									<option value="READY">🟢 พร้อมใช้งาน (READY)</option>
-									<option value="IN_USE">🔵 กำลังใช้งาน (IN_USE)</option>
-									<option value="MAINTENANCE">🟡 อยู่ระหว่างการบำรุงรักษา (MAINTENANCE)</option>
-									<option value="BROKEN">🔴 ชำรุดเสียหาย (BROKEN)</option>
-								</select>
-							{/snippet}
-						</Form.Control>
-						<Form.FieldErrors class="mt-1 text-xs font-semibold text-destructive" />
-					</Form.Field>
-				</section>
+				</details>
 			{/if}
 
-			{#if isEdit}
-				<!-- SECTION: สถานะการใช้งาน (Status) -->
-				<section
-					class="space-y-4 rounded-2xl border border-slate-100 bg-slate-50/60 p-6 dark:border-zinc-800 dark:bg-zinc-900/30"
-				>
-					<div class="flex items-center justify-between">
+			{#if showDeactivateToggle}
+				<section class={sectionClass}>
+					<div class="flex items-center justify-between gap-3">
 						<div class="space-y-0.5">
-							<label
-								for="deactivated-toggle"
-								class="cursor-pointer text-sm font-semibold text-slate-800 dark:text-slate-200"
-							>
-								สถานะปิดการใช้งาน
-							</label>
+							<Label for="deactivated-toggle" class="cursor-pointer text-sm font-semibold">
+								ปิดการใช้งาน
+							</Label>
 							<p class="text-xs text-muted-foreground">
-								หากปิดการใช้งาน รายการนี้จะไม่แสดงให้เลือกในธุรกรรมคลังและการเบิกจ่ายใหม่
-								แต่ประวัติเก่ายังคงอยู่
+								รายการที่ปิดจะไม่แสดงในการเลือกใหม่ แต่ประวัติเก่ายังอยู่
 							</p>
 						</div>
 						<Checkbox
@@ -1084,28 +1218,17 @@
 				</section>
 			{/if}
 
-			<!-- Submit & Back Buttons -->
-			<div class="flex items-center gap-3 pt-2">
-				<Button
-					variant="outline"
-					type="button"
-					onclick={onsuccess}
-					class="rounded-xl border border-slate-200 px-6 py-6 text-sm font-bold text-slate-700 hover:bg-slate-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900/50"
-				>
-					ยกเลิกและย้อนกลับ
+			<div class="flex items-center gap-3 pt-1">
+				<Button variant="outline" type="button" onclick={() => onsuccess?.()} class="rounded-xl">
+					{compact ? 'ยกเลิก' : 'ยกเลิกและย้อนกลับ'}
 				</Button>
-
-				<Button
-					type="submit"
-					disabled={$submitting || isPending || !unitMasterReady}
-					class="flex items-center gap-1.5 rounded-xl bg-[#002f6c] px-7 py-6 text-sm font-bold text-white shadow-md shadow-[#002f6c]/10 hover:bg-[#00204d] dark:shadow-none"
-				>
+				<Button type="submit" disabled={$submitting || isPending || !unitMasterReady}>
 					{#if $submitting || isPending}
-						กำลังบันทึกข้อมูล...
+						กำลังบันทึก...
 					{:else if isEdit}
 						บันทึกการแก้ไข
 					{:else}
-						บันทึกข้อมูล
+						บันทึก
 					{/if}
 				</Button>
 			</div>

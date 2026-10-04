@@ -46,6 +46,11 @@ vi.mock('$lib/features/public-register/booking-gate.server', () => ({
 	findConflictingHold: vi.fn(async () => null)
 }));
 
+const verifyResidenceMatchToken = vi.fn();
+vi.mock('$lib/features/public-register/residence-match-token.server', () => ({
+	verifyResidenceMatchToken: (...args: unknown[]) => verifyResidenceMatchToken(...args)
+}));
+
 const verifyToken = vi.fn<(token: string, ip?: string, action?: string) => Promise<boolean>>();
 vi.mock('$lib/server/security/captcha', () => ({
 	ReCaptchaProvider: class {
@@ -127,6 +132,8 @@ describe('POST /api/public/v1/registrations', () => {
 		vi.mocked(readForecastOccupancy).mockResolvedValue(0);
 		vi.mocked(findConflictingHold).mockReset();
 		vi.mocked(findConflictingHold).mockResolvedValue(null);
+		verifyResidenceMatchToken.mockReset();
+		verifyResidenceMatchToken.mockReturnValue(null);
 	});
 
 	it('422 when the contact first name is blank', async () => {
@@ -263,7 +270,7 @@ describe('POST /api/public/v1/registrations', () => {
 			const e = evacuees[0];
 
 			expect(e._id).toMatch(/^evacuee:[0-9A-HJKMNP-TV-Z]{26}$/);
-			expect(e.schema_v).toBe(10);
+			expect(e.schema_v).toBe(11);
 			expect(e.shelter_code).toBe('SH001');
 
 			expect(e.created_by).toBe('public');
@@ -301,7 +308,7 @@ describe('POST /api/public/v1/registrations', () => {
 	describe('a family booking', () => {
 		const FAMILY = {
 			...VALID_BODY,
-			national_id: '1234567890123',
+			national_id: '1234567890121',
 			members: [
 				CONTACT,
 				{
@@ -340,7 +347,7 @@ describe('POST /api/public/v1/registrations', () => {
 			expect(evacuees[0].phone).toBe('0812345678');
 			expect(evacuees[0].person_id).toEqual({
 				cardType: 'national_id',
-				number: '1234567890123'
+				number: '1234567890121'
 			});
 			expect(evacuees[1].phone).toBeNull();
 			expect((evacuees[1].person_id as { number?: string })?.number ?? '').toBe('');
@@ -475,7 +482,7 @@ describe('POST /api/public/v1/registrations', () => {
 
 	it('never returns PII on the ticket (Public task DoD)', async () => {
 		vi.mocked(findMasterByCode).mockResolvedValue(OPEN_SHELTER as never);
-		const body = await (await POST(event({ ...VALID_BODY, national_id: '1234567890123' }))).json();
+		const body = await (await POST(event({ ...VALID_BODY, national_id: '1234567890121' }))).json();
 
 		expect(Object.keys(body).sort()).toEqual([
 			'booked_at',
@@ -490,7 +497,7 @@ describe('POST /api/public/v1/registrations', () => {
 		]);
 		const serialized = JSON.stringify(body);
 		expect(serialized).not.toContain('0812345678');
-		expect(serialized).not.toContain('1234567890123');
+		expect(serialized).not.toContain('1234567890121');
 		expect(serialized).not.toContain('ใจดี'); // last name stays off the public ticket
 	});
 
@@ -547,7 +554,7 @@ describe('POST /api/public/v1/registrations', () => {
 						last_name: 'รักสงบ',
 						gender: 'male',
 						phone: '0811112222',
-						person_id: { cardType: 'national_id', number: '1100000000001' }
+						person_id: { cardType: 'national_id', number: '1100000000008' }
 					},
 					{
 						first_name: 'สมศรี',
@@ -601,7 +608,7 @@ describe('POST /api/public/v1/registrations', () => {
 						last_name: 'รักสงบ',
 						gender: 'male',
 						phone: '0811112222',
-						person_id: { cardType: 'national_id', number: '1100000000001' },
+						person_id: { cardType: 'national_id', number: '1100000000008' },
 						photo: 'image:01ARZ3NDEKTSV4RRFFQ69G5FAV'
 					}
 				],
@@ -638,7 +645,7 @@ describe('POST /api/public/v1/registrations', () => {
 			]);
 		});
 
-		it('422 when primary contact phone is missing in unified payload', async () => {
+		it('422 when primary contact phone is missing in unified payload (create)', async () => {
 			const invalidPayload = {
 				shelter_code: 'SH001',
 				captchaToken: 'tok',
@@ -664,6 +671,38 @@ describe('POST /api/public/v1/registrations', () => {
 			const res = await POST(event(invalidPayload));
 			expect(res.status).toBe(422);
 			expect((await res.json()).error).toBe('INVALID_INPUT');
+		});
+
+		it('does not 422 for empty phone when join_match_token is present (token gate runs)', async () => {
+			vi.mocked(findMasterByCode).mockResolvedValue(OPEN_SHELTER as never);
+			verifyResidenceMatchToken.mockReturnValue(null);
+
+			const joinPayload = {
+				shelter_code: 'SH001',
+				captchaToken: 'tok',
+				join_match_token: 'bad.token',
+				members: [
+					{
+						first_name: 'สมเกียรติ',
+						last_name: 'รักสงบ',
+						gender: 'male',
+						phone: ''
+					}
+				],
+				household: {
+					address_no: '99/1',
+					subdistrict: 'คอหงส์',
+					district: 'หาดใหญ่',
+					province: 'สงขลา',
+					postal_code: '90110',
+					pets: [],
+					vehicles: []
+				}
+			};
+
+			const res = await POST(event(joinPayload));
+			expect(res.status).toBe(400);
+			expect((await res.json()).error).toBe('INVALID_JOIN_TOKEN');
 		});
 	});
 });

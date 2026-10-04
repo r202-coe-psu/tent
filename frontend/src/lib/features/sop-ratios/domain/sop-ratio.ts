@@ -28,6 +28,30 @@ export const SOP_RATIO_KEYS = [
 
 export type SopRatioKey = (typeof SOP_RATIO_KEYS)[number];
 
+/**
+ * Sphere variables shown in the UI (requirement 2026-09-16, option A — display only).
+ * Persisted profiles keep the strict 20-key shape (CR-026); hidden keys retain their stored values.
+ * `m2_per_person_total` is presented as the merged "พื้นที่พักพิงรวม".
+ */
+export const VISIBLE_SOP_RATIO_KEYS: readonly SopRatioKey[] = [
+	'people_per_tap',
+	'people_per_handpump',
+	'people_per_open_well',
+	'people_per_laundry',
+	'people_per_bathing',
+	'people_per_toilet_female',
+	'people_per_toilet_male',
+	'm2_per_person_total',
+	'people_per_volunteer'
+];
+
+const VISIBLE_SOP_RATIO_KEY_SET: ReadonlySet<string> = new Set(VISIBLE_SOP_RATIO_KEYS);
+
+/** True when the ratio key is one of the Sphere variables shown in the UI. */
+export function isVisibleSopRatioKey(key: string): key is SopRatioKey {
+	return VISIBLE_SOP_RATIO_KEY_SET.has(key);
+}
+
 /** A stable, URL-safe identity for a master profile. */
 export const sopProfileSlugSchema = z.string().regex(/^[a-z0-9-]+$/, 'Invalid profile slug');
 

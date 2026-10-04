@@ -75,15 +75,13 @@ describe('intake pipeline integration (#209)', () => {
 				screening: {
 					evacuee_id: registered._id,
 					track: 'normal',
-					triage_level: 'yellow',
-					symptoms: [],
-					temperature_c: 37.1
+					symptoms: []
 				},
 				checkIn: false
 			},
 			ctx
 		);
-		expect(screening.triage_level).toBe('yellow');
+		expect(screening.schema_v).toBe(2);
 		expect(afterScreen).toBeUndefined();
 
 		const mid = await repo.getEvacuee(registered._id);
@@ -133,9 +131,7 @@ describe('intake pipeline integration (#209)', () => {
 				screening: {
 					evacuee_id: registered._id,
 					track: 'fast_track',
-					triage_level: 'green',
-					symptoms: [],
-					temperature_c: 36.5
+					symptoms: []
 				},
 				checkIn: true,
 				zone: 'Zone-Direct'
@@ -200,8 +196,8 @@ describe('intake pipeline integration (#209)', () => {
 			ctx
 		);
 
-		// Verified absent triage and vitals
-		expect(screening.triage_level).toBeNull();
+		// Verified absent triage and vitals (never stamped at all, per CR-106 2026-09-07)
+		expect(screening.triage_level).toBeUndefined();
 		expect(screening.vital_signs).toBeUndefined();
 		expect(screening.symptoms).toEqual([]);
 		expect(screening.notes).toBe('ผู้ประสบภัยแจ้งว่าไม่มีอาการป่วย สบายดี');

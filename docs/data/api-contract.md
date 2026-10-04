@@ -2,7 +2,7 @@
 title: Smart Shelter — API Contract v1
 status: draft for review
 created: 2026-06-11
-updated: 2026-09-16
+updated: 2026-10-01
 note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration; Partner Data API EXT-001–007 (#214); CR-124 staff Google step-up MFA + Google SSO login (enrolled + mint AuthSession)
 ---
 
@@ -48,6 +48,10 @@ DELETE /couch/_session          → logout
 
 **Staff Google & ThaID MFA + Linked SSO login (CR-124 & CR-ThaID)** — Google และ ThaID (DOPA BORA Digital ID) เป็นปัจจัยเพิ่ม / ทางเข้าสำหรับบัญชีที่ผูกแล้ว ไม่แทนที่ CouchDB เป็น IdP หลัก และไม่เปิด SSO ให้บัญชีที่ยังไม่ enroll:
 
+- **Login entry points (CR-141):** `/login` แสดงปุ่ม Google/ThaID ตาม `GET /api/public/v1/login-methods` → `{ password, google, thaid }`;
+  ฟอร์ม username/password แสดงบน `/login` เฉพาะเมื่อ `config:app.password_login_enabled = true` (default `false`).
+  `/admin-login` (ไม่ลิงก์จากที่ใด, `noindex`) แสดงฟอร์ม password เสมอสำหรับทุก role — เป็นการซ่อนระดับ UX เท่านั้น
+  (`POST /couch/_session` ยังรับ password)
 - **Password path:** Factor 1 = username/password → `POST /couch/_session` ตามเดิม
 - หลัง password login: ถ้า `_users.mfa.providers` มี `type:"google"` หรือ `type:"thaid"` → สถานะแอป `pending_mfa` นำทางไปยัง `/mfa-challenge`
   ซึ่งผู้ใช้สามารถเลือกยืนยัน Google/ThaID เพื่อตั้ง `mfa_ok` หรือกด "ข้ามขั้นตอนนี้" (`POST /api/v1/auth/mfa/skip`) เพื่อเข้าสู่ระบบได้ทันที
@@ -55,7 +59,13 @@ DELETE /couch/_session          → logout
 - **Linked SSO login path (enrolled-only):** ปุ่ม Google หรือ ThaID บนหน้า login → BFF `mode=login` (ไม่ต้องมี `AuthSession` ก่อน)
   - สำเร็จ: lookup `_users` โดย provider `sub` → **mint** cookie `AuthSession` + ตั้ง `mfa_ok` ในรอบเดียวกัน → redirect `/portal`
     (guards ยัง enforce force-setup ถ้าเข้าเงื่อนไข; ไม่ส่งไป `/mfa-challenge` เพราะมี `mfa_ok` แล้ว)
-  - ไม่พบ link / `sub` ไม่รู้จัก → **ไม่** mint session; redirect `/login?error=google_not_linked` หรือ `thaid_not_linked`
+  - ไม่พบ link / `sub` ไม่รู้จัก → **ไม่** mint session; ตั้ง cookie `pending_link` (signed, HttpOnly, 10 นาที) → redirect `/login/link` (CR-141)
+- **Link-on-first-login path (CR-141):** `/login/link` รับ username|เบอร์โทร + password (+ reCAPTCHA ตาม flag) → `POST /api/v1/auth/link-account`
+  - ตรวจ `pending_link` → rate limit (nonce + IP) → captcha → verify password กับ central `_session` ฝั่งเซิร์ฟเวอร์
+  - eligibility: `must_change_password = true` **และ** ไม่มี `mfa.providers` **และ** ไม่ใช่ bootstrap `_admin`; ไม่ผ่าน → 403
+  - ผูก provider (`sub` ผูกกับ user อื่น → 409) → mint `AuthSession` + `mfa_ok` → client ไป `/force-setup`
+  - รหัสผิด / ไม่พบ user → 401 ข้อความเดียวกัน; เกิน limit → 429 + ลบ cookie
+  - บัญชีเดิมที่ยังไม่ผูก → `/admin-login` แล้วผูกที่ `/me`
   - Mint ใช้ cookie-auth secret จาก CouchDB config (`chttpd_auth` / `couch_httpd_auth`) + `_users.salt`
     และ hash ตาม `hash_algorithms` ของโหนด — อ่านได้เฉพาะฝั่งเซิร์ฟเวอร์ (ห้าม `PUBLIC_*`); **ไม่** ใช้ Proxy Auth
 - BFF (central เท่านั้น; secrets ฝั่งเซิร์ฟเวอร์):
@@ -66,6 +76,11 @@ DELETE /couch/_session          → logout
   GET/POST /api/v1/auth/oauth/thaid/start       → redirect ไป BORA ThaID authorize (mode: link | stepup | login)
   GET      /api/v1/auth/oauth/thaid/callback    → แลก code (Basic Auth), อ่าน sub/name/pid; link / step-up / mint login
   POST     /api/v1/auth/oauth/thaid/unlink      → ถอดการผูก ThaID (self หรือ admin ตามสิทธิ์)
+  GET      /api/public/v1/login-methods          → { password, google, thaid } สำหรับหน้า login (CR-141)
+  GET      /api/public/v1/system-banner          → { enabled, message, variant } สำหรับ system banner (อ่าน config:app.banner_*; no-store, ไม่ auth)
+  GET      /api/v1/auth/link-account/pending     → { provider, display } จาก pending_link หรือ 401 (CR-141)
+  DELETE   /api/v1/auth/link-account/pending     → ยกเลิก / ลบ pending_link (CR-141)
+  POST     /api/v1/auth/link-account             → verify password + ผูก provider + mint session (CR-141)
   POST     /api/v1/auth/mfa/clear               → ล้าง cookie mfa_ok เมื่อ login ใหม่ / logout
   POST     /api/v1/auth/mfa/skip                → ข้ามขั้นตอน MFA challenge ในรอบ session ปัจจุบัน (ตั้ง cookie mfa_ok)
   GET      /api/v1/auth/me                      → รวมสถานะ mfa_enrolled / pending_mfa / providers (ขยายจาก CR-105/CR-124)
@@ -250,12 +265,16 @@ TTL **ไม่รีเซ็ต** — `expires_at` ยังนับจาก
 | Method | Path | Auth |
 | --- | --- | --- |
 | POST | `/public/v1/unassigned-registrations/photos` | public BFF + secret — GridFS face/pet photo (#255); returns `photo_id` (`gfs:{oid}`) |
-| POST | `/public/v1/unassigned-registrations` | public BFF + secret — body mirrors public UnifiedRegistration fields (+ member `photo` / pet `image_url` refs); `schema_v: 2` |
-| GET | `/staff/v1/unassigned-registrations/search?q=` | staff session |
-| POST | `/staff/v1/unassigned-registrations/{id}/claim` | staff + shelter scope — copies nickname/religion/emergency_contact; GridFS member `photo` + pet `image_url` → Couch `image:{ulid}` |
+| POST | `/public/v1/unassigned-registrations` | public BFF + secret — body mirrors public UnifiedRegistration fields (+ member `photo` / pet `image_url` refs); `schema_v: 3`; optional `join_registration_id` appends into existing family (incl. closed → reopen) |
+| GET | `/staff/v1/unassigned-registrations/search?q=` | staff session — open members + open pets |
+| GET | `/staff/v1/unassigned-registrations/{id}/review` | `require_registration_staff` — read-only pre-claim review (CR-140 addendum); open members/pets + household address only (no `pets[]` claim-status list); writes nothing |
+| GET | `/staff/v1/unassigned-registrations/photos/{photo_id}` | `require_registration_staff` — streams GridFS bytes (CR-140 addendum); 404 unless `photo_id` is still referenced by an **open** member `photo` or pet `image_url` |
+| POST | `/staff/v1/unassigned-registrations/{id}/claim` | staff + shelter scope — body `member_ids` and/or `pet_ids`; copies nickname/religion/emergency_contact; GridFS member `photo` + pet `image_url` → Couch `image:{ulid}`; append claimed pets onto existing Couch HH |
 | DELETE | `/staff/v1/unassigned-registrations/{id}` | `system_admin` only |
 
-Claim = Mongo mark แล้ว birth Couch (option B — ดู [CR-113](../changes/CR-113-unassigned-registration-mongo.md)); shape: `schema.md` §9.5. Full-claim Mongo delete เป็น best-effort: ถ้า delete ล้มหลัง birth สำเร็จ ตอบ 200 ด้วย `deleted: false` และ `id` ของเอกสาร orphan (ไม่ 503). Public browser เรียกผ่าน SvelteKit BFF เท่านั้น (ไม่ตรง FastAPI).
+Claim = Mongo mark (คน+สัตว์) แล้ว birth/append Couch (option B — ดู [CR-113](../changes/CR-113-unassigned-registration-mongo.md) + [CR-140](../changes/CR-140-persistent-unassigned-family.md)); shape: `schema.md` §9.5. เมื่อไม่มี `open` เหลือ → เอกสาร `closed` (**ไม่** hard-delete); `deleted` เสมอ `false`. Public browser เรียกผ่าน SvelteKit BFF เท่านั้น (ไม่ตรง FastAPI).
+
+**CR-140 addendum:** Staff claim UI ไม่เรียก `POST .../claim` ทันทีที่ติ๊กเลือก — ไปหน้า review (`GET .../{id}/review`, อ่านอย่างเดียว) ก่อนเสมอ; `POST .../claim` ถูกเรียกเมื่อ staff กดยืนยันในหน้านั้นเท่านั้น (ดู [CR-140](../changes/CR-140-persistent-unassigned-family.md) addendum ท้ายไฟล์).
 
 ### 5.3 Partner Data API — OAuth2 `/external` (EXT-001–007, #214)
 

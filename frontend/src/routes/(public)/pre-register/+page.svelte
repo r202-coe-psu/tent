@@ -21,6 +21,9 @@
 	} from '$lib/features/public-portal';
 	import { onMount } from 'svelte';
 	import { toast } from 'svelte-sonner';
+	import { PUBLIC_PRE_REGISTER_I18N } from '$lib/constants/i18n';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
 
 	interface Props {
 		data: {
@@ -30,11 +33,13 @@
 
 	const { data }: Props = $props();
 
+	const t = $derived(getTranslation(PUBLIC_PRE_REGISTER_I18N, langState.current));
+
 	let activeTab = $state<'form' | 'history'>('form');
 	let ticket = $state<BookingTicketModel | null>(null);
 
 	let shelters = $state<(PublicShelterCardModel & { available: number | null })[]>([]);
-	let loadError = $state('');
+	let loadError = $state(false);
 	let isLoading = $state(true);
 
 	let storedTicketsCount = $state(0);
@@ -63,7 +68,7 @@
 
 		storedTicketsCount = getStoredTickets().length;
 		if (anyVerified) {
-			toast.info('ตั๋วการจองได้รับการยืนยันเข้าศูนย์พักพิงแล้ว ระบบได้ลบข้อมูลออกจากอุปกรณ์');
+			toast.info(t.ticketsClaimedToast);
 		}
 	}
 
@@ -93,7 +98,7 @@
 						: null
 			}));
 		} catch {
-			loadError = 'ไม่สามารถโหลดข้อมูลศูนย์พักพิงได้ กรุณาลองใหม่อีกครั้ง';
+			loadError = true;
 		} finally {
 			isLoading = false;
 		}
@@ -112,7 +117,7 @@
 </script>
 
 <svelte:head>
-	<title>ลงทะเบียนเข้าศูนย์พักพิงล่วงหน้า | SmartShelter</title>
+	<title>{t.pageTitle}</title>
 </svelte:head>
 
 <div class="mx-auto w-full max-w-6xl px-4 py-6 md:px-6 md:py-8 xl:max-w-7xl">
@@ -123,7 +128,7 @@
 			class="inline-flex cursor-pointer items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground hover:underline"
 		>
 			<ArrowLeft class="size-4" />
-			<span>กลับหน้าหลัก</span>
+			<span>{t.backHome}</span>
 		</a>
 
 		<!-- Tab Switcher -->
@@ -137,7 +142,7 @@
 				onclick={() => (activeTab = 'form')}
 			>
 				<ClipboardCheck class="size-4" />
-				<span>{ticket ? 'ตั๋วการจอง' : 'ลงทะเบียนใหม่'}</span>
+				<span>{ticket ? t.tabTicket : t.tabNew}</span>
 			</button>
 			<button
 				type="button"
@@ -154,7 +159,7 @@
 				}}
 			>
 				<History class="size-4" />
-				<span>ประวัติการจองของฉัน</span>
+				<span>{t.tabHistory}</span>
 				{#if storedTicketsCount > 0}
 					<span
 						class="flex size-5 animate-pulse items-center justify-center rounded-full bg-primary text-2xs font-bold text-primary-foreground"
@@ -169,11 +174,10 @@
 	<!-- Page Heading -->
 	<div class="mb-8">
 		<h1 class="text-2xl font-black tracking-tight text-foreground md:text-3xl">
-			ลงทะเบียนเข้าศูนย์พักพิงล่วงหน้า
+			{t.heading}
 		</h1>
 		<p class="mt-2 text-sm text-muted-foreground">
-			กรอกข้อมูลตัวท่านและสมาชิกในครอบครัว เพื่ออำนวยความสะดวกในการจัดสรรพื้นที่เข้าพัก
-			เมื่อเดินทางถึงศูนย์พักพิง
+			{t.subheading}
 		</p>
 	</div>
 
@@ -196,7 +200,7 @@
 						removeStoredTicket(code);
 						ticket = null;
 						storedTicketsCount = getStoredTickets().length;
-						toast.success('นำตั๋วไปยืนยันแล้ว ระบบได้ลบข้อมูลออกจากอุปกรณ์เรียบร้อย');
+						toast.success(t.verifiedToast);
 					}}
 				/>
 			</div>
@@ -204,7 +208,7 @@
 			<div class="flex flex-wrap items-center justify-between gap-4">
 				<Button variant="outline" onclick={handleNewBooking} class="gap-2 font-semibold">
 					<Plus class="size-4" />
-					<span>ลงทะเบียนใหม่อีกครอบครัว</span>
+					<span>{t.registerAnother}</span>
 				</Button>
 				<Button
 					variant="ghost"
@@ -215,7 +219,7 @@
 					class="gap-2 text-muted-foreground hover:text-foreground"
 				>
 					<History class="size-4" />
-					<span>ดูตั๋วลงทะเบียนทั้งหมดที่บันทึกไว้</span>
+					<span>{t.viewAllTickets}</span>
 				</Button>
 			</div>
 		</div>
@@ -224,13 +228,13 @@
 			<div
 				class="mx-auto mb-3 size-8 animate-spin rounded-full border-2 border-primary border-t-transparent"
 			></div>
-			<p class="text-sm font-medium text-muted-foreground">กำลังโหลดรายชื่อศูนย์พักพิง…</p>
+			<p class="text-sm font-medium text-muted-foreground">{t.loadingShelters}</p>
 		</div>
 	{:else if loadError}
 		<div
 			class="rounded-2xl border border-destructive/30 bg-destructive/10 p-6 text-center text-sm text-destructive shadow-2xs"
 		>
-			<p>{loadError}</p>
+			<p>{t.loadError}</p>
 		</div>
 	{:else}
 		<div class="space-y-6">
