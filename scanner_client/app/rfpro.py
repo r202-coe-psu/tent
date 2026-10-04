@@ -3,9 +3,8 @@
 Implements the vendor frame format (RFpro SDK `通用协议规则`) and the contact-IC-card commands
 (`接触式IC卡功能指令`) over /dev/hidraw, then reuses the Thai ID APDU logic of ThaiSmartCardReader.
 
-Only an allowlist of commands can ever be written to the device: the read-only ones plus
-ICC SET_BAUD / PPS (18 82 / 18 83, card-side speed: opt-in, not persisted by the module). The vendor's
-reboot / flash-write / device baud-rate commands are unreachable from here. Card data (APDU
+Only an allowlist of read-only commands can ever be written to the device; the vendor's
+reboot / flash-write / baud-rate commands are unreachable from here. Card data (APDU
 payloads, ID number, names, address) is never logged — only command, status and lengths.
 """
 
@@ -61,8 +60,6 @@ CMD_ICC_SEL = b"\x18\x01"
 CMD_ICC_SLOT_PWR = b"\x18\x02"
 CMD_ICC_GETATR = b"\x18\x80"
 CMD_ICC_APDU = b"\x18\x81"
-CMD_ICC_SET_BAUD = b"\x18\x82"
-CMD_ICC_PPS = b"\x18\x83"
 ALLOWED_CMDS = frozenset(
     {
         CMD_HW_VER,
@@ -71,19 +68,8 @@ ALLOWED_CMDS = frozenset(
         CMD_ICC_SLOT_PWR,
         CMD_ICC_GETATR,
         CMD_ICC_APDU,
-        CMD_ICC_SET_BAUD,
-        CMD_ICC_PPS,
     }
 )
-# Card-side speeds the module accepts (vendor doc 接触式IC卡功能指令 §CMD_ICC_SET_BAUD); 9600 is
-# what it resets to on every restart, so only a higher speed is ever sent.
-DEFAULT_CARD_BAUD = 9600
-# Not used by the kiosk: on kiosk3 SET_BAUD before the ATR makes the Thai ID card stop answering
-# reset (status 0xf8), and PPS to anything faster than 9600 is accepted but the next APDU gets no
-# reply. Kept for experiments (inspect_card_rfpro.py --baud 38400, pps-sweep); a card that does
-# not answer reset at it drops the connection back to 9600 (see RfproConnection.connect).
-FAST_CARD_BAUD = 38400
-CARD_BAUDS = (DEFAULT_CARD_BAUD, FAST_CARD_BAUD)
 
 
 class RfproError(RuntimeError):
@@ -340,33 +326,12 @@ class RfproTransport:
 class RfproConnection:
     """The slice of the pyscard connection API that ThaiSmartCardReader uses."""
 
-    def __init__(self, transport: RfproTransport, baud: int = DEFAULT_CARD_BAUD) -> None:
-        if baud not in CARD_BAUDS:
-            raise ValueError(f"card baud must be one of {CARD_BAUDS}")
+    def __init__(self, transport: RfproTransport) -> None:
         self._transport = transport
-        self._baud = baud
         self._atr: list[int] = []
-
-    def _set_baud(self, baud: int) -> None:
-        reply = self._transport.command(
-            CMD_ICC_SET_BAUD, bytes([SLOT_MAIN]) + baud.to_bytes(4, "big")
-        )
-        if reply.status != 0x00:
-            logger.warning(
-                "Card reader refused card baud %d (status 0x%02x); staying at the default",
-                baud,
-                reply.status,
-            )
-
-    def _apply_baud(self) -> None:
-        """The module wants SET_BAUD before the ATR, and a reset may drop it, so it is sent
-        ahead of every reset. A module that refuses keeps its 9600, which still reads."""
-        if self._baud != DEFAULT_CARD_BAUD:
-            self._set_baud(self._baud)
 
     def _select_and_reset(self) -> Reply:
         self._transport.command(CMD_ICC_SEL, bytes([SLOT_MAIN, CARD_CPU_7816]))
-        self._apply_baud()
         return self._transport.command(CMD_ICC_GETATR, bytes([SLOT_MAIN]))
 
     def power_cycle(self) -> None:
@@ -387,20 +352,6 @@ class RfproConnection:
         if reply is None or reply.status != 0x00:
             # Some insertions answer a bare reset with an undocumented status (seen: 0x11);
             # cycling slot power once clears it.
-            self.power_cycle()
-            self._apply_baud()
-            reply = self._transport.command(CMD_ICC_GETATR, bytes([SLOT_MAIN]))
-        if (reply.status != 0x00 or not reply.data) and self._baud != DEFAULT_CARD_BAUD:
-            # The faster speed is unproven on some card/module pairs. Rather than leave the
-            # kiosk unable to read, drop to the module's default for good and reset once more
-            # (the module keeps the speed it was last given until it restarts).
-            logger.warning(
-                "Card did not answer reset at %d baud; falling back to %d",
-                self._baud,
-                DEFAULT_CARD_BAUD,
-            )
-            self._baud = DEFAULT_CARD_BAUD
-            self._set_baud(DEFAULT_CARD_BAUD)
             self.power_cycle()
             reply = self._transport.command(CMD_ICC_GETATR, bytes([SLOT_MAIN]))
         if reply.status != 0x00 or not reply.data:
@@ -426,13 +377,10 @@ class RfproThaiCardReader(ThaiSmartCardReader):
     """Thai national ID reader on the RFpro module; same API as the PC/SC reader."""
 
     def __init__(
-        self,
-        usb_id: str = DEFAULT_USB_ID,
-        transport: RfproTransport | None = None,
-        baud: int = DEFAULT_CARD_BAUD,
+        self, usb_id: str = DEFAULT_USB_ID, transport: RfproTransport | None = None
     ):
         self.transport = transport or RfproTransport.open(usb_id)
-        super().__init__(connection=RfproConnection(self.transport, baud))
+        super().__init__(connection=RfproConnection(self.transport))
         self._poll_failures = 0
         # Most card data one reply can carry; a longer field is read in pieces of this size.
         self.piece_size = max(1, self.transport.in_size - REPLY_FRAME_OVERHEAD)
@@ -442,9 +390,8 @@ class RfproThaiCardReader(ThaiSmartCardReader):
             self.transport.close()
             raise
         logger.info(
-            "Initialized RFpro card reader (firmware %s, card baud %d)",
+            "Initialized RFpro card reader (firmware %s)",
             version.data.decode("ascii", errors="replace").strip("\x00 "),
-            baud,
         )
 
     def close(self) -> None:

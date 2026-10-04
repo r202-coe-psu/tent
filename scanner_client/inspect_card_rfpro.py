@@ -6,16 +6,14 @@ Uses the same driver as the kiosk (`app/rfpro.py`: frame codec, command allowlis
 transport), so a pass here means the kiosk driver works on this machine. Not an automated
 test; run directly from scanner_client/.
 
-Only the driver's command allowlist is ever sent (no flash/reboot commands; --baud adds 18 82):
+Only the driver's read-only command allowlist is ever sent (no flash/baud/reboot commands):
   00 00 hardware version · 18 00 card state · 18 01 select card type · 18 02 slot power
-  18 80 reset card (ATR) · 18 82 card baud (38400 by default) · 18 81 APDU (SELECT Thai ID applet, read CID, GET RESPONSE only)
+  18 80 reset card (ATR) · 18 81 APDU (SELECT Thai ID applet, read CID, GET RESPONSE only)
 
 Usage:
   sudo python3 inspect_card_rfpro.py            # ทุกขั้น: version → สถานะบัตร → รอเสียบบัตร → ATR → อ่านเลขบัตร
   sudo python3 inspect_card_rfpro.py ping       # ขั้น 1–2 อย่างเดียว (ไม่ต้องมีบัตร)
   sudo python3 inspect_card_rfpro.py --full     # S0-6: อ่านทั้งใบ แสดงเฉพาะความยาวแต่ละ field + เวลา (ไม่แสดงข้อมูล)
-  sudo python3 inspect_card_rfpro.py --full --baud 38400   # ทดลองเท่านั้น: บน kiosk3 บัตรไม่ตอบรีเซ็ตที่ 38400 (default ของ inspector/kiosk = 9600)
-  sudo python3 inspect_card_rfpro.py pps-sweep  # ลอง PPS (18 83) หลายค่าหลัง ATR เทียบความเร็ว/ความถูกต้อง แล้วบอกค่าที่เร็วที่สุด
   python3 inspect_card_rfpro.py long-reply --verbose  # ดึงคำตอบยาว 1 รายการ (ชื่อไทย) แล้วรายงานเฉพาะโครงสร้างแพ็กเก็ต HID
   --verbose     แสดงคำสั่ง/คำตอบ (ข้อมูลบัตรใน APDU reply ถูกปิด เว้นแต่ใส่ --show-cid)
   --show-cid    แสดงเลขบัตรเต็ม (default ปิดบังกลางเลข)
@@ -35,26 +33,20 @@ from app.rfpro import (
     CMD_HW_VER,
     CMD_ICC_APDU,
     CMD_ICC_GETATR,
-    CMD_ICC_PPS,
     CMD_ICC_SEL,
-    CMD_ICC_SET_BAUD,
     CMD_ICC_SLOT_PWR,
     CMD_ICC_ST,
-    DEFAULT_CARD_BAUD,
-    FAST_CARD_BAUD,
-    CARD_BAUDS,
     HEARTBEAT,
     SLOT_MAIN,
     RfproConnection,
     RfproError,
-    RfproProtocolError,
     RfproThaiCardReader,
     RfproTransport,
     _xor,
     build_frame,
     parse_frame,
 )
-from app.scard import CMD_PHOTOS, CMD_THFULLNAME, SELECT, THAI_CARD_AID
+from app.scard import CMD_THFULLNAME, SELECT, THAI_CARD_AID
 from inspect_card_hid import DEFAULT_ID
 
 APDU_SELECT_THAI = bytes(SELECT + THAI_CARD_AID)
@@ -149,17 +141,12 @@ def wait_for_card(transport: RfproTransport) -> None:
     raise InspectError("ไม่พบบัตรภายใน 30 วิ")
 
 
-def read_cid(transport: RfproTransport, show_cid: bool, baud: int = DEFAULT_CARD_BAUD) -> None:
+def read_cid(transport: RfproTransport, show_cid: bool) -> None:
     wait_for_card(transport)
 
     step("4) เลือกบัตร CPU ISO 7816 (18 01) + รีเซ็ตบัตร (18 80)")
     reply = transport.command(CMD_ICC_SEL, bytes([SLOT_MAIN, CARD_CPU_7816]))
     print(f"   select type: status {status_text(reply.status)}")
-    if baud != DEFAULT_CARD_BAUD:
-        reply = transport.command(
-            CMD_ICC_SET_BAUD, bytes([SLOT_MAIN]) + baud.to_bytes(4, "big")
-        )
-        print(f"   set card baud {baud} (18 82): status {status_text(reply.status)}")
     reply = transport.command(CMD_ICC_GETATR, bytes([SLOT_MAIN]))
     if reply.status != 0x00:
         print(
@@ -171,8 +158,6 @@ def read_cid(transport: RfproTransport, show_cid: bool, baud: int = DEFAULT_CARD
                 f"   slot power {'on' if act else 'off'}: status {status_text(power.status)}"
             )
             time.sleep(0.3)
-        if baud != DEFAULT_CARD_BAUD:
-            transport.command(CMD_ICC_SET_BAUD, bytes([SLOT_MAIN]) + baud.to_bytes(4, "big"))
         reply = transport.command(CMD_ICC_GETATR, bytes([SLOT_MAIN]))
     if reply.status != 0x00:
         print(ATR_HINT)
@@ -207,25 +192,13 @@ def read_cid(transport: RfproTransport, show_cid: bool, baud: int = DEFAULT_CARD
     print(f"   status {status_text(reply.status)}")
 
 
-def read_full(transport: RfproTransport, baud: int = DEFAULT_CARD_BAUD) -> None:
+def read_full(transport: RfproTransport) -> None:
     """S0-6: read the whole card through the kiosk driver; print lengths and timing only."""
     wait_for_card(transport)
-    step(f"4) อ่านข้อมูลทั้งใบด้วย driver เดียวกับ kiosk (card baud {baud}; ไม่แสดงข้อมูลบัตร)")
-    reader = RfproThaiCardReader(transport=transport, baud=baud)
-    commands = 0
-    send = transport.command
-
-    def counted(*args, **kwargs):
-        nonlocal commands
-        commands += 1
-        return send(*args, **kwargs)
-
-    transport.command = counted
+    step("4) อ่านข้อมูลทั้งใบด้วย driver เดียวกับ kiosk (ไม่แสดงข้อมูลบัตร)")
+    reader = RfproThaiCardReader(transport=transport)
     started = time.monotonic()
-    try:
-        card = reader.read_all_data()
-    finally:
-        transport.command = send
+    card = reader.read_all_data()
     elapsed = time.monotonic() - started
     for key, value in card.items():
         if value in (None, ""):
@@ -235,109 +208,7 @@ def read_full(transport: RfproTransport, baud: int = DEFAULT_CARD_BAUD) -> None:
         else:
             size = f"{len(str(value))} ตัวอักษร"
         print(f"   {key:<16} {size}")
-    print(f"   {commands} คำสั่ง · เฉลี่ย {elapsed / max(commands, 1) * 1000:.0f} ms/คำสั่ง")
     print(f"✅ อ่านครบทั้งใบใน {elapsed:.1f} วิ (AC-C3: ลงทะเบียนต้องไม่เกินค่านี้ + 20%)")
-
-
-# (label, PPS1 = FiDi byte, SET_BAUD after the PPS). PPS1 high nibble = Fi index, low = Di index
-# (ISO 7816-3): Fi 3=372 9=512; Di 1=1 2=2 3=4 4=8 5=16 6=32. The Thai ID card's ATR offers 0x96.
-SWEEP_CANDIDATES: list[tuple[str, int | None, int | None]] = [
-    ("9600 baseline (no PPS)", None, None),
-    ("PPS 11  Fi372 Di1 (same speed)", 0x11, None),
-    ("PPS 12  Fi372 Di2", 0x12, None),
-    ("PPS 13  Fi372 Di4", 0x13, None),
-    ("PPS 13 + SET_BAUD 38400", 0x13, 38400),
-    ("PPS 14  Fi372 Di8", 0x14, None),
-    ("PPS 94  Fi512 Di8", 0x94, None),
-    ("PPS 96  Fi512 Di32 (card max)", 0x96, None),
-]
-SWEEP_PIECES = 25
-PHOTO_START = (CMD_PHOTOS[0][2] << 8) | CMD_PHOTOS[0][3]
-
-
-def sweep_one(
-    transport: RfproTransport, pps1: int | None, baud: int | None
-) -> tuple[str, float, bytes]:
-    """Reset the card, negotiate once, then read SWEEP_PIECES photo pieces. Returns
-    (PPS status text, ms per piece, the bytes read). Raises on any failure."""
-    # Back to a known state: module speed 9600, card cold-reset at its default speed.
-    transport.command(CMD_ICC_SET_BAUD, bytes([SLOT_MAIN]) + DEFAULT_CARD_BAUD.to_bytes(4, "big"))
-    reader = RfproThaiCardReader(transport=transport)
-    reader.connection.power_cycle()
-    transport.command(CMD_ICC_SEL, bytes([SLOT_MAIN, CARD_CPU_7816]))
-    atr = transport.command(CMD_ICC_GETATR, bytes([SLOT_MAIN]))
-    if atr.status != 0x00 or not atr.data:
-        raise InspectError(f"ATR status {status_text(atr.status)}")
-    pps_text = "-"
-    if pps1 is not None:
-        reply = transport.command(
-            CMD_ICC_PPS, bytes([SLOT_MAIN, 0x10, pps1, 0, 0, 0, 0])
-        )
-        pps_text = status_text(reply.status)
-        if reply.status != 0x00:
-            raise InspectError(f"PPS refused: {pps_text}")
-        time.sleep(0.05)
-    if baud is not None:
-        reply = transport.command(CMD_ICC_SET_BAUD, bytes([SLOT_MAIN]) + baud.to_bytes(4, "big"))
-        pps_text += f" / baud {status_text(reply.status)}"
-        if reply.status != 0x00:
-            raise InspectError(f"SET_BAUD refused: {status_text(reply.status)}")
-    reader.req_prefix = [0x00, 0xC0, 0x00, 0x01 if atr.data[:2] == b"\x3b\x67" else 0x00]
-    answer = transport.command(CMD_ICC_APDU, bytes([SLOT_MAIN]) + APDU_SELECT_THAI)
-    if answer.status != 0x00 or len(answer.data) < 2 or answer.data[-2] not in (0x90, 0x61):
-        raise InspectError(f"SELECT applet failed (status {status_text(answer.status)})")
-    data: list[int] = []
-    started = time.monotonic()
-    for index in range(SWEEP_PIECES):
-        data.extend(
-            reader._read_photo_piece(PHOTO_START + index * reader.piece_size, reader.piece_size)
-        )
-    ms_per_piece = (time.monotonic() - started) / SWEEP_PIECES * 1000
-    return pps_text, ms_per_piece, bytes(data)
-
-
-def pps_sweep(transport: RfproTransport) -> None:
-    """Try each PPS candidate from SWEEP_CANDIDATES against the card in the slot and report
-    which ones read correctly (same bytes as the 9600 baseline) and how fast. Only timings and
-    OK/FAIL are printed, never card data."""
-    wait_for_card(transport)
-    step(f"4) กวาด PPS: อ่าน {SWEEP_PIECES} ชิ้นของรูป (ชิ้นละ 2 คำสั่ง) ต่อค่า แล้วเทียบกับ 9600")
-    baseline: bytes | None = None
-    best: tuple[float, str] | None = None
-    pieces_total = 255  # ~5100-byte photo / 20 bytes per piece
-    for label, pps1, baud in SWEEP_CANDIDATES:
-        try:
-            pps_text, ms, data = sweep_one(transport, pps1, baud)
-        except (RfproError, InspectError, ValueError, RuntimeError) as error:
-            print(f"❌ {label:<34} {error}")
-            continue
-        if baseline is None:
-            baseline = data
-        same = data == baseline
-        verdict = "✅ ข้อมูลตรง" if same else "⚠️ ข้อมูลไม่ตรงกับ 9600"
-        print(
-            f"{verdict} {label:<34} {ms:6.1f} ms/ชิ้น · รูปทั้งใบ ≈ {ms * pieces_total / 1000:5.1f} วิ"
-            f" · PPS {pps_text}"
-        )
-        if same and pps1 is not None and (best is None or ms < best[0]):
-            best = (ms, label)
-    # Leave the module and card as the kiosk expects. A candidate the module could not follow
-    # can leave it unresponsive for a few seconds, so give each restore step a second chance.
-    for cmd, data in (
-        (CMD_ICC_SET_BAUD, bytes([SLOT_MAIN]) + DEFAULT_CARD_BAUD.to_bytes(4, "big")),
-        (CMD_ICC_SLOT_PWR, bytes([SLOT_MAIN, 0x00])),
-    ):
-        for attempt in range(2):
-            try:
-                transport.command(cmd, data)
-                break
-            except RfproProtocolError:
-                if attempt:
-                    print("⚠️  โมดูลไม่ตอบตอนคืนค่า — ถอด/เสียบ USB ของตัวอ่านใหม่ก่อนใช้ต่อ")
-    if best:
-        print(f"\n➡️  เร็วที่สุดที่ข้อมูลตรง: {best[1]} ({best[0]:.1f} ms/ชิ้น)")
-    else:
-        print("\n➡️  ไม่มีค่า PPS ไหนอ่านถูกต้อง — คง 9600 ไว้ ส่งผลนี้มาให้ทีม dev")
 
 
 def long_reply(transport: RfproTransport, usb_id: str) -> None:
@@ -445,7 +316,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("command", nargs="?", default="all", choices=["all", "ping", "long-reply", "pps-sweep"])
+    parser.add_argument("command", nargs="?", default="all", choices=["all", "ping", "long-reply"])
     parser.add_argument(
         "--full",
         action="store_true",
@@ -453,13 +324,6 @@ def main() -> None:
     )
     parser.add_argument(
         "--id", default=DEFAULT_ID, help=f"VID:PID (default {DEFAULT_ID})"
-    )
-    parser.add_argument(
-        "--baud",
-        type=int,
-        choices=CARD_BAUDS,
-        default=DEFAULT_CARD_BAUD,
-        help=f"ความเร็วสายระหว่างโมดูลกับบัตร (default {DEFAULT_CARD_BAUD} = ค่าที่ kiosk ใช้; {FAST_CARD_BAUD} ทดลองเท่านั้น — kiosk3 บัตรไม่ตอบรีเซ็ต)",
     )
     parser.add_argument("--verbose", action="store_true", help="แสดงคำสั่ง/คำตอบ")
     parser.add_argument(
@@ -485,27 +349,16 @@ def main() -> None:
         ping(transport)
         if args.command == "long-reply":
             long_reply(transport, args.id)
-        elif args.command == "pps-sweep":
-            pps_sweep(transport)
         elif args.command == "all":
             if args.full:
-                read_full(transport, args.baud)
+                read_full(transport)
             else:
-                read_cid(transport, args.show_cid, args.baud)
+                read_cid(transport, args.show_cid)
     except (RfproError, InspectError, RuntimeError, ValueError) as error:
         print(f"\n❌ {error}")
         print("   ลองใหม่ด้วย --verbose แล้วส่งผลให้ทีม dev")
         sys.exit(1)
     finally:
-        if args.baud != DEFAULT_CARD_BAUD and args.command in ("all",):
-            # The module keeps the speed it was given until it restarts; leave it at 9600 so a
-            # kiosk (or the next run) that does not send 18 82 still reads.
-            try:
-                transport.command(
-                    CMD_ICC_SET_BAUD, bytes([SLOT_MAIN]) + DEFAULT_CARD_BAUD.to_bytes(4, "big")
-                )
-            except RfproError:
-                pass
         transport.close()
 
 
