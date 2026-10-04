@@ -96,7 +96,7 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 **Index:** `(last_name, first_name)` · `(phone)` · `(household_id)` · `(current_stay.status)` · `(person_id.number)`
 - **Kiosk Lookup Indexes (CR-151):** ชุด `KIOSK_LOOKUP_MANGO_INDEXES` 3 ตัว ได้แก่ `['type', 'phone']` (`evacuee-type-phone-idx`), `['type', 'person_id.number']` (`evacuee-type-person-id-idx`), และ `['type', 'household_id']` (`evacuee-type-household-idx`) deploy แยกจาก referral indexes เพื่อรองรับการค้นหาผู้จองล่วงหน้าหน้า kiosk
 
-> **Kiosk Report-in (CR-151):** kiosk ปรับ flow จากเดิมที่สร้าง evacuee ใหม่จากบัตร (CR-097) เป็นการรับรายงานตัวผู้จองทางเว็บ (`registered_via: 'web'`) และอัปเดตสถานะเป็น `current_stay.status = 'arriving'` โดยคง `schema_v 11` (ไม่ bump schema_v; ส่วน walk-in ที่จอง schema_v 12 อยู่ใน CR-149)
+> **Kiosk Report-in (CR-151):** kiosk ปรับ flow จากเดิมที่สร้าง evacuee ใหม่จากบัตร (CR-097) เป็นการรับรายงานตัวผู้จองทางเว็บ (`registered_via: 'web'`) และอัปเดตสถานะเป็น `current_stay.status = 'arriving'` โดยคงเดิม (ไม่อัปเกรด schema_v; อิงตามเวอร์ชันปัจจุบันของ develop; ส่วน walk-in ที่จอง schema_v 12 อยู่ใน CR-149)
 
 **Migration (schema_v 2 → 3):** rename บน read — `registered`→`pre_registered`, `checked_in`→`active`;
 `checked_out` เดิม (ออกทั่วไป) → `checked_out` ใหม่ (กลับภูมิลำเนา) ชั่วคราวจนกว่า manual review แยก
