@@ -1,12 +1,13 @@
 ---
-id: draft
+id: CR-152
 title: Kiosk — เปิด/ปิดช่องทางรายงานตัวด้วยเบอร์โทรรายศูนย์ผ่าน shelter `feature_flags` (backoffice)
-status: proposed
+status: approved
 date: 2026-09-25
 created: 2026-09-25
 updated: 2026-10-04
 requested_by: ทีม kiosk (branch feat/pre-register_kiosk)
-decided_by: เจ้าของโครงการ
+decided_by: Jakee Indapanya (GitHub net-lynx), Project Owner — อนุมัติ 2026-10-04 (Asia/Bangkok)
+decision_date: 2026-10-04
 layer: volatile
 amends:
   - docs/changes/draft-kiosk-pre-registration-check-in.md (branch docs-kiosk-pre-register) FR-KPC-06, FR-KPC-11, §6.6, §7 สัญญา API
@@ -26,7 +27,9 @@ why: >
   ผู้จัดการศูนย์ต้องเปิด/ปิดได้เองจาก backoffice โดยไม่ต้องเข้าไปแก้ไฟล์บนเครื่อง kiosk ทีละเครื่อง
 migration: ไม่มี backfill — flag ใหม่ใน `feature_flags` default `false`; doc เดิมที่ไม่มี key อ่านเป็นปิด
 ---
-# ร่าง CR: Kiosk — เปิด/ปิดช่องทางเบอร์โทรรายศูนย์ผ่าน backoffice
+# CR-152: Kiosk — เปิด/ปิดช่องทางเบอร์โทรรายศูนย์ผ่าน backoffice
+
+> **สถานะ:** approved เป็น spec เมื่อ 2026-10-04 (Asia/Bangkok) โดย Project Owner Jakee Indapanya (GitHub net-lynx) · ยังไม่ implement · ยอมรับ flag รายศูนย์ผ่าน backoffice แล้ว
 
 > **สรุป (TL;DR)**
 >
@@ -146,3 +149,8 @@ migration: ไม่มี backfill — flag ใหม่ใน `feature_flags` 
 - 2026-09-25 — proposed (เดิมเสนอแบบ `.env` ต่อเครื่อง)
 - 2026-09-25 — เจ้าของโครงการตัดสินใจเปลี่ยนแนวทางเป็นการควบคุมรายศูนย์ผ่าน backoffice (shelter `feature_flags`) แทนการตั้งค่าต่อเครื่อง — ไม่มี open decision ค้าง, ข้อกำหนดการทำงานทั้งหมดระบุเป็น spec ไว้ข้างบนแล้ว (§1–§6)
 - 2026-10-04 — ปรับปรุงตาม PR Review (#311): ตัดลิงก์ phantom plan ที่ไม่มีอยู่จริง, ระบุสถานะการ rework ของโค้ด (commit `31c87846` บน `feat/pre-register_kiosk`), ระบุ branch dependency ของ `docs/data/{schema,api-contract}.md` (commit `9a73d6ba`), ขยายความ FR-KPT-20 และ AC-KPT-02 เรื่อง in-memory cache TTL 30s ให้ตรงกับโค้ดจริง, ระบุ additive extensibility ของ endpoint ใน FR-KPT-11 และปรับ path ใน AC-KPT-05/08 ให้เป็น full API path
+- 2026-10-04 (Asia/Bangkok) — **Project Owner Jakee Indapanya (GitHub net-lynx) ให้สัตยาบันและอนุมัติ spec นี้ (`status: approved`)** · ยังไม่ implement
+  - ยอมรับการควบคุมรายศูนย์ผ่าน backoffice: `feature_flags.kiosk_phone_check_in_enabled` (bool, default `false`)
+  - kiosk อ่านค่าผ่าน `POST /api/v1/scanner/kiosk/config` · อ่านค่าไม่ได้ = ปิด (fail closed)
+  - §7 ไม่มี open decision
+  - รันเลข CR-152 จาก `docs/changes/_index.md` บน `develop` (เลขที่จัดสรรล่าสุดคือ CR-151; ไม่ใช้ช่องว่าง 131–133 และ 144–147) · ถอด `docs/changes/draft-kiosk-phone-check-in-toggle.md`
