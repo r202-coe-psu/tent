@@ -36,11 +36,16 @@ POWER_CYCLE_SETTLE_SEC = 0.3
 # STX + INX + LEN(2) + CHK around the LEN bytes; replies are far smaller than this cap.
 FRAME_OVERHEAD = 5
 MAX_FRAME_LEN = 1024
-# The module returns a reply as ONE input report: of a longer frame only the first report arrives
-# (seen on kiosk3: a 112-byte frame delivered 32 bytes, nothing after). A reply frame is
+# The module answers with ONE 32-byte input report; of a longer frame only the first report
+# arrives by itself (kiosk3: a 112-byte frame delivered 32 bytes, nothing after). A reply frame is
 # STX+INX+LEN(2)+DEVICE(2)+CMD(2)+STATUS+CHK = 10 bytes around the card data, and the card's
 # SW1 SW2 ride inside that data, so a report holds in_size - 12 bytes of card data.
 REPLY_FRAME_OVERHEAD = 12
+# ...but a longer reply is not lost: the module hands out the rest one report per FE FF request
+# (CMD_NEXT_REPORT), so the transport now reads a whole 255-byte card field in one exchange.
+# Measured on kiosk3: Le 255 = 9 reports, the data matches the 20-byte pieces, ~1.4 ms/byte
+# (the card line at 9600 baud), so the Thai ID photo takes ~8 s instead of ~17 s.
+MAX_PIECE_SIZE = 255
 # Reading the photo piece by piece is slow; past this the photo is dropped and registration
 # goes on without it.
 PHOTO_BUDGET_SEC = 30.0
@@ -302,6 +307,17 @@ class RfproTransport:
             return False
         return frame is not None and frame.cmd == HEARTBEAT
 
+    @staticmethod
+    def _is_next_report_refusal(report: bytes) -> bool:
+        """A module without paging answers FE FF as an unknown command with a frame of its own."""
+        if report[:1] != bytes([STX]):
+            return False
+        try:
+            frame = parse_frame(report)
+        except RfproProtocolError:
+            return False
+        return frame is not None and frame.cmd == CMD_NEXT_REPORT
+
     def _await_reply(self, cmd: bytes, budget: float) -> Reply:
         deadline = time.monotonic() + budget
         buf = b""
@@ -317,8 +333,14 @@ class RfproTransport:
                 if start < 0:
                     continue
                 report = report[start:]
+            if buf and self._is_next_report_refusal(report):
+                raise RfproProtocolError("module does not support FE FF paged replies")
             reply, buf = self._extract(buf + report)
             if reply is None:
+                if buf:
+                    # A reply longer than one report: the module sends only the first and hands
+                    # out each next one when asked (see CMD_NEXT_REPORT).
+                    self._write(build_frame(self._inx, CMD_NEXT_REPORT))
                 continue  # the frame spans more reports (or the fragment was corrupt)
             # The device echoes INX, so a late reply to an earlier command is not ours.
             if reply.cmd == HEARTBEAT or reply.cmd != cmd or reply.inx != self._inx:
@@ -388,8 +410,10 @@ class RfproThaiCardReader(ThaiSmartCardReader):
         self.transport = transport or RfproTransport.open(usb_id)
         super().__init__(connection=RfproConnection(self.transport))
         self._poll_failures = 0
-        # Most card data one reply can carry; a longer field is read in pieces of this size.
-        self.piece_size = max(1, self.transport.in_size - REPLY_FRAME_OVERHEAD)
+        # Most card data one exchange asks for; a longer field is read in pieces of this size.
+        # What one report holds is the size to drop to if the paged replies ever fail.
+        self._single_report_piece = max(1, self.transport.in_size - REPLY_FRAME_OVERHEAD)
+        self.piece_size = MAX_PIECE_SIZE
         try:
             version = self.transport.command(CMD_HW_VER)
         except RfproError:
@@ -453,10 +477,36 @@ class RfproThaiCardReader(ThaiSmartCardReader):
             )
         return data
 
+    def _fall_back_to_single_report(self, error: Exception) -> bool:
+        """Paged replies are what lets a piece exceed one report. If one fails, read in
+        report-sized pieces from now on (the way kiosk3 always worked) instead of failing the
+        card. False when that is already the case."""
+        if self.piece_size <= self._single_report_piece:
+            return False
+        logger.warning(
+            "Long card replies failed (%s); reading in %d-byte pieces from now on",
+            error,
+            self._single_report_piece,
+        )
+        self.piece_size = self._single_report_piece
+        return True
+
     def transmit_cmd(self, cmd: list[int]) -> list[int]:
-        """Same as the PC/SC reader, but a field longer than one report is read in pieces."""
-        if len(cmd) != 7 or cmd[:2] != [0x80, 0xB0] or cmd[-1] <= self.piece_size:
+        try:
+            return self._transmit_cmd(cmd)
+        except ReaderLostError:
+            raise
+        except RfproError as error:
+            if not self._fall_back_to_single_report(error):
+                raise
+            return self._transmit_cmd(cmd)
+
+    def _transmit_cmd(self, cmd: list[int]) -> list[int]:
+        """Same as the PC/SC reader, but a field longer than one piece is read in pieces."""
+        if len(cmd) != 7 or cmd[:2] != [0x80, 0xB0]:
             return super().transmit_cmd(cmd)
+        # Every READ BINARY goes through _read_piece, even a field that fits one piece: it puts
+        # back a leading C0 the module swallows (e.g. a name or address starting with "ภ").
         offset = (cmd[2] << 8) | cmd[3]
         data: list[int] = []
         for start in range(0, cmd[-1], self.piece_size):
@@ -493,6 +543,14 @@ class RfproThaiCardReader(ThaiSmartCardReader):
                     except ReaderLostError:
                         raise
                     except RfproError as error:
+                        if self._fall_back_to_single_report(error):
+                            # Start over: changing the piece size half way would leave a gap
+                            # that shifts every later byte of the JPEG.
+                            self.connection.power_cycle()
+                            if not self.connect():
+                                logger.error("Card photo could not be read: card did not answer reset")
+                                return None
+                            return self.get_photo_bytes()
                         if recoveries >= MAX_PHOTO_RECOVERIES:
                             logger.error("Card photo could not be read: %s", error)
                             return None

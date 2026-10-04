@@ -37,7 +37,6 @@ from app.rfpro import (
     CMD_ICC_SEL,
     CMD_ICC_SLOT_PWR,
     CMD_ICC_ST,
-    CMD_NEXT_REPORT,
     HEARTBEAT,
     SLOT_MAIN,
     RfproConnection,
@@ -215,63 +214,15 @@ def read_full(transport: RfproTransport) -> None:
 
 PAGED_LADDER = (20, 48, 64, 100, 128, 200, 255)
 PHOTO_START = 0x017B
-MAX_PAGES = 20
-
-
-def fetch_paged(transport: RfproTransport, apdu: bytes, timeout: float = 1.0) -> tuple[bytes, int]:
-    """One 18 81 command, then the reply page by page: the module sends only the first 32-byte
-    report and, like the vendor library, is asked for each next one with FE FF (same INX).
-    Returns (the frame, pages). Raises InspectError if a page never arrives or the checksum fails."""
-    with transport._lock:
-        transport._inx = (transport._inx % 255) + 1
-        inx = transport._inx
-        transport._drain()
-        transport._write(build_frame(inx, CMD_ICC_APDU, bytes([SLOT_MAIN]) + apdu))
-
-        def next_report() -> bytes | None:
-            deadline = time.monotonic() + timeout
-            while (left := deadline - time.monotonic()) > 0:
-                report = transport._read_report(left)
-                if report is None:
-                    return None
-                if not transport._is_interleaved_heartbeat(report):
-                    return report
-            return None
-
-        first = next_report()
-        if first is None or first[:1] != b"\xaa" or len(first) < 4:
-            raise InspectError("ไม่มี report แรกที่ขึ้นต้น STX")
-        declared = int.from_bytes(first[2:4], "big") + 5
-        stream, pages = first, 1
-        while len(stream) < declared:
-            if pages >= MAX_PAGES:
-                raise InspectError(f"เกิน {MAX_PAGES} หน้าแล้วยังไม่ครบ ({len(stream)}/{declared})")
-            transport._write(build_frame(inx, CMD_NEXT_REPORT))
-            report = next_report()
-            if report is None:
-                raise InspectError(f"หน้า {pages + 1} ไม่มา (ได้ {len(stream)}/{declared} ไบต์)")
-            if report[:1] == b"\xaa":
-                try:
-                    answer = parse_frame(report)
-                except RfproError:
-                    answer = None
-                if answer is not None and answer.cmd == CMD_NEXT_REPORT:
-                    raise InspectError(f"โมดูลไม่รู้จัก FE FF (status {status_text(answer.status)})")
-            stream += report
-            pages += 1
-    frame = stream[:declared]
-    if _xor(frame[1:-1]) != frame[-1]:
-        raise InspectError(f"checksum ผิด ({pages} หน้า {declared} ไบต์)")
-    return frame, pages
 
 
 def paged_reply(transport: RfproTransport) -> None:
-    """Does asking for each next report with FE FF give a long reply that checks out, and how
-    fast? For each Le: READ BINARY at the photo offset, then GET RESPONSE read page by page.
-    Prints only OK/FAIL, pages and timing; the bytes read are compared with the Le 20 read in
-    memory and never shown."""
+    """Long replies through the driver's own paging (the transport asks for each next report
+    with FE FF, as the vendor library does). For each Le: READ BINARY at the photo offset, then
+    GET RESPONSE. Prints only OK/FAIL, the number of 32-byte reports and the time (which includes
+    the card reset); the bytes read are compared with the Le 20 read in memory, never shown."""
     wait_for_card(transport)
-    step("4) คำตอบยาวหลายหน้า: ขอหน้าถัดไปด้วย FE FF (ไม่แสดงข้อมูลบัตร)")
+    step("4) คำตอบยาวหลายหน้า: driver ขอหน้าถัดไปด้วย FE FF (ไม่แสดงข้อมูลบัตร)")
     connection = RfproConnection(transport)
     baseline: bytes | None = None
     for length in PAGED_LADDER:
@@ -285,21 +236,18 @@ def paged_reply(transport: RfproTransport) -> None:
             )
             if (sw1, sw2) != (0x61, length):
                 raise InspectError(f"READ BINARY → SW {sw1:02X} {sw2:02X} (ต้องเป็น 61 {length:02X})")
-            get_response = bytes([0x00, 0xC0, 0x00, 0x01 if atr[:2] == b"\x3b\x67" else 0x00, length])
-            frame, pages = fetch_paged(transport, get_response)
-            reply = parse_frame(frame)
-            if reply is None or reply.status != 0x00 or reply.data[-2:] != b"\x90\x00":
-                raise InspectError(f"คำตอบผิดรูป (status {reply.status if reply else '?'})")
-            data = reply.data[:-2]
-            if len(data) != length:
-                raise InspectError(f"ได้ {len(data)} ไบต์ ไม่ใช่ {length}")
+            p2 = 0x01 if atr[:2] == b"\x3b\x67" else 0x00
+            data, sw1, sw2 = connection.transmit([0x00, 0xC0, 0x00, p2, length])
+            if (sw1, sw2) != (0x90, 0x00) or len(data) != length:
+                raise InspectError(f"ได้ {len(data)} ไบต์ SW {sw1:02X} {sw2:02X} (ต้อง {length} ไบต์ 90 00)")
         except (RfproError, InspectError) as error:
             print(f"❌ Le {length:3d}: {error}")
             continue
         ms = (time.monotonic() - started) * 1000
+        pages = -(-(length + 12) // transport.in_size)  # frame = Le + 12 bytes, in_size per report
         if baseline is None:
-            baseline = data
-        same = data[: len(baseline)] == baseline[: len(data)]
+            baseline = bytes(data)
+        same = bytes(data[: len(baseline)]) == baseline[: len(data)]
         print(
             f"{'✅' if same else '⚠️ '} Le {length:3d}: {pages} หน้า · {ms:5.0f} ms"
             f"{'' if same else ' · ข้อมูลไม่ตรงกับ Le 20'}"

@@ -13,6 +13,7 @@ from app.rfpro import (
     CMD_ICC_GETATR,
     CMD_ICC_SEL,
     CMD_ICC_SLOT_PWR,
+    CMD_NEXT_REPORT,
     CMD_ICC_ST,
     Reply,
     RfproCardError,
@@ -69,6 +70,7 @@ class FakeHidDevice:
         report_id=None,
         size=OUT_SIZE,
         single_report=False,
+        paged=False,
     ):
         """`raw(inx, cmd, data)` returns the exact reports to send (for malformed-traffic tests);
         `report_id` prefixes every reply report, like a hidraw node with numbered reports."""
@@ -82,6 +84,10 @@ class FakeHidDevice:
         self.size = size
         # kiosk3 behaviour: of a reply longer than one input report only the first arrives.
         self.single_report = single_report
+        # What the vendor library revealed: the rest of a long reply is released one report at
+        # a time by `FE FF` requests.
+        self.paged = paged
+        self.pending: list[bytes] = []
         self.commands: list[tuple[bytes, bytes]] = []
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._serve, daemon=True)
@@ -111,6 +117,13 @@ class FakeHidDevice:
             length = int.from_bytes(frame[2:4], "big")
             inx, cmd, data = frame[1], frame[6:8], frame[8 : 4 + length]
             self.commands.append((cmd, data))
+            if self.paged and cmd == CMD_NEXT_REPORT:
+                try:
+                    if self.pending:
+                        self._send(self.pending.pop(0))
+                except OSError:
+                    return
+                continue
             try:
                 if self.raw is not None:
                     for chunk in self.raw(inx, cmd, data):
@@ -123,6 +136,9 @@ class FakeHidDevice:
                 if self.heartbeats:
                     self._send(reports(reply_frame(0, HEARTBEAT, 0), self.size)[0])
                 chunks = reports(reply_frame(inx, cmd, status, payload), self.size)
+                if self.paged:
+                    self.pending = chunks[1:]
+                    chunks = chunks[:1]
                 for chunk in chunks[:1] if self.single_report else chunks:
                     self._send(chunk)
             except OSError:
@@ -152,7 +168,7 @@ class FakeThaiCard:
         self.atr_silences = atr_silences
         self.pending = b""
         self.get_response_p2: list[int] = []
-        self.photo = bytes(range(256)) * 19  # 4864 bytes -> 20 chunks of up to 255
+        self.photo = (bytes(range(256)) * 20)[:5100]  # 20 chunks of 255, like a real card
         self.fields = {
             tuple(CMD_CID): CID.encode(),
             tuple(CMD_THFULLNAME): "นาย#สมชาย##ใจดี".encode("tis-620"),
@@ -293,6 +309,56 @@ class FrameTests(unittest.TestCase):
         with self.assertRaises(RfproProtocolError):
             parse_frame(raw[:-1] + bytes([raw[-1] ^ 0xFF]))
 
+    def test_next_report_request_matches_what_the_vendor_library_sends(self):
+        # usbmon: aa 06 00 04 00 00 fe ff (+ checksum) after the first report of a long reply.
+        frame = build_frame(6, CMD_NEXT_REPORT)
+        self.assertEqual(frame.hex(" "), "aa 06 00 04 00 00 fe ff 03")
+
+    def test_paged_reply_reads_every_size_and_reports_pages(self):
+        import contextlib
+        import io
+
+        import inspect_card_rfpro
+
+        card = FakeThaiCard()
+        device = FakeHidDevice(card, paged=True)
+        self.addCleanup(device.close)
+        transport = device.transport()
+        self.addCleanup(transport.close)
+        out = io.StringIO()
+
+        with patch.object(rfpro, "POWER_CYCLE_SETTLE_SEC", 0), contextlib.redirect_stdout(out):
+            inspect_card_rfpro.paged_reply(transport)
+
+        text = out.getvalue()
+        self.assertIn("✅ Le  20: 1 หน้า", text)
+        self.assertIn("✅ Le  48: 2 หน้า", text)  # 60-byte frame = 32 + 28
+        self.assertIn("✅ Le 255: 9 หน้า", text)  # 267-byte frame
+        self.assertNotIn("❌", text)
+        self.assertIn(CMD_NEXT_REPORT, [cmd for cmd, _ in device.commands])
+
+    def test_paged_reply_fails_cleanly_when_the_module_does_not_know_fe_ff(self):
+        import contextlib
+        import io
+
+        import inspect_card_rfpro
+
+        card = FakeThaiCard()
+        device = FakeHidDevice(card, single_report=True)  # a module without FE FF answers it as unknown
+        self.addCleanup(device.close)
+        transport = device.transport()
+        self.addCleanup(transport.close)
+        out = io.StringIO()
+
+        with (
+            patch.object(rfpro, "POWER_CYCLE_SETTLE_SEC", 0),
+            patch.object(inspect_card_rfpro, "PAGED_LADDER", (48,)),
+            contextlib.redirect_stdout(out),
+        ):
+            inspect_card_rfpro.paged_reply(transport)
+
+        self.assertIn("❌ Le  48: module does not support FE FF", out.getvalue())
+
     def test_commands_outside_the_allowlist_never_reach_the_wire(self):
         # 00 01 reboot, 00 04 write flash, 00 07 change baud (vendor command table).
         for cmd in (b"\x00\x01", b"\x00\x04", b"\x00\x07", b"\x18\x82"):
@@ -311,7 +377,7 @@ class FrameTests(unittest.TestCase):
 class TransportTests(unittest.TestCase):
     def test_skips_heartbeats_and_joins_replies_that_span_reports(self):
         payload = bytes(range(150))
-        device = FakeHidDevice(lambda cmd, data: (0, payload), heartbeats=True)
+        device = FakeHidDevice(lambda cmd, data: (0, payload), heartbeats=True, paged=True)
         self.addCleanup(device.close)
         transport = device.transport()
         self.addCleanup(transport.close)
@@ -387,7 +453,7 @@ class TransportTests(unittest.TestCase):
 
     def test_numbered_reports_are_prefixed_on_write_and_stripped_on_read(self):
         payload = bytes(range(80))
-        device = FakeHidDevice(lambda cmd, data: (0, payload), report_id=1, size=64)
+        device = FakeHidDevice(lambda cmd, data: (0, payload), report_id=1, size=64, paged=True)
         self.addCleanup(device.close)
         transport = device.transport()
         self.addCleanup(transport.close)
@@ -395,7 +461,7 @@ class TransportTests(unittest.TestCase):
         reply = transport.command(CMD_ICC_APDU, b"\x00\x00")
 
         self.assertEqual(reply.data, payload)
-        self.assertEqual(device.commands, [(CMD_ICC_APDU, b"\x00\x00")])
+        self.assertEqual(device.commands, [(CMD_ICC_APDU, b"\x00\x00"), (CMD_NEXT_REPORT, b"")])
 
     def test_unplugged_device_raises_device_lost(self):
         device = FakeHidDevice(lambda *_: (0, b""))
@@ -409,6 +475,9 @@ class TransportTests(unittest.TestCase):
 
 
 def make_reader(card: FakeThaiCard, **kwargs):
+    # The real module releases a long reply one report per FE FF request; single_report=True is
+    # a module that cannot (nothing after the first report), which makes the reader fall back.
+    kwargs.setdefault("paged", not kwargs.get("single_report", False))
     device = FakeHidDevice(card, **kwargs)
     transport = device.transport()
     reader = RfproThaiCardReader(transport=transport)
@@ -563,8 +632,8 @@ class ReaderTests(unittest.TestCase):
         self.assertEqual(data["citizen_id"], CID)
         self.assertEqual(data["full_name_th"], "นาย สมชาย ใจดี")
         self.assertTrue(base64.b64decode(data["photo_base64"].split(",", 1)[1]).startswith(card.photo))
-        apdus = [d for c, d in device.commands if c == CMD_ICC_APDU][1:]  # after SELECT
-        self.assertLessEqual(max(d[-1] for d in apdus), reader.piece_size)  # no Le above a piece
+        # The paged attempt failed, so the reader dropped to report-sized pieces for good.
+        self.assertEqual(reader.piece_size, 20)
 
     def test_fields_that_fit_one_report_are_read_in_a_single_command(self):
         _, device, reader = self.reader(single_report=True)
@@ -574,9 +643,22 @@ class ReaderTests(unittest.TestCase):
 
         self.assertEqual(len([1 for c, _ in device.commands if c == CMD_ICC_APDU]), 2)
 
-    def test_piece_size_follows_the_input_report_size(self):
+    def test_pieces_are_a_whole_card_field_and_fall_back_to_what_one_report_holds(self):
         _, _, reader = self.reader()
-        self.assertEqual(reader.piece_size, 20)  # 32-byte report - 12 bytes of frame and SW
+        self.assertEqual(reader.piece_size, 255)  # paged replies: a whole field in one exchange
+        self.assertEqual(reader._single_report_piece, 20)  # 32-byte report - 12 bytes of frame and SW
+
+    def test_the_photo_is_read_in_about_forty_commands_not_five_hundred(self):
+        card, device, reader = self.reader()
+        reader.connect()
+        device.commands.clear()
+
+        photo = reader.get_photo_bytes()
+
+        self.assertEqual(photo, card.photo)
+        photo_apdus = [c for c, _ in device.commands if c == CMD_ICC_APDU]
+        self.assertEqual(len(photo_apdus), 40)  # READ BINARY + GET RESPONSE for 20 chunks of 255
+        self.assertIn(CMD_NEXT_REPORT, [c for c, _ in device.commands])  # replies were paged
 
     def test_photo_is_dropped_when_it_takes_longer_than_the_budget(self):
         _, _, reader = self.reader()
@@ -643,11 +725,23 @@ class ReaderTests(unittest.TestCase):
 
     def test_photo_is_dropped_when_the_module_keeps_rejecting_a_piece(self):
         card, _, reader = self.reader(FlakyPhotoCard(failures=99))
+        reader.piece_size = reader._single_report_piece  # the retry limit is about report-sized pieces
         reader.connect()
 
         with self.assertLogs(rfpro.logger, level="ERROR"):
             self.assertIsNone(reader.get_photo_bytes())
         self.assertEqual(card.failures, 99 - rfpro.MAX_PHOTO_RECOVERIES - 1)
+
+    def test_a_failure_with_whole_field_pieces_restarts_the_photo_with_report_sized_ones(self):
+        card, _, reader = self.reader(FlakyPhotoCard(failures=1))
+        reader.connect()
+
+        with self.assertLogs(rfpro.logger, level="WARNING") as logs:
+            photo = reader.get_photo_bytes()
+
+        self.assertEqual(photo, card.photo)  # whole and in order: no gap from the switch
+        self.assertEqual(reader.piece_size, 20)
+        self.assertTrue(any("reading in 20-byte pieces" in line for line in logs.output))
 
     def test_unplugging_during_a_read_surfaces_as_a_lost_reader_not_a_card_error(self):
         from app.scard import ReaderLostError
