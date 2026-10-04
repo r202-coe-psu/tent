@@ -43,7 +43,7 @@
 	const formattedAddress = $derived.by(() => {
 		const parts = [
 			household.address_no ? `บ้านเลขที่ ${household.address_no}` : '',
-			household.village_no ? `หมู่ ${household.village_no}` : '',
+			household.village_no || '',
 			household.subdistrict ? `ต.${household.subdistrict}` : '',
 			household.district ? `อ.${household.district}` : '',
 			household.province ? `จ.${household.province}` : '',

@@ -2,6 +2,7 @@
  * Server helpers for public residence-match (no PII in response chips).
  */
 import { adminRaw } from '$lib/server/couch-admin';
+import { findMasterByCode } from '$lib/server/shelters.admin';
 import { shelterDbName } from '$lib/server/shelter-access-design';
 import { fastapiBaseUrl, fastapiServiceHeaders } from '$lib/server/fastapi';
 import {
@@ -10,7 +11,8 @@ import {
 	matchesResidenceAddress,
 	type ResidenceFields
 } from '$lib/features/people/server';
-import { signResidenceMatchToken, verifyResidenceMatchToken } from './residence-match-token.server';
+import { isShelterBookable } from '$lib/features/shelters/server';
+import { signResidenceMatchToken } from './residence-match-token.server';
 import { maskLastName } from '$lib/utils/mask';
 
 export type ResidenceSearchQuery = ResidenceFields & {
@@ -24,6 +26,8 @@ export type ResidenceMatchChip = {
 	shelter_code?: string | null;
 	shelter_name?: string | null;
 	is_in_shelter?: boolean;
+	/** When `is_in_shelter`, public join is allowed only if this is true. */
+	accepts_pre_registration?: boolean;
 	primary_contact_masked?: string | null;
 	matched_member_masked?: string | null;
 	member_count?: number;
@@ -61,6 +65,7 @@ function toChip(
 	meta?: {
 		shelter_code?: string | null;
 		shelter_name?: string | null;
+		accepts_pre_registration?: boolean;
 		primary_contact_masked?: string | null;
 		matched_member_masked?: string | null;
 		member_count?: number;
@@ -74,6 +79,9 @@ function toChip(
 		...(fields.housing_type?.trim() ? { housing_type: fields.housing_type.trim() } : {}),
 		...(meta?.shelter_code ? { shelter_code: meta.shelter_code } : {}),
 		...(meta?.shelter_name ? { shelter_name: meta.shelter_name } : {}),
+		...(typeof meta?.accepts_pre_registration === 'boolean'
+			? { accepts_pre_registration: meta.accepts_pre_registration }
+			: {}),
 		...(meta?.primary_contact_masked
 			? { primary_contact_masked: meta.primary_contact_masked }
 			: {}),
@@ -91,13 +99,19 @@ function toChip(
 export async function findShelterResidenceMatches(
 	shelterCode: string,
 	query: ResidenceSearchQuery,
-	shelterName?: string
+	shelterName?: string,
+	acceptsPreRegistration?: boolean
 ): Promise<ResidenceMatchChip[]> {
 	const rawPhone = query.phone?.replace(/\D/g, '') ?? '';
 	const hasPhone = rawPhone.length >= 9;
 	const hasRes = hasMinimumResidence(query);
 
 	if (!hasPhone && !hasRes) return [];
+
+	const acceptsPreReg =
+		typeof acceptsPreRegistration === 'boolean'
+			? acceptsPreRegistration
+			: isShelterBookable(await findMasterByCode(shelterCode));
 
 	const db = shelterDbName(shelterCode);
 
@@ -258,6 +272,7 @@ export async function findShelterResidenceMatches(
 				{
 					shelter_code: shelterCode,
 					shelter_name: shelterName,
+					accepts_pre_registration: acceptsPreReg,
 					primary_contact_masked: primaryMasked,
 					matched_member_masked: matchedMemberMasked,
 					member_count: evList.length,
@@ -345,20 +360,8 @@ export async function findUnassignedResidenceMatches(
 			address: hit.household_address
 		};
 
-		if (hit.claimed_shelter_code && hit.claimed_household_id) {
-			return toChip(
-				{
-					kind: 'shelter',
-					shelterCode: hit.claimed_shelter_code,
-					householdId: hit.claimed_household_id
-				},
-				{
-					residence_landmark: hit.landmark,
-					housing_type: hit.housing_type
-				},
-				meta
-			);
-		}
+		// Always Mongo-append join (even when some members already claimed into a shelter).
+		// Soft-join to Couch HH is out of scope — surface shelter_code for recommend copy only.
 		return toChip(
 			{ kind: 'unassigned', registrationId: hit.id },
 			{
@@ -371,10 +374,9 @@ export async function findUnassignedResidenceMatches(
 }
 
 /**
- * Universal residence matching for unassigned flow:
- * 1. Queries unassigned registrations (Mongo - open and claimed)
- * 2. Queries open CouchDB shelter databases in parallel
- * 3. Merges and deduplicates matches
+ * Unassigned-flow residence matching: Mongo queue families only.
+ * Shelter Couch HH chips are out of scope here (no soft-join); shelter booking
+ * hard-join still uses `findShelterResidenceMatches` via `shelter_code`.
  */
 export async function findUniversalResidenceMatches(
 	query: ResidenceSearchQuery,
@@ -404,49 +406,22 @@ export async function findUniversalResidenceMatches(
 		sheltersResult.status === 'fulfilled'
 			? ((
 					sheltersResult.value as {
-						shelters?: Array<{ code: string; name: string; status?: string }>;
+						shelters?: Array<{
+							code: string;
+							name: string;
+							status?: string;
+						}>;
 					} | null
 				)?.shelters ?? [])
 			: [];
-	const openShelters = sheltersList.filter((s) => s.status?.toLowerCase() !== 'closed');
 
-	// Populate shelter_name on unassigned matches that reference a claimed shelter
+	// Enrich claimed-shelter display name on Mongo chips (recommend copy only).
 	for (const chip of unassignedMatches) {
 		if (chip.shelter_code && !chip.shelter_name) {
-			const found = openShelters.find((s) => s.code === chip.shelter_code);
+			const found = sheltersList.find((s) => s.code === chip.shelter_code);
 			if (found) chip.shelter_name = found.name;
 		}
 	}
 
-	// Query open shelters in CouchDB in parallel
-	const shelterQueryPromises = openShelters.map(async (s) => {
-		try {
-			return await findShelterResidenceMatches(s.code, query, s.name);
-		} catch {
-			return [];
-		}
-	});
-
-	const shelterQueryResults = await Promise.all(shelterQueryPromises);
-	const shelterMatches = shelterQueryResults.flat();
-
-	// Deduplicate by target household/registration identifier
-	const seenTargets = new Set<string>();
-	const combined: ResidenceMatchChip[] = [];
-
-	for (const chip of [...shelterMatches, ...unassignedMatches]) {
-		const payload = verifyResidenceMatchToken(chip.match_token);
-		if (!payload) continue;
-		const targetKey =
-			payload.kind === 'shelter'
-				? `shelter:${payload.shelterCode}:${payload.householdId}`
-				: `unassigned:${payload.registrationId}`;
-
-		if (!seenTargets.has(targetKey)) {
-			seenTargets.add(targetKey);
-			combined.push(chip);
-		}
-	}
-
-	return combined;
+	return unassignedMatches;
 }

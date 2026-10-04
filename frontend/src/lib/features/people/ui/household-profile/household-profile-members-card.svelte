@@ -5,7 +5,7 @@
 	import Trash from '@lucide/svelte/icons/trash';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
-	import type { Evacuee, Household } from '../../domain/people';
+	import { evacueeAgeYears, type Evacuee, type Household } from '../../domain/people';
 
 	let {
 		household,
@@ -38,6 +38,7 @@
 	{:else}
 		<div class="divide-y divide-border/60">
 			{#each members as m (m._id)}
+				{@const age = evacueeAgeYears(m)}
 				<div class="flex items-center justify-between py-3 first:pt-0 last:pb-0">
 					<div class="min-w-0 pr-4">
 						<p class="truncate font-semibold text-slate-800 dark:text-slate-100">
@@ -50,7 +51,7 @@
 							{:else}
 								<Badge variant="secondary" class="mr-1.5">สมาชิก</Badge>
 							{/if}
-							{#if m.birth_year}อายุ {new Date().getFullYear() - m.birth_year} ปี ·
+							{#if age != null}อายุ {age} ปี ·
 							{/if}
 							สถานะ: {{
 								active: 'อยู่ในศูนย์',

@@ -51,5 +51,39 @@ export const DEFAULT_REPLENISHMENT_POLICIES: ReplenishmentPolicy[] = [
 		created_at: '2026-07-16T00:00:00.000Z',
 		updated_at: '2026-07-16T00:00:00.000Z',
 		created_by: 'system'
+	},
+	{
+		_id: 'replenishment_policy:REQUIREMENT_GROUP:FOOD_PROTEIN_HALAL',
+		type: 'replenishment_policy',
+		schema_v: 1,
+		scope_type: 'REQUIREMENT_GROUP',
+		target_id: 'FOOD_PROTEIN_HALAL',
+		lead_time_days: 2,
+		review_period_days: 2,
+		safety_days: 2,
+		min_doc_days: 2,
+		max_doc_days: 20,
+		status: 'active',
+		source: 'SPHERE_BASELINE',
+		created_at: '2026-07-16T00:00:00.000Z',
+		updated_at: '2026-07-16T00:00:00.000Z',
+		created_by: 'system'
+	},
+	{
+		_id: 'replenishment_policy:REQUIREMENT_GROUP:DRINKING_WATER',
+		type: 'replenishment_policy',
+		schema_v: 1,
+		scope_type: 'REQUIREMENT_GROUP',
+		target_id: 'DRINKING_WATER',
+		lead_time_days: 1,
+		review_period_days: 2,
+		safety_days: 2,
+		min_doc_days: 2,
+		max_doc_days: 14,
+		status: 'active',
+		source: 'SPHERE_BASELINE',
+		created_at: '2026-07-16T00:00:00.000Z',
+		updated_at: '2026-07-16T00:00:00.000Z',
+		created_by: 'system'
 	}
 ];

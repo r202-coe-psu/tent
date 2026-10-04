@@ -5,7 +5,8 @@
 	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
 	import Button from '$lib/components/ui/button/button.svelte';
 	import {
-		resolveMasterLabel,
+		shelterTypeLabel,
+		toLabelMap,
 		useShelterTypeLabelMap,
 		type PublicShelterDetail
 	} from '$lib/features/public-portal';
@@ -16,32 +17,15 @@
 	let { shelter }: { shelter: NonNullable<PublicShelterDetail> } = $props();
 
 	let t = $derived(getTranslation(PUBLIC_SHELTER_DETAILS_I18N, langState.current));
-	const shelterTypeLabels = useShelterTypeLabelMap();
+	const shelterTypeLabelsQuery = useShelterTypeLabelMap();
+	const shelterTypeLabels = $derived(toLabelMap(shelterTypeLabelsQuery.data, langState.current));
 	let shelterCode = $derived(shelter.code || shelter.id);
 	let canBook = $derived(Boolean(shelterCode) && shelter.status !== 'CLOSED');
 
 	let adminTypeDisplay = $derived.by(() => {
 		const code = shelter.admin_type;
 		if (!code || code === 'unspecified') return '';
-		const legacyEn: Record<string, string> =
-			langState.current === 'en'
-				? {
-						วัด: 'Temple',
-						โรงเรียน: 'School',
-						ศาลาประชาคม: 'Community Hall',
-						ศูนย์กีฬา: 'Sports Centre',
-						อาคารราชการ: 'Government Building',
-						หน่วยงานราชการ: 'Government Agency',
-						ศูนย์อพยพ: 'Evacuation Center',
-						มหาวิทยาลัย: 'University',
-						มัสยิด: 'Mosque',
-						โบสถ์: 'Church',
-						พื้นที่เอกชน: 'Private Area',
-						อื่นๆ: 'Other',
-						unspecified: 'Unspecified'
-					}
-				: {};
-		return resolveMasterLabel(code, shelterTypeLabels.data, legacyEn);
+		return shelterTypeLabel(code, shelterTypeLabels, langState.current);
 	});
 </script>
 

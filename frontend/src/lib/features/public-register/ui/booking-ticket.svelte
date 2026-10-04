@@ -3,12 +3,13 @@
 	import CircleCheck from '@lucide/svelte/icons/circle-check';
 	import Download from '@lucide/svelte/icons/download';
 	import QrNameTag from '$lib/components/qr-name-tag.svelte';
+	import ImageDown from '@lucide/svelte/icons/image-down';
 	import { generateQrDataUrl } from '$lib/utils/qrcode';
 	import { toast } from 'svelte-sonner';
 	import { Button } from '$lib/components/ui/button';
 	import { PUBLIC_BOOKING_TICKET_I18N } from '$lib/constants/i18n';
 	import { langState } from '$lib/states/i18n.svelte';
-	import { downloadElementAsPdf } from '$lib/utils/pdf';
+	import { downloadElementAsPdf, downloadElementAsPng } from '$lib/utils/pdf';
 	import { getTranslation } from '$lib/utils/i18n';
 	import type { BookingTicket } from '../application/booking-store.svelte';
 
@@ -29,7 +30,8 @@
 
 	/** The QR block — the only part that goes on paper (see the @media print rules). */
 	let ticketEl = $state<HTMLElement | null>(null);
-	let downloading = $state(false);
+	/** Which export is rendering; both share one html2canvas pass at a time. */
+	let downloading = $state<'pdf' | 'png' | null>(null);
 
 	const isUnassigned = $derived(
 		ticket.type === 'unassigned_queue' || ticket.shelter_code === 'unassigned'
@@ -60,8 +62,9 @@
 	});
 
 	/**
-	 * Save the ticket straight to the device as `preregister-<code>.pdf` (mirroring
-	 * the `evacuee-id-<id>` filename convention of the onsite QR card).
+	 * Save the ticket straight to the device as `preregister-<code>.pdf` or `.png`
+	 * (mirroring the `evacuee-id-<id>` filename convention of the onsite QR card).
+	 * The PNG suits phones, where a picture in the gallery is easier to find.
 	 *
 	 * Deliberately a download, not `window.print()` and not the preview tab the
 	 * staff QR card opens: a citizen on a phone at a shelter gate wants the file in
@@ -69,23 +72,25 @@
 	 * block. Only the QR block is rasterized, matching what the print stylesheet
 	 * below isolates — the QR plus the booking code as a human-readable fallback.
 	 */
-	async function downloadTicket() {
+	async function downloadTicket(format: 'pdf' | 'png') {
 		if (!ticketEl || downloading) return;
-		downloading = true;
+		downloading = format;
+		const filename = `preregister-${ticket.code}`;
 		try {
-			await downloadElementAsPdf(ticketEl, `preregister-${ticket.code}`);
+			if (format === 'png') await downloadElementAsPng(ticketEl, filename);
+			else await downloadElementAsPdf(ticketEl, filename);
 		} catch (err) {
 			// Surface the real reason when there is one — a render that timed out
 			// says so, which tells the citizen retrying is worth it.
 			toast.error(err instanceof Error && err.message ? err.message : t.downloadErrorFallback);
 		} finally {
-			downloading = false;
+			downloading = null;
 		}
 	}
 
 	const statusLabel = $derived(
 		isUnassigned
-			? 'รอรับเข้าศูนย์พักพิง'
+			? t.statusAwaitingShelter
 			: ticket.status === 'pre_registered'
 				? t.statusPreRegistered
 				: ticket.status === 'active'
@@ -104,7 +109,7 @@
 			<CircleCheck class="mt-0.5 h-5 w-5 shrink-0 text-success" />
 			<div>
 				<p class="text-sm font-bold text-foreground">
-					{isUnassigned ? t.unassignedSuccessTitle : t.successHeaderTitle}
+					{t.successHeaderTitle}
 				</p>
 				<p class="mt-0.5 text-xs text-muted-foreground">
 					{isUnassigned ? t.unassignedSuccessDesc : t.successHeaderDesc}
@@ -120,11 +125,9 @@
 			class="{isUnassigned ? 'bg-indigo-900' : 'bg-primary-dark'} px-6 py-4 text-center text-white"
 		>
 			<p class="mt-1 text-base font-bold">
-				{isUnassigned ? 'ไม่ระบุศูนย์พักพิง' : ticket.shelter_name}
+				{isUnassigned ? t.unassignedShelter : ticket.shelter_name}
 			</p>
-			{#if isUnassigned}
-				<p class="text-xs opacity-80">รหัสลงทะเบียน: {ticket.code}</p>
-			{:else}
+			{#if !isUnassigned}
 				<p class="text-xs opacity-80">{t.shelterCodeLabel} {ticket.shelter_code}</p>
 			{/if}
 		</div>
@@ -132,9 +135,9 @@
 		<!--
 			Printable target: only this block should end up on paper (QR + the holder's
 			name + shelter name — no wristband chrome, no accent bars, no ID-card panels).
-			The booking code is deliberately not shown: it is the evacuee ULID the QR
-			already carries — unreadable to a human, and meaningless to the marshal at
-			the gate, who matches the person in front of them against the name.
+			The code is deliberately not shown (shelter and unassigned tickets alike):
+			it is the ULID / registration id the QR already carries — unreadable to a
+			human, and staff find the person by QR, name or phone, never by typing it.
 			The `booking-ticket-print` id is picked up by the @media print isolation
 			below (same visibility-hidden-then-override idiom as evacuee-qr-modal.svelte),
 			so it stays visible while the rest of the page (header banner, dl, page
@@ -146,7 +149,7 @@
 			class="flex flex-col items-center gap-3 bg-card px-6 py-6"
 		>
 			<p class="hidden text-center text-sm font-bold text-foreground print:block">
-				{isUnassigned ? 'ยังไม่ระบุศูนย์พักพิง' : ticket.shelter_name}
+				{isUnassigned ? t.unassignedShelterPrint : ticket.shelter_name}
 			</p>
 			<QrNameTag
 				src={qrPromise}
@@ -156,6 +159,7 @@
 				detail={isUnassigned ? `รหัส: ${ticket.code}` : undefined}
 				fallback={isUnassigned ? t.qrErrorFallbackUnassigned : t.qrErrorFallback}
 			/>
+			<p class="text-center text-sm font-semibold text-foreground">{t.showQrInstruction}</p>
 		</div>
 
 		<!-- The name lives in the QR block above (it prints); no need to repeat it here. -->
@@ -166,8 +170,10 @@
 			</div>
 			{#if ticket.member_count}
 				<div class="flex justify-between gap-4">
-					<dt class="text-muted-foreground">จำนวนสมาชิก</dt>
-					<dd class="text-right font-semibold text-foreground">{ticket.member_count} คน</dd>
+					<dt class="text-muted-foreground">{t.memberCountLabel}</dt>
+					<dd class="text-right font-semibold text-foreground">
+						{t.memberCountValue(ticket.member_count)}
+					</dd>
 				</div>
 			{/if}
 			{#if bookedAt}
@@ -177,24 +183,26 @@
 				</div>
 			{/if}
 		</dl>
-
-		{#if isUnassigned}
-			<div class="border-t border-indigo-500/20 bg-indigo-500/10 p-4 text-xs text-foreground">
-				<p class="font-bold text-indigo-700 dark:text-indigo-300">
-					{t.unassignedNextStepsTitle}
-				</p>
-				<p class="mt-1 text-muted-foreground">
-					{t.unassignedNextStepsBody}
-					(รหัสอ้างอิง: <strong>{ticket.code}</strong>)
-				</p>
-			</div>
-		{/if}
 	</div>
 
 	<div class="flex flex-wrap items-center justify-center gap-3 print:hidden">
-		<Button type="button" variant="outline" disabled={downloading} onclick={downloadTicket}>
+		<Button
+			type="button"
+			variant="outline"
+			disabled={downloading !== null}
+			onclick={() => downloadTicket('pdf')}
+		>
 			<Download class="h-4 w-4" />
-			{downloading ? t.downloadingBtn : t.downloadBtn}
+			{downloading === 'pdf' ? t.downloadingBtn : t.downloadBtn}
+		</Button>
+		<Button
+			type="button"
+			variant="outline"
+			disabled={downloading !== null}
+			onclick={() => downloadTicket('png')}
+		>
+			<ImageDown class="h-4 w-4" />
+			{downloading === 'png' ? t.downloadingBtn : t.downloadPngBtn}
 		</Button>
 		{#if onVerified}
 			<Button
@@ -204,7 +212,7 @@
 				onclick={() => onVerified?.(ticket.code)}
 			>
 				<CheckCircle class="h-4 w-4 text-emerald-600" />
-				<span>นำตั๋วไปยืนยันแล้ว (ลบตั๋ว)</span>
+				<span>{t.verifiedBtn}</span>
 			</Button>
 		{/if}
 	</div>

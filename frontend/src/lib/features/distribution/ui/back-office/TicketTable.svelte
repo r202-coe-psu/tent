@@ -1,0 +1,201 @@
+<script lang="ts">
+	import type { RequisitionTicket } from '../../domain/food-supplies';
+	import type { TicketSortDirection } from '../model/ticket-filters';
+	import TicketStatusBadge from '../common/TicketStatusBadge.svelte';
+	import PaginationControls from '$lib/components/pagination-controls.svelte';
+	import * as Table from '$lib/components/ui/table/index.js';
+	import { getRequisitionTypeLabel } from '../model/ticket-status';
+	import Eye from '@lucide/svelte/icons/eye';
+	import Inbox from '@lucide/svelte/icons/inbox';
+	import ArrowDown from '@lucide/svelte/icons/arrow-down';
+	import ArrowUp from '@lucide/svelte/icons/arrow-up';
+
+	interface Props {
+		tickets: readonly RequisitionTicket[];
+		pageSize?: number;
+		onViewTicket?: (ticket: RequisitionTicket) => void;
+		sortDirection?: TicketSortDirection;
+		onToggleSort?: () => void;
+	}
+
+	let {
+		tickets,
+		pageSize = 10,
+		onViewTicket,
+		sortDirection = 'desc',
+		onToggleSort
+	}: Props = $props();
+
+	let currentPage = $state(1);
+
+	const totalItems = $derived(tickets.length);
+	const totalPages = $derived(Math.max(1, Math.ceil(totalItems / pageSize)));
+
+	// If page exceeds totalPages due to filtering, adjust
+	$effect(() => {
+		if (currentPage > totalPages) {
+			currentPage = 1;
+		}
+	});
+
+	const paginatedTickets = $derived.by(() => {
+		const start = (currentPage - 1) * pageSize;
+		return tickets.slice(start, start + pageSize);
+	});
+
+	function formatDateTime(isoString: string): string {
+		try {
+			return new Intl.DateTimeFormat('th-TH', {
+				year: 'numeric',
+				month: 'short',
+				day: 'numeric',
+				hour: '2-digit',
+				minute: '2-digit'
+			}).format(new Date(isoString));
+		} catch {
+			return isoString;
+		}
+	}
+
+	function handleViewDetails(ticket: RequisitionTicket) {
+		if (onViewTicket) {
+			onViewTicket(ticket);
+		} else {
+			// Future-compatible URL query param for Slice 5.2 deep-linking
+			const url = new URL(window.location.href);
+			url.searchParams.set('ticketId', ticket._id);
+			window.history.pushState({}, '', url.toString());
+		}
+	}
+</script>
+
+<div class="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-2xs">
+	{#if tickets.length === 0}
+		<!-- Empty state -->
+		<div class="flex flex-col items-center justify-center p-12 text-center">
+			<div
+				class="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400"
+			>
+				<Inbox class="h-6 w-6" />
+			</div>
+			<h3 class="text-sm font-semibold text-slate-900">ไม่พบตั๋วเบิกจ่าย</h3>
+			<p class="mt-1 max-w-sm text-xs text-slate-500">
+				ไม่มีตั๋วเบิกจ่ายที่ตรงกับเงื่อนไขการค้นหาหรือตัวกรองปัจจุบัน
+			</p>
+		</div>
+	{:else}
+		<Table.Root class="w-full text-left text-sm text-slate-700">
+			<Table.Header
+				class="border-b border-slate-200 bg-slate-50/75 text-xs font-semibold tracking-wider text-slate-600 uppercase"
+			>
+				<Table.Row>
+					<Table.Head scope="col" class="py-3.5 pr-3 pl-4 sm:pl-6">เลขที่ตั๋ว</Table.Head>
+					<Table.Head scope="col" class="px-3 py-3.5">ประเภท</Table.Head>
+					<Table.Head scope="col" class="px-3 py-3.5">จุดหมายปลายทาง</Table.Head>
+					<Table.Head scope="col" class="px-3 py-3.5">ผู้ร้องขอ</Table.Head>
+					<Table.Head
+						scope="col"
+						class="px-3 py-3.5"
+						aria-sort={sortDirection === 'desc' ? 'descending' : 'ascending'}
+					>
+						{#if onToggleSort}
+							<button
+								type="button"
+								onclick={onToggleSort}
+								class="group inline-flex items-center gap-1 rounded font-semibold text-slate-600 uppercase transition-colors hover:text-slate-900 focus:ring-2 focus:ring-[#0A2647] focus:ring-offset-1 focus:outline-none"
+								aria-label={`เรียงตามวันที่สร้าง (${sortDirection === 'desc' ? 'แสดงใหม่ไปเก่า คลิกเพื่อเรียงเก่าไปใหม่' : 'แสดงเก่าไปใหม่ คลิกเพื่อเรียงใหม่ไปเก่า'})`}
+							>
+								<span>วันที่สร้าง</span>
+								{#if sortDirection === 'desc'}
+									<ArrowDown class="h-3.5 w-3.5 text-slate-700" aria-hidden="true" />
+								{:else}
+									<ArrowUp class="h-3.5 w-3.5 text-slate-700" aria-hidden="true" />
+								{/if}
+							</button>
+						{:else}
+							วันที่สร้าง
+						{/if}
+					</Table.Head>
+					<Table.Head scope="col" class="px-3 py-3.5">สถานะ</Table.Head>
+					<Table.Head scope="col" class="relative py-3.5 pr-4 pl-3 text-right sm:pr-6">
+						<span class="sr-only">การจัดการ</span>
+					</Table.Head>
+				</Table.Row>
+			</Table.Header>
+			<Table.Body class="divide-y divide-slate-100">
+				{#each paginatedTickets as ticket (ticket._id)}
+					<Table.Row class="transition-colors hover:bg-slate-50/80">
+						<Table.Cell
+							class="py-3.5 pr-3 pl-4 text-sm font-bold whitespace-nowrap text-[#0A2647] sm:pl-6"
+						>
+							<span class="font-mono">{ticket.ticket_no}</span>
+							{#if ticket.meal}
+								<span
+									class="ml-1.5 inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-amber-700"
+								>
+									มื้อ{ticket.meal === 'breakfast'
+										? 'เช้า'
+										: ticket.meal === 'lunch'
+											? 'กลางวัน'
+											: ticket.meal === 'dinner'
+												? 'เย็น'
+												: 'ว่าง'}
+								</span>
+							{/if}
+						</Table.Cell>
+						<Table.Cell class="px-3 py-3.5 text-sm whitespace-nowrap">
+							<span
+								class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium {ticket.requisition_type ===
+								'food'
+									? 'border border-orange-200 bg-orange-50 text-orange-700'
+									: 'border border-slate-200 bg-slate-100 text-slate-700'}"
+							>
+								{getRequisitionTypeLabel(ticket.requisition_type as 'food' | 'supplies')}
+							</span>
+						</Table.Cell>
+						<Table.Cell class="px-3 py-3.5 text-sm font-medium whitespace-nowrap text-slate-800">
+							{ticket.destination_location}
+						</Table.Cell>
+						<Table.Cell class="px-3 py-3.5 text-sm whitespace-nowrap text-slate-600">
+							{ticket.requested_by}
+						</Table.Cell>
+						<Table.Cell class="px-3 py-3.5 text-xs whitespace-nowrap text-slate-500 tabular-nums">
+							{formatDateTime(ticket.created_at)}
+						</Table.Cell>
+						<Table.Cell class="px-3 py-3.5 text-sm whitespace-nowrap">
+							<TicketStatusBadge status={ticket.status} />
+						</Table.Cell>
+						<Table.Cell class="py-3.5 pr-4 pl-3 text-right text-sm whitespace-nowrap sm:pr-6">
+							<button
+								type="button"
+								onclick={() => handleViewDetails(ticket)}
+								class="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 shadow-2xs transition-colors hover:bg-slate-50 hover:text-[#0A2647]"
+							>
+								<Eye class="h-3.5 w-3.5 text-slate-500" />
+								<span>ดูรายละเอียด</span>
+							</button>
+						</Table.Cell>
+					</Table.Row>
+				{/each}
+			</Table.Body>
+		</Table.Root>
+
+		<!-- Pagination Footer -->
+		<div
+			class="flex flex-col items-center justify-between gap-3 border-t border-slate-200 px-4 py-3 sm:flex-row sm:px-6"
+		>
+			<div class="text-xs text-slate-500">
+				แสดง <span class="font-semibold text-slate-800 tabular-nums"
+					>{(currentPage - 1) * pageSize + 1}</span
+				>
+				ถึง
+				<span class="font-semibold text-slate-800 tabular-nums"
+					>{Math.min(currentPage * pageSize, totalItems)}</span
+				>
+				จากทั้งหมด <span class="font-semibold text-slate-800 tabular-nums">{totalItems}</span> รายการ
+			</div>
+
+			<PaginationControls bind:page={currentPage} count={totalItems} perPage={pageSize} />
+		</div>
+	{/if}
+</div>

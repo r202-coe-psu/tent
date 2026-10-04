@@ -20,7 +20,7 @@
 	import * as Table from '$lib/components/ui/table';
 	import { paginateItems } from '$lib/db/paginate';
 	import { getShelterCode } from '$lib/db/shelter';
-	import { useMasterData } from '$lib/features/master-data';
+	import { useMasterData, formatMasterLabel } from '$lib/features/master-data';
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 
@@ -31,12 +31,14 @@
 		matchesEvacueeSearch,
 		zoneLabel
 	} from '../../domain/people';
-	import { nextQueueLabel } from '../../domain/intake-pipeline';
+	import { isInShelterStatus, nextQueueLabel } from '../../domain/intake-pipeline';
 	import type { Evacuee } from '../../domain/people';
 	import RegisteredViaBadge from '../shared/registered-via-badge.svelte';
 	import StayStatusBadge from '../shared/stay-status-badge.svelte';
 
 	const PAGE_SIZE = 10;
+	/** Status filter value for the 「พักในศูนย์แล้ว」 KPI card (active + room_confirmed). */
+	const IN_SHELTER_FILTER = 'in_shelter';
 
 	type WorkflowTab = 'pre_registered' | 'arriving' | 'all';
 	type ArrivingSubTab = 'all' | 'medical' | 'zoning';
@@ -104,11 +106,7 @@
 	const arrivingEvacuees = $derived(
 		allEvacuees.filter((e) => e.current_stay?.status === 'arriving')
 	);
-	const inShelterEvacuees = $derived(
-		allEvacuees.filter(
-			(e) => e.current_stay?.status === 'active' || e.current_stay?.status === 'room_confirmed'
-		)
-	);
+	const inShelterEvacuees = $derived(allEvacuees.filter(isInShelterStatus));
 	const roomConfirmedCount = $derived(
 		allEvacuees.filter((e) => e.current_stay?.status === 'room_confirmed').length
 	);
@@ -162,7 +160,11 @@
 		allEvacuees
 			.filter((e) => {
 				if (!matchesEvacueeSearch(e, filterQuery)) return false;
-				if (allStatusFilter !== 'all' && e.current_stay?.status !== allStatusFilter) return false;
+				if (allStatusFilter === IN_SHELTER_FILTER) {
+					if (!isInShelterStatus(e)) return false;
+				} else if (allStatusFilter !== 'all' && e.current_stay?.status !== allStatusFilter) {
+					return false;
+				}
 				if (allZoneFilter !== 'all' && e.current_stay?.zone !== allZoneFilter) return false;
 				return true;
 			})
@@ -201,7 +203,10 @@
 		if (!needs?.length) return '—';
 		return needs
 			.slice(0, 2)
-			.map((n) => vulnerableGroupQuery.data?.items.find((i) => i.code === n)?.label ?? n)
+			.map((n) => {
+				const item = vulnerableGroupQuery.data?.items.find((i) => i.code === n);
+				return item ? formatMasterLabel(item, 'th') : n;
+			})
 			.join(', ');
 	}
 
@@ -292,9 +297,12 @@
 	<!-- Card 3: In Shelter -->
 	<button
 		type="button"
-		onclick={() => (activeTab = 'all')}
+		onclick={() => {
+			activeTab = 'all';
+			allStatusFilter = IN_SHELTER_FILTER;
+		}}
 		class="group flex flex-col justify-between rounded-xl border p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm {activeTab ===
-		'all'
+			'all' && allStatusFilter === IN_SHELTER_FILTER
 			? 'border-green-300 bg-green-50/50 shadow-2xs ring-2 ring-green-500/20'
 			: 'border-slate-200/80 bg-white shadow-2xs'}"
 	>
@@ -339,7 +347,10 @@
 		<nav class="flex gap-1 overflow-x-auto" aria-label="แท็บกระบวนการลงทะเบียน">
 			<button
 				type="button"
-				onclick={() => (activeTab = 'all')}
+				onclick={() => {
+					activeTab = 'all';
+					allStatusFilter = 'all';
+				}}
 				class="flex shrink-0 items-center gap-2 border-b-2 px-4 pb-3 text-sm font-semibold transition-colors {activeTab ===
 				'all'
 					? 'border-primary text-primary'
@@ -402,6 +413,7 @@
 							class="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-800 focus:ring-1 focus:ring-primary focus:outline-hidden"
 						>
 							<option value="all">ทุกสถานะ</option>
+							<option value={IN_SHELTER_FILTER}>พักในศูนย์แล้ว (เข้าพัก + ยืนยันถึงโซน)</option>
 							<option value="pre_registered">ลงทะเบียนล่วงหน้า</option>
 							<option value="kiosk_registered">ลงทะเบียนที่ตู้ (รอยืนยัน)</option>
 							<option value="arriving">รอเข้าพัก</option>

@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { APP_CONFIG_DEFAULTS, readAppConfig } from './app-config';
+import {
+	APP_CONFIG_DEFAULTS,
+	bannerPatchSchema,
+	isBannerVisible,
+	readAppConfig,
+	toSystemBanner
+} from './app-config';
 
 describe('readAppConfig', () => {
 	it('falls back to the spec defaults when the document is missing', () => {
@@ -64,5 +70,67 @@ describe('readAppConfig', () => {
 
 	it('ignores a non-object document', () => {
 		expect(readAppConfig('config:app')).toEqual(APP_CONFIG_DEFAULTS);
+	});
+
+	it('keeps the password form hidden unless explicitly enabled (CR-141)', () => {
+		expect(APP_CONFIG_DEFAULTS.password_login_enabled).toBe(false);
+		expect(readAppConfig({ password_login_enabled: 'yes' }).password_login_enabled).toBe(false);
+		expect(readAppConfig({ password_login_enabled: true }).password_login_enabled).toBe(true);
+	});
+});
+
+describe('system banner settings', () => {
+	it('defaults to hidden with the warning variant', () => {
+		expect(APP_CONFIG_DEFAULTS.banner_enabled).toBe(false);
+		expect(APP_CONFIG_DEFAULTS.banner_message).toBe('');
+		expect(APP_CONFIG_DEFAULTS.banner_variant).toBe('warning');
+		expect(isBannerVisible(APP_CONFIG_DEFAULTS)).toBe(false);
+	});
+
+	it('hides the banner when enabled but the message is empty or whitespace', () => {
+		expect(isBannerVisible(readAppConfig({ banner_enabled: true }))).toBe(false);
+		expect(isBannerVisible(readAppConfig({ banner_enabled: true, banner_message: '   ' }))).toBe(
+			false
+		);
+	});
+
+	it('shows the banner when enabled with a message, trimming it', () => {
+		const cfg = readAppConfig({ banner_enabled: true, banner_message: '  ปิดปรับปรุง  ' });
+		expect(isBannerVisible(cfg)).toBe(true);
+		expect(cfg.banner_message).toBe('ปิดปรับปรุง');
+	});
+
+	it('hides the banner when the message is present but the switch is off', () => {
+		expect(isBannerVisible(readAppConfig({ banner_enabled: false, banner_message: 'x' }))).toBe(
+			false
+		);
+	});
+
+	it('falls back to warning for an unknown variant', () => {
+		expect(readAppConfig({ banner_variant: 'rainbow' }).banner_variant).toBe('warning');
+	});
+
+	it('reads an over-long or multi-line message as empty', () => {
+		expect(readAppConfig({ banner_message: 'x'.repeat(121) }).banner_message).toBe('');
+		expect(readAppConfig({ banner_message: 'a\nb' }).banner_message).toBe('');
+	});
+
+	it('strict patch schema rejects what the reader would silently default', () => {
+		const ok = { banner_enabled: true, banner_message: 'ok', banner_variant: 'info' };
+		expect(bannerPatchSchema.safeParse(ok).success).toBe(true);
+		expect(bannerPatchSchema.safeParse({ ...ok, banner_message: 'x'.repeat(121) }).success).toBe(
+			false
+		);
+		expect(bannerPatchSchema.safeParse({ ...ok, banner_message: 'a\nb' }).success).toBe(false);
+		expect(bannerPatchSchema.safeParse({ ...ok, banner_variant: 'foo' }).success).toBe(false);
+	});
+
+	it('projects a hidden banner as disabled with no message', () => {
+		const hidden = toSystemBanner(readAppConfig({ banner_enabled: true, banner_message: '' }));
+		expect(hidden).toEqual({ enabled: false, message: '', variant: 'warning' });
+		const shown = toSystemBanner(
+			readAppConfig({ banner_enabled: true, banner_message: 'hi', banner_variant: 'destructive' })
+		);
+		expect(shown).toEqual({ enabled: true, message: 'hi', variant: 'destructive' });
 	});
 });

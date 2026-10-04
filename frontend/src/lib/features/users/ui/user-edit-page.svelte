@@ -158,7 +158,7 @@
 	<title>แก้ไขข้อมูลผู้ใช้งาน — SmartShelter</title>
 </svelte:head>
 
-<div class="container mx-auto max-w-[1200px] p-6">
+<div class="container mx-auto max-w-[1200px] p-4 sm:p-6">
 	<button
 		type="button"
 		class="mb-4 inline-flex cursor-pointer items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground hover:underline"

@@ -69,11 +69,24 @@ async function mockMasterData(page: Page): Promise<void> {
 	await page.route('**/api/back-office/master-data/*', async (route) => {
 		const type = new URL(route.request().url()).pathname.split('/').pop();
 		const items =
-			type === 'municipality_zone'
-				? [{ code: 'zone_1', label: 'โซน 1' }]
-				: type === 'community'
-					? [{ code: 'community_1', label: 'ชุมชน 1' }]
-					: [];
+			type === 'shelter_type'
+				? [
+						{
+							code: 'school',
+							label_th: 'โรงเรียน',
+							label_en: 'โรงเรียน',
+							is_default: true,
+							status: 'active'
+						},
+						{
+							code: 'temple',
+							label_th: 'วัด (ศาสนสถาน)',
+							label_en: 'วัด (ศาสนสถาน)',
+							is_default: false,
+							status: 'active'
+						}
+					]
+				: [];
 		await route.fulfill({
 			status: 200,
 			contentType: 'application/json',

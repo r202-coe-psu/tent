@@ -19,8 +19,8 @@
 }
 
 :root {
-	/* Fixed testing banner (bottom) — keep in sync with testing-banner.svelte height */
-	--testing-banner-height: 1.625rem;
+	/* Fixed system banner (bottom). 0 until +layout.svelte sets `data-system-banner` on <html>. */
+	--testing-banner-height: 0px;
 	--app-shell-height: calc(100svh - var(--testing-banner-height));
 	/*
 	 * Sticky offset for registration section headers (under app / shelter chrome).
@@ -30,11 +30,25 @@
 	--registration-sticky-top: 4rem;
 	--registration-scroll-mt: calc(var(--registration-sticky-top) + 0.5rem);
 	/*
-	 * Shelter form sticky offset: app shell header (h-16 / 4rem) + form title bar (~4rem).
-	 * Form title bar uses `top-16` so it sticks under the layout header.
+	 * Shelter form sticky offset: BO chrome (`--bo-sticky-top`) + form title bar (~4rem).
+	 * Form title bar uses `top-[var(--bo-sticky-top)]` under the BO page header.
 	 */
-	--shelter-form-sticky-top: 8rem;
+	--shelter-form-sticky-top: calc(var(--bo-sticky-top) + 4rem);
 	--shelter-form-scroll-mt: calc(var(--shelter-form-sticky-top) + 0.5rem);
+	/*
+	 * Back-office sticky chrome offsets (consumers: `top-[var(--bo-sticky-top)]`).
+	 *
+	 * --bo-mobile-nav-height: hamburger bar (h-16 / 4rem) + notch safe-area.
+	 *   Page header sticks below this on < lg; unused for positioning at lg+ (sidebar).
+	 * --bo-page-header-height: title-only bar (h-16 / 4rem). Shelter select lives in
+	 *   the sidebar / mobile Sheet; offline/reauth banner is conditional and not
+	 *   included in this offset. Keep in sync with back-office/+layout.svelte.
+	 * --bo-sticky-top: cumulative sticky chrome above page subheaders (evacuee tabs,
+	 *   shelter form title bar, etc.). Mobile = nav + header; lg+ = header only.
+	 */
+	--bo-mobile-nav-height: calc(4rem + env(safe-area-inset-top, 0px));
+	--bo-page-header-height: 4rem;
+	--bo-sticky-top: calc(var(--bo-mobile-nav-height) + var(--bo-page-header-height));
 	--radius: 0.5rem;
 	--background: oklch(0.985 0.003 240);
 	--foreground: oklch(0.147 0.004 49.25);
@@ -98,6 +112,13 @@
 	--warning-muted: oklch(0.408 0.123 63.95);
 	--warning-subtle: oklch(0.882 0.057 95.617);
 	--warning-border: oklch(0.408 0.123 63.95);
+
+	/* Info — system banner / neutral advisories (sky) */
+	--info: oklch(0.685 0.169 237.323);
+	--info-foreground: oklch(0.985 0.001 106.423);
+	--info-muted: oklch(0.977 0.013 236.62);
+	--info-subtle: oklch(0.746 0.16 232.661);
+	--info-border: oklch(0.901 0.058 230.902);
 
 	/* Shelter Specific Colors */
 	--shelter-bg: oklch(0.982 0.009 239);
@@ -163,6 +184,17 @@
 	--ops-inventory-text: #115e59;
 }
 
+/* lg+: sidebar chrome — only the page header sticks; drop mobile-nav from offset */
+@media (min-width: 1024px) {
+	:root {
+		--bo-sticky-top: var(--bo-page-header-height);
+	}
+}
+
+:root[data-system-banner] {
+	--testing-banner-height: 1.625rem;
+}
+
 .dark {
 	--background: oklch(0.147 0.004 49.25);
 	--foreground: oklch(0.985 0.001 106.423);
@@ -218,6 +250,13 @@
 	--warning-border: oklch(0.408 0.123 63.95);
 	--warning-dark: oklch(77.085% 0.16457 71.779);
 
+	/* Info — system banner / neutral advisories (sky, dark mode) */
+	--info: oklch(0.685 0.169 237.323);
+	--info-foreground: oklch(0.147 0.004 49.25);
+	--info-muted: oklch(0.293 0.066 243.157);
+	--info-subtle: oklch(0.828 0.111 230.318);
+	--info-border: oklch(0.293 0.066 243.157);
+
 	/* Shelter Specific Colors (Dark Mode) */
 	--shelter-bg: oklch(0.18 0.005 240);
 	--shelter-border: oklch(1 0 0 / 12%);
@@ -235,7 +274,8 @@
 
 @theme inline {
 	--font-sans:
-		'IBM Plex Sans Thai', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+		'IBM Plex Sans Thai Looped', 'IBM Plex Sans Thai', -apple-system, BlinkMacSystemFont,
+		'Segoe UI', Roboto, sans-serif;
 	--font-mono: 'Geist Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
 
 	--text-3xs: 0.5rem;
@@ -320,6 +360,12 @@
 	--color-warning-muted: var(--warning-muted);
 	--color-warning-subtle: var(--warning-subtle);
 	--color-warning-border: var(--warning-border);
+
+	--color-info: var(--info);
+	--color-info-foreground: var(--info-foreground);
+	--color-info-muted: var(--info-muted);
+	--color-info-subtle: var(--info-subtle);
+	--color-info-border: var(--info-border);
 
 	/* Shelter Colors theme bindings */
 	--color-shelter-bg: var(--shelter-bg);
@@ -482,10 +528,12 @@
 		@apply sticky bottom-0 z-30 -mx-1 border-t border-border bg-background/95 px-3 py-2 backdrop-blur-sm sm:space-y-2 sm:px-4 sm:pt-2.5 sm:pb-3;
 		padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
 	}
-	/* Always-reachable Save dock (registration-shell fixed pattern; sits above testing banner). */
 	.shelter-form-bottom-chrome {
-		@apply fixed inset-x-0 z-30 space-y-2 border-t border-shelter-border bg-background/95 px-3 pt-2.5 pb-3 backdrop-blur-sm sm:px-4;
+		@apply fixed inset-x-0 z-30 border-t border-slate-200 bg-white/95 px-4 py-2.5 shadow-lg backdrop-blur-sm sm:px-6;
 		bottom: var(--testing-banner-height);
+		padding-left: max(1rem, env(safe-area-inset-left));
+		padding-right: max(1rem, env(safe-area-inset-right));
+		padding-bottom: max(0.625rem, env(safe-area-inset-bottom));
 	}
 	.sticky-section-nav {
 		/* Top scroll-spy chips (registration-shell / ewar) — not used by unified form */

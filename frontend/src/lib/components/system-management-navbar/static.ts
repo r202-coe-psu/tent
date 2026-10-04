@@ -3,20 +3,20 @@ import { resolve } from '$app/paths';
 import type { Icon } from '@lucide/svelte';
 import {
 	Calculator,
-	Home,
 	KeyRound,
 	MapPin,
 	Megaphone,
 	Settings,
 	Shield,
-	Tent,
 	Users,
 	Building,
 	UserCog,
 	Warehouse,
 	Cpu,
 	LayoutDashboard,
-	ClipboardList
+	ClipboardList,
+	Database,
+	Flag
 } from '@lucide/svelte/icons';
 
 type Leaf = {
@@ -97,25 +97,13 @@ export const systemManagementNavbarGroups: SystemManagementNavbarGroup[] = [
 				icon: Settings,
 				children: [
 					{
-						label: 'ข้อมูลหลักบุคคล',
-						href: resolve(`${base}/registration-config`),
-						icon: Users,
+						label: 'Master Data',
+						href: resolve(`${base}/master-data`),
+						icon: Database,
 						requiresAdmin: true
 					},
 					{
-						label: 'การตั้งค่าศูนย์พักพิง',
-						href: resolve(`${base}/shelter-config`),
-						icon: Tent,
-						requiresAdmin: true
-					},
-					{
-						label: 'ข้อมูลครัวเรือน',
-						href: resolve(`${base}/household-master-data`),
-						icon: Home,
-						requiresAdmin: true
-					},
-					{
-						label: 'คลังพัสดุและสิ่งของ',
+						label: 'คลังสินค้า',
 						href: resolve(`${base}/catalog`),
 						icon: Warehouse,
 						requiresAdmin: true
@@ -133,15 +121,15 @@ export const systemManagementNavbarGroups: SystemManagementNavbarGroup[] = [
 						requiresAdmin: true
 					},
 					{
-						label: '7. อาสาสมัคร',
-						href: resolve(`${base}/volunteer-config`),
-						icon: Users,
-						requiresAdmin: true
-					},
-					{
 						label: 'ความปลอดภัย / reCAPTCHA',
 						href: resolve(`${base}/security`),
 						icon: Shield,
+						requiresAdmin: true
+					},
+					{
+						label: 'แบนเนอร์ระบบ',
+						href: resolve(`${base}/system-banner`),
+						icon: Flag,
 						requiresAdmin: true
 					},
 					{ label: 'งานอาสาสมัคร', href: null, icon: Users },

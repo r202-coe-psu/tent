@@ -160,7 +160,8 @@ const ASSIGNMENT_DOC = {
 const SKILL_ITEMS = [
 	{
 		code: 'cooking',
-		label: 'ประกอบอาหาร / ครัวสนาม',
+		label_th: 'ประกอบอาหาร / ครัวสนาม',
+		label_en: 'ประกอบอาหาร / ครัวสนาม',
 		category: 'operational',
 		description: 'เตรียมและแจกจ่ายอาหาร',
 		is_default: true,
@@ -168,7 +169,8 @@ const SKILL_ITEMS = [
 	},
 	{
 		code: 'first_aid',
-		label: 'ปฐมพยาบาล',
+		label_th: 'ปฐมพยาบาล',
+		label_en: 'ปฐมพยาบาล',
 		category: 'controlled',
 		description: 'ดูแลปฐมพยาบาลเบื้องต้น',
 		is_default: false,
@@ -414,12 +416,12 @@ test.describe('Volunteer backoffice module', () => {
 	test('opens Volunteer Skills and the add-skill dialog without writing', async ({ page }) => {
 		const { writes } = await mockVolunteerCouch(page);
 		await injectSession(page, ACCOUNTS.sm, sessions.sm);
-		await page.goto(`${BASE}/back-office/volunteer-skills`);
+		await page.goto(`${BASE}/back-office/master-data?type=volunteer_skills`);
 
-		await expect(page.getByRole('heading', { name: /ตั้งค่าทักษะมาตรฐานจิตอาสา/ })).toBeVisible();
-		await page.getByRole('button', { name: 'เพิ่มทักษะมาตรฐานใหม่' }).click();
+		await expect(page.getByRole('heading', { name: 'ทักษะมาตรฐานจิตอาสา' })).toBeVisible();
+		await page.getByRole('button', { name: 'เพิ่มรายการ' }).first().click();
 		await expect(page.getByRole('dialog')).toBeVisible();
-		await expect(page.getByRole('dialog').getByText('เพิ่มทักษะมาตรฐานใหม่')).toBeVisible();
+		await expect(page.getByRole('dialog').getByText(/เพิ่มรายการ/)).toBeVisible();
 		await expect.poll(() => writes).toHaveLength(0);
 	});
 });

@@ -14,12 +14,10 @@ import {
 	Warehouse,
 	Calculator,
 	HandHeart,
-	ShoppingCart,
 	MapPin,
 	UtensilsCrossed,
-	Tent,
-	Home,
-	FlaskConical
+	FlaskConical,
+	ClipboardCheck
 } from '@lucide/svelte/icons';
 
 type Leaf = {
@@ -31,7 +29,7 @@ type Leaf = {
 };
 
 type Group = Leaf & {
-	children: Leaf[];
+	children: BackofficeNavbarNode[];
 };
 
 export type BackofficeNavbarNode = Leaf | Group;
@@ -66,15 +64,14 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 		title: '2. บริหารทรัพยากร',
 		items: [
 			{
+				label: 'การประเมินความพร้อมศูนย์ (Readiness SOP)',
+				href: resolve('/back-office/shelters/readiness' as '/back-office/shelters'),
+				icon: ClipboardCheck
+			},
+			{
 				label: 'การประเมินประจำวัน (Daily SOP)',
 				href: resolve('/back-office/dailysop'),
 				icon: ClipboardList
-			},
-			{
-				label: 'คำนวณความต้องการทรัพยากร',
-				href: resolve('/back-office/resource-dashboard'),
-				icon: Calculator,
-				requiresManager: true
 			},
 			{
 				label: 'จำลองสถานการณ์ SOP',
@@ -83,20 +80,29 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				requiresManager: true
 			},
 			{
-				label: 'คลังสิ่งของและบริจาค',
+				label: 'คลัง',
+				href: resolve('/back-office/supply'),
+				icon: Package
+			},
+			{
+				label: 'บริจาค',
+				href: resolve('/back-office/stock-donations'),
+				icon: HandHeart
+			},
+			{
+				label: 'จัดการคำร้องเบิกจ่าย',
 				href: null,
-				icon: Package,
+				icon: ClipboardList,
 				children: [
-					{ label: 'แผงควบคุมสต็อก', href: resolve('/back-office/supply'), icon: Warehouse },
 					{
-						label: 'กระดานรับบริจาค',
-						href: resolve('/back-office/stock-donations'),
-						icon: HandHeart
+						label: 'จัดการเบิกจ่ายพัสดุและอาหาร',
+						href: resolve('/back-office/distribution'),
+						icon: ClipboardList
 					},
 					{
-						label: 'ใบจัดซื้อ',
-						href: resolve('/back-office/purchases'),
-						icon: ShoppingCart
+						label: 'โรงครัวและเสบียงอาหาร',
+						href: resolve('/back-office/tickets/kitchen'),
+						icon: UtensilsCrossed
 					}
 				]
 			},
@@ -129,34 +135,19 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				icon: Database,
 				children: [
 					{
-						label: '1. ข้อมูลบุคคล',
-						href: resolve('/back-office/registration-config'),
-						icon: Users
+						label: 'Master Data',
+						href: resolve('/back-office/master-data'),
+						icon: Database
 					},
 					{
-						label: '2. ตั้งค่าศูนย์พักพิง',
-						href: resolve('/back-office/shelter-config'),
-						icon: Tent
-					},
-					{
-						label: '3. ตั้งค่าครัวเรือน',
-						href: resolve('/back-office/household-master-data'),
-						icon: Home
-					},
-					{
-						label: '4. คลังสินค้า',
-						href: resolve('/back-office/catalog'),
+						label: 'คลังสินค้า',
+						href: resolve('/back-office/supply?tab=catalog' as '/back-office/supply'),
 						icon: Warehouse
 					},
 					{
 						label: '5. พารามิเตอร์',
 						href: resolve('/back-office/sop-parameters'),
 						icon: Calculator
-					},
-					{
-						label: '6. ทักษะอาสาสมัคร',
-						href: resolve('/back-office/volunteer-skills'),
-						icon: HandHeart
 					},
 					{ label: '7. โลจิสติกส์ & GIS', href: null, icon: MapPin }
 				]

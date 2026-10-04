@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { toast } from 'svelte-sonner';
@@ -6,17 +7,17 @@
 	import {
 		isAppSystemAdmin,
 		isSystemAdmin,
+		isShelterManager,
 		roleDisplayLabel,
-		rolesFromAssignments,
 		shelterCodeFromRoles,
 		shelterCodesFromRoles,
+		parseCompoundCapability,
+		SA_GRANTABLE_CAPABILITIES,
 		SYSTEM_ADMIN,
-		assignmentsFromRoles,
-		type ShelterAssignment
+		SHELTER_MANAGER
 	} from '$lib/auth/roles';
-	import UserForm from './user-form.svelte';
 	import UserList from './user-list.svelte';
-	import { useUsers, useCreateUser, useDeleteUser } from '../application/queries';
+	import { useUsers, useDeleteUser } from '../application/queries';
 	import {
 		adminResetPassword,
 		unlinkGoogleMfa,
@@ -24,25 +25,26 @@
 		type UserSummary
 	} from '../data/users.api';
 	import { usersKeys } from '../application/queries';
-	import type { CreateUserInput, ShelterAssignmentInput } from '../domain/schema';
 	import { usersListBaseFromPathname, withUsersView } from '../domain/user-edit-path';
-	import { UserPlus, Search, KeyRound, Copy, Check, ShieldAlert, Unlink } from '@lucide/svelte';
+	import { UserPlus, KeyRound, Copy, Check, ShieldAlert, Unlink } from '@lucide/svelte';
+	import StaffPageShell from '$lib/components/staff-page-shell.svelte';
+	import { spatial } from '$lib/tokens';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import PaginationControls from '$lib/components/pagination-controls.svelte';
 	import { useQueryClient } from '@tanstack/svelte-query';
+	import { useShelters } from '$lib/features/shelters';
 
 	let {
 		lockedShelterCode,
-		compact = false,
-		allowSystemAdminRole = false
+		compact = false
 	}: {
 		/** When set, list and forms are scoped to this shelter — no picker. */
 		lockedShelterCode?: string;
 		/** Embedded in shelter settings: smaller heading so it doesn't clash. */
 		compact?: boolean;
-		/** Portal-only: SA may create/edit `system_admin` users. */
-		allowSystemAdminRole?: boolean;
 	} = $props();
 
 	const roles = $derived(authStore.user?.roles ?? []);
@@ -54,17 +56,30 @@
 
 	const queryClient = useQueryClient();
 	const usersQuery = useUsers();
-	const createMutation = useCreateUser();
 	const deleteMutation = useDeleteUser();
+	const sheltersQuery = useShelters();
 
-	let dialogOpen = $state(false);
 	let deleteDialogOpen = $state(false);
 	let resetDialogOpen = $state(false);
 	let resetResultDialogOpen = $state(false);
 	let unlinkMfaDialogOpen = $state(false);
 	let unlinkMfaProvider = $state<'google' | 'thaid'>('google');
 
-	let searchQuery = $state('');
+	const PAGE_SIZE = 10;
+	let currentPage = $state(1);
+
+	// draft (bound to inputs)
+	let queryDraft = $state('');
+	let shelterDraft = $state('');
+	let roleDraft = $state('');
+	let typeDraft = $state('');
+
+	// applied (used by filteredUsers)
+	let queryFilter = $state('');
+	let shelterFilter = $state('');
+	let roleFilter = $state('');
+	let typeFilter = $state('');
+
 	let selectedUser = $state<UserSummary | null>(null);
 	let userToDelete = $state<string | null>(null);
 	let temporaryPassword = $state<string | null>(null);
@@ -72,52 +87,43 @@
 	let resetting = $state(false);
 	let unlinkingMfa = $state(false);
 
-	function rolesFromInput(input: {
-		is_system_admin?: boolean;
-		assignments?: ShelterAssignmentInput[];
-		capabilities?: string[];
-		capability?: string;
-		shelter_id?: string;
-	}): string[] | null {
-		if (input.is_system_admin || input.capabilities?.includes(SYSTEM_ADMIN)) {
-			return [SYSTEM_ADMIN];
-		}
-		if (input.assignments && input.assignments.length > 0) {
-			return rolesFromAssignments(input.assignments as ShelterAssignment[]);
-		}
-		const caps = (input.capabilities ?? (input.capability ? [input.capability] : [])).filter(
-			(c) => c !== SYSTEM_ADMIN
-		) as ShelterAssignment['capabilities'];
-		const code = effectiveLock ?? input.shelter_id;
-		if (!code || caps.length === 0) return null;
-		return rolesFromAssignments([{ shelter_code: code, capabilities: caps }]);
+	const shelterFilterOptions = $derived([
+		{ value: '', label: 'ทั้งหมด' },
+		...(sheltersQuery.data ?? []).map((s) => ({
+			value: s.code,
+			label: `${s.code} — ${s.name}`
+		}))
+	]);
+
+	const roleFilterOptions = [
+		{ value: '', label: 'ทั้งหมด' },
+		...SA_GRANTABLE_CAPABILITIES.map((cap) => ({
+			value: cap,
+			label: roleDisplayLabel(cap)
+		}))
+	];
+
+	const typeFilterOptions = [
+		{ value: '', label: 'ทั้งหมด' },
+		{ value: 'staff', label: 'เจ้าหน้าที่' },
+		{ value: 'volunteer', label: 'จิตอาสา' }
+	];
+
+	function applyFilters() {
+		queryFilter = queryDraft;
+		shelterFilter = shelterDraft;
+		roleFilter = roleDraft;
+		typeFilter = typeDraft;
+		currentPage = 1;
 	}
 
-	/** Rejects on failure — UserForm turns the reason into a Superforms error. */
-	async function handleCreate(input: CreateUserInput) {
-		const userRoles = rolesFromInput(input);
-		if (!userRoles) throw new Error('กรุณาระบุศูนย์พักพิงที่สังกัด');
-		const result = await createMutation.mutateAsync({
-			name: input.username,
-			password: input.password,
-			display_name: input.display_name,
-			roles: userRoles,
-			personnel_type: input.personnel_type,
-			organization: input.organization,
-			position: input.position,
-			phone: input.phone,
-			email: input.email,
-			notes: input.notes,
-			volunteer_id: input.volunteer_id,
-			duty_window: input.duty_window,
-			affiliation_tags: input.affiliation_tags
-		});
-		toast.success(
-			result.merged
-				? `เพิ่มสิทธิ์ในศูนย์นี้ให้ "${input.username}" แล้ว (บัญชีมีอยู่เดิม)`
-				: `สร้างผู้ใช้งาน "${input.username}" สำเร็จ`
-		);
-		dialogOpen = false;
+	/** Match bare or compound capability — do not use hasStaffCapability (SA would match all). */
+	function userMatchesRoleFilter(userRoles: readonly string[], filter: string): boolean {
+		if (!filter) return true;
+		if (filter === SYSTEM_ADMIN) return isAppSystemAdmin(userRoles);
+		if (filter === SHELTER_MANAGER) return isShelterManager(userRoles);
+		if (userRoles.includes(filter)) return true;
+		return userRoles.some((r) => parseCompoundCapability(r)?.capability === filter);
 	}
 
 	function editHref(user: UserSummary): string {
@@ -128,6 +134,24 @@
 				? resolve(`/system-management/users/${encodeURIComponent(user.name)}`)
 				: resolve(`/back-office/users/${encodeURIComponent(user.name)}`);
 		return `${path}?from=${encodeURIComponent(from)}`;
+	}
+
+	function goCreate() {
+		const listBase = usersListBaseFromPathname(page.url.pathname);
+		const from = withUsersView(page.url.pathname, page.url.search);
+		if (listBase === '/system-management/users') {
+			void goto(
+				resolve(
+					`/system-management/users/new?from=${encodeURIComponent(from)}` as '/system-management/users/new'
+				)
+			);
+		} else {
+			void goto(
+				resolve(
+					`/back-office/users/new?from=${encodeURIComponent(from)}` as '/back-office/users/new'
+				)
+			);
+		}
 	}
 
 	function confirmDelete(name: string) {
@@ -213,84 +237,148 @@
 	const filteredUsers = $derived(
 		usersQuery.data?.filter((u: UserSummary) => {
 			if (effectiveLock && !shelterCodesFromRoles(u.roles).includes(effectiveLock)) return false;
-			if (!searchQuery) return true;
-			const q = searchQuery.toLowerCase();
-			return (
-				u.name.toLowerCase().includes(q) ||
-				(u.display_name && u.display_name.toLowerCase().includes(q)) ||
-				(u.organization && u.organization.toLowerCase().includes(q)) ||
-				u.roles.some(
-					(r: string) =>
-						r.toLowerCase().includes(q) || roleDisplayLabel(r).toLowerCase().includes(q)
-				) ||
-				assignmentsFromRoles(u.roles).some((a) => a.shelter_code.toLowerCase().includes(q))
-			);
+
+			if (
+				!effectiveLock &&
+				shelterFilter &&
+				!shelterCodesFromRoles(u.roles).includes(shelterFilter)
+			) {
+				return false;
+			}
+
+			const q = queryFilter.trim();
+			if (q) {
+				const qLower = q.toLowerCase();
+				const matchesUsername = u.name.toLowerCase().includes(qLower);
+				const matchesPhone = Boolean(u.phone?.includes(q));
+				const matchesDisplayName = (u.display_name ?? '').toLowerCase().includes(qLower);
+				if (!matchesUsername && !matchesPhone && !matchesDisplayName) return false;
+			}
+
+			if (!userMatchesRoleFilter(u.roles, roleFilter)) return false;
+
+			if (typeFilter) {
+				const personnelType = u.personnel_type ?? 'staff';
+				if (personnelType !== typeFilter) return false;
+			}
+
+			return true;
 		}) ?? []
 	);
+
+	const totalPages = $derived(Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE)));
+	const pagedUsers = $derived(
+		filteredUsers.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+	);
+
+	$effect(() => {
+		const normalizedPage = Math.max(1, Math.min(currentPage, totalPages));
+		if (currentPage !== normalizedPage) currentPage = normalizedPage;
+	});
 </script>
 
-<div class={['mx-auto', compact ? 'max-w-none' : 'container max-w-[1200px] p-6']}>
-	<div
-		class={[
-			'flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center',
-			compact ? 'mb-4' : 'mb-8'
-		]}
-	>
-		<div class="flex items-center gap-4">
-			<div class="text-blue-900/80">
-				<UserPlus class={compact ? 'h-6 w-6' : 'h-8 w-8'} />
-			</div>
-			<div>
-				<h2 class={compact ? 'text-lg font-bold' : 'text-2xl font-bold text-slate-900'}>
-					จัดการผู้ใช้งาน (User Management)
-				</h2>
-				<p class="mt-1 text-sm text-muted-foreground">ค้นหา เพิ่ม และจัดการสิทธิ์บุคลากรในระบบ</p>
-			</div>
-		</div>
-
-		<Dialog.Root bind:open={dialogOpen}>
-			<Dialog.Trigger>
-				{#snippet child({ props })}
-					<Button
-						{...props}
-						class="rounded-lg bg-[#0f2d5c] px-5 py-5 font-semibold text-white hover:bg-[#0a1e3f]"
-					>
-						<span class="mr-2">+</span> เพิ่มผู้ใช้ใหม่
-					</Button>
-				{/snippet}
-			</Dialog.Trigger>
-			<Dialog.Content
-				class="flex max-h-[90vh] flex-col gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-[700px]"
+{#snippet userFiltersAndTable()}
+	<div class={spatial.container.staffPageCard}>
+		<form
+			class="border-b border-slate-200/80 p-4 sm:p-6"
+			onsubmit={(e) => {
+				e.preventDefault();
+				applyFilters();
+			}}
+		>
+			<div
+				class={[
+					'grid w-full grid-cols-1 gap-3 sm:grid-cols-2',
+					!effectiveLock ? 'lg:grid-cols-5' : 'lg:grid-cols-4'
+				]}
 			>
-				<Dialog.Header class="shrink-0 border-b border-slate-100 p-6 pb-2">
-					<Dialog.Title class="text-xl font-bold text-slate-900">เพิ่มผู้ใช้ใหม่</Dialog.Title>
-					<Dialog.Description class="text-xs text-slate-500">
-						กำหนดบัญชีผู้ใช้งาน สังกัดองค์กร และบทบาทหน้าที่ในศูนย์พักพิง
-					</Dialog.Description>
-				</Dialog.Header>
-				<UserForm
-					onsubmit={handleCreate}
-					oncancel={() => (dialogOpen = false)}
-					{isSA}
-					{allowSystemAdminRole}
-					lockedShelterCode={effectiveLock ?? null}
-					pending={createMutation.isPending}
-				/>
-			</Dialog.Content>
-		</Dialog.Root>
-	</div>
+				<div class="w-full min-w-0 space-y-2 sm:col-span-2">
+					<label for="user-query-filter" class="text-xs font-semibold text-foreground">ค้นหา</label>
+					<Input
+						id="user-query-filter"
+						type="search"
+						placeholder="ชื่อผู้ใช้, เบอร์โทร หรือชื่อ-นามสกุล"
+						bind:value={queryDraft}
+						class="h-11 min-h-11 rounded-xl border-input bg-background px-3 shadow-xs"
+					/>
+				</div>
 
-	<div class={['relative max-w-full', compact ? 'mb-4' : 'mb-6']}>
-		<Search class="absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
-		<Input
-			bind:value={searchQuery}
-			type="text"
-			placeholder="ค้นหาชื่อ, เบอร์โทร, สังกัดองค์กร หรือบทบาท..."
-			class="h-12 rounded-xl bg-white pl-11 text-base"
-		/>
-	</div>
+				{#if !effectiveLock}
+					<div class="w-full min-w-0 space-y-2">
+						<label for="user-shelter-filter" class="text-xs font-semibold text-foreground"
+							>ศูนย์อพยพ</label
+						>
+						<Select.Root type="single" bind:value={shelterDraft}>
+							<Select.Trigger
+								id="user-shelter-filter"
+								class="h-11 min-h-11 w-full min-w-0 rounded-xl border-input bg-background px-3 shadow-xs data-[size=default]:h-11"
+								aria-label="ศูนย์อพยพ"
+							>
+								<span class="truncate">
+									{shelterFilterOptions.find((option) => option.value === shelterDraft)?.label ??
+										'ทั้งหมด'}
+								</span>
+							</Select.Trigger>
+							<Select.Content>
+								{#each shelterFilterOptions as option (option.value)}
+									<Select.Item value={option.value} label={option.label} />
+								{/each}
+							</Select.Content>
+						</Select.Root>
+					</div>
+				{/if}
 
-	<div class="overflow-hidden rounded-2xl border bg-white shadow-xs">
+				<div class="w-full min-w-0 space-y-2">
+					<label for="user-role-filter" class="text-xs font-semibold text-foreground">บทบาท</label>
+					<Select.Root type="single" bind:value={roleDraft}>
+						<Select.Trigger
+							id="user-role-filter"
+							class="h-11 min-h-11 w-full min-w-0 rounded-xl border-input bg-background px-3 shadow-xs data-[size=default]:h-11"
+							aria-label="บทบาท"
+						>
+							<span class="truncate">
+								{roleFilterOptions.find((option) => option.value === roleDraft)?.label ?? 'ทั้งหมด'}
+							</span>
+						</Select.Trigger>
+						<Select.Content>
+							{#each roleFilterOptions as option (option.value)}
+								<Select.Item value={option.value} label={option.label} />
+							{/each}
+						</Select.Content>
+					</Select.Root>
+				</div>
+
+				<div class="w-full min-w-0 space-y-2">
+					<label for="user-type-filter" class="text-xs font-semibold text-foreground">ประเภท</label>
+					<Select.Root type="single" bind:value={typeDraft}>
+						<Select.Trigger
+							id="user-type-filter"
+							class="h-11 min-h-11 w-full min-w-0 rounded-xl border-input bg-background px-3 shadow-xs data-[size=default]:h-11"
+							aria-label="ประเภท"
+						>
+							<span class="truncate">
+								{typeFilterOptions.find((option) => option.value === typeDraft)?.label ?? 'ทั้งหมด'}
+							</span>
+						</Select.Trigger>
+						<Select.Content>
+							{#each typeFilterOptions as option (option.value)}
+								<Select.Item value={option.value} label={option.label} />
+							{/each}
+						</Select.Content>
+					</Select.Root>
+				</div>
+			</div>
+
+			<div class="mt-3 flex justify-end">
+				<Button
+					type="submit"
+					class="btn-primary-brand h-11 w-full rounded-xl px-6 font-semibold sm:w-auto"
+				>
+					ค้นหา
+				</Button>
+			</div>
+		</form>
+
 		{#if usersQuery.isLoading}
 			<div class="p-8 text-center text-sm text-muted-foreground">กำลังโหลดข้อมูลผู้ใช้งาน...</div>
 		{:else if usersQuery.isError}
@@ -299,7 +387,7 @@
 			</div>
 		{:else}
 			<UserList
-				users={filteredUsers}
+				users={pagedUsers}
 				{isSA}
 				{editHref}
 				ondelete={confirmDelete}
@@ -307,9 +395,55 @@
 				onunlinkmfa={handleOpenUnlinkMfa}
 				pending={deleteMutation.isPending || unlinkingMfa}
 			/>
+			<PaginationControls
+				bind:page={currentPage}
+				count={filteredUsers.length}
+				perPage={PAGE_SIZE}
+			/>
 		{/if}
 	</div>
-</div>
+{/snippet}
+
+{#if compact}
+	<div class="max-w-none">
+		<div class="mb-4 flex flex-col items-stretch justify-between gap-4 sm:flex-row sm:items-center">
+			<div class="flex min-w-0 items-center gap-4">
+				<div class="shrink-0 text-blue-900/80">
+					<UserPlus class="h-6 w-6" />
+				</div>
+				<div class="min-w-0">
+					<h2 class="text-lg font-bold">จัดการผู้ใช้งาน (User Management)</h2>
+					<p class="mt-1 text-sm text-muted-foreground">ค้นหา เพิ่ม และจัดการสิทธิ์บุคลากรในระบบ</p>
+				</div>
+			</div>
+
+			<Button
+				class="btn-primary-brand w-full shrink-0 rounded-lg px-5 py-5 font-semibold sm:w-auto"
+				onclick={goCreate}
+			>
+				<span class="mr-2">+</span> เพิ่มผู้ใช้ใหม่
+			</Button>
+		</div>
+
+		{@render userFiltersAndTable()}
+	</div>
+{:else}
+	<StaffPageShell
+		title="จัดการผู้ใช้งาน (User Management)"
+		description="ค้นหา เพิ่ม และจัดการสิทธิ์บุคลากรในระบบ"
+	>
+		{#snippet actions()}
+			<Button
+				class="btn-primary-brand shrink-0 rounded-lg px-5 py-5 font-semibold"
+				onclick={goCreate}
+			>
+				<span class="mr-2">+</span> เพิ่มผู้ใช้ใหม่
+			</Button>
+		{/snippet}
+
+		{@render userFiltersAndTable()}
+	</StaffPageShell>
+{/if}
 
 <!-- Unlink MFA Confirmation Dialog -->
 <Dialog.Root bind:open={unlinkMfaDialogOpen}>
@@ -404,7 +538,9 @@
 			<span class="text-xs font-bold tracking-wider text-amber-800 uppercase"
 				>รหัสผ่านชั่วคราว (One-Time Passphrase)</span
 			>
-			<div class="mt-2 font-mono text-2xl font-extrabold tracking-wide text-slate-900 select-all">
+			<div
+				class="mt-2 font-mono text-2xl font-extrabold tracking-wide break-all text-slate-900 select-all"
+			>
 				{temporaryPassword}
 			</div>
 		</div>
@@ -414,7 +550,7 @@
 			<span>ผู้ใช้งานจะต้องตั้งรหัสผ่านใหม่ของตนเองทันทีในการเข้าสู่ระบบครั้งถัดไป</span>
 		</div>
 
-		<div class="mt-5 flex justify-end gap-3">
+		<div class="mt-5 flex flex-col-reverse justify-end gap-3 sm:flex-row">
 			<Button type="button" variant="outline" class="gap-1.5" onclick={copyPassword}>
 				{#if copied}
 					<Check class="size-4 text-emerald-600" />
@@ -425,7 +561,7 @@
 				{/if}
 			</Button>
 			<Button
-				class="bg-[#0f2d5c] text-white hover:bg-[#0a1e3f]"
+				class="btn-primary-brand"
 				onclick={() => {
 					resetResultDialogOpen = false;
 					temporaryPassword = null;
@@ -453,7 +589,7 @@
 				{/if}
 			</Dialog.Description>
 		</Dialog.Header>
-		<div class="mt-2 flex justify-end gap-4 pt-4">
+		<div class="mt-2 flex flex-col-reverse justify-end gap-3 pt-4 sm:flex-row sm:gap-4">
 			<Button
 				type="button"
 				variant="outline"

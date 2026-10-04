@@ -115,8 +115,12 @@ export type FoodDistributionPoint = z.infer<typeof foodDistributionPointSchema>;
 export const facilitiesSchema = z.object({
 	toilets_male: z.coerce.number().int().min(0).nullish(),
 	toilets_female: z.coerce.number().int().min(0).nullish(),
+	toilets_unisex: z.coerce.number().int().min(0).nullish(),
 	toilets_accessible: z.coerce.number().int().min(0).nullish(),
 	showers: z.coerce.number().int().min(0).nullish(),
+	showers_male: z.coerce.number().int().min(0).nullish(),
+	showers_female: z.coerce.number().int().min(0).nullish(),
+	showers_unisex: z.coerce.number().int().min(0).nullish(),
 	water_points: z.coerce.number().int().min(0).nullish(),
 	handwashing_stations: z.coerce.number().int().min(0).nullish(),
 	car_toilet_accessible: z.boolean().nullish(),
@@ -127,8 +131,14 @@ export type Facilities = z.infer<typeof facilitiesSchema>;
 
 // ===== Common areas (per-shelter, per image section 3c) =====
 
+/**
+ * A shelter storage point ("จุดเก็บของ") — the master that stock ledger lots
+ * point at via `lot.storage_point_id` (draft-shelter-storage-points). `id` is a
+ * client-minted ULID, or `legacy-<index>` back-filled on read for rows written
+ * before schema_v 7; either way it is immutable once persisted.
+ */
 export const subStorageItemSchema = z.object({
-	id: z.string().optional(),
+	id: z.string().trim().min(1),
 	name: z.string().trim().min(1, 'ชื่อสถานที่จัดเก็บต้องไม่ว่าง'),
 	type: subStorageTypeSchema,
 	// CR-023 FR-23-11
@@ -384,6 +394,11 @@ export const shelterSchema = z.object({
 	operation_status: operationStatusSchema.default('standby'),
 	// code จาก master_data:shelter_type (CR-023 FR-23-0a) — persist string code
 	shelter_type: z.string().trim().nullish(),
+	floor_count: z.coerce
+		.number()
+		.int('จำนวนชั้นต้องเป็นจำนวนเต็ม')
+		.min(1, 'จำนวนชั้นต้องอย่างน้อย 1 ชั้น')
+		.nullish(),
 	project_level: projectLevelSchema.nullish(),
 	location: locationSchema.optional(),
 	contact: contactSchema.optional(),
@@ -487,6 +502,7 @@ export interface ShelterMaster {
 	site_kind: SiteKind;
 	operation_status?: OperationStatus;
 	shelter_type?: string | null;
+	floor_count?: number | null;
 	project_level?: ProjectLevel | null;
 	capacity?: number;
 	area_m2?: number | null;
@@ -563,6 +579,7 @@ function migrateV3ToV4(v3: ShelterMaster): ShelterMaster {
 	return {
 		...v3,
 		schema_v: 4 as const,
+		floor_count: v3.floor_count ?? null,
 		project_level: v3.project_level ?? null,
 		municipality_zone: v3.municipality_zone ?? null,
 		community: v3.community ?? null,
@@ -610,7 +627,7 @@ function migrateV3ToV4(v3: ShelterMaster): ShelterMaster {
  * `migrateVxToVy` step so migration runners (`scripts/migrate-shelter.ts`) stop
  * skipping docs that are behind by less than a whole major shape change.
  */
-export const SHELTER_MASTER_SCHEMA_V = 6;
+export const SHELTER_MASTER_SCHEMA_V = 7;
 
 /** v4 → v5 default-fill (CR-067). Old registry docs are evacuation centers. */
 function migrateV4ToV5(v4: ShelterMaster): ShelterMaster {
@@ -625,9 +642,39 @@ function migrateV4ToV5(v4: ShelterMaster): ShelterMaster {
 function migrateV5ToV6(v5: ShelterMaster): ShelterMaster {
 	return {
 		...v5,
-		schema_v: SHELTER_MASTER_SCHEMA_V,
+		schema_v: 6 as const,
 		food_distribution_points: v5.food_distribution_points ?? []
 	};
+}
+
+type LegacySubStorageItem = Omit<SubStorageItem, 'id'> & { id?: string | null };
+
+/** True when any storage point still lacks an `id` (written before schema_v 7). */
+function hasSubStorageWithoutId(master: ShelterMaster): boolean {
+	const items = (master.common_areas?.sub_storage ?? []) as LegacySubStorageItem[];
+	return items.some((item) => !item.id);
+}
+
+/**
+ * Back-fill `sub_storage[].id` as `legacy-<index>`. Deterministic on purpose: a
+ * ULID minted here would change on every read until the doc is next written, so
+ * a ledger lot could reference an id that never lands on the shelter doc.
+ */
+function fillSubStorageIds(master: ShelterMaster): ShelterMaster {
+	if (!master.common_areas) return master;
+	const items = (master.common_areas.sub_storage ?? []) as LegacySubStorageItem[];
+	return {
+		...master,
+		common_areas: {
+			...master.common_areas,
+			sub_storage: items.map((item, i) => ({ ...item, id: item.id || `legacy-${i}` }))
+		}
+	};
+}
+
+/** v6 → v7 (draft-shelter-storage-points). Storage points get a stable `id`. */
+function migrateV6ToV7(v6: ShelterMaster): ShelterMaster {
+	return { ...fillSubStorageIds(v6), schema_v: SHELTER_MASTER_SCHEMA_V };
 }
 
 /**
@@ -640,11 +687,15 @@ function migrateV5ToV6(v5: ShelterMaster): ShelterMaster {
  */
 function normalizeCurrent(master: ShelterMaster): ShelterMaster {
 	const hasSiteKind = 'site_kind' in master && !!master.site_kind;
-	if (hasSiteKind && Array.isArray(master.food_distribution_points)) return master;
+	const missingSubStorageId = hasSubStorageWithoutId(master);
+	if (hasSiteKind && Array.isArray(master.food_distribution_points) && !missingSubStorageId) {
+		return master;
+	}
+	const filled = missingSubStorageId ? fillSubStorageIds(master) : master;
 	return {
-		...master,
-		site_kind: master.site_kind ?? 'evacuation_center',
-		food_distribution_points: master.food_distribution_points ?? []
+		...filled,
+		site_kind: filled.site_kind ?? 'evacuation_center',
+		food_distribution_points: filled.food_distribution_points ?? []
 	};
 }
 
@@ -653,11 +704,15 @@ export function migrateShelterV2ToCurrent(master: ShelterMasterV2 | ShelterMaste
 	if (master.schema_v >= SHELTER_MASTER_SCHEMA_V) {
 		return normalizeCurrent(master as ShelterMaster);
 	}
-	if (master.schema_v === 5) return migrateV5ToV6(master as unknown as ShelterMaster);
+	if (master.schema_v === 6) return migrateV6ToV7(master as unknown as ShelterMaster);
+	if (master.schema_v === 5)
+		return migrateV6ToV7(migrateV5ToV6(master as unknown as ShelterMaster));
 	if (master.schema_v === 4)
-		return migrateV5ToV6(migrateV4ToV5(master as unknown as ShelterMaster));
+		return migrateV6ToV7(migrateV5ToV6(migrateV4ToV5(master as unknown as ShelterMaster)));
 	if (master.schema_v === 3)
-		return migrateV5ToV6(migrateV4ToV5(migrateV3ToV4(master as unknown as ShelterMaster)));
+		return migrateV6ToV7(
+			migrateV5ToV6(migrateV4ToV5(migrateV3ToV4(master as unknown as ShelterMaster)))
+		);
 	const v2 = master as ShelterMasterV2;
 	// Backfill shelter capacity: v2 stored capacity at the top level but v3 zones
 	// are the source of truth, so sum zone capacity (>= 0) and fall back to 100
@@ -674,6 +729,7 @@ export function migrateShelterV2ToCurrent(master: ShelterMasterV2 | ShelterMaste
 		operation_status:
 			v2.status === 'open' ? ('active' as OperationStatus) : (v2.status as OperationStatus),
 		shelter_type: null,
+		floor_count: null,
 		area_type: null,
 		capacity: backfilledCapacity,
 		facilities: {
@@ -718,6 +774,6 @@ export function migrateShelterV2ToCurrent(master: ShelterMasterV2 | ShelterMaste
 	delete (v3 as Record<string, unknown>).items;
 	delete (v3 as Record<string, unknown>).rules;
 	delete (v3 as Record<string, unknown>).sops;
-	// Chain v2→v3→v4→v5→v6 so a v2 doc lands on the current shape in one call.
-	return migrateV5ToV6(migrateV4ToV5(migrateV3ToV4(v3 as unknown as ShelterMaster)));
+	// Chain v2→v3→…→v7 so a v2 doc lands on the current shape in one call.
+	return migrateV6ToV7(migrateV5ToV6(migrateV4ToV5(migrateV3ToV4(v3 as unknown as ShelterMaster))));
 }

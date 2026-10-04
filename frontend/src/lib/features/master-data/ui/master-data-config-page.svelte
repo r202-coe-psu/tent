@@ -4,6 +4,7 @@
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import {
 		applyItemOp,
+		MASTER_DATA_TYPES,
 		masterTypeSchema,
 		type MasterDataItem,
 		type MasterDataQueryContext,
@@ -11,28 +12,29 @@
 		type MasterDataType
 	} from '$lib/features/master-data';
 	import { useMasterData, useMasterDataList, usePutMaster } from '$lib/features/master-data';
+	import StaffPageShell from '$lib/components/staff-page-shell.svelte';
+	import StaffHub from '$lib/components/staff-hub.svelte';
 	import MasterDataTypeList from './master-data-type-list.svelte';
 	import MasterDataItemList from './master-data-item-list.svelte';
-	import MasterDataEditModal from './master-data-edit-modal.svelte';
-	import ConsoleBanner from '$lib/components/console-banner.svelte';
+	import MasterDataEditModal, { type MasterDataEditSubmit } from './master-data-edit-modal.svelte';
 
 	let {
 		allowedTypes,
 		basePath,
-		title,
-		description,
+		title = 'Master Data',
+		description = 'จัดการรายการมาตรฐานที่ใช้ซ้ำในฟอร์ม · แก้ไขแล้วมีผลทันที',
 		scope = 'global',
 		shelterCode
 	}: {
 		allowedTypes?: readonly MasterDataType[];
 		basePath?: string;
-		title: string;
+		title?: string;
 		description?: string;
 		scope?: MasterDataScope;
 		shelterCode?: string | null;
 	} = $props();
 
-	const resolvedBasePath = $derived(basePath ?? resolve('/back-office/registration-config'));
+	const resolvedBasePath = $derived(basePath ?? resolve('/back-office/master-data'));
 	const resolvedScope = $derived<MasterDataScope>(scope);
 	const resolvedShelterCode = $derived(
 		shelterCode ?? (resolvedScope === 'global' ? undefined : shelterStore.selectedShelterCode)
@@ -43,26 +45,24 @@
 	});
 	const writeContext = $derived<MasterDataQueryContext>({
 		scope: resolvedScope === 'effective' ? 'global' : resolvedScope,
-		// Never pair shelter_code with a global write — the server rejects it (422).
 		...(resolvedScope !== 'effective' && resolvedShelterCode
 			? { shelterCode: resolvedShelterCode }
 			: {})
 	});
 
-	// Active type lives in the URL (`?type=...`) — single source of truth so
-	// the left-column tabs act as deep links, browser back/forward work, and
-	// `MasterDataTypeList` can render real `<a href>` anchors.
+	const visibleTypes = $derived(
+		allowedTypes ? MASTER_DATA_TYPES.filter((t) => allowedTypes.includes(t)) : MASTER_DATA_TYPES
+	);
+
 	const activeType = $derived<MasterDataType>(parseActiveType());
 
 	function parseActiveType(): MasterDataType {
 		const raw = page.url.searchParams.get('type');
 		const parsed = masterTypeSchema.safeParse(raw);
 		if (parsed.success) {
-			// If allowedTypes is set, ensure the parsed type is in the allowed set
 			if (!allowedTypes || allowedTypes.includes(parsed.data)) return parsed.data;
 		}
-		// Default to first allowed type, or 'vulnerable_group' if no filter
-		return allowedTypes?.[0] ?? 'vulnerable_group';
+		return visibleTypes[0] ?? 'vulnerable_group';
 	}
 
 	const list = useMasterDataList(() => readContext);
@@ -93,11 +93,6 @@
 		modalOpen = true;
 	}
 
-	// For shelter scope, the PUT body must contain ONLY shelter-local items —
-	// global items are read-only and live in their own doc, never copied into
-	// the shelter doc. Newly added items have no source entry yet, so they are
-	// treated as shelter-local. Global scope sends everything (all items are
-	// global there).
 	function localOnly(candidateItems: readonly MasterDataItem[]): MasterDataItem[] {
 		if (resolvedScope === 'global') return [...candidateItems];
 		return candidateItems.filter((item) => {
@@ -108,9 +103,6 @@
 
 	function submitItems(nextItems: readonly MasterDataItem[]) {
 		const local = localOnly(nextItems);
-		// A shelter-local default is the most specific choice — when one is set,
-		// clear any global-default pointer so the two never compete (last choice
-		// wins). (CR-049 amendment)
 		const hasLocalDefault = local.some((i) => i.is_default);
 		putMutation.mutate({
 			type: activeType,
@@ -120,19 +112,31 @@
 		});
 	}
 
-	function handleSubmit(input: { code?: string; label: string; is_default: boolean }) {
-		const op = input.code
-			? ({
-					kind: 'edit',
+	function handleSubmit(input: MasterDataEditSubmit) {
+		const isEdit = items.some((i) => i.code === input.code);
+		const op = isEdit
+			? {
+					kind: 'edit' as const,
 					code: input.code,
-					label: input.label,
-					is_default: input.is_default
-				} as const)
-			: ({ kind: 'add', label: input.label, is_default: input.is_default } as const);
+					...(input.newCode ? { newCode: input.newCode } : {}),
+					label_th: input.label_th,
+					label_en: input.label_en,
+					is_default: input.is_default,
+					...(input.category ? { category: input.category } : {}),
+					...(input.description !== undefined ? { description: input.description } : {})
+				}
+			: {
+					kind: 'add' as const,
+					code: input.code,
+					label_th: input.label_th,
+					label_en: input.label_en,
+					is_default: input.is_default,
+					...(input.category ? { category: input.category } : {}),
+					...(input.description !== undefined ? { description: input.description } : {})
+				};
 		submitItems(applyItemOp(items, op));
 	}
 
-	// Codes of global items this shelter has disabled (from the merged sources).
 	const disabledGlobalCodes = $derived(
 		Object.entries(detail.data?.item_sources ?? {})
 			.filter(([, s]) => s.shelter_disabled)
@@ -141,9 +145,6 @@
 
 	function handleToggleStatus(item: MasterDataItem) {
 		const source = detail.data?.item_sources?.[item.code];
-		// Global item under a shelter → per-shelter enable/disable via
-		// `disabled_global_codes` (CR-049 amendment). Never mutates the global doc;
-		// shelter-local items are sent unchanged.
 		if (resolvedScope !== 'global' && source?.scope === 'global') {
 			const next = source.shelter_disabled
 				? disabledGlobalCodes.filter((c) => c !== item.code)
@@ -156,7 +157,6 @@
 			});
 			return;
 		}
-		// Shelter-local item → flip its own status.
 		submitItems(
 			applyItemOp(items, {
 				kind: 'setStatus',
@@ -166,15 +166,7 @@
 		);
 	}
 
-	// Shelter picks a non-default GLOBAL item as its own default (CR-049
-	// amendment): stores `default_global_code` on the shelter-local doc only —
-	// the global item's label/is_default are never mutated. Shelter-local
-	// items are sent unchanged.
 	function handleSetGlobalDefault(item: MasterDataItem) {
-		// Choosing a global item as the default must win even when a shelter-local
-		// item is currently the default — clear the shelter-local `is_default`
-		// flags so the pointer isn't shadowed (merge: local default > pointed
-		// global). (CR-049 amendment)
 		const local = localOnly(items).map((i) => (i.is_default ? { ...i, is_default: false } : i));
 		putMutation.mutate({
 			type: activeType,
@@ -185,11 +177,27 @@
 	}
 </script>
 
-<main class="container mx-auto space-y-4 px-4 py-6">
-	<ConsoleBanner {title} {description} />
+<StaffPageShell {title} {description}>
+	{#snippet meta()}
+		{#if resolvedScope === 'shelter'}
+			<span
+				class="inline-flex rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-900"
+			>
+				ขอบเขต: ศูนย์นี้
+			</span>
+		{:else}
+			<span
+				class="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600"
+			>
+				ขอบเขต: ส่วนกลาง
+			</span>
+		{/if}
+	{/snippet}
 
-	<div class="grid grid-cols-1 gap-4 lg:grid-cols-[320px_1fr] lg:gap-6">
-		<MasterDataTypeList {activeType} {counts} {allowedTypes} basePath={resolvedBasePath} />
+	<StaffHub>
+		{#snippet nav()}
+			<MasterDataTypeList {activeType} {counts} {allowedTypes} basePath={resolvedBasePath} />
+		{/snippet}
 		<MasterDataItemList
 			type={activeType}
 			{items}
@@ -200,8 +208,8 @@
 			onToggleStatus={handleToggleStatus}
 			onSetGlobalDefault={handleSetGlobalDefault}
 		/>
-	</div>
-</main>
+	</StaffHub>
+</StaffPageShell>
 
 <MasterDataEditModal
 	bind:open={modalOpen}

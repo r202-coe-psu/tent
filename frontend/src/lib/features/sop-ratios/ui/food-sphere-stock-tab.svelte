@@ -5,10 +5,16 @@
 	import { useItemMasters, formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { useSupplyItems } from '$lib/features/supply';
-	import { useStockBalance, useLedger } from '$lib/features/operations';
+	import {
+		useStockBalance,
+		useLedger,
+		useStoragePoints,
+		lotStorageName
+	} from '$lib/features/operations';
 	import { useFoodSphereStandards } from '../application/food-sphere-queries';
 	import { useRequirementGroups } from '../application/requirement-group-queries';
 	import { useReplenishmentPolicies } from '../application/replenishment-queries';
+	import { headcountsFromAgeGroups } from '../domain/food-sphere-calc';
 	import { useDashboardDemographics, useDashboardOccupancy } from '$lib/features/dashboard';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import {
@@ -53,6 +59,7 @@
 	const supplyItemsQuery = useSupplyItems();
 	const balanceQuery = useStockBalance();
 	const ledgerQuery = useLedger();
+	const storagePoints = useStoragePoints(() => cleanShelterCode);
 	const standardsQuery = useFoodSphereStandards(() => cleanShelterCode);
 	const reqGroupsQuery = useRequirementGroups(() => cleanShelterCode);
 	const policiesQuery = useReplenishmentPolicies(() => cleanShelterCode);
@@ -88,11 +95,10 @@
 		const result: Record<string, { expiry?: string; note?: string }> = {};
 		const sorted = [...ledger].sort((a, b) => a.occurred_at.localeCompare(b.occurred_at));
 		for (const entry of sorted) {
-			if (qtyGt(entry.qty, 0) && (entry.lot?.expiry || entry.lot?.note)) {
-				result[entry.item_id] = {
-					expiry: entry.lot?.expiry,
-					note: entry.lot?.note
-				};
+			// `note` here is the lot's storage location label (draft-shelter-storage-points).
+			const location = lotStorageName(entry.lot, storagePoints.points) ?? undefined;
+			if (qtyGt(entry.qty, 0) && (entry.lot?.expiry || location)) {
+				result[entry.item_id] = { expiry: entry.lot?.expiry, note: location };
 			}
 		}
 		return result;
@@ -150,14 +156,7 @@
 		const policies = policiesQuery.data ?? [];
 		const demographics = demographicsQuery.data;
 
-		const headcounts: Record<string, number> = {
-			ALL: effectiveOccupancy
-		};
-		if (demographics?.age_groups) {
-			headcounts.ELDERLY = demographics.age_groups['60+'] ?? 0;
-			headcounts.CHILD_2_5 =
-				(demographics.age_groups['<1'] ?? 0) + (demographics.age_groups['1-5'] ?? 0);
-		}
+		const headcounts = headcountsFromAgeGroups(effectiveOccupancy, demographics?.age_groups);
 
 		return buildFoodSphereTable({
 			itemMasters: allItems,
@@ -604,7 +603,7 @@
 											class="shrink-0 rounded-full border border-border/60 bg-background/80 px-2 py-0.5 font-mono text-[11px] font-medium text-muted-foreground sm:text-xs"
 										>
 											เป้าหมาย: {group.totalGroupDemand.toLocaleString()}
-											{group.standardUom}/วัน
+											{formatUnit(group.standardUom, units, langState.current)}/วัน
 										</span>
 									{/if}
 								</div>

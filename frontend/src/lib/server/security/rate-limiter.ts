@@ -77,6 +77,29 @@ export class RateLimiter {
  */
 export const loginCaptchaIpLimiter = new RateLimiter(60_000, 10);
 
+/**
+ * Staff login identifier resolve (username ↔ phone). Enumeration-ish surface —
+ * same budget as captcha verify so a script cannot walk the phone book.
+ */
+export const loginResolveIpLimiter = new RateLimiter(60_000, 10);
+
+/**
+ * Third-party client secret reveal — own-password re-auth against CouchDB `_session`
+ * (CR-136). Same budget as login captcha: it's
+ * an already-authenticated SA, not an anonymous credential-stuffing surface, but a
+ * wrong-password guess still shouldn't be unlimited.
+ */
+export const thirdPartyClientSecretRevealLimiter = new RateLimiter(60_000, 10);
+
+/**
+ * Link-on-first-login attempts per `pending_link` nonce (CR-141 FR-20) — 5 tries per OAuth
+ * round; the window matches the cookie lifetime. Per worker, like every limiter here.
+ */
+export const linkAccountNonceLimiter = new RateLimiter(10 * 60_000, 5);
+
+/** Link-on-first-login per IP — same budget as login captcha verify. */
+export const linkAccountIpLimiter = new RateLimiter(60_000, 10);
+
 /** Creating a booking. The abuse vector CR-005 set this at — deliberately tight. */
 export const donationIpLimiter = new RateLimiter(60000, 3);
 /** Same, per phone number, so one abuser cannot spread across IPs. */

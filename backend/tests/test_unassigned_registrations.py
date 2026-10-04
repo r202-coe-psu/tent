@@ -111,11 +111,11 @@ async def test_create_persists_mongo_only_with_reserved_ids(
     assert reserved_evacuee.startswith("evacuee:")
     assert body["members"][0]["status"] == "open"
     assert body["registered_via"] == "web"
-    assert body["schema_v"] == 2
+    assert body["schema_v"] == 3
 
     stored = await UnassignedRegistration.get(body["id"])
     assert stored is not None
-    assert stored.schema_v == 2
+    assert stored.schema_v == 3
     assert stored.reserved_household_id == body["reserved_household_id"]
     assert stored.members[0].status == "open"
     assert stored.members[0].reserved_evacuee_id == reserved_evacuee
@@ -192,10 +192,10 @@ async def test_create_allows_homeless_with_landmark(
     assert stored.household.residence_landmark == "ใต้สะพาน"
 
 
-async def test_create_persists_expanded_public_fields_schema_v2(
+async def test_create_persists_expanded_public_fields_schema_v3(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:
-    """#255 — nickname, religion, emergency_contact, photo on Mongo queue."""
+    """#255 fields + schema_v 3 (pet claim lifecycle / persistent family)."""
     payload = _create_payload()
     payload["members"][0].update(
         {
@@ -216,7 +216,7 @@ async def test_create_persists_expanded_public_fields_schema_v2(
     )
     assert response.status_code == 201
     body = response.json()
-    assert body["schema_v"] == 2
+    assert body["schema_v"] == 3
     assert body["members"][0]["nickname"] == "ชาย"
     assert body["members"][0]["religion"] == "buddhist"
     assert body["members"][0]["emergency_contact"] == {
@@ -228,7 +228,7 @@ async def test_create_persists_expanded_public_fields_schema_v2(
 
     stored = await UnassignedRegistration.get(body["id"])
     assert stored is not None
-    assert stored.schema_v == 2
+    assert stored.schema_v == 3
     assert stored.members[0].nickname == "ชาย"
     assert stored.members[0].emergency_contact is not None
     assert stored.members[0].emergency_contact.phone == "0899999999"
@@ -629,6 +629,129 @@ async def test_residence_match_returns_non_pii_chips(
     assert hit["primary_contact_name_masked"] is not None
 
 
+async def test_residence_match_widens_across_villages_when_query_omits_village_no(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """Intentional (mirrors frontend `matchesResidenceAddress`, see
+    registration-shell.test.ts "ignores village_no when the query omits it"):
+    when the caller doesn't know/enter village_no, match widens across villages
+    that otherwise share the same address_no/subdistrict/district/province.
+    Locked in here as a regression, not a bug — do not tighten unilaterally."""
+    same_address = {
+        "housing_type": "owned_house",
+        "address_no": "77/2",
+        "subdistrict": "คอหงส์",
+        "district": "หาดใหญ่",
+        "province": "สงขลา",
+        "postal_code": "90110",
+        "pets": [],
+    }
+    first = await client.post(
+        "/public/v1/unassigned-registrations",
+        headers=auth_headers,
+        json=_create_payload(
+            members=[
+                {
+                    "first_name": "หนึ่ง",
+                    "last_name": "หมู่สอง",
+                    "gender": "male",
+                    "phone": "0810000001",
+                    "person_id": {"cardType": "national_id", "number": "1000000000001"},
+                    "country": "THAILAND",
+                    "vulnerable_groups": [],
+                    "special_needs": [],
+                }
+            ],
+            household={**same_address, "village_no": "หมู่ 2"},
+        ),
+    )
+    second = await client.post(
+        "/public/v1/unassigned-registrations",
+        headers=auth_headers,
+        json=_create_payload(
+            members=[
+                {
+                    "first_name": "สอง",
+                    "last_name": "หมู่เก้า",
+                    "gender": "male",
+                    "phone": "0810000002",
+                    "person_id": {"cardType": "national_id", "number": "1000000000002"},
+                    "country": "THAILAND",
+                    "vulnerable_groups": [],
+                    "special_needs": [],
+                }
+            ],
+            household={**same_address, "village_no": "หมู่ 9"},
+        ),
+    )
+    assert first.status_code == 201
+    assert second.status_code == 201
+
+    # No village_no in the query → both villages match (widen, by design).
+    widened = await client.post(
+        "/public/v1/unassigned-registrations/residence-match",
+        headers=auth_headers,
+        json=same_address,
+    )
+    assert widened.status_code == 200
+    assert {m["id"] for m in widened.json()["matches"]} == {
+        first.json()["id"],
+        second.json()["id"],
+    }
+
+    # Explicit village_no in the query → only the matching village.
+    narrowed = await client.post(
+        "/public/v1/unassigned-registrations/residence-match",
+        headers=auth_headers,
+        json={**same_address, "village_no": "หมู่ 9"},
+    )
+    assert narrowed.status_code == 200
+    assert {m["id"] for m in narrowed.json()["matches"]} == {second.json()["id"]}
+
+
+async def test_residence_match_caps_at_25_results(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    same_address = {
+        "housing_type": "owned_house",
+        "address_no": "1/1",
+        "subdistrict": "คอหงส์",
+        "district": "หาดใหญ่",
+        "province": "สงขลา",
+        "postal_code": "90110",
+        "pets": [],
+    }
+    for i in range(27):
+        response = await client.post(
+            "/public/v1/unassigned-registrations",
+            headers=auth_headers,
+            json=_create_payload(
+                members=[
+                    {
+                        "first_name": f"คน{i}",
+                        "last_name": "ทดสอบ",
+                        "gender": "male",
+                        "phone": f"08{i:08d}",
+                        "person_id": {"cardType": "national_id", "number": f"{i:013d}"},
+                        "country": "THAILAND",
+                        "vulnerable_groups": [],
+                        "special_needs": [],
+                    }
+                ],
+                household=same_address,
+            ),
+        )
+        assert response.status_code == 201
+
+    matched = await client.post(
+        "/public/v1/unassigned-registrations/residence-match",
+        headers=auth_headers,
+        json=same_address,
+    )
+    assert matched.status_code == 200
+    assert len(matched.json()["matches"]) == 25
+
+
 async def test_residence_match_by_member_phone(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:
@@ -691,6 +814,52 @@ async def test_residence_match_by_member_phone(
     assert hit["pets"][0]["species"] == "dog"
 
 
+async def test_residence_match_by_phone_finds_closed_document(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """After full claim, open_phones is empty — match must still find the family by phone."""
+    created = await client.post(
+        "/public/v1/unassigned-registrations",
+        headers=auth_headers,
+        json=_create_payload(
+            members=[
+                {
+                    "first_name": "สมชาย",
+                    "last_name": "ใจดี",
+                    "gender": "male",
+                    "phone": "0812345678",
+                    "person_id": {"cardType": "national_id", "number": "1111111111111"},
+                    "country": "THAILAND",
+                    "vulnerable_groups": [],
+                    "special_needs": [],
+                }
+            ]
+        ),
+    )
+    assert created.status_code == 201
+    reg_id = created.json()["id"]
+
+    stored = await UnassignedRegistration.get(reg_id)
+    assert stored is not None
+    stored.members[0].status = "claimed"
+    stored.members[0].claimed_shelter_code = "SH001"
+    stored.open_phones = []
+    stored.status = "closed"
+    await stored.save()
+
+    response = await client.post(
+        "/public/v1/unassigned-registrations/residence-match",
+        headers=auth_headers,
+        json={"phone": "0812345678"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["matches"]) == 1
+    assert body["matches"][0]["id"] == reg_id
+    assert body["matches"][0]["status"] == "closed"
+    assert body["matches"][0]["claimed_shelter_code"] == "SH001"
+
+
 async def test_join_appends_members_into_existing_reserved_household(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:
@@ -743,3 +912,312 @@ async def test_join_appends_members_into_existing_reserved_household(
     assert stored.reserved_household_id == reserved_hh
     assert len(stored.household.pets) == 1
     assert stored.household.pets[0].species == "dog"
+
+
+async def test_join_rejects_national_id_already_claimed_on_same_registration(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """A joiner must not reuse an already-claimed member's identity on this doc (join-dedup gap)."""
+    created = await client.post(
+        "/public/v1/unassigned-registrations",
+        headers=auth_headers,
+        json=_create_payload(),
+    )
+    assert created.status_code == 201
+    reg_id = created.json()["id"]
+
+    stored = await UnassignedRegistration.get(reg_id)
+    assert stored is not None
+    stored.members[0].status = "claimed"
+    stored.members[0].claimed_shelter_code = "SH001"
+    stored.open_person_id_numbers = []
+    stored.open_phones = []
+    await stored.save()
+
+    joined = await client.post(
+        "/public/v1/unassigned-registrations",
+        headers=auth_headers,
+        json=_create_payload(
+            join_registration_id=reg_id,
+            members=[
+                {
+                    "first_name": "สมชาย",
+                    "last_name": "ปลอม",
+                    "gender": "male",
+                    "phone": "0899999999",
+                    # Same national_id as the already-claimed member[0].
+                    "person_id": {"cardType": "national_id", "number": "1234567890123"},
+                    "country": "THAILAND",
+                    "vulnerable_groups": [],
+                    "special_needs": [],
+                }
+            ],
+        ),
+    )
+    assert joined.status_code == 409
+    assert joined.json()["errors"][0]["error"] == "DUPLICATE_OPEN_IDENTITY"
+
+    unchanged = await UnassignedRegistration.get(reg_id)
+    assert unchanged is not None
+    assert len(unchanged.members) == 1
+
+
+async def test_join_rejects_phone_already_claimed_on_same_registration(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """Same gap as above, via phone instead of national_id."""
+    created = await client.post(
+        "/public/v1/unassigned-registrations",
+        headers=auth_headers,
+        json=_create_payload(),
+    )
+    assert created.status_code == 201
+    reg_id = created.json()["id"]
+
+    stored = await UnassignedRegistration.get(reg_id)
+    assert stored is not None
+    stored.members[0].status = "claimed"
+    stored.members[0].claimed_shelter_code = "SH001"
+    stored.open_person_id_numbers = []
+    stored.open_phones = []
+    await stored.save()
+
+    joined = await client.post(
+        "/public/v1/unassigned-registrations",
+        headers=auth_headers,
+        json=_create_payload(
+            join_registration_id=reg_id,
+            members=[
+                {
+                    "first_name": "สมชาย",
+                    "last_name": "ปลอม",
+                    "gender": "male",
+                    # Same phone as the already-claimed member[0] ("0812345678").
+                    "phone": "0812345678",
+                    "person_id": {"cardType": "national_id", "number": "9998887776665"},
+                    "country": "THAILAND",
+                    "vulnerable_groups": [],
+                    "special_needs": [],
+                }
+            ],
+        ),
+    )
+    assert joined.status_code == 409
+    assert joined.json()["errors"][0]["error"] == "DUPLICATE_OPEN_IDENTITY"
+
+    unchanged = await UnassignedRegistration.get(reg_id)
+    assert unchanged is not None
+    assert len(unchanged.members) == 1
+
+
+async def test_join_target_not_found_returns_404(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    response = await client.post(
+        "/public/v1/unassigned-registrations",
+        headers=auth_headers,
+        json=_create_payload(join_registration_id=new_ulid()),
+    )
+    assert response.status_code == 404
+    assert response.json()["errors"][0]["error"] == "JOIN_TARGET_NOT_FOUND"
+
+
+# --------------------------------------------------------------- CR-148 FR-18
+
+_DORM_HOUSEHOLD: dict = {
+    "housing_type": "apartment_dorm",
+    "address_no": "305 หอสุขใจ อาคาร B ชั้น 3",
+    "subdistrict": "คอหงส์",
+    "district": "หาดใหญ่",
+    "province": "สงขลา",
+    "postal_code": "90110",
+    "pets": [],
+}
+
+
+async def test_create_round_trips_cr148_member_fields(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    payload = _create_payload()
+    payload["members"][0].update(
+        {
+            "religion": "other",
+            "religion_other": "  ซิกข์  ",
+            "vulnerable_groups": ["disability_other"],
+            "disability_other_detail": " ไม่ได้ยินข้างซ้าย ",
+        }
+    )
+    response = await client.post(
+        "/public/v1/unassigned-registrations", headers=auth_headers, json=payload
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["members"][0]["religion_other"] == "ซิกข์"
+    assert body["members"][0]["disability_other_detail"] == "ไม่ได้ยินข้างซ้าย"
+
+    stored = await UnassignedRegistration.get(body["id"])
+    assert stored is not None
+    assert stored.members[0].religion_other == "ซิกข์"
+    assert stored.members[0].disability_other_detail == "ไม่ได้ยินข้างซ้าย"
+
+
+async def test_create_drops_orphan_cr148_member_details(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    payload = _create_payload()
+    payload["members"][0].update(
+        {
+            "religion": "buddhist",
+            "religion_other": "ซิกข์",
+            "vulnerable_groups": ["elderly"],
+            "disability_other_detail": "ไม่ได้ยิน",
+        }
+    )
+    response = await client.post(
+        "/public/v1/unassigned-registrations", headers=auth_headers, json=payload
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["members"][0]["religion_other"] is None
+    assert body["members"][0]["disability_other_detail"] is None
+    stored = await UnassignedRegistration.get(body["id"])
+    assert stored is not None
+    assert stored.members[0].religion_other is None
+    assert stored.members[0].disability_other_detail is None
+
+
+async def test_create_rejects_religion_other_over_60_chars(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    payload = _create_payload()
+    payload["members"][0].update({"religion": "other", "religion_other": "ก" * 61})
+    response = await client.post(
+        "/public/v1/unassigned-registrations", headers=auth_headers, json=payload
+    )
+    assert response.status_code == 422
+    assert await UnassignedRegistration.count() == 0
+
+
+async def test_create_persists_dorm_fields_for_apartment_dorm(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    household = {
+        **_DORM_HOUSEHOLD,
+        "dorm_name": " หอสุขใจ ",
+        "dorm_building": "B",
+        "dorm_floor": "3",
+        "dorm_room": "305",
+    }
+    response = await client.post(
+        "/public/v1/unassigned-registrations",
+        headers=auth_headers,
+        json=_create_payload(household=household),
+    )
+    assert response.status_code == 201
+    stored = await UnassignedRegistration.get(response.json()["id"])
+    assert stored is not None
+    assert stored.household.dorm_name == "หอสุขใจ"
+    assert stored.household.dorm_building == "B"
+    assert stored.household.dorm_floor == "3"
+    assert stored.household.dorm_room == "305"
+
+
+@pytest.mark.parametrize("missing", ["dorm_name", "dorm_room"])
+async def test_create_rejects_apartment_dorm_without_required_dorm_fields(
+    client: AsyncClient, auth_headers: dict[str, str], missing: str
+) -> None:
+    household = {**_DORM_HOUSEHOLD, "dorm_name": "หอสุขใจ", "dorm_room": "305"}
+    household[missing] = "   "
+    response = await client.post(
+        "/public/v1/unassigned-registrations",
+        headers=auth_headers,
+        json=_create_payload(household=household),
+    )
+    assert response.status_code == 422
+    assert await UnassignedRegistration.count() == 0
+
+
+async def test_create_clears_dorm_fields_for_other_housing_types(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    payload = _create_payload()
+    payload["household"].update(
+        {"dorm_name": "หอสุขใจ", "dorm_building": "B", "dorm_floor": "3", "dorm_room": "305"}
+    )
+    response = await client.post(
+        "/public/v1/unassigned-registrations", headers=auth_headers, json=payload
+    )
+    assert response.status_code == 201
+    stored = await UnassignedRegistration.get(response.json()["id"])
+    assert stored is not None
+    hh = stored.household
+    assert (hh.dorm_name, hh.dorm_building, hh.dorm_floor, hh.dorm_room) == (
+        None,
+        None,
+        None,
+        None,
+    )
+
+
+async def test_create_rejects_pet_total_over_10(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    payload = _create_payload()
+    payload["household"]["pets"] = [{"species": "dog", "count": 6}, {"species": "cat", "count": 5}]
+    response = await client.post(
+        "/public/v1/unassigned-registrations", headers=auth_headers, json=payload
+    )
+    assert response.status_code == 422
+    assert await UnassignedRegistration.count() == 0
+
+
+async def test_create_rejects_pet_row_count_over_10(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    payload = _create_payload()
+    payload["household"]["pets"] = [{"species": "dog", "count": 11}]
+    response = await client.post(
+        "/public/v1/unassigned-registrations", headers=auth_headers, json=payload
+    )
+    assert response.status_code == 422
+
+
+async def test_create_allows_pet_total_of_exactly_10(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    payload = _create_payload()
+    payload["household"]["pets"] = [{"species": "dog", "count": 1} for _ in range(10)]
+    response = await client.post(
+        "/public/v1/unassigned-registrations", headers=auth_headers, json=payload
+    )
+    assert response.status_code == 201
+
+
+async def test_join_rejects_pets_pushing_household_over_10(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    first_payload = _create_payload()
+    first_payload["household"]["pets"] = [{"species": "dog", "count": 1} for _ in range(9)]
+    first = await client.post(
+        "/public/v1/unassigned-registrations", headers=auth_headers, json=first_payload
+    )
+    assert first.status_code == 201
+
+    join_payload = _create_payload(join_registration_id=first.json()["id"])
+    join_payload["members"][0].update(
+        {
+            "first_name": "สมหญิง",
+            "phone": "0899999999",
+            "person_id": {"cardType": "national_id", "number": "9876543210987"},
+        }
+    )
+    join_payload["household"]["pets"] = [{"species": "cat", "count": 1} for _ in range(2)]
+    joined = await client.post(
+        "/public/v1/unassigned-registrations", headers=auth_headers, json=join_payload
+    )
+    assert joined.status_code == 422
+    assert joined.json()["errors"][0]["error"] == "PETS_LIMIT_EXCEEDED"
+    stored = await UnassignedRegistration.get(first.json()["id"])
+    assert stored is not None
+    assert len(stored.household.pets) == 9
+    assert len(stored.members) == 1

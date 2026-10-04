@@ -40,6 +40,7 @@ import {
 	buildValidateDocUpdate,
 	REFERRAL_MANGO_INDEXES,
 	KIOSK_LOOKUP_MANGO_INDEXES,
+	REQUISITION_TICKET_MANGO_INDEXES,
 	shelterDbName
 } from '$lib/server/shelter-access-design';
 
@@ -352,13 +353,14 @@ async function grantSecurityMember(db: string, name: string, dryRun: boolean): P
 	return dryRun ? mutate() : withSecurityMutationLock(db, mutate);
 }
 
-async function deployReferralMangoIndexes(
+async function deployMangoIndexes(
 	db: string,
+	indexes: readonly (typeof REFERRAL_MANGO_INDEXES)[number][],
 	dryRun: boolean
 ): Promise<{ created: number; existing: number }> {
 	let created = 0;
 	let existing = 0;
-	for (const def of REFERRAL_MANGO_INDEXES) {
+	for (const def of indexes) {
 		if (dryRun) {
 			created++;
 			continue;
@@ -520,7 +522,13 @@ async function main() {
 
 			if (DRY_RUN) {
 				if (accessResult.updated) {
-					console.log(`    would redeploy _design/access (${accessResult.reason})`);
+					const indexCount =
+						REFERRAL_MANGO_INDEXES.length +
+						KIOSK_LOOKUP_MANGO_INDEXES.length +
+						REQUISITION_TICKET_MANGO_INDEXES.length;
+					console.log(
+						`    would redeploy _design/access (${accessResult.reason}) + ${indexCount} mango indexes`
+					);
 				} else {
 					console.log(`    _design/access already current (skip PUT)`);
 				}
@@ -545,9 +553,17 @@ async function main() {
 				console.log(`    ✓ _design/access (already current, skipped PUT)`);
 			}
 
-			const indexResult = await deployReferralMangoIndexes(db, false);
+			const referralIndexResult = await deployMangoIndexes(db, REFERRAL_MANGO_INDEXES, false);
 			console.log(
-				`    ✓ referral mango indexes (${indexResult.created} created, ${indexResult.existing} existing)`
+				`    ✓ referral mango indexes (${referralIndexResult.created} created, ${referralIndexResult.existing} existing)`
+			);
+			const ticketIndexResult = await deployMangoIndexes(
+				db,
+				REQUISITION_TICKET_MANGO_INDEXES,
+				false
+			);
+			console.log(
+				`    ✓ requisition_ticket mango indexes (${ticketIndexResult.created} created, ${ticketIndexResult.existing} existing)`
 			);
 			const kioskIndexResult = await deployKioskLookupMangoIndexes(db, false);
 			console.log(

@@ -460,6 +460,68 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/v1/admin/thirdparty-clients/{client_row_id}/regenerate-secret': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Regenerate Client Secret
+		 * @description Issue a new secret for this `client_id`, invalidating the old one immediately.
+		 *     Refused (409) once the client is revoked — same as scope edits.
+		 */
+		post: operations['regenerate_client_secret_v1_admin_thirdparty_clients__client_row_id__regenerate_secret_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/v1/admin/thirdparty-clients/{client_row_id}': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		post?: never;
+		/**
+		 * Delete Client
+		 * @description Soft-delete — only once already revoked (409 otherwise). Never hard-deletes.
+		 */
+		delete: operations['delete_client_v1_admin_thirdparty_clients__client_row_id__delete'];
+		options?: never;
+		head?: never;
+		/**
+		 * Update Client Scopes
+		 * @description Edit `allowed_scopes` — refused (409) once the client is revoked.
+		 */
+		patch: operations['update_client_scopes_v1_admin_thirdparty_clients__client_row_id__patch'];
+		trace?: never;
+	};
+	'/v1/admin/thirdparty-clients/{client_row_id}/secret': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** Reveal Client Secret */
+		get: operations['reveal_client_secret_v1_admin_thirdparty_clients__client_row_id__secret_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/external/locations': {
 		parameters: {
 			query?: never;
@@ -622,6 +684,26 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/public/v1/unassigned-registrations/residence-match': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Match Unassigned Residence
+		 * @description Service-to-service Residence match — ids + landmark/housing_type only (no member PII).
+		 */
+		post: operations['match_unassigned_residence_public_v1_unassigned_registrations_residence_match_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/staff/v1/unassigned-registrations/search': {
 		parameters: {
 			query?: never;
@@ -677,6 +759,46 @@ export interface paths {
 		 * @description SA-only paginated open Unassigned Registrations (system overview PII).
 		 */
 		get: operations['list_unassigned_registrations_staff_v1_unassigned_registrations_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/staff/v1/unassigned-registrations/photos/{photo_id}': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * Get Unassigned Registration Photo
+		 * @description Staff-only photo read (CR-140 addendum) — only if still referenced by an open row.
+		 */
+		get: operations['get_unassigned_registration_photo_staff_v1_unassigned_registrations_photos__photo_id__get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/staff/v1/unassigned-registrations/{registration_id}/review': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * Review Unassigned Registration
+		 * @description Read-only pre-claim review (CR-140 addendum) — open rows only, writes nothing.
+		 */
+		get: operations['review_unassigned_registration_staff_v1_unassigned_registrations__registration_id__review_get'];
 		put?: never;
 		post?: never;
 		delete?: never;
@@ -1103,6 +1225,27 @@ export interface components {
 			/** Last Name */
 			last_name: string;
 		};
+		/** ClaimedPetOut */
+		ClaimedPetOut: {
+			/** Pet Id */
+			pet_id: string;
+			/**
+			 * Status
+			 * @default claimed
+			 * @constant
+			 */
+			status: 'claimed';
+			/**
+			 * Species
+			 * @enum {string}
+			 */
+			species: 'dog' | 'cat' | 'other';
+			/**
+			 * Count
+			 * @default 1
+			 */
+			count: number;
+		};
 		/** ConfigResponse */
 		ConfigResponse: {
 			/**
@@ -1411,6 +1554,14 @@ export interface components {
 				('owned_house' | 'rented_house' | 'condo' | 'apartment_dorm' | 'homeless') | null;
 			/** Residence Landmark */
 			residence_landmark?: string | null;
+			/** Dorm Name */
+			dorm_name?: string | null;
+			/** Dorm Building */
+			dorm_building?: string | null;
+			/** Dorm Floor */
+			dorm_floor?: string | null;
+			/** Dorm Room */
+			dorm_room?: string | null;
 			/** Address No */
 			address_no?: string | null;
 			/** Village No */
@@ -1435,6 +1586,14 @@ export interface components {
 			housing_type?: string | null;
 			/** Residence Landmark */
 			residence_landmark?: string | null;
+			/** Dorm Name */
+			dorm_name?: string | null;
+			/** Dorm Building */
+			dorm_building?: string | null;
+			/** Dorm Floor */
+			dorm_floor?: string | null;
+			/** Dorm Room */
+			dorm_room?: string | null;
 			/** Address No */
 			address_no?: string | null;
 			/** Village No */
@@ -1450,6 +1609,8 @@ export interface components {
 			geo?: components['schemas']['GeoPoint'] | null;
 			/** Label */
 			label?: string | null;
+			/** Pets */
+			pets?: components['schemas']['PetCreated'][];
 		};
 		/** JobShiftTemplate */
 		JobShiftTemplate: {
@@ -1782,6 +1943,10 @@ export interface components {
 			nickname?: string | null;
 			/** Religion */
 			religion?: string | null;
+			/** Religion Other */
+			religion_other?: string | null;
+			/** Disability Other Detail */
+			disability_other_detail?: string | null;
 			emergency_contact?: components['schemas']['EmergencyContactOut'] | null;
 			/** Photo */
 			photo?: string | null;
@@ -1820,6 +1985,10 @@ export interface components {
 			nickname?: string | null;
 			/** Religion */
 			religion?: string | null;
+			/** Religion Other */
+			religion_other?: string | null;
+			/** Disability Other Detail */
+			disability_other_detail?: string | null;
 			emergency_contact?: components['schemas']['EmergencyContactInput'] | null;
 			/** Photo */
 			photo?: string | null;
@@ -1851,6 +2020,11 @@ export interface components {
 			unit: string;
 			/** Status */
 			status: string;
+			/**
+			 * Urgency
+			 * @default normal
+			 */
+			urgency: string;
 			/** Category */
 			category?: string | null;
 		};
@@ -1970,6 +2144,10 @@ export interface components {
 			nickname?: string | null;
 			/** Religion */
 			religion?: string | null;
+			/** Religion Other */
+			religion_other?: string | null;
+			/** Disability Other Detail */
+			disability_other_detail?: string | null;
 			emergency_contact?: components['schemas']['EmergencyContactOut'] | null;
 			/** Photo */
 			photo?: string | null;
@@ -1977,6 +2155,39 @@ export interface components {
 			birth_year?: number | null;
 			/** Age */
 			age?: number | null;
+		};
+		/**
+		 * OpenPetHit
+		 * @description Open pet surfaced by staff search/detail — claimable.
+		 */
+		OpenPetHit: {
+			/** Pet Id */
+			pet_id: string;
+			/**
+			 * Status
+			 * @default open
+			 * @constant
+			 */
+			status: 'open';
+			/**
+			 * Species
+			 * @enum {string}
+			 */
+			species: 'dog' | 'cat' | 'other';
+			/**
+			 * Count
+			 * @default 1
+			 */
+			count: number;
+			/** Notes */
+			notes?: string | null;
+			/**
+			 * Has Cage
+			 * @default false
+			 */
+			has_cage: boolean;
+			/** Image Url */
+			image_url?: string | null;
 		};
 		/** PaginatedAnnouncements */
 		PaginatedAnnouncements: {
@@ -2025,6 +2236,41 @@ export interface components {
 			cardType: 'national_id' | 'passport' | 'pink_card' | 'other' | 'anonymous';
 			/** Number */
 			number?: string | null;
+		};
+		/** PetCreated */
+		PetCreated: {
+			/** Pet Id */
+			pet_id: string;
+			/**
+			 * Status
+			 * @enum {string}
+			 */
+			status: 'open' | 'claimed' | 'cancelled';
+			/**
+			 * Species
+			 * @enum {string}
+			 */
+			species: 'dog' | 'cat' | 'other';
+			/**
+			 * Count
+			 * @default 1
+			 */
+			count: number;
+			/** Notes */
+			notes?: string | null;
+			/**
+			 * Has Cage
+			 * @default false
+			 */
+			has_cage: boolean;
+			/** Image Url */
+			image_url?: string | null;
+			/** Claimed Shelter Code */
+			claimed_shelter_code?: string | null;
+			/** Claimed At */
+			claimed_at?: string | null;
+			/** Claimed By */
+			claimed_by?: string | null;
 		};
 		/** PetInput */
 		PetInput: {
@@ -2486,6 +2732,12 @@ export interface components {
 			 * @default false
 			 */
 			accepts_pre_registration: boolean;
+			/** Readiness Status */
+			readiness_status?: string | null;
+			/** Readiness Tier */
+			readiness_tier?: string | null;
+			/** Readiness Assessed At */
+			readiness_assessed_at?: string | null;
 			/**
 			 * Updated At
 			 * Format: date-time
@@ -2617,10 +2869,15 @@ export interface components {
 			/** Locations */
 			locations: components['schemas']['SummaryLocationItem'][];
 		};
-		/** ThirdPartyClientCreateRequest */
+		/**
+		 * ThirdPartyClientCreateRequest
+		 * @description ``client_id`` is generated server-side (``tpc_…``) — not accepted from the caller.
+		 */
 		ThirdPartyClientCreateRequest: {
-			/** Client Id */
-			client_id: string;
+			/** Name */
+			name: string;
+			/** Description */
+			description?: string | null;
 			/** Module Name */
 			module_name: string;
 			/** Allowed Scopes */
@@ -2635,12 +2892,18 @@ export interface components {
 			id: string;
 			/** Client Id */
 			client_id: string;
+			/** Name */
+			name: string | null;
+			/** Description */
+			description: string | null;
 			/** Module Name */
 			module_name: string;
 			/** Allowed Scopes */
 			allowed_scopes: string[];
 			/** Is Active */
 			is_active: boolean;
+			/** Deleted At */
+			deleted_at: string | null;
 			/**
 			 * Created At
 			 * Format: date-time
@@ -2654,6 +2917,15 @@ export interface components {
 			/** Client Secret */
 			client_secret: string;
 		};
+		/** ThirdPartyClientDeleteResponse */
+		ThirdPartyClientDeleteResponse: {
+			/**
+			 * Success
+			 * @default true
+			 */
+			success: boolean;
+			client: components['schemas']['ThirdPartyClientPublic'];
+		};
 		/** ThirdPartyClientListResponse */
 		ThirdPartyClientListResponse: {
 			/** Clients */
@@ -2663,19 +2935,25 @@ export interface components {
 		};
 		/**
 		 * ThirdPartyClientPublic
-		 * @description Client metadata without the secret hash.
+		 * @description Client metadata without the secret hash/ciphertext.
 		 */
 		ThirdPartyClientPublic: {
 			/** Id */
 			id: string;
 			/** Client Id */
 			client_id: string;
+			/** Name */
+			name: string | null;
+			/** Description */
+			description: string | null;
 			/** Module Name */
 			module_name: string;
 			/** Allowed Scopes */
 			allowed_scopes: string[];
 			/** Is Active */
 			is_active: boolean;
+			/** Deleted At */
+			deleted_at: string | null;
 			/**
 			 * Created At
 			 * Format: date-time
@@ -2695,6 +2973,19 @@ export interface components {
 			 */
 			success: boolean;
 			client: components['schemas']['ThirdPartyClientPublic'];
+		};
+		/** ThirdPartyClientSecretResponse */
+		ThirdPartyClientSecretResponse: {
+			/** Client Secret */
+			client_secret: string;
+		};
+		/**
+		 * ThirdPartyClientUpdateRequest
+		 * @description ``PATCH`` body — scopes only. Refused (409) once the client is revoked.
+		 */
+		ThirdPartyClientUpdateRequest: {
+			/** Allowed Scopes */
+			allowed_scopes: string[];
 		};
 		/** TicketFindItem */
 		TicketFindItem: {
@@ -2887,11 +3178,13 @@ export interface components {
 		};
 		/**
 		 * UnassignedRegistrationClaimRequest
-		 * @description Staff claim — body selects open member reserved ids (CR-113 / #247).
+		 * @description Staff claim — open members and/or pets (draft-persistent-unassigned-family).
 		 */
 		UnassignedRegistrationClaimRequest: {
 			/** Member Ids */
-			member_ids: string[];
+			member_ids?: string[];
+			/** Pet Ids */
+			pet_ids?: string[];
 			/** Shelter Code */
 			shelter_code?: string | null;
 		};
@@ -2904,7 +3197,10 @@ export interface components {
 			success: boolean;
 			/** Id */
 			id: string | null;
-			/** Deleted */
+			/**
+			 * Deleted
+			 * @default false
+			 */
 			deleted: boolean;
 			/** Shelter Code */
 			shelter_code: string;
@@ -2914,8 +3210,12 @@ export interface components {
 			evacuee_ids: string[];
 			/** Claimed */
 			claimed: components['schemas']['ClaimedMemberOut'][];
+			/** Claimed Pets */
+			claimed_pets?: components['schemas']['ClaimedPetOut'][];
 			/** Remaining Open */
 			remaining_open: components['schemas']['OpenMemberHit'][];
+			/** Remaining Open Pets */
+			remaining_open_pets?: components['schemas']['OpenPetHit'][];
 		};
 		/** UnassignedRegistrationCreateRequest */
 		UnassignedRegistrationCreateRequest: {
@@ -2928,6 +3228,11 @@ export interface components {
 			 * @enum {string}
 			 */
 			registered_via: 'web' | 'staff';
+			/**
+			 * Join Registration Id
+			 * @description Append members (and pets) into this registration's reserved household (allowed even when document status is closed — reopen on append).
+			 */
+			join_registration_id?: string | null;
 		};
 		/** UnassignedRegistrationCreateResponse */
 		UnassignedRegistrationCreateResponse: {
@@ -2995,6 +3300,13 @@ export interface components {
 			open_members: components['schemas']['OpenMemberHit'][];
 			/** Open Member Count */
 			open_member_count: number;
+			/** Open Pets */
+			open_pets?: components['schemas']['OpenPetHit'][];
+			/**
+			 * Open Pet Count
+			 * @default 0
+			 */
+			open_pet_count: number;
 		};
 		/** UnassignedRegistrationListResponse */
 		UnassignedRegistrationListResponse: {
@@ -3008,6 +3320,58 @@ export interface components {
 			limit: number;
 			/** Offset */
 			offset: number;
+		};
+		/**
+		 * UnassignedRegistrationReviewResponse
+		 * @description Staff pre-claim review (CR-140 addendum) — open rows only, no write.
+		 *
+		 *     Household carries address fields only (no `pets` — those live in `open_pets`,
+		 *     unlike `HouseholdOut` which embeds every pet with claim status for the SA detail view).
+		 */
+		UnassignedRegistrationReviewResponse: {
+			/** Id */
+			id: string;
+			/** Reserved Household Id */
+			reserved_household_id: string;
+			/**
+			 * Registered Via
+			 * @enum {string}
+			 */
+			registered_via: 'web' | 'staff';
+			/** Status */
+			status: string;
+			/** Created At */
+			created_at: string;
+			/** Housing Type */
+			housing_type?: string | null;
+			/** Residence Landmark */
+			residence_landmark?: string | null;
+			/** Dorm Name */
+			dorm_name?: string | null;
+			/** Dorm Building */
+			dorm_building?: string | null;
+			/** Dorm Floor */
+			dorm_floor?: string | null;
+			/** Dorm Room */
+			dorm_room?: string | null;
+			/** Address No */
+			address_no?: string | null;
+			/** Village No */
+			village_no?: string | null;
+			/** Subdistrict */
+			subdistrict?: string | null;
+			/** District */
+			district?: string | null;
+			/** Province */
+			province?: string | null;
+			/** Postal Code */
+			postal_code?: string | null;
+			/** Label */
+			label?: string | null;
+			/** Open Members */
+			open_members: components['schemas']['OpenMemberHit'][];
+			/** Open Pets */
+			open_pets?: components['schemas']['OpenPetHit'][];
 		};
 		/** UnassignedRegistrationSearchHit */
 		UnassignedRegistrationSearchHit: {
@@ -3026,6 +3390,8 @@ export interface components {
 			created_at: string;
 			/** Open Members */
 			open_members: components['schemas']['OpenMemberHit'][];
+			/** Open Pets */
+			open_pets?: components['schemas']['OpenPetHit'][];
 		};
 		/** UnassignedRegistrationSearchResponse */
 		UnassignedRegistrationSearchResponse: {
@@ -3038,6 +3404,71 @@ export interface components {
 			open_registrations: number;
 			/** Open Members */
 			open_members: number;
+		};
+		/** UnassignedResidenceMatchHit */
+		UnassignedResidenceMatchHit: {
+			/** Id */
+			id: string;
+			/** Landmark */
+			landmark?: string | null;
+			/** Housing Type */
+			housing_type?: string | null;
+			/** Claimed Shelter Code */
+			claimed_shelter_code?: string | null;
+			/** Claimed Household Id */
+			claimed_household_id?: string | null;
+			/**
+			 * Status
+			 * @default open
+			 */
+			status: string;
+			/** Primary Contact Name Masked */
+			primary_contact_name_masked?: string | null;
+			/** Matched Member Masked */
+			matched_member_masked?: string | null;
+			/**
+			 * Member Count
+			 * @default 0
+			 */
+			member_count: number;
+			/** Pets */
+			pets?: {
+				[key: string]: unknown;
+			}[];
+			/** Household Address */
+			household_address?: {
+				[key: string]: unknown;
+			} | null;
+		};
+		/**
+		 * UnassignedResidenceMatchRequest
+		 * @description Service-to-service residence match — no member PII in response.
+		 */
+		UnassignedResidenceMatchRequest: {
+			/** Housing Type */
+			housing_type?:
+				('owned_house' | 'rented_house' | 'condo' | 'apartment_dorm' | 'homeless') | null;
+			/** Residence Landmark */
+			residence_landmark?: string | null;
+			/** Address No */
+			address_no?: string | null;
+			/** Village No */
+			village_no?: string | null;
+			/** Subdistrict */
+			subdistrict?: string | null;
+			/** District */
+			district?: string | null;
+			/** Province */
+			province?: string | null;
+			/** Postal Code */
+			postal_code?: string | null;
+			/** Phone */
+			phone?: string | null;
+		};
+		/** UnassignedResidenceMatchResponse */
+		UnassignedResidenceMatchResponse: {
+			/** Matches */
+			matches: components['schemas']['UnassignedResidenceMatchHit'][];
 		};
 		/** ValidationError */
 		ValidationError: {
@@ -4264,6 +4695,134 @@ export interface operations {
 			};
 		};
 	};
+	regenerate_client_secret_v1_admin_thirdparty_clients__client_row_id__regenerate_secret_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				client_row_id: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ThirdPartyClientCreateResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	delete_client_v1_admin_thirdparty_clients__client_row_id__delete: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				client_row_id: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ThirdPartyClientDeleteResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	update_client_scopes_v1_admin_thirdparty_clients__client_row_id__patch: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				client_row_id: string;
+			};
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['ThirdPartyClientUpdateRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ThirdPartyClientPublic'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	reveal_client_secret_v1_admin_thirdparty_clients__client_row_id__secret_get: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				client_row_id: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ThirdPartyClientSecretResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
 	list_locations_external_locations_get: {
 		parameters: {
 			query?: {
@@ -4593,6 +5152,39 @@ export interface operations {
 			};
 		};
 	};
+	match_unassigned_residence_public_v1_unassigned_registrations_residence_match_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['UnassignedResidenceMatchRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['UnassignedResidenceMatchResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
 	search_unassigned_registrations_staff_v1_unassigned_registrations_search_get: {
 		parameters: {
 			query?: {
@@ -4689,6 +5281,76 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['UnassignedRegistrationListResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	get_unassigned_registration_photo_staff_v1_unassigned_registrations_photos__photo_id__get: {
+		parameters: {
+			query?: never;
+			header?: {
+				Cookie?: string | null;
+			};
+			path: {
+				photo_id: string;
+			};
+			cookie?: {
+				AuthSession?: string | null;
+			};
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': unknown;
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	review_unassigned_registration_staff_v1_unassigned_registrations__registration_id__review_get: {
+		parameters: {
+			query?: never;
+			header?: {
+				Cookie?: string | null;
+			};
+			path: {
+				registration_id: string;
+			};
+			cookie?: {
+				AuthSession?: string | null;
+			};
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['UnassignedRegistrationReviewResponse'];
 				};
 			};
 			/** @description Validation Error */

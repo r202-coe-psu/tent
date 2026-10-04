@@ -126,11 +126,11 @@
 </script>
 
 {#if viewMode === 'list'}
-	<section class="min-w-0 rounded-xl border bg-card p-4 text-card-foreground shadow-sm sm:p-6">
+	<section class="min-w-0">
 		<header class="mb-6 flex flex-col gap-4">
 			<div class="flex w-full flex-col gap-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
 				<div>
-					<h1 class="text-xl font-semibold">กลุ่มสารอาหาร & หน่วยนับมาตรฐาน</h1>
+					<h2 class="text-lg font-bold">กลุ่มสารอาหาร & หน่วยนับมาตรฐาน</h2>
 					<p class="text-sm text-muted-foreground">
 						จัดการกลุ่มความต้องการสารอาหาร หน่วยนับกลาง และรายการสินค้าคู่เทียบ
 					</p>

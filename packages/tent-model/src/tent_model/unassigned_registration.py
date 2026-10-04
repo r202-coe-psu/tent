@@ -1,4 +1,4 @@
-"""Mongo SoR for Unassigned Registration (CR-113) — not a Couch projection."""
+"""Mongo SoR for Unassigned Registration (CR-113 + draft-persistent-unassigned-family)."""
 
 from __future__ import annotations
 
@@ -6,12 +6,16 @@ from datetime import datetime
 from typing import Literal
 
 from beanie import Document
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pymongo import ASCENDING, IndexModel
 
 from tent_model.public_shelter import GeoPoint
 
 MemberStatus = Literal["open", "claimed", "cancelled"]
+PetStatus = Literal["open", "claimed", "cancelled"]
+# Document-level: open while any member/pet is open; closed = history (no hard-delete).
+# Legacy readers may still see "claimed" / "partial_claim" — treat as closed-equivalent.
+DocumentStatus = Literal["open", "closed", "claimed", "partial_claim"]
 CardType = Literal["national_id", "passport", "pink_card", "other", "anonymous"]
 RegisteredVia = Literal["web", "staff"]
 HousingType = Literal[
@@ -22,6 +26,9 @@ HousingType = Literal[
 	"homeless",
 ]
 PetSpecies = Literal["dog", "cat", "other"]
+
+# New writes stamp schema_v 3 (pet_id + pet claim lifecycle + closed doc status).
+UNASSIGNED_SCHEMA_V = 3
 
 
 class PersonId(BaseModel):
@@ -54,6 +61,10 @@ class UnassignedMember(BaseModel):
 	age: int | None = None
 	nickname: str | None = None
 	religion: str | None = None
+	# CR-148 — free text when religion == "other".
+	religion_other: str | None = None
+	# CR-148 — optional detail when vulnerable_groups has "disability_other".
+	disability_other_detail: str | None = None
 	emergency_contact: EmergencyContact | None = None
 	# GridFS ref while queued (`gfs:{oid}`); claim births Couch `image:{ulid}` (#255).
 	photo: str | None = None
@@ -64,12 +75,38 @@ class UnassignedMember(BaseModel):
 
 
 class UnassignedPet(BaseModel):
+	"""One pet row on the central queue — claimable independently of members."""
+
+	# Optional on read for schema_v ≤2 legacy rows; writers mint pet:{ulid}.
+	pet_id: str | None = None
+	status: PetStatus = "open"
 	species: PetSpecies
 	count: int = 1
 	notes: str | None = None
 	has_cage: bool = False
 	# GridFS ref while queued (`gfs:{oid}`); claim births Couch `image:{ulid}` (#255 pet photo).
 	image_url: str | None = None
+	claimed_at: datetime | None = None
+	claimed_shelter_code: str | None = None
+	claimed_by: str | None = None
+
+	@model_validator(mode="before")
+	@classmethod
+	def _legacy_defaults(cls, data: object) -> object:
+		"""Readable legacy pets: missing status → open; missing pet_id stays None until mint."""
+		if not isinstance(data, dict):
+			return data
+		if data.get("status") is None and "status" not in data:
+			data = {**data, "status": "open"}
+		elif data.get("status") is None:
+			data = {**data, "status": "open"}
+		return data
+
+	def effective_status(self) -> PetStatus:
+		return self.status or "open"
+
+	def is_open(self) -> bool:
+		return self.effective_status() == "open"
 
 
 class UnassignedHousehold(BaseModel):
@@ -77,6 +114,11 @@ class UnassignedHousehold(BaseModel):
 
 	housing_type: HousingType | None = None
 	residence_landmark: str | None = None
+	# CR-148 — structured dorm address (housing_type apartment_dorm only).
+	dorm_name: str | None = None
+	dorm_building: str | None = None
+	dorm_floor: str | None = None
+	dorm_room: str | None = None
 	address_no: str | None = None
 	village_no: str | None = None
 	subdistrict: str | None = None
@@ -94,11 +136,11 @@ class UnassignedRegistration(Document):
 	model_config = ConfigDict(populate_by_name=True)
 
 	id: str = Field(alias="_id")
-	schema_v: int = 1
+	schema_v: int = UNASSIGNED_SCHEMA_V
 	reserved_household_id: str
 	members: list[UnassignedMember]
 	household: UnassignedHousehold
-	status: MemberStatus = "open"
+	status: DocumentStatus = "open"
 	registered_via: RegisteredVia
 	created_at: datetime
 	# Denormalized open-member identity keys for unique multikey indexes.
@@ -124,4 +166,14 @@ class UnassignedRegistration(Document):
 			),
 			IndexModel([("created_at", ASCENDING)], name="by_created_at"),
 			IndexModel([("members.status", ASCENDING)], name="by_member_status"),
+			IndexModel([("household.pets.status", ASCENDING)], name="by_pet_status"),
+			IndexModel([("status", ASCENDING)], name="by_document_status"),
 		]
+
+	def has_open_rows(self) -> bool:
+		if any(m.status == "open" for m in self.members):
+			return True
+		return any(p.is_open() for p in self.household.pets or [])
+
+	def derived_document_status(self) -> Literal["open", "closed"]:
+		return "open" if self.has_open_rows() else "closed"

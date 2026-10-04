@@ -4,9 +4,11 @@ import { SHELTER_CAPABILITIES } from '$lib/auth/roles';
 import { adminRaw, ServiceError } from '$lib/server/couch-admin';
 import {
 	SHELTER_REGISTRY_DB,
+	deployPeopleMangoIndexes,
 	deployRegistryDesign,
 	deployReferralMangoIndexes,
 	deployKioskLookupMangoIndexes,
+	deployRequisitionTicketMangoIndexes,
 	deployShelterViews,
 	deployTransferLedgerMangoIndexes,
 	findMasterByCode,
@@ -330,6 +332,12 @@ async function provisionShelterUnlocked(
 	await assertActive?.();
 	await deployTransferLedgerMangoIndexes(db);
 	steps.push({ step: 'transfer-ledger-mango', status: 200 });
+	await assertActive?.();
+	await deployPeopleMangoIndexes(db);
+	steps.push({ step: 'people-mango', status: 200 });
+	await assertActive?.();
+	await deployRequisitionTicketMangoIndexes(db);
+	steps.push({ step: 'requisition-ticket-mango', status: 200 });
 
 	await assertActive?.();
 	const registry = await adminRaw(`/${SHELTER_REGISTRY_DB}`, 'PUT');

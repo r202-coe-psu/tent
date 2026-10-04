@@ -3,6 +3,7 @@
 	import ConsoleBanner from '$lib/components/console-banner.svelte';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { authStore } from '$lib/stores/auth.svelte';
+	import { VISIBLE_SOP_RATIO_KEYS } from '$lib/features/sop-ratios';
 	import {
 		useCurrentCalculationSnapshot,
 		useDeleteScenario,
@@ -39,14 +40,12 @@
 			(scenario) => !deletedScenarioIds.includes(scenario.id)
 		)
 	);
-	const syncedStockCount = $derived(
-		currentQuery.data
-			? Object.values(currentQuery.data.stock_snapshot).filter((value) => value !== null).length
-			: 0
-	);
-	const totalStockCount = $derived(
-		currentQuery.data ? Object.keys(currentQuery.data.stock_snapshot).length : 0
-	);
+	const visibleStock = $derived.by(() => {
+		const stock = currentQuery.data?.stock_snapshot;
+		return stock ? VISIBLE_SOP_RATIO_KEYS.map((key) => stock[key] ?? null) : [];
+	});
+	const syncedStockCount = $derived(visibleStock.filter((value) => value !== null).length);
+	const totalStockCount = $derived(visibleStock.length);
 	const canShowWorkspace = $derived(Boolean(currentQuery.data) || (savedView && result !== null));
 
 	function errorMessage(error: unknown, fallback: string) {
@@ -218,6 +217,11 @@
 				{:else}<div class="sim-controls-unavailable">
 						<p class="font-semibold text-destructive">ข้อมูลปัจจุบันไม่พร้อมใช้งาน</p>
 						<p>ยังเปิดดูผลที่บันทึกไว้ได้ แต่ต้องโหลด baseline สำเร็จก่อนรันสถานการณ์ใหม่</p>
+						{#if currentQuery.error}
+							<p class="text-xs break-words text-destructive">
+								{errorMessage(currentQuery.error, 'โหลดข้อมูลปัจจุบันไม่สำเร็จ')}
+							</p>
+						{/if}
 						<Button
 							type="button"
 							variant="outline"

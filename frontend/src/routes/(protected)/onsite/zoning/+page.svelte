@@ -32,6 +32,9 @@
 		formatPersonName,
 		classifyZoningQueueTab,
 		buildZoningPath,
+		formatQueueWait,
+		sortByZoningQueueSince,
+		zoningQueueSince,
 		useConfirmRoom,
 		useConfirmRoomForHousehold,
 		useCheckInEvacuee,
@@ -48,6 +51,7 @@
 		toggleId,
 		selectRange,
 		applyRowClickSelection,
+		movementConflictMessage,
 		type Evacuee,
 		type ZoningQueueTab
 	} from '$lib/features/people';
@@ -57,7 +61,7 @@
 	} from '$lib/features/unassigned-registration';
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import { useShelter } from '$lib/features/shelters';
-	import { useMasterData } from '$lib/features/master-data';
+	import { useMasterData, formatMasterLabel } from '$lib/features/master-data';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { paginateItems } from '$lib/db/paginate';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -97,6 +101,22 @@
 		return map;
 	});
 	const occupantCounts = $derived(countPresentOccupantsByZone(allEvacuees));
+	/** Latest screening time per evacuee — when they became ready for zoning. */
+	const latestScreeningAt = $derived.by(() => {
+		const out: Record<string, string> = {};
+		for (const s of screenings) {
+			const at = s.screened_at ?? s.created_at;
+			if (!out[s.evacuee_id] || at > out[s.evacuee_id]) out[s.evacuee_id] = at;
+		}
+		return out;
+	});
+
+	// Ticks once a minute so 「รอ N นาที」 stays current without a refetch
+	let now = $state(new Date());
+	$effect(() => {
+		const timer = setInterval(() => (now = new Date()), 60_000);
+		return () => clearInterval(timer);
+	});
 
 	const SPECIAL_NEED_LABELS: Record<string, string> = {
 		wheelchair: 'ใช้วีลแชร์',
@@ -113,8 +133,8 @@
 	};
 
 	function getSpecialNeedLabel(need: string): string {
-		const fromMaster = vulnerableGroupQuery.data?.items.find((i) => i.code === need)?.label;
-		if (fromMaster) return fromMaster;
+		const masterItem = vulnerableGroupQuery.data?.items.find((i) => i.code === need);
+		if (masterItem) return formatMasterLabel(masterItem, 'th');
 		return SPECIAL_NEED_LABELS[need] ?? need;
 	}
 
@@ -136,13 +156,17 @@
 	/** Guards against bits-ui toggling the single box after a Shift range select. */
 	let skipNextCheckboxChange = false;
 
+	// Oldest-waiting first: this queue is the primary worklist, scanning is a shortcut
 	const pendingEvacuees = $derived(
-		allEvacuees.filter(
-			(e) =>
-				classifyZoningQueueTab(e, {
-					enableMedicalScreening: enableMedical,
-					hasScreening: screenedIds.has(e._id)
-				}) === 'pending'
+		sortByZoningQueueSince(
+			allEvacuees.filter(
+				(e) =>
+					classifyZoningQueueTab(e, {
+						enableMedicalScreening: enableMedical,
+						hasScreening: screenedIds.has(e._id)
+					}) === 'pending'
+			),
+			latestScreeningAt
 		)
 	);
 	const awaitingConfirmEvacuees = $derived(
@@ -218,8 +242,8 @@
 		clearSelection();
 	}
 
-	function openDetail(id: string) {
-		goto(resolve(buildZoningPath(id) as `/onsite/zoning/${string}`));
+	function openDetail(id: string, opts: { focusZone?: boolean } = {}) {
+		goto(resolve(buildZoningPath(id, opts) as `/onsite/zoning/${string}`));
 	}
 
 	function authorCtx() {
@@ -302,12 +326,19 @@
 		applyModifierSelection(index, ctrl, shift);
 	}
 
-	function onRowClick(e: MouseEvent, row: Evacuee) {
+	function onRowClick(e: MouseEvent, row: Evacuee, index: number) {
 		const ctrl = e.ctrlKey || e.metaKey;
 		const shift = e.shiftKey;
 		if (ctrl || shift) {
 			// Selection already applied in onRowMouseDown; never navigate.
 			e.preventDefault();
+			return;
+		}
+		if (selectedIds.length > 0) {
+			// A selection is already active: keep clicks toggling rows instead of
+			// navigating away, so bulk-selecting isn't derailed by a mis-tap.
+			selectedIds = toggleId(selectedIds, row._id);
+			lastClickedIndex = index;
 			return;
 		}
 		openDetail(row._id);
@@ -339,7 +370,7 @@
 			await confirmRoomMutation.mutateAsync({ evacuee: target, ctx: authorCtx() });
 			toast.success(`ยืนยันถึงโซน: ${formatPersonName(target)}`);
 		} catch (err: unknown) {
-			toast.error(err instanceof Error ? err.message : 'ยืนยันถึงโซนไม่สำเร็จ');
+			toast.error(movementConflictMessage(err));
 		}
 	}
 
@@ -356,6 +387,35 @@
 		}
 	}
 
+	/**
+	 * Like Promise.allSettled, but members of the same household run one after another: each write
+	 * also refreshes the shared household doc, so parallel writes there conflict (409).
+	 * Results keep the order of `targets`.
+	 */
+	async function settleByHousehold<T>(
+		targets: readonly Evacuee[],
+		run: (evacuee: Evacuee) => Promise<T>
+	): Promise<PromiseSettledResult<T>[]> {
+		const results: PromiseSettledResult<T>[] = new Array(targets.length);
+		const groups: Record<string, number[]> = {};
+		targets.forEach((e, i) => {
+			const key = e.household_id ?? `solo:${e._id}`;
+			(groups[key] ??= []).push(i);
+		});
+		await Promise.all(
+			Object.values(groups).map(async (indexes) => {
+				for (const i of indexes) {
+					try {
+						results[i] = { status: 'fulfilled', value: await run(targets[i]) };
+					} catch (reason: unknown) {
+						results[i] = { status: 'rejected', reason };
+					}
+				}
+			})
+		);
+		return results;
+	}
+
 	async function bulkConfirmSelected() {
 		if (bulkBusy || selectedIds.length === 0) return;
 		const targets = selectedEvacuees.filter(
@@ -368,8 +428,8 @@
 		bulkBusy = true;
 		try {
 			const ctx = authorCtx();
-			const results = await Promise.allSettled(
-				targets.map((evacuee) => confirmRoomMutation.mutateAsync({ evacuee, ctx }))
+			const results = await settleByHousehold(targets, (evacuee) =>
+				confirmRoomMutation.mutateAsync({ evacuee, ctx })
 			);
 			const ok = results.filter((r) => r.status === 'fulfilled').length;
 			const failed = results.length - ok;
@@ -413,12 +473,10 @@
 
 		bulkBusy = true;
 		try {
-			const results = await Promise.allSettled(
-				targets.map((evacuee) =>
-					isPendingTab
-						? checkInMutation.mutateAsync({ evacuee, ctx, zone })
-						: changeZoneMutation.mutateAsync({ evacuee, ctx, zone })
-				)
+			const results = await settleByHousehold(targets, (evacuee) =>
+				isPendingTab
+					? checkInMutation.mutateAsync({ evacuee, ctx, zone })
+					: changeZoneMutation.mutateAsync({ evacuee, ctx, zone })
 			);
 			const ok = results.filter((r) => r.status === 'fulfilled').length;
 			const failed = results.length - ok;
@@ -446,7 +504,7 @@
 			showCameraModal = false;
 			if (result.source === 'couch') {
 				toast.success(`พบผู้ประสบภัย: ${formatPersonName(result.evacuee)}`);
-				openDetail(result.evacuee._id);
+				openDetail(result.evacuee._id, { focusZone: true });
 				return;
 			}
 			toast.success('พบคิวลงทะเบียนล่วงหน้า (คิวกลาง) — รับเข้าศูนย์ก่อนจัดโซน');
@@ -543,8 +601,8 @@
 					</Badge>
 				</div>
 				<p class="mt-0.5 text-xs text-slate-500">
-					Zoning Desk — คิวพร้อมจัดโซน · รอยืนยันถึงโซน · ยืนยันแล้ว — ค้นหาหรือสแกน Handover /
-					Person QR
+					เลือกคนจากคิว「พร้อมจัดโซน」(เรียงตามเวลารอ — รอนานสุดก่อน) หรือสแกน Handover / Person QR
+					เป็นทางลัด
 				</p>
 			</div>
 		</div>
@@ -589,7 +647,7 @@
 								handleCodeInput(barcodeInput);
 							}
 						}}
-						class="h-12 rounded-xl bg-slate-50 pl-11 font-mono text-xs"
+						class="h-12 rounded-xl bg-slate-50 pl-11 text-xs tabular-nums"
 					/>
 				</div>
 				<Button
@@ -850,7 +908,7 @@
 									>ครอบครัว</Table.Head
 								>
 								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600">
-									{activeTab === 'pending' ? 'อัปเดต' : 'โซน'}
+									{activeTab === 'pending' ? 'รอมาแล้ว' : 'โซน'}
 								</Table.Head>
 								<Table.Head class="h-11 pr-5 text-right text-xs font-semibold text-slate-600"
 									>ดำเนินการ</Table.Head
@@ -868,7 +926,7 @@
 										? 'bg-[var(--shelter-accent-blue-bg)]'
 										: ''}"
 									onmousedown={(e) => onRowMouseDown(e, index)}
-									onclick={(e) => onRowClick(e, row)}
+									onclick={(e) => onRowClick(e, row, index)}
 								>
 									<Table.Cell class="py-3 pl-5">
 										<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -887,7 +945,7 @@
 									<Table.Cell class="py-3 font-semibold text-slate-900">
 										{formatPersonName(row)}
 									</Table.Cell>
-									<Table.Cell class="px-3 py-3 font-mono text-xs text-slate-600">
+									<Table.Cell class="px-3 py-3 text-xs text-slate-600 tabular-nums">
 										{maskNationalId(row.person_id?.number)}
 									</Table.Cell>
 									<Table.Cell class="px-3 py-3">
@@ -920,9 +978,25 @@
 									</Table.Cell>
 									<Table.Cell class="px-3 py-3 text-xs text-slate-500">
 										{#if activeTab === 'pending'}
-											{formatTimeOrDate(row.updated_at)}
+											{@const since = zoningQueueSince(row, latestScreeningAt[row._id])}
+											<span title={formatTimeOrDate(since)} class="tabular-nums">
+												{formatQueueWait(since, now)}
+											</span>
 										{:else}
-											{zoneLabel(row.current_stay.zone, shelterZones)}
+											<span class="inline-flex flex-wrap items-center gap-1.5">
+												<span>{zoneLabel(row.current_stay.zone, shelterZones)}</span>
+												{#if row.current_stay.status === 'room_confirmed'}
+													<span
+														class="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.5 text-2xs font-medium text-emerald-800 dark:text-emerald-200"
+														>ยืนยันแล้ว</span
+													>
+												{:else if isPendingZoneArrivalConfirmation(row)}
+													<span
+														class="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-2xs font-medium text-amber-800 dark:text-amber-200"
+														>รอยืนยัน</span
+													>
+												{/if}
+											</span>
 										{/if}
 									</Table.Cell>
 									<Table.Cell class="py-3 pr-5 text-right">

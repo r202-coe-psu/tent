@@ -4,6 +4,8 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Skeleton } from '$lib/components/ui/skeleton';
+	import StaffPageShell from '$lib/components/staff-page-shell.svelte';
+	import { spatial } from '$lib/tokens';
 	import type { PreRegistrationProfile } from '../domain/schemas';
 	import { useUnassignedProfile } from '../application/queries';
 
@@ -23,16 +25,16 @@
 	}
 </script>
 
-<div class="mx-auto max-w-4xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
-	<div class="flex flex-wrap items-center justify-between gap-3">
-		<div class="space-y-1">
-			<h1 class="text-2xl font-bold tracking-tight text-[#0A2647]">โปรไฟล์ Pre-registration</h1>
-			<p class="text-sm text-slate-600">ดูอย่างเดียว — ไม่มีการแก้ไขหรือเคลมจากหน้านี้</p>
-		</div>
+<StaffPageShell
+	title="โปรไฟล์ Pre-registration"
+	description="ดูอย่างเดียว — ไม่มีการแก้ไขหรือเคลมจากหน้านี้"
+	maxWidth="6xl"
+>
+	{#snippet actions()}
 		<Button variant="outline" size="sm" href={resolve('/system-management/pre-registrations')}>
 			กลับรายการ
 		</Button>
-	</div>
+	{/snippet}
 
 	{#if loading && !profile}
 		<div class="space-y-4">
@@ -62,7 +64,7 @@
 			{/if}
 		</div>
 
-		<Card.Root class="rounded-2xl border border-slate-200/80 bg-white shadow-2xs">
+		<Card.Root class={spatial.container.staffPageCard}>
 			<Card.Header>
 				<Card.Title class="text-lg font-bold text-slate-900">ข้อมูลบุคคล</Card.Title>
 			</Card.Header>
@@ -111,7 +113,7 @@
 			</Card.Content>
 		</Card.Root>
 
-		<Card.Root class="rounded-2xl border border-slate-200/80 bg-white shadow-2xs">
+		<Card.Root class={spatial.container.staffPageCard}>
 			<Card.Header>
 				<Card.Title class="text-lg font-bold text-slate-900">ที่อยู่อาศัย</Card.Title>
 			</Card.Header>
@@ -149,7 +151,7 @@
 			</Card.Content>
 		</Card.Root>
 
-		<Card.Root class="rounded-2xl border border-slate-200/80 bg-white shadow-2xs">
+		<Card.Root class={spatial.container.staffPageCard}>
 			<Card.Header>
 				<Card.Title class="text-lg font-bold text-slate-900">สมาชิกในครัวเรือน</Card.Title>
 				<Card.Description class="text-sm text-slate-500">
@@ -184,7 +186,7 @@
 			</Card.Content>
 		</Card.Root>
 
-		<Card.Root class="rounded-2xl border border-slate-200/80 bg-white shadow-2xs">
+		<Card.Root class={spatial.container.staffPageCard}>
 			<Card.Header>
 				<Card.Title class="text-lg font-bold text-slate-900">สถานะคิว / ศูนย์</Card.Title>
 			</Card.Header>
@@ -209,4 +211,4 @@
 			</Card.Content>
 		</Card.Root>
 	{/if}
-</div>
+</StaffPageShell>

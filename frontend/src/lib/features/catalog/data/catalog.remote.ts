@@ -13,7 +13,9 @@ import {
 	createRecipe,
 	type Recipe,
 	type RecipeInput,
-	isRecipe
+	isRecipe,
+	itemBelongsToCategory,
+	canShelterDeleteCatalogDoc
 } from '../domain/catalog';
 import {
 	createUnitOfMeasure,
@@ -74,11 +76,6 @@ function unitReferencesDoc(doc: AnyDoc, code: string): boolean {
 	}
 	if (doc.type === 'stock_ledger') {
 		return same(doc.unit);
-	}
-	if (doc.type === 'purchase') {
-		return (Array.isArray(doc.items) ? doc.items : []).some(
-			(item) => !!item && typeof item === 'object' && same((item as { unit?: unknown }).unit)
-		);
 	}
 	if (doc.type === 'stock_transfer') {
 		return (Array.isArray(doc.items) ? doc.items : []).some(
@@ -147,7 +144,31 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		return this.repo.get<ItemCategory>(id);
 	}
 
-	updateItemCategory(itemCategory: ItemCategory): Promise<ItemCategory> {
+	async updateItemCategory(itemCategory: ItemCategory): Promise<ItemCategory> {
+		const existing = await this.getItemCategory(itemCategory._id, itemCategory.shelter_code);
+		if (!existing) {
+			throw new Error(`ไม่พบข้อมูลหมวดหมู่: ${itemCategory._id}`);
+		}
+		if (existing.is_protected) {
+			if (!itemCategory.is_protected) {
+				throw new Error('ไม่สามารถยกเลิกการปกป้องหมวดหมู่ระบบมาตรฐานได้');
+			}
+			if (itemCategory.system_key !== existing.system_key) {
+				throw new Error('ไม่สามารถแก้ไข system_key ของหมวดหมู่ระบบมาตรฐานได้');
+			}
+			if (itemCategory.default_class !== existing.default_class) {
+				throw new Error('ไม่สามารถแก้ไข default_class ของหมวดหมู่ระบบมาตรฐานได้');
+			}
+			const updated: ItemCategory = {
+				...existing,
+				name: itemCategory.name,
+				description: itemCategory.description,
+				deactivated: itemCategory.deactivated,
+				is_default: itemCategory.is_default
+			};
+			const repo = this.getWriteRepo(updated.shelter_code);
+			return repo.put(touch(updated));
+		}
 		const repo = this.getWriteRepo(itemCategory.shelter_code);
 		return repo.put(touch(itemCategory));
 	}
@@ -295,6 +316,9 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		if (!item) return false;
 
 		if (item.override) {
+			if (shelterCode && item.shelter_code !== shelterCode) {
+				throw new Error('ไม่อนุญาตให้ลบรายการส่วนกลางจากศูนย์พักพิง');
+			}
 			const repo = this.getWriteRepo(item.shelter_code);
 			await repo.remove(item);
 			return true;
@@ -307,7 +331,11 @@ export class CatalogRemoteRepository implements CatalogRepository {
 			return false;
 		}
 
-		// Shelter scope (custom item created by this shelter)
+		// Shelter scope: only shelter-authored rows may be deleted/deactivated
+		if (!canShelterDeleteCatalogDoc(item, shelterCode)) {
+			throw new Error('ไม่อนุญาตให้ลบรายการส่วนกลางจากศูนย์พักพิง');
+		}
+
 		const shelterDb = `shelter_${shelterCode.toLowerCase()}`;
 		const shelterRepo = createRemoteRepository(shelterDb);
 		const ledgerEntries = await shelterRepo.allByType(
@@ -322,11 +350,10 @@ export class CatalogRemoteRepository implements CatalogRepository {
 			item.deactivated = true;
 			await this.updateItemMaster(item);
 			return false;
-		} else {
-			const repo = this.getWriteRepo(item.shelter_code);
-			await repo.remove(item);
-			return true;
 		}
+		const repo = this.getWriteRepo(item.shelter_code);
+		await repo.remove(item);
+		return true;
 	}
 
 	async inspectCategoryUsage(
@@ -344,7 +371,7 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		if (shelterCode) {
 			const itemMasters = await this.listItemMasters(shelterCode);
 			const localItems = itemMasters
-				.filter((item) => item.category === categoryName)
+				.filter((item) => itemBelongsToCategory(item, category))
 				.map((item) => item.name);
 
 			return {
@@ -368,7 +395,7 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		// Central scope (System Management)
 		const centralItems = await this.repo.allByType('item_master', isItemMaster);
 		const centralMatching = centralItems
-			.filter((item) => !item.shelter_code && item.category === categoryName)
+			.filter((item) => !item.shelter_code && itemBelongsToCategory(item, category))
 			.map((item) => item.name);
 
 		return {
@@ -389,8 +416,29 @@ export class CatalogRemoteRepository implements CatalogRepository {
 			throw new Error(`ไม่พบข้อมูลหมวดหมู่ ${id}`);
 		}
 
+		if (category.is_protected) {
+			throw new Error('ไม่อนุญาตให้ลบหมวดหมู่ระบบมาตรฐาน');
+		}
+
+		if (shelterCode) {
+			if (category.override && category.shelter_code === shelterCode) {
+				const repo = this.getWriteRepo(category.shelter_code);
+				await repo.remove(category);
+				return {
+					wasDeleted: true,
+					actionTaken: 'reset',
+					categoryName: category.name
+				};
+			}
+			if (!canShelterDeleteCatalogDoc(category, shelterCode)) {
+				throw new Error('ไม่อนุญาตให้ลบหมวดหมู่ส่วนกลางจากศูนย์พักพิง');
+			}
+		}
+
 		const usage = await this.inspectCategoryUsage(id, shelterCode);
-		const decision = evaluateCategoryDeletion(usage, shelterCode ? 'shelter' : 'central');
+		const decision = evaluateCategoryDeletion(usage, shelterCode ? 'shelter' : 'central', {
+			isProtected: !!category.is_protected
+		});
 
 		if (decision.action === 'reset') {
 			const repo = this.getWriteRepo(category.shelter_code);
@@ -427,6 +475,9 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		if (!recipe) return false;
 
 		if (recipe.override) {
+			if (shelterCode && recipe.shelter_code !== shelterCode) {
+				throw new Error('ไม่อนุญาตให้ลบสูตรอาหารส่วนกลางจากศูนย์พักพิง');
+			}
 			const repo = this.getWriteRepo(recipe.shelter_code);
 			await repo.remove(recipe);
 			return true;
@@ -439,7 +490,10 @@ export class CatalogRemoteRepository implements CatalogRepository {
 			return false;
 		}
 
-		// Shelter scope (custom recipe created by this shelter)
+		if (!canShelterDeleteCatalogDoc(recipe, shelterCode)) {
+			throw new Error('ไม่อนุญาตให้ลบสูตรอาหารส่วนกลางจากศูนย์พักพิง');
+		}
+
 		const shelterDb = `shelter_${shelterCode.toLowerCase()}`;
 		const shelterRepo = createRemoteRepository(shelterDb);
 		const mealPlans = await shelterRepo.allByType(
@@ -454,11 +508,10 @@ export class CatalogRemoteRepository implements CatalogRepository {
 			recipe.deactivated = true;
 			await this.updateRecipe(recipe);
 			return false;
-		} else {
-			const repo = this.getWriteRepo(recipe.shelter_code);
-			await repo.remove(recipe);
-			return true;
 		}
+		const repo = this.getWriteRepo(recipe.shelter_code);
+		await repo.remove(recipe);
+		return true;
 	}
 
 	async createUnitOfMeasure(input: UnitOfMeasureInput, ctx: AuthorContext): Promise<UnitOfMeasure> {
@@ -560,13 +613,7 @@ export class CatalogRemoteRepository implements CatalogRepository {
 			}
 		}
 
-		const referenceTypes = [
-			'item_master',
-			'recipe',
-			'donation_campaign',
-			'stock_ledger',
-			'purchase'
-		];
+		const referenceTypes = ['item_master', 'recipe', 'donation_campaign', 'stock_ledger'];
 		for (const database of databases) {
 			const repository = database === CATALOG_DB ? this.repo : createRemoteRepository(database);
 			for (const type of referenceTypes) {
