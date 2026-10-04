@@ -2,8 +2,8 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-03
-note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer; CR-135/CR-136 partner OAuth2 client name/module preset + secret reveal/edit/delete; CR-137 shrink master_data (10→4) + zone/community free text; CR-138 remove purchase doc type + withdraw purchase from stock_ledger.reason; CR-139 shelter storage points; CR-140 item_category default_class editable; CR-144/CR-145 meal_service_receipt (§2.7.3); CR-147 removes CR-146 meal_distribution_push (§2.7.4) — ticket flow ends at warehouse stock-in; CR-148 pre-register validation + evacuee religion_other/disability_other_detail (v11) + household dorm_* (v6)
+updated: 2026-10-04
+note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer; CR-135/CR-136 partner OAuth2 client name/module preset + secret reveal/edit/delete; CR-137 shrink master_data (10→4) + zone/community free text; CR-138 remove purchase doc type + withdraw purchase from stock_ledger.reason; CR-139 shelter storage points; CR-140 item_category default_class editable; CR-144/CR-145 meal_service_receipt (§2.7.3); CR-147 removes CR-146 meal_distribution_push (§2.7.4) — ticket flow ends at warehouse stock-in; CR-148 pre-register validation + evacuee religion_other/disability_other_detail (v11) + household dorm_* (v6); CR-151 kiosk pre-registration check-in (report-in arriving status & KIOSK_LOOKUP_MANGO_INDEXES)
 ---
 
 # Database Schema v5 — field-level
@@ -94,6 +94,9 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 ไม่นับ: `transferred`, `checked_out`, `deceased`, `cancelled`
 
 **Index:** `(last_name, first_name)` · `(phone)` · `(household_id)` · `(current_stay.status)` · `(person_id.number)`
+- **Kiosk Lookup Indexes (CR-151):** ชุด `KIOSK_LOOKUP_MANGO_INDEXES` 3 ตัว ได้แก่ `['type', 'phone']` (`evacuee-type-phone-idx`), `['type', 'person_id.number']` (`evacuee-type-person-id-idx`), และ `['type', 'household_id']` (`evacuee-type-household-idx`) deploy แยกจาก referral indexes เพื่อรองรับการค้นหาผู้จองล่วงหน้าหน้า kiosk
+
+> **Kiosk Report-in (CR-151):** kiosk ปรับ flow จากเดิมที่สร้าง evacuee ใหม่จากบัตร (CR-097) เป็นการรับรายงานตัวผู้จองทางเว็บ (`registered_via: 'web'`) และอัปเดตสถานะเป็น `current_stay.status = 'arriving'` โดยคงเดิม (ไม่อัปเกรด schema_v; อิงตามเวอร์ชันปัจจุบันของ develop; ส่วน walk-in ที่จอง schema_v 12 อยู่ใน CR-149)
 
 **Migration (schema_v 2 → 3):** rename บน read — `registered`→`pre_registered`, `checked_in`→`active`;
 `checked_out` เดิม (ออกทั่วไป) → `checked_out` ใหม่ (กลับภูมิลำเนา) ชั่วคราวจนกว่า manual review แยก
@@ -1671,7 +1674,7 @@ provisioning เท่านั้น. `value` คือเลขล่าสุ
 **Index:** `(device_id)` · `(shelter_code)`
 
 > ❓ **Architecture Open Question (Registry vs Shelter DB):**
-> - **ปัจจุบัน (Design Choice):** เก็บไว้ที่ DB `registry` ตรงกลาง เพื่อให้ Inbound API (`/api/v1/scanner/draft`) สามารถ lookup ตรวจสอบ `device_id` และ `secret_hash` ได้อย่างรวดเร็วใน 1 query โดย Client ไม่จำเป็นต้อง hardcode หรือส่ง `shelter_code` มาใน Request Header
+> - **ปัจจุบัน (Design Choice):** เก็บไว้ที่ DB `registry` ตรงกลาง เพื่อให้ Inbound API (`/api/v1/scanner/bootstrap`, `/api/v1/scanner/kiosk/lookup`, `/api/v1/scanner/kiosk/check-in` — CR-151; `/draft` ปิดเป็น 410) สามารถ lookup ตรวจสอบ `device_id` และ `secret_hash` ได้อย่างรวดเร็วใน 1 query โดย Client ไม่จำเป็นต้อง hardcode หรือส่ง `shelter_code` มาใน Request Header
 > - **ประเด็นพิจารณาในอนาคต (Future Consideration):** หากต้องการให้ศูนย์พักพิงมีอิสระในการเพิ่ม/จัดการเครื่องเอง (Shelter Autonomy) หรือรองรับ Edge Node ที่เน็ตตัดขาด อาจพิจารณาย้าย `scanner_device` ไปเก็บไว้ใน `shelter_{shelter_code}` โดยมีข้อกำหนดว่า Client Kiosk จะต้องส่ง Header `X-Shelter-Code` แนบมากับทุก request ด้วย
 
 ---
