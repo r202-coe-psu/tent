@@ -11,8 +11,8 @@ layer: volatile
 amends:
   - docs/changes/draft-kiosk-pre-registration-check-in.md (branch docs-kiosk-pre-register) FR-KPC-06, FR-KPC-11, §6.6, §7 สัญญา API
 affects:
-  - docs/data/schema.md §3.1 shelter `feature_flags` (+ `kiosk_phone_check_in_enabled`; ไม่ bump schema_v ตาม §6)
-  - docs/data/api-contract.md (Scanner / Kiosk — เพิ่ม `POST /api/v1/scanner/kiosk/config`)
+  - docs/data/schema.md §3.1 shelter `feature_flags` (+ `kiosk_phone_check_in_enabled`; ไม่ bump schema_v ตาม §6) *(commit `9a73d6ba` บน branch `feat/pre-register_kiosk` — รอ merge เข้า develop)*
+  - docs/data/api-contract.md (Scanner / Kiosk — เพิ่ม `POST /api/v1/scanner/kiosk/config`) *(commit `9a73d6ba` บน branch `feat/pre-register_kiosk` — รอ merge เข้า develop)*
   - frontend/src/lib/features/shelters/domain/schema.ts (+ schema.test.ts)
   - frontend/src/lib/features/shelters/ui/basic-info-section.svelte
   - frontend/src/routes/api/v1/scanner/kiosk/config/+server.ts (ใหม่ + server.test.ts)
@@ -21,7 +21,6 @@ affects:
   - frontend/src/routes/kiosk/{+page.ts,+page.svelte,phone/+page.ts}
   - scanner_client/app/manager.py (`_route_kiosk_api` allowlist) · scanner_client/tests/test_manager.py
   - scanner_client/{app/config.py,.env.example,README.md,tests/test_config.py} (ถอด `KIOSK_PHONE_CHECK_IN_ENABLED` จาก commit `d29ffcdb`)
-  - docs/features/kiosk-phone-check-in-toggle-implementation-plan.md
 why: >
   การเปิดช่องทางเบอร์โทรขึ้นกับความพร้อมของศูนย์ (index เบอร์ deploy แล้วหรือยัง, ศูนย์ต้องการให้เจ้าหน้าที่ดูแลเคสเบอร์เองหรือไม่)
   ผู้จัดการศูนย์ต้องเปิด/ปิดได้เองจาก backoffice โดยไม่ต้องเข้าไปแก้ไฟล์บนเครื่อง kiosk ทีละเครื่อง
@@ -86,7 +85,7 @@ migration: ไม่มี backfill — flag ใหม่ใน `feature_flags` 
 | ID        | Requirement                                                                                                                                                                                                                                                                           |
 | :-------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | FR-KPT-10 | `POST /api/v1/scanner/kiosk/config` ยืนยันเครื่องด้วย `authenticateScannerDevice` (FR-KPC-03) · ศูนย์มาจาก principal เท่านั้น (FR-KPC-04) · ไม่อ่าน body                                                                              |
-| FR-KPT-11 | 200 →`{ shelter_code, phone_check_in_enabled }` · `phone_check_in_enabled = shelter.feature_flags?.kiosk_phone_check_in_enabled === true` · shelter ไม่พบ → `false`                                                                                                    |
+| FR-KPT-11 | 200 → `{ shelter_code, phone_check_in_enabled, ... }` · `phone_check_in_enabled = shelter.feature_flags?.kiosk_phone_check_in_enabled === true` · shelter ไม่พบ → `false` · รองรับการคืน flag เสริมของ Kiosk อื่น ๆ (เช่น `walk_in_registration_enabled` ตาม FR-KWR-01) โดยไม่กระทบสัญญาเดิม (additive fields) |
 | FR-KPT-12 | 401`DEVICE_AUTH_FAILED` / 503 `DEPENDENCY_UNAVAILABLE` ตาม pattern `bootstrap` · ทุก response มี `cache-control: no-store` (FR-KPC-07)                                                                                                                               |
 | FR-KPT-13 | `scanner_client` `_route_kiosk_api` เพิ่ม `/api/v1/scanner/kiosk/config` ใน allowlist (POST same-origin เท่านั้น เหมือน path เดิม)                                                                                                                     |
 | FR-KPT-14 | lookup`source:'phone'` ตรวจ flag ของศูนย์หลังยืนยันเครื่อง ก่อน rate limiter · ปิด → 403 `KIOSK_METHOD_DISABLED`「ช่องทางนี้ปิดใช้งาน กรุณาติดต่อเจ้าหน้าที่」· QR / บัตร ไม่ตรวจ flag |
@@ -95,7 +94,7 @@ migration: ไม่มี backfill — flag ใหม่ใน `feature_flags` 
 
 | ID        | Requirement                                                                                                                                                                                                 |
 | :-------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR-KPT-20 | `/kiosk` โหลด config ใน `+page.ts` ก่อน render ทุกครั้งที่เข้า route (ไม่ cache) · timeout 3 วินาที                                                                  |
+| FR-KPT-20 | `/kiosk` โหลด config ใน `+page.ts` ก่อน render ทุกครั้งที่เข้า route (cache ใน memory ได้สั้น ๆ ไม่เกิน 30 วินาทีตาม `KIOSK_CONFIG_CACHE_TTL_MS` เพื่อลด round-trip latency เมื่อผู้ใช้กลับหน้าแรก; กรณี error/timeout ไม่ cache เพื่อให้ตรวจ network ใหม่ทันที) · timeout 3 วินาที |
 | FR-KPT-21 | config error / timeout / 401 / 503 →`phone_check_in_enabled = false` (fail closed ตามค่าเริ่มต้นปิด) · ไม่แสดง error ให้ผู้ประสบภัย                               |
 | FR-KPT-22 | ปิด → ไม่ render การ์ด`phone` · การ์ดที่เหลือเรียงแถวเดียว 3 คอลัมน์ · เปิด → 4 การ์ด grid 2×2 เดิม                                         |
 | FR-KPT-23 | `/kiosk/phone` โหลด config ใน `+page.ts` · ปิด → redirect 307 ไป `/kiosk` พร้อม context query เดิม ก่อน render numpad                                                       |
@@ -110,13 +109,13 @@ migration: ไม่มี backfill — flag ใหม่ใน `feature_flags` 
 | ID        | เงื่อนไข                                                                                                                                                                                | FR             |
 | :-------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------- |
 | AC-KPT-01 | ศูนย์ใหม่ / ศูนย์เดิมที่ไม่เคยตั้งค่า → kiosk ของศูนย์แสดง 3 การ์ด (ไม่มีเบอร์)                                                   | 01, 02, 22     |
-| AC-KPT-02 | ผู้จัดการศูนย์เปิด Switch → บันทึก → kiosk กลับหน้าแรก (idle / จบ check-in / กดกลับ) → 4 การ์ด โดยไม่รีสตาร์ท client           | 03, 04, 20, 22 |
+| AC-KPT-02 | ผู้จัดการศูนย์เปิด Switch → บันทึก → kiosk กลับหน้าแรก (idle / จบ check-in / กดกลับ) → 4 การ์ด โดยไม่รีสตาร์ท client (มีผลทันทีเมื่อ cache ใน memory 30s หมดอายุ) | 03, 04, 20, 22 |
 | AC-KPT-03 | ปิด Switch → kiosk กลับหน้าแรก → 3 การ์ด ·`/kiosk/phone` ถูก redirect                                                                                                | 22, 23         |
 | AC-KPT-04 | ผู้ใช้ที่ไม่ใช่ manager ของศูนย์ / SA → PATCH flag ไม่ได้ (403 เดิม)                                                                                          | 04             |
-| AC-KPT-05 | `POST /kiosk/config` ไม่มี header / secret ผิด → 401 · เครื่องศูนย์ A อ่าน flag ของศูนย์ A เท่านั้น                                                 | 10, 11, 12     |
+| AC-KPT-05 | `POST /api/v1/scanner/kiosk/config` ไม่มี header / secret ผิด → 401 · เครื่องศูนย์ A อ่าน flag ของศูนย์ A เท่านั้น                                                 | 10, 11, 12     |
 | AC-KPT-06 | ตัด network ไป server ระหว่างโหลดหน้าแรก → 3 การ์ด ภายใน ~3 วินาที ไม่ค้าง                                                                       | 20, 21         |
 | AC-KPT-07 | เปิด`/kiosk` ในเบราว์เซอร์ทั่วไป (ไม่ผ่าน scanner client) → 3 การ์ด (config 401 → ปิด)                                                                | 21             |
-| AC-KPT-08 | flag ปิด →`POST /kiosk/lookup {source:'phone'}` ได้ 403 `KIOSK_METHOD_DISABLED` · `source:'qr'` / `'smart-card'` ทำงานปกติ                                             | 14             |
+| AC-KPT-08 | flag ปิด → `POST /api/v1/scanner/kiosk/lookup {source:'phone'}` ได้ 403 `KIOSK_METHOD_DISABLED` · `source:'qr'` / `'smart-card'` ทำงานปกติ                                             | 14             |
 | AC-KPT-09 | Unit test: schema default · config endpoint (200 เปิด/ปิด/ไม่มี key, 401, 503, no-store) · allowlist Python · load`/kiosk` + `/kiosk/phone` fail closed · filter การ์ด | ทั้งหมด |
 
 **DoD:** `pnpm lint` · `pnpm check` (0 error) · `pnpm test` · `svelte-autofixer` ทุก `.svelte` ที่แตะ · `python -m unittest` ใน `scanner_client` · manual AC-KPT-01..08 บนจอ kiosk จริง
@@ -125,15 +124,15 @@ migration: ไม่มี backfill — flag ใหม่ใน `feature_flags` 
 
 ## 5. Impact
 
-- **Schema:** `docs/data/schema.md` §3.1 แถว `feature_flags` — เพิ่ม `kiosk_phone_check_in_enabled:bool` และหมายเหตุ default `false` (อัปเดตแล้วตามคำสั่งเจ้าของโครงการ 2026-09-25; shelter `schema_v` คง 6)
-- **API contract:** เพิ่ม `POST /api/v1/scanner/kiosk/config` และ error `KIOSK_METHOD_DISABLED` ในหัวข้อ Scanner / Kiosk (CR แม่ §7 และ `docs/data/api-contract.md`)
+- **Schema:** `docs/data/schema.md` §3.1 แถว `feature_flags` — เพิ่ม `kiosk_phone_check_in_enabled:bool` และหมายเหตุ default `false` (เนื้อหาพร้อมแล้วใน commit `9a73d6ba` บน branch `feat/pre-register_kiosk` รอ merge เข้า `develop`; shelter `schema_v` คง 6)
+- **API contract:** เพิ่ม `POST /api/v1/scanner/kiosk/config` และ error `KIOSK_METHOD_DISABLED` ในหัวข้อ Scanner / Kiosk (`docs/data/api-contract.md` §2.1 ใน commit `9a73d6ba` บน branch `feat/pre-register_kiosk` และ CR แม่ §7)
 - **Public plane:** worker `project_shelter` เก็บ doc ทั้งก้อนใน `raw_data` ของ `public_shelters` → flag ไปอยู่ใน Mongo ด้วย แต่ FastAPI อ่านเฉพาะ key ที่กำหนด (`accepts_pre_registration`) จึงไม่ถูกส่งออก public/external API · ไม่ต้องแก้ worker
 - **Security:** endpoint config คืนแค่ boolean + `shelter_code` ไม่มี PII · ช่องทางเบอร์ถูกปิดจริงที่ server (FR-KPT-14) ไม่ใช่แค่ซ่อน UI
-- **Code ฉบับ `.env` (commit `d29ffcdb`):** ต้อง rework ตาม plan §0.1
+- **Code ฉบับ `.env` (commit `d29ffcdb`):** ได้รับการ rework เป็นระบบ shelter `feature_flags` และ config endpoint เรียบร้อยแล้ว (commit `31c87846` บน branch `feat/pre-register_kiosk`)
 
 ## 6. Migration
 
-- ไม่ bump `schema_v` (additive key ใน object ที่มี default — precedent: `public_donations_enabled` CR-048, `enable_medical_screening` CR-106, `accepts_pre_registration`) · `docs/data/schema.md` §3.1 อัปเดตแล้ว (2026-09-25)
+- ไม่ bump `schema_v` (additive key ใน object ที่มี default — precedent: `public_donations_enabled` CR-048, `enable_medical_screening` CR-106, `accepts_pre_registration`) · `docs/data/schema.md` §3.1 อัปเดตใน branch `feat/pre-register_kiosk` (commit `9a73d6ba`)
 - ไม่มี backfill: Zod default + reader `=== true` ทำให้ doc เดิมอ่านเป็นปิด
 - Rollout: หลัง deploy ทุกศูนย์ปิดช่องทางเบอร์ · ผู้จัดการศูนย์ที่พร้อม (index deploy แล้ว) เปิดเองในฟอร์มศูนย์
 - เครื่อง kiosk ต้องอัปเดต `scanner_client` (allowlist ใหม่) — เครื่องที่ยังไม่อัปเดตได้ config 401 → ปิดช่องทางเบอร์ (fail closed ปิดตามค่าเริ่มต้น)
@@ -146,3 +145,4 @@ migration: ไม่มี backfill — flag ใหม่ใน `feature_flags` 
 
 - 2026-09-25 — proposed (เดิมเสนอแบบ `.env` ต่อเครื่อง)
 - 2026-09-25 — เจ้าของโครงการตัดสินใจเปลี่ยนแนวทางเป็นการควบคุมรายศูนย์ผ่าน backoffice (shelter `feature_flags`) แทนการตั้งค่าต่อเครื่อง — ไม่มี open decision ค้าง, ข้อกำหนดการทำงานทั้งหมดระบุเป็น spec ไว้ข้างบนแล้ว (§1–§6)
+- 2026-10-04 — ปรับปรุงตาม PR Review (#311): ตัดลิงก์ phantom plan ที่ไม่มีอยู่จริง, ระบุสถานะการ rework ของโค้ด (commit `31c87846` บน `feat/pre-register_kiosk`), ระบุ branch dependency ของ `docs/data/{schema,api-contract}.md` (commit `9a73d6ba`), ขยายความ FR-KPT-20 และ AC-KPT-02 เรื่อง in-memory cache TTL 30s ให้ตรงกับโค้ดจริง, ระบุ additive extensibility ของ endpoint ใน FR-KPT-11 และปรับ path ใน AC-KPT-05/08 ให้เป็น full API path
