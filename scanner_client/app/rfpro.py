@@ -397,9 +397,6 @@ class RfproConnection:
             raise RfproCardError(f"APDU exchange failed (status 0x{reply.status:02x})")
         return list(reply.data[:-2]), reply.data[-2], reply.data[-1]
 
-    def disconnect(self) -> None:
-        self._transport.command(CMD_ICC_SLOT_PWR, bytes([SLOT_MAIN, SLOT_POWER_OFF]))
-
 
 class RfproThaiCardReader(ThaiSmartCardReader):
     """Thai national ID reader on the RFpro module; same API as the PC/SC reader."""

@@ -11,6 +11,13 @@
 	}
 }
 
+/* Kiosk 10.1" 1024×600 panel — must match KIOSK_COMPACT_MEDIA in features/kiosk/domain/kiosk-layout.ts */
+@custom-variant kiosk-compact {
+	@media (max-height: 650px) {
+		@slot;
+	}
+}
+
 :root {
 	/* Fixed testing banner (bottom) — keep in sync with testing-banner.svelte height */
 	--testing-banner-height: 1.625rem;

@@ -1,7 +1,6 @@
 import base64
-import io
 import logging
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional
 
 try:
     from smartcard.System import readers
