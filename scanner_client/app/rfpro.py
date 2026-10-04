@@ -60,6 +60,11 @@ CMD_ICC_SEL = b"\x18\x01"
 CMD_ICC_SLOT_PWR = b"\x18\x02"
 CMD_ICC_GETATR = b"\x18\x80"
 CMD_ICC_APDU = b"\x18\x81"
+# Not in the vendor documents. Seen in usbmon traffic of the vendor library (libcomPro.so over
+# hiddev): after a reply whose frame is longer than one 32-byte input report, the library sends
+# `AA <same INX> 00 04 00 00 FE FF <CHK>` and the module answers with the next raw report.
+# Without it only the first report of a long reply ever arrives.
+CMD_NEXT_REPORT = b"\xfe\xff"
 ALLOWED_CMDS = frozenset(
     {
         CMD_HW_VER,
@@ -68,6 +73,7 @@ ALLOWED_CMDS = frozenset(
         CMD_ICC_SLOT_PWR,
         CMD_ICC_GETATR,
         CMD_ICC_APDU,
+        CMD_NEXT_REPORT,
     }
 )
 
