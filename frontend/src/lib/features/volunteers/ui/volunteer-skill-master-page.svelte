@@ -117,7 +117,7 @@
 				if (item.code === editingItem?.code) {
 					return {
 						...item,
-						code: data.code,
+						code: item.code,
 						label_th: data.label_th,
 						label_en: data.label_en,
 						category: data.category,
