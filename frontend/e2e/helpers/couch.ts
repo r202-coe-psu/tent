@@ -10,6 +10,7 @@
  * so we can set up state before hitting the actual endpoints under test.
  */
 
+import type { Page } from '@playwright/test';
 import process from 'node:process';
 
 const COUCH_URL = process.env.COUCHDB_ADMIN_URL ?? 'http://admin:password@localhost:5984';
@@ -96,15 +97,13 @@ export async function createCouchUser(user: TestUser): Promise<void> {
 		throw new Error(`Could not create test user "${name}" (HTTP ${res.status})`);
 }
 
-/**
- * A freshly minted user has no `security_question`, so the post-login gate (CR-105)
- * sends it to `/force-setup` before any protected route renders. Seed one so UI
- * tests exercise the page under test, not the onboarding wizard.
- */
-export async function completeUserOnboarding(name: string): Promise<void> {
+/** Test users require this setup to avoid the ordinary first-login gate. */
+export async function seedSecurityQuestion(name: string): Promise<void> {
 	const path = `/_users/${USER_PREFIX}${encodeURIComponent(name)}`;
 	const got = await couchReq('GET', path);
-	if (got.status >= 400) throw new Error(`Could not fetch user "${name}" (HTTP ${got.status})`);
+	if (got.status >= 400 || !got.data || typeof got.data !== 'object') {
+		throw new Error(`Could not load E2E user ${name} for setup`);
+	}
 	const res = await couchReq('PUT', path, {
 		...(got.data as Record<string, unknown>),
 		security_question: {
@@ -115,8 +114,7 @@ export async function completeUserOnboarding(name: string): Promise<void> {
 		},
 		must_change_password: false
 	});
-	if (res.status >= 400)
-		throw new Error(`Could not complete onboarding for "${name}" (HTTP ${res.status})`);
+	if (res.status >= 400) throw new Error(`Could not finish E2E user setup for ${name}`);
 }
 
 /** Delete a user from CouchDB _users. Silently ignores 404 (already gone). */
@@ -165,3 +163,83 @@ export const SM_SH002_ROLES = ['shelter:SH002', 'shelter_manager'];
 
 /** Roles for a Registration Staff member of SH001. */
 export const STAFF_SH001_ROLES = ['shelter:SH001', 'registration_staff'];
+
+// ─── App proxy ─────────────────────────────────────────────────────────────────
+
+/** Base URL of the previewed app; keep in sync with `playwright.config.ts`. */
+export const APP_BASE_URL = process.env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:4173';
+
+/**
+ * Route browser requests aimed at CouchDB through the application's /couch proxy,
+ * adding CORS headers so cookie-authenticated requests succeed when the test build
+ * leaves PUBLIC_COUCH_PROXY empty.
+ */
+export async function routeBrowserCouchThroughApp(page: Page): Promise<void> {
+	await page.route(`${COUCH_BASE}/**`, async (route) => {
+		const request = route.request();
+		const origin = new URL(request.url());
+		const allowOrigin = new URL(APP_BASE_URL).origin;
+		const corsHeaders = {
+			'access-control-allow-origin': allowOrigin,
+			'access-control-allow-credentials': 'true',
+			'access-control-allow-methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
+			'access-control-allow-headers':
+				request.headers()['access-control-request-headers'] ?? 'Content-Type, Accept',
+			'access-control-expose-headers': 'ETag, Location, Content-Type'
+		};
+
+		if (request.method() === 'OPTIONS') {
+			await route.fulfill({ status: 204, headers: corsHeaders });
+			return;
+		}
+
+		const response = await route.fetch({
+			url: `${APP_BASE_URL}/couch${origin.pathname}${origin.search}`
+		});
+		await route.fulfill({
+			response,
+			headers: { ...response.headers(), ...corsHeaders }
+		});
+	});
+}
+
+// ─── Document access ───────────────────────────────────────────────────────────
+
+export type CouchDocument = Record<string, unknown> & { _id: string; _rev?: string };
+
+export async function getDocument(db: string, id: string): Promise<CouchDocument | null> {
+	const res = await couchReq('GET', `/${db}/${encodeURIComponent(id)}`);
+	if (res.status === 404) return null;
+	if (res.status >= 400 || !res.data || typeof res.data !== 'object') {
+		throw new Error(`Could not read ${id} from ${db} (HTTP ${res.status})`);
+	}
+	return res.data as CouchDocument;
+}
+
+export async function putDocument(db: string, doc: CouchDocument): Promise<void> {
+	const res = await couchReq('PUT', `/${db}/${encodeURIComponent(doc._id)}`, doc);
+	if (res.status >= 400) {
+		throw new Error(`Could not seed ${doc._id} in ${db} (HTTP ${res.status})`);
+	}
+}
+
+export async function allDocuments(db: string): Promise<CouchDocument[]> {
+	const res = await couchReq('GET', `/${db}/_all_docs?include_docs=true`);
+	if (res.status >= 400 || !res.data || typeof res.data !== 'object') {
+		throw new Error(`Could not list ${db} during E2E setup/cleanup`);
+	}
+	const rows = (res.data as { rows?: Array<{ doc?: CouchDocument }> }).rows ?? [];
+	return rows.flatMap((row) => (row.doc ? [row.doc] : []));
+}
+
+export async function deleteDocument(db: string, doc: CouchDocument): Promise<void> {
+	const rev = doc._rev;
+	if (typeof rev !== 'string') return;
+	const res = await couchReq(
+		'DELETE',
+		`/${db}/${encodeURIComponent(doc._id)}?rev=${encodeURIComponent(rev)}`
+	);
+	if (res.status >= 400 && res.status !== 404) {
+		throw new Error(`Could not remove E2E document ${doc._id} (HTTP ${res.status})`);
+	}
+}

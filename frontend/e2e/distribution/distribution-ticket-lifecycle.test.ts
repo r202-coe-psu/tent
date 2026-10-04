@@ -10,13 +10,13 @@ import {
 	createDistributionScenario,
 	findShelterDocuments,
 	getShelterDocument,
-	routeBrowserCouchThroughApp,
 	seedDistributingTicket,
 	seedItemWithStock,
 	type CreateDistributionScenarioOptions,
 	type DistributionScenario,
 	type SeededItem
 } from './distribution';
+import { routeBrowserCouchThroughApp } from '../helpers/couch';
 
 const REQUESTED_QTY = '120';
 const ALLOCATED_QTY = '100';
