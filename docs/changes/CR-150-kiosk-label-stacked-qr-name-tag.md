@@ -1,11 +1,11 @@
 ---
-id: draft
+id: CR-150
 title: Kiosk label — QR บน / ข้อความล่าง ใช้ component QR + ชื่อ ร่วมกับตั๋ว pre-register
-status: proposed
+status: approved
 date: 2026-09-27
-updated: 2026-10-04
+updated: 2026-10-04 # approved โดย Dev Lead Soravit Sukkarn + รันเลข CR-150 และลงทะเบียนใน _index.md
 requested_by: ทีม (kiosk pre-register)
-decided_by: project owner
+decided_by: Soravit Sukkarn (Dev Lead)
 layer: volatile
 affects:
   - docs/changes/draft-kiosk-pre-registration-check-in.md (ปรับปรุง layout label ใน kiosk pre-register; รอ merge จาก branch docs-kiosk-pre-register)
@@ -18,7 +18,7 @@ why: label ของ kiosk กับตั๋ว QR ที่ดาวน์โ�
 migration: N/A (ไม่แตะ API / CouchDB / MongoDB / schema_v)
 ---
 
-# Kiosk label — QR บน / ข้อความล่าง ใช้ component QR + ชื่อ ร่วมกับตั๋ว pre-register
+# CR-150: Kiosk label — QR บน / ข้อความล่าง ใช้ component QR + ชื่อ ร่วมกับตั๋ว pre-register
 
 > [!NOTE]
 > **Branch Dependency & Retrospective Spec:** เอกสารนี้เป็นการ sync spec ย้อนหลัง (retrospective documentation) สำหรับการปรับปรุง layout label และการแชร์ component ที่เริ่มพัฒนาบน feature branch `feat/pre-register_kiosk` (โฟลเดอร์ `frontend/src/lib/features/kiosk` จะเข้าสู่ `develop` พร้อม feature branch ดังกล่าว)
@@ -88,4 +88,6 @@ N/A
 
 - 2026-09-27 — proposed; เจ้าของเลือก layout "QR บน / `ชื่อ` + ชื่อ + `ศูนย์ X`, ไม่แสดง ULID" และ track เป็น CR ไฟล์ใหม่
 - 2026-10-04 — ปรับปรุงตาม PR Review (#321): ลบ dead link, ปรับ `affects:` อ้างอิงเอกสารที่มีอยู่จริง (ระบุสถานะรอ merge), ระบุ branch dependency (`feat/pre-register_kiosk`), ขยายความ FR-P8 เรื่องจำนวนบรรทัด (3–4 บรรทัดเมื่อชื่อตัด 2 บรรทัด), FR-L2 พฤติกรรม placeholder บนกระดาษความร้อน, ระบุรหัสเป็น FR-P8 (แก้ — Kiosk Label Layout) ให้ชัดเจน และเพิ่มหมายเหตุนโยบาย Privacy การ mask นามสกุล (FR-KPC-28)
+- 2026-10-04 — approved โดย Dev Lead Soravit Sukkarn หลัง merge PR #321 เข้า develop · รันเลข CR-150 จาก docs/changes/_index.md
+
 

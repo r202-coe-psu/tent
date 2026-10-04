@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-10-03 # CR-149 kiosk walk-in registration
+updated: 2026-10-04 # CR-150 kiosk label stacked qr name tag
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 
@@ -160,3 +160,4 @@ note: ดัชนี Change Record ทุกตัว — กติกาอย
 | [CR-143](CR-143-stock-redesign-rules.md) | กติกาคลังชุดใหม่ (redesign หน้าคลังของศูนย์ #331) — §A ลำดับล็อตถ่วงน้ำหนักวันหมดอายุ×อายุในคลัง (+กลุ่มเร่งด่วน ≤7 วัน) ใช้ทั้งระบบ + เบิกตรงตัดหลายล็อต · §B รับบริจาคหลายรายการ (retry เฉพาะแถวที่ล้ม, ไม่เพิ่มสถานะ) · §C `stock_ledger.adjust_reason`/`note` (schema_v 5→6) · §D `requiresExpiry` จาก storage_type/shelf_life_days (+เติมวันหมดอายุอัตโนมัติ) · §E บังคับปลายทางเบิกตรง · §F รวมสินค้า `item_master.merged_into` (schema_v 4→5) | approved | stable | 2026-10-02 | docs/data/schema.md §2.1/§2.3/§4.2, docs/task-breakdown/03-C-supply.md T-11/T-12/T-14, frontend operations/** distribution/** catalog/**, shelter-access-design, worker projector |
 | [CR-148](CR-148-pre-register-validation-and-fields.md) | Pre-register validation hardening — บัตร ปชช. checksum, ปีเกิด 4 หลัก/ขอบเขตเดียวกับอายุ ≤150 (±1), สัตว์ ≤10 ต่อครัวเรือน, เบอร์ `+66` normalize, error ตามปฏิทิน พ.ศ./ค.ศ.; เพิ่ม `evacuee.religion_other` / `disability_other_detail` (schema_v 10→11) และ `household.dorm_name/building/floor/room` (schema_v 5→6; `address_no` = ค่าสรุป) | done | volatile | 2026-10-03 | docs/data/schema.md §1.1/§1.3/unassigned_registration, frontend people domain/forms/registration, public-register domain + BFF registrations, `$lib/utils/thai-id.ts`, `$lib/db/model.ts` |
 | [CR-149](CR-149-kiosk-walk-in-registration.md) | Kiosk walk-in registration — เสียบบัตรแล้วไม่พบข้อมูล → ลงทะเบียนใหม่ที่ตู้ (stay status `kiosk_registered`); shelter flag default off; Forecast only; one card one person; QR print deferred | approved | volatile | 2026-10-03 | docs/data/schema.md §1.1 (evacuee schema_v 11→12), shelter feature_flags, docs/data/api-contract.md §2.1, frontend kiosk/people, worker/backend occupancy |
+| [CR-150](CR-150-kiosk-label-stacked-qr-name-tag.md) | Kiosk label — QR บน / ข้อความล่าง (`ชื่อ` · ชื่อ-นามสกุล · `ศูนย์ {shelter_code}`) ใช้ component QrNameTag ร่วมกับตั๋ว pre-register, kioskQrBoxMm สูตร stacked, no schema_v bump | approved | volatile | 2026-09-27 (approved 2026-10-04) | frontend/src/lib/components/qr-name-tag.svelte, frontend/src/lib/utils/qrcode.ts, frontend/src/lib/features/kiosk/domain/print-label.ts, features/public-register/ui/booking-ticket.svelte |
