@@ -373,11 +373,11 @@ replication user, นาฬิกาของแต่ละเครื่อ�
 
 ### 5.2 Setup
 
-ทำตาม [SETUP-CENTRAL.md](SETUP-CENTRAL.md) และ [SETUP-EDGE.md](SETUP-EDGE.md) (ไฟล์อยู่ใน repo แล้ว — สรุปสั้นที่ [README root "Edge @ศูนย์"](../../README.md)):
+ทำตาม [SETUP-CENTRAL.md](SETUP-CENTRAL.md) และ [SETUP-EDGE.md](SETUP-EDGE.md):
 
 | server | ขั้นตอน | ไฟล์ |
 | --- | --- | --- |
-| A — central | SETUP-CENTRAL ขั้น 1–5 (ข้อมูลศูนย์, `repl_sh001`, `location /sync/` ใน host nginx) | host nginx (นอก repo) · [`nginx/nginx.conf`](../../nginx/nginx.conf) (stack ที่มี nginx ใน compose) |
+| A — central | SETUP-CENTRAL ขั้น 1–5 (ข้อมูลศูนย์, credential = central admin, `location /sync/` ใน host nginx) | host nginx (นอก repo) · [`nginx/nginx.conf`](../../nginx/nginx.conf) (stack ที่มี nginx ใน compose) |
 | B — edge | SETUP-EDGE ขั้น 1–6 (config, `.env`, `up`, ตรวจ sync) | [`docker-compose.edge.yml`](../../docker-compose.edge.yml) + ไฟล์ที่เกี่ยวข้อง |
 
 จากนั้นรันคำสั่งทดสอบทั้งหมดจาก shell ของ **server B**:
@@ -482,10 +482,14 @@ sudo timedatectl set-ntp true
 
 ### T11 — replication user ที่ไม่ใช่ admin
 
+> **ผล + decision sync 2026-10-05:** job `_users` ต้องใช้ server admin (ยืนยันแล้ว — ให้ role member / db admin ของ `_users` ก็ยังได้ 401 ที่ `_changes`)
+> จึงตัดสินใจให้ edge ใช้ **central admin ชุดเดียว** (`CENTRAL_REPL_*`) กับทุก job — ตัวแปร `CENTRAL_USERS_REPL_*` ถูกเอาออก
+> ขั้นตอนด้านล่างเป็นบันทึกการทดลองตอนยังแยก 2 ชุด (`scripts/central-repl-user.sh` ยังเก็บไว้ แต่ setup ไม่ใช้แล้ว)
+
 credential ใน `_replicator` ของ edge อยู่ในเครื่องที่ตั้งในศูนย์ จึงไม่ควรเป็น central admin
 เคสนี้ดูว่าถ้าใช้ user ที่มีสิทธิ์น้อยที่สุด job ไหนจะใช้ไม่ได้
 
-setup โหมด B ([SETUP-CENTRAL.md](SETUP-CENTRAL.md) ขั้น 3) ใช้ `repl_sh001` กับ `registry` / `catalog` / `shelter_*` อยู่แล้ว
+ตอนทดลอง setup เดิมใช้ `repl_sh001` (สร้างด้วย `scripts/central-repl-user.sh`) กับ `registry` / `catalog` / `shelter_*`
 (`_security` ของ central เพิ่ม role ด้วย `add_member_role` — ห้าม PUT ทับ) เคสนี้ทดลองให้ job `_users` ใช้ `repl_sh001` ด้วย
 
 ```bash
@@ -560,15 +564,15 @@ docker logs couch-edge 2>&1 | grep -i replicat   # log ฝั่ง replicator
 | T9 DNS cutover | ยังไม่ได้ทดสอบ | | lab ใช้ IP ตรง ไม่ได้ผ่าน `/sync` บน domain แอป |
 | T10a นาฬิกาอุปกรณ์เพี้ยน | ยังไม่ได้ทดสอบ | | LWW เลือกผิดตัว? |
 | T10b นาฬิกา server edge เพี้ยน | ยังไม่ได้ทดสอบ | | lab ใช้ `http://` จึงไม่มี TLS ให้ทดสอบ |
-| T11 non-admin replication user | ✅ ผ่านบางส่วน (lab 2 เครื่อง) | — | `repl_sh001` (ไม่ใช่ admin) ใช้ได้กับ `registry` / `catalog` / `shelter_sh001` ทั้ง pull และ push · ได้ 403 กับ `shelter_sh002` และ `_users` · **job `_users` ต้องใช้ central admin** (ยืนยันแล้ว) · การ push `_design/*` ด้วย user นี้ ยังไม่ได้ทดสอบ |
+| T11 non-admin replication user | ✅ ผ่านบางส่วน (lab 2 เครื่อง) | — | `repl_sh001` (ไม่ใช่ admin) ใช้ได้กับ `registry` / `catalog` / `shelter_sh001` ทั้ง pull และ push · ได้ 403 กับ `shelter_sh002` และ `_users` · **job `_users` ต้องใช้ central admin** (ยืนยันแล้ว) · การ push `_design/*` ด้วย user นี้ ยังไม่ได้ทดสอบ · **decision sync 2026-10-05: ใช้ central admin ชุดเดียว** |
 
 ### ข้อค้นพบจาก lab (ไม่อยู่ในแผนเดิมของ T1–T11)
 
 | # | ข้อค้นพบ | ผลต่อ runbook / spec |
 | --- | --- | --- |
 | F1 | **Backoff ของ replicator:** job ฝั่งดึงที่ล้มติดกันหลายครั้งรอนานขึ้นเป็นเท่าตัวทุกครั้ง ไม่กลับมาเองเมื่อ central กลับ แม้ฝั่งส่ง (push) ยังทำงาน → edge ไม่ได้ข้อมูลใหม่จาก central โดยไม่มี error ในแอป | ต้องมีกลไกเตะ job บน edge — ทำเป็น `edge-watchdog` แล้ว (ทดสอบแบบจำลอง) · ควรเป็นข้อกำหนดของ runbook CR-064 และเพิ่ม alert เมื่อ job ฝั่งดึง `crashing` นานเกินกำหนด |
-| F2 | **Auth lockout:** CouchDB 3.5 default `chttpd_auth_lockout = enforce` นับรหัสผิดต่อ (user, IP) เกิน 5 ครั้งตอบ **403** ต่อไปแม้ใส่รหัสถูก นาน 5 นาที (`max_lifetime`) job ที่ retry ด้วยรหัสผิดทำให้เกิดเอง (log ของ central: `Authentication rejected for locked-out user`) อาการ: 401 → 403 | การหมุนรหัส `repl_<code>` ที่ central ต้องอัปเดต edge และเตะ job พร้อมกัน · watchdog จึงไม่เตะ job ที่โดนปฏิเสธรหัส |
-| F3 | **หมุน/แก้ user ที่ central ทำให้ session ของ job ที่ edge ใช้ไม่ได้** (job ที่ไม่ได้ถูกลบก็ล้มตาม) | ใส่ไว้ในคำเตือนของ `scripts/central-repl-user.sh --rotate` |
+| F2 | **Auth lockout:** CouchDB 3.5 default `chttpd_auth_lockout = enforce` นับรหัสผิดต่อ (user, IP) เกิน 5 ครั้งตอบ **403** ต่อไปแม้ใส่รหัสถูก นาน 5 นาที (`max_lifetime`) job ที่ retry ด้วยรหัสผิดทำให้เกิดเอง (log ของ central: `Authentication rejected for locked-out user`) อาการ: 401 → 403 | การเปลี่ยนรหัส admin ที่ central ต้องอัปเดต `.env` ของ edge ทุกเครื่องและเตะ job พร้อมกัน · watchdog จึงไม่เตะ job ที่โดนปฏิเสธรหัส |
+| F3 | **หมุน/แก้ user ที่ central ทำให้ session ของ job ที่ edge ใช้ไม่ได้** (job ที่ไม่ได้ถูกลบก็ล้มตาม) | ใส่ไว้ใน SETUP-CENTRAL ขั้น 3 (แถว "เปลี่ยนรหัส admin ของ central") |
 | F4 | **`replication_auth_error` ครอบ 2 เรื่อง:** รหัสถูกปฏิเสธ (`session_request_unauthorized` / `forbidden`) และต่อ central ไม่ได้ (`session_request_failed`: nxdomain, conn_failed) | ใช้แยกว่าเตะ job ได้หรือไม่ |
 | F5 | `edge-init.sh` ข้าม job ที่มีอยู่แล้ว → แก้ `.env` แล้ว job เก่ายังถือรหัสเดิม ต้องลบ job ก่อน | ระบุไว้ใน SETUP-EDGE "งานประจำ" |
 | F6 | ตัวแปรใน shell ชนะ `.env` ของ docker compose (เช่น `export COUCHDB_PASSWORD=...` ค้างอยู่) | ให้ `unset` ก่อนรัน compose |
@@ -583,7 +587,8 @@ docker logs couch-edge 2>&1 | grep -i replicat   # log ฝั่ง replicator
    ทางเลือก: ออก cert ด้วย DNS-01 ที่ central แล้ว sync ไฟล์ลง edge เป็นระยะ หรือ internal CA
    (ต้องลง CA ทุกเครื่องในศูนย์) — `nginx-edge` ตอนนี้ฟังแค่ :80 · ยังไม่มีใน
    [gap checklist §7.A](../features/edge-disaster-continuity-idea.md)
-2. **credential ของ job `_users`** — ยังต้องเป็น central admin เพราะ user ทั่วไปอ่าน `_users` ไม่ได้ (T11)
+2. ~~**credential ของ job `_users`**~~ — **ตัดสินแล้ว (decision sync 2026-10-05):** edge ใช้ central admin ชุดเดียวกับทุก job
+   ยอมรับว่าเครื่อง edge หลุด = central admin หลุด และเปลี่ยนรหัส admin กระทบ edge ทุกศูนย์ (T11 · SETUP-CENTRAL ขั้น 3)
 3. **CR-064 ยังรอ owner approve** — ไฟล์ edge / `location /sync/` ใน `nginx/nginx.conf` ใน repo เป็นส่วนของ work package 3 ต้องผ่าน review ก่อน deploy
 
 ข้อค้นพบ F1–F3 กระทบ runbook ของ CR-064 (WP5) และเกณฑ์ "ops UI สถานะต่อ shelter" (OD-4: ต้องเห็น job ฝั่งดึงค้าง) —
@@ -610,5 +615,5 @@ sudo timedatectl set-ntp true
 docker compose -f docker-compose.edge.yml down
 
 # server A (central) — ลบ location /sync/ ใน host nginx แล้ว reload,
-# ลบ user repl_sh001 และ role repl:SH001 ออกจาก _security (SETUP-CENTRAL.md "ถอดออกหลังทดสอบ")
+# แล้วเปลี่ยนรหัส admin ถ้าเคยใส่ไว้ใน .env ของ edge (SETUP-CENTRAL.md "ถอดออกหลังทดสอบ")
 ```

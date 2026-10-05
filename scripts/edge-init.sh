@@ -57,6 +57,7 @@ for DB in registry catalog; do
 done
 
 # 3) replication jobs — edge เป็นฝ่ายเปิด connection ไปหา central เสมอ
+#    credential ฝั่ง central ชุดเดียวทุก job (central admin — decision sync 2026-10-05)
 LOC_AUTH=$(auth "$COUCHDB_USER" "$COUCHDB_PASSWORD")
 CEN_AUTH=$(auth "$CENTRAL_REPL_USER" "$CENTRAL_REPL_PASSWORD")
 
@@ -65,12 +66,8 @@ job catalog_pull "$CEN/catalog" "$CEN_AUTH" "$LOC/catalog" "$LOC_AUTH"
 job "${CODE_LC}_pull" "$CEN/$SHELTER_DB" "$CEN_AUTH" "$LOC/$SHELTER_DB" "$LOC_AUTH"
 job "${CODE_LC}_push" "$LOC/$SHELTER_DB" "$LOC_AUTH" "$CEN/$SHELTER_DB" "$CEN_AUTH"
 
-if [ -n "${CENTRAL_USERS_REPL_USER:-}" ]; then
-	USERS_AUTH=$(auth "$CENTRAL_USERS_REPL_USER" "${CENTRAL_USERS_REPL_PASSWORD:-}")
-	job "users_${CODE_LC}_pull" "$CEN/_users" "$USERS_AUTH" "$LOC/_users" "$LOC_AUTH" \
-		"\"selector\":{\"roles\":{\"\$elemMatch\":{\"\$eq\":\"${ROLE}\"}}}"
-else
-	echo "skip    users_${CODE_LC}_pull (CENTRAL_USERS_REPL_USER ว่าง — login ที่ edge จะใช้ไม่ได้)"
-fi
+# _users ที่ central อ่านได้เฉพาะ server admin → CENTRAL_REPL_USER ต้องเป็น central admin
+job "users_${CODE_LC}_pull" "$CEN/_users" "$CEN_AUTH" "$LOC/_users" "$LOC_AUTH" \
+	"\"selector\":{\"roles\":{\"\$elemMatch\":{\"\$eq\":\"${ROLE}\"}}}"
 
 echo "== done — ดูสถานะ: curl -s \$E/_scheduler/docs/_replicator"

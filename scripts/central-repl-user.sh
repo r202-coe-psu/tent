@@ -11,7 +11,10 @@
 #
 # Admin credentials come from COUCHDB_USER / COUCHDB_PASSWORD (env) or the repo-root .env;
 # the target from --url or COUCHDB_URL (default http://localhost:5984).
-# Details: docs/couchdb-replication/SETUP-CENTRAL.md (step 3).
+#
+# NOT used by the default edge setup: since decision sync 2026-10-05 the edge uses the central admin for every
+# job (CENTRAL_REPL_*), because the filtered _users pull needs server admin. Kept for a future least-privilege
+# setup (e.g. a per-shelter users mirror DB) — see docs/couchdb-replication/README.md T11.
 set -euo pipefail
 
 usage() {
@@ -174,16 +177,14 @@ fi
 echo
 if [ -n "$new_pw" ]; then
 	cat <<EOF
-Put these in the edge server's .env (shown once — store the password now):
+Credentials for ${REPL_USER} (shown once — store the password now):
 
-  SHELTER_CODE=${CODE_UC}
-  SYNC_URL=http://<this host's IP>:5984        # lab; real: https://<domain>/sync
-  CENTRAL_REPL_USER=${REPL_USER}
-  CENTRAL_REPL_PASSWORD=${new_pw}
-  CENTRAL_USERS_REPL_USER=<central admin>      # job _users still needs admin (docs/couchdb-replication/README.md "คำถามเปิด" ข้อ 2)
-  CENTRAL_USERS_REPL_PASSWORD=<central admin password>
+  user:     ${REPL_USER}
+  password: ${new_pw}
 
-Already-running edge jobs keep the old credentials: delete them and re-run edge-init (SETUP-EDGE.md, "kick").
+Not for CENTRAL_REPL_* of the default edge setup: edge-init also uses it for the filtered _users pull, which
+needs the central admin (docs/couchdb-replication/SETUP-CENTRAL.md step 3). Using this user there makes
+users_<code>_pull fail with 401, so staff cannot log in at the edge.
 EOF
 else
 	echo "Nothing printed for the password: it is only shown when created or rotated."

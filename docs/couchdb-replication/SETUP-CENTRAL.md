@@ -64,81 +64,32 @@ curl -s "$C/_users/_find" -H 'Content-Type: application/json' \
 
 ---
 
-## ขั้น 3 — สร้าง replication user ของศูนย์
+## ขั้น 3 — credential ที่ edge ใช้: central admin
 
-**ทำไมไม่ใช้ admin ของ central:** รหัสผ่านที่ใส่ใน job ของ edge ถูกเก็บใน `_replicator` เป็น **plaintext**
-บนเครื่องที่ตั้งในศูนย์ ถ้าเครื่อง edge หายหรือถูกเปิด รหัสผ่านนั้นต้องไม่ใช่กุญแจของทั้งระบบ
-user นี้จึงถูกจำกัดให้เห็นแค่ `registry`, `catalog` และ DB ของศูนย์ตัวเอง
+edge ใช้ **central CouchDB admin** (`COUCHDB_USER` / `COUCHDB_PASSWORD` ใน `.env` ของ central) ชุดเดียวกับทุก job
+— decision sync 2026-10-05 ([edge-disaster-continuity-idea.md](../features/edge-disaster-continuity-idea.md) §6 OD-6)
+ที่ central ไม่ต้องสร้าง user เพิ่ม ขั้นนี้คือการรับรู้ผลของการตัดสินใจนี้
 
-### วิธีที่แนะนำ: สคริปต์เดียวจบ
+**ทำไมเป็น admin:** job `_users` (ให้ staff login ที่ edge ได้) ต้องอ่าน `_changes` ของ `_users` ที่ central ซึ่ง CouchDB เปิดให้เฉพาะ
+server admin — ให้ role ระดับไหนก็ไม่ได้ (ทดสอบแล้วบน CouchDB 3.5: member/db admin ของ `_users` ยังได้ 401) และเมื่อ edge ต้องถือ
+admin อยู่แล้ว การแยก user สิทธิ์น้อยสำหรับ job อื่นไม่ได้ลดความเสี่ยงตอนเครื่อง edge หลุด
 
-```bash
-# จาก root ของ repo ที่ central (อ่านรหัส admin จาก .env เอง หรือใช้ COUCHDB_PASSWORD / --url)
-scripts/central-repl-user.sh SH001
-```
+**ผลที่ต้องรับ:**
 
-สคริปต์ [`scripts/central-repl-user.sh`](../../scripts/central-repl-user.sh) ทำทุกอย่างที่เขียนไว้ด้านล่างให้ในคำสั่งเดียว:
-สร้าง `repl_sh001` ด้วยรหัสผ่านสุ่ม → เพิ่ม role ลง `_security` ของ 3 DB (อ่านของเดิมมาเพิ่ม ไม่ลบ member เดิม) →
-ทดสอบด้วย user นั้นเอง (3 DB ต้อง 200, `_users` ต้อง 403) → พิมพ์ค่าที่ต้องใส่ใน `.env` ของ edge **ครั้งเดียว**
+| เรื่อง | ผล | ต้องทำ |
+| --- | --- | --- |
+| รหัสผ่านอยู่ในเครื่องที่ศูนย์ | อยู่ใน `.env` และ doc ของ `_replicator` (plaintext) ถ้าเครื่อง edge หลุด = central ทั้งระบบหลุด | ดูแลเครื่อง edge เหมือนเป็นความลับระดับ central · ถ้าหลุดให้เปลี่ยนรหัส admin ทันที |
+| `SHELTER_CODE` ผิด | central ไม่ปฏิเสธ (admin เข้าได้ทุก DB) job จะ sync ข้อมูลของศูนย์อื่นโดยไม่มี error | ตรวจ `SHELTER_CODE` ก่อน `up` ทุกครั้ง (SETUP-EDGE ขั้น 4) |
+| `_design/*` ที่ edge | job `<code>_push` ส่ง design doc ขึ้น central ได้ ถ้ามี `validate_doc_update` ที่ผิดหลุดขึ้นไป การเขียนของศูนย์นั้นที่ central จะถูกปฏิเสธ | อย่าสร้าง design doc ใน `shelter_<code>` ที่ edge |
+| เปลี่ยนรหัส admin ของ central | edge **ทุกศูนย์** หยุด sync พร้อมกัน และ service ของ central ที่ใช้ admin (`COUCHDB_ADMIN_URL` ฯลฯ) ต้องอัปเดตด้วย | อัปเดต `.env` ของ edge ทุกเครื่องแล้ว "เตะ" job ทันที (SETUP-EDGE "งานประจำ") — job ที่ retry ด้วยรหัสเก่าจะโดนล็อกเอาต์ (403) ราว 5 นาที |
 
-| คำสั่ง | ทำอะไร |
-| --- | --- |
-| `scripts/central-repl-user.sh SH001` | สร้าง (ถ้ามีอยู่แล้วจะไม่เปลี่ยนรหัสผ่าน รันซ้ำได้) |
-| `scripts/central-repl-user.sh SH001 --rotate` | ตั้งรหัสผ่านใหม่ (ใส่ `--password PW` เพื่อกำหนดเอง) · job ที่ edge ที่ถือรหัสเก่าอยู่ต้อง "เตะ" ใหม่ |
-| `scripts/central-repl-user.sh SH001 --remove` | ลบ user และถอด role ออกจาก `_security` |
-| `--url http://host:5984` | ชี้ CouchDB อื่น (default `COUCHDB_URL` หรือ `http://localhost:5984`) |
-
-- ต้องมี DB `registry`, `catalog`, `shelter_<code>` อยู่แล้ว (เปิด/seed ศูนย์ก่อน) ไม่งั้นสคริปต์หยุดพร้อมบอก
-- ต้องมี `curl` และ `python3` · รหัสผ่านห้ามมีช่องว่าง `"` หรือ `\`
-- หลัง `--rotate` รหัสใหม่ใช้ได้ช้าราว 2–3 วินาที (cache ของ CouchDB) สคริปต์รอให้เอง
-- **`--rotate` ทำให้ edge ที่ใช้รหัสเก่าอยู่ sync ไม่ได้ทันที** และ job ที่ retry ด้วยรหัสผิดจะโดนล็อกเอาต์ (403) ราว 5 นาที — หมุนรหัสแล้วต้องอัปเดต `.env` ของ edge และ "เตะ" job ทันที (SETUP-EDGE.md)
-- **ทดสอบแล้ว** บน CouchDB 3.5 ชั่วคราว: create / รันซ้ำ / rotate / custom password / remove / DB ไม่มี / รหัส admin ผิด / ชื่อศูนย์ผิดรูปแบบ — `public_writer` และ member เดิมคงอยู่ทุกกรณี
-
-### สิ่งที่สคริปต์ทำเบื้องหลัง (ทำมือ / อ่านเพื่อเข้าใจ)
+**ตรวจ:**
 
 ```bash
-CODE=SH001
-code=$(printf '%s' "$CODE" | tr 'A-Z' 'a-z')
-REPL_USER="repl_$code"
-REPL_PW='<ตั้งรหัสผ่านใหม่>'          # ห้ามมี " หรือ \  (edge ประกอบ JSON เอง)
-
-# 1) สร้าง user — role repl:<CODE> ใช้เป็นป้ายใน _security
-curl -s -X PUT "$C/_users/org.couchdb.user:$REPL_USER" -H 'Content-Type: application/json' \
-  -d "{\"name\":\"$REPL_USER\",\"password\":\"$REPL_PW\",\"type\":\"user\",\"roles\":[\"repl:$CODE\"]}"; echo
-
-# 2) เพิ่ม role นี้เป็น member ของ DB (อ่าน _security เดิม → เพิ่ม → เขียนกลับ)
-add_member_role() { # add_member_role <db> <role>
-  curl -s "$C/$1/_security" | python3 -c '
-import sys, json
-sec = json.load(sys.stdin) or {}
-roles = sec.setdefault("members", {}).setdefault("roles", [])
-if sys.argv[1] not in roles:
-    roles.append(sys.argv[1])
-print(json.dumps(sec))' "$2" \
-  | curl -s -X PUT "$C/$1/_security" -H 'Content-Type: application/json' -d @-; echo
-}
-for DB in registry catalog "shelter_$code"; do add_member_role "$DB" "repl:$CODE"; done
+curl -s -o /dev/null -w '%{http_code}\n' "$C/_users/_changes?limit=1"   # 200 = ใช้กับ job _users ได้
 ```
 
-**ห้าม PUT `_security` ทับตรง ๆ** — `_security` ของ DB จริงมี member อื่นอยู่แล้ว (เช่น `public_writer` ที่ provisioning ใส่)
-PUT ทับจะลบทิ้ง ฟังก์ชัน `add_member_role` จึงอ่านของเดิมมาเพิ่มแล้วเขียนกลับ (เหมือน
-[`shelters.admin.ts`](../../frontend/src/lib/server/shelters.admin.ts)) — ทำตอนไม่มีใครกำลังเปิดหรือแก้ศูนย์ผ่านแอป
-
-**ตรวจ** (ผลที่ทดสอบแล้วบน CouchDB 3.5):
-
-```bash
-R=http://$REPL_USER:$REPL_PW@localhost:5984
-for DB in registry catalog shelter_$code shelter_sh002 _users; do
-  echo "$DB: $(curl -s -o /dev/null -w '%{http_code}' $R/$DB)"
-done
-# registry 200 · catalog 200 · shelter_sh001 200 · shelter_sh002 403 · _users 403
-```
-
-`_users` ได้ 403 เป็นเรื่องปกติ — user ทั่วไปอ่าน `_users` ไม่ได้ จึงยังต้องใช้ **central admin** กับ job `_users`
-ของ edge (ข้อจำกัดที่รู้แล้ว — [README.md](README.md) หัวข้อ "คำถามเปิด" ข้อ 2)
-
-📖 [`/{db}/_security`](https://docs.couchdb.org/en/stable/api/database/security.html) ·
-[`_users` และการ auth](https://docs.couchdb.org/en/stable/intro/security.html)
+📖 [`_users` และการ auth](https://docs.couchdb.org/en/stable/intro/security.html)
 
 ---
 
@@ -232,8 +183,8 @@ sudo nginx -t && sudo systemctl reload nginx
 curl -s <SYNC_URL>/_up
 # {"seeds":{},"status":"ok"}   — ถ้าเป็น HTML = location /sync/ ยังไม่มี/ไม่ถูกโหลด หรือ proxy_pass ไม่มี / ท้าย (ขั้น 4B)
 
-curl -s -u repl_sh001:'<รหัสผ่านขั้น 3>' <SYNC_URL>/shelter_sh001
-# JSON ข้อมูล DB (doc_count ฯลฯ)  — ถ้า unauthorized = รหัสผิด / ขั้น 3 ไม่ครบ
+curl -s -u admin:'<รหัส admin ของ central>' <SYNC_URL>/shelter_sh001
+# JSON ข้อมูล DB (doc_count ฯลฯ)  — ถ้า unauthorized = รหัสผิด
 ```
 
 ผ่านทั้ง 2 ข้อ = central พร้อม
@@ -245,9 +196,8 @@ curl -s -u repl_sh001:'<รหัสผ่านขั้น 3>' <SYNC_URL>/shel
 | ค่า | ได้จาก | ใส่ใน `.env` ของ edge |
 | --- | --- | --- |
 | URL ของ central | ขั้น 4 | `SYNC_URL` |
-| รหัสศูนย์ | ขั้น 2–3 | `SHELTER_CODE` (เช่น `SH001`) |
-| replication user / password | ขั้น 3 | `CENTRAL_REPL_USER` / `CENTRAL_REPL_PASSWORD` |
-| central admin / password (ใช้กับ job `_users`) | `.env` ของ central | `CENTRAL_USERS_REPL_USER` / `CENTRAL_USERS_REPL_PASSWORD` |
+| รหัสศูนย์ | ขั้น 2 | `SHELTER_CODE` (เช่น `SH001`) |
+| central admin / password (ใช้กับทุก job) | `.env` ของ central (ขั้น 3) | `CENTRAL_REPL_USER` / `CENTRAL_REPL_PASSWORD` |
 
 ---
 
@@ -270,21 +220,16 @@ curl -s -u repl_sh001:'<รหัสผ่านขั้น 3>' <SYNC_URL>/shel
 | --- | --- | --- |
 | edge ต่อ `SYNC_URL` ไม่ติด (timeout / refused) | firewall, IP เปลี่ยน, port ไม่ได้ publish | ขั้น 4A / ตรวจ `ss -ltn \| grep 5984` |
 | ได้ HTML ของ SPA แทน JSON | host nginx ไม่ส่ง `Host` หรือ `server_name` ไม่ตรง → ตกไป block ของแอป | ขั้น 4B ข้อ (1), (5) |
-| `unauthorized` ทั้งที่รหัสถูก | user ไม่ใช่ member ของ DB | ขั้น 3 ดู `curl $C/shelter_sh001/_security` |
+| `unauthorized` / `403` ทั้งที่รหัสถูก | รหัส admin ใน `.env` ของ edge ไม่ตรง central หรือโดนล็อกเอาต์จากการ retry ด้วยรหัสผิด | ขั้น 3 · รอ 5 นาทีหลังแก้รหัส |
 | job ของ edge ได้ `413` | `client_max_body_size` ชั้นใดชั้นหนึ่งเล็กไป | ขั้น 4B ข้อ (2) ทุกชั้น |
 | sync ช้าเป็นนาที | nginx buffer `_changes` | `proxy_buffering off` ทุกชั้น |
-| `_security` หายสมาชิกเดิม | ใช้ PUT ทับ | คืนค่าเดิมจาก backup / provisioning ของแอป แล้วใช้ `add_member_role` |
 
 ---
 
 ## ถอดออกหลังทดสอบ
 
-```bash
-# ลบ replication user และถอด role ออกจาก _security ของ registry / catalog / shelter_<code>
-scripts/central-repl-user.sh SH001 --remove
-```
-
 จริง: ลบ `location /sync/` ใน host nginx แล้ว reload · Lab: ปิด firewall rule
+ถ้ารหัส admin ของ central เคยอยู่บนเครื่อง edge ที่จะไม่ใช้ต่อ ให้เปลี่ยนรหัส admin (ขั้น 3 แถว "เปลี่ยนรหัส")
 
 ---
 

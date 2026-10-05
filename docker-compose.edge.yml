@@ -14,10 +14,9 @@ x-edge-job-env: &edge-job-env
   COUCHDB_PASSWORD: ${COUCHDB_PASSWORD}
   SHELTER_CODE: ${SHELTER_CODE:?SHELTER_CODE is required}
   SYNC_URL: ${SYNC_URL:?SYNC_URL is required}
+  # Central CouchDB admin — used by every replication job, including the filtered _users pull
   CENTRAL_REPL_USER: ${CENTRAL_REPL_USER:?CENTRAL_REPL_USER is required}
   CENTRAL_REPL_PASSWORD: ${CENTRAL_REPL_PASSWORD:?CENTRAL_REPL_PASSWORD is required}
-  CENTRAL_USERS_REPL_USER: ${CENTRAL_USERS_REPL_USER:-}
-  CENTRAL_USERS_REPL_PASSWORD: ${CENTRAL_USERS_REPL_PASSWORD:-}
 
 services:
   couchdb:
