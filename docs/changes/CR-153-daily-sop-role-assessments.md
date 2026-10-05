@@ -1,11 +1,13 @@
 ---
-id: draft
+id: CR-153
 title: แบบประเมิน Daily SOP ประจำวันแยกตามหน้าที่
-status: proposed
+status: approved
 date: 2026-09-26
+created: 2026-09-26
 updated: 2026-10-05
 requested_by: Team D
-decided_by: pending Project Owner
+decided_by: kong — อนุมัติ 2026-10-05
+decision_date: 2026-10-05
 layer: volatile
 affects:
   - docs/data/schema.md §2.34
@@ -16,7 +18,7 @@ why: แบบประเมินเดิมรวมผลของหลา
 migration: เพิ่มเอกสาร daily_sop_role_assessment schema_v 1; ไม่แปลงเอกสาร daily_sop_assessment เดิมตาม CR-106/schema §2.21 และรายการประเมิน Role ไม่แสดงเอกสาร Legacy
 ---
 
-# แบบประเมิน Daily SOP ประจำวันแยกตามหน้าที่
+# CR-153: แบบประเมิน Daily SOP ประจำวันแยกตามหน้าที่
 
 > **สรุป:** แยกแบบประเมิน Daily SOP เป็น 9 Role รวม 79 ข้อ และบันทึกหนึ่งเอกสารต่อศูนย์/วัน/Role; กำหนด schema, authorization, Bangkok-date rules และ index สำหรับ implementation ในงานถัดไป โดยไม่แปลงเอกสาร Legacy. D-SC-01 ตรวจทั้งคลังด้วยสถานะและไม่บันทึกตัวเลขรวมข้ามหน่วย
 
@@ -31,7 +33,7 @@ migration: เพิ่มเอกสาร daily_sop_role_assessment schema_v 
 เปลี่ยนจากแบบประเมินเดิมที่รวมหลายหน้าที่ไว้ในชุดเดียว มาเป็นแบบตรวจรายวันแยกตามหน้าที่ 9 Role
 โดย Question Bank ในภาคผนวก A ตามมติที่บันทึกในเอกสารนี้มี 79 ข้อ จาก 91 ข้อ (ตัด 12 ข้อ)
 
-PR #326 นี้แก้เฉพาะ CR ฉบับนี้ โดยรวม Question Bank 79 ข้อและตาราง SOP Parameter ไว้ในภาคผนวก A เพื่อให้ CR อ่านและทบทวนได้ในเอกสารเดียว. CR บันทึก contract สำหรับการนำไปใช้ภายหลัง แต่ไม่แก้ `docs/data/schema.md §2.34` หรือ runtime; งาน schema §2.34 จะทำแยกบน branch DailySOP ใน PR ถัดไป และต้องยึด control snapshot contract ใน CR นี้. PR นี้ไม่เปลี่ยน implementation ของ UI, VDU, provisioner หรือ security policy. Question Bank ที่รันอยู่ใน frontend ปัจจุบันยังมี 91 ข้อ; การปรับ runtime ให้ตรง 79 ข้อเป็นงาน implementation แยกก่อน release และไม่ถือว่าเสร็จจาก PR เอกสารนี้. เอกสารเดิมชนิด `daily_sop_assessment` คงอยู่โดยไม่แปลงข้อมูล และไม่ปรากฏในรายการประเมิน Role ใหม่ ตาม CR-106/schema §2.21
+CR-153 (PR #326) นี้แก้เฉพาะ CR ฉบับนี้ โดยรวม Question Bank 79 ข้อและตาราง SOP Parameter ไว้ในภาคผนวก A เพื่อให้ CR อ่านและทบทวนได้ในเอกสารเดียว. CR บันทึก contract สำหรับการนำไปใช้ภายหลัง แต่ไม่แก้ `docs/data/schema.md §2.34` หรือ runtime; งาน schema §2.34 จะทำแยกบน branch DailySOP ใน PR ถัดไป และต้องยึด control snapshot contract ใน CR นี้. PR นี้ไม่เปลี่ยน implementation ของ UI, VDU, provisioner หรือ security policy. Question Bank ที่รันอยู่ใน frontend ปัจจุบันยังมี 91 ข้อ; การปรับ runtime ให้ตรง 79 ข้อเป็นงาน implementation แยกก่อน release และไม่ถือว่าเสร็จจาก PR เอกสารนี้. เอกสารเดิมชนิด `daily_sop_assessment` คงอยู่โดยไม่แปลงข้อมูล และไม่ปรากฏในรายการประเมิน Role ใหม่ ตาม CR-106/schema §2.21
 
 | หน้าที่ | จำนวนเดิม | ตัดออก | คงเหลือ |
 | --- | ---: | ---: | ---: |
@@ -60,7 +62,7 @@ Role SC, VC, SO และ FAC คงคำถามเดิมทั้งห�
 
 ## Impact
 
-PR #326 เปลี่ยนเฉพาะ CR ฉบับนี้; ไม่แก้ runtime หรือ schema ที่ใช้งานอยู่. เมื่อนำข้อเสนอนี้ไป implement จะกระทบ `docs/data/schema.md §2.34`, `frontend/src/lib/features/daily-sop` และ `frontend/src/lib/server/shelter-access-design.ts` รวมถึง unit/VDU tests ของส่วนดังกล่าว. D-SC-01 ใช้ `stock-status` endpoint ที่มีอยู่เพื่อแสดงยอดแบบอ่านอย่างเดียว; ไม่เพิ่ม stock API หรือเปิดคำสั่งแก้สต็อกจากแบบประเมิน. Implementation ต้องยึด field contract, authorization และ acceptance criteria ในเอกสารนี้.
+CR-153 (PR #326) เปลี่ยนเฉพาะ CR ฉบับนี้; ไม่แก้ runtime หรือ schema ที่ใช้งานอยู่. เมื่อนำข้อเสนอนี้ไป implement จะกระทบ `docs/data/schema.md §2.34`, `frontend/src/lib/features/daily-sop` และ `frontend/src/lib/server/shelter-access-design.ts` รวมถึง unit/VDU tests ของส่วนดังกล่าว. D-SC-01 ใช้ `stock-status` endpoint ที่มีอยู่เพื่อแสดงยอดแบบอ่านอย่างเดียว; ไม่เพิ่ม stock API หรือเปิดคำสั่งแก้สต็อกจากแบบประเมิน. Implementation ต้องยึด field contract, authorization และ acceptance criteria ในเอกสารนี้.
 
 ## Migration
 
@@ -448,3 +450,4 @@ schema_v 1 ไม่เก็บยอดคงเหลือและยอด
 - 2026-10-02 — kong อนุมัติ Question Bank 79 ข้อและถ้อยคำ D-SM-03 ตามบันทึกการทบทวน
 - 2026-10-04 — ขยาย contract: ล็อก field/audit rules, เพิ่ม `warehouse_staff` สำหรับ SC, แยก UI `Not started` จาก persisted status, ระบุแหล่ง SOP ratio และสูตร/หน่วยตัวเลข, ปิดขอบเขต Legacy, conflict และ pagination; เสนอให้ D-SC-01 ตรวจยอด ledger เทียบของจริงรายสินค้าโดยไม่เก็บ metric รวมข้ามหน่วย
 - 2026-10-05 — ระบุทางเดิน D-SC-01 ผ่านรายการยอดอ่านอย่างเดียวจาก stock-status endpoint ที่มีอยู่ เพื่อให้ warehouse_staff และ supply_coordinator ตรวจได้โดยไม่เปิดสิทธิ์แก้สต็อกเพิ่ม; กำหนดการเทียบตามหน่วย ledger และความละเอียด qty_str ใน CR-038
+- 2026-10-05 — kong อนุมัติข้อเสนอ รันเลขเป็น CR-153 (status: approved)
