@@ -11,8 +11,17 @@ export type DailySopRoleAuthorContext = AuthorContext & {
 	sopRatios?: Partial<Record<SopRatioKey, string>>;
 };
 
+export type DailySopRolePage = {
+	items: DailySopRoleAssessment[];
+	bookmark: string | null;
+};
+
 export interface DailySopRoleRepository {
-	list(shelterCode: string): Promise<DailySopRoleAssessment[]>;
+	listPage(
+		shelterCode: string,
+		bookmark?: string | null,
+		asOfDate?: string
+	): Promise<DailySopRolePage>;
 	read(id: string): Promise<DailySopRoleAssessment | null>;
 	findByShelterDateRole(
 		shelterCode: string,
@@ -23,6 +32,7 @@ export interface DailySopRoleRepository {
 		role: DailySopRoleCode,
 		draft: DailySopRoleDraft,
 		date: string,
-		ctx: DailySopRoleAuthorContext
+		ctx: DailySopRoleAuthorContext,
+		baseAssessment?: DailySopRoleAssessment | null
 	): Promise<DailySopRoleAssessment>;
 }

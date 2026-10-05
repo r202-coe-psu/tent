@@ -3,15 +3,14 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
-	import { ArrowLeft, CheckCircle2, ClipboardCheck, Save, TriangleAlert } from '@lucide/svelte';
+	import { ArrowLeft, CheckCircle2, ClipboardCheck, Save } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
-	import { useDashboardOccupancy } from '$lib/features/dashboard';
-	import { useShelter } from '$lib/features/shelters';
+	import { ConflictError } from '$lib/utils/errors';
 	import { useActiveSopRatio } from '$lib/features/sop-ratios';
 	import { buildDailySopRoleId } from '../data/daily-sop.remote';
 	import {
@@ -25,6 +24,7 @@
 		metricParameterForQuestion,
 		metricForQuestion,
 		promptForQuestion,
+		requiredForMetric,
 		questionsForRole,
 		roleAssessmentProgress,
 		roleDraftFromAssessment,
@@ -39,33 +39,44 @@
 	import {
 		useDailySopRoleAssessment,
 		useDailySopRoleAssessments,
+		useDailySopStockStatus,
+		useResetDailySopRoleList,
 		useSaveDailySopRoleAssessment
 	} from '../application/queries';
 
 	const shelterCode = $derived(getShelterCode());
-	const occupancyQuery = useDashboardOccupancy(() => shelterCode);
-	const shelterQuery = useShelter(() => shelterCode);
 	const sopRatioQuery = useActiveSopRatio(() => shelterCode);
 	const sopRatios = $derived(sopRatioQuery.data?.ratios ?? null);
 	const user = $derived(authStore.user);
 	const userRoles = $derived(user?.roles ?? []);
 	const availableRoles = $derived(assessableRoles(userRoles, shelterCode));
-	const today = dailySopBangkokDate();
+	let today = $state(dailySopBangkokDate());
 	const date = $derived(page.url.searchParams.get('date') ?? today);
 	const isCurrentDate = $derived(date === today);
 	const isHistoricalDate = $derived(date < today);
 	const landingView = $derived(page.url.searchParams.get('view') === 'roles' ? 'roles' : 'days');
 	const roleParam = $derived(page.url.searchParams.get('role'));
 	const selectedRole = $derived(roleParam ? roleForCode(roleParam) : null);
-	const historyQuery = useDailySopRoleAssessments(() => shelterCode);
+	const historyQuery = useDailySopRoleAssessments(
+		() => shelterCode,
+		() => today
+	);
+
+	const resetHistory = useResetDailySopRoleList();
 
 	let draft = $state<DailySopRoleDraft>({});
 	let hydratedId = $state('');
 	let isSaving = $state(false);
 	let saveSuccessOpen = $state(false);
 	let savedAssessment = $state<DailySopRoleAssessment | null>(null);
+	let baseAssessment = $state<DailySopRoleAssessment | null>(null);
+	let baseDraft = $state<DailySopRoleDraft | null>(null);
+	let revisionConflict = $state(false);
+	let latestConflictAssessment = $state<DailySopRoleAssessment | null | undefined>(undefined);
+	let mergeChoices = $state<Record<string, 'local' | 'server'>>({});
+	let stockPanelOpen = $state(false);
 
-	const history = $derived(historyQuery.data ?? []);
+	const history = $derived(historyQuery.data?.pages.flatMap((page) => page.items) ?? []);
 	const historyRows = $derived.by(() => {
 		return [...history].sort(
 			(a, b) =>
@@ -79,16 +90,12 @@
 	const canAssessSelectedRole = $derived(
 		Boolean(selectedRole && availableRoles.some((role) => role.code === selectedRole.code))
 	);
-	const hasSelectedAssessment = $derived(
-		Boolean(selectedRole && assessmentByDateRole.has(`${date}:${selectedRole.code}`))
-	);
 	const canEditSelectedRole = $derived(Boolean(isCurrentDate && canAssessSelectedRole));
-	const canReviewSelectedRole = $derived(
-		Boolean((isHistoricalDate || isCurrentDate) && hasSelectedAssessment)
+	const canOpenSelectedRole = $derived(
+		Boolean(selectedRole && (isHistoricalDate || isCurrentDate))
 	);
-	const canOpenSelectedRole = $derived(Boolean(canEditSelectedRole || canReviewSelectedRole));
 	const selectedId = $derived(
-		selectedRole && (canEditSelectedRole || canReviewSelectedRole)
+		selectedRole && canOpenSelectedRole
 			? buildDailySopRoleId(shelterCode, date, selectedRole.code)
 			: null
 	);
@@ -114,38 +121,13 @@
 		});
 	});
 	const activeAssessment = $derived(selectedQuery.data ?? null);
+	const stockShelterCode = $derived(activeAssessment?.shelter_code ?? shelterCode);
+	const stockQuery = useDailySopStockStatus(
+		() => stockShelterCode,
+		() => selectedRole?.code === 'SC' && stockPanelOpen
+	);
 	const isLoadingAssessment = $derived(Boolean(selectedId && selectedQuery.isLoading));
-	const capacityMetricValues = $derived.by(() => {
-		const occupancy = occupancyQuery.data;
-		const shelter = shelterQuery.data;
-		const capacity = shelter?.capacity;
-		if (
-			occupancy?.shelter_code !== shelterCode ||
-			shelter?.code !== shelterCode ||
-			typeof capacity !== 'number' ||
-			!Number.isFinite(capacity) ||
-			typeof occupancy.active !== 'number' ||
-			!Number.isFinite(occupancy.active)
-		)
-			return null;
-		return { occupants: occupancy.active, capacity };
-	});
-	const isLoadingCapacityValues = $derived(occupancyQuery.isLoading || shelterQuery.isLoading);
-	const effectiveDraft = $derived.by(() => {
-		if (selectedRole?.code !== 'SM' || !isCurrentDate || isLoadingAssessment) return draft;
-		const answer = draft['D-SM-02'];
-		const saved = activeAssessment?.controls.find((control) => control.id === 'D-SM-02');
-		if (!answer || hasRecordedControl(saved) || !capacityMetricValues) return draft;
-		const calculated = metricForQuestion('D-SM-02')?.evaluate(capacityMetricValues) ?? null;
-		return {
-			...draft,
-			'D-SM-02': {
-				...answer,
-				status: answer.status ?? (calculated === null ? null : calculated ? 'Pass' : 'Fail'),
-				measured_values: { ...answer.measured_values, ...capacityMetricValues }
-			}
-		};
-	});
+	const effectiveDraft = $derived(draft);
 	const questions = $derived.by(() => {
 		if (!selectedRole) return [];
 		if (activeAssessment)
@@ -168,13 +150,24 @@
 		Boolean(
 			selectedRole &&
 			isCurrentDate &&
+			!revisionConflict &&
 			hasRoleDraftInput(effectiveDraft, selectedRole.code) &&
 			questions.every((question) => {
 				const answer = effectiveDraft[question.id];
+				const parameterMissing =
+					metricParameterForQuestion(question.id) !== null &&
+					!metricForQuestion(question.id, ratioValuesForQuestion(question.id))?.parameter;
+				const parameterUnavailable =
+					parameterMissing && (Boolean(activeAssessment) || sopRatioQuery.isSuccess);
+				const parameterUnresolved =
+					parameterMissing && !activeAssessment && !sopRatioQuery.isSuccess;
 				return (
-					!answer ||
-					(answer.status !== 'Fail' && answer.status !== 'Pending') ||
-					Boolean(answer.notes.trim())
+					!parameterUnresolved &&
+					(!parameterUnavailable ||
+						(answer?.status === 'Pending' && Boolean(answer.notes.trim()))) &&
+					(!answer ||
+						(answer.status !== 'Fail' && answer.status !== 'Pending') ||
+						Boolean(answer.notes.trim()))
 				);
 			})
 		)
@@ -184,6 +177,32 @@
 		{ value: 'Fail', label: 'ไม่ผ่าน' },
 		{ value: 'Pending', label: 'รอตรวจ' }
 	] as const;
+	const conflictingQuestions = $derived.by(() => {
+		if (!selectedRole || !latestConflictAssessment) return [];
+		const latestDraft = roleDraftFromAssessment(latestConflictAssessment);
+		const initialDraft = baseDraft ?? createEmptyRoleDraft(selectedRole.code);
+		return questionsForRole(selectedRole.code).flatMap((question) => {
+			const initial = initialDraft[question.id];
+			const local = draft[question.id];
+			const server = latestDraft[question.id];
+			const localChanged = !sameControlAnswer(initial, local);
+			const serverChanged = !sameControlAnswer(initial, server);
+			return localChanged && serverChanged && !sameControlAnswer(local, server)
+				? [{ id: question.id, prompt: question.prompt, choice: mergeChoices[question.id] }]
+				: [];
+		});
+	});
+	const canApplyConflictMerge = $derived(
+		Boolean(
+			latestConflictAssessment &&
+			conflictingQuestions.every((question) => mergeChoices[question.id])
+		)
+	);
+
+	$effect(() => {
+		const timer = setInterval(() => (today = dailySopBangkokDate()), 60_000);
+		return () => clearInterval(timer);
+	});
 
 	$effect(() => {
 		const id = selectedId;
@@ -192,11 +211,25 @@
 		if (!id || !role) {
 			hydratedId = '';
 			draft = {};
+			baseAssessment = null;
+			baseDraft = null;
+			revisionConflict = false;
+			latestConflictAssessment = undefined;
+			mergeChoices = {};
+			stockPanelOpen = false;
 			return;
 		}
 		if (isLoadingAssessment || hydratedId === id) return;
-		draft = assessment ? roleDraftFromAssessment(assessment) : createEmptyRoleDraft(role.code);
+		baseAssessment = assessment ?? null;
+		baseDraft = cloneRoleDraft(
+			assessment ? roleDraftFromAssessment(assessment) : createEmptyRoleDraft(role.code)
+		);
+		draft = cloneRoleDraft(baseDraft);
 		hydratedId = id;
+		revisionConflict = false;
+		latestConflictAssessment = undefined;
+		mergeChoices = {};
+		stockPanelOpen = false;
 	});
 
 	function updateUrl(
@@ -273,33 +306,82 @@
 		};
 	}
 
-	function hasRecordedControl(control: DailySopRoleControlDraft | undefined): boolean {
-		return Boolean(
-			control &&
-			(control.status !== null ||
-				control.notes.trim() ||
-				control.observations.trim() ||
-				Object.values(control.measured_values).some((value) => value !== null))
+	function cloneRoleDraft(source: DailySopRoleDraft | null): DailySopRoleDraft {
+		return Object.fromEntries(
+			Object.entries(source ?? {}).map(([id, answer]) => [
+				id,
+				{ ...answer, measured_values: { ...answer.measured_values } }
+			])
 		);
+	}
+
+	function sameControlAnswer(
+		left: DailySopRoleControlDraft | undefined,
+		right: DailySopRoleControlDraft | undefined
+	): boolean {
+		if (!left || !right)
+			return (
+				(!left && !right) ||
+				([left?.status ?? null, left?.notes ?? '', left?.observations ?? ''].join('\u0000') ===
+					[right?.status ?? null, right?.notes ?? '', right?.observations ?? ''].join('\u0000') &&
+					Object.values(left?.measured_values ?? {}).every((value) => value === null) &&
+					Object.values(right?.measured_values ?? {}).every((value) => value === null))
+			);
+		const keys = [
+			...new Set([...Object.keys(left.measured_values), ...Object.keys(right.measured_values)])
+		].sort();
+		return (
+			left.status === right.status &&
+			left.notes === right.notes &&
+			left.observations === right.observations &&
+			keys.every(
+				(key) => (left.measured_values[key] ?? null) === (right.measured_values[key] ?? null)
+			)
+		);
+	}
+
+	async function loadLatestAfterConflict(): Promise<void> {
+		try {
+			const result = await selectedQuery.refetch();
+			latestConflictAssessment = result.data ?? null;
+			if (!latestConflictAssessment)
+				toast.error('ไม่พบเอกสารล่าสุดบน server; เก็บ draft นี้ไว้แล้ว');
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'โหลดข้อมูลล่าสุดไม่สำเร็จ');
+		}
+	}
+
+	function applyConflictMerge(): void {
+		if (!selectedRole || !latestConflictAssessment || !canApplyConflictMerge) return;
+		const initial = baseDraft ?? createEmptyRoleDraft(selectedRole.code);
+		const server = roleDraftFromAssessment(latestConflictAssessment);
+		const merged = cloneRoleDraft(server);
+		for (const question of questionsForRole(selectedRole.code)) {
+			const baseAnswer = initial[question.id];
+			const localAnswer = draft[question.id];
+			const serverAnswer = server[question.id];
+			const localChanged = !sameControlAnswer(baseAnswer, localAnswer);
+			const serverChanged = !sameControlAnswer(baseAnswer, serverAnswer);
+			if (!localChanged) continue;
+			if (serverChanged && !sameControlAnswer(localAnswer, serverAnswer)) {
+				if (mergeChoices[question.id] === 'local') merged[question.id] = localAnswer;
+			} else {
+				merged[question.id] = localAnswer;
+			}
+		}
+		baseAssessment = latestConflictAssessment;
+		baseDraft = cloneRoleDraft(server);
+		draft = cloneRoleDraft(merged);
+		revisionConflict = false;
+		latestConflictAssessment = undefined;
+		mergeChoices = {};
+		toast.success('รวม draft กับข้อมูลล่าสุดแล้ว ตรวจคำตอบก่อนกดบันทึกอีกครั้ง');
 	}
 
 	function isQuestionDirty(questionId: string): boolean {
 		const current = effectiveDraft[questionId];
 		if (!current) return false;
-		const saved = activeAssessment?.controls.find((control) => control.id === questionId);
-		if (!saved) return hasRecordedControl(current);
-		const measuredKeys = new Set([
-			...Object.keys(saved.measured_values),
-			...Object.keys(current.measured_values)
-		]);
-		return (
-			current.status !== saved.status ||
-			current.notes !== saved.notes ||
-			current.observations !== saved.observations ||
-			[...measuredKeys].some(
-				(key) => (current.measured_values[key] ?? null) !== (saved.measured_values[key] ?? null)
-			)
-		);
+		return !sameControlAnswer(baseDraft?.[questionId], current);
 	}
 
 	function formatAuditDateTime(value: string): string {
@@ -328,7 +410,7 @@
 	}
 
 	async function save(): Promise<void> {
-		if (!selectedRole || !user) return;
+		if (!selectedRole || !user || revisionConflict) return;
 		if (!isCurrentDate) {
 			toast.error('วันที่ผ่านมาเปิดดูได้อย่างเดียว ไม่สามารถบันทึกผลได้');
 			return;
@@ -352,6 +434,7 @@
 				role: selectedRole.code,
 				draft: effectiveDraft,
 				date,
+				baseAssessment,
 				ctx: {
 					shelterCode,
 					createdBy: user.name,
@@ -361,9 +444,26 @@
 				}
 			});
 			savedAssessment = saved;
+			baseAssessment = saved;
+			baseDraft = cloneRoleDraft(roleDraftFromAssessment(saved));
 			saveSuccessOpen = true;
 		} catch (error) {
-			toast.error(error instanceof Error ? error.message : 'บันทึกผลตรวจไม่สำเร็จ');
+			if (
+				error instanceof ConflictError ||
+				(typeof error === 'object' &&
+					error !== null &&
+					'code' in error &&
+					error.code === 'CONFLICT')
+			) {
+				revisionConflict = true;
+				latestConflictAssessment = undefined;
+				mergeChoices = {};
+				toast.error(
+					'ข้อมูลบน server เปลี่ยนแล้ว draft ยังอยู่ เปิดข้อมูลล่าสุดและรวมก่อนบันทึกใหม่'
+				);
+			} else {
+				toast.error(error instanceof Error ? error.message : 'บันทึกผลตรวจไม่สำเร็จ');
+			}
 		} finally {
 			isSaving = false;
 		}
@@ -400,8 +500,14 @@
 	}
 
 	function ratioValuesForQuestion(questionId: string) {
-		const storedParameter = activeAssessment?.controls.find((control) => control.id === questionId)
-			?.metric_spec?.parameter;
+		const storedControl = activeAssessment?.controls.find((control) => control.id === questionId);
+		const storedParameter = storedControl?.metric_spec?.parameter;
+		if (
+			storedControl &&
+			metricParameterForQuestion(questionId) &&
+			storedControl.metric_spec === null
+		)
+			return {};
 		return storedParameter
 			? { ...(sopRatios ?? {}), [storedParameter.key]: storedParameter.value }
 			: sopRatios;
@@ -525,7 +631,7 @@
 						<button
 							class="min-h-11 rounded-md border bg-background px-3 text-sm font-semibold whitespace-nowrap hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
 							type="button"
-							onclick={() => historyQuery.refetch()}
+							onclick={() => resetHistory(shelterCode)}
 						>
 							ลองอีกครั้ง
 						</button>
@@ -582,39 +688,31 @@
 									</div>
 									<div class="role-progress-action" role="cell">
 										{#if isHistoricalDate}
-											{#if row.assessment}
-												<button
-													class="inline-flex min-h-11 shrink-0 items-center justify-center rounded-md border border-primary/25 bg-primary/5 px-3 text-sm font-semibold whitespace-nowrap text-primary hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-													type="button"
-													aria-label="ดูผลย้อนหลัง: {row.role.label}"
-													onclick={() => updateUrl(row.role.code)}
-												>
-													ดูผลย้อนหลัง
-												</button>
-											{:else}
-												<span class="text-xs font-medium text-muted-foreground">ยังไม่มีผลตรวจ</span
-												>
-											{/if}
-										{:else if isCurrentDate && (row.canAssess || row.assessment)}
 											<button
 												class="inline-flex min-h-11 shrink-0 items-center justify-center rounded-md border border-primary/25 bg-primary/5 px-3 text-sm font-semibold whitespace-nowrap text-primary hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
 												type="button"
-												aria-label="{row.assessment
-													? row.canAssess
-														? row.assessment.status === 'Completed'
-															? 'เปิดผลตรวจ'
-															: 'ตรวจต่อ'
-														: 'ดูผลตรวจ'
-													: 'เริ่มตรวจ'}: {row.role.label}"
+												aria-label="{row.assessment ? 'ดูผลย้อนหลัง' : 'ดู Role'}: {row.role.label}"
 												onclick={() => updateUrl(row.role.code)}
 											>
-												{row.assessment
-													? row.canAssess
-														? row.assessment.status === 'Completed'
-															? 'เปิดผลตรวจ'
-															: 'ตรวจต่อ'
-														: 'ดูผลตรวจ'
-													: 'เริ่มตรวจ'}
+												{row.assessment ? 'ดูผลย้อนหลัง' : 'ดู Role'}
+											</button>
+										{:else if isCurrentDate}
+											{@const actionLabel = row.assessment
+												? row.canAssess
+													? row.assessment.status === 'Completed'
+														? 'เปิดผลตรวจ'
+														: 'ตรวจต่อ'
+													: 'ดูผลตรวจ'
+												: row.canAssess
+													? 'เริ่มตรวจ'
+													: 'ดู Role'}
+											<button
+												class="inline-flex min-h-11 shrink-0 items-center justify-center rounded-md border border-primary/25 bg-primary/5 px-3 text-sm font-semibold whitespace-nowrap text-primary hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+												type="button"
+												aria-label="{actionLabel}: {row.role.label}"
+												onclick={() => updateUrl(row.role.code)}
+											>
+												{actionLabel}
 											</button>
 										{:else}
 											<span class="text-xs font-medium text-muted-foreground">ดูสถานะได้</span>
@@ -624,6 +722,15 @@
 							{/each}
 						</div>
 					</div>
+					{#if historyQuery.hasNextPage}
+						<button
+							class="mt-3 min-h-11 rounded-md border bg-background px-4 text-sm font-semibold hover:bg-muted disabled:opacity-50"
+							type="button"
+							disabled={historyQuery.isFetchingNextPage}
+							onclick={() => historyQuery.fetchNextPage()}
+							>{historyQuery.isFetchingNextPage ? 'กำลังโหลด...' : 'โหลดผลตรวจวันก่อนหน้า'}</button
+						>
+					{/if}
 				{/if}
 			</section>
 		</section>
@@ -651,7 +758,7 @@
 					<button
 						class="min-h-11 rounded-md border bg-background px-3 text-sm font-semibold whitespace-nowrap hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
 						type="button"
-						onclick={() => historyQuery.refetch()}
+						onclick={() => resetHistory(shelterCode)}
 					>
 						ลองอีกครั้ง
 					</button>
@@ -738,6 +845,18 @@
 						</article>
 					{/each}
 				</div>
+				{#if historyQuery.hasNextPage}
+					<p class="text-sm text-muted-foreground">
+						วันที่เก่าที่สุดที่แสดงอาจยังโหลดไม่ครบทุกหน้าที่ — โหลดเพิ่มเพื่อดูครบ
+					</p>
+					<button
+						class="min-h-11 rounded-md border bg-background px-4 text-sm font-semibold hover:bg-muted disabled:opacity-50"
+						type="button"
+						disabled={historyQuery.isFetchingNextPage}
+						onclick={() => historyQuery.fetchNextPage()}
+						>{historyQuery.isFetchingNextPage ? 'กำลังโหลด...' : 'โหลดวันก่อนหน้า'}</button
+					>
+				{/if}
 			{/if}
 		</section>
 	{:else}
@@ -779,10 +898,14 @@
 								{roleStatusLabel(activeAssessment.status)}
 							</span>
 							<p class="text-muted-foreground sm:text-right">
-								บันทึกล่าสุดโดย {activeAssessment.assessor_name ||
+								เริ่มประเมินโดย {activeAssessment.assessor_name ||
 									user?.display_name?.trim() ||
 									user?.name}
-								·
+								· เริ่มเมื่อ
+								<time datetime={activeAssessment.assessed_at}>
+									{formatAuditDateTime(activeAssessment.assessed_at)}
+								</time>
+								· อัปเดต
 								<time datetime={activeAssessment.updated_at}>
 									{formatAuditDateTime(activeAssessment.updated_at)}
 								</time>
@@ -794,6 +917,83 @@
 						{/if}
 					</div>
 				</div>
+
+				{#if revisionConflict}
+					<section
+						class="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4"
+						aria-label="จัดการข้อมูลชนกัน"
+					>
+						<div role="alert">
+							<h2 class="font-semibold text-amber-950">
+								ข้อมูลบน server เปลี่ยนระหว่างที่คุณกำลังแก้
+							</h2>
+							<p class="mt-1 text-sm text-amber-900">
+								เก็บ draft ของคุณไว้แล้ว ระบบหยุดการบันทึกเพื่อไม่ให้เขียนทับข้อมูลใหม่
+							</p>
+						</div>
+						<button
+							class="min-h-11 rounded-md border border-amber-800/30 bg-background px-3 text-sm font-semibold hover:bg-amber-100"
+							type="button"
+							onclick={loadLatestAfterConflict}>โหลดข้อมูลล่าสุด</button
+						>
+						{#if latestConflictAssessment === null}
+							<p class="text-sm text-amber-950" role="status">
+								ยังไม่พบเอกสารล่าสุด; draft ยังอยู่
+								กรุณารีเฟรชหน้าหรือให้ผู้ดูแลตรวจรายการก่อนเริ่มบันทึกใหม่
+							</p>
+						{:else if latestConflictAssessment}
+							{#if conflictingQuestions.length}
+								<p class="text-sm text-amber-950">
+									เลือกคำตอบที่จะเก็บสำหรับแต่ละข้อที่ทั้งสองฝ่ายแก้ แล้วกดรวมข้อมูล
+								</p>
+								{#each conflictingQuestions as conflict (conflict.id)}
+									<fieldset class="rounded-lg border border-amber-300 bg-background p-3">
+										<legend class="px-1 text-sm font-semibold"
+											>{conflict.id} · {conflict.prompt}</legend
+										>
+										<div class="grid gap-2 sm:grid-cols-2">
+											<label
+												class="flex min-h-11 items-center gap-2 rounded-md border px-3 text-sm"
+											>
+												<input
+													type="radio"
+													name={'merge-' + conflict.id}
+													checked={mergeChoices[conflict.id] === 'local'}
+													onchange={() =>
+														(mergeChoices = { ...mergeChoices, [conflict.id]: 'local' })}
+												/>
+												ใช้ draft ของฉัน
+											</label>
+											<label
+												class="flex min-h-11 items-center gap-2 rounded-md border px-3 text-sm"
+											>
+												<input
+													type="radio"
+													name={'merge-' + conflict.id}
+													checked={mergeChoices[conflict.id] === 'server'}
+													onchange={() =>
+														(mergeChoices = { ...mergeChoices, [conflict.id]: 'server' })}
+												/>
+												ใช้ข้อมูลล่าสุดจาก server
+											</label>
+										</div>
+									</fieldset>
+								{/each}
+							{:else}
+								<p class="text-sm text-amber-950">
+									ไม่พบข้อที่ทั้งสองฝ่ายแก้ต่างกัน; รวมคำตอบของคุณเข้ากับข้อมูลล่าสุดได้
+								</p>
+							{/if}
+							<button
+								class="min-h-11 rounded-md bg-amber-900 px-4 text-sm font-semibold text-white hover:bg-amber-950 disabled:cursor-not-allowed disabled:opacity-50"
+								type="button"
+								disabled={!canApplyConflictMerge}
+								onclick={applyConflictMerge}>รวม draft กับข้อมูลล่าสุด</button
+							>
+						{/if}
+					</section>
+				{/if}
+
 				{#if progress && counts}
 					<div class="mt-4 space-y-3 border-t pt-3">
 						<div>
@@ -862,14 +1062,16 @@
 							{@const savedControl = activeAssessment?.controls.find(
 								(control) => control.id === question.id
 							)}
-							{@const hasSavedControl = hasRecordedControl(savedControl)}
 							{@const isDirty = isQuestionDirty(question.id)}
 							{@const metric = metricForQuestion(question.id, ratioValuesForQuestion(question.id))}
 							{@const parameterRequired = metricParameterForQuestion(question.id) !== null}
-							{@const parameterUnavailable = parameterRequired && !metric}
+							{@const parameterMissing = parameterRequired && !metric?.parameter}
+							{@const parameterLoading =
+								parameterMissing && !activeAssessment && !sopRatioQuery.isSuccess}
+							{@const parameterUnavailable =
+								parameterMissing && (Boolean(activeAssessment) || sopRatioQuery.isSuccess)}
 							{@const calculated = metric?.evaluate(answer?.measured_values ?? {}) ?? null}
-							{@const calculationUnavailable =
-								question.id === 'D-SM-02' && calculated === null && !answer?.status}
+							{@const requirement = requiredForMetric(metric, answer?.measured_values ?? {})}
 							<section
 								id={`role-question-${question.id}`}
 								class="grid scroll-mt-6 grid-cols-1 gap-y-3 border-b p-3 last:border-b-0 sm:p-4 md:grid-cols-[minmax(0,1fr)_repeat(3,minmax(5rem,6rem))] md:items-start md:gap-x-4"
@@ -891,16 +1093,34 @@
 												class="mt-2 text-xs leading-relaxed text-amber-800 sm:text-sm"
 												role="status"
 											>
-												{sopRatioQuery.isLoading
-													? 'กำลังโหลดค่ากำหนดของศูนย์'
-													: 'ไม่พบค่ากำหนดของศูนย์สำหรับข้อนี้ ให้เลือกรอตรวจ'}
+												ไม่พบค่ากำหนดของศูนย์สำหรับข้อนี้ ให้เลือกรอตรวจ
 											</p>
+										{:else if parameterLoading}
+											<div
+												class="mt-2 flex flex-wrap items-center gap-2 text-xs leading-relaxed text-muted-foreground sm:text-sm"
+												role="status"
+											>
+												<p>
+													{sopRatioQuery.isError
+														? 'โหลดค่ากำหนดของศูนย์ไม่สำเร็จ'
+														: 'กำลังโหลดค่ากำหนดของศูนย์'}
+												</p>
+												{#if sopRatioQuery.isError}
+													<button
+														class="min-h-11 rounded-md border bg-background px-3 font-medium hover:bg-muted"
+														type="button"
+														onclick={() => sopRatioQuery.refetch()}
+													>
+														ลองโหลดใหม่
+													</button>
+												{/if}
+											</div>
 										{/if}
-										{#if (hasSavedControl && savedControl) || isDirty}
+										{#if savedControl || isDirty}
 											<div
 												class="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs leading-relaxed text-muted-foreground sm:text-sm"
 											>
-												{#if hasSavedControl && savedControl}
+												{#if savedControl}
 													<span
 														>บันทึกล่าสุดโดย {savedControl.checked_by_name ||
 															savedControl.checked_by}</span
@@ -920,7 +1140,7 @@
 
 								<fieldset
 									class="min-w-0 md:col-span-3 md:col-start-2 md:row-start-1"
-									disabled={!canEditSelectedRole}
+									disabled={!canEditSelectedRole || revisionConflict}
 								>
 									<legend class="sr-only">ผลตรวจ: {question.prompt}</legend>
 									<div class="grid grid-cols-3 gap-1.5 sm:gap-2">
@@ -928,8 +1148,9 @@
 											{@const isSelected = answer?.status === option.value}
 											{@const optionDisabled =
 												!canEditSelectedRole ||
-												((parameterUnavailable || calculationUnavailable) &&
-													option.value !== 'Pending')}
+												revisionConflict ||
+												parameterLoading ||
+												(parameterUnavailable && option.value !== 'Pending')}
 											<label
 												class={`flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-md border px-1.5 text-xs font-semibold transition-colors focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring sm:mx-auto sm:size-11 sm:gap-0 sm:rounded-full sm:px-0 sm:text-sm ${
 													optionDisabled
@@ -976,9 +1197,13 @@
 
 								<details
 									class="col-span-full row-start-3 mt-1 rounded-lg border bg-muted/20 px-3 py-1.5 md:row-start-2 md:mt-0 md:px-4"
+									ontoggle={(event) => {
+										if (!event.currentTarget.open) stockPanelOpen = false;
+									}}
 									open={answer?.status === 'Fail' ||
 										answer?.status === 'Pending' ||
-										(question.id === 'D-SM-02' && calculated !== null)}
+										(question.id === 'D-SM-02' && calculated !== null) ||
+										question.id === 'D-SC-01'}
 								>
 									<summary class="min-h-11 cursor-pointer py-3 text-xs font-medium sm:text-sm">
 										{#if answer?.status === 'Fail' || answer?.status === 'Pending'}
@@ -990,79 +1215,130 @@
 										{/if}
 									</summary>
 									<div class="mt-3 grid gap-3 md:grid-cols-2">
+										{#if question.id === 'D-SC-01'}
+											<details
+												class="rounded-lg border bg-background p-3 md:col-span-2"
+												ontoggle={(event) => (stockPanelOpen = event.currentTarget.open)}
+											>
+												<summary class="min-h-11 cursor-pointer py-2 text-sm font-semibold">
+													ดูยอดคงเหลือในระบบ · อ่านอย่างเดียว
+												</summary>
+												<div class="mt-2">
+													{#if stockQuery.isLoading}
+														<p class="text-sm text-muted-foreground" role="status">
+															กำลังโหลดรายการคลัง...
+														</p>
+													{:else if stockQuery.isError}
+														<div
+															class="flex flex-wrap items-center justify-between gap-2"
+															role="alert"
+														>
+															<p class="text-sm">
+																โหลดรายการคลังไม่สำเร็จ เลือกรอตรวจและระบุสาเหตุได้
+															</p>
+															<button
+																class="min-h-11 rounded-md border px-3 text-sm font-medium hover:bg-muted"
+																type="button"
+																onclick={() => stockQuery.refetch()}>ลองโหลดใหม่</button
+															>
+														</div>
+													{:else if stockQuery.data}
+														<div
+															class="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground"
+														>
+															<span>ศูนย์ {stockQuery.data.shelter_code}</span>
+															<span>
+																{#if stockQuery.data.last_updated}
+																	อัปเดต {formatAuditDateTime(stockQuery.data.last_updated)}
+																{:else}ยังไม่มีเวลา ledger บันทึก{/if}
+															</span>
+															<button
+																class="min-h-11 rounded-md border px-3 text-xs font-medium hover:bg-muted"
+																type="button"
+																onclick={() => stockQuery.refetch()}>รีเฟรชยอดระบบ</button
+															>
+														</div>
+														{#if stockQuery.data.items.length}
+															<ul class="mt-2 divide-y rounded-md border">
+																{#each stockQuery.data.items as item (item.item_id)}
+																	<li
+																		class="flex items-start justify-between gap-3 px-3 py-2 text-sm"
+																	>
+																		<span class="min-w-0">
+																			<span class="block font-medium">{item.name}</span>
+																			<span class="text-xs text-muted-foreground"
+																				>{item.item_id}</span
+																			>
+																		</span>
+																		<strong class="shrink-0 tabular-nums"
+																			>{item.qty_on_hand} {item.unit}</strong
+																		>
+																	</li>
+																{/each}
+															</ul>
+														{:else}
+															<p class="mt-2 text-sm text-muted-foreground">
+																ไม่มีรายการในระบบ
+																หากยืนยันยอดศูนย์ทั้งบัญชีและของจริงแล้วจึงเลือกผ่าน
+															</p>
+														{/if}
+													{/if}
+													<p class="mt-2 text-xs text-muted-foreground">
+														ตรวจนับจริงทีละรายการด้วยหน่วยเดียวกัน;
+														ส่วนต่างให้ระบุสินค้าและยอดในหมายเหตุ
+													</p>
+												</div>
+											</details>
+										{/if}
 										{#if metric && answer}
 											<div class="rounded-lg border border-sky-200 bg-sky-50/60 p-3 md:col-span-2">
 												<p class="text-sm font-semibold">
-													{question.id === 'D-SM-02' ? 'ข้อมูลที่ใช้คำนวณ' : 'ค่าที่ตรวจได้'}
-													{#if question.id !== 'D-SM-02'}<span
-															class="font-normal text-muted-foreground">(ไม่บังคับ)</span
-														>{/if}
+													ค่าที่กรอกเพื่อประกอบการพิจารณา
+													<span class="font-normal text-muted-foreground">(ไม่บังคับ)</span>
 												</p>
-												{#if question.id === 'D-SM-02'}
-													<div class="mt-3 grid gap-3 sm:grid-cols-2">
-														{#each metric.fields as field (field.key)}
-															<div class="rounded-md border bg-background px-3 py-2.5">
-																<p class="text-sm text-muted-foreground">{field.label}</p>
-																<p class="mt-1 font-semibold tabular-nums">
-																	{answer.measured_values[field.key] ?? '—'}
-																	{field.unit}
-																</p>
-															</div>
-														{/each}
-													</div>
-													<p class="mt-2 text-xs text-muted-foreground">
-														เทียบจำนวนผู้พักพิงที่เข้าพักอยู่กับความจุที่กำหนดของศูนย์
+												<div class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+													{#each metric.fields as field (field.key)}
+														<label class="grid gap-1.5 text-sm">
+															<span
+																>{field.label}
+																<span class="text-muted-foreground">({field.unit})</span></span
+															>
+															<Input
+																id={'daily-sop-' + question.id + '-' + field.key}
+																type="number"
+																min="0"
+																step={field.step}
+																value={answer.measured_values[field.key] ?? ''}
+																disabled={!canEditSelectedRole || revisionConflict}
+																oninput={(event) =>
+																	setMeasuredValue(
+																		question.id,
+																		field.key,
+																		event.currentTarget.value
+																	)}
+															/>
+														</label>
+													{/each}
+												</div>
+												<p
+													class="mt-2 text-xs text-muted-foreground"
+													data-testid="metric-threshold"
+												>
+													เกณฑ์: {metric.threshold}
+												</p>
+												{#if requirement}
+													<p class="mt-1 text-sm" data-testid="metric-required">
+														ต้องการอย่างน้อย {requirement.amount}
+														{requirement.unit}
 													</p>
-													{#if calculated === null}
-														<p class="mt-2 text-sm text-amber-800" role="status">
-															{#if isHistoricalDate}
-																ข้อมูลที่บันทึกไว้ไม่ครบ จึงคำนวณย้อนหลังไม่ได้
-															{:else if isLoadingCapacityValues}
-																กำลังโหลดจำนวนผู้พักพิงและความจุของศูนย์...
-															{:else}
-																ยังคำนวณไม่ได้
-																เนื่องจากยังไม่มีข้อมูลจำนวนผู้พักพิงหรือความจุของศูนย์
-															{/if}
-														</p>
-													{/if}
-												{:else}
-													<div class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-														{#each metric.fields as field (field.key)}
-															<label class="grid gap-1.5 text-sm">
-																<span
-																	>{field.label}
-																	<span class="text-muted-foreground">({field.unit})</span></span
-																>
-																<Input
-																	id={`daily-sop-${question.id}-${field.key}`}
-																	type="number"
-																	min="0"
-																	step={field.step ?? 'any'}
-																	value={answer.measured_values[field.key] ?? ''}
-																	disabled={!canEditSelectedRole}
-																	oninput={(event) =>
-																		setMeasuredValue(
-																			question.id,
-																			field.key,
-																			event.currentTarget.value
-																		)}
-																/>
-															</label>
-														{/each}
-													</div>
 												{/if}
 												{#if calculated !== null}
 													<p class="mt-2 text-sm font-medium">
-														ผลคำนวณ{question.id === 'D-SM-02' ? 'จากข้อมูลศูนย์' : 'จากค่าที่กรอก'}: {calculated
-															? 'ผ่านเกณฑ์'
-															: 'ไม่ผ่านเกณฑ์'}
+														ผลคำนวณประกอบการพิจารณา: {calculated ? 'ผ่านเกณฑ์' : 'ไม่ผ่านเกณฑ์'}
 													</p>
-													{#if answer.status && answer.status !== 'Pending' && (answer.status === 'Pass') !== calculated}
-														<p class="mt-1 flex items-center gap-1 text-sm text-amber-800">
-															<TriangleAlert class="size-4" aria-hidden="true" /> ผลที่เลือกไม่ตรงกับผลคำนวณ
-															กรุณาตรวจค่าหรือหมายเหตุ
-														</p>
-													{/if}
+													<p class="mt-1 text-xs text-muted-foreground">
+														ผู้ประเมินเป็นผู้เลือกสถานะเอง
+													</p>
 												{/if}
 											</div>
 										{/if}
@@ -1073,10 +1349,10 @@
 												></span
 											>
 											<Textarea
-												id={`daily-sop-${question.id}-observations`}
+												id={'daily-sop-' + question.id + '-observations'}
 												rows={3}
 												value={answer?.observations ?? ''}
-												disabled={!canEditSelectedRole}
+												disabled={!canEditSelectedRole || revisionConflict}
 												oninput={(event) =>
 													setText(question.id, 'observations', event.currentTarget.value)}
 												placeholder="เช่น จำนวนที่ตรวจพบ เวลา หรือจุดที่ตรวจ"
@@ -1092,9 +1368,9 @@
 												{/if}
 											</span>
 											<Textarea
-												id={`daily-sop-${question.id}-notes`}
+												id={'daily-sop-' + question.id + '-notes'}
 												rows={3}
-												disabled={!canEditSelectedRole}
+												disabled={!canEditSelectedRole || revisionConflict}
 												class={(answer?.status === 'Fail' || answer?.status === 'Pending') &&
 												!answer?.notes.trim()
 													? 'border-destructive'
