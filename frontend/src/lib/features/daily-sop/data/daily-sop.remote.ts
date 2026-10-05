@@ -62,18 +62,24 @@ export class DailySopRoleRemoteRepository implements DailySopRoleRepository {
 			limit: DAILY_SOP_ROLE_PAGE_SIZE,
 			...(bookmark ? { bookmark } : {})
 		});
-		const items = response.docs.map((record) => dailySopRoleAssessmentSchema.parse(record));
+		// Documents that fail the current schema (e.g. written by an earlier prototype) are skipped,
+		// not rewritten; paging below counts raw docs so the bookmark stays correct.
+		const items = response.docs.flatMap((record) => {
+			const parsed = dailySopRoleAssessmentSchema.safeParse(record);
+			return parsed.success ? [parsed.data] : [];
+		});
 		if (
 			items.some((item) => item.shelter_code !== shelterCode || item.assessment_date > asOfDate)
 		) {
 			throw new Error('Daily SOP history query returned a document outside its selector.');
 		}
-		if (items.length === DAILY_SOP_ROLE_PAGE_SIZE && !response.bookmark) {
+		const fullPage = response.docs.length === DAILY_SOP_ROLE_PAGE_SIZE;
+		if (fullPage && !response.bookmark) {
 			throw new Error('Daily SOP history page is missing the CouchDB bookmark.');
 		}
 		return {
 			items,
-			bookmark: items.length === DAILY_SOP_ROLE_PAGE_SIZE ? response.bookmark : null
+			bookmark: fullPage ? response.bookmark : null
 		};
 	}
 
