@@ -175,6 +175,28 @@ describe('Daily SOP role repository', () => {
 		expect(final.bookmark).toBeNull();
 	});
 
+	it('skips documents that fail the schema without breaking paging', async () => {
+		const couch = await import('$lib/db/couch-db');
+		const valid = validAssessment('FAC', '2026-09-25');
+		const prototype = {
+			...validAssessment('REG', '2026-09-25'),
+			controls: [{ id: 'D-REG-01', check_method: 'old' }]
+		};
+		const docs = [
+			valid,
+			prototype,
+			...Array.from({ length: DAILY_SOP_ROLE_PAGE_SIZE - 2 }, () => ({ type: 'bad' }))
+		];
+		vi.mocked(couch.findDocsPage).mockResolvedValueOnce({
+			docs,
+			bookmark: 'next'
+		} as never);
+
+		const page = await new DailySopRoleRemoteRepository('shelter_sh001').listPage('SH001');
+		expect(page.items.map((item) => item._id)).toEqual([valid._id]);
+		expect(page.bookmark).toBe('next');
+	});
+
 	it('saves the current role snapshot without legacy fields or automatic Pass/Fail calculation', async () => {
 		const couch = await import('$lib/db/couch-db');
 		const draft = completeFacilityDraft();

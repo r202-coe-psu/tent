@@ -330,7 +330,7 @@ describe('CR-153 formulas and snapshot contract', () => {
 	];
 
 	it('keeps the 12 cut IDs out of the bank and uses no markdown backticks in prompts', () => {
-		const ids = new Set(DAILY_SOP_ROLE_QUESTIONS.map((question) => question.id));
+		const ids = new Set<string>(DAILY_SOP_ROLE_QUESTIONS.map((question) => question.id));
 		expect(DAILY_SOP_ROLE_QUESTIONS).toHaveLength(79);
 		for (const id of cutIds) expect(ids.has(id)).toBe(false);
 		for (const question of DAILY_SOP_ROLE_QUESTIONS) expect(question.prompt).not.toContain('`');
@@ -432,7 +432,7 @@ describe('CR-153 formulas and snapshot contract', () => {
 			dailySopRoleAssessmentSchema.safeParse({ ...base(), role_key: 'registration_staff' }).success
 		).toBe(false);
 		const extraControlField = base();
-		(extraControlField.controls[0] as Record<string, unknown>).check_method = 'x';
+		(extraControlField.controls[0] as unknown as Record<string, unknown>).check_method = 'x';
 		expect(dailySopRoleAssessmentSchema.safeParse(extraControlField).success).toBe(false);
 		const strayParameter = base();
 		strayParameter.controls[0].metric_spec = {
