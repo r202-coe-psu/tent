@@ -47,11 +47,13 @@ export { loadKioskHardware } from './application/kiosk-qr-input';
 export { cancelKioskFaceCheck } from './data/kiosk-face.api';
 export type { KioskHardware } from './domain/kiosk-hardware';
 export {
+	faceOutcomeIsPersonalChoice,
 	isFaceCheckEnabled,
 	type FaceCheckConfig,
 	type FaceCheckFlow,
 	type FaceCheckMode,
-	type FaceCheckOutcome
+	type FaceCheckOutcome,
+	type FaceUnavailableReason
 } from './domain/face-check';
 export type {
 	WalkInCardRegistrationOutcome,

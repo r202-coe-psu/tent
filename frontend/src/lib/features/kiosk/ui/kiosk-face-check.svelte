@@ -8,10 +8,13 @@
 	import { createKioskFaceApi } from '../data/kiosk-face.api';
 	import {
 		FACE_MATCH_SHOWN_MS,
+		faceOutcomeIsPersonalChoice,
 		type FaceCheckFlow,
 		type FaceCheckOutcome
 	} from '../domain/face-check';
 	import KioskBiometricConsent from './kiosk-biometric-consent.svelte';
+	import KioskFaceCameraPanel from './kiosk-face-camera-panel.svelte';
+	import KioskFaceCardNotice from './kiosk-face-card-notice.svelte';
 
 	interface Props {
 		flow: FaceCheckFlow;
@@ -57,11 +60,17 @@
 	const cameraShown = $derived(session.phase === 'starting' || session.phase === 'positioning');
 	const verifying = $derived(session.phase === 'verifying');
 	const resultShown = $derived(
-		session.phase === 'done' && mode === 'on' && session.outcome?.kind !== 'declined'
+		session.phase === 'done' &&
+			mode === 'on' &&
+			session.outcome !== null &&
+			!faceOutcomeIsPersonalChoice(session.outcome)
 	);
+	// Check-in reads the chip photo during the check, so the card must stay in until it says so.
+	const cardNoticeShown = $derived(flow === 'check_in' && session.phase !== 'done');
 
 	function handleFinished(outcome: FaceCheckOutcome): void {
-		if (mode === 'shadow' || outcome.kind === 'declined') {
+		// Declining or skipping is the person's own choice: carry on, no result screen.
+		if (mode === 'shadow' || faceOutcomeIsPersonalChoice(outcome)) {
 			onfinish(outcome);
 		} else if (outcome.kind === 'match') {
 			matchTimer = setTimeout(() => onfinish(outcome), FACE_MATCH_SHOWN_MS);
@@ -80,11 +89,15 @@
 </script>
 
 <section
-	class="mx-auto mt-4 w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs sm:p-8 kiosk-compact:p-4"
+	class="mx-auto mt-4 w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs sm:p-8 kiosk-compact:mt-2 kiosk-compact:p-3"
 	aria-live="polite"
 	data-testid="kiosk-face-check"
 	data-face-phase={session.phase}
 >
+	{#if cardNoticeShown}
+		<KioskFaceCardNotice removable={session.cardRemovable} />
+	{/if}
+
 	{#if session.phase === 'consent'}
 		<KioskBiometricConsent
 			{headingTag}
@@ -94,52 +107,21 @@
 	{/if}
 
 	<!-- Always mounted: the camera opens into it before the next render could mount it. -->
-	<div class={['space-y-4 text-center', cameraShown || verifying ? 'block' : 'hidden']}>
-		<svelte:element
-			this={headingTag}
-			class="text-2xl font-bold text-[#0A2647] kiosk-portrait:text-4xl"
-			>ตรวจสอบใบหน้า</svelte:element
-		>
-		<div
-			class="relative mx-auto aspect-[4/3] w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 kiosk-portrait:max-w-3xl kiosk-compact:max-w-xs"
-		>
-			<video
-				bind:this={video}
-				class="size-full -scale-x-100 object-cover"
-				autoplay
-				playsinline
-				muted
-				aria-label="ภาพจากกล้อง"
-			></video>
-			<div class="pointer-events-none absolute inset-0 flex items-center justify-center">
-				<div
-					class="aspect-[3/4] h-[84%] rounded-[50%] border-4 border-white/90"
-					aria-hidden="true"
-				></div>
-			</div>
-		</div>
-		<p
-			class="text-xl font-bold text-slate-900 kiosk-portrait:text-3xl kiosk-compact:text-lg"
-			role="status"
-			data-testid="kiosk-face-message"
-		>
-			{#if verifying}
-				<span
-					class="mr-2 inline-block size-5 animate-spin rounded-full border-2 border-slate-300 border-t-[#0A2647] align-middle motion-reduce:animate-none"
-					aria-hidden="true"
-				></span>กำลังตรวจสอบ…
-			{:else if session.phase === 'starting'}
-				กำลังเปิดกล้อง…
-			{:else}
-				{session.message}
-			{/if}
-		</p>
-		{#if session.attempt > 0}
-			<p class="text-sm font-semibold text-slate-600 tabular-nums kiosk-portrait:text-xl">
-				ครั้งที่ {session.attempt + 1}
-			</p>
-		{/if}
-	</div>
+	<KioskFaceCameraPanel
+		bind:video
+		{headingTag}
+		shown={cameraShown || verifying}
+		starting={session.phase === 'starting'}
+		{verifying}
+		message={session.message}
+		attempt={session.attempt}
+		maxAttempts={session.maxAttempts}
+		slow={session.slow}
+		frameReady={session.frameReady}
+		framingProblem={session.framingProblem}
+		showSkip={session.busy}
+		onskip={() => session.skip()}
+	/>
 
 	{#if resultShown && session.outcome}
 		{#if session.outcome.kind === 'match'}

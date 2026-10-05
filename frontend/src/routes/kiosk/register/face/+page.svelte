@@ -79,10 +79,13 @@
 		error = '';
 		const outcome = await submitWalkInCard(walkInSession.card, walkInSession);
 		if (outcome.kind === 'registered') {
+			// The done page forgets the session, so what it must say is passed on in the URL.
+			const checked = walkInSession.faceOutcome;
+			const staffRecheck = faceMode === 'on' && checked !== null && checked.kind !== 'match';
 			walkInSession.clear();
 			await goto(
 				resolve(
-					`/kiosk/register/done${contextQuery}` as
+					`/kiosk/register/done${contextQuery}${staffRecheck ? '&face=staff' : ''}` as
 						'/kiosk/register/done' | `/kiosk/register/done?${string}`
 				)
 			);
@@ -126,6 +129,8 @@
 		<p class="mt-8 text-center text-xl font-bold text-slate-900" role="status">
 			กำลังบันทึกข้อมูล…
 		</p>
+	{:else if hardware === null}
+		<p class="mt-8 text-center text-xl font-bold text-slate-900" role="status">กำลังเตรียมระบบ…</p>
 	{:else if faceMode && walkInSession.citizenId}
 		<KioskFaceCheck
 			flow="walk_in"

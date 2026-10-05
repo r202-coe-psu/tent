@@ -92,7 +92,40 @@ describe('createKioskFaceApi', () => {
 		const fetchFn = vi.fn<typeof fetch>().mockRejectedValue(new TypeError('offline'));
 
 		await expect(createKioskFaceApi(fetchFn).cancel()).resolves.toBeUndefined();
+		await expect(createKioskFaceApi(fetchFn).cancel('camera_denied')).resolves.toBeUndefined();
 		expect(lastCall(fetchFn).url).toBe(`${KIOSK_FACE_PATH}/cancel`);
+	});
+
+	it('cancels with an empty body when there is no reason', async () => {
+		const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(json({ ok: true }));
+
+		await createKioskFaceApi(fetchFn).cancel();
+
+		const { url, init } = lastCall(fetchFn);
+		expect(url).toBe(`${KIOSK_FACE_PATH}/cancel`);
+		expect(init.method).toBe('POST');
+		expect(init.body).toBe('{}');
+		expect(init.headers).toMatchObject({ 'content-type': 'application/json' });
+	});
+
+	it('tells the scanner client why when it cancels', async () => {
+		const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(json({ ok: true }));
+
+		await createKioskFaceApi(fetchFn).cancel('user_skipped');
+
+		expect(JSON.parse(lastCall(fetchFn).init.body as string)).toEqual({ reason: 'user_skipped' });
+	});
+
+	it('passes the attempt limit and the chip-photo state through when the scanner client sends them', async () => {
+		const fetchFn = vi
+			.fn<typeof fetch>()
+			.mockResolvedValue(json({ ok: true, reference: 'ready', max_attempts: 4 }));
+
+		await expect(createKioskFaceApi(fetchFn).start('1234567890123', 'check_in')).resolves.toEqual({
+			ok: true,
+			reference: 'ready',
+			max_attempts: 4
+		});
 	});
 
 	it('encodes large blobs without overflowing the call stack', async () => {
@@ -116,6 +149,18 @@ describe('cancelKioskFaceCheck', () => {
 		await cancelKioskFaceCheck();
 
 		expect(String(fetchFn.mock.calls[0][0])).toBe(`${KIOSK_FACE_PATH}/cancel`);
+		expect((fetchFn.mock.calls[0][1] as RequestInit).body).toBe('{}');
+	});
+
+	it('forwards the reason', async () => {
+		const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(json({ ok: true }));
+		vi.stubGlobal('fetch', fetchFn);
+
+		await cancelKioskFaceCheck('scanner_unreachable');
+
+		expect(JSON.parse((fetchFn.mock.calls[0][1] as RequestInit).body as string)).toEqual({
+			reason: 'scanner_unreachable'
+		});
 	});
 
 	it('never throws, so a page can call it on its way out', async () => {

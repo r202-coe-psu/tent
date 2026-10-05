@@ -1177,11 +1177,13 @@ class FakeFaceService:
 
     async def start(self, citizen_id, flow, read_photo=None):
         self.started = (citizen_id, flow, read_photo)
-        return self._answer("start", {"ok": True, "reference": "reading"})
+        return self._answer("start", {"ok": True, "reference": "reading", "max_attempts": 3})
 
     async def frame(self, raw):
         self.frame_bytes = raw
-        return self._answer("frame", {"face": True, "hint": "ok", "ready": True})
+        return self._answer(
+            "frame", {"face": True, "hint": "ok", "ready": True, "reference": "ready"}
+        )
 
     async def verify(self, frames):
         self.verified_frames = frames
@@ -1282,7 +1284,17 @@ class FaceRouteTests(unittest.IsolatedAsyncioTestCase):
         client = self.client()
         route = await self.call(client, "frame", b"\xff\xd8\xff-frame")
         self.assertEqual(client.face_service.frame_bytes, b"\xff\xd8\xff-frame")
-        self.assertEqual(route.fulfilled["body"], {"face": True, "hint": "ok", "ready": True})
+        self.assertEqual(
+            route.fulfilled["body"],
+            {"face": True, "hint": "ok", "ready": True, "reference": "ready"},
+        )
+
+    async def test_start_and_frame_replies_reach_the_page_with_the_new_fields(self):
+        client = self.client()
+        route = await self.call(client, "start", self.payload(citizen_id=CID, flow="check_in"))
+        self.assertEqual(
+            route.fulfilled["body"], {"ok": True, "reference": "reading", "max_attempts": 3}
+        )
 
     async def test_an_oversized_body_is_refused_before_any_work(self):
         client = self.client()
@@ -1319,6 +1331,39 @@ class FaceRouteTests(unittest.IsolatedAsyncioTestCase):
         client = self.client()
         await self.call(client, "cancel", b"{}")
         self.assertEqual(client.face_service.calls, ["cancel"])
+
+    async def test_cancel_logs_an_allowed_reason_and_nothing_else(self):
+        client = self.client()
+        for reason in sorted(manager.KIOSK_FACE_END_REASONS):
+            with self.assertLogs(manager.logger, level="INFO") as logs:
+                route = await self.call(client, "cancel", self.payload(reason=reason))
+            self.assertEqual(route.fulfilled["status"], 200)
+            self.assertEqual(route.fulfilled["body"], {"ok": True})
+            self.assertEqual(
+                [record.getMessage() for record in logs.records],
+                [f"Face check ended early: reason={reason}"],
+            )
+
+    async def test_cancel_ignores_an_unknown_or_malformed_reason_but_still_succeeds(self):
+        client = self.client()
+        bodies = (
+            b"",
+            b"{}",
+            b"not json",
+            b"\xff\xfe",
+            b"[]",
+            b'"camera_denied"',
+            self.payload(reason="because " + CID),
+            self.payload(reason=["camera_denied"]),
+            self.payload(reason=None),
+            self.payload(reason="camera_denied ", other=CID),
+        )
+        for body in bodies:
+            with self.assertNoLogs(manager.logger, level="INFO"):
+                route = await self.call(client, "cancel", body)
+            self.assertEqual(route.fulfilled["status"], 200, body)
+            self.assertEqual(route.fulfilled["body"], {"ok": True}, body)
+        self.assertEqual(client.face_service.calls, ["cancel"] * len(bodies))
 
 
 class FaceReaderTests(unittest.IsolatedAsyncioTestCase):

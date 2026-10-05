@@ -39,6 +39,7 @@ couchdb-session.ini
 
 # Python (worker + packages)
 .venv/
+.venv-gui/
 venv/
 __pycache__/
 *.py[cod]

@@ -53,6 +53,10 @@ KIOSK_HARDWARE_PATH = "/api/v1/scanner/kiosk/hardware"
 # Face check (see app/face): the page sends camera frames here and gets only a verdict or a hint
 # back. Answered locally - the server never sees a frame, a chip photo or an embedding.
 KIOSK_FACE_PATH_PREFIX = "/api/v1/scanner/kiosk/face/"
+# Why the page gave up on the camera or the person skipped; the only words `face/cancel` will log.
+KIOSK_FACE_END_REASONS = frozenset(
+    {"camera_denied", "camera_not_found", "camera_failed", "scanner_unreachable", "user_skipped"}
+)
 KIOSK_FACE_ACTIONS = ("start", "frame", "verify", "cancel")
 KIOSK_FACE_PATHS = frozenset(f"{KIOSK_FACE_PATH_PREFIX}{action}" for action in KIOSK_FACE_ACTIONS)
 KIOSK_FACE_MAX_BODY_BYTES = 6 * 1024 * 1024
@@ -444,6 +448,7 @@ class ScannerClientManager:
                 frames = self._decode_frames(self._json_object(raw).get("frames"))
                 return 200, await service.verify(frames)
             service.cancel()
+            self._log_face_end_reason(raw)
             return 200, {"ok": True}
         except FaceInputError:
             return failure(400, "INVALID_FACE_INPUT", "ข้อมูลสำหรับตรวจใบหน้าไม่ถูกต้อง")
@@ -455,6 +460,18 @@ class ScannerClientManager:
         except Exception as error:
             logger.error("Face check %s failed: %s", action, self._describe_failure(error))
             return failure(500, "FACE_CHECK_FAILED", "ตรวจใบหน้าไม่สำเร็จ")
+
+    @staticmethod
+    def _log_face_end_reason(raw: bytes) -> None:
+        """The page may say why it ended the face check early, so a pilot can tell a denied camera
+        from a missing one. Only a fixed set of words is logged; any other body is ignored."""
+        try:
+            payload = json.loads(raw or b"")
+        except (ValueError, UnicodeDecodeError):
+            return
+        reason = payload.get("reason") if isinstance(payload, dict) else None
+        if isinstance(reason, str) and reason in KIOSK_FACE_END_REASONS:
+            logger.info("Face check ended early: reason=%s", reason)
 
     @staticmethod
     def _json_object(raw: bytes) -> Dict[str, Any]:

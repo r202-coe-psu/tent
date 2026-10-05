@@ -581,7 +581,14 @@ SFace เทียบหน้า, MiniFASNet ตรวจว่าเป็น�
   จนกว่า Phase 3 (CR + schema) จะเสร็จ ตอนนี้ผลมีผลแค่ต่อหน้าจอ kiosk และบรรทัดสรุปใน log (`Face check finished: flow=… result=…`)
 - **เกณฑ์ยังไม่ได้ calibrate** กับรูปบัตรจริง (`app/face/profiles.py`) ใช้ `./inspect_face.py` ทดสอบด้วยบัตรและหน้าของทีมเอง
   (`--card --show-scores`; ลองส่องบัตร รูปพิมพ์ หรือจอมือถือให้กล้องด้วย) อย่าใช้หน้าคนอื่นโดยไม่ได้รับความยินยอม
+- **ทดสอบอ่านบัตรจริงพร้อมสแกนหน้าในหน้าต่าง OpenCV** (กล้องสด + รูปจากชิปบัตร + ผลตรงกัน/ไม่ตรง): `./card_face_demo.py`
+  เสียบบัตรที่ตัวอ่าน USB ได้เลย (ตัวอ่านตาม `CARD_READER` ใน `.env` หรือ `--reader pcsc|rfpro`) กด `R` อ่านบัตรใหม่ `S` แสดงตัวเลข `Q` ออก
+  ต้องใช้ OpenCV แบบมี GUI ซึ่ง `opencv-python-headless` ของ scanner_client ไม่มี ให้ใช้ venv แยก:
+  `python3 -m venv .venv-gui && .venv-gui/bin/pip install opencv-python numpy pillow pyscard python-dotenv && .venv-gui/bin/python card_face_demo.py`
+  ไม่บันทึกภาพ และแสดงเลขบัตรแค่ 4 ตัวท้าย (ใช้ `--show-data` ถ้าต้องการดูข้อมูลทั้งหมดใน terminal)
 - เมื่อเปิด face check `scanner_client` ให้สิทธิ์กล้องแก่ origin ของ kiosk อัตโนมัติ (ไม่มี prompt) เปิด `KIOSK_FACE_CHECK=on` จะมี log เตือนว่าเกณฑ์ยังไม่ได้ calibrate ให้ใช้ `shadow` ก่อน
+- ตรวจว่าสิทธิ์กล้องถูกให้โดยไม่มี prompt จริงบนเครื่อง (ไม่ใช่ CI): `./smoke_face_permissions.py` (เพิ่ม `--headed` เพื่อดูหน้าต่าง, `--live` เพื่อเปิดหน้า `/kiosk/register/face` จริง)
+  เปิด Chromium profile ใหม่แบบเดียวกับ manager แล้วถามหน้าเว็บว่า permission เป็น `granted` หรือ `prompt`; ผ่านเมื่อ `granted` (exit 0)
 - ถ้า model ไม่ครบ เครื่องจะตอบ `FACE_MODELS_MISSING` และหน้า kiosk ข้ามขั้นตอนนี้ไป
 - model ทั้ง 4 ตัวและ license อยู่ใน [`models/MODELS.md`](models/MODELS.md)
 

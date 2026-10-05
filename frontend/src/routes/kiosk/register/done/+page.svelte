@@ -17,6 +17,8 @@
 		getKioskDisplayContext(readKioskDisplayQuery(page.url.searchParams))
 	);
 	const contextQuery = $derived(buildKioskContextQuery(displayContext));
+	// Set by the face step when it ran visibly and did not confirm the person (see register/face).
+	const staffRecheck = $derived(page.url.searchParams.get('face') === 'staff');
 	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, returnHome);
 	onMount(() => {
 		walkInSession.clear();
@@ -50,6 +52,11 @@
 		<p class="mt-2 text-lg text-slate-700">
 			กรุณานำบัตรออกจากเครื่อง แล้วไปพบเจ้าหน้าที่เพื่อยืนยันข้อมูลและรายงานตัว
 		</p>
+		{#if staffRecheck}
+			<p class="mt-2 text-lg font-semibold text-slate-900" data-testid="kiosk-staff-recheck">
+				เจ้าหน้าที่จะตรวจสอบตัวตนของท่านอีกครั้ง
+			</p>
+		{/if}
 		<div class="mt-7">
 			<Button
 				type="button"

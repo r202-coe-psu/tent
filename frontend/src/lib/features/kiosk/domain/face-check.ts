@@ -45,12 +45,17 @@ export const FACE_HINTS = [
 ] as const;
 export type FaceHint = (typeof FACE_HINTS)[number];
 
+export const FACE_REFERENCE_STATES = ['reading', 'ready', 'unavailable'] as const;
+export type FaceReferenceState = (typeof FACE_REFERENCE_STATES)[number];
+
 const attemptSchema = z.number().int().min(0);
 
 export const faceFrameReplySchema = z.object({
 	face: z.boolean(),
 	hint: z.enum(FACE_HINTS),
-	ready: z.boolean()
+	ready: z.boolean(),
+	/** Whether the chip photo has been read yet; older scanner clients leave it out. */
+	reference: z.enum(FACE_REFERENCE_STATES).optional()
 });
 export type FaceFrameReply = z.infer<typeof faceFrameReplySchema>;
 
@@ -64,7 +69,9 @@ export type FaceVerifyReply = z.infer<typeof faceVerifyReplySchema>;
 
 export const faceStartReplySchema = z.object({
 	ok: z.literal(true),
-	reference: z.enum(['reading', 'ready', 'unavailable'])
+	reference: z.enum(FACE_REFERENCE_STATES),
+	/** How many verdict attempts the scanner client allows; older clients leave it out. */
+	max_attempts: z.number().int().min(1).optional()
 });
 export type FaceStartReply = z.infer<typeof faceStartReplySchema>;
 
@@ -78,8 +85,55 @@ export type FaceCheckOutcome =
 	| { kind: 'skipped'; reason: string }
 	/** The person did not agree to it. */
 	| { kind: 'declined' }
-	/** The camera or the scanner client failed. */
-	| { kind: 'unavailable' };
+	/** The camera or the scanner client failed; `reason` is for the scanner client's log, not the person. */
+	| { kind: 'unavailable'; reason?: FaceUnavailableReason };
+
+export const FACE_UNAVAILABLE_REASONS = [
+	'camera_denied',
+	'camera_not_found',
+	'camera_failed',
+	'scanner_unreachable'
+] as const;
+export type FaceUnavailableReason = (typeof FACE_UNAVAILABLE_REASONS)[number];
+
+function errorName(error: unknown): string {
+	if (typeof error !== 'object' || error === null || !('name' in error)) return '';
+	return String(error.name);
+}
+
+/**
+ * Sorts a failure into something a pilot can debug from the scanner client's log. Goes by the error
+ * name (not `instanceof`) so it stays pure and works for browser errors from any realm.
+ */
+export function classifyFaceFailure(error: unknown): FaceUnavailableReason {
+	switch (errorName(error)) {
+		case 'NotAllowedError':
+		case 'SecurityError':
+			return 'camera_denied';
+		case 'NotFoundError':
+		case 'OverconstrainedError':
+		case 'DevicesNotFoundError':
+			return 'camera_not_found';
+		// The scanner client refused or did not answer: an HTTP error, a dropped fetch or a timeout.
+		case 'KioskFaceError':
+		case 'TypeError':
+		case 'TimeoutError':
+			return 'scanner_unreachable';
+		default:
+			return 'camera_failed';
+	}
+}
+
+/** `skipped` reason when the person pressed "skip" at the camera (as opposed to the system skipping). */
+export const FACE_SKIPPED_BY_PERSON = 'user_skipped';
+
+/** True when the person chose to leave (declined or skipped): no result screen, just carry on. */
+export function faceOutcomeIsPersonalChoice(outcome: FaceCheckOutcome): boolean {
+	return (
+		outcome.kind === 'declined' ||
+		(outcome.kind === 'skipped' && outcome.reason === FACE_SKIPPED_BY_PERSON)
+	);
+}
 
 /** Anything but a match goes to staff; the check never refuses anyone service. */
 export function faceOutcomeNeedsStaff(outcome: FaceCheckOutcome): boolean {
@@ -89,6 +143,8 @@ export function faceOutcomeNeedsStaff(outcome: FaceCheckOutcome): boolean {
 // --- timing -------------------------------------------------------------------------------------
 
 export const FACE_PREVIEW_INTERVAL_MS = 250;
+/** A hint other than "ok" must repeat this many preview frames before the sentence on screen changes. */
+export const FACE_HINT_CONFIRM_FRAMES = 2;
 /** Consecutive well-framed preview frames before the burst is taken. */
 export const FACE_READY_STREAK = 2;
 export const FACE_BURST_FRAMES = 6;
@@ -97,6 +153,10 @@ export const FACE_BURST_INTERVAL_MS = 180;
 export const FACE_POSITION_TIMEOUT_MS = 45_000;
 /** How long the "try again" advice stays up before the preview resumes and replaces it. */
 export const FACE_RETRY_MESSAGE_MS = 1_800;
+/** Positioning that has lasted this long gets a quiet "staff will help if this does not work" line. */
+export const FACE_SLOW_NOTICE_MS = 30_000;
+/** Attempts shown as "2 of N" until the scanner client says otherwise. */
+export const FACE_DEFAULT_MAX_ATTEMPTS = 3;
 /** How long a match is shown before the flow continues by itself. */
 export const FACE_MATCH_SHOWN_MS = 1_400;
 

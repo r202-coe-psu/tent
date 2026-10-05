@@ -18,8 +18,12 @@
 	Wording is a draft for the data-protection review.
 -->
 <div aria-labelledby="face-consent-title">
+	<!-- Under another heading on a short screen the page title already says this: save the row. -->
 	<div
-		class="mb-4 inline-flex items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-sm font-semibold text-sky-900"
+		class={[
+			'mb-4 inline-flex items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-sm font-semibold text-sky-900 kiosk-compact:mb-2',
+			headingTag === 'h2' && 'kiosk-compact:hidden'
+		]}
 	>
 		<ScanFace class="size-4" aria-hidden="true" />ตรวจสอบตัวตน
 	</div>

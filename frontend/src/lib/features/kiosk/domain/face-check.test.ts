@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
 	FACE_CHECK_OFF,
 	FACE_HINTS,
+	FACE_SKIPPED_BY_PERSON,
+	classifyFaceFailure,
+	faceOutcomeIsPersonalChoice,
+	faceStartReplySchema,
 	faceFrameReplySchema,
 	faceHintMessage,
 	faceOutcomeNeedsStaff,
@@ -56,6 +60,24 @@ describe('replies from the scanner client', () => {
 		expect(faceFrameReplySchema.safeParse({ face: true, hint: 'ok' }).success).toBe(false);
 	});
 
+	it('reads the chip-photo state on a frame reply when the scanner client sends it', () => {
+		const base = { face: true, hint: 'ok', ready: true };
+		for (const reference of ['reading', 'ready', 'unavailable']) {
+			expect(faceFrameReplySchema.parse({ ...base, reference }).reference).toBe(reference);
+		}
+		expect(faceFrameReplySchema.parse(base).reference).toBeUndefined();
+		expect(faceFrameReplySchema.safeParse({ ...base, reference: 'gone' }).success).toBe(false);
+	});
+
+	it('reads the attempt limit on a start reply, which must be at least 1 when sent', () => {
+		const base = { ok: true, reference: 'reading' };
+		expect(faceStartReplySchema.parse({ ...base, max_attempts: 5 }).max_attempts).toBe(5);
+		expect(faceStartReplySchema.parse(base).max_attempts).toBeUndefined();
+		for (const max_attempts of [0, -1, 2.5, '3']) {
+			expect(faceStartReplySchema.safeParse({ ...base, max_attempts }).success).toBe(false);
+		}
+	});
+
 	it('accepts each verdict shape and nothing else', () => {
 		for (const reply of [
 			{ result: 'match', attempt: 1 },
@@ -103,6 +125,58 @@ describe('faceOutcomeNeedsStaff', () => {
 			{ kind: 'unavailable' }
 		] as const) {
 			expect(faceOutcomeNeedsStaff(outcome)).toBe(true);
+		}
+	});
+});
+
+describe('faceOutcomeIsPersonalChoice', () => {
+	it('is true when the person declined or pressed skip themselves', () => {
+		expect(faceOutcomeIsPersonalChoice({ kind: 'declined' })).toBe(true);
+		expect(faceOutcomeIsPersonalChoice({ kind: 'skipped', reason: FACE_SKIPPED_BY_PERSON })).toBe(
+			true
+		);
+	});
+
+	it('is false when the system skipped, could not confirm or failed', () => {
+		for (const outcome of [
+			{ kind: 'match' },
+			{ kind: 'not_confirmed', reason: FACE_SKIPPED_BY_PERSON },
+			{ kind: 'skipped', reason: 'timeout' },
+			{ kind: 'skipped', reason: 'no_chip_photo' },
+			{ kind: 'unavailable' },
+			{ kind: 'unavailable', reason: 'camera_denied' }
+		] as const) {
+			expect(faceOutcomeIsPersonalChoice(outcome)).toBe(false);
+		}
+	});
+});
+
+describe('classifyFaceFailure', () => {
+	it.each([
+		['NotAllowedError', 'camera_denied'],
+		['SecurityError', 'camera_denied'],
+		['NotFoundError', 'camera_not_found'],
+		['OverconstrainedError', 'camera_not_found'],
+		['DevicesNotFoundError', 'camera_not_found'],
+		['NotReadableError', 'camera_failed'],
+		['AbortError', 'camera_failed'],
+		['TimeoutError', 'scanner_unreachable']
+	] as const)('sorts a browser %s as %s', (name, reason) => {
+		expect(classifyFaceFailure(new DOMException('x', name))).toBe(reason);
+	});
+
+	it('treats a failed scanner client request, a dropped fetch and a timeout as unreachable', () => {
+		const refused = Object.assign(new Error('face check request failed (503)'), {
+			name: 'KioskFaceError'
+		});
+		expect(classifyFaceFailure(refused)).toBe('scanner_unreachable');
+		expect(classifyFaceFailure(new TypeError('Failed to fetch'))).toBe('scanner_unreachable');
+	});
+
+	it('calls any other error, or a non-error, a camera failure', () => {
+		expect(classifyFaceFailure(new Error('camera has no picture yet'))).toBe('camera_failed');
+		for (const value of [undefined, null, 'boom', 42, {}]) {
+			expect(classifyFaceFailure(value)).toBe('camera_failed');
 		}
 	});
 });

@@ -142,7 +142,11 @@ class FaceService:
             session.reference_task = asyncio.create_task(
                 self._read_reference(session, engine, read_photo)
             )
-        return {"ok": True, "reference": session.reference_state}
+        return {
+            "ok": True,
+            "reference": session.reference_state,
+            "max_attempts": self.profile.max_attempts,
+        }
 
     async def _read_reference(
         self, session: FaceSession, engine: FaceEngine, read_photo: PhotoReader
@@ -191,7 +195,7 @@ class FaceService:
 
     async def frame(self, raw: bytes) -> dict[str, Any]:
         """Judge one preview frame so the screen can tell the person how to stand."""
-        self._active()
+        session = self._active()
         engine = await self.warm_up()
 
         def judge() -> dict[str, Any]:
@@ -201,7 +205,10 @@ class FaceService:
             hint, face = quality.assess(image, engine.detect(image), self.profile)
             return {"face": face is not None, "hint": hint, "ready": hint == quality.OK}
 
-        return await asyncio.to_thread(judge)
+        reply = await asyncio.to_thread(judge)
+        # Lets a check-in screen say when the card can be taken out (the chip photo is read).
+        reply["reference"] = session.reference_state
+        return reply
 
     # -- verification -----------------------------------------------------------------------
 

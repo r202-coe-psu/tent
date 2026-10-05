@@ -49,7 +49,8 @@ function frameToBlob(video: HTMLVideoElement, maxWidth: number): Promise<Blob> {
 
 /**
  * Starts the kiosk's face camera into `video`. `cameraLabel` picks one of several cameras (the
- * kiosk3 has JSK-RGB and JSK-IR behind one name); without it the front camera is used.
+ * kiosk3 has JSK-RGB and JSK-IR behind one name); without it the front camera is used. Browser
+ * errors (NotAllowedError, NotFoundError, ...) are passed on untouched for `classifyFaceFailure`.
  */
 export async function openFaceCamera(
 	video: HTMLVideoElement,
@@ -66,7 +67,14 @@ export async function openFaceCamera(
 		}
 	});
 	video.srcObject = stream;
-	await video.play();
+	try {
+		await video.play();
+	} catch (error) {
+		// Do not leave the camera lit; the original error goes on so the caller can tell why.
+		stream.getTracks().forEach((track) => track.stop());
+		video.srcObject = null;
+		throw error;
+	}
 
 	return {
 		preview: () => frameToBlob(video, FACE_PREVIEW_MAX_WIDTH),

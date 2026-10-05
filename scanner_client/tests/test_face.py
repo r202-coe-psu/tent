@@ -222,7 +222,10 @@ class FaceServiceTests(unittest.IsolatedAsyncioTestCase):
     async def test_walk_in_uses_the_photo_set_aside_by_the_full_read(self):
         service = self.make()
         started = await self.start_walk_in(service)
-        self.assertEqual(started, {"ok": True, "reference": "reading"})
+        self.assertEqual(
+            started,
+            {"ok": True, "reference": "reading", "max_attempts": PROFILE.max_attempts},
+        )
         self.assertEqual(await service.verify(self.frames()), {"result": "match", "attempt": 1})
 
     async def test_starting_a_check_does_not_throw_away_the_photo_just_set_aside(self):
@@ -327,10 +330,22 @@ class FaceServiceTests(unittest.IsolatedAsyncioTestCase):
     async def test_preview_frames_get_a_hint(self):
         service = self.make()
         await self.start_walk_in(service)
-        self.assertEqual(await service.frame(jpeg()), {"face": True, "hint": "ok", "ready": True})
+        reply = await service.frame(jpeg())
+        self.assertEqual(
+            {key: reply[key] for key in ("face", "hint", "ready")},
+            {"face": True, "hint": "ok", "ready": True},
+        )
+        self.assertIn(reply["reference"], ("reading", "ready"))
         service = self.make(FakeEngine(faces=[face_row(w=520, x=10)]))
         await self.start_walk_in(service)
         self.assertEqual((await service.frame(jpeg()))["hint"], "too_close")
+
+    async def test_preview_frames_say_when_the_chip_photo_has_been_read(self):
+        # The check-in screen keeps "leave the card in" up until this turns ready.
+        service = self.make()
+        await self.start_walk_in(service)
+        await service._session.reference_task
+        self.assertEqual((await service.frame(jpeg()))["reference"], "ready")
 
     async def test_bad_input_is_refused(self):
         service = self.make()

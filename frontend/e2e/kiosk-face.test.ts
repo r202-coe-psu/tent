@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type Route } from '@playwright/test';
 import {
 	KIOSK_CITIZEN_ID,
 	KIOSK_QUERY,
@@ -56,6 +56,23 @@ async function walkInUntilCardRead(page: Page, options: KioskMockOptions) {
 }
 
 const agree = (page: Page) => page.getByRole('button', { name: 'ยินยอม เริ่มตรวจใบหน้า' });
+const skip = (page: Page) => page.getByRole('button', { name: 'ข้าม ให้เจ้าหน้าที่ตรวจแทน' });
+const guide = (page: Page) => page.getByTestId('kiosk-face-guide');
+
+function json(route: Route, body: unknown) {
+	return route.fulfill({
+		status: 200,
+		contentType: 'application/json',
+		body: JSON.stringify(body)
+	});
+}
+
+/** The person stays at the camera: the preview never says "well framed", so no verdict is asked. */
+async function holdAtCamera(page: Page, reply: Record<string, unknown> = {}) {
+	await page.route('**/api/v1/scanner/kiosk/face/frame', (route) =>
+		json(route, { face: true, hint: 'too_far', ready: false, ...reply })
+	);
+}
 
 test.describe('face check — walk-in registration', () => {
 	test('consent, check, then the registration goes ahead', async ({ page }) => {
@@ -181,6 +198,137 @@ test.describe('face check — walk-in registration', () => {
 		expect(mock.calls.filter((call) => /face\/(start|frame|verify)/.test(call))).toEqual([]);
 	});
 
+	test('skipping at the camera registers without a result screen', async ({ page }) => {
+		const mock = await walkInUntilCardRead(page, { face: { mode: 'on' } });
+		await holdAtCamera(page);
+
+		await agree(page).click();
+		await expect(guide(page)).toBeVisible();
+		await skip(page).click();
+
+		await expect(page.getByRole('heading', { name: 'ลงทะเบียนสำเร็จ' })).toBeVisible();
+		await expect(page.getByText('ระบบยืนยันไม่ได้ในขณะนี้')).toHaveCount(0);
+		expect(mock.calls).not.toContain('face/verify');
+		expect(mock.calls).toContain('face/cancel');
+		expect(mock.calls).toContain('register');
+	});
+
+	test('there is no skip button before the person agrees', async ({ page }) => {
+		await walkInUntilCardRead(page, { face: { mode: 'on' } });
+
+		await expect(agree(page)).toBeVisible();
+		await expect(skip(page)).toHaveCount(0);
+	});
+
+	test('the card notice is for check-in only', async ({ page }) => {
+		await walkInUntilCardRead(page, { face: { mode: 'on' } });
+		await holdAtCamera(page);
+
+		await expect(agree(page)).toBeVisible();
+		await expect(page.getByTestId('kiosk-face-card-notice')).toHaveCount(0);
+		await agree(page).click();
+		await expect(guide(page)).toBeVisible();
+		await expect(page.getByTestId('kiosk-face-card-notice')).toHaveCount(0);
+	});
+
+	test('the guide outline is amber with an alert icon while a fix is asked for', async ({
+		page
+	}) => {
+		await walkInUntilCardRead(page, { face: { mode: 'on' } });
+		await holdAtCamera(page);
+
+		await agree(page).click();
+
+		await expect(guide(page)).toHaveAttribute('data-face-guide', 'problem');
+		await expect(page.getByTestId('kiosk-face-guide-icon')).toBeVisible();
+		await expect(page.getByTestId('kiosk-face-message')).toContainText('ขยับเข้าใกล้');
+	});
+
+	test('the guide outline turns emerald with a check when the face is well placed', async ({
+		page
+	}) => {
+		await walkInUntilCardRead(page, { face: { mode: 'on' } });
+		await page.route('**/api/v1/scanner/kiosk/face/verify', () => {
+			// never answered: the person stays on the camera step with a well-framed face
+		});
+
+		await agree(page).click();
+
+		await expect(guide(page)).toHaveAttribute('data-face-guide', 'ready');
+		await expect(page.getByTestId('kiosk-face-guide-icon')).toBeVisible();
+	});
+
+	test('says the system is getting ready while the hardware answer is awaited', async ({
+		page
+	}) => {
+		const mock = await mockKioskApi(page, { lookup: NO_PRE_REGISTRATION, face: { mode: 'on' } });
+		let release: () => void = () => {};
+		const gate = new Promise<void>((resolve) => (release = resolve));
+		await page.route('**/api/v1/scanner/kiosk/hardware', async (route) => {
+			// Only the face step waits: the pages before it need the answer to get there.
+			if (page.url().includes('/kiosk/register/face')) await gate;
+			await json(route, {
+				qr_input: 'camera',
+				camera_label: null,
+				reader_max_gap_ms: 50,
+				face_check: { mode: 'on', flows: ['check_in', 'walk_in'] }
+			});
+		});
+		await page.goto(`/kiosk/scanner/remove-card${KIOSK_QUERY}`);
+		await page.locator('[data-kiosk-card-ready="true"]').waitFor({ state: 'attached' });
+		await dispatchKioskEvent(page, 'kiosk:smart-card-read', { citizenId: KIOSK_CITIZEN_ID });
+		await page.getByRole('button', { name: 'ลงทะเบียนใหม่' }).click();
+		await page.getByRole('button', { name: 'ยินยอมและดำเนินการ' }).click();
+		await page.locator('[data-kiosk-register-ready="true"]').waitFor({ state: 'attached' });
+		await dispatchKioskEvent(page, 'kiosk:smart-card-reading');
+		await dispatchKioskEvent(page, 'kiosk:smart-card-full-read', { citizen_id: KIOSK_CITIZEN_ID });
+
+		await expect(page.getByRole('status').filter({ hasText: 'กำลังเตรียมระบบ…' })).toBeVisible();
+		await expect(agree(page)).toHaveCount(0);
+
+		release();
+		await expect(agree(page)).toBeVisible();
+		await expect(page.getByText('กำลังเตรียมระบบ…')).toHaveCount(0);
+		expect(mock.calls).not.toContain('register');
+	});
+
+	test('after a result that is not a match, the done page says staff will check again', async ({
+		page
+	}) => {
+		await walkInUntilCardRead(page, {
+			face: { mode: 'on', verdicts: [{ result: 'not_confirmed', reason: 'x', attempt: 3 }] }
+		});
+
+		await agree(page).click();
+		await page.getByRole('button', { name: 'ดำเนินการต่อ' }).click();
+
+		await expect(page.getByRole('heading', { name: 'ลงทะเบียนสำเร็จ' })).toBeVisible();
+		await expect(page.getByText('เจ้าหน้าที่จะตรวจสอบตัวตนของท่านอีกครั้ง')).toBeVisible();
+	});
+
+	test('the done page says nothing extra after a match', async ({ page }) => {
+		await walkInUntilCardRead(page, { face: { mode: 'on' } });
+
+		await agree(page).click();
+
+		await expect(page.getByRole('heading', { name: 'ลงทะเบียนสำเร็จ' })).toBeVisible();
+		await expect(page.getByText('เจ้าหน้าที่จะตรวจสอบตัวตนของท่านอีกครั้ง')).toHaveCount(0);
+	});
+
+	test('shadow mode never adds the staff line to the done page', async ({ page }) => {
+		await walkInUntilCardRead(page, {
+			face: {
+				mode: 'shadow',
+				verdicts: [{ result: 'not_confirmed', reason: 'x', attempt: 3 }]
+			}
+		});
+
+		await agree(page).click();
+
+		await expect(page.getByRole('heading', { name: 'ลงทะเบียนสำเร็จ' })).toBeVisible();
+		await expect(page.getByText('เจ้าหน้าที่จะตรวจสอบตัวตนของท่านอีกครั้ง')).toHaveCount(0);
+	});
+
 	test('fits the portrait monitor without scrolling', async ({ page }) => {
 		await page.setViewportSize({ width: 1080, height: 1920 });
 		await walkInUntilCardRead(page, { face: { mode: 'on' } });
@@ -239,6 +387,38 @@ test.describe('face check — pre-registered check-in', () => {
 		await expect
 			.poll(() => mock.calls.filter((call) => call === 'face/cancel').length)
 			.toBeGreaterThan(before);
+	});
+
+	test('asks to keep the card in, then says when it may come out', async ({ page }) => {
+		await insertCard(page, { lookup: { kind: 'household', members: 4 }, face: { mode: 'on' } });
+		await holdAtCamera(page, { hint: 'ok', reference: 'reading' });
+		const notice = page.getByTestId('kiosk-face-card-notice');
+
+		await expect(notice).toContainText('กรุณาเสียบบัตรค้างไว้จนกว่าระบบจะบอกให้ถอด');
+		await agree(page).click();
+		await expect(guide(page)).toBeVisible();
+		await expect(notice).toHaveAttribute('data-card-removable', 'false');
+
+		await page.unroute('**/api/v1/scanner/kiosk/face/frame');
+		await holdAtCamera(page, { hint: 'ok', reference: 'ready' });
+
+		await expect(notice).toHaveAttribute('data-card-removable', 'true');
+		await expect(notice).toContainText('ถอดบัตรได้แล้ว');
+	});
+
+	test('skipping at the camera goes straight on to the member list', async ({ page }) => {
+		const mock = await insertCard(page, {
+			lookup: { kind: 'household', members: 4 },
+			face: { mode: 'on' }
+		});
+		await holdAtCamera(page);
+
+		await agree(page).click();
+		await skip(page).click();
+
+		await expect(page.getByRole('heading', { name: 'เลือกสมาชิก' })).toBeVisible();
+		await expect(page.getByText('ระบบยืนยันไม่ได้ในขณะนี้')).toHaveCount(0);
+		expect(mock.calls).not.toContain('face/verify');
 	});
 
 	test('with the face check off the member list shows at once', async ({ page }) => {

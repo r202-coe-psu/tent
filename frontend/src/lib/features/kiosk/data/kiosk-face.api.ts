@@ -29,8 +29,11 @@ export type KioskFaceApi = {
 	start(citizenId: string, flow: FaceCheckFlow): Promise<FaceStartReply>;
 	frame(jpeg: Blob): Promise<FaceFrameReply>;
 	verify(frames: readonly Blob[]): Promise<FaceVerifyReply>;
-	/** Best effort: wipes what the scanner client holds for this person. Never throws. */
-	cancel(): Promise<void>;
+	/**
+	 * Best effort: wipes what the scanner client holds for this person. Never throws. `reason` is
+	 * one of the scanner client's allowed codes (camera_denied, ..., user_skipped), for its log only.
+	 */
+	cancel(reason?: string): Promise<void>;
 };
 
 export async function blobToBase64(blob: Blob): Promise<string> {
@@ -47,8 +50,8 @@ export async function blobToBase64(blob: Blob): Promise<string> {
  * Wipes what the scanner client holds for the person at the kiosk (chip photo, check result).
  * Pages call it when they let the person go; it never throws.
  */
-export function cancelKioskFaceCheck(): Promise<void> {
-	return createKioskFaceApi().cancel();
+export function cancelKioskFaceCheck(reason?: string): Promise<void> {
+	return createKioskFaceApi().cancel(reason);
 }
 
 /**
@@ -109,9 +112,14 @@ export function createKioskFaceApi(fetchFn: typeof fetch = fetch): KioskFaceApi 
 			);
 			return parse(faceVerifyReplySchema, payload);
 		},
-		async cancel() {
+		async cancel(reason) {
 			try {
-				await post('cancel', '{}', 'application/json', KIOSK_FACE_START_TIMEOUT_MS);
+				await post(
+					'cancel',
+					JSON.stringify(reason ? { reason } : {}),
+					'application/json',
+					KIOSK_FACE_START_TIMEOUT_MS
+				);
 			} catch {
 				// Nothing to do: the scanner client also wipes it on the next card and after 5 minutes.
 			}
