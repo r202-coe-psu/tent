@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-10-04 # CR-152 kiosk phone check-in toggle
+updated: 2026-10-05 # CR-153 role-based daily SOP assessment
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 
@@ -163,3 +163,4 @@ note: ดัชนี Change Record ทุกตัว — กติกาอย
 | [CR-150](CR-150-kiosk-label-stacked-qr-name-tag.md) | Kiosk label — QR บน / ข้อความล่าง (`ชื่อ` · ชื่อ-นามสกุล · `ศูนย์ {shelter_code}`) ใช้ component QrNameTag ร่วมกับตั๋ว pre-register, kioskQrBoxMm สูตร stacked, no schema_v bump | approved | volatile | 2026-09-27 (approved 2026-10-04) | frontend/src/lib/components/qr-name-tag.svelte, frontend/src/lib/utils/qrcode.ts, frontend/src/lib/features/kiosk/domain/print-label.ts, features/public-register/ui/booking-ticket.svelte |
 | [CR-151](CR-151-kiosk-pre-registration-check-in.md) | Kiosk รับรายงานตัวผู้ลงทะเบียนล่วงหน้า — เลิกสร้าง evacuee จากบัตร (/draft → 410) เปลี่ยนเป็นรับรายงานตัวผู้จองทางเว็บ (pre_registered → arriving) ผ่าน QR ใบจอง / บัตร ปชช. / เบอร์โทร, KIOSK_LOOKUP_MANGO_INDEXES 3 ตัว, no schema_v bump (คงเดิม (ไม่อัปเกรด schema_v; อิงตามเวอร์ชันปัจจุบันของ develop)) | approved | volatile | 2026-09-24 (approved 2026-10-04) | docs/data/schema.md §1.1, docs/data/api-contract.md, docs/features/smart-card-registration-spec.md, CR-097, CONTEXT.md, frontend kiosk/scanners, scanner_client |
 | [CR-152](CR-152-kiosk-phone-check-in-toggle.md) | Kiosk phone check-in toggle — shelter `feature_flags.kiosk_phone_check_in_enabled` (default false) เปิด/ปิดที่ backoffice, kiosk อ่านผ่าน `POST /api/v1/scanner/kiosk/config`, fail closed, no schema_v bump | approved | volatile | 2026-09-25 (approved 2026-10-04) | docs/data/schema.md §3.1 feature_flags, docs/data/api-contract.md scanner/kiosk config, frontend shelters + kiosk, scanner_client allowlist |
+| [CR-153](CR-153-daily-sop-role-assessments.md) | แบบประเมิน Daily SOP ประจำวันแยกตามหน้าที่ (9 Role รวม 79 ข้อ) — เพิ่มเอกสาร daily_sop_role_assessment (schema_v 1) แยก 1 ฉบับต่อศูนย์/วัน/Role, กำหนด authorization/VDU/Bangkok-date และ Mango Index โดยไม่แปลงเอกสาร Legacy | approved | volatile | 2026-09-26 (approved 2026-10-05) | docs/data/schema.md §2.34, daily_sop_role_assessment schema_v 1, frontend/src/lib/features/daily-sop, frontend/src/lib/server/shelter-access-design.ts |
