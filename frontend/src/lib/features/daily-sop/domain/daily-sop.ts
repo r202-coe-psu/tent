@@ -1,6 +1,12 @@
+import Decimal from 'decimal.js';
 import { z } from 'zod';
 import { SOP_RATIO_KEYS, type SopRatioKey } from '$lib/features/sop-ratios/domain/sop-ratio';
-import { DAILY_SOP_ROLE_QUESTIONS } from './daily-sop.questions';
+import {
+	DAILY_SOP_ROLE_QUESTION_COUNTS,
+	DAILY_SOP_ROLE_QUESTION_IDS,
+	DAILY_SOP_ROLE_QUESTION_VERSION,
+	DAILY_SOP_ROLE_QUESTIONS
+} from './daily-sop.questions';
 
 export const DAILY_SOP_ROLE_DOCUMENT_TYPE = 'daily_sop_role_assessment' as const;
 export const DAILY_SOP_ROLE_SCHEMA_VERSION = 1 as const;
@@ -13,15 +19,50 @@ export function classifyDailySopDocument(value: unknown): 'legacy' | 'role' | 'u
 }
 
 export const DAILY_SOP_ROLES = [
-	{ code: 'SM', key: 'shelter_manager', label: 'ผู้จัดการศูนย์พักพิง' },
-	{ code: 'REG', key: 'registration_staff', label: 'ลงทะเบียนและข้อมูลผู้พักพิง' },
-	{ code: 'TRG', key: 'triage_staff', label: 'คัดกรองและกลุ่มเปราะบาง' },
-	{ code: 'MED', key: 'medical_staff', label: 'การแพทย์และสุขภาพ' },
-	{ code: 'KS', key: 'kitchen_staff', label: 'ครัวและโภชนาการ' },
-	{ code: 'SC', key: 'supply_coordinator', label: 'คลัง พัสดุ และการแจกจ่าย' },
-	{ code: 'VC', key: 'volunteer_coordinator', label: 'อาสาสมัครและกำลังคน' },
-	{ code: 'SO', key: 'security_officer', label: 'ความปลอดภัย' },
-	{ code: 'FAC', key: 'facility_staff', label: 'สถานที่ พื้นที่พัก และสาธารณูปโภค' }
+	{
+		code: 'SM',
+		key: 'shelter_manager',
+		label: 'ผู้จัดการศูนย์พักพิง',
+		capabilities: ['shelter_manager']
+	},
+	{
+		code: 'REG',
+		key: 'registration_staff',
+		label: 'ลงทะเบียนและข้อมูลผู้พักพิง',
+		capabilities: ['registration_staff']
+	},
+	{
+		code: 'TRG',
+		key: 'triage_staff',
+		label: 'คัดกรองและกลุ่มเปราะบาง',
+		capabilities: ['triage_staff']
+	},
+	{
+		code: 'MED',
+		key: 'medical_staff',
+		label: 'การแพทย์และสุขภาพ',
+		capabilities: ['medical_staff']
+	},
+	{ code: 'KS', key: 'kitchen_staff', label: 'ครัวและโภชนาการ', capabilities: ['kitchen_staff'] },
+	{
+		code: 'SC',
+		key: 'supply_coordinator',
+		label: 'คลัง พัสดุ และการแจกจ่าย',
+		capabilities: ['supply_coordinator', 'warehouse_staff']
+	},
+	{
+		code: 'VC',
+		key: 'volunteer_coordinator',
+		label: 'อาสาสมัครและกำลังคน',
+		capabilities: ['volunteer_coordinator']
+	},
+	{ code: 'SO', key: 'security_officer', label: 'ความปลอดภัย', capabilities: ['security_officer'] },
+	{
+		code: 'FAC',
+		key: 'facility_staff',
+		label: 'สถานที่ พื้นที่พัก และสาธารณูปโภค',
+		capabilities: ['facility_staff']
+	}
 ] as const;
 
 export type DailySopRoleCode = (typeof DAILY_SOP_ROLES)[number]['code'];
@@ -46,355 +87,324 @@ export const dailySopReviewDates = (assessmentDates: readonly string[], today: s
 		b.localeCompare(a)
 	);
 
-export type MetricField = {
-	key: string;
-	label: string;
-	unit: string;
-	step?: string;
-};
-
-type MetricSpec = {
+export type MetricField = { key: string; label: string; unit: string; step: string };
+type MetricValues = Readonly<Record<string, number | null | undefined>>;
+type MetricDefinition = {
 	fields: readonly MetricField[];
-	formula: string;
+	threshold: string;
+	parameterKey?: SopRatioKey;
+	evaluate: (values: MetricValues, parameter?: Decimal) => boolean | null;
+};
+export type MetricSpec = {
+	fields: readonly MetricField[];
 	threshold: string;
 	parameter?: { key: SopRatioKey; value: string };
-	evaluate: (values: Readonly<Record<string, number | null>>) => boolean | null;
+	evaluate: (values: MetricValues) => boolean | null;
 };
 
-const value = (values: Readonly<Record<string, number | null>>, key: string) => {
-	const item = values[key];
-	return typeof item === 'number' && Number.isFinite(item) ? item : null;
+const field = (key: string, label: string, unit: string, step = '1'): MetricField => ({
+	key,
+	label,
+	unit,
+	step
+});
+
+const decimalValue = (values: MetricValues, key: string): Decimal | null => {
+	const value = values[key];
+	return typeof value === 'number' && Number.isFinite(value) ? new Decimal(String(value)) : null;
 };
 
-const coverage = (
-	values: Readonly<Record<string, number | null>>,
-	required: string,
-	done: string,
-	percent = 100
-) => {
-	const total = value(values, required);
-	const complete = value(values, done);
-	if (total === null || complete === null || total < 0 || complete < 0) return null;
-	if (complete > total) return false;
-	return total === 0 ? complete === 0 : (complete / total) * 100 >= percent;
+const compare = (
+	values: MetricValues,
+	left: string,
+	right: string,
+	operator: 'gte' | 'lte' | 'eq'
+): boolean | null => {
+	const a = decimalValue(values, left);
+	const b = decimalValue(values, right);
+	if (!a || !b || a.isNegative() || b.isNegative()) return null;
+	return operator === 'gte' ? a.gte(b) : operator === 'lte' ? a.lte(b) : a.eq(b);
 };
 
-const metrics: Partial<Record<string, MetricSpec>> = {
+const equalCoverage = (values: MetricValues): boolean | null =>
+	compare(values, 'complete', 'required', 'eq');
+
+const metricDefinitions: Record<string, MetricDefinition> = {
 	'D-SM-02': {
 		fields: [
-			{ key: 'occupants', label: 'จำนวนผู้พักพิงปัจจุบัน', unit: 'คน', step: '1' },
-			{ key: 'capacity', label: 'ความจุที่ได้รับอนุมัติ', unit: 'คน', step: '1' }
+			field('occupants', 'จำนวนผู้พักพิงปัจจุบัน', 'คน'),
+			field('capacity', 'ความจุที่ได้รับอนุมัติ', 'คน')
 		],
-		formula: 'ผู้พักพิง ≤ ความจุที่ได้รับอนุมัติ',
-		threshold: 'จำนวนผู้พักพิงไม่เกินความจุที่ได้รับอนุมัติ',
-		evaluate: (v) => {
-			const people = value(v, 'occupants');
-			const capacity = value(v, 'capacity');
-			return people === null || capacity === null || people < 0 || capacity < 0
-				? null
-				: people <= capacity;
-		}
+		threshold: 'occupants ≤ capacity',
+		evaluate: (values) => compare(values, 'occupants', 'capacity', 'lte')
 	},
-	'D-REG-03': coverageMetric(
-		'ผู้ที่ต้องได้รับความช่วยเหลือ',
-		'ผู้ที่ได้รับความช่วยเหลือ',
-		'จำนวนที่ช่วย ÷ จำนวนที่ต้องช่วย × 100 ≥ 100%',
-		100
-	),
-	'D-REG-04': coverageMetric(
-		'รายการลงทะเบียนใหม่ที่เข้าเกณฑ์',
-		'รายการที่กรอกข้อมูลบังคับครบ',
-		'รายการครบ ÷ รายการที่เข้าเกณฑ์ × 100 ≥ 100%',
-		100
-	),
-	'D-TRG-01': coverageMetric(
-		'ผู้พักพิงที่มาถึง',
-		'ผู้ที่คัดกรองแล้ว',
-		'คัดกรองแล้ว ÷ ผู้มาถึง × 100 = 100%',
-		100
-	),
-	'D-TRG-05': coverageMetric(
-		'ผู้พักพิงกลุ่มเสี่ยงที่ตรวจพบ',
-		'รายการที่บันทึกประเภทและความต้องการครบ',
-		'ข้อมูลครบ ÷ จำนวนที่ตรวจพบ × 100 = 100%',
-		100
-	),
-	'D-TRG-08': coverageMetric(
-		'รายการที่ต้องติดตามในรอบนี้',
-		'รายการที่ติดตามแล้ว',
-		'ติดตามแล้ว ÷ รายการที่ต้องติดตาม × 100 = 100%',
-		100
-	),
-	'D-MED-08': coverageMetric(
-		'เหตุที่เข้าเกณฑ์ส่งต่อ',
-		'เหตุที่ส่งต่อภายใน 24 ชั่วโมง',
-		'ส่งต่อภายใน 24 ชม. ÷ เหตุที่เข้าเกณฑ์ × 100 ≥ 90%',
-		90
-	),
-	'D-KS-02': {
+	'D-REG-03': {
 		fields: [
-			{ key: 'planned', label: 'จำนวนอาหารตามแผนรอบนี้', unit: 'ที่', step: '1' },
-			{ key: 'ready', label: 'จำนวนอาหารพร้อมแจก', unit: 'ที่', step: '1' }
+			field('required', 'ผู้ที่ต้องได้รับความช่วยเหลือ', 'คน'),
+			field('complete', 'ผู้ที่ได้รับความช่วยเหลือ', 'คน')
 		],
-		formula: 'จำนวนอาหารพร้อมแจก ≥ จำนวนตามแผน',
-		threshold: 'จำนวนอาหารพร้อมแจกไม่น้อยกว่าจำนวนตามแผน',
-		evaluate: (v) => compare(v, 'ready', 'planned', '>=')
+		threshold: 'complete = required; ถ้า required = 0 ต้อง complete = 0',
+		evaluate: equalCoverage
 	},
-	'D-KS-03': coverageMetric(
-		'ผู้พักพิงที่ต้องการอาหารเฉพาะ',
-		'ผู้ที่ได้รับอาหารตามความต้องการ',
-		'ได้รับครบ ÷ ผู้ที่ต้องการ × 100 = 100%',
-		100
-	),
+	'D-TRG-01': {
+		fields: [
+			field('required', 'ผู้พักพิงที่มาถึง', 'คน'),
+			field('complete', 'ผู้ที่คัดกรองแล้ว', 'คน')
+		],
+		threshold: 'complete = required; ถ้า required = 0 ต้อง complete = 0',
+		evaluate: equalCoverage
+	},
+	'D-TRG-05': {
+		fields: [
+			field('required', 'ผู้พักพิงกลุ่มเสี่ยงที่ตรวจพบ', 'คน'),
+			field('complete', 'ผู้พักพิงที่มีข้อมูลประเภทและความต้องการครบ', 'คน')
+		],
+		threshold: 'complete = required; ถ้า required = 0 ต้อง complete = 0',
+		evaluate: equalCoverage
+	},
+	'D-TRG-08': {
+		fields: [
+			field('required', 'รายการที่ต้องติดตาม', 'รายการ'),
+			field('complete', 'รายการที่ติดตามแล้ว', 'รายการ')
+		],
+		threshold: 'complete = required; ถ้า required = 0 ต้อง complete = 0',
+		evaluate: equalCoverage
+	},
 	'D-KS-06': {
 		fields: [
-			{ key: 'required', label: 'อุปกรณ์ที่ต้องใช้ในรอบนี้', unit: 'ชิ้น', step: '1' },
-			{ key: 'usable', label: 'อุปกรณ์ที่สะอาดและใช้งานได้', unit: 'ชิ้น', step: '1' }
+			field('required', 'อุปกรณ์ที่ต้องใช้', 'ชิ้น'),
+			field('usable', 'อุปกรณ์สะอาดและใช้งานได้', 'ชิ้น')
 		],
-		formula: 'อุปกรณ์ที่ใช้ได้ ≥ อุปกรณ์ที่ต้องใช้',
-		threshold: 'จำนวนอุปกรณ์สะอาดและพร้อมใช้ไม่น้อยกว่าจำนวนที่ต้องใช้',
-		evaluate: (v) => compare(v, 'usable', 'required', '>=')
+		threshold: 'usable ≥ required',
+		evaluate: (values) => compare(values, 'usable', 'required', 'gte')
 	},
 	'D-KS-10': {
 		fields: [
-			{ key: 'produced', label: 'ผลิต', unit: 'ที่', step: '1' },
-			{ key: 'distributed', label: 'แจก', unit: 'ที่', step: '1' },
-			{ key: 'loss', label: 'สูญเสีย', unit: 'ที่', step: '1' },
-			{ key: 'remaining', label: 'คงเหลือจากการตรวจนับ', unit: 'ที่', step: '1' }
+			field('produced', 'ผลิต', 'ที่'),
+			field('distributed', 'แจก', 'ที่'),
+			field('loss', 'สูญเสีย', 'ที่'),
+			field('remaining', 'คงเหลือ', 'ที่')
 		],
-		formula: 'ผลิต − แจก − สูญเสีย = คงเหลือ',
-		threshold: 'ยอดผลิต − แจก − สูญเสีย เท่ากับยอดคงเหลือ',
-		evaluate: (v) => {
-			const produced = value(v, 'produced');
-			const distributed = value(v, 'distributed');
-			const loss = value(v, 'loss');
-			const remaining = value(v, 'remaining');
-			return [produced, distributed, loss, remaining].some((n) => n === null || n < 0)
-				? null
-				: Math.abs(produced! - distributed! - loss! - remaining!) < 0.000001;
-		}
-	},
-	'D-SC-01': {
-		fields: [
-			{ key: 'opening', label: 'ยอดยกมา', unit: 'หน่วย', step: '0.01' },
-			{ key: 'received', label: 'รับเข้า', unit: 'หน่วย', step: '0.01' },
-			{ key: 'issued', label: 'จ่ายออก', unit: 'หน่วย', step: '0.01' },
-			{ key: 'transferIn', label: 'โอนเข้า', unit: 'หน่วย', step: '0.01' },
-			{ key: 'transferOut', label: 'โอนออก', unit: 'หน่วย', step: '0.01' },
-			{ key: 'counted', label: 'ยอดตรวจนับจริง', unit: 'หน่วย', step: '0.01' }
-		],
-		formula: 'ยอดยกมา + รับเข้า − จ่ายออก + โอนเข้า − โอนออก = ยอดตรวจนับ',
-		threshold: 'ยอดตามบัญชีตรงกับยอดตรวจนับ',
-		evaluate: (v) => {
-			const opening = value(v, 'opening');
-			const received = value(v, 'received');
-			const issued = value(v, 'issued');
-			const transferIn = value(v, 'transferIn');
-			const transferOut = value(v, 'transferOut');
-			const counted = value(v, 'counted');
-			const all = [opening, received, issued, transferIn, transferOut, counted];
-			return all.some((n) => n === null || n < 0)
-				? null
-				: Math.abs(opening! + received! - issued! + transferIn! - transferOut! - counted!) <
-						0.000001;
+		threshold: 'produced - distributed - loss = remaining',
+		evaluate: (values) => {
+			const produced = decimalValue(values, 'produced');
+			const distributed = decimalValue(values, 'distributed');
+			const loss = decimalValue(values, 'loss');
+			const remaining = decimalValue(values, 'remaining');
+			if ([produced, distributed, loss, remaining].some((item) => !item || item.isNegative()))
+				return null;
+			return produced!.minus(distributed!).minus(loss!).eq(remaining!);
 		}
 	},
 	'D-VC-01': {
 		fields: [
-			{ key: 'rostered', label: 'อาสาสมัครตามบัญชี/ตารางกะ', unit: 'คน', step: '1' },
-			{ key: 'present', label: 'อาสาสมัครที่มาปฏิบัติงานจริง', unit: 'คน', step: '1' }
+			field('rostered', 'อาสาสมัครตามบัญชี/ตารางกะ', 'คน'),
+			field('present', 'อาสาสมัครที่มาปฏิบัติงานจริง', 'คน')
 		],
-		formula: 'ยอดตามบัญชี = ยอดมาปฏิบัติงานจริง หรือมีส่วนต่างพร้อมคำอธิบาย',
-		threshold: 'เปรียบเทียบบัญชีกับการตรวจนับในรอบ',
-		evaluate: (v) => compare(v, 'rostered', 'present', '===')
+		threshold:
+			'จำนวนตรงกันเมื่อ present = rostered; ผู้ประเมินเลือก status เองและบันทึกเหตุผลใน notes เมื่อเกี่ยวข้อง',
+		evaluate: (values) => compare(values, 'present', 'rostered', 'eq')
 	},
-	'D-VC-03': coverageMetric(
-		'งานที่ต้องใช้ทักษะเฉพาะ',
-		'งานที่มอบให้ผู้มีทักษะตรง',
-		'งานที่จับคู่ทักษะตรง ÷ งานที่ต้องใช้ทักษะ × 100 = 100%',
-		100
-	),
-	'D-VC-04': coverageMetric(
-		'อาสาสมัครที่เริ่มงานในรอบนี้',
-		'อาสาสมัครที่ผ่านการชี้แจง',
-		'ผ่านการชี้แจง ÷ ผู้เริ่มงาน × 100 = 100%',
-		100
-	),
-	'D-VC-05': coverageMetric(
-		'ผู้ที่ได้รับมอบหมายงาน',
-		'ผู้ที่มีคำสั่งงานและผู้ควบคุมครบ',
-		'เอกสารครบ ÷ ผู้ได้รับมอบหมาย × 100 = 100%',
-		100
-	),
+	'D-VC-02': {
+		fields: [
+			field('occupants', 'จำนวนผู้พักพิง', 'คน'),
+			field('volunteers', 'อาสาสมัครที่พร้อมปฏิบัติงาน', 'คน')
+		],
+		threshold: 'volunteers ≥ ceil(occupants ÷ {parameter}); ถ้า occupants = 0 ต้องการ 0 คน',
+		parameterKey: 'people_per_volunteer',
+		evaluate: (values, parameter) => ratioCompare(values, 'occupants', 'volunteers', parameter)
+	},
+	'D-VC-03': {
+		fields: [
+			field('required', 'งานที่ต้องใช้ทักษะเฉพาะ', 'งาน'),
+			field('complete', 'งานที่มอบให้ผู้มีทักษะตรง', 'งาน')
+		],
+		threshold: 'complete = required; ถ้า required = 0 ต้อง complete = 0',
+		evaluate: equalCoverage
+	},
+	'D-VC-04': {
+		fields: [
+			field('required', 'อาสาสมัครที่เริ่มงาน', 'คน'),
+			field('complete', 'อาสาสมัครที่ผ่านการชี้แจง', 'คน')
+		],
+		threshold: 'complete = required; ถ้า required = 0 ต้อง complete = 0',
+		evaluate: equalCoverage
+	},
+	'D-VC-05': {
+		fields: [
+			field('required', 'ผู้ที่ได้รับมอบหมายงาน', 'คน'),
+			field('complete', 'ผู้ที่มีคำสั่งงานและผู้ควบคุมครบ', 'คน')
+		],
+		threshold: 'complete = required; ถ้า required = 0 ต้อง complete = 0',
+		evaluate: equalCoverage
+	},
+	'D-FAC-01': {
+		fields: [
+			field('usableArea', 'พื้นที่พักอาศัยสุทธิที่ใช้ได้', 'ตร.ม.', '0.01'),
+			field('occupants', 'จำนวนผู้พักพิง', 'คน')
+		],
+		threshold:
+			'ถ้า occupants > 0: usableArea ÷ occupants ≥ {parameter}; ถ้า occupants = 0 ให้พื้นที่ขั้นต่ำเป็น 0 ตร.ม.',
+		parameterKey: 'm2_per_person_living',
+		evaluate: (values, parameter) => {
+			const area = decimalValue(values, 'usableArea');
+			const people = decimalValue(values, 'occupants');
+			if (!area || !people || area.isNegative() || people.isNegative() || !parameter) return null;
+			return people.isZero() ? area.gte(0) : area.gte(people.times(parameter));
+		}
+	},
+	'D-FAC-02': {
+		fields: [
+			field('people', 'ผู้พักพิงหญิง', 'คน'),
+			field('units', 'ห้องน้ำหญิงที่ใช้งานได้', 'ห้อง')
+		],
+		threshold: 'units ≥ ceil(people ÷ {parameter}); ถ้า people = 0 ต้องการ 0 ห้อง',
+		parameterKey: 'people_per_toilet_female',
+		evaluate: (values, parameter) => ratioCompare(values, 'people', 'units', parameter)
+	},
+	'D-FAC-03': {
+		fields: [
+			field('people', 'ผู้พักพิงชาย', 'คน'),
+			field('units', 'ห้องน้ำชายที่ใช้งานได้', 'ห้อง')
+		],
+		threshold: 'units ≥ ceil(people ÷ {parameter}); ถ้า people = 0 ต้องการ 0 ห้อง',
+		parameterKey: 'people_per_toilet_male',
+		evaluate: (values, parameter) => ratioCompare(values, 'people', 'units', parameter)
+	},
+	'D-FAC-06': {
+		fields: [field('people', 'ผู้พักพิง', 'คน'), field('units', 'จุดอาบน้ำที่ใช้งานได้', 'จุด')],
+		threshold: 'units ≥ ceil(people ÷ {parameter}); ถ้า people = 0 ต้องการ 0 จุด',
+		parameterKey: 'people_per_bathing',
+		evaluate: (values, parameter) => ratioCompare(values, 'people', 'units', parameter)
+	},
+	'D-FAC-07': {
+		fields: [field('people', 'ผู้พักพิง', 'คน'), field('units', 'จุดซักล้างที่ใช้งานได้', 'จุด')],
+		threshold: 'units ≥ ceil(people ÷ {parameter}); ถ้า people = 0 ต้องการ 0 จุด',
+		parameterKey: 'people_per_laundry',
+		evaluate: (values, parameter) => ratioCompare(values, 'people', 'units', parameter)
+	},
 	'D-FAC-08': {
 		fields: [
-			{ key: 'available', label: 'น้ำปลอดภัยพร้อมใช้', unit: 'ลิตร', step: '0.1' },
-			{ key: 'plannedNeed', label: 'ความต้องการตามแผนทรัพยากรวันนี้', unit: 'ลิตร', step: '0.1' }
+			field('available', 'น้ำปลอดภัยพร้อมใช้', 'ลิตร', '0.1'),
+			field('plannedNeed', 'ความต้องการตามแผนทรัพยากรวันนี้', 'ลิตร', '0.1')
 		],
-		formula: 'น้ำพร้อมใช้ ≥ ความต้องการตามแผนที่อนุมัติ',
-		threshold: 'น้ำที่พร้อมใช้ไม่น้อยกว่าความต้องการตามแผนวันนี้',
-		evaluate: (v) => compare(v, 'available', 'plannedNeed', '>=')
+		threshold: 'available ≥ plannedNeed',
+		evaluate: (values) => compare(values, 'available', 'plannedNeed', 'gte')
+	},
+	'D-FAC-10': {
+		fields: [field('people', 'ผู้พักพิง', 'คน'), field('units', 'จุดจ่ายน้ำที่ใช้งานได้', 'จุด')],
+		threshold: 'units ≥ ceil(people ÷ {parameter}); ถ้า people = 0 ต้องการ 0 จุด',
+		parameterKey: 'people_per_tap',
+		evaluate: (values, parameter) => ratioCompare(values, 'people', 'units', parameter)
 	}
 };
 
-function compare(
-	v: Readonly<Record<string, number | null>>,
-	left: string,
-	right: string,
-	op: '>=' | '<=' | '==='
-) {
-	const a = value(v, left);
-	const b = value(v, right);
-	if (a === null || b === null || a < 0 || b < 0) return null;
-	if (op === '>=') return a >= b;
-	if (op === '<=') return a <= b;
-	return a === b;
-}
-
-function coverageMetric(
-	labelA: string,
-	labelB: string,
-	formula: string,
-	percent = 100
-): MetricSpec {
-	return {
-		fields: [
-			{ key: 'required', label: labelA, unit: 'รายการ', step: '1' },
-			{ key: 'complete', label: labelB, unit: 'รายการ', step: '1' }
-		],
-		formula,
-		threshold: `${percent}% ของรายการ`,
-		evaluate: (v) => coverage(v, 'required', 'complete', percent)
-	};
-}
-
-function ratioMetric(
+function ratioCompare(
+	values: MetricValues,
 	peopleKey: string,
-	unitsKey: string,
-	peopleLabel: string,
-	unitsLabel: string,
-	peoplePerUnit: number,
-	unitLabel: string
-): MetricSpec {
-	return {
-		fields: [
-			{ key: peopleKey, label: peopleLabel, unit: 'คน', step: '1' },
-			{ key: unitsKey, label: unitsLabel, unit: unitLabel, step: '1' }
-		],
-		formula: `${unitsLabel} ≥ ปัดขึ้น(${peopleLabel} ÷ ${peoplePerUnit})`,
-		threshold: `${peoplePerUnit} คน/${unitLabel}`,
-		evaluate: (v) => {
-			const people = value(v, peopleKey);
-			const units = value(v, unitsKey);
-			return people === null || units === null || people < 0 || units < 0
-				? null
-				: units >= Math.ceil(people / peoplePerUnit);
-		}
-	};
+	unitKey: string,
+	parameter?: Decimal
+): boolean | null {
+	const people = decimalValue(values, peopleKey);
+	const units = decimalValue(values, unitKey);
+	if (!people || !units || people.isNegative() || units.isNegative() || !parameter) return null;
+	return units.gte(requiredUnits(people, parameter));
 }
 
-const metricParameterKeys: Partial<Record<string, SopRatioKey>> = {
-	'D-VC-02': 'people_per_volunteer',
-	'D-FAC-01': 'm2_per_person_living',
-	'D-FAC-02': 'people_per_toilet_female',
-	'D-FAC-03': 'people_per_toilet_male',
-	'D-FAC-06': 'people_per_bathing',
-	'D-FAC-07': 'people_per_laundry',
-	'D-FAC-10': 'people_per_tap'
+/** Units needed to serve `people` at `parameter` people per unit: ceil(people ÷ parameter). */
+export function requiredUnits(people: Decimal.Value, parameter: Decimal.Value): Decimal {
+	return new Decimal(people).div(parameter).ceil();
+}
+
+export const DAILY_SOP_ROLE_METRIC_CONTRACTS = Object.fromEntries(
+	Object.entries(metricDefinitions).map(([id, definition]) => [
+		id,
+		{
+			fields: definition.fields,
+			threshold: definition.threshold,
+			...(definition.parameterKey ? { parameterKey: definition.parameterKey } : {})
+		}
+	])
+) as Record<
+	string,
+	{ fields: readonly MetricField[]; threshold: string; parameterKey?: SopRatioKey }
+>;
+
+const isPositiveDecimalString = (value: string | undefined): value is string =>
+	typeof value === 'string' &&
+	/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value) &&
+	Number.isFinite(Number(value)) &&
+	Number(value) > 0 &&
+	new Decimal(value).gt(0);
+
+const isStepAligned = (value: number, step: string): boolean => {
+	try {
+		const amount = new Decimal(String(value));
+		const increment = new Decimal(step);
+		return (
+			amount.isFinite() && increment.isFinite() && increment.gt(0) && amount.mod(increment).isZero()
+		);
+	} catch {
+		return false;
+	}
 };
 
+const thresholdFor = (definition: MetricDefinition, parameterValue?: string) =>
+	definition.parameterKey
+		? definition.threshold.replace('{parameter}', parameterValue ?? `{${definition.parameterKey}}`)
+		: definition.threshold;
+
 export const metricParameterForQuestion = (questionId: string): SopRatioKey | null =>
-	metricParameterKeys[questionId] ?? null;
+	metricDefinitions[questionId]?.parameterKey ?? null;
 
 export const metricForQuestion = (
 	questionId: string,
 	ratioValues?: Partial<Record<SopRatioKey, string>> | null
 ): MetricSpec | null => {
-	const parameterKey = metricParameterForQuestion(questionId);
-	if (!parameterKey) return metrics[questionId] ?? null;
+	const definition = metricDefinitions[questionId];
+	if (!definition) return null;
+	const parameterKey = definition.parameterKey;
+	const parameterValue = parameterKey ? ratioValues?.[parameterKey] : undefined;
+	const validParameter = isPositiveDecimalString(parameterValue) ? parameterValue : undefined;
+	if (parameterKey && !validParameter) return null;
+	const parameter = validParameter ? new Decimal(validParameter) : undefined;
+	return {
+		fields: definition.fields,
+		threshold: thresholdFor(definition, validParameter),
+		...(parameterKey && validParameter
+			? { parameter: { key: parameterKey, value: validParameter } }
+			: {}),
+		evaluate: (values) => {
+			if (
+				definition.fields.some((item) => {
+					const measured = values[item.key];
+					return measured !== null && measured !== undefined && !isStepAligned(measured, item.step);
+				})
+			)
+				return null;
+			return definition.evaluate(values, parameter);
+		}
+	};
+};
 
-	const rawParameter = ratioValues?.[parameterKey];
-	const parameterValue = rawParameter === undefined ? Number.NaN : Number(rawParameter);
-	if (!Number.isFinite(parameterValue) || parameterValue <= 0) return null;
-	const withParameter = (metric: MetricSpec): MetricSpec => ({
-		...metric,
-		parameter: { key: parameterKey, value: rawParameter! }
-	});
-
-	switch (questionId) {
-		case 'D-VC-02':
-			return withParameter({
-				fields: [
-					{ key: 'occupants', label: 'จำนวนผู้พักพิง', unit: 'คน', step: '1' },
-					{ key: 'volunteers', label: 'อาสาสมัครที่พร้อมปฏิบัติงาน', unit: 'คน', step: '1' }
-				],
-				formula: `อาสาสมัครพร้อม ≥ ปัดขึ้น(จำนวนผู้พักพิง ÷ ${parameterValue})`,
-				threshold: `${parameterValue} ผู้พักพิง/อาสาสมัคร 1 คน`,
-				evaluate: (v) => {
-					const people = value(v, 'occupants');
-					const volunteers = value(v, 'volunteers');
-					return people === null || volunteers === null || people < 0 || volunteers < 0
-						? null
-						: volunteers >= Math.ceil(people / parameterValue);
-				}
-			});
-		case 'D-FAC-01':
-			return withParameter({
-				fields: [
-					{
-						key: 'usableArea',
-						label: 'พื้นที่พักอาศัยสุทธิที่ใช้ได้',
-						unit: 'ตร.ม.',
-						step: '0.01'
-					},
-					{ key: 'occupants', label: 'จำนวนผู้พักพิง', unit: 'คน', step: '1' }
-				],
-				formula: `พื้นที่สุทธิ ÷ ผู้พักพิง ≥ ${parameterValue} ตร.ม./คน`,
-				threshold: `${parameterValue} ตร.ม./คน`,
-				evaluate: (v) => {
-					const area = value(v, 'usableArea');
-					const people = value(v, 'occupants');
-					return area === null || people === null || area < 0 || people < 0
-						? null
-						: people === 0
-							? true
-							: area / people >= parameterValue;
-				}
-			});
-		case 'D-FAC-02':
-			return withParameter(
-				ratioMetric(
-					'people',
-					'units',
-					'ผู้พักพิงหญิง',
-					'ห้องน้ำหญิงที่ใช้งานได้',
-					parameterValue,
-					'ห้อง'
-				)
-			);
-		case 'D-FAC-03':
-			return withParameter(
-				ratioMetric(
-					'people',
-					'units',
-					'ผู้พักพิงชาย',
-					'ห้องน้ำชายที่ใช้งานได้',
-					parameterValue,
-					'ห้อง'
-				)
-			);
-		case 'D-FAC-06':
-			return withParameter(
-				ratioMetric('people', 'units', 'ผู้พักพิง', 'จุดอาบน้ำที่ใช้งานได้', parameterValue, 'จุด')
-			);
-		case 'D-FAC-07':
-			return withParameter(
-				ratioMetric('people', 'units', 'ผู้พักพิง', 'จุดซักล้างที่ใช้งานได้', parameterValue, 'จุด')
-			);
-		case 'D-FAC-10':
-			return withParameter(
-				ratioMetric('people', 'units', 'ผู้พักพิง', 'จุดจ่ายน้ำที่ใช้งานได้', parameterValue, 'จุด')
-			);
+/** Ratio rows only: minimum count implied by the parameter, for display next to the formula result. */
+export const requiredForMetric = (
+	metric: MetricSpec | null,
+	values: MetricValues
+): { amount: string; unit: string } | null => {
+	if (!metric?.parameter) return null;
+	const pairs = [
+		['people', 'units'],
+		['occupants', 'volunteers']
+	] as const;
+	for (const [peopleKey, unitKey] of pairs) {
+		const target = metric.fields.find((item) => item.key === unitKey);
+		const people = values[peopleKey];
+		if (!target || people === null || people === undefined || people < 0) continue;
+		return {
+			amount: requiredUnits(people, metric.parameter.value).toString(),
+			unit: target.unit
+		};
 	}
 	return null;
 };
@@ -403,27 +413,12 @@ export const promptForQuestion = (
 	question: DailySopRoleQuestion,
 	ratioValues?: Partial<Record<SopRatioKey, string>> | null
 ): string => {
-	const metric = metricForQuestion(question.id, ratioValues);
-	if (!metric) return question.prompt;
-
-	switch (question.id) {
-		case 'D-VC-02':
-			return `มีอาสาสมัครพร้อมปฏิบัติงานอย่างน้อย 1 คนต่อผู้พักพิง ${metric.parameter?.value} คนหรือไม่`;
-		case 'D-FAC-01':
-			return `พื้นที่พักอาศัยสุทธิต่อผู้พักพิงไม่น้อยกว่า ${metric.threshold} หรือไม่`;
-		case 'D-FAC-02':
-			return `ห้องน้ำหญิงที่ใช้งานได้รองรับผู้พักพิงหญิงตามอัตราส่วนไม่เกิน ${metric.threshold} หรือไม่`;
-		case 'D-FAC-03':
-			return `ห้องน้ำชายที่ใช้งานได้รองรับผู้พักพิงชายตามอัตราส่วนไม่เกิน ${metric.threshold} หรือไม่`;
-		case 'D-FAC-06':
-			return `จุดอาบน้ำที่ใช้งานได้รองรับผู้พักพิงตามอัตราส่วนไม่เกิน ${metric.threshold} หรือไม่`;
-		case 'D-FAC-07':
-			return `จุดซักล้างที่ใช้งานได้รองรับผู้พักพิงตามอัตราส่วนไม่เกิน ${metric.threshold} หรือไม่`;
-		case 'D-FAC-10':
-			return `จุดจ่ายน้ำที่ใช้งานได้รองรับผู้พักพิงตามอัตราส่วนไม่เกิน ${metric.threshold} หรือไม่`;
-		default:
-			return question.prompt;
-	}
+	const parameterKey = metricParameterForQuestion(question.id);
+	if (!parameterKey) return question.prompt;
+	const parameter = ratioValues?.[parameterKey];
+	return isPositiveDecimalString(parameter)
+		? question.prompt.replace(`{${parameterKey}}`, parameter)
+		: question.prompt;
 };
 
 export const questionsForRole = (role: DailySopRoleCode) =>
@@ -440,14 +435,22 @@ export const canAssessRole = (
 	if (roles.includes('system_admin') || hasCapability('shelter_manager', roles, shelterCode))
 		return true;
 	const roleDefinition = roleForCode(role);
-	return roleDefinition !== null && hasCapability(roleDefinition.key, roles, shelterCode);
+	return (
+		roleDefinition?.capabilities.some((capability) =>
+			hasCapability(capability, roles, shelterCode)
+		) ?? false
+	);
 };
 
 export const assessableRoles = (roles: readonly string[], shelterCode: string) =>
 	DAILY_SOP_ROLES.filter((role) => canAssessRole(role.code, roles, shelterCode));
 
 function hasCapability(capability: string, roles: readonly string[], shelterCode: string) {
-	return roles.includes(`${shelterCode}:${capability}`) || roles.includes(capability);
+	if (roles.includes(`${shelterCode}:${capability}`)) return true;
+	const scopes = roles.filter((role) => /^shelter:[^:]+$/.test(role));
+	return (
+		roles.includes(capability) && scopes.length === 1 && scopes[0] === `shelter:${shelterCode}`
+	);
 }
 
 export interface DailySopRoleControlDraft {
@@ -462,12 +465,9 @@ export type DailySopRoleDraft = Record<string, DailySopRoleControlDraft>;
 export interface DailySopRoleControlSnapshot extends DailySopRoleControlDraft {
 	id: string;
 	question: string;
-	check_method: string;
-	pass_criteria: string;
-	record_values: string;
 	metric_spec: {
 		fields: readonly MetricField[];
-		threshold?: string;
+		threshold: string;
 		parameter?: { key: SopRatioKey; value: string };
 	} | null;
 	checked_by: string;
@@ -485,7 +485,7 @@ export interface DailySopRoleAssessment {
 	role_code: DailySopRoleCode;
 	role_key: DailySopRoleKey;
 	role_label: string;
-	question_set_version?: string;
+	question_set_version?: typeof DAILY_SOP_ROLE_QUESTION_VERSION;
 	assessed_at: string;
 	assessor_name: string;
 	status: DailySopRoleAssessmentStatus;
@@ -508,7 +508,7 @@ export const createEmptyRoleDraft = (role: DailySopRoleCode): DailySopRoleDraft 
 				notes: '',
 				observations: '',
 				measured_values: Object.fromEntries(
-					(metricForQuestion(question.id)?.fields ?? []).map((field) => [field.key, null])
+					(metricForQuestion(question.id)?.fields ?? []).map((item) => [item.key, null])
 				)
 			}
 		])
@@ -528,14 +528,11 @@ export const roleDraftFromAssessment = (assessment: DailySopRoleAssessment): Dai
 	);
 
 const controlsForRoleDraft = (draft: DailySopRoleDraft, role: DailySopRoleCode) =>
-	Object.entries(draft)
-		.filter(([id]) => id.startsWith(`D-${role}-`))
-		.map(([, control]) => control);
+	questionsForRole(role).map((question) => draft[question.id]);
 
 export const summarizeRoleDraft = (draft: DailySopRoleDraft, role: DailySopRoleCode) => {
-	const controls = controlsForRoleDraft(draft, role);
 	const counts = { pass: 0, fail: 0, pending: 0, unanswered: 0 };
-	for (const control of controls) {
+	for (const control of controlsForRoleDraft(draft, role)) {
 		if (!control?.status) counts.unanswered++;
 		else if (control.status === 'Pass') counts.pass++;
 		else if (control.status === 'Fail') counts.fail++;
@@ -545,19 +542,17 @@ export const summarizeRoleDraft = (draft: DailySopRoleDraft, role: DailySopRoleC
 };
 
 export const canCompleteRoleDraft = (draft: DailySopRoleDraft, role: DailySopRoleCode) =>
-	controlsForRoleDraft(draft, role).every((control) => {
-		return (
+	controlsForRoleDraft(draft, role).every(
+		(control) =>
 			Boolean(control?.status) && (control.status === 'Pass' || control.notes.trim().length > 0)
-		);
-	});
+	);
 
 export const hasRoleDraftInput = (draft: DailySopRoleDraft, role: DailySopRoleCode) =>
-	controlsForRoleDraft(draft, role).some((control) => {
-		return (
+	controlsForRoleDraft(draft, role).some(
+		(control) =>
 			Boolean(control?.status || control?.notes.trim() || control?.observations.trim()) ||
 			Object.values(control?.measured_values ?? {}).some((item) => item !== null)
-		);
-	});
+	);
 
 export const roleAssessmentStatusFor = (
 	draft: DailySopRoleDraft,
@@ -566,7 +561,7 @@ export const roleAssessmentStatusFor = (
 
 export const roleAssessmentProgress = (draft: DailySopRoleDraft, role: DailySopRoleCode) => {
 	const counts = summarizeRoleDraft(draft, role);
-	const total = controlsForRoleDraft(draft, role).length;
+	const total = questionsForRole(role).length;
 	return {
 		...counts,
 		total,
@@ -574,110 +569,230 @@ export const roleAssessmentProgress = (draft: DailySopRoleDraft, role: DailySopR
 	};
 };
 
+const validDate = (value: string) => {
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+	const parsed = new Date(`${value}T00:00:00.000Z`);
+	return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+};
+
+export const isDailySopUtcTimestamp = (value: string) =>
+	(() => {
+		const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?Z$/.exec(value);
+		return Boolean(
+			match &&
+			validDate(match[1]) &&
+			Number(match[2]) <= 23 &&
+			Number(match[3]) <= 59 &&
+			Number(match[4]) <= 59 &&
+			Number.isFinite(Date.parse(value))
+		);
+	})();
+
+const timestampSchema = z
+	.string()
+	.refine(isDailySopUtcTimestamp, 'Timestamp must be valid UTC ISO-8601');
+const nonEmptyTrimmed = z.string().refine((value) => value.trim().length > 0);
+const metricFieldSchema = z
+	.object({
+		key: nonEmptyTrimmed,
+		label: nonEmptyTrimmed,
+		unit: nonEmptyTrimmed,
+		step: z.string().refine((value) => isPositiveDecimalString(value))
+	})
+	.strict();
+const metricSpecSchema = z
+	.object({
+		fields: z.array(metricFieldSchema).min(1),
+		threshold: nonEmptyTrimmed,
+		parameter: z
+			.object({
+				key: z.enum(SOP_RATIO_KEYS),
+				value: z.string().refine(isPositiveDecimalString)
+			})
+			.strict()
+			.optional()
+	})
+	.strict();
+
 const roleControlSchema = z
 	.object({
-		id: z.string().min(1),
-		question: z.string().min(1),
-		check_method: z.string().min(1),
-		pass_criteria: z.string().min(1),
-		record_values: z.string().min(1),
-		metric_spec: z
-			.object({
-				fields: z
-					.array(
-						z.object({
-							key: z.string().min(1),
-							label: z.string().min(1),
-							unit: z.string().min(1),
-							step: z.string().optional()
-						})
-					)
-					.min(1),
-				threshold: z.string().min(1).optional(),
-				parameter: z
-					.object({
-						key: z.enum(SOP_RATIO_KEYS),
-						value: z.string().min(1)
-					})
-					.optional()
-			})
-			.nullable(),
+		id: nonEmptyTrimmed,
+		question: nonEmptyTrimmed,
+		metric_spec: metricSpecSchema.nullable(),
 		status: z.enum(['Pass', 'Fail', 'Pending']).nullable(),
 		notes: z.string(),
 		observations: z.string(),
 		measured_values: z.record(z.string(), z.number().finite().min(0).nullable()),
-		checked_by: z.string().min(1),
-		checked_by_name: z.string().min(1).optional(),
-		checked_at: z.string().min(1)
+		checked_by: nonEmptyTrimmed,
+		checked_by_name: nonEmptyTrimmed.optional(),
+		checked_at: timestampSchema
 	})
-	.passthrough()
+	.strict()
 	.superRefine((control, ctx) => {
 		if ((control.status === 'Fail' || control.status === 'Pending') && !control.notes.trim()) {
 			ctx.addIssue({
 				code: 'custom',
-				message: 'กรุณาระบุหมายเหตุเมื่อเลือกไม่ผ่านหรือรอตรวจ',
+				message: 'Fail and Pending answers require notes',
 				path: ['notes']
 			});
 		}
 	});
 
+function issue(ctx: z.RefinementCtx, path: (string | number)[], message: string) {
+	ctx.addIssue({ code: 'custom', path, message });
+}
+
+const sameMetricFields = (actual: readonly MetricField[], expected: readonly MetricField[]) =>
+	actual.length === expected.length &&
+	actual.every((item, i) => {
+		const other = expected[i];
+		return (
+			item.key === other.key &&
+			item.label === other.label &&
+			item.unit === other.unit &&
+			item.step === other.step
+		);
+	});
+
+function validateControlContract(
+	control: DailySopRoleControlSnapshot,
+	question: DailySopRoleQuestion,
+	index: number,
+	ctx: z.RefinementCtx
+) {
+	const path: (string | number)[] = ['controls', index];
+	const definition = metricDefinitions[question.id];
+	if (!definition) {
+		if (control.metric_spec !== null || Object.keys(control.measured_values).length > 0)
+			issue(ctx, [...path, 'metric_spec'], 'Question must not have numeric metric fields');
+		if (control.question !== question.prompt)
+			issue(ctx, [...path, 'question'], 'Question text does not match the canonical snapshot');
+		return;
+	}
+	const spec = control.metric_spec;
+	if (definition.parameterKey && spec === null) {
+		if (
+			control.question !== promptForQuestion(question) ||
+			control.status !== 'Pending' ||
+			!control.notes.trim() ||
+			Object.keys(control.measured_values).length > 0
+		) {
+			issue(
+				ctx,
+				[...path, 'metric_spec'],
+				'An unavailable SOP parameter requires Pending and no metric values'
+			);
+		}
+		return;
+	}
+	if (!spec) {
+		issue(ctx, [...path, 'metric_spec'], 'Question requires its canonical metric specification');
+		return;
+	}
+	const parameter = spec.parameter;
+	if (definition.parameterKey && parameter?.key !== definition.parameterKey)
+		issue(
+			ctx,
+			[...path, 'metric_spec', 'parameter'],
+			'Question parameter does not match its canonical parameter'
+		);
+	if (!definition.parameterKey && parameter)
+		issue(ctx, [...path, 'metric_spec', 'parameter'], 'Question does not use a parameter');
+	const parameterValue =
+		parameter && parameter.key === definition.parameterKey ? parameter.value : undefined;
+	const expectedMetric = metricForQuestion(
+		question.id,
+		parameterValue && definition.parameterKey
+			? { [definition.parameterKey]: parameterValue }
+			: undefined
+	);
+	if (!expectedMetric || !sameMetricFields(spec.fields, expectedMetric.fields))
+		issue(
+			ctx,
+			[...path, 'metric_spec', 'fields'],
+			'Metric fields do not match the canonical question contract'
+		);
+	if (spec.threshold !== expectedMetric?.threshold)
+		issue(
+			ctx,
+			[...path, 'metric_spec', 'threshold'],
+			'Metric threshold does not match the canonical question contract'
+		);
+	const expectedQuestion = promptForQuestion(
+		question,
+		parameterValue && definition.parameterKey
+			? { [definition.parameterKey]: parameterValue }
+			: undefined
+	);
+	if (control.question !== expectedQuestion)
+		issue(ctx, [...path, 'question'], 'Question text does not match the canonical snapshot');
+	const expectedKeys = definition.fields.map((item) => item.key).sort();
+	const measuredKeys = Object.keys(control.measured_values).sort();
+	if (JSON.stringify(measuredKeys) !== JSON.stringify(expectedKeys))
+		issue(ctx, [...path, 'measured_values'], 'Measured value keys must match metric fields');
+	for (const item of definition.fields) {
+		const amount = control.measured_values[item.key];
+		if (amount !== null && amount !== undefined && !isStepAligned(amount, item.step))
+			issue(ctx, [...path, 'measured_values', item.key], 'Measured value does not match its step');
+	}
+}
+
 export const dailySopRoleAssessmentSchema = z
 	.object({
-		_id: z.string().min(1),
+		_id: nonEmptyTrimmed,
+		_rev: nonEmptyTrimmed.optional(),
 		type: z.literal(DAILY_SOP_ROLE_DOCUMENT_TYPE),
 		schema_v: z.literal(DAILY_SOP_ROLE_SCHEMA_VERSION),
-		shelter_code: z.string().min(1),
-		assessment_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+		shelter_code: nonEmptyTrimmed,
+		assessment_date: z.string().refine(validDate, 'Assessment date must be a real YYYY-MM-DD date'),
 		role_code: z.enum(
 			DAILY_SOP_ROLES.map((role) => role.code) as [DailySopRoleCode, ...DailySopRoleCode[]]
 		),
 		role_key: z.enum(
 			DAILY_SOP_ROLES.map((role) => role.key) as [DailySopRoleKey, ...DailySopRoleKey[]]
 		),
-		role_label: z.string().min(1),
-		question_set_version: z.string().min(1).optional(),
-		assessed_at: z.string().min(1),
-		assessor_name: z.string().min(1),
+		role_label: nonEmptyTrimmed,
+		question_set_version: z.literal(DAILY_SOP_ROLE_QUESTION_VERSION).optional(),
+		assessed_at: timestampSchema,
+		assessor_name: nonEmptyTrimmed,
 		status: z.enum(['InProgress', 'Completed']),
 		pass_count: z.number().int().min(0),
 		fail_count: z.number().int().min(0),
 		pending_count: z.number().int().min(0),
 		unanswered_count: z.number().int().min(0),
 		controls: z.array(roleControlSchema),
-		created_at: z.string().min(1),
-		updated_at: z.string().min(1),
-		created_by: z.string().min(1)
+		created_at: timestampSchema,
+		updated_at: timestampSchema,
+		created_by: nonEmptyTrimmed
 	})
-	.passthrough()
+	.strict()
 	.superRefine((assessment, ctx) => {
 		const role = roleForCode(assessment.role_code);
 		if (!role || assessment.role_key !== role.key || assessment.role_label !== role.label) {
-			ctx.addIssue({
-				code: 'custom',
-				message: 'Daily SOP role identity does not match role code',
-				path: ['role_code']
-			});
+			issue(ctx, ['role_code'], 'Daily SOP role identity does not match role code');
 			return;
 		}
 		const expectedId = `${DAILY_SOP_ROLE_DOCUMENT_TYPE}:${assessment.shelter_code}:${assessment.assessment_date}:${assessment.role_code}`;
-		if (assessment._id !== expectedId) {
-			ctx.addIssue({
-				code: 'custom',
-				message: 'Daily SOP role assessment id is invalid',
-				path: ['_id']
-			});
+		if (assessment._id !== expectedId)
+			issue(ctx, ['_id'], 'Daily SOP role assessment id is invalid');
+		const expectedQuestions = questionsForRole(assessment.role_code);
+		if (assessment.controls.length !== DAILY_SOP_ROLE_QUESTION_COUNTS[assessment.role_code]) {
+			issue(
+				ctx,
+				['controls'],
+				'Assessment must contain every question in its registered question set'
+			);
 		}
 		const counts = { pass: 0, fail: 0, pending: 0, unanswered: 0 };
-		const controlIds = new Set<string>();
 		assessment.controls.forEach((control, index) => {
-			if (!control.id.startsWith(`D-${assessment.role_code}-`) || controlIds.has(control.id)) {
-				ctx.addIssue({
-					code: 'custom',
-					message: 'Daily SOP role question id is invalid or duplicated',
-					path: ['controls', index, 'id']
-				});
-			}
-			controlIds.add(control.id);
+			const question = expectedQuestions[index];
+			if (!question || control.id !== question.id)
+				issue(
+					ctx,
+					['controls', index, 'id'],
+					'Question IDs and order must match the registered question set'
+				);
+			if (question) validateControlContract(control, question, index, ctx);
 			if (control.status === 'Pass') counts.pass++;
 			else if (control.status === 'Fail') counts.fail++;
 			else if (control.status === 'Pending') counts.pending++;
@@ -688,22 +803,15 @@ export const dailySopRoleAssessmentSchema = z
 			assessment.fail_count !== counts.fail ||
 			assessment.pending_count !== counts.pending ||
 			assessment.unanswered_count !== counts.unanswered
-		) {
-			ctx.addIssue({
-				code: 'custom',
-				message: 'Daily SOP role summary does not match its answers',
-				path: ['pass_count']
-			});
-		}
-		if ((assessment.status === 'Completed') !== (counts.unanswered === 0)) {
-			ctx.addIssue({
-				code: 'custom',
-				message: 'Daily SOP role status does not match answer completion',
-				path: ['status']
-			});
-		}
+		)
+			issue(ctx, ['pass_count'], 'Daily SOP role summary does not match its answers');
+		if ((assessment.status === 'Completed') !== (counts.unanswered === 0))
+			issue(ctx, ['status'], 'Daily SOP role status does not match answer completion');
 	});
 
 export const isDailySopRoleAssessment = (value: unknown): value is DailySopRoleAssessment =>
 	classifyDailySopDocument(value) === 'role' &&
 	dailySopRoleAssessmentSchema.safeParse(value).success;
+
+export const registeredDailySopQuestionIds = (role: DailySopRoleCode) =>
+	DAILY_SOP_ROLE_QUESTION_IDS[role];

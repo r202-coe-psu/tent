@@ -42,6 +42,7 @@ export {
 	dailySopKeys,
 	useDailySopRoleAssessment,
 	useDailySopRoleAssessments,
+	useResetDailySopRoleList,
 	useSaveDailySopRoleAssessment
 } from './application/queries';
 export { default as DailySopPage } from './ui/daily-sop-page.svelte';
