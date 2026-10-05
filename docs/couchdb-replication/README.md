@@ -398,7 +398,7 @@ curl -s "$C/_up"; echo   # ต้องได้ {"status":"ok",...} ผ่า�
 
 ```bash
 CENTRAL_IP=$(getent ahostsv4 app.example.com | awk 'NR==1{print $1}')
-EDGE_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' couch-edge)
+EDGE_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' tent-couchdb-edge)
 
 wan_down() { sudo iptables -I DOCKER-USER -s "$EDGE_IP" -d "$CENTRAL_IP" -j DROP; }
 wan_up()   { sudo iptables -D DOCKER-USER -s "$EDGE_IP" -d "$CENTRAL_IP" -j DROP; }
@@ -428,7 +428,7 @@ sudo tc qdisc del dev <wan-if> root
 # 1) จำลอง LAN DNS cutover: เปิด extra_hosts ของ service couchdb ใน docker-compose.edge.yml (บรรทัดคอมเมนต์ "POC T9")
 export EDGE_LAN_IP=<ip-lan-ของ-server-B>
 docker compose -f docker-compose.edge.yml up -d   # recreate couchdb
-docker exec couch-edge getent ahostsv4 app.example.com    # ต้องได้ EDGE_LAN_IP (ไม่ใช่ central)
+docker exec tent-couchdb-edge getent ahostsv4 app.example.com    # ต้องได้ EDGE_LAN_IP (ไม่ใช่ central)
 
 # 2) job ต้องล้ม (ยิงเข้า edge ตัวเอง) ไม่ใช่ running แบบเงียบ ๆ — ใช้ st.py/สคริปต์ดูสถานะเดิม หรือ:
 curl -s "$E/_scheduler/docs/_replicator" | python3 -c 'import sys,json;[print(d["doc_id"],d["state"],d.get("error_count")) for d in json.load(sys.stdin)["docs"]]'
@@ -436,10 +436,10 @@ curl -s -X PUT "$E/shelter_sh001/evacuee:01POCDNSCUTOVER0000000001" -d '{"type":
 
 # 3) cutback: เอา extra_hosts ออก แล้ว recreate
 docker compose -f docker-compose.edge.yml up -d
-docker exec couch-edge getent ahostsv4 app.example.com    # ต้องได้ CENTRAL_IP
+docker exec tent-couchdb-edge getent ahostsv4 app.example.com    # ต้องได้ CENTRAL_IP
 
 # 4) watchdog ต้องเตะ job เอง (ดู log) แล้ว doc จากขั้น 2 ถึง central
-docker logs -f couch-edge-watchdog
+docker logs -f tent-edge-watchdog-edge
 wait_doc $C shelter_sh001 evacuee:01POCDNSCUTOVER0000000001
 ```
 
@@ -471,7 +471,7 @@ wait_doc $C shelter_sh001 evacuee:01POCDNSCUTOVER0000000001
 ```bash
 sudo timedatectl set-ntp false
 sudo date -s '+2 years'
-docker restart couch-edge   # ให้ทุก job ต่อ TLS ใหม่
+docker restart tent-couchdb-edge   # ให้ทุก job ต่อ TLS ใหม่
 sleep 20
 curl -s "$E/_scheduler/docs/_replicator/sh001_pull" | python3 -m json.tool
 sudo timedatectl set-ntp true

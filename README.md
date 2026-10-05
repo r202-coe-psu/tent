@@ -255,7 +255,7 @@ stack ที่ใช้ compose nginx (`docker-compose.{staging,production}.yml
 cp .env.edge.example .env                       # SHELTER_CODE, SYNC_URL, credential
 cp couchdb-edge-example.ini couchdb-edge.ini    # secret ของ edge: openssl rand -hex 16 (มี auth_plugins=noop ที่ path /sync ต้องใช้)
 docker compose -f docker-compose.edge.yml up -d
-docker logs couch-edge-provision                # scripts/edge-init.sh: DB + _security + replication jobs
+docker logs tent-edge-init-edge                # scripts/edge-init.sh: DB + _security + replication jobs
 ```
 
 [`docker-compose.edge.yml`](docker-compose.edge.yml) = CouchDB + staff SPA + nginx ([`nginx-edge/`](nginx-edge/))

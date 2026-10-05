@@ -118,7 +118,7 @@ docker compose -f docker-compose.edge.yml up -d --build
 build frontend ครั้งแรกใช้เวลาหลายนาที จากนั้นดูผลของ provisioning:
 
 ```bash
-docker logs couch-edge-provision
+docker logs tent-edge-init-edge
 ```
 
 ผลที่ควรเห็น (`ok` = สร้างใหม่ · `exists` = มีอยู่แล้ว รันซ้ำได้):
@@ -200,7 +200,7 @@ curl -s -X PUT -u <staff>:<pw> $EDGE/couch/shelter_sh001/evacuee:01OUTAGE0000000
 
 | service | ทำไม |
 | --- | --- |
-| `couchdb` (`couch-edge`) | ตัวเก็บข้อมูลที่ศูนย์ + ที่อยู่ของ replication job · port bind `127.0.0.1` เท่านั้น staff เข้าผ่าน nginx |
+| `couchdb` (`tent-couchdb-edge`) | ตัวเก็บข้อมูลที่ศูนย์ + ที่อยู่ของ replication job · port bind `127.0.0.1` เท่านั้น staff เข้าผ่าน nginx |
 | `couchdb-init` | สร้าง `_users`, `_replicator` (single node) — เหมือน production |
 | `edge-init` | **เพิ่มใหม่** รัน `scripts/edge-init.sh` (ด้านล่าง) |
 | `frontend` | แอป staff ให้ใช้บน LAN ตอน WAN ขาด · ไม่ตั้ง `FASTAPI_INTERNAL_URL`, `EXTERNAL_API_SECRET`, `COUCHDB_PUBLIC_WRITER_URL`, import worker token, OAuth — route ของ public plane จะ fail ตามโหมด degraded แต่แอปยัง start ได้ |
@@ -239,7 +239,7 @@ curl -s -X PUT -u <staff>:<pw> $EDGE/couch/shelter_sh001/evacuee:01OUTAGE0000000
 ```bash
 curl -s $E/_scheduler/jobs            # job + history (error ล่าสุด)
 curl -s $E/_active_tasks              # docs_read / docs_written / changes_pending
-docker logs couch-edge 2>&1 | grep -i replicat
+docker logs tent-couchdb-edge 2>&1 | grep -i replicat
 ```
 
 **"เตะ" job** — เริ่มทันทีโดยข้าม backoff หรือเปลี่ยน credential: ลบ doc แล้วรัน `edge-init` ใหม่
@@ -277,7 +277,7 @@ docker compose -f docker-compose.edge.yml run --rm edge-init
 (`session_request_failed`) สคริปต์จึงแยกตามสาเหตุจริงด้านบน ไม่ใช่ดูแค่ชื่อ `replication_auth_error`
 
 ```bash
-docker logs -f couch-edge-watchdog          # ดูการทำงาน
+docker logs -f tent-edge-watchdog-edge          # ดูการทำงาน
 ```
 
 ตัวอย่าง log: `sh001_pull stuck (errors=2) while central is up — deleted, will be recreated` →
