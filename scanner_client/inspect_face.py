@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Try the kiosk face check from a terminal, without the browser or the server.
 
-  ./inspect_face.py --card                     # chip photo from the inserted card (PC/SC), live camera
+  ./inspect_face.py --card                     # chip photo from the inserted card (reader per CARD_READER in .env), live camera
   ./inspect_face.py --chip photo.jpg           # chip photo from a file
   ./inspect_face.py --card --image a.jpg b.jpg # compare against still images instead of the camera
   ./inspect_face.py --card --show-scores       # also print similarity / liveness numbers
@@ -33,14 +33,28 @@ DEFAULT_MODELS = Path(__file__).resolve().parent / "models"
 def load_reference(args) -> bytes:
     if args.chip:
         return Path(args.chip).read_bytes()
+    from app.config import DEFAULT_CARD_READER_USB_ID, load_config
     from app.scard import ThaiSmartCardReader
 
+    config = load_config()  # the same CARD_READER choice as the kiosk (.env)
+    reader = None
     try:
-        reader = ThaiSmartCardReader()
+        if str(config.get("CARD_READER") or "pcsc").strip().lower() == "rfpro":
+            from app.rfpro import RfproThaiCardReader
+
+            reader = RfproThaiCardReader(
+                str(config.get("CARD_READER_USB_ID") or "").strip() or DEFAULT_CARD_READER_USB_ID
+            )
+        else:
+            reader = ThaiSmartCardReader()
         started = time.monotonic()
         photo = reader.read_photo()
     except Exception as error:
         sys.exit(f"Could not read the card: {error}")
+    finally:
+        close = getattr(reader, "close", None)
+        if callable(close):
+            close()
     print(f"chip photo read in {time.monotonic() - started:.1f}s ({len(photo or b'')} bytes)")
     if not photo:
         sys.exit("The card gave no photo.")
