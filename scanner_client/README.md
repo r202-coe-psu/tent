@@ -560,6 +560,31 @@ sudo python3 inspect_card_rfpro.py                 # ถึงอ่านเล
 sudo python3 inspect_card_rfpro.py --full          # อ่านทั้งใบ: แสดงเฉพาะความยาวแต่ละ field + เวลา
 ```
 
+### ตรวจใบหน้าเทียบรูปในชิปบัตร (Face check)
+
+> **สถานะ: ข้อเสนอ ยังไม่ได้รับอนุมัติ** รายละเอียดและเหตุผลอยู่ใน
+> [`docs/plans/kiosk-face-verification-implementation-plan.md`](../docs/plans/kiosk-face-verification-implementation-plan.md)
+> ปิดอยู่เป็นค่าเริ่มต้น (`KIOSK_FACE_CHECK=off`) ตู้ที่ไม่ตั้งค่าจะทำงานเหมือนเดิมทุกอย่าง
+
+ตรวจว่าคนที่เสียบบัตรตรงกับรูปในชิปบัตรหรือไม่ ทำในเครื่องทั้งหมด (`app/face/`): YuNet หาใบหน้า,
+SFace เทียบหน้า, MiniFASNet ตรวจว่าเป็นคนจริง ภาพจากกล้อง รูปในชิป และ embedding อยู่ใน RAM เท่านั้น
+ไม่เขียนดิสก์ ไม่ log ไม่ส่งไป server เบราว์เซอร์ได้กลับมาแค่ผล (`match` / `not_confirmed` / `retry` / `skipped`)
+หรือคำแนะนำ (เช่น `too_far`) ผลไม่ผ่าน**ไม่ปฏิเสธใคร** แต่ต้องให้เจ้าหน้าที่ตรวจ
+
+```bash
+./models/download_models.sh        # ครั้งแรก (setup_big_kiosk.sh ทำให้ด้วย) ตรวจ sha256 ทุกไฟล์
+# .env:  KIOSK_FACE_CHECK=shadow     # off | shadow | on   (ดู .env.example)
+#        KIOSK_CAMERA_LABEL=JSK-RGB  # กล้องที่ใช้ถ่ายหน้า (ตัวเดียวกับสแกน QR)
+```
+
+- **ผลตรวจยังไม่ถูกส่งไป server**: `/register` และ `/check-in` ใช้ schema แบบ `strict` จึงยังแนบ `identity_check` ไม่ได้
+  จนกว่า Phase 3 (CR + schema) จะเสร็จ ตอนนี้ผลมีผลแค่ต่อหน้าจอ kiosk และบรรทัดสรุปใน log (`Face check finished: flow=… result=…`)
+- **เกณฑ์ยังไม่ได้ calibrate** กับรูปบัตรจริง (`app/face/profiles.py`) ใช้ `./inspect_face.py` ทดสอบด้วยบัตรและหน้าของทีมเอง
+  (`--card --show-scores`; ลองส่องบัตร รูปพิมพ์ หรือจอมือถือให้กล้องด้วย) อย่าใช้หน้าคนอื่นโดยไม่ได้รับความยินยอม
+- เมื่อเปิด face check `scanner_client` ให้สิทธิ์กล้องแก่ origin ของ kiosk อัตโนมัติ (ไม่มี prompt) เปิด `KIOSK_FACE_CHECK=on` จะมี log เตือนว่าเกณฑ์ยังไม่ได้ calibrate ให้ใช้ `shadow` ก่อน
+- ถ้า model ไม่ครบ เครื่องจะตอบ `FACE_MODELS_MISSING` และหน้า kiosk ข้ามขั้นตอนนี้ไป
+- model ทั้ง 4 ตัวและ license อยู่ใน [`models/MODELS.md`](models/MODELS.md)
+
 ### ล็อกไม่ให้ออกจากหน้า kiosk (ตู้ใหญ่)
 
 ใน session GNOME ปกติ **ปัดจอแล้วออกจาก Chromium ได้** (เปิดหน้า Activities / top bar ของ GNOME) — `--kiosk` ของ Chromium กันไม่ได้เพราะท่าปัดเป็นของ GNOME Shell. `setup_kiosk_lockdown.sh` แก้ที่ต้นเหตุ: ตั้ง GDM ให้ **login อัตโนมัติ** เข้า session **GNOME Kiosk Script** (แพ็กเกจ `gnome-kiosk` + `gnome-kiosk-script-session`) ซึ่ง **ไม่มี GNOME Shell เลย** — ไม่มี overview / ท่าปัดจอ / top bar / dock บนจอมีแค่ Chromium ของ kiosk ถ้า Chromium ปิดจะเห็นจอดำ (ไม่ใช่ desktop) แล้วเปิดใหม่เอง

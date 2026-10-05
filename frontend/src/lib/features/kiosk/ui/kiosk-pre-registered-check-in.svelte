@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import CreditCard from '@lucide/svelte/icons/credit-card';
@@ -53,6 +54,9 @@
 		onprintbusychange?: (busy: boolean) => void;
 		onregister?: (citizenId: string) => void;
 		onreset: () => void;
+		/** Keep the member list back while `hold` (e.g. the face check) is on screen. */
+		holdMembers?: boolean;
+		hold?: Snippet;
 	}
 
 	let {
@@ -63,7 +67,9 @@
 		backHref,
 		onprintbusychange,
 		onregister,
-		onreset
+		onreset,
+		holdMembers = false,
+		hold
 	}: Props = $props();
 
 	let lookup = $state<Extract<KioskLookupResponse, { kind: 'household' }> | null>(null);
@@ -424,14 +430,16 @@
 					: candidates.length > 0
 						? 'เลือกครัวเรือน'
 						: lookup
-							? 'เลือกสมาชิก'
+							? holdMembers
+								? 'ตรวจสอบตัวตน'
+								: 'เลือกสมาชิก'
 							: cardMode && !input
 								? 'รอเสียบบัตร'
 								: 'กำลังค้นหา'}
 			</h1>
 			{#if cardMode && !input}
 				<p class="mt-1 text-base text-slate-700">เสียบบัตรเพื่อค้นหา</p>
-			{:else if lookup && results.length === 0}
+			{:else if lookup && results.length === 0 && !holdMembers}
 				<p class="mt-1 text-base text-slate-700">เลือกผู้ที่มาถึง</p>
 			{:else if candidates.length > 0}
 				<p class="mt-1 text-base text-slate-700">เลือกครัวเรือนของท่าน</p>
@@ -528,7 +536,11 @@
 			</section>
 		{/if}
 
-		{#if lookup && centerMatches && results.length === 0}
+		{#if holdMembers && hold && lookup && centerMatches && results.length === 0}
+			{@render hold()}
+		{/if}
+
+		{#if lookup && centerMatches && results.length === 0 && !holdMembers}
 			<section
 				class="no-print rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs sm:p-6"
 				aria-labelledby="household-title"

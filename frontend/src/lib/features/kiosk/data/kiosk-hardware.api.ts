@@ -5,6 +5,7 @@ import {
 	MIN_READER_GAP_MS,
 	type KioskHardware
 } from '../domain/kiosk-hardware';
+import { parseFaceCheckConfig } from '../domain/face-check';
 
 export const KIOSK_HARDWARE_PATH = '/api/v1/scanner/kiosk/hardware';
 export const KIOSK_HARDWARE_TIMEOUT_MS = 3_000;
@@ -25,6 +26,7 @@ export async function fetchKioskHardware(fetchFn: typeof fetch = fetch): Promise
 			qr_input?: unknown;
 			camera_label?: unknown;
 			reader_max_gap_ms?: unknown;
+			face_check?: unknown;
 		} | null;
 		if (body?.qr_input !== 'camera' && body?.qr_input !== 'reader' && body?.qr_input !== 'both') {
 			return DEFAULT_KIOSK_HARDWARE;
@@ -42,7 +44,8 @@ export async function fetchKioskHardware(fetchFn: typeof fetch = fetch): Promise
 				gap >= MIN_READER_GAP_MS &&
 				gap <= MAX_READER_GAP_MS
 					? gap
-					: DEFAULT_READER_MAX_GAP_MS
+					: DEFAULT_READER_MAX_GAP_MS,
+			faceCheck: parseFaceCheckConfig(body.face_check)
 		};
 	} catch {
 		return DEFAULT_KIOSK_HARDWARE;

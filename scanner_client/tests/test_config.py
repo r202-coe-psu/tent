@@ -103,6 +103,33 @@ class HardwareConfigTests(unittest.TestCase):
         self.assertEqual(config["KIOSK_QR_INPUT"], "camera")
         self.assertEqual(config["CARD_READER"], "pcsc")
         self.assertEqual(config["CARD_READER_USB_ID"], "0483:4c43")
+        self.assertEqual(config["KIOSK_FACE_CHECK"], "off")
+        self.assertEqual(config["KIOSK_FACE_CHECK_FLOWS"], "check_in,walk_in")
+
+    def test_face_check_settings_are_accepted_and_normalised(self):
+        config = self.validate(
+            KIOSK_FACE_CHECK=" Shadow ",
+            KIOSK_FACE_CHECK_FLOWS="walk_in, Check_In,walk_in",
+            KIOSK_FACE_THRESHOLD_PROFILE="sface-opencv-default-v1",
+            KIOSK_FACE_MODELS_DIR=" /opt/tent/models ",
+        )
+
+        self.assertEqual(config["KIOSK_FACE_CHECK"], "shadow")
+        self.assertEqual(config["KIOSK_FACE_CHECK_FLOWS"], "walk_in,check_in")
+        self.assertEqual(config["KIOSK_FACE_THRESHOLD_PROFILE"], "sface-opencv-default-v1")
+        self.assertEqual(config["KIOSK_FACE_MODELS_DIR"], "/opt/tent/models")
+
+    def test_bad_face_check_settings_name_the_key_and_never_start_the_kiosk(self):
+        for key, value in (
+            ("KIOSK_FACE_CHECK", "maybe"),
+            ("KIOSK_FACE_CHECK_FLOWS", "walk_in,qr"),
+            ("KIOSK_FACE_CHECK_FLOWS", " , "),
+            ("KIOSK_FACE_THRESHOLD_PROFILE", "made-up"),
+        ):
+            with self.subTest(key=key, value=value):
+                with self.assertRaises(ScannerConfigError) as raised:
+                    self.validate(**{key: value})
+                self.assertIn(key, str(raised.exception))
 
     def test_kiosk3_settings_are_accepted_and_normalised(self):
         config = self.validate(

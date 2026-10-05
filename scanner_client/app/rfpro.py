@@ -431,6 +431,12 @@ class RfproThaiCardReader(ThaiSmartCardReader):
         self.connection.power_cycle()
         return super().read_all_data()
 
+    def read_photo(self) -> bytes | None:
+        """Same cold power-up as `read_all_data`: the face check reads the photo of a card that has
+        been in the reader since the ID read, which kiosk3 cannot do without a power cycle."""
+        self.connection.power_cycle()
+        return super().read_photo()
+
     def _read_piece(self, offset: int, length: int) -> list[int] | None:
         """READ BINARY of `length` bytes at `offset` + GET RESPONSE; None if the card has no data
         there (SW1 is not 61)."""

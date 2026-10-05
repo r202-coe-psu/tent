@@ -38,11 +38,27 @@ export type KioskLookupScenario =
 	| { kind: 'candidates' }
 	| { kind: 'error'; status: number; code: string; message: string; canRegister?: boolean };
 
+export type KioskFaceVerdict =
+	| { result: 'match'; attempt: number }
+	| { result: 'retry'; hint: string; attempt: number }
+	| { result: 'not_confirmed'; reason: string; attempt: number }
+	| { result: 'skipped'; reason: string; attempt: number };
+
+/** The scanner client's face check: reported by `/hardware`, answered by `/face/*`. */
+export interface KioskFaceMock {
+	mode: 'shadow' | 'on';
+	flows?: ('check_in' | 'walk_in')[];
+	/** What `face/verify` answers, in order; the last one repeats. Default: a match. */
+	verdicts?: KioskFaceVerdict[];
+	reference?: 'reading' | 'ready' | 'unavailable';
+}
+
 export interface KioskMockOptions {
 	phoneCheckInEnabled?: boolean;
 	lookup?: KioskLookupScenario;
 	/** `hold` keeps the print request pending until `releasePrint()`. */
 	print?: 'ok' | 'hold';
+	face?: KioskFaceMock;
 }
 
 function json(route: Route, status: number, body: unknown): Promise<void> {
@@ -114,16 +130,45 @@ export async function mockKioskApi(page: Page, options: KioskMockOptions = {}) {
 		});
 	});
 
-	await page.route('**/api/v1/scanner/kiosk/register', (route) =>
-		json(route, 200, { evacuee_id: 'evacuee:NEW01' })
-	);
+	// What the page asked of the scanner client, in order: 'face/start', 'face/frame', 'register', ...
+	const calls: string[] = [];
+
+	await page.route('**/api/v1/scanner/kiosk/register', (route) => {
+		calls.push('register');
+		return json(route, 200, { evacuee_id: 'evacuee:NEW01' });
+	});
+
+	if (options.face) {
+		const face = options.face;
+		const verdicts = [...(face.verdicts ?? [{ result: 'match', attempt: 1 } as const])];
+		await page.route('**/api/v1/scanner/kiosk/hardware', (route) =>
+			json(route, 200, {
+				qr_input: 'camera',
+				camera_label: null,
+				reader_max_gap_ms: 50,
+				face_check: { mode: face.mode, flows: face.flows ?? ['check_in', 'walk_in'] }
+			})
+		);
+		await page.route('**/api/v1/scanner/kiosk/face/*', (route) => {
+			const action = new URL(route.request().url()).pathname.split('/').pop()!;
+			calls.push(`face/${action}`);
+			if (action === 'start') {
+				return json(route, 200, { ok: true, reference: face.reference ?? 'reading' });
+			}
+			if (action === 'frame') return json(route, 200, { face: true, hint: 'ok', ready: true });
+			if (action === 'verify') {
+				return json(route, 200, verdicts.length > 1 ? verdicts.shift() : verdicts[0]);
+			}
+			return json(route, 200, { ok: true });
+		});
+	}
 
 	await page.route('**/api/v1/scanner/kiosk/print', async (route) => {
 		if (options.print === 'hold') await printGate;
 		return json(route, 200, { printed: 1 });
 	});
 
-	return { releasePrint: () => releasePrint() };
+	return { releasePrint: () => releasePrint(), calls };
 }
 
 /** The numpad drops taps closer than 80 ms, so space them out. */

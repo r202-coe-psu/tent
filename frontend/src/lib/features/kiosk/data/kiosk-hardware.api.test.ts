@@ -19,7 +19,8 @@ describe('fetchKioskHardware', () => {
 		await expect(fetchKioskHardware(fetchFn)).resolves.toEqual({
 			qrInput: 'both',
 			cameraLabel: 'JSK-RGB',
-			readerMaxGapMs: 40
+			readerMaxGapMs: 40,
+			faceCheck: { mode: 'off', flows: [] }
 		});
 		expect(fetchFn).toHaveBeenCalledWith(
 			KIOSK_HARDWARE_PATH,
@@ -30,6 +31,36 @@ describe('fetchKioskHardware', () => {
 			})
 		);
 		expect(KIOSK_HARDWARE_TIMEOUT_MS).toBe(3_000);
+	});
+
+	it('reads the face check mode and flows reported by the scanner client', async () => {
+		const result = await fetchKioskHardware(
+			vi.fn<typeof fetch>().mockResolvedValue(
+				json({
+					qr_input: 'camera',
+					camera_label: 'JSK-RGB',
+					reader_max_gap_ms: 50,
+					face_check: { mode: 'shadow', flows: ['walk_in'] }
+				})
+			)
+		);
+
+		expect(result.faceCheck).toEqual({ mode: 'shadow', flows: ['walk_in'] });
+	});
+
+	it('keeps the face check off when the scanner client says something unexpected', async () => {
+		const result = await fetchKioskHardware(
+			vi.fn<typeof fetch>().mockResolvedValue(
+				json({
+					qr_input: 'camera',
+					camera_label: null,
+					reader_max_gap_ms: 50,
+					face_check: { mode: 'always', flows: ['walk_in'] }
+				})
+			)
+		);
+
+		expect(result.faceCheck).toEqual({ mode: 'off', flows: [] });
 	});
 
 	it('treats a blank label as no label', async () => {
@@ -55,7 +86,12 @@ describe('fetchKioskHardware', () => {
 				.fn<typeof fetch>()
 				.mockResolvedValue(json({ qr_input: 'reader', camera_label: null, reader_max_gap_ms: 50 }))
 		);
-		expect(result).toEqual({ qrInput: 'reader', cameraLabel: null, readerMaxGapMs: 50 });
+		expect(result).toEqual({
+			qrInput: 'reader',
+			cameraLabel: null,
+			readerMaxGapMs: 50,
+			faceCheck: { mode: 'off', flows: [] }
+		});
 	});
 
 	it('falls back to the camera default without a scanner client or on any bad response', async () => {

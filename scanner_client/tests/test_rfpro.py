@@ -614,6 +614,18 @@ class ReaderTests(unittest.TestCase):
                 reader.read_citizen_id()
                 self.assertEqual(card.get_response_p2, [expected_p2])
 
+    def test_read_photo_reads_the_photo_alone_not_the_text_fields(self):
+        # The face check needs only the photo: no names, address or dates should leave the card.
+        card, device, reader = self.reader()
+        photo = reader.read_photo()
+        photo_only = len(device.commands)
+
+        _, full_device, full_reader = self.reader()
+        full_reader.read_all_data()
+
+        self.assertTrue(photo.startswith(card.photo))
+        self.assertLess(photo_only, len(full_device.commands))
+
     def test_read_all_data_returns_every_field_and_the_full_photo(self):
         card, _, reader = self.reader(heartbeats=True)
         # Fields this fake card does not store answer 6A 82 -> empty strings, like a blank record.
@@ -644,6 +656,18 @@ class ReaderTests(unittest.TestCase):
                 (CMD_ICC_GETATR, b"\x00"),
             ],
         )
+
+    def test_read_photo_also_starts_from_a_cold_power_up(self):
+        # The face check reads the photo of a card left in since the ID read: same kiosk3 quirk.
+        card, device, reader = self.reader()
+        reader.read_citizen_id()
+        device.commands.clear()
+
+        photo = reader.read_photo()
+
+        self.assertEqual(device.commands[0], (CMD_ICC_SLOT_PWR, b"\x00\x00"))
+        self.assertEqual(device.commands[1], (CMD_ICC_SLOT_PWR, b"\x00\x01"))
+        self.assertTrue(photo.startswith(card.photo))
 
     def test_read_all_data_survives_a_module_that_returns_one_report_per_reply(self):
         # kiosk3: a 100-byte answer is a 112-byte frame, and only its first 32 bytes arrive.

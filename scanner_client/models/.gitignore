@@ -1,0 +1,2 @@
+# Model binaries are downloaded by download_models.sh and checked against MODELS.md; never committed.
+*.onnx

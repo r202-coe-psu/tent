@@ -1,4 +1,6 @@
 import type { SmartCardData } from '$lib/features/scanners';
+import { registerKioskWalkIn } from '../data/kiosk-check-in.api';
+import { buildKioskPhotoPayload } from './kiosk-card-photo';
 
 export type WalkInCardSession = {
 	citizenId: string | null;
@@ -36,4 +38,16 @@ export async function registerWalkInCardRead(
 			message: cause instanceof Error ? cause.message : 'อ่านข้อมูลไม่สำเร็จ กรุณาลองอีกครั้ง'
 		};
 	}
+}
+
+/** Register a walk-in from the full card read: compress the chip photo, send the card without it. */
+export function submitWalkInCard(
+	card: SmartCardData | null | undefined,
+	session: WalkInCardSession
+): Promise<WalkInCardRegistrationOutcome> {
+	return registerWalkInCardRead(card, session, async (fullCard, consentedAt) => {
+		const photo = await buildKioskPhotoPayload(fullCard.photo_base64).catch(() => null);
+		const cardWithoutPhoto = { ...fullCard, photo_base64: undefined };
+		return registerKioskWalkIn(cardWithoutPhoto, photo, consentedAt);
+	});
 }

@@ -8,16 +8,18 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import {
 		buildKioskContextQuery,
+		cancelKioskFaceCheck,
 		getKioskDisplayContext,
 		KioskIdleTimeout,
 		KIOSK_IDLE_TIMEOUT_MS,
 		KioskCheckInWizard,
-		buildKioskPhotoPayload,
+		isFaceCheckEnabled,
+		loadKioskHardware,
 		navigateToKioskHome,
 		readKioskDisplayQuery,
-		registerKioskWalkIn,
-		registerWalkInCardRead,
-		walkInSession
+		submitWalkInCard,
+		walkInSession,
+		type KioskHardware
 	} from '$lib/features/kiosk';
 	import type { SmartCardData } from '$lib/features/scanners';
 	const displayContext = $derived(
@@ -29,6 +31,8 @@
 	let cardReading = $state(false);
 	let reading = $state(false);
 	let error = $state('');
+	// Unknown (null) counts as no face check: the scanner client answers in milliseconds, the chip read takes seconds.
+	let hardware = $state<KioskHardware | null>(null);
 	const busy = $derived(cardReading || reading);
 	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, returnHome);
 	onMount(() => {
@@ -37,6 +41,7 @@
 			return;
 		}
 		idleTimeout.start();
+		void loadKioskHardware().then((loaded) => (hardware = loaded));
 		const onCardReading = () => {
 			cardReading = true;
 			error = '';
@@ -65,6 +70,8 @@
 		idleTimeout.recordActivity();
 	}
 	function returnHome() {
+		// The chip photo may be set aside on the scanner client for the face check.
+		if (hardware && isFaceCheckEnabled(hardware.faceCheck, 'walk_in')) void cancelKioskFaceCheck();
 		walkInSession.clear();
 		navigateToKioskHome(contextQuery);
 	}
@@ -76,18 +83,25 @@
 			idleTimeout.setPaused(false);
 			return;
 		}
+		if (
+			hardware &&
+			isFaceCheckEnabled(hardware.faceCheck, 'walk_in') &&
+			card.citizen_id === walkInSession.citizenId
+		) {
+			// Hold the card in memory; the face page registers it once the check has ended.
+			walkInSession.holdCard(card);
+			await goto(
+				resolve(
+					`/kiosk/register/face${contextQuery}` as
+						'/kiosk/register/face' | `/kiosk/register/face?${string}`
+				)
+			);
+			return;
+		}
 		reading = true;
 		idleTimeout.setPaused(true);
 		error = '';
-		const outcome = await registerWalkInCardRead(
-			card,
-			walkInSession,
-			async (fullCard, consentedAt) => {
-				const photo = await buildKioskPhotoPayload(fullCard.photo_base64).catch(() => null);
-				const cardWithoutPhoto = { ...fullCard, photo_base64: undefined };
-				return registerKioskWalkIn(cardWithoutPhoto, photo, consentedAt);
-			}
-		);
+		const outcome = await submitWalkInCard(card, walkInSession);
 		if (outcome.kind === 'registered') {
 			walkInSession.clear();
 			await goto(

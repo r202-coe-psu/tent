@@ -198,6 +198,12 @@ class ThaiSmartCardReader:
             raise ValueError("Could not read Citizen ID (CID)")
         return cid
 
+    def read_photo(self) -> Optional[bytes]:
+        """Read only the chip photo (20 chunks) - no names or address. For the face check."""
+        if not self.connect():
+            raise RuntimeError("Failed to connect to smart card")
+        return self.get_photo_bytes()
+
     def read_all_data(self) -> Dict[str, Any]:
         """Read all available data from the card and return a structured dictionary"""
         if not self.connect():

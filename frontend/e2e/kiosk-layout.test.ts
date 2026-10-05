@@ -95,14 +95,11 @@ test.describe('kiosk layout — scanner (smart card)', () => {
 		await expect(page.getByRole('heading', { name: 'อ่านบัตรไม่สำเร็จ' })).toBeVisible();
 	});
 
-	test('remove card to confirm, then pick members', async ({ page }) => {
+	test('card read, then pick members', async ({ page }) => {
 		await open(page, '/kiosk/scanner/remove-card', { lookup: { kind: 'household', members: 4 } });
 		await page.locator('[data-kiosk-card-ready="true"]').waitFor({ state: 'attached' });
 		await dispatchKioskEvent(page, 'kiosk:smart-card-read', { citizenId: KIOSK_CITIZEN_ID });
 		await expect(page.getByRole('heading', { name: 'เลือกสมาชิก' })).toBeVisible();
-		await expect(page.getByText('ถอดบัตรเพื่อยืนยัน').first()).toBeVisible();
-
-		await dispatchKioskEvent(page, 'kiosk:smart-card-removed');
 		await expect(page.getByRole('button', { name: /ยืนยัน · \d+ คน/ })).toBeEnabled();
 	});
 });
@@ -176,7 +173,7 @@ test.describe('kiosk layout — walk-in registration', () => {
 		await page.locator('[data-kiosk-register-ready="true"]').waitFor({ state: 'attached' });
 		await expect(page.getByRole('heading', { name: 'เสียบบัตรประชาชน' })).toBeVisible();
 
-		// The full read takes ~20-30s; the screen must say so, or people pull the card mid-photo.
+		// The screen must say the chip is being read, or people pull the card mid-photo.
 		const cancel = page.getByRole('button', { name: 'ยกเลิก' });
 		await dispatchKioskEvent(page, 'kiosk:smart-card-reading');
 		await expect(page.getByRole('heading', { name: 'กำลังอ่านข้อมูลบัตร' })).toBeVisible();
@@ -287,27 +284,22 @@ for (const [name, viewport] of [
 				await expect(page.getByRole('heading', { name: 'เสียบบัตรประชาชน' })).toBeVisible();
 			});
 
-			await test.step('2. เสียบบัตร (scanner_client พาไปหน้าถอดบัตรแล้วส่งเลขบัตร)', async () => {
+			await test.step('2. เสียบบัตร (scanner_client พาไปหน้ารายงานตัวแล้วส่งเลขบัตร)', async () => {
 				// scanner_client drives this hop itself: it navigates, then fires the card event.
 				await page.goto(`/kiosk/scanner/remove-card${KIOSK_QUERY}`);
 				await page.locator('[data-kiosk-card-ready="true"]').waitFor({ state: 'attached' });
 				await dispatchKioskEvent(page, 'kiosk:smart-card-read', { citizenId: KIOSK_CITIZEN_ID });
 				await expect(page.getByRole('heading', { name: 'เลือกสมาชิก' })).toBeVisible();
 				await expect(confirm).toHaveText(/ยืนยัน · 1\s+คน/);
-				await expect(confirm).toBeDisabled();
-			});
-
-			await test.step('3. ถอดบัตร → ปุ่มยืนยันกดได้', async () => {
-				await dispatchKioskEvent(page, 'kiosk:smart-card-removed');
 				await expect(confirm).toBeEnabled();
 			});
 
-			await test.step('4. แตะ "ยืนยัน" → หน้าผลรายงานตัว', async () => {
+			await test.step('3. แตะ "ยืนยัน" → หน้าผลรายงานตัว', async () => {
 				await confirm.tap();
 				await expect(page.getByRole('heading', { name: 'ผลรายงานตัว', exact: true })).toBeVisible();
 			});
 
-			await test.step('5. แตะ "เสร็จสิ้น" → หน้าแรก', async () => {
+			await test.step('4. แตะ "เสร็จสิ้น" → หน้าแรก', async () => {
 				await page.getByRole('button', { name: 'เสร็จสิ้น' }).tap();
 				await expect(page).toHaveURL(/\/kiosk\?/);
 				await expect(page.getByRole('heading', { name: 'รายงานตัว', exact: true })).toBeVisible();

@@ -153,6 +153,20 @@ else
     bad ".venv ยังไม่พร้อม — รันใหม่โดยไม่ใส่ --skip-venv"
 fi
 
+# Face check (optional, off unless KIOSK_FACE_CHECK is set): OpenCV + the model files.
+if [ -x "$VENV_PY" ] && "$VENV_PY" -c "import cv2, numpy" 2>/dev/null; then
+    ok "OpenCV พร้อม (ตรวจใบหน้า)"
+else
+    warn "ยังไม่มี OpenCV ใน .venv — ต้องใช้เมื่อเปิด KIOSK_FACE_CHECK (pip install -r requirements.txt)"
+fi
+if $STATUS_ONLY; then
+    ./models/download_models.sh --check >/dev/null && ok "model ตรวจใบหน้าครบ" ||
+        warn "ยังไม่มี model ตรวจใบหน้า — รัน ./models/download_models.sh (ต้องใช้เมื่อเปิด KIOSK_FACE_CHECK)"
+else
+    ./models/download_models.sh && ok "model ตรวจใบหน้าพร้อม" ||
+        warn "ดาวน์โหลด model ตรวจใบหน้าไม่สำเร็จ — รัน ./models/download_models.sh ใหม่เมื่อมีเน็ต (ต้องใช้เมื่อเปิด KIOSK_FACE_CHECK)"
+fi
+
 # ------------------------------------------------------------------------------
 section "4) .env (เฉพาะค่าฮาร์ดแวร์ — ไม่แตะ secret)"
 if [ ! -f "$ENV_FILE" ]; then

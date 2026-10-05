@@ -19,6 +19,7 @@ from app.config import (
     DEFAULT_CARD_READER_USB_ID,
     DEFAULT_PRINTER_WIDTH_DOTS,
     DEFAULT_QR_READER_GAP_MS,
+    FACE_CHECK_FLOWS,
 )
 from app.rfpro import RfproError, RfproThaiCardReader
 from app.scard import ReaderLostError, ThaiSmartCardReader
@@ -49,6 +50,13 @@ KIOSK_PRINT_PATH = "/api/v1/scanner/kiosk/print"
 # Per-machine hardware settings for the kiosk page (QR input, camera choice). Answered locally
 # like the print path — never forwarded to the server and never given the device credential.
 KIOSK_HARDWARE_PATH = "/api/v1/scanner/kiosk/hardware"
+# Face check (see app/face): the page sends camera frames here and gets only a verdict or a hint
+# back. Answered locally - the server never sees a frame, a chip photo or an embedding.
+KIOSK_FACE_PATH_PREFIX = "/api/v1/scanner/kiosk/face/"
+KIOSK_FACE_ACTIONS = ("start", "frame", "verify", "cancel")
+KIOSK_FACE_PATHS = frozenset(f"{KIOSK_FACE_PATH_PREFIX}{action}" for action in KIOSK_FACE_ACTIONS)
+KIOSK_FACE_MAX_BODY_BYTES = 6 * 1024 * 1024
+DEFAULT_FACE_MODELS_DIR = Path(__file__).resolve().parent.parent / "models"
 KIOSK_PRINT_MAX_LABELS = 20
 KIOSK_PRINT_MAX_PNG_BYTES = 256 * 1024
 KIOSK_PRINT_TIMEOUT_SEC = 20.0
@@ -71,7 +79,7 @@ USBMISC_SYSFS = Path("/sys/class/usbmisc")
 USB_DEV_DIR = Path("/dev/usb")
 # Paths this client answers itself; a request that is not a same-origin POST gets a local 404
 # so it never reaches the server (and its access log).
-LOCAL_ONLY_PATHS = frozenset({KIOSK_PRINT_PATH, KIOSK_HARDWARE_PATH})
+LOCAL_ONLY_PATHS = frozenset({KIOSK_PRINT_PATH, KIOSK_HARDWARE_PATH}) | KIOSK_FACE_PATHS
 
 
 class BootstrapError(RuntimeError):
@@ -123,6 +131,29 @@ class ScannerClientManager:
         # `pcsc` (default) reads through pcscd; `rfpro` talks to the HID module on kiosk3.
         self.card_reader = str(config.get("CARD_READER") or "pcsc").strip().lower()
         self.card_reader_usb_id = str(config.get("CARD_READER_USB_ID") or "").strip() or DEFAULT_CARD_READER_USB_ID
+        # Face check: off (default - nothing changes), shadow (runs, never affects the person) or on.
+        self.face_mode = str(config.get("KIOSK_FACE_CHECK") or "off").strip().lower()
+        raw_flows = str(config.get("KIOSK_FACE_CHECK_FLOWS") or "").replace(" ", "")
+        self.face_flows = tuple(
+            flow for flow in (raw_flows.split(",") if raw_flows else FACE_CHECK_FLOWS) if flow in FACE_CHECK_FLOWS
+        )
+        self.face_service = None
+        if self.face_mode != "off":
+            # Imported only now: a kiosk with the face check off needs no OpenCV installed.
+            from app.face.profiles import get_profile
+            from app.face.service import FaceService
+
+            self.face_service = FaceService(
+                Path(str(config.get("KIOSK_FACE_MODELS_DIR") or "").strip() or DEFAULT_FACE_MODELS_DIR),
+                get_profile(str(config.get("KIOSK_FACE_THRESHOLD_PROFILE") or "").strip()),
+            )
+            if self.face_mode == "on":
+                logger.warning(
+                    "KIOSK_FACE_CHECK=on: the face thresholds are not calibrated on real chip photos yet; "
+                    "run with KIOSK_FACE_CHECK=shadow until the Phase 0 checks on this kiosk are done"
+                )
+        # The reader is one device: the card polling and a face-check photo read must take turns.
+        self._reader_lock = asyncio.Lock()
         self.poll_interval = float(config.get("POLL_INTERVAL", "0.5"))
         self.min_reading_display = 0.6
         self.client_nav_timeout_ms = 5000
@@ -317,6 +348,9 @@ class ScannerClientManager:
         if same_origin_post and request_url.path == KIOSK_HARDWARE_PATH:
             await self._fulfill_hardware(route)
             return
+        if same_origin_post and request_url.path in KIOSK_FACE_PATHS:
+            await self._fulfill_face(route, request_url.path.removeprefix(KIOSK_FACE_PATH_PREFIX))
+            return
         if request_url.path in LOCAL_ONLY_PATHS:
             await route.fulfill(
                 status=404,
@@ -344,9 +378,111 @@ class ScannerClientManager:
                     "qr_input": self.qr_input,
                     "camera_label": self.camera_label or None,
                     "reader_max_gap_ms": self.qr_reader_max_gap_ms,
+                    "face_check": {
+                        "mode": self.face_mode if self.face_service else "off",
+                        "flows": list(self.face_flows) if self.face_service else [],
+                    },
                 }
             ),
         )
+
+    async def _grant_camera_permission(self, context) -> None:
+        """Let the kiosk page open the camera without a permission prompt. The face check starts the
+        camera after a touch on the screen; in --kiosk mode nobody can answer a prompt, and the
+        browser profile is in /tmp, so an earlier "allow" would not survive a reboot."""
+        if self.face_service is None:
+            return
+        parts = urllib.parse.urlsplit(self.tent_base_url)
+        try:
+            await context.grant_permissions(["camera"], origin=f"{parts.scheme}://{parts.netloc}")
+        except Exception:
+            logger.warning("Could not grant the camera permission; the face check may wait for a prompt")
+
+    async def _read_chip_photo(self) -> Optional[bytes]:
+        """Read the chip photo from the inserted card for a check-in face check."""
+        reader = self.reader
+        if reader is None:
+            return None
+        async with self._reader_lock:
+            return await asyncio.to_thread(reader.read_photo)
+
+    async def _fulfill_face(self, route, action: str) -> None:
+        """Answer a face-check request locally. Bodies and errors carry no image, ID or score."""
+        status, body = await self._face_request(action, route.request.post_data_buffer)
+        await route.fulfill(
+            status=status,
+            content_type="application/json",
+            headers={"cache-control": "no-store"},
+            body=json.dumps(body),
+        )
+
+    async def _face_request(self, action: str, raw: Optional[bytes]) -> tuple[int, Dict[str, Any]]:
+        from app.face.service import FaceInputError, FaceStateError
+
+        def failure(status: int, code: str, message: str) -> tuple[int, Dict[str, Any]]:
+            return status, {"error": {"code": code, "message": message}}
+
+        service = self.face_service
+        if service is None:
+            return failure(404, "FACE_CHECK_DISABLED", "เครื่องนี้ไม่ได้เปิดการตรวจใบหน้า")
+        raw = raw or b""
+        if len(raw) > KIOSK_FACE_MAX_BODY_BYTES:
+            return failure(413, "INVALID_FACE_INPUT", "ข้อมูลภาพใหญ่เกินไป")
+
+        try:
+            if action == "start":
+                payload = self._json_object(raw)
+                citizen_id = str(payload.get("citizen_id") or "")
+                flow = payload.get("flow")
+                if not re.fullmatch(r"\d{13}", citizen_id) or flow not in self.face_flows:
+                    raise FaceInputError("invalid start request")
+                read_photo = self._read_chip_photo if flow == "check_in" else None
+                return 200, await service.start(citizen_id, flow, read_photo)
+            if action == "frame":
+                return 200, await service.frame(raw)
+            if action == "verify":
+                frames = self._decode_frames(self._json_object(raw).get("frames"))
+                return 200, await service.verify(frames)
+            service.cancel()
+            return 200, {"ok": True}
+        except FaceInputError:
+            return failure(400, "INVALID_FACE_INPUT", "ข้อมูลสำหรับตรวจใบหน้าไม่ถูกต้อง")
+        except FaceStateError:
+            return failure(409, "FACE_CHECK_NOT_STARTED", "การตรวจใบหน้าไม่ได้เริ่มหรือหมดเวลาแล้ว")
+        except FileNotFoundError as error:
+            logger.error("Face check models are missing: %s", error)
+            return failure(503, "FACE_MODELS_MISSING", "ยังไม่ได้ติดตั้งโมเดลตรวจใบหน้า")
+        except Exception as error:
+            logger.error("Face check %s failed: %s", action, self._describe_failure(error))
+            return failure(500, "FACE_CHECK_FAILED", "ตรวจใบหน้าไม่สำเร็จ")
+
+    @staticmethod
+    def _json_object(raw: bytes) -> Dict[str, Any]:
+        from app.face.service import FaceInputError
+
+        try:
+            payload = json.loads(raw or b"")
+        except (ValueError, UnicodeDecodeError):
+            raise FaceInputError("not JSON") from None
+        if not isinstance(payload, dict):
+            raise FaceInputError("not an object")
+        return payload
+
+    @staticmethod
+    def _decode_frames(encoded: Any) -> list[bytes]:
+        from app.face.service import FaceInputError, MAX_FRAMES
+
+        if not isinstance(encoded, list) or not 1 <= len(encoded) <= MAX_FRAMES:
+            raise FaceInputError("frames")
+        frames = []
+        for item in encoded:
+            if not isinstance(item, str):
+                raise FaceInputError("frame")
+            try:
+                frames.append(base64.b64decode(item, validate=True))
+            except (binascii.Error, ValueError):
+                raise FaceInputError("frame") from None
+        return frames
 
     async def _fulfill_print(self, route) -> None:
         """Answer the kiosk print request locally; the server never sees label images."""
@@ -597,6 +733,9 @@ class ScannerClientManager:
             started_at = time.monotonic()
             card = await asyncio.to_thread(self.reader.read_all_data)
             logger.info("Full smart-card read finished in %.1fs", time.monotonic() - started_at)
+            if self.face_service and "walk_in" in self.face_flows:
+                # Set the chip photo aside for the face check; it is used only if the person agrees.
+                self.face_service.stash_photo(str(card.get("citizen_id") or ""), card.get("photo_base64"))
             stage = "handoff"
             await self.page.evaluate(
                 "card => window.dispatchEvent(new CustomEvent('kiosk:smart-card-full-read', { detail: card }))",
@@ -624,7 +763,10 @@ class ScannerClientManager:
     async def _card_inserted(self) -> bool:
         """Poll the reader off the event loop: an HID reader can block for seconds."""
         reader = self.reader
-        return bool(reader and await asyncio.to_thread(reader.is_card_inserted))
+        if not reader:
+            return False
+        async with self._reader_lock:
+            return bool(await asyncio.to_thread(reader.is_card_inserted))
 
     async def _card_inserted_safely(self) -> bool:
         """Reader errors must not trap the kiosk on a result screen."""
@@ -747,6 +889,8 @@ class ScannerClientManager:
                         await asyncio.sleep(self.poll_interval)
                     continue
 
+                if self.face_service:
+                    self.face_service.cancel()  # a new card is a new person
                 logger.info("Card detected; reading citizen ID")
                 await self._navigate(self.reading_url)
                 try:
@@ -882,6 +1026,7 @@ class ScannerClientManager:
             )
 
             self.context = context
+            await self._grant_camera_permission(context)
             await context.route("**/api/v1/scanner/kiosk/**", self._route_kiosk_api)
             self.page = context.pages[0] if context.pages else await context.new_page()
 

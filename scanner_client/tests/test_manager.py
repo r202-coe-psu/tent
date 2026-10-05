@@ -1000,7 +1000,12 @@ class KioskHardwareRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(route.fulfilled["status"], 200)
         self.assertEqual(
             route.fulfilled["body"],
-            {"qr_input": "both", "camera_label": "JSK-RGB", "reader_max_gap_ms": 40},
+            {
+                "qr_input": "both",
+                "camera_label": "JSK-RGB",
+                "reader_max_gap_ms": 40,
+                "face_check": {"mode": "off", "flows": []},
+            },
         )
         body = manager.json.dumps(route.fulfilled["body"])
         self.assertNotIn(client.device_id, body)
@@ -1013,7 +1018,12 @@ class KioskHardwareRouteTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             route.fulfilled["body"],
-            {"qr_input": "camera", "camera_label": None, "reader_max_gap_ms": 50},
+            {
+                "qr_input": "camera",
+                "camera_label": None,
+                "reader_max_gap_ms": 50,
+                "face_check": {"mode": "off", "flows": []},
+            },
         )
 
     async def test_response_is_not_cacheable(self):
@@ -1145,3 +1155,277 @@ class ReaderLostDuringReadTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+FACE_URL = "https://tent.example.go.th/api/v1/scanner/kiosk/face/"
+CID = "1234567890123"
+
+
+class FakeFaceService:
+    """Records what the manager asks of the face service; answers with canned replies."""
+
+    def __init__(self):
+        self.calls = []
+        self.error = None
+        self.stashed = []
+
+    def _answer(self, name, reply):
+        self.calls.append(name)
+        if self.error:
+            raise self.error
+        return reply
+
+    async def start(self, citizen_id, flow, read_photo=None):
+        self.started = (citizen_id, flow, read_photo)
+        return self._answer("start", {"ok": True, "reference": "reading"})
+
+    async def frame(self, raw):
+        self.frame_bytes = raw
+        return self._answer("frame", {"face": True, "hint": "ok", "ready": True})
+
+    async def verify(self, frames):
+        self.verified_frames = frames
+        return self._answer("verify", {"result": "match", "attempt": 1})
+
+    def cancel(self):
+        self.calls.append("cancel")
+
+    def stash_photo(self, citizen_id, photo):
+        self.stashed.append((citizen_id, photo))
+
+
+class FaceRouteTests(unittest.IsolatedAsyncioTestCase):
+    def client(self, **overrides):
+        client = manager.ScannerClientManager(valid_config(KIOSK_FACE_CHECK="on", **overrides))
+        client.face_service = FakeFaceService()
+        return client
+
+    async def call(self, client, action, body=None, **route_kwargs):
+        route = FakePrintRoute(url=FACE_URL + action, body=body, **route_kwargs)
+        await client._route_kiosk_api(route)
+        return route
+
+    @staticmethod
+    def payload(**fields):
+        return manager.json.dumps(fields).encode()
+
+    async def test_face_check_is_off_unless_configured(self):
+        client = manager.ScannerClientManager(valid_config())
+        self.assertIsNone(client.face_service)
+        route = await self.call(client, "start", self.payload(citizen_id=CID, flow="walk_in"))
+        self.assertEqual(route.fulfilled["status"], 404)
+        self.assertEqual(route.fulfilled["body"]["error"]["code"], "FACE_CHECK_DISABLED")
+
+    async def test_hardware_reports_the_face_check_mode_and_flows(self):
+        client = self.client(KIOSK_FACE_CHECK_FLOWS="walk_in")
+        route = FakeHardwareRoute()
+        await client._route_kiosk_api(route)
+        self.assertEqual(route.fulfilled["body"]["face_check"], {"mode": "on", "flows": ["walk_in"]})
+
+    async def test_face_requests_are_answered_locally_and_never_forwarded(self):
+        client = self.client()
+        for action, body in (
+            ("start", self.payload(citizen_id=CID, flow="walk_in")),
+            ("frame", b"\xff\xd8\xff0"),
+            ("verify", self.payload(frames=[manager.base64.b64encode(b"x").decode()])),
+            ("cancel", b"{}"),
+        ):
+            route = await self.call(client, action, body)
+            self.assertIsNone(route.continued_headers, action)
+            self.assertEqual(route.fulfilled["status"], 200, action)
+            self.assertEqual(route.fulfilled["body"].get("error"), None, action)
+        self.assertEqual(client.face_service.calls, ["start", "frame", "verify", "cancel"])
+
+    async def test_a_foreign_origin_gets_a_local_404(self):
+        client = self.client()
+        route = await self.call(
+            client, "verify", b"{}", origin="https://attacker.example",
+        )
+        self.assertEqual(route.fulfilled["status"], 404)
+        self.assertIsNone(route.continued_headers)
+        self.assertEqual(client.face_service.calls, [])
+
+    async def test_check_in_reads_the_photo_from_the_card_and_walk_in_does_not(self):
+        client = self.client()
+        await self.call(client, "start", self.payload(citizen_id=CID, flow="check_in"))
+        self.assertEqual(client.face_service.started[1], "check_in")
+        self.assertEqual(client.face_service.started[2], client._read_chip_photo)
+        await self.call(client, "start", self.payload(citizen_id=CID, flow="walk_in"))
+        self.assertIsNone(client.face_service.started[2])
+
+    async def test_start_refuses_a_bad_id_an_unknown_flow_or_a_flow_that_is_switched_off(self):
+        client = self.client(KIOSK_FACE_CHECK_FLOWS="walk_in")
+        for body in (
+            self.payload(citizen_id="123", flow="walk_in"),
+            self.payload(citizen_id=CID, flow="elsewhere"),
+            self.payload(citizen_id=CID, flow="check_in"),
+            b"not json",
+            b"[]",
+        ):
+            route = await self.call(client, "start", body)
+            self.assertEqual(route.fulfilled["status"], 400)
+            self.assertEqual(route.fulfilled["body"]["error"]["code"], "INVALID_FACE_INPUT")
+        self.assertEqual(client.face_service.calls, [])
+
+    async def test_verify_decodes_the_frames_and_refuses_bad_ones(self):
+        client = self.client()
+        frames = [b"\xff\xd8\xff-one", b"\xff\xd8\xff-two"]
+        encoded = [manager.base64.b64encode(frame).decode() for frame in frames]
+        route = await self.call(client, "verify", self.payload(frames=encoded))
+        self.assertEqual(route.fulfilled["body"], {"result": "match", "attempt": 1})
+        self.assertEqual(client.face_service.verified_frames, frames)
+        for bad in (None, [], "x", [1], ["@@@"], ["AAAA"] * 9):
+            route = await self.call(client, "verify", self.payload(frames=bad))
+            self.assertEqual(route.fulfilled["status"], 400, bad)
+
+    async def test_frames_are_passed_through_as_raw_bytes(self):
+        client = self.client()
+        route = await self.call(client, "frame", b"\xff\xd8\xff-frame")
+        self.assertEqual(client.face_service.frame_bytes, b"\xff\xd8\xff-frame")
+        self.assertEqual(route.fulfilled["body"], {"face": True, "hint": "ok", "ready": True})
+
+    async def test_an_oversized_body_is_refused_before_any_work(self):
+        client = self.client()
+        route = await self.call(client, "frame", b"0" * (manager.KIOSK_FACE_MAX_BODY_BYTES + 1))
+        self.assertEqual(route.fulfilled["status"], 413)
+        self.assertEqual(client.face_service.calls, [])
+
+    async def test_errors_map_to_http_codes_without_leaking_details(self):
+        from app.face.service import FaceStateError
+
+        client = self.client()
+        cases = (
+            (FaceStateError("secret detail"), 409, "FACE_CHECK_NOT_STARTED"),
+            (FileNotFoundError("models/x.onnx"), 503, "FACE_MODELS_MISSING"),
+            (RuntimeError("private payload 1234567890123"), 500, "FACE_CHECK_FAILED"),
+        )
+        for error, status, code in cases:
+            client.face_service.error = error
+            if status == 409:  # an expected state, not a fault: nothing to log
+                with self.assertNoLogs(manager.logger, level="ERROR"):
+                    route = await self.call(client, "frame", b"\xff\xd8\xff0")
+                logged = ""
+            else:
+                with self.assertLogs(manager.logger, level="ERROR") as logs:
+                    route = await self.call(client, "frame", b"\xff\xd8\xff0")
+                logged = "\n".join(logs.output)
+            self.assertEqual(route.fulfilled["status"], status)
+            self.assertEqual(route.fulfilled["body"]["error"]["code"], code)
+            self.assertNotIn("secret detail", manager.json.dumps(route.fulfilled["body"]))
+            self.assertNotIn("private payload", logged)
+            self.assertNotIn(CID, logged)
+
+    async def test_cancel_wipes_the_service(self):
+        client = self.client()
+        await self.call(client, "cancel", b"{}")
+        self.assertEqual(client.face_service.calls, ["cancel"])
+
+
+class FaceReaderTests(unittest.IsolatedAsyncioTestCase):
+    async def test_the_photo_read_and_the_card_poll_never_overlap(self):
+        client = manager.ScannerClientManager(valid_config())
+        events = []
+
+        def read_photo():
+            events.append("photo-start")
+            time.sleep(0.15)
+            events.append("photo-end")
+            return b"\xff\xd8\xff-photo"
+
+        def is_card_inserted():
+            events.append("poll")
+            return True
+
+        client.reader = SimpleNamespace(read_photo=read_photo, is_card_inserted=is_card_inserted)
+        photo_task = asyncio.create_task(client._read_chip_photo())
+        await asyncio.sleep(0.02)  # the photo read is under way
+        await client._card_inserted()
+        self.assertEqual(await photo_task, b"\xff\xd8\xff-photo")
+        self.assertEqual(events, ["photo-start", "photo-end", "poll"])
+
+    async def test_no_reader_means_no_photo(self):
+        client = manager.ScannerClientManager(valid_config())
+        client.reader = None
+        self.assertIsNone(await client._read_chip_photo())
+
+    async def test_the_full_read_sets_the_chip_photo_aside_for_a_walk_in_face_check(self):
+        client = manager.ScannerClientManager(valid_config(KIOSK_FACE_CHECK="shadow"))
+        client.face_service = FakeFaceService()
+        client.page = EventFakePage(f"https://tent.example.go.th{client.register_card_path}")
+        card = {"citizen_id": CID, "photo_base64": "data:image/jpeg;base64,AAAA"}
+        client.reader = SimpleNamespace(read_all_data=lambda: card)
+
+        self.assertTrue(await client._read_full_card_if_register_path())
+
+        self.assertEqual(client.face_service.stashed, [(CID, "data:image/jpeg;base64,AAAA")])
+
+    async def test_nothing_is_set_aside_when_walk_in_face_check_is_off(self):
+        client = manager.ScannerClientManager(
+            valid_config(KIOSK_FACE_CHECK="on", KIOSK_FACE_CHECK_FLOWS="check_in")
+        )
+        client.face_service = FakeFaceService()
+        client.page = EventFakePage(f"https://tent.example.go.th{client.register_card_path}")
+        client.reader = SimpleNamespace(
+            read_all_data=lambda: {"citizen_id": CID, "photo_base64": "data:image/jpeg;base64,AAAA"}
+        )
+
+        self.assertTrue(await client._read_full_card_if_register_path())
+
+        self.assertEqual(client.face_service.stashed, [])
+
+
+class FaceCameraPermissionTests(unittest.IsolatedAsyncioTestCase):
+    class FakeContext:
+        def __init__(self, error=None):
+            self.granted = []
+            self.error = error
+
+        async def grant_permissions(self, permissions, *, origin):
+            if self.error:
+                raise self.error
+            self.granted.append((permissions, origin))
+
+    async def test_the_kiosk_origin_is_given_the_camera_when_the_face_check_runs(self):
+        client = manager.ScannerClientManager(valid_config(KIOSK_FACE_CHECK="shadow"))
+        context = self.FakeContext()
+
+        await client._grant_camera_permission(context)
+
+        self.assertEqual(context.granted, [(["camera"], "https://tent.example.go.th")])
+
+    async def test_only_the_origin_is_granted_not_a_path(self):
+        client = manager.ScannerClientManager(
+            valid_config(TENT_BASE_URL="https://tent.example.go.th:8443/app", KIOSK_FACE_CHECK="on")
+        )
+        context = self.FakeContext()
+
+        await client._grant_camera_permission(context)
+
+        self.assertEqual(context.granted[0][1], "https://tent.example.go.th:8443")
+
+    async def test_nothing_is_granted_when_the_face_check_is_off(self):
+        client = manager.ScannerClientManager(valid_config())
+        context = self.FakeContext()
+
+        await client._grant_camera_permission(context)
+
+        self.assertEqual(context.granted, [])
+
+    async def test_a_refused_grant_never_stops_the_kiosk_from_starting(self):
+        client = manager.ScannerClientManager(valid_config(KIOSK_FACE_CHECK="shadow"))
+
+        with self.assertLogs(manager.logger, level="WARNING") as logs:
+            await client._grant_camera_permission(self.FakeContext(error=RuntimeError("denied")))
+
+        self.assertIn("camera permission", "\n".join(logs.output))
+
+    def test_on_mode_warns_that_the_thresholds_are_not_calibrated(self):
+        with self.assertLogs(manager.logger, level="WARNING") as logs:
+            manager.ScannerClientManager(valid_config(KIOSK_FACE_CHECK="on"))
+
+        self.assertIn("shadow", "\n".join(logs.output))
+
+    def test_shadow_and_off_do_not_warn(self):
+        for mode in ("shadow", "off"):
+            with self.subTest(mode=mode), self.assertNoLogs(manager.logger, level="WARNING"):
+                manager.ScannerClientManager(valid_config(KIOSK_FACE_CHECK=mode))

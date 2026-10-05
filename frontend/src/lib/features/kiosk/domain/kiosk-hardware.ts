@@ -1,9 +1,13 @@
+import { FACE_CHECK_OFF, type FaceCheckConfig } from './face-check';
+
 export type KioskQrInput = 'camera' | 'reader' | 'both';
 
 export type KioskHardware = {
 	qrInput: KioskQrInput;
 	cameraLabel: string | null;
 	readerMaxGapMs: number;
+	/** Face check against the chip photo: off unless the scanner client turns it on. */
+	faceCheck: FaceCheckConfig;
 };
 
 export const DEFAULT_READER_MAX_GAP_MS = 50;
@@ -14,7 +18,8 @@ export const MAX_READER_GAP_MS = 100;
 export const DEFAULT_KIOSK_HARDWARE: KioskHardware = {
 	qrInput: 'camera',
 	cameraLabel: null,
-	readerMaxGapMs: DEFAULT_READER_MAX_GAP_MS
+	readerMaxGapMs: DEFAULT_READER_MAX_GAP_MS,
+	faceCheck: FACE_CHECK_OFF
 };
 
 export type QrInputPlan = {

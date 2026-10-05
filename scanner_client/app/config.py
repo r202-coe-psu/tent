@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Mapping, Any
 from urllib.parse import urlparse
 
+from app.face.profiles import PROFILES as FACE_THRESHOLD_PROFILES
+
 try:
     from dotenv import dotenv_values
 except ImportError:  # pragma: no cover - production installs python-dotenv
@@ -53,6 +55,8 @@ QR_READER_GAP_RANGE_MS = (10, 100)
 DEFAULT_QR_READER_GAP_MS = 50
 CARD_READERS = ("pcsc", "rfpro")
 DEFAULT_CARD_READER_USB_ID = "0483:4c43"
+FACE_CHECK_MODES = ("off", "shadow", "on")
+FACE_CHECK_FLOWS = ("check_in", "walk_in")
 
 
 def _is_trusted_plaintext_host(hostname: str) -> bool:
@@ -106,6 +110,17 @@ def _choice(config: Mapping[str, Any], key: str, allowed: tuple[str, ...], defau
     return value
 
 
+def _csv_choice(config: Mapping[str, Any], key: str, allowed: tuple[str, ...]) -> tuple[str, ...]:
+    """A comma separated subset of `allowed`; unset means all of them."""
+    raw = _clean(config.get(key))
+    if not raw:
+        return allowed
+    values = tuple(dict.fromkeys(part.strip().lower() for part in raw.split(",") if part.strip()))
+    if not values or any(value not in allowed for value in values):
+        raise ScannerConfigError(f"{key} must be a comma separated list of: {', '.join(allowed)}")
+    return values
+
+
 def _usb_id(config: Mapping[str, Any], key: str, default: str = "") -> str:
     value = _clean(config.get(key)) or default
     if value and not USB_ID_PATTERN.fullmatch(value):
@@ -154,6 +169,14 @@ def validate_hardware_config(config: Mapping[str, Any]) -> dict[str, str]:
     card_reader = _choice(config, "CARD_READER", CARD_READERS, "pcsc")
     card_reader_usb_id = _usb_id(config, "CARD_READER_USB_ID", DEFAULT_CARD_READER_USB_ID)
 
+    face_check = _choice(config, "KIOSK_FACE_CHECK", FACE_CHECK_MODES, "off")
+    face_flows = _csv_choice(config, "KIOSK_FACE_CHECK_FLOWS", FACE_CHECK_FLOWS)
+    face_profile = _clean(config.get("KIOSK_FACE_THRESHOLD_PROFILE"))
+    if face_profile and face_profile not in FACE_THRESHOLD_PROFILES:
+        raise ScannerConfigError(
+            "KIOSK_FACE_THRESHOLD_PROFILE must be one of: " + ", ".join(FACE_THRESHOLD_PROFILES)
+        )
+
     return {
         "PRINTER_BACKEND": backend,
         "PRINTER_USB_ID": printer_usb_id,
@@ -164,6 +187,10 @@ def validate_hardware_config(config: Mapping[str, Any]) -> dict[str, str]:
         "KIOSK_QR_READER_MAX_GAP_MS": str(reader_gap_ms),
         "CARD_READER": card_reader,
         "CARD_READER_USB_ID": card_reader_usb_id,
+        "KIOSK_FACE_CHECK": face_check,
+        "KIOSK_FACE_CHECK_FLOWS": ",".join(face_flows),
+        "KIOSK_FACE_THRESHOLD_PROFILE": face_profile,
+        "KIOSK_FACE_MODELS_DIR": _clean(config.get("KIOSK_FACE_MODELS_DIR")),
     }
 
 
