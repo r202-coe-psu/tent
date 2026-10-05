@@ -61,6 +61,10 @@ class UnassignedMember(BaseModel):
 	age: int | None = None
 	nickname: str | None = None
 	religion: str | None = None
+	# CR-148 — free text when religion == "other".
+	religion_other: str | None = None
+	# CR-148 — optional detail when vulnerable_groups has "disability_other".
+	disability_other_detail: str | None = None
 	emergency_contact: EmergencyContact | None = None
 	# GridFS ref while queued (`gfs:{oid}`); claim births Couch `image:{ulid}` (#255).
 	photo: str | None = None
@@ -110,6 +114,11 @@ class UnassignedHousehold(BaseModel):
 
 	housing_type: HousingType | None = None
 	residence_landmark: str | None = None
+	# CR-148 — structured dorm address (housing_type apartment_dorm only).
+	dorm_name: str | None = None
+	dorm_building: str | None = None
+	dorm_floor: str | None = None
+	dorm_room: str | None = None
 	address_no: str | None = None
 	village_no: str | None = None
 	subdistrict: str | None = None

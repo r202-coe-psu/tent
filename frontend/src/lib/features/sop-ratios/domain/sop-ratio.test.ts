@@ -6,6 +6,8 @@ import {
 	sopOverrideSchema,
 	resolveEffectiveProfile,
 	SOP_RATIO_KEYS,
+	VISIBLE_SOP_RATIO_KEYS,
+	isVisibleSopRatioKey,
 	SOP_RATIO_KIND,
 	SOP_MASTER_SCHEMA_VERSION,
 	SOP_OVERRIDE_SCHEMA_VERSION,
@@ -571,5 +573,36 @@ describe('SOP Ratio Domain', () => {
 			expect(ratio2).toBe(15);
 			expect(Number.isNaN(ratio2)).toBe(false);
 		});
+	});
+});
+
+describe('VISIBLE_SOP_RATIO_KEYS (display-only Sphere variables)', () => {
+	it('shows the 9 kept variables, all drawn from the persisted 20-key set', () => {
+		expect(VISIBLE_SOP_RATIO_KEYS).toHaveLength(9);
+		expect(new Set(VISIBLE_SOP_RATIO_KEYS).size).toBe(9);
+		for (const key of VISIBLE_SOP_RATIO_KEYS) expect(SOP_RATIO_KEYS).toContain(key);
+	});
+
+	it('hides water, energy, dining, split area and threshold variables', () => {
+		for (const key of [
+			'water_l_per_person_day',
+			'drinking_water_l_per_person_day',
+			'cooking_water_l_per_person_day',
+			'hygiene_water_l_per_person_day',
+			'kcal_per_adult_day',
+			'people_per_dining_point_adult',
+			'people_per_dining_point_child',
+			'm2_per_person_living',
+			'm2_per_person_living_cold',
+			'max_waterpoint_distance_m',
+			'max_queue_minutes'
+		]) {
+			expect(isVisibleSopRatioKey(key)).toBe(false);
+		}
+	});
+
+	it('keeps the merged shelter area and rejects unknown keys', () => {
+		expect(isVisibleSopRatioKey('m2_per_person_total')).toBe(true);
+		expect(isVisibleSopRatioKey('rice_g_per_person_meal')).toBe(false);
 	});
 });

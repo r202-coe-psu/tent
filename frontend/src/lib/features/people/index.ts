@@ -138,10 +138,15 @@ export {
 	nextQueueLabel,
 	classifyZoningQueueTab,
 	classifyScreeningQueueTab,
+	nextScreeningQueueEvacuee,
 	recommendZoneKind,
 	countPresentOccupantsByZone,
 	parseZoningQrCode,
 	buildZoningPath,
+	isInShelterStatus,
+	zoningQueueSince,
+	sortByZoningQueueSince,
+	formatQueueWait,
 	type NextQueueLabel,
 	type ZoningQueueTab,
 	type ScreeningQueueTab,
@@ -183,6 +188,9 @@ export {
 	isIntakeNewRegistrationLocked,
 	resolveNewRegistrationCta,
 	deriveDuplicateCheckQuery,
+	deriveDuplicateCheckQueries,
+	duplicateCheckKey,
+	type DuplicateCheckQuery,
 	type ShelterHitAction,
 	type NewRegistrationCtaKind,
 	type DuplicateCheckMember
@@ -245,7 +253,7 @@ export {
 } from './domain/birth-calendar';
 
 export type { PeopleRepository, EvacueeFilters, HouseholdFilters } from './data/people.repository';
-export { peopleRepository } from './data/people.remote';
+export { peopleRepository, isRegistrationCompensationIncomplete } from './data/people.remote';
 export { getShelterCode, getShelterDb } from '$lib/db/shelter';
 
 // Application — TanStack Query hooks + changes-feed live-query wiring
@@ -328,7 +336,14 @@ export { default as HouseholdForm } from './ui/household-form/household-form.sve
 export { default as HouseholdFormPage } from './ui/household-form/household-form-page.svelte';
 export { default as HouseholdPostArrival } from './ui/household-flows/household-post-arrival.svelte';
 export { default as EvacueeWristbandSuccess } from './ui/registration/evacuee-wristband-success.svelte';
-export { default as FamilyBatchPrint } from './ui/registration/family-batch-print.svelte';
+export {
+	default as FamilyBatchPrint,
+	type IntakeNextStation
+} from './ui/registration/family-batch-print.svelte';
+export {
+	default as StationCompletionSummary,
+	type StationSummaryFact
+} from './ui/shared/station-completion-summary.svelte';
 export { default as UnifiedRegistrationForm } from './ui/registration/unified-registration-form.svelte';
 export type { ThaiDAutofillProfile, ThaiDAutofillAddress } from './domain/thaid-profile';
 export { stripThaiTitle } from './domain/thaid-profile';

@@ -49,7 +49,10 @@ services:
 
   mongodb:
     container_name: tent-mongodb-staging
-    image: mongo:7
+    image: mongo:8.0
+    # Workaround: kernel ≥6.19 + MongoDB 8 TCMalloc rseq crash (exit 139).
+    environment:
+      - GLIBC_TUNABLES=glibc.pthread.rseq=1
     volumes:
       - /mnt/tent-data/mongodb/data:/data/db
     # No port binding — reachable only inside Docker network
@@ -93,6 +96,7 @@ services:
       THIRDPARTY_JWT_SIGNING_KEY: ${THIRDPARTY_JWT_SIGNING_KEY}
       THIRDPARTY_SECRET_SALT: ${THIRDPARTY_SECRET_SALT:-salt-change-this-on-prod}
       COUCHDB_URL: ${COUCHDB_URL:-http://couchdb:5984}
+      FASTAPI_WORKERS: ${FASTAPI_WORKERS:-4}
     # No port binding — reachable only inside Docker network (nginx proxies)
     restart: unless-stopped
 

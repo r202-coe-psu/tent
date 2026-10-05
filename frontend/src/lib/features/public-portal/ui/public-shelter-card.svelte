@@ -12,7 +12,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 
 	import type { PublicShelterCardModel } from '../domain/types';
-	import { resolveMasterLabel, toLabelMap } from '../domain/master-labels';
+	import { resolveMasterLabel, shelterTypeLabel, toLabelMap } from '../domain/master-labels';
 	import { useShelterTypeLabelMap, useVulnerableGroupLabelMap } from '../application/queries';
 
 	import { getTranslation } from '$lib/utils/i18n';
@@ -58,25 +58,7 @@
 	);
 
 	function adminTypeLabel(type: string): string {
-		const legacyEn: Record<string, string> =
-			langState.current === 'en'
-				? {
-						วัด: 'Temple',
-						โรงเรียน: 'School',
-						ศาลาประชาคม: 'Community Hall',
-						ศูนย์กีฬา: 'Sports Centre',
-						อาคารราชการ: 'Government Building',
-						หน่วยงานราชการ: 'Government Agency',
-						ศูนย์อพยพ: 'Evacuation Center',
-						มหาวิทยาลัย: 'University',
-						มัสยิด: 'Mosque',
-						โบสถ์: 'Church',
-						พื้นที่เอกชน: 'Private Area',
-						อื่นๆ: 'Other',
-						unspecified: 'Unspecified'
-					}
-				: { unspecified: '' };
-		return resolveMasterLabel(type, shelterTypeLabels, legacyEn);
+		return shelterTypeLabel(type, shelterTypeLabels, langState.current);
 	}
 
 	function vulnerableGroupLabel(group: string): string {

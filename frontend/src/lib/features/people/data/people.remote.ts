@@ -2,6 +2,7 @@ import { paginateItems } from '$lib/db/paginate';
 import { createRemoteRepository, type Repository, type PaginatedResult } from '$lib/db/repository';
 import { makeDocId, now, touch, type AuthorContext } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
+import type { UlidReservation } from '$lib/db/ulid-reservation';
 import { getShelterDb } from '$lib/db/shelter';
 import { createAuditEntry } from '$lib/features/shared';
 import {
@@ -41,7 +42,9 @@ import {
 	type Medical,
 	type MedicalInput,
 	type Movement,
-	type MovementAction
+	type MovementAction,
+	dormFieldsFor,
+	memberExtrasFor
 } from '../domain/people';
 import {
 	planFamilyRegistration,
@@ -334,6 +337,20 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		return all.filter((e) => matchesEvacueeSearch(e, q));
 	}
 
+	async searchEvacueesMany(queries: readonly string[]): Promise<Map<string, Evacuee[]>> {
+		const trimmed = [...new Set(queries.map((q) => q.trim()).filter(Boolean))];
+		const results = new Map<string, Evacuee[]>();
+		if (trimmed.length === 0) return results;
+		const all = await this.repo.allByType('evacuee', isEvacuee);
+		for (const q of trimmed) {
+			results.set(
+				q,
+				all.filter((e) => matchesEvacueeSearch(e, q))
+			);
+		}
+		return results;
+	}
+
 	createHousehold(input: HouseholdInput, ctx: AuthorContext): Promise<Household> {
 		return this.repo.put(buildHousehold(input, ctx));
 	}
@@ -349,9 +366,13 @@ export class PeopleRemoteRepository implements PeopleRepository {
 	async createFamilyRegistration(
 		input: UnifiedRegistrationInput,
 		ctx: AuthorContext,
-		channel: UnifiedRegistrationChannel = 'onsite'
+		channel: UnifiedRegistrationChannel = 'onsite',
+		ids?: UlidReservation
 	): Promise<{ household: Household; members: Evacuee[] }> {
 		const plan = planFamilyRegistration(input, channel);
+		// Same reservation + same input on a retry → same doc IDs → idempotent 409s.
+		ids?.rewind();
+		const nextUlid = () => ids?.next() ?? ulid();
 		const createdMemberIds: string[] = [];
 		let householdId: string | null = null;
 
@@ -372,7 +393,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 				const movementDocs: Movement[] = [];
 
 				for (const memberInput of plan.memberInputs) {
-					const memberUlid = ulid();
+					const memberUlid = nextUlid();
 					const memberId = makeDocId('evacuee', memberUlid);
 					createdMemberIds.push(memberId);
 
@@ -396,7 +417,8 @@ export class PeopleRemoteRepository implements PeopleRepository {
 									notes: memberInput.medical_note || '',
 									track: memberInput.track || ('normal' as const)
 								},
-								ctx
+								ctx,
+								nextUlid()
 							)
 						);
 					}
@@ -405,7 +427,8 @@ export class PeopleRemoteRepository implements PeopleRepository {
 						movementDocs.push(
 							createMovement(
 								{ evacuee_id: evacuee._id, action: 'check_in', zone: evacuee.current_stay.zone },
-								ctx
+								ctx,
+								nextUlid()
 							)
 						);
 					}
@@ -458,16 +481,20 @@ export class PeopleRemoteRepository implements PeopleRepository {
 					household = target;
 				}
 
-				await this.refreshDerivedHouseholdStatus(targetId);
-				const refreshed = await this.getHousehold(targetId);
-				household = refreshed ?? household;
+				// Members are committed from here on — a failed status refresh (network
+				// flap) must not fall through to compensation and delete them.
+				try {
+					await this.refreshDerivedHouseholdStatus(targetId);
+					const refreshed = await this.getHousehold(targetId);
+					household = refreshed ?? household;
+				} catch {
+					// Derived status is recomputed on the next household write.
+				}
 
 				return { household, members };
 			} catch (err) {
-				for (const id of [...createdMemberIds].reverse()) {
-					await this.compensateFailedEvacueeRegistration(id);
-				}
-				throw err;
+				const complete = await this.compensateFailedFamilyRegistration(createdMemberIds, null);
+				throw markCompensationResult(err, complete);
 			}
 		}
 
@@ -476,10 +503,10 @@ export class PeopleRemoteRepository implements PeopleRepository {
 				throw new Error('ต้องมีสมาชิกอย่างน้อย 1 คน');
 			}
 
-			const householdUlid = ulid();
+			const householdUlid = nextUlid();
 			householdId = makeDocId('household', householdUlid);
 
-			const memberUlids = plan.memberInputs.map(() => ulid());
+			const memberUlids = plan.memberInputs.map(() => nextUlid());
 			const memberIds = memberUlids.map((u) => makeDocId('evacuee', u));
 			createdMemberIds.push(...memberIds);
 			const headId = memberIds[0];
@@ -520,7 +547,8 @@ export class PeopleRemoteRepository implements PeopleRepository {
 								notes: memberInput.medical_note || '',
 								track: memberInput.track || ('normal' as const)
 							},
-							ctx
+							ctx,
+							nextUlid()
 						)
 					);
 				}
@@ -529,7 +557,8 @@ export class PeopleRemoteRepository implements PeopleRepository {
 					movementDocs.push(
 						createMovement(
 							{ evacuee_id: evacuee._id, action: 'check_in', zone: evacuee.current_stay.zone },
-							ctx
+							ctx,
+							nextUlid()
 						)
 					);
 				}
@@ -552,21 +581,38 @@ export class PeopleRemoteRepository implements PeopleRepository {
 
 			return { household, members };
 		} catch (err) {
-			if (householdId) {
-				for (const id of createdMemberIds) {
-					try {
-						await this.patchEvacuee(id, { household_id: null });
-					} catch {
-						// Best-effort unlink before household delete.
-					}
-				}
-				await this.compensateFailedHouseholdCreate(householdId);
-			}
-			for (const id of [...createdMemberIds].reverse()) {
-				await this.compensateFailedEvacueeRegistration(id);
-			}
-			throw err;
+			const complete = await this.compensateFailedFamilyRegistration(createdMemberIds, householdId);
+			throw markCompensationResult(err, complete);
 		}
+	}
+
+	/**
+	 * Undo a failed family submit: members (and their medical docs) first, then
+	 * the household once it has no members left. Never throws — a cleanup error
+	 * (typically still offline) must not replace the original save error.
+	 * Returns false when any step failed, i.e. docs may remain in CouchDB.
+	 * Append-only `check_in` movements are never removed (schema.md §7 rule 2).
+	 */
+	private async compensateFailedFamilyRegistration(
+		memberIds: readonly string[],
+		householdId: string | null
+	): Promise<boolean> {
+		let complete = true;
+		for (const id of [...memberIds].reverse()) {
+			try {
+				await this.compensateFailedEvacueeRegistration(id);
+			} catch {
+				complete = false;
+			}
+		}
+		if (householdId) {
+			try {
+				await this.compensateFailedHouseholdCreate(householdId);
+			} catch {
+				complete = false;
+			}
+		}
+		return complete;
 	}
 
 	async listHouseholds(): Promise<Household[]> {
@@ -1240,8 +1286,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 					community: null,
 					housing_type: householdInput.housing_type ?? null,
 					residence_landmark: householdInput.residence_landmark ?? null,
-					address_no:
-						householdInput.housing_type === 'homeless' ? null : (householdInput.address_no ?? null),
+					...dormFieldsFor(householdInput),
 					village_no: householdInput.village_no ?? null,
 					subdistrict: householdInput.subdistrict ?? null,
 					district: householdInput.district ?? null,
@@ -1266,8 +1311,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 				...existingHousehold,
 				housing_type: householdInput.housing_type ?? null,
 				residence_landmark: householdInput.residence_landmark ?? null,
-				address_no:
-					householdInput.housing_type === 'homeless' ? null : (householdInput.address_no ?? null),
+				...dormFieldsFor(householdInput),
 				village_no: householdInput.village_no ?? null,
 				subdistrict: householdInput.subdistrict ?? null,
 				district: householdInput.district ?? null,
@@ -1355,6 +1399,12 @@ export class PeopleRemoteRepository implements PeopleRepository {
 					photo: m.photo ?? existingEvacuee.photo,
 					country: m.country ?? existingEvacuee.country,
 					religion: m.religion ?? existingEvacuee.religion,
+					...memberExtrasFor({
+						religion: m.religion ?? existingEvacuee.religion,
+						religion_other: m.religion_other,
+						vulnerable_groups: m.vulnerable_groups ?? [],
+						disability_other_detail: m.disability_other_detail
+					}),
 					current_stay: updatedStay
 				});
 
@@ -1499,6 +1549,24 @@ export class PeopleRemoteRepository implements PeopleRepository {
 			mergedMembers: updatedMembers
 		};
 	}
+}
+
+const incompleteCompensation = new WeakSet<object>();
+
+/**
+ * True when a failed family registration could not be fully undone — some
+ * household / evacuee docs may still exist, so staff must search before resubmitting.
+ */
+export function isRegistrationCompensationIncomplete(err: unknown): boolean {
+	return typeof err === 'object' && err !== null && incompleteCompensation.has(err);
+}
+
+/** Re-throwable original error, tagged when compensation was incomplete. */
+function markCompensationResult(err: unknown, complete: boolean): unknown {
+	if (complete) return err;
+	const tagged = typeof err === 'object' && err !== null ? err : new Error(String(err));
+	incompleteCompensation.add(tagged);
+	return tagged;
 }
 
 let singleton: PeopleRepository | null = null;

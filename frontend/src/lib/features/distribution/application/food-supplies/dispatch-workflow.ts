@@ -16,13 +16,15 @@ import {
 	type RequisitionTicketRepository
 } from '../../data/food-supplies';
 import { assertCanDispatchTicket } from './auth';
+import { assertPositiveIntegerQty } from './validation';
 import { StockIntegrityError, TicketStateError, WorkflowValidationError } from './errors';
 import { assertLedgerReplayBase } from './ledger-replay';
-import { assertPositiveQty } from './validation';
+import { resolveCanonicalItemUnits, type CanonicalUnitCatalogRepository } from './canonical-unit';
 
 export interface DispatchWorkflowDependencies {
 	ticketRepo?: RequisitionTicketRepository;
 	operationsRepo?: OperationsRepository;
+	catalogRepo?: CanonicalUnitCatalogRepository;
 }
 
 export interface DispatchTicketOptions {
@@ -137,6 +139,11 @@ export async function dispatchTicket(
 			);
 		}
 	}
+	const itemUnits = await resolveCanonicalItemUnits(
+		current.items.map((item) => item.item_id),
+		ctx,
+		deps?.catalogRepo
+	);
 
 	let createdCount = 0;
 	for (const item of current.items) {
@@ -148,11 +155,16 @@ export async function dispatchTicket(
 				? options.item_lots[item.item_id]
 				: ledgerId;
 
+		const unit = itemUnits.get(item.item_id);
+		if (!unit) {
+			throw new StockIntegrityError(`Missing canonical unit for dispatched item ${item.item_id}`);
+		}
+
 		const ledgerEntry = createStockLedger(
 			{
 				item_id: item.item_id,
 				qty: qtyNeg(item.allocated_qty),
-				unit: 'ชิ้น',
+				unit,
 				reason: 'distribute',
 				ref_id: current._id,
 				lot_ref: lotRef,
@@ -205,7 +217,8 @@ export async function amendActiveTicket(
 ): Promise<RequisitionTicket> {
 	assertCanDispatchTicket(ctx);
 
-	assertPositiveQty(input.added_qty, 'Amendment added_qty');
+	assertPositiveIntegerQty(input.added_qty, 'Amendment added_qty');
+	const addedQty = input.added_qty.trim();
 
 	const amendmentId = input.amendmentId;
 	if (!isUlid(amendmentId)) {
@@ -227,6 +240,11 @@ export async function amendActiveTicket(
 	if (!targetItem) {
 		throw new WorkflowValidationError(`Item ${input.item_id} does not exist on ticket ${ticketId}`);
 	}
+	const itemUnits = await resolveCanonicalItemUnits([input.item_id], ctx, deps?.catalogRepo);
+	const unit = itemUnits.get(input.item_id);
+	if (!unit) {
+		throw new StockIntegrityError(`Missing canonical unit for amended item ${input.item_id}`);
+	}
 
 	const lotRef =
 		input.lot_ref && input.lot_ref.startsWith('stock_ledger:')
@@ -237,8 +255,8 @@ export async function amendActiveTicket(
 	const ledgerEntry = createStockLedger(
 		{
 			item_id: input.item_id,
-			qty: qtyNeg(input.added_qty),
-			unit: 'ชิ้น',
+			qty: qtyNeg(addedQty),
+			unit,
 			reason: 'distribute',
 			ref_id: current._id,
 			lot_ref: lotRef,
@@ -252,7 +270,7 @@ export async function amendActiveTicket(
 	const intendedAmendment: TicketAmendment = {
 		amendment_id: amendmentId,
 		item_id: input.item_id,
-		added_qty: input.added_qty,
+		added_qty: addedQty,
 		amended_at: now(),
 		amended_by: ctx.createdBy,
 		reason: input.reason || 'Frontline radio top-up request'
@@ -306,7 +324,7 @@ export async function amendActiveTicket(
 				if (i.item_id !== input.item_id) return i;
 				return {
 					...i,
-					allocated_qty: addQty(i.allocated_qty || '0', input.added_qty)
+					allocated_qty: addQty(i.allocated_qty || '0', addedQty)
 				};
 			});
 

@@ -14,7 +14,12 @@
 		useScreenings,
 		maskNationalId,
 		evacueeAgeYears,
-		type Screening
+		nextScreeningQueueEvacuee,
+		recommendZoneKind,
+		formatPersonName,
+		StationCompletionSummary,
+		type Screening,
+		type ZoningRecommendKind
 	} from '$lib/features/people';
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
@@ -62,9 +67,48 @@
 	let isDirty = $state(false);
 	let isNavigatingAfterSave = $state(false);
 	let savedEvacueeId = $state<string | null>(null);
+	// The route is reused for 「คนถัดไปในคิว」 — only show the summary for the person just saved
+	const justSaved = $derived(savedEvacueeId !== null && savedEvacueeId === evacueeId);
+
+	const ZONE_KIND_LABELS: Record<ZoningRecommendKind, string> = {
+		quarantine: 'โซนกักตัว (มีอาการเฝ้าระวัง)',
+		vulnerable: 'โซนกลุ่มเปราะบาง',
+		general: 'โซนทั่วไป'
+	};
+	const savedFacts = $derived.by(() => {
+		if (!evacuee) return [];
+		const symptoms = latestScreening?.symptoms ?? [];
+		return [
+			{
+				label: 'แนวทางดูแล',
+				value: latestScreening?.track === 'fast_track' ? 'Fast track' : 'ดูแลตามปกติ'
+			},
+			{
+				label: 'อาการเฝ้าระวัง (EWAR)',
+				value: symptoms.length > 0 ? `${symptoms.length} อาการ` : 'ไม่มี'
+			},
+			{
+				label: 'กลุ่มเปราะบาง',
+				value:
+					(evacuee.vulnerable_groups?.length ?? 0) > 0
+						? `${evacuee.vulnerable_groups.length} กลุ่ม`
+						: 'ไม่มี'
+			},
+			{
+				label: 'โซนที่ระบบแนะนำ (สถานี 3)',
+				value: ZONE_KIND_LABELS[recommendZoneKind(evacuee, symptoms)]
+			}
+		];
+	});
+	const screenedIds = $derived(
+		new Set(((screeningsQuery.data ?? []) as Screening[]).map((s) => s.evacuee_id))
+	);
+	const nextInQueue = $derived(
+		nextScreeningQueueEvacuee(evacueesQuery.data ?? [], screenedIds, savedEvacueeId)
+	);
 
 	beforeNavigate((nav) => {
-		if (isNavigatingAfterSave || savedEvacueeId) return;
+		if (isNavigatingAfterSave || justSaved) return;
 		if (
 			shouldConfirmLeave({ isDirty }) &&
 			!confirm('มีการแก้ไขที่ยังไม่ได้บันทึก ต้องการออกจากหน้านี้หรือไม่?')
@@ -81,6 +125,17 @@
 	function goToZoning(id: string) {
 		isNavigatingAfterSave = true;
 		goto(resolve(`/onsite/zoning/${id}` as `/onsite/zoning/${string}`));
+	}
+
+	function goToNextInQueue() {
+		if (!nextInQueue) return;
+		savedEvacueeId = null;
+		isDirty = false;
+		goto(
+			resolve(
+				`/onsite/medical-screening/${nextInQueue._id}` as `/onsite/medical-screening/${string}`
+			)
+		);
 	}
 
 	function handleSuccess(id: string) {
@@ -187,25 +242,35 @@
 				<Button variant="default" class="mt-4 w-full" onclick={goToQueue}>กลับไปคิวคัดกรอง</Button>
 			</Card.Root>
 		</div>
-	{:else if savedEvacueeId}
-		<div class="flex flex-1 items-center justify-center p-6">
-			<Card.Root class="w-full max-w-md border-border bg-card p-6 text-center shadow-sm">
-				<h2 class="text-base font-bold text-foreground">บันทึกผลการคัดกรองแล้ว</h2>
-				<p class="mt-1.5 text-xs text-muted-foreground">
-					ส่งต่อไปโต๊ะจัดสรรที่พัก (Station 3) หรือกลับคิวแพทย์
-				</p>
-				<div class="mt-5 flex flex-col gap-2">
-					<Button class="w-full" onclick={() => goToZoning(savedEvacueeId!)}>ไปจัดโซนเลย</Button>
-					<Button variant="outline" class="w-full" onclick={goToQueue}>กลับคิวแพทย์</Button>
-				</div>
-			</Card.Root>
+	{:else if justSaved}
+		<div class="p-4 md:p-6">
+			<StationCompletionSummary
+				title="บันทึกผลคัดกรองแล้ว"
+				subtitle={`${formatPersonName(evacuee)} — ส่งต่อโต๊ะจัดสรรที่พัก (สถานี 3) ได้เลย`}
+				facts={savedFacts}
+			>
+				{#snippet actions()}
+					<Button class="min-h-11" onclick={() => goToZoning(evacuee._id)}>ไปจัดโซนเลย</Button>
+					<Button
+						variant="outline"
+						class="min-h-11"
+						disabled={!nextInQueue}
+						onclick={goToNextInQueue}
+					>
+						{nextInQueue ? `คนถัดไปในคิว: ${formatPersonName(nextInQueue)}` : 'ไม่มีคนรอตรวจในคิว'}
+					</Button>
+					<Button variant="ghost" class="min-h-11" onclick={goToQueue}>กลับคิวแพทย์</Button>
+				{/snippet}
+			</StationCompletionSummary>
 		</div>
 	{:else}
-		<ClinicalScreeningForm
-			{evacuee}
-			{priorScreening}
-			onDirtyChange={(dirty) => (isDirty = dirty)}
-			onSuccess={handleSuccess}
-		/>
+		{#key evacuee._id}
+			<ClinicalScreeningForm
+				{evacuee}
+				{priorScreening}
+				onDirtyChange={(dirty) => (isDirty = dirty)}
+				onSuccess={handleSuccess}
+			/>
+		{/key}
 	{/if}
 </div>

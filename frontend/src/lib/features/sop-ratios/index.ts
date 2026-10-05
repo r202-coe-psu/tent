@@ -20,6 +20,8 @@ export {
 	verifyMasterPointerMatch,
 	SOP_RATIO_KEYS,
 	SOP_RATIO_KIND,
+	VISIBLE_SOP_RATIO_KEYS,
+	isVisibleSopRatioKey,
 	sopMasterSchema,
 	sopProfileFormSchema,
 	sopProfileInputSchema,
@@ -124,13 +126,19 @@ export {
 	FOOD_SPHERE_SOURCE_OPTIONS,
 	foodSphereStandardInputSchema,
 	isFoodSphereStandard,
+	FOOD_SPHERE_STANDARD_SCHEMA_VERSION,
 	type TargetSegment,
 	type FoodSphereSource,
 	type FoodSphereStandard,
 	type FoodSphereStandardInput
 } from './domain/food-sphere';
 export { DEFAULT_FOOD_SPHERE_STANDARDS } from './domain/food-sphere.fixture';
-export { calculateTotalDailyDemand, type HeadcountBySegment } from './domain/food-sphere-calc';
+export {
+	AGE_BUCKET_BY_SEGMENT,
+	calculateTotalDailyDemand,
+	headcountsFromAgeGroups,
+	type HeadcountBySegment
+} from './domain/food-sphere-calc';
 
 // Domain: Requirement Group
 export {

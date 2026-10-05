@@ -6,6 +6,7 @@
  * generated types so the rules live somewhere a test can reach without a server.
  */
 import { z } from 'zod';
+import { isValidThaiNationalId } from '$lib/utils/thai-id';
 
 /** CR-092 §4 ticket statuses. `rejected` is deliberately absent — see the module notes. */
 export const TICKET_STATUSES = ['confirmed', 'pending_review', 'cancelled'] as const;
@@ -156,15 +157,8 @@ const nationalIdField = z
 	.refine((value) => value === '' || isValidThaiNationalId(value), 'เลขประจำตัวประชาชนไม่ถูกต้อง')
 	.optional();
 
-export function isValidThaiNationalId(value: string): boolean {
-	const digits = value.replace(/\D/g, '');
-	if (digits.length !== 13) return false;
-	let sum = 0;
-	for (let i = 0; i < 12; i++) {
-		sum += Number(digits[i]) * (13 - i);
-	}
-	return (11 - (sum % 11)) % 10 === Number(digits[12]);
-}
+// Shared with registration (CR-148) — re-exported for existing volunteer-portal callers.
+export { isValidThaiNationalId };
 
 export const volunteerApplySchema = z.object({
 	/** Used by the direct CouchDB writer to select the job's shelter database. */

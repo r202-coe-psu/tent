@@ -49,6 +49,28 @@ function withTimeout<T>(work: Promise<T>, ms: number, message: string): Promise<
 	return Promise.race([work, expiry]).finally(() => clearTimeout(timer));
 }
 
+/** Rasterizes `element` on a white background, with the shared render timeout. */
+function renderElementToCanvas(
+	element: HTMLElement,
+	scale: number,
+	timeoutMs: number | undefined,
+	timeoutMessage: string
+): Promise<HTMLCanvasElement> {
+	return withTimeout(
+		html2canvas(element, {
+			scale,
+			backgroundColor: '#ffffff',
+			useCORS: true,
+			// Production serves the compiled Tailwind/Svelte CSS as external stylesheets.
+			// Freeze the resolved styles into the cloned tree so rendering does not
+			// depend on those stylesheets loading again inside html2canvas's hidden iframe.
+			onclone: (_document, clonedElement) => inlineComputedStyles(element, clonedElement)
+		}),
+		timeoutMs ?? DEFAULT_RENDER_TIMEOUT_MS,
+		timeoutMessage
+	);
+}
+
 /**
  * Rasterizes a DOM element (via html2canvas) and drops it into a jsPDF page
  * sized to match the element's aspect ratio — so the PDF is a pixel-faithful
@@ -68,17 +90,10 @@ async function renderElementToPdf(
 ): Promise<jsPDF> {
 	const scale = options.scale ?? 3;
 	const maxWidthMm = options.maxWidthMm ?? 70;
-	const canvas = await withTimeout(
-		html2canvas(element, {
-			scale,
-			backgroundColor: '#ffffff',
-			useCORS: true,
-			// Production serves the compiled Tailwind/Svelte CSS as external stylesheets.
-			// Freeze the resolved styles into the cloned tree so PDF rendering does not
-			// depend on those stylesheets loading again inside html2canvas's hidden iframe.
-			onclone: (_document, clonedElement) => inlineComputedStyles(element, clonedElement)
-		}),
-		options.timeoutMs ?? DEFAULT_RENDER_TIMEOUT_MS,
+	const canvas = await renderElementToCanvas(
+		element,
+		scale,
+		options.timeoutMs,
 		'สร้างไฟล์ PDF ใช้เวลานานเกินไป กรุณาลองใหม่อีกครั้ง'
 	);
 
@@ -141,4 +156,51 @@ export async function downloadElementAsPdf(
 ): Promise<void> {
 	const doc = await renderElementToPdf(element, filename, options);
 	doc.save(filename.toLowerCase().endsWith('.pdf') ? filename : `${filename}.pdf`);
+}
+
+/**
+ * Saves `element` as a PNG image named `<filename>.png`.
+ *
+ * Phones keep a picture in the photo gallery more reliably than a PDF in the
+ * downloads folder. Where the browser can share files (iOS Safari, Android
+ * Chrome), the share sheet opens so the citizen can pick "Save Image". Other
+ * browsers get a plain download.
+ */
+export async function downloadElementAsPng(
+	element: HTMLElement,
+	filename: string,
+	options: Pick<RenderPdfOptions, 'scale' | 'timeoutMs'> = {}
+): Promise<void> {
+	const canvas = await renderElementToCanvas(
+		element,
+		options.scale ?? 3,
+		options.timeoutMs,
+		'สร้างไฟล์รูปภาพใช้เวลานานเกินไป กรุณาลองใหม่อีกครั้ง'
+	);
+	const blob = await new Promise<Blob | null>((done) => canvas.toBlob(done, 'image/png'));
+	if (!blob) throw new Error('สร้างไฟล์รูปภาพไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
+
+	const name = filename.toLowerCase().endsWith('.png') ? filename : `${filename}.png`;
+	const file = new File([blob], name, { type: 'image/png' });
+	if (navigator.canShare?.({ files: [file] })) {
+		try {
+			await navigator.share({ files: [file] });
+			return;
+		} catch (err) {
+			// The citizen closed the share sheet: nothing more to do.
+			if (err instanceof DOMException && err.name === 'AbortError') return;
+			// Any other share failure falls through to a plain download.
+		}
+	}
+
+	const url = URL.createObjectURL(blob);
+	try {
+		const link = document.createElement('a');
+		link.href = url;
+		link.download = name;
+		link.click();
+	} finally {
+		// Revoke on the next tick so the click has started the download first.
+		setTimeout(() => URL.revokeObjectURL(url), 0);
+	}
 }

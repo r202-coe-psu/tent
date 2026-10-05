@@ -7,6 +7,12 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 from tent_model.public_shelter import GeoPoint
 
+# CR-148 — household animal cap (count per row and total per household).
+PETS_MAX_COUNT = 10
+RELIGION_OTHER_MAX_LEN = 60
+DISABILITY_OTHER_DETAIL_MAX_LEN = 120
+DORM_FIELD_MAX_LEN = 120
+
 
 class PersonIdInput(BaseModel):
     cardType: Literal["national_id", "passport", "pink_card", "other", "anonymous"] = "national_id"
@@ -50,6 +56,12 @@ class MemberInput(BaseModel):
     age: int | None = None
     nickname: str | None = None
     religion: str | None = None
+    # CR-148 FR-13 — free text when religion == "other"; forced None otherwise.
+    religion_other: str | None = Field(default=None, max_length=RELIGION_OTHER_MAX_LEN)
+    # CR-148 FR-14 — optional detail when vulnerable_groups has "disability_other".
+    disability_other_detail: str | None = Field(
+        default=None, max_length=DISABILITY_OTHER_DETAIL_MAX_LEN
+    )
     emergency_contact: EmergencyContactInput | None = None
     # GridFS ref `gfs:{oid}` from POST …/photos (#255).
     photo: str | None = None
@@ -59,7 +71,15 @@ class MemberInput(BaseModel):
     def _strip_str(cls, value: object) -> object:
         return value.strip() if isinstance(value, str) else value
 
-    @field_validator("phone", "nickname", "religion", "photo", mode="before")
+    @field_validator(
+        "phone",
+        "nickname",
+        "religion",
+        "religion_other",
+        "disability_other_detail",
+        "photo",
+        mode="before",
+    )
     @classmethod
     def _blank_optional_str_to_none(cls, value: object) -> object:
         if value is None:
@@ -78,11 +98,20 @@ class MemberInput(BaseModel):
             self.emergency_contact = None
         return self
 
+    @model_validator(mode="after")
+    def _drop_orphan_other_details(self) -> MemberInput:
+        """CR-148 — `*_other` details only persist alongside their parent choice."""
+        if self.religion != "other":
+            self.religion_other = None
+        if "disability_other" not in self.vulnerable_groups:
+            self.disability_other_detail = None
+        return self
+
 
 class PetInput(BaseModel):
     species: Literal["dog", "cat", "other"]
     # New rows: one animal per row (count=1). Legacy count>1 claimed as one unit.
-    count: int = Field(default=1, ge=1, le=50)
+    count: int = Field(default=1, ge=1, le=PETS_MAX_COUNT)
     notes: str | None = None
     has_cage: bool = False
     # GridFS ref `gfs:{oid}` from POST …/photos (#255 pet photo).
@@ -136,6 +165,11 @@ class HouseholdInput(BaseModel):
         Literal["owned_house", "rented_house", "condo", "apartment_dorm", "homeless"] | None
     ) = None
     residence_landmark: str | None = None
+    # CR-148 FR-15 — structured dorm address; only kept for housing_type apartment_dorm.
+    dorm_name: str | None = Field(default=None, max_length=DORM_FIELD_MAX_LEN)
+    dorm_building: str | None = Field(default=None, max_length=DORM_FIELD_MAX_LEN)
+    dorm_floor: str | None = Field(default=None, max_length=DORM_FIELD_MAX_LEN)
+    dorm_room: str | None = Field(default=None, max_length=DORM_FIELD_MAX_LEN)
     address_no: str | None = None
     village_no: str | None = None
     subdistrict: str | None = None
@@ -145,6 +179,37 @@ class HouseholdInput(BaseModel):
     geo: GeoPoint | None = None
     pets: list[PetInput] = Field(default_factory=list)
     label: str | None = None
+
+    @field_validator("dorm_name", "dorm_building", "dorm_floor", "dorm_room", mode="before")
+    @classmethod
+    def _blank_dorm_to_none(cls, value: object) -> object:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            trimmed = value.strip()
+            return trimmed or None
+        return value
+
+    @model_validator(mode="after")
+    def _validate_cr148_dorm(self) -> HouseholdInput:
+        """CR-148 FR-15/FR-17 — dorm name + room required for apartment_dorm; else cleared."""
+        if self.housing_type == "apartment_dorm":
+            if not self.dorm_name or not self.dorm_room:
+                raise ValueError("apartment_dorm residence requires dorm_name and dorm_room")
+            return self
+        self.dorm_name = None
+        self.dorm_building = None
+        self.dorm_floor = None
+        self.dorm_room = None
+        return self
+
+    @model_validator(mode="after")
+    def _validate_cr148_pet_total(self) -> HouseholdInput:
+        """CR-148 FR-08 — total animals per household ≤ PETS_MAX_COUNT."""
+        total = sum(pet.count for pet in self.pets)
+        if total > PETS_MAX_COUNT:
+            raise ValueError(f"household pets total {total} exceeds max {PETS_MAX_COUNT}")
+        return self
 
     @model_validator(mode="after")
     def _validate_cr112_residence(self) -> HouseholdInput:
@@ -237,6 +302,8 @@ class MemberCreated(BaseModel):
     age: int | None = None
     nickname: str | None = None
     religion: str | None = None
+    religion_other: str | None = None
+    disability_other_detail: str | None = None
     emergency_contact: EmergencyContactOut | None = None
     photo: str | None = None
 
@@ -281,6 +348,8 @@ class OpenMemberHit(BaseModel):
     special_needs: list[str] = Field(default_factory=list)
     nickname: str | None = None
     religion: str | None = None
+    religion_other: str | None = None
+    disability_other_detail: str | None = None
     emergency_contact: EmergencyContactOut | None = None
     photo: str | None = None
     birth_year: int | None = None
@@ -304,6 +373,10 @@ class UnassignedRegistrationSearchResponse(BaseModel):
 class HouseholdOut(BaseModel):
     housing_type: str | None = None
     residence_landmark: str | None = None
+    dorm_name: str | None = None
+    dorm_building: str | None = None
+    dorm_floor: str | None = None
+    dorm_room: str | None = None
     address_no: str | None = None
     village_no: str | None = None
     subdistrict: str | None = None
@@ -417,6 +490,10 @@ class UnassignedRegistrationReviewResponse(BaseModel):
     created_at: str
     housing_type: str | None = None
     residence_landmark: str | None = None
+    dorm_name: str | None = None
+    dorm_building: str | None = None
+    dorm_floor: str | None = None
+    dorm_room: str | None = None
     address_no: str | None = None
     village_no: str | None = None
     subdistrict: str | None = None

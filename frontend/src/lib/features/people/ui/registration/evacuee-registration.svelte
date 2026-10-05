@@ -120,9 +120,14 @@
 		onvalidationerror?.();
 		await tick();
 		requestAnimationFrame(() => {
-			formTopRef?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+			// Go straight to the first invalid field; the summary banner is the fallback.
 			const firstInvalid = formTopRef?.querySelector<HTMLElement>('[aria-invalid="true"]');
-			firstInvalid?.focus({ preventScroll: true });
+			if (!firstInvalid) {
+				formTopRef?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+				return;
+			}
+			firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+			firstInvalid.focus({ preventScroll: true });
 		});
 
 		toast.error(t.validation.formIncomplete, {
@@ -453,6 +458,7 @@
 				<h3 class="text-base font-bold text-foreground">กลุ่มเปราะบาง (Vulnerable Groups)</h3>
 			</div>
 			<VulnerableGroupsFields
+				showDisabilityDetail={false}
 				bind:vulnerable_groups={$formData.vulnerable_groups}
 				disabled={$submitting || pending}
 				idPrefix="reg-vg"

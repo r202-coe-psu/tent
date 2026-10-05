@@ -306,10 +306,10 @@ test.describe('Phase 2 intake pipeline (#252)', () => {
 
 		await page.getByRole('button', { name: 'บันทึกลงทะเบียนทั้งครอบครัว' }).click();
 
-		await expect(page.getByRole('heading', { name: 'พิมพ์บัตรประจำตัวครอบครัว' })).toBeVisible({
+		await expect(page.getByRole('heading', { name: 'ลงทะเบียนสำเร็จ' })).toBeVisible({
 			timeout: 20_000
 		});
-		await expect(page.getByText(/· 2 คน/)).toBeVisible();
+		await expect(page.getByText('2 คน', { exact: true })).toBeVisible();
 	});
 
 	// ── Seam 2: Unassigned Registration claim → Report-in ─────────────────────

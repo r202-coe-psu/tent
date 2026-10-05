@@ -1,3 +1,4 @@
+import type { UlidReservation } from '$lib/db/ulid-reservation';
 import type { AuthorContext } from '$lib/db/model';
 import type { PaginatedResult } from '$lib/db/repository';
 import type {
@@ -49,9 +50,11 @@ export type EvacueePatch = Partial<
 		| 'person_id'
 		| 'country'
 		| 'religion'
+		| 'religion_other'
 		| 'photo'
 		| 'special_needs'
 		| 'vulnerable_groups'
+		| 'disability_other_detail'
 		| 'emergency_contact'
 		| 'household_id'
 		| 'current_stay'
@@ -146,6 +149,11 @@ export interface PeopleRepository {
 
 	/** Search evacuees by name, phone, or national ID. */
 	searchEvacuees(query: string): Promise<Evacuee[]>;
+	/**
+	 * Run several searches against a single evacuee scan — the walk-in
+	 * duplicate check across every member card. Keyed by the trimmed query.
+	 */
+	searchEvacueesMany(queries: readonly string[]): Promise<Map<string, Evacuee[]>>;
 
 	/** Mint a screening from input + author context and persist it. */
 	createScreening(input: ScreeningInput, ctx: AuthorContext): Promise<Screening>;
@@ -273,7 +281,9 @@ export interface PeopleRepository {
 	createFamilyRegistration(
 		input: UnifiedRegistrationInput,
 		ctx: AuthorContext,
-		channel?: UnifiedRegistrationChannel
+		channel?: UnifiedRegistrationChannel,
+		/** Reuse across retries of the same input so a resubmit cannot mint a second family. */
+		ids?: UlidReservation
 	): Promise<{
 		household: Household;
 		members: Evacuee[];

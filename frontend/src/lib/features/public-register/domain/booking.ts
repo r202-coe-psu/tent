@@ -12,7 +12,14 @@
  * Pure: no I/O, no Svelte, no CouchDB. Safe to import from `+server.ts`.
  */
 import { z } from 'zod';
-import { shelterCodeSchema } from '$lib/db/model';
+import { normalizeThaiPhone, shelterCodeSchema } from '$lib/db/model';
+import { isValidThaiNationalId } from '$lib/utils/thai-id';
+import {
+	MAX_AGE_YEARS,
+	PETS_MAX_COUNT,
+	isBirthYearBEValid,
+	totalPetCount
+} from '$lib/features/people/server';
 
 export const UNASSIGNED_SHELTER_CODE = 'unassigned';
 
@@ -35,11 +42,13 @@ export const bookingShelterCodeSchema = z
 export const bookingPhoneSchema = z
 	.string({ error: 'กรุณากรอกเบอร์โทรศัพท์' })
 	.trim()
-	.regex(/^\d{10}$/, 'เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก');
+	.transform(normalizeThaiPhone)
+	.pipe(z.string().regex(/^\d{10}$/, 'เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก'));
 
 export const bookingOptionalPhoneSchema = z
 	.string()
 	.trim()
+	.transform(normalizeThaiPhone)
 	.refine((v) => v === '' || /^\d{10}$/.test(v), 'เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก')
 	.optional()
 	.nullable();
@@ -52,7 +61,8 @@ export const bookingGenderSchema = z.enum(['male', 'female', 'other'], {
 export const bookingNationalIdSchema = z
 	.string()
 	.trim()
-	.regex(/^\d{13}$/, 'เลขบัตรประชาชนต้องเป็นตัวเลข 13 หลัก');
+	.regex(/^\d{13}$/, 'เลขบัตรประชาชนต้องเป็นตัวเลข 13 หลัก')
+	.refine(isValidThaiNationalId, 'เลขบัตรประชาชนไม่ถูกต้อง (ตรวจสอบหลักสุดท้ายอีกครั้ง)');
 
 export const bookingCardTypeSchema = z.enum([
 	'national_id',
@@ -89,8 +99,12 @@ export const publicBookingMemberSchema = z.object({
 	country: z.string().trim().min(1).max(100).default('THAILAND'),
 	vulnerable_groups: z.array(z.string().trim().min(1)).max(20).default([]),
 	special_needs: z.array(z.string().trim().min(1)).max(20, 'เลือกได้สูงสุด 20 รายการ').default([]),
-	birth_year: z.number().int().optional(),
-	age: z.number().int().min(0).max(150).optional()
+	birth_year: z
+		.number()
+		.int()
+		.refine(isBirthYearBEValid, 'ปีเกิด (พ.ศ.) ต้องเป็น 4 หลัก และอายุไม่เกิน 150 ปี')
+		.optional(),
+	age: z.number().int().min(0).max(MAX_AGE_YEARS).optional()
 });
 
 export type PublicBookingMember = z.infer<typeof publicBookingMemberSchema>;
@@ -115,7 +129,12 @@ export const publicBookingPetSpeciesSchema = z.enum(['dog', 'cat', 'other'], {
 /** A pet travelling with the household — mirrors `household.pets[]` (CR-016 / CR-112). */
 export const publicBookingPetSchema = z.object({
 	species: publicBookingPetSpeciesSchema,
-	count: z.coerce.number().int().positive('จำนวนต้องมากกว่า 0').default(1),
+	count: z.coerce
+		.number()
+		.int()
+		.positive('จำนวนต้องมากกว่า 0')
+		.max(PETS_MAX_COUNT, `สัตว์เลี้ยงรวมได้ไม่เกิน ${PETS_MAX_COUNT} ตัวต่อครอบครัว`)
+		.default(1),
 	name: z.string().trim().max(100, 'ชื่อสัตว์เลี้ยงยาวเกินไป').optional().default(''),
 	condition: z.string().trim().max(200, 'อาการสัตว์เลี้ยงยาวเกินไป').optional().default(''),
 	notes: z.string().trim().max(200, 'รายละเอียดยาวเกินไป').optional(),
@@ -232,8 +251,14 @@ export const publicBookingInputSchema = z.object({
 		.min(1, 'ต้องมีผู้เข้าพักอย่างน้อย 1 คน')
 		// A single booking is a household, not a mass import — cap it so one request
 		// cannot reserve an entire shelter.
-		.max(20, 'จองได้สูงสุด 20 คนต่อครั้ง กรุณาติดต่อเจ้าหน้าที่หากมีมากกว่านี้'),
-	pets: z.array(publicBookingPetSchema).max(20, 'ระบุสัตว์เลี้ยงได้สูงสุด 20 ตัว').default([]),
+		.max(20, 'ลงทะเบียนได้สูงสุด 20 คนต่อครั้ง กรุณาติดต่อเจ้าหน้าที่หากมีมากกว่านี้'),
+	pets: z
+		.array(publicBookingPetSchema)
+		.default([])
+		.refine(
+			(pets) => totalPetCount(pets) <= PETS_MAX_COUNT,
+			`สัตว์เลี้ยงรวมได้ไม่เกิน ${PETS_MAX_COUNT} ตัวต่อครอบครัว`
+		),
 	vehicles: z.array(publicBookingVehicleSchema).max(10, 'ระบุยานพาหนะได้สูงสุด 10 คัน').default([]),
 	asset_description: z.string().trim().max(500, 'ข้อมูลทรัพย์สินยาวเกินไป').optional().default(''),
 	captchaToken: z.string().trim().optional()
@@ -388,7 +413,11 @@ export function isCaptchaKeyConfigured(key: string | undefined | null): boolean 
 }
 
 export const publicBookingLookupSchema = z.object({
-	code: z.string({ error: 'กรุณากรอกรหัสการจอง' }).trim().min(1, 'กรุณากรอกรหัสการจอง').max(64),
+	code: z
+		.string({ error: 'กรุณากรอกรหัสการลงทะเบียน' })
+		.trim()
+		.min(1, 'กรุณากรอกรหัสการลงทะเบียน')
+		.max(64),
 	phone: bookingPhoneSchema
 });
 
@@ -420,9 +449,9 @@ const ERROR_COPY: Record<PublicBookingErrorCode, string> = {
 	SHELTER_CLOSED: 'ศูนย์พักพิงนี้ปิดรับผู้เข้าพักแล้ว กรุณาเลือกศูนย์อื่น',
 	CAPACITY_EXCEEDED: 'ศูนย์พักพิงนี้เต็มตามจำนวนคาดการณ์แล้ว กรุณาเลือกศูนย์อื่น',
 	DUPLICATE_HOLD:
-		'มีการจองค้างอยู่แล้วสำหรับเบอร์หรือบัตรนี้ กรุณาใช้รหัสจองเดิมหรือติดต่อเจ้าหน้าที่',
-	BOOKING_NOT_FOUND: 'ไม่พบการจองที่ตรงกับรหัสและเบอร์โทรนี้',
-	WRITE_FAILED: 'บันทึกการจองไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
+		'มีการลงทะเบียนล่วงหน้าค้างอยู่แล้วสำหรับเบอร์หรือบัตรนี้ กรุณาใช้ใบลงทะเบียนเดิมหรือติดต่อเจ้าหน้าที่',
+	BOOKING_NOT_FOUND: 'ไม่พบการลงทะเบียนที่ตรงกับรหัสและเบอร์โทรนี้',
+	WRITE_FAILED: 'บันทึกการลงทะเบียนไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
 	SHELTER_REQUIRED: 'กรุณาเลือกศูนย์พักพิงก่อนอัปโหลดรูป',
 	EMPTY_PHOTO: 'ไม่พบไฟล์รูปภาพ กรุณาเลือกใหม่',
 	PHOTO_TOO_LARGE: 'ไฟล์รูปใหญ่เกินไป กรุณาเลือกไฟล์ที่เล็กกว่า',
