@@ -7,7 +7,6 @@ Canonical glossary and domain model vocabulary for the Smart Shelter disaster ev
 **Evacuee**:
 A displaced person seeking shelter, care, and basic necessities inside an evacuation shelter.
 _Avoid_: Refugee, patient, client, customer, Person (PRD/UI shorthand only — not a persisted entity).
-_UI (th)_: ผู้พักพิง — preferred display term in shelter-facing UI; persisted entity remains `evacuee`.
 
 **Anonymous ID**:
 A system-issued identity handle for an Evacuee who has no national ID or passport, stored as `person_id.cardType = anonymous` with a unique `number`, usable for search and on-site tracking.
@@ -112,10 +111,6 @@ _Avoid_: Equating In-zone with Present.
 A staff capability bound to one shelter in `_users.roles` as `{shelter_code}:{capability}` (with a matching `shelter:{code}` access gate), so one account may hold different duties in different shelters without privilege bleed.
 _Avoid_: Global staff role, flat multi-shelter role list.
 
-**Daily Role Assessment**:
-A daily snapshot of one operational role's shelter checks, stored separately for each shelter, local date, and role. Each control records Pass, Fail, Pending, or unanswered; Fail and Pending require a note. The assessment preserves the question, checking method, pass criterion, recorded values, and cited source used at the time.
-_Avoid_: One combined assessment owned by a manager, a single score across roles, treating unanswered as N/A.
-
 **Location Master**:
 The authoritative register of shelter facilities published to partner systems with permanent, non-reusable location codes.
 _Avoid_: Shelter directory, site list, place catalog.
@@ -127,3 +122,4 @@ _Avoid_: Third-party app, consumer, external client.
 **Administrative Code**:
 The official Department of Provincial Administration (DOPA) hierarchical numerical codes for provinces (2 digits), districts (4 digits), and subdistricts (6 digits).
 _Avoid_: Postal code, location text, geo string.
+
