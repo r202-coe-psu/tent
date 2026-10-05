@@ -36,6 +36,19 @@ export function couchBootstrapAdmin(): { name: string; password: string } {
 	return { name: decodeURIComponent(m[2]), password: decodeURIComponent(m[3]) };
 }
 
+/**
+ * AuthSession for the CouchDB server admin from `COUCHDB_ADMIN_URL` — the only
+ * identity allowed to provision shelters (`POST /api/back-office/shelter` requires
+ * `_admin`). Pass the result to `injectSession`.
+ */
+export async function bootstrapAdminSession(): Promise<{
+	user: { name: string; roles: string[] };
+	cookie: string;
+}> {
+	const { name, password } = couchBootstrapAdmin();
+	return { user: { name, roles: ['_admin'] }, cookie: await couchLogin(name, password) };
+}
+
 export async function couchReq(
 	method: string,
 	path: string,

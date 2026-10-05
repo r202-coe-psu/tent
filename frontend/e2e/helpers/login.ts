@@ -24,7 +24,8 @@
  */
 
 import type { Page } from '@playwright/test';
-import type { TestUser } from './couch';
+import { COUCH_BASE, type TestUser } from './couch';
+import { appBaseUrl } from './e2e-env';
 
 /**
  * Inject session for a test user into the browser context.
@@ -39,12 +40,13 @@ export async function injectSession(
 	user: Pick<TestUser, 'name' | 'roles'>,
 	authSession: string
 ): Promise<void> {
-	// 1. Set the AuthSession cookie for domain `localhost` (no port — sent to all ports).
+	const appBase = appBaseUrl();
+	// 1. Set the AuthSession cookie for the app host (no port — sent to all ports).
 	await page.context().addCookies([
 		{
 			name: 'AuthSession',
 			value: authSession,
-			domain: 'localhost',
+			domain: new URL(appBase).hostname,
 			path: '/',
 			httpOnly: false,
 			secure: false,
@@ -55,13 +57,48 @@ export async function injectSession(
 	// 2. Navigate to a neutral page first so localStorage is accessible.
 	//    We use `/login` (always accessible) but immediately set localStorage before
 	//    any redirects fire. We must visit a page with the correct origin first.
-	await page.goto('/login', { waitUntil: 'domcontentloaded' });
+	await page.goto(`${appBase}/login`, { waitUntil: 'domcontentloaded' });
 
 	// 3. Set localStorage with the user identity so authStore.loadCachedUser() succeeds.
 	const sessionUser = { name: user.name, roles: user.roles };
 	await page.evaluate((u) => {
 		localStorage.setItem('auth:user', JSON.stringify(u));
 	}, sessionUser);
+}
+
+/**
+ * The test build talks to CouchDB cross-origin (:4173 → :5984), so staff pages show
+ * the "cannot connect" banner. Forward the browser's CouchDB calls through the
+ * preview server's same-origin `/couch` proxy — the path nginx provides in
+ * production. Transport only: responses come from the real CouchDB, nothing is
+ * mocked. Call before the first navigation.
+ */
+export async function routeBrowserCouchThroughApp(page: Page): Promise<void> {
+	const appBase = appBaseUrl();
+	await page.route(`${COUCH_BASE}/**`, async (route) => {
+		const request = route.request();
+		const target = new URL(request.url());
+		const corsHeaders = {
+			'access-control-allow-origin': appBase,
+			'access-control-allow-credentials': 'true',
+			'access-control-allow-methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
+			'access-control-allow-headers':
+				request.headers()['access-control-request-headers'] ?? 'Content-Type, Accept'
+		};
+		if (request.method() === 'OPTIONS') {
+			await route.fulfill({ status: 204, headers: corsHeaders });
+			return;
+		}
+		const response = await route
+			.fetch({ url: `${appBase}/couch${target.pathname}${target.search}` })
+			.catch(() => null);
+		// The page navigated or closed mid-request (e.g. a _changes long-poll) — nothing
+		// left to answer, whether that happened during the fetch or before the fulfill.
+		if (!response) return;
+		await route
+			.fulfill({ response, headers: { ...response.headers(), ...corsHeaders } })
+			.catch(() => undefined);
+	});
 }
 
 /**

@@ -8,7 +8,7 @@ requested_by: ทีม (kiosk pre-register)
 decided_by: Soravit Sukkarn (Dev Lead)
 layer: volatile
 affects:
-  - docs/changes/draft-kiosk-pre-registration-check-in.md (ปรับปรุง layout label ใน kiosk pre-register; รอ merge จาก branch docs-kiosk-pre-register)
+  - docs/changes/CR-151-kiosk-pre-registration-check-in.md (ปรับปรุง layout label ใน kiosk pre-register; merge ผ่าน PR #309 แล้ว)
   - frontend/src/lib/components/qr-name-tag.svelte (ใหม่ — shared; ขึ้นกับ branch feat/pre-register_kiosk)
   - frontend/src/lib/utils/qrcode.ts (เพิ่ม qrModuleCount)
   - frontend/src/lib/features/kiosk/domain/print-label.ts (+ test) — ตัด layout 'side' (ขึ้นกับ branch feat/pre-register_kiosk)

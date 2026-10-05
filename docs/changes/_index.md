@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-10-04 # CR-150 kiosk label stacked qr name tag
+updated: 2026-10-04 # CR-152 kiosk phone check-in toggle
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 
@@ -161,3 +161,5 @@ note: ดัชนี Change Record ทุกตัว — กติกาอย
 | [CR-148](CR-148-pre-register-validation-and-fields.md) | Pre-register validation hardening — บัตร ปชช. checksum, ปีเกิด 4 หลัก/ขอบเขตเดียวกับอายุ ≤150 (±1), สัตว์ ≤10 ต่อครัวเรือน, เบอร์ `+66` normalize, error ตามปฏิทิน พ.ศ./ค.ศ.; เพิ่ม `evacuee.religion_other` / `disability_other_detail` (schema_v 10→11) และ `household.dorm_name/building/floor/room` (schema_v 5→6; `address_no` = ค่าสรุป) | done | volatile | 2026-10-03 | docs/data/schema.md §1.1/§1.3/unassigned_registration, frontend people domain/forms/registration, public-register domain + BFF registrations, `$lib/utils/thai-id.ts`, `$lib/db/model.ts` |
 | [CR-149](CR-149-kiosk-walk-in-registration.md) | Kiosk walk-in registration — เสียบบัตรแล้วไม่พบข้อมูล → ลงทะเบียนใหม่ที่ตู้ (stay status `kiosk_registered`); shelter flag default off; Forecast only; one card one person; QR print deferred | approved | volatile | 2026-10-03 | docs/data/schema.md §1.1 (evacuee schema_v 11→12), shelter feature_flags, docs/data/api-contract.md §2.1, frontend kiosk/people, worker/backend occupancy |
 | [CR-150](CR-150-kiosk-label-stacked-qr-name-tag.md) | Kiosk label — QR บน / ข้อความล่าง (`ชื่อ` · ชื่อ-นามสกุล · `ศูนย์ {shelter_code}`) ใช้ component QrNameTag ร่วมกับตั๋ว pre-register, kioskQrBoxMm สูตร stacked, no schema_v bump | approved | volatile | 2026-09-27 (approved 2026-10-04) | frontend/src/lib/components/qr-name-tag.svelte, frontend/src/lib/utils/qrcode.ts, frontend/src/lib/features/kiosk/domain/print-label.ts, features/public-register/ui/booking-ticket.svelte |
+| [CR-151](CR-151-kiosk-pre-registration-check-in.md) | Kiosk รับรายงานตัวผู้ลงทะเบียนล่วงหน้า — เลิกสร้าง evacuee จากบัตร (/draft → 410) เปลี่ยนเป็นรับรายงานตัวผู้จองทางเว็บ (pre_registered → arriving) ผ่าน QR ใบจอง / บัตร ปชช. / เบอร์โทร, KIOSK_LOOKUP_MANGO_INDEXES 3 ตัว, no schema_v bump (คงเดิม (ไม่อัปเกรด schema_v; อิงตามเวอร์ชันปัจจุบันของ develop)) | approved | volatile | 2026-09-24 (approved 2026-10-04) | docs/data/schema.md §1.1, docs/data/api-contract.md, docs/features/smart-card-registration-spec.md, CR-097, CONTEXT.md, frontend kiosk/scanners, scanner_client |
+| [CR-152](CR-152-kiosk-phone-check-in-toggle.md) | Kiosk phone check-in toggle — shelter `feature_flags.kiosk_phone_check_in_enabled` (default false) เปิด/ปิดที่ backoffice, kiosk อ่านผ่าน `POST /api/v1/scanner/kiosk/config`, fail closed, no schema_v bump | approved | volatile | 2026-09-25 (approved 2026-10-04) | docs/data/schema.md §3.1 feature_flags, docs/data/api-contract.md scanner/kiosk config, frontend shelters + kiosk, scanner_client allowlist |

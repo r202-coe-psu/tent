@@ -39,6 +39,7 @@ export const load: PageLoad = async ({ url, fetch }) => {
 	const distance = url.searchParams.get('distance') ?? '5';
 	const user_lat = url.searchParams.get('user_lat') || '';
 	const user_lng = url.searchParams.get('user_lng') || '';
+	const hide_full = url.searchParams.get('hide_full') === 'true';
 
 	// FastAPI accepts a single Mongo status; map UI `prepare` → `standby`.
 	const statusRaw =
@@ -123,6 +124,10 @@ export const load: PageLoad = async ({ url, fetch }) => {
 		shelters = shelters.filter((s) => s.admin_type === tf);
 	}
 
+	if (hide_full) {
+		shelters = shelters.filter((s) => s.status !== 'FULL');
+	}
+
 	if (hasUser && !Number.isNaN(maxDistance) && maxDistance > 0) {
 		shelters = shelters.filter((s) => !s.geo || s.distance <= maxDistance);
 	}
@@ -168,7 +173,8 @@ export const load: PageLoad = async ({ url, fetch }) => {
 			site_kind: siteKind,
 			distance,
 			user_lat,
-			user_lng
+			user_lng,
+			hide_full: hide_full ? 'true' : ''
 		},
 		available_types
 	};
