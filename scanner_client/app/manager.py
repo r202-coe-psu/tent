@@ -575,19 +575,6 @@ class ScannerClientManager:
             text += f" at {os.path.basename(last.filename)}:{last.lineno} in {last.name}"
         return text
 
-    async def _dispatch_read_progress(self, phase: str, done: int, total: int) -> None:
-        """Let the registration page draw how far the card read is. Best effort: a page that has
-        gone away or an evaluate that fails must never disturb the read itself."""
-        if not self.page or self.page.is_closed():
-            return
-        try:
-            await self.page.evaluate(
-                "detail => window.dispatchEvent(new CustomEvent('kiosk:smart-card-progress', { detail }))",
-                {"phase": phase, "done": done, "total": total},
-            )
-        except Exception:
-            logger.debug("Could not send card read progress to the kiosk page")
-
     async def _read_full_card_if_register_path(self) -> bool:
         """Read and hand off a full card only while the registration page is active."""
         if not self.page or self.page.is_closed() or not self.reader:
@@ -608,15 +595,7 @@ class ScannerClientManager:
             logger.info("Registration card page is ready; reading full smart-card data")
             stage = "read"
             started_at = time.monotonic()
-            loop = asyncio.get_running_loop()
-
-            def on_progress(phase: str, done: int, total: int) -> None:
-                # Runs on the reader's thread; the page is driven from the event loop.
-                asyncio.run_coroutine_threadsafe(
-                    self._dispatch_read_progress(phase, done, total), loop
-                )
-
-            card = await asyncio.to_thread(self.reader.read_all_data, on_progress)
+            card = await asyncio.to_thread(self.reader.read_all_data)
             logger.info("Full smart-card read finished in %.1fs", time.monotonic() - started_at)
             stage = "handoff"
             await self.page.evaluate(

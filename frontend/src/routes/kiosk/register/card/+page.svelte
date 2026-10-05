@@ -11,17 +11,13 @@
 		getKioskDisplayContext,
 		KioskIdleTimeout,
 		KIOSK_IDLE_TIMEOUT_MS,
-		KioskCardReadProgress,
 		KioskCheckInWizard,
-		advanceCardReadPercent,
 		buildKioskPhotoPayload,
 		navigateToKioskHome,
-		parseCardReadProgress,
 		readKioskDisplayQuery,
 		registerKioskWalkIn,
 		registerWalkInCardRead,
-		walkInSession,
-		type CardReadStage
+		walkInSession
 	} from '$lib/features/kiosk';
 	import type { SmartCardData } from '$lib/features/scanners';
 	const displayContext = $derived(
@@ -29,16 +25,11 @@
 	);
 	const contextQuery = $derived(buildKioskContextQuery(displayContext));
 	let ready = $state(false);
-	/** scanner_client is reading the chip (~20-30s); pulling the card now loses the photo. */
+	/** scanner_client is reading the chip; pulling the card now loses the photo. */
 	let cardReading = $state(false);
 	let reading = $state(false);
 	let error = $state('');
-	/** How far the chip read is, 0–100; scanner_client reports it as `kiosk:smart-card-progress`. */
-	let readPercent = $state(0);
-	let readPhase = $state<'data' | 'photo'>('data');
 	const busy = $derived(cardReading || reading);
-	const stage = $derived<CardReadStage>(reading ? 'saving' : readPhase);
-	const percent = $derived(reading ? 100 : readPercent);
 	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, returnHome);
 	onMount(() => {
 		if (!walkInSession.citizenId || !walkInSession.consented) {
@@ -48,16 +39,8 @@
 		idleTimeout.start();
 		const onCardReading = () => {
 			cardReading = true;
-			readPercent = 0;
-			readPhase = 'data';
 			error = '';
 			idleTimeout.setPaused(true);
-		};
-		const onCardProgress = (event: Event) => {
-			const progress = parseCardReadProgress((event as CustomEvent).detail);
-			if (!progress || !cardReading) return;
-			readPhase = progress.phase;
-			readPercent = advanceCardReadPercent(readPercent, progress);
 		};
 		const onCardRead = (event: Event) => void handleFullRead(event);
 		const onCardReadError = () => {
@@ -67,7 +50,6 @@
 			error = 'อ่านข้อมูลบัตรไม่สำเร็จ กรุณานำบัตรออกแล้วเสียบใหม่';
 		};
 		window.addEventListener('kiosk:smart-card-reading', onCardReading);
-		window.addEventListener('kiosk:smart-card-progress', onCardProgress);
 		window.addEventListener('kiosk:smart-card-full-read', onCardRead);
 		window.addEventListener('kiosk:smart-card-full-read-error', onCardReadError);
 		ready = true;
@@ -75,7 +57,6 @@
 			idleTimeout.stop();
 			ready = false;
 			window.removeEventListener('kiosk:smart-card-reading', onCardReading);
-			window.removeEventListener('kiosk:smart-card-progress', onCardProgress);
 			window.removeEventListener('kiosk:smart-card-full-read', onCardRead);
 			window.removeEventListener('kiosk:smart-card-full-read-error', onCardReadError);
 		};
@@ -130,7 +111,7 @@
 	data-kiosk-register-ready={ready ? 'true' : 'false'}
 >
 	<KioskCheckInWizard currentStep={3} step2Label="อ่านบัตร" />
-	<!-- Busy: tighter padding so the progress, the warning and "ยกเลิก" fit the 1024×600 panel. -->
+	<!-- Busy: tighter padding so the status, the warning and "ยกเลิก" fit the 1024×600 panel. -->
 	<section
 		class={[
 			'mx-auto mt-6 w-full max-w-3xl rounded-2xl border border-sky-200 bg-white p-6 text-center shadow-2xs',
@@ -141,8 +122,17 @@
 			<h1 class="text-2xl font-bold text-[#0A2647] kiosk-portrait:text-4xl">
 				{cardReading ? 'กำลังอ่านข้อมูลบัตร' : 'กำลังบันทึกข้อมูล'}
 			</h1>
-			<div class="mt-4 kiosk-portrait:mt-6">
-				<KioskCardReadProgress {percent} {stage} />
+			<div
+				class="mt-4 inline-flex min-h-12 items-center justify-center gap-3 rounded-xl border border-slate-200 bg-[#F8FAFC] px-4 text-base font-semibold text-slate-800 kiosk-portrait:mt-6 kiosk-portrait:min-h-16 kiosk-portrait:text-2xl"
+				role="status"
+				aria-live="polite"
+				data-testid="kiosk-register-card-busy"
+			>
+				<span
+					class="size-5 animate-spin rounded-full border-2 border-slate-300 border-t-[#0A2647] motion-reduce:animate-none kiosk-portrait:size-7"
+					aria-hidden="true"
+				></span>
+				กรุณารอสักครู่
 			</div>
 			{#if cardReading}
 				<div

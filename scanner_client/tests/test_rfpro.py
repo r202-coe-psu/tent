@@ -614,26 +614,6 @@ class ReaderTests(unittest.TestCase):
                 reader.read_citizen_id()
                 self.assertEqual(card.get_response_p2, [expected_p2])
 
-    def test_read_all_data_reports_progress_for_the_fields_then_each_photo_chunk(self):
-        _, _, reader = self.reader()
-        seen = []
-
-        reader.read_all_data(lambda phase, done, total: seen.append((phase, done, total)))
-
-        data = [item for item in seen if item[0] == "data"]
-        photo = [item for item in seen if item[0] == "photo"]
-        self.assertEqual(data, [("data", n, 9) for n in range(0, 10)])
-        self.assertEqual(photo, [("photo", n, 20) for n in range(1, 21)])
-        self.assertEqual(seen.index(("data", 9, 9)) + 1, seen.index(("photo", 1, 20)))
-
-    def test_a_progress_callback_that_raises_does_not_stop_the_read(self):
-        _, _, reader = self.reader()
-
-        def broken(*_):
-            raise RuntimeError("ui gone")
-
-        self.assertEqual(reader.read_all_data(broken)["citizen_id"], CID)
-
     def test_read_all_data_returns_every_field_and_the_full_photo(self):
         card, _, reader = self.reader(heartbeats=True)
         # Fields this fake card does not store answer 6A 82 -> empty strings, like a blank record.

@@ -1,6 +1,6 @@
 import base64
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 try:
     from smartcard.System import readers
@@ -11,12 +11,6 @@ except ImportError:
     CardConnectionException = Exception
 
 logger = logging.getLogger(__name__)
-
-
-# progress(phase, done, total): "data" counts the nine text fields, "photo" the 20 photo chunks.
-ProgressCallback = Callable[[str, int, int], None]
-DATA_FIELDS = 9
-PHOTO_CHUNK_COUNT = 20
 
 
 class ReaderLostError(RuntimeError):
@@ -70,7 +64,6 @@ class ThaiSmartCardReader:
         """`connection` lets a subclass supply a non-PC/SC transport that offers the same
         connect() / getATR() / transmit() API; the APDU and decoding logic below is shared."""
         self.req_prefix = [0x00, 0xC0, 0x00, 0x00]
-        self._progress: Optional[ProgressCallback] = None
         if connection is not None:
             self.reader = None
             self.connection = connection
@@ -124,15 +117,6 @@ class ThaiSmartCardReader:
             return False
         except Exception:
             return False
-
-    def _report(self, phase: str, done: int, total: int) -> None:
-        """Tell whoever is showing the read how far it is. A UI callback must never break the read."""
-        if self._progress is None:
-            return
-        try:
-            self._progress(phase, done, total)
-        except Exception:
-            logger.debug("Read progress callback failed", exc_info=True)
 
     def decode_tis620(self, data: List[int]) -> str:
         """Decode byte array from TIS-620 encoding (standard for Thai Smart Card)"""
@@ -188,13 +172,12 @@ class ThaiSmartCardReader:
         """Extract and assemble 20 chunks of JPEG photo bytes from the smart card"""
         data = []
         try:
-            for number, chunk_cmd in enumerate(CMD_PHOTOS, start=1):
+            for chunk_cmd in CMD_PHOTOS:
                 response, sw1, sw2 = self.connection.transmit(chunk_cmd)
                 if sw1 == 0x61:
                     get_resp_cmd = [0x00, 0xC0, 0x00, 0x00, sw2]
                     chunk_data, _, _ = self.connection.transmit(get_resp_cmd)
                     data.extend(chunk_data)
-                self._report("photo", number, PHOTO_CHUNK_COUNT)
 
             if data:
                 return bytes(bytearray(data))
@@ -215,29 +198,17 @@ class ThaiSmartCardReader:
             raise ValueError("Could not read Citizen ID (CID)")
         return cid
 
-    def read_all_data(self, progress: Optional[ProgressCallback] = None) -> Dict[str, Any]:
-        """Read all available data from the card and return a structured dictionary.
-
-        `progress(phase, done, total)` is called as the read advances (see ProgressCallback)."""
-        self._progress = progress
-        try:
-            return self._read_all_data()
-        finally:
-            self._progress = None
-
-    def _read_all_data(self) -> Dict[str, Any]:
+    def read_all_data(self) -> Dict[str, Any]:
+        """Read all available data from the card and return a structured dictionary"""
         if not self.connect():
             raise RuntimeError("Failed to connect to smart card")
-        self._report("data", 0, DATA_FIELDS)
 
         cid = self.get_citizen_id()
         if not cid:
             raise ValueError("Could not read Citizen ID (CID)")
-        self._report("data", 1, DATA_FIELDS)
 
         # Name Thai
         th_parts = self.get_thai_name_parts()
-        self._report("data", 2, DATA_FIELDS)
         title_th = th_parts[0].strip() if len(th_parts) > 0 else ""
         first_th = th_parts[1].strip() if len(th_parts) > 1 else ""
         middle_th = th_parts[2].strip() if len(th_parts) > 2 else ""
@@ -246,7 +217,6 @@ class ThaiSmartCardReader:
 
         # Name English
         en_parts = self.get_english_name_parts()
-        self._report("data", 3, DATA_FIELDS)
         title_en = en_parts[0].strip() if len(en_parts) > 0 else ""
         first_en = en_parts[1].strip() if len(en_parts) > 1 else ""
         middle_en = en_parts[2].strip() if len(en_parts) > 2 else ""
@@ -255,7 +225,6 @@ class ThaiSmartCardReader:
 
         # Date of Birth (YYYYMMDD in BE)
         dob_raw = self.get_date_of_birth()
-        self._report("data", 4, DATA_FIELDS)
         birth_year_ce = None
         age = None
         if len(dob_raw) >= 8:
@@ -269,11 +238,9 @@ class ThaiSmartCardReader:
 
         # Gender
         gender = self.get_gender()
-        self._report("data", 5, DATA_FIELDS)
 
         # Address
         addr_parts = self.get_address_parts()
-        self._report("data", 6, DATA_FIELDS)
         addr_raw = " ".join([p.strip() for p in addr_parts if p.strip()]).strip()
         address_no = addr_parts[0].strip() if len(addr_parts) > 0 and addr_parts[0].strip() else None
         village_no = addr_parts[1].strip() if len(addr_parts) > 1 and addr_parts[1].strip() else None
@@ -295,11 +262,8 @@ class ThaiSmartCardReader:
 
         # Dates & Issuer
         issuer = self.get_issuer()
-        self._report("data", 7, DATA_FIELDS)
         issue_date = self.get_issue_date()
-        self._report("data", 8, DATA_FIELDS)
         expire_date = self.get_expire_date()
-        self._report("data", 9, DATA_FIELDS)
 
         # Photo Base64
         photo_bytes = self.get_photo_bytes()

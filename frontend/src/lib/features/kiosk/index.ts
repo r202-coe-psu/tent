@@ -6,7 +6,6 @@ export { default as KioskPreRegisteredCheckIn } from './ui/kiosk-pre-registered-
 export { default as KioskCheckInWizard } from './ui/kiosk-check-in-wizard.svelte';
 export { default as KioskBackButton } from './ui/kiosk-back-button.svelte';
 export { default as KioskCardInsertScene } from './ui/kiosk-card-insert-scene.svelte';
-export { default as KioskCardReadProgress } from './ui/kiosk-card-read-progress.svelte';
 export { default as KioskQrScanScene } from './ui/kiosk-qr-scan-scene.svelte';
 export { default as KioskReaderPointer } from './ui/kiosk-reader-pointer.svelte';
 export { default as KioskNumpad } from './ui/kiosk-numpad.svelte';
@@ -42,12 +41,6 @@ export {
 } from './domain/display-context';
 export { isKioskPhoneCheckInEnabled } from './domain/kiosk-config';
 export { walkInSession } from './application/walk-in-session.svelte';
-export {
-	advanceCardReadPercent,
-	parseCardReadProgress,
-	type CardReadPhase,
-	type CardReadStage
-} from './domain/card-read-progress';
 export { registerWalkInCardRead } from './application/walk-in-card-registration';
 export type {
 	WalkInCardRegistrationOutcome,
