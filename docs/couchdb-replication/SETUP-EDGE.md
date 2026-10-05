@@ -224,7 +224,7 @@ curl -s -X PUT -u <staff>:<pw> $EDGE/couch/shelter_sh001/evacuee:01OUTAGE0000000
 | `users_sh001_pull` | central → edge | `CENTRAL_REPL_USER` | ให้ staff ของศูนย์นี้ login ที่ edge ได้ · `selector` role `shelter:<CODE>` กรองที่ central จึงไม่ส่ง user ศูนย์อื่นมา |
 
 - URL ฝั่ง edge ใน job คือ `http://127.0.0.1:5984` เพราะ job รัน **ภายใน container CouchDB** เอง
-- script ข้าม doc ที่มีอยู่แล้ว — ถ้าจะเปลี่ยน credential ของ job ต้องลบ doc ใน `_replicator` ก่อน (ดูด้านล่าง)
+- job แต่ละตัวเก็บ `edge_init_hash` (fingerprint ของ URL + credential + selector) — รันซ้ำแล้ว config ตรงกับ `.env` = `exists` (ข้าม) · ไม่ตรง เช่นแก้ `SYNC_URL` / รหัส / `SHELTER_CODE` = `stale` แล้วลบและสร้างใหม่ให้เอง (job ที่สร้างก่อนมี fingerprint ถูกสร้างใหม่หนึ่งครั้ง)
 - รหัสผ่านใน doc ของ `_replicator` เป็น **plaintext** (admin อ่านกลับก็เห็น) ถือเป็นความลับของเครื่อง edge
 
 📖 [Replicator database](https://docs.couchdb.org/en/stable/replication/replicator.html) ·
@@ -241,7 +241,7 @@ curl -s $E/_active_tasks              # docs_read / docs_written / changes_pendi
 docker logs tent-couchdb-edge 2>&1 | grep -i replicat
 ```
 
-**"เตะ" job** — เริ่มทันทีโดยข้าม backoff หรือเปลี่ยน credential: ลบ doc แล้วรัน `edge-init` ใหม่
+**"เตะ" job** — เริ่มทันทีโดยข้าม backoff: ลบ doc แล้วรัน `edge-init` ใหม่ (เปลี่ยน URL / credential ใน `.env` ไม่ต้องเตะ — รัน `edge-init` อย่างเดียว job ที่ไม่ตรงจะถูกสร้างใหม่เอง)
 (checkpoint ยังอยู่ใน `_local/*` จึงไม่ไล่ใหม่ทั้งหมด)
 
 ```bash

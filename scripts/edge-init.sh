@@ -5,9 +5,9 @@
 #   2. _design/edge_readonly บน registry / catalog (one-way — staff เขียนที่ edge ไม่ได้)
 #   3. _replicator jobs: registry / catalog / shelter pull, shelter push, filtered _users pull
 #
-# Idempotent: DB ที่มีอยู่แล้ว (412) และ doc ที่มีอยู่แล้ว (409) จะถูกข้าม — ถ้าจะเปลี่ยน credential
-# ของ job ให้ลบ doc ใน _replicator ก่อน (docs/couchdb-replication/SETUP-EDGE.md หัวข้อ "งานประจำ" `kick`)
-# แล้วรัน `docker compose -f docker-compose.edge.yml run --rm edge-init`
+# Idempotent: DB ที่มีอยู่แล้ว (412) และ doc ที่มีอยู่แล้ว (409) จะถูกข้าม · job ใน _replicator ที่ config
+# (SYNC_URL / credential / SHELTER_CODE) ไม่ตรงกับ .env ปัจจุบันจะถูกลบแล้วสร้างใหม่ (`stale`) — แก้ .env แล้ว
+# รัน `docker compose -f docker-compose.edge.yml run --rm edge-init` ได้เลย ไม่ต้อง kick เอง
 set -eu
 
 : "${COUCHDB_USER:?}" "${COUCHDB_PASSWORD:?}" "${SHELTER_CODE:?}" "${SYNC_URL:?}"
@@ -37,8 +37,31 @@ put() { # put <path> <json> — แสดงเฉพาะ response (payload �
 
 auth() { printf '{"basic":{"username":"%s","password":"%s"}}' "$1" "$2"; }
 
-job() { # job <doc-id> <source-url> <source-auth> <target-url> <target-auth> [extra-json]
-	put "_replicator/$1" "{\"source\":{\"url\":\"$2\",\"auth\":$3},\"target\":{\"url\":\"$4\",\"auth\":$5},\"continuous\":true${6:+,$6}}"
+# job <doc-id> <source-url> <source-auth> <target-url> <target-auth> [extra-json]
+# doc ของ job เก็บ `edge_init_hash` (sha256 ของ config ทั้งก้อน รวม URL + credential) ไว้เทียบรอบถัดไป:
+# ตรง = ข้าม · ไม่ตรง/ไม่มี (เช่นแก้ SYNC_URL หรือรหัสใน .env) = ลบแล้วสร้างใหม่ ไม่ปล่อยให้ job ชี้ค่าเก่าแบบเงียบ ๆ
+job() {
+	body="\"source\":{\"url\":\"$2\",\"auth\":$3},\"target\":{\"url\":\"$4\",\"auth\":$5},\"continuous\":true${6:+,$6}"
+	hash=$(printf '%s' "$body" | sha256sum | cut -c1-32)
+	cur=$(curl -s "$E/_replicator/$1")
+	case "$cur" in
+	*"\"edge_init_hash\":\"$hash\""*)
+		echo "exists  _replicator/$1"
+		return
+		;;
+	*'"_rev":"'*)
+		rev=$(printf '%s' "$cur" | sed -n 's/.*"_rev":"\([^"]*\)".*/\1/p' | head -1)
+		status=$(curl -s -o /tmp/edge-init.out -w '%{http_code}' -X DELETE "$E/_replicator/$1?rev=$rev")
+		case "$status" in
+		2??) echo "stale   _replicator/$1 (config ไม่ตรงกับ .env) — สร้างใหม่" ;;
+		*)
+			echo "FAILED  _replicator/$1 ลบ job เก่าไม่ได้ (HTTP $status): $(cat /tmp/edge-init.out)"
+			exit 1
+			;;
+		esac
+		;;
+	esac
+	put "_replicator/$1" "{$body,\"edge_init_hash\":\"$hash\"}"
 }
 
 echo "== edge-init: ${SHELTER_CODE} ← ${CEN}"
