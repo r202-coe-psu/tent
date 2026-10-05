@@ -6,6 +6,12 @@
 // Keep this server/seed helper domain-only. Importing the feature barrel pulls
 // Svelte/TanStack modules into Node-only scripts such as `pnpm seed`.
 import { SOP_RATIO_KEYS, SOP_RATIO_KIND } from '$lib/features/sop-ratios/server';
+import {
+	DAILY_SOP_ROLE_METRIC_CONTRACTS,
+	DAILY_SOP_ROLES,
+	DAILY_SOP_ROLE_QUESTION_VERSION,
+	DAILY_SOP_ROLE_QUESTIONS
+} from '$lib/features/daily-sop/server';
 
 /** Database name for a shelter's own per-shelter CouchDB. */
 export function shelterDbName(code: string): string {
@@ -50,6 +56,37 @@ export const REFERRAL_MANGO_INDEXES = [
 		type: 'json' as const
 	}
 ];
+
+/** Index required by role-based Daily SOP history (CR: daily-sop-role-assessment). */
+export const DAILY_SOP_ROLE_MANGO_INDEX = {
+	index: {
+		fields: [
+			{ type: 'desc' },
+			{ shelter_code: 'desc' },
+			{ assessment_date: 'desc' },
+			{ role_code: 'desc' }
+		]
+	},
+	ddoc: 'daily-sop-role-assessment',
+	name: 'daily-sop-role-assessment-by-shelter-date',
+	type: 'json' as const
+};
+
+const DAILY_SOP_ROLE_VDU_CONTRACT = JSON.stringify({
+	version: DAILY_SOP_ROLE_QUESTION_VERSION,
+	roles: DAILY_SOP_ROLES.map((role) => ({
+		code: role.code,
+		key: role.key,
+		label: role.label,
+		questions: DAILY_SOP_ROLE_QUESTIONS.filter((question) => question.role === role.code).map(
+			(question) => ({
+				id: question.id,
+				prompt: question.prompt,
+				metric: DAILY_SOP_ROLE_METRIC_CONTRACTS[question.id] ?? null
+			})
+		)
+	}))
+});
 
 /** Mango index definitions required by stock_transfer list/find (CR-059). */
 export const TRANSFER_MANGO_INDEXES = [
@@ -190,8 +227,19 @@ export const TICKET_DISTRIBUTION_MANGO_INDEXES = [
 export function buildValidateDocUpdate(code: string): string {
 	const simulationResourceKeys = JSON.stringify(SOP_RATIO_KEYS);
 	const simulationResourceKinds = JSON.stringify(SOP_RATIO_KIND);
+	const dailySopRoleContract = DAILY_SOP_ROLE_VDU_CONTRACT;
 	return `function (newDoc, oldDoc, userCtx) {
-  if (userCtx.roles.indexOf('_admin') !== -1) return;
+  var isCouchAdmin = userCtx.roles.indexOf('_admin') !== -1;
+  var isRoleAssessmentWrite = newDoc.type === 'daily_sop_role_assessment' ||
+    (oldDoc && oldDoc.type === 'daily_sop_role_assessment');
+  if (isRoleAssessmentWrite && newDoc._deleted === true) {
+    throw { forbidden: 'Daily SOP role assessments cannot be deleted' };
+  }
+  if (isRoleAssessmentWrite && oldDoc && oldDoc.type === 'daily_sop_role_assessment' &&
+      newDoc.type !== 'daily_sop_role_assessment') {
+    throw { forbidden: 'Daily SOP role assessment type cannot change' };
+  }
+  if (isCouchAdmin && !isRoleAssessmentWrite) return;
   if (newDoc.type === 'unit_of_measure' || (oldDoc && oldDoc.type === 'unit_of_measure')) {
     throw { forbidden: 'unit_of_measure is central-only' };
   }
@@ -369,8 +417,7 @@ export function buildValidateDocUpdate(code: string): string {
     'requirement_group', 'food_sphere_standard', 'replenishment_policy', 'sop_override',
     'distribution_request', 'distribution_batch', 'stock_lot_reservation',
     'distribution_issue', 'distribution_issue_idempotency', 'distribution_issue_capacity', 'distribution_one_time_guard', 'distribution_issue_gate',
-    'daily_sop_assessment',
-    'shelter_readiness_assessment',
+		'shelter_readiness_assessment',
     'requisition_ticket', 'distribution_log', 'bulk_return_pool', 'bulk_return_claim', 'loan_return_reservation',
     'meal_service_receipt',
     'daily_sop_role_assessment'
@@ -598,30 +645,152 @@ export function buildValidateDocUpdate(code: string): string {
       throw { forbidden: 'simulation document is too large' };
     }
   }
-  // Each role assessment stores its own immutable question snapshot.
+  // Each role assessment is checked against the embedded CR v1 contract. Keep
+  // this self-contained: CouchDB must not need external configuration at write time.
   if (newDoc.type === 'daily_sop_role_assessment') {
-    var roleMeta = {
-      'SM': { key: 'shelter_manager', label: 'ผู้จัดการศูนย์พักพิง' },
-      'REG': { key: 'registration_staff', label: 'ลงทะเบียนและข้อมูลผู้พักพิง' },
-      'TRG': { key: 'triage_staff', label: 'คัดกรองและกลุ่มเปราะบาง' },
-      'MED': { key: 'medical_staff', label: 'การแพทย์และสุขภาพ' },
-      'KS': { key: 'kitchen_staff', label: 'ครัวและโภชนาการ' },
-      'SC': { key: 'supply_coordinator', label: 'คลัง พัสดุ และการแจกจ่าย' },
-      'VC': { key: 'volunteer_coordinator', label: 'อาสาสมัครและกำลังคน' },
-      'SO': { key: 'security_officer', label: 'ความปลอดภัย' },
-      'FAC': { key: 'facility_staff', label: 'สถานที่ พื้นที่พัก และสาธารณูปโภค' }
-    };
-    var role = roleMeta[newDoc.role_code];
-    if (!role || newDoc.role_key !== role.key || newDoc.role_label !== role.label ||
-        typeof newDoc.assessed_at !== 'string' || !newDoc.assessed_at ||
-        typeof newDoc.assessor_name !== 'string' || !newDoc.assessor_name ||
-        newDoc.schema_v !== 1 ||
-        ['InProgress', 'Completed'].indexOf(newDoc.status) === -1) {
-      throw { forbidden: 'Daily SOP role assessment schema, role, or status is invalid' };
+    var contract = ${dailySopRoleContract};
+    var roles = contract.roles;
+    var role = null;
+    for (var roleIndex = 0; roleIndex < roles.length; roleIndex++) {
+      if (roles[roleIndex].code === newDoc.role_code) role = roles[roleIndex];
     }
-    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(newDoc.assessment_date) ||
-        newDoc._id !== 'daily_sop_role_assessment:' + newDoc.shelter_code + ':' + newDoc.assessment_date + ':' + newDoc.role_code) {
-      throw { forbidden: 'Daily SOP role assessment id must be shelter/date/role deterministic' };
+    function exactKeys(value, allowedKeys) {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+      var keys = Object.keys(value).sort();
+      var expected = allowedKeys.slice().sort();
+      if (keys.length !== expected.length) return false;
+      for (var keyIndex = 0; keyIndex < keys.length; keyIndex++) {
+        if (keys[keyIndex] !== expected[keyIndex]) return false;
+      }
+      return true;
+    }
+    function validDate(value) {
+      if (typeof value !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;
+      var parts = value.split('-');
+      var year = Number(parts[0]);
+      var month = Number(parts[1]);
+      var day = Number(parts[2]);
+      if (month < 1 || month > 12 || day < 1) return false;
+      var leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+      var days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+      return day <= days[month - 1];
+    }
+    function validTimestamp(value) {
+      if (typeof value !== 'string') return false;
+      var match = /^(\\d{4}-\\d{2}-\\d{2})T(\\d{2}):(\\d{2}):(\\d{2})(?:\\.\\d+)?Z$/.exec(value);
+      return !!match && validDate(match[1]) && Number(match[2]) <= 23 &&
+        Number(match[3]) <= 59 && Number(match[4]) <= 59 && isFinite(Date.parse(value));
+    }
+    function nonEmpty(value) { return typeof value === 'string' && value.trim().length > 0; }
+    function validPositiveDecimal(value) {
+      return typeof value === 'string' && /^(?:0|[1-9]\\d*)(?:\\.\\d+)?$/.test(value) &&
+        isFinite(Number(value)) && Number(value) > 0;
+    }
+    function decimalPlaces(value) {
+      var text = String(value);
+      if (text.indexOf('e') !== -1 || text.indexOf('E') !== -1) {
+        var parts = text.toLowerCase().split('e');
+        var fraction = parts[0].split('.')[1] || '';
+        return Math.max(0, fraction.length - Number(parts[1]));
+      }
+      return (text.split('.')[1] || '').length;
+    }
+    function stepAligned(value, step) {
+      if (typeof value !== 'number' || !isFinite(value) || value < 0) return false;
+      var precision = Math.max(decimalPlaces(value), decimalPlaces(step));
+      var scale = Math.pow(10, precision);
+      var scaledValue = Math.round(value * scale);
+      var scaledStep = Math.round(Number(step) * scale);
+      return isFinite(scaledValue) && Math.abs(value * scale - scaledValue) < 1e-7 &&
+        scaledValue <= 9007199254740991 && scaledStep > 0 && scaledValue % scaledStep === 0;
+    }
+    function hasCapability(capability) {
+      if (userCtx.roles.indexOf('${code}:' + capability) !== -1) return true;
+      var shelterScopes = [];
+      for (var scopeIndex = 0; scopeIndex < userCtx.roles.length; scopeIndex++) {
+        if (/^shelter:[^:]+$/.test(userCtx.roles[scopeIndex])) shelterScopes.push(userCtx.roles[scopeIndex]);
+      }
+      return userCtx.roles.indexOf(capability) !== -1 && shelterScopes.length === 1 &&
+        shelterScopes[0] === 'shelter:${code}';
+    }
+    function validControlSnapshot(control, question) {
+      if (!exactKeys(control, ['id', 'question', 'metric_spec', 'status', 'notes', 'observations',
+          'measured_values', 'checked_by', 'checked_by_name', 'checked_at']) &&
+          !exactKeys(control, ['id', 'question', 'metric_spec', 'status', 'notes', 'observations',
+            'measured_values', 'checked_by', 'checked_at'])) return false;
+      if (control.id !== question.id || typeof control.question !== 'string' ||
+          ['Pass', 'Fail', 'Pending', null].indexOf(control.status) === -1 ||
+          typeof control.notes !== 'string' || typeof control.observations !== 'string' ||
+          !control.measured_values || typeof control.measured_values !== 'object' ||
+          Array.isArray(control.measured_values) ||
+          !nonEmpty(control.checked_by) || !validTimestamp(control.checked_at) ||
+          (typeof control.checked_by_name !== 'undefined' && !nonEmpty(control.checked_by_name))) return false;
+      if ((control.status === 'Fail' || control.status === 'Pending') && !control.notes.trim()) return false;
+      if (question.metric === null) {
+        return control.question === question.prompt && control.metric_spec === null &&
+          exactKeys(control.measured_values, []);
+      }
+      var definition = question.metric;
+      if (definition.parameterKey && control.metric_spec === null) {
+        return control.question === question.prompt && control.status === 'Pending' &&
+          !!control.notes.trim() && exactKeys(control.measured_values, []);
+      }
+      if (!exactKeys(control.metric_spec, ['fields', 'threshold']) &&
+          !exactKeys(control.metric_spec, ['fields', 'threshold', 'parameter'])) return false;
+      if (!Array.isArray(control.metric_spec.fields) || control.metric_spec.fields.length !== definition.fields.length) return false;
+      for (var fieldIndex = 0; fieldIndex < definition.fields.length; fieldIndex++) {
+        var actualField = control.metric_spec.fields[fieldIndex];
+        var expectedField = definition.fields[fieldIndex];
+        if (!exactKeys(actualField, ['key', 'label', 'unit', 'step']) ||
+            actualField.key !== expectedField.key || actualField.label !== expectedField.label ||
+            actualField.unit !== expectedField.unit || actualField.step !== expectedField.step ||
+            !validPositiveDecimal(actualField.step)) return false;
+      }
+      var threshold = definition.threshold;
+      if (definition.parameterKey) {
+        var parameter = control.metric_spec.parameter;
+        if (!exactKeys(parameter, ['key', 'value']) || parameter.key !== definition.parameterKey ||
+            !validPositiveDecimal(parameter.value)) return false;
+        threshold = threshold.replace('{parameter}', parameter.value);
+        if (control.question !== question.prompt.replace('{' + definition.parameterKey + '}', parameter.value)) return false;
+      } else if (typeof control.metric_spec.parameter !== 'undefined') {
+        return false;
+      } else if (control.question !== question.prompt) {
+        return false;
+      }
+      if (control.metric_spec.threshold !== threshold) return false;
+      var expectedKeys = [];
+      for (var expectedIndex = 0; expectedIndex < definition.fields.length; expectedIndex++) {
+        expectedKeys.push(definition.fields[expectedIndex].key);
+      }
+      if (!exactKeys(control.measured_values, expectedKeys)) return false;
+      for (var measureIndex = 0; measureIndex < definition.fields.length; measureIndex++) {
+        var measure = control.measured_values[definition.fields[measureIndex].key];
+        if (measure !== null && !stepAligned(measure, definition.fields[measureIndex].step)) return false;
+      }
+      return true;
+    }
+    var applicationKeys = ['_id', '_rev', '_revisions', 'type', 'schema_v', 'shelter_code',
+      'assessment_date', 'role_code', 'role_key', 'role_label', 'question_set_version', 'assessed_at',
+      'assessor_name', 'status', 'pass_count', 'fail_count', 'pending_count', 'unanswered_count',
+      'controls', 'created_at', 'updated_at', 'created_by'];
+    var topKeys = Object.keys(newDoc);
+    for (var topIndex = 0; topIndex < topKeys.length; topIndex++) {
+      if (applicationKeys.indexOf(topKeys[topIndex]) === -1) {
+        throw { forbidden: 'Daily SOP role assessment contains an unregistered field' };
+      }
+    }
+    if (!role || newDoc.type !== 'daily_sop_role_assessment' || newDoc.schema_v !== 1 ||
+        newDoc.shelter_code !== '${code}' || !validDate(newDoc.assessment_date) ||
+        newDoc._id !== 'daily_sop_role_assessment:' + newDoc.shelter_code + ':' +
+          newDoc.assessment_date + ':' + newDoc.role_code ||
+        newDoc.role_key !== role.key || newDoc.role_label !== role.label ||
+        (typeof newDoc.question_set_version !== 'undefined' && newDoc.question_set_version !== contract.version) ||
+        !validTimestamp(newDoc.assessed_at) || !nonEmpty(newDoc.assessor_name) ||
+        !validTimestamp(newDoc.created_at) || !validTimestamp(newDoc.updated_at) || !nonEmpty(newDoc.created_by) ||
+        ['InProgress', 'Completed'].indexOf(newDoc.status) === -1 || !Array.isArray(newDoc.controls) ||
+        newDoc.controls.length !== role.questions.length) {
+      throw { forbidden: 'Daily SOP role assessment schema, date, identity, or question set is invalid' };
     }
     var bangkokNow = new Date(new Date().getTime() + 7 * 60 * 60 * 1000);
     var bangkokMonth = String(bangkokNow.getUTCMonth() + 1);
@@ -629,142 +798,72 @@ export function buildValidateDocUpdate(code: string): string {
     var currentBangkokDate = bangkokNow.getUTCFullYear() + '-' +
       (bangkokMonth.length === 1 ? '0' + bangkokMonth : bangkokMonth) + '-' +
       (bangkokDay.length === 1 ? '0' + bangkokDay : bangkokDay);
-    if (newDoc.assessment_date !== currentBangkokDate) {
+    if (!isCouchAdmin && newDoc.assessment_date !== currentBangkokDate) {
       throw { forbidden: 'Daily SOP role assessments can only be saved for the current Bangkok date' };
     }
-    if (!oldDoc && newDoc.created_by !== userCtx.name) {
-      throw { forbidden: 'Daily SOP role created_by must match the authenticated user' };
-    }
-    var oldRoleControlsById = {};
-    if (oldDoc) {
-      if (!Array.isArray(oldDoc.controls) || oldDoc.controls.length !== newDoc.controls.length) {
-        throw { forbidden: 'Daily SOP role question snapshot cannot change' };
-      }
-      for (var oldControlIndex = 0; oldControlIndex < oldDoc.controls.length; oldControlIndex++) {
-        var priorControl = oldDoc.controls[oldControlIndex];
-        if (!priorControl || typeof priorControl.id !== 'string' || oldRoleControlsById[priorControl.id]) {
-          throw { forbidden: 'Daily SOP role question snapshot is invalid' };
-        }
-        oldRoleControlsById[priorControl.id] = priorControl;
-        if (priorControl.id !== newDoc.controls[oldControlIndex].id) {
-          throw { forbidden: 'Daily SOP role question order cannot change' };
-        }
-      }
+    var allowedOwner = role.code === 'SC'
+      ? hasCapability('supply_coordinator') || hasCapability('warehouse_staff')
+      : hasCapability(role.key);
+    if (!isCouchAdmin && userCtx.roles.indexOf('system_admin') === -1 &&
+        !hasCapability('shelter_manager') && !allowedOwner) {
+      throw { forbidden: 'Daily SOP role assessment requires the role owner or shelter manager' };
     }
     if (oldDoc && (
         newDoc._id !== oldDoc._id || newDoc.shelter_code !== oldDoc.shelter_code ||
         newDoc.assessment_date !== oldDoc.assessment_date || newDoc.role_code !== oldDoc.role_code ||
         newDoc.role_key !== oldDoc.role_key || newDoc.role_label !== oldDoc.role_label ||
-        (oldDoc.question_set_version !== undefined && newDoc.question_set_version !== oldDoc.question_set_version) ||
-        newDoc.assessed_at !== oldDoc.assessed_at || newDoc.created_at !== oldDoc.created_at ||
+        newDoc.question_set_version !== oldDoc.question_set_version || newDoc.assessed_at !== oldDoc.assessed_at ||
+        newDoc.assessor_name !== oldDoc.assessor_name || newDoc.created_at !== oldDoc.created_at ||
         newDoc.created_by !== oldDoc.created_by)) {
-      throw { forbidden: 'Daily SOP role identity and creation metadata cannot change' };
+      throw { forbidden: 'Daily SOP role identity, version, and creation metadata cannot change' };
     }
-    var roleOwner = isRole(role.key);
-    var roleManager = isRole('shelter_manager');
-    if (!roleOwner && !roleManager) {
-      throw { forbidden: 'Daily SOP role assessment requires the role owner or shelter manager' };
+    if (!oldDoc && !isCouchAdmin && newDoc.created_by !== userCtx.name) {
+      throw { forbidden: 'Daily SOP role created_by must match the authenticated user' };
     }
-    if (!Array.isArray(newDoc.controls) || newDoc.controls.length === 0) {
-      throw { forbidden: 'Daily SOP role assessment needs at least one question' };
-    }
-    var roleStatuses = ['Pass', 'Fail', 'Pending'];
-    var roleSeen = {};
     var passCount = 0;
     var failCount = 0;
     var pendingCount = 0;
     var unansweredCount = 0;
-    for (var roleControlIndex = 0; roleControlIndex < newDoc.controls.length; roleControlIndex++) {
-      var roleControl = newDoc.controls[roleControlIndex];
-      if (!roleControl || typeof roleControl.id !== 'string' ||
-          roleSeen[roleControl.id] || typeof roleControl.question !== 'string' || !roleControl.question ||
-          typeof roleControl.check_method !== 'string' || !roleControl.check_method ||
-          typeof roleControl.pass_criteria !== 'string' || !roleControl.pass_criteria ||
-          typeof roleControl.record_values !== 'string' || !roleControl.record_values ||
-          (roleControl.metric_spec !== null && (!roleControl.metric_spec || typeof roleControl.metric_spec !== 'object' ||
-            typeof roleControl.metric_spec.threshold !== 'string' || !roleControl.metric_spec.threshold ||
-            (typeof roleControl.metric_spec.parameter !== 'undefined' &&
-              (!roleControl.metric_spec.parameter || typeof roleControl.metric_spec.parameter !== 'object' ||
-                ['people_per_volunteer', 'm2_per_person_living', 'people_per_toilet_female',
-                  'people_per_toilet_male', 'people_per_bathing', 'people_per_laundry',
-                  'people_per_tap'].indexOf(roleControl.metric_spec.parameter.key) === -1 ||
-                typeof roleControl.metric_spec.parameter.value !== 'string' ||
-                !isFinite(Number(roleControl.metric_spec.parameter.value)) ||
-                Number(roleControl.metric_spec.parameter.value) <= 0)) ||
-            !Array.isArray(roleControl.metric_spec.fields) || roleControl.metric_spec.fields.length === 0)) ||
-          (roleControl.status !== null && roleStatuses.indexOf(roleControl.status) === -1) ||
-          typeof roleControl.notes !== 'string' || typeof roleControl.observations !== 'string' ||
-          !roleControl.measured_values || typeof roleControl.measured_values !== 'object' ||
-          Array.isArray(roleControl.measured_values) ||
-          typeof roleControl.checked_by !== 'string' || !roleControl.checked_by ||
-          (typeof roleControl.checked_by_name !== 'undefined' &&
-            (typeof roleControl.checked_by_name !== 'string' || !roleControl.checked_by_name)) ||
-          typeof roleControl.checked_at !== 'string' || !roleControl.checked_at) {
-        throw { forbidden: 'Daily SOP role control shape or status is invalid' };
+    var hasRecordedInput = false;
+    for (var controlIndex = 0; controlIndex < role.questions.length; controlIndex++) {
+      var control = newDoc.controls[controlIndex];
+      var question = role.questions[controlIndex];
+      if (!validControlSnapshot(control, question)) {
+        throw { forbidden: 'Daily SOP role control does not match the registered snapshot contract' };
       }
-      var expectedPrefix = 'D-' + newDoc.role_code + '-';
-      if (roleControl.id.indexOf(expectedPrefix) !== 0) {
-        throw { forbidden: 'Daily SOP role question id does not match its role' };
+      var previous = oldDoc && oldDoc.controls ? oldDoc.controls[controlIndex] : null;
+      if (oldDoc && (!previous || previous.id !== control.id || previous.question !== control.question ||
+          JSON.stringify(previous.metric_spec) !== JSON.stringify(control.metric_spec))) {
+        throw { forbidden: 'Daily SOP role question and metric snapshots cannot change' };
       }
-      roleSeen[roleControl.id] = true;
-      if ((roleControl.status === 'Fail' || roleControl.status === 'Pending') && !roleControl.notes.trim()) {
-        throw { forbidden: 'Daily SOP fail and pending answers require notes' };
-      }
-      var measuredKeys = Object.keys(roleControl.measured_values);
-      for (var measuredIndex = 0; measuredIndex < measuredKeys.length; measuredIndex++) {
-        var measuredValue = roleControl.measured_values[measuredKeys[measuredIndex]];
-        if (measuredValue !== null && (typeof measuredValue !== 'number' || !isFinite(measuredValue) || measuredValue < 0)) {
-          throw { forbidden: 'Daily SOP measured values must be non-negative numbers or null' };
-        }
-      }
-      if (roleControl.metric_spec !== null) {
-        for (var metricFieldIndex = 0; metricFieldIndex < roleControl.metric_spec.fields.length; metricFieldIndex++) {
-          var metricField = roleControl.metric_spec.fields[metricFieldIndex];
-          if (!metricField || typeof metricField.key !== 'string' || !metricField.key ||
-              typeof metricField.label !== 'string' || !metricField.label ||
-              typeof metricField.unit !== 'string' || !metricField.unit ||
-              (typeof metricField.step !== 'undefined' && typeof metricField.step !== 'string')) {
-            throw { forbidden: 'Daily SOP role metric definition is invalid' };
-          }
-        }
-      }
-      var oldRoleControl = oldDoc ? oldRoleControlsById[roleControl.id] : null;
-      if (oldDoc && (!oldRoleControl ||
-          oldRoleControl.question !== roleControl.question ||
-          oldRoleControl.check_method !== roleControl.check_method ||
-          oldRoleControl.pass_criteria !== roleControl.pass_criteria ||
-          oldRoleControl.record_values !== roleControl.record_values ||
-          JSON.stringify(oldRoleControl.metric_spec) !== JSON.stringify(roleControl.metric_spec))) {
-        throw { forbidden: 'Daily SOP role question snapshot cannot change' };
-      }
-      var roleControlChanged = !oldRoleControl || oldRoleControl.status !== roleControl.status ||
-        oldRoleControl.notes !== roleControl.notes || oldRoleControl.observations !== roleControl.observations ||
-        JSON.stringify(oldRoleControl.measured_values) !== JSON.stringify(roleControl.measured_values) ||
-        oldRoleControl.checked_by !== roleControl.checked_by ||
-        oldRoleControl.checked_by_name !== roleControl.checked_by_name ||
-        oldRoleControl.checked_at !== roleControl.checked_at;
-      if (roleControlChanged && roleControl.checked_by !== userCtx.name) {
+      var controlChanged = !previous || previous.status !== control.status || previous.notes !== control.notes ||
+        previous.observations !== control.observations ||
+        JSON.stringify(previous.measured_values) !== JSON.stringify(control.measured_values) ||
+        previous.checked_by !== control.checked_by || previous.checked_by_name !== control.checked_by_name ||
+        previous.checked_at !== control.checked_at;
+      if (!isCouchAdmin && controlChanged && control.checked_by !== userCtx.name) {
         throw { forbidden: 'Daily SOP role checked_by must match the authenticated user' };
       }
-      if (roleControl.status === 'Pass') passCount++;
-      else if (roleControl.status === 'Fail') failCount++;
-      else if (roleControl.status === 'Pending') pendingCount++;
+      if (!oldDoc && !isCouchAdmin && control.checked_by !== userCtx.name) {
+        throw { forbidden: 'New Daily SOP role controls must record the authenticated creator' };
+      }
+      if (control.status !== null || control.notes.trim() || control.observations.trim()) hasRecordedInput = true;
+      var recordedKeys = Object.keys(control.measured_values);
+      for (var recordedIndex = 0; recordedIndex < recordedKeys.length; recordedIndex++) {
+        if (control.measured_values[recordedKeys[recordedIndex]] !== null) hasRecordedInput = true;
+      }
+      if (control.status === 'Pass') passCount++;
+      else if (control.status === 'Fail') failCount++;
+      else if (control.status === 'Pending') pendingCount++;
       else unansweredCount++;
     }
     if (newDoc.pass_count !== passCount || newDoc.fail_count !== failCount ||
         newDoc.pending_count !== pendingCount || newDoc.unanswered_count !== unansweredCount ||
-        passCount + failCount + pendingCount + unansweredCount !== newDoc.controls.length) {
-      throw { forbidden: 'Daily SOP role summary does not match its answers' };
+        newDoc.status !== (unansweredCount === 0 ? 'Completed' : 'InProgress')) {
+      throw { forbidden: 'Daily SOP role summary does not match its controls' };
     }
-    var completedRoleAssessment = unansweredCount === 0;
-    for (var noteCheckIndex = 0; noteCheckIndex < newDoc.controls.length; noteCheckIndex++) {
-      var noteCheckControl = newDoc.controls[noteCheckIndex];
-      if (noteCheckControl.status === 'Fail' || noteCheckControl.status === 'Pending') {
-        if (!noteCheckControl.notes.trim()) completedRoleAssessment = false;
-      }
-    }
-    if ((newDoc.status === 'Completed') !== completedRoleAssessment) {
-      throw { forbidden: 'Daily SOP role assessment status must match answer completion' };
+    if (!oldDoc && !hasRecordedInput) {
+      throw { forbidden: 'Daily SOP role assessment cannot be saved without an answer or recorded observation' };
     }
     if (JSON.stringify(newDoc).length > 524288) {
       throw { forbidden: 'Daily SOP role assessment document is too large' };

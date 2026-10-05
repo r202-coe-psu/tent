@@ -1,7 +1,24 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { SOP_RATIO_KEYS, SOP_RATIO_KIND } from '$lib/features/sop-ratios/server';
-import { DAILY_SOP_ROLE_QUESTIONS } from '$lib/features/daily-sop';
+import {
+	DAILY_SOP_ROLES,
+	metricForQuestion,
+	promptForQuestion,
+	questionsForRole,
+	DAILY_SOP_ROLE_QUESTIONS,
+	type DailySopRoleCode
+} from '$lib/features/daily-sop/server';
 import { buildValidateDocUpdate } from './shelter-access-design';
+
+const validRatios = {
+	m2_per_person_living: '3.5',
+	people_per_toilet_female: '20',
+	people_per_toilet_male: '35',
+	people_per_bathing: '50',
+	people_per_laundry: '100',
+	people_per_tap: '80',
+	people_per_volunteer: '50'
+};
 
 afterEach(() => {
 	vi.useRealTimers();
@@ -96,6 +113,69 @@ const dailyResults = SOP_RATIO_KEYS.map((key, ordinal) => ({
 	data_status: 'complete',
 	as_of: asOf
 }));
+
+function makeRoleAssessment(roleCode: DailySopRoleCode, date: string, user: string): Doc {
+	const role = DAILY_SOP_ROLES.find((item) => item.code === roleCode)!;
+	const timestamp = `${date}T10:00:00.000Z`;
+	const controls = questionsForRole(roleCode).map((question) => {
+		const metric = metricForQuestion(question.id, validRatios);
+		return {
+			id: question.id,
+			question: promptForQuestion(question, validRatios),
+			metric_spec: metric
+				? {
+						fields: metric.fields,
+						threshold: metric.threshold,
+						...(metric.parameter ? { parameter: metric.parameter } : {})
+					}
+				: null,
+			status: 'Pass',
+			notes: '',
+			observations: '',
+			measured_values: metric
+				? Object.fromEntries(metric.fields.map((item) => [item.key, null]))
+				: {},
+			checked_by: user,
+			checked_by_name: user,
+			checked_at: timestamp
+		};
+	});
+	return {
+		_id: `daily_sop_role_assessment:SH001:${date}:${roleCode}`,
+		type: 'daily_sop_role_assessment',
+		schema_v: 1,
+		shelter_code: 'SH001',
+		assessment_date: date,
+		role_code: roleCode,
+		role_key: role.key,
+		role_label: role.label,
+		question_set_version: 'daily-sop-role-v1',
+		assessed_at: timestamp,
+		assessor_name: user,
+		status: 'Completed',
+		pass_count: controls.length,
+		fail_count: 0,
+		pending_count: 0,
+		unanswered_count: 0,
+		controls,
+		created_at: timestamp,
+		updated_at: timestamp,
+		created_by: user
+	};
+}
+
+function controlsOf(doc: Doc): Doc[] {
+	return doc.controls as Doc[];
+}
+
+function updateRoleControl(doc: Doc, id: string, changes: Doc): Doc {
+	return {
+		...doc,
+		controls: controlsOf(doc).map((control) =>
+			control.id === id ? { ...control, ...changes } : control
+		)
+	};
+}
 const horizonResults = SOP_RATIO_KEYS.map((key) => ({
 	key,
 	kind: SOP_RATIO_KIND[key],
@@ -316,189 +396,355 @@ describe('buildValidateDocUpdate', () => {
 		);
 	});
 
-	it('validates role-owned Daily SOP snapshots and preserves each role/day boundary', () => {
+	it('validates Daily SOP assessments against the complete CR role and snapshot contract', () => {
 		vi.useFakeTimers();
 		vi.setSystemTime(new Date('2026-09-25T05:00:00.000Z'));
-		const roleQuestions = DAILY_SOP_ROLE_QUESTIONS.filter((question) => question.role === 'REG');
-		const roleAssessment = {
-			_id: 'daily_sop_role_assessment:SH001:2026-09-25:REG',
-			type: 'daily_sop_role_assessment',
-			...envelope,
-			schema_v: 1,
-			created_by: 'reg',
-			assessment_date: '2026-09-25',
-			role_code: 'REG',
-			role_key: 'registration_staff',
-			role_label: 'ลงทะเบียนและข้อมูลผู้พักพิง',
-			assessed_at: '2026-09-25T08:00:00.000Z',
-			assessor_name: 'เจ้าหน้าที่ทะเบียน',
-			status: 'Completed',
-			pass_count: 10,
-			fail_count: 0,
-			pending_count: 0,
-			unanswered_count: 0,
-			controls: roleQuestions.map((question) => ({
-				id: question.id,
-				question: question.prompt,
-				check_method: question.checkMethod,
-				pass_criteria: question.passCriteria,
-				record_values: question.recordValues,
-				metric_spec: null,
-				status: 'Pass',
-				notes: '',
-				observations: '',
-				measured_values: {},
-				checked_by: 'reg',
-				checked_at: '2026-09-25T08:00:00.000Z'
-			}))
-		};
 		const validate = compile();
-		const updatedByManager = {
-			...roleAssessment,
-			pass_count: 9,
-			fail_count: 1,
-			controls: roleAssessment.controls.map((control, index) =>
-				index === 0
-					? {
-							...control,
-							status: 'Fail',
-							notes: 'ติดตามการแก้ไข',
-							checked_by: 'sm',
-							checked_by_name: 'ผู้จัดการศูนย์',
-							checked_at: '2026-09-25T10:00:00.000Z'
-						}
-					: control
-			)
-		};
-		const updatedByAdmin = {
-			...roleAssessment,
-			pass_count: 9,
-			fail_count: 1,
-			controls: roleAssessment.controls.map((control, index) =>
-				index === 1
-					? {
-							...control,
-							status: 'Fail',
-							notes: 'ติดตามการแก้ไข',
-							checked_by: 'admin',
-							checked_by_name: 'ผู้ดูแลระบบ',
-							checked_at: '2026-09-25T10:00:00.000Z'
-						}
-					: control
-			)
-		};
+		const registration = makeRoleAssessment('REG', '2026-09-25', 'reg');
+		const facility = makeRoleAssessment('FAC', '2026-09-25', 'fac');
+		const warehouse = makeRoleAssessment('SC', '2026-09-25', 'wh');
+		const supplyCoordinator = makeRoleAssessment('SC', '2026-09-25', 'sc');
+
+		expect(() => validate(registration, null, REGISTRATION)).not.toThrow();
 		expect(() =>
-			validate(roleAssessment, null, { name: 'reg', roles: ['SH001:registration_staff'] })
+			validate(facility, null, { name: 'fac', roles: ['SH001:facility_staff'] })
 		).not.toThrow();
 		expect(() =>
-			validate(updatedByManager, roleAssessment, { name: 'sm', roles: ['SH001:shelter_manager'] })
+			validate(warehouse, null, { name: 'wh', roles: ['SH001:warehouse_staff'] })
 		).not.toThrow();
-		expect(() => validate(updatedByAdmin, roleAssessment, ADMIN)).not.toThrow();
+		expect(() =>
+			validate(supplyCoordinator, null, { name: 'sc', roles: ['SH001:supply_coordinator'] })
+		).not.toThrow();
+
+		const managerCreated = makeRoleAssessment('FAC', '2026-09-25', 'sm');
+		expect(() => validate(managerCreated, null, MANAGER)).not.toThrow();
+		const systemAdminCreated = makeRoleAssessment('FAC', '2026-09-25', 'admin');
+		expect(() => validate(systemAdminCreated, null, ADMIN)).not.toThrow();
+
+		expectForbidden(() => validate(registration, null, KITCHEN), /role owner or shelter manager/);
 		expectForbidden(
-			() => validate(roleAssessment, null, { name: 'reg', roles: ['SH001:facility_staff'] }),
-			/requires the role owner or shelter manager/
+			() =>
+				validate(registration, null, {
+					name: 'reg',
+					roles: ['shelter:SH002', 'registration_staff']
+				}),
+			/role owner or shelter manager/
 		);
-		const oldVersionAssessment = { ...roleAssessment, question_set_version: 'daily-sop-role-v0' };
-		expect(() => validate(oldVersionAssessment, null, REGISTRATION)).not.toThrow();
-		const oldVersionAnswerUpdate = {
-			...oldVersionAssessment,
-			pass_count: 9,
-			fail_count: 1,
-			controls: oldVersionAssessment.controls.map((control, index) =>
-				index === 0
-					? {
-							...control,
-							status: 'Fail',
-							notes: 'ติดตาม',
-							checked_by: 'sm',
-							checked_at: '2026-09-25T10:00:00.000Z'
-						}
-					: control
-			)
-		};
-		expect(() => validate(oldVersionAnswerUpdate, oldVersionAssessment, MANAGER)).not.toThrow();
-		const fewerQuestions = {
-			...roleAssessment,
-			controls: roleAssessment.controls.slice(1),
-			pass_count: 9
-		};
-		expect(() => validate(fewerQuestions, null, REGISTRATION)).not.toThrow();
-		const changedQuestion = {
-			...roleAssessment,
-			controls: roleAssessment.controls.map((control, index) =>
-				index === 0 ? { ...control, question: 'แก้ข้อความใน snapshot' } : control
-			)
+		expectForbidden(
+			() =>
+				validate(registration, null, {
+					name: 'reg',
+					roles: ['shelter:SH001', 'shelter:SH002', 'registration_staff']
+				}),
+			/role owner or shelter manager/
+		);
+		expectForbidden(
+			() => validate(registration, null, { name: 'another-user', roles: REGISTRATION.roles }),
+			/created_by must match/
+		);
+
+		const managerUpdate = updateRoleControl(registration, 'D-REG-01', {
+			status: 'Fail',
+			notes: 'ป้ายหลุด',
+			checked_by: 'sm',
+			checked_by_name: 'ผู้จัดการ',
+			checked_at: '2026-09-25T10:00:00.000Z'
+		});
+		managerUpdate.fail_count = 1;
+		managerUpdate.pass_count = 4;
+		expect(() => validate(managerUpdate, registration, MANAGER)).not.toThrow();
+
+		const appAdminUpdate = updateRoleControl(registration, 'D-REG-02', {
+			status: 'Fail',
+			notes: 'มีข้อมูลค้าง',
+			checked_by: 'admin',
+			checked_at: '2026-09-25T10:00:00.000Z'
+		});
+		appAdminUpdate.fail_count = 1;
+		appAdminUpdate.pass_count = 4;
+		expect(() => validate(appAdminUpdate, registration, ADMIN)).not.toThrow();
+
+		const changedQuestion = updateRoleControl(registration, 'D-REG-01', {
+			question: 'ข้อความที่ไม่ได้อยู่ใน Question Bank'
+		});
+		expectForbidden(
+			() => validate(changedQuestion, registration, REGISTRATION),
+			/registered snapshot contract/
+		);
+		const reordered = {
+			...registration,
+			controls: [...(registration.controls as Doc[])].reverse()
 		};
 		expectForbidden(
-			() => validate(changedQuestion, roleAssessment, REGISTRATION),
-			/question snapshot cannot change/
+			() => validate(reordered, registration, REGISTRATION),
+			/registered snapshot contract/
+		);
+		const extraControlField = updateRoleControl(registration, 'D-REG-01', {
+			check_method: 'legacy'
+		});
+		expectForbidden(
+			() => validate(extraControlField, registration, REGISTRATION),
+			/registered snapshot contract/
+		);
+		expectForbidden(
+			() => validate({ ...registration, unexpected: true }, null, REGISTRATION),
+			/unregistered field/
 		);
 		expectForbidden(
 			() =>
 				validate(
-					{ ...roleAssessment, controls: [...roleAssessment.controls].reverse() },
-					roleAssessment,
+					{ ...registration, question_set_version: 'daily-sop-role-v0' },
+					null,
 					REGISTRATION
 				),
-			/question order cannot change/
+			/question set is invalid/
 		);
 		expectForbidden(
 			() =>
 				validate(
-					{
-						...roleAssessment,
-						controls: [
-							...roleAssessment.controls,
-							{ ...roleAssessment.controls[0], id: 'D-REG-NEW' }
-						],
-						pass_count: 11
-					},
-					roleAssessment,
+					{ ...registration, _id: 'daily_sop_role_assessment:SH001:2026-09-25:SM' },
+					null,
 					REGISTRATION
 				),
-			/snapshot cannot change/
+			/schema, date, identity/
 		);
-		const failed = {
-			...roleAssessment,
-			status: 'Completed',
-			pass_count: 9,
-			fail_count: 1,
-			controls: roleAssessment.controls.map((control, index) =>
-				index === 0
-					? {
-							...control,
-							status: 'Fail',
-							checked_by: 'reg',
-							checked_at: '2026-09-25T09:00:00.000Z'
-						}
-					: control
-			)
-		};
+	});
+
+	it('validates exact Bangkok-day boundaries and lets only CouchDB _admin restore a valid past assessment', () => {
+		const validate = compile();
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-09-30T16:59:59.000Z'));
+		const lastSecond = makeRoleAssessment('REG', '2026-09-30', 'reg');
+		expect(() => validate(lastSecond, null, REGISTRATION)).not.toThrow();
+
+		vi.setSystemTime(new Date('2026-09-30T17:00:00.000Z'));
+		const firstSecond = makeRoleAssessment('REG', '2026-10-01', 'reg');
+		expect(() => validate(firstSecond, null, REGISTRATION)).not.toThrow();
+
+		const priorDate = makeRoleAssessment('REG', '2026-09-29', 'restored-user');
 		expectForbidden(
-			() => validate(failed, null, { name: 'reg', roles: ['registration_staff'] }),
-			/require notes/
-		);
-		expectForbidden(
-			() =>
-				validate({ ...roleAssessment, fail_count: 1 }, null, {
-					name: 'reg',
-					roles: ['registration_staff']
-				}),
-			/summary does not match/
-		);
-		expectForbidden(
-			() =>
-				validate({ ...roleAssessment, assessment_date: '2026-09-26' }, null, {
-					name: 'reg',
-					roles: ['registration_staff']
-				}),
-			/id must be shelter\/date\/role/
-		);
-		vi.setSystemTime(new Date('2026-09-26T05:00:00.000Z'));
-		expectForbidden(
-			() => validate(roleAssessment, roleAssessment, MANAGER),
+			() => validate(priorDate, null, { name: 'replicator', roles: REGISTRATION.roles }),
 			/current Bangkok date/
 		);
+		expect(() =>
+			validate(priorDate, null, { name: 'replicator', roles: ['_admin'] })
+		).not.toThrow();
+		expectForbidden(
+			() =>
+				validate({ ...priorDate, assessment_date: '2026-02-30' }, null, {
+					name: 'replicator',
+					roles: ['_admin']
+				}),
+			/schema, date, identity/
+		);
+		expectForbidden(
+			() =>
+				validate({ ...priorDate, assessed_at: '2026-09-29T25:00:00Z' }, null, {
+					name: 'replicator',
+					roles: ['_admin']
+				}),
+			/schema, date, identity/
+		);
+		expectForbidden(
+			() =>
+				validate({ ...priorDate, _deleted: true }, null, { name: 'replicator', roles: ['_admin'] }),
+			/cannot be deleted/
+		);
+		expectForbidden(
+			() =>
+				validate({ ...priorDate, type: 'daily_sop_assessment' }, priorDate, {
+					name: 'replicator',
+					roles: ['_admin']
+				}),
+			/type cannot change/
+		);
+	});
+
+	it('keeps schema, immutable identity, snapshots, metrics, and summary checks active for _admin', () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-09-25T05:00:00.000Z'));
+		const validate = compile();
+		const admin = { name: 'replicator', roles: ['_admin'] };
+		const assessment = makeRoleAssessment('FAC', '2026-09-24', 'original-user');
+
+		const changedIdentity = { ...assessment, assessor_name: 'เปลี่ยนชื่อผู้เริ่ม' };
+		expectForbidden(() => validate(changedIdentity, assessment, admin), /cannot change/);
+		const badCount = { ...assessment, pass_count: 14 };
+		expectForbidden(() => validate(badCount, null, admin), /summary does not match/);
+		const badSnapshot = updateRoleControl(assessment, 'D-FAC-01', {
+			question: 'แก้ snapshot',
+			checked_by: 'replicator',
+			checked_at: '2026-09-24T10:00:00.000Z'
+		});
+		expectForbidden(() => validate(badSnapshot, assessment, admin), /registered snapshot contract/);
+
+		const unalignedMeasure = updateRoleControl(assessment, 'D-FAC-01', {
+			measured_values: { usableArea: 0.001, occupants: null },
+			checked_by: 'replicator',
+			checked_at: '2026-09-24T10:00:00.000Z'
+		});
+		expectForbidden(
+			() => validate(unalignedMeasure, assessment, admin),
+			/registered snapshot contract/
+		);
+
+		const wrongParameter = updateRoleControl(assessment, 'D-FAC-02', {
+			metric_spec: {
+				...(controlsOf(assessment).find((control) => control.id === 'D-FAC-02')!
+					.metric_spec as Doc),
+				parameter: { key: 'people_per_toilet_male', value: '20' }
+			},
+			checked_by: 'replicator',
+			checked_at: '2026-09-24T10:00:00.000Z'
+		});
+		expectForbidden(
+			() => validate(wrongParameter, assessment, admin),
+			/registered snapshot contract/
+		);
+
+		const empty = makeRoleAssessment('REG', '2026-09-24', 'original-user');
+		for (const control of controlsOf(empty)) {
+			control.status = null;
+			control.notes = '';
+			control.observations = '';
+		}
+		empty.status = 'InProgress';
+		empty.pass_count = 0;
+		empty.unanswered_count = 5;
+		expectForbidden(
+			() => validate(empty, null, admin),
+			/without an answer or recorded observation/
+		);
+
+		const noVersion = makeRoleAssessment('REG', '2026-09-24', 'original-user');
+		delete noVersion.question_set_version;
+		expect(() => validate(noVersion, null, admin)).not.toThrow();
+		const addedVersion = { ...noVersion, question_set_version: 'daily-sop-role-v1' };
+		expectForbidden(() => validate(addedVersion, noVersion, admin), /version.*cannot change/);
+	});
+
+	it('requires a missing SOP parameter to be recorded as Pending and keeps D-SC-01 read-only metric-free', () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-09-25T05:00:00.000Z'));
+		const validate = compile();
+		const facilityRole = { name: 'fac', roles: ['shelter:SH001', 'facility_staff'] };
+		const question = DAILY_SOP_ROLE_QUESTIONS.find((item) => item.id === 'D-FAC-02')!;
+		const pending = makeRoleAssessment('FAC', '2026-09-25', 'fac');
+		const pendingControl = updateRoleControl(pending, question.id, {
+			question: question.prompt,
+			metric_spec: null,
+			status: 'Pending',
+			notes: 'ยังไม่มีค่า Parameter ของศูนย์',
+			measured_values: {},
+			checked_by: 'fac',
+			checked_at: '2026-09-25T08:00:00.000Z'
+		});
+		pendingControl.pass_count = 14;
+		pendingControl.pending_count = 1;
+		expect(() => validate(pendingControl, null, facilityRole)).not.toThrow();
+
+		const wrongMissingStatus = updateRoleControl(pendingControl, question.id, {
+			status: 'Pass',
+			notes: '',
+			checked_by: 'fac',
+			checked_at: '2026-09-25T08:00:00.000Z'
+		});
+		wrongMissingStatus.pass_count = 15;
+		wrongMissingStatus.pending_count = 0;
+		expectForbidden(
+			() => validate(wrongMissingStatus, null, facilityRole),
+			/registered snapshot contract/
+		);
+
+		const stockAssessment = makeRoleAssessment('SC', '2026-09-25', 'wh');
+		const stockControl = controlsOf(stockAssessment).find((control) => control.id === 'D-SC-01')!;
+		expect(stockControl.metric_spec).toBeNull();
+		expect(stockControl.measured_values).toEqual({});
+		expect(() =>
+			validate(stockAssessment, null, { name: 'wh', roles: ['SH001:warehouse_staff'] })
+		).not.toThrow();
+	});
+
+	it('applies CR-153 write rules to managers, admins, other shelters, authorship, deletes and updates', () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-09-25T05:00:00.000Z'));
+		const validate = compile();
+		const admin = { name: 'replicator', roles: ['_admin'] };
+		const registration = makeRoleAssessment('REG', '2026-09-25', 'reg');
+
+		const yesterday = makeRoleAssessment('REG', '2026-09-24', 'sm');
+		expectForbidden(() => validate(yesterday, null, MANAGER), /current Bangkok date/);
+		expectForbidden(
+			() => validate(makeRoleAssessment('REG', '2026-09-24', 'admin'), null, ADMIN),
+			/current Bangkok date/
+		);
+
+		for (const roles of [['SH002:registration_staff'], ['SH002:shelter_manager']]) {
+			expectForbidden(
+				() => validate(registration, null, { name: 'reg', roles }),
+				/role owner or shelter manager/
+			);
+		}
+
+		expectForbidden(
+			() => validate({ ...registration, shelter_code: 'SH002' }, null, REGISTRATION),
+			/./
+		);
+
+		const spoofed = updateRoleControl(registration, 'D-REG-01', {
+			status: 'Fail',
+			notes: 'ป้ายหลุด',
+			checked_by: 'someone-else',
+			checked_at: '2026-09-25T10:00:00.000Z'
+		});
+		spoofed.fail_count = 1;
+		spoofed.pass_count = 4;
+		expectForbidden(() => validate(spoofed, registration, REGISTRATION), /checked_by/);
+
+		expectForbidden(
+			() =>
+				validate(
+					{ ...registration, _id: 'daily_sop_role_assessment:SH001:2026-09-25:SM' },
+					null,
+					admin
+				),
+			/schema, date, identity/
+		);
+
+		for (const notes of [undefined, '', '   ']) {
+			const failWithoutNotes = updateRoleControl(registration, 'D-REG-01', {
+				status: 'Fail',
+				checked_by: 'reg',
+				checked_at: '2026-09-25T10:00:00.000Z'
+			});
+			failWithoutNotes.fail_count = 1;
+			failWithoutNotes.pass_count = 4;
+			const control = controlsOf(failWithoutNotes)[0];
+			if (notes === undefined) delete control.notes;
+			else control.notes = notes;
+			expectForbidden(() => validate(failWithoutNotes, registration, REGISTRATION), /./);
+		}
+
+		expectForbidden(
+			() => validate({ _id: registration._id, _rev: '2-x', _deleted: true }, registration, MANAGER),
+			/cannot be deleted/
+		);
+		expectForbidden(
+			() => validate({ _id: registration._id, _rev: '2-x', _deleted: true }, registration, admin),
+			/cannot be deleted/
+		);
+
+		const cleared = makeRoleAssessment('REG', '2026-09-25', 'reg');
+		for (const control of controlsOf(cleared)) {
+			control.status = null;
+			control.notes = '';
+			control.observations = '';
+			control.checked_by = 'reg';
+		}
+		cleared.status = 'InProgress';
+		cleared.pass_count = 0;
+		cleared.unanswered_count = 5;
+		expect(() => validate(cleared, registration, REGISTRATION)).not.toThrow();
 	});
 
 	it('allows managers to create/delete immutable simulations and rejects staff or updates', () => {

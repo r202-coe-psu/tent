@@ -16,6 +16,7 @@ import { adminRaw, ServiceError } from './couch-admin';
 import { buildSecurityMutationLock, type SecurityMutationLock } from './security-mutation-lock';
 import {
 	buildValidateDocUpdate,
+	DAILY_SOP_ROLE_MANGO_INDEX,
 	PEOPLE_MANGO_INDEXES,
 	REFERRAL_MANGO_INDEXES,
 	REQUISITION_TICKET_MANGO_INDEXES,
@@ -37,6 +38,7 @@ import {
 import { deployShelterViewsFn } from '$lib/features/shelters/server/deploy';
 
 export {
+	DAILY_SOP_ROLE_MANGO_INDEX,
 	PEOPLE_MANGO_INDEXES,
 	REFERRAL_MANGO_INDEXES,
 	TRANSFER_LEDGER_MANGO_INDEXES
@@ -526,5 +528,17 @@ export async function deployPeopleMangoIndexes(db: string): Promise<void> {
 				`Mango index ${def.name} deploy failed (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
 			);
 		}
+	}
+}
+
+/** Idempotent deploy of the Daily SOP role assessment list index. */
+export async function deployDailySopRoleMangoIndexes(db: string): Promise<void> {
+	const res = await adminRaw(`/${db}/_index`, 'POST', DAILY_SOP_ROLE_MANGO_INDEX);
+	if (res.status >= 400) {
+		const detail = (res.data as { reason?: string; error?: string } | null) ?? {};
+		throw new ServiceError(
+			'INTERNAL',
+			`Mango index ${DAILY_SOP_ROLE_MANGO_INDEX.name} deploy failed (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+		);
 	}
 }

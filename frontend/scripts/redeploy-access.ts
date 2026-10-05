@@ -1,5 +1,5 @@
 /**
- * Redeploy `_design/access` (validate_doc_update allowlist) + referral Mango
+ * Redeploy `_design/access` (validate_doc_update allowlist) + required Mango
  * indexes on every shelter DB listed in the registry, and grant the public
  * writer user `_security.members` access.
  *
@@ -38,6 +38,7 @@ import {
 } from '$lib/server/security-mutation-lock';
 import {
 	buildValidateDocUpdate,
+	DAILY_SOP_ROLE_MANGO_INDEX,
 	REFERRAL_MANGO_INDEXES,
 	REQUISITION_TICKET_MANGO_INDEXES,
 	shelterDbName
@@ -354,7 +355,7 @@ async function grantSecurityMember(db: string, name: string, dryRun: boolean): P
 
 async function deployMangoIndexes(
 	db: string,
-	indexes: readonly (typeof REFERRAL_MANGO_INDEXES)[number][],
+	indexes: readonly { name: string }[],
 	dryRun: boolean
 ): Promise<{ created: number; existing: number }> {
 	let created = 0;
@@ -406,7 +407,7 @@ function logPublicWriterEnsure(result: Awaited<ReturnType<typeof ensurePublicWri
 }
 
 async function main() {
-	console.log('🔄 Redeploy _design/access + referral Mango indexes + public writer grant');
+	console.log('🔄 Redeploy _design/access + shelter Mango indexes + public writer grant');
 	console.log(`   mode: ${DRY_RUN ? 'DRY-RUN (pass --write --confirm to apply)' : 'WRITE'}`);
 
 	const writerUrl = process.env.COUCHDB_PUBLIC_WRITER_URL ?? env.COUCHDB_PUBLIC_WRITER_URL;
@@ -459,14 +460,13 @@ async function main() {
 
 			if (DRY_RUN) {
 				if (accessResult.updated) {
-					const indexCount =
-						REFERRAL_MANGO_INDEXES.length + REQUISITION_TICKET_MANGO_INDEXES.length;
-					console.log(
-						`    would redeploy _design/access (${accessResult.reason}) + ${indexCount} mango indexes`
-					);
+					console.log(`    would redeploy _design/access (${accessResult.reason})`);
 				} else {
 					console.log(`    _design/access already current (skip PUT)`);
 				}
+				const indexCount =
+					REFERRAL_MANGO_INDEXES.length + REQUISITION_TICKET_MANGO_INDEXES.length + 1;
+				console.log(`    would ensure ${indexCount} shelter Mango indexes`);
 				if (PUBLIC_WRITER_NAME) {
 					console.log(
 						writerGranted
@@ -495,6 +495,10 @@ async function main() {
 			);
 			console.log(
 				`    ✓ requisition_ticket mango indexes (${ticketIndexResult.created} created, ${ticketIndexResult.existing} existing)`
+			);
+			const dailySopIndexResult = await deployMangoIndexes(db, [DAILY_SOP_ROLE_MANGO_INDEX], false);
+			console.log(
+				`    ✓ Daily SOP role mango index (${dailySopIndexResult.created} created, ${dailySopIndexResult.existing} existing)`
 			);
 			if (PUBLIC_WRITER_NAME) {
 				console.log(

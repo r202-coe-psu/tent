@@ -392,11 +392,13 @@ interface FindResponse<T> {
 	warning?: string;
 }
 
-export async function findDocs<T>(
+export type FindDocsPage<T> = { docs: T[]; bookmark: string | null };
+
+export async function findDocsPage<T>(
 	dbName: string,
 	query: { selector: Record<string, unknown>; [key: string]: unknown },
 	init?: CouchFetchInit
-): Promise<T[]> {
+): Promise<FindDocsPage<T>> {
 	const res = await couchDbFetch<FindResponse<T>>(dbName, '/_find', {
 		method: 'POST',
 		body: JSON.stringify(query),
@@ -405,7 +407,15 @@ export async function findDocs<T>(
 	if (res.warning) {
 		console.warn(`[CouchDB Warning] /_find query on "${dbName}" produced warning: ${res.warning}`);
 	}
-	return res.docs;
+	return { docs: res.docs, bookmark: res.bookmark ?? null };
+}
+
+export async function findDocs<T>(
+	dbName: string,
+	query: { selector: Record<string, unknown>; [key: string]: unknown },
+	init?: CouchFetchInit
+): Promise<T[]> {
+	return (await findDocsPage<T>(dbName, query, init)).docs;
 }
 
 export async function bulkDocs<T extends { _id: string; _rev?: string }>(
