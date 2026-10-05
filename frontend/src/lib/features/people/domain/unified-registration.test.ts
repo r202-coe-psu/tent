@@ -207,6 +207,8 @@ describe('unified registration — mononym and anonymous ID', () => {
 		const member = blankUnifiedMember();
 		expect(member.gender).toBe('');
 		expect(member.religion).toBe('unknown');
+		expect(member.religion_other).toBeNull();
+		expect(member.disability_other_detail).toBeNull();
 	});
 });
 

@@ -61,10 +61,12 @@
 	import { normalizeThaiPhone, sanitizePhoneTyping } from '$lib/db/model';
 	import {
 		hasMinimumResidence,
+		suggestHouseholdsByPhone,
 		type ResidenceFields,
-		type ResidenceMatchCandidate
+		type ResidenceMatchCandidate,
+		type PhoneHouseholdMatchCandidate
 	} from '../../domain/registration-shell';
-	import { peopleKeys, useHouseholds } from '../../application/queries';
+	import { peopleKeys, useHouseholds, useSearchEvacuees } from '../../application/queries';
 	import { peopleRepository } from '../../data/people.remote';
 	import {
 		readResidenceSuggestDeps,
@@ -181,6 +183,10 @@
 		return {
 			housing_type: 'owned_house',
 			residence_landmark: null,
+			dorm_name: null,
+			dorm_building: null,
+			dorm_floor: null,
+			dorm_room: null,
 			address_no: '',
 			village_no: '',
 			subdistrict: '',
@@ -270,6 +276,24 @@
 	);
 
 	const hasJoinSelection = $derived(Boolean(joinHouseholdId || joinMatchToken));
+	const phoneSearchQuery = $derived(normalizeThaiPhone(searchPhoneQuery.trim()));
+	const phoneSearchEnabled = $derived(
+		channel === 'onsite' &&
+			enableResidenceJoin &&
+			isThaiPhone(phoneSearchQuery) &&
+			!hasJoinSelection
+	);
+	const phoneSearch = useSearchEvacuees(
+		() => phoneSearchQuery,
+		() => phoneSearchEnabled
+	);
+	const phoneHouseholdSuggestions = $derived.by((): PhoneHouseholdMatchCandidate[] =>
+		suggestHouseholdsByPhone(phoneSearchQuery, phoneSearch.data ?? [], householdsQuery.data ?? [])
+	);
+	const phoneSearchPending = $derived(phoneSearchEnabled && phoneSearch.isFetching);
+	const phoneSearchCheckedEmpty = $derived(
+		phoneSearchEnabled && !phoneSearch.isFetching && phoneHouseholdSuggestions.length === 0
+	);
 
 	$effect(() => {
 		if (initialMembers && !touched) {
@@ -655,6 +679,26 @@
 		markDirty();
 	}
 
+	function confirmOnsitePhoneJoin(suggestion: PhoneHouseholdMatchCandidate) {
+		confirmOnsiteJoin(suggestion);
+		household = {
+			...household,
+			housing_type: suggestion.housing_type ?? household.housing_type,
+			residence_landmark: suggestion.residence_landmark ?? null,
+			address_no: suggestion.address_no ?? '',
+			village_no: suggestion.village_no ?? '',
+			subdistrict: suggestion.subdistrict ?? '',
+			district: suggestion.district ?? '',
+			province: suggestion.province ?? '',
+			postal_code: suggestion.postal_code ?? '',
+			dorm_name: suggestion.dorm_name ?? null,
+			dorm_building: suggestion.dorm_building ?? null,
+			dorm_floor: suggestion.dorm_floor ?? null,
+			dorm_room: suggestion.dorm_room ?? null
+		};
+		joinSelectedSummary = `${suggestion.label || 'ครอบครัวนี้'} · พบจากสมาชิก ${suggestion.matched_member_name}`;
+	}
+
 	function canJoinPublicChip(chip: ResidenceMatchChip): boolean {
 		// Mongo-queue family — always append-join (including after closed / claim).
 		if (!chip.is_in_shelter) return true;
@@ -1017,7 +1061,7 @@
 								aria-invalid={!!searchPhoneError}
 								class="h-9 w-full pr-7 text-sm"
 							/>
-							{#if searchPhoneQuery}
+							{#if searchPhoneQuery && !hasJoinSelection}
 								<button
 									type="button"
 									class="absolute top-2.5 right-2.5 text-xs text-muted-foreground hover:text-foreground"
@@ -1148,6 +1192,47 @@
 							>
 								สร้างใหม่แทน
 							</Button>
+						</div>
+					{:else if phoneSearchPending}
+						<div
+							class="mt-3 flex items-center gap-2 rounded-xl border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
+							role="status"
+							aria-live="polite"
+						>
+							<Loader2 class="size-3.5 animate-spin" aria-hidden="true" />
+							กำลังค้นหาครอบครัวจากเบอร์โทรศัพท์...
+						</div>
+					{:else if channel === 'onsite' && phoneHouseholdSuggestions.length > 0}
+						<div class="mt-3 space-y-2 rounded-xl border border-primary/30 bg-primary/5 p-3">
+							<p class="text-xs font-semibold text-foreground">
+								พบครอบครัวจากเบอร์โทรศัพท์ — เลือกเพื่อเพิ่มสมาชิกเข้า household
+							</p>
+							<ul class="space-y-2">
+								{#each phoneHouseholdSuggestions as suggestion (suggestion._id)}
+									<li
+										class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-card p-2.5 text-sm"
+									>
+										<div class="min-w-0">
+											<p class="font-medium text-foreground">
+												{suggestion.label || 'ครอบครัวไม่ระบุชื่อ'}
+											</p>
+											<p class="text-xs text-muted-foreground">
+												ตรงกับสมาชิก: {suggestion.matched_member_name} ·
+												{formatResidenceSummary(suggestion)}
+											</p>
+										</div>
+										<Button
+											type="button"
+											size="sm"
+											variant="outline"
+											disabled={fieldsLocked}
+											onclick={() => confirmOnsitePhoneJoin(suggestion)}
+										>
+											เข้าร่วม
+										</Button>
+									</li>
+								{/each}
+							</ul>
 						</div>
 					{:else if residenceSuggestPending}
 						<div
@@ -1304,6 +1389,10 @@
 								สร้างใหม่
 							</Button>
 						</div>
+					{:else if phoneSearchCheckedEmpty}
+						<p class="mt-3 text-xs text-muted-foreground">
+							ไม่พบครอบครัวที่มีเบอร์โทรศัพท์นี้ — สามารถกรอกข้อมูลเพื่อลงทะเบียนครอบครัวใหม่ได้
+						</p>
 					{:else if residenceSuggestCheckedEmpty}
 						<p class="mt-3 text-xs text-muted-foreground">
 							{searchPhoneQuery.trim()

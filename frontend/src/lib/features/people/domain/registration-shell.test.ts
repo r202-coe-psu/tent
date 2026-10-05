@@ -10,8 +10,10 @@ import {
 	resolveSectionEValues,
 	sectionEVisibility,
 	suggestHouseholdsByResidence,
+	suggestHouseholdsByPhone,
 	filterJoinCandidatesByEvacueeQuery
 } from './registration-shell';
+import type { Evacuee, Household } from './people';
 
 describe('autoHouseholdLabel', () => {
 	it('prefixes the registrant name with ครอบครัว', () => {
@@ -293,6 +295,120 @@ describe('filterJoinCandidatesByEvacueeQuery', () => {
 
 	it('returns empty for blank query', () => {
 		expect(filterJoinCandidatesByEvacueeQuery('  ', evacuees)).toEqual([]);
+	});
+});
+
+describe('suggestHouseholdsByPhone', () => {
+	it('normalizes +66, searches emergency phones, and returns households once', () => {
+		const households = [
+			{
+				_id: 'household:active',
+				type: 'household',
+				label: 'ครอบครัวสมชาย',
+				head_evacuee_id: 'evacuee:member',
+				status: 'arriving',
+				checkout_destination: null,
+				municipality_zone: null,
+				community: null,
+				pets: [],
+				vehicles: [],
+				address_no: '123',
+				village_no: 'หมู่ 2',
+				subdistrict: 'คลองแห',
+				district: 'หาดใหญ่',
+				province: 'สงขลา',
+				postal_code: '90110'
+			} as unknown as Household,
+			{
+				_id: 'household:cancelled',
+				type: 'household',
+				label: 'ครอบครัวปิดแล้ว',
+				head_evacuee_id: 'evacuee:cancelled',
+				status: 'cancelled',
+				checkout_destination: null,
+				municipality_zone: null,
+				community: null,
+				pets: [],
+				vehicles: [],
+				address_no: '123',
+				village_no: 'หมู่ 2',
+				subdistrict: 'คลองแห',
+				district: 'หาดใหญ่',
+				province: 'สงขลา',
+				postal_code: '90110'
+			} as unknown as Household
+		];
+		const evacuees = [
+			{
+				_id: 'evacuee:member',
+				first_name: 'สมชาย',
+				last_name: 'ใจดี',
+				phone: null,
+				emergency_contact: { name: 'ญาติ', phone: '081-234-5678', relation: 'ญาติ' },
+				household_id: 'household:active'
+			} as unknown as Evacuee,
+			{
+				_id: 'evacuee:cancelled',
+				first_name: 'ปิดแล้ว',
+				last_name: '',
+				phone: '+66812345678',
+				household_id: 'household:cancelled'
+			} as unknown as Evacuee,
+			{
+				_id: 'evacuee:member-two',
+				first_name: 'สมหญิง',
+				last_name: 'ใจดี',
+				phone: '0899999999',
+				household_id: 'household:active'
+			} as unknown as Evacuee
+		];
+
+		const results = suggestHouseholdsByPhone('+66 81 234 5678', evacuees, households);
+
+		expect(results.map((household) => household._id)).toEqual(['household:active']);
+		expect(results[0]?.label).toBe('ครอบครัวสมชาย');
+		expect(results[0]?.matched_member_name).toBe('สมชาย ใจดี');
+
+		const memberPhoneResults = suggestHouseholdsByPhone('089-999-9999', evacuees, households);
+		expect(memberPhoneResults.map((household) => household._id)).toEqual(['household:active']);
+		expect(memberPhoneResults[0]?.matched_member_id).toBe('evacuee:member-two');
+		expect(memberPhoneResults[0]?.matched_member_name).toBe('สมหญิง ใจดี');
+	});
+
+	it('can resolve a household through its head when the member link is legacy-missing', () => {
+		const household = {
+			_id: 'household:legacy',
+			type: 'household',
+			label: 'ครอบครัวหัวหน้า',
+			head_evacuee_id: 'evacuee:head',
+			status: 'checked_in',
+			checkout_destination: null,
+			municipality_zone: null,
+			community: null,
+			pets: [],
+			vehicles: [],
+			address_no: '99',
+			village_no: null,
+			subdistrict: 'คลองแห',
+			district: 'หาดใหญ่',
+			province: 'สงขลา',
+			postal_code: '90110'
+		} as unknown as Household;
+		const head = {
+			_id: 'evacuee:head',
+			first_name: 'หัวหน้า',
+			last_name: 'ครอบครัว',
+			phone: '0812345678',
+			household_id: null
+		} as unknown as Evacuee;
+
+		expect(suggestHouseholdsByPhone('0812345678', [head], [household])).toEqual([
+			expect.objectContaining({
+				_id: 'household:legacy',
+				matched_member_id: 'evacuee:head',
+				matched_member_name: 'หัวหน้า ครอบครัว'
+			})
+		]);
 	});
 });
 

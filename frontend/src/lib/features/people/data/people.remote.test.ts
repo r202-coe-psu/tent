@@ -502,6 +502,19 @@ describe('PeopleRemoteRepository', () => {
 				evInput({ first_name: 'Malee', last_name: 'Suksan', phone: '0899999999' }),
 				ctx
 			);
+			await repo.createEvacuee(
+				evInput({
+					first_name: 'Emergency',
+					last_name: 'Contact',
+					phone: null,
+					emergency_contact: {
+						name: 'ญาติ',
+						phone: '0823456789',
+						relation: 'ญาติ'
+					}
+				}),
+				ctx
+			);
 		});
 
 		it('returns [] for an empty query', async () => {
@@ -517,6 +530,12 @@ describe('PeopleRemoteRepository', () => {
 			const hits = await repo.searchEvacuees('081-234-5678');
 			expect(hits).toHaveLength(1);
 			expect(hits[0].first_name).toBe('Somchai');
+		});
+
+		it('matches +66 input against an emergency-contact phone', async () => {
+			const hits = await repo.searchEvacuees('+66 82 345 6789');
+			expect(hits).toHaveLength(1);
+			expect(hits[0].first_name).toBe('Emergency');
 		});
 
 		it('searchEvacueesMany answers every query from one evacuee scan', async () => {

@@ -21,6 +21,7 @@ import {
 	resolveStatusChangeAction,
 	normalizeCheckoutRemark,
 	statusChangeHandlerKind,
+	matchesEvacueePhoneSearch,
 	matchesEvacueeSearch,
 	zoneLabel,
 	isEvacuee,
@@ -1652,6 +1653,21 @@ describe('matchesEvacueeSearch', () => {
 		expect(matchesEvacueeSearch(evacuee, 'สมชาย ใจดี')).toBe(true);
 		expect(matchesEvacueeSearch(evacuee, '0812345678')).toBe(true);
 		expect(matchesEvacueeSearch(evacuee, 'ไม่มีตัวตน')).toBe(false);
+	});
+
+	it('normalizes +66 and matches an emergency-contact phone', () => {
+		const withEmergencyPhone = {
+			...evacuee,
+			phone: null,
+			emergency_contact: {
+				name: 'ผู้ติดต่อฉุกเฉิน',
+				phone: '081-234-5678',
+				relation: 'ญาติ'
+			}
+		};
+
+		expect(matchesEvacueePhoneSearch(withEmergencyPhone, '+66 81 234 5678')).toBe(true);
+		expect(matchesEvacueeSearch(withEmergencyPhone, '+66 81 234 5678')).toBe(true);
 	});
 
 	it('defaults to including search_excluded evacuees (internal staff search)', () => {
