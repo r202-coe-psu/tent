@@ -1,3 +1,6 @@
+import { formatPersonName, matchesEvacueePhoneSearch } from './people';
+import type { Evacuee, Household } from './people';
+
 /**
  * Pure helpers for Station 1 shared registration shell (Report-in + walk-in).
  * No I/O — unit-tested.
@@ -27,6 +30,45 @@ export type ResidenceMatchCandidate = ResidenceFields & {
 	_id: string;
 	label?: string | null;
 };
+
+export type PhoneHouseholdMatchCandidate = Household & {
+	matched_member_id: string;
+	matched_member_name: string;
+};
+
+/** Find joinable households from any member or emergency-contact phone. */
+export function suggestHouseholdsByPhone(
+	query: string,
+	evacuees: readonly Evacuee[],
+	households: readonly Household[]
+): PhoneHouseholdMatchCandidate[] {
+	if (!query.trim()) return [];
+
+	const matchedMembers = evacuees.filter((member) => matchesEvacueePhoneSearch(member, query));
+	const matchedByMemberId = new Map(matchedMembers.map((member) => [member._id, member]));
+	const matchedByHousehold = new Map<string, Evacuee>();
+	for (const member of matchedMembers) {
+		const householdId = member.household_id;
+		if (!householdId || matchedByHousehold.has(householdId)) continue;
+		matchedByHousehold.set(householdId, member);
+	}
+
+	return households
+		.filter((household) => isJoinableHouseholdStatus(household.status))
+		.flatMap((household) => {
+			const matched =
+				matchedByHousehold.get(household._id) ??
+				(household.head_evacuee_id ? matchedByMemberId.get(household.head_evacuee_id) : undefined);
+			if (!matched) return [];
+			return [
+				{
+					...household,
+					matched_member_id: matched._id,
+					matched_member_name: formatPersonName(matched)
+				}
+			];
+		});
+}
 
 export type JoinCandidateEvacuee = {
 	_id: string;
@@ -345,38 +387,6 @@ export function suggestHouseholdsByResidence<T extends ResidenceMatchCandidate>(
 			return false;
 		}
 		return matchesResidenceAddress(query, h);
-	});
-}
-
-/** Digits only, with a +66 / 66 country prefix turned into the local leading 0. */
-function normalizePhoneDigits(phone: string | null | undefined): string {
-	const digits = (phone ?? '').replace(/\D/g, '');
-	return digits.startsWith('66') && digits.length === 11 ? `0${digits.slice(2)}` : digits;
-}
-
-/**
- * Station 1「ค้นหาครอบครัวด้วยเบอร์โทรศัพท์」: Households that have a member whose own phone
- * equals `phone` (any spacing / dashes / +66). Same joinable-status filter as
- * {@link suggestHouseholdsByResidence}. Returns [] for anything shorter than a Thai number.
- */
-export function suggestHouseholdsByPhone<T extends ResidenceMatchCandidate>(
-	phone: string,
-	evacuees: readonly { phone?: string | null; household_id?: string | null }[],
-	households: readonly T[]
-): T[] {
-	const wanted = normalizePhoneDigits(phone);
-	if (!/^0\d{8,9}$/.test(wanted)) return [];
-	const householdIds = new Set(
-		evacuees
-			.filter((e) => e.household_id && normalizePhoneDigits(e.phone) === wanted)
-			.map((e) => e.household_id as string)
-	);
-	return households.filter((h) => {
-		const withStatus = h as ResidenceMatchCandidateWithStatus;
-		if (withStatus.status != null && !isJoinableHouseholdStatus(withStatus.status)) {
-			return false;
-		}
-		return householdIds.has(h._id);
 	});
 }
 

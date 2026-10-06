@@ -110,6 +110,7 @@ export {
 	statusChangeHandlerKind,
 	maskNationalId,
 	formatPersonName,
+	matchesEvacueePhoneSearch,
 	matchesEvacueeSearch,
 	zoneLabel,
 	type ZoneLabelSource,
@@ -223,6 +224,7 @@ export {
 	type HouseholdChoice,
 	type ResidenceFields,
 	type ResidenceMatchCandidate,
+	type PhoneHouseholdMatchCandidate,
 	type JoinCandidateEvacuee
 } from './domain/registration-shell';
 

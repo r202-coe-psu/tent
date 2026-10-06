@@ -5,6 +5,7 @@ import {
 	type Timestamp,
 	makeDoc,
 	now,
+	normalizeThaiPhone,
 	phoneSchema,
 	registeredViaSchema
 } from '$lib/db/model';
@@ -2004,6 +2005,19 @@ export function maskNationalId(id: string | null | undefined): string {
 	return `${id.slice(0, 3)}***${id.slice(-3)}`;
 }
 
+/** True when `query` matches an evacuee's own or emergency-contact phone. */
+export function matchesEvacueePhoneSearch(
+	evacuee: Pick<Evacuee, 'phone' | 'emergency_contact'>,
+	query: string
+): boolean {
+	const normalizedQuery = normalizeThaiPhone(query);
+	if (!normalizedQuery || !/\d/.test(normalizedQuery)) return false;
+	return [evacuee.phone, evacuee.emergency_contact?.phone].some((phone) => {
+		const normalizedPhone = normalizeThaiPhone(phone ?? '');
+		return normalizedPhone.includes(normalizedQuery);
+	});
+}
+
 /** True when `query` matches evacuee name, nickname, phone, or person ID (incl. masked). */
 export function matchesEvacueeSearch(
 	evacuee: Evacuee,
@@ -2027,7 +2041,7 @@ export function matchesEvacueeSearch(
 	if (masked.includes(q)) return true;
 	const digitsOnly = q.replace(/\D/g, '');
 	if (digitsOnly) {
-		if (evacuee.phone?.replace(/\D/g, '').includes(digitsOnly)) return true;
+		if (matchesEvacueePhoneSearch(evacuee, q)) return true;
 		if (evacuee.person_id?.number?.replace(/\D/g, '').includes(digitsOnly)) return true;
 	}
 	return false;
