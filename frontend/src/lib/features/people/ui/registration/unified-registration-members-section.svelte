@@ -15,6 +15,12 @@
 		type UnifiedRegistrationChannel
 	} from '../../domain/unified-registration';
 	import type { ThaiDAutofillProfile } from '../../domain/thaid-profile';
+	import {
+		evacueeAgeYears,
+		formatPersonName,
+		STATUS_LABELS,
+		type Evacuee
+	} from '../../domain/people';
 	import UnifiedRegistrationMemberCard from './unified-registration-member-card.svelte';
 	import UnifiedRegistrationSection from './unified-registration-section.svelte';
 	import ThaidMemberScanDialog from './thaid-member-scan-dialog.svelte';
@@ -31,6 +37,7 @@
 		isJoiningExistingHousehold = false,
 		primaryContactPhone = null,
 		thaidEnabled = false,
+		existingMembers = [],
 		onDirty
 	}: {
 		members: UnifiedMemberWithMeta[];
@@ -44,6 +51,8 @@
 		isJoiningExistingHousehold?: boolean;
 		primaryContactPhone?: string | null;
 		thaidEnabled?: boolean;
+		/** Joining a family: its current members, shown read-only before the new cards. */
+		existingMembers?: readonly Evacuee[];
 		onDirty?: () => void;
 	} = $props();
 
@@ -80,7 +89,9 @@
 
 	function memberTabLabel(member: UnifiedMemberWithMeta, index: number): string {
 		const name = [member.first_name, member.last_name].filter(Boolean).join(' ').trim();
-		return name || (index === 0 ? t.primaryContact : `${t.memberLabel} ${index + 1}`);
+		if (name) return name;
+		if (index === 0 && !isJoiningExistingHousehold) return t.primaryContact;
+		return `${t.memberLabel} ${existingMembers.length + index + 1}`;
 	}
 
 	function hasMemberErrors(index: number): boolean {
@@ -170,10 +181,56 @@
 	id="unified-members"
 	title={t.sectionMembers}
 	description={membersSectionDesc}
-	badge={`${members.length}${t.memberCountUnit ? ` ${t.memberCountUnit}` : ''}`}
+	badge={`${existingMembers.length + members.length}${t.memberCountUnit ? ` ${t.memberCountUnit}` : ''}`}
 	icon={Users}
 	bodyClass="none"
 >
+	{#if existingMembers.length > 0}
+		<section
+			aria-labelledby="existing-members-title"
+			class="mb-4 space-y-2 rounded-xl border border-border/70 bg-muted/20 p-3"
+		>
+			<h3 id="existing-members-title" class="text-sm font-semibold text-foreground">
+				สมาชิกเดิมในครอบครัว ({existingMembers.length} คน) · ดูอย่างเดียว
+			</h3>
+			<ul class="grid gap-2 sm:grid-cols-2">
+				{#each existingMembers as existing, i (existing._id)}
+					{@const age = evacueeAgeYears(existing)}
+					<li class="rounded-lg border border-border/60 bg-card p-2.5 text-xs">
+						<div class="flex items-start justify-between gap-2">
+							<p class="font-semibold text-foreground">
+								{i + 1}. {formatPersonName(existing)}
+								{#if existing.nickname}
+									<span class="font-normal text-muted-foreground">({existing.nickname})</span>
+								{/if}
+							</p>
+							<span
+								class="shrink-0 rounded-full bg-muted px-2 py-0.5 text-2xs text-muted-foreground"
+							>
+								{STATUS_LABELS[existing.current_stay.status] ?? existing.current_stay.status}
+							</span>
+						</div>
+						<p class="mt-1 text-muted-foreground">
+							{existing.gender === 'male'
+								? 'ชาย'
+								: existing.gender === 'female'
+									? 'หญิง'
+									: 'ไม่ระบุเพศ'}
+							{#if age != null}· อายุ {age} ปี{/if}
+							{#if (existing.vulnerable_groups?.length ?? 0) > 0}
+								· กลุ่มเปราะบาง {existing.vulnerable_groups.length}
+							{/if}
+						</p>
+					</li>
+				{/each}
+			</ul>
+			<p class="text-2xs text-muted-foreground">
+				แก้ไขข้อมูลสมาชิกเดิมได้ที่หน้าโปรไฟล์ — กรอกเฉพาะคนที่มาใหม่ด้านล่าง
+			</p>
+		</section>
+		<h3 class="mb-2 text-sm font-semibold text-foreground">สมาชิกที่มาใหม่</h3>
+	{/if}
+
 	{#if useMemberTabs}
 		<div
 			role="tablist"
@@ -240,6 +297,7 @@
 					excludeIds={members.map((m) => m._id).filter((id): id is string => Boolean(id))}
 					fieldErrors={memberFieldErrors[index]}
 					{isJoiningExistingHousehold}
+					numberOffset={existingMembers.length}
 					primaryContactPhone={isJoiningExistingHousehold
 						? primaryContactPhone
 						: (members[0]?.phone ?? null)}

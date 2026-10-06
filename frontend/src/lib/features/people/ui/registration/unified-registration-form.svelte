@@ -57,7 +57,6 @@
 	import {
 		dormFieldsFor,
 		formatPersonName,
-		STATUS_LABELS,
 		type HousingType,
 		type HouseholdVehicle,
 		type PetGroup
@@ -338,6 +337,16 @@
 		});
 	}
 
+	/** The joined family's head stays its primary contact (onsite). */
+	const joinedFamilyHeadName = $derived.by(() => {
+		if (joinedFamilyMembers.length === 0) return '';
+		const headId = (householdsQuery.data ?? []).find(
+			(h) => h._id === joinHouseholdId
+		)?.head_evacuee_id;
+		const head = joinedFamilyMembers.find((e) => e._id === headId) ?? joinedFamilyMembers[0]!;
+		return formatPersonName(head);
+	});
+
 	const GONE_STAY_STATUSES = new Set(['cancelled', 'checked_out', 'deceased', 'transferred']);
 	/** Onsite join: the family's current members, shown read-only so staff see who is already in. */
 	const joinedFamilyMembers = $derived(
@@ -514,11 +523,13 @@
 	});
 
 	const membersSectionDesc = $derived(
-		mode === 'report-in'
-			? 'ตรวจสอบข้อมูลสมาชิก และติ๊กเลือกผู้ที่มารายงานตัวในรอบนี้ (สามารถกดเพิ่มสมาชิกใหม่ที่เดินทางมาด้วยกันได้)'
-			: showVehiclesAssets
-				? `${t.sectionMembersDesc} ${t.sectionMembersDescOnsite}`
-				: t.sectionMembersDesc
+		joinedFamilyMembers.length > 0
+			? 'สมาชิกเดิมแสดงด้านบนแบบดูอย่างเดียว — กรอกเฉพาะคนที่มาใหม่'
+			: mode === 'report-in'
+				? 'ตรวจสอบข้อมูลสมาชิก และติ๊กเลือกผู้ที่มารายงานตัวในรอบนี้ (สามารถกดเพิ่มสมาชิกใหม่ที่เดินทางมาด้วยกันได้)'
+				: showVehiclesAssets
+					? `${t.sectionMembersDesc} ${t.sectionMembersDescOnsite}`
+					: t.sectionMembersDesc
 	);
 
 	const effectiveSubmitLabel = $derived(
@@ -1148,6 +1159,11 @@
 				submitDisabled={submitDisabled || readOnly}
 				submitLabel={effectiveSubmitLabel}
 				submittingLabel={t.submitting}
+				existingMembers={joinedFamilyMembers}
+				existingHeadName={joinedFamilyHeadName}
+				existingCount={channel === 'public' && hasJoinSelection
+					? (selectedMatchChip?.member_count ?? 0)
+					: 0}
 				onNavigate={(id) => scrollToSection(id as FormSectionId)}
 			/>
 		</aside>
@@ -1297,24 +1313,10 @@
 								<p class="text-xs text-muted-foreground">{joinSelectedSummary}</p>
 							{/if}
 							{#if joinedFamilyMembers.length > 0}
-								<div class="rounded-lg border border-border/60 bg-background/80 p-2.5">
-									<p class="text-xs font-semibold text-foreground">
-										สมาชิกเดิมในครอบครัวนี้ ({joinedFamilyMembers.length} คน) · ดูอย่างเดียว
-									</p>
-									<ul class="mt-1.5 space-y-1">
-										{#each joinedFamilyMembers as existing (existing._id)}
-											<li class="flex flex-wrap items-center justify-between gap-2 text-xs">
-												<span class="text-foreground">{formatPersonName(existing)}</span>
-												<span
-													class="rounded-full bg-muted px-2 py-0.5 text-2xs text-muted-foreground"
-												>
-													{STATUS_LABELS[existing.current_stay.status] ??
-														existing.current_stay.status}
-												</span>
-											</li>
-										{/each}
-									</ul>
-								</div>
+								<p class="text-xs text-muted-foreground">
+									ครอบครัวนี้มีสมาชิกเดิม {joinedFamilyMembers.length} คน — ดูรายชื่อในส่วน "สมาชิกครอบครัว"
+									ด้านล่าง
+								</p>
 							{:else if channel === 'public' && selectedMatchChip?.member_count}
 								<p class="text-xs text-muted-foreground">
 									ครอบครัวนี้มีสมาชิกเดิม {selectedMatchChip.member_count} คน
@@ -1616,6 +1618,7 @@
 				{shelterCode}
 				{membersSectionDesc}
 				isJoiningExistingHousehold={hasJoinSelection}
+				existingMembers={joinedFamilyMembers}
 				primaryContactPhone={members[0]?.phone ?? null}
 				thaidEnabled={channel === 'public' && thaidEnabled}
 				onDirty={markDirty}

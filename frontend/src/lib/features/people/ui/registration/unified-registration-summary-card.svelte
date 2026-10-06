@@ -25,6 +25,9 @@
 		submitDisabled = false,
 		submitLabel = 'ยืนยันการลงทะเบียน',
 		submittingLabel = 'กำลังบันทึก...',
+		existingMembers = [],
+		existingHeadName = '',
+		existingCount = 0,
 		onNavigate
 	}: {
 		shelterName?: string;
@@ -37,6 +40,14 @@
 		submitDisabled?: boolean;
 		submitLabel?: string;
 		submittingLabel?: string;
+		/** Joining a family: its current members (onsite) — counted with the new ones. */
+		existingMembers?: ReadonlyArray<
+			Pick<UnifiedMemberWithMeta, 'gender' | 'vulnerable_groups' | 'special_needs'>
+		>;
+		/** Joining a family: the family's head, who stays the primary contact. */
+		existingHeadName?: string;
+		/** Joining a family whose members can't be listed (public): how many are already in it. */
+		existingCount?: number;
 		onNavigate: (sectionId: string) => void;
 	} = $props();
 
@@ -54,17 +65,22 @@
 
 	const headMember = $derived(members[0]);
 	const headFullName = $derived(
-		headMember ? `${headMember.first_name || ''} ${headMember.last_name || ''}`.trim() : ''
+		existingHeadName ||
+			(headMember ? `${headMember.first_name || ''} ${headMember.last_name || ''}`.trim() : '')
 	);
+	const existingTotal = $derived(Math.max(existingMembers.length, existingCount));
+	const totalCount = $derived(existingTotal + members.length);
+	/** Gender / care counts cover everyone in the family, existing and new. */
+	const everyone = $derived([...existingMembers, ...members]);
 
 	const petCount = $derived(
 		(household.pets ?? []).reduce((sum: number, p) => sum + (Number(p.count) || 1), 0)
 	);
 
-	const maleCount = $derived(members.filter((m) => m.gender === 'male').length);
-	const femaleCount = $derived(members.filter((m) => m.gender === 'female').length);
+	const maleCount = $derived(everyone.filter((m) => m.gender === 'male').length);
+	const femaleCount = $derived(everyone.filter((m) => m.gender === 'female').length);
 	const vulnerableCount = $derived(
-		members.filter(
+		everyone.filter(
 			(m) => (m.vulnerable_groups?.length ?? 0) > 0 || (m.special_needs?.length ?? 0) > 0
 		).length
 	);
@@ -150,9 +166,14 @@
 				<span
 					class="rounded-full bg-primary/10 px-2 py-0.5 text-2xs font-bold text-primary tabular-nums"
 				>
-					{members.length} คน
+					{totalCount} คน
 				</span>
 			</div>
+			{#if existingTotal > 0}
+				<p class="text-2xs text-muted-foreground">
+					สมาชิกเดิม {existingTotal} · มาใหม่ {members.length}
+				</p>
+			{/if}
 
 			<div class="text-xs text-foreground">
 				<span class="text-muted-foreground">ผู้ติดต่อหลัก: </span>

@@ -62,6 +62,7 @@
 		excludeIds = [],
 		fieldErrors,
 		isJoiningExistingHousehold = false,
+		numberOffset = 0,
 		primaryContactPhone = null,
 		onRemove,
 		onReportingInChange,
@@ -78,6 +79,8 @@
 		excludeIds?: string[];
 		fieldErrors?: Record<string, string | undefined>;
 		isJoiningExistingHousehold?: boolean;
+		/** Members already in the joined family — new cards are numbered after them. */
+		numberOffset?: number;
 		primaryContactPhone?: string | null;
 		onRemove?: () => void;
 		onReportingInChange?: (reportingIn: boolean) => void;
@@ -85,8 +88,11 @@
 	} = $props();
 
 	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
-	const isPrimary = $derived(index === 0);
-	const title = $derived(isPrimary ? t.primaryContact : `${t.memberLabel} ${index + 1}`);
+	// Joining keeps the family's existing head; a new card is never the primary contact.
+	const isPrimary = $derived(index === 0 && !isJoiningExistingHousehold);
+	const title = $derived(
+		isPrimary ? t.primaryContact : `${t.memberLabel} ${numberOffset + index + 1}`
+	);
 	const photoInputId = $derived(`unified-member-photo-${index}`);
 	const showPhotoUpload = $derived(photoUpload !== 'none');
 	const hideNoPhone = $derived(channel === 'public' && index === 0 && !isJoiningExistingHousehold);
