@@ -19,7 +19,8 @@
 	import ScanSearchModal from './scan-search-modal.svelte';
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import {
-		canCheckInEvacuee,
+		canScanCheckIn,
+		needsIntakeBeforeStay,
 		canCheckOutEvacuee,
 		lookupFederatedByScanCode,
 		useCheckInEvacuee,
@@ -79,7 +80,7 @@
 	);
 
 	const isActionCheckOut = $derived(foundEvacuee ? canCheckOutEvacuee(foundEvacuee) : false);
-	const isActionCheckIn = $derived(foundEvacuee ? canCheckInEvacuee(foundEvacuee) : false);
+	const isActionCheckIn = $derived(foundEvacuee ? canScanCheckIn(foundEvacuee) : false);
 
 	const eligibleFamilyMembers = $derived.by(() => {
 		if (!foundEvacuee) return [];
@@ -87,7 +88,7 @@
 			return familyMembers.filter((e) => canCheckOutEvacuee(e));
 		}
 		if (isActionCheckIn) {
-			return familyMembers.filter((e) => canCheckInEvacuee(e));
+			return familyMembers.filter((e) => canScanCheckIn(e));
 		}
 		return [];
 	});
@@ -226,7 +227,10 @@
 			return;
 		}
 		try {
-			const promises = targets.map((evacuee) => checkIn.mutateAsync({ evacuee, ctx, zone }));
+			// Returning members go back to their own zone; the scanned person's is only a fallback.
+			const promises = targets.map((evacuee) =>
+				checkIn.mutateAsync({ evacuee, ctx, zone: evacuee.current_stay.zone?.trim() || zone })
+			);
 			const results = await Promise.allSettled(promises);
 
 			const fulfilledResults = results
@@ -437,7 +441,7 @@
 				{#if scanResult}
 					{@const found = scanResult.success ? scanResult.evacuee : undefined}
 					{@const canCheckOut = found?.current_stay ? canCheckOutEvacuee(found) : false}
-					{@const canCheckIn = found?.current_stay ? canCheckInEvacuee(found) : false}
+					{@const canCheckIn = found?.current_stay ? canScanCheckIn(found) : false}
 					{@const isTerminal = found?.current_stay?.status === 'deceased'}
 					<div
 						class="mt-6 w-full max-w-sm animate-in overflow-hidden rounded-2xl border shadow-md transition-all duration-200 fade-in slide-in-from-top-2
@@ -534,7 +538,7 @@
 											{@const isEligible = isActionCheckOut
 												? canCheckOutEvacuee(member)
 												: isActionCheckIn
-													? canCheckInEvacuee(member)
+													? canScanCheckIn(member)
 													: false}
 											{@const isScanned = member._id === found._id}
 											<label
@@ -567,6 +571,13 @@
 																class="ml-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-2xs font-bold text-primary"
 																>คนที่สแกน</span
 															>
+														{/if}
+														{#if isActionCheckIn && needsIntakeBeforeStay(member)}
+															<span
+																class="block text-2xs font-normal text-amber-700 dark:text-amber-300"
+															>
+																ยังไม่ผ่านจุดคัดกรอง/จัดโซน — ส่งไปสถานี 2–3
+															</span>
 														{/if}
 													</span>
 												</div>
@@ -627,6 +638,13 @@
 										{/if}
 										เช็คอิน
 									</Button>
+								{:else if found && needsIntakeBeforeStay(found)}
+									<p
+										class="flex h-11 flex-1 items-center justify-center rounded-xl bg-amber-100 px-2 text-center text-xs font-semibold text-amber-900 dark:bg-amber-950 dark:text-amber-200"
+										role="status"
+									>
+										ยังไม่ผ่านจุดคัดกรอง/จัดโซน — ส่งไปสถานี 1–3 ก่อนเช็คอิน
+									</p>
 								{:else}
 									<Button
 										disabled
