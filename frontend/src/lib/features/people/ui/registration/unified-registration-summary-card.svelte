@@ -57,6 +57,15 @@
 		headMember ? `${headMember.first_name || ''} ${headMember.last_name || ''}`.trim() : ''
 	);
 
+	const memberSummaries = $derived(
+		members.map((member, index) => ({
+			id: member._id || `member-${index}`,
+			name:
+				`${member.first_name || ''} ${member.last_name || ''}`.trim() || `สมาชิกคนที่ ${index + 1}`,
+			isPrimary: index === 0
+		}))
+	);
+
 	const petCount = $derived(
 		(household.pets ?? []).reduce((sum: number, p) => sum + (Number(p.count) || 1), 0)
 	);
@@ -158,6 +167,19 @@
 				<span class="text-muted-foreground">ผู้ติดต่อหลัก: </span>
 				<span class="font-semibold">{headFullName || 'ยังไม่ได้ระบุชื่อ'}</span>
 			</div>
+
+			<ul class="space-y-1.5" aria-label="รายชื่อสมาชิกครอบครัว">
+				{#each memberSummaries as member (member.id)}
+					<li
+						class="flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/10 px-2.5 py-1.5 text-xs"
+					>
+						<span class="min-w-0 truncate font-medium text-foreground">{member.name}</span>
+						{#if member.isPrimary}
+							<span class="shrink-0 text-2xs font-medium text-primary">หลัก</span>
+						{/if}
+					</li>
+				{/each}
+			</ul>
 
 			<div class="flex flex-wrap items-center gap-1.5 text-2xs text-muted-foreground">
 				{#if maleCount > 0}
