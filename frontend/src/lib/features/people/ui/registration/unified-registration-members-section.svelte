@@ -79,7 +79,7 @@
 
 	function memberTabLabel(member: UnifiedMemberWithMeta, index: number): string {
 		const name = [member.first_name, member.last_name].filter(Boolean).join(' ').trim();
-		return name || (index === 0 ? t.primaryContact : `${t.memberLabel} ${index + 1}`);
+		return name || (index === 0 ? t.primaryContact : `${t.memberNum} ${index + 1}`);
 	}
 
 	function hasMemberErrors(index: number): boolean {
