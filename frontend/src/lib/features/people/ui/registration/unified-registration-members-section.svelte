@@ -2,6 +2,7 @@
 	import Plus from '@lucide/svelte/icons/plus';
 	import Users from '@lucide/svelte/icons/users';
 	import QrCodeIcon from '@lucide/svelte/icons/qr-code';
+	import { tick } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { langState } from '$lib/states/i18n.svelte';
@@ -95,6 +96,22 @@
 		members = [...members, newMember];
 		selectMemberTab(members.length - 1);
 		onDirty?.();
+		void revealMember(members.length - 1);
+	}
+
+	/** Bring the new member's card into view and put the cursor in its first text field. */
+	async function revealMember(index: number) {
+		await tick();
+		const card = document.getElementById(
+			useMemberTabs ? `member-panel-${index}` : `member-card-${index}`
+		);
+		if (!card) return;
+		card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		card
+			.querySelector<HTMLInputElement>(
+				'input:not([type="file"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])'
+			)
+			?.focus({ preventScroll: true });
 	}
 
 	function removeMember(index: number) {
@@ -157,33 +174,6 @@
 	icon={Users}
 	bodyClass="none"
 >
-	{#snippet actions()}
-		<div class="flex flex-wrap items-center gap-2">
-			{#if channel === 'public' && thaidEnabled}
-				<Button
-					type="button"
-					variant="outline"
-					disabled={pending}
-					onclick={handleAddMemberViaThaiD}
-					class="h-9 gap-1.5 border-primary/30 text-xs text-primary hover:bg-primary/10 sm:text-sm"
-				>
-					<QrCodeIcon class="size-4" />
-					<span>เพิ่มสมาชิกด้วย ThaiD (สแกน QR)</span>
-				</Button>
-			{/if}
-			<Button
-				type="button"
-				variant="outline"
-				disabled={pending}
-				onclick={addMember}
-				class="h-9 gap-1.5 text-xs sm:text-sm"
-			>
-				<Plus class="size-4" />
-				{t.addMember}
-			</Button>
-		</div>
-	{/snippet}
-
 	{#if useMemberTabs}
 		<div
 			role="tablist"
@@ -220,7 +210,7 @@
 		{#each [...members.keys()] as index (index)}
 			<!-- Hidden (not unmounted) so every card keeps its state while switching tabs -->
 			<div
-				id={useMemberTabs ? `member-panel-${index}` : undefined}
+				id={useMemberTabs ? `member-panel-${index}` : `member-card-${index}`}
 				role={useMemberTabs ? 'tabpanel' : undefined}
 				aria-labelledby={useMemberTabs ? `member-tab-${index}` : undefined}
 				class={useMemberTabs && index !== activeMemberTab ? 'hidden' : undefined}
@@ -258,6 +248,32 @@
 				/>
 			</div>
 		{/each}
+	</div>
+
+	<!-- Below the last member, so adding the next person never needs a scroll back up -->
+	<div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+		{#if channel === 'public' && thaidEnabled}
+			<Button
+				type="button"
+				variant="outline"
+				disabled={pending}
+				onclick={handleAddMemberViaThaiD}
+				class="h-11 w-full gap-1.5 border-primary/30 text-sm text-primary hover:bg-primary/10 sm:w-auto"
+			>
+				<QrCodeIcon class="size-4" />
+				<span>เพิ่มสมาชิกด้วย ThaiD (สแกน QR)</span>
+			</Button>
+		{/if}
+		<Button
+			type="button"
+			variant="outline"
+			disabled={pending}
+			onclick={addMember}
+			class="h-11 w-full gap-1.5 border-dashed text-sm sm:w-auto"
+		>
+			<Plus class="size-4" />
+			{t.addMember}
+		</Button>
 	</div>
 
 	{#if thaidEnabled}

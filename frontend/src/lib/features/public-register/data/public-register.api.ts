@@ -175,20 +175,27 @@ export type ResidenceMatchRequest = {
 	phone?: string | null;
 };
 
-/** Debounced Residence suggest for public create — tokens + non-PII chips only. */
+/**
+ * Debounced Residence suggest for public create — tokens + non-PII chips only.
+ * `failed` separates "lookup broke" from "no family matched", so the form can say which.
+ */
 export async function matchResidence(
 	input: ResidenceMatchRequest
-): Promise<{ matches: ResidenceMatchChip[] }> {
-	const res = await fetch('/api/public/v1/households/residence-match', {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify(input)
-	});
-	if (!res.ok) {
-		return { matches: [] };
+): Promise<{ matches: ResidenceMatchChip[]; failed: boolean }> {
+	try {
+		const res = await fetch('/api/public/v1/households/residence-match', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(input)
+		});
+		if (!res.ok) {
+			return { matches: [], failed: true };
+		}
+		const body = (await res.json()) as { matches?: ResidenceMatchChip[] };
+		return { matches: body.matches ?? [], failed: false };
+	} catch {
+		return { matches: [], failed: true };
 	}
-	const body = (await res.json()) as { matches?: ResidenceMatchChip[] };
-	return { matches: body.matches ?? [] };
 }
 
 export interface UnassignedPhotoUploadResponse {

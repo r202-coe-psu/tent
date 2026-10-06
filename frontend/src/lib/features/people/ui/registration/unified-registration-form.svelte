@@ -12,6 +12,7 @@
 	import type { ZodIssue } from 'zod';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Alert from '$lib/components/ui/alert/index.js';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
@@ -45,6 +46,7 @@
 	} from './unified-registration-pets';
 	import {
 		blankUnifiedMember,
+		membersMissingPhoneChoice,
 		unifiedRegistrationInputSchema,
 		type MemberPhotoUploadMode,
 		type UnifiedMemberWithMeta,
@@ -54,6 +56,8 @@
 	} from '../../domain/unified-registration';
 	import {
 		dormFieldsFor,
+		formatPersonName,
+		STATUS_LABELS,
 		type HousingType,
 		type HouseholdVehicle,
 		type PetGroup
@@ -61,10 +65,11 @@
 	import { normalizeThaiPhone, sanitizePhoneTyping } from '$lib/db/model';
 	import {
 		hasMinimumResidence,
+		suggestHouseholdsByPhone,
 		type ResidenceFields,
 		type ResidenceMatchCandidate
 	} from '../../domain/registration-shell';
-	import { peopleKeys, useHouseholds } from '../../application/queries';
+	import { peopleKeys, useEvacuees, useHouseholds } from '../../application/queries';
 	import { peopleRepository } from '../../data/people.remote';
 	import {
 		readResidenceSuggestDeps,
@@ -181,6 +186,12 @@
 		return {
 			housing_type: 'owned_house',
 			residence_landmark: null,
+			// Explicit nulls: HouseholdAddressFields binds these, and Svelte rejects
+			// binding `undefined` to a bindable prop that has a fallback.
+			dorm_name: null,
+			dorm_building: null,
+			dorm_floor: null,
+			dorm_room: null,
 			address_no: '',
 			village_no: '',
 			subdistrict: '',
@@ -251,6 +262,8 @@
 	let publicMatchChips = $state<ResidenceMatchChip[]>([]);
 	let residenceSuggestPending = $state(false);
 	let residenceSuggestCheckedEmpty = $state(false);
+	/** Public lookup request failed — not the same as "no family matched". */
+	let residenceSuggestFailed = $state(false);
 	/** Stay false until GET /api/public/v1/thaid/status confirms ON (public channel only). */
 	let thaidEnabled = $state(false);
 
@@ -269,7 +282,48 @@
 		} as unknown as ReturnType<typeof useHouseholds>
 	);
 
+	/** Onsite create only: members' phones for「ค้นหาครอบครัวด้วยเบอร์โทรศัพท์」. */
+	const evacueesQuery = safeQuery(
+		() =>
+			createQuery(() => ({
+				queryKey: peopleKeys.evacuees(),
+				queryFn: () => peopleRepository().listEvacuees(),
+				enabled: channel === 'onsite' && mode === 'create'
+			})),
+		{
+			data: [],
+			isLoading: false
+		} as unknown as ReturnType<typeof useEvacuees>
+	);
+
 	const hasJoinSelection = $derived(Boolean(joinHouseholdId || joinMatchToken));
+
+	function normalizedName(first?: string | null, last?: string | null): string {
+		return `${first ?? ''} ${last ?? ''}`.replace(/\s+/g, ' ').trim().toLowerCase();
+	}
+
+	/** The joined family's existing member this card duplicates (same ID number or same full name). */
+	function findExistingFamilyMember(m: UnifiedMemberWithMeta) {
+		const idNo = m.person_id?.number?.replace(/\D/g, '') ?? '';
+		const name = normalizedName(m.first_name, m.last_name);
+		return joinedFamilyMembers.find((e) => {
+			if (m._id && m._id === e._id) return false;
+			const existingNo = e.person_id?.number?.replace(/\D/g, '') ?? '';
+			if (idNo && existingNo && idNo === existingNo) return true;
+			return Boolean(name) && name === normalizedName(e.first_name, e.last_name);
+		});
+	}
+
+	const GONE_STAY_STATUSES = new Set(['cancelled', 'checked_out', 'deceased', 'transferred']);
+	/** Onsite join: the family's current members, shown read-only so staff see who is already in. */
+	const joinedFamilyMembers = $derived(
+		channel === 'onsite' && joinHouseholdId
+			? (evacueesQuery.data ?? []).filter(
+					(e) =>
+						e.household_id === joinHouseholdId && !GONE_STAY_STATUSES.has(e.current_stay.status)
+				)
+			: []
+	);
 
 	$effect(() => {
 		if (initialMembers && !touched) {
@@ -293,6 +347,36 @@
 		}
 
 		const households = householdsQuery.data ?? [];
+
+		// A complete phone in the family-search box takes priority over the address suggest.
+		if (isThaiPhone(searchPhoneQuery)) {
+			const loading =
+				(Boolean(householdsQuery.isLoading) && households.length === 0) ||
+				(Boolean(evacueesQuery.isLoading) && (evacueesQuery.data ?? []).length === 0);
+			if (residenceSuggestTimer) clearTimeout(residenceSuggestTimer);
+			residenceSuggestPending = true;
+			residenceSuggestCheckedEmpty = false;
+			if (loading) {
+				residenceSuggestions = [];
+				return;
+			}
+			const phoneMatches = suggestHouseholdsByPhone(
+				searchPhoneQuery,
+				evacueesQuery.data ?? [],
+				households
+			);
+			const selected = untrack(() => joinHouseholdId);
+			residenceSuggestTimer = setTimeout(() => {
+				residenceSuggestions = phoneMatches;
+				residenceSuggestPending = false;
+				residenceSuggestCheckedEmpty = phoneMatches.length === 0;
+				if (selected && !phoneMatches.some((m) => m._id === selected)) dropJoinWithNotice();
+			}, 350);
+			return () => {
+				if (residenceSuggestTimer) clearTimeout(residenceSuggestTimer);
+			};
+		}
+
 		const deps = readResidenceSuggestDeps(
 			'create',
 			household,
@@ -307,7 +391,7 @@
 			residenceSuggestions = [];
 			residenceSuggestPending = false;
 			residenceSuggestCheckedEmpty = false;
-			if (untrack(() => joinHouseholdId)) clearJoinSelection();
+			if (untrack(() => joinHouseholdId)) dropJoinWithNotice();
 			return;
 		}
 
@@ -327,7 +411,7 @@
 			residenceSuggestPending = false;
 			residenceSuggestCheckedEmpty = matches.length === 0;
 			if (selectedId && !matches.some((m) => m._id === selectedId)) {
-				clearJoinSelection();
+				dropJoinWithNotice();
 			}
 		}, 350);
 		return () => {
@@ -367,6 +451,7 @@
 			publicMatchChips = [];
 			residenceSuggestPending = false;
 			residenceSuggestCheckedEmpty = false;
+			residenceSuggestFailed = false;
 			return;
 		}
 
@@ -399,13 +484,15 @@
 
 		residenceSuggestPending = true;
 		residenceSuggestCheckedEmpty = false;
+		residenceSuggestFailed = false;
 		let ignore = false;
 		const timer = setTimeout(() => {
 			void matchResidence(request).then((result) => {
 				if (ignore) return;
 				publicMatchChips = result.matches;
 				residenceSuggestPending = false;
-				residenceSuggestCheckedEmpty = result.matches.length === 0;
+				residenceSuggestFailed = result.failed;
+				residenceSuggestCheckedEmpty = !result.failed && result.matches.length === 0;
 			});
 		}, 350);
 
@@ -642,6 +729,16 @@
 		selectedMatchChip = null;
 	}
 
+	/**
+	 * The search changed under an active join (address / phone edited). Clearing it silently
+	 * would turn the next save into a brand-new household — a duplicate family — so say so.
+	 */
+	function dropJoinWithNotice() {
+		if (!joinHouseholdId && !joinMatchToken) return;
+		clearJoinSelection();
+		toast.warning('ยกเลิกการเข้าร่วมครอบครัวแล้ว เพราะข้อมูลค้นหาเปลี่ยน — ตรวจสอบก่อนบันทึก');
+	}
+
 	$effect(() => {
 		if (joinResetKey > 0) {
 			clearJoinSelection();
@@ -649,9 +746,31 @@
 	});
 
 	function confirmOnsiteJoin(suggestion: ResidenceMatchCandidate) {
+		createNewConfirmed = false;
 		joinHouseholdId = suggestion._id;
 		joinMatchToken = null;
 		joinSelectedSummary = suggestion.label?.trim() || formatResidenceSummary(suggestion);
+
+		// A phone search finds the family before any address is typed — copy theirs in
+		// (the fields lock while joined). Reassign so the cascading selects follow.
+		const source = suggestion as ResidenceMatchCandidate &
+			Pick<UnifiedHouseholdInput, 'dorm_name' | 'dorm_building' | 'dorm_floor' | 'dorm_room'>;
+		household = {
+			...household,
+			housing_type: (source.housing_type as HousingType) || household.housing_type,
+			residence_landmark: source.residence_landmark ?? household.residence_landmark,
+			dorm_name: source.dorm_name ?? household.dorm_name ?? null,
+			dorm_building: source.dorm_building ?? household.dorm_building ?? null,
+			dorm_floor: source.dorm_floor ?? household.dorm_floor ?? null,
+			dorm_room: source.dorm_room ?? household.dorm_room ?? null,
+			address_no: source.address_no || household.address_no,
+			village_no: source.village_no || household.village_no,
+			province: source.province || household.province,
+			district: source.district || household.district,
+			subdistrict: source.subdistrict || household.subdistrict,
+			postal_code: source.postal_code || household.postal_code
+		};
+		toast.success(t.joinFamilyLoadedToast);
 		markDirty();
 	}
 
@@ -666,6 +785,7 @@
 	}
 
 	function confirmPublicJoin(chip: ResidenceMatchChip) {
+		createNewConfirmed = false;
 		joinMatchToken = chip.match_token;
 		joinHouseholdId = null;
 		selectedMatchChip = chip;
@@ -695,6 +815,9 @@
 		}
 
 		markDirty();
+		toast.success(
+			chip.pets && chip.pets.length > 0 ? t.joinFamilyLoadedWithPetsToast : t.joinFamilyLoadedToast
+		);
 	}
 
 	/** ThaiD mock/real autofill: populate head member + address from profile. */
@@ -740,7 +863,18 @@
 		}
 	});
 
+	/** 「สร้างใหม่」 always asks first — skipping a found family is how duplicate households start. */
+	let confirmCreateNewOpen = $state(false);
+	/** Staff confirmed a new family; hide the found-family list until they ask for it again. */
+	let createNewConfirmed = $state(false);
+
 	function continueCreateDespiteSuggest() {
+		confirmCreateNewOpen = true;
+	}
+
+	function confirmCreateNew() {
+		confirmCreateNewOpen = false;
+		createNewConfirmed = true;
 		clearJoinSelection();
 		markDirty();
 	}
@@ -879,6 +1013,32 @@
 			}
 		}
 
+		// Joining: a card that is already in the family would be saved as a second copy of them.
+		if (joinedFamilyMembers.length > 0) {
+			const alreadyIn = members
+				.map((m, i) => ({ i, dup: findExistingFamilyMember(m) }))
+				.filter((x) => x.dup);
+			if (alreadyIn.length > 0) {
+				const message = `${formatPersonName(alreadyIn[0]!.dup!)} อยู่ในครอบครัวนี้แล้ว — ลบการ์ดนี้ออก กรอกเฉพาะสมาชิกที่มาใหม่`;
+				memberFieldErrors = Object.fromEntries(
+					alreadyIn.map(({ i }) => [i, { first_name: message }])
+				);
+				householdFieldErrors = {};
+				await revealValidation(message, [], 'members');
+				return;
+			}
+		}
+
+		const missingPhone = membersMissingPhoneChoice(members);
+		if (missingPhone.length > 0) {
+			memberFieldErrors = Object.fromEntries(
+				missingPhone.map((i) => [i, { phone: t.phoneOrNoPhoneRequired }])
+			);
+			householdFieldErrors = {};
+			await revealValidation(t.phoneOrNoPhoneRequired, [], 'members');
+			return;
+		}
+
 		if (mode === 'report-in') {
 			const reportingCount = members.filter((m) => m.reporting_in).length;
 			if (reportingCount === 0) {
@@ -1011,6 +1171,7 @@
 									searchPhoneQuery = sanitizePhoneTyping(
 										(e.currentTarget as HTMLInputElement).value
 									);
+									createNewConfirmed = false;
 								}}
 								onblur={() => (searchPhoneTouched = true)}
 								disabled={fieldsLocked || hasJoinSelection}
@@ -1107,8 +1268,32 @@
 							{#if joinSelectedSummary}
 								<p class="text-xs text-muted-foreground">{joinSelectedSummary}</p>
 							{/if}
+							{#if joinedFamilyMembers.length > 0}
+								<div class="rounded-lg border border-border/60 bg-background/80 p-2.5">
+									<p class="text-xs font-semibold text-foreground">
+										สมาชิกเดิมในครอบครัวนี้ ({joinedFamilyMembers.length} คน) · ดูอย่างเดียว
+									</p>
+									<ul class="mt-1.5 space-y-1">
+										{#each joinedFamilyMembers as existing (existing._id)}
+											<li class="flex flex-wrap items-center justify-between gap-2 text-xs">
+												<span class="text-foreground">{formatPersonName(existing)}</span>
+												<span
+													class="rounded-full bg-muted px-2 py-0.5 text-2xs text-muted-foreground"
+												>
+													{STATUS_LABELS[existing.current_stay.status] ??
+														existing.current_stay.status}
+												</span>
+											</li>
+										{/each}
+									</ul>
+								</div>
+							{:else if channel === 'public' && selectedMatchChip?.member_count}
+								<p class="text-xs text-muted-foreground">
+									ครอบครัวนี้มีสมาชิกเดิม {selectedMatchChip.member_count} คน
+								</p>
+							{/if}
 							<p class="text-xs text-muted-foreground">
-								สมาชิกใหม่จะถูกเพิ่มเข้าครอบครัวนี้ — หรือเลือกสร้างใหม่แทนได้
+								กรอกเฉพาะสมาชิกที่มาใหม่ด้านล่าง — สมาชิกเดิมไม่ต้องกรอกซ้ำ หรือเลือกสร้างใหม่แทนได้
 							</p>
 							{#if selectedMatchChip?.shelter_code && selectedMatchChip.shelter_code !== shelterCode}
 								<div
@@ -1158,10 +1343,29 @@
 							<Loader2 class="size-3.5 animate-spin" aria-hidden="true" />
 							กำลังค้นหาครอบครัวที่อยู่ตรงกัน...
 						</div>
+					{:else if createNewConfirmed && (residenceSuggestions.length > 0 || publicMatchChips.length > 0)}
+						<div
+							class="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
+							role="status"
+						>
+							<span>จะลงทะเบียนเป็นครอบครัวใหม่</span>
+							<Button
+								type="button"
+								size="sm"
+								variant="ghost"
+								class="h-7 text-xs"
+								disabled={fieldsLocked}
+								onclick={() => (createNewConfirmed = false)}
+							>
+								ดูครอบครัวที่พบอีกครั้ง
+							</Button>
+						</div>
 					{:else if channel === 'onsite' && residenceSuggestions.length > 0}
 						<div class="mt-3 space-y-2 rounded-xl border border-border bg-muted/20 p-3">
 							<p class="text-xs font-semibold text-foreground">
-								พบครอบครัวที่อยู่ใกล้เคียง — เข้าร่วมได้ หรือสร้างใหม่ได้เสมอ
+								{isThaiPhone(searchPhoneQuery)
+									? 'พบครอบครัวที่มีสมาชิกใช้เบอร์นี้ — เข้าร่วม หรือสร้างครอบครัวใหม่'
+									: 'พบครอบครัวที่อยู่ใกล้เคียง — เข้าร่วม หรือสร้างครอบครัวใหม่'}
 							</p>
 							<ul class="space-y-2">
 								{#each residenceSuggestions as suggestion (suggestion._id)}
@@ -1178,26 +1382,28 @@
 												</span>
 											{/if}
 										</span>
-										<Button
-											type="button"
-											size="sm"
-											variant="outline"
-											disabled={fieldsLocked}
-											onclick={() => confirmOnsiteJoin(suggestion)}
-										>
-											เข้าร่วม
-										</Button>
+										<div class="flex shrink-0 items-center gap-2">
+											<Button
+												type="button"
+												size="sm"
+												disabled={fieldsLocked}
+												onclick={() => confirmOnsiteJoin(suggestion)}
+											>
+												เข้าร่วม
+											</Button>
+											<Button
+												type="button"
+												size="sm"
+												variant="outline"
+												disabled={fieldsLocked}
+												onclick={continueCreateDespiteSuggest}
+											>
+												สร้างใหม่
+											</Button>
+										</div>
 									</li>
 								{/each}
 							</ul>
-							<Button
-								type="button"
-								size="sm"
-								disabled={fieldsLocked}
-								onclick={continueCreateDespiteSuggest}
-							>
-								สร้างใหม่
-							</Button>
 						</div>
 					{:else if channel === 'public' && publicMatchChips.length > 0}
 						<div class="mt-3 space-y-2 rounded-xl border border-border bg-muted/20 p-3">
@@ -1304,6 +1510,10 @@
 								สร้างใหม่
 							</Button>
 						</div>
+					{:else if residenceSuggestFailed}
+						<p class="mt-3 text-xs text-amber-800 dark:text-amber-200" role="status">
+							{t.residenceMatchFailed}
+						</p>
 					{:else if residenceSuggestCheckedEmpty}
 						<p class="mt-3 text-xs text-muted-foreground">
 							{searchPhoneQuery.trim()
@@ -1400,3 +1610,19 @@
 		</div>
 	</div>
 </form>
+
+<AlertDialog.Root bind:open={confirmCreateNewOpen}>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>สร้างครอบครัวใหม่?</AlertDialog.Title>
+			<AlertDialog.Description>
+				ระบบพบครอบครัวที่ตรงกันแล้ว ถ้าเป็นครอบครัวเดียวกัน ให้กด "เข้าร่วม" แทน
+				เพื่อไม่ให้มีครอบครัวซ้ำ — สร้างใหม่เฉพาะเมื่อแน่ใจว่าเป็นคนละครอบครัว
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel>ยกเลิก</AlertDialog.Cancel>
+			<AlertDialog.Action onclick={confirmCreateNew}>ยืนยัน สร้างครอบครัวใหม่</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>

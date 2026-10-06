@@ -116,6 +116,7 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		phonePlaceholder: 'เบอร์โทรศัพท์ 10 หลัก',
 		noPhone: 'ไม่มีเบอร์โทรศัพท์',
 		headPhoneRequired: 'กรุณากรอกเบอร์โทรศัพท์ 10 หลักของผู้ติดต่อหลัก',
+		phoneOrNoPhoneRequired: 'กรอกเบอร์โทรศัพท์ หรือติ๊ก "ไม่มีเบอร์โทรศัพท์"',
 		joinPhoneOptionalHelper: 'บ้านนี้มีผู้ติดต่อหลักอยู่แล้ว — กรอกเบอร์ได้ถ้าต้องการ',
 		joinPhoneInvalid: 'กรุณากรอกเบอร์ให้ครบ 10 หลัก หรือเว้นว่าง / เลือกไม่มีเบอร์',
 		specialNeedsLegend: 'ความต้องการพิเศษเฉพาะบุคคล',
@@ -243,8 +244,14 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		emergencyRelationLabel: 'ความสัมพันธ์',
 		emergencyRelationPlaceholder: 'เช่น บิดา มารดา คู่สมรส ญาติ',
 		// Special needs chrome + option labels (stored values stay Thai)
-		specialNeedsExtraLabel: 'ความต้องการเพิ่มเติม',
-		specialNeedsExtraDesc: 'เลือกความต้องการเพิ่มเติมเพื่อการจัดสรรที่พักและการดูแลอย่างเหมาะสม',
+		// Residence join feedback (public pre-register)
+		joinFamilyLoadedToast: 'ดึงข้อมูลครอบครัวแล้ว — กรอกที่อยู่ให้อัตโนมัติ',
+		joinFamilyLoadedWithPetsToast: 'ดึงข้อมูลครอบครัวแล้ว — กรอกที่อยู่และสัตว์เลี้ยงให้อัตโนมัติ',
+		residenceMatchFailed:
+			'ค้นหาครอบครัวไม่สำเร็จ — ลองแก้ที่อยู่หรือเบอร์โทรอีกครั้ง หรือลงทะเบียนครอบครัวใหม่ได้',
+		// One name for `special_needs` everywhere (Station 1/2/3, profile) — decided 2026-10-06
+		specialNeedsExtraLabel: 'ความต้องการพิเศษ',
+		specialNeedsExtraDesc: 'เลือกความต้องการพิเศษเพื่อการจัดสรรที่พักและการดูแลอย่างเหมาะสม',
 		specialNeedsCustomPlaceholder: 'ระบุความต้องการอื่นๆ (ถ้ามี)',
 		specialNeedsAdd: 'เพิ่ม',
 		specialNeedsRemoveAria: 'ลบ',
@@ -432,6 +439,7 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		phonePlaceholder: '10-digit phone number',
 		noPhone: 'No phone number',
 		headPhoneRequired: 'Please enter the primary contact’s 10-digit phone number',
+		phoneOrNoPhoneRequired: 'Enter a phone number or tick "No phone number"',
 		joinPhoneOptionalHelper: 'This household already has a primary contact — phone is optional',
 		joinPhoneInvalid: 'Enter a full 10-digit phone, leave blank, or choose no phone',
 		specialNeedsLegend: 'Individual Special Needs',
@@ -556,8 +564,13 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		emergencyRelationLabel: 'Relationship',
 		emergencyRelationPlaceholder: 'e.g. father, mother, spouse, relative',
 		// Special needs chrome + option labels (stored values stay Thai)
-		specialNeedsExtraLabel: 'Additional needs',
-		specialNeedsExtraDesc: 'Select additional needs for placement and care planning',
+		// Residence join feedback (public pre-register)
+		joinFamilyLoadedToast: 'Family details loaded — address filled in for you',
+		joinFamilyLoadedWithPetsToast: 'Family details loaded — address and pets filled in for you',
+		residenceMatchFailed:
+			'Could not look up families — check the address or phone and try again, or register a new family',
+		specialNeedsExtraLabel: 'Special needs',
+		specialNeedsExtraDesc: 'Select special needs for placement and care planning',
 		specialNeedsCustomPlaceholder: 'Other needs (optional)',
 		specialNeedsAdd: 'Add',
 		specialNeedsRemoveAria: 'Remove',
