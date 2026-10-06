@@ -251,7 +251,7 @@
 								<span
 									class="rounded-full bg-muted px-2 py-0.5 text-2xs font-normal text-muted-foreground"
 								>
-									ไม่จำเป็น / หากมี
+									{t.optionalIfAny}
 								</span>
 							{/if}
 						</div>
@@ -454,7 +454,7 @@
 												class="flex min-w-0 flex-1 flex-wrap items-center gap-1 sm:w-full sm:flex-col sm:items-stretch"
 											>
 												<span class="text-2xs text-muted-foreground sm:text-center">
-													(ไม่จำเป็น / หากมี)
+													({t.optionalIfAny})
 												</span>
 												<label
 													for="pet-photo-{pet.id}"

@@ -581,7 +581,7 @@
 					<span
 						class="rounded-md bg-muted px-1.5 py-0.5 text-2xs font-normal text-muted-foreground"
 					>
-						(ไม่จำเป็น / หากมี)
+						({t.optionalIfAny})
 					</span>
 				</div>
 			</div>

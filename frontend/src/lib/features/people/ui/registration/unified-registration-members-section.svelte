@@ -173,7 +173,7 @@
 		m.medical_conditions = profile.medical_conditions ?? [];
 		members = [...members];
 		onDirty?.();
-		toast.success(`ดึงข้อมูล ${profile.first_name} ${profile.last_name} เรียบร้อยแล้ว`);
+		toast.success(t.thaidFetchedToast(`${profile.first_name} ${profile.last_name}`));
 	}
 </script>
 
@@ -191,7 +191,7 @@
 			class="mb-4 space-y-2 rounded-xl border border-border/70 bg-muted/20 p-3"
 		>
 			<h3 id="existing-members-title" class="text-sm font-semibold text-foreground">
-				สมาชิกเดิมในครอบครัว ({existingMembers.length} คน) · ดูอย่างเดียว
+				{t.existingMembersTitle(existingMembers.length)}
 			</h3>
 			<ul class="grid gap-2 sm:grid-cols-2">
 				{#each existingMembers as existing, i (existing._id)}
@@ -212,29 +212,29 @@
 						</div>
 						<p class="mt-1 text-muted-foreground">
 							{existing.gender === 'male'
-								? 'ชาย'
+								? t.genderMale
 								: existing.gender === 'female'
-									? 'หญิง'
-									: 'ไม่ระบุเพศ'}
-							{#if age != null}· อายุ {age} ปี{/if}
+									? t.genderFemale
+									: t.genderUnspecified}
+							{#if age != null}· {t.ageYears(age)}{/if}
 							{#if (existing.vulnerable_groups?.length ?? 0) > 0}
-								· กลุ่มเปราะบาง {existing.vulnerable_groups.length}
+								· {t.vulnerableCount(existing.vulnerable_groups.length)}
 							{/if}
 						</p>
 					</li>
 				{/each}
 			</ul>
 			<p class="text-2xs text-muted-foreground">
-				แก้ไขข้อมูลสมาชิกเดิมได้ที่หน้าโปรไฟล์ — กรอกเฉพาะคนที่มาใหม่ด้านล่าง
+				{t.existingMembersHint}
 			</p>
 		</section>
-		<h3 class="mb-2 text-sm font-semibold text-foreground">สมาชิกที่มาใหม่</h3>
+		<h3 class="mb-2 text-sm font-semibold text-foreground">{t.newMembersTitle}</h3>
 	{/if}
 
 	{#if useMemberTabs}
 		<div
 			role="tablist"
-			aria-label="สลับสมาชิกครอบครัว"
+			aria-label={t.memberTabsAria}
 			class="mb-4 flex gap-1.5 overflow-x-auto border-b border-slate-200 pb-2"
 		>
 			{#each members as member, index (member._id ?? index)}
@@ -255,7 +255,7 @@
 					{#if hasMemberErrors(index)}
 						<span
 							class="rounded-full border border-red-200 bg-red-50 px-1.5 text-xs font-semibold text-red-900"
-							>มีข้อผิดพลาด</span
+							>{t.memberHasErrors}</span
 						>
 					{/if}
 				</button>
@@ -319,7 +319,7 @@
 				class="h-11 w-full gap-1.5 border-primary/30 text-sm text-primary hover:bg-primary/10 sm:w-auto"
 			>
 				<QrCodeIcon class="size-4" />
-				<span>เพิ่มสมาชิกด้วย ThaiD (สแกน QR)</span>
+				<span>{t.thaidAddMember}</span>
 			</Button>
 		{/if}
 		<Button
@@ -338,8 +338,8 @@
 		<ThaidMemberScanDialog
 			bind:open={scanDialogOpen}
 			memberLabel={targetMemberIndex !== null
-				? `สมาชิกคนที่ ${targetMemberIndex + 1}`
-				: 'สมาชิกในครอบครัว'}
+				? t.thaidScanMemberN(targetMemberIndex + 1)
+				: t.thaidScanFamilyMember}
 			onscanned={handleMemberScanned}
 		/>
 	{/if}

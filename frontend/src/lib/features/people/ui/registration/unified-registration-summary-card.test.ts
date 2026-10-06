@@ -5,6 +5,7 @@ import {
 	householdToUnifiedInput,
 	type UnifiedMemberWithMeta
 } from '../../domain/unified-registration';
+import { langState } from '$lib/states/i18n.svelte';
 import UnifiedRegistrationSummaryCard from './unified-registration-summary-card.svelte';
 
 describe('UnifiedRegistrationSummaryCard', () => {
@@ -57,5 +58,26 @@ describe('UnifiedRegistrationSummaryCard', () => {
 		// The family's head (not the new card) is shown as primary contact.
 		expect(result.body).toMatch(/ผู้ติดต่อหลัก:[\s\S]*?ชิโน ใจดี/);
 		expect(result.body).toContain('โฮป ใจดี');
+	});
+
+	it('renders in English when the page language is English', () => {
+		const previous = langState.current;
+		langState.current = 'en';
+		try {
+			const result = render(UnifiedRegistrationSummaryCard, {
+				props: {
+					household: householdToUnifiedInput(null),
+					members: [{ ...blankUnifiedMember(), first_name: 'Somchai', last_name: 'Jaidee' }],
+					activeSection: 'members',
+					onNavigate: vi.fn()
+				}
+			});
+			expect(result.body).toContain('Registration summary');
+			expect(result.body).toContain('1 person');
+			expect(result.body).toContain('No shelter selected');
+			expect(result.body).not.toContain('สรุปข้อมูลการลงทะเบียน');
+		} finally {
+			langState.current = previous;
+		}
 	});
 });
