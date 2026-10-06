@@ -1168,7 +1168,7 @@
 
 	<!-- 2-Column Responsive Layout on Desktop (lg:grid lg:grid-cols-12 lg:gap-8 lg:items-start) -->
 	<div class="lg:grid lg:grid-cols-12 lg:items-start lg:gap-8">
-		<!-- Left Column: Sticky Summary Card (hidden on mobile, sticky on lg+) -->
+		<!-- Left Column: Sticky Summary Card on desktop -->
 		<aside
 			class="hidden lg:sticky lg:top-[calc(var(--registration-sticky-top,0px)+1rem)] lg:col-span-4 lg:block"
 		>
@@ -1194,6 +1194,28 @@
 
 		<!-- Right Column: Form Area (Full width on mobile, 8-col on lg+) -->
 		<div class="space-y-6 lg:col-span-8">
+			<!-- Live summary for mobile and tablet; desktop uses the sticky card on the left. -->
+			<div class="lg:hidden">
+				<UnifiedRegistrationSummaryCard
+					{shelterName}
+					{shelterCode}
+					{household}
+					{members}
+					{showVehiclesAssets}
+					{activeSection}
+					{pending}
+					submitDisabled={submitDisabled || readOnly}
+					submitLabel={effectiveSubmitLabel}
+					submittingLabel={t.submitting}
+					existingMembers={joinedFamilyMembers}
+					existingHeadName={joinedFamilyHeadName}
+					existingCount={channel === 'public' && hasJoinSelection
+						? (selectedMatchChip?.member_count ?? 0)
+						: 0}
+					onNavigate={(id) => scrollToSection(id as FormSectionId)}
+				/>
+			</div>
+
 			<!-- Top Progress Stepper (Mobile & Desktop) -->
 			<UnifiedRegistrationStepper
 				sections={formSectionNav}

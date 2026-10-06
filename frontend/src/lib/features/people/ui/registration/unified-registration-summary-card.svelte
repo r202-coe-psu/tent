@@ -42,7 +42,10 @@
 		submittingLabel?: string;
 		/** Joining a family: its current members (onsite) — counted with the new ones. */
 		existingMembers?: ReadonlyArray<
-			Pick<UnifiedMemberWithMeta, 'gender' | 'vulnerable_groups' | 'special_needs'>
+			Pick<
+				UnifiedMemberWithMeta,
+				'first_name' | 'last_name' | 'gender' | 'vulnerable_groups' | 'special_needs'
+			> & { _id?: string }
 		>;
 		/** Joining a family: the family's head, who stays the primary contact. */
 		existingHeadName?: string;
@@ -72,6 +75,27 @@
 	const totalCount = $derived(existingTotal + members.length);
 	/** Gender / care counts cover everyone in the family, existing and new. */
 	const everyone = $derived([...existingMembers, ...members]);
+
+	/** Joined family first (its head is primary), then the new cards numbered after them. */
+	const memberSummaries = $derived([
+		...existingMembers.map((member, index) => {
+			const name = `${member.first_name || ''} ${member.last_name || ''}`.trim();
+			return {
+				id: member._id || `existing-${index}`,
+				name: name || `สมาชิกคนที่ ${index + 1}`,
+				isPrimary: Boolean(existingHeadName) && name === existingHeadName,
+				isExisting: true
+			};
+		}),
+		...members.map((member, index) => ({
+			id: member._id || `member-${index}`,
+			name:
+				`${member.first_name || ''} ${member.last_name || ''}`.trim() ||
+				`สมาชิกคนที่ ${existingMembers.length + index + 1}`,
+			isPrimary: index === 0 && existingMembers.length === 0 && !existingHeadName,
+			isExisting: false
+		}))
+	]);
 
 	const petCount = $derived(
 		(household.pets ?? []).reduce((sum: number, p) => sum + (Number(p.count) || 1), 0)
@@ -179,6 +203,24 @@
 				<span class="text-muted-foreground">ผู้ติดต่อหลัก: </span>
 				<span class="font-semibold">{headFullName || 'ยังไม่ได้ระบุชื่อ'}</span>
 			</div>
+
+			<ul class="space-y-1.5" aria-label="รายชื่อสมาชิกครอบครัว">
+				{#each memberSummaries as member (member.id)}
+					<li
+						class="flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/10 px-2.5 py-1.5 text-xs"
+					>
+						<span class="min-w-0 truncate font-medium text-foreground">{member.name}</span>
+						<span class="flex shrink-0 items-center gap-1">
+							{#if member.isExisting}
+								<span class="text-2xs text-muted-foreground">เดิม</span>
+							{/if}
+							{#if member.isPrimary}
+								<span class="text-2xs font-medium text-primary">หลัก</span>
+							{/if}
+						</span>
+					</li>
+				{/each}
+			</ul>
 
 			<div class="flex flex-wrap items-center gap-1.5 text-2xs text-muted-foreground">
 				{#if maleCount > 0}
