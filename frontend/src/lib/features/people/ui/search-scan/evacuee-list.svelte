@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { formatPersonName, type Evacuee } from '../../domain/people';
+	import { formatPersonName, genderLabelTh, type Evacuee } from '../../domain/people';
 
 	let { evacuees }: { evacuees: Evacuee[] } = $props();
 </script>
@@ -12,7 +12,8 @@
 			<div class="flex items-center justify-between">
 				<span class="text-sm font-medium">{formatPersonName(evacuee)}</span>
 				<span class="text-xs text-muted-foreground">
-					{evacuee.gender} · {evacuee.phone ?? 'ไม่มี'} · {evacuee.current_stay.status}
+					{genderLabelTh(evacuee.gender)} · {evacuee.phone ?? 'ไม่มี'} · {evacuee.current_stay
+						.status}
 				</span>
 			</div>
 		{/each}

@@ -4,6 +4,7 @@
 	import {
 		evacueeAgeYears,
 		formatPersonName,
+		genderLabelTh,
 		maskNationalId,
 		type Evacuee
 	} from '$lib/features/people';
@@ -86,7 +87,7 @@
 		<div class="min-w-0">
 			<span class="block text-xs font-medium text-muted-foreground">เพศ</span>
 			<span class="mt-0.5 block text-sm font-semibold text-slate-800 dark:text-slate-200">
-				{evacuee.gender === 'male' ? 'ชาย' : evacuee.gender === 'female' ? 'หญิง' : 'อื่นๆ'}
+				{genderLabelTh(evacuee.gender)}
 			</span>
 		</div>
 		<div class="min-w-0">
