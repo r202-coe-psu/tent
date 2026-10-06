@@ -171,7 +171,10 @@ test.describe('face check — walk-in registration', () => {
 		await agree(page).click();
 
 		await expect(page.getByTestId('kiosk-face-message')).toContainText('ลองอีกครั้ง');
-		await expect(page.getByRole('heading', { name: 'ลงทะเบียนสำเร็จ' })).toBeVisible();
+		// Two more previews, a second burst and the match screen come first: slower than the default.
+		await expect(page.getByRole('heading', { name: 'ลงทะเบียนสำเร็จ' })).toBeVisible({
+			timeout: 15_000
+		});
 		expect(mock.calls.filter((call) => call === 'face/verify')).toHaveLength(2);
 	});
 

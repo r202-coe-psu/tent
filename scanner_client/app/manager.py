@@ -399,8 +399,12 @@ class ScannerClientManager:
         parts = urllib.parse.urlsplit(self.tent_base_url)
         try:
             await context.grant_permissions(["camera"], origin=f"{parts.scheme}://{parts.netloc}")
-        except Exception:
-            logger.warning("Could not grant the camera permission; the face check may wait for a prompt")
+        except Exception as error:
+            logger.warning(
+                "Could not grant the camera permission; the face check may wait for a prompt (%s: %s)",
+                type(error).__name__,
+                error,
+            )
 
     async def _read_chip_photo(self) -> Optional[bytes]:
         """Read the chip photo from the inserted card for a check-in face check."""
