@@ -90,6 +90,7 @@
 <div class="space-y-4 pb-20">
 	<StationCompletionSummary
 		title="ลงทะเบียนสำเร็จ"
+		titleId="family-batch-print-heading"
 		subtitle={`พิมพ์บัตรด้านล่างทีละใบ${showHandover ? ' (Person QR และ Handover Slip ของทุกคน)' : ' (Person QR ของทุกคน)'} แล้วส่งต่อไปขั้นถัดไป`}
 		{facts}
 		actions={nextActions}
