@@ -219,7 +219,7 @@
 			first_name: ev.first_name,
 			last_name: ev.last_name,
 			nickname: ev.nickname,
-			gender: ev.gender,
+			gender: ev.gender ?? undefined,
 			phone: ev.phone,
 			person_id: ev.person_id,
 			birth_year: ev.birth_year,

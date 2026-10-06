@@ -9,6 +9,7 @@
 	import {
 		evacueeAgeYears,
 		formatPersonName,
+		genderLabelTh,
 		maskNationalId,
 		zoneLabel,
 		type Evacuee,
@@ -67,9 +68,7 @@
 	const countryName = $derived(
 		COUNTRIES.find((c) => c.value === evacuee.country)?.label ?? evacuee.country
 	);
-	const genderLabel = $derived(
-		evacuee.gender === 'male' ? 'ชาย' : evacuee.gender === 'female' ? 'หญิง' : 'อื่นๆ'
-	);
+	const genderLabel = $derived(genderLabelTh(evacuee.gender));
 	const hasIllnessAlert = $derived(
 		(medical !== null && (medical.conditions.length > 0 || !!medical.notes)) ||
 			(screening !== null && screening.symptoms.length > 0) ||

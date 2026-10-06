@@ -596,6 +596,19 @@ def test_aggregate_occupancy_gender_split():
     assert breakdown["female"] == 1
 
 
+def test_aggregate_occupancy_null_gender_counts_in_total_only():
+    """schema_v 12 (CR-154): partner bookings may carry gender=None."""
+    total, breakdown = aggregate_occupancy(
+        [
+            _active_evacuee(_id="e1", gender=None),
+            _active_evacuee(_id="e2", gender="female"),
+        ]
+    )
+    assert total == 2
+    assert breakdown["male"] == 0
+    assert breakdown["female"] == 1
+
+
 def test_aggregate_occupancy_age_buckets():
     total, breakdown = aggregate_occupancy(
         [

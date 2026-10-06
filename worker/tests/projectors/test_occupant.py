@@ -126,6 +126,21 @@ def test_project_shelter_occupant_unknown_without_age_or_birth_year():
     assert payload["age_range"] == "unknown"
 
 
+def test_project_shelter_occupant_null_gender():
+    """schema_v 12 (CR-154): gender=None passes through unchanged."""
+    doc = {
+        "_id": "evacuee:05",
+        "type": "evacuee",
+        "first_name": "สมชาย",
+        "last_name": "ใจดี",
+        "gender": None,
+        "current_stay": {"status": "active", "since": "2026-08-10T18:40:00Z"},
+    }
+    payload = project_shelter_occupant(doc, "SH001")
+    assert payload is not None
+    assert payload["gender"] is None
+
+
 def test_project_shelter_occupant_skips_inactive():
     doc = {
         "_id": "evacuee:02",

@@ -416,7 +416,8 @@ export function evacueeToUnifiedMember(
 		_rev: evacuee._rev,
 		first_name: evacuee.first_name,
 		last_name: evacuee.last_name ?? '',
-		gender: evacuee.gender,
+		// `null` (partner booking, CR-154) → unset so the form forces a pick.
+		gender: evacuee.gender ?? ('' as UnifiedMemberInput['gender']),
 		birth_year: evacuee.birth_year ?? undefined,
 		age: evacuee.age ?? undefined,
 		person_id: evacuee.person_id ?? { cardType: 'national_id', number: '' },

@@ -51,6 +51,7 @@ export {
 	petSpeciesLabel,
 	groupPetsBySpecies,
 	genderSchema,
+	genderLabelTh,
 	religionSchema,
 	stayStatusSchema,
 	STATUS_LABELS,
