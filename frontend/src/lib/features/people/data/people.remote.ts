@@ -1243,8 +1243,30 @@ export class PeopleRemoteRepository implements PeopleRepository {
 	async submitFamilyReportIn(
 		payload: FamilyReportInPayload
 	): Promise<{ household: Household; members: Evacuee[] }> {
-		const { householdId, household: householdInput, members: memberInputs, ctx } = payload;
-		const existingHousehold = householdId ? await this.getHousehold(householdId) : null;
+		const {
+			householdId,
+			createHousehold = false,
+			household: householdInput,
+			members: memberInputs,
+			ctx,
+			ids
+		} = payload;
+		ids?.rewind();
+		const nextUlid = () => ids?.next() ?? ulid();
+		const requestedHouseholdId = householdId?.trim() ?? '';
+		if (!requestedHouseholdId && !createHousehold) {
+			throw new Error('กรุณาเลือกครัวเรือนเดิมหรือยืนยันสร้างครัวเรือนใหม่');
+		}
+
+		// Reserve the create-path household id before any write. A retry after CouchDB
+		// accepted the first write but the response was lost will find this same doc.
+		const reservedHouseholdUlid = requestedHouseholdId ? null : nextUlid();
+		const targetHouseholdId =
+			requestedHouseholdId || makeDocId('household', reservedHouseholdUlid as string);
+		const existingHousehold = await this.getHousehold(targetHouseholdId);
+		if (requestedHouseholdId && !existingHousehold) {
+			throw new Error('ไม่พบครัวเรือนปลายทาง');
+		}
 		let savedHousehold: Household;
 
 		const normalizedPets: import('../domain/people').PetGroup[] = (householdInput.pets ?? []).map(
@@ -1269,13 +1291,18 @@ export class PeopleRemoteRepository implements PeopleRepository {
 
 		const docsToWrite: Array<{ _id: string; _rev?: string }> = [];
 
+		const plannedMemberIds = memberInputs.map((member) =>
+			member._id ? member._id : makeDocId('evacuee', nextUlid())
+		);
+
 		if (!existingHousehold) {
 			const headName = formatPersonName(
 				(memberInputs[0] as unknown as Evacuee) ?? { first_name: 'ผู้ประสบภัย', last_name: '' }
 			);
 			const label = autoHouseholdLabel(headName);
-			const householdUlid = ulid();
-			const headId = memberInputs[0]?._id ?? makeDocId('evacuee', ulid());
+			const householdUlid = reservedHouseholdUlid as string;
+			const headId = plannedMemberIds[0];
+			if (!headId) throw new Error('ต้องมีสมาชิกอย่างน้อย 1 คน');
 			savedHousehold = buildHousehold(
 				{
 					label,
@@ -1336,7 +1363,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		const allSavedMembers: Evacuee[] = [];
 		const affectedOldHouseholdIds = new Set<string>();
 
-		for (const m of memberInputs) {
+		for (const [memberIndex, m] of memberInputs.entries()) {
 			const willReportIn = Boolean(m.reporting_in);
 			if (m._id) {
 				const existingEvacuee = await this.repo.get<Evacuee>(m._id);
@@ -1414,7 +1441,9 @@ export class PeopleRemoteRepository implements PeopleRepository {
 					reportedInMembers.push(updatedEvacuee);
 				}
 			} else {
-				const newMemberUlid = ulid();
+				const plannedMemberId = plannedMemberIds[memberIndex];
+				if (!plannedMemberId) throw new Error('ไม่สามารถสร้างรหัสสมาชิกได้');
+				const newMemberUlid = plannedMemberId.replace(/^evacuee:/, '');
 				const newEvacuee = buildEvacuee(
 					{
 						...m,
@@ -1446,7 +1475,8 @@ export class PeopleRemoteRepository implements PeopleRepository {
 								notes: m.medical_note || '',
 								track: 'normal' as const
 							},
-							ctx
+							ctx,
+							nextUlid()
 						)
 					);
 				}

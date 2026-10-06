@@ -11,6 +11,7 @@
 	import * as Card from '$lib/components/ui/card';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { UlidReservation } from '$lib/db/ulid-reservation';
 	import {
 		FamilyBatchPrint,
 		RegistrationSaveErrorAlert,
@@ -68,6 +69,8 @@
 	let saveError = $state<SaveFailureReport | null>(null);
 	let isDirty = $state(false);
 	let isNavigatingAfterSave = $state(false);
+	let reportInReservationKey = $state('');
+	let reportInIds = $state<UlidReservation | null>(null);
 
 	beforeNavigate((nav) => {
 		if (isNavigatingAfterSave || completed) return;
@@ -100,11 +103,27 @@
 		saveError = null;
 
 		try {
-			const result = await submitReportIn.mutateAsync({
-				householdId: evacuee?.household_id ?? household?._id ?? '',
+			const members = meta?.allMembers ?? (input.members as UnifiedMemberWithMeta[]);
+			const targetHouseholdId =
+				evacuee?.household_id || household?._id || input.join_household_id || '';
+			const createHousehold = !targetHouseholdId;
+			const reservationKey = JSON.stringify({
+				householdId: targetHouseholdId,
+				createHousehold,
 				household: input.household,
-				members: meta?.allMembers ?? (input.members as UnifiedMemberWithMeta[]),
-				ctx
+				members
+			});
+			if (!reportInIds || reportInReservationKey !== reservationKey) {
+				reportInReservationKey = reservationKey;
+				reportInIds = new UlidReservation();
+			}
+			const result = await submitReportIn.mutateAsync({
+				householdId: targetHouseholdId,
+				createHousehold,
+				household: input.household,
+				members,
+				ctx,
+				ids: reportInIds
 			});
 			saveError = null;
 			isDirty = false;
@@ -132,6 +151,7 @@
 	<UnifiedRegistrationForm
 		mode="report-in"
 		channel="onsite"
+		allowHouseholdJoin={!evacuee?.household_id}
 		includeVehiclesAssets={true}
 		shelterCode={getShelterCode()}
 		{initialHousehold}

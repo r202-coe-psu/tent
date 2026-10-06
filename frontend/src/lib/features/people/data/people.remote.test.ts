@@ -29,6 +29,9 @@ import type { EvacueeInput, Medical } from '../domain/people';
 
 const ctx = { shelterCode: 'SH001', createdBy: 'tester' };
 
+const isStoredDoc = (doc: unknown): doc is { _id: string; type: string } =>
+	Boolean(doc && typeof doc === 'object');
+
 function evInput(over: Partial<EvacueeInput> = {}): EvacueeInput {
 	return {
 		first_name: 'Somchai',
@@ -1916,6 +1919,63 @@ describe('submitFamilyReportIn', () => {
 	beforeEach(() => {
 		memoryRepo = createInMemoryRepository();
 		repo = new PeopleRemoteRepository('shelter_sh001');
+	});
+
+	it('rejects an empty household target unless the caller explicitly opts into creation', async () => {
+		await expect(
+			repo.submitFamilyReportIn({
+				householdId: '',
+				household: {
+					housing_type: 'owned_house',
+					address_no: '1',
+					subdistrict: 'ในเมือง',
+					district: 'เมือง',
+					province: 'เชียงใหม่',
+					pets: [],
+					vehicles: [],
+					assets: null
+				},
+				members: [{ ...evInput(), reporting_in: true }],
+				ctx
+			})
+		).rejects.toThrow('กรุณาเลือกครัวเรือนเดิมหรือยืนยันสร้างครัวเรือนใหม่');
+	});
+
+	it('reuses the reserved household and member ids when an explicit create report-in is retried', async () => {
+		const ids = new UlidReservation();
+		const payload = {
+			householdId: '',
+			createHousehold: true,
+			household: {
+				housing_type: 'owned_house' as const,
+				address_no: '2',
+				subdistrict: 'ในเมือง',
+				district: 'เมือง',
+				province: 'เชียงใหม่',
+				pets: [],
+				vehicles: [],
+				assets: null
+			},
+			members: [
+				{
+					...evInput(),
+					first_name: 'ครอบครัวซ้ำ',
+					reporting_in: true,
+					medical_note: 'เบาหวาน'
+				}
+			],
+			ctx,
+			ids
+		};
+
+		const first = await repo.submitFamilyReportIn(payload);
+		const retried = await repo.submitFamilyReportIn(payload);
+
+		expect(retried.household._id).toBe(first.household._id);
+		expect(retried.members[0]?._id).toBe(first.members[0]?._id);
+		expect(await memoryRepo.allByType('household', isStoredDoc)).toHaveLength(1);
+		expect(await memoryRepo.allByType('evacuee', isStoredDoc)).toHaveLength(1);
+		expect(await memoryRepo.allByType('medical', isStoredDoc)).toHaveLength(1);
 	});
 
 	it('updates household, updates member details, and promotes checked members to arriving', async () => {

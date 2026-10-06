@@ -98,6 +98,7 @@
 		stickyTopOffset,
 		includeVehiclesAssets,
 		enableUnassignedPhoto = false,
+		allowHouseholdJoin = false,
 		shelterCode = '',
 		shelterName = '',
 		initialThaidProfile = null,
@@ -124,6 +125,8 @@
 		stickyTopOffset?: string;
 		includeVehiclesAssets?: boolean;
 		enableUnassignedPhoto?: boolean;
+		/** Report-in flows with no household must explicitly join or create. */
+		allowHouseholdJoin?: boolean;
 		shelterCode?: string;
 		shelterName?: string;
 		initialThaidProfile?: ThaiDAutofillProfile | null;
@@ -260,14 +263,18 @@
 	/** Stay false until GET /api/public/v1/thaid/status confirms ON (public channel only). */
 	let thaidEnabled = $state(false);
 
-	const enableResidenceJoin = $derived(mode === 'create');
+	const enableResidenceJoin = $derived(mode === 'create' || allowHouseholdJoin);
+	let householdDecision = $state<'join' | 'create' | null>(null);
+	$effect(() => {
+		if (!allowHouseholdJoin && householdDecision === null) householdDecision = 'create';
+	});
 	/** Same as `useHouseholds`, but `enabled` only for onsite create (no Couch fetch on public). */
 	const householdsQuery = safeQuery(
 		() =>
 			createQuery(() => ({
 				queryKey: peopleKeys.households(),
 				queryFn: () => peopleRepository().listHouseholds(),
-				enabled: channel === 'onsite' && mode === 'create'
+				enabled: channel === 'onsite' && enableResidenceJoin
 			})),
 		{
 			data: [],
@@ -664,6 +671,7 @@
 		joinMatchToken = null;
 		joinSelectedSummary = null;
 		selectedMatchChip = null;
+		if (allowHouseholdJoin) householdDecision = null;
 	}
 
 	$effect(() => {
@@ -676,6 +684,7 @@
 		joinHouseholdId = suggestion._id;
 		joinMatchToken = null;
 		joinSelectedSummary = suggestion.label?.trim() || formatResidenceSummary(suggestion);
+		if (allowHouseholdJoin) householdDecision = 'join';
 		markDirty();
 	}
 
@@ -786,6 +795,13 @@
 
 	function continueCreateDespiteSuggest() {
 		clearJoinSelection();
+		if (allowHouseholdJoin) householdDecision = 'create';
+		markDirty();
+	}
+
+	function chooseHouseholdJoin() {
+		householdDecision = null;
+		clearJoinSelection();
 		markDirty();
 	}
 
@@ -889,13 +905,20 @@
 						? { description: assetDescription.trim(), image_url: null }
 						: null
 			},
-			...(mode === 'create'
+			...(enableResidenceJoin
 				? {
 						join_household_id: joinHouseholdId || undefined,
 						join_match_token: joinMatchToken || undefined
 					}
 				: {})
 		};
+
+		if (allowHouseholdJoin && !hasJoinSelection && householdDecision !== 'create') {
+			memberFieldErrors = {};
+			householdFieldErrors = {};
+			await revealValidation('กรุณาเลือกครอบครัวเดิม หรือยืนยันสร้างครอบครัวใหม่', [], 'address');
+			return;
+		}
 
 		const result = unifiedRegistrationInputSchema.safeParse(payload);
 		if (!result.success) {
@@ -1399,6 +1422,43 @@
 								? 'ไม่พบครอบครัวที่ตรงกับเบอร์โทรศัพท์นี้ — สามารถกรอกข้อมูลเพื่อลงทะเบียนครอบครัวใหม่ได้'
 								: 'ไม่พบครอบครัวที่อยู่ตรงกัน — จะสร้างครอบครัวใหม่'}
 						</p>
+					{/if}
+
+					{#if allowHouseholdJoin && !hasJoinSelection}
+						<div
+							class="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-300/60 bg-amber-50/60 p-3"
+						>
+							<div class="min-w-0 text-xs">
+								<p class="font-semibold text-foreground">
+									{householdDecision === 'create'
+										? 'ยืนยันสร้างครอบครัวใหม่สำหรับการรายงานตัวครั้งนี้'
+										: 'ต้องเลือกครอบครัวปลายทางก่อนบันทึก'}
+								</p>
+								<p class="text-muted-foreground">
+									เลือก “เข้าร่วม” จากผลค้นหา หรือยืนยันว่าจะสร้าง household ใหม่
+								</p>
+							</div>
+							{#if householdDecision === 'create'}
+								<Button
+									type="button"
+									size="sm"
+									variant="outline"
+									disabled={fieldsLocked}
+									onclick={chooseHouseholdJoin}
+								>
+									กลับไปเลือกครอบครัวเดิม
+								</Button>
+							{:else}
+								<Button
+									type="button"
+									size="sm"
+									disabled={fieldsLocked}
+									onclick={continueCreateDespiteSuggest}
+								>
+									ยืนยันสร้างครอบครัวใหม่
+								</Button>
+							{/if}
+						</div>
 					{/if}
 				{/if}
 			</UnifiedRegistrationSection>
