@@ -20,11 +20,13 @@ _bearer = HTTPBearer(auto_error=False)
 @dataclass(frozen=True)
 class ThirdPartyClaims:
     client_id: str
-    module_name: str
+    module_name: str | None
     scopes: list[str]
 
 
-def mint_access_token(client_id: str, module_name: str, scopes: list[str]) -> tuple[str, int]:
+def mint_access_token(
+    client_id: str, module_name: str | None, scopes: list[str]
+) -> tuple[str, int]:
     """Mint a scoped HS256 JWT (ADR 0002: 3,600s lifetime, scopes embedded from the DB)."""
     now = datetime.now(UTC)
     expires_in = settings.THIRDPARTY_JWT_EXPIRE_SECONDS
@@ -68,7 +70,7 @@ async def verify_thirdparty_token(
     scope = payload.get("scope", "")
     return ThirdPartyClaims(
         client_id=payload.get("sub", ""),
-        module_name=payload.get("module_name", ""),
+        module_name=payload.get("module_name") or None,
         scopes=scope.split() if scope else [],
     )
 

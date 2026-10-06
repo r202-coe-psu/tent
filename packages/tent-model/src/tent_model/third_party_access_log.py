@@ -21,7 +21,7 @@ class ThirdPartyAccessLog(Document):
 
     id: str = Field(alias="_id")
     client_id: str
-    module_name: str
+    module_name: str | None = None  # None when the client has no module (CR-154 FR-62)
     endpoint: str
     location_code: str
     purpose: str

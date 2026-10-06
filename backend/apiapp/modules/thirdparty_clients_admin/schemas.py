@@ -35,7 +35,8 @@ class ThirdPartyClientCreateRequest(BaseModel):
 
     name: str = Field(min_length=1, max_length=NAME_MAX_LENGTH)
     description: str | None = Field(default=None, max_length=DESCRIPTION_MAX_LENGTH)
-    module_name: str = Field(min_length=1)
+    # Optional — a module only presets scopes in the admin form (CR-154 FR-62).
+    module_name: str | None = None
     allowed_scopes: list[str] = Field(min_length=1)
 
     @field_validator("name")
@@ -55,7 +56,10 @@ class ThirdPartyClientCreateRequest(BaseModel):
 
     @field_validator("module_name")
     @classmethod
-    def _module_must_be_known(cls, value: str) -> str:
+    def _module_must_be_known(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        value = value.strip()
         if value not in PARTNER_MODULES:
             raise ValueError(f"module_name must be one of: {', '.join(PARTNER_MODULES)}")
         return value
@@ -84,7 +88,7 @@ class ThirdPartyClientPublic(BaseModel):
     client_id: str
     name: str | None
     description: str | None
-    module_name: str
+    module_name: str | None
     allowed_scopes: list[str]
     is_active: bool
     deleted_at: datetime | None

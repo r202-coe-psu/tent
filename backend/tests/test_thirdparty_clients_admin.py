@@ -242,6 +242,23 @@ async def test_create_m2_client_with_booking_and_residency_scopes(
     assert {"booking-write", "residency-read"} <= set(created.allowed_scopes)
 
 
+async def test_create_without_module_name(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """CR-154 FR-62: module is optional — omitted or blank is stored as None."""
+    for name, extra in (("no module", {}), ("blank module", {"module_name": "  "})):
+        response = await client.post(
+            "/v1/admin/thirdparty-clients",
+            headers=auth_headers,
+            json={"name": name, "allowed_scopes": ["location-read"], **extra},
+        )
+        assert response.status_code == 201
+        assert response.json()["module_name"] is None
+        created = await ThirdPartyClient.get(response.json()["id"])
+        assert created is not None
+        assert created.module_name is None
+
+
 async def test_create_rejects_unknown_module_name(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:

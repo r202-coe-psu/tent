@@ -67,7 +67,8 @@ export interface ThirdPartyClient {
 	/** `null` only on clients created before the field existed. */
 	name: string | null;
 	description: string | null;
-	module_name: string;
+	/** `null` when created without a module — a module only presets scopes (CR-154 FR-62). */
+	module_name: string | null;
 	allowed_scopes: string[];
 	is_active: boolean;
 	/** Soft-delete timestamp — the list endpoint never returns a row once this is set. */
@@ -98,7 +99,12 @@ export const createThirdPartyClientSchema = z.object({
 		.transform((value) => (value === '' ? null : value))
 		.nullable()
 		.optional(),
-	module_name: z.enum(PARTNER_MODULES, { error: 'Select a module' }),
+	// Optional — picking a module only presets scopes (CR-154 FR-62).
+	module_name: z
+		.union([z.enum(PARTNER_MODULES), z.literal('')])
+		.transform((value) => (value === '' ? null : value))
+		.nullable()
+		.optional(),
 	allowed_scopes: z.array(z.enum(GRANTABLE_SCOPES)).min(1, 'Select at least one scope')
 });
 
@@ -122,8 +128,9 @@ export function isPartnerModule(value: string): value is PartnerModule {
 	return (PARTNER_MODULES as readonly string[]).includes(value);
 }
 
-/** Module label for a stored `module_name` — unknown values render as-is. */
-export function partnerModuleLabel(moduleName: string): string {
+/** Module label for a stored `module_name` — unknown values render as-is, none as ไม่ระบุ. */
+export function partnerModuleLabel(moduleName: string | null | undefined): string {
+	if (!moduleName) return 'ไม่ระบุ';
 	return isPartnerModule(moduleName) ? PARTNER_MODULE_LABEL[moduleName] : moduleName;
 }
 

@@ -92,7 +92,7 @@ class ThirdPartyClientsAdminUseCase:
             secret_issued_at=now,
             name=name,
             description=payload.description,
-            module_name=payload.module_name.strip(),
+            module_name=payload.module_name,
             allowed_scopes=payload.allowed_scopes,
             is_active=True,
             created_at=now,
