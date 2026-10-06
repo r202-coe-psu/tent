@@ -1,12 +1,16 @@
-"""Tests for the partner booking inbound loop (CR-154 C6, FR-50..54 / FR-62)."""
+"""Tests for the partner booking inbound loop (CR-154 C6, FR-50..54 / FR-62).
+
+State tests run against the real test Mongo (``db`` fixture) because the point of the
+worker's writes is that they are conditional on the row's current state — the API
+mutates the same rows concurrently (EXT-009 cancel).
+"""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
+from tent_model import ExternalBooking
 
 from worker.inbound.external_bookings import (
     HOLD_STATUSES,
@@ -18,42 +22,61 @@ from worker.inbound.external_bookings import (
 )
 
 CID = "1103700012345"
+PHONE = "0812345678"
 DB = "shelter_sh001"
+BOOKING_ID = "BK-01TEST"
+PII = ("cid", "first_name", "last_name", "phone")
 
 
-def _booking(**overrides):
-    booking = SimpleNamespace(
-        id="BK-01TEST",
-        booking_id="BK-01TEST",
-        client_id="client-abc",
-        module_name="M2",
-        shelter_code="SH001",
-        cid=CID,
-        cid_hash="hash",
-        first_name="สมชาย",
-        last_name="ใจดี",
-        phone="0812345678",
-        state="pending",
-        cancel_requested=False,
-        cancel_reason=None,
-        reject_reason=None,
-        evacuee_id=None,
-        household_id=None,
-        created_at=datetime(2026, 10, 6, tzinfo=UTC),
-        updated_at=datetime(2026, 10, 6, tzinfo=UTC),
-        save=AsyncMock(),
-    )
-    for key, value in overrides.items():
-        setattr(booking, key, value)
-
-    def clear_pii():
-        booking.cid = None
-        booking.first_name = None
-        booking.last_name = None
-        booking.phone = None
-
-    booking.clear_pii = clear_pii
+async def _insert(**overrides) -> ExternalBooking:
+    fields = {
+        "id": BOOKING_ID,
+        "booking_id": BOOKING_ID,
+        "client_id": "client-abc",
+        "module_name": "M2",
+        "shelter_code": "SH001",
+        "cid": CID,
+        "cid_hash": "hash",
+        "first_name": "สมชาย",
+        "last_name": "ใจดี",
+        "phone": PHONE,
+        "state": "pending",
+        "created_at": datetime(2026, 10, 6, tzinfo=UTC),
+        "updated_at": datetime(2026, 10, 6, tzinfo=UTC),
+    }
+    fields.update(overrides)
+    booking = ExternalBooking(**fields)
+    await booking.insert()
     return booking
+
+
+async def _row() -> dict:
+    row = await ExternalBooking.get_pymongo_collection().find_one({"_id": BOOKING_ID})
+    assert row is not None
+    return row
+
+
+async def _api_update(guard: dict, changes: dict) -> None:
+    """Simulate the API's guarded EXT-009 write on the raw collection."""
+    result = await ExternalBooking.get_pymongo_collection().update_one(
+        {"_id": BOOKING_ID, **guard}, {"$set": changes}
+    )
+    assert result.matched_count == 1
+
+
+async def _api_cancel_pending() -> None:
+    await _api_update(
+        {"state": "pending"},
+        {
+            "state": "cancelled",
+            "cid": None,
+            "first_name": None,
+            "last_name": None,
+            "phone": None,
+            "cancel_reason": "partner cancel",
+            "updated_at": datetime.now(UTC),
+        },
+    )
 
 
 def _couch(*, exists=True, find=None, bulk=None, doc=None):
@@ -73,11 +96,9 @@ def _couch(*, exists=True, find=None, bulk=None, doc=None):
     return couch
 
 
-def _assert_pii_cleared(booking):
-    assert booking.cid is None
-    assert booking.first_name is None
-    assert booking.last_name is None
-    assert booking.phone is None
+def _assert_pii_cleared(row: dict) -> None:
+    for key in PII:
+        assert row[key] is None, key
 
 
 # ---------------------------------------------------------------- pure builders
@@ -118,7 +139,7 @@ def test_build_evacuee_doc_shape():
         cid=CID,
         first_name="สมชาย",
         last_name=None,
-        phone="0812345678",
+        phone=PHONE,
         created_by="partner:M2",
         now="2026-10-06T00:00:00Z",
     )
@@ -144,27 +165,27 @@ def test_build_evacuee_doc_shape():
 # ---------------------------------------------------------------- pending → written
 
 
-@pytest.mark.asyncio
-async def test_pending_booking_written_and_pii_cleared():
-    booking = _booking()
+async def test_pending_booking_written_and_pii_cleared(db):
+    booking = await _insert()
     couch = _couch()
 
     assert await _persist_booking(couch, booking) is True
 
-    assert booking.evacuee_id.startswith("evacuee:")
-    assert booking.household_id.startswith("household:")
+    row = await _row()
+    assert row["evacuee_id"].startswith("evacuee:")
+    assert row["household_id"].startswith("household:")
     selector = couch.find.await_args.args[1]
     assert selector["person_id.number"] == CID
     assert selector["current_stay.status"] == {"$in": list(HOLD_STATUSES)}
-    assert selector["_id"] == {"$ne": booking.evacuee_id}
+    assert selector["_id"] == {"$ne": row["evacuee_id"]}
 
-    db, docs = couch.bulk_docs.await_args.args
-    assert db == DB
+    db_name, docs = couch.bulk_docs.await_args.args
+    assert db_name == DB
     household, evacuee = docs
     assert household["type"] == "household"
-    assert household["_id"] == booking.household_id
-    assert household["head_evacuee_id"] == booking.evacuee_id
-    assert evacuee["_id"] == booking.evacuee_id
+    assert household["_id"] == row["household_id"]
+    assert household["head_evacuee_id"] == row["evacuee_id"]
+    assert evacuee["_id"] == row["evacuee_id"]
     assert evacuee["gender"] is None
     assert evacuee["registered_via"] == "api"
     assert evacuee["schema_v"] == 12
@@ -172,15 +193,15 @@ async def test_pending_booking_written_and_pii_cleared():
     assert evacuee["created_by"] == "partner:M2"
     assert household["created_by"] == "partner:M2"
 
+    assert row["state"] == "written"
+    assert row["cancel_requested"] is False
+    _assert_pii_cleared(row)
     assert booking.state == "written"
-    _assert_pii_cleared(booking)
-    # Once to reserve ids before Couch, once after the write.
-    assert booking.save.await_count == 2
+    assert booking.cid is None
 
 
-@pytest.mark.asyncio
-async def test_no_module_falls_back_to_client_id():
-    booking = _booking(module_name=None)
+async def test_no_module_falls_back_to_client_id(db):
+    booking = await _insert(module_name=None)
     couch = _couch()
 
     assert await _persist_booking(couch, booking) is True
@@ -188,44 +209,97 @@ async def test_no_module_falls_back_to_client_id():
     assert {d["created_by"] for d in docs} == {"partner:client-abc"}
 
 
-@pytest.mark.asyncio
-async def test_retry_reuses_reserved_ids():
-    booking = _booking(evacuee_id="evacuee:E1", household_id="household:H1")
+async def test_retry_reuses_reserved_ids(db):
+    booking = await _insert(evacuee_id="evacuee:E1", household_id="household:H1")
     couch = _couch()
 
     assert await _persist_booking(couch, booking) is True
     _, docs = couch.bulk_docs.await_args.args
     assert [d["_id"] for d in docs] == ["household:H1", "evacuee:E1"]
-    booking.save.assert_awaited_once()
+    assert (await _row())["state"] == "written"
 
 
-@pytest.mark.asyncio
-async def test_missing_database_retries_later():
-    booking = _booking()
+async def test_missing_database_retries_later(db):
+    booking = await _insert()
     couch = _couch(exists=False)
 
     assert await _persist_booking(couch, booking) is False
-    assert booking.state == "pending"
-    assert booking.cid == CID
+    row = await _row()
+    assert row["state"] == "pending"
+    assert row["cid"] == CID
+    assert row["evacuee_id"] is None
     couch.bulk_docs.assert_not_awaited()
-    booking.save.assert_not_awaited()
 
 
-@pytest.mark.asyncio
-async def test_duplicate_rejects_and_clears_pii():
-    booking = _booking()
+async def test_cancelled_before_reserve_never_touches_couch(db):
+    booking = await _insert()  # poll read it as pending...
+    await _api_cancel_pending()  # ...then the partner cancelled
+    couch = _couch()
+
+    assert await _persist_booking(couch, booking) is True
+
+    couch.find.assert_not_awaited()
+    couch.bulk_docs.assert_not_awaited()
+    row = await _row()
+    assert row["state"] == "cancelled"
+    assert row["cancel_reason"] == "partner cancel"
+    assert row["evacuee_id"] is None
+    _assert_pii_cleared(row)
+
+
+async def test_cancelled_during_write_is_routed_to_cancel(db):
+    booking = await _insert()
+    couch = _couch()
+
+    async def bulk_then_api_cancels(*_args):
+        await _api_cancel_pending()
+        return [
+            {"ok": True, "id": "h", "rev": "1-a"},
+            {"ok": True, "id": "e", "rev": "1-b"},
+        ]
+
+    couch.bulk_docs = AsyncMock(side_effect=bulk_then_api_cancels)
+
+    assert await _persist_booking(couch, booking) is True
+
+    row = await _row()
+    assert row["state"] == "written"
+    assert row["cancel_requested"] is True
+    assert row["cancel_reason"] == "partner cancel"
+    assert row["evacuee_id"].startswith("evacuee:")
+    _assert_pii_cleared(row)
+
+
+async def test_duplicate_rejects_and_clears_pii(db):
+    booking = await _insert()
     couch = _couch(find=[{"_id": "evacuee:OTHER"}])
 
     assert await _persist_booking(couch, booking) is True
-    assert booking.state == "rejected"
-    assert booking.reject_reason == "duplicate"
-    _assert_pii_cleared(booking)
+    row = await _row()
+    assert row["state"] == "rejected"
+    assert row["reject_reason"] == "duplicate"
+    _assert_pii_cleared(row)
     couch.bulk_docs.assert_not_awaited()
 
 
-@pytest.mark.asyncio
-async def test_bulk_conflict_counts_as_written():
-    booking = _booking(evacuee_id="evacuee:E1", household_id="household:H1")
+async def test_duplicate_after_api_cancel_keeps_cancelled(db):
+    booking = await _insert(evacuee_id="evacuee:E1", household_id="household:H1")
+    couch = _couch()
+
+    async def find_then_api_cancels(*_args, **_kwargs):
+        await _api_cancel_pending()
+        return [{"_id": "evacuee:OTHER"}]
+
+    couch.find = AsyncMock(side_effect=find_then_api_cancels)
+
+    assert await _persist_booking(couch, booking) is True
+    row = await _row()
+    assert row["state"] == "cancelled"
+    assert row["reject_reason"] is None
+
+
+async def test_bulk_conflict_counts_as_written(db):
+    booking = await _insert(evacuee_id="evacuee:E1", household_id="household:H1")
     couch = _couch(
         bulk=[
             {
@@ -238,13 +312,13 @@ async def test_bulk_conflict_counts_as_written():
     )
 
     assert await _persist_booking(couch, booking) is True
-    assert booking.state == "written"
-    _assert_pii_cleared(booking)
+    row = await _row()
+    assert row["state"] == "written"
+    _assert_pii_cleared(row)
 
 
-@pytest.mark.asyncio
-async def test_bulk_other_error_keeps_pending(caplog):
-    booking = _booking()
+async def test_bulk_other_error_keeps_pending(db, caplog):
+    booking = await _insert()
     couch = _couch(
         bulk=[
             {"ok": True, "id": "household:H1", "rev": "1-a"},
@@ -253,22 +327,23 @@ async def test_bulk_other_error_keeps_pending(caplog):
     )
 
     assert await _persist_booking(couch, booking) is False
-    assert booking.state == "pending"
-    assert booking.cid == CID
+    row = await _row()
+    assert row["state"] == "pending"
+    assert row["cid"] == CID
     # PII never reaches the logs.
     assert CID not in caplog.text
-    assert "0812345678" not in caplog.text
+    assert PHONE not in caplog.text
 
 
-@pytest.mark.asyncio
-async def test_bulk_exception_keeps_pending():
-    booking = _booking()
+async def test_bulk_exception_keeps_pending(db):
+    booking = await _insert()
     couch = _couch()
     couch.bulk_docs = AsyncMock(side_effect=RuntimeError("boom"))
 
     assert await _persist_booking(couch, booking) is False
-    assert booking.state == "pending"
-    assert booking.cid == CID
+    row = await _row()
+    assert row["state"] == "pending"
+    assert row["cid"] == CID
 
 
 # ---------------------------------------------------------------- cancel
@@ -290,8 +365,8 @@ def _evacuee(status: str) -> dict:
     }
 
 
-def _written_booking():
-    return _booking(
+async def _insert_written() -> ExternalBooking:
+    return await _insert(
         state="written",
         cancel_requested=True,
         cid=None,
@@ -303,9 +378,8 @@ def _written_booking():
     )
 
 
-@pytest.mark.asyncio
-async def test_cancel_pre_registered_evacuee():
-    booking = _written_booking()
+async def test_cancel_pre_registered_evacuee(db):
+    booking = await _insert_written()
     household = {
         "_id": "household:H1",
         "_rev": "1-h",
@@ -331,14 +405,13 @@ async def test_cancel_pre_registered_evacuee():
     household_put = next(p for p in puts if p["_id"] == "household:H1")
     assert household_put["status"] == "cancelled"
 
-    assert booking.state == "cancelled"
-    assert booking.cancel_requested is False
-    booking.save.assert_awaited_once()
+    row = await _row()
+    assert row["state"] == "cancelled"
+    assert row["cancel_requested"] is False
 
 
-@pytest.mark.asyncio
-async def test_cancel_keeps_household_when_other_member_pre_registered():
-    booking = _written_booking()
+async def test_cancel_keeps_household_when_other_member_pre_registered(db):
+    booking = await _insert_written()
     household = {
         "_id": "household:H1",
         "status": "pre_registered",
@@ -356,39 +429,38 @@ async def test_cancel_keeps_household_when_other_member_pre_registered():
     assert await _process_cancel(couch, booking) is True
     ids = [call.args[1]["_id"] for call in couch.put_doc.await_args_list]
     assert "household:H1" not in ids
-    assert booking.state == "cancelled"
+    assert (await _row())["state"] == "cancelled"
 
 
-@pytest.mark.asyncio
-async def test_cancel_active_evacuee_not_cancellable():
-    booking = _written_booking()
+async def test_cancel_active_evacuee_not_cancellable(db):
+    booking = await _insert_written()
     couch = _couch(doc=_evacuee("active"))
 
     assert await _process_cancel(couch, booking) is True
     couch.put_doc.assert_not_awaited()
-    assert booking.state == "written"
-    assert booking.cancel_requested is False
-    assert booking.reject_reason == "not_cancellable"
+    row = await _row()
+    assert row["state"] == "written"
+    assert row["cancel_requested"] is False
+    assert row["reject_reason"] == "not_cancellable"
 
 
-@pytest.mark.asyncio
-async def test_cancel_evacuee_put_failure_retries():
-    booking = _written_booking()
+async def test_cancel_evacuee_put_failure_retries(db):
+    booking = await _insert_written()
     couch = _couch(doc=_evacuee("pre_registered"))
     couch.put_doc = AsyncMock(side_effect=RuntimeError("boom"))
 
     assert await _process_cancel(couch, booking) is False
-    assert booking.state == "written"
-    assert booking.cancel_requested is True
-    booking.save.assert_not_awaited()
+    row = await _row()
+    assert row["state"] == "written"
+    assert row["cancel_requested"] is True
 
 
-@pytest.mark.asyncio
-async def test_cancel_already_cancelled_stay_finishes_booking():
-    booking = _written_booking()
+async def test_cancel_already_cancelled_stay_finishes_booking(db):
+    booking = await _insert_written()
     couch = _couch(doc=_evacuee("cancelled"))
 
     assert await _process_cancel(couch, booking) is True
     couch.put_doc.assert_not_awaited()
-    assert booking.state == "cancelled"
-    assert booking.cancel_requested is False
+    row = await _row()
+    assert row["state"] == "cancelled"
+    assert row["cancel_requested"] is False

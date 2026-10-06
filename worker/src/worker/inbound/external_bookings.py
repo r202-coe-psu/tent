@@ -12,6 +12,10 @@ touches CouchDB (FR-54). This loop:
   household → ``cancelled`` once no member is left ``pre_registered``). Staff cancel
   writes no ``movement`` doc, so neither does this.
 
+The API changes the same rows concurrently (EXT-009), so every Mongo write here is a
+conditional ``update_one`` on the observed state (``_transition``), never a Beanie
+full-document ``save()``.
+
 Never log ``cid`` / ``phone`` / names — booking ids and Couch ids only.
 """
 
@@ -169,11 +173,39 @@ def build_audit_doc(
     }
 
 
-async def _finish(booking: ExternalBooking, **changes: Any) -> None:
+_PII_CLEARED: dict[str, None] = {
+    "cid": None,
+    "first_name": None,
+    "last_name": None,
+    "phone": None,
+}
+
+
+async def _transition(
+    booking: ExternalBooking, guard: dict[str, Any], changes: dict[str, Any]
+) -> bool:
+    """Conditionally ``$set`` ``changes`` on the booking row — never a full replace.
+
+    The API mutates the same rows concurrently (EXT-009 cancel: ``pending`` →
+    ``cancelled`` / ``written`` → ``cancel_requested``), so every worker write is a
+    compare-and-set on the state it observed. Returns False when the guard no longer
+    matches (the row moved under us); the in-memory copy is only updated on success.
+    """
+    now = datetime.now(UTC)
+    result = await ExternalBooking.get_pymongo_collection().update_one(
+        {"_id": booking.id, **guard},
+        {"$set": {**changes, "updated_at": now}},
+    )
+    if result.matched_count == 0:
+        return False
     for key, value in changes.items():
         setattr(booking, key, value)
-    booking.updated_at = datetime.now(UTC)
-    await booking.save()
+    booking.updated_at = now
+    return True
+
+
+_PENDING = {"state": "pending"}
+_CANCEL_DUE = {"state": "written", "cancel_requested": True}
 
 
 async def _persist_booking(couch: CouchClient, booking: ExternalBooking) -> bool:
@@ -193,11 +225,16 @@ async def _persist_booking(couch: CouchClient, booking: ExternalBooking) -> bool
         return False
 
     # Reserve ids before touching CouchDB so a retry re-uses them (conflict = written).
+    # Guarded on `pending`: if the API cancelled the row since the poll read it, stop
+    # here — nothing reaches CouchDB and the cancelled row is not resurrected.
     if not booking.evacuee_id or not booking.household_id:
-        booking.evacuee_id = booking.evacuee_id or f"evacuee:{new_ulid()}"
-        booking.household_id = booking.household_id or f"household:{new_ulid()}"
-        booking.updated_at = datetime.now(UTC)
-        await booking.save()
+        reserved = {
+            "evacuee_id": booking.evacuee_id or f"evacuee:{new_ulid()}",
+            "household_id": booking.household_id or f"household:{new_ulid()}",
+        }
+        if not await _transition(booking, _PENDING, reserved):
+            logger.info("Booking %s left pending before write — skipping", booking.id)
+            return True
 
     try:
         duplicates = await couch.find(
@@ -216,9 +253,13 @@ async def _persist_booking(couch: CouchClient, booking: ExternalBooking) -> bool
         return False
 
     if duplicates:
-        booking.clear_pii()
-        await _finish(booking, state="rejected", reject_reason="duplicate")
-        logger.info("Rejected booking %s as duplicate in %s", booking.id, database)
+        rejected = await _transition(
+            booking,
+            _PENDING,
+            {"state": "rejected", "reject_reason": "duplicate", **_PII_CLEARED},
+        )
+        if rejected:
+            logger.info("Rejected booking %s as duplicate in %s", booking.id, database)
         return True
 
     now = _now_iso()
@@ -262,11 +303,30 @@ async def _persist_booking(couch: CouchClient, booking: ExternalBooking) -> bool
         logger.error("Bulk write row failures for booking %s: %s", booking.id, detail)
         return False
 
-    booking.clear_pii()
-    await _finish(booking, state="written")
-    logger.info(
-        "Wrote booking %s to %s as %s", booking.id, database, booking.evacuee_id
-    )
+    if await _transition(booking, _PENDING, {"state": "written", **_PII_CLEARED}):
+        logger.info(
+            "Wrote booking %s to %s as %s", booking.id, database, booking.evacuee_id
+        )
+        return True
+
+    # The API cancelled the row while we were writing (it already cleared PII and kept
+    # `cancel_reason`). The evacuee now exists in CouchDB, so route the row through the
+    # cancel path: `written` + `cancel_requested` still reads CANCELLED to the partner
+    # (EXT-010) and the next poll cancels the stay.
+    if await _transition(
+        booking, {"state": "cancelled"}, {"state": "written", "cancel_requested": True}
+    ):
+        logger.info(
+            "Booking %s cancelled during write — queued stay cancel for %s",
+            booking.id,
+            booking.evacuee_id,
+        )
+    else:
+        logger.warning(
+            "Booking %s left pending during write; evacuee %s written but row not updated",
+            booking.id,
+            booking.evacuee_id,
+        )
     return True
 
 
@@ -339,7 +399,11 @@ async def _process_cancel(couch: CouchClient, booking: ExternalBooking) -> bool:
 
     status = ((evacuee or {}).get("current_stay") or {}).get("status")
     if evacuee is None or status not in ("pre_registered", "cancelled"):
-        await _finish(booking, cancel_requested=False, reject_reason="not_cancellable")
+        await _transition(
+            booking,
+            _CANCEL_DUE,
+            {"cancel_requested": False, "reject_reason": "not_cancellable"},
+        )
         logger.info("Booking %s not cancellable (stay=%s)", booking.id, status)
         return True
 
@@ -395,7 +459,9 @@ async def _process_cancel(couch: CouchClient, booking: ExternalBooking) -> bool:
 
     # status == "cancelled" here means an earlier attempt (or staff) already cancelled
     # the stay — the booking outcome is the same, so finish it instead of refusing.
-    await _finish(booking, state="cancelled", cancel_requested=False)
+    await _transition(
+        booking, _CANCEL_DUE, {"state": "cancelled", "cancel_requested": False}
+    )
     logger.info("Cancelled booking %s in %s", booking.id, database)
     return True
 
