@@ -5,6 +5,7 @@ import {
 	canScanCheckIn,
 	needsIntakeBeforeStay,
 	createEvacuee,
+	genderLabelTh,
 	createDraftEvacueeFromCard,
 	createMovement,
 	createScreening,
@@ -167,7 +168,7 @@ describe('vulnerable_groups vs special_needs', () => {
 		);
 		expect(e.vulnerable_groups).toEqual(['wheelchair', 'pregnant']);
 		expect(e.special_needs).toEqual(['ใช้ออกซิเจน']);
-		expect(e.schema_v).toBe(11);
+		expect(e.schema_v).toBe(12);
 
 		const bare = createEvacuee(
 			{ first_name: 'A', last_name: 'B', gender: 'other', phone: null },
@@ -240,7 +241,7 @@ describe('Anonymous ID', () => {
 			},
 			ctx
 		);
-		expect(a.schema_v).toBe(11);
+		expect(a.schema_v).toBe(12);
 		expect(a.person_id?.cardType).toBe('anonymous');
 		expect(isAnonymousId(a.person_id?.number ?? '')).toBe(true);
 		expect(b.person_id?.number).not.toBe(a.person_id?.number);
@@ -309,7 +310,7 @@ describe('createEvacuee', () => {
 		);
 		expect(e._id.startsWith('evacuee:')).toBe(true);
 		expect(e.type).toBe('evacuee');
-		expect(e.schema_v).toBe(11);
+		expect(e.schema_v).toBe(12);
 		expect(e.shelter_code).toBe('SH001');
 		expect(e.created_by).toBe('staff1');
 		expect(e.created_at).toBe(e.updated_at);
@@ -333,7 +334,7 @@ describe('createEvacuee', () => {
 			},
 			ctx
 		);
-		expect(e.schema_v).toBe(11);
+		expect(e.schema_v).toBe(12);
 		expect(e.current_stay.status).toBe('arriving');
 	});
 
@@ -409,8 +410,8 @@ describe('createEvacuee', () => {
 					last_name: 'ข',
 					gender: 'male',
 					phone: '0812345678',
-					// `api` is reserved for CR-071 and must not be accepted yet.
-					registered_via: 'api' as never
+					// `api` became valid with CR-154; anything outside the enum is still rejected.
+					registered_via: 'fax' as never
 				},
 				ctx
 			)
@@ -1742,5 +1743,33 @@ describe('scan check-in gate (every person goes through Station 2/3)', () => {
 		expect(needsIntakeBeforeStay(stay('pre_registered'))).toBe(true);
 		expect(needsIntakeBeforeStay(stay('arriving'))).toBe(true);
 		expect(needsIntakeBeforeStay(stay('active'))).toBe(false);
+	});
+});
+
+describe('gender nullable (schema_v 12, CR-154)', () => {
+	it('labels null gender as ไม่ระบุ and known values in Thai', () => {
+		expect(genderLabelTh(null)).toBe('ไม่ระบุ');
+		expect(genderLabelTh(undefined)).toBe('ไม่ระบุ');
+		expect(genderLabelTh('male')).toBe('ชาย');
+		expect(genderLabelTh('female')).toBe('หญิง');
+		expect(genderLabelTh('other')).toBe('อื่นๆ');
+	});
+
+	it('still requires gender on staff/public intake (FR-70)', () => {
+		const base = { first_name: 'A', last_name: 'B', phone: null };
+		expect(evacueeInputSchema.safeParse({ ...base, gender: null }).success).toBe(false);
+		expect(evacueeInputSchema.safeParse(base).success).toBe(false);
+		expect(evacueeInputSchema.safeParse({ ...base, gender: 'female' }).success).toBe(true);
+	});
+
+	it('accepts registered_via api', () => {
+		const parsed = evacueeInputSchema.safeParse({
+			first_name: 'A',
+			last_name: 'B',
+			gender: 'male',
+			phone: null,
+			registered_via: 'api'
+		});
+		expect(parsed.success).toBe(true);
 	});
 });

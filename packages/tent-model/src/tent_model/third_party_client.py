@@ -13,6 +13,9 @@ THIRD_PARTY_SCOPES = (
 	"location-stock-read",
 	"occupancy-read",
 	"occupancy-pii-read",
+	# CR-154 (M2): EXT-008–010 booking writes, EXT-011 per-person residency lookup.
+	"booking-write",
+	"residency-read",
 )
 
 
@@ -35,7 +38,9 @@ class ThirdPartyClient(Document):
 	# before the field existed (schema.md §9.6).
 	name: str | None = None
 	description: str | None = None
-	module_name: str
+	# Partner module (M2/M6/M7) — only a scope preset in the admin form; `None` when the
+	# admin picked scopes without a module (CR-154 FR-62).
+	module_name: str | None = None
 	allowed_scopes: list[str] = Field(default_factory=list)
 	is_active: bool = True
 	# Soft-delete timestamp — set only once `is_active` is False (revoke first). `find_all`

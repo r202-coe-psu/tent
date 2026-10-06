@@ -41,12 +41,15 @@
 		submitLabel?: string;
 		submittingLabel?: string;
 		/** Joining a family: its current members (onsite) — counted with the new ones. */
-		existingMembers?: ReadonlyArray<
-			Pick<
-				UnifiedMemberWithMeta,
-				'first_name' | 'last_name' | 'gender' | 'vulnerable_groups' | 'special_needs'
-			> & { _id?: string }
-		>;
+		existingMembers?: ReadonlyArray<{
+			_id?: string;
+			first_name?: string | null;
+			last_name?: string | null;
+			/** Stored members may have no gender (CR-154). */
+			gender?: string | null;
+			vulnerable_groups?: readonly string[] | null;
+			special_needs?: readonly string[] | null;
+		}>;
 		/** Joining a family: the family's head, who stays the primary contact. */
 		existingHeadName?: string;
 		/** Joining a family whose members can't be listed (public): how many are already in it. */

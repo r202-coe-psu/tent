@@ -137,6 +137,14 @@ export type PersonId = z.infer<typeof personIdSchema>;
 export const genderSchema = z.enum(['male', 'female', 'other']);
 export type Gender = z.infer<typeof genderSchema>;
 
+/** Thai display label; `null` = unknown (partner booking, schema_v 12, CR-154). */
+export function genderLabelTh(gender: Gender | null | undefined): string {
+	if (gender === 'male') return 'ชาย';
+	if (gender === 'female') return 'หญิง';
+	if (gender === 'other') return 'อื่นๆ';
+	return 'ไม่ระบุ';
+}
+
 export const religionSchema = z.enum(['buddhist', 'muslim', 'christian', 'other', 'unknown']);
 export type Religion = z.infer<typeof religionSchema>;
 
@@ -280,7 +288,8 @@ export interface Evacuee extends BaseDoc {
 	type: 'evacuee';
 	first_name: string;
 	last_name: string;
-	gender: Gender;
+	/** `null` = unknown — only partner bookings (`registered_via: api`) write it (schema_v 12, CR-154). */
+	gender: Gender | null;
 	phone: string | null;
 	nickname?: string;
 	birth_year?: number;
@@ -1454,7 +1463,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext, id?: stri
 	const person_id = resolvePersonIdOnCreate(d.person_id);
 	return makeDoc(
 		'evacuee',
-		11, // schema_v 11: religion_other + disability_other_detail (CR-148); 10: anonymous cardType + ANON mint (CR-112); 9: arriving (CR-106); 8: draft/card_snapshot (CR-084); 7 = registered_via `web` (CR-070); 6 = stay cancelled (CR-070); 5 = age (CR-057)
+		12, // schema_v 12: gender nullable + registered_via `api` (CR-154); 11: religion_other + disability_other_detail (CR-148); 10: anonymous cardType + ANON mint (CR-112); 9: arriving (CR-106); 8: draft/card_snapshot (CR-084); 7 = registered_via `web` (CR-070); 6 = stay cancelled (CR-070); 5 = age (CR-057)
 		{
 			first_name: d.first_name,
 			last_name: d.last_name,
