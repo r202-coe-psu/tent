@@ -70,6 +70,7 @@ def create_app() -> FastAPI:
     app = FastAPI(lifespan=lifespan, **settings.fastapi_kwargs)
     app.add_exception_handler(HTTPException, http_error.http_error_handler)
     app.add_exception_handler(RequestValidationError, validation_error.http422_error_handler)
+    app.add_exception_handler(Exception, http_error.unhandled_error_handler)
     init_all_middlewares(app, settings=settings)
     app.router.lifespan_context = lifespan
 

@@ -1,6 +1,6 @@
 """Pure unit tests for external shelter-residency mapping (CR-112)."""
 
-from apiapp.modules.external.residency import map_shelter_residency
+from apiapp.modules.thirdparty_residency.residency import map_shelter_residency
 
 
 def test_checked_in_for_present_statuses():
