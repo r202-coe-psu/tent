@@ -89,7 +89,7 @@ affects:
 **Request** `POST /external/bookings`
 
 ```json
-{ "location_code": "SH014", "cid": "1909800123456", "first_name": "สมชาย", "last_name": "ใจดี", "phone": "0812345678" }
+{ "location_code": "SH014", "cid": "1909800123458", "first_name": "สมชาย", "last_name": "ใจดี", "phone": "0812345678" }
 ```
 
 **Response 201**
@@ -133,7 +133,7 @@ affects:
 
 ### C5 — EXT-011 residency
 
-**Request** `GET /external/persons/shelter-residency?cid=1909800123456&purpose=<str>` (scope `residency-read`)
+**Request** `GET /external/persons/shelter-residency?cid=1909800123458&purpose=<str>` (scope `residency-read`)
 
 **Response 200**
 
