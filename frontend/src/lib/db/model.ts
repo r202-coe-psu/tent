@@ -161,6 +161,7 @@ export const phoneSchema = z
  * `import` = Bulk spreadsheet import.
  * `paper` = Paper-based intake.
  * `app` = Legacy onsite application alias.
+ * `api` = Partner booking (EXT-008) written by the sync worker (CR-154).
  */
 export const registeredViaSchema = z.enum([
 	'kiosk',
@@ -169,7 +170,8 @@ export const registeredViaSchema = z.enum([
 	'app',
 	'web',
 	'import',
-	'paper'
+	'paper',
+	'api'
 ]);
 
 /**
