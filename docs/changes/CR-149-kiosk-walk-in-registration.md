@@ -10,7 +10,7 @@ decided_by: Jakee Indapanya (GitHub net-lynx), Project Owner — อนุมั
 decision_date: 2026-10-03
 layer: volatile
 amends:
-  - docs/changes/draft-kiosk-pre-registration-check-in.md §3 (แถว "ลงทะเบียน walk-in ที่ kiosk" ย้ายจากนอกขอบเขต → ในขอบเขต เฉพาะช่องทางบัตร) · §1 ข้อ 3 (PDPA — อ่านเฉพาะเลข 13 หลัก → อ่านเต็มหลังได้ consent)
+  - docs/changes/CR-151-kiosk-pre-registration-check-in.md §3 (แถว "ลงทะเบียน walk-in ที่ kiosk" ย้ายจากนอกขอบเขต → ในขอบเขต เฉพาะช่องทางบัตร) · §1 ข้อ 3 (PDPA — อ่านเฉพาะเลข 13 หลัก → อ่านเต็มหลังได้ consent)
   - docs/features/smart-card-registration-spec.md FR-CARD-01..04 (สร้าง evacuee จากบัตรกลับมา แต่ผ่านปุ่ม + consent และใช้สถานะใหม่)
 affects:
   - docs/data/schema.md §1.1 evacuee — `current_stay.status` += `kiosk_registered` · occupancy metrics table · household status derive

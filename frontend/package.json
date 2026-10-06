@@ -19,6 +19,7 @@
 		"test:e2e": "vite build --mode test && playwright test",
 		"test:e2e:distribution": "vite build --mode test && playwright test e2e/distribution",
 		"test:e2e:staging": "playwright test --config=playwright.staging.config.ts",
+		"test:e2e:public": "playwright test --config=playwright.public.config.ts",
 		"test:e2e:donations": "vite build --mode test && playwright test e2e/donation.test.ts e2e/stock-donations.test.ts",
 		"openapi": "openapi-typescript",
 		"openapi:fetch": "mkdir -p src/lib/api-specs && curl -f http://localhost:9000/openapi.json -o src/lib/api-specs/fastapi.json",
