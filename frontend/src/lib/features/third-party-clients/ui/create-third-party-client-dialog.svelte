@@ -17,6 +17,7 @@
 		PARTNER_MODULE_LABEL,
 		SCOPE_LABEL,
 		SENSITIVE_SCOPES,
+		SENSITIVE_SCOPE_WARNING,
 		createThirdPartyClientSchema,
 		isPartnerModule,
 		type CreatedThirdPartyClient,
@@ -37,6 +38,8 @@
 
 	let name = $state('');
 	let description = $state('');
+	// Module is optional (CR-154 FR-62) — it only presets scopes.
+	const NO_MODULE = 'none';
 	let moduleName = $state<PartnerModule | ''>('');
 	let selectedScopes = $state<GrantableScope[]>([]);
 
@@ -53,6 +56,10 @@
 	}
 
 	function handleModuleChange(next: string) {
+		if (next === NO_MODULE) {
+			moduleName = '';
+			return;
+		}
 		if (!isPartnerModule(next)) return;
 		moduleName = next;
 		selectedScopes = [...DEFAULT_SCOPES_BY_MODULE[next]];
@@ -126,14 +133,24 @@
 			</div>
 			<div class="grid gap-2">
 				<span id="tpc-module-label" class="text-sm font-semibold"
-					>Module <span class="text-destructive">*</span></span
+					>Module <span class="font-normal text-muted-foreground">(ไม่บังคับ)</span></span
 				>
 				<RadioGroup.Root
-					value={moduleName}
+					value={moduleName || NO_MODULE}
 					onValueChange={handleModuleChange}
 					aria-labelledby="tpc-module-label"
 					class="grid gap-2 sm:grid-cols-2"
 				>
+					<label
+						for="tpc-module-none"
+						class="flex min-h-10 cursor-pointer items-center gap-3 rounded-lg border border-border px-3 text-sm {moduleName ===
+						''
+							? 'border-primary bg-primary/5 font-semibold'
+							: ''}"
+					>
+						<RadioGroup.Item value={NO_MODULE} id="tpc-module-none" class="size-4" />
+						ไม่ระบุ
+					</label>
 					{#each PARTNER_MODULES as module (module)}
 						<label
 							for="tpc-module-{module}"
@@ -148,7 +165,7 @@
 					{/each}
 				</RadioGroup.Root>
 				<p class="text-xs text-muted-foreground">
-					เลือก module แล้วระบบจะตั้ง scopes เริ่มต้นให้ — ปรับเพิ่ม/ลดได้
+					module ใช้ตั้ง scopes เริ่มต้นเท่านั้น — เลือก scopes เองได้โดยไม่ต้องเลือก module
 				</p>
 			</div>
 			<div class="grid gap-2">
@@ -169,8 +186,7 @@
 								>
 									<ShieldAlert class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
 									<p class="text-xs leading-normal">
-										Grants access to individual occupant records (PDPA-sensitive). Grant only with
-										written approval on file for this module.
+										{SENSITIVE_SCOPE_WARNING[scope]}
 									</p>
 								</div>
 							{/if}
