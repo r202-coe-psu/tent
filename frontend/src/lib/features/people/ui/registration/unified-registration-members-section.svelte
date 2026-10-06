@@ -91,7 +91,7 @@
 		const name = [member.first_name, member.last_name].filter(Boolean).join(' ').trim();
 		if (name) return name;
 		if (index === 0 && !isJoiningExistingHousehold) return t.primaryContact;
-		return `${t.memberLabel} ${existingMembers.length + index + 1}`;
+		return `${t.memberNum} ${existingMembers.length + index + 1}`;
 	}
 
 	function hasMemberErrors(index: number): boolean {

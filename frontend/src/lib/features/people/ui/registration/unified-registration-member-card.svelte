@@ -3,11 +3,12 @@
 	import Check from '@lucide/svelte/icons/check';
 	import IdCard from '@lucide/svelte/icons/id-card';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
-	import Phone from '@lucide/svelte/icons/phone';
+	import PhoneCall from '@lucide/svelte/icons/phone-call';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import HeartPulse from '@lucide/svelte/icons/heart-pulse';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import QrCode from '@lucide/svelte/icons/qr-code';
+	import ContactRound from '@lucide/svelte/icons/contact-round';
 	import { onDestroy } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import * as Accordion from '$lib/components/ui/accordion/index.js';
@@ -91,7 +92,7 @@
 	// Joining keeps the family's existing head; a new card is never the primary contact.
 	const isPrimary = $derived(index === 0 && !isJoiningExistingHousehold);
 	const title = $derived(
-		isPrimary ? t.primaryContact : `${t.memberLabel} ${numberOffset + index + 1}`
+		isPrimary ? t.primaryContactCardTitle : `${t.memberNum} ${numberOffset + index + 1}`
 	);
 	const photoInputId = $derived(`unified-member-photo-${index}`);
 	const showPhotoUpload = $derived(photoUpload !== 'none');
@@ -401,6 +402,9 @@
 	<div class="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-3">
 		<div>
 			<div class="flex flex-wrap items-center gap-2">
+				{#if isPrimary}
+					<ContactRound class="size-4 shrink-0 text-primary" aria-hidden="true" />
+				{/if}
 				<h3
 					id="member-card-title-{index}"
 					class={cn(
@@ -642,15 +646,23 @@
 	</div>
 
 	<Accordion.Root type="multiple" class="w-full">
-		<Accordion.Item value="emergency">
+		<Accordion.Item
+			value="emergency"
+			class="rounded-xl border border-amber-200 bg-amber-50/40 px-3 shadow-2xs"
+		>
 			<Accordion.Trigger class="hover:no-underline">
-				<span class="flex items-center gap-2">
-					<Phone class="size-4 text-primary" />
-					<span class="text-sm font-semibold text-foreground">{t.emergencySection}</span>
+				<span class="flex min-w-0 items-start gap-2 text-left">
+					<PhoneCall class="mt-0.5 size-4 shrink-0 text-amber-700" aria-hidden="true" />
+					<span class="flex min-w-0 flex-col gap-0.5">
+						<span class="text-sm font-semibold text-amber-950">{t.emergencySection}</span>
+						<span class="text-xs leading-snug font-normal text-amber-900/75">
+							{t.emergencySectionHint}
+						</span>
+					</span>
 				</span>
 			</Accordion.Trigger>
 			<Accordion.Content>
-				<div class="space-y-4 pt-1">
+				<div class="space-y-4 border-t border-amber-200/80 pt-4 pb-2">
 					<EmergencyContactFields
 						bind:name={emergency.name}
 						bind:phone={emergency.phone}
