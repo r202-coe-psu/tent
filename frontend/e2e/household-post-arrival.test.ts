@@ -464,7 +464,11 @@ test.describe('Household post-arrival grouping — real CouchDB', () => {
 		await expect(page).toHaveURL(/\/back-office\/evacuee-management\?tab=household/);
 
 		// The whole staff flow stayed on CouchDB — no PII went near the public plane.
-		expect(publicPlaneCalls, 'no /api/public calls from the staff wizard').toEqual([]);
+		// The layout-wide system banner (CR-142) is fetched on every page — not the wizard's doing.
+		expect(
+			publicPlaneCalls.filter((call) => !call.includes('/api/public/v1/system-banner')),
+			'no /api/public calls from the staff wizard'
+		).toEqual([]);
 
 		// ── Database ──
 		const households = await findDocs({ type: 'household', created_by: STAFF_A.name });
