@@ -24,6 +24,7 @@
 	import * as Table from '$lib/components/ui/table';
 
 	import {
+		ewarSymptomLabel,
 		useEvacuees,
 		useHouseholds,
 		useScreenings,
@@ -74,6 +75,9 @@
 	const screeningsQuery = useScreenings();
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
+	const quarantineZoneCodes = $derived(
+		new Set(shelterZones.filter((z) => z.type === 'quarantine').map((z) => z.code))
+	);
 	const vulnerableGroupQuery = useMasterData(() => 'vulnerable_group');
 	const confirmRoomMutation = useConfirmRoom();
 	const confirmRoomHouseholdMutation = useConfirmRoomForHousehold();
@@ -902,6 +906,9 @@
 									>เฝ้าระวัง (EWAR)</Table.Head
 								>
 								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
+									>กลุ่มเปราะบาง</Table.Head
+								>
+								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
 									>ความต้องการพิเศษ</Table.Head
 								>
 								<Table.Head class="h-11 px-3 text-xs font-semibold text-slate-600"
@@ -950,9 +957,32 @@
 									</Table.Cell>
 									<Table.Cell class="px-3 py-3">
 										{#if ewarSymptoms && ewarSymptoms.length > 0}
-											<Badge variant="outline" class="border-red-200 bg-red-50 text-red-900">
-												เฝ้าระวัง ({ewarSymptoms.length})
-											</Badge>
+											<div class="flex max-w-[14rem] flex-wrap gap-1">
+												{#each ewarSymptoms as symptom (symptom)}
+													<Badge
+														variant="outline"
+														class="border-red-200 bg-red-50 px-1.5 py-0 text-xs text-red-900"
+													>
+														{ewarSymptomLabel(symptom)}
+													</Badge>
+												{/each}
+											</div>
+										{:else}
+											<span class="text-xs text-slate-500">—</span>
+										{/if}
+									</Table.Cell>
+									<Table.Cell class="px-3 py-3">
+										{#if row.vulnerable_groups && row.vulnerable_groups.length > 0}
+											<div class="flex max-w-[14rem] flex-wrap gap-1">
+												{#each row.vulnerable_groups as group (group)}
+													<Badge
+														variant="outline"
+														class="border-primary/30 bg-primary/10 px-1.5 py-0 text-xs text-primary"
+													>
+														{getSpecialNeedLabel(group)}
+													</Badge>
+												{/each}
+											</div>
 										{:else}
 											<span class="text-xs text-slate-500">—</span>
 										{/if}
@@ -985,6 +1015,12 @@
 										{:else}
 											<span class="inline-flex flex-wrap items-center gap-1.5">
 												<span>{zoneLabel(row.current_stay.zone, shelterZones)}</span>
+												{#if quarantineZoneCodes.has(row.current_stay.zone ?? '')}
+													<span
+														class="rounded-full bg-red-600 px-1.5 py-0.5 text-2xs font-semibold text-white dark:bg-red-500"
+														>กักโรค</span
+													>
+												{/if}
 												{#if row.current_stay.status === 'room_confirmed'}
 													<span
 														class="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.5 text-2xs font-medium text-emerald-800 dark:text-emerald-200"

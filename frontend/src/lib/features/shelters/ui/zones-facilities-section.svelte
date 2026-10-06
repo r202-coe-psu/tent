@@ -2,6 +2,7 @@
 	import type { SuperForm } from 'sveltekit-superforms';
 	import type { SuperFormData } from 'sveltekit-superforms/client';
 	import type { Zone, Shelter, ZoneType, AreaType } from '../domain/schema';
+	import { ZONE_TYPE_LABELS } from '../domain/schema';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -159,14 +160,9 @@
 		}
 	}
 
-	const zoneTypeOptions: { value: ZoneType; label: string }[] = [
-		{ value: 'general', label: 'ทั่วไป' },
-		{ value: 'male', label: 'ชายล้วน' },
-		{ value: 'female', label: 'หญิงล้วน' },
-		{ value: 'vulnerable', label: 'เปราะบาง' },
-		{ value: 'pet', label: 'สัตว์เลี้ยง' },
-		{ value: 'quarantine', label: 'กักโรค' }
-	];
+	const zoneTypeOptions: { value: ZoneType; label: string }[] = (
+		Object.keys(ZONE_TYPE_LABELS) as ZoneType[]
+	).map((value) => ({ value, label: ZONE_TYPE_LABELS[value] }));
 
 	function addNewZone() {
 		const zones = $formData.zones ?? [];

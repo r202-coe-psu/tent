@@ -474,5 +474,44 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 			expect(result.body).toContain('แนะนำสำหรับผู้มีอาการเฝ้าระวัง (กักตัว)');
 			expect(result.body).not.toContain('triage');
 		});
+
+		it('says no matching zone is open instead of recommending a zone of another type', () => {
+			const result = render(ZoneSelectionFields, {
+				props: {
+					selected_zone: '',
+					ewar_symptoms: ['fever'],
+					shelter_zones: [{ code: 'Z-01', name: 'โซน A - ทั่วไป', type: 'general' }]
+				}
+			});
+			expect(result.body).toContain('ไม่มีโซนกักตัว (มีอาการเฝ้าระวัง) ที่เปิดอยู่');
+			expect(result.body).not.toContain('โซนแนะนำ:');
+		});
+
+		it('labels each zone with its Thai type and marks quarantine zones', () => {
+			const result = render(ZoneSelectionFields, {
+				props: {
+					selected_zone: '',
+					shelter_zones: [
+						{ code: 'Z-01', name: 'โซน A', type: 'general' },
+						{ code: 'Z-Q', name: 'โซน Q', type: 'quarantine' }
+					]
+				}
+			});
+			expect(result.body).toContain('ทั่วไป');
+			expect(result.body).toContain('โซนกักโรค');
+			expect(result.body).not.toContain('quarantine ·');
+		});
+
+		it('shows no per-person recommendation when no evacuee is given (bulk assign)', () => {
+			const result = render(ZoneSelectionFields, {
+				props: {
+					selected_zone: '',
+					evacuee: null,
+					shelter_zones: [{ code: 'Z-01', name: 'โซน A - ทั่วไป', type: 'general' }]
+				}
+			});
+			expect(result.body).not.toContain('โซนแนะนำ:');
+			expect(result.body).not.toContain('ที่เปิดอยู่');
+		});
 	});
 });
