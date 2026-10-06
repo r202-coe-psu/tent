@@ -168,7 +168,7 @@ describe('vulnerable_groups vs special_needs', () => {
 		);
 		expect(e.vulnerable_groups).toEqual(['wheelchair', 'pregnant']);
 		expect(e.special_needs).toEqual(['ใช้ออกซิเจน']);
-		expect(e.schema_v).toBe(12);
+		expect(e.schema_v).toBe(13);
 
 		const bare = createEvacuee(
 			{ first_name: 'A', last_name: 'B', gender: 'other', phone: null },
@@ -241,7 +241,7 @@ describe('Anonymous ID', () => {
 			},
 			ctx
 		);
-		expect(a.schema_v).toBe(12);
+		expect(a.schema_v).toBe(13);
 		expect(a.person_id?.cardType).toBe('anonymous');
 		expect(isAnonymousId(a.person_id?.number ?? '')).toBe(true);
 		expect(b.person_id?.number).not.toBe(a.person_id?.number);
@@ -310,7 +310,7 @@ describe('createEvacuee', () => {
 		);
 		expect(e._id.startsWith('evacuee:')).toBe(true);
 		expect(e.type).toBe('evacuee');
-		expect(e.schema_v).toBe(12);
+		expect(e.schema_v).toBe(13);
 		expect(e.shelter_code).toBe('SH001');
 		expect(e.created_by).toBe('staff1');
 		expect(e.created_at).toBe(e.updated_at);
@@ -334,7 +334,7 @@ describe('createEvacuee', () => {
 			},
 			ctx
 		);
-		expect(e.schema_v).toBe(12);
+		expect(e.schema_v).toBe(13);
 		expect(e.current_stay.status).toBe('arriving');
 	});
 
@@ -1771,5 +1771,23 @@ describe('gender nullable (schema_v 12, CR-154)', () => {
 			registered_via: 'api'
 		});
 		expect(parsed.success).toBe(true);
+	});
+});
+
+describe('preferred_zone (schema_v 13, CR-155)', () => {
+	const base = { first_name: 'A', last_name: 'B', gender: 'male' as const, phone: null };
+	const ctx = { shelterCode: 'SH001', createdBy: 'staff' };
+
+	it("stores Station 1's suggestion without zoning the person", () => {
+		const e = createEvacuee({ ...base, status: 'arriving', preferred_zone: 'Z5' }, ctx);
+		expect(e.preferred_zone).toBe('Z5');
+		expect(e.current_stay).toMatchObject({ status: 'arriving', zone: null });
+	});
+
+	it('leaves the field out when no zone was suggested', () => {
+		expect(createEvacuee({ ...base, preferred_zone: '' }, ctx)).not.toHaveProperty(
+			'preferred_zone'
+		);
+		expect(createEvacuee(base, ctx)).not.toHaveProperty('preferred_zone');
 	});
 });

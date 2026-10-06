@@ -308,6 +308,11 @@ export interface Evacuee extends BaseDoc {
 	card_snapshot?: CardSnapshot | null;
 	household_id: string | null;
 	current_stay: CurrentStay;
+	/**
+	 * Zone code Station 1 suggested for this person (schema_v 13, CR-155). Non-binding: it
+	 * never zones — Station 3 only uses it as the default pick when there are no EWAR symptoms.
+	 */
+	preferred_zone?: string | null;
 	privacy: { search_excluded: boolean };
 	registered_via: z.infer<typeof registeredViaSchema>;
 	anonymized?: boolean; // set by the purge job
@@ -823,6 +828,14 @@ export const evacueeInputSchema = z.object({
 	card_snapshot: cardSnapshotSchema.nullable().optional().default(null),
 	status: stayStatusSchema.optional().default('pre_registered'),
 	zone: z.string().trim().nullable().optional().default(null),
+	/** CR-155: Station 1's optional, non-binding zone suggestion ('' → null). */
+	preferred_zone: z
+		.string()
+		.trim()
+		.nullable()
+		.optional()
+		.default(null)
+		.transform((v) => v || null),
 	registered_via: registeredViaSchema.default('staff')
 });
 export type EvacueeInput = z.input<typeof evacueeInputSchema>;
@@ -1463,7 +1476,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext, id?: stri
 	const person_id = resolvePersonIdOnCreate(d.person_id);
 	return makeDoc(
 		'evacuee',
-		12, // schema_v 12: gender nullable + registered_via `api` (CR-154); 11: religion_other + disability_other_detail (CR-148); 10: anonymous cardType + ANON mint (CR-112); 9: arriving (CR-106); 8: draft/card_snapshot (CR-084); 7 = registered_via `web` (CR-070); 6 = stay cancelled (CR-070); 5 = age (CR-057)
+		13, // schema_v 13: preferred_zone (CR-155); 12: gender nullable + registered_via `api` (CR-154); 11: religion_other + disability_other_detail (CR-148); 10: anonymous cardType + ANON mint (CR-112); 9: arriving (CR-106); 8: draft/card_snapshot (CR-084); 7 = registered_via `web` (CR-070); 6 = stay cancelled (CR-070); 5 = age (CR-057)
 		{
 			first_name: d.first_name,
 			last_name: d.last_name,
@@ -1483,6 +1496,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext, id?: stri
 			...(d.card_snapshot ? { card_snapshot: d.card_snapshot } : {}),
 			household_id: d.household_id,
 			current_stay: { status: d.zone ? 'active' : d.status, zone: d.zone ?? null, since: now() },
+			...(d.preferred_zone ? { preferred_zone: d.preferred_zone } : {}),
 			privacy: { search_excluded: false },
 			registered_via: d.registered_via
 		},

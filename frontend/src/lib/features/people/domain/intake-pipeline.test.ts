@@ -12,6 +12,7 @@ import {
 	parseZoningQrCode,
 	recommendZoneKind,
 	pickRecommendedZone,
+	resolvePreferredZone,
 	sortByZoningQueueSince,
 	zoningQueueSince
 } from './intake-pipeline';
@@ -381,5 +382,34 @@ describe('pickRecommendedZone', () => {
 				'vulnerable'
 			)
 		).toBeNull();
+	});
+});
+
+describe('resolvePreferredZone (CR-155)', () => {
+	const zones = [
+		{ code: 'A', status: 'active' },
+		{ code: 'B', status: 'closed' }
+	];
+
+	it('pre-selects the suggested zone when it is open and there are no EWAR symptoms', () => {
+		expect(resolvePreferredZone('A', zones, 'general')).toEqual({ kind: 'use', code: 'A' });
+		expect(resolvePreferredZone('A', zones, 'vulnerable')).toEqual({ kind: 'use', code: 'A' });
+	});
+
+	it('never pre-selects it when the person has EWAR symptoms (quarantine always wins)', () => {
+		expect(resolvePreferredZone('A', zones, 'quarantine')).toEqual({
+			kind: 'quarantine_overrides',
+			code: 'A'
+		});
+	});
+
+	it('reports a closed or missing suggested zone instead of selecting it', () => {
+		expect(resolvePreferredZone('B', zones, 'general')).toEqual({ kind: 'unavailable', code: 'B' });
+		expect(resolvePreferredZone('Z', zones, 'general')).toEqual({ kind: 'unavailable', code: 'Z' });
+	});
+
+	it('does nothing when Station 1 left it empty', () => {
+		expect(resolvePreferredZone(null, zones, 'general')).toEqual({ kind: 'none' });
+		expect(resolvePreferredZone('  ', zones, 'general')).toEqual({ kind: 'none' });
 	});
 });

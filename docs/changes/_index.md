@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-10-06 # CR-154 M2 partner booking + residency
+updated: 2026-10-06 # CR-155 Station 1 preferred zone
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 
@@ -165,3 +165,4 @@ note: ดัชนี Change Record ทุกตัว — กติกาอย
 | [CR-152](CR-152-kiosk-phone-check-in-toggle.md) | Kiosk phone check-in toggle — shelter `feature_flags.kiosk_phone_check_in_enabled` (default false) เปิด/ปิดที่ backoffice, kiosk อ่านผ่าน `POST /api/v1/scanner/kiosk/config`, fail closed, no schema_v bump | approved | volatile | 2026-09-25 (approved 2026-10-04) | docs/data/schema.md §3.1 feature_flags, docs/data/api-contract.md scanner/kiosk config, frontend shelters + kiosk, scanner_client allowlist |
 | [CR-153](CR-153-daily-sop-role-assessments.md) | แบบประเมิน Daily SOP ประจำวันแยกตามหน้าที่ (9 Role รวม 79 ข้อ) — เพิ่มเอกสาร daily_sop_role_assessment (schema_v 1) แยก 1 ฉบับต่อศูนย์/วัน/Role, กำหนด authorization/VDU/Bangkok-date และ Mango Index โดยไม่แปลงเอกสาร Legacy | approved | volatile | 2026-09-26 (approved 2026-10-05) | docs/data/schema.md §2.34, daily_sop_role_assessment schema_v 1, frontend/src/lib/features/daily-sop, frontend/src/lib/server/shelter-access-design.ts |
 | [CR-154](CR-154-m2-partner-booking-residency.md) | M2 integration ย้ายเข้า Partner OAuth plane — EXT-008/009/010 booking (สร้าง/ยกเลิก/ดูสถานะ, Mongo buffer `external_bookings` → worker inbound → CouchDB, กันซ้ำเฉพาะภายในศูนย์) + EXT-011 residency (`residency-read`, บังคับ `purpose` + access log); scope ใหม่ `booking-write`/`residency-read`; `evacuee.gender` nullable + `registered_via: api` (schema_v 11→12); ลบ M2 endpoints บน `/external/v1` (supersede ส่วน M2 ของ CR-098) | approved | volatile | 2026-10-06 | docs/data/api-contract.md §5.1/§5.3, docs/data/schema.md §1.1/§9.4/§9.6/§9.7, ADR 0002, tent-model third_party_client/external_booking, backend thirdparty_bookings/thirdparty_residency/external, worker inbound external_bookings, frontend people domain + third-party-clients |
+| [CR-155](CR-155-station1-preferred-zone.md) | Station 1 บันทึก "โซนที่ต้องการ" รายคนแบบไม่บังคับ (accordion) เก็บใน `evacuee.preferred_zone` — ไม่ใช่การจัดโซน (`current_stay` ยัง `arriving` + `zone: null`, ทุกคนผ่าน Station 2/3); Station 3 ใช้เป็นค่าเลือกเริ่มต้น ยกเว้นมีอาการ EWAR → แนะนำโซนกักโรคเสมอ; evacuee schema_v 12→13 | done | volatile | 2026-10-06 | docs/data/schema.md §1.1, ADR-0001 note, frontend people domain/data + Station 1 member card + Station 3 zone picker |

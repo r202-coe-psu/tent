@@ -502,6 +502,31 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 			expect(result.body).not.toContain('quarantine ·');
 		});
 
+		it('says when the zone Station 1 suggested is pre-selected (CR-155)', () => {
+			const result = render(ZoneSelectionFields, {
+				props: {
+					selected_zone: 'Z-01',
+					preferred_zone: { kind: 'use', code: 'Z-01' },
+					shelter_zones: [{ code: 'Z-01', name: 'โซน A', type: 'general' }]
+				}
+			});
+			expect(result.body).toContain('โซนที่สถานี 1 ระบุไว้');
+			expect(result.body).toContain('เลือกไว้ให้แล้ว');
+		});
+
+		it('explains that EWAR symptoms override the zone Station 1 suggested (CR-155)', () => {
+			const result = render(ZoneSelectionFields, {
+				props: {
+					selected_zone: '',
+					ewar_symptoms: ['fever'],
+					preferred_zone: { kind: 'quarantine_overrides', code: 'Z-01' },
+					shelter_zones: [{ code: 'Z-01', name: 'โซน A', type: 'general' }]
+				}
+			});
+			expect(result.body).toContain('ไม่ได้เลือกให้');
+			expect(result.body).toContain('ต้องแยกไปโซนกักโรค');
+		});
+
 		it('shows no per-person recommendation when no evacuee is given (bulk assign)', () => {
 			const result = render(ZoneSelectionFields, {
 				props: {

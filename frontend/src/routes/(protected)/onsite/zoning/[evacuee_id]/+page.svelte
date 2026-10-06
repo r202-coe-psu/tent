@@ -13,6 +13,7 @@
 
 	import {
 		ewarSymptomLabel,
+		resolvePreferredZone,
 		useEvacuee,
 		useEvacuees,
 		useHouseholds,
@@ -143,11 +144,6 @@
 		return steps;
 	});
 
-	const selectedZone = $derived(
-		zoneDraftEvacueeId === evacueeId && zoneDraft !== null
-			? zoneDraft
-			: (evacuee?.current_stay.zone ?? '')
-	);
 	// Isolation default: companions start empty (never auto-select household)
 	const selectedCompanionIds = $derived(
 		companionDraftEvacueeId === evacueeId ? companionDraft : []
@@ -160,6 +156,15 @@
 		)
 	);
 	const isolationDefault = $derived(recommendKind === 'quarantine');
+	/** CR-155: Station 1's suggestion — default pick only when there are no EWAR symptoms. */
+	const preferredZone = $derived(
+		resolvePreferredZone(evacuee?.preferred_zone, shelterZones, recommendKind)
+	);
+	const selectedZone = $derived(
+		zoneDraftEvacueeId === evacueeId && zoneDraft !== null
+			? zoneDraft
+			: evacuee?.current_stay.zone || (preferredZone.kind === 'use' ? preferredZone.code : '')
+	);
 	const currentZone = $derived(evacuee?.current_stay.zone?.trim() ?? '');
 	// A zone_change to the same zone writes nothing meaningful — block it
 	const zoneChanged = $derived(!!selectedZone.trim() && selectedZone.trim() !== currentZone);
@@ -514,6 +519,7 @@
 						bind:selected_zone={() => selectedZone, setSelectedZone}
 						{evacuee}
 						ewar_symptoms={latestScreening?.symptoms}
+						preferred_zone={preferredZone}
 						occupant_counts={occupantCounts}
 						shelter_zones={shelterQuery.data?.zones}
 					/>

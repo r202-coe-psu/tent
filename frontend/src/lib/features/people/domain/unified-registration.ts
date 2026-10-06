@@ -220,6 +220,7 @@ export function blankUnifiedMember(): UnifiedMemberInput {
 		// and Svelte rejects binding `undefined` there (props_invalid_value).
 		religion_other: null,
 		disability_other_detail: null,
+		preferred_zone: null,
 		person_id: { cardType: 'national_id', number: '' },
 		vulnerable_groups: [],
 		special_needs: [],
@@ -455,6 +456,7 @@ export function evacueeToUnifiedMember(
 		religion: evacuee.religion ?? 'buddhist',
 		religion_other: evacuee.religion_other ?? null,
 		disability_other_detail: evacuee.disability_other_detail ?? null,
+		preferred_zone: evacuee.preferred_zone ?? null,
 		original_person_number: evacuee.person_id?.number ?? null,
 		stay_status: evacuee.current_stay.status,
 		reporting_in: isPreReg && isTarget,

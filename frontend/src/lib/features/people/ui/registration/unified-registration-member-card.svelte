@@ -9,6 +9,7 @@
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import QrCode from '@lucide/svelte/icons/qr-code';
 	import ContactRound from '@lucide/svelte/icons/contact-round';
+	import MapPin from '@lucide/svelte/icons/map-pin';
 	import { onDestroy } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import * as Accordion from '$lib/components/ui/accordion/index.js';
@@ -17,6 +18,9 @@
 	import { useSaveImage } from '$lib/features/images';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
+	import * as Select from '$lib/components/ui/select/index.js';
+	import { useShelter, ZONE_TYPE_LABELS, type ZoneType } from '$lib/features/shelters';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import {
 		uploadShelterBookingPhoto,
 		uploadUnassignedPhoto
@@ -96,6 +100,29 @@
 	);
 	const photoInputId = $derived(`unified-member-photo-${index}`);
 	const showPhotoUpload = $derived(photoUpload !== 'none');
+	/**
+	 * CR-155: Station 1 may note a zone this person would like — a suggestion for Station 3,
+	 * never a zone assignment. Onsite only; the public form never asks.
+	 */
+	const showPreferredZone = $derived(channel === 'onsite');
+	const NO_PREFERRED_ZONE = '__none__';
+	const shelterForZones = (() => {
+		try {
+			return useShelter(() =>
+				channel === 'onsite' ? (shelterStore.selectedShelterCode ?? getShelterCode() ?? '') : ''
+			);
+		} catch {
+			return null;
+		}
+	})();
+	const openZones = $derived(
+		(shelterForZones?.data?.zones ?? []).filter((z) => z.status !== 'closed')
+	);
+	function zoneOptionLabel(zone: { code: string; name?: string; type?: string }): string {
+		const type = ZONE_TYPE_LABELS[(zone.type || 'general') as ZoneType] ?? '';
+		return `${zone.name?.trim() || zone.code}${type ? ` · ${type}` : ''}`;
+	}
+
 	const hideNoPhone = $derived(channel === 'public' && index === 0 && !isJoiningExistingHousehold);
 
 	const isReportIn = $derived(mode === 'report-in');
@@ -711,6 +738,49 @@
 				</div>
 			</Accordion.Content>
 		</Accordion.Item>
+
+		{#if showPreferredZone}
+			<Accordion.Item value="preferred-zone">
+				<Accordion.Trigger class="hover:no-underline">
+					<span class="flex min-w-0 items-start gap-2 text-left">
+						<MapPin class="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+						<span class="flex min-w-0 flex-col gap-0.5">
+							<span class="text-sm font-semibold text-foreground">โซนที่ต้องการ (ไม่บังคับ)</span>
+							<span class="text-xs leading-snug font-normal text-muted-foreground">
+								เป็นค่าแนะนำให้จุดจัดโซน (สถานี 3) — ทุกคนยังต้องผ่านจุดคัดกรองและจัดโซน
+							</span>
+						</span>
+					</span>
+				</Accordion.Trigger>
+				<Accordion.Content>
+					<div class="pt-1 pb-2">
+						{#if openZones.length === 0}
+							<p class="text-xs text-muted-foreground">ศูนย์นี้ยังไม่มีโซนที่เปิดใช้งาน</p>
+						{:else}
+							<Select.Root
+								type="single"
+								value={member.preferred_zone || NO_PREFERRED_ZONE}
+								onValueChange={(value) => {
+									member.preferred_zone = value && value !== NO_PREFERRED_ZONE ? value : null;
+								}}
+								disabled={fieldsDisabled}
+							>
+								<Select.Trigger class="h-11 w-full text-sm" aria-label="โซนที่ต้องการ">
+									{@const picked = openZones.find((z) => z.code === member.preferred_zone)}
+									{picked ? zoneOptionLabel(picked) : 'ไม่ระบุ'}
+								</Select.Trigger>
+								<Select.Content>
+									<Select.Item value={NO_PREFERRED_ZONE} label="ไม่ระบุ" />
+									{#each openZones as zone (zone.code)}
+										<Select.Item value={zone.code} label={zoneOptionLabel(zone)} />
+									{/each}
+								</Select.Content>
+							</Select.Root>
+						{/if}
+					</div>
+				</Accordion.Content>
+			</Accordion.Item>
+		{/if}
 	</Accordion.Root>
 </section>
 

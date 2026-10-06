@@ -147,6 +147,7 @@ export {
 	nextScreeningQueueEvacuee,
 	recommendZoneKind,
 	pickRecommendedZone,
+	resolvePreferredZone,
 	ZONE_KIND_LABELS,
 	countPresentOccupantsByZone,
 	parseZoningQrCode,
@@ -158,7 +159,8 @@ export {
 	type NextQueueLabel,
 	type ZoningQueueTab,
 	type ScreeningQueueTab,
-	type ZoningRecommendKind
+	type ZoningRecommendKind,
+	type PreferredZoneOutcome
 } from './domain/intake-pipeline';
 
 export {

@@ -472,3 +472,17 @@ describe('unified registration — report-in converters', () => {
 		expect(targetMember.vulnerable_groups).toContain('pregnant');
 	});
 });
+
+describe('planFamilyRegistration — preferred_zone (CR-155)', () => {
+	it('carries the suggestion but never zones at Station 1', () => {
+		const plan = planFamilyRegistration(
+			validInput({ members: [validMember({ preferred_zone: 'Z5' })] }),
+			'onsite'
+		);
+		expect(plan.memberInputs[0]).toMatchObject({
+			preferred_zone: 'Z5',
+			zone: null,
+			status: 'arriving'
+		});
+	});
+});

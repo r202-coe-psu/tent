@@ -9,7 +9,12 @@
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import type { Evacuee, TriageLevel } from '$lib/features/people';
-	import { recommendZoneKind, pickRecommendedZone, ZONE_KIND_LABELS } from '$lib/features/people';
+	import {
+		recommendZoneKind,
+		pickRecommendedZone,
+		ZONE_KIND_LABELS,
+		type PreferredZoneOutcome
+	} from '$lib/features/people';
 
 	export interface ZoneItem {
 		code: string;
@@ -25,6 +30,7 @@
 		evacuee = null,
 		triage_level = null,
 		ewar_symptoms = null,
+		preferred_zone = { kind: 'none' },
 		occupant_counts,
 		onSelectZone,
 		disabled = false
@@ -34,6 +40,8 @@
 		evacuee?: Evacuee | null;
 		triage_level?: TriageLevel | null;
 		ewar_symptoms?: readonly string[] | null;
+		/** CR-155: what became of the zone Station 1 suggested (resolved by the caller). */
+		preferred_zone?: PreferredZoneOutcome;
 		occupant_counts?: Map<string, number> | Record<string, number>;
 		onSelectZone?: (zoneCode: string) => void;
 		disabled?: boolean;
@@ -96,6 +104,13 @@
 
 	const isQuarantine = (zone: ZoneItem) => zone.type === 'quarantine';
 
+	function zoneName(code: string): string {
+		const zone = (shelter_zones ?? shelterQuery.data?.zones ?? []).find(
+			(z: ZoneItem) => z.code === code
+		);
+		return zone?.name?.trim() || code;
+	}
+
 	function handleSelect(code: string) {
 		selected_zone = code;
 		onSelectZone?.(code);
@@ -103,6 +118,23 @@
 </script>
 
 <div class="space-y-4">
+	{#if preferred_zone.kind !== 'none'}
+		<p
+			class="rounded-lg border px-3 py-2 text-xs {preferred_zone.kind === 'use'
+				? 'border-primary/30 bg-primary/5 text-foreground'
+				: 'border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-100'}"
+			role="status"
+		>
+			{#if preferred_zone.kind === 'use'}
+				โซนที่สถานี 1 ระบุไว้: <strong>{zoneName(preferred_zone.code)}</strong> — เลือกไว้ให้แล้ว เปลี่ยนได้
+			{:else if preferred_zone.kind === 'quarantine_overrides'}
+				สถานี 1 ระบุโซน <strong>{zoneName(preferred_zone.code)}</strong> ไว้ — ไม่ได้เลือกให้ เพราะมีอาการเฝ้าระวัง
+				ต้องแยกไปโซนกักโรค
+			{:else}
+				โซนที่สถานี 1 ระบุไว้ ({preferred_zone.code}) ไม่เปิดใช้งานแล้ว — กรุณาเลือกโซนเอง
+			{/if}
+		</p>
+	{/if}
 	{#if hasSubject && !recommendedZone && activeZones.length > 0}
 		<div
 			role="status"
