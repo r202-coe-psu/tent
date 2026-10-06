@@ -589,7 +589,17 @@ SFace เทียบหน้า, MiniFASNet ตรวจว่าเป็น�
 - เมื่อเปิด face check `scanner_client` ให้สิทธิ์กล้องแก่ origin ของ kiosk อัตโนมัติ (ไม่มี prompt) เปิด `KIOSK_FACE_CHECK=on` จะมี log เตือนว่าเกณฑ์ยังไม่ได้ calibrate ให้ใช้ `shadow` ก่อน
 - ตรวจว่าสิทธิ์กล้องถูกให้โดยไม่มี prompt จริงบนเครื่อง (ไม่ใช่ CI): `./smoke_face_permissions.py` (เพิ่ม `--headed` เพื่อดูหน้าต่าง, `--live` เพื่อเปิดหน้า `/kiosk/register/face` จริง)
   เปิด Chromium profile ใหม่แบบเดียวกับ manager แล้วถามหน้าเว็บว่า permission เป็น `granted` หรือ `prompt`; ผ่านเมื่อ `granted` (exit 0)
-- ถ้า model ไม่ครบ เครื่องจะตอบ `FACE_MODELS_MISSING` และหน้า kiosk ข้ามขั้นตอนนี้ไป
+- **ที่เก็บ model**: ค่าเริ่มต้นคือโฟลเดอร์ `models/` ข้างโค้ด (`scanner_client/models/`) ไม่ต้องตั้งอะไรใน `.env`
+  ไฟล์ `.onnx` **ไม่ได้อยู่ใน git** (`models/.gitignore`) `git pull` จึงไม่ได้ model มาให้ ต้องรัน `./models/download_models.sh` บนเครื่องนั้นเอง
+  ต้องมีครบ 4 ไฟล์: `face_detection_yunet_2023mar.onnx`, `face_recognition_sface_2021dec.onnx`, `MiniFASNetV2.onnx`, `MiniFASNetV1SE.onnx`
+  ```bash
+  ls -l models/*.onnx                # ต้องเห็น 4 ไฟล์
+  ```
+  ตั้ง `KIOSK_FACE_MODELS_DIR=/path/ไป/โฟลเดอร์` เฉพาะเมื่อเก็บ model ไว้นอก repo จริงๆ และต้องมีไฟล์ครบ 4 ไฟล์ในโฟลเดอร์นั้น
+  **ถ้าไม่ได้ใช้ ให้ปล่อยบรรทัดนี้เป็นคอมเมนต์ หรือลบทิ้ง** (ค่า `/opt/tent/models` ใน `.env.example` เป็นแค่ตัวอย่าง ถ้าเปิดบรรทัดนี้โดยที่ไม่มีไฟล์อยู่ที่นั่น
+  จะขึ้น `FACE_MODELS_MISSING` ทั้งที่ `models/` ข้างโค้ดมีไฟล์ครบ) แก้ `.env` แล้วต้อง restart `scanner_client`
+- ถ้า model ไม่ครบ (หรือชี้โฟลเดอร์ผิด) เครื่องจะตอบ `FACE_MODELS_MISSING` และหน้า kiosk ข้ามขั้นตอนนี้ไป (ผู้ใช้ไปต่อได้ แต่ถือเป็น "ยืนยันไม่ได้")
+  ใน log จะมีบรรทัด `Face check models are missing: … (run models/download_models.sh): <ชื่อไฟล์ที่หาย>` ดูด้วย `grep -i "models" /tmp/kiosk_autostart.log`
 - model ทั้ง 4 ตัวและ license อยู่ใน [`models/MODELS.md`](models/MODELS.md)
 
 ### ล็อกไม่ให้ออกจากหน้า kiosk (ตู้ใหญ่)
