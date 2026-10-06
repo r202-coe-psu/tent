@@ -1292,60 +1292,77 @@
 					</div>
 				{/if}
 
-				<HouseholdAddressFields
-					bind:housing_type={household.housing_type}
-					bind:residence_landmark={
-						() => household.residence_landmark ?? '',
-						(v) => {
-							household.residence_landmark = v || null;
+				<!-- Joined family: its address was filled in for staff/the public and is locked -->
+				<div
+					class={{
+						'space-y-2 rounded-xl transition-colors': true,
+						'bg-primary/5 p-3 ring-2 ring-primary/40': hasJoinSelection
+					}}
+				>
+					{#if hasJoinSelection}
+						<p
+							class="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary"
+							role="status"
+						>
+							<CheckCircle2 class="size-3.5" aria-hidden="true" />
+							กรอกจากข้อมูลครอบครัวที่เข้าร่วมแล้ว — แก้ไขไม่ได้ระหว่างเข้าร่วม
+						</p>
+					{/if}
+					<HouseholdAddressFields
+						bind:housing_type={household.housing_type}
+						bind:residence_landmark={
+							() => household.residence_landmark ?? '',
+							(v) => {
+								household.residence_landmark = v || null;
+							}
 						}
-					}
-					bind:address_no={
-						() => household.address_no ?? '',
-						(v) => {
-							household.address_no = v;
+						bind:address_no={
+							() => household.address_no ?? '',
+							(v) => {
+								household.address_no = v;
+							}
 						}
-					}
-					bind:village_no={
-						() => household.village_no ?? '',
-						(v) => {
-							household.village_no = v;
+						bind:village_no={
+							() => household.village_no ?? '',
+							(v) => {
+								household.village_no = v;
+							}
 						}
-					}
-					bind:subdistrict={
-						() => household.subdistrict ?? '',
-						(v) => {
-							household.subdistrict = v;
+						bind:subdistrict={
+							() => household.subdistrict ?? '',
+							(v) => {
+								household.subdistrict = v;
+							}
 						}
-					}
-					bind:district={
-						() => household.district ?? '',
-						(v) => {
-							household.district = v;
+						bind:district={
+							() => household.district ?? '',
+							(v) => {
+								household.district = v;
+							}
 						}
-					}
-					bind:province={
-						() => household.province ?? '',
-						(v) => {
-							household.province = v;
+						bind:province={
+							() => household.province ?? '',
+							(v) => {
+								household.province = v;
+							}
 						}
-					}
-					bind:postal_code={
-						() => household.postal_code ?? '',
-						(v) => {
-							household.postal_code = v;
+						bind:postal_code={
+							() => household.postal_code ?? '',
+							(v) => {
+								household.postal_code = v;
+							}
 						}
-					}
-					bind:dorm_name={household.dorm_name}
-					bind:dorm_building={household.dorm_building}
-					bind:dorm_floor={household.dorm_floor}
-					bind:dorm_room={household.dorm_room}
-					dormFields={true}
-					errors={householdFieldErrors}
-					loadMasterHousingTypes={channel !== 'public'}
-					required={true}
-					disabled={fieldsLocked || hasJoinSelection}
-				/>
+						bind:dorm_name={household.dorm_name}
+						bind:dorm_building={household.dorm_building}
+						bind:dorm_floor={household.dorm_floor}
+						bind:dorm_room={household.dorm_room}
+						dormFields={true}
+						errors={householdFieldErrors}
+						loadMasterHousingTypes={channel !== 'public'}
+						required={true}
+						disabled={fieldsLocked || hasJoinSelection}
+					/>
+				</div>
 
 				{#if enableResidenceJoin}
 					{#if hasJoinSelection}
@@ -1604,36 +1621,41 @@
 												</div>
 											</div>
 
-											{#if canJoinPublicChip(chip)}
-												<Button
-													type="button"
-													size="sm"
-													variant="outline"
-													disabled={fieldsLocked}
-													onclick={() => confirmPublicJoin(chip)}
-												>
-													{chip.is_in_shelter ? 'เข้าร่วม' : 'เข้าร่วมคิวกลาง'}
-												</Button>
-											{:else}
-												<p class="max-w-[14rem] text-right text-2xs text-muted-foreground">
-													ศูนย์{chip.shelter_name
-														? ` ${chip.shelter_name}`
-														: ''}ยังไม่เปิดรับลงทะเบียนล่วงหน้า —
-													แนะนำติดต่อที่ศูนย์หรือแจ้งเจ้าหน้าที่
-												</p>
-											{/if}
+											<div class="flex shrink-0 flex-col items-end gap-1.5">
+												<div class="flex items-center gap-2">
+													{#if canJoinPublicChip(chip)}
+														<Button
+															type="button"
+															size="sm"
+															disabled={fieldsLocked}
+															onclick={() => confirmPublicJoin(chip)}
+														>
+															{chip.is_in_shelter ? 'เข้าร่วม' : 'เข้าร่วมคิวกลาง'}
+														</Button>
+													{/if}
+													<Button
+														type="button"
+														size="sm"
+														variant="outline"
+														disabled={fieldsLocked}
+														onclick={continueCreateDespiteSuggest}
+													>
+														สร้างใหม่
+													</Button>
+												</div>
+												{#if !canJoinPublicChip(chip)}
+													<p class="max-w-[14rem] text-right text-2xs text-muted-foreground">
+														ศูนย์{chip.shelter_name
+															? ` ${chip.shelter_name}`
+															: ''}ยังไม่เปิดรับลงทะเบียนล่วงหน้า —
+														แนะนำติดต่อที่ศูนย์หรือแจ้งเจ้าหน้าที่
+													</p>
+												{/if}
+											</div>
 										</div>
 									</li>
 								{/each}
 							</ul>
-							<Button
-								type="button"
-								size="sm"
-								disabled={fieldsLocked}
-								onclick={continueCreateDespiteSuggest}
-							>
-								สร้างใหม่
-							</Button>
 						</div>
 					{:else if phoneSearchCheckedEmpty}
 						<p class="mt-3 text-xs text-muted-foreground">
