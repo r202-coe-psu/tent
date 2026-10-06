@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { beforeNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { tick } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
@@ -129,6 +130,7 @@
 			isDirty = false;
 			isNavigatingAfterSave = true;
 			completed = result;
+			await focusCompletionHeading();
 			toast.success(`รายงานตัวสำเร็จ ${result.members.length} คน`);
 		} catch (err) {
 			saveError = buildSaveFailureReport(err, {
@@ -138,6 +140,14 @@
 			toast.error('บันทึกการรายงานตัวไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
 			throw err;
 		}
+	}
+
+	async function focusCompletionHeading() {
+		await tick();
+		window.scrollTo({ top: 0, behavior: 'auto' });
+		document.documentElement.scrollTo({ top: 0, behavior: 'auto' });
+		document.body.scrollTo({ top: 0, behavior: 'auto' });
+		document.getElementById('family-batch-print-heading')?.focus({ preventScroll: true });
 	}
 </script>
 

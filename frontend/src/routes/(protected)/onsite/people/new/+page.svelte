@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { beforeNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { tick } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
@@ -185,6 +186,7 @@
 			isDirty = false;
 			isNavigatingAfterSave = true;
 			completed = result;
+			await focusCompletionHeading();
 			toast.success(`ลงทะเบียนครอบครัว ${result.members.length} คน สำเร็จ`);
 		} catch (err) {
 			const partial = isRegistrationCompensationIncomplete(err);
@@ -202,6 +204,14 @@
 			}
 			throw err;
 		}
+	}
+
+	async function focusCompletionHeading() {
+		await tick();
+		window.scrollTo({ top: 0, behavior: 'auto' });
+		document.documentElement.scrollTo({ top: 0, behavior: 'auto' });
+		document.body.scrollTo({ top: 0, behavior: 'auto' });
+		document.getElementById('family-batch-print-heading')?.focus({ preventScroll: true });
 	}
 
 	function backToQueue() {
