@@ -363,9 +363,13 @@ export type UnifiedMemberWithMeta = UnifiedMemberInput & {
 
 export interface FamilyReportInPayload {
 	householdId: string;
+	/** Explicit opt-in for the kiosk flow when no existing household was selected. */
+	createHousehold?: boolean;
 	household: UnifiedHouseholdInput;
 	members: UnifiedMemberWithMeta[];
 	ctx: AuthorContext;
+	/** Reuse generated document ids when the same report-in is retried. */
+	ids?: import('$lib/db/ulid-reservation').UlidReservation;
 }
 
 function cleanAreaPrefix(name?: string | null): string {
