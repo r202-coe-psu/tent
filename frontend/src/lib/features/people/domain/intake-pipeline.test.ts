@@ -11,6 +11,7 @@ import {
 	nextScreeningQueueEvacuee,
 	parseZoningQrCode,
 	recommendZoneKind,
+	pickRecommendedZone,
 	sortByZoningQueueSince,
 	zoningQueueSince
 } from './intake-pipeline';
@@ -351,5 +352,34 @@ describe('formatQueueWait', () => {
 	it('returns — for missing or invalid input', () => {
 		expect(formatQueueWait(null, now)).toBe('—');
 		expect(formatQueueWait('not-a-date', now)).toBe('—');
+	});
+});
+
+describe('pickRecommendedZone', () => {
+	type TestZone = { code: string; type?: string; status?: string };
+	const zones: TestZone[] = [
+		{ code: 'A', type: 'general' },
+		{ code: 'B', type: 'vulnerable', status: 'closed' },
+		{ code: 'C', type: 'vulnerable' },
+		{ code: 'D' }
+	];
+
+	it('returns the first open zone of the recommended kind', () => {
+		expect(pickRecommendedZone(zones, 'vulnerable')?.code).toBe('C');
+		expect(pickRecommendedZone(zones, 'general')?.code).toBe('A');
+	});
+
+	it('treats zones without a type as general', () => {
+		expect(pickRecommendedZone<TestZone>([{ code: 'D' }], 'general')?.code).toBe('D');
+	});
+
+	it('returns null instead of an unrelated zone when no zone of that kind is open', () => {
+		expect(pickRecommendedZone(zones, 'quarantine')).toBeNull();
+		expect(
+			pickRecommendedZone<TestZone>(
+				[{ code: 'B', type: 'vulnerable', status: 'closed' }],
+				'vulnerable'
+			)
+		).toBeNull();
 	});
 });

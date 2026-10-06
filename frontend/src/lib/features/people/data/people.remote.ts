@@ -1419,6 +1419,9 @@ export class PeopleRemoteRepository implements PeopleRepository {
 					{
 						...m,
 						household_id: effectiveHouseholdId,
+						// Never zoned at the desk (ADR-0001) — a zone here would turn the new member
+						// `active` and skip Station 2/3.
+						zone: null,
 						status: 'arriving',
 						registered_via: 'staff'
 					},

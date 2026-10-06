@@ -4,6 +4,7 @@ import {
 	PRIMARY_CONTACT_LABEL,
 	applyAnonymousIdToMember,
 	blankUnifiedMember,
+	membersMissingPhoneChoice,
 	memberCardLabel,
 	parseUnifiedRegistration,
 	planFamilyRegistration,
@@ -207,6 +208,27 @@ describe('unified registration — mononym and anonymous ID', () => {
 		const member = blankUnifiedMember();
 		expect(member.gender).toBe('');
 		expect(member.religion).toBe('unknown');
+	});
+
+	it('blankUnifiedMember opens the phone field ready to type (not "no phone")', () => {
+		expect(blankUnifiedMember().phone).toBe('');
+	});
+
+	it('membersMissingPhoneChoice flags blank phones but not "no phone" (null) or filled ones', () => {
+		expect(
+			membersMissingPhoneChoice([
+				{ phone: '0812345678' },
+				{ phone: '' },
+				{ phone: null },
+				{ phone: '   ' }
+			])
+		).toEqual([1, 3]);
+	});
+
+	it('blankUnifiedMember sets CR-148 bound fields to null, never undefined', () => {
+		const member = blankUnifiedMember();
+		expect(member.religion_other).toBeNull();
+		expect(member.disability_other_detail).toBeNull();
 	});
 });
 

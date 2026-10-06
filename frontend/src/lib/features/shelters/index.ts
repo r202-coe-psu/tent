@@ -6,6 +6,7 @@ export {
 	resolveOperationStatus,
 	isShelterBookable,
 	zoneTypeSchema,
+	ZONE_TYPE_LABELS,
 	zoneStatusSchema,
 	powerSourceSchema,
 	waterSourceSchema,

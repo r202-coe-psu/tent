@@ -157,6 +157,25 @@ export function recommendZoneKind(
 	return 'general';
 }
 
+/** Zone type names shared by Station 2 (screening summary) and Station 3 (zone picker). */
+export const ZONE_KIND_LABELS: Record<ZoningRecommendKind, string> = {
+	quarantine: 'โซนกักตัว (มีอาการเฝ้าระวัง)',
+	vulnerable: 'โซนกลุ่มเปราะบาง',
+	general: 'โซนทั่วไป'
+};
+
+/**
+ * First open zone whose type matches `kind` (zones without a type count as general).
+ * Returns null when none matches — callers must not fall back to an unrelated zone,
+ * or the recommendation text would contradict the zone shown.
+ */
+export function pickRecommendedZone<Z extends { type?: string; status?: string }>(
+	zones: readonly Z[],
+	kind: ZoningRecommendKind
+): Z | null {
+	return zones.find((z) => z.status !== 'closed' && (z.type || 'general') === kind) ?? null;
+}
+
 /**
  * Present occupancy per zone: occupants whose stay is still "present"
  * (`active` | `room_confirmed` | `temporary_leave`) — not In-zone-only.

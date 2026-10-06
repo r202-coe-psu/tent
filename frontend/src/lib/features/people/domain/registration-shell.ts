@@ -348,6 +348,38 @@ export function suggestHouseholdsByResidence<T extends ResidenceMatchCandidate>(
 	});
 }
 
+/** Digits only, with a +66 / 66 country prefix turned into the local leading 0. */
+function normalizePhoneDigits(phone: string | null | undefined): string {
+	const digits = (phone ?? '').replace(/\D/g, '');
+	return digits.startsWith('66') && digits.length === 11 ? `0${digits.slice(2)}` : digits;
+}
+
+/**
+ * Station 1「ค้นหาครอบครัวด้วยเบอร์โทรศัพท์」: Households that have a member whose own phone
+ * equals `phone` (any spacing / dashes / +66). Same joinable-status filter as
+ * {@link suggestHouseholdsByResidence}. Returns [] for anything shorter than a Thai number.
+ */
+export function suggestHouseholdsByPhone<T extends ResidenceMatchCandidate>(
+	phone: string,
+	evacuees: readonly { phone?: string | null; household_id?: string | null }[],
+	households: readonly T[]
+): T[] {
+	const wanted = normalizePhoneDigits(phone);
+	if (!/^0\d{8,9}$/.test(wanted)) return [];
+	const householdIds = new Set(
+		evacuees
+			.filter((e) => e.household_id && normalizePhoneDigits(e.phone) === wanted)
+			.map((e) => e.household_id as string)
+	);
+	return households.filter((h) => {
+		const withStatus = h as ResidenceMatchCandidateWithStatus;
+		if (withStatus.status != null && !isJoinableHouseholdStatus(withStatus.status)) {
+			return false;
+		}
+		return householdIds.has(h._id);
+	});
+}
+
 function matchesNameOrPhone(
 	query: string,
 	evacuee: Pick<JoinCandidateEvacuee, 'first_name' | 'last_name' | 'nickname' | 'phone'>

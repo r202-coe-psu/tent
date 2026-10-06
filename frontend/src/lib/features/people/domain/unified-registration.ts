@@ -211,10 +211,15 @@ export function blankUnifiedMember(): UnifiedMemberInput {
 		last_name: '',
 		// Empty until the user picks male/female — schema rejects unset gender.
 		gender: '' as UnifiedMemberInput['gender'],
-		phone: null,
+		// '' = not filled in yet (the field opens ready to type); null = "ไม่มีเบอร์" ticked.
+		phone: '',
 		nickname: '',
 		country: 'THAILAND',
 		religion: 'unknown',
+		// Explicit nulls (CR-148): the member card binds these into fields with a fallback,
+		// and Svelte rejects binding `undefined` there (props_invalid_value).
+		religion_other: null,
+		disability_other_detail: null,
 		person_id: { cardType: 'national_id', number: '' },
 		vulnerable_groups: [],
 		special_needs: [],
@@ -225,6 +230,19 @@ export function blankUnifiedMember(): UnifiedMemberInput {
 		photo: null,
 		zone: null
 	};
+}
+
+/**
+ * Members who neither entered a phone nor ticked「ไม่มีเบอร์」. The card keeps
+ * `phone === null` only when that box is ticked, so a blank string means no choice
+ * was made — the schema would otherwise save it silently as "no phone".
+ */
+export function membersMissingPhoneChoice(
+	members: readonly Pick<UnifiedMemberInput, 'phone'>[]
+): number[] {
+	return members.flatMap((m, i) =>
+		typeof m.phone === 'string' && m.phone.trim() === '' ? [i] : []
+	);
 }
 
 /** 「บันทึกเคสไม่มีบัตร / บุคคลนิรนาม」 — mint ANON-{ulid} without blocking submit. */

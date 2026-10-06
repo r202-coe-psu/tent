@@ -1712,6 +1712,28 @@ export function canCheckInEvacuee(evacuee: Evacuee): boolean {
 	);
 }
 
+/**
+ * Scan-page check-in is for people coming *back* — they already went through Station 1–3.
+ * `pre_registered` / `arriving` have not been screened (Station 2) or zoned (Station 3) yet,
+ * so a scan must never check them in — not even alongside a family member who has a zone.
+ */
+export const SCAN_RETURN_STATUSES = [
+	'temporary_leave',
+	'checked_out',
+	'transferred'
+] as const satisfies readonly StayStatus[];
+
+export function canScanCheckIn(evacuee: Pick<Evacuee, 'current_stay'>): boolean {
+	return (SCAN_RETURN_STATUSES as readonly StayStatus[]).includes(evacuee.current_stay.status);
+}
+
+/** Not through intake yet: must go Station 1 → 2 → 3 before staying in a zone. */
+export function needsIntakeBeforeStay(evacuee: Pick<Evacuee, 'current_stay'>): boolean {
+	return (
+		evacuee.current_stay.status === 'pre_registered' || evacuee.current_stay.status === 'arriving'
+	);
+}
+
 export function canConfirmRoom(evacuee: Evacuee): boolean {
 	return (CONFIRM_ROOM_ELIGIBLE_STATUSES as readonly StayStatus[]).includes(
 		evacuee.current_stay.status
@@ -2222,3 +2244,12 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 		]
 	}
 ];
+
+const EWAR_SYMPTOM_LABELS: ReadonlyMap<string, string> = new Map(
+	EWAR_SYMPTOM_GROUPS.flatMap((g) => g.symptoms.map((s) => [s.id, s.label] as const))
+);
+
+/** Plain-Thai label for a persisted `Screening.symptoms` id; unknown ids are shown as-is. */
+export function ewarSymptomLabel(id: string): string {
+	return EWAR_SYMPTOM_LABELS.get(id) ?? id;
+}

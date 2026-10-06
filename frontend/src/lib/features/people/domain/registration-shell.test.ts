@@ -10,6 +10,7 @@ import {
 	resolveSectionEValues,
 	sectionEVisibility,
 	suggestHouseholdsByResidence,
+	suggestHouseholdsByPhone,
 	filterJoinCandidatesByEvacueeQuery
 } from './registration-shell';
 
@@ -490,5 +491,39 @@ describe('resolveHeadTransferRevert', () => {
 			id: 'household:h1',
 			patch: { head_evacuee_id: 'evacuee:old-head' }
 		});
+	});
+});
+
+describe('suggestHouseholdsByPhone', () => {
+	const households = [
+		{ _id: 'household:a', status: 'checked_in' },
+		{ _id: 'household:b', status: 'arriving' },
+		{ _id: 'household:c', status: 'checked_out' }
+	];
+	const evacuees = [
+		{ phone: '0812345678', household_id: 'household:a' },
+		{ phone: '081-999-0000', household_id: 'household:b' },
+		{ phone: '0855555555', household_id: 'household:c' },
+		{ phone: null, household_id: 'household:a' }
+	];
+
+	it('finds the household of any member with that phone', () => {
+		expect(suggestHouseholdsByPhone('0812345678', evacuees, households).map((h) => h._id)).toEqual([
+			'household:a'
+		]);
+	});
+
+	it('ignores dashes, spaces and a +66 prefix on either side', () => {
+		expect(
+			suggestHouseholdsByPhone('+66 81 999 0000', evacuees, households).map((h) => h._id)
+		).toEqual(['household:b']);
+	});
+
+	it('skips households that can no longer be joined', () => {
+		expect(suggestHouseholdsByPhone('0855555555', evacuees, households)).toEqual([]);
+	});
+
+	it('returns nothing for an incomplete number', () => {
+		expect(suggestHouseholdsByPhone('08123', evacuees, households)).toEqual([]);
 	});
 });

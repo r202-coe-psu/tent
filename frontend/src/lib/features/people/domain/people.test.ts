@@ -1,6 +1,9 @@
 // @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest';
 import {
+	ewarSymptomLabel,
+	canScanCheckIn,
+	needsIntakeBeforeStay,
 	createEvacuee,
 	createDraftEvacueeFromCard,
 	createMovement,
@@ -1693,5 +1696,35 @@ describe('zoneLabel', () => {
 	it('falls back to the raw code when no matching name exists', () => {
 		expect(zoneLabel('z9', [{ code: 'z1', name: 'โซนชาย' }])).toBe('z9');
 		expect(zoneLabel('z1')).toBe('z1');
+	});
+});
+
+describe('ewarSymptomLabel', () => {
+	it('maps a persisted symptom id to its plain-Thai label', () => {
+		expect(ewarSymptomLabel('acute_respiratory')).toBe(
+			'ติดเชื้อทางเดินหายใจเฉียบพลัน (ไอ เจ็บคอ หายใจลำบาก)'
+		);
+	});
+
+	it('returns unknown ids unchanged', () => {
+		expect(ewarSymptomLabel('legacy_code')).toBe('legacy_code');
+	});
+});
+
+describe('scan check-in gate (every person goes through Station 2/3)', () => {
+	const stay = (status: StayStatus) => ({ current_stay: { status, zone: 'Z5', since: '' } });
+
+	it('only lets people coming back check in from the scan page', () => {
+		expect(canScanCheckIn(stay('temporary_leave'))).toBe(true);
+		expect(canScanCheckIn(stay('checked_out'))).toBe(true);
+		expect(canScanCheckIn(stay('transferred'))).toBe(true);
+	});
+
+	it('never checks in someone who has not been screened and zoned yet', () => {
+		expect(canScanCheckIn(stay('pre_registered'))).toBe(false);
+		expect(canScanCheckIn(stay('arriving'))).toBe(false);
+		expect(needsIntakeBeforeStay(stay('pre_registered'))).toBe(true);
+		expect(needsIntakeBeforeStay(stay('arriving'))).toBe(true);
+		expect(needsIntakeBeforeStay(stay('active'))).toBe(false);
 	});
 });
