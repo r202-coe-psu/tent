@@ -20,7 +20,7 @@
  */
 import { test, expect } from '@playwright/test';
 import {
-	completeUserOnboarding,
+	seedSecurityQuestion,
 	couchLogin,
 	createCouchUser,
 	deleteCouchUser,
@@ -73,7 +73,7 @@ const waitForPublicFaq = (question: string, present: boolean) =>
 test.beforeAll(async () => {
 	if (IS_REMOTE) return;
 	await createCouchUser(TEST_USER);
-	await completeUserOnboarding(TEST_USER.name);
+	await seedSecurityQuestion(TEST_USER.name);
 	sessionCookie = await couchLogin(TEST_USER.name, TEST_USER.password);
 	operatorContactLinks = await readContactLinks();
 });
