@@ -330,8 +330,8 @@ interface Person {
 	age?: string;
 	/** Vulnerable-group checkbox codes, e.g. `elderly_dependent`. */
 	vulnerableGroups?: string[];
-	/** Zone name to assign already at Station 1 (leave undefined = "assign later"). */
-	zone?: string;
+	/** Station 1's optional preferred zone (CR-155) — a suggestion for Station 3, not a zone. */
+	preferredZone?: string;
 }
 const fullName = (p: Pick<Person, 'firstName' | 'lastName'>) => `${p.firstName} ${p.lastName}`;
 
@@ -361,8 +361,13 @@ async function fillMemberCard(page: Page, index: number, m: Person): Promise<voi
 			await card.locator(`#vg-${index}-${code}`).click();
 		}
 	}
-	if (m.zone) {
-		await card.locator('div.grid button', { hasText: m.zone }).first().click();
+	if (m.preferredZone) {
+		await card.getByRole('button', { name: /โซนที่ต้องการ \(ไม่บังคับ\)/ }).click();
+		await card.locator('[aria-label="โซนที่ต้องการ"]').click();
+		await page
+			.getByRole('option', { name: new RegExp(m.preferredZone) })
+			.first()
+			.click();
 	}
 }
 
@@ -702,7 +707,7 @@ async function walkInFlow(browser: Browser, run: Run, s: Sessions) {
 		gender: 'female',
 		nationalId: makeThaiNationalId(run.seed + 7),
 		age: '9',
-		zone: ZONE_VULNERABLE
+		preferredZone: ZONE_VULNERABLE
 	};
 	const relative: Person = {
 		firstName: 'Malee',
@@ -732,7 +737,7 @@ async function walkInFlow(browser: Browser, run: Run, s: Sessions) {
 	});
 
 	// Station 1: new household, 2 members (+ pet / car / assets when enabled)
-	await test.step('Station 1: register a NEW household (address, 2 members, pet, vehicle, assets, zone)', async () => {
+	await test.step('Station 1: register a NEW household (address, 2 members, pet, vehicle, assets, preferred zone)', async () => {
 		await fillAddress(desk, addressNo, 'หมู่ 5');
 		await expect(desk.locator('#postal_code')).not.toHaveValue('');
 
@@ -767,8 +772,8 @@ async function walkInFlow(browser: Browser, run: Run, s: Sessions) {
 
 	await test.step('Station 1: statuses and household details as staff see them', async () => {
 		await expectStay(desk, head, STATUS.arriving);
-		// Zone chosen at registration → active, awaiting arrival.
-		await expectStay(desk, child, STATUS.active, ZONE_VULNERABLE);
+		// A preferred zone is only a suggestion (ADR-0001, CR-155) — still arriving, no zone yet.
+		await expectStay(desk, child, STATUS.arriving);
 
 		await desk.goto(`/onsite/people/evacuee-profile-view/${ids[head.firstName]}`);
 		const profile = desk.getByRole('main').last();
@@ -803,10 +808,12 @@ async function walkInFlow(browser: Browser, run: Run, s: Sessions) {
 	});
 
 	await test.step('Station 3 queue before Station 2: held back (ON) / listed straight away (OFF)', async () => {
-		await expectZoningQueue(desk, run.flags, lastName, [head, relative], { screened: false });
+		await expectZoningQueue(desk, run.flags, lastName, [head, child, relative], {
+			screened: false
+		});
 	});
 
-	// ── Station 2: medical screening (head + relative) ──
+	// ── Station 2: medical screening (head + child + relative) ──
 	await test.step(
 		run.flags.medical
 			? 'Station 2: doctor screens head and relative'
@@ -823,6 +830,7 @@ async function walkInFlow(browser: Browser, run: Run, s: Sessions) {
 						allergies: 'เพนิซิลลิน'
 					}
 				},
+				{ id: ids[child.firstName], fill: { conditions: 'ไม่มี' } },
 				{ id: ids[relative.firstName], fill: { conditions: 'ไม่มี' } }
 			]);
 		}
@@ -830,7 +838,18 @@ async function walkInFlow(browser: Browser, run: Run, s: Sessions) {
 
 	// ── Station 3: zone allocation ──
 	await test.step('Station 3: head gets a zone (relative zoned along), then household confirms arrival', async () => {
-		await expectZoningQueue(desk, run.flags, lastName, [head, relative], { screened: true });
+		await expectZoningQueue(desk, run.flags, lastName, [head, child, relative], {
+			screened: true
+		});
+
+		// The child's Station 1 preferred zone comes preselected; staff confirm it.
+		await desk.goto(`/onsite/zoning/${ids[child.firstName]}`);
+		await expect(desk.getByText('Station 3', { exact: true })).toBeVisible({ timeout: 20_000 });
+		await expect(desk.getByText(`โซนที่สถานี 1 ระบุไว้: ${ZONE_VULNERABLE}`)).toBeVisible();
+		await desk.getByRole('button', { name: 'จัดเข้าโซน (รอยืนยันถึงโซน)' }).click();
+		await expect(desk).toHaveURL(/\/onsite\/zoning$/, { timeout: 20_000 });
+		await expectStay(desk, child, STATUS.active, ZONE_VULNERABLE);
+
 		await desk.goto(`/onsite/zoning/${ids[head.firstName]}`);
 		await expect(desk.getByText('Station 3', { exact: true })).toBeVisible({ timeout: 20_000 });
 		await desk.locator('div.grid button', { hasText: ZONE_GYM_1 }).first().click();
@@ -989,7 +1008,7 @@ async function preRegisterFlow(browser: Browser, run: Run, s: Sessions) {
 		const id = String(reply.id ?? '');
 		expect(id).not.toBe('');
 		await expect(screenA.getByText('ลงทะเบียนล่วงหน้าสำเร็จ')).toBeVisible({ timeout: 30_000 });
-		const qr = screenA.getByAltText(/คิวกลาง|queue/i);
+		const qr = screenA.getByAltText(/เจ้าหน้าที่ลงทะเบียน|registration staff/i);
 		await expect(qr).toBeVisible();
 		expect(await decodeQrImage(screenA, qr)).toBe(id);
 		return id;

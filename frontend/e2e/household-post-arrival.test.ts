@@ -509,7 +509,7 @@ test.describe('Household post-arrival grouping — real CouchDB', () => {
 		await nextStep(page).click();
 
 		await page.getByRole('button', { name: 'ประเภทที่อยู่อาศัย' }).click();
-		await page.getByRole('option', { name: 'ไร้ที่อยู่อาศัยเป็นหลักแหล่ง' }).click();
+		await page.getByRole('option', { name: /^ไร้ที่อยู่อาศัย/ }).click();
 		await fillGeography(page);
 		await nextToAssets(page).click();
 		await nextToZone(page).click();
@@ -628,7 +628,7 @@ test.describe('Household post-arrival grouping — real CouchDB', () => {
 		await nextStep(page).click();
 		await nextStep(page).click();
 		await page.getByRole('button', { name: 'ประเภทที่อยู่อาศัย' }).click();
-		await page.getByRole('option', { name: 'ไร้ที่อยู่อาศัยเป็นหลักแหล่ง' }).click();
+		await page.getByRole('option', { name: /^ไร้ที่อยู่อาศัย/ }).click();
 		await fillGeography(page);
 		await nextToAssets(page).click();
 		await nextToZone(page).click();
