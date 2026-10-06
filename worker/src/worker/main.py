@@ -13,6 +13,7 @@ from worker.config import load_settings
 from worker.couch.bootstrap import bootstrap_all, needs_bootstrap
 from worker.couch.client import CouchClient
 from worker.inbound.donations import run_inbound_loop
+from worker.inbound.external_bookings import run_external_booking_inbound_loop
 from worker.inbound.search_audit import run_search_audit_inbound_loop
 from worker.inbound.shift_responses import run_shift_response_inbound_loop
 from worker.inbound.volunteer_applications import run_volunteer_inbound_loop
@@ -51,6 +52,7 @@ async def run(*, force_bootstrap: bool, bootstrap_only: bool) -> None:
     shift_response_task: asyncio.Task[None] | None = None
     profile_update_task: asyncio.Task[None] | None = None
     schedule_action_task: asyncio.Task[None] | None = None
+    external_booking_task: asyncio.Task[None] | None = None
 
     try:
         if force_bootstrap or bootstrap_only or await needs_bootstrap():
@@ -84,6 +86,10 @@ async def run(*, force_bootstrap: bool, bootstrap_only: bool) -> None:
             run_volunteer_schedule_action_loop(couch, stop_event=stop),
             name="inbound-volunteer-schedule-actions",
         )
+        external_booking_task = asyncio.create_task(
+            run_external_booking_inbound_loop(couch, stop_event=stop),
+            name="inbound-external-bookings",
+        )
         await manager.start()
         logger.info("Sync worker running — Ctrl+C to stop")
         await stop.wait()
@@ -97,6 +103,7 @@ async def run(*, force_bootstrap: bool, bootstrap_only: bool) -> None:
             shift_response_task,
             profile_update_task,
             schedule_action_task,
+            external_booking_task,
         ):
             if task:
                 task.cancel()
