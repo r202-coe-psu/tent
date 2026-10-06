@@ -538,7 +538,7 @@
 					class="h-9 gap-1.5 border-primary/30 text-xs text-primary hover:bg-primary/10"
 				>
 					<QrCode class="size-3.5" />
-					<span>สแกน ThaiD</span>
+					<span>{t.memberScanThaid}</span>
 				</Button>
 			{/if}
 

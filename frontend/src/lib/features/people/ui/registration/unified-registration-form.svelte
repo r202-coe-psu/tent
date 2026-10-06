@@ -531,9 +531,9 @@
 
 	const membersSectionDesc = $derived(
 		joinedFamilyMembers.length > 0
-			? 'สมาชิกเดิมแสดงด้านบนแบบดูอย่างเดียว — กรอกเฉพาะคนที่มาใหม่'
+			? t.membersDescJoined
 			: mode === 'report-in'
-				? 'ตรวจสอบข้อมูลสมาชิก และติ๊กเลือกผู้ที่มารายงานตัวในรอบนี้ (สามารถกดเพิ่มสมาชิกใหม่ที่เดินทางมาด้วยกันได้)'
+				? t.membersDescReportIn
 				: showVehiclesAssets
 					? `${t.sectionMembersDesc} ${t.sectionMembersDescOnsite}`
 					: t.sectionMembersDesc
@@ -542,7 +542,7 @@
 	const effectiveSubmitLabel = $derived(
 		submitLabel ??
 			(mode === 'report-in'
-				? 'ยืนยันรายงานตัวและพิมพ์บัตร'
+				? t.submitReportIn
 				: channel === 'public'
 					? t.submitConfirm
 					: t.submitOnsite)
@@ -567,11 +567,11 @@
 			const errorParam = params.get('error');
 			if (errorParam) {
 				if (errorParam === 'thaid_disabled') {
-					toast.error('การลงทะเบียนผ่าน ThaiD ถูกปิดใช้งานชั่วคราว');
+					toast.error(t.thaidDisabledToast);
 				} else if (errorParam === 'invalid_state') {
-					toast.error('การยืนยันตัวตน ThaiD ไม่ถูกต้อง หรือหมดอายุ กรุณาลองใหม่อีกครั้ง');
+					toast.error(t.thaidInvalidStateToast);
 				} else {
-					toast.error(`การยืนยันตัวตน ThaiD ไม่สำเร็จ (${errorParam})`);
+					toast.error(t.thaidFailedToast(errorParam));
 				}
 				const cleanUrl = new URL(window.location.href);
 				cleanUrl.searchParams.delete('error');
@@ -597,7 +597,7 @@
 						}
 					})
 					.catch(() => {
-						toast.error('ไม่สามารถดึงข้อมูลจาก ThaiD ได้');
+						toast.error(t.thaidClaimFailedToast);
 					})
 					.finally(() => {
 						const cleanUrl = new URL(window.location.href);
@@ -726,14 +726,16 @@
 		onDirtyChange?.(false);
 	}
 
+	const addrGap = $derived(langState.current === 'en' ? ' ' : '');
+
 	function formatResidenceSummary(r: ResidenceFields): string {
 		const parts = [
 			r.residence_landmark,
 			r.address_no,
 			r.village_no,
-			r.subdistrict ? `ต.${r.subdistrict}` : '',
-			r.district ? `อ.${r.district}` : '',
-			r.province ? `จ.${r.province}` : '',
+			r.subdistrict ? `${t.addrSubdistrictAbbr}${addrGap}${r.subdistrict}` : '',
+			r.district ? `${t.addrDistrictAbbr}${addrGap}${r.district}` : '',
+			r.province ? `${t.addrProvinceAbbr}${addrGap}${r.province}` : '',
 			r.postal_code
 		].filter((p) => (p ?? '').toString().trim());
 		return parts.join(' ') || '—';
@@ -762,7 +764,7 @@
 	function dropJoinWithNotice() {
 		if (!joinHouseholdId && !joinMatchToken) return;
 		clearJoinSelection();
-		toast.warning('ยกเลิกการเข้าร่วมครอบครัวแล้ว เพราะข้อมูลค้นหาเปลี่ยน — ตรวจสอบก่อนบันทึก');
+		toast.warning(t.joinDroppedToast);
 	}
 
 	$effect(() => {
@@ -818,7 +820,7 @@
 			dorm_floor: suggestion.dorm_floor ?? null,
 			dorm_room: suggestion.dorm_room ?? null
 		};
-		joinSelectedSummary = `${suggestion.label || 'ครอบครัวนี้'} · พบจากสมาชิก ${suggestion.matched_member_name}`;
+		joinSelectedSummary = `${suggestion.label || t.joinThisFamily} · ${t.joinFoundViaMember(suggestion.matched_member_name)}`;
 		joinViaPhone = true;
 	}
 
@@ -840,14 +842,14 @@
 
 		// Build summary with masked primary contact
 		const addrPart = chip.address
-			? `บ้านเลขที่ ${chip.address.address_no || '-'} ${chip.address.residence_landmark || ''}`.trim()
+			? `${t.addrHouseNo} ${chip.address.address_no || '-'} ${chip.address.residence_landmark || ''}`.trim()
 			: chip.landmark?.trim() || '';
 		const contactPart = chip.primary_contact_masked
-			? `ผู้ติดต่อหลัก: ${chip.primary_contact_masked}`
+			? `${t.joinPrimaryContact} ${chip.primary_contact_masked}`
 			: '';
-		const shelterPart = chip.shelter_name ? `ศูนย์: ${chip.shelter_name}` : '';
+		const shelterPart = chip.shelter_name ? `${t.joinShelter} ${chip.shelter_name}` : '';
 		joinSelectedSummary =
-			[addrPart, contactPart, shelterPart].filter(Boolean).join(' · ') || 'ครอบครัวที่อยู่นี้';
+			[addrPart, contactPart, shelterPart].filter(Boolean).join(' · ') || t.joinFamilyAtAddress;
 
 		// Prefill address from chip (read-only lock via hasJoinSelection)
 		if (chip.address) {
@@ -899,7 +901,7 @@
 		};
 
 		markDirty();
-		toast.success(`ดึงข้อมูล ${profile.first_name} ${profile.last_name} เรียบร้อย`);
+		toast.success(t.thaidHeadFetchedToast(`${profile.first_name} ${profile.last_name}`));
 	}
 
 	$effect(() => {
@@ -1046,7 +1048,7 @@
 		if (allowHouseholdJoin && !hasJoinSelection && householdDecision !== 'create') {
 			memberFieldErrors = {};
 			householdFieldErrors = {};
-			await revealValidation('กรุณาเลือกครอบครัวเดิม หรือยืนยันสร้างครอบครัวใหม่', [], 'address');
+			await revealValidation(t.joinChooseOrCreate, [], 'address');
 			return;
 		}
 
@@ -1082,7 +1084,7 @@
 				.map((m, i) => ({ i, dup: findExistingFamilyMember(m) }))
 				.filter((x) => x.dup);
 			if (alreadyIn.length > 0) {
-				const message = `${formatPersonName(alreadyIn[0]!.dup!)} อยู่ในครอบครัวนี้แล้ว — ลบการ์ดนี้ออก กรอกเฉพาะสมาชิกที่มาใหม่`;
+				const message = t.joinMemberAlreadyIn(formatPersonName(alreadyIn[0]!.dup!));
 				memberFieldErrors = Object.fromEntries(
 					alreadyIn.map(({ i }) => [i, { first_name: message }])
 				);
@@ -1107,11 +1109,7 @@
 			if (reportingCount === 0) {
 				memberFieldErrors = {};
 				householdFieldErrors = {};
-				await revealValidation(
-					'กรุณาเลือกสมาชิกอย่างน้อย 1 คนที่มารายงานตัวในรอบนี้',
-					[],
-					'members'
-				);
+				await revealValidation(t.reportInPickMember, [], 'members');
 				return;
 			}
 		}
@@ -1305,7 +1303,7 @@
 							role="status"
 						>
 							<CheckCircle2 class="size-3.5" aria-hidden="true" />
-							กรอกจากข้อมูลครอบครัวที่เข้าร่วมแล้ว — แก้ไขไม่ได้ระหว่างเข้าร่วม
+							{t.joinAddressLocked}
 						</p>
 					{/if}
 					<HouseholdAddressFields
@@ -1371,34 +1369,33 @@
 							role="status"
 							aria-live="polite"
 						>
-							<p class="text-sm font-semibold text-foreground">จะเข้าร่วมครอบครัวที่มีอยู่แล้ว</p>
+							<p class="text-sm font-semibold text-foreground">{t.joinWillJoinTitle}</p>
 							{#if joinSelectedSummary}
 								<p class="text-xs text-muted-foreground">{joinSelectedSummary}</p>
 							{/if}
 							{#if joinedFamilyMembers.length > 0}
 								<p class="text-xs text-muted-foreground">
-									ครอบครัวนี้มีสมาชิกเดิม {joinedFamilyMembers.length} คน — ดูรายชื่อในส่วน "สมาชิกครอบครัว"
-									ด้านล่าง
+									{t.joinExistingSeeBelow(joinedFamilyMembers.length)}
 								</p>
 							{:else if channel === 'public' && selectedMatchChip?.member_count}
 								<p class="text-xs text-muted-foreground">
-									ครอบครัวนี้มีสมาชิกเดิม {selectedMatchChip.member_count} คน
+									{t.joinExistingCount(selectedMatchChip.member_count)}
 								</p>
 							{/if}
 							<p class="text-xs text-muted-foreground">
-								กรอกเฉพาะสมาชิกที่มาใหม่ด้านล่าง — สมาชิกเดิมไม่ต้องกรอกซ้ำ หรือเลือกสร้างใหม่แทนได้
+								{t.joinFillNewOnly}
 							</p>
 							{#if selectedMatchChip?.shelter_code && selectedMatchChip.shelter_code !== shelterCode}
 								<div
 									class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/20 bg-background/80 p-2 text-2xs"
 								>
 									<span class="text-muted-foreground">
-										มีสมาชิกครอบครัวนี้อยู่ที่ศูนย์:
+										{t.joinAtShelterPrefix}
+
 										<strong class="text-foreground"
 											>{selectedMatchChip.shelter_name || selectedMatchChip.shelter_code}</strong
 										>
-										— แนะนำไปติดต่อที่ศูนย์หรือแจ้งเจ้าหน้าที่ รวมทีหลังที่ศูนย์ได้ · การเข้าร่วมนี้เพิ่มชื่อเข้าคิวกลางใบเดิม
-										ไม่ใช่เข้าศูนย์อัตโนมัติ
+										{t.joinAtShelterSuffix}
 									</span>
 									{#if onselectshelter}
 										<Button
@@ -1412,7 +1409,7 @@
 													selectedMatchChip!.shelter_name ?? undefined
 												)}
 										>
-											ดูศูนย์นี้
+											{t.joinViewShelter}
 										</Button>
 									{/if}
 								</div>
@@ -1424,7 +1421,7 @@
 								disabled={fieldsLocked}
 								onclick={continueCreateDespiteSuggest}
 							>
-								สร้างใหม่แทน
+								{t.joinCreateInstead}
 							</Button>
 						</div>
 					{:else if phoneSearchPending}
@@ -1434,14 +1431,14 @@
 							aria-live="polite"
 						>
 							<Loader2 class="size-3.5 animate-spin" aria-hidden="true" />
-							กำลังค้นหาครอบครัวจากเบอร์โทรศัพท์...
+							{t.joinSearchingPhone}
 						</div>
 					{:else if createNewConfirmed && (phoneHouseholdSuggestions.length > 0 || residenceSuggestions.length > 0 || publicMatchChips.length > 0)}
 						<div
 							class="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
 							role="status"
 						>
-							<span>จะลงทะเบียนเป็นครอบครัวใหม่</span>
+							<span>{t.joinWillCreateNew}</span>
 							<Button
 								type="button"
 								size="sm"
@@ -1450,13 +1447,13 @@
 								disabled={fieldsLocked}
 								onclick={() => (createNewConfirmed = false)}
 							>
-								ดูครอบครัวที่พบอีกครั้ง
+								{t.joinShowMatchesAgain}
 							</Button>
 						</div>
 					{:else if channel === 'onsite' && phoneHouseholdSuggestions.length > 0}
 						<div class="mt-3 space-y-2 rounded-xl border border-primary/30 bg-primary/5 p-3">
 							<p class="text-xs font-semibold text-foreground">
-								พบครอบครัวที่มีสมาชิกใช้เบอร์นี้ — เข้าร่วม หรือสร้างครอบครัวใหม่
+								{t.joinPhoneMatchTitle}
 							</p>
 							<ul class="space-y-2">
 								{#each phoneHouseholdSuggestions as suggestion (suggestion._id)}
@@ -1465,10 +1462,11 @@
 									>
 										<div class="min-w-0">
 											<p class="font-medium text-foreground">
-												{suggestion.label || 'ครอบครัวไม่ระบุชื่อ'}
+												{suggestion.label || t.joinUnnamedFamily}
 											</p>
 											<p class="text-xs text-muted-foreground">
-												ตรงกับสมาชิก: {suggestion.matched_member_name} ·
+												{t.joinMatchedMember}
+												{suggestion.matched_member_name} ·
 												{formatResidenceSummary(suggestion)}
 											</p>
 										</div>
@@ -1479,7 +1477,7 @@
 												disabled={fieldsLocked}
 												onclick={() => confirmOnsitePhoneJoin(suggestion)}
 											>
-												เข้าร่วม
+												{t.joinAction}
 											</Button>
 											<Button
 												type="button"
@@ -1488,7 +1486,7 @@
 												disabled={fieldsLocked}
 												onclick={continueCreateDespiteSuggest}
 											>
-												สร้างใหม่
+												{t.joinCreateNew}
 											</Button>
 										</div>
 									</li>
@@ -1502,12 +1500,12 @@
 							aria-live="polite"
 						>
 							<Loader2 class="size-3.5 animate-spin" aria-hidden="true" />
-							กำลังค้นหาครอบครัวที่อยู่ตรงกัน...
+							{t.joinSearchingAddress}
 						</div>
 					{:else if channel === 'onsite' && residenceSuggestions.length > 0}
 						<div class="mt-3 space-y-2 rounded-xl border border-border bg-muted/20 p-3">
 							<p class="text-xs font-semibold text-foreground">
-								พบครอบครัวที่อยู่ใกล้เคียง — เข้าร่วม หรือสร้างครอบครัวใหม่
+								{t.joinNearbyTitle}
 							</p>
 							<ul class="space-y-2">
 								{#each residenceSuggestions as suggestion (suggestion._id)}
@@ -1531,7 +1529,7 @@
 												disabled={fieldsLocked}
 												onclick={() => confirmOnsiteJoin(suggestion)}
 											>
-												เข้าร่วม
+												{t.joinAction}
 											</Button>
 											<Button
 												type="button"
@@ -1540,7 +1538,7 @@
 												disabled={fieldsLocked}
 												onclick={continueCreateDespiteSuggest}
 											>
-												สร้างใหม่
+												{t.joinCreateNew}
 											</Button>
 										</div>
 									</li>
@@ -1550,7 +1548,7 @@
 					{:else if channel === 'public' && publicMatchChips.length > 0}
 						<div class="mt-3 space-y-2 rounded-xl border border-border bg-muted/20 p-3">
 							<p class="text-xs font-semibold text-foreground">
-								พบครอบครัวที่ลงทะเบียนแล้ว — เข้าร่วมหรือสร้างใหม่
+								{t.joinPublicMatchTitle}
 							</p>
 							<ul class="space-y-2">
 								{#each publicMatchChips as chip (chip.match_token)}
@@ -1560,33 +1558,35 @@
 												<!-- Address line (no "บ้านตนเอง") -->
 												<span class="text-sm font-medium text-foreground">
 													{#if chip.address?.address_no}
-														บ้านเลขที่ {chip.address.address_no}
+														{t.addrHouseNo}
+														{chip.address.address_no}
 														{chip.address.residence_landmark || ''}
 													{:else}
-														{chip.landmark?.trim() || 'ครอบครัวที่อยู่นี้'}
+														{chip.landmark?.trim() || t.joinFamilyAtAddress}
 													{/if}
 												</span>
 
 												<!-- Masked primary contact -->
 												{#if chip.primary_contact_masked}
 													<span class="text-xs text-muted-foreground">
-														ผู้ติดต่อหลัก: {chip.primary_contact_masked}
+														{t.joinPrimaryContact}
+														{chip.primary_contact_masked}
 													</span>
 												{/if}
 
 												<!-- Shelter recommend copy -->
 												{#if chip.is_in_shelter && chip.shelter_name}
 													<span class="text-2xs text-muted-foreground">
-														มีครอบครัวที่ศูนย์ {chip.shelter_name} แล้ว
+														{t.joinChipInShelter(chip.shelter_name)}
 														{#if !canJoinPublicChip(chip)}
-															— ศูนย์นี้ยังไม่เปิดรับลงทะเบียนล่วงหน้าจากเว็บ
+															{t.joinChipNoWebPreReg}
 														{/if}
 													</span>
 												{:else if chip.shelter_code || chip.shelter_name}
 													<span class="text-2xs text-muted-foreground">
-														มีสมาชิกครอบครัวนี้อยู่ที่ศูนย์
-														{chip.shelter_name || chip.shelter_code} แล้ว — แนะนำไปที่ศูนย์หรือแจ้งเจ้าหน้าที่
-														· กดเข้าร่วมเพื่อเพิ่มชื่อเข้าคิวกลางใบเดิม
+														{t.joinChipMembersAtShelter(
+															chip.shelter_name || chip.shelter_code || ''
+														)}
 													</span>
 												{/if}
 
@@ -1596,7 +1596,8 @@
 														class="mt-0.5 inline-flex w-fit items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-700"
 													>
 														<CheckCircle2 class="size-3" />
-														ตรงกับเบอร์โทรศัพท์ของสมาชิก: {chip.matched_member_masked}
+														{t.joinChipPhoneMatch}
+														{chip.matched_member_masked}
 													</span>
 												{/if}
 
@@ -1607,7 +1608,7 @@
 															class="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground"
 														>
 															<Users class="size-3" />
-															{chip.member_count} สมาชิก
+															{t.joinChipMemberCount(chip.member_count)}
 														</span>
 													{/if}
 													{#if chip.pets && chip.pets.length > 0}
@@ -1615,7 +1616,7 @@
 															class="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground"
 														>
 															<PawPrint class="size-3" />
-															{chip.pets.length} สัตว์เลี้ยง
+															{t.joinChipPetCount(chip.pets.length)}
 														</span>
 													{/if}
 												</div>
@@ -1630,7 +1631,7 @@
 															disabled={fieldsLocked}
 															onclick={() => confirmPublicJoin(chip)}
 														>
-															{chip.is_in_shelter ? 'เข้าร่วม' : 'เข้าร่วมคิวกลาง'}
+															{chip.is_in_shelter ? t.joinAction : t.joinQueueAction}
 														</Button>
 													{/if}
 													<Button
@@ -1640,15 +1641,12 @@
 														disabled={fieldsLocked}
 														onclick={continueCreateDespiteSuggest}
 													>
-														สร้างใหม่
+														{t.joinCreateNew}
 													</Button>
 												</div>
 												{#if !canJoinPublicChip(chip)}
 													<p class="max-w-[14rem] text-right text-2xs text-muted-foreground">
-														ศูนย์{chip.shelter_name
-															? ` ${chip.shelter_name}`
-															: ''}ยังไม่เปิดรับลงทะเบียนล่วงหน้า —
-														แนะนำติดต่อที่ศูนย์หรือแจ้งเจ้าหน้าที่
+														{t.joinChipShelterClosed(chip.shelter_name ?? '')}
 													</p>
 												{/if}
 											</div>
@@ -1659,7 +1657,7 @@
 						</div>
 					{:else if phoneSearchCheckedEmpty}
 						<p class="mt-3 text-xs text-muted-foreground">
-							ไม่พบครอบครัวที่มีเบอร์โทรศัพท์นี้ — สามารถกรอกข้อมูลเพื่อลงทะเบียนครอบครัวใหม่ได้
+							{t.joinPhoneNotFound}
 						</p>
 					{:else if residenceSuggestFailed}
 						<p class="mt-3 text-xs text-amber-800 dark:text-amber-200" role="status">
@@ -1667,9 +1665,7 @@
 						</p>
 					{:else if residenceSuggestCheckedEmpty}
 						<p class="mt-3 text-xs text-muted-foreground">
-							{searchPhoneQuery.trim()
-								? 'ไม่พบครอบครัวที่ตรงกับเบอร์โทรศัพท์นี้ — สามารถกรอกข้อมูลเพื่อลงทะเบียนครอบครัวใหม่ได้'
-								: 'ไม่พบครอบครัวที่อยู่ตรงกัน — จะสร้างครอบครัวใหม่'}
+							{searchPhoneQuery.trim() ? t.joinPhoneNoMatch : t.joinAddressNoMatch}
 						</p>
 					{/if}
 
@@ -1679,12 +1675,10 @@
 						>
 							<div class="min-w-0 text-xs">
 								<p class="font-semibold text-foreground">
-									{householdDecision === 'create'
-										? 'ยืนยันสร้างครอบครัวใหม่สำหรับการรายงานตัวครั้งนี้'
-										: 'ต้องเลือกครอบครัวปลายทางก่อนบันทึก'}
+									{householdDecision === 'create' ? t.joinDecisionCreate : t.joinDecisionRequired}
 								</p>
 								<p class="text-muted-foreground">
-									เลือก “เข้าร่วม” จากผลค้นหา หรือยืนยันว่าจะสร้าง household ใหม่
+									{t.joinDecisionHint}
 								</p>
 							</div>
 							{#if householdDecision === 'create'}
@@ -1695,7 +1689,7 @@
 									disabled={fieldsLocked}
 									onclick={chooseHouseholdJoin}
 								>
-									กลับไปเลือกครอบครัวเดิม
+									{t.joinBackToExisting}
 								</Button>
 							{:else}
 								<Button
@@ -1704,7 +1698,7 @@
 									disabled={fieldsLocked}
 									onclick={continueCreateDespiteSuggest}
 								>
-									ยืนยันสร้างครอบครัวใหม่
+									{t.joinConfirmCreate}
 								</Button>
 							{/if}
 						</div>
@@ -1803,15 +1797,14 @@
 <AlertDialog.Root bind:open={confirmCreateNewOpen}>
 	<AlertDialog.Content>
 		<AlertDialog.Header>
-			<AlertDialog.Title>สร้างครอบครัวใหม่?</AlertDialog.Title>
+			<AlertDialog.Title>{t.createNewDialogTitle}</AlertDialog.Title>
 			<AlertDialog.Description>
-				ระบบพบครอบครัวที่ตรงกันแล้ว ถ้าเป็นครอบครัวเดียวกัน ให้กด "เข้าร่วม" แทน
-				เพื่อไม่ให้มีครอบครัวซ้ำ — สร้างใหม่เฉพาะเมื่อแน่ใจว่าเป็นคนละครอบครัว
+				{t.createNewDialogDesc}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		<AlertDialog.Footer>
-			<AlertDialog.Cancel>ยกเลิก</AlertDialog.Cancel>
-			<AlertDialog.Action onclick={confirmCreateNew}>ยืนยัน สร้างครอบครัวใหม่</AlertDialog.Action>
+			<AlertDialog.Cancel>{t.createNewDialogCancel}</AlertDialog.Cancel>
+			<AlertDialog.Action onclick={confirmCreateNew}>{t.createNewDialogConfirm}</AlertDialog.Action>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>
 </AlertDialog.Root>
