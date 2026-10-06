@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { useCreateEvacuee, useEvacuees, useUpdateEvacuee } from '../../application/queries';
+	import { useCreateEvacuee, useEvacuees } from '../../application/queries';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { useSaveImage } from '$lib/features/images';
 	import {
@@ -79,7 +79,6 @@
 
 	// --- Queries and Mutations ---
 	const createEvacueeMutation = useCreateEvacuee();
-	const updateEvacueeMutation = useUpdateEvacuee();
 	const allEvacueesQuery = useEvacuees();
 
 	let isSubmitting = $state(false);
@@ -181,20 +180,11 @@
 
 				f.data.household_id = createdHousehold._id;
 
-				const memberDoc = await createEvacueeMutation.mutateAsync({
-					input: f.data,
+				// Members follow the head's suggested zone; Station 3 assigns the real one.
+				await createEvacueeMutation.mutateAsync({
+					input: { ...f.data, preferred_zone: createdHead?.preferred_zone ?? null },
 					ctx
 				});
-
-				if (createdHead?.current_stay?.zone) {
-					await updateEvacueeMutation.mutateAsync({
-						...memberDoc,
-						current_stay: {
-							...memberDoc.current_stay,
-							zone: createdHead.current_stay.zone
-						}
-					});
-				}
 
 				toast.success(`ลงทะเบียนสมาชิก "${formatPersonName(f.data)}" เรียบร้อยแล้ว`);
 
