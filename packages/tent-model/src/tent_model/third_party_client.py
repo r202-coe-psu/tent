@@ -13,6 +13,9 @@ THIRD_PARTY_SCOPES = (
 	"location-stock-read",
 	"occupancy-read",
 	"occupancy-pii-read",
+	# CR-154 (M2): EXT-008–010 booking writes, EXT-011 per-person residency lookup.
+	"booking-write",
+	"residency-read",
 )
 
 

@@ -11,10 +11,10 @@ from tent_model.third_party_client import THIRD_PARTY_SCOPES
 # `occupancy-pii-read` (EXT-007) — enabled per written approval from the project owner.
 GRANTABLE_SCOPES: tuple[str, ...] = THIRD_PARTY_SCOPES
 
-# Only these two partner systems exist today (ADR 0002 / ext-spec.md). Kept as a
+# Partner systems on the OAuth plane (ADR 0002; M2 added by CR-154). Kept as a
 # closed set — not free text — so a client can't be created under a typo'd or
 # unknown module name.
-PARTNER_MODULES: tuple[str, ...] = ("M6", "M7")
+PARTNER_MODULES: tuple[str, ...] = ("M2", "M6", "M7")
 
 NAME_MAX_LENGTH = 100
 DESCRIPTION_MAX_LENGTH = 500

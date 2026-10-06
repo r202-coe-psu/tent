@@ -17,6 +17,7 @@
 		PARTNER_MODULE_LABEL,
 		SCOPE_LABEL,
 		SENSITIVE_SCOPES,
+		SENSITIVE_SCOPE_WARNING,
 		createThirdPartyClientSchema,
 		isPartnerModule,
 		type CreatedThirdPartyClient,
@@ -169,8 +170,7 @@
 								>
 									<ShieldAlert class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
 									<p class="text-xs leading-normal">
-										Grants access to individual occupant records (PDPA-sensitive). Grant only with
-										written approval on file for this module.
+										{SENSITIVE_SCOPE_WARNING[scope]}
 									</p>
 								</div>
 							{/if}
