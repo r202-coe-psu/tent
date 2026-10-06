@@ -83,10 +83,9 @@ export async function registerHouseholdViaUi(
 
 	for (const [i, member] of members.entries()) {
 		if (i > 0) await page.getByRole('button', { name: 'เพิ่มสมาชิก' }).click();
-		const card =
-			i === 0
-				? page.getByRole('region', { name: 'ผู้ติดต่อหลัก' })
-				: page.getByRole('region', { name: 'สมาชิก' }).nth(i - 1);
+		// By position id, not by role: from 3 members Station 1 switches to tabs and hides the
+		// other cards, so counting visible 「สมาชิก」 regions no longer finds the new one.
+		const card = page.locator(`#unified-member-${i}`);
 		await card.getByPlaceholder('ชื่อจริง').fill(member.firstName);
 		await card.getByPlaceholder('เช่น มีสุข').fill(member.lastName);
 		await card.getByLabel(member.gender).check();
@@ -98,9 +97,11 @@ export async function registerHouseholdViaUi(
 			}
 			await card.getByRole('textbox', { name: 'เลขที่บัตรประจำตัว' }).fill(member.idCard.number);
 		}
+		// A new member's phone field opens ready to type; "no phone" must be ticked explicitly.
 		if (member.phone) {
-			await card.getByRole('checkbox', { name: 'ไม่มีเบอร์โทรศัพท์' }).uncheck();
 			await card.getByRole('textbox', { name: 'เบอร์โทรศัพท์ *' }).fill(member.phone);
+		} else {
+			await card.getByRole('checkbox', { name: 'ไม่มีเบอร์โทรศัพท์' }).check();
 		}
 	}
 

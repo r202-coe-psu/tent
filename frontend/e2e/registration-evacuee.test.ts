@@ -344,14 +344,16 @@ async function fillMemberCard(page: Page, index: number, m: Person): Promise<voi
 	await card.locator(`#member-${index}-last-name`).fill(m.lastName);
 	await card.locator(`#member-${index}-gender-${m.gender}`).click({ force: true });
 	if (m.age) await card.locator(`#member-${index}-age`).fill(m.age);
-	// "ไม่มีเบอร์โทรศัพท์" is ticked by default — untick to type a number.
+	// A new member's phone field opens ready to type; "ไม่มีเบอร์โทรศัพท์" must be ticked
+	// explicitly. The public head has no such checkbox (phone is mandatory there).
+	const noPhone = card.locator(`#member-${index}-no-phone`);
+	const noPhoneTicked = async () =>
+		(await noPhone.count()) > 0 && (await noPhone.getAttribute('aria-checked')) === 'true';
 	if (m.phone) {
-		// The public head has no such checkbox (phone is mandatory there).
-		const noPhone = card.locator(`#member-${index}-no-phone`);
-		if ((await noPhone.count()) && (await noPhone.getAttribute('aria-checked')) === 'true') {
-			await noPhone.click();
-		}
+		if (await noPhoneTicked()) await noPhone.click();
 		await card.locator(`#member-${index}-phone`).fill(m.phone);
+	} else if ((await noPhone.count()) > 0 && !(await noPhoneTicked())) {
+		await noPhone.click();
 	}
 	if (m.vulnerableGroups?.length) {
 		await card.getByRole('button', { name: 'กลุ่มเปราะบาง', exact: true }).click();

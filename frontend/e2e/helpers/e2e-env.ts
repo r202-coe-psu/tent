@@ -20,7 +20,8 @@
  *   household 3: `<prefix>คู่หนึ่ง` (ชาย), `<prefix>คู่สอง` (หญิง)
  *
  * ID numbers must be fictitious: a 13-digit national ID starting with `0` (real Thai
- * IDs start with 1–8, so it can never belong to anyone) and a passport of two letters
+ * IDs start with 1–8, so it can never belong to anyone) whose last digit is a valid
+ * mod-11 check digit (the form rejects others since CR-148) and a passport of two letters
  * plus 7 digits.
  *
  * Shelters fixture — two shelters whose names start with `E2E_SHELTERS_MARKER`,
@@ -68,6 +69,16 @@ const RUN_ID = Date.now().toString(36);
 export const FIXTURE_LAST_NAME = 'ทดสอบระบบ';
 export const FIXTURE_LAST_NAME_MASKED = 'ทด****บบ';
 
+/**
+ * Appends the mod-11 check digit (same rule as `$lib/utils/thai-id`) to 12 digits — the form
+ * rejects national IDs whose last digit does not check out (CR-148).
+ */
+function withThaiIdCheckDigit(first12: string): string {
+	let sum = 0;
+	for (let i = 0; i < 12; i++) sum += Number(first12[i]) * (13 - i);
+	return `${first12}${(11 - (sum % 11)) % 10}`;
+}
+
 export interface SearchFixture {
 	shelterName: string;
 	prefix: string;
@@ -88,7 +99,7 @@ export function searchFixture(): SearchFixture {
 	// Local: fictitious and unique per run — see the ID rule in the file comment.
 	const nationalId = IS_REMOTE
 		? requireEnv('E2E_SEARCH_NATIONAL_ID')
-		: `0${String(Date.now()).slice(-12)}`;
+		: withThaiIdCheckDigit(`0${String(Date.now()).slice(-11)}`);
 	const passport = IS_REMOTE
 		? requireEnv('E2E_SEARCH_PASSPORT')
 		: `ZZ${String(Date.now()).slice(-7)}`;
