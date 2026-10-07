@@ -21,11 +21,13 @@ import type {
 	TransferInput,
 	TransferFilter,
 	StockTransfer,
+	Donation,
 	WalkInDonationInput,
 	DispatchInfoInput,
 	CancelInfoInput,
 	DisputeInfoInput
 } from '../domain/operations';
+import type { DonationBatchLine } from '../domain/donation-batch';
 import { countPendingTransfers } from '../domain/transfer-pending';
 
 export const operationsKeys = {
@@ -190,6 +192,31 @@ export const useReceiveWalkInDonation = () => {
 			ctx: AuthorContext;
 		}) => operationsRepository().receiveWalkInDonation(donation, receive, ctx),
 		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
+		}
+	}));
+};
+
+/**
+ * Mutation hook for receiving every line of a donation ticket at once (CR-143 §B).
+ *
+ * A partly written receipt RESOLVES (it is data for the form, not an error), so the
+ * caches are refreshed on settle either way: the rows that landed already count
+ * towards on-hand and out of the reserved total (FR-B9).
+ */
+export const useReceiveDonationBatch = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({
+			donation,
+			lines,
+			ctx
+		}: {
+			donation: Donation;
+			lines: readonly DonationBatchLine[];
+			ctx: AuthorContext;
+		}) => operationsRepository().receiveDonationBatch(donation, lines, ctx),
+		onSettled: () => {
 			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
 		}
 	}));
