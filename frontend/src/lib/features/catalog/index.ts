@@ -68,6 +68,13 @@ export {
 	type PackagingSource,
 	mergeCatalogGenerations,
 	type CatalogEntry,
+	// Expiry requirement (CR-143 §D)
+	requiresExpiry,
+	suggestExpiry,
+	shelfLifeExpiryLabel,
+	expiryRequirementHint,
+	type ExpirySource,
+	type StorageType,
 	// Recipe
 	recipeInputSchema,
 	type RecipeInput,

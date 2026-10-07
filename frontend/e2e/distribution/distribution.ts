@@ -162,7 +162,7 @@ export async function seedItemWithStock(
 		qty: options.stockQty,
 		unit: 'piece',
 		reason: 'adjust',
-		adjust_reason: 'other',
+		adjust_reason: 'found',
 		ref_id: null,
 		lot_ref: lotId,
 		occurred_at: now

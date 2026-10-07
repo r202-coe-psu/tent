@@ -14,9 +14,25 @@ describe('toStockFormItems', () => {
 				unit: 'kg',
 				base_unit: 'kg',
 				conversions: [],
-				perishable: true
+				requiresExpiry: true
 			}
 		]);
+	});
+
+	it('carries storage_type and shelf_life_days from item masters for lot priority', () => {
+		const [item] = toStockFormItems(
+			[],
+			[
+				{
+					_id: 'item_master:milk',
+					name: 'Milk',
+					base_unit: 'box',
+					storage_type: 'CHILLED',
+					shelf_life_days: 5
+				}
+			]
+		);
+		expect(item).toMatchObject({ storage_type: 'CHILLED', shelf_life_days: 5 });
 	});
 
 	it('maps active item masters with packaging fields and sku', () => {
@@ -43,10 +59,29 @@ describe('toStockFormItems', () => {
 				conversions: [{ uom_name: 'pack', multiplier: '6' }],
 				default_inventory_uom: 'pack',
 				default_issue_uom: 'bottle',
-				perishable: false,
+				requiresExpiry: false,
 				sku: 'WAT-01'
 			}
 		]);
+	});
+
+	// CR-143 §D: item_master has no `perishable` field; the picker used to hardcode false.
+	it('derives requiresExpiry for item masters from storage and shelf life (FR-D1)', () => {
+		const items = toStockFormItems(
+			[],
+			[
+				{ _id: 'item_master:milk', name: 'Milk', base_unit: 'l', storage_type: 'CHILLED' },
+				{ _id: 'item_master:rice', name: 'Rice', base_unit: 'kg', storage_type: 'DRY' },
+				{ _id: 'item_master:can', name: 'Can', base_unit: 'can', shelf_life_days: 180 }
+			]
+		);
+		expect(items.map((i) => [i._id, i.requiresExpiry])).toEqual([
+			['item_master:milk', true],
+			['item_master:rice', false],
+			['item_master:can', true]
+		]);
+		expect(items.find((i) => i._id === 'item_master:can')?.shelf_life_days).toBe(180);
+		expect(items.find((i) => i._id === 'item_master:milk')?.storage_type).toBe('CHILLED');
 	});
 
 	it('drops deactivated item masters', () => {

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { SOP_RATIO_KEYS, SOP_RATIO_KIND } from '$lib/features/sop-ratios/server';
 import { DAILY_SOP_QUESTIONS } from '$lib/features/daily-sop';
+import { adjustReasonSchema } from '$lib/features/operations';
 import { buildValidateDocUpdate } from './shelter-access-design';
 
 type UserCtx = { name: string; roles: string[] };
@@ -922,12 +923,27 @@ describe('buildValidateDocUpdate', () => {
 				...over
 			});
 
-		it.each(['expired', 'damaged', 'count_mismatch', 'lost', 'found', 'other'])(
-			'accepts adjust with adjust_reason %s',
-			(adjust_reason) => {
-				expect(() => compile()(adjust({ adjust_reason }), null, WAREHOUSE)).not.toThrow();
-			}
-		);
+		it.each(adjustReasonSchema.options)('accepts adjust with adjust_reason %s', (adjust_reason) => {
+			const note = adjust_reason === 'other' ? { note: 'รายละเอียด' } : {};
+			expect(() => compile()(adjust({ adjust_reason, ...note }), null, WAREHOUSE)).not.toThrow();
+		});
+
+		// Keeps the CouchDB validator's hand-written list in step with the Zod enum.
+		it('lists exactly the adjustReasonSchema options', () => {
+			const source = buildValidateDocUpdate('SH001');
+			const match = source.match(/var adjustReasons = \[([^\]]*)\]/);
+			expect(match).not.toBeNull();
+			const listed = match![1].split(',').map((v) => v.trim().replace(/^'|'$/g, ''));
+			expect([...listed].sort()).toEqual([...adjustReasonSchema.options].sort());
+		});
+
+		// FR-C9 / AC-C6
+		it.each([undefined, '', '   '])("rejects adjust_reason 'other' with note %j", (note) => {
+			expectForbidden(
+				() => compile()(adjust({ adjust_reason: 'other', note }), null, WAREHOUSE),
+				/requires a non-empty note/
+			);
+		});
 
 		it('accepts an optional note up to 500 characters', () => {
 			expect(() => compile()(adjust({ note: 'ก'.repeat(500) }), null, WAREHOUSE)).not.toThrow();

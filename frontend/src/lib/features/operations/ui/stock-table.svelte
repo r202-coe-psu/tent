@@ -13,6 +13,7 @@
 	import { SUPPLY_CATEGORY_LABELS, type SupplyCategory } from '$lib/features/supply';
 	import {
 		itemMasterUnit,
+		requiresExpiry,
 		useItemMasters,
 		useItemCategories,
 		formatUnit,
@@ -68,6 +69,7 @@
 		type ItemStockSummary
 	} from '../domain/stock-summary';
 	import { lotStorageKey, lotStorageName } from '../domain/lot-storage';
+	import { toLotPriorityItems } from '../domain/lot-priority';
 	import { useStoragePoints } from '../application/use-storage-points.svelte';
 	import { qtyGt, addQty } from '$lib/utils/qty';
 	import { IsMobile } from '$lib/hooks/is-mobile.svelte';
@@ -162,7 +164,7 @@
 		quickActionKind === 'receive'
 			? 'บันทึกรับพัสดุเข้าคลัง'
 			: quickActionKind === 'distribute'
-				? 'ระบบเลือกล็อตที่หมดอายุก่อนให้อัตโนมัติ'
+				? 'ระบบเลือกล็อตที่ควรใช้ก่อนให้อัตโนมัติ'
 				: 'กรอกจำนวนที่นับได้จริง แล้วระบบจะคำนวณส่วนต่างให้อัตโนมัติ'
 	);
 
@@ -181,7 +183,7 @@
 			category: im.category || 'other',
 			unit: itemMasterUnit(im),
 			reorder_level: null,
-			perishable: false,
+			perishable: requiresExpiry(im),
 			target_reserve_days: undefined,
 			consumption_rate: undefined,
 			timeframe: undefined
@@ -231,6 +233,9 @@
 			return new SvelteMap<string, StockLotBalance[]>();
 		}
 	});
+
+	/** Shelf life / storage type per item, for the lot order shown in the detail panel. */
+	const lotPriorityItems = $derived(toLotPriorityItems(itemMastersQuery.data ?? []));
 
 	const stockSummaryByItem = $derived.by(() => {
 		const result = new SvelteMap<string, ItemStockSummary>();
@@ -594,6 +599,7 @@
 	bind:open={detailOpen}
 	row={selectedManageItem}
 	lots={selectedItemId ? (lotsByItem.get(selectedItemId) ?? []) : []}
+	itemsById={lotPriorityItems}
 	shelterCode={getShelterCode()}
 	{offline}
 	onaction={(kind) => openQuickAction(kind, selectedItemId ?? undefined)}

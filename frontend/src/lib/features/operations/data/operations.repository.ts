@@ -17,6 +17,7 @@ import type {
 	DisputeInfoInput
 } from '../domain/operations';
 import type { MergeItemsInput, ItemMergeResult } from '../domain/item-merge';
+import type { DonationBatchLine, DonationBatchResult } from '../domain/donation-batch';
 import type { AuditAction } from '$lib/features/shared';
 
 /**
@@ -72,6 +73,23 @@ export interface OperationsRepository {
 		receiveInput: ReceiveInput,
 		ctx: AuthorContext
 	): Promise<{ donation: Donation; entry: StockLedger }>;
+
+	/**
+	 * Receive every counted line of a donation ticket in one write (CR-143 §B).
+	 *
+	 * Rows are built with `keyDonationReceipt` (`reason: 'donation'`, `ref_id` = the
+	 * donation) under deterministic `_id`s, written in a single `_bulk_docs`, and only
+	 * then is the donation moved to `received`. A partial write is returned, not
+	 * thrown: the caller re-sends the same lines and only the missing rows are written
+	 * (FR-B7); when every row is already there only the status transition runs (FR-B8).
+	 * Validation (catalog unit, `lot.expiry` for `requiresExpiry` items — FR-D2) throws
+	 * before anything is written.
+	 */
+	receiveDonationBatch(
+		donation: Donation,
+		counted: readonly DonationBatchLine[],
+		ctx: AuthorContext
+	): Promise<DonationBatchResult>;
 
 	/**
 	 * Process and persist an outbound stock distribute entry.

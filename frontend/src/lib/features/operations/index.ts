@@ -55,7 +55,9 @@ export {
 	openNeeds,
 	calculateReserved,
 	keyedDonationIds,
+	recordedDonationQty,
 	keyableDonations,
+	completeDonationReceipt,
 	isNeedCutOff,
 	forceCutOffNeed,
 	reopenNeed,
@@ -131,6 +133,16 @@ export {
 	type MergeItemsInput,
 	type PlanItemMergeInput
 } from './domain/item-merge';
+export {
+	deriveDonationReceiptLineId,
+	donationShortfall,
+	isReceivedLine,
+	type DonationBatchLine,
+	type DonationBatchLineResult,
+	type DonationBatchLineState,
+	type DonationBatchResult,
+	type DonationShortfall
+} from './domain/donation-batch';
 export { countPendingTransfers, isTransferPending } from './domain/transfer-pending';
 export { deriveDeterministicLedgerId } from './domain/deterministic-ledger-id';
 export {
@@ -155,6 +167,7 @@ export {
 	useStockBalance,
 	useReceiveStock,
 	useDistributeStock,
+	useDistributeAcrossLots,
 	useAdjustStock,
 	useMergeItems,
 	useCampaigns,
@@ -162,6 +175,7 @@ export {
 	useDonations,
 	useCreateCampaign,
 	useReceiveWalkInDonation,
+	useReceiveDonationBatch,
 	useUpdateCampaign,
 	useTransfers,
 	useTransfer,
@@ -202,3 +216,29 @@ export { default as StoragePointSelect } from './ui/storage-point-select.svelte'
 export { default as TransferForm } from './ui/transfer-form.svelte';
 export { default as TransferList } from './ui/transfer-list.svelte';
 export { default as TransferTab } from './ui/transfer-tab.svelte';
+
+export {
+	rankLotsForIssue,
+	scoreLot,
+	isLotExpired,
+	lotPriorityReason,
+	toLotPriorityItems,
+	URGENT_DAYS,
+	W_EXPIRY,
+	W_AGE,
+	HORIZON_DAYS,
+	type LotPriorityItem,
+	type LotScore,
+	type RankLotsOptions
+} from './domain/lot-priority';
+export {
+	planLotSplit,
+	type LotAllocation,
+	type LotSplitPlan,
+	type SplittableLot
+} from './domain/lot-split';
+export type {
+	DistributeAcrossLotsResult,
+	DistributedLot,
+	FailedLot
+} from './application/distribute-across-lots';

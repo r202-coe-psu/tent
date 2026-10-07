@@ -795,6 +795,10 @@ export function buildValidateDocUpdate(code: string): string {
       if (!hasAdjustReason && typeof newDoc.schema_v === 'number' && newDoc.schema_v >= 6) {
         throw { forbidden: 'Adjust stock ledger requires adjust_reason' };
       }
+      // CR-156 FR-C9: the catch-all reason must say what happened. Old rows stay readable (FR-C10).
+      if (newDoc.adjust_reason === 'other' && (typeof newDoc.note !== 'string' || newDoc.note.trim().length === 0)) {
+        throw { forbidden: 'Adjust stock ledger with adjust_reason other requires a non-empty note' };
+      }
       if (hasLedgerNote && (typeof newDoc.note !== 'string' || newDoc.note.length > 500)) {
         throw { forbidden: 'Adjust stock ledger note must be a string of at most 500 characters' };
       }

@@ -4,7 +4,9 @@ import {
 	isMergedItem,
 	itemMasterUnit,
 	mergedAliasesByTarget,
-	type PackagingSource
+	requiresExpiry,
+	type PackagingSource,
+	type StorageType
 } from '$lib/features/catalog';
 
 /** Item row for receive / distribute / adjust pickers (and A6 transfer). */
@@ -12,7 +14,11 @@ export type StockFormItem = PackagingSource & {
 	_id: string;
 	name: string;
 	unit: string;
-	perishable?: boolean;
+	/** `lot.expiry` is mandatory on receive (CR-143 FR-D1 / FR-D3). */
+	requiresExpiry?: boolean;
+	/** Drives the receive form's expiry autofill (FR-D2a). */
+	shelf_life_days?: number;
+	storage_type?: StorageType;
 	sku?: string;
 	/** Names of items merged into this one (CR-143 FR-F5): searching an old name finds it. */
 	aliases?: string[];
@@ -38,12 +44,13 @@ export type StockFormMasterSource = {
 	default_issue_uom?: string;
 	deactivated?: boolean;
 	merged_into?: string;
+	shelf_life_days?: number;
+	storage_type?: StorageType;
 };
 
 /**
  * Merge legacy supply items and active item masters into the shared picker shape.
- * Supply items come first; deactivated and merged-away masters are dropped, and a
- * destination carries its merged sources' names as search aliases (CR-143 FR-F5).
+ * Supply items come first; deactivated masters are dropped.
  */
 export function toStockFormItems(
 	supplyItems: readonly StockFormSupplySource[],
@@ -55,7 +62,7 @@ export function toStockFormItems(
 		unit: item.unit,
 		base_unit: item.unit,
 		conversions: [] as { uom_name: string; multiplier: string }[],
-		perishable: item.perishable
+		requiresExpiry: requiresExpiry({ perishable: item.perishable })
 	}));
 
 	const aliasesByTarget = mergedAliasesByTarget(itemMasters);
@@ -72,7 +79,9 @@ export function toStockFormItems(
 				conversions: [...(im.conversions ?? [])],
 				default_inventory_uom: im.default_inventory_uom,
 				default_issue_uom: im.default_issue_uom,
-				perishable: false,
+				requiresExpiry: requiresExpiry(im),
+				...(im.shelf_life_days != null ? { shelf_life_days: im.shelf_life_days } : {}),
+				...(im.storage_type ? { storage_type: im.storage_type } : {}),
 				...(im.sku !== undefined ? { sku: im.sku } : {}),
 				...(aliases?.length ? { aliases } : {})
 			};

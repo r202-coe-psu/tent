@@ -134,6 +134,8 @@
 	});
 
 	const isSubmitting = $derived(adjustMutation.isPending);
+	/** CR-156 FR-C9 — `other` must say what happened. */
+	const noteRequired = $derived(adjustReason === 'other');
 
 	const unitLabel = $derived(
 		selectedItem ? formatUnit(selectedItem.unit, units, langState.current) || selectedItem.unit : ''
@@ -217,10 +219,6 @@
 			toast.error('กรุณาเลือกสถานที่/ล็อต');
 			return;
 		}
-		if (selectedItem.perishable && selectedLotKey === 'new' && !customExpiry) {
-			toast.error('สินค้าเน่าเสียได้ จำเป็นต้องระบุวันหมดอายุ');
-			return;
-		}
 		if (!newQtyInput || isNaN(Number(newQtyInput)) || Number(newQtyInput) < 0) {
 			toast.error('กรุณาระบุจำนวนใหม่ที่ถูกต้อง (ต้องไม่ติดลบ)');
 			return;
@@ -231,6 +229,10 @@
 		}
 		if (!adjustReason) {
 			toast.error('กรุณาเลือกเหตุผลในการปรับปรุง');
+			return;
+		}
+		if (noteRequired && !note.trim()) {
+			toast.error('กรุณาระบุรายละเอียดเมื่อเลือกเหตุผล "อื่น ๆ"');
 			return;
 		}
 
@@ -362,11 +364,7 @@
 				<Field.Root class="col-span-1">
 					<Field.Label for="custom-expiry">
 						วันหมดอายุ
-						{#if selectedItem.perishable}
-							<span class="font-bold text-destructive">*</span>
-						{:else}
-							<span class="font-normal text-muted-foreground">(ไม่บังคับ)</span>
-						{/if}
+						<span class="font-normal text-muted-foreground">(ไม่บังคับ)</span>
 					</Field.Label>
 					<DatePicker id="custom-expiry" ariaLabel="วันหมดอายุ" bind:value={customExpiry} />
 				</Field.Root>
@@ -458,13 +456,19 @@
 						{/each}
 					</div>
 					<Field.Label for="adjust-note">
-						รายละเอียดเพิ่มเติม <span class="font-normal text-muted-foreground">(ไม่บังคับ)</span>
+						รายละเอียดเพิ่มเติม
+						{#if noteRequired}
+							<span class="font-bold text-destructive">*</span>
+						{:else}
+							<span class="font-normal text-muted-foreground">(ไม่บังคับ)</span>
+						{/if}
 					</Field.Label>
 					<Textarea
 						id="adjust-note"
 						placeholder="เช่น กระสอบฉีก / พบตกหล่นหลังชั้นวาง"
 						bind:value={note}
 						maxlength={ADJUST_NOTE_MAX_LENGTH}
+						required={noteRequired}
 						rows={2}
 						class="min-h-11"
 					/>
@@ -484,7 +488,11 @@
 						type="submit"
 						size="lg"
 						variant={deltaSign === 'write_off' ? 'destructive' : 'default'}
-						disabled={offline || isSubmitting || deltaQty === '0' || !adjustReason}
+						disabled={offline ||
+							isSubmitting ||
+							deltaQty === '0' ||
+							!adjustReason ||
+							(noteRequired && !note.trim())}
 						class="min-h-11 w-full font-bold"
 					>
 						{submitLabel}
