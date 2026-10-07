@@ -1,7 +1,7 @@
 ---
 title: M2 ⇄ Shelter API — เอกสารส่งมอบ (EXT-001, EXT-002, EXT-008–EXT-011)
 status: as-built
-version: 1.0
+version: 1.1
 created: 2026-10-06
 updated: 2026-10-06
 audience: ทีมพัฒนา M2 (ระบบประเมินความพร้อมและจัดการกลุ่มเปราะบาง)
@@ -22,6 +22,7 @@ note: ตอบสเปก A_M2_API_SERVICES_SHELTER_V1.0 (20 ส.ค. 2569) �
   - error ให้ใช้ฟิลด์ `code` เป็นหลัก
 - **มีส่วนที่ต่างจากสเปก v1.0** ทั้ง path, ชื่อฟิลด์ และ envelope ดูตารางเทียบใน §2
 - **การจองเป็นแบบ "รับเข้าคิว"** — `201 BOOKED` หมายถึงระบบรับคำขอแล้ว และจะลงทะเบียนเข้าศูนย์ภายในประมาณ 10 วินาที ผลสุดท้ายดูได้จาก §6
+- **มี smoke test พร้อมใช้** สำหรับยืนยัน credentials และทุก endpoint ก่อนเริ่มเชื่อมต่อ ดู §9
 
 ---
 
@@ -312,3 +313,60 @@ curl -sS -G 'https://shelter.importstar.dev/public-api/external/persons/shelter-
 4. ถ้าต้องการยืนยันผล ให้เรียก §6.2 หลังจองประมาณ 10 วินาที
 5. ถ้าผู้จองเปลี่ยนใจก่อนไปถึงศูนย์ ให้ยกเลิก (§6.3)
 6. ตรวจสอบว่าผู้จองเข้าพักแล้วหรือยังด้วย §7 ระบบจะตอบ 404 จนกว่าเจ้าหน้าที่ศูนย์จะ check-in
+
+---
+
+## 9. Smoke test
+
+สคริปต์ `scripts/smoke_test_partner_api.py` ในรีโปของ Shelter ตรวจ endpoint ทั้งหมดใน §3–§7 แบบ end-to-end ผ่าน HTTP จริง ใช้ยืนยันว่า credentials และ scope ที่ได้รับใช้งานได้ก่อนเริ่มเชื่อมต่อ
+
+### 9.1 สิ่งที่ตรวจ
+
+| Endpoint | กรณีที่ตรวจ |
+| --- | --- |
+| EXT-001 token | ขอ token สำเร็จ (อายุ 3600 วินาที) · secret ผิดได้ 401 `invalid_client` · `grant_type` ผิดได้ 400 `unsupported_grant_type` |
+| EXT-002 รายการศูนย์ | ได้ envelope พร้อมรายการ · ไม่มี token ถูกปฏิเสธ |
+| EXT-008 จอง | `201 BOOKED` และ `booking_id` ขึ้นต้น `BK-` · body ว่างและ CID ผิด checksum ได้ 422 `validation_error` · ศูนย์ที่ไม่มีอยู่ได้ 404 `location_not_found` · CID เดิมที่ศูนย์เดิมได้ 409 `duplicate_booking` · ไม่มี token ถูกปฏิเสธ |
+| EXT-010 สถานะ | อ่านกลับได้ `BOOKED` พร้อมเวลา `+07:00` · อ่านได้ `CANCELLED` ทันทีหลังยกเลิก · id ที่ไม่มีได้ 404 `booking_not_found` |
+| EXT-009 ยกเลิก | `reason` เกิน 200 ตัวอักษรได้ 422 · ยกเลิกสำเร็จได้ 200 `CANCELLED` · ยกเลิกซ้ำได้ 409 `booking_not_cancellable` |
+| EXT-011 การเข้าพัก | ไม่ส่ง `purpose` ได้ 400 `missing_purpose` · CID รูปแบบผิดได้ 422 · CID ที่ไม่รู้จัก และ CID ที่จองแล้วแต่ยังไม่ check-in ได้ 404 `residency_not_found` · กรณี 200 ตรวจเมื่อระบุ CID ที่ check-in แล้ว (§9.2) |
+
+ถ้า token ไม่มี scope `booking-write` หรือ `residency-read` สคริปต์จะตรวจว่าได้ 403 `insufficient_scope` แล้วข้ามส่วนที่เหลือของกลุ่มนั้น และแจ้งในผลลัพธ์
+
+### 9.2 วิธีรัน
+
+```bash
+export PARTNER_API_BASE_URL=https://shelter.importstar.dev
+export PARTNER_API_PREFIX=/public-api
+export PARTNER_CLIENT_ID=<issued-by-shelter>
+export PARTNER_CLIENT_SECRET=<issued-by-shelter>
+python3 scripts/smoke_test_partner_api.py
+```
+
+| ตัวเลือก | ใช้ทำอะไร |
+| --- | --- |
+| `--skip-booking-writes` | ไม่สร้าง booking ทดสอบ รันแบบอ่านอย่างเดียว (ยังตรวจกรณี error) |
+| `--shelter-code <code>` (`PARTNER_SHELTER_CODE`) | บังคับศูนย์ที่ใช้จอง ถ้าไม่ระบุจะลองศูนย์สถานะ `open` ทีละที่จนกว่าจะรับจอง |
+| `--checked-in-cid <13 หลัก>` (`PARTNER_CHECKED_IN_CID`) | ตรวจ EXT-011 กรณี 200 กับคนที่ check-in แล้ว (ระบบไม่แสดง CID ในผลลัพธ์) |
+| `-v` | แสดง request / response ละเอียด (ซ่อน `client_secret`) |
+
+Exit code เป็น `0` เมื่อผ่านทั้งหมด และ `1` เมื่อมีข้อที่ไม่ผ่าน
+
+### 9.3 ผลกระทบต่อข้อมูล
+
+- การรันปกติ**สร้าง booking จริง 1 รายการ** ด้วย CID สุ่มที่ผ่าน checksum และชื่อ "Smoke Test" แล้วยกเลิกทุกครั้งเมื่อจบ ถ้า worker ลงทะเบียนเข้าศูนย์ไปก่อนการยกเลิก จะมีผู้พักสถานะ `pre_registered` ค้างจนกว่าระบบจะประมวลผลการยกเลิก
+- ใช้ `--skip-booking-writes` เมื่อไม่ต้องการเขียนข้อมูล
+- การเรียกทั้งหมดถูกบันทึกตาม PDPA เช่นเดียวกับการใช้งานจริง (§4)
+
+### 9.4 สถานะการตรวจสอบ
+
+| สภาพแวดล้อม | ผล |
+| --- | --- |
+| Local (FastAPI + worker) | ผ่าน 33 จาก 33 ข้อ เมื่อ 2026-10-06 (ส่วน M2 16 ข้อ) |
+| Staging | ยังไม่ได้รัน |
+
+**ยังไม่ครอบคลุม**
+- `invalid_token` (401) — สคริปต์ตรวจแค่ว่าไม่มี token แล้วถูกปฏิเสธด้วย 401 หรือ 403
+- `location_not_bookable` (409) — ยังไม่มีเคสที่บังคับให้เกิด ต้องมีศูนย์ที่ปิดรับจองโดยเฉพาะ
+- `internal_error` (500)
+- ผลสุดท้ายหลัง worker ลงทะเบียน (เช่น `REJECTED` / `duplicate` ในส่วนสถานะ §6.2) — สคริปต์ตรวจแค่สถานะทันทีหลังจอง
