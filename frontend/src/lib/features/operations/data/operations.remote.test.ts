@@ -132,7 +132,11 @@ import {
 	assertReceiveAgainstCatalog,
 	catalogItemRules
 } from './operations.remote';
-import { createReceiveEntry, projectStockLotBalances } from '../domain/operations';
+import {
+	createReceiveEntry,
+	createStockLedger,
+	projectStockLotBalances
+} from '../domain/operations';
 import { createStockLotReservation, makeLotReservationDocId } from '$lib/features/distribution';
 import { rankLotsForIssue } from '../domain/lot-priority';
 import { planLotSplit } from '../domain/lot-split';
@@ -877,13 +881,25 @@ describe('OperationsRemoteRepository', () => {
 			);
 
 			const result = await repo.adjustStock(
-				{ item_id: 'item:rice', qty: -2, unit: 'kg', source: 'adjust', reason: 'damaged' } as never,
+				{
+					item_id: 'item:rice',
+					qty: -2,
+					unit: 'kg',
+					source: 'adjust',
+					adjust_reason: 'damaged'
+				} as never,
 				ctx
 			);
 			expect(result.qty).toBe('-2');
 
 			const up = await repo.adjustStock(
-				{ item_id: 'item:rice', qty: 2, unit: 'kg', source: 'adjust', reason: 'found' } as never,
+				{
+					item_id: 'item:rice',
+					qty: 2,
+					unit: 'kg',
+					source: 'adjust',
+					adjust_reason: 'found'
+				} as never,
 				ctx
 			);
 			expect(up.qty).toBe('2');
@@ -900,6 +916,82 @@ describe('OperationsRemoteRepository', () => {
 			expect(result.item_id).toBe('item:rice');
 			const list = await repo.listLedger();
 			expect(list).toHaveLength(1);
+		});
+	});
+
+	// CR-143 §C — adjust_reason / note are persisted with schema_v 6 and a mixed
+	// v5/v6 ledger still produces the right balance (AC-C1, AC-C3).
+	describe('adjustStock (CR-143 §C)', () => {
+		beforeEach(() => {
+			mockGetItem.mockReset();
+			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
+		});
+
+		it('persists adjust_reason + note on a schema_v 6 row', async () => {
+			await repo.receiveStock(
+				{ item_id: 'item:rice', qty: 10, unit: 'kg', source: 'donation', ref_id: DONATION_REF },
+				ctx
+			);
+
+			const entry = await repo.adjustStock(
+				{
+					item_id: 'item:rice',
+					qty: '-4',
+					unit: 'kg',
+					adjust_reason: 'damaged',
+					note: 'กระสอบฉีก',
+					ref_id: null
+				},
+				ctx
+			);
+
+			expect(entry.schema_v).toBe(6);
+			const stored = (await repo.listLedger()).find((e) => e._id === entry._id);
+			expect(stored?.adjust_reason).toBe('damaged');
+			expect(stored?.note).toBe('กระสอบฉีก');
+			expect((await repo.getBalance()).get('item:rice')).toBe('6');
+		});
+
+		it('rejects a missing reason and writes nothing', async () => {
+			await expect(
+				repo.adjustStock({ item_id: 'item:rice', qty: '3', unit: 'kg', ref_id: null } as never, ctx)
+			).rejects.toThrow();
+			expect(await repo.listLedger()).toHaveLength(0);
+		});
+
+		it('rejects merge from the generic adjust path', async () => {
+			await expect(
+				repo.adjustStock(
+					{
+						item_id: 'item:rice',
+						qty: '3',
+						unit: 'kg',
+						adjust_reason: 'merge',
+						ref_id: null
+					} as never,
+					ctx
+				)
+			).rejects.toThrow();
+			expect(await repo.listLedger()).toHaveLength(0);
+		});
+
+		it('sums a ledger that mixes schema_v 5 and 6 rows', async () => {
+			// a pre-CR-143 adjust row as an older client persisted it
+			await repo.addLedgerEntry({
+				...createStockLedger(
+					{ item_id: 'item:rice', qty: '10', unit: 'kg', reason: 'donation', ref_id: DONATION_REF },
+					ctx
+				),
+				schema_v: 5 as never
+			});
+			await repo.adjustStock(
+				{ item_id: 'item:rice', qty: '-3', unit: 'kg', adjust_reason: 'lost', ref_id: null },
+				ctx
+			);
+
+			const ledger = await repo.listLedger();
+			expect(ledger.map((e) => e.schema_v).sort()).toEqual([5, 6]);
+			expect((await repo.getBalance()).get('item:rice')).toBe('7');
 		});
 	});
 

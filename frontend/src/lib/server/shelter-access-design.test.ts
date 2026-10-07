@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { SOP_RATIO_KEYS, SOP_RATIO_KIND } from '$lib/features/sop-ratios/server';
 import { DAILY_SOP_QUESTIONS } from '$lib/features/daily-sop';
+import { adjustReasonSchema } from '$lib/features/operations';
 import { buildValidateDocUpdate } from './shelter-access-design';
 
 type UserCtx = { name: string; roles: string[] };
@@ -908,6 +909,108 @@ describe('buildValidateDocUpdate', () => {
 					REGISTRATION
 				)
 			).not.toThrow();
+		});
+	});
+
+	describe('stock_ledger adjust_reason (CR-143 §C, schema_v 6)', () => {
+		const adjust = (over: Doc = {}): Doc =>
+			ledger({
+				schema_v: 6,
+				qty: '-2',
+				reason: 'adjust',
+				ref_id: null,
+				adjust_reason: 'damaged',
+				...over
+			});
+
+		it.each(adjustReasonSchema.options)('accepts adjust with adjust_reason %s', (adjust_reason) => {
+			const note = adjust_reason === 'other' ? { note: 'รายละเอียด' } : {};
+			expect(() => compile()(adjust({ adjust_reason, ...note }), null, WAREHOUSE)).not.toThrow();
+		});
+
+		// Keeps the CouchDB validator's hand-written list in step with the Zod enum.
+		it('lists exactly the adjustReasonSchema options', () => {
+			const source = buildValidateDocUpdate('SH001');
+			const match = source.match(/var adjustReasons = \[([^\]]*)\]/);
+			expect(match).not.toBeNull();
+			const listed = match![1].split(',').map((v) => v.trim().replace(/^'|'$/g, ''));
+			expect([...listed].sort()).toEqual([...adjustReasonSchema.options].sort());
+		});
+
+		// FR-C9 / AC-C6
+		it.each([undefined, '', '   '])("rejects adjust_reason 'other' with note %j", (note) => {
+			expectForbidden(
+				() => compile()(adjust({ adjust_reason: 'other', note }), null, WAREHOUSE),
+				/requires a non-empty note/
+			);
+		});
+
+		it('accepts an optional note up to 500 characters', () => {
+			expect(() => compile()(adjust({ note: 'ก'.repeat(500) }), null, WAREHOUSE)).not.toThrow();
+			expectForbidden(
+				() => compile()(adjust({ note: 'ก'.repeat(501) }), null, WAREHOUSE),
+				/note must be a string of at most 500 characters/
+			);
+			expectForbidden(
+				() => compile()(adjust({ note: 12 }), null, WAREHOUSE),
+				/note must be a string of at most 500 characters/
+			);
+		});
+
+		it('rejects an adjust_reason outside the enum', () => {
+			expectForbidden(
+				() => compile()(adjust({ adjust_reason: 'stolen' }), null, WAREHOUSE),
+				/adjust_reason must be one of/
+			);
+		});
+
+		it('requires adjust_reason on schema_v >= 6 adjust rows', () => {
+			expectForbidden(
+				() => compile()(adjust({ adjust_reason: undefined }), null, WAREHOUSE),
+				/Adjust stock ledger requires adjust_reason/
+			);
+		});
+
+		it('still accepts a schema_v <= 5 adjust row without adjust_reason (rollout window)', () => {
+			expect(() =>
+				compile()(adjust({ schema_v: 5, adjust_reason: undefined }), null, WAREHOUSE)
+			).not.toThrow();
+		});
+
+		// AC-C2
+		it.each([
+			['donation', { reason: 'donation', qty: '5', ref_id: 'donation:01J' }],
+			['receive', { reason: 'receive', qty: '5', ref_id: 'distribution_log:01J' }],
+			['requisition', { reason: 'requisition', qty: '-5', ref_id: 'requisition_ticket:01J' }],
+			[
+				'distribute',
+				{
+					reason: 'distribute',
+					qty: '-5',
+					ref_id: 'requisition_ticket:01J',
+					lot_ref: 'stock_ledger:01J'
+				}
+			],
+			[
+				'distribution_return',
+				{
+					reason: 'distribution_return',
+					qty: '5',
+					ref_id: 'distribution_batch:01J',
+					lot_ref: 'stock_ledger:01J'
+				}
+			]
+		])('rejects adjust_reason and note on reason=%s', (_name, over) => {
+			const row = ledger({ schema_v: 6, ...(over as Doc) });
+			expect(() => compile()(row, null, WAREHOUSE)).not.toThrow();
+			expectForbidden(
+				() => compile()({ ...row, adjust_reason: 'lost' }, null, WAREHOUSE),
+				/adjust_reason is only allowed when reason is adjust/
+			);
+			expectForbidden(
+				() => compile()({ ...row, note: 'x' }, null, WAREHOUSE),
+				/note is only allowed when reason is adjust/
+			);
 		});
 	});
 

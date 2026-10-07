@@ -67,14 +67,14 @@ function parseMs(value: string | undefined): number {
  * `lot.expiry` is checked.
  */
 export function isLotExpired(
-	lot: Pick<StockLotBalance, 'received_at' | 'lot'>,
+	lot: Pick<StockLotBalance, 'lot'> & { received_at?: string },
 	now: number,
 	item?: LotPriorityItem
 ): boolean {
 	const expiry = parseMs(lot.lot?.expiry);
 	if (!Number.isNaN(expiry)) return expiry <= now;
-	if (item === undefined) return false;
-	const s = scoreLot(lot, item, now);
+	if (item === undefined || !lot.received_at) return false;
+	const s = scoreLot({ lot: lot.lot, received_at: lot.received_at }, item, now);
 	return s.daysLeftSource === 'shelf_life' && s.daysLeft <= 0;
 }
 
