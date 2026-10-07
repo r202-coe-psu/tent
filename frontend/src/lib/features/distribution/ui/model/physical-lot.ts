@@ -1,7 +1,10 @@
 import type { StockLedger } from '$lib/features/operations';
 import {
+	isLotExpired,
+	lotPriorityReason,
 	projectStockLotBalances,
 	sortStockLotsByConsumptionOrder,
+	type LotPriorityItem,
 	type StockLotBalance
 } from '$lib/features/operations';
 import { qtyGt, qtyGte } from '$lib/utils/qty';
@@ -17,6 +20,8 @@ export interface EligiblePhysicalLot {
 	received_at: string;
 	isExpired: boolean;
 	hasSufficientQty: boolean;
+	/** Why the lot sits at this position in the issue order (CR-143 FR-A6). */
+	reason: string;
 }
 
 /**
@@ -29,18 +34,22 @@ export function isLotDateExpired(
 	if (!expiryDateStr) return false;
 	const expiry = new Date(expiryDateStr);
 	if (isNaN(expiry.getTime())) return false;
-	return expiry.getTime() < referenceDate.getTime();
+	// FR-A4: a lot whose expiry is at or before now is expired.
+	return expiry.getTime() <= referenceDate.getTime();
 }
 
 /**
  * Projects available physical lots from stock ledger history for a given item,
- * filters for positive balances, and sorts them according to canonical FEFO/FIFO order.
+ * filters for positive balances, and sorts them by the weighted issue priority shared with
+ * the stock page (CR-143 §A, FR-A5). `item` supplies shelf life / storage type; without it a
+ * 365-day horizon is assumed. Expired lots are listed last and flagged, never ranked first.
  */
 export function getEligiblePhysicalLots(
 	ledger: readonly StockLedger[] | undefined,
 	itemId: string,
 	requiredQty: string = '0',
-	referenceDate: Date = new Date()
+	referenceDate: Date = new Date(),
+	item?: LotPriorityItem
 ): EligiblePhysicalLot[] {
 	if (!ledger || ledger.length === 0 || !itemId) {
 		return [];
@@ -62,12 +71,14 @@ export function getEligiblePhysicalLots(
 	// Filter for this item and positive remaining balance
 	const itemLots = balances.filter((lot) => lot.item_id === itemId && qtyGt(lot.qty, 0));
 
-	// Sort canonically using Operations FEFO/FIFO consumption order
-	const sorted = sortStockLotsByConsumptionOrder(itemLots);
+	// Same ordering function as the stock page (FR-A5)
+	const nowMs = referenceDate.getTime();
+	const itemsById = new Map<string, LotPriorityItem>(item ? [[itemId, item]] : []);
+	const sorted = sortStockLotsByConsumptionOrder(itemLots, itemsById, nowMs);
 
 	return sorted.map((lot) => {
 		const expiry = lot.lot?.expiry;
-		const isExpired = isLotDateExpired(expiry, referenceDate);
+		const isExpired = isLotExpired(lot, nowMs);
 		const hasSufficientQty = qtyGte(lot.qty, requiredQty);
 
 		return {
@@ -80,7 +91,8 @@ export function getEligiblePhysicalLots(
 			unit: lot.unit,
 			received_at: lot.received_at,
 			isExpired,
-			hasSufficientQty
+			hasSufficientQty,
+			reason: lotPriorityReason(lot, item, nowMs)
 		};
 	});
 }

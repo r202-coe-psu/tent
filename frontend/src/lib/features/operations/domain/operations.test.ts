@@ -1984,6 +1984,17 @@ describe('projectStockLotBalances', () => {
 		expect(balances.find((lot) => lot.lot_ref.endsWith('B'))?.qty).toBe('2');
 	});
 
+	it('replays a legacy outbound FEFO-then-FIFO, ignoring the weighted issue priority (CR-143 §A)', () => {
+		// Old no-expiry lot sat in stock longest; the weighted ranking would issue it
+		// first, but legacy replay must keep drawing the expiring lot first.
+		const noExpiry = legacyInbound('OLD', '5', '2026-01-01T00:00:00Z');
+		const expiring = legacyInbound('EXP', '5', '2026-09-01T00:00:00Z', { expiry: '2027-06-01' });
+		const out = legacyOutbound('OUT', '3', '2026-10-01T00:00:00Z');
+		const balances = projectStockLotBalances([noExpiry, expiring, out]);
+		expect(balances.find((lot) => lot.lot_ref === 'stock_ledger:EXP')?.qty).toBe('2');
+		expect(balances.find((lot) => lot.lot_ref === 'stock_ledger:OLD')?.qty).toBe('5');
+	});
+
 	it('deducts an explicit outbound from only its physical lot', () => {
 		const a = inbound('A', '5', '2026-01-01T00:00:00Z');
 		const b = inbound('B', '5', '2026-01-01T00:00:00Z');
@@ -2088,74 +2099,66 @@ describe('projectStockLotBalances', () => {
 });
 
 describe('sortStockLotsByConsumptionOrder', () => {
-	it('sorts expiring lots before non-expiring lots, and earliest expiry first', () => {
-		const lots = [
-			{
-				lot_ref: 'stock_ledger:NO-EXPIRY',
-				item_id: 'item:water',
-				unit: 'bottle',
-				qty: '10',
-				received_at: '2026-01-01T00:00:00Z'
-			},
-			{
-				lot_ref: 'stock_ledger:LATER',
-				item_id: 'item:water',
-				unit: 'bottle',
-				qty: '10',
-				lot: { expiry: '2026-12-31' },
-				received_at: '2026-01-02T00:00:00Z'
-			},
-			{
-				lot_ref: 'stock_ledger:SOONER',
-				item_id: 'item:water',
-				unit: 'bottle',
-				qty: '10',
-				lot: { expiry: '2026-06-30' },
-				received_at: '2026-01-03T00:00:00Z'
-			}
-		];
+	// Fixed clock so the weighted score is deterministic (CR-143 §A, FR-A5).
+	const NOW = Date.parse('2026-10-02T00:00:00Z');
+	const lotAt = (ref: string, receivedAt: string, expiry?: string) => ({
+		lot_ref: `stock_ledger:${ref}`,
+		item_id: 'item:water',
+		unit: 'bottle',
+		qty: '10',
+		...(expiry ? { lot: { expiry } } : {}),
+		received_at: receivedAt
+	});
 
-		const sorted = sortStockLotsByConsumptionOrder(lots);
-		expect(sorted.map((l) => l.lot_ref)).toEqual([
+	it('weights expiry and days in stock instead of always putting no-expiry lots last', () => {
+		const lots = [
+			// no expiry, 273 days in stock: (365 - 273) - 136.5 = -44.5
+			lotAt('NO-EXPIRY', '2026-01-02T00:00:00Z'),
+			// 2026-12-31 is 90 days away, 272 days in stock: 90 - 136 = -46 -> before NO-EXPIRY
+			lotAt('LATER', '2026-01-03T00:00:00Z', '2026-12-31'),
+			// expires in 28 days (not urgent): 28 - 135.5 = -107.5 -> first
+			lotAt('SOONER', '2026-01-04T00:00:00Z', '2026-10-30')
+		];
+		expect(sortStockLotsByConsumptionOrder(lots, undefined, NOW).map((l) => l.lot_ref)).toEqual([
 			'stock_ledger:SOONER',
 			'stock_ledger:LATER',
 			'stock_ledger:NO-EXPIRY'
 		]);
 	});
 
-	it('uses received_at FIFO and lot_ref as tie-breakers when expiry matches', () => {
+	it('lets a long-stored no-expiry lot go before a barely-stored lot with a far expiry (AC-A2)', () => {
 		const lots = [
-			{
-				lot_ref: 'stock_ledger:B',
-				item_id: 'item:water',
-				unit: 'bottle',
-				qty: '10',
-				lot: { expiry: '2026-06-30' },
-				received_at: '2026-01-02T00:00:00Z'
-			},
-			{
-				lot_ref: 'stock_ledger:A',
-				item_id: 'item:water',
-				unit: 'bottle',
-				qty: '10',
-				lot: { expiry: '2026-06-30' },
-				received_at: '2026-01-02T00:00:00Z'
-			},
-			{
-				lot_ref: 'stock_ledger:EARLIER-RECEIPT',
-				item_id: 'item:water',
-				unit: 'bottle',
-				qty: '10',
-				lot: { expiry: '2026-06-30' },
-				received_at: '2026-01-01T00:00:00Z'
-			}
+			lotAt('D', '2026-09-27T00:00:00Z', '2027-11-06'),
+			lotAt('C', '2026-03-16T00:00:00Z')
 		];
+		expect(sortStockLotsByConsumptionOrder(lots, undefined, NOW).map((l) => l.lot_ref)).toEqual([
+			'stock_ledger:C',
+			'stock_ledger:D'
+		]);
+	});
 
-		const sorted = sortStockLotsByConsumptionOrder(lots);
-		expect(sorted.map((l) => l.lot_ref)).toEqual([
+	it('uses received_at FIFO and lot_ref as tie-breakers when the score matches', () => {
+		const lots = [
+			lotAt('B', '2026-06-02T00:00:00Z', '2027-06-30'),
+			lotAt('A', '2026-06-02T00:00:00Z', '2027-06-30'),
+			lotAt('EARLIER-RECEIPT', '2026-06-01T00:00:00Z', '2027-06-30')
+		];
+		expect(sortStockLotsByConsumptionOrder(lots, undefined, NOW).map((l) => l.lot_ref)).toEqual([
 			'stock_ledger:EARLIER-RECEIPT',
 			'stock_ledger:A',
 			'stock_ledger:B'
+		]);
+	});
+
+	it('reads shelf life and storage type from itemsById', () => {
+		const lots = [
+			lotAt('DRY', '2026-09-30T00:00:00Z'),
+			{ ...lotAt('MILK', '2026-09-30T00:00:00Z'), item_id: 'item:milk' }
+		];
+		const itemsById = new Map([['item:milk', { storage_type: 'CHILLED' }]]);
+		expect(sortStockLotsByConsumptionOrder(lots, itemsById, NOW).map((l) => l.lot_ref)).toEqual([
+			'stock_ledger:MILK',
+			'stock_ledger:DRY'
 		]);
 	});
 });

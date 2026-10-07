@@ -180,3 +180,18 @@ export { default as StoragePointSelect } from './ui/storage-point-select.svelte'
 export { default as TransferForm } from './ui/transfer-form.svelte';
 export { default as TransferList } from './ui/transfer-list.svelte';
 export { default as TransferTab } from './ui/transfer-tab.svelte';
+
+export {
+	rankLotsForIssue,
+	scoreLot,
+	isLotExpired,
+	lotPriorityReason,
+	toLotPriorityItems,
+	URGENT_DAYS,
+	W_EXPIRY,
+	W_AGE,
+	HORIZON_DAYS,
+	type LotPriorityItem,
+	type LotScore,
+	type RankLotsOptions
+} from './domain/lot-priority';

@@ -15,6 +15,7 @@ import {
 	subQty
 } from '$lib/utils/qty';
 import { unitCodeSchema } from '$lib/features/catalog/domain/unit-of-measure';
+import { rankLotsForIssue, type LotPriorityItem, type RankLotsOptions } from './lot-priority';
 
 /**
  * Operations domain — stock, donations, transfers (R2–R3).
@@ -751,6 +752,12 @@ export class StockLotIntegrityError extends Error {
 	}
 }
 
+/**
+ * LEGACY order, kept only so `projectStockLotBalances` replays old outbound rows
+ * (no `lot_ref`) exactly as before — changing it would change per-lot balances of
+ * existing history (CR-143 §A decision). Never use it to choose a lot to issue;
+ * use {@link sortStockLotsByConsumptionOrder} / `rankLotsForIssue` for that.
+ */
 function compareLotConsumptionOrder(a: StockLotBalance, b: StockLotBalance): number {
 	const aExpiry = a.lot?.expiry;
 	const bExpiry = b.lot?.expiry;
@@ -762,15 +769,18 @@ function compareLotConsumptionOrder(a: StockLotBalance, b: StockLotBalance): num
 }
 
 /**
- * Sorts physical stock lots in canonical FEFO/FIFO consumption order:
- * 1. Earliest expiry date first (lots with expiry before lots without expiry)
- * 2. Earliest receipt time (occurred_at / received_at)
- * 3. lot_ref ascending deterministic tie-breaker
+ * Canonical order for choosing which lot to issue (CR-143 §A, FR-A5): the weighted
+ * expiry x days-in-stock priority of {@link rankLotsForIssue}. Pass `itemsById` so
+ * shelf life and storage type are known; without it each item is assumed to have a
+ * 365-day horizon. Lots with no quantity left are dropped; expired lots come last.
  */
 export function sortStockLotsByConsumptionOrder(
-	lots: readonly StockLotBalance[]
+	lots: readonly StockLotBalance[],
+	itemsById?: ReadonlyMap<string, LotPriorityItem>,
+	nowMs: number = Date.now(),
+	options?: RankLotsOptions
 ): StockLotBalance[] {
-	return [...lots].sort(compareLotConsumptionOrder);
+	return rankLotsForIssue(lots, itemsById, nowMs, options);
 }
 
 /**

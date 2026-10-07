@@ -8,6 +8,9 @@ export type StockFormItem = PackagingSource & {
 	unit: string;
 	perishable?: boolean;
 	sku?: string;
+	/** Lot-priority inputs (CR-143 §A) — only item masters carry them. */
+	storage_type?: string;
+	shelf_life_days?: number;
 };
 
 /** Minimal supply-item fields needed to build a {@link StockFormItem}. */
@@ -29,6 +32,8 @@ export type StockFormMasterSource = {
 	default_inventory_uom?: string;
 	default_issue_uom?: string;
 	deactivated?: boolean;
+	storage_type?: string;
+	shelf_life_days?: number;
 };
 
 /**
@@ -61,7 +66,9 @@ export function toStockFormItems(
 				default_inventory_uom: im.default_inventory_uom,
 				default_issue_uom: im.default_issue_uom,
 				perishable: false,
-				...(im.sku !== undefined ? { sku: im.sku } : {})
+				...(im.sku !== undefined ? { sku: im.sku } : {}),
+				...(im.storage_type !== undefined ? { storage_type: im.storage_type } : {}),
+				...(im.shelf_life_days !== undefined ? { shelf_life_days: im.shelf_life_days } : {})
 			};
 		});
 
