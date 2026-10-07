@@ -3,6 +3,7 @@
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
@@ -722,7 +723,7 @@
 		{/if}
 
 		<div class="col-span-1 space-y-2 sm:col-span-2">
-			<Form.Label>จำนวน <span class="font-bold text-destructive">*</span></Form.Label>
+			<Label>จำนวน <span class="font-bold text-destructive">*</span></Label>
 			<div class="flex flex-wrap items-stretch gap-2">
 				<div
 					class="flex min-w-0 flex-1 items-stretch overflow-hidden rounded-lg border border-input"
@@ -825,9 +826,7 @@
 		</div>
 
 		<div class="col-span-1 space-y-2 sm:col-span-2">
-			<Form.Label
-				>เบิกให้ใคร / ไปที่ไหน <span class="font-bold text-destructive">*</span></Form.Label
-			>
+			<Label>เบิกให้ใคร / ไปที่ไหน <span class="font-bold text-destructive">*</span></Label>
 			<div class="flex flex-wrap gap-2" role="group" aria-label="ปลายทาง">
 				{#each destinationOptions as preset (preset)}
 					<button
