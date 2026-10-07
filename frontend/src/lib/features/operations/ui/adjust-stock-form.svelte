@@ -475,13 +475,6 @@
 				</div>
 
 				<div
-					class="col-span-1 rounded-xl border border-dashed border-border/70 bg-muted/20 px-3 py-2.5 text-xs text-muted-foreground sm:col-span-2"
-					aria-disabled="true"
-				>
-					รอบตรวจนับหลายรายการยังไม่พร้อมในเวอร์ชันนี้ — ปรับทีละล็อตไปก่อน
-				</div>
-
-				<div
 					class="sticky bottom-0 z-10 col-span-1 -mx-4 -mb-4 border-t border-slate-200 bg-slate-50 px-4 py-4 sm:col-span-2 sm:-mx-6 sm:-mb-6 sm:px-6"
 				>
 					<Button

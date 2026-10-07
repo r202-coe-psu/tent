@@ -35,6 +35,7 @@
 	import ReceiveStockForm from './receive-stock-form.svelte';
 	import DistributeStockForm from './distribute-stock-form.svelte';
 	import AdjustStockForm from './adjust-stock-form.svelte';
+	import CycleCountForm from './cycle-count-form.svelte';
 	import AttentionCards from './stock/attention-cards.svelte';
 	import StockFilters from './stock/stock-filters.svelte';
 	import StockRow from './stock/stock-row.svelte';
@@ -80,6 +81,7 @@
 	import ArrowDownToLine from '@lucide/svelte/icons/arrow-down-to-line';
 	import ArrowUpFromLine from '@lucide/svelte/icons/arrow-up-from-line';
 	import SlidersHorizontal from '@lucide/svelte/icons/sliders-horizontal';
+	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 
 	let { occupancy = 120 }: { occupancy?: number } = $props();
 
@@ -136,8 +138,9 @@
 
 	let selectedItemId = $state<string | null>(null);
 	let detailOpen = $state(false);
+	type QuickActionKind = 'receive' | 'distribute' | 'adjust' | 'count';
 	let quickActionOpen = $state(false);
-	let quickActionKind = $state<'receive' | 'distribute' | 'adjust'>('receive');
+	let quickActionKind = $state<QuickActionKind>('receive');
 	let quickActionItemId = $state<string | undefined>(undefined);
 	const isMobileViewport = new IsMobile();
 
@@ -146,7 +149,7 @@
 		detailOpen = true;
 	}
 
-	function openQuickAction(kind: 'receive' | 'distribute' | 'adjust', itemId?: string) {
+	function openQuickAction(kind: QuickActionKind, itemId?: string) {
 		quickActionKind = kind;
 		quickActionItemId = itemId;
 		quickActionOpen = true;
@@ -164,14 +167,18 @@
 			? 'รับเข้า'
 			: quickActionKind === 'distribute'
 				? 'เบิกจ่าย'
-				: 'ปรับยอด / ตรวจนับ'
+				: quickActionKind === 'count'
+					? 'ตรวจนับตามจุดเก็บ'
+					: 'ปรับยอดทีละรายการ'
 	);
 	const quickActionDescription = $derived(
 		quickActionKind === 'receive'
 			? 'บันทึกรับพัสดุเข้าคลัง'
 			: quickActionKind === 'distribute'
 				? 'ระบบเลือกล็อตที่ควรใช้ก่อนให้อัตโนมัติ'
-				: 'กรอกจำนวนที่นับได้จริง แล้วระบบจะคำนวณส่วนต่างให้อัตโนมัติ'
+				: quickActionKind === 'count'
+					? 'เดินนับทีละล็อตในจุดเก็บเดียว แล้วบันทึกครั้งเดียว'
+					: 'กรอกจำนวนที่นับได้จริง แล้วระบบจะคำนวณส่วนต่างให้อัตโนมัติ'
 	);
 
 	const items = $derived.by(() => {
@@ -411,7 +418,18 @@
 					onclick={() => openQuickAction('adjust')}
 				>
 					<SlidersHorizontal class="h-4 w-4" aria-hidden="true" />
-					ปรับยอด / ตรวจนับ
+					ปรับยอด
+				</Button>
+				<Button
+					type="button"
+					variant="outline"
+					class="min-h-11 gap-2 rounded-lg border-slate-300 px-4 text-sm font-semibold text-slate-800 shadow-2xs"
+					disabled={offline}
+					title={offline ? OFFLINE_HINT : undefined}
+					onclick={() => openQuickAction('count')}
+				>
+					<ClipboardList class="h-4 w-4" aria-hidden="true" />
+					ตรวจนับ
 				</Button>
 			</div>
 			<a
@@ -582,7 +600,7 @@
 
 <!-- Movement buttons: bottom bar below md (md+ keeps them in the header) -->
 <div
-	class="fixed inset-x-0 bottom-0 z-30 grid grid-cols-3 gap-2 border-t border-slate-200 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden"
+	class="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 gap-2 border-t border-slate-200 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden"
 >
 	<Button
 		type="button"
@@ -610,6 +628,16 @@
 		disabled={offline}
 		title={offline ? OFFLINE_HINT : undefined}
 		onclick={() => openQuickAction('adjust')}
+	>
+		ปรับยอด
+	</Button>
+	<Button
+		type="button"
+		variant="outline"
+		class="min-h-12 rounded-lg border-slate-300 text-sm font-semibold text-slate-800"
+		disabled={offline}
+		title={offline ? OFFLINE_HINT : undefined}
+		onclick={() => openQuickAction('count')}
 	>
 		ตรวจนับ
 	</Button>
@@ -658,6 +686,8 @@
 					{occupancy}
 					onsuccess={onMovementSuccess}
 				/>
+			{:else if quickActionKind === 'count'}
+				<CycleCountForm onsuccess={onMovementSuccess} />
 			{:else}
 				<AdjustStockForm preselectedItemId={quickActionItemId} onsuccess={onMovementSuccess} />
 			{/if}

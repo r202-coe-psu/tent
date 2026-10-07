@@ -831,7 +831,12 @@ export const adjustInputSchema = z
 	.superRefine((d, ctx) => checkOtherNote(d.adjust_reason, d.note, ctx));
 export type AdjustInput = z.input<typeof adjustInputSchema>;
 
-export function createAdjustEntry(input: AdjustInput, ctx: AuthorContext): StockLedger {
+/** `id` pins the row's `_id` (see {@link createStockLedger}) — the cycle count derives it per lot. */
+export function createAdjustEntry(
+	input: AdjustInput,
+	ctx: AuthorContext,
+	id?: string
+): StockLedger {
 	const d = adjustInputSchema.parse(input);
 	return createStockLedger(
 		{
@@ -845,7 +850,8 @@ export function createAdjustEntry(input: AdjustInput, ctx: AuthorContext): Stock
 			lot: d.lot,
 			occurred_at: d.occurred_at
 		},
-		ctx
+		ctx,
+		id
 	);
 }
 

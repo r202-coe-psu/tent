@@ -30,6 +30,7 @@ import type {
 import { catalogKeys } from '$lib/features/catalog';
 import type { MergeItemsInput } from '../domain/item-merge';
 import type { DonationBatchLine } from '../domain/donation-batch';
+import type { CycleCountSubmission } from '../domain/cycle-count';
 import { countPendingTransfers } from '../domain/transfer-pending';
 import { distributeAcrossLots, type DistributeAcrossLotsArgs } from './distribute-across-lots';
 
@@ -219,6 +220,22 @@ export const useReceiveDonationBatch = () => {
 			lines: readonly DonationBatchLine[];
 			ctx: AuthorContext;
 		}) => operationsRepository().receiveDonationBatch(donation, lines, ctx),
+		onSettled: () => {
+			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
+		}
+	}));
+};
+
+/**
+ * Mutation hook for saving a whole cycle count at once (#347). A partly written
+ * count RESOLVES (it is data for the form, not an error), so the caches are
+ * refreshed on settle either way: rows that landed already count towards on-hand.
+ */
+export const useApplyCycleCount = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({ submission, ctx }: { submission: CycleCountSubmission; ctx: AuthorContext }) =>
+			operationsRepository().applyCycleCount(submission, ctx),
 		onSettled: () => {
 			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
 		}

@@ -18,6 +18,7 @@ import type {
 } from '../domain/operations';
 import type { MergeItemsInput, ItemMergeResult } from '../domain/item-merge';
 import type { DonationBatchLine, DonationBatchResult } from '../domain/donation-batch';
+import type { CycleCountResult, CycleCountSubmission } from '../domain/cycle-count';
 import type { AuditAction } from '$lib/features/shared';
 
 /**
@@ -102,6 +103,15 @@ export interface OperationsRepository {
 	 * Process and persist a stock adjustment entry (increases or decreases stock).
 	 */
 	adjustStock(input: AdjustInput, ctx: AuthorContext): Promise<StockLedger>;
+
+	/**
+	 * Persist a cycle count (#347, CR-143 §C): one `adjust` row with
+	 * `adjust_reason: 'count_mismatch'` per differing lot, written in a single
+	 * `_bulk_docs` under deterministic `_id`s. A partial write is returned, not thrown —
+	 * re-sending the same submission writes only the rows still missing. Validation
+	 * (known item, unit, enough stock for the write-offs) throws before anything is written.
+	 */
+	applyCycleCount(submission: CycleCountSubmission, ctx: AuthorContext): Promise<CycleCountResult>;
 
 	/**
 	 * Merge a duplicate item into another (CR-143 §F): move every on-hand lot of the source

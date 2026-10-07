@@ -143,6 +143,19 @@ export {
 	type DonationBatchResult,
 	type DonationShortfall
 } from './domain/donation-batch';
+export {
+	buildCycleCountLots,
+	groupLotsByStorage,
+	classifyCycleCount,
+	cycleCountVariance,
+	planCycleCount,
+	summarizeCycleCount,
+	type CycleCountEntry,
+	type CycleCountLot,
+	type CycleCountResult,
+	type CycleCountSubmission,
+	type StorageGroup
+} from './domain/cycle-count';
 export { countPendingTransfers, isTransferPending } from './domain/transfer-pending';
 export { deriveDeterministicLedgerId } from './domain/deterministic-ledger-id';
 export {
@@ -176,6 +189,7 @@ export {
 	useCreateCampaign,
 	useReceiveWalkInDonation,
 	useReceiveDonationBatch,
+	useApplyCycleCount,
 	useUpdateCampaign,
 	useTransfers,
 	useTransfer,
@@ -210,6 +224,7 @@ export { STOCK_PARAM_KEYS } from './ui/stock/stock-url-state';
 /** Query keys owned by the movements tab — the page strips them when leaving it. */
 export { LEDGER_PARAM_KEYS } from './ui/ledger/ledger-url-state';
 export { default as AdjustStockForm } from './ui/adjust-stock-form.svelte';
+export { default as CycleCountForm } from './ui/cycle-count-form.svelte';
 export { default as MergeItemDialog } from './ui/merge-item-dialog.svelte';
 export { default as ItemCombobox } from './ui/item-combobox.svelte';
 export { default as StoragePointSelect } from './ui/storage-point-select.svelte';

@@ -55,6 +55,13 @@ import {
 	type DonationBatchLineResult,
 	type DonationBatchResult
 } from '../domain/donation-batch';
+import {
+	createCycleCountEntries,
+	deriveCycleCountLineId,
+	type CycleCountLineResult,
+	type CycleCountResult,
+	type CycleCountSubmission
+} from '../domain/cycle-count';
 import type { OperationsRepository } from './operations.repository';
 import { supplyRepository, type SupplyItem } from '$lib/features/supply';
 import {
@@ -658,6 +665,140 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			}
 		}
 		return this.addLedgerEntry(entry);
+	}
+
+	async applyCycleCount(
+		submission: CycleCountSubmission,
+		ctx: AuthorContext
+	): Promise<CycleCountResult> {
+		if (!submission.count_id) throw new Error('A cycle count needs a count id');
+		if (submission.lines.length === 0) {
+			throw new Error('Nothing to record — every counted lot matches the system');
+		}
+		const seen = new Set<string>();
+		for (const line of submission.lines) {
+			const key = `${line.item_id}::${line.lot_key}`;
+			if (seen.has(key))
+				throw new Error(`Duplicate lot in the count: ${line.item_id} (${line.lot_key})`);
+			seen.add(key);
+		}
+
+		// Ids are fixed by (count, item, lot): a row left by an earlier attempt is found by id and
+		// never written twice. Rows are append-only, so a retry that disagrees with what is already
+		// recorded must stop rather than pretend the edit landed.
+		const ids = await Promise.all(
+			submission.lines.map((l) => deriveCycleCountLineId(submission.count_id, l.item_id, l.lot_key))
+		);
+		const existing = await Promise.all(ids.map((id) => this.repo.get<StockLedger>(id)));
+		const results = new Map<string, CycleCountLineResult>();
+		const pending: { index: number; id: string }[] = [];
+		submission.lines.forEach((line, index) => {
+			const row = existing[index];
+			if (!row) {
+				pending.push({ index, id: ids[index] });
+				return;
+			}
+			if (row.item_id !== line.item_id || persistQty(row.qty) !== persistQty(line.qty)) {
+				throw new Error(
+					`Lot ${line.item_id} was already counted as ${row.qty} ${row.unit}; it cannot be changed`
+				);
+			}
+			results.set(line.lot_key + line.item_id, {
+				lot_key: line.lot_key,
+				item_id: line.item_id,
+				state: 'saved',
+				ledger_id: ids[index]
+			});
+		});
+
+		if (pending.length > 0) {
+			const toWrite = {
+				...submission,
+				lines: pending.map(({ index }) => submission.lines[index])
+			};
+			const entries = createCycleCountEntries(
+				toWrite,
+				ctx,
+				pending.map(({ id }) => id)
+			);
+
+			// Validate every row BEFORE writing any: a bad line must not leave its neighbours half
+			// recorded. Write-offs are checked against the aggregate balance (same rule as
+			// `adjustStock`), summed per item so two lots of one item cannot overdraw together.
+			const catalog = new Map<string, CatalogItem | null>();
+			for (const entry of entries) {
+				if (!catalog.has(entry.item_id)) {
+					catalog.set(entry.item_id, await this.loadCatalogItem(entry.item_id));
+				}
+				const item = catalog.get(entry.item_id) ?? null;
+				if (!item) {
+					throw new Error(
+						`Unknown item: ${entry.item_id} — item must exist in the catalog before adjusting stock`
+					);
+				}
+				assertReceiveAgainstCatalog(entry, item, { requireExpiry: false });
+			}
+			const writeOffs = new Map<string, string>();
+			for (const entry of entries) {
+				if (qtyLte(entry.qty, 0)) {
+					writeOffs.set(
+						entry.item_id,
+						addQty(writeOffs.get(entry.item_id) ?? '0', qtyAbs(entry.qty))
+					);
+				}
+			}
+			if (writeOffs.size > 0) {
+				const balances = await this.getBalance();
+				for (const [itemId, total] of writeOffs) {
+					const have = balances.get(itemId) ?? '0';
+					if (!qtyGte(have, total)) {
+						throw new Error(
+							`Insufficient stock for item ${itemId} (requested write-off ${total}, have ${have})`
+						);
+					}
+				}
+			}
+
+			const outcomes = new Map<string, { ok: boolean; reason: string }>();
+			try {
+				for (const outcome of await bulkDocsDetailed<StockLedger>(this.dbName, entries)) {
+					outcomes.set(outcome.id, {
+						ok: outcome.ok,
+						reason: outcome.ok ? '' : `${outcome.error}: ${outcome.reason}`
+					});
+				}
+			} catch (err) {
+				// Transport failure: nothing is known about any row, so each is read back below.
+				const reason = err instanceof Error ? err.message : 'bulk write failed';
+				for (const { id } of pending) outcomes.set(id, { ok: false, reason });
+			}
+
+			for (const { index, id } of pending) {
+				const line = submission.lines[index];
+				const outcome = outcomes.get(id);
+				let saved = outcome?.ok === true;
+				const reason = outcome?.reason ?? 'no result for this row';
+				if (!saved) {
+					// A 409 on a deterministic id means the row is already there, and a lost response
+					// may hide a row that did land: the ledger itself decides.
+					try {
+						saved = (await this.repo.get<StockLedger>(id)) !== null;
+					} catch {
+						// keep `saved = false`; the original reason stays the one shown
+					}
+				}
+				results.set(line.lot_key + line.item_id, {
+					lot_key: line.lot_key,
+					item_id: line.item_id,
+					state: saved ? 'saved' : 'failed',
+					ledger_id: id,
+					...(saved ? {} : { error: reason })
+				});
+			}
+		}
+
+		const lines = submission.lines.map((l) => results.get(l.lot_key + l.item_id)!);
+		return { lines, complete: lines.every((l) => l.state === 'saved') };
 	}
 
 	/** The shelter this repository's database belongs to (`shelter_sh001` → `SH001`), else null. */
