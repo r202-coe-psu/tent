@@ -2,7 +2,7 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-06
+updated: 2026-10-07
 note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer; CR-135/CR-136 partner OAuth2 client name/module preset + secret reveal/edit/delete; CR-137 shrink master_data (10→4) + zone/community free text; CR-138 remove purchase doc type + withdraw purchase from stock_ledger.reason; CR-139 shelter storage points; CR-140 item_category default_class editable; CR-144/CR-145 meal_service_receipt (§2.7.3); CR-147 removes CR-146 meal_distribution_push (§2.7.4) — ticket flow ends at warehouse stock-in; CR-148 pre-register validation + evacuee religion_other/disability_other_detail (v11) + household dorm_* (v6); CR-151 kiosk pre-registration check-in (report-in arriving status & KIOSK_LOOKUP_MANGO_INDEXES); CR-154 evacuee.gender nullable + registered_via api (v12), external_bookings (§9.7), partner scopes booking-write/residency-read + module M2
 ---
 
@@ -320,7 +320,7 @@ projection — เป็นข้อมูลหลังบ้านล้ว�
 | `ref_id` | str\|null | ตาม `reason` | doc ต้นเหตุ — **ค่าที่ยอมรับผูกกับ `reason` ตามตาราง "`reason` → `ref_id`" ด้านล่าง** (CR-055) |
 | `lot_ref` | str | opt/ตาม `reason` | stable physical-lot identity → `stock_ledger:{id}`; บังคับสำหรับ `distribute`/`distribution_return`; แถวรับเข้าใหม่ self-reference `_id` (เว้นแต่การรับของแจกเหลือคืนคลัง `reason='receive'` ที่แนะนำให้อ้างอิง `lot_ref` เดิมของล็อตที่เบิกจ่ายเพื่อการสืบย้อนกลับ); legacy อาจไม่มี field |
 | `lot` | {`expiry`:ts?, `note`:str?, `lot_no`:str?, `storage_zone`:str?, `storage_point_id`:str?, `produced_at`:ts?} | opt | ของหมดอายุได้ (อาหาร/ยา) · `lot_no`/`storage_zone` = CR-088 · `storage_point_id`/`produced_at` = schema_v 5 (ดูตารางย่อยด้านล่าง) |
-| `adjust_reason` | enum(`expired`,`damaged`,`count_mismatch`,`lost`,`found`,`merge`,`other`) | req เมื่อ `reason='adjust'` · ห้ามมีเมื่อ reason อื่น | เหตุผลการปรับยอด (schema_v 6, CR-143 §C); `merge` ใช้เฉพาะ flow รวมสินค้า (CR-143 §F) — ฟอร์มปรับยอดทั่วไปไม่แสดง |
+| `adjust_reason` | enum(`expired`,`damaged`,`count_mismatch`,`lost`,`found`,`merge`,`other`) | req เมื่อ `reason='adjust'` · ห้ามมีเมื่อ reason อื่น | เหตุผลการปรับยอด (schema_v 6, CR-143 §C); `merge` ใช้เฉพาะ flow รวมสินค้า (CR-143 §F) — ฟอร์มปรับยอดทั่วไปไม่แสดง; `other` ต้องมี `note` (CR-156); รับเข้า manual = `found` (CR-156) |
 | `note` | str ≤500 | opt (เฉพาะ `reason='adjust'`) | รายละเอียดการปรับยอด (schema_v 6, CR-143 §C) — ไม่ใช่ `lot.note` |
 | `occurred_at` | ts | req | — |
 
@@ -367,7 +367,7 @@ projection — เป็นข้อมูลหลังบ้านล้ว�
 
 **ลำดับการเลือกล็อตเพื่อเบิก (CR-143 §A):** ใช้ทั้งระบบ (หน้าคลัง + distribution dispatch / return / reconciliation) ต่อล็อตที่ qty > 0:
 `ageDays = now − (lot.produced_at ?? received_at)`; `daysLeft` = `lot.expiry − now` → ไม่มีก็ `shelf_life_days − ageDays` → ไม่มีก็ `HORIZON[storage_type] − ageDays`; `score = W_EXPIRY·daysLeft − W_AGE·ageDays`.
-ลำดับ: (1) กลุ่มเร่งด่วน — `daysLeft ≤ URGENT_DAYS` ที่มาจาก `lot.expiry`/`shelf_life_days` (ไม่ใช่ HORIZON) เรียงตาม `daysLeft` (2) ที่เหลือเรียงตาม `score` (3) เท่ากัน → `received_at` เก่าก่อน → `lot_ref`.
+ลำดับ: (1) กลุ่มเร่งด่วน — `daysLeft ≤ URGENT_DAYS` ที่มาจาก `lot.expiry`/`shelf_life_days` (ไม่ใช่ HORIZON) เรียงตาม `daysLeft` (2) ที่เหลือเรียงตาม `score` (3) เท่ากัน → `received_at` เก่าก่อน → `lot_ref`. ล็อตที่ไม่มี `lot.expiry` และ `daysLeft ≤ 0` จาก `shelf_life_days` = หมดอายุแล้ว ไม่เลือกอัตโนมัติ (CR-156 FR-A4a).
 ค่าตั้งต้น `W_EXPIRY=1`, `W_AGE=0.5`, `URGENT_DAYS=7`, `HORIZON` DRY 365 / CHILLED 7 / FROZEN 90 / CONTROLLED_MED 365 / ไม่ทราบ 365. ล็อตที่หมดอายุแล้วไม่ถูกเลือกอัตโนมัติ.
 **ข้อยกเว้น:** การ replay แถว outbound legacy (ไม่มี `lot_ref`) ใน `projectStockLotBalances` ยังใช้ FEFO→FIFO เดิม เพื่อไม่ให้ยอดรายล็อตของประวัติเปลี่ยน.
 **เบิกตรงหลายล็อต (CR-143 §A):** จำนวนเกินล็อตแรก → แบ่งเป็นแถว `distribute` ต่อล็อตตามลำดับข้างบน ใช้ `ref_id` (`requisition_ticket:direct-…`) เดียวกัน; ล้มกลางทางไม่ rollback (append-only) แต่ต้องรายงานส่วนที่ตัดแล้ว/ยังไม่ตัด; ยอดรวมไม่พอ → ห้ามบันทึก.
@@ -1777,7 +1777,7 @@ provisioning เท่านั้น. `value` คือเลขล่าสุ
 
 **ต้องกรอกวันหมดอายุตอนรับเข้า (CR-143 §D):** `requiresExpiry(item) = storage_type ∈ {CHILLED, FROZEN} || shelf_life_days != null` — แทนการอ้าง `item_master.perishable` (ไม่มี field นี้). มี `shelf_life_days` → UI เติม `lot.expiry` ให้อัตโนมัติ (แก้ได้, มี label ให้ตรวจสอบกับฉลาก); CHILLED/FROZEN ที่ไม่มี `shelf_life_days` → ผู้ใช้กรอกเอง.
 
-**รวมสินค้า (CR-143 §F):** ต่อทุกล็อตของต้นทางที่ qty > 0 เขียน `stock_ledger` `adjust` คู่ (−qty ต้นทาง / +qty ปลายทาง คง `lot` เดิม, `adjust_reason='merge'`, `note` = id อีกฝั่ง) ในการเขียนครั้งเดียว แล้วตั้ง `merged_into` + `deactivated: true` ที่ต้นทาง; หน่วยต้องแปลงได้; สินค้า local ของศูนย์ = SA หรือ shelter_manager/warehouse_staff ของศูนย์นั้น, สินค้าส่วนกลาง = SA เท่านั้น.
+**รวมสินค้า (CR-143 §F):** ต่อทุกล็อตของต้นทางที่ qty > 0 เขียน `stock_ledger` `adjust` คู่ (−qty ต้นทาง / +qty ปลายทาง คง `lot` เดิม, `adjust_reason='merge'`, `note` = id อีกฝั่ง) ในการเขียนครั้งเดียว แล้วตั้ง `merged_into` + `deactivated: true` ที่ต้นทาง; หน่วยต้องแปลงได้; สินค้า local ของศูนย์ = SA หรือ shelter_manager/warehouse_staff ของศูนย์นั้น, สินค้าส่วนกลางห้ามเป็นต้นทางของการรวม (CR-156 FR-F4a); retry ต้องปิดต้นทางได้โดยไม่ย้ายยอดซ้ำ (FR-F6).
 
 **Migration (schema_v 4 → 5, CR-143 §F):** additive `merged_into` (opt) — doc `schema_v 4` อ่านได้ปกติ ไม่ backfill.
 

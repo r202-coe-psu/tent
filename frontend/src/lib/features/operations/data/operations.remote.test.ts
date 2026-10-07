@@ -127,13 +127,20 @@ vi.mock('$lib/db/couch-db', async (importOriginal) => {
 	};
 });
 
-import { OperationsRemoteRepository, assertReceiveAgainstCatalog } from './operations.remote';
+import {
+	OperationsRemoteRepository,
+	assertReceiveAgainstCatalog,
+	catalogItemRules
+} from './operations.remote';
 import {
 	createReceiveEntry,
 	createStockLedger,
 	projectStockLotBalances
 } from '../domain/operations';
 import { createStockLotReservation, makeLotReservationDocId } from '$lib/features/distribution';
+import { rankLotsForIssue } from '../domain/lot-priority';
+import { planLotSplit } from '../domain/lot-split';
+import { distributeAcrossLots } from '../application/distribute-across-lots';
 import type { AuthorContext } from '$lib/db/model';
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'tester' };
@@ -217,18 +224,62 @@ describe('assertReceiveAgainstCatalog', () => {
 		).not.toThrow();
 	});
 
-	it('never demands lot.expiry for an item_master (no perishable flag on that shape)', () => {
-		const masterEntry = createReceiveEntry(
-			{ item_id: 'item_master:milk', qty: 1, unit: 'l', source: 'donation', ref_id: DONATION_REF },
-			ctx
-		);
-		expect(() =>
-			assertReceiveAgainstCatalog(masterEntry, {
-				type: 'item_master',
-				base_unit: 'l',
-				perishable: true
-			} as unknown as ItemMaster)
-		).not.toThrow();
+	// CR-143 §D (FR-D1): an item_master has no `perishable` flag, so the rule is derived.
+	describe('item_master expiry requirement (CR-143 §D)', () => {
+		const masterEntry = (expiry?: string) =>
+			createReceiveEntry(
+				{
+					item_id: 'item_master:milk',
+					qty: 1,
+					unit: 'l',
+					source: 'donation',
+					ref_id: DONATION_REF,
+					...(expiry ? { lot: { expiry } } : {})
+				},
+				ctx
+			);
+		const master = (extra: Record<string, unknown>) =>
+			({ type: 'item_master', base_unit: 'l', ...extra }) as unknown as ItemMaster;
+
+		it('AC-D1: rejects a CHILLED item received without lot.expiry', () => {
+			expect(() =>
+				assertReceiveAgainstCatalog(masterEntry(), master({ storage_type: 'CHILLED' }))
+			).toThrow('requires lot.expiry to be set');
+			expect(() =>
+				assertReceiveAgainstCatalog(masterEntry(), master({ storage_type: 'FROZEN' }))
+			).toThrow('requires lot.expiry to be set');
+		});
+
+		it('rejects an item with shelf_life_days received without lot.expiry', () => {
+			expect(() =>
+				assertReceiveAgainstCatalog(
+					masterEntry(),
+					master({ storage_type: 'DRY', shelf_life_days: 180 })
+				)
+			).toThrow('requires lot.expiry to be set');
+		});
+
+		it('AC-D2: never demands lot.expiry for a DRY item with no shelf life', () => {
+			expect(() =>
+				assertReceiveAgainstCatalog(masterEntry(), master({ storage_type: 'DRY' }))
+			).not.toThrow();
+			expect(() => assertReceiveAgainstCatalog(masterEntry(), master({}))).not.toThrow();
+		});
+
+		it('accepts a CHILLED item once lot.expiry is supplied', () => {
+			expect(() =>
+				assertReceiveAgainstCatalog(masterEntry('2026-12-31'), master({ storage_type: 'CHILLED' }))
+			).not.toThrow();
+		});
+
+		it('catalogItemRules reports the derived requirement for both shapes', () => {
+			expect(catalogItemRules(master({ storage_type: 'CHILLED' })).requiresExpiry).toBe(true);
+			expect(catalogItemRules(master({ storage_type: 'DRY' })).requiresExpiry).toBe(false);
+			expect(
+				catalogItemRules({ type: 'supply_item', unit: 'l', perishable: true } as SupplyItem)
+					.requiresExpiry
+			).toBe(true);
+		});
 	});
 
 	it('passes for a perishable item with lot.expiry set', () => {
@@ -395,6 +446,7 @@ describe('OperationsRemoteRepository', () => {
 			await expect(
 				repo.distributeStock(
 					{
+						note: 'ครัวกลาง',
 						item_id: 'item:soap',
 						qty: 15,
 						unit: 'bar',
@@ -416,6 +468,7 @@ describe('OperationsRemoteRepository', () => {
 			// Exhaust all 10 units from the lot so balance reaches 0
 			await repo.distributeStock(
 				{
+					note: 'ครัวกลาง',
 					item_id: 'item:soap',
 					qty: 10,
 					unit: 'bar',
@@ -432,6 +485,7 @@ describe('OperationsRemoteRepository', () => {
 			await expect(
 				repo.distributeStock(
 					{
+						note: 'ครัวกลาง',
 						item_id: 'item:soap',
 						qty: 1,
 						unit: 'bar',
@@ -457,6 +511,7 @@ describe('OperationsRemoteRepository', () => {
 			await expect(
 				repo.distributeStock(
 					{
+						note: 'ครัวกลาง',
 						item_id: 'item:soap',
 						qty: 5,
 						unit: 'bar',
@@ -482,6 +537,7 @@ describe('OperationsRemoteRepository', () => {
 			await expect(
 				repo.distributeStock(
 					{
+						note: 'ครัวกลาง',
 						item_id: 'item:soap',
 						qty: 1,
 						unit: 'bar',
@@ -495,6 +551,7 @@ describe('OperationsRemoteRepository', () => {
 			await expect(
 				repo.distributeStock(
 					{
+						note: 'ครัวกลาง',
 						item_id: 'item:soap',
 						qty: 1,
 						unit: 'bar',
@@ -537,6 +594,7 @@ describe('OperationsRemoteRepository', () => {
 
 			await repo.distributeStock(
 				{
+					note: 'ครัวกลาง',
 					item_id: 'item:soap',
 					qty: 5,
 					unit: 'bar',
@@ -566,6 +624,7 @@ describe('OperationsRemoteRepository', () => {
 			const results = await Promise.allSettled([
 				clientRepoA.distributeStock(
 					{
+						note: 'ครัวกลาง',
 						item_id: 'item:soap',
 						qty: 7,
 						unit: 'bar',
@@ -576,6 +635,7 @@ describe('OperationsRemoteRepository', () => {
 				),
 				clientRepoB.distributeStock(
 					{
+						note: 'ครัวกลาง',
 						item_id: 'item:soap',
 						qty: 7,
 						unit: 'bar',
@@ -607,6 +667,7 @@ describe('OperationsRemoteRepository', () => {
 			const results = await Promise.allSettled([
 				clientRepoA.distributeStock(
 					{
+						note: 'ครัวกลาง',
 						item_id: 'item:soap',
 						qty: 4,
 						unit: 'bar',
@@ -617,6 +678,7 @@ describe('OperationsRemoteRepository', () => {
 				),
 				clientRepoB.distributeStock(
 					{
+						note: 'ครัวกลาง',
 						item_id: 'item:soap',
 						qty: 4,
 						unit: 'bar',
@@ -632,6 +694,110 @@ describe('OperationsRemoteRepository', () => {
 			expect(projectStockLotBalances(await repo.listLedger())).toEqual([
 				expect.objectContaining({ lot_ref: inbound._id, item_id: 'item:soap', qty: '2' })
 			]);
+		});
+	});
+
+	describe('distribute across lots (CR-143 FR-A7–A9, AC-A5)', () => {
+		const DAY = 86_400_000;
+		const daysFromNow = (d: number) => new Date(Date.now() + d * DAY).toISOString();
+
+		async function receiveLots(quantities: number[]) {
+			mockGetItem.mockResolvedValue({ unit: 'bar' } as SupplyItem);
+			const inbound = [];
+			for (const [i, qty] of quantities.entries()) {
+				// distinct, non-urgent expiries so the priority order is L1, L2, L3
+				inbound.push(
+					await repo.receiveStock(
+						{
+							item_id: 'item:soap',
+							qty,
+							unit: 'bar',
+							source: 'donation',
+							ref_id: DONATION_REF,
+							lot: { expiry: daysFromNow(30 + i * 10) }
+						},
+						ctx
+					)
+				);
+			}
+			return inbound;
+		}
+
+		async function planFor(qty: string) {
+			const lots = projectStockLotBalances(await repo.listLedger());
+			const ranked = rankLotsForIssue(lots, undefined, Date.now(), { excludeExpired: true });
+			return planLotSplit(ranked, qty, Date.now());
+		}
+
+		it('AC-A5: 30 from lots 6 / 20 / 16 writes 3 distribute rows 6 / 20 / 4 on one ref_id', async () => {
+			const [l1, l2, l3] = await receiveLots([6, 20, 16]);
+			const plan = await planFor('30');
+
+			const result = await distributeAcrossLots(
+				repo,
+				{
+					note: 'ครัวกลาง',
+					allocations: plan.allocations,
+					item_id: 'item:soap',
+					ref_id: DISTRIBUTION_BATCH_REF
+				},
+				ctx
+			);
+
+			expect(result.complete).toBe(true);
+			const rows = (await repo.listLedger()).filter((e) => e.reason === 'distribute');
+			expect(rows).toHaveLength(3);
+			expect(rows.map((e) => [e.lot_ref, e.qty])).toEqual([
+				[l1._id, '-6'],
+				[l2._id, '-20'],
+				[l3._id, '-4']
+			]);
+			expect(new Set(rows.map((e) => e.ref_id))).toEqual(new Set([DISTRIBUTION_BATCH_REF]));
+			expect((await repo.getBalance()).get('item:soap')).toBe('12');
+			expect(
+				projectStockLotBalances(await repo.listLedger()).map((l) => [l.lot_ref, l.qty])
+			).toEqual([
+				[l1._id, '0'],
+				[l2._id, '0'],
+				[l3._id, '12']
+			]);
+		});
+
+		it('FR-A9: a failing row keeps the rows already written and reports the rest', async () => {
+			const [l1, l2] = await receiveLots([6, 20, 16]);
+			const plan = await planFor('30');
+			// another writer drains lot 2 after the plan was made, so row 2 is refused
+			await repo.distributeStock(
+				{
+					note: 'ครัวกลาง',
+					item_id: 'item:soap',
+					qty: 19,
+					unit: 'bar',
+					ref_id: 'requisition_ticket:01JOTHERWRITER',
+					lot_ref: l2._id
+				},
+				ctx
+			);
+
+			const result = await distributeAcrossLots(
+				repo,
+				{
+					note: 'ครัวกลาง',
+					allocations: plan.allocations,
+					item_id: 'item:soap',
+					ref_id: DISTRIBUTION_BATCH_REF
+				},
+				ctx
+			);
+
+			expect(result.complete).toBe(false);
+			expect(result.distributed.map((d) => [d.lot_ref, d.qty])).toEqual([[l1._id, '6']]);
+			expect(result.distributedQty).toBe('6');
+			expect(result.remainingQty).toBe('24');
+			expect(result.failure?.lot_ref).toBe(l2._id);
+			expect(result.failure?.message).toContain('Insufficient stock');
+			const mine = (await repo.listLedger()).filter((e) => e.ref_id === DISTRIBUTION_BATCH_REF);
+			expect(mine.map((e) => [e.lot_ref, e.qty])).toEqual([[l1._id, '-6']]);
 		});
 	});
 
@@ -698,6 +864,33 @@ describe('OperationsRemoteRepository', () => {
 					ctx
 				)
 			).rejects.toThrow('Perishable item item:rice requires lot.expiry to be set');
+		});
+
+		it('does not demand lot.expiry for any adjustment (CR-156 FR-D2d)', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'kg', perishable: true } as SupplyItem);
+			await repo.receiveStock(
+				{
+					item_id: 'item:rice',
+					qty: 10,
+					unit: 'kg',
+					source: 'donation',
+					ref_id: DONATION_REF,
+					lot: { expiry: '2027-01-01' }
+				},
+				ctx
+			);
+
+			const result = await repo.adjustStock(
+				{ item_id: 'item:rice', qty: -2, unit: 'kg', source: 'adjust', reason: 'damaged' } as never,
+				ctx
+			);
+			expect(result.qty).toBe('-2');
+
+			const up = await repo.adjustStock(
+				{ item_id: 'item:rice', qty: 2, unit: 'kg', source: 'adjust', reason: 'found' } as never,
+				ctx
+			);
+			expect(up.qty).toBe('2');
 		});
 
 		it('persists the ledger entry when the item exists and units match', async () => {

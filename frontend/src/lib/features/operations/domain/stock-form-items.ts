@@ -1,12 +1,22 @@
 import Fuse, { type IFuseOptions } from 'fuse.js';
-import { findItemByBarcode, itemMasterUnit, type PackagingSource } from '$lib/features/catalog';
+import {
+	findItemByBarcode,
+	itemMasterUnit,
+	requiresExpiry,
+	type PackagingSource,
+	type StorageType
+} from '$lib/features/catalog';
 
 /** Item row for receive / distribute / adjust pickers (and A6 transfer). */
 export type StockFormItem = PackagingSource & {
 	_id: string;
 	name: string;
 	unit: string;
-	perishable?: boolean;
+	/** `lot.expiry` is mandatory on receive (CR-143 FR-D1 / FR-D3). */
+	requiresExpiry?: boolean;
+	/** Drives the receive form's expiry autofill (FR-D2a). */
+	shelf_life_days?: number;
+	storage_type?: StorageType;
 	sku?: string;
 };
 
@@ -29,6 +39,8 @@ export type StockFormMasterSource = {
 	default_inventory_uom?: string;
 	default_issue_uom?: string;
 	deactivated?: boolean;
+	shelf_life_days?: number;
+	storage_type?: StorageType;
 };
 
 /**
@@ -45,7 +57,7 @@ export function toStockFormItems(
 		unit: item.unit,
 		base_unit: item.unit,
 		conversions: [] as { uom_name: string; multiplier: string }[],
-		perishable: item.perishable
+		requiresExpiry: requiresExpiry({ perishable: item.perishable })
 	}));
 
 	const mappedMasters = itemMasters
@@ -60,7 +72,9 @@ export function toStockFormItems(
 				conversions: [...(im.conversions ?? [])],
 				default_inventory_uom: im.default_inventory_uom,
 				default_issue_uom: im.default_issue_uom,
-				perishable: false,
+				requiresExpiry: requiresExpiry(im),
+				...(im.shelf_life_days != null ? { shelf_life_days: im.shelf_life_days } : {}),
+				...(im.storage_type ? { storage_type: im.storage_type } : {}),
 				...(im.sku !== undefined ? { sku: im.sku } : {})
 			};
 		});

@@ -15,6 +15,8 @@ import {
 	subQty
 } from '$lib/utils/qty';
 import { unitCodeSchema } from '$lib/features/catalog/domain/unit-of-measure';
+import { rankLotsForIssue, type LotPriorityItem, type RankLotsOptions } from './lot-priority';
+import { DISTRIBUTE_NOTE_MAX } from './distribute-destination';
 
 /**
  * Operations domain — stock, donations, transfers (R2–R3).
@@ -729,7 +731,12 @@ export const distributeInputSchema = z.object({
 	unit: z.string().trim().min(1),
 	ref_id: z.string().regex(/^requisition_ticket:.+/, 'ref_id must reference a requisition ticket'),
 	lot_ref: z.string().regex(/^stock_ledger:.+/, 'lot_ref must reference an inbound stock ledger'),
-	note: z.string().trim().optional(), // Used to store destination in lot.note
+	// CR-143 §E (FR-E1): a direct issue must name its destination, stored in lot.note.
+	note: z
+		.string({ error: 'กรุณาระบุปลายทาง / ผู้รับ' })
+		.trim()
+		.min(1, 'กรุณาระบุปลายทาง / ผู้รับ')
+		.max(DISTRIBUTE_NOTE_MAX, `ปลายทางต้องไม่เกิน ${DISTRIBUTE_NOTE_MAX} ตัวอักษร`),
 	occurred_at: z.string().optional()
 });
 export type DistributeInput = z.input<typeof distributeInputSchema>;
@@ -748,7 +755,7 @@ export function createDistributeEntry(
 			reason: 'distribute',
 			ref_id: d.ref_id,
 			lot_ref: d.lot_ref,
-			...(d.note ? { lot: { note: d.note } } : {}),
+			lot: { note: d.note },
 			occurred_at: d.occurred_at
 		},
 		ctx,
@@ -862,6 +869,12 @@ export class StockLotIntegrityError extends Error {
 	}
 }
 
+/**
+ * LEGACY order, kept only so `projectStockLotBalances` replays old outbound rows
+ * (no `lot_ref`) exactly as before — changing it would change per-lot balances of
+ * existing history (CR-143 §A decision). Never use it to choose a lot to issue;
+ * use {@link sortStockLotsByConsumptionOrder} / `rankLotsForIssue` for that.
+ */
 function compareLotConsumptionOrder(a: StockLotBalance, b: StockLotBalance): number {
 	const aExpiry = a.lot?.expiry;
 	const bExpiry = b.lot?.expiry;
@@ -873,15 +886,18 @@ function compareLotConsumptionOrder(a: StockLotBalance, b: StockLotBalance): num
 }
 
 /**
- * Sorts physical stock lots in canonical FEFO/FIFO consumption order:
- * 1. Earliest expiry date first (lots with expiry before lots without expiry)
- * 2. Earliest receipt time (occurred_at / received_at)
- * 3. lot_ref ascending deterministic tie-breaker
+ * Canonical order for choosing which lot to issue (CR-143 §A, FR-A5): the weighted
+ * expiry x days-in-stock priority of {@link rankLotsForIssue}. Pass `itemsById` so
+ * shelf life and storage type are known; without it each item is assumed to have a
+ * 365-day horizon. Lots with no quantity left are dropped; expired lots come last.
  */
 export function sortStockLotsByConsumptionOrder(
-	lots: readonly StockLotBalance[]
+	lots: readonly StockLotBalance[],
+	itemsById?: ReadonlyMap<string, LotPriorityItem>,
+	nowMs: number = Date.now(),
+	options?: RankLotsOptions
 ): StockLotBalance[] {
-	return [...lots].sort(compareLotConsumptionOrder);
+	return rankLotsForIssue(lots, itemsById, nowMs, options);
 }
 
 /**
@@ -1079,7 +1095,7 @@ export function expireDonation(donation: Donation): Donation {
 /** A line staff actually counted when the goods arrived — may differ from what was declared. */
 export interface CountedItem {
 	item_id: string;
-	qty: string; // qty_str positive, as physically counted
+	qty: string; // qty_str, as physically counted (positive; a batch line may be '0' = not received)
 	unit: string;
 	lot?: StockLot;
 }
@@ -1089,13 +1105,21 @@ export interface CountedItem {
  * donation to `stock_ledger`; there is no automatic conversion of the declared
  * items. Each counted line becomes one positive `receive` ledger entry
  * referencing the donation.
+ *
+ * `ids` (CR-143 FR-B4a) pins each row's `_id`, index-aligned with `counted`, so a
+ * retry re-derives the same ids and CouchDB's put-if-absent refuses the duplicate.
+ * Omitted, every row gets a fresh ULID (the one-off path).
  */
 export function keyDonationReceipt(
 	donation: Donation,
 	counted: CountedItem[],
-	ctx: AuthorContext
+	ctx: AuthorContext,
+	ids?: readonly string[]
 ): StockLedger[] {
-	return counted.map((c) =>
+	if (ids && ids.length !== counted.length) {
+		throw new Error('keyDonationReceipt: ids must line up one-to-one with counted lines');
+	}
+	return counted.map((c, index) =>
 		createStockLedger(
 			{
 				item_id: c.item_id,
@@ -1105,9 +1129,29 @@ export function keyDonationReceipt(
 				ref_id: donation._id,
 				...(c.lot ? { lot: c.lot } : {})
 			},
-			ctx
+			ctx,
+			ids?.[index]
 		)
 	);
+}
+
+/**
+ * Close a donation whose rows are all in the ledger (CR-143 FR-B4b).
+ *
+ * Unlike {@link receiveDonation} this accepts every outstanding status, not only the
+ * ones with a `received` edge in the state machine: `pending_review` is received
+ * straight from the counter by the scan route too (`api/back-office/donations/[query]`),
+ * because the count IS the verification. Terminal statuses other than `received` stay
+ * refused. An already `received` donation comes back unchanged so a retry that lost
+ * the response of a transition that did land is a no-op (FR-B8).
+ */
+export function completeDonationReceipt(donation: Donation): Donation {
+	if (donation.status === 'received') return donation;
+	if (!isDonationOutstanding(donation.status)) {
+		throw new Error(`Cannot receive a donation in status "${donation.status}"`);
+	}
+	const at = now();
+	return { ...donation, status: 'received', received_at: at, updated_at: at };
 }
 
 // ---------------------------------------------------------------- transfer
@@ -1433,6 +1477,24 @@ export function keyedDonationIds(stockLedgers: StockLedger[]): Set<string> {
 }
 
 /**
+ * Quantity already in the ledger per donation per item (reason `donation` rows only).
+ * `Map<donation _id, Map<item_id, qty>>`. Shared by `calculateReserved` and the batch
+ * receive so "recorded so far" has one definition (CR-143 FR-B9).
+ */
+export function recordedDonationQty(
+	stockLedgers: readonly StockLedger[]
+): Map<string, Map<string, string>> {
+	const recorded = new Map<string, Map<string, string>>();
+	for (const ledger of stockLedgers) {
+		if (ledger.reason !== 'donation' || !ledger.ref_id || !qtyGt(ledger.qty, 0)) continue;
+		const perItem = recorded.get(ledger.ref_id) ?? new Map<string, string>();
+		perItem.set(ledger.item_id, addQty(perItem.get(ledger.item_id) ?? '0', ledger.qty));
+		recorded.set(ledger.ref_id, perItem);
+	}
+	return recorded;
+}
+
+/**
  * Donations the receive form may still key stock against (CR-055 R4).
  *
  * Goods-in-kind only — a `money` donation never produces a ledger row. An
@@ -1440,14 +1502,17 @@ export function keyedDonationIds(stockLedgers: StockLedger[]): Set<string> {
  * marked as arrived but never keyed. Both still owe stock. `expired`, `cancelled`,
  * `redirected` and `rejected` are terminal, and anything already keyed would
  * double-count.
+ *
+ * An OUTSTANDING donation that already has rows is a batch receipt interrupted
+ * half way (CR-143 FR-B7): it stays offered so staff can finish it. Only a
+ * `received` donation with rows counts as done.
  */
 export function keyableDonations(donations: Donation[], stockLedgers: StockLedger[]): Donation[] {
 	const keyed = keyedDonationIds(stockLedgers);
 	return donations.filter(
 		(d) =>
 			d.kind === 'items' &&
-			(isDonationOutstanding(d.status) || d.status === 'received') &&
-			!keyed.has(d._id)
+			(isDonationOutstanding(d.status) || (d.status === 'received' && !keyed.has(d._id)))
 	);
 }
 
@@ -1457,17 +1522,32 @@ export function calculateReserved(
 	campaignId?: string
 ): Map<string, string> {
 	const keyed = keyedDonationIds(stockLedgers);
+	const recorded = recordedDonationQty(stockLedgers);
 
 	const reserved = new Map<string, string>();
 	for (const don of donations) {
 		if (campaignId && don.campaign_id && don.campaign_id !== campaignId) continue;
 		const isUnkeyedReceived = don.status === 'received' && !keyed.has(don._id);
 		if (!isDonationOutstanding(don.status) && !isUnkeyedReceived) continue;
+
+		const declared = new Map<string, string>();
 		for (const item of don.items ?? []) {
 			const itemId =
 				item.item_id || (item.free_text ? mapNeedItemHeuristic(item.free_text) : undefined);
 			if (!itemId) continue;
-			reserved.set(itemId, addQty(reserved.get(itemId) ?? '0', item.qty));
+			declared.set(itemId, addQty(declared.get(itemId) ?? '0', item.qty));
+		}
+
+		// FR-B9: a donation part-way through a batch receipt already has some of its
+		// goods in the ledger (and so in on-hand). Reserving them again would count the
+		// same boxes twice, so only the part not yet recorded stays reserved. Once the
+		// donation is `received` it leaves this branch altogether, which is also what
+		// releases a shortfall (FR-B6).
+		const alreadyRecorded = recorded.get(don._id);
+		for (const [itemId, qty] of declared) {
+			const left = subQty(qty, alreadyRecorded?.get(itemId) ?? '0');
+			if (!qtyGt(left, 0)) continue;
+			reserved.set(itemId, addQty(reserved.get(itemId) ?? '0', left));
 		}
 	}
 	return reserved;
