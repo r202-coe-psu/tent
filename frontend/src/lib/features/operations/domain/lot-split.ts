@@ -8,11 +8,15 @@
  */
 
 import { addQty, qtyGt, qtyGte, qtyIsZero, subQty, type QtyValue } from '$lib/utils/qty';
-import { isLotExpired } from './lot-priority';
+import { isLotExpired, type LotPriorityItem } from './lot-priority';
 import type { StockLotBalance } from './operations';
 
 /** The lot fields the planner reads. */
-export type SplittableLot = Pick<StockLotBalance, 'lot_ref' | 'qty' | 'lot' | 'unit'>;
+export type SplittableLot = Pick<StockLotBalance, 'lot_ref' | 'qty' | 'lot' | 'unit'> & {
+	/** Needed with `priorityItems` to apply the shelf-life rule (CR-156 FR-A4a). */
+	item_id?: string;
+	received_at?: string;
+};
 
 /** One ledger row the plan will write: take `qty` out of one lot. */
 export interface LotAllocation<T extends SplittableLot = StockLotBalance> {
@@ -40,17 +44,22 @@ export interface LotSplitPlan<T extends SplittableLot = StockLotBalance> {
  * FR-A7: walk `rankedLots` in order, taking from each until `qty` is covered.
  * Expired lots are skipped (FR-A4) and empty ones ignored. A non-positive `qty`
  * yields an empty, incomplete plan — there is nothing to issue.
+ *
+ * Pass `priorityItems` (item id → shelf life / storage type) so a lot with no expiry whose
+ * `shelf_life_days` is used up counts as expired too (CR-156 FR-A4a), as on the stock page.
  */
 export function planLotSplit<T extends SplittableLot>(
 	rankedLots: readonly T[],
 	qty: QtyValue,
-	now: number
+	now: number,
+	priorityItems?: ReadonlyMap<string, LotPriorityItem>
 ): LotSplitPlan<T> {
 	const skippedExpired: T[] = [];
 	const usable: T[] = [];
 	for (const lot of rankedLots) {
 		if (!qtyGt(lot.qty, 0)) continue;
-		if (isLotExpired(lot, now)) skippedExpired.push(lot);
+		if (isLotExpired(lot, now, lot.item_id ? priorityItems?.get(lot.item_id) : undefined))
+			skippedExpired.push(lot);
 		else usable.push(lot);
 	}
 	const available = usable.reduce((sum, lot) => addQty(sum, lot.qty), '0');
