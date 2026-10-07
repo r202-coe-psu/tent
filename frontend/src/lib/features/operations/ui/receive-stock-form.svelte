@@ -25,8 +25,18 @@
 		useUnitsOfMeasure,
 		itemSelectableUoms,
 		defaultInventoryUom,
-		toLedgerQtyUnit
+		toLedgerQtyUnit,
+		shelfLifeExpiryLabel
 	} from '$lib/features/catalog';
+	import {
+		applyExpiryAutofill,
+		confirmExpiry,
+		editExpiry,
+		expiryMissing,
+		initialExpiryState,
+		todayLocalIso,
+		type ExpiryState
+	} from '../domain/lot-expiry';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -73,7 +83,10 @@
 
 	let moreOpen = $state(false);
 	let producedAtDate = $state('');
-	let expiryDate = $state('');
+	// `lot.expiry` field state (CR-143 §D): autofilled from the item's shelf life until the
+	// user edits or confirms it. `expiry.autoFilled` is UI-only and never reaches the ledger.
+	let expiry = $state<ExpiryState>(initialExpiryState());
+	let expiryAttempted = $state(false);
 	let sourceMode = $state<SourceMode>('manual');
 
 	let selectedItemId = $state('');
@@ -168,7 +181,7 @@
 		SPA: true,
 		validators: zod4(receiveInputSchema),
 		resetForm: true,
-		onUpdate: async ({ form: validated }) => {
+		onUpdate: async ({ form: validated, cancel }) => {
 			// In walk-in mode `ref_id` is legitimately empty: the donation does not
 			// exist yet and is minted with the ledger row at submit. That is the one
 			// error worth ignoring — `validated.valid` stays the authority for
@@ -180,9 +193,12 @@
 				return;
 			}
 
-			// Validate perishable item expiry date requirement
-			if (selectedItem?.perishable && !validated.data.lot?.expiry) {
-				toast.error(`สินค้า "${selectedItem.name}" เป็นของเสียได้ จำเป็นต้องระบุวันหมดอายุ`);
+			// FR-D2: an item that requires an expiry cannot be saved without one.
+			if (selectedItem?.requiresExpiry && !validated.data.lot?.expiry) {
+				expiryAttempted = true;
+				// Without cancel() superforms resets the (valid) form, wiping item and qty.
+				cancel();
+				toast.error(`สินค้า "${selectedItem.name}" ต้องระบุวันหมดอายุ`);
 				return;
 			}
 
@@ -219,10 +235,13 @@
 
 	// Update locked unit when item is selected
 	function selectItem(item: StockFormItem) {
+		// A date keyed or confirmed for another item says nothing about this one (FR-D2c).
+		if (selectedItemId && selectedItemId !== item._id) commitExpiry(initialExpiryState());
 		selectedItem = item;
 		selectedItemId = item._id;
 		$formData.item_id = item._id;
 		$formData.unit = defaultInventoryUom(item);
+		refreshExpiryAutofill();
 	}
 
 	/** Chosen storage point id ('' = unspecified / main store). */
@@ -237,17 +256,31 @@
 		$formData.lot = { ...lot, ...storageLotFields(point) };
 	}
 
-	function setExpiryDate(val: string) {
-		expiryDate = val;
-		const trimmed = val.trim();
+	/** Mirror the expiry state into `lot.expiry` (the only expiry field that is persisted). */
+	function writeLotExpiry(value: string) {
 		if (!$formData.lot) {
-			if (trimmed) $formData.lot = { expiry: trimmed };
+			if (value) $formData.lot = { expiry: value };
 			return;
 		}
-		const current = $formData.lot.expiry ?? '';
-		if (current !== trimmed) {
-			$formData.lot.expiry = trimmed || undefined;
+		if (($formData.lot.expiry ?? '') !== value) {
+			$formData.lot.expiry = value || undefined;
 		}
+	}
+
+	function commitExpiry(next: ExpiryState) {
+		expiry = next;
+		writeLotExpiry(next.value);
+		if (next.value) expiryAttempted = false;
+	}
+
+	/** The user typed, picked or cleared the date. */
+	function setExpiryDate(val: string) {
+		commitExpiry(editExpiry(expiry, val));
+	}
+
+	/** Recompute from the item's shelf life unless the user has taken over (FR-D2a). */
+	function refreshExpiryAutofill() {
+		commitExpiry(applyExpiryAutofill(expiry, selectedItem, producedAtDate, todayLocalIso()));
 	}
 
 	/** Empty → domain defaults produced_at to occurred_at. */
@@ -256,11 +289,10 @@
 		const trimmed = val.trim();
 		if (!$formData.lot) {
 			if (trimmed) $formData.lot = { produced_at: trimmed };
-			return;
-		}
-		if (($formData.lot.produced_at ?? '') !== trimmed) {
+		} else if (($formData.lot.produced_at ?? '') !== trimmed) {
 			$formData.lot.produced_at = trimmed || undefined;
 		}
+		refreshExpiryAutofill();
 	}
 
 	function clearSelection() {
@@ -270,7 +302,8 @@
 		$formData.item_id = '';
 		$formData.unit = '';
 		clearDonation();
-		setExpiryDate('');
+		commitExpiry(initialExpiryState());
+		expiryAttempted = false;
 		setProducedAtDate('');
 		storagePointId = '';
 		setStoragePoint(null);
@@ -279,8 +312,9 @@
 	/** After a successful save: clear qty/lot clocks; clear item unless row-panel pin. */
 	function resetForNextLine() {
 		$formData.qty = '' as unknown as typeof $formData.qty;
-		setExpiryDate('');
-		setProducedAtDate('');
+		commitExpiry(initialExpiryState());
+		expiryAttempted = false;
+		producedAtDate = '';
 		storagePointId = '';
 		if ($formData.lot) {
 			$formData.lot = {
@@ -300,6 +334,9 @@
 		if (!preselectedItemId) {
 			clearSelection();
 			reset({ data: { source: $formData.source || 'manual' } });
+		} else {
+			// The pinned item stays: its next lot gets a fresh autofill.
+			refreshExpiryAutofill();
 		}
 	}
 
@@ -741,7 +778,7 @@
 					<div class="mb-1 flex flex-wrap items-center justify-between gap-2">
 						<Form.Label>
 							วันหมดอายุ
-							{#if selectedItem?.perishable}
+							{#if selectedItem?.requiresExpiry}
 								<span class="font-bold text-destructive">*</span>
 							{:else}
 								<span class="font-normal text-muted-foreground">(ไม่บังคับ)</span>
@@ -776,9 +813,29 @@
 					</div>
 					<DatePicker
 						{...props}
-						bind:value={() => expiryDate, setExpiryDate}
+						bind:value={() => expiry.value, setExpiryDate}
 						placeholder="วว/ดด/ปปปป"
 					/>
+					{#if expiry.autoFilled && expiry.shelfLifeDays != null}
+						<div
+							class="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900"
+						>
+							<span>{shelfLifeExpiryLabel(expiry.shelfLifeDays)}</span>
+							<Button
+								type="button"
+								variant="outline"
+								class="min-h-11 rounded-lg px-3 text-xs font-bold"
+								onclick={() => commitExpiry(confirmExpiry(expiry))}
+							>
+								ตรวจสอบแล้ว
+							</Button>
+						</div>
+					{/if}
+					{#if expiryAttempted && expiryMissing(selectedItem, expiry)}
+						<p class="mt-2 text-sm font-semibold text-destructive" role="alert">
+							สินค้านี้ต้องระบุวันหมดอายุ
+						</p>
+					{/if}
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />

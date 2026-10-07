@@ -121,9 +121,9 @@
 			: placeholder;
 	}
 
-	/** Is this catalog id a perishable item? Drives the expiry requirement below. */
+	/** Does this catalog id require an expiry date (CR-143 FR-D1)? Drives the check below. */
 	function isPerishable(itemId: string): boolean {
-		return catalogItems.find((c) => c._id === itemId)?.perishable === true;
+		return catalogItems.find((c) => c._id === itemId)?.requiresExpiry === true;
 	}
 
 	// Quick create item master dialog state
