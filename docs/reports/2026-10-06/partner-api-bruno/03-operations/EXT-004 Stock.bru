@@ -1,0 +1,32 @@
+meta {
+  name: EXT-004 Stock
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/public-api/external/locations/:location_code/stock
+  body: none
+  auth: inherit
+}
+
+params:path {
+  location_code: {{location_code}}
+}
+
+docs {
+  EXT-004 — สต็อกต่อศูนย์
+
+  Scope: location-stock-read
+  Method: GET /public-api/external/locations/{location_code}/stock
+
+  updated_at อยู่ที่ระดับศูนย์ ไม่มีต่อรายการสินค้า
+  m6_reference_id และ m6_item_code มักเป็น null
+  unit_ratio คงที่เป็น 1
+  source มักเป็น direct_donation
+  type_code ที่พบ: food, genaral, medical-equipment, medication
+  สะกด genaral ตามฝั่ง M6
+
+  Error: 404 location_not_found
+  Error: 401 invalid_token · 403 insufficient_scope
+}

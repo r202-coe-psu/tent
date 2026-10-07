@@ -51,10 +51,10 @@
 				<div class="flex items-center gap-2 text-xs text-white/80">
 					<Mail class="h-3.5 w-3.5 shrink-0 text-white/60" />
 					<a
-						href="mailto:Thamathep.l@psu.ac.th"
+						href="mailto:Thanathip.l@psu.ac.th"
 						class="transition-colors hover:text-white hover:underline"
 					>
-						Thamathip.l@psu.ac.th
+						Thanathip.l@psu.ac.th
 					</a>
 				</div>
 				<p class="text-xs text-white/60">{t.tagline}</p>

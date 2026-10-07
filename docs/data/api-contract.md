@@ -2,7 +2,7 @@
 title: Smart Shelter — API Contract v1
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-01
+updated: 2026-10-06
 note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration; Partner Data API EXT-001–007 (#214); CR-124 staff Google step-up MFA + Google SSO login (enrolled + mint AuthSession)
 ---
 
@@ -247,14 +247,19 @@ Contract เต็มอยู่ที่ [public-tier-flow-spec.html](../featu
 
 TTL **ไม่รีเซ็ต** — `expires_at` ยังนับจาก `declared_at` เดิม
 
-### 5.1 External plane `/external/v1` (CR-062, CR-098 M2 Integration) — legacy
+### 5.1 External plane `/external/v1` (CR-062) — legacy
 
-สำหรับหน่วยงานและระบบภายนอก (เช่น ระบบ M2) เรียกใช้งาน — **คนละ plane กับ Partner Data API (§5.3)** (path / auth / error shape ต่างกัน). **Soft-deprecated สำหรับงานใหม่:** คง router + API Keys UI ไว้; integration ใหม่ของพันธมิตรใช้ §5.3 `/external` (OAuth2) ไม่ใช่ `/external/v1`.
+สำหรับหน่วยงานและระบบภายนอกที่ถือ managed API key (CR-062) เรียกใช้งาน — **คนละ plane กับ Partner Data API (§5.3)** (path / auth / error shape ต่างกัน). **Soft-deprecated สำหรับงานใหม่:** คง router + API Keys UI ไว้; integration ใหม่ของพันธมิตรใช้ §5.3 `/external` (OAuth2) ไม่ใช่ `/external/v1`.
+
+> **CR-154:** บริการ M2 (`/external/v1/shelters`, `/external/v1/persons/shelter-residency` จาก CR-098) **ถูกลบ** — ย้ายไป §5.3 (EXT-002, EXT-008–011). endpoint `/external/v1` ที่เหลือ (needs, occupants, announcements, config/faqs) ไม่เปลี่ยน.
 
 | Endpoint | Method | Auth | Response |
 | --- | --- | --- | --- |
-| `/external/v1/shelters` | GET | `Authorization: Bearer <token>` หรือ `X-API-Key` | รายการศูนย์พักพิง (`shelter_id`, `shelter_name`, `lat`, `long`) กรองตาม `status` |
-| `/external/v1/persons/shelter-residency` | GET | `Authorization: Bearer <token>` หรือ `X-API-Key` | สถานะการเข้าพัก — คง `status: CHECKED_IN\|CHECKED_OUT`; **additive (CR-112):** `stay_status`, `in_zone` (bool). `CHECKED_IN` เมื่อ stay ∈ {`active`,`room_confirmed`,`temporary_leave`}; อื่นๆ = `CHECKED_OUT`. ค้นหาจาก `?cid=...` |
+| `/external/v1/shelters/{code}` | GET | `Authorization: Bearer <key>` หรือ `X-API-Key` | รายละเอียดศูนย์ (`ShelterDetailResponse`) |
+| `/external/v1/needs` | GET | เหมือนกัน | รายการความต้องการ (`NeedsListResponse`) |
+| `/external/v1/occupants` | POST | เหมือนกัน | ค้นหาผู้ประสบภัยแบบ public search (rate limit + `SearchAudit`) |
+| `/external/v1/announcements` | GET | เหมือนกัน | ประกาศ (แบ่งหน้า) |
+| `/external/v1/config/faqs` | GET | เหมือนกัน | FAQ config |
 
 **Public shelter occupancy (CR-112):** response ศูนย์สาธารณะคืนคีย์ `occupancy` (= Forecast), `present`, `in_zone`, `capacity` แบบ additive — ดูสูตรใน `schema.md` §1.1. Public family search allow-list รวม `arriving` และ `room_confirmed`.
 
@@ -276,9 +281,9 @@ Claim = Mongo mark (คน+สัตว์) แล้ว birth/append Couch (opt
 
 **CR-140 addendum:** Staff claim UI ไม่เรียก `POST .../claim` ทันทีที่ติ๊กเลือก — ไปหน้า review (`GET .../{id}/review`, อ่านอย่างเดียว) ก่อนเสมอ; `POST .../claim` ถูกเรียกเมื่อ staff กดยืนยันในหน้านั้นเท่านั้น (ดู [CR-140](../changes/CR-140-persistent-unassigned-family.md) addendum ท้ายไฟล์).
 
-### 5.3 Partner Data API — OAuth2 `/external` (EXT-001–007, #214)
+### 5.3 Partner Data API — OAuth2 `/external` (EXT-001–011, #214, CR-154)
 
-Machine-to-machine สำหรับ **M6 Resource Logistics / M7 Command Center** อ่าน MongoDB projection เท่านั้น (ไม่แตะ CouchDB SoR) — สถาปัตยกรรมใน [ADR 0002](../adr/0002-partner-integration-architecture.md); **as-built ส่งมอบพันธมิตร:** [partner-api-as-built.md](../reports/2026-09-10/partner-api-as-built.md) (ODT ใน `docs/source/` เป็น immutable archive; [stub](./partner-api.md) คงลิงก์ `docs/data/`).
+Machine-to-machine สำหรับ **M6 Resource Logistics / M7 Command Center / M2 กลุ่มเปราะบาง (CR-154)** — อ่าน MongoDB projection; ข้อยกเว้นเดียวที่เขียน = EXT-008/009 booking ผ่าน Mongo buffer `external_bookings` → worker inbound → CouchDB (FastAPI ไม่แตะ CouchDB SoR ตรง) — สถาปัตยกรรมใน [ADR 0002](../adr/0002-partner-integration-architecture.md); **as-built ส่งมอบพันธมิตร:** [partner-api-as-built.md](../reports/2026-09-10/partner-api-as-built.md) (ODT ใน `docs/source/` เป็น immutable archive; [stub](./partner-api.md) คงลิงก์ `docs/data/`).
 
 | Endpoint | Method | Auth / scope | หมายเหตุสั้น |
 | --- | --- | --- | --- |
@@ -289,12 +294,18 @@ Machine-to-machine สำหรับ **M6 Resource Logistics / M7 Command Cente
 | `/external/locations/{code}/occupancy` | GET | Bearer · `occupancy-read` | breakdown + `updated_by_role` คงที่ (EXT-005) |
 | `/external/summary` | GET | Bearer · `location-read` (+ `occupancy-read` สำหรับ top-level `occupancy_total`) | `critical_items` เฉพาะ `low`/`critical` (EXT-006) |
 | `/external/locations/{code}/occupants` | GET | Bearer · `occupancy-pii-read` + `?purpose=` | **denied by default**; ได้ scope แล้วยังคืน `result: []` จนกว่ามี data source (EXT-007 scaffold) |
+| `/external/bookings` | POST | Bearer · `booking-write` | จองศูนย์แทนประชาชน (M2 booking-shelter) — body `{location_code, cid, first_name, last_name, phone}` → **201** `result: {booking_id: "BK-{ulid}", location_code, booking_status: "BOOKED"}` = **รับเข้าคิว** (worker เขียน CouchDB `evacuee`+`household` `pre_registered`, `registered_via: api` ภายใน ~10s); กันซ้ำ **เฉพาะภายในศูนย์เดียวกัน**; ศูนย์ `full` จองได้ (EXT-008) |
+| `/external/bookings/{booking_id}/cancel` | POST | Bearer · `booking-write` | body `{reason?}` → `booking_status: "CANCELLED"`; เฉพาะ booking ของ client เดียวกัน และ stay ยัง `pre_registered` (EXT-009) |
+| `/external/bookings/{booking_id}` | GET | Bearer · `booking-write` | `booking_status`: `BOOKED`\|`CANCELLED`\|`REJECTED` (+`reject_reason`) — ใช้ poll ผลหลัง 201 (EXT-010) |
+| `/external/persons/shelter-residency` | GET | Bearer · `residency-read` + `?cid=&purpose=` | M2 get-person-shelter-residency — `result: {location_code, name_th, checkin_datetime (+07:00), residency_status: CHECKED_IN\|CHECKED_OUT, stay_status, in_zone}`; ค้นด้วย `national_id_hash`; หลาย record → เลือก Present ก่อน แล้ว `updated_at` ล่าสุด; `pre_registered` = 404; log ทุก call ลง `third_party_access_logs` (ไม่เก็บ CID) (EXT-011) |
 
 ```
 Success : { "status": 200, "message": "Found Data.", "result": … }
 Error   : { "status": <http>, "message": "…", "code"?: "…", "detail"?: "…", "result"?: [] }
          → partner ควร key off `code` เป็นหลัก (ไม่เทียบ message string)
 ```
+
+**Error codes (CR-154 — ใช้ทั้ง plane):** `400 missing_purpose` · `401 invalid_token` · `403 insufficient_scope` · `404 location_not_found` / `booking_not_found` / `residency_not_found` · `409 location_not_bookable` / `duplicate_booking` / `booking_not_cancellable` · `422 validation_error` · `500 internal_error`.
 
 แยกจาก §5.1: ไม่ใช้ `X-API-Key` / `/external/v1`; ไม่มี partner-plane rate limit 429 ในรุ่นนี้
 
@@ -310,5 +321,5 @@ Error   : { "status": <http>, "message": "…", "code"?: "…", "detail"?: "…"
   **Photos:** `POST /api/public/v1/registrations/photos` สร้าง `image` doc (+attachments)
   ในศูนย์ที่เลือกเท่านั้น (ไม่ใช่ read/list/delete surface).
 - ไม่มี JWT/refresh-token layer สำหรับ **staff sync plane** — template เดิม (`auth-interceptor`, `mock-api.js`) ไม่ใช้ (Partner plane §5.3 ใช้ JWT client_credentials แยกต่างหาก ไม่มี refresh)
-- EOC dashboard / Open API tier เต็มรูปแบบยัง deferred เป็น service แยก — **แต่** Partner Data API EXT-001–007 (§5.3) เปิดให้อ่าน aggregate ให้ M6/M7 แล้ว
-- ไม่มี endpoint อ่านข้อมูลรายบุคคลใน public plane; EXT-007 เป็น scaffold เท่านั้น (ไม่มี PII payload จริง)
+- EOC dashboard / Open API tier เต็มรูปแบบยัง deferred เป็น service แยก — **แต่** Partner Data API EXT-001–011 (§5.3) เปิดให้อ่าน aggregate ให้ M6/M7 และ booking/residency ให้ M2 แล้ว (CR-154)
+- ไม่มี endpoint อ่านข้อมูลรายบุคคลใน public plane; EXT-007 เป็น scaffold เท่านั้น (ไม่มี PII payload จริง); EXT-011 คืนเฉพาะสถานะการเข้าพักของ CID ที่ partner ระบุ (scope `residency-read` ออกรายกรณี + `purpose` + access log — CR-154)

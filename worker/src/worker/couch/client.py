@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 import httpx
 
@@ -57,6 +58,36 @@ class CouchClient:
         retry = await self._client.put(f"/{database}/{doc_id}", json=retry_doc)
         retry.raise_for_status()
         return retry.json()
+
+    async def find(
+        self,
+        database: str,
+        selector: dict[str, Any],
+        *,
+        fields: list[str] | None = None,
+        limit: int = 25,
+    ) -> list[dict[str, Any]]:
+        """Mango ``_find`` — returns the matching ``docs`` list."""
+        body: dict[str, Any] = {"selector": selector, "limit": limit}
+        if fields is not None:
+            body["fields"] = fields
+        response = await self._client.post(f"/{database}/_find", json=body)
+        response.raise_for_status()
+        return response.json().get("docs") or []
+
+    async def bulk_docs(
+        self, database: str, docs: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """POST ``_bulk_docs`` — returns CouchDB's per-row results.
+
+        Rows carry ``{"id", "rev"}`` on success or ``{"id", "error", "reason"}``
+        on failure (e.g. ``conflict``); callers decide which row errors matter.
+        """
+        response = await self._client.post(
+            f"/{database}/_bulk_docs", json={"docs": docs}
+        )
+        response.raise_for_status()
+        return response.json()
 
     async def database_exists(self, database: str) -> bool:
         response = await self._client.get(f"/{database}")
