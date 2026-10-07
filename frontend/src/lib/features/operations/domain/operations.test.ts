@@ -2315,7 +2315,10 @@ describe('batch receive in progress (CR-143 FR-B7 / FR-B9)', () => {
 			row('item:rice', '3'),
 			row('item:water', '20'),
 			row('item:rice', '9', 'donation:OTHER'),
-			createStockLedger({ item_id: 'item:rice', qty: '99', unit: 'kg', reason: 'adjust' }, ctx)
+			createStockLedger(
+				{ item_id: 'item:rice', qty: '99', unit: 'kg', reason: 'adjust', adjust_reason: 'found' },
+				ctx
+			)
 		]);
 		expect(recorded.get('donation:D1')?.get('item:rice')).toBe('7');
 		expect(recorded.get('donation:D1')?.get('item:water')).toBe('20');

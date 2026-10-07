@@ -881,13 +881,25 @@ describe('OperationsRemoteRepository', () => {
 			);
 
 			const result = await repo.adjustStock(
-				{ item_id: 'item:rice', qty: -2, unit: 'kg', source: 'adjust', reason: 'damaged' } as never,
+				{
+					item_id: 'item:rice',
+					qty: -2,
+					unit: 'kg',
+					source: 'adjust',
+					adjust_reason: 'damaged'
+				} as never,
 				ctx
 			);
 			expect(result.qty).toBe('-2');
 
 			const up = await repo.adjustStock(
-				{ item_id: 'item:rice', qty: 2, unit: 'kg', source: 'adjust', reason: 'found' } as never,
+				{
+					item_id: 'item:rice',
+					qty: 2,
+					unit: 'kg',
+					source: 'adjust',
+					adjust_reason: 'found'
+				} as never,
 				ctx
 			);
 			expect(up.qty).toBe('2');
