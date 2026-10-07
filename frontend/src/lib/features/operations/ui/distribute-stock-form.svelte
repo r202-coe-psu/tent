@@ -258,7 +258,8 @@
 		if (itemLots.length > 0) {
 			if (!$formData.lot_ref || !itemLots.some((l) => l.lot_ref === $formData.lot_ref)) {
 				const now = Date.now();
-				$formData.lot_ref = itemLots.find((l) => !isLotExpired(l, now))?.lot_ref ?? '';
+				$formData.lot_ref =
+					itemLots.find((l) => !isLotExpired(l, now, priorityItems.get(l.item_id)))?.lot_ref ?? '';
 			}
 		} else {
 			$formData.lot_ref = '';

@@ -41,7 +41,7 @@ export function buildLotRows(
 	let nextAssigned = false;
 	return ordered.map((lot) => {
 		const expiry = lot.lot?.expiry ?? null;
-		const isExpired = isLotExpired(lot, now);
+		const isExpired = isLotExpired(lot, now, itemsById?.get(lot.item_id));
 		const isNext = !isExpired && !nextAssigned;
 		if (isNext) nextAssigned = true;
 		return {

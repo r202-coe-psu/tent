@@ -49,9 +49,9 @@ export interface LotScore {
 	daysLeft: number;
 	daysLeftSource: DaysLeftSource;
 	score: number;
-	/** `daysLeft <= URGENT_DAYS` from real data (never from HORIZON). */
+	/** `0 < daysLeft <= URGENT_DAYS` from real data (never from HORIZON) (FR-A3a, FR-A4b). */
 	isUrgent: boolean;
-	/** `lot.expiry <= now` (FR-A4). */
+	/** `lot.expiry <= now` (FR-A4), or no expiry and `shelf_life_days` already used up (FR-A4a). */
 	isExpired: boolean;
 }
 
@@ -60,10 +60,22 @@ function parseMs(value: string | undefined): number {
 	return Date.parse(value);
 }
 
-/** `lot.expiry <= now` — such a lot must not be picked automatically (FR-A4). */
-export function isLotExpired(lot: Pick<StockLotBalance, 'lot'>, now: number): boolean {
+/**
+ * Whether a lot must not be picked automatically (FR-A4, FR-A4a): `lot.expiry <= now`, or —
+ * with no usable expiry — `shelf_life_days` already used up. A lot past only the storage-type
+ * HORIZON is NOT expired (FR-A4c). Pass `item` to apply the shelf-life rule; without it only
+ * `lot.expiry` is checked.
+ */
+export function isLotExpired(
+	lot: Pick<StockLotBalance, 'received_at' | 'lot'>,
+	now: number,
+	item?: LotPriorityItem
+): boolean {
 	const expiry = parseMs(lot.lot?.expiry);
-	return !Number.isNaN(expiry) && expiry <= now;
+	if (!Number.isNaN(expiry)) return expiry <= now;
+	if (item === undefined) return false;
+	const s = scoreLot(lot, item, now);
+	return s.daysLeftSource === 'shelf_life' && s.daysLeft <= 0;
 }
 
 /** FR-A1: score one lot. `now` is epoch milliseconds. */
@@ -97,8 +109,9 @@ export function scoreLot(
 		daysLeft,
 		daysLeftSource,
 		score: W_EXPIRY * daysLeft - W_AGE * ageDays,
-		isUrgent: daysLeftSource !== 'horizon' && daysLeft <= URGENT_DAYS,
-		isExpired: isLotExpired(lot, now)
+		isUrgent: daysLeftSource !== 'horizon' && daysLeft > 0 && daysLeft <= URGENT_DAYS,
+		isExpired:
+			daysLeftSource === 'expiry' ? daysLeft <= 0 : daysLeftSource === 'shelf_life' && daysLeft <= 0
 	};
 }
 
@@ -167,15 +180,16 @@ export function lotPriorityReason(
 		? 0
 		: Math.max(0, Math.floor((now - receivedMs) / MS_DAY));
 	const inStock = inStockDays >= 1 ? `อยู่ในคลัง ${inStockDays} วัน` : null;
-	const daysLeft = Math.floor(s.daysLeft);
+	// Same raw value `isUrgent` uses; shown rounded up so 0 < daysLeft < 1 reads "1 วัน".
+	const daysLeft = Math.ceil(s.daysLeft);
 
 	if (s.daysLeftSource === 'expiry') {
-		const left = daysLeft <= 0 ? 'หมดอายุวันนี้' : `หมดอายุอีก ${daysLeft} วัน`;
+		const left = `หมดอายุอีก ${daysLeft} วัน`;
 		if (s.isUrgent) return `${left} (เร่งด่วน)`;
 		return inStock ? `${left} · ${inStock}` : left;
 	}
 	if (s.daysLeftSource === 'shelf_life') {
-		const left = daysLeft <= 0 ? 'เกินอายุเก็บรักษาแล้ว' : `อายุเก็บรักษาเหลือ ${daysLeft} วัน`;
+		const left = `อายุเก็บรักษาเหลือ ${daysLeft} วัน`;
 		if (s.isUrgent) return `${left} (เร่งด่วน)`;
 		return inStock ? `${left} · ${inStock}` : left;
 	}

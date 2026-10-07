@@ -55,6 +55,26 @@ describe('buildLotRows', () => {
 		expect(rows[1]).toMatchObject({ lotRef: 'old', isExpired: true, isNext: false });
 	});
 
+	it('AC-A7: a lot past its shelf life is expired, not next, and says to adjust it out', () => {
+		const items = new Map([['item_master:rice', { storage_type: 'DRY', shelf_life_days: 30 }]]);
+		const rows = buildLotRows(
+			[
+				lot({ lot_ref: 'stale', received_at: iso(-60) }),
+				lot({ lot_ref: 'soon', received_at: iso(-5), lot: { expiry: iso(3) } })
+			],
+			[],
+			NOW,
+			items
+		);
+		expect(rows.map((r) => r.lotRef)).toEqual(['soon', 'stale']);
+		expect(rows[0].isNext).toBe(true);
+		expect(rows[1]).toMatchObject({
+			isExpired: true,
+			isNext: false,
+			reason: 'หมดอายุแล้ว — ปรับยอดออก'
+		});
+	});
+
 	it('marks nothing as next when every lot has expired', () => {
 		const rows = buildLotRows([lot({ lot_ref: 'old', lot: { expiry: iso(-1) } })], [], NOW);
 		expect(rows.some((r) => r.isNext)).toBe(false);

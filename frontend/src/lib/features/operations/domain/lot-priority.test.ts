@@ -285,3 +285,66 @@ describe('lotPriorityReason (FR-A6)', () => {
 		);
 	});
 });
+
+describe('lot past its shelf life (FR-A4a-c, AC-A7, AC-A8)', () => {
+	const SHELF: LotPriorityItem = { storage_type: 'DRY', shelf_life_days: 30 };
+	const shelfItems = new Map<string, LotPriorityItem>([['item_master:x', SHELF]]);
+
+	it('AC-A7: shelf life 30d, 60d in stock, no expiry is expired', () => {
+		const stale = lot('stale', { ageDays: 60 });
+		expect(isLotExpired(stale, NOW, SHELF)).toBe(true);
+		const s = scoreLot(stale, SHELF, NOW);
+		expect(s.isExpired).toBe(true);
+		expect(s.isUrgent).toBe(false);
+	});
+
+	it('AC-A7: not auto-selected and ranked after a lot expiring in 3 days', () => {
+		const lots = [lot('stale', { ageDays: 60 }), lot('soon', { ageDays: 5, expiresInDays: 3 })];
+		expect(rankLotsForIssue(lots, shelfItems, NOW).map((l) => l.lot_ref)).toEqual([
+			'soon',
+			'stale'
+		]);
+		expect(
+			rankLotsForIssue(lots, shelfItems, NOW, { excludeExpired: true }).map((l) => l.lot_ref)
+		).toEqual(['soon']);
+	});
+
+	it('AC-A7: UI reason tells staff to adjust it out', () => {
+		expect(lotPriorityReason(lot('stale', { ageDays: 60 }), SHELF, NOW)).toBe(
+			'หมดอายุแล้ว — ปรับยอดออก'
+		);
+	});
+
+	it('FR-A4a: daysLeft exactly 0 from shelf life is expired', () => {
+		expect(scoreLot(lot('a', { ageDays: 30 }), SHELF, NOW).isExpired).toBe(true);
+	});
+
+	it('FR-A4b: isUrgent only when 0 < daysLeft <= URGENT_DAYS', () => {
+		expect(scoreLot(lot('a', { ageDays: 25 }), SHELF, NOW).isUrgent).toBe(true);
+		expect(scoreLot(lot('a', { ageDays: 30 }), SHELF, NOW).isUrgent).toBe(false);
+		expect(scoreLot(lot('a', { expiresInDays: 0.5 }), DRY, NOW).isUrgent).toBe(true);
+	});
+
+	it('a real expiry wins over shelf life', () => {
+		expect(isLotExpired(lot('a', { ageDays: 60, expiresInDays: 10 }), NOW, SHELF)).toBe(false);
+	});
+
+	it('AC-A8: DRY, no expiry, no shelf life, 400d in stock stays selectable', () => {
+		const old = lot('old', { ageDays: 400 });
+		expect(isLotExpired(old, NOW, DRY)).toBe(false);
+		expect(isLotExpired(old, NOW)).toBe(false);
+		const s = scoreLot(old, DRY, NOW);
+		expect(s.daysLeft).toBeLessThan(0);
+		expect(s.isExpired).toBe(false);
+		expect(s.isUrgent).toBe(false);
+		expect(rankLotsForIssue([old], items, NOW, { excludeExpired: true })).toHaveLength(1);
+	});
+
+	it('reason and isUrgent agree on a fractional daysLeft', () => {
+		// 0.5 days left: urgent, and the reason must not claim it is already past shelf life
+		const l = lot('a', { ageDays: 29.5 });
+		expect(scoreLot(l, SHELF, NOW).isUrgent).toBe(true);
+		expect(lotPriorityReason(l, SHELF, NOW)).toContain('(เร่งด่วน)');
+		expect(lotPriorityReason(l, SHELF, NOW)).not.toContain('เกินอายุ');
+	});
+});

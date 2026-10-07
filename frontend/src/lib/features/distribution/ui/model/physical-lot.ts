@@ -78,7 +78,7 @@ export function getEligiblePhysicalLots(
 
 	return sorted.map((lot) => {
 		const expiry = lot.lot?.expiry;
-		const isExpired = isLotExpired(lot, nowMs);
+		const isExpired = isLotExpired(lot, nowMs, item);
 		const hasSufficientQty = qtyGte(lot.qty, requiredQty);
 
 		return {
