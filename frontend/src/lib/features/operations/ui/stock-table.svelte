@@ -12,7 +12,9 @@
 	import { useSupplyItems, useThresholdOverrides } from '$lib/features/supply';
 	import { SUPPLY_CATEGORY_LABELS, type SupplyCategory } from '$lib/features/supply';
 	import {
+		isMergedItem,
 		itemMasterUnit,
+		mergedAliasesByTarget,
 		requiresExpiry,
 		useItemMasters,
 		useItemCategories,
@@ -177,17 +179,23 @@
 		}));
 		const itemMasters = itemMastersQuery.data ?? [];
 
-		const mappedItemMasters = itemMasters.map((im) => ({
-			_id: im._id,
-			name: im.name,
-			category: im.category || 'other',
-			unit: itemMasterUnit(im),
-			reorder_level: null,
-			perishable: requiresExpiry(im),
-			target_reserve_days: undefined,
-			consumption_rate: undefined,
-			timeframe: undefined
-		}));
+		// A merged-away source holds no stock any more and is hidden (CR-143 FR-F5); its name
+		// stays searchable on the destination.
+		const aliasesByTarget = mergedAliasesByTarget(itemMasters);
+		const mappedItemMasters = itemMasters
+			.filter((im) => !isMergedItem(im))
+			.map((im) => ({
+				_id: im._id,
+				aliases: aliasesByTarget.get(im._id) ?? [],
+				name: im.name,
+				category: im.category || 'other',
+				unit: itemMasterUnit(im),
+				reorder_level: null,
+				perishable: requiresExpiry(im),
+				target_reserve_days: undefined,
+				consumption_rate: undefined,
+				timeframe: undefined
+			}));
 
 		return [...supplyItems, ...mappedItemMasters];
 	});
@@ -308,7 +316,8 @@
 				lotCount: summary?.lotCount ?? 0,
 				locationLabel: locationLabelByItem.get(item._id) ?? null,
 				coverDays: daysOfCover(qtyOnHand, dailyConsumption(occupancy, item, override)),
-				neverReceived: !everStocked.has(item._id)
+				neverReceived: !everStocked.has(item._id),
+				aliases: 'aliases' in item ? item.aliases : []
 			};
 		})
 	);
