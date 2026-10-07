@@ -429,130 +429,6 @@
 				"security": [{ "HTTPBearer": [] }]
 			}
 		},
-		"/external/v1/shelters": {
-			"get": {
-				"tags": ["External"],
-				"summary": "ดึงรายการศูนย์พักพิง (get-list-shelter)",
-				"description": "ดึงรายการศูนย์พักพิงสำหรับระบบภายนอก (M2).",
-				"operationId": "list_shelters_external_v1_shelters_get",
-				"security": [{ "HTTPBearer": [] }, { "APIKeyHeader": [] }],
-				"parameters": [
-					{
-						"name": "status",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"anyOf": [{ "type": "string" }, { "type": "null" }],
-							"description": "กรองสถานะ เช่น open",
-							"title": "Status"
-						},
-						"description": "กรองสถานะ เช่น open"
-					}
-				],
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"type": "array",
-									"items": { "$ref": "#/components/schemas/M2ShelterItem" },
-									"title": "Response List Shelters External V1 Shelters Get"
-								}
-							}
-						}
-					},
-					"401": {
-						"content": {
-							"application/json": { "schema": { "$ref": "#/components/schemas/M2ErrorResponse" } }
-						},
-						"description": "Unauthorized"
-					},
-					"403": {
-						"content": {
-							"application/json": { "schema": { "$ref": "#/components/schemas/M2ErrorResponse" } }
-						},
-						"description": "Forbidden"
-					},
-					"500": {
-						"content": {
-							"application/json": { "schema": { "$ref": "#/components/schemas/M2ErrorResponse" } }
-						},
-						"description": "Internal Server Error"
-					},
-					"422": {
-						"description": "Validation Error",
-						"content": {
-							"application/json": {
-								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
-							}
-						}
-					}
-				}
-			}
-		},
-		"/external/v1/persons/shelter-residency": {
-			"get": {
-				"tags": ["External"],
-				"summary": "ตรวจสอบสถานะการเข้าพัก (get-person-shelter-residency)",
-				"description": "ตรวจสอบสถานะการเข้าพักศูนย์พักพิงของผู้ประสบภัยจากเลขประจำตัวประชาชน (CID).",
-				"operationId": "get_person_shelter_residency_external_v1_persons_shelter_residency_get",
-				"security": [{ "HTTPBearer": [] }, { "APIKeyHeader": [] }],
-				"parameters": [
-					{
-						"name": "cid",
-						"in": "query",
-						"required": true,
-						"schema": {
-							"type": "string",
-							"description": "เลขประจำตัวประชาชน 13 หลัก",
-							"title": "Cid"
-						},
-						"description": "เลขประจำตัวประชาชน 13 หลัก"
-					}
-				],
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": { "$ref": "#/components/schemas/M2PersonResidencyResponse" }
-							}
-						}
-					},
-					"401": {
-						"content": {
-							"application/json": { "schema": { "$ref": "#/components/schemas/M2ErrorResponse" } }
-						},
-						"description": "Unauthorized"
-					},
-					"403": {
-						"content": {
-							"application/json": { "schema": { "$ref": "#/components/schemas/M2ErrorResponse" } }
-						},
-						"description": "Forbidden"
-					},
-					"404": {
-						"content": {
-							"application/json": { "schema": { "$ref": "#/components/schemas/M2ErrorResponse" } }
-						},
-						"description": "Not Found"
-					},
-					"422": {
-						"content": {
-							"application/json": { "schema": { "$ref": "#/components/schemas/M2ErrorResponse" } }
-						},
-						"description": "Unprocessable Content"
-					},
-					"500": {
-						"content": {
-							"application/json": { "schema": { "$ref": "#/components/schemas/M2ErrorResponse" } }
-						},
-						"description": "Internal Server Error"
-					}
-				}
-			}
-		},
 		"/external/v1/shelters/{code}": {
 			"get": {
 				"tags": ["External"],
@@ -929,6 +805,217 @@
 				}
 			}
 		},
+		"/external/bookings": {
+			"post": {
+				"tags": ["External"],
+				"summary": "Create Booking",
+				"operationId": "create_booking_external_bookings_post",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/BookingCreateRequest" }
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"201": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingCreatedEnvelope" }
+							}
+						}
+					},
+					"401": {
+						"description": "Unauthorized",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingErrorResponse" }
+							}
+						}
+					},
+					"403": {
+						"description": "Forbidden",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingErrorResponse" }
+							}
+						}
+					},
+					"404": {
+						"description": "Not Found",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingErrorResponse" }
+							}
+						}
+					},
+					"409": {
+						"description": "Conflict",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingErrorResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Unprocessable Content",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingErrorResponse" }
+							}
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
+		},
+		"/external/bookings/{booking_id}/cancel": {
+			"post": {
+				"tags": ["External"],
+				"summary": "Cancel Booking",
+				"operationId": "cancel_booking_external_bookings__booking_id__cancel_post",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "booking_id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Booking Id" }
+					}
+				],
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"anyOf": [
+									{ "$ref": "#/components/schemas/BookingCancelRequest" },
+									{ "type": "null" }
+								],
+								"title": "Body"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingCancelledEnvelope" }
+							}
+						}
+					},
+					"401": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingErrorResponse" }
+							}
+						},
+						"description": "Unauthorized"
+					},
+					"403": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingErrorResponse" }
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingErrorResponse" }
+							}
+						},
+						"description": "Not Found"
+					},
+					"409": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingErrorResponse" }
+							}
+						},
+						"description": "Conflict"
+					},
+					"422": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingErrorResponse" }
+							}
+						},
+						"description": "Unprocessable Content"
+					}
+				}
+			}
+		},
+		"/external/bookings/{booking_id}": {
+			"get": {
+				"tags": ["External"],
+				"summary": "Get Booking",
+				"operationId": "get_booking_external_bookings__booking_id__get",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "booking_id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Booking Id" }
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingStatusEnvelope" }
+							}
+						}
+					},
+					"401": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingErrorResponse" }
+							}
+						},
+						"description": "Unauthorized"
+					},
+					"403": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingErrorResponse" }
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingErrorResponse" }
+							}
+						},
+						"description": "Not Found"
+					},
+					"409": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingErrorResponse" }
+							}
+						},
+						"description": "Conflict"
+					},
+					"422": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingErrorResponse" }
+							}
+						},
+						"description": "Unprocessable Content"
+					}
+				}
+			}
+		},
 		"/v1/admin/thirdparty-clients": {
 			"get": {
 				"tags": ["External"],
@@ -999,6 +1086,41 @@
 						"content": {
 							"application/json": {
 								"schema": { "$ref": "#/components/schemas/ThirdPartyClientRevokeResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/v1/admin/thirdparty-clients/{client_row_id}/regenerate-secret": {
+			"post": {
+				"tags": ["External"],
+				"summary": "Regenerate Client Secret",
+				"description": "Issue a new secret for this `client_id`, invalidating the old one immediately.\nRefused (409) once the client is revoked — same as scope edits.",
+				"operationId": "regenerate_client_secret_v1_admin_thirdparty_clients__client_row_id__regenerate_secret_post",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "client_row_id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Client Row Id" }
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ThirdPartyClientCreateResponse" }
 							}
 						}
 					},
@@ -1093,7 +1215,6 @@
 			"get": {
 				"tags": ["External"],
 				"summary": "Reveal Client Secret",
-				"description": "Decrypt and return the plaintext secret. The BFF gates this behind the caller\nre-entering their own CouchDB password — this endpoint itself only enforces the\nsame `EXTERNAL_API_SECRET` bearer as every other route on this router.",
 				"operationId": "reveal_client_secret_v1_admin_thirdparty_clients__client_row_id__secret_get",
 				"security": [{ "HTTPBearer": [] }],
 				"parameters": [
@@ -1380,6 +1501,86 @@
 								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
 							}
 						}
+					}
+				}
+			}
+		},
+		"/external/persons/shelter-residency": {
+			"get": {
+				"tags": ["External"],
+				"summary": "Get Person Shelter Residency",
+				"operationId": "get_person_shelter_residency_external_persons_shelter_residency_get",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "cid",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string" }, { "type": "null" }],
+							"description": "เลขประจำตัวประชาชน 13 หลัก",
+							"title": "Cid"
+						},
+						"description": "เลขประจำตัวประชาชน 13 หลัก"
+					},
+					{
+						"name": "purpose",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string" }, { "type": "null" }],
+							"description": "วัตถุประสงค์การเรียกดู (บังคับ)",
+							"title": "Purpose"
+						},
+						"description": "วัตถุประสงค์การเรียกดู (บังคับ)"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/ResidencyEnvelope" } }
+						}
+					},
+					"400": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ResidencyErrorResponse" }
+							}
+						},
+						"description": "Bad Request"
+					},
+					"401": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ResidencyErrorResponse" }
+							}
+						},
+						"description": "Unauthorized"
+					},
+					"403": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ResidencyErrorResponse" }
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ResidencyErrorResponse" }
+							}
+						},
+						"description": "Not Found"
+					},
+					"422": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ResidencyErrorResponse" }
+							}
+						},
+						"description": "Unprocessable Content"
 					}
 				}
 			}
@@ -1740,6 +1941,100 @@
 						"content": {
 							"application/json": {
 								"schema": { "$ref": "#/components/schemas/UnassignedRegistrationListResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/staff/v1/unassigned-registrations/photos/{photo_id}": {
+			"get": {
+				"tags": ["Unassigned Registrations (Staff)"],
+				"summary": "Get Unassigned Registration Photo",
+				"description": "Staff-only photo read (CR-140 addendum) — only if still referenced by an open row.",
+				"operationId": "get_unassigned_registration_photo_staff_v1_unassigned_registrations_photos__photo_id__get",
+				"parameters": [
+					{
+						"name": "photo_id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Photo Id" }
+					},
+					{
+						"name": "Cookie",
+						"in": "header",
+						"required": false,
+						"schema": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Cookie" }
+					},
+					{
+						"name": "AuthSession",
+						"in": "cookie",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string" }, { "type": "null" }],
+							"title": "Authsession"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": { "application/json": { "schema": {} } }
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"/staff/v1/unassigned-registrations/{registration_id}/review": {
+			"get": {
+				"tags": ["Unassigned Registrations (Staff)"],
+				"summary": "Review Unassigned Registration",
+				"description": "Read-only pre-claim review (CR-140 addendum) — open rows only, writes nothing.",
+				"operationId": "review_unassigned_registration_staff_v1_unassigned_registrations__registration_id__review_get",
+				"parameters": [
+					{
+						"name": "registration_id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Registration Id" }
+					},
+					{
+						"name": "Cookie",
+						"in": "header",
+						"required": false,
+						"schema": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Cookie" }
+					},
+					{
+						"name": "AuthSession",
+						"in": "cookie",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string" }, { "type": "null" }],
+							"title": "Authsession"
+						}
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/UnassignedRegistrationReviewResponse" }
 							}
 						}
 					},
@@ -2482,6 +2777,146 @@
 				"required": ["full"],
 				"title": "Body_upload_unassigned_photo_public_v1_unassigned_registrations_photos_post"
 			},
+			"BookingCancelRequest": {
+				"properties": {
+					"reason": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Reason",
+						"description": "เหตุผลการยกเลิก (≤200 ตัวอักษร)"
+					}
+				},
+				"type": "object",
+				"title": "BookingCancelRequest"
+			},
+			"BookingCancelledEnvelope": {
+				"properties": {
+					"status": { "type": "integer", "title": "Status", "default": 200 },
+					"message": { "type": "string", "title": "Message", "default": "Booking cancelled." },
+					"result": { "$ref": "#/components/schemas/BookingCancelledResult" }
+				},
+				"type": "object",
+				"required": ["result"],
+				"title": "BookingCancelledEnvelope"
+			},
+			"BookingCancelledResult": {
+				"properties": {
+					"booking_id": { "type": "string", "title": "Booking Id" },
+					"booking_status": {
+						"type": "string",
+						"enum": ["BOOKED", "CANCELLED", "REJECTED"],
+						"title": "Booking Status",
+						"default": "CANCELLED"
+					}
+				},
+				"type": "object",
+				"required": ["booking_id"],
+				"title": "BookingCancelledResult"
+			},
+			"BookingCreateRequest": {
+				"properties": {
+					"location_code": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Location Code",
+						"description": "รหัสศูนย์พักพิง (EXT-002)"
+					},
+					"cid": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Cid",
+						"description": "เลขประจำตัวประชาชน 13 หลัก"
+					},
+					"first_name": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "First Name",
+						"description": "ชื่อ"
+					},
+					"last_name": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Last Name",
+						"description": "นามสกุล"
+					},
+					"phone": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Phone",
+						"description": "เบอร์โทรศัพท์ (รับ +66)"
+					}
+				},
+				"type": "object",
+				"title": "BookingCreateRequest"
+			},
+			"BookingCreatedEnvelope": {
+				"properties": {
+					"status": { "type": "integer", "title": "Status", "default": 201 },
+					"message": { "type": "string", "title": "Message", "default": "Booking accepted." },
+					"result": { "$ref": "#/components/schemas/BookingCreatedResult" }
+				},
+				"type": "object",
+				"required": ["result"],
+				"title": "BookingCreatedEnvelope"
+			},
+			"BookingCreatedResult": {
+				"properties": {
+					"booking_id": { "type": "string", "title": "Booking Id" },
+					"location_code": { "type": "string", "title": "Location Code" },
+					"booking_status": {
+						"type": "string",
+						"enum": ["BOOKED", "CANCELLED", "REJECTED"],
+						"title": "Booking Status",
+						"default": "BOOKED"
+					}
+				},
+				"type": "object",
+				"required": ["booking_id", "location_code"],
+				"title": "BookingCreatedResult"
+			},
+			"BookingErrorResponse": {
+				"properties": {
+					"status": { "type": "integer", "title": "Status" },
+					"message": { "type": "string", "title": "Message" },
+					"code": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Code" },
+					"detail": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Detail" }
+				},
+				"type": "object",
+				"required": ["status", "message"],
+				"title": "BookingErrorResponse"
+			},
+			"BookingStatusEnvelope": {
+				"properties": {
+					"status": { "type": "integer", "title": "Status", "default": 200 },
+					"message": { "type": "string", "title": "Message", "default": "Found Data." },
+					"result": { "$ref": "#/components/schemas/BookingStatusResult" }
+				},
+				"type": "object",
+				"required": ["result"],
+				"title": "BookingStatusEnvelope"
+			},
+			"BookingStatusResult": {
+				"properties": {
+					"booking_id": { "type": "string", "title": "Booking Id" },
+					"location_code": { "type": "string", "title": "Location Code" },
+					"booking_status": {
+						"type": "string",
+						"enum": ["BOOKED", "CANCELLED", "REJECTED"],
+						"title": "Booking Status"
+					},
+					"reject_reason": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Reject Reason"
+					},
+					"created_at": {
+						"type": "string",
+						"title": "Created At",
+						"description": "ISO 8601 (+07:00)"
+					},
+					"updated_at": {
+						"type": "string",
+						"title": "Updated At",
+						"description": "ISO 8601 (+07:00)"
+					}
+				},
+				"type": "object",
+				"required": ["booking_id", "location_code", "booking_status", "created_at", "updated_at"],
+				"title": "BookingStatusResult"
+			},
 			"ClaimedMemberOut": {
 				"properties": {
 					"reserved_evacuee_id": { "type": "string", "title": "Reserved Evacuee Id" },
@@ -2497,6 +2932,22 @@
 				"type": "object",
 				"required": ["reserved_evacuee_id", "first_name", "last_name"],
 				"title": "ClaimedMemberOut"
+			},
+			"ClaimedPetOut": {
+				"properties": {
+					"pet_id": { "type": "string", "title": "Pet Id" },
+					"status": {
+						"type": "string",
+						"const": "claimed",
+						"title": "Status",
+						"default": "claimed"
+					},
+					"species": { "type": "string", "enum": ["dog", "cat", "other"], "title": "Species" },
+					"count": { "type": "integer", "title": "Count", "default": 1 }
+				},
+				"type": "object",
+				"required": ["pet_id", "species"],
+				"title": "ClaimedPetOut"
 			},
 			"ConfigResponse": {
 				"properties": {
@@ -2829,6 +3280,22 @@
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Residence Landmark"
 					},
+					"dorm_name": {
+						"anyOf": [{ "type": "string", "maxLength": 120 }, { "type": "null" }],
+						"title": "Dorm Name"
+					},
+					"dorm_building": {
+						"anyOf": [{ "type": "string", "maxLength": 120 }, { "type": "null" }],
+						"title": "Dorm Building"
+					},
+					"dorm_floor": {
+						"anyOf": [{ "type": "string", "maxLength": 120 }, { "type": "null" }],
+						"title": "Dorm Floor"
+					},
+					"dorm_room": {
+						"anyOf": [{ "type": "string", "maxLength": 120 }, { "type": "null" }],
+						"title": "Dorm Room"
+					},
 					"address_no": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Address No"
@@ -2868,6 +3335,22 @@
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Residence Landmark"
 					},
+					"dorm_name": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Dorm Name"
+					},
+					"dorm_building": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Dorm Building"
+					},
+					"dorm_floor": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Dorm Floor"
+					},
+					"dorm_room": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Dorm Room"
+					},
 					"address_no": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Address No"
@@ -2887,7 +3370,12 @@
 						"title": "Postal Code"
 					},
 					"geo": { "anyOf": [{ "$ref": "#/components/schemas/GeoPoint" }, { "type": "null" }] },
-					"label": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Label" }
+					"label": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Label" },
+					"pets": {
+						"items": { "$ref": "#/components/schemas/PetCreated" },
+						"type": "array",
+						"title": "Pets"
+					}
 				},
 				"type": "object",
 				"title": "HouseholdOut"
@@ -3180,100 +3668,6 @@
 				"required": ["location_code", "updated_at", "items"],
 				"title": "LocationStockResult"
 			},
-			"M2ErrorDetail": {
-				"properties": {
-					"code": { "type": "string", "title": "Code" },
-					"message": { "type": "string", "title": "Message" }
-				},
-				"type": "object",
-				"required": ["code", "message"],
-				"title": "M2ErrorDetail"
-			},
-			"M2ErrorResponse": {
-				"properties": { "error": { "$ref": "#/components/schemas/M2ErrorDetail" } },
-				"type": "object",
-				"required": ["error"],
-				"title": "M2ErrorResponse"
-			},
-			"M2PersonResidencyResponse": {
-				"properties": {
-					"shelter_id": {
-						"type": "string",
-						"title": "Shelter Id",
-						"description": "รหัสศูนย์พักพิง"
-					},
-					"shelter_name": {
-						"type": "string",
-						"title": "Shelter Name",
-						"description": "ชื่อศูนย์พักพิง"
-					},
-					"checkin_datetime": {
-						"type": "string",
-						"title": "Checkin Datetime",
-						"description": "วันเวลาที่เช็คอิน (ISO 8601 พร้อม timezone เช่น 2026-08-20T14:30:00+07:00)"
-					},
-					"status": {
-						"type": "string",
-						"enum": ["CHECKED_IN", "CHECKED_OUT"],
-						"title": "Status",
-						"description": "สถานะการเข้าพัก"
-					},
-					"stay_status": {
-						"type": "string",
-						"title": "Stay Status",
-						"description": "สถานะ stay ดิบจาก projection (CR-112 additive)"
-					},
-					"in_zone": {
-						"type": "boolean",
-						"title": "In Zone",
-						"description": "True เมื่อยืนยันถึงโซนแล้ว (room_confirmed)"
-					}
-				},
-				"type": "object",
-				"required": [
-					"shelter_id",
-					"shelter_name",
-					"checkin_datetime",
-					"status",
-					"stay_status",
-					"in_zone"
-				],
-				"title": "M2PersonResidencyResponse"
-			},
-			"M2ShelterItem": {
-				"properties": {
-					"shelter_id": {
-						"type": "string",
-						"title": "Shelter Id",
-						"description": "รหัสศูนย์พักพิง เช่น SH001"
-					},
-					"shelter_name": {
-						"type": "string",
-						"title": "Shelter Name",
-						"description": "ชื่อศูนย์พักพิง"
-					},
-					"site_kind": {
-						"type": "string",
-						"enum": ["evacuation_center", "host_house"],
-						"title": "Site Kind",
-						"description": "ชนิดสถานที่",
-						"default": "evacuation_center"
-					},
-					"lat": {
-						"anyOf": [{ "type": "number" }, { "type": "null" }],
-						"title": "Lat",
-						"description": "พิกัดละติจูด (WGS 84)"
-					},
-					"long": {
-						"anyOf": [{ "type": "number" }, { "type": "null" }],
-						"title": "Long",
-						"description": "พิกัดลองจิจูด (WGS 84)"
-					}
-				},
-				"type": "object",
-				"required": ["shelter_id", "shelter_name"],
-				"title": "M2ShelterItem"
-			},
 			"MemberCreated": {
 				"properties": {
 					"reserved_evacuee_id": { "type": "string", "title": "Reserved Evacuee Id" },
@@ -3307,6 +3701,14 @@
 					"age": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "Age" },
 					"nickname": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Nickname" },
 					"religion": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Religion" },
+					"religion_other": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Religion Other"
+					},
+					"disability_other_detail": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Disability Other Detail"
+					},
 					"emergency_contact": {
 						"anyOf": [{ "$ref": "#/components/schemas/EmergencyContactOut" }, { "type": "null" }]
 					},
@@ -3355,6 +3757,14 @@
 					"age": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "Age" },
 					"nickname": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Nickname" },
 					"religion": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Religion" },
+					"religion_other": {
+						"anyOf": [{ "type": "string", "maxLength": 60 }, { "type": "null" }],
+						"title": "Religion Other"
+					},
+					"disability_other_detail": {
+						"anyOf": [{ "type": "string", "maxLength": 120 }, { "type": "null" }],
+						"title": "Disability Other Detail"
+					},
 					"emergency_contact": {
 						"anyOf": [{ "$ref": "#/components/schemas/EmergencyContactInput" }, { "type": "null" }]
 					},
@@ -3503,6 +3913,14 @@
 					},
 					"nickname": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Nickname" },
 					"religion": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Religion" },
+					"religion_other": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Religion Other"
+					},
+					"disability_other_detail": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Disability Other Detail"
+					},
 					"emergency_contact": {
 						"anyOf": [{ "$ref": "#/components/schemas/EmergencyContactOut" }, { "type": "null" }]
 					},
@@ -3517,6 +3935,21 @@
 				"required": ["reserved_evacuee_id", "first_name", "last_name", "gender", "country"],
 				"title": "OpenMemberHit",
 				"description": "Open member surfaced by staff search — claimable (not claimed/cancelled)."
+			},
+			"OpenPetHit": {
+				"properties": {
+					"pet_id": { "type": "string", "title": "Pet Id" },
+					"status": { "type": "string", "const": "open", "title": "Status", "default": "open" },
+					"species": { "type": "string", "enum": ["dog", "cat", "other"], "title": "Species" },
+					"count": { "type": "integer", "title": "Count", "default": 1 },
+					"notes": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Notes" },
+					"has_cage": { "type": "boolean", "title": "Has Cage", "default": false },
+					"image_url": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Image Url" }
+				},
+				"type": "object",
+				"required": ["pet_id", "species"],
+				"title": "OpenPetHit",
+				"description": "Open pet surfaced by staff search/detail — claimable."
 			},
 			"PaginatedAnnouncements": {
 				"properties": {
@@ -3572,12 +4005,45 @@
 				"title": "PersonIdOut",
 				"description": "Person id on create responses — distinct from request PersonIdInput."
 			},
+			"PetCreated": {
+				"properties": {
+					"pet_id": { "type": "string", "title": "Pet Id" },
+					"status": {
+						"type": "string",
+						"enum": ["open", "claimed", "cancelled"],
+						"title": "Status"
+					},
+					"species": { "type": "string", "enum": ["dog", "cat", "other"], "title": "Species" },
+					"count": { "type": "integer", "title": "Count", "default": 1 },
+					"notes": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Notes" },
+					"has_cage": { "type": "boolean", "title": "Has Cage", "default": false },
+					"image_url": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Image Url"
+					},
+					"claimed_shelter_code": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Claimed Shelter Code"
+					},
+					"claimed_at": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Claimed At"
+					},
+					"claimed_by": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Claimed By"
+					}
+				},
+				"type": "object",
+				"required": ["pet_id", "status", "species"],
+				"title": "PetCreated"
+			},
 			"PetInput": {
 				"properties": {
 					"species": { "type": "string", "enum": ["dog", "cat", "other"], "title": "Species" },
 					"count": {
 						"type": "integer",
-						"maximum": 50.0,
+						"maximum": 10.0,
 						"minimum": 1.0,
 						"title": "Count",
 						"default": 1
@@ -3688,6 +4154,67 @@
 				"required": ["shift_id"],
 				"title": "PublicJobShift",
 				"description": "Concrete shift identity plus renderable snapshot fields."
+			},
+			"ResidencyEnvelope": {
+				"properties": {
+					"status": { "type": "integer", "title": "Status", "default": 200 },
+					"message": { "type": "string", "title": "Message", "default": "Found Data." },
+					"result": { "$ref": "#/components/schemas/ResidencyItem" }
+				},
+				"type": "object",
+				"required": ["result"],
+				"title": "ResidencyEnvelope"
+			},
+			"ResidencyErrorResponse": {
+				"properties": {
+					"status": { "type": "integer", "title": "Status" },
+					"message": { "type": "string", "title": "Message" },
+					"code": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Code" },
+					"detail": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Detail" }
+				},
+				"type": "object",
+				"required": ["status", "message"],
+				"title": "ResidencyErrorResponse"
+			},
+			"ResidencyItem": {
+				"properties": {
+					"location_code": {
+						"type": "string",
+						"title": "Location Code",
+						"description": "รหัสศูนย์พักพิง (ตรงกับ EXT-002)"
+					},
+					"name_th": { "type": "string", "title": "Name Th", "description": "ชื่อศูนย์พักพิง" },
+					"checkin_datetime": {
+						"type": "string",
+						"title": "Checkin Datetime",
+						"description": "วันเวลาเข้าพัก ISO 8601 (+07:00)"
+					},
+					"residency_status": {
+						"type": "string",
+						"enum": ["CHECKED_IN", "CHECKED_OUT"],
+						"title": "Residency Status"
+					},
+					"stay_status": {
+						"type": "string",
+						"title": "Stay Status",
+						"description": "สถานะ stay ดิบจาก projection"
+					},
+					"in_zone": {
+						"type": "boolean",
+						"title": "In Zone",
+						"description": "True เมื่อยืนยันถึงโซนแล้ว (room_confirmed)"
+					}
+				},
+				"type": "object",
+				"required": [
+					"location_code",
+					"name_th",
+					"checkin_datetime",
+					"residency_status",
+					"stay_status",
+					"in_zone"
+				],
+				"title": "ResidencyItem"
 			},
 			"ScheduleActionRequest": {
 				"properties": {
@@ -4032,6 +4559,18 @@
 						"title": "Accepts Pre Registration",
 						"default": false
 					},
+					"readiness_status": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Readiness Status"
+					},
+					"readiness_tier": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Readiness Tier"
+					},
+					"readiness_assessed_at": {
+						"anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }],
+						"title": "Readiness Assessed At"
+					},
 					"updated_at": { "type": "string", "format": "date-time", "title": "Updated At" }
 				},
 				"type": "object",
@@ -4204,7 +4743,10 @@
 						"anyOf": [{ "type": "string", "maxLength": 500 }, { "type": "null" }],
 						"title": "Description"
 					},
-					"module_name": { "type": "string", "minLength": 1, "title": "Module Name" },
+					"module_name": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Module Name"
+					},
 					"allowed_scopes": {
 						"items": { "type": "string" },
 						"type": "array",
@@ -4213,7 +4755,7 @@
 					}
 				},
 				"type": "object",
-				"required": ["name", "module_name", "allowed_scopes"],
+				"required": ["name", "allowed_scopes"],
 				"title": "ThirdPartyClientCreateRequest",
 				"description": "``client_id`` is generated server-side (``tpc_…``) — not accepted from the caller."
 			},
@@ -4226,7 +4768,10 @@
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Description"
 					},
-					"module_name": { "type": "string", "title": "Module Name" },
+					"module_name": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Module Name"
+					},
 					"allowed_scopes": {
 						"items": { "type": "string" },
 						"type": "array",
@@ -4289,7 +4834,10 @@
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Description"
 					},
-					"module_name": { "type": "string", "title": "Module Name" },
+					"module_name": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Module Name"
+					},
 					"allowed_scopes": {
 						"items": { "type": "string" },
 						"type": "array",
@@ -4332,8 +4880,7 @@
 				"properties": { "client_secret": { "type": "string", "title": "Client Secret" } },
 				"type": "object",
 				"required": ["client_secret"],
-				"title": "ThirdPartyClientSecretResponse",
-				"description": "Decrypted plaintext secret — ``GET .../secret``, gated upstream by the BFF's\nown-password re-auth (CR-136)."
+				"title": "ThirdPartyClientSecretResponse"
 			},
 			"ThirdPartyClientUpdateRequest": {
 				"properties": {
@@ -4449,7 +4996,10 @@
 						"default": "Bearer"
 					},
 					"expires_in": { "type": "integer", "title": "Expires In" },
-					"module_name": { "type": "string", "title": "Module Name" },
+					"module_name": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Module Name"
+					},
 					"scopes": { "items": { "type": "string" }, "type": "array", "title": "Scopes" }
 				},
 				"type": "object",
@@ -4527,8 +5077,13 @@
 						"items": { "type": "string" },
 						"type": "array",
 						"maxItems": 20,
-						"minItems": 1,
 						"title": "Member Ids"
+					},
+					"pet_ids": {
+						"items": { "type": "string" },
+						"type": "array",
+						"maxItems": 50,
+						"title": "Pet Ids"
 					},
 					"shelter_code": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
@@ -4536,15 +5091,14 @@
 					}
 				},
 				"type": "object",
-				"required": ["member_ids"],
 				"title": "UnassignedRegistrationClaimRequest",
-				"description": "Staff claim — body selects open member reserved ids (CR-113 / #247)."
+				"description": "Staff claim — open members and/or pets (draft-persistent-unassigned-family)."
 			},
 			"UnassignedRegistrationClaimResponse": {
 				"properties": {
 					"success": { "type": "boolean", "title": "Success", "default": true },
 					"id": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Id" },
-					"deleted": { "type": "boolean", "title": "Deleted" },
+					"deleted": { "type": "boolean", "title": "Deleted", "default": false },
 					"shelter_code": { "type": "string", "title": "Shelter Code" },
 					"household_id": { "type": "string", "title": "Household Id" },
 					"evacuee_ids": { "items": { "type": "string" }, "type": "array", "title": "Evacuee Ids" },
@@ -4553,16 +5107,25 @@
 						"type": "array",
 						"title": "Claimed"
 					},
+					"claimed_pets": {
+						"items": { "$ref": "#/components/schemas/ClaimedPetOut" },
+						"type": "array",
+						"title": "Claimed Pets"
+					},
 					"remaining_open": {
 						"items": { "$ref": "#/components/schemas/OpenMemberHit" },
 						"type": "array",
 						"title": "Remaining Open"
+					},
+					"remaining_open_pets": {
+						"items": { "$ref": "#/components/schemas/OpenPetHit" },
+						"type": "array",
+						"title": "Remaining Open Pets"
 					}
 				},
 				"type": "object",
 				"required": [
 					"id",
-					"deleted",
 					"shelter_code",
 					"household_id",
 					"evacuee_ids",
@@ -4590,7 +5153,7 @@
 					"join_registration_id": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Join Registration Id",
-						"description": "Append members (and pets) into this open registration's reserved household."
+						"description": "Append members (and pets) into this registration's reserved household (allowed even when document status is closed — reopen on append)."
 					}
 				},
 				"type": "object",
@@ -4677,7 +5240,13 @@
 						"type": "array",
 						"title": "Open Members"
 					},
-					"open_member_count": { "type": "integer", "title": "Open Member Count" }
+					"open_member_count": { "type": "integer", "title": "Open Member Count" },
+					"open_pets": {
+						"items": { "$ref": "#/components/schemas/OpenPetHit" },
+						"type": "array",
+						"title": "Open Pets"
+					},
+					"open_pet_count": { "type": "integer", "title": "Open Pet Count", "default": 0 }
 				},
 				"type": "object",
 				"required": [
@@ -4708,6 +5277,83 @@
 				"required": ["items", "total", "open_member_count", "limit", "offset"],
 				"title": "UnassignedRegistrationListResponse"
 			},
+			"UnassignedRegistrationReviewResponse": {
+				"properties": {
+					"id": { "type": "string", "title": "Id" },
+					"reserved_household_id": { "type": "string", "title": "Reserved Household Id" },
+					"registered_via": {
+						"type": "string",
+						"enum": ["web", "staff"],
+						"title": "Registered Via"
+					},
+					"status": { "type": "string", "title": "Status" },
+					"created_at": { "type": "string", "title": "Created At" },
+					"housing_type": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Housing Type"
+					},
+					"residence_landmark": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Residence Landmark"
+					},
+					"dorm_name": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Dorm Name"
+					},
+					"dorm_building": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Dorm Building"
+					},
+					"dorm_floor": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Dorm Floor"
+					},
+					"dorm_room": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Dorm Room"
+					},
+					"address_no": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Address No"
+					},
+					"village_no": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Village No"
+					},
+					"subdistrict": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Subdistrict"
+					},
+					"district": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "District" },
+					"province": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Province" },
+					"postal_code": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Postal Code"
+					},
+					"label": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Label" },
+					"open_members": {
+						"items": { "$ref": "#/components/schemas/OpenMemberHit" },
+						"type": "array",
+						"title": "Open Members"
+					},
+					"open_pets": {
+						"items": { "$ref": "#/components/schemas/OpenPetHit" },
+						"type": "array",
+						"title": "Open Pets"
+					}
+				},
+				"type": "object",
+				"required": [
+					"id",
+					"reserved_household_id",
+					"registered_via",
+					"status",
+					"created_at",
+					"open_members"
+				],
+				"title": "UnassignedRegistrationReviewResponse",
+				"description": "Staff pre-claim review (CR-140 addendum) — open rows only, no write.\n\nHousehold carries address fields only (no `pets` — those live in `open_pets`,\nunlike `HouseholdOut` which embeds every pet with claim status for the SA detail view)."
+			},
 			"UnassignedRegistrationSearchHit": {
 				"properties": {
 					"id": { "type": "string", "title": "Id" },
@@ -4723,6 +5369,11 @@
 						"items": { "$ref": "#/components/schemas/OpenMemberHit" },
 						"type": "array",
 						"title": "Open Members"
+					},
+					"open_pets": {
+						"items": { "$ref": "#/components/schemas/OpenPetHit" },
+						"type": "array",
+						"title": "Open Pets"
 					}
 				},
 				"type": "object",

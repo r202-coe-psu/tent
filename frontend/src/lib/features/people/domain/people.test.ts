@@ -2,11 +2,13 @@
 import { describe, it, expect } from 'vitest';
 import {
 	createEvacuee,
+	genderLabelTh,
 	createDraftEvacueeFromCard,
 	createMovement,
 	createScreening,
 	applyMovementToStay,
 	assertMovementAllowed,
+	movementConflictMessage,
 	canCheckInEvacuee,
 	canCheckOutEvacuee,
 	canChangeEvacueeZone,
@@ -59,10 +61,14 @@ import {
 	housingTypeSchema,
 	householdInputSchema,
 	migratePetGroup,
-	migratePetGroups
+	migratePetGroups,
+	groupPetsBySpecies,
+	petSpeciesLabel
 } from './people';
 import type { AuthorContext } from '$lib/db/model';
+import type { ScreeningInput, StayStatus } from './people';
 import { isUlid } from '$lib/db/ulid';
+import { ConflictError } from '$lib/utils/errors';
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'staff1' };
 
@@ -158,7 +164,7 @@ describe('vulnerable_groups vs special_needs', () => {
 		);
 		expect(e.vulnerable_groups).toEqual(['wheelchair', 'pregnant']);
 		expect(e.special_needs).toEqual(['ใช้ออกซิเจน']);
-		expect(e.schema_v).toBe(10);
+		expect(e.schema_v).toBe(12);
 
 		const bare = createEvacuee(
 			{ first_name: 'A', last_name: 'B', gender: 'other', phone: null },
@@ -231,7 +237,7 @@ describe('Anonymous ID', () => {
 			},
 			ctx
 		);
-		expect(a.schema_v).toBe(10);
+		expect(a.schema_v).toBe(12);
 		expect(a.person_id?.cardType).toBe('anonymous');
 		expect(isAnonymousId(a.person_id?.number ?? '')).toBe(true);
 		expect(b.person_id?.number).not.toBe(a.person_id?.number);
@@ -269,11 +275,11 @@ describe('Anonymous ID', () => {
 		);
 		const replaced = replacePersonId(e, {
 			cardType: 'national_id',
-			number: '1103700123456'
+			number: '1103700123458'
 		});
 		expect(replaced.person_id).toEqual({
 			cardType: 'national_id',
-			number: '1103700123456'
+			number: '1103700123458'
 		});
 		expect(replaced._id).toBe(e._id);
 		expect(isAnonymousId(replaced.person_id?.number ?? '')).toBe(false);
@@ -300,7 +306,7 @@ describe('createEvacuee', () => {
 		);
 		expect(e._id.startsWith('evacuee:')).toBe(true);
 		expect(e.type).toBe('evacuee');
-		expect(e.schema_v).toBe(10);
+		expect(e.schema_v).toBe(12);
 		expect(e.shelter_code).toBe('SH001');
 		expect(e.created_by).toBe('staff1');
 		expect(e.created_at).toBe(e.updated_at);
@@ -313,7 +319,7 @@ describe('createEvacuee', () => {
 		expect(isEvacuee(e)).toBe(true);
 	});
 
-	it('stamps schema_v: 10 and supports status arriving', () => {
+	it('stamps schema_v: 11 and supports status arriving', () => {
 		const e = createEvacuee(
 			{
 				first_name: 'วิภา',
@@ -324,13 +330,13 @@ describe('createEvacuee', () => {
 			},
 			ctx
 		);
-		expect(e.schema_v).toBe(10);
+		expect(e.schema_v).toBe(12);
 		expect(e.current_stay.status).toBe('arriving');
 	});
 
 	it('creates evacuee from card snapshot with schema_v 8, status pre_registered, and registered_via kiosk', () => {
 		const card = {
-			citizen_id: '1234567890123',
+			citizen_id: '1234567890121',
 			title_th: 'นาย',
 			first_name_th: 'สมศักดิ์',
 			last_name_th: 'รักชาติ',
@@ -352,13 +358,13 @@ describe('createEvacuee', () => {
 		expect(kioskEv.current_stay.status).toBe('pre_registered');
 		expect(kioskEv.household_id).toBeNull();
 		expect(kioskEv.registered_via).toBe('kiosk');
-		expect(kioskEv.person_id?.number).toBe('1234567890123');
+		expect(kioskEv.person_id?.number).toBe('1234567890121');
 		expect(kioskEv.card_snapshot?.station_name).toBe('จุดสแกน Kiosk 1');
 	});
 
 	it('creates draft evacuee and calculates age automatically from birth_year_ce when age is not provided', () => {
 		const card = {
-			citizen_id: '1234567890123',
+			citizen_id: '1234567890121',
 			first_name_th: 'วิชัย',
 			last_name_th: 'ใจดี',
 			birth_year_ce: 1996,
@@ -400,8 +406,8 @@ describe('createEvacuee', () => {
 					last_name: 'ข',
 					gender: 'male',
 					phone: '0812345678',
-					// `api` is reserved for CR-071 and must not be accepted yet.
-					registered_via: 'api' as never
+					// `api` became valid with CR-154; anything outside the enum is still rejected.
+					registered_via: 'fax' as never
 				},
 				ctx
 			)
@@ -558,19 +564,27 @@ describe('evacueeInputSchema birth_year', () => {
 	it('rejects a birth_year implying an age over 150 years', () => {
 		const currentBEYear = new Date().getFullYear() + 543;
 		const minBirthYearBE = currentBEYear - 150;
-		const result = evacueeInputSchema.safeParse({ ...base, birth_year: minBirthYearBE });
+		const result = evacueeInputSchema.safeParse({ ...base, birth_year: minBirthYearBE - 1 });
 		expect(result.success).toBe(false);
 		if (!result.success) {
 			expect(result.error.issues.map((i) => i.message)).toContain(
-				`ปีเกิด (พ.ศ.) ต้องมากกว่า ${minBirthYearBE}`
+				`ปีเกิด (พ.ศ.) ต้องอยู่ระหว่าง ${minBirthYearBE}–${currentBEYear}`
 			);
 		}
 	});
 
-	it('accepts a birth_year implying an age of exactly 150 years', () => {
+	it('accepts a birth_year implying an age of exactly 150 years (CR-148 inclusive bound)', () => {
 		const currentBEYear = new Date().getFullYear() + 543;
-		const result = evacueeInputSchema.safeParse({ ...base, birth_year: currentBEYear - 150 + 1 });
+		const result = evacueeInputSchema.safeParse({ ...base, birth_year: currentBEYear - 150 });
 		expect(result.success).toBe(true);
+	});
+
+	it('rejects a birth_year that is not 4 digits (CR-148)', () => {
+		const result = evacueeInputSchema.safeParse({ ...base, birth_year: 253 });
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			expect(result.error.issues.map((i) => i.message)).toContain('กรุณากรอกปีเกิด 4 หลัก');
+		}
 	});
 
 	it('accepts a newborn — birth_year equal to the current year (age 0)', () => {
@@ -585,7 +599,7 @@ describe('evacueeInputSchema birth_year', () => {
 		expect(result.success).toBe(false);
 		if (!result.success) {
 			expect(result.error.issues.map((i) => i.message)).toContain(
-				'ปีเกิด (พ.ศ.) ต้องไม่เป็นปีในอนาคต'
+				`ปีเกิด (พ.ศ.) ต้องอยู่ระหว่าง ${currentBEYear - 150}–${currentBEYear}`
 			);
 		}
 	});
@@ -921,6 +935,61 @@ describe('movement → current_stay', () => {
 		expect(() => applyMovementToStay(active, m)).toThrow(/โซนปลายทาง/);
 	});
 
+	it('bulk rezone candidate filter (canChangeEvacueeZone) excludes discharged household members', () => {
+		const base = createEvacuee(
+			{ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null },
+			ctx
+		);
+		const withStatus = (status: StayStatus) => ({
+			...base,
+			current_stay: { status, zone: 'Z1', since: base.current_stay.since }
+		});
+		// A household mid-rezone: some still on-site, some already discharged/left.
+		const household = [
+			withStatus('active'),
+			withStatus('room_confirmed'),
+			withStatus('checked_out'),
+			withStatus('transferred'),
+			withStatus('deceased')
+		];
+		const candidates = household.filter(canChangeEvacueeZone);
+		expect(candidates.map((e) => e.current_stay.status)).toEqual(['active', 'room_confirmed']);
+	});
+
+	it('never drops or nulls household_id across check_in, confirm_room, zone_change, and check_out (FR-14)', () => {
+		const e = {
+			...createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx),
+			household_id: 'household:shared'
+		};
+
+		const checkedIn = applyMovementToStay(
+			e,
+			createMovement({ evacuee_id: e._id, action: 'check_in', zone: 'Z1' }, ctx)
+		);
+		expect(checkedIn.household_id).toBe('household:shared');
+
+		const confirmed = applyMovementToStay(
+			checkedIn,
+			createMovement({ evacuee_id: e._id, action: 'confirm_room', zone: 'Z1' }, ctx)
+		);
+		expect(confirmed.household_id).toBe('household:shared');
+
+		const rezoned = applyMovementToStay(
+			confirmed,
+			createMovement({ evacuee_id: e._id, action: 'zone_change', zone: 'Z2' }, ctx)
+		);
+		expect(rezoned.household_id).toBe('household:shared');
+
+		const checkedOut = applyMovementToStay(
+			rezoned,
+			createMovement(
+				{ evacuee_id: e._id, action: 'check_out', zone: null, reason: 'กลับบ้าน' },
+				ctx
+			)
+		);
+		expect(checkedOut.household_id).toBe('household:shared');
+	});
+
 	it('allows check_in from eligible stay statuses only', () => {
 		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
 		expect(canCheckInEvacuee(e)).toBe(true); // pre_registered
@@ -953,6 +1022,16 @@ describe('movement → current_stay', () => {
 		};
 		expect(() => assertMovementAllowed(confirmed, 'transfer_out')).not.toThrow();
 		expect(() => assertMovementAllowed(confirmed, 'leave_temporary')).not.toThrow();
+	});
+
+	it('movementConflictMessage gives friendly Thai copy for a write conflict, and falls through otherwise', () => {
+		expect(movementConflictMessage(new ConflictError('evacuee:01J'))).toBe(
+			'ข้อมูลถูกแก้ไขจากที่อื่นแล้ว กรุณาโหลดข้อมูลใหม่แล้วลองอีกครั้ง'
+		);
+		expect(movementConflictMessage(new Error('การเช็คอินต้องระบุโซน'))).toBe(
+			'การเช็คอินต้องระบุโซน'
+		);
+		expect(movementConflictMessage('not an error')).toBe('บันทึกไม่สำเร็จ');
 	});
 
 	it('rejects check_in without a zone', () => {
@@ -1077,7 +1156,9 @@ describe('triageLevelSchema and screeningInputSchema', () => {
 		expect(() => triageLevelSchema.parse('blue')).toThrow();
 	});
 
-	it('screeningInputSchema accepts triage_level and vital signs', () => {
+	it('screeningInputSchema no longer accepts triage_level or vital signs on new input (CR-106 2026-09-07)', () => {
+		// Extra/legacy keys on the raw input are silently dropped, not thrown on —
+		// a caller still sending them (an old client, a stale form) must not 422.
 		const parsed = screeningInputSchema.parse({
 			evacuee_id: 'evacuee:01J',
 			track: 'normal',
@@ -1086,58 +1167,46 @@ describe('triageLevelSchema and screeningInputSchema', () => {
 			blood_pressure_dia: 80,
 			heart_rate: 75,
 			spo2_percent: 98
-		});
-		expect(parsed.triage_level).toBe('yellow');
-		expect(parsed.blood_pressure_sys).toBe(120);
-		expect(parsed.blood_pressure_dia).toBe(80);
-		expect(parsed.heart_rate).toBe(75);
-		expect(parsed.spo2_percent).toBe(98);
-	});
-
-	it('screeningInputSchema allows null or omitted triage_level and vitals', () => {
-		const parsed = screeningInputSchema.parse({
-			evacuee_id: 'evacuee:01J',
-			track: 'normal',
-			triage_level: null
-		});
-		expect(parsed.triage_level).toBeNull();
-		expect(parsed.blood_pressure_sys).toBeUndefined();
+		} as never);
+		expect(parsed).not.toHaveProperty('triage_level');
+		expect(parsed).not.toHaveProperty('blood_pressure_sys');
+		expect(parsed).not.toHaveProperty('vital_signs');
+		expect(parsed).not.toHaveProperty('temperature_c');
+		expect(parsed).not.toHaveProperty('needs_referral');
 	});
 });
 
 describe('createScreening', () => {
-	it('defaults the screening time to now when omitted, stamps schema_v: 2 and triage_level: null', () => {
+	it('defaults the screening time to now when omitted and stamps schema_v: 2', () => {
 		const s = createScreening({ evacuee_id: 'evacuee:x', track: 'fast_track' }, ctx);
 		expect(s.type).toBe('screening');
 		expect(s.schema_v).toBe(2);
-		expect(s.triage_level).toBeNull();
-		expect(s.vital_signs).toBeUndefined();
-		expect(s.needs_referral).toBe(false);
 		expect(s.symptoms).toEqual([]);
 		expect(typeof s.screened_at).toBe('string');
 	});
 
-	it('stamps schema_v: 2, triage_level, and vital signs when provided', () => {
-		const s = createScreening(
-			{
-				evacuee_id: 'evacuee:x',
-				track: 'fast_track',
-				triage_level: 'red',
-				blood_pressure_sys: 140,
-				blood_pressure_dia: 90,
-				heart_rate: 105,
-				spo2_percent: 92
-			},
-			ctx
-		);
-		expect(s.schema_v).toBe(2);
-		expect(s.triage_level).toBe('red');
-		expect(s.vital_signs).toEqual({
+	it('never stamps temperature_c, needs_referral, triage_level, or vital_signs on a new doc (CR-106 2026-09-07 amendment)', () => {
+		// A stale caller might still send these legacy fields — they must be
+		// ignored, not persisted. Cast the whole literal since ScreeningInput
+		// no longer declares them.
+		const staleInput = {
+			evacuee_id: 'evacuee:x',
+			track: 'fast_track',
+			symptoms: ['fever'],
+			triage_level: 'red',
 			blood_pressure_sys: 140,
 			blood_pressure_dia: 90,
 			heart_rate: 105,
-			spo2_percent: 92
-		});
+			spo2_percent: 92,
+			temperature_c: 39,
+			needs_referral: true
+		} as unknown as ScreeningInput;
+		const s = createScreening(staleInput, ctx);
+		expect(s.schema_v).toBe(2);
+		expect(s).not.toHaveProperty('triage_level');
+		expect(s).not.toHaveProperty('vital_signs');
+		expect(s).not.toHaveProperty('temperature_c');
+		expect(s).not.toHaveProperty('needs_referral');
 	});
 });
 
@@ -1190,6 +1259,34 @@ describe('pet species dog|cat|other', () => {
 			{ species: 'cat', count: 1 }
 		]);
 	});
+
+	it('groupPetsBySpecies sums duplicate same-species entries into one group', () => {
+		expect(
+			groupPetsBySpecies([
+				{ species: 'cat', count: 1 },
+				{ species: 'cat', count: 1 }
+			])
+		).toEqual([{ species: 'cat', count: 2, hasCage: false }]);
+
+		expect(
+			groupPetsBySpecies([
+				{ species: 'dog', count: 1, has_cage: true },
+				{ species: 'dog', count: 2 },
+				{ species: 'cat', count: 1 }
+			])
+		).toEqual([
+			{ species: 'dog', count: 3, hasCage: true },
+			{ species: 'cat', count: 1, hasCage: false }
+		]);
+
+		expect(groupPetsBySpecies([])).toEqual([]);
+	});
+
+	it('petSpeciesLabel returns Thai labels for each species', () => {
+		expect(petSpeciesLabel('dog')).toBe('สุนัข');
+		expect(petSpeciesLabel('cat')).toBe('แมว');
+		expect(petSpeciesLabel('other')).toBe('อื่นๆ');
+	});
 });
 
 describe('household housing_type and homeless Residence', () => {
@@ -1206,7 +1303,7 @@ describe('household housing_type and homeless Residence', () => {
 			},
 			ctx
 		);
-		expect(h.schema_v).toBe(5);
+		expect(h.schema_v).toBe(6);
 		expect(h.housing_type).toBe('owned_house');
 		expect(h.residence_landmark).toBe('ใกล้สะพาน');
 		expect(housingTypeSchema.parse('homeless')).toBe('homeless');
@@ -1284,7 +1381,7 @@ describe('createHousehold', () => {
 
 		expect(h._id.startsWith('household:')).toBe(true);
 		expect(h.type).toBe('household');
-		expect(h.schema_v).toBe(5);
+		expect(h.schema_v).toBe(6);
 		expect(h.status).toBe('arriving');
 		expect(h.checkout_destination).toBeNull();
 		expect(h.shelter_code).toBe('SH001');
@@ -1597,5 +1694,33 @@ describe('zoneLabel', () => {
 	it('falls back to the raw code when no matching name exists', () => {
 		expect(zoneLabel('z9', [{ code: 'z1', name: 'โซนชาย' }])).toBe('z9');
 		expect(zoneLabel('z1')).toBe('z1');
+	});
+});
+
+describe('gender nullable (schema_v 12, CR-154)', () => {
+	it('labels null gender as ไม่ระบุ and known values in Thai', () => {
+		expect(genderLabelTh(null)).toBe('ไม่ระบุ');
+		expect(genderLabelTh(undefined)).toBe('ไม่ระบุ');
+		expect(genderLabelTh('male')).toBe('ชาย');
+		expect(genderLabelTh('female')).toBe('หญิง');
+		expect(genderLabelTh('other')).toBe('อื่นๆ');
+	});
+
+	it('still requires gender on staff/public intake (FR-70)', () => {
+		const base = { first_name: 'A', last_name: 'B', phone: null };
+		expect(evacueeInputSchema.safeParse({ ...base, gender: null }).success).toBe(false);
+		expect(evacueeInputSchema.safeParse(base).success).toBe(false);
+		expect(evacueeInputSchema.safeParse({ ...base, gender: 'female' }).success).toBe(true);
+	});
+
+	it('accepts registered_via api', () => {
+		const parsed = evacueeInputSchema.safeParse({
+			first_name: 'A',
+			last_name: 'B',
+			gender: 'male',
+			phone: null,
+			registered_via: 'api'
+		});
+		expect(parsed.success).toBe(true);
 	});
 });

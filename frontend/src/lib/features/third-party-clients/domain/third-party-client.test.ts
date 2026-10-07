@@ -3,6 +3,8 @@ import {
 	CLIENT_DESCRIPTION_MAX_LENGTH,
 	CLIENT_NAME_MAX_LENGTH,
 	DEFAULT_SCOPES_BY_MODULE,
+	SENSITIVE_SCOPES,
+	SENSITIVE_SCOPE_WARNING,
 	createThirdPartyClientSchema,
 	normalizeDeletedThirdPartyClient,
 	normalizeRevealedSecret,
@@ -16,7 +18,34 @@ import {
 } from './third-party-client';
 
 describe('createThirdPartyClientSchema', () => {
-	it('requires name, module_name, and at least one scope', () => {
+	it('treats module_name as optional — blank or missing becomes null (CR-154 FR-62)', () => {
+		const blank = createThirdPartyClientSchema.safeParse({
+			name: 'No module',
+			module_name: '',
+			allowed_scopes: ['location-read']
+		});
+		expect(blank.success).toBe(true);
+		expect(blank.data?.module_name).toBeNull();
+
+		const missing = createThirdPartyClientSchema.safeParse({
+			name: 'No module',
+			allowed_scopes: ['location-read']
+		});
+		expect(missing.success).toBe(true);
+		expect(missing.data?.module_name ?? null).toBeNull();
+	});
+
+	it('still rejects an unknown module', () => {
+		expect(
+			createThirdPartyClientSchema.safeParse({
+				name: 'Mystery',
+				module_name: 'M9',
+				allowed_scopes: ['location-read']
+			}).success
+		).toBe(false);
+	});
+
+	it('requires name and at least one scope', () => {
 		const result = createThirdPartyClientSchema.safeParse({
 			name: '',
 			module_name: '',
@@ -135,10 +164,31 @@ describe('DEFAULT_SCOPES_BY_MODULE', () => {
 		]);
 	});
 
-	it('never presets the PII scope', () => {
+	it('never presets a sensitive scope', () => {
 		for (const scopes of Object.values(DEFAULT_SCOPES_BY_MODULE)) {
-			expect(scopes).not.toContain('occupancy-pii-read');
+			for (const sensitive of SENSITIVE_SCOPES) expect(scopes).not.toContain(sensitive);
 		}
+	});
+
+	it('presets M2 to location-read only (CR-154)', () => {
+		expect(DEFAULT_SCOPES_BY_MODULE.M2).toEqual(['location-read']);
+	});
+});
+
+describe('CR-154 M2 scopes', () => {
+	it('accepts an M2 client with booking-write and residency-read', () => {
+		const result = createThirdPartyClientSchema.safeParse({
+			name: 'M2 Vulnerable Groups',
+			module_name: 'M2',
+			allowed_scopes: ['location-read', 'booking-write', 'residency-read']
+		});
+		expect(result.success).toBe(true);
+	});
+
+	it('flags booking-write and residency-read as sensitive with a warning each', () => {
+		expect(SENSITIVE_SCOPES).toContain('booking-write');
+		expect(SENSITIVE_SCOPES).toContain('residency-read');
+		for (const scope of SENSITIVE_SCOPES) expect(SENSITIVE_SCOPE_WARNING[scope]).toBeTruthy();
 	});
 });
 
@@ -169,7 +219,9 @@ describe('display helpers', () => {
 	it('labels known modules and passes unknown ones through', () => {
 		expect(partnerModuleLabel('M6')).toBe('M6 (จัดการทรัพยากร)');
 		expect(partnerModuleLabel('M7')).toBe('M7 (EoC)');
+		expect(partnerModuleLabel('M2')).toBe('M2 (กลุ่มเปราะบาง)');
 		expect(partnerModuleLabel('M9')).toBe('M9');
+		expect(partnerModuleLabel(null)).toBe('ไม่ระบุ');
 	});
 });
 

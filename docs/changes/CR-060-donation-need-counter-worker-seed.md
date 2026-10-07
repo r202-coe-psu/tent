@@ -3,7 +3,7 @@ id: CR-060
 title: "CR-060 scope amendment — worker projector seeds donation_need_counter.qty_target"
 status: approved
 date: 2026-07-28
-updated: 2026-09-04 # แก้บรรทัดวิธีปิด gap ของ FR-2 ที่ระบุ CLI ผิด + เติม --targets
+updated: 2026-10-03 # FR-2 ถูกยกเลิกโดย CR-129 (worker realign เพดานโควตาตามแคมเปญอัตโนมัติ)
 requested_by: ทีมพัฒนา (Team A — ชิโน, นัท, กาน)
 decided_by: เจ้าของโครงการ (PR review #130, 2026-07-29)
 layer: volatile
@@ -73,7 +73,7 @@ CR-045-donation-quota-atomic-reservation กำหนด `DonationsUseCase.creat
 
 - **FR-1** — worker upsert `donation_need_counter` ต่อทุก item ใน `donation_campaign.needs[]`
   เมื่อได้รับ CDC event ของ campaign นั้น (create/update, `status: open`)
-- **FR-2** — `qty_target` เขียนด้วย `$setOnInsert` เท่านั้น — CDC event ครั้งถัดไปของ campaign เดิม
+- **FR-2** — *(ยกเลิกโดย [CR-129](CR-129-quota-ceiling-follows-campaign-target.md))* `qty_target` เขียนด้วย `$setOnInsert` เท่านั้น — CDC event ครั้งถัดไปของ campaign เดิม
   (เช่น แก้ `qty_target`) ต้องไม่เปลี่ยนค่าที่ตั้งไว้แล้วใน `donation_need_counter`
 - **FR-3** — worker เขียนได้เฉพาะ `qty_target`/`shelter_code`/`campaign_id`/`item_id`/`created_at`/
   `updated_at` — ห้ามเขียน/เคลียร์ `reserved_qty` (field นั้นเป็นของ FastAPI ล้วน ตาม CR-045)
@@ -132,3 +132,5 @@ campaign เพื่อเติม `qty_target` ให้)
   (อ่าน `qty_target` ของ open campaign จาก CouchDB มา `$set` ลง counter ด้วย optimistic filter เดิม
   + ปฏิเสธการลดเพดานต่ำกว่ายอดที่จองไว้แล้ว). **FR-2 ยังอยู่ครบ** — CDC path ไม่แตะเพดานเหมือนเดิม
   เปลี่ยนเฉพาะ ops tool ที่ต้องสั่งเองและต้องล็อก write path ตาม CR-047 §Cutover Lock
+- 2026-10-03 — **FR-2 ถูกยกเลิกอย่างเป็นทางการโดย [CR-129](CR-129-quota-ceiling-follows-campaign-target.md)**:
+  worker ขยับ `qty_target` ตาม campaign needs ผ่าน atomic conditional update แทนการ freeze ไว้ที่ seed

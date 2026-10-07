@@ -18,7 +18,7 @@ function sampleUnified(over: Partial<UnifiedRegistrationInput> = {}): UnifiedReg
 				phone: '0812345678',
 				nickname: 'ชาย',
 				religion: 'buddhist',
-				person_id: { cardType: 'national_id', number: '1234567890123' },
+				person_id: { cardType: 'national_id', number: '1234567890121' },
 				country: 'THAILAND',
 				vulnerable_groups: ['elderly'],
 				special_needs: ['wheelchair'],
@@ -73,10 +73,23 @@ describe('publicUnassignedRegistrationRequestSchema', () => {
 		).toBe(false);
 	});
 
-	it('requires primary contact phone', () => {
+	it('requires primary contact phone when creating (no join)', () => {
 		const input = sampleUnified();
 		input.members[0]!.phone = '';
 		expect(publicUnassignedRegistrationRequestSchema.safeParse(input).success).toBe(false);
+	});
+
+	it('allows empty primary phone when joining via match token', () => {
+		const input = sampleUnified({ join_match_token: 'token.sig' });
+		input.members[0]!.phone = '';
+		expect(publicUnassignedRegistrationRequestSchema.safeParse(input).success).toBe(true);
+	});
+
+	it('rejects partial primary phone even when joining', () => {
+		const input = sampleUnified({ join_match_token: 'token.sig' });
+		input.members[0]!.phone = '08123';
+		const parsed = publicUnassignedRegistrationRequestSchema.safeParse(input);
+		expect(parsed.success).toBe(false);
 	});
 });
 

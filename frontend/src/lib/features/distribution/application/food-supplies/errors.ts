@@ -16,6 +16,13 @@ export class WorkflowValidationError extends WorkflowError {
 	}
 }
 
+export class ReservationSemanticMismatchError extends WorkflowValidationError {
+	constructor(message: string) {
+		super(message);
+		this.name = 'ReservationSemanticMismatchError';
+	}
+}
+
 export class WorkflowAuthorizationError extends WorkflowError {
 	constructor(message: string) {
 		super(message);

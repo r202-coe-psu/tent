@@ -143,9 +143,9 @@ export async function findDocsByPrefixAndType(
 			(r): r is { id: string; value?: { rev: string }; doc: { _rev: string; type: string } } =>
 				Boolean(
 					r.id &&
-						r.id.startsWith(prefix) &&
-						r.doc?.type === docType &&
-						(r.value?.rev || r.doc?._rev)
+					r.id.startsWith(prefix) &&
+					r.doc?.type === docType &&
+					(r.value?.rev || r.doc?._rev)
 				)
 		)
 		.map((r) => ({ id: r.id, rev: r.value?.rev ?? r.doc._rev }));
@@ -180,14 +180,12 @@ async function deleteDocsChunked(
 	}
 }
 
-export async function unseedStock(
-	options: {
-		shelter: string;
-		confirm?: boolean;
-		req?: CouchReq;
-		displayUrl?: string;
-	}
-): Promise<{ dbs: string[]; docsByDb: Record<string, string[]> }> {
+export async function unseedStock(options: {
+	shelter: string;
+	confirm?: boolean;
+	req?: CouchReq;
+	displayUrl?: string;
+}): Promise<{ dbs: string[]; docsByDb: Record<string, string[]> }> {
 	const req = options.req ?? couchReq;
 	const confirm = options.confirm ?? false;
 	const url = options.displayUrl ?? displayCouchUrl();

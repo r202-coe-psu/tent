@@ -4,7 +4,7 @@
 	import Eye from '@lucide/svelte/icons/eye';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import type { Evacuee } from '../../domain/people';
-	import { maskNationalId } from '../../domain/people';
+	import { evacueeAgeYears, maskNationalId } from '../../domain/people';
 
 	let {
 		head,
@@ -15,6 +15,8 @@
 		onOpenHeadModal: () => void;
 		onViewProfile: (id: string) => void;
 	} = $props();
+
+	const headAge = $derived(head ? evacueeAgeYears(head) : null);
 </script>
 
 <div class="space-y-4 rounded-3xl border border-border bg-card p-6 shadow-sm">
@@ -44,8 +46,8 @@
 					เลขบัตร: {maskNationalId(head.person_id?.number)}
 					{#if head.phone}
 						· โทร: {head.phone}{/if}
-					{#if head.birth_year}
-						· อายุ: {new Date().getFullYear() - head.birth_year} ปี{/if}
+					{#if headAge != null}
+						· อายุ: {headAge} ปี{/if}
 				</p>
 				<div class="pt-2">
 					<Button

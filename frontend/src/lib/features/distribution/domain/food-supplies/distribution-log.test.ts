@@ -11,7 +11,7 @@ const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'staff:flow2' };
 const ULID = '01J00000000000000000000000';
 const TICKET_ID = `requisition_ticket:${ULID}`;
 
-describe('Food & Supplies DistributionLog contract (CR-121)', () => {
+describe('Food & Supplies DistributionLog contract', () => {
 	const foodLogInput = {
 		ticket_id: TICKET_ID,
 		item_id: 'item:ready-meal',

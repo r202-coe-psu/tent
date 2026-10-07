@@ -34,7 +34,11 @@ async def http422_error_handler(
             for err in exc.errors()
         ]
         return JSONResponse(
-            {"status": HTTP_422_UNPROCESSABLE_CONTENT, "message": "; ".join(messages)},
+            {
+                "status": HTTP_422_UNPROCESSABLE_CONTENT,
+                "message": "; ".join(messages),
+                "code": "validation_error",
+            },
             status_code=HTTP_422_UNPROCESSABLE_CONTENT,
         )
     return JSONResponse(

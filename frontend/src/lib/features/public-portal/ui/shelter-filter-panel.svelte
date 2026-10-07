@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy, onMount, tick } from 'svelte';
+	import { onDestroy, onMount, tick, untrack } from 'svelte';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -27,6 +27,7 @@
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_FILTER_PANEL_I18N } from '$lib/constants/i18n';
 	import { langState } from '$lib/states/i18n.svelte';
+	import { shelterTypeLabel } from '../domain/master-labels';
 
 	interface Filters {
 		search?: string;
@@ -65,6 +66,7 @@
 		userLat = $bindable(''),
 		userLng = $bindable(''),
 		class: className = '',
+		idPrefix = '',
 		onClose
 	}: {
 		filters?: Filters;
@@ -73,6 +75,8 @@
 		userLat?: string;
 		userLng?: string;
 		class?: string;
+		/** Prefix for element ids so two mounted panels (desktop + drawer) never collide. */
+		idPrefix?: string;
 		onClose?: () => void;
 	} = $props();
 
@@ -90,7 +94,7 @@
 	let customDistanceDraft = $state<string>('');
 	let customDistanceError = $state(false);
 	let hideFullToggle = $state(false);
-	let hydrating = $state(false);
+	let hydrating = false;
 
 	let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 	let lastProvince: string | null = null;
@@ -159,30 +163,43 @@
 	}
 
 	$effect(() => {
-		hydrating = true;
-		searchQuery = filters.search ?? '';
-		selectedProvince = filters.province ?? '';
-		selectedDistrict = filters.district ?? '';
-		selectedSubdistrict = filters.subdistrict ?? '';
-		selectedSiteKind = filters.site_kind ?? '';
-		selectedType = filters.type ?? '';
-		const nextDistance = filters.distance || '5';
-		distanceValue = nextDistance;
-		customDistanceDraft = isDistancePreset(nextDistance) ? '' : nextDistance;
-		customDistanceError = false;
-		hideFullToggle =
-			filters.hide_full === true ||
-			filters.hide_full === 'true' ||
-			page.url.searchParams.get('hide_full') === 'true';
+		const f = filters;
+		void [
+			f.search,
+			f.province,
+			f.district,
+			f.subdistrict,
+			f.site_kind,
+			f.type,
+			f.distance,
+			f.user_lat,
+			f.user_lng,
+			f.hide_full
+		];
 
-		if (filters.user_lat) userLat = filters.user_lat.toString();
-		if (filters.user_lng) userLng = filters.user_lng.toString();
+		untrack(() => {
+			hydrating = true;
+			searchQuery = f.search ?? '';
+			selectedProvince = f.province ?? '';
+			selectedDistrict = f.district ?? '';
+			selectedSubdistrict = f.subdistrict ?? '';
+			selectedSiteKind = f.site_kind ?? '';
+			selectedType = f.type ?? '';
+			const nextDistance = f.distance || '5';
+			distanceValue = nextDistance;
+			customDistanceDraft = isDistancePreset(nextDistance) ? '' : nextDistance;
+			customDistanceError = false;
+			hideFullToggle = f.hide_full === true || f.hide_full === 'true';
 
-		lastProvince = selectedProvince;
-		lastDistrict = selectedDistrict;
+			if (f.user_lat) userLat = f.user_lat.toString();
+			if (f.user_lng) userLng = f.user_lng.toString();
 
-		void tick().then(() => {
-			hydrating = false;
+			lastProvince = f.province ?? '';
+			lastDistrict = f.district ?? '';
+
+			void tick().then(() => {
+				hydrating = false;
+			});
 		});
 	});
 
@@ -229,6 +246,19 @@
 	// Immediate live sync for all other controls (and bindable lat/lng).
 	// Readings happen inside commitFilters → buildFilterParams.
 	$effect(() => {
+		// Explicitly read all filter states FIRST to ensure Svelte tracks reactive dependencies
+		void [
+			selectedProvince,
+			selectedDistrict,
+			selectedSubdistrict,
+			selectedSiteKind,
+			selectedType,
+			distanceValue,
+			userLat,
+			userLng,
+			hideFullToggle
+		];
+
 		if (hydrating) return;
 		commitFilters();
 	});
@@ -236,6 +266,7 @@
 	let isCustomDistance = $derived(distanceValue !== '' && !isDistancePreset(distanceValue));
 
 	let locationData = $state<{ province: string; district: string; subdistrict: string }[]>([]);
+	let loadingLocations = $state(true);
 
 	let provincesList = $derived([
 		{ label: t.provincePlaceholder, value: '' },
@@ -333,6 +364,9 @@
 			})
 			.catch(() => {
 				/* province/district selects stay empty */
+			})
+			.finally(() => {
+				loadingLocations = false;
 			});
 
 		// First visit: request GPS so the map can show the user marker without a distance click.
@@ -389,23 +423,7 @@
 	}
 
 	function translateAdminType(type: string): string {
-		if (langState.current !== 'en') return type;
-		const map: Record<string, string> = {
-			วัด: 'Temple',
-			โรงเรียน: 'School',
-			ศาลาประชาคม: 'Community Hall',
-			ศูนย์กีฬา: 'Sports Centre',
-			อาคารราชการ: 'Government Building',
-			หน่วยงานราชการ: 'Government Agency',
-			ศูนย์อพยพ: 'Evacuation Center',
-			มหาวิทยาลัย: 'University',
-			มัสยิด: 'Mosque',
-			โบสถ์: 'Church',
-			พื้นที่เอกชน: 'Private Area',
-			อื่นๆ: 'Other',
-			unspecified: 'Unspecified'
-		};
-		return map[type] || type;
+		return shelterTypeLabel(type, undefined, langState.current);
 	}
 </script>
 
@@ -446,7 +464,7 @@
 			<div class="space-y-4">
 				<!-- Search -->
 				<div class="space-y-1.5">
-					<Label for="search" class="text-xs font-semibold text-muted-foreground"
+					<Label for={`${idPrefix}search`} class="text-xs font-semibold text-muted-foreground"
 						>{t.searchLabel}</Label
 					>
 					<div class="relative">
@@ -463,50 +481,56 @@
 				</div>
 				<!-- Province -->
 				<div class="w-full space-y-1.5">
-					<Label for="province" class="text-xs font-semibold text-muted-foreground"
+					<Label for={`${idPrefix}province`} class="text-xs font-semibold text-muted-foreground"
 						>{t.provinceLabel}</Label
 					>
 					<SearchSelect
 						name="province"
+						id={`${idPrefix}province`}
 						placeholder={t.provincePlaceholder}
 						bind:value={selectedProvince}
 						options={provincesList}
+						loading={loadingLocations}
 					/>
 				</div>
 
 				<!-- District -->
 				<div class="w-full space-y-1.5">
-					<Label for="district" class="text-xs font-semibold text-muted-foreground"
+					<Label for={`${idPrefix}district`} class="text-xs font-semibold text-muted-foreground"
 						>{t.districtLabel}</Label
 					>
 					<SearchSelect
 						name="district"
+						id={`${idPrefix}district`}
 						placeholder={t.districtPlaceholder}
 						bind:value={selectedDistrict}
 						options={districtsList}
+						loading={loadingLocations}
 					/>
 				</div>
 
 				<!-- Sub-district -->
 				<div class="w-full space-y-1.5">
-					<Label for="subdistrict" class="text-xs font-semibold text-muted-foreground"
+					<Label for={`${idPrefix}subdistrict`} class="text-xs font-semibold text-muted-foreground"
 						>{t.subdistrictLabel}</Label
 					>
 					<SearchSelect
 						name="subdistrict"
+						id={`${idPrefix}subdistrict`}
 						placeholder={t.subdistrictPlaceholder}
 						bind:value={selectedSubdistrict}
 						options={subdistrictsList}
+						loading={loadingLocations}
 					/>
 				</div>
 
 				<!-- Site kind -->
 				<div class="space-y-1.5">
-					<Label for="site_kind" class="text-xs font-semibold text-muted-foreground"
+					<Label for={`${idPrefix}site_kind`} class="text-xs font-semibold text-muted-foreground"
 						>{t.siteKindLabel}</Label
 					>
 					<Select.Root type="single" name="site_kind" bind:value={selectedSiteKind}>
-						<Select.Trigger class="w-full rounded-xl">
+						<Select.Trigger id={`${idPrefix}site_kind`} class="w-full rounded-xl">
 							<Select.Value placeholder={t.siteKindPlaceholder} />
 						</Select.Trigger>
 						<Select.Content>
@@ -519,10 +543,11 @@
 
 				<!-- Building type -->
 				<div class="space-y-1.5">
-					<Label for="type" class="text-xs font-semibold text-muted-foreground">{t.typeLabel}</Label
+					<Label for={`${idPrefix}type`} class="text-xs font-semibold text-muted-foreground"
+						>{t.typeLabel}</Label
 					>
 					<Select.Root type="single" name="type" bind:value={selectedType}>
-						<Select.Trigger class="w-full rounded-xl">
+						<Select.Trigger id={`${idPrefix}type`} class="w-full rounded-xl">
 							<Select.Value placeholder={t.typePlaceholder} />
 						</Select.Trigger>
 						<Select.Content>
@@ -589,8 +614,8 @@
 				</div>
 
 				<!-- Hidden geolocation inputs -->
-				<input type="hidden" name="user_lat" id="user_lat" value={userLat} />
-				<input type="hidden" name="user_lng" id="user_lng" value={userLng} />
+				<input type="hidden" name="user_lat" id={`${idPrefix}user_lat`} value={userLat} />
+				<input type="hidden" name="user_lng" id={`${idPrefix}user_lng`} value={userLng} />
 
 				<!-- Capacity Switch Card -->
 				<div class="flex items-start gap-4 rounded-xl border border-border bg-card p-4 shadow-sm">
@@ -604,7 +629,7 @@
 					/>
 					<div class="flex flex-col gap-1">
 						<Label
-							for="hide_full_ui"
+							for={`${idPrefix}hide_full_ui`}
 							class="cursor-pointer text-sm leading-tight font-bold text-foreground"
 							>{t.hideFullTitle}</Label
 						>

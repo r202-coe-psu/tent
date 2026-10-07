@@ -82,3 +82,4 @@ migration: additive — doc เดิมไม่มี `name`/`description` (�
 
 - 2026-09-24 — proposed as `draft-partner-client-name-module-preset`
 - 2026-09-24 — **approved** — Project Owner (Jakee); รันเลข **CR-135** (ถัดจาก CR-134 บน `develop`)
+- 2026-10-06 — FR-4 (Module radio บังคับ) ถูก supersede โดย [CR-154](CR-154-m2-partner-booking-residency.md) FR-62: `module_name` ไม่บังคับ (เก็บ `null`), module เป็นแค่ preset ของ scope; เพิ่ม module `M2`.

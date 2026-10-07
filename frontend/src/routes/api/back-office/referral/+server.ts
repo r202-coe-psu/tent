@@ -107,7 +107,7 @@ export const POST: RequestHandler = async ({ request, url }) => {
 		const evacueeSummary = {
 			first_name: evacueeDoc.first_name,
 			last_name: evacueeDoc.last_name,
-			gender: evacueeDoc.gender
+			gender: evacueeDoc.gender ?? undefined
 		};
 
 		const repo = new CouchDbReferralServerRepository('central_ops', shelterCode);

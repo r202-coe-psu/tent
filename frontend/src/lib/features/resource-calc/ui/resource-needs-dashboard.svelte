@@ -14,7 +14,7 @@
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import FileDown from '@lucide/svelte/icons/file-down';
 	import Scale from '@lucide/svelte/icons/scale';
-	import { RATIO_LABELS } from '$lib/features/sop-ratios';
+	import { RATIO_LABELS, isVisibleSopRatioKey } from '$lib/features/sop-ratios';
 	import type { SopRatioKey } from '$lib/features/sop-ratios';
 	import { useDailyCalc } from '../application/use-daily-calc';
 	import { useCalcRange } from '../application/use-calc-range';
@@ -53,7 +53,8 @@
 
 	const record = useDailyCalc(() => date);
 	const snapshot = $derived(record.data);
-	const results = $derived(snapshot?.results ?? []);
+	// Only the Sphere variables kept by the 2026-09-16 requirement are shown (display-only filter).
+	const results = $derived((snapshot?.results ?? []).filter((r) => isVisibleSopRatioKey(r.key)));
 
 	// 14-day occupancy trend for the KPI sparkline (bounded range scan — not the full trend view).
 	const from14 = $derived(addDays(date, -13));

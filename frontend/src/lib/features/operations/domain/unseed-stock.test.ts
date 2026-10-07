@@ -82,10 +82,7 @@ describe('unseed-stock helpers', () => {
 		});
 		const docs = await findDocsByPrefixAndType('catalog', 'item:', 'supply_item', mockReq);
 		expect(docs).toEqual([{ id: 'item:egg', rev: '1-a' }]);
-		expect(mockReq).toHaveBeenCalledWith(
-			'GET',
-			expect.stringMatching(/include_docs=true/)
-		);
+		expect(mockReq).toHaveBeenCalledWith('GET', expect.stringMatching(/include_docs=true/));
 	});
 
 	it('findStockDocsInDb unions all stock prefixes including item_master', async () => {
@@ -135,7 +132,10 @@ describe('unseed-stock helpers', () => {
 					data: { rows: [{ id: 'item_master:egg', value: { rev: '1-m' } }] }
 				};
 			}
-			if (path.includes(encodeURIComponent(JSON.stringify('item:'))) && path.includes('include_docs')) {
+			if (
+				path.includes(encodeURIComponent(JSON.stringify('item:'))) &&
+				path.includes('include_docs')
+			) {
 				return {
 					status: 200,
 					data: {
@@ -319,8 +319,8 @@ describe('unseedStock', () => {
 			status: 200,
 			data: ['shelter_sh001']
 		});
-		await expect(
-			unseedStock({ shelter: 'SH999', confirm: false, req: mockReq })
-		).rejects.toThrow(/shelter_sh999/);
+		await expect(unseedStock({ shelter: 'SH999', confirm: false, req: mockReq })).rejects.toThrow(
+			/shelter_sh999/
+		);
 	});
 });

@@ -5,7 +5,9 @@ export const GRANTABLE_SCOPES = [
 	'location-read',
 	'location-stock-read',
 	'occupancy-read',
-	'occupancy-pii-read'
+	'occupancy-pii-read',
+	'booking-write',
+	'residency-read'
 ] as const;
 export type GrantableScope = (typeof GRANTABLE_SCOPES)[number];
 
@@ -13,17 +15,34 @@ export const SCOPE_LABEL: Record<GrantableScope, string> = {
 	'location-read': 'location-read — Location Master (EXT-002/003)',
 	'location-stock-read': 'location-stock-read — Shelter stock (EXT-004)',
 	'occupancy-read': 'occupancy-read — Occupancy breakdown (EXT-005/006)',
-	'occupancy-pii-read': 'occupancy-pii-read — Individual occupant records (EXT-007)'
+	'occupancy-pii-read': 'occupancy-pii-read — Individual occupant records (EXT-007)',
+	'booking-write': 'booking-write — Book / cancel shelter on behalf of citizens (EXT-008–010)',
+	'residency-read': 'residency-read — Per-person shelter residency by national ID (EXT-011)'
 };
 
 /** Scopes that expose individual-level PII/sensitive data under PDPA — flagged in the UI. */
-export const SENSITIVE_SCOPES: readonly GrantableScope[] = ['occupancy-pii-read'];
+export const SENSITIVE_SCOPES: readonly GrantableScope[] = [
+	'occupancy-pii-read',
+	'booking-write',
+	'residency-read'
+];
 
-/** Only these two partner systems exist today (ADR 0002 / ext-spec.md) — a closed set. */
-export const PARTNER_MODULES = ['M6', 'M7'] as const;
+/** Per-scope PDPA warning shown beside each sensitive scope in the create/edit dialogs. */
+export const SENSITIVE_SCOPE_WARNING: Partial<Record<GrantableScope, string>> = {
+	'occupancy-pii-read':
+		'Grants access to individual occupant records (PDPA-sensitive). Grant only with written approval on file for this module.',
+	'booking-write':
+		"Lets this partner create and cancel bookings with citizens' national ID, name and phone (PDPA-sensitive). Grant only with written approval on file for this module.",
+	'residency-read':
+		'Reveals whether a given national ID is staying at a shelter, and where (PDPA-sensitive). Grant only with written approval on file for this module.'
+};
+
+/** Partner systems on the OAuth plane (ADR 0002; M2 added by CR-154) — a closed set. */
+export const PARTNER_MODULES = ['M2', 'M6', 'M7'] as const;
 export type PartnerModule = (typeof PARTNER_MODULES)[number];
 
 export const PARTNER_MODULE_LABEL: Record<PartnerModule, string> = {
+	M2: 'M2 (กลุ่มเปราะบาง)',
 	M6: 'M6 (จัดการทรัพยากร)',
 	M7: 'M7 (EoC)'
 };
@@ -33,9 +52,10 @@ export const CLIENT_DESCRIPTION_MAX_LENGTH = 500;
 
 /**
  * Preset scopes per module (schema.md §9.6) — applied when a module is picked in the
- * create form, but still freely toggleable. `occupancy-pii-read` is never preset.
+ * create form, but still freely toggleable. Sensitive scopes are never preset.
  */
 export const DEFAULT_SCOPES_BY_MODULE: Record<PartnerModule, GrantableScope[]> = {
+	M2: ['location-read'],
 	M6: ['location-read', 'location-stock-read'],
 	M7: ['location-read', 'location-stock-read', 'occupancy-read']
 };
@@ -47,7 +67,8 @@ export interface ThirdPartyClient {
 	/** `null` only on clients created before the field existed. */
 	name: string | null;
 	description: string | null;
-	module_name: string;
+	/** `null` when created without a module — a module only presets scopes (CR-154 FR-62). */
+	module_name: string | null;
 	allowed_scopes: string[];
 	is_active: boolean;
 	/** Soft-delete timestamp — the list endpoint never returns a row once this is set. */
@@ -78,7 +99,12 @@ export const createThirdPartyClientSchema = z.object({
 		.transform((value) => (value === '' ? null : value))
 		.nullable()
 		.optional(),
-	module_name: z.enum(PARTNER_MODULES, { error: 'Select a module' }),
+	// Optional — picking a module only presets scopes (CR-154 FR-62).
+	module_name: z
+		.union([z.enum(PARTNER_MODULES), z.literal('')])
+		.transform((value) => (value === '' ? null : value))
+		.nullable()
+		.optional(),
 	allowed_scopes: z.array(z.enum(GRANTABLE_SCOPES)).min(1, 'Select at least one scope')
 });
 
@@ -102,8 +128,9 @@ export function isPartnerModule(value: string): value is PartnerModule {
 	return (PARTNER_MODULES as readonly string[]).includes(value);
 }
 
-/** Module label for a stored `module_name` — unknown values render as-is. */
-export function partnerModuleLabel(moduleName: string): string {
+/** Module label for a stored `module_name` — unknown values render as-is, none as ไม่ระบุ. */
+export function partnerModuleLabel(moduleName: string | null | undefined): string {
+	if (!moduleName) return 'ไม่ระบุ';
 	return isPartnerModule(moduleName) ? PARTNER_MODULE_LABEL[moduleName] : moduleName;
 }
 
