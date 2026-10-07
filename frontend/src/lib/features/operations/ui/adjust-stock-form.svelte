@@ -222,10 +222,6 @@
 			toast.error('กรุณาเลือกสถานที่/ล็อต');
 			return;
 		}
-		if (selectedItem.perishable && selectedLotKey === 'new' && !customExpiry) {
-			toast.error('สินค้าเน่าเสียได้ จำเป็นต้องระบุวันหมดอายุ');
-			return;
-		}
 		if (!newQtyInput || isNaN(Number(newQtyInput)) || Number(newQtyInput) < 0) {
 			toast.error('กรุณาระบุจำนวนใหม่ที่ถูกต้อง (ต้องไม่ติดลบ)');
 			return;
@@ -366,11 +362,7 @@
 				<Field.Root class="col-span-1">
 					<Field.Label for="custom-expiry">
 						วันหมดอายุ
-						{#if selectedItem.perishable}
-							<span class="font-bold text-destructive">*</span>
-						{:else}
-							<span class="font-normal text-muted-foreground">(ไม่บังคับ)</span>
-						{/if}
+						<span class="font-normal text-muted-foreground">(ไม่บังคับ)</span>
 					</Field.Label>
 					<DatePicker id="custom-expiry" ariaLabel="วันหมดอายุ" bind:value={customExpiry} />
 				</Field.Root>

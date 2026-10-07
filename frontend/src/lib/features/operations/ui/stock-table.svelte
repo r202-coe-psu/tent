@@ -13,6 +13,7 @@
 	import { SUPPLY_CATEGORY_LABELS, type SupplyCategory } from '$lib/features/supply';
 	import {
 		itemMasterUnit,
+		requiresExpiry,
 		useItemMasters,
 		useItemCategories,
 		formatUnit,
@@ -182,7 +183,7 @@
 			category: im.category || 'other',
 			unit: itemMasterUnit(im),
 			reorder_level: null,
-			perishable: false,
+			perishable: requiresExpiry(im),
 			target_reserve_days: undefined,
 			consumption_rate: undefined,
 			timeframe: undefined

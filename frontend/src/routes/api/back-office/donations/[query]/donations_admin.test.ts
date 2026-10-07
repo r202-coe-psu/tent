@@ -36,6 +36,29 @@ const catalogRows = [
 			reorder_level: null,
 			perishable: true
 		}
+	},
+	// CR-143 §D — item_master has no `perishable` flag; the rule is derived (FR-D1).
+	{
+		doc: {
+			_id: 'item_master:yogurt',
+			type: 'item_master',
+			name: 'โยเกิร์ต',
+			base_unit: 'cup',
+			conversions: [],
+			type_class: 'CONSUMABLE',
+			storage_type: 'CHILLED'
+		}
+	},
+	{
+		doc: {
+			_id: 'item_master:flour',
+			type: 'item_master',
+			name: 'แป้ง',
+			base_unit: 'kg',
+			conversions: [],
+			type_class: 'CONSUMABLE',
+			storage_type: 'DRY'
+		}
 	}
 ];
 
@@ -310,6 +333,33 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 
 			expect(response.status).toBe(422);
 			expect((await response.json()).error).toMatch(/requires lot.expiry/);
+		});
+
+		it('AC-D1: rejects a CHILLED item_master received without lot.expiry', async () => {
+			mockCouch(baseDonation);
+
+			const response = await POST(
+				postEvent({
+					status: 'received',
+					items: [{ item_id: 'item_master:yogurt', qty: '2', unit: 'cup' }]
+				})
+			);
+
+			expect(response.status).toBe(422);
+			expect((await response.json()).error).toMatch(/requires lot.expiry/);
+		});
+
+		it('AC-D2: accepts a DRY item_master with no shelf life and no lot.expiry', async () => {
+			mockCouch(baseDonation);
+
+			const response = await POST(
+				postEvent({
+					status: 'received',
+					items: [{ item_id: 'item_master:flour', qty: '2', unit: 'kg' }]
+				})
+			);
+
+			expect(response.status).toBe(200);
 		});
 
 		it('accepts a perishable item when lot.expiry is supplied', async () => {
