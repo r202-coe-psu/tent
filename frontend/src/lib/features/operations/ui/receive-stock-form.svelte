@@ -33,6 +33,7 @@
 		applyExpiryAutofill,
 		confirmExpiry,
 		editExpiry,
+		expiryMissing,
 		initialExpiryState,
 		todayLocalIso,
 		type ExpiryState
@@ -240,6 +241,8 @@
 
 	// Update locked unit when item is selected
 	function selectItem(item: StockFormItem) {
+		// A date keyed or confirmed for another item says nothing about this one (FR-D2c).
+		if (selectedItemId && selectedItemId !== item._id) commitExpiry(initialExpiryState());
 		selectedItem = item;
 		selectedItemId = item._id;
 		$formData.item_id = item._id;
@@ -846,7 +849,7 @@
 								</Button>
 							</div>
 						{/if}
-						{#if expiryAttempted && selectedItem?.requiresExpiry && !expiry.value}
+						{#if expiryAttempted && expiryMissing(selectedItem, expiry)}
 							<p class="mt-2 text-sm font-semibold text-destructive" role="alert">
 								สินค้านี้ต้องระบุวันหมดอายุ
 							</p>

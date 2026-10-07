@@ -87,7 +87,11 @@ export function catalogItemRules(item: CatalogItem): { unit: string; requiresExp
 		: { unit: item.unit, requiresExpiry: requiresExpiry(item) };
 }
 
-export function assertReceiveAgainstCatalog(entry: StockLedger, item: CatalogItem | null): void {
+export function assertReceiveAgainstCatalog(
+	entry: StockLedger,
+	item: CatalogItem | null,
+	opts: { requireExpiry?: boolean } = {}
+): void {
 	if (!item) {
 		throw new Error(
 			`Unknown item: ${entry.item_id} — item must exist in the catalog before receiving stock`
@@ -99,7 +103,7 @@ export function assertReceiveAgainstCatalog(entry: StockLedger, item: CatalogIte
 			`Unit mismatch for item ${entry.item_id}: expected ${rules.unit}, got ${entry.unit}`
 		);
 	}
-	if (rules.requiresExpiry && !entry.lot?.expiry) {
+	if ((opts.requireExpiry ?? true) && rules.requiresExpiry && !entry.lot?.expiry) {
 		throw new Error(`Perishable item ${entry.item_id} requires lot.expiry to be set`);
 	}
 }
@@ -609,7 +613,10 @@ export class OperationsRemoteRepository implements OperationsRepository {
 				`Unknown item: ${entry.item_id} — item must exist in the catalog before adjusting stock`
 			);
 		}
-		assertReceiveAgainstCatalog(entry, item);
+		// The expiry rule is for stock coming in (CR-143 FR-D1). A write-off against an
+		// existing lot recorded before the item gained a shelf life has no expiry to carry,
+		// and must not be blocked from correcting it.
+		assertReceiveAgainstCatalog(entry, item, { requireExpiry: qtyGt(entry.qty, 0) });
 
 		// NOTE: This balance check is aggregate (cross-lot total), not per-lot.
 		// Acceptable for single-user shelter; per-lot validation requires FIFO tracking.
