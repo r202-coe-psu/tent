@@ -19,6 +19,22 @@ describe('toStockFormItems', () => {
 		]);
 	});
 
+	it('carries storage_type and shelf_life_days from item masters for lot priority', () => {
+		const [item] = toStockFormItems(
+			[],
+			[
+				{
+					_id: 'item_master:milk',
+					name: 'Milk',
+					base_unit: 'box',
+					storage_type: 'CHILLED',
+					shelf_life_days: 5
+				}
+			]
+		);
+		expect(item).toMatchObject({ storage_type: 'CHILLED', shelf_life_days: 5 });
+	});
+
 	it('maps active item masters with packaging fields and sku', () => {
 		const items = toStockFormItems(
 			[],

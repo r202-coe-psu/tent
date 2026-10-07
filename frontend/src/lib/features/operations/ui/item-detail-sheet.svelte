@@ -7,6 +7,7 @@
 	import ArrowUpFromLine from '@lucide/svelte/icons/arrow-up-from-line';
 	import SlidersHorizontal from '@lucide/svelte/icons/sliders-horizontal';
 	import Boxes from '@lucide/svelte/icons/boxes';
+	import type { LotPriorityItem } from '../domain/lot-priority';
 	import type { StockLotBalance } from '../domain/operations';
 	import { useStoragePoints } from '../application/use-storage-points.svelte';
 	import LedgerTable from './ledger-table.svelte';
@@ -19,6 +20,7 @@
 		open = $bindable(false),
 		row,
 		lots,
+		itemsById,
 		shelterCode,
 		offline = false,
 		onaction
@@ -27,6 +29,8 @@
 		row: StockDisplayRow | undefined;
 		/** Every lot of this item (zero-qty lots are dropped here). */
 		lots: readonly StockLotBalance[];
+		/** Shelf life / storage type per item — feeds the lot order and its reason. */
+		itemsById?: ReadonlyMap<string, LotPriorityItem>;
 		shelterCode: string;
 		/** Session expired: reading stays available, the movement buttons are off. */
 		offline?: boolean;
@@ -34,7 +38,7 @@
 	} = $props();
 
 	const storagePoints = useStoragePoints(() => shelterCode);
-	const lotRows = $derived(buildLotRows(lots, storagePoints.points));
+	const lotRows = $derived(buildLotRows(lots, storagePoints.points, Date.now(), itemsById));
 
 	const ACTIONS = [
 		{ kind: 'receive', label: 'รับเข้า', icon: ArrowDownToLine },
@@ -124,7 +128,7 @@
 								<p class="py-10 text-center text-sm font-medium text-slate-500">ไม่มีล็อตคงเหลือ</p>
 							{:else}
 								<ul class="space-y-2.5">
-									{#each lotRows as lot (lot.lotRef)}
+									{#each lotRows as lot, index (lot.lotRef)}
 										<li
 											class="rounded-xl border p-3 {lot.isExpired
 												? 'border-red-200 bg-red-50/40'
@@ -164,6 +168,13 @@
 											{#if lot.clockLine}
 												<p class="mt-0.5 text-xs text-slate-500">{lot.clockLine}</p>
 											{/if}
+											<p
+												class="mt-1 text-xs font-medium {lot.isExpired
+													? 'text-red-800'
+													: 'text-teal-900'}"
+											>
+												{lot.isExpired ? '' : `ลำดับที่ ${index + 1}: `}{lot.reason}
+											</p>
 										</li>
 									{/each}
 								</ul>

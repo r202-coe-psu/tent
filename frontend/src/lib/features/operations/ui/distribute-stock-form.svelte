@@ -14,11 +14,13 @@
 		type StockLedger,
 		StockLotIntegrityError
 	} from '../domain/operations';
+	import { isLotExpired, lotPriorityReason, toLotPriorityItems } from '../domain/lot-priority';
 	import { dailyConsumption, daysOfCover, resolveReorderThreshold } from '../domain/stock-summary';
 	import {
 		itemMasterUnit,
 		formatUnit,
 		useUnitsOfMeasure,
+		useItemMasters,
 		itemSelectableUoms,
 		defaultIssueUom,
 		toLedgerQtyUnit,
@@ -82,6 +84,11 @@
 		return balanceQuery.data.get(selectedItem._id) ?? '0';
 	});
 
+	// Shelf life / storage type feed the weighted lot order (CR-143 §A). Read from every item
+	// master (deactivated ones too, as the stock page does) so a lot sorts the same everywhere (FR-A5).
+	const itemMastersQuery = useItemMasters(() => getShelterCode());
+	const priorityItems = $derived(toLotPriorityItems(itemMastersQuery.data ?? []));
+
 	// Calculate per-lot balances for selectedItem
 	const lotProjection = $derived.by(() => {
 		const current = selectedItem;
@@ -90,7 +97,10 @@
 			const lots = projectStockLotBalances(ledgerQuery.data as StockLedger[]).filter(
 				(l) => l.item_id === current._id && qtyGt(l.qty, 0)
 			);
-			return { lots: sortStockLotsByConsumptionOrder(lots), error: null };
+			return {
+				lots: sortStockLotsByConsumptionOrder(lots, priorityItems, Date.now()),
+				error: null
+			};
 		} catch (error) {
 			if (!(error instanceof StockLotIntegrityError)) throw error;
 			return { lots: [], error: error.message };
@@ -242,11 +252,14 @@
 		].join(' ');
 	}
 
-	// Auto-select the first lot (FEFO) when item lots load or change
+	// Auto-select the top-priority lot when item lots load or change. An expired lot
+	// is never picked automatically (CR-143 FR-A4) — it must be adjusted out.
 	$effect(() => {
 		if (itemLots.length > 0) {
 			if (!$formData.lot_ref || !itemLots.some((l) => l.lot_ref === $formData.lot_ref)) {
-				$formData.lot_ref = itemLots[0].lot_ref;
+				const now = Date.now();
+				$formData.lot_ref =
+					itemLots.find((l) => !isLotExpired(l, now, priorityItems.get(l.item_id)))?.lot_ref ?? '';
 			}
 		} else {
 			$formData.lot_ref = '';
@@ -465,6 +478,9 @@
 								{#if clocks}
 									<p class="mt-1.5 text-xs text-muted-foreground">{clocks}</p>
 								{/if}
+								<p class="mt-1 text-xs font-medium text-muted-foreground">
+									{lotPriorityReason(activeLot, priorityItems.get(activeLot.item_id), Date.now())}
+								</p>
 							{/if}
 						{/if}
 					{/snippet}
