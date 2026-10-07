@@ -860,6 +860,13 @@
 												>
 													✓ ครบถ้วน
 												</Badge>
+											{:else if qtyGt(item.declaredQty, item.qty)}
+												<Badge
+													variant="outline"
+													class="h-6 border-amber-300/80 bg-amber-50 px-2 text-xs font-bold text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+												>
+													⚠ รับไม่ครบ
+												</Badge>
 											{:else}
 												<Badge
 													variant="outline"

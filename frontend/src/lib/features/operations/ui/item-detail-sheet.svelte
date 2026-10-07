@@ -23,6 +23,7 @@
 		itemsById,
 		shelterCode,
 		offline = false,
+		canDistribute = true,
 		onaction
 	}: {
 		open?: boolean;
@@ -34,6 +35,8 @@
 		shelterCode: string;
 		/** Session expired: reading stays available, the movement buttons are off. */
 		offline?: boolean;
+		/** False when user lacks warehouse_staff capability in the active shelter. */
+		canDistribute?: boolean;
 		onaction: (kind: ItemDetailAction) => void;
 	} = $props();
 
@@ -95,6 +98,12 @@
 
 				<div class="grid grid-cols-3 gap-2">
 					{#each ACTIONS as action (action.kind)}
+						{@const isDis = offline || (action.kind === 'distribute' && !canDistribute)}
+						{@const btnTitle = offline
+							? 'เซสชันหมดอายุ — เข้าสู่ระบบใหม่เพื่อบันทึก'
+							: action.kind === 'distribute' && !canDistribute
+								? 'ต้องมีสิทธิ์เจ้าหน้าที่คลัง (warehouse_staff) จึงจะเบิกจ่ายได้'
+								: undefined}
 						<Button
 							type="button"
 							variant={action.kind === 'receive' ? 'default' : 'outline'}
@@ -103,8 +112,8 @@
 							'receive'
 								? 'bg-[#0A2647] text-white hover:bg-[#051930]'
 								: 'border-slate-300 bg-white text-slate-800 shadow-2xs'}"
-							disabled={offline}
-							title={offline ? 'เซสชันหมดอายุ — เข้าสู่ระบบใหม่เพื่อบันทึก' : undefined}
+							disabled={isDis}
+							title={btnTitle}
 							onclick={() => onaction(action.kind)}
 						>
 							<action.icon class="h-4 w-4" aria-hidden="true" />

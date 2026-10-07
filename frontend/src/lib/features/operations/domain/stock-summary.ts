@@ -3,6 +3,7 @@ import { calculateReorderLevel } from '$lib/features/supply/domain/threshold-cal
 import { qtyGt, qtyLte, addQty } from '$lib/utils/qty';
 import type { StockLedger, StockLotBalance } from './operations';
 import { lotStorageKey } from './lot-storage';
+import { isLotExpired, type LotPriorityItem } from './lot-priority';
 
 /** Days before expiry at which a lot counts as "expiring soon". */
 export const EXPIRING_SOON_DAYS = 7;
@@ -36,13 +37,15 @@ export interface ItemStockSummary {
 export function summarizeItemStock(
 	lots: readonly StockLotBalance[],
 	now: number = Date.now(),
-	expiringWithinDays: number = EXPIRING_SOON_DAYS
+	expiringWithinDays: number = EXPIRING_SOON_DAYS,
+	item?: LotPriorityItem
 ): ItemStockSummary {
 	const remaining = lots.filter((l) => qtyGt(l.qty, 0));
 	let earliestExpiry: string | null = null;
 	let earliestExpiryMs = Infinity;
 	let oldestReceivedAt: string | null = null;
 	let expiredQty = '0';
+	let hasExpiredLot = false;
 	const storageKeys = new Set<string>();
 
 	for (const lot of remaining) {
@@ -50,20 +53,48 @@ export function summarizeItemStock(
 		if (!oldestReceivedAt || lot.received_at < oldestReceivedAt) {
 			oldestReceivedAt = lot.received_at;
 		}
-		const expiry = lot.lot?.expiry;
-		const expiryMs = expiry ? Date.parse(expiry) : NaN;
-		if (Number.isNaN(expiryMs)) continue;
-		if (expiryMs < earliestExpiryMs) {
-			earliestExpiryMs = expiryMs;
-			earliestExpiry = expiry ?? null;
+
+		let expiryMs = NaN;
+		let expiryStr: string | null = null;
+
+		if (lot.lot?.expiry) {
+			const parsed = Date.parse(lot.lot.expiry);
+			if (!Number.isNaN(parsed)) {
+				expiryMs = parsed;
+				expiryStr = lot.lot.expiry;
+			}
+		} else if (
+			typeof item?.shelf_life_days === 'number' &&
+			Number.isFinite(item.shelf_life_days) &&
+			(lot.lot?.produced_at || lot.received_at)
+		) {
+			const clock = lot.lot?.produced_at ? Date.parse(lot.lot.produced_at) : NaN;
+			const start = Number.isNaN(clock) ? Date.parse(lot.received_at) : clock;
+			if (!Number.isNaN(start)) {
+				expiryMs = start + item.shelf_life_days * DAY_MS;
+				expiryStr = new Date(expiryMs).toISOString();
+			}
 		}
-		if (expiryMs <= now) expiredQty = addQty(expiredQty, lot.qty);
+
+		const expired = isLotExpired(lot, now, item);
+		if (expired) {
+			hasExpiredLot = true;
+			expiredQty = addQty(expiredQty, lot.qty);
+		}
+
+		if (!Number.isNaN(expiryMs)) {
+			if (expiryMs < earliestExpiryMs) {
+				earliestExpiryMs = expiryMs;
+				earliestExpiry = expiryStr;
+			}
+		}
 	}
 
 	let expiryState: StockExpiryState = 'none';
-	if (earliestExpiry) {
-		if (earliestExpiryMs <= now) expiryState = 'expired';
-		else if (earliestExpiryMs - now <= expiringWithinDays * DAY_MS) expiryState = 'expiring';
+	if (hasExpiredLot || earliestExpiryMs <= now) {
+		expiryState = 'expired';
+	} else if (Number.isFinite(earliestExpiryMs)) {
+		if (earliestExpiryMs - now <= expiringWithinDays * DAY_MS) expiryState = 'expiring';
 		else expiryState = 'ok';
 	}
 

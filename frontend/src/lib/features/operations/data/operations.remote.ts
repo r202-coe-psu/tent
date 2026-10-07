@@ -49,6 +49,7 @@ import type { MergeItemsInput, ItemMergeResult } from '../domain/item-merge';
 import { createAuditEntry, type AuditAction } from '$lib/features/shared';
 import {
 	deriveDonationReceiptLineId,
+	donationShortfall,
 	isReceivedLine,
 	type DonationBatchLine,
 	type DonationBatchLineResult,
@@ -357,7 +358,30 @@ export class OperationsRemoteRepository implements OperationsRepository {
 		// failure here is retried on its own — the rows above are found by id, not rewritten.
 		try {
 			const latest = (await this.repo.get<Donation>(donation._id)) ?? donation;
-			const next = completeDonationReceipt(latest);
+			const nextBase = completeDonationReceipt(latest);
+			const declaredForShortfall = (latest.items ?? []).map((i) => ({
+				item_id: i.item_id || i.free_text,
+				qty: String(i.qty)
+			}));
+			const countedForShortfall = counted.map((c) => ({
+				item_id: c.item_id,
+				qty: String(c.qty)
+			}));
+			const shortfalls = donationShortfall(declaredForShortfall, countedForShortfall);
+			const next: Donation = {
+				...nextBase,
+				received_summary: {
+					total_items: receivedLines.length,
+					received_at: nextBase.received_at ?? new Date().toISOString(),
+					items: counted.map((c) => ({ item_id: c.item_id, qty: String(c.qty), unit: c.unit })),
+					shortfalls: shortfalls.map((s) => ({
+						item_id: s.item_id,
+						declared: s.declared,
+						counted: s.counted,
+						short: s.short
+					}))
+				}
+			};
 			const saved = next === latest ? latest : await this.updateDonation(next);
 			return { donation: saved, lines, rowsComplete: true, received: true };
 		} catch (err) {
