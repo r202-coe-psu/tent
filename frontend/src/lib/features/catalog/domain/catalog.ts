@@ -502,6 +502,9 @@ export function suggestExpiry(
 	const base = parseIsoDate(producedAt) ?? parseIsoDate(receivedOn);
 	if (!base) return null;
 	base.setUTCDate(base.getUTCDate() + Math.trunc(days));
+	// An absurd shelf life overflows the Date range (`toISOString` would throw) or leaves
+	// four-digit years; there is nothing sensible to suggest then.
+	if (Number.isNaN(base.getTime()) || base.getUTCFullYear() > 9999) return null;
 	return { expiry: base.toISOString().slice(0, 10), shelfLifeDays: Math.trunc(days) };
 }
 

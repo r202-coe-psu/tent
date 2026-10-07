@@ -571,6 +571,13 @@ describe('suggestExpiry (FR-D2a, FR-D2c)', () => {
 	});
 });
 
+describe('suggestExpiry — out-of-range shelf life', () => {
+	it('returns null instead of throwing when the date overflows', () => {
+		expect(suggestExpiry({ shelf_life_days: 1e12 }, '', '2026-10-02')).toBeNull();
+		expect(suggestExpiry({ shelf_life_days: 4_000_000 }, '', '2026-10-02')).toBeNull();
+	});
+});
+
 describe('shelfLifeExpiryLabel (FR-D2b)', () => {
 	it('uses the exact owner-approved Thai wording', () => {
 		expect(shelfLifeExpiryLabel(180)).toBe(

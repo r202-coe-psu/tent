@@ -181,7 +181,7 @@
 		SPA: true,
 		validators: zod4(receiveInputSchema),
 		resetForm: true,
-		onUpdate: async ({ form: validated }) => {
+		onUpdate: async ({ form: validated, cancel }) => {
 			// In walk-in mode `ref_id` is legitimately empty: the donation does not
 			// exist yet and is minted with the ledger row at submit. That is the one
 			// error worth ignoring — `validated.valid` stays the authority for
@@ -196,6 +196,8 @@
 			// FR-D2: an item that requires an expiry cannot be saved without one.
 			if (selectedItem?.requiresExpiry && !validated.data.lot?.expiry) {
 				expiryAttempted = true;
+				// Without cancel() superforms resets the (valid) form, wiping item and qty.
+				cancel();
 				toast.error(`สินค้า "${selectedItem.name}" ต้องระบุวันหมดอายุ`);
 				return;
 			}

@@ -73,9 +73,10 @@ const DIRECT_DISTRIBUTION_CLAIM_RECOVERY_AGE_MS = 15 * 60 * 1000;
 
 /** The unit + expiry rules a receive/adjust must satisfy, whichever shape it is. */
 export function catalogItemRules(item: CatalogItem): { unit: string; requiresExpiry: boolean } {
-	return isItemMaster(item)
-		? { unit: itemMasterUnit(item), requiresExpiry: requiresExpiry(item) }
-		: { unit: item.unit, requiresExpiry: requiresExpiry(item) };
+	return {
+		unit: isItemMaster(item) ? itemMasterUnit(item) : item.unit,
+		requiresExpiry: requiresExpiry(item)
+	};
 }
 
 export function assertReceiveAgainstCatalog(
