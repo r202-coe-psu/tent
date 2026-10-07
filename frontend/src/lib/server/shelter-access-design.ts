@@ -783,6 +783,29 @@ export function buildValidateDocUpdate(code: string): string {
         }
       }
     }
+    // CR-143 §C (stock_ledger schema_v 6): adjust_reason + note belong to adjust rows only.
+    var hasAdjustReason = typeof newDoc.adjust_reason !== 'undefined' && newDoc.adjust_reason !== null;
+    var hasLedgerNote = typeof newDoc.note !== 'undefined' && newDoc.note !== null;
+    if (newDoc.reason === 'adjust') {
+      var adjustReasons = ['expired', 'damaged', 'count_mismatch', 'lost', 'found', 'merge', 'other'];
+      if (hasAdjustReason && adjustReasons.indexOf(newDoc.adjust_reason) === -1) {
+        throw { forbidden: 'Adjust stock ledger adjust_reason must be one of ' + adjustReasons.join(', ') };
+      }
+      // Rows stamped before schema_v 6 (older clients mid-rollout) have no reason; readers map it to other.
+      if (!hasAdjustReason && typeof newDoc.schema_v === 'number' && newDoc.schema_v >= 6) {
+        throw { forbidden: 'Adjust stock ledger requires adjust_reason' };
+      }
+      if (hasLedgerNote && (typeof newDoc.note !== 'string' || newDoc.note.length > 500)) {
+        throw { forbidden: 'Adjust stock ledger note must be a string of at most 500 characters' };
+      }
+    } else {
+      if (hasAdjustReason) {
+        throw { forbidden: 'Stock ledger adjust_reason is only allowed when reason is adjust' };
+      }
+      if (hasLedgerNote) {
+        throw { forbidden: 'Stock ledger note is only allowed when reason is adjust' };
+      }
+    }
   }
   // 4. distribution_request lifecycle and role rules
   if (newDoc.type === 'distribution_request') {

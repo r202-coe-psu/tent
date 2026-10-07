@@ -911,6 +911,93 @@ describe('buildValidateDocUpdate', () => {
 		});
 	});
 
+	describe('stock_ledger adjust_reason (CR-143 §C, schema_v 6)', () => {
+		const adjust = (over: Doc = {}): Doc =>
+			ledger({
+				schema_v: 6,
+				qty: '-2',
+				reason: 'adjust',
+				ref_id: null,
+				adjust_reason: 'damaged',
+				...over
+			});
+
+		it.each(['expired', 'damaged', 'count_mismatch', 'lost', 'found', 'merge', 'other'])(
+			'accepts adjust with adjust_reason %s',
+			(adjust_reason) => {
+				expect(() => compile()(adjust({ adjust_reason }), null, WAREHOUSE)).not.toThrow();
+			}
+		);
+
+		it('accepts an optional note up to 500 characters', () => {
+			expect(() => compile()(adjust({ note: 'ก'.repeat(500) }), null, WAREHOUSE)).not.toThrow();
+			expectForbidden(
+				() => compile()(adjust({ note: 'ก'.repeat(501) }), null, WAREHOUSE),
+				/note must be a string of at most 500 characters/
+			);
+			expectForbidden(
+				() => compile()(adjust({ note: 12 }), null, WAREHOUSE),
+				/note must be a string of at most 500 characters/
+			);
+		});
+
+		it('rejects an adjust_reason outside the enum', () => {
+			expectForbidden(
+				() => compile()(adjust({ adjust_reason: 'stolen' }), null, WAREHOUSE),
+				/adjust_reason must be one of/
+			);
+		});
+
+		it('requires adjust_reason on schema_v >= 6 adjust rows', () => {
+			expectForbidden(
+				() => compile()(adjust({ adjust_reason: undefined }), null, WAREHOUSE),
+				/Adjust stock ledger requires adjust_reason/
+			);
+		});
+
+		it('still accepts a schema_v <= 5 adjust row without adjust_reason (rollout window)', () => {
+			expect(() =>
+				compile()(adjust({ schema_v: 5, adjust_reason: undefined }), null, WAREHOUSE)
+			).not.toThrow();
+		});
+
+		// AC-C2
+		it.each([
+			['donation', { reason: 'donation', qty: '5', ref_id: 'donation:01J' }],
+			['receive', { reason: 'receive', qty: '5', ref_id: 'distribution_log:01J' }],
+			['requisition', { reason: 'requisition', qty: '-5', ref_id: 'requisition_ticket:01J' }],
+			[
+				'distribute',
+				{
+					reason: 'distribute',
+					qty: '-5',
+					ref_id: 'requisition_ticket:01J',
+					lot_ref: 'stock_ledger:01J'
+				}
+			],
+			[
+				'distribution_return',
+				{
+					reason: 'distribution_return',
+					qty: '5',
+					ref_id: 'distribution_batch:01J',
+					lot_ref: 'stock_ledger:01J'
+				}
+			]
+		])('rejects adjust_reason and note on reason=%s', (_name, over) => {
+			const row = ledger({ schema_v: 6, ...(over as Doc) });
+			expect(() => compile()(row, null, WAREHOUSE)).not.toThrow();
+			expectForbidden(
+				() => compile()({ ...row, adjust_reason: 'lost' }, null, WAREHOUSE),
+				/adjust_reason is only allowed when reason is adjust/
+			);
+			expectForbidden(
+				() => compile()({ ...row, note: 'x' }, null, WAREHOUSE),
+				/note is only allowed when reason is adjust/
+			);
+		});
+	});
+
 	describe('stock_ledger role gate', () => {
 		it('rejects a writer without a warehouse/manager role', () => {
 			expectForbidden(

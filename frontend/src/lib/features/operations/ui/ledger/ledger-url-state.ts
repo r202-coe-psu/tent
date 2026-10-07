@@ -1,7 +1,13 @@
-import { toDayKey, type DayRange, type LedgerTypeFilter } from './ledger-view';
+import { adjustReasonSchema } from '../../domain/operations';
+import {
+	toDayKey,
+	type DayRange,
+	type LedgerReasonFilter,
+	type LedgerTypeFilter
+} from './ledger-view';
 
 /** Query keys owned by the movements tab — the page strips them when leaving it. */
-export const LEDGER_PARAM_KEYS = ['range', 'from', 'to', 'type', 'lq', 'lpage'] as const;
+export const LEDGER_PARAM_KEYS = ['range', 'from', 'to', 'type', 'lreason', 'lq', 'lpage'] as const;
 
 export const LEDGER_PAGE_SIZE = 50;
 
@@ -13,6 +19,8 @@ export interface LedgerUrlState {
 	from: string;
 	to: string;
 	type: LedgerTypeFilter;
+	/** Adjust reason filter (CR-143 FR-C5). */
+	reason: LedgerReasonFilter;
 	q: string;
 	page: number;
 }
@@ -22,6 +30,7 @@ export const LEDGER_URL_DEFAULTS: LedgerUrlState = {
 	from: '',
 	to: '',
 	type: 'all',
+	reason: 'all',
 	q: '',
 	page: 1
 };
@@ -36,6 +45,7 @@ export const LEDGER_RANGE_LABELS: Record<LedgerRangePreset, string> = {
 
 const RANGES = Object.keys(LEDGER_RANGE_LABELS) as LedgerRangePreset[];
 const TYPES: readonly LedgerTypeFilter[] = ['all', 'in', 'out', 'adjust', 'transfer'];
+const REASONS: readonly LedgerReasonFilter[] = ['all', ...adjustReasonSchema.options];
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 const validDay = (value: string | null): string =>
@@ -45,6 +55,7 @@ const validDay = (value: string | null): string =>
 export function parseLedgerParams(params: URLSearchParams): LedgerUrlState {
 	const range = params.get('range');
 	const type = params.get('type');
+	const reason = params.get('lreason');
 	const page = Number(params.get('lpage'));
 	const from = validDay(params.get('from'));
 	const to = validDay(params.get('to'));
@@ -61,6 +72,9 @@ export function parseLedgerParams(params: URLSearchParams): LedgerUrlState {
 		type: TYPES.includes(type as LedgerTypeFilter)
 			? (type as LedgerTypeFilter)
 			: LEDGER_URL_DEFAULTS.type,
+		reason: REASONS.includes(reason as LedgerReasonFilter)
+			? (reason as LedgerReasonFilter)
+			: LEDGER_URL_DEFAULTS.reason,
 		q: params.get('lq') ?? LEDGER_URL_DEFAULTS.q,
 		page: Number.isInteger(page) && page >= 1 ? page : LEDGER_URL_DEFAULTS.page
 	};
@@ -75,6 +89,7 @@ export function serializeLedgerParams(state: LedgerUrlState): URLSearchParams {
 		if (state.to) out.set('to', state.to);
 	}
 	if (state.type !== LEDGER_URL_DEFAULTS.type) out.set('type', state.type);
+	if (state.reason !== LEDGER_URL_DEFAULTS.reason) out.set('lreason', state.reason);
 	if (state.q.trim()) out.set('lq', state.q.trim());
 	if (state.page > 1) out.set('lpage', String(state.page));
 	return out;

@@ -207,8 +207,8 @@ describe('stockBalance', () => {
 });
 
 describe('stock_ledger schema_v + reason enum (CR-032 / draft-lot-produced-at)', () => {
-	// Writer stamps schema_v 5; legacy rows through schema_v 4 remain readable.
-	it('stamps schema_v 5 on new ledger rows', () => {
+	// Writer stamps schema_v 6 (CR-143 §C); legacy rows through schema_v 5 remain readable.
+	it('stamps schema_v 6 on new ledger rows', () => {
 		const entry = createStockLedger(
 			{
 				item_id: 'item:rice',
@@ -219,7 +219,7 @@ describe('stock_ledger schema_v + reason enum (CR-032 / draft-lot-produced-at)',
 			},
 			ctx
 		);
-		expect(entry.schema_v).toBe(5);
+		expect(entry.schema_v).toBe(6);
 		expect(entry.lot?.produced_at).toBe(entry.occurred_at);
 	});
 
@@ -271,7 +271,7 @@ describe('stock_ledger schema_v + reason enum (CR-032 / draft-lot-produced-at)',
 			ctx
 		);
 		expect(entry.lot).toBeUndefined();
-		expect(entry.schema_v).toBe(5);
+		expect(entry.schema_v).toBe(6);
 	});
 
 	it('accepts `distribution_return` as a valid reason (CR-059)', () => {
@@ -298,7 +298,14 @@ describe('stock_ledger schema_v + reason enum (CR-032 / draft-lot-produced-at)',
 
 	it('reads compatible schema_v 2 ledgers', () => {
 		const entry = createStockLedger(
-			{ item_id: 'item:rice', qty: '1', unit: 'kg', reason: 'adjust', ref_id: null },
+			{
+				item_id: 'item:rice',
+				qty: '1',
+				unit: 'kg',
+				reason: 'adjust',
+				adjust_reason: 'other',
+				ref_id: null
+			},
 			ctx
 		);
 		const legacy = { ...entry, schema_v: 2 as const };
@@ -319,6 +326,7 @@ describe('stock_ledger reason ↔ ref_id invariant (CR-055)', () => {
 				qty: reason === 'distribute' ? -5 : base.qty,
 				reason,
 				ref_id,
+				...(reason === 'adjust' ? { adjust_reason: 'other' as const } : {}),
 				...(reason === 'distribute' || reason === 'distribution_return'
 					? { lot_ref: 'stock_ledger:PHYSICALLOT' }
 					: {})
@@ -1641,7 +1649,7 @@ describe('lot numbering (CR-088)', () => {
 			storage_zone: 'A-01',
 			produced_at: '2026-08-25T10:00:00.000Z'
 		});
-		expect(entry.schema_v).toBe(5);
+		expect(entry.schema_v).toBe(6);
 		expect(parseStockLedger(entry)).toEqual(entry);
 	});
 });
@@ -1875,7 +1883,7 @@ describe('new inbound physical-lot identity (CR-059)', () => {
 
 	it('self-references a positive adjustment because it creates a new inbound lot', () => {
 		const adjusted = createAdjustEntry(
-			{ item_id: 'item:rice', qty: '2', unit: 'kg', ref_id: null },
+			{ item_id: 'item:rice', qty: '2', unit: 'kg', adjust_reason: 'found', ref_id: null },
 			ctx
 		);
 		expect(adjusted.lot_ref).toBe(adjusted._id);

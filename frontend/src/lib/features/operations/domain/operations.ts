@@ -51,6 +51,33 @@ export const ledgerReasonSchema = z.enum([
 export type LedgerReason = z.infer<typeof ledgerReasonSchema>;
 
 /**
+ * Why a stock correction was made (schema.md §2.1 `adjust_reason`, CR-143 §C —
+ * stock_ledger schema_v 6). Only meaningful on `reason: 'adjust'` rows.
+ */
+export const adjustReasonSchema = z.enum([
+	'expired',
+	'damaged',
+	'count_mismatch',
+	'lost',
+	'found',
+	'merge',
+	'other'
+]);
+export type AdjustReason = z.infer<typeof adjustReasonSchema>;
+
+/**
+ * `merge` is written only by the item-merge flow (CR-143 §F), so the generic adjust
+ * form offers — and `adjustInputSchema` accepts — everything else (FR-C6).
+ */
+export const manualAdjustReasonSchema = adjustReasonSchema.exclude(['merge']);
+export type ManualAdjustReason = z.infer<typeof manualAdjustReasonSchema>;
+export const MANUAL_ADJUST_REASONS: readonly ManualAdjustReason[] =
+	manualAdjustReasonSchema.options;
+
+/** Longest `note` an adjust row may carry (FR-C1). */
+export const ADJUST_NOTE_MAX_LENGTH = 500;
+
+/**
  * `pending_review` / `verifying` / `rejected` land here per the CR-052-approved
  * enum (schema.md §2.3, `donation.status`) — the code was behind the doc, not the
  * other way around (T-16).
@@ -195,6 +222,10 @@ export interface StockLedger extends BaseDoc {
 	/** Stable physical-lot identity. New inbound rows self-reference their own `_id`. */
 	lot_ref?: string;
 	lot?: StockLot;
+	/** schema_v 6: required on `reason: 'adjust'` rows, absent on every other reason. */
+	adjust_reason?: AdjustReason;
+	/** schema_v 6: free-text detail of an adjust row (not `lot.note`). */
+	note?: string;
 	occurred_at: Timestamp;
 }
 
@@ -432,6 +463,8 @@ const stockLedgerInputBaseSchema = z.object({
 		.regex(/^stock_ledger:.+/)
 		.optional(),
 	lot: stockLotSchema.optional(),
+	adjust_reason: adjustReasonSchema.optional(),
+	note: z.string().trim().max(ADJUST_NOTE_MAX_LENGTH).optional(),
 	occurred_at: z.string().optional()
 });
 
@@ -447,6 +480,31 @@ function stockLedgerInputSchemaWith(
 				message: `รายการประเภท '${d.reason}' ต้องอ้างอิง physical lot`
 			});
 		}
+		// CR-143 FR-C1/C2 — `adjust_reason` / `note` exist only on adjust rows.
+		if (d.reason === 'adjust') {
+			if (!d.adjust_reason) {
+				ctx.addIssue({
+					code: 'custom',
+					path: ['adjust_reason'],
+					message: 'กรุณาเลือกเหตุผลการปรับยอด'
+				});
+			}
+		} else {
+			if (d.adjust_reason !== undefined) {
+				ctx.addIssue({
+					code: 'custom',
+					path: ['adjust_reason'],
+					message: `รายการประเภท '${d.reason}' ห้ามมี adjust_reason`
+				});
+			}
+			if (d.note !== undefined) {
+				ctx.addIssue({
+					code: 'custom',
+					path: ['note'],
+					message: `รายการประเภท '${d.reason}' ห้ามมี note`
+				});
+			}
+		}
 	});
 }
 
@@ -461,7 +519,7 @@ export const stockLedgerDocSchema = z
 		_id: z.string().regex(/^stock_ledger:/),
 		_rev: z.string().optional(),
 		type: z.literal('stock_ledger'),
-		schema_v: z.union([z.literal(2), z.literal(3), z.literal(4), z.literal(5)]),
+		schema_v: z.union([z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.literal(6)]),
 		shelter_code: z.string().min(1),
 		created_at: z.string().datetime(),
 		updated_at: z.string().datetime(),
@@ -476,6 +534,9 @@ export const stockLedgerDocSchema = z
 			.regex(/^stock_ledger:.+/)
 			.optional(),
 		lot: stockLotSchema.optional(),
+		// schema_v 6. Rows written before it carry neither; readers must not require them.
+		adjust_reason: adjustReasonSchema.optional(),
+		note: z.string().optional(),
 		occurred_at: z.string().datetime()
 	})
 	.passthrough();
@@ -484,6 +545,9 @@ export const stockLedgerDocSchema = z
 export function parseStockLedger(input: unknown): StockLedger {
 	return stockLedgerDocSchema.parse(input) as StockLedger;
 }
+
+/** Current persisted `stock_ledger` shape (CR-143 §C). Every writer stamps this. */
+export const STOCK_LEDGER_SCHEMA_V = 6;
 
 /**
  * Canonical factory every new `stock_ledger` writer must go through (CR-055 R7) —
@@ -515,7 +579,7 @@ function createParsedStockLedger(
 
 	const entry = makeDoc(
 		'stock_ledger',
-		5,
+		STOCK_LEDGER_SCHEMA_V,
 		{
 			item_id: d.item_id,
 			qty: persistQty(d.qty),
@@ -524,6 +588,8 @@ function createParsedStockLedger(
 			ref_id: d.ref_id,
 			...(d.lot_ref ? { lot_ref: d.lot_ref } : {}),
 			...(lot ? { lot } : {}),
+			...(d.adjust_reason ? { adjust_reason: d.adjust_reason } : {}),
+			...(d.note ? { note: d.note } : {}),
 			occurred_at: occurredAt
 		},
 		ctx,
@@ -624,6 +690,11 @@ export function createReceiveEntry(
 			unit: d.unit,
 			reason: REASON_BY_RECEIVE_SOURCE[d.source],
 			ref_id: d.ref_id,
+			// A hand-keyed receipt is booked as an adjust (CR-143 §C needs a reason on those);
+			// there is no better fit than `other`, the same reading legacy rows get (FR-C4).
+			...(REASON_BY_RECEIVE_SOURCE[d.source] === 'adjust'
+				? { adjust_reason: 'other' as const }
+				: {}),
 			lot: d.lot,
 			occurred_at: d.occurred_at
 		},
@@ -705,6 +776,9 @@ export const adjustInputSchema = z.object({
 	// CR-055 R8: a manual correction has no originating doc — the comment used to
 	// say "always null" while the type still allowed a string.
 	ref_id: z.null().default(null),
+	// CR-143 FR-C1/C6 — a reason is mandatory; `merge` belongs to the merge flow only.
+	adjust_reason: manualAdjustReasonSchema,
+	note: z.string().trim().max(ADJUST_NOTE_MAX_LENGTH).optional(),
 	lot: stockLotSchema.optional(),
 	occurred_at: z.string().optional()
 });
@@ -719,11 +793,26 @@ export function createAdjustEntry(input: AdjustInput, ctx: AuthorContext): Stock
 			unit: d.unit,
 			reason: 'adjust',
 			ref_id: d.ref_id,
+			adjust_reason: d.adjust_reason,
+			note: d.note,
 			lot: d.lot,
 			occurred_at: d.occurred_at
 		},
 		ctx
 	);
+}
+
+/**
+ * The reason a ledger row was adjusted, for readers (CR-143 FR-C4). Rows written
+ * before schema_v 6 have no `adjust_reason` and read as `other`; a non-adjust row
+ * has none (`null`). Never throws.
+ */
+export function resolveAdjustReason(
+	entry: Pick<StockLedger, 'reason' | 'adjust_reason'>
+): AdjustReason | null {
+	if (entry.reason !== 'adjust') return null;
+	const parsed = adjustReasonSchema.safeParse(entry.adjust_reason);
+	return parsed.success ? parsed.data : 'other';
 }
 
 /** Sum signed deltas per item — the `stock_balance` read model, computed client-side. */

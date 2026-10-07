@@ -8,7 +8,8 @@
 	import ArrowDownLeft from '@lucide/svelte/icons/arrow-down-left';
 	import ArrowUpRight from '@lucide/svelte/icons/arrow-up-right';
 	import { qtyGt } from '$lib/utils/qty';
-	import { REASON_LABELS } from './ledger-view';
+	import { ADJUST_REASON_LABELS, REASON_LABELS } from './ledger-view';
+	import { resolveAdjustReason } from '../../domain/operations';
 	import { lotStorageName } from '../../domain/lot-storage';
 	import { useStoragePoints } from '../../application/use-storage-points.svelte';
 
@@ -132,6 +133,13 @@
 									>
 										{REASON_LABELS[entry.reason] ?? entry.reason}
 									</span>
+									<!-- CR-143 FR-C4/C5: rows from before schema_v 6 read as "other". -->
+									{@const adjustReason = resolveAdjustReason(entry)}
+									{#if adjustReason}
+										<span class="mt-1 block text-2xs font-semibold text-foreground/80">
+											{ADJUST_REASON_LABELS[adjustReason]}
+										</span>
+									{/if}
 								</Table.Cell>
 
 								<!-- Reference / Lot / Note -->
@@ -166,7 +174,10 @@
 												>Ref: {entry.ref_id}</span
 											>
 										{/if}
-										{#if !lotStorageName(entry.lot, storagePoints.points) && !entry.lot?.expiry && !entry.lot?.produced_at && !entry.ref_id}
+										{#if entry.note}
+											<span class="text-2xs font-medium text-foreground/80">{entry.note}</span>
+										{/if}
+										{#if !lotStorageName(entry.lot, storagePoints.points) && !entry.lot?.expiry && !entry.lot?.produced_at && !entry.ref_id && !entry.note}
 											<span class="text-muted-foreground/40">-</span>
 										{/if}
 									</div>
