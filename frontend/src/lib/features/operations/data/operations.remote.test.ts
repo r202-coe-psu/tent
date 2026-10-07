@@ -130,6 +130,9 @@ vi.mock('$lib/db/couch-db', async (importOriginal) => {
 import { OperationsRemoteRepository, assertReceiveAgainstCatalog } from './operations.remote';
 import { createReceiveEntry, projectStockLotBalances } from '../domain/operations';
 import { createStockLotReservation, makeLotReservationDocId } from '$lib/features/distribution';
+import { rankLotsForIssue } from '../domain/lot-priority';
+import { planLotSplit } from '../domain/lot-split';
+import { distributeAcrossLots } from '../application/distribute-across-lots';
 import type { AuthorContext } from '$lib/db/model';
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'tester' };
@@ -628,6 +631,99 @@ describe('OperationsRemoteRepository', () => {
 			expect(projectStockLotBalances(await repo.listLedger())).toEqual([
 				expect.objectContaining({ lot_ref: inbound._id, item_id: 'item:soap', qty: '2' })
 			]);
+		});
+	});
+
+	describe('distribute across lots (CR-143 FR-A7–A9, AC-A5)', () => {
+		const DAY = 86_400_000;
+		const daysFromNow = (d: number) => new Date(Date.now() + d * DAY).toISOString();
+
+		async function receiveLots(quantities: number[]) {
+			mockGetItem.mockResolvedValue({ unit: 'bar' } as SupplyItem);
+			const inbound = [];
+			for (const [i, qty] of quantities.entries()) {
+				// distinct, non-urgent expiries so the priority order is L1, L2, L3
+				inbound.push(
+					await repo.receiveStock(
+						{
+							item_id: 'item:soap',
+							qty,
+							unit: 'bar',
+							source: 'donation',
+							ref_id: DONATION_REF,
+							lot: { expiry: daysFromNow(30 + i * 10) }
+						},
+						ctx
+					)
+				);
+			}
+			return inbound;
+		}
+
+		async function planFor(qty: string) {
+			const lots = projectStockLotBalances(await repo.listLedger());
+			const ranked = rankLotsForIssue(lots, undefined, Date.now(), { excludeExpired: true });
+			return planLotSplit(ranked, qty, Date.now());
+		}
+
+		it('AC-A5: 30 from lots 6 / 20 / 16 writes 3 distribute rows 6 / 20 / 4 on one ref_id', async () => {
+			const [l1, l2, l3] = await receiveLots([6, 20, 16]);
+			const plan = await planFor('30');
+
+			const result = await distributeAcrossLots(
+				repo,
+				{ allocations: plan.allocations, item_id: 'item:soap', ref_id: DISTRIBUTION_BATCH_REF },
+				ctx
+			);
+
+			expect(result.complete).toBe(true);
+			const rows = (await repo.listLedger()).filter((e) => e.reason === 'distribute');
+			expect(rows).toHaveLength(3);
+			expect(rows.map((e) => [e.lot_ref, e.qty])).toEqual([
+				[l1._id, '-6'],
+				[l2._id, '-20'],
+				[l3._id, '-4']
+			]);
+			expect(new Set(rows.map((e) => e.ref_id))).toEqual(new Set([DISTRIBUTION_BATCH_REF]));
+			expect((await repo.getBalance()).get('item:soap')).toBe('12');
+			expect(
+				projectStockLotBalances(await repo.listLedger()).map((l) => [l.lot_ref, l.qty])
+			).toEqual([
+				[l1._id, '0'],
+				[l2._id, '0'],
+				[l3._id, '12']
+			]);
+		});
+
+		it('FR-A9: a failing row keeps the rows already written and reports the rest', async () => {
+			const [l1, l2] = await receiveLots([6, 20, 16]);
+			const plan = await planFor('30');
+			// another writer drains lot 2 after the plan was made, so row 2 is refused
+			await repo.distributeStock(
+				{
+					item_id: 'item:soap',
+					qty: 19,
+					unit: 'bar',
+					ref_id: 'requisition_ticket:01JOTHERWRITER',
+					lot_ref: l2._id
+				},
+				ctx
+			);
+
+			const result = await distributeAcrossLots(
+				repo,
+				{ allocations: plan.allocations, item_id: 'item:soap', ref_id: DISTRIBUTION_BATCH_REF },
+				ctx
+			);
+
+			expect(result.complete).toBe(false);
+			expect(result.distributed.map((d) => [d.lot_ref, d.qty])).toEqual([[l1._id, '6']]);
+			expect(result.distributedQty).toBe('6');
+			expect(result.remainingQty).toBe('24');
+			expect(result.failure?.lot_ref).toBe(l2._id);
+			expect(result.failure?.message).toContain('Insufficient stock');
+			const mine = (await repo.listLedger()).filter((e) => e.ref_id === DISTRIBUTION_BATCH_REF);
+			expect(mine.map((e) => [e.lot_ref, e.qty])).toEqual([[l1._id, '-6']]);
 		});
 	});
 
