@@ -73,10 +73,9 @@
 						href="mailto:Thamathep.l@psu.ac.th"
 						class="transition-colors hover:text-white hover:underline"
 					>
-						Thamathip.l@psu.ac.th
+						Thanathip.l@psu.ac.th
 					</a>
 				</div>
-				<p class="text-xs text-white/60">ระบบประสานงานและข้อมูลสาธารณะเพื่อการบรรเทาทุกข์</p>
 			</div>
 
 			<!-- Column 2: Emergency Numbers -->
@@ -143,8 +142,7 @@
 		<!-- Bottom Copyright Bar -->
 		<div class="mt-8 border-t border-white/10 pt-6 text-center text-xs text-white/60">
 			<p>
-				© 2026 SmartShelter • คุ้มครองข้อมูลตาม พ.ร.บ. PDPA •
-				ปฏิบัติการร่วมศูนย์ประสานงานช่วยเหลือผู้ประสบภัย
+				© 2026 SmartShelter • คุ้มครองข้อมูลตาม พ.ร.บ. PDPA
 			</p>
 		</div>
 	</div>
