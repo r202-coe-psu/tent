@@ -16,6 +16,8 @@ import {
 	calculateReserved,
 	keyedDonationIds,
 	keyableDonations,
+	recordedDonationQty,
+	completeDonationReceipt,
 	isNeedCutOff,
 	forceCutOffNeed,
 	editNeed,
@@ -2156,6 +2158,135 @@ describe('sortStockLotsByConsumptionOrder', () => {
 			'stock_ledger:EARLIER-RECEIPT',
 			'stock_ledger:A',
 			'stock_ledger:B'
+		]);
+	});
+});
+
+// CR-143 §B — batch receive, domain half.
+describe('keyDonationReceipt with pinned ids (CR-143 FR-B4a)', () => {
+	const donation = (): Donation => ({ ...declaredItemsDonation(), _id: 'donation:D1' });
+	const lines = [
+		{ item_id: 'item:rice', qty: '8', unit: 'kg' },
+		{ item_id: 'item:water', qty: '5', unit: 'ขวด' }
+	];
+
+	it('uses the supplied ids, index-aligned, and still points rows at the donation', () => {
+		const rows = keyDonationReceipt(donation(), lines, ctx, [
+			'stock_ledger:AAAAAAAAAAAAAAAAAAAAAAAAAA',
+			'stock_ledger:BBBBBBBBBBBBBBBBBBBBBBBBBB'
+		]);
+		expect(rows.map((r) => r._id)).toEqual([
+			'stock_ledger:AAAAAAAAAAAAAAAAAAAAAAAAAA',
+			'stock_ledger:BBBBBBBBBBBBBBBBBBBBBBBBBB'
+		]);
+		expect(rows.every((r) => r.reason === 'donation' && r.ref_id === 'donation:D1')).toBe(true);
+		// a new inbound lot self-references its own (pinned) _id
+		expect(rows[0].lot_ref).toBe(rows[0]._id);
+	});
+
+	it('refuses ids that do not line up with the lines', () => {
+		expect(() => keyDonationReceipt(donation(), lines, ctx, ['stock_ledger:A'])).toThrow(/line up/);
+	});
+});
+
+describe('completeDonationReceipt (CR-143 FR-B4b / FR-B8)', () => {
+	it('moves every outstanding status to received, pending_review included', () => {
+		for (const status of ['declared', 'pending_review', 'verifying'] as const) {
+			const done = completeDonationReceipt({ ...declaredItemsDonation(), status });
+			expect(done.status).toBe('received');
+			expect(done.received_at).not.toBeNull();
+		}
+	});
+
+	it('is a no-op on a donation that is already received', () => {
+		const received = receiveDonation(declaredItemsDonation());
+		expect(completeDonationReceipt(received)).toBe(received);
+	});
+
+	it('refuses the terminal statuses that never reach the shelf', () => {
+		for (const status of ['expired', 'cancelled', 'rejected', 'redirected'] as const) {
+			expect(() => completeDonationReceipt({ ...declaredItemsDonation(), status })).toThrow(
+				/Cannot receive/
+			);
+		}
+	});
+});
+
+describe('batch receive in progress (CR-143 FR-B7 / FR-B9)', () => {
+	const threeLineDonation = (status: Donation['status'] = 'declared'): Donation => ({
+		...declaredItemsDonation(),
+		_id: 'donation:D1',
+		status,
+		items: [
+			{ item_id: 'item:rice', qty: '10', unit: 'kg' },
+			{ item_id: 'item:water', qty: '20', unit: 'ขวด' },
+			{ item_id: 'item:oil', qty: '6', unit: 'ขวด' }
+		]
+	});
+	const row = (item_id: string, qty: string, ref_id = 'donation:D1') =>
+		createStockLedger({ item_id, qty, unit: 'kg', reason: 'donation', ref_id }, ctx);
+
+	it('recordedDonationQty sums donation rows per donation and item', () => {
+		const recorded = recordedDonationQty([
+			row('item:rice', '4'),
+			row('item:rice', '3'),
+			row('item:water', '20'),
+			row('item:rice', '9', 'donation:OTHER'),
+			createStockLedger({ item_id: 'item:rice', qty: '99', unit: 'kg', reason: 'adjust' }, ctx)
+		]);
+		expect(recorded.get('donation:D1')?.get('item:rice')).toBe('7');
+		expect(recorded.get('donation:D1')?.get('item:water')).toBe('20');
+		expect(recorded.get('donation:OTHER')?.get('item:rice')).toBe('9');
+		expect(recorded.size).toBe(2);
+	});
+
+	it('AC-B6: reserved drops by what is already in the ledger, so nothing is counted twice', () => {
+		const donation = threeLineDonation('verifying');
+		// 2 of 3 lines recorded: rice 10, water 20; oil still owed
+		const ledger = [row('item:rice', '10'), row('item:water', '20')];
+
+		const reserved = calculateReserved([donation], ledger);
+		expect(reserved.get('item:rice')).toBeUndefined();
+		expect(reserved.get('item:water')).toBeUndefined();
+		expect(reserved.get('item:oil')).toBe('6');
+
+		// on-hand + reserved of a recorded item is its declared qty once, not twice
+		const onHand = stockBalance(ledger);
+		const covered = (id: string) => Number(onHand.get(id) ?? '0') + Number(reserved.get(id) ?? '0');
+		expect(covered('item:rice')).toBe(10);
+		expect(covered('item:water')).toBe(20);
+		expect(covered('item:oil')).toBe(6);
+	});
+
+	it('keeps only the unrecorded remainder of a partly recorded line reserved', () => {
+		const reserved = calculateReserved([threeLineDonation()], [row('item:rice', '4')]);
+		expect(reserved.get('item:rice')).toBe('6');
+	});
+
+	it('does not reserve below zero when more was recorded than declared', () => {
+		const reserved = calculateReserved([threeLineDonation()], [row('item:rice', '12')]);
+		expect(reserved.get('item:rice')).toBeUndefined();
+	});
+
+	it('does not touch another donation that shares the item', () => {
+		const other: Donation = { ...threeLineDonation(), _id: 'donation:OTHER' };
+		const reserved = calculateReserved([threeLineDonation(), other], [row('item:rice', '10')]);
+		expect(reserved.get('item:rice')).toBe('10');
+	});
+
+	it('AC-B2 / FR-B6: a shortfall is not reserved once the donation is received', () => {
+		// 8 of the 10 rice arrived and the donation closed: the missing 2 are released
+		const received = { ...threeLineDonation(), status: 'received' as const };
+		const ledger = [row('item:rice', '8'), row('item:water', '20'), row('item:oil', '6')];
+		expect(calculateReserved([received], ledger).get('item:rice')).toBeUndefined();
+	});
+
+	it('keeps an interrupted batch in the picker, and drops a finished one', () => {
+		const partial = threeLineDonation('verifying');
+		const finished = { ...threeLineDonation('received'), _id: 'donation:DONE' };
+		const ledger = [row('item:rice', '10'), row('item:rice', '10', 'donation:DONE')];
+		expect(keyableDonations([partial, finished], ledger).map((d) => d._id)).toEqual([
+			'donation:D1'
 		]);
 	});
 });

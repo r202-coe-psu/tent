@@ -1,4 +1,4 @@
-import { bulkDocs, getDoc, putDocStrict } from '$lib/db/couch-db';
+import { bulkDocs, bulkDocsDetailed, getDoc, putDocStrict } from '$lib/db/couch-db';
 import { createRemoteRepository, type Repository } from '$lib/db/repository';
 import { getShelterCode, getShelterDb } from '$lib/db/shelter';
 import { now, touch, type AuthorContext } from '$lib/db/model';
@@ -22,6 +22,8 @@ import {
 	stockBalance,
 	createReceiveEntry,
 	createWalkInDonation,
+	keyDonationReceipt,
+	completeDonationReceipt,
 	createDistributeEntry,
 	createAdjustEntry,
 	projectStockLotBalances,
@@ -43,6 +45,13 @@ import {
 	type DisputeInfoInput
 } from '../domain/operations';
 import { createAuditEntry, type AuditAction } from '$lib/features/shared';
+import {
+	deriveDonationReceiptLineId,
+	isReceivedLine,
+	type DonationBatchLine,
+	type DonationBatchLineResult,
+	type DonationBatchResult
+} from '../domain/donation-batch';
 import type { OperationsRepository } from './operations.repository';
 import { supplyRepository, type SupplyItem } from '$lib/features/supply';
 import {
@@ -196,6 +205,163 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			entry
 		]);
 		return { donation: savedDonation as Donation, entry: savedEntry as StockLedger };
+	}
+
+	async receiveDonationBatch(
+		donation: Donation,
+		counted: readonly DonationBatchLine[],
+		ctx: AuthorContext
+	): Promise<DonationBatchResult> {
+		if (donation.kind !== 'items') {
+			throw new Error('Only a goods donation can be received into stock');
+		}
+		const seenLineNos = new Set<number>();
+		for (const line of counted) {
+			if (!Number.isInteger(line.line_no) || line.line_no < 0) {
+				throw new Error(`Invalid line number ${line.line_no} — must be a non-negative integer`);
+			}
+			if (seenLineNos.has(line.line_no)) {
+				throw new Error(`Duplicate line number ${line.line_no} in the donation receipt`);
+			}
+			seenLineNos.add(line.line_no);
+			if (!line.item_id) {
+				throw new Error(`Line ${line.line_no} has no item — match it to the catalog first`);
+			}
+			if (!qtyGte(line.qty, 0)) {
+				throw new Error(`Line ${line.line_no} has a negative quantity`);
+			}
+		}
+		// Zero lines write nothing (FR-B3). A receipt with nothing received at all must not
+		// reach `received`: with no row to key it, `calculateReserved` would hold the whole
+		// declaration forever. That donation should be cancelled instead.
+		const receivedLines = counted.filter(isReceivedLine);
+		if (receivedLines.length === 0) {
+			throw new Error('Nothing was received — set at least one line above zero');
+		}
+
+		// FR-B4a: the row ids are fixed by (donation, item, line), so a row left by an earlier
+		// attempt is found by id and never written twice (AC-B5).
+		const ids = await Promise.all(
+			receivedLines.map((line) =>
+				deriveDonationReceiptLineId(donation._id, line.item_id, line.line_no)
+			)
+		);
+		const existing = await Promise.all(ids.map((id) => this.repo.get<StockLedger>(id)));
+
+		const results = new Map<number, DonationBatchLineResult>();
+		for (const line of counted) {
+			if (!isReceivedLine(line)) {
+				results.set(line.line_no, {
+					line_no: line.line_no,
+					item_id: line.item_id,
+					state: 'skipped'
+				});
+			}
+		}
+
+		const toWrite: { line: DonationBatchLine; id: string }[] = [];
+		receivedLines.forEach((line, index) => {
+			const id = ids[index];
+			const row = existing[index];
+			if (!row) {
+				toWrite.push({ line, id });
+				return;
+			}
+			// Rows are append-only: a retry that disagrees with what is already recorded must
+			// stop here rather than pretend the edit landed.
+			if (
+				row.item_id !== line.item_id ||
+				row.unit !== line.unit ||
+				persistQty(row.qty) !== persistQty(line.qty)
+			) {
+				throw new Error(
+					`Line ${line.line_no} was already recorded as ${row.qty} ${row.unit}; it cannot be changed`
+				);
+			}
+			results.set(line.line_no, {
+				line_no: line.line_no,
+				item_id: line.item_id,
+				state: 'saved',
+				ledger_id: id
+			});
+		});
+
+		if (toWrite.length > 0) {
+			const entries = keyDonationReceipt(
+				donation,
+				toWrite.map(({ line }) => line),
+				ctx,
+				toWrite.map(({ id }) => id)
+			);
+			// Validate every row against the catalog (unit, FR-D2 expiry) BEFORE writing any:
+			// a bad line must not leave its neighbours half recorded.
+			const catalog = new Map<string, CatalogItem | null>();
+			for (const entry of entries) {
+				if (!catalog.has(entry.item_id)) {
+					catalog.set(entry.item_id, await this.loadCatalogItem(entry.item_id));
+				}
+				assertReceiveAgainstCatalog(entry, catalog.get(entry.item_id) ?? null);
+			}
+
+			const outcomes = new Map<string, { ok: boolean; reason: string }>();
+			try {
+				for (const outcome of await bulkDocsDetailed<StockLedger>(this.dbName, entries)) {
+					outcomes.set(outcome.id, {
+						ok: outcome.ok,
+						reason: outcome.ok ? '' : `${outcome.error}: ${outcome.reason}`
+					});
+				}
+			} catch (err) {
+				// Transport failure: nothing is known about any row, so each is read back below.
+				const reason = err instanceof Error ? err.message : 'bulk write failed';
+				for (const { id } of toWrite) outcomes.set(id, { ok: false, reason });
+			}
+
+			for (const { line, id } of toWrite) {
+				const outcome = outcomes.get(id);
+				let saved = outcome?.ok === true;
+				const reason = outcome?.reason ?? 'no result for this row';
+				if (!saved) {
+					// A 409 on a deterministic id means the row is already there, and a lost
+					// response may hide a row that did land: the ledger itself decides.
+					try {
+						saved = (await this.repo.get<StockLedger>(id)) !== null;
+					} catch {
+						// keep `saved = false`; the original reason stays the one shown
+					}
+				}
+				results.set(line.line_no, {
+					line_no: line.line_no,
+					item_id: line.item_id,
+					state: saved ? 'saved' : 'failed',
+					ledger_id: id,
+					...(saved ? {} : { error: reason })
+				});
+			}
+		}
+
+		const lines = counted.map((line) => results.get(line.line_no)!);
+		const rowsComplete = lines.every((line) => line.state !== 'failed');
+		if (!rowsComplete) {
+			return { donation, lines, rowsComplete: false, received: false };
+		}
+
+		// FR-B4b / FR-B8: the donation moves only after every row is in the ledger, and a
+		// failure here is retried on its own — the rows above are found by id, not rewritten.
+		try {
+			const latest = (await this.repo.get<Donation>(donation._id)) ?? donation;
+			const next = completeDonationReceipt(latest);
+			const saved = next === latest ? latest : await this.updateDonation(next);
+			return { donation: saved, lines, rowsComplete: true, received: true };
+		} catch (err) {
+			return {
+				donation,
+				lines,
+				rowsComplete: true,
+				received: false,
+				transitionError: err instanceof Error ? err.message : 'Could not mark the donation received'
+			};
+		}
 	}
 
 	async distributeStock(input: DistributeInput, ctx: AuthorContext): Promise<StockLedger> {

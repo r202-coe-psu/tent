@@ -395,6 +395,17 @@ describe('on-hand stock (T-22 cut-off)', () => {
 		expect(remaining.get('item:rice')).toBe('400');
 	});
 
+	it('does not count the recorded part of an interrupted batch receipt twice (CR-143 FR-B9)', () => {
+		// 60 of 100 kg is already in the ledger (on-hand); the donation is still verifying
+		// because a later line failed. Only the 40 kg not yet recorded is still owed.
+		const { remaining } = computeNeeds(
+			[campaign('c1', [need('item:rice', '500')])],
+			[donation('donation:1', 'c1', 'verifying', [{ item_id: 'item:rice', qty: '100' }])],
+			[ledger('item:rice', '60', { ref_id: 'donation:1' })]
+		);
+		expect(remaining.get('item:rice')).toBe('400');
+	});
+
 	it('still owes a received donation the ledger has not recorded yet', () => {
 		const { remaining } = computeNeeds(
 			[campaign('c1', [need('item:rice', '500')])],

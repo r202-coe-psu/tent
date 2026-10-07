@@ -55,7 +55,9 @@ export {
 	openNeeds,
 	calculateReserved,
 	keyedDonationIds,
+	recordedDonationQty,
 	keyableDonations,
+	completeDonationReceipt,
 	isNeedCutOff,
 	forceCutOffNeed,
 	reopenNeed,
@@ -111,6 +113,16 @@ export {
 	timeUntilExpiryMs,
 	type ItemLotAgeSummary
 } from './domain/lot-age';
+export {
+	deriveDonationReceiptLineId,
+	donationShortfall,
+	isReceivedLine,
+	type DonationBatchLine,
+	type DonationBatchLineResult,
+	type DonationBatchLineState,
+	type DonationBatchResult,
+	type DonationShortfall
+} from './domain/donation-batch';
 export { countPendingTransfers, isTransferPending } from './domain/transfer-pending';
 export { deriveDeterministicLedgerId } from './domain/deterministic-ledger-id';
 export {
@@ -141,6 +153,7 @@ export {
 	useDonations,
 	useCreateCampaign,
 	useReceiveWalkInDonation,
+	useReceiveDonationBatch,
 	useUpdateCampaign,
 	useTransfers,
 	useTransfer,
