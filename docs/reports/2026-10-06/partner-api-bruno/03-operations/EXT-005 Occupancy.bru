@@ -1,0 +1,28 @@
+meta {
+  name: EXT-005 Occupancy
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{base_url}}/public-api/external/locations/:location_code/occupancy
+  body: none
+  auth: inherit
+}
+
+params:path {
+  location_code: {{location_code}}
+}
+
+docs {
+  EXT-005 — ผู้พักพิงรวมของหนึ่งศูนย์
+
+  Scope: occupancy-read
+  Method: GET /public-api/external/locations/{location_code}/occupancy
+
+  breakdown ซ้อนทับกันได้ ผลรวมของกลุ่มไม่จำเป็นต้องเท่า occupancy_total
+  updated_by_role คงที่เป็นข้อความระบบนับอัตโนมัติ
+
+  Error: 404 location_not_found
+  Error: 401 invalid_token · 403 insufficient_scope
+}

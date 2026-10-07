@@ -67,4 +67,4 @@ affects:
 
 - 2026-08-20 — Approved by project owner (ร่างเดิมใช้รหัส CR-079). Phase 1 ดำเนินการ Endpoints 1 และ 3; พัก Endpoint 2 (`booking`) รอระบบหลักของอีกทีม.
 - 2026-08-31 — renumbered เป็น CR-098 เพื่อหลีกเลี่ยงการชนกับ CR-079 SOP what-if simulation
-
+- 2026-10-06 — ส่วน M2 (`/external/v1/shelters`, `/external/v1/persons/shelter-residency`) และ Endpoint 2 ที่พักไว้ ถูก supersede โดย [CR-154](CR-154-m2-partner-booking-residency.md): ย้ายไป Partner OAuth plane `/external/*` (EXT-002, EXT-008–011).

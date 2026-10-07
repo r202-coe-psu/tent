@@ -19,9 +19,9 @@ from ...core.config import settings
 
 _COUCH_TIMEOUT_SECONDS = 15.0
 _RELIGION_ALLOWED = frozenset({"buddhist", "muslim", "christian", "other", "unknown"})
-# Couch SoR schema versions at claim birth (CR-112 / schema.md) — keep local to birth.
-HOUSEHOLD_SCHEMA_V = 5
-EVACUEE_SCHEMA_V = 10
+# Couch SoR schema versions at claim birth (CR-112 / CR-148 / schema.md) — keep local to birth.
+HOUSEHOLD_SCHEMA_V = 6
+EVACUEE_SCHEMA_V = 12  # CR-154: gender nullable + registered_via api
 IMAGE_SCHEMA_V = 1
 
 
@@ -132,6 +132,10 @@ def build_couch_household(
         "vehicles": [],
         "housing_type": hh.housing_type,
         "residence_landmark": hh.residence_landmark,
+        "dorm_name": hh.dorm_name,
+        "dorm_building": hh.dorm_building,
+        "dorm_floor": hh.dorm_floor,
+        "dorm_room": hh.dorm_room,
         "address_no": hh.address_no,
         "village_no": hh.village_no,
         "subdistrict": hh.subdistrict,
@@ -228,6 +232,10 @@ def build_couch_evacuee(
         body["nickname"] = member.nickname
     if member.religion and member.religion in _RELIGION_ALLOWED:
         body["religion"] = member.religion
+        if member.religion == "other" and member.religion_other:
+            body["religion_other"] = member.religion_other
+    if member.disability_other_detail and "disability_other" in member.vulnerable_groups:
+        body["disability_other_detail"] = member.disability_other_detail
     if member.emergency_contact is not None:
         body["emergency_contact"] = {
             "name": member.emergency_contact.name,

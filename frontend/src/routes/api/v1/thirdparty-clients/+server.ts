@@ -40,7 +40,7 @@ interface CreateBody {
 }
 
 /**
- * POST { name, description?, module_name, allowed_scopes } — FastAPI generates `client_id`
+ * POST { name, description?, module_name?, allowed_scopes } — FastAPI generates `client_id`
  * (`tpc_…`); response includes plaintext `client_secret` once.
  */
 export const POST: RequestHandler = async ({ request }) => {
@@ -53,13 +53,16 @@ export const POST: RequestHandler = async ({ request }) => {
 			typeof body.description === 'string' && body.description.trim()
 				? body.description.trim()
 				: null;
-		const module_name = typeof body.module_name === 'string' ? body.module_name.trim() : '';
+		// Optional (CR-154 FR-62) — blank/missing → null; FastAPI validates known modules.
+		const module_name =
+			typeof body.module_name === 'string' && body.module_name.trim()
+				? body.module_name.trim()
+				: null;
 		const allowed_scopes = Array.isArray(body.allowed_scopes)
 			? body.allowed_scopes.filter((s): s is string => typeof s === 'string')
 			: [];
 
 		if (!name) throw new ServiceError('VALIDATION', 'name is required');
-		if (!module_name) throw new ServiceError('VALIDATION', 'module_name is required');
 		if (allowed_scopes.length === 0) {
 			throw new ServiceError('VALIDATION', 'allowed_scopes must have at least one scope');
 		}

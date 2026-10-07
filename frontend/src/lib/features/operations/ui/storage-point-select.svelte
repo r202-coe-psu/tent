@@ -38,7 +38,7 @@
 	<Select.Trigger
 		{id}
 		{...triggerProps}
-		class="h-11 w-full min-w-0 rounded-md border border-input bg-white px-3 text-sm font-medium shadow-xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none sm:h-10"
+		class="h-11 w-full min-w-0 rounded-md border border-input bg-white px-3 text-sm font-medium shadow-xs focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none data-[size=default]:h-11 sm:h-10 sm:data-[size=default]:h-10"
 	>
 		{selected ? `📍 ${selected.name}` : UNSPECIFIED_LABEL}
 	</Select.Trigger>

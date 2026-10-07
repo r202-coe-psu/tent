@@ -15,7 +15,7 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: Literal["Bearer"] = "Bearer"
     expires_in: int
-    module_name: str
+    module_name: str | None
     scopes: list[str]
 
 

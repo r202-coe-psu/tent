@@ -270,7 +270,7 @@ describe('POST /api/public/v1/registrations', () => {
 			const e = evacuees[0];
 
 			expect(e._id).toMatch(/^evacuee:[0-9A-HJKMNP-TV-Z]{26}$/);
-			expect(e.schema_v).toBe(10);
+			expect(e.schema_v).toBe(12);
 			expect(e.shelter_code).toBe('SH001');
 
 			expect(e.created_by).toBe('public');
@@ -308,7 +308,7 @@ describe('POST /api/public/v1/registrations', () => {
 	describe('a family booking', () => {
 		const FAMILY = {
 			...VALID_BODY,
-			national_id: '1234567890123',
+			national_id: '1234567890121',
 			members: [
 				CONTACT,
 				{
@@ -347,7 +347,7 @@ describe('POST /api/public/v1/registrations', () => {
 			expect(evacuees[0].phone).toBe('0812345678');
 			expect(evacuees[0].person_id).toEqual({
 				cardType: 'national_id',
-				number: '1234567890123'
+				number: '1234567890121'
 			});
 			expect(evacuees[1].phone).toBeNull();
 			expect((evacuees[1].person_id as { number?: string })?.number ?? '').toBe('');
@@ -482,7 +482,7 @@ describe('POST /api/public/v1/registrations', () => {
 
 	it('never returns PII on the ticket (Public task DoD)', async () => {
 		vi.mocked(findMasterByCode).mockResolvedValue(OPEN_SHELTER as never);
-		const body = await (await POST(event({ ...VALID_BODY, national_id: '1234567890123' }))).json();
+		const body = await (await POST(event({ ...VALID_BODY, national_id: '1234567890121' }))).json();
 
 		expect(Object.keys(body).sort()).toEqual([
 			'booked_at',
@@ -497,7 +497,7 @@ describe('POST /api/public/v1/registrations', () => {
 		]);
 		const serialized = JSON.stringify(body);
 		expect(serialized).not.toContain('0812345678');
-		expect(serialized).not.toContain('1234567890123');
+		expect(serialized).not.toContain('1234567890121');
 		expect(serialized).not.toContain('ใจดี'); // last name stays off the public ticket
 	});
 
@@ -554,7 +554,7 @@ describe('POST /api/public/v1/registrations', () => {
 						last_name: 'รักสงบ',
 						gender: 'male',
 						phone: '0811112222',
-						person_id: { cardType: 'national_id', number: '1100000000001' }
+						person_id: { cardType: 'national_id', number: '1100000000008' }
 					},
 					{
 						first_name: 'สมศรี',
@@ -608,7 +608,7 @@ describe('POST /api/public/v1/registrations', () => {
 						last_name: 'รักสงบ',
 						gender: 'male',
 						phone: '0811112222',
-						person_id: { cardType: 'national_id', number: '1100000000001' },
+						person_id: { cardType: 'national_id', number: '1100000000008' },
 						photo: 'image:01ARZ3NDEKTSV4RRFFQ69G5FAV'
 					}
 				],

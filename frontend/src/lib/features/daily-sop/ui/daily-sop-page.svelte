@@ -388,9 +388,7 @@
   Sticky subheaders on this page use --bo-sticky-top from app.css (stacked BO
   header is 8.5rem below xl, 4rem at xl+).
 -->
-<div
-	class="min-h-full bg-[#f5f7fa] px-3 py-4 sm:px-5 md:px-7 md:py-7"
->
+<div class="min-h-full bg-[#f5f7fa] px-3 py-4 sm:px-5 md:px-7 md:py-7">
 	<div class="mx-auto flex w-full max-w-[1480px] flex-col gap-5">
 		{#if endpointStore.status === 'disconnected'}
 			<div
@@ -416,7 +414,7 @@
 		{#if view === 'history'}
 			<section class="overflow-hidden rounded-[28px] border border-black/[0.04] bg-white shadow-sm">
 				<div
-					class="flex flex-col gap-4 border-b border-slate-100 px-4 py-5 sm:px-5 sm:py-6 sm:flex-row sm:items-center sm:justify-between md:px-8"
+					class="flex flex-col gap-4 border-b border-slate-100 px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-6 md:px-8"
 				>
 					<div class="flex items-start gap-3">
 						<div class="rounded-xl bg-slate-100 p-2.5 text-[#013365]">
@@ -483,7 +481,8 @@
 								>
 									<div class="flex items-center justify-between text-xs">
 										<span class="font-semibold text-[#1d1d1f]">{item.progress_percent}%</span>
-										<span class="text-[#86868b]">{historyProgressLabel(item.progress_percent)}</span>
+										<span class="text-[#86868b]">{historyProgressLabel(item.progress_percent)}</span
+										>
 									</div>
 									<div class="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
 										<div

@@ -9,6 +9,7 @@ import {
 	registeredViaSchema
 } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
+import { isValidThaiNationalId } from '$lib/utils/thai-id';
 import { ConflictError } from '$lib/utils/errors';
 
 /**
@@ -73,6 +74,33 @@ export function clampCardNumber(cardType: CardType, value: string): string {
 	return max != null ? normalized.slice(0, max) : normalized;
 }
 
+/**
+ * CR-148 FR-01: a Thai national ID must be exactly 13 digits and pass the mod-11 checksum.
+ * Returns the Thai error message, or null when valid.
+ */
+export function nationalIdIssue(number: string): string | null {
+	const digits = number.replace(/\D/g, '');
+	if (digits.length !== 13) return 'เลขประจำตัวประชาชนต้องมี 13 หลัก';
+	if (!isValidThaiNationalId(digits))
+		return 'เลขบัตรประชาชนไม่ถูกต้อง (ตรวจสอบหลักสุดท้ายอีกครั้ง)';
+	return null;
+}
+
+/**
+ * CR-148 FR-03: check the checksum only for a new number — a new person, or an edit that changed
+ * the digits. Legacy docs keep saving other fields even if their stored ID fails the checksum.
+ */
+export function shouldCheckNationalId(
+	cardType: CardType | undefined,
+	number: string | null | undefined,
+	originalNumber?: string | null
+): boolean {
+	if ((cardType ?? 'national_id') !== 'national_id') return false;
+	const digits = (number ?? '').replace(/\D/g, '');
+	if (!digits) return false;
+	return originalNumber == null || digits !== originalNumber.replace(/\D/g, '');
+}
+
 function refineCardNumberMax(
 	cardType: CardType,
 	number: string | undefined,
@@ -107,6 +135,14 @@ export type PersonId = z.infer<typeof personIdSchema>;
 
 export const genderSchema = z.enum(['male', 'female', 'other']);
 export type Gender = z.infer<typeof genderSchema>;
+
+/** Thai display label; `null` = unknown (partner booking, schema_v 12, CR-154). */
+export function genderLabelTh(gender: Gender | null | undefined): string {
+	if (gender === 'male') return 'ชาย';
+	if (gender === 'female') return 'หญิง';
+	if (gender === 'other') return 'อื่นๆ';
+	return 'ไม่ระบุ';
+}
 
 export const religionSchema = z.enum(['buddhist', 'muslim', 'christian', 'other', 'unknown']);
 export type Religion = z.infer<typeof religionSchema>;
@@ -251,7 +287,8 @@ export interface Evacuee extends BaseDoc {
 	type: 'evacuee';
 	first_name: string;
 	last_name: string;
-	gender: Gender;
+	/** `null` = unknown — only partner bookings (`registered_via: api`) write it (schema_v 12, CR-154). */
+	gender: Gender | null;
 	phone: string | null;
 	nickname?: string;
 	birth_year?: number;
@@ -259,7 +296,11 @@ export interface Evacuee extends BaseDoc {
 	person_id?: PersonId;
 	country: string;
 	religion?: Religion;
+	/** Free text when `religion = other` (schema_v 11, CR-148). */
+	religion_other?: string | null;
 	vulnerable_groups: string[];
+	/** Free text when `vulnerable_groups` has `disability_other` (schema_v 11, CR-148). */
+	disability_other_detail?: string | null;
 	special_needs: string[];
 	emergency_contact?: EmergencyContact;
 	photo?: string | null;
@@ -404,6 +445,11 @@ export interface Household extends BaseDoc {
 	notes?: string;
 	housing_type?: HousingType | null;
 	residence_landmark?: string | null;
+	/** Dormitory residence parts — only when `housing_type = apartment_dorm` (schema_v 6, CR-148). */
+	dorm_name?: string | null;
+	dorm_building?: string | null;
+	dorm_floor?: string | null;
+	dorm_room?: string | null;
 	address_no: string | null;
 	village_no: string | null;
 	subdistrict: string | null;
@@ -585,9 +631,85 @@ export function currentBEYear(): number {
 	return new Date().getFullYear() + 543;
 }
 
-/** Oldest acceptable birth year (พ.ศ.) — implies an age of {@link MAX_AGE_YEARS}. */
+/** Oldest acceptable birth year (พ.ศ.) — implies an age of {@link MAX_AGE_YEARS} (inclusive, CR-148). */
 export function minBirthYearBE(): number {
 	return currentBEYear() - MAX_AGE_YEARS;
+}
+
+/** CR-148 FR-04/FR-05: 4-digit พ.ศ. within `[minBirthYearBE(), currentBEYear()]`. */
+export function isBirthYearBEValid(year: number): boolean {
+	return (
+		Number.isInteger(year) &&
+		String(year).length === 4 &&
+		year >= minBirthYearBE() &&
+		year <= currentBEYear()
+	);
+}
+
+/** CR-148 FR-06: allowed gap between entered age and the age implied by birth year. */
+export const AGE_BIRTH_YEAR_TOLERANCE = 1;
+
+/** True when age and birth year (พ.ศ.) agree within {@link AGE_BIRTH_YEAR_TOLERANCE}. */
+export function ageMatchesBirthYear(age: number, birthYearBE: number): boolean {
+	return Math.abs(currentBEYear() - birthYearBE - age) <= AGE_BIRTH_YEAR_TOLERANCE;
+}
+
+function toOptionalInt(value: unknown): number | undefined {
+	if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+	if (typeof value === 'string' && value.trim() !== '') {
+		const n = Number(value);
+		return Number.isFinite(n) ? n : undefined;
+	}
+	return undefined;
+}
+
+export const RELIGION_OTHER_MAX = 60;
+export const DISABILITY_OTHER_DETAIL_MAX = 120;
+
+/**
+ * Cross-field member rules (CR-148) shared by every registration schema:
+ * age ↔ birth year (FR-06), religion「อื่นๆ」needs text (FR-13), national ID checksum for new
+ * numbers (FR-01/FR-03).
+ */
+export function refineMemberRules(
+	member: {
+		birth_year?: unknown;
+		age?: unknown;
+		religion?: string | null;
+		religion_other?: string | null;
+		person_id?: { cardType?: CardType; number?: string | null } | null;
+		/** Stored number of an existing evacuee (report-in) — unchanged numbers skip the checksum. */
+		original_person_number?: string | null;
+	},
+	ctx: z.RefinementCtx,
+	path: (string | number)[] = []
+): void {
+	const birthYear = toOptionalInt(member.birth_year);
+	const age = toOptionalInt(member.age);
+	if (
+		birthYear !== undefined &&
+		age !== undefined &&
+		isBirthYearBEValid(birthYear) &&
+		!ageMatchesBirthYear(age, birthYear)
+	) {
+		ctx.addIssue({ code: 'custom', path: [...path, 'age'], message: 'อายุไม่ตรงกับปีเกิด' });
+	}
+	if (member.religion === 'other' && !member.religion_other?.trim()) {
+		ctx.addIssue({
+			code: 'custom',
+			path: [...path, 'religion_other'],
+			message: 'กรุณาระบุศาสนา'
+		});
+	}
+	const personId = member.person_id;
+	if (
+		personId &&
+		shouldCheckNationalId(personId.cardType, personId.number, member.original_person_number)
+	) {
+		const issue = nationalIdIssue(personId.number ?? '');
+		if (issue)
+			ctx.addIssue({ code: 'custom', path: [...path, 'person_id', 'number'], message: issue });
+	}
 }
 
 /** Required emergency contact — household pre-register (and when any field is filled). */
@@ -660,12 +782,17 @@ export const evacueeInputSchema = z.object({
 	birth_year: z.coerce
 		.number()
 		.int()
-		.refine((y) => y > minBirthYearBE(), {
-			error: () => `ปีเกิด (พ.ศ.) ต้องมากกว่า ${minBirthYearBE()}`
+		.refine((y) => String(y).length === 4, 'กรุณากรอกปีเกิด 4 หลัก')
+		.refine((y) => y >= minBirthYearBE() && y <= currentBEYear(), {
+			error: () => `ปีเกิด (พ.ศ.) ต้องอยู่ระหว่าง ${minBirthYearBE()}–${currentBEYear()}`
 		})
-		.refine((y) => y <= currentBEYear(), 'ปีเกิด (พ.ศ.) ต้องไม่เป็นปีในอนาคต')
 		.optional(),
-	age: z.number().int().min(0).max(150).optional(),
+	age: z
+		.number()
+		.int()
+		.min(0, 'อายุต้องไม่ติดลบ')
+		.max(MAX_AGE_YEARS, `อายุต้องไม่เกิน ${MAX_AGE_YEARS} ปี`)
+		.optional(),
 	person_id: personIdSchema.default({ cardType: 'national_id', number: '' }),
 	country: z
 		.string({ error: 'กรุณาเลือกประเทศ' })
@@ -673,6 +800,14 @@ export const evacueeInputSchema = z.object({
 		.min(1, 'กรุณาเลือกประเทศ')
 		.default('THAILAND'),
 	religion: religionSchema.default('buddhist'),
+	religion_other: z.string().trim().max(RELIGION_OTHER_MAX).nullable().optional().default(null),
+	disability_other_detail: z
+		.string()
+		.trim()
+		.max(DISABILITY_OTHER_DETAIL_MAX)
+		.nullable()
+		.optional()
+		.default(null),
 	medical_conditions: z.array(z.string().trim().min(1)).default([]),
 	medical_allergies: z.array(z.string().trim().min(1)).default([]),
 	medical_medications: z.array(z.string().trim().min(1)).default([]),
@@ -787,6 +922,10 @@ const householdInputFieldsSchema = z.object({
 	notes: z.string().trim().optional(),
 	housing_type: housingTypeSchema.nullable().optional().default(null),
 	residence_landmark: z.string().trim().nullable().optional().default(null),
+	dorm_name: z.string().trim().nullable().optional().default(null),
+	dorm_building: z.string().trim().nullable().optional().default(null),
+	dorm_floor: z.string().trim().nullable().optional().default(null),
+	dorm_room: z.string().trim().nullable().optional().default(null),
 	address_no: z.string().trim().nullable().default(null),
 	village_no: z.string().trim().nullable().default(null),
 	subdistrict: z.string().trim().nullable().default(null),
@@ -948,8 +1087,11 @@ export const evacueePersonalEditFormSchema = z
 		noPhone: z.boolean().default(false),
 		cardType: cardTypeSchema,
 		cardNumber: z.string().trim(),
+		/** Stored number when the modal opened — unchanged numbers skip the checksum (CR-148 FR-03). */
+		originalCardNumber: z.string().trim().default(''),
 		country: z.string({ error: 'กรุณาเลือกสัญชาติ' }).trim().min(1, 'กรุณาเลือกสัญชาติ'),
-		religion: religionSchema
+		religion: religionSchema,
+		religionOther: z.string().trim().max(RELIGION_OTHER_MAX).default('')
 	})
 	.superRefine((data, ctx) => {
 		if (!data.noPhone && digitsOnly(data.phone).length !== 10) {
@@ -960,7 +1102,10 @@ export const evacueePersonalEditFormSchema = z
 			});
 		}
 
-		if (
+		if (shouldCheckNationalId(data.cardType, data.cardNumber, data.originalCardNumber || null)) {
+			const issue = nationalIdIssue(data.cardNumber);
+			if (issue) ctx.addIssue({ code: 'custom', path: ['cardNumber'], message: issue });
+		} else if (
 			data.cardType === 'national_id' &&
 			data.cardNumber &&
 			digitsOnly(data.cardNumber).length !== 13
@@ -972,6 +1117,10 @@ export const evacueePersonalEditFormSchema = z
 			});
 		} else {
 			refineCardNumberMax(data.cardType, data.cardNumber, ctx, ['cardNumber']);
+		}
+
+		if (data.religion === 'other' && !data.religionOther) {
+			ctx.addIssue({ code: 'custom', path: ['religionOther'], message: 'กรุณาระบุศาสนา' });
 		}
 
 		const parsedAge = data.age.trim() !== '' ? Number.parseInt(data.age, 10) : undefined;
@@ -988,24 +1137,19 @@ export const evacueePersonalEditFormSchema = z
 				message: `อายุต้องอยู่ระหว่าง 0 ถึง ${MAX_AGE_YEARS} ปี`
 			});
 		}
-		if (
-			data.birthYear &&
-			(!Number.isInteger(parsedBirthYear) ||
-				(parsedBirthYear ?? 0) <= minBirthYearBE() ||
-				(parsedBirthYear ?? 0) > currentBEYear())
-		) {
+		if (data.birthYear && !isBirthYearBEValid(parsedBirthYear ?? Number.NaN)) {
 			ctx.addIssue({
 				code: 'custom',
 				path: ['birthYear'],
-				message: `ปีเกิดต้องมากกว่า พ.ศ. ${minBirthYearBE()} และไม่เกินปีปัจจุบัน`
+				message: `ปีเกิด (พ.ศ.) ต้องเป็น 4 หลัก ระหว่าง ${minBirthYearBE()}–${currentBEYear()}`
 			});
 		}
 		if (
 			parsedBirthYear !== undefined &&
 			parsedAge !== undefined &&
-			Number.isInteger(parsedBirthYear) &&
+			isBirthYearBEValid(parsedBirthYear) &&
 			Number.isInteger(parsedAge) &&
-			currentBEYear() - parsedBirthYear !== parsedAge
+			!ageMatchesBirthYear(parsedAge, parsedBirthYear)
 		) {
 			ctx.addIssue({ code: 'custom', path: ['age'], message: 'ปีเกิดและอายุไม่สัมพันธ์กัน' });
 		}
@@ -1231,12 +1375,94 @@ export function replacePersonId(evacuee: Evacuee, personId: PersonId): Evacuee {
 	};
 }
 
+/** CR-148: persisted `religion_other` / `disability_other_detail`, cleared when not applicable. */
+export function memberExtrasFor(member: {
+	religion?: string | null;
+	religion_other?: string | null;
+	vulnerable_groups?: readonly string[] | null;
+	disability_other_detail?: string | null;
+}): { religion_other: string | null; disability_other_detail: string | null } {
+	const religionOther = member.religion === 'other' ? member.religion_other?.trim() || null : null;
+	const disabilityDetail = (member.vulnerable_groups ?? []).includes('disability_other')
+		? member.disability_other_detail?.trim() || null
+		: null;
+	return { religion_other: religionOther, disability_other_detail: disabilityDetail };
+}
+
+type DormFields = Pick<Household, 'dorm_name' | 'dorm_building' | 'dorm_floor' | 'dorm_room'>;
+
+/**
+ * CR-148 FR-16: readable one-line dorm address for `address_no`, e.g.
+ * 「305 หอสุขใจ อาคาร B ชั้น 3」. Empty parts are skipped.
+ */
+export function composeDormAddress(d: DormFields): string | null {
+	const parts = [
+		d.dorm_room?.trim(),
+		d.dorm_name?.trim(),
+		d.dorm_building?.trim() ? `อาคาร ${d.dorm_building.trim()}` : '',
+		d.dorm_floor?.trim() ? `ชั้น ${d.dorm_floor.trim()}` : ''
+	].filter(Boolean);
+	return parts.length > 0 ? parts.join(' ') : null;
+}
+
+/**
+ * CR-148 FR-16/FR-17: dorm fields + `address_no` as persisted. Dorm → `dorm_*` kept and
+ * `address_no` = composed summary; any other housing type → `dorm_*` cleared; homeless → no number.
+ */
+export function dormFieldsFor(h: {
+	housing_type?: HousingType | null;
+	address_no?: string | null;
+	dorm_name?: string | null;
+	dorm_building?: string | null;
+	dorm_floor?: string | null;
+	dorm_room?: string | null;
+}): DormFields & { address_no: string | null } {
+	if (h.housing_type === 'apartment_dorm') {
+		const dorm: DormFields = {
+			dorm_name: h.dorm_name?.trim() || null,
+			dorm_building: h.dorm_building?.trim() || null,
+			dorm_floor: h.dorm_floor?.trim() || null,
+			dorm_room: h.dorm_room?.trim() || null
+		};
+		return { ...dorm, address_no: composeDormAddress(dorm) ?? (h.address_no?.trim() || null) };
+	}
+	return {
+		dorm_name: null,
+		dorm_building: null,
+		dorm_floor: null,
+		dorm_room: null,
+		address_no: h.housing_type === 'homeless' ? null : h.address_no?.trim() || null
+	};
+}
+
+/** CR-148 FR-15: dorm residences need a dorm name and room number. */
+export function refineDormFields(
+	h: { housing_type?: HousingType | null; dorm_name?: string | null; dorm_room?: string | null },
+	ctx: z.RefinementCtx,
+	path: (string | number)[] = []
+): void {
+	if (h.housing_type !== 'apartment_dorm') return;
+	if (!h.dorm_name?.trim()) {
+		ctx.addIssue({ code: 'custom', path: [...path, 'dorm_name'], message: 'กรุณากรอกชื่อหอพัก' });
+	}
+	if (!h.dorm_room?.trim()) {
+		ctx.addIssue({ code: 'custom', path: [...path, 'dorm_room'], message: 'กรุณากรอกเลขห้อง' });
+	}
+}
+
+/** CR-148 FR-08: at most this many animals per household (sum of `count`). */
+export const PETS_MAX_COUNT = 10;
+
+export function totalPetCount(pets: readonly { count?: number | string | null }[]): number {
+	return pets.reduce((sum, p) => sum + (Number(p.count) || 0), 0);
+}
+
 export function createEvacuee(input: EvacueeInput, ctx: AuthorContext, id?: string): Evacuee {
 	const d = evacueeInputSchema.parse(input);
 	const person_id = resolvePersonIdOnCreate(d.person_id);
 	return makeDoc(
 		'evacuee',
-		10, // schema_v 10: anonymous cardType + ANON mint (CR-112); 9: arriving (CR-106); 8: draft/card_snapshot (CR-084); 7 = registered_via `web` (CR-070); 6 = stay cancelled (CR-070); 5 = age (CR-057)
+		12, // schema_v 12: gender nullable + registered_via `api` (CR-154); 11: religion_other + disability_other_detail (CR-148); 10: anonymous cardType + ANON mint (CR-112); 9: arriving (CR-106); 8: draft/card_snapshot (CR-084); 7 = registered_via `web` (CR-070); 6 = stay cancelled (CR-070); 5 = age (CR-057)
 		{
 			first_name: d.first_name,
 			last_name: d.last_name,
@@ -1247,6 +1473,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext, id?: stri
 			...(d.age !== undefined ? { age: d.age } : {}),
 			...(person_id ? { person_id } : {}),
 			...(d.religion ? { religion: d.religion } : {}),
+			...memberExtrasFor(d),
 			country: d.country,
 			vulnerable_groups: migrateVulnerableGroupCodes(d.vulnerable_groups),
 			special_needs: d.special_needs,
@@ -1332,7 +1559,7 @@ export function createHousehold(input: HouseholdInput, ctx: AuthorContext, id?: 
 	const d = householdInputSchema.parse(input);
 	return makeDoc(
 		'household',
-		5, // schema_v 5: housing_type + residence_landmark (CR-112); 4: status, checkout_destination
+		6, // schema_v 6: dorm_* (CR-148); 5: housing_type + residence_landmark (CR-112); 4: status, checkout_destination
 		{
 			label: d.label,
 			head_evacuee_id: d.head_evacuee_id,
@@ -1346,7 +1573,7 @@ export function createHousehold(input: HouseholdInput, ctx: AuthorContext, id?: 
 			...(d.notes ? { notes: d.notes } : {}),
 			housing_type: d.housing_type ?? null,
 			residence_landmark: d.residence_landmark || null,
-			address_no: d.address_no || null,
+			...dormFieldsFor(d),
 			village_no: d.village_no || null,
 			subdistrict: d.subdistrict || null,
 			district: d.district || null,
@@ -1846,9 +2073,12 @@ export const isScreening = (d: unknown): d is Screening =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'screening';
 
 export interface EwarSymptom {
+	/** Persisted in `Screening.symptoms` — never rename. */
 	id: string;
 	emoji: string;
+	/** Plain-Thai checkbox text staff read first. */
 	label: string;
+	/** Clinical / English term shown small under the label. */
 	sublabel?: string;
 }
 
@@ -1864,17 +2094,20 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 			{
 				id: 'acute_watery_diarrhea',
 				emoji: '💧',
-				label: 'อุจจาระร่วงเฉียบพลันแบบเป็นน้ำ/อหิวาตกโรค (Acute watery diarrhoea / Cholera)'
+				label: 'ท้องเสียถ่ายเป็นน้ำ (สงสัยอหิวาต์)',
+				sublabel: 'อุจจาระร่วงเฉียบพลัน · Acute watery diarrhoea / Cholera'
 			},
 			{
 				id: 'acute_bloody_diarrhea',
 				emoji: '🩸',
-				label: 'ท้องร่วงเป็นเลือด/โรคบิด (Acute bloody diarrhoea / Shigellosis)'
+				label: 'ถ่ายเป็นมูกเลือด (สงสัยโรคบิด)',
+				sublabel: 'ท้องร่วงเป็นเลือด · Acute bloody diarrhoea / Shigellosis'
 			},
 			{
 				id: 'typhoid',
 				emoji: '🌡️',
-				label: 'ไทฟอยด์ (Typhoid)'
+				label: 'ไข้ไทฟอยด์',
+				sublabel: 'Typhoid'
 			}
 		]
 	},
@@ -1884,7 +2117,8 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 			{
 				id: 'acute_respiratory',
 				emoji: '😷',
-				label: 'การติดเชื้อระบบทางเดินหายใจเฉียบพลัน (Acute respiratory infection)'
+				label: 'ติดเชื้อทางเดินหายใจเฉียบพลัน (ไอ เจ็บคอ หายใจลำบาก)',
+				sublabel: 'Acute respiratory infection'
 			}
 		]
 	},
@@ -1894,12 +2128,14 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 			{
 				id: 'malaria',
 				emoji: '🤒',
-				label: 'ไข้มาลาเรีย (Malaria)'
+				label: 'ไข้มาลาเรีย',
+				sublabel: 'Malaria'
 			},
 			{
 				id: 'dengue',
 				emoji: '🦟',
-				label: 'ไข้เลือดออก (Dengue)'
+				label: 'ไข้เลือดออก',
+				sublabel: 'Dengue'
 			}
 		]
 	},
@@ -1909,22 +2145,26 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 			{
 				id: 'measles',
 				emoji: '🔴',
-				label: 'โรคหัด (Measles)'
+				label: 'โรคหัด (ไข้ร่วมกับผื่น)',
+				sublabel: 'Measles'
 			},
 			{
 				id: 'meningitis',
 				emoji: '🧠',
-				label: 'เยื่อหุ้มสมองอักเสบ (Meningitis)'
+				label: 'เยื่อหุ้มสมองอักเสบ (ไข้ ปวดหัว คอแข็ง)',
+				sublabel: 'Meningitis'
 			},
 			{
 				id: 'diphtheria',
 				emoji: '🗣️',
-				label: 'คอตีบ (Diphtheria)'
+				label: 'คอตีบ',
+				sublabel: 'Diphtheria'
 			},
 			{
 				id: 'pertussis',
 				emoji: '😮‍💨',
-				label: 'ไอกรน (Pertussis)'
+				label: 'ไอกรน (ไอเป็นชุด ๆ)',
+				sublabel: 'Pertussis'
 			}
 		]
 	},
@@ -1934,12 +2174,14 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 			{
 				id: 'acute_jaundice_syndrome',
 				emoji: '🟡',
-				label: 'ภาวะดีซ่านเฉียบพลัน (Acute Jaundice Syndrome)'
+				label: 'ตัวเหลือง ตาเหลืองเฉียบพลัน',
+				sublabel: 'ภาวะดีซ่านเฉียบพลัน · Acute jaundice syndrome'
 			},
 			{
 				id: 'Hepatitis A or E',
 				emoji: '🦠',
-				label: 'ไวรัสตับอักเสบชนิด เอ หรือ อี (Hepatitis A or E)'
+				label: 'ไวรัสตับอักเสบ เอ หรือ อี',
+				sublabel: 'Hepatitis A or E'
 			}
 		]
 	},
@@ -1949,17 +2191,20 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 			{
 				id: 'acute_flaccid_paralysis',
 				emoji: '🦿',
-				label: 'ภาวะกล้ามเนื้ออ่อนปวกเปียกเฉียบพลันหรือโรคโปลิโอ (Acute Flaccid Paralysis / Polio)'
+				label: 'แขนขาอ่อนแรงเฉียบพลัน (สงสัยโปลิโอ)',
+				sublabel: 'กล้ามเนื้ออ่อนปวกเปียกเฉียบพลัน · Acute flaccid paralysis / Polio'
 			},
 			{
 				id: 'tetanus',
 				emoji: '🩹',
-				label: 'บาดทะยัก (Tetanus)'
+				label: 'บาดทะยัก',
+				sublabel: 'Tetanus'
 			},
 			{
 				id: 'acute_haemorrhagic_fever_syndrome',
 				emoji: '🩸',
-				label: 'กลุ่มอาการไข้เลือดออกรุงแรง (Acute Haemorrhagic Fever Syndrome)'
+				label: 'ไข้ร่วมกับเลือดออกผิดปกติ',
+				sublabel: 'กลุ่มอาการไข้เลือดออกรุนแรง · Acute haemorrhagic fever syndrome'
 			}
 		]
 	},
@@ -1969,17 +2214,19 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 			{
 				id: 'high_fever',
 				emoji: '🔥',
-				label: 'อาการไข้สูงกว่า 38.5 องศาเซลเซียส'
+				label: 'ไข้สูงเกิน 38.5 °C'
 			},
 			{
 				id: 'trauma',
 				emoji: '💥',
-				label: 'การบาดเจ็บ (Trauma)'
+				label: 'ได้รับบาดเจ็บ',
+				sublabel: 'Trauma'
 			},
 			{
 				id: 'chemical_poisoning',
 				emoji: '☠️',
-				label: 'สารเคมีเป็นพิษ (Chemical Poisoning)'
+				label: 'ได้รับสารเคมี / สารพิษ',
+				sublabel: 'Chemical poisoning'
 			}
 		]
 	}

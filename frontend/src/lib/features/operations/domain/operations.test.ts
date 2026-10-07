@@ -350,6 +350,12 @@ describe('stock_ledger reason ↔ ref_id invariant (CR-055)', () => {
 		});
 	}
 
+	// CR-141 — requisition now accepts either the legacy doc type or the new
+	// unified ticket, so old rows stay valid while new writes move to tickets.
+	it('accepts requisition with a requisition_ticket: ref_id (CR-141)', () => {
+		expect(write('requisition', 'requisition_ticket:01J').ref_id).toBe('requisition_ticket:01J');
+	});
+
 	it('rejects a reason that requires a ref_id when none is given', () => {
 		expect(() => createStockLedger({ ...base, reason: 'donation' }, ctx)).toThrow();
 	});
@@ -2026,6 +2032,49 @@ describe('projectStockLotBalances', () => {
 		const balances = projectStockLotBalances([source, out, returned]);
 		expect(balances).toHaveLength(1);
 		expect(balances[0]).toMatchObject({ lot_ref: source.lot_ref, qty: '3' });
+	});
+
+	it('projects matching canonical units through dispatch and return without a lot-integrity error', () => {
+		const source = createStockLedger(
+			{
+				item_id: 'item:blanket',
+				qty: '10',
+				unit: 'piece',
+				reason: 'receive',
+				ref_id: 'distribution_log:fixture',
+				occurred_at: '2026-01-01T00:00:00Z'
+			},
+			ctx,
+			'PIECE-IN'
+		);
+		const dispatched = createDistributeEntry(
+			{
+				item_id: 'item:blanket',
+				qty: '1',
+				unit: 'piece',
+				ref_id: 'requisition_ticket:fixture',
+				lot_ref: source.lot_ref!,
+				occurred_at: '2026-01-02T00:00:00Z'
+			},
+			ctx,
+			'PIECE-OUT'
+		);
+		const returned = createDistributionReturnEntry(
+			{
+				item_id: 'item:blanket',
+				qty: '1',
+				unit: 'piece',
+				ref_id: 'distribution_batch:fixture',
+				lot_ref: source.lot_ref!,
+				occurred_at: '2026-01-03T00:00:00Z'
+			},
+			ctx,
+			'PIECE-RETURN'
+		);
+
+		expect(projectStockLotBalances([source, dispatched, returned])).toMatchObject([
+			{ item_id: 'item:blanket', unit: 'piece', qty: '10' }
+		]);
 	});
 
 	it('fails closed for impossible legacy history', () => {

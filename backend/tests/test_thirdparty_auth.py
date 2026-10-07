@@ -100,6 +100,33 @@ async def test_scope_comes_from_db_not_request_body(
     assert response.json()["scopes"] == ["location-read", "location-stock-read"]
 
 
+async def test_client_without_module_receives_token(client: AsyncClient) -> None:
+    """CR-154 FR-62: module is only a preset — a client may have none."""
+    now = datetime.now(UTC)
+    doc = ThirdPartyClient(
+        id=new_ulid(),
+        client_id="no-module-client",
+        client_secret_hash=sha256_hex(CLIENT_SECRET),
+        module_name=None,
+        allowed_scopes=["location-read"],
+        is_active=True,
+        created_at=now,
+        updated_at=now,
+    )
+    await doc.insert()
+
+    response = await _request_token(client, client_id=doc.client_id, client_secret=CLIENT_SECRET)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["module_name"] is None
+
+    claims = await verify_thirdparty_token(
+        HTTPAuthorizationCredentials(scheme="Bearer", credentials=body["access_token"])
+    )
+    assert claims.module_name is None
+    assert claims.scopes == ["location-read"]
+
+
 async def test_unknown_client_id_rejected(client: AsyncClient) -> None:
     response = await _request_token(client, client_id="does-not-exist", client_secret="whatever")
     assert response.status_code == 401

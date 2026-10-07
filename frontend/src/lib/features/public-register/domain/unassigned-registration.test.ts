@@ -18,7 +18,7 @@ function sampleUnified(over: Partial<UnifiedRegistrationInput> = {}): UnifiedReg
 				phone: '0812345678',
 				nickname: 'ชาย',
 				religion: 'buddhist',
-				person_id: { cardType: 'national_id', number: '1234567890123' },
+				person_id: { cardType: 'national_id', number: '1234567890121' },
 				country: 'THAILAND',
 				vulnerable_groups: ['elderly'],
 				special_needs: ['wheelchair'],

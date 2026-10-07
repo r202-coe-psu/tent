@@ -1,0 +1,37 @@
+meta {
+  name: EXT-011 Shelter residency
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/public-api/external/persons/shelter-residency
+  body: none
+  auth: inherit
+}
+
+params:query {
+  @description('''เลขบัตร 13 หลัก บังคับ ไม่ตรวจ checksum''')
+  cid: {{cid}}
+  @description('''วัตถุประสงค์ บังคับ ใช้บันทึกตาม PDPA ไม่เก็บเลขบัตร''')
+  purpose: {{purpose}}
+}
+
+docs {
+  EXT-011 — ตรวจสอบการเข้าพัก
+
+  Scope: residency-read ออกเป็นรายกรณี
+  Method: GET /public-api/external/persons/shelter-residency
+
+  ต้องส่ง cid และ purpose
+  ลำดับการตรวจ: token แล้ว purpose แล้ว scope แล้วรูปแบบ cid แล้วจึงค้น
+  จองแล้วแต่ยังไม่ check-in หรือไม่พบเลขบัตร ได้ 404 residency_not_found
+
+  residency_status เป็น CHECKED_IN เมื่อ stay เป็น active, room_confirmed หรือ temporary_leave
+  ค่าอื่นที่เป็น 200 เป็น CHECKED_OUT
+  in_zone เป็น true เฉพาะ room_confirmed
+  ถ้าเลขบัตรมีหลายศูนย์ ระบบเลือกศูนย์ที่ยังพักอยู่ก่อน ถ้าไม่มีเลือกประวัติที่อัปเดตล่าสุด
+  เวลาเป็น ISO 8601 offset +07:00
+
+  Error: 400 missing_purpose · 401 invalid_token · 403 insufficient_scope · 422 validation_error
+}

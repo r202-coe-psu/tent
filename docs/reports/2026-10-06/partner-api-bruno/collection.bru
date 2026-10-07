@@ -1,0 +1,26 @@
+meta {
+  name: Smart Shelter Partner Data API
+}
+
+auth {
+  mode: bearer
+}
+
+auth:bearer {
+  token: {{access_token}}
+}
+
+docs {
+  คู่มือยิง Partner Data API (EXT-001 ถึง EXT-011) คู่กับ partner-api-as-built.md
+
+  ลำดับที่ใช้
+
+  1. เลือก environment Staging หรือ Production
+  2. กรอก client_id และ client_secret ที่ทีม Shelter ออกให้ (secret ไม่ถูกเขียนลงไฟล์)
+  3. ยิง EXT-001 ก่อน สคริปต์เก็บ access_token ให้ request ที่เหลือ
+  4. M6/M7 ใช้โฟลเดอร์ Locations, Operations และ Occupants
+  5. M2 ใช้ Locations แล้วตามด้วย Bookings และ Residency
+
+  ดูที่ `code` ใน body เมื่อเรียกไม่ผ่าน อย่าเทียบข้อความ `message`
+  ไม่มี rate limit 429 ในรุ่นนี้
+}

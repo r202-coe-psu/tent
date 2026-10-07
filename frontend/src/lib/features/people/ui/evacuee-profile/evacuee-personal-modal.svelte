@@ -30,6 +30,7 @@
 		cardNumber: string;
 		country: string;
 		religion: Religion;
+		religionOther: string;
 		photoFile: File | null;
 		removePhoto: boolean;
 	};
@@ -47,7 +48,6 @@
 	} = $props();
 
 	const currentYearBE = new Date().getFullYear() + 543;
-	const minimumBirthYearBE = currentYearBE - 150;
 	const initial = untrack(() => ({
 		firstName: evacuee.first_name,
 		lastName: evacuee.last_name,
@@ -56,13 +56,16 @@
 		age:
 			evacuee.age?.toString() ??
 			(evacuee.birth_year ? String(Math.max(0, currentYearBE - evacuee.birth_year)) : ''),
-		gender: evacuee.gender,
+		// `null` (partner booking, CR-154) → '' so staff must pick before saving.
+		gender: evacuee.gender ?? ('' as const),
 		phone: evacuee.phone ?? '',
 		noPhone: !evacuee.phone,
 		cardType: evacuee.person_id?.cardType ?? 'national_id',
 		cardNumber: evacuee.person_id?.number ?? '',
+		originalCardNumber: evacuee.person_id?.number ?? '',
 		country: evacuee.country || 'THAILAND',
-		religion: evacuee.religion ?? 'unknown'
+		religion: evacuee.religion ?? 'unknown',
+		religionOther: evacuee.religion_other ?? ''
 	}));
 
 	let firstName = $state(initial.firstName);
@@ -70,7 +73,7 @@
 	let nickname = $state(initial.nickname);
 	let birthYear = $state(initial.birthYear);
 	let age = $state(initial.age);
-	let gender = $state<Gender>(initial.gender);
+	let gender = $state<Gender | ''>(initial.gender);
 	let phone = $state(initial.phone);
 	let noPhone = $state(initial.noPhone);
 	let personId = $state<{ cardType?: CardType; number?: string }>({
@@ -79,6 +82,7 @@
 	});
 	let country = $state(initial.country);
 	let religion = $state<Religion>(initial.religion);
+	let religionOther = $state<string | null | undefined>(initial.religionOther);
 	let photoFile = $state<File | null>(null);
 	let removePhoto = $state(false);
 	let storedPhotoUrl = $state<string | null>(null);
@@ -109,13 +113,15 @@
 			age:
 				evacuee.age?.toString() ??
 				(evacuee.birth_year ? String(Math.max(0, currentYearBE - evacuee.birth_year)) : ''),
-			gender: evacuee.gender,
+			gender: evacuee.gender ?? ('' as const),
 			phone: evacuee.phone ?? '',
 			noPhone: !evacuee.phone,
 			cardType: evacuee.person_id?.cardType ?? 'national_id',
 			cardNumber: evacuee.person_id?.number ?? '',
+			originalCardNumber: evacuee.person_id?.number ?? '',
 			country: evacuee.country || 'THAILAND',
-			religion: evacuee.religion ?? 'unknown'
+			religion: evacuee.religion ?? 'unknown',
+			religionOther: evacuee.religion_other ?? ''
 		};
 		firstName = next.firstName;
 		lastName = next.lastName;
@@ -131,6 +137,7 @@
 		};
 		country = next.country;
 		religion = next.religion;
+		religionOther = next.religionOther;
 		$formData = next;
 		photoFile = null;
 		removePhoto = false;
@@ -199,8 +206,10 @@
 			noPhone,
 			cardType,
 			cardNumber,
+			originalCardNumber: evacuee.person_id?.number ?? '',
 			country,
-			religion
+			religion,
+			religionOther: religionOther ?? ''
 		};
 		const validation = await validateForm({ update: true, focusOnError: true });
 		if (!validation.valid) {
@@ -228,23 +237,7 @@
 			toast.error('อายุต้องอยู่ระหว่าง 0 ถึง 150 ปี');
 			return;
 		}
-		if (
-			parsedBirthYear !== undefined &&
-			(!Number.isFinite(parsedBirthYear) ||
-				parsedBirthYear <= minimumBirthYearBE ||
-				parsedBirthYear > currentYearBE)
-		) {
-			toast.error(`ปีเกิดต้องมากกว่า พ.ศ. ${minimumBirthYearBE} และไม่เกินปีปัจจุบัน`);
-			return;
-		}
-		if (
-			parsedBirthYear !== undefined &&
-			parsedAge !== undefined &&
-			currentYearBE - parsedBirthYear !== parsedAge
-		) {
-			toast.error('ปีเกิดและอายุไม่สัมพันธ์กัน');
-			return;
-		}
+		// Birth-year range and age ↔ birth-year (±1) are enforced by evacueePersonalEditFormSchema (CR-148)
 
 		saving = true;
 		try {
@@ -254,7 +247,8 @@
 				nickname: validation.data.nickname,
 				birthYear: parsedBirthYear,
 				age: parsedAge,
-				gender: validation.data.gender,
+				// Valid ⇒ genderSchema already rejected the '' placeholder for a null gender.
+				gender: validation.data.gender as Gender,
 				phone: validation.data.noPhone ? null : digits(validation.data.phone),
 				cardType: validation.data.cardType,
 				cardNumber:
@@ -263,6 +257,7 @@
 						: validation.data.cardNumber,
 				country: validation.data.country,
 				religion: validation.data.religion,
+				religionOther: validation.data.religionOther,
 				photoFile,
 				removePhoto
 			});
@@ -351,6 +346,7 @@
 							bind:gender
 							bind:country
 							bind:religion
+							bind:religion_other={religionOther}
 							bind:phone
 							bind:no_phone={noPhone}
 							disabled={saving}
@@ -362,7 +358,8 @@
 								birthYear: $errors.birthYear?.[0],
 								age: $errors.age?.[0],
 								country: $errors.country?.[0],
-								phone: $errors.phone?.[0]
+								phone: $errors.phone?.[0],
+								religion_other: $errors.religionOther?.[0]
 							}}
 						/>
 					</div>

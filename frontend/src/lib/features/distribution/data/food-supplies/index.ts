@@ -26,4 +26,10 @@ export {
 	type BulkReturnClaimRepository
 } from './bulk-return-claim.repository';
 
+export {
+	LoanReturnReservationRemoteRepository,
+	type LoanReturnReservationRepository,
+	type ReinitializeLoanReturnReservationInput
+} from './return-reservation.repository';
+
 export { resolveShelterDbName, retryCas, isCouchConflictError, MAX_CAS_RETRIES } from './shared';

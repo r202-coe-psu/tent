@@ -182,6 +182,9 @@ export const PUBLIC_PORTAL_HOME_I18N = {
 		pageTitle: 'Smart Shelter — แพลตฟอร์มช่วยเหลือผู้ประสบภัย',
 		heroTitle: 'แพลตฟอร์มช่วยเหลือผู้ประสบภัย',
 		heroSubtitle: 'ศูนย์พักพิง • ค้นหาผู้พักพิง • บริจาคและจิตอาสา',
+		registerCta: 'ลงทะเบียนผู้ประสบภัยล่วงหน้า',
+		registerCtaHint: 'ลงทะเบียนไว้ก่อน ถึงศูนย์แล้วรายงานตัวได้เร็วขึ้น',
+		findShelterQuick: 'ค้นหาศูนย์พักพิงใกล้ฉัน',
 		findSheltersTag: 'ค้นหาศูนย์พักพิง',
 		searchSheltersTitle: 'ค้นหาศูนย์พักพิง',
 		searchSheltersSubtitle: 'เช็คพิกัดและศูนย์พักพิงที่เปิดรับ',
@@ -245,6 +248,21 @@ export const PUBLIC_PORTAL_HOME_I18N = {
 		faqEmptyDesc:
 			'เจ้าหน้าที่กำลังอยู่ระหว่างการรวบรวมและเผยแพร่ข้อมูลคำถาม-คำตอบเพื่ออำนวยความสะดวกแก่ประชาชน',
 
+		// Donation card copy
+		essentialItems: 'สิ่งของจำเป็น',
+		locationText: (sub: string, dist: string, prov: string) => `ต.${sub} อ.${dist} จ.${prov}`,
+		defaultLocation: 'ต.คอหงส์ อ.หาดใหญ่ จ.สงขลา',
+		deficitOfTarget: (need: string, target: string) => `ขาดอีก ${need} จากเป้า ${target}`,
+		deficitOnly: (need: string) => `ขาดอีก ${need}`,
+		goalReached: 'ได้รับครบตามเป้าหมายแล้ว',
+		itemsDeficitText: (need: string) => `ขาดอีก ${need} ชิ้น`,
+
+		// Feature-under-development dialog
+		devModalTitle: 'ระบบอยู่ระหว่างการพัฒนา',
+		devModalDesc:
+			'ระบบดูภารกิจและการประสานงานจิตอาสากำลังอยู่ระหว่างการพัฒนา ขออภัยในความไม่สะดวก และขอขอบคุณที่ให้ความสนใจ',
+		devModalClose: 'รับทราบ',
+
 		// Floating button
 		emergencyAlertsBtn: 'แจ้งเตือนภัย'
 	},
@@ -252,6 +270,9 @@ export const PUBLIC_PORTAL_HOME_I18N = {
 		pageTitle: 'Smart Shelter — Disaster Relief & Assistance Platform',
 		heroTitle: 'Disaster Relief & Assistance Platform',
 		heroSubtitle: 'Shelters • Search Evacuees • Donate & Volunteer',
+		registerCta: 'Pre-register as an evacuee',
+		registerCtaHint: 'Register now so check-in at the shelter is faster',
+		findShelterQuick: 'Find a shelter near me',
 		findSheltersTag: 'Find Shelters',
 		searchSheltersTitle: 'Search Shelters',
 		searchSheltersSubtitle: 'Check GPS & view currently available shelters',
@@ -313,6 +334,21 @@ export const PUBLIC_PORTAL_HOME_I18N = {
 		faqSectionTitle: 'Frequently Asked Questions (FAQ)',
 		faqEmptyTitle: 'No frequently asked questions available',
 		faqEmptyDesc: 'Staff are compiling frequently asked questions to assist the public.',
+
+		// Donation card copy
+		essentialItems: 'Essential Items',
+		locationText: (sub: string, dist: string, prov: string) => `${sub}, ${dist}, ${prov}`,
+		defaultLocation: 'Kho Hong, Hat Yai, Songkhla',
+		deficitOfTarget: (need: string, target: string) => `Need ${need} more of ${target} pcs`,
+		deficitOnly: (need: string) => `Need ${need} more pcs`,
+		goalReached: 'Goal reached',
+		itemsDeficitText: (need: string) => `${need} pcs lacking`,
+
+		// Feature-under-development dialog
+		devModalTitle: 'Feature Under Development',
+		devModalDesc:
+			'The volunteer missions coordination system is currently under active development. Thank you for your interest and support!',
+		devModalClose: 'Close',
 
 		// Floating button
 		emergencyAlertsBtn: 'Emergency Alerts'

@@ -22,7 +22,7 @@ export type {
 	PublicSiteKind
 } from './domain/types';
 export { searchResultKey, toPublicShelterCard, toUiShelterStatus } from './domain/mappers';
-export { resolveMasterLabel, toLabelMap } from './domain/master-labels';
+export { resolveMasterLabel, shelterTypeLabel, toLabelMap } from './domain/master-labels';
 export {
 	isInShelterStatus,
 	publicStayStatusLabel,

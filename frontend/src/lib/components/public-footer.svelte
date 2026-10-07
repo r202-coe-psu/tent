@@ -4,7 +4,7 @@
 	import Building from '@lucide/svelte/icons/building';
 	import ExternalLink from '@lucide/svelte/icons/external-link';
 	import Mail from '@lucide/svelte/icons/mail';
-	import { PUBLIC_POLICY_I18N, PUBLIC_TERM_I18N } from '$lib/constants/i18n';
+	import { PUBLIC_FOOTER_I18N, PUBLIC_POLICY_I18N, PUBLIC_TERM_I18N } from '$lib/constants/i18n';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 
@@ -30,6 +30,7 @@
 	const hasFacebook = $derived(Boolean(effectiveConfig.facebook_url?.trim()));
 	const hasOnlineChannels = $derived(hasLineOa || hasFacebook);
 
+	const t = $derived(getTranslation(PUBLIC_FOOTER_I18N, langState.current));
 	const termT = $derived(getTranslation(PUBLIC_TERM_I18N, langState.current));
 	const policyT = $derived(getTranslation(PUBLIC_POLICY_I18N, langState.current));
 </script>
@@ -50,32 +51,32 @@
 				<div class="flex items-center gap-2 text-xs text-white/80">
 					<Mail class="h-3.5 w-3.5 shrink-0 text-white/60" />
 					<a
-						href="mailto:Thamathep.l@psu.ac.th"
+						href="mailto:Thanathip.l@psu.ac.th"
 						class="transition-colors hover:text-white hover:underline"
 					>
-						Thamathip.l@psu.ac.th
+						Thanathip.l@psu.ac.th
 					</a>
 				</div>
-				<p class="text-xs text-white/60">ระบบประสานงานและข้อมูลสาธารณะเพื่อการบรรเทาทุกข์</p>
+				<p class="text-xs text-white/60">{t.tagline}</p>
 			</div>
 
 			<!-- Column 2: Emergency Numbers -->
 			<div class="space-y-3 {hasOnlineChannels ? 'md:col-span-4' : 'md:col-span-5'}">
-				<h4 class="text-xs font-semibold text-white/80">เบอร์ติดต่อฉุกเฉิน</h4>
+				<h4 class="text-xs font-semibold text-white/80">{t.emergencyNumbers}</h4>
 				<div class="space-y-2 text-xs">
 					<div
 						class="flex items-center justify-between border-b border-white/10 pb-2 text-white/90"
 					>
 						<div class="flex items-center gap-2">
 							<span class="text-xs select-none">🚨</span>
-							<span>ศูนย์เตือนภัย ปภ.</span>
+							<span>{t.disasterWarning}</span>
 						</div>
 						<a href="tel:1784" class="font-mono font-bold text-white hover:underline">1784</a>
 					</div>
 					<div class="flex items-center justify-between pt-0.5 text-white/90">
 						<div class="flex items-center gap-2">
 							<span class="text-xs select-none">🚑</span>
-							<span>สายด่วนกู้ชีพ</span>
+							<span>{t.rescueHotline}</span>
 						</div>
 						<a href="tel:1669" class="font-mono font-bold text-white hover:underline">1669</a>
 					</div>
@@ -85,7 +86,7 @@
 			<!-- Column 3: Fast Online Channels -->
 			{#if hasOnlineChannels}
 				<div class="space-y-3 md:col-span-3">
-					<h4 class="text-xs font-semibold text-white/80">ช่องทางออนไลน์ด่วน</h4>
+					<h4 class="text-xs font-semibold text-white/80">{t.onlineChannels}</h4>
 					<div class="space-y-2">
 						{#if hasLineOa}
 							<a
@@ -96,7 +97,7 @@
 							>
 								<div class="flex items-center gap-2">
 									<span class="h-2 w-2 rounded-full bg-emerald-400"></span>
-									<span>LINE OA ฉุกเฉิน</span>
+									<span>{t.lineOa}</span>
 								</div>
 								<ExternalLink class="h-3.5 w-3.5 text-slate-400" />
 							</a>
@@ -110,7 +111,7 @@
 							>
 								<div class="flex items-center gap-2">
 									<span class="h-2 w-2 rounded-full bg-sky-400"></span>
-									<span>Facebook ข่าวสาร EOC</span>
+									<span>{t.facebook}</span>
 								</div>
 								<ExternalLink class="h-3.5 w-3.5 text-slate-400" />
 							</a>
@@ -123,8 +124,7 @@
 		<!-- Bottom Copyright Bar -->
 		<div class="mt-8 border-t border-white/10 pt-6 text-center text-xs text-white/60">
 			<p>
-				© 2026 SmartShelter • คุ้มครองข้อมูลตาม พ.ร.บ. PDPA •
-				ปฏิบัติการร่วมศูนย์ประสานงานช่วยเหลือผู้ประสบภัย
+				{t.copyright}
 			</p>
 			<p class="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
 				<a

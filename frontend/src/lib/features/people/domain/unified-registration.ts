@@ -12,8 +12,13 @@ import {
 } from './registration-shell';
 import type { AuthorContext } from '$lib/db/model';
 import {
+	PETS_MAX_COUNT,
+	dormFieldsFor,
 	evacueeInputSchema,
 	formatPersonName,
+	refineDormFields,
+	refineMemberRules,
+	totalPetCount,
 	housingTypeSchema,
 	householdInputSchema,
 	isMeaningfulOtherPetNotes,
@@ -37,7 +42,12 @@ export type MemberPhotoUploadMode = 'none' | 'onsite-couch' | 'unassigned-gridfs
 const petGroupSchema = z
 	.object({
 		species: z.enum(['dog', 'cat', 'other']),
-		count: z.coerce.number().int().positive().default(1),
+		count: z.coerce
+			.number()
+			.int()
+			.positive()
+			.max(PETS_MAX_COUNT, `สัตว์เลี้ยงรวมได้ไม่เกิน ${PETS_MAX_COUNT} ตัวต่อครอบครัว`)
+			.default(1),
 		notes: z.string().trim().optional(),
 		has_cage: z.boolean().optional(),
 		image_url: z.string().trim().nullable().optional()
@@ -60,20 +70,25 @@ const vehicleSchema = z.object({
 /**
  * Shared household block for the unified form.
  * Homeless: hide + clear `address_no`; require landmark **or** complete admin geo (#249 / CR-112).
- * Caps on pets/vehicles (20) are intentional UX limits — keep create compensation; do not raise casually.
+ * Caps: vehicles 20 (UX limit, #249); animals ≤ {@link PETS_MAX_COUNT} per household (CR-148).
+ * Dorm (`apartment_dorm`): dorm name + room required, `address_no` = composed summary (CR-148).
  */
 export const unifiedHouseholdInputSchema = z
 	.object({
 		housing_type: housingTypeSchema.nullable().optional().default('owned_house'),
 		residence_landmark: z.string().trim().nullable().optional().default(null),
+		dorm_name: z.string().trim().nullable().optional().default(null),
+		dorm_building: z.string().trim().nullable().optional().default(null),
+		dorm_floor: z.string().trim().nullable().optional().default(null),
+		dorm_room: z.string().trim().nullable().optional().default(null),
 		address_no: z.string().trim().nullable().optional().default(null),
 		village_no: z.string().trim().nullable().optional().default(null),
 		subdistrict: z.string().trim().nullable().optional().default(null),
 		district: z.string().trim().nullable().optional().default(null),
 		province: z.string().trim().nullable().optional().default(null),
 		postal_code: z.string().trim().nullable().optional().default(null),
-		// Intentional caps (#249): keep createFamilyRegistration compensation; not remove.
-		pets: z.array(petGroupSchema).max(20).default([]),
+		// Intentional caps (#249 / CR-148): keep createFamilyRegistration compensation; not remove.
+		pets: z.array(petGroupSchema).max(PETS_MAX_COUNT).default([]),
 		vehicles: z.array(vehicleSchema).max(20).default([]),
 		assets: z
 			.object({
@@ -85,10 +100,18 @@ export const unifiedHouseholdInputSchema = z
 			.default(null)
 	})
 	.superRefine((household, ctx) => {
+		if (totalPetCount(household.pets) > PETS_MAX_COUNT) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['pets'],
+				message: `สัตว์เลี้ยงรวมได้ไม่เกิน ${PETS_MAX_COUNT} ตัวต่อครอบครัว`
+			});
+		}
+		refineDormFields(household, ctx);
 		const residence: ResidenceFields = {
 			housing_type: household.housing_type,
 			residence_landmark: household.residence_landmark,
-			address_no: household.housing_type === 'homeless' ? null : household.address_no,
+			address_no: dormFieldsFor(household).address_no,
 			village_no: household.village_no,
 			subdistrict: household.subdistrict,
 			district: household.district,
@@ -119,18 +142,24 @@ export const unifiedHouseholdInputSchema = z
 			});
 		}
 	})
-	.transform((household) =>
-		household.housing_type === 'homeless' ? { ...household, address_no: null } : household
-	);
+	.transform((household) => ({ ...household, ...dormFieldsFor(household) }));
 
 /** Equal member card fields — personal + emergency + VG + special needs. */
-export const unifiedMemberInputSchema = evacueeInputSchema.omit({
-	household_id: true,
-	status: true,
-	registered_via: true,
-	card_snapshot: true,
-	track: true
-});
+export const unifiedMemberInputSchema = evacueeInputSchema
+	.omit({
+		household_id: true,
+		status: true,
+		registered_via: true,
+		card_snapshot: true,
+		track: true
+	})
+	.extend({
+		/**
+		 * Stored `person_id.number` of an existing evacuee (report-in / pull from queue) — an
+		 * unchanged number skips the national-ID checksum (CR-148 FR-03). Never persisted.
+		 */
+		original_person_number: z.string().nullable().optional()
+	});
 
 export const unifiedRegistrationInputSchema = z
 	.object({
@@ -149,6 +178,7 @@ export const unifiedRegistrationInputSchema = z
 		join_match_token: z.string().trim().min(1).nullable().optional()
 	})
 	.superRefine((value, ctx) => {
+		value.members.forEach((member, index) => refineMemberRules(member, ctx, ['members', index]));
 		const hasHh = Boolean(value.join_household_id?.trim());
 		const hasToken = Boolean(value.join_match_token?.trim());
 		if (hasHh && hasToken) {
@@ -261,12 +291,19 @@ export function planFamilyRegistration(
 	const targetHouseholdId = parsed.join_household_id?.trim() || null;
 	const mode: FamilyRegistrationMode = targetHouseholdId ? 'join' : 'create';
 
-	const memberInputs: EvacueeInput[] = parsed.members.map((member) => ({
-		...member,
-		household_id: mode === 'join' ? targetHouseholdId : null,
-		status: member.zone ? 'active' : status,
-		registered_via
-	}));
+	const memberInputs: EvacueeInput[] = parsed.members.map((parsedMember) => {
+		// `original_person_number` is form-only meta (CR-148 FR-03) — never persisted
+		const member: Partial<typeof parsedMember> = { ...parsedMember };
+		delete member.original_person_number;
+		return {
+			...(member as typeof parsedMember),
+			household_id: mode === 'join' ? targetHouseholdId : null,
+			// Registration never zones / checks in (ADR-0001): zoning happens at Station 3 only
+			zone: null,
+			status,
+			registered_via
+		};
+	});
 
 	const head = memberInputs[0]!;
 	const householdInput: HouseholdInput = householdInputSchema.parse({
@@ -282,8 +319,7 @@ export function planFamilyRegistration(
 		notes: '',
 		housing_type: parsed.household.housing_type ?? null,
 		residence_landmark: parsed.household.residence_landmark ?? null,
-		address_no:
-			parsed.household.housing_type === 'homeless' ? null : (parsed.household.address_no ?? null),
+		...dormFieldsFor(parsed.household),
 		village_no: parsed.household.village_no ?? null,
 		subdistrict: parsed.household.subdistrict ?? null,
 		district: parsed.household.district ?? null,
@@ -345,6 +381,10 @@ export function householdToUnifiedInput(
 	return {
 		housing_type: household.housing_type ?? 'owned_house',
 		residence_landmark: household.residence_landmark ?? null,
+		dorm_name: household.dorm_name ?? null,
+		dorm_building: household.dorm_building ?? null,
+		dorm_floor: household.dorm_floor ?? null,
+		dorm_room: household.dorm_room ?? null,
 		address_no: household.address_no ?? snap?.address_no ?? '',
 		village_no: household.village_no ?? villageParts,
 		subdistrict: household.subdistrict ?? cleanAreaPrefix(snap?.subdistrict),
@@ -374,7 +414,8 @@ export function evacueeToUnifiedMember(
 		_rev: evacuee._rev,
 		first_name: evacuee.first_name,
 		last_name: evacuee.last_name ?? '',
-		gender: evacuee.gender,
+		// `null` (partner booking, CR-154) → unset so the form forces a pick.
+		gender: evacuee.gender ?? ('' as UnifiedMemberInput['gender']),
 		birth_year: evacuee.birth_year ?? undefined,
 		age: evacuee.age ?? undefined,
 		person_id: evacuee.person_id ?? { cardType: 'national_id', number: '' },
@@ -390,6 +431,9 @@ export function evacueeToUnifiedMember(
 		photo: evacuee.photo ?? evacuee.card_snapshot?.photo_base64 ?? null,
 		country: evacuee.country ?? 'THAILAND',
 		religion: evacuee.religion ?? 'buddhist',
+		religion_other: evacuee.religion_other ?? null,
+		disability_other_detail: evacuee.disability_other_detail ?? null,
+		original_person_number: evacuee.person_id?.number ?? null,
 		stay_status: evacuee.current_stay.status,
 		reporting_in: isPreReg && isTarget,
 		zone: evacuee.current_stay.zone ?? null
