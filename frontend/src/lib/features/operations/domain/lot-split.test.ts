@@ -118,4 +118,29 @@ describe('planLotSplit (CR-143 FR-A7, FR-A11)', () => {
 			['DRY', '3']
 		]);
 	});
+
+	it('skips a lot with no expiry whose shelf life is used up when priorityItems are given (CR-156 FR-A4a, AC-A7)', () => {
+		const items = new Map([['item_master:x', { shelf_life_days: 30 }]]);
+		const spent = lot('SPENT', '8', { ageDays: 60 });
+		const fresh = lot('FRESH', '2', { ageDays: 5 });
+		const plan = planLotSplit([fresh, spent], '11', NOW, items);
+		expect(plan.allocations.map((a) => [a.lot_ref, a.qty])).toEqual([['FRESH', '2']]);
+		expect(plan.skippedExpired.map((l) => l.lot_ref)).toEqual(['SPENT']);
+		expect(plan.available).toBe('2');
+		expect(plan.shortfall).toBe('9');
+		expect(plan.complete).toBe(false);
+	});
+
+	it('without priorityItems only lot.expiry decides (backward compatible)', () => {
+		const spent = lot('SPENT', '8', { ageDays: 60 });
+		expect(planLotSplit([spent], '8', NOW).complete).toBe(true);
+	});
+
+	it('does not treat a lot past only the storage-type HORIZON as expired (FR-A4c, AC-A8)', () => {
+		const items = new Map([['item_master:x', { storage_type: 'DRY' }]]);
+		const old = lot('OLD', '8', { ageDays: 400 });
+		const plan = planLotSplit([old], '8', NOW, items);
+		expect(plan.skippedExpired).toEqual([]);
+		expect(plan.complete).toBe(true);
+	});
 });

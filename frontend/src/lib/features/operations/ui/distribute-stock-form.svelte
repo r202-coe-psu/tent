@@ -129,8 +129,11 @@
 	const activeLot = $derived(itemLots.find((l) => l.lot_ref === $formData.lot_ref));
 
 	// Expired lots are never issued automatically (FR-A4), so they add nothing to what is available.
-	const usableLots = $derived(itemLots.filter((l) => !isLotExpired(l, Date.now())));
-	const expiredLots = $derived(itemLots.filter((l) => isLotExpired(l, Date.now())));
+	// Includes lots whose shelf life is used up when they carry no expiry (CR-156 FR-A4a).
+	const lotIsExpired = (l: (typeof itemLots)[number]) =>
+		isLotExpired(l, Date.now(), priorityItems.get(l.item_id));
+	const usableLots = $derived(itemLots.filter((l) => !lotIsExpired(l)));
+	const expiredLots = $derived(itemLots.filter((l) => lotIsExpired(l)));
 	const usableTotal = $derived(usableLots.reduce((sum, l) => addQty(sum, l.qty), '0'));
 
 	// The most one save can issue: every usable lot in auto mode, the chosen lot in single mode.
@@ -149,7 +152,7 @@
 		}
 	});
 	const lotPlan = $derived(
-		requestedBase === null ? null : planLotSplit(itemLots, requestedBase, Date.now())
+		requestedBase === null ? null : planLotSplit(itemLots, requestedBase, Date.now(), priorityItems)
 	);
 
 	const maxQtyInUnit = $derived.by(() => {
@@ -313,15 +316,19 @@
 	// Auto-select the top-priority lot when item lots load or change. An expired lot
 	// is never picked automatically (CR-143 FR-A4) — it must be adjusted out.
 	$effect(() => {
+		// Write only when the value changes: this effect also reads `$formData`, so assigning the
+		// same `''` again (every lot expired) re-triggered it forever and froze the tab.
+		let next = $formData.lot_ref;
 		if (itemLots.length > 0) {
-			if (!$formData.lot_ref || !itemLots.some((l) => l.lot_ref === $formData.lot_ref)) {
+			if (!next || !itemLots.some((l) => l.lot_ref === next)) {
 				const now = Date.now();
-				$formData.lot_ref =
+				next =
 					itemLots.find((l) => !isLotExpired(l, now, priorityItems.get(l.item_id)))?.lot_ref ?? '';
 			}
 		} else {
-			$formData.lot_ref = '';
+			next = '';
 		}
+		if (next !== $formData.lot_ref) $formData.lot_ref = next;
 	});
 
 	function lotLabel(lot: (typeof itemLots)[number]): string {
