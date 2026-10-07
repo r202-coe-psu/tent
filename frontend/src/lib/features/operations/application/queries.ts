@@ -27,6 +27,8 @@ import type {
 	CancelInfoInput,
 	DisputeInfoInput
 } from '../domain/operations';
+import { catalogKeys } from '$lib/features/catalog';
+import type { MergeItemsInput } from '../domain/item-merge';
 import type { DonationBatchLine } from '../domain/donation-batch';
 import { countPendingTransfers } from '../domain/transfer-pending';
 import { distributeAcrossLots, type DistributeAcrossLotsArgs } from './distribute-across-lots';
@@ -265,6 +267,22 @@ export const useAdjustStock = () => {
 			operationsRepository().adjustStock(input, ctx),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
+		}
+	}));
+};
+
+/**
+ * Mutation hook to merge a duplicate item into another (CR-143 §F). Stock and catalog caches
+ * both change: the source's balance moves to the destination and the source is deactivated.
+ */
+export const useMergeItems = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({ input, ctx }: { input: MergeItemsInput; ctx: AuthorContext }) =>
+			operationsRepository().mergeItems(input, ctx),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
+			queryClient.invalidateQueries({ queryKey: catalogKeys.all });
 		}
 	}));
 };

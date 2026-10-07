@@ -264,6 +264,9 @@ export interface ItemCategory extends CatalogDoc {
 	override?: boolean;
 }
 
+/** Current persisted `item_master` shape (CR-143 §F adds `merged_into`). Every new writer stamps this. */
+export const ITEM_MASTER_SCHEMA_V = 5;
+
 export interface ItemMaster extends CatalogDoc {
 	type: 'item_master';
 	name: string;
@@ -279,6 +282,11 @@ export interface ItemMaster extends CatalogDoc {
 	deactivated?: boolean;
 	shelter_code?: string;
 	override?: boolean;
+	/**
+	 * schema_v 5 (CR-143 §F): set with `deactivated: true` when this item was merged into
+	 * another. Lists and pickers hide it; searching its old name finds the destination.
+	 */
+	merged_into?: string;
 
 	// New fields
 	shelf_life_days?: number;
@@ -571,6 +579,7 @@ export function mergeCatalogGenerations(
 		unit?: string;
 		category?: string;
 		deactivated?: boolean;
+		merged_into?: string;
 		storage_type?: StorageType;
 		shelf_life_days?: number;
 	}[]
@@ -583,7 +592,7 @@ export function mergeCatalogGenerations(
 		requiresExpiry: requiresExpiry(i)
 	}));
 	const masters: CatalogEntry[] = itemMasters
-		.filter((m) => !m.deactivated)
+		.filter((m) => !m.deactivated && !m.merged_into)
 		.map((m) => ({
 			_id: m._id,
 			name: m.name,
@@ -809,7 +818,7 @@ export function createItemMaster(
 	const isFuelEnergy = d.category === 'item_category:fuel_energy';
 	const doc = catalogDoc(
 		'item_master',
-		4,
+		ITEM_MASTER_SCHEMA_V,
 		{
 			name: d.name,
 			category: d.category,

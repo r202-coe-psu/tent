@@ -122,6 +122,18 @@ export {
 	type ItemLotAgeSummary
 } from './domain/lot-age';
 export {
+	ItemMergeError,
+	checkItemMerge,
+	planItemMerge,
+	type ItemMergeCheckInput,
+	type ItemMergeErrorCode,
+	type ItemMergeLeg,
+	type ItemMergePlan,
+	type ItemMergeResult,
+	type MergeItemsInput,
+	type PlanItemMergeInput
+} from './domain/item-merge';
+export {
 	deriveDonationReceiptLineId,
 	donationShortfall,
 	isReceivedLine,
@@ -157,6 +169,7 @@ export {
 	useDistributeStock,
 	useDistributeAcrossLots,
 	useAdjustStock,
+	useMergeItems,
 	useCampaigns,
 	useStockLedgers,
 	useDonations,
@@ -197,6 +210,7 @@ export { STOCK_PARAM_KEYS } from './ui/stock/stock-url-state';
 /** Query keys owned by the movements tab — the page strips them when leaving it. */
 export { LEDGER_PARAM_KEYS } from './ui/ledger/ledger-url-state';
 export { default as AdjustStockForm } from './ui/adjust-stock-form.svelte';
+export { default as MergeItemDialog } from './ui/merge-item-dialog.svelte';
 export { default as ItemCombobox } from './ui/item-combobox.svelte';
 export { default as StoragePointSelect } from './ui/storage-point-select.svelte';
 export { default as TransferForm } from './ui/transfer-form.svelte';

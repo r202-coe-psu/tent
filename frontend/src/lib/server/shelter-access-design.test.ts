@@ -924,7 +924,12 @@ describe('buildValidateDocUpdate', () => {
 			});
 
 		it.each(adjustReasonSchema.options)('accepts adjust with adjust_reason %s', (adjust_reason) => {
-			const note = adjust_reason === 'other' ? { note: 'รายละเอียด' } : {};
+			const note =
+				adjust_reason === 'other'
+					? { note: 'รายละเอียด' }
+					: adjust_reason === 'merge'
+						? { note: 'item_master:other' }
+						: {};
 			expect(() => compile()(adjust({ adjust_reason, ...note }), null, WAREHOUSE)).not.toThrow();
 		});
 
@@ -1011,6 +1016,118 @@ describe('buildValidateDocUpdate', () => {
 				() => compile()({ ...row, note: 'x' }, null, WAREHOUSE),
 				/note is only allowed when reason is adjust/
 			);
+		});
+	});
+
+	// CR-143 §F — FR-F4 is also enforced by the shelter DB, not only by the domain.
+	describe('item merge (CR-143 §F)', () => {
+		const COORDINATOR: UserCtx = {
+			name: 'sc',
+			roles: ['shelter:SH001', 'SH001:supply_coordinator']
+		};
+		const mergeRow = (over: Doc = {}): Doc =>
+			ledger({
+				schema_v: 6,
+				qty: '-6',
+				reason: 'adjust',
+				ref_id: null,
+				adjust_reason: 'merge',
+				note: 'item_master:B',
+				...over
+			});
+		const item = (over: Doc = {}): Doc => ({
+			_id: 'item_master:A',
+			type: 'item_master',
+			...envelope,
+			schema_v: 5,
+			base_unit: 'bottle',
+			conversions: [],
+			...over
+		});
+
+		it.each([
+			['warehouse_staff', WAREHOUSE],
+			['shelter_manager', MANAGER],
+			['system_admin', ADMIN]
+		])('accepts a merge ledger row from %s', (_name, user) => {
+			expect(() => compile()(mergeRow(), null, user)).not.toThrow();
+		});
+
+		it('rejects a merge ledger row from a supply_coordinator, who may otherwise adjust', () => {
+			expect(() =>
+				compile()(mergeRow({ adjust_reason: 'damaged', note: undefined }), null, COORDINATOR)
+			).not.toThrow();
+			expectForbidden(
+				() => compile()(mergeRow(), null, COORDINATOR),
+				/Only warehouse staff, shelter manager, or system admin can write merge stock ledger/
+			);
+		});
+
+		it('requires note to name the other item_master and forbids a ref_id', () => {
+			expectForbidden(
+				() => compile()(mergeRow({ note: undefined }), null, WAREHOUSE),
+				/note must be the item_master id/
+			);
+			expectForbidden(
+				() => compile()(mergeRow({ note: 'item:rice' }), null, WAREHOUSE),
+				/note must be the item_master id/
+			);
+			expectForbidden(
+				() => compile()(mergeRow({ ref_id: 'donation:01J' }), null, WAREHOUSE),
+				/must not carry a ref_id/
+			);
+		});
+
+		it('lets warehouse staff and managers retire a local item_master into another', () => {
+			const merged = item({ merged_into: 'item_master:B', deactivated: true });
+			expect(() => compile()(merged, item(), WAREHOUSE)).not.toThrow();
+			expect(() => compile()(merged, item(), MANAGER)).not.toThrow();
+			expect(() => compile()(merged, item(), ADMIN)).not.toThrow();
+		});
+
+		it('rejects merged_into from anyone else', () => {
+			const merged = item({ merged_into: 'item_master:B', deactivated: true });
+			expectForbidden(() => compile()(merged, item(), REGISTRATION), /can merge items/);
+			expectForbidden(() => compile()(merged, item(), COORDINATOR), /can merge items/);
+		});
+
+		it('rejects merged_into that is not another item_master or leaves the item active', () => {
+			expectForbidden(
+				() =>
+					compile()(item({ merged_into: 'item_master:A', deactivated: true }), item(), WAREHOUSE),
+				/merged_into must be another item_master id/
+			);
+			expectForbidden(
+				() => compile()(item({ merged_into: 'item:rice', deactivated: true }), item(), WAREHOUSE),
+				/merged_into must be another item_master id/
+			);
+			expectForbidden(
+				() => compile()(item({ merged_into: 'item_master:B' }), item(), WAREHOUSE),
+				/must be deactivated/
+			);
+		});
+
+		it('keeps a merge permanent: no clearing, redirecting or reactivating', () => {
+			const merged = item({ merged_into: 'item_master:B', deactivated: true });
+			const { merged_into: _drop, ...cleared } = merged;
+			void _drop;
+			expectForbidden(
+				() => compile()({ ...cleared, deactivated: false }, merged, WAREHOUSE),
+				/cannot be changed or cleared/
+			);
+			expectForbidden(
+				() => compile()({ ...merged, merged_into: 'item_master:C' }, merged, MANAGER),
+				/cannot be changed or cleared/
+			);
+			expectForbidden(
+				() => compile()({ ...merged, deactivated: false }, merged, REGISTRATION),
+				/must be deactivated/
+			);
+		});
+
+		it('does not re-gate edits to an item that is already merged', () => {
+			const merged = item({ merged_into: 'item_master:B', deactivated: true });
+			expect(() => compile()({ ...merged, description: 'x' }, merged, REGISTRATION)).not.toThrow();
 		});
 	});
 

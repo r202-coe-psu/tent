@@ -1083,6 +1083,205 @@ describe('OperationsRemoteRepository', () => {
 	});
 });
 
+// CR-143 §F — merge a duplicate item into another against in-memory dbs.
+describe('OperationsRemoteRepository.mergeItems (CR-143 §F)', () => {
+	let repo: OperationsRemoteRepository;
+	const MANAGER = ['shelter:SH001', 'SH001:shelter_manager'];
+	const WAREHOUSE = ['shelter:SH001', 'SH001:warehouse_staff'];
+
+	const seedDoc = (doc: Record<string, unknown> & { _id: string }) => {
+		mockPutDoc(doc as { _id: string; _rev?: string });
+	};
+	const itemMaster = (id: string, over: Record<string, unknown> = {}) => ({
+		_id: `item_master:${id}`,
+		type: 'item_master',
+		schema_v: 4,
+		shelter_code: 'SH001',
+		created_at: '2026-10-01T00:00:00.000Z',
+		updated_at: '2026-10-01T00:00:00.000Z',
+		created_by: 'seed',
+		name: `item ${id}`,
+		base_unit: 'bottle',
+		conversions: [],
+		type_class: 'CONSUMABLE',
+		dietary: [],
+		...over
+	});
+	const receive = (itemId: string, qty: string, expiry: string, occurredAt: string) =>
+		repo.addLedgerEntry(
+			createStockLedger(
+				{
+					item_id: itemId,
+					qty,
+					unit: 'bottle',
+					reason: 'donation',
+					ref_id: DONATION_REF,
+					lot: { expiry },
+					occurred_at: occurredAt
+				},
+				ctx
+			)
+		);
+
+	beforeEach(async () => {
+		couchDocs.clear();
+		repo = new OperationsRemoteRepository('shelter_sh001');
+		seedDoc({
+			_id: 'unit_of_measure:bottle',
+			type: 'unit_of_measure',
+			schema_v: 1,
+			code: 'bottle',
+			label_th: 'ขวด',
+			label_en: 'bottle',
+			dimension: 'count',
+			created_at: '2026-10-01T00:00:00.000Z',
+			updated_at: '2026-10-01T00:00:00.000Z',
+			created_by: 'seed'
+		});
+		seedDoc(itemMaster('A'));
+		seedDoc(itemMaster('B'));
+		await receive('item_master:A', '24', '2026-12-01', '2026-10-01T01:00:00.000Z');
+		await receive('item_master:A', '6', '2027-01-01', '2026-10-02T01:00:00.000Z');
+	});
+
+	it('AC-F1 — moves both lots, deactivates the source and stamps item_master schema_v 5', async () => {
+		const result = await repo.mergeItems(
+			{ sourceId: 'item_master:A', targetId: 'item_master:B', roles: MANAGER },
+			ctx
+		);
+
+		const ledger = await repo.listLedger();
+		const mergeRows = ledger.filter((e) => e.adjust_reason === 'merge');
+		expect(mergeRows).toHaveLength(4);
+		const balance = await repo.getBalance();
+		expect(balance.get('item_master:A')).toBe('0');
+		expect(balance.get('item_master:B')).toBe('30');
+
+		expect(result.legs).toHaveLength(2);
+		const stored = mockGetDoc<{ _id: string } & Record<string, unknown>>('item_master:A');
+		expect(stored).toMatchObject({
+			merged_into: 'item_master:B',
+			deactivated: true,
+			schema_v: 5
+		});
+		// the destination is untouched
+		expect(
+			mockGetDoc<{ _id: string } & Record<string, unknown>>('item_master:B')
+		).not.toHaveProperty('merged_into');
+	});
+
+	it('writes every paired row in a single bulkDocs call', async () => {
+		const couch = await import('$lib/db/couch-db');
+		const spy = vi.spyOn(couch, 'bulkDocs');
+		await repo.mergeItems(
+			{ sourceId: 'item_master:A', targetId: 'item_master:B', roles: WAREHOUSE },
+			ctx
+		);
+		expect(spy).toHaveBeenCalledTimes(1);
+		expect(spy.mock.calls[0][1]).toHaveLength(4);
+		spy.mockRestore();
+	});
+
+	it('AC-F2 — refuses incompatible base units before writing anything', async () => {
+		seedDoc(itemMaster('L', { base_unit: 'liter' }));
+		await expect(
+			repo.mergeItems({ sourceId: 'item_master:A', targetId: 'item_master:L', roles: MANAGER }, ctx)
+		).rejects.toMatchObject({ code: 'unit_mismatch' });
+
+		expect((await repo.listLedger()).filter((e) => e.adjust_reason === 'merge')).toHaveLength(0);
+		expect(
+			mockGetDoc<{ _id: string } & Record<string, unknown>>('item_master:A')
+		).not.toHaveProperty('merged_into');
+	});
+
+	it('AC-F3/F4 — a central item is never a source, even for SA, and nothing is written', async () => {
+		seedDoc(itemMaster('CA', { shelter_code: undefined }));
+		seedDoc(itemMaster('CB', { shelter_code: undefined }));
+		await receive('item_master:CA', '5', '2026-12-01', '2026-10-03T01:00:00.000Z');
+
+		for (const roles of [WAREHOUSE, ['system_admin']]) {
+			await expect(
+				repo.mergeItems({ sourceId: 'item_master:CA', targetId: 'item_master:CB', roles }, ctx)
+			).rejects.toMatchObject({ code: 'forbidden' });
+		}
+		expect((await repo.listLedger()).filter((e) => e.adjust_reason === 'merge')).toHaveLength(0);
+		expect(
+			mockGetDoc<{ _id: string } & Record<string, unknown>>('item_master:CA')
+		).not.toHaveProperty('merged_into');
+	});
+
+	it('AC-F4 — SA may merge a local item into a central one', async () => {
+		seedDoc(itemMaster('CB', { shelter_code: undefined }));
+		await repo.mergeItems(
+			{ sourceId: 'item_master:A', targetId: 'item_master:CB', roles: ['system_admin'] },
+			ctx
+		);
+		expect((await repo.getBalance()).get('item_master:CB')).toBe('30');
+	});
+
+	it('FR-F6 — a source update that cannot save writes NO ledger rows', async () => {
+		const { catalogRepository } = await import('$lib/features/catalog');
+		const spy = vi
+			.spyOn(catalogRepository(), 'assertItemMasterWritable')
+			.mockRejectedValueOnce(new Error('unit master unavailable'));
+		await expect(
+			repo.mergeItems({ sourceId: 'item_master:A', targetId: 'item_master:B', roles: MANAGER }, ctx)
+		).rejects.toThrow('unit master unavailable');
+		spy.mockRestore();
+		expect((await repo.listLedger()).filter((e) => e.adjust_reason === 'merge')).toHaveLength(0);
+	});
+
+	it('AC-F5 — ledger written but source update failed: retry finishes the source without duplicating rows', async () => {
+		const { catalogRepository } = await import('$lib/features/catalog');
+		const spy = vi
+			.spyOn(catalogRepository(), 'updateItemMaster')
+			.mockRejectedValueOnce(new Error('conflict'));
+		await expect(
+			repo.mergeItems({ sourceId: 'item_master:A', targetId: 'item_master:B', roles: MANAGER }, ctx)
+		).rejects.toThrow('conflict');
+		spy.mockRestore();
+
+		// moved but not yet deactivated
+		expect((await repo.listLedger()).filter((e) => e.adjust_reason === 'merge')).toHaveLength(4);
+		expect(
+			mockGetDoc<{ _id: string } & Record<string, unknown>>('item_master:A')
+		).not.toHaveProperty('merged_into');
+
+		await repo.mergeItems(
+			{ sourceId: 'item_master:A', targetId: 'item_master:B', roles: MANAGER },
+			ctx
+		);
+		expect((await repo.listLedger()).filter((e) => e.adjust_reason === 'merge')).toHaveLength(4);
+		expect((await repo.getBalance()).get('item_master:B')).toBe('30');
+		expect(mockGetDoc<{ _id: string } & Record<string, unknown>>('item_master:A')).toMatchObject({
+			merged_into: 'item_master:B',
+			deactivated: true
+		});
+	});
+
+	it('refuses an unknown destination', async () => {
+		await expect(
+			repo.mergeItems(
+				{ sourceId: 'item_master:A', targetId: 'item_master:NOPE', roles: MANAGER },
+				ctx
+			)
+		).rejects.toThrow(/Unknown item/);
+	});
+
+	it('merging again moves nothing more (the source is empty and already merged)', async () => {
+		await repo.mergeItems(
+			{ sourceId: 'item_master:A', targetId: 'item_master:B', roles: MANAGER },
+			ctx
+		);
+		await repo.mergeItems(
+			{ sourceId: 'item_master:A', targetId: 'item_master:B', roles: MANAGER },
+			ctx
+		);
+		expect((await repo.listLedger()).filter((e) => e.adjust_reason === 'merge')).toHaveLength(4);
+		expect((await repo.getBalance()).get('item_master:B')).toBe('30');
+	});
+});
+
 describe('OperationsRemoteRepository.updateCampaign', () => {
 	let repo: OperationsRemoteRepository;
 

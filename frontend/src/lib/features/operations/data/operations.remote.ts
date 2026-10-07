@@ -44,6 +44,8 @@ import {
 	type CancelInfoInput,
 	type DisputeInfoInput
 } from '../domain/operations';
+import { ItemMergeError, planItemMerge } from '../domain/item-merge';
+import type { MergeItemsInput, ItemMergeResult } from '../domain/item-merge';
 import { createAuditEntry, type AuditAction } from '$lib/features/shared';
 import {
 	deriveDonationReceiptLineId,
@@ -632,6 +634,46 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			}
 		}
 		return this.addLedgerEntry(entry);
+	}
+
+	/** The shelter this repository's database belongs to (`shelter_sh001` → `SH001`), else null. */
+	private shelterCodeOfDb(): string | null {
+		return this.dbName.startsWith('shelter_')
+			? this.dbName.replace('shelter_', '').toUpperCase()
+			: null;
+	}
+
+	async mergeItems(input: MergeItemsInput, ctx: AuthorContext): Promise<ItemMergeResult> {
+		const shelterCode = this.shelterCodeOfDb();
+		const catalog = catalogRepository();
+		const [source, target] = await Promise.all([
+			catalog.getItemMaster(input.sourceId, shelterCode),
+			catalog.getItemMaster(input.targetId, shelterCode)
+		]);
+		if (!source) throw new ItemMergeError('invalid_target', `Unknown item: ${input.sourceId}`);
+		if (!target) throw new ItemMergeError('invalid_target', `Unknown item: ${input.targetId}`);
+
+		const plan = await planItemMerge({
+			source,
+			target,
+			roles: input.roles,
+			shelterCode,
+			ledger: await this.listLedger(),
+			ctx
+		});
+
+		// FR-F6: prove the source doc will save (unit master, current _rev) BEFORE any ledger row
+		// is written, so a doomed merge writes nothing.
+		const current = await catalog.assertItemMasterWritable(plan.source);
+		const toSave = { ...plan.source, _rev: current._rev };
+
+		// Then ONE request for every missing pair (FR-F1). The plan skips rows whose deterministic
+		// id already exists, so retrying after a ledger write that succeeded but a source update
+		// that did not only finishes the source (no second move). NOT atomic across docs.
+		if (plan.entries.length > 0) await bulkDocs<StockLedger>(this.dbName, plan.entries);
+
+		const saved = await catalog.updateItemMaster(toSave);
+		return { source: saved, target, legs: plan.legs };
 	}
 
 	// --- Campaign/Donation/Slot Methods ---
