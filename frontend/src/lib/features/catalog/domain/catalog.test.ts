@@ -495,6 +495,12 @@ describe('packaging UOM conversion', () => {
 // CR-143 §D — `item_master` has no `perishable` field, so the old code hardcoded
 // `perishable: false` for every master and never demanded an expiry date.
 describe('requiresExpiry (FR-D1, FR-D3)', () => {
+	it('treats a zero, negative, fractional-below-one or NaN shelf life as unset', () => {
+		for (const days of [0, -5, 0.5, Number.NaN]) {
+			expect(requiresExpiry({ storage_type: 'DRY', shelf_life_days: days })).toBe(false);
+		}
+	});
+
 	it('is true for CHILLED and FROZEN storage', () => {
 		expect(requiresExpiry({ storage_type: 'CHILLED' })).toBe(true);
 		expect(requiresExpiry({ storage_type: 'FROZEN' })).toBe(true);

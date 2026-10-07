@@ -454,6 +454,11 @@ function isColdStorage(type: StorageType | null | undefined): boolean {
 	return !!type && EXPIRY_STORAGE_TYPES.includes(type);
 }
 
+/** A usable shelf life: a finite number of whole days >= 1 (0, negatives and NaN are "unset"). */
+function hasShelfLife(days: number | null | undefined): days is number {
+	return typeof days === 'number' && Number.isFinite(days) && Math.trunc(days) >= 1;
+}
+
 /**
  * Must a receive of this item carry `lot.expiry`? (CR-143 FR-D1, FR-D3)
  *
@@ -463,7 +468,7 @@ function isColdStorage(type: StorageType | null | undefined): boolean {
 export function requiresExpiry(item: ExpirySource): boolean {
 	if (item.perishable === true) return true;
 	if (isColdStorage(item.storage_type)) return true;
-	return item.shelf_life_days != null;
+	return hasShelfLife(item.shelf_life_days);
 }
 
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -493,7 +498,7 @@ export function suggestExpiry(
 	receivedOn: string
 ): { expiry: string; shelfLifeDays: number } | null {
 	const days = item.shelf_life_days;
-	if (days == null || !Number.isFinite(days) || days <= 0) return null;
+	if (!hasShelfLife(days)) return null;
 	const base = parseIsoDate(producedAt) ?? parseIsoDate(receivedOn);
 	if (!base) return null;
 	base.setUTCDate(base.getUTCDate() + Math.trunc(days));
@@ -510,7 +515,7 @@ export function expiryRequirementHint(item: ExpirySource): string {
 	if (isColdStorage(item.storage_type)) {
 		return 'แช่เย็น / แช่แข็ง → ต้องกรอกวันหมดอายุทุกครั้งที่รับเข้า';
 	}
-	if (item.shelf_life_days != null) {
+	if (hasShelfLife(item.shelf_life_days)) {
 		return `ระบุอายุเก็บรักษา ${item.shelf_life_days} วัน → ต้องกรอกวันหมดอายุทุกครั้งที่รับเข้า (ระบบเติมให้ ตรวจสอบกับฉลากอีกครั้ง)`;
 	}
 	return 'ไม่บังคับกรอกวันหมดอายุตอนรับเข้า (ใส่ได้ถ้ามี)';

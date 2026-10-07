@@ -222,7 +222,10 @@
 			toast.error('กรุณาเลือกสถานที่/ล็อต');
 			return;
 		}
-		if (selectedItem.requiresExpiry && selectedLotKey === 'new' && !customExpiry) {
+		// Stock coming in must carry an expiry (CR-143 FR-D1) — the new lot's own, or the
+		// existing lot's. A write-off (negative delta) is exempt, as on the server.
+		const incomingExpiry = selectedLotKey === 'new' ? customExpiry : currentLot?.expiry;
+		if (selectedItem.requiresExpiry && Number(deltaQty) > 0 && !incomingExpiry) {
 			toast.error('สินค้านี้ต้องระบุวันหมดอายุ');
 			return;
 		}
