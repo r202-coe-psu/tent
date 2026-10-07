@@ -1,11 +1,11 @@
 ---
-id: draft
+id: CR-155
 title: "Shelter Incident Log — doc type shelter_incident (Daily Occurrence Book, owner-based) · supersede CR-040"
-status: proposed
+status: approved
 date: 2026-09-25
-updated: 2026-10-05
+updated: 2026-10-07
 requested_by: den (feature spec "ระบบบันทึกเหตุการณ์ประจำวันในศูนย์")
-decided_by: kong (D1–D5, 2026-10-02 — PR #323 review)
+decided_by: kong (D1–D5, 2026-10-02 — PR #323 review; approved 2026-10-07)
 layer: volatile
 affects:
   - docs/data/schema.md §2.10 (`shelter_report` → `shelter_incident`, schema_v 1) · §7 index · §8 validation
@@ -25,7 +25,7 @@ why: แก้ปัญหา SM เป็นคอขวดในการเ�
 migration: N/A — doc type ใหม่เข้าแทนที่ shelter_report (ยังไม่มี production data สำหรับ shelter_report) · ศูนย์ที่ provision แล้วต้อง redeploy `_design/access`
 ---
 
-# Shelter Incident Log — `shelter_incident`
+# CR-155: Shelter Incident Log — `shelter_incident`
 
 ## สรุป (TL;DR)
 
@@ -188,3 +188,4 @@ N/A — doc type ใหม่. ไม่มี `shelter_report` ใน productio
 - 2026-10-02 — PR #323 review: kong เคาะ D1(b) supersede CR-040 · D2(a) lower_snake · D3 owner ปิดได้ทุก severity · D4 SM ยกเลิกจาก `action_in_progress` ได้ · D5 ตัด escalate · เพิ่ม IL-P6 ห้ามลบ (VDU) · ระบุวิธี sort (IL-U1) / ออกเลข (IL-D3) / late binding (IL-D11) · IL-P5 ตัดบัญชีอาสาสมัคร · เติม `why` / `migration` ใน frontmatter
 - 2026-10-03 — เพิ่ม `title` (หัวข้อเหตุการณ์, IL-D12) + ช่องค้นหาในหน้ารวม (IL-U1) — owner อนุมัติให้ implement แล้ว; ยังอยู่ใน schema_v 1
 - 2026-10-05 — PR #323 review รอบ 2: resolve conflict markers (คงฉบับ 2026-10-03 ที่มี D1–D5 + IL-D12 เท่านั้น) · IL-D1 ไม่อ้าง `shelter_id` แล้ว
+- 2026-10-07 — approved: รันเลข CR-155 ตาม branch develop; ปรับสถานะเป็น approved
