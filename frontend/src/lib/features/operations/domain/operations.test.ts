@@ -303,7 +303,7 @@ describe('stock_ledger schema_v + reason enum (CR-032 / draft-lot-produced-at)',
 				qty: '1',
 				unit: 'kg',
 				reason: 'adjust',
-				adjust_reason: 'other',
+				adjust_reason: 'found',
 				ref_id: null
 			},
 			ctx
@@ -326,7 +326,7 @@ describe('stock_ledger reason ↔ ref_id invariant (CR-055)', () => {
 				qty: reason === 'distribute' ? -5 : base.qty,
 				reason,
 				ref_id,
-				...(reason === 'adjust' ? { adjust_reason: 'other' as const } : {}),
+				...(reason === 'adjust' ? { adjust_reason: 'found' as const } : {}),
 				...(reason === 'distribute' || reason === 'distribution_return'
 					? { lot_ref: 'stock_ledger:PHYSICALLOT' }
 					: {})

@@ -48,7 +48,8 @@ describe('AC-C1 — adjusting without a reason is a validation error', () => {
 	it.each(['expired', 'damaged', 'count_mismatch', 'lost', 'found', 'other'] as const)(
 		'accepts %s and persists it (FR-C1)',
 		(adjust_reason) => {
-			const entry = createAdjustEntry({ ...adjust, adjust_reason }, ctx);
+			const note = adjust_reason === 'other' ? { note: 'รายละเอียด' } : {};
+			const entry = createAdjustEntry({ ...adjust, adjust_reason, ...note }, ctx);
 			expect(entry.adjust_reason).toBe(adjust_reason);
 			expect(entry.reason).toBe('adjust');
 		}
@@ -188,13 +189,55 @@ describe('FR-C2 — every writer stamps schema_v 6', () => {
 		expect([adjusted.schema_v, received.schema_v, legacy.schema_v]).toEqual([6, 6, 6]);
 	});
 
-	it('a manual receive (source=manual) is an adjust with reason other', () => {
+	it('a manual receive (source=manual) is an adjust with reason found (FR-C7 / AC-C5)', () => {
 		const entry = createReceiveEntry(
 			{ item_id: 'item:rice', qty: 5, unit: 'kg', source: 'manual', ref_id: null },
 			ctx
 		);
 		expect(entry.reason).toBe('adjust');
-		expect(entry.adjust_reason).toBe('other');
+		expect(entry.adjust_reason).toBe('found');
+		expect('note' in entry).toBe(false);
+	});
+});
+
+describe("FR-C9 / AC-C6 — adjust_reason 'other' needs a non-empty note", () => {
+	const other = { ...adjust, adjust_reason: 'other' } as const;
+
+	it.each([undefined, '', '   '])('rejects adjustInputSchema with note %j', (note) => {
+		const result = adjustInputSchema.safeParse({ ...other, note });
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			expect(result.error.issues.some((i) => i.path[0] === 'note')).toBe(true);
+		}
+		expect(() => createAdjustEntry({ ...other, note }, ctx)).toThrow();
+	});
+
+	it('rejects stockLedgerInputSchema / createStockLedger reason=adjust other without note', () => {
+		expect(stockLedgerInputSchema.safeParse({ ...other, reason: 'adjust' }).success).toBe(false);
+		expect(() => createStockLedger({ ...other, reason: 'adjust', note: ' ' }, ctx)).toThrow();
+	});
+
+	it('accepts other with a trimmed note and keeps it', () => {
+		const entry = createAdjustEntry({ ...other, note: '  กระสอบฉีก  ' }, ctx);
+		expect(entry.note).toBe('กระสอบฉีก');
+		expect(
+			stockLedgerInputSchema.safeParse({ ...other, reason: 'adjust', note: 'x' }).success
+		).toBe(true);
+	});
+
+	it('does not require a note for the other reasons', () => {
+		expect(adjustInputSchema.safeParse({ ...adjust, adjust_reason: 'lost' }).success).toBe(true);
+	});
+});
+
+describe('FR-C10 / AC-C7 — an old other row without a note still reads', () => {
+	it('parses it and counts it in the balance', () => {
+		const entry = createAdjustEntry({ ...adjust, qty: '-3', adjust_reason: 'lost' }, ctx);
+		const old = { ...entry, schema_v: 6, adjust_reason: 'other' } as unknown as StockLedger;
+		expect('note' in old).toBe(false);
+		expect(parseStockLedger(old).adjust_reason).toBe('other');
+		expect(resolveAdjustReason(old)).toBe('other');
+		expect(stockBalance([old]).get('item:rice')).toBe('-3');
 	});
 });
 

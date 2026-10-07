@@ -468,6 +468,24 @@ const stockLedgerInputBaseSchema = z.object({
 	occurred_at: z.string().optional()
 });
 
+/**
+ * CR-156 FR-C9 — `other` is the catch-all reason, so it must say what happened.
+ * Write-side only: persisted rows are not refined (FR-C10 keeps old ones readable).
+ */
+function checkOtherNote(
+	adjustReason: AdjustReason | undefined,
+	note: string | undefined,
+	ctx: z.RefinementCtx
+): void {
+	if (adjustReason === 'other' && !note?.trim()) {
+		ctx.addIssue({
+			code: 'custom',
+			path: ['note'],
+			message: 'กรุณาระบุรายละเอียดเมื่อเลือกเหตุผล "อื่น ๆ"'
+		});
+	}
+}
+
 function stockLedgerInputSchemaWith(
 	validateRefId: (reason: LedgerReason, refId: string | null, ctx: z.RefinementCtx) => void
 ) {
@@ -489,6 +507,7 @@ function stockLedgerInputSchemaWith(
 					message: 'กรุณาเลือกเหตุผลการปรับยอด'
 				});
 			}
+			checkOtherNote(d.adjust_reason, d.note, ctx);
 		} else {
 			if (d.adjust_reason !== undefined) {
 				ctx.addIssue({
@@ -691,10 +710,10 @@ export function createReceiveEntry(
 			unit: d.unit,
 			reason: REASON_BY_RECEIVE_SOURCE[d.source],
 			ref_id: d.ref_id,
-			// A hand-keyed receipt is booked as an adjust (CR-143 §C needs a reason on those);
-			// there is no better fit than `other`, the same reading legacy rows get (FR-C4).
+			// A hand-keyed receipt is booked as an adjust (CR-143 §C needs a reason on those):
+			// stock that turned up, so `found` (CR-156 FR-C7); the form offers no picker (FR-C8).
 			...(REASON_BY_RECEIVE_SOURCE[d.source] === 'adjust'
-				? { adjust_reason: 'other' as const }
+				? { adjust_reason: 'found' as const }
 				: {}),
 			lot: d.lot,
 			occurred_at: d.occurred_at
@@ -770,19 +789,21 @@ export function createDistributionReturnEntry(
 	);
 }
 
-export const adjustInputSchema = z.object({
-	item_id: z.string().min(1),
-	qty: qtyStrCoerceSignedNonZeroSchema,
-	unit: z.string().trim().min(1),
-	// CR-055 R8: a manual correction has no originating doc — the comment used to
-	// say "always null" while the type still allowed a string.
-	ref_id: z.null().default(null),
-	// CR-143 FR-C1/C6 — a reason is mandatory; `merge` belongs to the merge flow only.
-	adjust_reason: manualAdjustReasonSchema,
-	note: z.string().trim().max(ADJUST_NOTE_MAX_LENGTH).optional(),
-	lot: stockLotSchema.optional(),
-	occurred_at: z.string().optional()
-});
+export const adjustInputSchema = z
+	.object({
+		item_id: z.string().min(1),
+		qty: qtyStrCoerceSignedNonZeroSchema,
+		unit: z.string().trim().min(1),
+		// CR-055 R8: a manual correction has no originating doc — the comment used to
+		// say "always null" while the type still allowed a string.
+		ref_id: z.null().default(null),
+		// CR-143 FR-C1/C6 — a reason is mandatory; `merge` belongs to the merge flow only.
+		adjust_reason: manualAdjustReasonSchema,
+		note: z.string().trim().max(ADJUST_NOTE_MAX_LENGTH).optional(),
+		lot: stockLotSchema.optional(),
+		occurred_at: z.string().optional()
+	})
+	.superRefine((d, ctx) => checkOtherNote(d.adjust_reason, d.note, ctx));
 export type AdjustInput = z.input<typeof adjustInputSchema>;
 
 export function createAdjustEntry(input: AdjustInput, ctx: AuthorContext): StockLedger {

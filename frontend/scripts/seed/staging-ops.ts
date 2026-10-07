@@ -74,7 +74,7 @@ export async function seedStagingOps(): Promise<void> {
 					unit: 'kg',
 					reason: 'adjust',
 					ref_id: null,
-					adjust_reason: 'other'
+					adjust_reason: 'found'
 				},
 				ctx
 			),
@@ -85,7 +85,7 @@ export async function seedStagingOps(): Promise<void> {
 					unit: 'bottle',
 					reason: 'adjust',
 					ref_id: null,
-					adjust_reason: 'other'
+					adjust_reason: 'found'
 				},
 				ctx
 			),
@@ -96,7 +96,7 @@ export async function seedStagingOps(): Promise<void> {
 					unit: 'tablet',
 					reason: 'adjust',
 					ref_id: null,
-					adjust_reason: 'other'
+					adjust_reason: 'found'
 				},
 				ctx
 			),
@@ -107,7 +107,7 @@ export async function seedStagingOps(): Promise<void> {
 					unit: 'bar',
 					reason: 'adjust',
 					ref_id: null,
-					adjust_reason: 'other'
+					adjust_reason: 'found'
 				},
 				ctx
 			),
@@ -118,7 +118,7 @@ export async function seedStagingOps(): Promise<void> {
 					unit: 'piece',
 					reason: 'adjust',
 					ref_id: null,
-					adjust_reason: 'other'
+					adjust_reason: 'found'
 				},
 				ctx
 			),
@@ -129,7 +129,7 @@ export async function seedStagingOps(): Promise<void> {
 					unit: 'piece',
 					reason: 'adjust',
 					ref_id: null,
-					adjust_reason: 'other'
+					adjust_reason: 'found'
 				},
 				ctx
 			),
@@ -140,7 +140,7 @@ export async function seedStagingOps(): Promise<void> {
 					unit: 'kg',
 					reason: 'adjust',
 					ref_id: null,
-					adjust_reason: 'other'
+					adjust_reason: 'found'
 				},
 				ctx
 			)
