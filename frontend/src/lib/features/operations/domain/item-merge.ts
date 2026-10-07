@@ -37,6 +37,8 @@ export type ItemMergeErrorCode =
 	/** FR-F3 — base units differ and no exact conversion exists. */
 	| 'unit_mismatch';
 
+const unitKey = (code: string) => code.trim().toLowerCase();
+
 export class ItemMergeError extends Error {
 	readonly code: ItemMergeErrorCode;
 	constructor(code: ItemMergeErrorCode, message: string) {
@@ -69,7 +71,7 @@ export function checkItemMerge(input: ItemMergeCheckInput): ItemMergeError | nul
 			'forbidden',
 			isShelterLocalItem(source, shelterCode)
 				? 'เฉพาะผู้จัดการหรือเจ้าหน้าที่คลังของศูนย์นี้เท่านั้นที่รวมสินค้านี้ได้'
-				: 'สินค้าส่วนกลางรวมได้เฉพาะผู้ดูแลระบบ'
+				: 'สินค้าส่วนกลางรวมเป็นต้นทางไม่ได้ (รวมได้เฉพาะสินค้าของศูนย์ตัวเอง)'
 		);
 	}
 	// Resuming a half-finished merge into the SAME destination is allowed; any other is not.
@@ -84,13 +86,6 @@ export function checkItemMerge(input: ItemMergeCheckInput): ItemMergeError | nul
 	const targetIsLocal = isShelterLocalItem(target, shelterCode);
 	if (target.shelter_code && !target.override && !targetIsLocal) {
 		return new ItemMergeError('invalid_target', 'สินค้าปลายทางเป็นของศูนย์อื่น');
-	}
-	// local -> central is fine; central -> local would leave a central doc pointing at a local one.
-	if (!isShelterLocalItem(source, shelterCode) && targetIsLocal) {
-		return new ItemMergeError(
-			'invalid_target',
-			'สินค้าส่วนกลางต้องรวมเข้ากับสินค้าส่วนกลางด้วยกันเท่านั้น'
-		);
 	}
 	if (!resolveItemUnitConversion(source, target)) {
 		return new ItemMergeError(
@@ -143,14 +138,31 @@ export async function planItemMerge(input: PlanItemMergeInput): Promise<ItemMerg
 	const targetUnit = itemMasterUnit(target);
 	const scope = (input.shelterCode ?? '').toUpperCase();
 
+	// Plan against the ledger as it was BEFORE this merge: drop this pair's own earlier move rows,
+	// then skip any planned row whose deterministic id already exists. A retry after a partial or
+	// complete ledger write therefore writes only what is missing (FR-F6), never a second move.
+	const existingIds = new Set(ledger.map((entry) => entry._id));
+	const sourceUnit = itemMasterUnit(source);
 	const lots = sortStockLotsByConsumptionOrder(
-		projectStockLotBalances(ledger.filter((entry) => entry.item_id === source._id))
+		projectStockLotBalances(
+			ledger.filter(
+				(entry) =>
+					entry.item_id === source._id &&
+					!(entry.adjust_reason === 'merge' && entry.note === target._id)
+			)
+		)
 	).filter((lot) => qtyGt(lot.qty, 0));
 
 	const entries: StockLedger[] = [];
 	const legs: ItemMergeLeg[] = [];
 
 	for (const lot of lots) {
+		if (unitKey(lot.unit) !== unitKey(sourceUnit)) {
+			throw new ItemMergeError(
+				'unit_mismatch',
+				`ล็อต ${lot.lot_ref} บันทึกเป็นหน่วย ${lot.unit} แต่สินค้าใช้หน่วย ${sourceUnit} จึงรวมไม่ได้`
+			);
+		}
 		const targetQty = convertItemQty(lot.qty, conversion);
 		if (targetQty === null) {
 			throw new ItemMergeError(
@@ -177,42 +189,44 @@ export async function planItemMerge(input: PlanItemMergeInput): Promise<ItemMerg
 		);
 
 		// −qty at the source, against its own physical lot; `note` names the other side.
-		entries.push(
-			createStockLedger(
-				{
-					item_id: source._id,
-					qty: qtyNeg(lot.qty),
-					unit: lot.unit,
-					reason: 'adjust',
-					ref_id: null,
-					lot_ref: lot.lot_ref,
-					adjust_reason: 'merge',
-					note: target._id,
-					occurred_at: occurredAt
-				},
-				ctx,
-				outId
-			)
-		);
+		if (!existingIds.has(outId))
+			entries.push(
+				createStockLedger(
+					{
+						item_id: source._id,
+						qty: qtyNeg(lot.qty),
+						unit: lot.unit,
+						reason: 'adjust',
+						ref_id: null,
+						lot_ref: lot.lot_ref,
+						adjust_reason: 'merge',
+						note: target._id,
+						occurred_at: occurredAt
+					},
+					ctx,
+					outId
+				)
+			);
 		// +qty at the destination as a new physical lot that keeps the original lot facts
 		// (expiry, produced_at, storage point, lot no.).
-		entries.push(
-			createStockLedger(
-				{
-					item_id: target._id,
-					qty: targetQty,
-					unit: targetUnit,
-					reason: 'adjust',
-					ref_id: null,
-					...(lot.lot ? { lot: { ...lot.lot } } : {}),
-					adjust_reason: 'merge',
-					note: source._id,
-					occurred_at: occurredAt
-				},
-				ctx,
-				inId
-			)
-		);
+		if (!existingIds.has(inId))
+			entries.push(
+				createStockLedger(
+					{
+						item_id: target._id,
+						qty: targetQty,
+						unit: targetUnit,
+						reason: 'adjust',
+						ref_id: null,
+						...(lot.lot ? { lot: { ...lot.lot } } : {}),
+						adjust_reason: 'merge',
+						note: source._id,
+						occurred_at: occurredAt
+					},
+					ctx,
+					inId
+				)
+			);
 		legs.push({ lotRef: lot.lot_ref, sourceQty: lot.qty, targetQty, lot: lot.lot });
 	}
 

@@ -487,13 +487,17 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			ctx
 		});
 
-		// Ledger first, ONE request for every pair (FR-F1): a source that is deactivated but still
-		// holds stock is the worse failure, and re-running a merge whose rows already landed finds
-		// no stock left to move (and deterministic ids turn a double submit into a conflict).
-		// NOT atomic across docs — `_bulk_docs` validates each row on its own.
+		// FR-F6: prove the source doc will save (unit master, current _rev) BEFORE any ledger row
+		// is written, so a doomed merge writes nothing.
+		const current = await catalog.assertItemMasterWritable(plan.source);
+		const toSave = { ...plan.source, _rev: current._rev };
+
+		// Then ONE request for every missing pair (FR-F1). The plan skips rows whose deterministic
+		// id already exists, so retrying after a ledger write that succeeded but a source update
+		// that did not only finishes the source (no second move). NOT atomic across docs.
 		if (plan.entries.length > 0) await bulkDocs<StockLedger>(this.dbName, plan.entries);
 
-		const saved = await catalog.updateItemMaster(plan.source);
+		const saved = await catalog.updateItemMaster(toSave);
 		return { source: saved, target, legs: plan.legs };
 	}
 

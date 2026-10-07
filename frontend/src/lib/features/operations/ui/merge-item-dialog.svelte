@@ -11,6 +11,7 @@
 	import {
 		formatUnit,
 		isMergedItem,
+		itemMasterUnit,
 		useItemMasters,
 		useUnitsOfMeasure,
 		type ItemMaster
@@ -63,7 +64,12 @@
 		return { allowed, unitMismatch };
 	});
 
-	const pickerItems = $derived(toStockFormItems([], candidates.allowed));
+	// Built from the FULL list so a destination carries its merged sources' names as search aliases
+	// (FR-F5), then narrowed to the destinations this merge may use.
+	const pickerItems = $derived.by(() => {
+		const allowedIds = new Set(candidates.allowed.map((item) => item._id));
+		return toStockFormItems([], itemsQuery.data ?? []).filter((item) => allowedIds.has(item._id));
+	});
 	const target = $derived(candidates.allowed.find((item) => item._id === targetId) ?? null);
 
 	const refusal = $derived(
@@ -85,7 +91,13 @@
 	const totalQty = $derived(lots.reduce((sum, lot) => addQty(sum, lot.qty), '0'));
 
 	const canSubmit = $derived(
-		!!source && !!target && !blocker && !mergeMutation.isPending && !offline
+		!!source &&
+			!!target &&
+			!blocker &&
+			!ledgerQuery.isLoading &&
+			!ledgerQuery.isError &&
+			!mergeMutation.isPending &&
+			!offline
 	);
 
 	function handleSubmit(event: SubmitEvent) {
@@ -158,7 +170,7 @@
 					<p class="font-semibold text-slate-900">
 						ยอดที่จะย้าย
 						<span class="tabular-nums">{totalQty}</span>
-						{unitLabel(source.base_unit)} จาก
+						{unitLabel(itemMasterUnit(source))} จาก
 						<span class="tabular-nums">{lots.length}</span> ล็อต
 					</p>
 					<p class="text-slate-600">

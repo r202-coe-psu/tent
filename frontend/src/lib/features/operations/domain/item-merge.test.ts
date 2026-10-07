@@ -299,13 +299,20 @@ describe('AC-F3 / FR-F4 — who may merge', () => {
 		).rejects.toBeInstanceOf(ItemMergeError);
 	});
 
-	it('a system admin may merge a central item', async () => {
+	it('AC-F4 — SA may not merge a central item as the source, and nothing is planned', async () => {
 		const ledger = [receive('item_master:CA', '5', {}, '2026-10-01T00:00:00.000Z')];
-		const plan = await planItemMerge(
-			input({ source: centralA, target: centralB, roles: SA, ledger })
-		);
-		expect(plan.entries).toHaveLength(2);
-		expect(stockBalance([...ledger, ...plan.entries]).get('item_master:CB')).toBe('5');
+		await expect(
+			planItemMerge(input({ source: centralA, target: centralB, roles: SA, ledger }))
+		).rejects.toMatchObject({ code: 'forbidden' });
+		await expect(
+			planItemMerge(input({ source: centralA, target: localB, roles: SA, ledger }))
+		).rejects.toMatchObject({ code: 'forbidden' });
+	});
+
+	it('AC-F4 — SA may merge a local item INTO a central item (FR-F4b)', async () => {
+		const plan = await planItemMerge(input({ target: centralB, roles: SA }));
+		expect(plan.entries).toHaveLength(4);
+		expect(stockBalance([...twoLotLedger(), ...plan.entries]).get('item_master:CB')).toBe('30');
 	});
 
 	it.each([
@@ -324,14 +331,13 @@ describe('AC-F3 / FR-F4 — who may merge', () => {
 		}
 	});
 
-	it('a shelter override of a central item counts as central (SA only)', () => {
+	it('a shelter override of a central item counts as central (never a source)', () => {
 		const override = master({ _id: 'item_master:CA', name: 'x', shelter_code: SH, override: true });
-		expect(
-			checkItemMerge({ source: override, target: centralB, roles: MANAGER, shelterCode: SH })?.code
-		).toBe('forbidden');
-		expect(
-			checkItemMerge({ source: override, target: centralB, roles: SA, shelterCode: SH })
-		).toBeNull();
+		for (const roles of [MANAGER, SA]) {
+			expect(
+				checkItemMerge({ source: override, target: centralB, roles, shelterCode: SH })?.code
+			).toBe('forbidden');
+		}
 	});
 });
 
@@ -356,12 +362,6 @@ describe('target / source validity', () => {
 		const foreign = master({ _id: 'item_master:F', name: 'f', shelter_code: 'SH002' });
 		expect(
 			checkItemMerge({ source: localA, target: foreign, roles: SA, shelterCode: SH })?.code
-		).toBe('invalid_target');
-	});
-
-	it('refuses a central source into a shelter-local destination', () => {
-		expect(
-			checkItemMerge({ source: centralA, target: localB, roles: SA, shelterCode: SH })?.code
 		).toBe('invalid_target');
 	});
 
@@ -397,5 +397,33 @@ describe('conservation', () => {
 			addQty(before.get('item_master:A') ?? '0', before.get('item_master:B') ?? '0')
 		);
 		expect(after.get('item_master:B')).toBe('40');
+	});
+});
+
+describe('FR-F6 / AC-F5 — retry is idempotent', () => {
+	it('after the move rows landed, a retry plans no rows but still returns the deactivated source', async () => {
+		const ledger = twoLotLedger();
+		const first = await planItemMerge(input({ ledger }));
+		const retry = await planItemMerge(input({ ledger: [...ledger, ...first.entries] }));
+		expect(retry.entries).toEqual([]);
+		expect(retry.source).toMatchObject({ merged_into: 'item_master:B', deactivated: true });
+	});
+
+	it('after a partial write, a retry writes only the missing rows with the same ids', async () => {
+		const ledger = twoLotLedger();
+		const first = await planItemMerge(input({ ledger }));
+		const landed = first.entries.slice(0, 3);
+		const retry = await planItemMerge(input({ ledger: [...ledger, ...landed] }));
+		expect(retry.entries.map((e) => e._id)).toEqual([first.entries[3]._id]);
+		const all = [...ledger, ...landed, ...retry.entries];
+		expect(stockBalance(all).get('item_master:A')).toBe('0');
+		expect(stockBalance(all).get('item_master:B')).toBe('30');
+	});
+
+	it('refuses a lot whose unit differs from the source item unit', async () => {
+		const odd = [receive('item_master:A', '5', {}, '2026-10-01T00:00:00.000Z', 'box')];
+		await expect(planItemMerge(input({ ledger: odd }))).rejects.toMatchObject({
+			code: 'unit_mismatch'
+		});
 	});
 });

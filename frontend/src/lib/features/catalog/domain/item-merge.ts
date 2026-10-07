@@ -21,18 +21,29 @@ export function isMergedItem(item: MergeRef): boolean {
 }
 
 /**
- * Names of the merged-away sources, keyed by destination id, so a search for the old
- * name still finds the destination (FR-F5).
+ * Names of the merged-away sources, keyed by their final destination id, so a search for
+ * an old name still finds the item that is on offer (FR-F5). A chain (A merged into B,
+ * later B into C) credits both names to C; a cycle is cut rather than looped on.
  */
 export function mergedAliasesByTarget(
-	items: readonly Pick<ItemMaster, 'name' | 'merged_into'>[]
+	items: readonly Pick<ItemMaster, '_id' | 'name' | 'merged_into'>[]
 ): Map<string, string[]> {
+	const next = new Map<string, string>();
+	for (const item of items) {
+		if (item.merged_into) next.set(item._id, item.merged_into);
+	}
 	const aliases = new Map<string, string[]>();
 	for (const item of items) {
 		if (!item.merged_into || !item.name) continue;
-		const list = aliases.get(item.merged_into) ?? [];
+		let destination = item.merged_into;
+		const seen = new Set([item._id]);
+		while (next.has(destination) && !seen.has(destination)) {
+			seen.add(destination);
+			destination = next.get(destination)!;
+		}
+		const list = aliases.get(destination) ?? [];
 		list.push(item.name);
-		aliases.set(item.merged_into, list);
+		aliases.set(destination, list);
 	}
 	return aliases;
 }
@@ -54,16 +65,18 @@ export function isShelterLocalItem(item: ScopeRef, shelterCode: string | null): 
 }
 
 /**
- * Who may merge `item` away (FR-F4): a shelter's own item → SA, or that shelter's
- * shelter_manager / warehouse_staff; a central item (or an override of one) → SA only.
+ * Who may merge `item` away (FR-F4, amended FR-F4a): only a shelter's own item, by SA or that
+ * shelter's shelter_manager / warehouse_staff. A central item (or an override of one) can never
+ * be a source, not even for SA: its `merged_into` would hide it in every shelter while the stock
+ * moves in only one.
  */
 export function canMergeItem(
 	roles: readonly string[],
 	shelterCode: string | null,
 	item: ScopeRef
 ): boolean {
-	if (isSystemAdmin(roles)) return true;
 	if (!isShelterLocalItem(item, shelterCode)) return false;
+	if (isSystemAdmin(roles)) return true;
 	return (
 		hasCapabilityInShelter(roles, shelterCode, SHELTER_MANAGER) ||
 		hasCapabilityInShelter(roles, shelterCode, WAREHOUSE_STAFF)

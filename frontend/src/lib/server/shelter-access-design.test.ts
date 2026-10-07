@@ -1086,6 +1086,24 @@ describe('buildValidateDocUpdate', () => {
 			);
 		});
 
+		it('keeps a merge permanent: no clearing, redirecting or reactivating', () => {
+			const merged = item({ merged_into: 'item_master:B', deactivated: true });
+			const { merged_into: _drop, ...cleared } = merged;
+			void _drop;
+			expectForbidden(
+				() => compile()({ ...cleared, deactivated: false }, merged, WAREHOUSE),
+				/cannot be changed or cleared/
+			);
+			expectForbidden(
+				() => compile()({ ...merged, merged_into: 'item_master:C' }, merged, MANAGER),
+				/cannot be changed or cleared/
+			);
+			expectForbidden(
+				() => compile()({ ...merged, deactivated: false }, merged, REGISTRATION),
+				/must be deactivated/
+			);
+		});
+
 		it('does not re-gate edits to an item that is already merged', () => {
 			const merged = item({ merged_into: 'item_master:B', deactivated: true });
 			expect(() => compile()({ ...merged, description: 'x' }, merged, REGISTRATION)).not.toThrow();

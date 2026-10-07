@@ -2157,9 +2157,16 @@ export function buildValidateDocUpdate(code: string): string {
       if (typeof newDoc.merged_into !== 'string' || !/^item_master:.+/.test(newDoc.merged_into) || newDoc.merged_into === newDoc._id) {
         throw { forbidden: 'merged_into must be another item_master id' };
       }
-      if (newDoc.deactivated !== true) {
-        throw { forbidden: 'A merged item must be deactivated' };
+    }
+    // A merge is permanent (its stock moved by append-only ledger rows): the pointer may not be
+    // cleared or redirected, and the item may not be reactivated, by anyone who can edit it.
+    if (oldDoc && oldDoc.type === 'item_master' && oldDoc.merged_into) {
+      if (newDoc.merged_into !== oldDoc.merged_into) {
+        throw { forbidden: 'merged_into cannot be changed or cleared once an item is merged' };
       }
+    }
+    if (newDoc.merged_into && newDoc.deactivated !== true) {
+      throw { forbidden: 'A merged item must be deactivated' };
     }
     var isLegacyBaseUnitUpdate = oldDoc && oldDoc.type === 'item_master' &&
       oldDoc.base_unit === newDoc.base_unit && isLegacyUnitLabel(newDoc.base_unit);

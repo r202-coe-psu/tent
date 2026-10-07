@@ -40,14 +40,31 @@ describe('merged_into visibility (FR-F5)', () => {
 
 	it('maps each destination to the names merged into it', () => {
 		const aliases = mergedAliasesByTarget([
-			{ name: 'A1', merged_into: 'item_master:B' },
-			{ name: 'A2', merged_into: 'item_master:B' },
-			{ name: 'C', merged_into: 'item_master:D' },
-			{ name: 'B' }
+			{ _id: 'item_master:A1', name: 'A1', merged_into: 'item_master:B' },
+			{ _id: 'item_master:A2', name: 'A2', merged_into: 'item_master:B' },
+			{ _id: 'item_master:C', name: 'C', merged_into: 'item_master:D' },
+			{ _id: 'item_master:B', name: 'B' }
 		]);
 		expect(aliases.get('item_master:B')).toEqual(['A1', 'A2']);
 		expect(aliases.get('item_master:D')).toEqual(['C']);
 		expect(aliases.has('item_master:A')).toBe(false);
+	});
+
+	it('credits a chained merge to the final destination and survives a cycle', () => {
+		const chained = mergedAliasesByTarget([
+			{ _id: 'item_master:A', name: 'A', merged_into: 'item_master:B' },
+			{ _id: 'item_master:B', name: 'B', merged_into: 'item_master:C' },
+			{ _id: 'item_master:C', name: 'C' }
+		]);
+		expect(chained.get('item_master:C')).toEqual(['A', 'B']);
+		expect(chained.has('item_master:B')).toBe(false);
+
+		expect(() =>
+			mergedAliasesByTarget([
+				{ _id: 'item_master:X', name: 'X', merged_into: 'item_master:Y' },
+				{ _id: 'item_master:Y', name: 'Y', merged_into: 'item_master:X' }
+			])
+		).not.toThrow();
 	});
 
 	it('mergeCatalogGenerations never offers a merged-away master, even if left active', () => {
@@ -84,9 +101,11 @@ describe('canMergeItem (FR-F4)', () => {
 		expect(canMergeItem(['shelter:SH002', 'SH002:shelter_manager'], 'SH001', local)).toBe(false);
 	});
 
-	it('central item (and an override of one): SA only', () => {
+	it('AC-F4 central item (and an override of one) is never a source, even for SA', () => {
 		const manager = ['shelter:SH001', 'SH001:shelter_manager'];
-		expect(canMergeItem(['system_admin'], 'SH001', central)).toBe(true);
+		expect(canMergeItem(['system_admin'], 'SH001', central)).toBe(false);
+		expect(canMergeItem(['system_admin'], 'SH001', override)).toBe(false);
+		expect(canMergeItem(['system_admin'], null, central)).toBe(false);
 		expect(canMergeItem(manager, 'SH001', central)).toBe(false);
 		expect(canMergeItem(manager, 'SH001', override)).toBe(false);
 		expect(canMergeItem(manager, null, central)).toBe(false);
