@@ -1,21 +1,22 @@
 ---
 id: draft
-title: แก้เพิ่ม CR-143 — เหตุผลของการรับเข้า manual, note ของเหตุผล other, และล็อตที่เกินอายุเก็บรักษา
+title: แก้เพิ่ม CR-143 — เหตุผลรับเข้า manual, note ของ other, ล็อตเกินอายุเก็บรักษา, และขอบเขตการรวมสินค้า
 status: proposed
 date: 2026-10-07
 updated: 2026-10-07
 requested_by: project owner (ผล review PR #373 / #374 ของ GitHub #331)
 decided_by: project owner
 layer: volatile
-amends: CR-143 (§A, §C)
+amends: CR-143 (§A, §C, §F)
 affects:
-  - docs/changes/CR-143-stock-redesign-rules.md §A FR-A4, §C FR-C1
+  - docs/changes/CR-143-stock-redesign-rules.md §A FR-A4, §C FR-C1, §F FR-F4
   - docs/data/schema.md §2.1 stock_ledger (adjust_reason, note) — ไม่เปลี่ยนรูป doc, ไม่ bump schema_v
   - frontend/src/lib/features/operations/domain/operations.ts (adjustInputSchema, stockLedgerInputSchema, createStockLedger, buildReceiveEntry)
   - frontend/src/lib/features/operations/domain/lot-priority.ts (isUrgent, FR-A4)
   - frontend/src/lib/features/operations/ui/adjust-stock-form.svelte, distribute-stock-form.svelte
   - frontend/src/lib/server/shelter-access-design.ts (validate_doc_update — note ของ other)
-  - GitHub #340 (PR #373), #343 (PR #374)
+  - frontend/src/lib/features/operations (merge dialog, item-merge), frontend/src/lib/features/catalog/domain/item-merge.ts
+  - GitHub #340 (PR #373), #343 (PR #374), #346
 why: review ของ PR #373 และ #374 พบช่องว่างที่ CR-143 ไม่ได้ระบุ 3 จุด และ owner เลือกแนวทางแล้ว (C2, D2, G2)
 migration: N/A — ไม่เพิ่ม/ลบ field, ไม่เปลี่ยนชนิด, ไม่ bump schema_v (note เป็น field เดิมของ FR-C1)
 ---
@@ -23,9 +24,9 @@ migration: N/A — ไม่เพิ่ม/ลบ field, ไม่เปลี�
 # แก้เพิ่ม CR-143 — รับเข้า manual, note ของ `other`, ล็อตเกินอายุเก็บรักษา
 
 ## สรุป (TL;DR)
-- **เปลี่ยนอะไร:** เพิ่มกติกา 3 ข้อให้ CR-143 — (C) การรับเข้าแบบ manual บันทึกเป็น adjust `found`, (D) เหตุผล `other` ต้องมี `note`, (G) ล็อตที่เกินอายุเก็บรักษาถือเป็นหมดอายุแล้ว
+- **เปลี่ยนอะไร:** เพิ่มกติกา 4 ข้อให้ CR-143 — (F) จำกัดการรวมสินค้าเฉพาะสินค้า local ของศูนย์, (C) การรับเข้าแบบ manual บันทึกเป็น adjust `found`, (D) เหตุผล `other` ต้องมี `note`, (G) ล็อตที่เกินอายุเก็บรักษาถือเป็นหมดอายุแล้ว
 - **เพื่อใคร:** เจ้าหน้าที่คลังและผู้ตรวจรายงานความสูญเสีย ให้เหตุผลในบัญชีไม่ปนกันและไม่เบิกของที่เกินอายุอัตโนมัติ
-- **Dev ต้อง build:** แก้ domain + ฟอร์ม + `validate_doc_update` ตาม FR-C7–C9 และ FR-A4a ใน PR #374 (§C) และ PR #373 (§A)
+- **Dev ต้อง build:** แก้ domain + ฟอร์ม + `validate_doc_update` ตาม FR-C7–C9 และ FR-A4a ใน PR #374 (§C) และ PR #373 (§A) และ FR-F4a ใน #346 (§F)
 - **กระทบ schema:** ไม่มี — ไม่ bump `schema_v`
 
 ## Requirements
@@ -41,11 +42,19 @@ migration: N/A — ไม่เพิ่ม/ลบ field, ไม่เปลี�
 - **FR-A4b** `isUrgent` ต้องใช้กับล็อตที่ `0 < daysLeft ≤ URGENT_DAYS` เท่านั้น
 - **FR-A4c** ล็อตที่ `daysLeft ≤ 0` เพราะ `HORIZON` ไม่ถือเป็นหมดอายุ (คง FR-A3a)
 
+### §F — ขอบเขตการรวมสินค้า
+- **FR-F4a** การรวมสินค้า (§F) ใช้ได้เฉพาะสินค้า **local ของศูนย์** เท่านั้น สินค้าส่วนกลาง (central `item_master`) ห้ามเป็นต้นทางของการรวม แม้ผู้ใช้เป็น SA ทั้งใน UI (ซ่อน/ปิดปุ่ม "รวมกับรายการอื่น") และใน domain (`checkItemMerge` ปฏิเสธ) — แทนที่ส่วน "สินค้าส่วนกลาง: SA เท่านั้น" ของ FR-F4
+- **FR-F4b** ปลายทางของการรวมเป็นสินค้า local หรือสินค้าส่วนกลางก็ได้ (ย้ายยอดเฉพาะศูนย์ที่กำลังใช้งาน) หน่วยต้องเข้ากันตาม FR-F3
+- **FR-F4c** การรวมสินค้าส่วนกลางข้ามทุกศูนย์อยู่นอกขอบเขตของ CR นี้ ต้องมี CR แยกเมื่อต้องการ
+- **FR-F6** ลำดับการเขียน: ระบบต้องตรวจความถูกต้องของการปิดสินค้าต้นทาง (หน่วย, `_rev`) **ก่อน** เขียน ledger และถ้าแถว `merge` ของต้นทางถูกเขียนแล้วแต่ยังไม่ได้ปิดต้นทาง การ retry ต้องปิดต้นทางโดยไม่เขียนแถวย้ายยอดซ้ำ (`_id` ของแถว `merge` เป็น deterministic)
+
 ## Acceptance
 - **AC-C5** รับเข้า manual 10 ชิ้น → ledger 1 แถว `reason: 'adjust'`, `adjust_reason: 'found'`
 - **AC-C6** ปรับยอดด้วยเหตุผล `other` โดยไม่กรอก note → validation error ทั้ง Zod และ `validate_doc_update`
 - **AC-C7** อ่านแถว `adjust` `other` เก่าที่ไม่มี note ได้ ยอดคงเหลือถูกต้อง
 - **AC-A7** ล็อต `shelf_life_days = 30` อยู่ในคลัง 60 วัน ไม่มี expiry → ไม่ถูกเลือกอัตโนมัติ, ไม่อยู่ก่อนล็อตที่หมดอายุอีก 3 วัน, UI แจ้งให้ปรับยอดออก
+- **AC-F4** SA รวมสินค้าส่วนกลางเป็นต้นทาง → ถูกปฏิเสธ และ UI ไม่แสดงปุ่มรวม; SA รวมสินค้า local เข้าสินค้าส่วนกลางได้
+- **AC-F5** ย้ายยอดสำเร็จแต่ปิดต้นทางล้ม → retry ปิดต้นทางได้ ledger มีแถว `merge` ไม่ซ้ำ
 - **AC-A8** ล็อต DRY ไม่มี expiry และไม่มี `shelf_life_days` อยู่ในคลัง 400 วัน → ยังเลือกได้ (ไม่ถือหมดอายุจาก `HORIZON`)
 
 ## Impact
@@ -59,7 +68,8 @@ N/A — ไม่เพิ่ม field ไม่ bump `schema_v` แถวเก
 ## Why
 - **C:** การรับเข้า manual ถูกบันทึกเป็น `other` ทำให้รายงานเหตุผลปนกับการปรับยอดที่ผู้ใช้ตั้งใจเลือก `other`
 - **D:** ฟอร์มเดิมบังคับกรอกเหตุผลอิสระ เมื่อ CR-143 เปลี่ยนเป็น enum ทำให้ `other` ว่างได้ หลักฐานของเหตุผลกว้างสุดจึงหาย
+- **F:** การรวมสินค้าส่วนกลางเขียน `merged_into` ลง central DB ซึ่งซ่อนสินค้าทุกศูนย์ แต่ย้ายยอดเฉพาะศูนย์ที่ใช้งาน สต็อกของศูนย์อื่นจึงกำพร้า
 - **G:** ล็อตที่เกินอายุเก็บรักษาแต่ไม่มี expiry จริง ถูกจัดเป็นเร่งด่วนและถูกเบิกก่อนของที่ใกล้หมดอายุจริง ซึ่งขัดเจตนาของ FR-A3/FR-A4
 
 ## Decision log
-- 2026-10-07 — proposed (ร่างจากผล review PR #373 / #374) · owner เลือกแนวทาง C2, D2, G2 และให้บันทึกเป็น CR amendment ของ CR-143 · **รอ owner approve** ก่อนรันเลข CR และก่อนแก้โค้ด
+- 2026-10-07 — proposed (ร่างจากผล review PR #373 / #374) · owner เลือกแนวทาง C2, D2, G2 และ F4 = จำกัดเฉพาะสินค้า local (ก) และให้บันทึกเป็น CR amendment ของ CR-143 · **รอ owner approve** ก่อนรันเลข CR และก่อนแก้โค้ด
