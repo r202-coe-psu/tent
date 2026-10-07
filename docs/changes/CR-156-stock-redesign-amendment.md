@@ -1,11 +1,11 @@
 ---
-id: draft
+id: CR-156
 title: แก้เพิ่ม CR-143 — เหตุผลรับเข้า manual, note ของ other, ล็อตเกินอายุเก็บรักษา, และขอบเขตการรวมสินค้า
-status: proposed
+status: approved
 date: 2026-10-07
 updated: 2026-10-07
 requested_by: project owner (ผล review PR #373 / #374 ของ GitHub #331)
-decided_by: project owner
+decided_by: project owner (approved 2026-10-07)
 layer: volatile
 amends: CR-143 (§A, §C, §F)
 affects:
@@ -72,4 +72,5 @@ N/A — ไม่เพิ่ม field ไม่ bump `schema_v` แถวเก
 - **G:** ล็อตที่เกินอายุเก็บรักษาแต่ไม่มี expiry จริง ถูกจัดเป็นเร่งด่วนและถูกเบิกก่อนของที่ใกล้หมดอายุจริง ซึ่งขัดเจตนาของ FR-A3/FR-A4
 
 ## Decision log
-- 2026-10-07 — proposed (ร่างจากผล review PR #373 / #374) · owner เลือกแนวทาง C2, D2, G2 และ F4 = จำกัดเฉพาะสินค้า local (ก) และให้บันทึกเป็น CR amendment ของ CR-143 · **รอ owner approve** ก่อนรันเลข CR และก่อนแก้โค้ด
+- 2026-10-07 — **approved** โดย project owner (PR #379) · รันเลข CR-156 · แก้ CR-143 §A/§C/§F และ docs/data/schema.md §2.1/§4.2 · สถานะ `done` เมื่อ PR #373, #374 และ #346 ที่เกี่ยวข้องเสร็จ
+- 2026-10-07 — proposed (ร่างจากผล review PR #373 / #374) · owner เลือกแนวทาง C2, D2, G2 และ F4 = จำกัดเฉพาะสินค้า local (ก) และให้บันทึกเป็น CR amendment ของ CR-143 · รอ owner approve
