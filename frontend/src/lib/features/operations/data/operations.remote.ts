@@ -448,10 +448,9 @@ export class OperationsRemoteRepository implements OperationsRepository {
 				`Unknown item: ${entry.item_id} — item must exist in the catalog before adjusting stock`
 			);
 		}
-		// The expiry rule is for stock coming in (CR-143 FR-D1). A write-off against an
-		// existing lot recorded before the item gained a shelf life has no expiry to carry,
-		// and must not be blocked from correcting it.
-		assertReceiveAgainstCatalog(entry, item, { requireExpiry: qtyGt(entry.qty, 0) });
+		// The expiry rule is for receipts only (CR-156 FR-D2d): a count correction, up or down,
+		// may land on a lot recorded before the item gained a shelf life and has no expiry to carry.
+		assertReceiveAgainstCatalog(entry, item, { requireExpiry: false });
 
 		// NOTE: This balance check is aggregate (cross-lot total), not per-lot.
 		// Acceptable for single-user shelter; per-lot validation requires FIFO tracking.

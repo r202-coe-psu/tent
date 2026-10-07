@@ -222,13 +222,6 @@
 			toast.error('กรุณาเลือกสถานที่/ล็อต');
 			return;
 		}
-		// Stock coming in must carry an expiry (CR-143 FR-D1) — the new lot's own, or the
-		// existing lot's. A write-off (negative delta) is exempt, as on the server.
-		const incomingExpiry = selectedLotKey === 'new' ? customExpiry : currentLot?.expiry;
-		if (selectedItem.requiresExpiry && Number(deltaQty) > 0 && !incomingExpiry) {
-			toast.error('สินค้านี้ต้องระบุวันหมดอายุ');
-			return;
-		}
 		if (!newQtyInput || isNaN(Number(newQtyInput)) || Number(newQtyInput) < 0) {
 			toast.error('กรุณาระบุจำนวนใหม่ที่ถูกต้อง (ต้องไม่ติดลบ)');
 			return;
@@ -369,11 +362,7 @@
 				<Field.Root class="col-span-1">
 					<Field.Label for="custom-expiry">
 						วันหมดอายุ
-						{#if selectedItem.requiresExpiry}
-							<span class="font-bold text-destructive">*</span>
-						{:else}
-							<span class="font-normal text-muted-foreground">(ไม่บังคับ)</span>
-						{/if}
+						<span class="font-normal text-muted-foreground">(ไม่บังคับ)</span>
 					</Field.Label>
 					<DatePicker id="custom-expiry" ariaLabel="วันหมดอายุ" bind:value={customExpiry} />
 				</Field.Root>
