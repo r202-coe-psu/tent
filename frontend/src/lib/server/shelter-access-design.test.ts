@@ -924,7 +924,12 @@ describe('buildValidateDocUpdate', () => {
 			});
 
 		it.each(adjustReasonSchema.options)('accepts adjust with adjust_reason %s', (adjust_reason) => {
-			const note = adjust_reason === 'other' ? { note: 'รายละเอียด' } : {};
+			const note =
+				adjust_reason === 'other'
+					? { note: 'รายละเอียด' }
+					: adjust_reason === 'merge'
+						? { note: 'item_master:other' }
+						: {};
 			expect(() => compile()(adjust({ adjust_reason, ...note }), null, WAREHOUSE)).not.toThrow();
 		});
 
