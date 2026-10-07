@@ -463,11 +463,22 @@
 			toast.error(report.message, { id: toastId, duration: 15000 });
 			if (result.distributed.length > 0) {
 				$formData.ref_id = refId;
+				// Show what is left in the unit the user typed, but only when it converts back to the
+				// exact base quantity (qty keeps 4 decimals) — otherwise retry in the base unit so the
+				// retried plan cuts exactly what is missing, not a rounded neighbour.
+				let retryQty = result.remainingQty;
+				let retryUnit = itemMasterUnit(item);
 				try {
-					setQty(qtyFromBaseUnit(result.remainingQty, displayUnit, item));
+					const inDisplay = qtyFromBaseUnit(result.remainingQty, displayUnit, item);
+					if (persistQty(qtyToBaseUnit(inDisplay, displayUnit, item)) === result.remainingQty) {
+						retryQty = inDisplay;
+						retryUnit = displayUnit;
+					}
 				} catch {
-					setQty(result.remainingQty);
+					// no conversion for the typed unit: fall back to the base unit
 				}
+				$formData.unit = retryUnit;
+				setQty(retryQty);
 			}
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการบันทึกข้อมูล', {
