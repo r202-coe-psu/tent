@@ -394,6 +394,7 @@ describe('OperationsRemoteRepository', () => {
 			await expect(
 				repo.distributeStock(
 					{
+						note: 'ครัวกลาง',
 						item_id: 'item:soap',
 						qty: 15,
 						unit: 'bar',
@@ -415,6 +416,7 @@ describe('OperationsRemoteRepository', () => {
 			// Exhaust all 10 units from the lot so balance reaches 0
 			await repo.distributeStock(
 				{
+					note: 'ครัวกลาง',
 					item_id: 'item:soap',
 					qty: 10,
 					unit: 'bar',
@@ -431,6 +433,7 @@ describe('OperationsRemoteRepository', () => {
 			await expect(
 				repo.distributeStock(
 					{
+						note: 'ครัวกลาง',
 						item_id: 'item:soap',
 						qty: 1,
 						unit: 'bar',
@@ -456,6 +459,7 @@ describe('OperationsRemoteRepository', () => {
 			await expect(
 				repo.distributeStock(
 					{
+						note: 'ครัวกลาง',
 						item_id: 'item:soap',
 						qty: 5,
 						unit: 'bar',
@@ -481,6 +485,7 @@ describe('OperationsRemoteRepository', () => {
 			await expect(
 				repo.distributeStock(
 					{
+						note: 'ครัวกลาง',
 						item_id: 'item:soap',
 						qty: 1,
 						unit: 'bar',
@@ -494,6 +499,7 @@ describe('OperationsRemoteRepository', () => {
 			await expect(
 				repo.distributeStock(
 					{
+						note: 'ครัวกลาง',
 						item_id: 'item:soap',
 						qty: 1,
 						unit: 'bar',
@@ -536,6 +542,7 @@ describe('OperationsRemoteRepository', () => {
 
 			await repo.distributeStock(
 				{
+					note: 'ครัวกลาง',
 					item_id: 'item:soap',
 					qty: 5,
 					unit: 'bar',
@@ -565,6 +572,7 @@ describe('OperationsRemoteRepository', () => {
 			const results = await Promise.allSettled([
 				clientRepoA.distributeStock(
 					{
+						note: 'ครัวกลาง',
 						item_id: 'item:soap',
 						qty: 7,
 						unit: 'bar',
@@ -575,6 +583,7 @@ describe('OperationsRemoteRepository', () => {
 				),
 				clientRepoB.distributeStock(
 					{
+						note: 'ครัวกลาง',
 						item_id: 'item:soap',
 						qty: 7,
 						unit: 'bar',
@@ -606,6 +615,7 @@ describe('OperationsRemoteRepository', () => {
 			const results = await Promise.allSettled([
 				clientRepoA.distributeStock(
 					{
+						note: 'ครัวกลาง',
 						item_id: 'item:soap',
 						qty: 4,
 						unit: 'bar',
@@ -616,6 +626,7 @@ describe('OperationsRemoteRepository', () => {
 				),
 				clientRepoB.distributeStock(
 					{
+						note: 'ครัวกลาง',
 						item_id: 'item:soap',
 						qty: 4,
 						unit: 'bar',
@@ -672,7 +683,12 @@ describe('OperationsRemoteRepository', () => {
 
 			const result = await distributeAcrossLots(
 				repo,
-				{ allocations: plan.allocations, item_id: 'item:soap', ref_id: DISTRIBUTION_BATCH_REF },
+				{
+					note: 'ครัวกลาง',
+					allocations: plan.allocations,
+					item_id: 'item:soap',
+					ref_id: DISTRIBUTION_BATCH_REF
+				},
 				ctx
 			);
 
@@ -701,6 +717,7 @@ describe('OperationsRemoteRepository', () => {
 			// another writer drains lot 2 after the plan was made, so row 2 is refused
 			await repo.distributeStock(
 				{
+					note: 'ครัวกลาง',
 					item_id: 'item:soap',
 					qty: 19,
 					unit: 'bar',
@@ -712,7 +729,12 @@ describe('OperationsRemoteRepository', () => {
 
 			const result = await distributeAcrossLots(
 				repo,
-				{ allocations: plan.allocations, item_id: 'item:soap', ref_id: DISTRIBUTION_BATCH_REF },
+				{
+					note: 'ครัวกลาง',
+					allocations: plan.allocations,
+					item_id: 'item:soap',
+					ref_id: DISTRIBUTION_BATCH_REF
+				},
 				ctx
 			);
 

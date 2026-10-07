@@ -16,6 +16,7 @@ import {
 } from '$lib/utils/qty';
 import { unitCodeSchema } from '$lib/features/catalog/domain/unit-of-measure';
 import { rankLotsForIssue, type LotPriorityItem, type RankLotsOptions } from './lot-priority';
+import { DISTRIBUTE_NOTE_MAX } from './distribute-destination';
 
 /**
  * Operations domain — stock, donations, transfers (R2–R3).
@@ -639,7 +640,12 @@ export const distributeInputSchema = z.object({
 	unit: z.string().trim().min(1),
 	ref_id: z.string().regex(/^requisition_ticket:.+/, 'ref_id must reference a requisition ticket'),
 	lot_ref: z.string().regex(/^stock_ledger:.+/, 'lot_ref must reference an inbound stock ledger'),
-	note: z.string().trim().optional(), // Used to store destination in lot.note
+	// CR-143 §E (FR-E1): a direct issue must name its destination, stored in lot.note.
+	note: z
+		.string({ error: 'กรุณาระบุปลายทาง / ผู้รับ' })
+		.trim()
+		.min(1, 'กรุณาระบุปลายทาง / ผู้รับ')
+		.max(DISTRIBUTE_NOTE_MAX, `ปลายทางต้องไม่เกิน ${DISTRIBUTE_NOTE_MAX} ตัวอักษร`),
 	occurred_at: z.string().optional()
 });
 export type DistributeInput = z.input<typeof distributeInputSchema>;
@@ -658,7 +664,7 @@ export function createDistributeEntry(
 			reason: 'distribute',
 			ref_id: d.ref_id,
 			lot_ref: d.lot_ref,
-			...(d.note ? { lot: { note: d.note } } : {}),
+			lot: { note: d.note },
 			occurred_at: d.occurred_at
 		},
 		ctx,
