@@ -372,3 +372,32 @@ describe('recipes', () => {
 		expect(ingredientSummary(gone, nameOf)).toBe('—');
 	});
 });
+
+describe('merged items (CR-143 FR-F5)', () => {
+	const dest = item({ _id: 'item_master:B', name: 'นมถั่วเหลือง 300ml', shelter_code: SH });
+	const merged = item({
+		_id: 'item_master:A',
+		name: 'นมถั่วเหลือง 300 มล.',
+		shelter_code: SH,
+		merged_into: 'item_master:B',
+		deactivated: true
+	});
+	const filter: ItemFilter = { q: '', categoryId: 'all', origin: 'all', showDeactivated: true };
+
+	it('hides a merged-away source even with "show deactivated" on', () => {
+		expect(filterItems([dest, merged], [], filter, SH).map((i) => i._id)).toEqual([
+			'item_master:B'
+		]);
+	});
+
+	it("finds the destination when searching the source's old name", () => {
+		const hits = filterItems([dest, merged], [], { ...filter, q: '300 มล.' }, SH);
+		expect(hits.map((i) => i._id)).toEqual(['item_master:B']);
+	});
+
+	it('does not count a merged source in chips, the hidden-deactivated note or category totals', () => {
+		const f = { ...filter, showDeactivated: false };
+		expect(countScopeChips([dest, merged], [], f, SH).all).toBe(1);
+		expect(hiddenDeactivatedItems([dest, merged], [], f, SH)).toBe(0);
+	});
+});

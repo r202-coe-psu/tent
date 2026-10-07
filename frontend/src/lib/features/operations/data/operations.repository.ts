@@ -16,6 +16,7 @@ import type {
 	CancelInfoInput,
 	DisputeInfoInput
 } from '../domain/operations';
+import type { MergeItemsInput, ItemMergeResult } from '../domain/item-merge';
 import type { AuditAction } from '$lib/features/shared';
 
 /**
@@ -83,6 +84,14 @@ export interface OperationsRepository {
 	 * Process and persist a stock adjustment entry (increases or decreases stock).
 	 */
 	adjustStock(input: AdjustInput, ctx: AuthorContext): Promise<StockLedger>;
+
+	/**
+	 * Merge a duplicate item into another (CR-143 §F): move every on-hand lot of the source
+	 * to the destination with paired `adjust`/`merge` rows in ONE `bulkDocs`, then deactivate
+	 * the source with `merged_into`. Throws `ItemMergeError` when the actor may not merge it
+	 * (FR-F4) or the units cannot be converted (FR-F3), before anything is written.
+	 */
+	mergeItems(input: MergeItemsInput, ctx: AuthorContext): Promise<ItemMergeResult>;
 
 	// Campaign/Donation/Slot methods
 	listCampaigns(): Promise<DonationCampaign[]>;

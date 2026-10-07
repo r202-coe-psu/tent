@@ -798,6 +798,19 @@ export function buildValidateDocUpdate(code: string): string {
       if (hasLedgerNote && (typeof newDoc.note !== 'string' || newDoc.note.length > 500)) {
         throw { forbidden: 'Adjust stock ledger note must be a string of at most 500 characters' };
       }
+      // CR-143 §F (FR-F4): moving stock between items is the merge flow's job; a supply
+      // coordinator may adjust stock but may not merge items, and 'note' must name the other side.
+      if (newDoc.adjust_reason === 'merge') {
+        if (!isWarehouseOrAdmin && !isRole('shelter_manager')) {
+          throw { forbidden: 'Only warehouse staff, shelter manager, or system admin can write merge stock ledger' };
+        }
+        if (typeof newDoc.note !== 'string' || !/^item_master:.+/.test(newDoc.note)) {
+          throw { forbidden: 'Merge stock ledger note must be the item_master id of the other side' };
+        }
+        if (newDoc.ref_id !== null && typeof newDoc.ref_id !== 'undefined') {
+          throw { forbidden: 'Merge stock ledger must not carry a ref_id' };
+        }
+      }
     } else {
       if (hasAdjustReason) {
         throw { forbidden: 'Stock ledger adjust_reason is only allowed when reason is adjust' };
@@ -2135,6 +2148,19 @@ export function buildValidateDocUpdate(code: string): string {
     }
   }
   if (newDoc.type === 'item_master') {
+    // CR-143 §F (FR-F2/F4): 'merged_into' retires a shelter-local item into another one. Only the
+    // shelter's warehouse staff / managers (or SA) may set it, always together with deactivated.
+    if (newDoc.merged_into && !(oldDoc && oldDoc.merged_into === newDoc.merged_into)) {
+      if (!isRole('warehouse_staff') && !isRole('shelter_manager')) {
+        throw { forbidden: 'Only warehouse staff, shelter manager, or system admin can merge items' };
+      }
+      if (typeof newDoc.merged_into !== 'string' || !/^item_master:.+/.test(newDoc.merged_into) || newDoc.merged_into === newDoc._id) {
+        throw { forbidden: 'merged_into must be another item_master id' };
+      }
+      if (newDoc.deactivated !== true) {
+        throw { forbidden: 'A merged item must be deactivated' };
+      }
+    }
     var isLegacyBaseUnitUpdate = oldDoc && oldDoc.type === 'item_master' &&
       oldDoc.base_unit === newDoc.base_unit && isLegacyUnitLabel(newDoc.base_unit);
     if (newDoc.base_unit && !/^[a-z][a-z0-9_]{0,15}$/.test(newDoc.base_unit) && !isLegacyBaseUnitUpdate) {

@@ -42,6 +42,8 @@ import {
 	type CancelInfoInput,
 	type DisputeInfoInput
 } from '../domain/operations';
+import { ItemMergeError, planItemMerge } from '../domain/item-merge';
+import type { MergeItemsInput, ItemMergeResult } from '../domain/item-merge';
 import { createAuditEntry, type AuditAction } from '$lib/features/shared';
 import type { OperationsRepository } from './operations.repository';
 import { supplyRepository, type SupplyItem } from '$lib/features/supply';
@@ -457,6 +459,42 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			}
 		}
 		return this.addLedgerEntry(entry);
+	}
+
+	/** The shelter this repository's database belongs to (`shelter_sh001` → `SH001`), else null. */
+	private shelterCodeOfDb(): string | null {
+		return this.dbName.startsWith('shelter_')
+			? this.dbName.replace('shelter_', '').toUpperCase()
+			: null;
+	}
+
+	async mergeItems(input: MergeItemsInput, ctx: AuthorContext): Promise<ItemMergeResult> {
+		const shelterCode = this.shelterCodeOfDb();
+		const catalog = catalogRepository();
+		const [source, target] = await Promise.all([
+			catalog.getItemMaster(input.sourceId, shelterCode),
+			catalog.getItemMaster(input.targetId, shelterCode)
+		]);
+		if (!source) throw new ItemMergeError('invalid_target', `Unknown item: ${input.sourceId}`);
+		if (!target) throw new ItemMergeError('invalid_target', `Unknown item: ${input.targetId}`);
+
+		const plan = await planItemMerge({
+			source,
+			target,
+			roles: input.roles,
+			shelterCode,
+			ledger: await this.listLedger(),
+			ctx
+		});
+
+		// Ledger first, ONE request for every pair (FR-F1): a source that is deactivated but still
+		// holds stock is the worse failure, and re-running a merge whose rows already landed finds
+		// no stock left to move (and deterministic ids turn a double submit into a conflict).
+		// NOT atomic across docs — `_bulk_docs` validates each row on its own.
+		if (plan.entries.length > 0) await bulkDocs<StockLedger>(this.dbName, plan.entries);
+
+		const saved = await catalog.updateItemMaster(plan.source);
+		return { source: saved, target, legs: plan.legs };
 	}
 
 	// --- Campaign/Donation/Slot Methods ---

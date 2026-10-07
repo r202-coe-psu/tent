@@ -170,3 +170,33 @@ describe('barcode lookup', () => {
 		expect(filterStockFormItems(items, '0000000000000')).toEqual([]);
 	});
 });
+
+describe('merged items (CR-143 FR-F5)', () => {
+	const destination = { _id: 'item_master:B', name: 'นมถั่วเหลือง 300ml', base_unit: 'bottle' };
+	const source = {
+		_id: 'item_master:A',
+		name: 'นมถั่วเหลือง 300 มล.',
+		base_unit: 'bottle',
+		merged_into: 'item_master:B',
+		deactivated: true
+	};
+
+	it('drops the merged-away source from the pickers', () => {
+		expect(toStockFormItems([], [destination, source]).map((i) => i._id)).toEqual([
+			'item_master:B'
+		]);
+	});
+
+	it('drops a merged source even if it was left active', () => {
+		const stillActive = { ...source, deactivated: false };
+		expect(toStockFormItems([], [destination, stillActive]).map((i) => i._id)).toEqual([
+			'item_master:B'
+		]);
+	});
+
+	it("finds the destination by the source's old name", () => {
+		const items = toStockFormItems([], [destination, source]);
+		expect(items[0].aliases).toEqual(['นมถั่วเหลือง 300 มล.']);
+		expect(filterStockFormItems(items, '300 มล.').map((i) => i._id)).toEqual(['item_master:B']);
+	});
+});

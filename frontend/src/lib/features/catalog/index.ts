@@ -53,6 +53,7 @@ export {
 	itemMasterUpdateInputSchema,
 	type ItemMasterUpdateInput,
 	createItemMaster,
+	ITEM_MASTER_SCHEMA_V,
 	isItemMaster,
 	itemMasterUnit,
 	DEFAULT_ITEM_UNIT,
@@ -115,6 +116,15 @@ export {
 	type ItemMasterInitialValues
 } from './domain/quick-create';
 export { canWriteShelterCatalog } from './domain/catalog-permissions';
+export {
+	isMergedItem,
+	mergedAliasesByTarget,
+	isShelterLocalItem,
+	canMergeItem,
+	resolveItemUnitConversion,
+	convertItemQty,
+	type ItemUnitConversion
+} from './domain/item-merge';
 
 // Data — repository contract + remote CouchDB binding
 export type { CatalogRepository } from './data/catalog.repository';

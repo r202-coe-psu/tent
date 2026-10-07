@@ -1,5 +1,11 @@
 import Fuse, { type IFuseOptions } from 'fuse.js';
-import { findItemByBarcode, itemMasterUnit, type PackagingSource } from '$lib/features/catalog';
+import {
+	findItemByBarcode,
+	isMergedItem,
+	itemMasterUnit,
+	mergedAliasesByTarget,
+	type PackagingSource
+} from '$lib/features/catalog';
 
 /** Item row for receive / distribute / adjust pickers (and A6 transfer). */
 export type StockFormItem = PackagingSource & {
@@ -8,6 +14,8 @@ export type StockFormItem = PackagingSource & {
 	unit: string;
 	perishable?: boolean;
 	sku?: string;
+	/** Names of items merged into this one (CR-143 FR-F5): searching an old name finds it. */
+	aliases?: string[];
 };
 
 /** Minimal supply-item fields needed to build a {@link StockFormItem}. */
@@ -29,11 +37,13 @@ export type StockFormMasterSource = {
 	default_inventory_uom?: string;
 	default_issue_uom?: string;
 	deactivated?: boolean;
+	merged_into?: string;
 };
 
 /**
  * Merge legacy supply items and active item masters into the shared picker shape.
- * Supply items come first; deactivated masters are dropped.
+ * Supply items come first; deactivated and merged-away masters are dropped, and a
+ * destination carries its merged sources' names as search aliases (CR-143 FR-F5).
  */
 export function toStockFormItems(
 	supplyItems: readonly StockFormSupplySource[],
@@ -48,10 +58,12 @@ export function toStockFormItems(
 		perishable: item.perishable
 	}));
 
+	const aliasesByTarget = mergedAliasesByTarget(itemMasters);
 	const mappedMasters = itemMasters
-		.filter((im) => !im.deactivated)
+		.filter((im) => !im.deactivated && !isMergedItem(im))
 		.map((im) => {
 			const unit = itemMasterUnit(im);
+			const aliases = aliasesByTarget.get(im._id);
 			return {
 				_id: im._id,
 				name: im.name,
@@ -61,7 +73,8 @@ export function toStockFormItems(
 				default_inventory_uom: im.default_inventory_uom,
 				default_issue_uom: im.default_issue_uom,
 				perishable: false,
-				...(im.sku !== undefined ? { sku: im.sku } : {})
+				...(im.sku !== undefined ? { sku: im.sku } : {}),
+				...(aliases?.length ? { aliases } : {})
 			};
 		});
 
@@ -79,7 +92,8 @@ const FUSE_OPTIONS: IFuseOptions<StockFormSearchDoc> = {
 	keys: [
 		{ name: 'name', weight: 0.7 },
 		{ name: 'sku', weight: 0.2 },
-		{ name: 'skuNorm', weight: 0.1 }
+		{ name: 'skuNorm', weight: 0.1 },
+		{ name: 'aliases', weight: 0.5 }
 	],
 	threshold: 0.4,
 	ignoreLocation: true,
