@@ -1,0 +1,26 @@
+meta {
+  name: EXT-006 Summary
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{base_url}}/public-api/external/summary
+  body: none
+  auth: inherit
+}
+
+docs {
+  EXT-006 — สรุปข้ามศูนย์
+
+  Scope: location-read บังคับ
+  occupancy-read ถ้ามี จะเติม result.occupancy_total ระดับบน ถ้าไม่มีฟิลด์นั้นเป็น null
+  locations[].occupancy_total มีเสมอ
+
+  Method: GET /public-api/external/summary
+
+  critical_items ส่งเฉพาะ level เป็น low หรือ critical ไม่ส่ง normal
+  qty น้อยกว่าหรือเท่ากับ 0 เป็น critical ต่ำกว่า threshold เป็น low
+
+  Error: 401 invalid_token · 403 insufficient_scope
+}

@@ -1,18 +1,18 @@
 ---
 title: Partner Data API — As-Built (EXT-001–EXT-011)
 status: as-built
-version: 2.0
+version: 2.1
 created: 2026-10-06
-updated: 2026-10-06
+updated: 2026-10-07
 audience: M2 Vulnerable-group Readiness / M6 Resource Logistics / M7 Command Center (EOC) partners
-note: Self-contained as-built for partner integration; email this file alone (smoke-test script, if wanted, is attached separately — §18). v2.0 รวม EXT-008–011 (M2, CR-154) เข้ากับฉบับ 2026-09-10 (v1.6, EXT-001–007).
+note: Self-contained as-built for partner integration; email this file alone (smoke-test script, if wanted, is attached separately — §18; Bruno collection is attached separately — §19). v2.0 รวม EXT-008–011 (M2, CR-154) เข้ากับฉบับ 2026-09-10 (v1.6, EXT-001–007). v2.1 เติมตารางฟิลด์ request/result ของ EXT-008–011 ให้เท่า EXT-002–007 โดยไม่เปลี่ยนสัญญา.
 ---
 
 # Partner Data API — เอกสารส่งมอบ As-Built (EXT-001–EXT-011)
 
 เอกสารนี้อธิบาย **พฤติกรรมจริงของ API** ที่ Smart Shelter เปิดให้ระบบพันธมิตร (M2 / M6 / M7) เรียกใช้ และเป็น **สัญญา as-built ที่ใช้ผูก integration สำหรับ M2/M6/M7** — พอส่งไฟล์นี้ฉบับเดียวโดยไม่ต้องอ้างเอกสารภายในอื่น
 
-**วันที่เอกสาร:** 2026-10-06 · **เวอร์ชัน:** 2.0
+**วันที่เอกสาร:** 2026-10-07 · **เวอร์ชัน:** 2.1
 
 **ใครใช้ส่วนไหน:** M6/M7 ใช้ EXT-001–007 (§2–§11) · M2 ใช้ EXT-001, EXT-002 และ EXT-008–011 (§2, §5, §12–§15)
 
@@ -626,13 +626,17 @@ curl -sS -X POST 'https://shelter.importstar.dev/public-api/external/bookings' \
   }'
 ```
 
-| ฟิลด์ | ชนิด | บังคับ | เงื่อนไข |
+### Request body
+
+ทุกฟิลด์บังคับ ส่งฟิลด์อื่นเพิ่มมาได้แต่ระบบไม่เก็บ
+
+| Field | Type | Null? | หมายเหตุ |
 | --- | --- | --- | --- |
-| `location_code` | string | ✔ | รหัสศูนย์จาก EXT-002 |
-| `cid` | string(13) | ✔ | ตัวเลข 13 หลัก ผ่าน checksum ของบัตรประชาชน ห้ามมีขีดหรือช่องว่าง |
-| `first_name` | string | ✔ | ห้ามว่าง |
-| `last_name` | string | ✔ | ห้ามว่าง |
-| `phone` | string | ✔ | เบอร์ไทย 9–10 หลัก รับรูปแบบ `+66…` ได้ (ระบบแปลงเป็น `0…` ให้) |
+| `location_code` | string | no | รหัสศูนย์จาก EXT-002 ตัดช่องว่างหัวท้ายแล้วห้ามว่าง |
+| `cid` | string | no | ตัวเลข 13 หลัก ผ่าน checksum ของบัตรประชาชน ห้ามมีขีดหรือช่องว่าง |
+| `first_name` | string | no | ตัดช่องว่างหัวท้ายแล้วห้ามว่าง |
+| `last_name` | string | no | ตัดช่องว่างหัวท้ายแล้วห้ามว่าง |
+| `phone` | string | no | หลัง normalize ต้องตรง `^0\d{8,9}$` (ขึ้นต้น `0` แล้วตามด้วย 8 หรือ 9 หลัก) รับ `+66…` และ `66…` ระบบตัดช่องว่าง ขีด วงเล็บ แล้วแปลงเป็น `0…` ให้ |
 
 ### Success (201)
 
@@ -643,6 +647,14 @@ curl -sS -X POST 'https://shelter.importstar.dev/public-api/external/bookings' \
   "result": { "booking_id": "BK-01M48AM8KGVN69C4Z6K7K38ZZR", "location_code": "SH014", "booking_status": "BOOKED" }
 }
 ```
+
+### `result` (201)
+
+| Field | Type | Null? | หมายเหตุ |
+| --- | --- | --- | --- |
+| `booking_id` | string | no | `BK-{ulid}` เก็บไว้เรียก EXT-009 และ EXT-010 |
+| `location_code` | string | no | รหัสศูนย์ที่รับจอง |
+| `booking_status` | `"BOOKED"` | no | ค่านี้บน 201 แปลว่ารับเข้าคิวแล้ว ไม่ใช่ check-in |
 
 ### พฤติกรรม as-built
 
@@ -670,6 +682,14 @@ curl -sS -X POST 'https://shelter.importstar.dev/public-api/external/bookings' \
 | Method / Path | `GET /public-api/external/bookings/{booking_id}` |
 | Scope | `booking-write` |
 
+### Path parameters
+
+ไม่มี body
+
+| Param | Type | หมายเหตุ |
+| --- | --- | --- |
+| `booking_id` | string | `BK-{ulid}` จาก EXT-008 อ่านได้เฉพาะ booking ของ client ตัวเอง |
+
 ```bash
 curl -sS 'https://shelter.importstar.dev/public-api/external/bookings/BK-01M48AM8KGVN69C4Z6K7K38ZZR' \
   -H 'Authorization: Bearer <access_token>'
@@ -692,13 +712,28 @@ curl -sS 'https://shelter.importstar.dev/public-api/external/bookings/BK-01M48AM
 }
 ```
 
+### `result` (200)
+
+| Field | Type | Null? | หมายเหตุ |
+| --- | --- | --- | --- |
+| `booking_id` | string | no | ค่าเดียวกับ path |
+| `location_code` | string | no | รหัสศูนย์ของการจอง |
+| `booking_status` | `"BOOKED"` \| `"CANCELLED"` \| `"REJECTED"` | no | ดูตารางด้านล่าง |
+| `reject_reason` | `"duplicate"` \| `"not_cancellable"` \| null | yes | `null` เมื่อไม่มีเหตุปฏิเสธ |
+| `created_at` | datetime | no | ISO 8601 offset `+07:00` |
+| `updated_at` | datetime | no | ISO 8601 offset `+07:00` |
+
 | `booking_status` | ความหมาย |
 | --- | --- |
 | `BOOKED` | การจองมีผล (อยู่ในคิว หรือลงทะเบียนเข้าศูนย์แล้ว) |
 | `CANCELLED` | ยกเลิกแล้ว — แสดงทันทีที่ขอยกเลิกสำเร็จ แม้ระบบยังประมวลผลการยกเลิกไม่เสร็จ |
-| `REJECTED` | ระบบปฏิเสธตอนลงทะเบียน — ดู `reject_reason` (`duplicate` = พบการจองหรือการเข้าพักของเลขบัตรนี้ที่ศูนย์เดียวกันผ่านช่องทางอื่น) |
+| `REJECTED` | ระบบปฏิเสธตอนลงทะเบียน |
 
-ถ้าเคยขอยกเลิกแล้วแต่ยกเลิกไม่สำเร็จ เพราะผู้จองไปรายงานตัวที่ศูนย์ก่อน สถานะจะกลับเป็น `BOOKED` และมี `reject_reason: "not_cancellable"`
+| `reject_reason` | เมื่อไร |
+| --- | --- |
+| `null` | จองมีผล หรือยกเลิกสำเร็จ |
+| `duplicate` | `booking_status` เป็น `REJECTED` — พบการจองหรือการเข้าพักของเลขบัตรนี้ที่ศูนย์เดียวกันผ่านช่องทางอื่น |
+| `not_cancellable` | `booking_status` กลับเป็น `BOOKED` — ขอยกเลิกแล้วแต่ผู้จองไปรายงานตัวที่ศูนย์ก่อน ยกเลิกจึงไม่สำเร็จ |
 
 อ่านได้เฉพาะ booking ของ client ตัวเอง — booking ของ client อื่นตอบ `404 booking_not_found` (แยกไม่ออกจากกรณีไม่มีอยู่จริง)
 
@@ -710,7 +745,20 @@ curl -sS 'https://shelter.importstar.dev/public-api/external/bookings/BK-01M48AM
 | --- | --- |
 | Method / Path | `POST /public-api/external/bookings/{booking_id}/cancel` |
 | Scope | `booking-write` |
-| Body | ไม่บังคับ — ส่งว่างได้ หรือ `{ "reason": "…" }` (≤ 200 ตัวอักษร) |
+
+### Path parameters
+
+| Param | Type | หมายเหตุ |
+| --- | --- | --- |
+| `booking_id` | string | `BK-{ulid}` จาก EXT-008 ยกเลิกได้เฉพาะ booking ของ client ตัวเอง |
+
+### Request body
+
+ไม่บังคับ — ไม่ส่ง body, ส่ง `{}` หรือส่ง `reason` ก็ได้
+
+| Field | Type | Null? | หมายเหตุ |
+| --- | --- | --- | --- |
+| `reason` | string \| null | yes | ตัดช่องว่างหัวท้าย ค่าว่างหรือไม่ส่งเก็บเป็นไม่มีเหตุผล ยาวเกิน 200 ตัวอักษร → `422 validation_error` |
 
 ```bash
 curl -sS -X POST 'https://shelter.importstar.dev/public-api/external/bookings/BK-01M48AM8KGVN69C4Z6K7K38ZZR/cancel' \
@@ -729,6 +777,13 @@ curl -sS -X POST 'https://shelter.importstar.dev/public-api/external/bookings/BK
 }
 ```
 
+### `result` (200)
+
+| Field | Type | Null? | หมายเหตุ |
+| --- | --- | --- | --- |
+| `booking_id` | string | no | ค่าเดียวกับ path |
+| `booking_status` | `"CANCELLED"` | no | 200 คืนค่านี้เสมอ |
+
 ### พฤติกรรม as-built
 
 - ยกเลิกได้เฉพาะ booking ของ client ตัวเอง และเฉพาะตอนที่ผู้จองยังไม่ได้รายงานตัวที่ศูนย์ — ไม่เข้าเงื่อนไข → `409 booking_not_cancellable`
@@ -744,7 +799,15 @@ curl -sS -X POST 'https://shelter.importstar.dev/public-api/external/bookings/BK
 | --- | --- |
 | Method / Path | `GET /public-api/external/persons/shelter-residency` |
 | Scope | `residency-read` |
-| Query | `cid` (**บังคับ**, 13 หลัก) · `purpose` (**บังคับ**) — วัตถุประสงค์ ใช้บันทึกตาม PDPA |
+
+### Query parameters
+
+ไม่มี body
+
+| Param | Type | Default | ความหมาย |
+| --- | --- | --- | --- |
+| `cid` | string | — | **บังคับ** ตัวเลข 13 หลัก ไม่ตรวจ checksum ไม่ใช่ → `422 validation_error` |
+| `purpose` | string | — | **บังคับ** วัตถุประสงค์ ตัดช่องว่างแล้วห้ามว่าง ไม่ส่งหรือว่าง → `400 missing_purpose` ใช้บันทึกตาม PDPA ไม่เก็บเลขบัตร |
 
 ```bash
 curl -sS -G 'https://shelter.importstar.dev/public-api/external/persons/shelter-residency' \
@@ -780,11 +843,16 @@ curl -sS -G 'https://shelter.importstar.dev/public-api/external/persons/shelter-
 }
 ```
 
-| ฟิลด์ | ความหมาย |
-| --- | --- |
-| `residency_status` | `CHECKED_IN` เมื่อยังพักอยู่ในศูนย์ (รวมกรณีออกชั่วคราว) ส่วนกรณีอื่นเป็น `CHECKED_OUT` |
-| `stay_status` | สถานะละเอียดภายในระบบ (ข้อมูลเสริม) |
-| `in_zone` | `true` เมื่อเจ้าหน้าที่ยืนยันว่าผู้พักถึงโซนที่พักแล้ว |
+### `result` (200)
+
+| Field | Type | Null? | หมายเหตุ |
+| --- | --- | --- | --- |
+| `location_code` | string | no | รหัสศูนย์ ตรงกับ EXT-002 |
+| `name_th` | string | no | ชื่อศูนย์ ถ้าไม่มีชื่อใช้ `location_code` |
+| `checkin_datetime` | datetime | no | วันเวลาเข้าพัก ISO 8601 offset `+07:00` |
+| `residency_status` | `"CHECKED_IN"` \| `"CHECKED_OUT"` | no | `CHECKED_IN` เมื่อ `stay_status` เป็น `active`, `room_confirmed` หรือ `temporary_leave` ค่าอื่นเป็น `CHECKED_OUT` |
+| `stay_status` | string | no | สถานะ stay ดิบ ไม่มี `pre_registered` ใน 200 (กรณีนั้นเป็น 404) |
+| `in_zone` | bool | no | `true` เฉพาะเมื่อ `stay_status` เป็น `room_confirmed` |
 
 ถ้าเลขบัตรเดียวกันมีประวัติหลายศูนย์ ระบบเลือกศูนย์ที่ยังพักอยู่ก่อน ถ้าไม่มีเลือกประวัติที่อัปเดตล่าสุด
 
@@ -872,6 +940,8 @@ Exit code เป็น `0` เมื่อผ่านทั้งหมด แ�
 ---
 
 ## 19. Checklist ฝั่ง Partner
+
+คู่มือยิงด้วย Bruno อยู่ที่โฟลเดอร์ `partner-api-bruno/` คู่กับไฟล์นี้ (เปิดในแอป Bruno แบบ Open Collection) รายละเอียดการกรอก environment อยู่ใน `partner-api-bruno/README.md` — **แนบแยก** เช่นเดียวกับสคริปต์ smoke test ไม่ได้ฝังในไฟล์ markdown นี้
 
 1. ขอ `client_id` / `client_secret` + scopes จากทีม Shelter (ออกแยกจากเอกสารนี้)
 2. `POST /public-api/external/token` (`Content-Type: application/json`) แล้วเก็บ `access_token` จนใกล้หมดอายุ
