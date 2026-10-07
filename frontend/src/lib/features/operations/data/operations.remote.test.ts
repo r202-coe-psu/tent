@@ -744,6 +744,34 @@ describe('OperationsRemoteRepository', () => {
 			).rejects.toThrow('Perishable item item:rice requires lot.expiry to be set');
 		});
 
+		it('does not demand lot.expiry for a write-off against a lot without one', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'kg', perishable: true } as SupplyItem);
+			await repo.receiveStock(
+				{
+					item_id: 'item:rice',
+					qty: 10,
+					unit: 'kg',
+					source: 'donation',
+					ref_id: DONATION_REF,
+					lot: { expiry: '2027-01-01' }
+				},
+				ctx
+			);
+
+			const result = await repo.adjustStock(
+				{ item_id: 'item:rice', qty: -2, unit: 'kg', source: 'adjust', reason: 'damaged' } as never,
+				ctx
+			);
+			expect(result.qty).toBe('-2');
+
+			await expect(
+				repo.adjustStock(
+					{ item_id: 'item:rice', qty: 2, unit: 'kg', source: 'adjust', reason: 'found' } as never,
+					ctx
+				)
+			).rejects.toThrow('requires lot.expiry');
+		});
+
 		it('persists the ledger entry when the item exists and units match', async () => {
 			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
 

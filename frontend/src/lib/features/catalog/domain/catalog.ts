@@ -450,6 +450,10 @@ export type ExpirySource = {
 /** Storage types whose stock cannot be left on the shelf without a date. */
 const EXPIRY_STORAGE_TYPES: readonly StorageType[] = ['CHILLED', 'FROZEN'];
 
+function isColdStorage(type: StorageType | null | undefined): boolean {
+	return !!type && EXPIRY_STORAGE_TYPES.includes(type);
+}
+
 /**
  * Must a receive of this item carry `lot.expiry`? (CR-143 FR-D1, FR-D3)
  *
@@ -458,7 +462,7 @@ const EXPIRY_STORAGE_TYPES: readonly StorageType[] = ['CHILLED', 'FROZEN'];
  */
 export function requiresExpiry(item: ExpirySource): boolean {
 	if (item.perishable === true) return true;
-	if (item.storage_type && EXPIRY_STORAGE_TYPES.includes(item.storage_type)) return true;
+	if (isColdStorage(item.storage_type)) return true;
 	return item.shelf_life_days != null;
 }
 
@@ -503,7 +507,7 @@ export function shelfLifeExpiryLabel(shelfLifeDays: number): string {
 
 /** FR-D4 — what the chosen storage / shelf life means for stock receipts (item create forms). */
 export function expiryRequirementHint(item: ExpirySource): string {
-	if (item.storage_type && EXPIRY_STORAGE_TYPES.includes(item.storage_type)) {
+	if (isColdStorage(item.storage_type)) {
 		return 'แช่เย็น / แช่แข็ง → ต้องกรอกวันหมดอายุทุกครั้งที่รับเข้า';
 	}
 	if (item.shelf_life_days != null) {
