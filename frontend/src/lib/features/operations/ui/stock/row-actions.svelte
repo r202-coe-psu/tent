@@ -8,15 +8,20 @@
 		onreceive,
 		ondistribute,
 		disabled = false,
+		distributeDisabled = false,
 		layout = 'stack'
 	}: {
 		itemName: string;
 		onreceive: () => void;
 		ondistribute: () => void;
 		disabled?: boolean;
+		distributeDisabled?: boolean;
 		/** `stack` = one above the other (tablet, phone); `inline` = side by side (desktop). */
 		layout?: 'stack' | 'inline';
 	} = $props();
+
+	const DISTRIBUTE_FORBIDDEN_HINT =
+		'ต้องมีสิทธิ์เจ้าหน้าที่คลัง (warehouse_staff) จึงจะเบิกจ่ายได้';
 </script>
 
 <!-- stopPropagation: the table row is itself clickable (opens the item). -->
@@ -37,7 +42,8 @@
 	<Button
 		type="button"
 		variant="outline"
-		{disabled}
+		disabled={disabled || distributeDisabled}
+		title={distributeDisabled ? DISTRIBUTE_FORBIDDEN_HINT : undefined}
 		aria-label="เบิก {itemName}"
 		class="min-h-11 gap-1.5 rounded-lg border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 shadow-2xs"
 		onclick={(e: MouseEvent) => {

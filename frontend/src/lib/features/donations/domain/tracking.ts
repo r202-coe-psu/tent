@@ -50,6 +50,20 @@ export type DonationTrackView = {
 		total_items?: number;
 		received_at?: string;
 		remarks?: string;
+		shortfalls?: Array<{
+			item_id?: string;
+			item_name?: string;
+			declared?: string;
+			counted?: string;
+			short?: string;
+		}>;
+		items?: Array<{
+			item_id?: string;
+			free_text?: string;
+			item_name?: string;
+			qty?: string | number;
+			unit?: string;
+		}>;
 	} | null;
 	updated_at: string | null;
 	expires_at: string | null;

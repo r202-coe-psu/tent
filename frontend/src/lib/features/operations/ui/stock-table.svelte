@@ -24,7 +24,7 @@
 	} from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { isSystemAdmin } from '$lib/auth/roles';
+	import { isSystemAdmin, hasCapabilityInShelter, WAREHOUSE_STAFF } from '$lib/auth/roles';
 	import { useShelters } from '$lib/features/shelters';
 	import { getShelterCode } from '$lib/db/shelter';
 	import * as Table from '$lib/components/ui/table/index.js';
@@ -98,6 +98,10 @@
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
+	const currentShelter = $derived(getShelterCode());
+	const canDistribute = $derived(hasCapabilityInShelter(roles, currentShelter, WAREHOUSE_STAFF));
+	const DISTRIBUTE_FORBIDDEN_HINT =
+		'ต้องมีสิทธิ์เจ้าหน้าที่คลัง (warehouse_staff) จึงจะเบิกจ่ายได้';
 	let showOverall = $state(false);
 
 	const sheltersQuery = useShelters();
@@ -247,7 +251,12 @@
 
 	const stockSummaryByItem = $derived.by(() => {
 		const result = new SvelteMap<string, ItemStockSummary>();
-		for (const [itemId, lots] of lotsByItem) result.set(itemId, summarizeItemStock(lots));
+		for (const [itemId, lots] of lotsByItem) {
+			result.set(
+				itemId,
+				summarizeItemStock(lots, undefined, undefined, lotPriorityItems.get(itemId))
+			);
+		}
 		return result;
 	});
 
@@ -386,8 +395,8 @@
 					type="button"
 					variant="outline"
 					class="min-h-11 gap-2 rounded-lg border-slate-300 px-4 text-sm font-semibold text-slate-800 shadow-2xs"
-					disabled={offline}
-					title={offline ? OFFLINE_HINT : undefined}
+					disabled={offline || !canDistribute}
+					title={offline ? OFFLINE_HINT : !canDistribute ? DISTRIBUTE_FORBIDDEN_HINT : undefined}
 					onclick={() => openQuickAction('distribute')}
 				>
 					<ArrowUpFromLine class="h-4 w-4" aria-hidden="true" />
@@ -510,6 +519,7 @@
 								{row}
 								{readonly}
 								{offline}
+								{canDistribute}
 								onopen={(r) => openDetail(r._id)}
 								onreceive={(r) => openQuickAction('receive', r._id)}
 								ondistribute={(r) => openQuickAction('distribute', r._id)}
@@ -543,6 +553,7 @@
 									{row}
 									{readonly}
 									{offline}
+									{canDistribute}
 									onopen={(r) => openDetail(r._id)}
 									onreceive={(r) => openQuickAction('receive', r._id)}
 									ondistribute={(r) => openQuickAction('distribute', r._id)}
@@ -586,8 +597,8 @@
 		type="button"
 		variant="outline"
 		class="min-h-12 rounded-lg border-slate-300 text-sm font-semibold text-slate-800"
-		disabled={offline}
-		title={offline ? OFFLINE_HINT : undefined}
+		disabled={offline || !canDistribute}
+		title={offline ? OFFLINE_HINT : !canDistribute ? DISTRIBUTE_FORBIDDEN_HINT : undefined}
 		onclick={() => openQuickAction('distribute')}
 	>
 		เบิกจ่าย
@@ -611,6 +622,7 @@
 	itemsById={lotPriorityItems}
 	shelterCode={getShelterCode()}
 	{offline}
+	{canDistribute}
 	onaction={(kind) => openQuickAction(kind, selectedItemId ?? undefined)}
 />
 

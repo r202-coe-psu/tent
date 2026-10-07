@@ -33,6 +33,7 @@
 	import { useSupplyItems, useThresholdOverrides } from '$lib/features/supply';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
+	import { hasCapabilityInShelter, WAREHOUSE_STAFF } from '$lib/auth/roles';
 	import { getShelterCode } from '$lib/db/shelter';
 	import {
 		useDistributeStock,
@@ -69,6 +70,8 @@
 
 	// Session expired (`needsReauth`): every save button is off until the user signs in again.
 	const offline = $derived(authStore.needsReauth);
+	const roles = $derived(authStore.user?.roles ?? []);
+	const canDistribute = $derived(hasCapabilityInShelter(roles, getShelterCode(), WAREHOUSE_STAFF));
 
 	const stockItems = useStockFormItems(() => getShelterCode());
 	const unitsQuery = useUnitsOfMeasure();
@@ -527,6 +530,7 @@
 
 	const canSubmit = $derived(
 		!offline &&
+			canDistribute &&
 			!$submitting &&
 			!!$formData.qty &&
 			qtyGt(currentStock, 0) &&
@@ -538,6 +542,15 @@
 
 <form method="POST" use:form.enhance class="flex flex-col space-y-4">
 	<Field.FieldGroup class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+		{#if !canDistribute}
+			<div
+				class="col-span-1 -mt-2 mb-2 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800 sm:col-span-2"
+				role="alert"
+			>
+				<AlertTriangle class="h-4 w-4 shrink-0 text-red-600" aria-hidden="true" />
+				<span>ต้องมีสิทธิ์เจ้าหน้าที่คลัง (warehouse_staff) จึงจะเบิกจ่ายได้</span>
+			</div>
+		{/if}
 		<Form.Field {form} name="item_id" class="relative col-span-1 sm:col-span-2">
 			<Form.Control>
 				{#snippet children({ props })}
