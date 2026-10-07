@@ -29,6 +29,7 @@ import type {
 } from '../domain/operations';
 import type { DonationBatchLine } from '../domain/donation-batch';
 import { countPendingTransfers } from '../domain/transfer-pending';
+import { distributeAcrossLots, type DistributeAcrossLotsArgs } from './distribute-across-lots';
 
 export const operationsKeys = {
 	all: ['operations'] as const,
@@ -232,6 +233,23 @@ export const useDistributeStock = () => {
 			operationsRepository().distributeStock(input, ctx),
 		onSuccess: () => {
 			// Eagerly invalidate — live query will also fire, but this ensures instant update
+			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
+		}
+	}));
+};
+
+/**
+ * Mutation hook to issue one request across several lots (CR-143 FR-A7–A9): one
+ * `distributeStock` per planned lot, one shared `ref_id`, no rollback. Resolves
+ * with the partial result when a row fails — read `result.complete` / `.failure`.
+ * Caches are invalidated either way, since earlier rows may already have landed.
+ */
+export const useDistributeAcrossLots = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: ({ plan, ctx }: { plan: DistributeAcrossLotsArgs; ctx: AuthorContext }) =>
+			distributeAcrossLots(operationsRepository(), plan, ctx),
+		onSettled: () => {
 			queryClient.invalidateQueries({ queryKey: operationsKeys.all });
 		}
 	}));

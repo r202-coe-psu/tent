@@ -147,6 +147,7 @@ export {
 	useStockBalance,
 	useReceiveStock,
 	useDistributeStock,
+	useDistributeAcrossLots,
 	useAdjustStock,
 	useCampaigns,
 	useStockLedgers,
@@ -208,3 +209,14 @@ export {
 	type LotScore,
 	type RankLotsOptions
 } from './domain/lot-priority';
+export {
+	planLotSplit,
+	type LotAllocation,
+	type LotSplitPlan,
+	type SplittableLot
+} from './domain/lot-split';
+export type {
+	DistributeAcrossLotsResult,
+	DistributedLot,
+	FailedLot
+} from './application/distribute-across-lots';
