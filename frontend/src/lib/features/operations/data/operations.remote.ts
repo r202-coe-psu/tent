@@ -48,6 +48,7 @@ import { supplyRepository, type SupplyItem } from '$lib/features/supply';
 import {
 	isItemMaster,
 	itemMasterUnit,
+	requiresExpiry,
 	assertKnownUnitCodes,
 	isLegacyUnitLabel,
 	catalogRepository,
@@ -58,7 +59,8 @@ import { addQty, persistQty, qtyAbs, qtyGt, qtyGte, qtyLte, subQty } from '$lib/
 /**
  * A catalog row a ledger entry can point at. The `catalog` database holds two
  * shapes: the T-10 `item:{ulid}` supply stub (`unit`, `perishable`) and the
- * CR-013 `item_master:{ulid}` master (`base_unit`, no perishable flag). Item
+ * CR-013 `item_master:{ulid}` master (`base_unit`, no perishable flag — CR-143 §D
+ * derives the expiry requirement from storage / shelf life instead). Item
  * pickers already offer both, so both must survive the guards below.
  */
 export type CatalogItem = SupplyItem | ItemMaster;
@@ -70,10 +72,10 @@ export type CatalogItem = SupplyItem | ItemMaster;
 const DIRECT_DISTRIBUTION_CLAIM_RECOVERY_AGE_MS = 15 * 60 * 1000;
 
 /** The unit + expiry rules a receive/adjust must satisfy, whichever shape it is. */
-export function catalogItemRules(item: CatalogItem): { unit: string; perishable: boolean } {
+export function catalogItemRules(item: CatalogItem): { unit: string; requiresExpiry: boolean } {
 	return isItemMaster(item)
-		? { unit: itemMasterUnit(item), perishable: false }
-		: { unit: item.unit, perishable: item.perishable };
+		? { unit: itemMasterUnit(item), requiresExpiry: requiresExpiry(item) }
+		: { unit: item.unit, requiresExpiry: requiresExpiry(item) };
 }
 
 export function assertReceiveAgainstCatalog(entry: StockLedger, item: CatalogItem | null): void {
@@ -88,7 +90,7 @@ export function assertReceiveAgainstCatalog(entry: StockLedger, item: CatalogIte
 			`Unit mismatch for item ${entry.item_id}: expected ${rules.unit}, got ${entry.unit}`
 		);
 	}
-	if (rules.perishable && !entry.lot?.expiry) {
+	if (rules.requiresExpiry && !entry.lot?.expiry) {
 		throw new Error(`Perishable item ${entry.item_id} requires lot.expiry to be set`);
 	}
 }

@@ -127,7 +127,11 @@ vi.mock('$lib/db/couch-db', async (importOriginal) => {
 	};
 });
 
-import { OperationsRemoteRepository, assertReceiveAgainstCatalog } from './operations.remote';
+import {
+	OperationsRemoteRepository,
+	assertReceiveAgainstCatalog,
+	catalogItemRules
+} from './operations.remote';
 import { createReceiveEntry, projectStockLotBalances } from '../domain/operations';
 import { createStockLotReservation, makeLotReservationDocId } from '$lib/features/distribution';
 import type { AuthorContext } from '$lib/db/model';
@@ -213,18 +217,62 @@ describe('assertReceiveAgainstCatalog', () => {
 		).not.toThrow();
 	});
 
-	it('never demands lot.expiry for an item_master (no perishable flag on that shape)', () => {
-		const masterEntry = createReceiveEntry(
-			{ item_id: 'item_master:milk', qty: 1, unit: 'l', source: 'donation', ref_id: DONATION_REF },
-			ctx
-		);
-		expect(() =>
-			assertReceiveAgainstCatalog(masterEntry, {
-				type: 'item_master',
-				base_unit: 'l',
-				perishable: true
-			} as unknown as ItemMaster)
-		).not.toThrow();
+	// CR-143 §D (FR-D1): an item_master has no `perishable` flag, so the rule is derived.
+	describe('item_master expiry requirement (CR-143 §D)', () => {
+		const masterEntry = (expiry?: string) =>
+			createReceiveEntry(
+				{
+					item_id: 'item_master:milk',
+					qty: 1,
+					unit: 'l',
+					source: 'donation',
+					ref_id: DONATION_REF,
+					...(expiry ? { lot: { expiry } } : {})
+				},
+				ctx
+			);
+		const master = (extra: Record<string, unknown>) =>
+			({ type: 'item_master', base_unit: 'l', ...extra }) as unknown as ItemMaster;
+
+		it('AC-D1: rejects a CHILLED item received without lot.expiry', () => {
+			expect(() =>
+				assertReceiveAgainstCatalog(masterEntry(), master({ storage_type: 'CHILLED' }))
+			).toThrow('requires lot.expiry to be set');
+			expect(() =>
+				assertReceiveAgainstCatalog(masterEntry(), master({ storage_type: 'FROZEN' }))
+			).toThrow('requires lot.expiry to be set');
+		});
+
+		it('rejects an item with shelf_life_days received without lot.expiry', () => {
+			expect(() =>
+				assertReceiveAgainstCatalog(
+					masterEntry(),
+					master({ storage_type: 'DRY', shelf_life_days: 180 })
+				)
+			).toThrow('requires lot.expiry to be set');
+		});
+
+		it('AC-D2: never demands lot.expiry for a DRY item with no shelf life', () => {
+			expect(() =>
+				assertReceiveAgainstCatalog(masterEntry(), master({ storage_type: 'DRY' }))
+			).not.toThrow();
+			expect(() => assertReceiveAgainstCatalog(masterEntry(), master({}))).not.toThrow();
+		});
+
+		it('accepts a CHILLED item once lot.expiry is supplied', () => {
+			expect(() =>
+				assertReceiveAgainstCatalog(masterEntry('2026-12-31'), master({ storage_type: 'CHILLED' }))
+			).not.toThrow();
+		});
+
+		it('catalogItemRules reports the derived requirement for both shapes', () => {
+			expect(catalogItemRules(master({ storage_type: 'CHILLED' })).requiresExpiry).toBe(true);
+			expect(catalogItemRules(master({ storage_type: 'DRY' })).requiresExpiry).toBe(false);
+			expect(
+				catalogItemRules({ type: 'supply_item', unit: 'l', perishable: true } as SupplyItem)
+					.requiresExpiry
+			).toBe(true);
+		});
 	});
 
 	it('passes for a perishable item with lot.expiry set', () => {

@@ -22,7 +22,11 @@ import {
 	toLedgerQtyUnit,
 	defaultInventoryUom,
 	defaultIssueUom,
-	packagingMultiplier
+	packagingMultiplier,
+	requiresExpiry,
+	suggestExpiry,
+	shelfLifeExpiryLabel,
+	expiryRequirementHint
 } from './catalog';
 import type { AuthorContext } from '$lib/db/model';
 
@@ -485,5 +489,135 @@ describe('packaging UOM conversion', () => {
 	it('rejects unknown packaging codes', () => {
 		expect(() => qtyToBaseUnit('1', 'crate', rice)).toThrow(/Unknown unit/);
 		expect(packagingMultiplier(rice, 'kg')).toBe('1');
+	});
+});
+
+// CR-143 §D — `item_master` has no `perishable` field, so the old code hardcoded
+// `perishable: false` for every master and never demanded an expiry date.
+describe('requiresExpiry (FR-D1, FR-D3)', () => {
+	it('is true for CHILLED and FROZEN storage', () => {
+		expect(requiresExpiry({ storage_type: 'CHILLED' })).toBe(true);
+		expect(requiresExpiry({ storage_type: 'FROZEN' })).toBe(true);
+	});
+
+	it('is false for DRY with no shelf life (AC-D2)', () => {
+		expect(requiresExpiry({ storage_type: 'DRY' })).toBe(false);
+		expect(requiresExpiry({ storage_type: 'DRY', shelf_life_days: undefined })).toBe(false);
+		expect(requiresExpiry({})).toBe(false);
+	});
+
+	it('is false for CONTROLLED_MED on its own', () => {
+		expect(requiresExpiry({ storage_type: 'CONTROLLED_MED' })).toBe(false);
+	});
+
+	it('is true whenever shelf_life_days is set, whatever the storage', () => {
+		expect(requiresExpiry({ storage_type: 'DRY', shelf_life_days: 180 })).toBe(true);
+		expect(requiresExpiry({ shelf_life_days: 30 })).toBe(true);
+		expect(requiresExpiry({ shelf_life_days: null })).toBe(false);
+	});
+
+	it('stays true for a legacy supply_item.perishable (OR with FR-D1)', () => {
+		expect(requiresExpiry({ perishable: true })).toBe(true);
+		expect(requiresExpiry({ perishable: false })).toBe(false);
+		expect(requiresExpiry({ perishable: true, storage_type: 'DRY' })).toBe(true);
+	});
+});
+
+describe('suggestExpiry (FR-D2a, FR-D2c)', () => {
+	const dry180 = { storage_type: 'DRY' as const, shelf_life_days: 180 };
+
+	// AC-D3: received 2 Oct 2569 (= 2026-10-02), no production date -> 31 Mar 2570.
+	it('adds shelf_life_days to the receive date when there is no production date', () => {
+		expect(suggestExpiry(dry180, '', '2026-10-02')).toEqual({
+			expiry: '2027-03-31',
+			shelfLifeDays: 180
+		});
+		expect(suggestExpiry(dry180, undefined, '2026-10-02')?.expiry).toBe('2027-03-31');
+	});
+
+	// AC-D4: produced 1 Sep 2569 -> 28 Feb 2570.
+	it('prefers the production date over the receive date', () => {
+		expect(suggestExpiry(dry180, '2026-09-01', '2026-10-02')?.expiry).toBe('2027-02-28');
+	});
+
+	it('returns null for CHILLED / FROZEN without shelf_life_days (they must be keyed by hand)', () => {
+		expect(suggestExpiry({ storage_type: 'CHILLED' }, '', '2026-10-02')).toBeNull();
+		expect(suggestExpiry({ storage_type: 'FROZEN' }, '2026-09-01', '2026-10-02')).toBeNull();
+	});
+
+	it('returns null for an item that does not require expiry, and for a non-positive shelf life', () => {
+		expect(suggestExpiry({ storage_type: 'DRY' }, '', '2026-10-02')).toBeNull();
+		expect(suggestExpiry({ shelf_life_days: 0 }, '', '2026-10-02')).toBeNull();
+	});
+
+	it('falls back to the receive date when the production date is not a valid date', () => {
+		expect(suggestExpiry(dry180, 'garbage', '2026-10-02')?.expiry).toBe('2027-03-31');
+	});
+
+	it('returns null when the base date is unusable', () => {
+		expect(suggestExpiry(dry180, '', 'nope')).toBeNull();
+	});
+
+	it('crosses a leap day without drifting', () => {
+		expect(suggestExpiry({ shelf_life_days: 365 }, '2027-12-31', '2028-01-05')?.expiry).toBe(
+			'2028-12-30'
+		);
+	});
+});
+
+describe('shelfLifeExpiryLabel (FR-D2b)', () => {
+	it('uses the exact owner-approved Thai wording', () => {
+		expect(shelfLifeExpiryLabel(180)).toBe(
+			'คำนวณจากอายุเก็บรักษา 180 วัน — กรุณาตรวจสอบกับฉลากอีกครั้ง'
+		);
+	});
+});
+
+describe('expiryRequirementHint (FR-D4)', () => {
+	it('tells the user chilled / frozen items need an expiry on every receive', () => {
+		expect(expiryRequirementHint({ storage_type: 'CHILLED' })).toBe(
+			'แช่เย็น / แช่แข็ง → ต้องกรอกวันหมดอายุทุกครั้งที่รับเข้า'
+		);
+		expect(expiryRequirementHint({ storage_type: 'FROZEN' })).toContain('ต้องกรอกวันหมดอายุ');
+	});
+
+	it('explains the shelf-life case, including the auto-fill', () => {
+		const hint = expiryRequirementHint({ storage_type: 'DRY', shelf_life_days: 180 });
+		expect(hint).toContain('180 วัน');
+		expect(hint).toContain('ต้องกรอกวันหมดอายุ');
+	});
+
+	it('says an expiry is optional otherwise', () => {
+		expect(expiryRequirementHint({ storage_type: 'DRY' })).toContain('ไม่บังคับ');
+		expect(expiryRequirementHint({})).toContain('ไม่บังคับ');
+	});
+});
+
+describe('mergeCatalogGenerations — requiresExpiry', () => {
+	it('derives requiresExpiry for item masters instead of hardcoding false', () => {
+		const merged = mergeCatalogGenerations(
+			[],
+			[
+				{ _id: 'item_master:milk', name: 'นม', base_unit: 'l', storage_type: 'CHILLED' },
+				{ _id: 'item_master:rice', name: 'ข้าว', base_unit: 'kg', storage_type: 'DRY' },
+				{ _id: 'item_master:can', name: 'กระป๋อง', base_unit: 'can', shelf_life_days: 365 }
+			]
+		);
+		expect(Object.fromEntries(merged.map((m) => [m._id, m.requiresExpiry]))).toEqual({
+			'item_master:milk': true,
+			'item_master:rice': false,
+			'item_master:can': true
+		});
+	});
+
+	it('keeps requiresExpiry true for a legacy perishable supply item', () => {
+		const merged = mergeCatalogGenerations(
+			[
+				{ _id: 'item:egg', name: 'ไข่', unit: 'ฟอง', perishable: true },
+				{ _id: 'item:rice', name: 'ข้าวสาร', unit: 'kg' }
+			],
+			[]
+		);
+		expect(merged.map((m) => m.requiresExpiry)).toEqual([true, false]);
 	});
 });

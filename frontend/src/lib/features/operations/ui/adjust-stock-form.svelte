@@ -222,8 +222,8 @@
 			toast.error('กรุณาเลือกสถานที่/ล็อต');
 			return;
 		}
-		if (selectedItem.perishable && selectedLotKey === 'new' && !customExpiry) {
-			toast.error('สินค้าเน่าเสียได้ จำเป็นต้องระบุวันหมดอายุ');
+		if (selectedItem.requiresExpiry && selectedLotKey === 'new' && !customExpiry) {
+			toast.error('สินค้านี้ต้องระบุวันหมดอายุ');
 			return;
 		}
 		if (!newQtyInput || isNaN(Number(newQtyInput)) || Number(newQtyInput) < 0) {
@@ -366,7 +366,7 @@
 				<Field.Root class="col-span-1">
 					<Field.Label for="custom-expiry">
 						วันหมดอายุ
-						{#if selectedItem.perishable}
+						{#if selectedItem.requiresExpiry}
 							<span class="font-bold text-destructive">*</span>
 						{:else}
 							<span class="font-normal text-muted-foreground">(ไม่บังคับ)</span>
