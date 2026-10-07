@@ -65,16 +65,20 @@ export function parseLedgerParams(params: URLSearchParams): LedgerUrlState {
 		: from || to
 			? 'custom'
 			: LEDGER_URL_DEFAULTS.range;
+	const parsedType = TYPES.includes(type as LedgerTypeFilter)
+		? (type as LedgerTypeFilter)
+		: LEDGER_URL_DEFAULTS.type;
 	return {
 		range: resolvedRange,
 		from,
 		to,
-		type: TYPES.includes(type as LedgerTypeFilter)
-			? (type as LedgerTypeFilter)
-			: LEDGER_URL_DEFAULTS.type,
-		reason: REASONS.includes(reason as LedgerReasonFilter)
-			? (reason as LedgerReasonFilter)
-			: LEDGER_URL_DEFAULTS.reason,
+		type: parsedType,
+		// The reason chips only render for the adjust group; a stale `lreason` elsewhere would
+		// filter rows with no visible control to clear it.
+		reason:
+			parsedType === 'adjust' && REASONS.includes(reason as LedgerReasonFilter)
+				? (reason as LedgerReasonFilter)
+				: LEDGER_URL_DEFAULTS.reason,
 		q: params.get('lq') ?? LEDGER_URL_DEFAULTS.q,
 		page: Number.isInteger(page) && page >= 1 ? page : LEDGER_URL_DEFAULTS.page
 	};

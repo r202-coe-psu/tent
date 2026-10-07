@@ -497,7 +497,8 @@ function stockLedgerInputSchemaWith(
 					message: `รายการประเภท '${d.reason}' ห้ามมี adjust_reason`
 				});
 			}
-			if (d.note !== undefined) {
+			// A blank note is dropped by the factory anyway, so only real text is refused.
+			if (d.note) {
 				ctx.addIssue({
 					code: 'custom',
 					path: ['note'],
