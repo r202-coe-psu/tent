@@ -1,5 +1,6 @@
 <script lang="ts">
 	import * as Select from '$lib/components/ui/select';
+	import StaffAccountMenu from '$lib/components/staff-account-menu.svelte';
 	import { useShelters } from '$lib/features/shelters';
 	import { shelterStore, persistSelectedShelter } from '$lib/stores/shelter.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
@@ -45,15 +46,19 @@
 	class="flex h-[52px] w-full items-center justify-between gap-3 bg-[#0A2647] px-6 text-white shadow-sm"
 >
 	<div class="flex min-w-0 shrink items-center gap-2.5">
-		<img src="/logo.png" alt="PSU Smart Shelter" class="h-8 w-8 shrink-0" />
+		<img
+			src="/logo.png"
+			alt="PSU Smart Shelter"
+			class="h-8 w-8 shrink-0 rounded-lg object-contain"
+		/>
 		<span class="hidden truncate text-sm font-medium text-white sm:inline">PSU Smart Shelter</span>
 	</div>
 
-	<div class="flex min-w-0 items-center">
+	<div class="flex min-w-0 items-center gap-2">
 		{#if sheltersQuery.isPending}
-			<span class="pr-4 text-sm font-medium text-white/80">กำลังโหลด...</span>
+			<span class="pr-2 text-sm font-medium text-white/80">กำลังโหลด...</span>
 		{:else if sheltersQuery.isError}
-			<span class="pr-4 text-sm font-medium text-red-400">เกิดข้อผิดพลาดในการโหลดข้อมูล</span>
+			<span class="pr-2 text-sm font-medium text-red-400">เกิดข้อผิดพลาดในการโหลดข้อมูล</span>
 		{:else if sheltersQuery.data}
 			<Select.Root type="single" value={selectedCode ?? ''} onValueChange={onShelterChange}>
 				<Select.Trigger
@@ -72,5 +77,9 @@
 				</Select.Content>
 			</Select.Root>
 		{/if}
+
+		<StaffAccountMenu
+			class="text-white hover:bg-white/5 focus-visible:ring-offset-[#0A2647] [&_svg]:text-white/80 [&>span:first-child]:bg-white/15 [&>span:first-child]:text-white"
+		/>
 	</div>
 </nav>

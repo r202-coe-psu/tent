@@ -11,12 +11,14 @@
 	// Queries & mutations
 	import {
 		MANUAL_HOUSEHOLD_STATUS_TRANSITIONS,
+		suggestHouseholdsByResidence,
 		useCancelPreRegistration,
 		useEvacuees,
 		useHousehold,
 		useHouseholds,
 		useUpdateHousehold,
-		useUpdateEvacuee
+		useUpdateEvacuee,
+		zoneLabel
 	} from '../../index';
 	import type { Evacuee, PetGroup, HouseholdVehicle, HouseholdStatus } from '../../domain/people';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -82,6 +84,19 @@
 	const headOrFirstMember = $derived(head ?? members[0] ?? null);
 	const canCancel = $derived(canCancelHold(authStore.user?.roles ?? []));
 
+	/** Same-shelter residence matches — suggest merge (draft-persistent-unassigned-family follow-up). */
+	const residenceMergeSuggestions = $derived.by(() => {
+		if (!household) return [];
+		const candidates = allHouseholds.filter(
+			(h) =>
+				h._id !== household._id &&
+				h.status !== 'merged' &&
+				h.status !== 'cancelled' &&
+				h.status !== 'checked_out'
+		);
+		return suggestHouseholdsByResidence(household, candidates).slice(0, 3);
+	});
+
 	const statusConfig = {
 		checked_in: {
 			label: 'อยู่ในศูนย์ (Checked-in)',
@@ -129,6 +144,8 @@
 		district: string;
 		province: string;
 		postalCode: string;
+		municipalityZone: string;
+		community: string;
 	}) {
 		if (!household) return;
 		try {
@@ -139,7 +156,9 @@
 				subdistrict: data.subdistrict || null,
 				district: data.district || null,
 				province: data.province || null,
-				postal_code: data.postalCode || null
+				postal_code: data.postalCode || null,
+				municipality_zone: data.municipalityZone || null,
+				community: data.community || null
 			});
 			toast.success('แก้ไขที่อยู่สำเร็จ');
 			showAddressModal = false;
@@ -186,7 +205,7 @@
 			await Promise.all(promises);
 
 			toast.success(
-				`ย้ายโซนสมาชิกทั้ง ${members.length} คนเป็น ${zoneCode.toUpperCase()} เรียบร้อย`
+				`ย้ายโซนสมาชิกทั้ง ${members.length} คนเป็น ${zoneLabel(zoneCode, shelterZones)} เรียบร้อย`
 			);
 			showZoneModal = false;
 		} catch (err: unknown) {
@@ -325,6 +344,23 @@
 			isCancelling={cancelPreRegistrationMutation.isPending}
 			{canCancel}
 		/>
+
+		{#if residenceMergeSuggestions.length > 0}
+			<div
+				class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+				role="status"
+			>
+				<div class="min-w-0 space-y-1">
+					<p class="font-semibold">พบครัวเรือนที่อยู่อาจซ้ำในศูนย์นี้</p>
+					<p class="text-xs text-amber-900/80">
+						{residenceMergeSuggestions.map((h) => h.label?.trim() || h._id).join(' · ')} — ตรวจสอบแล้วรวมได้ผ่านปุ่มรวมครอบครัว
+					</p>
+				</div>
+				<Button type="button" size="sm" variant="outline" onclick={() => (showMergeModal = true)}>
+					เปิดหน้าต่างรวมครอบครัว
+				</Button>
+			</div>
+		{/if}
 
 		<!-- Grid Layout -->
 		<div class="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">

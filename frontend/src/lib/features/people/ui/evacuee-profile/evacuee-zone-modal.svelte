@@ -28,21 +28,37 @@
 	} = $props();
 
 	let selectedZone = $state(untrack(() => evacuee.current_stay.zone ?? ''));
+	let saving = $state(false);
 
 	$effect(() => {
 		if (show) {
-			selectedZone = evacuee.current_stay.zone ?? '';
+			selectedZone = untrack(() => evacuee.current_stay.zone ?? '');
+			saving = false;
 		}
 	});
 
-	async function handleSelectZone(zoneCode: string) {
+	const confirmDisabled = $derived(
+		saving || !selectedZone || selectedZone === (evacuee.current_stay.zone ?? '')
+	);
+
+	function handleSelectZone(zoneCode: string) {
+		if (saving) return;
 		selectedZone = zoneCode;
-		await onUpdateZone(zoneCode);
+	}
+
+	async function handleConfirm() {
+		if (confirmDisabled) return;
+		saving = true;
+		try {
+			await onUpdateZone(selectedZone);
+		} finally {
+			saving = false;
+		}
 	}
 </script>
 
 {#if show}
-	<ModalEscapeListener open={show} onEscape={onClose} />
+	<ModalEscapeListener open={show} disabled={saving} onEscape={onClose} />
 	<div
 		class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-xs"
 	>
@@ -54,8 +70,10 @@
 					ย้ายโซนที่พัก (Change stay zone)
 				</h3>
 				<button
+					type="button"
 					onclick={onClose}
-					class="cursor-pointer rounded-lg p-1 text-muted-foreground transition-colors hover:text-foreground"
+					disabled={saving}
+					class="cursor-pointer rounded-lg p-1 text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
 				>
 					<X class="size-5" />
 				</button>
@@ -67,16 +85,27 @@
 					shelter_zones={shelterZones}
 					{evacuee}
 					ewar_symptoms={screening?.symptoms}
+					disabled={saving}
 					onSelectZone={handleSelectZone}
 				/>
 			</div>
 
 			<div class="flex justify-end gap-2 border-t border-border pt-3">
 				<button
+					type="button"
 					onclick={onClose}
-					class="cursor-pointer rounded-xl border border-border bg-background px-4 py-2 text-xs font-semibold text-slate-800 transition-colors hover:bg-muted dark:text-slate-200"
+					disabled={saving}
+					class="cursor-pointer rounded-xl border border-border bg-background px-4 py-2 text-xs font-semibold text-slate-800 transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50 dark:text-slate-200"
 				>
 					ยกเลิก
+				</button>
+				<button
+					type="button"
+					onclick={handleConfirm}
+					disabled={confirmDisabled}
+					class="cursor-pointer rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
+				>
+					{saving ? 'กำลังบันทึก...' : 'ยืนยันย้ายโซน'}
 				</button>
 			</div>
 		</div>

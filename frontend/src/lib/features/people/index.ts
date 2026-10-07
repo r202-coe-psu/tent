@@ -48,7 +48,10 @@ export {
 	migratePetGroup,
 	migratePetGroups,
 	isMeaningfulOtherPetNotes,
+	petSpeciesLabel,
+	groupPetsBySpecies,
 	genderSchema,
+	genderLabelTh,
 	religionSchema,
 	stayStatusSchema,
 	STATUS_LABELS,
@@ -77,6 +80,7 @@ export {
 	createMovement,
 	createScreening,
 	assertMovementAllowed,
+	movementConflictMessage,
 	canCheckInEvacuee,
 	canCheckOutEvacuee,
 	canChangeEvacueeZone,
@@ -106,6 +110,7 @@ export {
 	formatPersonName,
 	matchesEvacueeSearch,
 	zoneLabel,
+	type ZoneLabelSource,
 	evacueeAgeYears,
 	EWAR_SYMPTOM_GROUPS,
 	isEvacuee,
@@ -121,13 +126,28 @@ export {
 } from './domain/people';
 
 export {
+	CR112_HOUSING_TYPE_CODES,
+	DEFAULT_HOUSING_TYPE_ITEMS_TH,
+	buildHousingTypeSelectItems,
+	setHousingTypeFromSelect,
+	housingTypeLabelForCode,
+	type HousingTypeSelectItem,
+	type MasterHousingItem
+} from './domain/housing-type-ui';
+
+export {
 	nextQueueLabel,
 	classifyZoningQueueTab,
 	classifyScreeningQueueTab,
+	nextScreeningQueueEvacuee,
 	recommendZoneKind,
 	countPresentOccupantsByZone,
 	parseZoningQrCode,
 	buildZoningPath,
+	isInShelterStatus,
+	zoningQueueSince,
+	sortByZoningQueueSince,
+	formatQueueWait,
 	type NextQueueLabel,
 	type ZoningQueueTab,
 	type ScreeningQueueTab,
@@ -140,6 +160,14 @@ export {
 	mongoUnassignedSearchQueries,
 	pickUnassignedSearchHit
 } from './domain/scan-lookup';
+
+export {
+	toggleId,
+	selectRange,
+	applyRowClickSelection,
+	type ApplyRowClickSelectionInput,
+	type ApplyRowClickSelectionResult
+} from './domain/row-selection';
 
 export {
 	REPORT_IN_CTA_LABEL,
@@ -160,8 +188,13 @@ export {
 	hasFederatedIntakeHits,
 	isIntakeNewRegistrationLocked,
 	resolveNewRegistrationCta,
+	deriveDuplicateCheckQuery,
+	deriveDuplicateCheckQueries,
+	duplicateCheckKey,
+	type DuplicateCheckQuery,
 	type ShelterHitAction,
-	type NewRegistrationCtaKind
+	type NewRegistrationCtaKind,
+	type DuplicateCheckMember
 } from './domain/intake-search';
 
 export {
@@ -221,7 +254,7 @@ export {
 } from './domain/birth-calendar';
 
 export type { PeopleRepository, EvacueeFilters, HouseholdFilters } from './data/people.repository';
-export { peopleRepository } from './data/people.remote';
+export { peopleRepository, isRegistrationCompensationIncomplete } from './data/people.remote';
 export { getShelterCode, getShelterDb } from '$lib/db/shelter';
 
 // Application — TanStack Query hooks + changes-feed live-query wiring
@@ -253,6 +286,7 @@ export {
 	type FederatedScanLookupDeps,
 	useHouseholds,
 	useHousehold,
+	useHouseholdMembers,
 	useHouseholdsPaginated,
 	listMatchingEvacueeIds,
 	listMatchingHouseholdIds,
@@ -270,8 +304,11 @@ export {
 	useDeleteMedical,
 	usePatchEvacuee,
 	useMedicals,
+	useMedicalByEvacuee,
 	useMovements,
+	useMovementsByEvacuee,
 	useScreenings,
+	useScreeningsByEvacuee,
 	startPeopleLiveQuery
 } from './application/queries';
 
@@ -300,7 +337,14 @@ export { default as HouseholdForm } from './ui/household-form/household-form.sve
 export { default as HouseholdFormPage } from './ui/household-form/household-form-page.svelte';
 export { default as HouseholdPostArrival } from './ui/household-flows/household-post-arrival.svelte';
 export { default as EvacueeWristbandSuccess } from './ui/registration/evacuee-wristband-success.svelte';
-export { default as FamilyBatchPrint } from './ui/registration/family-batch-print.svelte';
+export {
+	default as FamilyBatchPrint,
+	type IntakeNextStation
+} from './ui/registration/family-batch-print.svelte';
+export {
+	default as StationCompletionSummary,
+	type StationSummaryFact
+} from './ui/shared/station-completion-summary.svelte';
 export { default as UnifiedRegistrationForm } from './ui/registration/unified-registration-form.svelte';
 export type { ThaiDAutofillProfile, ThaiDAutofillAddress } from './domain/thaid-profile';
 export { stripThaiTitle } from './domain/thaid-profile';

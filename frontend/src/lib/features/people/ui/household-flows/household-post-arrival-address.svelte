@@ -3,7 +3,6 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Combobox } from '$lib/components/ui/combobox/index.js';
-	import { SearchSelect } from '$lib/components/ui/search-select/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Field from '$lib/components/ui/field/index.js';
@@ -20,24 +19,21 @@
 		householdPostArrivalAddressFormSchema,
 		type HouseholdPostArrivalAddressForm
 	} from '../../domain/people';
+	import {
+		buildHousingTypeSelectItems,
+		DEFAULT_HOUSING_TYPE_ITEMS_TH,
+		housingTypeLabelForCode,
+		setHousingTypeFromSelect
+	} from '../../domain/housing-type-ui';
 
 	let {
 		initialData = null,
 		householdLabel = '',
-		municipalityZoneItems = [],
-		communityItems = [],
-		defaultMunicipalityZone = '',
-		defaultCommunity = '',
 		onBack,
 		onNext
 	}: {
 		initialData?: Partial<HouseholdPostArrivalAddressForm> | null;
 		householdLabel?: string;
-		municipalityZoneItems?: { value: string; label: string }[];
-		communityItems?: { value: string; label: string }[];
-		/** master_data `is_default` code — pre-selects the field on a fresh form. */
-		defaultMunicipalityZone?: string;
-		defaultCommunity?: string;
 		onBack: () => void;
 		onNext: (data: HouseholdPostArrivalAddressForm) => void;
 	} = $props();
@@ -61,26 +57,6 @@
 		$formData = { ...$formData, ...initialData };
 	});
 
-	// Seed the configured defaults once master data arrives — only while the
-	// field is still empty, so stepping back into this form (initialData restores
-	// the operator's own choice) never overwrites it. (CR-049)
-	//
-	// One flag per field: the two master queries resolve independently, and a
-	// single shared flag would burn out on whichever arrives first and drop the
-	// other default for good.
-	let municipalityZoneSeeded = false;
-	let communitySeeded = false;
-	$effect(() => {
-		if (!municipalityZoneSeeded && defaultMunicipalityZone) {
-			municipalityZoneSeeded = true;
-			if (!$formData.municipalityZone) $formData.municipalityZone = defaultMunicipalityZone;
-		}
-		if (!communitySeeded && defaultCommunity) {
-			communitySeeded = true;
-			if (!$formData.community) $formData.community = defaultCommunity;
-		}
-	});
-
 	const provincesQuery = useProvinces();
 	const districtsQuery = useDistricts(() => $formData.province || null);
 	const subdistrictsQuery = useSubdistricts(
@@ -95,9 +71,16 @@
 		(subdistrictsQuery.data ?? []).map((s) => ({ value: s.subdistrict, label: s.subdistrict }))
 	);
 	const housingTypeItems = $derived(
-		(housingTypeQuery.data?.items ?? [])
-			.filter((i) => i.status === 'active')
-			.map((i) => ({ value: i.code, label: i.label }))
+		buildHousingTypeSelectItems({
+			defaultItems: DEFAULT_HOUSING_TYPE_ITEMS_TH,
+			masterItems: housingTypeQuery.data?.items ?? [],
+			currentValue: $formData.housingType
+		})
+	);
+	const housingTypeTriggerLabel = $derived(
+		$formData.housingType
+			? housingTypeLabelForCode($formData.housingType, housingTypeItems, $formData.housingType)
+			: '— เลือกประเภทที่อยู่อาศัย —'
 	);
 	const isHomeless = $derived($formData.housingType === 'homeless');
 
@@ -152,12 +135,10 @@
 						<Form.Control>
 							{#snippet children({ props })}
 								<Form.Label>เขตเทศบาล (Zone)</Form.Label>
-								<SearchSelect
-									items={municipalityZoneItems}
+								<Input
+									{...props}
 									bind:value={$formData.municipalityZone}
-									placeholder="เลือกเขตเทศบาล..."
-									emptyText="ไม่พบเขตเทศบาล"
-									controlProps={props}
+									placeholder="ระบุเขตเทศบาล..."
 								/>
 							{/snippet}
 						</Form.Control>
@@ -167,13 +148,7 @@
 						<Form.Control>
 							{#snippet children({ props })}
 								<Form.Label>ชุมชนในศูนย์ (Community)</Form.Label>
-								<SearchSelect
-									items={communityItems}
-									bind:value={$formData.community}
-									placeholder="เลือกชุมชน..."
-									emptyText="ไม่พบชุมชน"
-									controlProps={props}
-								/>
+								<Input {...props} bind:value={$formData.community} placeholder="ระบุชุมชน..." />
 							{/snippet}
 						</Form.Control>
 						<Form.FieldErrors />
@@ -193,12 +168,12 @@
 							<Select.Root
 								type="single"
 								bind:value={
-									() => $formData.housingType ?? '', (v) => ($formData.housingType = v || null)
+									() => $formData.housingType ?? '',
+									(v) => setHousingTypeFromSelect(v, (next) => ($formData.housingType = next))
 								}
 							>
 								<Select.Trigger {...props} class={selectTriggerClass}>
-									{housingTypeItems.find((o) => o.value === $formData.housingType)?.label ??
-										'— เลือกประเภทที่อยู่อาศัย —'}
+									{housingTypeTriggerLabel}
 								</Select.Trigger>
 								<Select.Content>
 									{#each housingTypeItems as opt (opt.value)}

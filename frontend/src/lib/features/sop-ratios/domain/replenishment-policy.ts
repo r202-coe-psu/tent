@@ -67,3 +67,29 @@ export function isReplenishmentPolicy(doc: unknown): doc is ReplenishmentPolicy 
 		typeof d.lead_time_days === 'number'
 	);
 }
+
+/** The id an ITEM-scope policy targets: the item id without its `item_master:` prefix, case kept. */
+export function itemPolicyTargetId(itemId: string): string {
+	return itemId.trim().replace(/^item_master:/, '');
+}
+
+/** Document id of a policy: `replenishment_policy:<scope>:<target>`. */
+export function replenishmentPolicyDocId(scope: ReplenishmentScope, targetId: string): string {
+	return `replenishment_policy:${scope}:${targetId}`;
+}
+
+/**
+ * The ITEM-scope policy for one item, of any status (an inactive one can be re-enabled).
+ * Matches both the prefixed and the clean target id.
+ */
+export function findItemPolicy(
+	itemId: string,
+	policies: readonly ReplenishmentPolicy[]
+): ReplenishmentPolicy | null {
+	const clean = itemPolicyTargetId(itemId);
+	return (
+		policies.find(
+			(p) => p.scope_type === 'ITEM' && (p.target_id === itemId || p.target_id === clean)
+		) ?? null
+	);
+}

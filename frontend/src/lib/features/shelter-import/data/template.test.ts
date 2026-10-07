@@ -28,7 +28,8 @@ describe('normalizeHeader', () => {
 
 describe('template → parse round trip', () => {
 	it('reads back required columns whose header carries the "*" marker', async () => {
-		const { shelters, zones } = await generateAndParse();
+		const { shelters, zones, foodDistributionPoints, hasFoodDistributionPointsSheet } =
+			await generateAndParse();
 
 		expect(shelters).toHaveLength(1);
 		expect(shelters[0].cells[H.name]).toBeTruthy();
@@ -39,6 +40,9 @@ describe('template → parse round trip', () => {
 		expect(zones.length).toBeGreaterThan(0);
 		expect(zones[0].cells[H.zone_code]).toBeTruthy();
 		expect(zones[0].cells[H.zone_capacity]).toBeTruthy();
+		expect(hasFoodDistributionPointsSheet).toBe(true);
+		expect(foodDistributionPoints).toHaveLength(1);
+		expect(foodDistributionPoints[0].cells[H.food_point_name]).toBeTruthy();
 	});
 
 	it('joins zone rows through the "รหัสศูนย์พักพิง" column', async () => {

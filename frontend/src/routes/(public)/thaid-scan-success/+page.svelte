@@ -11,7 +11,8 @@
 
 	const errorMessage = $derived.by(() => {
 		if (errorParam === 'thaid_disabled') return 'ระบบยืนยันตัวตน ThaiD ถูกปิดใช้งานชั่วคราว';
-		if (errorParam === 'session_expired') return 'QR Code นี้หมดอายุแล้ว กรุณาแจ้งผู้ลงทะเบียนหลักเพื่อสร้าง QR Code ใหม่';
+		if (errorParam === 'session_expired')
+			return 'QR Code นี้หมดอายุแล้ว กรุณาแจ้งผู้ลงทะเบียนหลักเพื่อสร้าง QR Code ใหม่';
 		if (errorParam === 'missing_session') return 'ไม่พบรหัสการเชื่อมต่อ (Invalid Session)';
 		return 'การยืนยันตัวตนไม่สำเร็จ กรุณาลองใหม่อีกครั้ง';
 	});
@@ -22,9 +23,13 @@
 </svelte:head>
 
 <div class="flex min-h-[70vh] items-center justify-center px-4 py-12">
-	<div class="w-full max-w-md rounded-2xl border border-border/80 bg-card p-6 text-center shadow-lg sm:p-8">
+	<div
+		class="w-full max-w-md rounded-2xl border border-border/80 bg-card p-6 text-center shadow-lg sm:p-8"
+	>
 		{#if isError}
-			<div class="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+			<div
+				class="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-destructive/10 text-destructive"
+			>
 				<AlertTriangle class="size-8" />
 			</div>
 			<h2 class="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
@@ -42,7 +47,9 @@
 				</a>
 			</div>
 		{:else}
-			<div class="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-primary/10 text-primary animate-in zoom-in-50 duration-300">
+			<div
+				class="mx-auto mb-4 flex size-16 animate-in items-center justify-center rounded-full bg-primary/10 text-primary duration-300 zoom-in-50"
+			>
 				<CheckCircle2 class="size-9" />
 			</div>
 			<h2 class="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
@@ -51,7 +58,9 @@
 			<p class="mt-2 text-sm text-muted-foreground">
 				ข้อมูลของคุณถูกส่งไปยังหน้าจอลงทะเบียนหลักแล้ว
 			</p>
-			<div class="mt-4 rounded-xl border border-primary/20 bg-primary/5 p-3.5 text-xs text-primary font-medium">
+			<div
+				class="mt-4 rounded-xl border border-primary/20 bg-primary/5 p-3.5 text-xs font-medium text-primary"
+			>
 				✓ บันทึกข้อมูลส่วนตัวและที่อยู่เรียบร้อย<br />
 				ท่านสามารถปิดหน้าต่างเบราว์เซอร์นี้ได้ทันที
 			</div>

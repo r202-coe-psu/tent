@@ -109,18 +109,17 @@ describe('createUserSchema', () => {
 		expect(parsed.is_system_admin).toBe(true);
 	});
 
-	it('requires organization for staff', () => {
+	it('allows empty/omitted organization for staff', () => {
 		const result = createUserSchema.safeParse({
-			username: '0812345678',
+			username: 'staff01',
 			password: validPassword,
 			display_name: 'สมชาย ใจดี',
 			personnel_type: 'staff',
 			organization: '',
-			phone: '0812345678',
 			capabilities: ['registration_staff'],
 			shelter_id: 'SH001'
 		});
-		expect(result.success).toBe(false);
+		expect(result.success).toBe(true);
 	});
 
 	it('allows empty/omitted organization for volunteer', () => {
@@ -184,6 +183,63 @@ describe('createUserSchema', () => {
 			shelter_id: 'SH001'
 		});
 		expect(result.success).toBe(false);
+	});
+
+	it('accepts create without phone (username-only account)', () => {
+		const parsed = createUserSchema.parse({
+			username: 'staff01',
+			password: validPassword,
+			display_name: 'เจ้าหน้าที่ หนึ่ง',
+			personnel_type: 'staff',
+			organization: 'ปภ.',
+			capabilities: ['registration_staff'],
+			shelter_id: 'SH001'
+		});
+		expect(parsed.username).toBe('staff01');
+		expect(parsed.phone).toBeUndefined();
+	});
+
+	it('accepts empty string phone as optional', () => {
+		const parsed = createUserSchema.parse({
+			username: 'staff02',
+			password: validPassword,
+			display_name: 'เจ้าหน้าที่ สอง',
+			personnel_type: 'staff',
+			organization: 'ปภ.',
+			phone: '',
+			capabilities: ['registration_staff'],
+			shelter_id: 'SH001'
+		});
+		expect(parsed.phone).toBe('');
+	});
+
+	it('rejects malformed optional phone', () => {
+		const result = createUserSchema.safeParse({
+			username: 'staff03',
+			password: validPassword,
+			display_name: 'เจ้าหน้าที่ สาม',
+			personnel_type: 'staff',
+			organization: 'ปภ.',
+			phone: '12345',
+			capabilities: ['registration_staff'],
+			shelter_id: 'SH001'
+		});
+		expect(result.success).toBe(false);
+	});
+
+	it('accepts username different from phone', () => {
+		const parsed = createUserSchema.parse({
+			username: 'staff01',
+			password: validPassword,
+			display_name: 'สมชาย ใจดี',
+			personnel_type: 'staff',
+			organization: 'ปภ.',
+			phone: '0812345678',
+			capabilities: ['registration_staff'],
+			shelter_id: 'SH001'
+		});
+		expect(parsed.username).toBe('staff01');
+		expect(parsed.phone).toBe('0812345678');
 	});
 
 	it('creates zod4 adapter for superforms without SchemaError', () => {

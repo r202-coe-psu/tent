@@ -1,11 +1,12 @@
 import type { MasterDataItem, MasterDataType } from '$lib/features/master-data/domain';
 
-/** One item to seed. `key` is a seed-only handle; `code` is generated/reused. */
+/** One item to seed. `key` is the persisted `code` (semantic snake_case). */
 export type SeedItemDef = {
 	key: string;
-	label: string;
+	label_th: string;
+	label_en: string;
 	is_default?: boolean;
-	/** `key` of the owning item in `parent_type` (community → municipality zone). */
+	/** Optional parent key — unused after CR-137 (community master removed). */
 	parent_key?: string;
 	category?: 'operational' | 'controlled' | 'GENERAL' | 'CONTROLLED';
 	description?: string;
@@ -38,7 +39,7 @@ export const masterCodes = (m: MasterLookup, type: MasterDataType, ...keys: stri
 	keys.map((key) => masterCode(m, type, key));
 
 export const masterLabel = (m: MasterLookup, type: MasterDataType, key: string) =>
-	masterItem(m, type, key).label;
+	masterItem(m, type, key).label_th;
 
 export const masterLabels = (m: MasterLookup, type: MasterDataType, ...keys: string[]) =>
 	keys.map((key) => masterLabel(m, type, key));

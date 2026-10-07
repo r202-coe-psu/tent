@@ -5,6 +5,9 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import { matchesEvacueeSearch, useEvacuees, zoneLabel, type Evacuee } from '$lib/features/people';
+	import { useShelter } from '$lib/features/shelters';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { getShelterCode } from '$lib/db/shelter';
 
 	let {
 		selectedIds = $bindable<string[]>([]),
@@ -17,6 +20,8 @@
 	const errorMessage = $derived(Array.isArray(error) ? error[0] : error);
 
 	const evacueesQuery = useEvacuees();
+	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
+	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
 	let searchTerm = $state('');
 
 	const activeEvacuees = $derived(
@@ -148,7 +153,7 @@
 									{evacuee.phone ?? '—'}
 								</Table.Cell>
 								<Table.Cell class="hidden font-mono text-xs text-muted-foreground md:table-cell">
-									{zoneLabel(evacuee.current_stay?.zone)}
+									{zoneLabel(evacuee.current_stay?.zone, shelterZones)}
 								</Table.Cell>
 							</Table.Row>
 						{/each}

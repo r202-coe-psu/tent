@@ -1,7 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { randomBytes } from 'node:crypto';
-// eslint-disable-next-line no-restricted-imports
-import type { ThaiDAutofillProfile } from '$lib/features/people/domain/thaid-profile';
+import type { ThaiDAutofillProfile } from '$lib/features/people';
 
 export type ScanSessionStatus = 'pending' | 'completed' | 'expired';
 
@@ -88,6 +87,23 @@ function handleClusterMessage(msg: unknown) {
 					emitter
 				});
 			}
+		}
+	} else if (m.action === 'init') {
+		const activeSessions: ClusterSessionPayload[] = [];
+		const now = Date.now();
+		for (const s of sessions.values()) {
+			if (s.expiresAt > now && s.status === 'pending') {
+				activeSessions.push({
+					id: s.id,
+					createdAt: s.createdAt,
+					expiresAt: s.expiresAt,
+					status: s.status,
+					profile: s.profile
+				});
+			}
+		}
+		if (activeSessions.length > 0) {
+			broadcastCluster({ action: 'init_sync', sessions: activeSessions });
 		}
 	}
 }

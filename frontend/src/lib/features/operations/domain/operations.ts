@@ -46,7 +46,6 @@ export const ledgerReasonSchema = z.enum([
 	'transfer_out',
 	'transfer_in',
 	'donation',
-	'purchase',
 	'distribution_return'
 ]);
 export type LedgerReason = z.infer<typeof ledgerReasonSchema>;
@@ -116,8 +115,21 @@ export interface StockLot {
 	 * cosmetic clash, never a wrong balance. Balances always come from `qty`.
 	 */
 	lot_no?: string;
-	/** Where the goods were physically put away. Free text — no zone master data yet (CR-088). */
+	/**
+	 * Where the goods were physically put away. Since schema_v 5 it is the storage
+	 * point's name AT WRITE TIME (snapshot); older rows hold free text (CR-088).
+	 */
 	storage_zone?: string;
+	/**
+	 * → `shelter.common_areas.sub_storage[].id` of the same shelter (schema_v 5,
+	 * CR-139). Absent = unspecified / main store, or legacy row.
+	 */
+	storage_point_id?: string;
+	/**
+	 * Production timestamp for the "จากผลิต" clock (draft-lot-produced-at).
+	 * On inbound receive, writers default this to `occurred_at` when omitted.
+	 */
+	produced_at?: Timestamp;
 }
 
 /** `L-YYMMDD-XXX` — `YYMMDD` = receive date, `XXX` = 3-digit per-day per-shelter sequence. */
@@ -127,12 +139,20 @@ export const LOT_NO_PATTERN = /^L-\d{6}-\d{3}$/;
  * Single source of truth for the shape of `stock_ledger.lot` (schema.md §2.1) —
  * every ledger/receipt input schema reuses it so the four writers cannot drift.
  */
-export const stockLotSchema = z.object({
-	expiry: z.string().optional(),
-	note: z.string().trim().optional(),
-	lot_no: z.string().regex(LOT_NO_PATTERN, 'lot_no must look like L-YYMMDD-XXX').optional(),
-	storage_zone: z.string().trim().max(100).optional()
-});
+export const stockLotSchema = z
+	.object({
+		expiry: z.string().optional(),
+		note: z.string().trim().optional(),
+		lot_no: z.string().regex(LOT_NO_PATTERN, 'lot_no must look like L-YYMMDD-XXX').optional(),
+		storage_zone: z.string().trim().max(100).optional(),
+		storage_point_id: z.string().trim().min(1).optional(),
+		/** ISO date or datetime — DatePicker may submit `YYYY-MM-DD`. */
+		produced_at: z.string().optional()
+	})
+	.refine((lot) => !lot.storage_point_id || !!lot.storage_zone, {
+		message: 'storage_point_id requires storage_zone (the point name at write time)',
+		path: ['storage_zone']
+	});
 
 /** `YYMMDD` of a date, in the caller's local time (the lot label is read by staff on site). */
 export function lotDateStamp(date: Date): string {
@@ -293,7 +313,7 @@ export interface StockTransfer extends BaseDoc {
 	notes?: string;
 }
 
-export type OperationsDoc = StockLedger | Donation | DonationCampaign | Purchase | StockTransfer;
+export type OperationsDoc = StockLedger | Donation | DonationCampaign | StockTransfer;
 
 // ---------------------------------------------------------------- stock_ledger
 
@@ -308,43 +328,91 @@ export type OperationsDoc = StockLedger | Donation | DonationCampaign | Purchase
  *
  * Exported so the audit script checks the same table it enforces.
  */
-export const REF_PREFIX_BY_REASON: Record<LedgerReason, string | null> = {
+type LedgerRefPrefix = string | null;
+export type LedgerRefRule = LedgerRefPrefix | readonly LedgerRefPrefix[];
+
+export const REF_PREFIX_BY_REASON: Record<LedgerReason, LedgerRefRule> = {
 	donation: 'donation:',
-	purchase: 'purchase:',
-	requisition: 'kitchen_requisition:',
+	// kitchen_requisition: legacy doc type, deprecated (CR-141) — still accepted so
+	// old rows remain valid; requisition_ticket: new unified ticket (CR-121/CR-141).
+	requisition: ['requisition_ticket:', 'kitchen_requisition:'],
 	// T-13 mints these; nothing writes `stock_transfer` docs yet.
 	transfer_in: 'stock_transfer:',
-	transfer_out: 'stock_transfer:',
+	transfer_out: ['stock_transfer:', 'requisition_ticket:'],
 	adjust: null, // manual correction — no source document by definition
-	distribute: 'distribution_batch:',
+	distribute: 'requisition_ticket:',
 	distribution_return: 'distribution_batch:',
-	receive: null // CR-055 Q-2: orphan enum value, kept but pinned to null
+	receive: ['meal_service:', 'requisition_ticket:', 'distribution_log:', 'bulk_return_pool:']
 };
+
+function matchesLedgerRefPrefix(refId: string, prefix: string): boolean {
+	return refId.startsWith(prefix) && refId.length > prefix.length;
+}
+
+/** Current schema.md §2.1 reference predicate for Ticket-era ledger writes. */
+export function isCanonicalLedgerRef(reason: LedgerReason, refId: string | null): boolean {
+	const rule = REF_PREFIX_BY_REASON[reason];
+	const accepted = Array.isArray(rule) ? rule : [rule];
+	if (refId === null) return accepted.includes(null);
+	return accepted.some(
+		(value) => typeof value === 'string' && matchesLedgerRefPrefix(refId, value)
+	);
+}
 
 /**
  * Shared by the write guard (R1, below) and the receive form's pre-validation
  * (R9, `receiveInputSchema`) so both read the same table — the form only mirrors
  * the rule for the user's benefit; this schema is where it is enforced.
  */
-function checkRefId(reason: LedgerReason, refId: string | null, ctx: z.RefinementCtx): void {
-	const expected = REF_PREFIX_BY_REASON[reason];
-	if (expected === null) {
-		if (refId !== null) {
-			ctx.addIssue({
-				code: 'custom',
-				path: ['ref_id'],
-				message: `รายการประเภท '${reason}' ต้องไม่มีเลขอ้างอิง (ref_id ต้องเป็น null)`
-			});
-		}
-		return;
-	}
-	if (!refId?.startsWith(expected)) {
+function checkRefIdAgainstRule(
+	reason: LedgerReason,
+	refId: string | null,
+	rule: LedgerRefRule,
+	ctx: z.RefinementCtx
+): void {
+	const accepted = Array.isArray(rule) ? rule : [rule];
+	if (isCanonicalLedgerRef(reason, refId)) return;
+	if (accepted.length === 1 && accepted[0] === null) {
 		ctx.addIssue({
 			code: 'custom',
 			path: ['ref_id'],
-			message: `รายการประเภท '${reason}' ต้องอ้างอิงเอกสารต้นทางที่ขึ้นต้นด้วย '${expected}'`
+			message: `รายการประเภท '${reason}' ต้องไม่มีเลขอ้างอิง (ref_id ต้องเป็น null)`
 		});
+		return;
 	}
+	const prefixes = accepted.filter((value): value is string => typeof value === 'string');
+	ctx.addIssue({
+		code: 'custom',
+		path: ['ref_id'],
+		message: `รายการประเภท '${reason}' ต้องอ้างอิงเอกสารต้นทางที่ขึ้นต้นด้วย '${prefixes.join("' หรือ '")}'`
+	});
+}
+
+/** Enforces the current schema.md §2.1 mapping for every new stock_ledger write. */
+function checkRefId(reason: LedgerReason, refId: string | null, ctx: z.RefinementCtx): void {
+	checkRefIdAgainstRule(reason, refId, REF_PREFIX_BY_REASON[reason], ctx);
+}
+
+/**
+ * Historical rows may carry these pre-Ticket Flow 2 references. They are never
+ * canonical Ticket-era writes; callers must opt into this compatibility path.
+ */
+export function isLegacyFlow2LedgerRef(reason: LedgerReason, refId: string | null): boolean {
+	return (
+		(reason === 'distribute' &&
+			refId !== null &&
+			matchesLedgerRefPrefix(refId, 'distribution_batch:')) ||
+		(reason === 'receive' && refId === null)
+	);
+}
+
+function checkLegacyFlow2RefId(
+	reason: LedgerReason,
+	refId: string | null,
+	ctx: z.RefinementCtx
+): void {
+	if (isLegacyFlow2LedgerRef(reason, refId)) return;
+	checkRefId(reason, refId, ctx);
 }
 
 /**
@@ -353,22 +421,25 @@ function checkRefId(reason: LedgerReason, refId: string | null, ctx: z.Refinemen
  * (`stockBalance`, `calculateReserved`, `LedgerTable`) must keep tolerating
  * older rows that predate this rule (CR-055 R5).
  */
-export const stockLedgerInputSchema = z
-	.object({
-		item_id: z.string().min(1),
-		qty: qtyStrCoerceSignedNonZeroSchema,
-		unit: z.string().trim().min(1),
-		reason: ledgerReasonSchema,
-		ref_id: z.string().nullable().default(null),
-		lot_ref: z
-			.string()
-			.regex(/^stock_ledger:.+/)
-			.optional(),
-		lot: stockLotSchema.optional(),
-		occurred_at: z.string().optional()
-	})
-	.superRefine((d, ctx) => {
-		checkRefId(d.reason, d.ref_id, ctx);
+const stockLedgerInputBaseSchema = z.object({
+	item_id: z.string().min(1),
+	qty: qtyStrCoerceSignedNonZeroSchema,
+	unit: z.string().trim().min(1),
+	reason: ledgerReasonSchema,
+	ref_id: z.string().nullable().default(null),
+	lot_ref: z
+		.string()
+		.regex(/^stock_ledger:.+/)
+		.optional(),
+	lot: stockLotSchema.optional(),
+	occurred_at: z.string().optional()
+});
+
+function stockLedgerInputSchemaWith(
+	validateRefId: (reason: LedgerReason, refId: string | null, ctx: z.RefinementCtx) => void
+) {
+	return stockLedgerInputBaseSchema.superRefine((d, ctx) => {
+		validateRefId(d.reason, d.ref_id, ctx);
 		if ((d.reason === 'distribute' || d.reason === 'distribution_return') && !d.lot_ref) {
 			ctx.addIssue({
 				code: 'custom',
@@ -377,7 +448,12 @@ export const stockLedgerInputSchema = z
 			});
 		}
 	});
+}
+
+export const stockLedgerInputSchema = stockLedgerInputSchemaWith(checkRefId);
 export type StockLedgerInput = z.input<typeof stockLedgerInputSchema>;
+
+const legacyFlow2StockLedgerInputSchema = stockLedgerInputSchemaWith(checkLegacyFlow2RefId);
 
 /** Full persisted stock_ledger contract used before signed-sum calculations. */
 export const stockLedgerDocSchema = z
@@ -385,7 +461,7 @@ export const stockLedgerDocSchema = z
 		_id: z.string().regex(/^stock_ledger:/),
 		_rev: z.string().optional(),
 		type: z.literal('stock_ledger'),
-		schema_v: z.union([z.literal(2), z.literal(3), z.literal(4)]),
+		schema_v: z.union([z.literal(2), z.literal(3), z.literal(4), z.literal(5)]),
 		shelter_code: z.string().min(1),
 		created_at: z.string().datetime(),
 		updated_at: z.string().datetime(),
@@ -402,16 +478,7 @@ export const stockLedgerDocSchema = z
 		lot: stockLotSchema.optional(),
 		occurred_at: z.string().datetime()
 	})
-	.passthrough()
-	.superRefine((doc, ctx) => {
-		if (doc.schema_v === 2 && doc.reason === 'purchase') {
-			ctx.addIssue({
-				code: z.ZodIssueCode.custom,
-				path: ['reason'],
-				message: 'purchase requires stock_ledger schema_v 3'
-			});
-		}
-	});
+	.passthrough();
 
 /** Parse one persisted ledger entry and fail closed before it contributes to a balance. */
 export function parseStockLedger(input: unknown): StockLedger {
@@ -419,24 +486,36 @@ export function parseStockLedger(input: unknown): StockLedger {
 }
 
 /**
- * The single factory every `stock_ledger` writer must go through (CR-055 R7) —
- * it is where the `reason` ↔ `ref_id` invariant is enforced, so a writer that
- * assembles the doc by hand silently escapes it.
+ * Canonical factory every new `stock_ledger` writer must go through (CR-055 R7) —
+ * it is where the current `reason` ↔ `ref_id` invariant is enforced. The only
+ * exception is the explicitly named legacy Flow 2 compatibility factory below.
  *
  * `id` exists for callers that need the `_id` BEFORE the write, so they can
  * store it on another doc in the same `bulkDocs` batch — kitchen
  * `issueRequisition` puts them on `kitchen_requisition.ledger_ids`. Omit it and
  * `makeDoc` mints a ULID as usual.
  */
-export function createStockLedger(
-	input: StockLedgerInput,
+function createParsedStockLedger(
+	d: z.output<typeof stockLedgerInputBaseSchema>,
 	ctx: AuthorContext,
 	id?: string
 ): StockLedger {
-	const d = stockLedgerInputSchema.parse(input);
+	const occurredAt = d.occurred_at ?? now();
+	// New inbound lots (qty > 0, not a distribution return) stamp produced_at
+	// from occurred_at when the caller omits it (draft-lot-produced-at).
+	const isNewInboundLot = qtyGt(persistQty(d.qty), 0) && d.reason !== 'distribution_return';
+	let lot = d.lot;
+	if (isNewInboundLot) {
+		if (!lot) {
+			lot = { produced_at: occurredAt };
+		} else if (!lot.produced_at) {
+			lot = { ...lot, produced_at: occurredAt };
+		}
+	}
+
 	const entry = makeDoc(
 		'stock_ledger',
-		4,
+		5,
 		{
 			item_id: d.item_id,
 			qty: persistQty(d.qty),
@@ -444,8 +523,8 @@ export function createStockLedger(
 			reason: d.reason,
 			ref_id: d.ref_id,
 			...(d.lot_ref ? { lot_ref: d.lot_ref } : {}),
-			...(d.lot ? { lot: d.lot } : {}),
-			occurred_at: d.occurred_at ?? now()
+			...(lot ? { lot } : {}),
+			occurred_at: occurredAt
 		},
 		ctx,
 		id
@@ -454,12 +533,32 @@ export function createStockLedger(
 	// Every newly-created inbound physical lot establishes its identity at write
 	// time. A distribution return reuses the original lot instead of becoming a
 	// new physical lot. Legacy persisted rows remain readable without this field.
-	const isNewInboundLot = qtyGt(entry.qty, 0) && entry.reason !== 'distribution_return';
 	if (!isNewInboundLot) return entry;
 	if (d.lot_ref && d.lot_ref !== entry._id) {
 		throw new Error('New inbound stock ledger lot_ref must equal its own _id');
 	}
 	return { ...entry, lot_ref: entry._id };
+}
+
+export function createStockLedger(
+	input: StockLedgerInput,
+	ctx: AuthorContext,
+	id?: string
+): StockLedger {
+	return createParsedStockLedger(stockLedgerInputSchema.parse(input), ctx, id);
+}
+
+/**
+ * Explicit compatibility writer for the still-supported legacy Flow 2 runtime.
+ * New Ticket-era code must call createStockLedger and therefore use the
+ * canonical schema.md mapping above.
+ */
+export function createLegacyFlow2StockLedger(
+	input: StockLedgerInput,
+	ctx: AuthorContext,
+	id?: string
+): StockLedger {
+	return createParsedStockLedger(legacyFlow2StockLedgerInputSchema.parse(input), ctx, id);
 }
 
 export const receiveSourceSchema = z.enum([
@@ -537,7 +636,7 @@ export const distributeInputSchema = z.object({
 	item_id: z.string().min(1),
 	qty: qtyStrCoercePositiveSchema,
 	unit: z.string().trim().min(1),
-	ref_id: z.string().regex(/^distribution_batch:.+/, 'ref_id must reference a distribution batch'),
+	ref_id: z.string().regex(/^requisition_ticket:.+/, 'ref_id must reference a requisition ticket'),
 	lot_ref: z.string().regex(/^stock_ledger:.+/, 'lot_ref must reference an inbound stock ledger'),
 	note: z.string().trim().optional(), // Used to store destination in lot.note
 	occurred_at: z.string().optional()
@@ -898,155 +997,6 @@ export function keyDonationReceipt(
 			ctx
 		)
 	);
-}
-
-// ---------------------------------------------------------------- purchase
-
-export interface PurchaseItem {
-	item_id: string;
-	qty: string; // qty_str — planning signal only; the real delta lives in stock_ledger
-	unit: string;
-}
-
-/**
- * A procurement record — schema.md §2.16. Like a donation it does NOT become
- * stock on its own: it carries the vendor/PO metadata a ledger row has no room
- * for, and is created in its own step. Staff key the physical count separately
- * via `keyPurchaseReceipt`. There is no `status` (CR-032 dropped the state
- * machine) — "received?" is inferred from ledger rows whose `ref_id` points
- * here. `items` is a planning signal only.
- */
-export interface Purchase extends BaseDoc {
-	type: 'purchase';
-	vendor: string;
-	po_ref?: string;
-	items: PurchaseItem[];
-	occurred_at: Timestamp;
-	note?: string;
-}
-
-export const purchaseInputSchema = z.object({
-	vendor: z.string().trim().min(1),
-	po_ref: z.string().trim().optional(),
-	items: z
-		.array(
-			z.object({
-				item_id: z.string().min(1),
-				qty: qtyStrCoercePositiveSchema,
-				unit: z.string().trim().min(1)
-			})
-		)
-		.min(1, 'A purchase needs at least one item'),
-	occurred_at: z.string().optional(),
-	note: z.string().trim().optional()
-});
-export type PurchaseInput = z.input<typeof purchaseInputSchema>;
-
-export function createPurchase(input: PurchaseInput, ctx: AuthorContext): Purchase {
-	const d = purchaseInputSchema.parse(input);
-	return makeDoc(
-		'purchase',
-		1,
-		{
-			vendor: d.vendor,
-			...(d.po_ref ? { po_ref: d.po_ref } : {}),
-			items: d.items.map((i) => ({ ...i, qty: persistQty(i.qty) })),
-			occurred_at: d.occurred_at ?? now(),
-			...(d.note ? { note: d.note } : {})
-		},
-		ctx
-	);
-}
-
-/**
- * Validator for the lines staff key against a purchase — the form-side mirror of
- * the `CountedItem[]` that `keyPurchaseReceipt` consumes. At least one line is
- * required, matching the repository's refusal to write an empty receipt.
- *
- * `lot.expiry` is deliberately optional here: whether an item is perishable
- * lives in the supply catalog, which the domain layer cannot see, so that check
- * stays with the caller (same split as `receiveInputSchema`).
- */
-export const purchaseReceiptInputSchema = z.object({
-	counted: z
-		.array(
-			z.object({
-				item_id: z.string().min(1),
-				qty: qtyStrCoercePositiveSchema,
-				unit: z.string().trim().min(1),
-				lot: stockLotSchema.optional()
-			})
-		)
-		.min(1, 'A receipt needs at least one counted line')
-});
-export type PurchaseReceiptInput = z.input<typeof purchaseReceiptInputSchema>;
-
-/**
- * Turn a hand counted purchase into stock. This is the ONLY path from a purchase
- * to `stock_ledger`, mirroring `keyDonationReceipt`. Each counted line becomes
- * one positive `purchase` ledger entry referencing the purchase doc — which was
- * already committed in an earlier step, so this is a plain append with no
- * cross-doc write to keep consistent.
- */
-export function keyPurchaseReceipt(
-	purchase: Purchase,
-	counted: CountedItem[],
-	ctx: AuthorContext
-): StockLedger[] {
-	return counted.map((c) =>
-		createStockLedger(
-			{
-				item_id: c.item_id,
-				qty: qtyAbs(c.qty),
-				unit: c.unit,
-				reason: 'purchase',
-				ref_id: purchase._id,
-				...(c.lot ? { lot: c.lot } : {})
-			},
-			ctx
-		)
-	);
-}
-
-/** How much of a purchase has physically arrived — always derived, never stored. */
-export type PurchaseReceiptStatus = 'not_received' | 'partial' | 'received';
-
-/**
- * Derive a purchase's receipt status from the ledger (schema.md §2.16). The doc
- * deliberately has no `status` field: the ledger is the only truth, so the badge
- * can never drift from the balance it is shown next to.
- *
- * Receiving more than ordered still counts as `received` — goods arriving over
- * the ordered amount is normal, and the overage stays visible by comparing the
- * numbers. Lines keyed for items absent from `items` don't move the status.
- */
-export function purchaseReceiptStatus(
-	purchase: Purchase,
-	stockLedgers: StockLedger[]
-): PurchaseReceiptStatus {
-	const receivedByItem = new Map<string, string>();
-	for (const entry of stockLedgers) {
-		if (entry.reason !== 'purchase' || entry.ref_id !== purchase._id) continue;
-		receivedByItem.set(
-			entry.item_id,
-			addQty(receivedByItem.get(entry.item_id) ?? '0', qtyAbs(entry.qty))
-		);
-	}
-
-	if (receivedByItem.size === 0) return 'not_received';
-	const complete = purchase.items.every((item) =>
-		qtyGte(receivedByItem.get(item.item_id) ?? '0', item.qty)
-	);
-	return complete ? 'received' : 'partial';
-}
-
-/**
- * A purchase may only be corrected while nothing has been keyed against it:
- * `items` is what the receipt status and the ordered-vs-actual audit compare
- * against, so editing it mid-receipt would move the goalposts (CR-032).
- */
-export function canEditPurchase(purchase: Purchase, stockLedgers: StockLedger[]): boolean {
-	return purchaseReceiptStatus(purchase, stockLedgers) === 'not_received';
 }
 
 // ---------------------------------------------------------------- transfer
@@ -1491,8 +1441,6 @@ export const isDonation = (d: unknown): d is Donation =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'donation';
 export const isDonationCampaign = (d: unknown): d is DonationCampaign =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'donation_campaign';
-export const isPurchase = (d: unknown): d is Purchase =>
-	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'purchase';
 export const isStockTransfer = (d: unknown): d is StockTransfer =>
 	!!d && typeof d === 'object' && (d as { type?: unknown }).type === 'stock_transfer';
 

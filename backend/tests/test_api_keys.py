@@ -92,14 +92,14 @@ async def test_admin_api_keys_require_bearer(client: AsyncClient) -> None:
     assert response.status_code == 401
 
 
-async def test_external_shelters_requires_api_key(
+async def test_external_v1_requires_api_key(
     client: AsyncClient, open_shelter: PublicShelter
 ) -> None:
-    missing = await client.get("/external/v1/shelters")
+    missing = await client.get("/external/v1/needs")
     assert missing.status_code == 401
 
     invalid = await client.get(
-        "/external/v1/shelters",
+        "/external/v1/needs",
         headers={"X-API-Key": "tsk_not-a-real-key-xxxxxxxxxx"},
     )
     assert invalid.status_code == 401
@@ -108,7 +108,7 @@ async def test_external_shelters_requires_api_key(
     assert anonymous_public.status_code == 401
 
 
-async def test_external_shelters_with_valid_key(
+async def test_external_v1_with_valid_key(
     client: AsyncClient,
     auth_headers: dict[str, str],
     open_shelter: PublicShelter,
@@ -127,12 +127,11 @@ async def test_external_shelters_with_valid_key(
     api_key = create.json()["api_key"]
 
     response = await client.get(
-        "/external/v1/shelters",
+        "/external/v1/shelters/SH001",
         headers={"X-API-Key": api_key},
     )
     assert response.status_code == 200
-    assert len(response.json()) == 1
-    assert response.json()[0]["shelter_id"] == "SH001"
+    assert response.json()["shelter"]["id"] == "SH001"
 
     stored = await ApiKey.get(create.json()["id"])
     assert stored is not None
@@ -156,7 +155,7 @@ async def test_external_rejects_expired_key(
     await doc.insert()
 
     response = await client.get(
-        "/external/v1/shelters",
+        "/external/v1/needs",
         headers={"X-API-Key": plaintext},
     )
     assert response.status_code == 401
@@ -180,7 +179,7 @@ async def test_external_rejects_revoked_key(
     await doc.insert()
 
     response = await client.get(
-        "/external/v1/shelters",
+        "/external/v1/needs",
         headers={"X-API-Key": plaintext},
     )
     assert response.status_code == 401

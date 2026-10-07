@@ -25,31 +25,27 @@
 		RICE_RECIPE_ID,
 		RECIPE_LABELS,
 		RECIPE_TO_STOCK_ITEM,
+		toTicketItemInput,
 		MealPlanForm,
-		RequisitionDialog,
 		MealServiceForm,
-		useGasCylinderTypes,
-		useGasLedger,
-		gasCylinderBalance,
 		type MealPlan,
 		type MealPlanRecipe
 	} from '$lib/features/kitchen';
 	import { useActiveSopProfile } from '$lib/features/sop-ratios';
 	import { useSupplyItems } from '$lib/features/supply';
-	import { useItemMasters, formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
-	import { langState } from '$lib/states/i18n.svelte';
+	import { useItemMasters } from '$lib/features/catalog';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { useStockBalance } from '$lib/features/operations';
-	import { qtyGt } from '$lib/utils/qty';
+	import { useCreateTicket, useTickets } from '$lib/features/tickets';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
+	import { formatThaiTime, formatThaiShortDate } from '$lib/utils/date';
 
 	const plans = useMealPlans();
 	const supplyItems = useSupplyItems();
 	const itemMasters = useItemMasters(() => getShelterCode());
-	const unitsQuery = useUnitsOfMeasure();
-	const units = $derived(unitsQuery.data ?? []);
 	const stockBalance = useStockBalance();
-	const gasTypes = useGasCylinderTypes();
-	const gasLedger = useGasLedger();
 	let createOpen = $state(false);
 	let createDefaultMode = $state<'sop' | 'recipe' | 'custom'>('sop');
 
@@ -62,6 +58,8 @@
 	const sopProfile = useActiveSopProfile();
 	const requisitions = useRequisitions();
 	const mealServices = useMealServices();
+	const tickets = useTickets();
+	const createTicket = useCreateTicket();
 
 	// Plans that already have a recorded service — drives the "✓ บันทึกแล้ว" hint.
 	// meal_service.meal_plan_id links a service record to the specific plan it
@@ -75,15 +73,17 @@
 	);
 
 	// Meal plans that already have at least one requisition — drives the
-	// "เบิกแล้ว" hint so staff don't accidentally double-deduct stock.
+	// "เบิกแล้ว" hint so staff don't accidentally double-deduct stock. Includes
+	// both the legacy kitchen_requisition (read-only after CR-141 cutover) and
+	// the new requisition_ticket (any non-CANCELLED ticket counts as "opened").
 	const requisitionedPlanIds = $derived(
-		new Set(
-			(requisitions.data ?? []).map((r) => r.meal_plan_id).filter((id): id is string => Boolean(id))
-		)
+		new Set([
+			...(requisitions.data ?? [])
+				.map((r) => r.meal_plan_id)
+				.filter((id): id is string => Boolean(id)),
+			...(tickets.data ?? []).filter((t) => t.status !== 'CANCELLED').map((t) => t.meal_plan_id)
+		])
 	);
-
-	let reqOpen = $state(false);
-	let reqPlan = $state<MealPlan | null>(null);
 
 	let serviceOpen = $state(false);
 	let servicePlan = $state<MealPlan | null>(null);
@@ -116,9 +116,20 @@
 		return plan.recipes.some((r) => r.recipe_id.startsWith('item_master:'));
 	}
 
-	function openRequisition(plan: MealPlan) {
-		reqPlan = plan;
-		reqOpen = true;
+	// Opens (or resumes — idempotent on meal_plan_id) a requisition_ticket for
+	// this plan and navigates to its detail page (CR-121/CR-141 — replaces the
+	// old instant-cut RequisitionDialog).
+	async function openTicket(plan: MealPlan) {
+		try {
+			const items = toTicketItemInput(plan, itemMasters.data ?? []);
+			const ticket = await createTicket.mutateAsync({
+				input: { meal_plan_id: plan._id, items },
+				ctx: { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'kitchen_staff' }
+			});
+			goto(resolve(`/back-office/tickets/${encodeURIComponent(ticket._id)}`));
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'เปิดตั๋วเบิกวัตถุดิบไม่สำเร็จ');
+		}
 	}
 
 	// Edit/delete are draft-only (in-code guard in useDeleteMealPlanDraft /
@@ -146,7 +157,9 @@
 		const plan = pendingDeletePlan;
 		try {
 			await deletePlan.mutateAsync(plan);
-			toast.success(`ลบแผน ${MEAL_PERIOD_LABELS[plan.meal]} วันที่ ${plan.date} แล้ว`);
+			toast.success(
+				`ลบแผน ${MEAL_PERIOD_LABELS[plan.meal]} วันที่ ${formatThaiShortDate(plan.date)} แล้ว`
+			);
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาด');
 		} finally {
@@ -183,63 +196,32 @@
 			);
 			return;
 		}
-		// Same fail-fast for gas (CR-085) — a plan whose planned draw already
-		// exceeds a cylinder's remaining balance can never actually be
-		// withdrawn (requisition-dialog hard-blocks it), so don't let it move
-		// past draft looking "ready".
-		if (gasShortfalls(plan).length > 0) {
-			toast.error(
-				'ยืนยันไม่ได้ — ถังแก๊สบางใบเหลือไม่พอตามที่แผนนี้คำนวณไว้ เติมแก๊สหรือแก้แผนก่อนแล้วค่อยยืนยัน'
-			);
-			return;
-		}
 		try {
 			await confirm.mutateAsync(plan);
-			toast.success(`ยืนยันแผน ${MEAL_PERIOD_LABELS[plan.meal]} วันที่ ${plan.date} แล้ว`);
+			toast.success(
+				`ยืนยันแผน ${MEAL_PERIOD_LABELS[plan.meal]} วันที่ ${formatThaiShortDate(plan.date)} แล้ว`
+			);
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาด');
 		}
 	}
 
-	// _id is a ulid now (multiple plans may share a date+meal) — show the plan's
-	// own date+meal fields directly instead of parsing them back out of the id.
+	// Formats date and meal period reference string.
 	function planRef(plan: MealPlan): string {
 		return `${plan.date}:${plan.meal}`;
 	}
 
-	// Display label + unit for a recipe row: fixed SOP ids first, then a
-	// supply_item lookup (custom mode, or a resolved/linked BOM ingredient),
-	// then an item_master lookup (an unresolved BOM ingredient — still shows a
-	// real name even though it can't be withdrawn yet), else the raw id.
+	// Resolves label and unit for recipe items.
 	function recipeLabel(recipeId: string): { label: string; unit: string } {
-		if (RECIPE_LABELS[recipeId]) {
-			const recipe = RECIPE_LABELS[recipeId];
-			return { ...recipe, unit: formatUnit(recipe.unit, units, langState.current) };
-		}
+		if (RECIPE_LABELS[recipeId]) return RECIPE_LABELS[recipeId];
 		const supplyItem = supplyItems.data?.find((i) => i._id === recipeId);
-		if (supplyItem)
-			return {
-				label: supplyItem.name,
-				unit: formatUnit(supplyItem.unit, units, langState.current)
-			};
+		if (supplyItem) return { label: supplyItem.name, unit: supplyItem.unit };
 		const itemMaster = itemMasters.data?.find((im) => im._id === recipeId);
-		if (itemMaster)
-			return {
-				label: itemMaster.name,
-				unit: formatUnit(itemMaster.base_unit, units, langState.current)
-			};
+		if (itemMaster) return { label: itemMaster.name, unit: itemMaster.base_unit };
 		return { label: recipeId, unit: '' };
 	}
 
-	function formatTime(iso: string): string {
-		return new Date(iso).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
-	}
-
-	// How much more than the shelter's current on-hand stock this recipe row
-	// needs (0 = fully covered) — in the same display unit as planned_qty/meta.unit
-	// (converted back from the stock unit when a static mapping applies, e.g.
-	// rice: on-hand kg × 1000 → g). BOM rows (item_master:*) are skipped — they
-	// already show their own "ยังเบิกไม่ได้จริง" note regardless of qty.
+	// Calculates required stock shortfall for a planned recipe item.
 	function stockShortfall(recipe: MealPlanRecipe): number {
 		if (recipe.recipe_id.startsWith('item_master:')) return 0;
 		const stock = RECIPE_TO_STOCK_ITEM[recipe.recipe_id];
@@ -247,29 +229,10 @@
 		const onHandDisplayUnit = stock ? onHand * stock.recipe_per_stock_unit : onHand;
 		return Math.max(0, recipe.planned_qty - onHandDisplayUnit);
 	}
-
-	// Gas cylinders (CR-085) this plan would draw short of — same "flag it in
-	// the table" treatment as stockShortfall above, so a gas shortfall is
-	// visible before staff even open the requisition dialog where it's a hard
-	// block.
-	function gasShortfalls(
-		plan: MealPlan
-	): { name: string; remaining: string; consumption_kg: string }[] {
-		if (!plan.gas_usage?.length) return [];
-		return plan.gas_usage
-			.map((g) => {
-				const cyl = (gasTypes.data ?? []).find((t) => t._id === g.cylinder_id);
-				const remaining = cyl
-					? gasCylinderBalance(gasLedger.data ?? [], g.cylinder_id, cyl.capacity_kg)
-					: '0';
-				return { name: cyl?.name ?? g.cylinder_id, remaining, consumption_kg: g.consumption_kg };
-			})
-			.filter((g) => qtyGt(g.consumption_kg, g.remaining));
-	}
 </script>
 
 <div class="flex flex-col gap-4 p-4">
-	<!-- SOP setup notice — master profiles are seeded by system_admin, not from here (CR-006) -->
+	<!-- SOP setup notice -->
 	{#if !sopProfile.isPending && !sopProfile.data}
 		<Card.Root class="border-amber-300 bg-amber-50">
 			<Card.Content class="pt-4">
@@ -305,7 +268,7 @@
 				</Button>
 				<Button variant="outline" onclick={() => openCreate('custom')} class="rounded-full px-4">
 					<FileText class="mr-1.5 h-3.5 w-3.5" />
-					กำหนดสูตรเอง (Custom)
+					กำหนดสูตรเอง
 				</Button>
 			</div>
 		</Card.Header>
@@ -333,12 +296,7 @@
 									<Table.Cell class="px-6 font-mono text-xs">
 										<p class="font-semibold text-foreground">{planRef(plan)}</p>
 										<p class="text-muted-foreground">
-											{new Date(plan.created_at).toLocaleDateString('th-TH', {
-												day: '2-digit',
-												month: '2-digit',
-												year: 'numeric'
-											})}
-											· {formatTime(plan.created_at)} น.
+											{formatThaiShortDate(plan.created_at)} · {formatThaiTime(plan.created_at)} น.
 										</p>
 									</Table.Cell>
 									<Table.Cell class="max-w-xs px-6">
@@ -373,15 +331,6 @@
 														>(ขาดอีก {shortfall.toLocaleString()} {meta.unit})</span
 													>
 												{/if}
-											</p>
-										{/each}
-										{#each gasShortfalls(plan) as g (g.name)}
-											<p
-												class="mt-0.5 flex items-center gap-1 text-xs text-amber-600"
-												title="ถังแก๊สเหลือไม่พอตามที่แผนนี้คำนวณไว้ — เติมแก๊สหรือแก้แผนก่อนเบิก"
-											>
-												<TriangleAlert class="h-3 w-3 shrink-0" />
-												แก๊ส {g.name}: เหลือ {g.remaining} kg (ต้องใช้ {g.consumption_kg} kg)
 											</p>
 										{/each}
 										{#if plan.override_reason}
@@ -428,7 +377,7 @@
 									</Table.Cell>
 									<Table.Cell class="px-6 text-center">
 										{#if stage === 'draft'}
-											{@const blocked = isBomSourced(plan) || gasShortfalls(plan).length > 0}
+											{@const blocked = isBomSourced(plan)}
 											<div class="flex items-center justify-center gap-1.5">
 												<Button
 													size="sm"
@@ -436,7 +385,7 @@
 													onclick={() => handleConfirm(plan)}
 													disabled={confirm.isPending || blocked}
 													title={blocked
-														? 'มีคำเตือนในแผนนี้ (วัตถุดิบยังไม่เชื่อมสต็อก หรือแก๊สไม่พอ) — แก้ก่อนยืนยัน'
+														? 'มีคำเตือนในแผนนี้ (วัตถุดิบยังไม่เชื่อมสต็อก) — แก้ก่อนยืนยัน'
 														: undefined}
 												>
 													ยืนยันแผน
@@ -444,7 +393,7 @@
 												<Button
 													size="sm"
 													variant="outline"
-													title="แก้ไขแผน (draft)"
+													title="แก้ไขแผน"
 													onclick={() => openEdit(plan)}
 												>
 													<Pencil class="h-3.5 w-3.5" />
@@ -452,7 +401,7 @@
 												<Button
 													size="sm"
 													variant="outline"
-													title="ลบแผน (draft)"
+													title="ลบแผน"
 													class="text-destructive hover:text-destructive"
 													onclick={() => openDeleteConfirm(plan)}
 													disabled={deletePlan.isPending}
@@ -465,14 +414,14 @@
 												<Button
 													size="sm"
 													variant="outline"
-													onclick={() => openRequisition(plan)}
-													disabled={isBomSourced(plan)}
+													onclick={() => openTicket(plan)}
+													disabled={isBomSourced(plan) || createTicket.isPending}
 													title={isBomSourced(plan)
 														? 'แผนนี้มีวัตถุดิบจากสูตร BOM ที่ยังไม่เชื่อมกับสต็อกจริง (ชื่อในสูตรกับชื่อในคลังไม่ตรงกัน) เบิกไม่ได้จนกว่าจะแก้ชื่อให้ตรงกัน'
 														: undefined}
 												>
 													<PackageCheck class="mr-1 h-3.5 w-3.5" />
-													เบิกวัตถุดิบ
+													เปิดตั๋วเบิกวัตถุดิบ
 												</Button>
 												{#if isBomSourced(plan)}
 													<p class="max-w-[220px] text-center text-2xs text-amber-600">
@@ -524,7 +473,6 @@
 
 <MealPlanForm bind:open={createOpen} defaultMode={createDefaultMode} />
 <MealPlanForm bind:open={editOpen} plan={editPlan} />
-<RequisitionDialog bind:open={reqOpen} plan={reqPlan} />
 <MealServiceForm bind:open={serviceOpen} plan={servicePlan} />
 
 <AlertDialog.Root bind:open={deleteConfirmOpen}>
@@ -533,8 +481,9 @@
 			<AlertDialog.Title>ลบแผนอาหารนี้?</AlertDialog.Title>
 			<AlertDialog.Description>
 				{#if pendingDeletePlan}
-					ลบแผน {MEAL_PERIOD_LABELS[pendingDeletePlan.meal]} วันที่ {pendingDeletePlan.date}
-					(draft) — ยังไม่เบิกวัตถุดิบหรือบันทึกบริการ ลบได้โดยไม่กระทบสต็อก แต่กู้คืนไม่ได้
+					ลบแผน {MEAL_PERIOD_LABELS[pendingDeletePlan.meal]} วันที่ {formatThaiShortDate(
+						pendingDeletePlan.date
+					)} — ยังไม่เบิกวัตถุดิบหรือบันทึกบริการ ลบได้โดยไม่กระทบสต็อก แต่กู้คืนไม่ได้
 				{/if}
 			</AlertDialog.Description>
 		</AlertDialog.Header>

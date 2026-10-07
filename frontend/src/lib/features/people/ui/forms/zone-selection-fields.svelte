@@ -161,7 +161,7 @@
 				<Select.Trigger class="!h-9 w-full rounded-md text-xs">
 					{#if selected_zone}
 						{@const match = activeZones.find((z) => z.code === selected_zone)}
-						{match ? `${match.name || match.code} (${match.code.toUpperCase()})` : selected_zone}
+						{match?.name?.trim() || match?.code || selected_zone}
 					{:else}
 						-- เลือกโซนที่พัก --
 					{/if}
@@ -171,7 +171,7 @@
 						{@const isRec = recommendedZone?.code === zone.code}
 						<Select.Item
 							value={zone.code}
-							label={`${zone.name || zone.code} (${zone.code.toUpperCase()})${isRec ? ' ★ แนะนำ' : ''}`}
+							label={`${zone.name?.trim() || zone.code}${isRec ? ' ★ แนะนำ' : ''}`}
 						/>
 					{/each}
 				</Select.Content>
@@ -199,7 +199,7 @@
 							<MapPin class="size-3.5 text-muted-foreground" />
 							<div>
 								<div class="flex items-center gap-1.5">
-									<span>{zone.name || zone.code}</span>
+									<span>{zone.name?.trim() || zone.code}</span>
 									{#if isRec}
 										<span
 											class="py-0.2 rounded bg-amber-100 px-1 text-[10px] font-bold text-amber-800 dark:bg-amber-950 dark:text-amber-200"
@@ -209,9 +209,7 @@
 									{/if}
 								</div>
 								<span class="text-2xs text-muted-foreground">
-									รหัส: {zone.code.toUpperCase()}
-									{zone.type ? `| ${zone.type}` : ''}
-									· พักอยู่ {occupantCount(zone.code)}
+									{zone.type ? `${zone.type} · ` : ''}พักอยู่ {occupantCount(zone.code)}
 									{zone.capacity != null ? `/ ${zone.capacity}` : ''} คน
 								</span>
 							</div>

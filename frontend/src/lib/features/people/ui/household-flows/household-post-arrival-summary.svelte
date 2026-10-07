@@ -2,8 +2,16 @@
 	import { onDestroy } from 'svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { zoneLabel } from '../../index';
-	import { maskNationalId, type Evacuee, type Household } from '../../domain/people';
-	import { useMasterData } from '$lib/features/master-data';
+	import {
+		maskNationalId,
+		groupPetsBySpecies,
+		petSpeciesLabel,
+		type Evacuee,
+		type Household
+	} from '../../domain/people';
+	import { useShelter } from '$lib/features/shelters';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { getShelterCode } from '$lib/db/shelter';
 	import { toast } from 'svelte-sonner';
 	import EvacueeQrModal from '../evacuee-profile/evacuee-qr-modal.svelte';
 
@@ -25,26 +33,8 @@
 		onFinish: () => void;
 	} = $props();
 
-	// --- Queries for Master Data ---
-	const municipalityZoneQuery = useMasterData(() => 'municipality_zone');
-	const communityQuery = useMasterData(() => 'community');
-
-	// Resolve municipality_zone label
-	const resolvedMunicipalityZone = $derived.by(() => {
-		const code = createdHousehold.municipality_zone;
-		if (!code) return null;
-		const item = (municipalityZoneQuery.data?.items ?? []).find((i) => i.code === code);
-		return item ? item.label : code;
-	});
-
-	// Resolve community label
-	const resolvedCommunity = $derived.by(() => {
-		const code = createdHousehold.community;
-		if (!code) return null;
-		const item = (communityQuery.data?.items ?? []).find((i) => i.code === code);
-		return item ? item.label : code;
-	});
-
+	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
+	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
 	// --- Copy functionality ---
 	let copied = $state(false);
 	let copyTimeout: ReturnType<typeof setTimeout>;
@@ -109,6 +99,7 @@
 	let showQrModal = $state(false);
 
 	const hasPets = $derived(!!(createdHousehold.pets && createdHousehold.pets.length > 0));
+	const groupedPets = $derived(groupPetsBySpecies(createdHousehold.pets ?? []));
 	const hasVehicles = $derived(
 		!!(createdHousehold.vehicles && createdHousehold.vehicles.length > 0)
 	);
@@ -175,15 +166,17 @@
 			<div>
 				<span class="text-xs text-muted-foreground">โซนที่จัดสรร</span>
 				<p class="dark:text-slate-250 mt-0.5 font-semibold text-slate-800">
-					{selectedHead?.current_stay?.zone ? zoneLabel(selectedHead.current_stay.zone) : '—'}
+					{selectedHead?.current_stay?.zone
+						? zoneLabel(selectedHead.current_stay.zone, shelterZones)
+						: '—'}
 				</p>
 			</div>
 			<div>
 				<span class="text-xs text-muted-foreground">เขตพื้นที่ / ชุมชน</span>
 				<p class="dark:text-slate-250 mt-0.5 font-semibold text-slate-800">
-					{resolvedMunicipalityZone || 'ไม่ได้ระบุ'}
-					{#if resolvedCommunity}
-						· ชุมชน {resolvedCommunity}
+					{createdHousehold.municipality_zone || 'ไม่ได้ระบุ'}
+					{#if createdHousehold.community}
+						· ชุมชน {createdHousehold.community}
 					{/if}
 					{#if createdHousehold.subdistrict}
 						· ต.{createdHousehold.subdistrict}
@@ -202,17 +195,12 @@
 				<div class="col-span-1 sm:col-span-2">
 					<span class="text-xs text-muted-foreground">สัตว์เลี้ยงที่พามาด้วย</span>
 					<div class="mt-1 flex flex-wrap gap-1.5">
-						{#each createdHousehold.pets as pet, i (i)}
-							{@const speciesMap = {
-								dog: 'สุนัข',
-								cat: 'แมว',
-								other: 'สัตว์เลี้ยงอื่นๆ'
-							}}
+						{#each groupedPets as pet (pet.species)}
 							<span
 								class="rounded border border-amber-200/50 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
 							>
-								{speciesMap[pet.species] || pet.species}: {pet.count} ตัว
-								{#if pet.has_cage}
+								{petSpeciesLabel(pet.species)}: {pet.count} ตัว
+								{#if pet.hasCage}
 									(มีกรง)
 								{/if}
 							</span>

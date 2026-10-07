@@ -11,6 +11,11 @@
 	import SearchSelect from '$lib/components/search-select.svelte';
 	import { useMasterData } from '$lib/features/master-data';
 	import { useDistricts, useProvinces, useSubdistricts } from '$lib/features/shelters';
+	import {
+		buildHousingTypeSelectItems,
+		housingTypeLabelForCode,
+		setHousingTypeFromSelect
+	} from '../../domain/housing-type-ui';
 	import { resolveCurrentThaiLocation } from '$lib/utils/nominatim';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
@@ -25,6 +30,15 @@
 		district = $bindable(''),
 		province = $bindable(''),
 		postal_code = $bindable(''),
+		dorm_name = $bindable<string | null | undefined>(null),
+		dorm_building = $bindable<string | null | undefined>(null),
+		dorm_floor = $bindable<string | null | undefined>(null),
+		dorm_room = $bindable<string | null | undefined>(null),
+		/**
+		 * CR-148: split dorm residences into dorm / building / floor / room. Only enable where
+		 * the caller persists `dorm_*` — otherwise the legacy「เลขห้อง」field stays.
+		 */
+		dormFields = false,
 		disabled = false,
 		required = false,
 		loadMasterHousingTypes = true,
@@ -38,9 +52,17 @@
 		district?: string;
 		province?: string;
 		postal_code?: string;
+		dorm_name?: string | null;
+		dorm_building?: string | null;
+		dorm_floor?: string | null;
+		dorm_room?: string | null;
+		dormFields?: boolean;
 		disabled?: boolean;
 		required?: boolean;
-		/** When false (e.g. public channel), skip back-office master-data and use defaults. */
+		/**
+		 * When false (e.g. public channel without back-office API), skip master fetch.
+		 * Option *values* are always CR-112 codes from defaults either way.
+		 */
 		loadMasterHousingTypes?: boolean;
 		errors?: {
 			housing_type?: string;
@@ -51,6 +73,8 @@
 			district?: string;
 			province?: string;
 			postal_code?: string;
+			dorm_name?: string;
+			dorm_room?: string;
 		};
 	} = $props();
 
@@ -118,14 +142,25 @@
 		{ value: 'homeless', label: t.housingHomeless }
 	]);
 
-	const housingTypeItems = $derived.by(() => {
-		if (!shouldLoadMasterHousingTypes) return DEFAULT_HOUSING_TYPES;
-		const masterItems = (housingTypeQuery.data?.items ?? [])
-			.filter((i) => i.status === 'active')
-			.map((i) => ({ value: i.code, label: housingLabelForCode(i.code, i.label) }));
-		return masterItems.length > 0 ? masterItems : DEFAULT_HOUSING_TYPES;
-	});
+	/** CR-112 codes as values; master only overlays labels for matching codes (+ orphan). */
+	const housingTypeItems = $derived(
+		buildHousingTypeSelectItems({
+			defaultItems: DEFAULT_HOUSING_TYPES,
+			masterItems: shouldLoadMasterHousingTypes ? (housingTypeQuery.data?.items ?? []) : [],
+			currentValue: housing_type,
+			labelForCode: housingLabelForCode
+		})
+	);
 
+	const housingTypeTriggerLabel = $derived(
+		housing_type
+			? housingTypeLabelForCode(
+					housing_type,
+					housingTypeItems,
+					housingLabelForCode(housing_type, housing_type)
+				)
+			: t.housingTypePlaceholder
+	);
 	const provinceItems = $derived(
 		(provincesQuery.data ?? []).map((value) => ({ value, label: value }))
 	);
@@ -142,6 +177,11 @@
 	const isHomeless = $derived(housing_type === 'homeless');
 	const isApartmentDorm = $derived(housing_type === 'apartment_dorm');
 	const isCondo = $derived(housing_type === 'condo');
+	const showDorm = $derived(dormFields && isApartmentDorm);
+
+	function dormInput(setter: (value: string) => void) {
+		return (e: Event) => setter((e.currentTarget as HTMLInputElement).value);
+	}
 
 	const addressNoLabel = $derived(
 		isApartmentDorm ? t.addressNoApartmentLabel : isCondo ? t.addressNoCondoLabel : t.addressNoLabel
@@ -154,20 +194,24 @@
 				: t.addressNoPlaceholder
 	);
 	const landmarkLabel = $derived(
-		isApartmentDorm
-			? t.landmarkLabelApartment
-			: isCondo
-				? t.landmarkLabelCondo
-				: t.landmarkLabelDefault
+		showDorm
+			? t.landmarkLabelDefault
+			: isApartmentDorm
+				? t.landmarkLabelApartment
+				: isCondo
+					? t.landmarkLabelCondo
+					: t.landmarkLabelDefault
 	);
 	const landmarkPlaceholder = $derived(
 		isHomeless
 			? t.landmarkPlaceholderHomeless
-			: isApartmentDorm
-				? t.landmarkPlaceholderApartment
-				: isCondo
-					? t.landmarkPlaceholderCondo
-					: t.landmarkPlaceholderDefault
+			: showDorm
+				? t.landmarkPlaceholderDefault
+				: isApartmentDorm
+					? t.landmarkPlaceholderApartment
+					: isCondo
+						? t.landmarkPlaceholderCondo
+						: t.landmarkPlaceholderDefault
 	);
 
 	const addressRequired = $derived(required && !isHomeless);
@@ -279,12 +323,14 @@
 			</Label>
 			<Select.Root
 				type="single"
-				bind:value={() => housing_type ?? '', (v) => (housing_type = v || null)}
+				bind:value={
+					() => housing_type ?? '',
+					(v) => setHousingTypeFromSelect(v, (next) => (housing_type = next))
+				}
 				{disabled}
 			>
 				<Select.Trigger id="housing-type" class={selectTriggerClass}>
-					{housingTypeItems.find((o) => o.value === housing_type)?.label ??
-						t.housingTypePlaceholder}
+					{housingTypeTriggerLabel}
 				</Select.Trigger>
 				<Select.Content>
 					{#each housingTypeItems as opt (opt.value)}
@@ -317,9 +363,75 @@
 		</div>
 	</div>
 
-	<!-- Street / house details — hide address_no when homeless (#249 Q5) -->
+	{#if showDorm}
+		<!-- CR-148: dorm residence — address_no is composed from these on save -->
+		<div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+			<div class="col-span-2 space-y-1.5">
+				<Label for="dorm-name" class="text-xs font-semibold text-foreground">
+					{t.dormNameLabel} <span class="text-destructive">*</span>
+				</Label>
+				<Input
+					id="dorm-name"
+					value={dorm_name ?? ''}
+					oninput={dormInput((v) => (dorm_name = v))}
+					{disabled}
+					placeholder={t.dormNamePlaceholder}
+					aria-invalid={!!errors?.dorm_name}
+					class="h-9"
+				/>
+				{#if errors?.dorm_name}
+					<p class="text-2xs text-destructive">{errors.dorm_name}</p>
+				{/if}
+			</div>
+			<div class="space-y-1.5">
+				<Label for="dorm-building" class="text-xs font-semibold text-foreground">
+					{t.dormBuildingLabel}
+				</Label>
+				<Input
+					id="dorm-building"
+					value={dorm_building ?? ''}
+					oninput={dormInput((v) => (dorm_building = v))}
+					{disabled}
+					placeholder={t.dormBuildingPlaceholder}
+					class="h-9"
+				/>
+			</div>
+			<div class="space-y-1.5">
+				<Label for="dorm-floor" class="text-xs font-semibold text-foreground">
+					{t.dormFloorLabel}
+				</Label>
+				<Input
+					id="dorm-floor"
+					value={dorm_floor ?? ''}
+					oninput={dormInput((v) => (dorm_floor = v))}
+					{disabled}
+					placeholder={t.dormFloorPlaceholder}
+					class="h-9"
+				/>
+			</div>
+			<div class="space-y-1.5">
+				<Label for="dorm-room" class="text-xs font-semibold text-foreground">
+					{t.dormRoomLabel} <span class="text-destructive">*</span>
+				</Label>
+				<Input
+					id="dorm-room"
+					value={dorm_room ?? ''}
+					oninput={dormInput((v) => (dorm_room = v))}
+					{disabled}
+					placeholder={t.dormRoomPlaceholder}
+					aria-invalid={!!errors?.dorm_room}
+					class="h-9"
+				/>
+				{#if errors?.dorm_room}
+					<p class="text-2xs text-destructive">{errors.dorm_room}</p>
+				{/if}
+			</div>
+		</div>
+	{/if}
+
+	<!-- Street / house details — hide address_no when homeless (#249 Q5) or dorm (CR-148) -->
 	<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-		{#if !isHomeless}
+		{#if !isHomeless && !showDorm}
 			<div class="space-y-1.5">
 				<Label for="address-no" class="text-xs font-semibold text-foreground">
 					{addressNoLabel}

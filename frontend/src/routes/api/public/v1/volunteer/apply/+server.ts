@@ -1,10 +1,11 @@
 import { dev } from '$app/environment';
 import { json } from '@sveltejs/kit';
-import type { RequestHandler } from './$types';
 import { env } from '$env/dynamic/private';
+import type { RequestHandler } from './$types';
 import { z } from 'zod';
 import { isCaptchaKeyConfigured } from '$lib/features/public-register/server';
 import { ReCaptchaProvider } from '$lib/server/security/captcha';
+import { verifyRecaptchaOrSkip } from '$lib/server/security/recaptcha-gate';
 import {
 	volunteerApplyIpLimiter,
 	volunteerApplyPhoneLimiter
@@ -46,7 +47,9 @@ const applySchema = z.object({
 	recaptcha_token: z.string().optional()
 });
 
-const captchaProvider = new ReCaptchaProvider(env.SECRET_RECAPTCHA_KEY || 'dummy-secret');
+const captchaProvider = new ReCaptchaProvider(
+	env.RECAPTCHA_PROJECT_ID || env.SECRET_RECAPTCHA_KEY || 'smart-shelter-508719'
+);
 const noStore = { 'Cache-Control': 'no-store' };
 
 function normalizedJobId(value: string): string {
@@ -69,8 +72,8 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 
 	const { job_id, shelter_code, applicant, selected_shift, recaptcha_token } = parsed.data;
 	const ip = getClientAddress();
-	const captchaConfigured = isCaptchaKeyConfigured(env.SECRET_RECAPTCHA_KEY);
-	const skipDevGuards = dev && !captchaConfigured;
+	const skipDevGuards =
+		dev && !isCaptchaKeyConfigured(env.RECAPTCHA_PROJECT_ID || env.SECRET_RECAPTCHA_KEY);
 
 	if (
 		!skipDevGuards &&
@@ -82,22 +85,17 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 		);
 	}
 
-	if (!captchaConfigured) {
-		if (!dev) {
-			console.error('SECRET_RECAPTCHA_KEY is missing or is a placeholder!');
-			return json(
-				{ success: false, error: 'SERVER_MISCONFIGURED' },
-				{ status: 500, headers: noStore }
-			);
-		}
-		console.warn('[dev] SECRET_RECAPTCHA_KEY not configured — skipping CAPTCHA verification');
-	} else {
-		if (!recaptcha_token) {
-			return json({ success: false, error: 'CAPTCHA_REQUIRED' }, { status: 400, headers: noStore });
-		}
-		if (!(await captchaProvider.verifyToken(recaptcha_token, ip, 'volunteer_apply'))) {
-			return json({ success: false, error: 'CAPTCHA_FAILED' }, { status: 403, headers: noStore });
-		}
+	const captcha = await verifyRecaptchaOrSkip({
+		token: recaptcha_token ?? '',
+		ip,
+		action: 'volunteer_apply',
+		provider: captchaProvider
+	});
+	if (!captcha.ok) {
+		return json(
+			{ success: false, error: captcha.error },
+			{ status: captcha.status, headers: noStore }
+		);
 	}
 
 	try {

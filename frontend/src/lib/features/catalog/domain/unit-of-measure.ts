@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { catalogDoc, type CatalogDoc, type AuthorContext } from '$lib/db/model';
 
-export const dimensionSchema = z.enum(['count', 'mass', 'volume', 'length']);
+export const dimensionSchema = z.enum(['count', 'mass', 'volume', 'length', 'energy']);
 export type Dimension = z.infer<typeof dimensionSchema>;
 
 export const unitCodeSchema = z
@@ -162,8 +162,66 @@ export const FALLBACK_UNIT_DEFINITIONS: FallbackUnitDef[] = [
 		label_en: 'm',
 		dimension: 'length',
 		sort_order: 27
+	},
+	{
+		code: 'mg',
+		label_th: 'มิลลิกรัม',
+		label_th_short: 'มก.',
+		label_en: 'mg',
+		dimension: 'mass',
+		sort_order: 28
+	},
+	{
+		code: 'mcg',
+		label_th: 'ไมโครกรัม',
+		label_th_short: 'มคก.',
+		label_en: 'mcg',
+		dimension: 'mass',
+		sort_order: 29
+	},
+	{
+		code: 'kcal',
+		label_th: 'กิโลแคลอรี',
+		label_th_short: 'กิโลแคลอรี',
+		label_en: 'kcal',
+		dimension: 'energy',
+		sort_order: 30
 	}
 ];
+
+/**
+ * Resolves a persisted or legacy display unit to its canonical UOM code.
+ *
+ * New writes must persist codes (for example `piece`), while this recognises
+ * legacy labels such as `ชิ้น` at controlled read/input boundaries.
+ */
+export function canonicalizeUnitCode(
+	value: unknown,
+	units?: readonly (UnitOfMeasure | FallbackUnitDef)[] | null
+): string | null {
+	if (typeof value !== 'string') return null;
+	const trimmed = value.trim();
+	if (!trimmed) return null;
+	const normalized = trimmed.toLowerCase();
+
+	const configured = units?.find((unit) => {
+		const candidates = [unit.code, unit.label_th, unit.label_th_short, unit.label_en]
+			.filter((candidate): candidate is string => typeof candidate === 'string')
+			.map((candidate) => candidate.trim().toLowerCase());
+		return candidates.includes(normalized);
+	});
+	if (configured) return configured.code.trim().toLowerCase();
+
+	const fallback = FALLBACK_UNIT_DEFINITIONS.find((unit) => {
+		const candidates = [unit.code, unit.label_th, unit.label_th_short, unit.label_en]
+			.filter((candidate): candidate is string => typeof candidate === 'string')
+			.map((candidate) => candidate.trim().toLowerCase());
+		return candidates.includes(normalized);
+	});
+	if (fallback) return fallback.code;
+
+	return isCanonicalUnitCode(trimmed) ? normalized : null;
+}
 
 export const FALLBACK_UNIT_LABELS: Record<string, { th: string; th_short?: string; en: string }> = {
 	...Object.fromEntries(
@@ -172,6 +230,10 @@ export const FALLBACK_UNIT_LABELS: Record<string, { th: string; th_short?: strin
 			{ th: u.label_th, th_short: u.label_th_short, en: u.label_en }
 		])
 	),
+	pcs: { th: 'ชิ้น', en: 'pcs' },
+	gram: { th: 'กรัม', th_short: 'ก.', en: 'g' },
+	liter: { th: 'ลิตร', th_short: 'ล.', en: 'L' },
+	litre: { th: 'ลิตร', th_short: 'ล.', en: 'L' },
 	// Legacy Thai labels backward-compat mapping
 	ชิ้น: { th: 'ชิ้น', en: 'pcs' },
 	หน่วย: { th: 'หน่วย', en: 'unit' },

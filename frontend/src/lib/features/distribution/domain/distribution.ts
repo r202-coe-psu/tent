@@ -228,7 +228,8 @@ export const distributionLotSnapshotSchema = z.object({
 	expiry: z.string().optional(),
 	note: z.string().trim().optional(),
 	lot_no: z.string().optional(),
-	storage_zone: z.string().trim().max(100).optional()
+	storage_zone: z.string().trim().max(100).optional(),
+	storage_point_id: z.string().trim().min(1).optional()
 });
 
 export const distributionAllocationSchema = z.object({

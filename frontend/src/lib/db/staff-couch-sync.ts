@@ -1,15 +1,16 @@
 import type { QueryClient } from '@tanstack/svelte-query';
 import { startCatalogMasterLiveQuery } from '$lib/features/catalog';
+import { startDistributionLiveQuery } from '$lib/features/distribution';
 import { startKitchenLiveQuery } from '$lib/features/kitchen';
 import { startOperationsLiveQuery } from '$lib/features/operations';
 import { startPeopleLiveQuery } from '$lib/features/people';
 import { startPeopleImportLiveQuery } from '$lib/features/people-import';
 import { startReferralsLiveQuery } from '$lib/features/referrals';
 import { startDailyCalcLiveQuery } from '$lib/features/resource-calc';
-import { startShelterImportLiveQuery } from '$lib/features/shelter-import';
 import { SHELTER_REGISTRY_DB, startSheltersLiveQuery } from '$lib/features/shelters';
 import { startSopRatioLiveQuery } from '$lib/features/sop-ratios';
 import { CATALOG_DB, startCatalogLiveQuery } from '$lib/features/supply';
+import { startTicketsLiveQuery } from '$lib/features/tickets';
 import { startVolunteersLiveQuery } from '$lib/features/volunteers';
 import { endpointStore } from '$lib/stores/endpoint.svelte';
 import { startChangesSubscriber, type ChangesSubscriberHandle } from './changes-subscriber';
@@ -31,22 +32,34 @@ type LiveQueryStarter = (queryClient: QueryClient) => Stoppable;
  */
 export const STAFF_LIVE_QUERY_STARTERS: readonly LiveQueryStarter[] = [
 	startSheltersLiveQuery,
-	startShelterImportLiveQuery,
 	startCatalogLiveQuery,
 	startCatalogMasterLiveQuery,
 	startPeopleLiveQuery,
 	startPeopleImportLiveQuery,
 	startOperationsLiveQuery,
 	startKitchenLiveQuery,
+	startTicketsLiveQuery,
 	startSopRatioLiveQuery,
 	startDailyCalcLiveQuery,
 	startReferralsLiveQuery,
-	startVolunteersLiveQuery
+	startVolunteersLiveQuery,
+	startDistributionLiveQuery
 ];
 
 export interface StartStaffCouchSyncOptions {
 	liveQueryStarters?: readonly LiveQueryStarter[];
 	changesStartDelayMs?: number;
+}
+
+/**
+ * Refetch active TanStack queries after a Couch `_session` cookie is restored.
+ *
+ * Queries that failed with 401/403 while `needsReauth` was set stay in the
+ * error cache; live `_changes` only invalidates on document events, so the
+ * protected layout must call this when reauth succeeds (see CR-033 sync restart).
+ */
+export function invalidateQueriesAfterReauth(queryClient: QueryClient): void {
+	void queryClient.invalidateQueries();
 }
 
 /**

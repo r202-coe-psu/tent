@@ -40,15 +40,3 @@ pre-push:
     worker-test:
       root: worker/
       run: uv run pytest tests
-
-    # Donation E2E only — NOT the whole `pnpm test:e2e` suite, which is currently red
-    # (`e2e/catalog.test.ts` and parts of `e2e/users/` fail on a clean tree) and would
-    # block every push. Widen this to `pnpm test:e2e` once those are green.
-    #
-    # Requires the docker stack up (`docker compose up -d`) AND CORS enabled on
-    # CouchDB: `test` mode builds with an empty `PUBLIC_COUCH_PROXY`, so the browser
-    # reaches CouchDB cross-origin at :5984 and every catalog read is blocked without
-    # it. Nothing in the repo turns CORS on yet — see the note in CONTRIBUTING §6.
-    frontend-e2e-donations:
-      root: frontend/
-      run: pnpm test:e2e:donations

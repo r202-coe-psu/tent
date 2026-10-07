@@ -40,7 +40,7 @@
 			<ChevronLeft class="h-5 w-5" />
 		</Button>
 		<div>
-			<span class="text-xs text-muted-foreground">หมวดคลังสินค้าและทรัพยากร</span>
+			<span class="text-xs text-muted-foreground">คลังสินค้า</span>
 			<h1 class="text-2xl font-bold tracking-tight">{title}</h1>
 		</div>
 	</div>

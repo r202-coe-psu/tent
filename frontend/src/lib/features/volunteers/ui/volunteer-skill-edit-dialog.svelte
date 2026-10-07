@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { MasterDataItem } from '$lib/features/master-data';
+	import { findDuplicateLabel } from '$lib/features/master-data';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
@@ -25,7 +26,8 @@
 		onClose: () => void;
 		onSave: (data: {
 			code: string;
-			label: string;
+			label_th: string;
+			label_en: string;
 			category: 'operational' | 'controlled';
 			description: string;
 			is_default: boolean;
@@ -33,7 +35,8 @@
 	}>();
 
 	let formCode = $state('');
-	let formLabel = $state('');
+	let formLabelTh = $state('');
+	let formLabelEn = $state('');
 	let formCategory = $state<'operational' | 'controlled'>('operational');
 	let formDescription = $state('');
 	let formIsDefault = $state(false);
@@ -43,13 +46,15 @@
 		if (open) {
 			if (editingItem) {
 				formCode = editingItem.code;
-				formLabel = editingItem.label;
+				formLabelTh = editingItem.label_th ?? '';
+				formLabelEn = editingItem.label_en ?? '';
 				formCategory = editingItem.category === 'controlled' ? 'controlled' : 'operational';
 				formDescription = editingItem.description || '';
 				formIsDefault = editingItem.is_default || false;
 			} else {
 				formCode = '';
-				formLabel = '';
+				formLabelTh = '';
+				formLabelEn = '';
 				formCategory = 'operational';
 				formDescription = '';
 				formIsDefault = false;
@@ -70,15 +75,15 @@
 			(i: MasterDataItem) => i.code === normalizedCode && i.code !== editingItem?.code
 		)
 	);
-	const isLabelDuplicate = $derived(
-		existingItems.some(
-			(i: MasterDataItem) =>
-				i.label.trim().toLowerCase() === formLabel.trim().toLowerCase() &&
-				i.code !== editingItem?.code
-		)
+	const duplicateTh = $derived(
+		findDuplicateLabel(existingItems, formLabelTh.trim(), 'label_th', editingItem?.code)
+	);
+	const duplicateEn = $derived(
+		findDuplicateLabel(existingItems, formLabelEn.trim(), 'label_en', editingItem?.code)
 	);
 
 	const codeErrorMessage = $derived.by(() => {
+		if (editingItem) return null;
 		if (!formTouched) return null;
 		if (!formCode.trim()) return 'กรุณาระบุรหัสทักษะ (Value/Key)';
 		if (!isCodeValid)
@@ -87,10 +92,17 @@
 		return null;
 	});
 
-	const labelErrorMessage = $derived.by(() => {
+	const labelThErrorMessage = $derived.by(() => {
 		if (!formTouched) return null;
-		if (!formLabel.trim()) return 'กรุณาระบุชื่อแสดงผลทักษะ';
-		if (isLabelDuplicate) return 'ชื่อทักษะนี้มีอยู่แล้วในระบบ';
+		if (!formLabelTh.trim()) return 'กรุณาระบุชื่อภาษาไทย';
+		if (duplicateTh) return 'ชื่อทักษะภาษาไทยนี้มีอยู่แล้วในระบบ';
+		return null;
+	});
+
+	const labelEnErrorMessage = $derived.by(() => {
+		if (!formTouched) return null;
+		if (!formLabelEn.trim()) return 'กรุณาระบุชื่อภาษาอังกฤษ';
+		if (duplicateEn) return 'ชื่อทักษะภาษาอังกฤษนี้มีอยู่แล้วในระบบ';
 		return null;
 	});
 
@@ -98,8 +110,10 @@
 		formCode.trim().length > 0 &&
 			isCodeValid &&
 			!isCodeDuplicate &&
-			formLabel.trim().length > 0 &&
-			!isLabelDuplicate
+			formLabelTh.trim().length > 0 &&
+			formLabelEn.trim().length > 0 &&
+			!duplicateTh &&
+			!duplicateEn
 	);
 
 	async function handleSubmit(e: SubmitEvent) {
@@ -109,7 +123,8 @@
 
 		await onSave({
 			code: normalizedCode,
-			label: formLabel.trim(),
+			label_th: formLabelTh.trim(),
+			label_en: formLabelEn.trim(),
 			category: formCategory,
 			description: formDescription.trim(),
 			is_default: formIsDefault
@@ -150,21 +165,31 @@
 			</header>
 
 			<form onsubmit={handleSubmit} class="space-y-4">
-				<!-- Field 1: Skill Key / Code -->
 				<div>
 					<label for="formCode" class="mb-1.5 block text-xs font-bold text-foreground">
-						รหัสทักษะ (Value / Key) <span class="text-danger">* ห้ามมีเว้นวรรค</span>
+						รหัสทักษะ (Value / Key)
+						{#if !editingItem}
+							<span class="text-danger">* ห้ามมีเว้นวรรค</span>
+						{:else}
+							<span class="text-xs font-normal text-muted-foreground">(ไม่สามารถแก้ไขได้)</span>
+						{/if}
 					</label>
 					<Input
 						id="formCode"
 						type="text"
 						bind:value={formCode}
+						disabled={!!editingItem}
+						readonly={!!editingItem}
 						placeholder="เช่น medical_first_aid, cooking_kitchen, logistics"
-						class="w-full rounded-xl border-border bg-background px-4 py-2.5 font-mono text-xs focus:border-primary focus:ring-1 focus:ring-primary {codeErrorMessage
+						class="w-full rounded-xl border-border bg-background px-4 py-2.5 font-mono text-xs focus:border-primary focus:ring-1 focus:ring-primary disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground disabled:opacity-80 {codeErrorMessage
 							? 'border-danger focus:border-danger focus:ring-danger'
 							: ''}"
 					/>
-					{#if codeErrorMessage}
+					{#if editingItem}
+						<p class="mt-1 text-3xs text-muted-foreground">
+							รหัสทักษะ (ID) เป็นค่าคงที่สำหรับอ้างอิงในระบบ ไม่สามารถแก้ไขได้
+						</p>
+					{:else if codeErrorMessage}
 						<p class="mt-1 text-2xs font-medium text-danger">{codeErrorMessage}</p>
 					{:else}
 						<p class="mt-1 text-3xs text-muted-foreground">
@@ -173,26 +198,42 @@
 					{/if}
 				</div>
 
-				<!-- Field 2: Label -->
 				<div>
-					<label for="formLabel" class="mb-1.5 block text-xs font-bold text-foreground">
-						ชื่อแสดงผลทักษะ (Label) <span class="text-danger">*</span>
+					<label for="formLabelTh" class="mb-1.5 block text-xs font-bold text-foreground">
+						ชื่อแสดงผลภาษาไทย <span class="text-danger">*</span>
 					</label>
 					<Input
-						id="formLabel"
+						id="formLabelTh"
 						type="text"
-						bind:value={formLabel}
-						placeholder="เช่น การแพทย์ / ปฐมพยาบาล, ประกอบอาหาร / ครัวสนาม"
-						class="w-full rounded-xl border-border bg-background px-4 py-2.5 text-xs focus:border-primary focus:ring-1 focus:ring-primary {labelErrorMessage
+						bind:value={formLabelTh}
+						placeholder="เช่น การแพทย์ / ปฐมพยาบาล"
+						class="w-full rounded-xl border-border bg-background px-4 py-2.5 text-xs focus:border-primary focus:ring-1 focus:ring-primary {labelThErrorMessage
 							? 'border-danger focus:border-danger focus:ring-danger'
 							: ''}"
 					/>
-					{#if labelErrorMessage}
-						<p class="mt-1 text-2xs font-medium text-danger">{labelErrorMessage}</p>
+					{#if labelThErrorMessage}
+						<p class="mt-1 text-2xs font-medium text-danger">{labelThErrorMessage}</p>
 					{/if}
 				</div>
 
-				<!-- Field 3: Category (Enum) -->
+				<div>
+					<label for="formLabelEn" class="mb-1.5 block text-xs font-bold text-foreground">
+						ชื่อแสดงผลภาษาอังกฤษ <span class="text-danger">*</span>
+					</label>
+					<Input
+						id="formLabelEn"
+						type="text"
+						bind:value={formLabelEn}
+						placeholder="e.g. Medical / first aid"
+						class="w-full rounded-xl border-border bg-background px-4 py-2.5 text-xs focus:border-primary focus:ring-1 focus:ring-primary {labelEnErrorMessage
+							? 'border-danger focus:border-danger focus:ring-danger'
+							: ''}"
+					/>
+					{#if labelEnErrorMessage}
+						<p class="mt-1 text-2xs font-medium text-danger">{labelEnErrorMessage}</p>
+					{/if}
+				</div>
+
 				<div>
 					<span class="mb-2 block text-xs font-bold text-foreground">
 						ประเภททักษะ (Skill Type / Category) <span class="text-danger">*</span>
@@ -248,7 +289,6 @@
 					</div>
 				</div>
 
-				<!-- Field 4: Description -->
 				<div>
 					<label for="formDescription" class="mb-1.5 block text-xs font-bold text-foreground">
 						คำอธิบายขอบเขตหน้าที่ (Description)
@@ -262,7 +302,6 @@
 					/>
 				</div>
 
-				<!-- Field 5: is_default -->
 				<div class="pt-2">
 					<label class="flex cursor-pointer items-center gap-2.5">
 						<input
@@ -276,7 +315,6 @@
 					</label>
 				</div>
 
-				<!-- Form Actions -->
 				<div class="mt-6 flex items-center justify-end gap-3 border-t border-border pt-4">
 					<Button
 						type="button"

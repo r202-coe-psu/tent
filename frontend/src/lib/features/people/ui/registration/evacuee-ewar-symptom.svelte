@@ -14,7 +14,11 @@
 	import { languageStore } from '$lib/stores/language.svelte';
 	import { EVACUEE_EWAR_I18N } from '../_constants/evacuee-ewar.i18n';
 	import { EVACUEE_REGISTRATION_I18N } from '../_constants/evacuee-registration.i18n';
-	import { CR112_VULNERABLE_GROUP_ACTIVE, useMasterData } from '$lib/features/master-data';
+	import {
+		CR112_VULNERABLE_GROUP_ACTIVE,
+		formatMasterLabel,
+		useMasterData
+	} from '$lib/features/master-data';
 	import {
 		applyIntersectionEntries,
 		isScrollNearEnd,
@@ -62,11 +66,11 @@
 		const masterByCode = new Map(
 			(vulnerableGroupQuery.data?.items ?? [])
 				.filter((item) => item.status === 'active')
-				.map((item) => [item.code, item.label])
+				.map((item) => [item.code, formatMasterLabel(item, languageStore.current)])
 		);
 		return CR112_VULNERABLE_GROUP_ACTIVE.map((item) => ({
 			code: item.code,
-			label: masterByCode.get(item.code) ?? item.label
+			label: masterByCode.get(item.code) ?? formatMasterLabel(item, languageStore.current)
 		}));
 	});
 
@@ -391,7 +395,12 @@
 								</span>
 								<span class="flex min-w-0 items-start gap-2">
 									<span class="text-base leading-none">{symptom.emoji}</span>
-									<span class="leading-snug">{symptom.label}</span>
+									<span class="flex min-w-0 flex-col leading-snug">
+										<span>{symptom.label}</span>
+										{#if symptom.sublabel}
+											<span class="text-xs text-muted-foreground">{symptom.sublabel}</span>
+										{/if}
+									</span>
 								</span>
 							</button>
 						{/each}

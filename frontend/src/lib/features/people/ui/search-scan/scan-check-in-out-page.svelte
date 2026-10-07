@@ -28,6 +28,7 @@
 		formatPersonName,
 		normalizeCheckoutRemark,
 		STATUS_LABELS,
+		zoneLabel,
 		type Evacuee,
 		type StayStatus
 	} from '$lib/features/people';
@@ -38,6 +39,7 @@
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { useShelter } from '$lib/features/shelters';
 
 	let scanCode = $state('');
 	let isScanning = $state(false);
@@ -62,6 +64,8 @@
 	const checkIn = useCheckInEvacuee();
 	const checkOut = useCheckOutEvacuee();
 	const evacueesQuery = useEvacuees();
+	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
+	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
 
 	let selectionOverrideIds = $state<string[] | null>(null);
 	let selectionOverrideForId = $state<string | null>(null);
@@ -485,10 +489,10 @@
 										</span>
 										{#if found.current_stay?.zone}
 											<span
-												class="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-2xs font-bold text-slate-600 uppercase dark:bg-slate-800 dark:text-slate-300"
+												class="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-2xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300"
 											>
 												<MapPin class="size-2.5" />
-												{found.current_stay.zone}
+												{zoneLabel(found.current_stay.zone, shelterZones)}
 											</span>
 										{/if}
 									</div>

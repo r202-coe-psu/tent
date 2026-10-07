@@ -1,30 +1,27 @@
 <script lang="ts">
 	import { fromStore } from 'svelte/store';
 	import { Input } from '$lib/components/ui/input/index.js';
-	import { SearchSelect } from '$lib/components/ui/search-select/index.js';
 	import * as Form from '$lib/components/ui/form/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import type { SuperForm } from 'sveltekit-superforms';
 	import { useMasterData } from '$lib/features/master-data';
 	import type { HouseholdFormData } from '../../domain/people';
+	import {
+		buildHousingTypeSelectItems,
+		DEFAULT_HOUSING_TYPE_ITEMS_TH,
+		housingTypeLabelForCode,
+		setHousingTypeFromSelect
+	} from '../../domain/housing-type-ui';
 
 	let {
 		form,
 		mzVal = $bindable(),
-		commVal = $bindable(),
-		municipalityZoneItems,
-		communityItems,
-		mzPending,
-		commPending
+		commVal = $bindable()
 	}: {
 		form: SuperForm<HouseholdFormData>;
 		mzVal: string;
 		commVal: string;
-		municipalityZoneItems: { value: string; label: string }[];
-		communityItems: { value: string; label: string }[];
-		mzPending: boolean;
-		commPending: boolean;
 	} = $props();
 
 	/** SuperForm `.form` is a store — `fromStore` exposes rune-friendly `.current`. */
@@ -32,9 +29,21 @@
 
 	const housingTypeQuery = useMasterData(() => 'housing_type');
 	const housingTypeItems = $derived(
-		(housingTypeQuery.data?.items ?? [])
-			.filter((i) => i.status === 'active')
-			.map((i) => ({ value: i.code, label: i.label }))
+		buildHousingTypeSelectItems({
+			defaultItems: DEFAULT_HOUSING_TYPE_ITEMS_TH,
+			masterItems: housingTypeQuery.data?.items ?? [],
+			currentValue: formData.current.housing_type
+		})
+	);
+
+	const housingTypeTriggerLabel = $derived(
+		formData.current.housing_type
+			? housingTypeLabelForCode(
+					formData.current.housing_type,
+					housingTypeItems,
+					formData.current.housing_type
+				)
+			: '— เลือกประเภทที่อยู่อาศัย —'
 	);
 
 	const isHomeless = $derived(formData.current.housing_type === 'homeless');
@@ -57,15 +66,7 @@
 			<Form.Control>
 				{#snippet children({ props })}
 					<Form.Label>เขตเทศบาล</Form.Label>
-					<SearchSelect
-						items={municipalityZoneItems}
-						bind:value={mzVal}
-						placeholder="เลือกเขต..."
-						emptyText="ไม่พบเขตที่ค้นหา"
-						loading={mzPending}
-						controlProps={props}
-						class="h-9 w-full"
-					/>
+					<Input {...props} bind:value={mzVal} placeholder="ระบุเขตเทศบาล..." class="h-9 w-full" />
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />
@@ -75,15 +76,7 @@
 			<Form.Control>
 				{#snippet children({ props })}
 					<Form.Label>ชุมชน</Form.Label>
-					<SearchSelect
-						items={communityItems}
-						bind:value={commVal}
-						placeholder="เลือกชุมชน..."
-						emptyText="ไม่พบชุมชนที่ค้นหา"
-						loading={commPending}
-						controlProps={props}
-						class="h-9 w-full"
-					/>
+					<Input {...props} bind:value={commVal} placeholder="ระบุชุมชน..." class="h-9 w-full" />
 				{/snippet}
 			</Form.Control>
 			<Form.FieldErrors />
@@ -104,12 +97,11 @@
 						type="single"
 						bind:value={
 							() => formData.current.housing_type ?? '',
-							(v) => (formData.current.housing_type = v || null)
+							(v) => setHousingTypeFromSelect(v, (next) => (formData.current.housing_type = next))
 						}
 					>
 						<Select.Trigger {...props} class={selectTriggerClass}>
-							{housingTypeItems.find((o) => o.value === formData.current.housing_type)?.label ??
-								'— เลือกประเภทที่อยู่อาศัย —'}
+							{housingTypeTriggerLabel}
 						</Select.Trigger>
 						<Select.Content>
 							{#each housingTypeItems as opt (opt.value)}

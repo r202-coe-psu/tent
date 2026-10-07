@@ -266,9 +266,20 @@ describe('validateRow — sub storage list', () => {
 		);
 		expect(r.ok).toBe(true);
 		expect(r.shelter?.common_areas.sub_storage).toEqual([
-			{ name: 'คลังหน้าอาคาร', type: 'food_dry', area_m2: 20 },
-			{ name: 'คลังยา', type: 'medical_supplies', area_m2: null }
+			{ id: expect.any(String), name: 'คลังหน้าอาคาร', type: 'food_dry', area_m2: 20 },
+			{ id: expect.any(String), name: 'คลังยา', type: 'medical_supplies', area_m2: null }
 		]);
+	});
+
+	it('mints a distinct id per storage point (ledger lots reference it)', () => {
+		const r = validateRow(
+			baseRow({ [H.sub_storage]: 'คลังหน้าอาคาร:อาหารแห้ง:20 | คลังยา:เวชภัณฑ์' }),
+			1,
+			emptyLookups()
+		);
+		const ids = (r.shelter?.common_areas.sub_storage ?? []).map((p) => p.id);
+		expect(ids.every((id) => id.length > 0)).toBe(true);
+		expect(new Set(ids).size).toBe(2);
 	});
 
 	it('rejects an unknown storage type', () => {
@@ -389,7 +400,9 @@ describe('validateWorkbook', () => {
 		zones: [
 			zoneRow({ [H.zone_code]: 'A', [H.zone_name]: 'โซน A', [H.zone_capacity]: '10' }, 1, '2'),
 			zoneRow({ [H.zone_code]: 'B', [H.zone_name]: 'โซน B', [H.zone_capacity]: '10' }, 2, '9')
-		]
+		],
+		foodDistributionPoints: [],
+		hasFoodDistributionPointsSheet: false
 	};
 
 	it('joins zone rows to the right shelter by ลำดับที่', () => {
@@ -404,7 +417,9 @@ describe('validateWorkbook', () => {
 				shelters: [{ ref: '', line: 1, cells: baseRow() }],
 				zones: [
 					zoneRow({ [H.zone_code]: 'A', [H.zone_name]: 'โซน A', [H.zone_capacity]: '10' }, 1, '1')
-				]
+				],
+				foodDistributionPoints: [],
+				hasFoodDistributionPointsSheet: false
 			},
 			emptyLookups()
 		);
@@ -422,7 +437,9 @@ describe('validateWorkbook', () => {
 					{ ref: '1', line: 1, cells: baseRow({ [H.name]: 'ศูนย์ ซ้ำ' }) },
 					{ ref: '2', line: 2, cells: baseRow({ [H.name]: '  ศูนย์   ซ้ำ  ' }) }
 				],
-				zones: []
+				zones: [],
+				foodDistributionPoints: [],
+				hasFoodDistributionPointsSheet: false
 			},
 			emptyLookups()
 		);
@@ -594,5 +611,43 @@ describe('buildUpdatePayload — fields the workbook cannot express', () => {
 		expect(payload.name).toBe(shelter.name);
 		expect(payload.capacity).toBe(shelter.capacity);
 		expect(payload.admission_policy.supported_vulnerable_groups).toEqual([]);
+	});
+
+	it('preserves operational flags and food points when an older workbook omits the new sheet', () => {
+		const shelter = rowPayload();
+		const existingPoints = [{ id: 'p-existing', name: 'จุดเดิม' }];
+		const payload = buildUpdatePayload(shelter, {
+			feature_flags: {
+				allow_pets: true,
+				allow_vehicles: true,
+				allow_assets: false,
+				public_donations_enabled: false,
+				enable_medical_screening: true,
+				accepts_pre_registration: true
+			},
+			food_distribution_points: existingPoints
+		});
+
+		expect(payload.feature_flags).toEqual({
+			allow_pets: true,
+			allow_vehicles: true,
+			allow_assets: false,
+			public_donations_enabled: false,
+			enable_medical_screening: true,
+			accepts_pre_registration: true
+		});
+		expect(payload.food_distribution_points).toEqual(existingPoints);
+	});
+
+	it('replaces food points only when the latest workbook explicitly supplies the sheet', () => {
+		const shelter = rowPayload();
+		const importedPoints = [{ id: 'p-imported', name: 'จุดใหม่' }];
+		const payload = buildUpdatePayload(
+			{ ...shelter, food_distribution_points: importedPoints },
+			{ food_distribution_points: [{ id: 'p-existing', name: 'จุดเดิม' }] },
+			{ foodDistributionPointsProvided: true }
+		);
+
+		expect(payload.food_distribution_points).toEqual(importedPoints);
 	});
 });

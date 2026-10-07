@@ -175,13 +175,12 @@ export function normalizeHeader(text: string): string {
 }
 
 /**
- * master_data lists the importer resolves. Both are configured per shelter and
- * the import always lands in the shelter that is open on screen, so their
- * options are known at download time and ship as dropdowns in the template.
+ * Formerly master_data-backed columns; CR-137 made zone/community free text.
+ * Kept as empty so Lookups/TemplateMasters stay typed without live master wiring.
  */
-export type MasterColumn = 'municipality_zone' | 'community';
+export type MasterColumn = never;
 
-export const MASTER_COLUMNS: readonly MasterColumn[] = ['municipality_zone', 'community'];
+export const MASTER_COLUMNS: readonly MasterColumn[] = [];
 
 /**
  * Fields intentionally absent from the workbook — documented on the README sheet.
@@ -205,8 +204,8 @@ export interface ColumnDef {
 	isRef?: boolean;
 	/** enum / multi-enum columns only — the fixed whitelist. */
 	choices?: readonly EnumChoice[];
-	/** masterdata columns only — which master_data type supplies the options. */
-	masterType?: MasterColumn;
+	/** masterdata columns only — which master_data type supplies the options (none after CR-137). */
+	masterType?: string;
 	/**
 	 * Dotted path into the payload this column feeds, used to map a Zod issue
 	 * back to this column. Omitted for columns the validator assembles by hand
@@ -445,19 +444,17 @@ const SHEET_ADDRESS: SheetDef = {
 		},
 		{
 			header: H.municipality_zone,
-			kind: 'masterdata',
+			kind: 'string',
 			required: false,
-			masterType: 'municipality_zone',
 			path: 'municipality_zone',
-			hint: 'เลือกจากรายการเขตเทศบาลของศูนย์นี้'
+			hint: 'ระบุเขตเทศบาลเป็นข้อความอิสระ'
 		},
 		{
 			header: H.community,
-			kind: 'masterdata',
+			kind: 'string',
 			required: false,
-			masterType: 'community',
 			path: 'community',
-			hint: 'เลือกจากรายการชุมชนของศูนย์นี้'
+			hint: 'ระบุชุมชนเป็นข้อความอิสระ'
 		},
 		{
 			header: H.pets,

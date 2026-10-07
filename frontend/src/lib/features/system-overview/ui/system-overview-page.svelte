@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert';
+	import StaffPageShell from '$lib/components/staff-page-shell.svelte';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import {
 		defaultMovementDateRange,
@@ -43,14 +44,10 @@
 	);
 </script>
 
-<div class="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
-	<header class="space-y-1">
-		<h1 class="text-2xl font-bold tracking-tight text-[#0A2647] sm:text-3xl">ภาพรวมระบบ</h1>
-		<p class="text-base text-slate-600">
-			สรุปสถานะศูนย์ คิวลงทะเบียนล่วงหน้า และการเคลื่อนย้ายทั่วระบบ
-		</p>
-	</header>
-
+<StaffPageShell
+	title="ภาพรวมระบบ"
+	description="สรุปสถานะศูนย์ คิวลงทะเบียนล่วงหน้า และการเคลื่อนย้ายทั่วระบบ"
+>
 	<OverviewFilterBar {filters} onChange={(next) => (filters = next)} />
 
 	{#if isError}
@@ -88,4 +85,4 @@
 		total={preRegsQuery.data?.total}
 		loading={preRegsQuery.isPending}
 	/>
-</div>
+</StaffPageShell>

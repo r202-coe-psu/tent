@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { QueryClient } from '@tanstack/svelte-query';
-import { CHANGES_FEED_START_DELAY_MS, startStaffCouchSync } from './staff-couch-sync';
+import {
+	CHANGES_FEED_START_DELAY_MS,
+	invalidateQueriesAfterReauth,
+	STAFF_LIVE_QUERY_STARTERS,
+	startStaffCouchSync
+} from './staff-couch-sync';
+import { startDistributionLiveQuery } from '$lib/features/distribution';
 
 const probe = vi.fn();
 const startChangesSubscriberMock = vi.fn((dbNames: string[]) => {
@@ -26,10 +32,6 @@ vi.mock('./shelter', () => ({
 vi.mock('$lib/features/shelters', () => ({
 	SHELTER_REGISTRY_DB: 'registry',
 	startSheltersLiveQuery: vi.fn(() => ({ stop: vi.fn() }))
-}));
-
-vi.mock('$lib/features/shelter-import', () => ({
-	startShelterImportLiveQuery: vi.fn(() => ({ stop: vi.fn() }))
 }));
 
 vi.mock('$lib/features/supply', () => ({
@@ -67,6 +69,10 @@ vi.mock('$lib/features/resource-calc', () => ({
 
 vi.mock('$lib/features/referrals', () => ({
 	startReferralsLiveQuery: vi.fn(() => ({ stop: vi.fn() }))
+}));
+
+vi.mock('$lib/features/distribution', () => ({
+	startDistributionLiveQuery: vi.fn(() => ({ stop: vi.fn() }))
 }));
 
 const queryClient = {} as QueryClient;
@@ -128,5 +134,24 @@ describe('startStaffCouchSync', () => {
 		handle.stop();
 
 		expect(stopSubscriber).toHaveBeenCalledTimes(1);
+	});
+
+	it('registers startDistributionLiveQuery in the production starter registry', () => {
+		// Guards against the exact omission where Distribution's live-query starter
+		// existed and was unit-tested in isolation but was never wired into the
+		// registry that startStaffCouchSync actually starts in the protected app.
+		expect(STAFF_LIVE_QUERY_STARTERS).toContain(startDistributionLiveQuery);
+	});
+});
+
+describe('invalidateQueriesAfterReauth', () => {
+	it('invalidates all queries so errored fetches retry after login', () => {
+		const invalidateQueries = vi.fn();
+		const client = { invalidateQueries } as unknown as QueryClient;
+
+		invalidateQueriesAfterReauth(client);
+
+		expect(invalidateQueries).toHaveBeenCalledTimes(1);
+		expect(invalidateQueries).toHaveBeenCalledWith();
 	});
 });

@@ -36,8 +36,14 @@ const {
 	mockExchangeThaidCode,
 	mockParseThaidCitizenClaims,
 	mockParseThaidOAuthState,
-	mockSetCitizenClaimCookie
+	mockSetCitizenClaimCookie,
+	mockResolveThaidLoginUser,
+	mockFindUserByThaidSubject,
+	mockSetPendingLinkCookie
 } = vi.hoisted(() => ({
+	mockResolveThaidLoginUser: vi.fn(),
+	mockFindUserByThaidSubject: vi.fn(),
+	mockSetPendingLinkCookie: vi.fn(),
 	mockClearThaidOAuthStateCookie: vi.fn(),
 	mockExchangeThaidCode: vi.fn(),
 	mockParseThaidCitizenClaims: vi.fn(),
@@ -56,7 +62,7 @@ vi.mock('$lib/server/thaid-oauth', () => ({
 	})),
 	parseThaidCitizenClaims: mockParseThaidCitizenClaims,
 	parseThaidOAuthState: mockParseThaidOAuthState,
-	resolveThaidLoginUser: vi.fn(),
+	resolveThaidLoginUser: mockResolveThaidLoginUser,
 	resolveThaidRedirectUri: vi.fn(() => 'http://localhost/api/v1/auth/oauth/thaid/callback'),
 	setCitizenClaimCookie: mockSetCitizenClaimCookie
 }));
@@ -70,10 +76,14 @@ vi.mock('$lib/server/google-oauth', () => ({
 }));
 
 vi.mock('$lib/server/user-service', () => ({
-	findUserByThaidSubject: vi.fn(),
+	findUserByThaidSubject: mockFindUserByThaidSubject,
 	getThaidMfa: vi.fn(),
 	linkThaidMfa: vi.fn(),
 	touchThaidMfaVerified: vi.fn()
+}));
+
+vi.mock('$lib/server/pending-link', () => ({
+	setPendingLinkCookie: mockSetPendingLinkCookie
 }));
 
 vi.mock('$lib/db/couch', () => ({
@@ -196,6 +206,63 @@ describe('GET /api/v1/auth/oauth/thaid/callback (mode=register)', () => {
 			const redir = e as { status: number; location: string };
 			expect(redir.status).toBe(302);
 			expect(redir.location).toBe('/pre-register?shelter=SH001&error=oauth_exchange_failed');
+		}
+	});
+});
+
+describe('GET /api/v1/auth/oauth/thaid/callback (mode=login, CR-141)', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	function loginEvent(state: string) {
+		return {
+			url: new URL(`http://localhost/api/v1/auth/oauth/thaid/callback?code=c&state=${state}`),
+			cookies: {
+				get: vi.fn((name: string) => (name === 'oauth_thaid_state' ? state : undefined)),
+				set: vi.fn(),
+				delete: vi.fn()
+			} as unknown as Cookies,
+			fetch: vi.fn() as unknown as typeof fetch
+		};
+	}
+
+	it('not linked → sets pending_link and redirects to /login/link', async () => {
+		mockParseThaidOAuthState.mockReturnValue({ mode: 'login', name: '', nonce: 'n' });
+		mockExchangeThaidCode.mockResolvedValue(mockClaims);
+		mockFindUserByThaidSubject.mockResolvedValue(null);
+		mockResolveThaidLoginUser.mockReturnValue({ ok: false, reason: 'thaid_not_linked' });
+		const event = loginEvent('s-login');
+
+		try {
+			await GET(event as Parameters<typeof GET>[0]);
+			expect.unreachable('Should have thrown redirect');
+		} catch (e: unknown) {
+			const redir = e as { status: number; location: string };
+			expect(redir.status).toBe(302);
+			expect(redir.location).toBe('/login/link');
+			expect(mockSetPendingLinkCookie).toHaveBeenCalledWith(event.cookies, {
+				provider: 'thaid',
+				sub: 'test-subject',
+				name: 'นายสมชาย มั่นคง',
+				pid_masked: '1-xxxx-xxxxx-56-6'
+			});
+		}
+	});
+
+	it('missing salt → still a login error, no pending link', async () => {
+		mockParseThaidOAuthState.mockReturnValue({ mode: 'login', name: '', nonce: 'n' });
+		mockExchangeThaidCode.mockResolvedValue(mockClaims);
+		mockFindUserByThaidSubject.mockResolvedValue({ name: 'x' });
+		mockResolveThaidLoginUser.mockReturnValue({ ok: false, reason: 'missing_salt' });
+
+		try {
+			await GET(loginEvent('s-login') as Parameters<typeof GET>[0]);
+			expect.unreachable('Should have thrown redirect');
+		} catch (e: unknown) {
+			const redir = e as { status: number; location: string };
+			expect(redir.location).toBe('/login?error=thaid_login_failed');
+			expect(mockSetPendingLinkCookie).not.toHaveBeenCalled();
 		}
 	});
 });

@@ -11,6 +11,9 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { useSearchEvacuees, maskNationalId, zoneLabel } from '$lib/features/people';
+	import { useShelter } from '$lib/features/shelters';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { getShelterCode } from '$lib/db/shelter';
 
 	const query = $derived(page.url.searchParams.get('q') ?? '');
 
@@ -20,6 +23,8 @@
 	);
 	const searchResults = $derived(searchQuery.data ?? []);
 	const isSearching = $derived(searchQuery.isFetching);
+	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
+	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
 
 	function newSearch() {
 		goto(resolve('/onsite/search-edit'));
@@ -105,7 +110,7 @@
 									class="mt-3 flex items-center justify-between gap-2 border-t border-border pt-3"
 								>
 									<p class="truncate text-xs text-muted-foreground">
-										Zone {zoneLabel(evacuee.current_stay.zone)}
+										Zone {zoneLabel(evacuee.current_stay.zone, shelterZones)}
 									</p>
 									<Button
 										type="button"

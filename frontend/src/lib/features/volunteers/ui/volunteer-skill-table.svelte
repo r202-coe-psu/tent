@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { MasterDataItem } from '$lib/features/master-data';
+	import { formatMasterLabel } from '$lib/features/master-data';
 	import * as Table from '$lib/components/ui/table/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -58,7 +59,12 @@
 						</Table.Cell>
 						<Table.Cell>
 							<div class="flex items-center gap-2">
-								<span class="text-sm font-bold text-foreground">{item.label}</span>
+								<span class="text-sm font-bold text-foreground"
+									>{formatMasterLabel(item, 'th')}</span
+								>
+								{#if item.label_en && item.label_en !== item.label_th}
+									<span class="text-2xs text-muted-foreground">({item.label_en})</span>
+								{/if}
 								{#if item.is_default}
 									<Badge
 										variant="outline"

@@ -269,8 +269,8 @@ describe('public/shelters load function', () => {
 
 	it('resolves shelter_type / admin_type ref id to human-readable label', async () => {
 		vi.mocked(fetchShelterTypes).mockResolvedValue([
-			{ code: '01K_SCHOOL_ID', label: 'โรงเรียน' },
-			{ code: '01K_TEMPLE_ID', label: 'วัด' }
+			{ code: '01K_SCHOOL_ID', label_th: 'โรงเรียน', label_en: 'School' },
+			{ code: '01K_TEMPLE_ID', label_th: 'วัด', label_en: 'Temple' }
 		]);
 
 		vi.mocked(listPublicShelters).mockResolvedValue({
@@ -312,8 +312,8 @@ describe('public/shelters load function', () => {
 
 	it('filters by shelter_type label correctly', async () => {
 		vi.mocked(fetchShelterTypes).mockResolvedValue([
-			{ code: '01K_SCHOOL_ID', label: 'โรงเรียน' },
-			{ code: '01K_TEMPLE_ID', label: 'วัด' }
+			{ code: '01K_SCHOOL_ID', label_th: 'โรงเรียน', label_en: 'School' },
+			{ code: '01K_TEMPLE_ID', label_th: 'วัด', label_en: 'Temple' }
 		]);
 
 		vi.mocked(listPublicShelters).mockResolvedValue({

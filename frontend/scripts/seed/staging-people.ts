@@ -17,7 +17,6 @@ import { prefixRangeEnd } from '../t31-seed-support';
 import { bulkDocsBatched, couchReq } from './couch';
 import { generatePersonProfile, initStagingFaker, nextHouseholdSize } from './people-faker';
 import {
-	masterCode,
 	masterCodes,
 	SH001_CODE,
 	SH002_CODE,
@@ -88,8 +87,8 @@ function buildShelterPeople(
 			...createHousehold(
 				{
 					label: `ครัวเรือน${head.last_name}`,
-					municipality_zone: masterCode(master, 'municipality_zone', head.zoneKey),
-					community: masterCode(master, 'community', head.communityKey),
+					municipality_zone: head.zoneLabel,
+					community: head.communityLabel,
 					// housing_type persists stable CR-112 codes (= seed keys), not ULID item codes
 					housing_type: head.housingTypeKey,
 					head_evacuee_id: null,

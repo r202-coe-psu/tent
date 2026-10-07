@@ -13,7 +13,7 @@
 	} = $props();
 </script>
 
-<Card.Root class="rounded-2xl border border-slate-200/80 bg-white shadow-2xs">
+<Card.Root class="rounded-xl border border-slate-200/80 bg-white shadow-2xs">
 	<Card.Header>
 		<Card.Title class="text-lg font-bold text-slate-900">ต้นทาง (ที่อยู่)</Card.Title>
 		<Card.Description class="text-sm text-slate-500">

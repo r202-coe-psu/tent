@@ -9,11 +9,13 @@
 	import UserPlus from '@lucide/svelte/icons/user-plus';
 
 	import {
-		useEvacuees,
+		useEvacuee,
+		useHousehold,
+		useHouseholdMembers,
 		useHouseholds,
-		useMedicals,
-		useScreenings,
-		useMovements,
+		useMedicalByEvacuee,
+		useScreeningsByEvacuee,
+		useMovementsByEvacuee,
 		useCreateMedical,
 		usePatchMedical,
 		useDeleteMedical,
@@ -29,7 +31,8 @@
 		normalizeCheckoutRemark,
 		statusChangeHandlerKind,
 		canChangeEvacueeZone,
-		formatPersonName
+		formatPersonName,
+		zoneLabel
 	} from '$lib/features/people';
 	import {
 		hasStaffCapability,
@@ -50,6 +53,7 @@
 	import { useShelter } from '$lib/features/shelters';
 	import { useSaveImage } from '$lib/features/images';
 	import { now } from '$lib/db/model';
+	import LoadingScreen from '$lib/components/loading-screen.svelte';
 
 	import EvacueeProfileIdentityRail from './evacuee-profile-identity-rail.svelte';
 	import EvacueeProfileMobileDock from './evacuee-profile-mobile-dock.svelte';
@@ -94,14 +98,14 @@
 		Record<StayStatus, { label: string; shortLabel: string; colorClass: string; dotClass: string }>
 	> = {
 		active: {
-			label: 'พักพิงในศูนย์ (Active)',
-			shortLabel: 'พักพิงในศูนย์',
+			label: 'เช็คอิน / พักพิงในศูนย์ (Check-in)',
+			shortLabel: 'เช็คอิน',
 			colorClass:
 				'bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800',
 			dotClass: 'bg-green-500'
 		},
 		room_confirmed: {
-			label: 'ยืนยันถึงโซนแล้ว (Zone Arrival Confirmed)',
+			label: 'ยืนยันถึงโซน (Zone Arrival Confirmed)',
 			shortLabel: 'ยืนยันถึงโซน',
 			colorClass:
 				'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800',
@@ -158,12 +162,28 @@
 		}
 	};
 
-	const evacueesQuery = useEvacuees();
+	const evacueeQuery = useEvacuee(() => evacueeId);
+	// Declared before any hook below that reads it in a getter — those hooks'
+	// createQuery() options run eagerly at call time, not lazily on first access,
+	// so referencing `evacuee` before this line throws a TDZ ReferenceError.
+	const evacuee = $derived(evacueeQuery.data ?? null);
+	const householdQuery = useHousehold(
+		() => evacuee?.household_id ?? '',
+		() => !!evacuee?.household_id
+	);
+	// Full household list is only needed by the "change household" picker modal,
+	// but EvacueeHouseholdModal reads it synchronously on mount (its initial
+	// `setAsHead` computation), so it must already be loaded by then — keep this
+	// eager rather than gating it on the modal being open.
 	const householdsQuery = useHouseholds();
-	const medicalsQuery = useMedicals();
-	const screeningsQuery = useScreenings();
+	const householdMembersQuery = useHouseholdMembers(
+		() => evacuee?.household_id ?? undefined,
+		() => !!evacuee?.household_id
+	);
+	const medicalQuery = useMedicalByEvacuee(() => evacueeId);
+	const screeningsQuery = useScreeningsByEvacuee(() => evacueeId);
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
-	const movementsQuery = useMovements();
+	const movementsQuery = useMovementsByEvacuee(() => evacueeId);
 	const patchEvacueeMutation = usePatchEvacuee();
 	const changeZoneMutation = useChangeEvacueeZone();
 	const patchHouseholdMutation = usePatchHousehold();
@@ -177,21 +197,12 @@
 	const createScreeningMutation = useCreateScreening();
 	const saveImageMutation = useSaveImage();
 
-	const evacuee = $derived(evacueesQuery.data?.find((e) => e._id === evacueeId) ?? null);
-	const household = $derived(
-		evacuee && householdsQuery.data
-			? (householdsQuery.data.find((h) => h._id === evacuee.household_id) ?? null)
-			: null
-	);
-	const medical = $derived(
-		evacuee && medicalsQuery.data
-			? (medicalsQuery.data.find((m) => m.evacuee_id === evacuee._id) ?? null)
-			: null
-	);
+	const household = $derived(householdQuery.data ?? null);
+	const medical = $derived(medicalQuery.data ?? null);
 	const screening = $derived(
-		evacuee && screeningsQuery.data
+		screeningsQuery.data
 			? (screeningsQuery.data
-					.filter((s) => s.evacuee_id === evacuee._id)
+					.slice()
 					.sort((a, b) =>
 						(b.screened_at ?? b.created_at).localeCompare(a.screened_at ?? a.created_at)
 					)[0] ?? null)
@@ -211,18 +222,15 @@
 			: null
 	);
 	const householdMembers = $derived.by(() => {
-		if (!evacuee?.household_id || !evacueesQuery.data) return [];
+		if (!evacuee?.household_id || !householdMembersQuery.data) return [];
 		const headId = household?.head_evacuee_id ?? null;
-		return evacueesQuery.data
-			.filter((e) => e.household_id === evacuee.household_id)
-			.slice()
-			.sort((a, b) => {
-				if (headId) {
-					if (a._id === headId) return -1;
-					if (b._id === headId) return 1;
-				}
-				return formatPersonName(a).localeCompare(formatPersonName(b), 'th');
-			});
+		return householdMembersQuery.data.slice().sort((a, b) => {
+			if (headId) {
+				if (a._id === headId) return -1;
+				if (b._id === headId) return 1;
+			}
+			return formatPersonName(a).localeCompare(formatPersonName(b), 'th');
+		});
 	});
 
 	function viewHouseholdMember(id: string) {
@@ -257,10 +265,8 @@
 
 	// Append-only movement stream for this evacuee, newest first (schema.md §1.1).
 	const movements = $derived(
-		evacuee && movementsQuery.data
-			? movementsQuery.data
-					.filter((m) => m.evacuee_id === evacuee._id)
-					.sort((a, b) => b.occurred_at.localeCompare(a.occurred_at))
+		movementsQuery.data
+			? movementsQuery.data.slice().sort((a, b) => b.occurred_at.localeCompare(a.occurred_at))
 			: []
 	);
 
@@ -295,10 +301,13 @@
 	};
 
 	const isLoading = $derived(
-		evacueesQuery.isLoading ||
-			householdsQuery.isLoading ||
-			medicalsQuery.isLoading ||
-			screeningsQuery.isLoading
+		evacueeQuery.isLoading ||
+			householdQuery.isLoading ||
+			householdMembersQuery.isLoading ||
+			medicalQuery.isLoading ||
+			screeningsQuery.isLoading ||
+			movementsQuery.isLoading ||
+			shelterQuery.isLoading
 	);
 
 	// Audit log — show a limited page of movements at a time, expand on demand
@@ -387,7 +396,7 @@
 					patch: { current_stay: { ...evacuee.current_stay, zone: zoneCode, since: now() } }
 				});
 			}
-			toast.success(`ย้ายโซนเป็น ${zoneCode.toUpperCase()} เรียบร้อย`);
+			toast.success(`ย้ายโซนเป็น ${zoneLabel(zoneCode, shelterZones)} เรียบร้อย`);
 			showZoneModal = false;
 		} catch (err: unknown) {
 			toast.error(`ไม่สามารถย้ายโซนได้: ${err instanceof Error ? err.message : String(err)}`);
@@ -397,7 +406,7 @@
 	// Status changes go through the movement stream — current_stay is only a
 	// snapshot of it (schema.md §1.1) — so every transition here records a
 	// movement doc instead of patching current_stay directly.
-	async function updateStatus(status: StayStatus) {
+	async function updateStatus(status: StayStatus, reason?: string) {
 		if (!evacuee) return;
 		try {
 			const action = resolveStatusChangeAction(evacuee.current_stay.status, status);
@@ -417,14 +426,26 @@
 				}
 				await checkInMutation.mutateAsync({ evacuee, ctx, zone });
 			} else if (kind === 'check_out') {
-				const entered = window.prompt('ระบุเหตุผลการเช็คเอาท์');
-				if (entered === null) return;
-				const reason = normalizeCheckoutRemark(entered);
-				await checkOutMutation.mutateAsync({ evacuee, ctx, reason });
+				const normalized = normalizeCheckoutRemark(reason);
+				await checkOutMutation.mutateAsync({ evacuee, ctx, reason: normalized });
 			} else if (kind === 'confirm_room') {
 				await confirmRoomMutation.mutateAsync({ evacuee, ctx });
 			} else if (action !== 'check_in' && action !== 'check_out' && action !== 'confirm_room') {
-				await recordMovementMutation.mutateAsync({ evacuee, action, ctx });
+				if (action === 'leave_temporary') {
+					const trimmed = (reason ?? '').trim();
+					if (!trimmed) {
+						toast.error('การออกชั่วคราวต้องระบุเหตุผล');
+						return;
+					}
+					await recordMovementMutation.mutateAsync({
+						evacuee,
+						action,
+						ctx,
+						reason: trimmed
+					});
+				} else {
+					await recordMovementMutation.mutateAsync({ evacuee, action, ctx });
+				}
 			}
 			toast.success('อัปเดตสถานะการพักพิงเรียบร้อย');
 			showStatusModal = false;
@@ -440,6 +461,8 @@
 		district: string;
 		province: string;
 		postalCode: string;
+		municipalityZone: string;
+		community: string;
 	}) {
 		if (!household) {
 			toast.error('ไม่พบข้อมูลครัวเรือนสำหรับบันทึกที่อยู่');
@@ -454,7 +477,9 @@
 					subdistrict: data.subdistrict || null,
 					district: data.district || null,
 					province: data.province || null,
-					postal_code: data.postalCode || null
+					postal_code: data.postalCode || null,
+					municipality_zone: data.municipalityZone || null,
+					community: data.community || null
 				}
 			});
 			toast.success('แก้ไขที่อยู่ครัวเรือนสำเร็จ');
@@ -517,6 +542,7 @@
 					person_id: { cardType: data.cardType, number: data.cardNumber || undefined },
 					country: data.country,
 					religion: data.religion,
+					religion_other: data.religion === 'other' ? data.religionOther || null : null,
 					photo
 				}
 			});
@@ -626,9 +652,7 @@
 					input: {
 						evacuee_id: evacuee._id,
 						symptoms: nextSymptoms,
-						temperature_c: null,
 						track: data.careTrack,
-						needs_referral: false,
 						notes: nextNotes || undefined
 					},
 					ctx: getActor()
@@ -715,14 +739,7 @@
 </script>
 
 {#if isLoading}
-	<div
-		class="flex flex-col items-center justify-center gap-3 rounded-lg border border-border bg-card py-20"
-	>
-		<div
-			class="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent"
-		></div>
-		<p class="text-sm font-medium text-muted-foreground">กำลังโหลดข้อมูลผู้พักพิง...</p>
-	</div>
+	<LoadingScreen message="กำลังโหลดข้อมูลผู้พักพิง..." />
 {:else if !evacuee}
 	<div class="space-y-4 rounded-lg border border-border bg-card py-16 text-center">
 		<p class="text-base font-semibold text-destructive">ไม่พบข้อมูลผู้พักพิงในระบบ</p>
@@ -761,7 +778,6 @@
 				onOpenQrModal={() => (showQrModal = true)}
 				onOpenPersonalEdit={() => (showPersonalModal = true)}
 				onOpenEmergencyEdit={() => (showEmergencyModal = true)}
-				onOpenActions={() => (showActionsSheet = true)}
 			/>
 		</div>
 
@@ -780,9 +796,6 @@
 					onOpenQrModal={() => (showQrModal = true)}
 					onOpenPersonalEdit={() => (showPersonalModal = true)}
 					onOpenEmergencyEdit={() => (showEmergencyModal = true)}
-					onOpenHealthEdit={() => (showHealthModal = true)}
-					onOpenHouseholdEdit={() => (showHouseholdModal = true)}
-					onOpenAssetsEdit={() => (showAssetModal = true)}
 				/>
 			</div>
 
@@ -842,7 +855,7 @@
 										{movementLabels[m.action].label}
 										{#if m.zone}
 											<span class="font-normal text-muted-foreground">
-												· โซน {m.zone.toUpperCase()}
+												· โซน {zoneLabel(m.zone, shelterZones)}
 											</span>
 										{/if}
 									</div>
@@ -900,11 +913,6 @@
 		onOpenZoneModal={() => (showZoneModal = true)}
 		onOpenStatusModal={() => (showStatusModal = true)}
 		onOpenQrModal={() => (showQrModal = true)}
-		onOpenPersonalEdit={() => (showPersonalModal = true)}
-		onOpenEmergencyEdit={() => (showEmergencyModal = true)}
-		onOpenHealthEdit={() => (showHealthModal = true)}
-		onOpenHouseholdEdit={() => (showHouseholdModal = true)}
-		onOpenAssetsEdit={() => (showAssetModal = true)}
 	/>
 
 	<!-- Modals (edit mode only) -->
@@ -918,13 +926,17 @@
 			onUpdateZone={updateZone}
 		/>
 
-		<EvacueeStatusModal
-			show={showStatusModal}
-			{evacuee}
-			{statusConfig}
-			onClose={() => (showStatusModal = false)}
-			onUpdateStatus={updateStatus}
-		/>
+		{#if showStatusModal}
+			{#key evacuee._id}
+				<EvacueeStatusModal
+					show={true}
+					{evacuee}
+					{statusConfig}
+					onClose={() => (showStatusModal = false)}
+					onUpdateStatus={updateStatus}
+				/>
+			{/key}
+		{/if}
 
 		<EvacueeQrModal show={showQrModal} {evacuee} onClose={() => (showQrModal = false)} />
 

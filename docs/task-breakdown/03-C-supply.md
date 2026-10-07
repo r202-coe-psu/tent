@@ -2,7 +2,7 @@
 title: "Task Breakdown — Module C — Supply & Inventory"
 status: active
 created: 2026-06-05
-updated: 2026-07-25 # T-11 DoD sync กับ CR-032 Option A (purchase = flow แยก)
+updated: 2026-10-02 # T-11/T-12/T-14: CR-143 stock redesign rules
 module: C
 note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown
 ---
@@ -45,18 +45,18 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 
 ### T-11 — Stock receive (inbound) + ledger write (FR-28)
 
-**Description:** บันทึกการรับสิ่งของเข้าคลังศูนย์ (จากบริจาค/จัดซื้อ/โอนมา) โดยทุก movement เขียนเป็น **append-only ledger** — ยอดคงเหลือคำนวณจาก ledger ไม่แก้ตัวเลขตรงๆ task นี้เป็น hub ของ critical path (block T-12/13/14/15)
+**Description:** บันทึกการรับสิ่งของเข้าคลังศูนย์ (จากบริจาค/โอนมา) โดยทุก movement เขียนเป็น **append-only ledger** — ยอดคงเหลือคำนวณจาก ledger ไม่แก้ตัวเลขตรงๆ task นี้เป็น hub ของ critical path (block T-12/13/14/15)
 
 **Definition of Done:**
 - รับเข้า: เลือก item + จำนวน + source marker (donation / transfer-in / manual) → ledger entry ถูกสร้าง + on-hand เพิ่มทันที พร้อม audit (ใคร/เมื่อไร)
-- **จัดซื้อ (purchase) — flow แยก ไม่ใช่ source marker ในฟอร์มรับเข้า** [CR-032, approved 2026-07-24 (@net-lynx) · design Option A 2026-07-25]: (1) สร้างใบจัดซื้อ (`vendor` / `po_ref` / `items` เป็น planning) (2) ตอนของถึง key รับเข้า → ledger `reason:purchase` + `ref_id = purchase._id` (mirror donation) · ~~`purchase` source รอ implement~~ ⚠️ **แก้ 2026-07-25:** purchase ไม่เป็นค่าใน `receiveSourceSchema`
-  - **กติกา UX เคาะครบ 2026-07-25** (ดู CR §UX decisions): surface = route `(protected)/back-office/purchases/` (guard `requireWarehouseAccess`) · key รับเข้าเป็น **counted ต่อ item แก้ qty ได้** (ตามบรรทัดฐาน T-26) · **รับหลายรอบได้** และ badge = **3 สถานะ derive จาก ledger เท่านั้น** (ยังไม่รับ / รับบางส่วน / รับครบ — รับเกินที่สั่ง = รับครบ ไม่ block ตอน key) · **แก้ใบได้เฉพาะสถานะ "ยังไม่รับ"** ไม่มียกเลิก/ลบใบ
-  - **สถานะ: slice 2/3 เสร็จ** — reason enum + `schema_v` 3 · doc type `schema.md` §2.16 · domain + data + application layer พร้อม test · **เหลือ:** UI surface + `seed.ts` demo (Standard DoD ต้องมี UI + demo จึงปิด T-11 ไม่ได้จนครบ)
-  - **ระวังตอนทำ T-24:** รายงานความโปร่งใส (public) นับ "รับเข้า" จาก ledger — ต้อง filter `reason` ไม่ให้ยอดจัดซื้อปนกับยอดบริจาค
+- ~~**จัดซื้อ (purchase)**~~ — ถอนโดย [CR-138](../changes/CR-138-remove-purchase.md) (supersede CR-032); ไม่มี route/UI/`reason:purchase`
 - ปริมาณศูนย์หรือติดลบถูก validate ปฏิเสธ
 - Ledger แก้ไขย้อนหลังไม่ได้ — ผิดต้องทำรายการ adjust ใหม่ (correction entry)
 - ยอดคงเหลือต่อ item คำนวณจาก ledger ถูกต้อง (test ครอบ concurrent writes บน CouchDB)
 - Demo รับของเข้าคลัง → ยอดอัปเดต end-to-end
+- **[CR-143](../changes/CR-143-stock-redesign-rules.md) §B** — รับเข้าจากใบบริจาคหลายรายการในครั้งเดียว (ดึงบรรทัดจากใบ, ยืนยันจำนวนรับจริง); สำเร็จบางแถว → retry เฉพาะแถวที่ล้ม, ใบเป็น `received` เมื่อครบทุกแถว, ไม่มีแถวซ้ำ (#342)
+- **CR-143 §C** — การปรับยอด (adjust) ต้องเลือก `adjust_reason` และบันทึก `note` ได้ (stock_ledger schema_v 6) (#343)
+- **CR-143 §D** — บังคับวันหมดอายุเมื่อ `requiresExpiry(item)`; มี `shelf_life_days` → เติมวันหมดอายุอัตโนมัติพร้อม label ให้ตรวจสอบ (#344)
 
 ### T-12 — Stock distribute (outbound) (FR-29)
 
@@ -67,6 +67,8 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 - แจกเกิน on-hand → **เตือน/ปฏิเสธ — ห้ามทำให้ stock ติดลบ** (PRD FR-29 + NFR-7/NFR-13 ไม่ใช่ warning-only)
 - ผูกผู้รับระดับโซนได้เป็นอย่างน้อย; ราย household (scan QR) เป็น optional ตาม design
 - ประวัติการแจกจ่าย query ได้ และ test + demo ผ่าน
+- **[CR-143](../changes/CR-143-stock-redesign-rules.md) §A** — เลือกล็อตด้วยลำดับถ่วงน้ำหนักวันหมดอายุ × อายุในคลัง (+กลุ่มเร่งด่วน ≤7 วัน) ทั้งระบบ; เบิกตรงจำนวนเกินล็อตแรก → ตัดหลายล็อตด้วย `ref_id` เดียวกัน, ล็อตหมดอายุไม่ถูกเลือกอัตโนมัติ (#340, #341)
+- **CR-143 §E** — เบิกตรงจากหน้าคลังต้องระบุปลายทาง/ผู้รับ (`lot.note`) (#345)
 
 ### T-13 — Inter-shelter transfer + receive confirm (FR-30)
 
@@ -96,6 +98,7 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 - ตัวเลข dashboard reconcile กับ Stock Ledger ได้เสมอ (ผลต่าง = 0 ใน UAT — SM-8)
 - ข้อมูล "ขาด/เกิน" expose เป็น API ให้ module Donation และ B ใช้ (ตาม contract T-03)
 - Perf ตามที่ตกลงกับ T-35 (read-model) และ test + demo ผ่าน
+- **[CR-143](../changes/CR-143-stock-redesign-rules.md)** — สถานะหมดอายุ/ใกล้หมดอายุคิดจากทุกล็อตที่มีของ (ไม่ใช่ล็อตล่าสุด); รวมสินค้าซ้ำผ่าน `adjust_reason='merge'` + `item_master.merged_into` (§F, #346); redesign หน้าคลังตาม #331
 
 ### T-45 — Donation/kitchen/inventory polish + UAT support (deferred)
 

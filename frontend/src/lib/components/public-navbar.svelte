@@ -16,7 +16,6 @@
 	import Bell from '@lucide/svelte/icons/bell';
 	// import Users from '@lucide/svelte/icons/users'; // Volunteer link temporarily disabled
 
-	import { onMount } from 'svelte';
 	// import * as Select from '$lib/components/ui/select';
 	import * as Sheet from '$lib/components/ui/sheet';
 	import { getTranslation } from '$lib/utils/i18n';
@@ -31,26 +30,8 @@
 
 	let { announcements: propAnnouncements = [] }: Props = $props();
 
-	let fetchedAnnouncements = $state<Announcement[]>([]);
-
-	const announcements = $derived(
-		propAnnouncements && propAnnouncements.length > 0 ? propAnnouncements : fetchedAnnouncements
-	);
+	const announcements = $derived(propAnnouncements);
 	const announcementsCount = $derived(announcements.length);
-
-	onMount(async () => {
-		if (propAnnouncements.length === 0) {
-			try {
-				const res = await fetch('/api/public/v1/announcements');
-				if (res.ok) {
-					const data = await res.json();
-					fetchedAnnouncements = (data.items as Announcement[]) || [];
-				}
-			} catch (e) {
-				console.error('Failed to fetch announcements in navbar', e);
-			}
-		}
-	});
 
 	function isActive(path: string) {
 		if (path === '/') {
@@ -156,7 +137,7 @@
 				<img
 					src="/logo.png"
 					alt="PSU Smart Shelter"
-					class="h-8 w-8 shrink-0 rounded-lg sm:h-9 sm:w-9"
+					class="h-8 w-8 shrink-0 rounded-lg object-contain sm:h-9 sm:w-9"
 				/>
 				<span class="truncate text-sm font-bold tracking-tight text-foreground sm:text-base"
 					>PSU Smart Shelter</span
@@ -164,8 +145,17 @@
 			</a>
 		</div>
 
-		<!-- Compact controls: phone + tablet (hamburger through lg) -->
-		<div class="flex shrink-0 items-center gap-1 sm:gap-2 lg:hidden">
+		<!-- Compact controls: phone + tablet + iPad Pro mid-range (hamburger through xl) -->
+		<div class="flex shrink-0 items-center gap-1 sm:gap-2 xl:hidden">
+			<!-- Primary public action stays visible on phones (not only inside the hamburger) -->
+			<a
+				href={resolve('/pre-register')}
+				class="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-lg bg-[#0A2647] px-2.5 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-[#051930] focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none sm:px-3 sm:text-sm"
+			>
+				<ClipboardPenLine class="h-4 w-4" aria-hidden="true" />
+				{t.registerShort}
+			</a>
+
 			<!-- Notification Bell Button (Mobile) -->
 			<PublicNotificationMenu variant="navbar" {announcements} bind:menuOpen={alertsMenuOpen} />
 
@@ -175,7 +165,7 @@
 					type="button"
 					onclick={toggleLanguage}
 					class="inline-flex cursor-pointer items-center justify-center rounded-full border border-slate-300 bg-white px-2.5 py-0.5 text-xs font-bold text-[#0A2647] shadow-2xs transition-all hover:border-slate-400 hover:bg-slate-50 active:scale-95"
-					aria-label={langState.current === 'th' ? 'Switch to English' : 'เปลี่ยนเป็นภาษาไทย'}
+					aria-label={t.switchLanguageAria}
 				>
 					{langState.current === 'th' ? 'EN' : 'TH'}
 				</button>
@@ -185,7 +175,7 @@
 				type="button"
 				class="flex items-center justify-center rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted"
 				onclick={toggleMobileMenu}
-				aria-label={mobileMenuOpen ? 'ปิดเมนู' : 'เปิดเมนู'}
+				aria-label={mobileMenuOpen ? t.closeMenu : t.openMenu}
 				aria-expanded={mobileMenuOpen}
 				aria-controls="public-mobile-nav"
 			>
@@ -193,11 +183,11 @@
 			</button>
 		</div>
 
-		<!-- Full horizontal nav: desktop lg+ only (avoids tablet wrap over form CTAs) -->
-		<nav class="hidden flex-nowrap items-center gap-1 lg:flex">
+		<!-- Full horizontal nav: desktop xl+ only (hamburger through tablet + iPad Pro mid-range) -->
+		<nav class="hidden flex-nowrap items-center gap-0.5 xl:flex 2xl:gap-1">
 			<a
 				href={resolve('/')}
-				class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 {isHomePage()
+				class="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 2xl:gap-2 2xl:px-3 {isHomePage()
 					? 'bg-primary-muted text-primary'
 					: 'text-muted-foreground'}"
 			>
@@ -207,7 +197,7 @@
 
 			<a
 				href={resolve('/shelters')}
-				class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 {isActive(
+				class="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 2xl:gap-2 2xl:px-3 {isActive(
 					'/shelters'
 				)
 					? 'bg-primary-muted text-primary'
@@ -219,7 +209,7 @@
 
 			<a
 				href={resolve('/pre-register')}
-				class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 {isActive(
+				class="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 2xl:gap-2 2xl:px-3 {isActive(
 					'/pre-register'
 				)
 					? 'bg-primary-muted text-primary'
@@ -231,7 +221,7 @@
 
 			<a
 				href={resolve('/search')}
-				class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 {isActive(
+				class="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 2xl:gap-2 2xl:px-3 {isActive(
 					'/search'
 				)
 					? 'bg-primary-muted text-primary'
@@ -249,7 +239,7 @@
 					aria-haspopup="menu"
 					aria-expanded={donationsMenuOpen}
 					aria-controls={donationsMenuOpen ? 'donations-menu' : undefined}
-					class="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 {isDonationsSection() ||
+					class="flex shrink-0 cursor-pointer items-center gap-1 rounded-lg px-2 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted/50 2xl:gap-1.5 2xl:px-3 {isDonationsSection() ||
 					donationsMenuOpen
 						? 'bg-primary-muted text-primary'
 						: 'text-muted-foreground'}"
@@ -302,7 +292,7 @@
 					aria-haspopup="menu"
 					aria-expanded={volunteersMenuOpen}
 					aria-controls={volunteersMenuOpen ? 'volunteers-menu' : undefined}
-					class="flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+					class="flex cursor-pointer items-center gap-1 rounded-lg px-2 py-2 text-sm font-medium transition-colors hover:bg-muted/50 2xl:gap-1.5 2xl:px-3 {isActive(
 						'/volunteers'
 					) || volunteersMenuOpen
 						? 'bg-primary-muted text-primary'
@@ -354,7 +344,7 @@
 
 			<a
 				href={resolve('/login')}
-				class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors hover:bg-muted/50 {isActive(
+				class="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-2 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors hover:bg-muted/50 2xl:gap-2 2xl:px-3 {isActive(
 					'/login'
 				)
 					? 'bg-primary-muted text-primary'
@@ -365,7 +355,7 @@
 			</a>
 
 			<!-- Notification Bell Button (Desktop) -->
-			<div class="ml-1 flex shrink-0 items-center">
+			<div class="ml-0.5 flex shrink-0 items-center 2xl:ml-1">
 				<PublicNotificationMenu
 					variant="navbar"
 					{announcements}
@@ -374,12 +364,14 @@
 			</div>
 
 			<!-- Language Switcher (Desktop) -->
-			<div class="ml-2 flex shrink-0 items-center border-l border-slate-200 pl-3">
+			<div
+				class="ml-1.5 flex shrink-0 items-center border-l border-slate-200 pl-2 2xl:ml-2 2xl:pl-3"
+			>
 				<button
 					type="button"
 					onclick={toggleLanguage}
-					class="inline-flex cursor-pointer items-center justify-center rounded-full border border-slate-300 bg-white px-3.5 py-1 text-xs font-bold text-[#0A2647] shadow-2xs transition-all hover:border-slate-400 hover:bg-slate-50 active:scale-95"
-					aria-label={langState.current === 'th' ? 'Switch to English' : 'เปลี่ยนเป็นภาษาไทย'}
+					class="inline-flex cursor-pointer items-center justify-center rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-bold text-[#0A2647] shadow-2xs transition-all hover:border-slate-400 hover:bg-slate-50 active:scale-95 2xl:px-3.5"
+					aria-label={t.switchLanguageAria}
 				>
 					{langState.current === 'th' ? 'EN' : 'TH'}
 				</button>
@@ -387,11 +379,11 @@
 		</nav>
 	</div>
 
-	<!-- Compact menu sheet (phone + tablet) -->
+	<!-- Compact menu sheet (phone + tablet + iPad Pro mid-range) -->
 	<Sheet.Root bind:open={mobileMenuOpen}>
 		<Sheet.Content id="public-mobile-nav" side="right" class="gap-0 p-0">
 			<Sheet.Header class="border-b p-4 pr-14">
-				<Sheet.Title>เมนู</Sheet.Title>
+				<Sheet.Title>{t.menuTitle}</Sheet.Title>
 			</Sheet.Header>
 			<nav class="flex flex-col gap-1 p-4">
 				<button
@@ -424,6 +416,19 @@
 				</a>
 
 				<a
+					href={resolve('/pre-register')}
+					onclick={closeMobileMenu}
+					class="flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
+						'/pre-register'
+					)
+						? 'bg-primary-muted text-primary'
+						: 'text-muted-foreground'}"
+				>
+					<ClipboardPenLine class="h-5 w-5" />
+					{t.preRegister}
+				</a>
+
+				<a
 					href={resolve('/shelters')}
 					onclick={closeMobileMenu}
 					class="flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
@@ -447,19 +452,6 @@
 				>
 					<Search class="h-5 w-5" />
 					{t.search}
-				</a>
-
-				<a
-					href={resolve('/pre-register')}
-					onclick={closeMobileMenu}
-					class="flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/50 {isActive(
-						'/pre-register'
-					)
-						? 'bg-primary-muted text-primary'
-						: 'text-muted-foreground'}"
-				>
-					<ClipboardPenLine class="h-5 w-5" />
-					{t.preRegister}
 				</a>
 
 				<a

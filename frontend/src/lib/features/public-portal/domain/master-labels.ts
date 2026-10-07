@@ -1,3 +1,7 @@
+import { formatMasterLabel } from '$lib/features/master-data';
+
+export type MasterLabelOption = { code: string; label_th: string; label_en: string };
+
 /**
  * Resolve a master-data code (ULID `item_…` or legacy free-text) to a display
  * label for the public portal. Public shelter payloads keep codes as-is;
@@ -5,11 +9,16 @@
  * config endpoints.
  */
 export function toLabelMap(
-	items: { code: string; label: string }[] | null | undefined
+	items: readonly MasterLabelOption[] | null | undefined,
+	lang: string = 'th'
 ): Record<string, string> {
 	const map: Record<string, string> = {};
 	for (const item of items ?? []) {
-		if (item.code && item.label) map[item.code] = item.label;
+		if (!item.code) continue;
+		const label = formatMasterLabel(item, lang);
+		// Empty bilingual text would otherwise fall back to the raw code — skip.
+		if (!item.label_th?.trim() && !item.label_en?.trim()) continue;
+		if (label) map[item.code] = label;
 	}
 	return map;
 }
@@ -31,4 +40,33 @@ export function resolveMasterLabel(
 	if (fromLegacy) return fromLegacy;
 	if (code.startsWith('item_')) return '';
 	return code;
+}
+
+/**
+ * English names for shelter types stored as free Thai text before the
+ * master-data registry existed. Thai needs no table: the stored text is Thai.
+ */
+const LEGACY_SHELTER_TYPE_EN: Record<string, string> = {
+	วัด: 'Temple',
+	โรงเรียน: 'School',
+	ศาลาประชาคม: 'Community Hall',
+	ศูนย์กีฬา: 'Sports Centre',
+	อาคารราชการ: 'Government Building',
+	หน่วยงานราชการ: 'Government Agency',
+	ศูนย์อพยพ: 'Evacuation Center',
+	มหาวิทยาลัย: 'University',
+	มัสยิด: 'Mosque',
+	โบสถ์: 'Church',
+	พื้นที่เอกชน: 'Private Area',
+	อื่นๆ: 'Other',
+	unspecified: 'Unspecified'
+};
+
+/** Display label for a shelter type code, in the given language. */
+export function shelterTypeLabel(
+	code: string | null | undefined,
+	labels: Record<string, string> | undefined,
+	lang: string = 'th'
+): string {
+	return resolveMasterLabel(code, labels, lang === 'en' ? LEGACY_SHELTER_TYPE_EN : undefined);
 }

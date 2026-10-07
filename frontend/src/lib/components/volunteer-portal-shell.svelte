@@ -1,6 +1,5 @@
 <script lang="ts">
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
-	import HeartHandshake from '@lucide/svelte/icons/heart-handshake';
 	import { resolve } from '$app/paths';
 	import type { Snippet } from 'svelte';
 	import { PORTAL_SESSION_KEY, PORTAL_TOKEN_HANDOFF_KEY } from '$lib/features/volunteer-portal';
@@ -28,14 +27,14 @@
 				class="flex min-w-0 items-center gap-3"
 				aria-label="กลับหน้าหลัก"
 			>
-				<div
-					class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white/10 text-white"
-				>
-					<HeartHandshake class="size-6" strokeWidth={1.8} />
-				</div>
+				<img
+					src="/logo.png"
+					alt="PSU Smart Shelter"
+					class="size-10 shrink-0 rounded-xl object-contain"
+				/>
 				<div class="min-w-0">
 					<p class="truncate text-base font-extrabold tracking-tight sm:text-lg">
-						ระบบบริการจิตอาสา
+						PSU Smart Shelter
 					</p>
 					<p
 						class="line-clamp-2 text-[11px] leading-snug font-medium whitespace-normal text-blue-100 sm:text-xs"
@@ -49,10 +48,11 @@
 				<a
 					href={resolve('/')}
 					onclick={leavePortal}
-					class="hidden items-center gap-1.5 rounded-full bg-white/10 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-white/20 sm:flex"
+					class="flex min-h-11 items-center gap-1.5 rounded-full bg-white/10 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none sm:px-4"
 				>
-					<ArrowLeft class="size-3.5" />
-					กลับหน้าหลัก
+					<ArrowLeft class="size-4 sm:size-3.5" aria-hidden="true" />
+					<span class="sm:hidden">กลับ</span>
+					<span class="hidden sm:inline">กลับหน้าหลัก</span>
 				</a>
 			</div>
 		</div>

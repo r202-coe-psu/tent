@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any, TypeVar
+from typing import Any
 
 from beanie import Document
 
-T = TypeVar("T", bound=Document)
 
-
-async def apply_document(model: type[T], action: str, payload: dict[str, Any] | None) -> None:
+async def apply_document[T: Document](
+    model: type[T], action: str, payload: dict[str, Any] | None
+) -> None:
     if action == "delete":
         if payload and payload.get("_id"):
             existing = await model.get(payload["_id"])

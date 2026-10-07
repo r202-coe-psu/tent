@@ -41,10 +41,43 @@ interface BulkDocResult {
 interface AllDocsRow {
 	id: string;
 	doc?: unknown;
+	value?: { rev?: string; deleted?: boolean };
 }
 
 interface AllDocsResponse {
 	rows: AllDocsRow[];
+}
+
+/** Options for a limited type-prefix `_all_docs` page. Prefer `afterId` over deep `skip`. */
+export type DocsByTypePageOptions = {
+	limit: number;
+	/** Resume after this `_id` (exclusive). */
+	afterId?: string;
+	/** Offset within the type prefix — slow for large offsets; prefer `afterId`. */
+	skip?: number;
+};
+
+export type DocsByTypePageResult<T> = {
+	items: T[];
+	/** Pass as `afterId` on the next call; `null` when no further rows. */
+	nextCursor: string | null;
+};
+
+/**
+ * Split a `limit + 1` fetch into a page of `limit` items and an optional resume cursor.
+ * Pure helper — unit-test without network.
+ */
+export function takePageWithCursor<T>(
+	rows: T[],
+	limit: number,
+	idOf: (row: T) => string
+): { items: T[]; nextCursor: string | null } {
+	if (limit < 1) return { items: [], nextCursor: null };
+	const hasMore = rows.length > limit;
+	const items = hasMore ? rows.slice(0, limit) : rows;
+	const last = items.length > 0 ? items[items.length - 1] : undefined;
+	const nextCursor = hasMore && last !== undefined ? idOf(last) : null;
+	return { items, nextCursor };
 }
 
 type CouchFetchInit = RequestInit & { fetch?: typeof fetch };
@@ -257,20 +290,85 @@ export async function deleteDoc(
 	);
 }
 
+function typePrefixKeys(type: string): { startkey: string; endkey: string } {
+	return {
+		startkey: JSON.stringify(`${type}:`),
+		endkey: JSON.stringify(`${type}:${TYPE_PREFIX_END}`)
+	};
+}
+
 export async function allDocsByType<T>(
 	dbName: string,
 	type: string,
 	guard: (d: unknown) => d is T,
 	init?: CouchFetchInit
 ): Promise<T[]> {
-	const startkey = JSON.stringify(`${type}:`);
-	const endkey = JSON.stringify(`${type}:${TYPE_PREFIX_END}`);
+	const { startkey, endkey } = typePrefixKeys(type);
 	const res = await couchDbFetch<AllDocsResponse>(
 		dbName,
 		`/_all_docs?include_docs=true&startkey=${encodeURIComponent(startkey)}&endkey=${encodeURIComponent(endkey)}`,
 		init
 	);
 	return res.rows.map((r) => r.doc).filter((d): d is T => guard(d));
+}
+
+/**
+ * Limited `_all_docs` by `{type}:` prefix with key-cursor pagination.
+ * Fetches `limit + 1` rows so `nextCursor` is known without a second round-trip.
+ */
+export async function allDocsByTypePage<T extends { _id: string }>(
+	dbName: string,
+	type: string,
+	guard: (d: unknown) => d is T,
+	options: DocsByTypePageOptions,
+	init?: CouchFetchInit
+): Promise<DocsByTypePageResult<T>> {
+	const limit = options.limit;
+	if (limit < 1) return { items: [], nextCursor: null };
+
+	const { endkey } = typePrefixKeys(type);
+	const afterId = options.afterId;
+	const startkey = JSON.stringify(afterId ?? `${type}:`);
+	let skip = options.skip ?? 0;
+	if (afterId) skip += 1;
+
+	const params = [
+		'include_docs=true',
+		`startkey=${encodeURIComponent(startkey)}`,
+		`endkey=${encodeURIComponent(endkey)}`,
+		`limit=${limit + 1}`
+	];
+	if (afterId) {
+		params.push(`startkey_docid=${encodeURIComponent(afterId)}`);
+	}
+	if (skip > 0) {
+		params.push(`skip=${skip}`);
+	}
+
+	const res = await couchDbFetch<AllDocsResponse>(dbName, `/_all_docs?${params.join('&')}`, init);
+	const matched = res.rows
+		.filter((r) => !r.value?.deleted)
+		.map((r) => r.doc)
+		.filter((d): d is T => guard(d));
+	return takePageWithCursor(matched, limit, (doc) => doc._id);
+}
+
+/**
+ * Count docs under a `{type}:` prefix via `_all_docs` without `include_docs`
+ * (IDs only — lighter than a full doc scan). Still O(n) over the prefix.
+ */
+export async function countDocsByType(
+	dbName: string,
+	type: string,
+	init?: CouchFetchInit
+): Promise<number> {
+	const { startkey, endkey } = typePrefixKeys(type);
+	const res = await couchDbFetch<AllDocsResponse>(
+		dbName,
+		`/_all_docs?include_docs=false&startkey=${encodeURIComponent(startkey)}&endkey=${encodeURIComponent(endkey)}`,
+		init
+	);
+	return res.rows.filter((r) => r.id && !r.value?.deleted).length;
 }
 
 export async function allDocsByIds<T>(

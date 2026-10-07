@@ -132,6 +132,9 @@ pnpm exec lefthook run pre-push
 - `pnpm seed:master` — Platform init เท่านั้น (`master_data` + catalog/SOP/config) — ใช้ร่วม prod/staging
 - `pnpm seed:staging` — Full staging demo (master + users + 3 ศูนย์ + volume people)
 - `pnpm unseed --confirm` — Wipe all CouchDB databases except `_users`
+- `pnpm unseed:master-data --confirm` — ลบเฉพาะเอกสาร `master_data:*` ใน `registry` (ไม่กระทบ shelter, catalog, หรือ users)
+- `pnpm unseed:master --confirm` — ลบ `master_data`, `config`, และฐานข้อมูล `catalog`
+- `pnpm unseed:stock --shelter=SH001 --confirm` — ลบ stock docs (`stock_ledger`, threshold override, lot reservation, shelter `item_master`) ใน shelter นั้น **และ** ลบ `item_master` + `supply_item` ใน `catalog`; ใช้ `--shelter=all` สำหรับทุก `shelter_*`
 
 การจัดการข้อมูลตัวอย่างด้วย Docker Compose (รันที่ repo root; ต้องมี `couchdb` / `mongodb` จาก base compose):
 
@@ -141,6 +144,10 @@ pnpm exec lefthook run pre-push
   `docker compose -f docker-compose.yml -f docker-compose.seed.yml --profile master run --rm seed-master`
 - **Unseed** (ลบ Couch DBs ยกเว้น `_users`):
   `docker compose -f docker-compose.yml -f docker-compose.seed.yml run --rm unseed`
+- **Unseed master_data only**:
+  `docker compose -f docker-compose.yml -f docker-compose.seed.yml run --rm unseed-master-data`
+- **Unseed master (master_data + config + catalog)**:
+  `docker compose -f docker-compose.yml -f docker-compose.seed.yml --profile master run --rm unseed-master`
 - **Wipe Mongo** (`dropDatabase` ตาม `DATABASE_URI`):
   `docker compose -f docker-compose.yml -f docker-compose.seed.yml run --rm mongo-wipe`
 - **Bootstrap Mongo** (project จาก Couch แล้ว exit):

@@ -4,7 +4,7 @@
  */
 
 import type { StayStatus } from './people';
-import { STATUS_LABELS } from './people';
+import { STATUS_LABELS, isAnonymousId } from './people';
 
 /** CTA when a local shelter hit is `pre_registered`. */
 export const REPORT_IN_CTA_LABEL = 'รับรายงานตัว (Report-in)';
@@ -58,6 +58,64 @@ export function resolveShelterHitAction(status: StayStatus): ShelterHitAction {
 /** Thai label for the stay status shown on already-registered hits. */
 export function shelterHitStatusLabel(status: StayStatus): string {
 	return STATUS_LABELS[status] ?? status;
+}
+
+/** Minimal shape needed to derive a duplicate-check search string from a member card. */
+export interface DuplicateCheckMember {
+	first_name?: string | null;
+	last_name?: string | null;
+	phone?: string | null;
+	person_id?: { number?: string | null } | null;
+}
+
+/**
+ * Derive the single best search string to federated-search before a walk-in
+ * `/new` submit (#251 hard anti-dupe — must also gate the actual write, not
+ * just the Station 1 search-first UI). Mirrors what staff would type into
+ * the Station 1 search box: identity document number > phone > full name.
+ */
+export function deriveDuplicateCheckQuery(member: DuplicateCheckMember): string | null {
+	const idNumber = member.person_id?.number?.trim();
+	// A system-minted `ANON-{ulid}` is unique by construction — it can never hit
+	// an existing person, so fall through to phone / name instead.
+	if (idNumber && !isAnonymousId(idNumber)) return idNumber;
+	const phone = member.phone?.trim();
+	if (phone) return phone;
+	const name = `${member.first_name ?? ''} ${member.last_name ?? ''}`.trim();
+	return name || null;
+}
+
+/** One de-duplicated search string and the member cards (0-based) it came from. */
+export interface DuplicateCheckQuery {
+	query: string;
+	memberIndexes: number[];
+}
+
+/**
+ * Duplicate-check queries for **every** member card of a walk-in submit, not
+ * just members[0] — companions can already be registered too. Identical
+ * queries (shared family phone) are searched once and keep all their indexes.
+ */
+export function deriveDuplicateCheckQueries(
+	members: readonly DuplicateCheckMember[]
+): DuplicateCheckQuery[] {
+	const byQuery = new Map<string, number[]>();
+	members.forEach((member, index) => {
+		const query = deriveDuplicateCheckQuery(member);
+		if (!query) return;
+		const indexes = byQuery.get(query);
+		if (indexes) indexes.push(index);
+		else byQuery.set(query, [index]);
+	});
+	return [...byQuery].map(([query, memberIndexes]) => ({ query, memberIndexes }));
+}
+
+/** Stable key for a query set — the sticky override applies to this exact set only. */
+export function duplicateCheckKey(queries: readonly DuplicateCheckQuery[]): string {
+	return queries
+		.map((q) => q.query)
+		.sort()
+		.join('\u0000');
 }
 
 /** True when at least one plane still has hits (hard anti-dupe predicate). */

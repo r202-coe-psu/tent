@@ -1,18 +1,25 @@
 <script lang="ts">
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
-	import { CR112_VULNERABLE_GROUP_ACTIVE } from '$lib/features/master-data';
+	import { Input } from '$lib/components/ui/input/index.js';
+	import { CR112_VULNERABLE_GROUP_ACTIVE, formatMasterLabel } from '$lib/features/master-data';
 	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 
 	let {
 		vulnerable_groups = $bindable<string[]>([]),
+		/** Free text when「ผู้พิการ (อื่นๆ)」is ticked — optional (CR-148). */
+		disability_other_detail = $bindable<string | null | undefined>(null),
+		/** Render the detail input — off for screens that cannot persist it yet. */
+		showDisabilityDetail = true,
 		disabled = false,
 		idPrefix = 'vg',
 		label = ''
 	}: {
 		vulnerable_groups?: string[];
+		disability_other_detail?: string | null;
+		showDisabilityDetail?: boolean;
 		disabled?: boolean;
 		idPrefix?: string;
 		label?: string;
@@ -41,10 +48,16 @@
 
 	function toggle(code: string) {
 		if (disabled) return;
-		vulnerable_groups = vulnerable_groups.includes(code)
+		const removing = vulnerable_groups.includes(code);
+		vulnerable_groups = removing
 			? vulnerable_groups.filter((c) => c !== code)
 			: [...vulnerable_groups, code];
+		if (removing && code === 'disability_other') disability_other_detail = null;
 	}
+
+	const showDetail = $derived(
+		showDisabilityDetail && vulnerable_groups.includes('disability_other')
+	);
 </script>
 
 <div class="space-y-3">
@@ -69,8 +82,27 @@
 					{disabled}
 					class="size-4 shrink-0"
 				/>
-				<span class="leading-tight">{vulnerableLabel(item.code, item.label)}</span>
+				<span class="leading-tight"
+					>{vulnerableLabel(item.code, formatMasterLabel(item, langState.current))}</span
+				>
 			</label>
 		{/each}
 	</div>
+
+	{#if showDetail}
+		<div class="space-y-1.5">
+			<Label for="{idPrefix}-disability-detail" class="text-xs font-semibold text-foreground">
+				{t.disabilityOtherDetailLabel}
+			</Label>
+			<Input
+				id="{idPrefix}-disability-detail"
+				value={disability_other_detail ?? ''}
+				oninput={(e) => (disability_other_detail = (e.currentTarget as HTMLInputElement).value)}
+				{disabled}
+				maxlength={120}
+				placeholder={t.disabilityOtherDetailPlaceholder}
+				class="h-9"
+			/>
+		</div>
+	{/if}
 </div>

@@ -1,6 +1,6 @@
 /**
- * Client helper — whether the browser should show/enable ThaiD registration.
- * Backed by GET /api/public/v1/thaid/status (dev mock OR keys configured AND config:app flag ON).
+ * Client helper — whether the browser should show ThaiD (login, /me link, pre-register).
+ * Backed by GET /api/public/v1/thaid/status (operator flag ON, and keys configured or DEV mock).
  */
 
 export interface ThaidStatusResponse {

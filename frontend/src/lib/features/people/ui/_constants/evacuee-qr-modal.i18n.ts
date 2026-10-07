@@ -7,7 +7,10 @@ export const EVACUEE_QR_MODAL_I18N = {
 		printIdCard: 'พิมพ์บัตรประจำตัว',
 		pdfBlockedToast: 'เบราว์เซอร์บล็อกหน้าต่าง PDF กรุณาอนุญาตป๊อปอัปแล้วลองใหม่',
 		pdfFailedToast: 'สร้าง PDF ไม่สำเร็จ',
-		qrAlt: (name: string) => `QR Code สำหรับ ${name}`
+		qrAlt: (name: string) => `QR Code สำหรับ ${name}`,
+		checklistCheckIn: 'เช็คอิน',
+		checklistScreening: 'คัดกรอง',
+		checklistLodging: 'ที่พัก'
 	},
 	en: {
 		cardTitle: 'Evacuee Identity Card',
@@ -17,7 +20,10 @@ export const EVACUEE_QR_MODAL_I18N = {
 		printIdCard: 'Print ID Card',
 		pdfBlockedToast: 'Browser blocked the PDF window. Please allow popups and try again.',
 		pdfFailedToast: 'Failed to generate PDF',
-		qrAlt: (name: string) => `QR Code for ${name}`
+		qrAlt: (name: string) => `QR Code for ${name}`,
+		checklistCheckIn: 'Check-in',
+		checklistScreening: 'Screening',
+		checklistLodging: 'Lodging'
 	}
 } as const;
 

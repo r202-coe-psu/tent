@@ -28,6 +28,7 @@ import {
 	touchThaidMfaVerified,
 	type CouchUserDoc
 } from '$lib/server/user-service';
+import { setPendingLinkCookie } from '$lib/server/pending-link';
 
 export const prerender = false;
 
@@ -107,14 +108,15 @@ export const GET: RequestHandler = async ({ url, fetch, cookies }) => {
 			dispatchErrorRedirect('invalid_state');
 		}
 
-		const { clientId, clientSecret, tokenUrl } = getThaidOAuthConfig();
+		const { clientId, clientSecret, tokenUrl, userinfoUrl } = getThaidOAuthConfig();
 		const redirectUri = resolveThaidRedirectUri(url);
 		const claims = await exchangeThaidCode({
 			code,
 			redirectUri,
 			clientId,
 			clientSecret,
-			tokenUrl
+			tokenUrl,
+			userinfoUrl
 		});
 
 		if (state.mode === 'register') {
@@ -141,9 +143,15 @@ export const GET: RequestHandler = async ({ url, fetch, cookies }) => {
 			const user = await findUserByThaidSubject(claims.sub);
 			const resolved = resolveThaidLoginUser(user);
 			if (!resolved.ok) {
-				loginErrorRedirect(
-					resolved.reason === 'missing_salt' ? 'thaid_login_failed' : 'thaid_not_linked'
-				);
+				if (resolved.reason === 'missing_salt') loginErrorRedirect('thaid_login_failed');
+				// CR-141 — not linked yet: offer link-on-first-login instead of an error.
+				setPendingLinkCookie(cookies, {
+					provider: 'thaid',
+					sub: claims.sub,
+					name: claims.name ?? null,
+					pid_masked: claims.pid_masked ?? null
+				});
+				throw redirect(302, '/login/link');
 			}
 
 			const [secret, algo] = await Promise.all([

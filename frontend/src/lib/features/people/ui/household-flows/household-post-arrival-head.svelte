@@ -10,6 +10,9 @@
 	} from '../../index';
 	import type { Evacuee, Household } from '../../domain/people';
 	import { toast } from 'svelte-sonner';
+	import { useShelter } from '$lib/features/shelters';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { getShelterCode } from '$lib/db/shelter';
 
 	// Icons
 	import Search from '@lucide/svelte/icons/search';
@@ -37,6 +40,9 @@
 		onNext: () => void;
 		onViewProfile: (id: string) => void;
 	} = $props();
+
+	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
+	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
 
 	// Search states
 	let headQuery = $state('');
@@ -182,7 +188,7 @@
 									{#if evacuee.phone}
 										· {evacuee.phone}{/if}
 									{#if evacuee.current_stay.zone}
-										· {zoneLabel(evacuee.current_stay.zone)}{/if}
+										· {zoneLabel(evacuee.current_stay.zone, shelterZones)}{/if}
 								</p>
 							</div>
 

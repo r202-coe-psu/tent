@@ -74,7 +74,7 @@ export interface AuthorContext {
 
 /** `"{type}:{ulid}"` — the canonical id shape (schema.md §0). */
 export function makeDocId(type: string, id: string = ulid()): string {
-	return `${type}:${id}`;
+	return id.startsWith(`${type}:`) ? id : `${type}:${id}`;
 }
 
 /** Current instant as an ISO-8601 UTC string. */
@@ -114,12 +114,42 @@ export function touch<T extends { updated_at: Timestamp }>(doc: T): T {
 
 // ---------------------------------------------------------------- shared zod
 
-/** Thai-friendly phone field: UI requires it, but "ไม่มี" maps to null. */
+/**
+ * Normalize a Thai phone as typed (CR-148): drop spaces / dashes / dots / parentheses, then map the
+ * country-code forms `+66XXXXXXXXX` / `66XXXXXXXXX` (9 digits after 66) to `0XXXXXXXXX`.
+ * Anything else is returned with only the separators removed — validation decides if it is valid.
+ */
+export function normalizeThaiPhone(value: string): string {
+	const compact = value.trim().replace(/[\s\-.()]/g, '');
+	const intl = /^\+?66(\d{8,9})$/.exec(compact);
+	return intl ? `0${intl[1]}` : compact;
+}
+
+/**
+ * Keystroke filter for phone inputs (CR-148 FR-10): keeps digits and a leading `+`, caps the
+ * length for the typed form, and collapses a complete `+66…` / `66…` number to `0…` as soon as
+ * it is recognisable. Partial country-code input (`+66 8`) is kept so the user can finish typing.
+ */
+export function sanitizePhoneTyping(value: string): string {
+	const plus = value.trim().startsWith('+');
+	const digits = value.replace(/\D/g, '');
+	if (plus) return normalizeThaiPhone(`+${digits.slice(0, 11)}`);
+	if (digits.startsWith('66') && digits.length > 10) return normalizeThaiPhone(digits.slice(0, 11));
+	return digits.slice(0, digits.startsWith('66') ? 11 : 10);
+}
+
+/** Thai-friendly phone field: empty / 「ไม่มี」→ null; `+66` normalized; otherwise digits only. */
 export const phoneSchema = z
-	.string({ error: 'กรุณากรอกเบอร์โทรศัพท์' })
-	.trim()
-	.regex(/^[0-9]+$/, 'กรุณากรอกเบอร์โทรศัพท์เป็นตัวเลขเท่านั้น')
-	.nullable();
+	.union([
+		z.null(),
+		z.literal(''),
+		z
+			.string({ error: 'กรุณากรอกเบอร์โทรศัพท์' })
+			.trim()
+			.transform(normalizeThaiPhone)
+			.pipe(z.string().regex(/^[0-9]+$/, 'กรุณากรอกเบอร์โทรศัพท์เป็นตัวเลขเท่านั้น'))
+	])
+	.transform((val): string | null => (val === '' || val === null ? null : val));
 
 /**
  * Reusable enum for the registration channel.
@@ -131,6 +161,7 @@ export const phoneSchema = z
  * `import` = Bulk spreadsheet import.
  * `paper` = Paper-based intake.
  * `app` = Legacy onsite application alias.
+ * `api` = Partner booking (EXT-008) written by the sync worker (CR-154).
  */
 export const registeredViaSchema = z.enum([
 	'kiosk',
@@ -139,7 +170,8 @@ export const registeredViaSchema = z.enum([
 	'app',
 	'web',
 	'import',
-	'paper'
+	'paper',
+	'api'
 ]);
 
 /**

@@ -23,7 +23,7 @@
 	</div>
 {:else}
 	<div class="grid gap-4 md:grid-cols-2">
-		<Card.Root class="border border-emerald-200 bg-white shadow-2xs">
+		<Card.Root class="rounded-xl border border-emerald-200 bg-white shadow-2xs">
 			<Card.Header class="pb-2">
 				<Card.Title class="text-base font-semibold text-emerald-900">พร้อมรับ</Card.Title>
 				<Card.Description class="text-sm text-slate-500">คิวลงทะเบียนล่วงหน้า</Card.Description>
@@ -44,7 +44,7 @@
 			</Card.Content>
 		</Card.Root>
 
-		<Card.Root class="border border-sky-200 bg-white shadow-2xs">
+		<Card.Root class="rounded-xl border border-sky-200 bg-white shadow-2xs">
 			<Card.Header class="pb-2">
 				<Card.Title class="text-base font-semibold text-sky-900">อยู่ในศูนย์</Card.Title>
 				<Card.Description class="text-sm text-slate-500">ปัจจุบัน / คาดการณ์</Card.Description>

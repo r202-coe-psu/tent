@@ -2,8 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { POST } from './+server';
 import { GET as getDetail } from './[id]/+server';
 import { completeScanSession, _resetSessionsForTest } from '$lib/server/thaid-scan-session';
-// eslint-disable-next-line no-restricted-imports
-import type { ThaiDAutofillProfile } from '$lib/features/people/domain/thaid-profile';
+import type { ThaiDAutofillProfile } from '$lib/features/people';
 
 const mockProfile: ThaiDAutofillProfile = {
 	id: 'thaid-1234567890123',

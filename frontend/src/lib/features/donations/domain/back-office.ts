@@ -75,7 +75,9 @@ export const walkInIntakeInputSchema = z.object({
 				lot: z
 					.object({
 						expiry: z.string().trim().optional(),
-						storage_zone: z.string().trim().max(100).optional()
+						storage_zone: z.string().trim().max(100).optional(),
+						// → shelter sub_storage[].id (draft-shelter-storage-points); kept, not stripped
+						storage_point_id: z.string().trim().min(1).optional()
 					})
 					.optional()
 			})

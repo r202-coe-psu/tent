@@ -7,7 +7,6 @@ import {
 	SPECIAL_NEED_CHOICES,
 	type EnumChoice
 } from '../domain/columns';
-import type { TemplateMasters } from './template';
 
 /**
  * A realistic, ready-to-import example household (CR-071 slice A / T-72) —
@@ -18,6 +17,8 @@ import type { TemplateMasters } from './template';
  * module is pinned against the real validator, not just eyeballed. Every enum
  * cell uses the exact label text from `domain/columns.ts` so it matches the
  * workbook's dropdowns.
+ *
+ * CR-137: municipality_zone / community are free-text sample labels (not master codes).
  */
 
 /** Cell values for the example household, keyed by Thai column header. */
@@ -35,11 +36,8 @@ function labelOf<T extends string>(choices: readonly EnumChoice<T>[], value: T):
 	return found.label;
 }
 
-/** Build the example household's cell values, resolving master-data labels from `masters`. */
-export function buildSampleWorkbook(masters: TemplateMasters): SampleWorkbook {
-	const zoneLabel = masters.municipality_zone[0]?.label;
-	const communityLabel = masters.community[0]?.label;
-
+/** Build the example household's cell values. */
+export function buildSampleWorkbook(): SampleWorkbook {
 	const household: Record<string, string | number> = {
 		[H.label]: 'ครอบครัวสมชาย ใจดี',
 		[H.card_type]: labelOf(CARD_TYPE_CHOICES, 'national_id'),
@@ -63,15 +61,13 @@ export function buildSampleWorkbook(masters: TemplateMasters): SampleWorkbook {
 		[H.district]: 'เมือง',
 		[H.province]: 'เชียงราย',
 		[H.postal_code]: '57000',
+		[H.municipality_zone]: 'เขตเทศบาลนครหาดใหญ่ 1',
+		[H.community]: 'ชุมชนริมน้ำ',
 		[H.pets]: 'สุนัข:1:มีกรงและสมุดวัคซีน',
 		[H.vehicles]: 'รถจักรยานยนต์:กข 1234',
 		[H.assets]: 'กระเป๋าเสื้อผ้า 2 ใบ',
 		[H.notes]: 'บ้านน้ำท่วมถึงชั้นล่าง'
 	};
-	// Master-data lists are per shelter — only pre-fill them when the shelter
-	// actually has options, otherwise the sample row would fail its own import.
-	if (zoneLabel) household[H.municipality_zone] = zoneLabel;
-	if (communityLabel) household[H.community] = communityLabel;
 
 	const members: Record<string, string | number>[] = [
 		{
@@ -110,8 +106,8 @@ export function buildSampleWorkbook(masters: TemplateMasters): SampleWorkbook {
 }
 
 /** The same example as flat CSV rows — one row per person, head first. */
-export function buildSampleCsvRows(masters: TemplateMasters): Record<string, string | number>[] {
-	const { household, members } = buildSampleWorkbook(masters);
+export function buildSampleCsvRows(): Record<string, string | number>[] {
+	const { household, members } = buildSampleWorkbook();
 	const headRole = labelOf(ROLE_CHOICES, 'head');
 	const memberRole = labelOf(ROLE_CHOICES, 'member');
 	return [

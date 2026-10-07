@@ -15,9 +15,9 @@ import type { CellValue } from 'exceljs';
 /**
  * Generate the shelter-import `.xlsx` template (CR-039).
  *
- * The workbook has five data sheets (see `domain/columns.ts`) joined on the
+ * The workbook has six data sheets (see `domain/columns.ts`) joined on the
  * shelter's running number — `ลำดับที่` on the 1:1 sheets, `รหัสศูนย์พักพิง` on
- * the zone sheet — plus a `คำแนะนำ` README and a hidden `lists` sheet that
+ * the N:1 zone and food-distribution sheets — plus a `คำแนะนำ` README and a hidden `lists` sheet that
  * backs every dropdown. Dropdown option lists live on `lists` and are referenced
  * by range — Excel's inline list breaks on the commas and length of the Thai
  * labels. Cells store the human label; the importer resolves label → code on
@@ -190,12 +190,19 @@ export async function buildShelterTemplateBlob(
 		if (sample) {
 			if (sheet.kind === 'shelter') {
 				writeSampleRow(ws, 2, headerToCol, sample.shelter);
-			} else {
+			} else if (sheet.kind === 'zone') {
 				sample.zones.forEach((zone, i) => {
 					const row = i + 2;
 					const refCol = headerToCol.get(sheet.refHeader);
 					if (refCol) ws.getCell(row, refCol).value = 1;
 					writeSampleRow(ws, row, headerToCol, zone);
+				});
+			} else {
+				sample.foodDistributionPoints.forEach((point, i) => {
+					const row = i + 2;
+					const refCol = headerToCol.get(sheet.refHeader);
+					if (refCol) ws.getCell(row, refCol).value = 1;
+					writeSampleRow(ws, row, headerToCol, point);
 				});
 			}
 		}

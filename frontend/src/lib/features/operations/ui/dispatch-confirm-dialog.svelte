@@ -11,6 +11,7 @@
 	import Truck from '@lucide/svelte/icons/truck';
 	import { toast } from 'svelte-sonner';
 	import { dispatchInfoSchema, type DispatchInfoInput } from '../domain/operations';
+	import { authStore } from '$lib/stores/auth.svelte';
 
 	interface Props {
 		open: boolean;
@@ -22,6 +23,9 @@
 	}
 
 	let { open = $bindable(false), route, isPending = false, onConfirm }: Props = $props();
+
+	// Session expired (`needsReauth`): every save button is off until the user signs in again.
+	const offline = $derived(authStore.needsReauth);
 
 	let driverName = $state('');
 	let vehiclePlate = $state('');
@@ -91,7 +95,7 @@
 			<Button variant="outline" onclick={() => handleOpenChange(false)} disabled={isPending}>
 				ยกเลิก
 			</Button>
-			<Button onclick={handleConfirm} disabled={isPending}>
+			<Button onclick={handleConfirm} disabled={isPending || offline}>
 				<Truck class="mr-1 h-4 w-4" />
 				{isPending ? 'กำลังอนุมัติ...' : 'ยืนยันส่งมอบ'}
 			</Button>
