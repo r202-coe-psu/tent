@@ -52,7 +52,8 @@ export interface DistributeAcrossLotsArgs {
 	item_id: string;
 	/** Requisition ticket shared by every row, `requisition_ticket:direct-…`. */
 	ref_id: string;
-	note?: string;
+	/** Destination, stored in each row's `lot.note` (CR-143 FR-E1). */
+	note: string;
 	occurred_at?: string;
 }
 
@@ -83,7 +84,7 @@ export async function distributeAcrossLots(
 					unit: allocation.lot.unit,
 					ref_id: args.ref_id,
 					lot_ref: allocation.lot_ref,
-					...(args.note ? { note: args.note } : {}),
+					note: args.note,
 					...(args.occurred_at ? { occurred_at: args.occurred_at } : {})
 				},
 				ctx

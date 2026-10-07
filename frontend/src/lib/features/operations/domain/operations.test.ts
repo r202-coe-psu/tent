@@ -993,14 +993,15 @@ describe('createDistributeEntry', () => {
 		expect(entry.shelter_code).toBe(ctx.shelterCode);
 	});
 
-	it('creates entry without note and preserves an explicit deterministic ID', () => {
+	it('keeps a note-bearing entry on an explicit deterministic ID', () => {
 		const entry = createDistributeEntry(
 			{
 				item_id: 'item:rice',
 				qty: 10,
 				unit: 'kg',
 				ref_id: 'requisition_ticket:TICKET1',
-				lot_ref: 'stock_ledger:LOT1'
+				lot_ref: 'stock_ledger:LOT1',
+				note: 'ครัวกลาง'
 			},
 			ctx,
 			'DETERMINISTIC-OUT'
@@ -1008,13 +1009,80 @@ describe('createDistributeEntry', () => {
 
 		expect(entry.qty).toBe('-10');
 		expect(entry._id).toBe('stock_ledger:DETERMINISTIC-OUT');
-		expect(entry.lot).toBeUndefined();
+		expect(entry.lot).toEqual({ note: 'ครัวกลาง' });
+	});
+
+	describe('AC-E1 / FR-E1: a direct issue must name its destination', () => {
+		const base = {
+			item_id: 'item:rice',
+			qty: '2',
+			unit: 'kg',
+			ref_id: 'requisition_ticket:direct-01JTEST',
+			lot_ref: 'stock_ledger:LOT1'
+		};
+
+		it('rejects a missing note', () => {
+			const result = distributeInputSchema.safeParse(base);
+			expect(result.success).toBe(false);
+			// @ts-expect-error -- `note` is required, so the compiler rejects this input too
+			expect(() => createDistributeEntry(base, ctx)).toThrow();
+		});
+
+		it.each(['', '   ', '\t\n'])('rejects a blank note %j', (note) => {
+			expect(distributeInputSchema.safeParse({ ...base, note }).success).toBe(false);
+			expect(() => createDistributeEntry({ ...base, note }, ctx)).toThrow();
+		});
+
+		it('rejects a note longer than 100 characters but accepts exactly 100', () => {
+			expect(distributeInputSchema.safeParse({ ...base, note: 'ก'.repeat(101) }).success).toBe(
+				false
+			);
+			expect(distributeInputSchema.safeParse({ ...base, note: 'ก'.repeat(100) }).success).toBe(
+				true
+			);
+		});
+
+		it('trims the destination before storing it in lot.note', () => {
+			const entry = createDistributeEntry({ ...base, note: '  โซน A  ' }, ctx);
+			expect(entry.lot).toEqual({ note: 'โซน A' });
+		});
+	});
+
+	it('FR-E4: a legacy distribute row without a note still projects', () => {
+		const inbound = createReceiveEntry(
+			{
+				item_id: 'item:rice',
+				qty: '10',
+				unit: 'kg',
+				source: 'donation',
+				ref_id: DONATION_REF,
+				occurred_at: '2026-01-01T00:00:00Z'
+			},
+			ctx,
+			'LEGACY-IN'
+		);
+		const legacyOut = createStockLedger(
+			{
+				item_id: 'item:rice',
+				qty: '-4',
+				unit: 'kg',
+				reason: 'distribute',
+				ref_id: 'requisition_ticket:OLD',
+				lot_ref: inbound.lot_ref!,
+				occurred_at: '2026-01-02T00:00:00Z'
+			},
+			ctx,
+			'LEGACY-OUT'
+		);
+		expect(legacyOut.lot).toBeUndefined();
+		expect(projectStockLotBalances([inbound, legacyOut])[0]).toMatchObject({ qty: '6' });
 	});
 
 	it('rejects zero or negative quantity inputs', () => {
 		expect(() =>
 			createDistributeEntry(
 				{
+					note: 'ครัวกลาง',
 					item_id: 'item:water',
 					qty: 0,
 					unit: 'ขวด',
@@ -1028,6 +1096,7 @@ describe('createDistributeEntry', () => {
 		expect(() =>
 			createDistributeEntry(
 				{
+					note: 'ครัวกลาง',
 					item_id: 'item:water',
 					qty: -5,
 					unit: 'ขวด',
@@ -1040,7 +1109,7 @@ describe('createDistributeEntry', () => {
 	});
 
 	it('rejects null or wrong-prefix ref_id and requires lot_ref', () => {
-		const base = { item_id: 'item:water', qty: '1', unit: 'ขวด' };
+		const base = { item_id: 'item:water', qty: '1', unit: 'ขวด', note: 'ครัวกลาง' };
 		expect(
 			distributeInputSchema.safeParse({
 				...base,
@@ -2002,6 +2071,7 @@ describe('projectStockLotBalances', () => {
 		const b = inbound('B', '5', '2026-01-01T00:00:00Z');
 		const out = createDistributeEntry(
 			{
+				note: 'ครัวกลาง',
 				item_id: 'item:rice',
 				qty: '3',
 				unit: 'kg',
@@ -2020,6 +2090,7 @@ describe('projectStockLotBalances', () => {
 		const source = inbound('A', '5', '2026-01-01T00:00:00Z');
 		const out = createDistributeEntry(
 			{
+				note: 'ครัวกลาง',
 				item_id: 'item:rice',
 				qty: '3',
 				unit: 'kg',
@@ -2062,6 +2133,7 @@ describe('projectStockLotBalances', () => {
 		);
 		const dispatched = createDistributeEntry(
 			{
+				note: 'ครัวกลาง',
 				item_id: 'item:blanket',
 				qty: '1',
 				unit: 'piece',

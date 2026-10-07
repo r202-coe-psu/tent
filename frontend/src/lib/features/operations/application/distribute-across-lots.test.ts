@@ -74,7 +74,7 @@ describe('distributeAcrossLots (CR-143 FR-A8, FR-A9)', () => {
 
 		const result = await distributeAcrossLots(
 			repo,
-			{ allocations: plan.allocations, item_id: 'item:x', ref_id: REF },
+			{ note: 'ครัวกลาง', allocations: plan.allocations, item_id: 'item:x', ref_id: REF },
 			ctx
 		);
 
@@ -96,7 +96,7 @@ describe('distributeAcrossLots (CR-143 FR-A8, FR-A9)', () => {
 
 		const result = await distributeAcrossLots(
 			repo,
-			{ allocations: plan.allocations, item_id: 'item:x', ref_id: REF },
+			{ note: 'ครัวกลาง', allocations: plan.allocations, item_id: 'item:x', ref_id: REF },
 			ctx
 		);
 
@@ -109,7 +109,7 @@ describe('distributeAcrossLots (CR-143 FR-A8, FR-A9)', () => {
 		const repo = fakeRepo();
 		const result = await distributeAcrossLots(
 			repo,
-			{ allocations: [], item_id: 'item:x', ref_id: REF },
+			{ note: 'ครัวกลาง', allocations: [], item_id: 'item:x', ref_id: REF },
 			ctx
 		);
 		expect(repo.calls).toEqual([]);

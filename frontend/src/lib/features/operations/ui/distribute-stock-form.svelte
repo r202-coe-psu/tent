@@ -51,8 +51,9 @@
 	import { formatLotClockLine } from '../domain/lot-age';
 	import { lotStorageLabel } from '../domain/lot-storage';
 	import { useStoragePoints } from '../application/use-storage-points.svelte';
+	import { useDestinationOptions } from '../application/use-destination-options.svelte';
+	import { DISTRIBUTE_NOTE_MAX, isCustomDestination } from '../domain/distribute-destination';
 
-	const DEST_PRESETS = ['ครัวกลาง', 'โซนเต็นท์ A', 'โซนเต็นท์ B', 'ห้องพยาบาล'] as const;
 	const QTY_CHIPS = [10, 20, 50] as const;
 
 	let {
@@ -72,6 +73,9 @@
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
 	const storagePoints = useStoragePoints(() => getShelterCode());
+	// FR-E2: destination chips come from the shelter's own storage points and zones.
+	const destinations = useDestinationOptions(() => getShelterCode());
+	const destinationOptions = $derived(destinations.options);
 	const balanceQuery = useStockBalance();
 	const ledgerQuery = useLedger();
 	const distributeMutation = useDistributeStock();
@@ -85,6 +89,8 @@
 	let keepOpenOnSuccess = $state(true);
 	// 'auto': split across lots in priority order (CR-143 FR-A7). 'single': the user picks one lot (FR-A10).
 	let lotMode = $state<'auto' | 'single'>('auto');
+	// "อื่นๆ" was tapped: the destination is typed by hand, even while the box is still empty.
+	let customDestination = $state(false);
 
 	const items = $derived(stockItems.items);
 	const balanceByItemId = $derived(balanceQuery.data ?? new Map<string, string>());
@@ -218,7 +224,8 @@
 		defaults(
 			{
 				ref_id: `requisition_ticket:direct-${ulid()}`,
-				lot_ref: ''
+				lot_ref: '',
+				note: ''
 			},
 			zod4(distributeInputSchema)
 		),
@@ -272,6 +279,10 @@
 	);
 
 	const { form: formData, submitting, reset } = form;
+
+	const customActive = $derived(
+		customDestination || isCustomDestination($formData.note, destinationOptions)
+	);
 
 	const selectedUnitLabel = $derived(
 		formatUnit($formData.unit, units, langState.current) || $formData.unit || 'เลือกหน่วย'
@@ -346,6 +357,7 @@
 	function resetForNextLine() {
 		$formData.qty = '' as unknown as typeof $formData.qty;
 		$formData.note = '';
+		customDestination = false;
 		$formData.lot_ref = '';
 		$formData.ref_id = `requisition_ticket:direct-${ulid()}`;
 		if (!preselectedItemId) {
@@ -385,10 +397,12 @@
 
 	function setDestination(label: string | null) {
 		if (label === null) {
+			customDestination = true;
 			$formData.note = '';
 			queueMicrotask(() => noteInputEl?.focus());
 			return;
 		}
+		customDestination = false;
 		$formData.note = label;
 	}
 
@@ -445,7 +459,7 @@
 					allocations: plan.allocations,
 					item_id: data.item_id,
 					ref_id: refId,
-					note: data.note || undefined
+					note: data.note
 				},
 				ctx
 			});
@@ -811,12 +825,15 @@
 		</div>
 
 		<div class="col-span-1 space-y-2 sm:col-span-2">
-			<Form.Label>เบิกให้ใคร / ไปที่ไหน</Form.Label>
-			<div class="flex flex-wrap gap-2">
-				{#each DEST_PRESETS as preset (preset)}
+			<Form.Label
+				>เบิกให้ใคร / ไปที่ไหน <span class="font-bold text-destructive">*</span></Form.Label
+			>
+			<div class="flex flex-wrap gap-2" role="group" aria-label="ปลายทาง">
+				{#each destinationOptions as preset (preset)}
 					<button
 						type="button"
 						class={chipClass($formData.note === preset)}
+						aria-pressed={$formData.note === preset}
 						onclick={() => setDestination(preset)}
 					>
 						{preset}
@@ -824,9 +841,8 @@
 				{/each}
 				<button
 					type="button"
-					class={chipClass(
-						!!$formData.note && !(DEST_PRESETS as readonly string[]).includes($formData.note)
-					)}
+					class={chipClass(customActive)}
+					aria-pressed={customActive}
 					onclick={() => setDestination(null)}
 				>
 					อื่นๆ...
@@ -838,7 +854,8 @@
 						<Input
 							{...props}
 							bind:ref={noteInputEl}
-							placeholder="ปลายทาง / ผู้รับ (ไม่บังคับ)"
+							placeholder="ปลายทาง / ผู้รับ"
+							maxlength={DISTRIBUTE_NOTE_MAX}
 							bind:value={$formData.note}
 							class="min-h-11"
 						/>
