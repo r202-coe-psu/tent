@@ -294,7 +294,7 @@
 		<div>
 			<p class="font-bold text-primary">{t.guidanceTitle}</p>
 			<ul class="mt-1 space-y-1 text-xs text-muted-foreground">
-				{#each t.guidanceBullets ?? [t.guidanceDesc] as bullet}
+				{#each t.guidanceBullets ?? [t.guidanceDesc] as bullet (bullet)}
 					<li>{bullet}</li>
 				{/each}
 			</ul>

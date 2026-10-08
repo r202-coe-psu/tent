@@ -3,6 +3,7 @@ id: CR-154
 title: M2 integration ย้ายเข้า Partner OAuth plane — booking (EXT-008/009/010) + residency (EXT-011), scope ใหม่, evacuee.gender nullable (schema_v 11→12)
 status: approved
 date: 2026-10-06
+updated: 2026-10-09
 requested_by: เจ้าของโครงการ (สเปก M2 A_M2_API_SERVICES_SHELTER_V1.0)
 decided_by: เจ้าของโครงการ
 layer: volatile
@@ -205,9 +206,12 @@ affects:
 | `gender` | enum(`male`,`female`,`other`) · req | enum(`male`,`female`,`other`) \| **null** · req (key ต้องมีเสมอ, ค่าเป็น `null` ได้ แปลว่ายังไม่ทราบ) |
 | `registered_via` | enum(`kiosk`,`staff`,`backoffice`,`app`,`web`,`import`,`paper`) | **+ `api`** (partner booking, CR นี้) |
 
-- **FR-70** ฟอร์มของ staff, kiosk และ public pre-register **ยังบังคับเลือกเพศเหมือนเดิม** ค่า `null` เกิดได้เฉพาะจาก `registered_via = api`
-- **FR-71** UI ที่แสดงเพศต้องแสดงค่า `null` เป็น "ไม่ระบุ" และ Station 1 ต้องให้ staff เติมเพศได้
-- **FR-72** worker `occupancy.py` (breakdown `male`/`female`) และ `occupant.py` ต้องรองรับ `gender = null` โดยไม่นับเข้า male หรือ female
+- ~~**FR-70** ฟอร์มของ staff, kiosk และ public pre-register **ยังบังคับเลือกเพศเหมือนเดิม** ค่า `null` เกิดได้เฉพาะจาก `registered_via = api`~~
+  **Superseded by decision sync 2026-10-09 (D1/D3/D4):** `gender = null` ("ไม่ระบุ") ใช้ได้ทุกช่องทาง (public, kiosk, Station 1, back-office, api); ฟอร์มลงทะเบียนทุกช่องทาง preselect "ไม่ระบุ" และไม่บังคับเลือก; `'other'` คงใน enum สำหรับ doc เดิม — UI ไม่เสนอให้เลือกใหม่ และต้อง preserve เมื่อแก้ไข doc ที่เป็น `'other'`
+- ~~**FR-71** UI ที่แสดงเพศต้องแสดงค่า `null` เป็น "ไม่ระบุ" และ Station 1 ต้องให้ staff เติมเพศได้~~
+  **Superseded (ลดขอบเขต) by decision sync 2026-10-09 (D6):** UI แสดง `null` (และ `'other'`) เป็น "ไม่ระบุ" และแก้เพศได้ในทุกช่องทาง — ไม่มี warning badge, ไม่ block check-in
+- ~~**FR-72** worker `occupancy.py` (breakdown `male`/`female`) และ `occupant.py` ต้องรองรับ `gender = null` โดยไม่นับเข้า male หรือ female~~
+  **Superseded (ถูกรวมเข้า) by decision sync 2026-10-09 (D5):** `occupancy_breakdown` เพิ่ม `gender_unspecified` (นับ `null` + `'other'`) และมี invariant `male + female + gender_unspecified = occupancy_total` — ดู `schema.md` §9.1; `occupant.py` ยังต้องรองรับ `gender = null` ตามเดิม
 
 ### C9 — Legacy `/external/v1`
 
@@ -290,3 +294,4 @@ affects:
 - ทางเลือกที่ตัดทิ้ง: ให้ FastAPI เขียน CouchDB ตรงด้วย public-writer credential แบบ synchronous เพราะต้องเพิ่ม credential ให้ backend และไม่ทนต่อกรณี Couch ล่ม จึงเลือก Mongo buffer → worker inbound ตามแพทเทิร์น donations/volunteers
 - 2026-10-06 — implementation note: เพิ่ม FR-61 (`module_name` += `M2`) — จำเป็นต่อ D2/D4 เพราะ `PARTNER_MODULES` เดิมรับแค่ `M6`/`M7` จึงออก client ให้ M2 ไม่ได้
 - 2026-10-06 — owner เพิ่ม FR-62: `module_name` ไม่บังคับ (module = preset ของ scope เท่านั้น) เก็บ `null` เมื่อไม่เลือก; บันทึกใน CR-154 (ไม่แยก CR) และ supersede CR-135 FR-4
+- 2026-10-09 — **decision sync** (ไม่เปิด CR ใหม่ ตามที่เจ้าของโครงการเลือก; บันทึกเต็มที่ `docs/data/schema.md` frontmatter `note:`): ยกเลิก FR-70, ลด FR-71, รวม FR-72 เข้า `occupancy_breakdown.gender_unspecified` — `gender = null` ใช้ได้ทุกช่องทาง, preselect "ไม่ระบุ" ในทุกฟอร์ม, `'other'` คงไว้อ่าน/preserve เท่านั้น; D7 ข้างบนยังใช้ได้ (partner booking ยังส่ง `null`)
