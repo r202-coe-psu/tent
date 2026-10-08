@@ -1,11 +1,11 @@
 ---
-id: draft
+id: CR-157
 title: แยกคิวรับของบริจาคเป็นคิวมาส่งเองกับคิวรถศูนย์ไปรับ
-status: proposed
+status: approved
 date: 2026-09-24
-updated: 2026-10-05
+updated: 2026-10-08
 requested_by: เจ้าของโครงการ (ทบทวน DN-5 ระหว่าง implement T-60)
-decided_by: <รอเจ้าของโครงการ>
+decided_by: Soravit Sukkarn (Team Lead)
 layer: stable + volatile   # `_id` pattern ของ donation_slot = stable core -> ต้อง review ก่อน
 affects:
   - docs/data/schema.md §2.13 donation_slot — เพิ่ม field `mode`, `capacity` req -> opt/nullable, เปลี่ยน `_id` pattern
@@ -234,3 +234,4 @@ collection `donation_slot_counters`. **กระทบ stable core (`_id` patter
   (ไม่รวมทุกกรณีเป็น `SLOT_FULL` เพราะ donor ต้องรู้ว่าช่วงเต็ม หรือช่วงไม่มีอยู่จริง); เพิ่ม §C-6
   + FR-DS-14/15 ให้ครอบ Mongo counter ที่ implement ใน `8a5c6450`; แก้ §Migration ให้ตรงกับพฤติกรรม
   back-office จริง; ระบุ FR-DS-12 กับ FR-DS-10 (back-office) ว่ายังไม่ตรง code
+- 2026-10-08 — approved โดย Soravit Sukkarn (Team Lead) (รันเลข CR-157)
