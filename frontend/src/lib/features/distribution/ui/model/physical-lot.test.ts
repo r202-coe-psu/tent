@@ -179,4 +179,86 @@ describe('Physical Lot Projection & FEFO Ordering (Slice 5.3)', () => {
 		expect(lots.find((l) => l.lot_no === 'L-260401-040')?.isExpired).toBe(true);
 		expect(lots.find((l) => l.lot_no === 'L-260501-041')?.isExpired).toBe(false);
 	});
+
+	describe('weighted lot priority (CR-143 §A, FR-A5)', () => {
+		it('AC-A2: long-stored no-expiry lot goes before a barely-stored lot with a far expiry', () => {
+			const ledger: StockLedger[] = [
+				// 400 days left, 5 days in stock -> 400 - 2.5 = 397.5
+				createInboundLedger('D', 'item:rice', '10', '2026-05-27T00:00:00Z', {
+					lot_no: 'L-260101-004',
+					expiry: '2027-07-06'
+				}),
+				// no expiry, DRY, 200 days in stock -> (365 - 200) - 100 = 65
+				createInboundLedger('C', 'item:rice', '10', '2025-11-13T00:00:00Z', {
+					lot_no: 'L-260101-003'
+				})
+			];
+			const lots = getEligiblePhysicalLots(ledger, 'item:rice', '1', refDate);
+			expect(lots.map((l) => l.lot_no)).toEqual(['L-260101-003', 'L-260101-004']);
+		});
+
+		it('AC-A3: a lot expiring in 3 days goes before long-stored stock without expiry', () => {
+			const ledger: StockLedger[] = [
+				createInboundLedger('F', 'item:rice', '10', '2025-06-01T00:00:00Z', {
+					lot_no: 'L-260101-006'
+				}),
+				createInboundLedger('E', 'item:rice', '10', '2026-05-02T00:00:00Z', {
+					lot_no: 'L-260101-005',
+					expiry: '2026-06-04'
+				})
+			];
+			const lots = getEligiblePhysicalLots(ledger, 'item:rice', '1', refDate);
+			expect(lots.map((l) => l.lot_no)).toEqual(['L-260101-005', 'L-260101-006']);
+		});
+
+		it('AC-A4: an expired lot is flagged and never ranked ahead of a usable lot', () => {
+			const ledger: StockLedger[] = [
+				createInboundLedger('OLD', 'item:rice', '10', '2026-01-01T00:00:00Z', {
+					lot_no: 'L-260101-007',
+					expiry: '2026-05-31'
+				}),
+				createInboundLedger('NEW', 'item:rice', '10', '2026-05-30T00:00:00Z', {
+					lot_no: 'L-260101-008',
+					expiry: '2027-05-30'
+				})
+			];
+			const lots = getEligiblePhysicalLots(ledger, 'item:rice', '1', refDate);
+			expect(lots.map((l) => [l.lot_no, l.isExpired])).toEqual([
+				['L-260101-008', false],
+				['L-260101-007', true]
+			]);
+		});
+
+		it('treats expiry equal to the reference time as expired (FR-A4)', () => {
+			expect(isLotDateExpired('2026-06-01T00:00:00.000Z', refDate)).toBe(true);
+		});
+
+		it('uses the item shelf life and storage type when supplied', () => {
+			const ledger: StockLedger[] = [
+				createInboundLedger('FRESH', 'item:milk', '10', '2026-05-31T00:00:00Z', {
+					lot_no: 'L-260101-011'
+				}),
+				createInboundLedger('OLDER', 'item:milk', '10', '2026-05-29T00:00:00Z', {
+					lot_no: 'L-260101-012'
+				})
+			];
+			const lots = getEligiblePhysicalLots(ledger, 'item:milk', '1', refDate, {
+				storage_type: 'CHILLED',
+				shelf_life_days: 5
+			});
+			// shelf life 5d: OLDER has 2d left (urgent), FRESH has 4d left (urgent) -> OLDER first
+			expect(lots.map((l) => l.lot_no)).toEqual(['L-260101-012', 'L-260101-011']);
+			expect(lots[0].reason).toBe('อายุเก็บรักษาเหลือ 2 วัน (เร่งด่วน)');
+		});
+
+		it('gives each lot a reason for its position (FR-A6)', () => {
+			const ledger: StockLedger[] = [
+				createInboundLedger('C', 'item:rice', '10', '2025-11-13T00:00:00Z', {
+					lot_no: 'L-260101-003'
+				})
+			];
+			const [lot] = getEligiblePhysicalLots(ledger, 'item:rice', '1', refDate);
+			expect(lot.reason).toBe('อยู่ในคลัง 200 วัน');
+		});
+	});
 });

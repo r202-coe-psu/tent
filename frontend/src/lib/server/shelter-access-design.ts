@@ -783,6 +783,46 @@ export function buildValidateDocUpdate(code: string): string {
         }
       }
     }
+    // CR-143 §C (stock_ledger schema_v 6): adjust_reason + note belong to adjust rows only.
+    var hasAdjustReason = typeof newDoc.adjust_reason !== 'undefined' && newDoc.adjust_reason !== null;
+    var hasLedgerNote = typeof newDoc.note !== 'undefined' && newDoc.note !== null;
+    if (newDoc.reason === 'adjust') {
+      var adjustReasons = ['expired', 'damaged', 'count_mismatch', 'lost', 'found', 'merge', 'other'];
+      if (hasAdjustReason && adjustReasons.indexOf(newDoc.adjust_reason) === -1) {
+        throw { forbidden: 'Adjust stock ledger adjust_reason must be one of ' + adjustReasons.join(', ') };
+      }
+      // Rows stamped before schema_v 6 (older clients mid-rollout) have no reason; readers map it to other.
+      if (!hasAdjustReason && typeof newDoc.schema_v === 'number' && newDoc.schema_v >= 6) {
+        throw { forbidden: 'Adjust stock ledger requires adjust_reason' };
+      }
+      // CR-156 FR-C9: the catch-all reason must say what happened. Old rows stay readable (FR-C10).
+      if (newDoc.adjust_reason === 'other' && (typeof newDoc.note !== 'string' || newDoc.note.trim().length === 0)) {
+        throw { forbidden: 'Adjust stock ledger with adjust_reason other requires a non-empty note' };
+      }
+      if (hasLedgerNote && (typeof newDoc.note !== 'string' || newDoc.note.length > 500)) {
+        throw { forbidden: 'Adjust stock ledger note must be a string of at most 500 characters' };
+      }
+      // CR-143 §F (FR-F4): moving stock between items is the merge flow's job; a supply
+      // coordinator may adjust stock but may not merge items, and 'note' must name the other side.
+      if (newDoc.adjust_reason === 'merge') {
+        if (!isWarehouseOrAdmin && !isRole('shelter_manager')) {
+          throw { forbidden: 'Only warehouse staff, shelter manager, or system admin can write merge stock ledger' };
+        }
+        if (typeof newDoc.note !== 'string' || !/^item_master:.+/.test(newDoc.note)) {
+          throw { forbidden: 'Merge stock ledger note must be the item_master id of the other side' };
+        }
+        if (newDoc.ref_id !== null && typeof newDoc.ref_id !== 'undefined') {
+          throw { forbidden: 'Merge stock ledger must not carry a ref_id' };
+        }
+      }
+    } else {
+      if (hasAdjustReason) {
+        throw { forbidden: 'Stock ledger adjust_reason is only allowed when reason is adjust' };
+      }
+      if (hasLedgerNote) {
+        throw { forbidden: 'Stock ledger note is only allowed when reason is adjust' };
+      }
+    }
   }
   // 4. distribution_request lifecycle and role rules
   if (newDoc.type === 'distribution_request') {
@@ -2112,6 +2152,26 @@ export function buildValidateDocUpdate(code: string): string {
     }
   }
   if (newDoc.type === 'item_master') {
+    // CR-143 §F (FR-F2/F4): 'merged_into' retires a shelter-local item into another one. Only the
+    // shelter's warehouse staff / managers (or SA) may set it, always together with deactivated.
+    if (newDoc.merged_into && !(oldDoc && oldDoc.merged_into === newDoc.merged_into)) {
+      if (!isRole('warehouse_staff') && !isRole('shelter_manager')) {
+        throw { forbidden: 'Only warehouse staff, shelter manager, or system admin can merge items' };
+      }
+      if (typeof newDoc.merged_into !== 'string' || !/^item_master:.+/.test(newDoc.merged_into) || newDoc.merged_into === newDoc._id) {
+        throw { forbidden: 'merged_into must be another item_master id' };
+      }
+    }
+    // A merge is permanent (its stock moved by append-only ledger rows): the pointer may not be
+    // cleared or redirected, and the item may not be reactivated, by anyone who can edit it.
+    if (oldDoc && oldDoc.type === 'item_master' && oldDoc.merged_into) {
+      if (newDoc.merged_into !== oldDoc.merged_into) {
+        throw { forbidden: 'merged_into cannot be changed or cleared once an item is merged' };
+      }
+    }
+    if (newDoc.merged_into && newDoc.deactivated !== true) {
+      throw { forbidden: 'A merged item must be deactivated' };
+    }
     var isLegacyBaseUnitUpdate = oldDoc && oldDoc.type === 'item_master' &&
       oldDoc.base_unit === newDoc.base_unit && isLegacyUnitLabel(newDoc.base_unit);
     if (newDoc.base_unit && !/^[a-z][a-z0-9_]{0,15}$/.test(newDoc.base_unit) && !isLegacyBaseUnitUpdate) {

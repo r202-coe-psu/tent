@@ -65,6 +65,7 @@ export async function seedStagingOps(): Promise<void> {
 		// `adjust` (schema.md §2.1, ref_id null) — the same reason the back-office
 		// manual receive writes. `receive` now requires a meal_service / requisition /
 		// distribution_log / bulk_return_pool ref (CR-121) and would be refused.
+		// CR-143 §C: every adjust names a reason; an opening balance is `other`.
 		const stockEntries = [
 			createLegacyFlow2StockLedger(
 				{
@@ -72,7 +73,8 @@ export async function seedStagingOps(): Promise<void> {
 					qty: scale(code, 500, 300, 150),
 					unit: 'kg',
 					reason: 'adjust',
-					ref_id: null
+					ref_id: null,
+					adjust_reason: 'found'
 				},
 				ctx
 			),
@@ -82,7 +84,8 @@ export async function seedStagingOps(): Promise<void> {
 					qty: scale(code, 1200, 800, 400),
 					unit: 'bottle',
 					reason: 'adjust',
-					ref_id: null
+					ref_id: null,
+					adjust_reason: 'found'
 				},
 				ctx
 			),
@@ -92,12 +95,20 @@ export async function seedStagingOps(): Promise<void> {
 					qty: '2000',
 					unit: 'tablet',
 					reason: 'adjust',
-					ref_id: null
+					ref_id: null,
+					adjust_reason: 'found'
 				},
 				ctx
 			),
 			createStockLedger(
-				{ item_id: ITEM.soap, qty: '300', unit: 'bar', reason: 'adjust', ref_id: null },
+				{
+					item_id: ITEM.soap,
+					qty: '300',
+					unit: 'bar',
+					reason: 'adjust',
+					ref_id: null,
+					adjust_reason: 'found'
+				},
 				ctx
 			),
 			createLegacyFlow2StockLedger(
@@ -106,16 +117,31 @@ export async function seedStagingOps(): Promise<void> {
 					qty: scale(code, 200, 120, 60),
 					unit: 'piece',
 					reason: 'adjust',
-					ref_id: null
+					ref_id: null,
+					adjust_reason: 'found'
 				},
 				ctx
 			),
 			createStockLedger(
-				{ item_id: ITEM.egg, qty: '3000', unit: 'piece', reason: 'adjust', ref_id: null },
+				{
+					item_id: ITEM.egg,
+					qty: '3000',
+					unit: 'piece',
+					reason: 'adjust',
+					ref_id: null,
+					adjust_reason: 'found'
+				},
 				ctx
 			),
 			createStockLedger(
-				{ item_id: ITEM.vegetable, qty: '200', unit: 'kg', reason: 'adjust', ref_id: null },
+				{
+					item_id: ITEM.vegetable,
+					qty: '200',
+					unit: 'kg',
+					reason: 'adjust',
+					ref_id: null,
+					adjust_reason: 'found'
+				},
 				ctx
 			)
 		].map((doc, i) => ({ ...doc, _id: `stock_ledger:seed-st:${code.toLowerCase()}:${i}` }));

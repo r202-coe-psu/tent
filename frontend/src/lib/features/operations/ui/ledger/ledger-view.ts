@@ -1,6 +1,11 @@
 import { qtyGt } from '$lib/utils/qty';
 import { lotStorageName, type StoragePointRef } from '../../domain/lot-storage';
-import type { LedgerReason, StockLedger } from '../../domain/operations';
+import {
+	resolveAdjustReason,
+	type AdjustReason,
+	type LedgerReason,
+	type StockLedger
+} from '../../domain/operations';
 
 /** The four movement kinds the movements tab groups ledger reasons into. */
 export type LedgerGroup = 'in' | 'out' | 'adjust' | 'transfer';
@@ -35,6 +40,19 @@ export const REASON_LABELS: Record<LedgerReason, string> = {
 	transfer_in: 'โอนย้ายเข้า'
 };
 
+/** CR-143 §C — why a stock correction was made. Thai labels shared by the adjust form and the ledger. */
+export const ADJUST_REASON_LABELS: Record<AdjustReason, string> = {
+	expired: 'หมดอายุ',
+	damaged: 'เสียหาย / เน่าเสีย',
+	count_mismatch: 'นับไม่ตรง',
+	lost: 'สูญหาย',
+	found: 'พบของเพิ่ม',
+	merge: 'รวมสินค้า',
+	other: 'อื่น ๆ'
+};
+
+export type LedgerReasonFilter = AdjustReason | 'all';
+
 /** A ledger entry flattened to what the movements tab shows and exports. */
 export interface LedgerRow {
 	id: string;
@@ -46,6 +64,9 @@ export interface LedgerRow {
 	group: LedgerGroup;
 	reason: LedgerReason;
 	reasonLabel: string;
+	/** Adjust rows only; a row from before schema_v 6 reads as `other` (FR-C4). */
+	adjustReason: AdjustReason | null;
+	adjustReasonLabel: string;
 	itemName: string;
 	/** Signed quantity string, exactly as persisted. */
 	qty: string;
@@ -85,6 +106,11 @@ export function toLedgerRow(entry: StockLedger, lookup: LedgerLookup): LedgerRow
 	// `lotStorageName` would otherwise read as a legacy location.
 	const isOut = group === 'out' && entry.reason !== 'distribution_return';
 	const destination = isOut ? (entry.lot?.note?.trim() ?? '') : '';
+	const adjustReason = resolveAdjustReason(entry);
+	const adjustReasonLabel = adjustReason ? ADJUST_REASON_LABELS[adjustReason] : '';
+	const adjustDetail = adjustReason
+		? [adjustReasonLabel, entry.note?.trim()].filter(Boolean).join(' · ')
+		: '';
 	const lot = entry.lot && isOut ? { ...entry.lot, note: undefined } : entry.lot;
 	return {
 		id: entry._id,
@@ -94,10 +120,12 @@ export function toLedgerRow(entry: StockLedger, lookup: LedgerLookup): LedgerRow
 		group,
 		reason: entry.reason,
 		reasonLabel: REASON_LABELS[entry.reason] ?? entry.reason,
+		adjustReason,
+		adjustReasonLabel,
 		itemName: lookup.itemName(entry.item_id),
 		qty: entry.qty,
 		unit: lookup.unitLabel(entry.unit),
-		detail: destination || (entry.ref_id ?? ''),
+		detail: adjustDetail || destination || (entry.ref_id ?? ''),
 		lotNo: entry.lot?.lot_no ?? '',
 		storage: lotStorageName(lot, lookup.points) ?? '',
 		createdBy: entry.created_by,
@@ -131,6 +159,8 @@ export interface LedgerFilter {
 	range: DayRange;
 	type: LedgerTypeFilter;
 	q: string;
+	/** Adjust reason (FR-C5); omitted / `all` keeps every row. */
+	reason?: LedgerReasonFilter;
 }
 
 /** Range, type and free-text search (item, reference, destination, lot, place, author). */
@@ -138,6 +168,7 @@ export function filterLedger(rows: readonly LedgerRow[], filter: LedgerFilter): 
 	const q = filter.q.trim().toLowerCase();
 	return filterByRange(rows, filter.range).filter((r) => {
 		if (filter.type !== 'all' && r.group !== filter.type) return false;
+		if (filter.reason && filter.reason !== 'all' && r.adjustReason !== filter.reason) return false;
 		if (!q) return true;
 		return [r.itemName, r.refId, r.detail, r.lotNo, r.storage, r.createdBy].some((v) =>
 			v.toLowerCase().includes(q)

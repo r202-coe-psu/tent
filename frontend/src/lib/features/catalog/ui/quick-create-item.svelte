@@ -28,7 +28,7 @@
 		useItemMasters,
 		useUnitsOfMeasure
 	} from '../application/queries';
-	import { catalogOrigin } from '../domain/catalog';
+	import { catalogOrigin, expiryRequirementHint } from '../domain/catalog';
 	import { ORIGIN_LABELS } from './master/master-view';
 	import ItemMasterForm from './item-master-form.svelte';
 
@@ -441,6 +441,9 @@
 						</button>
 					{/each}
 				</div>
+				<p class="text-sm text-slate-600" data-testid="expiry-requirement-hint">
+					{expiryRequirementHint({ storage_type: storage })}
+				</p>
 			</fieldset>
 		{/if}
 

@@ -151,6 +151,11 @@ async function fillPrimaryMember(
 
 /** Open the booking page and wait for the shelter step. */
 async function openBooking(page: Page) {
+	const pageErrors: string[] = [];
+	page.on('pageerror', (err) => {
+		pageErrors.push(err.message);
+	});
+
 	await page.goto('/');
 	await page.evaluate(() => {
 		(window as Window & { __captchaToken?: string }).__captchaToken = 'e2e-captcha-token';
@@ -160,7 +165,11 @@ async function openBooking(page: Page) {
 		.first()
 		.click();
 	await page.waitForURL('**/pre-register');
+	// Shelter heading lives outside UnifiedRegistrationForm — also require the address
+	// field so a props_invalid_value crash in the form cannot look like a green open.
 	await expect(page.getByRole('heading', { name: 'ศูนย์พักพิงที่ต้องการเข้าพัก' })).toBeVisible();
+	await expect(page.locator('#address-no')).toBeVisible({ timeout: 15_000 });
+	expect(pageErrors, `uncaught page errors:\n${pageErrors.join('\n')}`).toEqual([]);
 	return page;
 }
 

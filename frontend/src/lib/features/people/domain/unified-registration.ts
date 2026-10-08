@@ -215,6 +215,9 @@ export function blankUnifiedMember(): UnifiedMemberInput {
 		nickname: '',
 		country: 'THAILAND',
 		religion: 'unknown',
+		// Keep defined — Svelte 5 rejects bind:x={undefined} when $bindable has a fallback.
+		religion_other: null,
+		disability_other_detail: null,
 		person_id: { cardType: 'national_id', number: '' },
 		vulnerable_groups: [],
 		special_needs: [],
