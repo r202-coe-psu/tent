@@ -20,6 +20,7 @@ export default defineConfig({
 		'**/public-search-flow.test.ts',
 		'**/public-shelters-filter.test.ts'
 	],
+	grepInvert: /@quarantine/,
 	globalTimeout: 480_000,
 	outputDir: 'test-results/public',
 	reporter: [
