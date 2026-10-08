@@ -27,6 +27,17 @@
  * The FastAPI behind the app must expose `GET /public/v1/unassigned-registrations/{id}/status`
  * (PR #391) — W2/W3 fail against an older backend, which is exactly what they guard.
  *
+ * ── Tags (Playwright `{ tag }`, select with `--grep`) ─────────────────────────────────────
+ *  @pre-register  feature tag — every test in this file and in `public-register.test.ts`
+ *  @smoke         read-only, safe on staging / production (never writes; server-error cases
+ *                 mock the write endpoint): N, R, V, E, S, U. Run on pre-push, the PR gate and
+ *                 against staging (`pnpm test:e2e:pre-register:smoke`); kept when `IS_REMOTE`
+ *  @critical      writes real data against the local stack and asserts zero leak afterwards:
+ *                 W1–W6 and Z. Skipped when `IS_REMOTE`; run on the PR gate / nightly
+ *  @regression    the fully mocked suite `public-register.test.ts` (no backend needed);
+ *                 run on the PR gate / nightly (`pnpm test:e2e:regression`)
+ *  Each test carries exactly one of @smoke / @critical / @regression.
+ *
  * ── Scenarios ────────────────────────────────────────────────────────────────────────────
  *  N1  landing page links to /pre-register (3 places), hero CTA → ?shelter=unassigned, title
  *  N2  shelter dropdown: "ไม่ระบุศูนย์พักพิง" always; closed / not-accepting shelters never
@@ -185,7 +196,7 @@ test.afterAll(async () => {
 
 // =============================================================== N — navigation
 
-test.describe('Pre-register: navigation (N)', () => {
+test.describe('Pre-register: navigation (N)', { tag: ['@pre-register', '@smoke'] }, () => {
 	test('N1 the landing page links to /pre-register and the hero CTA opens the central queue', async ({
 		page
 	}) => {
@@ -238,7 +249,7 @@ test.describe('Pre-register: navigation (N)', () => {
 
 // =============================================================== R — render contract
 
-test.describe('Pre-register: render contract (R)', () => {
+test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@smoke'] }, () => {
 	test('R1 the page skeleton is fully rendered', async ({ page }) => {
 		await NO_BANNER(page);
 		await openPreRegister(page);
@@ -703,7 +714,7 @@ async function focusIsWithin(field: Locator): Promise<boolean> {
 	);
 }
 
-test.describe('Pre-register: validation gates (V)', () => {
+test.describe('Pre-register: validation gates (V)', { tag: ['@pre-register', '@smoke'] }, () => {
 	test('V1 the confirm buttons stay disabled until the consent box is ticked; an empty form sends nothing', async ({
 		page,
 		health
@@ -1028,7 +1039,7 @@ const ERROR_ROWS: ErrorRow[] = [
 	}
 ];
 
-test.describe('Pre-register: error matrix (E)', () => {
+test.describe('Pre-register: error matrix (E)', { tag: ['@pre-register', '@smoke'] }, () => {
 	for (const row of ERROR_ROWS) {
 		test(`${row.id} shows "${row.message}"`, async ({ page, health }) => {
 			test.setTimeout(row.id === 'E22' ? 90_000 : 60_000);
@@ -1226,265 +1237,272 @@ test.describe('Pre-register: error matrix (E)', () => {
 
 // =============================================================== S — server / page errors
 
-test.describe('Pre-register: server and page-level errors (S)', () => {
-	/** Fill the central-queue form with valid data; the POST is intercepted by the caller. */
-	async function fillValidQueueForm(page: Page) {
-		await openPreRegister(page);
-		await fillBase(page, { member: { firstName: 'ทดสอบ', lastName: LAST_NAME } });
-	}
-
-	async function expectFormKept(page: Page) {
-		await expect(page.locator('#member-0-first-name')).toHaveValue('ทดสอบ');
-		await expect(page.locator('#member-0-last-name')).toHaveValue(LAST_NAME);
-		await expect(page.locator('#member-0-phone')).toHaveValue('0899999999');
-		await expect(page.locator('#address-no')).toHaveValue('123/45');
-		await expect(page.locator('#postal_code')).toHaveValue('90110');
-		await expect(page.getByRole('checkbox', { name: DISCLAIMER_LABEL })).toBeChecked();
-		await expect(page.getByText('ลงทะเบียนล่วงหน้าสำเร็จ')).toHaveCount(0);
-	}
-
-	const serverCases: {
-		id: string;
-		status: number;
-		body: Record<string, unknown>;
-		toast: string;
-		allow: RegExp;
-	}[] = [
-		{
-			id: 'S1a 409 DUPLICATE_OPEN_IDENTITY',
-			status: 409,
-			body: { success: false, error: 'DUPLICATE_OPEN_IDENTITY' },
-			toast: 'มีผู้ลงทะเบียนด้วยบัตรหรือเบอร์นี้อยู่แล้วในคิวกลาง',
-			allow: /409/
-		},
-		{
-			id: 'S1b 422 INVALID_INPUT (field message)',
-			status: 422,
-			body: {
-				success: false,
-				error: 'INVALID_INPUT',
-				details: {
-					formErrors: [],
-					fieldErrors: { 'members.0.phone': ['เบอร์โทรไม่ถูกต้องจากเซิร์ฟเวอร์'] }
-				}
-			},
-			toast: 'เบอร์โทรไม่ถูกต้องจากเซิร์ฟเวอร์',
-			allow: /422/
-		},
-		{
-			id: 'S1c 422 INVALID_INPUT (no details)',
-			status: 422,
-			body: { success: false, error: 'INVALID_INPUT' },
-			toast: 'ข้อมูลไม่ครบหรือไม่ถูกต้อง',
-			allow: /422/
-		},
-		{
-			id: 'S1d 429 RATE_LIMITED',
-			status: 429,
-			body: { success: false, error: 'RATE_LIMITED' },
-			toast: 'ส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่',
-			allow: /429/
-		},
-		{
-			id: 'S1e 500 WRITE_FAILED',
-			status: 500,
-			body: { success: false, error: 'WRITE_FAILED' },
-			toast: 'ไม่สามารถบันทึกการลงทะเบียนได้ กรุณาลองใหม่',
-			allow: /500/
+test.describe(
+	'Pre-register: server and page-level errors (S)',
+	{ tag: ['@pre-register', '@smoke'] },
+	() => {
+		/** Fill the central-queue form with valid data; the POST is intercepted by the caller. */
+		async function fillValidQueueForm(page: Page) {
+			await openPreRegister(page);
+			await fillBase(page, { member: { firstName: 'ทดสอบ', lastName: LAST_NAME } });
 		}
-	];
 
-	for (const c of serverCases) {
-		test(`${c.id}: a readable toast and the form data kept`, async ({ page, health }) => {
-			health.allow(c.allow);
+		async function expectFormKept(page: Page) {
+			await expect(page.locator('#member-0-first-name')).toHaveValue('ทดสอบ');
+			await expect(page.locator('#member-0-last-name')).toHaveValue(LAST_NAME);
+			await expect(page.locator('#member-0-phone')).toHaveValue('0899999999');
+			await expect(page.locator('#address-no')).toHaveValue('123/45');
+			await expect(page.locator('#postal_code')).toHaveValue('90110');
+			await expect(page.getByRole('checkbox', { name: DISCLAIMER_LABEL })).toBeChecked();
+			await expect(page.getByText('ลงทะเบียนล่วงหน้าสำเร็จ')).toHaveCount(0);
+		}
+
+		const serverCases: {
+			id: string;
+			status: number;
+			body: Record<string, unknown>;
+			toast: string;
+			allow: RegExp;
+		}[] = [
+			{
+				id: 'S1a 409 DUPLICATE_OPEN_IDENTITY',
+				status: 409,
+				body: { success: false, error: 'DUPLICATE_OPEN_IDENTITY' },
+				toast: 'มีผู้ลงทะเบียนด้วยบัตรหรือเบอร์นี้อยู่แล้วในคิวกลาง',
+				allow: /409/
+			},
+			{
+				id: 'S1b 422 INVALID_INPUT (field message)',
+				status: 422,
+				body: {
+					success: false,
+					error: 'INVALID_INPUT',
+					details: {
+						formErrors: [],
+						fieldErrors: { 'members.0.phone': ['เบอร์โทรไม่ถูกต้องจากเซิร์ฟเวอร์'] }
+					}
+				},
+				toast: 'เบอร์โทรไม่ถูกต้องจากเซิร์ฟเวอร์',
+				allow: /422/
+			},
+			{
+				id: 'S1c 422 INVALID_INPUT (no details)',
+				status: 422,
+				body: { success: false, error: 'INVALID_INPUT' },
+				toast: 'ข้อมูลไม่ครบหรือไม่ถูกต้อง',
+				allow: /422/
+			},
+			{
+				id: 'S1d 429 RATE_LIMITED',
+				status: 429,
+				body: { success: false, error: 'RATE_LIMITED' },
+				toast: 'ส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่',
+				allow: /429/
+			},
+			{
+				id: 'S1e 500 WRITE_FAILED',
+				status: 500,
+				body: { success: false, error: 'WRITE_FAILED' },
+				toast: 'ไม่สามารถบันทึกการลงทะเบียนได้ กรุณาลองใหม่',
+				allow: /500/
+			}
+		];
+
+		for (const c of serverCases) {
+			test(`${c.id}: a readable toast and the form data kept`, async ({ page, health }) => {
+				health.allow(c.allow);
+				await page.route('**/api/public/v1/unassigned-registrations', (route) =>
+					route.request().method() === 'POST'
+						? route.fulfill({
+								status: c.status,
+								contentType: 'application/json',
+								body: JSON.stringify(c.body)
+							})
+						: route.continue()
+				);
+				await fillValidQueueForm(page);
+				await submitButton(page).click();
+				const toast = page.locator('[data-sonner-toast]').filter({ hasText: c.toast });
+				await expect(toast).toBeVisible();
+				// a human sentence, never the raw machine code
+				await expect(page.locator('[data-sonner-toast]')).not.toContainText(/[A-Z]{2,}_[A-Z_]+/);
+				await expectFormKept(page);
+				expect(health.registrationWrites).toHaveLength(1);
+			});
+		}
+
+		/** The write endpoint drops the connection (offline, proxy reset). */
+		async function dropConnection(page: Page, health: { allow(...p: RegExp[]): void }) {
+			health.allow(/ERR_FAILED|Failed to load resource/);
 			await page.route('**/api/public/v1/unassigned-registrations', (route) =>
-				route.request().method() === 'POST'
-					? route.fulfill({
-							status: c.status,
-							contentType: 'application/json',
-							body: JSON.stringify(c.body)
-						})
-					: route.continue()
+				route.request().method() === 'POST' ? route.abort('connectionreset') : route.continue()
 			);
 			await fillValidQueueForm(page);
 			await submitButton(page).click();
-			const toast = page.locator('[data-sonner-toast]').filter({ hasText: c.toast });
-			await expect(toast).toBeVisible();
-			// a human sentence, never the raw machine code
-			await expect(page.locator('[data-sonner-toast]')).not.toContainText(/[A-Z]{2,}_[A-Z_]+/);
+			await expect(page.locator('[data-sonner-toast]').first()).toBeVisible();
+		}
+
+		test('S1f a dropped connection raises an error toast and keeps the form', async ({
+			page,
+			health
+		}) => {
+			await dropConnection(page, health);
+			await expect(page.locator('[data-sonner-toast][data-type="error"]')).toHaveCount(1);
 			await expectFormKept(page);
 			expect(health.registrationWrites).toHaveLength(1);
 		});
-	}
 
-	/** The write endpoint drops the connection (offline, proxy reset). */
-	async function dropConnection(page: Page, health: { allow(...p: RegExp[]): void }) {
-		health.allow(/ERR_FAILED|Failed to load resource/);
-		await page.route('**/api/public/v1/unassigned-registrations', (route) =>
-			route.request().method() === 'POST' ? route.abort('connectionreset') : route.continue()
-		);
-		await fillValidQueueForm(page);
-		await submitButton(page).click();
-		await expect(page.locator('[data-sonner-toast]').first()).toBeVisible();
-	}
+		test.fixme('S1f GAP: a dropped connection is explained in plain language', async ({
+			page,
+			health
+		}) => {
+			// Today the toast shows the browser's raw "Failed to fetch".
+			await dropConnection(page, health);
+			await expect(page.locator('[data-sonner-toast]')).not.toContainText('Failed to fetch');
+		});
 
-	test('S1f a dropped connection raises an error toast and keeps the form', async ({
-		page,
-		health
-	}) => {
-		await dropConnection(page, health);
-		await expect(page.locator('[data-sonner-toast][data-type="error"]')).toHaveCount(1);
-		await expectFormKept(page);
-		expect(health.registrationWrites).toHaveLength(1);
-	});
-
-	test.fixme('S1f GAP: a dropped connection is explained in plain language', async ({
-		page,
-		health
-	}) => {
-		// Today the toast shows the browser's raw "Failed to fetch".
-		await dropConnection(page, health);
-		await expect(page.locator('[data-sonner-toast]')).not.toContainText('Failed to fetch');
-	});
-
-	test('S2 a shelter that does not take pre-registrations cannot be chosen from a link', async ({
-		page
-	}) => {
-		const res = await page.request.get('/api/public/v1/shelters');
-		const { shelters } = (await res.json()) as {
-			shelters: { code: string; accepts_pre_registration?: boolean }[];
-		};
-		const closedToBooking = shelters.find((s) => s.accepts_pre_registration !== true);
-		test.skip(!closedToBooking, 'every shelter accepts pre-registration on this target');
-		await page.goto(`/pre-register?shelter=${closedToBooking!.code}`);
-		await expect(
-			page.getByText('ศูนย์นี้ยังไม่เปิดรับลงทะเบียนล่วงหน้าจากหน้าสาธารณะ')
-		).toBeVisible();
-		await expect(page.getByText('กรุณาเลือกศูนย์พักพิง', { exact: true })).toBeVisible();
-		await expect(page.locator('#address-no')).toHaveCount(0);
-	});
-
-	test('S3 a reCAPTCHA failure blocks the send with its own message', async ({ page, health }) => {
-		await page.route('**/api/public/v1/recaptcha', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({ enabled: true })
-			})
-		);
-		// Do not load Google's script: no token can ever be produced.
-		await page.route(/google\.com\/recaptcha/, (route) => route.abort());
-		health.allow(/recaptcha|ERR_FAILED|Failed to load resource/i);
-		await fillValidQueueForm(page);
-		await submitButton(page).click();
-		await expect(
+		test('S2 a shelter that does not take pre-registrations cannot be chosen from a link', async ({
 			page
-				.locator('[data-sonner-toast]')
-				.filter({ hasText: 'ระบบยืนยันตัวตน (reCAPTCHA) ขัดข้อง กรุณาลองใหม่อีกครั้ง' })
-				.first()
-		).toBeVisible();
-		expect(health.registrationWrites).toEqual([]);
-	});
+		}) => {
+			const res = await page.request.get('/api/public/v1/shelters');
+			const { shelters } = (await res.json()) as {
+				shelters: { code: string; accepts_pre_registration?: boolean }[];
+			};
+			const closedToBooking = shelters.find((s) => s.accepts_pre_registration !== true);
+			test.skip(!closedToBooking, 'every shelter accepts pre-registration on this target');
+			await page.goto(`/pre-register?shelter=${closedToBooking!.code}`);
+			await expect(
+				page.getByText('ศูนย์นี้ยังไม่เปิดรับลงทะเบียนล่วงหน้าจากหน้าสาธารณะ')
+			).toBeVisible();
+			await expect(page.getByText('กรุณาเลือกศูนย์พักพิง', { exact: true })).toBeVisible();
+			await expect(page.locator('#address-no')).toHaveCount(0);
+		});
 
-	test.fixme('S3 GAP: a reCAPTCHA failure raises a single toast', async ({ page, health }) => {
-		// Today booking-form toasts the message and then re-toasts it from the catch block.
-		await page.route('**/api/public/v1/recaptcha', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({ enabled: true })
-			})
-		);
-		await page.route(/google\.com\/recaptcha/, (route) => route.abort());
-		health.allow(/recaptcha|ERR_FAILED|Failed to load resource/i);
-		await fillValidQueueForm(page);
-		await submitButton(page).click();
-		await expect(page.locator('[data-sonner-toast][data-type="error"]')).toHaveCount(1);
-	});
-
-	test('S4 the shelter safety consent is required once a pet comes along', async ({
-		page,
-		health
-	}) => {
-		const shelter = {
-			code: 'E2E01',
-			name: 'ศูนย์ทดสอบ E2E (mock)',
-			status: 'open',
-			capacity: 50,
-			accepts_pre_registration: true,
-			province: 'สงขลา',
-			vulnerable_groups: [],
-			pet_policy: 'conditional'
-		};
-		await page.route('**/api/public/v1/shelters?*', (route) => route.fallback());
-		await page.route('**/api/public/v1/shelters', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({ shelters: [shelter], count: 1, as_of: new Date().toISOString() })
-			})
-		);
-		await page.route('**/api/public/v1/config/shelter-policy**', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({
-					code: shelter.code,
-					feature_flags: { allow_pets: true },
-					admission_policy: { pet_policy: { policy: 'conditional' } }
+		test('S3 a reCAPTCHA failure blocks the send with its own message', async ({
+			page,
+			health
+		}) => {
+			await page.route('**/api/public/v1/recaptcha', (route) =>
+				route.fulfill({
+					status: 200,
+					contentType: 'application/json',
+					body: JSON.stringify({ enabled: true })
 				})
-			})
-		);
-		await page.route('**/api/public/v1/registrations', (route) => route.abort());
-		await openPreRegister(page, '/pre-register');
-		await chooseShelter(page, /ศูนย์ทดสอบ E2E/);
-		await fillBase(page, { consent: false });
-		await openPets(page);
-		await page.getByRole('button', { name: 'เพิ่มสุนัข' }).click();
-		await submitButton(page).click();
-		await expect(
-			page.locator('[data-sonner-toast]').filter({
-				hasText: 'กรุณากดยืนยันการรับทราบเงื่อนไขและมาตรการด้านความปลอดภัยของศูนย์พักพิง'
-			})
-		).toBeVisible();
-		expect(health.registrationWrites).toEqual([]);
-	});
+			);
+			// Do not load Google's script: no token can ever be produced.
+			await page.route(/google\.com\/recaptcha/, (route) => route.abort());
+			health.allow(/recaptcha|ERR_FAILED|Failed to load resource/i);
+			await fillValidQueueForm(page);
+			await submitButton(page).click();
+			await expect(
+				page
+					.locator('[data-sonner-toast]')
+					.filter({ hasText: 'ระบบยืนยันตัวตน (reCAPTCHA) ขัดข้อง กรุณาลองใหม่อีกครั้ง' })
+					.first()
+			).toBeVisible();
+			expect(health.registrationWrites).toEqual([]);
+		});
 
-	test('S5 pets are capped at ten per household', async ({ page }) => {
-		await openPreRegister(page);
-		await openPets(page);
-		const add = page.locator('#unified-pets').getByRole('button', { name: 'แมว', exact: true });
-		for (let i = 0; i < 10; i++) await add.click();
-		await expect(add).toBeDisabled();
-		await expect(
-			page.getByText('บันทึกสัตว์เลี้ยงได้สูงสุด 10 ตัวต่อครอบครัว').first()
-		).toBeVisible();
-	});
+		test.fixme('S3 GAP: a reCAPTCHA failure raises a single toast', async ({ page, health }) => {
+			// Today booking-form toasts the message and then re-toasts it from the catch block.
+			await page.route('**/api/public/v1/recaptcha', (route) =>
+				route.fulfill({
+					status: 200,
+					contentType: 'application/json',
+					body: JSON.stringify({ enabled: true })
+				})
+			);
+			await page.route(/google\.com\/recaptcha/, (route) => route.abort());
+			health.allow(/recaptcha|ERR_FAILED|Failed to load resource/i);
+			await fillValidQueueForm(page);
+			await submitButton(page).click();
+			await expect(page.locator('[data-sonner-toast][data-type="error"]')).toHaveCount(1);
+		});
 
-	test('S6 a failing shelter list shows the load error instead of a broken form', async ({
-		page,
-		health
-	}) => {
-		health.allow(/500|Failed to load resource/);
-		await page.route('**/api/public/v1/shelters', (route) =>
-			route.fulfill({
-				status: 500,
-				contentType: 'application/json',
-				body: JSON.stringify({ error: 'UPSTREAM_DOWN' })
-			})
-		);
-		await page.goto('/pre-register?shelter=unassigned');
-		await expect(
-			page.getByText('ไม่สามารถโหลดข้อมูลศูนย์พักพิงได้ กรุณาลองใหม่อีกครั้ง')
-		).toBeVisible();
-		await expect(page.locator('#address-no')).toHaveCount(0);
-		await expect(page.getByRole('button', { name: SUBMIT_LABEL })).toHaveCount(0);
-	});
-});
+		test('S4 the shelter safety consent is required once a pet comes along', async ({
+			page,
+			health
+		}) => {
+			const shelter = {
+				code: 'E2E01',
+				name: 'ศูนย์ทดสอบ E2E (mock)',
+				status: 'open',
+				capacity: 50,
+				accepts_pre_registration: true,
+				province: 'สงขลา',
+				vulnerable_groups: [],
+				pet_policy: 'conditional'
+			};
+			await page.route('**/api/public/v1/shelters?*', (route) => route.fallback());
+			await page.route('**/api/public/v1/shelters', (route) =>
+				route.fulfill({
+					status: 200,
+					contentType: 'application/json',
+					body: JSON.stringify({ shelters: [shelter], count: 1, as_of: new Date().toISOString() })
+				})
+			);
+			await page.route('**/api/public/v1/config/shelter-policy**', (route) =>
+				route.fulfill({
+					status: 200,
+					contentType: 'application/json',
+					body: JSON.stringify({
+						code: shelter.code,
+						feature_flags: { allow_pets: true },
+						admission_policy: { pet_policy: { policy: 'conditional' } }
+					})
+				})
+			);
+			await page.route('**/api/public/v1/registrations', (route) => route.abort());
+			await openPreRegister(page, '/pre-register');
+			await chooseShelter(page, /ศูนย์ทดสอบ E2E/);
+			await fillBase(page, { consent: false });
+			await openPets(page);
+			await page.getByRole('button', { name: 'เพิ่มสุนัข' }).click();
+			await submitButton(page).click();
+			await expect(
+				page.locator('[data-sonner-toast]').filter({
+					hasText: 'กรุณากดยืนยันการรับทราบเงื่อนไขและมาตรการด้านความปลอดภัยของศูนย์พักพิง'
+				})
+			).toBeVisible();
+			expect(health.registrationWrites).toEqual([]);
+		});
+
+		test('S5 pets are capped at ten per household', async ({ page }) => {
+			await openPreRegister(page);
+			await openPets(page);
+			const add = page.locator('#unified-pets').getByRole('button', { name: 'แมว', exact: true });
+			for (let i = 0; i < 10; i++) await add.click();
+			await expect(add).toBeDisabled();
+			await expect(
+				page.getByText('บันทึกสัตว์เลี้ยงได้สูงสุด 10 ตัวต่อครอบครัว').first()
+			).toBeVisible();
+		});
+
+		test('S6 a failing shelter list shows the load error instead of a broken form', async ({
+			page,
+			health
+		}) => {
+			health.allow(/500|Failed to load resource/);
+			await page.route('**/api/public/v1/shelters', (route) =>
+				route.fulfill({
+					status: 500,
+					contentType: 'application/json',
+					body: JSON.stringify({ error: 'UPSTREAM_DOWN' })
+				})
+			);
+			await page.goto('/pre-register?shelter=unassigned');
+			await expect(
+				page.getByText('ไม่สามารถโหลดข้อมูลศูนย์พักพิงได้ กรุณาลองใหม่อีกครั้ง')
+			).toBeVisible();
+			await expect(page.locator('#address-no')).toHaveCount(0);
+			await expect(page.getByRole('button', { name: SUBMIT_LABEL })).toHaveCount(0);
+		});
+	}
+);
 
 // =============================================================== U — layout, i18n
 
-test.describe('Pre-register: layout and language (U)', () => {
+test.describe('Pre-register: layout and language (U)', { tag: ['@pre-register', '@smoke'] }, () => {
 	for (const viewport of [
 		{ name: '1440 desktop', width: 1440, height: 900 },
 		{ name: '390 phone', width: 390, height: 844 }
@@ -1652,402 +1670,426 @@ async function submitAndWait(page: Page, endpoint: 'unassigned-registrations' | 
 	return response;
 }
 
-test.describe('Pre-register: unassigned registration against the real stack (W1–W4, W6)', () => {
-	test.describe.configure({ mode: 'serial' });
+test.describe(
+	'Pre-register: unassigned registration against the real stack (W1–W4, W6)',
+	{ tag: ['@pre-register', '@critical'] },
+	() => {
+		test.describe.configure({ mode: 'serial' });
 
-	let context: BrowserContext;
-	let page: Page;
-	let health: PageHealth;
-	let statusCalls: StatusCall[];
-	let queueId = '';
+		let context: BrowserContext;
+		let page: Page;
+		let health: PageHealth;
+		let statusCalls: StatusCall[];
+		let queueId = '';
 
-	test.beforeAll(async ({ browser }) => {
-		if (IS_REMOTE) return;
-		context = await browser.newContext();
-		page = await context.newPage();
-		health = watchPage(page);
-		statusCalls = recordStatusCalls(page);
-	});
-	test.afterAll(async () => {
-		await context?.close();
-	});
-	test.beforeEach(() => {
-		test.skip(IS_REMOTE, READ_ONLY_REASON);
-	});
-
-	test('W1 a full family registers in the central queue and gets its QR ticket', async () => {
-		test.setTimeout(120_000);
-		liveWritesStarted = true;
-		await page.goto('/');
-		await page.getByRole('link', { name: 'ลงทะเบียนผู้ประสบภัยล่วงหน้า' }).click();
-		await expect(page).toHaveURL(/\/pre-register\?shelter=unassigned$/);
-		await expect(page.locator('#address-no')).toBeVisible({ timeout: 20_000 });
-		await expect(shelterTrigger(page)).toContainText('ไม่ระบุศูนย์พักพิง');
-
-		// address
-		await fillAddress(page, {
-			landmark: `E2E ใกล้ตลาดทดสอบ ${RUN_ID}`,
-			houseNo: '99/9',
-			villageNo: 'หมู่ 9 ถ.ทดสอบ'
+		test.beforeAll(async ({ browser }) => {
+			if (IS_REMOTE) return;
+			context = await browser.newContext();
+			page = await context.newPage();
+			health = watchPage(page);
+			statusCalls = recordStatusCalls(page);
 		});
-		await expect(page.locator('#postal_code')).toHaveValue('90110');
-
-		// head of family + religion + emergency contact
-		await fillMember(page, 0, {
-			firstName: FIRST_NAME,
-			lastName: LAST_NAME,
-			nickname: 'ชาย',
-			nationalId: HEAD_ID,
-			birthYear: '2535',
-			gender: 'male',
-			phone: HEAD_PHONE
+		test.afterAll(async () => {
+			await context?.close();
 		});
-		await primaryCard(page).getByRole('button', { name: 'ไม่ระบุ', exact: true }).click();
-		await page.getByRole('option', { name: 'อิสลาม' }).click();
-		await fillEmergencyContact(page, {
-			name: 'E2E ผู้ติดต่อฉุกเฉิน',
-			phone: EMERGENCY_PHONE,
-			relation: 'ญาติ'
+		test.beforeEach(() => {
+			test.skip(IS_REMOTE, READ_ONLY_REASON);
 		});
 
-		// member 2 with vulnerable groups + a special need
-		await page.getByRole('button', { name: 'เพิ่มสมาชิก' }).click();
-		const card2 = memberCard(page, 2);
-		await fillMember(page, 1, {
-			firstName: MEMBER2_NAME,
-			lastName: LAST_NAME,
-			nationalId: MEMBER2_ID,
-			birthYear: '2490',
-			gender: 'female'
+		test('W1 a full family registers in the central queue and gets its QR ticket', async () => {
+			test.setTimeout(120_000);
+			liveWritesStarted = true;
+			await page.goto('/');
+			await page.getByRole('link', { name: 'ลงทะเบียนผู้ประสบภัยล่วงหน้า' }).click();
+			await expect(page).toHaveURL(/\/pre-register\?shelter=unassigned$/);
+			await expect(page.locator('#address-no')).toBeVisible({ timeout: 20_000 });
+			await expect(shelterTrigger(page)).toContainText('ไม่ระบุศูนย์พักพิง');
+
+			// address
+			await fillAddress(page, {
+				landmark: `E2E ใกล้ตลาดทดสอบ ${RUN_ID}`,
+				houseNo: '99/9',
+				villageNo: 'หมู่ 9 ถ.ทดสอบ'
+			});
+			await expect(page.locator('#postal_code')).toHaveValue('90110');
+
+			// head of family + religion + emergency contact
+			await fillMember(page, 0, {
+				firstName: FIRST_NAME,
+				lastName: LAST_NAME,
+				nickname: 'ชาย',
+				nationalId: HEAD_ID,
+				birthYear: '2535',
+				gender: 'male',
+				phone: HEAD_PHONE
+			});
+			await primaryCard(page).getByRole('button', { name: 'ไม่ระบุ', exact: true }).click();
+			await page.getByRole('option', { name: 'อิสลาม' }).click();
+			await fillEmergencyContact(page, {
+				name: 'E2E ผู้ติดต่อฉุกเฉิน',
+				phone: EMERGENCY_PHONE,
+				relation: 'ญาติ'
+			});
+
+			// member 2 with vulnerable groups + a special need
+			await page.getByRole('button', { name: 'เพิ่มสมาชิก' }).click();
+			const card2 = memberCard(page, 2);
+			await fillMember(page, 1, {
+				firstName: MEMBER2_NAME,
+				lastName: LAST_NAME,
+				nationalId: MEMBER2_ID,
+				birthYear: '2490',
+				gender: 'female'
+			});
+			await openMemberAccordion(card2, 'กลุ่มเปราะบาง');
+			await page.locator('#vg-1-elderly_dependent').click();
+			await page.locator('#vg-1-chronic_illness').click();
+			await openMemberAccordion(card2, 'ความต้องการพิเศษ');
+			await card2.getByRole('checkbox', { name: 'ใช้วีลแชร์', exact: true }).last().click();
+
+			// one cat
+			await openPets(page);
+			await page.getByRole('button', { name: 'เพิ่มแมว' }).click();
+			await page.getByPlaceholder('เช่น ถุงเงิน, เจ้าส้ม, บ๊อบบี้').fill('มะลิ');
+			await page.getByPlaceholder(/มีโรคประจำตัว/).fill(`แมวทดสอบ E2E ${RUN_ID}`);
+			await page.getByText('มีกรง / สายจูง / ตะกร้า').click();
+
+			await acceptDisclaimer(page);
+			const response = await submitAndWait(page, 'unassigned-registrations');
+			expect(response.status()).toBe(201);
+			const body = (await response.json()) as { id: string; members: unknown[] };
+			queueId = body.id;
+			createdQueueIds.add(queueId);
+			recordCreatedQueueId(queueId);
+			expect(body.members).toHaveLength(2);
+
+			// the ticket
+			await expect(page.getByText('ลงทะเบียนล่วงหน้าสำเร็จ')).toBeVisible();
+			await expect(page.getByAltText(QR_ALT_QUEUE)).toBeVisible();
+			await expect(page.getByText(`${FIRST_NAME} ${LAST_NAME}`)).toBeVisible();
+			await expect(page.getByText('2 คน', { exact: true })).toBeVisible();
+			await expect(
+				page.getByText('แสดง QR Code นี้ต่อเจ้าหน้าที่ เพื่อรับเข้าศูนย์')
+			).toBeVisible();
+			// the id rides in the QR only — never printed for a human
+			await expect(page.getByText(queueId)).toHaveCount(0);
+			await expect.poll(() => storedTicketCodes(page)).toContain(queueId);
+			await expect(page.locator('main')).toMatchAriaSnapshot({ name: 'ticket.aria.yml' });
+			expectHealthy(health);
 		});
-		await openMemberAccordion(card2, 'กลุ่มเปราะบาง');
-		await page.locator('#vg-1-elderly_dependent').click();
-		await page.locator('#vg-1-chronic_illness').click();
-		await openMemberAccordion(card2, 'ความต้องการพิเศษ');
-		await card2.getByRole('checkbox', { name: 'ใช้วีลแชร์', exact: true }).last().click();
 
-		// one cat
-		await openPets(page);
-		await page.getByRole('button', { name: 'เพิ่มแมว' }).click();
-		await page.getByPlaceholder('เช่น ถุงเงิน, เจ้าส้ม, บ๊อบบี้').fill('มะลิ');
-		await page.getByPlaceholder(/มีโรคประจำตัว/).fill(`แมวทดสอบ E2E ${RUN_ID}`);
-		await page.getByText('มีกรง / สายจูง / ตะกร้า').click();
+		test('W2 the ticket survives the history tab and a reload (BUG-01 regression)', async () => {
+			test.setTimeout(90_000);
+			const claimedToast = page.getByText(CLAIMED_TOAST);
+			statusCalls.length = 0;
+			statusWindowStart = Date.now();
 
-		await acceptDisclaimer(page);
-		const response = await submitAndWait(page, 'unassigned-registrations');
-		expect(response.status()).toBe(201);
-		const body = (await response.json()) as { id: string; members: unknown[] };
-		queueId = body.id;
-		createdQueueIds.add(queueId);
-		recordCreatedQueueId(queueId);
-		expect(body.members).toHaveLength(2);
+			await page.getByRole('button', { name: /ใบลงทะเบียนของฉัน/ }).click();
+			await expect(page.getByText(`${FIRST_NAME} ${LAST_NAME}`)).toBeVisible();
+			// the sync really asked the status endpoint, and was told "still waiting"
+			await expect.poll(() => statusCalls.length, { timeout: 15_000 }).toBeGreaterThan(0);
+			expect(statusCalls.at(-1)).toMatchObject({
+				status: 200,
+				body: { success: true, verified: false }
+			});
+			expect(statusCalls.at(-1)?.body).not.toHaveProperty('notFound');
+			await expect(claimedToast).toHaveCount(0);
+			expect(await storedTicketCodes(page)).toContain(queueId);
 
-		// the ticket
-		await expect(page.getByText('ลงทะเบียนล่วงหน้าสำเร็จ')).toBeVisible();
-		await expect(page.getByAltText(QR_ALT_QUEUE)).toBeVisible();
-		await expect(page.getByText(`${FIRST_NAME} ${LAST_NAME}`)).toBeVisible();
-		await expect(page.getByText('2 คน', { exact: true })).toBeVisible();
-		await expect(page.getByText('แสดง QR Code นี้ต่อเจ้าหน้าที่ เพื่อรับเข้าศูนย์')).toBeVisible();
-		// the id rides in the QR only — never printed for a human
-		await expect(page.getByText(queueId)).toHaveCount(0);
-		await expect.poll(() => storedTicketCodes(page)).toContain(queueId);
-		await expect(page.locator('main')).toMatchAriaSnapshot({ name: 'ticket.aria.yml' });
-		expectHealthy(health);
-	});
+			// reload, open the tab again: the first sync after a reload is where BUG-01 deleted it
+			statusCalls.length = 0;
+			await page.reload();
+			await page.getByRole('button', { name: /ใบลงทะเบียนของฉัน/ }).click();
+			await expect(page.getByText(`${FIRST_NAME} ${LAST_NAME}`)).toBeVisible();
+			await expect.poll(() => statusCalls.length, { timeout: 15_000 }).toBeGreaterThan(0);
+			await expect(claimedToast).toHaveCount(0);
+			expect(await storedTicketCodes(page)).toContain(queueId);
 
-	test('W2 the ticket survives the history tab and a reload (BUG-01 regression)', async () => {
-		test.setTimeout(90_000);
-		const claimedToast = page.getByText(CLAIMED_TOAST);
-		statusCalls.length = 0;
-		statusWindowStart = Date.now();
-
-		await page.getByRole('button', { name: /ใบลงทะเบียนของฉัน/ }).click();
-		await expect(page.getByText(`${FIRST_NAME} ${LAST_NAME}`)).toBeVisible();
-		// the sync really asked the status endpoint, and was told "still waiting"
-		await expect.poll(() => statusCalls.length, { timeout: 15_000 }).toBeGreaterThan(0);
-		expect(statusCalls.at(-1)).toMatchObject({
-			status: 200,
-			body: { success: true, verified: false }
+			// the QR is still reachable from the history list
+			await page.getByText(`${FIRST_NAME} ${LAST_NAME}`).click();
+			await expect(page.getByAltText(QR_ALT_QUEUE)).toBeVisible();
+			expectHealthy(health);
 		});
-		expect(statusCalls.at(-1)?.body).not.toHaveProperty('notFound');
-		await expect(claimedToast).toHaveCount(0);
-		expect(await storedTicketCodes(page)).toContain(queueId);
 
-		// reload, open the tab again: the first sync after a reload is where BUG-01 deleted it
-		statusCalls.length = 0;
-		await page.reload();
-		await page.getByRole('button', { name: /ใบลงทะเบียนของฉัน/ }).click();
-		await expect(page.getByText(`${FIRST_NAME} ${LAST_NAME}`)).toBeVisible();
-		await expect.poll(() => statusCalls.length, { timeout: 15_000 }).toBeGreaterThan(0);
-		await expect(claimedToast).toHaveCount(0);
-		expect(await storedTicketCodes(page)).toContain(queueId);
+		test('W3 the status BFF reports the real ticket as still open, never as not found', async () => {
+			const res = await page.request.post('/api/public/v1/registrations/status', {
+				data: { code: queueId }
+			});
+			expect(res.status()).toBe(200);
+			const body = (await res.json()) as Record<string, unknown>;
+			expect(body).toMatchObject({ success: true, verified: false, status: 'open' });
+			expect(body).not.toHaveProperty('notFound');
 
-		// the QR is still reachable from the history list
-		await page.getByText(`${FIRST_NAME} ${LAST_NAME}`).click();
-		await expect(page.getByAltText(QR_ALT_QUEUE)).toBeVisible();
-		expectHealthy(health);
-	});
-
-	test('W3 the status BFF reports the real ticket as still open, never as not found', async () => {
-		const res = await page.request.post('/api/public/v1/registrations/status', {
-			data: { code: queueId }
+			// an id that never existed is the one case reported as not found
+			const missing = await page.request.post('/api/public/v1/registrations/status', {
+				data: { code: '01ZZZZZZZZZZZZZZZZZZZZZZZZ' }
+			});
+			expect(await missing.json()).toMatchObject({ verified: false, notFound: true });
 		});
-		expect(res.status()).toBe(200);
-		const body = (await res.json()) as Record<string, unknown>;
-		expect(body).toMatchObject({ success: true, verified: false, status: 'open' });
-		expect(body).not.toHaveProperty('notFound');
 
-		// an id that never existed is the one case reported as not found
-		const missing = await page.request.post('/api/public/v1/registrations/status', {
-			data: { code: '01ZZZZZZZZZZZZZZZZZZZZZZZZ' }
+		test('W4 the same identity cannot enter the queue twice', async () => {
+			test.setTimeout(90_000);
+			health.problems.length = 0; // the 409 below logs a console error on purpose
+			await page.goto(PRE_REGISTER_PATH);
+			await expect(page.locator('#address-no')).toBeVisible({ timeout: 20_000 });
+			await fillAddress(page);
+			await fillMember(page, 0, {
+				firstName: FIRST_NAME,
+				lastName: LAST_NAME,
+				nationalId: HEAD_ID,
+				gender: 'male',
+				phone: HEAD_PHONE
+			});
+			await acceptDisclaimer(page);
+			const response = await submitAndWait(page, 'unassigned-registrations');
+			expect(response.status()).toBe(409);
+			expect(await response.json()).toMatchObject({
+				success: false,
+				error: 'DUPLICATE_OPEN_IDENTITY'
+			});
+			await expect(
+				page
+					.locator('[data-sonner-toast]')
+					.filter({ hasText: 'มีผู้ลงทะเบียนด้วยบัตรหรือเบอร์นี้อยู่แล้วในคิวกลาง' })
+			).toBeVisible();
+			// nothing was lost: the form keeps what was typed and no ticket appeared
+			await expect(page.locator('#member-0-first-name')).toHaveValue(FIRST_NAME);
+			await expect(page.locator('#member-0-card-number')).toHaveValue(HEAD_ID);
+			await expect(page.getByText('ลงทะเบียนล่วงหน้าสำเร็จ')).toHaveCount(0);
+			expect(health.problems.filter((p) => !/409/.test(p))).toEqual([]);
+			// and the queue still holds exactly the one registration of this run
+			expect(await listUnassignedRegistrations(LAST_NAME)).toEqual([queueId]);
 		});
-		expect(await missing.json()).toMatchObject({ verified: false, notFound: true });
-	});
 
-	test('W4 the same identity cannot enter the queue twice', async () => {
-		test.setTimeout(90_000);
-		health.problems.length = 0; // the 409 below logs a console error on purpose
-		await page.goto(PRE_REGISTER_PATH);
-		await expect(page.locator('#address-no')).toBeVisible({ timeout: 20_000 });
-		await fillAddress(page);
-		await fillMember(page, 0, {
-			firstName: FIRST_NAME,
-			lastName: LAST_NAME,
-			nationalId: HEAD_ID,
-			gender: 'male',
-			phone: HEAD_PHONE
-		});
-		await acceptDisclaimer(page);
-		const response = await submitAndWait(page, 'unassigned-registrations');
-		expect(response.status()).toBe(409);
-		expect(await response.json()).toMatchObject({
-			success: false,
-			error: 'DUPLICATE_OPEN_IDENTITY'
-		});
-		await expect(
-			page
-				.locator('[data-sonner-toast]')
-				.filter({ hasText: 'มีผู้ลงทะเบียนด้วยบัตรหรือเบอร์นี้อยู่แล้วในคิวกลาง' })
-		).toBeVisible();
-		// nothing was lost: the form keeps what was typed and no ticket appeared
-		await expect(page.locator('#member-0-first-name')).toHaveValue(FIRST_NAME);
-		await expect(page.locator('#member-0-card-number')).toHaveValue(HEAD_ID);
-		await expect(page.getByText('ลงทะเบียนล่วงหน้าสำเร็จ')).toHaveCount(0);
-		expect(health.problems.filter((p) => !/409/.test(p))).toEqual([]);
-		// and the queue still holds exactly the one registration of this run
-		expect(await listUnassignedRegistrations(LAST_NAME)).toEqual([queueId]);
-	});
-
-	test('W6 the stored registration matches what was typed', async () => {
-		const doc = (await getUnassignedRegistration(queueId)) as {
-			status: string;
-			household: Record<string, unknown> & { pets: Record<string, unknown>[] };
-			members: Record<string, unknown>[];
-		};
-		expect(doc.status).toBe('open');
-		expect(doc.household).toMatchObject({
-			housing_type: 'owned_house',
-			residence_landmark: `E2E ใกล้ตลาดทดสอบ ${RUN_ID}`,
-			address_no: '99/9',
-			village_no: 'หมู่ 9 ถ.ทดสอบ',
-			subdistrict: 'คอหงส์',
-			district: 'หาดใหญ่',
-			province: 'สงขลา',
-			postal_code: '90110'
-		});
-		expect(doc.household.pets).toHaveLength(1);
-		expect(doc.household.pets[0]).toMatchObject({ species: 'cat', has_cage: true });
-		expect(String(doc.household.pets[0].notes)).toContain('มะลิ');
-		expect(String(doc.household.pets[0].notes)).toContain(`แมวทดสอบ E2E ${RUN_ID}`);
-
-		expect(doc.members).toHaveLength(2);
-		const [head, second] = doc.members;
-		expect(head).toMatchObject({
-			status: 'open',
-			first_name: FIRST_NAME,
-			last_name: LAST_NAME,
-			nickname: 'ชาย',
-			gender: 'male',
-			phone: HEAD_PHONE,
-			birth_year: 2535,
-			religion: 'muslim',
-			country: 'THAILAND',
-			emergency_contact: { name: 'E2E ผู้ติดต่อฉุกเฉิน', phone: EMERGENCY_PHONE, relation: 'ญาติ' }
-		});
-		expect(head.person_id).toMatchObject({ number: HEAD_ID });
-		expect(head.vulnerable_groups).toEqual([]);
-		expect(second).toMatchObject({
-			status: 'open',
-			first_name: MEMBER2_NAME,
-			last_name: LAST_NAME,
-			gender: 'female',
-			birth_year: 2490
-		});
-		expect(second.person_id).toMatchObject({ number: MEMBER2_ID });
-		expect([...(second.vulnerable_groups as string[])].sort()).toEqual([
-			'chronic_illness',
-			'elderly_dependent'
-		]);
-		expect(second.special_needs).toEqual(['ใช้วีลแชร์']);
-	});
-});
-
-test.describe('Pre-register: shelter booking against the real stack (W5, W6)', () => {
-	test.describe.configure({ mode: 'serial' });
-
-	const SHELTER_NAME = `E2E ศูนย์ทดสอบจองล่วงหน้า ${RUN_ID}`;
-	let context: BrowserContext;
-	let page: Page;
-	let health: PageHealth;
-	let statusCalls: StatusCall[];
-	let ticketCode = '';
-
-	test.beforeEach(() => {
-		test.skip(IS_REMOTE, READ_ONLY_REASON);
-		// the production-mode app writes bookings as the limited `public_writer` CouchDB user
-		test.skip(
-			!process.env.COUCHDB_PUBLIC_WRITER_URL,
-			'COUCHDB_PUBLIC_WRITER_URL is not set (and public_writer provisioned via pnpm seed:master)'
-		);
-	});
-	test.afterAll(async () => {
-		await context?.close();
-	});
-
-	test('W5 staff opens a shelter to pre-registration; a citizen books it and keeps the ticket', async ({
-		browser,
-		baseURL
-	}) => {
-		test.setTimeout(240_000);
-		liveWritesStarted = true;
-
-		// staff: create the shelter through the UI, accepting pre-registrations
-		const staffContext = await browser.newContext();
-		const staffPage = await staffContext.newPage();
-		const admin = await bootstrapAdminSession();
-		await routeBrowserCouchThroughApp(staffPage);
-		await injectSession(staffPage, admin.user, admin.cookie);
-		shelterCode = await createShelterViaUi(staffPage, {
-			name: SHELTER_NAME,
-			siteKind: 'evacuation_center',
-			lat: 7.0,
-			lng: 100.48,
-			subdistrict: 'คอหงส์',
-			capacity: 40,
-			acceptsPreRegistration: true
-		});
-		recordCreatedShelter(shelterCode);
-		await staffContext.close();
-
-		// the worker projects it asynchronously — wait until the public API offers it
-		await waitForProjection('shelter bookable in /shelters', async () => {
-			const res = await fetch(`${baseURL}/api/public/v1/shelters`);
-			const { shelters } = (await res.json()) as {
-				shelters: { code: string; status: string; accepts_pre_registration?: boolean }[];
+		test('W6 the stored registration matches what was typed', async () => {
+			const doc = (await getUnassignedRegistration(queueId)) as {
+				status: string;
+				household: Record<string, unknown> & { pets: Record<string, unknown>[] };
+				members: Record<string, unknown>[];
 			};
-			const row = shelters.find((s) => s.code === shelterCode);
-			return row?.status === 'open' && row.accepts_pre_registration === true;
+			expect(doc.status).toBe('open');
+			expect(doc.household).toMatchObject({
+				housing_type: 'owned_house',
+				residence_landmark: `E2E ใกล้ตลาดทดสอบ ${RUN_ID}`,
+				address_no: '99/9',
+				village_no: 'หมู่ 9 ถ.ทดสอบ',
+				subdistrict: 'คอหงส์',
+				district: 'หาดใหญ่',
+				province: 'สงขลา',
+				postal_code: '90110'
+			});
+			expect(doc.household.pets).toHaveLength(1);
+			expect(doc.household.pets[0]).toMatchObject({ species: 'cat', has_cage: true });
+			expect(String(doc.household.pets[0].notes)).toContain('มะลิ');
+			expect(String(doc.household.pets[0].notes)).toContain(`แมวทดสอบ E2E ${RUN_ID}`);
+
+			expect(doc.members).toHaveLength(2);
+			const [head, second] = doc.members;
+			expect(head).toMatchObject({
+				status: 'open',
+				first_name: FIRST_NAME,
+				last_name: LAST_NAME,
+				nickname: 'ชาย',
+				gender: 'male',
+				phone: HEAD_PHONE,
+				birth_year: 2535,
+				religion: 'muslim',
+				country: 'THAILAND',
+				emergency_contact: {
+					name: 'E2E ผู้ติดต่อฉุกเฉิน',
+					phone: EMERGENCY_PHONE,
+					relation: 'ญาติ'
+				}
+			});
+			expect(head.person_id).toMatchObject({ number: HEAD_ID });
+			expect(head.vulnerable_groups).toEqual([]);
+			expect(second).toMatchObject({
+				status: 'open',
+				first_name: MEMBER2_NAME,
+				last_name: LAST_NAME,
+				gender: 'female',
+				birth_year: 2490
+			});
+			expect(second.person_id).toMatchObject({ number: MEMBER2_ID });
+			expect([...(second.vulnerable_groups as string[])].sort()).toEqual([
+				'chronic_illness',
+				'elderly_dependent'
+			]);
+			expect(second.special_needs).toEqual(['ใช้วีลแชร์']);
+		});
+	}
+);
+
+test.describe(
+	'Pre-register: shelter booking against the real stack (W5, W6)',
+	{ tag: ['@pre-register', '@critical'] },
+	() => {
+		test.describe.configure({ mode: 'serial' });
+
+		const SHELTER_NAME = `E2E ศูนย์ทดสอบจองล่วงหน้า ${RUN_ID}`;
+		let context: BrowserContext;
+		let page: Page;
+		let health: PageHealth;
+		let statusCalls: StatusCall[];
+		let ticketCode = '';
+
+		test.beforeEach(() => {
+			test.skip(IS_REMOTE, READ_ONLY_REASON);
+			// the production-mode app writes bookings as the limited `public_writer` CouchDB user
+			test.skip(
+				!process.env.COUCHDB_PUBLIC_WRITER_URL,
+				'COUCHDB_PUBLIC_WRITER_URL is not set (and public_writer provisioned via pnpm seed:master)'
+			);
+		});
+		test.afterAll(async () => {
+			await context?.close();
 		});
 
-		// citizen: a fresh browser, no staff session
-		context = await browser.newContext();
-		page = await context.newPage();
-		health = watchPage(page);
-		statusCalls = recordStatusCalls(page);
-		await page.goto('/pre-register');
-		await expect(page.locator('#address-no')).toBeVisible({ timeout: 20_000 });
-		await chooseShelter(page, new RegExp(SHELTER_NAME));
-		await expect(page).toHaveURL(new RegExp(`shelter=${shelterCode}`));
-		await expect(shelterTrigger(page)).toContainText(SHELTER_NAME);
+		test('W5 staff opens a shelter to pre-registration; a citizen books it and keeps the ticket', async ({
+			browser,
+			baseURL
+		}) => {
+			test.setTimeout(240_000);
+			liveWritesStarted = true;
 
-		await fillAddress(page, { houseNo: '5/5' });
-		await fillMember(page, 0, {
-			firstName: FIRST_NAME,
-			lastName: LAST_NAME,
-			nationalId: fictitiousNationalId((Number.parseInt(RUN_ID, 36) + 2) % 1e11),
-			gender: 'female',
-			phone: fictitiousPhone(31)
+			// staff: create the shelter through the UI, accepting pre-registrations
+			const staffContext = await browser.newContext();
+			const staffPage = await staffContext.newPage();
+			const admin = await bootstrapAdminSession();
+			await routeBrowserCouchThroughApp(staffPage);
+			await injectSession(staffPage, admin.user, admin.cookie);
+			shelterCode = await createShelterViaUi(staffPage, {
+				name: SHELTER_NAME,
+				siteKind: 'evacuation_center',
+				lat: 7.0,
+				lng: 100.48,
+				subdistrict: 'คอหงส์',
+				capacity: 40,
+				acceptsPreRegistration: true
+			});
+			recordCreatedShelter(shelterCode);
+			await staffContext.close();
+
+			// the worker projects it asynchronously — wait until the public API offers it
+			await waitForProjection('shelter bookable in /shelters', async () => {
+				const res = await fetch(`${baseURL}/api/public/v1/shelters`);
+				const { shelters } = (await res.json()) as {
+					shelters: { code: string; status: string; accepts_pre_registration?: boolean }[];
+				};
+				const row = shelters.find((s) => s.code === shelterCode);
+				return row?.status === 'open' && row.accepts_pre_registration === true;
+			});
+
+			// citizen: a fresh browser, no staff session
+			context = await browser.newContext();
+			page = await context.newPage();
+			health = watchPage(page);
+			statusCalls = recordStatusCalls(page);
+			await page.goto('/pre-register');
+			await expect(page.locator('#address-no')).toBeVisible({ timeout: 20_000 });
+			await chooseShelter(page, new RegExp(SHELTER_NAME));
+			await expect(page).toHaveURL(new RegExp(`shelter=${shelterCode}`));
+			await expect(shelterTrigger(page)).toContainText(SHELTER_NAME);
+
+			await fillAddress(page, { houseNo: '5/5' });
+			await fillMember(page, 0, {
+				firstName: FIRST_NAME,
+				lastName: LAST_NAME,
+				nationalId: fictitiousNationalId((Number.parseInt(RUN_ID, 36) + 2) % 1e11),
+				gender: 'female',
+				phone: fictitiousPhone(31)
+			});
+			await openMemberAccordion(primaryCard(page), 'กลุ่มเปราะบาง');
+			await page.locator('#vg-0-pregnant').click();
+
+			const response = await submitAndWait(page, 'registrations');
+			expect(response.status()).toBe(201);
+			const body = (await response.json()) as {
+				code: string;
+				shelter_code: string;
+				status: string;
+			};
+			ticketCode = body.code;
+			expect(body.shelter_code).toBe(shelterCode);
+
+			await expect(page.getByAltText(QR_ALT_SHELTER)).toBeVisible();
+			await expect(page.getByText(SHELTER_NAME).first()).toBeVisible();
+			await expect(page.getByText(`${FIRST_NAME} ${LAST_NAME}`)).toBeVisible();
+			await expect.poll(() => storedTicketCodes(page)).toContain(ticketCode);
+
+			// reload → the ticket is still in "my registrations" and still pending
+			await waitForStatusBudget();
+			statusCalls.length = 0;
+			await page.reload();
+			await page.getByRole('button', { name: /ใบลงทะเบียนของฉัน/ }).click();
+			await expect(page.getByText(`${FIRST_NAME} ${LAST_NAME}`)).toBeVisible();
+			await expect.poll(() => statusCalls.length, { timeout: 15_000 }).toBeGreaterThan(0);
+			expect(statusCalls.at(-1)).toMatchObject({
+				status: 200,
+				body: { success: true, verified: false, status: 'pre_registered' }
+			});
+			await expect(page.getByText(CLAIMED_TOAST)).toHaveCount(0);
+			expect(await storedTicketCodes(page)).toContain(ticketCode);
+			expectHealthy(health);
 		});
-		await openMemberAccordion(primaryCard(page), 'กลุ่มเปราะบาง');
-		await page.locator('#vg-0-pregnant').click();
 
-		const response = await submitAndWait(page, 'registrations');
-		expect(response.status()).toBe(201);
-		const body = (await response.json()) as { code: string; shelter_code: string; status: string };
-		ticketCode = body.code;
-		expect(body.shelter_code).toBe(shelterCode);
-
-		await expect(page.getByAltText(QR_ALT_SHELTER)).toBeVisible();
-		await expect(page.getByText(SHELTER_NAME).first()).toBeVisible();
-		await expect(page.getByText(`${FIRST_NAME} ${LAST_NAME}`)).toBeVisible();
-		await expect.poll(() => storedTicketCodes(page)).toContain(ticketCode);
-
-		// reload → the ticket is still in "my registrations" and still pending
-		await waitForStatusBudget();
-		statusCalls.length = 0;
-		await page.reload();
-		await page.getByRole('button', { name: /ใบลงทะเบียนของฉัน/ }).click();
-		await expect(page.getByText(`${FIRST_NAME} ${LAST_NAME}`)).toBeVisible();
-		await expect.poll(() => statusCalls.length, { timeout: 15_000 }).toBeGreaterThan(0);
-		expect(statusCalls.at(-1)).toMatchObject({
-			status: 200,
-			body: { success: true, verified: false, status: 'pre_registered' }
+		test('W6 the booked evacuee and household in CouchDB match what was typed', async () => {
+			const db = `shelter_${shelterCode!.toLowerCase()}`;
+			const res = await couchReq('GET', `/${db}/_all_docs?include_docs=true`);
+			expect(res.status).toBe(200);
+			const docs = (res.data as { rows: { doc: Record<string, unknown> }[] }).rows.map(
+				(r) => r.doc
+			);
+			const evacuees = docs.filter((d) => d.type === 'evacuee' && d.last_name === LAST_NAME);
+			const households = docs.filter((d) => d.type === 'household');
+			expect(evacuees).toHaveLength(1);
+			expect(households).toHaveLength(1);
+			expect(evacuees[0]).toMatchObject({
+				first_name: FIRST_NAME,
+				gender: 'female',
+				vulnerable_groups: ['pregnant'],
+				current_stay: { status: 'pre_registered' }
+			});
+			expect(households[0]).toMatchObject({
+				address_no: '5/5',
+				subdistrict: 'คอหงส์',
+				district: 'หาดใหญ่',
+				province: 'สงขลา',
+				postal_code: '90110'
+			});
 		});
-		await expect(page.getByText(CLAIMED_TOAST)).toHaveCount(0);
-		expect(await storedTicketCodes(page)).toContain(ticketCode);
-		expectHealthy(health);
-	});
-
-	test('W6 the booked evacuee and household in CouchDB match what was typed', async () => {
-		const db = `shelter_${shelterCode!.toLowerCase()}`;
-		const res = await couchReq('GET', `/${db}/_all_docs?include_docs=true`);
-		expect(res.status).toBe(200);
-		const docs = (res.data as { rows: { doc: Record<string, unknown> }[] }).rows.map((r) => r.doc);
-		const evacuees = docs.filter((d) => d.type === 'evacuee' && d.last_name === LAST_NAME);
-		const households = docs.filter((d) => d.type === 'household');
-		expect(evacuees).toHaveLength(1);
-		expect(households).toHaveLength(1);
-		expect(evacuees[0]).toMatchObject({
-			first_name: FIRST_NAME,
-			gender: 'female',
-			vulnerable_groups: ['pregnant'],
-			current_stay: { status: 'pre_registered' }
-		});
-		expect(households[0]).toMatchObject({
-			address_no: '5/5',
-			subdistrict: 'คอหงส์',
-			district: 'หาดใหญ่',
-			province: 'สงขลา',
-			postal_code: '90110'
-		});
-	});
-});
+	}
+);
 
 // =============================================================== zero-leak
 
 /** Registered last, so it runs after every W group. */
-test.describe('Pre-register: teardown leaves nothing behind', () => {
-	test.beforeEach(() => {
-		test.skip(IS_REMOTE, READ_ONLY_REASON);
-	});
+test.describe(
+	'Pre-register: teardown leaves nothing behind',
+	{ tag: ['@pre-register', '@critical'] },
+	() => {
+		test.beforeEach(() => {
+			test.skip(IS_REMOTE, READ_ONLY_REASON);
+		});
 
-	test('Z the central queue and CouchDB hold nothing of this run', async () => {
-		test.setTimeout(240_000);
-		// remove what this suite created (ledger + this run's registrations) …
-		const created = await purgeCreatedData(LAST_NAME, createdQueueIds);
-		// … then prove it is gone
-		expect(await listUnassignedRegistrations(LAST_NAME)).toEqual([]);
-		for (const id of created.queue) expect(await getUnassignedRegistration(id)).toBeNull();
-		for (const code of created.shelters) {
-			expect((await couchReq('GET', `/shelter_${code.toLowerCase()}`)).status).toBe(404);
-			const byCode = await couchReq(
-				'GET',
-				`/registry/_design/app/_view/by_code?key=${encodeURIComponent(JSON.stringify(code))}`
-			);
-			expect((byCode.data as { rows: unknown[] }).rows).toEqual([]);
-		}
-		// the top-level afterAll safety net finds nothing left to do
-		shelterCode = undefined;
-		createdQueueIds.clear();
-	});
-});
+		test('Z the central queue and CouchDB hold nothing of this run', async () => {
+			test.setTimeout(240_000);
+			// remove what this suite created (ledger + this run's registrations) …
+			const created = await purgeCreatedData(LAST_NAME, createdQueueIds);
+			// … then prove it is gone
+			expect(await listUnassignedRegistrations(LAST_NAME)).toEqual([]);
+			for (const id of created.queue) expect(await getUnassignedRegistration(id)).toBeNull();
+			for (const code of created.shelters) {
+				expect((await couchReq('GET', `/shelter_${code.toLowerCase()}`)).status).toBe(404);
+				const byCode = await couchReq(
+					'GET',
+					`/registry/_design/app/_view/by_code?key=${encodeURIComponent(JSON.stringify(code))}`
+				);
+				expect((byCode.data as { rows: unknown[] }).rows).toEqual([]);
+			}
+			// the top-level afterAll safety net finds nothing left to do
+			shelterCode = undefined;
+			createdQueueIds.clear();
+		});
+	}
+);
