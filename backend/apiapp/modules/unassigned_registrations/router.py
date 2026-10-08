@@ -42,6 +42,7 @@ from .schemas import (
     UnassignedRegistrationReviewResponse,
     UnassignedRegistrationSearchResponse,
     UnassignedRegistrationStatsResponse,
+    UnassignedRegistrationStatusResponse,
     UnassignedResidenceMatchRequest,
     UnassignedResidenceMatchResponse,
 )
@@ -190,6 +191,25 @@ async def match_unassigned_residence(
     _enforce_rate_limit(request)
     response.headers["Cache-Control"] = "no-store"
     return await use_case.match_by_residence(payload)
+
+
+@router.get(
+    "/{registration_id}/status",
+    response_model=UnassignedRegistrationStatusResponse,
+    dependencies=[Depends(verify_external_secret)],
+)
+async def get_unassigned_registration_status(
+    registration_id: str,
+    request: Request,
+    response: Response,
+    use_case: UnassignedRegistrationsUseCase = Depends(  # noqa: B008
+        get_unassigned_registrations_use_case
+    ),
+) -> UnassignedRegistrationStatusResponse:
+    """Service-to-service ticket status (BFF sync) — status + counts only, no PII."""
+    _enforce_rate_limit(request)
+    response.headers["Cache-Control"] = "no-store"
+    return await use_case.get_status(registration_id)
 
 
 @staff_router.get(

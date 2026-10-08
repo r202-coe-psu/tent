@@ -14,6 +14,7 @@
 	import type { BookingTicket } from '../application/booking-store.svelte';
 	import { getStoredTickets, removeStoredTicket } from '../data/ticket-storage';
 	import { checkTicketStatus } from '../data/public-register.api';
+	import { syncStoredTicketStatuses } from '../application/ticket-sync';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { PUBLIC_TICKET_HISTORY_I18N } from '$lib/constants/i18n';
 	import { getTranslation } from '$lib/utils/i18n';
@@ -37,27 +38,14 @@
 	});
 
 	async function syncAllStatus() {
-		const current = getStoredTickets();
-		let removedAny = false;
-		for (const t of current) {
-			try {
-				const res = await checkTicketStatus(t.code);
-				if (res.verified || res.notFound) {
-					removeStoredTicket(t.code);
-					removedAny = true;
-				}
-			} catch {
-				// skip on network/status error
-			}
+		const { verified } = await syncStoredTicketStatuses();
+		if (verified.length === 0) return;
+		tickets = getStoredTickets();
+		if (selectedTicket && !tickets.some((t) => t.code === selectedTicket?.code)) {
+			selectedTicket = null;
 		}
-		if (removedAny) {
-			tickets = getStoredTickets();
-			if (selectedTicket && !tickets.some((t) => t.code === selectedTicket?.code)) {
-				selectedTicket = null;
-			}
-			onTicketsChange?.();
-			toast.info(copy.ticketsClaimedToast);
-		}
+		onTicketsChange?.();
+		toast.info(copy.ticketsClaimedToast);
 	}
 
 	function handleRemove(code: string, e?: MouseEvent) {
@@ -99,12 +87,7 @@
 				onTicketsChange?.();
 				toast.success(copy.statusVerified);
 			} else if (res.notFound) {
-				removeStoredTicket(code);
-				tickets = getStoredTickets();
-				if (selectedTicket?.code === code) {
-					selectedTicket = null;
-				}
-				onTicketsChange?.();
+				// Keep the ticket — the user can delete it manually; never auto-drop the only QR.
 				toast.info(copy.statusNotFound);
 			} else {
 				toast.info(copy.statusPending);
