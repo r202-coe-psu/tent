@@ -44,7 +44,7 @@
 		no_phone = $bindable(false),
 		birth_year = $bindable<number | string | undefined>(),
 		age = $bindable<number | string | undefined>(),
-		gender = $bindable<Gender | ''>(''),
+		gender = $bindable<Gender | null>(null),
 		religion = $bindable<Religion>('unknown'),
 		/** Free text when religion is「อื่นๆ」 (CR-148). */
 		religion_other = $bindable<string | null | undefined>(null),
@@ -52,6 +52,8 @@
 		disabled = false,
 		/** Hide「ไม่มีเบอร์」— public primary contact must enter a phone. */
 		hideNoPhone = false,
+		/** Public pre-register omits nickname; onsite keeps it. */
+		showNickname = true,
 		phoneOptional = false,
 		phoneHelperText = '',
 		idPrefix = '',
@@ -65,12 +67,13 @@
 		no_phone?: boolean;
 		birth_year?: number | string | undefined;
 		age?: number | string | undefined;
-		gender?: Gender | '';
+		gender?: Gender | null;
 		religion?: Religion;
 		religion_other?: string | null;
 		country?: string;
 		disabled?: boolean;
 		hideNoPhone?: boolean;
+		showNickname?: boolean;
 		phoneOptional?: boolean;
 		phoneHelperText?: string;
 		idPrefix?: string;
@@ -209,7 +212,11 @@
 		country !== 'THAILAND' || (person_id.cardType != null && person_id.cardType !== 'national_id')
 	);
 
-	const genderRadioValue = $derived(gender === 'male' || gender === 'female' ? gender : '');
+	/** Radio sentinel for `gender: null` (ไม่ระบุเพศ). */
+	const GENDER_UNSPECIFIED = 'unspecified';
+	const genderRadioValue = $derived(
+		gender === 'male' || gender === 'female' ? gender : GENDER_UNSPECIFIED
+	);
 </script>
 
 <div class="space-y-4">
@@ -259,23 +266,25 @@
 		<p class="text-2xs text-muted-foreground">{t.mononymHint}</p>
 	{/if}
 
-	<!-- Nickname -->
-	<div class="space-y-1.5">
-		<Label for={fid('nickname')} class="text-xs font-semibold text-foreground"
-			>{t.nicknameLabel}</Label
-		>
-		<Input
-			id={fid('nickname')}
-			bind:value={nickname}
-			{disabled}
-			placeholder={t.nicknamePlaceholder}
-			aria-invalid={!!errors?.nickname}
-			class="h-11 min-h-11 sm:h-9 sm:min-h-9 {errors?.nickname ? errClass : ''}"
-		/>
-		{#if errors?.nickname}
-			<p class="text-2xs text-destructive">{errors.nickname}</p>
-		{/if}
-	</div>
+	{#if showNickname}
+		<!-- Nickname -->
+		<div class="space-y-1.5">
+			<Label for={fid('nickname')} class="text-xs font-semibold text-foreground"
+				>{t.nicknameLabel}</Label
+			>
+			<Input
+				id={fid('nickname')}
+				bind:value={nickname}
+				{disabled}
+				placeholder={t.nicknamePlaceholder}
+				aria-invalid={!!errors?.nickname}
+				class="h-11 min-h-11 sm:h-9 sm:min-h-9 {errors?.nickname ? errClass : ''}"
+			/>
+			{#if errors?.nickname}
+				<p class="text-2xs text-destructive">{errors.nickname}</p>
+			{/if}
+		</div>
+	{/if}
 
 	<!-- Identity Document -->
 	<div class="grid gap-3 sm:grid-cols-2">
@@ -427,7 +436,7 @@
 		<div class="flex flex-col gap-1.5">
 			<div class="flex min-h-7 items-center">
 				<Label class="text-xs font-semibold text-foreground" id={fid('gender-label')}>
-					{t.genderLabel} <span class="text-destructive">*</span>
+					{t.genderLabel}
 				</Label>
 			</div>
 			<RadioGroup.Root
@@ -435,15 +444,17 @@
 				onValueChange={(val) => {
 					if (val === 'male' || val === 'female') {
 						gender = val;
+					} else {
+						gender = null;
 					}
 				}}
 				{disabled}
 				aria-labelledby={fid('gender-label')}
 				aria-invalid={!!errors?.gender}
-				class="grid grid-cols-2 gap-2"
+				class="grid grid-cols-3 gap-2"
 			>
 				<label
-					class="flex min-h-11 w-full cursor-pointer items-center gap-2.5 rounded-md border border-border px-3 py-2 text-sm {genderRadioValue ===
+					class="flex min-h-11 w-full cursor-pointer items-center gap-2.5 rounded-md border border-border px-2 py-2 text-sm sm:px-3 {genderRadioValue ===
 					'male'
 						? 'border-primary bg-primary/5 font-semibold'
 						: ''} {disabled ? 'pointer-events-none opacity-60' : ''}"
@@ -453,7 +464,7 @@
 					{t.genderMale}
 				</label>
 				<label
-					class="flex min-h-11 w-full cursor-pointer items-center gap-2.5 rounded-md border border-border px-3 py-2 text-sm {genderRadioValue ===
+					class="flex min-h-11 w-full cursor-pointer items-center gap-2.5 rounded-md border border-border px-2 py-2 text-sm sm:px-3 {genderRadioValue ===
 					'female'
 						? 'border-primary bg-primary/5 font-semibold'
 						: ''} {disabled ? 'pointer-events-none opacity-60' : ''}"
@@ -461,6 +472,20 @@
 				>
 					<RadioGroup.Item value="female" id={fid('gender-female')} class="size-4 shrink-0" />
 					{t.genderFemale}
+				</label>
+				<label
+					class="flex min-h-11 w-full cursor-pointer items-center gap-2.5 rounded-md border border-border px-2 py-2 text-sm sm:px-3 {genderRadioValue ===
+					GENDER_UNSPECIFIED
+						? 'border-primary bg-primary/5 font-semibold'
+						: ''} {disabled ? 'pointer-events-none opacity-60' : ''}"
+					for={fid('gender-unspecified')}
+				>
+					<RadioGroup.Item
+						value={GENDER_UNSPECIFIED}
+						id={fid('gender-unspecified')}
+						class="size-4 shrink-0"
+					/>
+					<span class="leading-tight">{t.genderUnspecified}</span>
 				</label>
 			</RadioGroup.Root>
 			{#if errors?.gender}

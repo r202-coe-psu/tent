@@ -202,7 +202,7 @@
 			stay_status: undefined,
 			first_name: '',
 			last_name: '',
-			gender: '' as UnifiedMemberInput['gender'],
+			gender: null,
 			birth_year: undefined,
 			age: undefined,
 			person_id: { cardType: 'national_id', number: '' },
@@ -646,6 +646,7 @@
 			bind:country={member.country}
 			disabled={fieldsDisabled}
 			{hideNoPhone}
+			showNickname={channel !== 'public'}
 			phoneOptional={isJoiningExistingHousehold}
 			phoneHelperText={isJoiningExistingHousehold
 				? primaryContactPhone
