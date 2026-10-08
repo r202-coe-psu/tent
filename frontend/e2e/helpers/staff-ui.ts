@@ -15,6 +15,8 @@ export interface ShelterForm {
 	lng: number;
 	subdistrict: string; // in จ.สงขลา อ.หาดใหญ่
 	capacity: number;
+	/** Tick 「รับลงทะเบียนเข้าพักล่วงหน้าจากหน้าสาธารณะ」 so /pre-register lists the shelter. */
+	acceptsPreRegistration?: boolean;
 }
 
 /** System management → create shelter (status Active). Returns the minted code. */
@@ -43,6 +45,9 @@ export async function createShelterViaUi(page: Page, shelter: ShelterForm): Prom
 	await page
 		.getByRole('spinbutton', { name: 'ความจุสูงสุด (Max Capacity) *' })
 		.fill(String(shelter.capacity));
+	if (shelter.acceptsPreRegistration) {
+		await page.getByRole('switch', { name: 'รับลงทะเบียนเข้าพักล่วงหน้าจากหน้าสาธารณะ' }).click();
+	}
 	await page.getByRole('button', { name: 'บันทึกข้อมูล' }).click();
 
 	await expect(page).toHaveURL(/\/system-management\/shelters\/edit\/SH\d+$/);

@@ -22,6 +22,7 @@
 		"test:e2e:public": "playwright test --config=playwright.public.config.ts",
 		"test:e2e:donations": "vite build --mode test && playwright test e2e/donation.test.ts e2e/stock-donations.test.ts",
 		"test:e2e:stock": "vite build --mode test && playwright test e2e/stock-inventory.test.ts",
+		"test:e2e:pre-register": "vite build --mode test && playwright test e2e/public-pre-register-flow.test.ts e2e/public-register.test.ts",
 		"openapi": "openapi-typescript",
 		"openapi:fetch": "mkdir -p src/lib/api-specs && curl -f http://localhost:9000/openapi.json -o src/lib/api-specs/fastapi.json",
 		"openapi:fastapi": "openapi-typescript src/lib/api-specs/fastapi.json -o src/lib/api/openapi.d.ts",
