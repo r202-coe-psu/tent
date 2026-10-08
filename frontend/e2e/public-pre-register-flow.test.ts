@@ -662,7 +662,7 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 		await openPets(page);
 		await page.getByRole('button', { name: 'เพิ่มแมว' }).click();
 		await page.getByRole('button', { name: 'ใบลงทะเบียนของฉัน' }).click();
-		await expect(page.getByText('ใบลงทะเบียนที่บันทึกไว้ในอุปกรณ์นี้')).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'ใบลงทะเบียนของฉัน', level: 2 })).toBeVisible();
 		await page.waitForLoadState('networkidle');
 		expectHealthy(health);
 		expect(health.registrationWrites).toEqual([]);
