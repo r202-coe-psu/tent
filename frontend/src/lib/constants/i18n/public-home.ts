@@ -159,7 +159,7 @@ export const PUBLIC_ALERTS_PANEL_I18N = {
 		emergencyAlertsBtn: 'แจ้งเตือนภัย'
 	},
 	en: {
-		title: 'Emergency Alerts',
+		title: 'Announcements',
 		newAnnouncements: 'New Alerts',
 		noNewAnnouncements: 'No New Alerts',
 		close: 'Close',

@@ -48,7 +48,7 @@ export const PUBLIC_NAVBAR_I18N = {
 		trackDonationLong: 'Track Donation Status',
 		volunteers: 'Volunteer',
 		volunteer: 'Volunteer',
-		volunteerJobBoard: 'Volunteer Job Board',
+		volunteerJobBoard: 'Volunteer Registration',
 		volunteerPortal: 'Volunteer Portal / My Schedule',
 		backoffice: 'Backoffice',
 		alerts: 'Emergency Alerts',
