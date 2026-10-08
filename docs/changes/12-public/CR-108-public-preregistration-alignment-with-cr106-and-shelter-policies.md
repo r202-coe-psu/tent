@@ -27,7 +27,7 @@ affects:
    - รองรับบุคคลไม่มีนามสกุล (Mononym / ชาวต่างชาติ) ตาม CR-106 FR-18..20 โดย `last_name` เป็น optional และจัดรูปแบบ `household.label` สะอาดตา
    - เพิ่มการระบุปีเกิดและอายุ พร้อมปุ่มสลับศักราช **พ.ศ. (ค่าเริ่มต้น) / ค.ศ.** และระบบคำนวณอายุ ↔ ปีเกิด สองทางอัตโนมัติ
 4. **ควบคุมตาม Flag ของศูนย์พักพิง (`allow_pets`, `allow_assets`, `allow_vehicles`):**
-   - ให้บริการ endpoint [`/api/public/v1/config/shelter-policy?shelter=CODE`](file:///home/jakee/Projects/tent/frontend/src/routes/api/public/v1/config/shelter-policy/+server.ts) ดึงค่าจาก master doc ใน CouchDB
+   - ให้บริการ endpoint [`/api/public/v1/config/shelter-policy?shelter=CODE`](../../../frontend/src/routes/api/public/v1/config/shelter-policy/+server.ts) ดึงค่าจาก master doc ใน CouchDB
    - ปิดการกรอกและแสดงแบนเนอร์แจ้งนโยบายอย่างชัดเจน เมื่อศูนย์ปิดรับสัตว์เลี้ยง, ทรัพย์สิน หรือยานพาหนะ
 5. **ฟอร์มสัตว์เลี้ยงและยานพาหนะมาตรฐานเดียวกับ `/people/new`:**
    - ปุ่มสลับ "ไม่มีสัตว์เลี้ยง" / "มีสัตว์เลี้ยง"
@@ -44,7 +44,7 @@ affects:
 
 ## 1. Context & Motivation (Why)
 
-- **ความไม่สอดคล้องระหว่างหน้างานและเว็บ:** การลงทะเบียนที่ศูนย์พักพิงได้รับการปรับปรุงตาม [CR-106](file:///home/jakee/Projects/tent/docs/changes/00-baseline/CR-106-decoupled-registration-medical-screening-flow.md) ให้แยก Station 1 (ทะเบียน), Station 2 (คัดกรองแพทย์), Station 3 (จัดโซน) แต่ระบบจองล่วงหน้าสำหรับประชาชน (Public Pre-registration) เดิมยังเป็น Dialog modal ที่คับแคบ ไม่เหมาะกับมือถือ และมีฟิลด์ข้อมูลที่ไม่ตรงกับหน้างาน
+- **ความไม่สอดคล้องระหว่างหน้างานและเว็บ:** การลงทะเบียนที่ศูนย์พักพิงได้รับการปรับปรุงตาม [CR-106](../00-baseline/CR-106-decoupled-registration-medical-screening-flow.md) ให้แยก Station 1 (ทะเบียน), Station 2 (คัดกรองแพทย์), Station 3 (จัดโซน) แต่ระบบจองล่วงหน้าสำหรับประชาชน (Public Pre-registration) เดิมยังเป็น Dialog modal ที่คับแคบ ไม่เหมาะกับมือถือ และมีฟิลด์ข้อมูลที่ไม่ตรงกับหน้างาน
 - **ปัญหาชื่อบุคคลไม่มีนามสกุล:** ในพื้นที่ประสบภัยมีชาวต่างชาติและผู้ไม่มีนามสกุล แต่ระบบเดิมบังคับนามสกุล
 - **การขาดการเชื่อมโยงกับนโยบายศูนย์:** แบบฟอร์มเดิมเปิดรับสัตว์เลี้ยงและยานพาหนะเสมอ แม้ศูนย์พักพิงนั้นๆ จะตั้งค่าไม่อนุญาตให้นำสัตว์เลี้ยงเข้าพัก หรือไม่มีพื้นที่จอดรถ
 - **ความเสี่ยงด้านความปลอดภัยและความรับผิดชอบ:** ประชาชนนำสัตว์เลี้ยงหรือทรัพย์สินมีค่ามาโดยไม่ทราบนโยบายของศูนย์พักพิงล่วงหน้า และไม่มีขั้นตอนยืนยันข้อกำหนดด้านความปลอดภัย
@@ -59,12 +59,12 @@ affects:
 - **FR-03 (CTA Alignment):** ปรับปุ่มบน Navbar, Landing page (`/+page.svelte`), หน้ารายการศูนย์ (`/shelters`), และหน้าละเอียดศูนย์ (`/shelters/[id]`) ให้ลิงก์เข้าสู่ `/pre-register` ทั้งหมด ยกเลิกการเปิด `BookingModal`
 
 ### 2.2 Local Storage Persistence & Ticket History
-- **FR-04 (Storage Manager):** จัดเก็บตั๋วลง `localStorage` คีย์ `tent_public_booking_tickets_v1` ผ่าน [`ticket-storage.ts`](file:///home/jakee/Projects/tent/frontend/src/lib/features/public-register/data/ticket-storage.ts) ป้องกันข้อมูลซ้ำซ้อน
+- **FR-04 (Storage Manager):** จัดเก็บตั๋วลง `localStorage` คีย์ `tent_public_booking_tickets_v1` ผ่าน [`ticket-storage.ts`](../../../frontend/src/lib/features/public-register/data/ticket-storage.ts) ป้องกันข้อมูลซ้ำซ้อน
 - **FR-05 (History UI):** แท็บ "ประวัติการจองของฉัน" แสดงประวัติการจองทั้งหมด ตั๋ว และ Person QR code สำหรับสแกนเข้าประตูศูนย์
 - **FR-06 (Banners):** แบนเนอร์แนะนำให้ทำรายการบนมือถือ และแบนเนอร์แจ้งเตือนหากมีตั๋วในเครื่องอยู่แล้ว
 
 ### 2.3 Demographics & Mononym Support (CR-106 Alignment)
-- **FR-07 (Mononym Support):** `last_name` เป็น optional (`.default('')`) ใน [`publicBookingMemberSchema`](file:///home/jakee/Projects/tent/frontend/src/lib/features/public-register/domain/booking.ts)
+- **FR-07 (Mononym Support):** `last_name` เป็น optional (`.default('')`) ใน [`publicBookingMemberSchema`](../../../frontend/src/lib/features/public-register/domain/booking.ts)
 - **FR-08 (Household Label):** `householdLabelFrom` ตัดช่องว่างต่อท้ายออกหากไม่มีนามสกุล (เช่น `ครอบครัวสมชาย`)
 - **FR-09 (Calendar Era Toggle):** ปุ่มสลับ พ.ศ. (ค่าเริ่มต้น) และ ค.ศ. สำหรับปีเกิด พร้อมการคำนวณสองทางกับช่องอายุ
 

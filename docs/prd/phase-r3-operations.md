@@ -193,8 +193,8 @@ Shelter Manager จัดการประกาศรับสมัครง�
 **Consequences (testable):**
 - คำนวณวัตถุดิบ/ของ/จำนวนอาสาที่ต้องการต่อวันต่อศูนย์
 - เทียบกับ on-hand stock (R2) → แสดง gap (ต้องเบิก/ต้องบริจาคเพิ่มเท่าไร)
-- R3 runtime = **on-demand** จาก UI ([CR-042](../../changes/07-B-sop/CR-042-daily-sop-calc-follow-up.md) OD-3=A) — ไม่บังคับรอบอัตโนมัติ
-- ผลคำนวณเป็นแหล่งสำหรับ dashboard (FR-46); **feed เข้า Meal Plan (FR-39) / Donation redirect (FR-37) / Volunteer demand (FR-43) เลื่อนหลัง T-32 นิ่ง** ([CR-042](../../changes/07-B-sop/CR-042-daily-sop-calc-follow-up.md) OD-4=C)
+- R3 runtime = **on-demand** จาก UI ([CR-042](../changes/07-B-sop/CR-042-daily-sop-calc-follow-up.md) OD-3=A) — ไม่บังคับรอบอัตโนมัติ
+- ผลคำนวณเป็นแหล่งสำหรับ dashboard (FR-46); **feed เข้า Meal Plan (FR-39) / Donation redirect (FR-37) / Volunteer demand (FR-43) เลื่อนหลัง T-32 นิ่ง** ([CR-042](../changes/07-B-sop/CR-042-daily-sop-calc-follow-up.md) OD-4=C)
 
 #### FR-46: Resource Calculation Dashboard
 
@@ -202,7 +202,7 @@ Shelter Manager เห็นความต้องการรายวัน�
 
 **Consequences (testable):**
 - แสดง required vs on-hand vs gap ต่อทรัพยากรต่อวัน พร้อม last-updated
-- Drill-down ระบุว่า ratio มาจาก master หรือ override จาก snapshot (`ratio_source`) ([CR-042](../../changes/07-B-sop/CR-042-daily-sop-calc-follow-up.md) OD-1=A)
+- Drill-down ระบุว่า ratio มาจาก master หรือ override จาก snapshot (`ratio_source`) ([CR-042](../changes/07-B-sop/CR-042-daily-sop-calc-follow-up.md) OD-1=A)
 - ตัวเลข reconcile กับ occupancy + Stock Ledger ใน UAT
 
 ### 4.5 Shelter Reports & Referral (Modules E + F)

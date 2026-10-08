@@ -45,13 +45,13 @@ affects:
 ## Impact
 
 ### 1. เอกสาร (Documentation)
-- **[schema.md](file:///home/suthinxn/suthinxn/work/tent/docs/data/schema.md):** เพิ่มเนื้อหาในหัวข้อ §2.16 เพื่อนิยามฟิลด์และความหมายของเอกสาร และหัวข้อ §7 เพื่อเพิ่มการทำ Mango Index `(item_id)` บนฐานข้อมูล `shelter_*`
+- **[schema.md](../../data/schema.md):** เพิ่มเนื้อหาในหัวข้อ §2.16 เพื่อนิยามฟิลด์และความหมายของเอกสาร และหัวข้อ §7 เพื่อเพิ่มการทำ Mango Index `(item_id)` บนฐานข้อมูล `shelter_*`
 
 ### 2. ซอร์สโค้ด (Source Code)
-- **[threshold-override.ts](file:///home/suthinxn/suthinxn/work/tent/frontend/src/lib/features/supply/domain/threshold-override.ts):** ประกาศ Zod Schema และชนิดข้อมูล TypeScript สำหรับ Threshold Override
-- **[supply.remote.ts](file:///home/suthinxn/suthinxn/work/tent/frontend/src/lib/features/supply/data/supply.remote.ts):** เพิ่มการตรวจสอบความสอดคล้องผ่าน Zod schema ก่อนเรียกฟังก์ชันเซฟเอกสารลงฐานข้อมูล CouchDB
-- **[queries.ts](file:///home/suthinxn/suthinxn/work/tent/frontend/src/lib/features/supply/application/queries.ts):** กำหนด Type-Safety ใน Mutation function เพื่อป้องกันการทำ Type Erasure
-- **[alert-threshold-editor.svelte](file:///home/suthinxn/suthinxn/work/tent/frontend/src/lib/features/sop-ratios/ui/alert-threshold-editor.svelte):** ป้อนอินพุตโดยตรงผ่านแบบฟอร์มแก้ไขเกณฑ์เตือนภัย
+- **[threshold-override.ts](../../../frontend/src/lib/features/supply/domain/threshold-override.ts):** ประกาศ Zod Schema และชนิดข้อมูล TypeScript สำหรับ Threshold Override
+- **[supply.remote.ts](../../../frontend/src/lib/features/supply/data/supply.remote.ts):** เพิ่มการตรวจสอบความสอดคล้องผ่าน Zod schema ก่อนเรียกฟังก์ชันเซฟเอกสารลงฐานข้อมูล CouchDB
+- **[queries.ts](../../../frontend/src/lib/features/supply/application/queries.ts):** กำหนด Type-Safety ใน Mutation function เพื่อป้องกันการทำ Type Erasure
+- **[alert-threshold-editor.svelte](../../../frontend/src/lib/features/sop-ratios/ui/alert-threshold-editor.svelte):** ป้อนอินพุตโดยตรงผ่านแบบฟอร์มแก้ไขเกณฑ์เตือนภัย
 
 ## Migration
 - ไม่มีผลกระทบเชิงระบบกับประวัติข้อมูลเก่า (No Production Backfill) เนื่องจากนี่เป็นการเพิ่ม Document Type ใหม่เอี่ยมเข้าสู่คลังข้อมูล
