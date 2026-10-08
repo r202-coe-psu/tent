@@ -6,6 +6,8 @@
 	import {
 		buildKioskContextQuery,
 		getKioskDisplayContext,
+		KioskIdleTimeout,
+		KIOSK_IDLE_TIMEOUT_MS,
 		KioskCheckInWizard,
 		KioskRegisterConsent,
 		navigateToKioskHome,
@@ -16,11 +18,18 @@
 		getKioskDisplayContext(readKioskDisplayQuery(page.url.searchParams))
 	);
 	const contextQuery = $derived(buildKioskContextQuery(displayContext));
+	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, returnHome);
 	onMount(() => {
 		if (!walkInSession.citizenId) {
 			void goto(resolve(`/kiosk${contextQuery}` as '/kiosk' | `/kiosk?${string}`));
+			return;
 		}
+		idleTimeout.start();
+		return () => idleTimeout.stop();
 	});
+	function activity() {
+		idleTimeout.recordActivity();
+	}
 	function returnHome() {
 		walkInSession.clear();
 		navigateToKioskHome(contextQuery);
@@ -37,6 +46,7 @@
 </script>
 
 <svelte:head><title>ยินยอมลงทะเบียน — SmartShelter Kiosk</title></svelte:head>
+<svelte:window onpointerdown={activity} onkeydown={activity} />
 <div class="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 py-3">
 	<KioskCheckInWizard currentStep={2} step2Label="ยินยอม" />
 	<KioskRegisterConsent onconsent={consent} oncancel={returnHome} />

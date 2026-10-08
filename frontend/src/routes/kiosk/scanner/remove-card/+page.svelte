@@ -8,6 +8,8 @@
 		getKioskDisplayContext,
 		isFaceCheckEnabled,
 		KioskFaceCheck,
+		KioskIdleTimeout,
+		KIOSK_IDLE_TIMEOUT_MS,
 		KioskPreRegisteredCheckIn,
 		loadKioskHardware,
 		navigateToKioskHome,
@@ -50,6 +52,30 @@
 		gate?.source === 'smart-card' &&
 			(hardware === null || (faceMode !== null && faceDoneFor !== gate.citizen_id))
 	);
+	/** Camera running or staff on the PIN panel (which has its own 30 s idle). */
+	let faceBusy = false;
+	let printBusy = false;
+	/** Counts from each card: the household list (or a "not matched" result) must not stay up. */
+	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, returnHome);
+
+	function recordActivity(): void {
+		idleTimeout.recordActivity();
+	}
+
+	function syncIdlePause(): void {
+		idleTimeout.setPaused(faceBusy || printBusy);
+	}
+
+	function handleFaceBusyChange(busy: boolean): void {
+		faceBusy = busy;
+		syncIdlePause();
+	}
+
+	function handlePrintBusyChange(busy: boolean): void {
+		printBusy = busy;
+		syncIdlePause();
+	}
+
 	function returnHome(): void {
 		chipPhoto = null;
 		navigateToKioskHome(contextQuery);
@@ -80,10 +106,12 @@
 			if (typeof detail?.citizenId !== 'string' || !/^\d{13}$/.test(detail.citizenId)) return;
 			chipPhoto = null; // a new card is a new person
 			gate = { source: 'smart-card', citizen_id: detail.citizenId };
+			idleTimeout.start();
 		};
 		window.addEventListener('kiosk:smart-card-read', handleCardRead);
 		ready = true;
 		return () => {
+			idleTimeout.stop();
 			window.removeEventListener('kiosk:smart-card-read', handleCardRead);
 			chipPhoto = null;
 			// Leaving ends this person's visit: wipe the face check the scanner client may still hold.
@@ -93,6 +121,8 @@
 </script>
 
 <svelte:head><title>รายงานตัวด้วยบัตรประชาชน — SmartShelter Kiosk</title></svelte:head>
+
+<svelte:window onpointerdown={recordActivity} onkeydown={recordActivity} />
 
 {#snippet faceStep()}
 	{#if faceMode && gate?.source === 'smart-card'}
@@ -105,6 +135,7 @@
 			embedded
 			onfinish={(outcome) => handleFaceFinished(citizenId, outcome)}
 			oncancel={returnHome}
+			onbusychange={handleFaceBusyChange}
 		/>
 	{/if}
 {/snippet}
@@ -116,6 +147,7 @@
 		displayShelterCode={displayContext.shelterCode}
 		cardMode
 		{cardPhoto}
+		onprintbusychange={handlePrintBusyChange}
 		onreset={returnHome}
 		onregister={startWalkInRegistration}
 		{holdMembers}
