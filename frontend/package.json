@@ -19,6 +19,7 @@
 		"test:e2e": "vite build --mode test && playwright test",
 		"test:e2e:distribution": "vite build --mode test && playwright test e2e/distribution",
 		"test:e2e:staging": "playwright test --config=playwright.staging.config.ts",
+		"test:e2e:prod": "playwright test --config=playwright.prod.config.ts",
 		"test:e2e:public": "playwright test --config=playwright.public.config.ts",
 		"test:e2e:donations": "vite build --mode test && playwright test e2e/donation.test.ts e2e/stock-donations.test.ts",
 		"test:e2e:stock": "vite build --mode test && playwright test e2e/stock-inventory.test.ts",

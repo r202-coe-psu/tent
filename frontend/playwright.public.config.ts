@@ -20,7 +20,9 @@ export default defineConfig({
 		'**/public-search-flow.test.ts',
 		'**/public-shelters-filter.test.ts'
 	],
-	// Inherited grepInvert from stagingConfig; keep explicit for clarity when that config changes.
+	// Remote public-plane job: all non-quarantine tests in the allowlisted files
+	// (not limited to the staging @release|@smoke grep).
+	grep: /.*/,
 	grepInvert: /@quarantine/,
 	globalTimeout: 480_000,
 	outputDir: 'test-results/public',
