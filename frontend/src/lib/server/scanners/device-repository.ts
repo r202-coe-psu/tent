@@ -184,9 +184,11 @@ export class ScannerDeviceRepository {
 			if (result.status === 409) throw new ScannerConflictError();
 			if (result.status < 200 || result.status >= 300) throw new ScannerDependencyError();
 		} catch (error) {
-			// Only our own revision is removed, so a concurrent create's PIN is never deleted.
+			// Put back what was there (rev-guarded on our own revision): if a concurrent create of the
+			// same device_id won the registry race after we replaced its PIN, deleting ours would leave
+			// that live device with no PIN at all.
 			await this.bestEffort('rollback create', input.device_id, () =>
-				this.secrets.remove(input.device_id, secret._rev)
+				this.restoreSecret(input.device_id, orphan, secret._rev)
 			);
 			if (error instanceof ScannerConflictError) throw error;
 			return rethrowDependency(error);
@@ -306,7 +308,7 @@ export class ScannerDeviceRepository {
 		}
 	}
 
-	/** Put the PIN doc back to what it was before a failed {@link setStaffPin}. */
+	/** Put the PIN doc back to what it was before a failed {@link setStaffPin} / create. */
 	private async restoreSecret(
 		deviceId: string,
 		previous: StaffPinSecret | null,

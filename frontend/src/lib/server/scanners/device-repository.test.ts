@@ -192,6 +192,23 @@ describe('ScannerDeviceRepository', () => {
 		expect(secrets.docs.has('kiosk-sh001-01')).toBe(false);
 	});
 
+	it('restores the PIN of a concurrent create of the same id that won the registry race', async () => {
+		// The other request already wrote its PIN, then its registry PUT wins ours.
+		secrets.docs.set('kiosk-sh001-01', storedSecret('482913', { updated_by: 'other-sa' }));
+		mockRaw
+			.mockResolvedValueOnce({ status: 404, data: null })
+			.mockResolvedValueOnce({ status: 409, data: { error: 'conflict' } });
+
+		await expect(repository.createDevice(input, 'sa-user')).rejects.toBeInstanceOf(
+			ScannerConflictError
+		);
+		expect(secrets.remove).not.toHaveBeenCalled();
+		expect(secrets.docs.get('kiosk-sh001-01')).toMatchObject({
+			pin: '482913',
+			updated_by: 'other-sa'
+		});
+	});
+
 	it('fails the create with 503-class error when the secrets store is down', async () => {
 		mockRaw.mockResolvedValueOnce({ status: 404, data: null });
 		secrets.get.mockRejectedValueOnce(new StaffPinUnavailableError());
