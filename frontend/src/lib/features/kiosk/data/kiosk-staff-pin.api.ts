@@ -6,7 +6,7 @@ export const KIOSK_STAFF_PIN_TIMEOUT_MS = 8_000;
  * credential on the way, so the server checks the PIN of this kiosk only.
  * - `wrong`: the PIN was not right; staff may try again (no limit on tries).
  * - `not_set`: no PIN has been set for this kiosk, so staff cannot bypass here.
- * - `error`: anything else (no key on the server, device not recognised, network, timeout).
+ * - `error`: anything else (PIN store unavailable, device not recognised, network, timeout).
  */
 export type KioskStaffPinResult =
 	{ kind: 'verified' } | { kind: 'wrong' } | { kind: 'not_set' } | { kind: 'error' };

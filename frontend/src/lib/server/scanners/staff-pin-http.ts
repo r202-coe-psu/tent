@@ -7,7 +7,7 @@ import {
 } from './device-credentials';
 import { StaffPinNotSetError, StaffPinUnavailableError } from './staff-pin-store';
 
-/** Every staff-PIN response may carry a PIN or lock state — never cache it. */
+/** Every staff-PIN response may carry a PIN or its set/verify state — never cache it. */
 export const STAFF_PIN_NO_STORE = { 'cache-control': 'no-store', pragma: 'no-cache' } as const;
 
 export function staffPinJson(body: unknown, status: number): Response {
