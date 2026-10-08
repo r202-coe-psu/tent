@@ -969,6 +969,8 @@ async function preRegisterFlow(browser: Browser, run: Run, s: Sessions) {
 		await expect(
 			screenA.getByRole('heading', { name: 'ศูนย์พักพิงที่ต้องการเข้าพัก' })
 		).toBeVisible({ timeout: 20_000 });
+		// Form body must mount — shelter heading alone survives a UnifiedRegistrationForm crash.
+		await expect(screenA.locator('#address-no')).toBeVisible({ timeout: 15_000 });
 		await screenA.getByRole('button', { name: /เลือกศูนย์พักพิง|ไม่ระบุศูนย์พักพิง/ }).click();
 		// SH001 is no longer offered.
 		await expect(
