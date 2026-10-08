@@ -307,12 +307,17 @@ class ScannerClientManager:
             return RfproThaiCardReader(self.card_reader_usb_id)
         return ThaiSmartCardReader()
 
-    def _drop_reader(self) -> None:
+    async def _drop_reader(self) -> None:
         """Forget a reader whose hardware vanished so init_reader() waits for it again."""
-        reader, self.reader = self.reader, None
+        reader, self.reader = self.reader, None  # nothing new picks it up from here on
         close = getattr(reader, "close", None)
-        if callable(close):
-            close()
+        if not callable(close):
+            return
+        async with self._reader_lock:
+            try:
+                await asyncio.to_thread(close)
+            except Exception as error:
+                logger.warning("Closing the lost card reader failed: %s", type(error).__name__)
 
     async def init_reader(self) -> bool:
         """Attempt to initialize the Smart Card Reader driver"""
@@ -423,6 +428,8 @@ class ScannerClientManager:
         if reader is None:
             return None
         async with self._reader_lock:
+            if self.reader is not reader:
+                return None  # the reader was dropped (unplugged) while this read waited its turn
             return await asyncio.to_thread(reader.read_photo)
 
     async def _fulfill_face(self, route, action: str) -> None:
@@ -806,7 +813,7 @@ class ScannerClientManager:
             return await self._card_inserted()
         except ReaderLostError:
             logger.warning("Smart Card Reader disconnected; waiting for the hardware")
-            self._drop_reader()
+            await self._drop_reader()
             return False
         except Exception:
             logger.warning("Card reader poll failed while waiting for kiosk home")
@@ -978,7 +985,7 @@ class ScannerClientManager:
                     await self._navigate(self.home_url)
             except ReaderLostError:
                 logger.warning("Smart Card Reader disconnected; waiting for the hardware")
-                self._drop_reader()
+                await self._drop_reader()
                 if urllib.parse.urlsplit(self.page.url).path != self.home_path:
                     # Don't strand the person on a reading screen that can no longer finish.
                     await self._navigate(self.home_url)

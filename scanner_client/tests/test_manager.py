@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -1128,6 +1129,92 @@ class CardPollTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(client.reader)
         self.assertEqual(closed, [True])
         self.assertEqual(len(logs.output), 1)
+
+
+class DropReaderTests(unittest.IsolatedAsyncioTestCase):
+    async def test_closing_a_lost_reader_runs_off_the_event_loop(self):
+        client = manager.ScannerClientManager(valid_config())
+        loop_thread = threading.get_ident()
+        close_threads = []
+
+        def slow_close():
+            close_threads.append(threading.get_ident())
+            time.sleep(0.2)  # pcscd / an HID node slow to let go
+
+        client.reader = SimpleNamespace(close=slow_close)
+        ticks = []
+
+        async def tick():
+            for _ in range(5):
+                ticks.append(True)
+                await asyncio.sleep(0.02)
+
+        await asyncio.gather(client._drop_reader(), tick())
+
+        self.assertIsNone(client.reader)
+        self.assertEqual(len(close_threads), 1)
+        self.assertNotEqual(close_threads[0], loop_thread)
+        self.assertEqual(len(ticks), 5)
+
+    async def test_the_reader_is_forgotten_before_close_finishes(self):
+        client = manager.ScannerClientManager(valid_config())
+        seen = []
+        client.reader = SimpleNamespace(close=lambda: seen.append(client.reader))
+        await client._drop_reader()
+        self.assertEqual(seen, [None])
+
+    async def test_close_waits_for_a_chip_photo_read_on_the_same_reader(self):
+        client = manager.ScannerClientManager(valid_config())
+        events = []
+
+        def read_photo():
+            events.append("photo-start")
+            time.sleep(0.15)
+            events.append("photo-end")
+            return b"\xff\xd8\xff-photo"
+
+        client.reader = SimpleNamespace(
+            read_photo=read_photo, close=lambda: events.append("close")
+        )
+        photo_task = asyncio.create_task(client._read_chip_photo())
+        await asyncio.sleep(0.02)  # the photo read is under way
+        await client._drop_reader()
+        self.assertEqual(await photo_task, b"\xff\xd8\xff-photo")
+        self.assertEqual(events, ["photo-start", "photo-end", "close"])
+
+    async def test_a_photo_read_waiting_for_the_lock_skips_a_reader_dropped_meanwhile(self):
+        client = manager.ScannerClientManager(valid_config())
+        events = []
+        client.reader = SimpleNamespace(
+            read_photo=lambda: events.append("read"), close=lambda: events.append("close")
+        )
+        await client._reader_lock.acquire()  # a card poll is in progress
+        photo_task = asyncio.create_task(client._read_chip_photo())
+        await asyncio.sleep(0)  # the photo read holds the old reader and waits its turn
+        drop_task = asyncio.create_task(client._drop_reader())  # the poll found it unplugged
+        await asyncio.sleep(0)
+        client._reader_lock.release()
+
+        self.assertIsNone(await photo_task)
+        await drop_task
+        self.assertEqual(events, ["close"])  # never read through the closed handle
+
+    async def test_a_failing_close_still_drops_the_reader(self):
+        client = manager.ScannerClientManager(valid_config())
+
+        def broken_close():
+            raise OSError("already gone")
+
+        client.reader = SimpleNamespace(close=broken_close)
+        with self.assertLogs(manager.logger, level="WARNING"):
+            await client._drop_reader()
+        self.assertIsNone(client.reader)
+
+    async def test_a_reader_without_close_is_just_forgotten(self):
+        client = manager.ScannerClientManager(valid_config())
+        client.reader = SimpleNamespace()
+        await client._drop_reader()
+        self.assertIsNone(client.reader)
 
 
 class ReaderLostDuringReadTests(unittest.IsolatedAsyncioTestCase):
