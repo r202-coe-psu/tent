@@ -1352,13 +1352,13 @@ test.describe(
 			expect(health.registrationWrites).toHaveLength(1);
 		});
 
-		test.fixme('S1f GAP: a dropped connection is explained in plain language', async ({
-			page,
-			health
-		}) => {
-			// Today the toast shows the browser's raw "Failed to fetch".
+		test('S1f a dropped connection is explained in plain language', async ({ page, health }) => {
 			await dropConnection(page, health);
+			const toast = page.locator('[data-sonner-toast][data-type="error"]');
+			await expect(toast).toContainText('เชื่อมต่อไม่สำเร็จ');
+			await expect(toast).toContainText('ข้อมูลที่กรอกยังอยู่ครบ');
 			await expect(page.locator('[data-sonner-toast]')).not.toContainText('Failed to fetch');
+			await expectFormKept(page);
 		});
 
 		test('S2 a shelter that does not take pre-registrations cannot be chosen from a link', async ({
@@ -1403,8 +1403,7 @@ test.describe(
 			expect(health.registrationWrites).toEqual([]);
 		});
 
-		test.fixme('S3 GAP: a reCAPTCHA failure raises a single toast', async ({ page, health }) => {
-			// Today booking-form toasts the message and then re-toasts it from the catch block.
+		test('S3 a reCAPTCHA failure raises a single toast', async ({ page, health }) => {
 			await page.route('**/api/public/v1/recaptcha', (route) =>
 				route.fulfill({
 					status: 200,
