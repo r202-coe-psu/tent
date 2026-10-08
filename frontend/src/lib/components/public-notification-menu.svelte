@@ -141,8 +141,7 @@
 							<X class="h-4 w-4" />
 						</button>
 					</div>
-					<div class="mt-1 flex items-center justify-between gap-2 pl-9">
-						<p class="text-2xs text-slate-500">{t.subtitle}</p>
+					<div class="mt-1 flex items-center justify-end gap-2 pl-9">
 						{#if announcementsCount > 0}
 							<span
 								class="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-2xs font-semibold whitespace-nowrap text-red-700"
@@ -313,8 +312,7 @@
 								<X class="h-4 w-4" />
 							</button>
 						</div>
-						<div class="mt-1 flex items-center justify-between gap-2 pl-9">
-							<p class="text-2xs text-slate-500">{t.subtitle}</p>
+						<div class="mt-1 flex items-center justify-end gap-2 pl-9">
 							{#if announcementsCount > 0}
 								<span
 									class="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-2xs font-semibold whitespace-nowrap text-red-700"
