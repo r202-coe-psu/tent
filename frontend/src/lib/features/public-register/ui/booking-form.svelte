@@ -4,8 +4,10 @@
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import QrCode from '@lucide/svelte/icons/qr-code';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
-	import { onMount, untrack } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
+	import { replaceState } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { env } from '$env/dynamic/public';
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Label } from '$lib/components/ui/label';
@@ -74,7 +76,7 @@
 			} else {
 				url.searchParams.delete('shelter');
 			}
-			window.history.replaceState(window.history.state, '', url.pathname + url.search);
+			replaceState(resolve((url.pathname + url.search) as '/'), {});
 			try {
 				if (code) {
 					sessionStorage.setItem('pre_register_shelter', code);
@@ -111,7 +113,8 @@
 			const url = new URL(window.location.href);
 			if (url.searchParams.get('shelter') !== selectedShelterCode) {
 				url.searchParams.set('shelter', selectedShelterCode);
-				window.history.replaceState(window.history.state, '', url.pathname + url.search);
+				// The router is not ready during the first mount — wait a tick before shallow routing.
+				void tick().then(() => replaceState(resolve((url.pathname + url.search) as '/'), {}));
 			}
 		}
 	});
