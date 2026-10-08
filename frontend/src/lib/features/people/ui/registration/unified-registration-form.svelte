@@ -803,8 +803,10 @@
 	) {
 		formError = message;
 		validationMessages = messages.length > 0 ? messages : [message];
+		// The toast title already carries `message` — list only the other issues underneath.
+		const extraMessages = validationMessages.filter((m) => m !== message).slice(0, 3);
 		toast.error(message, {
-			description: validationMessages.slice(0, 3).join('\n'),
+			description: extraMessages.length > 0 ? extraMessages.join('\n') : undefined,
 			duration: 6000
 		});
 		await tick();
