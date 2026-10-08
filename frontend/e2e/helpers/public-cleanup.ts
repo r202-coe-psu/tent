@@ -39,12 +39,25 @@ export async function waitForProjection(
 	throw new Error(`Timed out waiting for projection: ${what} (is the sync worker running?)`);
 }
 
-/** Public projection status of a shelter code via the BFF, or undefined if absent. */
-export async function publicShelterStatus(code: string): Promise<string | undefined> {
+/** Public shelter row as the landing / directory BFF returns it. */
+export interface PublicShelterRow {
+	code: string;
+	name?: string;
+	status: string;
+	capacity?: number;
+}
+
+/** Public projection of a shelter code via the BFF, or undefined if absent. */
+export async function publicShelter(code: string): Promise<PublicShelterRow | undefined> {
 	const res = await fetch(`${bffBase()}/shelters`);
 	if (!res.ok) throw new Error(`shelters HTTP ${res.status}`);
-	const { shelters } = (await res.json()) as { shelters: { code: string; status: string }[] };
-	return shelters.find((s) => s.code === code)?.status;
+	const { shelters } = (await res.json()) as { shelters: PublicShelterRow[] };
+	return shelters.find((s) => s.code === code);
+}
+
+/** Public projection status of a shelter code via the BFF, or undefined if absent. */
+export async function publicShelterStatus(code: string): Promise<string | undefined> {
+	return (await publicShelter(code))?.status;
 }
 
 /**

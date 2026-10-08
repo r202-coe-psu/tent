@@ -47,40 +47,41 @@ pipeline {
             }
         }
 
-        stage('Trigger Staging E2E') {
+        stage('Staging E2E Gate') {
             when {
                 branch 'staging'
             }
             steps {
-                catchError(buildResult: 'UNSTABLE', stageResult: 'UNSTABLE', message: 'Unable to enqueue Staging E2E') {
-                    withCredentials([
-                        sshUserPrivateKey(credentialsId: 'tent-staging-ssh', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER'),
-                        string(credentialsId: 'tent-staging-host', variable: 'SSH_HOST'),
-                        string(credentialsId: 'tent-staging-port', variable: 'SSH_PORT')
-                    ]) {
-                        script {
-                            def deployedCommit = sh(
-                                returnStdout: true,
-                                script: '''
-                                    set +x
-                                    ssh -i "$SSH_KEY" -p "$SSH_PORT" -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" \
-                                        "git -C /home/projects/tent rev-parse HEAD"
-                                '''
-                            ).trim()
+                withCredentials([
+                    sshUserPrivateKey(credentialsId: 'tent-staging-ssh', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER'),
+                    string(credentialsId: 'tent-staging-host', variable: 'SSH_HOST'),
+                    string(credentialsId: 'tent-staging-port', variable: 'SSH_PORT')
+                ]) {
+                    script {
+                        def deployedCommit = sh(
+                            returnStdout: true,
+                            script: '''
+                                set +x
+                                ssh -i "$SSH_KEY" -p "$SSH_PORT" -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" \
+                                    "git -C /home/projects/tent rev-parse HEAD"
+                            '''
+                        ).trim()
 
-                            if (deployedCommit != env.GIT_COMMIT) {
-                                error("Staging server is at ${deployedCommit}, expected ${env.GIT_COMMIT}")
-                            }
-
-                            echo "Queueing tent-e2e-staging for ${deployedCommit}"
-                            build job: 'tent-e2e-staging',
-                                  parameters: [
-                                      string(name: 'DEPLOY_COMMIT', value: deployedCommit),
-                                      string(name: 'STAGING_URL', value: 'https://shelter.importstar.dev')
-                                  ],
-                                  wait: false,
-                                  propagate: false
+                        if (deployedCommit != env.GIT_COMMIT) {
+                            error("Staging server is at ${deployedCommit}, expected ${env.GIT_COMMIT}")
                         }
+
+                        // Wait + propagate: a red/missing E2E fails this deploy job.
+                        // tent-e2e-staging also posts GitHub commit status `staging/e2e`
+                        // on DEPLOY_COMMIT — owner enables that check on `main` protection.
+                        echo "Running tent-e2e-staging (wait+propagate) for ${deployedCommit}"
+                        build job: 'tent-e2e-staging',
+                              parameters: [
+                                  string(name: 'DEPLOY_COMMIT', value: deployedCommit),
+                                  string(name: 'STAGING_URL', value: 'https://shelter.importstar.dev')
+                              ],
+                              wait: true,
+                              propagate: true
                     }
                 }
             }
@@ -125,6 +126,32 @@ pipeline {
                             echo "Deployment process finished successfully!"
                         '''
                     }
+                }
+            }
+        }
+
+        stage('Production @prod Smoke') {
+            when {
+                branch 'main'
+            }
+            steps {
+                withCredentials([
+                    file(credentialsId: 'tent-prod-e2e-env', variable: 'E2E_ENV_FILE')
+                ]) {
+                    withEnv([
+                        'CI=true',
+                        'E2E_BASE_URL=https://shelter.psu.ac.th'
+                    ]) {
+                        // Read-only @prod (< 2 min). Failure fails the prod deploy job
+                        // (Jenkins email/Slack on failure is the alert channel).
+                        sh 'chmod +x scripts/run-prod-e2e.sh && scripts/run-prod-e2e.sh'
+                    }
+                }
+            }
+            post {
+                failure {
+                    echo 'ALERT: Production @prod E2E smoke failed after deploy — investigate immediately.'
+                    echo "Build: ${env.BUILD_URL}"
                 }
             }
         }

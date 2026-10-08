@@ -34,6 +34,8 @@
  *                 against staging (`pnpm test:e2e:pre-register:smoke`); kept when `IS_REMOTE`
  *  @critical      writes real data against the local stack and asserts zero leak afterwards:
  *                 W1–W6 and Z. Skipped when `IS_REMOTE`; run on the PR gate / nightly
+ *  @release       release-gate journey only: navigation (N) + critical happy paths (W*) +
+ *                 zero-leak (Z). Not on the error-matrix / render / server-error rows.
  *  @regression    the fully mocked suite `public-register.test.ts` (no backend needed);
  *                 run on the PR gate / nightly (`pnpm test:e2e:regression`)
  *  Each test carries exactly one of @smoke / @critical / @regression.
@@ -196,56 +198,60 @@ test.afterAll(async () => {
 
 // =============================================================== N — navigation
 
-test.describe('Pre-register: navigation (N)', { tag: ['@pre-register', '@smoke'] }, () => {
-	test('N1 the landing page links to /pre-register and the hero CTA opens the central queue', async ({
-		page
-	}) => {
-		await page.goto('/');
-		const links = page.locator('a[href="/pre-register"]');
-		// navbar compact button + navbar full nav + hero CTA
-		await expect(links).toHaveCount(3);
-		await expect(links.filter({ visible: true })).toHaveCount(2);
+test.describe(
+	'Pre-register: navigation (N)',
+	{ tag: ['@pre-register', '@smoke', '@release', '@prod'] },
+	() => {
+		test('N1 the landing page links to /pre-register and the hero CTA opens the central queue', async ({
+			page
+		}) => {
+			await page.goto('/');
+			const links = page.locator('a[href="/pre-register"]');
+			// navbar compact button + navbar full nav + hero CTA
+			await expect(links).toHaveCount(3);
+			await expect(links.filter({ visible: true })).toHaveCount(2);
 
-		await page.getByRole('link', { name: 'ลงทะเบียนผู้ประสบภัยล่วงหน้า' }).click();
-		// The booking form pins the default (central queue) in the URL once it mounts.
-		await expect(page).toHaveURL(/\/pre-register\?shelter=unassigned$/);
-		await expect(page).toHaveTitle('ลงทะเบียนเข้าศูนย์พักพิงล่วงหน้า | SmartShelter');
-		await expect(
-			page.getByRole('heading', { name: 'ลงทะเบียนเข้าศูนย์พักพิงล่วงหน้า', level: 1 })
-		).toBeVisible();
+			await page.getByRole('link', { name: 'ลงทะเบียนผู้ประสบภัยล่วงหน้า' }).click();
+			// The booking form pins the default (central queue) in the URL once it mounts.
+			await expect(page).toHaveURL(/\/pre-register\?shelter=unassigned$/);
+			await expect(page).toHaveTitle('ลงทะเบียนเข้าศูนย์พักพิงล่วงหน้า | SmartShelter');
+			await expect(
+				page.getByRole('heading', { name: 'ลงทะเบียนเข้าศูนย์พักพิงล่วงหน้า', level: 1 })
+			).toBeVisible();
 
-		await page.goto('/');
-		await page.getByRole('link', { name: 'ลงทะเบียนล่วงหน้า', exact: true }).click();
-		await expect(page).toHaveURL(/\/pre-register/);
-	});
+			await page.goto('/');
+			await page.getByRole('link', { name: 'ลงทะเบียนล่วงหน้า', exact: true }).click();
+			await expect(page).toHaveURL(/\/pre-register/);
+		});
 
-	test('N2 the shelter dropdown always offers the queue and never a closed / non-accepting shelter', async ({
-		page
-	}) => {
-		const res = await page.request.get('/api/public/v1/shelters');
-		expect(res.ok()).toBe(true);
-		const { shelters } = (await res.json()) as {
-			shelters: {
-				code: string;
-				name: string;
-				status: string;
-				accepts_pre_registration?: boolean;
-			}[];
-		};
-		const bookable = shelters.filter(
-			(s) => s.status.toLowerCase() !== 'closed' && s.accepts_pre_registration === true
-		);
-		const hidden = shelters.filter((s) => !bookable.includes(s));
+		test('N2 the shelter dropdown always offers the queue and never a closed / non-accepting shelter', async ({
+			page
+		}) => {
+			const res = await page.request.get('/api/public/v1/shelters');
+			expect(res.ok()).toBe(true);
+			const { shelters } = (await res.json()) as {
+				shelters: {
+					code: string;
+					name: string;
+					status: string;
+					accepts_pre_registration?: boolean;
+				}[];
+			};
+			const bookable = shelters.filter(
+				(s) => s.status.toLowerCase() !== 'closed' && s.accepts_pre_registration === true
+			);
+			const hidden = shelters.filter((s) => !bookable.includes(s));
 
-		await openPreRegister(page);
-		await shelterTrigger(page).click();
-		const options = page.getByRole('option');
-		await expect(options).toHaveCount(1 + bookable.length);
-		await expect(options.filter({ hasText: UNASSIGNED_OPTION })).toHaveCount(1);
-		for (const s of bookable) await expect(options.filter({ hasText: s.name })).toHaveCount(1);
-		for (const s of hidden) await expect(options.filter({ hasText: s.name })).toHaveCount(0);
-	});
-});
+			await openPreRegister(page);
+			await shelterTrigger(page).click();
+			const options = page.getByRole('option');
+			await expect(options).toHaveCount(1 + bookable.length);
+			await expect(options.filter({ hasText: UNASSIGNED_OPTION })).toHaveCount(1);
+			for (const s of bookable) await expect(options.filter({ hasText: s.name })).toHaveCount(1);
+			for (const s of hidden) await expect(options.filter({ hasText: s.name })).toHaveCount(0);
+		});
+	}
+);
 
 // =============================================================== R — render contract
 
@@ -357,10 +363,11 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 		await expect(card.getByRole('heading', { name: 'ผู้ติดต่อหลัก', level: 3 })).toBeVisible();
 		await expect(page.locator('#unified-member-photo-0')).toBeEnabled();
 		await expect(card.getByText('ถ่าย / เลือกภาพ', { exact: true })).toBeVisible();
+		// Public channel omits nickname (`showNickname={channel !== 'public'}`).
+		await expect(page.locator('#member-0-nickname')).toHaveCount(0);
 		const memberControls: [string, string][] = [
 			['#member-0-first-name', 'ชื่อ *'],
 			['#member-0-last-name', 'นามสกุล'],
-			['#member-0-nickname', 'ชื่อเล่น'],
 			['#member-0-card-number', 'เลขที่บัตรประจำตัว'],
 			['#member-0-birth-year', 'ปีเกิด (พ.ศ.)'],
 			['#member-0-age', 'อายุ (ปี)'],
@@ -504,10 +511,10 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 		await page.getByRole('button', { name: 'เพิ่มสมาชิก' }).click();
 		const card = memberCard(page, 2);
 		await expect(card).toBeVisible();
+		await expect(card.locator('#member-1-nickname')).toHaveCount(0);
 		for (const field of [
 			'first-name',
 			'last-name',
-			'nickname',
 			'card-number',
 			'birth-year',
 			'age',
@@ -1698,7 +1705,7 @@ async function submitAndWait(page: Page, endpoint: 'unassigned-registrations' | 
 
 test.describe(
 	'Pre-register: unassigned registration against the real stack (W1–W4, W6)',
-	{ tag: ['@pre-register', '@critical'] },
+	{ tag: ['@pre-register', '@critical', '@release'] },
 	() => {
 		test.describe.configure({ mode: 'serial' });
 
@@ -1743,7 +1750,6 @@ test.describe(
 			await fillMember(page, 0, {
 				firstName: FIRST_NAME,
 				lastName: LAST_NAME,
-				nickname: 'ชาย',
 				nationalId: HEAD_ID,
 				birthYear: '2535',
 				gender: 'male',
@@ -1915,7 +1921,6 @@ test.describe(
 				status: 'open',
 				first_name: FIRST_NAME,
 				last_name: LAST_NAME,
-				nickname: 'ชาย',
 				gender: 'male',
 				phone: HEAD_PHONE,
 				birth_year: 2535,
@@ -1927,6 +1932,8 @@ test.describe(
 					relation: 'ญาติ'
 				}
 			});
+			// Public channel omits the nickname field — stored value stays empty/absent.
+			expect(head.nickname == null || head.nickname === '').toBe(true);
 			expect(head.person_id).toMatchObject({ number: HEAD_ID });
 			expect(head.vulnerable_groups).toEqual([]);
 			expect(second).toMatchObject({
@@ -1948,7 +1955,7 @@ test.describe(
 
 test.describe(
 	'Pre-register: shelter booking against the real stack (W5, W6)',
-	{ tag: ['@pre-register', '@critical'] },
+	{ tag: ['@pre-register', '@critical', '@release'] },
 	() => {
 		test.describe.configure({ mode: 'serial' });
 
@@ -2092,7 +2099,7 @@ test.describe(
 /** Registered last, so it runs after every W group. */
 test.describe(
 	'Pre-register: teardown leaves nothing behind',
-	{ tag: ['@pre-register', '@critical'] },
+	{ tag: ['@pre-register', '@critical', '@release'] },
 	() => {
 		test.beforeEach(() => {
 			test.skip(IS_REMOTE, READ_ONLY_REASON);

@@ -57,7 +57,7 @@ async function fillPasswordWithoutReportingValue(page: Page, password: string): 
 	});
 }
 
-test.describe('Staging smoke', () => {
+test.describe('Staging smoke', { tag: ['@smoke', '@release'] }, () => {
 	test('health endpoint returns the exact frontend readiness payload', async ({ request }) => {
 		const response = await request.get('/api/health');
 
