@@ -53,9 +53,8 @@ export const bookingOptionalPhoneSchema = z
 	.optional()
 	.nullable();
 
-export const bookingGenderSchema = z.enum(['male', 'female', 'other'], {
-	error: 'กรุณาเลือกเพศ'
-});
+/** `null` = ไม่ระบุ (default on public booking forms). */
+export const bookingGenderSchema = z.enum(['male', 'female', 'other']).nullable();
 
 /** 13-digit Thai national ID. Optional — a displaced person may have lost their card. */
 export const bookingNationalIdSchema = z

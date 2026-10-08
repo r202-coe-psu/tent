@@ -2051,10 +2051,10 @@ export interface components {
 			 */
 			last_name: string;
 			/**
-			 * Gender
-			 * @enum {string}
+			 * Gender — `null` = ไม่ระบุ
+			 * @enum {string|null}
 			 */
-			gender: 'male' | 'female' | 'other';
+			gender: 'male' | 'female' | 'other' | null;
 			/** Phone */
 			phone?: string | null;
 			person_id?: components['schemas']['PersonIdInput'] | null;
