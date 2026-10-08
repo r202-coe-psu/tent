@@ -136,28 +136,9 @@ export const FACE_SKIPPED_BY_PERSON = 'user_skipped';
 /** `skipped` reason when staff checked the card by eye and entered the kiosk's staff PIN. */
 export const FACE_BYPASSED_BY_STAFF = 'staff_bypass';
 
-/**
- * True when the person chose to leave (declined or skipped). Only picks the wording on screen:
- * in mode `on` a choice still needs the staff PIN (see `faceOutcomeNeedsStaffPin`).
- */
-export function faceOutcomeIsPersonalChoice(outcome: FaceCheckOutcome): boolean {
-	return (
-		outcome.kind === 'declined' ||
-		(outcome.kind === 'skipped' && outcome.reason === FACE_SKIPPED_BY_PERSON)
-	);
-}
-
 /** True when staff entered the PIN for this person: they already checked the card. */
 export function faceOutcomeIsStaffBypass(outcome: FaceCheckOutcome): boolean {
 	return outcome.kind === 'skipped' && outcome.reason === FACE_BYPASSED_BY_STAFF;
-}
-
-/**
- * Anything but a match (or a staff PIN bypass, where staff already checked) should be checked by
- * staff afterwards.
- */
-export function faceOutcomeNeedsStaff(outcome: FaceCheckOutcome): boolean {
-	return outcome.kind !== 'match' && !faceOutcomeIsStaffBypass(outcome);
 }
 
 /**

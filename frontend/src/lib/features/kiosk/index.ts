@@ -7,69 +7,21 @@ export { default as KioskPreRegisteredCheckIn } from './ui/kiosk-pre-registered-
 export { default as KioskCheckInWizard } from './ui/kiosk-check-in-wizard.svelte';
 export { default as KioskBackButton } from './ui/kiosk-back-button.svelte';
 export { default as KioskCardInsertScene } from './ui/kiosk-card-insert-scene.svelte';
-export { default as KioskQrScanScene } from './ui/kiosk-qr-scan-scene.svelte';
 export { default as KioskReaderPointer } from './ui/kiosk-reader-pointer.svelte';
-export { default as KioskNumpad } from './ui/kiosk-numpad.svelte';
 export { default as KioskPhoneIdentityEntry } from './ui/phone-identity-entry.svelte';
-export { default as PhoneHouseholdPicker } from './ui/phone-household-picker.svelte';
 export { KioskIdleTimeout, KIOSK_IDLE_TIMEOUT_MS } from './ui/kiosk-idle-timeout.svelte.js';
 export { navigateToKioskHome } from './application/kiosk-navigation';
-export type {
-	GateInput,
-	KioskHouseholdCandidate,
-	KioskLookupResponse,
-	KioskLookupResult,
-	KioskEvacueeSummary,
-	KioskCheckInResult,
-	KioskCheckInMemberResult
-} from './data/kiosk-check-in.api';
-export { KioskRequestError } from './data/kiosk-check-in.api';
-export { registerKioskWalkIn } from './data/kiosk-check-in.api';
-export { buildKioskPhotoPayload } from './application/kiosk-card-photo';
-export {
-	fetchKioskConfig,
-	KIOSK_CONFIG_TIMEOUT_MS,
-	type KioskConfig
-} from './data/kiosk-config.api';
+export { registerKioskWalkIn, type GateInput } from './data/kiosk-check-in.api';
+export { fetchKioskConfig } from './data/kiosk-config.api';
 export {
 	buildKioskContextQuery,
 	getKioskDisplayContext,
-	KIOSK_DISPLAY_QUERY_KEYS,
-	readKioskDisplayQuery,
-	type KioskDisplayContext,
-	type KioskDisplayQuery,
-	type KioskDisplayQueryKey
+	readKioskDisplayQuery
 } from './domain/display-context';
 export { isKioskPhoneCheckInEnabled } from './domain/kiosk-config';
 export { walkInSession } from './application/walk-in-session.svelte';
-export { registerWalkInCardRead, submitWalkInCard } from './application/walk-in-card-registration';
+export { submitWalkInCard } from './application/walk-in-card-registration';
 export { loadKioskHardware } from './application/kiosk-qr-input';
 export { cancelKioskFaceCheck } from './data/kiosk-face.api';
-export { verifyKioskStaffPin, type KioskStaffPinResult } from './data/kiosk-staff-pin.api';
 export type { KioskHardware } from './domain/kiosk-hardware';
-export {
-	FACE_BYPASSED_BY_STAFF,
-	faceOutcomeIsPersonalChoice,
-	faceOutcomeNeedsStaff,
-	faceOutcomeNeedsStaffPin,
-	isFaceCheckEnabled,
-	type FaceCheckConfig,
-	type FaceCheckFlow,
-	type FaceCheckMode,
-	type FaceCheckOutcome,
-	type FaceUnavailableReason
-} from './domain/face-check';
-export type {
-	WalkInCardRegistrationOutcome,
-	WalkInCardSession
-} from './application/walk-in-card-registration';
-export {
-	IDENTITY_METHODS,
-	visibleIdentityMethods,
-	KIOSK_CARD_PATH,
-	KIOSK_PHONE_PATH,
-	KIOSK_QR_PATH,
-	type IdentityMethodDefinition,
-	type IdentityMethodId,
-	type IdentityMethodOptions
-} from './domain/identity-method';
+export { isFaceCheckEnabled, type FaceCheckOutcome } from './domain/face-check';

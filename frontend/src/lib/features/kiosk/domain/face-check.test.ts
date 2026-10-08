@@ -7,12 +7,10 @@ import {
 	FACE_SKIPPED_BY_PERSON,
 	classifyFaceFailure,
 	faceOutcomeAction,
-	faceOutcomeIsPersonalChoice,
 	faceStartReplySchema,
 	faceFrameReplySchema,
 	faceHintMessage,
 	faceOutcomeMessage,
-	faceOutcomeNeedsStaff,
 	faceOutcomeNeedsStaffPin,
 	faceRetryMessage,
 	faceVerifyReplySchema,
@@ -135,20 +133,6 @@ describe('wording', () => {
 	});
 });
 
-describe('faceOutcomeNeedsStaff', () => {
-	it('sends everything but a match to staff', () => {
-		expect(faceOutcomeNeedsStaff({ kind: 'match' })).toBe(false);
-		for (const outcome of [
-			{ kind: 'not_confirmed', reason: 'x' },
-			{ kind: 'skipped', reason: 'x' },
-			{ kind: 'declined' },
-			{ kind: 'unavailable' }
-		] as const) {
-			expect(faceOutcomeNeedsStaff(outcome)).toBe(true);
-		}
-	});
-});
-
 const NOT_MATCHES: Exclude<FaceCheckOutcome, { kind: 'match' }>[] = [
 	{ kind: 'not_confirmed', reason: 'retry_exhausted' },
 	{ kind: 'skipped', reason: FACE_SKIPPED_BY_PERSON },
@@ -157,12 +141,6 @@ const NOT_MATCHES: Exclude<FaceCheckOutcome, { kind: 'match' }>[] = [
 	{ kind: 'declined' },
 	{ kind: 'unavailable', reason: 'camera_failed' }
 ];
-
-describe('faceOutcomeNeedsStaff and the staff bypass', () => {
-	it('does not send a staff PIN bypass back to staff: they already checked the card', () => {
-		expect(faceOutcomeNeedsStaff({ kind: 'skipped', reason: FACE_BYPASSED_BY_STAFF })).toBe(false);
-	});
-});
 
 describe('faceOutcomeNeedsStaffPin', () => {
 	it('lets only a match carry on by itself in mode on', () => {
@@ -253,28 +231,6 @@ describe('faceOutcomeMessage', () => {
 		expect(message.tone).toBe('declined');
 		expect(`${message.title} ${message.detail}`).not.toMatch(/ไม่ได้|ไม่ตรง|ผิด|ปฏิเสธ/);
 		expect(message.detail).toContain('ท่านยังรับบริการได้ตามปกติ');
-	});
-});
-
-describe('faceOutcomeIsPersonalChoice', () => {
-	it('is true when the person declined or pressed skip themselves', () => {
-		expect(faceOutcomeIsPersonalChoice({ kind: 'declined' })).toBe(true);
-		expect(faceOutcomeIsPersonalChoice({ kind: 'skipped', reason: FACE_SKIPPED_BY_PERSON })).toBe(
-			true
-		);
-	});
-
-	it('is false when the system skipped, could not confirm or failed', () => {
-		for (const outcome of [
-			{ kind: 'match' },
-			{ kind: 'not_confirmed', reason: FACE_SKIPPED_BY_PERSON },
-			{ kind: 'skipped', reason: 'timeout' },
-			{ kind: 'skipped', reason: 'no_chip_photo' },
-			{ kind: 'unavailable' },
-			{ kind: 'unavailable', reason: 'camera_denied' }
-		] as const) {
-			expect(faceOutcomeIsPersonalChoice(outcome)).toBe(false);
-		}
 	});
 });
 
