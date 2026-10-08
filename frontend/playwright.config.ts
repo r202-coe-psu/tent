@@ -2,6 +2,13 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const APP_BASE_URL = process.env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:4173';
+const APP_PORT = (() => {
+	try {
+		return new URL(APP_BASE_URL).port || '4173';
+	} catch {
+		return '4173';
+	}
+})();
 
 export default defineConfig({
 	testDir: './e2e',
@@ -15,6 +22,7 @@ export default defineConfig({
 	workers: 1,
 	grepInvert: /@quarantine/,
 	reporter: 'html',
+	grepInvert: /@quarantine/,
 	use: {
 		baseURL: APP_BASE_URL,
 		trace: 'on-first-retry',
@@ -35,7 +43,8 @@ export default defineConfig({
 		{
 			// Pass the admin URL so the SvelteKit BFF can reach CouchDB.
 			// COUCHDB_ADMIN_URL can be overridden via CI env; defaults to local dev value.
-			command: `COUCHDB_ADMIN_URL=${process.env.COUCHDB_ADMIN_URL ?? 'http://admin:password@localhost:5984'} pnpm preview`,
+			// Preview port follows PLAYWRIGHT_TEST_BASE_URL so parallel worktrees do not collide.
+			command: `COUCHDB_ADMIN_URL=${process.env.COUCHDB_ADMIN_URL ?? 'http://admin:password@localhost:5984'} pnpm preview --port ${APP_PORT} --strictPort`,
 			url: APP_BASE_URL,
 			reuseExistingServer: !process.env.CI,
 			timeout: 60_000,

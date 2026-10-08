@@ -168,7 +168,10 @@ export async function fillMember(page: Page, n: number, m: MemberInput): Promise
 	const id = (name: string) => page.locator(`#member-${n}-${name}`);
 	if (m.firstName !== undefined) await id('first-name').fill(m.firstName);
 	if (m.lastName !== undefined) await id('last-name').fill(m.lastName);
-	if (m.nickname !== undefined) await id('nickname').fill(m.nickname);
+	// Public pre-register omits nickname (`showNickname={channel !== 'public'}`).
+	if (m.nickname !== undefined && (await id('nickname').count()) > 0) {
+		await id('nickname').fill(m.nickname);
+	}
 	if (m.nationalId !== undefined) await id('card-number').fill(m.nationalId);
 	if (m.birthYear !== undefined) await id('birth-year').fill(m.birthYear);
 	if (m.age !== undefined) await id('age').fill(m.age);
