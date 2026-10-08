@@ -7,6 +7,7 @@ const SHELTERS = {
 			name: 'ศูนย์พักพิง เทศบาลนครหาดใหญ่',
 			status: 'open',
 			capacity: 200,
+			accepts_pre_registration: true,
 			province: 'สงขลา',
 			district: 'หาดใหญ่',
 			subdistrict: 'หาดใหญ่',
@@ -18,6 +19,7 @@ const SHELTERS = {
 			name: 'ศูนย์พักพิง โรงเรียนวัดโคกสมานคุณ',
 			status: 'closed',
 			capacity: 100,
+			accepts_pre_registration: false,
 			province: 'สงขลา',
 			vulnerable_groups: [],
 			pet_policy: 'no_pets'
@@ -228,7 +230,7 @@ test.describe('Public shelter booking (T-71 / CR-070)', () => {
 		// Public head must enter phone — no「ไม่มีเบอร์」checkbox.
 		await expect(page.locator('#member-0-no-phone')).toHaveCount(0);
 
-		await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).click();
+		await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last().click();
 
 		await expect(page.getByText('สมชาย ใจดี')).toBeVisible();
 		await expect(page.getByAltText('QR สำหรับยืนยันตัวตนที่ประตูศูนย์')).toBeVisible();
@@ -268,6 +270,11 @@ test.describe('Public shelter booking (T-71 / CR-070)', () => {
 			phone: '0812345678'
 		});
 
+		// The vulnerable-group checklist sits in a collapsed accordion on every member card.
+		await page
+			.getByRole('region', { name: 'ผู้ติดต่อหลัก' })
+			.getByRole('button', { name: 'กลุ่มเปราะบาง' })
+			.click();
 		await expect(page.getByText('ผู้ป่วยติดเตียง').first()).toBeVisible();
 		await expect(page.getByText('ผู้สูงอายุช่วยเหลือตัวเองไม่ได้').first()).toBeVisible();
 
@@ -277,9 +284,10 @@ test.describe('Public shelter booking (T-71 / CR-070)', () => {
 		await member2.locator('#member-1-first-name').fill('สมหญิง');
 		await member2.locator('#member-1-last-name').fill('ใจดี');
 		await member2.locator('#member-1-gender-female').click({ force: true });
+		await member2.getByRole('button', { name: 'กลุ่มเปราะบาง' }).click();
 		await member2.locator('#vg-1-elderly_dependent').click();
 
-		await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).click();
+		await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last().click();
 		await expect(page.getByAltText('QR สำหรับยืนยันตัวตนที่ประตูศูนย์')).toBeVisible();
 
 		expect(submitted).toMatchObject({
@@ -341,6 +349,11 @@ test.describe('Public shelter booking (T-71 / CR-070)', () => {
 			phone: '0812345678'
 		});
 
+		// The pets section is a collapsed accordion until opened.
+		await page
+			.locator('#unified-pets')
+			.getByRole('button', { name: /^สัตว์เลี้ยง/ })
+			.click();
 		await page.getByRole('button', { name: 'เพิ่มสุนัข' }).click();
 		await page.getByPlaceholder('เช่น ถุงเงิน, เจ้าส้ม, บ๊อบบี้').fill('โกโก้');
 		await page.getByPlaceholder(/มีโรคประจำตัว|สายพันธุ์/).fill('ชิวาว่า');
@@ -350,7 +363,7 @@ test.describe('Public shelter booking (T-71 / CR-070)', () => {
 			.getByLabel(/ข้าพเจ้ารับทราบและยินยอมปฏิบัติตามเงื่อนไขและมาตรการด้านความปลอดภัย/)
 			.check();
 
-		await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).click();
+		await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last().click();
 		await expect(page.getByAltText('QR สำหรับยืนยันตัวตนที่ประตูศูนย์')).toBeVisible();
 
 		const household = submitted?.household as { pets?: Array<Record<string, unknown>> };
@@ -380,7 +393,7 @@ test.describe('Public shelter booking (T-71 / CR-070)', () => {
 			lastName: 'ใจดี',
 			phone: '0812345678'
 		});
-		await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).click();
+		await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last().click();
 
 		// Server errors surface as toast (booking-form catch); form alert is for client validation.
 		await expect(
@@ -390,7 +403,7 @@ test.describe('Public shelter booking (T-71 / CR-070)', () => {
 		});
 	});
 
-	test('the shelter detail CTA opens the dialog with that shelter locked', async ({ page }) => {
+	test('the shelter detail CTA opens the form with that shelter preselected', async ({ page }) => {
 		await mockReferenceData(page);
 		await page.route('**/api/public/v1/shelters/SH001', (route) =>
 			route.fulfill({
@@ -404,12 +417,16 @@ test.describe('Public shelter booking (T-71 / CR-070)', () => {
 		await page.getByRole('link', { name: 'ลงทะเบียนล่วงหน้าที่ศูนย์นี้' }).first().click();
 		await page.waitForURL('**/pre-register?shelter=SH001');
 
+		// /pre-register is a page, not a modal: the shelter is preselected but still changeable.
 		const trigger = page.getByRole('button', { name: /เทศบาลนครหาดใหญ่/ });
-		await expect(trigger).toBeDisabled();
+		await expect(trigger).toBeEnabled();
 		await expect(trigger).toContainText('เทศบาลนครหาดใหญ่');
+		await expect(page.locator('#address-no')).toBeVisible();
 	});
 
-	test('the family-search CTA opens its own dialog', async ({ page }) => {
+	test('the hero search opens the family-search dialog when the query is empty', async ({
+		page
+	}) => {
 		await mockReferenceData(page);
 		await page.route('**/api/public/v1/occupants**', (route) =>
 			route.fulfill({
@@ -420,10 +437,11 @@ test.describe('Public shelter booking (T-71 / CR-070)', () => {
 		);
 
 		await page.goto('/');
-		await page.getByRole('button', { name: 'ค้นหารายชื่อผู้พักพิง' }).click();
+		await page.getByRole('button', { name: 'ค้นหา', exact: true }).click();
 
-		const dialog = page.getByRole('dialog');
-		await expect(dialog.getByText(/สืบค้น|ค้นหา/i).first()).toBeVisible();
+		const dialog = page.getByRole('dialog', { name: 'ค้นหาผู้พักพิง' });
+		await expect(dialog).toBeVisible();
+		await expect(dialog.getByRole('textbox', { name: 'คำค้นหา' })).toBeVisible();
 	});
 });
 
