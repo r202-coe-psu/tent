@@ -13,6 +13,7 @@ export default defineConfig({
 	// User management access-control tests call CouchDB directly (no parallelism
 	// issues since each test uses unique usernames with a RUN_ID suffix).
 	workers: 1,
+	grepInvert: /@quarantine/,
 	reporter: 'html',
 	use: {
 		baseURL: APP_BASE_URL,
