@@ -318,9 +318,9 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 		).toBeVisible();
 		await expect(page.getByRole('checkbox', { name: DISCLAIMER_LABEL })).toBeVisible();
 
-		// single submit button in bottom bar
-		await expect(page.getByRole('button', { name: SUBMIT_LABEL })).toHaveCount(1);
-		await expect(page.getByRole('button', { name: SUBMIT_LABEL })).toBeVisible();
+		// submit button in the bottom bar, repeated once in the summary aside
+		await expect(page.getByRole('button', { name: SUBMIT_LABEL })).toHaveCount(2);
+		await expect(submitButton(page)).toBeVisible();
 	});
 
 	test('R2 every address and primary-contact control is rendered, enabled and labelled', async ({
@@ -741,14 +741,15 @@ test.describe('Pre-register: validation gates (V)', { tag: ['@pre-register', '@s
 		health
 	}) => {
 		await openPreRegister(page);
+		// the bottom bar and the summary aside each carry a confirm button
 		const buttons = page.getByRole('button', { name: SUBMIT_LABEL });
-		await expect(buttons).toHaveCount(1);
-		await expect(buttons).toBeDisabled();
+		await expect(buttons).toHaveCount(2);
+		for (const button of await buttons.all()) await expect(button).toBeDisabled();
 
 		await acceptDisclaimer(page);
-		await expect(buttons).toBeEnabled();
+		for (const button of await buttons.all()) await expect(button).toBeEnabled();
 		await page.getByRole('checkbox', { name: DISCLAIMER_LABEL }).uncheck();
-		await expect(buttons).toBeDisabled();
+		for (const button of await buttons.all()) await expect(button).toBeDisabled();
 
 		await acceptDisclaimer(page);
 		await submitButton(page).click();
