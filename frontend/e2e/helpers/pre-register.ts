@@ -49,6 +49,14 @@ export interface PageHealth {
 	registrationWrites: string[];
 }
 
+/**
+ * reCAPTCHA's own iframe (injected when the server has it enabled, e.g. staging) logs
+ * `requestStorageAccess: Permission denied.` into the page console; it is third-party noise,
+ * not an app problem. Matched on the console message's source URL so first-party errors still count.
+ */
+const RECAPTCHA_FRAME_URL =
+	/^https:\/\/(www\.)?(google\.com|gstatic\.com|recaptcha\.net)\/recaptcha\//;
+
 const REGISTRATION_WRITE = /\/api\/public\/v1\/(unassigned-registrations|registrations)(\?|$)/;
 
 /** Start collecting console problems, failed responses and registration writes on `page`. */
@@ -56,6 +64,7 @@ export function watchPage(page: Page): PageHealth {
 	const health: PageHealth = { problems: [], failedResponses: [], registrationWrites: [] };
 	page.on('pageerror', (err) => health.problems.push(`pageerror: ${err.message}`));
 	page.on('console', (msg) => {
+		if (RECAPTCHA_FRAME_URL.test(msg.location().url)) return;
 		if (msg.type() === 'error' || msg.type() === 'warning') {
 			health.problems.push(`console.${msg.type()}: ${msg.text()}`);
 		}
