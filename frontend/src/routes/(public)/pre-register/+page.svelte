@@ -160,14 +160,16 @@
 		</div>
 	</div>
 
-	<!-- Page Heading -->
+	<!-- Page Heading — hide form subheading on history tab (A5) -->
 	<div class="mb-8">
 		<h1 class="text-2xl font-black tracking-tight text-foreground md:text-3xl">
 			{t.heading}
 		</h1>
-		<p class="mt-2 text-sm text-muted-foreground">
-			{t.subheading}
-		</p>
+		{#if activeTab !== 'history'}
+			<p class="mt-2 text-sm text-muted-foreground">
+				{t.subheading}
+			</p>
+		{/if}
 	</div>
 
 	<!-- Main Content Area -->

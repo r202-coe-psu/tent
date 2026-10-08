@@ -238,7 +238,9 @@
 	let isLocating = $state(false);
 
 	const selectTriggerClass =
-		"flex !h-9 w-full items-start rounded-md border border-input bg-white px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground dark:bg-input/30 [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4";
+		"flex !h-11 w-full items-start rounded-md border border-input bg-white px-3 !pt-2.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground sm:!h-9 sm:!pt-1.5 dark:bg-input/30 [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4";
+
+	const touchInputClass = 'min-h-11 h-11 sm:h-9 sm:min-h-9';
 
 	// Hide + clear house number when homeless (#249 Q5) — field must not linger in form state.
 	$effect(() => {
@@ -380,7 +382,7 @@
 				placeholder={landmarkPlaceholder}
 				aria-invalid={!!errors?.residence_landmark}
 				aria-describedby={errors?.residence_landmark ? 'residence-landmark-error' : undefined}
-				class="h-9"
+				class={touchInputClass}
 			/>
 			{#if errors?.residence_landmark}
 				<p id="residence-landmark-error" class="text-2xs text-destructive">
@@ -405,7 +407,7 @@
 					placeholder={t.dormNamePlaceholder}
 					aria-invalid={!!errors?.dorm_name}
 					aria-describedby={errors?.dorm_name ? 'dorm-name-error' : undefined}
-					class="h-9"
+					class={touchInputClass}
 				/>
 				{#if errors?.dorm_name}
 					<p id="dorm-name-error" class="text-2xs text-destructive">{errors.dorm_name}</p>
@@ -421,7 +423,7 @@
 					oninput={dormInput((v) => (dorm_building = v))}
 					{disabled}
 					placeholder={t.dormBuildingPlaceholder}
-					class="h-9"
+					class={touchInputClass}
 				/>
 			</div>
 			<div class="space-y-1.5">
@@ -434,7 +436,7 @@
 					oninput={dormInput((v) => (dorm_floor = v))}
 					{disabled}
 					placeholder={t.dormFloorPlaceholder}
-					class="h-9"
+					class={touchInputClass}
 				/>
 			</div>
 			<div class="space-y-1.5">
@@ -449,7 +451,7 @@
 					placeholder={t.dormRoomPlaceholder}
 					aria-invalid={!!errors?.dorm_room}
 					aria-describedby={errors?.dorm_room ? 'dorm-room-error' : undefined}
-					class="h-9"
+					class={touchInputClass}
 				/>
 				{#if errors?.dorm_room}
 					<p id="dorm-room-error" class="text-2xs text-destructive">{errors.dorm_room}</p>
@@ -473,7 +475,7 @@
 					placeholder={addressNoPlaceholder}
 					aria-invalid={!!areaError}
 					aria-describedby={areaError ? AREA_ERROR_ID : undefined}
-					class="h-9"
+					class={touchInputClass}
 				/>
 				{#if areaError}
 					<p id={AREA_ERROR_ID} class="text-2xs text-destructive">{areaError}</p>
@@ -492,7 +494,7 @@
 				placeholder={t.villageNoPlaceholder}
 				aria-invalid={!!errors?.village_no}
 				aria-describedby={errors?.village_no ? 'village-no-error' : undefined}
-				class="h-9"
+				class={touchInputClass}
 			/>
 			{#if errors?.village_no}
 				<p id="village-no-error" class="text-2xs text-destructive">{errors.village_no}</p>
@@ -554,7 +556,7 @@
 					emptyText={provincesQuery.isError ? t.provinceLoadFail : t.provinceEmpty}
 					loading={provincesQuery.isLoading}
 					{disabled}
-					class="!h-9 rounded-md text-sm {provinceInvalid ? 'border-destructive' : ''}"
+					class="!h-11 rounded-md text-sm sm:!h-9 {provinceInvalid ? 'border-destructive' : ''}"
 					controlProps={{
 						id: 'province',
 						'aria-invalid': provinceInvalid,
@@ -581,7 +583,7 @@
 					emptyText={districtsQuery.isError ? t.districtLoadFail : t.districtEmpty}
 					loading={districtsQuery.isLoading}
 					disabled={disabled || !province}
-					class="!h-9 rounded-md text-sm {districtInvalid ? 'border-destructive' : ''}"
+					class="!h-11 rounded-md text-sm sm:!h-9 {districtInvalid ? 'border-destructive' : ''}"
 					controlProps={{
 						id: 'district',
 						'aria-invalid': districtInvalid,
@@ -608,7 +610,7 @@
 					emptyText={subdistrictsQuery.isError ? t.subdistrictLoadFail : t.subdistrictEmpty}
 					loading={subdistrictsQuery.isLoading}
 					disabled={disabled || !district}
-					class="!h-9 rounded-md text-sm {subdistrictInvalid ? 'border-destructive' : ''}"
+					class="!h-11 rounded-md text-sm sm:!h-9 {subdistrictInvalid ? 'border-destructive' : ''}"
 					controlProps={{
 						id: 'subdistrict',
 						'aria-invalid': subdistrictInvalid,
@@ -634,8 +636,10 @@
 					id="postal_code"
 					bind:value={postal_code}
 					disabled
+					inputmode="numeric"
+					autocomplete="postal-code"
 					placeholder={!subdistrict ? t.postalNeedsSubdistrict : t.postalFilling}
-					class="h-9 bg-muted/50 text-sm"
+					class="{touchInputClass} bg-muted/50 text-sm"
 				/>
 				{#if errors?.postal_code}
 					<p class="text-2xs text-destructive">{errors.postal_code}</p>

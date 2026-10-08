@@ -34,11 +34,14 @@
 	const announcementsCount = $derived(announcements.length);
 	const hasEmergency = $derived(announcements.some((a) => a.severity === 'emergency'));
 
-	onMount(() => {
-		if (typeof window !== 'undefined' && window.location.hash === '#announcements') {
+	function syncMenuFromHash() {
+		if (typeof window === 'undefined') return;
+		if (window.location.hash === '#announcements') {
 			menuOpen = true;
 		}
-	});
+	}
+
+	onMount(syncMenuFromHash);
 
 	function toggleMenu() {
 		menuOpen = !menuOpen;
@@ -65,10 +68,15 @@
 
 	afterNavigate(() => {
 		menuOpen = false;
+		syncMenuFromHash();
 	});
 </script>
 
-<svelte:window onpointerdown={handleWindowPointerDown} onkeydown={handleWindowKeydown} />
+<svelte:window
+	onpointerdown={handleWindowPointerDown}
+	onkeydown={handleWindowKeydown}
+	onhashchange={syncMenuFromHash}
+/>
 
 {#if variant === 'navbar'}
 	<!-- Navbar mode: Compact icon button for mobile and desktop headers -->
@@ -239,9 +247,10 @@
 		{/if}
 	</div>
 {:else}
-	<!-- Floating mode: Pill button for PC and bottom-docked view -->
+	<!-- Floating mode: icon FAB on phones, pill + label from md up; sits above the testing banner -->
 	<div
-		class="fixed right-4 bottom-4 z-50 flex flex-col items-end gap-2.5 md:right-6 md:bottom-6 {customClass}"
+		class="fixed right-4 z-50 flex flex-col items-end gap-2.5 md:right-6 {customClass}"
+		style="bottom: calc(1rem + var(--testing-banner-height, 0px));"
 	>
 		<div class="relative">
 			<button
@@ -250,10 +259,10 @@
 				onclick={toggleMenu}
 				aria-label="{t.alertsAriaLabel} {announcementsCount > 0 ? `(${announcementsCount})` : ''}"
 				aria-expanded={menuOpen}
-				class="relative hidden items-center justify-center rounded-full bg-[#0284C7] whitespace-nowrap text-white shadow-md transition-all duration-200 hover:bg-[#0369a1] hover:shadow-lg focus-visible:ring-2 focus-visible:ring-sky-600 focus-visible:ring-offset-2 focus-visible:outline-none active:scale-95 md:inline-flex md:h-auto md:w-full md:gap-2 md:px-4 md:py-2.5 md:text-xs md:font-bold"
+				class="relative inline-flex size-12 items-center justify-center rounded-full bg-[#0284C7] whitespace-nowrap text-white shadow-md transition-all duration-200 hover:bg-[#0369a1] hover:shadow-lg focus-visible:ring-2 focus-visible:ring-sky-600 focus-visible:ring-offset-2 focus-visible:outline-none active:scale-95 md:h-auto md:w-full md:gap-2 md:px-4 md:py-2.5 md:text-xs md:font-bold"
 			>
 				<Bell class="h-4 w-4 shrink-0 text-amber-300" />
-				<span>{t.emergencyAlertsBtn}</span>
+				<span class="sr-only md:not-sr-only">{t.emergencyAlertsBtn}</span>
 				{#if announcementsCount > 0}
 					<span class="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
 						{#if hasEmergency}
@@ -281,7 +290,8 @@
 					bind:this={menuEl}
 					role="dialog"
 					aria-label={t.title}
-					class="fixed right-4 bottom-20 left-4 z-50 mx-auto max-w-sm rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xl sm:absolute sm:right-0 sm:bottom-full sm:left-auto sm:mx-0 sm:mb-3 sm:w-96 sm:max-w-sm"
+					style="--alerts-panel-bottom: calc(5rem + var(--testing-banner-height, 0px));"
+					class="fixed right-4 bottom-[var(--alerts-panel-bottom)] left-4 z-50 mx-auto max-w-sm rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xl sm:absolute sm:right-0 sm:bottom-full sm:left-auto sm:mx-0 sm:mb-3 sm:w-96 sm:max-w-sm"
 				>
 					<div class="border-b border-slate-100 pb-3">
 						<div class="flex items-center justify-between gap-2">

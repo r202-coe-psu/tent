@@ -203,9 +203,9 @@ describe('unified registration — mononym and anonymous ID', () => {
 		expect(isAnonymousId(member.person_id?.number ?? '')).toBe(true);
 	});
 
-	it('blankUnifiedMember leaves gender unset for forced male/female choice', () => {
+	it('blankUnifiedMember defaults gender to null (ไม่ระบุเพศ)', () => {
 		const member = blankUnifiedMember();
-		expect(member.gender).toBe('');
+		expect(member.gender).toBeNull();
 		expect(member.religion).toBe('unknown');
 	});
 

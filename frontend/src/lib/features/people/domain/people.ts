@@ -287,7 +287,7 @@ export interface Evacuee extends BaseDoc {
 	type: 'evacuee';
 	first_name: string;
 	last_name: string;
-	/** `null` = unknown — only partner bookings (`registered_via: api`) write it (schema_v 12, CR-154). */
+	/** `null` = ไม่ระบุ / unknown (registration default + partner booking, schema_v 12). */
 	gender: Gender | null;
 	phone: string | null;
 	nickname?: string;
@@ -804,7 +804,8 @@ export const evacueeInputSchema = z.object({
 	first_name: z.string({ error: 'กรุณากรอกชื่อ' }).trim().min(1, 'กรุณากรอกชื่อ'),
 	// Empty allowed for mononyms / foreign nationals without family names (CR-106 FR-18).
 	last_name: z.string().trim().default(''),
-	gender: z.enum(['male', 'female', 'other'], { error: 'กรุณาเลือกเพศ' }),
+	/** `null` = ไม่ระบุเพศ (default on registration forms). */
+	gender: z.enum(['male', 'female', 'other'], { error: 'กรุณาเลือกเพศ' }).nullable(),
 	phone: phoneSchema, // UI requires a value; "ไม่มี" → null
 	nickname: z.string().trim().optional(),
 	birth_year: z.coerce
@@ -1110,7 +1111,7 @@ export const evacueePersonalEditFormSchema = z
 		nickname: z.string().trim(),
 		birthYear: z.string().trim(),
 		age: z.string().trim(),
-		gender: genderSchema,
+		gender: genderSchema.nullable(),
 		phone: z.string().trim(),
 		noPhone: z.boolean().default(false),
 		cardType: cardTypeSchema,
