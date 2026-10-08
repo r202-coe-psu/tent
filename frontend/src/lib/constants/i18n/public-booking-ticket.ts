@@ -26,6 +26,8 @@ export const PUBLIC_BOOKING_TICKET_I18N = {
 		memberCountLabel: 'จำนวนสมาชิก',
 		memberCountValue: (count: number) => `${count} คน`,
 		verifiedBtn: 'ยืนยันที่ศูนย์แล้ว (ลบใบลงทะเบียน)',
+		verifiedConfirm:
+			'คุณได้นำใบลงทะเบียนนี้ไปรายงานตัวยืนยันเข้าพักที่ศูนย์แล้วใช่หรือไม่?\n\nระบบจะลบใบลงทะเบียนนี้ออกจากอุปกรณ์',
 		unassignedSuccessDesc:
 			'ระบบบันทึกข้อมูลเรียบร้อยแล้ว แต่ยังไม่ได้ระบุศูนย์ จึงไม่การันตีที่พัก กรุณาบันทึกใบลงทะเบียนนี้ไว้'
 	},
@@ -56,6 +58,8 @@ export const PUBLIC_BOOKING_TICKET_I18N = {
 		memberCountLabel: 'Members',
 		memberCountValue: (count: number) => `${count} ${count === 1 ? 'person' : 'people'}`,
 		verifiedBtn: 'Confirmed at shelter (remove slip)',
+		verifiedConfirm:
+			'Have you already checked in with this slip at the shelter?\n\nIt will be removed from this device.',
 		unassignedSuccessDesc:
 			'Your details are saved, but no shelter was chosen, so a place is not guaranteed. Please keep this slip.'
 	}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatPersonName, isAnonymousId } from './people';
+import { collectMemberRuleIssues, formatPersonName, isAnonymousId } from './people';
 import {
 	PRIMARY_CONTACT_LABEL,
 	applyAnonymousIdToMember,
@@ -203,9 +203,9 @@ describe('unified registration — mononym and anonymous ID', () => {
 		expect(isAnonymousId(member.person_id?.number ?? '')).toBe(true);
 	});
 
-	it('blankUnifiedMember leaves gender unset for forced male/female choice', () => {
+	it('blankUnifiedMember defaults gender to null (ไม่ระบุเพศ)', () => {
 		const member = blankUnifiedMember();
-		expect(member.gender).toBe('');
+		expect(member.gender).toBeNull();
 		expect(member.religion).toBe('unknown');
 	});
 
@@ -453,5 +453,62 @@ describe('unified registration — report-in converters', () => {
 		expect(targetMember.emergency_contact?.name).toBe('กิตติศักดิ์');
 		expect(targetMember.special_needs).toContain('ต้องการแพมเพิส');
 		expect(targetMember.vulnerable_groups).toContain('pregnant');
+	});
+});
+
+describe('unified registration — collectMemberRuleIssues (one-pass validation)', () => {
+	it('keeps the cross-field issues Zod skips when gender is missing', () => {
+		const members = [
+			validMember({
+				gender: '' as UnifiedRegistrationInput['members'][number]['gender'],
+				person_id: { cardType: 'national_id', number: '1234567890123' }
+			})
+		];
+
+		const parsed = unifiedRegistrationInputSchema.safeParse(validInput({ members }));
+		expect(parsed.success).toBe(false);
+		const zodMessages = parsed.success ? [] : parsed.error.issues.map((i) => i.message);
+		// Base-schema abort (gender) hides the checksum rule from superRefine…
+		expect(zodMessages.some((m) => m.includes('เลขบัตรประชาชนไม่ถูกต้อง'))).toBe(false);
+
+		// …so the collector must surface it, with the same path the form maps to #member-0-card-number.
+		const issues = collectMemberRuleIssues(members);
+		expect(issues).toHaveLength(1);
+		expect(issues[0].path).toEqual(['members', 0, 'person_id', 'number']);
+		expect(issues[0].message).toContain('เลขบัตรประชาชนไม่ถูกต้อง');
+		expect(zodMessages.some((m) => m.includes('เพศ'))).toBe(true);
+	});
+
+	it('collects every rule per member with members[i] paths', () => {
+		const issues = collectMemberRuleIssues([
+			validMember(),
+			validMember({
+				birth_year: 2500,
+				age: 5,
+				religion: 'other',
+				religion_other: ' ',
+				person_id: { cardType: 'national_id', number: '123' }
+			})
+		]);
+
+		expect(issues.map((i) => i.path.join('.')).sort()).toEqual([
+			'members.1.age',
+			'members.1.person_id.number',
+			'members.1.religion_other'
+		]);
+	});
+
+	it('returns nothing for valid members', () => {
+		expect(collectMemberRuleIssues([validMember()])).toEqual([]);
+	});
+
+	it('skips the checksum for an unchanged stored number (report-in)', () => {
+		const issues = collectMemberRuleIssues([
+			validMember({
+				person_id: { cardType: 'national_id', number: '1234567890123' },
+				original_person_number: '1234567890123'
+			})
+		]);
+		expect(issues).toEqual([]);
 	});
 });
