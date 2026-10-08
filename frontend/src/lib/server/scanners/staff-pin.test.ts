@@ -4,7 +4,6 @@ vi.mock('$lib/server/couch-admin', () => ({ adminRaw: vi.fn() }));
 
 import {
 	generateStaffPin,
-	StaffPinAttemptLimiter,
 	staffPinMatches,
 	StaffPinUnavailableError,
 	verifyDeviceStaffPin
@@ -71,62 +70,28 @@ describe('staff-pin helpers', () => {
 	});
 });
 
-describe('StaffPinAttemptLimiter', () => {
-	it('locks after 5 failures for 5 minutes, then resets', () => {
-		let clock = 1_000_000;
-		const limiter = new StaffPinAttemptLimiter(5, 5 * 60 * 1000, () => clock);
-
-		for (let remaining = 4; remaining >= 1; remaining -= 1) {
-			expect(limiter.recordFailure('kiosk-01')).toEqual({ locked: false, remaining });
-		}
-		expect(limiter.recordFailure('kiosk-01')).toEqual({ locked: true, retryAfterS: 300 });
-		expect(limiter.lockedFor('kiosk-01')).toBe(300);
-		expect(limiter.lockedFor('kiosk-02')).toBeNull();
-
-		clock += 299_500;
-		expect(limiter.lockedFor('kiosk-01')).toBe(1);
-		clock += 500;
-		expect(limiter.lockedFor('kiosk-01')).toBeNull();
-		expect(limiter.recordFailure('kiosk-01')).toEqual({ locked: false, remaining: 4 });
-	});
-});
-
 describe('verifyDeviceStaffPin', () => {
-	let limiter: StaffPinAttemptLimiter;
 	const get = vi.fn<(deviceId: string) => Promise<StaffPinSecret | null>>();
-	const deps = () => ({ store: { get }, limiter });
+	const deps = () => ({ store: { get } });
 
 	beforeEach(() => {
-		limiter = new StaffPinAttemptLimiter();
 		get.mockReset();
 		get.mockResolvedValue(secret('482913'));
 	});
 
-	it('accepts the right PIN and resets the failure counter', async () => {
+	it('accepts the right PIN and rejects a wrong one', async () => {
 		const d = device();
-		expect(await verifyDeviceStaffPin(d, '111112', deps())).toEqual({
-			kind: 'wrong',
-			remaining: 4
-		});
+		expect(await verifyDeviceStaffPin(d, '111112', deps())).toEqual({ kind: 'wrong' });
 		expect(await verifyDeviceStaffPin(d, '482913', deps())).toEqual({ kind: 'ok' });
-		expect(await verifyDeviceStaffPin(d, '111112', deps())).toEqual({
-			kind: 'wrong',
-			remaining: 4
-		});
 		expect(get).toHaveBeenCalledWith('kiosk-01');
 	});
 
-	it('locks after the 5th wrong PIN and rejects even the right PIN while locked', async () => {
+	it('never locks the device, however many wrong PINs come first', async () => {
 		const d = device();
-		for (let i = 0; i < 4; i += 1) await verifyDeviceStaffPin(d, '000001', deps());
-		expect(await verifyDeviceStaffPin(d, '000001', deps())).toEqual({
-			kind: 'locked',
-			retryAfterS: 300
-		});
-		get.mockClear();
-		expect((await verifyDeviceStaffPin(d, '482913', deps())).kind).toBe('locked');
-		// A locked device does not even reach the secrets store.
-		expect(get).not.toHaveBeenCalled();
+		for (let i = 0; i < 20; i += 1) {
+			expect(await verifyDeviceStaffPin(d, '000001', deps())).toEqual({ kind: 'wrong' });
+		}
+		expect(await verifyDeviceStaffPin(d, '482913', deps())).toEqual({ kind: 'ok' });
 	});
 
 	it('reports not_set when no PIN doc exists, whatever the registry metadata says', async () => {
@@ -135,8 +100,6 @@ describe('verifyDeviceStaffPin', () => {
 		expect(await verifyDeviceStaffPin(device({ schema_v: 1 }), '482913', deps())).toEqual({
 			kind: 'not_set'
 		});
-		// not_set never burns an attempt.
-		expect(limiter.lockedFor('kiosk-01')).toBeNull();
 	});
 
 	it('propagates a store failure instead of accepting any PIN', async () => {

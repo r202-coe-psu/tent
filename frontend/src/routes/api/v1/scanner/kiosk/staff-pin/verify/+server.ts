@@ -84,21 +84,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			case 'ok':
 				return respond({ ok: true }, 200);
 			case 'wrong':
-				return respond(
-					{
-						error: { code: 'staff_pin_invalid', message: 'PIN ไม่ถูกต้อง' },
-						remaining_attempts: result.remaining
-					},
-					401
-				);
-			case 'locked':
-				return respond(
-					{
-						error: { code: 'staff_pin_locked', message: 'กรอก PIN ผิดหลายครั้ง กรุณารอสักครู่' },
-						retry_after_s: result.retryAfterS
-					},
-					423
-				);
+				return respond({ error: { code: 'staff_pin_invalid', message: 'PIN ไม่ถูกต้อง' } }, 401);
 			case 'not_set':
 				return respond(
 					{

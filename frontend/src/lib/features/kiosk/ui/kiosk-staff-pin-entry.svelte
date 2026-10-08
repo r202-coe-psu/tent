@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
-	import Lock from '@lucide/svelte/icons/lock';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { verifyKioskStaffPin, type KioskStaffPinResult } from '../data/kiosk-staff-pin.api';
 	import KioskNumpadPanel from './kiosk-numpad-panel.svelte';
@@ -30,50 +29,19 @@
 	type Status =
 		| { kind: 'idle' }
 		| { kind: 'checking' }
-		| { kind: 'wrong'; remaining: number }
-		| { kind: 'locked'; until: number }
+		| { kind: 'wrong' }
 		/** No PIN set on this kiosk, or the server could not check it. */
 		| { kind: 'blocked' };
 
 	// Never in a URL, a log or storage; cleared on every way out.
 	let pin = $state('');
 	let status = $state<Status>({ kind: 'idle' });
-	let now = $state(Date.now());
 	let closed = false;
 	let idleTimer: ReturnType<typeof setTimeout> | null = null;
-	let lockClock: ReturnType<typeof setInterval> | null = null;
 	let panel: HTMLElement | null = null;
 
-	const keysDisabled = $derived(
-		status.kind === 'checking' || status.kind === 'locked' || status.kind === 'blocked'
-	);
+	const keysDisabled = $derived(status.kind === 'checking' || status.kind === 'blocked');
 	const canConfirm = $derived(pin.length === PIN_LENGTH && !keysDisabled);
-	const waitSeconds = $derived(
-		status.kind === 'locked' ? Math.max(0, Math.ceil((status.until - now) / 1000)) : 0
-	);
-	const waitText = $derived(
-		`${Math.floor(waitSeconds / 60)}:${String(waitSeconds % 60).padStart(2, '0')}`
-	);
-
-	/** The lock counts down on screen and lifts by itself. */
-	function startLock(retryAfterS: number): void {
-		now = Date.now();
-		const until = now + retryAfterS * 1000;
-		status = { kind: 'locked', until };
-		stopLockClock();
-		lockClock = setInterval(() => {
-			now = Date.now();
-			if (now < until) return;
-			stopLockClock();
-			status = { kind: 'idle' };
-			void refocusKeys();
-		}, 1_000);
-	}
-
-	function stopLockClock(): void {
-		if (lockClock) clearInterval(lockClock);
-		lockClock = null;
-	}
 
 	function touch(): void {
 		if (idleTimer) clearTimeout(idleTimer);
@@ -85,7 +53,6 @@
 		pin = '';
 		if (idleTimer) clearTimeout(idleTimer);
 		idleTimer = null;
-		stopLockClock();
 	}
 
 	function cancel(): void {
@@ -107,11 +74,8 @@
 				onverified();
 				return;
 			case 'wrong':
-				status = { kind: 'wrong', remaining: result.remaining };
+				status = { kind: 'wrong' };
 				void refocusKeys();
-				return;
-			case 'locked':
-				startLock(result.retryAfterS);
 				return;
 			default:
 				status = { kind: 'blocked' };
@@ -159,7 +123,7 @@
 		return () => (panel = null);
 	}
 
-	/** The keys are usable again (wrong PIN, lock lifted): put focus back on them. */
+	/** The keys are usable again after a wrong PIN: put focus back on them. */
 	async function refocusKeys(): Promise<void> {
 		await tick();
 		if (!closed && panel) focusFirstKey(panel);
@@ -251,20 +215,7 @@
 						class="flex items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-base font-semibold text-amber-900 kiosk-portrait:text-xl"
 					>
 						<CircleAlert class="size-5 shrink-0" aria-hidden="true" />
-						PIN ไม่ถูกต้อง เหลืออีก {status.remaining} ครั้ง
-					</p>
-				{:else if status.kind === 'locked'}
-					<p
-						class="flex items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-base font-semibold text-amber-900 kiosk-portrait:text-xl"
-					>
-						<Lock class="size-5 shrink-0" aria-hidden="true" />
-						<span
-							>กรอกผิดหลายครั้ง ลองใหม่ได้ในอีก
-							<!-- The ticking clock is not read out every second; the minutes are. -->
-							<span class="tabular-nums" aria-hidden="true">{waitText}</span>
-							<span class="sr-only">ประมาณ {Math.max(1, Math.ceil(waitSeconds / 60))}</span>
-							นาที</span
-						>
+						PIN ไม่ถูกต้อง กรุณาลองใหม่
 					</p>
 				{:else if status.kind === 'blocked'}
 					<p

@@ -15,7 +15,6 @@ import { POST } from './+server';
 import type { RequestEvent } from './$types';
 import { scannerServerRepository } from '$lib/features/scanners/server';
 import { hashScannerSecret } from '$lib/server/scanners/device-credentials';
-import { staffPinAttemptLimiter } from '$lib/server/scanners/staff-pin';
 import {
 	staffPinSecretStore,
 	StaffPinUnavailableError,
@@ -84,7 +83,6 @@ describe('POST /api/v1/scanner/kiosk/staff-pin/verify', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		info = vi.spyOn(console, 'info').mockImplementation(() => {});
-		staffPinAttemptLimiter.reset('kiosk-01');
 		mockLookup.mockResolvedValue(deviceDoc() as never);
 		mockSecret.mockResolvedValue(secretDoc);
 	});
@@ -103,35 +101,29 @@ describe('POST /api/v1/scanner/kiosk/staff-pin/verify', () => {
 		expect(logged).not.toContain('482913');
 	});
 
-	it('returns 401 with remaining attempts for a wrong PIN', async () => {
+	it('returns 401 staff_pin_invalid for a wrong PIN', async () => {
 		const response = await POST(request({ pin: '111112' }));
 
 		expect(response.status).toBe(401);
 		const body = await response.json();
-		expect(body.remaining_attempts).toBe(4);
 		expect(body.error.code).toBe('staff_pin_invalid');
+		expect(body).not.toHaveProperty('remaining_attempts');
 		expect(response.headers.get('cache-control')).toBe('no-store');
 	});
 
-	it('locks with 423 + retry_after_s on the 5th wrong PIN and rejects the right PIN while locked', async () => {
-		for (let i = 0; i < 4; i += 1) {
+	it('never locks: the right PIN still works after many wrong ones', async () => {
+		for (let i = 0; i < 10; i += 1) {
 			expect((await POST(request({ pin: '111112' }))).status).toBe(401);
 		}
-		const locked = await POST(request({ pin: '111112' }));
-		expect(locked.status).toBe(423);
-		expect((await locked.json()).retry_after_s).toBe(300);
-
-		const stillLocked = await POST(request({ pin: '482913' }));
-		expect(stillLocked.status).toBe(423);
+		expect((await POST(request({ pin: '482913' }))).status).toBe(200);
 	});
 
-	it('returns 401 without remaining_attempts when device auth fails', async () => {
+	it('returns 401 DEVICE_AUTH_FAILED when device auth fails', async () => {
 		const response = await POST(request({ pin: '482913' }, { 'x-device-secret': 'wrong' }));
 
 		expect(response.status).toBe(401);
 		const body = await response.json();
 		expect(body.error.code).toBe('DEVICE_AUTH_FAILED');
-		expect(body).not.toHaveProperty('remaining_attempts');
 	});
 
 	it('rejects inactive devices as an auth failure', async () => {

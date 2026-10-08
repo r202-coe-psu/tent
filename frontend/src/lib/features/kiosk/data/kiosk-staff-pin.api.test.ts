@@ -22,14 +22,9 @@ describe('verifyKioskStaffPin', () => {
 
 	it.each<[string, Response, KioskStaffPinResult]>([
 		[
-			'a wrong PIN with the tries left',
-			json({ error: { code: 'staff_pin_wrong', message: 'x' }, remaining_attempts: 3 }, 401),
-			{ kind: 'wrong', remaining: 3 }
-		],
-		[
-			'a lock with the wait',
-			json({ error: { code: 'staff_pin_locked', message: 'x' }, retry_after_s: 299 }, 423),
-			{ kind: 'locked', retryAfterS: 299 }
+			'a wrong PIN',
+			json({ error: { code: 'staff_pin_invalid', message: 'x' } }, 401),
+			{ kind: 'wrong' }
 		],
 		[
 			'no PIN set on this kiosk',
@@ -37,7 +32,7 @@ describe('verifyKioskStaffPin', () => {
 			{ kind: 'not_set' }
 		],
 		[
-			'a device credential failure (401 without a count)',
+			'a device credential failure (401 with another code)',
 			json({ error: { code: 'unauthorized', message: 'x' } }, 401),
 			{ kind: 'error' }
 		],
@@ -48,7 +43,7 @@ describe('verifyKioskStaffPin', () => {
 		],
 		['a malformed request', json({ error: { code: 'bad_request' } }, 400), { kind: 'error' }],
 		['a 200 that is not ok', json({ ok: false }), { kind: 'error' }],
-		['a lock without a wait', json({ error: {} }, 423), { kind: 'error' }],
+		['an unexpected 423', json({ error: { code: 'staff_pin_locked' } }, 423), { kind: 'error' }],
 		['a body that is not JSON', new Response('nope', { status: 401 }), { kind: 'error' }]
 	])('maps %s', async (_name, response, expected) => {
 		const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(response);
