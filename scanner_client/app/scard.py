@@ -72,6 +72,8 @@ class ThaiSmartCardReader:
         # PC/SC only: a context of our own for the slot status poll (see is_card_inserted).
         self._hcontext = None
         self._poll_failures = 0
+        self._last_present = False
+        self._last_event_count: Optional[int] = None
         if connection is not None:
             self.reader = None
             self.connection = connection
@@ -162,12 +164,23 @@ class ThaiSmartCardReader:
             if self._poll_failures >= MAX_POLL_FAILURES:
                 self._poll_failures = 0
                 raise ReaderLostError("card reader stopped answering status polls")
-            return False
+            # A hiccup says nothing about the slot: reporting "empty" would end a removal wait.
+            return self._last_present
         self._poll_failures = 0
         event_state = states[0][1]
         if event_state & (pcsc.SCARD_STATE_UNKNOWN | pcsc.SCARD_STATE_UNAVAILABLE):
             raise ReaderLostError("card reader is no longer available")
-        return bool(event_state & pcsc.SCARD_STATE_PRESENT)
+        present = bool(event_state & pcsc.SCARD_STATE_PRESENT)
+        event_count = (event_state >> 16) & 0xFFFF
+        swapped = (
+            present
+            and self._last_present
+            and self._last_event_count is not None
+            and event_count != self._last_event_count
+        )
+        self._last_event_count = event_count
+        self._last_present = present
+        return present and not swapped
 
     def decode_tis620(self, data: List[int]) -> str:
         """Decode byte array from TIS-620 encoding (standard for Thai Smart Card)"""
