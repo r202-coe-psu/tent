@@ -8,6 +8,8 @@ export default defineConfig({
 	fullyParallel: true,
 	forbidOnly: !!process.env.CI,
 	retries: process.env.CI ? 2 : 0,
+	// §3 / §9.B — suites tagged @quarantine (e.g. SH001 live writers) stay out of default runs.
+	grepInvert: /@quarantine/,
 	// User management access-control tests call CouchDB directly (no parallelism
 	// issues since each test uses unique usernames with a RUN_ID suffix).
 	workers: 1,
