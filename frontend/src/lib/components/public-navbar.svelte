@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { afterNavigate } from '$app/navigation';
+	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import Home from '@lucide/svelte/icons/home';
 	import Building from '@lucide/svelte/icons/building';
@@ -22,7 +22,6 @@
 	import { PUBLIC_NAVBAR_I18N } from '$lib/constants/i18n';
 	import { langState } from '$lib/states/i18n.svelte';
 	import type { Announcement } from '$lib/features/announcements';
-	import PublicNotificationMenu from '$lib/components/public-notification-menu.svelte';
 
 	interface Props {
 		announcements?: Announcement[];
@@ -62,8 +61,6 @@
 	let donationsMenuEl: HTMLDivElement | undefined = $state();
 	let volunteersMenuOpen = $state(false);
 	let volunteersMenuEl: HTMLDivElement | undefined = $state();
-	let alertsMenuOpen = $state(false);
-	let desktopAlertsOpen = $state(false);
 	let headerHeight = $state(64);
 
 	const t = $derived(getTranslation(PUBLIC_NAVBAR_I18N, langState.current));
@@ -71,8 +68,6 @@
 	function toggleMobileMenu() {
 		mobileMenuOpen = !mobileMenuOpen;
 		if (mobileMenuOpen) {
-			alertsMenuOpen = false;
-			desktopAlertsOpen = false;
 			donationsMenuOpen = false;
 		}
 	}
@@ -83,10 +78,6 @@
 
 	function toggleDonationsMenu() {
 		donationsMenuOpen = !donationsMenuOpen;
-		if (donationsMenuOpen) {
-			alertsMenuOpen = false;
-			desktopAlertsOpen = false;
-		}
 	}
 
 	function closeDonationsMenu() {
@@ -117,8 +108,6 @@
 		donationsMenuOpen = false;
 		volunteersMenuOpen = false;
 		mobileMenuOpen = false;
-		alertsMenuOpen = false;
-		desktopAlertsOpen = false;
 	});
 </script>
 
@@ -164,21 +153,6 @@
 					{t.registerShort}
 				{/if}
 			</a>
-
-			<!-- Notification Bell Button (Mobile) -->
-			<PublicNotificationMenu variant="navbar" {announcements} bind:menuOpen={alertsMenuOpen} />
-
-			<!-- Language Switcher (Mobile) -->
-			<div class="flex shrink-0 items-center border-l border-slate-200 pl-1.5 sm:pl-2">
-				<button
-					type="button"
-					onclick={toggleLanguage}
-					class="inline-flex cursor-pointer items-center justify-center rounded-full border border-slate-300 bg-white px-2.5 py-0.5 text-xs font-bold text-[#0A2647] shadow-2xs transition-all hover:border-slate-400 hover:bg-slate-50 active:scale-95"
-					aria-label={t.switchLanguageAria}
-				>
-					{langState.current === 'th' ? 'EN' : 'TH'}
-				</button>
-			</div>
 
 			<button
 				type="button"
@@ -363,15 +337,6 @@
 				{t.backoffice}
 			</a>
 
-			<!-- Notification Bell Button (Desktop) -->
-			<div class="ml-0.5 flex shrink-0 items-center 2xl:ml-1">
-				<PublicNotificationMenu
-					variant="navbar"
-					{announcements}
-					bind:menuOpen={desktopAlertsOpen}
-				/>
-			</div>
-
 			<!-- Language Switcher (Desktop) -->
 			<div
 				class="ml-1.5 flex shrink-0 items-center border-l border-slate-200 pl-2 2xl:ml-2 2xl:pl-3"
@@ -399,7 +364,7 @@
 					type="button"
 					onclick={() => {
 						closeMobileMenu();
-						alertsMenuOpen = true;
+						void goto(`${resolve('/')}#announcements`);
 					}}
 					class="flex min-h-11 items-center justify-between rounded-xl px-4 py-3 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50"
 				>

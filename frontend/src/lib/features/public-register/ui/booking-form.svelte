@@ -466,7 +466,7 @@
 					</section>
 				{/if}
 				{#if captchaEnabled}
-					<p class="text-center text-2xs text-muted-foreground">{t.recaptchaBranding}</p>
+					<p class="mt-4 text-center text-2xs text-muted-foreground">{t.recaptchaBranding}</p>
 				{/if}
 			{/snippet}
 		</UnifiedRegistrationForm>

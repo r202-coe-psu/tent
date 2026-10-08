@@ -154,6 +154,7 @@
 		channel === 'onsite' || enableUnassignedPhoto || shelterPhotoEnabled
 	);
 	const memberPhotoUpload = $derived.by((): MemberPhotoUploadMode => {
+		if (channel === 'public') return 'none';
 		if (channel === 'onsite') return 'onsite-couch';
 		if (enableUnassignedPhoto) return 'unassigned-gridfs';
 		if (shelterPhotoEnabled) return 'shelter-couch';
@@ -987,11 +988,13 @@
 		<!-- Right Column: Form Area (Full width on mobile, 8-col on lg+) -->
 		<div class="space-y-6 lg:col-span-8">
 			<!-- Top Progress Stepper (Mobile & Desktop) -->
-			<UnifiedRegistrationStepper
-				sections={formSectionNav}
-				{activeSection}
-				onNavigate={(id) => scrollToSection(id as FormSectionId)}
-			/>
+			{#if channel !== 'public'}
+				<UnifiedRegistrationStepper
+					sections={formSectionNav}
+					{activeSection}
+					onNavigate={(id) => scrollToSection(id as FormSectionId)}
+				/>
+			{/if}
 
 			<!-- ── Section 1: Address ─────────────────────────────────── -->
 			<UnifiedRegistrationSection
@@ -1010,7 +1013,7 @@
 
 				<!-- Quick Search & Merge Tool Bar (both Public and Onsite) -->
 				{#if enableResidenceJoin}
-					<div class="space-y-3 rounded-xl border border-border/60 bg-muted/10 p-3">
+					<div class="mb-4 space-y-3 rounded-xl border border-border/60 bg-muted/10 p-3 sm:mb-5">
 						<div class="flex items-center justify-between gap-2">
 							<p class="flex items-center gap-1.5 text-xs font-semibold text-foreground">
 								<Search class="size-3.5 text-primary" />

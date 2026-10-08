@@ -20,6 +20,7 @@
 	import * as Accordion from '$lib/components/ui/accordion/index.js';
 	import PublicDonationCard from '$lib/components/public-donation-card.svelte';
 	import PublicVolunteerCard from '$lib/components/public-volunteer-card.svelte';
+	import PublicNotificationMenu from '$lib/components/public-notification-menu.svelte';
 	import { FamilySearchModal } from '$lib/features/public-portal';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
@@ -661,6 +662,8 @@
 </div>
 
 <FamilySearchModal bind:open={searchOpen} />
+
+<PublicNotificationMenu variant="floating" announcements={data.announcements} />
 
 <Dialog.Root bind:open={devModalOpen}>
 	<Dialog.Content class="max-w-md rounded-2xl p-6 sm:p-7">

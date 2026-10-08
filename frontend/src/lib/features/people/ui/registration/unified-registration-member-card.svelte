@@ -513,7 +513,7 @@
 				</Button>
 			{/if}
 
-			{#if !isAlreadyReported}
+			{#if channel !== 'public' && !isAlreadyReported}
 				<Button
 					type="button"
 					variant="outline"
