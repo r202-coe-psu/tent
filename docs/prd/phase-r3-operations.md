@@ -69,7 +69,7 @@ R2 ทำให้ศูนย์เห็นคนเป็นครัวเ�
 - **Skill Match** — การจับคู่ Volunteer กับงานที่ต้องการทักษะตรงกัน
 - **SOP Ratio** — อัตราส่วนมาตรฐาน (วัตถุดิบ/ของ/อาสา ต่อจำนวนผู้พักพิงต่อวัน) ที่ตั้งค่าได้
 - **Resource Calculation** — ผลคำนวณความต้องการรายวันจาก occupancy × SOP Ratio
-- **Shelter Report** — รายงานในศูนย์ (`shelter_report`) แยกประเภทด้วย `kind`: grievance (ร้องเรียน/ร้องทุกข์) | incident (เหตุที่ staff/SM บันทึก); ติดตามจนปิดหรือ escalate → referral — ไม่ใช่ gate check-in/out หรือ occupancy roster ([CR-040](../changes/CR-040-shelter-case-grievance-reframe.md))
+- **Shelter Report** — รายงานในศูนย์ (`shelter_report`) แยกประเภทด้วย `kind`: grievance (ร้องเรียน/ร้องทุกข์) | incident (เหตุที่ staff/SM บันทึก); ติดตามจนปิดหรือ escalate → referral — ไม่ใช่ gate check-in/out หรือ occupancy roster ([CR-040](../changes/08-E-reports/CR-040-shelter-case-grievance-reframe.md))
 - **Referral** — การส่งต่อผู้พักพิง/ความต้องการไปยังศูนย์หรือหน่วยงานอื่น (ศูนย์เต็ม, อาหารขาด, ผู้ป่วยฉุกเฉิน)
 
 ## 4. Features
@@ -193,8 +193,8 @@ Shelter Manager จัดการประกาศรับสมัครง�
 **Consequences (testable):**
 - คำนวณวัตถุดิบ/ของ/จำนวนอาสาที่ต้องการต่อวันต่อศูนย์
 - เทียบกับ on-hand stock (R2) → แสดง gap (ต้องเบิก/ต้องบริจาคเพิ่มเท่าไร)
-- R3 runtime = **on-demand** จาก UI ([CR-042](../../changes/CR-042-daily-sop-calc-follow-up.md) OD-3=A) — ไม่บังคับรอบอัตโนมัติ
-- ผลคำนวณเป็นแหล่งสำหรับ dashboard (FR-46); **feed เข้า Meal Plan (FR-39) / Donation redirect (FR-37) / Volunteer demand (FR-43) เลื่อนหลัง T-32 นิ่ง** ([CR-042](../../changes/CR-042-daily-sop-calc-follow-up.md) OD-4=C)
+- R3 runtime = **on-demand** จาก UI ([CR-042](../../changes/07-B-sop/CR-042-daily-sop-calc-follow-up.md) OD-3=A) — ไม่บังคับรอบอัตโนมัติ
+- ผลคำนวณเป็นแหล่งสำหรับ dashboard (FR-46); **feed เข้า Meal Plan (FR-39) / Donation redirect (FR-37) / Volunteer demand (FR-43) เลื่อนหลัง T-32 นิ่ง** ([CR-042](../../changes/07-B-sop/CR-042-daily-sop-calc-follow-up.md) OD-4=C)
 
 #### FR-46: Resource Calculation Dashboard
 
@@ -202,7 +202,7 @@ Shelter Manager เห็นความต้องการรายวัน�
 
 **Consequences (testable):**
 - แสดง required vs on-hand vs gap ต่อทรัพยากรต่อวัน พร้อม last-updated
-- Drill-down ระบุว่า ratio มาจาก master หรือ override จาก snapshot (`ratio_source`) ([CR-042](../../changes/CR-042-daily-sop-calc-follow-up.md) OD-1=A)
+- Drill-down ระบุว่า ratio มาจาก master หรือ override จาก snapshot (`ratio_source`) ([CR-042](../../changes/07-B-sop/CR-042-daily-sop-calc-follow-up.md) OD-1=A)
 - ตัวเลข reconcile กับ occupancy + Stock Ledger ใน UAT
 
 ### 4.5 Shelter Reports & Referral (Modules E + F)
@@ -248,7 +248,7 @@ Shelter Manager (`shelter_manager`) สร้างคำขอส่งต่�
 - Kitchen: meal plan, requisition (ตัด stock), meal service record
 - Volunteer: registration + skills, skill match + task/shift assignment
 - SOP: ratio config, daily resource calculation, calculation dashboard
-- Shelter Reports: เปิด/ติดตาม `shelter_report` (kind grievance|incident) + escalate atomic → referral ([CR-040](../changes/CR-040-shelter-case-grievance-reframe.md))
+- Shelter Reports: เปิด/ติดตาม `shelter_report` (kind grievance|incident) + escalate atomic → referral ([CR-040](../changes/08-E-reports/CR-040-shelter-case-grievance-reframe.md))
 - Referral: referral & hand-off ภายในเครือข่ายศูนย์
 
 ### 6.2 Out of Scope for R3

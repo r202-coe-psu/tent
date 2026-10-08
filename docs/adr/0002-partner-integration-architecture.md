@@ -34,7 +34,7 @@ To maintain high throughput, sub-second latency for command dashboards, strict P
    - Set default access to disabled (return HTTP 403 Forbidden with standardized reason).
    - Log all attempts (including caller identity, IP, target shelter, and purpose) to `third_party_access_logs`.
 
-7. **M2 Booking & Residency (`EXT-008`–`EXT-011`, [CR-154](../changes/CR-154-m2-partner-booking-residency.md))**:
+7. **M2 Booking & Residency (`EXT-008`–`EXT-011`, [CR-154](../changes/10-eoc/CR-154-m2-partner-booking-residency.md))**:
    - Add partner module `M2` (vulnerable-group assessment system) to the same OAuth2 plane instead of the legacy `/external/v1` API-key plane; M2's shelter list reuses `EXT-002`.
    - `EXT-008`–`EXT-010` (`POST /external/bookings`, `.../{id}/cancel`, `GET .../{id}`, scope `booking-write`) are the plane's only write path: FastAPI inserts into the MongoDB buffer `external_bookings`; the sync worker's inbound loop creates `household` + `evacuee` (`pre_registered`, `registered_via: api`) in `shelter_{code}` and then clears PII from the buffer. FastAPI still never holds CouchDB credentials.
    - `EXT-011` (`GET /external/persons/shelter-residency`, scope `residency-read`) follows the `EXT-007` pattern: mandatory `purpose`, every attempt logged to `third_party_access_logs`, lookup by `national_id_hash` only.

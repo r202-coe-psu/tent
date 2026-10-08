@@ -12,8 +12,8 @@ inputDocuments:
   - docs/prd/squad-roster.md
   - docs/prd/phase-r2-foundation.md
   - docs/prd/phase-r4-integration-handover.md
-  - docs/changes/CR-041-module-a-volunteer-job-board.md
-  - docs/changes/CR-104-volunteer-backoffice-and-user-management-v10.md
+  - docs/changes/06-A-volunteer/CR-041-module-a-volunteer-job-board.md
+  - docs/changes/06-A-volunteer/CR-104-volunteer-backoffice-and-user-management-v10.md
   - docs/features/volunteer-job-board-flow.md
   - docs/task-breakdown/06-A-volunteer.md
   - docs/data/schema.md
@@ -30,7 +30,7 @@ updated: 2026-09-01 # Aligned with CR-104
 
 ## Overview
 
-Epic/story breakdown สำหรับ **Module A — Volunteer** ตาม [CR-104 — Volunteer Backoffice & User Management V10](../changes/CR-104-volunteer-backoffice-and-user-management-v10.md) (`proposed`) ที่รวมและยกระดับ CR-041, CR-092, CR-096, CR-101, CR-102, CR-103  
+Epic/story breakdown สำหรับ **Module A — Volunteer** ตาม [CR-104 — Volunteer Backoffice & User Management V10](../changes/06-A-volunteer/CR-104-volunteer-backoffice-and-user-management-v10.md) (`proposed`) ที่รวมและยกระดับ CR-041, CR-092, CR-096, CR-101, CR-102, CR-103  
 แมปกับบอร์ดโปรเจกต์: **T-28 / T-29** · Team A · Phase R3
 
 มติผลิตภัณฑ์และ follow-ups ปิดครบแล้ว — Epic 1–4 มี stories + AC ครบ · ส่วนท้ายเป็น handoff ให้ dev
