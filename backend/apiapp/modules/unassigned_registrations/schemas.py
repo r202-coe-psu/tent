@@ -420,6 +420,16 @@ class UnassignedRegistrationDetailResponse(BaseModel):
     members: list[MemberCreated]
 
 
+class UnassignedRegistrationStatusResponse(BaseModel):
+    """Status-only projection for the public BFF ticket sync — no PII (names, ids, phones)."""
+
+    id: str
+    status: str
+    members_total: int
+    members_claimed: int
+    claimed: bool
+
+
 class UnassignedRegistrationStatsResponse(BaseModel):
     open_registrations: int
     open_members: int

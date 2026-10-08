@@ -46,7 +46,7 @@ export const PUBLIC_TICKET_HISTORY_I18N = {
 		statusVerified:
 			'ใบลงทะเบียนนี้ได้รับการยืนยันเข้าศูนย์พักพิงแล้ว ระบบได้ลบข้อมูลออกจากอุปกรณ์เรียบร้อย',
 		statusNotFound:
-			'ไม่พบใบลงทะเบียนนี้ในระบบ (อาจหมดอายุหรือถูกลบแล้ว) ระบบได้ลบข้อมูลออกจากอุปกรณ์',
+			'ไม่พบใบลงทะเบียนนี้ในระบบ (อาจหมดอายุหรือถูกลบแล้ว) หากไม่ใช้แล้วสามารถลบออกจากอุปกรณ์ได้เอง',
 		statusPending: 'ใบลงทะเบียนนี้ยังอยู่ระหว่างรอการยืนยันเข้าพักที่ศูนย์',
 		statusCheckFailed: 'ไม่สามารถตรวจสอบสถานะได้ในขณะนี้',
 		backToList: 'กลับไปยังรายการใบลงทะเบียนทั้งหมด',
@@ -76,7 +76,7 @@ export const PUBLIC_TICKET_HISTORY_I18N = {
 		statusVerified:
 			'This registration was confirmed at the shelter, so it has been removed from this device.',
 		statusNotFound:
-			'This registration was not found (it may have expired or been deleted), so it has been removed from this device.',
+			'This registration was not found (it may have expired or been deleted). You can remove it from this device yourself.',
 		statusPending: 'This registration is still waiting to be confirmed at the shelter.',
 		statusCheckFailed: 'Could not check the status right now.',
 		backToList: 'Back to all registration slips',

@@ -339,7 +339,8 @@ export async function checkTicketStatus(code: string): Promise<TicketStatusResul
 		return {
 			success: res.ok && body.success === true,
 			verified: body.verified === true,
-			notFound: body.notFound === true || body.error === 'BOOKING_NOT_FOUND',
+			// notFound only on a clean 2xx answer — an upstream error (4xx/5xx) must never read as "deleted".
+			notFound: res.ok && body.notFound === true,
 			status: body.status,
 			error: body.error
 		};

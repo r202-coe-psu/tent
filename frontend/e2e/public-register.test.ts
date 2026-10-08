@@ -498,4 +498,128 @@ test.describe('Public unassigned registration (#255 / CR-113)', () => {
 			'SH001'
 		);
 	});
+	test.describe('background ticket status sync keeps the queue QR', () => {
+		const REG_ID = '01JUNASSIGNEDREG0000000001';
+		const TICKET_STORAGE_KEY = 'smartshelter_public_booking_tickets';
+		const CLAIMED_TOAST = 'ใบลงทะเบียนได้รับการยืนยันเข้าศูนย์พักพิงแล้ว';
+
+		/** Submit a no-shelter registration (mocked BFF) so a queue ticket lands in localStorage. */
+		async function submitUnassigned(page: Page) {
+			await mockReferenceData(page);
+			await page.route('**/api/public/v1/unassigned-registrations', async (route) => {
+				if (route.request().method() !== 'POST') return route.continue();
+				await route.fulfill({
+					status: 201,
+					contentType: 'application/json',
+					body: JSON.stringify({
+						success: true,
+						id: REG_ID,
+						schema_v: 3,
+						reserved_household_id: 'household:01H',
+						members: [
+							{
+								reserved_evacuee_id: 'evacuee:01H',
+								status: 'open',
+								first_name: 'สมชาย',
+								last_name: 'ใจดี'
+							}
+						],
+						registered_via: 'web',
+						status: 'open',
+						created_at: '2026-09-09T03:00:00.000Z'
+					})
+				});
+			});
+			await openBooking(page);
+			await selectShelter(page, /ไม่ระบุศูนย์พักพิง/);
+			await fillAddress(page);
+			await fillPrimaryMember(page, {
+				firstName: 'สมชาย',
+				lastName: 'ใจดี',
+				phone: '0812345678'
+			});
+			await page.getByLabel(/ข้าพเจ้ารับทราบเงื่อนไขการใช้งานระบบ/).check();
+			await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last().click();
+			await expect(page.getByText('ลงทะเบียนล่วงหน้าสำเร็จ')).toBeVisible();
+			await expect.poll(() => storedCodes(page)).toContain(REG_ID);
+		}
+
+		function storedCodes(page: Page) {
+			return page.evaluate((key) => {
+				try {
+					const raw = JSON.parse(localStorage.getItem(key) ?? '[]') as { code: string }[];
+					return raw.map((t) => t.code);
+				} catch {
+					return [];
+				}
+			}, TICKET_STORAGE_KEY);
+		}
+
+		async function openHistoryThenReload(page: Page) {
+			await page.getByRole('button', { name: /ใบลงทะเบียนของฉัน/ }).click();
+			await page.waitForTimeout(500);
+			await page.reload();
+			await page.getByRole('button', { name: /ใบลงทะเบียนของฉัน/ }).click();
+			await page.waitForTimeout(500);
+		}
+
+		const keepsTicket: [string, number, Record<string, unknown>][] = [
+			[
+				'upstream error (502 STATUS_UNAVAILABLE)',
+				502,
+				{ success: false, verified: false, error: 'STATUS_UNAVAILABLE' }
+			],
+			[
+				'pending (verified:false, status open)',
+				200,
+				{ success: true, verified: false, status: 'open' }
+			],
+			[
+				'not found (notFound:true)',
+				200,
+				{ success: true, verified: false, notFound: true, error: 'BOOKING_NOT_FOUND' }
+			]
+		];
+
+		for (const [label, status, body] of keepsTicket) {
+			test(`ticket survives history tab + reload when status is ${label}`, async ({ page }) => {
+				await page.route('**/api/public/v1/registrations/status', (route) =>
+					route.fulfill({
+						status,
+						contentType: 'application/json',
+						body: JSON.stringify(body)
+					})
+				);
+				await submitUnassigned(page);
+
+				await openHistoryThenReload(page);
+
+				expect(await storedCodes(page)).toContain(REG_ID);
+				await expect(page.getByText(CLAIMED_TOAST)).toHaveCount(0);
+			});
+		}
+
+		test('ticket is removed and toast shown only when status is verified', async ({ page }) => {
+			let verified = false;
+			await page.route('**/api/public/v1/registrations/status', (route) =>
+				route.fulfill({
+					status: 200,
+					contentType: 'application/json',
+					body: JSON.stringify({
+						success: true,
+						verified,
+						status: verified ? 'closed' : 'open'
+					})
+				})
+			);
+			await submitUnassigned(page);
+
+			verified = true;
+			await page.reload();
+			await page.getByRole('button', { name: /ใบลงทะเบียนของฉัน/ }).click();
+
+			await expect(page.getByText(CLAIMED_TOAST).first()).toBeVisible();
+			await expect.poll(() => storedCodes(page)).not.toContain(REG_ID);
+		});
+	});
 });

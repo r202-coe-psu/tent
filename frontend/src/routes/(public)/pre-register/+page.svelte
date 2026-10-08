@@ -11,7 +11,7 @@
 		TicketHistory,
 		getStoredTickets,
 		removeStoredTicket,
-		checkTicketStatus,
+		syncStoredTicketStatuses,
 		type BookingTicketModel
 	} from '$lib/features/public-register';
 	import {
@@ -51,23 +51,10 @@
 			return;
 		}
 
-		let anyVerified = false;
-		for (const t of current) {
-			try {
-				const res = await checkTicketStatus(t.code);
-				if (res.verified) {
-					removeStoredTicket(t.code);
-					anyVerified = true;
-				} else if (res.notFound) {
-					removeStoredTicket(t.code);
-				}
-			} catch {
-				// skip on failure
-			}
-		}
+		const { verified } = await syncStoredTicketStatuses();
 
 		storedTicketsCount = getStoredTickets().length;
-		if (anyVerified) {
+		if (verified.length > 0) {
 			toast.info(t.ticketsClaimedToast);
 		}
 	}
