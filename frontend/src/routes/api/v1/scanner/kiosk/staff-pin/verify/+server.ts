@@ -1,4 +1,3 @@
-import { json } from '@sveltejs/kit';
 import { z } from 'zod';
 import type { RequestHandler } from './$types';
 import {
@@ -12,18 +11,13 @@ import {
 	ScannerAuthError
 } from '$lib/server/scanners/device-credentials';
 import { StaffPinUnavailableError, verifyDeviceStaffPin } from '$lib/server/scanners/staff-pin';
+import { staffPinJson } from '$lib/server/scanners/staff-pin-http';
 // eslint-disable-next-line no-restricted-imports -- server-safe domain schema; feature barrel pulls client UI/query code
 import { staffPinSchema } from '$lib/features/scanners/domain/scanner.schema';
 
 export const prerender = false;
 
-const noStoreHeaders = { 'cache-control': 'no-store', pragma: 'no-cache' };
-
 const verifyBodySchema = z.object({ pin: staffPinSchema }).strict();
-
-function respond(body: unknown, status: number): Response {
-	return json(body, { status, headers: noStoreHeaders });
-}
 
 /** Audit line: device, time, outcome. Never the PIN. */
 function audit(deviceId: string, outcome: string): void {
@@ -53,19 +47,19 @@ export const POST: RequestHandler = async ({ request }) => {
 		);
 	} catch (error) {
 		if (error instanceof ScannerAuthError) {
-			return respond(
+			return staffPinJson(
 				{ error: { code: DEVICE_AUTH_FAILED, message: 'ไม่สามารถยืนยันเครื่อง kiosk ได้' } },
 				401
 			);
 		}
-		return respond(
+		return staffPinJson(
 			{ error: { code: DEPENDENCY_UNAVAILABLE, message: 'บริการตรวจสอบ PIN ไม่พร้อมใช้งาน' } },
 			503
 		);
 	}
 	const authenticated = device as PersistedScannerDevice | null;
 	if (!authenticated) {
-		return respond(
+		return staffPinJson(
 			{ error: { code: DEPENDENCY_UNAVAILABLE, message: 'บริการตรวจสอบ PIN ไม่พร้อมใช้งาน' } },
 			503
 		);
@@ -74,7 +68,10 @@ export const POST: RequestHandler = async ({ request }) => {
 	const body: unknown = await request.json().catch(() => null);
 	const parsed = verifyBodySchema.safeParse(body);
 	if (!parsed.success) {
-		return respond({ error: { code: 'VALIDATION', message: 'PIN ต้องเป็นตัวเลข 6 หลัก' } }, 400);
+		return staffPinJson(
+			{ error: { code: 'VALIDATION', message: 'PIN ต้องเป็นตัวเลข 6 หลัก' } },
+			400
+		);
 	}
 
 	try {
@@ -82,11 +79,14 @@ export const POST: RequestHandler = async ({ request }) => {
 		audit(authenticated.device_id, result.kind);
 		switch (result.kind) {
 			case 'ok':
-				return respond({ ok: true }, 200);
+				return staffPinJson({ ok: true }, 200);
 			case 'wrong':
-				return respond({ error: { code: 'staff_pin_invalid', message: 'PIN ไม่ถูกต้อง' } }, 401);
+				return staffPinJson(
+					{ error: { code: 'staff_pin_invalid', message: 'PIN ไม่ถูกต้อง' } },
+					401
+				);
 			case 'not_set':
-				return respond(
+				return staffPinJson(
 					{
 						error: {
 							code: 'staff_pin_not_set',
@@ -101,7 +101,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			authenticated.device_id,
 			error instanceof StaffPinUnavailableError ? 'unavailable' : 'error'
 		);
-		return respond(
+		return staffPinJson(
 			{ error: { code: DEPENDENCY_UNAVAILABLE, message: 'บริการตรวจสอบ PIN ไม่พร้อมใช้งาน' } },
 			503
 		);
