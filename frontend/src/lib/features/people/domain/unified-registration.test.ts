@@ -208,6 +208,13 @@ describe('unified registration — mononym and anonymous ID', () => {
 		expect(member.gender).toBe('');
 		expect(member.religion).toBe('unknown');
 	});
+
+	it('blankUnifiedMember defines CR-148 optional fields (Svelte bindable fallbacks)', () => {
+		const member = blankUnifiedMember();
+		// undefined would throw props_invalid_value when bound to $bindable(null)
+		expect(member.religion_other).toBeNull();
+		expect(member.disability_other_detail).toBeNull();
+	});
 });
 
 describe('unified registration — family plan', () => {

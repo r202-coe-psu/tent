@@ -121,9 +121,9 @@
 			: placeholder;
 	}
 
-	/** Is this catalog id a perishable item? Drives the expiry requirement below. */
+	/** Does this catalog id require an expiry date (CR-143 FR-D1)? Drives the check below. */
 	function isPerishable(itemId: string): boolean {
-		return catalogItems.find((c) => c._id === itemId)?.perishable === true;
+		return catalogItems.find((c) => c._id === itemId)?.requiresExpiry === true;
 	}
 
 	// Quick create item master dialog state
@@ -859,6 +859,13 @@
 													class="h-6 border-emerald-300/80 bg-emerald-50 px-2 text-xs font-bold text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
 												>
 													✓ ครบถ้วน
+												</Badge>
+											{:else if qtyGt(item.declaredQty, item.qty)}
+												<Badge
+													variant="outline"
+													class="h-6 border-amber-300/80 bg-amber-50 px-2 text-xs font-bold text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+												>
+													⚠ รับไม่ครบ
 												</Badge>
 											{:else}
 												<Badge

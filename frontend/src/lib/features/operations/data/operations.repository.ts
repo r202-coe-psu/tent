@@ -16,6 +16,9 @@ import type {
 	CancelInfoInput,
 	DisputeInfoInput
 } from '../domain/operations';
+import type { MergeItemsInput, ItemMergeResult } from '../domain/item-merge';
+import type { DonationBatchLine, DonationBatchResult } from '../domain/donation-batch';
+import type { CycleCountResult, CycleCountSubmission } from '../domain/cycle-count';
 import type { AuditAction } from '$lib/features/shared';
 
 /**
@@ -73,6 +76,23 @@ export interface OperationsRepository {
 	): Promise<{ donation: Donation; entry: StockLedger }>;
 
 	/**
+	 * Receive every counted line of a donation ticket in one write (CR-143 §B).
+	 *
+	 * Rows are built with `keyDonationReceipt` (`reason: 'donation'`, `ref_id` = the
+	 * donation) under deterministic `_id`s, written in a single `_bulk_docs`, and only
+	 * then is the donation moved to `received`. A partial write is returned, not
+	 * thrown: the caller re-sends the same lines and only the missing rows are written
+	 * (FR-B7); when every row is already there only the status transition runs (FR-B8).
+	 * Validation (catalog unit, `lot.expiry` for `requiresExpiry` items — FR-D2) throws
+	 * before anything is written.
+	 */
+	receiveDonationBatch(
+		donation: Donation,
+		counted: readonly DonationBatchLine[],
+		ctx: AuthorContext
+	): Promise<DonationBatchResult>;
+
+	/**
 	 * Process and persist an outbound stock distribute entry.
 	 * Will throw an error if the selected physical lot is missing, mismatched, or
 	 * does not have enough stock.
@@ -83,6 +103,23 @@ export interface OperationsRepository {
 	 * Process and persist a stock adjustment entry (increases or decreases stock).
 	 */
 	adjustStock(input: AdjustInput, ctx: AuthorContext): Promise<StockLedger>;
+
+	/**
+	 * Persist a cycle count (#347, CR-143 §C): one `adjust` row with
+	 * `adjust_reason: 'count_mismatch'` per differing lot, written in a single
+	 * `_bulk_docs` under deterministic `_id`s. A partial write is returned, not thrown —
+	 * re-sending the same submission writes only the rows still missing. Validation
+	 * (known item, unit, enough stock for the write-offs) throws before anything is written.
+	 */
+	applyCycleCount(submission: CycleCountSubmission, ctx: AuthorContext): Promise<CycleCountResult>;
+
+	/**
+	 * Merge a duplicate item into another (CR-143 §F): move every on-hand lot of the source
+	 * to the destination with paired `adjust`/`merge` rows in ONE `bulkDocs`, then deactivate
+	 * the source with `merged_into`. Throws `ItemMergeError` when the actor may not merge it
+	 * (FR-F4) or the units cannot be converted (FR-F3), before anything is written.
+	 */
+	mergeItems(input: MergeItemsInput, ctx: AuthorContext): Promise<ItemMergeResult>;
 
 	// Campaign/Donation/Slot methods
 	listCampaigns(): Promise<DonationCampaign[]>;

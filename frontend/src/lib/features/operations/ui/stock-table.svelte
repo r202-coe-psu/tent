@@ -12,7 +12,10 @@
 	import { useSupplyItems, useThresholdOverrides } from '$lib/features/supply';
 	import { SUPPLY_CATEGORY_LABELS, type SupplyCategory } from '$lib/features/supply';
 	import {
+		isMergedItem,
 		itemMasterUnit,
+		mergedAliasesByTarget,
+		requiresExpiry,
 		useItemMasters,
 		useItemCategories,
 		formatUnit,
@@ -21,7 +24,7 @@
 	} from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { isSystemAdmin } from '$lib/auth/roles';
+	import { isSystemAdmin, hasCapabilityInShelter, WAREHOUSE_STAFF } from '$lib/auth/roles';
 	import { useShelters } from '$lib/features/shelters';
 	import { getShelterCode } from '$lib/db/shelter';
 	import * as Table from '$lib/components/ui/table/index.js';
@@ -32,6 +35,7 @@
 	import ReceiveStockForm from './receive-stock-form.svelte';
 	import DistributeStockForm from './distribute-stock-form.svelte';
 	import AdjustStockForm from './adjust-stock-form.svelte';
+	import CycleCountForm from './cycle-count-form.svelte';
 	import AttentionCards from './stock/attention-cards.svelte';
 	import StockFilters from './stock/stock-filters.svelte';
 	import StockRow from './stock/stock-row.svelte';
@@ -68,6 +72,7 @@
 		type ItemStockSummary
 	} from '../domain/stock-summary';
 	import { lotStorageKey, lotStorageName } from '../domain/lot-storage';
+	import { toLotPriorityItems } from '../domain/lot-priority';
 	import { useStoragePoints } from '../application/use-storage-points.svelte';
 	import { qtyGt, addQty } from '$lib/utils/qty';
 	import { IsMobile } from '$lib/hooks/is-mobile.svelte';
@@ -76,6 +81,7 @@
 	import ArrowDownToLine from '@lucide/svelte/icons/arrow-down-to-line';
 	import ArrowUpFromLine from '@lucide/svelte/icons/arrow-up-from-line';
 	import SlidersHorizontal from '@lucide/svelte/icons/sliders-horizontal';
+	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 
 	let { occupancy = 120 }: { occupancy?: number } = $props();
 
@@ -94,6 +100,10 @@
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
+	const currentShelter = $derived(getShelterCode());
+	const canDistribute = $derived(hasCapabilityInShelter(roles, currentShelter, WAREHOUSE_STAFF));
+	const DISTRIBUTE_FORBIDDEN_HINT =
+		'ต้องมีสิทธิ์เจ้าหน้าที่คลัง (warehouse_staff) จึงจะเบิกจ่ายได้';
 	let showOverall = $state(false);
 
 	const sheltersQuery = useShelters();
@@ -128,8 +138,9 @@
 
 	let selectedItemId = $state<string | null>(null);
 	let detailOpen = $state(false);
+	type QuickActionKind = 'receive' | 'distribute' | 'adjust' | 'count';
 	let quickActionOpen = $state(false);
-	let quickActionKind = $state<'receive' | 'distribute' | 'adjust'>('receive');
+	let quickActionKind = $state<QuickActionKind>('receive');
 	let quickActionItemId = $state<string | undefined>(undefined);
 	const isMobileViewport = new IsMobile();
 
@@ -138,7 +149,7 @@
 		detailOpen = true;
 	}
 
-	function openQuickAction(kind: 'receive' | 'distribute' | 'adjust', itemId?: string) {
+	function openQuickAction(kind: QuickActionKind, itemId?: string) {
 		quickActionKind = kind;
 		quickActionItemId = itemId;
 		quickActionOpen = true;
@@ -156,14 +167,18 @@
 			? 'รับเข้า'
 			: quickActionKind === 'distribute'
 				? 'เบิกจ่าย'
-				: 'ปรับยอด / ตรวจนับ'
+				: quickActionKind === 'count'
+					? 'ตรวจนับตามจุดเก็บ'
+					: 'ปรับยอดทีละรายการ'
 	);
 	const quickActionDescription = $derived(
 		quickActionKind === 'receive'
 			? 'บันทึกรับพัสดุเข้าคลัง'
 			: quickActionKind === 'distribute'
-				? 'ระบบเลือกล็อตที่หมดอายุก่อนให้อัตโนมัติ'
-				: 'กรอกจำนวนที่นับได้จริง แล้วระบบจะคำนวณส่วนต่างให้อัตโนมัติ'
+				? 'ระบบเลือกล็อตที่ควรใช้ก่อนให้อัตโนมัติ'
+				: quickActionKind === 'count'
+					? 'เดินนับทีละล็อตในจุดเก็บเดียว แล้วบันทึกครั้งเดียว'
+					: 'กรอกจำนวนที่นับได้จริง แล้วระบบจะคำนวณส่วนต่างให้อัตโนมัติ'
 	);
 
 	const items = $derived.by(() => {
@@ -175,17 +190,23 @@
 		}));
 		const itemMasters = itemMastersQuery.data ?? [];
 
-		const mappedItemMasters = itemMasters.map((im) => ({
-			_id: im._id,
-			name: im.name,
-			category: im.category || 'other',
-			unit: itemMasterUnit(im),
-			reorder_level: null,
-			perishable: false,
-			target_reserve_days: undefined,
-			consumption_rate: undefined,
-			timeframe: undefined
-		}));
+		// A merged-away source holds no stock any more and is hidden (CR-143 FR-F5); its name
+		// stays searchable on the destination.
+		const aliasesByTarget = mergedAliasesByTarget(itemMasters);
+		const mappedItemMasters = itemMasters
+			.filter((im) => !isMergedItem(im))
+			.map((im) => ({
+				_id: im._id,
+				aliases: aliasesByTarget.get(im._id) ?? [],
+				name: im.name,
+				category: im.category || 'other',
+				unit: itemMasterUnit(im),
+				reorder_level: null,
+				perishable: requiresExpiry(im),
+				target_reserve_days: undefined,
+				consumption_rate: undefined,
+				timeframe: undefined
+			}));
 
 		return [...supplyItems, ...mappedItemMasters];
 	});
@@ -232,9 +253,17 @@
 		}
 	});
 
+	/** Shelf life / storage type per item, for the lot order shown in the detail panel. */
+	const lotPriorityItems = $derived(toLotPriorityItems(itemMastersQuery.data ?? []));
+
 	const stockSummaryByItem = $derived.by(() => {
 		const result = new SvelteMap<string, ItemStockSummary>();
-		for (const [itemId, lots] of lotsByItem) result.set(itemId, summarizeItemStock(lots));
+		for (const [itemId, lots] of lotsByItem) {
+			result.set(
+				itemId,
+				summarizeItemStock(lots, undefined, undefined, lotPriorityItems.get(itemId))
+			);
+		}
 		return result;
 	});
 
@@ -303,7 +332,8 @@
 				lotCount: summary?.lotCount ?? 0,
 				locationLabel: locationLabelByItem.get(item._id) ?? null,
 				coverDays: daysOfCover(qtyOnHand, dailyConsumption(occupancy, item, override)),
-				neverReceived: !everStocked.has(item._id)
+				neverReceived: !everStocked.has(item._id),
+				aliases: 'aliases' in item ? item.aliases : []
 			};
 		})
 	);
@@ -372,8 +402,8 @@
 					type="button"
 					variant="outline"
 					class="min-h-11 gap-2 rounded-lg border-slate-300 px-4 text-sm font-semibold text-slate-800 shadow-2xs"
-					disabled={offline}
-					title={offline ? OFFLINE_HINT : undefined}
+					disabled={offline || !canDistribute}
+					title={offline ? OFFLINE_HINT : !canDistribute ? DISTRIBUTE_FORBIDDEN_HINT : undefined}
 					onclick={() => openQuickAction('distribute')}
 				>
 					<ArrowUpFromLine class="h-4 w-4" aria-hidden="true" />
@@ -388,7 +418,18 @@
 					onclick={() => openQuickAction('adjust')}
 				>
 					<SlidersHorizontal class="h-4 w-4" aria-hidden="true" />
-					ปรับยอด / ตรวจนับ
+					ปรับยอด
+				</Button>
+				<Button
+					type="button"
+					variant="outline"
+					class="min-h-11 gap-2 rounded-lg border-slate-300 px-4 text-sm font-semibold text-slate-800 shadow-2xs"
+					disabled={offline}
+					title={offline ? OFFLINE_HINT : undefined}
+					onclick={() => openQuickAction('count')}
+				>
+					<ClipboardList class="h-4 w-4" aria-hidden="true" />
+					ตรวจนับ
 				</Button>
 			</div>
 			<a
@@ -496,6 +537,7 @@
 								{row}
 								{readonly}
 								{offline}
+								{canDistribute}
 								onopen={(r) => openDetail(r._id)}
 								onreceive={(r) => openQuickAction('receive', r._id)}
 								ondistribute={(r) => openQuickAction('distribute', r._id)}
@@ -529,6 +571,7 @@
 									{row}
 									{readonly}
 									{offline}
+									{canDistribute}
 									onopen={(r) => openDetail(r._id)}
 									onreceive={(r) => openQuickAction('receive', r._id)}
 									ondistribute={(r) => openQuickAction('distribute', r._id)}
@@ -557,7 +600,7 @@
 
 <!-- Movement buttons: bottom bar below md (md+ keeps them in the header) -->
 <div
-	class="fixed inset-x-0 bottom-0 z-30 grid grid-cols-3 gap-2 border-t border-slate-200 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden"
+	class="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 gap-2 border-t border-slate-200 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden"
 >
 	<Button
 		type="button"
@@ -572,8 +615,8 @@
 		type="button"
 		variant="outline"
 		class="min-h-12 rounded-lg border-slate-300 text-sm font-semibold text-slate-800"
-		disabled={offline}
-		title={offline ? OFFLINE_HINT : undefined}
+		disabled={offline || !canDistribute}
+		title={offline ? OFFLINE_HINT : !canDistribute ? DISTRIBUTE_FORBIDDEN_HINT : undefined}
 		onclick={() => openQuickAction('distribute')}
 	>
 		เบิกจ่าย
@@ -586,6 +629,16 @@
 		title={offline ? OFFLINE_HINT : undefined}
 		onclick={() => openQuickAction('adjust')}
 	>
+		ปรับยอด
+	</Button>
+	<Button
+		type="button"
+		variant="outline"
+		class="min-h-12 rounded-lg border-slate-300 text-sm font-semibold text-slate-800"
+		disabled={offline}
+		title={offline ? OFFLINE_HINT : undefined}
+		onclick={() => openQuickAction('count')}
+	>
 		ตรวจนับ
 	</Button>
 </div>
@@ -594,8 +647,10 @@
 	bind:open={detailOpen}
 	row={selectedManageItem}
 	lots={selectedItemId ? (lotsByItem.get(selectedItemId) ?? []) : []}
+	itemsById={lotPriorityItems}
 	shelterCode={getShelterCode()}
 	{offline}
+	{canDistribute}
 	onaction={(kind) => openQuickAction(kind, selectedItemId ?? undefined)}
 />
 
@@ -631,6 +686,8 @@
 					{occupancy}
 					onsuccess={onMovementSuccess}
 				/>
+			{:else if quickActionKind === 'count'}
+				<CycleCountForm onsuccess={onMovementSuccess} />
 			{:else}
 				<AdjustStockForm preselectedItemId={quickActionItemId} onsuccess={onMovementSuccess} />
 			{/if}

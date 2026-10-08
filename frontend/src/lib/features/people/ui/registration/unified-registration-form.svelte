@@ -181,6 +181,11 @@
 		return {
 			housing_type: 'owned_house',
 			residence_landmark: null,
+			// Keep defined — Svelte 5 rejects bind:x={undefined} when $bindable has a fallback.
+			dorm_name: null,
+			dorm_building: null,
+			dorm_floor: null,
+			dorm_room: null,
 			address_no: '',
 			village_no: '',
 			subdistrict: '',
@@ -196,7 +201,11 @@
 	function buildInitialMembers(): UnifiedMemberWithMeta[] {
 		if (initialMembers && initialMembers.length > 0) {
 			return initialMembers.map((m) => ({
+				...blankUnifiedMember(),
 				...m,
+				// Keep defined — Svelte 5 rejects bind:x={undefined} when $bindable has a fallback.
+				religion_other: m.religion_other ?? null,
+				disability_other_detail: m.disability_other_detail ?? null,
 				reporting_in: m.reporting_in ?? (m.stay_status === 'pre_registered' || !m._id)
 			}));
 		}

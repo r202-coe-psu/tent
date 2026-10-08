@@ -68,6 +68,13 @@ describe('attentionCounts', () => {
 describe('filterRows', () => {
 	const rows = [milk, rice, bread, eggs, noodles, catalogOnly];
 
+	it('finds an item by the name of an item merged into it (CR-143 FR-F5)', () => {
+		const merged = row({ _id: 'item:b', name: 'Soy milk 300 ml', aliases: ['Soymilk 300ml'] });
+		const found = filterRows([merged, rice], { ...NO_FILTER, q: 'soymilk' });
+		expect(found.map((r) => r._id)).toEqual(['item:b']);
+		expect(filterRows([merged, rice], { ...NO_FILTER, q: 'nothing' })).toEqual([]);
+	});
+
 	it('hides catalog-only items by default so they are not counted as "หมด"', () => {
 		expect(filterRows(rows, NO_FILTER).map((r) => r._id)).not.toContain('soap');
 		expect(hiddenCatalogCount(rows)).toBe(1);

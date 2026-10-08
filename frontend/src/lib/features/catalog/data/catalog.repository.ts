@@ -48,6 +48,13 @@ export interface CatalogRepository {
 
 	updateItemMaster(itemMaster: ItemMaster): Promise<ItemMaster>;
 
+	/**
+	 * Dry-run of `updateItemMaster`: throws what the write would throw (item missing, unit master
+	 * unavailable, unknown unit codes) without saving. Lets a multi-step flow (item merge, CR-143
+	 * FR-F6) prove the item doc will save BEFORE it writes ledger rows.
+	 */
+	assertItemMasterWritable(itemMaster: ItemMaster): Promise<ItemMaster>;
+
 	// Recipe
 	createRecipe(input: RecipeInput, ctx: AuthorContext, shelterCode?: string): Promise<Recipe>;
 

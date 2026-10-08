@@ -1,13 +1,27 @@
 import Fuse, { type IFuseOptions } from 'fuse.js';
-import { findItemByBarcode, itemMasterUnit, type PackagingSource } from '$lib/features/catalog';
+import {
+	findItemByBarcode,
+	isMergedItem,
+	itemMasterUnit,
+	mergedAliasesByTarget,
+	requiresExpiry,
+	type PackagingSource,
+	type StorageType
+} from '$lib/features/catalog';
 
 /** Item row for receive / distribute / adjust pickers (and A6 transfer). */
 export type StockFormItem = PackagingSource & {
 	_id: string;
 	name: string;
 	unit: string;
-	perishable?: boolean;
+	/** `lot.expiry` is mandatory on receive (CR-143 FR-D1 / FR-D3). */
+	requiresExpiry?: boolean;
+	/** Drives the receive form's expiry autofill (FR-D2a). */
+	shelf_life_days?: number;
+	storage_type?: StorageType;
 	sku?: string;
+	/** Names of items merged into this one (CR-143 FR-F5): searching an old name finds it. */
+	aliases?: string[];
 };
 
 /** Minimal supply-item fields needed to build a {@link StockFormItem}. */
@@ -29,6 +43,9 @@ export type StockFormMasterSource = {
 	default_inventory_uom?: string;
 	default_issue_uom?: string;
 	deactivated?: boolean;
+	merged_into?: string;
+	shelf_life_days?: number;
+	storage_type?: StorageType;
 };
 
 /**
@@ -45,13 +62,15 @@ export function toStockFormItems(
 		unit: item.unit,
 		base_unit: item.unit,
 		conversions: [] as { uom_name: string; multiplier: string }[],
-		perishable: item.perishable
+		requiresExpiry: requiresExpiry({ perishable: item.perishable })
 	}));
 
+	const aliasesByTarget = mergedAliasesByTarget(itemMasters);
 	const mappedMasters = itemMasters
-		.filter((im) => !im.deactivated)
+		.filter((im) => !im.deactivated && !isMergedItem(im))
 		.map((im) => {
 			const unit = itemMasterUnit(im);
+			const aliases = aliasesByTarget.get(im._id);
 			return {
 				_id: im._id,
 				name: im.name,
@@ -60,8 +79,11 @@ export function toStockFormItems(
 				conversions: [...(im.conversions ?? [])],
 				default_inventory_uom: im.default_inventory_uom,
 				default_issue_uom: im.default_issue_uom,
-				perishable: false,
-				...(im.sku !== undefined ? { sku: im.sku } : {})
+				requiresExpiry: requiresExpiry(im),
+				...(im.shelf_life_days != null ? { shelf_life_days: im.shelf_life_days } : {}),
+				...(im.storage_type ? { storage_type: im.storage_type } : {}),
+				...(im.sku !== undefined ? { sku: im.sku } : {}),
+				...(aliases?.length ? { aliases } : {})
 			};
 		});
 
@@ -79,7 +101,8 @@ const FUSE_OPTIONS: IFuseOptions<StockFormSearchDoc> = {
 	keys: [
 		{ name: 'name', weight: 0.7 },
 		{ name: 'sku', weight: 0.2 },
-		{ name: 'skuNorm', weight: 0.1 }
+		{ name: 'skuNorm', weight: 0.1 },
+		{ name: 'aliases', weight: 0.5 }
 	],
 	threshold: 0.4,
 	ignoreLocation: true,
