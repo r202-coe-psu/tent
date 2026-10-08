@@ -47,6 +47,13 @@
 		generated && device && generated.deviceId === device.id ? generated.pin : null
 	);
 
+	/**
+	 * Set in `onUpdate` once the PIN is saved; the dialog is closed (and the form cleared) in
+	 * `onUpdated`, because superforms writes the submitted data back into the form after `onUpdate`
+	 * returns — clearing earlier would leave this device's PIN in the fields for the next device.
+	 */
+	let savedThisSubmit = false;
+
 	const form = superForm(defaults(emptyValues(), zod4Client(setStaffPinFormSchema)), {
 		SPA: true,
 		dataType: 'json',
@@ -54,15 +61,22 @@
 		resetForm: false,
 		warnings: { duplicateId: false },
 		onUpdate: async ({ form: validated }) => {
+			savedThisSubmit = false;
 			if (!validated.valid || !device) return;
+			const target = device;
 			try {
-				await setMutation.mutateAsync({ id: device.id, body: { pin: validated.data.pin } });
+				await setMutation.mutateAsync({ id: target.id, body: { pin: validated.data.pin } });
 				setMutation.reset();
-				toast.success(`ตั้ง PIN ของเครื่อง ${device.name} แล้ว`);
-				close();
+				toast.success(`ตั้ง PIN ของเครื่อง ${target.name} แล้ว`);
+				savedThisSubmit = true;
 			} catch (err) {
 				toast.error(err instanceof Error ? err.message : 'ไม่สามารถตั้ง PIN ได้');
 			}
+		},
+		onUpdated: () => {
+			if (!savedThisSubmit) return;
+			savedThisSubmit = false;
+			close();
 		}
 	});
 
@@ -97,11 +111,12 @@
 		try {
 			const result = await setMutation.mutateAsync({ id: target.id, body: { regenerate: true } });
 			setMutation.reset();
+			// The PIN has changed on the server even if the dialog was closed meanwhile — always say so.
+			toast.success(`สุ่ม PIN ใหม่ให้เครื่อง ${target.name} แล้ว`);
 			if (!open || !result.pin) return;
 			generated = { deviceId: target.id, pin: result.pin };
 			generatedVisible = false;
 			$formData = emptyValues();
-			toast.success(`สุ่ม PIN ใหม่ให้เครื่อง ${target.name} แล้ว`);
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'ไม่สามารถสุ่ม PIN ใหม่ได้');
 		}
