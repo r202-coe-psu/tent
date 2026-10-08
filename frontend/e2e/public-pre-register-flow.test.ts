@@ -177,6 +177,15 @@ const test = base.extend<{ health: PageHealth & { allow(...patterns: RegExp[]): 
 
 const NO_BANNER = async (page: Page) => mockSystemBanner(page, false);
 
+/**
+ * ThaiD is not under test here and its flag differs per environment (staging: ON, local: OFF).
+ * The render-contract snapshots (R4 / R5) mock it OFF so they never depend on that flag.
+ */
+const NO_THAID = async (page: Page) =>
+	page.route('**/api/public/v1/thaid/status', (route) =>
+		route.fulfill({ json: { enabled: false, isDev: false, mode: 'real' } })
+	);
+
 /** Identity of this run — the last name carries the run id so teardown can find it. */
 const LAST_NAME = `ทดสอบ${RUN_ID}`;
 const HEAD_ID = fictitiousNationalId(Number.parseInt(RUN_ID, 36) % 1e11);
@@ -589,12 +598,14 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 
 	test('R4 ARIA snapshot: the empty form', async ({ page }) => {
 		await NO_BANNER(page);
+		await NO_THAID(page);
 		await openPreRegister(page);
 		await expect(page.locator('main')).toMatchAriaSnapshot({ name: 'form-empty.aria.yml' });
 	});
 
 	test('R4 ARIA snapshot: the form with every error showing', async ({ page }) => {
 		await NO_BANNER(page);
+		await NO_THAID(page);
 		await openPreRegister(page);
 		await acceptDisclaimer(page);
 		await submitButton(page).click();
@@ -609,6 +620,7 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 		test(`R5 screenshot ${viewport.name}: empty and all-errors form`, async ({ page }) => {
 			await page.setViewportSize({ width: viewport.width, height: viewport.height });
 			await NO_BANNER(page);
+			await NO_THAID(page);
 			await openPreRegister(page);
 			await page.waitForLoadState('networkidle');
 			// Viewport shots at fixed scroll positions: a full-page capture mangles the sticky
