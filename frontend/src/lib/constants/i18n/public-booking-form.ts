@@ -159,11 +159,16 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		unassignedShelterName: 'ไม่ระบุศูนย์พักพิง',
 		guidanceTitle: '💡 ลงทะเบียนล่วงหน้าเพื่อความสะดวกและรวดเร็ว',
 		guidanceDesc:
-			'เมื่อลงทะเบียนเรียบร้อยแล้ว ท่านสามารถแจ้งเบอร์โทรศัพท์หรือแสดง QR Code ต่อเจ้าหน้าที่ลงทะเบียนประจำศูนย์ เพื่อยืนยันการเข้าพักได้ทันที',
+			'- เมื่อลงทะเบียนเรียบร้อยแล้ว ท่านสามารถแจ้งเบอร์โทรศัพท์หรือแสดง QR Code ต่อเจ้าหน้าที่ลงทะเบียนประจำศูนย์ เพื่อยืนยันการเข้าพักได้ทันที\n- การลงทะเบียนล่วงหน้าเป็นเพียงการบันทึกข้อมูลเข้าสู่ระบบเพื่อความสะดวกและลดขั้นตอนเท่านั้น ไม่ได้เป็นการยืนยันสิทธิ์หรือการันตีการเข้าพัก',
+		guidanceBullets: [
+			'- เมื่อลงทะเบียนเรียบร้อยแล้ว ท่านสามารถแจ้งเบอร์โทรศัพท์หรือแสดง QR Code ต่อเจ้าหน้าที่ลงทะเบียนประจำศูนย์ เพื่อยืนยันการเข้าพักได้ทันที',
+			'- การลงทะเบียนล่วงหน้าเป็นเพียงการบันทึกข้อมูลเข้าสู่ระบบเพื่อความสะดวกและลดขั้นตอนเท่านั้น ไม่ได้เป็นการยืนยันสิทธิ์หรือการันตีการเข้าพัก'
+		],
 		unassignedOption: '📍 ไม่ระบุศูนย์พักพิง',
 		unassignedOptionHint: 'ลงทะเบียนล่วงหน้าโดยไม่ระบุศูนย์ (ยืนยันศูนย์เมื่อเดินทางถึง)',
-		unassignedNoticeTitle: 'กรณีไม่ระบุศูนย์พักพิง',
-		unassignedNoticeDesc: 'การลงทะเบียนล่วงหน้า จะไม่การันตีว่าคุณจะได้เข้าพักในศูนย์',
+		shelterNoticeTitle: 'หมายเหตุ',
+		shelterNoticeDesc:
+			'หากไม่พบศูนย์พักพิง ที่ต้องการเข้าพักให้เลือกไม่ระบุศูนย์พักพิงไว้ก่อน เนื่องจากศูนย์ของท่านไม่เปิดให้ลงทะเบียนล่วงหน้า',
 		shelterChangedToast: (name: string) => `เปลี่ยนศูนย์พักพิงเป็น "${name}" เรียบร้อยแล้ว`,
 		submitRegistration: 'ยืนยันการลงทะเบียน',
 		shelterSafetyTitle: 'เงื่อนไขและมาตรการความปลอดภัยของศูนย์พักพิง',
@@ -477,11 +482,16 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		unassignedShelterName: 'No shelter selected',
 		guidanceTitle: '💡 Pre-register for a faster check-in',
 		guidanceDesc:
-			'Once registered, give your phone number or show the QR code to the registration staff at the shelter to confirm your stay right away.',
+			'- Once registered, give your phone number or show the QR code to the registration staff at the shelter to confirm your stay right away.\n- Pre-registration is solely to record information in the system for convenience and to reduce processing steps; it does not confirm eligibility or guarantee accommodation.',
+		guidanceBullets: [
+			'- Once registered, give your phone number or show the QR code to the registration staff at the shelter to confirm your stay right away.',
+			'- Pre-registration is solely to record information in the system for convenience and to reduce processing steps; it does not confirm eligibility or guarantee accommodation.'
+		],
 		unassignedOption: '📍 No shelter selected',
 		unassignedOptionHint: 'Pre-register without choosing a shelter (confirm one when you arrive)',
-		unassignedNoticeTitle: 'Registering without a shelter',
-		unassignedNoticeDesc: 'Pre-registration does not guarantee you a place in a shelter.',
+		shelterNoticeTitle: 'Note',
+		shelterNoticeDesc:
+			'If you cannot find the shelter you wish to stay at, select "No shelter selected" for now, as your shelter may not be open for pre-registration.',
 		shelterChangedToast: (name: string) => `Shelter changed to "${name}"`,
 		submitRegistration: 'Submit registration',
 		shelterSafetyTitle: 'Shelter conditions and safety rules',

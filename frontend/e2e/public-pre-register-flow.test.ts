@@ -214,9 +214,9 @@ test.describe(
 			await page.getByRole('link', { name: 'ลงทะเบียนผู้ประสบภัยล่วงหน้า' }).click();
 			// The booking form pins the default (central queue) in the URL once it mounts.
 			await expect(page).toHaveURL(/\/pre-register\?shelter=unassigned$/);
-			await expect(page).toHaveTitle('ลงทะเบียนเข้าศูนย์พักพิงล่วงหน้า | SmartShelter');
+			await expect(page).toHaveTitle('ลงทะเบียนล่วงหน้า | SmartShelter');
 			await expect(
-				page.getByRole('heading', { name: 'ลงทะเบียนเข้าศูนย์พักพิงล่วงหน้า', level: 1 })
+				page.getByRole('heading', { name: 'ลงทะเบียนล่วงหน้า', level: 1 })
 			).toBeVisible();
 
 			await page.goto('/');
@@ -267,30 +267,37 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 		await openPreRegister(page);
 
 		await expect(
-			page.getByRole('heading', { name: 'ลงทะเบียนเข้าศูนย์พักพิงล่วงหน้า', level: 1 })
+			page.getByRole('heading', { name: 'ลงทะเบียนล่วงหน้า', level: 1 })
 		).toBeVisible();
 		await expect(page.getByText('💡 ลงทะเบียนล่วงหน้าเพื่อความสะดวกและรวดเร็ว')).toBeVisible();
+		await expect(
+			page.getByText(
+				'- เมื่อลงทะเบียนเรียบร้อยแล้ว ท่านสามารถแจ้งเบอร์โทรศัพท์หรือแสดง QR Code ต่อเจ้าหน้าที่ลงทะเบียนประจำศูนย์ เพื่อยืนยันการเข้าพักได้ทันที'
+			)
+		).toBeVisible();
+		await expect(
+			page.getByText(
+				'- การลงทะเบียนล่วงหน้าเป็นเพียงการบันทึกข้อมูลเข้าสู่ระบบเพื่อความสะดวกและลดขั้นตอนเท่านั้น ไม่ได้เป็นการยืนยันสิทธิ์หรือการันตีการเข้าพัก'
+			)
+		).toBeVisible();
 		await expect(page.getByRole('link', { name: 'กลับหน้าหลัก' })).toBeVisible();
 		await expect(page.getByRole('button', { name: 'ลงทะเบียนใหม่' })).toBeVisible();
 		await expect(page.getByRole('button', { name: 'ใบลงทะเบียนของฉัน' })).toBeVisible();
 
-		// shelter section + the "no shelter" warning
+		// shelter section + always-visible note box
 		await expect(
 			page.getByRole('heading', { name: 'ศูนย์พักพิงที่ต้องการเข้าพัก', level: 3 })
 		).toBeVisible();
 		await expect(shelterTrigger(page)).toContainText('ไม่ระบุศูนย์พักพิง');
-		await expect(page.getByText('กรณีไม่ระบุศูนย์พักพิง', { exact: true })).toBeVisible();
+		await expect(page.getByText('หมายเหตุ', { exact: true })).toBeVisible();
 		await expect(
-			page.getByText('การลงทะเบียนล่วงหน้า จะไม่การันตีว่าคุณจะได้เข้าพักในศูนย์')
+			page.getByText(
+				'หากไม่พบศูนย์พักพิง ที่ต้องการเข้าพักให้เลือกไม่ระบุศูนย์พักพิงไว้ก่อน เนื่องจากศูนย์ของท่านไม่เปิดให้ลงทะเบียนล่วงหน้า'
+			)
 		).toBeVisible();
 
-		// live summary (desktop aside)
-		const aside = page.getByRole('complementary');
-		await expect(aside).toContainText('Live Summary');
-		await expect(aside.getByRole('button', { name: SUBMIT_LABEL })).toBeVisible();
-		for (const shortcut of ['1. ที่อยู่', '2. สมาชิก', '3. สัตว์เลี้ยง']) {
-			await expect(aside.getByRole('button', { name: shortcut })).toBeVisible();
-		}
+		// live summary (desktop aside) is removed on public channel
+		await expect(page.getByRole('complementary')).toHaveCount(0);
 
 		// the four sections
 		await expect(page.getByRole('heading', { name: 'ข้อมูลที่อยู่อาศัย', level: 2 })).toBeVisible();
@@ -301,11 +308,9 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 		).toBeVisible();
 		await expect(page.getByRole('checkbox', { name: DISCLAIMER_LABEL })).toBeVisible();
 
-		// both submit buttons (summary aside + bottom bar)
-		await expect(page.getByRole('button', { name: SUBMIT_LABEL })).toHaveCount(2);
-		for (const button of await page.getByRole('button', { name: SUBMIT_LABEL }).all()) {
-			await expect(button).toBeVisible();
-		}
+		// single submit button in bottom bar
+		await expect(page.getByRole('button', { name: SUBMIT_LABEL })).toHaveCount(1);
+		await expect(page.getByRole('button', { name: SUBMIT_LABEL })).toBeVisible();
 	});
 
 	test('R2 every address and primary-contact control is rendered, enabled and labelled', async ({
@@ -724,15 +729,13 @@ test.describe('Pre-register: validation gates (V)', { tag: ['@pre-register', '@s
 	}) => {
 		await openPreRegister(page);
 		const buttons = page.getByRole('button', { name: SUBMIT_LABEL });
-		await expect(buttons).toHaveCount(2);
-		await expect(buttons.first()).toBeDisabled();
-		await expect(buttons.last()).toBeDisabled();
+		await expect(buttons).toHaveCount(1);
+		await expect(buttons).toBeDisabled();
 
 		await acceptDisclaimer(page);
-		await expect(buttons.first()).toBeEnabled();
-		await expect(buttons.last()).toBeEnabled();
+		await expect(buttons).toBeEnabled();
 		await page.getByRole('checkbox', { name: DISCLAIMER_LABEL }).uncheck();
-		await expect(buttons.last()).toBeDisabled();
+		await expect(buttons).toBeDisabled();
 
 		await acceptDisclaimer(page);
 		await submitButton(page).click();
@@ -1613,13 +1616,13 @@ test.describe('Pre-register: layout and language (U)', { tag: ['@pre-register', 
 		await openPreRegister(page);
 		await page.getByRole('button', { name: 'Switch to English' }).click();
 		await expect(
-			page.getByRole('heading', { name: 'Pre-register for a shelter', level: 1 })
+			page.getByRole('heading', { name: 'Pre-registration', level: 1 })
 		).toBeVisible();
 		await expect(page.getByRole('button', { name: 'My registrations' })).toBeVisible();
-		await expect(page).toHaveTitle('Pre-register for a shelter | SmartShelter');
+		await expect(page).toHaveTitle('Pre-registration | SmartShelter');
 		await page.getByRole('button', { name: 'เปลี่ยนเป็นภาษาไทย' }).click();
 		await expect(
-			page.getByRole('heading', { name: 'ลงทะเบียนเข้าศูนย์พักพิงล่วงหน้า', level: 1 })
+			page.getByRole('heading', { name: 'ลงทะเบียนล่วงหน้า', level: 1 })
 		).toBeVisible();
 	});
 
