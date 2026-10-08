@@ -16,6 +16,7 @@ export default defineConfig({
 	...stagingConfig,
 	testMatch: [
 		'**/public-home-flow.test.ts',
+		'**/public-pre-register-flow.test.ts',
 		'**/public-search-flow.test.ts',
 		'**/public-shelters-filter.test.ts'
 	],

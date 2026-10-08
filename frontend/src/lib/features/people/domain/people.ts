@@ -681,7 +681,7 @@ export function refineMemberRules(
 		/** Stored number of an existing evacuee (report-in) — unchanged numbers skip the checksum. */
 		original_person_number?: string | null;
 	},
-	ctx: z.RefinementCtx,
+	ctx: Pick<z.RefinementCtx, 'addIssue'>,
 	path: (string | number)[] = []
 ): void {
 	const birthYear = toOptionalInt(member.birth_year);
@@ -710,6 +710,34 @@ export function refineMemberRules(
 		if (issue)
 			ctx.addIssue({ code: 'custom', path: [...path, 'person_id', 'number'], message: issue });
 	}
+}
+
+export type MemberRuleIssue = { path: (string | number)[]; message: string };
+
+/**
+ * Runs {@link refineMemberRules} for every member and returns the issues instead of adding them to
+ * a Zod context. Zod 4 skips `superRefine` once the base schema has an aborting issue (e.g. gender
+ * not picked), so forms call this to report the cross-field errors in the same pass.
+ * Paths are `['members', index, ...]`.
+ */
+export function collectMemberRuleIssues(
+	members: Parameters<typeof refineMemberRules>[0][]
+): MemberRuleIssue[] {
+	const issues: MemberRuleIssue[] = [];
+	const collector: Pick<z.RefinementCtx, 'addIssue'> = {
+		addIssue(issue) {
+			if (typeof issue === 'string') {
+				issues.push({ path: [], message: issue });
+				return;
+			}
+			issues.push({
+				path: (issue.path ?? []) as (string | number)[],
+				message: issue.message ?? ''
+			});
+		}
+	};
+	members.forEach((member, index) => refineMemberRules(member, collector, ['members', index]));
+	return issues;
 }
 
 /** Required emergency contact — household pre-register (and when any field is filled). */

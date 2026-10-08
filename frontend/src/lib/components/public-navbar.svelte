@@ -150,17 +150,18 @@
 			<!-- Primary public action stays visible on phones (not only inside the hamburger) -->
 			<a
 				href={resolve('/pre-register')}
-				class="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-lg bg-[#0A2647] px-2.5 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-[#051930] focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none sm:px-3 sm:text-sm"
+				class="inline-flex min-h-9 min-w-9 shrink-0 items-center justify-center gap-1 rounded-lg bg-[#0A2647] px-2 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-[#051930] focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none sm:px-3 sm:text-sm"
 			>
 				<ClipboardPenLine class="h-4 w-4" aria-hidden="true" />
-				{t.registerShort}
+				<!-- Icon-only below sm so the brand name keeps its full width on 360–390px phones. -->
+				<span class="sr-only sm:not-sr-only">{t.registerShort}</span>
 			</a>
 
 			<!-- Notification Bell Button (Mobile) -->
 			<PublicNotificationMenu variant="navbar" {announcements} bind:menuOpen={alertsMenuOpen} />
 
-			<!-- Language Switcher (Mobile) -->
-			<div class="flex shrink-0 items-center border-l border-slate-200 pl-1.5 sm:pl-2">
+			<!-- Language Switcher (sm+ only; phones use the toggle inside the hamburger sheet) -->
+			<div class="hidden shrink-0 items-center border-l border-slate-200 pl-1.5 sm:flex sm:pl-2">
 				<button
 					type="button"
 					onclick={toggleLanguage}

@@ -512,6 +512,7 @@
 	}
 	.unified-reg-bottom-chrome {
 		@apply sticky bottom-0 z-30 -mx-1 border-t border-border bg-background/95 px-3 py-2 backdrop-blur-sm sm:space-y-2 sm:px-4 sm:pt-2.5 sm:pb-3;
+		bottom: var(--testing-banner-height);
 		padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
 	}
 	.shelter-form-bottom-chrome {

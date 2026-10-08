@@ -31,6 +31,8 @@ export {
 	useCreateUnassignedRegistration
 } from './application/queries';
 
+export { syncStoredTicketStatuses, type TicketSyncResult } from './application/ticket-sync';
+
 // data
 export {
 	createBooking,

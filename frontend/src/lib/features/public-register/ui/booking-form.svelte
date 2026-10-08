@@ -4,8 +4,10 @@
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import QrCode from '@lucide/svelte/icons/qr-code';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
-	import { onMount, untrack } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
+	import { replaceState } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { env } from '$env/dynamic/public';
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Label } from '$lib/components/ui/label';
@@ -26,7 +28,11 @@
 	import { UNASSIGNED_SHELTER_CODE } from '../domain/booking';
 	import { UnifiedRegistrationForm, type UnifiedRegistrationInput } from '$lib/features/people';
 	import { fetchRecaptchaEnabled } from '$lib/api/recaptcha-status';
-	import { isJoinSelectionInvalidError } from '../data/public-register.api';
+	import {
+		isJoinSelectionInvalidError,
+		isNetworkError,
+		PublicApiError
+	} from '../data/public-register.api';
 
 	interface Props {
 		shelters: (PublicShelterCardModel & { available: number | null })[];
@@ -74,7 +80,7 @@
 			} else {
 				url.searchParams.delete('shelter');
 			}
-			window.history.replaceState(window.history.state, '', url.pathname + url.search);
+			replaceState(resolve((url.pathname + url.search) as '/'), {});
 			try {
 				if (code) {
 					sessionStorage.setItem('pre_register_shelter', code);
@@ -111,7 +117,8 @@
 			const url = new URL(window.location.href);
 			if (url.searchParams.get('shelter') !== selectedShelterCode) {
 				url.searchParams.set('shelter', selectedShelterCode);
-				window.history.replaceState(window.history.state, '', url.pathname + url.search);
+				// The router is not ready during the first mount — wait a tick before shallow routing.
+				void tick().then(() => replaceState(resolve((url.pathname + url.search) as '/'), {}));
 			}
 		}
 	});
@@ -147,6 +154,17 @@
 
 	let isSubmitting = $state(false);
 
+	/**
+	 * One human-readable sentence per failed submit. Only `PublicApiError` carries copy that was
+	 * mapped from a server code; anything else (a stray `TypeError`, ...) gets the generic fallback
+	 * instead of leaking a raw browser message.
+	 */
+	function submitErrorMessage(err: unknown): string {
+		if (isNetworkError(err)) return t.networkError;
+		if (err instanceof PublicApiError && err.message) return err.message;
+		return t.bookingErrorFallback;
+	}
+
 	async function handleUnifiedSubmit(unifiedInput: UnifiedRegistrationInput) {
 		if (!isUnassigned && !selectedIsBookable) {
 			const err = t.shelterNotBookable;
@@ -179,8 +197,8 @@
 			captchaEnabled = enabled;
 			const token = await captchaToken();
 			if (enabled && !token) {
-				toast.error(t.recaptchaError);
-				throw new Error(t.recaptchaError);
+				// Not toasted here — the catch block below raises the single toast for this error.
+				throw new PublicApiError('CAPTCHA_CLIENT_FAILED', t.recaptchaError);
 			}
 
 			const head = unifiedInput.members[0];
@@ -246,8 +264,7 @@
 			}
 			onbooked(ticket);
 		} catch (err) {
-			const msg = err instanceof Error ? err.message : t.bookingErrorFallback;
-			toast.error(msg);
+			toast.error(submitErrorMessage(err));
 			if (isJoinSelectionInvalidError(err)) {
 				joinResetKey += 1;
 			}
