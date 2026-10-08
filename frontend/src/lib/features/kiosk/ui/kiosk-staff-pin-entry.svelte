@@ -1,15 +1,12 @@
 <script lang="ts">
-	import { onMount, tick } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { StaffPinEntry, STAFF_PIN_LENGTH } from '../application/staff-pin-entry.svelte';
 	import { verifyKioskStaffPin, type KioskStaffPinResult } from '../data/kiosk-staff-pin.api';
 	import KioskNumpadPanel from './kiosk-numpad-panel.svelte';
 
-	/** Digits in a staff PIN. */
-	const PIN_LENGTH = 6;
-	const PIN_SLOTS = Array.from({ length: PIN_LENGTH }, (_, slot) => slot);
-	/** Nobody touched the panel for this long: close it as if cancelled, so the kiosk is not stuck. */
-	const STAFF_PIN_IDLE_MS = 30_000;
+	const PIN_SLOTS = Array.from({ length: STAFF_PIN_LENGTH }, (_, slot) => slot);
 
 	interface Props {
 		headingTag?: 'h1' | 'h2';
@@ -26,61 +23,18 @@
 	const id = $props.id();
 	const titleId = `${id}-title`;
 
-	type Status =
-		| { kind: 'idle' }
-		| { kind: 'checking' }
-		| { kind: 'wrong' }
-		/** No PIN set on this kiosk, or the server could not check it. */
-		| { kind: 'blocked' };
-
 	// Never in a URL, a log or storage; cleared on every way out.
-	let pin = $state('');
-	let status = $state<Status>({ kind: 'idle' });
+	const entry = untrack(
+		() =>
+			new StaffPinEntry({
+				verify: (pin) => verify(pin),
+				onverified: () => onverified(),
+				oncancel: () => oncancel(),
+				onretry: () => void refocusKeys()
+			})
+	);
 	let closed = false;
-	let idleTimer: ReturnType<typeof setTimeout> | null = null;
 	let panel: HTMLElement | null = null;
-
-	const keysDisabled = $derived(status.kind === 'checking' || status.kind === 'blocked');
-	const canConfirm = $derived(pin.length === PIN_LENGTH && !keysDisabled);
-
-	function touch(): void {
-		if (idleTimer) clearTimeout(idleTimer);
-		idleTimer = setTimeout(cancel, STAFF_PIN_IDLE_MS);
-	}
-
-	function close(): void {
-		closed = true;
-		pin = '';
-		if (idleTimer) clearTimeout(idleTimer);
-		idleTimer = null;
-	}
-
-	function cancel(): void {
-		if (closed) return;
-		close();
-		oncancel();
-	}
-
-	async function confirm(): Promise<void> {
-		if (!canConfirm) return;
-		const entered = pin;
-		status = { kind: 'checking' };
-		const result = await verify(entered);
-		if (closed) return; // cancelled, timed out or closed by the page meanwhile
-		pin = '';
-		switch (result.kind) {
-			case 'verified':
-				close();
-				onverified();
-				return;
-			case 'wrong':
-				status = { kind: 'wrong' };
-				void refocusKeys();
-				return;
-			default:
-				status = { kind: 'blocked' };
-		}
-	}
 
 	/**
 	 * A keyboard works wherever focus is: a focused key that gets disabled (6 digits in, or while
@@ -88,10 +42,10 @@
 	 * numpad already handled arrive here default-prevented and are skipped.
 	 */
 	function handleWindowKeydown(event: KeyboardEvent): void {
-		touch();
+		entry.touch();
 		if (event.key === 'Escape') {
 			event.preventDefault();
-			cancel();
+			entry.press('Escape');
 			return;
 		}
 		if (event.defaultPrevented || event.repeat || event.altKey || event.ctrlKey || event.metaKey) {
@@ -99,17 +53,9 @@
 		}
 		const target = event.target instanceof Element ? event.target : null;
 		if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
-		if (/^\d$/.test(event.key)) {
-			event.preventDefault();
-			if (!keysDisabled && pin.length < PIN_LENGTH) pin += event.key;
-		} else if (event.key === 'Backspace') {
-			event.preventDefault();
-			if (!keysDisabled) pin = pin.slice(0, -1);
-		} else if (event.key === 'Enter' && !target?.closest('button, a')) {
-			// Enter on a focused button activates that button instead.
-			event.preventDefault();
-			void confirm();
-		}
+		// Enter on a focused button activates that button instead.
+		if (event.key === 'Enter' && target?.closest('button, a')) return;
+		if (entry.press(event.key)) event.preventDefault();
 	}
 
 	function focusFirstKey(node: HTMLElement): void {
@@ -123,31 +69,34 @@
 		return () => (panel = null);
 	}
 
-	/** The keys are usable again after a wrong PIN: put focus back on them. */
+	/** The keys are usable again after a wrong PIN or a failed check: put focus back on them. */
 	async function refocusKeys(): Promise<void> {
 		await tick();
 		if (!closed && panel) focusFirstKey(panel);
 	}
 
 	onMount(() => {
-		touch();
-		return close;
+		entry.start();
+		return () => {
+			closed = true;
+			entry.close();
+		};
 	});
 </script>
 
-<svelte:window onkeydown={handleWindowKeydown} onpointerdown={touch} />
+<svelte:window onkeydown={handleWindowKeydown} onpointerdown={() => entry.touch()} />
 
 <div
 	class="flex flex-col"
 	data-testid="kiosk-staff-pin"
-	data-pin-status={status.kind}
+	data-pin-status={entry.status.kind}
 	{@attach attachPanel}
 >
 	<KioskNumpadPanel
-		bind:value={pin}
-		maxLength={PIN_LENGTH}
-		disabled={keysDisabled}
-		onsubmit={() => void confirm()}
+		bind:value={entry.pin}
+		maxLength={STAFF_PIN_LENGTH}
+		disabled={entry.keysDisabled}
+		onsubmit={() => void entry.confirm()}
 		labelledby={titleId}
 	>
 		{#snippet header()}
@@ -167,14 +116,16 @@
 		{#snippet display()}
 			<output
 				class="flex min-h-14 items-center justify-center gap-4 rounded-xl border border-slate-200 bg-white px-4 kiosk-portrait:min-h-20 kiosk-portrait:gap-6 kiosk-portrait:rounded-2xl kiosk-portrait:border-2"
-				aria-label={`กรอก PIN แล้ว ${pin.length} จาก ${PIN_LENGTH} หลัก`}
+				aria-label={`กรอก PIN แล้ว ${entry.pin.length} จาก ${STAFF_PIN_LENGTH} หลัก`}
 				data-testid="kiosk-staff-pin-dots"
 			>
 				{#each PIN_SLOTS as slot (slot)}
 					<span
 						class={[
 							'size-4 rounded-full border-2 kiosk-portrait:size-6',
-							slot < pin.length ? 'border-[#0A2647] bg-[#0A2647]' : 'border-slate-300 bg-white'
+							slot < entry.pin.length
+								? 'border-[#0A2647] bg-[#0A2647]'
+								: 'border-slate-300 bg-white'
 						]}
 						aria-hidden="true"
 					></span>
@@ -185,11 +136,11 @@
 		{#snippet actions()}
 			<Button
 				type="button"
-				disabled={!canConfirm}
-				onclick={() => void confirm()}
+				disabled={!entry.canConfirm}
+				onclick={() => void entry.confirm()}
 				class="min-h-12 w-full gap-2 bg-[#0A2647] text-base font-bold text-white hover:bg-[#051930] focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 kiosk-portrait:min-h-16 kiosk-portrait:text-xl"
 			>
-				{#if status.kind === 'checking'}
+				{#if entry.status.kind === 'checking'}
 					<span
 						class="inline-block size-5 animate-spin rounded-full border-2 border-white/40 border-t-white motion-reduce:animate-none"
 						aria-hidden="true"
@@ -201,7 +152,7 @@
 			<Button
 				type="button"
 				variant="outline"
-				onclick={cancel}
+				onclick={() => entry.cancel()}
 				class="min-h-12 w-full text-base font-bold focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 kiosk-portrait:min-h-16 kiosk-portrait:text-xl"
 			>
 				ยกเลิก
@@ -210,14 +161,21 @@
 
 		{#snippet footer()}
 			<div class="min-h-7" aria-live="polite" data-testid="kiosk-staff-pin-status">
-				{#if status.kind === 'wrong'}
+				{#if entry.status.kind === 'wrong'}
 					<p
 						class="flex items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-base font-semibold text-amber-900 kiosk-portrait:text-xl"
 					>
 						<CircleAlert class="size-5 shrink-0" aria-hidden="true" />
 						PIN ไม่ถูกต้อง กรุณาลองใหม่
 					</p>
-				{:else if status.kind === 'blocked'}
+				{:else if entry.status.kind === 'error'}
+					<p
+						class="flex items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-base font-semibold text-amber-900 kiosk-portrait:text-xl"
+					>
+						<CircleAlert class="size-5 shrink-0" aria-hidden="true" />
+						ตรวจสอบ PIN ไม่สำเร็จ กรุณาลองใหม่
+					</p>
+				{:else if entry.status.kind === 'blocked'}
 					<p
 						class="flex items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-base font-semibold text-amber-900 kiosk-portrait:text-xl"
 					>
