@@ -18,6 +18,11 @@ export class KioskPhotoValidationError extends Error {
 
 type DecodedKioskPhoto = { full: Buffer; thumb?: Buffer };
 
+const KIOSK_PHOTO_EXTENSION: Record<KioskPhotoPayload['content_type'], string> = {
+	'image/jpeg': 'jpg',
+	'image/webp': 'webp'
+};
+
 export type KioskCardImageRef = { id: string; rev: string };
 
 /** Decode and verify a smart-card photo payload: canonical base64, declared sizes and real MIME. */
@@ -63,7 +68,7 @@ export async function putKioskCardImage(
 		'image',
 		1,
 		{
-			filename: 'smart-card-photo.jpg',
+			filename: `smart-card-photo.${KIOSK_PHOTO_EXTENSION[photo.content_type]}`,
 			content_type: photo.content_type,
 			width: photo.width,
 			height: photo.height,
