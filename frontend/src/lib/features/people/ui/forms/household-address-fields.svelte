@@ -215,6 +215,24 @@
 	);
 
 	const addressRequired = $derived(required && !isHomeless);
+
+	/** The "address incomplete" message is one error for house no. + province + district + subdistrict. */
+	const AREA_ERROR_ID = 'address-area-error';
+	const areaError = $derived(errors?.address_no ?? '');
+	const showAddressNoInput = $derived(!isHomeless && !showDorm);
+	const provinceInvalid = $derived(!!errors?.province || (!!areaError && !province));
+	const districtInvalid = $derived(!!errors?.district || (!!areaError && !district));
+	const subdistrictInvalid = $derived(!!errors?.subdistrict || (!!areaError && !subdistrict));
+
+	/** `aria-describedby` for a field: its own message, or the shared area message while it is empty. */
+	function areaDescribedBy(
+		own: string | undefined,
+		id: string,
+		empty: boolean
+	): string | undefined {
+		if (own) return id;
+		return areaError && empty ? AREA_ERROR_ID : undefined;
+	}
 	const hasLocation = $derived(Boolean(province || district || subdistrict || postal_code));
 
 	let isLocating = $state(false);
@@ -329,7 +347,12 @@
 				}
 				{disabled}
 			>
-				<Select.Trigger id="housing-type" class={selectTriggerClass}>
+				<Select.Trigger
+					id="housing-type"
+					class={selectTriggerClass}
+					aria-invalid={!!errors?.housing_type}
+					aria-describedby={errors?.housing_type ? 'housing-type-error' : undefined}
+				>
 					{housingTypeTriggerLabel}
 				</Select.Trigger>
 				<Select.Content>
@@ -339,7 +362,7 @@
 				</Select.Content>
 			</Select.Root>
 			{#if errors?.housing_type}
-				<p class="text-2xs text-destructive">{errors.housing_type}</p>
+				<p id="housing-type-error" class="text-2xs text-destructive">{errors.housing_type}</p>
 			{/if}
 		</div>
 
@@ -355,10 +378,14 @@
 				bind:value={residence_landmark}
 				{disabled}
 				placeholder={landmarkPlaceholder}
+				aria-invalid={!!errors?.residence_landmark}
+				aria-describedby={errors?.residence_landmark ? 'residence-landmark-error' : undefined}
 				class="h-9"
 			/>
 			{#if errors?.residence_landmark}
-				<p class="text-2xs text-destructive">{errors.residence_landmark}</p>
+				<p id="residence-landmark-error" class="text-2xs text-destructive">
+					{errors.residence_landmark}
+				</p>
 			{/if}
 		</div>
 	</div>
@@ -377,10 +404,11 @@
 					{disabled}
 					placeholder={t.dormNamePlaceholder}
 					aria-invalid={!!errors?.dorm_name}
+					aria-describedby={errors?.dorm_name ? 'dorm-name-error' : undefined}
 					class="h-9"
 				/>
 				{#if errors?.dorm_name}
-					<p class="text-2xs text-destructive">{errors.dorm_name}</p>
+					<p id="dorm-name-error" class="text-2xs text-destructive">{errors.dorm_name}</p>
 				{/if}
 			</div>
 			<div class="space-y-1.5">
@@ -420,10 +448,11 @@
 					{disabled}
 					placeholder={t.dormRoomPlaceholder}
 					aria-invalid={!!errors?.dorm_room}
+					aria-describedby={errors?.dorm_room ? 'dorm-room-error' : undefined}
 					class="h-9"
 				/>
 				{#if errors?.dorm_room}
-					<p class="text-2xs text-destructive">{errors.dorm_room}</p>
+					<p id="dorm-room-error" class="text-2xs text-destructive">{errors.dorm_room}</p>
 				{/if}
 			</div>
 		</div>
@@ -431,7 +460,7 @@
 
 	<!-- Street / house details — hide address_no when homeless (#249 Q5) or dorm (CR-148) -->
 	<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-		{#if !isHomeless && !showDorm}
+		{#if showAddressNoInput}
 			<div class="space-y-1.5">
 				<Label for="address-no" class="text-xs font-semibold text-foreground">
 					{addressNoLabel}
@@ -442,10 +471,12 @@
 					bind:value={address_no}
 					{disabled}
 					placeholder={addressNoPlaceholder}
+					aria-invalid={!!areaError}
+					aria-describedby={areaError ? AREA_ERROR_ID : undefined}
 					class="h-9"
 				/>
-				{#if errors?.address_no}
-					<p class="text-2xs text-destructive">{errors.address_no}</p>
+				{#if areaError}
+					<p id={AREA_ERROR_ID} class="text-2xs text-destructive">{areaError}</p>
 				{/if}
 			</div>
 		{/if}
@@ -459,10 +490,12 @@
 				bind:value={village_no}
 				{disabled}
 				placeholder={t.villageNoPlaceholder}
+				aria-invalid={!!errors?.village_no}
+				aria-describedby={errors?.village_no ? 'village-no-error' : undefined}
 				class="h-9"
 			/>
 			{#if errors?.village_no}
-				<p class="text-2xs text-destructive">{errors.village_no}</p>
+				<p id="village-no-error" class="text-2xs text-destructive">{errors.village_no}</p>
 			{/if}
 		</div>
 	</div>
@@ -501,6 +534,10 @@
 			</div>
 		</div>
 
+		{#if areaError && !showAddressNoInput}
+			<p id={AREA_ERROR_ID} class="text-2xs text-destructive">{areaError}</p>
+		{/if}
+
 		<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 			<!-- Province -->
 			<div class="space-y-1.5">
@@ -517,11 +554,15 @@
 					emptyText={provincesQuery.isError ? t.provinceLoadFail : t.provinceEmpty}
 					loading={provincesQuery.isLoading}
 					{disabled}
-					class="!h-9 rounded-md text-sm"
-					controlProps={{ id: 'province' }}
+					class="!h-9 rounded-md text-sm {provinceInvalid ? 'border-destructive' : ''}"
+					controlProps={{
+						id: 'province',
+						'aria-invalid': provinceInvalid,
+						'aria-describedby': areaDescribedBy(errors?.province, 'province-error', !province)
+					}}
 				/>
 				{#if errors?.province}
-					<p class="text-2xs text-destructive">{errors.province}</p>
+					<p id="province-error" class="text-2xs text-destructive">{errors.province}</p>
 				{/if}
 			</div>
 
@@ -540,11 +581,15 @@
 					emptyText={districtsQuery.isError ? t.districtLoadFail : t.districtEmpty}
 					loading={districtsQuery.isLoading}
 					disabled={disabled || !province}
-					class="!h-9 rounded-md text-sm"
-					controlProps={{ id: 'district' }}
+					class="!h-9 rounded-md text-sm {districtInvalid ? 'border-destructive' : ''}"
+					controlProps={{
+						id: 'district',
+						'aria-invalid': districtInvalid,
+						'aria-describedby': areaDescribedBy(errors?.district, 'district-error', !district)
+					}}
 				/>
 				{#if errors?.district}
-					<p class="text-2xs text-destructive">{errors.district}</p>
+					<p id="district-error" class="text-2xs text-destructive">{errors.district}</p>
 				{/if}
 			</div>
 
@@ -563,11 +608,19 @@
 					emptyText={subdistrictsQuery.isError ? t.subdistrictLoadFail : t.subdistrictEmpty}
 					loading={subdistrictsQuery.isLoading}
 					disabled={disabled || !district}
-					class="!h-9 rounded-md text-sm"
-					controlProps={{ id: 'subdistrict' }}
+					class="!h-9 rounded-md text-sm {subdistrictInvalid ? 'border-destructive' : ''}"
+					controlProps={{
+						id: 'subdistrict',
+						'aria-invalid': subdistrictInvalid,
+						'aria-describedby': areaDescribedBy(
+							errors?.subdistrict,
+							'subdistrict-error',
+							!subdistrict
+						)
+					}}
 				/>
 				{#if errors?.subdistrict}
-					<p class="text-2xs text-destructive">{errors.subdistrict}</p>
+					<p id="subdistrict-error" class="text-2xs text-destructive">{errors.subdistrict}</p>
 				{/if}
 			</div>
 

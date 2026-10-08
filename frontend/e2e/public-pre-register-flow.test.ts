@@ -61,44 +61,44 @@
  *
  * ── Error matrix (C2.2) ──────────────────────────────────────────────────────────────────
  *  Each row is asserted for: (1) the literal message under the field, (2) aria-invalid on
- *  the field, (3) the message in the "ตรวจสอบข้อมูลก่อนบันทึก" summary and the jump button
- *  moving focus to the first invalid field, (4) no POST. "—" = the app does not do it today;
- *  such rows keep the assertion that holds and add a `test.fixme` for the missing part
- *  (listed in the PR as app gaps, not fixed here).
+ *  the field with aria-describedby pointing at that message, (3) the message in the
+ *  "ตรวจสอบข้อมูลก่อนบันทึก" summary and the jump button moving keyboard focus into the first
+ *  invalid control, (4) no POST.
  *
- *  id   message (literal)                                         trigger                              field (focus)           inline aria
- *  E01  กรุณากรอกบ้านเลขที่ จังหวัด อำเภอ และตำบล                  no house no. / province / …           #address-no              yes    —
- *  E02  กรุณากรอกชื่อ                                              first name empty                     #member-0-first-name     yes    yes
- *  E03  กรุณาเลือกเพศ                                              no gender picked                     radiogroup เพศ           yes    yes
- *  E04  เลขบัตรประชาชนไม่ถูกต้อง (ตรวจสอบหลักสุดท้ายอีกครั้ง)       13 digits, wrong checksum            #member-0-card-number    yes    yes
- *  E05  เลขประจำตัวประชาชนต้องมี 13 หลัก                           12 digits                            #member-0-card-number    yes    yes
- *  E06  กรุณากรอกเบอร์โทรศัพท์ 10 หลักของผู้ติดต่อหลัก              head phone empty                     #member-0-phone          yes    yes
- *  E07  (same as E06)                                             head phone "0812"                    #member-0-phone          yes    yes
- *  E08  กรุณากรอกเบอร์ติดต่อฉุกเฉินให้ครบ 10 หลัก                   emergency phone "12"                 #emergency-phone         —      —
- *  E09  กรุณากรอกชื่อ-นามสกุลผู้ติดต่อฉุกเฉิน                      emergency phone+relation, no name    #emergency-name          —      —
- *  E10  กรุณาระบุความสัมพันธ์ของผู้ติดต่อฉุกเฉิน                    emergency name+phone, no relation    #emergency-relation      —      —
- *  E11  กรุณากรอกปีเกิด 4 หลัก                                     birth year "254"                     #member-0-birth-year     yes    yes
- *  E12  ปีเกิด (พ.ศ.) ต้องอยู่ระหว่าง <min>–<max>                  birth year 2300 (พ.ศ.)               #member-0-birth-year     yes    yes
- *  E13  ปีเกิด (ค.ศ.) ต้องอยู่ระหว่าง <min>–<max> (summary: พ.ศ.)   ค.ศ. toggle, birth year 1700        #member-0-birth-year     yes    yes
- *  E14  อายุต้องไม่เกิน 150 ปี                                     age "151"                            #member-0-age            yes    yes
- *  E15  กรุณาระบุศาสนา                                             religion อื่นๆ (ระบุ), text empty    #member-0-religion-other yes    yes
- *  E16  กรุณากรอกชื่อ (card สมาชิก 2)                              member 2 added, left blank           #member-1-first-name     yes    yes
- *  E17  กรุณาเลือกเพศ (card สมาชิก 2)                              member 2 named, no gender            radiogroup (card 2)      yes    yes
- *  E18  กรุณาระบุชนิดสัตว์เมื่อเลือกอื่นๆ                           "เพิ่มสัตว์อื่นๆ", species empty     species input (pets)     —      —
- *  E19  กรุณากรอกชื่อหอพัก                                         housing = หอพัก, name empty          #dorm-name               yes    yes
- *  E20  กรุณากรอกเลขห้อง                                           housing = หอพัก, room empty          #dorm-room               yes    yes
- *  E21  ที่พักแบบไร้บ้านเลขที่ต้องมีจุดสังเกตหรือที่ตั้งครบ         housing = ไร้ที่อยู่, no landmark/area #residence-landmark      yes    —
- *  E22  ลงทะเบียนได้สูงสุด 20 คนต่อครั้ง                           21 member cards                      (summary only)           —      —
- *  E23  เบอร์โทรไม่ถูกต้อง — ต้องขึ้นต้นด้วย 0 และมี 9–10 หลัก …    family-search phone, on blur         family-search input      yes    yes
- *  E24  กรุณากรอกเบอร์ให้ครบ 10 หลัก หรือเว้นว่าง / เลือกไม่มีเบอร์   joined family (mock), head phone "12" #member-0-phone          yes    yes
+ *  id   message (literal)                                         trigger                              field (focus)
+ *  E01  กรุณากรอกบ้านเลขที่ จังหวัด อำเภอ และตำบล                  no house no. / province / …           #address-no
+ *  E02  กรุณากรอกชื่อ                                              first name empty                     #member-0-first-name
+ *  E03  กรุณาเลือกเพศ                                              no gender picked                     radiogroup เพศ
+ *  E04  เลขบัตรประชาชนไม่ถูกต้อง (ตรวจสอบหลักสุดท้ายอีกครั้ง)       13 digits, wrong checksum            #member-0-card-number
+ *  E05  เลขประจำตัวประชาชนต้องมี 13 หลัก                           12 digits                            #member-0-card-number
+ *  E06  กรุณากรอกเบอร์โทรศัพท์ 10 หลักของผู้ติดต่อหลัก              head phone empty                     #member-0-phone
+ *  E07  (same as E06)                                             head phone "0812"                    #member-0-phone
+ *  E08  กรุณากรอกเบอร์ติดต่อฉุกเฉินให้ครบ 10 หลัก                   emergency phone "12"                 #emergency-phone
+ *  E09  กรุณากรอกชื่อ-นามสกุลผู้ติดต่อฉุกเฉิน                      emergency phone+relation, no name    #emergency-name
+ *  E10  กรุณาระบุความสัมพันธ์ของผู้ติดต่อฉุกเฉิน                    emergency name+phone, no relation    #emergency-relation
+ *  E11  กรุณากรอกปีเกิด 4 หลัก                                     birth year "254"                     #member-0-birth-year
+ *  E12  ปีเกิด (พ.ศ.) ต้องอยู่ระหว่าง <min>–<max>                  birth year 2300 (พ.ศ.)               #member-0-birth-year
+ *  E13  ปีเกิด (ค.ศ.) ต้องอยู่ระหว่าง <min>–<max> (summary: พ.ศ.)   ค.ศ. toggle, birth year 1700        #member-0-birth-year
+ *  E14  อายุต้องไม่เกิน 150 ปี                                     age "151"                            #member-0-age
+ *  E15  กรุณาระบุศาสนา                                             religion อื่นๆ (ระบุ), text empty    #member-0-religion-other
+ *  E16  กรุณากรอกชื่อ (card สมาชิก 2)                              member 2 added, left blank           #member-1-first-name
+ *  E17  กรุณาเลือกเพศ (card สมาชิก 2)                              member 2 named, no gender            radiogroup (card 2)
+ *  E18  กรุณาระบุชนิดสัตว์เมื่อเลือกอื่นๆ                           "เพิ่มสัตว์อื่นๆ", species empty     species input (pets)
+ *  E19  กรุณากรอกชื่อหอพัก                                         housing = หอพัก, name empty          #dorm-name
+ *  E20  กรุณากรอกเลขห้อง                                           housing = หอพัก, room empty          #dorm-room
+ *  E21  ที่พักแบบไร้บ้านเลขที่ต้องมีจุดสังเกตหรือที่ตั้งครบ         housing = ไร้ที่อยู่, no landmark/area #residence-landmark
+ *  E22  ลงทะเบียนได้สูงสุด 20 คนต่อครั้ง                           21 member cards                      add-member button
+ *  E23  เบอร์โทรไม่ถูกต้อง — ต้องขึ้นต้นด้วย 0 และมี 9–10 หลัก …    family-search phone, on blur         family-search input
+ *  E24  กรุณากรอกเบอร์ให้ครบ 10 หลัก หรือเว้นว่าง / เลือกไม่มีเบอร์   joined family (mock), head phone "12" #member-0-phone
  *  Gates (not field errors): consent unchecked → both submit buttons disabled (V1); pets
  *  capped at 10 (S5); shelter not bookable (S2) / reCAPTCHA failure (S3) / shelter safety
  *  consent (S4) surface as a banner or toast.
  *  Not reachable from the UI: "อายุไม่ตรงกับปีเกิด" (age and birth year auto-sync, so they
  *  can never disagree — covered by the domain unit tests) and the unassigned-consent toast
  *  (the submit button is disabled instead).
- *  Fix-and-resubmit: E02/E03/E06 fixed one by one, the fixed error disappears and the others
- *  stay (the form keeps showing a fixed field's error until the next submit — see PR notes).
+ *  Fix-as-you-type: after the first failed submit a field loses its error (aria-invalid, the
+ *  message and its line in the summary) the moment its value is valid; the others stay and no
+ *  field shows an error before the first submit.
  */
 import {
 	test as base,
@@ -734,7 +734,8 @@ test.describe('Pre-register: validation gates (V)', { tag: ['@pre-register', '@s
 		await acceptDisclaimer(page);
 		await submitButton(page).click();
 		await expect(summaryAlert(page)).toBeVisible();
-		await expect(page.locator('#member-0-first-name')).toBeFocused();
+		// the empty address is the first invalid field in DOM order (it now carries aria-invalid)
+		await expect(page.locator('#address-no')).toBeFocused();
 		expect(health.registrationWrites).toEqual([]);
 	});
 
@@ -811,13 +812,6 @@ interface ErrorRow {
 	field: (page: Page) => Locator;
 	/** First invalid field in DOM order when it is not `field` (focus target of the jump). */
 	firstInvalid?: (page: Page) => Locator;
-	/** `false` = the app renders no text under the field. */
-	inline?: boolean;
-	/** `false` = the field never gets aria-invalid, so the jump button cannot target it. */
-	ariaInvalid?: boolean;
-	/** `'scroll'` = the jump scrolls the field into view but keyboard focus does not follow. */
-	jump?: 'focus' | 'scroll';
-	gap?: string;
 }
 
 const currentBE = new Date().getFullYear() + 543;
@@ -834,9 +828,7 @@ const ERROR_ROWS: ErrorRow[] = [
 		message: MISSING_AREA,
 		prepare: (page) => fillBase(page, { address: false }),
 		field: (page) => page.locator('#address-no'),
-		firstInvalid: (page) => page.locator('#address-no'),
-		ariaInvalid: false,
-		gap: 'address errors render text only — the fields carry no aria-invalid, so the jump button skips them'
+		firstInvalid: (page) => page.locator('#address-no')
 	},
 	{
 		id: 'E02',
@@ -848,9 +840,7 @@ const ERROR_ROWS: ErrorRow[] = [
 		id: 'E03',
 		message: 'กรุณาเลือกเพศ',
 		prepare: (page) => fillBase(page, { member: { gender: undefined } }),
-		field: (page) => radiogroup(page),
-		jump: 'scroll',
-		gap: 'jumping to an unpicked gender scrolls to the group but does not move keyboard focus into it'
+		field: (page) => radiogroup(page)
 	},
 	{
 		id: 'E04',
@@ -885,10 +875,7 @@ const ERROR_ROWS: ErrorRow[] = [
 			await fillBase(page);
 			await fillEmergencyContact(page, { name: 'ผู้ติดต่อ', phone: '12', relation: 'ญาติ' });
 		},
-		field: (page) => page.locator('#emergency-phone'),
-		inline: false,
-		ariaInvalid: false,
-		gap: 'emergency-contact errors are only listed in the summary / toast — nothing is shown at the field and the accordion stays closed'
+		field: (page) => page.locator('#emergency-phone')
 	},
 	{
 		id: 'E09',
@@ -897,10 +884,7 @@ const ERROR_ROWS: ErrorRow[] = [
 			await fillBase(page);
 			await fillEmergencyContact(page, { name: '', phone: '0812345678', relation: 'ญาติ' });
 		},
-		field: (page) => page.locator('#emergency-name'),
-		inline: false,
-		ariaInvalid: false,
-		gap: 'emergency-contact errors are only listed in the summary / toast'
+		field: (page) => page.locator('#emergency-name')
 	},
 	{
 		id: 'E10',
@@ -909,10 +893,7 @@ const ERROR_ROWS: ErrorRow[] = [
 			await fillBase(page);
 			await fillEmergencyContact(page, { name: 'ผู้ติดต่อ', phone: '0812345678', relation: '' });
 		},
-		field: (page) => page.locator('#emergency-relation'),
-		inline: false,
-		ariaInvalid: false,
-		gap: 'emergency-contact errors are only listed in the summary / toast'
+		field: (page) => page.locator('#emergency-relation')
 	},
 	{
 		id: 'E11',
@@ -972,9 +953,7 @@ const ERROR_ROWS: ErrorRow[] = [
 			await page.getByRole('button', { name: 'เพิ่มสมาชิก' }).click();
 			await fillMember(page, 1, { firstName: 'สมาชิกสอง' });
 		},
-		field: (page) => radiogroup(page, memberCard(page, 2)),
-		jump: 'scroll',
-		gap: 'jumping to an unpicked gender scrolls to the group but does not move keyboard focus into it'
+		field: (page) => radiogroup(page, memberCard(page, 2))
 	},
 	{
 		id: 'E18',
@@ -984,10 +963,7 @@ const ERROR_ROWS: ErrorRow[] = [
 			await openPets(page);
 			await page.getByRole('button', { name: 'เพิ่มสัตว์อื่นๆ' }).first().click();
 		},
-		field: (page) => page.getByPlaceholder('เช่น นกแก้ว, กระต่าย, ชูก้าไรเดอร์'),
-		inline: false,
-		ariaInvalid: false,
-		gap: 'the missing pet species is only listed in the summary / toast — the species input is not flagged'
+		field: (page) => page.getByPlaceholder('เช่น นกแก้ว, กระต่าย, ชูก้าไรเดอร์')
 	},
 	{
 		id: 'E19',
@@ -1021,9 +997,7 @@ const ERROR_ROWS: ErrorRow[] = [
 			await page.locator('#housing-type').click();
 			await page.getByRole('option', { name: 'ไร้ที่อยู่อาศัยเป็นหลักแหล่ง' }).click();
 		},
-		field: (page) => page.locator('#residence-landmark'),
-		ariaInvalid: false,
-		gap: 'the landmark field shows the error text but carries no aria-invalid'
+		field: (page) => page.locator('#residence-landmark')
 	},
 	{
 		id: 'E22',
@@ -1032,10 +1006,7 @@ const ERROR_ROWS: ErrorRow[] = [
 			await fillBase(page);
 			for (let i = 0; i < 20; i++) await page.getByRole('button', { name: 'เพิ่มสมาชิก' }).click();
 		},
-		field: (page) => page.locator('#unified-members'),
-		inline: false,
-		ariaInvalid: false,
-		gap: 'the 20-member cap is only listed in the summary / toast'
+		field: (page) => page.getByRole('button', { name: 'เพิ่มสมาชิก' })
 	}
 ];
 
@@ -1046,6 +1017,8 @@ test.describe('Pre-register: error matrix (E)', { tag: ['@pre-register', '@smoke
 			await NO_BANNER(page);
 			await openPreRegister(page);
 			await row.prepare(page);
+			// nothing is flagged before the first submit
+			await expect(page.locator('[aria-invalid="true"]')).toHaveCount(0);
 			await submitButton(page).click();
 
 			const summary = summaryAlert(page);
@@ -1053,10 +1026,8 @@ test.describe('Pre-register: error matrix (E)', { tag: ['@pre-register', '@smoke
 			const field = row.field(page);
 
 			// (1) the literal message under the field
-			if (row.inline !== false) {
-				await expect(field).toBeVisible();
-				expect(await messageUnderField(field, row.message), `${row.id} inline`).toBe(true);
-			}
+			await expect(field).toBeVisible();
+			expect(await messageUnderField(field, row.message), `${row.id} inline`).toBe(true);
 			// (3) in the summary alert
 			await expect(
 				summary.getByRole('listitem').filter({ hasText: row.summaryMessage ?? row.message })
@@ -1070,41 +1041,21 @@ test.describe('Pre-register: error matrix (E)', { tag: ['@pre-register', '@smoke
 				: '';
 			expect(toastBody).not.toContain(toastTitle);
 
-			// (2) aria-invalid + the jump button
-			if (row.ariaInvalid === false) {
-				test.info().annotations.push({ type: 'app-gap', description: row.gap ?? '' });
-			} else {
-				await expect(field).toHaveAttribute('aria-invalid', 'true');
-				const target = row.firstInvalid?.(page) ?? field;
-				// a person presses the button after the first auto-scroll has finished
-				await settleScroll(page);
-				await page.getByRole('button', { name: JUMP_BUTTON }).click();
-				if (row.jump === 'scroll') {
-					test.info().annotations.push({ type: 'app-gap', description: row.gap ?? '' });
-				} else {
-					await expect.poll(() => focusIsWithin(target), `${row.id} jump focus`).toBe(true);
-				}
-				await expect(target).toBeInViewport();
-			}
+			// (2) aria-invalid, aria-describedby -> the message, and the jump button
+			await expect(field).toHaveAttribute('aria-invalid', 'true');
+			const describedBy = await field.getAttribute('aria-describedby');
+			expect(describedBy, `${row.id} aria-describedby`).toBeTruthy();
+			await expect(page.locator(`[id="${describedBy}"]`)).toHaveText(row.message);
+			const target = row.firstInvalid?.(page) ?? field;
+			// a person presses the button after the first auto-scroll has finished
+			await settleScroll(page);
+			await page.getByRole('button', { name: JUMP_BUTTON }).click();
+			await expect.poll(() => focusIsWithin(target), `${row.id} jump focus`).toBe(true);
+			await expect(target).toBeInViewport();
 
 			// (4) nothing was sent
 			expect(health.registrationWrites).toEqual([]);
 		});
-
-		if (row.gap) {
-			test.fixme(`${row.id} GAP: ${row.gap}`, async ({ page }) => {
-				await openPreRegister(page);
-				await row.prepare(page);
-				await submitButton(page).click();
-				await expect(summaryAlert(page)).toBeVisible();
-				const field = row.field(page);
-				expect(await messageUnderField(field, row.message)).toBe(true);
-				await expect(field).toHaveAttribute('aria-invalid', 'true');
-				await settleScroll(page);
-				await page.getByRole('button', { name: JUMP_BUTTON }).click();
-				await expect.poll(() => focusIsWithin(field)).toBe(true);
-			});
-		}
 	}
 
 	test('E23 an invalid family-search phone is flagged once the field loses focus', async ({
@@ -1223,15 +1174,91 @@ test.describe('Pre-register: error matrix (E)', { tag: ['@pre-register', '@smoke
 		).toHaveCount(1);
 	});
 
-	test.fixme('GAP: a fixed field loses its error immediately, without another submit', async ({
+	test('a fixed field loses its error as soon as its value is valid, without another submit', async ({
 		page
 	}) => {
 		await openPreRegister(page);
+		await fillAddress(page);
+		await fillMember(page, 0, { phone: '0812', nationalId: '123' });
 		await acceptDisclaimer(page);
+		// no error before the first submit, even for the half-typed phone and ID number
+		await expect(page.locator('[aria-invalid="true"]')).toHaveCount(0);
 		await submitButton(page).click();
-		await expect(page.locator('#member-0-first-name')).toHaveAttribute('aria-invalid', 'true');
-		await page.locator('#member-0-first-name').fill('ทดสอบ');
-		await expect(page.locator('#member-0-first-name')).not.toHaveAttribute('aria-invalid', 'true');
+
+		const first = page.locator('#member-0-first-name');
+		const gender = radiogroup(page);
+		const phone = page.locator('#member-0-phone');
+		const card = page.locator('#member-0-card-number');
+		const summary = summaryAlert(page);
+		for (const field of [first, gender, phone, card])
+			await expect(field).toHaveAttribute('aria-invalid', 'true');
+
+		// typing a name clears only the name error — message, flag and summary line
+		await first.fill('ทดสอบ');
+		await expect(first).not.toHaveAttribute('aria-invalid', 'true');
+		expect(await messageUnderField(first, 'กรุณากรอกชื่อ')).toBe(false);
+		await expect(summary.getByRole('listitem').filter({ hasText: 'กรุณากรอกชื่อ' })).toHaveCount(0);
+		await expect(gender).toHaveAttribute('aria-invalid', 'true');
+		await expect(phone).toHaveAttribute('aria-invalid', 'true');
+
+		// a still-invalid value keeps its error while typing, and clears on the last digit
+		await phone.fill('089999');
+		await expect(phone).toHaveAttribute('aria-invalid', 'true');
+		await phone.fill('0899999999');
+		await expect(phone).not.toHaveAttribute('aria-invalid', 'true');
+		expect(await messageUnderField(phone, HEAD_PHONE_REQUIRED)).toBe(false);
+
+		// picking a gender clears the radio group
+		await page.locator('label[for="member-0-gender-female"]').click();
+		await expect(gender).not.toHaveAttribute('aria-invalid', 'true');
+		await expect(gender).not.toHaveAttribute('aria-describedby', /.+/);
+
+		// the ID number is still short, so it stays flagged, and nothing new appeared
+		await expect(card).toHaveAttribute('aria-invalid', 'true');
+		await expect(page.locator('[aria-invalid="true"]')).toHaveCount(1);
+		await expect(summary.getByRole('listitem')).toHaveCount(1);
+
+		// the last fix empties the summary
+		await card.fill(fictitiousNationalId(424242));
+		await expect(page.locator('[aria-invalid="true"]')).toHaveCount(0);
+		await expect(summary).toBeHidden();
+	});
+
+	test('fixing the address, the emergency contact and the pet species clears them at once', async ({
+		page
+	}) => {
+		await openPreRegister(page);
+		await fillBase(page, { address: false });
+		await fillEmergencyContact(page, { name: '', phone: '12', relation: '' });
+		await openPets(page);
+		await page.getByRole('button', { name: 'เพิ่มสัตว์อื่นๆ' }).first().click();
+		await submitButton(page).click();
+		await expect(summaryAlert(page)).toBeVisible();
+
+		const address = page.locator('#address-no');
+		const province = page.locator('#province');
+		const emergencyPhone = page.locator('#emergency-phone');
+		const species = page.getByPlaceholder('เช่น นกแก้ว, กระต่าย, ชูก้าไรเดอร์');
+		for (const field of [address, province, emergencyPhone, species])
+			await expect(field).toHaveAttribute('aria-invalid', 'true');
+
+		await species.fill('นกแก้ว');
+		await expect(species).not.toHaveAttribute('aria-invalid', 'true');
+		await emergencyPhone.fill('0812345678');
+		await expect(emergencyPhone).not.toHaveAttribute('aria-invalid', 'true');
+		await expect(page.locator('#emergency-name')).toHaveAttribute('aria-invalid', 'true');
+
+		// the area error is one error: it goes away once every required piece is filled
+		await address.fill('123/45');
+		await expect(address).toHaveAttribute('aria-invalid', 'true');
+		await pickSearchSelect(page, 'province', 'สงขลา');
+		await expect(province).not.toHaveAttribute('aria-invalid', 'true');
+		await expect(page.locator('#district')).toHaveAttribute('aria-invalid', 'true');
+		await pickSearchSelect(page, 'district', 'หาดใหญ่');
+		await pickSearchSelect(page, 'subdistrict', 'คอหงส์');
+		await expect(address).not.toHaveAttribute('aria-invalid', 'true');
+		await expect(page.locator('#district')).not.toHaveAttribute('aria-invalid', 'true');
+		await expect(page.locator('#subdistrict')).not.toHaveAttribute('aria-invalid', 'true');
 	});
 });
 
