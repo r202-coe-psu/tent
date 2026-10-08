@@ -291,10 +291,10 @@ function personColumns(role: string): ColumnDef[] {
 		{
 			header: H.gender,
 			kind: 'enum',
-			required: true,
+			required: false,
 			choices: GENDER_CHOICES,
 			path: 'gender',
-			hint: 'เพศ (จำเป็น)'
+			hint: 'เพศ (เว้นว่าง = ไม่ระบุ)'
 		},
 		{
 			header: H.birth_year,

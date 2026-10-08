@@ -15,7 +15,7 @@ To maintain high throughput, sub-second latency for command dashboards, strict P
 2. **Decoupled MongoDB Read Projection Plane**:
    - Serve all third-party endpoints strictly from FastAPI backed by MongoDB, completely isolated from internal CouchDB instances.
    - Extend the Python Sync Worker to project aggregated shelter inventory balances into a new collection `shelter_stocks` for `EXT-004`.
-   - Extend `public_shelters` in MongoDB with `occupancy_total` and `occupancy_breakdown` (`male`, `female`, `child_under_5`, `elderly_over_60`, `pregnant`, `bedridden`, `disabled`), continuously computed by the worker from CouchDB evacuee documents.
+   - Extend `public_shelters` in MongoDB with `occupancy_total` and `occupancy_breakdown` (`male`, `female`, `gender_unspecified` [added by decision sync 2026-10-09, see `docs/data/schema.md` §9.1], `child_under_5`, `elderly_over_60`, `pregnant`, `bedridden`, `disabled`), continuously computed by the worker from CouchDB evacuee documents.
 
 3. **Location Master Lifecycle & Soft Delete (`EXT-002`, `EXT-003`)**:
    - Alter worker projector to prevent hard-deleting closed shelters from MongoDB. When a shelter is closed or standby, preserve the document with `location_status: "closed"` and `is_active: true`. Only mark `is_active: false` upon actual administrative archival or deletion.

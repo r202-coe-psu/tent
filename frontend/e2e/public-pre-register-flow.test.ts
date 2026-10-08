@@ -70,7 +70,7 @@
  *  id   message (literal)                                         trigger                              field (focus)
  *  E01  กรุณากรอกบ้านเลขที่ จังหวัด อำเภอ และตำบล                  no house no. / province / …           #address-no
  *  E02  กรุณากรอกชื่อ                                              first name empty                     #member-0-first-name
- *  E03  กรุณาเลือกเพศ                                              no gender picked                     radiogroup เพศ
+ *  E03  (no error — gender optional, ไม่ระบุ preselected)         no gender picked → payload gender:null  see "Gender is optional" below
  *  E04  เลขบัตรประชาชนไม่ถูกต้อง (ตรวจสอบหลักสุดท้ายอีกครั้ง)       13 digits, wrong checksum            #member-0-card-number
  *  E05  เลขประจำตัวประชาชนต้องมี 13 หลัก                           12 digits                            #member-0-card-number
  *  E06  กรุณากรอกเบอร์โทรศัพท์ 10 หลักของผู้ติดต่อหลัก              head phone empty                     #member-0-phone
@@ -84,7 +84,7 @@
  *  E14  อายุต้องไม่เกิน 150 ปี                                     age "151"                            #member-0-age
  *  E15  กรุณาระบุศาสนา                                             religion อื่นๆ (ระบุ), text empty    #member-0-religion-other
  *  E16  กรุณากรอกชื่อ (card สมาชิก 2)                              member 2 added, left blank           #member-1-first-name
- *  E17  กรุณาเลือกเพศ (card สมาชิก 2)                              member 2 named, no gender            radiogroup (card 2)
+ *  E17  (no error — gender optional, ไม่ระบุ preselected)         member 2 named, no gender → gender:null  see "Gender is optional" below
  *  E18  กรุณาระบุชนิดสัตว์เมื่อเลือกอื่นๆ                           "เพิ่มสัตว์อื่นๆ", species empty     species input (pets)
  *  E19  กรุณากรอกชื่อหอพัก                                         housing = หอพัก, name empty          #dorm-name
  *  E20  กรุณากรอกเลขห้อง                                           housing = หอพัก, room empty          #dorm-room
@@ -746,7 +746,7 @@ test.describe('Pre-register: validation gates (V)', { tag: ['@pre-register', '@s
 		expect(health.registrationWrites).toEqual([]);
 	});
 
-	test('V2 one submit reports gender + wrong ID checksum + short phone together, without repeating the title', async ({
+	test('V2 one submit reports wrong ID checksum + short phone together (gender is never an error), without repeating the title', async ({
 		page,
 		health
 	}) => {
@@ -760,9 +760,7 @@ test.describe('Pre-register: validation gates (V)', { tag: ['@pre-register', '@s
 		await acceptDisclaimer(page);
 		await submitButton(page).click();
 
-		const card = primaryCard(page);
 		const expected: [Locator, string][] = [
-			[card.getByRole('radiogroup', { name: /เพศ/ }), 'กรุณาเลือกเพศ'],
 			[
 				page.locator('#member-0-card-number'),
 				'เลขบัตรประชาชนไม่ถูกต้อง (ตรวจสอบหลักสุดท้ายอีกครั้ง)'
@@ -776,6 +774,12 @@ test.describe('Pre-register: validation gates (V)', { tag: ['@pre-register', '@s
 				summaryAlert(page).getByRole('listitem').filter({ hasText: message })
 			).toHaveCount(1);
 		}
+
+		// decision sync 2026-10-09: gender defaults to ไม่ระบุ (null) and is never reported as missing.
+		await expect(radiogroup(page)).not.toHaveAttribute('aria-invalid', 'true');
+		await expect(
+			summaryAlert(page).getByRole('listitem').filter({ hasText: 'กรุณาเลือกเพศ' })
+		).toHaveCount(0);
 
 		// OBS-02: the toast title is the first message and the description never repeats it.
 		const toast = page.locator('[data-sonner-toast]').first();
@@ -842,12 +846,6 @@ const ERROR_ROWS: ErrorRow[] = [
 		message: 'กรุณากรอกชื่อ',
 		prepare: (page) => fillBase(page, { member: { firstName: '' } }),
 		field: (page) => page.locator('#member-0-first-name')
-	},
-	{
-		id: 'E03',
-		message: 'กรุณาเลือกเพศ',
-		prepare: (page) => fillBase(page, { member: { gender: undefined } }),
-		field: (page) => radiogroup(page)
 	},
 	{
 		id: 'E04',
@@ -953,16 +951,6 @@ const ERROR_ROWS: ErrorRow[] = [
 		field: (page) => memberCard(page, 2).locator('#member-1-first-name')
 	},
 	{
-		id: 'E17',
-		message: 'กรุณาเลือกเพศ',
-		prepare: async (page) => {
-			await fillBase(page);
-			await page.getByRole('button', { name: 'เพิ่มสมาชิก', exact: true }).click();
-			await fillMember(page, 1, { firstName: 'สมาชิกสอง' });
-		},
-		field: (page) => radiogroup(page, memberCard(page, 2))
-	},
-	{
 		id: 'E18',
 		message: 'กรุณาระบุชนิดสัตว์เมื่อเลือกอื่นๆ',
 		prepare: async (page) => {
@@ -1066,6 +1054,79 @@ test.describe('Pre-register: error matrix (E)', { tag: ['@pre-register', '@smoke
 		});
 	}
 
+	// ---- Gender is optional (decision sync 2026-10-09 — supersedes CR-154 FR-70) ----------------
+	// ไม่ระบุ is preselected in every registration form and persists as `null`; there is no
+	// "กรุณาเลือกเพศ" error any more. @smoke is read-only on staging, so the registration POST is
+	// intercepted (answered with a stubbed 500, like S1e) and the captured request body is asserted
+	// instead of letting anything reach the server.
+
+	type QueueSubmitBody = { members: { first_name: string; gender: string | null }[] };
+
+	/** Answer the queue POST locally and collect its JSON body — nothing is written upstream. */
+	async function captureQueueSubmit(
+		page: Page,
+		health: { allow(...p: RegExp[]): void }
+	): Promise<QueueSubmitBody[]> {
+		health.allow(/500/);
+		const bodies: QueueSubmitBody[] = [];
+		await page.route('**/api/public/v1/unassigned-registrations', (route) => {
+			if (route.request().method() !== 'POST') return route.continue();
+			bodies.push(route.request().postDataJSON() as QueueSubmitBody);
+			return route.fulfill({
+				status: 500,
+				contentType: 'application/json',
+				body: JSON.stringify({ success: false, error: 'WRITE_FAILED' })
+			});
+		});
+		return bodies;
+	}
+
+	async function expectUnspecifiedPreselected(card: Locator) {
+		await expect(card.getByRole('radio', { name: 'ไม่ระบุ' })).toBeChecked();
+		await expect(card.getByRole('radio', { name: 'ชาย' })).not.toBeChecked();
+		await expect(card.getByRole('radio', { name: 'หญิง' })).not.toBeChecked();
+	}
+
+	test('E03 gender is optional — ไม่ระบุ preselected, submit not blocked, payload gender is null', async ({
+		page,
+		health
+	}) => {
+		await NO_BANNER(page);
+		await openPreRegister(page);
+		await expectUnspecifiedPreselected(primaryCard(page));
+		const bodies = await captureQueueSubmit(page, health);
+		await fillBase(page, { member: { gender: undefined } });
+		await submitButton(page).click();
+
+		await expect.poll(() => bodies.length).toBe(1);
+		expect(bodies[0].members[0].gender).toBeNull();
+		await expect(radiogroup(page)).not.toHaveAttribute('aria-invalid', 'true');
+		await expect(summaryAlert(page)).toHaveCount(0);
+		await expect(page.getByText('กรุณาเลือกเพศ')).toHaveCount(0);
+		// the only write is the intercepted one
+		expect(health.registrationWrites).toEqual(['POST /api/public/v1/unassigned-registrations']);
+	});
+
+	test('E17 gender is optional on member 2 — ไม่ระบุ preselected, payload gender is null', async ({
+		page,
+		health
+	}) => {
+		await NO_BANNER(page);
+		await openPreRegister(page);
+		const bodies = await captureQueueSubmit(page, health);
+		await fillBase(page);
+		await page.getByRole('button', { name: 'เพิ่มสมาชิก', exact: true }).click();
+		await fillMember(page, 1, { firstName: 'สมาชิกสอง' });
+		await expectUnspecifiedPreselected(memberCard(page, 2));
+		await submitButton(page).click();
+
+		await expect.poll(() => bodies.length).toBe(1);
+		expect(bodies[0].members.map((m) => m.gender)).toEqual(['male', null]);
+		await expect(radiogroup(page, memberCard(page, 2))).not.toHaveAttribute('aria-invalid', 'true');
+		await expect(summaryAlert(page)).toHaveCount(0);
+		expect(health.registrationWrites).toEqual(['POST /api/public/v1/unassigned-registrations']);
+	});
+
 	test('E23 an invalid family-search phone is flagged once the field loses focus', async ({
 		page,
 		health
@@ -1146,31 +1207,19 @@ test.describe('Pre-register: error matrix (E)', { tag: ['@pre-register', '@smoke
 		await submitButton(page).click();
 
 		const first = page.locator('#member-0-first-name');
-		const gender = radiogroup(page);
 		const phone = page.locator('#member-0-phone');
-		for (const field of [first, gender, phone])
-			await expect(field).toHaveAttribute('aria-invalid', 'true');
+		for (const field of [first, phone]) await expect(field).toHaveAttribute('aria-invalid', 'true');
 
 		// 1) fix the name → only its error goes away
 		await first.fill('ทดสอบ');
 		await submitButton(page).click();
 		await expect(first).not.toHaveAttribute('aria-invalid', 'true');
-		await expect(gender).toHaveAttribute('aria-invalid', 'true');
 		await expect(phone).toHaveAttribute('aria-invalid', 'true');
 		await expect(
 			summaryAlert(page).getByRole('listitem').filter({ hasText: 'กรุณากรอกชื่อ' })
 		).toHaveCount(0);
 
-		// 2) fix the gender
-		await page.locator('label[for="member-0-gender-female"]').click();
-		await submitButton(page).click();
-		await expect(gender).not.toHaveAttribute('aria-invalid', 'true');
-		await expect(phone).toHaveAttribute('aria-invalid', 'true');
-		await expect(
-			summaryAlert(page).getByRole('listitem').filter({ hasText: 'กรุณาเลือกเพศ' })
-		).toHaveCount(0);
-
-		// 3) fix the phone → the remaining error (ID number "123" is still short)
+		// 2) fix the phone → the remaining error (ID number "123" is still short)
 		await phone.fill('0899999999');
 		await submitButton(page).click();
 		await expect(phone).not.toHaveAttribute('aria-invalid', 'true');
@@ -1194,11 +1243,10 @@ test.describe('Pre-register: error matrix (E)', { tag: ['@pre-register', '@smoke
 		await submitButton(page).click();
 
 		const first = page.locator('#member-0-first-name');
-		const gender = radiogroup(page);
 		const phone = page.locator('#member-0-phone');
 		const card = page.locator('#member-0-card-number');
 		const summary = summaryAlert(page);
-		for (const field of [first, gender, phone, card])
+		for (const field of [first, phone, card])
 			await expect(field).toHaveAttribute('aria-invalid', 'true');
 
 		// typing a name clears only the name error — message, flag and summary line
@@ -1206,7 +1254,6 @@ test.describe('Pre-register: error matrix (E)', { tag: ['@pre-register', '@smoke
 		await expect(first).not.toHaveAttribute('aria-invalid', 'true');
 		expect(await messageUnderField(first, 'กรุณากรอกชื่อ')).toBe(false);
 		await expect(summary.getByRole('listitem').filter({ hasText: 'กรุณากรอกชื่อ' })).toHaveCount(0);
-		await expect(gender).toHaveAttribute('aria-invalid', 'true');
 		await expect(phone).toHaveAttribute('aria-invalid', 'true');
 
 		// a still-invalid value keeps its error while typing, and clears on the last digit
@@ -1215,11 +1262,6 @@ test.describe('Pre-register: error matrix (E)', { tag: ['@pre-register', '@smoke
 		await phone.fill('0899999999');
 		await expect(phone).not.toHaveAttribute('aria-invalid', 'true');
 		expect(await messageUnderField(phone, HEAD_PHONE_REQUIRED)).toBe(false);
-
-		// picking a gender clears the radio group
-		await page.locator('label[for="member-0-gender-female"]').click();
-		await expect(gender).not.toHaveAttribute('aria-invalid', 'true');
-		await expect(gender).not.toHaveAttribute('aria-describedby', /.+/);
 
 		// the ID number is still short, so it stays flagged, and nothing new appeared
 		await expect(card).toHaveAttribute('aria-invalid', 'true');
@@ -1633,9 +1675,7 @@ test.describe('Pre-register: layout and language (U)', { tag: ['@pre-register', 
 		await page.getByRole('button', { name: /เปิดเมนู/ }).click();
 		await page.getByRole('button', { name: /เปลี่ยนภาษา/ }).click();
 		await page.keyboard.press('Escape');
-		await expect(
-			page.getByRole('heading', { name: 'Pre-register for a shelter', level: 1 })
-		).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'Pre-registration', level: 1 })).toBeVisible();
 	});
 });
 

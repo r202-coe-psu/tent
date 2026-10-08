@@ -467,7 +467,8 @@ export function parseThaidCitizenClaims(claims: ThaidClaims): ThaiDAutofillProfi
 
 	let firstName: string;
 	let lastName: string;
-	let gender: 'male' | 'female' | 'other' = 'other';
+	// `null` = ThaID gave no usable gender → ไม่ระบุ (never fabricate legacy 'other').
+	let gender: 'male' | 'female' | null = null;
 
 	const givenName = typeof raw.given_name === 'string' ? raw.given_name.trim() : '';
 	const familyName = typeof raw.family_name === 'string' ? raw.family_name.trim() : '';
@@ -494,8 +495,8 @@ export function parseThaidCitizenClaims(claims: ThaidClaims): ThaiDAutofillProfi
 		gender = 'female';
 	}
 
-	// If gender is still 'other', check title claim
-	if (gender === 'other' && typeof raw.title === 'string' && raw.title) {
+	// If gender is still unresolved, check title claim
+	if (gender === null && typeof raw.title === 'string' && raw.title) {
 		const titleInferred = stripThaiTitle(raw.title).inferredGender;
 		if (titleInferred) {
 			gender = titleInferred;
@@ -505,14 +506,14 @@ export function parseThaidCitizenClaims(claims: ThaidClaims): ThaiDAutofillProfi
 	if (givenName) {
 		const stripped = stripThaiTitle(givenName);
 		firstName = stripped.cleanedText;
-		if (gender === 'other' && stripped.inferredGender) {
+		if (gender === null && stripped.inferredGender) {
 			gender = stripped.inferredGender;
 		}
 		lastName = familyName;
 	} else {
 		const rawFullName = (claims.name || (typeof raw.name === 'string' ? raw.name : '')).trim();
 		const stripped = stripThaiTitle(rawFullName);
-		if (gender === 'other' && stripped.inferredGender) {
+		if (gender === null && stripped.inferredGender) {
 			gender = stripped.inferredGender;
 		}
 		const parts = stripped.cleanedText.split(/\s+/).filter(Boolean);
