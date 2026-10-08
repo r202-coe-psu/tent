@@ -14,6 +14,8 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		recaptchaBranding: 'เว็บไซต์นี้มีการป้องกันด้วย reCAPTCHA',
 		bookingSuccess: 'ลงทะเบียนสำเร็จ',
 		bookingErrorFallback: 'ลงทะเบียนไม่สำเร็จ กรุณาลองใหม่',
+		networkError:
+			'เชื่อมต่อไม่สำเร็จ ข้อมูลที่กรอกยังอยู่ครบ กรุณาตรวจสอบอินเทอร์เน็ตแล้วกดส่งอีกครั้ง',
 		selectShelterFirst: 'กรุณาเลือกศูนย์พักพิงก่อน —',
 		step1Title: 'ศูนย์พักพิงที่ต้องการเข้าพัก',
 		shelterLabel: 'ศูนย์พักพิงที่ต้องการเข้าพัก',
@@ -329,6 +331,8 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		recaptchaBranding: 'This site is protected by reCAPTCHA.',
 		bookingSuccess: 'Registration successful',
 		bookingErrorFallback: 'Registration failed. Please try again.',
+		networkError:
+			'Connection failed. Your information has been kept — please check your internet connection and submit again.',
 		selectShelterFirst: 'Please select a shelter first —',
 		step1Title: 'Preferred Shelter',
 		shelterLabel: 'Preferred Shelter',

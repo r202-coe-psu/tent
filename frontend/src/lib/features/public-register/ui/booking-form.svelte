@@ -28,7 +28,11 @@
 	import { UNASSIGNED_SHELTER_CODE } from '../domain/booking';
 	import { UnifiedRegistrationForm, type UnifiedRegistrationInput } from '$lib/features/people';
 	import { fetchRecaptchaEnabled } from '$lib/api/recaptcha-status';
-	import { isJoinSelectionInvalidError } from '../data/public-register.api';
+	import {
+		isJoinSelectionInvalidError,
+		isNetworkError,
+		PublicApiError
+	} from '../data/public-register.api';
 
 	interface Props {
 		shelters: (PublicShelterCardModel & { available: number | null })[];
@@ -150,6 +154,17 @@
 
 	let isSubmitting = $state(false);
 
+	/**
+	 * One human-readable sentence per failed submit. Only `PublicApiError` carries copy that was
+	 * mapped from a server code; anything else (a stray `TypeError`, ...) gets the generic fallback
+	 * instead of leaking a raw browser message.
+	 */
+	function submitErrorMessage(err: unknown): string {
+		if (isNetworkError(err)) return t.networkError;
+		if (err instanceof PublicApiError && err.message) return err.message;
+		return t.bookingErrorFallback;
+	}
+
 	async function handleUnifiedSubmit(unifiedInput: UnifiedRegistrationInput) {
 		if (!isUnassigned && !selectedIsBookable) {
 			const err = t.shelterNotBookable;
@@ -182,8 +197,8 @@
 			captchaEnabled = enabled;
 			const token = await captchaToken();
 			if (enabled && !token) {
-				toast.error(t.recaptchaError);
-				throw new Error(t.recaptchaError);
+				// Not toasted here — the catch block below raises the single toast for this error.
+				throw new PublicApiError('CAPTCHA_CLIENT_FAILED', t.recaptchaError);
 			}
 
 			const head = unifiedInput.members[0];
@@ -249,8 +264,7 @@
 			}
 			onbooked(ticket);
 		} catch (err) {
-			const msg = err instanceof Error ? err.message : t.bookingErrorFallback;
-			toast.error(msg);
+			toast.error(submitErrorMessage(err));
 			if (isJoinSelectionInvalidError(err)) {
 				joinResetKey += 1;
 			}
