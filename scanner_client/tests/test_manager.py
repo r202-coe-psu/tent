@@ -441,6 +441,34 @@ class KioskApiRouteTests(unittest.IsolatedAsyncioTestCase):
                 True,
             ),
             (
+                "same-origin staff PIN verify POST",
+                "https://tent.example.go.th/api/v1/scanner/kiosk/staff-pin/verify",
+                "POST",
+                "https://tent.example.go.th",
+                True,
+            ),
+            (
+                "staff PIN verify from a foreign Origin header",
+                "https://tent.example.go.th/api/v1/scanner/kiosk/staff-pin/verify",
+                "POST",
+                "https://attacker.example",
+                False,
+            ),
+            (
+                "staff PIN verify on a foreign request URL",
+                "https://attacker.example/api/v1/scanner/kiosk/staff-pin/verify",
+                "POST",
+                "https://tent.example.go.th",
+                False,
+            ),
+            (
+                "staff PIN verify GET",
+                "https://tent.example.go.th/api/v1/scanner/kiosk/staff-pin/verify",
+                "GET",
+                "https://tent.example.go.th",
+                False,
+            ),
+            (
                 "GET",
                 "https://tent.example.go.th/api/v1/scanner/kiosk/lookup",
                 "GET",
@@ -1334,6 +1362,7 @@ class FaceRouteTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_cancel_logs_an_allowed_reason_and_nothing_else(self):
         client = self.client()
+        self.assertIn("staff_bypass", manager.KIOSK_FACE_END_REASONS)
         for reason in sorted(manager.KIOSK_FACE_END_REASONS):
             with self.assertLogs(manager.logger, level="INFO") as logs:
                 route = await self.call(client, "cancel", self.payload(reason=reason))

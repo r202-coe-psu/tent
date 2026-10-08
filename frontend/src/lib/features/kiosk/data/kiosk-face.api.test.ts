@@ -65,6 +65,26 @@ describe('createKioskFaceApi', () => {
 		expect(body.frames.map((frame) => atob(frame))).toEqual(['one', 'two']);
 	});
 
+	it('passes the chip photo on with a match verdict', async () => {
+		const fetchFn = vi
+			.fn<typeof fetch>()
+			.mockResolvedValue(json({ result: 'match', attempt: 2, chip_photo: '/9j/AAAA' }));
+
+		await expect(createKioskFaceApi(fetchFn).verify([jpeg('one')])).resolves.toEqual({
+			result: 'match',
+			attempt: 2,
+			chip_photo: '/9j/AAAA'
+		});
+	});
+
+	it('cancels with the staff bypass reason for the scanner client log', async () => {
+		const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(json({ ok: true }));
+
+		await createKioskFaceApi(fetchFn).cancel('staff_bypass');
+
+		expect(JSON.parse(lastCall(fetchFn).init.body as string)).toEqual({ reason: 'staff_bypass' });
+	});
+
 	it('turns an error response into KioskFaceError with the scanner client code', async () => {
 		const fetchFn = vi
 			.fn<typeof fetch>()

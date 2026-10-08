@@ -31,7 +31,8 @@ export type KioskFaceApi = {
 	verify(frames: readonly Blob[]): Promise<FaceVerifyReply>;
 	/**
 	 * Best effort: wipes what the scanner client holds for this person. Never throws. `reason` is
-	 * one of the scanner client's allowed codes (camera_denied, ..., user_skipped), for its log only.
+	 * one of the scanner client's allowed codes (camera_denied, ..., user_skipped, staff_bypass), for its
+	 * log only.
 	 */
 	cancel(reason?: string): Promise<void>;
 };
@@ -56,7 +57,8 @@ export function cancelKioskFaceCheck(reason?: string): Promise<void> {
 
 /**
  * Talks to the scanner client on this kiosk (it answers `/face/*` itself; nothing reaches the
- * server). Frames go up as JPEG; only a verdict or a hint comes back - never a score or an image.
+ * server). Frames go up as JPEG; only a verdict or a hint comes back - never a score or a camera
+ * image. The one image is the chip photo of a check-in match, handed over once so it can be kept.
  */
 export function createKioskFaceApi(fetchFn: typeof fetch = fetch): KioskFaceApi {
 	async function post(

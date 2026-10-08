@@ -138,6 +138,71 @@ describe('checkInSelectedMembers batching', () => {
 	});
 });
 
+describe('checkInSelectedMembers card photo', () => {
+	afterEach(() => vi.unstubAllGlobals());
+
+	const primaryId = 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV';
+	const photo = {
+		content_type: 'image/jpeg' as const,
+		full_base64: '/9j/4A==',
+		width: 1,
+		height: 1,
+		original_size: 4,
+		compressed_size: 4,
+		thumbnail_size: 0
+	};
+
+	function captureBodies(): Array<Record<string, unknown>> {
+		const bodies: Array<Record<string, unknown>> = [];
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+				const body = JSON.parse(String(init?.body)) as Record<string, unknown> & {
+					evacuee_ids: string[];
+				};
+				bodies.push(body);
+				return new Response(
+					JSON.stringify({
+						shelter_code: 'SH001',
+						members: body.evacuee_ids.map((evacuee_id) => ({ evacuee_id, status: 'checked_in' }))
+					}),
+					{ status: 200, headers: { 'content-type': 'application/json' } }
+				);
+			})
+		);
+		return bodies;
+	}
+
+	it('omits source, citizen_id and photo when no photo is given', async () => {
+		const bodies = captureBodies();
+		await checkInSelectedMembers(primaryId, [primaryId]);
+		expect(bodies).toEqual([{ primary_evacuee_id: primaryId, evacuee_ids: [primaryId] }]);
+	});
+
+	it('sends the photo with the smart-card source only on the batch holding the card owner', async () => {
+		const others = Array.from(
+			{ length: 3 },
+			(_, index) => `evacuee:${String(index).padStart(26, '0')}`
+		);
+		const bodies = captureBodies();
+		await checkInSelectedMembers(primaryId, [...others, primaryId], {
+			batchLimit: 2,
+			photo,
+			citizenId: '1234567890123'
+		});
+		expect(bodies).toHaveLength(2);
+		expect(bodies[0]).not.toHaveProperty('photo');
+		expect(bodies[0]).not.toHaveProperty('source');
+		expect(bodies[1]).toEqual({
+			primary_evacuee_id: primaryId,
+			evacuee_ids: [others[2], primaryId],
+			source: 'smart-card',
+			citizen_id: '1234567890123',
+			photo
+		});
+	});
+});
+
 describe('registerKioskWalkIn', () => {
 	afterEach(() => vi.unstubAllGlobals());
 

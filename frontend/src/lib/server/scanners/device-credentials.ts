@@ -62,6 +62,15 @@ export class ScannerShelterNotFoundError extends Error {
 	}
 }
 
+export class ScannerDeviceNotFoundError extends Error {
+	readonly code = 'NOT_FOUND' as const;
+
+	constructor() {
+		super('Scanner device not found');
+		this.name = 'ScannerDeviceNotFoundError';
+	}
+}
+
 export interface ScannerDevicePrincipal {
 	/** Internal registry id used only for server-side heartbeat updates. */
 	readonly registry_id: string;

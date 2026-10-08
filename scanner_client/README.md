@@ -42,7 +42,7 @@ flowchart LR
 
 1. **Kiosk UI**: QR และบัตรเข้าสู่หน้าแสดงผู้ลงทะเบียนและสมาชิกครัวเรือนชุดเดียวกัน
 2. **Card Engine**: อ่านเลขประจำตัวประชาชน 13 หลักเพื่อค้นหาเท่านั้น; ชื่อ ที่อยู่ และรูปจากบัตรไม่ถูกส่งเข้า API
-3. **Kiosk API**: Python Client แนบ `X-Device-Id` และ `X-Device-Secret` เฉพาะคำขอ same-origin ไปยัง `/api/v1/scanner/kiosk/lookup` และ `/check-in`; server ตรวจ device และใช้ศูนย์ที่ผูกกับ device
+3. **Kiosk API**: Python Client แนบ `X-Device-Id` และ `X-Device-Secret` เฉพาะคำขอ same-origin ไปยัง `/api/v1/scanner/kiosk/lookup`, `/check-in`, `/config`, `/register` และ `/staff-pin/verify`; server ตรวจ device และใช้ศูนย์ที่ผูกกับ device
 4. **Check-in**: เจ้าหน้าที่เลือกสมาชิกที่มาถึง ระบบเปลี่ยนเฉพาะผู้ที่เลือกจาก `pre_registered` เป็น `arriving` และสร้าง QR แบบไม่มีข้อมูลส่วนบุคคล
 5. **Wristband**: พิมพ์ label 1 ดวงต่อคนออกเครื่องพิมพ์ label ทันที (ไม่มี print dialog) และสั่งพิมพ์ซ้ำจากผลเดิมโดยไม่ส่ง check-in ซ้ำ — ดู [เครื่องพิมพ์ Label XP-365B](#-เครื่องพิมพ์-label-xp-365b-usb-label-printer)
 
@@ -325,7 +325,7 @@ python main.py
 - ตรวจรายชื่อสมาชิกที่มาถึงและเลือกผู้ที่ต้องการรายงานตัว จากนั้นยืนยันเพื่อเปลี่ยนสถานะและแสดง QR สำหรับพิมพ์สายรัดข้อมือ; ครัวเรือนที่มีสมาชิกเกิน 20 คนจะยืนยันเป็นชุด ชุดละไม่เกิน 20 คน
 - ชื่อใน phone flow ถูกปิดบางส่วนเพื่อความเป็นส่วนตัว รวมถึงนามสกุลบนสายรัดข้อมือ; รายการที่เจ้าของเลือกไม่ให้ค้นหาจะไม่ปรากฏในผลค้นหา
 - เบอร์ที่กรอกใช้ค้นหารายการจองในศูนย์ของอุปกรณ์เท่านั้น ไม่อยู่ใน URL หรือ browser storage; เมื่อออกจากหน้า/หมดเวลา ระบบล้างช่องกรอก
-- เครื่อง Client แนบ `X-Device-Id` และ `X-Device-Secret` ให้เฉพาะคำขอ `POST` same-origin ไปยัง `/api/v1/scanner/kiosk/lookup` และ `/check-in`; browser ไม่ได้รับค่า secret
+- เครื่อง Client แนบ `X-Device-Id` และ `X-Device-Secret` ให้เฉพาะคำขอ `POST` same-origin ไปยัง `/api/v1/scanner/kiosk/lookup`, `/check-in`, `/config`, `/register` และ `/staff-pin/verify`; browser ไม่ได้รับค่า secret
 
 การทดสอบ `python test_card.py` ในหัวข้อก่อนหน้านี้เป็นการตรวจฮาร์ดแวร์ในเครื่องและแสดงข้อมูลบัตร/บันทึกรูปถ่ายในเครื่องทดสอบเท่านั้น ไม่ใช่ flow ของ Kiosk สำหรับผู้ใช้งานจริง
 

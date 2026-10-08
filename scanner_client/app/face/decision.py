@@ -48,14 +48,22 @@ def decide(
     profile: ThresholdProfile,
 ) -> Decision:
     """`similarity` is None when too few frames passed the quality gate; `live` is None when
-    liveness could not be assessed (no usable frame)."""
-    if similarity is not None:
-        if similarity >= profile.too_similar:
-            return Decision(NOT_CONFIRMED, REASON_CARD_PRESENTATION)
-        if live is False:
-            return Decision(NOT_CONFIRMED, REASON_LIVENESS_FAILED)
-        if similarity >= profile.match:
-            return Decision(MATCH)
+    liveness could not be assessed (no usable frame).
+
+    Every miss gets the same `max_attempts` tries, a face judged fake or too close to the chip photo
+    included: the liveness and card-presentation limits are not calibrated, so ending at the first
+    such burst would turn real people away too easily. The final verdict carries the reason of the
+    last attempt."""
+    if similarity is None:
+        reason = REASON_RETRY_EXHAUSTED
+    elif similarity >= profile.too_similar:
+        reason = REASON_CARD_PRESENTATION
+    elif live is False:
+        reason = REASON_LIVENESS_FAILED
+    elif similarity >= profile.match:
+        return Decision(MATCH)
+    else:
+        reason = REASON_RETRY_EXHAUSTED
     if attempt >= profile.max_attempts:
-        return Decision(NOT_CONFIRMED, REASON_RETRY_EXHAUSTED)
+        return Decision(NOT_CONFIRMED, reason)
     return Decision(RETRY)

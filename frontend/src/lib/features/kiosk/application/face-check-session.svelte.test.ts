@@ -2,8 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { KioskFaceError, type KioskFaceApi } from '../data/kiosk-face.api';
 import {
 	FACE_BURST_FRAMES,
+	FACE_BYPASSED_BY_STAFF,
 	FACE_DEFAULT_MAX_ATTEMPTS,
 	FACE_POSITION_TIMEOUT_MS,
+	FACE_PREVIEW_INTERVAL_MS,
 	FACE_RETRY_MESSAGE_MS,
 	FACE_SKIPPED_BY_PERSON,
 	FACE_SLOW_NOTICE_MS,
@@ -724,6 +726,20 @@ describe('FaceCheckSession slow notice', () => {
 		expect(session.slow).toBe(false);
 	});
 
+	it('still times out when no burst counts as an attempt', async () => {
+		// Every burst is unusable (movement, flicker): the scanner client keeps answering attempt 0.
+		const { session, api, finished } = setup({
+			frames: [READY],
+			verdicts: [{ result: 'retry', hint: 'ok', attempt: 0 }]
+		});
+
+		await session.agree();
+
+		expect(finished).toEqual([{ kind: 'skipped', reason: 'timeout' }]);
+		expect(session.attempt).toBe(0);
+		expect(vi.mocked(api.verify).mock.calls.length).toBeGreaterThan(1);
+	});
+
 	it('stays off for a quick check', async () => {
 		const { session } = setup();
 
@@ -754,5 +770,190 @@ describe('FaceCheckSession.maxAttempts', () => {
 		await session.agree();
 
 		expect(atFirstFrame).toBe(5);
+	});
+});
+
+const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+/** Holds the session for staff at its `holdAt`-th preview pause (the loop then waits on resume). */
+function setupHeld(holdAt: number, options: Parameters<typeof setup>[0] = {}) {
+	let ref: FaceCheckSession | null = null;
+	let pauses = 0;
+	const ctx = setup({
+		frames: [NOT_READY],
+		...options,
+		onSleep: (ms) => {
+			if (ms === FACE_PREVIEW_INTERVAL_MS && ++pauses === holdAt) ref?.hold();
+		}
+	});
+	ref = ctx.session;
+	return ctx;
+}
+
+describe('FaceCheckSession.hold (staff PIN)', () => {
+	it('stops sending frames while held, stays busy, and carries on after resume', async () => {
+		const { session, api, finished } = setupHeld(2);
+		const pending = session.agree();
+		await flush();
+
+		expect(session.held).toBe(true);
+		expect(session.phase).toBe('positioning');
+		expect(session.busy).toBe(true);
+		const framesWhileHeld = vi.mocked(api.frame).mock.calls.length;
+		await flush();
+		expect(api.frame).toHaveBeenCalledTimes(framesWhileHeld);
+		expect(finished).toEqual([]);
+
+		session.resume();
+		await pending;
+
+		expect(session.held).toBe(false);
+		expect(vi.mocked(api.frame).mock.calls.length).toBeGreaterThan(framesWhileHeld);
+		expect(finished).toEqual([{ kind: 'skipped', reason: 'timeout' }]);
+	});
+
+	it('does not count the time held towards the positioning timeout', async () => {
+		const { session, api, clock } = setupHeld(2);
+		const pending = session.agree();
+		await flush();
+		const framesWhileHeld = vi.mocked(api.frame).mock.calls.length;
+
+		clock.now += FACE_POSITION_TIMEOUT_MS * 2;
+		session.resume();
+		await pending;
+
+		// Without the pause being discounted it would time out before another frame.
+		expect(vi.mocked(api.frame).mock.calls.length).toBeGreaterThan(framesWhileHeld + 10);
+	});
+
+	it('ends as a staff bypass when staff enter the PIN, and tells the scanner client why', async () => {
+		const { session, api, camera, finished } = setupHeld(2);
+		const pending = session.agree();
+		await flush();
+
+		session.skip(FACE_BYPASSED_BY_STAFF);
+		await pending;
+
+		expect(finished).toEqual([{ kind: 'skipped', reason: FACE_BYPASSED_BY_STAFF }]);
+		expect(session.held).toBe(false);
+		expect(camera.stop).toHaveBeenCalled();
+		expect(api.cancel).toHaveBeenCalledExactlyOnceWith('staff_bypass');
+	});
+
+	it('keeps a verdict that arrives while held until resume', async () => {
+		const holdBurst = deferred<void>();
+		const { session, finished } = setup({ holdBurst });
+		const pending = session.agree();
+		await vi.waitFor(() => expect(session.phase).toBe('verifying'));
+
+		session.hold();
+		holdBurst.resolve();
+		await flush();
+		expect(finished).toEqual([]);
+
+		session.resume();
+		await pending;
+		expect(finished).toEqual([{ kind: 'match' }]);
+	});
+
+	it('drops a verdict that arrives while held when staff bypass the check', async () => {
+		const holdBurst = deferred<void>();
+		const { session, finished } = setup({ holdBurst });
+		const pending = session.agree();
+		await vi.waitFor(() => expect(session.phase).toBe('verifying'));
+
+		session.hold();
+		holdBurst.resolve();
+		await flush();
+		session.skip(FACE_BYPASSED_BY_STAFF);
+		await pending;
+
+		expect(finished).toEqual([{ kind: 'skipped', reason: 'staff_bypass' }]);
+	});
+
+	it('does not hold before the person agreed or after the end', async () => {
+		const first = setup();
+		first.session.hold();
+		expect(first.session.held).toBe(false);
+
+		const second = setup();
+		await second.session.agree();
+		second.session.hold();
+		expect(second.session.held).toBe(false);
+	});
+
+	it('lets the page go while held', async () => {
+		const { session, finished } = setupHeld(2);
+		const pending = session.agree();
+		await flush();
+
+		session.destroy();
+		await pending;
+
+		expect(finished).toEqual([]);
+	});
+});
+
+describe('FaceCheckSession.cardRemoved (check-in)', () => {
+	it('ends as card_removed while the chip photo is still needed', async () => {
+		const { session, api, finished } = setupHeld(2, { flow: 'check_in' });
+		const pending = session.agree();
+		await flush();
+
+		session.cardRemoved();
+		await pending;
+
+		expect(finished).toEqual([{ kind: 'skipped', reason: 'card_removed' }]);
+		expect(api.cancel).toHaveBeenCalledOnce();
+	});
+
+	it('asks the scanner client first while held, and carries on if the photo was read meanwhile', async () => {
+		const { session, api, finished } = setupHeld(2, { flow: 'check_in' });
+		const pending = session.agree();
+		await flush();
+		expect(session.cardRemovable).toBe(false);
+		vi.mocked(api.frame).mockResolvedValueOnce({ ...NOT_READY, reference: 'ready' });
+
+		await session.cardRemoved();
+
+		expect(finished).toEqual([]);
+		expect(session.cardRemovable).toBe(true);
+		expect(api.cancel).not.toHaveBeenCalled();
+		session.destroy();
+		await pending;
+	});
+
+	it('changes nothing once the chip photo was read, or on walk-in', async () => {
+		const read = setupHeld(2, {
+			flow: 'check_in',
+			start: { ok: true, reference: 'ready' }
+		});
+		const readPending = read.session.agree();
+		await flush();
+		read.session.cardRemoved();
+		expect(read.finished).toEqual([]);
+		read.session.destroy();
+		await readPending;
+
+		const walkIn = setupHeld(2);
+		const walkInPending = walkIn.session.agree();
+		await flush();
+		walkIn.session.cardRemoved();
+		expect(walkIn.finished).toEqual([]);
+		walkIn.session.destroy();
+		await walkInPending;
+	});
+});
+
+describe('FaceCheckSession match with the chip photo', () => {
+	it('passes the chip photo on with the match', async () => {
+		const { session, finished } = setup({
+			flow: 'check_in',
+			verdicts: [{ result: 'match', attempt: 1, chip_photo: 'AAAA' }]
+		});
+
+		await session.agree();
+
+		expect(finished).toEqual([{ kind: 'match', chipPhoto: 'AAAA' }]);
 	});
 });

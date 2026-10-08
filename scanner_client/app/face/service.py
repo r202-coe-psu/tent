@@ -1,7 +1,8 @@
 """Orchestrates one kiosk face check. The browser sends camera frames to the scanner client and gets
-back only a verdict or a hint: the chip photo, the camera frames and the embeddings never leave this
-process, and nothing is written to disk. Nothing logged here carries a citizen ID, a score or an
-image."""
+back only a verdict or a hint: the camera frames and the embeddings never leave this process, and
+nothing is written to disk. The one exception is a check-in that matches: its chip photo goes back to
+the page once, with the verdict, so the check-in can keep it as the person's photo. Nothing logged
+here carries a citizen ID, a score or an image."""
 
 from __future__ import annotations
 
@@ -25,6 +26,7 @@ from app.face.engine import MODEL_ID, FaceEngine
 from app.face.profiles import ThresholdProfile
 from app.face.reference import JPEG_SIGNATURE, decode_photo, reference_embedding
 from app.face.session import (
+    FLOW_CHECK_IN,
     FLOW_WALK_IN,
     FLOWS,
     REFERENCE_READY,
@@ -162,6 +164,13 @@ class FaceService:
                 session.set_unavailable("no_chip_photo")
             return
         await self._prepare_reference(session, engine, photo)
+        if (
+            session is self._session
+            and session.reference_state == REFERENCE_READY
+            and isinstance(photo, bytes)
+            and photo.startswith(JPEG_SIGNATURE)
+        ):
+            session.chip_photo = photo  # handed to the page only if the face matches
 
     async def _prepare_reference(
         self, session: FaceSession, engine: FaceEngine, photo: bytes | str
@@ -235,19 +244,23 @@ class FaceService:
                     "attempt": session.attempts}
 
         engine = await self.warm_up()
-        session.attempts += 1
         measured = await asyncio.to_thread(self._measure, engine, session.reference, frames)
         similarities, live_flags, hints = measured
+        if session is not self._session:
+            raise FaceStateError("face check was cancelled")
+        hint = hints.most_common(1)[0][0] if hints else quality.OK
 
-        if len(similarities) >= self.profile.required_frames:
-            similarity: Optional[float] = combine_similarities(similarities, self.profile.top_k)
-            live: Optional[bool] = majority_live(live_flags)
-        else:
-            similarity, live = None, None
+        # Only a burst that could be compared is an attempt: one spoilt by moving or bad light
+        # costs nothing. The page's own positioning timeout keeps this from looping forever.
+        if len(similarities) < self.profile.required_frames:
+            return {"result": decisions.RETRY, "hint": hint, "attempt": session.attempts}
+        session.attempts += 1
+        similarity = combine_similarities(similarities, self.profile.top_k)
+        live = majority_live(live_flags)
 
         verdict = decide(similarity, live, session.attempts, self.profile)
         if not verdict.final:
-            hint = hints.most_common(1)[0][0] if hints else quality.OK
+            # Only the generic quality hint: never why a burst looked fake.
             return {"result": decisions.RETRY, "hint": hint, "attempt": session.attempts}
         return self._finish(session, verdict.result, verdict.reason, live)
 
@@ -279,11 +292,15 @@ class FaceService:
             "liveness": "not_checked" if live is None else ("pass" if live else "fail"),
         }
         session.reference = None  # the embedding has done its job
+        chip_photo, session.chip_photo = session.chip_photo, None  # sent at most once, then gone
         logger.info(
             "Face check finished: flow=%s result=%s reason=%s attempts=%d",
             session.flow, result, reason, session.attempts,
         )
-        return self._reply(session, session.outcome)
+        reply = self._reply(session, session.outcome)
+        if result == decisions.MATCH and session.flow == FLOW_CHECK_IN and chip_photo:
+            reply["chip_photo"] = base64.b64encode(chip_photo).decode("ascii")
+        return reply
 
     @staticmethod
     def _reply(session: FaceSession, outcome: dict) -> dict[str, Any]:

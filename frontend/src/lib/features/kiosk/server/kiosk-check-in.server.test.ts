@@ -3,8 +3,10 @@ import { adminFetch } from '$lib/server/couch-admin';
 import {
 	checkInSelectedMembers,
 	KioskInputError,
+	kioskCheckInInputSchema,
 	kioskGateInputSchema,
-	lookupPreRegisteredEvacuee
+	lookupPreRegisteredEvacuee,
+	saveKioskCheckInCardPhoto
 } from './kiosk-check-in.server';
 
 vi.mock('$lib/server/couch-admin', () => ({ adminFetch: vi.fn() }));
@@ -655,5 +657,187 @@ describe('checkInSelectedMembers', () => {
 		expect(
 			mockAdminFetch.mock.calls.filter(([path]) => path.endsWith(encodeURIComponent(primary._id)))
 		).toHaveLength(4);
+	});
+});
+
+describe('kioskCheckInInputSchema photo', () => {
+	const primaryId = `evacuee:${ids[0]}`;
+	const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0]);
+	const photo = {
+		content_type: 'image/jpeg' as const,
+		full_base64: jpeg.toString('base64'),
+		width: 1,
+		height: 1,
+		original_size: 4,
+		compressed_size: 4,
+		thumbnail_size: 0
+	};
+
+	it('defaults photo to null and keeps the legacy body valid', () => {
+		const parsed = kioskCheckInInputSchema.parse({
+			primary_evacuee_id: primaryId,
+			evacuee_ids: [primaryId]
+		});
+		expect(parsed.photo).toBeNull();
+	});
+
+	it('accepts a photo only with a smart-card source and citizen id', () => {
+		const base = { primary_evacuee_id: primaryId, evacuee_ids: [primaryId], photo };
+		expect(
+			kioskCheckInInputSchema.safeParse({
+				...base,
+				source: 'smart-card',
+				citizen_id: '1234567890123'
+			}).success
+		).toBe(true);
+		expect(kioskCheckInInputSchema.safeParse({ ...base, source: 'qr' }).success).toBe(false);
+		expect(kioskCheckInInputSchema.safeParse({ ...base, source: 'phone' }).success).toBe(false);
+		expect(kioskCheckInInputSchema.safeParse({ ...base, source: 'smart-card' }).success).toBe(
+			false
+		);
+		expect(kioskCheckInInputSchema.safeParse(base).success).toBe(false);
+	});
+});
+
+describe('saveKioskCheckInCardPhoto', () => {
+	const citizenId = '1234567890123';
+	const ownerId = `evacuee:${ids[0]}`;
+	const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
+	const photo = {
+		content_type: 'image/jpeg' as const,
+		full_base64: jpeg.toString('base64'),
+		width: 1,
+		height: 1,
+		original_size: jpeg.length,
+		compressed_size: jpeg.length,
+		thumbnail_size: 0
+	};
+	const checkedIn = [{ evacuee_id: ownerId, status: 'checked_in' as const }];
+
+	type Owner = ReturnType<typeof evacuee> & { photo?: string | null };
+	let owner: Owner;
+	let evacueePutError: Error | null;
+	let imagePuts: Array<{ path: string; body: Record<string, unknown> }>;
+	let evacueePuts: Array<Record<string, unknown>>;
+	let deletes: string[];
+	let warn: ReturnType<typeof vi.spyOn>;
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		owner = evacuee(0, { current_stay: { status: 'arriving' }, _rev: '2-evacuee' });
+		evacueePutError = null;
+		imagePuts = [];
+		evacueePuts = [];
+		deletes = [];
+		warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		mockAdminFetch.mockImplementation(async (path, init = {}) => {
+			const method = init.method ?? 'GET';
+			if (method === 'DELETE') {
+				deletes.push(path);
+				return { ok: true } as never;
+			}
+			if (path.includes('image%3A')) {
+				imagePuts.push({ path, body: JSON.parse(String(init.body)) });
+				return { ok: true, rev: '1-image' } as never;
+			}
+			if (path.endsWith(encodeURIComponent(ownerId))) {
+				if (method === 'PUT') {
+					if (evacueePutError) throw evacueePutError;
+					evacueePuts.push(JSON.parse(String(init.body)));
+					return { ok: true, rev: '3-evacuee' } as never;
+				}
+				return owner as never;
+			}
+			throw Object.assign(new Error('not found'), { status: 404 });
+		});
+	});
+
+	function save(overrides: Partial<Parameters<typeof saveKioskCheckInCardPhoto>[2]> = {}) {
+		return saveKioskCheckInCardPhoto(shelterCode, 'KIOSK-01', {
+			primaryEvacueeId: ownerId,
+			citizenId,
+			photo,
+			results: checkedIn,
+			...overrides
+		});
+	}
+
+	it('stores image:{ulid} and links it to the card owner who has no photo yet', async () => {
+		await expect(save()).resolves.toBe('saved');
+
+		expect(imagePuts).toHaveLength(1);
+		expect(imagePuts[0].path).toMatch(/^\/shelter_sh001\/image%3A[0-9A-HJKMNP-TV-Z]{26}$/);
+		expect(imagePuts[0].body).toMatchObject({
+			type: 'image',
+			shelter_code: shelterCode,
+			created_by: 'scanner:KIOSK-01',
+			content_type: 'image/jpeg',
+			_attachments: { full: { content_type: 'image/jpeg', data: photo.full_base64 } }
+		});
+		expect(evacueePuts).toHaveLength(1);
+		expect(evacueePuts[0]).toMatchObject({
+			_id: ownerId,
+			_rev: '2-evacuee',
+			photo: decodeURIComponent(imagePuts[0].path.split('/').pop()!)
+		});
+		expect(deletes).toEqual([]);
+	});
+
+	it('never replaces an existing photo', async () => {
+		owner.photo = 'image:01ARZ3NDEKTSV4RRFFQ69G5FAA';
+		await expect(save()).resolves.toBe('has_photo');
+		expect(imagePuts).toEqual([]);
+		expect(evacueePuts).toEqual([]);
+	});
+
+	it('only writes to the evacuee whose person_id matches the card', async () => {
+		await expect(save({ citizenId: '9999999999999' })).resolves.toBe('not_owner');
+		expect(imagePuts).toEqual([]);
+		expect(evacueePuts).toEqual([]);
+	});
+
+	it('skips when the card owner was not checked in by this request', async () => {
+		await expect(
+			save({ results: [{ evacuee_id: ownerId, status: 'not_eligible' }] })
+		).resolves.toBe('not_checked_in');
+		await expect(
+			save({ results: [{ evacuee_id: ownerId, status: 'already_checked_in' }] })
+		).resolves.toBe('not_checked_in');
+		await expect(save({ results: [] })).resolves.toBe('not_checked_in');
+		expect(mockAdminFetch).not.toHaveBeenCalled();
+	});
+
+	it('rejects a corrupt photo without writing anything or throwing', async () => {
+		const notJpeg = Buffer.from([0x00, 0x01, 0x02, 0x03]);
+		await expect(
+			save({
+				photo: {
+					...photo,
+					full_base64: notJpeg.toString('base64'),
+					compressed_size: notJpeg.length
+				}
+			})
+		).resolves.toBe('invalid_photo');
+		await expect(save({ photo: { ...photo, compressed_size: 999 } })).resolves.toBe(
+			'invalid_photo'
+		);
+		expect(imagePuts).toEqual([]);
+		expect(evacueePuts).toEqual([]);
+	});
+
+	it('deletes the just-created image when the evacuee update conflicts', async () => {
+		evacueePutError = Object.assign(new Error('conflict'), { status: 409 });
+		await expect(save()).resolves.toBe('failed');
+		expect(imagePuts).toHaveLength(1);
+		expect(deletes).toHaveLength(1);
+		expect(deletes[0]).toBe(`${imagePuts[0].path}?rev=1-image`);
+	});
+
+	it('never logs image data on failure', async () => {
+		evacueePutError = Object.assign(new Error('conflict'), { status: 409 });
+		await save();
+		const logged = JSON.stringify(warn.mock.calls);
+		expect(logged).not.toContain(photo.full_base64);
+		expect(warn).toHaveBeenCalled();
 	});
 });

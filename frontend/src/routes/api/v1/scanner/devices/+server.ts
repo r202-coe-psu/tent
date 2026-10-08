@@ -61,7 +61,8 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json(
 			{
 				device: toScannerDeviceSummary(created.device),
-				plaintext_secret: created.plaintext_secret
+				plaintext_secret: created.plaintext_secret,
+				plaintext_staff_pin: created.plaintext_staff_pin
 			},
 			{ status: 201, headers: noStoreHeaders() }
 		);

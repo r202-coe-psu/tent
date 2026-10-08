@@ -11,6 +11,13 @@ import {
 import { adminFetch } from '$lib/server/couch-admin';
 import { shelterDbName } from '$lib/server/shelter-access-design';
 import { maskLastName } from '$lib/utils/mask';
+import { kioskPhotoPayloadSchema, type KioskPhotoPayload } from '../domain/kiosk-photo';
+import {
+	deleteKioskCardImage,
+	KioskPhotoValidationError,
+	putKioskCardImage,
+	type KioskCardImageRef
+} from './kiosk-photo.server';
 
 const ULID = '[0-7][0-9A-HJKMNP-TV-Z]{25}';
 const evacueeIdSchema = z.string().regex(new RegExp(`^evacuee:${ULID}$`, 'i'));
@@ -28,10 +35,27 @@ export const kioskGateInputSchema = z.discriminatedUnion('source', [
 	})
 ]);
 
-export const kioskCheckInInputSchema = z.object({
-	primary_evacuee_id: evacueeIdSchema,
-	evacuee_ids: z.array(evacueeIdSchema).min(1).max(20)
-});
+export const kioskCheckInInputSchema = z
+	.object({
+		primary_evacuee_id: evacueeIdSchema,
+		evacuee_ids: z.array(evacueeIdSchema).min(1).max(20),
+		source: z.enum(['smart-card', 'qr', 'phone']).optional(),
+		citizen_id: z
+			.string()
+			.regex(/^\d{13}$/)
+			.optional(),
+		// Chip photo from a face `match`; only a smart-card gate has a card to take it from.
+		photo: kioskPhotoPayloadSchema.nullable().default(null)
+	})
+	.superRefine((input, ctx) => {
+		if (input.photo && (input.source !== 'smart-card' || !input.citizen_id)) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['photo'],
+				message: 'photo is only accepted for a smart-card check-in with citizen_id'
+			});
+		}
+	});
 
 type Stay = { status?: string; zone?: string | null; since?: string };
 type EvacueeDoc = {
@@ -46,6 +70,8 @@ type EvacueeDoc = {
 	age?: number;
 	birth_year?: number;
 	household_id?: string | null;
+	person_id?: { number?: string };
+	photo?: string | null;
 	current_stay?: Stay;
 	privacy?: { search_excluded?: boolean };
 	created_at?: string;
@@ -538,5 +564,62 @@ async function refreshHouseholdStatus(
 	} catch (err) {
 		// The evacuee write is authoritative; a later read can repair this derived projection.
 		console.warn('[Kiosk Check-in] Household status refresh failed', err);
+	}
+}
+
+export type KioskCheckInPhotoOutcome =
+	'saved' | 'has_photo' | 'not_owner' | 'not_checked_in' | 'invalid_photo' | 'failed';
+
+/**
+ * Keep the face-matched chip photo as the card owner's profile photo after a check-in.
+ * Best effort: never throws, never replaces an existing photo, only when this request checked
+ * the owner in, and only touches the one evacuee whose `person_id.number` is the card's citizen
+ * id (not the household).
+ */
+export async function saveKioskCheckInCardPhoto(
+	shelterCode: string,
+	deviceId: string,
+	input: {
+		primaryEvacueeId: string;
+		citizenId: string;
+		photo: KioskPhotoPayload;
+		results: readonly KioskCheckInMemberResult[];
+	}
+): Promise<KioskCheckInPhotoOutcome> {
+	const dbName = shelterDbName(shelterCode);
+	const ownerId = `evacuee:${input.primaryEvacueeId.slice('evacuee:'.length).toUpperCase()}`;
+	const ownerResult = input.results.find((result) => result.evacuee_id === ownerId);
+	// Only on the check-in it came with: a re-scan of someone already checked in attaches nothing.
+	if (ownerResult?.status !== 'checked_in') return 'not_checked_in';
+
+	let image: KioskCardImageRef | null = null;
+	try {
+		const owner = await getById(dbName, ownerId);
+		if (
+			!owner ||
+			owner.shelter_code !== shelterCode ||
+			owner.person_id?.number !== input.citizenId
+		) {
+			return 'not_owner';
+		}
+		if (owner.photo) return 'has_photo';
+
+		image = await putKioskCardImage(dbName, shelterCode, deviceId, input.photo);
+		await adminFetch(`/${dbName}/${encodeURIComponent(owner._id)}`, {
+			method: 'PUT',
+			body: JSON.stringify({ ...owner, photo: image.id, updated_at: now() })
+		});
+		return 'saved';
+	} catch (error) {
+		if (image) await deleteKioskCardImage(dbName, image).catch(() => {});
+		if (error instanceof KioskPhotoValidationError) {
+			console.warn('[Kiosk Check-in] Card photo rejected; check-in kept without photo');
+			return 'invalid_photo';
+		}
+		// Log only the status: the error may echo request context and must never carry image data.
+		console.warn('[Kiosk Check-in] Card photo save failed; check-in kept without photo', {
+			status: responseStatus(error)
+		});
+		return 'failed';
 	}
 }

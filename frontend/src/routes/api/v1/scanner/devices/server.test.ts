@@ -53,7 +53,11 @@ describe('POST /api/v1/scanner/devices', () => {
 			isSA: true,
 			shelterCode: null
 		});
-		mockCreate.mockResolvedValue({ device: persisted, plaintext_secret: 'sk_scan_one_time' });
+		mockCreate.mockResolvedValue({
+			device: persisted,
+			plaintext_secret: 'sk_scan_one_time',
+			plaintext_staff_pin: '482913'
+		});
 	});
 
 	async function post(body: unknown): Promise<Response> {
@@ -92,6 +96,7 @@ describe('POST /api/v1/scanner/devices', () => {
 		expect(response.status).toBe(201);
 		expect(response.headers.get('cache-control')).toBe('no-store');
 		expect(data.plaintext_secret).toBe('sk_scan_one_time');
+		expect(data.plaintext_staff_pin).toBe('482913');
 		expect(data.device).toEqual({
 			id: 'scanner_device:kiosk-sh001-01',
 			device_id: 'kiosk-sh001-01',
@@ -99,7 +104,9 @@ describe('POST /api/v1/scanner/devices', () => {
 			shelter_code: 'SH001',
 			station_name: 'โต๊ะ 1',
 			status: 'active',
-			last_seen_at: null
+			last_seen_at: null,
+			staff_pin_set: false,
+			staff_pin_is_default: false
 		});
 		expect(data.device).not.toHaveProperty('secret_hash');
 		expect(data.device).not.toHaveProperty('_rev');

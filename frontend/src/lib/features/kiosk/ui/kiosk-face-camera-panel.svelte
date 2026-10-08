@@ -20,9 +20,11 @@
 		/** Face framed well enough to take the photo / a problem to fix (never colour alone). */
 		frameReady: boolean;
 		framingProblem: boolean;
-		/** "Skip" is offered while the camera step runs. */
+		/** "Staff skip this step" is offered while the camera step runs. */
 		showSkip: boolean;
 		onskip: () => void;
+		/** The skip button, so focus can come back to it when the staff PIN panel closes. */
+		skipButton?: HTMLElement | null;
 	}
 
 	let {
@@ -38,7 +40,8 @@
 		frameReady,
 		framingProblem,
 		showSkip,
-		onskip
+		onskip,
+		skipButton = $bindable(null)
 	}: Props = $props();
 
 	const tone = $derived(frameReady ? 'ready' : framingProblem ? 'problem' : 'idle');
@@ -130,11 +133,12 @@
 			{#if showSkip}
 				<div class="flex justify-center">
 					<Button
+						bind:ref={skipButton}
 						type="button"
 						variant="outline"
 						onclick={onskip}
-						class="min-h-12 px-6 text-base kiosk-portrait:min-h-16 kiosk-portrait:text-xl"
-						>ข้าม ให้เจ้าหน้าที่ตรวจแทน</Button
+						class="min-h-12 px-6 text-base focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 kiosk-portrait:min-h-16 kiosk-portrait:text-xl"
+						>เจ้าหน้าที่ข้ามขั้นตอนนี้</Button
 					>
 				</div>
 			{/if}

@@ -45,9 +45,13 @@ export { walkInSession } from './application/walk-in-session.svelte';
 export { registerWalkInCardRead, submitWalkInCard } from './application/walk-in-card-registration';
 export { loadKioskHardware } from './application/kiosk-qr-input';
 export { cancelKioskFaceCheck } from './data/kiosk-face.api';
+export { verifyKioskStaffPin, type KioskStaffPinResult } from './data/kiosk-staff-pin.api';
 export type { KioskHardware } from './domain/kiosk-hardware';
 export {
+	FACE_BYPASSED_BY_STAFF,
 	faceOutcomeIsPersonalChoice,
+	faceOutcomeNeedsStaff,
+	faceOutcomeNeedsStaffPin,
 	isFaceCheckEnabled,
 	type FaceCheckConfig,
 	type FaceCheckFlow,

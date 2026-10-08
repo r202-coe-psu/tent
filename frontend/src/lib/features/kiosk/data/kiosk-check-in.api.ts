@@ -182,11 +182,19 @@ export async function lookupPreRegisteredEvacuee(
 	return result;
 }
 
+/**
+ * Face-matched chip photo for a smart-card check-in, plus the card's citizen id so the server
+ * can tie it to the card owner. The server keeps it as the owner's profile photo only when they
+ * have none yet; a photo problem never fails the check-in.
+ */
+export type KioskCheckInPhotoOptions =
+	{ photo?: null; citizenId?: undefined } | { photo: KioskPhotoPayload; citizenId: string };
+
 /** The server derives the shelter from device auth and validates household membership. */
 export async function checkInSelectedMembers(
 	primaryEvacueeId: string,
 	evacueeIds: string[],
-	options: { signal?: AbortSignal; batchLimit?: number } = {}
+	options: { signal?: AbortSignal; batchLimit?: number } & KioskCheckInPhotoOptions = {}
 ): Promise<KioskCheckInBatchResult> {
 	const batchLimit = Math.min(20, Math.max(1, options.batchLimit ?? 20));
 	const batches = Array.from({ length: Math.ceil(evacueeIds.length / batchLimit) }, (_, index) =>
@@ -202,7 +210,17 @@ export async function checkInSelectedMembers(
 		});
 	};
 
+	// The card owner is the primary; attach the photo only to the batch that checks them in.
+	const photoBatchIndex =
+		options.photo && options.citizenId
+			? batches.findIndex((batch) => batch.includes(primaryEvacueeId))
+			: -1;
+
 	for (const [batchIndex, batch] of batches.entries()) {
+		const photoFields =
+			batchIndex === photoBatchIndex
+				? { source: 'smart-card', citizen_id: options.citizenId, photo: options.photo }
+				: {};
 		try {
 			const result = await requestWithTimeout<KioskCheckInResult>(
 				'/api/v1/scanner/kiosk/check-in',
@@ -210,7 +228,11 @@ export async function checkInSelectedMembers(
 					method: 'POST',
 					headers: { 'content-type': 'application/json' },
 					cache: 'no-store',
-					body: JSON.stringify({ primary_evacuee_id: primaryEvacueeId, evacuee_ids: batch })
+					body: JSON.stringify({
+						primary_evacuee_id: primaryEvacueeId,
+						evacuee_ids: batch,
+						...photoFields
+					})
 				},
 				async (response) => {
 					if (!response.ok) throw await requestError(response);

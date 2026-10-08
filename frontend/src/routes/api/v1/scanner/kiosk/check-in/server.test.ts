@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST } from './+server';
 import type { RequestEvent } from './$types';
 import { scannerServerRepository } from '$lib/features/scanners/server';
-import { checkInSelectedMembers } from '$lib/features/kiosk/server/kiosk-check-in.server';
+import {
+	checkInSelectedMembers,
+	saveKioskCheckInCardPhoto
+} from '$lib/features/kiosk/server/kiosk-check-in.server';
 import {
 	authenticateScannerDevice,
 	DEVICE_AUTH_FAILED,
@@ -25,7 +28,7 @@ vi.mock('$lib/features/kiosk/server/kiosk-check-in.server', async () => {
 	const actual = await vi.importActual<
 		typeof import('$lib/features/kiosk/server/kiosk-check-in.server')
 	>('$lib/features/kiosk/server/kiosk-check-in.server');
-	return { ...actual, checkInSelectedMembers: vi.fn() };
+	return { ...actual, checkInSelectedMembers: vi.fn(), saveKioskCheckInCardPhoto: vi.fn() };
 });
 
 vi.mock('$lib/server/scanners/device-credentials', async () => {
@@ -37,10 +40,26 @@ vi.mock('$lib/server/scanners/device-credentials', async () => {
 
 const mockAuthenticate = vi.mocked(authenticateScannerDevice);
 const mockCheckIn = vi.mocked(checkInSelectedMembers);
+const mockSavePhoto = vi.mocked(saveKioskCheckInCardPhoto);
 const mockHeartbeat = vi.mocked(scannerServerRepository.updateDeviceLastSeen);
 const primaryId = 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV';
 const memberId = 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAW';
-const principal = { registry_id: 'device-record-1', shelter_code: 'SH001' };
+const principal = {
+	registry_id: 'device-record-1',
+	device_id: 'test-kiosk-device',
+	shelter_code: 'SH001'
+};
+const citizenId = '1234567890123';
+const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0]);
+const photo = {
+	content_type: 'image/jpeg',
+	full_base64: jpeg.toString('base64'),
+	width: 1,
+	height: 1,
+	original_size: jpeg.length,
+	compressed_size: jpeg.length,
+	thumbnail_size: 0
+};
 
 function request(body: unknown, deviceId = 'test-kiosk-device'): RequestEvent {
 	return {
@@ -71,6 +90,7 @@ describe('POST /api/v1/scanner/kiosk/check-in', () => {
 			{ evacuee_id: primaryId, status: 'checked_in', qr_payload: primaryId }
 		] as never);
 		mockHeartbeat.mockResolvedValue(undefined);
+		mockSavePhoto.mockResolvedValue('saved');
 	});
 
 	it('authenticates the device, checks in members, and returns no-store results', async () => {
@@ -120,5 +140,66 @@ describe('POST /api/v1/scanner/kiosk/check-in', () => {
 		expect(response.status).toBe(500);
 		expect(response.headers.get('cache-control')).toBe('no-store');
 		expect((await response.json()).error.code).toBe('KIOSK_CHECK_IN_FAILED');
+	});
+
+	it('stores the chip photo for a smart-card check-in after the members are written', async () => {
+		const response = await send({
+			primary_evacuee_id: primaryId,
+			evacuee_ids: [primaryId],
+			source: 'smart-card',
+			citizen_id: citizenId,
+			photo
+		});
+		expect(response.status).toBe(200);
+		expect(mockCheckIn).toHaveBeenCalledWith('SH001', primaryId, [primaryId]);
+		expect(mockSavePhoto).toHaveBeenCalledWith('SH001', 'test-kiosk-device', {
+			primaryEvacueeId: primaryId,
+			citizenId,
+			photo,
+			results: [{ evacuee_id: primaryId, status: 'checked_in', qr_payload: primaryId }]
+		});
+	});
+
+	it('does not attempt a photo save when no photo is sent', async () => {
+		const response = await send({
+			primary_evacuee_id: primaryId,
+			evacuee_ids: [primaryId],
+			source: 'smart-card',
+			citizen_id: citizenId
+		});
+		expect(response.status).toBe(200);
+		expect(mockSavePhoto).not.toHaveBeenCalled();
+	});
+
+	it('keeps the check-in successful when the photo save fails', async () => {
+		mockSavePhoto.mockRejectedValueOnce(new Error('image write failed'));
+		const response = await send({
+			primary_evacuee_id: primaryId,
+			evacuee_ids: [primaryId],
+			source: 'smart-card',
+			citizen_id: citizenId,
+			photo
+		});
+		expect(response.status).toBe(200);
+		expect((await response.json()).members[0].status).toBe('checked_in');
+	});
+
+	it.each([
+		['qr', { source: 'qr' }],
+		['phone', { source: 'phone' }],
+		['missing source', {}],
+		['smart-card without citizen_id', { source: 'smart-card' }]
+	])('rejects a photo on a %s check-in with 400 before writing', async (_label, extra) => {
+		const response = await send({
+			primary_evacuee_id: primaryId,
+			evacuee_ids: [primaryId],
+			...extra,
+			photo
+		});
+		expect(response.status).toBe(400);
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect((await response.json()).error.code).toBe('INVALID_CHECK_IN_INPUT');
+		expect(mockCheckIn).not.toHaveBeenCalled();
+		expect(mockSavePhoto).not.toHaveBeenCalled();
 	});
 });

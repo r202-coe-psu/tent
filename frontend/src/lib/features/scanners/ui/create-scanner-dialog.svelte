@@ -65,7 +65,11 @@
 				toast.success('ลงทะเบียนเครื่องสแกนสำเร็จ');
 				open = false;
 				resetForm();
-				oncreated({ ...created.device, plaintext_secret: created.plaintext_secret });
+				oncreated({
+					...created.device,
+					plaintext_secret: created.plaintext_secret,
+					plaintext_staff_pin: created.plaintext_staff_pin
+				});
 			},
 			onError: (err) => {
 				toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการลงทะเบียนเครื่อง');

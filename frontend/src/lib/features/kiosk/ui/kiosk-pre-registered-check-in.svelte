@@ -36,6 +36,7 @@
 		lookupPreRegisteredEvacuee,
 		type GateInput,
 		type KioskCheckInMemberResult,
+		type KioskCheckInPhotoOptions,
 		type KioskHouseholdCandidate,
 		type KioskEvacueeSummary,
 		type KioskLookupResponse
@@ -43,6 +44,7 @@
 	import { printKioskLabels } from '../data/kiosk-print.api';
 	import { renderKioskLabelPng } from '../application/kiosk-label-image';
 	import { runKioskPrintFlow } from '../application/kiosk-print-flow';
+	import { buildKioskPhotoPayload } from '../application/kiosk-card-photo';
 	import KioskBackButton from './kiosk-back-button.svelte';
 
 	interface Props {
@@ -57,6 +59,11 @@
 		/** Keep the member list back while `hold` (e.g. the face check) is on screen. */
 		holdMembers?: boolean;
 		hold?: Snippet;
+		/**
+		 * Smart-card check-in whose face matched: the chip photo (base64 JPEG), sent with /check-in so
+		 * the server can keep it as the card owner's photo when they have none.
+		 */
+		cardPhoto?: string | null;
 	}
 
 	let {
@@ -69,7 +76,8 @@
 		onregister,
 		onreset,
 		holdMembers = false,
-		hold
+		hold,
+		cardPhoto = null
 	}: Props = $props();
 
 	let lookup = $state<Extract<KioskLookupResponse, { kind: 'household' }> | null>(null);
@@ -256,7 +264,8 @@
 		printError = '';
 		try {
 			const response = await checkInSelectedMembers(lookup.primary_evacuee_id, ids, {
-				batchLimit: 20
+				batchLimit: 20,
+				...(await cardPhotoOptions())
 			});
 			results = mergeCheckInResults(results, response.members);
 			retryableIds = response.retryable_evacuee_ids;
@@ -277,6 +286,13 @@
 		} finally {
 			isSubmitting = false;
 		}
+	}
+
+	/** The chip photo, made small enough to send; nothing when it cannot be (the check-in still goes ahead). */
+	async function cardPhotoOptions(): Promise<KioskCheckInPhotoOptions> {
+		if (!cardPhoto || input?.source !== 'smart-card') return {};
+		const photo = await buildKioskPhotoPayload(cardPhoto);
+		return photo ? { photo, citizenId: input.citizen_id } : {};
 	}
 
 	function mergeCheckInResults(

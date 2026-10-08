@@ -1,7 +1,12 @@
 import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
 import { scannerRepository } from '../data/scanner.remote';
-import { createScannerDevice } from '../data/scanner.api';
-import type { ScannerDevice } from '../domain/scanner.schema';
+import {
+	createScannerDevice,
+	deleteScannerDevice,
+	revealScannerStaffPin,
+	setScannerStaffPin
+} from '../data/scanner.api';
+import type { ScannerDevice, StaffPinUpdateRequest } from '../domain/scanner.schema';
 
 export const scannerKeys = {
 	allDevices: ['scanner-devices'] as const,
@@ -38,7 +43,29 @@ export const useUpdateScannerDevice = () => {
 export const useDeleteScannerDevice = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: (id: string) => scannerRepository.deleteDevice(id),
+		mutationFn: (id: string) => deleteScannerDevice(id),
 		onSuccess: () => queryClient.invalidateQueries({ queryKey: scannerKeys.allDevices })
 	}));
 };
+
+/** Set or regenerate a device's staff PIN; refreshes the list so the PIN badges update. */
+export const useSetScannerStaffPin = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (input: { id: string; body: StaffPinUpdateRequest }) =>
+			setScannerStaffPin(input.id, input.body),
+		// Never keep a (regenerated) PIN in the mutation cache once the dialog lets go of it.
+		gcTime: 0,
+		onSuccess: () => queryClient.invalidateQueries({ queryKey: scannerKeys.allDevices })
+	}));
+};
+
+/**
+ * Reveal a device's PIN on demand. A mutation, not a query: never prefetched, never shared via
+ * the query cache, and `gcTime: 0` so the result is dropped as soon as the dialog resets it.
+ */
+export const useRevealScannerStaffPin = () =>
+	createMutation(() => ({
+		mutationFn: (id: string) => revealScannerStaffPin(id),
+		gcTime: 0
+	}));

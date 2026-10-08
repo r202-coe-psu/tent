@@ -3,7 +3,8 @@ import type { RequestHandler } from './$types';
 import { scannerServerRepository } from '$lib/features/scanners/server';
 import {
 	checkInSelectedMembers,
-	kioskCheckInInputSchema
+	kioskCheckInInputSchema,
+	saveKioskCheckInCardPhoto
 } from '$lib/features/kiosk/server/kiosk-check-in.server';
 import {
 	authenticateScannerDevice,
@@ -36,6 +37,16 @@ export const POST: RequestHandler = async ({ request }) => {
 			parsed.data.primary_evacuee_id,
 			parsed.data.evacuee_ids
 		);
+		const { photo, citizen_id: citizenId } = parsed.data;
+		if (photo && citizenId) {
+			// Best effort after the authoritative check-in writes; never fails the response.
+			await saveKioskCheckInCardPhoto(principal.shelter_code, principal.device_id, {
+				primaryEvacueeId: parsed.data.primary_evacuee_id,
+				citizenId,
+				photo,
+				results: result
+			}).catch(() => {});
+		}
 		await scannerServerRepository.updateDeviceLastSeen(principal.registry_id).catch(() => {});
 		return json(
 			{ shelter_code: principal.shelter_code, members: result },

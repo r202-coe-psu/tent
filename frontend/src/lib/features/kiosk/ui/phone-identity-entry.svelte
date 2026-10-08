@@ -6,7 +6,7 @@
 	import Search from '@lucide/svelte/icons/search';
 	import KioskBackButton from './kiosk-back-button.svelte';
 	import KioskCheckInWizard from './kiosk-check-in-wizard.svelte';
-	import KioskNumpad from './kiosk-numpad.svelte';
+	import KioskNumpadPanel from './kiosk-numpad-panel.svelte';
 	import KioskPreRegisteredCheckIn from './kiosk-pre-registered-check-in.svelte';
 	import { formatPhoneForDisplay, isKioskPhoneSubmittable, phoneEntryHint } from '../domain/phone';
 	import type { GateInput } from '../data/kiosk-check-in.api';
@@ -83,34 +83,37 @@
 					กรอกเบอร์โทรศัพท์
 				</h1>
 			</header>
-			<section
-				class="phone-entry mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col gap-2 kiosk-portrait:mt-4 kiosk-portrait:max-w-xl kiosk-portrait:flex-none kiosk-portrait:gap-5"
-				aria-label="ค้นหาด้วยเบอร์โทรศัพท์"
+			<KioskNumpadPanel
+				bind:value={phone}
+				maxLength={10}
+				onsubmit={startLookup}
+				label="ค้นหาด้วยเบอร์โทรศัพท์"
+				class="kiosk-portrait:mt-4"
 			>
-				<header class="text-center">
-					<p class="mt-1 text-base text-slate-700 kiosk-portrait:text-xl">
-						ใช้เบอร์ที่กรอกตอนลงทะเบียนล่วงหน้า
-					</p>
-				</header>
+				{#snippet header()}
+					<header class="text-center">
+						<p class="mt-1 text-base text-slate-700 kiosk-portrait:text-xl">
+							ใช้เบอร์ที่กรอกตอนลงทะเบียนล่วงหน้า
+						</p>
+					</header>
+				{/snippet}
 
-				<output
-					class={[
-						'flex min-h-14 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-2xl font-bold text-slate-950 tabular-nums kiosk-portrait:min-h-20 kiosk-portrait:rounded-2xl kiosk-portrait:border-2',
-						displayPhone
-							? 'kiosk-portrait:text-4xl'
-							: 'kiosk-portrait:text-2xl kiosk-portrait:font-semibold kiosk-portrait:text-slate-400'
-					]}
-					aria-label="เบอร์โทรศัพท์ที่กรอก"
-					aria-live="polite"
-				>
-					{displayPhone || 'เบอร์โทรศัพท์'}
-				</output>
+				{#snippet display()}
+					<output
+						class={[
+							'flex min-h-14 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-2xl font-bold text-slate-950 tabular-nums kiosk-portrait:min-h-20 kiosk-portrait:rounded-2xl kiosk-portrait:border-2',
+							displayPhone
+								? 'kiosk-portrait:text-4xl'
+								: 'kiosk-portrait:text-2xl kiosk-portrait:font-semibold kiosk-portrait:text-slate-400'
+						]}
+						aria-label="เบอร์โทรศัพท์ที่กรอก"
+						aria-live="polite"
+					>
+						{displayPhone || 'เบอร์โทรศัพท์'}
+					</output>
+				{/snippet}
 
-				<div class="phone-entry-numpad flex min-h-0 flex-1 flex-col">
-					<KioskNumpad bind:value={phone} maxLength={10} onsubmit={startLookup} />
-				</div>
-
-				<div class="phone-entry-search">
+				{#snippet actions()}
 					<Button
 						type="button"
 						disabled={!isValid}
@@ -119,102 +122,23 @@
 					>
 						<Search class="h-5 w-5" aria-hidden="true" />ค้นหา
 					</Button>
-				</div>
-				<!-- Portrait only: says why the search button is disabled. Hidden (and unread) in landscape. -->
-				<p
-					class="hidden min-h-7 text-center text-lg font-semibold text-amber-900 kiosk-portrait:block"
-					aria-live="polite"
-				>
-					{entryHint ?? ''}
-				</p>
-				<p
-					class="phone-entry-hint text-center text-sm leading-snug text-slate-600 kiosk-portrait:text-lg"
-				>
-					ไม่มีเบอร์? ใช้ QR หรือบัตรประชาชน หรือติดต่อเจ้าหน้าที่
-				</p>
-			</section>
+				{/snippet}
+
+				{#snippet footer()}
+					<!-- Portrait only: says why the search button is disabled. Hidden (and unread) in landscape. -->
+					<p
+						class="hidden min-h-7 text-center text-lg font-semibold text-amber-900 kiosk-portrait:block"
+						aria-live="polite"
+					>
+						{entryHint ?? ''}
+					</p>
+					<p
+						class="kiosk-numpad-panel-note text-center text-sm leading-snug text-slate-600 kiosk-portrait:text-lg"
+					>
+						ไม่มีเบอร์? ใช้ QR หรือบัตรประชาชน หรือติดต่อเจ้าหน้าที่
+					</p>
+				{/snippet}
+			</KioskNumpadPanel>
 		</div>
 	</div>
 {/if}
-
-<style>
-	.phone-entry-numpad :global([role='group']) {
-		flex: 1;
-		grid-template-rows: repeat(4, minmax(3rem, 1fr));
-	}
-
-	.phone-entry-numpad :global(button) {
-		height: 100%;
-	}
-
-	@media (max-height: 650px) {
-		.phone-entry {
-			gap: 0.25rem;
-		}
-
-		.phone-entry header p {
-			margin-top: 0;
-			font-size: 0.875rem;
-			line-height: 1.25;
-		}
-
-		.phone-entry output {
-			min-height: 2.75rem;
-			font-size: 1.25rem;
-		}
-
-		.phone-entry-numpad :global(button) {
-			min-height: 3rem;
-			height: 100%;
-		}
-
-		.phone-entry-numpad :global(button[aria-label^='ตัวเลข']) {
-			font-size: 1.5rem;
-		}
-
-		.phone-entry-search :global(button) {
-			min-height: 2.75rem;
-		}
-
-		.phone-entry-hint {
-			font-size: 0.75rem;
-			line-height: 1.2;
-		}
-	}
-
-	/* 24" portrait: a fixed-size numpad (5.5rem keys, ~2:1) instead of stretching to the screen. */
-	@media screen and (orientation: portrait) and (min-height: 1200px) {
-		/* Button forces svg to size-4 unless the class list mentions "size-", which would also
-		   resize the landscape icons — so icons are scaled here instead (specificity beats it). */
-		.phone-entry-search :global(button svg),
-		.phone-entry-numpad :global(button svg) {
-			width: 1.5rem;
-			height: 1.5rem;
-		}
-
-		.phone-entry-numpad {
-			flex: none;
-		}
-
-		.phone-entry-numpad :global([role='group']) {
-			flex: none;
-			grid-template-rows: repeat(4, 5.5rem);
-			gap: 0.75rem;
-		}
-
-		.phone-entry-numpad :global(button) {
-			border-width: 2px;
-			border-radius: 0.75rem;
-		}
-
-		.phone-entry-numpad :global(button[aria-label^='ตัวเลข']) {
-			font-size: 2.5rem;
-			line-height: 1;
-		}
-
-		.phone-entry-numpad :global(button:not([aria-label^='ตัวเลข'])) {
-			font-size: 1.25rem;
-			line-height: 1.4;
-		}
-	}
-</style>

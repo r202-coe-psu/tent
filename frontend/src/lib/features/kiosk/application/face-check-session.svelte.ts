@@ -49,14 +49,15 @@ const BUSY_PHASES: readonly FaceCheckPhase[] = ['starting', 'positioning', 'veri
 /**
  * One person's face check, driven from the kiosk page: consent → open the camera → watch the
  * preview until the person is well framed → take a burst → read the verdict (try again if told to)
- * → done. It never refuses anyone: every ending is an outcome the caller turns into "continue".
+ * → done. It only reports how the check ended; whether that ending may carry on by itself or needs
+ * the staff PIN is the page's call (`faceOutcomeNeedsStaffPin`).
  */
 export class FaceCheckSession {
 	phase = $state<FaceCheckPhase>('consent');
 	/** The instruction on screen while positioning; a short sentence for the person. */
 	message = $state(faceHintMessage('ok'));
 	attempt = $state(0);
-	outcome = $state<FaceCheckOutcome | null>(null);
+	outcome = $state.raw<FaceCheckOutcome | null>(null);
 	/** ISO time the person agreed to the check; the consent record for what is stored later. */
 	consentedAt = $state<string | null>(null);
 	/** Attempts the scanner client allows, for "attempt 2 of N". */
@@ -65,6 +66,8 @@ export class FaceCheckSession {
 	frameReady = $state(false);
 	/** Positioning has gone on long enough to tell the person staff will help if it does not work. */
 	slow = $state(false);
+	/** Paused for staff entering the PIN: no frames are sent and the positioning clock stands still. */
+	held = $state(false);
 
 	private camera: FaceCamera | null = null;
 	private stopped = false;
@@ -73,6 +76,8 @@ export class FaceCheckSession {
 	private shownHint = $state<FaceHint>('ok');
 	private candidateHint: FaceHint | null = null;
 	private candidateFrames = 0;
+	/** Loops waiting for `resume()` (or the end) while `held`. */
+	private resumeWaiters: (() => void)[] = [];
 	private readonly sleep: (ms: number) => Promise<void>;
 	private readonly now: () => number;
 
@@ -144,18 +149,59 @@ export class FaceCheckSession {
 	}
 
 	/**
-	 * The person chose to leave the camera step and have staff check instead. Unlike `decline` this
-	 * comes after they agreed, so the outcome says so; unlike a timeout it is their own choice.
+	 * Leave the camera step and have staff check instead. Unlike `decline` this comes after the
+	 * person agreed, so the outcome says so. `reason` is `FACE_SKIPPED_BY_PERSON` when the person
+	 * chose it, or `FACE_BYPASSED_BY_STAFF` once staff entered the kiosk's PIN.
 	 */
-	skip(): void {
+	skip(reason: string = FACE_SKIPPED_BY_PERSON): void {
 		if (!this.busy) return;
-		void this.deps.api.cancel(FACE_SKIPPED_BY_PERSON);
-		this.finish({ kind: 'skipped', reason: FACE_SKIPPED_BY_PERSON });
+		void this.deps.api.cancel(reason);
+		this.finish({ kind: 'skipped', reason });
+	}
+
+	/**
+	 * Staff are entering the PIN: stop sending frames and stop the positioning clock, so the check
+	 * does not end by itself (a match or a timeout) under their fingers. A burst or a chip-photo read
+	 * already under way carries on; its verdict waits for `resume()`.
+	 */
+	hold(): void {
+		if (!this.busy || this.held) return;
+		this.held = true;
+	}
+
+	/** Staff cancelled the PIN: the check carries on where it was. */
+	resume(): void {
+		if (!this.held) return;
+		this.held = false;
+		this.releaseWaiters();
+	}
+
+	/**
+	 * Check-in: the card came out while the check still needed the chip photo. Ends the check the way
+	 * the scanner client would have reported it (`skipped / card_removed`); once the photo is read,
+	 * taking the card out is allowed and changes nothing. While held (staff on the PIN) it first asks
+	 * the scanner client, since the read may have finished after the last preview frame.
+	 */
+	async cardRemoved(): Promise<void> {
+		if (!this.busy || this.deps.flow !== 'check_in' || this.referenceReady) return;
+		if (this.held && this.camera) {
+			// No frames go out while staff are on the PIN, so `referenceReady` may be stale: ask once.
+			try {
+				const reply = await this.deps.api.frame(await this.camera.preview());
+				if (reply.reference === 'ready') this.referenceReady = true;
+			} catch {
+				// No answer: treat it as the photo still being needed, as before.
+			}
+			if (this.ended || this.referenceReady) return;
+		}
+		void this.deps.api.cancel();
+		this.finish({ kind: 'skipped', reason: 'card_removed' });
 	}
 
 	/** The page is going away. Wipes an unfinished check; a finished one is kept for the server hand-off. */
 	destroy(): void {
 		this.stopped = true;
+		this.releaseWaiters();
 		this.camera?.stop();
 		this.camera = null;
 		if (this.phase !== 'done') void this.deps.api.cancel();
@@ -165,6 +211,14 @@ export class FaceCheckSession {
 		let startedAt = this.now();
 		let streak = 0;
 		while (!this.stopped && this.phase === 'positioning' && this.camera) {
+			if (this.held) {
+				// The time staff spend on the PIN does not count towards the positioning timeout.
+				const heldAt = this.now();
+				await this.waitWhileHeld();
+				startedAt += this.now() - heldAt;
+				streak = 0;
+				continue;
+			}
 			const waited = this.now() - startedAt;
 			if (waited > FACE_POSITION_TIMEOUT_MS) {
 				return this.finish({ kind: 'skipped', reason: 'timeout' });
@@ -180,12 +234,19 @@ export class FaceCheckSession {
 			} catch (error) {
 				return this.fail(error);
 			}
+			if (this.held) continue; // staff pressed skip while the frame was out: no burst now
 			if (streak >= FACE_READY_STREAK) {
+				const attemptBefore = this.attempt;
 				const verdict = await this.verify();
 				if (verdict === 'done' || this.stopped) return;
 				streak = 0;
-				startedAt = this.now();
-				this.slow = false;
+				// Only a burst that counted as an attempt starts the clock again. One the scanner client
+				// could not use (movement, flicker, chip photo not read yet) costs no attempt, so the
+				// timeout is what keeps such bursts from going on forever.
+				if (this.attempt > attemptBefore) {
+					startedAt = this.now();
+					this.slow = false;
+				}
 			}
 			await this.sleep(FACE_PREVIEW_INTERVAL_MS);
 		}
@@ -203,10 +264,15 @@ export class FaceCheckSession {
 			return 'done';
 		}
 		if (this.stopped || this.phase === 'done') return 'done'; // left or skipped while verifying
+		// Staff are on the PIN: the verdict waits, and is dropped if they bypass the check.
+		await this.waitWhileHeld();
+		if (this.ended) return 'done';
 		this.attempt = Math.max(this.attempt, reply.attempt);
 		switch (reply.result) {
 			case 'match':
-				this.finish({ kind: 'match' });
+				this.finish(
+					reply.chip_photo ? { kind: 'match', chipPhoto: reply.chip_photo } : { kind: 'match' }
+				);
 				return 'done';
 			case 'not_confirmed':
 				this.finish({ kind: 'not_confirmed', reason: reply.reason });
@@ -261,10 +327,21 @@ export class FaceCheckSession {
 		this.finish({ kind: 'unavailable', reason });
 	}
 
+	private waitWhileHeld(): Promise<void> {
+		if (!this.held || this.stopped) return Promise.resolve();
+		return new Promise((resolve) => this.resumeWaiters.push(resolve));
+	}
+
+	private releaseWaiters(): void {
+		for (const resolve of this.resumeWaiters.splice(0)) resolve();
+	}
+
 	private finish(outcome: FaceCheckOutcome): void {
 		if (this.phase === 'done') return;
 		this.camera?.stop();
 		this.camera = null;
+		this.held = false;
+		this.releaseWaiters();
 		this.outcome = outcome;
 		this.setPhase('done');
 		this.deps.onfinish(outcome);

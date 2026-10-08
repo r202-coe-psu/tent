@@ -62,12 +62,8 @@ export class ScannerRemoteRepository {
 		return toScannerDeviceSummary(await this.registryRepo.put(updated));
 	}
 
-	async deleteDevice(id: string): Promise<void> {
-		const existing = await this.registryRepo.get<PersistedScannerDevice>(id);
-		if (existing && isPersistedScannerDevice(existing)) {
-			await this.registryRepo.remove(existing);
-		}
-	}
+	// Delete is server-side only (`deleteScannerDevice` in scanner.api.ts): it must also remove the
+	// device's staff PIN from the admin-only `scanner_secrets` DB, which the browser cannot reach.
 }
 
 export const scannerRepository = new ScannerRemoteRepository();

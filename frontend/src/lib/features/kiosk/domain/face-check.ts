@@ -60,7 +60,12 @@ export const faceFrameReplySchema = z.object({
 export type FaceFrameReply = z.infer<typeof faceFrameReplySchema>;
 
 export const faceVerifyReplySchema = z.discriminatedUnion('result', [
-	z.object({ result: z.literal('match'), attempt: attemptSchema }),
+	z.object({
+		result: z.literal('match'),
+		attempt: attemptSchema,
+		/** Check-in only: the chip photo (base64 JPEG), sent once on a match so it can be kept. */
+		chip_photo: z.string().min(1).optional()
+	}),
 	z.object({ result: z.literal('retry'), hint: z.enum(FACE_HINTS), attempt: attemptSchema }),
 	z.object({ result: z.literal('not_confirmed'), reason: z.string(), attempt: attemptSchema }),
 	z.object({ result: z.literal('skipped'), reason: z.string(), attempt: attemptSchema })
@@ -78,7 +83,8 @@ export type FaceStartReply = z.infer<typeof faceStartReplySchema>;
 // --- how a check ends ---------------------------------------------------------------------------
 
 export type FaceCheckOutcome =
-	| { kind: 'match' }
+	/** `chipPhoto`: check-in only, the chip photo (base64 JPEG) the scanner client handed over. */
+	| { kind: 'match'; chipPhoto?: string }
 	/** The face did not match, or looked like a photo, after the allowed attempts. */
 	| { kind: 'not_confirmed'; reason: string }
 	/** The check could not run on this card (no chip photo, card pulled out, timed out). */
@@ -127,7 +133,13 @@ export function classifyFaceFailure(error: unknown): FaceUnavailableReason {
 /** `skipped` reason when the person pressed "skip" at the camera (as opposed to the system skipping). */
 export const FACE_SKIPPED_BY_PERSON = 'user_skipped';
 
-/** True when the person chose to leave (declined or skipped): no result screen, just carry on. */
+/** `skipped` reason when staff checked the card by eye and entered the kiosk's staff PIN. */
+export const FACE_BYPASSED_BY_STAFF = 'staff_bypass';
+
+/**
+ * True when the person chose to leave (declined or skipped). Only picks the wording on screen:
+ * in mode `on` a choice still needs the staff PIN (see `faceOutcomeNeedsStaffPin`).
+ */
 export function faceOutcomeIsPersonalChoice(outcome: FaceCheckOutcome): boolean {
 	return (
 		outcome.kind === 'declined' ||
@@ -135,9 +147,65 @@ export function faceOutcomeIsPersonalChoice(outcome: FaceCheckOutcome): boolean 
 	);
 }
 
-/** Anything but a match goes to staff; the check never refuses anyone service. */
+/** True when staff entered the PIN for this person: they already checked the card. */
+export function faceOutcomeIsStaffBypass(outcome: FaceCheckOutcome): boolean {
+	return outcome.kind === 'skipped' && outcome.reason === FACE_BYPASSED_BY_STAFF;
+}
+
+/**
+ * Anything but a match (or a staff PIN bypass, where staff already checked) should be checked by
+ * staff afterwards.
+ */
 export function faceOutcomeNeedsStaff(outcome: FaceCheckOutcome): boolean {
-	return outcome.kind !== 'match';
+	return outcome.kind !== 'match' && !faceOutcomeIsStaffBypass(outcome);
+}
+
+/**
+ * Mode `on`: only a match carries on by itself; every other ending (not confirmed, skipped,
+ * camera failed, declined) waits for staff to enter the kiosk's PIN before anything is saved.
+ * Shadow mode never shows the person a result, so it never asks for the PIN.
+ */
+export function faceOutcomeNeedsStaffPin(outcome: FaceCheckOutcome, mode: FaceCheckMode): boolean {
+	return mode === 'on' && outcome.kind !== 'match';
+}
+
+/**
+ * What the kiosk page does when a check ends:
+ * - `hand_on`: carry on now (staff entered the PIN, or any ending outside mode `on`);
+ * - `show_match`: mode `on` match - show "verified" for a moment, then carry on;
+ * - `wait_for_pin`: wait for staff (an open PIN panel stays open, otherwise the result screen asks);
+ * - `close_pin`: the card came out while the chip photo was needed - close an open PIN panel (that
+ *   is not a staff bypass) and let the result screen ask.
+ * In mode `on` only a match or a staff bypass ever carries on.
+ */
+export type FaceOutcomeAction = 'hand_on' | 'show_match' | 'wait_for_pin' | 'close_pin';
+
+export function faceOutcomeAction(
+	outcome: FaceCheckOutcome,
+	mode: FaceCheckMode
+): FaceOutcomeAction {
+	if (faceOutcomeIsStaffBypass(outcome)) return 'hand_on';
+	if (mode !== 'on') return 'hand_on';
+	if (!faceOutcomeNeedsStaffPin(outcome, mode)) return 'show_match';
+	if (outcome.kind === 'skipped' && outcome.reason === 'card_removed') return 'close_pin';
+	return 'wait_for_pin';
+}
+
+/** Where the staff PIN panel was opened: at the camera, or on the result screen after the check. */
+export type StaffPinOpenedFrom = 'camera' | 'result';
+
+/**
+ * Staff cancelled the PIN (cancel, Esc or 30 s idle):
+ * - from the result screen: `go_home` - nothing is saved;
+ * - from the camera, and the check ended meanwhile: `show_result` - the result screen asks again;
+ * - from the camera, check still running: `resume` it where it was.
+ */
+export function staffPinCancelAction(
+	from: StaffPinOpenedFrom,
+	checkEnded: boolean
+): 'go_home' | 'show_result' | 'resume' {
+	if (from === 'result') return 'go_home';
+	return checkEnded ? 'show_result' : 'resume';
 }
 
 // --- timing -------------------------------------------------------------------------------------
@@ -183,6 +251,43 @@ export function faceHintMessage(hint: FaceHint): string {
 /** After an attempt that did not match: say what to fix, or just ask for another try. */
 export function faceRetryMessage(hint: FaceHint): string {
 	return hint === 'ok'
-		? 'ระบบยังยืนยันไม่ได้ กรุณามองตรงที่กล้องแล้วลองอีกครั้ง'
+		? 'ใบหน้ายังไม่ตรงกับรูปในบัตร กรุณามองตรงที่กล้องแล้วลองอีกครั้ง'
 		: HINT_MESSAGES[hint];
+}
+
+export type FaceOutcomeMessage = {
+	/** Which icon goes with it: the face was compared, staff will check the card, or the check could not run. */
+	tone: 'not_confirmed' | 'declined' | 'unchecked';
+	title: string;
+	detail: string;
+};
+
+/**
+ * The result screen for an ending that is not a match (mode `on`). Only `not_confirmed` was really
+ * compared, so only it says the face does not match; the others never use the word "ไม่ตรง".
+ * Declining is the person's right, so its wording is plain service, not a failure.
+ */
+export function faceOutcomeMessage(
+	outcome: Exclude<FaceCheckOutcome, { kind: 'match' }>
+): FaceOutcomeMessage {
+	switch (outcome.kind) {
+		case 'not_confirmed':
+			return {
+				tone: 'not_confirmed',
+				title: 'ใบหน้าไม่ตรงกับรูปในบัตรประชาชน',
+				detail: 'กรุณาติดต่อเจ้าหน้าที่เพื่อตรวจสอบตัวตน'
+			};
+		case 'declined':
+			return {
+				tone: 'declined',
+				title: 'เจ้าหน้าที่จะตรวจบัตรให้ท่าน',
+				detail: 'กรุณาติดต่อเจ้าหน้าที่ ท่านยังรับบริการได้ตามปกติ'
+			};
+		default:
+			return {
+				tone: 'unchecked',
+				title: 'ระบบตรวจใบหน้าไม่ได้',
+				detail: 'กรุณาติดต่อเจ้าหน้าที่'
+			};
+	}
 }

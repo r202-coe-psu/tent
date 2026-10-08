@@ -74,16 +74,25 @@ class DecisionTests(unittest.TestCase):
             decide(None, None, PROFILE.max_attempts, PROFILE).reason, decision.REASON_RETRY_EXHAUSTED
         )
 
-    def test_a_face_too_close_to_the_chip_photo_looks_like_the_card_held_up(self):
-        verdict = decide(PROFILE.too_similar, True, 1, PROFILE)
+    def test_a_face_too_close_to_the_chip_photo_retries_then_looks_like_the_card_held_up(self):
+        self.assertEqual(decide(PROFILE.too_similar, True, 1, PROFILE), Decision(decision.RETRY))
+        verdict = decide(PROFILE.too_similar, True, PROFILE.max_attempts, PROFILE)
         self.assertEqual(verdict, Decision(decision.NOT_CONFIRMED, decision.REASON_CARD_PRESENTATION))
         self.assertTrue(verdict.final)
 
-    def test_a_face_judged_fake_is_never_a_match(self):
+    def test_a_face_judged_fake_is_never_a_match_but_gets_every_attempt(self):
+        for attempt in range(1, PROFILE.max_attempts):
+            self.assertEqual(decide(0.7, False, attempt, PROFILE), Decision(decision.RETRY))
         self.assertEqual(
-            decide(0.7, False, 1, PROFILE),
+            decide(0.7, False, PROFILE.max_attempts, PROFILE),
             Decision(decision.NOT_CONFIRMED, decision.REASON_LIVENESS_FAILED),
         )
+
+    def test_the_final_reason_is_the_last_attempts(self):
+        last = PROFILE.max_attempts
+        self.assertEqual(decide(0.1, True, last, PROFILE).reason, decision.REASON_RETRY_EXHAUSTED)
+        self.assertEqual(decide(0.7, False, last, PROFILE).reason, decision.REASON_LIVENESS_FAILED)
+        self.assertEqual(decide(0.95, True, last, PROFILE).reason, decision.REASON_CARD_PRESENTATION)
 
     def test_the_default_profile_is_the_named_one_and_unknown_names_fail(self):
         self.assertIs(get_profile(None), DEFAULT_PROFILE)
@@ -146,11 +155,12 @@ class LivenessCropTests(unittest.TestCase):
 
 
 class FakeEngine:
-    """Stands in for FaceEngine: scripted detections and similarities, no models."""
+    """Stands in for FaceEngine: scripted detections and similarities, no models. `live` is a bool
+    or a list of per-call verdicts (the last one repeats)."""
 
     def __init__(self, similarities=(0.6,), live=True, faces=None):
         self.similarities = list(similarities)
-        self.live = live
+        self.live = list(live) if isinstance(live, (list, tuple)) else [live]
         self.faces = [face_row()] if faces is None else faces
         self.detect_sizes = []
         self.unaligned_calls = 0
@@ -172,7 +182,8 @@ class FakeEngine:
         return self.similarities.pop(0) if len(self.similarities) > 1 else self.similarities[0]
 
     def liveness(self, image, face):
-        return LivenessResult(is_real=self.live, p_real=0.9 if self.live else 0.1)
+        live = self.live.pop(0) if len(self.live) > 1 else self.live[0]
+        return LivenessResult(is_real=live, p_real=0.9 if live else 0.1)
 
 
 class ReferenceTests(unittest.TestCase):
@@ -282,30 +293,125 @@ class FaceServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(final, {"result": "not_confirmed", "attempt": 3, "reason": "retry_exhausted"})
         self.assertEqual(await service.verify(self.frames()), final)  # asking again changes nothing
 
-    async def test_the_card_held_to_the_camera_is_not_confirmed_at_once(self):
+    async def test_the_card_held_to_the_camera_retries_then_is_not_confirmed(self):
         service = self.make(FakeEngine(similarities=[0.95]))
         await self.start_walk_in(service)
+        for attempt in range(1, PROFILE.max_attempts):
+            reply = await service.verify(self.frames())
+            self.assertEqual(reply, {"result": "retry", "hint": "ok", "attempt": attempt})
         reply = await service.verify(self.frames())
-        self.assertEqual(reply, {"result": "not_confirmed", "attempt": 1, "reason": "possible_card_presentation"})
+        self.assertEqual(
+            reply,
+            {"result": "not_confirmed", "attempt": PROFILE.max_attempts, "reason": "possible_card_presentation"},
+        )
 
-    async def test_a_fake_face_is_not_confirmed(self):
+    async def test_a_fake_face_retries_then_is_not_confirmed(self):
         service = self.make(FakeEngine(similarities=[0.7], live=False))
         await self.start_walk_in(service)
+        for attempt in range(1, PROFILE.max_attempts):
+            reply = await service.verify(self.frames())
+            # The retry hint never says the face looked fake.
+            self.assertEqual(reply, {"result": "retry", "hint": "ok", "attempt": attempt})
         reply = await service.verify(self.frames())
         self.assertEqual((reply["result"], reply["reason"]), ("not_confirmed", "liveness_failed"))
+        self.assertEqual(reply["attempt"], PROFILE.max_attempts)
         self.assertEqual(service.identity_check(mode="on", device_id="d")["liveness"], "fail")
 
-    async def test_unusable_frames_retry_with_the_commonest_hint(self):
+    async def test_a_live_face_on_the_third_attempt_after_two_fakes_matches(self):
+        frames = self.frames()
+        fakes = [False] * (len(frames) * 2)
+        service = self.make(FakeEngine(similarities=[0.7], live=fakes + [True]))
+        await self.start_walk_in(service)
+        for attempt in (1, 2):
+            self.assertEqual((await service.verify(frames))["result"], "retry")
+        self.assertEqual(await service.verify(frames), {"result": "match", "attempt": 3})
+
+    async def test_unusable_frames_retry_with_the_commonest_hint_and_cost_no_attempt(self):
         service = self.make(FakeEngine(faces=[]))
         await self.start_walk_in(service)
-        reply = await service.verify(self.frames())
-        self.assertEqual(reply, {"result": "retry", "hint": "no_face", "attempt": 1})
+        for _ in range(PROFILE.max_attempts + 2):
+            reply = await service.verify(self.frames())
+            self.assertEqual(reply, {"result": "retry", "hint": "no_face", "attempt": 0})
+        self.assertIsNone(service._session.outcome)
 
-    async def test_too_few_good_frames_is_a_retry_even_if_they_match(self):
+    async def test_too_few_good_frames_is_a_retry_even_if_they_match_and_is_not_counted(self):
         service = self.make()
         await self.start_walk_in(service)
         frames = self.frames(2)  # the profile wants 3
-        self.assertEqual((await service.verify(frames))["result"], "retry")
+        reply = await service.verify(frames)
+        self.assertEqual((reply["result"], reply["attempt"]), ("retry", 0))
+        self.assertEqual(await service.verify(self.frames()), {"result": "match", "attempt": 1})
+
+    async def test_a_spoilt_burst_between_misses_does_not_use_up_an_attempt(self):
+        service = self.make(FakeEngine(similarities=[0.1]))
+        await self.start_walk_in(service)
+        self.assertEqual((await service.verify(self.frames()))["attempt"], 1)
+        self.assertEqual((await service.verify(self.frames(2)))["attempt"], 1)
+        self.assertEqual((await service.verify(self.frames()))["attempt"], 2)
+        self.assertEqual((await service.verify(self.frames()))["result"], "not_confirmed")
+
+    # -- chip photo for check-in ------------------------------------------------------------
+
+    async def start_check_in(self, service, photo):
+        async def read_photo():
+            return photo
+
+        await service.start(CID, "check_in", read_photo)
+        await service._session.reference_task
+
+    async def test_a_check_in_match_hands_the_chip_photo_back_once(self):
+        service = self.make()
+        photo = jpeg(textured(100, 120))
+        await self.start_check_in(service, photo)
+        reply = await service.verify(self.frames())
+        self.assertEqual((reply["result"], reply["attempt"]), ("match", 1))
+        self.assertEqual(base64.b64decode(reply["chip_photo"]), photo)
+        self.assertIsNone(service._session.chip_photo)
+        self.assertEqual(await service.verify(self.frames()), {"result": "match", "attempt": 1})
+
+    async def test_a_check_in_that_is_not_confirmed_never_gets_the_chip_photo(self):
+        service = self.make(FakeEngine(similarities=[0.1]))
+        await self.start_check_in(service, jpeg(textured(100, 120)))
+        replies = [await service.verify(self.frames()) for _ in range(PROFILE.max_attempts)]
+        self.assertEqual(replies[-1]["result"], "not_confirmed")
+        self.assertFalse(any("chip_photo" in reply for reply in replies))
+        self.assertIsNone(service._session.chip_photo)
+
+    async def test_a_walk_in_match_does_not_send_the_chip_photo(self):
+        service = self.make()
+        await self.start_walk_in(service)
+        await service._session.reference_task
+        self.assertIsNone(service._session.chip_photo)
+        self.assertNotIn("chip_photo", await service.verify(self.frames()))
+
+    async def test_the_chip_photo_is_wiped_on_cancel_and_on_a_new_check(self):
+        service = self.make()
+        await self.start_check_in(service, jpeg(textured(100, 120)))
+        session = service._session
+        self.assertIsNotNone(session.chip_photo)
+        service.cancel()
+        self.assertIsNone(session.chip_photo)
+
+        await self.start_check_in(service, jpeg(textured(100, 120)))
+        session = service._session
+        await self.start_check_in(service, jpeg(textured(100, 120)))  # a new card
+        self.assertIsNone(session.chip_photo)
+
+    async def test_the_chip_photo_is_wiped_when_the_session_expires(self):
+        now = [1000.0]
+        service = self.make(clock=lambda: now[0])
+        await self.start_check_in(service, jpeg(textured(100, 120)))
+        session = service._session
+        now[0] += face_service.SESSION_TTL_SEC + 1
+        with self.assertRaises(FaceStateError):
+            await service.verify(self.frames())
+        self.assertIsNone(session.chip_photo)
+
+    async def test_an_unusable_chip_photo_is_not_kept(self):
+        service = self.make()
+        await self.start_check_in(service, b"\xff\xd8\xffnot really a jpeg")
+        self.assertIsNone(service._session.chip_photo)
+        self.assertEqual((await service.verify(self.frames()))["result"], "skipped")
 
     async def test_verify_waits_for_the_chip_photo_but_not_forever(self):
         service = self.make()

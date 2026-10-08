@@ -1,5 +1,7 @@
-"""One person's face check, kept in RAM only. Holds the chip photo's embedding (never the photo) and
-the outcome; `clear()` wipes it. Nothing here is written to disk or logged."""
+"""One person's face check, kept in RAM only. Holds the chip photo's embedding and the outcome, and for
+a check-in the chip photo itself until the verdict (handed to the page once on a match, so the server
+can keep it as the person's photo); `clear()` wipes it all. Nothing here is written to disk or
+logged."""
 
 from __future__ import annotations
 
@@ -30,6 +32,7 @@ class FaceSession:
     reference_task: Optional[asyncio.Task] = field(default=None, repr=False)
     attempts: int = 0
     outcome: Optional[dict] = None  # final {result, reason, liveness}
+    chip_photo: Optional[bytes] = field(default=None, repr=False)  # check-in only, until the verdict
 
     def set_reference(self, embedding: np.ndarray) -> None:
         self.reference = embedding
@@ -37,6 +40,7 @@ class FaceSession:
 
     def set_unavailable(self, reason: str) -> None:
         self.reference = None
+        self.chip_photo = None
         self.reference_state = REFERENCE_UNAVAILABLE
         self.reference_reason = reason
 
@@ -45,3 +49,4 @@ class FaceSession:
             self.reference_task.cancel()
         self.reference_task = None
         self.reference = None
+        self.chip_photo = None

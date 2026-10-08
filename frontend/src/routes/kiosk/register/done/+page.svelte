@@ -6,8 +6,6 @@
 	import {
 		buildKioskContextQuery,
 		getKioskDisplayContext,
-		KioskIdleTimeout,
-		KIOSK_IDLE_TIMEOUT_MS,
 		KioskCheckInWizard,
 		navigateToKioskHome,
 		readKioskDisplayQuery,
@@ -19,15 +17,9 @@
 	const contextQuery = $derived(buildKioskContextQuery(displayContext));
 	// Set by the face step when it ran visibly and did not confirm the person (see register/face).
 	const staffRecheck = $derived(page.url.searchParams.get('face') === 'staff');
-	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, returnHome);
 	onMount(() => {
 		walkInSession.clear();
-		idleTimeout.start();
-		return () => idleTimeout.stop();
 	});
-	function activity() {
-		idleTimeout.recordActivity();
-	}
 	function returnHome() {
 		walkInSession.clear();
 		navigateToKioskHome(contextQuery);
@@ -35,7 +27,6 @@
 </script>
 
 <svelte:head><title>ลงทะเบียนสำเร็จ — SmartShelter Kiosk</title></svelte:head>
-<svelte:window onpointerdown={activity} onkeydown={activity} />
 <div class="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 py-3">
 	<KioskCheckInWizard currentStep={5} step2Label="ลงทะเบียน" />
 	<section

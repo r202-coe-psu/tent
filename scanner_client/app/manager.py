@@ -51,11 +51,21 @@ KIOSK_PRINT_PATH = "/api/v1/scanner/kiosk/print"
 # like the print path — never forwarded to the server and never given the device credential.
 KIOSK_HARDWARE_PATH = "/api/v1/scanner/kiosk/hardware"
 # Face check (see app/face): the page sends camera frames here and gets only a verdict or a hint
-# back. Answered locally - the server never sees a frame, a chip photo or an embedding.
+# back. Answered locally - the server never sees a frame or an embedding. The one image that leaves
+# is the chip photo of a check-in whose face matched: handed to the page once with the verdict, so
+# /check-in can keep it as the person's photo when they have none.
 KIOSK_FACE_PATH_PREFIX = "/api/v1/scanner/kiosk/face/"
-# Why the page gave up on the camera or the person skipped; the only words `face/cancel` will log.
+# Why the page gave up on the camera, the person skipped or staff bypassed it with the device PIN;
+# the only words `face/cancel` will log.
 KIOSK_FACE_END_REASONS = frozenset(
-    {"camera_denied", "camera_not_found", "camera_failed", "scanner_unreachable", "user_skipped"}
+    {
+        "camera_denied",
+        "camera_not_found",
+        "camera_failed",
+        "scanner_unreachable",
+        "user_skipped",
+        "staff_bypass",
+    }
 )
 KIOSK_FACE_ACTIONS = ("start", "frame", "verify", "cancel")
 KIOSK_FACE_PATHS = frozenset(f"{KIOSK_FACE_PATH_PREFIX}{action}" for action in KIOSK_FACE_ACTIONS)
@@ -335,6 +345,7 @@ class ScannerClientManager:
             "/api/v1/scanner/kiosk/check-in",
             "/api/v1/scanner/kiosk/config",
             "/api/v1/scanner/kiosk/register",
+            "/api/v1/scanner/kiosk/staff-pin/verify",
         }
 
         headers = dict(request.headers)

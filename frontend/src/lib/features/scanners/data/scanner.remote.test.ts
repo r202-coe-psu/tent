@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ScannerRemoteRepository } from './scanner.remote';
-import type { PersistedScannerDevice } from '../domain/scanner.schema';
+import type { PersistedScannerDeviceV1, PersistedScannerDeviceV2 } from '../domain/scanner.schema';
 import type { Repository } from '$lib/db/repository';
 
 class MockRepository implements Repository {
 	private store = new Map<string, unknown>();
 
-	seed(doc: PersistedScannerDevice) {
+	seed(doc: PersistedScannerDeviceV1 | PersistedScannerDeviceV2) {
 		this.store.set(doc._id, structuredClone(doc));
 	}
 
@@ -59,7 +59,9 @@ class MockRepository implements Repository {
 	}
 }
 
-function persistedDevice(overrides: Partial<PersistedScannerDevice> = {}): PersistedScannerDevice {
+function persistedDevice(
+	overrides: Partial<PersistedScannerDeviceV1> = {}
+): PersistedScannerDeviceV1 {
 	return {
 		_id: 'scanner_device:SCAN-01',
 		_rev: '1-a',
@@ -76,6 +78,20 @@ function persistedDevice(overrides: Partial<PersistedScannerDevice> = {}): Persi
 		secret_prefix: 'sk_scan_aaaaaaaa...',
 		status: 'active',
 		last_seen_at: null,
+		...overrides
+	};
+}
+
+function persistedDeviceV2(
+	overrides: Partial<PersistedScannerDeviceV2> = {}
+): PersistedScannerDeviceV2 {
+	return {
+		...persistedDevice(),
+		schema_v: 2,
+		staff_pin_set: true,
+		staff_pin_is_default: true,
+		staff_pin_updated_at: '2026-08-30T00:00:00Z',
+		staff_pin_updated_by: 'admin',
 		...overrides
 	};
 }
@@ -100,10 +116,32 @@ describe('ScannerRemoteRepository', () => {
 			shelter_code: 'SH001',
 			station_name: 'โต๊ะ 1',
 			status: 'active',
-			last_seen_at: null
+			last_seen_at: null,
+			staff_pin_set: false,
+			staff_pin_is_default: false
 		});
 		expect(device).not.toHaveProperty('secret_hash');
 		expect(device).not.toHaveProperty('_rev');
+	});
+
+	it('lists v2 devices with PIN flags but no PIN metadata beyond them', async () => {
+		registry.seed(persistedDeviceV2());
+
+		const [device] = await scannerRepo.listDevices();
+		expect(device.staff_pin_set).toBe(true);
+		expect(device.staff_pin_is_default).toBe(true);
+		expect(device).not.toHaveProperty('staff_pin_updated_by');
+	});
+
+	it('keeps the staff PIN metadata when a v2 device is edited from the browser', async () => {
+		const seeded = persistedDeviceV2();
+		registry.seed(seeded);
+
+		await scannerRepo.updateDevice('scanner_device:SCAN-01', { status: 'inactive' });
+		const stored = await registry.get<PersistedScannerDeviceV2>('scanner_device:SCAN-01');
+		expect(stored?.staff_pin_set).toBe(true);
+		expect(stored?.staff_pin_updated_at).toBe(seeded.staff_pin_updated_at);
+		expect(stored?.schema_v).toBe(2);
 	});
 
 	it('updates a persisted device while returning a redacted summary', async () => {
@@ -117,12 +155,5 @@ describe('ScannerRemoteRepository', () => {
 		expect(updated.name).toBe('Updated Name');
 		expect(updated.status).toBe('inactive');
 		expect(updated).not.toHaveProperty('secret_hash');
-	});
-
-	it('deletes a device by its opaque summary id', async () => {
-		registry.seed(persistedDevice());
-
-		await scannerRepo.deleteDevice('scanner_device:SCAN-01');
-		expect(await scannerRepo.getDevice('scanner_device:SCAN-01')).toBeNull();
 	});
 });

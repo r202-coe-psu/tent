@@ -10,8 +10,6 @@
 		buildKioskContextQuery,
 		cancelKioskFaceCheck,
 		getKioskDisplayContext,
-		KioskIdleTimeout,
-		KIOSK_IDLE_TIMEOUT_MS,
 		KioskCheckInWizard,
 		isFaceCheckEnabled,
 		loadKioskHardware,
@@ -34,24 +32,20 @@
 	// Unknown (null) counts as no face check: the scanner client answers in milliseconds, the chip read takes seconds.
 	let hardware = $state<KioskHardware | null>(null);
 	const busy = $derived(cardReading || reading);
-	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, returnHome);
 	onMount(() => {
 		if (!walkInSession.citizenId || !walkInSession.consented) {
 			void goto(resolve(`/kiosk${contextQuery}` as '/kiosk' | `/kiosk?${string}`));
 			return;
 		}
-		idleTimeout.start();
 		void loadKioskHardware().then((loaded) => (hardware = loaded));
 		const onCardReading = () => {
 			cardReading = true;
 			error = '';
-			idleTimeout.setPaused(true);
 		};
 		const onCardRead = (event: Event) => void handleFullRead(event);
 		const onCardReadError = () => {
 			cardReading = false;
 			reading = false;
-			idleTimeout.setPaused(false);
 			error = 'อ่านข้อมูลบัตรไม่สำเร็จ กรุณานำบัตรออกแล้วเสียบใหม่';
 		};
 		window.addEventListener('kiosk:smart-card-reading', onCardReading);
@@ -59,16 +53,12 @@
 		window.addEventListener('kiosk:smart-card-full-read-error', onCardReadError);
 		ready = true;
 		return () => {
-			idleTimeout.stop();
 			ready = false;
 			window.removeEventListener('kiosk:smart-card-reading', onCardReading);
 			window.removeEventListener('kiosk:smart-card-full-read', onCardRead);
 			window.removeEventListener('kiosk:smart-card-full-read-error', onCardReadError);
 		};
 	});
-	function activity() {
-		idleTimeout.recordActivity();
-	}
 	function returnHome() {
 		// The chip photo may be set aside on the scanner client for the face check.
 		if (hardware && isFaceCheckEnabled(hardware.faceCheck, 'walk_in')) void cancelKioskFaceCheck();
@@ -79,10 +69,7 @@
 		if (reading) return;
 		const card = (event as CustomEvent<SmartCardData>).detail;
 		cardReading = false;
-		if (!card || typeof card.citizen_id !== 'string') {
-			idleTimeout.setPaused(false);
-			return;
-		}
+		if (!card || typeof card.citizen_id !== 'string') return;
 		if (
 			hardware &&
 			isFaceCheckEnabled(hardware.faceCheck, 'walk_in') &&
@@ -99,7 +86,6 @@
 			return;
 		}
 		reading = true;
-		idleTimeout.setPaused(true);
 		error = '';
 		const outcome = await submitWalkInCard(card, walkInSession);
 		if (outcome.kind === 'registered') {
@@ -113,13 +99,11 @@
 		} else {
 			if (outcome.kind === 'mismatch' || outcome.kind === 'error') error = outcome.message;
 			reading = false;
-			idleTimeout.setPaused(false);
 		}
 	}
 </script>
 
 <svelte:head><title>เสียบบัตรประชาชน — SmartShelter Kiosk</title></svelte:head>
-<svelte:window onpointerdown={activity} onkeydown={activity} />
 <div
 	class="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 py-3"
 	data-kiosk-register-ready={ready ? 'true' : 'false'}

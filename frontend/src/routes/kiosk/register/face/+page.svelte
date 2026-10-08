@@ -8,12 +8,11 @@
 	import {
 		buildKioskContextQuery,
 		cancelKioskFaceCheck,
+		faceOutcomeNeedsStaff,
 		getKioskDisplayContext,
 		isFaceCheckEnabled,
 		KioskCheckInWizard,
 		KioskFaceCheck,
-		KioskIdleTimeout,
-		KIOSK_IDLE_TIMEOUT_MS,
 		loadKioskHardware,
 		navigateToKioskHome,
 		readKioskDisplayQuery,
@@ -37,51 +36,46 @@
 			? hardware.faceCheck.mode
 			: null
 	);
-	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, returnHome);
-
 	onMount(() => {
 		if (!walkInSession.citizenId || !walkInSession.consented || !walkInSession.card) {
 			void goto(resolve(`/kiosk${contextQuery}` as '/kiosk' | `/kiosk?${string}`));
 			return;
 		}
-		idleTimeout.start();
 		void loadKioskHardware().then((loaded) => {
 			hardware = loaded;
 			// The scanner client turned the check off after the card page sent us here: just register.
 			if (!isFaceCheckEnabled(loaded.faceCheck, 'walk_in')) void register();
 		});
 		return () => {
-			idleTimeout.stop();
-			// However the person leaves (cancel, idle, registered), do not leave the check behind.
+			// However the person leaves (cancel or registered), do not leave the check behind.
 			void cancelKioskFaceCheck();
 		};
 	});
-
-	function activity() {
-		idleTimeout.recordActivity();
-	}
 
 	function returnHome() {
 		walkInSession.clear();
 		navigateToKioskHome(contextQuery);
 	}
 
+	/**
+	 * Mode `on`: only a match or a staff PIN bypass gets here (anything else waits for the PIN, or
+	 * "cancel" goes home without registering). Shadow: every ending, as before.
+	 */
 	function handleFaceFinished(outcome: FaceCheckOutcome) {
 		walkInSession.faceOutcome = outcome;
 		void register();
 	}
 
-	/** The face check never refuses anyone: whatever it said, the registration goes ahead. */
 	async function register() {
 		if (registering) return;
 		registering = true;
-		idleTimeout.setPaused(true);
 		error = '';
 		const outcome = await submitWalkInCard(walkInSession.card, walkInSession);
 		if (outcome.kind === 'registered') {
-			// The done page forgets the session, so what it must say is passed on in the URL.
+			// The done page forgets the session, so what it must say is passed on in the URL. Staff who
+			// entered the PIN have just checked the card: no need to send the person back to them.
 			const checked = walkInSession.faceOutcome;
-			const staffRecheck = faceMode === 'on' && checked !== null && checked.kind !== 'match';
+			const staffRecheck = faceMode === 'on' && checked !== null && faceOutcomeNeedsStaff(checked);
 			walkInSession.clear();
 			await goto(
 				resolve(
@@ -96,12 +90,10 @@
 				? outcome.message
 				: 'ลงทะเบียนไม่สำเร็จ กรุณาลองอีกครั้ง';
 		registering = false;
-		idleTimeout.setPaused(false);
 	}
 </script>
 
 <svelte:head><title>ตรวจสอบใบหน้า — SmartShelter Kiosk</title></svelte:head>
-<svelte:window onpointerdown={activity} onkeydown={activity} />
 <div class="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 py-3">
 	<KioskCheckInWizard currentStep={3} step2Label="อ่านบัตร" />
 	{#if error}
@@ -138,7 +130,7 @@
 			mode={faceMode}
 			cameraLabel={hardware?.cameraLabel ?? null}
 			onfinish={handleFaceFinished}
-			onbusychange={(busy) => idleTimeout.setPaused(busy)}
+			oncancel={returnHome}
 		/>
 	{/if}
 </div>

@@ -7,20 +7,28 @@
 	import Check from '@lucide/svelte/icons/check';
 	import Key from '@lucide/svelte/icons/key';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
+	import KeyRound from '@lucide/svelte/icons/key-round';
+	import Eye from '@lucide/svelte/icons/eye';
+	import EyeOff from '@lucide/svelte/icons/eye-off';
+	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import type { CreatedScannerDevice, ScannerDevice } from '../domain/scanner.schema';
 
 	let {
 		open = $bindable(false),
 		device = null,
-		isNew = false
+		isNew = false,
+		onclose
 	}: {
 		open?: boolean;
 		device?: ScannerDevice | CreatedScannerDevice | null;
 		isNew?: boolean;
+		/** The dialog closed: the page should drop the plaintext secret and PIN it handed in. */
+		onclose?: () => void;
 	} = $props();
 
 	let copied = $state(false);
 	let copiedEnv = $state(false);
+	let pinVisible = $state(false);
 	const deploymentBaseUrl = $derived(
 		typeof window === 'undefined' ? 'https://<deployment-host>' : window.location.origin
 	);
@@ -30,6 +38,29 @@
 		const created = device as CreatedScannerDevice;
 		return created.plaintext_secret || '';
 	});
+
+	/** Default staff PIN — present only right after create (`null` if the server could not save one). */
+	const staffPinValue = $derived.by(() => {
+		if (!device || !isNew) return null;
+		return (device as CreatedScannerDevice).plaintext_staff_pin ?? null;
+	});
+
+	async function copyStaffPin() {
+		if (!staffPinValue) return;
+		try {
+			await navigator.clipboard.writeText(staffPinValue);
+			toast.success('คัดลอก PIN เจ้าหน้าที่แล้ว');
+		} catch {
+			toast.error('ไม่สามารถคัดลอกได้');
+		}
+	}
+
+	function handleOpenChange(next: boolean) {
+		open = next;
+		if (next) return;
+		pinVisible = false;
+		onclose?.();
+	}
 
 	const envSnippet = $derived.by(() => {
 		if (!device || !secretValue) return '';
@@ -61,7 +92,7 @@
 	}
 </script>
 
-<Dialog.Root bind:open>
+<Dialog.Root bind:open onOpenChange={handleOpenChange}>
 	<Dialog.Content class="max-h-[90dvh] gap-3 overflow-y-auto sm:max-w-[560px]">
 		<Dialog.Header>
 			<Dialog.Title
@@ -142,6 +173,74 @@
 					{/if}
 				</div>
 
+				{#if isNew}
+					{#if staffPinValue}
+						<div class="space-y-1.5">
+							<p id="new-staff-pin-label" class="text-sm font-semibold text-slate-700">
+								PIN เจ้าหน้าที่ (ค่าเริ่มต้น):
+							</p>
+							<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+								<output
+									aria-labelledby="new-staff-pin-label"
+									class="flex min-h-12 flex-1 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-4 text-2xl font-bold tracking-[0.3em] text-[#0A2647] tabular-nums"
+								>
+									{#if pinVisible}
+										{staffPinValue}
+									{:else}
+										<span aria-hidden="true">••••••</span>
+										<span class="sr-only">PIN ถูกซ่อนอยู่</span>
+									{/if}
+								</output>
+								<div class="flex gap-2">
+									<Button
+										variant="outline"
+										size="sm"
+										class="min-h-11 flex-1 gap-1.5 sm:flex-none"
+										onclick={() => (pinVisible = !pinVisible)}
+										aria-pressed={pinVisible}
+									>
+										{#if pinVisible}
+											<EyeOff class="h-4 w-4" />
+											<span>ซ่อน</span>
+										{:else}
+											<Eye class="h-4 w-4" />
+											<span>แสดง</span>
+										{/if}
+										<span class="sr-only">PIN</span>
+									</Button>
+									<Button
+										variant="outline"
+										size="sm"
+										class="min-h-11 flex-1 gap-1.5 sm:flex-none"
+										onclick={copyStaffPin}
+									>
+										<Copy class="h-4 w-4" />
+										<span>คัดลอก</span>
+										<span class="sr-only">PIN</span>
+									</Button>
+								</div>
+							</div>
+							<p class="flex items-start gap-1.5 text-xs text-slate-500">
+								<KeyRound class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+								<span>
+									ใช้ที่ตู้ kiosk เมื่อเจ้าหน้าที่ต้องข้ามการตรวจใบหน้า เปิดดูหรือเปลี่ยน PIN
+									ได้อีกจากรายการเครื่อง แนะนำให้เปลี่ยนจากค่าเริ่มต้น
+								</span>
+							</p>
+						</div>
+					{:else}
+						<div
+							class="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-sm text-amber-900"
+						>
+							<TriangleAlert class="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+							<p>
+								ยังสร้าง PIN เจ้าหน้าที่ให้เครื่องนี้ไม่ได้
+								เจ้าหน้าที่จะข้ามการตรวจใบหน้าที่ตู้ไม่ได้จนกว่าจะตั้ง PIN จากรายการเครื่อง
+							</p>
+						</div>
+					{/if}
+				{/if}
+
 				<div class="space-y-1.5">
 					<div class="flex flex-wrap items-center justify-between gap-1">
 						<label for="env-snippet" class="text-xs font-semibold text-muted-foreground">
@@ -171,7 +270,7 @@
 		{/if}
 
 		<Dialog.Footer>
-			<Button class="w-full sm:w-auto" onclick={() => (open = false)}>ปิดหน้าต่าง</Button>
+			<Button class="w-full sm:w-auto" onclick={() => handleOpenChange(false)}>ปิดหน้าต่าง</Button>
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>

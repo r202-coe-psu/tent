@@ -5,3 +5,5 @@ export * from './data/scanner.api';
 export { default as CreateScannerDialog } from './ui/create-scanner-dialog.svelte';
 export { default as RevealScannerSecretDialog } from './ui/reveal-scanner-secret-dialog.svelte';
 export { default as ScannerList } from './ui/scanner-list.svelte';
+export { default as SetStaffPinDialog } from './ui/set-staff-pin-dialog.svelte';
+export { default as ViewStaffPinDialog } from './ui/view-staff-pin-dialog.svelte';

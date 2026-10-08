@@ -4,6 +4,7 @@ import KioskBiometricConsent from './kiosk-biometric-consent.svelte';
 import KioskFaceCameraPanel from './kiosk-face-camera-panel.svelte';
 import KioskFaceCardNotice from './kiosk-face-card-notice.svelte';
 import KioskFaceCheck from './kiosk-face-check.svelte';
+import KioskStaffPinEntry from './kiosk-staff-pin-entry.svelte';
 
 const noop = () => {};
 
@@ -48,7 +49,8 @@ describe('KioskFaceCheck', () => {
 		citizenId: '1234567890123',
 		mode: 'on',
 		cameraLabel: null,
-		onfinish: noop
+		onfinish: noop,
+		oncancel: noop
 	} as const;
 
 	it('starts at the consent step: no camera is opened before the person agrees', () => {
@@ -87,7 +89,8 @@ describe('KioskFaceCheck — card notice and skip', () => {
 		citizenId: '1234567890123',
 		mode: 'on',
 		cameraLabel: null,
-		onfinish: noop
+		onfinish: noop,
+		oncancel: noop
 	} as const;
 
 	it('warns check-in to keep the card in from the first step, and not walk-in', () => {
@@ -103,7 +106,7 @@ describe('KioskFaceCheck — card notice and skip', () => {
 		const { body } = render(KioskFaceCheck, { props });
 
 		expect(body).toContain('data-face-phase="consent"');
-		expect(body).not.toContain('ข้าม ให้เจ้าหน้าที่ตรวจแทน');
+		expect(body).not.toContain('เจ้าหน้าที่ข้ามขั้นตอนนี้');
 	});
 });
 
@@ -198,11 +201,11 @@ describe('KioskFaceCameraPanel', () => {
 		const running = render(KioskFaceCameraPanel, { props: panel });
 		const idle = render(KioskFaceCameraPanel, { props: { ...panel, showSkip: false } });
 
-		expect(running.body).toContain('ข้าม ให้เจ้าหน้าที่ตรวจแทน');
+		expect(running.body).toContain('เจ้าหน้าที่ข้ามขั้นตอนนี้');
 		for (const token of ['min-h-12', 'kiosk-portrait:min-h-16']) {
 			expect(running.body).toContain(token);
 		}
-		expect(idle.body).not.toContain('ข้าม ให้เจ้าหน้าที่ตรวจแทน');
+		expect(idle.body).not.toContain('เจ้าหน้าที่ข้ามขั้นตอนนี้');
 	});
 
 	it('shows the opening and checking texts instead of the instruction', () => {
@@ -211,5 +214,53 @@ describe('KioskFaceCameraPanel', () => {
 
 		expect(starting.body).toContain('กำลังเปิดกล้อง…');
 		expect(verifying.body).toContain('กำลังตรวจสอบ…');
+	});
+});
+
+describe('KioskStaffPinEntry', () => {
+	const props = { onverified: noop, oncancel: noop };
+
+	it('speaks to staff and asks them to check the card by eye first', () => {
+		const { body } = render(KioskStaffPinEntry, { props });
+
+		expect(body).toContain('สำหรับเจ้าหน้าที่');
+		expect(body).toContain('ตรวจบัตรประชาชนกับตัวบุคคลแล้ว กรอก PIN 6 หลักเพื่อดำเนินการต่อ');
+	});
+
+	it('is a labelled section in the page, h2 under another heading', () => {
+		const alone = render(KioskStaffPinEntry, { props });
+		const nested = render(KioskStaffPinEntry, { props: { ...props, headingTag: 'h2' } });
+
+		expect(alone.body).toMatch(/<section[^>]*aria-labelledby="[^"]+-title"/);
+		expect(alone.body).toMatch(/<h1[^>]*id="[^"]+-title"/);
+		expect(nested.body).toMatch(/<h2[^>]*id="[^"]+-title"/);
+		expect(nested.body).not.toContain('<h1');
+		expect(alone.body).not.toContain('role="dialog"');
+	});
+
+	it('shows six empty dots, never digits, and says how many are filled', () => {
+		const { body } = render(KioskStaffPinEntry, { props });
+
+		expect(body).toContain('aria-label="กรอก PIN แล้ว 0 จาก 6 หลัก"');
+		expect(body.match(/rounded-full border-2/g)).toHaveLength(6);
+	});
+
+	it('uses the phone keypad and waits for the confirm button, which starts disabled', () => {
+		const { body } = render(KioskStaffPinEntry, { props });
+
+		expect(body).toContain('aria-label="ปุ่มกดตัวเลข"');
+		expect(body).toContain('aria-label="ตัวเลข 1"');
+		expect(body).toMatch(/<button[^>]*disabled[^>]*>\s*(<!--[^>]*-->)*\s*ยืนยัน/);
+		expect(body).toContain('ยกเลิก');
+		for (const token of ['min-h-12', 'kiosk-portrait:min-h-16', 'focus-visible:ring-2']) {
+			expect(body).toContain(token);
+		}
+	});
+
+	it('has a polite live status line, empty to start with', () => {
+		const { body } = render(KioskStaffPinEntry, { props });
+
+		expect(body).toMatch(/aria-live="polite"[^>]*data-testid="kiosk-staff-pin-status"/);
+		expect(body).not.toContain('PIN ไม่ถูกต้อง');
 	});
 });

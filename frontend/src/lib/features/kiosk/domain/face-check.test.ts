@@ -1,18 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import {
+	FACE_BYPASSED_BY_STAFF,
 	FACE_CHECK_OFF,
+	FACE_CHECK_MODES,
 	FACE_HINTS,
 	FACE_SKIPPED_BY_PERSON,
 	classifyFaceFailure,
+	faceOutcomeAction,
 	faceOutcomeIsPersonalChoice,
 	faceStartReplySchema,
 	faceFrameReplySchema,
 	faceHintMessage,
+	faceOutcomeMessage,
 	faceOutcomeNeedsStaff,
+	faceOutcomeNeedsStaffPin,
 	faceRetryMessage,
 	faceVerifyReplySchema,
 	isFaceCheckEnabled,
-	parseFaceCheckConfig
+	parseFaceCheckConfig,
+	staffPinCancelAction,
+	type FaceCheckOutcome
 } from './face-check';
 
 describe('parseFaceCheckConfig', () => {
@@ -96,6 +103,17 @@ describe('replies from the scanner client', () => {
 			expect(faceVerifyReplySchema.safeParse(reply).success).toBe(false);
 		}
 	});
+
+	it('reads the chip photo on a match when the scanner client sends one', () => {
+		const reply = faceVerifyReplySchema.parse({ result: 'match', attempt: 1, chip_photo: 'AAAA' });
+		expect(reply).toEqual({ result: 'match', attempt: 1, chip_photo: 'AAAA' });
+		expect(faceVerifyReplySchema.parse({ result: 'match', attempt: 1 })).not.toHaveProperty(
+			'chip_photo'
+		);
+		expect(
+			faceVerifyReplySchema.safeParse({ result: 'match', attempt: 1, chip_photo: '' }).success
+		).toBe(false);
+	});
 });
 
 describe('wording', () => {
@@ -103,8 +121,10 @@ describe('wording', () => {
 		for (const hint of FACE_HINTS) expect(faceHintMessage(hint).length).toBeGreaterThan(5);
 	});
 
-	it('asks for a plain retry when nothing specific is wrong', () => {
-		expect(faceRetryMessage('ok')).toContain('ลองอีกครั้ง');
+	it('says the face does not match the card yet when nothing specific is wrong', () => {
+		expect(faceRetryMessage('ok')).toBe(
+			'ใบหน้ายังไม่ตรงกับรูปในบัตร กรุณามองตรงที่กล้องแล้วลองอีกครั้ง'
+		);
 		expect(faceRetryMessage('too_far')).toBe(faceHintMessage('too_far'));
 	});
 
@@ -126,6 +146,113 @@ describe('faceOutcomeNeedsStaff', () => {
 		] as const) {
 			expect(faceOutcomeNeedsStaff(outcome)).toBe(true);
 		}
+	});
+});
+
+const NOT_MATCHES: Exclude<FaceCheckOutcome, { kind: 'match' }>[] = [
+	{ kind: 'not_confirmed', reason: 'retry_exhausted' },
+	{ kind: 'skipped', reason: FACE_SKIPPED_BY_PERSON },
+	{ kind: 'skipped', reason: 'timeout' },
+	{ kind: 'skipped', reason: 'no_chip_photo' },
+	{ kind: 'declined' },
+	{ kind: 'unavailable', reason: 'camera_failed' }
+];
+
+describe('faceOutcomeNeedsStaff and the staff bypass', () => {
+	it('does not send a staff PIN bypass back to staff: they already checked the card', () => {
+		expect(faceOutcomeNeedsStaff({ kind: 'skipped', reason: FACE_BYPASSED_BY_STAFF })).toBe(false);
+	});
+});
+
+describe('faceOutcomeNeedsStaffPin', () => {
+	it('lets only a match carry on by itself in mode on', () => {
+		expect(faceOutcomeNeedsStaffPin({ kind: 'match' }, 'on')).toBe(false);
+		expect(faceOutcomeNeedsStaffPin({ kind: 'match', chipPhoto: 'AAAA' }, 'on')).toBe(false);
+		for (const outcome of NOT_MATCHES) expect(faceOutcomeNeedsStaffPin(outcome, 'on')).toBe(true);
+	});
+
+	it('asks for declining too: it is not a way around the check', () => {
+		expect(faceOutcomeNeedsStaffPin({ kind: 'declined' }, 'on')).toBe(true);
+	});
+
+	it('never asks in shadow or off mode', () => {
+		for (const mode of FACE_CHECK_MODES.filter((value) => value !== 'on')) {
+			for (const outcome of NOT_MATCHES) {
+				expect(faceOutcomeNeedsStaffPin(outcome, mode)).toBe(false);
+			}
+		}
+	});
+});
+
+describe('faceOutcomeAction', () => {
+	const STAFF_BYPASS: FaceCheckOutcome = { kind: 'skipped', reason: FACE_BYPASSED_BY_STAFF };
+	const CARD_REMOVED: FaceCheckOutcome = { kind: 'skipped', reason: 'card_removed' };
+
+	it('in mode on, carries on only after a match or a staff PIN', () => {
+		expect(faceOutcomeAction({ kind: 'match' }, 'on')).toBe('show_match');
+		expect(faceOutcomeAction({ kind: 'match', chipPhoto: 'AAAA' }, 'on')).toBe('show_match');
+		expect(faceOutcomeAction(STAFF_BYPASS, 'on')).toBe('hand_on');
+		for (const outcome of [...NOT_MATCHES, CARD_REMOVED]) {
+			expect(['wait_for_pin', 'close_pin']).toContain(faceOutcomeAction(outcome, 'on'));
+		}
+	});
+
+	it('waits for the PIN after every other ending, declining and skipping included', () => {
+		for (const outcome of NOT_MATCHES)
+			expect(faceOutcomeAction(outcome, 'on')).toBe('wait_for_pin');
+	});
+
+	it('closes an open PIN panel when the card came out: that is not a staff bypass', () => {
+		expect(faceOutcomeAction(CARD_REMOVED, 'on')).toBe('close_pin');
+	});
+
+	it('hands every ending on in shadow mode, which never shows a result', () => {
+		for (const outcome of [{ kind: 'match' } as const, ...NOT_MATCHES, CARD_REMOVED]) {
+			expect(faceOutcomeAction(outcome, 'shadow')).toBe('hand_on');
+		}
+	});
+});
+
+describe('staffPinCancelAction', () => {
+	it('goes home when cancelled from the result screen, whatever the check did', () => {
+		expect(staffPinCancelAction('result', true)).toBe('go_home');
+		expect(staffPinCancelAction('result', false)).toBe('go_home');
+	});
+
+	it('resumes the check when cancelled at the camera', () => {
+		expect(staffPinCancelAction('camera', false)).toBe('resume');
+	});
+
+	it('shows the result when the check ended while staff were on the PIN', () => {
+		expect(staffPinCancelAction('camera', true)).toBe('show_result');
+	});
+});
+
+describe('faceOutcomeMessage', () => {
+	it('says plainly that the face does not match only when it was compared', () => {
+		expect(faceOutcomeMessage({ kind: 'not_confirmed', reason: 'liveness_failed' })).toEqual({
+			tone: 'not_confirmed',
+			title: 'ใบหน้าไม่ตรงกับรูปในบัตรประชาชน',
+			detail: 'กรุณาติดต่อเจ้าหน้าที่เพื่อตรวจสอบตัวตน'
+		});
+	});
+
+	it('never says "does not match" when nothing was compared', () => {
+		for (const outcome of NOT_MATCHES.filter((value) => value.kind !== 'not_confirmed')) {
+			const { title, detail } = faceOutcomeMessage(outcome);
+			expect(`${title} ${detail}`).not.toContain('ไม่ตรง');
+			expect(`${title} ${detail}`).toContain('กรุณาติดต่อเจ้าหน้าที่');
+		}
+		expect(faceOutcomeMessage({ kind: 'skipped', reason: 'timeout' }).title).toBe(
+			'ระบบตรวจใบหน้าไม่ได้'
+		);
+	});
+
+	it('words declining as service, not a failure', () => {
+		const message = faceOutcomeMessage({ kind: 'declined' });
+		expect(message.tone).toBe('declined');
+		expect(`${message.title} ${message.detail}`).not.toMatch(/ไม่ได้|ไม่ตรง|ผิด|ปฏิเสธ/);
+		expect(message.detail).toContain('ท่านยังรับบริการได้ตามปกติ');
 	});
 });
 
