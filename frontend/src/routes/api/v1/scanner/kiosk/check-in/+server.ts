@@ -39,13 +39,14 @@ export const POST: RequestHandler = async ({ request }) => {
 		);
 		const { photo, citizen_id: citizenId } = parsed.data;
 		if (photo && citizenId) {
-			// Best effort after the authoritative check-in writes; never fails the response.
+			// Best effort after the authoritative check-in writes; it reports failure as an outcome
+			// and never throws, so the response is never failed by the photo.
 			await saveKioskCheckInCardPhoto(principal.shelter_code, principal.device_id, {
 				primaryEvacueeId: parsed.data.primary_evacuee_id,
 				citizenId,
 				photo,
 				results: result
-			}).catch(() => {});
+			});
 		}
 		await scannerServerRepository.updateDeviceLastSeen(principal.registry_id).catch(() => {});
 		return json(

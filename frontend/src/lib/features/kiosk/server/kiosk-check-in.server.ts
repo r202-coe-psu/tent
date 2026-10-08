@@ -45,7 +45,8 @@ export const kioskCheckInInputSchema = z
 			.regex(/^\d{13}$/)
 			.optional(),
 		// Chip photo from a face `match`; only a smart-card gate has a card to take it from.
-		photo: kioskPhotoPayloadSchema.nullable().default(null)
+		// A malformed photo is dropped (→ null), never a reason to fail the check-in (Phase 6).
+		photo: kioskPhotoPayloadSchema.nullable().catch(null).default(null)
 	})
 	.superRefine((input, ctx) => {
 		if (input.photo && (input.source !== 'smart-card' || !input.citizen_id)) {

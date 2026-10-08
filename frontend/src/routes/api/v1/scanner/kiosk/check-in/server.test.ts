@@ -172,7 +172,7 @@ describe('POST /api/v1/scanner/kiosk/check-in', () => {
 	});
 
 	it('keeps the check-in successful when the photo save fails', async () => {
-		mockSavePhoto.mockRejectedValueOnce(new Error('image write failed'));
+		mockSavePhoto.mockResolvedValueOnce('failed');
 		const response = await send({
 			primary_evacuee_id: primaryId,
 			evacuee_ids: [primaryId],
@@ -182,6 +182,36 @@ describe('POST /api/v1/scanner/kiosk/check-in', () => {
 		});
 		expect(response.status).toBe(200);
 		expect((await response.json()).members[0].status).toBe('checked_in');
+	});
+
+	it.each([
+		['bad base64', { ...photo, full_base64: 'not base64!' }],
+		['unknown content type', { ...photo, content_type: 'image/png' }],
+		['extra field', { ...photo, exif: 'x' }],
+		['not an object', 'photo']
+	])('drops an invalid photo (%s) and still checks in', async (_label, badPhoto) => {
+		const response = await send({
+			primary_evacuee_id: primaryId,
+			evacuee_ids: [primaryId],
+			source: 'smart-card',
+			citizen_id: citizenId,
+			photo: badPhoto
+		});
+		expect(response.status).toBe(200);
+		expect((await response.json()).members[0].status).toBe('checked_in');
+		expect(mockCheckIn).toHaveBeenCalledWith('SH001', primaryId, [primaryId]);
+		expect(mockSavePhoto).not.toHaveBeenCalled();
+	});
+
+	it('drops an invalid photo on a QR check-in instead of rejecting it', async () => {
+		const response = await send({
+			primary_evacuee_id: primaryId,
+			evacuee_ids: [primaryId],
+			source: 'qr',
+			photo: { content_type: 'image/png' }
+		});
+		expect(response.status).toBe(200);
+		expect(mockSavePhoto).not.toHaveBeenCalled();
 	});
 
 	it.each([
