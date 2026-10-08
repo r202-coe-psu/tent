@@ -266,9 +266,7 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 		await NO_BANNER(page);
 		await openPreRegister(page);
 
-		await expect(
-			page.getByRole('heading', { name: 'ลงทะเบียนล่วงหน้า', level: 1 })
-		).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'ลงทะเบียนล่วงหน้า', level: 1 })).toBeVisible();
 		await expect(page.getByText('💡 ลงทะเบียนล่วงหน้าเพื่อความสะดวกและรวดเร็ว')).toBeVisible();
 		await expect(
 			page.getByText(
@@ -296,8 +294,11 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 			)
 		).toBeVisible();
 
-		// live summary (desktop aside) is removed on public channel
-		await expect(page.getByRole('complementary')).toHaveCount(0);
+		// summary card (desktop aside): present with heading, but without "Live Summary" badge
+		const aside = page.getByRole('complementary');
+		await expect(aside).toBeVisible();
+		await expect(aside).toContainText('สรุปข้อมูลการลงทะเบียน');
+		await expect(aside.getByText('Live Summary')).toHaveCount(0);
 
 		// the four sections
 		await expect(page.getByRole('heading', { name: 'ข้อมูลที่อยู่อาศัย', level: 2 })).toBeVisible();
@@ -1615,15 +1616,11 @@ test.describe('Pre-register: layout and language (U)', { tag: ['@pre-register', 
 	test('U3 switching to English retitles the page', async ({ page }) => {
 		await openPreRegister(page);
 		await page.getByRole('button', { name: 'Switch to English' }).click();
-		await expect(
-			page.getByRole('heading', { name: 'Pre-registration', level: 1 })
-		).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'Pre-registration', level: 1 })).toBeVisible();
 		await expect(page.getByRole('button', { name: 'My registrations' })).toBeVisible();
 		await expect(page).toHaveTitle('Pre-registration | SmartShelter');
 		await page.getByRole('button', { name: 'เปลี่ยนเป็นภาษาไทย' }).click();
-		await expect(
-			page.getByRole('heading', { name: 'ลงทะเบียนล่วงหน้า', level: 1 })
-		).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'ลงทะเบียนล่วงหน้า', level: 1 })).toBeVisible();
 	});
 
 	test('U3 on a phone the language toggle lives in the hamburger menu', async ({ page }) => {

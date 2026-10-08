@@ -993,31 +993,29 @@
 		</Alert.Root>
 	{/if}
 
-	<!-- 2-Column Responsive Layout on Desktop (non-public), single column when public without Live summary -->
-	<div class={channel !== 'public' ? 'lg:grid lg:grid-cols-12 lg:items-start lg:gap-8' : ''}>
-		{#if channel !== 'public'}
-			<!-- Left Column: Sticky Summary Card (hidden on mobile, sticky on lg+) -->
-			<aside
-				class="hidden lg:sticky lg:top-[calc(var(--registration-sticky-top,0px)+1rem)] lg:col-span-4 lg:block"
-			>
-				<UnifiedRegistrationSummaryCard
-					{shelterName}
-					{shelterCode}
-					{household}
-					{members}
-					{showVehiclesAssets}
-					{activeSection}
-					{pending}
-					submitDisabled={submitDisabled || readOnly}
-					submitLabel={effectiveSubmitLabel}
-					submittingLabel={t.submitting}
-					onNavigate={(id) => scrollToSection(id as FormSectionId)}
-				/>
-			</aside>
-		{/if}
+	<!-- 2-Column Responsive Layout on Desktop (lg:grid lg:grid-cols-12 lg:gap-8 lg:items-start) -->
+	<div class="lg:grid lg:grid-cols-12 lg:items-start lg:gap-8">
+		<!-- Left Column: Sticky Summary Card (hidden on mobile, sticky on lg+) -->
+		<aside
+			class="hidden lg:sticky lg:top-[calc(var(--registration-sticky-top,0px)+1rem)] lg:col-span-4 lg:block"
+		>
+			<UnifiedRegistrationSummaryCard
+				{shelterName}
+				{shelterCode}
+				{household}
+				{members}
+				{showVehiclesAssets}
+				{activeSection}
+				{pending}
+				submitDisabled={submitDisabled || readOnly}
+				submitLabel={effectiveSubmitLabel}
+				submittingLabel={t.submitting}
+				onNavigate={(id) => scrollToSection(id as FormSectionId)}
+			/>
+		</aside>
 
-		<!-- Right Column: Form Area (Full width on mobile, 8-col on lg+ for non-public) -->
-		<div class="space-y-6 {channel !== 'public' ? 'lg:col-span-8' : ''}">
+		<!-- Right Column: Form Area (Full width on mobile, 8-col on lg+) -->
+		<div class="space-y-6 lg:col-span-8">
 			<!-- Top Progress Stepper (Mobile & Desktop) -->
 			{#if channel !== 'public'}
 				<UnifiedRegistrationStepper
@@ -1436,21 +1434,19 @@
 
 			<div class="unified-reg-bottom-chrome {isVirtualKeyboardOpen ? 'max-sm:hidden' : ''}">
 				<div class="space-y-2">
-					{#if channel !== 'public'}
-						<button
-							type="button"
-							class="touch-target inline-flex h-11 w-full items-center justify-between gap-2 rounded-xl border border-border bg-card px-3 text-left text-xs font-semibold text-foreground shadow-2xs transition-colors hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none lg:hidden"
-							aria-haspopup="dialog"
-							aria-expanded={mobileSummaryOpen}
-							onclick={() => (mobileSummaryOpen = true)}
-						>
-							<span class="inline-flex min-w-0 items-center gap-1.5">
-								<Users class="size-3.5 shrink-0 text-primary" aria-hidden="true" />
-								<span class="truncate tabular-nums">{mobileSummaryChipLabel}</span>
-							</span>
-							<ChevronUp class="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-						</button>
-					{/if}
+					<button
+						type="button"
+						class="touch-target inline-flex h-11 w-full items-center justify-between gap-2 rounded-xl border border-border bg-card px-3 text-left text-xs font-semibold text-foreground shadow-2xs transition-colors hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none lg:hidden"
+						aria-haspopup="dialog"
+						aria-expanded={mobileSummaryOpen}
+						onclick={() => (mobileSummaryOpen = true)}
+					>
+						<span class="inline-flex min-w-0 items-center gap-1.5">
+							<Users class="size-3.5 shrink-0 text-primary" aria-hidden="true" />
+							<span class="truncate tabular-nums">{mobileSummaryChipLabel}</span>
+						</span>
+						<ChevronUp class="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+					</button>
 					<div class="flex items-center gap-2">
 						<div class="lg:hidden">
 							<UnifiedRegistrationStickyNav
@@ -1477,38 +1473,36 @@
 				</div>
 			</div>
 
-			{#if channel !== 'public'}
-				<Sheet.Root bind:open={mobileSummaryOpen}>
-					<Sheet.Content
-						side="bottom"
-						class="flex max-h-[85dvh] flex-col gap-0 overflow-hidden p-0 pb-[env(safe-area-inset-bottom)] lg:hidden"
-					>
-						<Sheet.Header class="sr-only">
-							<Sheet.Title>สรุปข้อมูลการลงทะเบียน</Sheet.Title>
-							<Sheet.Description>{mobileSummaryChipLabel}</Sheet.Description>
-						</Sheet.Header>
-						<div class="min-h-0 flex-1 overflow-y-auto p-3">
-							<UnifiedRegistrationSummaryCard
-								{shelterName}
-								{shelterCode}
-								{household}
-								{members}
-								{showVehiclesAssets}
-								{activeSection}
-								{pending}
-								submitDisabled={submitDisabled || readOnly}
-								submitLabel={effectiveSubmitLabel}
-								submittingLabel={t.submitting}
-								showSubmit={false}
-								onNavigate={(id) => {
-									mobileSummaryOpen = false;
-									scrollToSection(id as FormSectionId);
-								}}
-							/>
-						</div>
-					</Sheet.Content>
-				</Sheet.Root>
-			{/if}
+			<Sheet.Root bind:open={mobileSummaryOpen}>
+				<Sheet.Content
+					side="bottom"
+					class="flex max-h-[85dvh] flex-col gap-0 overflow-hidden p-0 pb-[env(safe-area-inset-bottom)] lg:hidden"
+				>
+					<Sheet.Header class="sr-only">
+						<Sheet.Title>สรุปข้อมูลการลงทะเบียน</Sheet.Title>
+						<Sheet.Description>{mobileSummaryChipLabel}</Sheet.Description>
+					</Sheet.Header>
+					<div class="min-h-0 flex-1 overflow-y-auto p-3">
+						<UnifiedRegistrationSummaryCard
+							{shelterName}
+							{shelterCode}
+							{household}
+							{members}
+							{showVehiclesAssets}
+							{activeSection}
+							{pending}
+							submitDisabled={submitDisabled || readOnly}
+							submitLabel={effectiveSubmitLabel}
+							submittingLabel={t.submitting}
+							showSubmit={false}
+							onNavigate={(id) => {
+								mobileSummaryOpen = false;
+								scrollToSection(id as FormSectionId);
+							}}
+						/>
+					</div>
+				</Sheet.Content>
+			</Sheet.Root>
 		</div>
 	</div>
 </form>
