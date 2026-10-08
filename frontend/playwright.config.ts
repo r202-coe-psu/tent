@@ -38,7 +38,12 @@ export default defineConfig({
 			timeout: 60_000,
 			env: {
 				COUCHDB_ADMIN_URL: process.env.COUCHDB_ADMIN_URL ?? 'http://admin:password@localhost:5984',
-				SECRET_RECAPTCHA_KEY: process.env.SECRET_RECAPTCHA_KEY ?? 'e2e-recaptcha-secret'
+				SECRET_RECAPTCHA_KEY: process.env.SECRET_RECAPTCHA_KEY ?? 'e2e-recaptcha-secret',
+				// Public shelter bookings write as the limited `public_writer` user (production mode
+				// has no admin fallback) — pre-register W5 needs it, see .env.example.
+				...(process.env.COUCHDB_PUBLIC_WRITER_URL
+					? { COUCHDB_PUBLIC_WRITER_URL: process.env.COUCHDB_PUBLIC_WRITER_URL }
+					: {})
 			}
 		}
 	]

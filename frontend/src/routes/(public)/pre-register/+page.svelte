@@ -11,7 +11,7 @@
 		TicketHistory,
 		getStoredTickets,
 		removeStoredTicket,
-		checkTicketStatus,
+		syncStoredTicketStatuses,
 		type BookingTicketModel
 	} from '$lib/features/public-register';
 	import {
@@ -51,22 +51,10 @@
 			return;
 		}
 
-		let anyVerified = false;
-		for (const t of current) {
-			try {
-				const res = await checkTicketStatus(t.code);
-				// Only drop tickets on verified claim — never on notFound/upstream errors (BUG-01).
-				if (res.verified) {
-					removeStoredTicket(t.code);
-					anyVerified = true;
-				}
-			} catch {
-				// skip on failure
-			}
-		}
+		const { verified } = await syncStoredTicketStatuses();
 
 		storedTicketsCount = getStoredTickets().length;
-		if (anyVerified) {
+		if (verified.length > 0) {
 			toast.info(t.ticketsClaimedToast);
 		}
 	}
@@ -131,21 +119,23 @@
 		</a>
 
 		<!-- Tab Switcher -->
-		<div class="inline-flex rounded-2xl border border-border bg-muted/40 p-1">
+		<div
+			class="flex w-full rounded-2xl border border-border bg-muted/40 p-1 sm:inline-flex sm:w-auto"
+		>
 			<button
 				type="button"
-				class="inline-flex cursor-pointer items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-all {activeTab ===
+				class="inline-flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-sm font-semibold whitespace-nowrap transition-all sm:flex-none sm:gap-2 sm:px-4 {activeTab ===
 				'form'
 					? 'bg-card text-foreground shadow-xs ring-1 ring-border/50'
 					: 'text-muted-foreground hover:text-foreground'}"
 				onclick={() => (activeTab = 'form')}
 			>
-				<ClipboardCheck class="size-4" />
+				<ClipboardCheck class="hidden size-4 sm:block" />
 				<span>{ticket ? t.tabTicket : t.tabNew}</span>
 			</button>
 			<button
 				type="button"
-				class="relative inline-flex cursor-pointer items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-all {activeTab ===
+				class="relative inline-flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-sm font-semibold whitespace-nowrap transition-all sm:flex-none sm:gap-2 sm:px-4 {activeTab ===
 				'history'
 					? 'bg-card text-foreground shadow-xs ring-1 ring-border/50'
 					: 'text-muted-foreground hover:text-foreground'} {storedTicketsCount > 0
@@ -157,7 +147,7 @@
 					void syncTicketsStatus();
 				}}
 			>
-				<History class="size-4" />
+				<History class="hidden size-4 sm:block" />
 				<span>{t.tabHistory}</span>
 				{#if storedTicketsCount > 0}
 					<span

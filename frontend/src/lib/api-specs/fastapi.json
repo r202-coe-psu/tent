@@ -1769,6 +1769,41 @@
 				"security": [{ "HTTPBearer": [] }]
 			}
 		},
+		"/public/v1/unassigned-registrations/{registration_id}/status": {
+			"get": {
+				"tags": ["Unassigned Registrations"],
+				"summary": "Get Unassigned Registration Status",
+				"description": "Service-to-service ticket status (BFF sync) — status + counts only, no PII.",
+				"operationId": "get_unassigned_registration_status_public_v1_unassigned_registrations__registration_id__status_get",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "registration_id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Registration Id" }
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/UnassignedRegistrationStatusResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
+			}
+		},
 		"/staff/v1/unassigned-registrations/search": {
 			"get": {
 				"tags": ["Unassigned Registrations (Staff)"],
@@ -5407,6 +5442,19 @@
 				"type": "object",
 				"required": ["open_registrations", "open_members"],
 				"title": "UnassignedRegistrationStatsResponse"
+			},
+			"UnassignedRegistrationStatusResponse": {
+				"properties": {
+					"id": { "type": "string", "title": "Id" },
+					"status": { "type": "string", "title": "Status" },
+					"members_total": { "type": "integer", "title": "Members Total" },
+					"members_claimed": { "type": "integer", "title": "Members Claimed" },
+					"claimed": { "type": "boolean", "title": "Claimed" }
+				},
+				"type": "object",
+				"required": ["id", "status", "members_total", "members_claimed", "claimed"],
+				"title": "UnassignedRegistrationStatusResponse",
+				"description": "Status-only projection for the public BFF ticket sync — no PII (names, ids, phones)."
 			},
 			"UnassignedResidenceMatchHit": {
 				"properties": {

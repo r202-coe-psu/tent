@@ -8,7 +8,7 @@
 	import HeartPulse from '@lucide/svelte/icons/heart-pulse';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import QrCode from '@lucide/svelte/icons/qr-code';
-	import { onDestroy, onMount } from 'svelte';
+	import { onDestroy, onMount, untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import * as Accordion from '$lib/components/ui/accordion/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -63,6 +63,7 @@
 		fieldErrors,
 		isJoiningExistingHousehold = false,
 		primaryContactPhone = null,
+		validationSeq = 0,
 		onRemove,
 		onReportingInChange,
 		onScanThaiD
@@ -79,6 +80,8 @@
 		fieldErrors?: Record<string, string | undefined>;
 		isJoiningExistingHousehold?: boolean;
 		primaryContactPhone?: string | null;
+		/** Bumped by the form on every failed submit — re-opens a collapsed section holding an error. */
+		validationSeq?: number;
 		onRemove?: () => void;
 		onReportingInChange?: (reportingIn: boolean) => void;
 		onScanThaiD?: () => void;
@@ -162,6 +165,24 @@
 		name: member.emergency_contact?.name ?? '',
 		phone: member.emergency_contact?.phone ?? '',
 		relation: member.emergency_contact?.relation ?? ''
+	});
+	/** Open accordion sections; the emergency one opens by itself when it holds an error. */
+	let openSections = $state<string[]>([]);
+	const emergencyErrors = $derived({
+		name: fieldErrors?.['emergency_contact.name'],
+		phone: fieldErrors?.['emergency_contact.phone'],
+		relation: fieldErrors?.['emergency_contact.relation']
+	});
+	const hasEmergencyError = $derived(
+		Boolean(emergencyErrors.name || emergencyErrors.phone || emergencyErrors.relation)
+	);
+	/** Index 0 keeps the plain `emergency-*` ids; later members get their own so ids stay unique. */
+	const emergencyIdPrefix = $derived(index === 0 ? 'emergency' : `member-${index}-emergency`);
+	$effect(() => {
+		void validationSeq;
+		if (hasEmergencyError && !untrack(() => openSections).includes('emergency')) {
+			openSections = [...untrack(() => openSections), 'emergency'];
+		}
 	});
 	let photoPreviewUrl = $state<string | null>(null);
 	let uploadingPhoto = $state(false);
@@ -658,7 +679,7 @@
 		/>
 	</div>
 
-	<Accordion.Root type="multiple" class="w-full">
+	<Accordion.Root type="multiple" bind:value={openSections} class="w-full">
 		<Accordion.Item value="emergency">
 			<Accordion.Trigger class="hover:no-underline">
 				<span class="flex items-center gap-2">
@@ -673,6 +694,8 @@
 						bind:phone={emergency.phone}
 						bind:relation={emergency.relation}
 						disabled={fieldsDisabled}
+						idPrefix={emergencyIdPrefix}
+						errors={emergencyErrors}
 					/>
 				</div>
 			</Accordion.Content>

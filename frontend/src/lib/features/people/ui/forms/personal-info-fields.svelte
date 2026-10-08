@@ -233,12 +233,17 @@
 				autocomplete="given-name"
 				placeholder={showMononymHint ? t.firstNamePlaceholderFull : t.firstNamePlaceholderGiven}
 				aria-invalid={!!(errors?.first_name || errors?.firstName)}
+				aria-describedby={errors?.first_name || errors?.firstName
+					? fid('first-name-error')
+					: undefined}
 				class="h-11 min-h-11 sm:h-9 sm:min-h-9 {errors?.first_name || errors?.firstName
 					? errClass
 					: ''}"
 			/>
 			{#if errors?.first_name || errors?.firstName}
-				<p class="text-2xs text-destructive">{errors?.first_name ?? errors?.firstName}</p>
+				<p id={fid('first-name-error')} class="text-2xs text-destructive">
+					{errors?.first_name ?? errors?.firstName}
+				</p>
 			{/if}
 		</div>
 
@@ -253,12 +258,17 @@
 				autocomplete="family-name"
 				placeholder={showMononymHint ? t.lastNamePlaceholderOptional : t.lastNamePlaceholder}
 				aria-invalid={!!(errors?.last_name || errors?.lastName)}
+				aria-describedby={errors?.last_name || errors?.lastName
+					? fid('last-name-error')
+					: undefined}
 				class="h-11 min-h-11 sm:h-9 sm:min-h-9 {errors?.last_name || errors?.lastName
 					? errClass
 					: ''}"
 			/>
 			{#if errors?.last_name || errors?.lastName}
-				<p class="text-2xs text-destructive">{errors?.last_name ?? errors?.lastName}</p>
+				<p id={fid('last-name-error')} class="text-2xs text-destructive">
+					{errors?.last_name ?? errors?.lastName}
+				</p>
 			{/if}
 		</div>
 	</div>
@@ -278,10 +288,11 @@
 				{disabled}
 				placeholder={t.nicknamePlaceholder}
 				aria-invalid={!!errors?.nickname}
+				aria-describedby={errors?.nickname ? fid('nickname-error') : undefined}
 				class="h-11 min-h-11 sm:h-9 sm:min-h-9 {errors?.nickname ? errClass : ''}"
 			/>
 			{#if errors?.nickname}
-				<p class="text-2xs text-destructive">{errors.nickname}</p>
+				<p id={fid('nickname-error')} class="text-2xs text-destructive">{errors.nickname}</p>
 			{/if}
 		</div>
 	{/if}
@@ -345,6 +356,9 @@
 						? t.cardNumberPlaceholderNational
 						: t.cardNumberPlaceholderOther}
 					aria-invalid={!!(errors?.cardNumber || errors?.number || errors?.person_id)}
+					aria-describedby={errors?.cardNumber || errors?.number || errors?.person_id
+						? fid('card-number-error')
+						: undefined}
 					class="h-11 min-h-11 sm:h-9 sm:min-h-9 {errors?.cardNumber ||
 					errors?.number ||
 					errors?.person_id
@@ -353,7 +367,7 @@
 				/>
 			{/if}
 			{#if errors?.cardNumber || errors?.number || errors?.person_id}
-				<p class="text-2xs text-destructive">
+				<p id={fid('card-number-error')} class="text-2xs text-destructive">
 					{errors.cardNumber ?? errors.number ?? errors.person_id}
 				</p>
 			{/if}
@@ -407,10 +421,11 @@
 				maxlength={4}
 				placeholder={calendar === 'BE' ? t.birthYearPlaceholderBE : t.birthYearPlaceholderCE}
 				aria-invalid={!!birthYearError}
+				aria-describedby={birthYearError ? fid('birth-year-error') : undefined}
 				class="h-11 min-h-11 sm:h-9 sm:min-h-9 {birthYearError ? errClass : ''}"
 			/>
 			{#if birthYearError}
-				<p class="text-2xs text-destructive">{birthYearError}</p>
+				<p id={fid('birth-year-error')} class="text-2xs text-destructive">{birthYearError}</p>
 			{/if}
 		</div>
 
@@ -426,10 +441,11 @@
 				inputmode="numeric"
 				placeholder={t.agePlaceholder}
 				aria-invalid={!!errors?.age}
+				aria-describedby={errors?.age ? fid('age-error') : undefined}
 				class="h-11 min-h-11 sm:h-9 sm:min-h-9 {errors?.age ? errClass : ''}"
 			/>
 			{#if errors?.age}
-				<p class="text-2xs text-destructive">{errors.age}</p>
+				<p id={fid('age-error')} class="text-2xs text-destructive">{errors.age}</p>
 			{/if}
 		</div>
 
@@ -451,6 +467,7 @@
 				{disabled}
 				aria-labelledby={fid('gender-label')}
 				aria-invalid={!!errors?.gender}
+				aria-describedby={errors?.gender ? fid('gender-error') : undefined}
 				class="grid grid-cols-3 gap-2"
 			>
 				<label
@@ -489,7 +506,7 @@
 				</label>
 			</RadioGroup.Root>
 			{#if errors?.gender}
-				<p class="text-2xs text-destructive">{errors.gender}</p>
+				<p id={fid('gender-error')} class="text-2xs text-destructive">{errors.gender}</p>
 			{/if}
 		</div>
 	</div>
@@ -509,10 +526,14 @@
 				emptyText={t.countryEmpty}
 				{disabled}
 				class="!h-11 rounded-md text-sm sm:!h-9 {errors?.country ? errClass : ''}"
-				controlProps={{ id: fid('country'), 'aria-invalid': !!errors?.country }}
+				controlProps={{
+					id: fid('country'),
+					'aria-invalid': !!errors?.country,
+					'aria-describedby': errors?.country ? fid('country-error') : undefined
+				}}
 			/>
 			{#if errors?.country}
-				<p class="text-2xs text-destructive">{errors.country}</p>
+				<p id={fid('country-error')} class="text-2xs text-destructive">{errors.country}</p>
 			{/if}
 		</div>
 
@@ -548,10 +569,13 @@
 					maxlength={60}
 					placeholder={t.religionOtherPlaceholder}
 					aria-invalid={!!errors?.religion_other}
+					aria-describedby={errors?.religion_other ? fid('religion-other-error') : undefined}
 					class="h-11 min-h-11 sm:h-9 sm:min-h-9 {errors?.religion_other ? errClass : ''}"
 				/>
 				{#if errors?.religion_other}
-					<p class="text-2xs text-destructive">{errors.religion_other}</p>
+					<p id={fid('religion-other-error')} class="text-2xs text-destructive">
+						{errors.religion_other}
+					</p>
 				{/if}
 			{/if}
 		</div>
@@ -578,6 +602,7 @@
 				autocomplete="tel"
 				placeholder={t.phonePlaceholder}
 				aria-invalid={!!errors?.phone}
+				aria-describedby={errors?.phone ? fid('phone-error') : undefined}
 				class="h-11 min-h-11 sm:h-9 sm:min-h-9 {errors?.phone ? errClass : ''}"
 			/>
 			{#if phoneHelperText}
@@ -586,7 +611,7 @@
 				<p class="text-2xs text-muted-foreground">{t.phoneIntlHint}</p>
 			{/if}
 			{#if errors?.phone}
-				<p class="text-2xs text-destructive">{errors.phone}</p>
+				<p id={fid('phone-error')} class="text-2xs text-destructive">{errors.phone}</p>
 			{/if}
 		</div>
 
