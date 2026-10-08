@@ -8,49 +8,53 @@
 	import {
 		buildKioskContextQuery,
 		cancelKioskFaceCheck,
-		faceOutcomeNeedsStaff,
 		getKioskDisplayContext,
-		isFaceCheckEnabled,
 		KioskCheckInWizard,
 		KioskFaceCheck,
-		loadKioskHardware,
+		KioskIdleTimeout,
+		KIOSK_IDLE_TIMEOUT_MS,
 		navigateToKioskHome,
 		readKioskDisplayQuery,
 		submitWalkInCard,
 		walkInSession,
-		type FaceCheckOutcome,
-		type KioskHardware
+		type FaceCheckOutcome
 	} from '$lib/features/kiosk';
 
 	const displayContext = $derived(
 		getKioskDisplayContext(readKioskDisplayQuery(page.url.searchParams))
 	);
 	const contextQuery = $derived(buildKioskContextQuery(displayContext));
-	let hardware = $state<KioskHardware | null>(null);
 	let registering = $state(false);
 	let error = $state('');
-	const faceMode = $derived(
-		hardware &&
-			isFaceCheckEnabled(hardware.faceCheck, 'walk_in') &&
-			hardware.faceCheck.mode !== 'off'
-			? hardware.faceCheck.mode
-			: null
-	);
+	const faceCheck = walkInSession.faceCheckToRun;
+	let faceBusy = false;
+	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, returnHome);
+
 	onMount(() => {
 		if (!walkInSession.citizenId || !walkInSession.consented || !walkInSession.card) {
 			void goto(resolve(`/kiosk${contextQuery}` as '/kiosk' | `/kiosk?${string}`));
 			return;
 		}
-		void loadKioskHardware().then((loaded) => {
-			hardware = loaded;
-			// The scanner client turned the check off after the card page sent us here: just register.
-			if (!isFaceCheckEnabled(loaded.faceCheck, 'walk_in')) void register();
-		});
+		idleTimeout.start();
 		return () => {
-			// However the person leaves (cancel or registered), do not leave the check behind.
+			idleTimeout.stop();
+			// However the person leaves (cancel, idle, registered), do not leave the check behind.
 			void cancelKioskFaceCheck();
 		};
 	});
+
+	function activity() {
+		idleTimeout.recordActivity();
+	}
+
+	function syncIdlePause() {
+		idleTimeout.setPaused(faceBusy || registering);
+	}
+
+	function handleFaceBusyChange(busy: boolean) {
+		faceBusy = busy;
+		syncIdlePause();
+	}
 
 	function returnHome() {
 		walkInSession.clear();
@@ -69,17 +73,14 @@
 	async function register() {
 		if (registering) return;
 		registering = true;
+		syncIdlePause();
 		error = '';
 		const outcome = await submitWalkInCard(walkInSession.card, walkInSession);
 		if (outcome.kind === 'registered') {
-			// The done page forgets the session, so what it must say is passed on in the URL. Staff who
-			// entered the PIN have just checked the card: no need to send the person back to them.
-			const checked = walkInSession.faceOutcome;
-			const staffRecheck = faceMode === 'on' && checked !== null && faceOutcomeNeedsStaff(checked);
 			walkInSession.clear();
 			await goto(
 				resolve(
-					`/kiosk/register/done${contextQuery}${staffRecheck ? '&face=staff' : ''}` as
+					`/kiosk/register/done${contextQuery}` as
 						'/kiosk/register/done' | `/kiosk/register/done?${string}`
 				)
 			);
@@ -90,10 +91,12 @@
 				? outcome.message
 				: 'ลงทะเบียนไม่สำเร็จ กรุณาลองอีกครั้ง';
 		registering = false;
+		syncIdlePause();
 	}
 </script>
 
 <svelte:head><title>ตรวจสอบใบหน้า — SmartShelter Kiosk</title></svelte:head>
+<svelte:window onpointerdown={activity} onkeydown={activity} />
 <div class="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 py-3">
 	<KioskCheckInWizard currentStep={3} step2Label="อ่านบัตร" />
 	{#if error}
@@ -121,16 +124,15 @@
 		<p class="mt-8 text-center text-xl font-bold text-slate-900" role="status">
 			กำลังบันทึกข้อมูล…
 		</p>
-	{:else if hardware === null}
-		<p class="mt-8 text-center text-xl font-bold text-slate-900" role="status">กำลังเตรียมระบบ…</p>
-	{:else if faceMode && walkInSession.citizenId}
+	{:else if walkInSession.citizenId && walkInSession.consented && walkInSession.card}
 		<KioskFaceCheck
 			flow="walk_in"
 			citizenId={walkInSession.citizenId}
-			mode={faceMode}
-			cameraLabel={hardware?.cameraLabel ?? null}
+			mode={faceCheck.mode}
+			cameraLabel={faceCheck.cameraLabel}
 			onfinish={handleFaceFinished}
 			oncancel={returnHome}
+			onbusychange={handleFaceBusyChange}
 		/>
 	{/if}
 </div>
