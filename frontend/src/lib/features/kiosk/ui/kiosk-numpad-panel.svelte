@@ -100,8 +100,9 @@
 			font-size: 1.5rem;
 		}
 
+		/* Still a 48px touch target: the main buttons never shrink below the keys. */
 		.numpad-panel-actions :global(button) {
-			min-height: 2.75rem;
+			min-height: 3rem;
 		}
 
 		.numpad-panel :global(.kiosk-numpad-panel-note) {
