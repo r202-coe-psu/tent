@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import unittest
+from unittest.mock import patch
 from collections import Counter
 from pathlib import Path
 
@@ -489,6 +490,72 @@ class FaceServiceTests(unittest.IsolatedAsyncioTestCase):
         now[0] += face_service.SESSION_TTL_SEC + 1
         with self.assertRaises(FaceStateError):
             await service.verify(self.frames())
+
+    async def test_an_abandoned_check_is_wiped_by_its_timer_without_another_call(self):
+        # The page died mid-check: nothing calls verify/end again, yet the photo must go.
+        service = self.make()
+        with patch.object(face_service, "SESSION_TTL_SEC", 0.05):
+            await self.start_check_in(service, jpeg(textured(100, 120)))
+        session = service._session
+        self.assertIsNotNone(session.chip_photo)
+        await asyncio.sleep(0.1)
+        self.assertIsNone(service._session)
+        self.assertIsNone(session.chip_photo)
+        self.assertIsNone(session.reference)
+
+    async def test_a_new_check_restarts_the_timer(self):
+        service = self.make()
+        with patch.object(face_service, "SESSION_TTL_SEC", 0.1):
+            await self.start_walk_in(service)
+            await asyncio.sleep(0.06)
+            await self.start_walk_in(service)  # the next person, 60 ms later
+        second = service._session
+        await asyncio.sleep(0.06)  # past the first check's deadline, not the second's
+        self.assertIs(service._session, second)
+        await asyncio.sleep(0.08)
+        self.assertIsNone(service._session)
+
+    async def test_cancel_stops_the_timers(self):
+        service = self.make()
+        await self.start_walk_in(service)
+        service.stash_photo(CID, jpeg(textured(100, 120)))
+        session_timer, stash_timer = service._session_timer, service._stash_timer
+        service.cancel()
+        self.assertTrue(session_timer.cancelled())
+        self.assertTrue(stash_timer.cancelled())
+        self.assertIsNone(service._session_timer)
+        self.assertIsNone(service._stash_timer)
+
+    async def test_an_unused_stashed_photo_is_wiped_by_its_timer(self):
+        service = self.make()
+        with patch.object(face_service, "STASH_TTL_SEC", 0.05):
+            service.stash_photo(CID, jpeg(textured(100, 120)))
+        await asyncio.sleep(0.1)
+        self.assertIsNone(service._stash)
+
+    async def test_an_expiring_check_leaves_a_newer_stash_alone(self):
+        service = self.make()
+        with patch.object(face_service, "SESSION_TTL_SEC", 0.05):
+            await self.start_walk_in(service)
+        service.stash_photo(CID, jpeg(textured(100, 120)))  # the next walk-in's full read
+        await asyncio.sleep(0.1)
+        self.assertIsNone(service._session)
+        self.assertIsNotNone(service._stash)
+
+    async def test_taking_the_stash_stops_its_timer(self):
+        service = self.make()
+        service.stash_photo(CID, jpeg(textured(100, 120)))
+        stash_timer = service._stash_timer
+        await service.start(CID, "walk_in")
+        self.assertTrue(stash_timer.cancelled())
+
+    def test_without_a_running_loop_the_ttl_is_still_checked_on_use(self):
+        now = [1000.0]
+        service = self.make(clock=lambda: now[0])
+        service.stash_photo(CID, jpeg(textured(100, 120)))  # no event loop here: no timer
+        self.assertIsNone(service._stash_timer)
+        now[0] += face_service.STASH_TTL_SEC + 1
+        self.assertIsNone(service._take_stash(CID))
 
     async def test_a_stashed_photo_expires(self):
         now = [1000.0]

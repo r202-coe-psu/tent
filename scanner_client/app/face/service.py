@@ -83,6 +83,10 @@ class FaceService:
         self._clock = clock
         self._stash: Optional[tuple[str, bytes | str, float]] = None
         self._session: Optional[FaceSession] = None
+        # Wipe timers: the TTLs are also checked on use, but a page that dies mid-check never
+        # calls again, and the chip photo / embedding must not sit in RAM until the next person.
+        self._stash_timer: Optional[asyncio.TimerHandle] = None
+        self._session_timer: Optional[asyncio.TimerHandle] = None
 
     # -- engine -----------------------------------------------------------------------------
 
@@ -100,12 +104,35 @@ class FaceService:
         use it once the person has agreed to the face check. Wiped by `start`, `cancel` or its TTL."""
         if photo:
             self._stash = (citizen_id, photo, self._clock() + STASH_TTL_SEC)
+            self._stash_timer = self._reschedule(self._stash_timer, STASH_TTL_SEC, self._clear_stash)
 
     def _take_stash(self, citizen_id: str) -> Optional[bytes | str]:
-        stash, self._stash = self._stash, None
+        stash = self._stash
+        self._clear_stash()
         if stash and stash[0] == citizen_id and self._clock() < stash[2]:
             return stash[1]
         return None
+
+    def _clear_stash(self) -> None:
+        self._stash = None
+        self._stash_timer = self._reschedule(self._stash_timer, None, None)
+
+    @staticmethod
+    def _reschedule(
+        handle: Optional[asyncio.TimerHandle],
+        delay: Optional[float],
+        callback: Optional[Callable[[], None]],
+    ) -> Optional[asyncio.TimerHandle]:
+        """Cancel `handle`, then (if `delay` is given) start a new timer on the running loop. With no
+        running loop the TTL is still enforced when the data is next used."""
+        if handle is not None:
+            handle.cancel()
+        if delay is None or callback is None:
+            return None
+        try:
+            return asyncio.get_running_loop().call_later(delay, callback)
+        except RuntimeError:
+            return None
 
     # -- lifecycle --------------------------------------------------------------------------
 
@@ -129,6 +156,9 @@ class FaceService:
         self._drop_session()  # keep the stash: a walk-in's photo was set aside before this call
         session = FaceSession(citizen_id, flow, self._clock(), _utc_now())
         self._session = session
+        self._session_timer = self._reschedule(
+            self._session_timer, SESSION_TTL_SEC, lambda: self._expire_session(session)
+        )
 
         if flow == FLOW_WALK_IN:
             photo = self._take_stash(citizen_id)
@@ -191,13 +221,20 @@ class FaceService:
             session.set_reference(embedding)
 
     def _drop_session(self) -> None:
+        self._session_timer = self._reschedule(self._session_timer, None, None)
         if self._session:
             self._session.clear()
         self._session = None
 
+    def _expire_session(self, session: FaceSession) -> None:
+        self._session_timer = None
+        if session is self._session:
+            logger.info("Face check expired without an end call; wiping it")
+            self._drop_session()  # a stash belongs to whoever read a card since: it has its own timer
+
     def cancel(self) -> None:
         """Wipe everything held for the current person."""
-        self._stash = None
+        self._clear_stash()
         self._drop_session()
 
     # -- preview ----------------------------------------------------------------------------
