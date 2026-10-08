@@ -20,6 +20,8 @@ export default defineConfig({
 		'**/public-search-flow.test.ts',
 		'**/public-shelters-filter.test.ts'
 	],
+	// Inherited grepInvert from stagingConfig; keep explicit for clarity when that config changes.
+	grepInvert: /@quarantine/,
 	globalTimeout: 480_000,
 	outputDir: 'test-results/public',
 	reporter: [

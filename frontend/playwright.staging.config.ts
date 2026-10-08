@@ -17,6 +17,8 @@ export default defineConfig({
 	fullyParallel: false,
 	forbidOnly: true,
 	retries: process.env.CI ? 1 : 0,
+	// §3 / §9.B — keep @quarantine suites out of staging even after testMatch widens.
+	grepInvert: /@quarantine/,
 	workers: 1,
 	timeout: 60_000,
 	globalTimeout: 120_000,
