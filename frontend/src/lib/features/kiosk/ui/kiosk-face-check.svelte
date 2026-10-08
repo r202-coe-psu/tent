@@ -7,18 +7,14 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { createBusyReport } from '../application/busy-report';
 	import { openFaceCamera } from '../application/face-camera';
+	import { FaceCheckPinFlow } from '../application/face-check-pin-flow.svelte';
 	import { FaceCheckSession } from '../application/face-check-session.svelte';
 	import { createKioskFaceApi } from '../data/kiosk-face.api';
 	import type { KioskStaffPinResult } from '../data/kiosk-staff-pin.api';
 	import {
-		FACE_BYPASSED_BY_STAFF,
-		FACE_MATCH_SHOWN_MS,
-		faceOutcomeAction,
 		faceOutcomeMessage,
-		staffPinCancelAction,
 		type FaceCheckFlow,
-		type FaceCheckOutcome,
-		type StaffPinOpenedFrom
+		type FaceCheckOutcome
 	} from '../domain/face-check';
 	import KioskBiometricConsent from './kiosk-biometric-consent.svelte';
 	import KioskFaceCameraPanel from './kiosk-face-camera-panel.svelte';
@@ -62,19 +58,22 @@
 
 	let video = $state<HTMLVideoElement>();
 	let skipButton = $state<HTMLElement | null>(null);
-	/**
-	 * Where the staff PIN panel was opened from: the camera (cancel resumes the check) or the result
-	 * screen after the check ended (cancel goes home). Closed = null.
-	 */
-	let pinFrom = $state<StaffPinOpenedFrom | null>(null);
 	/** "Staff carry on" on the result screen; focus returns here when the PIN is cancelled. */
 	let continueButton = $state<HTMLElement | null>(null);
-	/** onfinish has been called: nothing more to show while the page moves on. */
-	let handedOn = $state(false);
-	let matchTimer: ReturnType<typeof setTimeout> | null = null;
 	let sessionBusy = false;
 	const busyReport = createBusyReport((busy) => onbusychange?.(busy));
 	const faceApi = createKioskFaceApi();
+
+	const pinFlow = untrack(
+		() =>
+			new FaceCheckPinFlow({
+				mode: () => mode,
+				cancelCheck: (reason) => void faceApi.cancel(reason),
+				onfinish: (outcome) => onfinish(outcome),
+				oncancel: () => oncancel(),
+				onpinchange: reportBusy
+			})
+	);
 
 	const session = untrack(
 		() =>
@@ -83,15 +82,16 @@
 				citizenId,
 				api: faceApi,
 				openCamera: () => openFaceCamera(video!, cameraLabel),
-				onfinish: handleFinished,
+				onfinish: (outcome) => pinFlow.finished(outcome),
 				onbusychange: (busy) => {
 					sessionBusy = busy;
 					reportBusy();
 				}
 			})
 	);
+	pinFlow.attach(session);
 
-	const pinOpen = $derived(pinFrom !== null);
+	const pinOpen = $derived(pinFlow.pinOpen);
 	const cameraShown = $derived(
 		!pinOpen &&
 			(session.phase === 'starting' ||
@@ -99,7 +99,7 @@
 				session.phase === 'verifying')
 	);
 	const finished = $derived(
-		session.phase === 'done' && mode === 'on' && session.outcome !== null && !handedOn
+		session.phase === 'done' && mode === 'on' && session.outcome !== null && !pinFlow.handedOn
 	);
 	const notMatched = $derived(
 		finished && session.outcome !== null && session.outcome.kind !== 'match'
@@ -107,78 +107,28 @@
 			: null
 	);
 	const notMatchedMessage = $derived(notMatched ? faceOutcomeMessage(notMatched) : null);
+	/**
+	 * Read out by the always-mounted live line below. The result boxes appear with their text already
+	 * in them, which screen readers may skip, and the live region must not cover the PIN keys.
+	 */
+	const resultAnnouncement = $derived.by(() => {
+		if (pinOpen || !finished) return '';
+		if (session.outcome?.kind === 'match') return 'ยืนยันตัวตนเรียบร้อย';
+		return notMatchedMessage ? `${notMatchedMessage.title} ${notMatchedMessage.detail}` : '';
+	});
 	// Check-in reads the chip photo during the check, so the card must stay in until it says so.
 	const cardNoticeShown = $derived(flow === 'check_in' && session.phase !== 'done');
 
 	/** The page's idle timeout pauses while the camera runs and while staff are on the PIN. */
 	function reportBusy(): void {
-		busyReport.update(sessionBusy || pinFrom !== null);
-	}
-
-	function setPinFrom(from: StaffPinOpenedFrom | null): void {
-		pinFrom = from;
-		reportBusy();
-	}
-
-	function handOn(outcome: FaceCheckOutcome): void {
-		handedOn = true;
-		setPinFrom(null);
-		onfinish(outcome);
-	}
-
-	/** In mode `on` only a match or a staff bypass carries on (`faceOutcomeAction`). */
-	function handleFinished(outcome: FaceCheckOutcome): void {
-		switch (faceOutcomeAction(outcome, mode)) {
-			case 'hand_on':
-				return handOn(outcome);
-			case 'show_match':
-				setPinFrom(null);
-				matchTimer = setTimeout(() => handOn(outcome), FACE_MATCH_SHOWN_MS);
-				return;
-			case 'close_pin':
-				setPinFrom(null);
-				return;
-			case 'wait_for_pin':
-				// The PIN panel, if open, stays open; otherwise the result screen asks.
-				return;
-		}
-	}
-
-	/** "Staff skip this step" at the camera. Shadow mode never shows a result, so it never asks. */
-	function handleSkip(): void {
-		if (mode === 'shadow') return session.skip();
-		session.hold();
-		setPinFrom('camera');
-	}
-
-	function handlePinVerified(): void {
-		if (session.phase !== 'done') {
-			// Ends the check as a staff bypass; handleFinished hands it on.
-			session.skip(FACE_BYPASSED_BY_STAFF);
-			return;
-		}
-		// The check had already ended: only the scanner client's log learns why it carried on.
-		void faceApi.cancel(FACE_BYPASSED_BY_STAFF);
-		handOn({ kind: 'skipped', reason: FACE_BYPASSED_BY_STAFF });
+		busyReport.update(sessionBusy || pinFlow.pinOpen);
 	}
 
 	async function handlePinCancel(): Promise<void> {
-		const from = pinFrom;
-		if (!from) return;
-		setPinFrom(null);
-		switch (staffPinCancelAction(from, session.phase === 'done')) {
-			case 'go_home':
-				return oncancel();
-			case 'show_result':
-				// Ended meanwhile: the result screen asks again.
-				await tick();
-				continueButton?.focus();
-				return;
-			case 'resume':
-				session.resume();
-				await tick();
-				skipButton?.focus();
-		}
+		const focus = pinFlow.pinCancelled();
+		if (!focus) return;
+		await tick();
+		(focus === 'continue' ? continueButton : skipButton)?.focus();
 	}
 
 	/**
@@ -187,14 +137,14 @@
 	 */
 	function listenForCardRemoval(): () => void {
 		const handleCardRemoved = () => {
-			if (flow === 'check_in' && pinFrom === 'camera') void session.cardRemoved();
+			if (flow === 'check_in' && pinFlow.pinFrom === 'camera') void session.cardRemoved();
 		};
 		window.addEventListener('kiosk:smart-card-removed', handleCardRemoved);
 		return () => window.removeEventListener('kiosk:smart-card-removed', handleCardRemoved);
 	}
 
 	onMount(() => () => {
-		if (matchTimer) clearTimeout(matchTimer);
+		pinFlow.destroy();
 		session.destroy();
 		// Unmounted mid-check or with the PIN panel open: never leave the page's idle timeout paused.
 		busyReport.release();
@@ -203,7 +153,6 @@
 
 <section
 	class="mx-auto mt-4 w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs sm:p-8 kiosk-compact:mt-2 kiosk-compact:p-3"
-	aria-live="polite"
 	data-testid="kiosk-face-check"
 	data-face-phase={session.phase}
 	{@attach listenForCardRemoval}
@@ -235,20 +184,19 @@
 		frameReady={session.frameReady}
 		framingProblem={session.framingProblem}
 		showSkip={session.busy}
-		onskip={handleSkip}
+		onskip={() => pinFlow.skip()}
 	/>
 
 	{#if pinOpen}
 		<KioskStaffPinEntry
 			{headingTag}
 			verify={verifyStaffPin}
-			onverified={handlePinVerified}
+			onverified={() => pinFlow.pinVerified()}
 			oncancel={() => void handlePinCancel()}
 		/>
 	{:else if finished && session.outcome?.kind === 'match'}
 		<div
 			class="flex flex-col items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-center text-emerald-950"
-			role="status"
 			data-testid="kiosk-face-result"
 			data-face-result="match"
 		>
@@ -266,7 +214,6 @@
 					? 'border-sky-200 bg-sky-50 text-sky-950'
 					: 'border-amber-200 bg-amber-50 text-amber-950'
 			]}
-			role="status"
 			data-testid="kiosk-face-result"
 			data-face-result={notMatchedMessage.tone}
 		>
@@ -285,7 +232,7 @@
 				<Button
 					bind:ref={continueButton}
 					type="button"
-					onclick={() => setPinFrom('result')}
+					onclick={() => pinFlow.openFromResult()}
 					class="min-h-12 w-full bg-[#0A2647] px-8 text-base font-bold text-white hover:bg-[#051930] focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 kiosk-portrait:min-h-16 kiosk-portrait:text-2xl"
 					>เจ้าหน้าที่ดำเนินการต่อ</Button
 				>
@@ -299,4 +246,8 @@
 			</div>
 		</div>
 	{/if}
+
+	<p class="sr-only" aria-live="polite" data-testid="kiosk-face-announcement">
+		{resultAnnouncement}
+	</p>
 </section>

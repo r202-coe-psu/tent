@@ -74,6 +74,15 @@ describe('KioskFaceCheck', () => {
 		expect(body).not.toContain('kiosk-face-result');
 	});
 
+	it('keeps the live region to the result line, not the whole section with the PIN keys', () => {
+		const { body } = render(KioskFaceCheck, { props });
+
+		expect(body).not.toMatch(/<section[^>]*aria-live/);
+		expect(body).toMatch(
+			/<p class="sr-only" aria-live="polite" data-testid="kiosk-face-announcement"><\/p>/
+		);
+	});
+
 	it('uses h2 headings when embedded under the check-in header', () => {
 		const embedded = render(KioskFaceCheck, { props: { ...props, embedded: true } });
 		const alone = render(KioskFaceCheck, { props });
