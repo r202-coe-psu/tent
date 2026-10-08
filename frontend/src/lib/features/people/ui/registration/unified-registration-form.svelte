@@ -53,6 +53,7 @@
 		type UnifiedHouseholdInput
 	} from '../../domain/unified-registration';
 	import {
+		collectMemberRuleIssues,
 		dormFieldsFor,
 		type HousingType,
 		type HouseholdVehicle,
@@ -759,7 +760,9 @@
 		markDirty();
 	}
 
-	function mapZodIssues(issues: ZodIssue[]): {
+	type FormIssue = Pick<ZodIssue, 'path' | 'message'>;
+
+	function mapZodIssues(issues: FormIssue[]): {
 		messages: string[];
 		memberErrors: Record<number, Record<string, string>>;
 		householdErrors: Record<string, string>;
@@ -785,7 +788,7 @@
 	}
 
 	/** Section that owns a Zod issue — the scroll fallback when no field carries `aria-invalid`. */
-	function sectionForIssue(issue: ZodIssue | undefined): FormSectionId {
+	function sectionForIssue(issue: FormIssue | undefined): FormSectionId {
 		const [root, key] = issue?.path ?? [];
 		if (root !== 'household') return 'members';
 		return key === 'pets' || key === 'vehicles' ? key : 'address';
@@ -827,18 +830,22 @@
 		if (!focusFirstInvalid()) scrollToSection('members');
 	}
 
+	/** Public channel only: primary contact needs a 10-digit phone (join flows may leave it blank). */
+	function publicHeadPhoneMessage(): string | null {
+		const headPhone = members[0]?.phone?.trim() ?? '';
+		const phoneOk = /^0\d{8,9}$/.test(headPhone.replace(/[-\s]/g, ''));
+		if (hasJoinSelection) return headPhone && !phoneOk ? t.joinPhoneInvalid : null;
+		return phoneOk ? null : t.headPhoneRequired;
+	}
+
 	async function handleSubmit(e: Event) {
 		e.preventDefault();
 		if (pending || readOnly) return;
 
-		for (const p of petItems) {
-			if (p.species === 'other' && !p.customSpecies.trim()) {
-				memberFieldErrors = {};
-				householdFieldErrors = {};
-				await revealValidation(t.petOtherSpeciesRequired, [], 'pets');
-				return;
-			}
-		}
+		// Every check below feeds one pass so the user sees all problems after a single submit.
+		const petOtherSpeciesMissing = petItems.some(
+			(p) => p.species === 'other' && !p.customSpecies.trim()
+		);
 		household.pets = syncPetsToHousehold(petItems);
 
 		// Empty phone → null so phoneSchema accepts optional join / 「ไม่มีเบอร์」.
@@ -865,43 +872,51 @@
 		};
 
 		const result = unifiedRegistrationInputSchema.safeParse(payload);
+		// Zod 4 skips `superRefine` (checksum, age ↔ birth year, …) once the base schema aborts,
+		// so collect the member rules separately and report them in the same pass.
+		const issues: FormIssue[] = [];
 		if (!result.success) {
-			const mapped = mapZodIssues(result.error.issues);
+			const seen: string[] = [];
+			for (const issue of [
+				...result.error.issues,
+				...collectMemberRuleIssues(payload.members)
+			] as FormIssue[]) {
+				const key = `${issue.path.map(String).join('.')}|${issue.message}`;
+				if (seen.includes(key)) continue;
+				seen.push(key);
+				issues.push(issue);
+			}
+		}
+		const mapped = mapZodIssues(issues);
+		const extraMessages: string[] = [];
+		let fallbackSection: FormSectionId | undefined = issues.length
+			? sectionForIssue(issues[0])
+			: undefined;
+
+		const headPhoneMessage = channel === 'public' ? publicHeadPhoneMessage() : null;
+		if (headPhoneMessage && !mapped.memberErrors[0]?.phone) {
+			mapped.memberErrors[0] = { ...mapped.memberErrors[0], phone: headPhoneMessage };
+			extraMessages.push(headPhoneMessage);
+			fallbackSection ??= 'members';
+		}
+
+		const petIssueReported = issues.some((i) => i.path[0] === 'household' && i.path[1] === 'pets');
+		if (petOtherSpeciesMissing && !petIssueReported) {
+			extraMessages.push(t.petOtherSpeciesRequired);
+			fallbackSection ??= 'pets';
+		}
+
+		if (mode === 'report-in' && !members.some((m) => m.reporting_in)) {
+			extraMessages.push('กรุณาเลือกสมาชิกอย่างน้อย 1 คนที่มารายงานตัวในรอบนี้');
+			fallbackSection ??= 'members';
+		}
+
+		if (!result.success || extraMessages.length > 0) {
 			memberFieldErrors = mapped.memberErrors;
 			householdFieldErrors = mapped.householdErrors;
-			const first = mapped.messages[0] ?? t.validationError;
-			await revealValidation(first, mapped.messages, sectionForIssue(result.error.issues[0]));
+			const messages = [...new Set([...mapped.messages, ...extraMessages])];
+			await revealValidation(messages[0] ?? t.validationError, messages, fallbackSection);
 			return;
-		}
-
-		if (channel === 'public') {
-			const headPhone = members[0]?.phone?.trim() ?? '';
-			const phoneOk = !headPhone || /^0\d{8,9}$/.test(headPhone.replace(/[-\s]/g, ''));
-			if (hasJoinSelection) {
-				if (headPhone && !phoneOk) {
-					memberFieldErrors = { 0: { phone: t.joinPhoneInvalid } };
-					await revealValidation(t.joinPhoneInvalid, [], 'members');
-					return;
-				}
-			} else if (!headPhone || !/^0\d{8,9}$/.test(headPhone.replace(/[-\s]/g, ''))) {
-				memberFieldErrors = { 0: { phone: t.headPhoneRequired } };
-				await revealValidation(t.headPhoneRequired, [], 'members');
-				return;
-			}
-		}
-
-		if (mode === 'report-in') {
-			const reportingCount = members.filter((m) => m.reporting_in).length;
-			if (reportingCount === 0) {
-				memberFieldErrors = {};
-				householdFieldErrors = {};
-				await revealValidation(
-					'กรุณาเลือกสมาชิกอย่างน้อย 1 คนที่มารายงานตัวในรอบนี้',
-					[],
-					'members'
-				);
-				return;
-			}
 		}
 
 		formError = null;
