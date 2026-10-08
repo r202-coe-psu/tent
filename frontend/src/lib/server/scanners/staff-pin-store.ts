@@ -154,9 +154,12 @@ export class StaffPinSecretStore {
 			...(existing.members?.roles ?? []).filter((role) => role !== '_admin')
 		];
 		if (extraMembers.length > 0) {
-			console.warn(
-				`[scanner-staff-pin] ${this.db} _security admits non-admin members (${extraMembers.join(', ')}); left unchanged — review it`
+			// Fail closed: never write a plaintext PIN into a DB that non-admins can read. Fixing the
+			// `_security` is an operator decision, so it is left unchanged and reported.
+			console.error(
+				`[scanner-staff-pin] ${this.db} _security admits non-admin members (${extraMembers.join(', ')}); refusing to store PINs until it is admin-only`
 			);
+			throw new StaffPinUnavailableError('Staff PIN store is readable by non-admins');
 		}
 		const merged = mergeCouchSecurity(existing, SCANNER_SECRETS_SECURITY);
 		if (!merged) return;

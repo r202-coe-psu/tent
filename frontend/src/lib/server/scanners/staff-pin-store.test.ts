@@ -160,6 +160,24 @@ describe('StaffPinSecretStore', () => {
 		expect(raw.mock.calls.some(([p, m]) => p.endsWith('/_security') && m === 'PUT')).toBe(false);
 	});
 
+	it.each([
+		['a member name', { members: { names: ['kiosk-staff'], roles: ['_admin'] } }],
+		['a non-admin member role', { members: { roles: ['_admin', 'shelter_staff'] } }]
+	])(
+		'fails closed when _security admits %s, writing no PIN and not touching _security',
+		async (_label, security) => {
+			const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+			const raw = couch(docs, { createStatus: 412, security });
+			const store = new StaffPinSecretStore(raw);
+
+			await expect(store.put(input, null)).rejects.toBeInstanceOf(StaffPinUnavailableError);
+			expect(docs).not.toHaveBeenCalled();
+			expect(raw.mock.calls.some(([p, m]) => p.endsWith('/_security') && m === 'PUT')).toBe(false);
+			expect(String(errorSpy.mock.calls[0]?.[0])).not.toContain(input.pin);
+			errorSpy.mockRestore();
+		}
+	);
+
 	it('retries the ensure step after a failure instead of caching it', async () => {
 		const raw = couch(docs, { securityPutStatus: 500 });
 		const store = new StaffPinSecretStore(raw);
