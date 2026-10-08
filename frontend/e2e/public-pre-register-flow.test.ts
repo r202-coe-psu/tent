@@ -200,7 +200,7 @@ test.afterAll(async () => {
 
 test.describe(
 	'Pre-register: navigation (N)',
-	{ tag: ['@pre-register', '@smoke', '@release'] },
+	{ tag: ['@pre-register', '@smoke', '@release', '@prod'] },
 	() => {
 		test('N1 the landing page links to /pre-register and the hero CTA opens the central queue', async ({
 			page

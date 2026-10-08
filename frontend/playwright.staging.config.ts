@@ -3,25 +3,33 @@ import { defineConfig, devices } from '@playwright/test';
 
 const stagingURL = process.env.E2E_BASE_URL ?? 'https://shelter.importstar.dev';
 
-// Keep this allowlist limited to tests that are safe to run against live Staging.
-// Paths are relative to e2e/; add **/ prefixes so tests can live anywhere under that folder.
-const stagingTestAllowlist = ['**/staging/smoke.test.ts'];
-
 if (!/^https:\/\/[^\s/]+\/?$/.test(stagingURL)) {
 	throw new Error('E2E_BASE_URL must be an HTTPS origin without a path');
 }
 
+/**
+ * Staging release gate (e2e/README.md §9.C / layer 4):
+ *   - run `@release` + `@smoke` across the suite tree
+ *   - exclude `@quarantine`
+ *   - workers=1; budget 15–30 min
+ *
+ * Remote `@critical` journeys (J2 W*, J3–J6) still `test.skip` when `IS_REMOTE`
+ * (`E2E_BASE_URL` set) until staging fixtures + the janitor are provisioned for
+ * live writes. They appear as skipped, not failures. Staging `@smoke`/`@release`
+ * that are read-only (incl. J1 + J2 navigation) do run.
+ */
 export default defineConfig({
 	testDir: './e2e',
-	testMatch: stagingTestAllowlist,
+	testMatch: '**/*.test.ts',
 	fullyParallel: false,
 	forbidOnly: true,
 	retries: process.env.CI ? 1 : 0,
-	// §3 / §9.B — keep @quarantine suites out of staging even after testMatch widens.
+	grep: /@release|@smoke/,
 	grepInvert: /@quarantine/,
 	workers: 1,
 	timeout: 60_000,
-	globalTimeout: 120_000,
+	// 30 min wall clock for the full @release + @smoke remote set.
+	globalTimeout: 1_800_000,
 	expect: { timeout: 15_000 },
 	outputDir: 'test-results/staging',
 	reporter: [

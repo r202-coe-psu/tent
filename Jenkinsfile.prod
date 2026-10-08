@@ -1,6 +1,11 @@
 pipeline {
     agent { label 'mgmt' }
 
+    options {
+        timeout(time: 45, unit: 'MINUTES')
+        timestamps()
+    }
+
     stages {
         stage('Deploy to Production') {
             when {
@@ -14,18 +19,18 @@ pipeline {
                 ]) {
                     sh '''
                         echo "Starting deployment to Production server..."
-                        
+
                         ssh -i $SSH_KEY -p $SSH_PORT -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST "
                             echo '==> Deploying Tent to Production...'
                             cd /home/projects/tent
                             git -C /home/projects/tent pull
-                            
+
                             echo '==> Building frontend image...'
                             docker compose -f docker-compose.production.no-nginx.yml build frontend
-                            
+
                             echo '==> Syncing CouchDB Design Docs & Schema...'
                             docker compose -f docker-compose.production.no-nginx.yml run --rm frontend pnpm db:sync
-                            
+
                             echo '==> Starting services...'
                             docker compose -f docker-compose.production.no-nginx.yml up -d --build --force-recreate
                         "
@@ -33,6 +38,52 @@ pipeline {
                     '''
                 }
             }
+        }
+
+        stage('Production @prod Smoke') {
+            when {
+                branch 'main'
+            }
+            steps {
+                withCredentials([
+                    file(credentialsId: 'tent-prod-e2e-env', variable: 'E2E_ENV_FILE')
+                ]) {
+                    withEnv([
+                        'CI=true',
+                        'E2E_BASE_URL=https://shelter.psu.ac.th'
+                    ]) {
+                        sh 'chmod +x scripts/run-prod-e2e.sh && scripts/run-prod-e2e.sh'
+                    }
+                }
+            }
+            post {
+                failure {
+                    echo 'ALERT: Production @prod E2E smoke failed after deploy — investigate immediately.'
+                    echo "Build: ${env.BUILD_URL}"
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            junit allowEmptyResults: true, testResults: 'frontend/test-results/prod/junit.xml'
+            publishHTML(target: [
+                allowMissing: true,
+                alwaysLinkToLastBuild: true,
+                keepAll: true,
+                reportDir: 'frontend/playwright-report/prod',
+                reportFiles: 'index.html',
+                reportName: 'Production E2E Report'
+            ])
+            archiveArtifacts allowEmptyArchive: true, artifacts: 'frontend/test-results/prod/**/*,frontend/playwright-report/prod/**/*', fingerprint: false
+            cleanWs(cleanWhenNotBuilt: false,
+                    deleteDirs: true,
+                    disableDeferredWipeout: true,
+                    notFailBuild: true)
+        }
+        failure {
+            echo 'ALERT: Jenkinsfile.prod failed (deploy and/or @prod smoke).'
         }
     }
 }
