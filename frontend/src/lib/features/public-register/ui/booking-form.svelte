@@ -293,7 +293,11 @@
 		<QrCode class="mt-0.5 h-5 w-5 shrink-0 text-primary" />
 		<div>
 			<p class="font-bold text-primary">{t.guidanceTitle}</p>
-			<p class="mt-0.5 text-xs text-muted-foreground">{t.guidanceDesc}</p>
+			<ul class="mt-1 space-y-1 text-xs text-muted-foreground">
+				{#each t.guidanceBullets ?? [t.guidanceDesc] as bullet}
+					<li>{bullet}</li>
+				{/each}
+			</ul>
 		</div>
 	</div>
 
@@ -357,19 +361,18 @@
 					{/each}
 				</Select.Content>
 			</Select.Root>
-			{#if isUnassigned}
-				<div
-					class="flex items-start gap-2.5 rounded-xl border border-primary/30 bg-primary/10 p-3.5 text-xs text-foreground"
-				>
-					<Info class="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-					<div>
-						<p class="font-bold text-primary">{t.unassignedNoticeTitle}</p>
-						<p class="mt-0.5 text-muted-foreground">
-							{t.unassignedNoticeDesc}
-						</p>
-					</div>
+			<div
+				class="flex items-start gap-2.5 rounded-xl border border-primary/30 bg-primary/10 p-3.5 text-xs text-foreground"
+			>
+				<Info class="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+				<div>
+					<p class="font-bold text-primary">{t.shelterNoticeTitle}</p>
+					<p class="mt-0.5 text-muted-foreground">
+						{t.shelterNoticeDesc}
+					</p>
 				</div>
-			{:else if selected && !selectedIsBookable}
+			</div>
+			{#if selected && !selectedIsBookable}
 				<p
 					class="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning-muted/40 p-2.5 text-xs text-warning"
 				>
