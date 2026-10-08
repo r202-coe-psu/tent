@@ -93,7 +93,9 @@
 
 	function formatUpdatedAt(value: string | null): string {
 		if (!value) return '—';
-		return new Date(value).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' });
+		const date = new Date(value);
+		if (Number.isNaN(date.getTime())) return '—';
+		return date.toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' });
 	}
 </script>
 
