@@ -18,6 +18,7 @@ export default defineConfig({
 	forbidOnly: true,
 	retries: process.env.CI ? 1 : 0,
 	workers: 1,
+	grepInvert: /@quarantine/,
 	timeout: 60_000,
 	globalTimeout: 120_000,
 	expect: { timeout: 15_000 },

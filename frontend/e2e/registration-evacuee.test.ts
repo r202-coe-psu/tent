@@ -1,4 +1,8 @@
 /**
+ * @quarantine — mutates SH001 toggles + global reCAPTCHA; name-regex teardown (§4 violation).
+ * Replaced by `onsite-stations-flow.test.ts` (own `E2E` shelter, ledger teardown). Do not delete
+ * until that suite is green on staging; excluded by Playwright `grepInvert: /@quarantine/`.
+ *
  * E2E: evacuee registration across Station 1 → 2 → 3 (+ scan check-in/out) on the REAL stack,
  * driven only through the UI — no direct database writes. SH001's toggles are flipped on the
  * shelter edit page, reCAPTCHA on /system-management/security, ids are read from the printed
@@ -1221,118 +1225,122 @@ async function preRegisterFlow(browser: Browser, run: Run, s: Sessions) {
 // ══════════════════════════════════════════════════════════════════════════════
 // Suite
 // ══════════════════════════════════════════════════════════════════════════════
-test.describe('Registration stations 1 → 3 (real stack, via UI)', () => {
-	let sessions: Sessions;
-	let adminSession: string;
-	/** As found; put back in afterAll. */
-	let originalToggles: Toggles;
-	let recaptchaWasEnabled = true;
+test.describe(
+	'Registration stations 1 → 3 (real stack, via UI)',
+	{ tag: ['@onsite', '@quarantine'] },
+	() => {
+		let sessions: Sessions;
+		let adminSession: string;
+		/** As found; put back in afterAll. */
+		let originalToggles: Toggles;
+		let recaptchaWasEnabled = true;
 
-	test.beforeAll(async ({ browser }) => {
-		test.setTimeout(180_000);
-		await createStaffUser(REGISTRAR);
-		await createStaffUser(MEDIC);
-		await createStaffUser(ADMIN);
-		sessions = {
-			registrar: await couchLogin(REGISTRAR.name, REGISTRAR.password),
-			medic: await couchLogin(MEDIC.name, MEDIC.password)
-		};
-		adminSession = await couchLogin(ADMIN.name, ADMIN.password);
+		test.beforeAll(async ({ browser }) => {
+			test.setTimeout(180_000);
+			await createStaffUser(REGISTRAR);
+			await createStaffUser(MEDIC);
+			await createStaffUser(ADMIN);
+			sessions = {
+				registrar: await couchLogin(REGISTRAR.name, REGISTRAR.password),
+				medic: await couchLogin(MEDIC.name, MEDIC.password)
+			};
+			adminSession = await couchLogin(ADMIN.name, ADMIN.password);
 
-		// No human submits the public form: switch the CAPTCHA off for the run.
-		const admin = await openAsStaff(browser, ADMIN, adminSession);
-		recaptchaWasEnabled = await setRecaptcha(admin, false);
-		await admin.context().close();
+			// No human submits the public form: switch the CAPTCHA off for the run.
+			const admin = await openAsStaff(browser, ADMIN, adminSession);
+			recaptchaWasEnabled = await setRecaptcha(admin, false);
+			await admin.context().close();
 
-		const manager = await openAsStaff(browser, MEDIC, sessions.medic);
-		originalToggles = await readToggles(manager);
-		await manager.context().close();
-	});
+			const manager = await openAsStaff(browser, MEDIC, sessions.medic);
+			originalToggles = await readToggles(manager);
+			await manager.context().close();
+		});
 
-	test.afterAll(async ({ browser }) => {
-		test.setTimeout(180_000);
-		if (sessions?.medic && originalToggles) {
-			try {
-				const manager = await openAsStaff(browser, MEDIC, sessions.medic);
-				await waitForSyncWorker(manager);
-				await setToggles(manager, originalToggles);
-				await waitForSyncWorker(manager);
-				await manager.context().close();
-			} catch (err) {
-				console.error('Failed to restore shelter toggles:', err);
+		test.afterAll(async ({ browser }) => {
+			test.setTimeout(180_000);
+			if (sessions?.medic && originalToggles) {
+				try {
+					const manager = await openAsStaff(browser, MEDIC, sessions.medic);
+					await waitForSyncWorker(manager);
+					await setToggles(manager, originalToggles);
+					await waitForSyncWorker(manager);
+					await manager.context().close();
+				} catch (err) {
+					console.error('Failed to restore shelter toggles:', err);
+				}
 			}
-		}
-		if (adminSession) {
-			try {
-				const admin = await openAsStaff(browser, ADMIN, adminSession);
-				await setRecaptcha(admin, recaptchaWasEnabled);
-				await admin.context().close();
-			} catch (err) {
-				console.error('Failed to restore recaptcha:', err);
+			if (adminSession) {
+				try {
+					const admin = await openAsStaff(browser, ADMIN, adminSession);
+					await setRecaptcha(admin, recaptchaWasEnabled);
+					await admin.context().close();
+				} catch (err) {
+					console.error('Failed to restore recaptcha:', err);
+				}
 			}
-		}
-		try {
-			console.log(`Deleted ${await deleteRunData()} docs created by run ${RUN_TAG}`);
-		} catch (err) {
-			console.error(`Failed to delete test data (tag ${RUN_TAG}):`, err);
-		}
-		await Promise.allSettled([
-			deleteCouchUser(REGISTRAR.name),
-			deleteCouchUser(MEDIC.name),
-			deleteCouchUser(ADMIN.name)
-		]);
-	});
+			try {
+				console.log(`Deleted ${await deleteRunData()} docs created by run ${RUN_TAG}`);
+			} catch (err) {
+				console.error(`Failed to delete test data (tag ${RUN_TAG}):`, err);
+			}
+			await Promise.allSettled([
+				deleteCouchUser(REGISTRAR.name),
+				deleteCouchUser(MEDIC.name),
+				deleteCouchUser(ADMIN.name)
+			]);
+		});
 
-	test.beforeEach(() => {
-		test.info().annotations.push({ type: 'test data tag', description: RUN_TAG });
-	});
+		test.beforeEach(() => {
+			test.info().annotations.push({ type: 'test data tag', description: RUN_TAG });
+		});
 
-	async function applyToggles(browser: Browser, run: Run, target: Partial<Toggles>) {
-		const manager = await openAsStaff(browser, MEDIC, sessions.medic);
-		run.flags = await setToggles(manager, target);
-		await waitForSyncWorker(manager);
-		await manager.context().close();
+		async function applyToggles(browser: Browser, run: Run, target: Partial<Toggles>) {
+			const manager = await openAsStaff(browser, MEDIC, sessions.medic);
+			run.flags = await setToggles(manager, target);
+			await waitForSyncWorker(manager);
+			await manager.context().close();
+		}
+
+		test.describe('SH001 all switches ON', () => {
+			test.beforeAll(async ({ browser }) => {
+				test.setTimeout(180_000);
+				await applyToggles(browser, ON, ON_TARGET);
+			});
+
+			test('1.1 walk-in: Station 1 (new + joined household, pet, vehicle, assets) → Station 2 → Station 3 → scan check-out/in', async ({
+				browser
+			}) => {
+				test.setTimeout(300_000);
+				await walkInFlow(browser, ON, sessions);
+			});
+
+			test('1.2 pre-register: public site (screen A) → report-in at the desk by search + QR scan (screen B) → Station 2 → Station 3', async ({
+				browser
+			}) => {
+				test.setTimeout(420_000);
+				await preRegisterFlow(browser, ON, sessions);
+			});
+		});
+
+		test.describe('SH001 pre-registration + Station 2 OFF', () => {
+			test.beforeAll(async ({ browser }) => {
+				test.setTimeout(180_000);
+				await applyToggles(browser, OFF, OFF_TARGET);
+			});
+
+			test('1.3 walk-in [switches off]: Station 2 skipped → Station 3 → scan check-out/in', async ({
+				browser
+			}) => {
+				test.setTimeout(300_000);
+				await walkInFlow(browser, OFF, sessions);
+			});
+
+			test('1.4 pre-register [switches off]: public booking refused → central queue (screen A) → claim by search + QR scan (screen B) → Station 3', async ({
+				browser
+			}) => {
+				test.setTimeout(420_000);
+				await preRegisterFlow(browser, OFF, sessions);
+			});
+		});
 	}
-
-	test.describe('SH001 all switches ON', () => {
-		test.beforeAll(async ({ browser }) => {
-			test.setTimeout(180_000);
-			await applyToggles(browser, ON, ON_TARGET);
-		});
-
-		test('1.1 walk-in: Station 1 (new + joined household, pet, vehicle, assets) → Station 2 → Station 3 → scan check-out/in', async ({
-			browser
-		}) => {
-			test.setTimeout(300_000);
-			await walkInFlow(browser, ON, sessions);
-		});
-
-		test('1.2 pre-register: public site (screen A) → report-in at the desk by search + QR scan (screen B) → Station 2 → Station 3', async ({
-			browser
-		}) => {
-			test.setTimeout(420_000);
-			await preRegisterFlow(browser, ON, sessions);
-		});
-	});
-
-	test.describe('SH001 pre-registration + Station 2 OFF', () => {
-		test.beforeAll(async ({ browser }) => {
-			test.setTimeout(180_000);
-			await applyToggles(browser, OFF, OFF_TARGET);
-		});
-
-		test('1.3 walk-in [switches off]: Station 2 skipped → Station 3 → scan check-out/in', async ({
-			browser
-		}) => {
-			test.setTimeout(300_000);
-			await walkInFlow(browser, OFF, sessions);
-		});
-
-		test('1.4 pre-register [switches off]: public booking refused → central queue (screen A) → claim by search + QR scan (screen B) → Station 3', async ({
-			browser
-		}) => {
-			test.setTimeout(420_000);
-			await preRegisterFlow(browser, OFF, sessions);
-		});
-	});
-});
+);
