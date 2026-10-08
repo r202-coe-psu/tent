@@ -9,6 +9,8 @@
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import { onMount, tick, untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
+	import { replaceState } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import type { ZodIssue } from 'zod';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Alert from '$lib/components/ui/alert/index.js';
@@ -481,10 +483,8 @@
 				}
 				const cleanUrl = new URL(window.location.href);
 				cleanUrl.searchParams.delete('error');
-				window.history.replaceState(
-					{},
-					'',
-					cleanUrl.pathname + (cleanUrl.search ? cleanUrl.search : '')
+				void tick().then(() =>
+					replaceState(resolve((cleanUrl.pathname + cleanUrl.search) as '/'), {})
 				);
 			}
 
@@ -508,11 +508,7 @@
 					.finally(() => {
 						const cleanUrl = new URL(window.location.href);
 						cleanUrl.searchParams.delete('thaid');
-						window.history.replaceState(
-							{},
-							'',
-							cleanUrl.pathname + (cleanUrl.search ? cleanUrl.search : '')
-						);
+						replaceState(resolve((cleanUrl.pathname + cleanUrl.search) as '/'), {});
 					});
 			}
 		}
