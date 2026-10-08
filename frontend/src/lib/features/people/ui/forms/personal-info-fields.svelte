@@ -213,8 +213,8 @@
 </script>
 
 <div class="space-y-4">
-	<!-- Name & Surname (2-column on mobile & desktop) -->
-	<div class="grid grid-cols-2 gap-2 sm:gap-3">
+	<!-- Name & Surname — stack full-width on mobile (M10) -->
+	<div class="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
 		<div class="space-y-1.5">
 			<Label for={fid('first-name')} class="text-xs font-semibold text-foreground">
 				{t.firstNameLabel} <span class="text-destructive">*</span>
@@ -226,7 +226,9 @@
 				autocomplete="given-name"
 				placeholder={showMononymHint ? t.firstNamePlaceholderFull : t.firstNamePlaceholderGiven}
 				aria-invalid={!!(errors?.first_name || errors?.firstName)}
-				class="h-9 {errors?.first_name || errors?.firstName ? errClass : ''}"
+				class="h-11 min-h-11 sm:h-9 sm:min-h-9 {errors?.first_name || errors?.firstName
+					? errClass
+					: ''}"
 			/>
 			{#if errors?.first_name || errors?.firstName}
 				<p class="text-2xs text-destructive">{errors?.first_name ?? errors?.firstName}</p>
@@ -244,7 +246,9 @@
 				autocomplete="family-name"
 				placeholder={showMononymHint ? t.lastNamePlaceholderOptional : t.lastNamePlaceholder}
 				aria-invalid={!!(errors?.last_name || errors?.lastName)}
-				class="h-9 {errors?.last_name || errors?.lastName ? errClass : ''}"
+				class="h-11 min-h-11 sm:h-9 sm:min-h-9 {errors?.last_name || errors?.lastName
+					? errClass
+					: ''}"
 			/>
 			{#if errors?.last_name || errors?.lastName}
 				<p class="text-2xs text-destructive">{errors?.last_name ?? errors?.lastName}</p>
@@ -266,7 +270,7 @@
 			{disabled}
 			placeholder={t.nicknamePlaceholder}
 			aria-invalid={!!errors?.nickname}
-			class="h-9 {errors?.nickname ? errClass : ''}"
+			class="h-11 min-h-11 sm:h-9 sm:min-h-9 {errors?.nickname ? errClass : ''}"
 		/>
 		{#if errors?.nickname}
 			<p class="text-2xs text-destructive">{errors.nickname}</p>
@@ -298,7 +302,7 @@
 				}}
 				{disabled}
 			>
-				<Select.Trigger class="!h-9 w-full rounded-md text-sm">
+				<Select.Trigger class="!h-11 w-full rounded-md text-sm sm:!h-9">
 					{cardTypeOptions.find((o) => o.value === activeCardType)?.label ?? t.cardTypeNationalId}
 				</Select.Trigger>
 				<Select.Content>
@@ -316,7 +320,7 @@
 			{#if isAnonymousCard}
 				<p
 					id={fid('card-number')}
-					class="flex h-9 items-center rounded-md border border-dashed border-border bg-muted/40 px-3 text-sm text-muted-foreground"
+					class="flex h-11 min-h-11 items-center rounded-md border border-dashed border-border bg-muted/40 px-3 text-sm text-muted-foreground sm:h-9 sm:min-h-9"
 				>
 					{t.cardNumberAnonymousHint}
 				</p>
@@ -332,7 +336,11 @@
 						? t.cardNumberPlaceholderNational
 						: t.cardNumberPlaceholderOther}
 					aria-invalid={!!(errors?.cardNumber || errors?.number || errors?.person_id)}
-					class="h-9 {errors?.cardNumber || errors?.number || errors?.person_id ? errClass : ''}"
+					class="h-11 min-h-11 sm:h-9 sm:min-h-9 {errors?.cardNumber ||
+					errors?.number ||
+					errors?.person_id
+						? errClass
+						: ''}"
 				/>
 			{/if}
 			{#if errors?.cardNumber || errors?.number || errors?.person_id}
@@ -343,8 +351,8 @@
 		</div>
 	</div>
 
-	<!-- Birth Year & Age on mobile (2 cols), plus Gender -->
-	<div class="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
+	<!-- Birth Year & Age stack on mobile (M10); Gender full-row ≥44px (M2) -->
+	<div class="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
 		<div class="flex flex-col gap-1.5">
 			<div class="flex min-h-7 items-center justify-between gap-1 sm:gap-2">
 				<Label for={fid('birth-year')} class="truncate text-xs font-semibold text-foreground">
@@ -390,7 +398,7 @@
 				maxlength={4}
 				placeholder={calendar === 'BE' ? t.birthYearPlaceholderBE : t.birthYearPlaceholderCE}
 				aria-invalid={!!birthYearError}
-				class="h-9 {birthYearError ? errClass : ''}"
+				class="h-11 min-h-11 sm:h-9 sm:min-h-9 {birthYearError ? errClass : ''}"
 			/>
 			{#if birthYearError}
 				<p class="text-2xs text-destructive">{birthYearError}</p>
@@ -409,14 +417,14 @@
 				inputmode="numeric"
 				placeholder={t.agePlaceholder}
 				aria-invalid={!!errors?.age}
-				class="h-9 {errors?.age ? errClass : ''}"
+				class="h-11 min-h-11 sm:h-9 sm:min-h-9 {errors?.age ? errClass : ''}"
 			/>
 			{#if errors?.age}
 				<p class="text-2xs text-destructive">{errors.age}</p>
 			{/if}
 		</div>
 
-		<div class="col-span-2 flex flex-col gap-1.5 sm:col-span-1">
+		<div class="flex flex-col gap-1.5">
 			<div class="flex min-h-7 items-center">
 				<Label class="text-xs font-semibold text-foreground" id={fid('gender-label')}>
 					{t.genderLabel} <span class="text-destructive">*</span>
@@ -432,26 +440,26 @@
 				{disabled}
 				aria-labelledby={fid('gender-label')}
 				aria-invalid={!!errors?.gender}
-				class="flex flex-wrap gap-2 sm:gap-3"
+				class="grid grid-cols-2 gap-2"
 			>
 				<label
-					class="flex min-h-9 cursor-pointer items-center gap-2 rounded-md border border-border px-3 text-sm {genderRadioValue ===
+					class="flex min-h-11 w-full cursor-pointer items-center gap-2.5 rounded-md border border-border px-3 py-2 text-sm {genderRadioValue ===
 					'male'
 						? 'border-primary bg-primary/5 font-semibold'
 						: ''} {disabled ? 'pointer-events-none opacity-60' : ''}"
 					for={fid('gender-male')}
 				>
-					<RadioGroup.Item value="male" id={fid('gender-male')} class="size-4" />
+					<RadioGroup.Item value="male" id={fid('gender-male')} class="size-4 shrink-0" />
 					{t.genderMale}
 				</label>
 				<label
-					class="flex min-h-9 cursor-pointer items-center gap-2 rounded-md border border-border px-3 text-sm {genderRadioValue ===
+					class="flex min-h-11 w-full cursor-pointer items-center gap-2.5 rounded-md border border-border px-3 py-2 text-sm {genderRadioValue ===
 					'female'
 						? 'border-primary bg-primary/5 font-semibold'
 						: ''} {disabled ? 'pointer-events-none opacity-60' : ''}"
 					for={fid('gender-female')}
 				>
-					<RadioGroup.Item value="female" id={fid('gender-female')} class="size-4" />
+					<RadioGroup.Item value="female" id={fid('gender-female')} class="size-4 shrink-0" />
 					{t.genderFemale}
 				</label>
 			</RadioGroup.Root>
@@ -475,7 +483,7 @@
 				searchPlaceholder={t.countrySearch}
 				emptyText={t.countryEmpty}
 				{disabled}
-				class="!h-9 rounded-md text-sm {errors?.country ? errClass : ''}"
+				class="!h-11 rounded-md text-sm sm:!h-9 {errors?.country ? errClass : ''}"
 				controlProps={{ id: fid('country'), 'aria-invalid': !!errors?.country }}
 			/>
 			{#if errors?.country}
@@ -496,7 +504,7 @@
 				}}
 				{disabled}
 			>
-				<Select.Trigger class="!h-9 w-full rounded-md text-sm">
+				<Select.Trigger class="!h-11 w-full rounded-md text-sm sm:!h-9">
 					{religionOptions.find((o) => o.value === religionSelectValue)?.label ?? t.religionUnknown}
 				</Select.Trigger>
 				<Select.Content>
@@ -515,7 +523,7 @@
 					maxlength={60}
 					placeholder={t.religionOtherPlaceholder}
 					aria-invalid={!!errors?.religion_other}
-					class="h-9 {errors?.religion_other ? errClass : ''}"
+					class="h-11 min-h-11 sm:h-9 sm:min-h-9 {errors?.religion_other ? errClass : ''}"
 				/>
 				{#if errors?.religion_other}
 					<p class="text-2xs text-destructive">{errors.religion_other}</p>
@@ -545,7 +553,7 @@
 				autocomplete="tel"
 				placeholder={t.phonePlaceholder}
 				aria-invalid={!!errors?.phone}
-				class="h-9 {errors?.phone ? errClass : ''}"
+				class="h-11 min-h-11 sm:h-9 sm:min-h-9 {errors?.phone ? errClass : ''}"
 			/>
 			{#if phoneHelperText}
 				<p class="text-2xs text-muted-foreground">{phoneHelperText}</p>

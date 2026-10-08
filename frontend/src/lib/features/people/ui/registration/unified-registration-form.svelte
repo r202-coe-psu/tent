@@ -7,11 +7,13 @@
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import Search from '@lucide/svelte/icons/search';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
+	import ChevronUp from '@lucide/svelte/icons/chevron-up';
 	import { onMount, tick, untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import type { ZodIssue } from 'zod';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Alert from '$lib/components/ui/alert/index.js';
+	import * as Sheet from '$lib/components/ui/sheet/index.js';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
@@ -228,6 +230,15 @@
 	let activeSection = $state<FormSectionId>('address');
 	let scrollSpyPaused = $state(false);
 	let isVirtualKeyboardOpen = $state(false);
+	/** Mobile-only: summary sheet opened from chip near sticky CTA. */
+	let mobileSummaryOpen = $state(false);
+
+	const summaryPetCount = $derived(
+		(household.pets ?? []).reduce((sum, p) => sum + (Number(p.count) || 1), 0)
+	);
+	const mobileSummaryChipLabel = $derived(
+		`${t.memberLabel} ${members.length} · ${t.sectionPets} ${summaryPetCount}`
+	);
 
 	let petItems = $state<PetCardItem[]>(
 		untrack(() => parseInitialPets(household.pets as PetGroup[]).items)
@@ -1382,30 +1393,76 @@
 			{/if}
 
 			<div class="unified-reg-bottom-chrome {isVirtualKeyboardOpen ? 'max-sm:hidden' : ''}">
-				<div class="flex items-center gap-2">
-					<div class="lg:hidden">
-						<UnifiedRegistrationStickyNav
-							compact={true}
-							sections={formSectionNav}
-							{activeSection}
-							ariaLabel={t.sectionNavAria}
-							onNavigate={(id) => scrollToSection(id as FormSectionId)}
-						/>
-					</div>
-					{#if !readOnly}
-						<div class="min-w-0 flex-1">
-							<UnifiedRegistrationSubmitBar
-								{pending}
-								{submitDisabled}
-								label={effectiveSubmitLabel}
-								submittingLabel={t.submitting}
-								align={submitAlign}
-								sticky={false}
+				<div class="space-y-2">
+					<button
+						type="button"
+						class="touch-target inline-flex h-11 w-full items-center justify-between gap-2 rounded-xl border border-border bg-card px-3 text-left text-xs font-semibold text-foreground shadow-2xs transition-colors hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none lg:hidden"
+						aria-haspopup="dialog"
+						aria-expanded={mobileSummaryOpen}
+						onclick={() => (mobileSummaryOpen = true)}
+					>
+						<span class="inline-flex min-w-0 items-center gap-1.5">
+							<Users class="size-3.5 shrink-0 text-primary" aria-hidden="true" />
+							<span class="truncate tabular-nums">{mobileSummaryChipLabel}</span>
+						</span>
+						<ChevronUp class="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+					</button>
+					<div class="flex items-center gap-2">
+						<div class="lg:hidden">
+							<UnifiedRegistrationStickyNav
+								compact={true}
+								sections={formSectionNav}
+								{activeSection}
+								ariaLabel={t.sectionNavAria}
+								onNavigate={(id) => scrollToSection(id as FormSectionId)}
 							/>
 						</div>
-					{/if}
+						{#if !readOnly}
+							<div class="min-w-0 flex-1">
+								<UnifiedRegistrationSubmitBar
+									{pending}
+									{submitDisabled}
+									label={effectiveSubmitLabel}
+									submittingLabel={t.submitting}
+									align={submitAlign}
+									sticky={false}
+								/>
+							</div>
+						{/if}
+					</div>
 				</div>
 			</div>
+
+			<Sheet.Root bind:open={mobileSummaryOpen}>
+				<Sheet.Content
+					side="bottom"
+					class="flex max-h-[85dvh] flex-col gap-0 overflow-hidden p-0 pb-[env(safe-area-inset-bottom)] lg:hidden"
+				>
+					<Sheet.Header class="sr-only">
+						<Sheet.Title>สรุปข้อมูลการลงทะเบียน</Sheet.Title>
+						<Sheet.Description>{mobileSummaryChipLabel}</Sheet.Description>
+					</Sheet.Header>
+					<div class="min-h-0 flex-1 overflow-y-auto p-3">
+						<UnifiedRegistrationSummaryCard
+							{shelterName}
+							{shelterCode}
+							{household}
+							{members}
+							{showVehiclesAssets}
+							{activeSection}
+							{pending}
+							submitDisabled={submitDisabled || readOnly}
+							submitLabel={effectiveSubmitLabel}
+							submittingLabel={t.submitting}
+							showSubmit={false}
+							onNavigate={(id) => {
+								mobileSummaryOpen = false;
+								scrollToSection(id as FormSectionId);
+							}}
+						/>
+					</div>
+				</Sheet.Content>
+			</Sheet.Root>
 		</div>
 	</div>
 </form>

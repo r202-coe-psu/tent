@@ -38,19 +38,20 @@
 
 	async function syncAllStatus() {
 		const current = getStoredTickets();
-		let removedAny = false;
+		let anyVerified = false;
 		for (const t of current) {
 			try {
 				const res = await checkTicketStatus(t.code);
-				if (res.verified || res.notFound) {
+				// Only drop tickets on verified claim — never on notFound/upstream errors (BUG-01).
+				if (res.verified) {
 					removeStoredTicket(t.code);
-					removedAny = true;
+					anyVerified = true;
 				}
 			} catch {
 				// skip on network/status error
 			}
 		}
-		if (removedAny) {
+		if (anyVerified) {
 			tickets = getStoredTickets();
 			if (selectedTicket && !tickets.some((t) => t.code === selectedTicket?.code)) {
 				selectedTicket = null;
@@ -99,12 +100,6 @@
 				onTicketsChange?.();
 				toast.success(copy.statusVerified);
 			} else if (res.notFound) {
-				removeStoredTicket(code);
-				tickets = getStoredTickets();
-				if (selectedTicket?.code === code) {
-					selectedTicket = null;
-				}
-				onTicketsChange?.();
 				toast.info(copy.statusNotFound);
 			} else {
 				toast.info(copy.statusPending);
@@ -143,27 +138,20 @@
 			<BookingTicketView
 				ticket={selectedTicket}
 				showSuccessHeader={false}
-				onVerified={(code) => handleConfirmVerified(code)}
+				onVerified={(code) => {
+					/* Confirm lives in BookingTicketView; apply removal only */
+					removeStoredTicket(code);
+					tickets = getStoredTickets();
+					selectedTicket = null;
+					onTicketsChange?.();
+					toast.success(copy.verifiedToast);
+				}}
 			/>
 		</div>
-	{:else}
-		<div class="flex items-center justify-between">
-			<div>
-				<h2 class="text-lg font-bold text-foreground">{copy.title}</h2>
-				<p class="text-xs text-muted-foreground">
-					{copy.subtitle}
-				</p>
-			</div>
-			{#if onNewBooking}
-				<Button size="sm" onclick={onNewBooking} class="gap-1.5 font-semibold">
-					<Plus class="size-4" />
-					<span>{copy.newBooking}</span>
-				</Button>
-			{/if}
-		</div>
-
-		{#if tickets.length === 0}
-			<div class="rounded-2xl border border-dashed border-border bg-card p-10 text-center">
+	{:else if tickets.length === 0}
+		<div class="flex flex-col gap-4">
+			<h2 class="text-lg font-bold text-foreground">{copy.title}</h2>
+			<div class="rounded-2xl border border-dashed border-border bg-card px-4 py-8 text-center">
 				<div
 					class="mx-auto mb-3 flex size-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground"
 				>
@@ -175,14 +163,30 @@
 				</p>
 				{#if onNewBooking}
 					<div class="mt-5">
-						<Button onclick={onNewBooking} class="font-semibold">
+						<Button onclick={onNewBooking} class="min-h-11 font-semibold">
 							<Plus class="mr-1.5 size-4" />
 							<span>{copy.startBooking}</span>
 						</Button>
 					</div>
 				{/if}
 			</div>
-		{:else}
+		</div>
+	{:else}
+		<div class="space-y-4">
+			<div class="flex items-center justify-between gap-3">
+				<div>
+					<h2 class="text-lg font-bold text-foreground">{copy.title}</h2>
+					<p class="text-xs text-muted-foreground">
+						{copy.subtitle}
+					</p>
+				</div>
+				{#if onNewBooking}
+					<Button size="sm" onclick={onNewBooking} class="gap-1.5 font-semibold">
+						<Plus class="size-4" />
+						<span>{copy.newBooking}</span>
+					</Button>
+				{/if}
+			</div>
 			<div class="grid gap-3">
 				{#each tickets as t (t.code)}
 					<div
@@ -270,6 +274,6 @@
 					</div>
 				{/each}
 			</div>
-		{/if}
+		</div>
 	{/if}
 </div>

@@ -55,11 +55,10 @@
 		for (const t of current) {
 			try {
 				const res = await checkTicketStatus(t.code);
+				// Only drop tickets on verified claim — never on notFound/upstream errors (BUG-01).
 				if (res.verified) {
 					removeStoredTicket(t.code);
 					anyVerified = true;
-				} else if (res.notFound) {
-					removeStoredTicket(t.code);
 				}
 			} catch {
 				// skip on failure
@@ -171,14 +170,16 @@
 		</div>
 	</div>
 
-	<!-- Page Heading -->
+	<!-- Page Heading — hide form subheading on history tab (A5) -->
 	<div class="mb-8">
 		<h1 class="text-2xl font-black tracking-tight text-foreground md:text-3xl">
 			{t.heading}
 		</h1>
-		<p class="mt-2 text-sm text-muted-foreground">
-			{t.subheading}
-		</p>
+		{#if activeTab !== 'history'}
+			<p class="mt-2 text-sm text-muted-foreground">
+				{t.subheading}
+			</p>
+		{/if}
 	</div>
 
 	<!-- Main Content Area -->

@@ -423,7 +423,7 @@
 								id="unassigned-disclaimer-ack"
 								checked={disclaimerAcknowledged}
 								onCheckedChange={(v) => (disclaimerAcknowledged = v === true)}
-								class="mt-0.5 size-4 shrink-0"
+								class="mt-0.5 size-5 shrink-0"
 							/>
 							<span class="text-xs leading-relaxed font-semibold select-none sm:text-sm">
 								{t.unassignedDisclaimerAck}
@@ -457,7 +457,7 @@
 								id="disclaimer-ack"
 								checked={disclaimerAcknowledged}
 								onCheckedChange={(v) => (disclaimerAcknowledged = v === true)}
-								class="mt-0.5 size-4 shrink-0"
+								class="mt-0.5 size-5 shrink-0"
 							/>
 							<span class="text-xs leading-relaxed font-semibold select-none sm:text-sm">
 								{t.shelterSafetyAck}

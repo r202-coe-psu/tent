@@ -89,14 +89,28 @@ async function handleStatusCheck(code: string, clientIp: string, fetchFn: typeof
 				{ status: 200, headers: noStore }
 			);
 		}
+		// Real miss only — do not treat auth/server failures as notFound (BUG-01).
+		if (res.status === 404) {
+			return json(
+				{ success: true, verified: false, notFound: true, error: 'BOOKING_NOT_FOUND' },
+				{ status: 200, headers: noStore }
+			);
+		}
+		return json(
+			{
+				success: false,
+				verified: false,
+				error: 'UPSTREAM_ERROR',
+				upstreamStatus: res.status
+			},
+			{ status: 502, headers: noStore }
+		);
 	} catch {
-		// FastAPI fallback
+		return json(
+			{ success: false, verified: false, error: 'UPSTREAM_UNAVAILABLE' },
+			{ status: 502, headers: noStore }
+		);
 	}
-
-	return json(
-		{ success: true, verified: false, notFound: true, error: 'BOOKING_NOT_FOUND' },
-		{ status: 200, headers: noStore }
-	);
 }
 
 export const POST: RequestHandler = async ({ request, getClientAddress, fetch }) => {

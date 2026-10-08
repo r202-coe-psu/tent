@@ -220,7 +220,9 @@
 	let isLocating = $state(false);
 
 	const selectTriggerClass =
-		"flex !h-9 w-full items-start rounded-md border border-input bg-white px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground dark:bg-input/30 [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4";
+		"flex !h-11 w-full items-start rounded-md border border-input bg-white px-3 !pt-2.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground sm:!h-9 sm:!pt-1.5 dark:bg-input/30 [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4";
+
+	const touchInputClass = 'min-h-11 h-11 sm:h-9 sm:min-h-9';
 
 	// Hide + clear house number when homeless (#249 Q5) — field must not linger in form state.
 	$effect(() => {
@@ -355,7 +357,7 @@
 				bind:value={residence_landmark}
 				{disabled}
 				placeholder={landmarkPlaceholder}
-				class="h-9"
+				class={touchInputClass}
 			/>
 			{#if errors?.residence_landmark}
 				<p class="text-2xs text-destructive">{errors.residence_landmark}</p>
@@ -377,7 +379,7 @@
 					{disabled}
 					placeholder={t.dormNamePlaceholder}
 					aria-invalid={!!errors?.dorm_name}
-					class="h-9"
+					class={touchInputClass}
 				/>
 				{#if errors?.dorm_name}
 					<p class="text-2xs text-destructive">{errors.dorm_name}</p>
@@ -393,7 +395,7 @@
 					oninput={dormInput((v) => (dorm_building = v))}
 					{disabled}
 					placeholder={t.dormBuildingPlaceholder}
-					class="h-9"
+					class={touchInputClass}
 				/>
 			</div>
 			<div class="space-y-1.5">
@@ -406,7 +408,7 @@
 					oninput={dormInput((v) => (dorm_floor = v))}
 					{disabled}
 					placeholder={t.dormFloorPlaceholder}
-					class="h-9"
+					class={touchInputClass}
 				/>
 			</div>
 			<div class="space-y-1.5">
@@ -420,7 +422,7 @@
 					{disabled}
 					placeholder={t.dormRoomPlaceholder}
 					aria-invalid={!!errors?.dorm_room}
-					class="h-9"
+					class={touchInputClass}
 				/>
 				{#if errors?.dorm_room}
 					<p class="text-2xs text-destructive">{errors.dorm_room}</p>
@@ -442,7 +444,7 @@
 					bind:value={address_no}
 					{disabled}
 					placeholder={addressNoPlaceholder}
-					class="h-9"
+					class={touchInputClass}
 				/>
 				{#if errors?.address_no}
 					<p class="text-2xs text-destructive">{errors.address_no}</p>
@@ -459,7 +461,7 @@
 				bind:value={village_no}
 				{disabled}
 				placeholder={t.villageNoPlaceholder}
-				class="h-9"
+				class={touchInputClass}
 			/>
 			{#if errors?.village_no}
 				<p class="text-2xs text-destructive">{errors.village_no}</p>
@@ -517,7 +519,7 @@
 					emptyText={provincesQuery.isError ? t.provinceLoadFail : t.provinceEmpty}
 					loading={provincesQuery.isLoading}
 					{disabled}
-					class="!h-9 rounded-md text-sm"
+					class="!h-11 rounded-md text-sm sm:!h-9"
 					controlProps={{ id: 'province' }}
 				/>
 				{#if errors?.province}
@@ -540,7 +542,7 @@
 					emptyText={districtsQuery.isError ? t.districtLoadFail : t.districtEmpty}
 					loading={districtsQuery.isLoading}
 					disabled={disabled || !province}
-					class="!h-9 rounded-md text-sm"
+					class="!h-11 rounded-md text-sm sm:!h-9"
 					controlProps={{ id: 'district' }}
 				/>
 				{#if errors?.district}
@@ -563,7 +565,7 @@
 					emptyText={subdistrictsQuery.isError ? t.subdistrictLoadFail : t.subdistrictEmpty}
 					loading={subdistrictsQuery.isLoading}
 					disabled={disabled || !district}
-					class="!h-9 rounded-md text-sm"
+					class="!h-11 rounded-md text-sm sm:!h-9"
 					controlProps={{ id: 'subdistrict' }}
 				/>
 				{#if errors?.subdistrict}
@@ -581,8 +583,10 @@
 					id="postal_code"
 					bind:value={postal_code}
 					disabled
+					inputmode="numeric"
+					autocomplete="postal-code"
 					placeholder={!subdistrict ? t.postalNeedsSubdistrict : t.postalFilling}
-					class="h-9 bg-muted/50 text-sm"
+					class="{touchInputClass} bg-muted/50 text-sm"
 				/>
 				{#if errors?.postal_code}
 					<p class="text-2xs text-destructive">{errors.postal_code}</p>

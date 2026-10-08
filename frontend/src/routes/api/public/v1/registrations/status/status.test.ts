@@ -135,4 +135,51 @@ describe('POST /api/public/v1/registrations/status', () => {
 		expect(body.verified).toBe(false);
 		expect(body.error).toBe('BOOKING_NOT_FOUND');
 	});
+
+	it('does not map upstream 401 to notFound (BUG-01)', async () => {
+		vi.mocked(adminRaw).mockResolvedValue({ status: 404, data: null });
+		const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 401 });
+		const event = postEvent({ code: ULID });
+		event.fetch = fetchMock;
+
+		const res = await POST(event);
+		expect(res.status).toBe(502);
+		const body = await res.json();
+		expect(body.success).toBe(false);
+		expect(body.verified).toBe(false);
+		expect(body.notFound).toBeUndefined();
+		expect(body.error).toBe('UPSTREAM_ERROR');
+		expect(body.upstreamStatus).toBe(401);
+	});
+
+	it('does not map upstream 5xx to notFound (BUG-01)', async () => {
+		vi.mocked(adminRaw).mockResolvedValue({ status: 404, data: null });
+		const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 503 });
+		const event = postEvent({ code: ULID });
+		event.fetch = fetchMock;
+
+		const res = await POST(event);
+		expect(res.status).toBe(502);
+		const body = await res.json();
+		expect(body.success).toBe(false);
+		expect(body.verified).toBe(false);
+		expect(body.notFound).toBeUndefined();
+		expect(body.error).toBe('UPSTREAM_ERROR');
+		expect(body.upstreamStatus).toBe(503);
+	});
+
+	it('returns 502 without notFound when FastAPI fetch throws', async () => {
+		vi.mocked(adminRaw).mockResolvedValue({ status: 404, data: null });
+		const fetchMock = vi.fn().mockRejectedValue(new Error('network down'));
+		const event = postEvent({ code: ULID });
+		event.fetch = fetchMock;
+
+		const res = await POST(event);
+		expect(res.status).toBe(502);
+		const body = await res.json();
+		expect(body.success).toBe(false);
+		expect(body.verified).toBe(false);
+		expect(body.notFound).toBeUndefined();
+		expect(body.error).toBe('UPSTREAM_UNAVAILABLE');
+	});
 });
