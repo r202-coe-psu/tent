@@ -1,60 +1,59 @@
 ---
-title: "Task Breakdown — Module E — Shelter Reports"
+title: "Task Breakdown — Module E — Shelter Incident Log"
 status: active
 created: 2026-06-05
-updated: 2026-07-23
+updated: 2026-10-08
 module: E
 note: >
-  CR-040 — reframe จาก Security check-in/out → Shelter Report
-  (หน่วยหลัก = report · kind = grievance | incident). Doc type `shelter_report`.
-  ดู docs/changes/CR-040-shelter-case-grievance-reframe.md +
-  docs/features/shelter-report-flow.md
+  CR-155 — Shelter Incident Log (`shelter_incident`) แทน Shelter Report (`shelter_report`, CR-040)
+  ทั้งหมด รวมเรื่องร้องทุกข์ · staff ทุกคนเปิดบันทึกได้ · ไม่มี escalate → referral ในรอบนี้.
+  ดู docs/changes/CR-155-shelter-incident-log.md + docs/data/schema.md §2.10
 ---
 
-# Module E — Shelter Reports
+# Module E — Shelter Incident Log
 
-> report tracking (`shelter_report`) · `kind`: grievance | incident — ไม่ใช่ security gate / occupancy monitoring
+> สมุดบันทึกเหตุการณ์ประจำวัน (`shelter_incident`) — ไม่ใช่ security gate / occupancy monitoring
 
 - **Team owner:** Team B — พีค, โฮป, ปิ๊ก (ดู [Squad Roster](../prd/squad-roster.md))
 - **Phase:** R2, R3
 - **Design input (บริษัท):** P-01 (ส่งมอบแล้ว), P-02 (กำหนดส่งก่อนกรกฎาคม 2026)
 - **Target ส่งมอบ:** ภายในสิงหาคม 2026
-- **Spec:** [CR-040](../changes/CR-040-shelter-case-grievance-reframe.md) · [feature flow](../features/shelter-report-flow.md)
+- **Spec:** [CR-155](../changes/CR-155-shelter-incident-log.md) (แทน [CR-040](../changes/CR-040-shelter-case-grievance-reframe.md)) · [schema.md §2.10](../data/schema.md)
 
 ## Features / Tasks
 
 | ID | Status | Feature / Task | FR | Phase | Stage | Scope | Raw MD | AI× | Adj MD | Depends |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| T-19 | ⬜ | Groundwork: shelter_report schema + report↔referral handoff | prep R3 | R2 | prod | ส.ค. | 6 | ÷1.25 | 5 | T-02 |
-| T-33 | ⬜ | Shelter report intake + list/detail + escalate (atomic) | FR-47 | R3 | prod | ส.ค. | 6 | ÷1.6 | 4 | T-19 |
+| T-19 | ⬜ | Groundwork: `shelter_incident` schema + VDU rules + staff directory | prep R3 | R2 | prod | ส.ค. | 6 | ÷1.25 | 5 | T-02 |
+| T-33 | ⬜ | Shelter incident log: list ส่งเวร / create / detail + timeline actions | FR-47 | R3 | prod | ส.ค. | 6 | ÷1.6 | 4 | T-19 |
 |  |  | **รวมทั้งโมดูล** |  |  |  |  | **12** |  | **9** |  |
 
 ## Task Details
 
 > DoD ทุก prod task ยึด [Standard DoD](_index.md#standard-dod): **UI + data/write path + validation + permission + test + demo ของ slice** — รายการด้านล่างคือเกณฑ์เฉพาะของ task นั้นเพิ่มจากมาตรฐานกลาง
 
-### T-19 — Groundwork: shelter_report schema + report↔referral handoff (prep R3)
+### T-19 — Groundwork: `shelter_incident` schema + VDU rules + staff directory (prep R3)
 
-**Description:** งานเตรียม R3: ลงทะเบียน doc type `shelter_report` (state machine ตาม CR-040), field หลัก `kind` (grievance|incident), category/severity whitelist, forward-only status, `pet_refs` shape, mutate allow-list (`SHELTER_REPORT_MUTATE_ROLES` = SM ใน R3 + SA override), และสัญญา **escalate atomic → referral** ร่วม Module F (T-34) — ไม่ใช่ feature ที่ end-user ใช้ครบ
-
-**Definition of Done:**
-- Schema `shelter_report` (field + `kind` + transitions + indexes) ผ่าน review Lead และสอดคล้อง T-02 / `schema.md` หลัง CR-040 approve
-- สัญญา escalate: สร้าง `referral` สำเร็จก่อนตั้ง `status=escalated` + `escalation.referral_id` (ห้าม escalated ไร้ referral_id); recovery path เมื่อ partial fail ระบุชัด
-- Mutate permission = allow-list คงที่เดียว (ขยายบทบาทภายหลังได้โดยไม่เปลี่ยน schema) — R3 default = `shelter_manager` (+ `system_admin` override)
-- ข้อสรุปเพียงพอให้ T-33 / T-34 เริ่ม build โดยไม่ redesign
-- **นอกขอบเขต T-19:** UI list/create, occupancy/monitoring, check-in/out
-
-### T-33 — Shelter report intake + list/detail + escalate (FR-47)
-
-**Description:** สร้าง feature `shelter-reports` + route `/reports`: SM เปิดรายงาน (`kind` = grievance หรือ incident) ติดตามสถานะและ timeline มอบหมาย และ escalate ไป referral แบบ atomic — อ้างอิงคน/สัตว์เป็น related refs จาก People (T-06/T-07) **ไม่ทำ** security gate check-in/out และ **ไม่ทำ** หน้า monitoring “ใครอยู่ในศูนย์ / ออกแล้วยังไม่กลับ”
+**Description:** ลงทะเบียน doc type `shelter_incident` (schema.md §2.10, CR-155) — domain schema/state machine/policy, กฎ `validate_doc_update` (create · append timeline ทีละหนึ่ง entry · สิทธิ์ owner/staff/SM · ห้ามลบ) และ endpoint `GET /api/v1/shelters/{code}/staff` สำหรับเลือกผู้รับช่วง
 
 **Definition of Done:**
-- CRUD/lifecycle ตาม [feature flow SR-\*](../features/shelter-report-flow.md): สร้าง grievance + incident, filter status/severity/`kind`, **default sort = severity แล้ว occurred_at**, detail + append `actions[]`, transition forward-only
-- Mutate เฉพาะ role ใน allow-list (R3: SM) ใน shelter scope; SA override; REG/KS/WS เข้าไม่ได้จนกว่าจะขยาย allow-list
-- `pet_refs` = `{ household_id, pet_index }` validate กับ household; `evacuee_ids` จาก people barrel
-- Escalate (UI confirm) → สร้าง referral atomic → รายงาน `escalated` มี `referral_id` (SR-D8)
-- **ห้าม** เขียน `movement` / อัปเดต occupancy จาก Module E; **ไม่มี** UI present/overdue roster
-- Demo: J1 (grievance → resolved) + J3 (escalate) เมื่อ referral พร้อม; unit test transition / whitelist / pet_ref / allow-list helper / `kind` required
+- Domain (Zod schema, transitions, policy) กับ VDU บังคับกฎชุดเดียวกัน (IL-D / IL-S / IL-P ใน CR-155) — มี test ทั้งสองฝั่ง
+- VDU reject การลบ `shelter_incident` ทุก role รวม SA
+- Staff directory คืนเฉพาะ staff ที่ active มี capability ในศูนย์ และไม่ใช่บัญชีอาสาสมัคร (IL-P5)
+- ขั้น deploy: `pnpm redeploy:access --write --confirm` ทุกศูนย์ที่ provision แล้ว
+- **นอกขอบเขต T-19:** UI, escalate → referral (D5)
+
+### T-33 — Shelter incident log UI (FR-47)
+
+**Description:** feature `incidents` + route `/back-office/incidents` (`/new`, `/{id}`): staff ทุกคนในศูนย์เปิดบันทึกและเป็นเจ้าของเคส · เจ้าของเคส/SM เปลี่ยนสถานะ ส่งต่อ ระบุคู่กรณี ปิดเคส · SM ยกเลิก · ทุก action กรอกเหตุผลลง timeline — **ไม่ทำ** security gate check-in/out และหน้า monitoring occupancy
+
+**Definition of Done:**
+- List: default "ยังไม่ปิด" (ส่งเวร) · filter status/severity/category/"เฉพาะเคสของฉัน" · ค้นหา `title`/`incident_no`/จุดเกิดเหตุ · sort severity แล้ว `occurred_at` (IL-U1)
+- Create: ไม่บังคับผู้เข้าพัก · complainant/respondent แยกฝั่ง · respondent `unknown` ได้ (IL-U2)
+- Detail: timeline ใหม่→เก่า · แสดงเฉพาะปุ่มที่ actor มีสิทธิ์ · ทุก action เปิด dialog บังคับเหตุผล (IL-U3)
+- เมนู sidebar หมวด 3 + ทางเข้าสำหรับ staff ทุก role (IL-U4)
+- **ห้าม** เขียน `movement` / อัปเดต occupancy จาก Module E
+- Acceptance ตาม CR-155 ผ่านด้วยบัญชี staff จริง (ไม่ใช่ CouchDB `_admin`)
 
 ## Effort by phase (Adj MD)
 
@@ -69,6 +68,4 @@ note: >
 **Cross-module dependency (ขึ้นกับโมดูลอื่น):**
 
 - `T-02` (Data-model expansion) — module **Platform/Core**
-- `T-06` / people movement — อ่านผู้เกี่ยวข้องเท่านั้น (ไม่เขียนจาก Module E)
-- `T-07` Pet/asset — `pet_refs` อ้าง household pets
-- `T-34` Referral & hand-off — ปลายทาง escalate (atomic contract จาก T-19)
+- `T-06` / people — ค้นหาผู้เข้าพักสำหรับ complainant/respondent (อ่านอย่างเดียวผ่าน barrel)

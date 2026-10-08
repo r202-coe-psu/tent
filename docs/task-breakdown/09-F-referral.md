@@ -2,7 +2,7 @@
 title: "Task Breakdown — Module F — Referral"
 status: active
 created: 2026-06-05
-updated: 2026-07-24 # CR-045 — destination-gated capacity + single-evacuee DoD wording
+updated: 2026-10-08 # CR-155 — drop report↔referral dependency
 module: F
 note: decision-synced 2026-06-15 — task details and DoD maintained directly in Markdown
 ---
@@ -49,4 +49,4 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 
 **Cross-module dependency (ขึ้นกับโมดูลอื่น):**
 
-- `T-19` (Groundwork: shelter_report schema + report↔referral handoff) — module **Module E — Shelter Reports** (CR-040)
+- ~~`T-19` (Groundwork: shelter_report schema + report↔referral handoff)~~ — CR-155 ตัด escalate → referral ออก (D5); Module E ไม่สร้าง referral ในรอบนี้

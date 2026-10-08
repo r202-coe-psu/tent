@@ -2,7 +2,7 @@
 title: Smart Shelter — Data Model (CouchDB remote-first) v3
 status: draft for review
 created: 2026-06-11
-updated: 2026-08-26
+updated: 2026-10-08 # CR-155 — shelter_incident replaces shelter_report
 note: ออกแบบใหม่ทั้งหมด — ไม่สืบทอดจาก docs/data v2.0 (retired 2026-06-11); decision sync 2026-06-15 เลือก MongoDB projection สำหรับ public tier และ EOC read-model
 ---
 
@@ -132,7 +132,7 @@ device app  ⇄ WAN ⇄  central (CouchDB)
 | `job_application` | state machine | ใบสมัครงานอาสา (`pending_review→confirmed|rejected|cancelled`, tracking_token) — v2 CR-041 + CR-094 |
 | `shift_assignment` | mutable (LWW) | ตารางเวร + duty_window + เช็คอิน/เช็คเอาต์หน้างาน (QR หรือ manual override) + dispatch — v3 CR-094, บังคับ Time-Bound Write Access ที่ CouchDB (role grant ตามกะ) |
 | `volunteer_transfer` | state machine | คำขอโอนย้ายอาสาข้ามศูนย์ (`pending→accepted|rejected`) — doc ใหม่ CR-094 §3.5, accepted แล้วอัปเดต `volunteer.current_shelter_code` |
-| `shelter_report` | state machine | รายงานในศูนย์ (`kind`: grievance \| incident) — [CR-040](../changes/CR-040-shelter-case-grievance-reframe.md) |
+| `shelter_incident` | state machine (ห้ามลบ) | บันทึกเหตุการณ์ประจำวันในศูนย์ — staff ทุกคนเปิดได้ · timeline append-only · แทน `shelter_report` — [CR-155](../changes/CR-155-shelter-incident-log.md) |
 | `referral` | state machine | ส่งต่อหน่วยงานนอก/ข้ามศูนย์: `draft→sent→accepted|rejected→closed` (จัดเก็บที่ `central_ops` — ดู schema.md §5.4) |
 | `audit` | **append-only** | การกระทำสำคัญ (override duplicate-hint, แก้ retroactive, export, ลบ) |
 

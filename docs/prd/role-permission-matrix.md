@@ -2,7 +2,7 @@
 title: "Full-System Role Permission Matrix (R2-R4 & V10)"
 status: approved
 created: 2026-06-04
-updated: 2026-09-01 # CR-093 (Compound Roles) & CR-104 (Volunteer Backoffice, 10-Role Taxonomy, Health Policy)
+updated: 2026-10-08 # CR-155 — shelter_incident replaces shelter_report
 closes: K-12 (A1 RBAC phase-blocker)
 affects:
   - docs/data/schema.md §6 _users
@@ -87,7 +87,7 @@ affects:
 | **Inventory & Supply** | รับของบริจาค, ตัดจ่ายพัสดุ, สต็อก | ✓ | scope | — | — | — | — | scope | — | — | — |
 | **Volunteer Job Board** | สร้างประกาศภารกิจงานอาสา, จัดกะ | ✓ | scope | — | — | — | — | — | scope | — | — |
 | **Volunteer Check-in** | รับรายงานตัวอาสาหน้างาน (POS/Kiosk) | ✓ | scope | scope | — | — | — | — | scope | — | — |
-| **Security Incidents** | บันทึกเหตุการณ์ความไม่ปลอดภัย | ✓ | scope | — | — | — | — | — | — | scope | — |
+| **Shelter Incident Log** ([CR-155](../changes/CR-155-shelter-incident-log.md)) | เปิดบันทึก + เพิ่มบันทึกสังเกตการณ์ (ทุก staff) · เปลี่ยนสถานะ/ส่งต่อ/ปิด = เจ้าของเคสหรือ SM · ยกเลิก = SM · ลบไม่ได้ทุก role | ✓ | scope | scope | scope | scope | scope | scope | scope | scope | scope |
 | **Zoning & Facilities** | จัดการโซน, เต็นท์, ทรัพย์สินอาคาร | ✓ | scope | — | — | — | — | — | — | — | scope |
 | **User Management** | สร้าง/แก้ไขผู้ใช้ประจำศูนย์ตน | ✓ | scope | — | — | — | — | — | — | — | — |
 

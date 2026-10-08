@@ -2,7 +2,7 @@
 title: Smart Shelter — Database ER Diagram v3
 status: draft for review
 created: 2026-06-17
-updated: 2026-09-18
+updated: 2026-10-08 # CR-155 — shelter_incident replaces shelter_report
 source: docs/data/schema.md
 ---
 
@@ -47,9 +47,7 @@ erDiagram
     EVACUEE ||--o{ MOVEMENT : "evacuee_id"
     EVACUEE ||--o{ SCREENING : "evacuee_id"
     EVACUEE ||--o{ REFERRAL : "evacuee_id"
-    EVACUEE }o--o{ SHELTER_REPORT : "evacuee_ids"
-    HOUSEHOLD }o--o{ SHELTER_REPORT : "pet_refs"
-    SHELTER_REPORT ||--o| REFERRAL : "escalation"
+    EVACUEE }o--o{ SHELTER_INCIDENT : "complainant / respondent"
 
     ITEM_MASTER ||--o{ STOCK_LEDGER : "item_id"
     ITEM_MASTER ||--o{ STOCK_TRANSFER_ITEM : "item_id"
@@ -426,23 +424,22 @@ erDiagram
         datetime decided_at "nullable"
     }
 
-    SHELTER_REPORT {
-        string _id PK "shelter_report:ulid"
-        enum kind "grievance incident"
-        enum category "theft violence fire intrusion lost_person pet_related facility food_service staff_conduct noise privacy other"
-        enum severity "info warning critical"
-        enum status "open in_progress resolved closed escalated"
-        string subject "req"
-        string description "req"
-        string zone "nullable"
-        json reporter "source evacuee_id display_name contact"
-        json evacuee_ids "evacuee id array"
-        json pet_refs "household_id pet_index"
-        string assignee_user_id FK "nullable _users name"
-        json actions "at by note array"
-        json escalation "referral_id reason nullable"
+    SHELTER_INCIDENT {
+        string _id PK "shelter_incident:ulid"
+        string incident_no "INC-YYYYMMDD-NNN"
+        string title "req max 120 immutable"
+        string location_detail "req"
+        enum category "harassment_violence theft_property_damage substance_rule_violation fraud_resource_abuse medical_mental_health dispute other"
+        enum severity "low medium high critical"
         datetime occurred_at "req"
-        datetime closed_at "nullable"
+        string reported_by FK "_users name"
+        string assigned_to FK "_users name"
+        string description "req"
+        json attachments "image id array"
+        enum current_status "reported action_in_progress resolved closed cancelled"
+        json complainant "type evacuee_id name_or_detail"
+        json respondent "status evacuee_id name_or_detail unknown_description"
+        json timeline "timestamp actor_id type details from to array"
     }
 
     REFERRAL {
@@ -485,9 +482,7 @@ erDiagram
     JOB ||--o{ JOB_APPLICATION : "job_id"
     JOB_APPLICATION |o--o| VOLUNTEER : "volunteer_id nullable"
     VOLUNTEER ||--o{ VOLUNTEER_TRANSFER : "requested transfer"
-    EVACUEE }o--o{ SHELTER_REPORT : "evacuee_ids"
-    HOUSEHOLD }o--o{ SHELTER_REPORT : "pet_refs"
-    SHELTER_REPORT ||--o| REFERRAL : "escalation"
+    EVACUEE }o--o{ SHELTER_INCIDENT : "complainant / respondent"
     EVACUEE ||--o{ REFERRAL : "referrals"
     AUDIT }o--|| DOC_TARGET : "audits target"
 ```
