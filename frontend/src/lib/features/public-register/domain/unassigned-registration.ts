@@ -189,7 +189,7 @@ export type UnassignedRegistrationErrorCode =
 export function unassignedRegistrationErrorMessage(code: string | undefined): string {
 	switch (code) {
 		case 'DUPLICATE_OPEN_IDENTITY':
-			return 'มีผู้ลงทะเบียนด้วยบัตรหรือเบอร์นี้อยู่แล้วในคิวกลาง';
+			return 'เลขบัตรประชาชน หรือ เบอร์โทรศัพท์นี้ลงทะเบียนเรียบร้อยแล้ว';
 		case 'INVALID_ANONYMOUS_ID':
 			return 'รหัสนิรนามไม่ถูกต้อง';
 		case 'INVALID_PHOTO_REF':
