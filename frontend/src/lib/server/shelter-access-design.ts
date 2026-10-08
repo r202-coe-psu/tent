@@ -299,7 +299,9 @@ export function buildValidateDocUpdate(code: string): string {
     var protectedCoordinationDelete = oldDoc && [
       'distribution_issue_idempotency', 'distribution_issue_capacity', 'distribution_one_time_guard', 'distribution_issue_gate'
     ].indexOf(oldDoc.type) !== -1;
-    if (oldDoc && (oldDoc.type === 'distribution_log' || oldDoc.type === 'bulk_return_claim' || oldDoc.type === 'bulk_return_pool' || oldDoc.type === 'loan_return_reservation')) {
+    // Incident Log is an occurrence book — records are closed or cancelled, never deleted.
+    if (oldDoc && (oldDoc.type === 'distribution_log' || oldDoc.type === 'bulk_return_claim' || oldDoc.type === 'bulk_return_pool' || oldDoc.type === 'loan_return_reservation' ||
+        oldDoc.type === 'shelter_incident')) {
       throw { forbidden: 'Cannot delete ' + oldDoc.type + ' documents' };
     }
     if (wasAppendOnly || protectedCoordinationDelete || (oldDoc && oldDoc.type === 'kitchen_requisition')) {
@@ -369,7 +371,8 @@ export function buildValidateDocUpdate(code: string): string {
     'daily_sop_assessment',
     'shelter_readiness_assessment',
     'requisition_ticket', 'distribution_log', 'bulk_return_pool', 'bulk_return_claim', 'loan_return_reservation',
-    'meal_service_receipt'
+    'meal_service_receipt',
+    'shelter_incident'
   ];
   if (allowed.indexOf(newDoc.type) === -1) {
     throw { forbidden: 'doc type not allowed yet: ' + newDoc.type };
@@ -381,6 +384,136 @@ export function buildValidateDocUpdate(code: string): string {
   if (newDoc.type === 'kitchen_requisition' && oldDoc) {
     if (oldDoc.status === 'approved' || oldDoc.status === 'rejected') {
       throw { forbidden: 'Cannot update finalized kitchen_requisition documents' };
+    }
+  }
+  // Shelter Incident Log (CR-155, schema.md §2.10): any shelter staff opens a record and
+  // becomes owner; each update appends exactly one timeline entry by the caller. Owner or
+  // manager changes status / hands over / identifies the respondent; anyone in the shelter may
+  // add a note; cancel is manager-only; closed/cancelled are final and records are never deleted.
+  if (newDoc.type === 'shelter_incident') {
+    var incStatuses = ['reported', 'action_in_progress', 'resolved', 'closed', 'cancelled'];
+    var incTransitions = {
+      reported: ['action_in_progress', 'cancelled'],
+      action_in_progress: ['resolved', 'cancelled'],
+      resolved: ['closed', 'action_in_progress'],
+      closed: [],
+      cancelled: []
+    };
+    var incManager = isRole('shelter_manager');
+    var incStaff = userCtx.roles.indexOf('system_admin') !== -1 ||
+      userCtx.roles.indexOf('shelter:${code}') !== -1;
+    if (!incStaff) {
+      throw { forbidden: 'Only staff of this shelter can write shelter_incident' };
+    }
+    if (!/^shelter_incident:[0-9A-HJKMNP-TV-Z]{26}$/.test(newDoc._id)) {
+      throw { forbidden: 'shelter_incident id must be shelter_incident:{ulid}' };
+    }
+    if (newDoc.schema_v !== 1) {
+      throw { forbidden: 'shelter_incident schema_v must be 1' };
+    }
+    if (incStatuses.indexOf(newDoc.current_status) === -1) {
+      throw { forbidden: 'Invalid shelter_incident current_status' };
+    }
+    if (typeof newDoc.assigned_to !== 'string' || !newDoc.assigned_to) {
+      throw { forbidden: 'shelter_incident assigned_to is required' };
+    }
+    if (!Array.isArray(newDoc.timeline)) {
+      throw { forbidden: 'shelter_incident timeline must be an array' };
+    }
+    if (!oldDoc) {
+      if (newDoc.reported_by !== userCtx.name || newDoc.assigned_to !== userCtx.name ||
+          newDoc.created_by !== userCtx.name) {
+        throw { forbidden: 'New shelter_incident must be reported by and assigned to its creator' };
+      }
+      if (newDoc.current_status !== 'reported' || newDoc.timeline.length !== 0) {
+        throw { forbidden: 'New shelter_incident must start as reported with an empty timeline' };
+      }
+      if (typeof newDoc.title !== 'string' || !newDoc.title.trim() || newDoc.title.length > 120) {
+        throw { forbidden: 'shelter_incident title is required (1-120 characters)' };
+      }
+    } else {
+      if (oldDoc.current_status === 'closed' || oldDoc.current_status === 'cancelled') {
+        throw { forbidden: 'Closed or cancelled shelter_incident cannot be modified' };
+      }
+      var incFixed = ['incident_no', 'title', 'location_detail', 'category', 'severity', 'occurred_at',
+        'reported_by', 'description', 'attachments', 'complainant', 'created_at', 'created_by'];
+      for (var incFixedIndex = 0; incFixedIndex < incFixed.length; incFixedIndex++) {
+        var incField = incFixed[incFixedIndex];
+        if (JSON.stringify(newDoc[incField]) !== JSON.stringify(oldDoc[incField])) {
+          throw { forbidden: 'shelter_incident ' + incField + ' is immutable' };
+        }
+      }
+      var oldTimeline = oldDoc.timeline || [];
+      if (newDoc.timeline.length !== oldTimeline.length + 1 ||
+          JSON.stringify(newDoc.timeline.slice(0, oldTimeline.length)) !== JSON.stringify(oldTimeline)) {
+        throw { forbidden: 'shelter_incident update must append exactly one timeline entry' };
+      }
+      var incEntry = newDoc.timeline[newDoc.timeline.length - 1] || {};
+      if (incEntry.actor_id !== userCtx.name) {
+        throw { forbidden: 'shelter_incident timeline actor must be the caller' };
+      }
+      if (typeof incEntry.timestamp !== 'string' || !incEntry.timestamp) {
+        throw { forbidden: 'shelter_incident timeline timestamp is required' };
+      }
+      if (typeof incEntry.details !== 'string' || !incEntry.details.trim()) {
+        throw { forbidden: 'shelter_incident timeline details (action & reason) are required' };
+      }
+      var incOwnerOrManager = oldDoc.assigned_to === userCtx.name || incManager;
+      var incStatusSame = newDoc.current_status === oldDoc.current_status;
+      var incAssigneeSame = newDoc.assigned_to === oldDoc.assigned_to;
+      var incRespondentSame = JSON.stringify(newDoc.respondent) === JSON.stringify(oldDoc.respondent);
+      if (incEntry.type === 'add_note') {
+        if (!incStatusSame || !incAssigneeSame || !incRespondentSame) {
+          throw { forbidden: 'shelter_incident add_note cannot change other fields' };
+        }
+      } else if (incEntry.type === 'status_change') {
+        var incFrom = oldDoc.current_status;
+        var incTo = newDoc.current_status;
+        if (incEntry.from_status !== incFrom || incEntry.to_status !== incTo ||
+            (incTransitions[incFrom] || []).indexOf(incTo) === -1) {
+          throw { forbidden: 'Invalid shelter_incident transition from ' + incFrom + ' to ' + incTo };
+        }
+        if (!incAssigneeSame || !incRespondentSame) {
+          throw { forbidden: 'shelter_incident status_change cannot change other fields' };
+        }
+        if (incTo === 'cancelled' && !incManager) {
+          throw { forbidden: 'Only shelter managers can cancel a shelter_incident' };
+        }
+        if (!incOwnerOrManager) {
+          throw { forbidden: 'Only the assignee or a shelter manager can change shelter_incident status' };
+        }
+      } else if (incEntry.type === 'reassignment') {
+        if (!incOwnerOrManager) {
+          throw { forbidden: 'Only the assignee or a shelter manager can reassign a shelter_incident' };
+        }
+        if (incAssigneeSame || incEntry.from_assignee !== oldDoc.assigned_to ||
+            incEntry.to_assignee !== newDoc.assigned_to) {
+          throw { forbidden: 'shelter_incident reassignment entry does not match assigned_to' };
+        }
+        if (!incStatusSame || !incRespondentSame) {
+          throw { forbidden: 'shelter_incident reassignment cannot change other fields' };
+        }
+      } else if (incEntry.type === 'identify_respondent') {
+        if (!incOwnerOrManager) {
+          throw { forbidden: 'Only the assignee or a shelter manager can identify the respondent' };
+        }
+        var incNextRespondent = newDoc.respondent || {};
+        if (!oldDoc.respondent || oldDoc.respondent.status !== 'unknown' ||
+            (incNextRespondent.status !== 'known_evacuee' && incNextRespondent.status !== 'known_external')) {
+          throw { forbidden: 'shelter_incident respondent can only go from unknown to known' };
+        }
+        if (incNextRespondent.status === 'known_evacuee' && !incNextRespondent.evacuee_id) {
+          throw { forbidden: 'known_evacuee respondent requires evacuee_id' };
+        }
+        if (incNextRespondent.status === 'known_external' && !incNextRespondent.name_or_detail) {
+          throw { forbidden: 'known_external respondent requires name_or_detail' };
+        }
+        if (!incStatusSame || !incAssigneeSame) {
+          throw { forbidden: 'shelter_incident identify_respondent cannot change other fields' };
+        }
+      } else {
+        throw { forbidden: 'Unknown shelter_incident timeline entry type' };
+      }
     }
   }
   // T-42: saved simulations are immutable snapshots and manager-owned planning evidence.

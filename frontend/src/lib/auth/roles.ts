@@ -292,6 +292,16 @@ export function canAccessZoning(roles: readonly string[], shelterCode?: string |
 	);
 }
 
+/**
+ * Shelter Incident Log — any staff of the shelter (Daily Occurrence Book: whoever finds an
+ * incident may open it). Per-record rights live in `features/incidents` policy + VDU.
+ */
+export function canAccessIncidents(roles: readonly string[], shelterCode?: string | null): boolean {
+	if (isSystemAdmin(roles)) return true;
+	if (shelterCode) return hasShelterScope(roles, shelterCode);
+	return shelterCodesFromRoles(roles).length > 0;
+}
+
 /** True when the role list includes warehouse/supply capability (any or scoped shelter). */
 export function isWarehouseStaff(roles: readonly string[], shelterCode?: string | null): boolean {
 	return (
