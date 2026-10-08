@@ -34,9 +34,6 @@
 					<Dialog.Title class="text-base font-bold text-slate-900 sm:text-lg">
 						ประกาศแจ้งเตือนภัยฉุกเฉิน
 					</Dialog.Title>
-					<Dialog.Description class="text-xs text-slate-500">
-						ข้อมูลและประกาศสถานการณ์เร่งด่วนจากศูนย์บัญชาการสถานการณ์ (EOC)
-					</Dialog.Description>
 				</div>
 			</div>
 		</Dialog.Header>

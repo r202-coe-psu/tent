@@ -287,7 +287,7 @@ export interface Evacuee extends BaseDoc {
 	type: 'evacuee';
 	first_name: string;
 	last_name: string;
-	/** `null` = unknown — only partner bookings (`registered_via: api`) write it (schema_v 12, CR-154). */
+	/** `null` = ไม่ระบุ / unknown (registration default + partner booking, schema_v 12). */
 	gender: Gender | null;
 	phone: string | null;
 	nickname?: string;
@@ -681,7 +681,7 @@ export function refineMemberRules(
 		/** Stored number of an existing evacuee (report-in) — unchanged numbers skip the checksum. */
 		original_person_number?: string | null;
 	},
-	ctx: z.RefinementCtx,
+	ctx: Pick<z.RefinementCtx, 'addIssue'>,
 	path: (string | number)[] = []
 ): void {
 	const birthYear = toOptionalInt(member.birth_year);
@@ -710,6 +710,34 @@ export function refineMemberRules(
 		if (issue)
 			ctx.addIssue({ code: 'custom', path: [...path, 'person_id', 'number'], message: issue });
 	}
+}
+
+export type MemberRuleIssue = { path: (string | number)[]; message: string };
+
+/**
+ * Runs {@link refineMemberRules} for every member and returns the issues instead of adding them to
+ * a Zod context. Zod 4 skips `superRefine` once the base schema has an aborting issue (e.g. gender
+ * not picked), so forms call this to report the cross-field errors in the same pass.
+ * Paths are `['members', index, ...]`.
+ */
+export function collectMemberRuleIssues(
+	members: Parameters<typeof refineMemberRules>[0][]
+): MemberRuleIssue[] {
+	const issues: MemberRuleIssue[] = [];
+	const collector: Pick<z.RefinementCtx, 'addIssue'> = {
+		addIssue(issue) {
+			if (typeof issue === 'string') {
+				issues.push({ path: [], message: issue });
+				return;
+			}
+			issues.push({
+				path: (issue.path ?? []) as (string | number)[],
+				message: issue.message ?? ''
+			});
+		}
+	};
+	members.forEach((member, index) => refineMemberRules(member, collector, ['members', index]));
+	return issues;
 }
 
 /** Required emergency contact — household pre-register (and when any field is filled). */
@@ -776,7 +804,8 @@ export const evacueeInputSchema = z.object({
 	first_name: z.string({ error: 'กรุณากรอกชื่อ' }).trim().min(1, 'กรุณากรอกชื่อ'),
 	// Empty allowed for mononyms / foreign nationals without family names (CR-106 FR-18).
 	last_name: z.string().trim().default(''),
-	gender: z.enum(['male', 'female', 'other'], { error: 'กรุณาเลือกเพศ' }),
+	/** `null` = ไม่ระบุเพศ (default on registration forms). */
+	gender: z.enum(['male', 'female', 'other'], { error: 'กรุณาเลือกเพศ' }).nullable(),
 	phone: phoneSchema, // UI requires a value; "ไม่มี" → null
 	nickname: z.string().trim().optional(),
 	birth_year: z.coerce
@@ -1082,7 +1111,7 @@ export const evacueePersonalEditFormSchema = z
 		nickname: z.string().trim(),
 		birthYear: z.string().trim(),
 		age: z.string().trim(),
-		gender: genderSchema,
+		gender: genderSchema.nullable(),
 		phone: z.string().trim(),
 		noPhone: z.boolean().default(false),
 		cardType: cardTypeSchema,
