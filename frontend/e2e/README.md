@@ -22,32 +22,47 @@ Known problems:
 
 - `registration-evacuee.test.ts` flips SH001 policy toggles that it cannot fully restore — unsafe on shared DBs.
 - Query-based teardown (`?q=<run id>`) once deleted unrelated dev records (server search matches digit substrings).
-- `pnpm test:e2e:pre-register` (and any local `playwright test` run) can hang on exit after every
-  test has already finished and printed results — **safe to `Ctrl+C`, the printed results are
-  final.** Root cause: under this repo's pnpm/Node combo, the `vite preview` process Playwright's
-  `webServer` spawns detaches from Playwright's own process tree (confirmed via `ps --ppid`: the
-  preview process's parent is no longer the `playwright test` process), so Playwright can't signal
-  it to exit at teardown and waits forever. Workaround used by `registration-evacuee.test.ts`
-  (`frontend/e2e/registration-evacuee.test.ts:31`): start the preview server yourself first, so
-  `reuseExistingServer` finds it already up and never tries to spawn/kill it —
-  `pnpm preview --port 4173 --strictPort &` then run `playwright test` normally. Reinstalling
-  `@playwright/test` does **not** fix this (it's environmental, not a package bug) — it only looks
-  fixed because a fresh install has no leftover server to race with.
+- ~~Local `playwright test` hung forever after the last test whenever Playwright spawned the preview
+  server itself.~~ **Fixed** — `playwright.config.ts` used to launch it with `pnpm preview`; pnpm
+  runs the script in its **own process group**, so Playwright's process-group kill at teardown
+  missed `vite preview`, which then got orphaned (re-parented to `systemd --user`) while still
+  holding Playwright's stdout pipe — Playwright waited on that pipe forever. `pnpm exec vite` has
+  the same problem; the config now calls `node_modules/.bin/vite preview` directly. Symptom of the
+  old bug (if you see it on another branch): it only hung when **no** server was already on 4173 —
+  `scripts/run-e2e-headed.sh` always kills the old one first, so it hung every time, while a bare
+  `npx playwright test` right after it reused the orphan and exited fine. Reinstalling
+  `@playwright/test` never fixed it. The hung run's printed results are final — `Ctrl+C` is safe.
+- ~~`[15/37]` in a full local `@critical` run (pre-register **W5**) sat idle for ~1 minute.~~
+  **Fixed** — the ticket-status BFF allows 10 requests/min/IP and W5 used to sleep a fixed 61s
+  after W2 to stay under it. Half of that budget was an app bug: opening the "ใบลงทะเบียนของฉัน" tab
+  synced every stored ticket **twice** (the tab's `onclick` and `TicketHistory`'s own `onMount`),
+  which also burns a real citizen's budget. With the duplicate removed, W2–W5 spend ~8 of 10, and
+  `waitForStatusBudget(needed)` now counts real hits and only waits when the budget is short. The
+  limiters live in the preview server's memory, so re-running the pre-register suite back-to-back
+  against a **reused** server can still get `429 Too Many Requests` on W4/W5 — wait a minute or
+  restart the server.
 - After `pnpm unseed`/`pnpm seed`, **always restart the preview server** before the next
-  `playwright test` run. A server left running from a previous run (see the hang above — it rarely
-  actually exits) holds state/connections against the old databases; wiping and reseeding CouchDB
+  `playwright test` run. A server left running from a previous run holds state/connections against
+  the old databases; wiping and reseeding CouchDB
   out from under it has caused it to crash mid-run, which then shows up as unrelated-looking
   `net::ERR_CONNECTION_REFUSED` failures on every subsequent test. Check with
   `ss -ltnp | grep 4173` and kill it before reseeding, or before trusting a run's results.
 - `COUCHDB_PUBLIC_WRITER_URL` (needed for the pre-register W5/W6 shelter-booking tests, else they
   skip) must go in **`frontend/.env`**, not `frontend/e2e/.env` — only `frontend/.env` is read by
-  the seed scripts (`scripts/seed/couch.ts`'s own loader). It also will not reach `playwright test`
-  itself by being in any `.env` file at all: nothing in this repo loads `.env` for the Playwright
-  process, so `export COUCHDB_PUBLIC_WRITER_URL=...` in the shell before running `playwright test`
-  is required every time (or re-export it in whatever shell profile you use). Setting the var does
+  the seed scripts (`scripts/seed/couch.ts`'s own loader). A bare `npx playwright test` loads no
+  `.env` at all, so `export COUCHDB_PUBLIC_WRITER_URL=...` in the shell first.
+  `scripts/run-e2e-headed.sh local` instead loads `frontend/e2e/.env` and **overrides** your shell
+  exports with it — so a stale password there gives `public booking write failed (401)` in the
+  `[WebServer]` log and W5 fails with 502 even though the bare `npx` run passes. Setting the var does
   nothing until you also re-run `pnpm seed` (not `pnpm seed:master`, which skips `seedUsers()`
   entirely) to actually provision the `public_writer` CouchDB user — check with
   `curl $COUCHDB_ADMIN_URL/_users/org.couchdb.user:public_writer`.
+- For **local** runs, leave `E2E_BASE_URL` (and the `E2E_SEARCH_*` / `E2E_SHELTERS_MARKER`
+  fixtures) **unset** in `frontend/e2e/.env`, even if it is copied from `.env.example`. Any value — even
+  `http://localhost:5173` — makes `IS_REMOTE` true (`helpers/e2e-env.ts`), so `public-search-flow`
+  and `public-shelters-filter` stop creating their own data and look for pre-seeded staging fixtures
+  (`[E2E-STAGING] …`) that do not exist locally. They fail with a `toPass` timeout. The app URL
+  for local runs comes from `PLAYWRIGHT_TEST_BASE_URL`, not `E2E_BASE_URL`.
 - `config:app.recaptcha_enabled` defaults to `true`; any suite that writes through a public BFF
   route gated by `recaptcha-gate.ts` needs to flip it off for the duration of its writes and restore
   it after (see `setRecaptcha` in `helpers/staff-ui.ts`, used by both pre-register W1-W4/W6 **and**

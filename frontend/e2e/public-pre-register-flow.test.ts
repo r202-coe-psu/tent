@@ -1716,16 +1716,22 @@ function storedTicketCodes(page: Page): Promise<string[]> {
 }
 
 /**
- * The ticket-status BFF allows 10 requests per minute per IP. W2/W3 spend about half of it;
- * W5 waits for that window to pass instead of tripping a 429 (the sync only ever fires from
- * the page, so the budget cannot be raised from the test).
+ * The ticket-status BFF allows 10 requests per sliding minute per IP (`registerLookupIpLimiter`).
+ * Every real status request this file makes is timestamped in `statusHits`, so a test that is
+ * about to spend `needed` more waits only until enough older hits have left the window — instead
+ * of tripping a 429 (the sync only ever fires from the page, so the budget cannot be raised from
+ * the test). Timestamps are taken on the response, i.e. never earlier than the server's own.
  */
-let statusWindowStart = 0;
-async function waitForStatusBudget(): Promise<void> {
-	if (!statusWindowStart) return;
-	const remaining = statusWindowStart + 61_000 - Date.now();
-	if (remaining > 0) await new Promise((r) => setTimeout(r, remaining));
-	statusWindowStart = 0;
+const STATUS_LIMIT = 10;
+const STATUS_WINDOW_MS = 61_000;
+const statusHits: number[] = [];
+async function waitForStatusBudget(needed: number): Promise<void> {
+	for (;;) {
+		const now = Date.now();
+		while (statusHits.length > 0 && now - statusHits[0] >= STATUS_WINDOW_MS) statusHits.shift();
+		if (statusHits.length + needed <= STATUS_LIMIT) return;
+		await new Promise((r) => setTimeout(r, statusHits[0] + STATUS_WINDOW_MS - now));
+	}
 }
 
 interface StatusCall {
@@ -1738,6 +1744,7 @@ function recordStatusCalls(page: Page): StatusCall[] {
 	const calls: StatusCall[] = [];
 	page.on('response', async (res) => {
 		if (!res.url().includes('/api/public/v1/registrations/status')) return;
+		statusHits.push(Date.now());
 		calls.push({ status: res.status(), body: await res.json().catch(() => null) });
 	});
 	return calls;
@@ -1883,7 +1890,6 @@ test.describe(
 			test.setTimeout(90_000);
 			const claimedToast = page.getByText(CLAIMED_TOAST);
 			statusCalls.length = 0;
-			statusWindowStart = Date.now();
 
 			await page.getByRole('button', { name: /ใบลงทะเบียนของฉัน/ }).click();
 			await expect(page.getByText(`${FIRST_NAME} ${LAST_NAME}`)).toBeVisible();
@@ -1913,9 +1919,11 @@ test.describe(
 		});
 
 		test('W3 the status BFF reports the real ticket as still open, never as not found', async () => {
+			// page.request fires no page 'response' events — count these two by hand
 			const res = await page.request.post('/api/public/v1/registrations/status', {
 				data: { code: queueId }
 			});
+			statusHits.push(Date.now());
 			expect(res.status()).toBe(200);
 			const body = (await res.json()) as Record<string, unknown>;
 			expect(body).toMatchObject({ success: true, verified: false, status: 'open' });
@@ -1925,6 +1933,7 @@ test.describe(
 			const missing = await page.request.post('/api/public/v1/registrations/status', {
 				data: { code: '01ZZZZZZZZZZZZZZZZZZZZZZZZ' }
 			});
+			statusHits.push(Date.now());
 			expect(await missing.json()).toMatchObject({ verified: false, notFound: true });
 		});
 
@@ -2035,6 +2044,13 @@ test.describe(
 		let statusCalls: StatusCall[];
 		let ticketCode = '';
 
+		// This booking also writes through the real reCAPTCHA gate (recaptcha-gate.ts) — see
+		// the W1-W4/W6 block above for why it must be disabled for the duration of the writes.
+		let adminContext: BrowserContext;
+		let adminPage: Page;
+		let recaptchaWasEnabled = true;
+		const canWrite = () => CAN_WRITE && Boolean(process.env.COUCHDB_PUBLIC_WRITER_URL);
+
 		test.beforeEach(() => {
 			test.skip(!CAN_WRITE, READ_ONLY_REASON);
 			// the production-mode app writes bookings as the limited `public_writer` CouchDB user
@@ -2043,7 +2059,18 @@ test.describe(
 				'COUCHDB_PUBLIC_WRITER_URL is not set (and public_writer provisioned via pnpm seed:master)'
 			);
 		});
+		test.beforeAll(async ({ browser }) => {
+			if (!canWrite()) return;
+			const admin = await bootstrapAdminSession();
+			adminContext = await browser.newContext();
+			adminPage = await adminContext.newPage();
+			await routeBrowserCouchThroughApp(adminPage);
+			await injectSession(adminPage, admin.user, admin.cookie);
+			recaptchaWasEnabled = await setRecaptcha(adminPage, false);
+		});
 		test.afterAll(async () => {
+			if (canWrite()) await setRecaptcha(adminPage, recaptchaWasEnabled);
+			await adminContext?.close();
 			await context?.close();
 		});
 
@@ -2120,7 +2147,8 @@ test.describe(
 			await expect.poll(() => storedTicketCodes(page)).toContain(ticketCode);
 
 			// reload → the ticket is still in "my registrations" and still pending
-			await waitForStatusBudget();
+			// the reload's mount sync + the history tab's own sync, one ticket each
+			await waitForStatusBudget(2);
 			statusCalls.length = 0;
 			await page.reload();
 			await page.getByRole('button', { name: /ใบลงทะเบียนของฉัน/ }).click();
