@@ -6,22 +6,11 @@ import {
 	type RequisitionTicketRepository
 } from './requisition-ticket.repository';
 
-interface InMemoryDoc {
-	_id: string;
-	_rev?: string;
-	type?: string;
-	[key: string]: unknown;
-}
-
-let store: Map<string, InMemoryDoc>;
-let revCounters: Map<string, number>;
-let putDocCalls: InMemoryDoc[];
-
-function nextRev(id: string): string {
-	const count = (revCounters.get(id) ?? 0) + 1;
-	revCounters.set(id, count);
-	return `${count}-rev${id.replace(/[^a-zA-Z0-9]/g, '')}`;
-}
+const couch = await vi.hoisted(async () => {
+	const { createInMemoryCouch } = await import('$lib/testing/in-memory-couch');
+	return createInMemoryCouch();
+});
+const { store, nextRev } = couch;
 
 vi.mock('$lib/db/shelter', () => ({
 	SHELTER_CODE: 'SH001',
@@ -29,45 +18,7 @@ vi.mock('$lib/db/shelter', () => ({
 	getShelterDb: () => 'shelter_sh001'
 }));
 
-vi.mock('$lib/db/couch-db', async () => {
-	const { ConflictError } = await import('$lib/utils/errors');
-	return {
-		ConflictError,
-		getDoc: async <T extends { _id: string }>(_dbName: string, id: string): Promise<T | null> => {
-			const doc = store.get(id);
-			if (!doc) return null;
-			return JSON.parse(JSON.stringify(doc)) as T;
-		},
-		putDoc: async <T extends { _id: string; _rev?: string }>(
-			_dbName: string,
-			doc: T
-		): Promise<T> => {
-			putDocCalls.push(JSON.parse(JSON.stringify(doc)));
-			const existing = store.get(doc._id);
-			if (existing) {
-				if (!doc._rev || doc._rev !== existing._rev) {
-					throw new ConflictError(`Conflict on doc ${doc._id}: rev mismatch`);
-				}
-			}
-			const clone = JSON.parse(JSON.stringify(doc)) as T & { _rev: string };
-			clone._rev = nextRev(doc._id);
-			store.set(doc._id, clone as InMemoryDoc);
-			return clone;
-		},
-		allDocsByType: async <T extends { _id: string; type: string }>(
-			_dbName: string,
-			type: string
-		): Promise<T[]> => {
-			const results: T[] = [];
-			for (const [id, doc] of store.entries()) {
-				if (id.startsWith(`${type}:`) && doc.type === type) {
-					results.push(JSON.parse(JSON.stringify(doc)) as T);
-				}
-			}
-			return results;
-		}
-	};
-});
+vi.mock('$lib/db/couch-db', () => couch.couchDbModule);
 
 describe('RequisitionTicketRemoteRepository', () => {
 	const ctx: AuthorContext = {
@@ -79,9 +30,7 @@ describe('RequisitionTicketRemoteRepository', () => {
 	let repo: RequisitionTicketRepository;
 
 	beforeEach(() => {
-		store = new Map();
-		revCounters = new Map();
-		putDocCalls = [];
+		couch.reset();
 		repo = new RequisitionTicketRemoteRepository('SH001');
 	});
 
