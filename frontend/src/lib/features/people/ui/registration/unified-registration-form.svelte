@@ -197,9 +197,7 @@
 		if (initialMembers && initialMembers.length > 0) {
 			return initialMembers.map((m) => ({
 				...m,
-				reporting_in:
-					m.reporting_in ??
-					(m.stay_status === 'pre_registered' || m.stay_status === 'kiosk_registered' || !m._id)
+				reporting_in: m.reporting_in ?? (m.stay_status === 'pre_registered' || !m._id)
 			}));
 		}
 		return [blankUnifiedMember()];
