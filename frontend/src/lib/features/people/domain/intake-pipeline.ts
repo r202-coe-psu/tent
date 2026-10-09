@@ -185,7 +185,7 @@ export type PreferredZoneOutcome =
 	| { kind: 'unavailable'; code: string };
 
 /**
- * CR-155: what Station 3 does with the zone Station 1 suggested.
+ * CR-158: what Station 3 does with the zone Station 1 suggested.
  * Only `use` pre-selects it; staff can always pick another zone.
  */
 export function resolvePreferredZone<Z extends { code: string; status?: string }>(

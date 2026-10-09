@@ -110,6 +110,8 @@ export {
 	normalizeCheckoutRemark,
 	statusChangeHandlerKind,
 	maskNationalId,
+	collectMemberRuleIssues,
+	type MemberRuleIssue,
 	formatPersonName,
 	matchesEvacueePhoneSearch,
 	matchesEvacueeSearch,

@@ -1432,7 +1432,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 						vulnerable_groups: m.vulnerable_groups ?? [],
 						disability_other_detail: m.disability_other_detail
 					}),
-					// CR-155: a suggestion only — current_stay is untouched by it.
+					// CR-158: a suggestion only — current_stay is untouched by it.
 					preferred_zone: m.preferred_zone ?? existingEvacuee.preferred_zone ?? null,
 					current_stay: updatedStay
 				});

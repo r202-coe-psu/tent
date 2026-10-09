@@ -28,6 +28,8 @@
 		submitDisabled = false,
 		submitLabel = '',
 		submittingLabel = '',
+		/** Desktop aside keeps submit; mobile summary sheet relies on sticky CTA. */
+		showSubmit = true,
 		existingMembers = [],
 		existingHeadName = '',
 		existingCount = 0,
@@ -43,6 +45,7 @@
 		submitDisabled?: boolean;
 		submitLabel?: string;
 		submittingLabel?: string;
+		showSubmit?: boolean;
 		/** Joining a family: its current members (onsite) — counted with the new ones. */
 		existingMembers?: ReadonlyArray<{
 			_id?: string;
@@ -364,19 +367,21 @@
 		</div>
 
 		<!-- 6. Submit Button (Desktop Access) -->
-		<div class="pt-2">
-			<Button
-				type="submit"
-				disabled={pending || submitDisabled}
-				class="h-11 w-full gap-2 rounded-xl text-sm font-semibold shadow-xs"
-			>
-				{#if pending}
-					<Loader2 class="size-4 animate-spin" />
-					{submittingLabel || t.submitting}
-				{:else}
-					{submitLabel || t.submitConfirm}
-				{/if}
-			</Button>
-		</div>
+		{#if showSubmit}
+			<div class="pt-2">
+				<Button
+					type="submit"
+					disabled={pending || submitDisabled}
+					class="h-11 w-full gap-2 rounded-xl text-sm font-semibold shadow-xs"
+				>
+					{#if pending}
+						<Loader2 class="size-4 animate-spin" />
+						{submittingLabel || t.submitting}
+					{:else}
+						{submitLabel || t.submitConfirm}
+					{/if}
+				</Button>
+			</div>
+		{/if}
 	</div>
 </div>

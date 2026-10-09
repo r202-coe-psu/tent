@@ -385,7 +385,7 @@ describe('pickRecommendedZone', () => {
 	});
 });
 
-describe('resolvePreferredZone (CR-155)', () => {
+describe('resolvePreferredZone (CR-158)', () => {
 	const zones = [
 		{ code: 'A', status: 'active' },
 		{ code: 'B', status: 'closed' }

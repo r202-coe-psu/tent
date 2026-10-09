@@ -53,9 +53,8 @@ export const bookingOptionalPhoneSchema = z
 	.optional()
 	.nullable();
 
-export const bookingGenderSchema = z.enum(['male', 'female', 'other'], {
-	error: 'กรุณาเลือกเพศ'
-});
+/** `null` = ไม่ระบุ (default on public booking forms). */
+export const bookingGenderSchema = z.enum(['male', 'female', 'other']).nullable();
 
 /** 13-digit Thai national ID. Optional — a displaced person may have lost their card. */
 export const bookingNationalIdSchema = z
@@ -439,7 +438,12 @@ export type PublicBookingErrorCode =
 	| 'PHOTO_TOO_LARGE'
 	| 'INVALID_INPUT'
 	| 'INVALID_JOIN_TOKEN'
-	| 'JOIN_TARGET_NOT_FOUND';
+	| 'JOIN_TARGET_NOT_FOUND'
+	| 'NETWORK_ERROR';
+
+/** Fetch never reached the server (offline, reset, abort) — data is kept so the user can retry. */
+export const NETWORK_ERROR_MESSAGE =
+	'เชื่อมต่อไม่สำเร็จ ข้อมูลที่กรอกยังอยู่ครบ กรุณาตรวจสอบอินเทอร์เน็ตแล้วกดส่งอีกครั้ง';
 
 const ERROR_COPY: Record<PublicBookingErrorCode, string> = {
 	RATE_LIMITED: 'มีการส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่',
@@ -458,7 +462,8 @@ const ERROR_COPY: Record<PublicBookingErrorCode, string> = {
 	INVALID_INPUT: 'ข้อมูลไม่ถูกต้อง กรุณาตรวจสอบแล้วลองใหม่',
 	INVALID_JOIN_TOKEN:
 		'ลิงก์เข้าร่วมครอบครัวหมดอายุหรือไม่ถูกต้อง กรุณาค้นหาครอบครัวใหม่แล้วเลือกอีกครั้ง',
-	JOIN_TARGET_NOT_FOUND: 'ไม่พบครอบครัวที่เลือก กรุณาเลือกครอบครัวใหม่ก่อนส่ง'
+	JOIN_TARGET_NOT_FOUND: 'ไม่พบครอบครัวที่เลือก กรุณาเลือกครอบครัวใหม่ก่อนส่ง',
+	NETWORK_ERROR: NETWORK_ERROR_MESSAGE
 };
 
 export function publicBookingErrorMessage(code: unknown): string {

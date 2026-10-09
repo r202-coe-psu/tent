@@ -1,5 +1,6 @@
 import { catalogOrigin, itemBelongsToCategory } from '../../domain/catalog';
 import { isBaseUnitRow } from '../../domain/item-barcode';
+import { isMergedItem, mergedAliasesByTarget } from '../../domain/item-merge';
 import { missingOptionalFields } from '../../domain/item-similarity';
 import type { ItemCategory, ItemMaster, Recipe } from '../../domain/catalog';
 import type { Dimension, UnitOfMeasure } from '../../domain/unit-of-measure';
@@ -163,19 +164,30 @@ export function isNewItem(item: Pick<ItemMaster, 'created_at'>, now: number = Da
 	return Number.isFinite(created) && now - created >= 0 && now - created < NEW_ITEM_WINDOW_MS;
 }
 
+/** Old names of items merged into each destination (CR-143 FR-F5), so searching one finds it. */
+type MergedAliases = ReadonlyMap<string, readonly string[]>;
+
 function matchesItem(
 	item: ItemMaster,
 	categories: readonly ItemCategory[],
 	filter: ItemFilter,
-	shelterCode: string | null
+	shelterCode: string | null,
+	aliases: MergedAliases
 ): boolean {
+	// A merged-away source is gone from the list even under "แสดงที่ปิดใช้งาน" (FR-F5).
+	if (isMergedItem(item)) return false;
 	if (filter.categoryId !== 'all') {
 		const category = categories.find((c) => c._id === filter.categoryId);
 		if (!category || !itemBelongsToCategory(item, category)) return false;
 	}
 	if (filter.origin !== 'all' && catalogOrigin(item, shelterCode) !== filter.origin) return false;
 	if (!matchesScope(item, filter.scope ?? 'all', shelterCode)) return false;
-	return matchesText(filter.q.trim().toLowerCase(), item.name, item.sku);
+	return matchesText(
+		filter.q.trim().toLowerCase(),
+		item.name,
+		item.sku,
+		...(aliases.get(item._id) ?? [])
+	);
 }
 
 /** Items that pass every filter, sorted by name. */
@@ -185,11 +197,12 @@ export function filterItems(
 	filter: ItemFilter,
 	shelterCode: string | null
 ): ItemMaster[] {
+	const aliases = mergedAliasesByTarget(items);
 	return items
 		.filter(
 			(i) =>
 				(filter.showDeactivated || !i.deactivated) &&
-				matchesItem(i, categories, filter, shelterCode)
+				matchesItem(i, categories, filter, shelterCode, aliases)
 		)
 		.sort((a, b) => byThaiName(a.name, b.name));
 }
@@ -202,8 +215,10 @@ export function hiddenDeactivatedItems(
 	shelterCode: string | null
 ): number {
 	if (filter.showDeactivated) return 0;
-	return items.filter((i) => i.deactivated && matchesItem(i, categories, filter, shelterCode))
-		.length;
+	const aliases = mergedAliasesByTarget(items);
+	return items.filter(
+		(i) => i.deactivated && matchesItem(i, categories, filter, shelterCode, aliases)
+	).length;
 }
 
 /**
@@ -217,9 +232,10 @@ export function countScopeChips(
 	shelterCode: string | null
 ): Record<ScopeChip, number> {
 	const counts: Record<ScopeChip, number> = { all: 0, incomplete: 0, local: 0, central: 0 };
+	const aliases = mergedAliasesByTarget(items);
 	for (const item of items) {
 		if (!filter.showDeactivated && item.deactivated) continue;
-		if (!matchesItem(item, categories, { ...filter, scope: 'all' }, shelterCode)) continue;
+		if (!matchesItem(item, categories, { ...filter, scope: 'all' }, shelterCode, aliases)) continue;
 		counts.all++;
 		for (const chip of ['incomplete', 'local', 'central'] as const) {
 			if (matchesScope(item, chip, shelterCode)) counts[chip]++;
@@ -235,7 +251,8 @@ export function categoryItemCount(
 	showDeactivated: boolean
 ): number {
 	return items.filter(
-		(i) => itemBelongsToCategory(i, category) && (showDeactivated || !i.deactivated)
+		(i) =>
+			itemBelongsToCategory(i, category) && !isMergedItem(i) && (showDeactivated || !i.deactivated)
 	).length;
 }
 

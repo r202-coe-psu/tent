@@ -732,6 +732,26 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/public/v1/unassigned-registrations/{registration_id}/status': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * Get Unassigned Registration Status
+		 * @description Service-to-service ticket status (BFF sync) — status + counts only, no PII.
+		 */
+		get: operations['get_unassigned_registration_status_public_v1_unassigned_registrations__registration_id__status_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/staff/v1/unassigned-registrations/search': {
 		parameters: {
 			query?: never;
@@ -2051,10 +2071,10 @@ export interface components {
 			 */
 			last_name: string;
 			/**
-			 * Gender
-			 * @enum {string}
+			 * Gender — `null` = ไม่ระบุ
+			 * @enum {string|null}
 			 */
-			gender: 'male' | 'female' | 'other';
+			gender: 'male' | 'female' | 'other' | null;
 			/** Phone */
 			phone?: string | null;
 			person_id?: components['schemas']['PersonIdInput'] | null;
@@ -3552,6 +3572,22 @@ export interface components {
 			open_registrations: number;
 			/** Open Members */
 			open_members: number;
+		};
+		/**
+		 * UnassignedRegistrationStatusResponse
+		 * @description Status-only projection for the public BFF ticket sync — no PII (names, ids, phones).
+		 */
+		UnassignedRegistrationStatusResponse: {
+			/** Id */
+			id: string;
+			/** Status */
+			status: string;
+			/** Members Total */
+			members_total: number;
+			/** Members Claimed */
+			members_claimed: number;
+			/** Claimed */
+			claimed: boolean;
 		};
 		/** UnassignedResidenceMatchHit */
 		UnassignedResidenceMatchHit: {
@@ -5470,6 +5506,37 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['UnassignedResidenceMatchResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	get_unassigned_registration_status_public_v1_unassigned_registrations__registration_id__status_get: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				registration_id: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['UnassignedRegistrationStatusResponse'];
 				};
 			};
 			/** @description Validation Error */

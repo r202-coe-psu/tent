@@ -156,7 +156,7 @@
 		)
 	);
 	const isolationDefault = $derived(recommendKind === 'quarantine');
-	/** CR-155: Station 1's suggestion — default pick only when there are no EWAR symptoms. */
+	/** CR-158: Station 1's suggestion — default pick only when there are no EWAR symptoms. */
 	const preferredZone = $derived(
 		resolvePreferredZone(evacuee?.preferred_zone, shelterZones, recommendKind)
 	);

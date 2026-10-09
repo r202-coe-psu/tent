@@ -41,7 +41,7 @@ path ในเอกสารนี้อ้างจาก `frontend/` (ยก�
 - [x] ⚪ #16 Station 3 แสดงข้อมูลมากขึ้น (ผลคัดกรองจาก Station 2)
 
 ### ร่วมกัน
-- [x] 5/10 เช้า: ส่ง #17, #18, #19 ให้ Project Owner ตัดสินใจ (#18 ทำแล้ว · #17 ทำแล้วด้วย CR-155 · #19 ยังไม่มีคำตอบ)
+- [x] 5/10 เช้า: ส่ง #17, #18, #19 ให้ Project Owner ตัดสินใจ (#18 ทำแล้ว · #17 ทำแล้วด้วย CR-158 · #19 ยังไม่มีคำตอบ)
 - [ ] 5/10 เย็น: sync สั้นๆ — งาน 🔴 ค้างอะไร, ต้องสลับงานไหม
 - [ ] 6/10 บ่าย: รวม PR, รัน `pnpm lint` / `pnpm check` / `pnpm test` / E2E public, ทดสอบ Flow 1–3 ซ้ำแบบ roleplay
 
@@ -683,7 +683,7 @@ branch: `fix-feedback-rolplay` (แตกจาก `develop` @ `1b19d7c3`) · **
   - เดิมสร้างหัวหน้าครอบครัวแล้วเขียน `current_stay.zone` ทับ → VDU ใน develop ปฏิเสธ
     ("zone_change requires current_stay.status active or room_confirmed") บันทึกไม่ได้
   - ใหม่: หัวหน้าและสมาชิกที่เพิ่มในขั้นสรุปได้ `preferred_zone` ตอนสร้าง (`zone` ยังเป็น null) — Station 3 เลือกโซนจริง
-    (ใช้ field เดียวกับ CR-155 ไม่เปลี่ยน schema)
+    (ใช้ field เดียวกับ CR-158 ไม่เปลี่ยน schema)
   - `household-pre-register.svelte`, `household-pre-register-summary.svelte` · E2E `household-pre-register` แก้ assertion 5 จุด
 - **E2E `registration-evacuee` ผ่าน 4/4** หลังแก้ test ให้ตรงกับ flow ปัจจุบัน:
   - Station 1 ไม่จัดโซนแล้ว (ADR-0001) → ลูกเลือก "โซนที่ต้องการ" ใน accordion, ยังเป็น arriving,

@@ -14,6 +14,7 @@
 		itemMasterUpdateInputSchema,
 		resolveCategoryId,
 		catalogOrigin,
+		expiryRequirementHint,
 		type ItemMaster,
 		type ItemMasterInput,
 		type TypeClass
@@ -1016,6 +1017,12 @@
 												STORAGE_OPTIONS,
 												(v) => ($formData.storage_type = v as typeof $formData.storage_type)
 											)}
+											<p class="text-sm text-slate-600" data-testid="expiry-requirement-hint">
+												{expiryRequirementHint({
+													storage_type: $formData.storage_type,
+													shelf_life_days: $formData.shelf_life_days
+												})}
+											</p>
 										{/snippet}
 									</Form.Control>
 								</Form.Field>

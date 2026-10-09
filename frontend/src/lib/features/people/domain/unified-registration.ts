@@ -209,15 +209,14 @@ export function blankUnifiedMember(): UnifiedMemberInput {
 	return {
 		first_name: '',
 		last_name: '',
-		// Empty until the user picks male/female — schema rejects unset gender.
-		gender: '' as UnifiedMemberInput['gender'],
+		// Default: ไม่ระบุเพศ (persisted as null).
+		gender: null,
 		// '' = not filled in yet (the field opens ready to type); null = "ไม่มีเบอร์" ticked.
 		phone: '',
 		nickname: '',
 		country: 'THAILAND',
 		religion: 'unknown',
-		// Explicit nulls (CR-148): the member card binds these into fields with a fallback,
-		// and Svelte rejects binding `undefined` there (props_invalid_value).
+		// Keep defined — Svelte 5 rejects bind:x={undefined} when $bindable has a fallback.
 		religion_other: null,
 		disability_other_detail: null,
 		preferred_zone: null,
@@ -437,8 +436,7 @@ export function evacueeToUnifiedMember(
 		_rev: evacuee._rev,
 		first_name: evacuee.first_name,
 		last_name: evacuee.last_name ?? '',
-		// `null` (partner booking, CR-154) → unset so the form forces a pick.
-		gender: evacuee.gender ?? ('' as UnifiedMemberInput['gender']),
+		gender: evacuee.gender ?? null,
 		birth_year: evacuee.birth_year ?? undefined,
 		age: evacuee.age ?? undefined,
 		person_id: evacuee.person_id ?? { cardType: 'national_id', number: '' },

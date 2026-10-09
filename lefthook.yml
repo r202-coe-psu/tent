@@ -23,20 +23,27 @@ pre-commit:
       stage_fixed: true
 
 pre-push:
-  parallel: true
+  # Sequential: svelte-check + vitest + pytest in parallel starve RAM and run slower overall.
+  # Fast jobs first so cheap failures surface early.
+  # glob is matched relative to `root`; a job is skipped when no pushed file matches.
+  parallel: false
   commands:
+    worker-test:
+      root: worker/
+      glob: "**/*.{py,toml,lock}"
+      run: uv run pytest tests
+
+    backend-test:
+      root: backend/
+      glob: "**/*.{py,toml,lock}"
+      run: uv run pytest tests
+
     frontend-check:
       root: frontend/
+      glob: "**/*.{ts,js,svelte,json,css,yaml}"
       run: pnpm check
 
     frontend-test:
       root: frontend/
+      glob: "**/*.{ts,js,svelte,json,css,yaml}"
       run: pnpm test
-
-    backend-test:
-      root: backend/
-      run: uv run pytest tests
-
-    worker-test:
-      root: worker/
-      run: uv run pytest tests

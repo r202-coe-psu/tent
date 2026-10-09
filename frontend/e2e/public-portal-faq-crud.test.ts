@@ -20,11 +20,11 @@
  */
 import { test, expect } from '@playwright/test';
 import {
-	seedSecurityQuestion,
 	couchLogin,
 	createCouchUser,
 	deleteCouchUser,
-	SA_ROLES
+	SA_ROLES,
+	seedSecurityQuestion
 } from './helpers/couch';
 import { IS_REMOTE, READ_ONLY_REASON } from './helpers/e2e-env';
 import { injectSession } from './helpers/login';

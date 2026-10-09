@@ -145,7 +145,6 @@ export const PUBLIC_EMERGENCY_I18N = {
 export const PUBLIC_ALERTS_PANEL_I18N = {
 	th: {
 		title: 'การแจ้งเตือนภัยฉุกเฉิน',
-		subtitle: 'ศูนย์บัญชาการสถานการณ์ (EOC)',
 		newAnnouncements: 'ประกาศใหม่',
 		noNewAnnouncements: 'ไม่มีประกาศใหม่',
 		close: 'ปิด',
@@ -161,7 +160,6 @@ export const PUBLIC_ALERTS_PANEL_I18N = {
 	},
 	en: {
 		title: 'Emergency Alerts',
-		subtitle: 'Emergency Operations Center (EOC)',
 		newAnnouncements: 'New Alerts',
 		noNewAnnouncements: 'No New Alerts',
 		close: 'Close',

@@ -288,7 +288,7 @@ export interface Evacuee extends BaseDoc {
 	type: 'evacuee';
 	first_name: string;
 	last_name: string;
-	/** `null` = unknown — only partner bookings (`registered_via: api`) write it (schema_v 12, CR-154). */
+	/** `null` = ไม่ระบุ / unknown (registration default + partner booking, schema_v 12). */
 	gender: Gender | null;
 	phone: string | null;
 	nickname?: string;
@@ -309,7 +309,7 @@ export interface Evacuee extends BaseDoc {
 	household_id: string | null;
 	current_stay: CurrentStay;
 	/**
-	 * Zone code Station 1 suggested for this person (schema_v 13, CR-155). Non-binding: it
+	 * Zone code Station 1 suggested for this person (schema_v 13, CR-158). Non-binding: it
 	 * never zones — Station 3 only uses it as the default pick when there are no EWAR symptoms.
 	 */
 	preferred_zone?: string | null;
@@ -687,7 +687,7 @@ export function refineMemberRules(
 		/** Stored number of an existing evacuee (report-in) — unchanged numbers skip the checksum. */
 		original_person_number?: string | null;
 	},
-	ctx: z.RefinementCtx,
+	ctx: Pick<z.RefinementCtx, 'addIssue'>,
 	path: (string | number)[] = []
 ): void {
 	const birthYear = toOptionalInt(member.birth_year);
@@ -716,6 +716,34 @@ export function refineMemberRules(
 		if (issue)
 			ctx.addIssue({ code: 'custom', path: [...path, 'person_id', 'number'], message: issue });
 	}
+}
+
+export type MemberRuleIssue = { path: (string | number)[]; message: string };
+
+/**
+ * Runs {@link refineMemberRules} for every member and returns the issues instead of adding them to
+ * a Zod context. Zod 4 skips `superRefine` once the base schema has an aborting issue (e.g. gender
+ * not picked), so forms call this to report the cross-field errors in the same pass.
+ * Paths are `['members', index, ...]`.
+ */
+export function collectMemberRuleIssues(
+	members: Parameters<typeof refineMemberRules>[0][]
+): MemberRuleIssue[] {
+	const issues: MemberRuleIssue[] = [];
+	const collector: Pick<z.RefinementCtx, 'addIssue'> = {
+		addIssue(issue) {
+			if (typeof issue === 'string') {
+				issues.push({ path: [], message: issue });
+				return;
+			}
+			issues.push({
+				path: (issue.path ?? []) as (string | number)[],
+				message: issue.message ?? ''
+			});
+		}
+	};
+	members.forEach((member, index) => refineMemberRules(member, collector, ['members', index]));
+	return issues;
 }
 
 /** Required emergency contact — household pre-register (and when any field is filled). */
@@ -782,7 +810,8 @@ export const evacueeInputSchema = z.object({
 	first_name: z.string({ error: 'กรุณากรอกชื่อ' }).trim().min(1, 'กรุณากรอกชื่อ'),
 	// Empty allowed for mononyms / foreign nationals without family names (CR-106 FR-18).
 	last_name: z.string().trim().default(''),
-	gender: z.enum(['male', 'female', 'other'], { error: 'กรุณาเลือกเพศ' }),
+	/** `null` = ไม่ระบุเพศ (default on registration forms). */
+	gender: z.enum(['male', 'female', 'other'], { error: 'กรุณาเลือกเพศ' }).nullable(),
 	phone: phoneSchema, // UI requires a value; "ไม่มี" → null
 	nickname: z.string().trim().optional(),
 	birth_year: z.coerce
@@ -828,7 +857,7 @@ export const evacueeInputSchema = z.object({
 	card_snapshot: cardSnapshotSchema.nullable().optional().default(null),
 	status: stayStatusSchema.optional().default('pre_registered'),
 	zone: z.string().trim().nullable().optional().default(null),
-	/** CR-155: Station 1's optional, non-binding zone suggestion ('' → null). */
+	/** CR-158: Station 1's optional, non-binding zone suggestion ('' → null). */
 	preferred_zone: z
 		.string()
 		.trim()
@@ -1096,7 +1125,7 @@ export const evacueePersonalEditFormSchema = z
 		nickname: z.string().trim(),
 		birthYear: z.string().trim(),
 		age: z.string().trim(),
-		gender: genderSchema,
+		gender: genderSchema.nullable(),
 		phone: z.string().trim(),
 		noPhone: z.boolean().default(false),
 		cardType: cardTypeSchema,
@@ -1476,7 +1505,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext, id?: stri
 	const person_id = resolvePersonIdOnCreate(d.person_id);
 	return makeDoc(
 		'evacuee',
-		13, // schema_v 13: preferred_zone (CR-155); 12: gender nullable + registered_via `api` (CR-154); 11: religion_other + disability_other_detail (CR-148); 10: anonymous cardType + ANON mint (CR-112); 9: arriving (CR-106); 8: draft/card_snapshot (CR-084); 7 = registered_via `web` (CR-070); 6 = stay cancelled (CR-070); 5 = age (CR-057)
+		13, // schema_v 13: preferred_zone (CR-158); 12: gender nullable + registered_via `api` (CR-154); 11: religion_other + disability_other_detail (CR-148); 10: anonymous cardType + ANON mint (CR-112); 9: arriving (CR-106); 8: draft/card_snapshot (CR-084); 7 = registered_via `web` (CR-070); 6 = stay cancelled (CR-070); 5 = age (CR-057)
 		{
 			first_name: d.first_name,
 			last_name: d.last_name,

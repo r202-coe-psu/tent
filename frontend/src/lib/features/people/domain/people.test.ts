@@ -1755,11 +1755,16 @@ describe('gender nullable (schema_v 12, CR-154)', () => {
 		expect(genderLabelTh('other')).toBe('อื่นๆ');
 	});
 
-	it('still requires gender on staff/public intake (FR-70)', () => {
+	it('accepts null gender (ไม่ระบุเพศ) on intake; key still required', () => {
 		const base = { first_name: 'A', last_name: 'B', phone: null };
-		expect(evacueeInputSchema.safeParse({ ...base, gender: null }).success).toBe(false);
+		expect(evacueeInputSchema.safeParse({ ...base, gender: null }).success).toBe(true);
 		expect(evacueeInputSchema.safeParse(base).success).toBe(false);
 		expect(evacueeInputSchema.safeParse({ ...base, gender: 'female' }).success).toBe(true);
+	});
+
+	it('createEvacuee persists gender null', () => {
+		const e = createEvacuee({ first_name: 'A', last_name: 'B', gender: null, phone: null }, ctx);
+		expect(e.gender).toBeNull();
 	});
 
 	it('accepts registered_via api', () => {
@@ -1774,7 +1779,7 @@ describe('gender nullable (schema_v 12, CR-154)', () => {
 	});
 });
 
-describe('preferred_zone (schema_v 13, CR-155)', () => {
+describe('preferred_zone (schema_v 13, CR-158)', () => {
 	const base = { first_name: 'A', last_name: 'B', gender: 'male' as const, phone: null };
 	const ctx = { shelterCode: 'SH001', createdBy: 'staff' };
 

@@ -2,13 +2,14 @@
 	import {
 		LEDGER_PARAM_KEYS,
 		LedgerTable,
+		MergeItemDialog,
 		STOCK_PARAM_KEYS,
 		StockTable,
 		TransferTab,
 		usePendingTransferCount,
 		useStockBalance
 	} from '$lib/features/operations';
-	import { ProductsPanel } from '$lib/features/catalog';
+	import { ProductsPanel, type ItemMaster } from '$lib/features/catalog';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import { ResourceNeedsDashboard } from '$lib/features/resource-calc';
@@ -39,6 +40,14 @@
 	const pendingCount = $derived(pendingTransfers.data ?? 0);
 
 	const catalogBasePath = resolve('/back-office/catalog');
+
+	// "รวมกับรายการอื่น" (CR-143 §F) moves stock, so the page joins catalog's list to operations' dialog.
+	let mergeOpen = $state(false);
+	let mergeSource = $state<ItemMaster | null>(null);
+	function startMerge(item: ItemMaster) {
+		mergeSource = item;
+		mergeOpen = true;
+	}
 
 	const PRIMARY_TABS = ['inventory', 'movements', 'transfer'] as const;
 	type PrimaryTabKey = (typeof PRIMARY_TABS)[number];
@@ -181,7 +190,12 @@
 		</div>
 	{:else if activeTab === 'catalog'}
 		<div class="animate-in duration-300 fade-in slide-in-from-bottom-2">
-			<ProductsPanel basePath={catalogBasePath} scope="shelter" stockByItemId={balanceQuery.data} />
+			<ProductsPanel
+				basePath={catalogBasePath}
+				scope="shelter"
+				stockByItemId={balanceQuery.data}
+				onmerge={startMerge}
+			/>
 		</div>
 	{:else if activeTab === 'sphere'}
 		<div class="animate-in duration-300 fade-in slide-in-from-bottom-2">
@@ -197,3 +211,5 @@
 		</div>
 	{/if}
 </div>
+
+<MergeItemDialog bind:open={mergeOpen} source={mergeSource} />

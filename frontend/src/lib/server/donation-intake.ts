@@ -4,7 +4,12 @@ import { hasStaffCapability, isShelterManager } from '$lib/auth/roles';
 import type { PublicDonationDoc, ReceiveDonationInput } from '$lib/features/donations';
 import type { CountedItem } from '$lib/features/operations/server';
 import { isSupplyItem, type SupplyItem, CATALOG_DB } from '$lib/features/supply/server';
-import { isItemMaster, itemMasterUnit, type ItemMaster } from '$lib/features/catalog/server';
+import {
+	isItemMaster,
+	itemMasterUnit,
+	requiresExpiry,
+	type ItemMaster
+} from '$lib/features/catalog/server';
 import { fetchDocs } from '$lib/server/donation-docs';
 import { sha256Hex } from '$lib/db/hash';
 
@@ -124,15 +129,19 @@ export async function assertCountedAgainstCatalog(counted: CountedItem[]): Promi
 
 	// Two shapes share the `catalog` database and the `_id` prefixes do not nest:
 	// `item:{ulid}` is the T-10 supply stub (`unit`, `perishable`), `item_master:{ulid}`
-	// the CR-013 master (`base_unit`, no perishable flag). Scanning only `item:` left
+	// the CR-013 master (`base_unit`; its expiry rule is derived — CR-143 FR-D1). Scanning only `item:` left
 	// every item_master line rejected as an unknown item.
 	const supplyItems = (await fetchDocs<SupplyItem>(CATALOG_DB, 'item:')).filter(isSupplyItem);
 	const itemMasters = (await fetchDocs<ItemMaster>(CATALOG_DB, 'item_master:')).filter(
 		isItemMaster
 	);
-	const byId = new Map<string, { unit: string; perishable: boolean }>([
-		...supplyItems.map((i) => [i._id, { unit: i.unit, perishable: i.perishable }] as const),
-		...itemMasters.map((m) => [m._id, { unit: itemMasterUnit(m), perishable: false }] as const)
+	const byId = new Map<string, { unit: string; requiresExpiry: boolean }>([
+		...supplyItems.map(
+			(i) => [i._id, { unit: i.unit, requiresExpiry: requiresExpiry(i) }] as const
+		),
+		...itemMasters.map(
+			(m) => [m._id, { unit: itemMasterUnit(m), requiresExpiry: requiresExpiry(m) }] as const
+		)
 	]);
 
 	for (const line of counted) {
@@ -145,7 +154,7 @@ export async function assertCountedAgainstCatalog(counted: CountedItem[]): Promi
 				`Unit mismatch for item ${line.item_id}: expected ${item.unit}, got ${line.unit}`
 			);
 		}
-		if (item.perishable && !line.lot?.expiry) {
+		if (item.requiresExpiry && !line.lot?.expiry) {
 			throw new Error(`Perishable item ${line.item_id} requires lot.expiry to be set`);
 		}
 	}

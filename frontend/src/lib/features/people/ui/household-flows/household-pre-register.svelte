@@ -66,7 +66,7 @@
 			};
 
 			// 1. Create Head Evacuee (pre_registered). The picked zone is only a suggestion
-			// (`preferred_zone`, CR-155): the real zone is assigned at Station 3, and the VDU
+			// (`preferred_zone`, CR-158): the real zone is assigned at Station 3, and the VDU
 			// rejects a zone change on anyone not yet active.
 			const headDoc = await createEvacueeMutation.mutateAsync({
 				input: { ...headData, preferred_zone: zone || null },

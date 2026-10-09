@@ -40,7 +40,7 @@
 		evacuee?: Evacuee | null;
 		triage_level?: TriageLevel | null;
 		ewar_symptoms?: readonly string[] | null;
-		/** CR-155: what became of the zone Station 1 suggested (resolved by the caller). */
+		/** CR-158: what became of the zone Station 1 suggested (resolved by the caller). */
 		preferred_zone?: PreferredZoneOutcome;
 		occupant_counts?: Map<string, number> | Record<string, number>;
 		onSelectZone?: (zoneCode: string) => void;
