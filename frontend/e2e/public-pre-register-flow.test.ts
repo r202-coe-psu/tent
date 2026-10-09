@@ -220,7 +220,7 @@ test.describe(
 			await expect(links).toHaveCount(3);
 			await expect(links.filter({ visible: true })).toHaveCount(2);
 
-			await page.getByRole('link', { name: 'ลงทะเบียนผู้ประสบภัยล่วงหน้า' }).click();
+			await page.getByRole('link', { name: 'ลงทะเบียนล่วงหน้า' }).click();
 			// The booking form pins the default (central queue) in the URL once it mounts.
 			await expect(page).toHaveURL(/\/pre-register\?shelter=unassigned$/);
 			await expect(page).toHaveTitle('ลงทะเบียนล่วงหน้า | SmartShelter');
@@ -1195,7 +1195,7 @@ test.describe('Pre-register: error matrix (E)', { tag: ['@pre-register', '@smoke
 		);
 		await openPreRegister(page);
 		await fillAddress(page);
-		await page.getByRole('button', { name: 'เข้าร่วมคิวกลาง' }).click();
+		await page.getByRole('button', { name: 'เข้าร่วมครอบครัวนี้' }).click();
 		await expect(page.getByText('จะเข้าร่วมครอบครัวที่มีอยู่แล้ว')).toBeVisible();
 
 		await fillMember(page, 0, { firstName: 'ทดสอบ', gender: 'male', phone: '12' });
@@ -1783,7 +1783,7 @@ test.describe(
 			test.setTimeout(120_000);
 			liveWritesStarted = true;
 			await page.goto('/');
-			await page.getByRole('link', { name: 'ลงทะเบียนผู้ประสบภัยล่วงหน้า' }).click();
+			await page.getByRole('link', { name: 'ลงทะเบียนล่วงหน้า' }).click();
 			await expect(page).toHaveURL(/\/pre-register\?shelter=unassigned$/);
 			await expect(page.locator('#address-no')).toBeVisible({ timeout: 20_000 });
 			await expect(shelterTrigger(page)).toContainText('ไม่ระบุศูนย์พักพิง');

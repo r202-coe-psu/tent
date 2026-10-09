@@ -223,6 +223,24 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 			expect(other.body).toMatch(/id="card-number"/);
 			expect(other.body).not.toMatch(/id="card-number"[^>]*maxlength=/);
 		});
+
+		it('renders checking indicator when checkingCardNumber is true', () => {
+			const result = render(PersonalInfoFields, {
+				props: {
+					checkingCardNumber: true
+				}
+			});
+			expect(result.body).toContain('กำลังตรวจสอบ...');
+		});
+
+		it('renders checking indicator when checkingPhone is true', () => {
+			const result = render(PersonalInfoFields, {
+				props: {
+					checkingPhone: true
+				}
+			});
+			expect(result.body).toContain('กำลังตรวจสอบ...');
+		});
 	});
 
 	describe('Special Needs Fields (special-needs-fields.svelte)', () => {
