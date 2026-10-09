@@ -46,4 +46,5 @@ pre-push:
     frontend-test:
       root: frontend/
       glob: "**/*.{ts,js,svelte,json,css,yaml}"
-      run: pnpm test
+      # Vitest fs cache disabled here: this hook is the only unit-test gate (see frontend/CONTRIBUTING.md §6).
+      run: VITEST_NO_FS_CACHE=1 pnpm test

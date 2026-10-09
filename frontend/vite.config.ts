@@ -1,8 +1,9 @@
 import devtoolsJson from 'vite-plugin-devtools-json';
 import tailwindcss from '@tailwindcss/vite';
 import { sveltekit } from '@sveltejs/kit/vite';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 import { loadEnv } from 'vite';
+import { globSync, readFileSync } from 'node:fs';
 
 function couchInit(user: string, password: string, couchUrl: string) {
 	return {
@@ -26,6 +27,26 @@ function couchInit(user: string, password: string, couchUrl: string) {
 		}
 	};
 }
+
+// --- Vitest project split (see CONTRIBUTING.md §6) -------------------------------------------
+// `pure` runs with `isolate: false` (one shared module graph per worker => far less import/transform
+// work). That is only safe for tests with no module-level or global state, so membership is
+// rule-based: pure-by-convention directories, minus any file that mocks modules / stubs env or
+// globals / switches environment (those go to `isolated` automatically). Every other test file
+// stays in `isolated`, so each file runs in exactly one project.
+const TEST_INCLUDE = ['src/**/*.{test,spec}.{ts,js}'];
+const PURE_GLOBS = [
+	'src/lib/**/domain/**/*.test.ts',
+	'src/lib/db/**/*.test.ts',
+	'src/lib/auth/**/*.test.ts'
+];
+const NEEDS_ISOLATION =
+	/\bvi\.(mock|doMock|hoisted|unmock|importActual|resetModules|stubEnv|stubGlobal|useFakeTimers)\b|@vitest-environment|process\.env|globalThis/;
+
+const pureTestFiles = globSync(PURE_GLOBS)
+	.filter((file) => !NEEDS_ISOLATION.test(readFileSync(file, 'utf8')))
+	.map((file) => file.replaceAll('\\', '/'))
+	.sort();
 
 export default defineConfig(({ mode }) => {
 	const env = loadEnv(mode, process.cwd(), '');
@@ -64,8 +85,26 @@ export default defineConfig(({ mode }) => {
 		test: {
 			globals: true,
 			environment: 'node',
-			include: ['src/**/*.{test,spec}.{ts,js}'],
-			setupFiles: ['./src/lib/testing/vitest-setup.ts']
+			setupFiles: ['./src/lib/testing/vitest-setup.ts'],
+			// Persistent transform cache: node_modules/.experimental-vitest-cache (delete if stale).
+			// VITEST_NO_FS_CACHE=1 disables it (pre-push hook). The CLI flag
+			// `--experimental.fsModuleCache=false` is NOT honoured: projects (`extends: true`) take
+			// the value from this file.
+			experimental: { fsModuleCache: process.env.VITEST_NO_FS_CACHE !== '1' },
+			projects: [
+				{
+					extends: true,
+					test: { name: 'pure', include: pureTestFiles, isolate: false }
+				},
+				{
+					extends: true,
+					test: {
+						name: 'isolated',
+						include: TEST_INCLUDE,
+						exclude: [...configDefaults.exclude, ...pureTestFiles]
+					}
+				}
+			]
 		}
 	};
 });
