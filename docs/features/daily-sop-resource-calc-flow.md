@@ -6,7 +6,7 @@ updated: 2026-07-23
 module: B
 audience: developer + stakeholder review
 track: >
-  Change Record [CR-042](../changes/CR-042-daily-sop-calc-follow-up.md) status=approved (2026-07-23).
+  Change Record [CR-042](../changes/07-B-sop/CR-042-daily-sop-calc-follow-up.md) status=approved (2026-07-23).
   OD-1=A · OD-2=B · OD-3=A · OD-4=C. schema.md §2.15 + 07-B DoD applied; code/Zod = implement next.
 note: >
   รวม Module B ที่ dev ต้อง implement ได้: FR-44/45/46 · T-30/T-31/T-32.
@@ -20,8 +20,8 @@ note: >
 
 - Module B ให้ศูนย์ **ตั้งอัตราส่วน SOP → คำนวณ need/have/gap รายวัน → ดู dashboard** เพื่อตัดสินใจขอของ / เรียกอาสา / วางแผนครัว
 - Persist หลัก: `sop_profile` (catalog) · `sop_override` (shelter) · `daily_calc:{date}` (shelter, 1 doc/วัน, **schema_v 2**)
-- Effective ratio = **override `active` ?? master** ([CR-006](../changes/CR-006-sop-profile-master-override.md) / [CR-018](../changes/CR-018-sop-override-invariants.md))
-- Engine: occupancy (`evacuee.current_stay.status = active`) × ratio → `need`; เทียบ `have` ตาม hardcode map → `gap` ([CR-036](../changes/CR-036-daily-calc-doc-type.md) / [CR-042](../changes/CR-042-daily-sop-calc-follow-up.md))
+- Effective ratio = **override `active` ?? master** ([CR-006](../changes/07-B-sop/CR-006-sop-profile-master-override.md) / [CR-018](../changes/07-B-sop/CR-018-sop-override-invariants.md))
+- Engine: occupancy (`evacuee.current_stay.status = active`) × ratio → `need`; เทียบ `have` ตาม hardcode map → `gap` ([CR-036](../changes/07-B-sop/CR-036-daily-calc-doc-type.md) / [CR-042](../changes/07-B-sop/CR-042-daily-sop-calc-follow-up.md))
 - R3: **on-demand อย่างเดียว** · drill-down จาก snapshot fields · **ไม่** feed Meal/Volunteer/Donation จนกว่า T-32 นิ่ง
 
 ---
@@ -33,7 +33,7 @@ note: >
 | **จุดประสงค์**    | เปลี่ยน occupancy + stock + SOP ratio เป็นตัวเลข need/have/gap ที่ผู้บริหารศูนย์ใช้วางแผนวันต่อวัน                                                              |
 | **ในขอบเขต**      | T-30 config · T-31 engine + persist · T-32 dashboard `/resources` · permission ตาม matrix                                                                       |
 | **นอกขอบเขต**     | T-42 what-if · EOC aggregate ของ calc · public transparency · rice/egg consumption (ครัว / CR-021) · gate security · scheduled auto-run · downstream feed ใน R3 |
-| **Change Record** | [CR-042](../changes/CR-042-daily-sop-calc-follow-up.md) (`approved`) — ปิด follow-up จาก [CR-036](../changes/CR-036-daily-calc-doc-type.md)                     |
+| **Change Record** | [CR-042](../changes/07-B-sop/CR-042-daily-sop-calc-follow-up.md) (`approved`) — ปิด follow-up จาก [CR-036](../changes/07-B-sop/CR-036-daily-calc-doc-type.md)                     |
 | **Route**         | `/resources` (dashboard + run) · `/admin/catalog` (master SOP — SA) · UI override ใน shelter back-office ของ `sop-ratios`                                       |
 | **Code**          | `features/sop-ratios/` · `features/resource-calc/`                                                                                                              |
 
@@ -116,7 +116,7 @@ flowchart LR
 | **DS-E10** | Snapshot freeze: `ratio_snapshot`, `occupancy_snapshot`, `stock_snapshot`, `sop_profile_version`, `ratio_source`, `sop_override_id`, `sop_override_version`, `formula_v`, `as_of` |
 | **DS-E11** | รองรับ **on-demand run** จาก UI เท่านั้นใน R3 (ไม่มี scheduler)                                                                                                                   |
 | **DS-E12** | Unit test สูตรครอบ multiply/divide/threshold + edge DS-E5..E7                                                                                                                     |
-| **DS-E13** | `have` ตาม hardcode map ใน [CR-042](../changes/CR-042-daily-sop-calc-follow-up.md) — ไม่ lookup ด้วยชื่อ ratio key                                                                |
+| **DS-E13** | `have` ตาม hardcode map ใน [CR-042](../changes/07-B-sop/CR-042-daily-sop-calc-follow-up.md) — ไม่ lookup ด้วยชื่อ ratio key                                                                |
 | **DS-E14** | `schema_v = 2` บนทุก doc ใหม่                                                                                                                                                     |
 
 ### 4.3 Dashboard (FR-46 / T-32)
@@ -190,7 +190,7 @@ flowchart LR
 ## 7. Canonical ratio keys (20) + `have` map
 
 แหล่ง truth: CR-021 + reference table (signed-off). **ห้าม** persist `rice_g_per_person_meal` ใน SOP ratios (ย้ายครัว).  
-Map เต็มอยู่ใน [CR-042](../changes/CR-042-daily-sop-calc-follow-up.md) — สรุป:
+Map เต็มอยู่ใน [CR-042](../changes/07-B-sop/CR-042-daily-sop-calc-follow-up.md) — สรุป:
 
 | #     | key                                                       | kind           | have_source | path / id                        |
 | ----- | --------------------------------------------------------- | -------------- | ----------- | -------------------------------- |
@@ -295,9 +295,9 @@ sequenceDiagram
 | Task breakdown          | [`docs/task-breakdown/07-B-sop.md`](../task-breakdown/07-B-sop.md)                                                                                                                         |
 | PRD R3                  | [`docs/prd/phase-r3-operations.md`](../prd/phase-r3-operations.md) §4.4                                                                                                                    |
 | Schema                  | [`docs/data/schema.md`](../data/schema.md) §2.14 §2.15 §4.4                                                                                                                                |
-| CR master/override      | [CR-006](../changes/CR-006-sop-profile-master-override.md), [CR-018](../changes/CR-018-sop-override-invariants.md), [CR-021](../changes/CR-021-sop-ratio-scope-handbook-plus-volunteer.md) |
-| CR daily_calc           | [CR-036](../changes/CR-036-daily-calc-doc-type.md)                                                                                                                                         |
-| CR follow-up (approved) | [CR-042](../changes/CR-042-daily-sop-calc-follow-up.md)                                                                                                                                    |
+| CR master/override      | [CR-006](../changes/07-B-sop/CR-006-sop-profile-master-override.md), [CR-018](../changes/07-B-sop/CR-018-sop-override-invariants.md), [CR-021](../changes/07-B-sop/CR-021-sop-ratio-scope-handbook-plus-volunteer.md) |
+| CR daily_calc           | [CR-036](../changes/07-B-sop/CR-036-daily-calc-doc-type.md)                                                                                                                                         |
+| CR follow-up (approved) | [CR-042](../changes/07-B-sop/CR-042-daily-sop-calc-follow-up.md)                                                                                                                                    |
 | Ratio values            | [`docs/source/handbooks/sop-ratio-reference-table.md`](../source/handbooks/sop-ratio-reference-table.md)                                                                                   |
 | Sitemap                 | [`docs/sitemap.md`](../sitemap.md) §2.7 `/resources`                                                                                                                                       |
 | Code                    | `frontend/src/lib/features/resource-calc/` · `frontend/src/lib/features/sop-ratios/`                                                                                                       |

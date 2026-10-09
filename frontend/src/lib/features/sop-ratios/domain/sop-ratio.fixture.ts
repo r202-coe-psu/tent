@@ -4,7 +4,7 @@ import type { SopRatioKey } from './sop-ratio';
  * Default ratios representing the Sphere Baseline and standard guidelines.
  * These values align with the ratified defaults in the SOP Ratio Reference Table.
  * @see docs/source/handbooks/sop-ratio-reference-table.md
- * @see docs/changes/CR-026-sop-ratio-catalog-scope-and-history-ratification.md
+ * @see docs/changes/07-B-sop/CR-026-sop-ratio-catalog-scope-and-history-ratification.md
  */
 export const validRatios: Record<SopRatioKey, string> = {
 	water_l_per_person_day: '15',

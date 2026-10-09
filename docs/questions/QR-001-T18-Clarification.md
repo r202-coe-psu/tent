@@ -23,10 +23,10 @@ feature `sop-ratios` ยังไม่มีในโค้ด — ไฟล์
 
 **ที่ยังไม่ชัด (dev lead ยืนยันไม่ได้):** `catalog` DB ในระบบนี้เป็น central-only จริงไหม หรือมี mechanism ให้แต่ละ shelter แก้ได้ด้วย — ส่งผลต่อ factory, route guard, sync direction, validate_doc_update ทั้งหมด
 
-**✅ RESOLVED → [CR-006](../changes/CR-006-sop-profile-master-override.md)** — สองชั้น: master
+**✅ RESOLVED → [CR-006](../changes/07-B-sop/CR-006-sop-profile-master-override.md)** — สองชั้น: master
 (`sop_profile`) อยู่ `catalog` (central, `system_admin` แก้) + override (`sop_override`) อยู่
 `shelter_*` (`shelter_manager` แก้เฉพาะศูนย์ตัวเอง) resolve = `override active ?? master` —
-ยืนยันซ้ำโดย PO ในที่ประชุม 2026-07-01 (ดู [CR-026](../changes/CR-026-sop-ratio-catalog-scope-and-history-ratification.md))
+ยืนยันซ้ำโดย PO ในที่ประชุม 2026-07-01 (ดู [CR-026](../changes/07-B-sop/CR-026-sop-ratio-catalog-scope-and-history-ratification.md))
 
 **สถานะ:** ✅ RESOLVED → CR-006 + CR-026 (ratified 2026-07-03)
 
@@ -42,7 +42,7 @@ feature `sop-ratios` ยังไม่มีในโค้ด — ไฟล์
 
 **✅ RESOLVED 2026-06-25 (PO):** ครอบคลุมทุกมิติ ปภ.2565 + Sphere 2018, **merge** คีย์ความหมายซ้ำ →
 **20 canonical keys**, คงรูป `{key: num>0}` (เลขเดียวต่อคีย์ ไม่ใช่ range), เพิ่ม `SOP_RATIO_KIND`
-(multiply/divide/threshold). บันทึก → [CR-006 §"SOP ratio canonical key list"](../changes/CR-006-sop-profile-master-override.md).
+(multiply/divide/threshold). บันทึก → [CR-006 §"SOP ratio canonical key list"](../changes/07-B-sop/CR-006-sop-profile-master-override.md).
 ค่า seed จริงต่อคีย์ยังตาม Q-T18-3.
 
 **สถานะ:** ✅ RESOLVED → CR-006 (amend 2026-06-25)
