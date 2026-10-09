@@ -407,10 +407,11 @@ class ScannerClientManager:
         )
 
     async def _grant_camera_permission(self, context) -> None:
-        """Let the kiosk page open the camera without a permission prompt. The face check starts the
-        camera after a touch on the screen; in --kiosk mode nobody can answer a prompt, and the
-        browser profile is in /tmp, so an earlier "allow" would not survive a reboot."""
-        if self.face_service is None:
+        """Let the kiosk page open the camera without a permission prompt. The face check and the
+        camera QR scan both open the camera; in --kiosk mode nobody can answer a prompt, and the
+        browser profile is in /tmp, so an earlier "allow" would not survive a reboot. A reader-only
+        kiosk with the face check off never asks for the camera, so it is not given one."""
+        if self.face_service is None and self.qr_input not in ("camera", "both"):
             return
         parts = urllib.parse.urlsplit(self.tent_base_url)
         try:

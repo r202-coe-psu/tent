@@ -1564,8 +1564,18 @@ class FaceCameraPermissionTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(context.granted[0][1], "https://tent.example.go.th:8443")
 
-    async def test_nothing_is_granted_when_the_face_check_is_off(self):
-        client = manager.ScannerClientManager(valid_config())
+    async def test_the_kiosk_origin_is_given_the_camera_when_qr_codes_are_scanned_by_camera(self):
+        for qr_input in ("camera", "both"):
+            with self.subTest(qr_input=qr_input):
+                client = manager.ScannerClientManager(valid_config(KIOSK_QR_INPUT=qr_input))
+                context = self.FakeContext()
+
+                await client._grant_camera_permission(context)
+
+                self.assertEqual(context.granted, [(["camera"], "https://tent.example.go.th")])
+
+    async def test_nothing_is_granted_to_a_reader_only_kiosk_with_the_face_check_off(self):
+        client = manager.ScannerClientManager(valid_config(KIOSK_QR_INPUT="reader"))
         context = self.FakeContext()
 
         await client._grant_camera_permission(context)
