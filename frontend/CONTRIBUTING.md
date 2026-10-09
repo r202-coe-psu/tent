@@ -397,6 +397,15 @@ Coding patterns (client wrappers, mappers, query keys): **`CONVENTIONS.md` §12*
   globals on). Prioritize **domain** logic (factories, invariants, guards) and **data** repositories
   (use injectable repository doubles or mock `fetch` for fast tests; use `*.remote.integration.test.ts`
   when validating real CouchDB HTTP behavior).
+- **Vitest projects** (`vite.config.ts`): `pure` runs with `isolate: false` (shared module graph,
+  much faster); `isolated` is the default per-file isolation. `pure` = `src/lib/**/domain/**`,
+  `src/lib/db/**`, `src/lib/auth/**`, minus any file that uses `vi.mock`/`vi.doMock`/`vi.stubEnv`/
+  `vi.stubGlobal`/fake timers/`process.env`/`globalThis` or `// @vitest-environment` (those are
+  routed to `isolated` automatically). Files in `pure` must not rely on module mocks or global
+  state; if a test needs them, it lands in `isolated` — never add shared mutable state to a
+  `pure` test. Every test file runs in exactly one project.
+- Vitest's fs module cache (`experimental.fsModuleCache`) persists transforms in
+  `node_modules/.experimental-vitest-cache`. Delete that directory if results look stale.
 - E2E is **Playwright** in `e2e/`; `pnpm test:e2e` builds in `test` mode first. `e2e/mock-api.js`
   stands in for the backend during those runs.
 
