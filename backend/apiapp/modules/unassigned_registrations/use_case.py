@@ -21,6 +21,7 @@ from tent_model.unassigned_registration import (
 
 from ...core.staff_session import StaffSession
 from ...infrastructure.gridfs import load_unassigned_photo, parse_photo_ref, photo_ref
+from ...utils.datetime_fmt import utc_z_isoformat
 from ...utils.masking import (
     mask_last_name,
     mask_phone,
@@ -445,7 +446,7 @@ class UnassignedRegistrationsUseCase:
             members=[_member_response(m) for m in doc.members],
             registered_via=doc.registered_via,
             status=doc.status,
-            created_at=doc.created_at.isoformat(),
+            created_at=utc_z_isoformat(doc.created_at),
         )
 
     async def _join_existing(
@@ -526,7 +527,7 @@ class UnassignedRegistrationsUseCase:
             members=[_member_response(m) for m in doc.members],
             registered_via=doc.registered_via,
             status=doc.status,
-            created_at=doc.created_at.isoformat(),
+            created_at=utc_z_isoformat(doc.created_at),
         )
 
     async def match_by_residence(
@@ -762,7 +763,7 @@ class UnassignedRegistrationsUseCase:
             reserved_household_id=doc.reserved_household_id,
             registered_via=doc.registered_via,
             status=doc.status,
-            created_at=doc.created_at.isoformat(),
+            created_at=utc_z_isoformat(doc.created_at),
             housing_type=hh.housing_type,
             residence_landmark=hh.residence_landmark,
             dorm_name=hh.dorm_name,
@@ -846,7 +847,7 @@ class UnassignedRegistrationsUseCase:
                     reserved_household_id=doc.reserved_household_id,
                     registered_via=doc.registered_via,
                     status=doc.status,
-                    created_at=doc.created_at.isoformat(),
+                    created_at=utc_z_isoformat(doc.created_at),
                     open_members=open_members,
                     open_pets=open_pet_hits,
                 )
@@ -1479,7 +1480,7 @@ def _open_pet_hit(pet: UnassignedPet) -> OpenPetHit:
 
 
 def _pet_response(pet: UnassignedPet) -> PetCreated:
-    claimed_at = pet.claimed_at.isoformat() if pet.claimed_at else None
+    claimed_at = utc_z_isoformat(pet.claimed_at) if pet.claimed_at else None
     return PetCreated(
         pet_id=pet.pet_id or "",
         status=pet.effective_status(),
@@ -1523,7 +1524,7 @@ def _list_item(doc: UnassignedRegistration) -> UnassignedRegistrationListItem:
         reserved_household_id=doc.reserved_household_id,
         registered_via=doc.registered_via,
         status=doc.status,
-        created_at=doc.created_at.isoformat(),
+        created_at=utc_z_isoformat(doc.created_at),
         household=_household_out(doc.household),
         open_members=open_members,
         open_member_count=len(open_members),
@@ -1540,7 +1541,7 @@ def _detail_response(doc: UnassignedRegistration) -> UnassignedRegistrationDetai
         reserved_household_id=doc.reserved_household_id,
         registered_via=doc.registered_via,
         status=doc.status,
-        created_at=doc.created_at.isoformat(),
+        created_at=utc_z_isoformat(doc.created_at),
         household=_household_out(doc.household),
         members=[_member_response(m) for m in doc.members],
     )

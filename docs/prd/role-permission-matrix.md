@@ -14,7 +14,7 @@ affects:
 
 ## 0. Document Purpose
 
-เอกสารนี้คือแม่บทการควบคุมสิทธิ์การเข้าถึงข้อมูลและการปฏิบัติการของระบบ Smart Shelter (Canonical Role-Based Access Control Specification) ครอบคลุมสถาปัตยกรรม **10 Role Taxonomy**, **Compound Scoped Roles (บทบาทระบุศูนย์)**, **Time-Bound Dynamic Role Provisioning**, และ **Health & Screening Visibility Policy** ตามที่กำหนดใน [CR-093](../changes/CR-093-multi-shelter-compound-roles.md) และ [CR-104](../changes/CR-104-volunteer-backoffice-and-user-management-v10.md).
+เอกสารนี้คือแม่บทการควบคุมสิทธิ์การเข้าถึงข้อมูลและการปฏิบัติการของระบบ Smart Shelter (Canonical Role-Based Access Control Specification) ครอบคลุมสถาปัตยกรรม **10 Role Taxonomy**, **Compound Scoped Roles (บทบาทระบุศูนย์)**, **Time-Bound Dynamic Role Provisioning**, และ **Health & Screening Visibility Policy** ตามที่กำหนดใน [CR-093](../changes/01-core/CR-093-multi-shelter-compound-roles.md) และ [CR-104](../changes/06-A-volunteer/CR-104-volunteer-backoffice-and-user-management-v10.md).
 
 ---
 

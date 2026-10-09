@@ -143,8 +143,9 @@
 					: ''}"
 				onclick={() => {
 					activeTab = 'history';
+					// no sync here: TicketHistory mounts with the tab and syncs itself — a second
+					// call doubled every status request (10/min/IP budget) and the claimed toast
 					storedTicketsCount = getStoredTickets().length;
-					void syncTicketsStatus();
 				}}
 			>
 				<History class="hidden size-4 sm:block" />

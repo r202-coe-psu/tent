@@ -65,6 +65,8 @@ export interface ShelterSummary {
 	luggage_policy: LuggagePolicy;
 	parking_policy: ParkingPolicy;
 	feature_flags: ShelterFeatureFlags;
+	created_at: string;
+	updated_at: string;
 }
 
 export interface SheltersRepository {

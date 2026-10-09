@@ -4068,4 +4068,210 @@ describe('buildValidateDocUpdate', () => {
 			);
 		});
 	});
+
+	describe('bulk_return_claim / bulk_return_pool VDU rules (moved from return-workflow)', () => {
+		it('23. v2 → v1 rejected by VDU', () => {
+			const vduCode = buildValidateDocUpdate('SH001');
+			const validate = new Function(`return ${vduCode}`)();
+
+			const v2Pool = {
+				_id: 'bulk_return_pool:01J00000000000000000000150',
+				type: 'bulk_return_pool',
+				schema_v: 2,
+				shelter_code: 'SH001',
+				item_id: 'item:cot',
+				stock_ledger_id: 'stock_ledger:01J00000000000000000000150',
+				total_received_qty: '10',
+				claimed_qty: '0',
+				unclaimed_quota: '10',
+				claim_ids: [],
+				status: 'ACTIVE',
+				created_at: new Date().toISOString(),
+				created_by: 'wh_user',
+				updated_at: new Date().toISOString()
+			};
+
+			const downgraded = { ...v2Pool, schema_v: 1 };
+			expectForbidden(
+				() =>
+					validate(downgraded, v2Pool, {
+						name: 'wh_user',
+						roles: ['shelter:SH001', 'warehouse_staff']
+					}),
+				/Cannot downgrade bulk_return_pool from schema_v 2 to 1/
+			);
+		});
+
+		it('24. bulk_return_claim hard delete rejected by VDU', () => {
+			const vduCode = buildValidateDocUpdate('SH001');
+			const validate = new Function(`return ${vduCode}`)();
+
+			const claimDoc = {
+				_id: 'bulk_return_claim:01J00000000000000000000151',
+				type: 'bulk_return_claim',
+				schema_v: 1,
+				shelter_code: 'SH001',
+				operation_id: '01J00000000000000000000152',
+				distribution_log_id: 'distribution_log:01J00000000000000000000151',
+				bulk_pool_id: 'bulk_return_pool:01J00000000000000000000153',
+				item_id: 'item:cot',
+				claimed_qty: '1',
+				status: 'CLAIM_INTENT',
+				created_at: new Date().toISOString(),
+				created_by: 'reg_user',
+				updated_at: new Date().toISOString()
+			};
+
+			expectForbidden(
+				() =>
+					validate({ _id: claimDoc._id, _deleted: true }, claimDoc, {
+						name: 'reg_user',
+						roles: ['shelter:SH001', 'registration_staff']
+					}),
+				/Cannot delete bulk_return_claim documents/
+			);
+		});
+
+		it('24a. VDU permits all canonical frontline claim roles including system_admin and rejects unauthorized scope', () => {
+			const vduCode = buildValidateDocUpdate('SH001');
+			const validate = new Function(`return ${vduCode}`)();
+			const claimDoc = {
+				_id: 'bulk_return_claim:01J00000000000000000000170',
+				type: 'bulk_return_claim',
+				schema_v: 1,
+				shelter_code: 'SH001',
+				operation_id: '01J00000000000000000000171',
+				distribution_log_id: 'distribution_log:01J00000000000000000000170',
+				bulk_pool_id: 'bulk_return_pool:01J00000000000000000000172',
+				item_id: 'item:cot',
+				claimed_qty: '1',
+				status: 'CLAIM_INTENT',
+				created_at: new Date().toISOString(),
+				created_by: 'frontline_user',
+				updated_at: new Date().toISOString()
+			};
+
+			for (const userCtx of [
+				{ name: 'reg', roles: ['shelter:SH001', 'registration_staff'] },
+				{ name: 'sc', roles: ['shelter:SH001', 'supply_coordinator'] },
+				{ name: 'mgr', roles: ['shelter:SH001', 'shelter_manager'] },
+				{ name: 'admin', roles: ['system_admin'] }
+			]) {
+				expect(() =>
+					validate({ ...claimDoc, created_by: userCtx.name }, null, userCtx)
+				).not.toThrow();
+			}
+
+			expectForbidden(
+				() =>
+					validate({ ...claimDoc, created_by: 'unauth' }, null, {
+						name: 'unauth',
+						roles: ['shelter:SH001', 'kitchen_staff']
+					}),
+				/Only registration staff, supply coordinator, shelter manager, or system admin can manage bulk return claims/
+			);
+			expectForbidden(
+				() =>
+					validate({ ...claimDoc, created_by: 'reg', shelter_code: 'SH002' }, null, {
+						name: 'reg',
+						roles: ['shelter:SH001', 'registration_staff']
+					}),
+				/shelter_code must be SH001/
+			);
+		});
+
+		it('25. immutable fields on bulk_return_claim rejected by VDU', () => {
+			const vduCode = buildValidateDocUpdate('SH001');
+			const validate = new Function(`return ${vduCode}`)();
+
+			const claimDoc = {
+				_id: 'bulk_return_claim:01J00000000000000000000154',
+				type: 'bulk_return_claim',
+				schema_v: 1,
+				shelter_code: 'SH001',
+				operation_id: '01J00000000000000000000155',
+				distribution_log_id: 'distribution_log:01J00000000000000000000154',
+				bulk_pool_id: 'bulk_return_pool:01J00000000000000000000156',
+				item_id: 'item:cot',
+				claimed_qty: '1',
+				status: 'CLAIM_INTENT',
+				created_at: new Date().toISOString(),
+				created_by: 'reg_user',
+				updated_at: new Date().toISOString()
+			};
+
+			// Mutating permanent immutable fields
+			expectForbidden(
+				() =>
+					validate(
+						{ ...claimDoc, distribution_log_id: 'distribution_log:01J00000000000000000000999' },
+						claimDoc,
+						{
+							name: 'reg_user',
+							roles: ['shelter:SH001', 'registration_staff']
+						}
+					),
+				/bulk_return_claim id must derive from distribution_log_id/
+			);
+
+			expectForbidden(
+				() =>
+					validate({ ...claimDoc, item_id: 'item:other' }, claimDoc, {
+						name: 'reg_user',
+						roles: ['shelter:SH001', 'registration_staff']
+					}),
+				/bulk_return_claim.item_id is permanently immutable/
+			);
+		});
+
+		it('26. attempt fields change only ABORTED → CLAIM_INTENT', () => {
+			const vduCode = buildValidateDocUpdate('SH001');
+			const validate = new Function(`return ${vduCode}`)();
+
+			const claimDoc = {
+				_id: 'bulk_return_claim:01J00000000000000000000157',
+				type: 'bulk_return_claim',
+				schema_v: 1,
+				shelter_code: 'SH001',
+				operation_id: '01J00000000000000000000158',
+				distribution_log_id: 'distribution_log:01J00000000000000000000157',
+				bulk_pool_id: 'bulk_return_pool:01J00000000000000000000159',
+				item_id: 'item:cot',
+				claimed_qty: '1',
+				status: 'CLAIM_INTENT',
+				created_at: new Date().toISOString(),
+				created_by: 'reg_user',
+				updated_at: new Date().toISOString()
+			};
+
+			// Changing operation_id during CLAIM_INTENT -> POOL_CLAIMED is forbidden
+			expectForbidden(
+				() =>
+					validate(
+						{
+							...claimDoc,
+							operation_id: '01J00000000000000000000888',
+							status: 'POOL_CLAIMED'
+						},
+						claimDoc,
+						{ name: 'reg_user', roles: ['shelter:SH001', 'registration_staff'] }
+					),
+				/bulk_return_claim.operation_id is immutable during transition CLAIM_INTENT to POOL_CLAIMED/
+			);
+
+			// Changing operation_id from ABORTED -> CLAIM_INTENT is permitted
+			const abortedClaim = { ...claimDoc, status: 'ABORTED' };
+			expect(() =>
+				validate(
+					{
+						...abortedClaim,
+						operation_id: '01J00000000000000000000999',
+						status: 'CLAIM_INTENT'
+					},
+					abortedClaim,
+					{ name: 'reg_user', roles: ['shelter:SH001', 'registration_staff'] }
+				)
+			).not.toThrow();
+		});
+	});
 });

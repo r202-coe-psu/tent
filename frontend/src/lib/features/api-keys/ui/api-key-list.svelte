@@ -10,6 +10,7 @@
 		type ApiKey,
 		type ApiKeyStatus
 	} from '../domain/api-key';
+	import { formatThaiShortDate } from '$lib/utils/date';
 
 	let {
 		keys,
@@ -28,13 +29,7 @@
 	};
 
 	function formatDate(iso: string): string {
-		const ms = Date.parse(iso);
-		if (Number.isNaN(ms)) return iso;
-		return new Date(ms).toLocaleDateString('th-TH', {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric'
-		});
+		return formatThaiShortDate(iso) || iso;
 	}
 </script>
 

@@ -68,7 +68,9 @@ function masterToSummary(master: ShelterMaster): ShelterSummary {
 		admission_policy: master.admission_policy ?? { ...EMPTY_ADMISSION_POLICY },
 		luggage_policy: master.luggage_policy ?? { ...EMPTY_LUGGAGE_POLICY },
 		parking_policy: master.parking_policy ?? { ...EMPTY_PARKING_POLICY },
-		feature_flags: master.feature_flags ?? { ...DEFAULT_SHELTER_FEATURE_FLAGS }
+		feature_flags: master.feature_flags ?? { ...DEFAULT_SHELTER_FEATURE_FLAGS },
+		created_at: master.created_at ?? '',
+		updated_at: master.updated_at ?? ''
 	};
 }
 

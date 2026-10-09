@@ -343,7 +343,6 @@ export {
 	openEvacueeRow
 } from './ui/search-scan/evacuee-queue-navigation';
 export { default as EvacueeProfileView } from './ui/evacuee-profile/evacuee-profile-view.svelte';
-export { default as EvacueeForm } from './ui/registration/evacuee-form.svelte';
 export { default as RegistrationShell } from './ui/registration/registration-shell.svelte';
 export { default as EvacueeList } from './ui/search-scan/evacuee-list.svelte';
 export { default as HouseholdForm } from './ui/household-form/household-form.svelte';

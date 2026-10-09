@@ -4,6 +4,7 @@
  */
 import { createRequire } from 'node:module';
 import { expect, type Browser, type Locator, type Page } from '@playwright/test';
+import QRCode from 'qrcode';
 import { type TestUser } from './couch';
 import { injectSession, routeBrowserCouchThroughApp } from './login';
 import { pinActiveShelter } from './staff-ui';
@@ -97,29 +98,90 @@ export async function fillWalkInAddress(
 	}
 }
 
-/** Decode a Person QR `<img>` with the app's html5-qrcode (evacuee id payload). */
+/** Quiet zone the Person QR is rendered with (`evacuee-qr-modal.svelte`, `margin: 1`). */
+const PERSON_QR_MARGIN = 1;
+
+/**
+ * Read a Person QR `<img>` (evacuee id payload). Decodes with the app's html5-qrcode first; its
+ * ZXing build cannot be given PURE_BARCODE/TRY_HARDER and misses ~8% of these synthetic
+ * images outright (random ULIDs — measured 34/400), so a miss falls back to an exact check: the
+ * enclosing card's `qr-identity-card-<ulid>` id names the candidate, and the image must match
+ * the `qrcode` matrix for `evacuee:<ulid>` module for module.
+ */
 export async function decodeQrImage(page: Page, img: Locator): Promise<string> {
 	const src = await img.getAttribute('src');
 	if (!src?.startsWith('data:image')) throw new Error('QR <img> has no data-URL source');
 	if (!(await page.evaluate(() => 'Html5Qrcode' in window))) {
 		await page.addScriptTag({ path: nodeRequire.resolve('html5-qrcode/html5-qrcode.min.js') });
 	}
-	return page.evaluate(async (dataUrl) => {
-		const holder = document.createElement('div');
-		holder.id = 'e2e-qr-decode';
-		holder.style.display = 'none';
-		document.body.appendChild(holder);
-		const blob = await (await fetch(dataUrl)).blob();
-		const file = new File([blob], 'qr.png', { type: blob.type });
+	const decoded = await page.evaluate(async (dataUrl) => {
 		type QrScanner = { scanFile(file: File, showImage: boolean): Promise<string> };
 		const { Html5Qrcode } = window as unknown as { Html5Qrcode: new (id: string) => QrScanner };
-		const scanner = new Html5Qrcode(holder.id);
-		try {
-			return await scanner.scanFile(file, false);
-		} finally {
-			holder.remove();
+		const source = await (await fetch(dataUrl)).blob();
+		// a rescaled copy rescues most images the decoder misses at their native size
+		for (const scale of [1, 0.5, 0.75]) {
+			let blob = source;
+			if (scale !== 1) {
+				const bitmap = await createImageBitmap(source);
+				const canvas = document.createElement('canvas');
+				canvas.width = Math.round(bitmap.width * scale);
+				canvas.height = Math.round(bitmap.height * scale);
+				canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+				blob = await new Promise<Blob>((resolve, reject) =>
+					canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob failed'))), 'image/png')
+				);
+			}
+			const holder = document.createElement('div');
+			holder.id = 'e2e-qr-decode';
+			holder.style.display = 'none';
+			document.body.appendChild(holder);
+			try {
+				return await new Html5Qrcode(holder.id).scanFile(new File([blob], 'qr.png'), false);
+			} catch {
+				// try the next scale
+			} finally {
+				holder.remove();
+			}
 		}
+		return null;
 	}, src);
+	if (decoded) return decoded;
+
+	const cardId = await img
+		.locator('xpath=ancestor::*[starts-with(@id, "qr-identity-card-")][1]')
+		.getAttribute('id');
+	if (!cardId) throw new Error('QR could not be decoded and has no qr-identity-card ancestor');
+	const candidate = `evacuee:${cardId.slice('qr-identity-card-'.length)}`;
+	const { modules } = QRCode.create(candidate);
+	const span = modules.size + PERSON_QR_MARGIN * 2;
+	const dark = await page.evaluate(
+		async ({ dataUrl, span, margin, size }) => {
+			const bitmap = await createImageBitmap(await (await fetch(dataUrl)).blob());
+			const canvas = document.createElement('canvas');
+			canvas.width = bitmap.width;
+			canvas.height = bitmap.height;
+			const ctx = canvas.getContext('2d')!;
+			ctx.drawImage(bitmap, 0, 0);
+			const { data } = ctx.getImageData(0, 0, bitmap.width, bitmap.height);
+			const step = bitmap.width / span;
+			const cells: boolean[] = [];
+			for (let row = 0; row < size; row++) {
+				for (let col = 0; col < size; col++) {
+					const x = Math.floor((col + margin + 0.5) * step);
+					const y = Math.floor((row + margin + 0.5) * step);
+					const i = (y * bitmap.width + x) * 4;
+					cells.push((data[i] + data[i + 1] + data[i + 2]) / 3 < 128);
+				}
+			}
+			return cells;
+		},
+		{ dataUrl: src, span, margin: PERSON_QR_MARGIN, size: modules.size }
+	);
+	const expected = Array.from(modules.data, (bit) => bit === 1);
+	if (dark.length !== expected.length || dark.some((d, i) => d !== expected[i])) {
+		throw new Error(`QR could not be decoded and does not encode ${candidate}`);
+	}
+	return candidate;
 }
 
 /** On the print screen, read each member's evacuee id from their Person QR. */

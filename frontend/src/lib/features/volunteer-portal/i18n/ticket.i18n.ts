@@ -174,42 +174,38 @@ function parseBackendTimestamp(value: string): Date {
 	return new Date(normalized);
 }
 
-/** Formats ISO timestamp into localized date & time (e.g. "5 ก.ย. 2569, 18:55 น." / "Sep 5, 2026, 6:55 PM") */
-export function formatLocalizedDateTime(isoString: string, lang: LanguageCode = 'th'): string {
+/**
+ * Formats ISO timestamp as th-TH + Asia/Bangkok (e.g. "5 ก.ย. 2569, 18:55 น.").
+ * `lang` is kept for call-site compatibility; calendar output does not switch.
+ */
+export function formatLocalizedDateTime(isoString: string, _lang?: LanguageCode): string {
+	void _lang;
 	if (!isoString) return '';
 	const date = parseBackendTimestamp(isoString);
 	if (Number.isNaN(date.getTime())) return isoString;
 
-	if (lang === 'th') {
-		const formatted = date.toLocaleString('th-TH-u-ca-buddhist', {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit',
-			hour12: false,
-			timeZone: 'Asia/Bangkok'
-		});
-		return `${formatted} น.`;
-	}
-
-	return date.toLocaleString('en-US', {
+	const formatted = date.toLocaleString('th-TH-u-ca-buddhist', {
 		year: 'numeric',
 		month: 'short',
 		day: 'numeric',
-		hour: 'numeric',
+		hour: '2-digit',
 		minute: '2-digit',
-		hour12: true,
+		hour12: false,
 		timeZone: 'Asia/Bangkok'
 	});
+	return `${formatted} น.`;
 }
 
-/** Formats ISO / YYYY-MM-DD date into localized date (e.g. "วันเสาร์ที่ 13 มิถุนายน 2569" or "2 กันยายน 2569" / "Saturday, June 13, 2026") */
+/**
+ * Formats ISO / YYYY-MM-DD as th-TH Buddhist calendar (e.g. "2 กันยายน 2569").
+ * `lang` is kept for call-site compatibility; calendar output does not switch.
+ */
 export function formatLocalizedDate(
 	dateStr: string,
-	lang: LanguageCode = 'th',
+	_lang?: LanguageCode,
 	includeWeekday = false
 ): string {
+	void _lang;
 	if (!dateStr) return '';
 	let normalized = dateStr.trim();
 	const ddmmyyyy = normalized.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
@@ -220,22 +216,12 @@ export function formatLocalizedDate(
 	const date = new Date(normalized.includes('T') ? normalized : `${normalized}T00:00:00Z`);
 	if (Number.isNaN(date.getTime())) return dateStr;
 
-	if (lang === 'th') {
-		return date.toLocaleDateString('th-TH-u-ca-buddhist', {
-			weekday: includeWeekday ? 'long' : undefined,
-			year: 'numeric',
-			month: 'long',
-			day: 'numeric',
-			timeZone: 'UTC'
-		});
-	}
-
-	return date.toLocaleDateString('en-US', {
+	return date.toLocaleDateString('th-TH-u-ca-buddhist', {
 		weekday: includeWeekday ? 'long' : undefined,
 		year: 'numeric',
 		month: 'long',
 		day: 'numeric',
-		timeZone: 'UTC'
+		timeZone: 'Asia/Bangkok'
 	});
 }
 

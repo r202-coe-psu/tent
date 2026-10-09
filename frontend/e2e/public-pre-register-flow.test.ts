@@ -12,9 +12,11 @@
  * system-admin API and the `E2E …` shelter of W5 through `teardownShelter` — then asserts
  * nothing carrying this run's id is left in the queue or CouchDB (zero-leak, like
  * `stock-inventory.test.ts`).
- * Remote target (`E2E_BASE_URL`, staging/production, `playwright.public.config.ts`): strictly
- * read-only — the W* group is skipped; the navigation / render / validation / responsive
- * groups run (they never POST: the server-error cases mock the write endpoint).
+ * Remote target (`E2E_BASE_URL`, staging/production, `playwright.public.config.ts`): read-only
+ * by default — the W* group is skipped; the navigation / render / validation / responsive
+ * groups run (they never POST: the server-error cases mock the write endpoint). With
+ * `ALLOW_REMOTE_WRITES=true` (staging only), the W* group runs the same live writes +
+ * zero-leak teardown as local, against that remote target's own CouchDB.
  *
  * Local requirements: the full local stack — `docker compose up -d` (CouchDB, MongoDB, sync
  * worker, FastAPI :9000; set `E2E_FASTAPI_URL` if FastAPI is elsewhere) plus platform init
@@ -32,8 +34,9 @@
  *  @smoke         read-only, safe on staging / production (never writes; server-error cases
  *                 mock the write endpoint): N, R, V, E, S, U. Run on pre-push, the PR gate and
  *                 against staging (`pnpm test:e2e:pre-register:smoke`); kept when `IS_REMOTE`
- *  @critical      writes real data against the local stack and asserts zero leak afterwards:
- *                 W1–W6 and Z. Skipped when `IS_REMOTE`; run on the PR gate / nightly
+ *  @critical      writes real data and asserts zero leak afterwards: W1–W6 and Z. Runs
+ *                 locally or on a remote target with `ALLOW_REMOTE_WRITES=true` (staging);
+ *                 read-only remote otherwise; also run on the PR gate / nightly
  *  @release       release-gate journey only: navigation (N) + critical happy paths (W*) +
  *                 zero-leak (Z). Not on the error-matrix / render / server-error rows.
  *  @regression    the fully mocked suite `public-register.test.ts` (no backend needed);
@@ -110,7 +113,12 @@ import {
 	type Page
 } from '@playwright/test';
 import { bootstrapAdminSession, couchReq } from './helpers/couch';
-import { IS_REMOTE, LOCAL_RUN_ID as RUN_ID, READ_ONLY_REASON } from './helpers/e2e-env';
+import {
+	CAN_WRITE as TARGET_CAN_WRITE,
+	IS_REMOTE,
+	LOCAL_RUN_ID as RUN_ID,
+	READ_ONLY_REASON as TARGET_READ_ONLY_REASON
+} from './helpers/e2e-env';
 import { injectSession, routeBrowserCouchThroughApp } from './helpers/login';
 import {
 	DISCLAIMER_LABEL,
@@ -150,7 +158,7 @@ import {
 	recordCreatedShelter,
 	waitForProjection
 } from './helpers/public-cleanup';
-import { createShelterViaUi } from './helpers/staff-ui';
+import { createShelterViaUi, setRecaptcha } from './helpers/staff-ui';
 
 // ------------------------------------------------------------------ fixtures
 
@@ -187,6 +195,17 @@ const NO_THAID = async (page: Page) =>
 		route.fulfill({ json: { enabled: false, isDev: false, mode: 'real' } })
 	);
 
+/**
+ * Teardown (`purgeCreatedData`) lists and deletes central-queue documents through FastAPI's
+ * staff routes, which have no browser-facing BFF. On a remote target they are reachable only
+ * through `E2E_FASTAPI_URL` (staging: `https://<host>/public-api`); without it every write here
+ * would leave data behind, so the live-write groups stay read-only instead.
+ */
+const CAN_WRITE = TARGET_CAN_WRITE && (!IS_REMOTE || Boolean(process.env.E2E_FASTAPI_URL));
+const READ_ONLY_REASON = TARGET_CAN_WRITE
+	? 'E2E_FASTAPI_URL is not set — teardown cannot reach the central queue on this target'
+	: TARGET_READ_ONLY_REASON;
+
 /** Identity of this run — the last name carries the run id so teardown can find it. */
 const LAST_NAME = `ทดสอบ${RUN_ID}`;
 const HEAD_ID = fictitiousNationalId(Number.parseInt(RUN_ID, 36) % 1e11);
@@ -202,7 +221,7 @@ let liveWritesStarted = false;
 /** Everything the run created is gone — queue documents, and the W5 shelter in CouchDB. */
 test.afterAll(async () => {
 	test.setTimeout(180_000);
-	if (IS_REMOTE || !liveWritesStarted) return;
+	if (!CAN_WRITE || !liveWritesStarted) return;
 	await purgeCreatedData(LAST_NAME, createdQueueIds);
 });
 
@@ -1710,16 +1729,28 @@ function storedTicketCodes(page: Page): Promise<string[]> {
 }
 
 /**
- * The ticket-status BFF allows 10 requests per minute per IP. W2/W3 spend about half of it;
- * W5 waits for that window to pass instead of tripping a 429 (the sync only ever fires from
- * the page, so the budget cannot be raised from the test).
+ * The ticket-status BFF and the form's instant duplicate check (`check-duplicate`, fired when a
+ * member's national ID / phone is complete) share one budget: 10 requests per sliding minute per
+ * IP (`registerLookupIpLimiter`). Every real request to either that this file makes is
+ * timestamped in `statusHits`, so a test that is about to spend `needed` more waits only until
+ * enough older hits have left the window — instead of tripping a 429 (both fire from the page,
+ * so the budget cannot be raised from the test). Timestamps are taken on the response, i.e.
+ * never earlier than the server's own.
  */
-let statusWindowStart = 0;
-async function waitForStatusBudget(): Promise<void> {
-	if (!statusWindowStart) return;
-	const remaining = statusWindowStart + 61_000 - Date.now();
-	if (remaining > 0) await new Promise((r) => setTimeout(r, remaining));
-	statusWindowStart = 0;
+const LOOKUP_BUDGET_PATHS = [
+	'/api/public/v1/registrations/status',
+	'/api/public/v1/registrations/check-duplicate'
+];
+const STATUS_LIMIT = 10;
+const STATUS_WINDOW_MS = 61_000;
+const statusHits: number[] = [];
+async function waitForStatusBudget(needed: number): Promise<void> {
+	for (;;) {
+		const now = Date.now();
+		while (statusHits.length > 0 && now - statusHits[0] >= STATUS_WINDOW_MS) statusHits.shift();
+		if (statusHits.length + needed <= STATUS_LIMIT) return;
+		await new Promise((r) => setTimeout(r, statusHits[0] + STATUS_WINDOW_MS - now));
+	}
 }
 
 interface StatusCall {
@@ -1727,11 +1758,20 @@ interface StatusCall {
 	body: Record<string, unknown> | null;
 }
 
-/** Record the ticket-status BFF responses the page receives. */
+/** Count every lookup-budget request `page` makes into `statusHits`. */
+function countLookupBudget(page: Page): void {
+	page.on('response', (res) => {
+		const { pathname } = new URL(res.url());
+		if (LOOKUP_BUDGET_PATHS.includes(pathname)) statusHits.push(Date.now());
+	});
+}
+
+/** Record the ticket-status BFF responses the page receives (and count its budget). */
 function recordStatusCalls(page: Page): StatusCall[] {
+	countLookupBudget(page);
 	const calls: StatusCall[] = [];
 	page.on('response', async (res) => {
-		if (!res.url().includes('/api/public/v1/registrations/status')) return;
+		if (new URL(res.url()).pathname !== '/api/public/v1/registrations/status') return;
 		calls.push({ status: res.status(), body: await res.json().catch(() => null) });
 	});
 	return calls;
@@ -1762,18 +1802,34 @@ test.describe(
 		let statusCalls: StatusCall[];
 		let queueId = '';
 
+		// This suite writes through the real reCAPTCHA gate (recaptcha-gate.ts) — a fake
+		// __captchaToken never passes real Google verification — so disable the switch for
+		// the duration of the writes and restore whatever it was set to beforehand.
+		let adminContext: BrowserContext;
+		let adminPage: Page;
+		let recaptchaWasEnabled = true;
+
 		test.beforeAll(async ({ browser }) => {
-			if (IS_REMOTE) return;
+			if (!CAN_WRITE) return;
 			context = await browser.newContext();
 			page = await context.newPage();
 			health = watchPage(page);
 			statusCalls = recordStatusCalls(page);
+
+			const admin = await bootstrapAdminSession();
+			adminContext = await browser.newContext();
+			adminPage = await adminContext.newPage();
+			await routeBrowserCouchThroughApp(adminPage);
+			await injectSession(adminPage, admin.user, admin.cookie);
+			recaptchaWasEnabled = await setRecaptcha(adminPage, false);
 		});
 		test.afterAll(async () => {
+			if (CAN_WRITE) await setRecaptcha(adminPage, recaptchaWasEnabled);
+			await adminContext?.close();
 			await context?.close();
 		});
 		test.beforeEach(() => {
-			test.skip(IS_REMOTE, READ_ONLY_REASON);
+			test.skip(!CAN_WRITE, READ_ONLY_REASON);
 		});
 
 		test('W1 a full family registers in the central queue and gets its QR ticket', async () => {
@@ -1866,7 +1922,6 @@ test.describe(
 			test.setTimeout(90_000);
 			const claimedToast = page.getByText(CLAIMED_TOAST);
 			statusCalls.length = 0;
-			statusWindowStart = Date.now();
 
 			await page.getByRole('button', { name: /ใบลงทะเบียนของฉัน/ }).click();
 			await expect(page.getByText(`${FIRST_NAME} ${LAST_NAME}`)).toBeVisible();
@@ -1896,9 +1951,11 @@ test.describe(
 		});
 
 		test('W3 the status BFF reports the real ticket as still open, never as not found', async () => {
+			// page.request fires no page 'response' events — count these two by hand
 			const res = await page.request.post('/api/public/v1/registrations/status', {
 				data: { code: queueId }
 			});
+			statusHits.push(Date.now());
 			expect(res.status()).toBe(200);
 			const body = (await res.json()) as Record<string, unknown>;
 			expect(body).toMatchObject({ success: true, verified: false, status: 'open' });
@@ -1908,12 +1965,15 @@ test.describe(
 			const missing = await page.request.post('/api/public/v1/registrations/status', {
 				data: { code: '01ZZZZZZZZZZZZZZZZZZZZZZZZ' }
 			});
+			statusHits.push(Date.now());
 			expect(await missing.json()).toMatchObject({ verified: false, notFound: true });
 		});
 
 		test('W4 the same identity cannot enter the queue twice', async () => {
-			test.setTimeout(90_000);
+			test.setTimeout(150_000); // may first wait out the lookup budget W1–W3 spent
 			health.problems.length = 0; // the 409 below logs a console error on purpose
+			// the mount sync of W1's ticket + the duplicate checks of the head's ID and phone
+			await waitForStatusBudget(4);
 			await page.goto(PRE_REGISTER_PATH);
 			await expect(page.locator('#address-no')).toBeVisible({ timeout: 20_000 });
 			await fillAddress(page);
@@ -2018,15 +2078,33 @@ test.describe(
 		let statusCalls: StatusCall[];
 		let ticketCode = '';
 
+		// This booking also writes through the real reCAPTCHA gate (recaptcha-gate.ts) — see
+		// the W1-W4/W6 block above for why it must be disabled for the duration of the writes.
+		let adminContext: BrowserContext;
+		let adminPage: Page;
+		let recaptchaWasEnabled = true;
+		const canWrite = () => CAN_WRITE && Boolean(process.env.COUCHDB_PUBLIC_WRITER_URL);
+
 		test.beforeEach(() => {
-			test.skip(IS_REMOTE, READ_ONLY_REASON);
+			test.skip(!CAN_WRITE, READ_ONLY_REASON);
 			// the production-mode app writes bookings as the limited `public_writer` CouchDB user
 			test.skip(
 				!process.env.COUCHDB_PUBLIC_WRITER_URL,
 				'COUCHDB_PUBLIC_WRITER_URL is not set (and public_writer provisioned via pnpm seed:master)'
 			);
 		});
+		test.beforeAll(async ({ browser }) => {
+			if (!canWrite()) return;
+			const admin = await bootstrapAdminSession();
+			adminContext = await browser.newContext();
+			adminPage = await adminContext.newPage();
+			await routeBrowserCouchThroughApp(adminPage);
+			await injectSession(adminPage, admin.user, admin.cookie);
+			recaptchaWasEnabled = await setRecaptcha(adminPage, false);
+		});
 		test.afterAll(async () => {
+			if (canWrite()) await setRecaptcha(adminPage, recaptchaWasEnabled);
+			await adminContext?.close();
 			await context?.close();
 		});
 
@@ -2065,7 +2143,9 @@ test.describe(
 				return row?.status === 'open' && row.accepts_pre_registration === true;
 			});
 
-			// citizen: a fresh browser, no staff session
+			// citizen: a fresh browser, no staff session — the form's duplicate checks (ID + phone)
+			// and the reload below come out of the same lookup budget W4 just spent
+			await waitForStatusBudget(4);
 			context = await browser.newContext();
 			page = await context.newPage();
 			health = watchPage(page);
@@ -2103,7 +2183,8 @@ test.describe(
 			await expect.poll(() => storedTicketCodes(page)).toContain(ticketCode);
 
 			// reload → the ticket is still in "my registrations" and still pending
-			await waitForStatusBudget();
+			// the reload's mount sync + the history tab's own sync, one ticket each
+			await waitForStatusBudget(2);
 			statusCalls.length = 0;
 			await page.reload();
 			await page.getByRole('button', { name: /ใบลงทะเบียนของฉัน/ }).click();
@@ -2154,7 +2235,7 @@ test.describe(
 	{ tag: ['@pre-register', '@critical', '@release'] },
 	() => {
 		test.beforeEach(() => {
-			test.skip(IS_REMOTE, READ_ONLY_REASON);
+			test.skip(!CAN_WRITE, READ_ONLY_REASON);
 		});
 
 		test('Z the central queue and CouchDB hold nothing of this run', async () => {
