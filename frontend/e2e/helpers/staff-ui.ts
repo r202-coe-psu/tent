@@ -72,6 +72,10 @@ export interface MemberForm {
 	idCard?: { type: 'national_id' | 'passport'; number: string };
 }
 
+/** Station 1 switches to per-member tabs once a household reaches this many members
+ *  (unified-registration-members-section.svelte) and hides every inactive tab's card. */
+const MEMBER_TABS_MIN = 3;
+
 /** Onsite Station 1 → register one household (first member = primary contact). */
 export async function registerHouseholdViaUi(
 	page: Page,
@@ -88,10 +92,15 @@ export async function registerHouseholdViaUi(
 
 	for (const [i, member] of members.entries()) {
 		if (i > 0) await page.getByRole('button', { name: 'เพิ่มสมาชิก' }).click();
-		const card =
-			i === 0
-				? page.getByRole('region', { name: 'ผู้ติดต่อหลัก' })
-				: page.getByRole('region', { name: 'สมาชิก' }).nth(i - 1);
+		const label = i === 0 ? 'ผู้ติดต่อหลัก' : `สมาชิก ${i + 1}`;
+		// Once the tab bar exists, select this member's tab explicitly instead of counting
+		// visible "สมาชิก"-named regions — that pool shrinks/grows as tabs appear. The tab's
+		// accessible name is prefixed with its 1-based index ("3.สมาชิก 3"), so match by
+		// substring rather than exact.
+		if (i + 1 >= MEMBER_TABS_MIN) {
+			await page.getByRole('tab', { name: label }).click();
+		}
+		const card = page.getByRole('region', { name: label, exact: true });
 		await card.getByPlaceholder('ชื่อจริง').fill(member.firstName);
 		await card.getByPlaceholder('เช่น มีสุข').fill(member.lastName);
 		await card.getByLabel(member.gender).check();
@@ -199,4 +208,19 @@ export async function configureOnsiteShelterViaUi(
 /** Pin the active workspace shelter in localStorage (staff with one `shelter:` role). */
 export async function pinActiveShelter(page: Page, code: string): Promise<void> {
 	await page.evaluate((c) => localStorage.setItem('tent.activeShelterCode', c), code);
+}
+
+/** Set the reCAPTCHA switch on /system-management/security; returns its previous state. */
+export async function setRecaptcha(page: Page, enabled: boolean): Promise<boolean> {
+	await page.goto('/system-management/security');
+	const sw = page.locator('#recaptcha-enabled');
+	await expect(sw).toBeVisible({ timeout: 20_000 });
+	const before = (await sw.getAttribute('aria-checked')) === 'true';
+	if (before !== enabled) {
+		await sw.click();
+		await expect(
+			page.getByText(enabled ? 'เปิดใช้งาน reCAPTCHA แล้ว' : 'ปิดใช้งาน reCAPTCHA แล้ว')
+		).toBeVisible({ timeout: 20_000 });
+	}
+	return before;
 }

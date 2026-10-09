@@ -71,14 +71,16 @@ test.describe('Public landing: setup and urgent need', { tag: ['@public', '@crit
 
 	test('lists the critical need and links to its donation form', async ({ page }) => {
 		test.skip(IS_REMOTE, 'no production need fixture — it would invite real donations');
-		test.setTimeout(120_000); // outlasts the 90 s projection wait below
-		// The worker projects new needs asynchronously — retry the landing page.
+		test.setTimeout(45_000); // outlasts the 35 s projection wait below
+		// This shelter was just created — the worker's registry listener only polls for
+		// brand-new shelter databases every 30s (listeners/registry.py), so this first
+		// wait needs headroom past that; retry the landing page until it does.
 		await expect(async () => {
 			await page.goto('/');
 			await expect(page.getByRole('heading', { name: SHELTER_NAME })).toBeVisible({
 				timeout: 3_000
 			});
-		}).toPass({ intervals: [3_000], timeout: 90_000 });
+		}).toPass({ intervals: [2_000], timeout: 35_000 });
 
 		await expect(
 			page.getByRole('heading', { name: 'ความต้องการบริจาคด่วน', exact: true })
