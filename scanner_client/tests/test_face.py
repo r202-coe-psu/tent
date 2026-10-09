@@ -577,10 +577,10 @@ class FaceServiceTests(unittest.IsolatedAsyncioTestCase):
         await self.start_walk_in(service)
         self.assertIsNone(service.identity_check(mode="on", device_id="kiosk-1"))  # no verdict yet
         await service.verify(self.frames())
-        record = service.identity_check(mode="shadow", device_id="kiosk-1")
+        record = service.identity_check(mode="on", device_id="kiosk-1")
         self.assertEqual(record["method"], "face_1to1_chip")
         self.assertEqual((record["flow"], record["result"], record["liveness"]), ("walk_in", "match", "pass"))
-        self.assertEqual((record["mode"], record["device_id"], record["attempts"]), ("shadow", "kiosk-1", 1))
+        self.assertEqual((record["mode"], record["device_id"], record["attempts"]), ("on", "kiosk-1", 1))
         self.assertEqual(record["threshold_profile"], "sface-opencv-default-v1")
         self.assertTrue(record["biometric_consented_at"].endswith("Z"))
         self.assertNotIn("reason", record)

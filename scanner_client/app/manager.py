@@ -145,7 +145,7 @@ class ScannerClientManager:
         # `pcsc` (default) reads through pcscd; `rfpro` talks to the HID module on kiosk3.
         self.card_reader = str(config.get("CARD_READER") or "pcsc").strip().lower()
         self.card_reader_usb_id = str(config.get("CARD_READER_USB_ID") or "").strip() or DEFAULT_CARD_READER_USB_ID
-        # Face check: off (default - nothing changes), shadow (runs, never affects the person) or on.
+        # Face check: off (default - nothing changes) or on.
         self.face_mode = str(config.get("KIOSK_FACE_CHECK") or "off").strip().lower()
         raw_flows = str(config.get("KIOSK_FACE_CHECK_FLOWS") or "").replace(" ", "")
         self.face_flows = tuple(
@@ -164,7 +164,7 @@ class ScannerClientManager:
             if self.face_mode == "on":
                 logger.warning(
                     "KIOSK_FACE_CHECK=on: the face thresholds are not calibrated on real chip photos yet; "
-                    "run with KIOSK_FACE_CHECK=shadow until the Phase 0 checks on this kiosk are done"
+                    "keep KIOSK_FACE_CHECK=off on a kiosk in service until the Phase 0 checks on it are done"
                 )
         # The reader is one device: the card polling and a face-check photo read must take turns.
         self._reader_lock = asyncio.Lock()

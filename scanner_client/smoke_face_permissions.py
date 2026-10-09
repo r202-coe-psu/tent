@@ -7,7 +7,7 @@
   ./smoke_face_permissions.py --fake-camera   # Chromium test camera, for a machine with no camera
 
 It starts a fresh Chromium profile the way the manager does (same launch arguments, same
-`_grant_camera_permission` call, face check forced to at least `shadow`) and asks the page what the
+`_grant_camera_permission` call, face check forced `on`) and asks the page what the
 camera permission is. `granted` means the person will never see a prompt. It never answers a prompt
 itself (no --use-fake-ui-for-media-stream), so a missing grant shows up as `prompt`. Nothing is
 recorded: the camera stream is closed at once and only the verdicts are printed. Exit 0 = ok.
@@ -76,8 +76,8 @@ async def run(args: argparse.Namespace) -> int:
         print(f"Config invalid: {error}", file=sys.stderr)
         return 78
     if str(config.get("KIOSK_FACE_CHECK") or "off").strip().lower() == "off":
-        config["KIOSK_FACE_CHECK"] = "shadow"  # the manager grants the camera only when the check runs
-        print("KIOSK_FACE_CHECK is off in .env; testing as if it were 'shadow'")
+        config["KIOSK_FACE_CHECK"] = "on"  # so the face page runs; nobody sees a verdict here
+        print("KIOSK_FACE_CHECK is off in .env; testing as if it were 'on'")
     config["DEBUG"] = "true" if args.headed else "false"
     config["KIOSK_SILENT_PRINT"] = "false"  # printing is not under test
     manager = ScannerClientManager(config)

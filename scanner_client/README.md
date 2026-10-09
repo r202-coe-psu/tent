@@ -573,7 +573,7 @@ SFace เทียบหน้า, MiniFASNet ตรวจว่าเป็น�
 
 ```bash
 ./models/download_models.sh        # ครั้งแรก (setup_big_kiosk.sh ทำให้ด้วย) ตรวจ sha256 ทุกไฟล์
-# .env:  KIOSK_FACE_CHECK=shadow     # off | shadow | on   (ดู .env.example)
+# .env:  KIOSK_FACE_CHECK=on         # off | on   (ดู .env.example) — on เฉพาะตู้ทดสอบจนกว่าจะ calibrate
 #        KIOSK_CAMERA_LABEL=JSK-RGB  # กล้องที่ใช้ถ่ายหน้า (ตัวเดียวกับสแกน QR)
 ```
 
@@ -586,7 +586,7 @@ SFace เทียบหน้า, MiniFASNet ตรวจว่าเป็น�
   ต้องใช้ OpenCV แบบมี GUI ซึ่ง `opencv-python-headless` ของ scanner_client ไม่มี ให้ใช้ venv แยก:
   `python3 -m venv .venv-gui && .venv-gui/bin/pip install opencv-python numpy pillow pyscard python-dotenv && .venv-gui/bin/python card_face_demo.py`
   ไม่บันทึกภาพ และแสดงเลขบัตรแค่ 4 ตัวท้าย (ใช้ `--show-data` ถ้าต้องการดูข้อมูลทั้งหมดใน terminal)
-- เมื่อเปิด face check `scanner_client` ให้สิทธิ์กล้องแก่ origin ของ kiosk อัตโนมัติ (ไม่มี prompt) เปิด `KIOSK_FACE_CHECK=on` จะมี log เตือนว่าเกณฑ์ยังไม่ได้ calibrate ให้ใช้ `shadow` ก่อน
+- เมื่อเปิด face check หรือสแกน QR ด้วยกล้อง (`KIOSK_QR_INPUT=camera|both`) `scanner_client` ให้สิทธิ์กล้องแก่ origin ของ kiosk อัตโนมัติ (ไม่มี prompt) เปิด `KIOSK_FACE_CHECK=on` จะมี log เตือนว่าเกณฑ์ยังไม่ได้ calibrate ให้คง `off` ไว้บนตู้ที่ให้บริการจริง
 - ตรวจว่าสิทธิ์กล้องถูกให้โดยไม่มี prompt จริงบนเครื่อง (ไม่ใช่ CI): `./smoke_face_permissions.py` (เพิ่ม `--headed` เพื่อดูหน้าต่าง, `--live` เพื่อเปิดหน้า `/kiosk/register/face` จริง)
   เปิด Chromium profile ใหม่แบบเดียวกับ manager แล้วถามหน้าเว็บว่า permission เป็น `granted` หรือ `prompt`; ผ่านเมื่อ `granted` (exit 0)
 - **ที่เก็บ model**: ค่าเริ่มต้นคือโฟลเดอร์ `models/` ข้างโค้ด (`scanner_client/models/`) ไม่ต้องตั้งอะไรใน `.env`

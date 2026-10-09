@@ -1510,7 +1510,7 @@ class FaceReaderTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(await client._read_chip_photo())
 
     async def test_the_full_read_sets_the_chip_photo_aside_for_a_walk_in_face_check(self):
-        client = manager.ScannerClientManager(valid_config(KIOSK_FACE_CHECK="shadow"))
+        client = manager.ScannerClientManager(valid_config(KIOSK_FACE_CHECK="on"))
         client.face_service = FakeFaceService()
         client.page = EventFakePage(f"https://tent.example.go.th{client.register_card_path}")
         card = {"citizen_id": CID, "photo_base64": "data:image/jpeg;base64,AAAA"}
@@ -1547,7 +1547,7 @@ class FaceCameraPermissionTests(unittest.IsolatedAsyncioTestCase):
             self.granted.append((permissions, origin))
 
     async def test_the_kiosk_origin_is_given_the_camera_when_the_face_check_runs(self):
-        client = manager.ScannerClientManager(valid_config(KIOSK_FACE_CHECK="shadow"))
+        client = manager.ScannerClientManager(valid_config(KIOSK_FACE_CHECK="on"))
         context = self.FakeContext()
 
         await client._grant_camera_permission(context)
@@ -1583,7 +1583,7 @@ class FaceCameraPermissionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(context.granted, [])
 
     async def test_a_refused_grant_never_stops_the_kiosk_from_starting(self):
-        client = manager.ScannerClientManager(valid_config(KIOSK_FACE_CHECK="shadow"))
+        client = manager.ScannerClientManager(valid_config(KIOSK_FACE_CHECK="on"))
 
         with self.assertLogs(manager.logger, level="WARNING") as logs:
             await client._grant_camera_permission(self.FakeContext(error=RuntimeError("denied")))
@@ -1594,9 +1594,8 @@ class FaceCameraPermissionTests(unittest.IsolatedAsyncioTestCase):
         with self.assertLogs(manager.logger, level="WARNING") as logs:
             manager.ScannerClientManager(valid_config(KIOSK_FACE_CHECK="on"))
 
-        self.assertIn("shadow", "\n".join(logs.output))
+        self.assertIn("KIOSK_FACE_CHECK=off", "\n".join(logs.output))
 
-    def test_shadow_and_off_do_not_warn(self):
-        for mode in ("shadow", "off"):
-            with self.subTest(mode=mode), self.assertNoLogs(manager.logger, level="WARNING"):
-                manager.ScannerClientManager(valid_config(KIOSK_FACE_CHECK=mode))
+    def test_off_does_not_warn(self):
+        with self.assertNoLogs(manager.logger, level="WARNING"):
+            manager.ScannerClientManager(valid_config(KIOSK_FACE_CHECK="off"))

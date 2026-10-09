@@ -55,7 +55,7 @@ QR_READER_GAP_RANGE_MS = (10, 100)
 DEFAULT_QR_READER_GAP_MS = 50
 CARD_READERS = ("pcsc", "rfpro")
 DEFAULT_CARD_READER_USB_ID = "0483:4c43"
-FACE_CHECK_MODES = ("off", "shadow", "on")
+FACE_CHECK_MODES = ("off", "on")
 FACE_CHECK_FLOWS = ("check_in", "walk_in")
 
 
