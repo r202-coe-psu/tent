@@ -62,6 +62,31 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 			expect(result.body).not.toContain('value="other"');
 		});
 
+		it('preselects ไม่ระบุ for null and legacy other gender without offering other', () => {
+			for (const gender of [null, 'other'] as const) {
+				const result = render(PersonalInfoFields, {
+					props: {
+						first_name: 'สมชาย',
+						last_name: 'ใจดี',
+						phone: '0812345678',
+						gender,
+						religion: 'buddhist',
+						country: 'THAILAND',
+						person_id: { cardType: 'national_id', number: '' }
+					}
+				});
+				expect(result.body).toContain('ไม่ระบุ');
+				expect(result.body).toContain('value="unspecified"');
+				expect(result.body).not.toContain('value="other"');
+				// Only the ไม่ระบุ radio is checked (male/female are not).
+				const checked = result.body.match(/<button[^>]*role="radio"[^>]*>/g) ?? [];
+				const checkedValues = checked
+					.filter((b) => b.includes('aria-checked="true"'))
+					.map((b) => /value="([^"]*)"/.exec(b)?.[1]);
+				expect(checkedValues).toEqual(['unspecified']);
+			}
+		});
+
 		it('renders English placeholders and options when locale is en', () => {
 			languageStore.setLanguage('en');
 			const result = render(PersonalInfoFields, {

@@ -5,6 +5,7 @@ import {
 	canScanCheckIn,
 	needsIntakeBeforeStay,
 	createEvacuee,
+	createKioskEvacueeFromCard,
 	genderLabelTh,
 	createDraftEvacueeFromCard,
 	createMovement,
@@ -1746,13 +1747,13 @@ describe('scan check-in gate (every person goes through Station 2/3)', () => {
 	});
 });
 
-describe('gender nullable (schema_v 12, CR-154)', () => {
-	it('labels null gender as ไม่ระบุ and known values in Thai', () => {
+describe('gender nullable (schema_v 12, CR-154; decision sync 2026-10-09)', () => {
+	it('labels null and legacy other gender as ไม่ระบุ, known values in Thai', () => {
 		expect(genderLabelTh(null)).toBe('ไม่ระบุ');
 		expect(genderLabelTh(undefined)).toBe('ไม่ระบุ');
 		expect(genderLabelTh('male')).toBe('ชาย');
 		expect(genderLabelTh('female')).toBe('หญิง');
-		expect(genderLabelTh('other')).toBe('อื่นๆ');
+		expect(genderLabelTh('other')).toBe('ไม่ระบุ');
 	});
 
 	it('accepts null gender (ไม่ระบุเพศ) on intake; key still required', () => {
@@ -1765,6 +1766,46 @@ describe('gender nullable (schema_v 12, CR-154)', () => {
 	it('createEvacuee persists gender null', () => {
 		const e = createEvacuee({ first_name: 'A', last_name: 'B', gender: null, phone: null }, ctx);
 		expect(e.gender).toBeNull();
+	});
+
+	it('legacy other stays valid input; unknown values are rejected without the required-gender message', () => {
+		const base = { first_name: 'A', last_name: 'B', phone: null };
+		expect(evacueeInputSchema.safeParse({ ...base, gender: 'other' }).success).toBe(true);
+		const bad = evacueeInputSchema.safeParse({ ...base, gender: '' });
+		expect(bad.success).toBe(false);
+		expect(JSON.stringify(bad.error?.issues)).not.toContain('กรุณาเลือกเพศ');
+	});
+
+	it('personal edit form schema accepts null and legacy other gender', () => {
+		const base = {
+			firstName: 'A',
+			lastName: 'B',
+			nickname: '',
+			birthYear: '',
+			age: '30',
+			phone: '',
+			noPhone: true,
+			cardType: 'national_id' as const,
+			cardNumber: '',
+			country: 'THAILAND',
+			religion: 'unknown' as const
+		};
+		for (const gender of [null, 'other', 'male'] as const) {
+			const parsed = evacueePersonalEditFormSchema.safeParse({ ...base, gender });
+			expect(parsed.success, String(gender)).toBe(true);
+		}
+	});
+
+	it('kiosk card without gender persists null (no fabricated other)', () => {
+		const card = {
+			citizen_id: '1101700230673',
+			scanned_at: '2026-10-09T00:00:00.000Z',
+			device_id: 'scanner-1'
+		};
+		const e = createKioskEvacueeFromCard(card, ctx);
+		expect(e.gender).toBeNull();
+		const female = createKioskEvacueeFromCard({ ...card, gender: 'female' }, ctx);
+		expect(female.gender).toBe('female');
 	});
 
 	it('accepts registered_via api', () => {

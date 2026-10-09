@@ -64,12 +64,12 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 		title: '2. บริหารทรัพยากร',
 		items: [
 			{
-				label: 'การประเมินความพร้อมศูนย์ (Readiness SOP)',
+				label: 'การประเมินความพร้อมศูนย์',
 				href: resolve('/back-office/shelters/readiness' as '/back-office/shelters'),
 				icon: ClipboardCheck
 			},
 			{
-				label: 'การประเมินประจำวัน (Daily SOP)',
+				label: 'การประเมินประจำวัน',
 				href: resolve('/back-office/dailysop'),
 				icon: ClipboardList
 			},
@@ -130,12 +130,12 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 			},
 			{ label: 'จัดการผู้ใช้งานและสิทธิ์', href: resolve('/back-office/users'), icon: UserCog },
 			{
-				label: 'จัดการข้อมูลหลัก (Master Data)',
+				label: 'จัดการข้อมูลหลัก',
 				href: null,
 				icon: Database,
 				children: [
 					{
-						label: 'Master Data',
+						label: 'ข้อมูลหลัก',
 						href: resolve('/back-office/master-data'),
 						icon: Database
 					},

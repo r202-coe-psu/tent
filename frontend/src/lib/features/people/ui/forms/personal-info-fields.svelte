@@ -212,7 +212,11 @@
 		country !== 'THAILAND' || (person_id.cardType != null && person_id.cardType !== 'national_id')
 	);
 
-	/** Radio sentinel for `gender: null` (ไม่ระบุเพศ). */
+	/**
+	 * Radio sentinel for `gender: null` (ไม่ระบุเพศ). Legacy `'other'` also renders as selected
+	 * ไม่ระบุ but is NOT rewritten — `gender` only changes on the user's own pick (decision sync
+	 * 2026-10-09).
+	 */
 	const GENDER_UNSPECIFIED = 'unspecified';
 	const genderRadioValue = $derived(
 		gender === 'male' || gender === 'female' ? gender : GENDER_UNSPECIFIED

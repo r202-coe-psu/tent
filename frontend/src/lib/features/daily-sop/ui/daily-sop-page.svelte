@@ -382,7 +382,7 @@
 	}
 </script>
 
-<svelte:head><title>การประเมินประจำวัน (Daily SOP)</title></svelte:head>
+<svelte:head><title>การประเมินประจำวัน</title></svelte:head>
 
 <!--
   Sticky subheaders on this page use --bo-sticky-top from app.css (stacked BO

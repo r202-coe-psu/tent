@@ -97,7 +97,7 @@ Full reset (Couch unseed + Mongo wipe + seed + bootstrap — stop worker first):
 
 Full workflow: **`frontend/CONTRIBUTING.md` §4.2** + coding patterns **`frontend/CONVENTIONS.md` §12**.
 
-1. **Change CouchDB docs / projectors** (`worker/`) → projections land in Mongo `public_*`.
+1. **Change CouchDB docs / projectors** (`worker/`) → projections land in Mongo `public_*`. Bump `PROJECTION_VERSION` (`worker/src/worker/projection_version.py`) when a projector's output shape changes.
 2. **Change FastAPI** (`backend/apiapp/modules/…`) — keep paths on contract
    (`/public/v1/occupants`, `/public/v1/shelters`, …); add tests under `backend/tests/`.
 3. **Regenerate types** from `frontend/`: `pnpm openapi:update` → commit `fastapi.json` +

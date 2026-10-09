@@ -134,14 +134,16 @@ export const personIdSchema = z
 	});
 export type PersonId = z.infer<typeof personIdSchema>;
 
-export const genderSchema = z.enum(['male', 'female', 'other']);
+export const genderSchema = z.enum(['male', 'female', 'other'], { error: 'เพศไม่ถูกต้อง' });
 export type Gender = z.infer<typeof genderSchema>;
 
-/** Thai display label; `null` = unknown (partner booking, schema_v 12, CR-154). */
+/**
+ * Thai display label. `null` (ไม่ระบุ, valid on every channel) and legacy `'other'` both display as
+ * "ไม่ระบุ" and are counted as `gender_unspecified` in occupancy (decision sync 2026-10-09).
+ */
 export function genderLabelTh(gender: Gender | null | undefined): string {
 	if (gender === 'male') return 'ชาย';
 	if (gender === 'female') return 'หญิง';
-	if (gender === 'other') return 'อื่นๆ';
 	return 'ไม่ระบุ';
 }
 
@@ -288,7 +290,7 @@ export interface Evacuee extends BaseDoc {
 	type: 'evacuee';
 	first_name: string;
 	last_name: string;
-	/** `null` = ไม่ระบุ / unknown (registration default + partner booking, schema_v 12). */
+	/** `null` = ไม่ระบุ (registration default on every channel + partner booking; 'other' = legacy). */
 	gender: Gender | null;
 	phone: string | null;
 	nickname?: string;
@@ -811,7 +813,8 @@ export const evacueeInputSchema = z.object({
 	// Empty allowed for mononyms / foreign nationals without family names (CR-106 FR-18).
 	last_name: z.string().trim().default(''),
 	/** `null` = ไม่ระบุเพศ (default on registration forms). */
-	gender: z.enum(['male', 'female', 'other'], { error: 'กรุณาเลือกเพศ' }).nullable(),
+	// 'other' = legacy (read/preserve only — forms never offer it); null = ไม่ระบุ, never required.
+	gender: genderSchema.nullable(),
 	phone: phoneSchema, // UI requires a value; "ไม่มี" → null
 	nickname: z.string().trim().optional(),
 	birth_year: z.coerce
@@ -1541,7 +1544,8 @@ export function createKioskEvacueeFromCard(
 ): Evacuee {
 	const firstName = cardSnapshot.first_name_th || 'ไม่ระบุชื่อ';
 	const lastName = cardSnapshot.last_name_th || '';
-	const gender = cardSnapshot.gender || 'other';
+	// Card chip carries no gender → ไม่ระบุ (`null`); never fabricate legacy 'other'.
+	const gender = cardSnapshot.gender ?? null;
 	const birthYearBE = cardSnapshot.birth_year_ce ? cardSnapshot.birth_year_ce + 543 : undefined;
 	const age =
 		cardSnapshot.age !== undefined
