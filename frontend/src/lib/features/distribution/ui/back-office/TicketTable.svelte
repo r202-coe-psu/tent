@@ -9,6 +9,7 @@
 	import Inbox from '@lucide/svelte/icons/inbox';
 	import ArrowDown from '@lucide/svelte/icons/arrow-down';
 	import ArrowUp from '@lucide/svelte/icons/arrow-up';
+	import { formatThaiDateTime } from '$lib/utils/date';
 
 	interface Props {
 		tickets: readonly RequisitionTicket[];
@@ -44,17 +45,7 @@
 	});
 
 	function formatDateTime(isoString: string): string {
-		try {
-			return new Intl.DateTimeFormat('th-TH', {
-				year: 'numeric',
-				month: 'short',
-				day: 'numeric',
-				hour: '2-digit',
-				minute: '2-digit'
-			}).format(new Date(isoString));
-		} catch {
-			return isoString;
-		}
+		return formatThaiDateTime(isoString) || isoString;
 	}
 
 	function handleViewDetails(ticket: RequisitionTicket) {

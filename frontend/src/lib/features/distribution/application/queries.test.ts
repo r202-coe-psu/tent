@@ -479,379 +479,251 @@ describe('Phase 5 Slice 5.0 — Distribution TanStack Query Layer', () => {
 	});
 
 	describe('4. Mutation Caller Wrappers & Authoritative Invalidation (All 19 Workflows)', () => {
-		it('useCreateRequisitionTicket (Workflow 1): forwards input + ctx and invalidates tickets', async () => {
-			mockWorkflowCalls.createRequisitionTicket.mockResolvedValueOnce({ _id: 'tkt_new' });
-			useCreateRequisitionTicket();
+		const ticketsList = ['distribution', 'SH001', 'tickets'];
+		const stableAmendmentId = createStableOperationId();
+		const stableOpUlid = createStableOperationId();
+
+		type MutationCase = {
+			name: string;
+			hook: () => unknown;
+			workflow: keyof typeof mockWorkflowCalls;
+			/** Variables handed to `mutationFn`. */
+			variables: unknown;
+			/** Positional workflow args that precede the author context. */
+			args: unknown[];
+			/** Query keys that `onSuccess` must invalidate (each at least once). */
+			invalidates: unknown[];
+		};
+
+		const createInput = {
+			requisition_type: 'food' as const,
+			destination_location: 'ZONE_A',
+			meal: 'lunch' as const,
+			items: [{ item_id: 'item_meal', requested_qty: '50' }]
+		};
+		const allocations = [{ item_id: 'item_1', allocated_qty: '50' }];
+		const dispatchOptions = { driver_name: 'Driver Bob', license_plate: '1กข1234' };
+		const amendInput = { amendmentId: stableAmendmentId, item_id: 'item_water', added_qty: '20' };
+		const foodInput = {
+			item_id: 'meal_box',
+			qty: '2',
+			recipient_type: 'individual' as const,
+			recipient_id: 'person_123'
+		};
+		const suppliesInput = {
+			item_id: 'blanket',
+			qty: '1',
+			recipient_type: 'individual' as const,
+			recipient_id: 'person_456'
+		};
+		const returnInput = { qty_returned: '1', condition_on_return: 'READY' as const };
+		const clearInput = { clear_reason: 'lost' as const, notes: 'Missing in field' };
+		const poolInput = {
+			operationUlid: stableOpUlid,
+			item_id: 'tent_item',
+			total_received_qty: '10'
+		};
+		const bulkClearInput = {
+			operationUlid: stableOpUlid,
+			logId: 'log_claim',
+			poolId: 'pool_claim'
+		};
+		const closeOptions = { returned_quantities: { item_1: '5' } };
+		const receiveOptions = { verified_returned_quantities: { item_1: '5' } };
+
+		const cases: MutationCase[] = [
+			{
+				name: 'useCreateRequisitionTicket (Workflow 1): forwards input + ctx and invalidates tickets',
+				hook: useCreateRequisitionTicket,
+				workflow: 'createRequisitionTicket',
+				variables: { input: createInput },
+				args: [createInput],
+				invalidates: [ticketsList]
+			},
+			{
+				name: 'useAllocateTicketItems (Workflow 2): invalidates detail and ticket list',
+				hook: useAllocateTicketItems,
+				workflow: 'allocateTicketItems',
+				variables: { ticketId: 'tkt_alloc', allocations },
+				args: ['tkt_alloc', allocations],
+				invalidates: [distributionKeys.ticket('SH001', 'tkt_alloc'), ticketsList]
+			},
+			{
+				name: 'useApproveTicketForDispatch (Workflow 3): invalidates detail and ticket list',
+				hook: useApproveTicketForDispatch,
+				workflow: 'approveTicketForDispatch',
+				variables: { ticketId: 'tkt_appr' },
+				args: ['tkt_appr'],
+				invalidates: [distributionKeys.ticket('SH001', 'tkt_appr')]
+			},
+			{
+				name: 'useCancelTicket (Workflow 4): invalidates detail and ticket list',
+				hook: useCancelTicket,
+				workflow: 'cancelTicket',
+				variables: { ticketId: 'tkt_cancel', reason: 'Emergency stop' },
+				args: ['tkt_cancel', 'Emergency stop'],
+				invalidates: [distributionKeys.ticket('SH001', 'tkt_cancel')]
+			},
+			{
+				name: 'useDispatchTicket (Workflow 5): invalidates ticket and operations stock ledgers',
+				hook: useDispatchTicket,
+				workflow: 'dispatchTicket',
+				variables: { ticketId: 'tkt_disp', options: dispatchOptions },
+				args: ['tkt_disp', dispatchOptions],
+				invalidates: [
+					distributionKeys.ticket('SH001', 'tkt_disp'),
+					operationsKeys.stockLedgers(),
+					operationsKeys.balance()
+				]
+			},
+			{
+				name: 'useReceiveTicketAtDistributionPoint (Workflow 6): invalidates ticket and list',
+				hook: useReceiveTicketAtDistributionPoint,
+				workflow: 'receiveTicketAtDistributionPoint',
+				variables: { ticketId: 'tkt_rcv' },
+				args: ['tkt_rcv'],
+				invalidates: [distributionKeys.ticket('SH001', 'tkt_rcv')]
+			},
+			{
+				name: 'useAmendActiveTicket (Workflow 7): preserves caller-supplied amendmentId across invocations',
+				hook: useAmendActiveTicket,
+				workflow: 'amendActiveTicket',
+				variables: { ticketId: 'tkt_amend', input: amendInput },
+				args: [
+					'tkt_amend',
+					expect.objectContaining({ amendmentId: stableAmendmentId, added_qty: '20' })
+				],
+				invalidates: [distributionKeys.ticket('SH001', 'tkt_amend'), operationsKeys.stockLedgers()]
+			},
+			{
+				name: 'useRecordFoodDistribution (Workflow 8): invalidates logs, ticket, and reconciliation',
+				hook: useRecordFoodDistribution,
+				workflow: 'recordFoodDistribution',
+				variables: { ticketId: 'tkt_food', input: foodInput },
+				args: ['tkt_food', foodInput],
+				invalidates: [
+					['distribution', 'SH001', 'logs'],
+					distributionKeys.ticket('SH001', 'tkt_food'),
+					distributionKeys.shiftReconciliation('SH001', 'tkt_food')
+				]
+			},
+			{
+				name: 'useRecordSuppliesDistribution (Workflow 9): invalidates logs, ticket, and reconciliation',
+				hook: useRecordSuppliesDistribution,
+				workflow: 'recordSuppliesDistribution',
+				variables: { ticketId: 'tkt_supplies', input: suppliesInput },
+				args: ['tkt_supplies', suppliesInput],
+				invalidates: [['distribution', 'SH001', 'logs']]
+			},
+			{
+				name: 'useVoidDistributionLog (Workflow 10): invalidates log and ticket capacity',
+				hook: useVoidDistributionLog,
+				workflow: 'voidDistributionLog',
+				variables: { logId: 'log_void', reason: 'Incorrect recipient', ticketId: 'tkt_target' },
+				args: ['log_void', 'Incorrect recipient'],
+				invalidates: [
+					distributionKeys.log('SH001', 'log_void'),
+					distributionKeys.ticket('SH001', 'tkt_target')
+				]
+			},
+			{
+				name: 'useReturnLoanAtCounter (Workflow 11): invalidates log, logs, and stock ledger',
+				hook: useReturnLoanAtCounter,
+				workflow: 'returnLoanAtCounter',
+				variables: { logId: 'log_loan', input: returnInput },
+				args: ['log_loan', returnInput],
+				invalidates: [
+					distributionKeys.log('SH001', 'log_loan'),
+					operationsKeys.stockLedgers(),
+					distributionKeys.returnOperationState('SH001', 'log_loan')
+				]
+			},
+			{
+				name: 'useClearLoanNonPhysical (Workflow 12): invalidates log and logs without stock write',
+				hook: useClearLoanNonPhysical,
+				workflow: 'clearLoanNonPhysical',
+				variables: { logId: 'log_lost', input: clearInput },
+				args: ['log_lost', clearInput],
+				invalidates: [
+					distributionKeys.log('SH001', 'log_lost'),
+					distributionKeys.returnOperationState('SH001', 'log_lost')
+				]
+			},
+			{
+				name: 'useCreateBulkReturnPool (Workflow 13): forwards stable operationUlid and invalidates pools and stock',
+				hook: useCreateBulkReturnPool,
+				workflow: 'createBulkReturnPool',
+				variables: { input: poolInput },
+				args: [poolInput],
+				invalidates: [['distribution', 'SH001', 'bulk_pools'], operationsKeys.stockLedgers()]
+			},
+			{
+				name: 'useClearLoanViaBulkPool (Workflow 14): forwards stable operationUlid and invalidates pool, claim, log',
+				hook: useClearLoanViaBulkPool,
+				workflow: 'clearLoanViaBulkPool',
+				variables: { input: bulkClearInput },
+				args: [bulkClearInput],
+				invalidates: [
+					distributionKeys.bulkPool('SH001', 'pool_claim'),
+					distributionKeys.log('SH001', 'log_claim'),
+					['distribution', 'SH001', 'bulk_claims']
+				]
+			},
+			{
+				name: 'useCloseShift (Workflow 16): invalidates ticket, list, and reconciliation',
+				hook: useCloseShift,
+				workflow: 'closeShift',
+				variables: { ticketId: 'tkt_close', options: closeOptions },
+				args: ['tkt_close', closeOptions],
+				invalidates: [
+					distributionKeys.ticket('SH001', 'tkt_close'),
+					distributionKeys.shiftReconciliation('SH001', 'tkt_close')
+				]
+			},
+			{
+				name: 'useSubmitReturnsToWarehouse (Workflow 17): invalidates ticket and list',
+				hook: useSubmitReturnsToWarehouse,
+				workflow: 'submitReturnsToWarehouse',
+				variables: { ticketId: 'tkt_sub_ret' },
+				args: ['tkt_sub_ret'],
+				invalidates: [distributionKeys.ticket('SH001', 'tkt_sub_ret')]
+			},
+			{
+				name: 'useReceiveWarehouseReturns (Workflow 18): invalidates ticket and operations stock',
+				hook: useReceiveWarehouseReturns,
+				workflow: 'receiveWarehouseReturns',
+				variables: { ticketId: 'tkt_rcv_ret', options: receiveOptions },
+				args: ['tkt_rcv_ret', receiveOptions],
+				invalidates: [
+					distributionKeys.ticket('SH001', 'tkt_rcv_ret'),
+					operationsKeys.stockLedgers()
+				]
+			},
+			{
+				name: 'useCompleteTicket (Workflow 19): invalidates ticket and list',
+				hook: useCompleteTicket,
+				workflow: 'completeTicket',
+				variables: { ticketId: 'tkt_done' },
+				args: ['tkt_done'],
+				invalidates: [distributionKeys.ticket('SH001', 'tkt_done')]
+			}
+		];
+
+		it.each(cases)('$name', async ({ hook, workflow, variables, args, invalidates }) => {
+			mockWorkflowCalls[workflow].mockResolvedValueOnce({});
+			hook();
 			expect(tracker.lastCreatedMutation?.retry).toBe(false);
 
-			const input = {
-				requisition_type: 'food' as const,
-				destination_location: 'ZONE_A',
-				meal: 'lunch' as const,
-				items: [{ item_id: 'item_meal', requested_qty: '50' }]
-			};
-			await tracker.lastCreatedMutation?.mutationFn({ input });
-			expect(mockWorkflowCalls.createRequisitionTicket).toHaveBeenCalledWith(
-				input,
+			await tracker.lastCreatedMutation?.mutationFn(variables);
+			expect(mockWorkflowCalls[workflow]).toHaveBeenCalledWith(
+				...args,
 				expect.objectContaining({ createdBy: 'staff_alice', shelterCode: 'SH001' })
 			);
 
-			tracker.lastCreatedMutation?.onSuccess?.({ _id: 'tkt_new' }, { input }, undefined);
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: ['distribution', 'SH001', 'tickets']
-			});
-		});
-
-		it('useAllocateTicketItems (Workflow 2): invalidates detail and ticket list', async () => {
-			useAllocateTicketItems();
-			expect(tracker.lastCreatedMutation?.retry).toBe(false);
-
-			const allocations = [{ item_id: 'item_1', allocated_qty: '50' }];
-			await tracker.lastCreatedMutation?.mutationFn({ ticketId: 'tkt_alloc', allocations });
-			expect(mockWorkflowCalls.allocateTicketItems).toHaveBeenCalledWith(
-				'tkt_alloc',
-				allocations,
-				expect.objectContaining({ createdBy: 'staff_alice' })
-			);
-
-			tracker.lastCreatedMutation?.onSuccess?.(
-				{},
-				{ ticketId: 'tkt_alloc', allocations },
-				undefined
-			);
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: distributionKeys.ticket('SH001', 'tkt_alloc')
-			});
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: ['distribution', 'SH001', 'tickets']
-			});
-		});
-
-		it('useApproveTicketForDispatch (Workflow 3): invalidates detail and ticket list', async () => {
-			useApproveTicketForDispatch();
-			await tracker.lastCreatedMutation?.mutationFn({ ticketId: 'tkt_appr' });
-			expect(mockWorkflowCalls.approveTicketForDispatch).toHaveBeenCalledWith(
-				'tkt_appr',
-				expect.objectContaining({ createdBy: 'staff_alice' })
-			);
-
-			tracker.lastCreatedMutation?.onSuccess?.({}, { ticketId: 'tkt_appr' }, undefined);
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: distributionKeys.ticket('SH001', 'tkt_appr')
-			});
-		});
-
-		it('useCancelTicket (Workflow 4): invalidates detail and ticket list', async () => {
-			useCancelTicket();
-			await tracker.lastCreatedMutation?.mutationFn({
-				ticketId: 'tkt_cancel',
-				reason: 'Emergency stop'
-			});
-			expect(mockWorkflowCalls.cancelTicket).toHaveBeenCalledWith(
-				'tkt_cancel',
-				'Emergency stop',
-				expect.objectContaining({ createdBy: 'staff_alice' })
-			);
-
-			tracker.lastCreatedMutation?.onSuccess?.(
-				{},
-				{ ticketId: 'tkt_cancel', reason: 'Emergency stop' },
-				undefined
-			);
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: distributionKeys.ticket('SH001', 'tkt_cancel')
-			});
-		});
-
-		it('useDispatchTicket (Workflow 5): invalidates ticket and operations stock ledgers', async () => {
-			useDispatchTicket();
-			const options = { driver_name: 'Driver Bob', license_plate: '1กข1234' };
-			await tracker.lastCreatedMutation?.mutationFn({ ticketId: 'tkt_disp', options });
-			expect(mockWorkflowCalls.dispatchTicket).toHaveBeenCalledWith(
-				'tkt_disp',
-				options,
-				expect.objectContaining({ createdBy: 'staff_alice' })
-			);
-
-			tracker.lastCreatedMutation?.onSuccess?.({}, { ticketId: 'tkt_disp', options }, undefined);
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: distributionKeys.ticket('SH001', 'tkt_disp')
-			});
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: operationsKeys.stockLedgers()
-			});
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: operationsKeys.balance()
-			});
-		});
-
-		it('useReceiveTicketAtDistributionPoint (Workflow 6): invalidates ticket and list', async () => {
-			useReceiveTicketAtDistributionPoint();
-			await tracker.lastCreatedMutation?.mutationFn({ ticketId: 'tkt_rcv' });
-			expect(mockWorkflowCalls.receiveTicketAtDistributionPoint).toHaveBeenCalledWith(
-				'tkt_rcv',
-				expect.objectContaining({ createdBy: 'staff_alice' })
-			);
-
-			tracker.lastCreatedMutation?.onSuccess?.({}, { ticketId: 'tkt_rcv' }, undefined);
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: distributionKeys.ticket('SH001', 'tkt_rcv')
-			});
-		});
-
-		it('useAmendActiveTicket (Workflow 7): preserves caller-supplied amendmentId across invocations', async () => {
-			useAmendActiveTicket();
-			const stableAmendmentId = createStableOperationId();
-			const input = {
-				amendmentId: stableAmendmentId,
-				item_id: 'item_water',
-				added_qty: '20'
-			};
-
-			await tracker.lastCreatedMutation?.mutationFn({ ticketId: 'tkt_amend', input });
-			expect(mockWorkflowCalls.amendActiveTicket).toHaveBeenCalledWith(
-				'tkt_amend',
-				expect.objectContaining({ amendmentId: stableAmendmentId, added_qty: '20' }),
-				expect.objectContaining({ createdBy: 'staff_alice' })
-			);
-
-			tracker.lastCreatedMutation?.onSuccess?.({}, { ticketId: 'tkt_amend', input }, undefined);
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: distributionKeys.ticket('SH001', 'tkt_amend')
-			});
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: operationsKeys.stockLedgers()
-			});
-		});
-
-		it('useRecordFoodDistribution (Workflow 8): invalidates logs, ticket, and reconciliation', async () => {
-			useRecordFoodDistribution();
-			const input = {
-				item_id: 'meal_box',
-				qty: '2',
-				recipient_type: 'individual' as const,
-				recipient_id: 'person_123'
-			};
-			await tracker.lastCreatedMutation?.mutationFn({ ticketId: 'tkt_food', input });
-			expect(mockWorkflowCalls.recordFoodDistribution).toHaveBeenCalledWith(
-				'tkt_food',
-				input,
-				expect.objectContaining({ createdBy: 'staff_alice' })
-			);
-
-			tracker.lastCreatedMutation?.onSuccess?.({}, { ticketId: 'tkt_food', input }, undefined);
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: ['distribution', 'SH001', 'logs']
-			});
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: distributionKeys.ticket('SH001', 'tkt_food')
-			});
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: distributionKeys.shiftReconciliation('SH001', 'tkt_food')
-			});
-		});
-
-		it('useRecordSuppliesDistribution (Workflow 9): invalidates logs, ticket, and reconciliation', async () => {
-			useRecordSuppliesDistribution();
-			const input = {
-				item_id: 'blanket',
-				qty: '1',
-				recipient_type: 'individual' as const,
-				recipient_id: 'person_456'
-			};
-			await tracker.lastCreatedMutation?.mutationFn({ ticketId: 'tkt_supplies', input });
-			expect(mockWorkflowCalls.recordSuppliesDistribution).toHaveBeenCalledWith(
-				'tkt_supplies',
-				input,
-				expect.objectContaining({ createdBy: 'staff_alice' })
-			);
-
-			tracker.lastCreatedMutation?.onSuccess?.({}, { ticketId: 'tkt_supplies', input }, undefined);
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: ['distribution', 'SH001', 'logs']
-			});
-		});
-
-		it('useVoidDistributionLog (Workflow 10): invalidates log and ticket capacity', async () => {
-			useVoidDistributionLog();
-			await tracker.lastCreatedMutation?.mutationFn({
-				logId: 'log_void',
-				reason: 'Incorrect recipient',
-				ticketId: 'tkt_target'
-			});
-			expect(mockWorkflowCalls.voidDistributionLog).toHaveBeenCalledWith(
-				'log_void',
-				'Incorrect recipient',
-				expect.objectContaining({ createdBy: 'staff_alice' })
-			);
-
-			tracker.lastCreatedMutation?.onSuccess?.(
-				{},
-				{ logId: 'log_void', reason: 'Incorrect recipient', ticketId: 'tkt_target' },
-				undefined
-			);
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: distributionKeys.log('SH001', 'log_void')
-			});
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: distributionKeys.ticket('SH001', 'tkt_target')
-			});
-		});
-
-		it('useReturnLoanAtCounter (Workflow 11): invalidates log, logs, and stock ledger', async () => {
-			useReturnLoanAtCounter();
-			const input = { qty_returned: '1', condition_on_return: 'READY' as const };
-			await tracker.lastCreatedMutation?.mutationFn({ logId: 'log_loan', input });
-			expect(mockWorkflowCalls.returnLoanAtCounter).toHaveBeenCalledWith(
-				'log_loan',
-				input,
-				expect.objectContaining({ createdBy: 'staff_alice' })
-			);
-
-			tracker.lastCreatedMutation?.onSuccess?.({}, { logId: 'log_loan', input }, undefined);
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: distributionKeys.log('SH001', 'log_loan')
-			});
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: operationsKeys.stockLedgers()
-			});
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: distributionKeys.returnOperationState('SH001', 'log_loan')
-			});
-		});
-
-		it('useClearLoanNonPhysical (Workflow 12): invalidates log and logs without stock write', async () => {
-			useClearLoanNonPhysical();
-			const input = { clear_reason: 'lost' as const, notes: 'Missing in field' };
-			await tracker.lastCreatedMutation?.mutationFn({ logId: 'log_lost', input });
-			expect(mockWorkflowCalls.clearLoanNonPhysical).toHaveBeenCalledWith(
-				'log_lost',
-				input,
-				expect.objectContaining({ createdBy: 'staff_alice' })
-			);
-
-			tracker.lastCreatedMutation?.onSuccess?.({}, { logId: 'log_lost', input }, undefined);
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: distributionKeys.log('SH001', 'log_lost')
-			});
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: distributionKeys.returnOperationState('SH001', 'log_lost')
-			});
-		});
-
-		it('useCreateBulkReturnPool (Workflow 13): forwards stable operationUlid and invalidates pools and stock', async () => {
-			useCreateBulkReturnPool();
-			const stableOpUlid = createStableOperationId();
-			const input = {
-				operationUlid: stableOpUlid,
-				item_id: 'tent_item',
-				total_received_qty: '10'
-			};
-			await tracker.lastCreatedMutation?.mutationFn({ input });
-			expect(mockWorkflowCalls.createBulkReturnPool).toHaveBeenCalledWith(
-				input,
-				expect.objectContaining({ createdBy: 'staff_alice' })
-			);
-
-			tracker.lastCreatedMutation?.onSuccess?.({}, { input }, undefined);
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: ['distribution', 'SH001', 'bulk_pools']
-			});
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: operationsKeys.stockLedgers()
-			});
-		});
-
-		it('useClearLoanViaBulkPool (Workflow 14): forwards stable operationUlid and invalidates pool, claim, log', async () => {
-			useClearLoanViaBulkPool();
-			const stableOpUlid = createStableOperationId();
-			const input = {
-				operationUlid: stableOpUlid,
-				logId: 'log_claim',
-				poolId: 'pool_claim'
-			};
-			await tracker.lastCreatedMutation?.mutationFn({ input });
-			expect(mockWorkflowCalls.clearLoanViaBulkPool).toHaveBeenCalledWith(
-				input,
-				expect.objectContaining({ createdBy: 'staff_alice' })
-			);
-
-			tracker.lastCreatedMutation?.onSuccess?.({}, { input }, undefined);
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: distributionKeys.bulkPool('SH001', 'pool_claim')
-			});
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: distributionKeys.log('SH001', 'log_claim')
-			});
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: ['distribution', 'SH001', 'bulk_claims']
-			});
-		});
-
-		it('useCloseShift (Workflow 16): invalidates ticket, list, and reconciliation', async () => {
-			useCloseShift();
-			const options = { returned_quantities: { item_1: '5' } };
-			await tracker.lastCreatedMutation?.mutationFn({ ticketId: 'tkt_close', options });
-			expect(mockWorkflowCalls.closeShift).toHaveBeenCalledWith(
-				'tkt_close',
-				options,
-				expect.objectContaining({ createdBy: 'staff_alice' })
-			);
-
-			tracker.lastCreatedMutation?.onSuccess?.({}, { ticketId: 'tkt_close', options }, undefined);
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: distributionKeys.ticket('SH001', 'tkt_close')
-			});
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: distributionKeys.shiftReconciliation('SH001', 'tkt_close')
-			});
-		});
-
-		it('useSubmitReturnsToWarehouse (Workflow 17): invalidates ticket and list', async () => {
-			useSubmitReturnsToWarehouse();
-			await tracker.lastCreatedMutation?.mutationFn({ ticketId: 'tkt_sub_ret' });
-			expect(mockWorkflowCalls.submitReturnsToWarehouse).toHaveBeenCalledWith(
-				'tkt_sub_ret',
-				expect.objectContaining({ createdBy: 'staff_alice' })
-			);
-
-			tracker.lastCreatedMutation?.onSuccess?.({}, { ticketId: 'tkt_sub_ret' }, undefined);
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: distributionKeys.ticket('SH001', 'tkt_sub_ret')
-			});
-		});
-
-		it('useReceiveWarehouseReturns (Workflow 18): invalidates ticket and operations stock', async () => {
-			useReceiveWarehouseReturns();
-			const options = { verified_returned_quantities: { item_1: '5' } };
-			await tracker.lastCreatedMutation?.mutationFn({ ticketId: 'tkt_rcv_ret', options });
-			expect(mockWorkflowCalls.receiveWarehouseReturns).toHaveBeenCalledWith(
-				'tkt_rcv_ret',
-				options,
-				expect.objectContaining({ createdBy: 'staff_alice' })
-			);
-
-			tracker.lastCreatedMutation?.onSuccess?.({}, { ticketId: 'tkt_rcv_ret', options }, undefined);
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: distributionKeys.ticket('SH001', 'tkt_rcv_ret')
-			});
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: operationsKeys.stockLedgers()
-			});
-		});
-
-		it('useCompleteTicket (Workflow 19): invalidates ticket and list', async () => {
-			useCompleteTicket();
-			await tracker.lastCreatedMutation?.mutationFn({ ticketId: 'tkt_done' });
-			expect(mockWorkflowCalls.completeTicket).toHaveBeenCalledWith(
-				'tkt_done',
-				expect.objectContaining({ createdBy: 'staff_alice' })
-			);
-
-			tracker.lastCreatedMutation?.onSuccess?.({}, { ticketId: 'tkt_done' }, undefined);
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: distributionKeys.ticket('SH001', 'tkt_done')
-			});
+			tracker.lastCreatedMutation?.onSuccess?.({}, variables, undefined);
+			for (const queryKey of invalidates) {
+				expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey });
+			}
 		});
 	});
 
@@ -891,78 +763,75 @@ describe('Phase 5 Slice 5.0 — Distribution TanStack Query Layer', () => {
 	});
 
 	describe('6. Cache Invalidation Helpers', () => {
-		it('invalidateTicketCollection invalidates shelter ticket list queries', () => {
-			invalidateTicketCollection(mockQueryClient as never, 'SH001');
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: ['distribution', 'SH001', 'tickets']
-			});
-		});
+		const qc = () => mockQueryClient as never;
+		const cases: Array<{
+			name: string;
+			run: () => void;
+			invalidates: unknown[];
+		}> = [
+			{
+				name: 'invalidateTicketCollection invalidates shelter ticket list queries',
+				run: () => invalidateTicketCollection(qc(), 'SH001'),
+				invalidates: [['distribution', 'SH001', 'tickets']]
+			},
+			{
+				name: 'invalidateTicket invalidates specific ticket query',
+				run: () => invalidateTicket(qc(), 'SH001', 'tkt_01'),
+				invalidates: [['distribution', 'SH001', 'ticket', 'tkt_01']]
+			},
+			{
+				name: 'invalidateTicketWithCollection invalidates both ticket and collection',
+				run: () => invalidateTicketWithCollection(qc(), 'SH001', 'tkt_01'),
+				invalidates: [
+					['distribution', 'SH001', 'ticket', 'tkt_01'],
+					['distribution', 'SH001', 'tickets']
+				]
+			},
+			{
+				name: 'invalidateDistributionLogs invalidates log collections and specific log when provided',
+				run: () => invalidateDistributionLogs(qc(), 'SH001', 'log_01'),
+				invalidates: [
+					['distribution', 'SH001', 'log', 'log_01'],
+					['distribution', 'SH001', 'logs']
+				]
+			},
+			{
+				name: 'invalidateShiftReconciliation invalidates shift reconciliation query',
+				run: () => invalidateShiftReconciliation(qc(), 'SH001', 'tkt_01'),
+				invalidates: [['distribution', 'SH001', 'shift_reconciliation', 'tkt_01']]
+			},
+			{
+				name: 'invalidateBulkPools invalidates pool collections and specific pool when provided',
+				run: () => invalidateBulkPools(qc(), 'SH001', 'pool_01'),
+				invalidates: [
+					['distribution', 'SH001', 'bulk_pool', 'pool_01'],
+					['distribution', 'SH001', 'bulk_pools']
+				]
+			},
+			{
+				name: 'invalidateBulkClaims invalidates claim collections and specific claim when provided',
+				run: () => invalidateBulkClaims(qc(), 'SH001', 'claim_01'),
+				invalidates: [
+					['distribution', 'SH001', 'bulk_claim', 'claim_01'],
+					['distribution', 'SH001', 'bulk_claims']
+				]
+			},
+			{
+				name: 'invalidateInventoryQueries invalidates stock ledgers, ledger, and balance',
+				run: () => invalidateInventoryQueries(qc()),
+				invalidates: [
+					operationsKeys.stockLedgers(),
+					operationsKeys.ledger(),
+					operationsKeys.balance()
+				]
+			}
+		];
 
-		it('invalidateTicket invalidates specific ticket query', () => {
-			invalidateTicket(mockQueryClient as never, 'SH001', 'tkt_01');
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: ['distribution', 'SH001', 'ticket', 'tkt_01']
-			});
-		});
-
-		it('invalidateTicketWithCollection invalidates both ticket and collection', () => {
-			invalidateTicketWithCollection(mockQueryClient as never, 'SH001', 'tkt_01');
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: ['distribution', 'SH001', 'ticket', 'tkt_01']
-			});
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: ['distribution', 'SH001', 'tickets']
-			});
-		});
-
-		it('invalidateDistributionLogs invalidates log collections and specific log when provided', () => {
-			invalidateDistributionLogs(mockQueryClient as never, 'SH001', 'log_01');
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: ['distribution', 'SH001', 'log', 'log_01']
-			});
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: ['distribution', 'SH001', 'logs']
-			});
-		});
-
-		it('invalidateShiftReconciliation invalidates shift reconciliation query', () => {
-			invalidateShiftReconciliation(mockQueryClient as never, 'SH001', 'tkt_01');
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: ['distribution', 'SH001', 'shift_reconciliation', 'tkt_01']
-			});
-		});
-
-		it('invalidateBulkPools invalidates pool collections and specific pool when provided', () => {
-			invalidateBulkPools(mockQueryClient as never, 'SH001', 'pool_01');
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: ['distribution', 'SH001', 'bulk_pool', 'pool_01']
-			});
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: ['distribution', 'SH001', 'bulk_pools']
-			});
-		});
-
-		it('invalidateBulkClaims invalidates claim collections and specific claim when provided', () => {
-			invalidateBulkClaims(mockQueryClient as never, 'SH001', 'claim_01');
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: ['distribution', 'SH001', 'bulk_claim', 'claim_01']
-			});
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: ['distribution', 'SH001', 'bulk_claims']
-			});
-		});
-
-		it('invalidateInventoryQueries invalidates stock ledgers, ledger, and balance', () => {
-			invalidateInventoryQueries(mockQueryClient as never);
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: operationsKeys.stockLedgers()
-			});
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: operationsKeys.ledger()
-			});
-			expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({
-				queryKey: operationsKeys.balance()
-			});
+		it.each(cases)('$name', ({ run, invalidates }) => {
+			run();
+			for (const queryKey of invalidates) {
+				expect(mockQueryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey });
+			}
 		});
 	});
 });

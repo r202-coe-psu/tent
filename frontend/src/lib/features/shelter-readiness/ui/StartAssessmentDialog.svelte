@@ -6,6 +6,7 @@
 	import PlusCircle from '@lucide/svelte/icons/plus-circle';
 	import CopyPlus from '@lucide/svelte/icons/copy-plus';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
+	import { formatThaiShortDate } from '$lib/utils/date';
 
 	interface Props {
 		open: boolean;
@@ -44,15 +45,7 @@
 
 	function formatDate(isoStr?: string): string {
 		if (!isoStr) return '';
-		try {
-			return new Date(isoStr).toLocaleDateString('th-TH', {
-				year: 'numeric',
-				month: 'short',
-				day: 'numeric'
-			});
-		} catch {
-			return isoStr;
-		}
+		return formatThaiShortDate(isoStr) || isoStr;
 	}
 </script>
 

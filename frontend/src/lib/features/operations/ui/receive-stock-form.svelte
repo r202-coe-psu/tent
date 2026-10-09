@@ -42,6 +42,7 @@
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { sha256Hex } from '$lib/db/hash';
+	import { DISPLAY_LOCALE, DISPLAY_TIME_ZONE } from '$lib/utils/date';
 	import {
 		useDonations,
 		useReceiveStock,
@@ -138,7 +139,8 @@
 	});
 
 	function donationLabel(donation: Donation): string {
-		const when = new Date(donation.declared_at).toLocaleDateString('th-TH', {
+		const when = new Date(donation.declared_at).toLocaleDateString(DISPLAY_LOCALE, {
+			timeZone: DISPLAY_TIME_ZONE,
 			day: '2-digit',
 			month: 'short'
 		});

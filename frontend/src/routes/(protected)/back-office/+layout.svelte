@@ -15,22 +15,21 @@
 	import { useShelters } from '$lib/features/shelters';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { isSystemAdmin } from '$lib/auth/roles';
-	import { resolve } from '$app/paths';
 	import Building from '@lucide/svelte/icons/building';
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
-	import Plus from '@lucide/svelte/icons/plus';
 	import { ReauthDialog } from '$lib/features/login';
+	import { Button } from '$lib/components/ui/button';
 
 	let { children }: LayoutProps = $props();
 	let reauthOpen = $state(false);
 
 	const sheltersQuery = useShelters();
+	const shelters = $derived(sheltersQuery.data ?? []);
+	const isZeroShelters = $derived(!sheltersQuery.isLoading && shelters.length === 0);
+
 	const roles = $derived(authStore.user?.roles ?? []);
 	const isSA = $derived(isSystemAdmin(roles));
-	const isZeroShelter = $derived(
-		sheltersQuery.isSuccess && (sheltersQuery.data?.length ?? 0) === 0
-	);
 
 	function findMatchingLeaf(
 		node: BackofficeNavbarNode,
@@ -157,58 +156,41 @@
 
 		<!-- Content grows with the document; window scroll is the primary scroller. -->
 		<div class="flex flex-1 flex-col">
-			{#if sheltersQuery.isPending}
-				<div class="flex flex-1 items-center justify-center p-12">
-					<div class="flex flex-col items-center gap-3">
-						<div
-							class="size-8 animate-spin rounded-full border-4 border-primary border-t-transparent"
-						></div>
-						<p class="text-sm font-medium text-muted-foreground">
-							กำลังตรวจสอบข้อมูลศูนย์พักพิง...
-						</p>
-					</div>
-				</div>
-			{:else if isZeroShelter}
+			{#if isZeroShelters}
 				<div class="flex flex-1 items-center justify-center p-6 sm:p-12">
 					<div
-						class="mx-auto flex max-w-md flex-col items-center rounded-2xl border border-slate-200/80 bg-card p-6 text-center shadow-xs sm:p-8"
+						class="mx-auto flex max-w-md flex-col items-center rounded-2xl border border-slate-200/80 bg-card p-8 text-center shadow-xs"
 					>
 						<div
-							class="mb-4 flex size-14 items-center justify-center rounded-2xl border border-warning-border/40 bg-warning/10 text-warning shadow-2xs"
+							class="mb-4 flex size-14 items-center justify-center rounded-full bg-amber-50 text-amber-600 ring-8 ring-amber-50/50"
 						>
 							<ShieldAlert class="size-7" />
 						</div>
-
-						<h2 class="text-lg font-bold text-foreground sm:text-xl">ยังไม่มีศูนย์พักพิงในระบบ</h2>
-
+						<h2 class="text-xl font-bold text-foreground sm:text-2xl">ยังไม่มีศูนย์พักพิงในระบบ</h2>
 						<p class="mt-2 text-sm leading-relaxed text-muted-foreground">
-							{#if isSA}
-								ระบบยังไม่พบข้อมูลศูนย์พักพิงที่เปิดใช้งาน
-								กรุณาสร้างหรือนำเข้าข้อมูลศูนย์พักพิงในระบบบริหารจัดการเพื่อเริ่มต้นการใช้งานส่วนหลังบ้าน
-							{:else}
-								ระบบยังไม่มีข้อมูลศูนย์พักพิงที่เปิดใช้งาน
-								หรือท่านยังไม่ได้รับสิทธิ์เข้าถึงศูนย์พักพิง กรุณาติดต่อผู้ดูแลระบบ (System Admin)
-								เพื่อเปิดใช้งานศูนย์
-							{/if}
+							การดำเนินการในระบบส่วนหลังจำเป็นต้องมีศูนย์พักพิงที่เปิดใช้งานอย่างน้อย 1 แห่งในระบบ
 						</p>
-
-						<div class="mt-6 flex flex-wrap items-center justify-center gap-3">
-							{#if isSA}
-								<a
-									href={resolve('/system-management/shelters')}
-									class="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-xs transition-colors hover:bg-primary/90"
+						{#if isSA}
+							<div class="mt-6 flex w-full flex-col items-center gap-3">
+								<Button
+									href="/system-management/shelters"
+									size="lg"
+									class="w-full px-6 font-semibold sm:w-auto"
 								>
-									<Plus class="size-4" />
-									ไปยังหน้าจัดการศูนย์พักพิง
-								</a>
-							{:else}
-								<div
-									class="inline-flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3.5 py-2 text-xs font-medium text-muted-foreground"
-								>
-									สถานะ: รอการตั้งค่าศูนย์จากผู้ดูแลระบบ
-								</div>
-							{/if}
-						</div>
+									สร้างหรือนำเข้าศูนย์พักพิง
+								</Button>
+								<p class="text-xs text-muted-foreground">
+									ไปที่หน้าจัดการศูนย์พักพิงเพื่อสร้างศูนย์ใหม่หรือนำเข้าข้อมูล
+								</p>
+							</div>
+						{:else}
+							<div
+								class="mt-6 w-full rounded-xl border border-border bg-muted/50 p-4 text-xs text-muted-foreground"
+							>
+								กรุณาติดต่อผู้ดูแลระบบ (System Administrator)
+								เพื่อสร้างหรือเปิดใช้งานศูนย์พักพิงในระบบ
+							</div>
+						{/if}
 					</div>
 				</div>
 			{:else}

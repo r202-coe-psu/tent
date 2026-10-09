@@ -4,6 +4,7 @@ import { createRawSnippet } from 'svelte';
 import Layout from './+layout.svelte';
 
 let mockSheltersState = {
+	isLoading: false,
 	isPending: false,
 	isSuccess: true,
 	data: [] as Array<{ code: string; name: string }>
@@ -64,6 +65,7 @@ describe('Back-office Layout Zero-Shelter Guard (#393)', () => {
 	beforeEach(() => {
 		mockRoles = ['system_admin'];
 		mockSheltersState = {
+			isLoading: false,
 			isPending: false,
 			isSuccess: true,
 			data: []
@@ -73,6 +75,7 @@ describe('Back-office Layout Zero-Shelter Guard (#393)', () => {
 	it('renders locked screen with admin action when zero shelters exist and user is system_admin', () => {
 		mockRoles = ['system_admin'];
 		mockSheltersState = {
+			isLoading: false,
 			isPending: false,
 			isSuccess: true,
 			data: []
@@ -88,11 +91,11 @@ describe('Back-office Layout Zero-Shelter Guard (#393)', () => {
 
 		// Must show locked header
 		expect(result.body).toContain('ยังไม่มีศูนย์พักพิงในระบบ');
-		// Must show admin instruction
-		expect(result.body).toContain('ระบบยังไม่พบข้อมูลศูนย์พักพิงที่เปิดใช้งาน');
+		// Must show instruction
+		expect(result.body).toContain('การดำเนินการในระบบส่วนหลังจำเป็นต้องมีศูนย์พักพิง');
 		// Must contain CTA button to /system-management/shelters
 		expect(result.body).toContain('/system-management/shelters');
-		expect(result.body).toContain('ไปยังหน้าจัดการศูนย์พักพิง');
+		expect(result.body).toContain('สร้างหรือนำเข้าศูนย์พักพิง');
 		// Must NOT render children content
 		expect(result.body).not.toContain('CONTENT_RENDERED');
 	});
@@ -100,6 +103,7 @@ describe('Back-office Layout Zero-Shelter Guard (#393)', () => {
 	it('renders locked screen with staff notice when zero shelters exist and user is regular staff', () => {
 		mockRoles = ['volunteer'];
 		mockSheltersState = {
+			isLoading: false,
 			isPending: false,
 			isSuccess: true,
 			data: []
@@ -116,18 +120,16 @@ describe('Back-office Layout Zero-Shelter Guard (#393)', () => {
 		// Must show locked header
 		expect(result.body).toContain('ยังไม่มีศูนย์พักพิงในระบบ');
 		// Must show staff instruction
-		expect(result.body).toContain('กรุณาติดต่อผู้ดูแลระบบ (System Admin)');
-		expect(result.body).toContain('เพื่อเปิดใช้งานศูนย์');
-		// Must show status badge
-		expect(result.body).toContain('สถานะ: รอการตั้งค่าศูนย์จากผู้ดูแลระบบ');
+		expect(result.body).toContain('กรุณาติดต่อผู้ดูแลระบบ (System Administrator)');
 		// Must NOT show admin button
-		expect(result.body).not.toContain('ไปยังหน้าจัดการศูนย์พักพิง');
+		expect(result.body).not.toContain('สร้างหรือนำเข้าศูนย์พักพิง');
 		// Must NOT render children content
 		expect(result.body).not.toContain('CONTENT_RENDERED');
 	});
 
 	it('renders children content when shelters exist in the system', () => {
 		mockSheltersState = {
+			isLoading: false,
 			isPending: false,
 			isSuccess: true,
 			data: [{ code: 'SH01', name: 'ศูนย์พักพิงหลัก' }]

@@ -26,7 +26,12 @@
 	} from '../data/users.api';
 	import { usersKeys } from '../application/queries';
 	import { usersListBaseFromPathname, withUsersView } from '../domain/user-edit-path';
-	import { UserPlus, KeyRound, Copy, Check, ShieldAlert, Unlink } from '@lucide/svelte';
+	import UserPlus from '@lucide/svelte/icons/user-plus';
+	import KeyRound from '@lucide/svelte/icons/key-round';
+	import Copy from '@lucide/svelte/icons/copy';
+	import Check from '@lucide/svelte/icons/check';
+	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
+	import Unlink from '@lucide/svelte/icons/unlink';
 	import StaffPageShell from '$lib/components/staff-page-shell.svelte';
 	import { spatial } from '$lib/tokens';
 	import { Button } from '$lib/components/ui/button/index.js';

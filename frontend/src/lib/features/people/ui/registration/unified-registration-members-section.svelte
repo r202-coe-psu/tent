@@ -31,6 +31,7 @@
 		shelterCode = '',
 		membersSectionDesc,
 		isJoiningExistingHousehold = false,
+		existingMemberCount = null,
 		primaryContactPhone = null,
 		thaidEnabled = false,
 		onDirty
@@ -50,6 +51,8 @@
 		shelterCode?: string;
 		membersSectionDesc: string;
 		isJoiningExistingHousehold?: boolean;
+		/** Count of people already in the household being joined (from match chip). */
+		existingMemberCount?: number | null;
 		primaryContactPhone?: string | null;
 		thaidEnabled?: boolean;
 		onDirty?: () => void;
@@ -57,6 +60,37 @@
 
 	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
 	const MEMBERS_ERROR_ID = 'members-limit-error';
+
+	const sectionTitle = $derived(
+		isJoiningExistingHousehold ? t.sectionMembersJoin : t.sectionMembers
+	);
+	const sectionDescription = $derived(
+		isJoiningExistingHousehold ? t.sectionMembersDescJoin : membersSectionDesc
+	);
+	const addMemberLabel = $derived(isJoiningExistingHousehold ? t.addMemberJoin : t.addMember);
+
+	const knownExistingCount = $derived(
+		existingMemberCount != null && existingMemberCount > 0 ? existingMemberCount : 0
+	);
+
+	const membersBadges = $derived.by(() => {
+		const unit = t.memberCountUnit ? ` ${t.memberCountUnit}` : '';
+		if (isJoiningExistingHousehold) {
+			const badges: Array<{ text: string; tone?: 'primary' | 'muted' }> = [];
+			if (knownExistingCount > 0) {
+				badges.push({
+					text: `${t.memberBadgeExisting} ${knownExistingCount}${unit}`,
+					tone: 'muted'
+				});
+			}
+			badges.push({
+				text: `${t.memberBadgeAddingMore} ${members.length}${unit}`,
+				tone: 'primary'
+			});
+			return badges;
+		}
+		return [{ text: `${members.length}${unit}`, tone: 'primary' as const }];
+	});
 
 	/** Station 1: large families switch member cards via tabs instead of one long scroll. */
 	const MEMBER_TABS_MIN = 3;
@@ -151,14 +185,14 @@
 
 <UnifiedRegistrationSection
 	id="unified-members"
-	title={t.sectionMembers}
-	description={membersSectionDesc}
-	badge={`${members.length}${t.memberCountUnit ? ` ${t.memberCountUnit}` : ''}`}
+	title={sectionTitle}
+	description={sectionDescription}
+	badges={membersBadges}
 	icon={Users}
 	bodyClass="none"
 >
 	{#snippet actions()}
-		<div class="flex flex-wrap items-center gap-2">
+		<div class="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
 			{#if channel === 'public' && thaidEnabled}
 				<Button
 					type="button"
@@ -178,13 +212,26 @@
 				onclick={addMember}
 				aria-invalid={membersError ? true : undefined}
 				aria-describedby={membersError ? MEMBERS_ERROR_ID : undefined}
-				class="h-9 gap-1.5 text-xs sm:text-sm"
+				class="h-9 flex-1 gap-1.5 text-xs sm:flex-none sm:text-sm"
 			>
 				<Plus class="size-4" />
-				{t.addMember}
+				{addMemberLabel}
 			</Button>
 		</div>
 	{/snippet}
+
+	{#if isJoiningExistingHousehold && knownExistingCount > 0}
+		<div
+			class="mb-3 rounded-xl border border-border/70 bg-muted/30 p-3 sm:p-3.5"
+			role="status"
+			aria-live="polite"
+		>
+			<p class="text-sm font-semibold text-foreground">
+				{t.existingMembersCount(knownExistingCount)}
+			</p>
+			<p class="mt-1 text-xs leading-relaxed text-muted-foreground">{t.existingMembersHint}</p>
+		</div>
+	{/if}
 
 	{#if membersError}
 		<p id={MEMBERS_ERROR_ID} class="mb-3 text-sm font-medium text-destructive">{membersError}</p>

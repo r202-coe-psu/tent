@@ -119,7 +119,7 @@ note: decision-synced 2026-07-15 — CR-033 remote-first; CR-005 public-tier red
 **Definition of Done:**
 
 - RoPA ครอบทุก processing activity ของระบบ ผ่าน review ผู้รับผิดชอบ PDPA ของโครงการ
-- Retention policy ต่อประเภทข้อมูลกำหนดชัด + กลไกลบ/anonymize อัตโนมัติทำงานจริง (test ได้) — รวม cleanup ของ submission/temp artifacts ตาม FR-17 (remote-first continuity baseline, [CR-033](../changes/CR-033-remote-first-architecture-program-index.md); **ไม่มี offline local Pouch store ให้ cleanup**) ที่ FR-55 กำหนด
+- Retention policy ต่อประเภทข้อมูลกำหนดชัด + กลไกลบ/anonymize อัตโนมัติทำงานจริง (test ได้) — รวม cleanup ของ submission/temp artifacts ตาม FR-17 (remote-first continuity baseline, [CR-033](../changes/01-core/CR-033-remote-first-architecture-program-index.md); **ไม่มี offline local Pouch store ให้ cleanup**) ที่ FR-55 กำหนด
 - Consent flows (ลงทะเบียน, family search T-40, donor, volunteer) สอดคล้องเอกสารและ audit ได้
 - เอกสารชุดนี้อยู่ใน handover package (T-44)
 
