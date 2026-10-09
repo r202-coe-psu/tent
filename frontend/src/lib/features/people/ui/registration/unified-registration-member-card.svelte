@@ -38,7 +38,6 @@
 		applyAnonymousIdToMember,
 		evacueeToUnifiedMember,
 		type MemberPhotoUploadMode,
-		type UnifiedMemberInput,
 		type UnifiedMemberWithMeta,
 		type UnifiedRegistrationChannel
 	} from '../../domain/unified-registration';
@@ -148,9 +147,9 @@
 	if (member.nickname == null) member.nickname = '';
 	if (member.country == null) member.country = 'THAILAND';
 	if (member.religion == null) member.religion = 'unknown';
-	if (member.gender == null || (member.gender as string) === 'other') {
-		member.gender = '' as UnifiedMemberInput['gender'];
-	}
+	// ไม่ระบุ = null (default, valid on every channel). Legacy 'other' is preserved as-is — the radio
+	// shows it as ไม่ระบุ and only the user's own pick changes it (decision sync 2026-10-09).
+	if (member.gender === undefined) member.gender = null;
 
 	let noPhone = $state(member.phone == null);
 	let birthYear = $state<string | number | undefined>(

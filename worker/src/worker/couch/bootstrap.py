@@ -5,7 +5,12 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from worker.couch.checkpoint import save_checkpoint
+from worker.couch.checkpoint import (
+    get_checkpoint,
+    get_projection_version,
+    save_checkpoint,
+    save_projection_version,
+)
 from worker.couch.client import CouchClient
 from worker.masking import shelter_code_from_db_name, shelter_db_name
 from worker.mongo import (
@@ -26,6 +31,7 @@ from worker.mongo import (
     refresh_shelter_stock,
 )
 from worker.mongo.on_hand import refresh_on_hand
+from worker.projection_version import PROJECTION_VERSION
 from worker.projectors.donation import project_donation
 from worker.projectors.donation_need_counter import plan_need_counters
 from worker.projectors.evacuee import project_evacuee
@@ -55,6 +61,11 @@ async def bootstrap_database(couch: CouchClient, database: str) -> None:
         logger.warning("Database %s does not exist — skipping bootstrap", database)
         return
 
+    # Read the update seq BEFORE scanning and checkpoint it afterwards: a change that
+    # lands mid-scan (after its doc was already read) is then replayed by the _changes
+    # tail instead of being skipped. Projection writes are upserts, so replay is safe.
+    seq = await couch.db_update_seq(database)
+
     shelter_code = shelter_code_from_db_name(database)
     if database == REGISTRY_DB:
         async for doc in couch.iter_all_docs(REGISTRY_DB):
@@ -79,7 +90,6 @@ async def bootstrap_database(couch: CouchClient, database: str) -> None:
 
                 action, payload = project_config(doc)
                 await apply_config(action, payload)
-        seq = await couch.db_update_seq(REGISTRY_DB)
         await save_checkpoint(REGISTRY_DB, seq)
         logger.info("Bootstrap complete for %s (seq=%s)", REGISTRY_DB, seq)
         return
@@ -151,7 +161,6 @@ async def bootstrap_database(couch: CouchClient, database: str) -> None:
     for action, payload in need_actions:
         await apply_need(action, payload)
 
-    seq = await couch.db_update_seq(database)
     await save_checkpoint(database, seq)
     logger.info("Bootstrap complete for %s (seq=%s)", database, seq)
 
@@ -188,15 +197,56 @@ async def list_all_shelter_codes(couch: CouchClient) -> list[str]:
 
 
 async def bootstrap_all(couch: CouchClient) -> None:
-    logger.info("Starting bootstrap scan")
+    """Full scan; records PROJECTION_VERSION only once every database has succeeded.
+
+    Any exception propagates before the version is written, so the next start retries.
+    """
+    logger.info("Starting bootstrap scan (projection version %s)", PROJECTION_VERSION)
     await bootstrap_database(couch, REGISTRY_DB)
     for code in await list_open_shelter_codes(couch):
         await bootstrap_database(couch, shelter_db_name(code))
-    logger.info("Bootstrap finished")
+    await save_projection_version(PROJECTION_VERSION)
+    logger.info("Bootstrap finished (projection version %s stored)", PROJECTION_VERSION)
+
+
+async def bootstrap_reason() -> str | None:
+    """Why a bootstrap is needed on start, or None when the projections are current."""
+    if await get_checkpoint(REGISTRY_DB) is None:
+        return "first install (no registry checkpoint)"
+    stored = await get_projection_version()
+    if stored is None:
+        return (
+            f"projection version not recorded yet (code is v{PROJECTION_VERSION}) — "
+            "one-off re-projection on an existing install"
+        )
+    if stored < PROJECTION_VERSION:
+        return f"projection version upgrade from v{stored} to v{PROJECTION_VERSION}"
+    if stored > PROJECTION_VERSION:
+        logger.warning(
+            "Stored projection version v%s is newer than this worker's v%s "
+            "(rollback?) — not bootstrapping; Mongo rows may carry a newer shape",
+            stored,
+            PROJECTION_VERSION,
+        )
+    return None
 
 
 async def needs_bootstrap() -> bool:
-    from worker.couch.checkpoint import get_checkpoint
+    return await bootstrap_reason() is not None
 
-    registry_cp = await get_checkpoint(REGISTRY_DB)
-    return registry_cp is None
+
+async def maybe_bootstrap(couch: CouchClient, *, force: bool) -> bool:
+    """Run bootstrap_all when forced or needed. Returns True if it ran."""
+    reason = (
+        "forced by --bootstrap / --bootstrap-only"
+        if force
+        else await bootstrap_reason()
+    )
+    if reason is None:
+        logger.info(
+            "Projections up to date (v%s) — skipping bootstrap", PROJECTION_VERSION
+        )
+        return False
+    logger.info("Bootstrap triggered: %s", reason)
+    await bootstrap_all(couch)
+    return True

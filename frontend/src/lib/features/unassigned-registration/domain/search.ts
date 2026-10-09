@@ -46,7 +46,8 @@ export const openMemberHitSchema = z.object({
 	status: z.literal('open'),
 	first_name: z.string(),
 	last_name: z.string(),
-	gender: z.string(),
+	/** `null` = ไม่ระบุ (decision sync 2026-10-09); legacy `'other'` also reads as ไม่ระบุ. */
+	gender: z.string().nullable(),
 	phone: z.string().nullable(),
 	person_id: personIdHitSchema.nullable(),
 	country: z.string(),
@@ -114,8 +115,8 @@ export function formatOpenMemberName(member: OpenMemberHit): string {
 	return `${member.first_name} ${member.last_name}`.trim();
 }
 
-export function formatOpenMemberGender(gender: string): string {
-	return GENDER_LABELS[gender] ?? gender;
+export function formatOpenMemberGender(gender: string | null | undefined): string {
+	return (gender ? GENDER_LABELS[gender] : undefined) ?? 'ไม่ระบุ';
 }
 
 export function formatOpenMemberCardType(cardType: PersonIdHit['cardType']): string {

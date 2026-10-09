@@ -2035,7 +2035,7 @@ export interface components {
 			/** Last Name */
 			last_name: string;
 			/** Gender */
-			gender: string;
+			gender?: string | null;
 			/** Phone */
 			phone?: string | null;
 			person_id?: components['schemas']['PersonIdOut'] | null;
@@ -2070,11 +2070,8 @@ export interface components {
 			 * @default
 			 */
 			last_name: string;
-			/**
-			 * Gender — `null` = ไม่ระบุ
-			 * @enum {string|null}
-			 */
-			gender: 'male' | 'female' | 'other' | null;
+			/** Gender */
+			gender: ('male' | 'female' | 'other') | null;
 			/** Phone */
 			phone?: string | null;
 			person_id?: components['schemas']['PersonIdInput'] | null;
@@ -2154,6 +2151,8 @@ export interface components {
 			male: number;
 			/** Female */
 			female: number;
+			/** Gender Unspecified */
+			gender_unspecified: number;
 			/** Child Under 5 */
 			child_under_5: number;
 			/** Elderly Over 60 */
@@ -2240,7 +2239,7 @@ export interface components {
 			/** Last Name */
 			last_name: string;
 			/** Gender */
-			gender: string;
+			gender?: string | null;
 			/** Phone */
 			phone?: string | null;
 			person_id?: components['schemas']['PersonIdOut'] | null;

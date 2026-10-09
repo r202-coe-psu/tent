@@ -89,11 +89,6 @@
 			<span class="text-xs font-bold tracking-wider text-muted-foreground uppercase">
 				สรุปข้อมูลการลงทะเบียน
 			</span>
-			<span
-				class="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-2xs font-semibold text-primary"
-			>
-				Live Summary
-			</span>
 		</div>
 	</div>
 
