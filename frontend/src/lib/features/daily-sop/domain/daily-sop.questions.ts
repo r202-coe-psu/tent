@@ -70,7 +70,6 @@ export const DAILY_SOP_ROLE_QUESTION_IDS = {
 	]
 } as const;
 
-/** Question text and ordering copied from the approved CR appendix. */
 export const DAILY_SOP_ROLE_QUESTIONS = [
 	{
 		id: 'D-SM-02',

@@ -62,8 +62,7 @@ export class DailySopRoleRemoteRepository implements DailySopRoleRepository {
 			limit: DAILY_SOP_ROLE_PAGE_SIZE,
 			...(bookmark ? { bookmark } : {})
 		});
-		// Documents that fail the current schema (e.g. written by an earlier prototype) are skipped,
-		// not rewritten; paging below counts raw docs so the bookmark stays correct.
+		// Count raw documents for bookmarks even when invalid documents are skipped.
 		const items = response.docs.flatMap((record) => {
 			const parsed = dailySopRoleAssessmentSchema.safeParse(record);
 			return parsed.success ? [parsed.data] : [];
@@ -282,7 +281,6 @@ const dailySopStockStatusSchema = z
 
 export type DailySopStockStatus = z.infer<typeof dailySopStockStatusSchema>;
 
-/** Read-only projection of the existing stock-status endpoint for D-SC-01. */
 export async function fetchDailySopStockStatus(shelterCode: string): Promise<DailySopStockStatus> {
 	const response = await fetch(`/api/v1/shelters/${encodeURIComponent(shelterCode)}/stock-status`);
 	if (!response.ok) throw new Error(`Stock status request failed (${response.status}).`);
