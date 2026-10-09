@@ -406,6 +406,10 @@ Coding patterns (client wrappers, mappers, query keys): **`CONVENTIONS.md` §12*
   `pure` test. Every test file runs in exactly one project.
 - Vitest's fs module cache (`experimental.fsModuleCache`) persists transforms in
   `node_modules/.experimental-vitest-cache`. Delete that directory if results look stale.
+  Set `VITEST_NO_FS_CACHE=1` to disable it for one run (the CLI flag `--experimental.fsModuleCache=false`
+  does not work with `projects`). The pre-push hook runs with `VITEST_NO_FS_CACHE=1` on purpose, because
+  it is the only unit-test gate and an experimental cache must not be the last check; follow-up: run
+  `pnpm test` in Jenkins, then reconsider.
 - E2E is **Playwright** in `e2e/`; `pnpm test:e2e` builds in `test` mode first. `e2e/mock-api.js`
   stands in for the backend during those runs.
 
