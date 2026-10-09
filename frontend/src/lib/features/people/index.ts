@@ -372,6 +372,14 @@ export {
 	formatSaveFailureReport,
 	type SaveFailureReport
 } from '$lib/utils/errors';
+export {
+	isValidThaiIdCandidate,
+	performFederatedDuplicateLookup,
+	resolveInstantDuplicateAction,
+	type InstantDuplicateMatch,
+	type FederatedDuplicateLookupDeps
+} from './domain/instant-duplicate';
+export { default as InstantDuplicateDialog } from './ui/registration/instant-duplicate-dialog.svelte';
 
 // UI — i18n dictionaries used directly by route pages
 export { EVACUEE_PAGE_I18N, type EvacueePageI18n } from './ui/_constants/evacuee-page.i18n';

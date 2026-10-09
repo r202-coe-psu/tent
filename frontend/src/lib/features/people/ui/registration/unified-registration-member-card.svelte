@@ -9,6 +9,7 @@
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import QrCode from '@lucide/svelte/icons/qr-code';
 	import { onDestroy, onMount, untrack } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { toast } from 'svelte-sonner';
 	import * as Accordion from '$lib/components/ui/accordion/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -42,7 +43,13 @@
 		type UnifiedRegistrationChannel
 	} from '../../domain/unified-registration';
 	import type { Evacuee } from '../../domain/people';
+	import {
+		isValidThaiIdCandidate,
+		performFederatedDuplicateLookup,
+		type InstantDuplicateMatch
+	} from '../../domain/instant-duplicate';
 	import PullPreRegisteredDialog from './pull-pre-registered-dialog.svelte';
+	import InstantDuplicateDialog from './instant-duplicate-dialog.svelte';
 	import {
 		forgetPhotoPreview,
 		rememberPhotoPreview,
@@ -190,6 +197,92 @@
 	let pullDialogOpen = $state(false);
 	let wasPulled = $state(false);
 
+	let isCheckingDuplicate = $state(false);
+	let duplicateMatches = $state<InstantDuplicateMatch[]>([]);
+	let duplicateModalOpen = $state(false);
+	const dismissedThaiIds = new SvelteSet<string>();
+	let lastCheckedThaiId = $state<string | null>(null);
+	let duplicateDebounceTimer: ReturnType<typeof setTimeout> | undefined;
+
+	async function runInstantDuplicateCheck(rawThaiId: string) {
+		if (fieldsDisabled) return;
+		const thaiId = rawThaiId.trim().replace(/\D/g, '');
+		if (thaiId.length !== 13) return;
+		if (isCheckingDuplicate) return;
+		if (dismissedThaiIds.has(thaiId) || lastCheckedThaiId === thaiId) return;
+
+		isCheckingDuplicate = true;
+		try {
+			const hits = await performFederatedDuplicateLookup(thaiId);
+			lastCheckedThaiId = thaiId;
+			const currentId = member.person_id?.number?.trim().replace(/\D/g, '');
+			if (currentId === thaiId && hits.length > 0 && !dismissedThaiIds.has(thaiId)) {
+				duplicateMatches = hits;
+				duplicateModalOpen = true;
+			}
+		} catch {
+			// Gracefully handle any error
+		} finally {
+			isCheckingDuplicate = false;
+		}
+	}
+
+	$effect(() => {
+		if (channel !== 'onsite' || fieldsDisabled || isAlreadyReported || member._id) return;
+		const cardType = member.person_id?.cardType;
+		const rawNumber = member.person_id?.number ?? '';
+
+		if (duplicateDebounceTimer) {
+			clearTimeout(duplicateDebounceTimer);
+			duplicateDebounceTimer = undefined;
+		}
+
+		if (!isValidThaiIdCandidate(rawNumber, cardType)) {
+			isCheckingDuplicate = false;
+			return;
+		}
+
+		const cleanId = rawNumber.trim().replace(/\D/g, '');
+		if (dismissedThaiIds.has(cleanId) || lastCheckedThaiId === cleanId) {
+			return;
+		}
+
+		duplicateDebounceTimer = setTimeout(() => {
+			void runInstantDuplicateCheck(cleanId);
+		}, 400);
+
+		return () => {
+			if (duplicateDebounceTimer) {
+				clearTimeout(duplicateDebounceTimer);
+				duplicateDebounceTimer = undefined;
+			}
+		};
+	});
+
+	function handleCardNumberBlur() {
+		if (channel !== 'onsite' || fieldsDisabled || isAlreadyReported || member._id) return;
+		const cardType = member.person_id?.cardType;
+		const rawNumber = member.person_id?.number ?? '';
+		if (!isValidThaiIdCandidate(rawNumber, cardType)) return;
+
+		const cleanId = rawNumber.trim().replace(/\D/g, '');
+		if (dismissedThaiIds.has(cleanId) || lastCheckedThaiId === cleanId) return;
+
+		if (duplicateDebounceTimer) {
+			clearTimeout(duplicateDebounceTimer);
+			duplicateDebounceTimer = undefined;
+		}
+		void runInstantDuplicateCheck(cleanId);
+	}
+
+	function handleDismissDuplicate() {
+		duplicateModalOpen = false;
+		const currentId = member.person_id?.number?.trim().replace(/\D/g, '');
+		if (currentId) {
+			dismissedThaiIds.add(currentId);
+		}
+	}
+
 	onMount(() => {
 		if (typeof window !== 'undefined' && window.matchMedia('(min-width: 640px)').matches) {
 			photoSectionOpen = ['photo'];
@@ -245,6 +338,9 @@
 		emergency.phone = '';
 		emergency.relation = '';
 		wasPulled = false;
+		lastCheckedThaiId = null;
+		duplicateMatches = [];
+		duplicateModalOpen = false;
 		onReportingInChange?.(true);
 		toast.info('ล้างข้อมูลและยกเลิกการเชื่อมโยงเรียบร้อยแล้ว');
 	}
@@ -675,6 +771,8 @@
 				: ''}
 			idPrefix="member-{index}"
 			errors={fieldErrors}
+			checkingCardNumber={isCheckingDuplicate}
+			onCardNumberBlur={handleCardNumberBlur}
 		/>
 	</div>
 
@@ -746,5 +844,14 @@
 		bind:open={pullDialogOpen}
 		{excludeIds}
 		onselect={handlePopulateFromQueue}
+	/>
+{/if}
+
+{#if channel === 'onsite'}
+	<InstantDuplicateDialog
+		bind:open={duplicateModalOpen}
+		matches={duplicateMatches}
+		thaiId={member.person_id?.number ?? ''}
+		ondismiss={handleDismissDuplicate}
 	/>
 {/if}
