@@ -40,8 +40,9 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 
 ### 1.1 `evacuee` — `evacuee:{ulid}`
 
-> **schema_v 12** — `gender` รับ `null` ได้ (ยังไม่ทราบ — เกิดจาก partner booking เท่านั้น); `registered_via` เพิ่ม `api` ([CR-154](../changes/10-eoc/CR-154-m2-partner-booking-residency.md)).
-> **schema_v 11** — เพิ่ม `religion_other`, `disability_other_detail`; validation ปีเกิด/บัตร ปชช./เบอร์ `+66` เข้มขึ้น ([CR-148](../changes/00-baseline/CR-148-pre-register-validation-and-fields.md)).
+> **decision sync 2026-10-09 (ไม่ bump `schema_v`)** — `gender = null` ("ไม่ระบุ") ใช้ได้ **ทุกช่องทาง** ไม่จำกัดเฉพาะ `registered_via = api`; ฟอร์มลงทะเบียนทุกช่องทาง preselect "ไม่ระบุ" และไม่บังคับเลือกเพศ. ยกเลิก CR-154 FR-70, FR-71 (เหลือเพียง "UI แสดง `null` เป็น ไม่ระบุ + แก้เพศได้ทุกช่องทาง") และ FR-72 (ย้ายไป `public_shelters.occupancy_breakdown.gender_unspecified`, §9.1).
+> **schema_v 12** — `gender` รับ `null` ได้ (ยังไม่ทราบ — partner booking เป็นต้น; ขยายเป็นทุกช่องทางโดย decision sync 2026-10-09); `registered_via` เพิ่ม `api` ([CR-154](../changes/CR-154-m2-partner-booking-residency.md)).
+> **schema_v 11** — เพิ่ม `religion_other`, `disability_other_detail`; validation ปีเกิด/บัตร ปชช./เบอร์ `+66` เข้มขึ้น ([CR-148](../changes/CR-148-pre-register-validation-and-fields.md)).
 > **schema_v 10** — `person_id.cardType` เพิ่ม `anonymous` (+ ระบบออก `ANON-{ulid}`); เพิ่ม `vulnerable_groups[]`; stay เพิ่ม `room_confirmed` (CR-112).
 > **schema_v 9** — เพิ่มสถานะ `arriving` ใน `current_stay.status` (CR-106) — ผู้ประสบภัยที่รายงานตัวหน้างานแล้ว อยู่ระหว่างรอตรวจคัดกรองการแพทย์ หรือรอจัดสรรที่พัก (ไม่นับเตียงที่ถูกใช้จริงใน occupancy dashboard จนกว่าจะ check-in เป็น `active`).
 > **schema_v 8** — เพิ่ม `card_snapshot` (CR-084) — สำหรับการสแกนบัตรประชาชน Smart Card Kiosk รอเจ้าหน้าที่คัดกรองและยืนยันตัวตน; Walk-in จาก Kiosk กำหนดสถานะเป็น `pre_registered` และ `registered_via: 'kiosk'`.
