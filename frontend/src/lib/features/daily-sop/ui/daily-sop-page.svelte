@@ -2,17 +2,15 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
-	import {
-		Activity,
-		ArrowLeft,
-		CalendarDays,
-		CheckCircle2,
-		ChevronRight,
-		ClipboardCheck,
-		CloudOff,
-		Radio,
-		UserRound
-	} from '@lucide/svelte';
+	import Activity from '@lucide/svelte/icons/activity';
+	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import CalendarDays from '@lucide/svelte/icons/calendar-days';
+	import CheckCircle2 from '@lucide/svelte/icons/circle-check';
+	import ChevronRight from '@lucide/svelte/icons/chevron-right';
+	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
+	import CloudOff from '@lucide/svelte/icons/cloud-off';
+	import Radio from '@lucide/svelte/icons/radio';
+	import UserRound from '@lucide/svelte/icons/user-round';
 	import { toast } from 'svelte-sonner';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import {
