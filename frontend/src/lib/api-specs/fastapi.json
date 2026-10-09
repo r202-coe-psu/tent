@@ -5482,6 +5482,11 @@
 						"title": "Matched Member Masked"
 					},
 					"member_count": { "type": "integer", "title": "Member Count", "default": 0 },
+					"members_masked": {
+						"items": { "type": "string" },
+						"type": "array",
+						"title": "Members Masked"
+					},
 					"pets": {
 						"items": { "additionalProperties": true, "type": "object" },
 						"type": "array",

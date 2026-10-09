@@ -41,6 +41,7 @@
 		primaryContactPhone = null,
 		thaidEnabled = false,
 		existingMembers = [],
+		existingMemberCount = 0,
 		onDirty
 	}: {
 		members: UnifiedMemberWithMeta[];
@@ -62,11 +63,15 @@
 		thaidEnabled?: boolean;
 		/** Joining a family: its current members, shown read-only before the new cards. */
 		existingMembers?: readonly Evacuee[];
+		/** Public join: how many are already in the family (their masked names show by the search). */
+		existingMemberCount?: number;
 		onDirty?: () => void;
 	} = $props();
 
 	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
 	const MEMBERS_ERROR_ID = 'members-limit-error';
+	/** Members already in the joined family — new cards are numbered after them. */
+	const existingTotal = $derived(existingMembers.length || existingMemberCount);
 
 	/** Station 1: large families switch member cards via tabs instead of one long scroll. */
 	const MEMBER_TABS_MIN = 3;
@@ -91,7 +96,7 @@
 		const name = [member.first_name, member.last_name].filter(Boolean).join(' ').trim();
 		if (name) return name;
 		if (index === 0 && !isJoiningExistingHousehold) return t.primaryContact;
-		return `${t.memberNum} ${existingMembers.length + index + 1}`;
+		return `${t.memberNum} ${existingTotal + index + 1}`;
 	}
 
 	function hasMemberErrors(index: number): boolean {
@@ -181,7 +186,7 @@
 	id="unified-members"
 	title={t.sectionMembers}
 	description={membersSectionDesc}
-	badge={`${existingMembers.length + members.length}${t.memberCountUnit ? ` ${t.memberCountUnit}` : ''}`}
+	badge={`${existingTotal + members.length}${t.memberCountUnit ? ` ${t.memberCountUnit}` : ''}`}
 	icon={Users}
 	bodyClass="none"
 >
@@ -331,7 +336,7 @@
 					fieldErrors={memberFieldErrors[index]}
 					{validationSeq}
 					{isJoiningExistingHousehold}
-					numberOffset={existingMembers.length}
+					numberOffset={existingTotal}
 					primaryContactPhone={isJoiningExistingHousehold
 						? primaryContactPhone
 						: (members[0]?.phone ?? null)}

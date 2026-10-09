@@ -305,6 +305,7 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		joinChipMembersAtShelter: (shelter: string) =>
 			`มีสมาชิกครอบครัวนี้อยู่ที่ศูนย์ ${shelter} แล้ว — แนะนำไปที่ศูนย์หรือแจ้งเจ้าหน้าที่ · กดเข้าร่วมเพื่อเพิ่มชื่อเข้าคิวกลางใบเดิม`,
 		joinChipPhoneMatch: 'ตรงกับเบอร์โทรศัพท์ของสมาชิก:',
+		joinChipMembersMasked: 'สมาชิก:',
 		joinChipMemberCount: (n: number) => `${n} สมาชิก`,
 		joinChipPetCount: (n: number) => `${n} สัตว์เลี้ยง`,
 		joinChipShelterClosed: (shelter: string) =>
@@ -793,6 +794,7 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		joinChipMembersAtShelter: (shelter: string) =>
 			`Members of this family are already at ${shelter} — go to the shelter or tell staff · press Join to add names to the existing central queue entry`,
 		joinChipPhoneMatch: "Matches a member's phone number:",
+		joinChipMembersMasked: 'Members:',
 		joinChipMemberCount: (n: number) => `${n} ${n === 1 ? 'member' : 'members'}`,
 		joinChipPetCount: (n: number) => `${n} ${n === 1 ? 'pet' : 'pets'}`,
 		joinChipShelterClosed: (shelter: string) =>

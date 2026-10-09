@@ -810,6 +810,8 @@ async def test_residence_match_by_member_phone(
     assert hit["member_count"] == 2
     assert "สมชาย" in hit["primary_contact_name_masked"]
     assert "คุณส***" in hit["matched_member_masked"]
+    # Every current member, first name + masked surname — never the full surname.
+    assert hit["members_masked"] == ["สมชาย ใ****", "สมหญิง ใ****"]
     assert len(hit["pets"]) == 1
     assert hit["pets"][0]["species"] == "dog"
 

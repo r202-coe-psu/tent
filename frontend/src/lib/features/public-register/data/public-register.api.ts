@@ -174,6 +174,8 @@ export type ResidenceMatchChip = {
 	primary_contact_masked?: string | null;
 	matched_member_masked?: string | null;
 	member_count?: number;
+	/** Current members, first name + masked surname — who is already in the family. */
+	members_masked?: string[];
 	pets?: Array<{ species: string; name?: string; count?: number; details?: string }>;
 	address?: {
 		housing_type?: string;

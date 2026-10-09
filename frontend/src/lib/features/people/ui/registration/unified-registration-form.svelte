@@ -1279,7 +1279,7 @@
 
 				<!-- Quick Search & Merge Tool Bar (both Public and Onsite) -->
 				{#if enableResidenceJoin}
-					<div class="mb-4 space-y-3 rounded-xl border border-border/60 bg-muted/10 p-3 sm:mb-5">
+					<div class="my-4 space-y-3 rounded-xl border border-border/60 bg-muted/10 p-3 sm:mb-5">
 						<div class="flex items-center justify-between gap-2">
 							<p class="flex items-center gap-1.5 text-xs font-semibold text-foreground">
 								<Search class="size-3.5 text-primary" />
@@ -1330,6 +1330,367 @@
 						{/if}
 						{#if channel === 'public'}
 							<p class="text-2xs text-muted-foreground">{t.familySearchHint}</p>
+						{/if}
+					</div>
+				{/if}
+
+				<!-- Family search results sit right under the search box -->
+				{#if enableResidenceJoin}
+					<div class="mb-4 empty:hidden">
+						{#if hasJoinSelection}
+							<div
+								class="mt-3 space-y-2 rounded-xl border border-primary/30 bg-primary/5 p-3"
+								role="status"
+								aria-live="polite"
+							>
+								<p class="text-sm font-semibold text-foreground">{t.joinWillJoinTitle}</p>
+								{#if joinSelectedSummary}
+									<p class="text-xs text-muted-foreground">{joinSelectedSummary}</p>
+								{/if}
+								{#if joinedFamilyMembers.length > 0}
+									<p class="text-xs text-muted-foreground">
+										{t.joinExistingSeeBelow(joinedFamilyMembers.length)}
+									</p>
+								{:else if channel === 'public' && selectedMatchChip?.member_count}
+									<p class="text-xs text-muted-foreground">
+										{t.joinExistingCount(selectedMatchChip.member_count)}
+									</p>
+									{#if selectedMatchChip.members_masked?.length}
+										<!-- Masked names only (first name + hidden surname) — enough to recognise the family -->
+										<ol class="grid gap-1 text-xs text-foreground sm:grid-cols-2">
+											{#each selectedMatchChip.members_masked as name, i (`${i}:${name}`)}
+												<li class="rounded-md bg-background/80 px-2 py-1">{i + 1}. {name}</li>
+											{/each}
+										</ol>
+									{/if}
+								{/if}
+								<p class="text-xs text-muted-foreground">
+									{t.joinFillNewOnly}
+								</p>
+								{#if selectedMatchChip?.shelter_code && selectedMatchChip.shelter_code !== shelterCode}
+									<div
+										class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/20 bg-background/80 p-2 text-2xs"
+									>
+										<span class="text-muted-foreground">
+											{t.joinAtShelterPrefix}
+
+											<strong class="text-foreground"
+												>{selectedMatchChip.shelter_name || selectedMatchChip.shelter_code}</strong
+											>
+											{t.joinAtShelterSuffix}
+										</span>
+										{#if onselectshelter}
+											<Button
+												type="button"
+												variant="outline"
+												size="sm"
+												class="h-6 border-primary/30 px-2 text-2xs text-primary hover:bg-primary/10"
+												onclick={() =>
+													onselectshelter?.(
+														selectedMatchChip!.shelter_code!,
+														selectedMatchChip!.shelter_name ?? undefined
+													)}
+											>
+												{t.joinViewShelter}
+											</Button>
+										{/if}
+									</div>
+								{/if}
+								<Button
+									type="button"
+									size="sm"
+									variant="outline"
+									disabled={fieldsLocked}
+									onclick={continueCreateDespiteSuggest}
+								>
+									{t.joinCreateInstead}
+								</Button>
+							</div>
+						{:else if phoneSearchPending}
+							<div
+								class="mt-3 flex items-center gap-2 rounded-xl border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
+								role="status"
+								aria-live="polite"
+							>
+								<Loader2 class="size-3.5 animate-spin" aria-hidden="true" />
+								{t.joinSearchingPhone}
+							</div>
+						{:else if createNewConfirmed && (phoneHouseholdSuggestions.length > 0 || residenceSuggestions.length > 0 || publicMatchChips.length > 0)}
+							<div
+								class="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
+								role="status"
+							>
+								<span>{t.joinWillCreateNew}</span>
+								<Button
+									type="button"
+									size="sm"
+									variant="ghost"
+									class="h-7 text-xs"
+									disabled={fieldsLocked}
+									onclick={() => (createNewConfirmed = false)}
+								>
+									{t.joinShowMatchesAgain}
+								</Button>
+							</div>
+						{:else if channel === 'onsite' && phoneHouseholdSuggestions.length > 0}
+							<div class="mt-3 space-y-2 rounded-xl border border-primary/30 bg-primary/5 p-3">
+								<p class="text-xs font-semibold text-foreground">
+									{t.joinPhoneMatchTitle}
+								</p>
+								<ul class="space-y-2">
+									{#each phoneHouseholdSuggestions as suggestion (suggestion._id)}
+										<li
+											class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-card p-2.5 text-sm"
+										>
+											<div class="min-w-0">
+												<p class="font-medium text-foreground">
+													{suggestion.label || t.joinUnnamedFamily}
+												</p>
+												<p class="text-xs text-muted-foreground">
+													{t.joinMatchedMember}
+													{suggestion.matched_member_name} ·
+													{formatResidenceSummary(suggestion)}
+												</p>
+											</div>
+											<div class="flex shrink-0 items-center gap-2">
+												<Button
+													type="button"
+													size="sm"
+													disabled={fieldsLocked}
+													onclick={() => confirmOnsitePhoneJoin(suggestion)}
+												>
+													{t.joinAction}
+												</Button>
+												<Button
+													type="button"
+													size="sm"
+													variant="outline"
+													disabled={fieldsLocked}
+													onclick={continueCreateDespiteSuggest}
+												>
+													{t.joinCreateNew}
+												</Button>
+											</div>
+										</li>
+									{/each}
+								</ul>
+							</div>
+						{:else if residenceSuggestPending}
+							<div
+								class="mt-3 flex items-center gap-2 rounded-xl border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
+								role="status"
+								aria-live="polite"
+							>
+								<Loader2 class="size-3.5 animate-spin" aria-hidden="true" />
+								{t.joinSearchingAddress}
+							</div>
+						{:else if channel === 'onsite' && residenceSuggestions.length > 0}
+							<div class="mt-3 space-y-2 rounded-xl border border-border bg-muted/20 p-3">
+								<p class="text-xs font-semibold text-foreground">
+									{t.joinNearbyTitle}
+								</p>
+								<ul class="space-y-2">
+									{#each residenceSuggestions as suggestion (suggestion._id)}
+										<li class="flex flex-wrap items-center justify-between gap-2 text-sm">
+											<span>
+												{#if suggestion.label?.trim()}
+													<span class="font-medium">{suggestion.label}</span>
+													<span class="text-muted-foreground">
+														· {formatResidenceSummary(suggestion)}
+													</span>
+												{:else}
+													<span class="text-muted-foreground">
+														{formatResidenceSummary(suggestion)}
+													</span>
+												{/if}
+											</span>
+											<div class="flex shrink-0 items-center gap-2">
+												<Button
+													type="button"
+													size="sm"
+													disabled={fieldsLocked}
+													onclick={() => confirmOnsiteJoin(suggestion)}
+												>
+													{t.joinAction}
+												</Button>
+												<Button
+													type="button"
+													size="sm"
+													variant="outline"
+													disabled={fieldsLocked}
+													onclick={continueCreateDespiteSuggest}
+												>
+													{t.joinCreateNew}
+												</Button>
+											</div>
+										</li>
+									{/each}
+								</ul>
+							</div>
+						{:else if channel === 'public' && publicMatchChips.length > 0}
+							<div class="mt-3 space-y-2 rounded-xl border border-border bg-muted/20 p-3">
+								<p class="text-xs font-semibold text-foreground">
+									{t.joinPublicMatchTitle}
+								</p>
+								<ul class="space-y-2">
+									{#each publicMatchChips as chip (chip.match_token)}
+										<li class="rounded-lg border border-border/60 bg-card p-2.5">
+											<div class="flex flex-wrap items-start justify-between gap-2">
+												<div class="flex flex-col gap-1">
+													<!-- Address line (no "บ้านตนเอง") -->
+													<span class="text-sm font-medium text-foreground">
+														{#if chip.address?.address_no}
+															{t.addrHouseNo}
+															{chip.address.address_no}
+															{chip.address.residence_landmark || ''}
+														{:else}
+															{chip.landmark?.trim() || t.joinFamilyAtAddress}
+														{/if}
+													</span>
+
+													<!-- Masked primary contact -->
+													{#if chip.primary_contact_masked}
+														<span class="text-xs text-muted-foreground">
+															{t.joinPrimaryContact}
+															{chip.primary_contact_masked}
+														</span>
+													{/if}
+
+													<!-- Shelter recommend copy -->
+													{#if chip.is_in_shelter && chip.shelter_name}
+														<span class="text-2xs text-muted-foreground">
+															{t.joinChipInShelter(chip.shelter_name)}
+															{#if !canJoinPublicChip(chip)}
+																{t.joinChipNoWebPreReg}
+															{/if}
+														</span>
+													{:else if chip.shelter_code || chip.shelter_name}
+														<span class="text-2xs text-muted-foreground">
+															{t.joinChipMembersAtShelter(
+																chip.shelter_name || chip.shelter_code || ''
+															)}
+														</span>
+													{/if}
+
+													<!-- Member phone match confirmation badge -->
+													{#if chip.matched_member_masked}
+														<span
+															class="mt-0.5 inline-flex w-fit items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-700"
+														>
+															<CheckCircle2 class="size-3" />
+															{t.joinChipPhoneMatch}
+															{chip.matched_member_masked}
+														</span>
+													{/if}
+
+													{#if chip.members_masked?.length}
+														<span class="text-xs text-muted-foreground">
+															{t.joinChipMembersMasked}
+															{chip.members_masked.join(', ')}
+														</span>
+													{/if}
+
+													<!-- Member & pet count badges -->
+													<div class="mt-0.5 flex flex-wrap gap-1.5">
+														{#if chip.member_count && chip.member_count > 0}
+															<span
+																class="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground"
+															>
+																<Users class="size-3" />
+																{t.joinChipMemberCount(chip.member_count)}
+															</span>
+														{/if}
+														{#if chip.pets && chip.pets.length > 0}
+															<span
+																class="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground"
+															>
+																<PawPrint class="size-3" />
+																{t.joinChipPetCount(chip.pets.length)}
+															</span>
+														{/if}
+													</div>
+												</div>
+
+												<div class="flex shrink-0 flex-col items-end gap-1.5">
+													<div class="flex items-center gap-2">
+														{#if canJoinPublicChip(chip)}
+															<Button
+																type="button"
+																size="sm"
+																disabled={fieldsLocked}
+																onclick={() => confirmPublicJoin(chip)}
+															>
+																{chip.is_in_shelter ? t.joinAction : t.joinQueueAction}
+															</Button>
+														{/if}
+														<Button
+															type="button"
+															size="sm"
+															variant="outline"
+															disabled={fieldsLocked}
+															onclick={continueCreateDespiteSuggest}
+														>
+															{t.joinCreateNew}
+														</Button>
+													</div>
+													{#if !canJoinPublicChip(chip)}
+														<p class="max-w-[14rem] text-right text-2xs text-muted-foreground">
+															{t.joinChipShelterClosed(chip.shelter_name ?? '')}
+														</p>
+													{/if}
+												</div>
+											</div>
+										</li>
+									{/each}
+								</ul>
+							</div>
+						{:else if phoneSearchCheckedEmpty}
+							<p class="mt-3 text-xs text-muted-foreground">
+								{t.joinPhoneNotFound}
+							</p>
+						{:else if residenceSuggestFailed}
+							<p class="mt-3 text-xs text-amber-800 dark:text-amber-200" role="status">
+								{t.residenceMatchFailed}
+							</p>
+						{:else if residenceSuggestCheckedEmpty}
+							<p class="mt-3 text-xs text-muted-foreground">
+								{searchPhoneQuery.trim() ? t.joinPhoneNoMatch : t.joinAddressNoMatch}
+							</p>
+						{/if}
+
+						{#if allowHouseholdJoin && !hasJoinSelection}
+							<div
+								class="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-300/60 bg-amber-50/60 p-3"
+							>
+								<div class="min-w-0 text-xs">
+									<p class="font-semibold text-foreground">
+										{householdDecision === 'create' ? t.joinDecisionCreate : t.joinDecisionRequired}
+									</p>
+									<p class="text-muted-foreground">
+										{t.joinDecisionHint}
+									</p>
+								</div>
+								{#if householdDecision === 'create'}
+									<Button
+										type="button"
+										size="sm"
+										variant="outline"
+										disabled={fieldsLocked}
+										onclick={chooseHouseholdJoin}
+									>
+										{t.joinBackToExisting}
+									</Button>
+								{:else}
+									<Button
+										type="button"
+										size="sm"
+										disabled={fieldsLocked}
+										onclick={continueCreateDespiteSuggest}
+									>
+										{t.joinConfirmCreate}
+									</Button>
+								{/if}
+							</div>
 						{/if}
 					</div>
 				{/if}
@@ -1405,349 +1766,6 @@
 						disabled={fieldsLocked || hasJoinSelection}
 					/>
 				</div>
-
-				{#if enableResidenceJoin}
-					{#if hasJoinSelection}
-						<div
-							class="mt-3 space-y-2 rounded-xl border border-primary/30 bg-primary/5 p-3"
-							role="status"
-							aria-live="polite"
-						>
-							<p class="text-sm font-semibold text-foreground">{t.joinWillJoinTitle}</p>
-							{#if joinSelectedSummary}
-								<p class="text-xs text-muted-foreground">{joinSelectedSummary}</p>
-							{/if}
-							{#if joinedFamilyMembers.length > 0}
-								<p class="text-xs text-muted-foreground">
-									{t.joinExistingSeeBelow(joinedFamilyMembers.length)}
-								</p>
-							{:else if channel === 'public' && selectedMatchChip?.member_count}
-								<p class="text-xs text-muted-foreground">
-									{t.joinExistingCount(selectedMatchChip.member_count)}
-								</p>
-							{/if}
-							<p class="text-xs text-muted-foreground">
-								{t.joinFillNewOnly}
-							</p>
-							{#if selectedMatchChip?.shelter_code && selectedMatchChip.shelter_code !== shelterCode}
-								<div
-									class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/20 bg-background/80 p-2 text-2xs"
-								>
-									<span class="text-muted-foreground">
-										{t.joinAtShelterPrefix}
-
-										<strong class="text-foreground"
-											>{selectedMatchChip.shelter_name || selectedMatchChip.shelter_code}</strong
-										>
-										{t.joinAtShelterSuffix}
-									</span>
-									{#if onselectshelter}
-										<Button
-											type="button"
-											variant="outline"
-											size="sm"
-											class="h-6 border-primary/30 px-2 text-2xs text-primary hover:bg-primary/10"
-											onclick={() =>
-												onselectshelter?.(
-													selectedMatchChip!.shelter_code!,
-													selectedMatchChip!.shelter_name ?? undefined
-												)}
-										>
-											{t.joinViewShelter}
-										</Button>
-									{/if}
-								</div>
-							{/if}
-							<Button
-								type="button"
-								size="sm"
-								variant="outline"
-								disabled={fieldsLocked}
-								onclick={continueCreateDespiteSuggest}
-							>
-								{t.joinCreateInstead}
-							</Button>
-						</div>
-					{:else if phoneSearchPending}
-						<div
-							class="mt-3 flex items-center gap-2 rounded-xl border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
-							role="status"
-							aria-live="polite"
-						>
-							<Loader2 class="size-3.5 animate-spin" aria-hidden="true" />
-							{t.joinSearchingPhone}
-						</div>
-					{:else if createNewConfirmed && (phoneHouseholdSuggestions.length > 0 || residenceSuggestions.length > 0 || publicMatchChips.length > 0)}
-						<div
-							class="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
-							role="status"
-						>
-							<span>{t.joinWillCreateNew}</span>
-							<Button
-								type="button"
-								size="sm"
-								variant="ghost"
-								class="h-7 text-xs"
-								disabled={fieldsLocked}
-								onclick={() => (createNewConfirmed = false)}
-							>
-								{t.joinShowMatchesAgain}
-							</Button>
-						</div>
-					{:else if channel === 'onsite' && phoneHouseholdSuggestions.length > 0}
-						<div class="mt-3 space-y-2 rounded-xl border border-primary/30 bg-primary/5 p-3">
-							<p class="text-xs font-semibold text-foreground">
-								{t.joinPhoneMatchTitle}
-							</p>
-							<ul class="space-y-2">
-								{#each phoneHouseholdSuggestions as suggestion (suggestion._id)}
-									<li
-										class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-card p-2.5 text-sm"
-									>
-										<div class="min-w-0">
-											<p class="font-medium text-foreground">
-												{suggestion.label || t.joinUnnamedFamily}
-											</p>
-											<p class="text-xs text-muted-foreground">
-												{t.joinMatchedMember}
-												{suggestion.matched_member_name} ·
-												{formatResidenceSummary(suggestion)}
-											</p>
-										</div>
-										<div class="flex shrink-0 items-center gap-2">
-											<Button
-												type="button"
-												size="sm"
-												disabled={fieldsLocked}
-												onclick={() => confirmOnsitePhoneJoin(suggestion)}
-											>
-												{t.joinAction}
-											</Button>
-											<Button
-												type="button"
-												size="sm"
-												variant="outline"
-												disabled={fieldsLocked}
-												onclick={continueCreateDespiteSuggest}
-											>
-												{t.joinCreateNew}
-											</Button>
-										</div>
-									</li>
-								{/each}
-							</ul>
-						</div>
-					{:else if residenceSuggestPending}
-						<div
-							class="mt-3 flex items-center gap-2 rounded-xl border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
-							role="status"
-							aria-live="polite"
-						>
-							<Loader2 class="size-3.5 animate-spin" aria-hidden="true" />
-							{t.joinSearchingAddress}
-						</div>
-					{:else if channel === 'onsite' && residenceSuggestions.length > 0}
-						<div class="mt-3 space-y-2 rounded-xl border border-border bg-muted/20 p-3">
-							<p class="text-xs font-semibold text-foreground">
-								{t.joinNearbyTitle}
-							</p>
-							<ul class="space-y-2">
-								{#each residenceSuggestions as suggestion (suggestion._id)}
-									<li class="flex flex-wrap items-center justify-between gap-2 text-sm">
-										<span>
-											{#if suggestion.label?.trim()}
-												<span class="font-medium">{suggestion.label}</span>
-												<span class="text-muted-foreground">
-													· {formatResidenceSummary(suggestion)}
-												</span>
-											{:else}
-												<span class="text-muted-foreground">
-													{formatResidenceSummary(suggestion)}
-												</span>
-											{/if}
-										</span>
-										<div class="flex shrink-0 items-center gap-2">
-											<Button
-												type="button"
-												size="sm"
-												disabled={fieldsLocked}
-												onclick={() => confirmOnsiteJoin(suggestion)}
-											>
-												{t.joinAction}
-											</Button>
-											<Button
-												type="button"
-												size="sm"
-												variant="outline"
-												disabled={fieldsLocked}
-												onclick={continueCreateDespiteSuggest}
-											>
-												{t.joinCreateNew}
-											</Button>
-										</div>
-									</li>
-								{/each}
-							</ul>
-						</div>
-					{:else if channel === 'public' && publicMatchChips.length > 0}
-						<div class="mt-3 space-y-2 rounded-xl border border-border bg-muted/20 p-3">
-							<p class="text-xs font-semibold text-foreground">
-								{t.joinPublicMatchTitle}
-							</p>
-							<ul class="space-y-2">
-								{#each publicMatchChips as chip (chip.match_token)}
-									<li class="rounded-lg border border-border/60 bg-card p-2.5">
-										<div class="flex flex-wrap items-start justify-between gap-2">
-											<div class="flex flex-col gap-1">
-												<!-- Address line (no "บ้านตนเอง") -->
-												<span class="text-sm font-medium text-foreground">
-													{#if chip.address?.address_no}
-														{t.addrHouseNo}
-														{chip.address.address_no}
-														{chip.address.residence_landmark || ''}
-													{:else}
-														{chip.landmark?.trim() || t.joinFamilyAtAddress}
-													{/if}
-												</span>
-
-												<!-- Masked primary contact -->
-												{#if chip.primary_contact_masked}
-													<span class="text-xs text-muted-foreground">
-														{t.joinPrimaryContact}
-														{chip.primary_contact_masked}
-													</span>
-												{/if}
-
-												<!-- Shelter recommend copy -->
-												{#if chip.is_in_shelter && chip.shelter_name}
-													<span class="text-2xs text-muted-foreground">
-														{t.joinChipInShelter(chip.shelter_name)}
-														{#if !canJoinPublicChip(chip)}
-															{t.joinChipNoWebPreReg}
-														{/if}
-													</span>
-												{:else if chip.shelter_code || chip.shelter_name}
-													<span class="text-2xs text-muted-foreground">
-														{t.joinChipMembersAtShelter(
-															chip.shelter_name || chip.shelter_code || ''
-														)}
-													</span>
-												{/if}
-
-												<!-- Member phone match confirmation badge -->
-												{#if chip.matched_member_masked}
-													<span
-														class="mt-0.5 inline-flex w-fit items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-700"
-													>
-														<CheckCircle2 class="size-3" />
-														{t.joinChipPhoneMatch}
-														{chip.matched_member_masked}
-													</span>
-												{/if}
-
-												<!-- Member & pet count badges -->
-												<div class="mt-0.5 flex flex-wrap gap-1.5">
-													{#if chip.member_count && chip.member_count > 0}
-														<span
-															class="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground"
-														>
-															<Users class="size-3" />
-															{t.joinChipMemberCount(chip.member_count)}
-														</span>
-													{/if}
-													{#if chip.pets && chip.pets.length > 0}
-														<span
-															class="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground"
-														>
-															<PawPrint class="size-3" />
-															{t.joinChipPetCount(chip.pets.length)}
-														</span>
-													{/if}
-												</div>
-											</div>
-
-											<div class="flex shrink-0 flex-col items-end gap-1.5">
-												<div class="flex items-center gap-2">
-													{#if canJoinPublicChip(chip)}
-														<Button
-															type="button"
-															size="sm"
-															disabled={fieldsLocked}
-															onclick={() => confirmPublicJoin(chip)}
-														>
-															{chip.is_in_shelter ? t.joinAction : t.joinQueueAction}
-														</Button>
-													{/if}
-													<Button
-														type="button"
-														size="sm"
-														variant="outline"
-														disabled={fieldsLocked}
-														onclick={continueCreateDespiteSuggest}
-													>
-														{t.joinCreateNew}
-													</Button>
-												</div>
-												{#if !canJoinPublicChip(chip)}
-													<p class="max-w-[14rem] text-right text-2xs text-muted-foreground">
-														{t.joinChipShelterClosed(chip.shelter_name ?? '')}
-													</p>
-												{/if}
-											</div>
-										</div>
-									</li>
-								{/each}
-							</ul>
-						</div>
-					{:else if phoneSearchCheckedEmpty}
-						<p class="mt-3 text-xs text-muted-foreground">
-							{t.joinPhoneNotFound}
-						</p>
-					{:else if residenceSuggestFailed}
-						<p class="mt-3 text-xs text-amber-800 dark:text-amber-200" role="status">
-							{t.residenceMatchFailed}
-						</p>
-					{:else if residenceSuggestCheckedEmpty}
-						<p class="mt-3 text-xs text-muted-foreground">
-							{searchPhoneQuery.trim() ? t.joinPhoneNoMatch : t.joinAddressNoMatch}
-						</p>
-					{/if}
-
-					{#if allowHouseholdJoin && !hasJoinSelection}
-						<div
-							class="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-300/60 bg-amber-50/60 p-3"
-						>
-							<div class="min-w-0 text-xs">
-								<p class="font-semibold text-foreground">
-									{householdDecision === 'create' ? t.joinDecisionCreate : t.joinDecisionRequired}
-								</p>
-								<p class="text-muted-foreground">
-									{t.joinDecisionHint}
-								</p>
-							</div>
-							{#if householdDecision === 'create'}
-								<Button
-									type="button"
-									size="sm"
-									variant="outline"
-									disabled={fieldsLocked}
-									onclick={chooseHouseholdJoin}
-								>
-									{t.joinBackToExisting}
-								</Button>
-							{:else}
-								<Button
-									type="button"
-									size="sm"
-									disabled={fieldsLocked}
-									onclick={continueCreateDespiteSuggest}
-								>
-									{t.joinConfirmCreate}
-								</Button>
-							{/if}
-						</div>
-					{/if}
-				{/if}
 			</UnifiedRegistrationSection>
 
 			<!-- ── Section 2: Members ─────────────────────────────────── -->
@@ -1765,6 +1783,9 @@
 				{membersSectionDesc}
 				isJoiningExistingHousehold={hasJoinSelection}
 				existingMembers={joinedFamilyMembers}
+				existingMemberCount={channel === 'public' && hasJoinSelection
+					? (selectedMatchChip?.member_count ?? 0)
+					: 0}
 				primaryContactPhone={members[0]?.phone ?? null}
 				thaidEnabled={channel === 'public' && thaidEnabled}
 				onDirty={markDirty}
