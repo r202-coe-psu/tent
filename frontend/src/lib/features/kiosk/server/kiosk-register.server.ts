@@ -144,7 +144,7 @@ export async function registerKioskWalkIn(
 			title_th: cardInput.title_th || undefined,
 			first_name_th: cardInput.first_name_th || undefined,
 			last_name_th: cardInput.last_name_th || undefined,
-			gender: cardInput.gender,
+			gender: cardInput.gender ?? undefined,
 			birth_date: cardInput.birth_date || undefined,
 			birth_year_ce: cardInput.birth_year_ce ?? undefined,
 			age: cardInput.age ?? undefined,
