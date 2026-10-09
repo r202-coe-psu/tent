@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { resolve } from '$app/paths';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import ArrowRight from '@lucide/svelte/icons/arrow-right';
 	import Building2 from '@lucide/svelte/icons/building-2';
@@ -15,15 +14,22 @@
 	let {
 		open = $bindable(false),
 		matches = [],
+		queryValue = '',
 		thaiId = '',
+		fieldType = 'national_id',
+		isPublic = false,
 		ondismiss
 	}: {
 		open?: boolean;
-		matches: InstantDuplicateMatch[];
+		matches?: InstantDuplicateMatch[];
+		queryValue?: string;
 		thaiId?: string;
+		fieldType?: 'national_id' | 'phone';
+		isPublic?: boolean;
 		ondismiss: () => void;
 	} = $props();
 
+	const effectiveValue = $derived(queryValue || thaiId || '');
 	const primaryMatch = $derived(matches[0] ?? null);
 
 	function handleProceedNotThisPerson() {
@@ -33,7 +39,7 @@
 
 	async function handleNavigateToExisting(actionUrl: string) {
 		open = false;
-		await goto(resolve(actionUrl as `/${string}`));
+		await goto(actionUrl);
 	}
 </script>
 
@@ -50,18 +56,41 @@
 			<div class="flex items-center gap-2 text-amber-600 dark:text-amber-500">
 				<AlertTriangle class="size-5 shrink-0" />
 				<AlertDialog.Title class="text-lg font-bold text-slate-900 dark:text-slate-100">
-					พบข้อมูลซ้ำในระบบ
+					{#if isPublic}
+						{fieldType === 'phone'
+							? 'เบอร์โทรศัพท์นี้มีข้อมูลในระบบแล้ว'
+							: 'เลขประจำตัวประชาชนนี้มีข้อมูลในระบบแล้ว'}
+					{:else}
+						{fieldType === 'phone' ? 'พบข้อมูลเบอร์โทรศัพท์ซ้ำในระบบ' : 'พบข้อมูลซ้ำในระบบ'}
+					{/if}
 				</AlertDialog.Title>
 			</div>
+
 			<AlertDialog.Description class="text-sm text-slate-600 dark:text-slate-400">
-				ตรวจพบเลขบัตรประชาชน <strong
-					class="font-semibold text-slate-900 tabular-nums dark:text-slate-100"
-					>{maskNationalId(thaiId || primaryMatch?.nationalId)}</strong
-				> มีข้อมูลผู้ประสบภัยอยู่ในระบบแล้ว กรุณาตรวจสอบก่อนกรอกข้อมูลซ้ำ
+				{#if isPublic}
+					{#if fieldType === 'phone'}
+						ตรวจพบเบอร์โทรศัพท์นี้มีการลงทะเบียนในระบบแล้ว หากท่านเคยลงทะเบียนไว้แล้ว
+						สามารถใช้เบอร์โทรศัพท์ตรวจสอบสถานะได้ที่หน้าประวัติ
+					{:else}
+						ตรวจพบเลขประจำตัวประชาชนนี้มีการลงทะเบียนในระบบแล้ว หากท่านเคยลงทะเบียนไว้แล้ว
+						สามารถตรวจสอบสถานะได้ที่หน้าประวัติ
+					{/if}
+				{:else if fieldType === 'phone'}
+					ตรวจพบเบอร์โทรศัพท์ <strong
+						class="font-semibold text-slate-900 tabular-nums dark:text-slate-100"
+						>{effectiveValue}</strong
+					> มีข้อมูลผู้ประสบภัยอยู่ในระบบแล้ว กรุณาตรวจสอบก่อนกรอกข้อมูลซ้ำ
+				{:else}
+					ตรวจพบเลขบัตรประชาชน <strong
+						class="font-semibold text-slate-900 tabular-nums dark:text-slate-100"
+						>{maskNationalId(effectiveValue || primaryMatch?.nationalId)}</strong
+					> มีข้อมูลผู้ประสบภัยอยู่ในระบบแล้ว กรุณาตรวจสอบก่อนกรอกข้อมูลซ้ำ
+				{/if}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 
-		{#if matches.length > 0}
+		<!-- Only render specific match details for desk staff (Onsite), NEVER for Public -->
+		{#if !isPublic && matches.length > 0}
 			<div class="my-2 space-y-2.5">
 				{#each matches as match, index (match.id + index)}
 					<div
@@ -97,11 +126,16 @@
 						</div>
 
 						<div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-							<span
-								>เลขบัตรประชาชน: <span class="font-mono tabular-nums"
-									>{maskNationalId(match.nationalId)}</span
-								></span
-							>
+							{#if match.nationalId}
+								<span
+									>เลขบัตรประชาชน: <span class="font-mono tabular-nums"
+										>{maskNationalId(match.nationalId)}</span
+									></span
+								>
+							{/if}
+							{#if match.phone}
+								<span>เบอร์โทร: <span class="font-mono tabular-nums">{match.phone}</span></span>
+							{/if}
 						</div>
 
 						{#if matches.length > 1}
@@ -124,24 +158,35 @@
 		{/if}
 
 		<AlertDialog.Footer class="gap-2 sm:gap-2">
-			<Button
-				type="button"
-				variant="outline"
-				class="h-10 rounded-xl"
-				onclick={handleProceedNotThisPerson}
-			>
-				ไม่ใช่คนนี้ / กรอกต่อ
-			</Button>
-			{#if primaryMatch}
+			{#if isPublic}
 				<Button
 					type="button"
 					variant="default"
-					class="h-10 gap-1.5 rounded-xl bg-amber-600 text-white hover:bg-amber-700 dark:bg-amber-600 dark:hover:bg-amber-700"
-					onclick={() => handleNavigateToExisting(primaryMatch.actionUrl)}
+					class="h-10 w-full rounded-xl bg-amber-600 text-white hover:bg-amber-700 sm:w-auto"
+					onclick={handleProceedNotThisPerson}
 				>
-					<span>ไปที่ข้อมูลเดิม / เช็คอิน</span>
-					<ArrowRight class="size-4" />
+					รับทราบ / ปิด
 				</Button>
+			{:else}
+				<Button
+					type="button"
+					variant="outline"
+					class="h-10 rounded-xl"
+					onclick={handleProceedNotThisPerson}
+				>
+					ไม่ใช่คนนี้ / กรอกต่อ
+				</Button>
+				{#if primaryMatch}
+					<Button
+						type="button"
+						variant="default"
+						class="h-10 gap-1.5 rounded-xl bg-amber-600 text-white hover:bg-amber-700 dark:bg-amber-600 dark:hover:bg-amber-700"
+						onclick={() => handleNavigateToExisting(primaryMatch.actionUrl)}
+					>
+						<span>ไปที่ข้อมูลเดิม / เช็คอิน</span>
+						<ArrowRight class="size-4" />
+					</Button>
+				{/if}
 			{/if}
 		</AlertDialog.Footer>
 	</AlertDialog.Content>

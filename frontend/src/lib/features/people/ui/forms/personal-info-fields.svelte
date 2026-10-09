@@ -60,7 +60,9 @@
 		idPrefix = '',
 		errors,
 		checkingCardNumber = false,
-		onCardNumberBlur
+		onCardNumberBlur,
+		checkingPhone = false,
+		onPhoneBlur
 	}: {
 		first_name?: string;
 		last_name?: string;
@@ -83,6 +85,8 @@
 		errors?: Record<string, string | undefined>;
 		checkingCardNumber?: boolean;
 		onCardNumberBlur?: (e: FocusEvent) => void;
+		checkingPhone?: boolean;
+		onPhoneBlur?: (e: FocusEvent) => void;
 	} = $props();
 
 	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
@@ -614,18 +618,31 @@
 	<!-- Phone -->
 	<div class="space-y-2">
 		<div class="space-y-1.5">
-			<Label for={fid('phone')} class="text-xs font-semibold text-foreground">
-				{t.phoneFieldLabel}
-				{#if phoneOptional}
-					<span class="text-2xs font-normal text-muted-foreground">(ทางเลือก)</span>
-				{:else if !no_phone || hideNoPhone}
-					<span class="text-destructive">*</span>
+			<div class="flex items-center justify-between">
+				<Label for={fid('phone')} class="text-xs font-semibold text-foreground">
+					{t.phoneFieldLabel}
+					{#if phoneOptional}
+						<span class="text-2xs font-normal text-muted-foreground">(ทางเลือก)</span>
+					{:else if !no_phone || hideNoPhone}
+						<span class="text-destructive">*</span>
+					{/if}
+				</Label>
+				{#if checkingPhone}
+					<span
+						class="inline-flex animate-pulse items-center gap-1 text-2xs font-medium text-primary"
+						role="status"
+						aria-live="polite"
+					>
+						<Loader2 class="size-3 animate-spin" />
+						<span>กำลังตรวจสอบ...</span>
+					</span>
 				{/if}
-			</Label>
+			</div>
 			<Input
 				id={fid('phone')}
 				value={phone}
 				oninput={onPhoneInput}
+				onblur={onPhoneBlur}
 				disabled={disabled || (!hideNoPhone && no_phone)}
 				inputmode="tel"
 				maxlength={15}

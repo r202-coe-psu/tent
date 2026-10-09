@@ -28,11 +28,21 @@ export function isValidThaiIdCandidate(
 	return digitsOnly.length === 13;
 }
 
+/** Check if phone number qualifies as a Thai phone candidate (9-10 digits, starts with 0). */
+export function isValidPhoneCandidate(phone: string | null | undefined): boolean {
+	if (!phone) return false;
+	const trimmed = phone.trim();
+	if (!trimmed) return false;
+	const digitsOnly = trimmed.replace(/\D/g, '');
+	return (digitsOnly.length === 9 || digitsOnly.length === 10) && digitsOnly.startsWith('0');
+}
+
 export interface InstantDuplicateMatch {
 	source: 'local' | 'unassigned';
 	id: string;
 	name: string;
-	nationalId: string;
+	nationalId?: string;
+	phone?: string;
 	status: string;
 	statusLabel: string;
 	actionUrl: string;
@@ -79,16 +89,16 @@ export function resolveInstantDuplicateAction(match: {
  * and central unassigned pool (MongoDB). Gracefully handles network/rejection errors.
  */
 export async function performFederatedDuplicateLookup(
-	thaiId: string,
+	query: string,
 	deps?: FederatedDuplicateLookupDeps
 ): Promise<InstantDuplicateMatch[]> {
-	const digitsOnly = thaiId.trim().replace(/\D/g, '');
-	if (digitsOnly.length !== 13) return [];
+	const digitsOnly = query.trim().replace(/\D/g, '');
+	if (digitsOnly.length !== 13 && digitsOnly.length !== 10 && digitsOnly.length !== 9) return [];
 
 	const searchLocal =
-		deps?.searchLocal ?? ((id: string) => peopleRepository().searchEvacueesMany([id]));
+		deps?.searchLocal ?? ((q: string) => peopleRepository().searchEvacueesMany([q]));
 	const searchPool =
-		deps?.searchPool ?? ((id: string) => unassignedRegistrationRemote.searchOpen(id));
+		deps?.searchPool ?? ((q: string) => unassignedRegistrationRemote.searchOpen(q));
 
 	const [localRes, poolRes] = await Promise.allSettled([
 		searchLocal(digitsOnly),
@@ -112,7 +122,8 @@ export async function performFederatedDuplicateLookup(
 				source: 'local',
 				id: evacuee._id,
 				name: formatPersonName(evacuee),
-				nationalId: evacuee.person_id?.number ?? digitsOnly,
+				nationalId: evacuee.person_id?.number,
+				phone: evacuee.phone ?? undefined,
 				status,
 				statusLabel: `ในศูนย์พักพิง — ${rawStatusLabel}`,
 				shelterLabel: 'ในศูนย์นี้',
@@ -129,7 +140,8 @@ export async function performFederatedDuplicateLookup(
 			const matchingMember =
 				hit.open_members.find((m) => {
 					const num = m.person_id?.number?.replace(/\D/g, '') ?? '';
-					return num === digitsOnly;
+					const phone = (m.phone ?? '').replace(/\D/g, '');
+					return num === digitsOnly || phone === digitsOnly;
 				}) ?? hit.open_members[0];
 
 			if (matchingMember) {
@@ -145,7 +157,8 @@ export async function performFederatedDuplicateLookup(
 					source: 'unassigned',
 					id: hit.id,
 					name: formatOpenMemberName(matchingMember),
-					nationalId: matchingMember.person_id?.number ?? digitsOnly,
+					nationalId: matchingMember.person_id?.number ?? undefined,
+					phone: matchingMember.phone ?? undefined,
 					status: 'unassigned_open',
 					statusLabel: 'คิวกลาง — ลงทะเบียนออนไลน์',
 					shelterLabel: 'คิวกลาง',
@@ -158,4 +171,43 @@ export async function performFederatedDuplicateLookup(
 	}
 
 	return matches;
+}
+
+export interface PublicDuplicateCheckResult {
+	duplicate: boolean;
+	field: 'national_id' | 'phone' | null;
+}
+
+/**
+ * Public rate-limited duplicate check via server-side endpoint.
+ * Completely zero-PII guarantee (returns only boolean duplicate status).
+ */
+export async function checkPublicDuplicate(
+	params: { national_id?: string; phone?: string },
+	fetchFn: typeof fetch = fetch
+): Promise<PublicDuplicateCheckResult> {
+	try {
+		const res = await fetchFn('/api/public/v1/registrations/check-duplicate', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(params)
+		});
+
+		if (!res.ok) {
+			return { duplicate: false, field: null };
+		}
+
+		const data = (await res.json().catch(() => null)) as {
+			success?: boolean;
+			duplicate?: boolean;
+			field?: 'national_id' | 'phone' | null;
+		} | null;
+
+		return {
+			duplicate: Boolean(data?.duplicate),
+			field: data?.field ?? null
+		};
+	} catch {
+		return { duplicate: false, field: null };
+	}
 }

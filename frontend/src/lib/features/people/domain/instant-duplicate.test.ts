@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
 	isValidThaiIdCandidate,
+	isValidPhoneCandidate,
+	checkPublicDuplicate,
 	resolveInstantDuplicateAction,
 	performFederatedDuplicateLookup
 } from './instant-duplicate';
@@ -210,6 +212,56 @@ describe('Instant ThaiID Duplicate Check (#389)', () => {
 			expect(results).toEqual([]);
 			expect(searchLocal).not.toHaveBeenCalled();
 			expect(searchPool).not.toHaveBeenCalled();
+		});
+	});
+
+	describe('isValidPhoneCandidate', () => {
+		it('accepts 10-digit mobile numbers starting with 0', () => {
+			expect(isValidPhoneCandidate('0812345678')).toBe(true);
+			expect(isValidPhoneCandidate('091-234-5678')).toBe(true);
+			expect(isValidPhoneCandidate('061 234 5678')).toBe(true);
+		});
+
+		it('accepts 9-digit landline numbers starting with 0', () => {
+			expect(isValidPhoneCandidate('021234567')).toBe(true);
+			expect(isValidPhoneCandidate('02-123-4567')).toBe(true);
+		});
+
+		it('rejects numbers not starting with 0', () => {
+			expect(isValidPhoneCandidate('1812345678')).toBe(false);
+			expect(isValidPhoneCandidate('812345678')).toBe(false);
+		});
+
+		it('rejects empty, short, or overly long phone strings', () => {
+			expect(isValidPhoneCandidate('')).toBe(false);
+			expect(isValidPhoneCandidate(null)).toBe(false);
+			expect(isValidPhoneCandidate('08123456')).toBe(false); // 8 digits
+			expect(isValidPhoneCandidate('081234567890')).toBe(false); // 12 digits
+		});
+	});
+
+	describe('checkPublicDuplicate', () => {
+		it('returns duplicate result from public endpoint', async () => {
+			const mockFetch = vi.fn().mockResolvedValue({
+				ok: true,
+				json: async () => ({ success: true, duplicate: true, field: 'phone' })
+			} as unknown as Response);
+
+			const result = await checkPublicDuplicate({ phone: '0812345678' }, mockFetch);
+			expect(result).toEqual({ duplicate: true, field: 'phone' });
+			expect(mockFetch).toHaveBeenCalledWith(
+				'/api/public/v1/registrations/check-duplicate',
+				expect.objectContaining({
+					method: 'POST',
+					body: JSON.stringify({ phone: '0812345678' })
+				})
+			);
+		});
+
+		it('gracefully handles network error and returns false', async () => {
+			const mockFetch = vi.fn().mockRejectedValue(new Error('Network error'));
+			const result = await checkPublicDuplicate({ national_id: '1234567890123' }, mockFetch);
+			expect(result).toEqual({ duplicate: false, field: null });
 		});
 	});
 });

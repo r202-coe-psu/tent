@@ -232,6 +232,15 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 			});
 			expect(result.body).toContain('กำลังตรวจสอบ...');
 		});
+
+		it('renders checking indicator when checkingPhone is true', () => {
+			const result = render(PersonalInfoFields, {
+				props: {
+					checkingPhone: true
+				}
+			});
+			expect(result.body).toContain('กำลังตรวจสอบ...');
+		});
 	});
 
 	describe('Special Needs Fields (special-needs-fields.svelte)', () => {
