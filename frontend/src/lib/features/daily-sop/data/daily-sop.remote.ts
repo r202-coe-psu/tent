@@ -16,7 +16,7 @@ import {
 	hasRoleDraftInput,
 	isDailySopRoleAssessment,
 	metricForQuestion,
-	promptForQuestion,
+	questionText,
 	questionsForRole,
 	roleAssessmentStatusFor,
 	summarizeRoleDraft,
@@ -232,7 +232,7 @@ function buildControlSnapshots(
 		const metric = metricForQuestion(question.id, sopRatios);
 		return {
 			id: question.id,
-			question: promptForQuestion(question, sopRatios),
+			question: questionText(question, sopRatios),
 			metric_spec: metric
 				? {
 						fields: metric.fields,

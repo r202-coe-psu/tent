@@ -3,7 +3,7 @@ import { SOP_RATIO_KEYS, SOP_RATIO_KIND } from '$lib/features/sop-ratios/server'
 import {
 	DAILY_SOP_ROLES,
 	metricForQuestion,
-	promptForQuestion,
+	questionText,
 	questionsForRole,
 	DAILY_SOP_ROLE_QUESTIONS,
 	type DailySopRoleCode
@@ -121,7 +121,7 @@ function makeRoleAssessment(roleCode: DailySopRoleCode, date: string, user: stri
 		const metric = metricForQuestion(question.id, validRatios);
 		return {
 			id: question.id,
-			question: promptForQuestion(question, validRatios),
+			question: questionText(question, validRatios),
 			metric_spec: metric
 				? {
 						fields: metric.fields,
@@ -631,7 +631,7 @@ describe('buildValidateDocUpdate', () => {
 		const question = DAILY_SOP_ROLE_QUESTIONS.find((item) => item.id === 'D-FAC-02')!;
 		const pending = makeRoleAssessment('FAC', '2026-09-25', 'fac');
 		const pendingControl = updateRoleControl(pending, question.id, {
-			question: question.prompt,
+			question: question.text,
 			metric_spec: null,
 			status: 'Pending',
 			notes: 'ยังไม่มีค่า Parameter ของศูนย์',

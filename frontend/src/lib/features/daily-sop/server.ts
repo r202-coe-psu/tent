@@ -3,7 +3,7 @@ export {
 	DAILY_SOP_ROLE_METRIC_CONTRACTS,
 	DAILY_SOP_ROLES,
 	metricForQuestion,
-	promptForQuestion,
+	questionText,
 	questionsForRole,
 	type DailySopRoleCode
 } from './domain/daily-sop';

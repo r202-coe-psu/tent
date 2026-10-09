@@ -409,16 +409,16 @@ export const requiredForMetric = (
 	return null;
 };
 
-export const promptForQuestion = (
+export const questionText = (
 	question: DailySopRoleQuestion,
 	ratioValues?: Partial<Record<SopRatioKey, string>> | null
 ): string => {
 	const parameterKey = metricParameterForQuestion(question.id);
-	if (!parameterKey) return question.prompt;
+	if (!parameterKey) return question.text;
 	const parameter = ratioValues?.[parameterKey];
 	return isPositiveDecimalString(parameter)
-		? question.prompt.replace(`{${parameterKey}}`, parameter)
-		: question.prompt;
+		? question.text.replace(`{${parameterKey}}`, parameter)
+		: question.text;
 };
 
 export const questionsForRole = (role: DailySopRoleCode) =>
@@ -665,14 +665,14 @@ function validateControlContract(
 	if (!definition) {
 		if (control.metric_spec !== null || Object.keys(control.measured_values).length > 0)
 			issue(ctx, [...path, 'metric_spec'], 'Question must not have numeric metric fields');
-		if (control.question !== question.prompt)
+		if (control.question !== question.text)
 			issue(ctx, [...path, 'question'], 'Question text does not match the canonical snapshot');
 		return;
 	}
 	const spec = control.metric_spec;
 	if (definition.parameterKey && spec === null) {
 		if (
-			control.question !== promptForQuestion(question) ||
+			control.question !== questionText(question) ||
 			control.status !== 'Pending' ||
 			!control.notes.trim() ||
 			Object.keys(control.measured_values).length > 0
@@ -718,7 +718,7 @@ function validateControlContract(
 			[...path, 'metric_spec', 'threshold'],
 			'Metric threshold does not match the canonical question contract'
 		);
-	const expectedQuestion = promptForQuestion(
+	const expectedQuestion = questionText(
 		question,
 		parameterValue && definition.parameterKey
 			? { [definition.parameterKey]: parameterValue }

@@ -19,7 +19,7 @@ import {
 	isDailySopUtcTimestamp,
 	metricForQuestion,
 	metricParameterForQuestion,
-	promptForQuestion,
+	questionText,
 	requiredForMetric,
 	requiredUnits,
 	questionsForRole,
@@ -42,7 +42,7 @@ function validAssessment(
 		const metric = metricForQuestion(question.id, ratios);
 		return {
 			id: question.id,
-			question: promptForQuestion(question, ratios),
+			question: questionText(question, ratios),
 			metric_spec: metric
 				? {
 						fields: metric.fields,
@@ -102,10 +102,10 @@ describe('Daily SOP role question set', () => {
 		}
 		expect(DAILY_SOP_ROLE_QUESTIONS.map((question) => question.id)).not.toContain('D-REG-04');
 		expect(DAILY_SOP_ROLE_QUESTIONS.map((question) => question.role)).not.toContain('LEGACY');
-		expect(DAILY_SOP_ROLE_QUESTIONS.find((question) => question.id === 'D-SM-03')?.prompt).toBe(
+		expect(DAILY_SOP_ROLE_QUESTIONS.find((question) => question.id === 'D-SM-03')?.text).toBe(
 			'ข้อประเมินที่ไม่ผ่านของฝ่ายต่าง ๆ ที่กระทบความปลอดภัยหรือบริการจำเป็น มีผู้รับผิดชอบและแผนแก้ไขหรือไม่'
 		);
-		expect(DAILY_SOP_ROLE_QUESTIONS.find((question) => question.id === 'D-VC-01')?.prompt).toBe(
+		expect(DAILY_SOP_ROLE_QUESTIONS.find((question) => question.id === 'D-VC-01')?.text).toBe(
 			'จำนวนอาสาสมัครที่มารายงานตัวและพร้อมปฏิบัติงานตรงกับบัญชีกำลังคนหรือไม่'
 		);
 	});
@@ -244,7 +244,7 @@ describe('Daily SOP role question set', () => {
 		const question = questionsForRole('FAC').find((item) => item.id === 'D-FAC-02')!;
 		expect(metricParameterForQuestion(question.id)).toBe('people_per_toilet_female');
 		expect(metricForQuestion(question.id, ratios)).toBeNull();
-		expect(promptForQuestion(question, ratios)).toContain('{people_per_toilet_female}');
+		expect(questionText(question, ratios)).toContain('{people_per_toilet_female}');
 		const assessment = validAssessment('FAC', ratios);
 		const control = assessment.controls.find((item) => item.id === question.id)!;
 		control.status = 'Pending';
@@ -329,11 +329,11 @@ describe('CR-153 formulas and snapshot contract', () => {
 		'D-KS-08'
 	];
 
-	it('keeps the 12 cut IDs out of the bank and uses no markdown backticks in prompts', () => {
+	it('keeps removed IDs out of the bank and avoids markdown code ticks in question text', () => {
 		const ids = new Set<string>(DAILY_SOP_ROLE_QUESTIONS.map((question) => question.id));
 		expect(DAILY_SOP_ROLE_QUESTIONS).toHaveLength(79);
 		for (const id of cutIds) expect(ids.has(id)).toBe(false);
-		for (const question of DAILY_SOP_ROLE_QUESTIONS) expect(question.prompt).not.toContain('`');
+		for (const question of DAILY_SOP_ROLE_QUESTIONS) expect(question.text).not.toContain('`');
 	});
 
 	it('computes required units with ceil', () => {

@@ -81,7 +81,7 @@ const DAILY_SOP_ROLE_VDU_CONTRACT = JSON.stringify({
 		questions: DAILY_SOP_ROLE_QUESTIONS.filter((question) => question.role === role.code).map(
 			(question) => ({
 				id: question.id,
-				prompt: question.prompt,
+				text: question.text,
 				metric: DAILY_SOP_ROLE_METRIC_CONTRACTS[question.id] ?? null
 			})
 		)
@@ -727,12 +727,12 @@ export function buildValidateDocUpdate(code: string): string {
           (typeof control.checked_by_name !== 'undefined' && !nonEmpty(control.checked_by_name))) return false;
       if ((control.status === 'Fail' || control.status === 'Pending') && !control.notes.trim()) return false;
       if (question.metric === null) {
-        return control.question === question.prompt && control.metric_spec === null &&
+        return control.question === question.text && control.metric_spec === null &&
           exactKeys(control.measured_values, []);
       }
       var definition = question.metric;
       if (definition.parameterKey && control.metric_spec === null) {
-        return control.question === question.prompt && control.status === 'Pending' &&
+        return control.question === question.text && control.status === 'Pending' &&
           !!control.notes.trim() && exactKeys(control.measured_values, []);
       }
       if (!exactKeys(control.metric_spec, ['fields', 'threshold']) &&
@@ -752,10 +752,10 @@ export function buildValidateDocUpdate(code: string): string {
         if (!exactKeys(parameter, ['key', 'value']) || parameter.key !== definition.parameterKey ||
             !validPositiveDecimal(parameter.value)) return false;
         threshold = threshold.replace('{parameter}', parameter.value);
-        if (control.question !== question.prompt.replace('{' + definition.parameterKey + '}', parameter.value)) return false;
+        if (control.question !== question.text.replace('{' + definition.parameterKey + '}', parameter.value)) return false;
       } else if (typeof control.metric_spec.parameter !== 'undefined') {
         return false;
-      } else if (control.question !== question.prompt) {
+      } else if (control.question !== question.text) {
         return false;
       }
       if (control.metric_spec.threshold !== threshold) return false;
