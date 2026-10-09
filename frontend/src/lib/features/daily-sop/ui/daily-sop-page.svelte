@@ -1,18 +1,22 @@
-<!-- Hallmark · pre-emit critique: P4 H4 E3 S4 R4 V4 -->
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
-	import { ArrowLeft, CheckCircle2, ClipboardCheck, Save } from '@lucide/svelte';
+	import { ArrowLeft, CheckCircle2, ClipboardCheck, Package, Save } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 	import * as Dialog from '$lib/components/ui/dialog';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import * as RadioGroup from '$lib/components/ui/radio-group/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { ConflictError } from '$lib/utils/errors';
 	import { useActiveSopRatio } from '$lib/features/sop-ratios';
 	import { buildDailySopRoleId } from '../data/daily-sop.remote';
+	import DailySopAuditPanel from './daily-sop-audit-panel.svelte';
+	import DailySopStockPanel from './daily-sop-stock-panel.svelte';
 	import {
 		DAILY_SOP_ROLES,
 		assessableRoles,
@@ -23,7 +27,7 @@
 		hasRoleDraftInput,
 		metricParameterForQuestion,
 		metricForQuestion,
-		promptForQuestion,
+		questionText,
 		requiredForMetric,
 		questionsForRole,
 		roleAssessmentProgress,
@@ -75,6 +79,7 @@
 	let latestConflictAssessment = $state<DailySopRoleAssessment | null | undefined>(undefined);
 	let mergeChoices = $state<Record<string, 'local' | 'server'>>({});
 	let stockPanelOpen = $state(false);
+	let stockTrigger: HTMLButtonElement | null = $state(null);
 
 	const history = $derived(historyQuery.data?.pages.flatMap((page) => page.items) ?? []);
 	const historyRows = $derived.by(() => {
@@ -131,14 +136,17 @@
 	const questions = $derived.by(() => {
 		if (!selectedRole) return [];
 		if (activeAssessment)
-			return activeAssessment.controls.map(({ id, question }) => ({ id, prompt: question }));
+			return activeAssessment.controls.map(({ id, question }) => ({ id, text: question }));
 		return questionsForRole(selectedRole.code).map((question) => ({
 			id: question.id,
-			prompt: promptForQuestion(question, sopRatios)
+			text: questionText(question, sopRatios)
 		}));
 	});
 	const progress = $derived(
 		selectedRole ? roleAssessmentProgress(effectiveDraft, selectedRole.code) : null
+	);
+	const firstUnansweredQuestionId = $derived(
+		questions.find((question) => !effectiveDraft[question.id]?.status)?.id ?? null
 	);
 	const counts = $derived(
 		selectedRole ? summarizeRoleDraft(effectiveDraft, selectedRole.code) : null
@@ -188,7 +196,13 @@
 			const localChanged = !sameControlAnswer(initial, local);
 			const serverChanged = !sameControlAnswer(initial, server);
 			return localChanged && serverChanged && !sameControlAnswer(local, server)
-				? [{ id: question.id, prompt: question.prompt, choice: mergeChoices[question.id] }]
+				? [
+						{
+							id: question.id,
+							text: question.text,
+							choice: mergeChoices[question.id]
+						}
+					]
 				: [];
 		});
 	});
@@ -241,10 +255,10 @@
 		params.set('view', nextLandingView);
 		if (role) params.set('role', role);
 		if (nextDate) params.set('date', nextDate);
-		void goto(`/back-office/dailysop${params.size ? `?${params.toString()}` : ''}`, {
-			keepFocus: true,
-			noScroll: true
-		});
+		void goto(
+			resolve(`/back-office/dailysop?${params.toString()}` as `/back-office/dailysop?${string}`),
+			{ keepFocus: true, noScroll: true }
+		);
 	}
 
 	function rowsForDate(assessmentDate: string) {
@@ -530,17 +544,19 @@
 	{#if (!selectedRole && landingView === 'roles') || (selectedRole && !canOpenSelectedRole)}
 		<section class="space-y-5">
 			<div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-				<div class="min-w-0 border-l-4 border-primary pl-3">
+				<div class="min-w-0 border-b pb-4">
 					<div class="flex items-center gap-2">
-						<button
-							class="inline-flex min-h-11 items-center gap-2 rounded-lg border bg-background px-3 text-sm font-semibold hover:bg-muted"
-							type="button"
+						<Button
+							variant="outline"
+							class="min-h-11 gap-2 px-3"
 							onclick={() => updateUrl(null, date, 'days')}
 						>
 							<ArrowLeft class="size-4" aria-hidden="true" /> ดูทุกวัน
-						</button>
+						</Button>
 					</div>
-					<h2 class="mt-3 text-lg font-semibold">ความคืบหน้าวันที่ {formatAssessmentDate(date)}</h2>
+					<h1 class="mt-3 text-xl font-semibold tracking-tight sm:text-2xl">
+						ความคืบหน้าวันที่ {formatAssessmentDate(date)}
+					</h1>
 					<p class="mt-1 text-sm text-muted-foreground">
 						{#if isHistoricalDate}
 							วันย้อนหลังเปิดดู Review ได้ทุก Role โดยไม่มีสิทธิ์แก้ไข
@@ -628,13 +644,13 @@
 						role="alert"
 					>
 						<p class="text-sm">โหลดรายการตรวจไม่สำเร็จ</p>
-						<button
-							class="min-h-11 rounded-md border bg-background px-3 text-sm font-semibold whitespace-nowrap hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-							type="button"
+						<Button
+							variant="outline"
+							class="min-h-11 px-3 whitespace-nowrap"
 							onclick={() => resetHistory(shelterCode)}
 						>
 							ลองอีกครั้ง
-						</button>
+						</Button>
 					</div>
 				{:else}
 					<div class="role-progress-table" role="table" aria-label="ผลตรวจแยกตาม Role">
@@ -688,14 +704,14 @@
 									</div>
 									<div class="role-progress-action" role="cell">
 										{#if isHistoricalDate}
-											<button
-												class="inline-flex min-h-11 shrink-0 items-center justify-center rounded-md border border-primary/25 bg-primary/5 px-3 text-sm font-semibold whitespace-nowrap text-primary hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-												type="button"
+											<Button
+												variant="outline"
+												class="min-h-12 w-full shrink-0 border-primary/25 bg-primary/5 px-3 text-primary hover:bg-primary/10 xl:min-h-11 xl:w-auto"
 												aria-label="{row.assessment ? 'ดูผลย้อนหลัง' : 'ดู Role'}: {row.role.label}"
 												onclick={() => updateUrl(row.role.code)}
 											>
 												{row.assessment ? 'ดูผลย้อนหลัง' : 'ดู Role'}
-											</button>
+											</Button>
 										{:else if isCurrentDate}
 											{@const actionLabel = row.assessment
 												? row.canAssess
@@ -706,14 +722,14 @@
 												: row.canAssess
 													? 'เริ่มตรวจ'
 													: 'ดู Role'}
-											<button
-												class="inline-flex min-h-11 shrink-0 items-center justify-center rounded-md border border-primary/25 bg-primary/5 px-3 text-sm font-semibold whitespace-nowrap text-primary hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-												type="button"
+											<Button
+												variant="outline"
+												class="min-h-12 w-full shrink-0 border-primary/25 bg-primary/5 px-3 text-primary hover:bg-primary/10 xl:min-h-11 xl:w-auto"
 												aria-label="{actionLabel}: {row.role.label}"
 												onclick={() => updateUrl(row.role.code)}
 											>
 												{actionLabel}
-											</button>
+											</Button>
 										{:else}
 											<span class="text-xs font-medium text-muted-foreground">ดูสถานะได้</span>
 										{/if}
@@ -892,12 +908,23 @@
 							</p>
 						{/if}
 					</div>
-					<div class="grid gap-1 text-sm sm:justify-items-end">
+					<div
+						class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-sm sm:grid sm:justify-items-end"
+					>
 						{#if activeAssessment}
 							<span class={roleStatusClass(activeAssessment.status)}>
 								{roleStatusLabel(activeAssessment.status)}
 							</span>
-							<p class="text-muted-foreground sm:text-right">
+							<p class="text-muted-foreground sm:hidden">
+								อัปเดต <time datetime={activeAssessment.updated_at}
+									>{formatAuditDateTime(activeAssessment.updated_at)}</time
+								>
+							</p>
+							<DailySopAuditPanel
+								assessment={activeAssessment}
+								formatDateTime={formatAuditDateTime}
+							/>
+							<p class="hidden text-muted-foreground sm:block sm:text-right">
 								เริ่มประเมินโดย {activeAssessment.assessor_name ||
 									user?.display_name?.trim() ||
 									user?.name}
@@ -931,11 +958,13 @@
 								เก็บ draft ของคุณไว้แล้ว ระบบหยุดการบันทึกเพื่อไม่ให้เขียนทับข้อมูลใหม่
 							</p>
 						</div>
-						<button
-							class="min-h-11 rounded-md border border-amber-800/30 bg-background px-3 text-sm font-semibold hover:bg-amber-100"
-							type="button"
-							onclick={loadLatestAfterConflict}>โหลดข้อมูลล่าสุด</button
+						<Button
+							variant="outline"
+							class="min-h-12 border-amber-800/30 bg-background px-3 hover:bg-amber-100"
+							onclick={loadLatestAfterConflict}
 						>
+							โหลดข้อมูลล่าสุด
+						</Button>
 						{#if latestConflictAssessment === null}
 							<p class="text-sm text-amber-950" role="status">
 								ยังไม่พบเอกสารล่าสุด; draft ยังอยู่
@@ -949,34 +978,32 @@
 								{#each conflictingQuestions as conflict (conflict.id)}
 									<fieldset class="rounded-lg border border-amber-300 bg-background p-3">
 										<legend class="px-1 text-sm font-semibold"
-											>{conflict.id} · {conflict.prompt}</legend
+											>{conflict.id} · {conflict.text}</legend
 										>
-										<div class="grid gap-2 sm:grid-cols-2">
-											<label
-												class="flex min-h-11 items-center gap-2 rounded-md border px-3 text-sm"
-											>
-												<input
-													type="radio"
-													name={'merge-' + conflict.id}
-													checked={mergeChoices[conflict.id] === 'local'}
-													onchange={() =>
-														(mergeChoices = { ...mergeChoices, [conflict.id]: 'local' })}
-												/>
-												ใช้ draft ของฉัน
-											</label>
-											<label
-												class="flex min-h-11 items-center gap-2 rounded-md border px-3 text-sm"
-											>
-												<input
-													type="radio"
-													name={'merge-' + conflict.id}
-													checked={mergeChoices[conflict.id] === 'server'}
-													onchange={() =>
-														(mergeChoices = { ...mergeChoices, [conflict.id]: 'server' })}
-												/>
-												ใช้ข้อมูลล่าสุดจาก server
-											</label>
-										</div>
+										<RadioGroup.Root
+											value={mergeChoices[conflict.id] ?? ''}
+											onValueChange={(value) => {
+												if (value === 'local' || value === 'server') {
+													mergeChoices = { ...mergeChoices, [conflict.id]: value };
+												}
+											}}
+											class="gap-2 sm:grid-cols-2"
+										>
+											{#each [{ value: 'local', label: 'ใช้ draft ของฉัน' }, { value: 'server', label: 'ใช้ข้อมูลล่าสุดจาก server' }] as choice (choice.value)}
+												{@const selected = mergeChoices[conflict.id] === choice.value}
+												<div
+													class={`relative flex min-h-12 items-center rounded-md border px-3 text-sm ${selected ? 'border-amber-700 bg-amber-50 text-amber-950' : 'border-slate-300 bg-background text-slate-800'}`}
+												>
+													<RadioGroup.Item
+														id={`merge-${choice.value}-${conflict.id}`}
+														value={choice.value}
+														aria-label={choice.label}
+														class="absolute inset-0 z-10 size-full rounded-md border-0 bg-transparent text-transparent shadow-none data-[state=checked]:border-0 data-[state=checked]:bg-transparent"
+													/>
+													<span class="pointer-events-none relative">{choice.label}</span>
+												</div>
+											{/each}
+										</RadioGroup.Root>
 									</fieldset>
 								{/each}
 							{:else}
@@ -984,19 +1011,20 @@
 									ไม่พบข้อที่ทั้งสองฝ่ายแก้ต่างกัน; รวมคำตอบของคุณเข้ากับข้อมูลล่าสุดได้
 								</p>
 							{/if}
-							<button
-								class="min-h-11 rounded-md bg-amber-900 px-4 text-sm font-semibold text-white hover:bg-amber-950 disabled:cursor-not-allowed disabled:opacity-50"
-								type="button"
+							<Button
+								class="min-h-12 bg-amber-900 px-4 text-white hover:bg-amber-950"
 								disabled={!canApplyConflictMerge}
-								onclick={applyConflictMerge}>รวม draft กับข้อมูลล่าสุด</button
+								onclick={applyConflictMerge}
 							>
+								รวม draft กับข้อมูลล่าสุด
+							</Button>
 						{/if}
 					</section>
 				{/if}
 
 				{#if progress && counts}
 					<div class="mt-4 space-y-3 border-t pt-3">
-						<div>
+						<div class={canEditSelectedRole ? 'hidden sm:block' : 'block'}>
 							<div class="flex items-center justify-between gap-3 text-sm">
 								<span class="font-semibold">ความคืบหน้า</span>
 								<span class="shrink-0 font-medium text-muted-foreground tabular-nums">
@@ -1016,22 +1044,22 @@
 								<div class="h-full rounded-full bg-primary" style:width="{progress.percent}%"></div>
 							</div>
 						</div>
-						<div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-4">
-							<div class="flex items-baseline justify-between gap-2">
-								<span class="text-muted-foreground">ผ่าน</span>
-								<strong class="text-emerald-800 tabular-nums">{counts.pass}</strong>
+						<div class="grid grid-cols-4 gap-1.5 text-center sm:gap-2">
+							<div class="min-w-0 rounded-lg border bg-muted/20 px-1 py-2">
+								<strong class="block text-sm text-emerald-800 tabular-nums">{counts.pass}</strong>
+								<span class="block text-xs text-muted-foreground">ผ่าน</span>
 							</div>
-							<div class="flex items-baseline justify-between gap-2">
-								<span class="text-muted-foreground">ไม่ผ่าน</span>
-								<strong class="text-rose-800 tabular-nums">{counts.fail}</strong>
+							<div class="min-w-0 rounded-lg border bg-muted/20 px-1 py-2">
+								<strong class="block text-sm text-rose-800 tabular-nums">{counts.fail}</strong>
+								<span class="block text-xs text-muted-foreground">ไม่ผ่าน</span>
 							</div>
-							<div class="flex items-baseline justify-between gap-2">
-								<span class="text-muted-foreground">รอตรวจ</span>
-								<strong class="text-amber-800 tabular-nums">{counts.pending}</strong>
+							<div class="min-w-0 rounded-lg border bg-muted/20 px-1 py-2">
+								<strong class="block text-sm text-amber-800 tabular-nums">{counts.pending}</strong>
+								<span class="block text-xs text-muted-foreground">รอตรวจ</span>
 							</div>
-							<div class="flex items-baseline justify-between gap-2">
-								<span class="text-muted-foreground">ยังไม่ตอบ</span>
-								<strong class="tabular-nums">{counts.unanswered}</strong>
+							<div class="min-w-0 rounded-lg border bg-muted/20 px-1 py-2">
+								<strong class="block text-sm tabular-nums">{counts.unanswered}</strong>
+								<span class="block text-xs text-muted-foreground">ยังไม่ตอบ</span>
 							</div>
 						</div>
 					</div>
@@ -1086,7 +1114,7 @@
 											{question.id}
 										</p>
 										<h3 class="mt-1 text-sm leading-relaxed font-medium sm:text-base">
-											{question.prompt}
+											{question.text}
 										</h3>
 										{#if parameterUnavailable}
 											<p
@@ -1106,13 +1134,13 @@
 														: 'กำลังโหลดค่ากำหนดของศูนย์'}
 												</p>
 												{#if sopRatioQuery.isError}
-													<button
-														class="min-h-11 rounded-md border bg-background px-3 font-medium hover:bg-muted"
-														type="button"
+													<Button
+														variant="outline"
+														class="min-h-11 px-3"
 														onclick={() => sopRatioQuery.refetch()}
 													>
 														ลองโหลดใหม่
-													</button>
+													</Button>
 												{/if}
 											</div>
 										{/if}
@@ -1142,7 +1170,7 @@
 									class="min-w-0 md:col-span-3 md:col-start-2 md:row-start-1"
 									disabled={!canEditSelectedRole || revisionConflict}
 								>
-									<legend class="sr-only">ผลตรวจ: {question.prompt}</legend>
+									<legend class="sr-only">ผลตรวจ: {question.text}</legend>
 									<div class="grid grid-cols-3 gap-1.5 sm:gap-2">
 										{#each statusOptions as option (option.value)}
 											{@const isSelected = answer?.status === option.value}
@@ -1152,7 +1180,7 @@
 												parameterLoading ||
 												(parameterUnavailable && option.value !== 'Pending')}
 											<label
-												class={`flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-md border px-1.5 text-xs font-semibold transition-colors focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring sm:mx-auto sm:size-11 sm:gap-0 sm:rounded-full sm:px-0 sm:text-sm ${
+												class={`flex min-h-12 min-w-0 items-center justify-center gap-1.5 rounded-md border px-1.5 text-sm font-semibold transition-colors focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring sm:mx-auto sm:size-11 sm:min-h-11 sm:min-w-11 sm:gap-0 sm:rounded-full sm:px-0 md:size-12 md:min-h-12 md:min-w-12 ${
 													optionDisabled
 														? 'cursor-not-allowed opacity-50'
 														: 'cursor-pointer active:translate-y-px'
@@ -1197,9 +1225,6 @@
 
 								<details
 									class="col-span-full row-start-3 mt-1 rounded-lg border bg-muted/20 px-3 py-1.5 md:row-start-2 md:mt-0 md:px-4"
-									ontoggle={(event) => {
-										if (!event.currentTarget.open) stockPanelOpen = false;
-									}}
 									open={answer?.status === 'Fail' ||
 										answer?.status === 'Pending' ||
 										(question.id === 'D-SM-02' && calculated !== null) ||
@@ -1216,79 +1241,32 @@
 									</summary>
 									<div class="mt-3 grid gap-3 md:grid-cols-2">
 										{#if question.id === 'D-SC-01'}
-											<details
-												class="rounded-lg border bg-background p-3 md:col-span-2"
-												ontoggle={(event) => (stockPanelOpen = event.currentTarget.open)}
+											<div
+												class="flex flex-col items-start gap-2 rounded-lg border border-slate-200/80 bg-white p-3 sm:flex-row sm:items-center sm:gap-x-4 md:col-span-2"
 											>
-												<summary class="min-h-11 cursor-pointer py-2 text-sm font-semibold">
-													ดูยอดคงเหลือในระบบ · อ่านอย่างเดียว
-												</summary>
-												<div class="mt-2">
-													{#if stockQuery.isLoading}
-														<p class="text-sm text-muted-foreground" role="status">
-															กำลังโหลดรายการคลัง...
+												<Button
+													variant="outline"
+													bind:ref={stockTrigger}
+													class="min-h-12 w-full sm:w-auto"
+													data-testid="daily-sop-stock-trigger"
+													onclick={() => (stockPanelOpen = true)}
+												>
+													<Package class="size-4" aria-hidden="true" />
+													ดูยอดคงเหลือในระบบ
+												</Button>
+												<div class="text-sm text-slate-500">
+													<p>อ่านอย่างเดียว · ไม่แก้ไขสต็อก</p>
+													{#if stockQuery.data}
+														<p class="text-xs">
+															<span class="tabular-nums">{stockQuery.data.items.length}</span>
+															รายการ
+															{#if stockQuery.data.last_updated}
+																· อัปเดต {formatAuditDateTime(stockQuery.data.last_updated)}
+															{/if}
 														</p>
-													{:else if stockQuery.isError}
-														<div
-															class="flex flex-wrap items-center justify-between gap-2"
-															role="alert"
-														>
-															<p class="text-sm">
-																โหลดรายการคลังไม่สำเร็จ เลือกรอตรวจและระบุสาเหตุได้
-															</p>
-															<button
-																class="min-h-11 rounded-md border px-3 text-sm font-medium hover:bg-muted"
-																type="button"
-																onclick={() => stockQuery.refetch()}>ลองโหลดใหม่</button
-															>
-														</div>
-													{:else if stockQuery.data}
-														<div
-															class="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground"
-														>
-															<span>ศูนย์ {stockQuery.data.shelter_code}</span>
-															<span>
-																{#if stockQuery.data.last_updated}
-																	อัปเดต {formatAuditDateTime(stockQuery.data.last_updated)}
-																{:else}ยังไม่มีเวลา ledger บันทึก{/if}
-															</span>
-															<button
-																class="min-h-11 rounded-md border px-3 text-xs font-medium hover:bg-muted"
-																type="button"
-																onclick={() => stockQuery.refetch()}>รีเฟรชยอดระบบ</button
-															>
-														</div>
-														{#if stockQuery.data.items.length}
-															<ul class="mt-2 divide-y rounded-md border">
-																{#each stockQuery.data.items as item (item.item_id)}
-																	<li
-																		class="flex items-start justify-between gap-3 px-3 py-2 text-sm"
-																	>
-																		<span class="min-w-0">
-																			<span class="block font-medium">{item.name}</span>
-																			<span class="text-xs text-muted-foreground"
-																				>{item.item_id}</span
-																			>
-																		</span>
-																		<strong class="shrink-0 tabular-nums"
-																			>{item.qty_on_hand} {item.unit}</strong
-																		>
-																	</li>
-																{/each}
-															</ul>
-														{:else}
-															<p class="mt-2 text-sm text-muted-foreground">
-																ไม่มีรายการในระบบ
-																หากยืนยันยอดศูนย์ทั้งบัญชีและของจริงแล้วจึงเลือกผ่าน
-															</p>
-														{/if}
 													{/if}
-													<p class="mt-2 text-xs text-muted-foreground">
-														ตรวจนับจริงทีละรายการด้วยหน่วยเดียวกัน;
-														ส่วนต่างให้ระบุสินค้าและยอดในหมายเหตุ
-													</p>
 												</div>
-											</details>
+											</div>
 										{/if}
 										{#if metric && answer}
 											<div class="rounded-lg border border-sky-200 bg-sky-50/60 p-3 md:col-span-2">
@@ -1424,15 +1402,29 @@
 									</div>
 								</div>
 							{/if}
-							<button
-								class="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-semibold whitespace-nowrap text-primary-foreground hover:bg-primary/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-4"
-								type="button"
-								disabled={!canSave || isSaving}
-								onclick={save}
+							<div
+								class={`grid gap-2 sm:flex sm:justify-end ${progress?.unanswered ? 'grid-cols-[auto_1fr]' : 'grid-cols-1'}`}
 							>
-								<Save class="size-4" aria-hidden="true" />
-								{isSaving ? 'กำลังบันทึก...' : isComplete ? 'บันทึกผลตรวจ' : 'บันทึกความคืบหน้า'}
-							</button>
+								{#if progress?.unanswered && firstUnansweredQuestionId}
+									<Button
+										variant="outline"
+										class="min-h-12 min-w-0 px-2 text-xs whitespace-nowrap sm:min-h-11 sm:px-3 sm:text-sm"
+										onclick={() =>
+											document
+												.getElementById(`role-question-${firstUnansweredQuestionId}`)
+												?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+										>ข้อถัดไปที่ยังไม่ตอบ ({progress.unanswered})</Button
+									>
+								{/if}
+								<Button
+									class="min-h-12 w-full gap-2 px-3 py-2 text-sm sm:min-h-11 sm:w-auto sm:px-4"
+									disabled={!canSave || isSaving}
+									onclick={save}
+								>
+									<Save class="size-4" aria-hidden="true" />
+									{isSaving ? 'กำลังบันทึก...' : isComplete ? 'บันทึกผลตรวจ' : 'บันทึกความคืบหน้า'}
+								</Button>
+							</div>
 						</div>
 					</div>
 				{/if}
@@ -1441,11 +1433,24 @@
 	{/if}
 </main>
 
+{#if selectedRole?.code === 'SC'}
+	<DailySopStockPanel
+		bind:open={stockPanelOpen}
+		shelterCode={stockShelterCode}
+		status={stockQuery.data ? 'ready' : stockQuery.isError ? 'error' : 'loading'}
+		refreshFailed={Boolean(stockQuery.data && stockQuery.isError)}
+		items={stockQuery.data?.items ?? []}
+		updatedLabel={stockQuery.data?.last_updated
+			? formatAuditDateTime(stockQuery.data.last_updated)
+			: null}
+		isRefreshing={stockQuery.isFetching}
+		onRefresh={() => stockQuery.refetch()}
+		onReturnFocus={() => stockTrigger?.focus()}
+	/>
+{/if}
+
 <Dialog.Root bind:open={saveSuccessOpen}>
-	<Dialog.Content
-		class="inset-x-0 top-auto bottom-0 left-0 w-full max-w-none translate-x-0 translate-y-0 gap-5 rounded-t-3xl rounded-b-none p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:top-1/2 sm:bottom-auto sm:left-1/2 sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl sm:p-6"
-		data-testid="role-save-success-dialog"
-	>
+	<Dialog.Content data-testid="role-save-success-dialog">
 		<Dialog.Header class="text-left">
 			<div
 				class="mb-1 flex size-11 items-center justify-center rounded-full bg-emerald-100 text-emerald-800"
@@ -1464,19 +1469,22 @@
 			</p>
 		</Dialog.Header>
 		<Dialog.Footer class="flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-			<button
-				type="button"
-				class="min-h-11 w-full rounded-xl border px-4 text-sm font-semibold whitespace-nowrap hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:w-auto"
-				onclick={() => (saveSuccessOpen = false)}>ทำต่อหน้านี้</button
+			<Button
+				variant="outline"
+				class="min-h-12 w-full px-4 sm:min-h-11 sm:w-auto"
+				onclick={() => (saveSuccessOpen = false)}
 			>
-			<button
-				type="button"
-				class="min-h-11 w-full rounded-xl bg-primary px-4 text-sm font-semibold whitespace-nowrap text-primary-foreground hover:bg-primary/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:w-auto"
+				ทำต่อหน้านี้
+			</Button>
+			<Button
+				class="min-h-12 w-full px-4 sm:min-h-11 sm:w-auto"
 				onclick={() => {
 					saveSuccessOpen = false;
 					updateUrl(null, date, 'roles');
-				}}>กลับภาพรวม</button
+				}}
 			>
+				กลับภาพรวม
+			</Button>
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>
@@ -1508,7 +1516,8 @@
 		grid-template-areas:
 			'identity status'
 			'meter meter'
-			'summary action';
+			'summary summary'
+			'action action';
 		grid-template-columns: minmax(0, 1fr) auto;
 		align-items: center;
 		gap: 0.75rem;
@@ -1568,14 +1577,14 @@
 	.role-progress-summary {
 		grid-area: summary;
 		min-width: 0;
-		font-size: 0.7rem;
+		font-size: 0.75rem;
 		line-height: 1.5;
 		color: var(--muted-foreground);
 	}
 
 	.role-progress-action {
 		grid-area: action;
-		justify-self: end;
+		justify-self: stretch;
 	}
 
 	@media (min-width: 80rem) {
@@ -1647,10 +1656,6 @@
 
 		.role-progress-label span {
 			display: none;
-		}
-
-		.role-progress-summary {
-			font-size: 0.68rem;
 		}
 	}
 </style>
