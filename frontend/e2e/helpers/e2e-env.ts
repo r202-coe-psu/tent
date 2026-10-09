@@ -8,11 +8,11 @@
  *    and staging before fixtures + janitor are ready): setup, teardown and any test
  *    that writes are skipped; assertions run against a dedicated E2E fixture
  *    provisioned once through the staff UI, whose values come from env.
- *  - **remote, writable** (`E2E_BASE_URL` **and** `ALLOW_REMOTE_WRITES=true` —
- *    staging only, set by `Jenkinsfile.e2e-staging`): `@critical` suites create their
- *    own `E2E …` shelter through the staff UI against the real remote stack and tear
- *    it down the same way as local, via `CAN_WRITE` (needs `COUCHDB_ADMIN_URL` for
- *    that remote target too). Never set this for `playwright.prod.config.ts`.
+ *  - **remote, writable** (`E2E_BASE_URL` **and** `ALLOW_REMOTE_WRITES=true` — staging
+ *    only, set in the `tent-staging-e2e-env` Jenkins credential / `e2e/.env.example`,
+ *    never `tent-prod-e2e-env`): `@critical` suites create their own `E2E …` shelter
+ *    through the staff UI against the real remote stack and tear it down the same way
+ *    as local, via `CAN_WRITE` (needs `COUCHDB_ADMIN_URL` for that remote target too).
  *
  * Fixture convention (provision it with exactly these shapes — fictitious names only):
  *
@@ -47,9 +47,11 @@ import type { MemberForm, ShelterForm } from './staff-ui';
 export const IS_REMOTE = Boolean(process.env.E2E_BASE_URL);
 
 /**
- * Explicit opt-in for a remote target to accept live writes — set only by
- * `Jenkinsfile.e2e-staging` (never `Jenkinsfile.prod`). On its own this flag means
- * nothing locally; it only relaxes the read-only gate below when `IS_REMOTE` is true.
+ * Explicit opt-in for a remote target to accept live writes — set in the
+ * `tent-staging-e2e-env` Jenkins credential (see `e2e/.env.example`), never
+ * `tent-prod-e2e-env`. A credential change the secret's owner controls, not a
+ * pipeline code change. On its own this flag means nothing locally; it only
+ * relaxes the read-only gate below when `IS_REMOTE` is true.
  */
 export const ALLOW_REMOTE_WRITES = Boolean(process.env.ALLOW_REMOTE_WRITES);
 

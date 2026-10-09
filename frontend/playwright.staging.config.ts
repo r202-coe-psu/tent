@@ -9,27 +9,51 @@ if (!/^https:\/\/[^\s/]+\/?$/.test(stagingURL)) {
 
 /**
  * Staging release gate (e2e/README.md §9.C / layer 4):
- *   - run `@release` + `@smoke` across the suite tree
+ *   - `testMatch` names exactly the suites that carry `@critical` or `@smoke`
+ *     anywhere in the file — an explicit allowlist, not `**\/*.test.ts` + grep.
+ *     Playwright must statically import every file `testMatch` names (to build
+ *     its list before `grep` filters anything), so scoping it this tightly means
+ *     an unrelated suite elsewhere in e2e/ (e.g. distribution/, sop-parameters/,
+ *     stock-inventory.test.ts — none of them staging-tagged) can never break this
+ *     config just by failing to resolve its own imports. Add a file here only
+ *     when it gains a `@critical` or `@smoke` tag.
+ *   - `grep` then picks the individual `@critical`/`@smoke` tests inside those
+ *     files (not scoped to `@release` — this also surfaces `@critical` suites
+ *     outside the six release journeys, e.g. the live-results describes in
+ *     public-search-flow / public-shelters-filter / public-home-flow, as skipped
+ *     rather than absent)
  *   - exclude `@quarantine`
  *   - workers=1; budget 15–30 min
  *
- * Remote `@critical` journeys (J2 W*, J3–J6) only run their live writes when this
- * process also has `ALLOW_REMOTE_WRITES=true` (set by `Jenkinsfile.e2e-staging`,
- * never `Jenkinsfile.prod`) — see `CAN_WRITE` in `e2e/helpers/e2e-env.ts`. Without
- * it they `test.skip` and appear as skipped, not failures. Staging `@smoke`/
- * `@release` that are read-only (incl. J1 + J2 navigation) always run.
+ * `@critical` suites only run their live writes when this process also has
+ * `ALLOW_REMOTE_WRITES=true` — set via the `tent-staging-e2e-env` Jenkins
+ * credential (`e2e/.env.example` documents it), never `tent-prod-e2e-env` — see
+ * `CAN_WRITE` in `e2e/helpers/e2e-env.ts`. Suites still gated on the older
+ * `IS_REMOTE` check directly (public-home-flow, public-search-flow,
+ * public-shelters-filter — no verified zero-leak teardown yet) stay `test.skip`
+ * regardless of `ALLOW_REMOTE_WRITES` and appear as skipped, not failures.
  */
 export default defineConfig({
 	testDir: './e2e',
-	testMatch: '**/*.test.ts',
+	testMatch: [
+		'back-office-evacuee-management.test.ts',
+		'onsite-stations-flow.test.ts',
+		'public-home-flow.test.ts',
+		'public-portal.test.ts',
+		'public-pre-register-flow.test.ts',
+		'public-search-flow.test.ts',
+		'public-shelters-filter.test.ts',
+		'staging/smoke.test.ts',
+		'system-admin-shelter.test.ts'
+	],
 	fullyParallel: false,
 	forbidOnly: true,
 	retries: process.env.CI ? 1 : 0,
-	grep: /@release|@smoke/,
+	grep: /@critical|@smoke/,
 	grepInvert: /@quarantine/,
 	workers: 1,
 	timeout: 60_000,
-	// 30 min wall clock for the full @release + @smoke remote set.
+	// 30 min wall clock for the full @critical + @smoke remote set.
 	globalTimeout: 1_800_000,
 	expect: { timeout: 15_000 },
 	outputDir: 'test-results/staging',
@@ -47,7 +71,16 @@ export default defineConfig({
 		actionTimeout: 15_000,
 		navigationTimeout: 30_000,
 		launchOptions: {
-			args: ['--no-sandbox', '--disable-setuid-sandbox']
+			args: ['--no-sandbox', '--disable-setuid-sandbox'],
+			// Local debugging only: PW_SLOWMO=500 --headed to watch a run in a real
+			// browser window (same var name as playwright.config.ts). Unset in CI, so
+			// this never changes the pipeline's timing. PW_SLOW_MO (underscore) is
+			// accepted too, for `.env`/`.env.staging` files written before this rename.
+			slowMo: process.env.PW_SLOWMO
+				? Number(process.env.PW_SLOWMO)
+				: process.env.PW_SLOW_MO
+					? Number(process.env.PW_SLOW_MO)
+					: undefined
 		}
 	},
 	projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }]

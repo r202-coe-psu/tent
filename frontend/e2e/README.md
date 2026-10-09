@@ -258,9 +258,12 @@ assertion green; `--list` shows every touched test with exactly one layer tag; a
 
 ### 9.C Pipeline (after B is merged) — **done in Step C PR**
 
-- `playwright.staging.config.ts`: `grep: /@release|@smoke/`, `grepInvert: /@quarantine/`,
-  workers=1, `globalTimeout` 30 min. Remote `@critical` journeys still skip via `IS_REMOTE` until
-  staging fixtures + janitor are ready for live writes (they show as skipped, not failures).
+- `playwright.staging.config.ts`: `grep: /@critical|@smoke/`, `grepInvert: /@quarantine/`,
+  workers=1, `globalTimeout` 30 min. `@critical` suites only run their live writes when the
+  `tent-staging-e2e-env` credential sets `ALLOW_REMOTE_WRITES=true` (`CAN_WRITE` in
+  `helpers/e2e-env.ts`); suites still gated on the older `IS_REMOTE` check directly
+  (`public-home-flow`, `public-search-flow`, `public-shelters-filter` — no verified zero-leak
+  teardown yet) stay skipped regardless (they show as skipped, not failures).
 - `Jenkinsfile.e2e-staging` / `scripts/run-staging-e2e.sh`: fail the job on Playwright failure;
   post GitHub commit status context **`staging/e2e`** on `DEPLOY_COMMIT` (pending →
   success/failure/error). Credential: `tent-github-status-token`.
