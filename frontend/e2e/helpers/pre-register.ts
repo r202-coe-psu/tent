@@ -57,6 +57,10 @@ export interface PageHealth {
 const RECAPTCHA_FRAME_URL =
 	/^https:\/\/(www\.)?(google\.com|gstatic\.com|recaptcha\.net)\/recaptcha\//;
 
+/** reCAPTCHA's report-only CSP `frame-ancestors` console noise about framing google.com (no usable source URL). */
+const GOOGLE_REPORT_ONLY_CSP_TEXT =
+	/^Framing 'https:\/\/(www\.)?google\.com\/[^']*' violates the following report-only Content Security Policy/;
+
 const REGISTRATION_WRITE = /\/api\/public\/v1\/(unassigned-registrations|registrations)(\?|$)/;
 
 /** Start collecting console problems, failed responses and registration writes on `page`. */
@@ -65,6 +69,7 @@ export function watchPage(page: Page): PageHealth {
 	page.on('pageerror', (err) => health.problems.push(`pageerror: ${err.message}`));
 	page.on('console', (msg) => {
 		if (RECAPTCHA_FRAME_URL.test(msg.location().url)) return;
+		if (GOOGLE_REPORT_ONLY_CSP_TEXT.test(msg.text())) return;
 		if (msg.type() === 'error' || msg.type() === 'warning') {
 			health.problems.push(`console.${msg.type()}: ${msg.text()}`);
 		}
