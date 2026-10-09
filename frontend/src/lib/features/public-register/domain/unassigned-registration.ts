@@ -12,11 +12,15 @@
 import { z } from 'zod';
 import type { components } from '$lib/api/openapi';
 import {
+	dormFieldsFor,
 	isBlankEmergencyContact,
+	memberExtrasFor,
+	refineMemberRules,
 	unifiedRegistrationInputSchema,
 	type UnifiedRegistrationInput,
 	type UnifiedRegistrationParsed
 } from '$lib/features/people/server';
+import { NETWORK_ERROR_MESSAGE } from './booking';
 
 /** FastAPI create body — derived from OpenAPI (CONVENTIONS §12) + optional join. */
 export type UnassignedRegistrationPayload =
@@ -37,12 +41,27 @@ export const publicUnassignedRegistrationRequestSchema = z
 		disclaimerAcknowledged: z.boolean().optional()
 	})
 	.superRefine((value, ctx) => {
-		const headPhone = value.members[0]?.phone?.trim();
-		if (!headPhone || !/^0\d{8,9}$/.test(headPhone.replace(/[-\s]/g, ''))) {
+		// `.shape.members` skips the unified schema's own superRefine — re-apply member rules (CR-148)
+		value.members.forEach((member, index) => refineMemberRules(member, ctx, ['members', index]));
+		const joining = Boolean(value.join_match_token?.trim());
+		const headPhone = value.members[0]?.phone?.trim() ?? '';
+		if (!headPhone) {
+			if (!joining) {
+				ctx.addIssue({
+					code: 'custom',
+					path: ['members', 0, 'phone'],
+					message: 'กรุณากรอกเบอร์โทรศัพท์ 10 หลักของผู้ติดต่อหลัก'
+				});
+			}
+			return;
+		}
+		if (!/^0\d{8,9}$/.test(headPhone.replace(/[-\s]/g, ''))) {
 			ctx.addIssue({
 				code: 'custom',
 				path: ['members', 0, 'phone'],
-				message: 'กรุณากรอกเบอร์โทรศัพท์ 10 หลักของผู้ติดต่อหลัก'
+				message: joining
+					? 'กรุณากรอกเบอร์ให้ครบ 10 หลัก หรือเว้นว่าง / เลือกไม่มีเบอร์'
+					: 'กรุณากรอกเบอร์โทรศัพท์ 10 หลักของผู้ติดต่อหลัก'
 			});
 		}
 	});
@@ -114,6 +133,7 @@ export function toUnassignedRegistrationPayload(
 			...(typeof member.age === 'number' ? { age: member.age } : {}),
 			...(nickname ? { nickname } : {}),
 			...(religion ? { religion } : {}),
+			...memberExtrasFor(member),
 			...(emergency ? { emergency_contact: emergency } : {}),
 			...(photo ? { photo } : {})
 		};
@@ -126,7 +146,7 @@ export function toUnassignedRegistrationPayload(
 		household: {
 			housing_type: hh.housing_type ?? null,
 			residence_landmark: hh.residence_landmark ?? null,
-			address_no: hh.housing_type === 'homeless' ? null : (hh.address_no ?? null),
+			...dormFieldsFor(hh),
 			village_no: hh.village_no || null,
 			subdistrict: hh.subdistrict ?? null,
 			district: hh.district ?? null,
@@ -155,13 +175,16 @@ export type UnassignedRegistrationErrorCode =
 	| 'INVALID_INPUT'
 	| 'INVALID_ANONYMOUS_ID'
 	| 'INVALID_PHOTO_REF'
+	| 'INVALID_JOIN_TOKEN'
+	| 'JOIN_TARGET_NOT_FOUND'
 	| 'RATE_LIMITED'
 	| 'CAPTCHA_REQUIRED'
 	| 'CAPTCHA_FAILED'
 	| 'SERVER_MISCONFIGURED'
 	| 'DUPLICATE_OPEN_IDENTITY'
 	| 'WRITE_FAILED'
-	| 'DISCLAIMER_REQUIRED';
+	| 'DISCLAIMER_REQUIRED'
+	| 'NETWORK_ERROR';
 
 export function unassignedRegistrationErrorMessage(code: string | undefined): string {
 	switch (code) {
@@ -171,6 +194,10 @@ export function unassignedRegistrationErrorMessage(code: string | undefined): st
 			return 'รหัสนิรนามไม่ถูกต้อง';
 		case 'INVALID_PHOTO_REF':
 			return 'รหัสรูปถ่ายไม่ถูกต้อง กรุณาอัปโหลดใหม่';
+		case 'INVALID_JOIN_TOKEN':
+			return 'ลิงก์เข้าร่วมครอบครัวหมดอายุหรือไม่ถูกต้อง กรุณาค้นหาครอบครัวใหม่แล้วเลือกอีกครั้ง';
+		case 'JOIN_TARGET_NOT_FOUND':
+			return 'ไม่พบครอบครัวที่เลือก กรุณาเลือกครอบครัวใหม่ก่อนส่ง';
 		case 'RATE_LIMITED':
 			return 'ส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่';
 		case 'CAPTCHA_REQUIRED':
@@ -180,6 +207,8 @@ export function unassignedRegistrationErrorMessage(code: string | undefined): st
 			return 'กรุณายืนยันการรับทราบเงื่อนไขการใช้งานระบบก่อนส่งข้อมูล';
 		case 'INVALID_INPUT':
 			return 'ข้อมูลไม่ครบหรือไม่ถูกต้อง';
+		case 'NETWORK_ERROR':
+			return NETWORK_ERROR_MESSAGE;
 		default:
 			return 'ไม่สามารถบันทึกการลงทะเบียนได้ กรุณาลองใหม่';
 	}

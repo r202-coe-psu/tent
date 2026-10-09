@@ -1,16 +1,36 @@
 /**
  * Staging ops: stock, campaigns, donations for SH001–SH003.
  */
-import type { AuthorContext } from '$lib/db/model';
+import { now, type AuthorContext } from '$lib/db/model';
 import {
 	createCampaign,
 	createStockLedger,
-	createWalkInDonation
+	createWalkInDonation,
+	createLegacyFlow2StockLedger
 } from '$lib/features/operations/domain/operations';
 import { shelterDbName } from '$lib/server/shelter-access-design';
 import { prefixRangeEnd } from '../t31-seed-support';
 import { bulkDocs, couchReq } from './couch';
 import { ITEM, SH001_CODE, SH002_CODE, SH003_CODE } from './types';
+
+/**
+ * item_master ids are random ULIDs since the catalog rewrite (develop merge) — only
+ * preserved across reseeds by matching on `name`. Resolve the real id for a few
+ * item masters this script references by the old deterministic id, falling back to
+ * that literal id only if no match exists (keeps this a no-op on an already-seeded DB).
+ */
+async function resolveItemMasterIdsByName(): Promise<Map<string, string>> {
+	const byName = new Map<string, string>();
+	const { status, data } = await couchReq('GET', '/catalog/_all_docs?include_docs=true');
+	if (status !== 200) return byName;
+	const rows = (data as { rows?: Array<{ doc?: { type?: string; name?: string; _id: string } }> })
+		.rows;
+	for (const row of rows ?? []) {
+		const doc = row.doc;
+		if (doc?.type === 'item_master' && doc.name) byName.set(doc.name, doc._id);
+	}
+	return byName;
+}
 
 async function hasOps(db: string): Promise<boolean> {
 	const prefix = 'donation_campaign:seed-st:';
@@ -31,6 +51,7 @@ function scale(code: string, hi: number, mid: number, lo: number): string {
 }
 
 export async function seedStagingOps(): Promise<void> {
+	const itemMasterIdByName = await resolveItemMasterIdsByName();
 	for (const code of [SH001_CODE, SH002_CODE, SH003_CODE]) {
 		const db = shelterDbName(code);
 		const ctx: AuthorContext = { shelterCode: code, createdBy: 'seed' };
@@ -44,57 +65,83 @@ export async function seedStagingOps(): Promise<void> {
 		// `adjust` (schema.md §2.1, ref_id null) — the same reason the back-office
 		// manual receive writes. `receive` now requires a meal_service / requisition /
 		// distribution_log / bulk_return_pool ref (CR-121) and would be refused.
+		// CR-143 §C: every adjust names a reason; an opening balance is `other`.
 		const stockEntries = [
-			createStockLedger(
+			createLegacyFlow2StockLedger(
 				{
 					item_id: ITEM.rice,
 					qty: scale(code, 500, 300, 150),
 					unit: 'kg',
 					reason: 'adjust',
-					ref_id: null
+					ref_id: null,
+					adjust_reason: 'found'
 				},
 				ctx
 			),
-			createStockLedger(
+			createLegacyFlow2StockLedger(
 				{
 					item_id: ITEM.water,
 					qty: scale(code, 1200, 800, 400),
 					unit: 'bottle',
 					reason: 'adjust',
-					ref_id: null
+					ref_id: null,
+					adjust_reason: 'found'
 				},
 				ctx
 			),
-			createStockLedger(
+			createLegacyFlow2StockLedger(
 				{
 					item_id: ITEM.paracetamol,
 					qty: '2000',
 					unit: 'tablet',
 					reason: 'adjust',
-					ref_id: null
+					ref_id: null,
+					adjust_reason: 'found'
 				},
 				ctx
 			),
 			createStockLedger(
-				{ item_id: ITEM.soap, qty: '300', unit: 'bar', reason: 'adjust', ref_id: null },
+				{
+					item_id: ITEM.soap,
+					qty: '300',
+					unit: 'bar',
+					reason: 'adjust',
+					ref_id: null,
+					adjust_reason: 'found'
+				},
 				ctx
 			),
-			createStockLedger(
+			createLegacyFlow2StockLedger(
 				{
 					item_id: ITEM.blanket,
 					qty: scale(code, 200, 120, 60),
 					unit: 'piece',
 					reason: 'adjust',
-					ref_id: null
+					ref_id: null,
+					adjust_reason: 'found'
 				},
 				ctx
 			),
 			createStockLedger(
-				{ item_id: ITEM.egg, qty: '3000', unit: 'piece', reason: 'adjust', ref_id: null },
+				{
+					item_id: ITEM.egg,
+					qty: '3000',
+					unit: 'piece',
+					reason: 'adjust',
+					ref_id: null,
+					adjust_reason: 'found'
+				},
 				ctx
 			),
 			createStockLedger(
-				{ item_id: ITEM.vegetable, qty: '200', unit: 'kg', reason: 'adjust', ref_id: null },
+				{
+					item_id: ITEM.vegetable,
+					qty: '200',
+					unit: 'kg',
+					reason: 'adjust',
+					ref_id: null,
+					adjust_reason: 'found'
+				},
 				ctx
 			)
 		].map((doc, i) => ({ ...doc, _id: `stock_ledger:seed-st:${code.toLowerCase()}:${i}` }));
@@ -170,9 +217,35 @@ export async function seedStagingOps(): Promise<void> {
 			_id: `donation:seed-st:${code.toLowerCase()}:${i}`
 		}));
 
-		await bulkDocs(db, [...stockEntries, ...campaigns, ...donations]);
+		// Demo scenario for the catalog "ปรับแต่งแล้ว" (override) flow: SH001 customizes the
+		// central item_master:rice by adding a shelter-specific bulk-sack conversion unit.
+		const itemMasterOverrides =
+			code === SH001_CODE
+				? [
+						{
+							_id: itemMasterIdByName.get('ข้าวสาร') ?? 'item_master:rice',
+							type: 'item_master',
+							schema_v: 4,
+							created_at: now(),
+							updated_at: now(),
+							created_by: 'seed',
+							name: 'ข้าวสาร',
+							category: 'item_category:food',
+							base_unit: 'kg',
+							sku: 'SKU-RICE-01',
+							dietary: ['HALAL'],
+							conversions: [{ uom_name: 'กระสอบ', multiplier: '50', barcode: '' }],
+							distribution_type: 'recurring',
+							type_class: 'CONSUMABLE',
+							shelter_code: code,
+							override: true
+						}
+					]
+				: [];
+
+		await bulkDocs(db, [...stockEntries, ...campaigns, ...donations, ...itemMasterOverrides]);
 		console.log(
-			`  ✓ ${db}: ${stockEntries.length} stock, ${campaigns.length} campaigns, ${donations.length} donations`
+			`  ✓ ${db}: ${stockEntries.length} stock, ${campaigns.length} campaigns, ${donations.length} donations${itemMasterOverrides.length ? `, ${itemMasterOverrides.length} item_master override` : ''}`
 		);
 	}
 }

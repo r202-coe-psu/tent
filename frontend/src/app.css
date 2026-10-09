@@ -5,8 +5,8 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-	/* Fixed testing banner (bottom) — keep in sync with testing-banner.svelte height */
-	--testing-banner-height: 1.625rem;
+	/* Fixed system banner (bottom). 0 until +layout.svelte sets `data-system-banner` on <html>. */
+	--testing-banner-height: 0px;
 	--app-shell-height: calc(100svh - var(--testing-banner-height));
 	/*
 	 * Sticky offset for registration section headers (under app / shelter chrome).
@@ -99,6 +99,13 @@
 	--warning-subtle: oklch(0.882 0.057 95.617);
 	--warning-border: oklch(0.408 0.123 63.95);
 
+	/* Info — system banner / neutral advisories (sky) */
+	--info: oklch(0.685 0.169 237.323);
+	--info-foreground: oklch(0.985 0.001 106.423);
+	--info-muted: oklch(0.977 0.013 236.62);
+	--info-subtle: oklch(0.746 0.16 232.661);
+	--info-border: oklch(0.901 0.058 230.902);
+
 	/* Shelter Specific Colors */
 	--shelter-bg: oklch(0.982 0.009 239);
 	--shelter-border: oklch(0.923 0.003 48.717);
@@ -170,6 +177,10 @@
 	}
 }
 
+:root[data-system-banner] {
+	--testing-banner-height: 1.625rem;
+}
+
 .dark {
 	--background: oklch(0.147 0.004 49.25);
 	--foreground: oklch(0.985 0.001 106.423);
@@ -224,6 +235,13 @@
 	--warning-subtle: oklch(0.882 0.057 95.617);
 	--warning-border: oklch(0.408 0.123 63.95);
 	--warning-dark: oklch(77.085% 0.16457 71.779);
+
+	/* Info — system banner / neutral advisories (sky, dark mode) */
+	--info: oklch(0.685 0.169 237.323);
+	--info-foreground: oklch(0.147 0.004 49.25);
+	--info-muted: oklch(0.293 0.066 243.157);
+	--info-subtle: oklch(0.828 0.111 230.318);
+	--info-border: oklch(0.293 0.066 243.157);
 
 	/* Shelter Specific Colors (Dark Mode) */
 	--shelter-bg: oklch(0.18 0.005 240);
@@ -328,6 +346,12 @@
 	--color-warning-muted: var(--warning-muted);
 	--color-warning-subtle: var(--warning-subtle);
 	--color-warning-border: var(--warning-border);
+
+	--color-info: var(--info);
+	--color-info-foreground: var(--info-foreground);
+	--color-info-muted: var(--info-muted);
+	--color-info-subtle: var(--info-subtle);
+	--color-info-border: var(--info-border);
 
 	/* Shelter Colors theme bindings */
 	--color-shelter-bg: var(--shelter-bg);
@@ -487,7 +511,9 @@
 		}
 	}
 	.unified-reg-bottom-chrome {
-		@apply sticky bottom-0 z-30 -mx-1 border-t border-border bg-background/95 px-3 py-2 backdrop-blur-sm sm:space-y-2 sm:px-4 sm:pt-2.5 sm:pb-3;
+		@apply sticky z-30 -mx-1 border-t border-border bg-background/95 px-3 py-2 backdrop-blur-sm sm:space-y-2 sm:px-4 sm:pt-2.5 sm:pb-3;
+		/* Sit above the system testing banner when present (0px when absent). */
+		bottom: var(--testing-banner-height);
 		padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
 	}
 	.shelter-form-bottom-chrome {

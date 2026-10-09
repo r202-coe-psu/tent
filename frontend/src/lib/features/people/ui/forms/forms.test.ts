@@ -112,14 +112,23 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 			expect(result.body).not.toMatch(/ศาสนา[\s\S]{0,400}อื่น\s*ๆ/);
 		});
 
-		it('maps legacy religion other to ไม่ระบุ on the trigger', () => {
+		it('shows religion other as「อื่นๆ (ระบุ)」with a free-text field (CR-148)', () => {
 			const result = render(PersonalInfoFields, {
 				props: {
 					religion: 'other',
+					religion_other: 'ซิกข์',
 					phone: '0812345678'
 				}
 			});
-			expect(result.body).toContain('ไม่ระบุ');
+			expect(result.body).toContain('อื่นๆ (ระบุ)');
+			expect(result.body).toContain('ซิกข์');
+		});
+
+		it('labels the birth-year input with a 4-digit limit (CR-148)', () => {
+			const result = render(PersonalInfoFields, {
+				props: { birth_year: 2535, phone: '0812345678' }
+			});
+			expect(result.body).toMatch(/maxlength="4"/);
 		});
 
 		it('shows BE/CE calendar toggle labels', () => {
@@ -149,6 +158,20 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 					phone: ''
 				}
 			});
+			expect(result.body).toContain('ไม่มีเบอร์โทรศัพท์');
+		});
+
+		it('marks phone optional and shows helper when joining a household', () => {
+			const result = render(PersonalInfoFields, {
+				props: {
+					hideNoPhone: false,
+					phoneOptional: true,
+					phoneHelperText: 'บ้านนี้มีผู้ติดต่อหลักอยู่แล้ว — กรอกเบอร์ได้ถ้าต้องการ',
+					phone: ''
+				}
+			});
+			expect(result.body).toContain('(ทางเลือก)');
+			expect(result.body).toContain('บ้านนี้มีผู้ติดต่อหลักอยู่แล้ว');
 			expect(result.body).toContain('ไม่มีเบอร์โทรศัพท์');
 		});
 

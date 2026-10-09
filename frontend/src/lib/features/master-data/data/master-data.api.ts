@@ -1,5 +1,5 @@
 import { serviceFetch } from '$lib/api/service';
-import { getShelterCode } from '$lib/db/shelter';
+import { resolveContextShelterCode } from '$lib/db/shelter';
 import type {
 	MasterData,
 	MasterDataItem,
@@ -36,9 +36,12 @@ function effectiveContext(context?: MasterDataQueryContext): Required<
 > & {
 	shelterCode?: string;
 } {
-	const scope = context?.scope ?? 'effective';
+	const requested = context?.scope ?? 'effective';
 	const shelterCode =
-		context?.shelterCode ?? (scope === 'effective' ? getShelterCode() : undefined);
+		context?.shelterCode ??
+		(requested === 'effective' ? (resolveContextShelterCode() ?? undefined) : undefined);
+	// No shelter to merge against (SA central view) → read the global list.
+	const scope = requested === 'effective' && !shelterCode ? 'global' : requested;
 	return { scope, ...(shelterCode ? { shelterCode } : {}) };
 }
 

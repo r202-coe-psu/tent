@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { PageData } from './$types';
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { SvelteMap } from 'svelte/reactivity';
 	import Search from '@lucide/svelte/icons/search';
 	import Package from '@lucide/svelte/icons/package';
@@ -11,12 +12,15 @@
 	import Inbox from '@lucide/svelte/icons/inbox';
 	import Info from '@lucide/svelte/icons/info';
 	import Construction from '@lucide/svelte/icons/construction';
+	import ClipboardPen from '@lucide/svelte/icons/clipboard-pen';
+	import MapPin from '@lucide/svelte/icons/map-pin';
 
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Button } from '$lib/components/ui/button';
 	import * as Accordion from '$lib/components/ui/accordion/index.js';
 	import PublicDonationCard from '$lib/components/public-donation-card.svelte';
 	import PublicVolunteerCard from '$lib/components/public-volunteer-card.svelte';
+	import PublicNotificationMenu from '$lib/components/public-notification-menu.svelte';
 	import { FamilySearchModal } from '$lib/features/public-portal';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
@@ -74,7 +78,7 @@
 	};
 
 	function formatItemName(rawName: string): string {
-		if (!rawName) return isEn ? 'Essential Items' : 'สิ่งของจำเป็น';
+		if (!rawName) return t.essentialItems;
 		const cleanKey = rawName.startsWith('item:') ? rawName : `item:${rawName}`;
 		if (ITEM_NAMES[cleanKey]) {
 			return isEn ? ITEM_NAMES[cleanKey].en : ITEM_NAMES[cleanKey].th;
@@ -135,12 +139,8 @@
 		return list.map((s) => {
 			const geo = sheltersGeoMap.get(s.code);
 			const loc = geo
-				? isEn
-					? `${geo.subdistrict}, ${geo.district}, ${geo.province}`
-					: `ต.${geo.subdistrict} อ.${geo.district} จ.${geo.province}`
-				: isEn
-					? 'Kho Hong, Hat Yai, Songkhla'
-					: 'ต.คอหงส์ อ.หาดใหญ่ จ.สงขลา';
+				? t.locationText(geo.subdistrict, geo.district, geo.province)
+				: t.defaultLocation;
 
 			const formattedNeeds = (s.needs || []).map((n) => formatItemName(n.name || n.item_id));
 
@@ -161,26 +161,20 @@
 				totalTarget > 0
 					? Math.min(100, Math.max(0, Math.round((totalReceived / totalTarget) * 100)))
 					: 0;
-			const deficitText = isEn
-				? totalQtyNeeded > 0
+			const deficitText =
+				totalQtyNeeded > 0
 					? totalTarget > 0
-						? `Need ${totalQtyNeeded.toLocaleString()} more of ${totalTarget.toLocaleString()} pcs`
-						: `Need ${totalQtyNeeded.toLocaleString()} more pcs`
-					: 'Goal reached'
-				: totalQtyNeeded > 0
-					? totalTarget > 0
-						? `ขาดอีก ${totalQtyNeeded.toLocaleString()} จากเป้า ${totalTarget.toLocaleString()}`
-						: `ขาดอีก ${totalQtyNeeded.toLocaleString()}`
-					: 'ได้รับครบตามเป้าหมายแล้ว';
+						? t.deficitOfTarget(totalQtyNeeded.toLocaleString(), totalTarget.toLocaleString())
+						: t.deficitOnly(totalQtyNeeded.toLocaleString())
+					: t.goalReached;
 
 			return {
 				id: s.code,
 				code: s.code,
 				name: s.name,
-				status: isEn ? 'Critical' : 'วิกฤติ',
+				status: t.criticalBadge,
 				location: loc,
-				needs:
-					formattedNeeds.length > 0 ? formattedNeeds : [isEn ? 'Essential Items' : 'สิ่งของจำเป็น'],
+				needs: formattedNeeds.length > 0 ? formattedNeeds : [t.essentialItems],
 				receivedPercent,
 				deficitText
 			};
@@ -241,6 +235,27 @@
 				{t.heroSubtitle}
 			</p>
 		</div>
+
+		<!-- Primary CTA: pre-register (most important public action), shelter search as quick link -->
+		<div
+			class="mx-auto mt-6 flex max-w-4xl flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-center"
+		>
+			<a
+				href={resolve('/pre-register')}
+				class="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white px-6 text-base font-bold text-[#0A2647] shadow-xs transition-colors hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#0A2647] focus-visible:outline-none sm:text-lg"
+			>
+				<ClipboardPen class="h-5 w-5" aria-hidden="true" />
+				{t.registerCta}
+			</a>
+			<a
+				href={resolve('/shelters')}
+				class="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/60 px-6 text-base font-semibold text-white transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#0A2647] focus-visible:outline-none"
+			>
+				<MapPin class="h-5 w-5" aria-hidden="true" />
+				{t.findShelterQuick}
+			</a>
+		</div>
+		<p class="mt-2 text-center text-xs text-white/75 sm:text-sm">{t.registerCtaHint}</p>
 
 		<!-- 2 Quick Action Cards Inside Hero Area -->
 		<div class="mx-auto mt-7 grid max-w-4xl grid-cols-1 gap-4 text-left sm:grid-cols-2">
@@ -351,7 +366,7 @@
 						</span>
 						{#if urgentItemsCount > 0}
 							<span class="text-xs font-bold text-orange-600 sm:text-sm">
-								({isEn ? `${urgentItemsDeficit} pcs lacking` : `ขาดอีก ${urgentItemsDeficit} ชิ้น`})
+								({t.itemsDeficitText(urgentItemsDeficit)})
 							</span>
 						{:else}
 							<span class="text-xs font-medium text-slate-400 sm:text-sm">
@@ -648,6 +663,8 @@
 
 <FamilySearchModal bind:open={searchOpen} />
 
+<PublicNotificationMenu variant="floating" announcements={data.announcements} />
+
 <Dialog.Root bind:open={devModalOpen}>
 	<Dialog.Content class="max-w-md rounded-2xl p-6 sm:p-7">
 		<div class="flex flex-col items-center text-center">
@@ -658,12 +675,10 @@
 			</div>
 			<Dialog.Header class="text-center">
 				<Dialog.Title class="text-center text-lg font-bold text-slate-900 sm:text-xl">
-					{isEn ? 'Feature Under Development' : 'ระบบอยู่ระหว่างการพัฒนา'}
+					{t.devModalTitle}
 				</Dialog.Title>
 				<Dialog.Description class="mt-2 text-center text-sm text-slate-500">
-					{isEn
-						? 'The volunteer missions coordination system is currently under active development. Thank you for your interest and support!'
-						: 'ระบบดูภารกิจและการประสานงานจิตอาสากำลังอยู่ระหว่างการพัฒนา ขออภัยในความไม่สะดวก และขอขอบคุณที่ให้ความสนใจ'}
+					{t.devModalDesc}
 				</Dialog.Description>
 			</Dialog.Header>
 			<div class="mt-6 flex w-full justify-center">
@@ -672,7 +687,7 @@
 					onclick={() => (devModalOpen = false)}
 					class="min-w-[120px] rounded-xl bg-slate-900 text-white hover:bg-slate-800"
 				>
-					{isEn ? 'Close' : 'รับทราบ'}
+					{t.devModalClose}
 				</Button>
 			</div>
 		</div>

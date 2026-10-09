@@ -1,6 +1,13 @@
+<script module lang="ts">
+	/** Where registered people go next — Station 2 when medical screening is on, else Station 3. */
+	export type IntakeNextStation = 'medical' | 'zoning';
+</script>
+
 <script lang="ts">
-	import Users from '@lucide/svelte/icons/users';
+	import ArrowRight from '@lucide/svelte/icons/arrow-right';
+	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import StationCompletionSummary from '../shared/station-completion-summary.svelte';
 	import { formatPersonName, type Evacuee, type Household } from '../../domain/people';
 	import EvacueeQrModal from '../evacuee-profile/evacuee-qr-modal.svelte';
 	import EvacueeHandoverSlipModal from '../evacuee-profile/evacuee-handover-slip-modal.svelte';
@@ -11,11 +18,17 @@
 	let {
 		household,
 		members,
-		onDone
+		onDone,
+		onNextStation,
+		onRegisterAnother
 	}: {
 		household: Household;
 		members: Evacuee[];
+		/** Back to the Station 1 queue. */
 		onDone: () => void;
+		onNextStation?: (station: IntakeNextStation) => void;
+		/** Start a fresh family form in place. */
+		onRegisterAnother?: () => void;
 	} = $props();
 
 	function safeQuery<T>(fn: () => T, fallback: T): T {
@@ -36,6 +49,19 @@
 	);
 
 	const total = $derived(members.length);
+	const nextStation = $derived<IntakeNextStation>(showHandover ? 'medical' : 'zoning');
+	const nextStationLabel = $derived(
+		nextStation === 'medical' ? 'ไปคัดกรองแพทย์ (สถานี 2)' : 'ไปจัดโซน (สถานี 3)'
+	);
+	const facts = $derived([
+		{ label: 'ครอบครัว', value: household.label || '—' },
+		{ label: 'จำนวน', value: `${total} คน` },
+		{ label: 'สถานะ', value: 'รายงานตัวแล้ว · รอเข้าพัก' },
+		{
+			label: 'ขั้นถัดไป',
+			value: nextStation === 'medical' ? 'คัดกรองแพทย์ (สถานี 2)' : 'จัดโซน (สถานี 3)'
+		}
+	]);
 
 	function isHead(member: Evacuee, index: number): boolean {
 		if (household.head_evacuee_id) {
@@ -45,25 +71,37 @@
 	}
 </script>
 
+{#snippet nextActions()}
+	{#if onNextStation}
+		<Button type="button" class="min-h-11" onclick={() => onNextStation?.(nextStation)}>
+			{nextStationLabel}
+			<ArrowRight class="ml-1.5 size-4" />
+		</Button>
+	{/if}
+	{#if onRegisterAnother}
+		<Button type="button" variant="outline" class="min-h-11" onclick={onRegisterAnother}>
+			<UserPlus class="mr-1.5 size-4" />
+			ลงทะเบียนครอบครัวถัดไป
+		</Button>
+	{/if}
+	<Button type="button" variant="ghost" class="min-h-11" onclick={onDone}>กลับคิวทะเบียน</Button>
+{/snippet}
+
 <div class="space-y-4 pb-20">
-	<div class="rounded-xl border border-border bg-card p-4 sm:p-5">
-		<div class="flex items-start gap-3">
-			<div
-				class="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"
-			>
-				<Users class="size-5" />
-			</div>
-			<div>
-				<h2 class="text-lg font-bold text-foreground">พิมพ์บัตรประจำตัวครอบครัว</h2>
-				<p class="text-sm text-muted-foreground">
-					{household.label} · {total} คน — พิมพ์บัตรด้านล่างทีละใบ แล้วกดเสร็จสิ้น
-					{#if showHandover}
-						(Person QR และ Handover Slip ของทุกคน)
-					{/if}
-				</p>
-			</div>
-		</div>
-	</div>
+	<StationCompletionSummary
+		title="ลงทะเบียนสำเร็จ"
+		subtitle={`พิมพ์บัตรด้านล่างทีละใบ${showHandover ? ' (Person QR และ Handover Slip ของทุกคน)' : ' (Person QR ของทุกคน)'} แล้วส่งต่อไปขั้นถัดไป`}
+		{facts}
+		actions={nextActions}
+	>
+		<ul class="flex flex-wrap gap-1.5 text-sm">
+			{#each members as member, i (member._id)}
+				<li class="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-slate-700">
+					{formatPersonName(member)}{isHead(member, i) ? ' (ผู้ติดต่อหลัก)' : ''}
+				</li>
+			{/each}
+		</ul>
+	</StationCompletionSummary>
 
 	{#each members as member, i (member._id)}
 		<section class="space-y-3">
@@ -93,6 +131,8 @@
 	<div
 		class="sticky bottom-0 z-10 -mx-1 border-t border-border bg-background/95 p-3 backdrop-blur-sm"
 	>
-		<Button type="button" onclick={onDone} class="w-full">เสร็จสิ้น / กลับคิว</Button>
+		<div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
+			{@render nextActions()}
+		</div>
 	</div>
 </div>

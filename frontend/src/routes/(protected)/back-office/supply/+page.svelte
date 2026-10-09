@@ -1,15 +1,17 @@
 <script lang="ts">
-	import { StockTable, TransferForm, TransferList } from '$lib/features/operations';
-	import { ProductsPanel } from '$lib/features/catalog';
+	import {
+		LEDGER_PARAM_KEYS,
+		LedgerTable,
+		MergeItemDialog,
+		STOCK_PARAM_KEYS,
+		StockTable,
+		TransferTab,
+		usePendingTransferCount,
+		useStockBalance
+	} from '$lib/features/operations';
+	import { ProductsPanel, type ItemMaster } from '$lib/features/catalog';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
-	import Boxes from '@lucide/svelte/icons/boxes';
-	import ChevronDown from '@lucide/svelte/icons/chevron-down';
-	import Ellipsis from '@lucide/svelte/icons/ellipsis';
-	import Scale from '@lucide/svelte/icons/scale';
-	import Truck from '@lucide/svelte/icons/truck';
-	import Utensils from '@lucide/svelte/icons/utensils';
-	import Warehouse from '@lucide/svelte/icons/warehouse';
 	import { ResourceNeedsDashboard } from '$lib/features/resource-calc';
 	import { FoodSphereStockTab } from '$lib/features/sop-ratios/components';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
@@ -20,8 +22,6 @@
 	import { resolve } from '$app/paths';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
-	import { Button } from '$lib/components/ui/button/index.js';
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 
 	const isOffline = $derived(authStore.needsReauth);
 
@@ -33,38 +33,48 @@
 	const occupancyQuery = useDashboardOccupancy(() => shelterCode);
 	const occupancy = $derived(occupancyQuery.data?.active ?? 0);
 
+	// The master list shows on-hand quantity; the ledger lives in `operations`, so the page joins them.
+	const balanceQuery = useStockBalance();
+
+	const pendingTransfers = usePendingTransferCount();
+	const pendingCount = $derived(pendingTransfers.data ?? 0);
+
 	const catalogBasePath = resolve('/back-office/catalog');
 
-	type TabKey = 'inventory' | 'catalog' | 'sphere' | 'food-sphere' | 'transfer';
-	const SECONDARY_TABS = ['catalog', 'sphere', 'food-sphere'] as const;
-	type SecondaryTabKey = (typeof SECONDARY_TABS)[number];
+	// "รวมกับรายการอื่น" (CR-143 §F) moves stock, so the page joins catalog's list to operations' dialog.
+	let mergeOpen = $state(false);
+	let mergeSource = $state<ItemMaster | null>(null);
+	function startMerge(item: ItemMaster) {
+		mergeSource = item;
+		mergeOpen = true;
+	}
+
+	const PRIMARY_TABS = ['inventory', 'movements', 'transfer'] as const;
+	type PrimaryTabKey = (typeof PRIMARY_TABS)[number];
+	// Reached by link, not by tab: their `?tab=` URLs keep working.
+	const SECONDARY_TABS = [
+		{ key: 'catalog', label: 'สินค้า (Master)' },
+		{ key: 'sphere', label: 'วิเคราะห์ความต้องการ' },
+		{ key: 'food-sphere', label: 'วิเคราะห์เสบียงอาหาร' }
+	] as const;
+	type SecondaryTabKey = (typeof SECONDARY_TABS)[number]['key'];
+	type TabKey = PrimaryTabKey | SecondaryTabKey;
+
+	const KNOWN_TABS: readonly TabKey[] = [...PRIMARY_TABS, ...SECONDARY_TABS.map((t) => t.key)];
 
 	const activeTab = $derived<TabKey>(
-		(['catalog', 'sphere', 'food-sphere', 'transfer'] as const).find(
-			(t) => t === page.url.searchParams.get('tab')
-		) ?? 'inventory'
+		KNOWN_TABS.find((t) => t === page.url.searchParams.get('tab')) ?? 'inventory'
 	);
 
-	const isSecondaryTab = $derived((SECONDARY_TABS as readonly string[]).includes(activeTab));
-
-	const secondaryLabel = $derived.by(() => {
-		switch (activeTab) {
-			case 'catalog':
-				return 'สินค้า (Master)';
-			case 'sphere':
-				return 'วิเคราะห์ความต้องการพื้นฐาน';
-			case 'food-sphere':
-				return 'วิเคราะห์เสบียงอาหาร';
-			default:
-				return 'เครื่องมือเพิ่มเติม';
-		}
-	});
-
-	function setTab(tab: TabKey) {
+	function setTab(tab: PrimaryTabKey) {
 		const params = new SvelteURLSearchParams(page.url.searchParams);
 		params.set('tab', tab);
-		if (tab !== 'catalog') {
-			params.delete('action');
+		params.delete('action');
+		if (tab !== 'inventory') {
+			for (const key of STOCK_PARAM_KEYS) params.delete(key);
+		}
+		if (tab !== 'movements') {
+			for (const key of LEDGER_PARAM_KEYS) params.delete(key);
 		}
 		const qs = params.toString();
 		void goto(resolve(`/back-office/supply${qs ? `?${qs}` : ''}` as '/back-office/supply'), {
@@ -74,13 +84,19 @@
 		});
 	}
 
-	function primaryPillClass(tab: 'inventory' | 'transfer') {
-		const active = activeTab === tab;
+	function tabClass(active: boolean) {
 		return [
-			'inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold tracking-wide transition-all duration-200 active:scale-[0.98] md:px-5',
+			'-mb-px inline-flex min-h-11 shrink-0 items-center gap-2 border-b-[3px] px-3.5 text-base transition-colors focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none md:px-4',
 			active
-				? 'bg-[#0A2647] text-white shadow-2xs'
-				: 'border border-transparent text-slate-500 hover:bg-white/80 hover:text-slate-900'
+				? 'border-[#0A2647] font-bold text-[#0A2647]'
+				: 'border-transparent font-semibold text-slate-600 hover:text-slate-900'
+		].join(' ');
+	}
+
+	function secondaryClass(active: boolean) {
+		return [
+			'inline-flex min-h-11 shrink-0 items-center rounded px-1 text-sm font-semibold whitespace-nowrap focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none',
+			active ? 'text-[#0A2647] underline underline-offset-4' : 'text-sky-700 hover:text-sky-900'
 		].join(' ');
 	}
 </script>
@@ -108,96 +124,78 @@
 	</header>
 
 	<div
-		class="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200/80 bg-white p-1.5 shadow-2xs"
+		class="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-b border-slate-200"
 	>
 		<nav
-			class="flex min-w-0 flex-1 scrollbar-none items-center gap-1 overflow-x-auto"
-			aria-label="แท็บหลักคลัง"
+			class="flex min-w-0 scrollbar-none items-center gap-1 overflow-x-auto"
+			aria-label="แท็บคลัง"
 		>
 			<button
 				type="button"
 				onclick={() => setTab('inventory')}
-				class={primaryPillClass('inventory')}
+				aria-current={activeTab === 'inventory' ? 'page' : undefined}
+				class={tabClass(activeTab === 'inventory')}
 			>
-				<Boxes class="h-4 w-4 shrink-0" aria-hidden="true" />
-				<span class="md:hidden">พัสดุ</span>
-				<span class="hidden md:inline">รายการพัสดุ</span>
+				สต็อก
 			</button>
-			<button type="button" onclick={() => setTab('transfer')} class={primaryPillClass('transfer')}>
-				<Truck class="h-4 w-4 shrink-0" aria-hidden="true" />
-				<span class="md:hidden">โอน</span>
-				<span class="hidden md:inline">โอนข้ามศูนย์</span>
+			<button
+				type="button"
+				onclick={() => setTab('movements')}
+				aria-current={activeTab === 'movements' ? 'page' : undefined}
+				class={tabClass(activeTab === 'movements')}
+			>
+				ความเคลื่อนไหว
+			</button>
+			<button
+				type="button"
+				onclick={() => setTab('transfer')}
+				aria-current={activeTab === 'transfer' ? 'page' : undefined}
+				class={tabClass(activeTab === 'transfer')}
+			>
+				โอนย้าย
+				{#if pendingCount > 0}
+					<span
+						class="inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-full bg-[#0284C7] px-1.5 text-xs font-bold text-white tabular-nums"
+					>
+						{pendingCount}
+						<span class="sr-only">รายการรอดำเนินการ</span>
+					</span>
+				{/if}
 			</button>
 		</nav>
 
-		<div class="ms-auto shrink-0">
-			<DropdownMenu.Root>
-				<DropdownMenu.Trigger>
-					{#snippet child({ props })}
-						<Button
-							{...props}
-							variant="outline"
-							class="min-h-11 gap-2 rounded-lg border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 {isSecondaryTab
-								? 'border-teal-200 bg-teal-50 text-teal-900'
-								: ''}"
-						>
-							<span class="md:hidden" aria-hidden="true">
-								<Ellipsis class="h-4 w-4" />
-							</span>
-							<span class="hidden max-w-[14rem] truncate md:inline">{secondaryLabel}</span>
-							<span class="md:hidden">เพิ่มเติม</span>
-							<ChevronDown class="h-4 w-4 shrink-0 opacity-60" aria-hidden="true" />
-							<span class="sr-only">เครื่องมือเพิ่มเติม</span>
-						</Button>
-					{/snippet}
-				</DropdownMenu.Trigger>
-				<DropdownMenu.Content align="end" class="min-w-56">
-					<DropdownMenu.Label class="text-xs font-semibold text-slate-500">
-						เครื่องมือเพิ่มเติม
-					</DropdownMenu.Label>
-					<DropdownMenu.Separator />
-					<DropdownMenu.RadioGroup
-						value={isSecondaryTab ? activeTab : ''}
-						onValueChange={(value) => {
-							if (value && (SECONDARY_TABS as readonly string[]).includes(value)) {
-								setTab(value as SecondaryTabKey);
-							}
-						}}
-					>
-						<DropdownMenu.RadioItem
-							value="catalog"
-							class="min-h-11 cursor-pointer gap-2 py-2.5 text-sm font-semibold"
-						>
-							<Warehouse class="h-4 w-4 shrink-0" aria-hidden="true" />
-							สินค้า (Master)
-						</DropdownMenu.RadioItem>
-						<DropdownMenu.RadioItem
-							value="sphere"
-							class="min-h-11 cursor-pointer gap-2 py-2.5 text-sm font-semibold"
-						>
-							<Scale class="h-4 w-4 shrink-0" aria-hidden="true" />
-							วิเคราะห์ความต้องการพื้นฐาน
-						</DropdownMenu.RadioItem>
-						<DropdownMenu.RadioItem
-							value="food-sphere"
-							class="min-h-11 cursor-pointer gap-2 py-2.5 text-sm font-semibold"
-						>
-							<Utensils class="h-4 w-4 shrink-0" aria-hidden="true" />
-							วิเคราะห์เสบียงอาหาร
-						</DropdownMenu.RadioItem>
-					</DropdownMenu.RadioGroup>
-				</DropdownMenu.Content>
-			</DropdownMenu.Root>
-		</div>
+		<nav
+			class="flex min-w-0 scrollbar-none items-center gap-5 overflow-x-auto"
+			aria-label="เครื่องมือเพิ่มเติม"
+		>
+			{#each SECONDARY_TABS as tab (tab.key)}
+				<a
+					href={resolve(`/back-office/supply?tab=${tab.key}` as '/back-office/supply')}
+					aria-current={activeTab === tab.key ? 'page' : undefined}
+					class={secondaryClass(activeTab === tab.key)}
+				>
+					{tab.label}
+				</a>
+			{/each}
+		</nav>
 	</div>
 
 	{#if activeTab === 'inventory'}
 		<div class="animate-in duration-300 fade-in slide-in-from-bottom-2">
 			<StockTable {occupancy} />
 		</div>
+	{:else if activeTab === 'movements'}
+		<div class="animate-in duration-300 fade-in slide-in-from-bottom-2">
+			<LedgerTable />
+		</div>
 	{:else if activeTab === 'catalog'}
 		<div class="animate-in duration-300 fade-in slide-in-from-bottom-2">
-			<ProductsPanel basePath={catalogBasePath} scope="shelter" />
+			<ProductsPanel
+				basePath={catalogBasePath}
+				scope="shelter"
+				stockByItemId={balanceQuery.data}
+				onmerge={startMerge}
+			/>
 		</div>
 	{:else if activeTab === 'sphere'}
 		<div class="animate-in duration-300 fade-in slide-in-from-bottom-2">
@@ -208,9 +206,10 @@
 			<FoodSphereStockTab {occupancy} {shelterCode} />
 		</div>
 	{:else if activeTab === 'transfer'}
-		<div class="flex animate-in flex-col gap-6 duration-300 fade-in slide-in-from-bottom-2">
-			<TransferForm />
-			<TransferList />
+		<div class="animate-in duration-300 fade-in slide-in-from-bottom-2">
+			<TransferTab />
 		</div>
 	{/if}
 </div>
+
+<MergeItemDialog bind:open={mergeOpen} source={mergeSource} />

@@ -1,11 +1,13 @@
 ---
 id: CR-040
 title: "Module E reframe — Security check-in/out → Shelter Report (kind: grievance | incident)"
-status: done
+status: superseded
 date: 2026-07-15
-updated: 2026-07-23
+updated: 2026-10-07 # superseded by CR-155 — replaced by shelter_incident
 approved_on: 2026-07-23
 done_on: 2026-07-23
+superseded_on: 2026-10-07
+superseded_by: CR-155
 requested_by: project owner
 decided_by: project owner
 layer: volatile
@@ -23,6 +25,9 @@ affects:
 ---
 
 # CR-040 — Module E: Shelter Report (grievance / incident)
+
+> [!WARNING]
+> **CR-040 ถูก supersede โดย [CR-155](CR-155-shelter-incident-log.md)** (2026-10-07): แทนที่ doc type `shelter_report` ด้วย `shelter_incident` (Daily Occurrence Book, owner-based) ทั้งหมด รวมเรื่อง grievance และ incident
 
 ## สรุป (TL;DR)
 

@@ -25,6 +25,8 @@
 		submitDisabled = false,
 		submitLabel = 'ยืนยันการลงทะเบียน',
 		submittingLabel = 'กำลังบันทึก...',
+		/** Desktop aside keeps submit; mobile summary sheet relies on sticky CTA. */
+		showSubmit = true,
 		onNavigate
 	}: {
 		shelterName?: string;
@@ -37,13 +39,14 @@
 		submitDisabled?: boolean;
 		submitLabel?: string;
 		submittingLabel?: string;
+		showSubmit?: boolean;
 		onNavigate: (sectionId: string) => void;
 	} = $props();
 
 	const formattedAddress = $derived.by(() => {
 		const parts = [
 			household.address_no ? `บ้านเลขที่ ${household.address_no}` : '',
-			household.village_no ? `หมู่ ${household.village_no}` : '',
+			household.village_no || '',
 			household.subdistrict ? `ต.${household.subdistrict}` : '',
 			household.district ? `อ.${household.district}` : '',
 			household.province ? `จ.${household.province}` : '',
@@ -272,19 +275,21 @@
 		</div>
 
 		<!-- 6. Submit Button (Desktop Access) -->
-		<div class="pt-2">
-			<Button
-				type="submit"
-				disabled={pending || submitDisabled}
-				class="h-11 w-full gap-2 rounded-xl text-sm font-semibold shadow-xs"
-			>
-				{#if pending}
-					<Loader2 class="size-4 animate-spin" />
-					{submittingLabel}
-				{:else}
-					{submitLabel}
-				{/if}
-			</Button>
-		</div>
+		{#if showSubmit}
+			<div class="pt-2">
+				<Button
+					type="submit"
+					disabled={pending || submitDisabled}
+					class="h-11 w-full gap-2 rounded-xl text-sm font-semibold shadow-xs"
+				>
+					{#if pending}
+						<Loader2 class="size-4 animate-spin" />
+						{submittingLabel}
+					{:else}
+						{submitLabel}
+					{/if}
+				</Button>
+			</div>
+		{/if}
 	</div>
 </div>

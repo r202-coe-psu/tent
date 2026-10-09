@@ -13,10 +13,18 @@
 		class: className,
 		portalProps,
 		children,
+		closeDisabled = false,
 		...restProps
 	}: WithoutChildrenOrChild<DialogPrimitive.ContentProps> & {
 		portalProps?: WithoutChildrenOrChild<ComponentProps<typeof DialogPortal>>;
 		children: Snippet;
+		/**
+		 * Disables (without hiding) the built-in header close button — e.g. while a
+		 * caller's own mutation is pending or in an irreversible forward-recovery state.
+		 * Does not affect Escape or outside-interaction dismissal; callers that need those
+		 * blocked too should wire onEscapeKeydown / onInteractOutside independently.
+		 */
+		closeDisabled?: boolean;
 	} = $props();
 </script>
 
@@ -32,7 +40,7 @@
 		{...restProps}
 	>
 		{@render children?.()}
-		<DialogPrimitive.Close data-slot="dialog-close">
+		<DialogPrimitive.Close data-slot="dialog-close" disabled={closeDisabled}>
 			{#snippet child({ props })}
 				<Button variant="ghost" class="absolute top-2 right-2" size="icon-sm" {...props}>
 					<XIcon />

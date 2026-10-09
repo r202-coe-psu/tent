@@ -30,6 +30,15 @@
 		district = $bindable(''),
 		province = $bindable(''),
 		postal_code = $bindable(''),
+		dorm_name = $bindable<string | null | undefined>(null),
+		dorm_building = $bindable<string | null | undefined>(null),
+		dorm_floor = $bindable<string | null | undefined>(null),
+		dorm_room = $bindable<string | null | undefined>(null),
+		/**
+		 * CR-148: split dorm residences into dorm / building / floor / room. Only enable where
+		 * the caller persists `dorm_*` — otherwise the legacy「เลขห้อง」field stays.
+		 */
+		dormFields = false,
 		disabled = false,
 		required = false,
 		loadMasterHousingTypes = true,
@@ -43,6 +52,11 @@
 		district?: string;
 		province?: string;
 		postal_code?: string;
+		dorm_name?: string | null;
+		dorm_building?: string | null;
+		dorm_floor?: string | null;
+		dorm_room?: string | null;
+		dormFields?: boolean;
 		disabled?: boolean;
 		required?: boolean;
 		/**
@@ -59,6 +73,8 @@
 			district?: string;
 			province?: string;
 			postal_code?: string;
+			dorm_name?: string;
+			dorm_room?: string;
 		};
 	} = $props();
 
@@ -161,6 +177,11 @@
 	const isHomeless = $derived(housing_type === 'homeless');
 	const isApartmentDorm = $derived(housing_type === 'apartment_dorm');
 	const isCondo = $derived(housing_type === 'condo');
+	const showDorm = $derived(dormFields && isApartmentDorm);
+
+	function dormInput(setter: (value: string) => void) {
+		return (e: Event) => setter((e.currentTarget as HTMLInputElement).value);
+	}
 
 	const addressNoLabel = $derived(
 		isApartmentDorm ? t.addressNoApartmentLabel : isCondo ? t.addressNoCondoLabel : t.addressNoLabel
@@ -173,29 +194,53 @@
 				: t.addressNoPlaceholder
 	);
 	const landmarkLabel = $derived(
-		isApartmentDorm
-			? t.landmarkLabelApartment
-			: isCondo
-				? t.landmarkLabelCondo
-				: t.landmarkLabelDefault
+		showDorm
+			? t.landmarkLabelDefault
+			: isApartmentDorm
+				? t.landmarkLabelApartment
+				: isCondo
+					? t.landmarkLabelCondo
+					: t.landmarkLabelDefault
 	);
 	const landmarkPlaceholder = $derived(
 		isHomeless
 			? t.landmarkPlaceholderHomeless
-			: isApartmentDorm
-				? t.landmarkPlaceholderApartment
-				: isCondo
-					? t.landmarkPlaceholderCondo
-					: t.landmarkPlaceholderDefault
+			: showDorm
+				? t.landmarkPlaceholderDefault
+				: isApartmentDorm
+					? t.landmarkPlaceholderApartment
+					: isCondo
+						? t.landmarkPlaceholderCondo
+						: t.landmarkPlaceholderDefault
 	);
 
 	const addressRequired = $derived(required && !isHomeless);
+
+	/** The "address incomplete" message is one error for house no. + province + district + subdistrict. */
+	const AREA_ERROR_ID = 'address-area-error';
+	const areaError = $derived(errors?.address_no ?? '');
+	const showAddressNoInput = $derived(!isHomeless && !showDorm);
+	const provinceInvalid = $derived(!!errors?.province || (!!areaError && !province));
+	const districtInvalid = $derived(!!errors?.district || (!!areaError && !district));
+	const subdistrictInvalid = $derived(!!errors?.subdistrict || (!!areaError && !subdistrict));
+
+	/** `aria-describedby` for a field: its own message, or the shared area message while it is empty. */
+	function areaDescribedBy(
+		own: string | undefined,
+		id: string,
+		empty: boolean
+	): string | undefined {
+		if (own) return id;
+		return areaError && empty ? AREA_ERROR_ID : undefined;
+	}
 	const hasLocation = $derived(Boolean(province || district || subdistrict || postal_code));
 
 	let isLocating = $state(false);
 
 	const selectTriggerClass =
-		"flex !h-9 w-full items-start rounded-md border border-input bg-white px-3 !pt-1.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground dark:bg-input/30 [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4";
+		"flex !h-11 w-full items-start rounded-md border border-input bg-white px-3 !pt-2.5 text-sm font-medium shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-placeholder:text-muted-foreground sm:!h-9 sm:!pt-1.5 dark:bg-input/30 [&_svg]:self-center [&_svg:not([class*='size-'])]:size-4";
+
+	const touchInputClass = 'min-h-11 h-11 sm:h-9 sm:min-h-9';
 
 	// Hide + clear house number when homeless (#249 Q5) — field must not linger in form state.
 	$effect(() => {
@@ -304,7 +349,12 @@
 				}
 				{disabled}
 			>
-				<Select.Trigger id="housing-type" class={selectTriggerClass}>
+				<Select.Trigger
+					id="housing-type"
+					class={selectTriggerClass}
+					aria-invalid={!!errors?.housing_type}
+					aria-describedby={errors?.housing_type ? 'housing-type-error' : undefined}
+				>
 					{housingTypeTriggerLabel}
 				</Select.Trigger>
 				<Select.Content>
@@ -314,7 +364,7 @@
 				</Select.Content>
 			</Select.Root>
 			{#if errors?.housing_type}
-				<p class="text-2xs text-destructive">{errors.housing_type}</p>
+				<p id="housing-type-error" class="text-2xs text-destructive">{errors.housing_type}</p>
 			{/if}
 		</div>
 
@@ -330,17 +380,89 @@
 				bind:value={residence_landmark}
 				{disabled}
 				placeholder={landmarkPlaceholder}
-				class="h-9"
+				aria-invalid={!!errors?.residence_landmark}
+				aria-describedby={errors?.residence_landmark ? 'residence-landmark-error' : undefined}
+				class={touchInputClass}
 			/>
 			{#if errors?.residence_landmark}
-				<p class="text-2xs text-destructive">{errors.residence_landmark}</p>
+				<p id="residence-landmark-error" class="text-2xs text-destructive">
+					{errors.residence_landmark}
+				</p>
 			{/if}
 		</div>
 	</div>
 
-	<!-- Street / house details — hide address_no when homeless (#249 Q5) -->
+	{#if showDorm}
+		<!-- CR-148: dorm residence — address_no is composed from these on save -->
+		<div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+			<div class="col-span-2 space-y-1.5">
+				<Label for="dorm-name" class="text-xs font-semibold text-foreground">
+					{t.dormNameLabel} <span class="text-destructive">*</span>
+				</Label>
+				<Input
+					id="dorm-name"
+					value={dorm_name ?? ''}
+					oninput={dormInput((v) => (dorm_name = v))}
+					{disabled}
+					placeholder={t.dormNamePlaceholder}
+					aria-invalid={!!errors?.dorm_name}
+					aria-describedby={errors?.dorm_name ? 'dorm-name-error' : undefined}
+					class={touchInputClass}
+				/>
+				{#if errors?.dorm_name}
+					<p id="dorm-name-error" class="text-2xs text-destructive">{errors.dorm_name}</p>
+				{/if}
+			</div>
+			<div class="space-y-1.5">
+				<Label for="dorm-building" class="text-xs font-semibold text-foreground">
+					{t.dormBuildingLabel}
+				</Label>
+				<Input
+					id="dorm-building"
+					value={dorm_building ?? ''}
+					oninput={dormInput((v) => (dorm_building = v))}
+					{disabled}
+					placeholder={t.dormBuildingPlaceholder}
+					class={touchInputClass}
+				/>
+			</div>
+			<div class="space-y-1.5">
+				<Label for="dorm-floor" class="text-xs font-semibold text-foreground">
+					{t.dormFloorLabel}
+				</Label>
+				<Input
+					id="dorm-floor"
+					value={dorm_floor ?? ''}
+					oninput={dormInput((v) => (dorm_floor = v))}
+					{disabled}
+					placeholder={t.dormFloorPlaceholder}
+					class={touchInputClass}
+				/>
+			</div>
+			<div class="space-y-1.5">
+				<Label for="dorm-room" class="text-xs font-semibold text-foreground">
+					{t.dormRoomLabel} <span class="text-destructive">*</span>
+				</Label>
+				<Input
+					id="dorm-room"
+					value={dorm_room ?? ''}
+					oninput={dormInput((v) => (dorm_room = v))}
+					{disabled}
+					placeholder={t.dormRoomPlaceholder}
+					aria-invalid={!!errors?.dorm_room}
+					aria-describedby={errors?.dorm_room ? 'dorm-room-error' : undefined}
+					class={touchInputClass}
+				/>
+				{#if errors?.dorm_room}
+					<p id="dorm-room-error" class="text-2xs text-destructive">{errors.dorm_room}</p>
+				{/if}
+			</div>
+		</div>
+	{/if}
+
+	<!-- Street / house details — hide address_no when homeless (#249 Q5) or dorm (CR-148) -->
 	<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-		{#if !isHomeless}
+		{#if showAddressNoInput}
 			<div class="space-y-1.5">
 				<Label for="address-no" class="text-xs font-semibold text-foreground">
 					{addressNoLabel}
@@ -351,10 +473,12 @@
 					bind:value={address_no}
 					{disabled}
 					placeholder={addressNoPlaceholder}
-					class="h-9"
+					aria-invalid={!!areaError}
+					aria-describedby={areaError ? AREA_ERROR_ID : undefined}
+					class={touchInputClass}
 				/>
-				{#if errors?.address_no}
-					<p class="text-2xs text-destructive">{errors.address_no}</p>
+				{#if areaError}
+					<p id={AREA_ERROR_ID} class="text-2xs text-destructive">{areaError}</p>
 				{/if}
 			</div>
 		{/if}
@@ -368,10 +492,12 @@
 				bind:value={village_no}
 				{disabled}
 				placeholder={t.villageNoPlaceholder}
-				class="h-9"
+				aria-invalid={!!errors?.village_no}
+				aria-describedby={errors?.village_no ? 'village-no-error' : undefined}
+				class={touchInputClass}
 			/>
 			{#if errors?.village_no}
-				<p class="text-2xs text-destructive">{errors.village_no}</p>
+				<p id="village-no-error" class="text-2xs text-destructive">{errors.village_no}</p>
 			{/if}
 		</div>
 	</div>
@@ -410,6 +536,10 @@
 			</div>
 		</div>
 
+		{#if areaError && !showAddressNoInput}
+			<p id={AREA_ERROR_ID} class="text-2xs text-destructive">{areaError}</p>
+		{/if}
+
 		<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 			<!-- Province -->
 			<div class="space-y-1.5">
@@ -426,11 +556,15 @@
 					emptyText={provincesQuery.isError ? t.provinceLoadFail : t.provinceEmpty}
 					loading={provincesQuery.isLoading}
 					{disabled}
-					class="!h-9 rounded-md text-sm"
-					controlProps={{ id: 'province' }}
+					class="!h-11 rounded-md text-sm sm:!h-9 {provinceInvalid ? 'border-destructive' : ''}"
+					controlProps={{
+						id: 'province',
+						'aria-invalid': provinceInvalid,
+						'aria-describedby': areaDescribedBy(errors?.province, 'province-error', !province)
+					}}
 				/>
 				{#if errors?.province}
-					<p class="text-2xs text-destructive">{errors.province}</p>
+					<p id="province-error" class="text-2xs text-destructive">{errors.province}</p>
 				{/if}
 			</div>
 
@@ -449,11 +583,15 @@
 					emptyText={districtsQuery.isError ? t.districtLoadFail : t.districtEmpty}
 					loading={districtsQuery.isLoading}
 					disabled={disabled || !province}
-					class="!h-9 rounded-md text-sm"
-					controlProps={{ id: 'district' }}
+					class="!h-11 rounded-md text-sm sm:!h-9 {districtInvalid ? 'border-destructive' : ''}"
+					controlProps={{
+						id: 'district',
+						'aria-invalid': districtInvalid,
+						'aria-describedby': areaDescribedBy(errors?.district, 'district-error', !district)
+					}}
 				/>
 				{#if errors?.district}
-					<p class="text-2xs text-destructive">{errors.district}</p>
+					<p id="district-error" class="text-2xs text-destructive">{errors.district}</p>
 				{/if}
 			</div>
 
@@ -472,11 +610,19 @@
 					emptyText={subdistrictsQuery.isError ? t.subdistrictLoadFail : t.subdistrictEmpty}
 					loading={subdistrictsQuery.isLoading}
 					disabled={disabled || !district}
-					class="!h-9 rounded-md text-sm"
-					controlProps={{ id: 'subdistrict' }}
+					class="!h-11 rounded-md text-sm sm:!h-9 {subdistrictInvalid ? 'border-destructive' : ''}"
+					controlProps={{
+						id: 'subdistrict',
+						'aria-invalid': subdistrictInvalid,
+						'aria-describedby': areaDescribedBy(
+							errors?.subdistrict,
+							'subdistrict-error',
+							!subdistrict
+						)
+					}}
 				/>
 				{#if errors?.subdistrict}
-					<p class="text-2xs text-destructive">{errors.subdistrict}</p>
+					<p id="subdistrict-error" class="text-2xs text-destructive">{errors.subdistrict}</p>
 				{/if}
 			</div>
 
@@ -490,8 +636,10 @@
 					id="postal_code"
 					bind:value={postal_code}
 					disabled
+					inputmode="numeric"
+					autocomplete="postal-code"
 					placeholder={!subdistrict ? t.postalNeedsSubdistrict : t.postalFilling}
-					class="h-9 bg-muted/50 text-sm"
+					class="{touchInputClass} bg-muted/50 text-sm"
 				/>
 				{#if errors?.postal_code}
 					<p class="text-2xs text-destructive">{errors.postal_code}</p>

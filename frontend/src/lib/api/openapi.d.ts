@@ -205,46 +205,6 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
-	'/external/v1/shelters': {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		/**
-		 * ดึงรายการศูนย์พักพิง (get-list-shelter)
-		 * @description ดึงรายการศูนย์พักพิงสำหรับระบบภายนอก (M2).
-		 */
-		get: operations['list_shelters_external_v1_shelters_get'];
-		put?: never;
-		post?: never;
-		delete?: never;
-		options?: never;
-		head?: never;
-		patch?: never;
-		trace?: never;
-	};
-	'/external/v1/persons/shelter-residency': {
-		parameters: {
-			query?: never;
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		/**
-		 * ตรวจสอบสถานะการเข้าพัก (get-person-shelter-residency)
-		 * @description ตรวจสอบสถานะการเข้าพักศูนย์พักพิงของผู้ประสบภัยจากเลขประจำตัวประชาชน (CID).
-		 */
-		get: operations['get_person_shelter_residency_external_v1_persons_shelter_residency_get'];
-		put?: never;
-		post?: never;
-		delete?: never;
-		options?: never;
-		head?: never;
-		patch?: never;
-		trace?: never;
-	};
 	'/external/v1/shelters/{code}': {
 		parameters: {
 			query?: never;
@@ -425,6 +385,57 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/external/bookings': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Create Booking */
+		post: operations['create_booking_external_bookings_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/external/bookings/{booking_id}/cancel': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/** Cancel Booking */
+		post: operations['cancel_booking_external_bookings__booking_id__cancel_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/external/bookings/{booking_id}': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** Get Booking */
+		get: operations['get_booking_external_bookings__booking_id__get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/v1/admin/thirdparty-clients': {
 		parameters: {
 			query?: never;
@@ -454,6 +465,27 @@ export interface paths {
 		put?: never;
 		/** Revoke Client */
 		post: operations['revoke_client_v1_admin_thirdparty_clients__client_row_id__revoke_post'];
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/v1/admin/thirdparty-clients/{client_row_id}/regenerate-secret': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		get?: never;
+		put?: never;
+		/**
+		 * Regenerate Client Secret
+		 * @description Issue a new secret for this `client_id`, invalidating the old one immediately.
+		 *     Refused (409) once the client is revoked — same as scope edits.
+		 */
+		post: operations['regenerate_client_secret_v1_admin_thirdparty_clients__client_row_id__regenerate_secret_post'];
 		delete?: never;
 		options?: never;
 		head?: never;
@@ -491,12 +523,7 @@ export interface paths {
 			path?: never;
 			cookie?: never;
 		};
-		/**
-		 * Reveal Client Secret
-		 * @description Decrypt and return the plaintext secret. The BFF gates this behind the caller
-		 *     re-entering their own CouchDB password — this endpoint itself only enforces the
-		 *     same `EXTERNAL_API_SECRET` bearer as every other route on this router.
-		 */
+		/** Reveal Client Secret */
 		get: operations['reveal_client_secret_v1_admin_thirdparty_clients__client_row_id__secret_get'];
 		put?: never;
 		post?: never;
@@ -566,6 +593,23 @@ export interface paths {
 		};
 		/** Get Location Occupants */
 		get: operations['get_location_occupants_external_locations__location_code__occupants_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/external/persons/shelter-residency': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/** Get Person Shelter Residency */
+		get: operations['get_person_shelter_residency_external_persons_shelter_residency_get'];
 		put?: never;
 		post?: never;
 		delete?: never;
@@ -688,6 +732,26 @@ export interface paths {
 		patch?: never;
 		trace?: never;
 	};
+	'/public/v1/unassigned-registrations/{registration_id}/status': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * Get Unassigned Registration Status
+		 * @description Service-to-service ticket status (BFF sync) — status + counts only, no PII.
+		 */
+		get: operations['get_unassigned_registration_status_public_v1_unassigned_registrations__registration_id__status_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
 	'/staff/v1/unassigned-registrations/search': {
 		parameters: {
 			query?: never;
@@ -743,6 +807,46 @@ export interface paths {
 		 * @description SA-only paginated open Unassigned Registrations (system overview PII).
 		 */
 		get: operations['list_unassigned_registrations_staff_v1_unassigned_registrations_get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/staff/v1/unassigned-registrations/photos/{photo_id}': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * Get Unassigned Registration Photo
+		 * @description Staff-only photo read (CR-140 addendum) — only if still referenced by an open row.
+		 */
+		get: operations['get_unassigned_registration_photo_staff_v1_unassigned_registrations_photos__photo_id__get'];
+		put?: never;
+		post?: never;
+		delete?: never;
+		options?: never;
+		head?: never;
+		patch?: never;
+		trace?: never;
+	};
+	'/staff/v1/unassigned-registrations/{registration_id}/review': {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		/**
+		 * Review Unassigned Registration
+		 * @description Read-only pre-claim review (CR-140 addendum) — open rows only, writes nothing.
+		 */
+		get: operations['review_unassigned_registration_staff_v1_unassigned_registrations__registration_id__review_get'];
 		put?: never;
 		post?: never;
 		delete?: never;
@@ -1154,6 +1258,143 @@ export interface components {
 			/** Thumbnail Size */
 			thumbnail_size?: number | null;
 		};
+		/** BookingCancelRequest */
+		BookingCancelRequest: {
+			/**
+			 * Reason
+			 * @description เหตุผลการยกเลิก (≤200 ตัวอักษร)
+			 */
+			reason?: string | null;
+		};
+		/** BookingCancelledEnvelope */
+		BookingCancelledEnvelope: {
+			/**
+			 * Status
+			 * @default 200
+			 */
+			status: number;
+			/**
+			 * Message
+			 * @default Booking cancelled.
+			 */
+			message: string;
+			result: components['schemas']['BookingCancelledResult'];
+		};
+		/** BookingCancelledResult */
+		BookingCancelledResult: {
+			/** Booking Id */
+			booking_id: string;
+			/**
+			 * Booking Status
+			 * @default CANCELLED
+			 * @enum {string}
+			 */
+			booking_status: 'BOOKED' | 'CANCELLED' | 'REJECTED';
+		};
+		/** BookingCreateRequest */
+		BookingCreateRequest: {
+			/**
+			 * Location Code
+			 * @description รหัสศูนย์พักพิง (EXT-002)
+			 */
+			location_code?: string | null;
+			/**
+			 * Cid
+			 * @description เลขประจำตัวประชาชน 13 หลัก
+			 */
+			cid?: string | null;
+			/**
+			 * First Name
+			 * @description ชื่อ
+			 */
+			first_name?: string | null;
+			/**
+			 * Last Name
+			 * @description นามสกุล
+			 */
+			last_name?: string | null;
+			/**
+			 * Phone
+			 * @description เบอร์โทรศัพท์ (รับ +66)
+			 */
+			phone?: string | null;
+		};
+		/** BookingCreatedEnvelope */
+		BookingCreatedEnvelope: {
+			/**
+			 * Status
+			 * @default 201
+			 */
+			status: number;
+			/**
+			 * Message
+			 * @default Booking accepted.
+			 */
+			message: string;
+			result: components['schemas']['BookingCreatedResult'];
+		};
+		/** BookingCreatedResult */
+		BookingCreatedResult: {
+			/** Booking Id */
+			booking_id: string;
+			/** Location Code */
+			location_code: string;
+			/**
+			 * Booking Status
+			 * @default BOOKED
+			 * @enum {string}
+			 */
+			booking_status: 'BOOKED' | 'CANCELLED' | 'REJECTED';
+		};
+		/** BookingErrorResponse */
+		BookingErrorResponse: {
+			/** Status */
+			status: number;
+			/** Message */
+			message: string;
+			/** Code */
+			code?: string | null;
+			/** Detail */
+			detail?: string | null;
+		};
+		/** BookingStatusEnvelope */
+		BookingStatusEnvelope: {
+			/**
+			 * Status
+			 * @default 200
+			 */
+			status: number;
+			/**
+			 * Message
+			 * @default Found Data.
+			 */
+			message: string;
+			result: components['schemas']['BookingStatusResult'];
+		};
+		/** BookingStatusResult */
+		BookingStatusResult: {
+			/** Booking Id */
+			booking_id: string;
+			/** Location Code */
+			location_code: string;
+			/**
+			 * Booking Status
+			 * @enum {string}
+			 */
+			booking_status: 'BOOKED' | 'CANCELLED' | 'REJECTED';
+			/** Reject Reason */
+			reject_reason?: string | null;
+			/**
+			 * Created At
+			 * @description ISO 8601 (+07:00)
+			 */
+			created_at: string;
+			/**
+			 * Updated At
+			 * @description ISO 8601 (+07:00)
+			 */
+			updated_at: string;
+		};
 		/** ClaimedMemberOut */
 		ClaimedMemberOut: {
 			/** Reserved Evacuee Id */
@@ -1168,6 +1409,27 @@ export interface components {
 			first_name: string;
 			/** Last Name */
 			last_name: string;
+		};
+		/** ClaimedPetOut */
+		ClaimedPetOut: {
+			/** Pet Id */
+			pet_id: string;
+			/**
+			 * Status
+			 * @default claimed
+			 * @constant
+			 */
+			status: 'claimed';
+			/**
+			 * Species
+			 * @enum {string}
+			 */
+			species: 'dog' | 'cat' | 'other';
+			/**
+			 * Count
+			 * @default 1
+			 */
+			count: number;
 		};
 		/** ConfigResponse */
 		ConfigResponse: {
@@ -1477,6 +1739,14 @@ export interface components {
 				('owned_house' | 'rented_house' | 'condo' | 'apartment_dorm' | 'homeless') | null;
 			/** Residence Landmark */
 			residence_landmark?: string | null;
+			/** Dorm Name */
+			dorm_name?: string | null;
+			/** Dorm Building */
+			dorm_building?: string | null;
+			/** Dorm Floor */
+			dorm_floor?: string | null;
+			/** Dorm Room */
+			dorm_room?: string | null;
 			/** Address No */
 			address_no?: string | null;
 			/** Village No */
@@ -1501,6 +1771,14 @@ export interface components {
 			housing_type?: string | null;
 			/** Residence Landmark */
 			residence_landmark?: string | null;
+			/** Dorm Name */
+			dorm_name?: string | null;
+			/** Dorm Building */
+			dorm_building?: string | null;
+			/** Dorm Floor */
+			dorm_floor?: string | null;
+			/** Dorm Room */
+			dorm_room?: string | null;
 			/** Address No */
 			address_no?: string | null;
 			/** Village No */
@@ -1516,6 +1794,8 @@ export interface components {
 			geo?: components['schemas']['GeoPoint'] | null;
 			/** Label */
 			label?: string | null;
+			/** Pets */
+			pets?: components['schemas']['PetCreated'][];
 		};
 		/** JobShiftTemplate */
 		JobShiftTemplate: {
@@ -1741,81 +2021,6 @@ export interface components {
 			/** Items */
 			items: components['schemas']['StockItem'][];
 		};
-		/** M2ErrorDetail */
-		M2ErrorDetail: {
-			/** Code */
-			code: string;
-			/** Message */
-			message: string;
-		};
-		/** M2ErrorResponse */
-		M2ErrorResponse: {
-			error: components['schemas']['M2ErrorDetail'];
-		};
-		/** M2PersonResidencyResponse */
-		M2PersonResidencyResponse: {
-			/**
-			 * Shelter Id
-			 * @description รหัสศูนย์พักพิง
-			 */
-			shelter_id: string;
-			/**
-			 * Shelter Name
-			 * @description ชื่อศูนย์พักพิง
-			 */
-			shelter_name: string;
-			/**
-			 * Checkin Datetime
-			 * @description วันเวลาที่เช็คอิน (ISO 8601 พร้อม timezone เช่น 2026-08-20T14:30:00+07:00)
-			 */
-			checkin_datetime: string;
-			/**
-			 * Status
-			 * @description สถานะการเข้าพัก
-			 * @enum {string}
-			 */
-			status: 'CHECKED_IN' | 'CHECKED_OUT';
-			/**
-			 * Stay Status
-			 * @description สถานะ stay ดิบจาก projection (CR-112 additive)
-			 */
-			stay_status: string;
-			/**
-			 * In Zone
-			 * @description True เมื่อยืนยันถึงโซนแล้ว (room_confirmed)
-			 */
-			in_zone: boolean;
-		};
-		/** M2ShelterItem */
-		M2ShelterItem: {
-			/**
-			 * Shelter Id
-			 * @description รหัสศูนย์พักพิง เช่น SH001
-			 */
-			shelter_id: string;
-			/**
-			 * Shelter Name
-			 * @description ชื่อศูนย์พักพิง
-			 */
-			shelter_name: string;
-			/**
-			 * Site Kind
-			 * @description ชนิดสถานที่
-			 * @default evacuation_center
-			 * @enum {string}
-			 */
-			site_kind: 'evacuation_center' | 'host_house';
-			/**
-			 * Lat
-			 * @description พิกัดละติจูด (WGS 84)
-			 */
-			lat?: number | null;
-			/**
-			 * Long
-			 * @description พิกัดลองจิจูด (WGS 84)
-			 */
-			long?: number | null;
-		};
 		/** MemberCreated */
 		MemberCreated: {
 			/** Reserved Evacuee Id */
@@ -1848,6 +2053,10 @@ export interface components {
 			nickname?: string | null;
 			/** Religion */
 			religion?: string | null;
+			/** Religion Other */
+			religion_other?: string | null;
+			/** Disability Other Detail */
+			disability_other_detail?: string | null;
 			emergency_contact?: components['schemas']['EmergencyContactOut'] | null;
 			/** Photo */
 			photo?: string | null;
@@ -1862,10 +2071,10 @@ export interface components {
 			 */
 			last_name: string;
 			/**
-			 * Gender
-			 * @enum {string}
+			 * Gender — `null` = ไม่ระบุ
+			 * @enum {string|null}
 			 */
-			gender: 'male' | 'female' | 'other';
+			gender: 'male' | 'female' | 'other' | null;
 			/** Phone */
 			phone?: string | null;
 			person_id?: components['schemas']['PersonIdInput'] | null;
@@ -1886,6 +2095,10 @@ export interface components {
 			nickname?: string | null;
 			/** Religion */
 			religion?: string | null;
+			/** Religion Other */
+			religion_other?: string | null;
+			/** Disability Other Detail */
+			disability_other_detail?: string | null;
 			emergency_contact?: components['schemas']['EmergencyContactInput'] | null;
 			/** Photo */
 			photo?: string | null;
@@ -2041,6 +2254,10 @@ export interface components {
 			nickname?: string | null;
 			/** Religion */
 			religion?: string | null;
+			/** Religion Other */
+			religion_other?: string | null;
+			/** Disability Other Detail */
+			disability_other_detail?: string | null;
 			emergency_contact?: components['schemas']['EmergencyContactOut'] | null;
 			/** Photo */
 			photo?: string | null;
@@ -2048,6 +2265,39 @@ export interface components {
 			birth_year?: number | null;
 			/** Age */
 			age?: number | null;
+		};
+		/**
+		 * OpenPetHit
+		 * @description Open pet surfaced by staff search/detail — claimable.
+		 */
+		OpenPetHit: {
+			/** Pet Id */
+			pet_id: string;
+			/**
+			 * Status
+			 * @default open
+			 * @constant
+			 */
+			status: 'open';
+			/**
+			 * Species
+			 * @enum {string}
+			 */
+			species: 'dog' | 'cat' | 'other';
+			/**
+			 * Count
+			 * @default 1
+			 */
+			count: number;
+			/** Notes */
+			notes?: string | null;
+			/**
+			 * Has Cage
+			 * @default false
+			 */
+			has_cage: boolean;
+			/** Image Url */
+			image_url?: string | null;
 		};
 		/** PaginatedAnnouncements */
 		PaginatedAnnouncements: {
@@ -2096,6 +2346,41 @@ export interface components {
 			cardType: 'national_id' | 'passport' | 'pink_card' | 'other' | 'anonymous';
 			/** Number */
 			number?: string | null;
+		};
+		/** PetCreated */
+		PetCreated: {
+			/** Pet Id */
+			pet_id: string;
+			/**
+			 * Status
+			 * @enum {string}
+			 */
+			status: 'open' | 'claimed' | 'cancelled';
+			/**
+			 * Species
+			 * @enum {string}
+			 */
+			species: 'dog' | 'cat' | 'other';
+			/**
+			 * Count
+			 * @default 1
+			 */
+			count: number;
+			/** Notes */
+			notes?: string | null;
+			/**
+			 * Has Cage
+			 * @default false
+			 */
+			has_cage: boolean;
+			/** Image Url */
+			image_url?: string | null;
+			/** Claimed Shelter Code */
+			claimed_shelter_code?: string | null;
+			/** Claimed At */
+			claimed_at?: string | null;
+			/** Claimed By */
+			claimed_by?: string | null;
 		};
 		/** PetInput */
 		PetInput: {
@@ -2260,6 +2545,64 @@ export interface components {
 			 * @default 0
 			 */
 			applicants_count: number;
+		};
+		/** ResidencyEnvelope */
+		ResidencyEnvelope: {
+			/**
+			 * Status
+			 * @default 200
+			 */
+			status: number;
+			/**
+			 * Message
+			 * @default Found Data.
+			 */
+			message: string;
+			result: components['schemas']['ResidencyItem'];
+		};
+		/** ResidencyErrorResponse */
+		ResidencyErrorResponse: {
+			/** Status */
+			status: number;
+			/** Message */
+			message: string;
+			/** Code */
+			code?: string | null;
+			/** Detail */
+			detail?: string | null;
+		};
+		/** ResidencyItem */
+		ResidencyItem: {
+			/**
+			 * Location Code
+			 * @description รหัสศูนย์พักพิง (ตรงกับ EXT-002)
+			 */
+			location_code: string;
+			/**
+			 * Name Th
+			 * @description ชื่อศูนย์พักพิง
+			 */
+			name_th: string;
+			/**
+			 * Checkin Datetime
+			 * @description วันเวลาเข้าพัก ISO 8601 (+07:00)
+			 */
+			checkin_datetime: string;
+			/**
+			 * Residency Status
+			 * @enum {string}
+			 */
+			residency_status: 'CHECKED_IN' | 'CHECKED_OUT';
+			/**
+			 * Stay Status
+			 * @description สถานะ stay ดิบจาก projection
+			 */
+			stay_status: string;
+			/**
+			 * In Zone
+			 * @description True เมื่อยืนยันถึงโซนแล้ว (room_confirmed)
+			 */
+			in_zone: boolean;
 		};
 		/**
 		 * ScheduleActionRequest
@@ -2557,6 +2900,12 @@ export interface components {
 			 * @default false
 			 */
 			accepts_pre_registration: boolean;
+			/** Readiness Status */
+			readiness_status?: string | null;
+			/** Readiness Tier */
+			readiness_tier?: string | null;
+			/** Readiness Assessed At */
+			readiness_assessed_at?: string | null;
 			/**
 			 * Updated At
 			 * Format: date-time
@@ -2698,7 +3047,7 @@ export interface components {
 			/** Description */
 			description?: string | null;
 			/** Module Name */
-			module_name: string;
+			module_name?: string | null;
 			/** Allowed Scopes */
 			allowed_scopes: string[];
 		};
@@ -2716,7 +3065,7 @@ export interface components {
 			/** Description */
 			description: string | null;
 			/** Module Name */
-			module_name: string;
+			module_name: string | null;
 			/** Allowed Scopes */
 			allowed_scopes: string[];
 			/** Is Active */
@@ -2766,7 +3115,7 @@ export interface components {
 			/** Description */
 			description: string | null;
 			/** Module Name */
-			module_name: string;
+			module_name: string | null;
 			/** Allowed Scopes */
 			allowed_scopes: string[];
 			/** Is Active */
@@ -2793,11 +3142,7 @@ export interface components {
 			success: boolean;
 			client: components['schemas']['ThirdPartyClientPublic'];
 		};
-		/**
-		 * ThirdPartyClientSecretResponse
-		 * @description Decrypted plaintext secret — ``GET .../secret``, gated upstream by the BFF's
-		 *     own-password re-auth (CR-136).
-		 */
+		/** ThirdPartyClientSecretResponse */
 		ThirdPartyClientSecretResponse: {
 			/** Client Secret */
 			client_secret: string;
@@ -2930,7 +3275,7 @@ export interface components {
 			/** Expires In */
 			expires_in: number;
 			/** Module Name */
-			module_name: string;
+			module_name: string | null;
 			/** Scopes */
 			scopes: string[];
 		};
@@ -3001,11 +3346,13 @@ export interface components {
 		};
 		/**
 		 * UnassignedRegistrationClaimRequest
-		 * @description Staff claim — body selects open member reserved ids (CR-113 / #247).
+		 * @description Staff claim — open members and/or pets (draft-persistent-unassigned-family).
 		 */
 		UnassignedRegistrationClaimRequest: {
 			/** Member Ids */
-			member_ids: string[];
+			member_ids?: string[];
+			/** Pet Ids */
+			pet_ids?: string[];
 			/** Shelter Code */
 			shelter_code?: string | null;
 		};
@@ -3018,7 +3365,10 @@ export interface components {
 			success: boolean;
 			/** Id */
 			id: string | null;
-			/** Deleted */
+			/**
+			 * Deleted
+			 * @default false
+			 */
 			deleted: boolean;
 			/** Shelter Code */
 			shelter_code: string;
@@ -3028,8 +3378,12 @@ export interface components {
 			evacuee_ids: string[];
 			/** Claimed */
 			claimed: components['schemas']['ClaimedMemberOut'][];
+			/** Claimed Pets */
+			claimed_pets?: components['schemas']['ClaimedPetOut'][];
 			/** Remaining Open */
 			remaining_open: components['schemas']['OpenMemberHit'][];
+			/** Remaining Open Pets */
+			remaining_open_pets?: components['schemas']['OpenPetHit'][];
 		};
 		/** UnassignedRegistrationCreateRequest */
 		UnassignedRegistrationCreateRequest: {
@@ -3044,7 +3398,7 @@ export interface components {
 			registered_via: 'web' | 'staff';
 			/**
 			 * Join Registration Id
-			 * @description Append members (and pets) into this open registration's reserved household.
+			 * @description Append members (and pets) into this registration's reserved household (allowed even when document status is closed — reopen on append).
 			 */
 			join_registration_id?: string | null;
 		};
@@ -3114,6 +3468,13 @@ export interface components {
 			open_members: components['schemas']['OpenMemberHit'][];
 			/** Open Member Count */
 			open_member_count: number;
+			/** Open Pets */
+			open_pets?: components['schemas']['OpenPetHit'][];
+			/**
+			 * Open Pet Count
+			 * @default 0
+			 */
+			open_pet_count: number;
 		};
 		/** UnassignedRegistrationListResponse */
 		UnassignedRegistrationListResponse: {
@@ -3127,6 +3488,58 @@ export interface components {
 			limit: number;
 			/** Offset */
 			offset: number;
+		};
+		/**
+		 * UnassignedRegistrationReviewResponse
+		 * @description Staff pre-claim review (CR-140 addendum) — open rows only, no write.
+		 *
+		 *     Household carries address fields only (no `pets` — those live in `open_pets`,
+		 *     unlike `HouseholdOut` which embeds every pet with claim status for the SA detail view).
+		 */
+		UnassignedRegistrationReviewResponse: {
+			/** Id */
+			id: string;
+			/** Reserved Household Id */
+			reserved_household_id: string;
+			/**
+			 * Registered Via
+			 * @enum {string}
+			 */
+			registered_via: 'web' | 'staff';
+			/** Status */
+			status: string;
+			/** Created At */
+			created_at: string;
+			/** Housing Type */
+			housing_type?: string | null;
+			/** Residence Landmark */
+			residence_landmark?: string | null;
+			/** Dorm Name */
+			dorm_name?: string | null;
+			/** Dorm Building */
+			dorm_building?: string | null;
+			/** Dorm Floor */
+			dorm_floor?: string | null;
+			/** Dorm Room */
+			dorm_room?: string | null;
+			/** Address No */
+			address_no?: string | null;
+			/** Village No */
+			village_no?: string | null;
+			/** Subdistrict */
+			subdistrict?: string | null;
+			/** District */
+			district?: string | null;
+			/** Province */
+			province?: string | null;
+			/** Postal Code */
+			postal_code?: string | null;
+			/** Label */
+			label?: string | null;
+			/** Open Members */
+			open_members: components['schemas']['OpenMemberHit'][];
+			/** Open Pets */
+			open_pets?: components['schemas']['OpenPetHit'][];
 		};
 		/** UnassignedRegistrationSearchHit */
 		UnassignedRegistrationSearchHit: {
@@ -3145,6 +3558,8 @@ export interface components {
 			created_at: string;
 			/** Open Members */
 			open_members: components['schemas']['OpenMemberHit'][];
+			/** Open Pets */
+			open_pets?: components['schemas']['OpenPetHit'][];
 		};
 		/** UnassignedRegistrationSearchResponse */
 		UnassignedRegistrationSearchResponse: {
@@ -3157,6 +3572,22 @@ export interface components {
 			open_registrations: number;
 			/** Open Members */
 			open_members: number;
+		};
+		/**
+		 * UnassignedRegistrationStatusResponse
+		 * @description Status-only projection for the public BFF ticket sync — no PII (names, ids, phones).
+		 */
+		UnassignedRegistrationStatusResponse: {
+			/** Id */
+			id: string;
+			/** Status */
+			status: string;
+			/** Members Total */
+			members_total: number;
+			/** Members Claimed */
+			members_claimed: number;
+			/** Claimed */
+			claimed: boolean;
 		};
 		/** UnassignedResidenceMatchHit */
 		UnassignedResidenceMatchHit: {
@@ -3927,133 +4358,6 @@ export interface operations {
 			};
 		};
 	};
-	list_shelters_external_v1_shelters_get: {
-		parameters: {
-			query?: {
-				/** @description กรองสถานะ เช่น open */
-				status?: string | null;
-			};
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		requestBody?: never;
-		responses: {
-			/** @description Successful Response */
-			200: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['M2ShelterItem'][];
-				};
-			};
-			/** @description Unauthorized */
-			401: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['M2ErrorResponse'];
-				};
-			};
-			/** @description Forbidden */
-			403: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['M2ErrorResponse'];
-				};
-			};
-			/** @description Validation Error */
-			422: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['HTTPValidationError'];
-				};
-			};
-			/** @description Internal Server Error */
-			500: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['M2ErrorResponse'];
-				};
-			};
-		};
-	};
-	get_person_shelter_residency_external_v1_persons_shelter_residency_get: {
-		parameters: {
-			query: {
-				/** @description เลขประจำตัวประชาชน 13 หลัก */
-				cid: string;
-			};
-			header?: never;
-			path?: never;
-			cookie?: never;
-		};
-		requestBody?: never;
-		responses: {
-			/** @description Successful Response */
-			200: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['M2PersonResidencyResponse'];
-				};
-			};
-			/** @description Unauthorized */
-			401: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['M2ErrorResponse'];
-				};
-			};
-			/** @description Forbidden */
-			403: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['M2ErrorResponse'];
-				};
-			};
-			/** @description Not Found */
-			404: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['M2ErrorResponse'];
-				};
-			};
-			/** @description Unprocessable Content */
-			422: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['M2ErrorResponse'];
-				};
-			};
-			/** @description Internal Server Error */
-			500: {
-				headers: {
-					[name: string]: unknown;
-				};
-				content: {
-					'application/json': components['schemas']['M2ErrorResponse'];
-				};
-			};
-		};
-	};
 	get_shelter_external_v1_shelters__code__get: {
 		parameters: {
 			query?: never;
@@ -4364,6 +4668,213 @@ export interface operations {
 			};
 		};
 	};
+	create_booking_external_bookings_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody: {
+			content: {
+				'application/json': components['schemas']['BookingCreateRequest'];
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			201: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['BookingCreatedEnvelope'];
+				};
+			};
+			/** @description Unauthorized */
+			401: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['BookingErrorResponse'];
+				};
+			};
+			/** @description Forbidden */
+			403: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['BookingErrorResponse'];
+				};
+			};
+			/** @description Not Found */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['BookingErrorResponse'];
+				};
+			};
+			/** @description Conflict */
+			409: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['BookingErrorResponse'];
+				};
+			};
+			/** @description Unprocessable Content */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['BookingErrorResponse'];
+				};
+			};
+		};
+	};
+	cancel_booking_external_bookings__booking_id__cancel_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				booking_id: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: {
+			content: {
+				'application/json': components['schemas']['BookingCancelRequest'] | null;
+			};
+		};
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['BookingCancelledEnvelope'];
+				};
+			};
+			/** @description Unauthorized */
+			401: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['BookingErrorResponse'];
+				};
+			};
+			/** @description Forbidden */
+			403: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['BookingErrorResponse'];
+				};
+			};
+			/** @description Not Found */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['BookingErrorResponse'];
+				};
+			};
+			/** @description Conflict */
+			409: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['BookingErrorResponse'];
+				};
+			};
+			/** @description Unprocessable Content */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['BookingErrorResponse'];
+				};
+			};
+		};
+	};
+	get_booking_external_bookings__booking_id__get: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				booking_id: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['BookingStatusEnvelope'];
+				};
+			};
+			/** @description Unauthorized */
+			401: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['BookingErrorResponse'];
+				};
+			};
+			/** @description Forbidden */
+			403: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['BookingErrorResponse'];
+				};
+			};
+			/** @description Not Found */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['BookingErrorResponse'];
+				};
+			};
+			/** @description Conflict */
+			409: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['BookingErrorResponse'];
+				};
+			};
+			/** @description Unprocessable Content */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['BookingErrorResponse'];
+				};
+			};
+		};
+	};
 	list_clients_v1_admin_thirdparty_clients_get: {
 		parameters: {
 			query?: never;
@@ -4435,6 +4946,37 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['ThirdPartyClientRevokeResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	regenerate_client_secret_v1_admin_thirdparty_clients__client_row_id__regenerate_secret_post: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				client_row_id: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ThirdPartyClientCreateResponse'];
 				};
 			};
 			/** @description Validation Error */
@@ -4728,6 +5270,76 @@ export interface operations {
 			};
 		};
 	};
+	get_person_shelter_residency_external_persons_shelter_residency_get: {
+		parameters: {
+			query?: {
+				/** @description เลขประจำตัวประชาชน 13 หลัก */
+				cid?: string | null;
+				/** @description วัตถุประสงค์การเรียกดู (บังคับ) */
+				purpose?: string | null;
+			};
+			header?: never;
+			path?: never;
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ResidencyEnvelope'];
+				};
+			};
+			/** @description Bad Request */
+			400: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ResidencyErrorResponse'];
+				};
+			};
+			/** @description Unauthorized */
+			401: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ResidencyErrorResponse'];
+				};
+			};
+			/** @description Forbidden */
+			403: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ResidencyErrorResponse'];
+				};
+			};
+			/** @description Not Found */
+			404: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ResidencyErrorResponse'];
+				};
+			};
+			/** @description Unprocessable Content */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['ResidencyErrorResponse'];
+				};
+			};
+		};
+	};
 	get_location_stock_external_locations__location_code__stock_get: {
 		parameters: {
 			query?: never;
@@ -4907,6 +5519,37 @@ export interface operations {
 			};
 		};
 	};
+	get_unassigned_registration_status_public_v1_unassigned_registrations__registration_id__status_get: {
+		parameters: {
+			query?: never;
+			header?: never;
+			path: {
+				registration_id: string;
+			};
+			cookie?: never;
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['UnassignedRegistrationStatusResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
 	search_unassigned_registrations_staff_v1_unassigned_registrations_search_get: {
 		parameters: {
 			query?: {
@@ -5003,6 +5646,76 @@ export interface operations {
 				};
 				content: {
 					'application/json': components['schemas']['UnassignedRegistrationListResponse'];
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	get_unassigned_registration_photo_staff_v1_unassigned_registrations_photos__photo_id__get: {
+		parameters: {
+			query?: never;
+			header?: {
+				Cookie?: string | null;
+			};
+			path: {
+				photo_id: string;
+			};
+			cookie?: {
+				AuthSession?: string | null;
+			};
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': unknown;
+				};
+			};
+			/** @description Validation Error */
+			422: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['HTTPValidationError'];
+				};
+			};
+		};
+	};
+	review_unassigned_registration_staff_v1_unassigned_registrations__registration_id__review_get: {
+		parameters: {
+			query?: never;
+			header?: {
+				Cookie?: string | null;
+			};
+			path: {
+				registration_id: string;
+			};
+			cookie?: {
+				AuthSession?: string | null;
+			};
+		};
+		requestBody?: never;
+		responses: {
+			/** @description Successful Response */
+			200: {
+				headers: {
+					[name: string]: unknown;
+				};
+				content: {
+					'application/json': components['schemas']['UnassignedRegistrationReviewResponse'];
 				};
 			};
 			/** @description Validation Error */

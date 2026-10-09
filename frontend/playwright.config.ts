@@ -1,6 +1,15 @@
 /// <reference types="node" />
 import { defineConfig, devices } from '@playwright/test';
 
+const APP_BASE_URL = process.env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:4173';
+const APP_PORT = (() => {
+	try {
+		return new URL(APP_BASE_URL).port || '4173';
+	} catch {
+		return '4173';
+	}
+})();
+
 export default defineConfig({
 	testDir: './e2e',
 	fullyParallel: true,
@@ -8,10 +17,12 @@ export default defineConfig({
 	retries: process.env.CI ? 2 : 0,
 	// User management access-control tests call CouchDB directly (no parallelism
 	// issues since each test uses unique usernames with a RUN_ID suffix).
-	workers: process.env.CI ? 1 : undefined,
+	workers: 1,
 	reporter: 'html',
+	// §3 / §9.B — suites tagged @quarantine (e.g. SH001 live writers) stay out of default runs.
+	grepInvert: /@quarantine/,
 	use: {
-		baseURL: 'http://localhost:4173',
+		baseURL: APP_BASE_URL,
 		trace: 'on-first-retry',
 		video: process.env.PW_VIDEO ? 'on' : 'off',
 		launchOptions: {
@@ -30,12 +41,19 @@ export default defineConfig({
 		{
 			// Pass the admin URL so the SvelteKit BFF can reach CouchDB.
 			// COUCHDB_ADMIN_URL can be overridden via CI env; defaults to local dev value.
-			command: `COUCHDB_ADMIN_URL=${process.env.COUCHDB_ADMIN_URL ?? 'http://admin:password@localhost:5984'} pnpm preview`,
-			url: 'http://localhost:4173',
+			// Preview port follows PLAYWRIGHT_TEST_BASE_URL so parallel worktrees do not collide.
+			command: `COUCHDB_ADMIN_URL=${process.env.COUCHDB_ADMIN_URL ?? 'http://admin:password@localhost:5984'} pnpm preview --port ${APP_PORT} --strictPort`,
+			url: APP_BASE_URL,
 			reuseExistingServer: !process.env.CI,
 			timeout: 60_000,
 			env: {
-				COUCHDB_ADMIN_URL: process.env.COUCHDB_ADMIN_URL ?? 'http://admin:password@localhost:5984'
+				COUCHDB_ADMIN_URL: process.env.COUCHDB_ADMIN_URL ?? 'http://admin:password@localhost:5984',
+				SECRET_RECAPTCHA_KEY: process.env.SECRET_RECAPTCHA_KEY ?? 'e2e-recaptcha-secret',
+				// Public shelter bookings write as the limited `public_writer` user (production mode
+				// has no admin fallback) — pre-register W5 needs it, see .env.example.
+				...(process.env.COUCHDB_PUBLIC_WRITER_URL
+					? { COUCHDB_PUBLIC_WRITER_URL: process.env.COUCHDB_PUBLIC_WRITER_URL }
+					: {})
 			}
 		}
 	]

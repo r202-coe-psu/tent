@@ -10,6 +10,7 @@ import {
 	migrateShelterV2ToCurrent,
 	type ShelterMaster
 } from '../domain/schema';
+import { uniqueByShelterCode } from '../domain/unique-code';
 import type { SheltersRepository, ShelterSummary, ShelterBasic } from './shelters.repository';
 
 export const SHELTER_REGISTRY_DB = 'registry';
@@ -38,6 +39,7 @@ function masterToSummary(master: ShelterMaster): ShelterSummary {
 		operation_status: master.operation_status ?? 'standby',
 		capacity: master.capacity ?? 0,
 		shelter_type: master.shelter_type ?? null,
+		floor_count: master.floor_count ?? null,
 		project_level: master.project_level ?? null,
 		location: master.location ?? {},
 		contact: master.contact ?? {},
@@ -96,13 +98,13 @@ export class SheltersRemoteRepository implements SheltersRepository {
 	async listShelters(): Promise<ShelterSummary[]> {
 		const masters = await this.repo.allByType('shelter', isShelterMasterDoc);
 		const summaries = masters.map((m) => masterToSummary(migrateShelterV2ToCurrent(m)));
-		return visibleSheltersSummary(summaries);
+		return visibleSheltersSummary(uniqueByShelterCode(summaries));
 	}
 
 	async searchShelters(): Promise<ShelterBasic[]> {
 		const masters = await this.repo.allByType('shelter', isShelterMasterDoc);
 		const basics = masters.map((m) => masterToBasic(migrateShelterV2ToCurrent(m)));
-		return visibleSheltersBasic(basics);
+		return visibleSheltersBasic(uniqueByShelterCode(basics));
 	}
 
 	async getShelter(code: string): Promise<ShelterSummary> {

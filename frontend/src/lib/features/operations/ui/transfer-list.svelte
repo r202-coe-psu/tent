@@ -5,6 +5,7 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { authStore } from '$lib/stores/auth.svelte';
 	import {
 		useTransfers,
 		useDispatchTransfer,
@@ -13,6 +14,7 @@
 		useDisputeTransfer,
 		useResumeTransfer
 	} from '../application/queries';
+	import { isTransferPending } from '../domain/transfer-pending';
 	import { toast } from 'svelte-sonner';
 	import {
 		cancelInfoSchema,
@@ -27,6 +29,8 @@
 	import Ban from '@lucide/svelte/icons/ban';
 	import CirclePause from '@lucide/svelte/icons/circle-pause';
 	import CirclePlay from '@lucide/svelte/icons/circle-play';
+	import PackageMinus from '@lucide/svelte/icons/package-minus';
+	import PackagePlus from '@lucide/svelte/icons/package-plus';
 
 	const transfersQuery = useTransfers();
 	const dispatchMutation = useDispatchTransfer();
@@ -37,6 +41,9 @@
 
 	const ownShelter = getShelterCode();
 
+	// Session expired (`needsReauth`): every action button is off until the user signs in again.
+	const offline = $derived(authStore.needsReauth);
+
 	const STATUS_LABEL: Record<TransferStatus, string> = {
 		requested: 'รอส่งมอบ',
 		shipped: 'ระหว่างขนส่ง',
@@ -44,6 +51,21 @@
 		cancelled: 'ยกเลิกแล้ว',
 		disputed: 'ระงับไว้'
 	};
+
+	function statusBadgeClass(status: TransferStatus): string {
+		switch (status) {
+			case 'requested':
+				return 'border-amber-200 bg-amber-50 text-amber-900';
+			case 'shipped':
+				return 'border-sky-200 bg-sky-50 text-sky-900';
+			case 'received':
+				return 'border-emerald-200 bg-emerald-50 text-emerald-900';
+			case 'cancelled':
+				return 'border-border bg-muted text-muted-foreground';
+			case 'disputed':
+				return 'border-rose-200 bg-rose-50 text-rose-900';
+		}
+	}
 
 	/** CR-089 FR-03/FR-04 — cancel and dispute both need a reason, so they share one prompt. */
 	type ReasonMode = 'cancel' | 'dispute';
@@ -89,6 +111,17 @@
 			cancelMutation.isPending ||
 			disputeMutation.isPending ||
 			resumeMutation.isPending
+	);
+
+	const transfers = $derived(transfersQuery.data ?? []);
+
+	const incomingPending = $derived(
+		transfers.filter((t) => t.to_shelter === ownShelter && t.status === 'shipped')
+	);
+	const outgoingPending = $derived(
+		transfers.filter(
+			(t) => t.from_shelter === ownShelter && (t.status === 'requested' || t.status === 'disputed')
+		)
 	);
 
 	function isOutgoing(t: StockTransfer): boolean {
@@ -189,100 +222,235 @@
 			error: errorMessage
 		});
 	}
+
+	function itemsSummary(t: StockTransfer): string {
+		return t.items.map((i) => `${i.item_id} ${i.qty} ${i.unit}`).join(', ');
+	}
 </script>
 
-<div class="rounded-2xl border border-border/80 bg-card p-5 shadow-md">
-	<div class="mb-4 flex items-center gap-2 border-b border-border/60 pb-3">
-		<Truck class="h-4.5 w-4.5 text-primary" />
-		<h3 class="text-sm font-bold text-foreground">รายการโอนย้ายข้ามศูนย์</h3>
-	</div>
-
-	{#if transfersQuery.isLoading}
-		<p class="text-sm text-muted-foreground">กำลังโหลดข้อมูล...</p>
-	{:else if !transfersQuery.data || transfersQuery.data.length === 0}
-		<p class="text-sm text-muted-foreground">ยังไม่มีรายการโอนย้าย</p>
-	{:else}
-		<Table.Root>
-			<Table.Header>
-				<Table.Row>
-					<Table.Head>เส้นทาง</Table.Head>
-					<Table.Head>รายการ</Table.Head>
-					<Table.Head>สถานะ</Table.Head>
-					<Table.Head class="text-right">การดำเนินการ</Table.Head>
-				</Table.Row>
-			</Table.Header>
-			<Table.Body>
-				{#each transfersQuery.data as t (t._id)}
-					<Table.Row>
-						<Table.Cell>
-							<span class="font-mono text-xs font-semibold">{t.from_shelter} → {t.to_shelter}</span>
-							<span
-								class="ml-2 rounded-md border border-border/60 px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground"
+<div class="flex flex-col gap-4">
+	<!-- Inbox cards -->
+	<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+		<section class="rounded-2xl border border-border/80 bg-card p-4 shadow-md sm:p-5">
+			<div class="mb-3 flex items-center gap-2 border-b border-border/60 pb-3">
+				<PackagePlus class="h-4.5 w-4.5 text-primary" aria-hidden="true" />
+				<h3 class="text-sm font-bold text-foreground">ต้องรับเข้า</h3>
+				{#if incomingPending.length > 0}
+					<span
+						class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#0284C7] px-1.5 text-[11px] font-bold text-white"
+					>
+						{incomingPending.length}
+					</span>
+				{/if}
+			</div>
+			{#if transfersQuery.isLoading}
+				<p class="text-sm text-muted-foreground">กำลังโหลด…</p>
+			{:else if incomingPending.length === 0}
+				<p class="text-sm text-muted-foreground">ไม่มีรายการรอตรวจรับ</p>
+			{:else}
+				<ul class="space-y-3">
+					{#each incomingPending as t (t._id)}
+						<li
+							class="flex flex-col gap-3 rounded-xl border border-sky-200/80 bg-sky-50/40 p-3 sm:flex-row sm:items-center sm:justify-between"
+						>
+							<div class="min-w-0 space-y-1">
+								<p class="font-mono text-xs font-semibold">
+									{t.from_shelter} → {t.to_shelter}
+								</p>
+								<p class="truncate text-xs text-muted-foreground">{itemsSummary(t)}</p>
+							</div>
+							<button
+								type="button"
+								onclick={() => handleReceive(t)}
+								disabled={receiveMutation.isPending || offline}
+								class={buttonVariants({ size: 'sm' })}
 							>
-								{isOutgoing(t) ? 'ต้นทาง (เรา)' : 'ปลายทาง (เรา)'}
-							</span>
-						</Table.Cell>
-						<Table.Cell class="text-xs">
-							{#each t.items as item (item.item_id)}
-								<div>{item.item_id} — {item.qty} {item.unit}</div>
-							{/each}
-						</Table.Cell>
-						<Table.Cell class="text-xs font-semibold">
-							{STATUS_LABEL[t.status]}
-							{#if t.status === 'disputed' && t.dispute_reason}
-								<div class="mt-0.5 text-[11px] font-normal text-muted-foreground">
-									{t.dispute_reason}
-								</div>
-							{/if}
-						</Table.Cell>
-						<Table.Cell>
-							<div class="flex flex-wrap justify-end gap-2">
-								{#if isOutgoing(t) && t.status === 'requested'}
+								<PackageCheck class="mr-1 h-3.5 w-3.5" />ตรวจรับ
+							</button>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		</section>
+
+		<section class="rounded-2xl border border-border/80 bg-card p-4 shadow-md sm:p-5">
+			<div class="mb-3 flex items-center gap-2 border-b border-border/60 pb-3">
+				<PackageMinus class="h-4.5 w-4.5 text-primary" aria-hidden="true" />
+				<h3 class="text-sm font-bold text-foreground">ต้องส่งออก</h3>
+				{#if outgoingPending.length > 0}
+					<span
+						class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#0284C7] px-1.5 text-[11px] font-bold text-white"
+					>
+						{outgoingPending.length}
+					</span>
+				{/if}
+			</div>
+			{#if transfersQuery.isLoading}
+				<p class="text-sm text-muted-foreground">กำลังโหลด…</p>
+			{:else if outgoingPending.length === 0}
+				<p class="text-sm text-muted-foreground">ไม่มีรายการรอส่งมอบ</p>
+			{:else}
+				<ul class="space-y-3">
+					{#each outgoingPending as t (t._id)}
+						<li
+							class="flex flex-col gap-3 rounded-xl border border-amber-200/80 bg-amber-50/40 p-3"
+						>
+							<div class="min-w-0 space-y-1">
+								<p class="font-mono text-xs font-semibold">
+									{t.from_shelter} → {t.to_shelter}
+								</p>
+								<p class="truncate text-xs text-muted-foreground">{itemsSummary(t)}</p>
+								<span
+									class="inline-flex rounded-md border px-1.5 py-0.5 text-[10px] font-bold {statusBadgeClass(
+										t.status
+									)}"
+								>
+									{STATUS_LABEL[t.status]}
+								</span>
+							</div>
+							<div class="flex flex-wrap gap-2">
+								{#if t.status === 'requested'}
 									<button
+										type="button"
 										onclick={() => openDispatch(t)}
-										disabled={outgoingBusy}
+										disabled={outgoingBusy || offline}
 										class={buttonVariants({ size: 'sm' })}
 									>
-										<Truck class="mr-1 h-3.5 w-3.5" />อนุมัติส่งมอบ
+										<Truck class="mr-1 h-3.5 w-3.5" />ยืนยันส่ง
 									</button>
 									<button
+										type="button"
 										onclick={() => openReason(t, 'dispute')}
-										disabled={outgoingBusy}
+										disabled={outgoingBusy || offline}
 										class={buttonVariants({ size: 'sm', variant: 'outline' })}
 									>
-										<CirclePause class="mr-1 h-3.5 w-3.5" />คัดค้าน/ระงับ
+										<CirclePause class="mr-1 h-3.5 w-3.5" />ระงับ
 									</button>
+								{:else if t.status === 'disputed'}
 									<button
-										onclick={() => openReason(t, 'cancel')}
-										disabled={outgoingBusy}
-										class={buttonVariants({ size: 'sm', variant: 'outline' })}
-									>
-										<Ban class="mr-1 h-3.5 w-3.5" />ยกเลิก
-									</button>
-								{:else if isOutgoing(t) && t.status === 'disputed'}
-									<button
+										type="button"
 										onclick={() => handleResume(t)}
-										disabled={outgoingBusy}
+										disabled={outgoingBusy || offline}
 										class={buttonVariants({ size: 'sm' })}
 									>
 										<CirclePlay class="mr-1 h-3.5 w-3.5" />กลับมาดำเนินการต่อ
 									</button>
-								{:else if !isOutgoing(t) && t.status === 'shipped'}
-									<button
-										onclick={() => handleReceive(t)}
-										disabled={receiveMutation.isPending}
-										class={buttonVariants({ size: 'sm' })}
-									>
-										<PackageCheck class="mr-1 h-3.5 w-3.5" />ยืนยันรับเข้า
-									</button>
 								{/if}
 							</div>
-						</Table.Cell>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		</section>
+	</div>
+
+	<!-- History -->
+	<div class="rounded-2xl border border-border/80 bg-card p-5 shadow-md">
+		<div class="mb-4 flex items-center gap-2 border-b border-border/60 pb-3">
+			<Truck class="h-4.5 w-4.5 text-primary" aria-hidden="true" />
+			<h3 class="text-sm font-bold text-foreground">ประวัติการโอน</h3>
+		</div>
+
+		{#if transfersQuery.isLoading}
+			<p class="text-sm text-muted-foreground">กำลังโหลดข้อมูล...</p>
+		{:else if transfers.length === 0}
+			<p class="text-sm text-muted-foreground">ยังไม่มีรายการโอนย้าย</p>
+		{:else}
+			<Table.Root>
+				<Table.Header>
+					<Table.Row>
+						<Table.Head>เส้นทาง</Table.Head>
+						<Table.Head>รายการ</Table.Head>
+						<Table.Head>สถานะ</Table.Head>
+						<Table.Head class="text-right">การดำเนินการ</Table.Head>
 					</Table.Row>
-				{/each}
-			</Table.Body>
-		</Table.Root>
-	{/if}
+				</Table.Header>
+				<Table.Body>
+					{#each transfers as t (t._id)}
+						<Table.Row class={isTransferPending(t, ownShelter) ? 'bg-muted/30' : ''}>
+							<Table.Cell>
+								<span class="font-mono text-xs font-semibold"
+									>{t.from_shelter} → {t.to_shelter}</span
+								>
+								<span
+									class="ml-2 rounded-md border border-border/60 px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground"
+								>
+									{isOutgoing(t) ? 'ต้นทาง (เรา)' : 'ปลายทาง (เรา)'}
+								</span>
+							</Table.Cell>
+							<Table.Cell class="text-xs">
+								{#each t.items as item (item.item_id)}
+									<div>{item.item_id} — {item.qty} {item.unit}</div>
+								{/each}
+							</Table.Cell>
+							<Table.Cell>
+								<span
+									class="inline-flex rounded-md border px-2 py-0.5 text-[11px] font-bold {statusBadgeClass(
+										t.status
+									)}"
+								>
+									{STATUS_LABEL[t.status]}
+								</span>
+								{#if t.status === 'disputed' && t.dispute_reason}
+									<div class="mt-0.5 text-[11px] font-normal text-muted-foreground">
+										{t.dispute_reason}
+									</div>
+								{/if}
+							</Table.Cell>
+							<Table.Cell>
+								<div class="flex flex-wrap justify-end gap-2">
+									{#if isOutgoing(t) && t.status === 'requested'}
+										<button
+											type="button"
+											onclick={() => openDispatch(t)}
+											disabled={outgoingBusy || offline}
+											class={buttonVariants({ size: 'sm' })}
+										>
+											<Truck class="mr-1 h-3.5 w-3.5" />อนุมัติส่งมอบ
+										</button>
+										<button
+											type="button"
+											onclick={() => openReason(t, 'dispute')}
+											disabled={outgoingBusy || offline}
+											class={buttonVariants({ size: 'sm', variant: 'outline' })}
+										>
+											<CirclePause class="mr-1 h-3.5 w-3.5" />คัดค้าน/ระงับ
+										</button>
+										<button
+											type="button"
+											onclick={() => openReason(t, 'cancel')}
+											disabled={outgoingBusy || offline}
+											class={buttonVariants({ size: 'sm', variant: 'outline' })}
+										>
+											<Ban class="mr-1 h-3.5 w-3.5" />ยกเลิก
+										</button>
+									{:else if isOutgoing(t) && t.status === 'disputed'}
+										<button
+											type="button"
+											onclick={() => handleResume(t)}
+											disabled={outgoingBusy || offline}
+											class={buttonVariants({ size: 'sm' })}
+										>
+											<CirclePlay class="mr-1 h-3.5 w-3.5" />กลับมาดำเนินการต่อ
+										</button>
+									{:else if !isOutgoing(t) && t.status === 'shipped'}
+										<button
+											type="button"
+											onclick={() => handleReceive(t)}
+											disabled={receiveMutation.isPending || offline}
+											class={buttonVariants({ size: 'sm' })}
+										>
+											<PackageCheck class="mr-1 h-3.5 w-3.5" />ยืนยันรับเข้า
+										</button>
+									{/if}
+								</div>
+							</Table.Cell>
+						</Table.Row>
+					{/each}
+				</Table.Body>
+			</Table.Root>
+		{/if}
+	</div>
 </div>
 
 <DispatchConfirmDialog
@@ -322,7 +490,11 @@
 			>
 				ปิด
 			</Button>
-			<Button variant="destructive" onclick={handleReasonConfirm} disabled={reasonPending}>
+			<Button
+				variant="destructive"
+				onclick={handleReasonConfirm}
+				disabled={reasonPending || offline}
+			>
 				{reasonPending ? reasonCopy.pendingLabel : reasonCopy.confirmLabel}
 			</Button>
 		</Dialog.Footer>

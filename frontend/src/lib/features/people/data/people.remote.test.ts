@@ -19,8 +19,13 @@ vi.mock('$lib/db/repository', async (importOriginal) => {
 	};
 });
 
-import { PeopleRemoteRepository, peopleRepository } from './people.remote';
-import type { EvacueeInput } from '../domain/people';
+import {
+	PeopleRemoteRepository,
+	peopleRepository,
+	isRegistrationCompensationIncomplete
+} from './people.remote';
+import { UlidReservation } from '$lib/db/ulid-reservation';
+import type { EvacueeInput, Medical } from '../domain/people';
 
 const ctx = { shelterCode: 'SH001', createdBy: 'tester' };
 
@@ -174,6 +179,103 @@ describe('PeopleRemoteRepository', () => {
 			expect(updated.conditions).toEqual(['asthma', 'diabetes']);
 			expect(updated.blood_group).toBe('O');
 			expect(updated._rev).not.toBe(medical._rev);
+		});
+
+		it('merges onto the existing document rather than overwriting fields a partial caller omits', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const medical = await repo.createMedical(
+				{
+					evacuee_id: evacuee._id,
+					conditions: ['asthma'],
+					medications: ['ventolin'],
+					allergies: ['penicillin'],
+					track: 'normal'
+				},
+				ctx
+			);
+
+			// Simulate a future caller that forgets to carry every field forward —
+			// updateMedical must not let this wipe `allergies`/`medications`.
+			// eslint-disable-next-line @typescript-eslint/no-unused-vars
+			const { allergies: _dropped, ...partial } = medical;
+
+			const updated = await repo.updateMedical({
+				...partial,
+				conditions: ['asthma', 'diabetes']
+			} as Medical);
+
+			expect(updated.conditions).toEqual(['asthma', 'diabetes']);
+			expect(updated.medications).toEqual(['ventolin']);
+			expect(updated.allergies).toEqual(['penicillin']);
+		});
+	});
+
+	describe('scoped-by-evacuee/household lookups', () => {
+		it('getMedicalByEvacuee returns only that evacuee’s medical record', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const other = await repo.createEvacuee(evInput({ first_name: 'Other' }), ctx);
+			await repo.createMedical(
+				{ evacuee_id: evacuee._id, conditions: ['asthma'], medications: [], allergies: [] },
+				ctx
+			);
+			await repo.createMedical(
+				{ evacuee_id: other._id, conditions: ['diabetes'], medications: [], allergies: [] },
+				ctx
+			);
+
+			const found = await repo.getMedicalByEvacuee(evacuee._id);
+			expect(found?.conditions).toEqual(['asthma']);
+			expect(await repo.getMedicalByEvacuee('evacuee:missing')).toBeNull();
+		});
+
+		it('listScreeningsByEvacuee returns only that evacuee’s screenings', async () => {
+			const evacuee = await repo.createEvacuee(evInput(), ctx);
+			const other = await repo.createEvacuee(evInput({ first_name: 'Other' }), ctx);
+			await repo.createScreening({ evacuee_id: evacuee._id, symptoms: [], track: 'normal' }, ctx);
+			await repo.createScreening({ evacuee_id: other._id, symptoms: [], track: 'normal' }, ctx);
+
+			const screenings = await repo.listScreeningsByEvacuee(evacuee._id);
+			expect(screenings).toHaveLength(1);
+			expect(screenings[0].evacuee_id).toBe(evacuee._id);
+		});
+
+		it('listMovementsByEvacuee returns only that evacuee’s movement history', async () => {
+			const household = await repo.createHousehold(
+				{ label: 'ครัวเรือน', head_evacuee_id: null, status: 'checked_in' },
+				ctx
+			);
+			const evacuee = await repo.createEvacuee(
+				evInput({ household_id: household._id, status: 'arriving' }),
+				ctx
+			);
+			const other = await repo.createEvacuee(
+				evInput({ first_name: 'Other', household_id: household._id, status: 'arriving' }),
+				ctx
+			);
+			await repo.checkInEvacuee(evacuee, ctx, 'Zone A');
+			await repo.checkInEvacuee(other, ctx, 'Zone A');
+
+			const movements = await repo.listMovementsByEvacuee(evacuee._id);
+			expect(movements).toHaveLength(1);
+			expect(movements[0].evacuee_id).toBe(evacuee._id);
+		});
+
+		it('listHouseholdMembers returns only evacuees linked to that household', async () => {
+			const household = await repo.createHousehold(
+				{ label: 'ครัวเรือน', head_evacuee_id: null, status: 'checked_in' },
+				ctx
+			);
+			const otherHousehold = await repo.createHousehold(
+				{ label: 'ครัวเรือนอื่น', head_evacuee_id: null, status: 'checked_in' },
+				ctx
+			);
+			const member = await repo.createEvacuee(evInput({ household_id: household._id }), ctx);
+			await repo.createEvacuee(evInput({ household_id: otherHousehold._id }), ctx);
+			await repo.createEvacuee(evInput(), ctx);
+
+			const members = await repo.listHouseholdMembers(household._id);
+			expect(members).toHaveLength(1);
+			expect(members[0]._id).toBe(member._id);
 		});
 	});
 
@@ -416,6 +518,28 @@ describe('PeopleRemoteRepository', () => {
 			expect(hits).toHaveLength(1);
 			expect(hits[0].first_name).toBe('Somchai');
 		});
+
+		it('searchEvacueesMany answers every query from one evacuee scan', async () => {
+			const scan = vi.spyOn(memoryRepo, 'allByType');
+			const hits = await repo.searchEvacueesMany([
+				'0812345678',
+				' Malee Suksan ',
+				'nobody',
+				'0812345678'
+			]);
+
+			expect(scan).toHaveBeenCalledTimes(1);
+			expect([...hits.keys()]).toEqual(['0812345678', 'Malee Suksan', 'nobody']);
+			expect(hits.get('0812345678')?.map((e) => e.first_name)).toEqual(['Somchai']);
+			expect(hits.get('Malee Suksan')?.map((e) => e.first_name)).toEqual(['Malee']);
+			expect(hits.get('nobody')).toEqual([]);
+		});
+
+		it('searchEvacueesMany skips the scan when every query is blank', async () => {
+			const scan = vi.spyOn(memoryRepo, 'allByType');
+			expect((await repo.searchEvacueesMany(['', '  '])).size).toBe(0);
+			expect(scan).not.toHaveBeenCalled();
+		});
 	});
 
 	describe('listEvacueesPaginated filters', () => {
@@ -518,6 +642,18 @@ describe('check-in / check-out', () => {
 				action: 'check_in',
 				zone: 'zone-a'
 			});
+		});
+
+		it('allows checking in multiple evacuees to the same zone — no capacity limit (FR-12, non-blocking by design)', async () => {
+			const zone = 'zone-crowded';
+			for (let i = 0; i < 5; i++) {
+				const evacuee = await repo.createEvacuee(evInput({ first_name: `คน${i}` }), ctx);
+				const updated = await repo.checkInEvacuee(evacuee, ctx, zone);
+				expect(updated.current_stay.status).toBe('active');
+				expect(updated.current_stay.zone).toBe(zone);
+			}
+			const inZone = (await repo.listEvacuees()).filter((e) => e.current_stay.zone === zone);
+			expect(inZone).toHaveLength(5);
 		});
 
 		it('persists the updated status so a fresh fetch reflects it', async () => {
@@ -800,18 +936,35 @@ describe('check-in / check-out', () => {
 
 	it('rejects check-in when the evacuee is deceased', async () => {
 		const evacuee = await repo.createEvacuee(evInput(), ctx);
-		const deceased = {
+		// Persist the deceased status so the eligibility check (which now reads
+		// the fresh document, not the caller's possibly-stale copy — see
+		// checkInEvacuee's fetchLatestOrThrow) actually sees it.
+		const deceased = await memoryRepo.put({
 			...evacuee,
 			current_stay: {
 				status: 'deceased' as const,
 				zone: null,
 				since: evacuee.current_stay.since
 			}
-		};
+		});
 		await expect(repo.checkInEvacuee(deceased, ctx, 'zone-a')).rejects.toThrow(/เสียชีวิต/);
 		expect(await repo.listMovements()).toHaveLength(0);
 		const fetched = await repo.getEvacuee(evacuee._id);
-		expect(fetched?.current_stay.status).toBe('pre_registered');
+		expect(fetched?.current_stay.status).toBe('deceased');
+	});
+
+	it('rejects check-in built off a stale caller-provided copy when the persisted evacuee is deceased', async () => {
+		// Simulates the real race this fix closes: the UI loaded the evacuee
+		// earlier (staleEvacuee, still showing pre_registered) but the document
+		// was changed to deceased by someone else before this check-in submits.
+		const evacuee = await repo.createEvacuee(evInput(), ctx);
+		const staleEvacuee = { ...evacuee };
+		await memoryRepo.put({
+			...evacuee,
+			current_stay: { status: 'deceased' as const, zone: null, since: evacuee.current_stay.since }
+		});
+		await expect(repo.checkInEvacuee(staleEvacuee, ctx, 'zone-a')).rejects.toThrow(/เสียชีวิต/);
+		expect(await repo.listMovements()).toHaveLength(0);
 	});
 
 	describe('changeEvacueeZone', () => {
@@ -827,6 +980,24 @@ describe('check-in / check-out', () => {
 				action: 'zone_change',
 				zone: 'zone-b'
 			});
+		});
+
+		it('allows rezoning into a zone that already has occupants — no capacity limit (FR-12)', async () => {
+			const first = await repo.checkInEvacuee(
+				await repo.createEvacuee(evInput({ first_name: 'หนึ่ง' }), ctx),
+				ctx,
+				'zone-a'
+			);
+			const second = await repo.checkInEvacuee(
+				await repo.createEvacuee(evInput({ first_name: 'สอง' }), ctx),
+				ctx,
+				'zone-b'
+			);
+			const rezoned = await repo.changeEvacueeZone(second, ctx, 'zone-a');
+			expect(rezoned.current_stay.zone).toBe('zone-a');
+
+			const inZoneA = (await repo.listEvacuees()).filter((e) => e.current_stay.zone === 'zone-a');
+			expect(inZoneA.map((e) => e._id).sort()).toEqual([first._id, second._id].sort());
 		});
 	});
 
@@ -964,7 +1135,7 @@ describe('check-in / check-out', () => {
 		it('persists both evacuee and screening', async () => {
 			const { evacuee, screening } = await repo.createEvacueeWithScreening(
 				evInput(),
-				{ symptoms: [], temperature_c: null, track: 'normal', needs_referral: false },
+				{ symptoms: [], track: 'normal' },
 				ctx
 			);
 			expect(evacuee._id).toMatch(/^evacuee:/);
@@ -984,7 +1155,7 @@ describe('check-in / check-out', () => {
 			await expect(
 				repo.createEvacueeWithScreening(
 					evInput({ first_name: 'Rollback' }),
-					{ symptoms: ['fever'], temperature_c: null, track: 'fast_track', needs_referral: false },
+					{ symptoms: ['fever'], track: 'fast_track' },
 					ctx
 				)
 			).rejects.toThrow(/doc type not allowed yet: screening/);
@@ -1008,7 +1179,7 @@ describe('check-in / check-out', () => {
 						first_name: 'MedRollback',
 						medical_conditions: ['diabetes']
 					}),
-					{ symptoms: [], temperature_c: null, track: 'normal', needs_referral: false },
+					{ symptoms: [], track: 'normal' },
 					ctx
 				)
 			).rejects.toThrow(/doc type not allowed yet: screening/);
@@ -1043,9 +1214,7 @@ describe('check-in / check-out', () => {
 				{
 					evacuee_id: eArrivingScreened._id,
 					symptoms: [],
-					temperature_c: 36.5,
-					track: 'normal',
-					needs_referral: false
+					track: 'normal'
 				},
 				ctx
 			);
@@ -1092,13 +1261,7 @@ describe('check-in / check-out', () => {
 					screening: {
 						evacuee_id: evacuee._id,
 						track: 'normal',
-						triage_level: 'green',
-						symptoms: ['headache'],
-						temperature_c: 36.8,
-						blood_pressure_sys: 118,
-						blood_pressure_dia: 78,
-						heart_rate: 72,
-						spo2_percent: 99
+						symptoms: ['headache']
 					},
 					checkIn: false
 				},
@@ -1107,13 +1270,8 @@ describe('check-in / check-out', () => {
 
 			expect(result.screening).toBeDefined();
 			expect(result.screening.schema_v).toBe(2);
-			expect(result.screening.triage_level).toBe('green');
-			expect(result.screening.vital_signs).toEqual({
-				blood_pressure_sys: 118,
-				blood_pressure_dia: 78,
-				heart_rate: 72,
-				spo2_percent: 99
-			});
+			expect(result.screening).not.toHaveProperty('triage_level');
+			expect(result.screening).not.toHaveProperty('vital_signs');
 			expect(result.evacuee).toBeUndefined();
 
 			// Evacuee remains arriving
@@ -1133,9 +1291,7 @@ describe('check-in / check-out', () => {
 					screening: {
 						evacuee_id: evacuee._id,
 						track: 'fast_track',
-						triage_level: 'yellow',
-						symptoms: ['cough', 'fever'],
-						temperature_c: 38.2
+						symptoms: ['cough', 'fever']
 					},
 					checkIn: true,
 					zone: 'Zone-Yellow-1'
@@ -1145,7 +1301,7 @@ describe('check-in / check-out', () => {
 
 			expect(result.screening).toBeDefined();
 			expect(result.screening.schema_v).toBe(2);
-			expect(result.screening.triage_level).toBe('yellow');
+			expect(result.screening).not.toHaveProperty('triage_level');
 
 			expect(result.evacuee).toBeDefined();
 			expect(result.evacuee?.current_stay.status).toBe('active');
@@ -1176,14 +1332,11 @@ describe('check-in / check-out', () => {
 					screening: {
 						evacuee_id: evacuee._id,
 						track: 'normal',
-						triage_level: 'green',
-						symptoms: [],
-						temperature_c: 36.5
+						symptoms: []
 					},
 					checkIn: false,
 					medical: {
 						evacuee_id: evacuee._id,
-						blood_group: 'A',
 						conditions: ['diabetes'],
 						medications: ['metformin'],
 						allergies: ['penicillin'],
@@ -1195,7 +1348,6 @@ describe('check-in / check-out', () => {
 			);
 
 			expect(result.medical).toBeDefined();
-			expect(result.medical?.blood_group).toBe('A');
 			expect(result.medical?.conditions).toEqual(['diabetes']);
 			expect(result.medical?.medications).toEqual(['metformin']);
 			expect(result.medical?.allergies).toEqual(['penicillin']);
@@ -1204,7 +1356,6 @@ describe('check-in / check-out', () => {
 			const medicals = await repo.listMedicals();
 			const linked = medicals.find((m) => m.evacuee_id === evacuee._id);
 			expect(linked).toBeDefined();
-			expect(linked?.blood_group).toBe('A');
 			expect(linked?.conditions).toEqual(['diabetes']);
 		});
 
@@ -1216,7 +1367,6 @@ describe('check-in / check-out', () => {
 			await repo.createMedical(
 				{
 					evacuee_id: evacuee._id,
-					blood_group: 'O',
 					conditions: ['hypertension'],
 					medications: [],
 					allergies: [],
@@ -1230,12 +1380,10 @@ describe('check-in / check-out', () => {
 					screening: {
 						evacuee_id: evacuee._id,
 						track: 'normal',
-						triage_level: 'yellow',
 						symptoms: ['fever']
 					},
 					medical: {
 						evacuee_id: evacuee._id,
-						blood_group: 'B',
 						conditions: ['hypertension', 'asthma'],
 						medications: ['inhaler'],
 						allergies: ['seafood'],
@@ -1246,7 +1394,6 @@ describe('check-in / check-out', () => {
 				ctx
 			);
 
-			expect(result.medical?.blood_group).toBe('B');
 			expect(result.medical?.conditions).toEqual(['hypertension', 'asthma']);
 			expect(result.medical?.track).toBe('fast_track');
 
@@ -1353,10 +1500,7 @@ describe('check-in / check-out', () => {
 					screening: {
 						evacuee_id: infectious._id,
 						track: 'fast_track',
-						triage_level: 'red',
-						symptoms: ['acute_watery_diarrhea'],
-						temperature_c: 39.1,
-						needs_referral: false
+						symptoms: ['acute_watery_diarrhea']
 					},
 					checkIn: true,
 					zone: 'ISO-Medical-1'
@@ -1421,6 +1565,129 @@ describe('check-in / check-out', () => {
 			const hh = await repo.getHousehold(household._id);
 			expect(hh?.status).toBe('arriving');
 		});
+	});
+});
+
+describe('createFamilyRegistration network-failure resilience (go-live S4)', () => {
+	let repo: PeopleRemoteRepository;
+	let offline = false;
+
+	const familyInput = {
+		members: [
+			{
+				first_name: 'สมชาย',
+				last_name: 'ใจดี',
+				gender: 'male' as const,
+				phone: '0812345678',
+				country: 'THAILAND'
+			},
+			{
+				first_name: 'สมหญิง',
+				last_name: 'ใจดี',
+				gender: 'female' as const,
+				phone: null,
+				country: 'THAILAND'
+			}
+		],
+		household: {
+			housing_type: 'owned_house' as const,
+			address_no: '12/3',
+			subdistrict: 'หาดใหญ่',
+			district: 'หาดใหญ่',
+			province: 'สงขลา',
+			pets: [],
+			vehicles: [],
+			assets: null
+		}
+	};
+
+	/**
+	 * Couch-like `_bulk_docs`: a doc without `_rev` whose `_id` already exists is
+	 * a 409 (treated as success, like `couch-db.ts` bulkDocs). `commitThenDrop`
+	 * commits that many docs, then fails as if the connection dropped.
+	 */
+	function couchLikeRepo(opts: { commitThenDrop?: number } = {}) {
+		const base = createInMemoryRepository();
+		let dropsLeft = opts.commitThenDrop == null ? 0 : 1;
+		const offlineGuard =
+			<A extends unknown[], R>(fn: (...args: A) => Promise<R>) =>
+			(...args: A) => {
+				if (offline) return Promise.reject(new Error('Failed to fetch'));
+				return fn(...args);
+			};
+		return {
+			...base,
+			get: offlineGuard(base.get.bind(base)),
+			find: offlineGuard(base.find.bind(base)),
+			remove: offlineGuard(base.remove.bind(base)),
+			async bulkDocs<T extends { _id: string; _rev?: string }>(docs: T[]): Promise<T[]> {
+				const saved: T[] = [];
+				for (const [i, doc] of docs.entries()) {
+					if (dropsLeft > 0 && i === opts.commitThenDrop) {
+						dropsLeft--;
+						offline = true;
+						throw new Error('Failed to fetch');
+					}
+					const existing = await base.get<T>(doc._id);
+					saved.push(existing && !doc._rev ? doc : await base.put(doc));
+				}
+				return saved;
+			}
+		};
+	}
+
+	async function countDocs(type: string) {
+		const anyDoc = (doc: unknown): doc is { _id: string; type: string } => doc != null;
+		return (await memoryRepo.allByType(type, anyDoc)).length;
+	}
+
+	beforeEach(() => {
+		offline = false;
+	});
+
+	it('keeps the original save error and flags it when cleanup cannot reach CouchDB', async () => {
+		memoryRepo = couchLikeRepo({ commitThenDrop: 2 });
+		repo = new PeopleRemoteRepository('shelter_sh001');
+
+		const err = await repo
+			.createFamilyRegistration(familyInput, ctx, 'onsite')
+			.catch((e: unknown) => e);
+
+		expect((err as Error).message).toBe('Failed to fetch');
+		expect(isRegistrationCompensationIncomplete(err)).toBe(true);
+	});
+
+	it('does not flag the error when cleanup removed everything it created', async () => {
+		memoryRepo = createInMemoryRepository();
+		vi.spyOn(memoryRepo, 'bulkDocs').mockRejectedValueOnce(new Error('bulkDocs: 1 doc(s) failed'));
+		repo = new PeopleRemoteRepository('shelter_sh001');
+
+		const err = await repo
+			.createFamilyRegistration(familyInput, ctx, 'onsite')
+			.catch((e: unknown) => e);
+
+		expect(isRegistrationCompensationIncomplete(err)).toBe(false);
+		expect(await countDocs('evacuee')).toBe(0);
+		expect(await countDocs('household')).toBe(0);
+	});
+
+	it('a resubmit with the same reservation completes the family instead of duplicating it', async () => {
+		memoryRepo = couchLikeRepo({ commitThenDrop: 2 });
+		repo = new PeopleRemoteRepository('shelter_sh001');
+		const ids = new UlidReservation();
+
+		await expect(repo.createFamilyRegistration(familyInput, ctx, 'onsite', ids)).rejects.toThrow();
+		expect(await countDocs('evacuee')).toBe(1); // household + member 0 committed, cleanup offline
+
+		offline = false;
+		const result = await repo.createFamilyRegistration(familyInput, ctx, 'onsite', ids);
+
+		expect(await countDocs('household')).toBe(1);
+		expect(await countDocs('evacuee')).toBe(2);
+		expect(result.members.map((m) => m.household_id)).toEqual([
+			result.household._id,
+			result.household._id
+		]);
 	});
 });
 

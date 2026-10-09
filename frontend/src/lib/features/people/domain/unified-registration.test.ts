@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatPersonName, isAnonymousId } from './people';
+import { collectMemberRuleIssues, formatPersonName, isAnonymousId } from './people';
 import {
 	PRIMARY_CONTACT_LABEL,
 	applyAnonymousIdToMember,
@@ -23,7 +23,7 @@ function validMember(over: Partial<UnifiedRegistrationInput['members'][number]> 
 		country: 'THAILAND',
 		vulnerable_groups: [] as string[],
 		special_needs: [] as string[],
-		person_id: { cardType: 'national_id' as const, number: '1234567890123' },
+		person_id: { cardType: 'national_id' as const, number: '1234567890121' },
 		emergency_contact: { name: 'สมหญิง', phone: '0899999999', relation: 'คู่สมรส' },
 		...over
 	};
@@ -203,10 +203,17 @@ describe('unified registration — mononym and anonymous ID', () => {
 		expect(isAnonymousId(member.person_id?.number ?? '')).toBe(true);
 	});
 
-	it('blankUnifiedMember leaves gender unset for forced male/female choice', () => {
+	it('blankUnifiedMember defaults gender to null (ไม่ระบุเพศ)', () => {
 		const member = blankUnifiedMember();
-		expect(member.gender).toBe('');
+		expect(member.gender).toBeNull();
 		expect(member.religion).toBe('unknown');
+	});
+
+	it('blankUnifiedMember defines CR-148 optional fields (Svelte bindable fallbacks)', () => {
+		const member = blankUnifiedMember();
+		// undefined would throw props_invalid_value when bound to $bindable(null)
+		expect(member.religion_other).toBeNull();
+		expect(member.disability_other_detail).toBeNull();
 	});
 });
 
@@ -228,6 +235,15 @@ describe('unified registration — family plan', () => {
 		expect(plan.headMemberIndex).toBe(0);
 		expect(plan.memberInputs[0]?.first_name).toBe('หัว');
 		expect(plan.householdInput.label).toContain('หัว');
+	});
+
+	it('never zones at registration — a submitted zone is dropped and status stays arriving', () => {
+		const plan = planFamilyRegistration(
+			validInput({ members: [validMember({ zone: 'Z1' })] }),
+			'onsite'
+		);
+		expect(plan.memberInputs[0]?.zone).toBeNull();
+		expect(plan.memberInputs[0]?.status).toBe('arriving');
 	});
 
 	it('plans public channel members as pre_registered', () => {
@@ -311,7 +327,7 @@ describe('unified registration — report-in converters', () => {
 			last_name: 'ใจดี',
 			gender: 'male' as const,
 			phone: '0812345678',
-			person_id: { cardType: 'national_id' as const, number: '1234567890123' },
+			person_id: { cardType: 'national_id' as const, number: '1234567890121' },
 			current_stay: {
 				status: 'pre_registered' as const,
 				zone: null,
@@ -346,7 +362,7 @@ describe('unified registration — report-in converters', () => {
 			last_name: 'มณีรัตน์',
 			gender: 'male' as const,
 			card_snapshot: {
-				citizen_id: '1909800123456',
+				citizen_id: '1909800123458',
 				address_no: '12/4',
 				village_no: '3',
 				lane: 'ซอย 5',
@@ -399,7 +415,7 @@ describe('unified registration — report-in converters', () => {
 			birth_year: 2542,
 			age: 27,
 			phone: '0823334455',
-			person_id: { cardType: 'national_id' as const, number: '1809900234567' },
+			person_id: { cardType: 'national_id' as const, number: '1809900234562' },
 			emergency_contact: { name: 'กิตติศักดิ์', phone: '0891112233', relation: 'สามี' },
 			special_needs: ['ต้องการแพมเพิส'],
 			vulnerable_groups: ['pregnant'],
@@ -410,7 +426,7 @@ describe('unified registration — report-in converters', () => {
 			},
 			registered_via: 'kiosk' as const,
 			card_snapshot: {
-				citizen_id: '1809900234567',
+				citizen_id: '1809900234562',
 				photo_base64: 'data:image/jpeg;base64,spousephoto'
 			},
 			created_at: '2026-01-01T00:00:00.000Z',
@@ -437,5 +453,62 @@ describe('unified registration — report-in converters', () => {
 		expect(targetMember.emergency_contact?.name).toBe('กิตติศักดิ์');
 		expect(targetMember.special_needs).toContain('ต้องการแพมเพิส');
 		expect(targetMember.vulnerable_groups).toContain('pregnant');
+	});
+});
+
+describe('unified registration — collectMemberRuleIssues (one-pass validation)', () => {
+	it('keeps the cross-field issues Zod skips when gender is missing', () => {
+		const members = [
+			validMember({
+				gender: '' as UnifiedRegistrationInput['members'][number]['gender'],
+				person_id: { cardType: 'national_id', number: '1234567890123' }
+			})
+		];
+
+		const parsed = unifiedRegistrationInputSchema.safeParse(validInput({ members }));
+		expect(parsed.success).toBe(false);
+		const zodMessages = parsed.success ? [] : parsed.error.issues.map((i) => i.message);
+		// Base-schema abort (gender) hides the checksum rule from superRefine…
+		expect(zodMessages.some((m) => m.includes('เลขบัตรประชาชนไม่ถูกต้อง'))).toBe(false);
+
+		// …so the collector must surface it, with the same path the form maps to #member-0-card-number.
+		const issues = collectMemberRuleIssues(members);
+		expect(issues).toHaveLength(1);
+		expect(issues[0].path).toEqual(['members', 0, 'person_id', 'number']);
+		expect(issues[0].message).toContain('เลขบัตรประชาชนไม่ถูกต้อง');
+		expect(zodMessages.some((m) => m.includes('เพศ'))).toBe(true);
+	});
+
+	it('collects every rule per member with members[i] paths', () => {
+		const issues = collectMemberRuleIssues([
+			validMember(),
+			validMember({
+				birth_year: 2500,
+				age: 5,
+				religion: 'other',
+				religion_other: ' ',
+				person_id: { cardType: 'national_id', number: '123' }
+			})
+		]);
+
+		expect(issues.map((i) => i.path.join('.')).sort()).toEqual([
+			'members.1.age',
+			'members.1.person_id.number',
+			'members.1.religion_other'
+		]);
+	});
+
+	it('returns nothing for valid members', () => {
+		expect(collectMemberRuleIssues([validMember()])).toEqual([]);
+	});
+
+	it('skips the checksum for an unchanged stored number (report-in)', () => {
+		const issues = collectMemberRuleIssues([
+			validMember({
+				person_id: { cardType: 'national_id', number: '1234567890123' },
+				original_person_number: '1234567890123'
+			})
+		]);
+		expect(issues).toEqual([]);
 	});
 });

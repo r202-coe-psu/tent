@@ -35,6 +35,7 @@
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { qtyGt, subQty } from '$lib/utils/qty';
 
 	let { data }: { data: { token: string } } = $props();
 	const token = $derived(data.token);
@@ -75,6 +76,55 @@
 	 */
 	const showQr = $derived(status === 'verifying');
 	const isReceived = $derived(status === 'received');
+
+	const shortfalls = $derived.by(() => {
+		if (!isReceived || !donation?.received_summary) return [];
+		if (donation.received_summary.shortfalls && donation.received_summary.shortfalls.length > 0) {
+			return donation.received_summary.shortfalls;
+		}
+		if (donation.received_summary.items && donation.received_summary.items.length > 0) {
+			const countedMap: Record<string, string> = {};
+			for (const c of donation.received_summary.items) {
+				const key = c.item_id || c.free_text || c.item_name || '';
+				if (key) countedMap[key] = String(c.qty ?? '0');
+			}
+			const list: Array<{
+				item_id?: string;
+				item_name?: string;
+				declared: string;
+				counted: string;
+				short: string;
+			}> = [];
+			for (const it of donation.items) {
+				const key = it.item_id || it.item_name || '';
+				const counted = countedMap[key] ?? '0';
+				const declared = String(it.qty ?? '0');
+				if (qtyGt(declared, counted)) {
+					list.push({
+						item_id: it.item_id ?? undefined,
+						item_name: it.item_name,
+						declared,
+						counted,
+						short: subQty(declared, counted)
+					});
+				}
+			}
+			return list;
+		}
+		return [];
+	});
+
+	const hasShortfall = $derived(shortfalls.length > 0);
+
+	const shortfallByItem = $derived.by(() => {
+		const map: Record<string, { declared?: string; counted?: string; short?: string }> = {};
+		for (const s of shortfalls) {
+			if (s.item_id) map[s.item_id] = s;
+			if (s.item_name) map[s.item_name] = s;
+		}
+		return map;
+	});
+
 	let qrCodeUrl = $state('');
 
 	$effect(() => {
@@ -213,6 +263,26 @@
 							{t.receivedBody}
 						</p>
 					</div>
+
+					{#if hasShortfall}
+						<div
+							class="flex items-start gap-3 rounded-2xl border border-amber-500/40 bg-amber-50/80 p-4 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/30 dark:text-amber-200"
+						>
+							<AlertCircle class="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+							<div>
+								<h5 class="font-bold">
+									{langState.current === 'en'
+										? `Received with shortfall (${shortfalls.length} item${shortfalls.length > 1 ? 's' : ''})`
+										: `ศูนย์ตรวจรับสิ่งของไม่ครบ (${shortfalls.length} รายการ)`}
+								</h5>
+								<p class="mt-0.5 text-2xs text-amber-800/90 dark:text-amber-300/90">
+									{langState.current === 'en'
+										? 'The unreceived quantities have been deducted and will not remain as reserved quota in the system.'
+										: 'ยอดส่วนต่างที่ยังไม่ได้รับถูกยกเลิกแล้ว ไม่มียอดค้างในระบบ และไม่ผูกกับโควตาการบริจาค'}
+								</p>
+							</div>
+						</div>
+					{/if}
 				{/if}
 
 				{#if showQr && qrCodeUrl}
@@ -424,14 +494,45 @@
 									</thead>
 									<tbody class="divide-y divide-border/60 font-semibold text-foreground">
 										{#each donation.items as item, i (item.item_name + String(i))}
+											{@const sf =
+												(item.item_id && shortfallByItem[item.item_id]) ||
+												shortfallByItem[item.item_name]}
 											<tr>
-												<td class="px-4 py-3">{item.item_name}</td>
+												<td class="px-4 py-3">
+													<div class="flex flex-wrap items-center gap-2">
+														<span>{item.item_name}</span>
+														{#if sf}
+															<span
+																class="inline-flex items-center rounded-md bg-amber-100 px-2 py-0.5 text-2xs font-bold text-amber-800 dark:bg-amber-950/50 dark:text-amber-300"
+															>
+																{langState.current === 'en'
+																	? `Shortfall: -${sf.short}`
+																	: `รับไม่ครบ (ขาด ${sf.short})`}
+															</span>
+														{/if}
+													</div>
+												</td>
 												<td class="px-4 py-3 text-right">
-													{item.qty != null
-														? Number(item.qty).toLocaleString(
-																langState.current === 'en' ? 'en-US' : 'th-TH'
-															)
-														: t.noData}
+													{#if sf}
+														<div class="flex flex-col items-end">
+															<span class="text-xs font-bold text-foreground">
+																{Number(sf.counted).toLocaleString(
+																	langState.current === 'en' ? 'en-US' : 'th-TH'
+																)}
+															</span>
+															<span class="text-2xs text-muted-foreground line-through">
+																{Number(item.qty).toLocaleString(
+																	langState.current === 'en' ? 'en-US' : 'th-TH'
+																)}
+															</span>
+														</div>
+													{:else}
+														{item.qty != null
+															? Number(item.qty).toLocaleString(
+																	langState.current === 'en' ? 'en-US' : 'th-TH'
+																)
+															: t.noData}
+													{/if}
 												</td>
 												<td class="px-4 py-3 text-muted-foreground"
 													>{item.unit

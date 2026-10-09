@@ -1,5 +1,7 @@
 /**
- * E2E: Phase 2 intake pipeline (#252)
+ * E2E: Phase 2 intake pipeline (#252) — mocked Couch (`mock-couch`); `@regression`.
+ * Live Station 1→2→3 + scan on an own `E2E` shelter is `onsite-stations-flow.test.ts`.
+ * Do not expand SH001 live coverage here.
  *
  * Confirmed Playwright seams (Playwright-only — no new Vitest):
  * 1. Staff Station 1 → Unified Registration → batch QR → Medical Screening → Zoning
@@ -8,7 +10,7 @@
  * 4. Anti-duplicate — existing Evacuee blocks new create
  *
  * Run (rebuild first — matches package.json test:e2e):
- *   pnpm exec vite build --mode test && pnpm playwright test e2e/intake-pipeline.test.ts
+ *   pnpm exec vite build --mode test && pnpm playwright test e2e/intake-pipeline.test.ts --grep @regression
  */
 
 import { test, expect, type Page } from '@playwright/test';
@@ -183,7 +185,7 @@ async function fillMinimalUnifiedRegistration(
 	}
 }
 
-test.describe('Phase 2 intake pipeline (#252)', () => {
+test.describe('Phase 2 intake pipeline (#252)', { tag: ['@onsite', '@regression'] }, () => {
 	let staffSession: string;
 	let managerSession: string;
 
@@ -306,10 +308,10 @@ test.describe('Phase 2 intake pipeline (#252)', () => {
 
 		await page.getByRole('button', { name: 'บันทึกลงทะเบียนทั้งครอบครัว' }).click();
 
-		await expect(page.getByRole('heading', { name: 'พิมพ์บัตรประจำตัวครอบครัว' })).toBeVisible({
+		await expect(page.getByRole('heading', { name: 'ลงทะเบียนสำเร็จ' })).toBeVisible({
 			timeout: 20_000
 		});
-		await expect(page.getByText(/· 2 คน/)).toBeVisible();
+		await expect(page.getByText('2 คน', { exact: true })).toBeVisible();
 	});
 
 	// ── Seam 2: Unassigned Registration claim → Report-in ─────────────────────

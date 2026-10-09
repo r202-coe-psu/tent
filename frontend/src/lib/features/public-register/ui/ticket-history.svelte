@@ -14,7 +14,10 @@
 	import type { BookingTicket } from '../application/booking-store.svelte';
 	import { getStoredTickets, removeStoredTicket } from '../data/ticket-storage';
 	import { checkTicketStatus } from '../data/public-register.api';
+	import { syncStoredTicketStatuses } from '../application/ticket-sync';
 	import { langState } from '$lib/states/i18n.svelte';
+	import { PUBLIC_TICKET_HISTORY_I18N } from '$lib/constants/i18n';
+	import { getTranslation } from '$lib/utils/i18n';
 
 	interface Props {
 		onNewBooking?: () => void;
@@ -22,6 +25,8 @@
 	}
 
 	const { onNewBooking, onTicketsChange }: Props = $props();
+
+	const copy = $derived(getTranslation(PUBLIC_TICKET_HISTORY_I18N, langState.current));
 
 	let tickets = $state<BookingTicket[]>([]);
 	let selectedTicket = $state<BookingTicket | null>(null);
@@ -33,32 +38,19 @@
 	});
 
 	async function syncAllStatus() {
-		const current = getStoredTickets();
-		let removedAny = false;
-		for (const t of current) {
-			try {
-				const res = await checkTicketStatus(t.code);
-				if (res.verified || res.notFound) {
-					removeStoredTicket(t.code);
-					removedAny = true;
-				}
-			} catch {
-				// skip on network/status error
-			}
+		const { verified } = await syncStoredTicketStatuses();
+		if (verified.length === 0) return;
+		tickets = getStoredTickets();
+		if (selectedTicket && !tickets.some((t) => t.code === selectedTicket?.code)) {
+			selectedTicket = null;
 		}
-		if (removedAny) {
-			tickets = getStoredTickets();
-			if (selectedTicket && !tickets.some((t) => t.code === selectedTicket?.code)) {
-				selectedTicket = null;
-			}
-			onTicketsChange?.();
-			toast.info('ตั๋วการจองได้รับการยืนยันเข้าศูนย์พักพิงแล้ว ระบบได้ลบข้อมูลออกจากอุปกรณ์');
-		}
+		onTicketsChange?.();
+		toast.info(copy.ticketsClaimedToast);
 	}
 
 	function handleRemove(code: string, e?: MouseEvent) {
 		e?.stopPropagation();
-		if (confirm('คุณต้องการลบตั๋วการจองนี้ออกจากเครื่องหรือไม่?')) {
+		if (confirm(copy.confirmRemove)) {
 			removeStoredTicket(code);
 			tickets = getStoredTickets();
 			if (selectedTicket?.code === code) {
@@ -70,18 +62,14 @@
 
 	function handleConfirmVerified(code: string, e?: MouseEvent) {
 		e?.stopPropagation();
-		if (
-			confirm(
-				'คุณได้นำตั๋วนี้ไปรายงานตัวยืนยันเข้าพักที่ศูนย์แล้วใช่หรือไม่?\n\nระบบจะลบข้อมูลตั๋วนี้ออกจากอุปกรณ์'
-			)
-		) {
+		if (confirm(copy.confirmVerified)) {
 			removeStoredTicket(code);
 			tickets = getStoredTickets();
 			if (selectedTicket?.code === code) {
 				selectedTicket = null;
 			}
 			onTicketsChange?.();
-			toast.success('นำตั๋วไปยืนยันแล้ว ระบบได้ลบข้อมูลตั๋วนี้ออกจากอุปกรณ์เรียบร้อย');
+			toast.success(copy.verifiedToast);
 		}
 	}
 
@@ -97,24 +85,15 @@
 					selectedTicket = null;
 				}
 				onTicketsChange?.();
-				toast.success(
-					'ตั๋วนี้ได้รับการยืนยันเข้าศูนย์พักพิงแล้ว ระบบได้ลบข้อมูลออกจากอุปกรณ์เรียบร้อย'
-				);
+				toast.success(copy.statusVerified);
 			} else if (res.notFound) {
-				removeStoredTicket(code);
-				tickets = getStoredTickets();
-				if (selectedTicket?.code === code) {
-					selectedTicket = null;
-				}
-				onTicketsChange?.();
-				toast.info(
-					'ไม่พบข้อมูลตั๋วนี้ในระบบ (อาจหมดอายุหรือถูกลบแล้ว) ระบบได้ลบข้อมูลออกจากอุปกรณ์'
-				);
+				// Keep the ticket — the user can delete it manually; never auto-drop the only QR.
+				toast.info(copy.statusNotFound);
 			} else {
-				toast.info('ตั๋วนี้ยังอยู่ระหว่างรอการยืนยันเข้าพักที่ศูนย์');
+				toast.info(copy.statusPending);
 			}
 		} catch {
-			toast.error('ไม่สามารถตรวจสอบสถานะได้ในขณะนี้');
+			toast.error(copy.statusCheckFailed);
 		} finally {
 			checkingCode = null;
 		}
@@ -141,53 +120,61 @@
 				class="inline-flex cursor-pointer items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground"
 			>
 				<ArrowLeft class="size-4" />
-				<span>กลับไปยังรายการตั๋วทั้งหมด</span>
+				<span>{copy.backToList}</span>
 			</button>
 
 			<BookingTicketView
 				ticket={selectedTicket}
 				showSuccessHeader={false}
-				onVerified={(code) => handleConfirmVerified(code)}
+				onVerified={(code) => {
+					/* Confirm lives in BookingTicketView; apply removal only */
+					removeStoredTicket(code);
+					tickets = getStoredTickets();
+					selectedTicket = null;
+					onTicketsChange?.();
+					toast.success(copy.verifiedToast);
+				}}
 			/>
 		</div>
-	{:else}
-		<div class="flex items-center justify-between">
-			<div>
-				<h2 class="text-lg font-bold text-foreground">ตั๋วลงทะเบียนที่บันทึกไว้ในอุปกรณ์นี้</h2>
-				<p class="text-xs text-muted-foreground">
-					แตะที่ตั๋วเพื่อเปิดแสดง QR Code สำหรับแสดงต่อเจ้าหน้าที่ลงทะเบียนประจำศูนย์
-					เพื่อยืนยันการเข้าพัก
-				</p>
-			</div>
-			{#if onNewBooking}
-				<Button size="sm" onclick={onNewBooking} class="gap-1.5 font-semibold">
-					<Plus class="size-4" />
-					<span>ลงทะเบียนใหม่</span>
-				</Button>
-			{/if}
-		</div>
-
-		{#if tickets.length === 0}
-			<div class="rounded-2xl border border-dashed border-border bg-card p-10 text-center">
+	{:else if tickets.length === 0}
+		<div class="flex flex-col gap-4">
+			<h2 class="text-lg font-bold text-foreground">{copy.title}</h2>
+			<div class="rounded-2xl border border-dashed border-border bg-card px-4 py-8 text-center">
 				<div
 					class="mx-auto mb-3 flex size-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground"
 				>
 					<QrCode class="size-6" />
 				</div>
-				<p class="text-sm font-bold text-foreground">ไม่พบตั๋วการจองในอุปกรณ์นี้</p>
+				<p class="text-sm font-bold text-foreground">{copy.emptyTitle}</p>
 				<p class="mt-1 text-xs text-muted-foreground">
-					เมื่อคุณจองเข้าศูนย์พักพิงล่วงหน้าสำเร็จ ตั๋วและรหัส QR จะถูกบันทึกไว้ที่นี่โดยอัตโนมัติ
+					{copy.emptyDesc}
 				</p>
 				{#if onNewBooking}
 					<div class="mt-5">
-						<Button onclick={onNewBooking} class="font-semibold">
+						<Button onclick={onNewBooking} class="min-h-11 font-semibold">
 							<Plus class="mr-1.5 size-4" />
-							<span>เริ่มการจองเข้าศูนย์ล่วงหน้า</span>
+							<span>{copy.startBooking}</span>
 						</Button>
 					</div>
 				{/if}
 			</div>
-		{:else}
+		</div>
+	{:else}
+		<div class="space-y-4">
+			<div class="flex items-center justify-between gap-3">
+				<div>
+					<h2 class="text-lg font-bold text-foreground">{copy.title}</h2>
+					<p class="text-xs text-muted-foreground">
+						{copy.subtitle}
+					</p>
+				</div>
+				{#if onNewBooking}
+					<Button size="sm" onclick={onNewBooking} class="gap-1.5 font-semibold">
+						<Plus class="size-4" />
+						<span>{copy.newBooking}</span>
+					</Button>
+				{/if}
+			</div>
 			<div class="grid gap-3">
 				{#each tickets as t (t.code)}
 					<div
@@ -211,11 +198,11 @@
 										: 'bg-primary/10 text-primary'} px-2 py-0.5 text-2xs font-bold"
 								>
 									{t.shelter_code === 'unassigned' || t.type === 'unassigned_queue'
-										? 'ยังไม่ระบุศูนย์'
+										? copy.unassignedBadge
 										: t.code}
 								</span>
 								<span class="text-sm font-bold text-foreground">
-									{[t.first_name, t.last_name].filter(Boolean).join(' ') || 'ผู้จอง'}
+									{[t.first_name, t.last_name].filter(Boolean).join(' ') || copy.registrantFallback}
 								</span>
 							</div>
 
@@ -224,7 +211,9 @@
 							>
 								<span class="flex items-center gap-1">
 									<MapPin class="size-3.5" />
-									{t.shelter_name || t.shelter_code}
+									{t.shelter_code === 'unassigned' || t.type === 'unassigned_queue'
+										? copy.unassignedShelter
+										: t.shelter_name || t.shelter_code}
 								</span>
 								{#if t.booked_at}
 									<span class="flex items-center gap-1">
@@ -240,30 +229,30 @@
 								type="button"
 								variant="outline"
 								size="sm"
-								title="ตรวจสอบว่าตั๋วได้รับการยืนยันที่ศูนย์แล้วหรือยัง"
+								title={copy.checkStatusTitle}
 								class="h-8 gap-1 px-2 text-xs font-semibold"
 								disabled={checkingCode === t.code}
 								onclick={(e) => handleCheckStatus(t.code, e)}
 							>
 								<RefreshCw class="size-3.5 {checkingCode === t.code ? 'animate-spin' : ''}" />
-								<span class="hidden sm:inline">ตรวจสถานะ</span>
+								<span class="hidden sm:inline">{copy.checkStatus}</span>
 							</Button>
 							<Button
 								type="button"
 								variant="secondary"
 								size="sm"
-								title="ยืนยันว่านำตั๋วไปใช้งานแล้ว และลบออกจากอุปกรณ์"
+								title={copy.markVerifiedTitle}
 								class="h-8 gap-1 px-2.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 dark:text-emerald-300 dark:hover:bg-emerald-950/50"
 								onclick={(e) => handleConfirmVerified(t.code, e)}
 							>
 								<CheckCircle class="size-3.5 text-emerald-600" />
-								<span>ยืนยันแล้ว</span>
+								<span>{copy.markVerified}</span>
 							</Button>
 							<Button
 								type="button"
 								variant="ghost"
 								size="icon-sm"
-								aria-label="ลบตั๋ว"
+								aria-label={copy.removeAria}
 								class="text-muted-foreground hover:text-destructive"
 								onclick={(e) => handleRemove(t.code, e)}
 							>
@@ -273,6 +262,6 @@
 					</div>
 				{/each}
 			</div>
-		{/if}
+		</div>
 	{/if}
 </div>

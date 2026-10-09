@@ -16,6 +16,8 @@ import {
 	calculateReserved,
 	keyedDonationIds,
 	keyableDonations,
+	recordedDonationQty,
+	completeDonationReceipt,
 	isNeedCutOff,
 	forceCutOffNeed,
 	editNeed,
@@ -207,8 +209,8 @@ describe('stockBalance', () => {
 });
 
 describe('stock_ledger schema_v + reason enum (CR-032 / draft-lot-produced-at)', () => {
-	// Writer stamps schema_v 5; legacy rows through schema_v 4 remain readable.
-	it('stamps schema_v 5 on new ledger rows', () => {
+	// Writer stamps schema_v 6 (CR-143 §C); legacy rows through schema_v 5 remain readable.
+	it('stamps schema_v 6 on new ledger rows', () => {
 		const entry = createStockLedger(
 			{
 				item_id: 'item:rice',
@@ -219,7 +221,7 @@ describe('stock_ledger schema_v + reason enum (CR-032 / draft-lot-produced-at)',
 			},
 			ctx
 		);
-		expect(entry.schema_v).toBe(5);
+		expect(entry.schema_v).toBe(6);
 		expect(entry.lot?.produced_at).toBe(entry.occurred_at);
 	});
 
@@ -271,7 +273,7 @@ describe('stock_ledger schema_v + reason enum (CR-032 / draft-lot-produced-at)',
 			ctx
 		);
 		expect(entry.lot).toBeUndefined();
-		expect(entry.schema_v).toBe(5);
+		expect(entry.schema_v).toBe(6);
 	});
 
 	it('accepts `distribution_return` as a valid reason (CR-059)', () => {
@@ -298,7 +300,14 @@ describe('stock_ledger schema_v + reason enum (CR-032 / draft-lot-produced-at)',
 
 	it('reads compatible schema_v 2 ledgers', () => {
 		const entry = createStockLedger(
-			{ item_id: 'item:rice', qty: '1', unit: 'kg', reason: 'adjust', ref_id: null },
+			{
+				item_id: 'item:rice',
+				qty: '1',
+				unit: 'kg',
+				reason: 'adjust',
+				adjust_reason: 'found',
+				ref_id: null
+			},
 			ctx
 		);
 		const legacy = { ...entry, schema_v: 2 as const };
@@ -319,6 +328,7 @@ describe('stock_ledger reason ↔ ref_id invariant (CR-055)', () => {
 				qty: reason === 'distribute' ? -5 : base.qty,
 				reason,
 				ref_id,
+				...(reason === 'adjust' ? { adjust_reason: 'found' as const } : {}),
 				...(reason === 'distribute' || reason === 'distribution_return'
 					? { lot_ref: 'stock_ledger:PHYSICALLOT' }
 					: {})
@@ -349,6 +359,12 @@ describe('stock_ledger reason ↔ ref_id invariant (CR-055)', () => {
 			expect(() => write(reason, invalid)).toThrow();
 		});
 	}
+
+	// CR-141 — requisition now accepts either the legacy doc type or the new
+	// unified ticket, so old rows stay valid while new writes move to tickets.
+	it('accepts requisition with a requisition_ticket: ref_id (CR-141)', () => {
+		expect(write('requisition', 'requisition_ticket:01J').ref_id).toBe('requisition_ticket:01J');
+	});
 
 	it('rejects a reason that requires a ref_id when none is given', () => {
 		expect(() => createStockLedger({ ...base, reason: 'donation' }, ctx)).toThrow();
@@ -985,14 +1001,15 @@ describe('createDistributeEntry', () => {
 		expect(entry.shelter_code).toBe(ctx.shelterCode);
 	});
 
-	it('creates entry without note and preserves an explicit deterministic ID', () => {
+	it('keeps a note-bearing entry on an explicit deterministic ID', () => {
 		const entry = createDistributeEntry(
 			{
 				item_id: 'item:rice',
 				qty: 10,
 				unit: 'kg',
 				ref_id: 'requisition_ticket:TICKET1',
-				lot_ref: 'stock_ledger:LOT1'
+				lot_ref: 'stock_ledger:LOT1',
+				note: 'ครัวกลาง'
 			},
 			ctx,
 			'DETERMINISTIC-OUT'
@@ -1000,13 +1017,80 @@ describe('createDistributeEntry', () => {
 
 		expect(entry.qty).toBe('-10');
 		expect(entry._id).toBe('stock_ledger:DETERMINISTIC-OUT');
-		expect(entry.lot).toBeUndefined();
+		expect(entry.lot).toEqual({ note: 'ครัวกลาง' });
+	});
+
+	describe('AC-E1 / FR-E1: a direct issue must name its destination', () => {
+		const base = {
+			item_id: 'item:rice',
+			qty: '2',
+			unit: 'kg',
+			ref_id: 'requisition_ticket:direct-01JTEST',
+			lot_ref: 'stock_ledger:LOT1'
+		};
+
+		it('rejects a missing note', () => {
+			const result = distributeInputSchema.safeParse(base);
+			expect(result.success).toBe(false);
+			// @ts-expect-error -- `note` is required, so the compiler rejects this input too
+			expect(() => createDistributeEntry(base, ctx)).toThrow();
+		});
+
+		it.each(['', '   ', '\t\n'])('rejects a blank note %j', (note) => {
+			expect(distributeInputSchema.safeParse({ ...base, note }).success).toBe(false);
+			expect(() => createDistributeEntry({ ...base, note }, ctx)).toThrow();
+		});
+
+		it('rejects a note longer than 100 characters but accepts exactly 100', () => {
+			expect(distributeInputSchema.safeParse({ ...base, note: 'ก'.repeat(101) }).success).toBe(
+				false
+			);
+			expect(distributeInputSchema.safeParse({ ...base, note: 'ก'.repeat(100) }).success).toBe(
+				true
+			);
+		});
+
+		it('trims the destination before storing it in lot.note', () => {
+			const entry = createDistributeEntry({ ...base, note: '  โซน A  ' }, ctx);
+			expect(entry.lot).toEqual({ note: 'โซน A' });
+		});
+	});
+
+	it('FR-E4: a legacy distribute row without a note still projects', () => {
+		const inbound = createReceiveEntry(
+			{
+				item_id: 'item:rice',
+				qty: '10',
+				unit: 'kg',
+				source: 'donation',
+				ref_id: DONATION_REF,
+				occurred_at: '2026-01-01T00:00:00Z'
+			},
+			ctx,
+			'LEGACY-IN'
+		);
+		const legacyOut = createStockLedger(
+			{
+				item_id: 'item:rice',
+				qty: '-4',
+				unit: 'kg',
+				reason: 'distribute',
+				ref_id: 'requisition_ticket:OLD',
+				lot_ref: inbound.lot_ref!,
+				occurred_at: '2026-01-02T00:00:00Z'
+			},
+			ctx,
+			'LEGACY-OUT'
+		);
+		expect(legacyOut.lot).toBeUndefined();
+		expect(projectStockLotBalances([inbound, legacyOut])[0]).toMatchObject({ qty: '6' });
 	});
 
 	it('rejects zero or negative quantity inputs', () => {
 		expect(() =>
 			createDistributeEntry(
 				{
+					note: 'ครัวกลาง',
 					item_id: 'item:water',
 					qty: 0,
 					unit: 'ขวด',
@@ -1020,6 +1104,7 @@ describe('createDistributeEntry', () => {
 		expect(() =>
 			createDistributeEntry(
 				{
+					note: 'ครัวกลาง',
 					item_id: 'item:water',
 					qty: -5,
 					unit: 'ขวด',
@@ -1032,7 +1117,7 @@ describe('createDistributeEntry', () => {
 	});
 
 	it('rejects null or wrong-prefix ref_id and requires lot_ref', () => {
-		const base = { item_id: 'item:water', qty: '1', unit: 'ขวด' };
+		const base = { item_id: 'item:water', qty: '1', unit: 'ขวด', note: 'ครัวกลาง' };
 		expect(
 			distributeInputSchema.safeParse({
 				...base,
@@ -1635,7 +1720,7 @@ describe('lot numbering (CR-088)', () => {
 			storage_zone: 'A-01',
 			produced_at: '2026-08-25T10:00:00.000Z'
 		});
-		expect(entry.schema_v).toBe(5);
+		expect(entry.schema_v).toBe(6);
 		expect(parseStockLedger(entry)).toEqual(entry);
 	});
 });
@@ -1869,7 +1954,7 @@ describe('new inbound physical-lot identity (CR-059)', () => {
 
 	it('self-references a positive adjustment because it creates a new inbound lot', () => {
 		const adjusted = createAdjustEntry(
-			{ item_id: 'item:rice', qty: '2', unit: 'kg', ref_id: null },
+			{ item_id: 'item:rice', qty: '2', unit: 'kg', adjust_reason: 'found', ref_id: null },
 			ctx
 		);
 		expect(adjusted.lot_ref).toBe(adjusted._id);
@@ -1978,11 +2063,23 @@ describe('projectStockLotBalances', () => {
 		expect(balances.find((lot) => lot.lot_ref.endsWith('B'))?.qty).toBe('2');
 	});
 
+	it('replays a legacy outbound FEFO-then-FIFO, ignoring the weighted issue priority (CR-143 §A)', () => {
+		// Old no-expiry lot sat in stock longest; the weighted ranking would issue it
+		// first, but legacy replay must keep drawing the expiring lot first.
+		const noExpiry = legacyInbound('OLD', '5', '2026-01-01T00:00:00Z');
+		const expiring = legacyInbound('EXP', '5', '2026-09-01T00:00:00Z', { expiry: '2027-06-01' });
+		const out = legacyOutbound('OUT', '3', '2026-10-01T00:00:00Z');
+		const balances = projectStockLotBalances([noExpiry, expiring, out]);
+		expect(balances.find((lot) => lot.lot_ref === 'stock_ledger:EXP')?.qty).toBe('2');
+		expect(balances.find((lot) => lot.lot_ref === 'stock_ledger:OLD')?.qty).toBe('5');
+	});
+
 	it('deducts an explicit outbound from only its physical lot', () => {
 		const a = inbound('A', '5', '2026-01-01T00:00:00Z');
 		const b = inbound('B', '5', '2026-01-01T00:00:00Z');
 		const out = createDistributeEntry(
 			{
+				note: 'ครัวกลาง',
 				item_id: 'item:rice',
 				qty: '3',
 				unit: 'kg',
@@ -2001,6 +2098,7 @@ describe('projectStockLotBalances', () => {
 		const source = inbound('A', '5', '2026-01-01T00:00:00Z');
 		const out = createDistributeEntry(
 			{
+				note: 'ครัวกลาง',
 				item_id: 'item:rice',
 				qty: '3',
 				unit: 'kg',
@@ -2028,6 +2126,50 @@ describe('projectStockLotBalances', () => {
 		expect(balances[0]).toMatchObject({ lot_ref: source.lot_ref, qty: '3' });
 	});
 
+	it('projects matching canonical units through dispatch and return without a lot-integrity error', () => {
+		const source = createStockLedger(
+			{
+				item_id: 'item:blanket',
+				qty: '10',
+				unit: 'piece',
+				reason: 'receive',
+				ref_id: 'distribution_log:fixture',
+				occurred_at: '2026-01-01T00:00:00Z'
+			},
+			ctx,
+			'PIECE-IN'
+		);
+		const dispatched = createDistributeEntry(
+			{
+				note: 'ครัวกลาง',
+				item_id: 'item:blanket',
+				qty: '1',
+				unit: 'piece',
+				ref_id: 'requisition_ticket:fixture',
+				lot_ref: source.lot_ref!,
+				occurred_at: '2026-01-02T00:00:00Z'
+			},
+			ctx,
+			'PIECE-OUT'
+		);
+		const returned = createDistributionReturnEntry(
+			{
+				item_id: 'item:blanket',
+				qty: '1',
+				unit: 'piece',
+				ref_id: 'distribution_batch:fixture',
+				lot_ref: source.lot_ref!,
+				occurred_at: '2026-01-03T00:00:00Z'
+			},
+			ctx,
+			'PIECE-RETURN'
+		);
+
+		expect(projectStockLotBalances([source, dispatched, returned])).toMatchObject([
+			{ item_id: 'item:blanket', unit: 'piece', qty: '10' }
+		]);
+	});
+
 	it('fails closed for impossible legacy history', () => {
 		expect(() =>
 			projectStockLotBalances([
@@ -2039,74 +2181,198 @@ describe('projectStockLotBalances', () => {
 });
 
 describe('sortStockLotsByConsumptionOrder', () => {
-	it('sorts expiring lots before non-expiring lots, and earliest expiry first', () => {
-		const lots = [
-			{
-				lot_ref: 'stock_ledger:NO-EXPIRY',
-				item_id: 'item:water',
-				unit: 'bottle',
-				qty: '10',
-				received_at: '2026-01-01T00:00:00Z'
-			},
-			{
-				lot_ref: 'stock_ledger:LATER',
-				item_id: 'item:water',
-				unit: 'bottle',
-				qty: '10',
-				lot: { expiry: '2026-12-31' },
-				received_at: '2026-01-02T00:00:00Z'
-			},
-			{
-				lot_ref: 'stock_ledger:SOONER',
-				item_id: 'item:water',
-				unit: 'bottle',
-				qty: '10',
-				lot: { expiry: '2026-06-30' },
-				received_at: '2026-01-03T00:00:00Z'
-			}
-		];
+	// Fixed clock so the weighted score is deterministic (CR-143 §A, FR-A5).
+	const NOW = Date.parse('2026-10-02T00:00:00Z');
+	const lotAt = (ref: string, receivedAt: string, expiry?: string) => ({
+		lot_ref: `stock_ledger:${ref}`,
+		item_id: 'item:water',
+		unit: 'bottle',
+		qty: '10',
+		...(expiry ? { lot: { expiry } } : {}),
+		received_at: receivedAt
+	});
 
-		const sorted = sortStockLotsByConsumptionOrder(lots);
-		expect(sorted.map((l) => l.lot_ref)).toEqual([
+	it('weights expiry and days in stock instead of always putting no-expiry lots last', () => {
+		const lots = [
+			// no expiry, 273 days in stock: (365 - 273) - 136.5 = -44.5
+			lotAt('NO-EXPIRY', '2026-01-02T00:00:00Z'),
+			// 2026-12-31 is 90 days away, 272 days in stock: 90 - 136 = -46 -> before NO-EXPIRY
+			lotAt('LATER', '2026-01-03T00:00:00Z', '2026-12-31'),
+			// expires in 28 days (not urgent): 28 - 135.5 = -107.5 -> first
+			lotAt('SOONER', '2026-01-04T00:00:00Z', '2026-10-30')
+		];
+		expect(sortStockLotsByConsumptionOrder(lots, undefined, NOW).map((l) => l.lot_ref)).toEqual([
 			'stock_ledger:SOONER',
 			'stock_ledger:LATER',
 			'stock_ledger:NO-EXPIRY'
 		]);
 	});
 
-	it('uses received_at FIFO and lot_ref as tie-breakers when expiry matches', () => {
+	it('lets a long-stored no-expiry lot go before a barely-stored lot with a far expiry (AC-A2)', () => {
 		const lots = [
-			{
-				lot_ref: 'stock_ledger:B',
-				item_id: 'item:water',
-				unit: 'bottle',
-				qty: '10',
-				lot: { expiry: '2026-06-30' },
-				received_at: '2026-01-02T00:00:00Z'
-			},
-			{
-				lot_ref: 'stock_ledger:A',
-				item_id: 'item:water',
-				unit: 'bottle',
-				qty: '10',
-				lot: { expiry: '2026-06-30' },
-				received_at: '2026-01-02T00:00:00Z'
-			},
-			{
-				lot_ref: 'stock_ledger:EARLIER-RECEIPT',
-				item_id: 'item:water',
-				unit: 'bottle',
-				qty: '10',
-				lot: { expiry: '2026-06-30' },
-				received_at: '2026-01-01T00:00:00Z'
-			}
+			lotAt('D', '2026-09-27T00:00:00Z', '2027-11-06'),
+			lotAt('C', '2026-03-16T00:00:00Z')
 		];
+		expect(sortStockLotsByConsumptionOrder(lots, undefined, NOW).map((l) => l.lot_ref)).toEqual([
+			'stock_ledger:C',
+			'stock_ledger:D'
+		]);
+	});
 
-		const sorted = sortStockLotsByConsumptionOrder(lots);
-		expect(sorted.map((l) => l.lot_ref)).toEqual([
+	it('uses received_at FIFO and lot_ref as tie-breakers when the score matches', () => {
+		const lots = [
+			lotAt('B', '2026-06-02T00:00:00Z', '2027-06-30'),
+			lotAt('A', '2026-06-02T00:00:00Z', '2027-06-30'),
+			lotAt('EARLIER-RECEIPT', '2026-06-01T00:00:00Z', '2027-06-30')
+		];
+		expect(sortStockLotsByConsumptionOrder(lots, undefined, NOW).map((l) => l.lot_ref)).toEqual([
 			'stock_ledger:EARLIER-RECEIPT',
 			'stock_ledger:A',
 			'stock_ledger:B'
+		]);
+	});
+
+	it('reads shelf life and storage type from itemsById', () => {
+		const lots = [
+			lotAt('DRY', '2026-09-30T00:00:00Z'),
+			{ ...lotAt('MILK', '2026-09-30T00:00:00Z'), item_id: 'item:milk' }
+		];
+		const itemsById = new Map([['item:milk', { storage_type: 'CHILLED' }]]);
+		expect(sortStockLotsByConsumptionOrder(lots, itemsById, NOW).map((l) => l.lot_ref)).toEqual([
+			'stock_ledger:MILK',
+			'stock_ledger:DRY'
+		]);
+	});
+});
+
+// CR-143 §B — batch receive, domain half.
+describe('keyDonationReceipt with pinned ids (CR-143 FR-B4a)', () => {
+	const donation = (): Donation => ({ ...declaredItemsDonation(), _id: 'donation:D1' });
+	const lines = [
+		{ item_id: 'item:rice', qty: '8', unit: 'kg' },
+		{ item_id: 'item:water', qty: '5', unit: 'ขวด' }
+	];
+
+	it('uses the supplied ids, index-aligned, and still points rows at the donation', () => {
+		const rows = keyDonationReceipt(donation(), lines, ctx, [
+			'stock_ledger:AAAAAAAAAAAAAAAAAAAAAAAAAA',
+			'stock_ledger:BBBBBBBBBBBBBBBBBBBBBBBBBB'
+		]);
+		expect(rows.map((r) => r._id)).toEqual([
+			'stock_ledger:AAAAAAAAAAAAAAAAAAAAAAAAAA',
+			'stock_ledger:BBBBBBBBBBBBBBBBBBBBBBBBBB'
+		]);
+		expect(rows.every((r) => r.reason === 'donation' && r.ref_id === 'donation:D1')).toBe(true);
+		// a new inbound lot self-references its own (pinned) _id
+		expect(rows[0].lot_ref).toBe(rows[0]._id);
+	});
+
+	it('refuses ids that do not line up with the lines', () => {
+		expect(() => keyDonationReceipt(donation(), lines, ctx, ['stock_ledger:A'])).toThrow(/line up/);
+	});
+});
+
+describe('completeDonationReceipt (CR-143 FR-B4b / FR-B8)', () => {
+	it('moves every outstanding status to received, pending_review included', () => {
+		for (const status of ['declared', 'pending_review', 'verifying'] as const) {
+			const done = completeDonationReceipt({ ...declaredItemsDonation(), status });
+			expect(done.status).toBe('received');
+			expect(done.received_at).not.toBeNull();
+		}
+	});
+
+	it('is a no-op on a donation that is already received', () => {
+		const received = receiveDonation(declaredItemsDonation());
+		expect(completeDonationReceipt(received)).toBe(received);
+	});
+
+	it('refuses the terminal statuses that never reach the shelf', () => {
+		for (const status of ['expired', 'cancelled', 'rejected', 'redirected'] as const) {
+			expect(() => completeDonationReceipt({ ...declaredItemsDonation(), status })).toThrow(
+				/Cannot receive/
+			);
+		}
+	});
+});
+
+describe('batch receive in progress (CR-143 FR-B7 / FR-B9)', () => {
+	const threeLineDonation = (status: Donation['status'] = 'declared'): Donation => ({
+		...declaredItemsDonation(),
+		_id: 'donation:D1',
+		status,
+		items: [
+			{ item_id: 'item:rice', qty: '10', unit: 'kg' },
+			{ item_id: 'item:water', qty: '20', unit: 'ขวด' },
+			{ item_id: 'item:oil', qty: '6', unit: 'ขวด' }
+		]
+	});
+	const row = (item_id: string, qty: string, ref_id = 'donation:D1') =>
+		createStockLedger({ item_id, qty, unit: 'kg', reason: 'donation', ref_id }, ctx);
+
+	it('recordedDonationQty sums donation rows per donation and item', () => {
+		const recorded = recordedDonationQty([
+			row('item:rice', '4'),
+			row('item:rice', '3'),
+			row('item:water', '20'),
+			row('item:rice', '9', 'donation:OTHER'),
+			createStockLedger(
+				{ item_id: 'item:rice', qty: '99', unit: 'kg', reason: 'adjust', adjust_reason: 'found' },
+				ctx
+			)
+		]);
+		expect(recorded.get('donation:D1')?.get('item:rice')).toBe('7');
+		expect(recorded.get('donation:D1')?.get('item:water')).toBe('20');
+		expect(recorded.get('donation:OTHER')?.get('item:rice')).toBe('9');
+		expect(recorded.size).toBe(2);
+	});
+
+	it('AC-B6: reserved drops by what is already in the ledger, so nothing is counted twice', () => {
+		const donation = threeLineDonation('verifying');
+		// 2 of 3 lines recorded: rice 10, water 20; oil still owed
+		const ledger = [row('item:rice', '10'), row('item:water', '20')];
+
+		const reserved = calculateReserved([donation], ledger);
+		expect(reserved.get('item:rice')).toBeUndefined();
+		expect(reserved.get('item:water')).toBeUndefined();
+		expect(reserved.get('item:oil')).toBe('6');
+
+		// on-hand + reserved of a recorded item is its declared qty once, not twice
+		const onHand = stockBalance(ledger);
+		const covered = (id: string) => Number(onHand.get(id) ?? '0') + Number(reserved.get(id) ?? '0');
+		expect(covered('item:rice')).toBe(10);
+		expect(covered('item:water')).toBe(20);
+		expect(covered('item:oil')).toBe(6);
+	});
+
+	it('keeps only the unrecorded remainder of a partly recorded line reserved', () => {
+		const reserved = calculateReserved([threeLineDonation()], [row('item:rice', '4')]);
+		expect(reserved.get('item:rice')).toBe('6');
+	});
+
+	it('does not reserve below zero when more was recorded than declared', () => {
+		const reserved = calculateReserved([threeLineDonation()], [row('item:rice', '12')]);
+		expect(reserved.get('item:rice')).toBeUndefined();
+	});
+
+	it('does not touch another donation that shares the item', () => {
+		const other: Donation = { ...threeLineDonation(), _id: 'donation:OTHER' };
+		const reserved = calculateReserved([threeLineDonation(), other], [row('item:rice', '10')]);
+		expect(reserved.get('item:rice')).toBe('10');
+	});
+
+	it('AC-B2 / FR-B6: a shortfall is not reserved once the donation is received', () => {
+		// 8 of the 10 rice arrived and the donation closed: the missing 2 are released
+		const received = { ...threeLineDonation(), status: 'received' as const };
+		const ledger = [row('item:rice', '8'), row('item:water', '20'), row('item:oil', '6')];
+		expect(calculateReserved([received], ledger).get('item:rice')).toBeUndefined();
+	});
+
+	it('keeps an interrupted batch in the picker, and drops a finished one', () => {
+		const partial = threeLineDonation('verifying');
+		const finished = { ...threeLineDonation('received'), _id: 'donation:DONE' };
+		const ledger = [row('item:rice', '10'), row('item:rice', '10', 'donation:DONE')];
+		expect(keyableDonations([partial, finished], ledger).map((d) => d._id)).toEqual([
+			'donation:D1'
 		]);
 	});
 });

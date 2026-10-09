@@ -13,8 +13,11 @@
 		type Gender,
 		type Religion
 	} from '$lib/features/people';
+	import { sanitizePhoneTyping } from '$lib/db/model';
 	import {
 		ageFromBirthYearBE,
+		birthYearDisplayProblem,
+		birthYearDisplayRange,
 		currentYearBE,
 		defaultBirthCalendar,
 		toDisplayBirthYear,
@@ -41,12 +44,16 @@
 		no_phone = $bindable(false),
 		birth_year = $bindable<number | string | undefined>(),
 		age = $bindable<number | string | undefined>(),
-		gender = $bindable<Gender | ''>(''),
+		gender = $bindable<Gender | null>(null),
 		religion = $bindable<Religion>('unknown'),
+		/** Free text when religion is「อื่นๆ」 (CR-148). */
+		religion_other = $bindable<string | null | undefined>(null),
 		country = $bindable('THAILAND'),
 		disabled = false,
 		/** Hide「ไม่มีเบอร์」— public primary contact must enter a phone. */
 		hideNoPhone = false,
+		/** Public pre-register omits nickname; onsite keeps it. */
+		showNickname = true,
 		phoneOptional = false,
 		phoneHelperText = '',
 		idPrefix = '',
@@ -60,11 +67,13 @@
 		no_phone?: boolean;
 		birth_year?: number | string | undefined;
 		age?: number | string | undefined;
-		gender?: Gender | '';
+		gender?: Gender | null;
 		religion?: Religion;
+		religion_other?: string | null;
 		country?: string;
 		disabled?: boolean;
 		hideNoPhone?: boolean;
+		showNickname?: boolean;
 		phoneOptional?: boolean;
 		phoneHelperText?: string;
 		idPrefix?: string;
@@ -104,7 +113,9 @@
 						? t.religionMuslim
 						: value === 'christian'
 							? t.religionChristian
-							: t.religionUnknown
+							: value === 'other'
+								? t.religionOther
+								: t.religionUnknown
 		}))
 	);
 
@@ -133,6 +144,21 @@
 	const displayBirthYear = $derived(
 		beYearParsed == null ? '' : String(toDisplayBirthYear(beYearParsed, calendar))
 	);
+
+	// CR-148 FR-07: speak in the calendar the user is typing in, not always พ.ศ.
+	const birthYearError = $derived.by(() => {
+		const schemaError = errors?.birthYear ?? errors?.birth_year;
+		if (!schemaError) return '';
+		const problem = birthYearDisplayProblem(displayBirthYear, calendar);
+		if (problem === 'digits') return t.birthYearDigitsError;
+		if (problem === 'range') {
+			const { min, max } = birthYearDisplayRange(calendar);
+			return (calendar === 'BE' ? t.birthYearRangeErrorBE : t.birthYearRangeErrorCE)
+				.replace('{min}', String(min))
+				.replace('{max}', String(max));
+		}
+		return schemaError;
+	});
 
 	function digits(value: string): string {
 		return value.replace(/\D/g, '');
@@ -179,19 +205,23 @@
 
 	function onPhoneInput(e: Event) {
 		const target = e.currentTarget as HTMLInputElement;
-		phone = digits(target.value).slice(0, 10);
+		phone = sanitizePhoneTyping(target.value);
 	}
 
 	const showMononymHint = $derived(
 		country !== 'THAILAND' || (person_id.cardType != null && person_id.cardType !== 'national_id')
 	);
 
-	const genderRadioValue = $derived(gender === 'male' || gender === 'female' ? gender : '');
+	/** Radio sentinel for `gender: null` (ไม่ระบุเพศ). */
+	const GENDER_UNSPECIFIED = 'unspecified';
+	const genderRadioValue = $derived(
+		gender === 'male' || gender === 'female' ? gender : GENDER_UNSPECIFIED
+	);
 </script>
 
 <div class="space-y-4">
-	<!-- Name & Surname (2-column on mobile & desktop) -->
-	<div class="grid grid-cols-2 gap-2 sm:gap-3">
+	<!-- Name & Surname — stack full-width on mobile (M10) -->
+	<div class="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
 		<div class="space-y-1.5">
 			<Label for={fid('first-name')} class="text-xs font-semibold text-foreground">
 				{t.firstNameLabel} <span class="text-destructive">*</span>
@@ -203,10 +233,17 @@
 				autocomplete="given-name"
 				placeholder={showMononymHint ? t.firstNamePlaceholderFull : t.firstNamePlaceholderGiven}
 				aria-invalid={!!(errors?.first_name || errors?.firstName)}
-				class="h-9 {errors?.first_name || errors?.firstName ? errClass : ''}"
+				aria-describedby={errors?.first_name || errors?.firstName
+					? fid('first-name-error')
+					: undefined}
+				class="h-11 min-h-11 sm:h-9 sm:min-h-9 {errors?.first_name || errors?.firstName
+					? errClass
+					: ''}"
 			/>
 			{#if errors?.first_name || errors?.firstName}
-				<p class="text-2xs text-destructive">{errors?.first_name ?? errors?.firstName}</p>
+				<p id={fid('first-name-error')} class="text-2xs text-destructive">
+					{errors?.first_name ?? errors?.firstName}
+				</p>
 			{/if}
 		</div>
 
@@ -221,10 +258,17 @@
 				autocomplete="family-name"
 				placeholder={showMononymHint ? t.lastNamePlaceholderOptional : t.lastNamePlaceholder}
 				aria-invalid={!!(errors?.last_name || errors?.lastName)}
-				class="h-9 {errors?.last_name || errors?.lastName ? errClass : ''}"
+				aria-describedby={errors?.last_name || errors?.lastName
+					? fid('last-name-error')
+					: undefined}
+				class="h-11 min-h-11 sm:h-9 sm:min-h-9 {errors?.last_name || errors?.lastName
+					? errClass
+					: ''}"
 			/>
 			{#if errors?.last_name || errors?.lastName}
-				<p class="text-2xs text-destructive">{errors?.last_name ?? errors?.lastName}</p>
+				<p id={fid('last-name-error')} class="text-2xs text-destructive">
+					{errors?.last_name ?? errors?.lastName}
+				</p>
 			{/if}
 		</div>
 	</div>
@@ -232,23 +276,26 @@
 		<p class="text-2xs text-muted-foreground">{t.mononymHint}</p>
 	{/if}
 
-	<!-- Nickname -->
-	<div class="space-y-1.5">
-		<Label for={fid('nickname')} class="text-xs font-semibold text-foreground"
-			>{t.nicknameLabel}</Label
-		>
-		<Input
-			id={fid('nickname')}
-			bind:value={nickname}
-			{disabled}
-			placeholder={t.nicknamePlaceholder}
-			aria-invalid={!!errors?.nickname}
-			class="h-9 {errors?.nickname ? errClass : ''}"
-		/>
-		{#if errors?.nickname}
-			<p class="text-2xs text-destructive">{errors.nickname}</p>
-		{/if}
-	</div>
+	{#if showNickname}
+		<!-- Nickname -->
+		<div class="space-y-1.5">
+			<Label for={fid('nickname')} class="text-xs font-semibold text-foreground"
+				>{t.nicknameLabel}</Label
+			>
+			<Input
+				id={fid('nickname')}
+				bind:value={nickname}
+				{disabled}
+				placeholder={t.nicknamePlaceholder}
+				aria-invalid={!!errors?.nickname}
+				aria-describedby={errors?.nickname ? fid('nickname-error') : undefined}
+				class="h-11 min-h-11 sm:h-9 sm:min-h-9 {errors?.nickname ? errClass : ''}"
+			/>
+			{#if errors?.nickname}
+				<p id={fid('nickname-error')} class="text-2xs text-destructive">{errors.nickname}</p>
+			{/if}
+		</div>
+	{/if}
 
 	<!-- Identity Document -->
 	<div class="grid gap-3 sm:grid-cols-2">
@@ -275,7 +322,7 @@
 				}}
 				{disabled}
 			>
-				<Select.Trigger class="!h-9 w-full rounded-md text-sm">
+				<Select.Trigger class="!h-11 w-full rounded-md text-sm sm:!h-9">
 					{cardTypeOptions.find((o) => o.value === activeCardType)?.label ?? t.cardTypeNationalId}
 				</Select.Trigger>
 				<Select.Content>
@@ -293,7 +340,7 @@
 			{#if isAnonymousCard}
 				<p
 					id={fid('card-number')}
-					class="flex h-9 items-center rounded-md border border-dashed border-border bg-muted/40 px-3 text-sm text-muted-foreground"
+					class="flex h-11 min-h-11 items-center rounded-md border border-dashed border-border bg-muted/40 px-3 text-sm text-muted-foreground sm:h-9 sm:min-h-9"
 				>
 					{t.cardNumberAnonymousHint}
 				</p>
@@ -308,18 +355,27 @@
 					placeholder={activeCardType === 'national_id'
 						? t.cardNumberPlaceholderNational
 						: t.cardNumberPlaceholderOther}
-					aria-invalid={!!(errors?.cardNumber || errors?.number)}
-					class="h-9 {errors?.cardNumber || errors?.number ? errClass : ''}"
+					aria-invalid={!!(errors?.cardNumber || errors?.number || errors?.person_id)}
+					aria-describedby={errors?.cardNumber || errors?.number || errors?.person_id
+						? fid('card-number-error')
+						: undefined}
+					class="h-11 min-h-11 sm:h-9 sm:min-h-9 {errors?.cardNumber ||
+					errors?.number ||
+					errors?.person_id
+						? errClass
+						: ''}"
 				/>
 			{/if}
-			{#if errors?.cardNumber || errors?.number}
-				<p class="text-2xs text-destructive">{errors.cardNumber ?? errors.number}</p>
+			{#if errors?.cardNumber || errors?.number || errors?.person_id}
+				<p id={fid('card-number-error')} class="text-2xs text-destructive">
+					{errors.cardNumber ?? errors.number ?? errors.person_id}
+				</p>
 			{/if}
 		</div>
 	</div>
 
-	<!-- Birth Year & Age on mobile (2 cols), plus Gender -->
-	<div class="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
+	<!-- Birth Year & Age stack on mobile (M10); Gender full-row ≥44px (M2) -->
+	<div class="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
 		<div class="flex flex-col gap-1.5">
 			<div class="flex min-h-7 items-center justify-between gap-1 sm:gap-2">
 				<Label for={fid('birth-year')} class="truncate text-xs font-semibold text-foreground">
@@ -362,12 +418,14 @@
 				oninput={(e) => updateBirthYearDisplay((e.currentTarget as HTMLInputElement).value)}
 				{disabled}
 				inputmode="numeric"
+				maxlength={4}
 				placeholder={calendar === 'BE' ? t.birthYearPlaceholderBE : t.birthYearPlaceholderCE}
-				aria-invalid={!!(errors?.birthYear || errors?.birth_year)}
-				class="h-9 {errors?.birthYear || errors?.birth_year ? errClass : ''}"
+				aria-invalid={!!birthYearError}
+				aria-describedby={birthYearError ? fid('birth-year-error') : undefined}
+				class="h-11 min-h-11 sm:h-9 sm:min-h-9 {birthYearError ? errClass : ''}"
 			/>
-			{#if errors?.birthYear || errors?.birth_year}
-				<p class="text-2xs text-destructive">{errors.birthYear ?? errors.birth_year}</p>
+			{#if birthYearError}
+				<p id={fid('birth-year-error')} class="text-2xs text-destructive">{birthYearError}</p>
 			{/if}
 		</div>
 
@@ -383,17 +441,18 @@
 				inputmode="numeric"
 				placeholder={t.agePlaceholder}
 				aria-invalid={!!errors?.age}
-				class="h-9 {errors?.age ? errClass : ''}"
+				aria-describedby={errors?.age ? fid('age-error') : undefined}
+				class="h-11 min-h-11 sm:h-9 sm:min-h-9 {errors?.age ? errClass : ''}"
 			/>
 			{#if errors?.age}
-				<p class="text-2xs text-destructive">{errors.age}</p>
+				<p id={fid('age-error')} class="text-2xs text-destructive">{errors.age}</p>
 			{/if}
 		</div>
 
-		<div class="col-span-2 flex flex-col gap-1.5 sm:col-span-1">
+		<div class="flex flex-col gap-1.5">
 			<div class="flex min-h-7 items-center">
 				<Label class="text-xs font-semibold text-foreground" id={fid('gender-label')}>
-					{t.genderLabel} <span class="text-destructive">*</span>
+					{t.genderLabel}
 				</Label>
 			</div>
 			<RadioGroup.Root
@@ -401,36 +460,53 @@
 				onValueChange={(val) => {
 					if (val === 'male' || val === 'female') {
 						gender = val;
+					} else {
+						gender = null;
 					}
 				}}
 				{disabled}
 				aria-labelledby={fid('gender-label')}
 				aria-invalid={!!errors?.gender}
-				class="flex flex-wrap gap-2 sm:gap-3"
+				aria-describedby={errors?.gender ? fid('gender-error') : undefined}
+				class="grid grid-cols-3 gap-2"
 			>
 				<label
-					class="flex min-h-9 cursor-pointer items-center gap-2 rounded-md border border-border px-3 text-sm {genderRadioValue ===
+					class="flex min-h-11 w-full cursor-pointer items-center gap-2.5 rounded-md border border-border px-2 py-2 text-sm sm:px-3 {genderRadioValue ===
 					'male'
 						? 'border-primary bg-primary/5 font-semibold'
 						: ''} {disabled ? 'pointer-events-none opacity-60' : ''}"
 					for={fid('gender-male')}
 				>
-					<RadioGroup.Item value="male" id={fid('gender-male')} class="size-4" />
+					<RadioGroup.Item value="male" id={fid('gender-male')} class="size-4 shrink-0" />
 					{t.genderMale}
 				</label>
 				<label
-					class="flex min-h-9 cursor-pointer items-center gap-2 rounded-md border border-border px-3 text-sm {genderRadioValue ===
+					class="flex min-h-11 w-full cursor-pointer items-center gap-2.5 rounded-md border border-border px-2 py-2 text-sm sm:px-3 {genderRadioValue ===
 					'female'
 						? 'border-primary bg-primary/5 font-semibold'
 						: ''} {disabled ? 'pointer-events-none opacity-60' : ''}"
 					for={fid('gender-female')}
 				>
-					<RadioGroup.Item value="female" id={fid('gender-female')} class="size-4" />
+					<RadioGroup.Item value="female" id={fid('gender-female')} class="size-4 shrink-0" />
 					{t.genderFemale}
+				</label>
+				<label
+					class="flex min-h-11 w-full cursor-pointer items-center gap-2.5 rounded-md border border-border px-2 py-2 text-sm sm:px-3 {genderRadioValue ===
+					GENDER_UNSPECIFIED
+						? 'border-primary bg-primary/5 font-semibold'
+						: ''} {disabled ? 'pointer-events-none opacity-60' : ''}"
+					for={fid('gender-unspecified')}
+				>
+					<RadioGroup.Item
+						value={GENDER_UNSPECIFIED}
+						id={fid('gender-unspecified')}
+						class="size-4 shrink-0"
+					/>
+					<span class="leading-tight">{t.genderUnspecified}</span>
 				</label>
 			</RadioGroup.Root>
 			{#if errors?.gender}
-				<p class="text-2xs text-destructive">{errors.gender}</p>
+				<p id={fid('gender-error')} class="text-2xs text-destructive">{errors.gender}</p>
 			{/if}
 		</div>
 	</div>
@@ -449,11 +525,15 @@
 				searchPlaceholder={t.countrySearch}
 				emptyText={t.countryEmpty}
 				{disabled}
-				class="!h-9 rounded-md text-sm {errors?.country ? errClass : ''}"
-				controlProps={{ id: fid('country'), 'aria-invalid': !!errors?.country }}
+				class="!h-11 rounded-md text-sm sm:!h-9 {errors?.country ? errClass : ''}"
+				controlProps={{
+					id: fid('country'),
+					'aria-invalid': !!errors?.country,
+					'aria-describedby': errors?.country ? fid('country-error') : undefined
+				}}
 			/>
 			{#if errors?.country}
-				<p class="text-2xs text-destructive">{errors.country}</p>
+				<p id={fid('country-error')} class="text-2xs text-destructive">{errors.country}</p>
 			{/if}
 		</div>
 
@@ -465,11 +545,12 @@
 				onValueChange={(val) => {
 					if ((RELIGION_UI_VALUES as readonly string[]).includes(val)) {
 						religion = val as (typeof RELIGION_UI_VALUES)[number];
+						if (val !== 'other') religion_other = null;
 					}
 				}}
 				{disabled}
 			>
-				<Select.Trigger class="!h-9 w-full rounded-md text-sm">
+				<Select.Trigger class="!h-11 w-full rounded-md text-sm sm:!h-9">
 					{religionOptions.find((o) => o.value === religionSelectValue)?.label ?? t.religionUnknown}
 				</Select.Trigger>
 				<Select.Content>
@@ -478,6 +559,25 @@
 					{/each}
 				</Select.Content>
 			</Select.Root>
+			{#if religionSelectValue === 'other'}
+				<Label for={fid('religion-other')} class="sr-only">{t.religionOtherLabel}</Label>
+				<Input
+					id={fid('religion-other')}
+					value={religion_other ?? ''}
+					oninput={(e) => (religion_other = (e.currentTarget as HTMLInputElement).value)}
+					{disabled}
+					maxlength={60}
+					placeholder={t.religionOtherPlaceholder}
+					aria-invalid={!!errors?.religion_other}
+					aria-describedby={errors?.religion_other ? fid('religion-other-error') : undefined}
+					class="h-11 min-h-11 sm:h-9 sm:min-h-9 {errors?.religion_other ? errClass : ''}"
+				/>
+				{#if errors?.religion_other}
+					<p id={fid('religion-other-error')} class="text-2xs text-destructive">
+						{errors.religion_other}
+					</p>
+				{/if}
+			{/if}
 		</div>
 	</div>
 
@@ -497,18 +597,21 @@
 				value={phone}
 				oninput={onPhoneInput}
 				disabled={disabled || (!hideNoPhone && no_phone)}
-				inputmode="numeric"
-				maxlength={10}
+				inputmode="tel"
+				maxlength={15}
 				autocomplete="tel"
 				placeholder={t.phonePlaceholder}
 				aria-invalid={!!errors?.phone}
-				class="h-9 {errors?.phone ? errClass : ''}"
+				aria-describedby={errors?.phone ? fid('phone-error') : undefined}
+				class="h-11 min-h-11 sm:h-9 sm:min-h-9 {errors?.phone ? errClass : ''}"
 			/>
 			{#if phoneHelperText}
 				<p class="text-2xs text-muted-foreground">{phoneHelperText}</p>
+			{:else if !no_phone}
+				<p class="text-2xs text-muted-foreground">{t.phoneIntlHint}</p>
 			{/if}
 			{#if errors?.phone}
-				<p class="text-2xs text-destructive">{errors.phone}</p>
+				<p id={fid('phone-error')} class="text-2xs text-destructive">{errors.phone}</p>
 			{/if}
 		</div>
 

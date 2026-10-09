@@ -28,7 +28,7 @@ from ...core.staff_session import (
     require_shelter_scoped_staff,
     require_system_admin,
 )
-from ...infrastructure.gridfs import store_unassigned_photo
+from ...infrastructure.gridfs import load_unassigned_photo, store_unassigned_photo
 from ...utils.request_meta import client_ip
 from .couch_birth import CouchBirthPort, get_couch_birth
 from .schemas import (
@@ -39,8 +39,10 @@ from .schemas import (
     UnassignedRegistrationCreateResponse,
     UnassignedRegistrationDetailResponse,
     UnassignedRegistrationListResponse,
+    UnassignedRegistrationReviewResponse,
     UnassignedRegistrationSearchResponse,
     UnassignedRegistrationStatsResponse,
+    UnassignedRegistrationStatusResponse,
     UnassignedResidenceMatchRequest,
     UnassignedResidenceMatchResponse,
 )
@@ -191,6 +193,25 @@ async def match_unassigned_residence(
     return await use_case.match_by_residence(payload)
 
 
+@router.get(
+    "/{registration_id}/status",
+    response_model=UnassignedRegistrationStatusResponse,
+    dependencies=[Depends(verify_external_secret)],
+)
+async def get_unassigned_registration_status(
+    registration_id: str,
+    request: Request,
+    response: Response,
+    use_case: UnassignedRegistrationsUseCase = Depends(  # noqa: B008
+        get_unassigned_registrations_use_case
+    ),
+) -> UnassignedRegistrationStatusResponse:
+    """Service-to-service ticket status (BFF sync) — status + counts only, no PII."""
+    _enforce_rate_limit(request)
+    response.headers["Cache-Control"] = "no-store"
+    return await use_case.get_status(registration_id)
+
+
 @staff_router.get(
     "/search",
     response_model=UnassignedRegistrationSearchResponse,
@@ -255,6 +276,55 @@ async def list_unassigned_registrations(
         limit=limit,
         offset=offset,
     )
+
+
+@staff_router.get(
+    "/photos/{photo_id}",
+)
+async def get_unassigned_registration_photo(
+    photo_id: str,
+    response: Response,
+    _session: StaffSession = Depends(require_registration_staff),  # noqa: B008
+    use_case: UnassignedRegistrationsUseCase = Depends(  # noqa: B008
+        get_unassigned_registrations_use_case
+    ),
+) -> Response:
+    """Staff-only photo read (CR-140 addendum) — only if still referenced by an open row."""
+    response.headers["Cache-Control"] = "private, no-store"
+    normalized_ref = await use_case.find_open_photo_reference(photo_id)
+    if normalized_ref is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": {"code": "NOT_FOUND", "message": "Photo not found"}},
+        )
+    loaded = await load_unassigned_photo(normalized_ref)
+    if loaded is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": {"code": "NOT_FOUND", "message": "Photo not found"}},
+        )
+    return Response(
+        content=loaded.full_bytes,
+        media_type=loaded.content_type,
+        headers={"Cache-Control": "private, no-store"},
+    )
+
+
+@staff_router.get(
+    "/{registration_id}/review",
+    response_model=UnassignedRegistrationReviewResponse,
+)
+async def review_unassigned_registration(
+    registration_id: str,
+    response: Response,
+    _session: StaffSession = Depends(require_registration_staff),  # noqa: B008
+    use_case: UnassignedRegistrationsUseCase = Depends(  # noqa: B008
+        get_unassigned_registrations_use_case
+    ),
+) -> UnassignedRegistrationReviewResponse:
+    """Read-only pre-claim review (CR-140 addendum) — open rows only, writes nothing."""
+    response.headers["Cache-Control"] = "no-store"
+    return await use_case.get_review(registration_id)
 
 
 @staff_router.get(

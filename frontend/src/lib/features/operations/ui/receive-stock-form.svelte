@@ -19,17 +19,25 @@
 	import { storageLotFields, type StoragePointRef } from '../domain/lot-storage';
 	import { useStoragePoints } from '../application/use-storage-points.svelte';
 	import StoragePointSelect from './storage-point-select.svelte';
-	import { useSupplyItems } from '$lib/features/supply';
+	import ItemCombobox from './item-combobox.svelte';
+	import DonationBatchReceive from './donation-batch-receive.svelte';
 	import {
-		itemMasterUnit,
-		useItemMasters,
 		formatUnit,
 		useUnitsOfMeasure,
 		itemSelectableUoms,
 		defaultInventoryUom,
 		toLedgerQtyUnit,
-		type PackagingSource
+		shelfLifeExpiryLabel
 	} from '$lib/features/catalog';
+	import {
+		applyExpiryAutofill,
+		confirmExpiry,
+		editExpiry,
+		expiryMissing,
+		initialExpiryState,
+		todayLocalIso,
+		type ExpiryState
+	} from '../domain/lot-expiry';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -38,29 +46,34 @@
 		useDonations,
 		useReceiveStock,
 		useReceiveWalkInDonation,
+		useStockBalance,
 		useStockLedgers
 	} from '../application/queries';
+	import { useStockFormItems } from '../application/use-stock-form-items.svelte';
+	import type { StockFormItem } from '../domain/stock-form-items';
 	import { toast } from 'svelte-sonner';
-	import PackagePlus from '@lucide/svelte/icons/package-plus';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
+	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
+	import HandHelping from '@lucide/svelte/icons/hand-helping';
+	import Package from '@lucide/svelte/icons/package';
+	import { SvelteDate } from 'svelte/reactivity';
+	import { tick } from 'svelte';
 
-	export type MovementFormSuccess = { keepOpen: true; summary?: string };
+	export type MovementFormSuccess = { keepOpen: boolean; summary?: string };
 
-	type StockFormItem = PackagingSource & {
-		_id: string;
-		name: string;
-		unit: string;
-		perishable?: boolean;
-	};
+	/** UI-only source cards — still maps to `source: 'donation' | 'manual'`. */
+	type SourceMode = 'donation_ticket' | 'walk_in' | 'manual';
 
 	let {
 		onsuccess,
 		preselectedItemId = undefined
 	}: { onsuccess?: (result?: MovementFormSuccess) => void; preselectedItemId?: string } = $props();
 
-	// Fetch supply catalog items
-	const itemsQuery = useSupplyItems();
-	const itemMastersQuery = useItemMasters(() => getShelterCode());
+	// Session expired (`needsReauth`): every save button is off until the user signs in again.
+	const offline = $derived(authStore.needsReauth);
+
+	const stockItems = useStockFormItems(() => getShelterCode());
+	const balanceQuery = useStockBalance();
 	const storagePoints = useStoragePoints(() => getShelterCode());
 	const unitsQuery = useUnitsOfMeasure();
 	const units = $derived(unitsQuery.data ?? []);
@@ -69,16 +82,26 @@
 	const ledgersQuery = useStockLedgers();
 	const walkInMutation = useReceiveWalkInDonation();
 
-	let lastSuccess = $state<string | null>(null);
 	let moreOpen = $state(false);
 	let producedAtDate = $state('');
-	let expiryDate = $state('');
+	// `lot.expiry` field state (CR-143 §D): autofilled from the item's shelf life until the
+	// user edits or confirms it. `expiry.autoFilled` is UI-only and never reaches the ledger.
+	let expiry = $state<ExpiryState>(initialExpiryState());
+	let expiryAttempted = $state(false);
+	let sourceMode = $state<SourceMode>('manual');
 
-	// Local state for searchable items combobox
-	let searchQuery = $state('');
-	let isDropdownOpen = $state(false);
+	let selectedItemId = $state('');
 	let selectedItem = $state<StockFormItem | null>(null);
-	let container = $state<HTMLDivElement | null>(null);
+
+	// Set when the item was just created from the picker: shows the "ใหม่" badge and moves
+	// focus to the quantity field so the user can keep typing.
+	let justCreatedItemId = $state('');
+	let qtyInput = $state<HTMLInputElement | null>(null);
+
+	async function focusQty() {
+		await tick();
+		qtyInput?.focus();
+	}
 
 	// Donation picker (CR-055 R4) — replaces the free-text `ref_id` box. Its own
 	// container so the shared click-outside handler can close either dropdown.
@@ -94,43 +117,10 @@
 	let walkInDonorName = $state('');
 	let walkInDonorPhone = $state('');
 
-	const items = $derived.by((): StockFormItem[] => {
-		const supplyItems = (itemsQuery.data ?? []).map((item) => ({
-			_id: item._id,
-			name: item.name,
-			unit: item.unit,
-			base_unit: item.unit,
-			conversions: [] as { uom_name: string; multiplier: string }[],
-			perishable: item.perishable
-		}));
-		const itemMasters = itemMastersQuery.data ?? [];
-
-		const mappedItemMasters = itemMasters
-			.filter((im) => !im.deactivated)
-			.map((im) => ({
-				_id: im._id,
-				name: im.name,
-				unit: itemMasterUnit(im),
-				base_unit: itemMasterUnit(im),
-				conversions: im.conversions ?? [],
-				default_inventory_uom: im.default_inventory_uom,
-				default_issue_uom: im.default_issue_uom,
-				perishable: false
-			}));
-
-		return [...supplyItems, ...mappedItemMasters];
-	});
-
+	const items = $derived(stockItems.items);
 	const unitOptions = $derived(selectedItem ? itemSelectableUoms(selectedItem) : []);
-
-	// Filter items based on search query
-	const filteredItems = $derived.by(() => {
-		if (!searchQuery) return items;
-		const query = searchQuery.toLowerCase().trim();
-		return items.filter((i) => i.name.toLowerCase().includes(query));
-	});
-
 	const itemNameById = $derived(new Map(items.map((i) => [i._id, i.name])));
+	const balanceByItemId = $derived(balanceQuery.data ?? new Map<string, string>());
 
 	/**
 	 * Donations still owing stock. The picker exists so `ref_id` can only ever be
@@ -162,11 +152,37 @@
 		return [`${donation.donor.name}${ticket}`, when, goods].filter(Boolean).join(' · ');
 	}
 
+	function sourceCardClass(active: boolean) {
+		return [
+			'flex min-h-11 w-full flex-col items-start gap-1 rounded-xl border-2 px-3 py-3 text-left transition-colors',
+			active
+				? 'border-[#0284C7] bg-sky-50 text-sky-950'
+				: 'border-border bg-card text-foreground hover:border-slate-400'
+		].join(' ');
+	}
+
+	function setSourceMode(mode: SourceMode) {
+		sourceMode = mode;
+		if (mode === 'manual') {
+			$formData.source = 'manual';
+			clearDonation();
+			resetWalkIn();
+			return;
+		}
+		$formData.source = 'donation';
+		if (mode === 'donation_ticket') {
+			resetWalkIn();
+			return;
+		}
+		clearDonation();
+		isWalkInOpen = true;
+	}
+
 	const form = superForm(defaults({ source: 'manual' }, zod4(receiveInputSchema)), {
 		SPA: true,
 		validators: zod4(receiveInputSchema),
 		resetForm: true,
-		onUpdate: async ({ form: validated }) => {
+		onUpdate: async ({ form: validated, cancel }) => {
 			// In walk-in mode `ref_id` is legitimately empty: the donation does not
 			// exist yet and is minted with the ledger row at submit. That is the one
 			// error worth ignoring — `validated.valid` stays the authority for
@@ -178,9 +194,12 @@
 				return;
 			}
 
-			// Validate perishable item expiry date requirement
-			if (selectedItem?.perishable && !validated.data.lot?.expiry) {
-				toast.error(`สินค้า "${selectedItem.name}" เป็นของเสียได้ จำเป็นต้องระบุวันหมดอายุ`);
+			// FR-D2: an item that requires an expiry cannot be saved without one.
+			if (selectedItem?.requiresExpiry && !validated.data.lot?.expiry) {
+				expiryAttempted = true;
+				// Without cancel() superforms resets the (valid) form, wiping item and qty.
+				cancel();
+				toast.error(`สินค้า "${selectedItem.name}" ต้องระบุวันหมดอายุ`);
 				return;
 			}
 
@@ -215,13 +234,22 @@
 	 */
 	const isWalkIn = $derived($formData.source === 'donation' && isWalkInOpen);
 
+	// With a donation ticket the lines are counted and received together (CR-143 §B) by
+	// `DonationBatchReceive`, which replaces the one-item fields below.
+	function handleBatchReceived(summary: string) {
+		clearDonation();
+		onsuccess?.({ keepOpen: true, summary });
+	}
+
 	// Update locked unit when item is selected
 	function selectItem(item: StockFormItem) {
+		// A date keyed or confirmed for another item says nothing about this one (FR-D2c).
+		if (selectedItemId && selectedItemId !== item._id) commitExpiry(initialExpiryState());
 		selectedItem = item;
+		selectedItemId = item._id;
 		$formData.item_id = item._id;
 		$formData.unit = defaultInventoryUom(item);
-		searchQuery = item.name;
-		isDropdownOpen = false;
+		refreshExpiryAutofill();
 	}
 
 	/** Chosen storage point id ('' = unspecified / main store). */
@@ -236,42 +264,55 @@
 		$formData.lot = { ...lot, ...storageLotFields(point) };
 	}
 
-	// Keep expiryDate and $formData.lot.expiry in sync
-	$effect(() => {
-		const val = expiryDate.trim();
+	/** Mirror the expiry state into `lot.expiry` (the only expiry field that is persisted). */
+	function writeLotExpiry(value: string) {
 		if (!$formData.lot) {
-			if (val) {
-				$formData.lot = { expiry: val };
-			}
-		} else {
-			const current = $formData.lot.expiry ?? '';
-			if (current !== val) {
-				$formData.lot.expiry = val || undefined;
-			}
+			if (value) $formData.lot = { expiry: value };
+			return;
 		}
-	});
+		if (($formData.lot.expiry ?? '') !== value) {
+			$formData.lot.expiry = value || undefined;
+		}
+	}
 
-	// Keep producedAtDate and $formData.lot.produced_at in sync (empty → domain defaults to occurred_at)
-	$effect(() => {
-		const val = producedAtDate.trim();
+	function commitExpiry(next: ExpiryState) {
+		expiry = next;
+		writeLotExpiry(next.value);
+		if (next.value) expiryAttempted = false;
+	}
+
+	/** The user typed, picked or cleared the date. */
+	function setExpiryDate(val: string) {
+		commitExpiry(editExpiry(expiry, val));
+	}
+
+	/** Recompute from the item's shelf life unless the user has taken over (FR-D2a). */
+	function refreshExpiryAutofill() {
+		commitExpiry(applyExpiryAutofill(expiry, selectedItem, producedAtDate, todayLocalIso()));
+	}
+
+	/** Empty → domain defaults produced_at to occurred_at. */
+	function setProducedAtDate(val: string) {
+		producedAtDate = val;
+		const trimmed = val.trim();
 		if (!$formData.lot) {
-			if (val) {
-				$formData.lot = { produced_at: val };
-			}
-		} else if (($formData.lot.produced_at ?? '') !== val) {
-			$formData.lot.produced_at = val || undefined;
+			if (trimmed) $formData.lot = { produced_at: trimmed };
+		} else if (($formData.lot.produced_at ?? '') !== trimmed) {
+			$formData.lot.produced_at = trimmed || undefined;
 		}
-	});
+		refreshExpiryAutofill();
+	}
 
 	function clearSelection() {
 		selectedItem = null;
+		selectedItemId = '';
+		justCreatedItemId = '';
 		$formData.item_id = '';
 		$formData.unit = '';
-		searchQuery = '';
-		isDropdownOpen = false;
 		clearDonation();
-		expiryDate = '';
-		producedAtDate = '';
+		commitExpiry(initialExpiryState());
+		expiryAttempted = false;
+		setProducedAtDate('');
 		storagePointId = '';
 		setStoragePoint(null);
 	}
@@ -279,7 +320,8 @@
 	/** After a successful save: clear qty/lot clocks; clear item unless row-panel pin. */
 	function resetForNextLine() {
 		$formData.qty = '' as unknown as typeof $formData.qty;
-		expiryDate = '';
+		commitExpiry(initialExpiryState());
+		expiryAttempted = false;
 		producedAtDate = '';
 		storagePointId = '';
 		if ($formData.lot) {
@@ -294,9 +336,15 @@
 		setStoragePoint(null);
 		clearDonation();
 		resetWalkIn();
+		if (sourceMode === 'walk_in') {
+			isWalkInOpen = true;
+		}
 		if (!preselectedItemId) {
 			clearSelection();
 			reset({ data: { source: $formData.source || 'manual' } });
+		} else {
+			// The pinned item stays: its next lot gets a fresh autofill.
+			refreshExpiryAutofill();
 		}
 	}
 
@@ -314,10 +362,13 @@
 		isDonationDropdownOpen = false;
 	}
 
-	// Quick expiry date buttons (+3d / +7d)
-	function setQuickExpiry(days: number) {
-		const formatted = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-		expiryDate = formatted;
+	/** Quick expiry shortcuts: +7ว / +6ด / +1ปี */
+	function setQuickExpiry(offset: { days?: number; months?: number; years?: number }) {
+		const d = new SvelteDate();
+		if (offset.years) d.setFullYear(d.getFullYear() + offset.years);
+		if (offset.months) d.setMonth(d.getMonth() + offset.months);
+		if (offset.days) d.setDate(d.getDate() + offset.days);
+		setExpiryDate(d.toISOString().split('T')[0] ?? '');
 	}
 
 	// Submit handler
@@ -339,7 +390,6 @@
 				const name = selectedItem?.name ?? data.item_id;
 				const unitLabel = formatUnit(displayUnit, units, langState.current) || displayUnit;
 				const summary = `${name} +${displayQty} ${unitLabel}`;
-				lastSuccess = `รับเข้าแล้ว: ${summary}`;
 				resetForNextLine();
 				onsuccess?.({ keepOpen: true, summary });
 				return 'รับเข้าแล้ว';
@@ -367,7 +417,6 @@
 			success: () => {
 				const unitLabel = formatUnit(displayUnit, units, langState.current) || displayUnit;
 				const summary = `${donation.donor.name} · ${selectedItem?.name ?? data.item_id} +${displayQty} ${unitLabel}`;
-				lastSuccess = `รับเข้าแล้ว: ${summary}`;
 				resetForNextLine();
 				onsuccess?.({ keepOpen: true, summary });
 				return 'รับเข้าแล้ว';
@@ -396,12 +445,9 @@
 		}
 	});
 
-	// Click outside a combobox closes its dropdown
+	// Click outside donation picker closes its dropdown
 	function handleClickOutside(event: MouseEvent) {
 		const target = event.target as Node;
-		if (container && !container.contains(target)) {
-			isDropdownOpen = false;
-		}
 		if (donationContainer && !donationContainer.contains(target)) {
 			isDonationDropdownOpen = false;
 		}
@@ -452,410 +498,409 @@
 
 <svelte:document onclick={handleClickOutside} />
 
-<form
-	method="POST"
-	use:form.enhance
-	class="flex flex-col space-y-4 rounded-2xl border border-border/80 bg-card p-4 shadow-md sm:p-5"
->
-	<div class="flex items-center gap-2 border-b border-border/60 pb-3">
-		<PackagePlus class="h-4.5 w-4.5 text-primary" aria-hidden="true" />
-		<h3 class="text-sm font-bold text-foreground">รับเข้า</h3>
-	</div>
-
-	{#if lastSuccess}
-		<p
-			class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800"
-			role="status"
-		>
-			{lastSuccess} ✓
-		</p>
-	{/if}
-
+<form method="POST" use:form.enhance class="flex flex-col space-y-4">
 	<Field.FieldGroup class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-		<Form.Field {form} name="item_id" class="relative col-span-1 sm:col-span-2">
-			<Form.Control>
-				{#snippet children({ props })}
-					<Form.Label>สินค้า <span class="font-bold text-destructive">*</span></Form.Label>
-					<div bind:this={container} class="relative w-full">
-						<Input
-							{...props}
-							placeholder="ค้นหา…"
-							bind:value={searchQuery}
-							onfocus={() => !preselectedItemId && (isDropdownOpen = true)}
-							oninput={() => !preselectedItemId && (isDropdownOpen = true)}
-							role="combobox"
-							aria-expanded={isDropdownOpen}
-							aria-controls="item-listbox"
-							aria-haspopup="listbox"
-							autocomplete="off"
-							disabled={!!preselectedItemId}
-							class="min-h-11 {preselectedItemId
-								? 'cursor-not-allowed bg-muted font-bold text-muted-foreground'
-								: ''}"
-						/>
-						{#if selectedItem && !preselectedItemId}
-							<Button
-								type="button"
-								variant="ghost"
-								class="absolute top-1/2 right-1 min-h-11 min-w-11 -translate-y-1/2 px-3 text-sm font-semibold text-muted-foreground hover:text-foreground"
-								onclick={clearSelection}
-							>
-								ล้าง
-							</Button>
+		<div class="col-span-1 space-y-2 sm:col-span-2">
+			<p class="text-sm font-bold text-foreground">1 · ของมาจากไหน</p>
+			<div class="grid grid-cols-1 gap-2 sm:grid-cols-3" role="radiogroup" aria-label="ที่มา">
+				<button
+					type="button"
+					role="radio"
+					aria-checked={sourceMode === 'donation_ticket'}
+					class={sourceCardClass(sourceMode === 'donation_ticket')}
+					onclick={() => setSourceMode('donation_ticket')}
+				>
+					<span class="flex items-center gap-2 text-sm font-bold">
+						<ClipboardList class="h-4 w-4 shrink-0" aria-hidden="true" />
+						ใบบริจาค
+					</span>
+					<span class="text-xs font-medium text-muted-foreground">
+						{#if openDonations.length > 0}
+							รอรับ {openDonations.length} ใบ
+						{:else}
+							เลือกจากใบจอง
 						{/if}
+					</span>
+				</button>
+				<button
+					type="button"
+					role="radio"
+					aria-checked={sourceMode === 'walk_in'}
+					class={sourceCardClass(sourceMode === 'walk_in')}
+					onclick={() => setSourceMode('walk_in')}
+				>
+					<span class="flex items-center gap-2 text-sm font-bold">
+						<HandHelping class="h-4 w-4 shrink-0" aria-hidden="true" />
+						บริจาคหน้างาน
+					</span>
+					<span class="text-xs font-medium text-muted-foreground">ระบุชื่อผู้บริจาค</span>
+				</button>
+				<button
+					type="button"
+					role="radio"
+					aria-checked={sourceMode === 'manual'}
+					class={sourceCardClass(sourceMode === 'manual')}
+					onclick={() => setSourceMode('manual')}
+				>
+					<span class="flex items-center gap-2 text-sm font-bold">
+						<Package class="h-4 w-4 shrink-0" aria-hidden="true" />
+						รับเข้าอื่นๆ
+					</span>
+					<span class="text-xs font-medium text-muted-foreground">รับเข้าคลังทั่วไป</span>
+				</button>
+			</div>
+		</div>
 
-						{#if isDropdownOpen}
-							<div
-								id="item-listbox"
-								role="listbox"
-								class="absolute left-0 z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl"
-							>
-								{#if itemsQuery.isLoading || itemMastersQuery.isLoading}
-									<div class="p-3 text-xs text-muted-foreground">กำลังโหลด…</div>
-								{:else if filteredItems.length === 0}
-									<div class="p-3 text-xs text-muted-foreground">ไม่พบสินค้า</div>
-								{:else}
-									{#each filteredItems as item (item._id)}
-										<button
-											type="button"
-											role="option"
-											aria-selected={selectedItem?._id === item._id}
-											class="flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium hover:bg-muted"
-											onclick={() => selectItem(item)}
-										>
-											<span class="font-semibold text-foreground">{item.name}</span>
-											<span
-												class="rounded-md border border-border/60 bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+		{#if sourceMode === 'donation_ticket'}
+			<Form.Field {form} name="ref_id" class="relative col-span-1 sm:col-span-2">
+				<Form.Control>
+					{#snippet children({ props })}
+						<Form.Label>อ้างอิงบริจาค <span class="font-bold text-destructive">*</span></Form.Label>
+						<div bind:this={donationContainer} class="relative w-full">
+							<Input
+								{...props}
+								placeholder="ค้นหาใบบริจาค…"
+								bind:value={donationSearch}
+								onfocus={() => (isDonationDropdownOpen = true)}
+								oninput={() => {
+									isDonationDropdownOpen = true;
+									if (selectedDonation) {
+										selectedDonation = null;
+										$formData.ref_id = null;
+									}
+								}}
+								role="combobox"
+								aria-expanded={isDonationDropdownOpen}
+								aria-controls="donation-listbox"
+								aria-haspopup="listbox"
+								autocomplete="off"
+								class="min-h-11"
+							/>
+							{#if selectedDonation}
+								<Button
+									type="button"
+									variant="ghost"
+									size="xs"
+									class="absolute top-1/2 right-2 -translate-y-1/2"
+									onclick={clearDonation}
+								>
+									ล้าง
+								</Button>
+							{/if}
+
+							{#if isDonationDropdownOpen}
+								<div
+									id="donation-listbox"
+									role="listbox"
+									class="absolute left-0 z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl"
+								>
+									{#if donationsQuery.isLoading || ledgersQuery.isLoading}
+										<div class="p-3 text-xs text-muted-foreground">กำลังโหลด…</div>
+									{:else if filteredDonations.length === 0}
+										<div class="p-3 text-xs text-muted-foreground">
+											ไม่มีใบบริจาครอรับ — ลองบริจาคหน้างาน
+										</div>
+									{:else}
+										{#each filteredDonations as donation (donation._id)}
+											<button
+												type="button"
+												role="option"
+												aria-selected={selectedDonation?._id === donation._id}
+												class="flex w-full cursor-pointer flex-col gap-0.5 rounded-lg px-3 py-2.5 text-left hover:bg-muted"
+												onclick={() => selectDonation(donation)}
 											>
-												{formatUnit(item.unit, units, langState.current)}
-											</span>
-										</button>
-									{/each}
-								{/if}
-							</div>
-						{/if}
-					</div>
-				{/snippet}
-			</Form.Control>
-			<Form.FieldErrors />
-		</Form.Field>
+												<span class="text-sm font-semibold text-foreground">
+													{donation.donor.name}
+												</span>
+												<span class="text-xs text-muted-foreground">{donationLabel(donation)}</span>
+											</button>
+										{/each}
+									{/if}
+								</div>
+							{/if}
+						</div>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
+		{/if}
 
-		<Form.Field {form} name="qty" class="col-span-1">
-			<Form.Control>
-				{#snippet children({ props })}
-					<Form.Label>จำนวน <span class="font-bold text-destructive">*</span></Form.Label>
-					<Input
-						{...props}
-						type="number"
-						placeholder="0"
-						min="0.01"
-						step="any"
-						bind:value={$formData.qty}
-						class="min-h-11 font-mono font-bold"
-					/>
-				{/snippet}
-			</Form.Control>
-			<Form.FieldErrors />
-		</Form.Field>
-
-		<Form.Field {form} name="unit" class="col-span-1">
-			<Form.Control>
-				{#snippet children({ props })}
-					<Form.Label>หน่วย <span class="font-bold text-destructive">*</span></Form.Label>
-					{#if !selectedItem}
+		{#if sourceMode === 'walk_in'}
+			<div
+				class="col-span-1 flex flex-col gap-3 rounded-xl border border-dashed border-border bg-muted/40 p-4 sm:col-span-2"
+			>
+				<span class="text-xs font-bold text-foreground">บริจาคหน้างาน</span>
+				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+					<div>
+						<Label for="walkin-donor-name" class="mb-1.5 block text-xs font-medium">
+							ชื่อผู้บริจาค <span class="font-bold text-destructive">*</span>
+						</Label>
 						<Input
-							{...props}
-							placeholder="เลือกสินค้าก่อน"
-							value=""
-							readonly
-							disabled
+							id="walkin-donor-name"
+							placeholder="ชื่อ"
+							bind:value={walkInDonorName}
 							class="min-h-11"
 						/>
-					{:else if unitOptions.length <= 1}
-						<Input {...props} value={selectedUnitLabel} readonly disabled class="min-h-11" />
-					{:else}
-						<Select.Root
-							type="single"
-							value={$formData.unit}
-							onValueChange={(val) => {
-								if (val) $formData.unit = val;
-							}}
-						>
-							<Select.Trigger
-								{...props}
-								class="min-h-11 w-full rounded-md border border-input bg-white px-3 text-sm font-medium"
-							>
-								{selectedUnitLabel}
-							</Select.Trigger>
-							<Select.Content>
-								{#each unitOptions as option (option.code)}
-									<Select.Item
-										value={option.code}
-										label={formatUnit(option.code, units, langState.current) || option.code}
-									/>
-								{/each}
-							</Select.Content>
-						</Select.Root>
-					{/if}
-				{/snippet}
-			</Form.Control>
-			<Form.FieldErrors />
-		</Form.Field>
+					</div>
+					<div>
+						<Label for="walkin-donor-phone" class="mb-1.5 block text-xs font-medium">
+							เบอร์โทร
+						</Label>
+						<Input
+							id="walkin-donor-phone"
+							placeholder="ไม่บังคับ"
+							inputmode="numeric"
+							bind:value={walkInDonorPhone}
+							class="min-h-11"
+						/>
+					</div>
+				</div>
+			</div>
+		{/if}
 
-		<Form.Field {form} name="lot.produced_at" class="col-span-1 sm:col-span-2">
-			<Form.Control>
-				{#snippet children({ props })}
-					<Form.Label>วันผลิต</Form.Label>
-					<DatePicker {...props} bind:value={producedAtDate} placeholder="วันนี้ = เข้าคลัง" />
-				{/snippet}
-			</Form.Control>
-			<Form.FieldErrors />
-		</Form.Field>
-
-		<!-- Storage Location (lot.storage_point_id + lot.storage_zone) -->
-		<Form.Field {form} name="lot.storage_zone" class="col-span-1 sm:col-span-2">
-			<Form.Control>
-				{#snippet children({ props })}
-					<Form.Label>สถานที่จัดเก็บ (จุดเก็บของของศูนย์)</Form.Label>
-					<StoragePointSelect
-						points={storagePoints.points}
-						bind:value={storagePointId}
-						onchange={setStoragePoint}
-						triggerProps={props}
-					/>
-				{/snippet}
-			</Form.Control>
-			<Form.FieldErrors />
-		</Form.Field>
-
-		<Form.Field {form} name="lot.expiry" class="col-span-1 sm:col-span-2">
-			<Form.Control>
-				{#snippet children({ props })}
-					<div class="mb-1 flex flex-wrap items-center justify-between gap-2">
+		{#if sourceMode === 'donation_ticket'}
+			{#if selectedDonation}
+				<!-- keyed by donation so picking another ticket starts a fresh count -->
+				{#key selectedDonation._id}
+					<DonationBatchReceive donation={selectedDonation} onsuccess={handleBatchReceived} />
+				{/key}
+			{:else}
+				<p class="col-span-1 text-sm text-slate-500 sm:col-span-2">
+					เลือกใบบริจาคเพื่อดึงรายการทั้งหมดมานับรับของพร้อมกัน
+				</p>
+			{/if}
+		{:else}
+			<Form.Field {form} name="item_id" class="relative col-span-1 sm:col-span-2">
+				<Form.Control>
+					{#snippet children({ props })}
 						<Form.Label>
-							วันหมดอายุ
-							{#if selectedItem?.perishable}
-								<span class="font-bold text-destructive">*</span>
-							{:else}
-								<span class="font-normal text-muted-foreground">(ไม่บังคับ)</span>
+							สินค้า <span class="font-bold text-destructive">*</span>
+							{#if justCreatedItemId && justCreatedItemId === selectedItemId}
+								<span class="ml-2 rounded-full bg-sky-600 px-2 py-0.5 text-xs font-bold text-white"
+									>ใหม่</span
+								>
 							{/if}
 						</Form.Label>
-						<div class="flex gap-2">
-							<Button
-								type="button"
-								variant="outline"
-								class="min-h-11 min-w-[48px] rounded-lg px-3 text-xs font-bold"
-								onclick={() => setQuickExpiry(3)}
-							>
-								+3 วัน
-							</Button>
-							<Button
-								type="button"
-								variant="outline"
-								class="min-h-11 min-w-[48px] rounded-lg px-3 text-xs font-bold"
-								onclick={() => setQuickExpiry(7)}
-							>
-								+7 วัน
-							</Button>
-						</div>
-					</div>
-					<DatePicker {...props} bind:value={expiryDate} placeholder="วว/ดด/ปปปป" />
-				{/snippet}
-			</Form.Control>
-			<Form.FieldErrors />
-		</Form.Field>
+						<ItemCombobox
+							id={props.id}
+							name={props.name}
+							aria-invalid={props['aria-invalid']}
+							aria-describedby={props['aria-describedby']}
+							{items}
+							allowCreate
+							bind:value={selectedItemId}
+							disabled={!!preselectedItemId}
+							isLoading={stockItems.isLoading}
+							{balanceByItemId}
+							formatBalanceUnit={(item) =>
+								formatUnit(item.unit, units, langState.current) || item.unit}
+							onSelect={(item, meta) => {
+								if (!item) {
+									clearSelection();
+									return;
+								}
+								selectItem(item);
+								// A scanned pack barcode names the unit it was printed on.
+								if (meta?.uom) $formData.unit = meta.uom;
+								if (meta?.created) {
+									justCreatedItemId = item._id;
+									void focusQty();
+								}
+							}}
+						/>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
 
-		<div class="col-span-1 sm:col-span-2">
-			<button
-				type="button"
-				class="flex min-h-11 w-full items-center justify-between rounded-lg border border-border/60 bg-muted/30 px-3 text-sm font-semibold text-foreground"
-				onclick={() => (moreOpen = !moreOpen)}
-				aria-expanded={moreOpen}
-			>
-				<span>เพิ่มเติม</span>
-				<ChevronDown
-					class="h-4 w-4 transition-transform {moreOpen ? 'rotate-180' : ''}"
-					aria-hidden="true"
-				/>
-			</button>
+			<Form.Field {form} name="qty" class="col-span-1">
+				<Form.Control>
+					{#snippet children({ props })}
+						<Form.Label>จำนวน <span class="font-bold text-destructive">*</span></Form.Label>
+						<Input
+							{...props}
+							bind:ref={qtyInput}
+							type="number"
+							placeholder="0"
+							min="0.01"
+							step="any"
+							bind:value={$formData.qty}
+							class="min-h-11 font-mono font-bold"
+						/>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
 
-			{#if moreOpen}
-				<div class="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
-					<Form.Field {form} name="source" class="col-span-1 sm:col-span-2">
-						<Form.Control>
-							{#snippet children({ props })}
-								<Form.Label>ที่มา <span class="font-bold text-destructive">*</span></Form.Label>
-								<Select.Root
-									type="single"
-									bind:value={$formData.source}
-									onValueChange={(val) => {
-										if (val && val !== 'donation') {
-											clearDonation();
-											resetWalkIn();
-										}
-									}}
+			<Form.Field {form} name="unit" class="col-span-1">
+				<Form.Control>
+					{#snippet children({ props })}
+						<Form.Label>หน่วย <span class="font-bold text-destructive">*</span></Form.Label>
+						{#if !selectedItem}
+							<Input
+								{...props}
+								placeholder="เลือกสินค้าก่อน"
+								value=""
+								readonly
+								disabled
+								class="min-h-11"
+							/>
+						{:else if unitOptions.length <= 1}
+							<Input {...props} value={selectedUnitLabel} readonly disabled class="min-h-11" />
+						{:else}
+							<Select.Root
+								type="single"
+								value={$formData.unit}
+								onValueChange={(val) => {
+									if (val) $formData.unit = val;
+								}}
+							>
+								<Select.Trigger
+									{...props}
+									class="min-h-11 w-full rounded-md border border-input bg-white px-3 text-sm font-medium"
 								>
-									<Select.Trigger
-										{...props}
-										class="min-h-11 w-full rounded-md border border-input bg-white px-3 text-sm font-medium"
-									>
-										{$formData.source === 'manual' ? 'รับเข้าคลัง' : 'บริจาค'}
-									</Select.Trigger>
-									<Select.Content>
-										<Select.Item value="donation" label="บริจาค" />
-										<Select.Item value="manual" label="รับเข้าคลัง" />
-									</Select.Content>
-								</Select.Root>
-							{/snippet}
-						</Form.Control>
-						<Form.FieldErrors />
-					</Form.Field>
+									{selectedUnitLabel}
+								</Select.Trigger>
+								<Select.Content>
+									{#each unitOptions as option (option.code)}
+										<Select.Item
+											value={option.code}
+											label={formatUnit(option.code, units, langState.current) || option.code}
+										/>
+									{/each}
+								</Select.Content>
+							</Select.Root>
+						{/if}
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
 
-					{#if $formData.source === 'donation' && !isWalkIn}
-						<Form.Field {form} name="ref_id" class="relative col-span-1 sm:col-span-2">
+			<!-- Storage Location (lot.storage_point_id + lot.storage_zone) -->
+			<Form.Field {form} name="lot.storage_zone" class="col-span-1 sm:col-span-2">
+				<Form.Control>
+					{#snippet children({ props })}
+						<Form.Label>สถานที่จัดเก็บ (จุดเก็บของของศูนย์)</Form.Label>
+						<StoragePointSelect
+							points={storagePoints.points}
+							bind:value={storagePointId}
+							onchange={setStoragePoint}
+							triggerProps={props}
+						/>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
+
+			<Form.Field {form} name="lot.expiry" class="col-span-1 sm:col-span-2">
+				<Form.Control>
+					{#snippet children({ props })}
+						<div class="mb-1 flex flex-wrap items-center justify-between gap-2">
+							<Form.Label>
+								วันหมดอายุ
+								{#if selectedItem?.requiresExpiry}
+									<span class="font-bold text-destructive">*</span>
+								{:else}
+									<span class="font-normal text-muted-foreground">(ไม่บังคับ)</span>
+								{/if}
+							</Form.Label>
+							<div class="flex flex-wrap gap-2">
+								<Button
+									type="button"
+									variant="outline"
+									class="min-h-11 min-w-[48px] rounded-lg px-3 text-xs font-bold"
+									onclick={() => setQuickExpiry({ days: 7 })}
+								>
+									+7ว
+								</Button>
+								<Button
+									type="button"
+									variant="outline"
+									class="min-h-11 min-w-[48px] rounded-lg px-3 text-xs font-bold"
+									onclick={() => setQuickExpiry({ months: 6 })}
+								>
+									+6ด
+								</Button>
+								<Button
+									type="button"
+									variant="outline"
+									class="min-h-11 min-w-[48px] rounded-lg px-3 text-xs font-bold"
+									onclick={() => setQuickExpiry({ years: 1 })}
+								>
+									+1ปี
+								</Button>
+							</div>
+						</div>
+						<DatePicker
+							{...props}
+							bind:value={() => expiry.value, setExpiryDate}
+							placeholder="วว/ดด/ปปปป"
+						/>
+						{#if expiry.autoFilled && expiry.shelfLifeDays != null}
+							<div
+								class="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900"
+							>
+								<span>{shelfLifeExpiryLabel(expiry.shelfLifeDays)}</span>
+								<Button
+									type="button"
+									variant="outline"
+									class="min-h-11 rounded-lg px-3 text-xs font-bold"
+									onclick={() => commitExpiry(confirmExpiry(expiry))}
+								>
+									ตรวจสอบแล้ว
+								</Button>
+							</div>
+						{/if}
+						{#if expiryAttempted && expiryMissing(selectedItem, expiry)}
+							<p class="mt-2 text-sm font-semibold text-destructive" role="alert">
+								สินค้านี้ต้องระบุวันหมดอายุ
+							</p>
+						{/if}
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
+
+			<div class="col-span-1 sm:col-span-2">
+				<button
+					type="button"
+					class="flex min-h-11 w-full items-center justify-between rounded-lg border border-border/60 bg-muted/30 px-3 text-sm font-semibold text-foreground"
+					onclick={() => (moreOpen = !moreOpen)}
+					aria-expanded={moreOpen}
+				>
+					<span>ตัวเลือกเพิ่มเติม</span>
+					<ChevronDown
+						class="h-4 w-4 transition-transform {moreOpen ? 'rotate-180' : ''}"
+						aria-hidden="true"
+					/>
+				</button>
+
+				{#if moreOpen}
+					<div class="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+						<Form.Field {form} name="lot.produced_at" class="col-span-1 sm:col-span-2">
 							<Form.Control>
 								{#snippet children({ props })}
-									<Form.Label
-										>อ้างอิงบริจาค <span class="font-bold text-destructive">*</span></Form.Label
-									>
-									<div bind:this={donationContainer} class="relative w-full">
-										<Input
-											{...props}
-											placeholder="ค้นหาใบบริจาค…"
-											bind:value={donationSearch}
-											onfocus={() => (isDonationDropdownOpen = true)}
-											oninput={() => {
-												isDonationDropdownOpen = true;
-												if (selectedDonation) {
-													selectedDonation = null;
-													$formData.ref_id = null;
-												}
-											}}
-											role="combobox"
-											aria-expanded={isDonationDropdownOpen}
-											aria-controls="donation-listbox"
-											aria-haspopup="listbox"
-											autocomplete="off"
-											class="min-h-11"
-										/>
-										{#if selectedDonation}
-											<Button
-												type="button"
-												variant="ghost"
-												size="xs"
-												class="absolute top-1/2 right-2 -translate-y-1/2"
-												onclick={clearDonation}
-											>
-												ล้าง
-											</Button>
-										{/if}
-
-										{#if isDonationDropdownOpen}
-											<div
-												id="donation-listbox"
-												role="listbox"
-												class="absolute left-0 z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl"
-											>
-												{#if donationsQuery.isLoading || ledgersQuery.isLoading}
-													<div class="p-3 text-xs text-muted-foreground">กำลังโหลด…</div>
-												{:else if filteredDonations.length === 0}
-													<div class="p-3 text-xs text-muted-foreground">
-														ไม่มีใบบริจาครอรับ — ใช้บริจาคหน้างานด้านล่าง
-													</div>
-												{:else}
-													{#each filteredDonations as donation (donation._id)}
-														<button
-															type="button"
-															role="option"
-															aria-selected={selectedDonation?._id === donation._id}
-															class="flex w-full cursor-pointer flex-col gap-0.5 rounded-lg px-3 py-2.5 text-left hover:bg-muted"
-															onclick={() => selectDonation(donation)}
-														>
-															<span class="text-sm font-semibold text-foreground">
-																{donation.donor.name}
-															</span>
-															<span class="text-xs text-muted-foreground"
-																>{donationLabel(donation)}</span
-															>
-														</button>
-													{/each}
-												{/if}
-											</div>
-										{/if}
-									</div>
+									<Form.Label>วันผลิต</Form.Label>
+									<DatePicker
+										{...props}
+										bind:value={() => producedAtDate, setProducedAtDate}
+										placeholder="วันนี้ = เข้าคลัง"
+									/>
 								{/snippet}
 							</Form.Control>
 							<Form.FieldErrors />
 						</Form.Field>
-					{/if}
+					</div>
+				{/if}
+			</div>
 
-					{#if $formData.source === 'donation'}
-						<div class="col-span-1 sm:col-span-2">
-							{#if isWalkInOpen}
-								<div
-									class="flex flex-col gap-3 rounded-xl border border-dashed border-border bg-muted/40 p-4"
-								>
-									<div class="flex items-center justify-between">
-										<span class="text-xs font-bold text-foreground">บริจาคหน้างาน</span>
-										<Button
-											type="button"
-											variant="ghost"
-											class="min-h-11 px-4 text-sm font-semibold"
-											onclick={resetWalkIn}
-										>
-											เลือกจากใบแทน
-										</Button>
-									</div>
-									<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-										<div>
-											<Label for="walkin-donor-name" class="mb-1.5 block text-xs font-medium">
-												ชื่อผู้บริจาค <span class="font-bold text-destructive">*</span>
-											</Label>
-											<Input
-												id="walkin-donor-name"
-												placeholder="ชื่อ"
-												bind:value={walkInDonorName}
-												class="min-h-11"
-											/>
-										</div>
-										<div>
-											<Label for="walkin-donor-phone" class="mb-1.5 block text-xs font-medium">
-												เบอร์โทร
-											</Label>
-											<Input
-												id="walkin-donor-phone"
-												placeholder="ไม่บังคับ"
-												inputmode="numeric"
-												bind:value={walkInDonorPhone}
-												class="min-h-11"
-											/>
-										</div>
-									</div>
-								</div>
-							{:else}
-								<Button
-									type="button"
-									variant="link"
-									size="sm"
-									class="h-auto p-0 text-xs font-bold"
-									onclick={() => {
-										clearDonation();
-										isWalkInOpen = true;
-									}}
-								>
-									ไม่มีใบจอง? บริจาคหน้างาน
-								</Button>
-							{/if}
-						</div>
-					{/if}
-				</div>
-			{/if}
-		</div>
-
-		<div class="col-span-1 pt-1 sm:col-span-2">
-			<Form.Button size="lg" disabled={$submitting} class="min-h-11 w-full font-bold">
-				{$submitting ? 'กำลังบันทึก…' : 'บันทึกแล้วรับชิ้นถัดไป'}
-			</Form.Button>
-		</div>
+			<div
+				class="sticky bottom-0 z-10 col-span-1 -mx-4 -mb-4 border-t border-slate-200 bg-slate-50 px-4 py-4 sm:col-span-2 sm:-mx-6 sm:-mb-6 sm:px-6"
+			>
+				<Form.Button size="lg" disabled={$submitting || offline} class="min-h-11 w-full font-bold">
+					{$submitting ? 'กำลังบันทึก…' : 'บันทึกแล้วรับชิ้นถัดไป'}
+				</Form.Button>
+			</div>
+		{/if}
 	</Field.FieldGroup>
 </form>

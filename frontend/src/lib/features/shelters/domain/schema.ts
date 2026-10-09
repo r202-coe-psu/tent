@@ -390,6 +390,11 @@ export const shelterSchema = z.object({
 	operation_status: operationStatusSchema.default('standby'),
 	// code จาก master_data:shelter_type (CR-023 FR-23-0a) — persist string code
 	shelter_type: z.string().trim().nullish(),
+	floor_count: z.coerce
+		.number()
+		.int('จำนวนชั้นต้องเป็นจำนวนเต็ม')
+		.min(1, 'จำนวนชั้นต้องอย่างน้อย 1 ชั้น')
+		.nullish(),
 	project_level: projectLevelSchema.nullish(),
 	location: locationSchema.optional(),
 	contact: contactSchema.optional(),
@@ -493,6 +498,7 @@ export interface ShelterMaster {
 	site_kind: SiteKind;
 	operation_status?: OperationStatus;
 	shelter_type?: string | null;
+	floor_count?: number | null;
 	project_level?: ProjectLevel | null;
 	capacity?: number;
 	area_m2?: number | null;
@@ -569,6 +575,7 @@ function migrateV3ToV4(v3: ShelterMaster): ShelterMaster {
 	return {
 		...v3,
 		schema_v: 4 as const,
+		floor_count: v3.floor_count ?? null,
 		project_level: v3.project_level ?? null,
 		municipality_zone: v3.municipality_zone ?? null,
 		community: v3.community ?? null,
@@ -718,6 +725,7 @@ export function migrateShelterV2ToCurrent(master: ShelterMasterV2 | ShelterMaste
 		operation_status:
 			v2.status === 'open' ? ('active' as OperationStatus) : (v2.status as OperationStatus),
 		shelter_type: null,
+		floor_count: null,
 		area_type: null,
 		capacity: backfilledCapacity,
 		facilities: {

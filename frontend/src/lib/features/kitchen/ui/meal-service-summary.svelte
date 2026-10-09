@@ -10,9 +10,10 @@
 		computeMealVariance,
 		MEAL_PERIOD_LABELS,
 		MEAL_VARIANCE_STATUS_LABELS,
-		type MealPlan,
+		toMealPlanMap,
 		type MealVarianceStatus
 	} from '$lib/features/kitchen';
+	import { formatThaiDateTime, formatThaiShortDate, formatThaiTime } from '$lib/utils/date';
 
 	const STATUS_CLASS: Record<MealVarianceStatus, string> = {
 		on_target: 'border-emerald-200 bg-emerald-50 text-emerald-700',
@@ -23,16 +24,7 @@
 
 	const services = useMealServices();
 	const plans = useMealPlans();
-
-	// Index plans by _id so each service finds its exact source plan —
-	// meal_service.meal_plan_id links a record to the specific plan it reports
-	// on, so this resolves correctly even when multiple plans share a date+meal
-	// (extra batches).
-	const planById = $derived.by(() => {
-		const m: Record<string, MealPlan> = {};
-		for (const p of plans.data ?? []) m[p._id] = p;
-		return m;
-	});
+	const planById = $derived(toMealPlanMap(plans.data));
 
 	// Newest first — created_at is the audit timestamp of the record.
 	const rows = $derived.by(() =>
@@ -43,15 +35,6 @@
 				return { svc, plan, v: computeMealVariance(svc, plan) };
 			})
 	);
-
-	function formatTime(iso: string): string {
-		return new Date(iso).toLocaleString('th-TH', {
-			day: '2-digit',
-			month: '2-digit',
-			hour: '2-digit',
-			minute: '2-digit'
-		});
-	}
 
 	const PAGE_SIZE = 10;
 	let currentPage = $state(1);
@@ -93,7 +76,7 @@
 								</p>
 								<p class="text-xs text-muted-foreground">
 									{#if plan?.label}{MEAL_PERIOD_LABELS[svc.meal]} ·
-									{/if}<span class="font-mono tabular-nums">{svc.date}</span>
+									{/if}<span class="font-mono tabular-nums">{formatThaiShortDate(svc.date)}</span>
 								</p>
 								{#if !plan}
 									<p class="text-xs text-slate-500">ไม่มีแผนอ้างอิง</p>
@@ -103,14 +86,16 @@
 								<Badge variant="outline" class={STATUS_CLASS[v.status]}
 									>{MEAL_VARIANCE_STATUS_LABELS[v.status]}</Badge
 								>
-								<p class="mt-0.5 text-xs tabular-nums text-muted-foreground">
+								<p class="mt-0.5 text-xs text-muted-foreground tabular-nums">
 									{v.variance_pct === null
 										? '—'
 										: `${v.variance_pct >= 0 ? '+' : ''}${v.variance_pct.toFixed(1)}%`}
 								</p>
 							</div>
 						</div>
-						<div class="grid grid-cols-2 gap-2 rounded-xl border border-slate-200/80 bg-slate-50/80 p-3 text-center text-xs">
+						<div
+							class="grid grid-cols-2 gap-2 rounded-xl border border-slate-200/80 bg-slate-50/80 p-3 text-center text-xs"
+						>
 							<div>
 								<p class="text-muted-foreground">วางแผน</p>
 								<p class="font-semibold tabular-nums">
@@ -142,7 +127,7 @@
 							</div>
 						</div>
 						<p class="text-xs text-muted-foreground">
-							{svc.created_by} · {formatTime(svc.created_at)}
+							{svc.created_by} · {formatThaiTime(svc.created_at)}
 						</p>
 					</article>
 				{/each}
@@ -172,7 +157,7 @@
 									</p>
 									<p class="text-xs text-muted-foreground">
 										{#if plan?.label}{MEAL_PERIOD_LABELS[svc.meal]} ·
-										{/if}<span class="font-mono">{svc.date}</span>
+										{/if}<span class="font-mono">{formatThaiShortDate(svc.date)}</span>
 									</p>
 									{#if !plan}
 										<p class="text-xs text-slate-500">ไม่มีแผนอ้างอิง</p>
@@ -204,7 +189,7 @@
 									<Badge variant="outline" class={STATUS_CLASS[v.status]}
 										>{MEAL_VARIANCE_STATUS_LABELS[v.status]}</Badge
 									>
-									<p class="mt-0.5 text-xs tabular-nums text-muted-foreground">
+									<p class="mt-0.5 text-xs text-muted-foreground tabular-nums">
 										{v.variance_pct === null
 											? '—'
 											: `${v.variance_pct >= 0 ? '+' : ''}${v.variance_pct.toFixed(1)}%`}
@@ -212,7 +197,7 @@
 								</Table.Cell>
 								<Table.Cell class="px-6">
 									<p class="text-sm">{svc.created_by}</p>
-									<p class="text-xs text-muted-foreground">{formatTime(svc.created_at)}</p>
+									<p class="text-xs text-muted-foreground">{formatThaiDateTime(svc.created_at)}</p>
 								</Table.Cell>
 							</Table.Row>
 						{/each}

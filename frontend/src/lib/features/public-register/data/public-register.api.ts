@@ -11,7 +11,7 @@
 import type { components } from '$lib/api/openapi';
 import type { UnifiedRegistrationInput } from '$lib/features/people';
 import type { PublicBookingInput, PublicBookingLookupInput } from '../domain/booking';
-import { publicBookingErrorMessage } from '../domain/booking';
+import { NETWORK_ERROR_MESSAGE, publicBookingErrorMessage } from '../domain/booking';
 import { unassignedRegistrationErrorMessage } from '../domain/unassigned-registration';
 
 export interface BookingTicketResponse {
@@ -30,16 +30,84 @@ export type PublicUnifiedBookingPayload = UnifiedRegistrationInput & {
 	disclaimerAcknowledged?: boolean;
 };
 
+/** BFF error with machine-readable `code` for join-clear / field mapping. */
+export class PublicApiError extends Error {
+	readonly code: string;
+	constructor(code: string, message: string) {
+		super(message);
+		this.name = 'PublicApiError';
+		this.code = code;
+	}
+}
+
+export const NETWORK_ERROR_CODE = 'NETWORK_ERROR';
+
+export function isNetworkError(err: unknown): boolean {
+	return err instanceof PublicApiError && err.code === NETWORK_ERROR_CODE;
+}
+
+/**
+ * `fetch` that never leaks the browser's raw rejection ("Failed to fetch", `AbortError`, ...).
+ * Any rejection means no HTTP response arrived — offline, connection reset, aborted — and is
+ * surfaced as a `PublicApiError('NETWORK_ERROR')` so callers can map it to copy by code.
+ */
+export async function publicFetch(input: string, init?: RequestInit): Promise<Response> {
+	try {
+		return await fetch(input, init);
+	} catch {
+		throw new PublicApiError(NETWORK_ERROR_CODE, NETWORK_ERROR_MESSAGE);
+	}
+}
+
+/** Code for an error response: the envelope's `error`, else inferred from the status. */
+function errorCodeFrom(res: Response, body: ErrorEnvelope | null): string {
+	if (typeof body?.error === 'string') return body.error;
+	if (res.status === 429) return 'RATE_LIMITED';
+	return 'WRITE_FAILED';
+}
+
+export function isJoinSelectionInvalidError(err: unknown): boolean {
+	return (
+		err instanceof PublicApiError &&
+		(err.code === 'INVALID_JOIN_TOKEN' || err.code === 'JOIN_TARGET_NOT_FOUND')
+	);
+}
+
+function firstFlattenedFieldMessage(details: unknown): string | null {
+	if (!details || typeof details !== 'object') return null;
+	const d = details as {
+		formErrors?: unknown;
+		fieldErrors?: Record<string, unknown>;
+	};
+	if (Array.isArray(d.formErrors)) {
+		const form = d.formErrors.find((m) => typeof m === 'string' && m.trim());
+		if (typeof form === 'string') return form;
+	}
+	for (const value of Object.values(d.fieldErrors ?? {})) {
+		if (!Array.isArray(value)) continue;
+		const msg = value.find((m) => typeof m === 'string' && m.trim());
+		if (typeof msg === 'string') return msg;
+	}
+	return null;
+}
+
+type ErrorEnvelope = { error?: unknown; details?: unknown };
+
 /** Turn the BFF's `{ success:false, error }` envelope into a Thai-language Error. */
-async function bookingError(res: Response): Promise<Error> {
-	const body = (await res.json().catch(() => null)) as { error?: unknown } | null;
-	return new Error(publicBookingErrorMessage(body?.error));
+async function bookingError(res: Response): Promise<PublicApiError> {
+	const body = (await res.json().catch(() => null)) as ErrorEnvelope | null;
+	const code = errorCodeFrom(res, body);
+	if (code === 'INVALID_INPUT') {
+		const fieldMsg = firstFlattenedFieldMessage(body?.details);
+		if (fieldMsg) return new PublicApiError(code, fieldMsg);
+	}
+	return new PublicApiError(code, publicBookingErrorMessage(code));
 }
 
 export async function createBooking(
 	input: PublicBookingInput | PublicUnifiedBookingPayload
 ): Promise<BookingTicketResponse> {
-	const res = await fetch('/api/public/v1/registrations', {
+	const res = await publicFetch('/api/public/v1/registrations', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify(input)
@@ -51,7 +119,7 @@ export async function createBooking(
 export async function lookupBooking(
 	input: PublicBookingLookupInput
 ): Promise<BookingTicketResponse> {
-	const res = await fetch('/api/public/v1/registrations/lookup', {
+	const res = await publicFetch('/api/public/v1/registrations/lookup', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify(input)
@@ -68,9 +136,14 @@ export type PublicUnassignedRegistrationPayload = UnifiedRegistrationInput & {
 	disclaimerAcknowledged?: boolean;
 };
 
-async function unassignedRegistrationError(res: Response): Promise<Error> {
-	const body = (await res.json().catch(() => null)) as { error?: unknown } | null;
-	return new Error(unassignedRegistrationErrorMessage(body?.error as string | undefined));
+async function unassignedRegistrationError(res: Response): Promise<PublicApiError> {
+	const body = (await res.json().catch(() => null)) as ErrorEnvelope | null;
+	const code = errorCodeFrom(res, body);
+	if (code === 'INVALID_INPUT') {
+		const fieldMsg = firstFlattenedFieldMessage(body?.details);
+		if (fieldMsg) return new PublicApiError(code, fieldMsg);
+	}
+	return new PublicApiError(code, unassignedRegistrationErrorMessage(code));
 }
 
 /**
@@ -80,7 +153,7 @@ async function unassignedRegistrationError(res: Response): Promise<Error> {
 export async function createUnassignedRegistration(
 	input: PublicUnassignedRegistrationPayload
 ): Promise<UnassignedRegistrationResponse> {
-	const res = await fetch('/api/public/v1/unassigned-registrations', {
+	const res = await publicFetch('/api/public/v1/unassigned-registrations', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify(input)
@@ -96,6 +169,8 @@ export type ResidenceMatchChip = {
 	shelter_code?: string | null;
 	shelter_name?: string | null;
 	is_in_shelter?: boolean;
+	/** When true with `is_in_shelter`, public join button may be shown. */
+	accepts_pre_registration?: boolean;
 	primary_contact_masked?: string | null;
 	matched_member_masked?: string | null;
 	member_count?: number;
@@ -160,7 +235,7 @@ export interface UnassignedPhotoUploadResponse {
 export async function uploadUnassignedPhoto(
 	form: FormData
 ): Promise<UnassignedPhotoUploadResponse> {
-	const res = await fetch('/api/public/v1/unassigned-registrations/photos', {
+	const res = await publicFetch('/api/public/v1/unassigned-registrations/photos', {
 		method: 'POST',
 		body: form
 	});
@@ -179,7 +254,7 @@ export async function uploadShelterBookingPhoto(
 	form: FormData
 ): Promise<ShelterBookingPhotoUploadResponse> {
 	form.set('shelter_code', shelterCode.trim());
-	const res = await fetch('/api/public/v1/registrations/photos', {
+	const res = await publicFetch('/api/public/v1/registrations/photos', {
 		method: 'POST',
 		body: form
 	});
@@ -290,7 +365,8 @@ export async function checkTicketStatus(code: string): Promise<TicketStatusResul
 		return {
 			success: res.ok && body.success === true,
 			verified: body.verified === true,
-			notFound: body.notFound === true || body.error === 'BOOKING_NOT_FOUND',
+			// notFound only on a clean 2xx answer — an upstream error (4xx/5xx) must never read as "deleted".
+			notFound: res.ok && body.notFound === true,
 			status: body.status,
 			error: body.error
 		};

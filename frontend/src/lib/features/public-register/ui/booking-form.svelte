@@ -4,8 +4,10 @@
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import QrCode from '@lucide/svelte/icons/qr-code';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
-	import { onMount, untrack } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
+	import { replaceState } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { env } from '$env/dynamic/public';
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Label } from '$lib/components/ui/label';
@@ -26,6 +28,11 @@
 	import { UNASSIGNED_SHELTER_CODE } from '../domain/booking';
 	import { UnifiedRegistrationForm, type UnifiedRegistrationInput } from '$lib/features/people';
 	import { fetchRecaptchaEnabled } from '$lib/api/recaptcha-status';
+	import {
+		isJoinSelectionInvalidError,
+		isNetworkError,
+		PublicApiError
+	} from '../data/public-register.api';
 
 	interface Props {
 		shelters: (PublicShelterCardModel & { available: number | null })[];
@@ -42,6 +49,8 @@
 	const createUnassignedRegistration = useCreateUnassignedRegistration();
 	const siteKey = env.PUBLIC_RECAPTCHA_SITE_KEY || '';
 	let captchaEnabled = $state(false);
+	/** Bumped on join-token/target API failures so UnifiedRegistrationForm clears the chip. */
+	let joinResetKey = $state(0);
 
 	function resolveInitialShelter(): string {
 		if (lockedShelterCode) return lockedShelterCode;
@@ -71,7 +80,7 @@
 			} else {
 				url.searchParams.delete('shelter');
 			}
-			window.history.replaceState(window.history.state, '', url.pathname + url.search);
+			replaceState(resolve((url.pathname + url.search) as '/'), {});
 			try {
 				if (code) {
 					sessionStorage.setItem('pre_register_shelter', code);
@@ -108,7 +117,8 @@
 			const url = new URL(window.location.href);
 			if (url.searchParams.get('shelter') !== selectedShelterCode) {
 				url.searchParams.set('shelter', selectedShelterCode);
-				window.history.replaceState(window.history.state, '', url.pathname + url.search);
+				// The router is not ready during the first mount — wait a tick before shallow routing.
+				void tick().then(() => replaceState(resolve((url.pathname + url.search) as '/'), {}));
 			}
 		}
 	});
@@ -116,7 +126,7 @@
 	function capacityLabel(s: { capacity: number; available: number | null }): string {
 		return s.available === null
 			? `${s.capacity} ${t.unitPlaces}`
-			: `ว่าง ${s.available} / ${s.capacity} ${t.unitPlaces}`;
+			: t.capacityAvailable(s.available, s.capacity, t.unitPlaces);
 	}
 
 	async function captchaToken(): Promise<string | null> {
@@ -144,9 +154,20 @@
 
 	let isSubmitting = $state(false);
 
+	/**
+	 * One human-readable sentence per failed submit. Only `PublicApiError` carries copy that was
+	 * mapped from a server code; anything else (a stray `TypeError`, ...) gets the generic fallback
+	 * instead of leaking a raw browser message.
+	 */
+	function submitErrorMessage(err: unknown): string {
+		if (isNetworkError(err)) return t.networkError;
+		if (err instanceof PublicApiError && err.message) return err.message;
+		return t.bookingErrorFallback;
+	}
+
 	async function handleUnifiedSubmit(unifiedInput: UnifiedRegistrationInput) {
 		if (!isUnassigned && !selectedIsBookable) {
-			const err = 'ศูนย์นี้ยังไม่เปิดรับลงทะเบียนล่วงหน้าจากหน้าสาธารณะ';
+			const err = t.shelterNotBookable;
 			toast.error(err);
 			throw new Error(err);
 		}
@@ -164,7 +185,7 @@
 				shelter: shelterPolicy as unknown as ShelterSummary
 			});
 			if (groups.length > 0 && !disclaimerAcknowledged) {
-				const err = 'กรุณากดยืนยันการรับทราบเงื่อนไขและมาตรการด้านความปลอดภัยของศูนย์พักพิง';
+				const err = t.shelterDisclaimerRequired;
 				toast.error(err);
 				throw new Error(err);
 			}
@@ -176,8 +197,8 @@
 			captchaEnabled = enabled;
 			const token = await captchaToken();
 			if (enabled && !token) {
-				toast.error(t.recaptchaError);
-				throw new Error(t.recaptchaError);
+				// Not toasted here — the catch block below raises the single toast for this error.
+				throw new PublicApiError('CAPTCHA_CLIENT_FAILED', t.recaptchaError);
 			}
 
 			const head = unifiedInput.members[0];
@@ -190,11 +211,11 @@
 					...(token ? { captchaToken: token } : {})
 				});
 
-				toast.success('ลงทะเบียนสำเร็จ');
+				toast.success(t.registerSuccess);
 				const ticket: BookingTicket = {
 					code: res.id,
 					shelter_code: UNASSIGNED_SHELTER_CODE,
-					shelter_name: 'ไม่ระบุศูนย์พักพิง',
+					shelter_name: t.unassignedShelterName,
 					first_name: head.first_name,
 					last_name: head.last_name ?? '',
 					status: res.status,
@@ -243,8 +264,10 @@
 			}
 			onbooked(ticket);
 		} catch (err) {
-			const msg = err instanceof Error ? err.message : t.bookingErrorFallback;
-			toast.error(msg);
+			toast.error(submitErrorMessage(err));
+			if (isJoinSelectionInvalidError(err)) {
+				joinResetKey += 1;
+			}
 			throw err;
 		} finally {
 			isSubmitting = false;
@@ -269,11 +292,8 @@
 	>
 		<QrCode class="mt-0.5 h-5 w-5 shrink-0 text-primary" />
 		<div>
-			<p class="font-bold text-primary">💡 ลงทะเบียนล่วงหน้าเพื่อความสะดวกและรวดเร็ว</p>
-			<p class="mt-0.5 text-xs text-muted-foreground">
-				เมื่อลงทะเบียนเรียบร้อยแล้ว ท่านสามารถแจ้งเบอร์โทรศัพท์หรือแสดง QR Code
-				ต่อเจ้าหน้าที่ลงทะเบียนประจำศูนย์ เพื่อยืนยันการเข้าพักได้ทันที
-			</p>
+			<p class="font-bold text-primary">{t.guidanceTitle}</p>
+			<p class="mt-0.5 text-xs text-muted-foreground">{t.guidanceDesc}</p>
 		</div>
 	</div>
 
@@ -304,14 +324,14 @@
 				disabled={Boolean(lockedShelterCode)}
 			>
 				<Select.Trigger class="!h-10 w-full text-sm font-semibold">
-					{isUnassigned ? '📍 ไม่ระบุศูนย์พักพิง' : (selected?.name ?? t.selectShelterPlaceholder)}
+					{isUnassigned ? t.unassignedOption : (selected?.name ?? t.selectShelterPlaceholder)}
 				</Select.Trigger>
 				<Select.Content>
-					<Select.Item value={UNASSIGNED_SHELTER_CODE} label="📍 ไม่ระบุศูนย์พักพิง">
+					<Select.Item value={UNASSIGNED_SHELTER_CODE} label={t.unassignedOption}>
 						<span class="flex flex-col gap-0.5 text-left">
-							<span class="font-bold text-foreground">📍 ไม่ระบุศูนย์พักพิง</span>
+							<span class="font-bold text-foreground">{t.unassignedOption}</span>
 							<span class="text-2xs break-words whitespace-normal text-muted-foreground"
-								>ลงทะเบียนล่วงหน้าโดยไม่ระบุศูนย์ (ยืนยันศูนย์เมื่อเดินทางถึง)</span
+								>{t.unassignedOptionHint}</span
 							>
 						</span>
 					</Select.Item>
@@ -343,9 +363,9 @@
 				>
 					<Info class="mt-0.5 h-4 w-4 shrink-0 text-primary" />
 					<div>
-						<p class="font-bold text-primary">กรณีไม่ระบุศูนย์พักพิง</p>
+						<p class="font-bold text-primary">{t.unassignedNoticeTitle}</p>
 						<p class="mt-0.5 text-muted-foreground">
-							การลงทะเบียนล่วงหน้า จะไม่การันตีว่าคุณจะได้เข้าพักในศูนย์
+							{t.unassignedNoticeDesc}
 						</p>
 					</div>
 				</div>
@@ -354,7 +374,7 @@
 					class="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning-muted/40 p-2.5 text-xs text-warning"
 				>
 					<AlertTriangle class="mt-0.5 h-3.5 w-3.5 shrink-0" />
-					<span>ศูนย์นี้ยังไม่เปิดรับลงทะเบียนล่วงหน้าจากหน้าสาธารณะ</span>
+					<span>{t.shelterNotBookable}</span>
 				</p>
 			{:else if selected}
 				<p class="flex items-start gap-1 text-xs text-muted-foreground">
@@ -383,15 +403,17 @@
 			{submitDisabled}
 			enableUnassignedPhoto={isUnassigned}
 			shelterCode={isUnassigned ? '' : selectedShelterCode}
-			shelterName={selected?.name ?? (isUnassigned ? 'ไม่ระบุศูนย์พักพิง' : selectedShelterCode)}
+			shelterName={selected?.name ?? (isUnassigned ? t.unassignedShelterName : selectedShelterCode)}
+			bookableShelterCodes={bookable.map((s) => s.code)}
+			{joinResetKey}
 			onsubmit={handleUnifiedSubmit}
 			onselectshelter={(code, name) => {
 				if (code && selectedShelterCode !== code) {
 					updateShelterSelection(code);
-					toast.success(`เปลี่ยนศูนย์พักพิงเป็น "${name || code}" เรียบร้อยแล้ว`);
+					toast.success(t.shelterChangedToast(name || code));
 				}
 			}}
-			submitLabel="ยืนยันการลงทะเบียน"
+			submitLabel={t.submitRegistration}
 		>
 			{#snippet children({ household })}
 				{@const currentDisclaimerGroups = !isUnassigned
@@ -418,7 +440,7 @@
 								id="unassigned-disclaimer-ack"
 								checked={disclaimerAcknowledged}
 								onCheckedChange={(v) => (disclaimerAcknowledged = v === true)}
-								class="mt-0.5 size-4 shrink-0"
+								class="mt-0.5 size-5 shrink-0"
 							/>
 							<span class="text-xs leading-relaxed font-semibold select-none sm:text-sm">
 								{t.unassignedDisclaimerAck}
@@ -430,7 +452,7 @@
 						<div class="flex items-center gap-2">
 							<ShieldAlert class="size-5 text-amber-600 dark:text-amber-400" />
 							<h4 class="text-sm font-bold text-foreground">
-								เงื่อนไขและมาตรการความปลอดภัยของศูนย์พักพิง
+								{t.shelterSafetyTitle}
 							</h4>
 						</div>
 						<div class="space-y-3">
@@ -452,25 +474,25 @@
 								id="disclaimer-ack"
 								checked={disclaimerAcknowledged}
 								onCheckedChange={(v) => (disclaimerAcknowledged = v === true)}
-								class="mt-0.5 size-4 shrink-0"
+								class="mt-0.5 size-5 shrink-0"
 							/>
 							<span class="text-xs leading-relaxed font-semibold select-none sm:text-sm">
-								ข้าพเจ้ารับทราบและยินยอมปฏิบัติตามเงื่อนไขและมาตรการด้านความปลอดภัยของศูนย์พักพิงทุกประการ
+								{t.shelterSafetyAck}
 							</span>
 						</label>
 					</section>
 				{/if}
 				{#if captchaEnabled}
-					<p class="text-center text-2xs text-muted-foreground">{t.recaptchaBranding}</p>
+					<p class="mt-4 text-center text-2xs text-muted-foreground">{t.recaptchaBranding}</p>
 				{/if}
 			{/snippet}
 		</UnifiedRegistrationForm>
 	{:else}
 		<div class="rounded-2xl border border-dashed border-border/80 bg-card/50 p-8 text-center">
 			<MapPin class="mx-auto mb-2 size-8 text-muted-foreground/60" />
-			<h4 class="text-sm font-bold text-foreground">กรุณาเลือกศูนย์พักพิง</h4>
+			<h4 class="text-sm font-bold text-foreground">{t.chooseShelterTitle}</h4>
 			<p class="mt-1 text-xs text-muted-foreground">
-				เลือกศูนย์พักพิงที่ท่านต้องการเข้าพัก หรือเลือก "ไม่ระบุศูนย์พักพิง" เพื่อดำเนินการลงทะเบียน
+				{t.chooseShelterDesc}
 			</p>
 		</div>
 	{/if}

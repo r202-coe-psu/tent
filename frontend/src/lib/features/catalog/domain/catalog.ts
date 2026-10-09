@@ -264,6 +264,9 @@ export interface ItemCategory extends CatalogDoc {
 	override?: boolean;
 }
 
+/** Current persisted `item_master` shape (CR-143 §F adds `merged_into`). Every new writer stamps this. */
+export const ITEM_MASTER_SCHEMA_V = 5;
+
 export interface ItemMaster extends CatalogDoc {
 	type: 'item_master';
 	name: string;
@@ -279,6 +282,11 @@ export interface ItemMaster extends CatalogDoc {
 	deactivated?: boolean;
 	shelter_code?: string;
 	override?: boolean;
+	/**
+	 * schema_v 5 (CR-143 §F): set with `deactivated: true` when this item was merged into
+	 * another. Lists and pickers hide it; searching its old name finds the destination.
+	 */
+	merged_into?: string;
 
 	// New fields
 	shelf_life_days?: number;
@@ -292,6 +300,13 @@ export interface ItemMaster extends CatalogDoc {
 	qty_per_person?: number;
 	returnable?: boolean;
 	asset_status?: AssetStatus;
+
+	// item_category:fuel_energy specific fields (physical tank spec) — plain
+	// item_master data, no longer tied to per-tank documents.
+	fuel_type?: string;
+	capacity_kg?: string;
+	burn_rate_kg_per_hour?: string;
+	time_multiplier?: string;
 }
 
 export interface Recipe extends CatalogDoc {
@@ -338,7 +353,7 @@ export type PackagingUomOption = {
 export type PackagingSource = {
 	base_unit?: string;
 	unit?: string;
-	conversions?: readonly { uom_name: string; multiplier: string }[];
+	conversions?: readonly { uom_name: string; multiplier: string; barcode?: string }[];
 	default_inventory_uom?: string;
 	default_issue_uom?: string;
 };
@@ -430,6 +445,93 @@ export function toLedgerQtyUnit(
 	};
 }
 
+// ---------------------------------------------------------------- expiry requirement (CR-143 §D)
+
+/** The fields that decide whether a receive must carry `lot.expiry` (either catalog generation). */
+export type ExpirySource = {
+	storage_type?: StorageType | null;
+	shelf_life_days?: number | null;
+	/** Legacy `supply_item.perishable` (FR-D3). `item_master` has no such field. */
+	perishable?: boolean | null;
+};
+
+/** Storage types whose stock cannot be left on the shelf without a date. */
+const EXPIRY_STORAGE_TYPES: readonly StorageType[] = ['CHILLED', 'FROZEN'];
+
+function isColdStorage(type: StorageType | null | undefined): boolean {
+	return !!type && EXPIRY_STORAGE_TYPES.includes(type);
+}
+
+/** A usable shelf life: a finite number of whole days >= 1 (0, negatives and NaN are "unset"). */
+function hasShelfLife(days: number | null | undefined): days is number {
+	return typeof days === 'number' && Number.isFinite(days) && Math.trunc(days) >= 1;
+}
+
+/**
+ * Must a receive of this item carry `lot.expiry`? (CR-143 FR-D1, FR-D3)
+ *
+ * `item_master` never had a `perishable` flag, so this is derived: CHILLED / FROZEN
+ * storage, or any `shelf_life_days`. A legacy `supply_item.perishable` still counts.
+ */
+export function requiresExpiry(item: ExpirySource): boolean {
+	if (item.perishable === true) return true;
+	if (isColdStorage(item.storage_type)) return true;
+	return hasShelfLife(item.shelf_life_days);
+}
+
+const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** Parse `YYYY-MM-DD` to a UTC date, rejecting values the calendar rolls over (e.g. 02-31). */
+function parseIsoDate(value: string | undefined | null): Date | null {
+	const match = ISO_DATE.exec((value ?? '').trim());
+	if (!match) return null;
+	const [, y, m, d] = match;
+	const date = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)));
+	return date.getUTCFullYear() === Number(y) &&
+		date.getUTCMonth() === Number(m) - 1 &&
+		date.getUTCDate() === Number(d)
+		? date
+		: null;
+}
+
+/**
+ * Default `lot.expiry` for an item with a shelf life: `(produced_at ?? received on) +
+ * shelf_life_days` (CR-143 FR-D2a). Dates are `YYYY-MM-DD`. `null` when the item has
+ * no usable shelf life (FR-D2c: CHILLED / FROZEN without one are keyed by hand) or no
+ * valid base date. A blank or invalid `producedAt` falls back to the receive date.
+ */
+export function suggestExpiry(
+	item: ExpirySource,
+	producedAt: string | undefined | null,
+	receivedOn: string
+): { expiry: string; shelfLifeDays: number } | null {
+	const days = item.shelf_life_days;
+	if (!hasShelfLife(days)) return null;
+	const base = parseIsoDate(producedAt) ?? parseIsoDate(receivedOn);
+	if (!base) return null;
+	base.setUTCDate(base.getUTCDate() + Math.trunc(days));
+	// An absurd shelf life overflows the Date range (`toISOString` would throw) or leaves
+	// four-digit years; there is nothing sensible to suggest then.
+	if (Number.isNaN(base.getTime()) || base.getUTCFullYear() > 9999) return null;
+	return { expiry: base.toISOString().slice(0, 10), shelfLifeDays: Math.trunc(days) };
+}
+
+/** FR-D2b — shown beside an auto-filled expiry. UI-only: never written to the ledger. */
+export function shelfLifeExpiryLabel(shelfLifeDays: number): string {
+	return `คำนวณจากอายุเก็บรักษา ${shelfLifeDays} วัน — กรุณาตรวจสอบกับฉลากอีกครั้ง`;
+}
+
+/** FR-D4 — what the chosen storage / shelf life means for stock receipts (item create forms). */
+export function expiryRequirementHint(item: ExpirySource): string {
+	if (isColdStorage(item.storage_type)) {
+		return 'แช่เย็น / แช่แข็ง → ต้องกรอกวันหมดอายุทุกครั้งที่รับเข้า';
+	}
+	if (hasShelfLife(item.shelf_life_days)) {
+		return `ระบุอายุเก็บรักษา ${item.shelf_life_days} วัน → ต้องกรอกวันหมดอายุทุกครั้งที่รับเข้า (ระบบเติมให้ ตรวจสอบกับฉลากอีกครั้ง)`;
+	}
+	return 'ไม่บังคับกรอกวันหมดอายุตอนรับเข้า (ใส่ได้ถ้ามี)';
+}
+
 // ---------------------------------------------------------------- catalog generations
 
 /** One pickable catalog row, whichever generation it came from. */
@@ -438,7 +540,8 @@ export type CatalogEntry = {
 	name: string;
 	unit: string;
 	category: string;
-	perishable: boolean;
+	/** `lot.expiry` is mandatory on receive (CR-143 FR-D1). */
+	requiresExpiry: boolean;
 };
 
 /**
@@ -476,6 +579,9 @@ export function mergeCatalogGenerations(
 		unit?: string;
 		category?: string;
 		deactivated?: boolean;
+		merged_into?: string;
+		storage_type?: StorageType;
+		shelf_life_days?: number;
 	}[]
 ): CatalogEntry[] {
 	const legacy: CatalogEntry[] = supplyItems.map((i) => ({
@@ -483,16 +589,16 @@ export function mergeCatalogGenerations(
 		name: i.name,
 		unit: i.unit || '',
 		category: i.category || '',
-		perishable: i.perishable ?? false
+		requiresExpiry: requiresExpiry(i)
 	}));
 	const masters: CatalogEntry[] = itemMasters
-		.filter((m) => !m.deactivated)
+		.filter((m) => !m.deactivated && !m.merged_into)
 		.map((m) => ({
 			_id: m._id,
 			name: m.name,
 			unit: itemMasterUnit(m) || '',
 			category: m.category || '',
-			perishable: false
+			requiresExpiry: requiresExpiry(m)
 		}));
 
 	const [preferred, fallback] = LEGACY_WINS ? [legacy, masters] : [masters, legacy];
@@ -546,7 +652,16 @@ const itemMasterFieldsSchema = z
 		qty_per_person: z.number().min(0).optional(),
 		returnable: z.boolean().optional(),
 		asset_status: assetStatusSchema.optional(),
-		override: z.boolean().optional()
+		override: z.boolean().optional(),
+
+		// item_category:fuel_energy specific fields (CR-119/120/125). Empty string
+		// tolerated at the object level (form default before the user fills the
+		// field in) — conditional requiredness for fuel_energy is enforced below
+		// in `validateItemMasterFields`.
+		fuel_type: z.literal('LPG').optional(),
+		capacity_kg: z.union([z.literal(''), qtyStrCoercePositiveSchema]).optional(),
+		burn_rate_kg_per_hour: z.union([z.literal(''), qtyStrCoercePositiveSchema]).optional(),
+		time_multiplier: z.union([z.literal(''), qtyStrCoercePositiveSchema]).optional()
 	})
 	.superRefine((data, ctx) => {
 		const codes = (data.conversions ?? [])
@@ -617,6 +732,25 @@ function validateItemMasterFields(
 			});
 		}
 	}
+
+	// FUEL_ENERGY contract (CR-119/120/125, schema.md): capacity_kg and
+	// burn_rate_kg_per_hour are conditionally required for this category.
+	if (data.category === 'item_category:fuel_energy') {
+		if (!data.capacity_kg || data.capacity_kg === '') {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: 'กรุณาระบุความจุถัง (กก.)',
+				path: ['capacity_kg']
+			});
+		}
+		if (!data.burn_rate_kg_per_hour || data.burn_rate_kg_per_hour === '') {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: 'กรุณาระบุอัตราสิ้นเปลืองแก๊ส (กก./ชม.)',
+				path: ['burn_rate_kg_per_hour']
+			});
+		}
+	}
 }
 
 export const itemMasterInputSchema = itemMasterFieldsSchema.superRefine((data, ctx) => {
@@ -681,15 +815,17 @@ export function createItemMaster(
 	shelterCode?: string
 ): ItemMaster {
 	const d = itemMasterInputSchema.parse(input);
+	const isFuelEnergy = d.category === 'item_category:fuel_energy';
 	const doc = catalogDoc(
 		'item_master',
-		4,
+		ITEM_MASTER_SCHEMA_V,
 		{
 			name: d.name,
 			category: d.category,
 			sku: d.sku,
 			description: d.description,
-			base_unit: d.base_unit || 'piece',
+			// FUEL_ENERGY contract (CR-119/120/125): base_unit locked to "cylinder".
+			base_unit: isFuelEnergy ? 'cylinder' : d.base_unit || 'piece',
 			conversions: d.conversions.map((c) => ({
 				...c,
 				multiplier: persistQty(c.multiplier)
@@ -703,18 +839,34 @@ export function createItemMaster(
 			...(shelterCode ? { shelter_code: shelterCode } : {}),
 			...(d.override ? { override: d.override } : {}),
 
-			// New fields
-			shelf_life_days: d.shelf_life_days,
-			storage_type: d.storage_type,
-			allergens: d.allergens,
-			target_gender: d.target_gender,
-			age_group: d.age_group,
-			dietary: d.dietary,
+			// New fields — FUEL_ENERGY doesn't persist these (schema.md FUEL_ENERGY
+			// contract: hide/don't persist unrelated food/distribution fields).
+			// `dietary` stays required (empty for FUEL_ENERGY) to match `ItemMaster`.
+			dietary: isFuelEnergy ? [] : d.dietary,
+			...(isFuelEnergy
+				? {}
+				: {
+						shelf_life_days: d.shelf_life_days,
+						storage_type: d.storage_type,
+						allergens: d.allergens,
+						target_gender: d.target_gender,
+						age_group: d.age_group
+					}),
 
 			// Durable & Equipment specific fields
 			qty_per_person: d.qty_per_person,
 			returnable: d.returnable,
-			asset_status: d.asset_status
+			asset_status: d.asset_status,
+
+			// item_category:fuel_energy specific fields (CR-119/120/125)
+			...(isFuelEnergy
+				? {
+						fuel_type: 'LPG' as const,
+						capacity_kg: persistQty(d.capacity_kg || '0'),
+						burn_rate_kg_per_hour: persistQty(d.burn_rate_kg_per_hour || '0'),
+						time_multiplier: persistQty(d.time_multiplier || '1')
+					}
+				: {})
 		},
 		ctx.createdBy
 	);

@@ -3,10 +3,10 @@ import {
 	createCouchUser,
 	deleteCouchUser,
 	couchLogin,
-	couchReq,
+	seedSecurityQuestion,
 	STAFF_SH001_ROLES
 } from './helpers/couch';
-import { injectSession, clearSession } from './helpers/login';
+import { injectSession, clearSession, routeBrowserCouchThroughApp } from './helpers/login';
 
 /**
  * Back-office donation campaigns.
@@ -42,30 +42,6 @@ const REG = {
 };
 
 const sessions: Record<string, string> = {};
-
-/**
- * A freshly minted user has no `security_question`, and the post-login gate sends
- * anyone in that state to `/force-setup` before any back-office route renders. Seed
- * one so these tests exercise the donation page and not the onboarding wizard.
- */
-async function seedSecurityQuestion(name: string): Promise<void> {
-	const path = `/_users/org.couchdb.user:${encodeURIComponent(name)}`;
-	const got = await couchReq('GET', path);
-	const doc = got.data as Record<string, unknown>;
-	const res = await couchReq('PUT', path, {
-		...doc,
-		security_question: {
-			question_id: 'high_school',
-			answer_hash: 'e2e'.padEnd(64, '0'),
-			salt: 'e2e'.padEnd(32, '0'),
-			set_at: new Date().toISOString()
-		},
-		must_change_password: false
-	});
-	if (res.status >= 400) {
-		throw new Error(`Could not seed security question for "${name}" (HTTP ${res.status})`);
-	}
-}
 
 test.beforeAll(async () => {
 	await createCouchUser(WS);
@@ -104,6 +80,7 @@ test.describe('Stock donations — access', () => {
 
 test.describe("Create campaign — the unit is the catalog's", () => {
 	test.beforeEach(async ({ page }) => {
+		await routeBrowserCouchThroughApp(page);
 		await injectSession(page, WS, sessions[WS.name]);
 		await page.goto('/back-office/stock-donations');
 		await page.getByRole('tab', { name: /จัดการความต้องการ/ }).click();

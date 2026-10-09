@@ -7,70 +7,81 @@ pipeline {
                 branch 'staging'
             }
             steps {
+                script {
+                    if (!(env.GIT_COMMIT ==~ /[0-9a-f]{40}/)) {
+                        error("Invalid build commit: ${env.GIT_COMMIT}")
+                    }
+                }
                 withCredentials([
                     sshUserPrivateKey(credentialsId: 'tent-staging-ssh', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER'),
                     string(credentialsId: 'tent-staging-host', variable: 'SSH_HOST'),
                     string(credentialsId: 'tent-staging-port', variable: 'SSH_PORT')
                 ]) {
-                    sh '''
-                        echo "Starting deployment to Staging server..."
-                        
-                        ssh -i $SSH_KEY -p $SSH_PORT -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST "
-                            
-                            echo '==> Deploying Tent to Staging...'
-                            cd /home/projects/tent
-                            git -C /home/projects/tent pull
-                            
-                            echo '==> Building frontend image...'
-                            docker compose -f docker-compose.staging.no-nginx.yml build frontend
-                            
-                            echo '==> Syncing CouchDB Design Docs & Schema...'
-                            docker compose -f docker-compose.staging.no-nginx.yml run --rm frontend pnpm db:sync
-                            
-                            echo '==> Starting services...'
-                            docker compose -f docker-compose.staging.no-nginx.yml up -d --build --force-recreate
-                        "
-                        echo "Deployment process finished successfully!"
-                    '''
+                    // Deploy the exact commit Jenkins built (not `git pull`), and fail fast on any
+                    // remote error so a stale checkout can never be reported as a successful deploy.
+                    withEnv(["DEPLOY_SHA=${env.GIT_COMMIT}"]) {
+                        sh '''
+                            set -eu
+                            echo "Starting deployment of ${DEPLOY_SHA} to Staging server..."
 
+                            ssh -i "$SSH_KEY" -p "$SSH_PORT" -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" "
+                                set -eu
+                                echo '==> Deploying Tent ${DEPLOY_SHA} to Staging...'
+                                cd /home/projects/tent
+                                git fetch --no-tags origin +refs/heads/staging:refs/remotes/origin/staging
+                                git checkout -B staging ${DEPLOY_SHA}
+
+                                echo '==> Building frontend image...'
+                                docker compose -f docker-compose.staging.no-nginx.yml build frontend
+
+                                echo '==> Syncing CouchDB Design Docs & Schema...'
+                                docker compose -f docker-compose.staging.no-nginx.yml run --rm frontend pnpm db:sync
+
+                                echo '==> Starting services...'
+                                docker compose -f docker-compose.staging.no-nginx.yml up -d --build --force-recreate
+                            "
+                            echo "Deployment process finished successfully!"
+                        '''
+                    }
                 }
             }
         }
 
-        stage('Trigger Staging E2E') {
+        stage('Staging E2E Gate') {
             when {
                 branch 'staging'
             }
             steps {
-                catchError(buildResult: 'UNSTABLE', stageResult: 'UNSTABLE', message: 'Unable to enqueue Staging E2E') {
-                    withCredentials([
-                        sshUserPrivateKey(credentialsId: 'tent-staging-ssh', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER'),
-                        string(credentialsId: 'tent-staging-host', variable: 'SSH_HOST'),
-                        string(credentialsId: 'tent-staging-port', variable: 'SSH_PORT')
-                    ]) {
-                        script {
-                            def deployedCommit = sh(
-                                returnStdout: true,
-                                script: '''
-                                    set +x
-                                    ssh -i "$SSH_KEY" -p "$SSH_PORT" -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" \
-                                        "git -C /home/projects/tent rev-parse HEAD"
-                                '''
-                            ).trim()
+                withCredentials([
+                    sshUserPrivateKey(credentialsId: 'tent-staging-ssh', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER'),
+                    string(credentialsId: 'tent-staging-host', variable: 'SSH_HOST'),
+                    string(credentialsId: 'tent-staging-port', variable: 'SSH_PORT')
+                ]) {
+                    script {
+                        def deployedCommit = sh(
+                            returnStdout: true,
+                            script: '''
+                                set +x
+                                ssh -i "$SSH_KEY" -p "$SSH_PORT" -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" \
+                                    "git -C /home/projects/tent rev-parse HEAD"
+                            '''
+                        ).trim()
 
-                            if (!(deployedCommit ==~ /[0-9a-f]{40}/)) {
-                                error("Invalid deployed Staging commit: ${deployedCommit}")
-                            }
-
-                            echo "Queueing tent-e2e-staging for ${deployedCommit}"
-                            build job: 'tent-e2e-staging',
-                                  parameters: [
-                                      string(name: 'DEPLOY_COMMIT', value: deployedCommit),
-                                      string(name: 'STAGING_URL', value: 'https://shelter.importstar.dev')
-                                  ],
-                                  wait: false,
-                                  propagate: false
+                        if (deployedCommit != env.GIT_COMMIT) {
+                            error("Staging server is at ${deployedCommit}, expected ${env.GIT_COMMIT}")
                         }
+
+                        // Wait + propagate: a red/missing E2E fails this deploy job.
+                        // tent-e2e-staging also posts GitHub commit status `staging/e2e`
+                        // on DEPLOY_COMMIT — owner enables that check on `main` protection.
+                        echo "Running tent-e2e-staging (wait+propagate) for ${deployedCommit}"
+                        build job: 'tent-e2e-staging',
+                              parameters: [
+                                  string(name: 'DEPLOY_COMMIT', value: deployedCommit),
+                                  string(name: 'STAGING_URL', value: 'https://shelter.importstar.dev')
+                              ],
+                              wait: true,
+                              propagate: true
                     }
                 }
             }
@@ -81,30 +92,66 @@ pipeline {
                 branch 'main'
             }
             steps {
+                script {
+                    if (!(env.GIT_COMMIT ==~ /[0-9a-f]{40}/)) {
+                        error("Invalid build commit: ${env.GIT_COMMIT}")
+                    }
+                }
                 withCredentials([
                     sshUserPrivateKey(credentialsId: 'tent-prod-ssh', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER'),
                     string(credentialsId: 'tent-prod-host', variable: 'SSH_HOST'),
                     string(credentialsId: 'tent-prod-port', variable: 'SSH_PORT')
                 ]) {
-                    sh '''
-                        echo "Starting deployment to Production server..."
-                        
-                        ssh -i $SSH_KEY -p $SSH_PORT -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST "
-                            echo '==> Deploying Tent to Production...'
-                            cd /home/projects/tent
-                            git -C /home/projects/tent pull
-                            
-                            echo '==> Building frontend image...'
-                            docker compose -f docker-compose.production.no-nginx.yml build frontend
-                            
-                            echo '==> Syncing CouchDB Design Docs & Schema...'
-                            docker compose -f docker-compose.production.no-nginx.yml run --rm frontend pnpm db:sync
-                            
-                            echo '==> Starting services...'
-                            docker compose -f docker-compose.production.no-nginx.yml up -d --build --force-recreate
-                        "
-                        echo "Deployment process finished successfully!"
-                    '''
+                    withEnv(["DEPLOY_SHA=${env.GIT_COMMIT}"]) {
+                        sh '''
+                            set -eu
+                            echo "Starting deployment of ${DEPLOY_SHA} to Production server..."
+
+                            ssh -i "$SSH_KEY" -p "$SSH_PORT" -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" "
+                                set -eu
+                                echo '==> Deploying Tent ${DEPLOY_SHA} to Production...'
+                                cd /home/projects/tent
+                                git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+                                git checkout -B main ${DEPLOY_SHA}
+
+                                echo '==> Building frontend image...'
+                                docker compose -f docker-compose.production.no-nginx.yml build frontend
+
+                                echo '==> Syncing CouchDB Design Docs & Schema...'
+                                docker compose -f docker-compose.production.no-nginx.yml run --rm frontend pnpm db:sync
+
+                                echo '==> Starting services...'
+                                docker compose -f docker-compose.production.no-nginx.yml up -d --build --force-recreate
+                            "
+                            echo "Deployment process finished successfully!"
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Production @prod Smoke') {
+            when {
+                branch 'main'
+            }
+            steps {
+                withCredentials([
+                    file(credentialsId: 'tent-prod-e2e-env', variable: 'E2E_ENV_FILE')
+                ]) {
+                    withEnv([
+                        'CI=true',
+                        'E2E_BASE_URL=https://shelter.psu.ac.th'
+                    ]) {
+                        // Read-only @prod (< 2 min). Failure fails the prod deploy job
+                        // (Jenkins email/Slack on failure is the alert channel).
+                        sh 'chmod +x scripts/run-prod-e2e.sh && scripts/run-prod-e2e.sh'
+                    }
+                }
+            }
+            post {
+                failure {
+                    echo 'ALERT: Production @prod E2E smoke failed after deploy — investigate immediately.'
+                    echo "Build: ${env.BUILD_URL}"
                 }
             }
         }

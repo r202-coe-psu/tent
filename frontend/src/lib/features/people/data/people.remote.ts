@@ -2,6 +2,7 @@ import { paginateItems } from '$lib/db/paginate';
 import { createRemoteRepository, type Repository, type PaginatedResult } from '$lib/db/repository';
 import { makeDocId, now, touch, type AuthorContext } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
+import type { UlidReservation } from '$lib/db/ulid-reservation';
 import { getShelterDb } from '$lib/db/shelter';
 import { createAuditEntry } from '$lib/features/shared';
 import {
@@ -41,7 +42,9 @@ import {
 	type Medical,
 	type MedicalInput,
 	type Movement,
-	type MovementAction
+	type MovementAction,
+	dormFieldsFor,
+	memberExtrasFor
 } from '../domain/people';
 import {
 	planFamilyRegistration,
@@ -334,6 +337,20 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		return all.filter((e) => matchesEvacueeSearch(e, q));
 	}
 
+	async searchEvacueesMany(queries: readonly string[]): Promise<Map<string, Evacuee[]>> {
+		const trimmed = [...new Set(queries.map((q) => q.trim()).filter(Boolean))];
+		const results = new Map<string, Evacuee[]>();
+		if (trimmed.length === 0) return results;
+		const all = await this.repo.allByType('evacuee', isEvacuee);
+		for (const q of trimmed) {
+			results.set(
+				q,
+				all.filter((e) => matchesEvacueeSearch(e, q))
+			);
+		}
+		return results;
+	}
+
 	createHousehold(input: HouseholdInput, ctx: AuthorContext): Promise<Household> {
 		return this.repo.put(buildHousehold(input, ctx));
 	}
@@ -349,9 +366,13 @@ export class PeopleRemoteRepository implements PeopleRepository {
 	async createFamilyRegistration(
 		input: UnifiedRegistrationInput,
 		ctx: AuthorContext,
-		channel: UnifiedRegistrationChannel = 'onsite'
+		channel: UnifiedRegistrationChannel = 'onsite',
+		ids?: UlidReservation
 	): Promise<{ household: Household; members: Evacuee[] }> {
 		const plan = planFamilyRegistration(input, channel);
+		// Same reservation + same input on a retry → same doc IDs → idempotent 409s.
+		ids?.rewind();
+		const nextUlid = () => ids?.next() ?? ulid();
 		const createdMemberIds: string[] = [];
 		let householdId: string | null = null;
 
@@ -372,7 +393,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 				const movementDocs: Movement[] = [];
 
 				for (const memberInput of plan.memberInputs) {
-					const memberUlid = ulid();
+					const memberUlid = nextUlid();
 					const memberId = makeDocId('evacuee', memberUlid);
 					createdMemberIds.push(memberId);
 
@@ -396,7 +417,8 @@ export class PeopleRemoteRepository implements PeopleRepository {
 									notes: memberInput.medical_note || '',
 									track: memberInput.track || ('normal' as const)
 								},
-								ctx
+								ctx,
+								nextUlid()
 							)
 						);
 					}
@@ -405,7 +427,8 @@ export class PeopleRemoteRepository implements PeopleRepository {
 						movementDocs.push(
 							createMovement(
 								{ evacuee_id: evacuee._id, action: 'check_in', zone: evacuee.current_stay.zone },
-								ctx
+								ctx,
+								nextUlid()
 							)
 						);
 					}
@@ -458,16 +481,20 @@ export class PeopleRemoteRepository implements PeopleRepository {
 					household = target;
 				}
 
-				await this.refreshDerivedHouseholdStatus(targetId);
-				const refreshed = await this.getHousehold(targetId);
-				household = refreshed ?? household;
+				// Members are committed from here on — a failed status refresh (network
+				// flap) must not fall through to compensation and delete them.
+				try {
+					await this.refreshDerivedHouseholdStatus(targetId);
+					const refreshed = await this.getHousehold(targetId);
+					household = refreshed ?? household;
+				} catch {
+					// Derived status is recomputed on the next household write.
+				}
 
 				return { household, members };
 			} catch (err) {
-				for (const id of [...createdMemberIds].reverse()) {
-					await this.compensateFailedEvacueeRegistration(id);
-				}
-				throw err;
+				const complete = await this.compensateFailedFamilyRegistration(createdMemberIds, null);
+				throw markCompensationResult(err, complete);
 			}
 		}
 
@@ -476,10 +503,10 @@ export class PeopleRemoteRepository implements PeopleRepository {
 				throw new Error('ต้องมีสมาชิกอย่างน้อย 1 คน');
 			}
 
-			const householdUlid = ulid();
+			const householdUlid = nextUlid();
 			householdId = makeDocId('household', householdUlid);
 
-			const memberUlids = plan.memberInputs.map(() => ulid());
+			const memberUlids = plan.memberInputs.map(() => nextUlid());
 			const memberIds = memberUlids.map((u) => makeDocId('evacuee', u));
 			createdMemberIds.push(...memberIds);
 			const headId = memberIds[0];
@@ -520,7 +547,8 @@ export class PeopleRemoteRepository implements PeopleRepository {
 								notes: memberInput.medical_note || '',
 								track: memberInput.track || ('normal' as const)
 							},
-							ctx
+							ctx,
+							nextUlid()
 						)
 					);
 				}
@@ -529,7 +557,8 @@ export class PeopleRemoteRepository implements PeopleRepository {
 					movementDocs.push(
 						createMovement(
 							{ evacuee_id: evacuee._id, action: 'check_in', zone: evacuee.current_stay.zone },
-							ctx
+							ctx,
+							nextUlid()
 						)
 					);
 				}
@@ -552,21 +581,38 @@ export class PeopleRemoteRepository implements PeopleRepository {
 
 			return { household, members };
 		} catch (err) {
-			if (householdId) {
-				for (const id of createdMemberIds) {
-					try {
-						await this.patchEvacuee(id, { household_id: null });
-					} catch {
-						// Best-effort unlink before household delete.
-					}
-				}
-				await this.compensateFailedHouseholdCreate(householdId);
-			}
-			for (const id of [...createdMemberIds].reverse()) {
-				await this.compensateFailedEvacueeRegistration(id);
-			}
-			throw err;
+			const complete = await this.compensateFailedFamilyRegistration(createdMemberIds, householdId);
+			throw markCompensationResult(err, complete);
 		}
+	}
+
+	/**
+	 * Undo a failed family submit: members (and their medical docs) first, then
+	 * the household once it has no members left. Never throws — a cleanup error
+	 * (typically still offline) must not replace the original save error.
+	 * Returns false when any step failed, i.e. docs may remain in CouchDB.
+	 * Append-only `check_in` movements are never removed (schema.md §7 rule 2).
+	 */
+	private async compensateFailedFamilyRegistration(
+		memberIds: readonly string[],
+		householdId: string | null
+	): Promise<boolean> {
+		let complete = true;
+		for (const id of [...memberIds].reverse()) {
+			try {
+				await this.compensateFailedEvacueeRegistration(id);
+			} catch {
+				complete = false;
+			}
+		}
+		if (householdId) {
+			try {
+				await this.compensateFailedHouseholdCreate(householdId);
+			} catch {
+				complete = false;
+			}
+		}
+		return complete;
 	}
 
 	async listHouseholds(): Promise<Household[]> {
@@ -841,7 +887,11 @@ export class PeopleRemoteRepository implements PeopleRepository {
 	async updateMedical(medical: Medical): Promise<Medical> {
 		const latest = await this.repo.get<Medical>(medical._id);
 		if (!latest) throw new Error('ไม่พบข้อมูลสุขภาพ');
-		return this.repo.put(touch({ ...medical, _rev: latest._rev }));
+		// Merge onto the fresh doc rather than overwriting it outright — safe
+		// today because the sole caller (recordMedicalScreening) already
+		// pre-merges, but a future partial-object caller must not silently
+		// wipe fields it didn't intend to touch.
+		return this.repo.put(touch({ ...latest, ...medical, _rev: latest._rev }));
 	}
 
 	async patchMedical(id: string, patch: MedicalPatch): Promise<Medical> {
@@ -855,12 +905,38 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		if (latest) await this.repo.remove(latest);
 	}
 
+	async getMedicalByEvacuee(evacueeId: string): Promise<Medical | null> {
+		const medicals = await this.repo.find<Medical>({
+			selector: { type: 'medical', evacuee_id: evacueeId },
+			limit: 1
+		});
+		return medicals.find(isMedical) ?? null;
+	}
+
 	listMovements(): Promise<Movement[]> {
 		return this.repo.allByType('movement', isMovement);
 	}
 
+	async listMovementsByEvacuee(evacueeId: string): Promise<Movement[]> {
+		// CouchDB's Mango default limit is 25 — explicit limit avoids silently
+		// truncating a long-lived evacuee's append-only movement history.
+		const movements = await this.repo.find<Movement>({
+			selector: { type: 'movement', evacuee_id: evacueeId },
+			limit: 10_000
+		});
+		return movements.filter(isMovement);
+	}
+
 	listScreenings(): Promise<Screening[]> {
 		return this.repo.allByType('screening', isScreening);
+	}
+
+	async listScreeningsByEvacuee(evacueeId: string): Promise<Screening[]> {
+		const screenings = await this.repo.find<Screening>({
+			selector: { type: 'screening', evacuee_id: evacueeId },
+			limit: 10_000
+		});
+		return screenings.filter(isScreening);
 	}
 
 	async getPendingScreeningEvacuees(shelterCode?: string): Promise<Evacuee[]> {
@@ -883,28 +959,38 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		});
 	}
 
+	/** Re-fetches the evacuee so movement eligibility and the applied patch are
+	 *  built from the current document, not a possibly-stale caller-provided
+	 *  copy — otherwise a concurrent edit (by anyone, on any field) made
+	 *  between page-load and this write is silently clobbered, and CouchDB's
+	 *  own conflict detection never gets a chance to fire (see people.remote.test.ts). */
+	private async fetchLatestOrThrow(evacueeId: string): Promise<Evacuee> {
+		const latest = await this.repo.get<Evacuee>(evacueeId);
+		if (!latest) {
+			throw new Error('ไม่พบข้อมูลผู้ประสบภัย (อาจถูกลบไปแล้ว)');
+		}
+		return latest;
+	}
+
 	async checkInEvacuee(evacuee: Evacuee, ctx: AuthorContext, zone: string): Promise<Evacuee> {
 		const nextZone = zone.trim();
 		if (!nextZone) {
 			throw new Error('การเช็คอินต้องระบุโซน');
 		}
-		assertMovementAllowed(evacuee, 'check_in');
+		const latest = await this.fetchLatestOrThrow(evacuee._id);
+		assertMovementAllowed(latest, 'check_in');
 		const movement = createMovement(
-			{ evacuee_id: evacuee._id, action: 'check_in', zone: nextZone },
+			{ evacuee_id: latest._id, action: 'check_in', zone: nextZone },
 			ctx
 		);
 		await this.repo.put(movement);
-
-		const latest = await this.repo.get<Evacuee>(evacuee._id);
-		const updated = await this.repo.put(
-			applyMovementToStay({ ...evacuee, _rev: latest?._rev ?? evacuee._rev }, movement)
-		);
+		const updated = await this.repo.put(applyMovementToStay(latest, movement));
 		await this.refreshDerivedHouseholdStatus(updated.household_id);
 		return updated;
 	}
 
 	/** Record a check-out movement, then apply it to the evacuee's current_stay.
-	 *  Fetches the latest _rev first to avoid stale-revision conflicts from live sync.
+	 *  Fetches the latest revision first (see fetchLatestOrThrow).
 	 *  Check-out requires a nonempty trimmed reason/notes (CR-112). */
 	async checkOutEvacuee(
 		evacuee: Evacuee,
@@ -912,36 +998,32 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		opts: { reason?: string; notes?: string } = {}
 	): Promise<Evacuee> {
 		const reason = (opts.reason ?? opts.notes ?? '').trim();
-		assertMovementAllowed(evacuee, 'check_out', { reason });
+		const latest = await this.fetchLatestOrThrow(evacuee._id);
+		assertMovementAllowed(latest, 'check_out', { reason });
 		const movement = createMovement(
-			{ evacuee_id: evacuee._id, action: 'check_out', zone: null, reason },
+			{ evacuee_id: latest._id, action: 'check_out', zone: null, reason },
 			ctx
 		);
 		await this.repo.put(movement);
-		const latest = await this.repo.get<Evacuee>(evacuee._id);
-		const updated = await this.repo.put(
-			applyMovementToStay({ ...evacuee, _rev: latest?._rev ?? evacuee._rev }, movement)
-		);
+		const updated = await this.repo.put(applyMovementToStay(latest, movement));
 		await this.refreshDerivedHouseholdStatus(updated.household_id);
 		return updated;
 	}
 
 	/** Zone Arrival Confirmation: active → room_confirmed (CR-112). */
 	async confirmRoom(evacuee: Evacuee, ctx: AuthorContext): Promise<Evacuee> {
-		assertMovementAllowed(evacuee, 'confirm_room');
+		const latest = await this.fetchLatestOrThrow(evacuee._id);
+		assertMovementAllowed(latest, 'confirm_room');
 		const movement = createMovement(
 			{
-				evacuee_id: evacuee._id,
+				evacuee_id: latest._id,
 				action: 'confirm_room',
-				zone: evacuee.current_stay.zone
+				zone: latest.current_stay.zone
 			},
 			ctx
 		);
 		await this.repo.put(movement);
-		const latest = await this.repo.get<Evacuee>(evacuee._id);
-		const updated = await this.repo.put(
-			applyMovementToStay({ ...evacuee, _rev: latest?._rev ?? evacuee._rev }, movement)
-		);
+		const updated = await this.repo.put(applyMovementToStay(latest, movement));
 		await this.refreshDerivedHouseholdStatus(updated.household_id);
 		return updated;
 	}
@@ -968,43 +1050,39 @@ export class PeopleRemoteRepository implements PeopleRepository {
 		if (!nextZone) {
 			throw new Error('การเปลี่ยนโซนต้องระบุโซนปลายทาง');
 		}
-		assertMovementAllowed(evacuee, 'zone_change');
+		const latest = await this.fetchLatestOrThrow(evacuee._id);
+		assertMovementAllowed(latest, 'zone_change');
 		const movement = createMovement(
-			{ evacuee_id: evacuee._id, action: 'zone_change', zone: nextZone },
+			{ evacuee_id: latest._id, action: 'zone_change', zone: nextZone },
 			ctx
 		);
 		await this.repo.put(movement);
-		const latest = await this.repo.get<Evacuee>(evacuee._id);
-		const updated = await this.repo.put(
-			applyMovementToStay({ ...evacuee, _rev: latest?._rev ?? evacuee._rev }, movement)
-		);
+		const updated = await this.repo.put(applyMovementToStay(latest, movement));
 		await this.refreshDerivedHouseholdStatus(updated.household_id);
 		return updated;
 	}
 
 	/** Record a non-check-in/out movement, then apply it to the evacuee's current_stay.
-	 *  Fetches the latest _rev first to avoid stale-revision conflicts from live sync. */
+	 *  Fetches the latest revision first (see fetchLatestOrThrow). */
 	async recordMovement(
 		evacuee: Evacuee,
 		action: Exclude<MovementAction, 'check_in' | 'check_out' | 'confirm_room'>,
 		ctx: AuthorContext,
 		opts?: { reason?: string }
 	): Promise<Evacuee> {
-		assertMovementAllowed(evacuee, action, opts);
+		const latest = await this.fetchLatestOrThrow(evacuee._id);
+		assertMovementAllowed(latest, action, opts);
 		const movement = createMovement(
 			{
-				evacuee_id: evacuee._id,
+				evacuee_id: latest._id,
 				action,
-				zone: evacuee.current_stay.zone,
+				zone: latest.current_stay.zone,
 				...(opts?.reason ? { reason: opts.reason } : {})
 			},
 			ctx
 		);
 		await this.repo.put(movement);
-		const latest = await this.repo.get<Evacuee>(evacuee._id);
-		const updated = await this.repo.put(
-			applyMovementToStay({ ...evacuee, _rev: latest?._rev ?? evacuee._rev }, movement)
-		);
+		const updated = await this.repo.put(applyMovementToStay(latest, movement));
 		await this.refreshDerivedHouseholdStatus(updated.household_id);
 		return updated;
 	}
@@ -1208,8 +1286,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 					community: null,
 					housing_type: householdInput.housing_type ?? null,
 					residence_landmark: householdInput.residence_landmark ?? null,
-					address_no:
-						householdInput.housing_type === 'homeless' ? null : (householdInput.address_no ?? null),
+					...dormFieldsFor(householdInput),
 					village_no: householdInput.village_no ?? null,
 					subdistrict: householdInput.subdistrict ?? null,
 					district: householdInput.district ?? null,
@@ -1234,8 +1311,7 @@ export class PeopleRemoteRepository implements PeopleRepository {
 				...existingHousehold,
 				housing_type: householdInput.housing_type ?? null,
 				residence_landmark: householdInput.residence_landmark ?? null,
-				address_no:
-					householdInput.housing_type === 'homeless' ? null : (householdInput.address_no ?? null),
+				...dormFieldsFor(householdInput),
 				village_no: householdInput.village_no ?? null,
 				subdistrict: householdInput.subdistrict ?? null,
 				district: householdInput.district ?? null,
@@ -1323,6 +1399,12 @@ export class PeopleRemoteRepository implements PeopleRepository {
 					photo: m.photo ?? existingEvacuee.photo,
 					country: m.country ?? existingEvacuee.country,
 					religion: m.religion ?? existingEvacuee.religion,
+					...memberExtrasFor({
+						religion: m.religion ?? existingEvacuee.religion,
+						religion_other: m.religion_other,
+						vulnerable_groups: m.vulnerable_groups ?? [],
+						disability_other_detail: m.disability_other_detail
+					}),
 					current_stay: updatedStay
 				});
 
@@ -1467,6 +1549,24 @@ export class PeopleRemoteRepository implements PeopleRepository {
 			mergedMembers: updatedMembers
 		};
 	}
+}
+
+const incompleteCompensation = new WeakSet<object>();
+
+/**
+ * True when a failed family registration could not be fully undone — some
+ * household / evacuee docs may still exist, so staff must search before resubmitting.
+ */
+export function isRegistrationCompensationIncomplete(err: unknown): boolean {
+	return typeof err === 'object' && err !== null && incompleteCompensation.has(err);
+}
+
+/** Re-throwable original error, tagged when compensation was incomplete. */
+function markCompensationResult(err: unknown, complete: boolean): unknown {
+	if (complete) return err;
+	const tagged = typeof err === 'object' && err !== null ? err : new Error(String(err));
+	incompleteCompensation.add(tagged);
+	return tagged;
 }
 
 let singleton: PeopleRepository | null = null;

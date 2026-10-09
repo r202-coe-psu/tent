@@ -339,7 +339,7 @@
 				onclick={() => (showFilterPanel = true)}
 			>
 				<Filter class="h-4 w-4 text-primary" />
-				<span>ค้นหาและตัวกรอง</span>
+				<span>{t.searchAndFilter}</span>
 				<ChevronRight class="h-3.5 w-3.5 text-muted-foreground" />
 			</button>
 		{/if}
@@ -364,7 +364,7 @@
 						type="button"
 						class="rounded-lg p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
 						onclick={() => (showListPanel = false)}
-						title="ย่อรายการศูนย์"
+						title={t.collapseList}
 					>
 						<ChevronRight class="h-4 w-4" />
 					</button>
@@ -531,7 +531,7 @@
 					{t.locationsUnit}
 				</span>
 				{#if liveUserLat && liveUserLng}
-					<span>เรียงตามระยะทางใกล้สุด</span>
+					<span>{t.sortedByDistance}</span>
 				{/if}
 			</div>
 
@@ -595,7 +595,7 @@
 				<div class="flex items-center justify-between border-b border-border/60 px-4 py-3">
 					<div class="flex items-center gap-2">
 						<Filter class="h-4 w-4 text-primary" />
-						<h3 class="text-sm font-bold text-foreground">ค้นหาและตัวกรอง</h3>
+						<h3 class="text-sm font-bold text-foreground">{t.searchAndFilter}</h3>
 					</div>
 					<button
 						type="button"
@@ -613,6 +613,7 @@
 						action="/shelters"
 						bind:userLat={liveUserLat}
 						bind:userLng={liveUserLng}
+						idPrefix="mobile-"
 						class="h-auto max-h-none border-0 bg-transparent p-0 shadow-none"
 						onClose={() => (mobileFilterOpen = false)}
 					/>

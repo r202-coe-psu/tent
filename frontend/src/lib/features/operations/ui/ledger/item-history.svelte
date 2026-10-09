@@ -1,0 +1,197 @@
+<script lang="ts">
+	import { useLedgerByItem } from '../../application/queries';
+	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getShelterCode } from '$lib/db/shelter';
+	import * as Table from '$lib/components/ui/table/index.js';
+	import Clock from '@lucide/svelte/icons/clock';
+	import ArrowDownLeft from '@lucide/svelte/icons/arrow-down-left';
+	import ArrowUpRight from '@lucide/svelte/icons/arrow-up-right';
+	import { qtyGt } from '$lib/utils/qty';
+	import { ADJUST_REASON_LABELS, REASON_LABELS } from './ledger-view';
+	import { resolveAdjustReason } from '../../domain/operations';
+	import { lotStorageName } from '../../domain/lot-storage';
+	import { useStoragePoints } from '../../application/use-storage-points.svelte';
+
+	/** One item's movement history, for the item detail sheet. The shelter-wide view is `ledger-movements.svelte`. */
+	let { filterItemId }: { filterItemId: string } = $props();
+
+	// Fetch stock movements ledger
+	const storagePoints = useStoragePoints(() => getShelterCode());
+	const unitsQuery = useUnitsOfMeasure();
+	const units = $derived(unitsQuery.data ?? []);
+	const ledgerQuery = useLedgerByItem(() => filterItemId);
+
+	const ledger = $derived(ledgerQuery.data ?? []);
+	// Sort by occurred_at descending to show newest entries first
+	const sortedLedger = $derived(
+		[...ledger].sort((a, b) => b.occurred_at.localeCompare(a.occurred_at))
+	);
+
+	function formatDateTime(isoString: string): string {
+		try {
+			return (
+				new Date(isoString).toLocaleString('th-TH', {
+					day: '2-digit',
+					month: '2-digit',
+					year: '2-digit',
+					hour: '2-digit',
+					minute: '2-digit'
+				}) + ' น.'
+			);
+		} catch {
+			return isoString;
+		}
+	}
+</script>
+
+<div class="space-y-4">
+	{#if ledgerQuery.isLoading}
+		<div class="space-y-2">
+			{#each [0, 1, 2] as i (i)}
+				<div class="h-12 animate-pulse rounded-xl border border-border bg-muted/20"></div>
+			{/each}
+		</div>
+	{:else if ledgerQuery.isError}
+		<p class="text-sm font-semibold text-destructive">
+			เกิดข้อผิดพลาด: {ledgerQuery.error?.message}
+		</p>
+	{:else if sortedLedger.length === 0}
+		<div
+			class="flex flex-col items-center justify-center rounded-2xl border border-border bg-muted/10 p-10 text-center"
+		>
+			<Clock class="mb-3 h-10 w-10 text-muted-foreground/30" />
+			<p class="text-sm font-medium text-muted-foreground">ยังไม่มีรายการเคลื่อนไหวคลังในระบบ</p>
+			<p class="mt-1 text-xs text-muted-foreground/60">
+				ทำรายการ "รับของเข้าคลัง" เพื่อสร้างความเคลื่อนไหวแรก
+			</p>
+		</div>
+	{:else}
+		<div class="overflow-hidden rounded-2xl border border-border/80 bg-background shadow-sm">
+			<div class="overflow-x-auto">
+				<Table.Root>
+					<Table.Header class="border-b border-border/60 bg-muted/40">
+						<Table.Row class="hover:bg-transparent">
+							<Table.Head
+								class="w-[120px] text-2xs font-bold tracking-wider text-foreground uppercase"
+								>วัน-เวลา</Table.Head
+							>
+							<Table.Head class="text-2xs font-bold tracking-wider text-foreground uppercase"
+								>จำนวน</Table.Head
+							>
+							<Table.Head class="text-2xs font-bold tracking-wider text-foreground uppercase"
+								>ประเภท</Table.Head
+							>
+							<Table.Head class="text-2xs font-bold tracking-wider text-foreground uppercase"
+								>สถานที่เก็บ / เลขอ้างอิง</Table.Head
+							>
+							<Table.Head
+								class="w-[120px] text-2xs font-bold tracking-wider text-foreground uppercase"
+								>ผู้บันทึก</Table.Head
+							>
+						</Table.Row>
+					</Table.Header>
+					<Table.Body class="divide-y divide-border/40">
+						{#each sortedLedger as entry (entry._id)}
+							<Table.Row class="transition-colors hover:bg-muted/30">
+								<!-- DateTime -->
+								<Table.Cell class="font-mono text-xs whitespace-nowrap text-muted-foreground">
+									{formatDateTime(entry.occurred_at)}
+								</Table.Cell>
+
+								<!-- Quantity & Signed Color -->
+								<Table.Cell class="whitespace-nowrap">
+									<span class="flex items-center gap-1">
+										{#if qtyGt(entry.qty, 0)}
+											<span
+												class="inline-flex items-center gap-0.5 rounded border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0.5 text-xs font-extrabold text-emerald-600 shadow-sm dark:text-emerald-400"
+											>
+												<ArrowDownLeft class="h-3.5 w-3.5" />
+												+{entry.qty}
+											</span>
+										{:else}
+											<span
+												class="inline-flex items-center gap-0.5 rounded border border-rose-500/20 bg-rose-500/10 px-1.5 py-0.5 text-xs font-extrabold text-rose-600 shadow-sm dark:text-rose-400"
+											>
+												<ArrowUpRight class="h-3.5 w-3.5" />
+												{entry.qty}
+											</span>
+										{/if}
+										<span class="text-xs font-medium text-muted-foreground"
+											>{formatUnit(entry.unit, units, langState.current)}</span
+										>
+									</span>
+								</Table.Cell>
+
+								<!-- Reason -->
+								<Table.Cell class="whitespace-nowrap">
+									<span
+										class="rounded-full border px-2.5 py-0.5 text-2xs font-bold shadow-sm
+										{qtyGt(entry.qty, 0)
+											? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+											: 'border-rose-500/20 bg-rose-500/10 text-rose-600 dark:text-rose-400'}"
+									>
+										{REASON_LABELS[entry.reason] ?? entry.reason}
+									</span>
+									<!-- CR-143 FR-C4/C5: rows from before schema_v 6 read as "other". -->
+									{@const adjustReason = resolveAdjustReason(entry)}
+									{#if adjustReason}
+										<span class="mt-1 block text-2xs font-semibold text-foreground/80">
+											{ADJUST_REASON_LABELS[adjustReason]}
+										</span>
+									{/if}
+								</Table.Cell>
+
+								<!-- Reference / Lot / Note -->
+								<Table.Cell class="max-w-[220px] truncate text-xs text-muted-foreground">
+									<div class="flex flex-col gap-1 py-1">
+										{#if lotStorageName(entry.lot, storagePoints.points)}
+											<span class="text-xs font-medium text-foreground"
+												>📍 {lotStorageName(entry.lot, storagePoints.points)}</span
+											>
+										{/if}
+										{#if entry.lot?.produced_at}
+											<span class="text-2xs font-medium text-muted-foreground/90">
+												จากผลิต: {new Date(entry.lot.produced_at).toLocaleDateString('th-TH', {
+													day: '2-digit',
+													month: 'short',
+													year: '2-digit'
+												})}
+											</span>
+										{/if}
+										{#if entry.lot?.expiry}
+											<span class="text-2xs font-medium text-muted-foreground/90">
+												⌛ หมดอายุ: {new Date(entry.lot.expiry).toLocaleDateString('th-TH', {
+													day: '2-digit',
+													month: 'short',
+													year: '2-digit'
+												})}
+											</span>
+										{/if}
+										{#if entry.ref_id}
+											<span
+												class="w-fit rounded border border-border/80 bg-muted/80 px-1.5 py-0.5 font-mono text-2xs text-foreground/80"
+												>Ref: {entry.ref_id}</span
+											>
+										{/if}
+										{#if entry.note}
+											<span class="text-2xs font-medium text-foreground/80">{entry.note}</span>
+										{/if}
+										{#if !lotStorageName(entry.lot, storagePoints.points) && !entry.lot?.expiry && !entry.lot?.produced_at && !entry.ref_id && !entry.note}
+											<span class="text-muted-foreground/40">-</span>
+										{/if}
+									</div>
+								</Table.Cell>
+
+								<!-- Author -->
+								<Table.Cell class="truncate text-xs font-medium text-muted-foreground">
+									{entry.created_by}
+								</Table.Cell>
+							</Table.Row>
+						{/each}
+					</Table.Body>
+				</Table.Root>
+			</div>
+		</div>
+	{/if}
+</div>
