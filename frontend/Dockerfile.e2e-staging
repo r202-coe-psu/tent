@@ -1,4 +1,6 @@
-FROM mcr.microsoft.com/playwright:v1.61.1-noble
+# Keep this tag equal to the resolved @playwright/test version in pnpm-lock.yaml — a
+# mismatch fails every test with "Executable doesn't exist" (browsers are baked into the image).
+FROM mcr.microsoft.com/playwright:v1.64.0-noble
 
 WORKDIR /work/frontend
 
@@ -15,5 +17,5 @@ COPY src/lib ./src/lib
 
 ENV CI=true
 
-# Default: staging release gate (@release + @smoke). Override CMD for prod @prod.
+# Default: staging release gate (@critical + @smoke). Override CMD for prod @prod.
 CMD ["./node_modules/.bin/playwright", "test", "--config=playwright.staging.config.ts"]

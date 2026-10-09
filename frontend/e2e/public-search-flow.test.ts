@@ -2,11 +2,12 @@
  * Public family search (/search) — true end-to-end, no seeding and no mocks
  * (except the thin server-error route in the smoke group).
  *
- * Local target: the critical group does what staff do — create a shelter in system
- * management and register households at Station 1 — and afterAll tears the shelter
- * down through the CouchDB admin API (the UI cannot delete shelters or evacuees).
- * Remote target (`E2E_BASE_URL`, staging/production): read-only — setup and teardown
- * are skipped and the tests search the provisioned E2E fixture (see helpers/e2e-env.ts).
+ * Writable target (local, or staging with `ALLOW_REMOTE_WRITES=true`): the critical group
+ * does what staff do — create a per-run `E2E …` shelter in system management and register
+ * households at Station 1 — and tears the shelter down through the CouchDB admin API (the UI
+ * cannot delete shelters or evacuees); the Z test proves nothing is left in CouchDB or in
+ * the public search. Read-only remote target (production): setup and teardown are skipped
+ * and the tests search the provisioned E2E fixture (see helpers/e2e-env.ts).
  *
  * The public tests always go through the real path
  * (CouchDB → sync worker → Mongo → FastAPI → BFF).
@@ -14,7 +15,7 @@
  * ── Tags ──────────────────────────────────────────────────────────────────────────
  *  @public    feature tag
  *  @smoke     read-only form / validation / server-error (safe on staging/prod)
- *  @critical  local writes (shelter + households) + live search asserts; skip when IS_REMOTE
+ *  @critical  writes (shelter + households) + live search asserts; read-only when !CAN_WRITE
  *  @release   thin release-gate journey (search form + min-length error)
  *  @prod      compact production smoke subset of @release
  *
@@ -23,16 +24,21 @@
  * Locators are generated with Playwright codegen (`pnpm exec playwright codegen`).
  */
 import { test, expect } from '@playwright/test';
-import { bootstrapAdminSession } from './helpers/couch';
+import { bootstrapAdminSession, couchReq } from './helpers/couch';
 import {
+	CAN_WRITE,
 	FIXTURE_LAST_NAME as LAST_NAME,
 	FIXTURE_LAST_NAME_MASKED as LAST_NAME_MASKED,
-	IS_REMOTE,
 	READ_ONLY_REASON,
 	searchFixture
 } from './helpers/e2e-env';
 import { injectSession, routeBrowserCouchThroughApp } from './helpers/login';
-import { teardownShelter } from './helpers/public-cleanup';
+import {
+	publicSearchCount,
+	publicShelter,
+	teardownShelter,
+	waitForProjection
+} from './helpers/public-cleanup';
 import {
 	createShelterViaUi,
 	registerHouseholdViaUi,
@@ -108,7 +114,7 @@ test.describe('Public family search: live results', { tag: ['@public', '@critica
 	test.describe.configure({ mode: 'serial' });
 
 	test('staff creates a shelter and registers households', async ({ page }) => {
-		test.skip(IS_REMOTE, READ_ONLY_REASON);
+		test.skip(!CAN_WRITE, READ_ONLY_REASON);
 		test.setTimeout(180_000);
 		const admin = await bootstrapAdminSession();
 		await routeBrowserCouchThroughApp(page);
@@ -127,14 +133,16 @@ test.describe('Public family search: live results', { tag: ['@public', '@critica
 	});
 
 	test('finds everyone by name prefix and paginates 5 per page', async ({ page }) => {
-		test.setTimeout(150_000); // outlasts the 120 s projection wait below
-		// The worker projects new registrations asynchronously — retry the search.
+		test.setTimeout(75_000); // outlasts the 60 s projection wait below
+		// The shelter was just created — the worker's registry listener only polls for
+		// brand-new shelter databases every 30s (listeners/registry.py), so this first
+		// wait needs headroom past that (more on a shared remote worker); retry until it does.
 		await expect(async () => {
 			await page.goto(`/search?q=${encodeURIComponent(PREFIX)}`);
 			await expect(page.getByText(`พบข้อมูลทั้งหมด ${TOTAL} รายการ`)).toBeVisible({
 				timeout: 3_000
 			});
-		}).toPass({ intervals: [5_000], timeout: 120_000 });
+		}).toPass({ intervals: [2_000], timeout: 60_000 });
 
 		await expect(page.getByRole('heading', { name: PREFIX })).toHaveCount(5);
 		await expect(page.getByText('หน้า 1 จาก 2')).toBeVisible();
@@ -242,5 +250,33 @@ test.describe('Public family search: live results', { tag: ['@public', '@critica
 		await expect(page.getByRole('heading', { name: `${SOLO} ${LAST_NAME_MASKED}` })).toBeVisible();
 		await expect(page.getByRole('heading', { name: HEAD })).toHaveCount(0);
 		await expect(page.getByText('มาเดี่ยว')).toBeVisible();
+	});
+
+	test('Z teardown leaves no shelter or searchable person of this run', async () => {
+		test.skip(!CAN_WRITE, READ_ONLY_REASON);
+		test.setTimeout(180_000);
+		const code = shelterCode;
+		expect(code, 'setup created no shelter').toBeTruthy();
+		await teardownShelter(code!);
+		shelterCode = undefined;
+
+		expect((await couchReq('GET', `/shelter_${code!.toLowerCase()}`)).status).toBe(404);
+		const byCode = await couchReq(
+			'GET',
+			`/registry/_design/app/_view/by_code?key=${encodeURIComponent(JSON.stringify(code))}`
+		);
+		expect((byCode.data as { rows: unknown[] }).rows).toEqual([]);
+		// the worker cascades the registry delete to the public plane asynchronously
+		await waitForProjection(
+			`${PREFIX} gone from public search`,
+			async () => (await publicSearchCount(PREFIX)) === 0,
+			{ timeoutMs: 60_000, intervalMs: 2_000 }
+		);
+		// The row itself stays as `closed` until the worker's retention job (every 5 min,
+		// reconcile_closed_shelters) removes it — never as anything a citizen could book.
+		const row = await publicShelter(code!);
+		expect(row === undefined || row.status === 'closed', `${code} left as ${row?.status}`).toBe(
+			true
+		);
 	});
 });
