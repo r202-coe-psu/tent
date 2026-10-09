@@ -44,31 +44,52 @@ describe('PublicFooter (#398 Verification)', () => {
 		expect(result.body).toContain('md:col-span-5');
 	});
 
-	it.each([
-		{
-			name: 'both LINE OA and Facebook',
-			configData: {
-				line_oa_url: 'https://line.me/R/ti/p/@smartshelter',
-				facebook_url: 'https://facebook.com/smartshelter'
+	it('renders online channels column when line_oa_url or facebook_url is provided', () => {
+		const result = render(PublicFooter, {
+			props: {
+				configData: {
+					line_oa_url: 'https://line.me/R/ti/p/@smartshelter',
+					facebook_url: 'https://facebook.com/smartshelter'
+				}
 			}
-		},
-		{
-			name: 'LINE OA only',
-			configData: { line_oa_url: 'https://line.me/R/ti/p/@smartshelter' }
-		},
-		{
-			name: 'Facebook only',
-			configData: { facebook_url: 'https://facebook.com/smartshelter' }
-		}
-	])(
-		'never renders the online channels column (removed in #398), even when LINE OA / Facebook URLs are configured ($name)',
-		({ configData }) => {
-			const result = render(PublicFooter, { props: { configData } });
+		});
 
-			expect(result.body).not.toContain('ช่องทางออนไลน์ด่วน');
-			expect(result.body).not.toContain('line.me');
-			expect(result.body).not.toContain('facebook.com');
-			expect(result.body).toContain('Smart Shelter Platform');
-		}
-	);
+		// Should show online channels column
+		expect(result.body).toContain('ช่องทางออนไลน์ด่วน');
+		expect(result.body).toContain('https://line.me/R/ti/p/@smartshelter');
+		expect(result.body).toContain('https://facebook.com/smartshelter');
+
+		// Grid layout adjusts to 3 columns (5 : 4 : 3)
+		expect(result.body).toContain('md:col-span-5');
+		expect(result.body).toContain('md:col-span-4');
+		expect(result.body).toContain('md:col-span-3');
+	});
+
+	it('renders online channels column if only LINE OA is provided', () => {
+		const result = render(PublicFooter, {
+			props: {
+				configData: {
+					line_oa_url: 'https://line.me/R/ti/p/@smartshelter'
+				}
+			}
+		});
+
+		expect(result.body).toContain('ช่องทางออนไลน์ด่วน');
+		expect(result.body).toContain('https://line.me/R/ti/p/@smartshelter');
+		expect(result.body).not.toContain('facebook.com');
+	});
+
+	it('renders online channels column if only Facebook is provided', () => {
+		const result = render(PublicFooter, {
+			props: {
+				configData: {
+					facebook_url: 'https://facebook.com/smartshelter'
+				}
+			}
+		});
+
+		expect(result.body).toContain('ช่องทางออนไลน์ด่วน');
+		expect(result.body).toContain('https://facebook.com/smartshelter');
+		expect(result.body).not.toContain('line.me');
+	});
 });
