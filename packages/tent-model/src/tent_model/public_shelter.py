@@ -23,6 +23,8 @@ class OccupancyBreakdown(BaseModel):
 
     male: int = 0
     female: int = 0
+    # decision sync 2026-10-09: gender null/missing/'other'; male+female+this == occupancy_total.
+    gender_unspecified: int = 0
     child_under_5: int = 0
     elderly_over_60: int = 0
     pregnant: int = 0

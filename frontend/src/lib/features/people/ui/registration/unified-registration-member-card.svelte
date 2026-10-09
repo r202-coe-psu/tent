@@ -8,7 +8,7 @@
 	import HeartPulse from '@lucide/svelte/icons/heart-pulse';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import QrCode from '@lucide/svelte/icons/qr-code';
-	import { onDestroy } from 'svelte';
+	import { onDestroy, onMount, untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import * as Accordion from '$lib/components/ui/accordion/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -38,7 +38,6 @@
 		applyAnonymousIdToMember,
 		evacueeToUnifiedMember,
 		type MemberPhotoUploadMode,
-		type UnifiedMemberInput,
 		type UnifiedMemberWithMeta,
 		type UnifiedRegistrationChannel
 	} from '../../domain/unified-registration';
@@ -63,6 +62,7 @@
 		fieldErrors,
 		isJoiningExistingHousehold = false,
 		primaryContactPhone = null,
+		validationSeq = 0,
 		onRemove,
 		onReportingInChange,
 		onScanThaiD
@@ -79,6 +79,8 @@
 		fieldErrors?: Record<string, string | undefined>;
 		isJoiningExistingHousehold?: boolean;
 		primaryContactPhone?: string | null;
+		/** Bumped by the form on every failed submit — re-opens a collapsed section holding an error. */
+		validationSeq?: number;
 		onRemove?: () => void;
 		onReportingInChange?: (reportingIn: boolean) => void;
 		onScanThaiD?: () => void;
@@ -145,9 +147,9 @@
 	if (member.nickname == null) member.nickname = '';
 	if (member.country == null) member.country = 'THAILAND';
 	if (member.religion == null) member.religion = 'unknown';
-	if (member.gender == null || (member.gender as string) === 'other') {
-		member.gender = '' as UnifiedMemberInput['gender'];
-	}
+	// ไม่ระบุ = null (default, valid on every channel). Legacy 'other' is preserved as-is — the radio
+	// shows it as ไม่ระบุ and only the user's own pick changes it (decision sync 2026-10-09).
+	if (member.gender === undefined) member.gender = null;
 
 	let noPhone = $state(member.phone == null);
 	let birthYear = $state<string | number | undefined>(
@@ -163,10 +165,36 @@
 		phone: member.emergency_contact?.phone ?? '',
 		relation: member.emergency_contact?.relation ?? ''
 	});
+	/** Open accordion sections; the emergency one opens by itself when it holds an error. */
+	let openSections = $state<string[]>([]);
+	const emergencyErrors = $derived({
+		name: fieldErrors?.['emergency_contact.name'],
+		phone: fieldErrors?.['emergency_contact.phone'],
+		relation: fieldErrors?.['emergency_contact.relation']
+	});
+	const hasEmergencyError = $derived(
+		Boolean(emergencyErrors.name || emergencyErrors.phone || emergencyErrors.relation)
+	);
+	/** Index 0 keeps the plain `emergency-*` ids; later members get their own so ids stay unique. */
+	const emergencyIdPrefix = $derived(index === 0 ? 'emergency' : `member-${index}-emergency`);
+	$effect(() => {
+		void validationSeq;
+		if (hasEmergencyError && !untrack(() => openSections).includes('emergency')) {
+			openSections = [...untrack(() => openSections), 'emergency'];
+		}
+	});
 	let photoPreviewUrl = $state<string | null>(null);
 	let uploadingPhoto = $state(false);
+	/** Face photo accordion: collapsed on mobile by default; open from sm+ */
+	let photoSectionOpen = $state<string[]>([]);
 	let pullDialogOpen = $state(false);
 	let wasPulled = $state(false);
+
+	onMount(() => {
+		if (typeof window !== 'undefined' && window.matchMedia('(min-width: 640px)').matches) {
+			photoSectionOpen = ['photo'];
+		}
+	});
 
 	function handlePopulateFromQueue(ev: Evacuee) {
 		const converted = evacueeToUnifiedMember(ev);
@@ -194,7 +222,7 @@
 			stay_status: undefined,
 			first_name: '',
 			last_name: '',
-			gender: '' as UnifiedMemberInput['gender'],
+			gender: null,
 			birth_year: undefined,
 			age: undefined,
 			person_id: { cardType: 'national_id', number: '' },
@@ -505,7 +533,7 @@
 				</Button>
 			{/if}
 
-			{#if !isAlreadyReported}
+			{#if channel !== 'public' && !isAlreadyReported}
 				<Button
 					type="button"
 					variant="outline"
@@ -536,72 +564,86 @@
 	</div>
 
 	{#if showPhotoUpload}
-		<div class="rounded-xl border border-border/50 bg-muted/10 p-3 sm:p-3.5">
-			<div class="mb-2.5 flex flex-wrap items-center justify-between gap-1.5">
-				<div class="flex items-center gap-2">
-					<Camera class="size-4 text-muted-foreground" />
-					<h4 class="text-sm font-semibold text-foreground">{t.facePhotoTitle}</h4>
-					<span
-						class="rounded-md bg-muted px-1.5 py-0.5 text-2xs font-normal text-muted-foreground"
-					>
-						(ไม่จำเป็น / หากมี)
-					</span>
-				</div>
-			</div>
-			<div class="flex items-center gap-3">
-				<div
-					class="relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-dashed border-border bg-background shadow-2xs"
-				>
-					{#if uploadingPhoto}
-						<Loader2 class="size-5 animate-spin text-primary" />
-					{:else if photoPreviewUrl}
-						<img src={photoPreviewUrl} alt={t.facePhotoTitle} class="size-full object-cover" />
-					{:else}
-						<Camera class="size-6 text-muted-foreground/40" />
-					{/if}
-				</div>
-				<div class="flex min-w-0 flex-1 flex-col gap-1.5">
-					<p class="truncate text-2xs text-muted-foreground">{t.facePhotoHint}</p>
-					<div class="flex flex-wrap items-center gap-2">
-						<label
-							for={photoInputId}
-							class="inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-3 text-xs font-medium text-foreground shadow-2xs transition-colors hover:bg-muted {fieldsDisabled ||
-							uploadingPhoto
-								? 'pointer-events-none opacity-60'
-								: ''}"
+		<!-- Collapsed by default on mobile (max-sm); open on sm+ so desktop keeps the full block -->
+		<Accordion.Root type="multiple" bind:value={photoSectionOpen} class="w-full">
+			<Accordion.Item
+				value="photo"
+				class="rounded-xl border border-border/50 bg-muted/10 px-3 sm:px-3.5"
+			>
+				<Accordion.Trigger class="hover:no-underline">
+					<span class="flex min-w-0 flex-1 items-center gap-2">
+						<Camera class="size-4 shrink-0 text-muted-foreground" />
+						<span class="text-sm font-semibold text-foreground">{t.facePhotoTitle}</span>
+						<span
+							class="rounded-md bg-muted px-1.5 py-0.5 text-2xs font-normal text-muted-foreground"
 						>
-							<Camera class="size-3.5 text-primary" />
-							<span>{photoPreviewUrl || member.photo ? t.facePhotoChange : t.facePhotoPick}</span>
-						</label>
-						<input
-							id={photoInputId}
-							type="file"
-							accept="image/*"
-							capture="user"
-							class="sr-only"
-							disabled={fieldsDisabled || uploadingPhoto}
-							onchange={(e) => {
-								const input = e.currentTarget;
-								void handlePhotoSelect(input.files?.[0] ?? null);
-								input.value = '';
-							}}
-						/>
+							(ไม่จำเป็น / หากมี)
+						</span>
 						{#if photoPreviewUrl || member.photo}
-							<Button
-								type="button"
-								variant="ghost"
-								size="sm"
-								class="h-8 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
-								disabled={fieldsDisabled || uploadingPhoto}
-								onclick={clearPhoto}
-							>
-								{t.facePhotoRemove}
-							</Button>
+							<span class="size-2 shrink-0 rounded-full bg-primary" aria-label={t.facePhotoTitle}
+							></span>
 						{/if}
+					</span>
+				</Accordion.Trigger>
+				<Accordion.Content>
+					<div class="flex items-center gap-3 pb-3">
+						<div
+							class="relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-dashed border-border bg-background shadow-2xs"
+						>
+							{#if uploadingPhoto}
+								<Loader2 class="size-5 animate-spin text-primary" />
+							{:else if photoPreviewUrl}
+								<img src={photoPreviewUrl} alt={t.facePhotoTitle} class="size-full object-cover" />
+							{:else}
+								<Camera class="size-6 text-muted-foreground/40" />
+							{/if}
+						</div>
+						<div class="flex min-w-0 flex-1 flex-col gap-1.5">
+							<p class="truncate text-2xs text-muted-foreground">{t.facePhotoHint}</p>
+							<div class="flex flex-wrap items-center gap-2">
+								<label
+									for={photoInputId}
+									class="inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-3 text-xs font-medium text-foreground shadow-2xs transition-colors hover:bg-muted {fieldsDisabled ||
+									uploadingPhoto
+										? 'pointer-events-none opacity-60'
+										: ''}"
+								>
+									<Camera class="size-3.5 text-primary" />
+									<span
+										>{photoPreviewUrl || member.photo ? t.facePhotoChange : t.facePhotoPick}</span
+									>
+								</label>
+								<input
+									id={photoInputId}
+									type="file"
+									accept="image/*"
+									capture="user"
+									class="sr-only"
+									disabled={fieldsDisabled || uploadingPhoto}
+									onchange={(e) => {
+										const input = e.currentTarget;
+										void handlePhotoSelect(input.files?.[0] ?? null);
+										input.value = '';
+									}}
+								/>
+								{#if photoPreviewUrl || member.photo}
+									<Button
+										type="button"
+										variant="ghost"
+										size="sm"
+										class="h-8 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+										disabled={fieldsDisabled || uploadingPhoto}
+										onclick={clearPhoto}
+									>
+										{t.facePhotoRemove}
+									</Button>
+								{/if}
+							</div>
+						</div>
 					</div>
-				</div>
-			</div>
-		</div>
+				</Accordion.Content>
+			</Accordion.Item>
+		</Accordion.Root>
 	{/if}
 
 	<div class="space-y-4">
@@ -624,6 +666,7 @@
 			bind:country={member.country}
 			disabled={fieldsDisabled}
 			{hideNoPhone}
+			showNickname={channel !== 'public'}
 			phoneOptional={isJoiningExistingHousehold}
 			phoneHelperText={isJoiningExistingHousehold
 				? primaryContactPhone
@@ -635,7 +678,7 @@
 		/>
 	</div>
 
-	<Accordion.Root type="multiple" class="w-full">
+	<Accordion.Root type="multiple" bind:value={openSections} class="w-full">
 		<Accordion.Item value="emergency">
 			<Accordion.Trigger class="hover:no-underline">
 				<span class="flex items-center gap-2">
@@ -650,6 +693,8 @@
 						bind:phone={emergency.phone}
 						bind:relation={emergency.relation}
 						disabled={fieldsDisabled}
+						idPrefix={emergencyIdPrefix}
+						errors={emergencyErrors}
 					/>
 				</div>
 			</Accordion.Content>

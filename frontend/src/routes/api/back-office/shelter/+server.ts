@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { requireAdmin, requireShelterScopeOrSA, serviceError } from '$lib/server/couch-admin';
+import { requireShelterScopeOrSA, requireSystemAdmin, serviceError } from '$lib/server/couch-admin';
 import {
 	createShelterSchema,
 	EMPTY_ADMISSION_POLICY,
@@ -15,9 +15,12 @@ import { provisionShelter } from '$lib/features/shelters/server/provisioner';
 
 export const prerender = false;
 
-/** POST shelter (5-section v3 schema) — provision a shelter; code is auto-assigned. */
+/**
+ * POST shelter (5-section v3 schema) — provision a shelter; code is auto-assigned.
+ * SA (`system_admin`) or Couch `_admin` — provisioning itself runs on admin credentials.
+ */
 export const POST: RequestHandler = async ({ request }) => {
-	await requireAdmin(request.headers.get('cookie'));
+	await requireSystemAdmin(request.headers.get('cookie'));
 	try {
 		const body = (await request.json().catch(() => ({}))) as unknown;
 		return json(await provisionShelter(createShelterSchema.parse(body)));

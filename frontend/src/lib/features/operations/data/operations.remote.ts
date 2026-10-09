@@ -1,4 +1,4 @@
-import { bulkDocs, getDoc, putDocStrict } from '$lib/db/couch-db';
+import { bulkDocs, bulkDocsDetailed, getDoc, putDocStrict } from '$lib/db/couch-db';
 import { createRemoteRepository, type Repository } from '$lib/db/repository';
 import { getShelterCode, getShelterDb } from '$lib/db/shelter';
 import { now, touch, type AuthorContext } from '$lib/db/model';
@@ -22,6 +22,8 @@ import {
 	stockBalance,
 	createReceiveEntry,
 	createWalkInDonation,
+	keyDonationReceipt,
+	completeDonationReceipt,
 	createDistributeEntry,
 	createAdjustEntry,
 	projectStockLotBalances,
@@ -43,12 +45,30 @@ import {
 	type DisputeInfoInput
 } from '../domain/operations';
 import { assertDonationSlotDeletable, countSlotBookings, slotMode } from '../domain/donation-slot';
+import { ItemMergeError, planItemMerge } from '../domain/item-merge';
+import type { MergeItemsInput, ItemMergeResult } from '../domain/item-merge';
 import { createAuditEntry, type AuditAction } from '$lib/features/shared';
+import {
+	deriveDonationReceiptLineId,
+	donationShortfall,
+	isReceivedLine,
+	type DonationBatchLine,
+	type DonationBatchLineResult,
+	type DonationBatchResult
+} from '../domain/donation-batch';
+import {
+	createCycleCountEntries,
+	deriveCycleCountLineId,
+	type CycleCountLineResult,
+	type CycleCountResult,
+	type CycleCountSubmission
+} from '../domain/cycle-count';
 import type { OperationsRepository } from './operations.repository';
 import { supplyRepository, type SupplyItem } from '$lib/features/supply';
 import {
 	isItemMaster,
 	itemMasterUnit,
+	requiresExpiry,
 	assertKnownUnitCodes,
 	isLegacyUnitLabel,
 	catalogRepository,
@@ -59,7 +79,8 @@ import { addQty, persistQty, qtyAbs, qtyGt, qtyGte, qtyLte, subQty } from '$lib/
 /**
  * A catalog row a ledger entry can point at. The `catalog` database holds two
  * shapes: the T-10 `item:{ulid}` supply stub (`unit`, `perishable`) and the
- * CR-013 `item_master:{ulid}` master (`base_unit`, no perishable flag). Item
+ * CR-013 `item_master:{ulid}` master (`base_unit`, no perishable flag — CR-143 §D
+ * derives the expiry requirement from storage / shelf life instead). Item
  * pickers already offer both, so both must survive the guards below.
  */
 export type CatalogItem = SupplyItem | ItemMaster;
@@ -71,13 +92,18 @@ export type CatalogItem = SupplyItem | ItemMaster;
 const DIRECT_DISTRIBUTION_CLAIM_RECOVERY_AGE_MS = 15 * 60 * 1000;
 
 /** The unit + expiry rules a receive/adjust must satisfy, whichever shape it is. */
-export function catalogItemRules(item: CatalogItem): { unit: string; perishable: boolean } {
-	return isItemMaster(item)
-		? { unit: itemMasterUnit(item), perishable: false }
-		: { unit: item.unit, perishable: item.perishable };
+export function catalogItemRules(item: CatalogItem): { unit: string; requiresExpiry: boolean } {
+	return {
+		unit: isItemMaster(item) ? itemMasterUnit(item) : item.unit,
+		requiresExpiry: requiresExpiry(item)
+	};
 }
 
-export function assertReceiveAgainstCatalog(entry: StockLedger, item: CatalogItem | null): void {
+export function assertReceiveAgainstCatalog(
+	entry: StockLedger,
+	item: CatalogItem | null,
+	opts: { requireExpiry?: boolean } = {}
+): void {
 	if (!item) {
 		throw new Error(
 			`Unknown item: ${entry.item_id} — item must exist in the catalog before receiving stock`
@@ -89,7 +115,7 @@ export function assertReceiveAgainstCatalog(entry: StockLedger, item: CatalogIte
 			`Unit mismatch for item ${entry.item_id}: expected ${rules.unit}, got ${entry.unit}`
 		);
 	}
-	if (rules.perishable && !entry.lot?.expiry) {
+	if ((opts.requireExpiry ?? true) && rules.requiresExpiry && !entry.lot?.expiry) {
 		throw new Error(`Perishable item ${entry.item_id} requires lot.expiry to be set`);
 	}
 }
@@ -195,6 +221,186 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			entry
 		]);
 		return { donation: savedDonation as Donation, entry: savedEntry as StockLedger };
+	}
+
+	async receiveDonationBatch(
+		donation: Donation,
+		counted: readonly DonationBatchLine[],
+		ctx: AuthorContext
+	): Promise<DonationBatchResult> {
+		if (donation.kind !== 'items') {
+			throw new Error('Only a goods donation can be received into stock');
+		}
+		const seenLineNos = new Set<number>();
+		for (const line of counted) {
+			if (!Number.isInteger(line.line_no) || line.line_no < 0) {
+				throw new Error(`Invalid line number ${line.line_no} — must be a non-negative integer`);
+			}
+			if (seenLineNos.has(line.line_no)) {
+				throw new Error(`Duplicate line number ${line.line_no} in the donation receipt`);
+			}
+			seenLineNos.add(line.line_no);
+			if (!line.item_id) {
+				throw new Error(`Line ${line.line_no} has no item — match it to the catalog first`);
+			}
+			if (!qtyGte(line.qty, 0)) {
+				throw new Error(`Line ${line.line_no} has a negative quantity`);
+			}
+		}
+		// Zero lines write nothing (FR-B3). A receipt with nothing received at all must not
+		// reach `received`: with no row to key it, `calculateReserved` would hold the whole
+		// declaration forever. That donation should be cancelled instead.
+		const receivedLines = counted.filter(isReceivedLine);
+		if (receivedLines.length === 0) {
+			throw new Error('Nothing was received — set at least one line above zero');
+		}
+
+		// FR-B4a: the row ids are fixed by (donation, item, line), so a row left by an earlier
+		// attempt is found by id and never written twice (AC-B5).
+		const ids = await Promise.all(
+			receivedLines.map((line) =>
+				deriveDonationReceiptLineId(donation._id, line.item_id, line.line_no)
+			)
+		);
+		const existing = await Promise.all(ids.map((id) => this.repo.get<StockLedger>(id)));
+
+		const results = new Map<number, DonationBatchLineResult>();
+		for (const line of counted) {
+			if (!isReceivedLine(line)) {
+				results.set(line.line_no, {
+					line_no: line.line_no,
+					item_id: line.item_id,
+					state: 'skipped'
+				});
+			}
+		}
+
+		const toWrite: { line: DonationBatchLine; id: string }[] = [];
+		receivedLines.forEach((line, index) => {
+			const id = ids[index];
+			const row = existing[index];
+			if (!row) {
+				toWrite.push({ line, id });
+				return;
+			}
+			// Rows are append-only: a retry that disagrees with what is already recorded must
+			// stop here rather than pretend the edit landed.
+			if (
+				row.item_id !== line.item_id ||
+				row.unit !== line.unit ||
+				persistQty(row.qty) !== persistQty(line.qty)
+			) {
+				throw new Error(
+					`Line ${line.line_no} was already recorded as ${row.qty} ${row.unit}; it cannot be changed`
+				);
+			}
+			results.set(line.line_no, {
+				line_no: line.line_no,
+				item_id: line.item_id,
+				state: 'saved',
+				ledger_id: id
+			});
+		});
+
+		if (toWrite.length > 0) {
+			const entries = keyDonationReceipt(
+				donation,
+				toWrite.map(({ line }) => line),
+				ctx,
+				toWrite.map(({ id }) => id)
+			);
+			// Validate every row against the catalog (unit, FR-D2 expiry) BEFORE writing any:
+			// a bad line must not leave its neighbours half recorded.
+			const catalog = new Map<string, CatalogItem | null>();
+			for (const entry of entries) {
+				if (!catalog.has(entry.item_id)) {
+					catalog.set(entry.item_id, await this.loadCatalogItem(entry.item_id));
+				}
+				assertReceiveAgainstCatalog(entry, catalog.get(entry.item_id) ?? null);
+			}
+
+			const outcomes = new Map<string, { ok: boolean; reason: string }>();
+			try {
+				for (const outcome of await bulkDocsDetailed<StockLedger>(this.dbName, entries)) {
+					outcomes.set(outcome.id, {
+						ok: outcome.ok,
+						reason: outcome.ok ? '' : `${outcome.error}: ${outcome.reason}`
+					});
+				}
+			} catch (err) {
+				// Transport failure: nothing is known about any row, so each is read back below.
+				const reason = err instanceof Error ? err.message : 'bulk write failed';
+				for (const { id } of toWrite) outcomes.set(id, { ok: false, reason });
+			}
+
+			for (const { line, id } of toWrite) {
+				const outcome = outcomes.get(id);
+				let saved = outcome?.ok === true;
+				const reason = outcome?.reason ?? 'no result for this row';
+				if (!saved) {
+					// A 409 on a deterministic id means the row is already there, and a lost
+					// response may hide a row that did land: the ledger itself decides.
+					try {
+						saved = (await this.repo.get<StockLedger>(id)) !== null;
+					} catch {
+						// keep `saved = false`; the original reason stays the one shown
+					}
+				}
+				results.set(line.line_no, {
+					line_no: line.line_no,
+					item_id: line.item_id,
+					state: saved ? 'saved' : 'failed',
+					ledger_id: id,
+					...(saved ? {} : { error: reason })
+				});
+			}
+		}
+
+		const lines = counted.map((line) => results.get(line.line_no)!);
+		const rowsComplete = lines.every((line) => line.state !== 'failed');
+		if (!rowsComplete) {
+			return { donation, lines, rowsComplete: false, received: false };
+		}
+
+		// FR-B4b / FR-B8: the donation moves only after every row is in the ledger, and a
+		// failure here is retried on its own — the rows above are found by id, not rewritten.
+		try {
+			const latest = (await this.repo.get<Donation>(donation._id)) ?? donation;
+			const nextBase = completeDonationReceipt(latest);
+			const declaredForShortfall = (latest.items ?? []).map((i) => ({
+				item_id: i.item_id || i.free_text,
+				qty: String(i.qty)
+			}));
+			const countedForShortfall = counted.map((c) => ({
+				item_id: c.item_id,
+				qty: String(c.qty)
+			}));
+			const shortfalls = donationShortfall(declaredForShortfall, countedForShortfall);
+			const next: Donation = {
+				...nextBase,
+				received_summary: {
+					total_items: receivedLines.length,
+					received_at: nextBase.received_at ?? new Date().toISOString(),
+					items: counted.map((c) => ({ item_id: c.item_id, qty: String(c.qty), unit: c.unit })),
+					shortfalls: shortfalls.map((s) => ({
+						item_id: s.item_id,
+						declared: s.declared,
+						counted: s.counted,
+						short: s.short
+					}))
+				}
+			};
+			const saved = next === latest ? latest : await this.updateDonation(next);
+			return { donation: saved, lines, rowsComplete: true, received: true };
+		} catch (err) {
+			return {
+				donation,
+				lines,
+				rowsComplete: true,
+				received: false,
+				transitionError: err instanceof Error ? err.message : 'Could not mark the donation received'
+			};
+		}
 	}
 
 	async distributeStock(input: DistributeInput, ctx: AuthorContext): Promise<StockLedger> {
@@ -442,7 +648,9 @@ export class OperationsRemoteRepository implements OperationsRepository {
 				`Unknown item: ${entry.item_id} — item must exist in the catalog before adjusting stock`
 			);
 		}
-		assertReceiveAgainstCatalog(entry, item);
+		// The expiry rule is for receipts only (CR-156 FR-D2d): a count correction, up or down,
+		// may land on a lot recorded before the item gained a shelf life and has no expiry to carry.
+		assertReceiveAgainstCatalog(entry, item, { requireExpiry: false });
 
 		// NOTE: This balance check is aggregate (cross-lot total), not per-lot.
 		// Acceptable for single-user shelter; per-lot validation requires FIFO tracking.
@@ -458,6 +666,180 @@ export class OperationsRemoteRepository implements OperationsRepository {
 			}
 		}
 		return this.addLedgerEntry(entry);
+	}
+
+	async applyCycleCount(
+		submission: CycleCountSubmission,
+		ctx: AuthorContext
+	): Promise<CycleCountResult> {
+		if (!submission.count_id) throw new Error('A cycle count needs a count id');
+		if (submission.lines.length === 0) {
+			throw new Error('Nothing to record — every counted lot matches the system');
+		}
+		const seen = new Set<string>();
+		for (const line of submission.lines) {
+			const key = `${line.item_id}::${line.lot_key}`;
+			if (seen.has(key))
+				throw new Error(`Duplicate lot in the count: ${line.item_id} (${line.lot_key})`);
+			seen.add(key);
+		}
+
+		// Ids are fixed by (count, item, lot): a row left by an earlier attempt is found by id and
+		// never written twice. Rows are append-only, so a retry that disagrees with what is already
+		// recorded must stop rather than pretend the edit landed.
+		const ids = await Promise.all(
+			submission.lines.map((l) => deriveCycleCountLineId(submission.count_id, l.item_id, l.lot_key))
+		);
+		const existing = await Promise.all(ids.map((id) => this.repo.get<StockLedger>(id)));
+		const results = new Map<string, CycleCountLineResult>();
+		const pending: { index: number; id: string }[] = [];
+		submission.lines.forEach((line, index) => {
+			const row = existing[index];
+			if (!row) {
+				pending.push({ index, id: ids[index] });
+				return;
+			}
+			if (row.item_id !== line.item_id || persistQty(row.qty) !== persistQty(line.qty)) {
+				throw new Error(
+					`Lot ${line.item_id} was already counted as ${row.qty} ${row.unit}; it cannot be changed`
+				);
+			}
+			results.set(line.lot_key + line.item_id, {
+				lot_key: line.lot_key,
+				item_id: line.item_id,
+				state: 'saved',
+				ledger_id: ids[index]
+			});
+		});
+
+		if (pending.length > 0) {
+			const toWrite = {
+				...submission,
+				lines: pending.map(({ index }) => submission.lines[index])
+			};
+			const entries = createCycleCountEntries(
+				toWrite,
+				ctx,
+				pending.map(({ id }) => id)
+			);
+
+			// Validate every row BEFORE writing any: a bad line must not leave its neighbours half
+			// recorded. Write-offs are checked against the aggregate balance (same rule as
+			// `adjustStock`), summed per item so two lots of one item cannot overdraw together.
+			const catalog = new Map<string, CatalogItem | null>();
+			for (const entry of entries) {
+				if (!catalog.has(entry.item_id)) {
+					catalog.set(entry.item_id, await this.loadCatalogItem(entry.item_id));
+				}
+				const item = catalog.get(entry.item_id) ?? null;
+				if (!item) {
+					throw new Error(
+						`Unknown item: ${entry.item_id} — item must exist in the catalog before adjusting stock`
+					);
+				}
+				assertReceiveAgainstCatalog(entry, item, { requireExpiry: false });
+			}
+			const writeOffs = new Map<string, string>();
+			for (const entry of entries) {
+				if (qtyLte(entry.qty, 0)) {
+					writeOffs.set(
+						entry.item_id,
+						addQty(writeOffs.get(entry.item_id) ?? '0', qtyAbs(entry.qty))
+					);
+				}
+			}
+			if (writeOffs.size > 0) {
+				const balances = await this.getBalance();
+				for (const [itemId, total] of writeOffs) {
+					const have = balances.get(itemId) ?? '0';
+					if (!qtyGte(have, total)) {
+						throw new Error(
+							`Insufficient stock for item ${itemId} (requested write-off ${total}, have ${have})`
+						);
+					}
+				}
+			}
+
+			const outcomes = new Map<string, { ok: boolean; reason: string }>();
+			try {
+				for (const outcome of await bulkDocsDetailed<StockLedger>(this.dbName, entries)) {
+					outcomes.set(outcome.id, {
+						ok: outcome.ok,
+						reason: outcome.ok ? '' : `${outcome.error}: ${outcome.reason}`
+					});
+				}
+			} catch (err) {
+				// Transport failure: nothing is known about any row, so each is read back below.
+				const reason = err instanceof Error ? err.message : 'bulk write failed';
+				for (const { id } of pending) outcomes.set(id, { ok: false, reason });
+			}
+
+			for (const { index, id } of pending) {
+				const line = submission.lines[index];
+				const outcome = outcomes.get(id);
+				let saved = outcome?.ok === true;
+				const reason = outcome?.reason ?? 'no result for this row';
+				if (!saved) {
+					// A 409 on a deterministic id means the row is already there, and a lost response
+					// may hide a row that did land: the ledger itself decides.
+					try {
+						saved = (await this.repo.get<StockLedger>(id)) !== null;
+					} catch {
+						// keep `saved = false`; the original reason stays the one shown
+					}
+				}
+				results.set(line.lot_key + line.item_id, {
+					lot_key: line.lot_key,
+					item_id: line.item_id,
+					state: saved ? 'saved' : 'failed',
+					ledger_id: id,
+					...(saved ? {} : { error: reason })
+				});
+			}
+		}
+
+		const lines = submission.lines.map((l) => results.get(l.lot_key + l.item_id)!);
+		return { lines, complete: lines.every((l) => l.state === 'saved') };
+	}
+
+	/** The shelter this repository's database belongs to (`shelter_sh001` → `SH001`), else null. */
+	private shelterCodeOfDb(): string | null {
+		return this.dbName.startsWith('shelter_')
+			? this.dbName.replace('shelter_', '').toUpperCase()
+			: null;
+	}
+
+	async mergeItems(input: MergeItemsInput, ctx: AuthorContext): Promise<ItemMergeResult> {
+		const shelterCode = this.shelterCodeOfDb();
+		const catalog = catalogRepository();
+		const [source, target] = await Promise.all([
+			catalog.getItemMaster(input.sourceId, shelterCode),
+			catalog.getItemMaster(input.targetId, shelterCode)
+		]);
+		if (!source) throw new ItemMergeError('invalid_target', `Unknown item: ${input.sourceId}`);
+		if (!target) throw new ItemMergeError('invalid_target', `Unknown item: ${input.targetId}`);
+
+		const plan = await planItemMerge({
+			source,
+			target,
+			roles: input.roles,
+			shelterCode,
+			ledger: await this.listLedger(),
+			ctx
+		});
+
+		// FR-F6: prove the source doc will save (unit master, current _rev) BEFORE any ledger row
+		// is written, so a doomed merge writes nothing.
+		const current = await catalog.assertItemMasterWritable(plan.source);
+		const toSave = { ...plan.source, _rev: current._rev };
+
+		// Then ONE request for every missing pair (FR-F1). The plan skips rows whose deterministic
+		// id already exists, so retrying after a ledger write that succeeded but a source update
+		// that did not only finishes the source (no second move). NOT atomic across docs.
+		if (plan.entries.length > 0) await bulkDocs<StockLedger>(this.dbName, plan.entries);
+
+		const saved = await catalog.updateItemMaster(toSave);
+		return { source: saved, target, legs: plan.legs };
 	}
 
 	// --- Campaign/Donation/Slot Methods ---

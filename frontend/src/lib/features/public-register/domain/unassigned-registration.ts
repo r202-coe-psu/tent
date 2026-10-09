@@ -20,6 +20,7 @@ import {
 	type UnifiedRegistrationInput,
 	type UnifiedRegistrationParsed
 } from '$lib/features/people/server';
+import { NETWORK_ERROR_MESSAGE } from './booking';
 
 /** FastAPI create body — derived from OpenAPI (CONVENTIONS §12) + optional join. */
 export type UnassignedRegistrationPayload =
@@ -182,12 +183,13 @@ export type UnassignedRegistrationErrorCode =
 	| 'SERVER_MISCONFIGURED'
 	| 'DUPLICATE_OPEN_IDENTITY'
 	| 'WRITE_FAILED'
-	| 'DISCLAIMER_REQUIRED';
+	| 'DISCLAIMER_REQUIRED'
+	| 'NETWORK_ERROR';
 
 export function unassignedRegistrationErrorMessage(code: string | undefined): string {
 	switch (code) {
 		case 'DUPLICATE_OPEN_IDENTITY':
-			return 'มีผู้ลงทะเบียนด้วยบัตรหรือเบอร์นี้อยู่แล้วในคิวกลาง';
+			return 'เลขบัตรประชาชน หรือ เบอร์โทรศัพท์นี้ลงทะเบียนเรียบร้อยแล้ว';
 		case 'INVALID_ANONYMOUS_ID':
 			return 'รหัสนิรนามไม่ถูกต้อง';
 		case 'INVALID_PHOTO_REF':
@@ -205,6 +207,8 @@ export function unassignedRegistrationErrorMessage(code: string | undefined): st
 			return 'กรุณายืนยันการรับทราบเงื่อนไขการใช้งานระบบก่อนส่งข้อมูล';
 		case 'INVALID_INPUT':
 			return 'ข้อมูลไม่ครบหรือไม่ถูกต้อง';
+		case 'NETWORK_ERROR':
+			return NETWORK_ERROR_MESSAGE;
 		default:
 			return 'ไม่สามารถบันทึกการลงทะเบียนได้ กรุณาลองใหม่';
 	}

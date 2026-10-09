@@ -13,6 +13,7 @@
 		useEvacuees,
 		useScreenings,
 		maskNationalId,
+		genderLabelTh,
 		evacueeAgeYears,
 		nextScreeningQueueEvacuee,
 		recommendZoneKind,
@@ -184,7 +185,7 @@
 			</div>
 			{#if evacuee}
 				<p class="mt-0.5 text-xs text-muted-foreground">
-					เพศ {evacuee.gender === 'male' ? 'ชาย' : evacuee.gender === 'female' ? 'หญิง' : 'อื่นๆ'} · อายุ
+					เพศ {genderLabelTh(evacuee.gender)} · อายุ
 					{evacueeAgeYears(evacuee) ?? '—'} ปี · บัตร
 					{maskNationalId(evacuee.person_id?.number)} · โทร {evacuee.phone || '—'}
 				</p>

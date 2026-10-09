@@ -61,7 +61,8 @@ describe('open member claim preview formatters', () => {
 	it('maps gender and card type to Thai labels', () => {
 		expect(formatOpenMemberGender('male')).toBe('ชาย');
 		expect(formatOpenMemberGender('female')).toBe('หญิง');
-		expect(formatOpenMemberGender('other')).toBe('other');
+		expect(formatOpenMemberGender('other')).toBe('ไม่ระบุ');
+		expect(formatOpenMemberGender(null)).toBe('ไม่ระบุ');
 		expect(formatOpenMemberCardType('national_id')).toBe('บัตรประชาชน');
 		expect(formatOpenMemberCardType('passport')).toBe('พาสปอร์ต');
 	});

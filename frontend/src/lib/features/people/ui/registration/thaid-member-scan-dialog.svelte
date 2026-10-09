@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
-	import QRCode from 'qrcode';
+	import { generateQrDataUrl } from '$lib/utils/qrcode';
 	import QrCodeIcon from '@lucide/svelte/icons/qr-code';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
@@ -78,7 +78,7 @@
 					: Math.max(0, Math.floor((data.expiresAt - Date.now()) / 1000)) || 900;
 
 			// Generate QR code image
-			qrDataUrl = await QRCode.toDataURL(data.qrUrl, {
+			qrDataUrl = await generateQrDataUrl(data.qrUrl, {
 				width: 280,
 				margin: 1,
 				color: {

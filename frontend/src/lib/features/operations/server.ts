@@ -23,6 +23,7 @@ export {
 	stockBalance,
 	isDonationOutstanding,
 	keyedDonationIds,
+	recordedDonationQty,
 	isStockLedger,
 	isDonation,
 	stockLedgerInputSchema,
@@ -67,3 +68,9 @@ export {
 } from './domain/transfer.authorization';
 
 export { bookingQueue, countSlotBookings, slotMode, slotsOnDate } from './domain/donation-slot';
+
+export {
+	donationShortfall,
+	type DonationShortfall,
+	type DonationBatchLine
+} from './domain/donation-batch';

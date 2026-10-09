@@ -264,6 +264,9 @@ export interface ItemCategory extends CatalogDoc {
 	override?: boolean;
 }
 
+/** Current persisted `item_master` shape (CR-143 §F adds `merged_into`). Every new writer stamps this. */
+export const ITEM_MASTER_SCHEMA_V = 5;
+
 export interface ItemMaster extends CatalogDoc {
 	type: 'item_master';
 	name: string;
@@ -279,6 +282,11 @@ export interface ItemMaster extends CatalogDoc {
 	deactivated?: boolean;
 	shelter_code?: string;
 	override?: boolean;
+	/**
+	 * schema_v 5 (CR-143 §F): set with `deactivated: true` when this item was merged into
+	 * another. Lists and pickers hide it; searching its old name finds the destination.
+	 */
+	merged_into?: string;
 
 	// New fields
 	shelf_life_days?: number;
@@ -437,6 +445,93 @@ export function toLedgerQtyUnit(
 	};
 }
 
+// ---------------------------------------------------------------- expiry requirement (CR-143 §D)
+
+/** The fields that decide whether a receive must carry `lot.expiry` (either catalog generation). */
+export type ExpirySource = {
+	storage_type?: StorageType | null;
+	shelf_life_days?: number | null;
+	/** Legacy `supply_item.perishable` (FR-D3). `item_master` has no such field. */
+	perishable?: boolean | null;
+};
+
+/** Storage types whose stock cannot be left on the shelf without a date. */
+const EXPIRY_STORAGE_TYPES: readonly StorageType[] = ['CHILLED', 'FROZEN'];
+
+function isColdStorage(type: StorageType | null | undefined): boolean {
+	return !!type && EXPIRY_STORAGE_TYPES.includes(type);
+}
+
+/** A usable shelf life: a finite number of whole days >= 1 (0, negatives and NaN are "unset"). */
+function hasShelfLife(days: number | null | undefined): days is number {
+	return typeof days === 'number' && Number.isFinite(days) && Math.trunc(days) >= 1;
+}
+
+/**
+ * Must a receive of this item carry `lot.expiry`? (CR-143 FR-D1, FR-D3)
+ *
+ * `item_master` never had a `perishable` flag, so this is derived: CHILLED / FROZEN
+ * storage, or any `shelf_life_days`. A legacy `supply_item.perishable` still counts.
+ */
+export function requiresExpiry(item: ExpirySource): boolean {
+	if (item.perishable === true) return true;
+	if (isColdStorage(item.storage_type)) return true;
+	return hasShelfLife(item.shelf_life_days);
+}
+
+const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** Parse `YYYY-MM-DD` to a UTC date, rejecting values the calendar rolls over (e.g. 02-31). */
+function parseIsoDate(value: string | undefined | null): Date | null {
+	const match = ISO_DATE.exec((value ?? '').trim());
+	if (!match) return null;
+	const [, y, m, d] = match;
+	const date = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)));
+	return date.getUTCFullYear() === Number(y) &&
+		date.getUTCMonth() === Number(m) - 1 &&
+		date.getUTCDate() === Number(d)
+		? date
+		: null;
+}
+
+/**
+ * Default `lot.expiry` for an item with a shelf life: `(produced_at ?? received on) +
+ * shelf_life_days` (CR-143 FR-D2a). Dates are `YYYY-MM-DD`. `null` when the item has
+ * no usable shelf life (FR-D2c: CHILLED / FROZEN without one are keyed by hand) or no
+ * valid base date. A blank or invalid `producedAt` falls back to the receive date.
+ */
+export function suggestExpiry(
+	item: ExpirySource,
+	producedAt: string | undefined | null,
+	receivedOn: string
+): { expiry: string; shelfLifeDays: number } | null {
+	const days = item.shelf_life_days;
+	if (!hasShelfLife(days)) return null;
+	const base = parseIsoDate(producedAt) ?? parseIsoDate(receivedOn);
+	if (!base) return null;
+	base.setUTCDate(base.getUTCDate() + Math.trunc(days));
+	// An absurd shelf life overflows the Date range (`toISOString` would throw) or leaves
+	// four-digit years; there is nothing sensible to suggest then.
+	if (Number.isNaN(base.getTime()) || base.getUTCFullYear() > 9999) return null;
+	return { expiry: base.toISOString().slice(0, 10), shelfLifeDays: Math.trunc(days) };
+}
+
+/** FR-D2b — shown beside an auto-filled expiry. UI-only: never written to the ledger. */
+export function shelfLifeExpiryLabel(shelfLifeDays: number): string {
+	return `คำนวณจากอายุเก็บรักษา ${shelfLifeDays} วัน — กรุณาตรวจสอบกับฉลากอีกครั้ง`;
+}
+
+/** FR-D4 — what the chosen storage / shelf life means for stock receipts (item create forms). */
+export function expiryRequirementHint(item: ExpirySource): string {
+	if (isColdStorage(item.storage_type)) {
+		return 'แช่เย็น / แช่แข็ง → ต้องกรอกวันหมดอายุทุกครั้งที่รับเข้า';
+	}
+	if (hasShelfLife(item.shelf_life_days)) {
+		return `ระบุอายุเก็บรักษา ${item.shelf_life_days} วัน → ต้องกรอกวันหมดอายุทุกครั้งที่รับเข้า (ระบบเติมให้ ตรวจสอบกับฉลากอีกครั้ง)`;
+	}
+	return 'ไม่บังคับกรอกวันหมดอายุตอนรับเข้า (ใส่ได้ถ้ามี)';
+}
+
 // ---------------------------------------------------------------- catalog generations
 
 /** One pickable catalog row, whichever generation it came from. */
@@ -445,7 +540,8 @@ export type CatalogEntry = {
 	name: string;
 	unit: string;
 	category: string;
-	perishable: boolean;
+	/** `lot.expiry` is mandatory on receive (CR-143 FR-D1). */
+	requiresExpiry: boolean;
 };
 
 /**
@@ -483,6 +579,9 @@ export function mergeCatalogGenerations(
 		unit?: string;
 		category?: string;
 		deactivated?: boolean;
+		merged_into?: string;
+		storage_type?: StorageType;
+		shelf_life_days?: number;
 	}[]
 ): CatalogEntry[] {
 	const legacy: CatalogEntry[] = supplyItems.map((i) => ({
@@ -490,16 +589,16 @@ export function mergeCatalogGenerations(
 		name: i.name,
 		unit: i.unit || '',
 		category: i.category || '',
-		perishable: i.perishable ?? false
+		requiresExpiry: requiresExpiry(i)
 	}));
 	const masters: CatalogEntry[] = itemMasters
-		.filter((m) => !m.deactivated)
+		.filter((m) => !m.deactivated && !m.merged_into)
 		.map((m) => ({
 			_id: m._id,
 			name: m.name,
 			unit: itemMasterUnit(m) || '',
 			category: m.category || '',
-			perishable: false
+			requiresExpiry: requiresExpiry(m)
 		}));
 
 	const [preferred, fallback] = LEGACY_WINS ? [legacy, masters] : [masters, legacy];
@@ -719,7 +818,7 @@ export function createItemMaster(
 	const isFuelEnergy = d.category === 'item_category:fuel_energy';
 	const doc = catalogDoc(
 		'item_master',
-		4,
+		ITEM_MASTER_SCHEMA_V,
 		{
 			name: d.name,
 			category: d.category,

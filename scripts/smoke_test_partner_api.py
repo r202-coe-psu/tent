@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Partner API Smoke Test Script (Issues #214 - #220 / EXT-001 - EXT-007)
+Partner API Smoke Test Script (Issues #214 - #220 / EXT-001 - EXT-011)
 =======================================================================
 Validates the Partner API against Smart Shelter public paths
 (Cloudflare → nginx → FastAPI). Prefer providing an existing client (UI-issued)
@@ -27,6 +27,19 @@ Endpoints exercised (prefix + path):
   GET  {prefix}/external/locations/{code}/occupancy
   GET  {prefix}/external/summary
   GET  {prefix}/external/locations/{code}/occupants
+  POST {prefix}/external/bookings                      (M2, EXT-008, scope booking-write)
+  GET  {prefix}/external/bookings/{booking_id}         (M2, EXT-010)
+  GET  {prefix}/external/persons/shelter-residency     (M2, EXT-011, scope residency-read)
+  POST {prefix}/external/bookings/{booking_id}/cancel  (M2, EXT-009)
+
+M2 checks (EXT-008..011) are scope-aware: when the token lacks `booking-write` /
+`residency-read` the script asserts the 403 insufficient_scope gate instead of
+skipping silently. The booking checks WRITE one booking (random checksum-valid CID,
+name "Smoke Test") to the target shelter and always cancel it afterwards. Use
+--skip-booking-writes to keep a run strictly read-only.
+
+Optional: PARTNER_CHECKED_IN_CID=<13 digits of a person already checked in> adds
+the EXT-011 200-path check (the CID is sent to the API, never printed).
 """
 
 from __future__ import annotations
@@ -34,6 +47,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import random
 import sys
 import time
 import urllib.error
@@ -82,6 +96,14 @@ def get_error_detail(data: Dict[str, Any]) -> str:
     return ""
 
 
+def make_valid_cid() -> str:
+    """Random 13-digit Thai national ID with a correct mod-11 check digit."""
+    digits = [random.randint(1, 8)] + [random.randint(0, 9) for _ in range(11)]
+    total = sum(d * (13 - i) for i, d in enumerate(digits))
+    digits.append((11 - total % 11) % 10)
+    return "".join(str(d) for d in digits)
+
+
 class SmokeTestRunner:
     def __init__(
         self,
@@ -93,6 +115,8 @@ class SmokeTestRunner:
         client_id: Optional[str] = None,
         client_secret: Optional[str] = None,
         api_prefix: str = "/public-api",
+        skip_booking_writes: bool = False,
+        checked_in_cid: Optional[str] = None,
     ):
         self.base_url = base_url.rstrip("/")
         # Staging edge keeps partner routes under /public-api/external/*;
@@ -100,8 +124,11 @@ class SmokeTestRunner:
         self.api_prefix = api_prefix.rstrip("/")
         self.admin_secret = admin_secret
         self.shelter_code = shelter_code
+        self.explicit_shelter_code = shelter_code
         self.keep_client = keep_client
         self.verbose = verbose
+        self.skip_booking_writes = skip_booking_writes
+        self.checked_in_cid = (checked_in_cid or "").strip() or None
 
         # When set, skip admin create/revoke and mint tokens with these credentials.
         self.provided_client_id = (client_id or "").strip() or None
@@ -114,6 +141,12 @@ class SmokeTestRunner:
         self.created_client_id: Optional[str] = self.provided_client_id
         self.client_secret: Optional[str] = self.provided_client_secret
         self.access_token: Optional[str] = None
+        self.token_scopes: List[str] = []
+
+        # M2 booking state shared across EXT-008..011 scenarios
+        self.booking_id: Optional[str] = None
+        self.booking_cid: Optional[str] = None
+        self.booking_location: Optional[str] = None
 
         self.results: List[Tuple[str, str, bool, str]] = (
             []
@@ -214,14 +247,15 @@ class SmokeTestRunner:
         else:
             # 1.1 Create Third-party Client via Admin API (local / internal FastAPI only)
             ts = int(time.time())
-            self.created_client_id = f"smoke-m6-{ts}"
             payload = {
-                "client_id": self.created_client_id,
-                "module_name": "M6",
+                "name": f"smoke-m2-{ts}",
+                "module_name": "M2",
                 "allowed_scopes": [
                     "location-read",
                     "location-stock-read",
                     "occupancy-read",
+                    "booking-write",
+                    "residency-read",
                 ],
             }
             status, data = self.http_request(
@@ -233,6 +267,8 @@ class SmokeTestRunner:
 
             if status == 201 and data.get("client_secret"):
                 self.created_client_row_id = data.get("id")
+                # client_id is generated server-side (tpc_…)
+                self.created_client_id = data.get("client_id")
                 self.client_secret = data.get("client_secret")
                 self.record_result(
                     "#215",
@@ -264,6 +300,7 @@ class SmokeTestRunner:
         scopes = data.get("scopes", [])
         if status == 200 and token and expires_in == 3600 and "location-read" in scopes:
             self.access_token = token
+            self.token_scopes = list(scopes)
             self.record_result(
                 "#215",
                 "Token endpoint mints scoped Bearer JWT (3,600s TTL)",
@@ -495,6 +532,7 @@ class SmokeTestRunner:
         expected_keys = {
             "male",
             "female",
+            "gender_unspecified",
             "child_under_5",
             "elderly_over_60",
             "pregnant",
@@ -726,6 +764,362 @@ class SmokeTestRunner:
         return True
 
     # -------------------------------------------------------------------------
+    # M2 scenarios (CR-154): EXT-008 create · EXT-010 status · EXT-011 residency · EXT-009 cancel
+    # -------------------------------------------------------------------------
+    def _banner(self, title: str) -> None:
+        bar = "======================================================"
+        self.log(f"\n{BOLD}{bar}{RESET}")
+        self.log(f"{BOLD}{title}{RESET}")
+        self.log(f"{BOLD}{bar}{RESET}")
+
+    def _booking_candidates(self, headers: Dict[str, str]) -> List[str]:
+        """Explicit --shelter-code only; otherwise `open` locations from EXT-002.
+
+        Not `self.shelter_code`: #216 auto-fills it with the first listed location,
+        which may be closed or opted out of pre-registration.
+        """
+        if self.explicit_shelter_code:
+            return [self.explicit_shelter_code]
+        status, data = self.http_request(
+            "GET",
+            self.partner_path("/external/locations") + "?status=open&limit=20",
+            headers=headers,
+        )
+        result = data.get("result") if status == 200 else None
+        if not isinstance(result, list):
+            return []
+        return [loc["location_code"] for loc in result if loc.get("location_code")]
+
+    def test_m2_bookings(self) -> bool:
+        """EXT-008 (create) + EXT-010 (status). Leaves the booking open for EXT-011/009."""
+        self._banner("Testing M2: EXT-008 Create Booking & EXT-010 Booking Status")
+
+        if not self.access_token:
+            self.record_result("M2", "Booking endpoints", False, "Missing access token")
+            return False
+
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+        bookings = self.partner_path("/external/bookings")
+
+        # M2.1 No token → rejected
+        status, _ = self.http_request("POST", bookings, body={"location_code": "X"})
+        self.record_result(
+            "M2",
+            "EXT-008 unauthenticated request rejected with 401/403",
+            status in (401, 403),
+            "" if status in (401, 403) else f"got HTTP {status}",
+        )
+
+        # M2.2 Scope gate: without booking-write the whole group is 403
+        if "booking-write" not in self.token_scopes:
+            status, data = self.http_request(
+                "POST", bookings, headers=headers, body={"location_code": "X"}
+            )
+            err_code = get_error_code(data)
+            self.record_result(
+                "M2",
+                "Token without booking-write is denied (403 insufficient_scope)",
+                status == 403 and err_code == "insufficient_scope",
+                f"HTTP {status} (code={err_code})",
+            )
+            self.log(
+                f"  {YELLOW}Skipping booking write checks (token has no booking-write scope){RESET}"
+            )
+            return True
+
+        # M2.3 Validation: empty body / bad CID checksum → 422 validation_error
+        status, data = self.http_request("POST", bookings, headers=headers, body={})
+        err_code = get_error_code(data)
+        self.record_result(
+            "M2",
+            "EXT-008 empty body rejected with 422 validation_error",
+            status == 422 and err_code == "validation_error",
+            f"HTTP {status} (code={err_code})",
+        )
+
+        candidates = self._booking_candidates(headers)
+        if not candidates:
+            self.record_result(
+                "M2",
+                "EXT-008 needs an open location to book",
+                True,
+                "Notice: no open location (seed one or pass --shelter-code); write checks skipped",
+            )
+            return True
+
+        person = {
+            "location_code": candidates[0],
+            "first_name": "Smoke",
+            "last_name": "Test",
+            "phone": "+66812345678",
+        }
+        bad_cid = {**person, "cid": "1234567890123"}  # fails mod-11 checksum
+        status, data = self.http_request("POST", bookings, headers=headers, body=bad_cid)
+        err_code = get_error_code(data)
+        self.record_result(
+            "M2",
+            "EXT-008 CID with bad checksum rejected with 422 validation_error",
+            status == 422 and err_code == "validation_error",
+            f"HTTP {status} (code={err_code})",
+        )
+
+        # M2.4 Unknown location → 404 location_not_found
+        status, data = self.http_request(
+            "POST",
+            bookings,
+            headers=headers,
+            body={**person, "location_code": "NON_EXISTENT_999", "cid": make_valid_cid()},
+        )
+        err_code = get_error_code(data)
+        self.record_result(
+            "M2",
+            "EXT-008 unknown location rejected with 404 location_not_found",
+            status == 404 and err_code == "location_not_found",
+            f"HTTP {status} (code={err_code})",
+        )
+
+        # M2.5 Unknown booking id → 404 booking_not_found (EXT-010)
+        status, data = self.http_request(
+            "GET", f"{bookings}/BK-NON_EXISTENT_999", headers=headers
+        )
+        err_code = get_error_code(data)
+        self.record_result(
+            "M2",
+            "EXT-010 unknown booking_id returns 404 booking_not_found",
+            status == 404 and err_code == "booking_not_found",
+            f"HTTP {status} (code={err_code})",
+        )
+
+        if self.skip_booking_writes:
+            self.log(f"  {YELLOW}Skipping booking create (--skip-booking-writes){RESET}")
+            return True
+
+        # M2.6 Create a booking → 201 BOOKED (next candidate when a location opts out)
+        cid = make_valid_cid()
+        location = candidates[0]
+        for location in candidates:
+            status, data = self.http_request(
+                "POST",
+                bookings,
+                headers=headers,
+                body={**person, "location_code": location, "cid": cid},
+            )
+            if not (status == 409 and get_error_code(data) == "location_not_bookable"):
+                break
+        res = data.get("result", {}) if isinstance(data, dict) else {}
+        booking_id = res.get("booking_id", "")
+        if (
+            status == 201
+            and str(booking_id).startswith("BK-")
+            and res.get("location_code") == location
+            and res.get("booking_status") == "BOOKED"
+        ):
+            self.booking_id, self.booking_cid, self.booking_location = (
+                booking_id,
+                cid,
+                location,
+            )
+            self.record_result(
+                "M2",
+                "EXT-008 POST /external/bookings accepts booking (201 BOOKED)",
+                True,
+                f"booking_id={booking_id}, location={location}",
+            )
+        else:
+            self.record_result(
+                "M2",
+                "EXT-008 POST /external/bookings accepts booking (201 BOOKED)",
+                False,
+                f"HTTP {status} - {data}",
+            )
+            return False
+
+        # M2.7 Same CID, same shelter → 409 duplicate_booking
+        status, data = self.http_request(
+            "POST",
+            bookings,
+            headers=headers,
+            body={**person, "location_code": location, "cid": cid},
+        )
+        err_code = get_error_code(data)
+        self.record_result(
+            "M2",
+            "EXT-008 same CID at same location rejected with 409 duplicate_booking",
+            status == 409 and err_code == "duplicate_booking",
+            f"HTTP {status} (code={err_code})",
+        )
+
+        # M2.8 Status read-back (EXT-010)
+        status, data = self.http_request(
+            "GET", f"{bookings}/{self.booking_id}", headers=headers
+        )
+        res = data.get("result", {}) if isinstance(data, dict) else {}
+        stamps_ok = all(
+            str(res.get(k, "")).endswith("+07:00") for k in ("created_at", "updated_at")
+        )
+        self.record_result(
+            "M2",
+            "EXT-010 GET /external/bookings/{id} returns BOOKED with +07:00 timestamps",
+            status == 200
+            and res.get("booking_id") == self.booking_id
+            and res.get("location_code") == location
+            and res.get("booking_status") == "BOOKED"
+            and stamps_ok,
+            f"HTTP {status}, booking_status={res.get('booking_status')}",
+        )
+        return True
+
+    def test_m2_residency(self) -> bool:
+        """EXT-011 — purpose + scope gates, 404 for a booked-but-not-checked-in CID."""
+        self._banner("Testing M2: EXT-011 Shelter Residency Lookup")
+
+        if not self.access_token:
+            self.record_result("M2", "Residency endpoint", False, "Missing access token")
+            return False
+
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+        path = self.partner_path("/external/persons/shelter-residency")
+
+        def query(cid: str, purpose: Optional[str] = "smoke-test") -> str:
+            params = {"cid": cid}
+            if purpose is not None:
+                params["purpose"] = purpose
+            return f"{path}?{urllib.parse.urlencode(params)}"
+
+        # M2.9 Missing purpose → 400 (checked before scope)
+        status, data = self.http_request(
+            "GET", query(make_valid_cid(), purpose=None), headers=headers
+        )
+        err_code = get_error_code(data)
+        self.record_result(
+            "M2",
+            "EXT-011 missing 'purpose' rejected with 400 missing_purpose",
+            status == 400 and err_code == "missing_purpose",
+            f"HTTP {status} (code={err_code})",
+        )
+
+        # M2.10 Scope gate
+        if "residency-read" not in self.token_scopes:
+            status, data = self.http_request("GET", query(make_valid_cid()), headers=headers)
+            err_code = get_error_code(data)
+            self.record_result(
+                "M2",
+                "Token without residency-read is denied (403 insufficient_scope)",
+                status == 403 and err_code == "insufficient_scope",
+                f"HTTP {status} (code={err_code})",
+            )
+            self.log(
+                f"  {YELLOW}Skipping residency lookups (token has no residency-read scope){RESET}"
+            )
+            return True
+
+        # M2.11 Malformed CID → 422
+        status, data = self.http_request("GET", query("123"), headers=headers)
+        err_code = get_error_code(data)
+        self.record_result(
+            "M2",
+            "EXT-011 malformed cid rejected with 422 validation_error",
+            status == 422 and err_code == "validation_error",
+            f"HTTP {status} (code={err_code})",
+        )
+
+        # M2.12 Unknown CID → 404 residency_not_found
+        status, data = self.http_request("GET", query(make_valid_cid()), headers=headers)
+        err_code = get_error_code(data)
+        self.record_result(
+            "M2",
+            "EXT-011 unknown cid returns 404 residency_not_found",
+            status == 404 and err_code == "residency_not_found",
+            f"HTTP {status} (code={err_code})",
+        )
+
+        # M2.13 Booked but not checked in → still 404 (pre_registered is not residency)
+        if self.booking_cid:
+            status, data = self.http_request("GET", query(self.booking_cid), headers=headers)
+            err_code = get_error_code(data)
+            self.record_result(
+                "M2",
+                "EXT-011 booked-but-not-checked-in cid returns 404 residency_not_found",
+                status == 404 and err_code == "residency_not_found",
+                f"HTTP {status} (code={err_code})",
+            )
+
+        # M2.14 Optional 200 path with a known checked-in person
+        if self.checked_in_cid:
+            status, data = self.http_request(
+                "GET", query(self.checked_in_cid), headers=headers
+            )
+            res = data.get("result", {}) if isinstance(data, dict) else {}
+            self.record_result(
+                "M2",
+                "EXT-011 checked-in cid returns residency envelope",
+                status == 200
+                and res.get("residency_status") in ("CHECKED_IN", "CHECKED_OUT")
+                and bool(res.get("location_code"))
+                and "checkin_datetime" in res
+                and isinstance(res.get("in_zone"), bool),
+                f"HTTP {status}, location={res.get('location_code')}, "
+                f"residency_status={res.get('residency_status')}",
+            )
+        return True
+
+    def test_m2_cancel(self) -> bool:
+        """EXT-009 — always runs when a booking was created, so no test booking is left open."""
+        if not self.booking_id:
+            return True
+        self._banner("Testing M2: EXT-009 Cancel Booking")
+
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+        base = self.partner_path(f"/external/bookings/{self.booking_id}")
+
+        # M2.15 Over-long reason → 422 (validated before the booking is touched)
+        status, data = self.http_request(
+            "POST", f"{base}/cancel", headers=headers, body={"reason": "x" * 201}
+        )
+        err_code = get_error_code(data)
+        self.record_result(
+            "M2",
+            "EXT-009 reason over 200 chars rejected with 422 validation_error",
+            status == 422 and err_code == "validation_error",
+            f"HTTP {status} (code={err_code})",
+        )
+
+        # M2.16 Cancel → 200 CANCELLED
+        status, data = self.http_request(
+            "POST", f"{base}/cancel", headers=headers, body={"reason": "smoke test cleanup"}
+        )
+        res = data.get("result", {}) if isinstance(data, dict) else {}
+        self.record_result(
+            "M2",
+            "EXT-009 POST .../cancel returns 200 CANCELLED",
+            status == 200
+            and res.get("booking_id") == self.booking_id
+            and res.get("booking_status") == "CANCELLED",
+            f"HTTP {status} - {data}" if status != 200 else "",
+        )
+
+        # M2.17 Status reflects the cancellation immediately (FR-35)
+        status, data = self.http_request("GET", base, headers=headers)
+        res = data.get("result", {}) if isinstance(data, dict) else {}
+        self.record_result(
+            "M2",
+            "EXT-010 status reads CANCELLED after cancel",
+            status == 200 and res.get("booking_status") == "CANCELLED",
+            f"HTTP {status}, booking_status={res.get('booking_status')}",
+        )
+
+        # M2.18 Cancelling twice → 409 booking_not_cancellable
+        status, data = self.http_request("POST", f"{base}/cancel", headers=headers)
+        err_code = get_error_code(data)
+        self.record_result(
+            "M2",
+            "EXT-009 second cancel rejected with 409 booking_not_cancellable",
+            status == 409 and err_code == "booking_not_cancellable",
+            f"HTTP {status} (code={err_code})",
+        )
+        return True
+
+    # -------------------------------------------------------------------------
     # Scenario 7: Cleanup & Client Revocation (Issue #215 Lifecycle)
     # -------------------------------------------------------------------------
     def test_cleanup_and_revocation(self) -> bool:
@@ -818,7 +1212,7 @@ class SmokeTestRunner:
             f"\n{BOLD}================================================================={RESET}"
         )
         self.log(
-            f"{BOLD}{CYAN}SMOKE TEST SUITE: Smart Shelter Partner API (Issues #214-#220){RESET}"
+            f"{BOLD}{CYAN}SMOKE TEST SUITE: Smart Shelter Partner API (Issues #214-#220 + M2 EXT-008..011){RESET}"
         )
         self.log(f"{BOLD}Target Host: {self.base_url}{RESET}")
         self.log(
@@ -872,6 +1266,9 @@ class SmokeTestRunner:
         self.test_issue_218_stock()
         self.test_issue_219_summary()
         self.test_issue_220_occupants_pdpa()
+        self.test_m2_bookings()
+        self.test_m2_residency()
+        self.test_m2_cancel()
         self.test_cleanup_and_revocation()
 
         elapsed = time.time() - start_time
@@ -901,6 +1298,7 @@ class SmokeTestRunner:
             "#218": "EXT-004: Shelter Stock Projection & M6 Schema Alignment",
             "#219": "EXT-006: Cross-Location Summary & Critical Items Alerts",
             "#220": "EXT-007: Occupants Scaffold & PDPA Default-Deny Audit",
+            "M2": "EXT-008..011: Bookings (create/cancel/status) & Shelter Residency",
         }
 
         for issue_id, issue_name in issue_map.items():
@@ -934,7 +1332,7 @@ class SmokeTestRunner:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Smoke test Smart Shelter Partner API (Issues #214 to #220)",
+        description="Smoke test Smart Shelter Partner API (Issues #214 to #220 + M2 EXT-008..011)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Staging example:\n"
@@ -988,6 +1386,17 @@ def main():
         help="Specific location_code to test (env: PARTNER_SHELTER_CODE; default: auto)",
     )
     parser.add_argument(
+        "--skip-booking-writes",
+        action="store_true",
+        help="Do not create a test booking (EXT-008/009 happy path); negative checks still run",
+    )
+    parser.add_argument(
+        "--checked-in-cid",
+        default=os.getenv("PARTNER_CHECKED_IN_CID", ""),
+        help="13-digit CID of a person already checked in, to verify the EXT-011 200 path "
+        "(env: PARTNER_CHECKED_IN_CID)",
+    )
+    parser.add_argument(
         "--keep-client",
         action="store_true",
         help="Do not revoke the admin-created client after testing (admin mode only)",
@@ -1030,6 +1439,8 @@ def main():
         client_id=client_id or None,
         client_secret=client_secret or None,
         api_prefix=args.api_prefix.strip(),
+        skip_booking_writes=args.skip_booking_writes,
+        checked_in_cid=args.checked_in_cid,
     )
 
     exit_code = runner.run_all()

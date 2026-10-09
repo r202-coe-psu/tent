@@ -219,6 +219,29 @@ async def test_partial_claim_births_couch_for_ticked_only_and_leaves_open_search
     assert [m["reserved_evacuee_id"] for m in hits[0]["open_members"]] == [leave_id]
 
 
+async def test_claim_births_null_and_legacy_other_gender_unchanged(
+    authed_client: AsyncClient,
+    couch_birth: InMemoryCouchBirth,
+) -> None:
+    """decision sync 2026-10-09: null stays null, legacy 'other' is preserved on claim."""
+    doc = await _seed_two_member_registration()
+    doc.members[0].gender = None
+    doc.members[1].gender = "other"
+    await doc.save()
+    ids = [m.reserved_evacuee_id for m in doc.members]
+
+    response = await authed_client.post(
+        f"/staff/v1/unassigned-registrations/{doc.id}/claim",
+        json={"member_ids": ids},
+    )
+    assert response.status_code == 200
+
+    born = couch_birth.docs_for("SH001")
+    assert "gender" in born[ids[0]]
+    assert born[ids[0]]["gender"] is None
+    assert born[ids[1]]["gender"] == "other"
+
+
 async def test_full_claim_retains_mongo_document_as_closed(
     authed_client: AsyncClient,
     couch_birth: InMemoryCouchBirth,

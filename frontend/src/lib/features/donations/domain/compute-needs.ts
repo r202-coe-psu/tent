@@ -2,6 +2,7 @@ import type { Donation, DonationCampaign, StockLedger } from '$lib/features/oper
 import {
 	isDonationOutstanding,
 	keyedDonationIds,
+	recordedDonationQty,
 	stockBalance
 } from '$lib/features/operations/server';
 import { addQty, subQty, qtyGt } from '$lib/utils/qty';
@@ -40,6 +41,7 @@ export function computeNeeds(
 	// item_id from free text, both of which this side dropped on purpose.
 	const onHand = stockBalance(stockLedgers);
 	const keyed = keyedDonationIds(stockLedgers);
+	const recorded = recordedDonationQty(stockLedgers);
 
 	for (const campaign of campaigns) {
 		const covered = new Map(onHand);
@@ -52,9 +54,14 @@ export function computeNeeds(
 			// Received *and* already booked into the ledger: the goods are on the shelf,
 			// counted in onHand. Counting them again here closes the need at half.
 			if (don.status === 'received' && keyed.has(don._id)) continue;
+			// A batch receipt interrupted half way (CR-143 FR-B7) has part of its goods in the
+			// ledger already — they are in onHand, so only the rest is still owed (FR-B9).
+			const alreadyRecorded = recorded.get(don._id);
 			for (const it of don.items ?? []) {
 				if (!it.item_id) continue;
-				covered.set(it.item_id, addQty(covered.get(it.item_id) ?? '0', it.qty));
+				const stillOwed = subQty(it.qty, alreadyRecorded?.get(it.item_id) ?? '0');
+				if (!qtyGt(stillOwed, 0)) continue;
+				covered.set(it.item_id, addQty(covered.get(it.item_id) ?? '0', stillOwed));
 			}
 		}
 		for (const need of campaign.needs) {
