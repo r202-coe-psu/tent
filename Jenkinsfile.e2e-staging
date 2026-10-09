@@ -1,3 +1,4 @@
+// Manual review (decision 2026-10-09): no GitHub commit status; humans read the Staging E2E Report before promoting to main.
 pipeline {
     agent { label 'mgmt' }
 
@@ -13,12 +14,6 @@ pipeline {
     parameters {
         string(name: 'DEPLOY_COMMIT', defaultValue: '', description: 'Exact commit deployed to Staging')
         string(name: 'STAGING_URL', defaultValue: 'https://shelter.importstar.dev', description: 'Staging base URL')
-    }
-
-    environment {
-        // GitHub commit status context required on `main` branch protection (owner enables it).
-        GITHUB_STATUS_CONTEXT = 'staging/e2e'
-        GITHUB_REPO = 'r202-coe-psu/tent'
     }
 
     stages {
@@ -42,14 +37,6 @@ pipeline {
                         git checkout --detach "$DEPLOY_COMMIT"
                         test "$(git rev-parse HEAD)" = "$DEPLOY_COMMIT"
                     '''
-                }
-            }
-        }
-
-        stage('Report Pending GitHub Status') {
-            steps {
-                script {
-                    setGitHubCommitStatus('pending', 'Staging E2E running')
                 }
             }
         }
@@ -97,21 +84,6 @@ pipeline {
     }
 
     post {
-        success {
-            script {
-                setGitHubCommitStatus('success', 'Staging E2E passed')
-            }
-        }
-        failure {
-            script {
-                setGitHubCommitStatus('failure', 'Staging E2E failed')
-            }
-        }
-        aborted {
-            script {
-                setGitHubCommitStatus('error', 'Staging E2E aborted')
-            }
-        }
         always {
             junit allowEmptyResults: true, testResults: 'frontend/test-results/staging/junit.xml'
             publishHTML(target: [
@@ -127,60 +99,6 @@ pipeline {
                     deleteDirs: true,
                     disableDeferredWipeout: true,
                     notFailBuild: true)
-        }
-    }
-}
-
-/**
- * Post a commit status on params.DEPLOY_COMMIT via the GitHub REST API.
- * Credential: secret text `tent-github-status-token` (fine-grained or classic PAT
- * with `statuses:write` on r202-coe-psu/tent). Owner must provision this before
- * the status appears; missing credential fails the status step (and thus the job).
- */
-void setGitHubCommitStatus(String state, String description) {
-    def sha = params.DEPLOY_COMMIT?.trim()
-    if (!(sha ==~ /[0-9a-f]{40}/)) {
-        echo "Skipping GitHub status (${state}): DEPLOY_COMMIT is not a full SHA"
-        return
-    }
-    def targetUrl = env.BUILD_URL ?: ''
-    withCredentials([string(credentialsId: 'tent-github-status-token', variable: 'GITHUB_TOKEN')]) {
-        withEnv([
-            "STATUS_STATE=${state}",
-            "STATUS_DESC=${description}",
-            "STATUS_SHA=${sha}",
-            "STATUS_CONTEXT=${env.GITHUB_STATUS_CONTEXT}",
-            "STATUS_REPO=${env.GITHUB_REPO}",
-            "STATUS_TARGET_URL=${targetUrl}"
-        ]) {
-            sh '''
-                set -eu
-                payload="$(mktemp)"
-                trap 'rm -f "$payload"' EXIT
-                python3 - <<'PY' > "$payload"
-import json, os
-print(json.dumps({
-    "state": os.environ["STATUS_STATE"],
-    "description": os.environ["STATUS_DESC"][:140],
-    "context": os.environ["STATUS_CONTEXT"],
-    "target_url": os.environ.get("STATUS_TARGET_URL") or None,
-}))
-PY
-                http_code="$(curl --silent --show-error --output /tmp/gh-status-body.json --write-out '%{http_code}' \
-                    -X POST \
-                    -H "Accept: application/vnd.github+json" \
-                    -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-                    -H "X-GitHub-Api-Version: 2022-11-28" \
-                    -H "Content-Type: application/json" \
-                    --data @"$payload" \
-                    "https://api.github.com/repos/${STATUS_REPO}/statuses/${STATUS_SHA}")"
-                if [ "$http_code" != "201" ]; then
-                    echo "GitHub statuses API returned HTTP ${http_code}:" >&2
-                    cat /tmp/gh-status-body.json >&2 || true
-                    exit 1
-                fi
-                echo "GitHub commit status ${STATUS_STATE} set on ${STATUS_SHA} (${STATUS_CONTEXT})"
-            '''
         }
     }
 }
