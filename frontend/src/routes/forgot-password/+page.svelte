@@ -12,7 +12,10 @@
 		verifySecurityQuestionAndReset,
 		type ForgotPasswordVerifyInput
 	} from '$lib/features/users';
-	import { KeyRound, ArrowLeft, ShieldQuestion, ShieldAlert } from '@lucide/svelte';
+	import KeyRound from '@lucide/svelte/icons/key-round';
+	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import ShieldQuestion from '@lucide/svelte/icons/shield-question-mark';
+	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import Eye from '@lucide/svelte/icons/eye';
 	import EyeOff from '@lucide/svelte/icons/eye-off';
 

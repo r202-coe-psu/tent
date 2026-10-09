@@ -1,24 +1,22 @@
 import type { ResolvedPathname } from '$app/types';
 import { resolve } from '$app/paths';
 import type { Icon } from '@lucide/svelte';
-import {
-	Users,
-	HeartHandshake,
-	ClipboardList,
-	Package,
-	FileCheck,
-	FileText,
-	Building,
-	UserCog,
-	Database,
-	Warehouse,
-	Calculator,
-	HandHeart,
-	MapPin,
-	UtensilsCrossed,
-	FlaskConical,
-	ClipboardCheck
-} from '@lucide/svelte/icons';
+import Users from '@lucide/svelte/icons/users';
+import HeartHandshake from '@lucide/svelte/icons/heart-handshake';
+import ClipboardList from '@lucide/svelte/icons/clipboard-list';
+import Package from '@lucide/svelte/icons/package';
+import FileCheck from '@lucide/svelte/icons/file-check';
+import FileText from '@lucide/svelte/icons/file-text';
+import Building from '@lucide/svelte/icons/building';
+import UserCog from '@lucide/svelte/icons/user-cog';
+import Database from '@lucide/svelte/icons/database';
+import Warehouse from '@lucide/svelte/icons/warehouse';
+import Calculator from '@lucide/svelte/icons/calculator';
+import HandHeart from '@lucide/svelte/icons/hand-heart';
+import MapPin from '@lucide/svelte/icons/map-pin';
+import UtensilsCrossed from '@lucide/svelte/icons/utensils-crossed';
+import FlaskConical from '@lucide/svelte/icons/flask-conical';
+import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
 
 type Leaf = {
 	label: string;

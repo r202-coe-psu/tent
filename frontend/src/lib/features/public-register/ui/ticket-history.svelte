@@ -18,6 +18,7 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import { PUBLIC_TICKET_HISTORY_I18N } from '$lib/constants/i18n';
 	import { getTranslation } from '$lib/utils/i18n';
+	import { formatThaiDateTime } from '$lib/utils/date';
 
 	interface Props {
 		onNewBooking?: () => void;
@@ -100,14 +101,7 @@
 	}
 
 	function formatDate(dateStr: string): string {
-		if (!dateStr) return '';
-		const d = new Date(dateStr);
-		return Number.isNaN(d.getTime())
-			? ''
-			: d.toLocaleString(langState.current === 'th' ? 'th-TH' : 'en-US', {
-					dateStyle: 'medium',
-					timeStyle: 'short'
-				});
+		return formatThaiDateTime(dateStr);
 	}
 </script>
 

@@ -2,21 +2,28 @@ import { describe, it, expect } from 'vitest';
 import {
 	formatThaiDateTime,
 	formatThaiTime,
+	formatThaiShortDate,
 	formatThaiDate,
 	daysBetween,
-	buildDateRange
+	buildDateRange,
+	DISPLAY_LOCALE,
+	DISPLAY_TIME_ZONE
 } from './date';
 
 describe('date utilities', () => {
+	it('exports display locale and timezone constants', () => {
+		expect(DISPLAY_LOCALE).toBe('th-TH');
+		expect(DISPLAY_TIME_ZONE).toBe('Asia/Bangkok');
+	});
+
 	describe('formatThaiDateTime', () => {
-		it('formats valid ISO datetime string into Thai formatted date and time', () => {
+		it('formats UTC ISO as Bangkok wall clock with Buddhist year', () => {
+			// 14:30Z → 21:30 Asia/Bangkok
 			const iso = '2026-07-04T14:30:00.000Z';
 			const formatted = formatThaiDateTime(iso);
-			expect(formatted).toBeDefined();
-			expect(typeof formatted).toBe('string');
-			// Should contain Thai year (2569 for 2026) or Thai month
 			expect(formatted).toMatch(/2569/);
-			expect(formatted).toMatch(/ก.ค./);
+			expect(formatted).toMatch(/ก\.ค\./);
+			expect(formatted).toMatch(/21:30/);
 		});
 
 		it('safely handles empty string or undefined-like inputs', () => {
@@ -30,12 +37,9 @@ describe('date utilities', () => {
 	});
 
 	describe('formatThaiTime', () => {
-		it('formats valid ISO datetime string into time string', () => {
+		it('formats UTC ISO as Bangkok wall clock', () => {
 			const iso = '2026-07-04T14:30:00.000Z';
-			const formatted = formatThaiTime(iso);
-			expect(formatted).toBeDefined();
-			expect(typeof formatted).toBe('string');
-			expect(formatted).toMatch(/\d{1,2}:\d{2}/);
+			expect(formatThaiTime(iso)).toMatch(/21:30/);
 		});
 
 		it('safely handles empty string or undefined-like inputs', () => {
@@ -45,6 +49,16 @@ describe('date utilities', () => {
 		it('safely falls back to raw string on invalid date formats', () => {
 			const invalid = 'not-a-valid-date';
 			expect(formatThaiTime(invalid)).toBe(invalid);
+		});
+	});
+
+	describe('formatThaiShortDate', () => {
+		it('formats UTC ISO near midnight as Bangkok calendar day with Buddhist year', () => {
+			// 2026-07-04T20:00Z → 2026-07-05 03:00 Bangkok → 5/7/2569
+			const formatted = formatThaiShortDate('2026-07-04T20:00:00.000Z');
+			expect(formatted).toMatch(/5/);
+			expect(formatted).toMatch(/7/);
+			expect(formatted).toMatch(/2569/);
 		});
 	});
 
