@@ -427,7 +427,7 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 
 		await openMemberAccordion(card, 'ผู้ติดต่อฉุกเฉิน');
 		for (const [selector, label] of [
-			['#emergency-name', 'ชื่อผู้ติดต่อ'],
+			['#emergency-name', 'ชื่อผู้ติดต่อฉุกเฉิน'],
 			['#emergency-phone', 'เบอร์โทรศัพท์'],
 			['#emergency-relation', 'ความสัมพันธ์']
 		]) {
@@ -548,7 +548,8 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 			primaryCard(page).getByRole('checkbox', { name: 'ไม่มีเบอร์โทรศัพท์' })
 		).toHaveCount(0);
 		for (const accordion of ['ผู้ติดต่อฉุกเฉิน', 'กลุ่มเปราะบาง', 'ความต้องการพิเศษ'] as const) {
-			await expect(card.getByRole('button', { name: accordion, exact: true })).toBeVisible();
+			// The emergency trigger also carries a hint line (roleplay #11) — match the title.
+			await expect(card.getByRole('button', { name: new RegExp(`^${accordion}`) })).toBeVisible();
 		}
 		await card.getByRole('button', { name: 'ลบ' }).click();
 		await expect(card).toHaveCount(0);
@@ -1135,6 +1136,8 @@ test.describe('Pre-register: error matrix (E)', { tag: ['@pre-register', '@smoke
 		await page.getByRole('button', { name: 'เพิ่มสมาชิก', exact: true }).click();
 		await fillMember(page, 1, { firstName: 'สมาชิกสอง' });
 		await expectUnspecifiedPreselected(memberCard(page, 2));
+		// No phone for member 2 — the field opens ready to type, so tick "no phone" (#10).
+		await page.locator('#member-1-no-phone').click();
 		await submitButton(page).click();
 
 		await expect.poll(() => bodies.length).toBe(1);
