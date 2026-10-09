@@ -41,6 +41,12 @@ Known problems:
   limiters live in the preview server's memory, so re-running the pre-register suite back-to-back
   against a **reused** server can still get `429 Too Many Requests` on W4/W5 — wait a minute or
   restart the server.
+- ~~`onsite-stations-flow` Station 1 failed at random on the Person QR.~~ **Fixed** — error was
+  `No MultiFormat Readers were able to detect the code`: html5-qrcode's bundled ZXing misses ~8% of the app's Person QR
+  images (random ULID payloads; measured 34/400). `decodeQrImage` (`helpers/onsite.ts`) now
+  retries at other scales, then falls back to an exact module-by-module match against the
+  `qrcode` matrix for the card's `qr-identity-card-<ulid>` id. `registration-evacuee.test.ts`
+  (quarantined) still has its own unpatched copy.
 - After `pnpm unseed`/`pnpm seed`, **always restart the preview server** before the next
   `playwright test` run. A server left running from a previous run holds state/connections against
   the old databases; wiping and reseeding CouchDB
