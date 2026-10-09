@@ -178,7 +178,7 @@
 		try {
 			const profile = await resolveAccess.mutateAsync(credential);
 			if (!profile?.portal_id) {
-				loginError = 'ไม่พบเบอร์โทรศัพท์นี้ในระบบจิตอาสา กรุณาตรวจสอบเบอร์ที่ใช้สมัครอีกครั้ง';
+				loginError = 'ไม่พบเบอร์โทรศัพท์นี้ในระบบอาสาสมัคร กรุณาตรวจสอบเบอร์ที่ใช้สมัครอีกครั้ง';
 				return;
 			}
 			toast.success('เข้าสู่ระบบสำเร็จ');

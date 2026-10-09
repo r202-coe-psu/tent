@@ -3,6 +3,7 @@ id: CR-154
 title: M2 integration ย้ายเข้า Partner OAuth plane — booking (EXT-008/009/010) + residency (EXT-011), scope ใหม่, evacuee.gender nullable (schema_v 11→12)
 status: approved
 date: 2026-10-06
+updated: 2026-10-09
 requested_by: เจ้าของโครงการ (สเปก M2 A_M2_API_SERVICES_SHELTER_V1.0)
 decided_by: เจ้าของโครงการ
 layer: volatile
@@ -11,7 +12,9 @@ affects:
   - docs/data/api-contract.md §5.1 (ลบแถว M2), §5.3 (เพิ่ม EXT-008–011)
   - docs/data/schema.md §1.1 evacuee (gender nullable, registered_via += api) · schema_v 11 → 12
   - docs/data/schema.md §9.4 third_party_access_logs (endpoint += EXT-008–011)
-  - docs/data/schema.md §9.6 third_party_clients (allowed_scopes += booking-write, residency-read; module_name += M2)
+  - docs/data/schema.md §9.6 third_party_clients (allowed_scopes += booking-write, residency-read; module_name += M2, req → opt nullable)
+  - docs/data/schema.md §9.4 third_party_access_logs (module_name nullable)
+  - CR-135 FR-4 (module radio บังคับ → ไม่บังคับ)
   - docs/data/schema.md §9.7 external_bookings (ใหม่, MongoDB)
   - docs/adr/0002-partner-integration-architecture.md (scope list)
   - packages/tent-model/src/tent_model/{third_party_client.py, external_booking.py}
@@ -87,7 +90,7 @@ affects:
 **Request** `POST /external/bookings`
 
 ```json
-{ "location_code": "SH014", "cid": "1909800123456", "first_name": "สมชาย", "last_name": "ใจดี", "phone": "0812345678" }
+{ "location_code": "SH014", "cid": "1909800123458", "first_name": "สมชาย", "last_name": "ใจดี", "phone": "0812345678" }
 ```
 
 **Response 201**
@@ -131,7 +134,7 @@ affects:
 
 ### C5 — EXT-011 residency
 
-**Request** `GET /external/persons/shelter-residency?cid=1909800123456&purpose=<str>` (scope `residency-read`)
+**Request** `GET /external/persons/shelter-residency?cid=1909800123458&purpose=<str>` (scope `residency-read`)
 
 **Response 200**
 
@@ -179,7 +182,7 @@ affects:
     - ติดต่อและเอกสาร: `phone`, `person_id = {cardType: national_id, number: cid}`, `country = "THAILAND"`
     - ค่าที่ M2 ไม่ได้ส่ง: `gender = null`
     - stay: `current_stay = {status: pre_registered, zone: null, since: now}`
-    - ที่มา: `registered_via = api`, `created_by = "partner:{module_name}"`
+    - ที่มา: `registered_via = api`, `created_by = "partner:{module_name}"` (ถ้า client ไม่มี module → `"partner:{client_id}"`, FR-62)
     - privacy: `privacy.search_excluded = false`
 - **FR-52** เมื่อเขียนสำเร็จ ให้ตั้ง `state = written`, ใส่ `evacuee_id`/`household_id` และล้าง PII ถ้าเขียนไม่สำเร็จให้ retry ในรอบถัดไป
 - **FR-53** สำหรับ `cancel_requested`: ถ้า evacuee ยังเป็น `pre_registered` ให้เปลี่ยนเป็น `cancelled` แล้วตั้ง `state = cancelled` ถ้าไม่ใช่ ให้ล้าง flag แล้วบันทึก `reject_reason = not_cancellable`
@@ -194,6 +197,7 @@ affects:
 
 - **FR-60** เพิ่ม scope ทั้งสองใน `THIRD_PARTY_SCOPES` และใน Zod enum / label ของ UI third-party-clients
 - **FR-61** เพิ่ม partner module **`M2`** ใน `PARTNER_MODULES` (backend `thirdparty_clients_admin/schemas.py`, frontend `third-party-clients/domain`) และใน `schema.md` §9.6 `module_name`; preset scope ของ `M2` = `location-read` เท่านั้น (scope sensitive ไม่ preset)
+- **FR-62** `module_name` เปลี่ยนเป็น **optional** (req → opt, nullable): module เป็นแค่ preset ของ scope ในฟอร์มสร้าง — admin เลือก scope เองได้โดยไม่ต้องเลือก module. ไม่เลือก/ว่าง → เก็บ `null` ทั้งใน `third_party_clients`, JWT claim `module_name`, `TokenResponse.module_name` และ `third_party_access_logs.module_name`; UI แสดง "ไม่ระบุ"; ค่าที่ส่งมาต้องอยู่ใน `PARTNER_MODULES` (ค่าอื่น = 422). supersede CR-135 FR-4 (radio บังคับ)
 
 ### C8 — Schema change `evacuee` (schema_v 11 → 12)
 
@@ -202,9 +206,12 @@ affects:
 | `gender` | enum(`male`,`female`,`other`) · req | enum(`male`,`female`,`other`) \| **null** · req (key ต้องมีเสมอ, ค่าเป็น `null` ได้ แปลว่ายังไม่ทราบ) |
 | `registered_via` | enum(`kiosk`,`staff`,`backoffice`,`app`,`web`,`import`,`paper`) | **+ `api`** (partner booking, CR นี้) |
 
-- **FR-70** ฟอร์มของ staff, kiosk และ public pre-register **ยังบังคับเลือกเพศเหมือนเดิม** ค่า `null` เกิดได้เฉพาะจาก `registered_via = api`
-- **FR-71** UI ที่แสดงเพศต้องแสดงค่า `null` เป็น "ไม่ระบุ" และ Station 1 ต้องให้ staff เติมเพศได้
-- **FR-72** worker `occupancy.py` (breakdown `male`/`female`) และ `occupant.py` ต้องรองรับ `gender = null` โดยไม่นับเข้า male หรือ female
+- ~~**FR-70** ฟอร์มของ staff, kiosk และ public pre-register **ยังบังคับเลือกเพศเหมือนเดิม** ค่า `null` เกิดได้เฉพาะจาก `registered_via = api`~~
+  **Superseded by decision sync 2026-10-09 (D1/D3/D4):** `gender = null` ("ไม่ระบุ") ใช้ได้ทุกช่องทาง (public, kiosk, Station 1, back-office, api); ฟอร์มลงทะเบียนทุกช่องทาง preselect "ไม่ระบุ" และไม่บังคับเลือก; `'other'` คงใน enum สำหรับ doc เดิม — UI ไม่เสนอให้เลือกใหม่ และต้อง preserve เมื่อแก้ไข doc ที่เป็น `'other'`
+- ~~**FR-71** UI ที่แสดงเพศต้องแสดงค่า `null` เป็น "ไม่ระบุ" และ Station 1 ต้องให้ staff เติมเพศได้~~
+  **Superseded (ลดขอบเขต) by decision sync 2026-10-09 (D6):** UI แสดง `null` (และ `'other'`) เป็น "ไม่ระบุ" และแก้เพศได้ในทุกช่องทาง — ไม่มี warning badge, ไม่ block check-in
+- ~~**FR-72** worker `occupancy.py` (breakdown `male`/`female`) และ `occupant.py` ต้องรองรับ `gender = null` โดยไม่นับเข้า male หรือ female~~
+  **Superseded (ถูกรวมเข้า) by decision sync 2026-10-09 (D5):** `occupancy_breakdown` เพิ่ม `gender_unspecified` (นับ `null` + `'other'`) และมี invariant `male + female + gender_unspecified = occupancy_total` — ดู `schema.md` §9.1; `occupant.py` ยังต้องรองรับ `gender = null` ตามเดิม
 
 ### C9 — Legacy `/external/v1`
 
@@ -286,3 +293,5 @@ affects:
   - D8: เพิ่ม endpoint ยกเลิก booking
 - ทางเลือกที่ตัดทิ้ง: ให้ FastAPI เขียน CouchDB ตรงด้วย public-writer credential แบบ synchronous เพราะต้องเพิ่ม credential ให้ backend และไม่ทนต่อกรณี Couch ล่ม จึงเลือก Mongo buffer → worker inbound ตามแพทเทิร์น donations/volunteers
 - 2026-10-06 — implementation note: เพิ่ม FR-61 (`module_name` += `M2`) — จำเป็นต่อ D2/D4 เพราะ `PARTNER_MODULES` เดิมรับแค่ `M6`/`M7` จึงออก client ให้ M2 ไม่ได้
+- 2026-10-06 — owner เพิ่ม FR-62: `module_name` ไม่บังคับ (module = preset ของ scope เท่านั้น) เก็บ `null` เมื่อไม่เลือก; บันทึกใน CR-154 (ไม่แยก CR) และ supersede CR-135 FR-4
+- 2026-10-09 — **decision sync** (ไม่เปิด CR ใหม่ ตามที่เจ้าของโครงการเลือก; บันทึกเต็มที่ `docs/data/schema.md` frontmatter `note:`): ยกเลิก FR-70, ลด FR-71, รวม FR-72 เข้า `occupancy_breakdown.gender_unspecified` — `gender = null` ใช้ได้ทุกช่องทาง, preselect "ไม่ระบุ" ในทุกฟอร์ม, `'other'` คงไว้อ่าน/preserve เท่านั้น; D7 ข้างบนยังใช้ได้ (partner booking ยังส่ง `null`)

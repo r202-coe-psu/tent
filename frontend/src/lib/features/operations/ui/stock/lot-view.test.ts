@@ -50,8 +50,29 @@ describe('buildLotRows', () => {
 			[],
 			NOW
 		);
-		expect(rows[0]).toMatchObject({ lotRef: 'old', isExpired: true, isNext: false });
-		expect(rows[1]).toMatchObject({ lotRef: 'fresh', isExpired: false, isNext: true });
+		// expired lots are never picked automatically, so they list after usable ones (FR-A4)
+		expect(rows[0]).toMatchObject({ lotRef: 'fresh', isExpired: false, isNext: true });
+		expect(rows[1]).toMatchObject({ lotRef: 'old', isExpired: true, isNext: false });
+	});
+
+	it('AC-A7: a lot past its shelf life is expired, not next, and says to adjust it out', () => {
+		const items = new Map([['item_master:rice', { storage_type: 'DRY', shelf_life_days: 30 }]]);
+		const rows = buildLotRows(
+			[
+				lot({ lot_ref: 'stale', received_at: iso(-60) }),
+				lot({ lot_ref: 'soon', received_at: iso(-5), lot: { expiry: iso(3) } })
+			],
+			[],
+			NOW,
+			items
+		);
+		expect(rows.map((r) => r.lotRef)).toEqual(['soon', 'stale']);
+		expect(rows[0].isNext).toBe(true);
+		expect(rows[1]).toMatchObject({
+			isExpired: true,
+			isNext: false,
+			reason: 'หมดอายุแล้ว — ปรับยอดออก'
+		});
 	});
 
 	it('marks nothing as next when every lot has expired', () => {
@@ -82,5 +103,41 @@ describe('buildLotRows', () => {
 			NOW
 		);
 		expect(row.storageName).toBe('ห้องเย็น');
+	});
+
+	it('puts a lot expiring in 3 days before long-stored dry stock without expiry (AC-A3)', () => {
+		const rows = buildLotRows(
+			[
+				lot({ lot_ref: 'dry', received_at: iso(-365) }),
+				lot({ lot_ref: 'urgent', received_at: iso(-30), lot: { expiry: iso(3) } })
+			],
+			[],
+			NOW
+		);
+		expect(rows.map((r) => r.lotRef)).toEqual(['urgent', 'dry']);
+		expect(rows[0].isNext).toBe(true);
+	});
+
+	it('gives each lot its priority reason (FR-A6)', () => {
+		const rows = buildLotRows(
+			[
+				lot({ lot_ref: 'urgent', received_at: iso(-30), lot: { expiry: iso(3) } }),
+				lot({ lot_ref: 'dry', received_at: iso(-200) }),
+				lot({ lot_ref: 'gone', received_at: iso(-5), lot: { expiry: iso(-1) } })
+			],
+			[],
+			NOW
+		);
+		expect(Object.fromEntries(rows.map((r) => [r.lotRef, r.reason]))).toEqual({
+			urgent: 'หมดอายุอีก 3 วัน (เร่งด่วน)',
+			dry: 'อยู่ในคลัง 200 วัน',
+			gone: 'หมดอายุแล้ว — ปรับยอดออก'
+		});
+	});
+
+	it('uses the item shelf life and storage type when supplied', () => {
+		const itemsById = new Map([['item_master:rice', { shelf_life_days: 5 }]]);
+		const [row] = buildLotRows([lot({ lot_ref: 'a', received_at: iso(-1) })], [], NOW, itemsById);
+		expect(row.reason).toBe('อายุเก็บรักษาเหลือ 4 วัน (เร่งด่วน)');
 	});
 });

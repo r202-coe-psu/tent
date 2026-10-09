@@ -212,7 +212,7 @@
 			"post": {
 				"tags": ["Donations"],
 				"summary": "Track Search Donation",
-				"description": "Resolve booking_ref (DN-…) + phone → tracking_token (CR-052 §2.6).",
+				"description": "Resolve booking_ref (DN-\u2026) + phone \u2192 tracking_token (CR-052 \u00a72.6).",
 				"operationId": "track_search_donation_public_v1_donations_track_search_post",
 				"requestBody": {
 					"content": {
@@ -427,130 +427,6 @@
 					}
 				},
 				"security": [{ "HTTPBearer": [] }]
-			}
-		},
-		"/external/v1/shelters": {
-			"get": {
-				"tags": ["External"],
-				"summary": "ดึงรายการศูนย์พักพิง (get-list-shelter)",
-				"description": "ดึงรายการศูนย์พักพิงสำหรับระบบภายนอก (M2).",
-				"operationId": "list_shelters_external_v1_shelters_get",
-				"security": [{ "HTTPBearer": [] }, { "APIKeyHeader": [] }],
-				"parameters": [
-					{
-						"name": "status",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"anyOf": [{ "type": "string" }, { "type": "null" }],
-							"description": "กรองสถานะ เช่น open",
-							"title": "Status"
-						},
-						"description": "กรองสถานะ เช่น open"
-					}
-				],
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"type": "array",
-									"items": { "$ref": "#/components/schemas/M2ShelterItem" },
-									"title": "Response List Shelters External V1 Shelters Get"
-								}
-							}
-						}
-					},
-					"401": {
-						"content": {
-							"application/json": { "schema": { "$ref": "#/components/schemas/M2ErrorResponse" } }
-						},
-						"description": "Unauthorized"
-					},
-					"403": {
-						"content": {
-							"application/json": { "schema": { "$ref": "#/components/schemas/M2ErrorResponse" } }
-						},
-						"description": "Forbidden"
-					},
-					"500": {
-						"content": {
-							"application/json": { "schema": { "$ref": "#/components/schemas/M2ErrorResponse" } }
-						},
-						"description": "Internal Server Error"
-					},
-					"422": {
-						"description": "Validation Error",
-						"content": {
-							"application/json": {
-								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
-							}
-						}
-					}
-				}
-			}
-		},
-		"/external/v1/persons/shelter-residency": {
-			"get": {
-				"tags": ["External"],
-				"summary": "ตรวจสอบสถานะการเข้าพัก (get-person-shelter-residency)",
-				"description": "ตรวจสอบสถานะการเข้าพักศูนย์พักพิงของผู้ประสบภัยจากเลขประจำตัวประชาชน (CID).",
-				"operationId": "get_person_shelter_residency_external_v1_persons_shelter_residency_get",
-				"security": [{ "HTTPBearer": [] }, { "APIKeyHeader": [] }],
-				"parameters": [
-					{
-						"name": "cid",
-						"in": "query",
-						"required": true,
-						"schema": {
-							"type": "string",
-							"description": "เลขประจำตัวประชาชน 13 หลัก",
-							"title": "Cid"
-						},
-						"description": "เลขประจำตัวประชาชน 13 หลัก"
-					}
-				],
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": { "$ref": "#/components/schemas/M2PersonResidencyResponse" }
-							}
-						}
-					},
-					"401": {
-						"content": {
-							"application/json": { "schema": { "$ref": "#/components/schemas/M2ErrorResponse" } }
-						},
-						"description": "Unauthorized"
-					},
-					"403": {
-						"content": {
-							"application/json": { "schema": { "$ref": "#/components/schemas/M2ErrorResponse" } }
-						},
-						"description": "Forbidden"
-					},
-					"404": {
-						"content": {
-							"application/json": { "schema": { "$ref": "#/components/schemas/M2ErrorResponse" } }
-						},
-						"description": "Not Found"
-					},
-					"422": {
-						"content": {
-							"application/json": { "schema": { "$ref": "#/components/schemas/M2ErrorResponse" } }
-						},
-						"description": "Unprocessable Content"
-					},
-					"500": {
-						"content": {
-							"application/json": { "schema": { "$ref": "#/components/schemas/M2ErrorResponse" } }
-						},
-						"description": "Internal Server Error"
-					}
-				}
 			}
 		},
 		"/external/v1/shelters/{code}": {
@@ -929,6 +805,217 @@
 				}
 			}
 		},
+		"/external/bookings": {
+			"post": {
+				"tags": ["External"],
+				"summary": "Create Booking",
+				"operationId": "create_booking_external_bookings_post",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": { "$ref": "#/components/schemas/BookingCreateRequest" }
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"201": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingCreatedEnvelope" }
+							}
+						}
+					},
+					"401": {
+						"description": "Unauthorized",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingErrorResponse" }
+							}
+						}
+					},
+					"403": {
+						"description": "Forbidden",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingErrorResponse" }
+							}
+						}
+					},
+					"404": {
+						"description": "Not Found",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingErrorResponse" }
+							}
+						}
+					},
+					"409": {
+						"description": "Conflict",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingErrorResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Unprocessable Content",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingErrorResponse" }
+							}
+						}
+					}
+				},
+				"security": [{ "HTTPBearer": [] }]
+			}
+		},
+		"/external/bookings/{booking_id}/cancel": {
+			"post": {
+				"tags": ["External"],
+				"summary": "Cancel Booking",
+				"operationId": "cancel_booking_external_bookings__booking_id__cancel_post",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "booking_id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Booking Id" }
+					}
+				],
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"anyOf": [
+									{ "$ref": "#/components/schemas/BookingCancelRequest" },
+									{ "type": "null" }
+								],
+								"title": "Body"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingCancelledEnvelope" }
+							}
+						}
+					},
+					"401": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingErrorResponse" }
+							}
+						},
+						"description": "Unauthorized"
+					},
+					"403": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingErrorResponse" }
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingErrorResponse" }
+							}
+						},
+						"description": "Not Found"
+					},
+					"409": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingErrorResponse" }
+							}
+						},
+						"description": "Conflict"
+					},
+					"422": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingErrorResponse" }
+							}
+						},
+						"description": "Unprocessable Content"
+					}
+				}
+			}
+		},
+		"/external/bookings/{booking_id}": {
+			"get": {
+				"tags": ["External"],
+				"summary": "Get Booking",
+				"operationId": "get_booking_external_bookings__booking_id__get",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "booking_id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Booking Id" }
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingStatusEnvelope" }
+							}
+						}
+					},
+					"401": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingErrorResponse" }
+							}
+						},
+						"description": "Unauthorized"
+					},
+					"403": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingErrorResponse" }
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingErrorResponse" }
+							}
+						},
+						"description": "Not Found"
+					},
+					"409": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingErrorResponse" }
+							}
+						},
+						"description": "Conflict"
+					},
+					"422": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/BookingErrorResponse" }
+							}
+						},
+						"description": "Unprocessable Content"
+					}
+				}
+			}
+		},
 		"/v1/admin/thirdparty-clients": {
 			"get": {
 				"tags": ["External"],
@@ -1017,7 +1104,7 @@
 			"post": {
 				"tags": ["External"],
 				"summary": "Regenerate Client Secret",
-				"description": "Issue a new secret for this `client_id`, invalidating the old one immediately.\nRefused (409) once the client is revoked — same as scope edits.",
+				"description": "Issue a new secret for this `client_id`, invalidating the old one immediately.\nRefused (409) once the client is revoked \u2014 same as scope edits.",
 				"operationId": "regenerate_client_secret_v1_admin_thirdparty_clients__client_row_id__regenerate_secret_post",
 				"security": [{ "HTTPBearer": [] }],
 				"parameters": [
@@ -1052,7 +1139,7 @@
 			"patch": {
 				"tags": ["External"],
 				"summary": "Update Client Scopes",
-				"description": "Edit `allowed_scopes` — refused (409) once the client is revoked.",
+				"description": "Edit `allowed_scopes` \u2014 refused (409) once the client is revoked.",
 				"operationId": "update_client_scopes_v1_admin_thirdparty_clients__client_row_id__patch",
 				"security": [{ "HTTPBearer": [] }],
 				"parameters": [
@@ -1093,7 +1180,7 @@
 			"delete": {
 				"tags": ["External"],
 				"summary": "Delete Client",
-				"description": "Soft-delete — only once already revoked (409 otherwise). Never hard-deletes.",
+				"description": "Soft-delete \u2014 only once already revoked (409 otherwise). Never hard-deletes.",
 				"operationId": "delete_client_v1_admin_thirdparty_clients__client_row_id__delete",
 				"security": [{ "HTTPBearer": [] }],
 				"parameters": [
@@ -1418,6 +1505,86 @@
 				}
 			}
 		},
+		"/external/persons/shelter-residency": {
+			"get": {
+				"tags": ["External"],
+				"summary": "Get Person Shelter Residency",
+				"operationId": "get_person_shelter_residency_external_persons_shelter_residency_get",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "cid",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string" }, { "type": "null" }],
+							"description": "\u0e40\u0e25\u0e02\u0e1b\u0e23\u0e30\u0e08\u0e33\u0e15\u0e31\u0e27\u0e1b\u0e23\u0e30\u0e0a\u0e32\u0e0a\u0e19 13 \u0e2b\u0e25\u0e31\u0e01",
+							"title": "Cid"
+						},
+						"description": "\u0e40\u0e25\u0e02\u0e1b\u0e23\u0e30\u0e08\u0e33\u0e15\u0e31\u0e27\u0e1b\u0e23\u0e30\u0e0a\u0e32\u0e0a\u0e19 13 \u0e2b\u0e25\u0e31\u0e01"
+					},
+					{
+						"name": "purpose",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [{ "type": "string" }, { "type": "null" }],
+							"description": "\u0e27\u0e31\u0e15\u0e16\u0e38\u0e1b\u0e23\u0e30\u0e2a\u0e07\u0e04\u0e4c\u0e01\u0e32\u0e23\u0e40\u0e23\u0e35\u0e22\u0e01\u0e14\u0e39 (\u0e1a\u0e31\u0e07\u0e04\u0e31\u0e1a)",
+							"title": "Purpose"
+						},
+						"description": "\u0e27\u0e31\u0e15\u0e16\u0e38\u0e1b\u0e23\u0e30\u0e2a\u0e07\u0e04\u0e4c\u0e01\u0e32\u0e23\u0e40\u0e23\u0e35\u0e22\u0e01\u0e14\u0e39 (\u0e1a\u0e31\u0e07\u0e04\u0e31\u0e1a)"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": { "schema": { "$ref": "#/components/schemas/ResidencyEnvelope" } }
+						}
+					},
+					"400": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ResidencyErrorResponse" }
+							}
+						},
+						"description": "Bad Request"
+					},
+					"401": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ResidencyErrorResponse" }
+							}
+						},
+						"description": "Unauthorized"
+					},
+					"403": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ResidencyErrorResponse" }
+							}
+						},
+						"description": "Forbidden"
+					},
+					"404": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ResidencyErrorResponse" }
+							}
+						},
+						"description": "Not Found"
+					},
+					"422": {
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/ResidencyErrorResponse" }
+							}
+						},
+						"description": "Unprocessable Content"
+					}
+				}
+			}
+		},
 		"/external/locations/{location_code}/stock": {
 			"get": {
 				"tags": ["External"],
@@ -1499,7 +1666,7 @@
 			"post": {
 				"tags": ["Unassigned Registrations"],
 				"summary": "Upload Unassigned Photo",
-				"description": "Store a compressed face/pet photo in Mongo GridFS for later claim → Couch image (#255).",
+				"description": "Store a compressed face/pet photo in Mongo GridFS for later claim \u2192 Couch image (#255).",
 				"operationId": "upload_unassigned_photo_public_v1_unassigned_registrations_photos_post",
 				"requestBody": {
 					"content": {
@@ -1536,7 +1703,7 @@
 			"post": {
 				"tags": ["Unassigned Registrations"],
 				"summary": "Create Unassigned Registration",
-				"description": "Public pre-registration without a shelter — writes Mongo only (FR-UR-01).",
+				"description": "Public pre-registration without a shelter \u2014 writes Mongo only (FR-UR-01).",
 				"operationId": "create_unassigned_registration_public_v1_unassigned_registrations_post",
 				"requestBody": {
 					"content": {
@@ -1571,7 +1738,7 @@
 			"post": {
 				"tags": ["Unassigned Registrations"],
 				"summary": "Match Unassigned Residence",
-				"description": "Service-to-service Residence match — ids + landmark/housing_type only (no member PII).",
+				"description": "Service-to-service Residence match \u2014 ids + landmark/housing_type only (no member PII).",
 				"operationId": "match_unassigned_residence_public_v1_unassigned_registrations_residence_match_post",
 				"requestBody": {
 					"content": {
@@ -1600,6 +1767,41 @@
 					}
 				},
 				"security": [{ "HTTPBearer": [] }]
+			}
+		},
+		"/public/v1/unassigned-registrations/{registration_id}/status": {
+			"get": {
+				"tags": ["Unassigned Registrations"],
+				"summary": "Get Unassigned Registration Status",
+				"description": "Service-to-service ticket status (BFF sync) \u2014 status + counts only, no PII.",
+				"operationId": "get_unassigned_registration_status_public_v1_unassigned_registrations__registration_id__status_get",
+				"security": [{ "HTTPBearer": [] }],
+				"parameters": [
+					{
+						"name": "registration_id",
+						"in": "path",
+						"required": true,
+						"schema": { "type": "string", "title": "Registration Id" }
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/UnassignedRegistrationStatusResponse" }
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+							}
+						}
+					}
+				}
 			}
 		},
 		"/staff/v1/unassigned-registrations/search": {
@@ -1792,7 +1994,7 @@
 			"get": {
 				"tags": ["Unassigned Registrations (Staff)"],
 				"summary": "Get Unassigned Registration Photo",
-				"description": "Staff-only photo read (CR-140 addendum) — only if still referenced by an open row.",
+				"description": "Staff-only photo read (CR-140 addendum) \u2014 only if still referenced by an open row.",
 				"operationId": "get_unassigned_registration_photo_staff_v1_unassigned_registrations_photos__photo_id__get",
 				"parameters": [
 					{
@@ -1837,7 +2039,7 @@
 			"get": {
 				"tags": ["Unassigned Registrations (Staff)"],
 				"summary": "Review Unassigned Registration",
-				"description": "Read-only pre-claim review (CR-140 addendum) — open rows only, writes nothing.",
+				"description": "Read-only pre-claim review (CR-140 addendum) \u2014 open rows only, writes nothing.",
 				"operationId": "review_unassigned_registration_staff_v1_unassigned_registrations__registration_id__review_get",
 				"parameters": [
 					{
@@ -1975,7 +2177,7 @@
 			"post": {
 				"tags": ["Unassigned Registrations (Staff)"],
 				"summary": "Claim Unassigned Registration",
-				"description": "Claim open members into this shelter — Couch birth at pre_registered (#247).",
+				"description": "Claim open members into this shelter \u2014 Couch birth at pre_registered (#247).",
 				"operationId": "claim_unassigned_registration_staff_v1_unassigned_registrations__registration_id__claim_post",
 				"parameters": [
 					{
@@ -2259,7 +2461,7 @@
 			"post": {
 				"tags": ["Volunteers"],
 				"summary": "Volunteer Schedule",
-				"description": "ตารางทำงานจิตอาสา — the roster behind the Access Portal (CR-092 หน้าจอ 6).",
+				"description": "\u0e15\u0e32\u0e23\u0e32\u0e07\u0e17\u0e33\u0e07\u0e32\u0e19\u0e08\u0e34\u0e15\u0e2d\u0e32\u0e2a\u0e32 \u2014 the roster behind the Access Portal (CR-092 \u0e2b\u0e19\u0e49\u0e32\u0e08\u0e2d 6).",
 				"operationId": "volunteer_schedule_public_v1_volunteer_schedule_post",
 				"requestBody": {
 					"content": {
@@ -2528,7 +2730,7 @@
 					"api_key"
 				],
 				"title": "ApiKeyCreateResponse",
-				"description": "Create response — plaintext ``api_key`` is returned once."
+				"description": "Create response \u2014 plaintext ``api_key`` is returned once."
 			},
 			"ApiKeyListResponse": {
 				"properties": {
@@ -2609,6 +2811,146 @@
 				"type": "object",
 				"required": ["full"],
 				"title": "Body_upload_unassigned_photo_public_v1_unassigned_registrations_photos_post"
+			},
+			"BookingCancelRequest": {
+				"properties": {
+					"reason": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Reason",
+						"description": "\u0e40\u0e2b\u0e15\u0e38\u0e1c\u0e25\u0e01\u0e32\u0e23\u0e22\u0e01\u0e40\u0e25\u0e34\u0e01 (\u2264200 \u0e15\u0e31\u0e27\u0e2d\u0e31\u0e01\u0e29\u0e23)"
+					}
+				},
+				"type": "object",
+				"title": "BookingCancelRequest"
+			},
+			"BookingCancelledEnvelope": {
+				"properties": {
+					"status": { "type": "integer", "title": "Status", "default": 200 },
+					"message": { "type": "string", "title": "Message", "default": "Booking cancelled." },
+					"result": { "$ref": "#/components/schemas/BookingCancelledResult" }
+				},
+				"type": "object",
+				"required": ["result"],
+				"title": "BookingCancelledEnvelope"
+			},
+			"BookingCancelledResult": {
+				"properties": {
+					"booking_id": { "type": "string", "title": "Booking Id" },
+					"booking_status": {
+						"type": "string",
+						"enum": ["BOOKED", "CANCELLED", "REJECTED"],
+						"title": "Booking Status",
+						"default": "CANCELLED"
+					}
+				},
+				"type": "object",
+				"required": ["booking_id"],
+				"title": "BookingCancelledResult"
+			},
+			"BookingCreateRequest": {
+				"properties": {
+					"location_code": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Location Code",
+						"description": "\u0e23\u0e2b\u0e31\u0e2a\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e1e\u0e31\u0e01\u0e1e\u0e34\u0e07 (EXT-002)"
+					},
+					"cid": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Cid",
+						"description": "\u0e40\u0e25\u0e02\u0e1b\u0e23\u0e30\u0e08\u0e33\u0e15\u0e31\u0e27\u0e1b\u0e23\u0e30\u0e0a\u0e32\u0e0a\u0e19 13 \u0e2b\u0e25\u0e31\u0e01"
+					},
+					"first_name": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "First Name",
+						"description": "\u0e0a\u0e37\u0e48\u0e2d"
+					},
+					"last_name": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Last Name",
+						"description": "\u0e19\u0e32\u0e21\u0e2a\u0e01\u0e38\u0e25"
+					},
+					"phone": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Phone",
+						"description": "\u0e40\u0e1a\u0e2d\u0e23\u0e4c\u0e42\u0e17\u0e23\u0e28\u0e31\u0e1e\u0e17\u0e4c (\u0e23\u0e31\u0e1a +66)"
+					}
+				},
+				"type": "object",
+				"title": "BookingCreateRequest"
+			},
+			"BookingCreatedEnvelope": {
+				"properties": {
+					"status": { "type": "integer", "title": "Status", "default": 201 },
+					"message": { "type": "string", "title": "Message", "default": "Booking accepted." },
+					"result": { "$ref": "#/components/schemas/BookingCreatedResult" }
+				},
+				"type": "object",
+				"required": ["result"],
+				"title": "BookingCreatedEnvelope"
+			},
+			"BookingCreatedResult": {
+				"properties": {
+					"booking_id": { "type": "string", "title": "Booking Id" },
+					"location_code": { "type": "string", "title": "Location Code" },
+					"booking_status": {
+						"type": "string",
+						"enum": ["BOOKED", "CANCELLED", "REJECTED"],
+						"title": "Booking Status",
+						"default": "BOOKED"
+					}
+				},
+				"type": "object",
+				"required": ["booking_id", "location_code"],
+				"title": "BookingCreatedResult"
+			},
+			"BookingErrorResponse": {
+				"properties": {
+					"status": { "type": "integer", "title": "Status" },
+					"message": { "type": "string", "title": "Message" },
+					"code": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Code" },
+					"detail": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Detail" }
+				},
+				"type": "object",
+				"required": ["status", "message"],
+				"title": "BookingErrorResponse"
+			},
+			"BookingStatusEnvelope": {
+				"properties": {
+					"status": { "type": "integer", "title": "Status", "default": 200 },
+					"message": { "type": "string", "title": "Message", "default": "Found Data." },
+					"result": { "$ref": "#/components/schemas/BookingStatusResult" }
+				},
+				"type": "object",
+				"required": ["result"],
+				"title": "BookingStatusEnvelope"
+			},
+			"BookingStatusResult": {
+				"properties": {
+					"booking_id": { "type": "string", "title": "Booking Id" },
+					"location_code": { "type": "string", "title": "Location Code" },
+					"booking_status": {
+						"type": "string",
+						"enum": ["BOOKED", "CANCELLED", "REJECTED"],
+						"title": "Booking Status"
+					},
+					"reject_reason": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Reject Reason"
+					},
+					"created_at": {
+						"type": "string",
+						"title": "Created At",
+						"description": "ISO 8601 (+07:00)"
+					},
+					"updated_at": {
+						"type": "string",
+						"title": "Updated At",
+						"description": "ISO 8601 (+07:00)"
+					}
+				},
+				"type": "object",
+				"required": ["booking_id", "location_code", "booking_status", "created_at", "updated_at"],
+				"title": "BookingStatusResult"
 			},
 			"ClaimedMemberOut": {
 				"properties": {
@@ -2703,7 +3045,7 @@
 				"type": "object",
 				"required": ["assignment_id", "code", "action"],
 				"title": "DispatchRespondRequest",
-				"description": "Answering an offered shift — two factors, neither enough alone.\n\nThe credential is whatever the portal signed in with and must resolve to the\nassignment's own volunteer; ``code`` is the short code a manager read out. A\nsix-character code is only safe because the caller has to know whose shift it is\nas well."
+				"description": "Answering an offered shift \u2014 two factors, neither enough alone.\n\nThe credential is whatever the portal signed in with and must resolve to the\nassignment's own volunteer; ``code`` is the short code a manager read out. A\nsix-character code is only safe because the caller has to know whose shift it is\nas well."
 			},
 			"DispatchRespondResponse": {
 				"properties": {
@@ -2841,7 +3183,7 @@
 				"type": "object",
 				"required": ["booking_ref", "phone"],
 				"title": "DonationTrackSearchRequest",
-				"description": "CR-052 §2.6 — human booking_ref + phone exact match (not token alone)."
+				"description": "CR-052 \u00a72.6 \u2014 human booking_ref + phone exact match (not token alone)."
 			},
 			"DonationTrackSearchResponse": {
 				"properties": {
@@ -3361,100 +3703,6 @@
 				"required": ["location_code", "updated_at", "items"],
 				"title": "LocationStockResult"
 			},
-			"M2ErrorDetail": {
-				"properties": {
-					"code": { "type": "string", "title": "Code" },
-					"message": { "type": "string", "title": "Message" }
-				},
-				"type": "object",
-				"required": ["code", "message"],
-				"title": "M2ErrorDetail"
-			},
-			"M2ErrorResponse": {
-				"properties": { "error": { "$ref": "#/components/schemas/M2ErrorDetail" } },
-				"type": "object",
-				"required": ["error"],
-				"title": "M2ErrorResponse"
-			},
-			"M2PersonResidencyResponse": {
-				"properties": {
-					"shelter_id": {
-						"type": "string",
-						"title": "Shelter Id",
-						"description": "รหัสศูนย์พักพิง"
-					},
-					"shelter_name": {
-						"type": "string",
-						"title": "Shelter Name",
-						"description": "ชื่อศูนย์พักพิง"
-					},
-					"checkin_datetime": {
-						"type": "string",
-						"title": "Checkin Datetime",
-						"description": "วันเวลาที่เช็คอิน (ISO 8601 พร้อม timezone เช่น 2026-08-20T14:30:00+07:00)"
-					},
-					"status": {
-						"type": "string",
-						"enum": ["CHECKED_IN", "CHECKED_OUT"],
-						"title": "Status",
-						"description": "สถานะการเข้าพัก"
-					},
-					"stay_status": {
-						"type": "string",
-						"title": "Stay Status",
-						"description": "สถานะ stay ดิบจาก projection (CR-112 additive)"
-					},
-					"in_zone": {
-						"type": "boolean",
-						"title": "In Zone",
-						"description": "True เมื่อยืนยันถึงโซนแล้ว (room_confirmed)"
-					}
-				},
-				"type": "object",
-				"required": [
-					"shelter_id",
-					"shelter_name",
-					"checkin_datetime",
-					"status",
-					"stay_status",
-					"in_zone"
-				],
-				"title": "M2PersonResidencyResponse"
-			},
-			"M2ShelterItem": {
-				"properties": {
-					"shelter_id": {
-						"type": "string",
-						"title": "Shelter Id",
-						"description": "รหัสศูนย์พักพิง เช่น SH001"
-					},
-					"shelter_name": {
-						"type": "string",
-						"title": "Shelter Name",
-						"description": "ชื่อศูนย์พักพิง"
-					},
-					"site_kind": {
-						"type": "string",
-						"enum": ["evacuation_center", "host_house"],
-						"title": "Site Kind",
-						"description": "ชนิดสถานที่",
-						"default": "evacuation_center"
-					},
-					"lat": {
-						"anyOf": [{ "type": "number" }, { "type": "null" }],
-						"title": "Lat",
-						"description": "พิกัดละติจูด (WGS 84)"
-					},
-					"long": {
-						"anyOf": [{ "type": "number" }, { "type": "null" }],
-						"title": "Long",
-						"description": "พิกัดลองจิจูด (WGS 84)"
-					}
-				},
-				"type": "object",
-				"required": ["shelter_id", "shelter_name"],
-				"title": "M2ShelterItem"
-			},
 			"MemberCreated": {
 				"properties": {
 					"reserved_evacuee_id": { "type": "string", "title": "Reserved Evacuee Id" },
@@ -3465,7 +3713,7 @@
 					},
 					"first_name": { "type": "string", "title": "First Name" },
 					"last_name": { "type": "string", "title": "Last Name" },
-					"gender": { "type": "string", "title": "Gender" },
+					"gender": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Gender" },
 					"phone": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Phone" },
 					"person_id": {
 						"anyOf": [{ "$ref": "#/components/schemas/PersonIdOut" }, { "type": "null" }]
@@ -3502,14 +3750,7 @@
 					"photo": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Photo" }
 				},
 				"type": "object",
-				"required": [
-					"reserved_evacuee_id",
-					"status",
-					"first_name",
-					"last_name",
-					"gender",
-					"country"
-				],
+				"required": ["reserved_evacuee_id", "status", "first_name", "last_name", "country"],
 				"title": "MemberCreated"
 			},
 			"MemberInput": {
@@ -3521,7 +3762,13 @@
 						"title": "First Name"
 					},
 					"last_name": { "type": "string", "title": "Last Name", "default": "" },
-					"gender": { "type": "string", "enum": ["male", "female", "other"], "title": "Gender" },
+					"gender": {
+						"anyOf": [
+							{ "type": "string", "enum": ["male", "female", "other"] },
+							{ "type": "null" }
+						],
+						"title": "Gender"
+					},
 					"phone": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Phone" },
 					"person_id": {
 						"anyOf": [{ "$ref": "#/components/schemas/PersonIdInput" }, { "type": "null" }]
@@ -3595,6 +3842,7 @@
 				"properties": {
 					"male": { "type": "integer", "title": "Male" },
 					"female": { "type": "integer", "title": "Female" },
+					"gender_unspecified": { "type": "integer", "title": "Gender Unspecified" },
 					"child_under_5": { "type": "integer", "title": "Child Under 5" },
 					"elderly_over_60": { "type": "integer", "title": "Elderly Over 60" },
 					"pregnant": { "type": "integer", "title": "Pregnant" },
@@ -3605,6 +3853,7 @@
 				"required": [
 					"male",
 					"female",
+					"gender_unspecified",
 					"child_under_5",
 					"elderly_over_60",
 					"pregnant",
@@ -3682,7 +3931,7 @@
 					"status": { "type": "string", "const": "open", "title": "Status", "default": "open" },
 					"first_name": { "type": "string", "title": "First Name" },
 					"last_name": { "type": "string", "title": "Last Name" },
-					"gender": { "type": "string", "title": "Gender" },
+					"gender": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Gender" },
 					"phone": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Phone" },
 					"person_id": {
 						"anyOf": [{ "$ref": "#/components/schemas/PersonIdOut" }, { "type": "null" }]
@@ -3719,9 +3968,9 @@
 					"age": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "Age" }
 				},
 				"type": "object",
-				"required": ["reserved_evacuee_id", "first_name", "last_name", "gender", "country"],
+				"required": ["reserved_evacuee_id", "first_name", "last_name", "country"],
 				"title": "OpenMemberHit",
-				"description": "Open member surfaced by staff search — claimable (not claimed/cancelled)."
+				"description": "Open member surfaced by staff search \u2014 claimable (not claimed/cancelled)."
 			},
 			"OpenPetHit": {
 				"properties": {
@@ -3736,7 +3985,7 @@
 				"type": "object",
 				"required": ["pet_id", "species"],
 				"title": "OpenPetHit",
-				"description": "Open pet surfaced by staff search/detail — claimable."
+				"description": "Open pet surfaced by staff search/detail \u2014 claimable."
 			},
 			"PaginatedAnnouncements": {
 				"properties": {
@@ -3790,7 +4039,7 @@
 				"type": "object",
 				"required": ["cardType"],
 				"title": "PersonIdOut",
-				"description": "Person id on create responses — distinct from request PersonIdInput."
+				"description": "Person id on create responses \u2014 distinct from request PersonIdInput."
 			},
 			"PetCreated": {
 				"properties": {
@@ -3909,7 +4158,7 @@
 					"status"
 				],
 				"title": "PublicJobItem",
-				"description": "One card on the board (CR-092 screen 1).\n\nCarries the 2-colour quota the card renders (``รับแล้ว`` / ``ว่าง``) — the third,\n``dispatched``, is a back-office state and is folded into \"not available\" here\nrather than shown to the public."
+				"description": "One card on the board (CR-092 screen 1).\n\nCarries the 2-colour quota the card renders (``\u0e23\u0e31\u0e1a\u0e41\u0e25\u0e49\u0e27`` / ``\u0e27\u0e48\u0e32\u0e07``) \u2014 the third,\n``dispatched``, is a back-office state and is folded into \"not available\" here\nrather than shown to the public."
 			},
 			"PublicJobListResponse": {
 				"properties": {
@@ -3941,6 +4190,71 @@
 				"required": ["shift_id"],
 				"title": "PublicJobShift",
 				"description": "Concrete shift identity plus renderable snapshot fields."
+			},
+			"ResidencyEnvelope": {
+				"properties": {
+					"status": { "type": "integer", "title": "Status", "default": 200 },
+					"message": { "type": "string", "title": "Message", "default": "Found Data." },
+					"result": { "$ref": "#/components/schemas/ResidencyItem" }
+				},
+				"type": "object",
+				"required": ["result"],
+				"title": "ResidencyEnvelope"
+			},
+			"ResidencyErrorResponse": {
+				"properties": {
+					"status": { "type": "integer", "title": "Status" },
+					"message": { "type": "string", "title": "Message" },
+					"code": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Code" },
+					"detail": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Detail" }
+				},
+				"type": "object",
+				"required": ["status", "message"],
+				"title": "ResidencyErrorResponse"
+			},
+			"ResidencyItem": {
+				"properties": {
+					"location_code": {
+						"type": "string",
+						"title": "Location Code",
+						"description": "\u0e23\u0e2b\u0e31\u0e2a\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e1e\u0e31\u0e01\u0e1e\u0e34\u0e07 (\u0e15\u0e23\u0e07\u0e01\u0e31\u0e1a EXT-002)"
+					},
+					"name_th": {
+						"type": "string",
+						"title": "Name Th",
+						"description": "\u0e0a\u0e37\u0e48\u0e2d\u0e28\u0e39\u0e19\u0e22\u0e4c\u0e1e\u0e31\u0e01\u0e1e\u0e34\u0e07"
+					},
+					"checkin_datetime": {
+						"type": "string",
+						"title": "Checkin Datetime",
+						"description": "\u0e27\u0e31\u0e19\u0e40\u0e27\u0e25\u0e32\u0e40\u0e02\u0e49\u0e32\u0e1e\u0e31\u0e01 ISO 8601 (+07:00)"
+					},
+					"residency_status": {
+						"type": "string",
+						"enum": ["CHECKED_IN", "CHECKED_OUT"],
+						"title": "Residency Status"
+					},
+					"stay_status": {
+						"type": "string",
+						"title": "Stay Status",
+						"description": "\u0e2a\u0e16\u0e32\u0e19\u0e30 stay \u0e14\u0e34\u0e1a\u0e08\u0e32\u0e01 projection"
+					},
+					"in_zone": {
+						"type": "boolean",
+						"title": "In Zone",
+						"description": "True \u0e40\u0e21\u0e37\u0e48\u0e2d\u0e22\u0e37\u0e19\u0e22\u0e31\u0e19\u0e16\u0e36\u0e07\u0e42\u0e0b\u0e19\u0e41\u0e25\u0e49\u0e27 (room_confirmed)"
+					}
+				},
+				"type": "object",
+				"required": [
+					"location_code",
+					"name_th",
+					"checkin_datetime",
+					"residency_status",
+					"stay_status",
+					"in_zone"
+				],
+				"title": "ResidencyItem"
 			},
 			"ScheduleActionRequest": {
 				"properties": {
@@ -4001,7 +4315,7 @@
 				},
 				"type": "object",
 				"title": "ScheduleLookupRequest",
-				"description": "Same key as the ticket lookup — the portal signs in by phone or by token."
+				"description": "Same key as the ticket lookup \u2014 the portal signs in by phone or by token."
 			},
 			"ScheduleShift": {
 				"properties": {
@@ -4033,7 +4347,7 @@
 				"type": "object",
 				"required": ["assignment_id", "job_id", "shelter_code", "status"],
 				"title": "ScheduleShift",
-				"description": "One shift the volunteer is actually on (schema.md §2.9, CR-092 หน้าจอ 6).\n\nDistinct from a ticket: a ticket is the application they filed, this is the roster\nentry a manager put them on, with the duty window the Time-Bound access guard reads\nand the check-in stamps the tablet station writes."
+				"description": "One shift the volunteer is actually on (schema.md \u00a72.9, CR-092 \u0e2b\u0e19\u0e49\u0e32\u0e08\u0e2d 6).\n\nDistinct from a ticket: a ticket is the application they filed, this is the roster\nentry a manager put them on, with the duty window the Time-Bound access guard reads\nand the check-in stamps the tablet station writes."
 			},
 			"SearchRequest": {
 				"properties": {
@@ -4469,7 +4783,10 @@
 						"anyOf": [{ "type": "string", "maxLength": 500 }, { "type": "null" }],
 						"title": "Description"
 					},
-					"module_name": { "type": "string", "minLength": 1, "title": "Module Name" },
+					"module_name": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Module Name"
+					},
 					"allowed_scopes": {
 						"items": { "type": "string" },
 						"type": "array",
@@ -4478,9 +4795,9 @@
 					}
 				},
 				"type": "object",
-				"required": ["name", "module_name", "allowed_scopes"],
+				"required": ["name", "allowed_scopes"],
 				"title": "ThirdPartyClientCreateRequest",
-				"description": "``client_id`` is generated server-side (``tpc_…``) — not accepted from the caller."
+				"description": "``client_id`` is generated server-side (``tpc_\u2026``) \u2014 not accepted from the caller."
 			},
 			"ThirdPartyClientCreateResponse": {
 				"properties": {
@@ -4491,7 +4808,10 @@
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Description"
 					},
-					"module_name": { "type": "string", "title": "Module Name" },
+					"module_name": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Module Name"
+					},
 					"allowed_scopes": {
 						"items": { "type": "string" },
 						"type": "array",
@@ -4521,7 +4841,7 @@
 					"client_secret"
 				],
 				"title": "ThirdPartyClientCreateResponse",
-				"description": "Create response — plaintext ``client_secret`` is returned once."
+				"description": "Create response \u2014 plaintext ``client_secret`` is returned once."
 			},
 			"ThirdPartyClientDeleteResponse": {
 				"properties": {
@@ -4554,7 +4874,10 @@
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Description"
 					},
-					"module_name": { "type": "string", "title": "Module Name" },
+					"module_name": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Module Name"
+					},
 					"allowed_scopes": {
 						"items": { "type": "string" },
 						"type": "array",
@@ -4611,7 +4934,7 @@
 				"type": "object",
 				"required": ["allowed_scopes"],
 				"title": "ThirdPartyClientUpdateRequest",
-				"description": "``PATCH`` body — scopes only. Refused (409) once the client is revoked."
+				"description": "``PATCH`` body \u2014 scopes only. Refused (409) once the client is revoked."
 			},
 			"TicketFindItem": {
 				"properties": {
@@ -4647,7 +4970,7 @@
 				},
 				"type": "object",
 				"title": "TicketFindRequest",
-				"description": "Tab 2 — \"ค้นหาตั๋วของฉัน\", by phone or by a token already in hand."
+				"description": "Tab 2 \u2014 \"\u0e04\u0e49\u0e19\u0e2b\u0e32\u0e15\u0e31\u0e4b\u0e27\u0e02\u0e2d\u0e07\u0e09\u0e31\u0e19\", by phone or by a token already in hand."
 			},
 			"TicketFindResponse": {
 				"properties": {
@@ -4713,7 +5036,10 @@
 						"default": "Bearer"
 					},
 					"expires_in": { "type": "integer", "title": "Expires In" },
-					"module_name": { "type": "string", "title": "Module Name" },
+					"module_name": {
+						"anyOf": [{ "type": "string" }, { "type": "null" }],
+						"title": "Module Name"
+					},
 					"scopes": { "items": { "type": "string" }, "type": "array", "title": "Scopes" }
 				},
 				"type": "object",
@@ -4737,7 +5063,7 @@
 					"vulnerable_count": {
 						"anyOf": [{ "type": "integer" }, { "type": "null" }],
 						"title": "Vulnerable Count",
-						"description": "Not projected in public_persons yet — always null until schema adds age"
+						"description": "Not projected in public_persons yet \u2014 always null until schema adds age"
 					}
 				},
 				"type": "object",
@@ -4806,7 +5132,7 @@
 				},
 				"type": "object",
 				"title": "UnassignedRegistrationClaimRequest",
-				"description": "Staff claim — open members and/or pets (draft-persistent-unassigned-family)."
+				"description": "Staff claim \u2014 open members and/or pets (draft-persistent-unassigned-family)."
 			},
 			"UnassignedRegistrationClaimResponse": {
 				"properties": {
@@ -4867,7 +5193,7 @@
 					"join_registration_id": {
 						"anyOf": [{ "type": "string" }, { "type": "null" }],
 						"title": "Join Registration Id",
-						"description": "Append members (and pets) into this registration's reserved household (allowed even when document status is closed — reopen on append)."
+						"description": "Append members (and pets) into this registration's reserved household (allowed even when document status is closed \u2014 reopen on append)."
 					}
 				},
 				"type": "object",
@@ -5066,7 +5392,7 @@
 					"open_members"
 				],
 				"title": "UnassignedRegistrationReviewResponse",
-				"description": "Staff pre-claim review (CR-140 addendum) — open rows only, no write.\n\nHousehold carries address fields only (no `pets` — those live in `open_pets`,\nunlike `HouseholdOut` which embeds every pet with claim status for the SA detail view)."
+				"description": "Staff pre-claim review (CR-140 addendum) \u2014 open rows only, no write.\n\nHousehold carries address fields only (no `pets` \u2014 those live in `open_pets`,\nunlike `HouseholdOut` which embeds every pet with claim status for the SA detail view)."
 			},
 			"UnassignedRegistrationSearchHit": {
 				"properties": {
@@ -5121,6 +5447,19 @@
 				"type": "object",
 				"required": ["open_registrations", "open_members"],
 				"title": "UnassignedRegistrationStatsResponse"
+			},
+			"UnassignedRegistrationStatusResponse": {
+				"properties": {
+					"id": { "type": "string", "title": "Id" },
+					"status": { "type": "string", "title": "Status" },
+					"members_total": { "type": "integer", "title": "Members Total" },
+					"members_claimed": { "type": "integer", "title": "Members Claimed" },
+					"claimed": { "type": "boolean", "title": "Claimed" }
+				},
+				"type": "object",
+				"required": ["id", "status", "members_total", "members_claimed", "claimed"],
+				"title": "UnassignedRegistrationStatusResponse",
+				"description": "Status-only projection for the public BFF ticket sync \u2014 no PII (names, ids, phones)."
 			},
 			"UnassignedResidenceMatchHit": {
 				"properties": {
@@ -5200,7 +5539,7 @@
 				},
 				"type": "object",
 				"title": "UnassignedResidenceMatchRequest",
-				"description": "Service-to-service residence match — no member PII in response."
+				"description": "Service-to-service residence match \u2014 no member PII in response."
 			},
 			"UnassignedResidenceMatchResponse": {
 				"properties": {
@@ -5375,7 +5714,7 @@
 				},
 				"type": "object",
 				"title": "VolunteerProfile",
-				"description": "The volunteer's own profile, merged across every shelter they hold one at.\n\n``volunteer`` is a per-shelter document, so someone who has helped at two centres has\ntwo of them. The portal shows one person, so the newest document supplies the\nidentity and the shelters are listed alongside — and an edit made here is applied to\nall of them (see ``VolunteerProfileUpdateBuffer``).\n\nNo ``national_id`` and no raw phone, same rule as the Digital Pass (FR-VOL-03.4)."
+				"description": "The volunteer's own profile, merged across every shelter they hold one at.\n\n``volunteer`` is a per-shelter document, so someone who has helped at two centres has\ntwo of them. The portal shows one person, so the newest document supplies the\nidentity and the shelters are listed alongside \u2014 and an edit made here is applied to\nall of them (see ``VolunteerProfileUpdateBuffer``).\n\nNo ``national_id`` and no raw phone, same rule as the Digital Pass (FR-VOL-03.4)."
 			},
 			"VolunteerProfileResponse": {
 				"properties": {
@@ -5410,7 +5749,7 @@
 				},
 				"type": "object",
 				"title": "VolunteerProfileUpdateRequest",
-				"description": "What a volunteer may change about themselves.\n\nSkills only, for now. They are self-declared and carry no authority on their own: a\ncontrolled job still routes to review, and ``identity_verified`` stays a staff badge\n— so this cannot be used to unlock work the shelter has not approved."
+				"description": "What a volunteer may change about themselves.\n\nSkills only, for now. They are self-declared and carry no authority on their own: a\ncontrolled job still routes to review, and ``identity_verified`` stays a staff badge\n\u2014 so this cannot be used to unlock work the shelter has not approved."
 			},
 			"VolunteerProfileUpdateResponse": {
 				"properties": {
@@ -5464,7 +5803,7 @@
 					"qr_payload"
 				],
 				"title": "VolunteerTicket",
-				"description": "What the Digital Pass may show.\n\nNo ``national_id`` in any form and no raw phone — FR-VOL-03.4. ``token`` is echoed\nbecause the pass displays it as the human-readable ticket id."
+				"description": "What the Digital Pass may show.\n\nNo ``national_id`` in any form and no raw phone \u2014 FR-VOL-03.4. ``token`` is echoed\nbecause the pass displays it as the human-readable ticket id."
 			},
 			"VolunteerTicketResponse": {
 				"properties": {

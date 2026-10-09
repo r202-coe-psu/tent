@@ -269,7 +269,8 @@ export const smartCardDataSchema = z.object({
 	birth_date: z.string().trim().default(''),
 	birth_year_ce: z.number().nullable().default(null),
 	age: z.number().nullable().default(null),
-	gender: z.enum(['male', 'female', 'other']).default('other'),
+	// Card without a usable gender → null (ไม่ระบุ); 'other' stays accepted from legacy scanners.
+	gender: z.enum(['male', 'female', 'other']).nullable().default(null),
 	address_raw: z.string().trim().default(''),
 	address_no: z.string().trim().nullable().default(null),
 	village_no: z.string().trim().nullable().default(null),

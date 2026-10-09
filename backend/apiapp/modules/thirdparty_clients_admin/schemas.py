@@ -11,10 +11,10 @@ from tent_model.third_party_client import THIRD_PARTY_SCOPES
 # `occupancy-pii-read` (EXT-007) — enabled per written approval from the project owner.
 GRANTABLE_SCOPES: tuple[str, ...] = THIRD_PARTY_SCOPES
 
-# Only these two partner systems exist today (ADR 0002 / ext-spec.md). Kept as a
+# Partner systems on the OAuth plane (ADR 0002; M2 added by CR-154). Kept as a
 # closed set — not free text — so a client can't be created under a typo'd or
 # unknown module name.
-PARTNER_MODULES: tuple[str, ...] = ("M6", "M7")
+PARTNER_MODULES: tuple[str, ...] = ("M2", "M6", "M7")
 
 NAME_MAX_LENGTH = 100
 DESCRIPTION_MAX_LENGTH = 500
@@ -35,7 +35,8 @@ class ThirdPartyClientCreateRequest(BaseModel):
 
     name: str = Field(min_length=1, max_length=NAME_MAX_LENGTH)
     description: str | None = Field(default=None, max_length=DESCRIPTION_MAX_LENGTH)
-    module_name: str = Field(min_length=1)
+    # Optional — a module only presets scopes in the admin form (CR-154 FR-62).
+    module_name: str | None = None
     allowed_scopes: list[str] = Field(min_length=1)
 
     @field_validator("name")
@@ -55,7 +56,10 @@ class ThirdPartyClientCreateRequest(BaseModel):
 
     @field_validator("module_name")
     @classmethod
-    def _module_must_be_known(cls, value: str) -> str:
+    def _module_must_be_known(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        value = value.strip()
         if value not in PARTNER_MODULES:
             raise ValueError(f"module_name must be one of: {', '.join(PARTNER_MODULES)}")
         return value
@@ -84,7 +88,7 @@ class ThirdPartyClientPublic(BaseModel):
     client_id: str
     name: str | None
     description: str | None
-    module_name: str
+    module_name: str | None
     allowed_scopes: list[str]
     is_active: bool
     deleted_at: datetime | None

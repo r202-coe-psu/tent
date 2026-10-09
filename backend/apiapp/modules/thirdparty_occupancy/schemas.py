@@ -10,6 +10,7 @@ from pydantic import BaseModel
 class OccupancyBreakdownItem(BaseModel):
     male: int
     female: int
+    gender_unspecified: int
     child_under_5: int
     elderly_over_60: int
     pregnant: int

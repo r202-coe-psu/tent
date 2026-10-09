@@ -6,7 +6,7 @@ import {
 	seedSecurityQuestion,
 	STAFF_SH001_ROLES
 } from './helpers/couch';
-import { injectSession, clearSession } from './helpers/login';
+import { injectSession, clearSession, routeBrowserCouchThroughApp } from './helpers/login';
 
 /**
  * Back-office donation campaigns.
@@ -80,6 +80,7 @@ test.describe('Stock donations — access', () => {
 
 test.describe("Create campaign — the unit is the catalog's", () => {
 	test.beforeEach(async ({ page }) => {
+		await routeBrowserCouchThroughApp(page);
 		await injectSession(page, WS, sessions[WS.name]);
 		await page.goto('/back-office/stock-donations');
 		await page.getByRole('tab', { name: /จัดการความต้องการ/ }).click();

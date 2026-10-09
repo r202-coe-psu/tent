@@ -20,13 +20,24 @@
 	import { useStoragePoints } from '../application/use-storage-points.svelte';
 	import StoragePointSelect from './storage-point-select.svelte';
 	import ItemCombobox from './item-combobox.svelte';
+	import DonationBatchReceive from './donation-batch-receive.svelte';
 	import {
 		formatUnit,
 		useUnitsOfMeasure,
 		itemSelectableUoms,
 		defaultInventoryUom,
-		toLedgerQtyUnit
+		toLedgerQtyUnit,
+		shelfLifeExpiryLabel
 	} from '$lib/features/catalog';
+	import {
+		applyExpiryAutofill,
+		confirmExpiry,
+		editExpiry,
+		expiryMissing,
+		initialExpiryState,
+		todayLocalIso,
+		type ExpiryState
+	} from '../domain/lot-expiry';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -73,7 +84,10 @@
 
 	let moreOpen = $state(false);
 	let producedAtDate = $state('');
-	let expiryDate = $state('');
+	// `lot.expiry` field state (CR-143 §D): autofilled from the item's shelf life until the
+	// user edits or confirms it. `expiry.autoFilled` is UI-only and never reaches the ledger.
+	let expiry = $state<ExpiryState>(initialExpiryState());
+	let expiryAttempted = $state(false);
 	let sourceMode = $state<SourceMode>('manual');
 
 	let selectedItemId = $state('');
@@ -168,7 +182,7 @@
 		SPA: true,
 		validators: zod4(receiveInputSchema),
 		resetForm: true,
-		onUpdate: async ({ form: validated }) => {
+		onUpdate: async ({ form: validated, cancel }) => {
 			// In walk-in mode `ref_id` is legitimately empty: the donation does not
 			// exist yet and is minted with the ledger row at submit. That is the one
 			// error worth ignoring — `validated.valid` stays the authority for
@@ -180,9 +194,12 @@
 				return;
 			}
 
-			// Validate perishable item expiry date requirement
-			if (selectedItem?.perishable && !validated.data.lot?.expiry) {
-				toast.error(`สินค้า "${selectedItem.name}" เป็นของเสียได้ จำเป็นต้องระบุวันหมดอายุ`);
+			// FR-D2: an item that requires an expiry cannot be saved without one.
+			if (selectedItem?.requiresExpiry && !validated.data.lot?.expiry) {
+				expiryAttempted = true;
+				// Without cancel() superforms resets the (valid) form, wiping item and qty.
+				cancel();
+				toast.error(`สินค้า "${selectedItem.name}" ต้องระบุวันหมดอายุ`);
 				return;
 			}
 
@@ -217,12 +234,22 @@
 	 */
 	const isWalkIn = $derived($formData.source === 'donation' && isWalkInOpen);
 
+	// With a donation ticket the lines are counted and received together (CR-143 §B) by
+	// `DonationBatchReceive`, which replaces the one-item fields below.
+	function handleBatchReceived(summary: string) {
+		clearDonation();
+		onsuccess?.({ keepOpen: true, summary });
+	}
+
 	// Update locked unit when item is selected
 	function selectItem(item: StockFormItem) {
+		// A date keyed or confirmed for another item says nothing about this one (FR-D2c).
+		if (selectedItemId && selectedItemId !== item._id) commitExpiry(initialExpiryState());
 		selectedItem = item;
 		selectedItemId = item._id;
 		$formData.item_id = item._id;
 		$formData.unit = defaultInventoryUom(item);
+		refreshExpiryAutofill();
 	}
 
 	/** Chosen storage point id ('' = unspecified / main store). */
@@ -237,17 +264,31 @@
 		$formData.lot = { ...lot, ...storageLotFields(point) };
 	}
 
-	function setExpiryDate(val: string) {
-		expiryDate = val;
-		const trimmed = val.trim();
+	/** Mirror the expiry state into `lot.expiry` (the only expiry field that is persisted). */
+	function writeLotExpiry(value: string) {
 		if (!$formData.lot) {
-			if (trimmed) $formData.lot = { expiry: trimmed };
+			if (value) $formData.lot = { expiry: value };
 			return;
 		}
-		const current = $formData.lot.expiry ?? '';
-		if (current !== trimmed) {
-			$formData.lot.expiry = trimmed || undefined;
+		if (($formData.lot.expiry ?? '') !== value) {
+			$formData.lot.expiry = value || undefined;
 		}
+	}
+
+	function commitExpiry(next: ExpiryState) {
+		expiry = next;
+		writeLotExpiry(next.value);
+		if (next.value) expiryAttempted = false;
+	}
+
+	/** The user typed, picked or cleared the date. */
+	function setExpiryDate(val: string) {
+		commitExpiry(editExpiry(expiry, val));
+	}
+
+	/** Recompute from the item's shelf life unless the user has taken over (FR-D2a). */
+	function refreshExpiryAutofill() {
+		commitExpiry(applyExpiryAutofill(expiry, selectedItem, producedAtDate, todayLocalIso()));
 	}
 
 	/** Empty → domain defaults produced_at to occurred_at. */
@@ -256,11 +297,10 @@
 		const trimmed = val.trim();
 		if (!$formData.lot) {
 			if (trimmed) $formData.lot = { produced_at: trimmed };
-			return;
-		}
-		if (($formData.lot.produced_at ?? '') !== trimmed) {
+		} else if (($formData.lot.produced_at ?? '') !== trimmed) {
 			$formData.lot.produced_at = trimmed || undefined;
 		}
+		refreshExpiryAutofill();
 	}
 
 	function clearSelection() {
@@ -270,7 +310,8 @@
 		$formData.item_id = '';
 		$formData.unit = '';
 		clearDonation();
-		setExpiryDate('');
+		commitExpiry(initialExpiryState());
+		expiryAttempted = false;
 		setProducedAtDate('');
 		storagePointId = '';
 		setStoragePoint(null);
@@ -279,8 +320,9 @@
 	/** After a successful save: clear qty/lot clocks; clear item unless row-panel pin. */
 	function resetForNextLine() {
 		$formData.qty = '' as unknown as typeof $formData.qty;
-		setExpiryDate('');
-		setProducedAtDate('');
+		commitExpiry(initialExpiryState());
+		expiryAttempted = false;
+		producedAtDate = '';
 		storagePointId = '';
 		if ($formData.lot) {
 			$formData.lot = {
@@ -300,6 +342,9 @@
 		if (!preselectedItemId) {
 			clearSelection();
 			reset({ data: { source: $formData.source || 'manual' } });
+		} else {
+			// The pinned item stays: its next lot gets a fresh autofill.
+			refreshExpiryAutofill();
 		}
 	}
 
@@ -613,216 +658,249 @@
 			</div>
 		{/if}
 
-		<Form.Field {form} name="item_id" class="relative col-span-1 sm:col-span-2">
-			<Form.Control>
-				{#snippet children({ props })}
-					<Form.Label>
-						สินค้า <span class="font-bold text-destructive">*</span>
-						{#if justCreatedItemId && justCreatedItemId === selectedItemId}
-							<span class="ml-2 rounded-full bg-sky-600 px-2 py-0.5 text-xs font-bold text-white"
-								>ใหม่</span
-							>
-						{/if}
-					</Form.Label>
-					<ItemCombobox
-						id={props.id}
-						name={props.name}
-						aria-invalid={props['aria-invalid']}
-						aria-describedby={props['aria-describedby']}
-						{items}
-						allowCreate
-						bind:value={selectedItemId}
-						disabled={!!preselectedItemId}
-						isLoading={stockItems.isLoading}
-						{balanceByItemId}
-						formatBalanceUnit={(item) =>
-							formatUnit(item.unit, units, langState.current) || item.unit}
-						onSelect={(item, meta) => {
-							if (!item) {
-								clearSelection();
-								return;
-							}
-							selectItem(item);
-							// A scanned pack barcode names the unit it was printed on.
-							if (meta?.uom) $formData.unit = meta.uom;
-							if (meta?.created) {
-								justCreatedItemId = item._id;
-								void focusQty();
-							}
-						}}
-					/>
-				{/snippet}
-			</Form.Control>
-			<Form.FieldErrors />
-		</Form.Field>
-
-		<Form.Field {form} name="qty" class="col-span-1">
-			<Form.Control>
-				{#snippet children({ props })}
-					<Form.Label>จำนวน <span class="font-bold text-destructive">*</span></Form.Label>
-					<Input
-						{...props}
-						bind:ref={qtyInput}
-						type="number"
-						placeholder="0"
-						min="0.01"
-						step="any"
-						bind:value={$formData.qty}
-						class="min-h-11 font-mono font-bold"
-					/>
-				{/snippet}
-			</Form.Control>
-			<Form.FieldErrors />
-		</Form.Field>
-
-		<Form.Field {form} name="unit" class="col-span-1">
-			<Form.Control>
-				{#snippet children({ props })}
-					<Form.Label>หน่วย <span class="font-bold text-destructive">*</span></Form.Label>
-					{#if !selectedItem}
-						<Input
-							{...props}
-							placeholder="เลือกสินค้าก่อน"
-							value=""
-							readonly
-							disabled
-							class="min-h-11"
-						/>
-					{:else if unitOptions.length <= 1}
-						<Input {...props} value={selectedUnitLabel} readonly disabled class="min-h-11" />
-					{:else}
-						<Select.Root
-							type="single"
-							value={$formData.unit}
-							onValueChange={(val) => {
-								if (val) $formData.unit = val;
-							}}
-						>
-							<Select.Trigger
-								{...props}
-								class="min-h-11 w-full rounded-md border border-input bg-white px-3 text-sm font-medium"
-							>
-								{selectedUnitLabel}
-							</Select.Trigger>
-							<Select.Content>
-								{#each unitOptions as option (option.code)}
-									<Select.Item
-										value={option.code}
-										label={formatUnit(option.code, units, langState.current) || option.code}
-									/>
-								{/each}
-							</Select.Content>
-						</Select.Root>
-					{/if}
-				{/snippet}
-			</Form.Control>
-			<Form.FieldErrors />
-		</Form.Field>
-
-		<!-- Storage Location (lot.storage_point_id + lot.storage_zone) -->
-		<Form.Field {form} name="lot.storage_zone" class="col-span-1 sm:col-span-2">
-			<Form.Control>
-				{#snippet children({ props })}
-					<Form.Label>สถานที่จัดเก็บ (จุดเก็บของของศูนย์)</Form.Label>
-					<StoragePointSelect
-						points={storagePoints.points}
-						bind:value={storagePointId}
-						onchange={setStoragePoint}
-						triggerProps={props}
-					/>
-				{/snippet}
-			</Form.Control>
-			<Form.FieldErrors />
-		</Form.Field>
-
-		<Form.Field {form} name="lot.expiry" class="col-span-1 sm:col-span-2">
-			<Form.Control>
-				{#snippet children({ props })}
-					<div class="mb-1 flex flex-wrap items-center justify-between gap-2">
+		{#if sourceMode === 'donation_ticket'}
+			{#if selectedDonation}
+				<!-- keyed by donation so picking another ticket starts a fresh count -->
+				{#key selectedDonation._id}
+					<DonationBatchReceive donation={selectedDonation} onsuccess={handleBatchReceived} />
+				{/key}
+			{:else}
+				<p class="col-span-1 text-sm text-slate-500 sm:col-span-2">
+					เลือกใบบริจาคเพื่อดึงรายการทั้งหมดมานับรับของพร้อมกัน
+				</p>
+			{/if}
+		{:else}
+			<Form.Field {form} name="item_id" class="relative col-span-1 sm:col-span-2">
+				<Form.Control>
+					{#snippet children({ props })}
 						<Form.Label>
-							วันหมดอายุ
-							{#if selectedItem?.perishable}
-								<span class="font-bold text-destructive">*</span>
-							{:else}
-								<span class="font-normal text-muted-foreground">(ไม่บังคับ)</span>
+							สินค้า <span class="font-bold text-destructive">*</span>
+							{#if justCreatedItemId && justCreatedItemId === selectedItemId}
+								<span class="ml-2 rounded-full bg-sky-600 px-2 py-0.5 text-xs font-bold text-white"
+									>ใหม่</span
+								>
 							{/if}
 						</Form.Label>
-						<div class="flex flex-wrap gap-2">
-							<Button
-								type="button"
-								variant="outline"
-								class="min-h-11 min-w-[48px] rounded-lg px-3 text-xs font-bold"
-								onclick={() => setQuickExpiry({ days: 7 })}
-							>
-								+7ว
-							</Button>
-							<Button
-								type="button"
-								variant="outline"
-								class="min-h-11 min-w-[48px] rounded-lg px-3 text-xs font-bold"
-								onclick={() => setQuickExpiry({ months: 6 })}
-							>
-								+6ด
-							</Button>
-							<Button
-								type="button"
-								variant="outline"
-								class="min-h-11 min-w-[48px] rounded-lg px-3 text-xs font-bold"
-								onclick={() => setQuickExpiry({ years: 1 })}
-							>
-								+1ปี
-							</Button>
-						</div>
-					</div>
-					<DatePicker
-						{...props}
-						bind:value={() => expiryDate, setExpiryDate}
-						placeholder="วว/ดด/ปปปป"
-					/>
-				{/snippet}
-			</Form.Control>
-			<Form.FieldErrors />
-		</Form.Field>
+						<ItemCombobox
+							id={props.id}
+							name={props.name}
+							aria-invalid={props['aria-invalid']}
+							aria-describedby={props['aria-describedby']}
+							{items}
+							allowCreate
+							bind:value={selectedItemId}
+							disabled={!!preselectedItemId}
+							isLoading={stockItems.isLoading}
+							{balanceByItemId}
+							formatBalanceUnit={(item) =>
+								formatUnit(item.unit, units, langState.current) || item.unit}
+							onSelect={(item, meta) => {
+								if (!item) {
+									clearSelection();
+									return;
+								}
+								selectItem(item);
+								// A scanned pack barcode names the unit it was printed on.
+								if (meta?.uom) $formData.unit = meta.uom;
+								if (meta?.created) {
+									justCreatedItemId = item._id;
+									void focusQty();
+								}
+							}}
+						/>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
 
-		<div class="col-span-1 sm:col-span-2">
-			<button
-				type="button"
-				class="flex min-h-11 w-full items-center justify-between rounded-lg border border-border/60 bg-muted/30 px-3 text-sm font-semibold text-foreground"
-				onclick={() => (moreOpen = !moreOpen)}
-				aria-expanded={moreOpen}
-			>
-				<span>ตัวเลือกเพิ่มเติม</span>
-				<ChevronDown
-					class="h-4 w-4 transition-transform {moreOpen ? 'rotate-180' : ''}"
-					aria-hidden="true"
-				/>
-			</button>
+			<Form.Field {form} name="qty" class="col-span-1">
+				<Form.Control>
+					{#snippet children({ props })}
+						<Form.Label>จำนวน <span class="font-bold text-destructive">*</span></Form.Label>
+						<Input
+							{...props}
+							bind:ref={qtyInput}
+							type="number"
+							placeholder="0"
+							min="0.01"
+							step="any"
+							bind:value={$formData.qty}
+							class="min-h-11 font-mono font-bold"
+						/>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
 
-			{#if moreOpen}
-				<div class="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
-					<Form.Field {form} name="lot.produced_at" class="col-span-1 sm:col-span-2">
-						<Form.Control>
-							{#snippet children({ props })}
-								<Form.Label>วันผลิต</Form.Label>
-								<DatePicker
+			<Form.Field {form} name="unit" class="col-span-1">
+				<Form.Control>
+					{#snippet children({ props })}
+						<Form.Label>หน่วย <span class="font-bold text-destructive">*</span></Form.Label>
+						{#if !selectedItem}
+							<Input
+								{...props}
+								placeholder="เลือกสินค้าก่อน"
+								value=""
+								readonly
+								disabled
+								class="min-h-11"
+							/>
+						{:else if unitOptions.length <= 1}
+							<Input {...props} value={selectedUnitLabel} readonly disabled class="min-h-11" />
+						{:else}
+							<Select.Root
+								type="single"
+								value={$formData.unit}
+								onValueChange={(val) => {
+									if (val) $formData.unit = val;
+								}}
+							>
+								<Select.Trigger
 									{...props}
-									bind:value={() => producedAtDate, setProducedAtDate}
-									placeholder="วันนี้ = เข้าคลัง"
-								/>
-							{/snippet}
-						</Form.Control>
-						<Form.FieldErrors />
-					</Form.Field>
-				</div>
-			{/if}
-		</div>
+									class="min-h-11 w-full rounded-md border border-input bg-white px-3 text-sm font-medium"
+								>
+									{selectedUnitLabel}
+								</Select.Trigger>
+								<Select.Content>
+									{#each unitOptions as option (option.code)}
+										<Select.Item
+											value={option.code}
+											label={formatUnit(option.code, units, langState.current) || option.code}
+										/>
+									{/each}
+								</Select.Content>
+							</Select.Root>
+						{/if}
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
 
-		<div
-			class="sticky bottom-0 z-10 col-span-1 -mx-4 -mb-4 border-t border-slate-200 bg-slate-50 px-4 py-4 sm:col-span-2 sm:-mx-6 sm:-mb-6 sm:px-6"
-		>
-			<Form.Button size="lg" disabled={$submitting || offline} class="min-h-11 w-full font-bold">
-				{$submitting ? 'กำลังบันทึก…' : 'บันทึกแล้วรับชิ้นถัดไป'}
-			</Form.Button>
-		</div>
+			<!-- Storage Location (lot.storage_point_id + lot.storage_zone) -->
+			<Form.Field {form} name="lot.storage_zone" class="col-span-1 sm:col-span-2">
+				<Form.Control>
+					{#snippet children({ props })}
+						<Form.Label>สถานที่จัดเก็บ (จุดเก็บของของศูนย์)</Form.Label>
+						<StoragePointSelect
+							points={storagePoints.points}
+							bind:value={storagePointId}
+							onchange={setStoragePoint}
+							triggerProps={props}
+						/>
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
+
+			<Form.Field {form} name="lot.expiry" class="col-span-1 sm:col-span-2">
+				<Form.Control>
+					{#snippet children({ props })}
+						<div class="mb-1 flex flex-wrap items-center justify-between gap-2">
+							<Form.Label>
+								วันหมดอายุ
+								{#if selectedItem?.requiresExpiry}
+									<span class="font-bold text-destructive">*</span>
+								{:else}
+									<span class="font-normal text-muted-foreground">(ไม่บังคับ)</span>
+								{/if}
+							</Form.Label>
+							<div class="flex flex-wrap gap-2">
+								<Button
+									type="button"
+									variant="outline"
+									class="min-h-11 min-w-[48px] rounded-lg px-3 text-xs font-bold"
+									onclick={() => setQuickExpiry({ days: 7 })}
+								>
+									+7ว
+								</Button>
+								<Button
+									type="button"
+									variant="outline"
+									class="min-h-11 min-w-[48px] rounded-lg px-3 text-xs font-bold"
+									onclick={() => setQuickExpiry({ months: 6 })}
+								>
+									+6ด
+								</Button>
+								<Button
+									type="button"
+									variant="outline"
+									class="min-h-11 min-w-[48px] rounded-lg px-3 text-xs font-bold"
+									onclick={() => setQuickExpiry({ years: 1 })}
+								>
+									+1ปี
+								</Button>
+							</div>
+						</div>
+						<DatePicker
+							{...props}
+							bind:value={() => expiry.value, setExpiryDate}
+							placeholder="วว/ดด/ปปปป"
+						/>
+						{#if expiry.autoFilled && expiry.shelfLifeDays != null}
+							<div
+								class="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900"
+							>
+								<span>{shelfLifeExpiryLabel(expiry.shelfLifeDays)}</span>
+								<Button
+									type="button"
+									variant="outline"
+									class="min-h-11 rounded-lg px-3 text-xs font-bold"
+									onclick={() => commitExpiry(confirmExpiry(expiry))}
+								>
+									ตรวจสอบแล้ว
+								</Button>
+							</div>
+						{/if}
+						{#if expiryAttempted && expiryMissing(selectedItem, expiry)}
+							<p class="mt-2 text-sm font-semibold text-destructive" role="alert">
+								สินค้านี้ต้องระบุวันหมดอายุ
+							</p>
+						{/if}
+					{/snippet}
+				</Form.Control>
+				<Form.FieldErrors />
+			</Form.Field>
+
+			<div class="col-span-1 sm:col-span-2">
+				<button
+					type="button"
+					class="flex min-h-11 w-full items-center justify-between rounded-lg border border-border/60 bg-muted/30 px-3 text-sm font-semibold text-foreground"
+					onclick={() => (moreOpen = !moreOpen)}
+					aria-expanded={moreOpen}
+				>
+					<span>ตัวเลือกเพิ่มเติม</span>
+					<ChevronDown
+						class="h-4 w-4 transition-transform {moreOpen ? 'rotate-180' : ''}"
+						aria-hidden="true"
+					/>
+				</button>
+
+				{#if moreOpen}
+					<div class="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+						<Form.Field {form} name="lot.produced_at" class="col-span-1 sm:col-span-2">
+							<Form.Control>
+								{#snippet children({ props })}
+									<Form.Label>วันผลิต</Form.Label>
+									<DatePicker
+										{...props}
+										bind:value={() => producedAtDate, setProducedAtDate}
+										placeholder="วันนี้ = เข้าคลัง"
+									/>
+								{/snippet}
+							</Form.Control>
+							<Form.FieldErrors />
+						</Form.Field>
+					</div>
+				{/if}
+			</div>
+
+			<div
+				class="sticky bottom-0 z-10 col-span-1 -mx-4 -mb-4 border-t border-slate-200 bg-slate-50 px-4 py-4 sm:col-span-2 sm:-mx-6 sm:-mb-6 sm:px-6"
+			>
+				<Form.Button size="lg" disabled={$submitting || offline} class="min-h-11 w-full font-bold">
+					{$submitting ? 'กำลังบันทึก…' : 'บันทึกแล้วรับชิ้นถัดไป'}
+				</Form.Button>
+			</div>
+		{/if}
 	</Field.FieldGroup>
 </form>

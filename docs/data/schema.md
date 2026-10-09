@@ -2,8 +2,8 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-06
-note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer; CR-135/CR-136 partner OAuth2 client name/module preset + secret reveal/edit/delete; CR-137 shrink master_data (10→4) + zone/community free text; CR-138 remove purchase doc type + withdraw purchase from stock_ledger.reason; CR-139 shelter storage points; CR-140 item_category default_class editable; CR-144/CR-145 meal_service_receipt (§2.7.3); CR-147 removes CR-146 meal_distribution_push (§2.7.4) — ticket flow ends at warehouse stock-in; CR-148 pre-register validation + evacuee religion_other/disability_other_detail (v11) + household dorm_* (v6); CR-151 kiosk pre-registration check-in (report-in arriving status & KIOSK_LOOKUP_MANGO_INDEXES); CR-154 evacuee.gender nullable + registered_via api (v12), external_bookings (§9.7), partner scopes booking-write/residency-read + module M2
+updated: 2026-10-09
+note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer; CR-135/CR-136 partner OAuth2 client name/module preset + secret reveal/edit/delete; CR-137 shrink master_data (10→4) + zone/community free text; CR-138 remove purchase doc type + withdraw purchase from stock_ledger.reason; CR-139 shelter storage points; CR-140 item_category default_class editable; CR-144/CR-145 meal_service_receipt (§2.7.3); CR-147 removes CR-146 meal_distribution_push (§2.7.4) — ticket flow ends at warehouse stock-in; CR-148 pre-register validation + evacuee religion_other/disability_other_detail (v11) + household dorm_* (v6); CR-151 kiosk pre-registration check-in (report-in arriving status & KIOSK_LOOKUP_MANGO_INDEXES); CR-154 evacuee.gender nullable + registered_via api (v12), external_bookings (§9.7), partner scopes booking-write/residency-read + module M2; decision sync 2026-10-09 — `evacuee.gender = null` ("ไม่ระบุ") ใช้ได้ทุกช่องทาง (public/kiosk/Station 1/back-office/api) เป็นค่าเริ่มต้นของฟอร์ม, `'other'` คงไว้อ่านเฉพาะ doc เดิม (UI ไม่เสนอให้เลือกใหม่, แก้ไขแล้วต้อง preserve) — ยกเลิก CR-154 FR-70/FR-71(บางส่วน)/FR-72; เพิ่ม `public_shelters.occupancy_breakdown.gender_unspecified` (null+other) พร้อม invariant `male+female+gender_unspecified = occupancy_total`; evacuee ไม่ bump schema_v (v12 รองรับ null แล้ว); ต้อง re-project `public_shelters` (worker bootstrap) หลัง deploy
 ---
 
 # Database Schema v5 — field-level
@@ -40,7 +40,8 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 
 ### 1.1 `evacuee` — `evacuee:{ulid}`
 
-> **schema_v 12** — `gender` รับ `null` ได้ (ยังไม่ทราบ — เกิดจาก partner booking เท่านั้น); `registered_via` เพิ่ม `api` ([CR-154](../changes/CR-154-m2-partner-booking-residency.md)).
+> **decision sync 2026-10-09 (ไม่ bump `schema_v`)** — `gender = null` ("ไม่ระบุ") ใช้ได้ **ทุกช่องทาง** ไม่จำกัดเฉพาะ `registered_via = api`; ฟอร์มลงทะเบียนทุกช่องทาง preselect "ไม่ระบุ" และไม่บังคับเลือกเพศ. ยกเลิก CR-154 FR-70, FR-71 (เหลือเพียง "UI แสดง `null` เป็น ไม่ระบุ + แก้เพศได้ทุกช่องทาง") และ FR-72 (ย้ายไป `public_shelters.occupancy_breakdown.gender_unspecified`, §9.1).
+> **schema_v 12** — `gender` รับ `null` ได้ (ยังไม่ทราบ — partner booking เป็นต้น; ขยายเป็นทุกช่องทางโดย decision sync 2026-10-09); `registered_via` เพิ่ม `api` ([CR-154](../changes/CR-154-m2-partner-booking-residency.md)).
 > **schema_v 11** — เพิ่ม `religion_other`, `disability_other_detail`; validation ปีเกิด/บัตร ปชช./เบอร์ `+66` เข้มขึ้น ([CR-148](../changes/CR-148-pre-register-validation-and-fields.md)).
 > **schema_v 10** — `person_id.cardType` เพิ่ม `anonymous` (+ ระบบออก `ANON-{ulid}`); เพิ่ม `vulnerable_groups[]`; stay เพิ่ม `room_confirmed` (CR-112).
 > **schema_v 9** — เพิ่มสถานะ `arriving` ใน `current_stay.status` (CR-106) — ผู้ประสบภัยที่รายงานตัวหน้างานแล้ว อยู่ระหว่างรอตรวจคัดกรองการแพทย์ หรือรอจัดสรรที่พัก (ไม่นับเตียงที่ถูกใช้จริงใน occupancy dashboard จนกว่าจะ check-in เป็น `active`).
@@ -62,7 +63,7 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 | --- | --- | --- | --- |
 | `first_name` | str | req | ตัดช่องว่างหัวท้าย; ห้าม empty |
 | `last_name` | str | req | ตัดช่องว่างหัวท้าย; **ว่างได้** เมื่อไม่มีนามสกุล (mononym / ชาวต่างชาติ เช่น พม่า) — field คงมีเสมอ เป็น `""` ได้ (CR-106) |
-| `gender` | enum(`male`,`female`,`other`)\|null | req | key ต้องมีเสมอ; `null` = ยังไม่ทราบ — เกิดได้เฉพาะ `registered_via = api` (partner booking, CR-154); ฟอร์ม staff/kiosk/public ยังบังคับเลือก; UI แสดง `null` เป็น "ไม่ระบุ" และ staff เติมได้ที่ Station 1 / หน้าแก้ไข |
+| `gender` | enum(`male`,`female`,`other`)\|null | req | key ต้องมีเสมอ; `null` = ไม่ระบุ — **ใช้ได้ทุกช่องทาง** (public/kiosk/Station 1/back-office/api; decision sync 2026-10-09 แทนที่ CR-154 FR-70) และเป็นค่าเริ่มต้นของฟอร์มลงทะเบียนทุกช่องทาง (ไม่แตะ = persist `null`, ไม่มี error "กรุณาเลือกเพศ"); `'other'` คงใน enum สำหรับ doc เดิมเท่านั้น — reader ต้องรับได้, ฟอร์มใหม่ไม่เสนอให้เลือก, แก้ไข doc ที่เป็น `'other'` ต้อง preserve จนกว่าผู้ใช้เลือก male/female/ไม่ระบุเอง; UI แสดง `null` และ `'other'` เป็น "ไม่ระบุ" และแก้ไขเพศได้ทุกช่องทาง (ไม่มี badge เตือน ไม่ block check-in); occupancy นับ `null`+`'other'` เป็น `gender_unspecified` (§9.1) |
 | `phone` | str\|null | req | UI บังคับกรอก — กด/พิมพ์ "ไม่มี" → เก็บ `null`; เก็บ normalize แล้ว (ตัวเลขล้วน เช่น `"0812345678"`); ฟิลด์เดียวต่อคน; input `+66XXXXXXXXX` / `66XXXXXXXXX` normalize เป็น `0XXXXXXXXX` (CR-148) |
 | `nickname` | str | opt | — |
 | `birth_year` | int | opt | พ.ศ. 4 หลัก — ช่วง `currentBE − 150 ≤ birth_year ≤ currentBE` (**รวม** 150, ตรงกับ `age ≤ 150`); กรอกคู่กับ `age` ต้องต่างกันไม่เกิน ±1 ปี (CR-148) |
@@ -127,6 +128,8 @@ implement — ไม่กระทบ migration นี้
 **Migration (schema_v 10 → 11, CR-148):** purely additive — `religion_other`, `disability_other_detail` default `null` ตอนอ่าน; doc เดิมไม่ต้อง backfill; validation ใหม่ใช้กับ input ใหม่/ค่าที่ถูกแก้เท่านั้น; เขียนใหม่ stamp schema_v 11
 
 **Migration (schema_v 11 → 12, CR-154):** relaxing + additive enum — doc เดิมมี `gender` ครบทุกตัว ไม่ต้อง backfill; reader ทุกจุดต้อง handle `gender = null` (label "ไม่ระบุ", occupancy breakdown ไม่นับเข้า male/female แต่นับใน total); `registered_via: api` เขียนโดย worker inbound `external_bookings` เท่านั้น; เขียนใหม่ stamp schema_v 12
+
+**Decision sync 2026-10-09 (ไม่ bump `schema_v`):** รูปร่าง doc ไม่เปลี่ยน (v12 รับ `gender = null` อยู่แล้ว) — เปลี่ยนเฉพาะ rule การรับ input: ทุกช่องทางเขียน `null` ได้, ไม่ต้อง backfill, doc `'other'` เดิมไม่ถูกแปลง; reader ต้องรับ `null` และ `'other'` ทั้งคู่ (แสดง "ไม่ระบุ", นับ `gender_unspecified`); FastAPI intake schema (`unassigned_registrations`) ต้องรับ `gender: null`
 
 **Migration (schema_v 9 → 10, CR-112):** purely additive — `anonymous` ใน `cardType`, `vulnerable_groups` default `[]` ตอนอ่าน, `room_confirmed` ใน stay; doc เดิมอ่านได้โดยไม่ต้อง backfill; เขียนใหม่ stamp schema_v 10
 
@@ -322,7 +325,7 @@ projection — เป็นข้อมูลหลังบ้านล้ว�
 | `ref_id` | str\|null | ตาม `reason` | doc ต้นเหตุ — **ค่าที่ยอมรับผูกกับ `reason` ตามตาราง "`reason` → `ref_id`" ด้านล่าง** (CR-055) |
 | `lot_ref` | str | opt/ตาม `reason` | stable physical-lot identity → `stock_ledger:{id}`; บังคับสำหรับ `distribute`/`distribution_return`; แถวรับเข้าใหม่ self-reference `_id` (เว้นแต่การรับของแจกเหลือคืนคลัง `reason='receive'` ที่แนะนำให้อ้างอิง `lot_ref` เดิมของล็อตที่เบิกจ่ายเพื่อการสืบย้อนกลับ); legacy อาจไม่มี field |
 | `lot` | {`expiry`:ts?, `note`:str?, `lot_no`:str?, `storage_zone`:str?, `storage_point_id`:str?, `produced_at`:ts?} | opt | ของหมดอายุได้ (อาหาร/ยา) · `lot_no`/`storage_zone` = CR-088 · `storage_point_id`/`produced_at` = schema_v 5 (ดูตารางย่อยด้านล่าง) |
-| `adjust_reason` | enum(`expired`,`damaged`,`count_mismatch`,`lost`,`found`,`merge`,`other`) | req เมื่อ `reason='adjust'` · ห้ามมีเมื่อ reason อื่น | เหตุผลการปรับยอด (schema_v 6, CR-143 §C); `merge` ใช้เฉพาะ flow รวมสินค้า (CR-143 §F) — ฟอร์มปรับยอดทั่วไปไม่แสดง |
+| `adjust_reason` | enum(`expired`,`damaged`,`count_mismatch`,`lost`,`found`,`merge`,`other`) | req เมื่อ `reason='adjust'` · ห้ามมีเมื่อ reason อื่น | เหตุผลการปรับยอด (schema_v 6, CR-143 §C); `merge` ใช้เฉพาะ flow รวมสินค้า (CR-143 §F) — ฟอร์มปรับยอดทั่วไปไม่แสดง; `other` ต้องมี `note` (CR-156); รับเข้า manual = `found` (CR-156) |
 | `note` | str ≤500 | opt (เฉพาะ `reason='adjust'`) | รายละเอียดการปรับยอด (schema_v 6, CR-143 §C) — ไม่ใช่ `lot.note` |
 | `occurred_at` | ts | req | — |
 
@@ -369,7 +372,7 @@ projection — เป็นข้อมูลหลังบ้านล้ว�
 
 **ลำดับการเลือกล็อตเพื่อเบิก (CR-143 §A):** ใช้ทั้งระบบ (หน้าคลัง + distribution dispatch / return / reconciliation) ต่อล็อตที่ qty > 0:
 `ageDays = now − (lot.produced_at ?? received_at)`; `daysLeft` = `lot.expiry − now` → ไม่มีก็ `shelf_life_days − ageDays` → ไม่มีก็ `HORIZON[storage_type] − ageDays`; `score = W_EXPIRY·daysLeft − W_AGE·ageDays`.
-ลำดับ: (1) กลุ่มเร่งด่วน — `daysLeft ≤ URGENT_DAYS` ที่มาจาก `lot.expiry`/`shelf_life_days` (ไม่ใช่ HORIZON) เรียงตาม `daysLeft` (2) ที่เหลือเรียงตาม `score` (3) เท่ากัน → `received_at` เก่าก่อน → `lot_ref`.
+ลำดับ: (1) กลุ่มเร่งด่วน — `daysLeft ≤ URGENT_DAYS` ที่มาจาก `lot.expiry`/`shelf_life_days` (ไม่ใช่ HORIZON) เรียงตาม `daysLeft` (2) ที่เหลือเรียงตาม `score` (3) เท่ากัน → `received_at` เก่าก่อน → `lot_ref`. ล็อตที่ไม่มี `lot.expiry` และ `daysLeft ≤ 0` จาก `shelf_life_days` = หมดอายุแล้ว ไม่เลือกอัตโนมัติ (CR-156 FR-A4a).
 ค่าตั้งต้น `W_EXPIRY=1`, `W_AGE=0.5`, `URGENT_DAYS=7`, `HORIZON` DRY 365 / CHILLED 7 / FROZEN 90 / CONTROLLED_MED 365 / ไม่ทราบ 365. ล็อตที่หมดอายุแล้วไม่ถูกเลือกอัตโนมัติ.
 **ข้อยกเว้น:** การ replay แถว outbound legacy (ไม่มี `lot_ref`) ใน `projectStockLotBalances` ยังใช้ FEFO→FIFO เดิม เพื่อไม่ให้ยอดรายล็อตของประวัติเปลี่ยน.
 **เบิกตรงหลายล็อต (CR-143 §A):** จำนวนเกินล็อตแรก → แบ่งเป็นแถว `distribute` ต่อล็อตตามลำดับข้างบน ใช้ `ref_id` (`requisition_ticket:direct-…`) เดียวกัน; ล้มกลางทางไม่ rollback (append-only) แต่ต้องรายงานส่วนที่ตัดแล้ว/ยังไม่ตัด; ยอดรวมไม่พอ → ห้ามบันทึก.
@@ -1779,7 +1782,7 @@ provisioning เท่านั้น. `value` คือเลขล่าสุ
 
 **ต้องกรอกวันหมดอายุตอนรับเข้า (CR-143 §D):** `requiresExpiry(item) = storage_type ∈ {CHILLED, FROZEN} || shelf_life_days != null` — แทนการอ้าง `item_master.perishable` (ไม่มี field นี้). มี `shelf_life_days` → UI เติม `lot.expiry` ให้อัตโนมัติ (แก้ได้, มี label ให้ตรวจสอบกับฉลาก); CHILLED/FROZEN ที่ไม่มี `shelf_life_days` → ผู้ใช้กรอกเอง.
 
-**รวมสินค้า (CR-143 §F):** ต่อทุกล็อตของต้นทางที่ qty > 0 เขียน `stock_ledger` `adjust` คู่ (−qty ต้นทาง / +qty ปลายทาง คง `lot` เดิม, `adjust_reason='merge'`, `note` = id อีกฝั่ง) ในการเขียนครั้งเดียว แล้วตั้ง `merged_into` + `deactivated: true` ที่ต้นทาง; หน่วยต้องแปลงได้; สินค้า local ของศูนย์ = SA หรือ shelter_manager/warehouse_staff ของศูนย์นั้น, สินค้าส่วนกลาง = SA เท่านั้น.
+**รวมสินค้า (CR-143 §F):** ต่อทุกล็อตของต้นทางที่ qty > 0 เขียน `stock_ledger` `adjust` คู่ (−qty ต้นทาง / +qty ปลายทาง คง `lot` เดิม, `adjust_reason='merge'`, `note` = id อีกฝั่ง) ในการเขียนครั้งเดียว แล้วตั้ง `merged_into` + `deactivated: true` ที่ต้นทาง; หน่วยต้องแปลงได้; สินค้า local ของศูนย์ = SA หรือ shelter_manager/warehouse_staff ของศูนย์นั้น, สินค้าส่วนกลางห้ามเป็นต้นทางของการรวม (CR-156 FR-F4a); retry ต้องปิดต้นทางได้โดยไม่ย้ายยอดซ้ำ (FR-F6).
 
 **Migration (schema_v 4 → 5, CR-143 §F):** additive `merged_into` (opt) — doc `schema_v 4` อ่านได้ปกติ ไม่ backfill.
 
@@ -2310,7 +2313,7 @@ Partner API EXT-002/003/005/006 (`docs/adr/0002-partner-integration-architecture
 | `occupancy` | int | opt | **Forecast** (CR-112) — stay ∈ {`pre_registered`,`arriving`,`active`,`room_confirmed`,`temporary_leave`}; ไม่นับ Unassigned Registration จน claim |
 | `present` | int | opt | **Present** (CR-112) — stay ∈ {`active`,`room_confirmed`,`temporary_leave`} |
 | `in_zone` | int | opt | **In-zone** (CR-112) — stay = `room_confirmed` เท่านั้น |
-| `occupancy_breakdown` | {`male`,`female`,`child_under_5`,`elderly_over_60`,`pregnant`,`bedridden`,`disabled`: int} | req | **ใหม่ (CR-111, EXT-005)** — default ทุก field `0`; `male`/`female` จาก `evacuee.gender`, `child_under_5`/`elderly_over_60` จาก `evacuee.age`, `pregnant`/`bedridden`/`disabled` จาก `evacuee.special_needs` (free-form, match แบบ case-insensitive) — กลุ่มซ้อนทับกันได้ ผลรวมไม่จำเป็นต้องเท่า `occupancy_total` (ODT EXT-005 note) |
+| `occupancy_breakdown` | {`male`,`female`,`gender_unspecified`,`child_under_5`,`elderly_over_60`,`pregnant`,`bedridden`,`disabled`: int} | req | **ใหม่ (CR-111, EXT-005)** — default ทุก field `0`; `male`/`female` จาก `evacuee.gender`, `gender_unspecified` = จำนวน `evacuee.gender` เป็น `null`/ไม่มี key/`'other'` (**เพิ่ม — decision sync 2026-10-09**), `child_under_5`/`elderly_over_60` จาก `evacuee.age`, `pregnant`/`bedridden`/`disabled` จาก `evacuee.special_needs` (free-form, match แบบ case-insensitive). **Invariant (กลุ่มเพศแบ่งส่วนแบบไม่ซ้อนทับ):** `male + female + gender_unspecified = occupancy_total`; กลุ่มอื่น (อายุ/special_needs) ยังซ้อนทับกันได้ ผลรวมไม่จำเป็นต้องเท่า `occupancy_total` (ODT EXT-005 note). เปิดเผยผ่าน `GET /external/locations/{code}/occupancy` (`breakdown.gender_unspecified`). ไม่มี `schema_v` ของ projection — additive; หลัง deploy ต้อง re-project ด้วย worker bootstrap เพื่อเติมค่าให้ศูนย์ที่มีอยู่ (doc เดิมไม่มี key → อ่านเป็น `0` จนกว่าจะ refresh) |
 | `raw_data` | {str:Any} | req | โครงสร้าง JSON ต้นฉบับจากเอกสาร `shelter` ใน CouchDB `registry` เพื่อใช้สำหรับการฉายข้อมูลแบบละเอียด โดยไม่ต้องกำหนด Field ยิบย่อยใน Schema |
 | `updated_at` | ts | req | เวลาที่ sync ข้อมูลล่าสุด — รวมถึงตอน occupancy fields เปลี่ยนด้วย |
 
@@ -2370,7 +2373,7 @@ partner ODT "นโยบายควบคุมการเข้าถึง�
 | --- | --- | --- | --- |
 | `_id` | str | req | ULID |
 | `client_id` | str | req | จาก JWT claims (`sub`) — ไม่ใช่จาก request body |
-| `module_name` | str | req | `M2`/`M6`/`M7` จาก claims |
+| `module_name` | str\|null | req | `M2`/`M6`/`M7` จาก claims; `null` เมื่อ client ไม่มี module (CR-154 FR-62) |
 | `endpoint` | str | req | `"EXT-007"` · `"EXT-008"`–`"EXT-011"` (CR-154) |
 | `location_code` | str | req | จาก path param / body — ไม่ตรวจว่ามีจริงก่อน log (log ทุก attempt ตาม ODT); EXT-009/010 = ศูนย์ของ booking; EXT-011 = ศูนย์ที่พบ หรือ `""` เมื่อไม่พบ — **ห้ามเก็บ CID/phone** (CR-154) |
 | `purpose` | str | req | จาก query param; `""` เมื่อผู้เรียกไม่ส่งมา (denied_missing_purpose ก็ยัง log); EXT-008–010 ไม่มี purpose → `""` เสมอ |
@@ -2439,7 +2442,7 @@ document, เพิ่ม field แบบ additive)
 | `secret_issued_at` | ts\|null | sys | **ใหม่** — เวลาที่ secret ปัจจุบันถูก (re)generate; plaintext ไม่ได้เก็บ/เข้ารหัสไว้เลย แต่ derive แบบ deterministic จาก `HMAC-SHA256(key=THIRDPARTY_SECRET_SALT, msg=client_id + secret_issued_at)` (server-only env var, ไม่ใช่ DB) ทุกครั้งที่ต้อง "ดูซ้ำ" · ไม่ใช้ในเส้นทาง auth · `null` สำหรับ client ที่สร้างก่อน field นี้ (ดูซ้ำไม่ได้ — ต้อง revoke แล้วสร้างใหม่) |
 | `name` | str\|null | req (สร้างใหม่) | ชื่อที่ admin ตั้งเอง, trim, 1–100 ตัวอักษร, **unique แบบไม่สนตัวพิมพ์เฉพาะกับแถวที่ยังไม่ถูกลบ** (`deleted_at = null`) — ซ้ำ → `409`; client ที่ถูก soft-delete แล้วไม่นับกันชื่อ (ใช้ชื่อเดิมสร้างใหม่ได้) · `null` ได้เฉพาะ doc เดิมก่อน field นี้ (UI แสดง `client_id` แทน) |
 | `description` | str\|null | opt | คำอธิบายเพิ่มเติมของคีย์, trim, ≤500 ตัวอักษร; ว่าง → `null` |
-| `module_name` | enum(`M2`,`M6`,`M7`) | req | **CR-154:** เพิ่ม `M2` (ระบบประเมินความพร้อมและจัดการกลุ่มเปราะบาง) — โมดูลพันธมิตร (UI: "Module" radio) — ฝังใน JWT claim `module_name` + `TokenResponse.module_name` + `third_party_access_logs.module_name` (semantics เดิม) |
+| `module_name` | enum(`M2`,`M6`,`M7`)\|null | opt | **CR-154:** เพิ่ม `M2` (ระบบประเมินความพร้อมและจัดการกลุ่มเปราะบาง); **ไม่บังคับ (FR-62)** — module เป็นแค่ preset ของ scope ในฟอร์ม, ไม่เลือก → `null` (JWT claim / `TokenResponse.module_name` / access log เป็น `null` ด้วย, UI แสดง "ไม่ระบุ") — โมดูลพันธมิตร (UI: "Module" radio) — ฝังใน JWT claim `module_name` + `TokenResponse.module_name` + `third_party_access_logs.module_name` (semantics เดิม) |
 | `allowed_scopes` | [enum(`location-read`,`location-stock-read`,`occupancy-read`,`occupancy-pii-read`,`booking-write`,`residency-read`)] | req | **CR-154:** `booking-write` (EXT-008–010) และ `residency-read` (EXT-011) เป็น sensitive scope เหมือน `occupancy-pii-read` — ไม่ preset, admin ติ๊กเองรายกรณี; `M2` preset = `location-read` · ≥1 ค่า · **preset ตาม module** เมื่อเลือกในฟอร์ม: `M6` → `location-read`, `location-stock-read` · `M7` → `location-read`, `location-stock-read`, `occupancy-read` · `occupancy-pii-read` ไม่อยู่ใน preset ใด ๆ · **แก้ไขได้ซ้ำๆ ภายหลัง** ผ่าน `PATCH` แต่**เฉพาะตอน `is_active = true`** เท่านั้น (revoke แล้วแก้ไม่ได้ — `409`) |
 | `is_active` | bool | req | default `true`; revoke → `false` (ไม่ลบ doc) |
 | `deleted_at` | ts\|null | sys | **ใหม่** — soft-delete timestamp; ตั้งได้เฉพาะตอน `is_active = false` (ต้อง revoke ก่อนถึงลบได้ — `409` ถ้ายัง active) · list ไม่คืนแถวที่ `deleted_at != null` (ซ่อนจาก UI แต่ไม่ hard-delete จาก Mongo — เก็บไว้เพื่อ audit) |

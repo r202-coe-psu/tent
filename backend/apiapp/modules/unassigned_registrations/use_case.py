@@ -64,6 +64,7 @@ from .schemas import (
     UnassignedRegistrationSearchHit,
     UnassignedRegistrationSearchResponse,
     UnassignedRegistrationStatsResponse,
+    UnassignedRegistrationStatusResponse,
     UnassignedResidenceMatchHit,
     UnassignedResidenceMatchRequest,
     UnassignedResidenceMatchResponse,
@@ -698,6 +699,36 @@ class UnassignedRegistrationsUseCase:
                 },
             )
         return _detail_response(doc)
+
+    async def get_status(self, registration_id: str) -> UnassignedRegistrationStatusResponse:
+        """Status-only lookup for the public ticket sync (BFF, service secret) — no PII.
+
+        `claimed` is true only once the document is closed/claimed AND at least one member
+        was actually claimed; a partial claim (`open`) keeps the ticket pending because the
+        remaining members still need the QR.
+        """
+        try:
+            doc = await UnassignedRegistration.get(registration_id)
+        except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
+            raise _mongo_unavailable("get_status") from exc
+        if doc is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": {
+                        "code": "NOT_FOUND",
+                        "message": "Unassigned Registration not found",
+                    }
+                },
+            )
+        members_claimed = sum(1 for m in doc.members if m.status == "claimed")
+        return UnassignedRegistrationStatusResponse(
+            id=doc.id,
+            status=doc.status,
+            members_total=len(doc.members),
+            members_claimed=members_claimed,
+            claimed=members_claimed > 0 and doc.status in ("closed", "claimed"),
+        )
 
     async def get_review(self, registration_id: str) -> UnassignedRegistrationReviewResponse:
         """Open-only pre-claim review (CR-140 addendum) — read-only, no write."""

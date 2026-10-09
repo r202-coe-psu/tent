@@ -4,8 +4,10 @@
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import QrCode from '@lucide/svelte/icons/qr-code';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
-	import { onMount, untrack } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
+	import { replaceState } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { env } from '$env/dynamic/public';
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Label } from '$lib/components/ui/label';
@@ -26,7 +28,11 @@
 	import { UNASSIGNED_SHELTER_CODE } from '../domain/booking';
 	import { UnifiedRegistrationForm, type UnifiedRegistrationInput } from '$lib/features/people';
 	import { fetchRecaptchaEnabled } from '$lib/api/recaptcha-status';
-	import { isJoinSelectionInvalidError } from '../data/public-register.api';
+	import {
+		isJoinSelectionInvalidError,
+		isNetworkError,
+		PublicApiError
+	} from '../data/public-register.api';
 
 	interface Props {
 		shelters: (PublicShelterCardModel & { available: number | null })[];
@@ -74,7 +80,7 @@
 			} else {
 				url.searchParams.delete('shelter');
 			}
-			window.history.replaceState(window.history.state, '', url.pathname + url.search);
+			replaceState(resolve((url.pathname + url.search) as '/'), {});
 			try {
 				if (code) {
 					sessionStorage.setItem('pre_register_shelter', code);
@@ -111,7 +117,8 @@
 			const url = new URL(window.location.href);
 			if (url.searchParams.get('shelter') !== selectedShelterCode) {
 				url.searchParams.set('shelter', selectedShelterCode);
-				window.history.replaceState(window.history.state, '', url.pathname + url.search);
+				// The router is not ready during the first mount — wait a tick before shallow routing.
+				void tick().then(() => replaceState(resolve((url.pathname + url.search) as '/'), {}));
 			}
 		}
 	});
@@ -147,6 +154,17 @@
 
 	let isSubmitting = $state(false);
 
+	/**
+	 * One human-readable sentence per failed submit. Only `PublicApiError` carries copy that was
+	 * mapped from a server code; anything else (a stray `TypeError`, ...) gets the generic fallback
+	 * instead of leaking a raw browser message.
+	 */
+	function submitErrorMessage(err: unknown): string {
+		if (isNetworkError(err)) return t.networkError;
+		if (err instanceof PublicApiError && err.message) return err.message;
+		return t.bookingErrorFallback;
+	}
+
 	async function handleUnifiedSubmit(unifiedInput: UnifiedRegistrationInput) {
 		if (!isUnassigned && !selectedIsBookable) {
 			const err = t.shelterNotBookable;
@@ -179,8 +197,8 @@
 			captchaEnabled = enabled;
 			const token = await captchaToken();
 			if (enabled && !token) {
-				toast.error(t.recaptchaError);
-				throw new Error(t.recaptchaError);
+				// Not toasted here — the catch block below raises the single toast for this error.
+				throw new PublicApiError('CAPTCHA_CLIENT_FAILED', t.recaptchaError);
 			}
 
 			const head = unifiedInput.members[0];
@@ -246,8 +264,7 @@
 			}
 			onbooked(ticket);
 		} catch (err) {
-			const msg = err instanceof Error ? err.message : t.bookingErrorFallback;
-			toast.error(msg);
+			toast.error(submitErrorMessage(err));
 			if (isJoinSelectionInvalidError(err)) {
 				joinResetKey += 1;
 			}
@@ -276,7 +293,11 @@
 		<QrCode class="mt-0.5 h-5 w-5 shrink-0 text-primary" />
 		<div>
 			<p class="font-bold text-primary">{t.guidanceTitle}</p>
-			<p class="mt-0.5 text-xs text-muted-foreground">{t.guidanceDesc}</p>
+			<ul class="mt-1 space-y-1 text-xs text-muted-foreground">
+				{#each t.guidanceBullets ?? [t.guidanceDesc] as bullet (bullet)}
+					<li>{bullet}</li>
+				{/each}
+			</ul>
 		</div>
 	</div>
 
@@ -340,19 +361,18 @@
 					{/each}
 				</Select.Content>
 			</Select.Root>
-			{#if isUnassigned}
-				<div
-					class="flex items-start gap-2.5 rounded-xl border border-primary/30 bg-primary/10 p-3.5 text-xs text-foreground"
-				>
-					<Info class="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-					<div>
-						<p class="font-bold text-primary">{t.unassignedNoticeTitle}</p>
-						<p class="mt-0.5 text-muted-foreground">
-							{t.unassignedNoticeDesc}
-						</p>
-					</div>
+			<div
+				class="flex items-start gap-2.5 rounded-xl border border-primary/30 bg-primary/10 p-3.5 text-xs text-foreground"
+			>
+				<Info class="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+				<div>
+					<p class="font-bold text-primary">{t.shelterNoticeTitle}</p>
+					<p class="mt-0.5 text-muted-foreground">
+						{t.shelterNoticeDesc}
+					</p>
 				</div>
-			{:else if selected && !selectedIsBookable}
+			</div>
+			{#if selected && !selectedIsBookable}
 				<p
 					class="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning-muted/40 p-2.5 text-xs text-warning"
 				>
@@ -423,7 +443,7 @@
 								id="unassigned-disclaimer-ack"
 								checked={disclaimerAcknowledged}
 								onCheckedChange={(v) => (disclaimerAcknowledged = v === true)}
-								class="mt-0.5 size-4 shrink-0"
+								class="mt-0.5 size-5 shrink-0"
 							/>
 							<span class="text-xs leading-relaxed font-semibold select-none sm:text-sm">
 								{t.unassignedDisclaimerAck}
@@ -457,7 +477,7 @@
 								id="disclaimer-ack"
 								checked={disclaimerAcknowledged}
 								onCheckedChange={(v) => (disclaimerAcknowledged = v === true)}
-								class="mt-0.5 size-4 shrink-0"
+								class="mt-0.5 size-5 shrink-0"
 							/>
 							<span class="text-xs leading-relaxed font-semibold select-none sm:text-sm">
 								{t.shelterSafetyAck}
@@ -466,7 +486,7 @@
 					</section>
 				{/if}
 				{#if captchaEnabled}
-					<p class="text-center text-2xs text-muted-foreground">{t.recaptchaBranding}</p>
+					<p class="mt-4 text-center text-2xs text-muted-foreground">{t.recaptchaBranding}</p>
 				{/if}
 			{/snippet}
 		</UnifiedRegistrationForm>

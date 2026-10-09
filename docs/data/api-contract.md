@@ -2,8 +2,8 @@
 title: Smart Shelter — API Contract v1
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-06
-note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration; Partner Data API EXT-001–007 (#214); CR-124 staff Google step-up MFA + Google SSO login (enrolled + mint AuthSession)
+updated: 2026-10-09
+note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration; Partner Data API EXT-001–007 (#214); CR-124 staff Google step-up MFA + Google SSO login (enrolled + mint AuthSession); decision sync 2026-10-08 — เพิ่ม GET /public/v1/unassigned-registrations/{id}/status (service secret, status-only) แทนการเรียก staff detail จาก BFF registrations/status — แก้ ticket คิวกลางหายจากอุปกรณ์ (QA pre-register 2026-10-08); decision sync 2026-10-09 — `breakdown` ของ EXT-005 เพิ่ม `gender_unspecified` (null+other; `male+female+gender_unspecified = occupancy_total`) และ `POST /public/v1/unassigned-registrations` รับ `members[].gender = null`
 ---
 
 # Smart Shelter — API Contract v1
@@ -341,6 +341,7 @@ TTL **ไม่รีเซ็ต** — `expires_at` ยังนับจาก
 | --- | --- | --- |
 | POST | `/public/v1/unassigned-registrations/photos` | public BFF + secret — GridFS face/pet photo (#255); returns `photo_id` (`gfs:{oid}`) |
 | POST | `/public/v1/unassigned-registrations` | public BFF + secret — body mirrors public UnifiedRegistration fields (+ member `photo` / pet `image_url` refs); `schema_v: 3`; optional `join_registration_id` appends into existing family (incl. closed → reopen) |
+| GET | `/public/v1/unassigned-registrations/{id}/status` | public BFF + secret (`verify_external_secret`) — status-only, **no PII**: `{id, status, members_total, members_claimed, claimed}`; `claimed = members_claimed > 0 and status in (closed, claimed)` (partial claim = `open` → still pending); 404 `NOT_FOUND` when deleted. Caller: BFF `/api/public/v1/registrations/status` (ticket sync) — upstream errors map to 502 `STATUS_UNAVAILABLE`, never `notFound` |
 | GET | `/staff/v1/unassigned-registrations/search?q=` | staff session — open members + open pets |
 | GET | `/staff/v1/unassigned-registrations/{id}/review` | `require_registration_staff` — read-only pre-claim review (CR-140 addendum); open members/pets + household address only (no `pets[]` claim-status list); writes nothing |
 | GET | `/staff/v1/unassigned-registrations/photos/{photo_id}` | `require_registration_staff` — streams GridFS bytes (CR-140 addendum); 404 unless `photo_id` is still referenced by an **open** member `photo` or pet `image_url` |
@@ -361,7 +362,7 @@ Machine-to-machine สำหรับ **M6 Resource Logistics / M7 Command Cente
 | `/external/locations` | GET | Bearer · `location-read` | Location Master list (EXT-002) |
 | `/external/locations/{code}` | GET | Bearer · `location-read` | detail + `facilities` (EXT-003) |
 | `/external/locations/{code}/stock` | GET | Bearer · `location-stock-read` | stock; `updated_at` ระดับ location (EXT-004) |
-| `/external/locations/{code}/occupancy` | GET | Bearer · `occupancy-read` | breakdown + `updated_by_role` คงที่ (EXT-005) |
+| `/external/locations/{code}/occupancy` | GET | Bearer · `occupancy-read` | breakdown (`male`, `female`, `gender_unspecified`, `child_under_5`, `elderly_over_60`, `pregnant`, `bedridden`, `disabled`) + `updated_by_role` คงที่ (EXT-005); `gender_unspecified` = `gender` เป็น `null`/`'other'`, invariant `male+female+gender_unspecified = occupancy_total` (decision sync 2026-10-09) |
 | `/external/summary` | GET | Bearer · `location-read` (+ `occupancy-read` สำหรับ top-level `occupancy_total`) | `critical_items` เฉพาะ `low`/`critical` (EXT-006) |
 | `/external/locations/{code}/occupants` | GET | Bearer · `occupancy-pii-read` + `?purpose=` | **denied by default**; ได้ scope แล้วยังคืน `result: []` จนกว่ามี data source (EXT-007 scaffold) |
 | `/external/bookings` | POST | Bearer · `booking-write` | จองศูนย์แทนประชาชน (M2 booking-shelter) — body `{location_code, cid, first_name, last_name, phone}` → **201** `result: {booking_id: "BK-{ulid}", location_code, booking_status: "BOOKED"}` = **รับเข้าคิว** (worker เขียน CouchDB `evacuee`+`household` `pre_registered`, `registered_via: api` ภายใน ~10s); กันซ้ำ **เฉพาะภายในศูนย์เดียวกัน**; ศูนย์ `full` จองได้ (EXT-008) |

@@ -144,13 +144,12 @@ export const PUBLIC_EMERGENCY_I18N = {
 
 export const PUBLIC_ALERTS_PANEL_I18N = {
 	th: {
-		title: 'การแจ้งเตือนภัยฉุกเฉิน',
-		subtitle: 'ศูนย์บัญชาการสถานการณ์ (EOC)',
+		title: 'ประกาศแจ้งเตือน',
 		newAnnouncements: 'ประกาศใหม่',
 		noNewAnnouncements: 'ไม่มีประกาศใหม่',
 		close: 'ปิด',
 		closeAlerts: 'ปิดการแจ้งเตือน',
-		viewAll: 'ดูรายละเอียดประกาศทั้งหมด →',
+		viewAll: 'ดูประกาศทั้งหมด →',
 		emptyTitle: 'ไม่มีประกาศแจ้งเตือนภัยในขณะนี้',
 		emptySubtitle: 'สถานการณ์ปกติ ทุกศูนย์พักพิงเปิดให้บริการตามปกติ',
 		emergencyBadge: 'วิกฤติ (Emergency)',
@@ -160,8 +159,7 @@ export const PUBLIC_ALERTS_PANEL_I18N = {
 		emergencyAlertsBtn: 'แจ้งเตือนภัย'
 	},
 	en: {
-		title: 'Emergency Alerts',
-		subtitle: 'Emergency Operations Center (EOC)',
+		title: 'Announcements',
 		newAnnouncements: 'New Alerts',
 		noNewAnnouncements: 'No New Alerts',
 		close: 'Close',

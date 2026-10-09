@@ -22,6 +22,13 @@ interface EvacueeDoc {
 	current_stay?: { status?: string };
 }
 
+function statusUnavailable() {
+	return json(
+		{ success: false, verified: false, error: 'STATUS_UNAVAILABLE' },
+		{ status: 502, headers: noStore }
+	);
+}
+
 async function handleStatusCheck(code: string, clientIp: string, fetchFn: typeof globalThis.fetch) {
 	const parsed = statusRequestSchema.safeParse({ code });
 	if (!parsed.success) {
@@ -72,27 +79,30 @@ async function handleStatusCheck(code: string, clientIp: string, fetchFn: typeof
 		// Couch search fallback
 	}
 
-	// 2. Search Mongo unassigned registration via FastAPI
+	// 2. Central-queue ticket via FastAPI (service Bearer, status-only, no PII).
+	// Only a real 404 means "deleted" (→ notFound below). Any other failure is an upstream
+	// problem and MUST NOT be reported as notFound — the client would drop the user's QR.
 	try {
-		const upstream = `${fastapiBaseUrl()}/staff/v1/unassigned-registrations/${encodeURIComponent(parsed.data.code)}`;
+		const upstream = `${fastapiBaseUrl()}/public/v1/unassigned-registrations/${encodeURIComponent(parsed.data.code)}/status`;
 		const res = await fetchFn(upstream, {
 			headers: fastapiServiceHeaders({ Accept: 'application/json' })
 		});
 		if (res.ok) {
-			const detail = (await res.json()) as { status?: string };
-			const status = detail.status ?? 'open';
-			const verified = status === 'claimed' || status === 'processed';
+			const body = (await res.json()) as { status?: string; claimed?: boolean };
 			return json(
 				{
 					success: true,
-					verified,
-					status
+					verified: body.claimed === true,
+					status: body.status ?? 'open'
 				},
 				{ status: 200, headers: noStore }
 			);
 		}
+		if (res.status !== 404) {
+			return statusUnavailable();
+		}
 	} catch {
-		// FastAPI fallback
+		return statusUnavailable();
 	}
 
 	return json(

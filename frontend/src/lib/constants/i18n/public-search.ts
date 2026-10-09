@@ -21,6 +21,7 @@ export const PUBLIC_SEARCH_I18N = {
 		genderMale: 'ชาย',
 		genderFemale: 'หญิง',
 		genderOther: 'อื่นๆ',
+		genderUnspecified: 'ไม่ระบุ',
 		statusInShelter: 'ปลอดภัย (อยู่ในศูนย์แล้ว)',
 		statusMoved: 'ย้ายศูนย์พักพิงแล้ว',
 		statusLeft: 'ออกจากศูนย์แล้ว (กลับบ้าน/ส่งต่อ)',
@@ -65,6 +66,7 @@ export const PUBLIC_SEARCH_I18N = {
 		genderMale: 'Male',
 		genderFemale: 'Female',
 		genderOther: 'Other',
+		genderUnspecified: 'Unspecified',
 		statusInShelter: 'Safe (In Shelter)',
 		statusMoved: 'Moved Shelter',
 		statusLeft: 'Left Shelter (Home/Referred)',
@@ -103,6 +105,7 @@ export const PUBLIC_FAMILY_SEARCH_I18N = {
 		genderMale: 'ชาย',
 		genderFemale: 'หญิง',
 		genderOther: 'อื่นๆ',
+		genderUnspecified: 'ไม่ระบุ',
 		noShelter: 'ไม่ระบุศูนย์',
 		noTime: 'ไม่ระบุเวลา',
 		timeSuffix: ' น.'
@@ -121,6 +124,7 @@ export const PUBLIC_FAMILY_SEARCH_I18N = {
 		genderMale: 'Male',
 		genderFemale: 'Female',
 		genderOther: 'Other',
+		genderUnspecified: 'Unspecified',
 		noShelter: 'Shelter not specified',
 		noTime: 'Time not specified',
 		timeSuffix: ''

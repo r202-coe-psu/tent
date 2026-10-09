@@ -98,7 +98,7 @@ else
 		fail "Docker image ${IMAGE_NAME} does not exist; run without --no-build first."
 fi
 
-printf 'Running Staging smoke tests...\n'
+printf 'Running Staging E2E (@release + @smoke, grepInvert @quarantine)...\n'
 docker_env_args=()
 if [[ -f "${ENV_FILE}" ]]; then
 	docker_env_args+=(--env-file "${ENV_FILE}")

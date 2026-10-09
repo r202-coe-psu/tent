@@ -121,7 +121,7 @@ export const jobsI18n: Record<LanguageCode, JobsTranslations> = {
 		heroBadge: 'Volunteer Job Board',
 		tabJobBoard: 'งานอาสาสมัคร (Job Board)',
 		tabFindTicket: 'ค้นหาตั๋วของฉัน (Find My Ticket)',
-		portalLink: 'เข้าสู่ระบบจิตอาสา / ตารางงานของฉัน →',
+		portalLink: 'เข้าสู่ระบบอาสาสมัคร / ตารางงานของฉัน →',
 		// Job Board Search & Filters
 		jobBoardSectionTitle: 'งานอาสาสมัครในศูนย์พักพิง',
 		searchPlaceholder: 'ค้นหาชื่องาน, ทักษะ, หรือชื่อศูนย์...',
