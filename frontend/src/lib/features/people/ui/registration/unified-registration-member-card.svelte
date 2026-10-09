@@ -9,6 +9,7 @@
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import QrCode from '@lucide/svelte/icons/qr-code';
 	import { onDestroy, onMount, untrack } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { toast } from 'svelte-sonner';
 	import * as Accordion from '$lib/components/ui/accordion/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -42,7 +43,15 @@
 		type UnifiedRegistrationChannel
 	} from '../../domain/unified-registration';
 	import type { Evacuee } from '../../domain/people';
+	import {
+		isValidThaiIdCandidate,
+		isValidPhoneCandidate,
+		performFederatedDuplicateLookup,
+		checkPublicDuplicate,
+		type InstantDuplicateMatch
+	} from '../../domain/instant-duplicate';
 	import PullPreRegisteredDialog from './pull-pre-registered-dialog.svelte';
+	import InstantDuplicateDialog from './instant-duplicate-dialog.svelte';
 	import {
 		forgetPhotoPreview,
 		rememberPhotoPreview,
@@ -190,6 +199,222 @@
 	let pullDialogOpen = $state(false);
 	let wasPulled = $state(false);
 
+	let isCheckingCard = $state(false);
+	let isCheckingPhone = $state(false);
+	let duplicateMatches = $state<InstantDuplicateMatch[]>([]);
+	let duplicateModalOpen = $state(false);
+	let duplicateFieldType = $state<'national_id' | 'phone'>('national_id');
+	let duplicateQueryValue = $state('');
+	const dismissedThaiIds = new SvelteSet<string>();
+	const dismissedPhones = new SvelteSet<string>();
+	let lastCheckedThaiId = $state<string | null>(null);
+	let lastCheckedPhone = $state<string | null>(null);
+	let cardDebounceTimer: ReturnType<typeof setTimeout> | undefined;
+	let phoneDebounceTimer: ReturnType<typeof setTimeout> | undefined;
+
+	async function runInstantCardDuplicateCheck(rawThaiId: string) {
+		if (fieldsDisabled) return;
+		const thaiId = rawThaiId.trim().replace(/\D/g, '');
+		if (thaiId.length !== 13) return;
+		if (isCheckingCard) return;
+		if (dismissedThaiIds.has(thaiId) || lastCheckedThaiId === thaiId) return;
+
+		isCheckingCard = true;
+		try {
+			if (channel === 'onsite') {
+				const hits = await performFederatedDuplicateLookup(thaiId);
+				lastCheckedThaiId = thaiId;
+				const currentId = member.person_id?.number?.trim().replace(/\D/g, '');
+				if (currentId === thaiId && hits.length > 0 && !dismissedThaiIds.has(thaiId)) {
+					duplicateMatches = hits;
+					duplicateFieldType = 'national_id';
+					duplicateQueryValue = thaiId;
+					duplicateModalOpen = true;
+				}
+			} else if (channel === 'public') {
+				const res = await checkPublicDuplicate({ national_id: thaiId });
+				lastCheckedThaiId = thaiId;
+				const currentId = member.person_id?.number?.trim().replace(/\D/g, '');
+				if (currentId === thaiId && res.duplicate && !dismissedThaiIds.has(thaiId)) {
+					duplicateMatches = [];
+					duplicateFieldType = 'national_id';
+					duplicateQueryValue = thaiId;
+					duplicateModalOpen = true;
+				}
+			}
+		} catch {
+			// Gracefully handle any error
+		} finally {
+			isCheckingCard = false;
+		}
+	}
+
+	async function runInstantPhoneDuplicateCheck(rawPhone: string) {
+		if (fieldsDisabled) return;
+		const cleanPhone = rawPhone.trim().replace(/\D/g, '');
+		if (cleanPhone.length < 9 || cleanPhone.length > 10) return;
+		if (isCheckingPhone) return;
+		if (dismissedPhones.has(cleanPhone) || lastCheckedPhone === cleanPhone) return;
+
+		isCheckingPhone = true;
+		try {
+			if (channel === 'onsite') {
+				const hits = await performFederatedDuplicateLookup(cleanPhone);
+				lastCheckedPhone = cleanPhone;
+				const currentPhone = (member.phone ?? '').trim().replace(/\D/g, '');
+				if (currentPhone === cleanPhone && hits.length > 0 && !dismissedPhones.has(cleanPhone)) {
+					duplicateMatches = hits;
+					duplicateFieldType = 'phone';
+					duplicateQueryValue = cleanPhone;
+					duplicateModalOpen = true;
+				}
+			} else if (channel === 'public') {
+				const res = await checkPublicDuplicate({ phone: cleanPhone });
+				lastCheckedPhone = cleanPhone;
+				const currentPhone = (member.phone ?? '').trim().replace(/\D/g, '');
+				if (currentPhone === cleanPhone && res.duplicate && !dismissedPhones.has(cleanPhone)) {
+					duplicateMatches = [];
+					duplicateFieldType = 'phone';
+					duplicateQueryValue = cleanPhone;
+					duplicateModalOpen = true;
+				}
+			}
+		} catch {
+			// Gracefully handle any error
+		} finally {
+			isCheckingPhone = false;
+		}
+	}
+
+	$effect(() => {
+		if (
+			(channel !== 'onsite' && channel !== 'public') ||
+			fieldsDisabled ||
+			isAlreadyReported ||
+			member._id
+		)
+			return;
+		const cardType = member.person_id?.cardType;
+		const rawNumber = member.person_id?.number ?? '';
+
+		if (cardDebounceTimer) {
+			clearTimeout(cardDebounceTimer);
+			cardDebounceTimer = undefined;
+		}
+
+		if (!isValidThaiIdCandidate(rawNumber, cardType)) {
+			isCheckingCard = false;
+			return;
+		}
+
+		const cleanId = rawNumber.trim().replace(/\D/g, '');
+		if (dismissedThaiIds.has(cleanId) || lastCheckedThaiId === cleanId) {
+			return;
+		}
+
+		cardDebounceTimer = setTimeout(() => {
+			void runInstantCardDuplicateCheck(cleanId);
+		}, 400);
+
+		return () => {
+			if (cardDebounceTimer) {
+				clearTimeout(cardDebounceTimer);
+				cardDebounceTimer = undefined;
+			}
+		};
+	});
+
+	$effect(() => {
+		if (
+			(channel !== 'onsite' && channel !== 'public') ||
+			fieldsDisabled ||
+			isAlreadyReported ||
+			member._id
+		)
+			return;
+		const rawPhone = member.phone ?? '';
+
+		if (phoneDebounceTimer) {
+			clearTimeout(phoneDebounceTimer);
+			phoneDebounceTimer = undefined;
+		}
+
+		if (!isValidPhoneCandidate(rawPhone)) {
+			isCheckingPhone = false;
+			return;
+		}
+
+		const cleanPhone = rawPhone.trim().replace(/\D/g, '');
+		if (dismissedPhones.has(cleanPhone) || lastCheckedPhone === cleanPhone) {
+			return;
+		}
+
+		phoneDebounceTimer = setTimeout(() => {
+			void runInstantPhoneDuplicateCheck(cleanPhone);
+		}, 400);
+
+		return () => {
+			if (phoneDebounceTimer) {
+				clearTimeout(phoneDebounceTimer);
+				phoneDebounceTimer = undefined;
+			}
+		};
+	});
+
+	function handleCardNumberBlur() {
+		if (
+			(channel !== 'onsite' && channel !== 'public') ||
+			fieldsDisabled ||
+			isAlreadyReported ||
+			member._id
+		)
+			return;
+		const cardType = member.person_id?.cardType;
+		const rawNumber = member.person_id?.number ?? '';
+		if (!isValidThaiIdCandidate(rawNumber, cardType)) return;
+
+		const cleanId = rawNumber.trim().replace(/\D/g, '');
+		if (dismissedThaiIds.has(cleanId) || lastCheckedThaiId === cleanId) return;
+
+		if (cardDebounceTimer) {
+			clearTimeout(cardDebounceTimer);
+			cardDebounceTimer = undefined;
+		}
+		void runInstantCardDuplicateCheck(cleanId);
+	}
+
+	function handlePhoneBlur() {
+		if (
+			(channel !== 'onsite' && channel !== 'public') ||
+			fieldsDisabled ||
+			isAlreadyReported ||
+			member._id
+		)
+			return;
+		const rawPhone = member.phone ?? '';
+		if (!isValidPhoneCandidate(rawPhone)) return;
+
+		const cleanPhone = rawPhone.trim().replace(/\D/g, '');
+		if (dismissedPhones.has(cleanPhone) || lastCheckedPhone === cleanPhone) return;
+
+		if (phoneDebounceTimer) {
+			clearTimeout(phoneDebounceTimer);
+			phoneDebounceTimer = undefined;
+		}
+		void runInstantPhoneDuplicateCheck(cleanPhone);
+	}
+
+	function handleDismissDuplicate() {
+		duplicateModalOpen = false;
+		if (duplicateFieldType === 'national_id') {
+			const currentId = member.person_id?.number?.trim().replace(/\D/g, '');
+			if (currentId) dismissedThaiIds.add(currentId);
+		} else if (duplicateFieldType === 'phone') {
+			const currentPhone = (member.phone ?? '').trim().replace(/\D/g, '');
+			if (currentPhone) dismissedPhones.add(currentPhone);
+		}
+	}
+
 	onMount(() => {
 		if (typeof window !== 'undefined' && window.matchMedia('(min-width: 640px)').matches) {
 			photoSectionOpen = ['photo'];
@@ -245,6 +470,9 @@
 		emergency.phone = '';
 		emergency.relation = '';
 		wasPulled = false;
+		lastCheckedThaiId = null;
+		duplicateMatches = [];
+		duplicateModalOpen = false;
 		onReportingInChange?.(true);
 		toast.info('ล้างข้อมูลและยกเลิกการเชื่อมโยงเรียบร้อยแล้ว');
 	}
@@ -675,6 +903,10 @@
 				: ''}
 			idPrefix="member-{index}"
 			errors={fieldErrors}
+			checkingCardNumber={isCheckingCard}
+			onCardNumberBlur={handleCardNumberBlur}
+			checkingPhone={isCheckingPhone}
+			onPhoneBlur={handlePhoneBlur}
 		/>
 	</div>
 
@@ -746,5 +978,16 @@
 		bind:open={pullDialogOpen}
 		{excludeIds}
 		onselect={handlePopulateFromQueue}
+	/>
+{/if}
+
+{#if channel === 'onsite' || channel === 'public'}
+	<InstantDuplicateDialog
+		bind:open={duplicateModalOpen}
+		matches={duplicateMatches}
+		queryValue={duplicateQueryValue}
+		fieldType={duplicateFieldType}
+		isPublic={channel === 'public'}
+		ondismiss={handleDismissDuplicate}
 	/>
 {/if}

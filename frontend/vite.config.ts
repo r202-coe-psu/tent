@@ -41,7 +41,10 @@ export default defineConfig(({ mode }) => {
 			tailwindcss(),
 			sveltekit(),
 			devtoolsJson(),
-			couchInit(env.COUCHDB_USER ?? 'admin', env.COUCHDB_PASSWORD ?? 'password', couchTarget)
+			// Dev-only side effect (PUTs to CouchDB) — never run it inside unit tests.
+			...(process.env.VITEST
+				? []
+				: [couchInit(env.COUCHDB_USER ?? 'admin', env.COUCHDB_PASSWORD ?? 'password', couchTarget)])
 		],
 		ssr: {
 			noExternal: ['decimal.js', 'jsonwebtoken', 'openapi-fetch']

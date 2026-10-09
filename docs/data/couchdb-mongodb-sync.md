@@ -153,7 +153,7 @@ The worker resumes `_changes` from its checkpoint, so documents that never chang
 - ห้าม treat เป็น Evacuee / Couch SoR ก่อน claim
 - ห้ามนับเข้า Forecast occupancy รายศูนย์จนกว่า claim
 - claim order (locked, option B): Mongo mark/lock → Couch birth → revert Mongo on Couch failure
-- shape + claim algorithm: `schema.md` §9.5 + [CR-113](../changes/CR-113-unassigned-registration-mongo.md)
+- shape + claim algorithm: `schema.md` §9.5 + [CR-113](../changes/00-baseline/CR-113-unassigned-registration-mongo.md)
 
 **หลักการ projection:** allow-list field เท่านั้น — projector มี whitelist ตายตัวต่อ type; field
 ใหม่ใน CouchDB **ไม่หลุด**ไป Mongo เองจนกว่าจะเพิ่มใน whitelist (กัน PII leak โดยอุบัติเหตุ).

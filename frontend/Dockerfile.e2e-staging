@@ -11,6 +11,9 @@ RUN pnpm install --frozen-lockfile --ignore-scripts
 
 COPY playwright.staging.config.ts playwright.prod.config.ts ./
 COPY e2e ./e2e
+# Some e2e helpers import pure modules from src/lib (e.g. utils/qty, db/ulid);
+# Playwright loads every test file before grep filtering, so they must exist in the image.
+COPY src/lib ./src/lib
 
 ENV CI=true
 

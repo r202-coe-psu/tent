@@ -1,22 +1,22 @@
 # E2E testing — strategy, rules and handoff
 
-> Status (2026-10-08): phase 0 **done** (#391–#396). Steps A–B **done** (#401–#405).
-> Step C (pipeline) **in this PR** — staging `@release`+`@smoke` gate, GitHub status `staging/e2e`,
-> janitor, prod `@prod`. Owner still enables `main` branch protection requiring that status.
+> Status (2026-10-09): phase 0 **done** (#391–#396). Steps A–B **done** (#401–#405).
+> Step C (pipeline) **done** — staging `@release`+`@smoke` runs after every staging deploy for
+> manual review (decision 2026-10-09; no GitHub status gate), janitor, prod `@prod`.
 > Agents: read §4, §8 and §9 first.
 
 ## 1. Current state
 
-| Item                           | Today                                                                                                                                                                                               |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Playwright                     | 1.64, Chromium only                                                                                                                                                                                 |
-| `playwright.config.ts`         | local: `vite preview` (:4173) + `e2e/mock-api.js` (:9001); `grepInvert: /@quarantine/`                                                                                                              |
-| `playwright.staging.config.ts` | remote: `grep: /@release\|@smoke/`, `grepInvert: /@quarantine/`, workers=1, `globalTimeout` 30 min                                                                                                  |
-| `playwright.prod.config.ts`    | remote read-only: `grep: /@prod/`, `globalTimeout` 2 min                                                                                                                                            |
-| `playwright.public.config.ts`  | remote read-only public suites (incl. pre-register) — **not wired to any job**                                                                                                                      |
-| Suites                         | J1–J6 carry `@release` where green locally; unsafe SH001 suites are `@quarantine`                                                                                                                   |
-| Automation                     | Staging deploy **waits+propagates** `tent-e2e-staging` (no `catchError→UNSTABLE`); job posts GitHub status `staging/e2e` on `DEPLOY_COMMIT`. Prod deploy runs `@prod` after. Janitor job available. |
-| Pre-push (lefthook)            | lint / check / unit tests only — no e2e                                                                                                                                                             |
+| Item                           | Today                                                                                                                                                                                                                               |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Playwright                     | 1.64, Chromium only                                                                                                                                                                                                                 |
+| `playwright.config.ts`         | local: `vite preview` (:4173) + `e2e/mock-api.js` (:9001); `grepInvert: /@quarantine/`                                                                                                                                              |
+| `playwright.staging.config.ts` | remote: `grep: /@release\|@smoke/`, `grepInvert: /@quarantine/`, workers=1, `globalTimeout` 30 min                                                                                                                                  |
+| `playwright.prod.config.ts`    | remote read-only: `grep: /@prod/`, `globalTimeout` 2 min                                                                                                                                                                            |
+| `playwright.public.config.ts`  | remote read-only public suites (incl. pre-register) — **not wired to any job**                                                                                                                                                      |
+| Suites                         | J1–J6 carry `@release` where green locally; unsafe SH001 suites are `@quarantine`                                                                                                                                                   |
+| Automation                     | Staging deploy runs `tent-e2e-staging` with `wait: true, propagate: false` (manual review: no GitHub commit status; a person reads the Staging E2E Report before promoting). Prod deploy runs `@prod` after. Janitor job available. |
+| Pre-push (lefthook)            | lint / check / unit tests only — no e2e                                                                                                                                                                                             |
 
 Known problems:
 
@@ -41,6 +41,9 @@ Known problems:
   limiters live in the preview server's memory, so re-running the pre-register suite back-to-back
   against a **reused** server can still get `429 Too Many Requests` on W4/W5 — wait a minute or
   restart the server.
+  Since develop's `registrations/check-duplicate` (instant duplicate check on the public form)
+  shares that same `registerLookupIpLimiter` budget, W4 and W5 fill the form again and usually
+  wait out one window, so the pre-register `@critical` group takes ~1 min longer than before.
 - ~~`onsite-stations-flow` Station 1 failed at random on the Person QR.~~ **Fixed** — error was
   `No MultiFormat Readers were able to detect the code`: html5-qrcode's bundled ZXing misses ~8% of the app's Person QR
   images (random ULID payloads; measured 34/400). `decodeQrImage` (`helpers/onsite.ts`) now
@@ -145,8 +148,9 @@ Select a feature and a layer: `playwright test --grep "(?=.*@pre-register)(?=.*@
 
 Reference implementation: `public-pre-register-flow.test.ts` + `helpers/pre-register.ts`.
 
-- **Render contract** — every section, field and option visible/enabled with bound labels; ARIA
-  snapshot (`toMatchAriaSnapshot`) and visual snapshots (`toHaveScreenshot`, dynamic regions masked).
+- **Render contract** — every section, field and option visible/enabled with bound labels, at
+  desktop and mobile widths, with no console/page errors. Structural assertions only — no pixel
+  baselines (`toHaveScreenshot`) or full-text ARIA snapshots, so copy tweaks don't break the suite.
 - **Error contract** — a matrix of every validation message ↔ trigger ↔ field; each row asserts the
   literal message at the field, `aria-invalid` + `aria-describedby`, the summary/jump behavior, and
   that nothing is sent.
@@ -159,15 +163,15 @@ Reference implementation: `public-pre-register-flow.test.ts` + `helpers/pre-regi
 
 ## 6. Roadmap
 
-| Phase / step | Scope                                                                                                                    | Status / depends on                                 |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------- |
-| 0            | Pre-register pilot: #391 (ticket status), #392 (form UX), #394 (suite + tags), #395 (submit toasts), #396 (field errors) | ✅ merged                                           |
-| A            | Release-gate coverage audit (read-only) — §9.A                                                                           | ✅ #401                                             |
-| B1–B3        | Close the gaps per journey + phase-1 conventions for the touched suites — §9.B                                           | ✅ #402–#405                                        |
-| C            | Pipeline: staging `@release`+`@smoke`, GH status `staging/e2e`, janitor, prod `@prod` — §9.C                             | ✅ this PR (owner: `main` protection + credentials) |
-| 3            | PR gate Jenkins job: build + `@regression`                                                                               | after C                                             |
-| 4            | Nightly: ephemeral docker stack + `@critical` (confirm `mgmt` capacity first)                                            | after C                                             |
-| 5            | Template rollout to the remaining features (donations, volunteer, stock, distribution…) + tag every remaining suite      | after C                                             |
+| Phase / step | Scope                                                                                                                    | Status / depends on                        |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------ |
+| 0            | Pre-register pilot: #391 (ticket status), #392 (form UX), #394 (suite + tags), #395 (submit toasts), #396 (field errors) | ✅ merged                                  |
+| A            | Release-gate coverage audit (read-only) — §9.A                                                                           | ✅ #401                                    |
+| B1–B3        | Close the gaps per journey + phase-1 conventions for the touched suites — §9.B                                           | ✅ #402–#405                               |
+| C            | Pipeline: staging `@release`+`@smoke` (manual review, no GH status), janitor, prod `@prod` — §9.C                        | ✅ done (owner: credentials, janitor cron) |
+| 3            | PR gate Jenkins job: build + `@regression`                                                                               | after C                                    |
+| 4            | Nightly: ephemeral docker stack + `@critical` (confirm `mgmt` capacity first)                                            | after C                                    |
+| 5            | Template rollout to the remaining features (donations, volunteer, stock, distribution…) + tag every remaining suite      | after C                                    |
 
 ### Decisions (2026-10-08)
 
@@ -179,10 +183,11 @@ Reference implementation: `public-pre-register-flow.test.ts` + `helpers/pre-regi
    ledger-only teardown (§4.2), a zero-leak assertion at the end of each run, and a scheduled
    staging janitor that removes leftover records carrying the exact `E2E` + run-id marker (never
    by fuzzy search) older than a few hours.
-3. **A failed staging E2E blocks promotion to prod.** Staging and prod are separate pipelines
+3. ~~**A failed staging E2E blocks promotion to prod.** Staging and prod are separate pipelines
    (prod deploys when `staging` is merged into `main`), so the gate is: the commit being merged to
    `main` must have a green staging E2E status (Jenkins reports a GitHub commit status; branch
-   protection on `main` requires it). Remove the `catchError → UNSTABLE` wrapper.
+   protection on `main` requires it). Remove the `catchError → UNSTABLE` wrapper.~~
+   _Superseded by decision 2026-10-09 (manual review)._
 4. **Production smoke: yes, compact.** After the prod deploy (`Jenkinsfile.prod`, branch `main`)
    run a small read-only subset tagged `@prod` (also `@smoke`): landing page, pre-register form
    renders, shelter search — target under 2 minutes, never writes.
@@ -202,7 +207,7 @@ Live suites also need platform init (`pnpm seed:master`, `pnpm db:sync`); see ea
 
 ## 8. Release gate — six journeys that must pass before prod
 
-Nothing is merged `staging → main` unless every journey below is green on staging (`@release`).
+Nothing is merged `staging → main` unless every journey below is green on staging (`@release`) — checked by a person in the Staging E2E Report (decision 2026-10-09), not by an automatic gate.
 "Works" means the §5 template: render contract, error contract, the real critical flow end to end
 with data read back, correct role access, hygiene.
 
@@ -320,15 +325,17 @@ assertion green; `--list` shows every touched test with exactly one layer tag; a
 
 - `playwright.staging.config.ts`: `grep: /@critical|@smoke/`, `grepInvert: /@quarantine/`,
   workers=1, `globalTimeout` 30 min. `@critical` suites only run their live writes when the
-  `tent-staging-e2e-env` credential sets `ALLOW_REMOTE_WRITES=true` (`CAN_WRITE` in
-  `helpers/e2e-env.ts`); suites still gated on the older `IS_REMOTE` check directly
-  (`public-home-flow`, `public-search-flow`, `public-shelters-filter` — no verified zero-leak
-  teardown yet) stay skipped regardless (they show as skipped, not failures).
-- `Jenkinsfile.e2e-staging` / `scripts/run-staging-e2e.sh`: fail the job on Playwright failure;
-  post GitHub commit status context **`staging/e2e`** on `DEPLOY_COMMIT` (pending →
-  success/failure/error). Credential: `tent-github-status-token`.
-- Root `Jenkinsfile`: removed `catchError → UNSTABLE`; **wait+propagate** on `tent-e2e-staging`
-  so a red E2E fails the staging deploy job.
+  `tent-staging-e2e-env` credential sets `ALLOW_REMOTE_WRITES=true` (exactly `true`; `CAN_WRITE`
+  in `helpers/e2e-env.ts`). `public-search-flow` / `public-shelters-filter` now create and tear
+  down their own per-run data on such a run too (zero-leak Z test each); only `public-home-flow`
+  is still gated on `IS_REMOTE` and shows as skipped.
+- `Jenkinsfile.e2e-staging` / `scripts/run-staging-e2e.sh`: fail the job on Playwright failure.
+  ~~Post GitHub commit status context **`staging/e2e`** on `DEPLOY_COMMIT` (pending →
+  success/failure/error). Credential: `tent-github-status-token`.~~ _Superseded by decision
+  2026-10-09: no commit status is posted; the "Staging E2E Report" is reviewed manually._
+- Root `Jenkinsfile`: removed `catchError → UNSTABLE`; ~~**wait+propagate** on `tent-e2e-staging`
+  so a red E2E fails the staging deploy job.~~ _Superseded by decision 2026-10-09: now
+  `wait: true, propagate: false`, so the deploy stays green when the deploy itself succeeded._
 - Staging janitor: `scripts/staging-e2e-janitor.mjs` + `scripts/run-staging-e2e-janitor.sh` +
   `Jenkinsfile.e2e-janitor` — deletes only registry shelters whose **name starts with `E2E`** and
   are older than N hours; default **dry-run**; logs every id. Credential:
@@ -337,10 +344,12 @@ assertion green; `--list` shows every touched test with exactly one layer tag; a
   run `@prod` after deploy (`E2E_BASE_URL=https://shelter.psu.ac.th`, credential
   `tent-prod-e2e-env`). Failure fails the job and prints an ALERT line (wire Slack/email in Jenkins
   if desired).
-- **Owner follow-ups (not in code):** enable `main` branch protection requiring status
+- **Owner follow-ups (not in code):** ~~enable `main` branch protection requiring status
   `staging/e2e`; provision `tent-github-status-token`, `tent-staging-couch-admin-url`,
-  `tent-prod-e2e-env`; fill `tent-staging-e2e-env` per `frontend/e2e/.env.example` (no
-  provisioned search/shelter fixture is needed on a writable run); schedule the janitor job.
+  `tent-prod-e2e-env`;~~ provision `tent-staging-couch-admin-url` and `tent-prod-e2e-env`; fill
+  `tent-staging-e2e-env` per `frontend/e2e/.env.example` (no provisioned search/shelter fixture is
+  needed on a writable run); schedule the janitor job. (`tent-github-status-token` is no longer
+  needed; decision 2026-10-09.)
 - **Staging reachability (verified 2026-10-10):** the Jenkins container reaches CouchDB only via
   the app host's `/couch` proxy (`COUCHDB_ADMIN_URL=https://…@shelter.importstar.dev/couch`;
   `routeBrowserCouchThroughApp` skips same-origin `/couch`) and FastAPI's staff routes only via
@@ -349,6 +358,16 @@ assertion green; `--list` shows every touched test with exactly one layer tag; a
   `/public-api/` location predates CR-063 — if it is removed, give the e2e runner another route
   to FastAPI first. `Dockerfile.e2e-staging`'s image tag must equal the locked
   `@playwright/test` version.
-- **Acceptance:** a staging deploy with a deliberately broken journey shows a red commit status and
-  (once protection is on) blocks the `main` merge; a clean deploy is green; the janitor dry-run
-  lists only `E2E` shelters.
+- **Acceptance:** ~~a staging deploy with a deliberately broken journey shows a red commit status and
+  (once protection is on) blocks the `main` merge; a clean deploy is green;~~ a staging deploy with a
+  deliberately broken journey leaves the deploy job green and a red `tent-e2e-staging` build with a
+  failing Staging E2E Report; a clean run is green; the janitor dry-run lists only `E2E` shelters.
+
+### Decision (2026-10-09) — manual review for now
+
+Staging E2E runs automatically after every staging deploy (`tent-e2e-staging`, triggered with
+`wait: true, propagate: false`), but it is **not** an automatic gate: no GitHub commit status is
+posted and `main` branch protection does not require one. A person reads the "Staging E2E Report"
+in Jenkins and decides whether to promote `staging` → `main`. Credential `tent-github-status-token`
+is no longer needed; `tent-staging-e2e-env` still is. Re-introducing the automatic gate later means
+restoring the status stage/post blocks and setting `propagate: true`.

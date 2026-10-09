@@ -3,6 +3,7 @@
 	import type { ScenarioSummary } from '../data/scenario.repository';
 	import FolderOpen from '@lucide/svelte/icons/folder-open';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
+	import { formatThaiDateTime } from '$lib/utils/date';
 
 	let {
 		scenarios,
@@ -70,9 +71,9 @@
 						{scenario.override_count > 0 ? 'ปรับเกณฑ์ใน Scenario' : 'จำลองทั่วไป'}
 					</span>
 					<p class="mt-1 text-[11px] text-muted-foreground sm:hidden">
-						{scenario.occupancy.toLocaleString('th-TH')} คน · {scenario.days} วัน · {new Date(
+						{scenario.occupancy.toLocaleString('th-TH')} คน · {scenario.days} วัน · {formatThaiDateTime(
 							scenario.created_at
-						).toLocaleString('th-TH')}
+						)}
 					</p>
 				</div>
 				<div class="saved-scope hidden sm:flex">
@@ -81,7 +82,7 @@
 					>
 				</div>
 				<div class="saved-date hidden text-xs text-muted-foreground sm:block">
-					{new Date(scenario.created_at).toLocaleString('th-TH')}
+					{formatThaiDateTime(scenario.created_at)}
 				</div>
 				<div class="flex shrink-0 gap-1">
 					<Button

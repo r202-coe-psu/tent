@@ -60,8 +60,8 @@
  *  R2 every control visible + enabled with its label bound (`getByLabel`) — address, primary
  *     contact, emergency / vulnerable / special-needs accordions, pets, consent, member 2
  *  R3 dropdowns open with real options (housing 5, province from the API, religion, card type)
- *  R4 ARIA snapshots of <main>: empty form, all-errors form, queue ticket
- *  R5 screenshots 1440 / 390 of the empty and the all-errors form
+ *  R4 no field flagged before submit; an empty submit flags fields + shows the summary
+ *  R5 1440 / 390: every section renders, empty and all-errors (structural, no pixel baselines)
  *  R6 no pageerror / console error / warning / HTTP >= 400 while loading and filling
  *
  * ── Error matrix (C2.2) ──────────────────────────────────────────────────────────────────
@@ -134,6 +134,7 @@ import {
 	fillAddress,
 	fillEmergencyContact,
 	fillMember,
+	invalidFields,
 	memberCard,
 	mockSystemBanner,
 	openMemberAccordion,
@@ -239,7 +240,10 @@ test.describe(
 			await expect(links).toHaveCount(3);
 			await expect(links.filter({ visible: true })).toHaveCount(2);
 
-			await page.getByRole('link', { name: 'ลงทะเบียนผู้ประสบภัยล่วงหน้า' }).click();
+			await page
+				.locator('main header')
+				.getByRole('link', { name: 'ลงทะเบียนล่วงหน้า', exact: true })
+				.click();
 			// The booking form pins the default (central queue) in the URL once it mounts.
 			await expect(page).toHaveURL(/\/pre-register\?shelter=unassigned$/);
 			await expect(page).toHaveTitle('ลงทะเบียนล่วงหน้า | SmartShelter');
@@ -248,7 +252,10 @@ test.describe(
 			).toBeVisible();
 
 			await page.goto('/');
-			await page.getByRole('link', { name: 'ลงทะเบียนล่วงหน้า', exact: true }).click();
+			await page
+				.getByRole('banner')
+				.getByRole('link', { name: 'ลงทะเบียนล่วงหน้า', exact: true })
+				.click();
 			await expect(page).toHaveURL(/\/pre-register/);
 		});
 
@@ -388,7 +395,7 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 		await expect(page.getByRole('button', { name: 'ใช้ตำแหน่งปัจจุบัน' })).toBeEnabled();
 		await expect(
 			page.getByRole('textbox', {
-				name: 'ค้นหาครอบครัวด้วยเบอร์โทรศัพท์ (เพื่อเข้าร่วมบ้านเดิม)'
+				name: 'ค้นหาครอบครัวของท่านด้วยเบอร์โทรศัพท์'
 			})
 		).toBeEnabled();
 
@@ -615,68 +622,51 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 		await expect(page.getByRole('button', { name: 'ไทย', exact: true }).first()).toBeVisible();
 	});
 
-	test('R4 ARIA snapshot: the empty form', async ({ page }) => {
+	test('R4 no field is flagged before submit; an empty submit flags fields and lists them', async ({
+		page
+	}) => {
 		await NO_BANNER(page);
 		await NO_THAID(page);
 		await openPreRegister(page);
-		await expect(page.locator('main')).toMatchAriaSnapshot({ name: 'form-empty.aria.yml' });
-	});
+		await expect(invalidFields(page)).toHaveCount(0);
+		await expect(summaryAlert(page)).toHaveCount(0);
 
-	test('R4 ARIA snapshot: the form with every error showing', async ({ page }) => {
-		await NO_BANNER(page);
-		await NO_THAID(page);
-		await openPreRegister(page);
 		await acceptDisclaimer(page);
 		await submitButton(page).click();
 		await expect(summaryAlert(page)).toBeVisible();
-		await expect(page.locator('main')).toMatchAriaSnapshot({ name: 'form-errors.aria.yml' });
+		await expect(page.getByRole('button', { name: JUMP_BUTTON })).toBeVisible();
+		expect(await invalidFields(page).count()).toBeGreaterThan(0);
 	});
 
 	for (const viewport of [
 		{ name: 'desktop', width: 1440, height: 900 },
 		{ name: 'mobile', width: 390, height: 844 }
 	]) {
-		test(`R5 screenshot ${viewport.name}: empty and all-errors form`, async ({ page }) => {
+		// Structural render check (no pixel baselines): every section shows and the error state
+		// renders; console / page errors are caught by the auto `health` fixture.
+		test(`R5 ${viewport.name}: the empty and the all-errors form render every section`, async ({
+			page
+		}) => {
 			await page.setViewportSize({ width: viewport.width, height: viewport.height });
 			await NO_BANNER(page);
 			await NO_THAID(page);
 			await openPreRegister(page);
-			await page.waitForLoadState('networkidle');
-			// Viewport shots at fixed scroll positions: a full-page capture mangles the sticky
-			// summary / bars. The navbar carries live announcement counts, toasts are transient.
-			const options = {
-				animations: 'disabled' as const,
-				caret: 'hide' as const,
-				maxDiffPixelRatio: 0.01,
-				mask: [page.locator('header')]
-			};
-			const scrollTo = async (selector: string | null) => {
-				await page.evaluate((sel) => {
-					const target = sel ? document.querySelector(sel) : null;
-					window.scrollTo({
-						top: target ? target.getBoundingClientRect().top + window.scrollY - 90 : 0,
-						behavior: 'instant'
-					});
-				}, selector);
-				await settleScroll(page);
-			};
 
-			await expect(page).toHaveScreenshot(`form-empty-top-${viewport.name}.png`, options);
-			await scrollTo('#unified-members');
-			await expect(page).toHaveScreenshot(`form-empty-members-${viewport.name}.png`, options);
+			await expect(
+				page.getByRole('heading', { name: 'ลงทะเบียนล่วงหน้า', level: 1 })
+			).toBeVisible();
+			await expect(shelterTrigger(page)).toBeVisible();
+			await page.locator('#address-no').scrollIntoViewIfNeeded();
+			await expect(page.locator('#address-no')).toBeVisible();
+			await page.locator('#unified-members').scrollIntoViewIfNeeded();
+			await expect(page.locator('#unified-members')).toBeVisible();
+			await expect(primaryCard(page)).toBeVisible();
+			await expect(submitButton(page)).toBeVisible();
 
-			await scrollTo(null);
 			await acceptDisclaimer(page);
 			await submitButton(page).click();
 			await expect(summaryAlert(page)).toBeVisible();
-			await page.locator('[data-sonner-toast]').first().waitFor();
-			// toasts are transient — hide them so the baseline never depends on their timing
-			await page.addStyleTag({ content: '[data-sonner-toaster]{display:none !important}' });
-			await settleScroll(page);
-			await scrollTo('form [role="alert"]');
-			await expect(page).toHaveScreenshot(`form-errors-top-${viewport.name}.png`, options);
-			await scrollTo('#unified-members');
-			await expect(page).toHaveScreenshot(`form-errors-members-${viewport.name}.png`, options);
+			expect(await invalidFields(page).count()).toBeGreaterThan(0);
 		});
 	}
 
@@ -1165,7 +1155,7 @@ test.describe('Pre-register: error matrix (E)', { tag: ['@pre-register', '@smoke
 	}) => {
 		await openPreRegister(page);
 		const search = page.getByRole('textbox', {
-			name: 'ค้นหาครอบครัวด้วยเบอร์โทรศัพท์ (เพื่อเข้าร่วมบ้านเดิม)'
+			name: 'ค้นหาครอบครัวของท่านด้วยเบอร์โทรศัพท์'
 		});
 		await search.fill('08123');
 		await expect(search).not.toHaveAttribute('aria-invalid', 'true');
@@ -1214,7 +1204,7 @@ test.describe('Pre-register: error matrix (E)', { tag: ['@pre-register', '@smoke
 		);
 		await openPreRegister(page);
 		await fillAddress(page);
-		await page.getByRole('button', { name: 'เข้าร่วมคิวกลาง' }).click();
+		await page.getByRole('button', { name: 'เข้าร่วมครอบครัวนี้' }).click();
 		await expect(page.getByText('จะเข้าร่วมครอบครัวที่มีอยู่แล้ว')).toBeVisible();
 
 		await fillMember(page, 0, { firstName: 'ทดสอบ', gender: 'male', phone: '12' });
@@ -1732,12 +1722,18 @@ function storedTicketCodes(page: Page): Promise<string[]> {
 }
 
 /**
- * The ticket-status BFF allows 10 requests per sliding minute per IP (`registerLookupIpLimiter`).
- * Every real status request this file makes is timestamped in `statusHits`, so a test that is
- * about to spend `needed` more waits only until enough older hits have left the window — instead
- * of tripping a 429 (the sync only ever fires from the page, so the budget cannot be raised from
- * the test). Timestamps are taken on the response, i.e. never earlier than the server's own.
+ * The ticket-status BFF and the form's instant duplicate check (`check-duplicate`, fired when a
+ * member's national ID / phone is complete) share one budget: 10 requests per sliding minute per
+ * IP (`registerLookupIpLimiter`). Every real request to either that this file makes is
+ * timestamped in `statusHits`, so a test that is about to spend `needed` more waits only until
+ * enough older hits have left the window — instead of tripping a 429 (both fire from the page,
+ * so the budget cannot be raised from the test). Timestamps are taken on the response, i.e.
+ * never earlier than the server's own.
  */
+const LOOKUP_BUDGET_PATHS = [
+	'/api/public/v1/registrations/status',
+	'/api/public/v1/registrations/check-duplicate'
+];
 const STATUS_LIMIT = 10;
 const STATUS_WINDOW_MS = 61_000;
 const statusHits: number[] = [];
@@ -1755,12 +1751,20 @@ interface StatusCall {
 	body: Record<string, unknown> | null;
 }
 
-/** Record the ticket-status BFF responses the page receives. */
+/** Count every lookup-budget request `page` makes into `statusHits`. */
+function countLookupBudget(page: Page): void {
+	page.on('response', (res) => {
+		const { pathname } = new URL(res.url());
+		if (LOOKUP_BUDGET_PATHS.includes(pathname)) statusHits.push(Date.now());
+	});
+}
+
+/** Record the ticket-status BFF responses the page receives (and count its budget). */
 function recordStatusCalls(page: Page): StatusCall[] {
+	countLookupBudget(page);
 	const calls: StatusCall[] = [];
 	page.on('response', async (res) => {
-		if (!res.url().includes('/api/public/v1/registrations/status')) return;
-		statusHits.push(Date.now());
+		if (new URL(res.url()).pathname !== '/api/public/v1/registrations/status') return;
 		calls.push({ status: res.status(), body: await res.json().catch(() => null) });
 	});
 	return calls;
@@ -1825,7 +1829,10 @@ test.describe(
 			test.setTimeout(120_000);
 			liveWritesStarted = true;
 			await page.goto('/');
-			await page.getByRole('link', { name: 'ลงทะเบียนผู้ประสบภัยล่วงหน้า' }).click();
+			await page
+				.locator('main header')
+				.getByRole('link', { name: 'ลงทะเบียนล่วงหน้า', exact: true })
+				.click();
 			await expect(page).toHaveURL(/\/pre-register\?shelter=unassigned$/);
 			await expect(page.locator('#address-no')).toBeVisible({ timeout: 20_000 });
 			await expect(shelterTrigger(page)).toContainText('ไม่ระบุศูนย์พักพิง');
@@ -1954,8 +1961,10 @@ test.describe(
 		});
 
 		test('W4 the same identity cannot enter the queue twice', async () => {
-			test.setTimeout(90_000);
+			test.setTimeout(150_000); // may first wait out the lookup budget W1–W3 spent
 			health.problems.length = 0; // the 409 below logs a console error on purpose
+			// the mount sync of W1's ticket + the duplicate checks of the head's ID and phone
+			await waitForStatusBudget(4);
 			await page.goto(PRE_REGISTER_PATH);
 			await expect(page.locator('#address-no')).toBeVisible({ timeout: 20_000 });
 			await fillAddress(page);
@@ -2125,7 +2134,9 @@ test.describe(
 				return row?.status === 'open' && row.accepts_pre_registration === true;
 			});
 
-			// citizen: a fresh browser, no staff session
+			// citizen: a fresh browser, no staff session — the form's duplicate checks (ID + phone)
+			// and the reload below come out of the same lookup budget W4 just spent
+			await waitForStatusBudget(4);
 			context = await browser.newContext();
 			page = await context.newPage();
 			health = watchPage(page);

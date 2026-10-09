@@ -27,6 +27,7 @@
 	import { now } from '$lib/db/model';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { canCancelHold } from '$lib/auth/roles';
+	import { formatThaiDateTime } from '$lib/utils/date';
 
 	// Sub-components
 	import HouseholdProfileHeaderCard from './household-profile-header-card.svelte';
@@ -300,15 +301,8 @@
 
 	function formatDateTime(ts: string | number | undefined): string {
 		if (!ts) return 'ไม่ระบุ';
-		const d = new Date(ts);
-		if (isNaN(d.getTime())) return String(ts);
-		return d.toLocaleString('th-TH', {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit'
-		});
+		const formatted = formatThaiDateTime(String(ts));
+		return formatted || String(ts);
 	}
 </script>
 
