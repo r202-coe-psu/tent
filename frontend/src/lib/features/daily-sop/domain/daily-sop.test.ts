@@ -323,7 +323,7 @@ describe('Daily SOP role question set', () => {
 	});
 });
 
-describe('CR-153 formulas and snapshot contract', () => {
+describe('Daily SOP formulas and snapshot contract', () => {
 	const cutIds = [
 		'D-SM-01',
 		'D-REG-04',

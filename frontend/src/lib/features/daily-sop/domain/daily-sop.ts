@@ -310,7 +310,6 @@ function ratioCompare(
 	return units.gte(requiredUnits(people, parameter));
 }
 
-/** Units needed to serve `people` at `parameter` people per unit: ceil(people ÷ parameter). */
 export function requiredUnits(people: Decimal.Value, parameter: Decimal.Value): Decimal {
 	return new Decimal(people).div(parameter).ceil();
 }
@@ -386,7 +385,6 @@ export const metricForQuestion = (
 	};
 };
 
-/** Ratio rows only: minimum count implied by the parameter, for display next to the formula result. */
 export const requiredForMetric = (
 	metric: MetricSpec | null,
 	values: MetricValues

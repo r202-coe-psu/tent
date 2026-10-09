@@ -36,7 +36,6 @@ export const useDailySopRoleAssessments = (shelterCode: () => string, asOfDate: 
 		};
 	});
 
-/** Restart the paged history from page one (drops loaded pages and bookmarks). */
 export const useResetDailySopRoleList = () => {
 	const queryClient = useQueryClient();
 	return (shelterCode: string) =>

@@ -1,4 +1,3 @@
-/** Server-safe Daily SOP contract for CouchDB validation design functions. */
 export {
 	DAILY_SOP_ROLE_METRIC_CONTRACTS,
 	DAILY_SOP_ROLES,
