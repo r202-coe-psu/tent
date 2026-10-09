@@ -287,6 +287,8 @@ test.describe(
 			await member2.locator('#member-1-first-name').fill('สมหญิง');
 			await member2.locator('#member-1-last-name').fill('ใจดี');
 			await member2.locator('#member-1-gender-female').click({ force: true });
+			// No phone for this member — the field opens ready to type, so say so (roleplay #10).
+			await member2.locator('#member-1-no-phone').click();
 			await member2.getByRole('button', { name: 'กลุ่มเปราะบาง' }).click();
 			await member2.locator('#vg-1-elderly_dependent').click();
 

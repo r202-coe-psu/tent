@@ -717,7 +717,10 @@
 	</div>
 
 	<Accordion.Root type="multiple" bind:value={openSections} class="w-full">
-		<Accordion.Item value="emergency">
+		<Accordion.Item
+			value="emergency"
+			class="rounded-xl border border-amber-200 bg-amber-50/40 px-3 shadow-2xs"
+		>
 			<Accordion.Trigger class="hover:no-underline">
 				<span class="flex min-w-0 items-start gap-2 text-left">
 					<PhoneCall class="mt-0.5 size-4 shrink-0 text-amber-700" aria-hidden="true" />

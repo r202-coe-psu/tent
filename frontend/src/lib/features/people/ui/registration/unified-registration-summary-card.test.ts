@@ -80,4 +80,25 @@ describe('UnifiedRegistrationSummaryCard', () => {
 			langState.current = previous;
 		}
 	});
+
+	it('lists a publicly joined family by masked names, its head as primary contact', () => {
+		const result = render(UnifiedRegistrationSummaryCard, {
+			props: {
+				household: householdToUnifiedInput(null),
+				members: [{ ...blankUnifiedMember(), _id: 'new-1' }],
+				activeSection: 'members',
+				onNavigate: vi.fn(),
+				existingCount: 3,
+				existingHeadName: 'สมชาย ใ****',
+				existingMaskedNames: ['สมชาย ใ****', 'สมหญิง ใ****', 'ดารา ใ****']
+			}
+		});
+
+		expect(result.body).toContain('4 คน');
+		expect(result.body).toContain('สมหญิง ใ****');
+		expect(result.body).toContain('ดารา ใ****');
+		// The new card is numbered after the three current members, not "1".
+		expect(result.body).toContain('สมาชิกคนที่ 4');
+		expect(result.body).not.toContain('ยังไม่ได้ระบุชื่อ');
+	});
 });

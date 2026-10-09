@@ -261,9 +261,6 @@
 	const summaryPetCount = $derived(
 		(household.pets ?? []).reduce((sum, p) => sum + (Number(p.count) || 1), 0)
 	);
-	const mobileSummaryChipLabel = $derived(
-		`${t.memberLabel} ${members.length} · ${t.sectionPets} ${summaryPetCount}`
-	);
 
 	let petItems = $state<PetCardItem[]>(
 		untrack(() => parseInitialPets(household.pets as PetGroup[]).items)
@@ -389,6 +386,22 @@
 						e.household_id === joinHouseholdId && !GONE_STAY_STATUSES.has(e.current_stay.status)
 				)
 			: []
+	);
+
+	/** Public join: the matched family's head and members, masked (no member docs reach the browser). */
+	const publicJoinChip = $derived(
+		channel === 'public' && hasJoinSelection ? selectedMatchChip : null
+	);
+	const summaryExistingMaskedNames = $derived(publicJoinChip?.members_masked ?? []);
+	const summaryExistingCount = $derived(
+		Math.max(joinedFamilyMembers.length, publicJoinChip?.member_count ?? 0)
+	);
+	const summaryExistingHeadName = $derived(
+		joinedFamilyHeadName || publicJoinChip?.primary_contact_masked || ''
+	);
+
+	const mobileSummaryChipLabel = $derived(
+		`${t.memberLabel} ${summaryExistingCount + members.length} · ${t.sectionPets} ${summaryPetCount}`
 	);
 
 	$effect(() => {
@@ -1065,7 +1078,12 @@
 			});
 		}
 
-		for (const index of membersMissingPhoneChoice(members)) {
+		// Blank phone with "ไม่มีเบอร์" unticked. Joining makes phones optional, and the public
+		// head has its own rule (publicHeadPhoneMessage) — the field shows no tick box there.
+		const phoneChoiceMissing = hasJoinSelection
+			? []
+			: membersMissingPhoneChoice(members).filter((i) => !(channel === 'public' && i === 0));
+		for (const index of phoneChoiceMissing) {
 			if (!reported(['members', index, 'phone'])) {
 				extras.push({ path: ['members', index, 'phone'], message: t.phoneOrNoPhoneRequired });
 				fallbackSection ??= 'members';
@@ -1138,9 +1156,6 @@
 		if (pending || readOnly) return;
 
 		household.pets = syncPetsToHousehold(petItems);
-		for (const m of members) {
-			if (!m.phone?.trim()) m.phone = null;
-		}
 
 		const { parsed, entries, fallbackSection } = collectValidation();
 
@@ -1157,6 +1172,10 @@
 
 		submittedEntries = null;
 		firstErrorMember = null;
+		// Only now: a blank phone that passed validation is saved as "no phone".
+		for (const m of members) {
+			if (!m.phone?.trim()) m.phone = null;
+		}
 		try {
 			await onsubmit(parsed.data as UnifiedRegistrationInput, {
 				reportingInMembers: members.filter((m) => m.reporting_in),
@@ -1221,38 +1240,15 @@
 				submitLabel={effectiveSubmitLabel}
 				submittingLabel={t.submitting}
 				existingMembers={joinedFamilyMembers}
-				existingHeadName={joinedFamilyHeadName}
-				existingCount={channel === 'public' && hasJoinSelection
-					? (selectedMatchChip?.member_count ?? 0)
-					: 0}
+				existingHeadName={summaryExistingHeadName}
+				existingMaskedNames={summaryExistingMaskedNames}
+				existingCount={summaryExistingCount}
 				onNavigate={(id) => scrollToSection(id as FormSectionId)}
 			/>
 		</aside>
 
 		<!-- Right Column: Form Area (Full width on mobile, 8-col on lg+) -->
 		<div class="space-y-6 lg:col-span-8">
-			<!-- Live summary for mobile and tablet; desktop uses the sticky card on the left. -->
-			<div class="lg:hidden">
-				<UnifiedRegistrationSummaryCard
-					{shelterName}
-					{shelterCode}
-					{household}
-					{members}
-					{showVehiclesAssets}
-					{activeSection}
-					{pending}
-					submitDisabled={submitDisabled || readOnly}
-					submitLabel={effectiveSubmitLabel}
-					submittingLabel={t.submitting}
-					existingMembers={joinedFamilyMembers}
-					existingHeadName={joinedFamilyHeadName}
-					existingCount={channel === 'public' && hasJoinSelection
-						? (selectedMatchChip?.member_count ?? 0)
-						: 0}
-					onNavigate={(id) => scrollToSection(id as FormSectionId)}
-				/>
-			</div>
-
 			<!-- Top Progress Stepper (Mobile & Desktop) -->
 			{#if channel !== 'public'}
 				<UnifiedRegistrationStepper
@@ -1882,7 +1878,7 @@
 					class="flex max-h-[85dvh] flex-col gap-0 overflow-hidden p-0 pb-[env(safe-area-inset-bottom)] lg:hidden"
 				>
 					<Sheet.Header class="sr-only">
-						<Sheet.Title>สรุปข้อมูลการลงทะเบียน</Sheet.Title>
+						<Sheet.Title>{t.summaryTitle}</Sheet.Title>
 						<Sheet.Description>{mobileSummaryChipLabel}</Sheet.Description>
 					</Sheet.Header>
 					<div class="min-h-0 flex-1 overflow-y-auto p-3">
@@ -1898,6 +1894,10 @@
 							submitLabel={effectiveSubmitLabel}
 							submittingLabel={t.submitting}
 							showSubmit={false}
+							existingMembers={joinedFamilyMembers}
+							existingHeadName={summaryExistingHeadName}
+							existingMaskedNames={summaryExistingMaskedNames}
+							existingCount={summaryExistingCount}
 							onNavigate={(id) => {
 								mobileSummaryOpen = false;
 								scrollToSection(id as FormSectionId);

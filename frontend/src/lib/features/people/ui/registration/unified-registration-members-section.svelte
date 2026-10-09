@@ -190,35 +190,6 @@
 	icon={Users}
 	bodyClass="none"
 >
-	{#snippet actions()}
-		<div class="flex flex-wrap items-center gap-2">
-			{#if channel === 'public' && thaidEnabled}
-				<Button
-					type="button"
-					variant="outline"
-					disabled={pending}
-					onclick={handleAddMemberViaThaiD}
-					class="h-9 gap-1.5 border-primary/30 text-xs text-primary hover:bg-primary/10 sm:text-sm"
-				>
-					<QrCodeIcon class="size-4" />
-					<span>{t.thaidAddMember}</span>
-				</Button>
-			{/if}
-			<Button
-				type="button"
-				variant="outline"
-				disabled={pending}
-				onclick={addMember}
-				aria-invalid={membersError ? true : undefined}
-				aria-describedby={membersError ? MEMBERS_ERROR_ID : undefined}
-				class="h-9 gap-1.5 text-xs sm:text-sm"
-			>
-				<Plus class="size-4" />
-				{t.addMember}
-			</Button>
-		</div>
-	{/snippet}
-
 	{#if existingMembers.length > 0}
 		<section
 			aria-labelledby="existing-members-title"
@@ -366,6 +337,8 @@
 			variant="outline"
 			disabled={pending}
 			onclick={addMember}
+			aria-invalid={membersError ? true : undefined}
+			aria-describedby={membersError ? MEMBERS_ERROR_ID : undefined}
 			class="h-11 w-full gap-1.5 border-dashed text-sm sm:w-auto"
 		>
 			<Plus class="size-4" />

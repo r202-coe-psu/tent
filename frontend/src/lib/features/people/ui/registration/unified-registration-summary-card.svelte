@@ -33,6 +33,7 @@
 		existingMembers = [],
 		existingHeadName = '',
 		existingCount = 0,
+		existingMaskedNames = [],
 		onNavigate
 	}: {
 		shelterName?: string;
@@ -60,6 +61,8 @@
 		existingHeadName?: string;
 		/** Joining a family whose members can't be listed (public): how many are already in it. */
 		existingCount?: number;
+		/** Public join: the family's current members as masked names (first name + hidden surname). */
+		existingMaskedNames?: readonly string[];
 		onNavigate: (sectionId: string) => void;
 	} = $props();
 
@@ -88,7 +91,9 @@
 		existingHeadName ||
 			(headMember ? `${headMember.first_name || ''} ${headMember.last_name || ''}`.trim() : '')
 	);
-	const existingTotal = $derived(Math.max(existingMembers.length, existingCount));
+	const existingTotal = $derived(
+		Math.max(existingMembers.length, existingMaskedNames.length, existingCount)
+	);
 	const totalCount = $derived(existingTotal + members.length);
 	/** Gender / care counts cover everyone in the family, existing and new. */
 	const everyone = $derived([...existingMembers, ...members]);
@@ -104,12 +109,19 @@
 				isExisting: true
 			};
 		}),
+		// Public join: names arrive masked, no other details.
+		...(existingMembers.length > 0 ? [] : existingMaskedNames).map((name, index) => ({
+			id: `existing-masked-${index}`,
+			name,
+			isPrimary: Boolean(existingHeadName) && name === existingHeadName,
+			isExisting: true
+		})),
 		...members.map((member, index) => ({
 			id: member._id || `member-${index}`,
 			name:
 				`${member.first_name || ''} ${member.last_name || ''}`.trim() ||
-				`${t.summaryMemberNo} ${existingMembers.length + index + 1}`,
-			isPrimary: index === 0 && existingMembers.length === 0 && !existingHeadName,
+				`${t.summaryMemberNo} ${existingTotal + index + 1}`,
+			isPrimary: index === 0 && existingTotal === 0 && !existingHeadName,
 			isExisting: false
 		}))
 	]);

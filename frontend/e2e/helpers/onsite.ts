@@ -66,12 +66,15 @@ export async function fillMemberCard(page: Page, index: number, m: OnsitePerson)
 	await card.locator(`#member-${index}-last-name`).fill(m.lastName);
 	await card.locator(`#member-${index}-gender-${m.gender}`).click({ force: true });
 	if (m.age) await card.locator(`#member-${index}-age`).fill(m.age);
+	const noPhone = card.locator(`#member-${index}-no-phone`);
+	const noPhoneTicked = async () =>
+		(await noPhone.count()) > 0 && (await noPhone.getAttribute('aria-checked')) === 'true';
 	if (m.phone) {
-		const noPhone = card.locator(`#member-${index}-no-phone`);
-		if ((await noPhone.count()) && (await noPhone.getAttribute('aria-checked')) === 'true') {
-			await noPhone.click();
-		}
+		if (await noPhoneTicked()) await noPhone.click();
 		await card.locator(`#member-${index}-phone`).fill(m.phone);
+	} else if ((await noPhone.count()) > 0 && !(await noPhoneTicked())) {
+		// The phone field opens ready to type; a member without one must tick "no phone".
+		await noPhone.click();
 	}
 }
 
