@@ -1,17 +1,5 @@
 export const DAILY_SOP_ROLE_QUESTION_VERSION = 'daily-sop-role-v1' as const;
 
-export const DAILY_SOP_ROLE_QUESTION_COUNTS = {
-	SM: 9,
-	REG: 5,
-	TRG: 7,
-	MED: 9,
-	KS: 6,
-	SC: 10,
-	VC: 8,
-	SO: 10,
-	FAC: 15
-} as const;
-
 export const DAILY_SOP_ROLE_QUESTION_IDS = {
 	SM: [
 		'D-SM-02',
