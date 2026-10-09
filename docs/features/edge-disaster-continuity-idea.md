@@ -2,11 +2,12 @@
 title: Edge disaster continuity — operational idea (parked)
 status: idea / elevated-via-CR-064
 created: 2026-08-12
-updated: 2026-08-13
+updated: 2026-10-05
 note: >
   แนวคิดปฏิบัติการ LAN edge — elevate ผ่าน CR-064 (proposed) + T-54 Package B.
   Topology binding ยังอยู่ที่ docs/data/* จนกว่า CR-064 จะ approved แล้ว reconcile.
   OD-1..OD-5 ล็อกแล้ว (2026-08-12).
+  decision sync 2026-10-05 — OD-6 replicator credential = central admin ชุดเดียว (ดู §6 + Decision log).
 related:
   - docs/changes/CR-064-edge-disaster-continuity.md
   - docs/changes/CR-033-remote-first-architecture-program-index.md
@@ -100,7 +101,7 @@ related:
 
 
 
-## 6. Locked decisions (2026-08-12)
+## 6. Locked decisions (2026-08-12 · OD-6 2026-10-05)
 
 | ID | Decision | Implication |
 | --- | --- | --- |
@@ -109,6 +110,7 @@ related:
 | **OD-3** | Cutover **ยอมให้ login ใหม่** — ไม่บังคับคง `_session` จาก central ข้ามไป edge | Same-domain ยังมีประโยชน์เรื่อง URL/bookmark แต่ cookie continuity ไม่ใช่ hard req; ต้องมี runbook “login ใหม่บน edge / login ใหม่ตอนกลับ central” |
 | **OD-4** | Cutback / continuity มองผ่าน **ops UI**: (1) หน้า central เห็นสถานะ **shelter ทีละศูนย์** (2) ที่ศูนย์ staff เห็นสถานะ **WAN** | เกณฑ์ lag/conflict + ใครประกาศ cutback ผูกกับ UI นี้ (รายละเอียด SLO ลงใน CR/T-54) |
 | **OD-5** | Track = **เปิด CR ใหม่** (ต่อ CR-033 follow-up) + **ขยาย T-54** + **sync ขึ้น Notion** | ✅ [CR-064](../changes/CR-064-edge-disaster-continuity.md) proposed · T-54 Package B · Notion sync |
+| **OD-6** | Replicator credential (A5) = **central CouchDB admin ชุดเดียว** (`CENTRAL_REPL_*`) กับทุก job รวม filtered `_users` pull — เอา `CENTRAL_USERS_REPL_*` / per-shelter `repl_<code>` ออกจาก setup · เหตุผล: `_users/_changes` เปิดเฉพาะ server admin (ทดสอบ CouchDB 3.5: role member / db admin ของ `_users` ยังได้ 401) และเมื่อ edge ต้องถือ admin อยู่แล้ว `repl_<code>` ไม่ลดความเสี่ยงตอนเครื่อง edge หลุด | ยอมรับ: เครื่อง edge หลุด = central admin หลุด · `SHELTER_CODE` ผิดไม่ถูก central ปฏิเสธ · `_design/*` จาก edge push ขึ้น central ได้ · เปลี่ยนรหัส admin กระทบ edge ทุกศูนย์ · ทางเลือก least-privilege ที่เลื่อนไว้: per-shelter users mirror DB ที่ central (`scripts/central-repl-user.sh` เก็บไว้) · กระทบ `scripts/edge-init.sh`, `docker-compose.edge.yml`, `.env.edge.example`, `docs/couchdb-replication/*` |
 
 
 
@@ -126,6 +128,7 @@ related:
 | 0.3 | OD-3 login ใหม่ได้ (ไม่บังคับ cookie continuity) | ✅ locked |
 | 0.4 | OD-4 ops UI สถานะ shelter + WAN ที่ศูนย์ | ✅ locked (รายละเอียดใน CR-064) |
 | 0.5 | OD-5 CR + ขยาย T-54 + Notion | ✅ [CR-064](../changes/CR-064-edge-disaster-continuity.md) proposed · T-54 updated · Notion sync |
+| 0.6 | OD-6 replicator credential = central admin ชุดเดียว | ✅ decision sync 2026-10-05 |
 
 
 
@@ -139,7 +142,7 @@ related:
 | A2  | Router / LAN runbook (DHCP, DNS, firewall, `/couch`) | P0  |
 | A3  | Same-domain DNS cutover + ทดสอบ login ใหม่บน edge        | P0  |
 | A4  | Staging dry-run ก่อนฤดูเสี่ยง                        | P1  |
-| A5  | Replicator credentials / rotation                    | P1  |
+| A5  | Replicator credentials / rotation (credential = OD-6) | P1  |
 | A6  | Monitor `_up`, replicator lag, disk                  | P1  |
 | A7  | Wipe edge ตอนปิดศูนย์                                | P1  |
 
@@ -268,4 +271,5 @@ related:
 | 2026-08-12 | Parked idea: mini PC + warm sync + same-domain LAN cutover + failback; ตัด scale user บน edge |
 | 2026-08-12 | **Locked OD-1..OD-5:** staff stack ยกเว้น FastAPI/Mongo · network-only · re-login OK · ops UI shelter+WAN · track = CR + T-54 + Notion |
 | 2026-08-12 | Elevated: [CR-064](../changes/CR-064-edge-disaster-continuity.md) proposed · T-54 Package B · Notion T-54 sync |
+| 2026-10-05 | **Decision sync OD-6:** edge ใช้ central CouchDB admin ชุดเดียว (`CENTRAL_REPL_*`) กับทุก replication job (A5) — ปิดคำถามเปิดข้อ 2 ใน [couchdb-replication/README.md](../couchdb-replication/README.md) |
 
