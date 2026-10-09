@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-	DAILY_SOP_ROLE_QUESTION_COUNTS,
 	DAILY_SOP_ROLE_QUESTION_IDS,
 	DAILY_SOP_ROLE_QUESTION_VERSION,
 	DAILY_SOP_ROLE_QUESTIONS
@@ -87,14 +86,25 @@ function validAssessment(
 }
 
 describe('Daily SOP role question set', () => {
-	it('matches the CR v1 question bank exactly: 79 unique ordered IDs across nine roles', () => {
+	it('matches the 79 unique ordered IDs across nine roles', () => {
+		const expectedQuestionCounts = {
+			SM: 9,
+			REG: 5,
+			TRG: 7,
+			MED: 9,
+			KS: 6,
+			SC: 10,
+			VC: 8,
+			SO: 10,
+			FAC: 15
+		} as const;
 		expect(DAILY_SOP_ROLE_QUESTION_VERSION).toBe('daily-sop-role-v1');
 		expect(DAILY_SOP_ROLE_QUESTIONS).toHaveLength(79);
 		expect(DAILY_SOP_ROLES).toHaveLength(9);
 		expect(new Set(DAILY_SOP_ROLE_QUESTIONS.map((question) => question.id)).size).toBe(79);
 		for (const role of DAILY_SOP_ROLES) {
 			const questions = questionsForRole(role.code);
-			expect(questions).toHaveLength(DAILY_SOP_ROLE_QUESTION_COUNTS[role.code]);
+			expect(questions).toHaveLength(expectedQuestionCounts[role.code]);
 			expect(questions.map((question) => question.id)).toEqual(
 				DAILY_SOP_ROLE_QUESTION_IDS[role.code]
 			);

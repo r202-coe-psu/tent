@@ -2,7 +2,6 @@ import Decimal from 'decimal.js';
 import { z } from 'zod';
 import { SOP_RATIO_KEYS, type SopRatioKey } from '$lib/features/sop-ratios/domain/sop-ratio';
 import {
-	DAILY_SOP_ROLE_QUESTION_COUNTS,
 	DAILY_SOP_ROLE_QUESTION_IDS,
 	DAILY_SOP_ROLE_QUESTION_VERSION,
 	DAILY_SOP_ROLE_QUESTIONS
@@ -776,7 +775,8 @@ export const dailySopRoleAssessmentSchema = z
 		if (assessment._id !== expectedId)
 			issue(ctx, ['_id'], 'Daily SOP role assessment id is invalid');
 		const expectedQuestions = questionsForRole(assessment.role_code);
-		if (assessment.controls.length !== DAILY_SOP_ROLE_QUESTION_COUNTS[assessment.role_code]) {
+		const questionIds = DAILY_SOP_ROLE_QUESTION_IDS[assessment.role_code];
+		if (assessment.controls.length !== questionIds.length) {
 			issue(
 				ctx,
 				['controls'],
