@@ -9,7 +9,7 @@ note: ดัชนี Change Record ทุกตัว — กติกาอย
 # Change Records
 
 ดัชนีการเปลี่ยนแปลง spec/docs ทั้งหมด. กติกา + รูปแบบ CR ดู [Change Management Policy](../change-management.md).
-ตอนร่างเก็บเป็น `draft-<slug>.md` (`id: draft`) เมื่อเจ้าของโครงการ approve จึงรันเลขเป็น `CR-NNN-<slug>.md` และบันทึกลงตารางด้านล่างนี้. เริ่ม template จาก [`_template.md`](_template.md).
+ตอนร่างเก็บเป็น `draft-<slug>.md` (`id: draft`) เมื่อเจ้าของโครงการ approve จึงรันเลขแล้วย้ายเข้าโฟลเดอร์หมวดเป็น `<category>/CR-NNN-<slug>.md` (เช่น `02-people/CR-NNN-<slug>.md` — ดูรายชื่อหมวดด้านล่าง) และบันทึกเป็นแถวในตารางของหมวดนั้น. เริ่ม template จาก [`_template.md`](_template.md).
 
 > ก่อนเปิด CR ใหม่ทุกครั้ง **ถามเจ้าของโครงการก่อน** ว่าจะ track ช่องทางไหน (CR ไฟล์ / Notion /
 > decision sync note) — Policy §6.

@@ -473,6 +473,16 @@ describe('thaid-oauth helpers (CR-ThaID)', () => {
 			expect(missProfile.gender).toBe('female');
 		});
 
+		it('returns null gender (ไม่ระบุ) when neither claim nor title resolves it', () => {
+			const profile = parseThaidCitizenClaims({
+				sub: 'sub-none',
+				pid: '333',
+				name: 'สมศรี ตัวอย่าง',
+				raw: {}
+			});
+			expect(profile.gender).toBeNull();
+		});
+
 		it('parses numeric gender and sex claims (1=male, 2=female)', () => {
 			expect(parseThaidCitizenClaims({ sub: 's1', raw: { gender: 1 } }).gender).toBe('male');
 			expect(parseThaidCitizenClaims({ sub: 's2', raw: { gender: 2 } }).gender).toBe('female');

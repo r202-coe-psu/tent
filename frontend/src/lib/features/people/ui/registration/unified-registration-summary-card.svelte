@@ -9,10 +9,20 @@
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import Users from '@lucide/svelte/icons/users';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
 	import type {
 		UnifiedMemberWithMeta,
 		UnifiedRegistrationInput
 	} from '../../domain/unified-registration';
+
+	type SummaryPet = {
+		species: string;
+		name?: string;
+		count?: number;
+		customSpecies?: string;
+	};
 
 	let {
 		shelterName = '',
@@ -27,6 +37,9 @@
 		submittingLabel = 'กำลังบันทึก...',
 		/** Desktop aside keeps submit; mobile summary sheet relies on sticky CTA. */
 		showSubmit = true,
+		existingMemberCount = null,
+		existingPets = [],
+		newPets = [],
 		onNavigate
 	}: {
 		shelterName?: string;
@@ -40,8 +53,13 @@
 		submitLabel?: string;
 		submittingLabel?: string;
 		showSubmit?: boolean;
+		existingMemberCount?: number | null;
+		existingPets?: Array<{ species: string; name?: string; count?: number }>;
+		newPets?: Array<{ species: string; name?: string; customSpecies?: string }>;
 		onNavigate: (sectionId: string) => void;
 	} = $props();
+
+	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
 
 	const formattedAddress = $derived.by(() => {
 		const parts = [
@@ -60,9 +78,17 @@
 		headMember ? `${headMember.first_name || ''} ${headMember.last_name || ''}`.trim() : ''
 	);
 
-	const petCount = $derived(
-		(household.pets ?? []).reduce((sum: number, p) => sum + (Number(p.count) || 1), 0)
+	const existingCount = $derived(
+		existingMemberCount != null && existingMemberCount > 0 ? existingMemberCount : 0
 	);
+	const totalMemberCount = $derived(
+		existingCount > 0 ? existingCount + members.length : members.length
+	);
+
+	const existingPetCount = $derived(
+		existingPets.reduce((sum, p) => sum + (Number(p.count) || 1), 0)
+	);
+	const petCount = $derived(existingPetCount + newPets.length);
 
 	const maleCount = $derived(members.filter((m) => m.gender === 'male').length);
 	const femaleCount = $derived(members.filter((m) => m.gender === 'female').length);
@@ -78,6 +104,19 @@
 		)
 	);
 	const isMembersReady = $derived(Boolean(headMember?.first_name?.trim()));
+
+	function speciesLabel(species: string, customSpecies?: string): string {
+		if (species === 'dog') return t.dogTitle;
+		if (species === 'cat') return t.catTitle;
+		if (customSpecies?.trim()) return customSpecies.trim();
+		return t.otherPetTitle;
+	}
+
+	function petDisplayLabel(pet: SummaryPet): string {
+		const name = pet.name?.trim();
+		if (name) return name;
+		return speciesLabel(pet.species, pet.customSpecies);
+	}
 </script>
 
 <div
@@ -88,11 +127,6 @@
 		<div class="flex items-center justify-between gap-2">
 			<span class="text-xs font-bold tracking-wider text-muted-foreground uppercase">
 				สรุปข้อมูลการลงทะเบียน
-			</span>
-			<span
-				class="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-2xs font-semibold text-primary"
-			>
-				Live Summary
 			</span>
 		</div>
 	</div>
@@ -153,9 +187,15 @@
 				<span
 					class="rounded-full bg-primary/10 px-2 py-0.5 text-2xs font-bold text-primary tabular-nums"
 				>
-					{members.length} คน
+					{totalMemberCount} คน
 				</span>
 			</div>
+
+			{#if existingCount > 0}
+				<p class="text-2xs text-muted-foreground">
+					{t.summaryMembersExisting(existingCount)} · {t.summaryMembersAdding(members.length)}
+				</p>
+			{/if}
 
 			<div class="text-xs text-foreground">
 				<span class="text-muted-foreground">ผู้ติดต่อหลัก: </span>
@@ -195,6 +235,30 @@
 					{petCount > 0 ? `${petCount} ตัว` : 'ไม่มี'}
 				</span>
 			</div>
+
+			{#if existingPets.length > 0 || newPets.length > 0}
+				<div class="flex flex-wrap gap-1.5">
+					{#each existingPets as pet, i (`existing-${pet.species}-${pet.name ?? ''}-${i}`)}
+						<span
+							class="inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 px-1.5 py-0.5 text-2xs text-muted-foreground"
+						>
+							{petDisplayLabel(pet)}
+							<span class="font-medium text-foreground/70">· {t.summaryPetExisting}</span>
+							{#if (pet.count ?? 1) > 1}
+								<span class="tabular-nums">×{pet.count}</span>
+							{/if}
+						</span>
+					{/each}
+					{#each newPets as pet, i (`new-${pet.species}-${pet.name ?? ''}-${i}`)}
+						<span
+							class="inline-flex items-center gap-1 rounded-md border border-primary/20 bg-primary/5 px-1.5 py-0.5 text-2xs text-foreground"
+						>
+							{petDisplayLabel(pet)}
+							<span class="font-medium text-primary">· {t.summaryPetNew}</span>
+						</span>
+					{/each}
+				</div>
+			{/if}
 
 			{#if showVehiclesAssets}
 				<div class="flex items-center justify-between gap-2 pt-1">

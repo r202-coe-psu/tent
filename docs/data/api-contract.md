@@ -2,8 +2,8 @@
 title: Smart Shelter — API Contract v1
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-08
-note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration; Partner Data API EXT-001–007 (#214); CR-124 staff Google step-up MFA + Google SSO login (enrolled + mint AuthSession); decision sync 2026-10-08 — เพิ่ม GET /public/v1/unassigned-registrations/{id}/status (service secret, status-only) แทนการเรียก staff detail จาก BFF registrations/status — แก้ ticket คิวกลางหายจากอุปกรณ์ (QA pre-register 2026-10-08)
+updated: 2026-10-09
+note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration; Partner Data API EXT-001–007 (#214); CR-124 staff Google step-up MFA + Google SSO login (enrolled + mint AuthSession); decision sync 2026-10-08 — เพิ่ม GET /public/v1/unassigned-registrations/{id}/status (service secret, status-only) แทนการเรียก staff detail จาก BFF registrations/status — แก้ ticket คิวกลางหายจากอุปกรณ์ (QA pre-register 2026-10-08); decision sync 2026-10-09 — `breakdown` ของ EXT-005 เพิ่ม `gender_unspecified` (null+other; `male+female+gender_unspecified = occupancy_total`) และ `POST /public/v1/unassigned-registrations` รับ `members[].gender = null`
 ---
 
 # Smart Shelter — API Contract v1
@@ -292,7 +292,7 @@ Machine-to-machine สำหรับ **M6 Resource Logistics / M7 Command Cente
 | `/external/locations` | GET | Bearer · `location-read` | Location Master list (EXT-002) |
 | `/external/locations/{code}` | GET | Bearer · `location-read` | detail + `facilities` (EXT-003) |
 | `/external/locations/{code}/stock` | GET | Bearer · `location-stock-read` | stock; `updated_at` ระดับ location (EXT-004) |
-| `/external/locations/{code}/occupancy` | GET | Bearer · `occupancy-read` | breakdown + `updated_by_role` คงที่ (EXT-005) |
+| `/external/locations/{code}/occupancy` | GET | Bearer · `occupancy-read` | breakdown (`male`, `female`, `gender_unspecified`, `child_under_5`, `elderly_over_60`, `pregnant`, `bedridden`, `disabled`) + `updated_by_role` คงที่ (EXT-005); `gender_unspecified` = `gender` เป็น `null`/`'other'`, invariant `male+female+gender_unspecified = occupancy_total` (decision sync 2026-10-09) |
 | `/external/summary` | GET | Bearer · `location-read` (+ `occupancy-read` สำหรับ top-level `occupancy_total`) | `critical_items` เฉพาะ `low`/`critical` (EXT-006) |
 | `/external/locations/{code}/occupants` | GET | Bearer · `occupancy-pii-read` + `?purpose=` | **denied by default**; ได้ scope แล้วยังคืน `result: []` จนกว่ามี data source (EXT-007 scaffold) |
 | `/external/bookings` | POST | Bearer · `booking-write` | จองศูนย์แทนประชาชน (M2 booking-shelter) — body `{location_code, cid, first_name, last_name, phone}` → **201** `result: {booking_id: "BK-{ulid}", location_code, booking_status: "BOOKED"}` = **รับเข้าคิว** (worker เขียน CouchDB `evacuee`+`household` `pre_registered`, `registered_via: api` ภายใน ~10s); กันซ้ำ **เฉพาะภายในศูนย์เดียวกัน**; ศูนย์ `full` จองได้ (EXT-008) |

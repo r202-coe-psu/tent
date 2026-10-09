@@ -161,15 +161,19 @@
 		</div>
 	{:else}
 		<div class="space-y-4">
-			<div class="flex items-center justify-between gap-3">
-				<div>
+			<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+				<div class="min-w-0">
 					<h2 class="text-lg font-bold text-foreground">{copy.title}</h2>
 					<p class="text-xs text-muted-foreground">
 						{copy.subtitle}
 					</p>
 				</div>
 				{#if onNewBooking}
-					<Button size="sm" onclick={onNewBooking} class="gap-1.5 font-semibold">
+					<Button
+						size="sm"
+						onclick={onNewBooking}
+						class="h-9 min-h-9 w-full gap-1.5 font-semibold sm:h-8 sm:min-h-0 sm:w-auto"
+					>
 						<Plus class="size-4" />
 						<span>{copy.newBooking}</span>
 					</Button>
@@ -187,10 +191,10 @@
 								selectedTicket = t;
 							}
 						}}
-						class="flex cursor-pointer items-center justify-between rounded-2xl border border-border bg-card p-4 shadow-xs transition-all hover:border-primary/50 hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+						class="flex cursor-pointer flex-col gap-3 rounded-2xl border border-border bg-card p-4 shadow-xs transition-all hover:border-primary/50 hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none sm:flex-row sm:items-center sm:justify-between"
 					>
-						<div class="space-y-1.5">
-							<div class="flex items-center gap-2">
+						<div class="min-w-0 flex-1 space-y-1.5">
+							<div class="flex flex-wrap items-center gap-2">
 								<span
 									class="rounded-full {t.shelter_code === 'unassigned' ||
 									t.type === 'unassigned_queue'
@@ -207,30 +211,34 @@
 							</div>
 
 							<div
-								class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground"
+								class="flex flex-col gap-1 text-xs text-muted-foreground sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-1"
 							>
-								<span class="flex items-center gap-1">
-									<MapPin class="size-3.5" />
-									{t.shelter_code === 'unassigned' || t.type === 'unassigned_queue'
-										? copy.unassignedShelter
-										: t.shelter_name || t.shelter_code}
+								<span class="flex min-w-0 items-center gap-1">
+									<MapPin class="size-3.5 shrink-0" />
+									<span class="truncate">
+										{t.shelter_code === 'unassigned' || t.type === 'unassigned_queue'
+											? copy.unassignedShelter
+											: t.shelter_name || t.shelter_code}
+									</span>
 								</span>
 								{#if t.booked_at}
 									<span class="flex items-center gap-1">
-										<Calendar class="size-3.5" />
+										<Calendar class="size-3.5 shrink-0" />
 										{formatDate(t.booked_at)}
 									</span>
 								{/if}
 							</div>
 						</div>
 
-						<div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
+						<div
+							class="flex items-center gap-1.5 border-t border-border/60 pt-3 sm:shrink-0 sm:gap-2 sm:border-0 sm:pt-0"
+						>
 							<Button
 								type="button"
 								variant="outline"
 								size="sm"
 								title={copy.checkStatusTitle}
-								class="h-8 gap-1 px-2 text-xs font-semibold"
+								class="h-9 min-h-9 flex-1 gap-1 px-2 text-xs font-semibold sm:h-8 sm:min-h-0 sm:flex-none"
 								disabled={checkingCode === t.code}
 								onclick={(e) => handleCheckStatus(t.code, e)}
 							>
@@ -242,7 +250,7 @@
 								variant="secondary"
 								size="sm"
 								title={copy.markVerifiedTitle}
-								class="h-8 gap-1 px-2.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 dark:text-emerald-300 dark:hover:bg-emerald-950/50"
+								class="h-9 min-h-9 flex-1 gap-1 px-2.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 sm:h-8 sm:min-h-0 sm:flex-none dark:text-emerald-300 dark:hover:bg-emerald-950/50"
 								onclick={(e) => handleConfirmVerified(t.code, e)}
 							>
 								<CheckCircle class="size-3.5 text-emerald-600" />
@@ -253,7 +261,7 @@
 								variant="ghost"
 								size="icon-sm"
 								aria-label={copy.removeAria}
-								class="text-muted-foreground hover:text-destructive"
+								class="h-9 min-h-9 shrink-0 text-muted-foreground hover:text-destructive sm:h-8 sm:min-h-0"
 								onclick={(e) => handleRemove(t.code, e)}
 							>
 								<Trash2 class="size-4" />
