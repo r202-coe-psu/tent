@@ -232,11 +232,11 @@
 			</h1>
 		</div>
 
-		<!-- Primary CTA: pre-register -->
+		<!-- Primary CTA: pre-register — soft white halo reads on navy -->
 		<div class="mx-auto mt-6 flex max-w-4xl justify-center">
 			<a
 				href={resolve('/pre-register')}
-				class="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white px-6 text-base font-bold text-[#0A2647] shadow-xs transition-colors hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#0A2647] focus-visible:outline-none sm:text-lg"
+				class="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white px-6 text-base font-bold text-[#0A2647] shadow-[0_0_0_1px_rgba(255,255,255,0.45),0_0_18px_rgba(255,255,255,0.28),0_0_40px_rgba(255,255,255,0.12)] transition-[background-color,box-shadow] hover:bg-slate-100 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.55),0_0_22px_rgba(255,255,255,0.36),0_0_48px_rgba(255,255,255,0.16)] focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#0A2647] focus-visible:outline-none sm:text-lg"
 			>
 				<ClipboardPen class="h-5 w-5" aria-hidden="true" />
 				{t.registerCta}

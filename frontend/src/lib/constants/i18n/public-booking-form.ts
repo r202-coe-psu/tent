@@ -103,7 +103,7 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		religionUnknown: 'ไม่ระบุ',
 		religionOther: 'อื่นๆ (ระบุ)',
 		familySearchTitle: 'ค้นหาครอบครัวด้วยเบอร์โทรศัพท์',
-		familySearchTitlePublic: 'ค้นหาครอบครัวด้วยเบอร์โทรศัพท์ (เพื่อเข้าร่วมบ้านเดิม)',
+		familySearchTitlePublic: 'ค้นหาครอบครัวของท่านด้วยเบอร์โทรศัพท์',
 		familySearchPlaceholder: 'เบอร์ของสมาชิกคนใดก็ได้ เช่น 0812345678 หรือ +66812345678',
 		familySearchClear: 'ล้างเบอร์โทร',
 		familySearchHint:
