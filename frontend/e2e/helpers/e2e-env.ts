@@ -1,13 +1,18 @@
 /**
  * Target selection + fixture contract for the public-plane E2E suites.
  *
- * One suite, two targets:
+ * One suite, three targets:
  *  - **local** (no `E2E_BASE_URL`): each suite creates its data through the staff UI,
  *    then tears it down in afterAll (needs `COUCHDB_ADMIN_URL`).
- *  - **remote** (`E2E_BASE_URL` set — staging / production, see
- *    `playwright.public.config.ts`): strictly READ-ONLY. Setup, teardown and any
- *    test that writes are skipped; assertions run against a dedicated E2E fixture
+ *  - **remote, read-only** (`E2E_BASE_URL` set, `ALLOW_REMOTE_WRITES` unset — production,
+ *    and staging before fixtures + janitor are ready): setup, teardown and any test
+ *    that writes are skipped; assertions run against a dedicated E2E fixture
  *    provisioned once through the staff UI, whose values come from env.
+ *  - **remote, writable** (`E2E_BASE_URL` **and** `ALLOW_REMOTE_WRITES=true` —
+ *    staging only, set by `Jenkinsfile.e2e-staging`): `@critical` suites create their
+ *    own `E2E …` shelter through the staff UI against the real remote stack and tear
+ *    it down the same way as local, via `CAN_WRITE` (needs `COUCHDB_ADMIN_URL` for
+ *    that remote target too). Never set this for `playwright.prod.config.ts`.
  *
  * Fixture convention (provision it with exactly these shapes — fictitious names only):
  *
@@ -38,8 +43,23 @@ import process from 'node:process';
 import { test } from '@playwright/test';
 import type { MemberForm, ShelterForm } from './staff-ui';
 
-/** Remote (staging/production) targets are read-only. */
+/** True for any remote target (staging or production) — fixture values must come from env. */
 export const IS_REMOTE = Boolean(process.env.E2E_BASE_URL);
+
+/**
+ * Explicit opt-in for a remote target to accept live writes — set only by
+ * `Jenkinsfile.e2e-staging` (never `Jenkinsfile.prod`). On its own this flag means
+ * nothing locally; it only relaxes the read-only gate below when `IS_REMOTE` is true.
+ */
+export const ALLOW_REMOTE_WRITES = Boolean(process.env.ALLOW_REMOTE_WRITES);
+
+/**
+ * True when this run may write: always true locally, true on a remote target only
+ * when it explicitly opted in. `@critical` suites gate on `!CAN_WRITE` instead of
+ * `IS_REMOTE` so the same suite runs its real writes locally AND on a writable
+ * staging run, while staying read-only on production (or staging before it opts in).
+ */
+export const CAN_WRITE = !IS_REMOTE || ALLOW_REMOTE_WRITES;
 
 /**
  * Origin of the app under test — the running config's `baseURL` (local preview
@@ -52,7 +72,8 @@ export function appBaseUrl(): string {
 	return baseURL.replace(/\/$/, '');
 }
 
-export const READ_ONLY_REASON = 'remote target is read-only (E2E_BASE_URL is set)';
+export const READ_ONLY_REASON =
+	'remote target is read-only (E2E_BASE_URL is set and ALLOW_REMOTE_WRITES is not)';
 
 function requireEnv(name: string): string {
 	const value = process.env[name]?.trim();

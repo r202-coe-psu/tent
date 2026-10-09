@@ -99,12 +99,17 @@ else
 fi
 
 printf 'Running Staging E2E (@release + @smoke, grepInvert @quarantine)...\n'
+if [[ "${ALLOW_REMOTE_WRITES:-}" == 'true' ]]; then
+	printf '@critical journeys will write to staging (ALLOW_REMOTE_WRITES=true).\n'
+else
+	printf '@critical journeys stay read-only/skipped (ALLOW_REMOTE_WRITES is not "true").\n'
+fi
 docker_env_args=()
 if [[ -f "${ENV_FILE}" ]]; then
 	docker_env_args+=(--env-file "${ENV_FILE}")
 fi
 
-for env_name in E2E_BASE_URL E2E_ADMIN_USERNAME E2E_ADMIN_PASSWORD E2E_USERNAME E2E_PASSWORD; do
+for env_name in E2E_BASE_URL E2E_ADMIN_USERNAME E2E_ADMIN_PASSWORD E2E_USERNAME E2E_PASSWORD ALLOW_REMOTE_WRITES; do
 	if [[ -n "${!env_name:-}" ]]; then
 		docker_env_args+=(--env "${env_name}")
 	fi

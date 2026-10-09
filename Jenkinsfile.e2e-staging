@@ -87,6 +87,7 @@ pipeline {
                 ]) {
                     withEnv([
                         'CI=true',
+                        'ALLOW_REMOTE_WRITES=true',
                         "E2E_BASE_URL=${params.STAGING_URL.replaceAll('/+$', '')}"
                     ]) {
                         sh 'scripts/run-staging-e2e.sh'

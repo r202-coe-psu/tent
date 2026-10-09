@@ -13,10 +13,11 @@ if (!/^https:\/\/[^\s/]+\/?$/.test(stagingURL)) {
  *   - exclude `@quarantine`
  *   - workers=1; budget 15–30 min
  *
- * Remote `@critical` journeys (J2 W*, J3–J6) still `test.skip` when `IS_REMOTE`
- * (`E2E_BASE_URL` set) until staging fixtures + the janitor are provisioned for
- * live writes. They appear as skipped, not failures. Staging `@smoke`/`@release`
- * that are read-only (incl. J1 + J2 navigation) do run.
+ * Remote `@critical` journeys (J2 W*, J3–J6) only run their live writes when this
+ * process also has `ALLOW_REMOTE_WRITES=true` (set by `Jenkinsfile.e2e-staging`,
+ * never `Jenkinsfile.prod`) — see `CAN_WRITE` in `e2e/helpers/e2e-env.ts`. Without
+ * it they `test.skip` and appear as skipped, not failures. Staging `@smoke`/
+ * `@release` that are read-only (incl. J1 + J2 navigation) always run.
  */
 export default defineConfig({
 	testDir: './e2e',

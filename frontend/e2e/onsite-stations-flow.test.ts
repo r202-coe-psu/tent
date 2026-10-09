@@ -10,7 +10,8 @@
  * Teardown: ledger (`recordCreatedShelter`) + `teardownShelter` + Couch user delete;
  * final zero-leak asserts the shelter DB and registry row are gone.
  *
- * Tags: `@onsite` + `@critical` + `@release`. Skipped when `IS_REMOTE`.
+ * Tags: `@onsite` + `@critical` + `@release`. Runs locally or on a remote target
+ * with `ALLOW_REMOTE_WRITES=true` (staging); read-only remote otherwise.
  *
  * Local: `docker compose up -d`, `pnpm seed:master`, build with `PUBLIC_COUCH_PROXY=/couch`,
  * then preview on a free port (not :5173) and:
@@ -30,7 +31,7 @@ import {
 	shelterManagerRoles,
 	type TestUser
 } from './helpers/couch';
-import { IS_REMOTE, LOCAL_RUN_ID as RUN_ID, READ_ONLY_REASON } from './helpers/e2e-env';
+import { CAN_WRITE, LOCAL_RUN_ID as RUN_ID, READ_ONLY_REASON } from './helpers/e2e-env';
 import { injectSession, routeBrowserCouchThroughApp } from './helpers/login';
 import {
 	checkInByScan,
@@ -100,7 +101,7 @@ async function ensureStaff(code: string): Promise<void> {
 
 test.afterAll(async () => {
 	test.setTimeout(180_000);
-	if (IS_REMOTE || !liveWritesStarted) return;
+	if (!CAN_WRITE || !liveWritesStarted) return;
 	if (shelterCode) {
 		await teardownShelter(shelterCode).catch(() => undefined);
 		shelterCode = undefined;
@@ -115,7 +116,7 @@ test.describe(
 	{ tag: ['@onsite', '@critical', '@release'] },
 	() => {
 		test.beforeEach(() => {
-			test.skip(IS_REMOTE, READ_ONLY_REASON);
+			test.skip(!CAN_WRITE, READ_ONLY_REASON);
 		});
 
 		test('provision E2E shelter with medical screening + zone', async ({ page }) => {

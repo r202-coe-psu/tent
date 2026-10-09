@@ -12,9 +12,11 @@
  * system-admin API and the `E2E …` shelter of W5 through `teardownShelter` — then asserts
  * nothing carrying this run's id is left in the queue or CouchDB (zero-leak, like
  * `stock-inventory.test.ts`).
- * Remote target (`E2E_BASE_URL`, staging/production, `playwright.public.config.ts`): strictly
- * read-only — the W* group is skipped; the navigation / render / validation / responsive
- * groups run (they never POST: the server-error cases mock the write endpoint).
+ * Remote target (`E2E_BASE_URL`, staging/production, `playwright.public.config.ts`): read-only
+ * by default — the W* group is skipped; the navigation / render / validation / responsive
+ * groups run (they never POST: the server-error cases mock the write endpoint). With
+ * `ALLOW_REMOTE_WRITES=true` (staging only), the W* group runs the same live writes +
+ * zero-leak teardown as local, against that remote target's own CouchDB.
  *
  * Local requirements: the full local stack — `docker compose up -d` (CouchDB, MongoDB, sync
  * worker, FastAPI :9000; set `E2E_FASTAPI_URL` if FastAPI is elsewhere) plus platform init
@@ -32,8 +34,9 @@
  *  @smoke         read-only, safe on staging / production (never writes; server-error cases
  *                 mock the write endpoint): N, R, V, E, S, U. Run on pre-push, the PR gate and
  *                 against staging (`pnpm test:e2e:pre-register:smoke`); kept when `IS_REMOTE`
- *  @critical      writes real data against the local stack and asserts zero leak afterwards:
- *                 W1–W6 and Z. Skipped when `IS_REMOTE`; run on the PR gate / nightly
+ *  @critical      writes real data and asserts zero leak afterwards: W1–W6 and Z. Runs
+ *                 locally or on a remote target with `ALLOW_REMOTE_WRITES=true` (staging);
+ *                 read-only remote otherwise; also run on the PR gate / nightly
  *  @release       release-gate journey only: navigation (N) + critical happy paths (W*) +
  *                 zero-leak (Z). Not on the error-matrix / render / server-error rows.
  *  @regression    the fully mocked suite `public-register.test.ts` (no backend needed);
@@ -110,7 +113,7 @@ import {
 	type Page
 } from '@playwright/test';
 import { bootstrapAdminSession, couchReq } from './helpers/couch';
-import { IS_REMOTE, LOCAL_RUN_ID as RUN_ID, READ_ONLY_REASON } from './helpers/e2e-env';
+import { CAN_WRITE, LOCAL_RUN_ID as RUN_ID, READ_ONLY_REASON } from './helpers/e2e-env';
 import { injectSession, routeBrowserCouchThroughApp } from './helpers/login';
 import {
 	DISCLAIMER_LABEL,
@@ -201,7 +204,7 @@ let liveWritesStarted = false;
 /** Everything the run created is gone — queue documents, and the W5 shelter in CouchDB. */
 test.afterAll(async () => {
 	test.setTimeout(180_000);
-	if (IS_REMOTE || !liveWritesStarted) return;
+	if (!CAN_WRITE || !liveWritesStarted) return;
 	await purgeCreatedData(LAST_NAME, createdQueueIds);
 });
 
@@ -1766,7 +1769,7 @@ test.describe(
 		let queueId = '';
 
 		test.beforeAll(async ({ browser }) => {
-			if (IS_REMOTE) return;
+			if (!CAN_WRITE) return;
 			context = await browser.newContext();
 			page = await context.newPage();
 			health = watchPage(page);
@@ -1776,7 +1779,7 @@ test.describe(
 			await context?.close();
 		});
 		test.beforeEach(() => {
-			test.skip(IS_REMOTE, READ_ONLY_REASON);
+			test.skip(!CAN_WRITE, READ_ONLY_REASON);
 		});
 
 		test('W1 a full family registers in the central queue and gets its QR ticket', async () => {
@@ -2017,7 +2020,7 @@ test.describe(
 		let ticketCode = '';
 
 		test.beforeEach(() => {
-			test.skip(IS_REMOTE, READ_ONLY_REASON);
+			test.skip(!CAN_WRITE, READ_ONLY_REASON);
 			// the production-mode app writes bookings as the limited `public_writer` CouchDB user
 			test.skip(
 				!process.env.COUCHDB_PUBLIC_WRITER_URL,
@@ -2152,7 +2155,7 @@ test.describe(
 	{ tag: ['@pre-register', '@critical', '@release'] },
 	() => {
 		test.beforeEach(() => {
-			test.skip(IS_REMOTE, READ_ONLY_REASON);
+			test.skip(!CAN_WRITE, READ_ONLY_REASON);
 		});
 
 		test('Z the central queue and CouchDB hold nothing of this run', async () => {
