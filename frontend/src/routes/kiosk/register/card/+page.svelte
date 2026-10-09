@@ -12,6 +12,7 @@
 		getKioskDisplayContext,
 		KioskIdleTimeout,
 		KIOSK_IDLE_TIMEOUT_MS,
+		KioskBackButton,
 		KioskCheckInWizard,
 		isFaceCheckEnabled,
 		loadKioskHardware,
@@ -26,6 +27,7 @@
 		getKioskDisplayContext(readKioskDisplayQuery(page.url.searchParams))
 	);
 	const contextQuery = $derived(buildKioskContextQuery(displayContext));
+	const homeUrl = $derived(`/kiosk${contextQuery}`);
 	let ready = $state(false);
 	/** scanner_client is reading the chip; pulling the card now loses the photo. */
 	let cardReading = $state(false);
@@ -70,10 +72,14 @@
 	function activity() {
 		idleTimeout.recordActivity();
 	}
-	function returnHome() {
+	/** Every way home ends the visit; the back button's link does the navigating itself. */
+	function leave() {
 		// The chip photo may be set aside on the scanner client for the face check.
 		if (hardware && isFaceCheckEnabled(hardware.faceCheck, 'walk_in')) void cancelKioskFaceCheck();
 		walkInSession.clear();
+	}
+	function returnHome() {
+		leave();
 		navigateToKioskHome(contextQuery);
 	}
 	async function handleFullRead(event: Event) {
@@ -127,6 +133,9 @@
 	data-kiosk-register-ready={ready ? 'true' : 'false'}
 >
 	<KioskCheckInWizard currentStep={3} step2Label="อ่านบัตร" />
+	<div class="flex justify-start">
+		<KioskBackButton href={homeUrl} onclick={leave} disabled={busy} />
+	</div>
 	<!-- Busy: tighter padding so the status, the warning and "ยกเลิก" fit the 1024×600 panel. -->
 	<section
 		class={[

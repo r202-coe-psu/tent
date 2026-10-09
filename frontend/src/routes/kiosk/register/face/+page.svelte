@@ -9,6 +9,7 @@
 		buildKioskContextQuery,
 		cancelKioskFaceCheck,
 		getKioskDisplayContext,
+		KioskBackButton,
 		KioskCheckInWizard,
 		KioskFaceCheck,
 		KioskIdleTimeout,
@@ -24,6 +25,7 @@
 		getKioskDisplayContext(readKioskDisplayQuery(page.url.searchParams))
 	);
 	const contextQuery = $derived(buildKioskContextQuery(displayContext));
+	const homeUrl = $derived(`/kiosk${contextQuery}`);
 	let registering = $state(false);
 	let error = $state('');
 	const faceCheck = walkInSession.faceCheckToRun;
@@ -99,6 +101,10 @@
 <svelte:window onpointerdown={activity} onkeydown={activity} />
 <div class="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 py-3">
 	<KioskCheckInWizard currentStep={3} step2Label="อ่านบัตร" />
+	<!-- Leaving mid-check is a cancel: unmounting ends the check and nothing is registered. -->
+	<div class="flex justify-start">
+		<KioskBackButton href={homeUrl} onclick={() => walkInSession.clear()} disabled={registering} />
+	</div>
 	{#if error}
 		<section
 			class="mx-auto mt-4 w-full max-w-3xl rounded-xl border border-amber-200 bg-amber-50 p-5 text-amber-950"

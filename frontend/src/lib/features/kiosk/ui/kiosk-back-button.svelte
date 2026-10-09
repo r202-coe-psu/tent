@@ -7,9 +7,11 @@
 		/** Accessible name only; the visible text is always "กลับ". */
 		label?: string;
 		onclick?: () => void;
+		/** Leaving now would lose work in flight (a chip read, a save): shown but not usable. */
+		disabled?: boolean;
 	}
 
-	let { href, label = 'กลับหน้าเริ่มต้น', onclick }: Props = $props();
+	let { href, label = 'กลับหน้าเริ่มต้น', onclick, disabled = false }: Props = $props();
 </script>
 
 <!--
@@ -20,10 +22,11 @@
 -->
 <Button
 	{href}
-	{onclick}
+	{disabled}
+	onclick={disabled ? undefined : onclick}
 	variant="ghost"
 	aria-label={label}
-	class="min-h-11 gap-2 px-3 text-base font-semibold text-[#0A2647] focus-visible:ring-2 focus-visible:ring-[#0A2647] kiosk-portrait:min-h-16 kiosk-portrait:px-5 kiosk-portrait:text-xl kiosk-portrait:[&_svg]:size-6!"
+	class="min-h-11 gap-2 px-3 text-base font-semibold text-[#0A2647] focus-visible:ring-2 focus-visible:ring-[#0A2647] aria-disabled:pointer-events-none aria-disabled:opacity-50 kiosk-portrait:min-h-16 kiosk-portrait:px-5 kiosk-portrait:text-xl kiosk-portrait:[&_svg]:size-6!"
 >
 	<ArrowLeft aria-hidden="true" />กลับ
 </Button>
