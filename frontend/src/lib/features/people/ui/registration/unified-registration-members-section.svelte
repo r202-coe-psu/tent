@@ -38,10 +38,10 @@
 		shelterCode = '',
 		membersSectionDesc,
 		isJoiningExistingHousehold = false,
+		existingMemberCount = null,
 		primaryContactPhone = null,
 		thaidEnabled = false,
 		existingMembers = [],
-		existingMemberCount = 0,
 		onDirty
 	}: {
 		members: UnifiedMemberWithMeta[];
@@ -59,19 +59,49 @@
 		shelterCode?: string;
 		membersSectionDesc: string;
 		isJoiningExistingHousehold?: boolean;
+		/** Count of people already in the household being joined (from match chip). */
+		existingMemberCount?: number | null;
 		primaryContactPhone?: string | null;
 		thaidEnabled?: boolean;
 		/** Joining a family: its current members, shown read-only before the new cards. */
 		existingMembers?: readonly Evacuee[];
-		/** Public join: how many are already in the family (their masked names show by the search). */
-		existingMemberCount?: number;
 		onDirty?: () => void;
 	} = $props();
 
 	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
 	const MEMBERS_ERROR_ID = 'members-limit-error';
 	/** Members already in the joined family — new cards are numbered after them. */
-	const existingTotal = $derived(existingMembers.length || existingMemberCount);
+	const existingTotal = $derived(existingMembers.length || (existingMemberCount ?? 0));
+
+	const sectionTitle = $derived(
+		isJoiningExistingHousehold ? t.sectionMembersJoin : t.sectionMembers
+	);
+	const sectionDescription = $derived(
+		isJoiningExistingHousehold ? t.sectionMembersDescJoin : membersSectionDesc
+	);
+	const addMemberLabel = $derived(isJoiningExistingHousehold ? t.addMemberJoin : t.addMember);
+
+	// Onsite lists the joined family's members; public only knows how many (from the match chip).
+	const knownExistingCount = $derived(existingTotal);
+
+	const membersBadges = $derived.by(() => {
+		const unit = t.memberCountUnit ? ` ${t.memberCountUnit}` : '';
+		if (isJoiningExistingHousehold) {
+			const badges: Array<{ text: string; tone?: 'primary' | 'muted' }> = [];
+			if (knownExistingCount > 0) {
+				badges.push({
+					text: `${t.memberBadgeExisting} ${knownExistingCount}${unit}`,
+					tone: 'muted'
+				});
+			}
+			badges.push({
+				text: `${t.memberBadgeAddingMore} ${members.length}${unit}`,
+				tone: 'primary'
+			});
+			return badges;
+		}
+		return [{ text: `${members.length}${unit}`, tone: 'primary' as const }];
+	});
 
 	/** Station 1: large families switch member cards via tabs instead of one long scroll. */
 	const MEMBER_TABS_MIN = 3;
@@ -184,9 +214,9 @@
 
 <UnifiedRegistrationSection
 	id="unified-members"
-	title={t.sectionMembers}
-	description={membersSectionDesc}
-	badge={`${existingTotal + members.length}${t.memberCountUnit ? ` ${t.memberCountUnit}` : ''}`}
+	title={sectionTitle}
+	description={sectionDescription}
+	badges={membersBadges}
 	icon={Users}
 	bodyClass="none"
 >
@@ -196,7 +226,7 @@
 			class="mb-4 space-y-2 rounded-xl border border-border/70 bg-muted/20 p-3"
 		>
 			<h3 id="existing-members-title" class="text-sm font-semibold text-foreground">
-				{t.existingMembersTitle(existingMembers.length)}
+				{t.onsiteExistingMembersTitle(existingMembers.length)}
 			</h3>
 			<ul class="grid gap-2 sm:grid-cols-2">
 				{#each existingMembers as existing, i (existing._id)}
@@ -230,10 +260,23 @@
 				{/each}
 			</ul>
 			<p class="text-2xs text-muted-foreground">
-				{t.existingMembersHint}
+				{t.onsiteExistingMembersHint}
 			</p>
 		</section>
 		<h3 class="mb-2 text-sm font-semibold text-foreground">{t.newMembersTitle}</h3>
+	{/if}
+
+	{#if isJoiningExistingHousehold && existingMembers.length === 0 && knownExistingCount > 0}
+		<div
+			class="mb-3 rounded-xl border border-border/70 bg-muted/30 p-3 sm:p-3.5"
+			role="status"
+			aria-live="polite"
+		>
+			<p class="text-sm font-semibold text-foreground">
+				{t.existingMembersCount(knownExistingCount)}
+			</p>
+			<p class="mt-1 text-xs leading-relaxed text-muted-foreground">{t.existingMembersHint}</p>
+		</div>
 	{/if}
 
 	{#if membersError}
@@ -342,7 +385,7 @@
 			class="h-11 w-full gap-1.5 border-dashed text-sm sm:w-auto"
 		>
 			<Plus class="size-4" />
-			{t.addMember}
+			{addMemberLabel}
 		</Button>
 	</div>
 

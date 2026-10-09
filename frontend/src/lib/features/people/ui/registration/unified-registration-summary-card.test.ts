@@ -88,7 +88,7 @@ describe('UnifiedRegistrationSummaryCard', () => {
 				members: [{ ...blankUnifiedMember(), _id: 'new-1' }],
 				activeSection: 'members',
 				onNavigate: vi.fn(),
-				existingCount: 3,
+				existingMemberCount: 3,
 				existingHeadName: 'สมชาย ใ****',
 				existingMaskedNames: ['สมชาย ใ****', 'สมหญิง ใ****', 'ดารา ใ****']
 			}

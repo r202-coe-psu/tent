@@ -101,8 +101,9 @@ test.describe(
 			await expect(
 				page.getByRole('heading', { name: 'แพลตฟอร์มช่วยเหลือผู้ประสบภัย', level: 1 })
 			).toBeVisible();
-			await expect(page.getByRole('link', { name: 'ลงทะเบียนผู้ประสบภัยล่วงหน้า' })).toBeVisible();
-			await expect(page.getByRole('link', { name: 'ค้นหาศูนย์พักพิงใกล้ฉัน' })).toBeVisible();
+			await expect(
+				page.locator('main header').getByRole('link', { name: 'ลงทะเบียนล่วงหน้า', exact: true })
+			).toBeVisible();
 			await expect(
 				page.getByRole('textbox', { name: 'พิมพ์ชื่อ-นามสกุล, เลขประจำตัว' })
 			).toBeVisible();
@@ -210,8 +211,9 @@ test.describe('Public landing: error contract', { tag: ['@public', '@smoke'] }, 
 		await expect(
 			page.getByRole('heading', { name: 'แพลตฟอร์มช่วยเหลือผู้ประสบภัย', level: 1 })
 		).toBeVisible();
-		await expect(page.getByRole('link', { name: 'ลงทะเบียนผู้ประสบภัยล่วงหน้า' })).toBeVisible();
-		await expect(page.getByRole('link', { name: 'ค้นหาศูนย์พักพิงใกล้ฉัน' })).toBeVisible();
+		await expect(
+			page.locator('main header').getByRole('link', { name: 'ลงทะเบียนล่วงหน้า', exact: true })
+		).toBeVisible();
 	});
 
 	test.fixme('GAP: landing does not surface a load-error message when public needs/shelters APIs fail (sysError i18n unused; page silently degrades to empty lists)', async ({

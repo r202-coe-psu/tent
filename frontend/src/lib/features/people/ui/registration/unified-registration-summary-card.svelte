@@ -9,13 +9,20 @@
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import Users from '@lucide/svelte/icons/users';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
-	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
 	import type {
 		UnifiedMemberWithMeta,
 		UnifiedRegistrationInput
 	} from '../../domain/unified-registration';
+
+	type SummaryPet = {
+		species: string;
+		name?: string;
+		count?: number;
+		customSpecies?: string;
+	};
 
 	let {
 		shelterName = '',
@@ -32,8 +39,10 @@
 		showSubmit = true,
 		existingMembers = [],
 		existingHeadName = '',
-		existingCount = 0,
 		existingMaskedNames = [],
+		existingMemberCount = null,
+		existingPets = [],
+		newPets = [],
 		onNavigate
 	}: {
 		shelterName?: string;
@@ -59,10 +68,12 @@
 		}>;
 		/** Joining a family: the family's head, who stays the primary contact. */
 		existingHeadName?: string;
-		/** Joining a family whose members can't be listed (public): how many are already in it. */
-		existingCount?: number;
 		/** Public join: the family's current members as masked names (first name + hidden surname). */
 		existingMaskedNames?: readonly string[];
+		/** Public join: how many are already in the family (from the match chip). */
+		existingMemberCount?: number | null;
+		existingPets?: Array<{ species: string; name?: string; count?: number }>;
+		newPets?: Array<{ species: string; name?: string; customSpecies?: string }>;
 		onNavigate: (sectionId: string) => void;
 	} = $props();
 
@@ -90,6 +101,9 @@
 	const headFullName = $derived(
 		existingHeadName ||
 			(headMember ? `${headMember.first_name || ''} ${headMember.last_name || ''}`.trim() : '')
+	);
+	const existingCount = $derived(
+		existingMemberCount != null && existingMemberCount > 0 ? existingMemberCount : 0
 	);
 	const existingTotal = $derived(
 		Math.max(existingMembers.length, existingMaskedNames.length, existingCount)
@@ -126,9 +140,10 @@
 		}))
 	]);
 
-	const petCount = $derived(
-		(household.pets ?? []).reduce((sum: number, p) => sum + (Number(p.count) || 1), 0)
+	const existingPetCount = $derived(
+		existingPets.reduce((sum, p) => sum + (Number(p.count) || 1), 0)
 	);
+	const petCount = $derived(existingPetCount + newPets.length);
 
 	const maleCount = $derived(everyone.filter((m) => m.gender === 'male').length);
 	const femaleCount = $derived(everyone.filter((m) => m.gender === 'female').length);
@@ -159,6 +174,19 @@
 		)
 	);
 	const isMembersReady = $derived(Boolean(headMember?.first_name?.trim()));
+
+	function speciesLabel(species: string, customSpecies?: string): string {
+		if (species === 'dog') return t.dogTitle;
+		if (species === 'cat') return t.catTitle;
+		if (customSpecies?.trim()) return customSpecies.trim();
+		return t.otherPetTitle;
+	}
+
+	function petDisplayLabel(pet: SummaryPet): string {
+		const name = pet.name?.trim();
+		if (name) return name;
+		return speciesLabel(pet.species, pet.customSpecies);
+	}
 </script>
 
 <div
@@ -294,6 +322,30 @@
 					{petCount > 0 ? `${petCount} ${t.summaryPetUnit}`.trim() : t.summaryNone}
 				</span>
 			</div>
+
+			{#if existingPets.length > 0 || newPets.length > 0}
+				<div class="flex flex-wrap gap-1.5">
+					{#each existingPets as pet, i (`existing-${pet.species}-${pet.name ?? ''}-${i}`)}
+						<span
+							class="inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 px-1.5 py-0.5 text-2xs text-muted-foreground"
+						>
+							{petDisplayLabel(pet)}
+							<span class="font-medium text-foreground/70">· {t.summaryPetExisting}</span>
+							{#if (pet.count ?? 1) > 1}
+								<span class="tabular-nums">×{pet.count}</span>
+							{/if}
+						</span>
+					{/each}
+					{#each newPets as pet, i (`new-${pet.species}-${pet.name ?? ''}-${i}`)}
+						<span
+							class="inline-flex items-center gap-1 rounded-md border border-primary/20 bg-primary/5 px-1.5 py-0.5 text-2xs text-foreground"
+						>
+							{petDisplayLabel(pet)}
+							<span class="font-medium text-primary">· {t.summaryPetNew}</span>
+						</span>
+					{/each}
+				</div>
+			{/if}
 
 			{#if showVehiclesAssets}
 				<div class="flex items-center justify-between gap-2 pt-1">

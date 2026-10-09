@@ -85,8 +85,9 @@ Select a feature and a layer: `playwright test --grep "(?=.*@pre-register)(?=.*@
 
 Reference implementation: `public-pre-register-flow.test.ts` + `helpers/pre-register.ts`.
 
-- **Render contract** — every section, field and option visible/enabled with bound labels; ARIA
-  snapshot (`toMatchAriaSnapshot`) and visual snapshots (`toHaveScreenshot`, dynamic regions masked).
+- **Render contract** — every section, field and option visible/enabled with bound labels, at
+  desktop and mobile widths, with no console/page errors. Structural assertions only — no pixel
+  baselines (`toHaveScreenshot`) or full-text ARIA snapshots, so copy tweaks don't break the suite.
 - **Error contract** — a matrix of every validation message ↔ trigger ↔ field; each row asserts the
   literal message at the field, `aria-invalid` + `aria-describedby`, the summary/jump behavior, and
   that nothing is sent.

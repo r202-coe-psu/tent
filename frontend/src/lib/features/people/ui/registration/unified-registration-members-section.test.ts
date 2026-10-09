@@ -18,7 +18,9 @@ describe('UnifiedRegistrationMembersSection — public join', () => {
 		});
 
 		expect(body).toContain('สมาชิกคนที่ 3');
-		expect(body).toMatch(/>\s*3 คน\s*</);
+		// Joining: separate badges for the family's current members and the ones being added.
+		expect(body).toContain('มีอยู่แล้ว 2 คน');
+		expect(body).toContain('กำลังเพิ่มอีก 1 คน');
 	});
 
 	it('starts at member 1 when not joining', () => {

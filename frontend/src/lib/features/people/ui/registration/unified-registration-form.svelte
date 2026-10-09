@@ -258,10 +258,6 @@
 	/** Mobile-only: summary sheet opened from chip near sticky CTA. */
 	let mobileSummaryOpen = $state(false);
 
-	const summaryPetCount = $derived(
-		(household.pets ?? []).reduce((sum, p) => sum + (Number(p.count) || 1), 0)
-	);
-
 	let petItems = $state<PetCardItem[]>(
 		untrack(() => parseInitialPets(household.pets as PetGroup[]).items)
 	);
@@ -274,6 +270,10 @@
 	/** Quick search bar for member phone (household search enhancement). */
 	let searchPhoneQuery = $state('');
 	let searchPhoneTouched = $state(false);
+	/** Feedback from a completed phone search driven by the search bar (not head-phone fallback). */
+	let phoneSearchFeedback = $state<'found' | 'not-found' | null>(null);
+	/** Normalized phone last scrolled-to — prevent scroll spam for the same result. */
+	let lastScrolledPhone = $state('');
 	// CR-148 FR-11: inline error once the user leaves an incomplete / malformed number
 	const searchPhoneError = $derived(
 		searchPhoneTouched && searchPhoneQuery.trim() !== '' && !isThaiPhone(searchPhoneQuery)
@@ -285,12 +285,40 @@
 		return /^0\d{8,9}$/.test(normalizeThaiPhone(value));
 	}
 
+	function clearPhoneSearchFeedback() {
+		phoneSearchFeedback = null;
+		lastScrolledPhone = '';
+	}
+
 	/** Currently selected match chip from public residence match (for address prefill & pets). */
 	let selectedMatchChip = $state<ResidenceMatchChip | null>(null);
+	/**
+	 * Durable existing-member count for join UI (header badges / summary).
+	 * Captured at confirm time so it survives chip list refreshes / optional field loss.
+	 */
+	let joinExistingMemberCount = $state<number | null>(null);
+	let publicMatchChips = $state<ResidenceMatchChip[]>([]);
+
+	const hasJoinSelection = $derived(Boolean(joinHouseholdId || joinMatchToken));
+
+	/** Prefer dedicated join state; fall back to chip / match list by token. */
+	const resolvedExistingMemberCount = $derived.by(() => {
+		if (!hasJoinSelection) return null;
+		if (joinExistingMemberCount != null && joinExistingMemberCount > 0) {
+			return joinExistingMemberCount;
+		}
+		const fromChip = selectedMatchChip?.member_count;
+		if (typeof fromChip === 'number' && fromChip > 0) return fromChip;
+		if (joinMatchToken) {
+			const listed = publicMatchChips.find((c) => c.match_token === joinMatchToken);
+			const fromList = listed?.member_count;
+			if (typeof fromList === 'number' && fromList > 0) return fromList;
+		}
+		return null;
+	});
 
 	let residenceSuggestTimer: ReturnType<typeof setTimeout> | null = null;
 	let residenceSuggestions = $state<ResidenceMatchCandidate[]>([]);
-	let publicMatchChips = $state<ResidenceMatchChip[]>([]);
 	let residenceSuggestPending = $state(false);
 	let residenceSuggestCheckedEmpty = $state(false);
 	/** Public lookup request failed — not the same as "no family matched". */
@@ -331,7 +359,6 @@
 		} as unknown as ReturnType<typeof useEvacuees>
 	);
 
-	const hasJoinSelection = $derived(Boolean(joinHouseholdId || joinMatchToken));
 	const phoneSearchQuery = $derived(normalizeThaiPhone(searchPhoneQuery.trim()));
 	const phoneSearchEnabled = $derived(
 		channel === 'onsite' &&
@@ -393,15 +420,23 @@
 		channel === 'public' && hasJoinSelection ? selectedMatchChip : null
 	);
 	const summaryExistingMaskedNames = $derived(publicJoinChip?.members_masked ?? []);
-	const summaryExistingCount = $derived(
-		Math.max(joinedFamilyMembers.length, publicJoinChip?.member_count ?? 0)
-	);
 	const summaryExistingHeadName = $derived(
 		joinedFamilyHeadName || publicJoinChip?.primary_contact_masked || ''
 	);
 
+	/** Everyone already in the joined family: onsite lists them, public knows the count. */
+	const summaryExistingMemberCount = $derived(
+		hasJoinSelection ? Math.max(joinedFamilyMembers.length, resolvedExistingMemberCount ?? 0) : 0
+	);
+	const summaryExistingPetsCount = $derived(
+		hasJoinSelection
+			? (selectedMatchChip?.pets ?? []).reduce((sum, p) => sum + (Number(p.count) || 1), 0)
+			: 0
+	);
+	const summaryTotalMembers = $derived(summaryExistingMemberCount + members.length);
+	const summaryTotalPets = $derived(summaryExistingPetsCount + petItems.length);
 	const mobileSummaryChipLabel = $derived(
-		`${t.memberLabel} ${summaryExistingCount + members.length} · ${t.sectionPets} ${summaryPetCount}`
+		`${t.memberLabel} ${summaryTotalMembers} · ${t.sectionPets} ${summaryTotalPets}`
 	);
 
 	$effect(() => {
@@ -483,7 +518,10 @@
 		// Active join: skip rematch. HMAC match_tokens rotate on every matchResidence call, so
 		// re-running (e.g. typing head phone) would mint new tokens and wipe the selection. Read
 		// joinMatchToken without untrack so clearing ("สร้างใหม่แทน") re-enters and rematches.
-		if (joinMatchToken) return;
+		if (joinMatchToken) {
+			phoneSearchFeedback = null;
+			return;
+		}
 
 		const form: ResidenceFields = {
 			housing_type: household.housing_type,
@@ -497,9 +535,17 @@
 			postal_code: household.postal_code
 		};
 
-		/** Phone from quick search bar, or fallback to head member's phone. */
+		/** Phone from quick search bar only — drives found/not-found feedback + scroll. */
+		const searchBarPhone = normalizeThaiPhone(searchPhoneQuery.trim());
+		const isPhoneSearchFromBar = isThaiPhone(searchBarPhone);
+		/** Phone from quick search bar, or fallback to head member's phone (match request). */
 		const phone = normalizeThaiPhone(searchPhoneQuery.trim() || members[0]?.phone?.trim() || '');
 		const hasSearchPhone = isThaiPhone(phone);
+
+		if (!isPhoneSearchFromBar) {
+			phoneSearchFeedback = null;
+			lastScrolledPhone = '';
+		}
 
 		if (!hasMinimumResidence(form) && !hasSearchPhone) {
 			publicMatchChips = [];
@@ -547,6 +593,22 @@
 				residenceSuggestPending = false;
 				residenceSuggestFailed = result.failed;
 				residenceSuggestCheckedEmpty = !result.failed && result.matches.length === 0;
+
+				if (!isPhoneSearchFromBar || result.failed) return;
+
+				if (result.matches.length > 0) {
+					phoneSearchFeedback = 'found';
+					if (lastScrolledPhone !== searchBarPhone) {
+						lastScrolledPhone = searchBarPhone;
+						void tick().then(() => {
+							document
+								.getElementById('family-match-results')
+								?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+						});
+					}
+				} else {
+					phoneSearchFeedback = 'not-found';
+				}
 			});
 		}, 350);
 
@@ -559,7 +621,11 @@
 	const formSectionNav = $derived.by(() => {
 		const items: { id: FormSectionId; label: string; icon: typeof Home }[] = [
 			{ id: 'address', label: t.sectionAddress, icon: Home },
-			{ id: 'members', label: t.sectionMembers, icon: Users },
+			{
+				id: 'members',
+				label: hasJoinSelection ? t.sectionMembersJoin : t.sectionMembers,
+				icon: Users
+			},
 			{ id: 'pets', label: t.sectionPets, icon: PawPrint }
 		];
 		if (showVehiclesAssets) {
@@ -787,6 +853,7 @@
 		joinMatchToken = null;
 		joinSelectedSummary = null;
 		selectedMatchChip = null;
+		joinExistingMemberCount = null;
 		if (allowHouseholdJoin) householdDecision = null;
 	}
 
@@ -800,6 +867,15 @@
 		toast.warning(t.joinDroppedToast);
 	}
 
+	function captureJoinExistingMemberCount(chip: ResidenceMatchChip): number | null {
+		const fromChip = chip.member_count;
+		if (typeof fromChip === 'number' && fromChip > 0) return fromChip;
+		const listed = publicMatchChips.find((c) => c.match_token === chip.match_token);
+		const fromList = listed?.member_count;
+		if (typeof fromList === 'number' && fromList > 0) return fromList;
+		return null;
+	}
+
 	$effect(() => {
 		if (joinResetKey > 0) {
 			clearJoinSelection();
@@ -810,6 +886,8 @@
 		createNewConfirmed = false;
 		joinHouseholdId = suggestion._id;
 		joinMatchToken = null;
+		selectedMatchChip = null;
+		joinExistingMemberCount = null;
 		joinSelectedSummary = suggestion.label?.trim() || formatResidenceSummary(suggestion);
 
 		// A phone search finds the family before any address is typed — copy theirs in
@@ -872,6 +950,8 @@
 		joinMatchToken = chip.match_token;
 		joinHouseholdId = null;
 		selectedMatchChip = chip;
+		joinExistingMemberCount = captureJoinExistingMemberCount(chip);
+		phoneSearchFeedback = null;
 
 		// Build summary with masked primary contact
 		const addrPart = chip.address
@@ -1242,7 +1322,9 @@
 				existingMembers={joinedFamilyMembers}
 				existingHeadName={summaryExistingHeadName}
 				existingMaskedNames={summaryExistingMaskedNames}
-				existingCount={summaryExistingCount}
+				existingMemberCount={summaryExistingMemberCount}
+				existingPets={selectedMatchChip?.pets ?? []}
+				newPets={petItems}
 				onNavigate={(id) => scrollToSection(id as FormSectionId)}
 			/>
 		</aside>
@@ -1311,6 +1393,7 @@
 									onclick={() => {
 										searchPhoneQuery = '';
 										searchPhoneTouched = false;
+										clearPhoneSearchFeedback();
 									}}
 									title={t.familySearchClear}
 									aria-label={t.familySearchClear}
@@ -1326,6 +1409,13 @@
 						{/if}
 						{#if channel === 'public'}
 							<p class="text-2xs text-muted-foreground">{t.familySearchHint}</p>
+						{/if}
+						{#if phoneSearchFeedback === 'found'}
+							<p class="text-2xs font-medium text-emerald-700 dark:text-emerald-400">
+								{t.familySearchFound}
+							</p>
+						{:else if phoneSearchFeedback === 'not-found'}
+							<p class="text-2xs font-medium text-muted-foreground">{t.familySearchNotFound}</p>
 						{/if}
 					</div>
 				{/if}
@@ -1524,10 +1614,14 @@
 								</ul>
 							</div>
 						{:else if channel === 'public' && publicMatchChips.length > 0}
-							<div class="mt-3 space-y-2 rounded-xl border border-border bg-muted/20 p-3">
+							<div
+								id="family-match-results"
+								class="mt-3 space-y-2 rounded-xl border border-border bg-muted/20 p-3"
+							>
 								<p class="text-xs font-semibold text-foreground">
 									{t.joinPublicMatchTitle}
 								</p>
+								<p class="text-2xs text-muted-foreground">{t.joinFamilyMatchesHint}</p>
 								<ul class="space-y-2">
 									{#each publicMatchChips as chip (chip.match_token)}
 										<li class="rounded-lg border border-border/60 bg-card p-2.5">
@@ -1779,9 +1873,7 @@
 				{membersSectionDesc}
 				isJoiningExistingHousehold={hasJoinSelection}
 				existingMembers={joinedFamilyMembers}
-				existingMemberCount={channel === 'public' && hasJoinSelection
-					? (selectedMatchChip?.member_count ?? 0)
-					: 0}
+				existingMemberCount={summaryExistingMemberCount}
 				primaryContactPhone={members[0]?.phone ?? null}
 				thaidEnabled={channel === 'public' && thaidEnabled}
 				onDirty={markDirty}
@@ -1897,7 +1989,9 @@
 							existingMembers={joinedFamilyMembers}
 							existingHeadName={summaryExistingHeadName}
 							existingMaskedNames={summaryExistingMaskedNames}
-							existingCount={summaryExistingCount}
+							existingMemberCount={summaryExistingMemberCount}
+							existingPets={selectedMatchChip?.pets ?? []}
+							newPets={petItems}
 							onNavigate={(id) => {
 								mobileSummaryOpen = false;
 								scrollToSection(id as FormSectionId);
