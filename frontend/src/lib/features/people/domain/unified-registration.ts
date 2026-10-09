@@ -209,12 +209,15 @@ export function blankUnifiedMember(): UnifiedMemberInput {
 	return {
 		first_name: '',
 		last_name: '',
-		// Empty until the user picks male/female — schema rejects unset gender.
-		gender: '' as UnifiedMemberInput['gender'],
+		// Default: ไม่ระบุเพศ (persisted as null).
+		gender: null,
 		phone: null,
 		nickname: '',
 		country: 'THAILAND',
 		religion: 'unknown',
+		// Keep defined — Svelte 5 rejects bind:x={undefined} when $bindable has a fallback.
+		religion_other: null,
+		disability_other_detail: null,
 		person_id: { cardType: 'national_id', number: '' },
 		vulnerable_groups: [],
 		special_needs: [],
@@ -414,7 +417,7 @@ export function evacueeToUnifiedMember(
 		_rev: evacuee._rev,
 		first_name: evacuee.first_name,
 		last_name: evacuee.last_name ?? '',
-		gender: evacuee.gender,
+		gender: evacuee.gender ?? null,
 		birth_year: evacuee.birth_year ?? undefined,
 		age: evacuee.age ?? undefined,
 		person_id: evacuee.person_id ?? { cardType: 'national_id', number: '' },

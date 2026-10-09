@@ -21,6 +21,9 @@
 	let {
 		members = $bindable<UnifiedMemberWithMeta[]>(),
 		memberFieldErrors = {},
+		membersError = null,
+		validationSeq = 0,
+		firstErrorMember = null,
 		pending = false,
 		mode = 'create',
 		channel = 'onsite',
@@ -34,6 +37,12 @@
 	}: {
 		members: UnifiedMemberWithMeta[];
 		memberFieldErrors?: Record<number, Record<string, string>>;
+		/** Batch-level error (more than 20 members) — shown under the section header. */
+		membersError?: string | null;
+		/** Bumped on every failed submit so cards can re-open collapsed sections holding an error. */
+		validationSeq?: number;
+		/** Member card holding the first error of the last failed submit. */
+		firstErrorMember?: number | null;
 		pending?: boolean;
 		mode?: 'create' | 'report-in';
 		channel?: UnifiedRegistrationChannel;
@@ -47,34 +56,25 @@
 	} = $props();
 
 	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
+	const MEMBERS_ERROR_ID = 'members-limit-error';
 
 	/** Station 1: large families switch member cards via tabs instead of one long scroll. */
 	const MEMBER_TABS_MIN = 3;
 	const useMemberTabs = $derived(channel === 'onsite' && members.length >= MEMBER_TABS_MIN);
 
-	const firstErrorIndex = $derived.by((): number | null => {
-		const withErrors = Object.entries(memberFieldErrors)
-			.filter(([, errs]) => Object.values(errs ?? {}).some(Boolean))
-			.map(([i]) => Number(i))
-			.sort((a, b) => a - b);
-		return withErrors[0] ?? null;
-	});
-
-	// Manual tab choice is pinned to the error set it was made against: a new failed submit
-	// (new memberFieldErrors object) jumps to the first member with errors.
+	// Manual tab choice is pinned to the submit it was made after: a new failed submit
+	// (new `validationSeq`) jumps to the member with the first error.
 	let pickedTab = $state(0);
-	let pickedForErrors = $state<object | null>(null);
+	let pickedAtSeq = $state(0);
 	const activeMemberTab = $derived.by(() => {
 		const wanted =
-			firstErrorIndex !== null && pickedForErrors !== memberFieldErrors
-				? firstErrorIndex
-				: pickedTab;
+			firstErrorMember !== null && pickedAtSeq !== validationSeq ? firstErrorMember : pickedTab;
 		return Math.min(Math.max(wanted, 0), Math.max(members.length - 1, 0));
 	});
 
 	function selectMemberTab(index: number) {
 		pickedTab = index;
-		pickedForErrors = memberFieldErrors;
+		pickedAtSeq = validationSeq;
 	}
 
 	function memberTabLabel(member: UnifiedMemberWithMeta, index: number): string {
@@ -176,6 +176,8 @@
 				variant="outline"
 				disabled={pending}
 				onclick={addMember}
+				aria-invalid={membersError ? true : undefined}
+				aria-describedby={membersError ? MEMBERS_ERROR_ID : undefined}
 				class="h-9 gap-1.5 text-xs sm:text-sm"
 			>
 				<Plus class="size-4" />
@@ -183,6 +185,10 @@
 			</Button>
 		</div>
 	{/snippet}
+
+	{#if membersError}
+		<p id={MEMBERS_ERROR_ID} class="mb-3 text-sm font-medium text-destructive">{membersError}</p>
+	{/if}
 
 	{#if useMemberTabs}
 		<div
@@ -249,6 +255,7 @@
 					{channel}
 					excludeIds={members.map((m) => m._id).filter((id): id is string => Boolean(id))}
 					fieldErrors={memberFieldErrors[index]}
+					{validationSeq}
 					{isJoiningExistingHousehold}
 					primaryContactPhone={isJoiningExistingHousehold
 						? primaryContactPhone

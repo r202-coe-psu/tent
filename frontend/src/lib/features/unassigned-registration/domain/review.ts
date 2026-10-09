@@ -41,8 +41,9 @@ export function unassignedPhotoUrl(photoId: string | null | undefined): string |
 
 const KNOWN_GENDERS = new Set(['male', 'female', 'other']);
 
-function asMemberGender(gender: string): 'male' | 'female' | 'other' {
-	return KNOWN_GENDERS.has(gender) ? (gender as 'male' | 'female' | 'other') : 'other';
+/** `null` stays `null` (ไม่ระบุ); legacy `'other'` is preserved; unknown strings → `null`. */
+function asMemberGender(gender: string | null): 'male' | 'female' | 'other' | null {
+	return gender && KNOWN_GENDERS.has(gender) ? (gender as 'male' | 'female' | 'other') : null;
 }
 
 type MemberReligion = 'unknown' | 'other' | 'buddhist' | 'muslim' | 'christian';

@@ -5,6 +5,7 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import CalendarIcon from '@lucide/svelte/icons/calendar';
 	import { parseDate, type DateValue } from '@internationalized/date';
+	import { untrack } from 'svelte';
 
 	let {
 		value = $bindable(''),
@@ -74,23 +75,28 @@
 		return null;
 	}
 
-	// Sync when external `value` changes
+	// Sync when external `value` changes. `value` is read first and unconditionally so the
+	// effect never drops its dependency (an early return before the read left it with no
+	// dependencies, and later programmatic changes were never shown). While the user is
+	// typing, the text already represents `value`, so it is left alone instead of reformatted.
 	$effect(() => {
-		if (isInternalUpdating) return;
-		if (value) {
-			const formatted = toDisplayFormat(value);
-			if (formatted) {
-				displayValue = formatted;
+		const current = value;
+		untrack(() => {
+			if (current) {
+				const formatted = toDisplayFormat(current);
+				if (!formatted) return;
+				if (parseToIso(displayValue) !== current) displayValue = formatted;
 				try {
-					calendarValue = parseDate(value);
+					calendarValue = parseDate(current);
 				} catch {
 					calendarValue = undefined;
 				}
+			} else {
+				// Only clear text that is a complete date; half-typed text stays.
+				if (displayValue && parseToIso(displayValue)) displayValue = '';
+				calendarValue = undefined;
 			}
-		} else {
-			displayValue = '';
-			calendarValue = undefined;
-		}
+		});
 	});
 
 	// Sync when user picks a date from the calendar

@@ -24,6 +24,7 @@ _DISABLED_TAGS = {"disabled"}
 class OccupancyBreakdownDict(TypedDict):
     male: int
     female: int
+    gender_unspecified: int
     child_under_5: int
     elderly_over_60: int
     pregnant: int
@@ -35,6 +36,7 @@ def _empty_breakdown() -> OccupancyBreakdownDict:
     return {
         "male": 0,
         "female": 0,
+        "gender_unspecified": 0,
         "child_under_5": 0,
         "elderly_over_60": 0,
         "pregnant": 0,
@@ -64,6 +66,10 @@ def aggregate_occupancy(
             breakdown["male"] += 1
         elif gender == "female":
             breakdown["female"] += 1
+        else:
+            # null / missing key / legacy 'other' → ไม่ระบุเพศ (decision sync 2026-10-09).
+            # Keeps male + female + gender_unspecified == occupancy_total.
+            breakdown["gender_unspecified"] += 1
 
         age = doc.get("age")
         if isinstance(age, (int, float)):

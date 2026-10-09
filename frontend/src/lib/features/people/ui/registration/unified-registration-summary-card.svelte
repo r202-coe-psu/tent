@@ -25,6 +25,8 @@
 		submitDisabled = false,
 		submitLabel = 'ยืนยันการลงทะเบียน',
 		submittingLabel = 'กำลังบันทึก...',
+		/** Desktop aside keeps submit; mobile summary sheet relies on sticky CTA. */
+		showSubmit = true,
 		onNavigate
 	}: {
 		shelterName?: string;
@@ -37,6 +39,7 @@
 		submitDisabled?: boolean;
 		submitLabel?: string;
 		submittingLabel?: string;
+		showSubmit?: boolean;
 		onNavigate: (sectionId: string) => void;
 	} = $props();
 
@@ -85,11 +88,6 @@
 		<div class="flex items-center justify-between gap-2">
 			<span class="text-xs font-bold tracking-wider text-muted-foreground uppercase">
 				สรุปข้อมูลการลงทะเบียน
-			</span>
-			<span
-				class="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-2xs font-semibold text-primary"
-			>
-				Live Summary
 			</span>
 		</div>
 	</div>
@@ -272,19 +270,21 @@
 		</div>
 
 		<!-- 6. Submit Button (Desktop Access) -->
-		<div class="pt-2">
-			<Button
-				type="submit"
-				disabled={pending || submitDisabled}
-				class="h-11 w-full gap-2 rounded-xl text-sm font-semibold shadow-xs"
-			>
-				{#if pending}
-					<Loader2 class="size-4 animate-spin" />
-					{submittingLabel}
-				{:else}
-					{submitLabel}
-				{/if}
-			</Button>
-		</div>
+		{#if showSubmit}
+			<div class="pt-2">
+				<Button
+					type="submit"
+					disabled={pending || submitDisabled}
+					class="h-11 w-full gap-2 rounded-xl text-sm font-semibold shadow-xs"
+				>
+					{#if pending}
+						<Loader2 class="size-4 animate-spin" />
+						{submittingLabel}
+					{:else}
+						{submitLabel}
+					{/if}
+				</Button>
+			</div>
+		{/if}
 	</div>
 </div>

@@ -7,6 +7,7 @@
 	import ArrowUpFromLine from '@lucide/svelte/icons/arrow-up-from-line';
 	import SlidersHorizontal from '@lucide/svelte/icons/sliders-horizontal';
 	import Boxes from '@lucide/svelte/icons/boxes';
+	import type { LotPriorityItem } from '../domain/lot-priority';
 	import type { StockLotBalance } from '../domain/operations';
 	import { useStoragePoints } from '../application/use-storage-points.svelte';
 	import LedgerTable from './ledger-table.svelte';
@@ -19,22 +20,28 @@
 		open = $bindable(false),
 		row,
 		lots,
+		itemsById,
 		shelterCode,
 		offline = false,
+		canDistribute = true,
 		onaction
 	}: {
 		open?: boolean;
 		row: StockDisplayRow | undefined;
 		/** Every lot of this item (zero-qty lots are dropped here). */
 		lots: readonly StockLotBalance[];
+		/** Shelf life / storage type per item — feeds the lot order and its reason. */
+		itemsById?: ReadonlyMap<string, LotPriorityItem>;
 		shelterCode: string;
 		/** Session expired: reading stays available, the movement buttons are off. */
 		offline?: boolean;
+		/** False when user lacks warehouse_staff capability in the active shelter. */
+		canDistribute?: boolean;
 		onaction: (kind: ItemDetailAction) => void;
 	} = $props();
 
 	const storagePoints = useStoragePoints(() => shelterCode);
-	const lotRows = $derived(buildLotRows(lots, storagePoints.points));
+	const lotRows = $derived(buildLotRows(lots, storagePoints.points, Date.now(), itemsById));
 
 	const ACTIONS = [
 		{ kind: 'receive', label: 'รับเข้า', icon: ArrowDownToLine },
@@ -91,6 +98,12 @@
 
 				<div class="grid grid-cols-3 gap-2">
 					{#each ACTIONS as action (action.kind)}
+						{@const isDis = offline || (action.kind === 'distribute' && !canDistribute)}
+						{@const btnTitle = offline
+							? 'เซสชันหมดอายุ — เข้าสู่ระบบใหม่เพื่อบันทึก'
+							: action.kind === 'distribute' && !canDistribute
+								? 'ต้องมีสิทธิ์เจ้าหน้าที่คลัง (warehouse_staff) จึงจะเบิกจ่ายได้'
+								: undefined}
 						<Button
 							type="button"
 							variant={action.kind === 'receive' ? 'default' : 'outline'}
@@ -99,8 +112,8 @@
 							'receive'
 								? 'bg-[#0A2647] text-white hover:bg-[#051930]'
 								: 'border-slate-300 bg-white text-slate-800 shadow-2xs'}"
-							disabled={offline}
-							title={offline ? 'เซสชันหมดอายุ — เข้าสู่ระบบใหม่เพื่อบันทึก' : undefined}
+							disabled={isDis}
+							title={btnTitle}
 							onclick={() => onaction(action.kind)}
 						>
 							<action.icon class="h-4 w-4" aria-hidden="true" />
@@ -124,7 +137,7 @@
 								<p class="py-10 text-center text-sm font-medium text-slate-500">ไม่มีล็อตคงเหลือ</p>
 							{:else}
 								<ul class="space-y-2.5">
-									{#each lotRows as lot (lot.lotRef)}
+									{#each lotRows as lot, index (lot.lotRef)}
 										<li
 											class="rounded-xl border p-3 {lot.isExpired
 												? 'border-red-200 bg-red-50/40'
@@ -164,6 +177,13 @@
 											{#if lot.clockLine}
 												<p class="mt-0.5 text-xs text-slate-500">{lot.clockLine}</p>
 											{/if}
+											<p
+												class="mt-1 text-xs font-medium {lot.isExpired
+													? 'text-red-800'
+													: 'text-teal-900'}"
+											>
+												{lot.isExpired ? '' : `ลำดับที่ ${index + 1}: `}{lot.reason}
+											</p>
 										</li>
 									{/each}
 								</ul>

@@ -18,7 +18,8 @@ import {
 	keyDonationReceipt,
 	type CountedItem,
 	type Donation,
-	type StockLedger
+	type StockLedger,
+	donationShortfall
 } from '$lib/features/operations/server';
 import { createAuditEntry, type AuditEntry } from '$lib/features/shared';
 import { allocateLotNos } from '$lib/server/lot-number';
@@ -242,6 +243,16 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		// 3) Donation stays the record of what was DECLARED — `items` is never
 		//    overwritten (the projector mirrors it as `items_declared`). What was
 		//    actually received lands on `received_summary` (couchdb-mongodb-sync.md §3.2).
+		const declaredForShortfall = (donation.items ?? []).map((it) => ({
+			item_id: it.item_id || it.free_text,
+			qty: String(it.qty)
+		}));
+		const countedForShortfall = (countedLines ?? []).map((c) => ({
+			item_id: 'item_id' in c && c.item_id ? c.item_id : 'free_text' in c ? c.free_text : undefined,
+			qty: String(c.qty)
+		}));
+		const shortfalls = donationShortfall(declaredForShortfall, countedForShortfall);
+
 		const updated: PublicDonationDoc = {
 			...donation,
 			status: 'received',
@@ -250,7 +261,19 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			received_summary: {
 				total_items: (countedLines ?? []).length,
 				received_at: nowStr,
-				...(parsed.data.remarks ? { remarks: parsed.data.remarks } : {})
+				...(parsed.data.remarks ? { remarks: parsed.data.remarks } : {}),
+				shortfalls: shortfalls.map((s) => ({
+					item_id: s.item_id,
+					declared: s.declared,
+					counted: s.counted,
+					short: s.short
+				})),
+				items: (countedLines ?? []).map((c) => ({
+					item_id: 'item_id' in c ? c.item_id : undefined,
+					free_text: 'free_text' in c ? c.free_text : undefined,
+					qty: String(c.qty),
+					unit: c.unit
+				}))
 			}
 		};
 

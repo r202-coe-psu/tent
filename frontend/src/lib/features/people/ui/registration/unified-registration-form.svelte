@@ -7,11 +7,14 @@
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import Search from '@lucide/svelte/icons/search';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
+	import ChevronUp from '@lucide/svelte/icons/chevron-up';
 	import { onMount, tick, untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
-	import type { ZodIssue } from 'zod';
+	import { replaceState } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Alert from '$lib/components/ui/alert/index.js';
+	import * as Sheet from '$lib/components/ui/sheet/index.js';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
@@ -33,6 +36,7 @@
 	import type { ThaiDAutofillProfile } from '../../domain/thaid-profile';
 	import { fetchThaidRegistrationStatus } from '$lib/api/thaid-status';
 	import { readRegistrationStickyTopPx } from './registration-sticky-offset';
+	import { firstInvalidField, focusTargetFor } from './registration-focus';
 	import {
 		applyIntersectionEntries,
 		isScrollNearEnd,
@@ -53,11 +57,19 @@
 		type UnifiedHouseholdInput
 	} from '../../domain/unified-registration';
 	import {
+		collectMemberRuleIssues,
 		dormFieldsFor,
 		type HousingType,
 		type HouseholdVehicle,
 		type PetGroup
 	} from '../../domain/people';
+	import {
+		stillInvalidEntries,
+		toRegistrationEntries,
+		toRegistrationFieldErrors,
+		type RegistrationErrorEntry,
+		type RegistrationIssue
+	} from '../../domain/registration-validation';
 	import { normalizeThaiPhone, sanitizePhoneTyping } from '$lib/db/model';
 	import {
 		hasMinimumResidence,
@@ -152,6 +164,7 @@
 		channel === 'onsite' || enableUnassignedPhoto || shelterPhotoEnabled
 	);
 	const memberPhotoUpload = $derived.by((): MemberPhotoUploadMode => {
+		if (channel === 'public') return 'none';
 		if (channel === 'onsite') return 'onsite-couch';
 		if (enableUnassignedPhoto) return 'unassigned-gridfs';
 		if (shelterPhotoEnabled) return 'shelter-couch';
@@ -181,6 +194,11 @@
 		return {
 			housing_type: 'owned_house',
 			residence_landmark: null,
+			// Keep defined — Svelte 5 rejects bind:x={undefined} when $bindable has a fallback.
+			dorm_name: null,
+			dorm_building: null,
+			dorm_floor: null,
+			dorm_room: null,
 			address_no: '',
 			village_no: '',
 			subdistrict: '',
@@ -196,7 +214,11 @@
 	function buildInitialMembers(): UnifiedMemberWithMeta[] {
 		if (initialMembers && initialMembers.length > 0) {
 			return initialMembers.map((m) => ({
+				...blankUnifiedMember(),
 				...m,
+				// Keep defined — Svelte 5 rejects bind:x={undefined} when $bindable has a fallback.
+				religion_other: m.religion_other ?? null,
+				disability_other_detail: m.disability_other_detail ?? null,
 				reporting_in: m.reporting_in ?? (m.stay_status === 'pre_registered' || !m._id)
 			}));
 		}
@@ -208,17 +230,27 @@
 		untrack(() => buildInitialHousehold())
 	);
 	let assetDescription = $state(untrack(() => initialHousehold?.assets?.description ?? ''));
-	let formError = $state<string | null>(null);
-	let validationMessages = $state<string[]>([]);
-	let memberFieldErrors = $state<Record<number, Record<string, string>>>({});
-	/** Household-level field errors (CR-148 dorm fields etc.), keyed by household field. */
-	let householdFieldErrors = $state<Record<string, string>>({});
+	/** Errors reported by the last failed submit; `null` until the first submit. */
+	let submittedEntries = $state.raw<RegistrationErrorEntry[] | null>(null);
+	/** Bumped on every failed submit — collapsed sections holding an error re-open on it. */
+	let validationSeq = $state(0);
+	/** Member card with the first error of the last failed submit (tab to show for large families). */
+	let firstErrorMember = $state<number | null>(null);
 	let formRootEl = $state<HTMLFormElement | null>(null);
 	let touched = $state(false);
 	let hasAutofilled = $state(false);
 	let activeSection = $state<FormSectionId>('address');
 	let scrollSpyPaused = $state(false);
 	let isVirtualKeyboardOpen = $state(false);
+	/** Mobile-only: summary sheet opened from chip near sticky CTA. */
+	let mobileSummaryOpen = $state(false);
+
+	const summaryPetCount = $derived(
+		(household.pets ?? []).reduce((sum, p) => sum + (Number(p.count) || 1), 0)
+	);
+	const mobileSummaryChipLabel = $derived(
+		`${t.memberLabel} ${members.length} · ${t.sectionPets} ${summaryPetCount}`
+	);
 
 	let petItems = $state<PetCardItem[]>(
 		untrack(() => parseInitialPets(household.pets as PetGroup[]).items)
@@ -471,10 +503,8 @@
 				}
 				const cleanUrl = new URL(window.location.href);
 				cleanUrl.searchParams.delete('error');
-				window.history.replaceState(
-					{},
-					'',
-					cleanUrl.pathname + (cleanUrl.search ? cleanUrl.search : '')
+				void tick().then(() =>
+					replaceState(resolve((cleanUrl.pathname + cleanUrl.search) as '/'), {})
 				);
 			}
 
@@ -498,11 +528,7 @@
 					.finally(() => {
 						const cleanUrl = new URL(window.location.href);
 						cleanUrl.searchParams.delete('thaid');
-						window.history.replaceState(
-							{},
-							'',
-							cleanUrl.pathname + (cleanUrl.search ? cleanUrl.search : '')
-						);
+						replaceState(resolve((cleanUrl.pathname + cleanUrl.search) as '/'), {});
 					});
 			}
 		}
@@ -750,95 +776,29 @@
 		markDirty();
 	}
 
-	function mapZodIssues(issues: ZodIssue[]): {
-		messages: string[];
-		memberErrors: Record<number, Record<string, string>>;
-		householdErrors: Record<string, string>;
-	} {
-		const messages: string[] = [];
-		const memberErrors: Record<number, Record<string, string>> = {};
-		const householdErrors: Record<string, string> = {};
-		for (const issue of issues) {
-			messages.push(issue.message);
-			const [root, idx, field] = issue.path;
-			if (root === 'members' && typeof idx === 'number' && typeof field === 'string') {
-				memberErrors[idx] ??= {};
-				if (!memberErrors[idx][field]) memberErrors[idx][field] = issue.message;
-			} else if (root === 'household' && typeof idx === 'string') {
-				householdErrors[idx] ??= issue.message;
-			}
-		}
-		return {
-			messages: [...new Set(messages.filter(Boolean))],
-			memberErrors,
-			householdErrors
-		};
-	}
-
-	/** Section that owns a Zod issue — the scroll fallback when no field carries `aria-invalid`. */
-	function sectionForIssue(issue: ZodIssue | undefined): FormSectionId {
+	/** Section that owns an issue — the scroll fallback when no field carries `aria-invalid`. */
+	function sectionForIssue(issue: RegistrationIssue | undefined): FormSectionId {
 		const [root, key] = issue?.path ?? [];
 		if (root !== 'household') return 'members';
 		return key === 'pets' || key === 'vehicles' ? key : 'address';
 	}
 
-	/**
-	 * Lists every issue in the summary banner, then takes the user straight to the
-	 * first invalid field (same for public and staff). Errors with no field to
-	 * point at land on `fallbackSection`, or on the banner when none is given.
-	 */
-	async function revealValidation(
-		message: string,
-		messages: string[] = [],
-		fallbackSection?: FormSectionId
-	) {
-		formError = message;
-		validationMessages = messages.length > 0 ? messages : [message];
-		toast.error(message, {
-			description: validationMessages.slice(0, 3).join('\n'),
-			duration: 6000
-		});
-		await tick();
-		if (focusFirstInvalid()) return;
-		if (fallbackSection) scrollToSection(fallbackSection);
-		else formRootEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+	/** Public channel only: primary contact needs a 10-digit phone (join flows may leave it blank). */
+	function publicHeadPhoneMessage(): string | null {
+		const headPhone = members[0]?.phone?.trim() ?? '';
+		const phoneOk = /^0\d{8,9}$/.test(headPhone.replace(/[-\s]/g, ''));
+		if (hasJoinSelection) return headPhone && !phoneOk ? t.joinPhoneInvalid : null;
+		return phoneOk ? null : t.headPhoneRequired;
 	}
 
-	function focusFirstInvalid(): boolean {
-		const firstInvalid = formRootEl?.querySelector<HTMLElement>('[aria-invalid="true"]');
-		if (!firstInvalid) return false;
-		firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
-		requestAnimationFrame(() => firstInvalid.focus({ preventScroll: true }));
-		return true;
-	}
-
-	function jumpToFirstError() {
-		if (!focusFirstInvalid()) scrollToSection('members');
-	}
-
-	async function handleSubmit(e: Event) {
-		e.preventDefault();
-		if (pending || readOnly) return;
-
-		for (const p of petItems) {
-			if (p.species === 'other' && !p.customSpecies.trim()) {
-				memberFieldErrors = {};
-				householdFieldErrors = {};
-				await revealValidation(t.petOtherSpeciesRequired, [], 'pets');
-				return;
-			}
-		}
-		household.pets = syncPetsToHousehold(petItems);
-
-		// Empty phone → null so phoneSchema accepts optional join / 「ไม่มีเบอร์」.
-		for (const m of members) {
-			if (!m.phone?.trim()) m.phone = null;
-		}
-
-		const payload: UnifiedRegistrationInput = {
-			members,
+	/** The registration as it would be sent — a pure copy, so it is safe to build while typing. */
+	function buildPayload(): UnifiedRegistrationInput {
+		return {
+			// Empty phone → null so phoneSchema accepts optional join / 「ไม่มีเบอร์」.
+			members: members.map((m) => (m.phone?.trim() ? m : { ...m, phone: null })),
 			household: {
 				...household,
+				pets: syncPetsToHousehold(petItems),
 				vehicles: showVehiclesAssets ? (household.vehicles ?? []) : [],
 				assets:
 					showVehiclesAssets && assetDescription.trim()
@@ -852,53 +812,143 @@
 					}
 				: {})
 		};
+	}
 
-		const result = unifiedRegistrationInputSchema.safeParse(payload);
-		if (!result.success) {
-			const mapped = mapZodIssues(result.error.issues);
-			memberFieldErrors = mapped.memberErrors;
-			householdFieldErrors = mapped.householdErrors;
-			const first = mapped.messages[0] ?? t.validationError;
-			await revealValidation(first, mapped.messages, sectionForIssue(result.error.issues[0]));
+	/**
+	 * Every problem with the form right now, in one pass (schema + member rules + the UI-only
+	 * rules), so the user sees all of them after a single submit. Pure — it also drives the live
+	 * re-validation that clears a field's error as soon as it is fixed.
+	 */
+	function collectValidation(): {
+		parsed: ReturnType<typeof unifiedRegistrationInputSchema.safeParse>;
+		entries: RegistrationErrorEntry[];
+		fallbackSection: FormSectionId | undefined;
+	} {
+		const payload = buildPayload();
+		const parsed = unifiedRegistrationInputSchema.safeParse(payload);
+		// Zod 4 skips `superRefine` (checksum, age ↔ birth year, …) once the base schema aborts,
+		// so collect the member rules separately and report them in the same pass.
+		const issues: RegistrationIssue[] = parsed.success
+			? []
+			: [...parsed.error.issues, ...collectMemberRuleIssues(payload.members)];
+		let fallbackSection: FormSectionId | undefined = issues.length
+			? sectionForIssue(issues[0])
+			: undefined;
+
+		const extras: RegistrationIssue[] = [];
+		const reported = (path: (string | number)[]) =>
+			issues.some((i) => path.every((part, n) => i.path[n] === part));
+
+		const headPhoneMessage = channel === 'public' ? publicHeadPhoneMessage() : null;
+		if (headPhoneMessage && !reported(['members', 0, 'phone'])) {
+			extras.push({ path: ['members', 0, 'phone'], message: headPhoneMessage });
+			fallbackSection ??= 'members';
+		}
+
+		petItems.forEach((pet, index) => {
+			if (
+				pet.species === 'other' &&
+				!pet.customSpecies.trim() &&
+				!reported(['household', 'pets', index])
+			) {
+				extras.push({
+					path: ['household', 'pets', index, 'notes'],
+					message: t.petOtherSpeciesRequired
+				});
+				fallbackSection ??= 'pets';
+			}
+		});
+
+		if (mode === 'report-in' && !members.some((m) => m.reporting_in)) {
+			extras.push({
+				path: ['reporting_in'],
+				message: 'กรุณาเลือกสมาชิกอย่างน้อย 1 คนที่มารายงานตัวในรอบนี้'
+			});
+			fallbackSection ??= 'members';
+		}
+
+		return {
+			parsed,
+			entries: toRegistrationEntries([...issues, ...extras]),
+			fallbackSection
+		};
+	}
+
+	/**
+	 * After a failed submit the form re-validates as the user types: a field keeps its error only
+	 * while it is still invalid. Fields the submit did not flag never show an error before the next
+	 * submit.
+	 */
+	const liveEntries = $derived(submittedEntries ? collectValidation().entries : null);
+	const visibleErrors = $derived(
+		toRegistrationFieldErrors(
+			submittedEntries && liveEntries ? stillInvalidEntries(submittedEntries, liveEntries) : []
+		)
+	);
+
+	/**
+	 * Lists every issue in the summary banner, then takes the user straight to the
+	 * first invalid field (same for public and staff). Errors with no field to
+	 * point at land on `fallbackSection`, or on the banner when none is given.
+	 */
+	async function revealValidation(messages: string[], fallbackSection?: FormSectionId) {
+		const message = messages[0] ?? t.validationError;
+		// The toast title already carries `message` — list only the other issues underneath.
+		const extraMessages = messages.filter((m) => m !== message).slice(0, 3);
+		toast.error(message, {
+			description: extraMessages.length > 0 ? extraMessages.join('\n') : undefined,
+			duration: 6000
+		});
+		validationSeq += 1;
+		await tick();
+		if (focusFirstInvalid()) return;
+		// A collapsed section may still be opening — give it one frame before falling back.
+		await new Promise<void>((done) => requestAnimationFrame(() => done()));
+		if (focusFirstInvalid()) return;
+		if (fallbackSection) scrollToSection(fallbackSection);
+		else formRootEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+	}
+
+	function focusFirstInvalid(): boolean {
+		const field = firstInvalidField(formRootEl);
+		if (!field) return false;
+		// Composite controls (the gender radio group) flag a wrapper — focus the control inside it.
+		const target = focusTargetFor(field);
+		field.scrollIntoView({ behavior: 'smooth', block: 'center' });
+		requestAnimationFrame(() => target.focus({ preventScroll: true }));
+		return true;
+	}
+
+	function jumpToFirstError() {
+		if (!focusFirstInvalid()) scrollToSection('members');
+	}
+
+	async function handleSubmit(e: Event) {
+		e.preventDefault();
+		if (pending || readOnly) return;
+
+		household.pets = syncPetsToHousehold(petItems);
+		for (const m of members) {
+			if (!m.phone?.trim()) m.phone = null;
+		}
+
+		const { parsed, entries, fallbackSection } = collectValidation();
+
+		if (!parsed.success || entries.length > 0) {
+			submittedEntries = entries;
+			firstErrorMember =
+				entries
+					.map((entry) => (entry.path[0] === 'members' ? entry.path[1] : undefined))
+					.filter((index): index is number => typeof index === 'number')
+					.sort((a, b) => a - b)[0] ?? null;
+			await revealValidation(toRegistrationFieldErrors(entries).messages, fallbackSection);
 			return;
 		}
 
-		if (channel === 'public') {
-			const headPhone = members[0]?.phone?.trim() ?? '';
-			const phoneOk = !headPhone || /^0\d{8,9}$/.test(headPhone.replace(/[-\s]/g, ''));
-			if (hasJoinSelection) {
-				if (headPhone && !phoneOk) {
-					memberFieldErrors = { 0: { phone: t.joinPhoneInvalid } };
-					await revealValidation(t.joinPhoneInvalid, [], 'members');
-					return;
-				}
-			} else if (!headPhone || !/^0\d{8,9}$/.test(headPhone.replace(/[-\s]/g, ''))) {
-				memberFieldErrors = { 0: { phone: t.headPhoneRequired } };
-				await revealValidation(t.headPhoneRequired, [], 'members');
-				return;
-			}
-		}
-
-		if (mode === 'report-in') {
-			const reportingCount = members.filter((m) => m.reporting_in).length;
-			if (reportingCount === 0) {
-				memberFieldErrors = {};
-				householdFieldErrors = {};
-				await revealValidation(
-					'กรุณาเลือกสมาชิกอย่างน้อย 1 คนที่มารายงานตัวในรอบนี้',
-					[],
-					'members'
-				);
-				return;
-			}
-		}
-
-		formError = null;
-		validationMessages = [];
-		memberFieldErrors = {};
-		householdFieldErrors = {};
+		submittedEntries = null;
+		firstErrorMember = null;
 		try {
-			await onsubmit(result.data as UnifiedRegistrationInput, {
+			await onsubmit(parsed.data as UnifiedRegistrationInput, {
 				reportingInMembers: members.filter((m) => m.reporting_in),
 				allMembers: members
 			});
@@ -920,13 +970,13 @@
 	oninput={markDirty}
 	{@attach createScrollSpy()}
 >
-	{#if formError}
+	{#if visibleErrors.messages.length > 0}
 		<Alert.Root variant="destructive" class="border-destructive/40 bg-destructive/5" role="alert">
 			<CircleAlert class="size-4" />
 			<Alert.Title class="font-semibold">{t.validationSummaryTitle}</Alert.Title>
 			<Alert.Description>
 				<ul class="mt-2 list-disc space-y-1 pl-5">
-					{#each validationMessages as msg (msg)}
+					{#each visibleErrors.messages as msg (msg)}
 						<li>{msg}</li>
 					{/each}
 				</ul>
@@ -967,11 +1017,13 @@
 		<!-- Right Column: Form Area (Full width on mobile, 8-col on lg+) -->
 		<div class="space-y-6 lg:col-span-8">
 			<!-- Top Progress Stepper (Mobile & Desktop) -->
-			<UnifiedRegistrationStepper
-				sections={formSectionNav}
-				{activeSection}
-				onNavigate={(id) => scrollToSection(id as FormSectionId)}
-			/>
+			{#if channel !== 'public'}
+				<UnifiedRegistrationStepper
+					sections={formSectionNav}
+					{activeSection}
+					onNavigate={(id) => scrollToSection(id as FormSectionId)}
+				/>
+			{/if}
 
 			<!-- ── Section 1: Address ─────────────────────────────────── -->
 			<UnifiedRegistrationSection
@@ -990,7 +1042,7 @@
 
 				<!-- Quick Search & Merge Tool Bar (both Public and Onsite) -->
 				{#if enableResidenceJoin}
-					<div class="space-y-3 rounded-xl border border-border/60 bg-muted/10 p-3">
+					<div class="mb-4 space-y-3 rounded-xl border border-border/60 bg-muted/10 p-3 sm:mb-5">
 						<div class="flex items-center justify-between gap-2">
 							<p class="flex items-center gap-1.5 text-xs font-semibold text-foreground">
 								<Search class="size-3.5 text-primary" />
@@ -1015,6 +1067,7 @@
 								onblur={() => (searchPhoneTouched = true)}
 								disabled={fieldsLocked || hasJoinSelection}
 								aria-invalid={!!searchPhoneError}
+								aria-describedby={searchPhoneError ? 'family-search-phone-error' : undefined}
 								class="h-9 w-full pr-7 text-sm"
 							/>
 							{#if searchPhoneQuery}
@@ -1033,7 +1086,9 @@
 							{/if}
 						</div>
 						{#if searchPhoneError}
-							<p class="text-2xs text-destructive">{searchPhoneError}</p>
+							<p id="family-search-phone-error" class="text-2xs text-destructive">
+								{searchPhoneError}
+							</p>
 						{/if}
 						{#if channel === 'public'}
 							<p class="text-2xs text-muted-foreground">{t.familySearchHint}</p>
@@ -1090,7 +1145,7 @@
 					bind:dorm_floor={household.dorm_floor}
 					bind:dorm_room={household.dorm_room}
 					dormFields={true}
-					errors={householdFieldErrors}
+					errors={visibleErrors.household}
 					loadMasterHousingTypes={channel !== 'public'}
 					required={true}
 					disabled={fieldsLocked || hasJoinSelection}
@@ -1317,7 +1372,10 @@
 			<!-- ── Section 2: Members ─────────────────────────────────── -->
 			<UnifiedRegistrationMembersSection
 				bind:members
-				{memberFieldErrors}
+				memberFieldErrors={visibleErrors.members}
+				membersError={visibleErrors.membersLimit}
+				{validationSeq}
+				{firstErrorMember}
 				pending={fieldsLocked}
 				{mode}
 				{channel}
@@ -1339,6 +1397,8 @@
 				{enableUnassignedPhoto}
 				{shelterCode}
 				existingPets={selectedMatchChip?.pets ?? []}
+				petErrors={visibleErrors.pets}
+				{validationSeq}
 				onsync={onPetsSynced}
 			/>
 
@@ -1373,30 +1433,76 @@
 			{/if}
 
 			<div class="unified-reg-bottom-chrome {isVirtualKeyboardOpen ? 'max-sm:hidden' : ''}">
-				<div class="flex items-center gap-2">
-					<div class="lg:hidden">
-						<UnifiedRegistrationStickyNav
-							compact={true}
-							sections={formSectionNav}
-							{activeSection}
-							ariaLabel={t.sectionNavAria}
-							onNavigate={(id) => scrollToSection(id as FormSectionId)}
-						/>
-					</div>
-					{#if !readOnly}
-						<div class="min-w-0 flex-1">
-							<UnifiedRegistrationSubmitBar
-								{pending}
-								{submitDisabled}
-								label={effectiveSubmitLabel}
-								submittingLabel={t.submitting}
-								align={submitAlign}
-								sticky={false}
+				<div class="space-y-2">
+					<button
+						type="button"
+						class="touch-target inline-flex h-11 w-full items-center justify-between gap-2 rounded-xl border border-border bg-card px-3 text-left text-xs font-semibold text-foreground shadow-2xs transition-colors hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none lg:hidden"
+						aria-haspopup="dialog"
+						aria-expanded={mobileSummaryOpen}
+						onclick={() => (mobileSummaryOpen = true)}
+					>
+						<span class="inline-flex min-w-0 items-center gap-1.5">
+							<Users class="size-3.5 shrink-0 text-primary" aria-hidden="true" />
+							<span class="truncate tabular-nums">{mobileSummaryChipLabel}</span>
+						</span>
+						<ChevronUp class="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+					</button>
+					<div class="flex items-center gap-2">
+						<div class="lg:hidden">
+							<UnifiedRegistrationStickyNav
+								compact={true}
+								sections={formSectionNav}
+								{activeSection}
+								ariaLabel={t.sectionNavAria}
+								onNavigate={(id) => scrollToSection(id as FormSectionId)}
 							/>
 						</div>
-					{/if}
+						{#if !readOnly}
+							<div class="min-w-0 flex-1">
+								<UnifiedRegistrationSubmitBar
+									{pending}
+									{submitDisabled}
+									label={effectiveSubmitLabel}
+									submittingLabel={t.submitting}
+									align={submitAlign}
+									sticky={false}
+								/>
+							</div>
+						{/if}
+					</div>
 				</div>
 			</div>
+
+			<Sheet.Root bind:open={mobileSummaryOpen}>
+				<Sheet.Content
+					side="bottom"
+					class="flex max-h-[85dvh] flex-col gap-0 overflow-hidden p-0 pb-[env(safe-area-inset-bottom)] lg:hidden"
+				>
+					<Sheet.Header class="sr-only">
+						<Sheet.Title>สรุปข้อมูลการลงทะเบียน</Sheet.Title>
+						<Sheet.Description>{mobileSummaryChipLabel}</Sheet.Description>
+					</Sheet.Header>
+					<div class="min-h-0 flex-1 overflow-y-auto p-3">
+						<UnifiedRegistrationSummaryCard
+							{shelterName}
+							{shelterCode}
+							{household}
+							{members}
+							{showVehiclesAssets}
+							{activeSection}
+							{pending}
+							submitDisabled={submitDisabled || readOnly}
+							submitLabel={effectiveSubmitLabel}
+							submittingLabel={t.submitting}
+							showSubmit={false}
+							onNavigate={(id) => {
+								mobileSummaryOpen = false;
+								scrollToSection(id as FormSectionId);
+							}}
+						/>
+					</div>
+				</Sheet.Content>
+			</Sheet.Root>
 		</div>
 	</div>
 </form>

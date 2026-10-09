@@ -15,6 +15,7 @@
 	import Boxes from '@lucide/svelte/icons/boxes';
 	import { catalogOrigin, resolveCategoryLabel, type ItemMaster } from '../domain/catalog';
 	import { canWriteShelterCatalog } from '../domain/catalog-permissions';
+	import { canMergeItem, isMergedItem } from '../domain/item-merge';
 	import { missingOptionalFields } from '../domain/item-similarity';
 	import { formatUnit } from '../domain/unit-of-measure';
 	import {
@@ -52,7 +53,8 @@
 	let {
 		basePath,
 		scope,
-		stockByItemId
+		stockByItemId,
+		onmerge
 	}: {
 		basePath: string;
 		scope: 'central' | 'shelter';
@@ -61,6 +63,11 @@
 		 * ledger belongs to `operations`, which depends on this feature. Omit for no stock column.
 		 */
 		stockByItemId?: ReadonlyMap<string, string>;
+		/**
+		 * Open the merge dialog for an item (CR-143 §F). The dialog moves stock, which belongs to
+		 * `operations`, so the page owns it; omit to hide "รวมกับรายการอื่น".
+		 */
+		onmerge?: (item: ItemMaster) => void;
 	} = $props();
 
 	const roles = $derived(authStore.user?.roles ?? []);
@@ -169,6 +176,15 @@
 		if (kind === 'local') return 'delete';
 		if (kind === 'override') return 'reset';
 		return 'central';
+	}
+
+	function mergeHandler(item: ItemMaster | null): (() => void) | undefined {
+		if (!onmerge || !item || item.deactivated || isMergedItem(item)) return undefined;
+		if (!canMergeItem(roles, shelterCode, item)) return undefined;
+		return () => {
+			sheetOpen = false;
+			onmerge(item);
+		};
 	}
 
 	// —— item sheet ——
@@ -515,6 +531,7 @@
 	{defaultCategoryId}
 	onaction={(kind) => selectedItem && requestItemAction(selectedItem, kind)}
 	onactivate={() => selectedItem && activateItem(selectedItem)}
+	onmerge={mergeHandler(selectedItem)}
 	onclose={() => {
 		if (sheetMode === 'create') selectedId = '';
 	}}

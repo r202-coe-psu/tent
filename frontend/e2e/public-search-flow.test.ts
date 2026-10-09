@@ -1,7 +1,8 @@
 /**
- * Public family search (/search) — true end-to-end, no seeding and no mocks.
+ * Public family search (/search) — true end-to-end, no seeding and no mocks
+ * (except the thin server-error route in the smoke group).
  *
- * Local target: the first test does what staff do — create a shelter in system
+ * Local target: the critical group does what staff do — create a shelter in system
  * management and register households at Station 1 — and afterAll tears the shelter
  * down through the CouchDB admin API (the UI cannot delete shelters or evacuees).
  * Remote target (`E2E_BASE_URL`, staging/production): read-only — setup and teardown
@@ -9,6 +10,13 @@
  *
  * The public tests always go through the real path
  * (CouchDB → sync worker → Mongo → FastAPI → BFF).
+ *
+ * ── Tags ──────────────────────────────────────────────────────────────────────────
+ *  @public    feature tag
+ *  @smoke     read-only form / validation / server-error (safe on staging/prod)
+ *  @critical  local writes (shelter + households) + live search asserts; skip when IS_REMOTE
+ *  @release   thin release-gate journey (search form + min-length error)
+ *  @prod      compact production smoke subset of @release
  *
  * Local requirements: `docker compose up -d` (CouchDB, MongoDB, sync worker, FastAPI
  * :9000) plus platform init (`pnpm seed:master`, `pnpm db:sync`).
@@ -30,8 +38,6 @@ import {
 	registerHouseholdViaUi,
 	selectActiveShelter
 } from './helpers/staff-ui';
-
-test.describe.configure({ mode: 'serial' });
 
 const FIXTURE = searchFixture();
 const { prefix: PREFIX, phone: PHONE, head: HEAD, solo: SOLO, total: TOTAL } = FIXTURE;
@@ -55,7 +61,52 @@ test.afterAll(async () => {
 	if (shelterCode) await teardownShelter(shelterCode);
 });
 
-test.describe('Public family search', () => {
+test.describe(
+	'Public family search: render and error contract',
+	{ tag: ['@public', '@smoke', '@release', '@prod'] },
+	() => {
+		test('R1 the search form is fully rendered', async ({ page }) => {
+			await page.goto('/search');
+			await expect(page).toHaveTitle(/ระบบค้นหาผู้พักพิง/);
+			await expect(page.getByRole('heading', { name: 'กรอกข้อมูลเพื่อค้นหา' })).toBeVisible();
+			await expect(page.getByRole('textbox', { name: SEARCH_BOX })).toBeVisible();
+			await expect(page.getByRole('button', { name: 'ค้นหา' })).toBeVisible();
+			await expect(page.getByRole('heading', { name: 'เริ่มการค้นหา' })).toBeVisible();
+		});
+
+		test('E01 rejects a query shorter than 3 characters', async ({ page }) => {
+			await page.goto('/search');
+			await page.getByRole('textbox', { name: SEARCH_BOX }).fill('ทด');
+			await page.getByRole('button', { name: 'ค้นหา' }).click();
+			await expect(page.getByText('กรุณากรอกข้อมูลอย่างน้อย 3')).toBeVisible();
+			await expect(page.getByRole('heading', { name: 'เริ่มการค้นหา' })).toBeVisible();
+		});
+	}
+);
+
+test.describe('Public family search: server errors', { tag: ['@public', '@smoke'] }, () => {
+	test('S1 a failing occupants search shows a readable error and keeps the query', async ({
+		page
+	}) => {
+		await page.route('**/api/public/v1/occupants', (route) =>
+			route.fulfill({
+				status: 500,
+				contentType: 'application/json',
+				body: JSON.stringify({ error: 'UPSTREAM_DOWN' })
+			})
+		);
+		await page.goto('/search');
+		await page.getByRole('textbox', { name: SEARCH_BOX }).fill('นายทดสอบระบบ');
+		await page.getByRole('button', { name: 'ค้นหา' }).click();
+		await expect(page.getByText('เกิดข้อผิดพลาดในการค้นหา')).toBeVisible();
+		await expect(page.getByRole('textbox', { name: SEARCH_BOX })).toHaveValue('นายทดสอบระบบ');
+		await expect(page.getByRole('heading', { name: 'ไม่พบรายชื่อ' })).toHaveCount(0);
+	});
+});
+
+test.describe('Public family search: live results', { tag: ['@public', '@critical'] }, () => {
+	test.describe.configure({ mode: 'serial' });
+
 	test('staff creates a shelter and registers households', async ({ page }) => {
 		test.skip(IS_REMOTE, READ_ONLY_REASON);
 		test.setTimeout(180_000);
@@ -98,15 +149,7 @@ test.describe('Public family search', () => {
 		await expect(page.getByText('หน้า 1 จาก 2')).toBeVisible();
 	});
 
-	test('shows the search form', async ({ page }) => {
-		await page.goto('/search');
-		await expect(page.getByRole('heading', { name: 'กรอกข้อมูลเพื่อค้นหา' })).toBeVisible();
-		await expect(page.getByRole('textbox', { name: SEARCH_BOX })).toBeVisible();
-		await expect(page.getByRole('button', { name: 'ค้นหา' })).toBeVisible();
-		await expect(page.getByRole('heading', { name: 'เริ่มการค้นหา' })).toBeVisible();
-	});
-
-	test('rejects a query shorter than 3 characters', async ({ page }) => {
+	test('rejects a short query then recovers with a valid search', async ({ page }) => {
 		await page.goto('/search');
 		await page.getByRole('textbox', { name: SEARCH_BOX }).fill('ทด');
 		await page.getByRole('button', { name: 'ค้นหา' }).click();

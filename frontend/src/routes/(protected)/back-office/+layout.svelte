@@ -64,7 +64,7 @@
 		return null;
 	});
 
-	const pageTitle = $derived(currentPageNode?.label ?? 'ระบบส่วนหลัง (Back-Office)');
+	const pageTitle = $derived(currentPageNode?.label ?? 'ระบบส่วนหลัง');
 	const PageIcon = $derived(currentPageNode?.icon ?? Building);
 	const isDailySopPage = $derived(page.url.pathname.startsWith('/back-office/dailysop'));
 

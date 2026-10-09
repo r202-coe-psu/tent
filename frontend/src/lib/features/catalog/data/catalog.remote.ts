@@ -216,10 +216,15 @@ export class CatalogRemoteRepository implements CatalogRepository {
 		return this.repo.get<ItemMaster>(id);
 	}
 
-	async updateItemMaster(itemMaster: ItemMaster): Promise<ItemMaster> {
+	async assertItemMasterWritable(itemMaster: ItemMaster): Promise<ItemMaster> {
 		const current = await this.getItemMaster(itemMaster._id, itemMaster.shelter_code);
 		if (!current) throw new Error(`Item master not found: ${itemMaster._id}`);
 		await this.validateItemMasterUnits(itemMaster, current);
+		return current;
+	}
+
+	async updateItemMaster(itemMaster: ItemMaster): Promise<ItemMaster> {
+		await this.assertItemMasterWritable(itemMaster);
 		const repo = this.getWriteRepo(itemMaster.shelter_code);
 		return repo.put(touch(itemMaster));
 	}
