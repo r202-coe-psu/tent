@@ -22,7 +22,7 @@ Planning source ปัจจุบัน = Markdown ใน `docs/task-breakdown/
 
 - **Greenfield:** ยังไม่มีระบบ MVP ที่ใช้งานจริงมาก่อน (มีเพียง CouchDB PoC) — คำว่า "MVP/baseline" ในเอกสารชุดนี้และ PRD หมายถึง **baseline scope FR-1–20** (auth, person registration, screening, person QR/movement, dashboard, remote-first continuity — spec ใน `docs/features/`) ซึ่งต้อง **build เป็นส่วนแรกของ foundation** ก่อนที่ R2 จะต่อยอด
 - ✅ **ปิดช่องว่างแล้ว (เคาะ 2026-06-11):** baseline FR-1–20 มี T-task ของตัวเองแล้ว — [module 0 Baseline](00-baseline.md) (T-47..T-55, 37 Adj MD) ยอดรวมใหม่ = **250 Adj MD**; estimate เคาะจริงใน workshop (K-16)
-- **Data layer ([CR-033](../changes/CR-033-remote-first-architecture-program-index.md) เคาะ 2026-07-07; baseline task sync 2026-07-15):** ระบบหลักเป็น **remote-first** — write ไป active endpoint โดยตรง (Central ก่อนเสมอ, LAN Edge fallback ตอน WAN/Central ล่ม, active ได้ครั้งละหนึ่ง); **deny** PouchDB / local-first / local-only write queue; disconnected = status-only; public tier และ EOC/Open API read-model ใช้ **MongoDB projection** จาก Central CouchDB (ดู [10-eoc](10-eoc.md))
+- **Data layer ([CR-033](../changes/01-core/CR-033-remote-first-architecture-program-index.md) เคาะ 2026-07-07; baseline task sync 2026-07-15):** ระบบหลักเป็น **remote-first** — write ไป active endpoint โดยตรง (Central ก่อนเสมอ, LAN Edge fallback ตอน WAN/Central ล่ม, active ได้ครั้งละหนึ่ง); **deny** PouchDB / local-first / local-only write queue; disconnected = status-only; public tier และ EOC/Open API read-model ใช้ **MongoDB projection** จาก Central CouchDB (ดู [10-eoc](10-eoc.md))
 - **Kickoff:** 2026-06-10 · **Workshop (ทีมเริ่มงาน):** 2026-06-17
 - **In-scope** (Baseline + R2 + R3 + Family Search + governance): ส่งมอบภายใน **สิงหาคม 2026** (2026-08-31), **go-live full program กันยายน** (สัปดาห์ 1)
 - **Deferred** (EOC aggregate API, Open API, SOP simulation, inventory polish): ส่งมอบหลัง go-live
@@ -54,7 +54,7 @@ Planning source ปัจจุบัน = Markdown ใน `docs/task-breakdown/
 **Walking skeleton (10–17 มิ.ย.) — done (CR-033 reframe):**
 
 - ✅ Auth/RBAC kernel: roles, guards, auth store (`$lib/auth/`, `$lib/guards/`, `$lib/stores/`)
-- ✅ Remote CouchDB access layer + repository pattern + app-level event channel (`$lib/db/`) — **ไม่ใช้ PouchDB** ([CR-033](../changes/CR-033-remote-first-architecture-program-index.md))
+- ✅ Remote CouchDB access layer + repository pattern + app-level event channel (`$lib/db/`) — **ไม่ใช้ PouchDB** ([CR-033](../changes/01-core/CR-033-remote-first-architecture-program-index.md))
 - ✅ CouchDB `_session` cookie auth + Central-first remote write design
 - ✅ Shared typed errors + API utilities (`$lib/utils/`)
 - ✅ Login/logout, me profile, health check, register (server-only)
@@ -84,7 +84,7 @@ Planning source ปัจจุบัน = Markdown ใน `docs/task-breakdown/
 | 12  | [Public Portal (PUB tier)](12-public.md)  | 3     | 11.5    | R3         | ส.ค. (CR-005)          |
 |     | **รวม (prod+post นักศึกษา)**              |       | **270** |            |                        |
 
-> **CR-005 (2026-06-22) — public-tier scope:** +Module 12 Public Portal (T-57/58/59, +11.5) · Donation +T-60 `/donate` wizard (+5.5) · Family Search T-41 `/search` bump (+1.5) → ยอดรวม 250 → **268.5 Adj MD** (provisional, recalibrate K-16). `/search` (FAM) ขยาย exposure surface, `/donate` (DN) ต้องการ donation schema_v 1→2 + `donation_slot` §2.13. ดูรายละเอียด [CR-005](../changes/CR-005-public-portal-landing-public-metrics.md).
+> **CR-005 (2026-06-22) — public-tier scope:** +Module 12 Public Portal (T-57/58/59, +11.5) · Donation +T-60 `/donate` wizard (+5.5) · Family Search T-41 `/search` bump (+1.5) → ยอดรวม 250 → **268.5 Adj MD** (provisional, recalibrate K-16). `/search` (FAM) ขยาย exposure surface, `/donate` (DN) ต้องการ donation schema_v 1→2 + `donation_slot` §2.13. ดูรายละเอียด [CR-005](../changes/12-public/CR-005-public-portal-landing-public-metrics.md).
 > **CR-006 (2026-06-22) — SOP master/override:** Module B T-30 +1.5 Adj MD (master+override surface) → 268.5 → **270 Adj MD**.
 > **CR-066 (2026-08-13, approved Wave 1–3 + T-72; Wave 4 = รอบ CR ถัดไป) — site / occupancy / booking / triage:** T-66..T-72 พร้อมตาม dependency (T-70 ยัง blocked T-37). T-73..T-76 ยัง **ไม่รวม** เข้า 270 Adj MD. Spec = [`docs/features/site-occupancy-booking-program.md`](../features/site-occupancy-booking-program.md). ห้าม reuse T-61/T-62.
 
