@@ -1016,7 +1016,10 @@ const ERROR_ROWS: ErrorRow[] = [
 			for (let i = 0; i < 20; i++)
 				await page.getByRole('button', { name: 'เพิ่มสมาชิก', exact: true }).click();
 		},
-		field: (page) => page.getByRole('button', { name: 'เพิ่มสมาชิก', exact: true })
+		field: (page) => page.getByRole('button', { name: 'เพิ่มสมาชิก', exact: true }),
+		// The add button sits below the last member (roleplay #13), so the jump lands on the
+		// first blank member card above it.
+		firstInvalid: (page) => memberCard(page, 2).locator('#member-1-first-name')
 	}
 ];
 

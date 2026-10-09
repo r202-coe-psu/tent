@@ -176,6 +176,8 @@ async function fillMinimalUnifiedRegistration(
 	await primary.locator('#member-0-last-name').fill(opts.lastName);
 	// Gender radios required (blankUnifiedMember no longer defaults gender).
 	await primary.locator('#member-0-gender-male').click({ force: true });
+	// No phone: the field opens ready to type, so tick "no phone" (roleplay #10).
+	await primary.locator('#member-0-no-phone').click();
 
 	if (opts.addSecondMember) {
 		await page.getByRole('button', { name: 'เพิ่มสมาชิก' }).click();
@@ -185,6 +187,7 @@ async function fillMinimalUnifiedRegistration(
 		await member2.locator('#member-1-first-name').fill('สมาชิก');
 		await member2.locator('#member-1-last-name').fill('คนที่สอง');
 		await member2.locator('#member-1-gender-female').click({ force: true });
+		await member2.locator('#member-1-no-phone').click();
 	}
 }
 
