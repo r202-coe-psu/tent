@@ -14,7 +14,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { bootstrapAdminSession, couchReq } from './couch';
-import { appBaseUrl } from './e2e-env';
+import { appBaseUrl, IS_REMOTE } from './e2e-env';
 
 /** Public BFF of the app under test (see `appBaseUrl`). */
 const bffBase = () => `${appBaseUrl()}/api/public/v1`;
@@ -295,6 +295,10 @@ export function recordCreatedShelter(code: string): void {
  * Delete everything the ledger (plus `extraQueueIds`) lists, and the registrations that
  * carry this run's `marker`, then empty the ledger. Shelters go through `teardownShelter`,
  * which refuses anything that is not an `E2E …` shelter.
+ *
+ * On a remote target without `E2E_FASTAPI_URL` the central queue is unreachable: the marker
+ * sweep is skipped when nothing was queued (suites that never touch the queue, e.g. onsite),
+ * and a run that did queue documents fails loudly rather than leave them behind silently.
  */
 export async function purgeCreatedData(
 	marker: string,
@@ -302,7 +306,15 @@ export async function purgeCreatedData(
 ): Promise<{ queue: string[]; shelters: string[] }> {
 	const ledger = readLedger();
 	const queue = new Set<string>([...ledger.queue, ...extraQueueIds]);
-	for (const id of await listUnassignedRegistrations(marker)) queue.add(id);
+	const queueReachable = !IS_REMOTE || Boolean(process.env.E2E_FASTAPI_URL);
+	if (!queueReachable && queue.size > 0) {
+		throw new Error(
+			`E2E_FASTAPI_URL is not set — cannot delete central-queue documents ${[...queue].join(', ')}`
+		);
+	}
+	if (queueReachable) {
+		for (const id of await listUnassignedRegistrations(marker)) queue.add(id);
+	}
 	for (const id of queue) await deleteUnassignedRegistration(id);
 	for (const code of ledger.shelters) await teardownShelter(code);
 	writeLedger({ queue: [], shelters: [] });

@@ -63,12 +63,20 @@ Known problems:
   nothing until you also re-run `pnpm seed` (not `pnpm seed:master`, which skips `seedUsers()`
   entirely) to actually provision the `public_writer` CouchDB user — check with
   `curl $COUCHDB_ADMIN_URL/_users/org.couchdb.user:public_writer`.
-- For **local** runs, leave `E2E_BASE_URL` (and the `E2E_SEARCH_*` / `E2E_SHELTERS_MARKER`
-  fixtures) **unset** in `frontend/e2e/.env`, even if it is copied from `.env.example`. Any value — even
-  `http://localhost:5173` — makes `IS_REMOTE` true (`helpers/e2e-env.ts`), so `public-search-flow`
-  and `public-shelters-filter` stop creating their own data and look for pre-seeded staging fixtures
-  (`[E2E-STAGING] …`) that do not exist locally. They fail with a `toPass` timeout. The app URL
-  for local runs comes from `PLAYWRIGHT_TEST_BASE_URL`, not `E2E_BASE_URL`.
+- For **local** runs, leave `E2E_BASE_URL` **unset** in `frontend/e2e/.env`, even if it is copied
+  from `.env.example`. Any value — even `http://localhost:5173` — makes `IS_REMOTE` true
+  (`helpers/e2e-env.ts`): without `ALLOW_REMOTE_WRITES=true` the run turns read-only, so
+  `public-search-flow` / `public-shelters-filter` look for a provisioned fixture
+  (`E2E_SEARCH_*` / `E2E_SHELTERS_MARKER`) and fail with a `toPass` timeout. The app URL for
+  local runs comes from `PLAYWRIGHT_TEST_BASE_URL`, not `E2E_BASE_URL`.
+- `public-search-flow` / `public-shelters-filter` used to skip their setup on **every** remote
+  target and search a hand-provisioned staging fixture that nobody had created. They now gate on
+  `CAN_WRITE` like the other `@critical` suites: a writable staging run creates per-run `E2E …`
+  data and tears it down; each ends with a Z test. Public persons disappear as soon as the
+  registry doc is deleted. The public **shelter row** stays `closed` / `is_active:false` until
+  the worker's retention job (`reconcile_closed_shelters`, every 5 min) removes it — verified
+  locally, gone within 138 s. `ALLOW_REMOTE_WRITES` must now be exactly `true` (it used to accept
+  any non-empty value, `false` included).
 - `config:app.recaptcha_enabled` defaults to `true`; any suite that writes through a public BFF
   route gated by `recaptcha-gate.ts` needs to flip it off for the duration of its writes and restore
   it after (see `setRecaptcha` in `helpers/staff-ui.ts`, used by both pre-register W1-W4/W6 **and**
@@ -165,7 +173,7 @@ Reference implementation: `public-pre-register-flow.test.ts` + `helpers/pre-regi
 
 1. **Jenkins agent** — the `mgmt` agent already builds and runs Docker containers
    (`scripts/run-staging-e2e.sh` → `frontend/Dockerfile.e2e-staging`, base
-   `mcr.microsoft.com/playwright:v1.61.1-noble`), so Playwright-in-Docker works today. Still to
+   `mcr.microsoft.com/playwright:v1.64.0-noble`), so Playwright-in-Docker works today. Still to
    confirm for phase 4: enough CPU/RAM/ports on `mgmt` to run a full `docker compose` stack.
 2. **Staging may be written to** by `@critical` tests, on the condition that cleanup is guaranteed:
    ledger-only teardown (§4.2), a zero-leak assertion at the end of each run, and a scheduled
@@ -331,8 +339,16 @@ assertion green; `--list` shows every touched test with exactly one layer tag; a
   if desired).
 - **Owner follow-ups (not in code):** enable `main` branch protection requiring status
   `staging/e2e`; provision `tent-github-status-token`, `tent-staging-couch-admin-url`,
-  `tent-prod-e2e-env`; expand `tent-staging-e2e-env` with the fixture keys in
-  `frontend/e2e/.env.example`; schedule the janitor job.
+  `tent-prod-e2e-env`; fill `tent-staging-e2e-env` per `frontend/e2e/.env.example` (no
+  provisioned search/shelter fixture is needed on a writable run); schedule the janitor job.
+- **Staging reachability (verified 2026-10-10):** the Jenkins container reaches CouchDB only via
+  the app host's `/couch` proxy (`COUCHDB_ADMIN_URL=https://…@shelter.importstar.dev/couch`;
+  `routeBrowserCouchThroughApp` skips same-origin `/couch`) and FastAPI's staff routes only via
+  the host nginx's `/public-api/` (`E2E_FASTAPI_URL`). Without `E2E_FASTAPI_URL` every
+  pre-register live-write group skips rather than leak central-queue documents. That
+  `/public-api/` location predates CR-063 — if it is removed, give the e2e runner another route
+  to FastAPI first. `Dockerfile.e2e-staging`'s image tag must equal the locked
+  `@playwright/test` version.
 - **Acceptance:** a staging deploy with a deliberately broken journey shows a red commit status and
   (once protection is on) blocks the `main` merge; a clean deploy is green; the janitor dry-run
   lists only `E2E` shelters.

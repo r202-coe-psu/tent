@@ -20,7 +20,7 @@ if (!/^https:\/\/[^\s/]+\/?$/.test(stagingURL)) {
  *   - `grep` then picks the individual `@critical`/`@smoke` tests inside those
  *     files (not scoped to `@release` — this also surfaces `@critical` suites
  *     outside the six release journeys, e.g. the live-results describes in
- *     public-search-flow / public-shelters-filter / public-home-flow, as skipped
+ *     public-search-flow / public-shelters-filter, and public-home-flow as skipped
  *     rather than absent)
  *   - exclude `@quarantine`
  *   - workers=1; budget 15–30 min
@@ -28,10 +28,12 @@ if (!/^https:\/\/[^\s/]+\/?$/.test(stagingURL)) {
  * `@critical` suites only run their live writes when this process also has
  * `ALLOW_REMOTE_WRITES=true` — set via the `tent-staging-e2e-env` Jenkins
  * credential (`e2e/.env.example` documents it), never `tent-prod-e2e-env` — see
- * `CAN_WRITE` in `e2e/helpers/e2e-env.ts`. Suites still gated on the older
- * `IS_REMOTE` check directly (public-home-flow, public-search-flow,
- * public-shelters-filter — no verified zero-leak teardown yet) stay `test.skip`
- * regardless of `ALLOW_REMOTE_WRITES` and appear as skipped, not failures.
+ * `CAN_WRITE` in `e2e/helpers/e2e-env.ts`. public-search-flow and
+ * public-shelters-filter create and tear down their own per-run data like the
+ * other `@critical` suites (each ends with a zero-leak Z test), so they need no
+ * provisioned fixture on a writable run. public-home-flow is still gated on
+ * `IS_REMOTE` directly (a live critical need would invite real donations) and
+ * stays `test.skip` regardless of `ALLOW_REMOTE_WRITES`.
  */
 export default defineConfig({
 	testDir: './e2e',

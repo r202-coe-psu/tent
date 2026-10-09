@@ -113,7 +113,12 @@ import {
 	type Page
 } from '@playwright/test';
 import { bootstrapAdminSession, couchReq } from './helpers/couch';
-import { CAN_WRITE, LOCAL_RUN_ID as RUN_ID, READ_ONLY_REASON } from './helpers/e2e-env';
+import {
+	CAN_WRITE as TARGET_CAN_WRITE,
+	IS_REMOTE,
+	LOCAL_RUN_ID as RUN_ID,
+	READ_ONLY_REASON as TARGET_READ_ONLY_REASON
+} from './helpers/e2e-env';
 import { injectSession, routeBrowserCouchThroughApp } from './helpers/login';
 import {
 	DISCLAIMER_LABEL,
@@ -188,6 +193,17 @@ const NO_THAID = async (page: Page) =>
 	page.route('**/api/public/v1/thaid/status', (route) =>
 		route.fulfill({ json: { enabled: false, isDev: false, mode: 'real' } })
 	);
+
+/**
+ * Teardown (`purgeCreatedData`) lists and deletes central-queue documents through FastAPI's
+ * staff routes, which have no browser-facing BFF. On a remote target they are reachable only
+ * through `E2E_FASTAPI_URL` (staging: `https://<host>/public-api`); without it every write here
+ * would leave data behind, so the live-write groups stay read-only instead.
+ */
+const CAN_WRITE = TARGET_CAN_WRITE && (!IS_REMOTE || Boolean(process.env.E2E_FASTAPI_URL));
+const READ_ONLY_REASON = TARGET_CAN_WRITE
+	? 'E2E_FASTAPI_URL is not set — teardown cannot reach the central queue on this target'
+	: TARGET_READ_ONLY_REASON;
 
 /** Identity of this run — the last name carries the run id so teardown can find it. */
 const LAST_NAME = `ทดสอบ${RUN_ID}`;

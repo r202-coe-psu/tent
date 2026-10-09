@@ -4,17 +4,18 @@
  * One suite, three targets:
  *  - **local** (no `E2E_BASE_URL`): each suite creates its data through the staff UI,
  *    then tears it down in afterAll (needs `COUCHDB_ADMIN_URL`).
- *  - **remote, read-only** (`E2E_BASE_URL` set, `ALLOW_REMOTE_WRITES` unset — production,
- *    and staging before fixtures + janitor are ready): setup, teardown and any test
- *    that writes are skipped; assertions run against a dedicated E2E fixture
- *    provisioned once through the staff UI, whose values come from env.
+ *  - **remote, read-only** (`E2E_BASE_URL` set, `ALLOW_REMOTE_WRITES` unset — production):
+ *    setup, teardown and any test that writes are skipped; assertions run against a
+ *    dedicated E2E fixture provisioned once through the staff UI, whose values come from env.
  *  - **remote, writable** (`E2E_BASE_URL` **and** `ALLOW_REMOTE_WRITES=true` — staging
  *    only, set in the `tent-staging-e2e-env` Jenkins credential / `e2e/.env.example`,
- *    never `tent-prod-e2e-env`): `@critical` suites create their own `E2E …` shelter
- *    through the staff UI against the real remote stack and tear it down the same way
- *    as local, via `CAN_WRITE` (needs `COUCHDB_ADMIN_URL` for that remote target too).
+ *    never `tent-prod-e2e-env`): exactly like local — `@critical` suites create their own
+ *    per-run `E2E …` data through the staff UI against the real remote stack and tear it
+ *    down, via `CAN_WRITE` (needs `COUCHDB_ADMIN_URL` for that remote target too). No
+ *    provisioned fixture and none of the env below.
  *
- * Fixture convention (provision it with exactly these shapes — fictitious names only):
+ * Fixture convention for the **read-only remote** target only (provision it with exactly
+ * these shapes — fictitious names only):
  *
  * Search fixture — one shelter `E2E_SEARCH_SHELTER_NAME` with 6 evacuees, every first
  * name starting with `E2E_SEARCH_PREFIX`, last name `ทดสอบระบบ`:
@@ -35,9 +36,9 @@
  * Set both to `closed` after provisioning so the public does not treat them as real
  * destinations — the filters under test do not depend on status.
  *
- * Remote env (all required when `E2E_BASE_URL` is set): `E2E_SEARCH_SHELTER_NAME`,
- * `E2E_SEARCH_PREFIX`, `E2E_SEARCH_PHONE`, `E2E_SEARCH_NATIONAL_ID`,
- * `E2E_SEARCH_PASSPORT`, `E2E_SHELTERS_MARKER`.
+ * Read-only remote env (all required when `E2E_BASE_URL` is set and the run cannot
+ * write): `E2E_SEARCH_SHELTER_NAME`, `E2E_SEARCH_PREFIX`, `E2E_SEARCH_PHONE`,
+ * `E2E_SEARCH_NATIONAL_ID`, `E2E_SEARCH_PASSPORT`, `E2E_SHELTERS_MARKER`.
  */
 import process from 'node:process';
 import { test } from '@playwright/test';
@@ -54,7 +55,8 @@ export const IS_REMOTE = Boolean(process.env.E2E_BASE_URL);
  * pipeline code change. On its own this flag means nothing locally; it only
  * relaxes the read-only gate below when `IS_REMOTE` is true.
  */
-export const ALLOW_REMOTE_WRITES = Boolean(process.env.ALLOW_REMOTE_WRITES);
+// exactly "true", like run-staging-e2e.sh — `ALLOW_REMOTE_WRITES=false` must not opt in
+export const ALLOW_REMOTE_WRITES = process.env.ALLOW_REMOTE_WRITES?.trim() === 'true';
 
 /**
  * True when this run may write: always true locally, true on a remote target only
@@ -78,15 +80,24 @@ export function appBaseUrl(): string {
 export const READ_ONLY_REASON =
 	'remote target is read-only (E2E_BASE_URL is set and ALLOW_REMOTE_WRITES is not)';
 
+/**
+ * True when the public suites must read a provisioned fixture instead of creating their own
+ * per-run data — a remote target that may not write. Writable runs (local, or staging with
+ * `ALLOW_REMOTE_WRITES=true`) always create and tear down their own.
+ */
+export const USES_PROVISIONED_FIXTURE = IS_REMOTE && !CAN_WRITE;
+
 function requireEnv(name: string): string {
 	const value = process.env[name]?.trim();
 	if (!value) {
-		throw new Error(`${name} is required when E2E_BASE_URL is set (see e2e/helpers/e2e-env.ts)`);
+		throw new Error(
+			`${name} is required on a read-only remote target (see e2e/helpers/e2e-env.ts)`
+		);
 	}
 	return value;
 }
 
-/** Unique per local run so leftovers from other runs never match. */
+/** Unique per run so leftovers from other runs never match. */
 const RUN_ID = Date.now().toString(36);
 
 export const FIXTURE_LAST_NAME = 'ทดสอบระบบ';
@@ -107,16 +118,18 @@ export interface SearchFixture {
 }
 
 export function searchFixture(): SearchFixture {
-	const prefix = IS_REMOTE ? requireEnv('E2E_SEARCH_PREFIX') : `ทดสอบ${RUN_ID}`;
-	const phone = IS_REMOTE ? requireEnv('E2E_SEARCH_PHONE') : `08${String(Date.now()).slice(-8)}`;
-	// Local: fictitious and unique per run — see the ID rule in the file comment.
-	const nationalId = IS_REMOTE
+	const prefix = USES_PROVISIONED_FIXTURE ? requireEnv('E2E_SEARCH_PREFIX') : `ทดสอบ${RUN_ID}`;
+	const phone = USES_PROVISIONED_FIXTURE
+		? requireEnv('E2E_SEARCH_PHONE')
+		: `08${String(Date.now()).slice(-8)}`;
+	// Writable runs: fictitious and unique per run — see the ID rule in the file comment.
+	const nationalId = USES_PROVISIONED_FIXTURE
 		? requireEnv('E2E_SEARCH_NATIONAL_ID')
 		: fictitiousNationalId(Date.now());
-	const passport = IS_REMOTE
+	const passport = USES_PROVISIONED_FIXTURE
 		? requireEnv('E2E_SEARCH_PASSPORT')
 		: `ZZ${String(Date.now()).slice(-7)}`;
-	const shelterName = IS_REMOTE
+	const shelterName = USES_PROVISIONED_FIXTURE
 		? requireEnv('E2E_SEARCH_SHELTER_NAME')
 		: `E2E ศูนย์ทดสอบค้นหา ${RUN_ID}`;
 	const person = (
@@ -168,7 +181,7 @@ export interface SheltersFixture {
 }
 
 export function sheltersFixture(): SheltersFixture {
-	const marker = IS_REMOTE ? requireEnv('E2E_SHELTERS_MARKER') : `E2Eกรอง${RUN_ID}`;
+	const marker = USES_PROVISIONED_FIXTURE ? requireEnv('E2E_SHELTERS_MARKER') : `E2Eกรอง${RUN_ID}`;
 	return {
 		marker,
 		hostNear: {
