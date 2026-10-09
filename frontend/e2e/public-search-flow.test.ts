@@ -127,14 +127,16 @@ test.describe('Public family search: live results', { tag: ['@public', '@critica
 	});
 
 	test('finds everyone by name prefix and paginates 5 per page', async ({ page }) => {
-		test.setTimeout(150_000); // outlasts the 120 s projection wait below
-		// The worker projects new registrations asynchronously — retry the search.
+		test.setTimeout(45_000); // outlasts the 35 s projection wait below
+		// The shelter was just created — the worker's registry listener only polls for
+		// brand-new shelter databases every 30s (listeners/registry.py), so this first
+		// wait needs headroom past that; retry the search until it does.
 		await expect(async () => {
 			await page.goto(`/search?q=${encodeURIComponent(PREFIX)}`);
 			await expect(page.getByText(`พบข้อมูลทั้งหมด ${TOTAL} รายการ`)).toBeVisible({
 				timeout: 3_000
 			});
-		}).toPass({ intervals: [5_000], timeout: 120_000 });
+		}).toPass({ intervals: [2_000], timeout: 35_000 });
 
 		await expect(page.getByRole('heading', { name: PREFIX })).toHaveCount(5);
 		await expect(page.getByText('หน้า 1 จาก 2')).toBeVisible();

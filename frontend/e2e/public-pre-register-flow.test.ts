@@ -152,7 +152,7 @@ import {
 	recordCreatedShelter,
 	waitForProjection
 } from './helpers/public-cleanup';
-import { createShelterViaUi } from './helpers/staff-ui';
+import { createShelterViaUi, setRecaptcha } from './helpers/staff-ui';
 
 // ------------------------------------------------------------------ fixtures
 
@@ -1768,14 +1768,30 @@ test.describe(
 		let statusCalls: StatusCall[];
 		let queueId = '';
 
+		// This suite writes through the real reCAPTCHA gate (recaptcha-gate.ts) — a fake
+		// __captchaToken never passes real Google verification — so disable the switch for
+		// the duration of the writes and restore whatever it was set to beforehand.
+		let adminContext: BrowserContext;
+		let adminPage: Page;
+		let recaptchaWasEnabled = true;
+
 		test.beforeAll(async ({ browser }) => {
 			if (!CAN_WRITE) return;
 			context = await browser.newContext();
 			page = await context.newPage();
 			health = watchPage(page);
 			statusCalls = recordStatusCalls(page);
+
+			const admin = await bootstrapAdminSession();
+			adminContext = await browser.newContext();
+			adminPage = await adminContext.newPage();
+			await routeBrowserCouchThroughApp(adminPage);
+			await injectSession(adminPage, admin.user, admin.cookie);
+			recaptchaWasEnabled = await setRecaptcha(adminPage, false);
 		});
 		test.afterAll(async () => {
+			if (CAN_WRITE) await setRecaptcha(adminPage, recaptchaWasEnabled);
+			await adminContext?.close();
 			await context?.close();
 		});
 		test.beforeEach(() => {

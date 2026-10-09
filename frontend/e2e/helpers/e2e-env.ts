@@ -41,6 +41,7 @@
  */
 import process from 'node:process';
 import { test } from '@playwright/test';
+import { fictitiousNationalId } from './pre-register';
 import type { MemberForm, ShelterForm } from './staff-ui';
 
 /** True for any remote target (staging or production) — fixture values must come from env. */
@@ -111,7 +112,7 @@ export function searchFixture(): SearchFixture {
 	// Local: fictitious and unique per run — see the ID rule in the file comment.
 	const nationalId = IS_REMOTE
 		? requireEnv('E2E_SEARCH_NATIONAL_ID')
-		: `0${String(Date.now()).slice(-12)}`;
+		: fictitiousNationalId(Date.now());
 	const passport = IS_REMOTE
 		? requireEnv('E2E_SEARCH_PASSPORT')
 		: `ZZ${String(Date.now()).slice(-7)}`;

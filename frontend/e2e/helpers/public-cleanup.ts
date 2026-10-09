@@ -29,7 +29,7 @@ export const E2E_SHELTER_PREFIX = 'E2E';
 export async function waitForProjection(
 	what: string,
 	check: () => Promise<boolean>,
-	{ timeoutMs = 90_000, intervalMs = 3_000 } = {}
+	{ timeoutMs = 10_000, intervalMs = 1_000 } = {}
 ): Promise<void> {
 	const deadline = Date.now() + timeoutMs;
 	while (Date.now() < deadline) {

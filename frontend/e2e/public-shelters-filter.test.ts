@@ -106,19 +106,21 @@ test.describe(
 		});
 
 		test('filters the list by shelter name', async ({ page }) => {
-			test.setTimeout(90_000); // outlasts the 60 s projection wait below
+			test.setTimeout(45_000); // outlasts the 35 s projection wait below
 			await page.goto('/shelters');
 			await expect(page).toHaveURL(/distance=5/);
 			await expect(page.getByRole('heading', { name: 'ค้นหาและตัวกรอง' })).toBeVisible();
 
-			// The worker projects new shelters asynchronously — retry the filter.
+			// These shelters were just created — the worker's registry listener only
+			// polls for brand-new shelter databases every 30s (listeners/registry.py),
+			// so this first wait needs headroom past that; retry the filter until it does.
 			await expect(async () => {
 				await page.goto('/shelters');
 				await page.getByRole('textbox', { name: 'ค้นหา' }).fill(MARKER);
 				await expect(page.getByRole('heading', { name: HOST_NEAR.name })).toBeVisible({
 					timeout: 3_000
 				});
-			}).toPass({ intervals: [3_000], timeout: 60_000 });
+			}).toPass({ intervals: [2_000], timeout: 35_000 });
 			await expect(page).toHaveURL(/q=/);
 			await expect(page.getByRole('heading', { name: EVAC_FAR.name })).toBeHidden();
 			await expect(page.getByRole('heading', { name: MARKER })).toHaveCount(1);
