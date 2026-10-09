@@ -5,6 +5,7 @@
 
 import { z } from 'zod';
 import { CR112_VULNERABLE_GROUP_ACTIVE, formatMasterLabel } from '$lib/features/master-data';
+import { formatThaiDateTime } from '$lib/utils/date';
 
 /** Full Station 1 badge copy for Unassigned Registration hits (#250 / CR-113). */
 export const UNASSIGNED_QUEUE_BADGE_LABEL = 'คิวกลาง / ยังไม่ระบุศูนย์';
@@ -46,7 +47,8 @@ export const openMemberHitSchema = z.object({
 	status: z.literal('open'),
 	first_name: z.string(),
 	last_name: z.string(),
-	gender: z.string(),
+	/** `null` = ไม่ระบุ (decision sync 2026-10-09); legacy `'other'` also reads as ไม่ระบุ. */
+	gender: z.string().nullable(),
 	phone: z.string().nullable(),
 	person_id: personIdHitSchema.nullable(),
 	country: z.string(),
@@ -114,8 +116,8 @@ export function formatOpenMemberName(member: OpenMemberHit): string {
 	return `${member.first_name} ${member.last_name}`.trim();
 }
 
-export function formatOpenMemberGender(gender: string): string {
-	return GENDER_LABELS[gender] ?? gender;
+export function formatOpenMemberGender(gender: string | null | undefined): string {
+	return (gender ? GENDER_LABELS[gender] : undefined) ?? 'ไม่ระบุ';
 }
 
 export function formatOpenMemberCardType(cardType: PersonIdHit['cardType']): string {
@@ -152,14 +154,7 @@ export function formatOpenPetLabel(pet: OpenPetHit): string {
 
 /** Thai-locale date+time for claim registration header. */
 export function formatClaimCreatedAt(iso: string): string {
-	try {
-		return new Date(iso).toLocaleString('th-TH', {
-			dateStyle: 'medium',
-			timeStyle: 'short'
-		});
-	} catch {
-		return iso;
-	}
+	return formatThaiDateTime(iso) || iso;
 }
 
 /** True when FastAPI / BFF signal that central Mongo (or auth) is unreachable. */

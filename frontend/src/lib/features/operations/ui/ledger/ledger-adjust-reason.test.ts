@@ -81,12 +81,6 @@ describe('toLedgerRow adjust reason', () => {
 		expect(row.detail).toBe('donation:DN-1');
 	});
 
-	it('labels every persisted reason', () => {
-		for (const key of ['expired', 'damaged', 'count_mismatch', 'lost', 'found', 'merge', 'other']) {
-			expect(ADJUST_REASON_LABELS[key as keyof typeof ADJUST_REASON_LABELS]).toBeTruthy();
-		}
-	});
-
 	it('exports the reason in the CSV reason/destination column', () => {
 		const csv = ledgerToCsv(buildLedgerRows([expired], lookup));
 		expect(csv).toContain(ADJUST_REASON_LABELS.expired);

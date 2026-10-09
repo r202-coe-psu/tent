@@ -79,6 +79,13 @@ describe('validateRow — cell resolution', () => {
 		}
 	});
 
+	it('treats a blank gender cell as ไม่ระบุ (null) instead of a required-field error', () => {
+		const result = validateRow(minimalHead({ [H.gender]: '' }), 1, emptyLookups());
+
+		expect(result.ok).toBe(true);
+		expect(result.payload?.head.gender).toBeNull();
+	});
+
 	it('lists the accepted options when an enum cell is wrong', () => {
 		const result = validateRow(minimalHead({ [H.gender]: 'ก' }), 1, emptyLookups());
 

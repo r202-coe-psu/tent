@@ -1,11 +1,11 @@
 export const PUBLIC_PRE_REGISTER_I18N = {
 	th: {
-		pageTitle: 'ลงทะเบียนเข้าศูนย์พักพิงล่วงหน้า | SmartShelter',
+		pageTitle: 'ลงทะเบียนล่วงหน้า | SmartShelter',
 		backHome: 'กลับหน้าหลัก',
 		tabTicket: 'ใบลงทะเบียน',
 		tabNew: 'ลงทะเบียนใหม่',
 		tabHistory: 'ใบลงทะเบียนของฉัน',
-		heading: 'ลงทะเบียนเข้าศูนย์พักพิงล่วงหน้า',
+		heading: 'ลงทะเบียนล่วงหน้า',
 		subheading:
 			'กรอกข้อมูลตัวท่านและสมาชิกในครอบครัว เพื่ออำนวยความสะดวกในการจัดสรรพื้นที่เข้าพัก เมื่อเดินทางถึงศูนย์พักพิง',
 		ticketsClaimedToast:
@@ -17,12 +17,12 @@ export const PUBLIC_PRE_REGISTER_I18N = {
 		loadingShelters: 'กำลังโหลดรายชื่อศูนย์พักพิง…'
 	},
 	en: {
-		pageTitle: 'Pre-register for a shelter | SmartShelter',
+		pageTitle: 'Pre-registration | SmartShelter',
 		backHome: 'Back to home',
 		tabTicket: 'Registration slip',
 		tabNew: 'New registration',
 		tabHistory: 'My registrations',
-		heading: 'Pre-register for a shelter',
+		heading: 'Pre-registration',
 		subheading:
 			'Enter details for yourself and your family so the shelter can prepare space for you before you arrive.',
 		ticketsClaimedToast:

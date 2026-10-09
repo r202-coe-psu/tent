@@ -41,7 +41,7 @@
 		try {
 			const profile = await resolvePortalAccess({ phone });
 			if (!profile?.portal_id) {
-				error = 'ไม่พบเบอร์โทรศัพท์นี้ในระบบจิตอาสา กรุณาตรวจสอบเบอร์ที่ใช้สมัครอีกครั้ง';
+				error = 'ไม่พบเบอร์โทรศัพท์นี้ในระบบอาสาสมัคร กรุณาตรวจสอบเบอร์ที่ใช้สมัครอีกครั้ง';
 				return;
 			}
 			try {

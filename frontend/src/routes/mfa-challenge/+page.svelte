@@ -20,7 +20,7 @@
 		skipMfa
 	} from '$lib/features/users';
 	import { GoogleSignInButton, ThaIdSignInButton } from '$lib/features/login';
-	import { ShieldCheck } from '@lucide/svelte';
+	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 
 	let loading = $state(true);
 	let skipping = $state(false);

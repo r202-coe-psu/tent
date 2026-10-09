@@ -9,7 +9,7 @@ layer: volatile
 affects:
   - docs/task-breakdown/04-donation.md §T-16 DoD (ข้อ "CR-052 UI Split")
   - docs/data/schema.md §2.3 `donation.status` (ข้อความกำกับ transition)
-  - docs/changes/CR-052-donation-system-design-v8.md (erratum — ผัง vs ข้อความ)
+  - docs/changes/04-donation/CR-052-donation-system-design-v8.md (erratum — ผัง vs ข้อความ)
   - frontend/src/lib/features/operations/domain/operations.ts (`DONATION_TRANSITIONS`)
   - frontend/src/routes/(protected)/back-office/stock-donations/+page.svelte
 why: แท็บหนึ่งซ้ำกับคิวในสถานีสแกน อีกแท็บอ่านได้อย่างเดียว และเอกสารกับโค้ดกำลังเล่าคนละเรื่องเรื่อง transition

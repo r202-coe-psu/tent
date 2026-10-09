@@ -70,7 +70,9 @@ export const GET: RequestHandler = async ({ request }) => {
 					admission_policy: migrated.admission_policy ?? EMPTY_ADMISSION_POLICY,
 					luggage_policy: migrated.luggage_policy ?? EMPTY_LUGGAGE_POLICY,
 					parking_policy: migrated.parking_policy ?? EMPTY_PARKING_POLICY,
-					feature_flags: migrated.feature_flags ?? { ...DEFAULT_SHELTER_FEATURE_FLAGS }
+					feature_flags: migrated.feature_flags ?? { ...DEFAULT_SHELTER_FEATURE_FLAGS },
+					created_at: migrated.created_at ?? '',
+					updated_at: migrated.updated_at ?? ''
 				};
 			}),
 			{ headers: { 'cache-control': 'no-store, max-age=0' } }

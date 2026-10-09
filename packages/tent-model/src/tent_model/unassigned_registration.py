@@ -51,7 +51,8 @@ class UnassignedMember(BaseModel):
 	status: MemberStatus = "open"
 	first_name: str
 	last_name: str = ""
-	gender: Literal["male", "female", "other"]
+	# decision sync 2026-10-09: null = ไม่ระบุ; 'other' legacy (read/preserve only).
+	gender: Literal["male", "female", "other"] | None
 	phone: str | None = None
 	person_id: PersonId | None = None
 	country: str = "THAILAND"
