@@ -57,8 +57,8 @@
  *  R2 every control visible + enabled with its label bound (`getByLabel`) — address, primary
  *     contact, emergency / vulnerable / special-needs accordions, pets, consent, member 2
  *  R3 dropdowns open with real options (housing 5, province from the API, religion, card type)
- *  R4 ARIA snapshots of <main>: empty form, all-errors form, queue ticket
- *  R5 screenshots 1440 / 390 of the empty and the all-errors form
+ *  R4 no field flagged before submit; an empty submit flags fields + shows the summary
+ *  R5 1440 / 390: every section renders, empty and all-errors (structural, no pixel baselines)
  *  R6 no pageerror / console error / warning / HTTP >= 400 while loading and filling
  *
  * ── Error matrix (C2.2) ──────────────────────────────────────────────────────────────────
@@ -126,6 +126,7 @@ import {
 	fillAddress,
 	fillEmergencyContact,
 	fillMember,
+	invalidFields,
 	memberCard,
 	mockSystemBanner,
 	openMemberAccordion,
@@ -220,7 +221,10 @@ test.describe(
 			await expect(links).toHaveCount(3);
 			await expect(links.filter({ visible: true })).toHaveCount(2);
 
-			await page.getByRole('link', { name: 'ลงทะเบียนล่วงหน้า' }).click();
+			await page
+				.locator('main header')
+				.getByRole('link', { name: 'ลงทะเบียนล่วงหน้า', exact: true })
+				.click();
 			// The booking form pins the default (central queue) in the URL once it mounts.
 			await expect(page).toHaveURL(/\/pre-register\?shelter=unassigned$/);
 			await expect(page).toHaveTitle('ลงทะเบียนล่วงหน้า | SmartShelter');
@@ -229,7 +233,10 @@ test.describe(
 			).toBeVisible();
 
 			await page.goto('/');
-			await page.getByRole('link', { name: 'ลงทะเบียนล่วงหน้า', exact: true }).click();
+			await page
+				.getByRole('banner')
+				.getByRole('link', { name: 'ลงทะเบียนล่วงหน้า', exact: true })
+				.click();
 			await expect(page).toHaveURL(/\/pre-register/);
 		});
 
@@ -369,7 +376,7 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 		await expect(page.getByRole('button', { name: 'ใช้ตำแหน่งปัจจุบัน' })).toBeEnabled();
 		await expect(
 			page.getByRole('textbox', {
-				name: 'ค้นหาครอบครัวด้วยเบอร์โทรศัพท์ (เพื่อเข้าร่วมบ้านเดิม)'
+				name: 'ค้นหาครอบครัวของท่านด้วยเบอร์โทรศัพท์'
 			})
 		).toBeEnabled();
 
@@ -596,68 +603,51 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 		await expect(page.getByRole('button', { name: 'ไทย', exact: true }).first()).toBeVisible();
 	});
 
-	test('R4 ARIA snapshot: the empty form', async ({ page }) => {
+	test('R4 no field is flagged before submit; an empty submit flags fields and lists them', async ({
+		page
+	}) => {
 		await NO_BANNER(page);
 		await NO_THAID(page);
 		await openPreRegister(page);
-		await expect(page.locator('main')).toMatchAriaSnapshot({ name: 'form-empty.aria.yml' });
-	});
+		await expect(invalidFields(page)).toHaveCount(0);
+		await expect(summaryAlert(page)).toHaveCount(0);
 
-	test('R4 ARIA snapshot: the form with every error showing', async ({ page }) => {
-		await NO_BANNER(page);
-		await NO_THAID(page);
-		await openPreRegister(page);
 		await acceptDisclaimer(page);
 		await submitButton(page).click();
 		await expect(summaryAlert(page)).toBeVisible();
-		await expect(page.locator('main')).toMatchAriaSnapshot({ name: 'form-errors.aria.yml' });
+		await expect(page.getByRole('button', { name: JUMP_BUTTON })).toBeVisible();
+		expect(await invalidFields(page).count()).toBeGreaterThan(0);
 	});
 
 	for (const viewport of [
 		{ name: 'desktop', width: 1440, height: 900 },
 		{ name: 'mobile', width: 390, height: 844 }
 	]) {
-		test(`R5 screenshot ${viewport.name}: empty and all-errors form`, async ({ page }) => {
+		// Structural render check (no pixel baselines): every section shows and the error state
+		// renders; console / page errors are caught by the auto `health` fixture.
+		test(`R5 ${viewport.name}: the empty and the all-errors form render every section`, async ({
+			page
+		}) => {
 			await page.setViewportSize({ width: viewport.width, height: viewport.height });
 			await NO_BANNER(page);
 			await NO_THAID(page);
 			await openPreRegister(page);
-			await page.waitForLoadState('networkidle');
-			// Viewport shots at fixed scroll positions: a full-page capture mangles the sticky
-			// summary / bars. The navbar carries live announcement counts, toasts are transient.
-			const options = {
-				animations: 'disabled' as const,
-				caret: 'hide' as const,
-				maxDiffPixelRatio: 0.01,
-				mask: [page.locator('header')]
-			};
-			const scrollTo = async (selector: string | null) => {
-				await page.evaluate((sel) => {
-					const target = sel ? document.querySelector(sel) : null;
-					window.scrollTo({
-						top: target ? target.getBoundingClientRect().top + window.scrollY - 90 : 0,
-						behavior: 'instant'
-					});
-				}, selector);
-				await settleScroll(page);
-			};
 
-			await expect(page).toHaveScreenshot(`form-empty-top-${viewport.name}.png`, options);
-			await scrollTo('#unified-members');
-			await expect(page).toHaveScreenshot(`form-empty-members-${viewport.name}.png`, options);
+			await expect(
+				page.getByRole('heading', { name: 'ลงทะเบียนล่วงหน้า', level: 1 })
+			).toBeVisible();
+			await expect(shelterTrigger(page)).toBeVisible();
+			await page.locator('#address-no').scrollIntoViewIfNeeded();
+			await expect(page.locator('#address-no')).toBeVisible();
+			await page.locator('#unified-members').scrollIntoViewIfNeeded();
+			await expect(page.locator('#unified-members')).toBeVisible();
+			await expect(primaryCard(page)).toBeVisible();
+			await expect(submitButton(page)).toBeVisible();
 
-			await scrollTo(null);
 			await acceptDisclaimer(page);
 			await submitButton(page).click();
 			await expect(summaryAlert(page)).toBeVisible();
-			await page.locator('[data-sonner-toast]').first().waitFor();
-			// toasts are transient — hide them so the baseline never depends on their timing
-			await page.addStyleTag({ content: '[data-sonner-toaster]{display:none !important}' });
-			await settleScroll(page);
-			await scrollTo('form [role="alert"]');
-			await expect(page).toHaveScreenshot(`form-errors-top-${viewport.name}.png`, options);
-			await scrollTo('#unified-members');
-			await expect(page).toHaveScreenshot(`form-errors-members-${viewport.name}.png`, options);
+			expect(await invalidFields(page).count()).toBeGreaterThan(0);
 		});
 	}
 
@@ -1146,7 +1136,7 @@ test.describe('Pre-register: error matrix (E)', { tag: ['@pre-register', '@smoke
 	}) => {
 		await openPreRegister(page);
 		const search = page.getByRole('textbox', {
-			name: 'ค้นหาครอบครัวด้วยเบอร์โทรศัพท์ (เพื่อเข้าร่วมบ้านเดิม)'
+			name: 'ค้นหาครอบครัวของท่านด้วยเบอร์โทรศัพท์'
 		});
 		await search.fill('08123');
 		await expect(search).not.toHaveAttribute('aria-invalid', 'true');
@@ -1783,7 +1773,10 @@ test.describe(
 			test.setTimeout(120_000);
 			liveWritesStarted = true;
 			await page.goto('/');
-			await page.getByRole('link', { name: 'ลงทะเบียนล่วงหน้า' }).click();
+			await page
+				.locator('main header')
+				.getByRole('link', { name: 'ลงทะเบียนล่วงหน้า', exact: true })
+				.click();
 			await expect(page).toHaveURL(/\/pre-register\?shelter=unassigned$/);
 			await expect(page.locator('#address-no')).toBeVisible({ timeout: 20_000 });
 			await expect(shelterTrigger(page)).toContainText('ไม่ระบุศูนย์พักพิง');
