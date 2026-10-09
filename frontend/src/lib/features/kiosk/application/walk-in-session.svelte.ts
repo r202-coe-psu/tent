@@ -1,14 +1,14 @@
 import type { SmartCardData } from '$lib/features/scanners';
-import type { FaceCheckMode, FaceCheckOutcome } from '../domain/face-check';
+import type { FaceCheckOutcome } from '../domain/face-check';
 
 /** The face check the walk-in face page runs, as the card page resolved it from the hardware. */
-export type WalkInFaceCheck = { mode: 'shadow' | 'on'; cameraLabel: string | null };
+export type WalkInFaceCheck = { cameraLabel: string | null };
 
 /**
- * Nothing known about the face check (the card page never said): run it in mode `on`, so anything
- * but a match waits for the staff PIN. The face page never skips the check by itself.
+ * Nothing known about the face check (the card page never said): run it anyway with the front
+ * camera, so anything but a match waits for the staff PIN. The face page never skips the check.
  */
-export const WALK_IN_FACE_CHECK_STRICT: WalkInFaceCheck = { mode: 'on', cameraLabel: null };
+export const WALK_IN_FACE_CHECK_STRICT: WalkInFaceCheck = { cameraLabel: null };
 
 class WalkInSession {
 	citizenId = $state<string | null>(null);
@@ -20,7 +20,7 @@ class WalkInSession {
 	faceCheck = $state.raw<WalkInFaceCheck | null>(null);
 	faceOutcome = $state<FaceCheckOutcome | null>(null);
 
-	/** What the face page runs: the card page's face check, or mode `on` when it is not known. */
+	/** What the face page runs: the card page's face check, or the strict default when not known. */
 	get faceCheckToRun(): WalkInFaceCheck {
 		return this.faceCheck ?? WALK_IN_FACE_CHECK_STRICT;
 	}
@@ -41,13 +41,10 @@ class WalkInSession {
 		}
 	}
 
-	/**
-	 * Hold the card for the face page, with the face check the card page found on. Only `shadow`
-	 * stays shadow: any other mode (the card page only gets here with the check on) runs as `on`.
-	 */
-	holdCard(card: SmartCardData, faceMode: FaceCheckMode, cameraLabel: string | null): void {
+	/** Hold the card for the face page, with the camera the card page found for the face check. */
+	holdCard(card: SmartCardData, cameraLabel: string | null): void {
 		this.card = card;
-		this.faceCheck = { mode: faceMode === 'shadow' ? 'shadow' : 'on', cameraLabel };
+		this.faceCheck = { cameraLabel };
 	}
 
 	clear(): void {

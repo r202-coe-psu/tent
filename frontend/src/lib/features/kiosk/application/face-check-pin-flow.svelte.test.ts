@@ -4,7 +4,6 @@ import type { KioskStaffPinResult } from '../data/kiosk-staff-pin.api';
 import {
 	FACE_BYPASSED_BY_STAFF,
 	FACE_MATCH_SHOWN_MS,
-	type FaceCheckMode,
 	type FaceCheckOutcome
 } from '../domain/face-check';
 import { FaceCheckPinFlow, type FaceCheckPinFlowSession } from './face-check-pin-flow.svelte';
@@ -23,7 +22,7 @@ afterEach(() => {
 });
 
 /** A session stub: the flow only holds, resumes, skips and reads the phase. */
-function setup(mode: FaceCheckMode = 'on') {
+function setup() {
 	const session: FaceCheckPinFlowSession & { phase: FaceCheckPhase } = {
 		phase: 'positioning',
 		hold: vi.fn(),
@@ -40,7 +39,6 @@ function setup(mode: FaceCheckMode = 'on') {
 	const cancelCheck = vi.fn();
 	const pinChanges: boolean[] = [];
 	const flow = new FaceCheckPinFlow({
-		mode: () => mode,
 		cancelCheck,
 		onfinish,
 		oncancel,
@@ -50,7 +48,7 @@ function setup(mode: FaceCheckMode = 'on') {
 	return { flow, session, onfinish, oncancel, cancelCheck, pinChanges };
 }
 
-describe('FaceCheckPinFlow — result screen (mode on)', () => {
+describe('FaceCheckPinFlow — result screen', () => {
 	it('waits for staff on a not-matched result instead of handing on', () => {
 		const { flow, session, onfinish } = setup();
 		session.phase = 'done';
@@ -155,17 +153,6 @@ describe('FaceCheckPinFlow — from the camera', () => {
 		expect(flow.pinOpen).toBe(false);
 		expect(onfinish).not.toHaveBeenCalled();
 	});
-
-	it('in shadow mode skips straight away and never asks for a PIN', () => {
-		const { flow, session, onfinish } = setup('shadow');
-
-		flow.skip();
-
-		expect(session.hold).not.toHaveBeenCalled();
-		expect(session.skip).toHaveBeenCalledExactlyOnceWith();
-		expect(flow.pinOpen).toBe(false);
-		expect(onfinish).toHaveBeenCalledOnce();
-	});
 });
 
 describe('FaceCheckPinFlow — match', () => {
@@ -213,7 +200,6 @@ function setupReal(verdict: 'not_confirmed' | 'match' = 'not_confirmed') {
 	const onfinish = vi.fn();
 	const oncancel = vi.fn();
 	const flow = new FaceCheckPinFlow({
-		mode: () => 'on',
 		cancelCheck: (reason) => void api.cancel(reason),
 		onfinish,
 		oncancel

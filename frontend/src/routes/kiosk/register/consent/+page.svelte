@@ -49,7 +49,9 @@
 
 <svelte:head><title>ยินยอมลงทะเบียน — SmartShelter Kiosk</title></svelte:head>
 <svelte:window onpointerdown={activity} onkeydown={activity} />
-<div class="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 py-3">
+<div
+	class="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 py-3 kiosk-compact:gap-1.5 kiosk-compact:py-0"
+>
 	<KioskCheckInWizard currentStep={2} step2Label="ยินยอม" />
 	<div class="flex justify-start">
 		<KioskBackButton href={homeUrl} onclick={() => walkInSession.clear()} />

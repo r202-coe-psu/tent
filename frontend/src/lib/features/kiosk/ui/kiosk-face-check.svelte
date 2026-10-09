@@ -17,6 +17,11 @@
 		type FaceCheckOutcome
 	} from '../domain/face-check';
 	import KioskBiometricConsent from './kiosk-biometric-consent.svelte';
+	import {
+		KIOSK_NOTICE_PRIMARY_ACTION,
+		KIOSK_NOTICE_SECONDARY_ACTION
+	} from './kiosk-notice-actions';
+	import KioskNoticePanel from './kiosk-notice-panel.svelte';
 	import KioskFaceCameraPanel from './kiosk-face-camera-panel.svelte';
 	import KioskFaceCardNotice from './kiosk-face-card-notice.svelte';
 	import KioskStaffPinEntry from './kiosk-staff-pin-entry.svelte';
@@ -24,16 +29,14 @@
 	interface Props {
 		flow: FaceCheckFlow;
 		citizenId: string;
-		/** shadow: runs the check but never shows the person a result. on: shows it. */
-		mode: 'shadow' | 'on';
 		/** Which of the kiosk's cameras to use (same label as the QR camera); null = front camera. */
 		cameraLabel: string | null;
 		/**
-		 * The person may move on: a match, staff entered the PIN (`skipped / staff_bypass`), or in
-		 * shadow mode any ending. In mode `on` nothing else gets here.
+		 * The person may move on: a match, or staff entered the PIN (`skipped / staff_bypass`).
+		 * Nothing else gets here.
 		 */
 		onfinish: (outcome: FaceCheckOutcome) => void;
-		/** Mode `on`, after an ending that needs the PIN: "cancel" pressed. Go home, save nothing. */
+		/** After an ending that needs the PIN: "cancel" pressed. Go home, save nothing. */
 		oncancel: () => void;
 		/** True while the camera runs or the staff PIN panel is open, so the page can pause its idle timeout. */
 		onbusychange?: (busy: boolean) => void;
@@ -46,7 +49,6 @@
 	let {
 		flow,
 		citizenId,
-		mode,
 		cameraLabel,
 		onfinish,
 		oncancel,
@@ -67,7 +69,6 @@
 	const pinFlow = untrack(
 		() =>
 			new FaceCheckPinFlow({
-				mode: () => mode,
 				cancelCheck: (reason) => void faceApi.cancel(reason),
 				onfinish: (outcome) => onfinish(outcome),
 				oncancel: () => oncancel(),
@@ -99,7 +100,7 @@
 				session.phase === 'verifying')
 	);
 	const finished = $derived(
-		session.phase === 'done' && mode === 'on' && session.outcome !== null && !pinFlow.handedOn
+		session.phase === 'done' && session.outcome !== null && !pinFlow.handedOn
 	);
 	const notMatched = $derived(
 		finished && session.outcome !== null && session.outcome.kind !== 'match'
@@ -152,7 +153,7 @@
 </script>
 
 <section
-	class="mx-auto mt-4 w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs sm:p-8 kiosk-compact:mt-2 kiosk-compact:p-3"
+	class="mx-auto mt-4 w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs sm:p-8 kiosk-compact:mt-0 kiosk-compact:p-3"
 	data-testid="kiosk-face-check"
 	data-face-phase={session.phase}
 	{@attach listenForCardRemoval}
@@ -195,56 +196,46 @@
 			oncancel={() => void handlePinCancel()}
 		/>
 	{:else if finished && session.outcome?.kind === 'match'}
-		<div
-			class="flex flex-col items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-center text-emerald-950"
+		<KioskNoticePanel
+			bare
+			tone="success"
+			icon={CheckCircle2}
+			title="ยืนยันตัวตนเรียบร้อย"
+			{headingTag}
 			data-testid="kiosk-face-result"
 			data-face-result="match"
-		>
-			<CheckCircle2 class="size-12 kiosk-portrait:size-20" aria-hidden="true" />
-			<svelte:element this={headingTag} class="text-2xl font-bold kiosk-portrait:text-4xl"
-				>ยืนยันตัวตนเรียบร้อย</svelte:element
-			>
-		</div>
+		/>
 	{:else if notMatchedMessage}
 		<!-- Never red and never "refused": the threshold can be wrong and this may be the card's owner. -->
-		<div
-			class={[
-				'flex flex-col items-center gap-3 rounded-xl border p-6 text-center',
-				notMatchedMessage.tone === 'declined'
-					? 'border-sky-200 bg-sky-50 text-sky-950'
-					: 'border-amber-200 bg-amber-50 text-amber-950'
-			]}
+		<KioskNoticePanel
+			bare
+			tone={notMatchedMessage.tone === 'declined' ? 'info' : 'warning'}
+			icon={notMatchedMessage.tone === 'not_confirmed'
+				? UserRoundX
+				: notMatchedMessage.tone === 'declined'
+					? IdCard
+					: UserRoundSearch}
+			title={notMatchedMessage.title}
+			{headingTag}
 			data-testid="kiosk-face-result"
 			data-face-result={notMatchedMessage.tone}
 		>
-			{#if notMatchedMessage.tone === 'not_confirmed'}
-				<UserRoundX class="size-12 kiosk-portrait:size-20" aria-hidden="true" />
-			{:else if notMatchedMessage.tone === 'declined'}
-				<IdCard class="size-12 kiosk-portrait:size-20" aria-hidden="true" />
-			{:else}
-				<UserRoundSearch class="size-12 kiosk-portrait:size-20" aria-hidden="true" />
-			{/if}
-			<svelte:element this={headingTag} class="text-2xl font-bold kiosk-portrait:text-4xl"
-				>{notMatchedMessage.title}</svelte:element
-			>
-			<p class="text-lg kiosk-portrait:text-2xl">{notMatchedMessage.detail}</p>
-			<div class="mt-2 flex w-full max-w-md flex-col gap-3 kiosk-portrait:max-w-xl">
+			<p>{notMatchedMessage.detail}</p>
+			{#snippet actions()}
 				<Button
 					bind:ref={continueButton}
 					type="button"
 					onclick={() => pinFlow.openFromResult()}
-					class="min-h-12 w-full bg-[#0A2647] px-8 text-base font-bold text-white hover:bg-[#051930] focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 kiosk-portrait:min-h-16 kiosk-portrait:text-2xl"
-					>เจ้าหน้าที่ดำเนินการต่อ</Button
+					class={KIOSK_NOTICE_PRIMARY_ACTION}>เจ้าหน้าที่ดำเนินการต่อ</Button
 				>
 				<Button
 					type="button"
 					variant="outline"
 					onclick={oncancel}
-					class="min-h-12 w-full px-8 text-base font-bold focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 kiosk-portrait:min-h-16 kiosk-portrait:text-2xl"
-					>ยกเลิก</Button
+					class={KIOSK_NOTICE_SECONDARY_ACTION}>ยกเลิก</Button
 				>
-			</div>
-		</div>
+			{/snippet}
+		</KioskNoticePanel>
 	{/if}
 
 	<p class="sr-only" aria-live="polite" data-testid="kiosk-face-announcement">

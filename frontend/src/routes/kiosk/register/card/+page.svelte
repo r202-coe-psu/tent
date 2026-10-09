@@ -12,8 +12,12 @@
 		getKioskDisplayContext,
 		KioskIdleTimeout,
 		KIOSK_IDLE_TIMEOUT_MS,
+		KIOSK_NOTICE_SECONDARY_ACTION,
 		KioskBackButton,
+		KioskBusyStatus,
 		KioskCheckInWizard,
+		KioskInlineAlert,
+		KioskNoticePanel,
 		isFaceCheckEnabled,
 		loadKioskHardware,
 		navigateToKioskHome,
@@ -97,7 +101,7 @@
 		) {
 			// Hold the card in memory; the face page registers it once the check has ended. The face
 			// check found on here goes with it, so the face page never has to ask again (and fail open).
-			walkInSession.holdCard(card, hardware.faceCheck.mode, hardware.cameraLabel);
+			walkInSession.holdCard(card, hardware.cameraLabel);
 			await goto(
 				resolve(
 					`/kiosk/register/face${contextQuery}` as
@@ -136,68 +140,36 @@
 	<div class="flex justify-start">
 		<KioskBackButton href={homeUrl} onclick={leave} disabled={busy} />
 	</div>
-	<!-- Busy: tighter padding so the status, the warning and "ยกเลิก" fit the 1024×600 panel. -->
-	<section
-		class={[
-			'mx-auto mt-6 w-full max-w-3xl rounded-2xl border border-sky-200 bg-white p-6 text-center shadow-2xs',
-			busy ? 'kiosk-portrait:p-10' : 'sm:p-10'
-		]}
+	<KioskNoticePanel
+		tone="info"
+		icon={CreditCard}
+		headingTag="h1"
+		title={busy ? (cardReading ? 'กำลังอ่านข้อมูลบัตร' : 'กำลังบันทึกข้อมูล') : 'เสียบบัตรประชาชน'}
 	>
 		{#if busy}
-			<h1 class="text-2xl font-bold text-[#0A2647] kiosk-portrait:text-4xl">
-				{cardReading ? 'กำลังอ่านข้อมูลบัตร' : 'กำลังบันทึกข้อมูล'}
-			</h1>
-			<div
-				class="mt-4 inline-flex min-h-12 items-center justify-center gap-3 rounded-xl border border-slate-200 bg-[#F8FAFC] px-4 text-base font-semibold text-slate-800 kiosk-portrait:mt-6 kiosk-portrait:min-h-16 kiosk-portrait:text-2xl"
-				role="status"
-				aria-live="polite"
-				data-testid="kiosk-register-card-busy"
-			>
-				<span
-					class="size-5 animate-spin rounded-full border-2 border-slate-300 border-t-[#0A2647] motion-reduce:animate-none kiosk-portrait:size-7"
-					aria-hidden="true"
-				></span>
-				กรุณารอสักครู่
-			</div>
+			<KioskBusyStatus data-testid="kiosk-register-card-busy">กรุณารอสักครู่</KioskBusyStatus>
 			{#if cardReading}
-				<div
-					class="mx-auto mt-4 flex max-w-xl items-center justify-center gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-lg font-bold text-amber-950 kiosk-portrait:mt-6 kiosk-portrait:p-4"
+				<KioskInlineAlert tone="warning" icon={CircleAlert}
+					>อย่าดึงบัตรออก จนกว่าระบบจะอ่านเสร็จ</KioskInlineAlert
 				>
-					<CircleAlert class="h-6 w-6 shrink-0" aria-hidden="true" />
-					<p>อย่าดึงบัตรออก จนกว่าระบบจะอ่านเสร็จ</p>
-				</div>
 			{/if}
 		{:else}
-			<div
-				class="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-sky-200 bg-sky-50 text-sky-900"
-			>
-				<CreditCard class="h-8 w-8" aria-hidden="true" />
-			</div>
-			<h1 class="mt-5 text-2xl font-bold text-[#0A2647] kiosk-portrait:text-4xl">
-				เสียบบัตรประชาชน
-			</h1>
-			<p class="mt-2 text-base text-slate-700">
+			<p>
 				เสียบบัตรของผู้ที่ต้องการลงทะเบียน (หากเสียบค้างอยู่แล้ว ไม่ต้องถอด)
 				ระบบจะอ่านข้อมูลจากชิปโดยอัตโนมัติ
 			</p>
 		{/if}
-		{#if error}<div
-				class="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-left text-amber-950"
-				role="alert"
-			>
-				<div class="flex gap-3">
-					<CircleAlert class="h-5 w-5 shrink-0" aria-hidden="true" />
-					<p>{error}</p>
-				</div>
-			</div>{/if}
-		<div class="mt-6">
+		{#if error}
+			<KioskInlineAlert tone="warning" icon={CircleAlert} role="alert">{error}</KioskInlineAlert>
+		{/if}
+		{#snippet actions()}
 			<Button
 				type="button"
 				variant="outline"
 				onclick={returnHome}
 				disabled={busy}
-				class="min-h-12 px-6">ยกเลิก</Button
+				class={KIOSK_NOTICE_SECONDARY_ACTION}>ยกเลิก</Button
 			>
-		</div>
-	</section>
+		{/snippet}
+	</KioskNoticePanel>
 </div>

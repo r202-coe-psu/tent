@@ -40,12 +40,12 @@ describe('fetchKioskHardware', () => {
 					qr_input: 'camera',
 					camera_label: 'JSK-RGB',
 					reader_max_gap_ms: 50,
-					face_check: { mode: 'shadow', flows: ['walk_in'] }
+					face_check: { mode: 'on', flows: ['walk_in'] }
 				})
 			)
 		);
 
-		expect(result.faceCheck).toEqual({ mode: 'shadow', flows: ['walk_in'] });
+		expect(result.faceCheck).toEqual({ mode: 'on', flows: ['walk_in'] });
 	});
 
 	it('keeps the face check off when the scanner client says something unexpected', async () => {

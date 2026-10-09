@@ -31,7 +31,7 @@
 	/** The citizen ID whose face check has ended, so a new card asks again. */
 	let faceDoneFor = $state<string | null>(null);
 	/**
-	 * Mode `on`, face matched: the chip photo the scanner client handed over, for /check-in to keep
+	 * Face matched: the chip photo the scanner client handed over, for /check-in to keep
 	 * as the card owner's photo if they have none. Never after a staff PIN bypass; dropped on a new
 	 * card or when the page goes.
 	 */
@@ -41,16 +41,12 @@
 			? chipPhoto.photo
 			: null
 	);
-	const faceMode = $derived(
-		hardware &&
-			isFaceCheckEnabled(hardware.faceCheck, 'check_in') &&
-			hardware.faceCheck.mode !== 'off'
-			? hardware.faceCheck.mode
-			: null
+	const faceCheckOn = $derived(
+		hardware !== null && isFaceCheckEnabled(hardware.faceCheck, 'check_in')
 	);
 	const holdMembers = $derived(
 		gate?.source === 'smart-card' &&
-			(hardware === null || (faceMode !== null && faceDoneFor !== gate.citizen_id))
+			(hardware === null || (faceCheckOn && faceDoneFor !== gate.citizen_id))
 	);
 	/** Camera running or staff on the PIN panel (which has its own 30 s idle). */
 	let faceBusy = false;
@@ -84,7 +80,7 @@
 	function handleFaceFinished(citizenId: string, outcome: FaceCheckOutcome): void {
 		faceDoneFor = citizenId;
 		chipPhoto =
-			faceMode === 'on' && outcome.kind === 'match' && outcome.chipPhoto
+			outcome.kind === 'match' && outcome.chipPhoto
 				? { citizenId, photo: outcome.chipPhoto }
 				: null;
 	}
@@ -115,7 +111,7 @@
 			window.removeEventListener('kiosk:smart-card-read', handleCardRead);
 			chipPhoto = null;
 			// Leaving ends this person's visit: wipe the face check the scanner client may still hold.
-			if (faceMode !== null) void cancelKioskFaceCheck();
+			if (faceCheckOn) void cancelKioskFaceCheck();
 		};
 	}
 </script>
@@ -125,12 +121,11 @@
 <svelte:window onpointerdown={recordActivity} onkeydown={recordActivity} />
 
 {#snippet faceStep()}
-	{#if faceMode && gate?.source === 'smart-card'}
+	{#if faceCheckOn && gate?.source === 'smart-card'}
 		{@const citizenId = gate.citizen_id}
 		<KioskFaceCheck
 			flow="check_in"
 			{citizenId}
-			mode={faceMode}
 			cameraLabel={hardware?.cameraLabel ?? null}
 			embedded
 			onfinish={(outcome) => handleFaceFinished(citizenId, outcome)}

@@ -1,5 +1,9 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
+	import {
+		KIOSK_NOTICE_PRIMARY_ACTION,
+		KIOSK_NOTICE_SECONDARY_ACTION
+	} from './kiosk-notice-actions';
 
 	interface Props {
 		lookupErrorCode: string | null;
@@ -8,10 +12,8 @@
 		retryAfterSeconds: number;
 		homeUrl: string;
 		backUrl: string;
-		canRegister?: boolean;
 		onretry: () => void;
 		onreset: () => void;
-		onregister?: () => void;
 	}
 
 	let {
@@ -21,10 +23,8 @@
 		retryAfterSeconds,
 		homeUrl,
 		backUrl,
-		canRegister = false,
 		onretry,
-		onreset,
-		onregister
+		onreset
 	}: Props = $props();
 
 	const isMethodDisabled = $derived(lookupErrorCode === 'KIOSK_METHOD_DISABLED');
@@ -35,44 +35,34 @@
 	);
 </script>
 
-<div class="mt-4 flex flex-col justify-center gap-2 sm:flex-row">
-	{#if canRegister && onregister}
+<!-- Rendered in a KioskNoticePanel's actions: the panel stacks and sizes them. -->
+{#if !isMethodDisabled}
+	{#if isPhoneLookupMiss}
+		<Button type="button" onclick={onreset} class={KIOSK_NOTICE_PRIMARY_ACTION}
+			>กรอกเบอร์ใหม่</Button
+		>
+	{:else}
 		<Button
 			type="button"
-			onclick={onregister}
-			class="min-h-12 bg-[#0A2647] px-5 text-base font-bold text-white hover:bg-[#051930]"
-			>ลงทะเบียนใหม่</Button
+			disabled={isLookingUp || retryAfterSeconds > 0}
+			onclick={onretry}
+			class={KIOSK_NOTICE_PRIMARY_ACTION}
 		>
+			{#if retryAfterSeconds > 0}
+				ลองอีกครั้งใน <span class="tabular-nums">{retryAfterSeconds}</span> วินาที
+			{:else if isLookingUp}
+				กำลังค้นหา…
+			{:else}
+				ลองอีกครั้ง
+			{/if}
+		</Button>
 	{/if}
-	{#if !isMethodDisabled}
-		{#if isPhoneLookupMiss}
-			<Button
-				type="button"
-				onclick={onreset}
-				class="min-h-12 bg-[#0A2647] px-5 text-base font-bold text-white hover:bg-[#051930]"
-				>กรอกเบอร์ใหม่</Button
-			>
-		{:else}
-			<Button
-				type="button"
-				disabled={isLookingUp || retryAfterSeconds > 0}
-				onclick={onretry}
-				class="min-h-12 bg-[#0A2647] px-5 text-base font-bold text-white hover:bg-[#051930]"
-			>
-				{#if retryAfterSeconds > 0}
-					ลองอีกครั้งใน {retryAfterSeconds} วินาที
-				{:else if isLookingUp}
-					กำลังค้นหา…
-				{:else}
-					ลองอีกครั้ง
-				{/if}
-			</Button>
-		{/if}
-	{/if}
-	<Button
-		href={isMethodDisabled ? homeUrl : backUrl}
-		variant="outline"
-		onclick={onreset}
-		class="min-h-12 border-[#CBD5E1] px-5 text-base font-bold text-[#0A2647]">กลับ</Button
-	>
-</div>
+{/if}
+<!-- The only way on when the method is off: then it is the main button. -->
+<Button
+	href={isMethodDisabled ? homeUrl : backUrl}
+	variant={isMethodDisabled ? 'default' : 'outline'}
+	onclick={onreset}
+	class={isMethodDisabled ? KIOSK_NOTICE_PRIMARY_ACTION : KIOSK_NOTICE_SECONDARY_ACTION}
+	>กลับ</Button
+>

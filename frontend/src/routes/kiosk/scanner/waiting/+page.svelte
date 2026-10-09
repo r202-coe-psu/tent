@@ -34,7 +34,7 @@
 				เสียบบัตรประชาชน
 			</h1>
 			<p class="mt-1 text-base font-semibold text-slate-700 kiosk-portrait:text-xl">
-				คว่ำบัตรลง · เอาด้านบาร์โค้ดเข้า
+				หงายบัตรขึ้น · เอาด้านบาร์โค้ดเข้า
 			</p>
 		</header>
 

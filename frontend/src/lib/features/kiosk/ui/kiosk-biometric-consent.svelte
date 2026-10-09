@@ -1,6 +1,10 @@
 <script lang="ts">
 	import ScanFace from '@lucide/svelte/icons/scan-face';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import {
+		KIOSK_NOTICE_PRIMARY_ACTION,
+		KIOSK_NOTICE_SECONDARY_ACTION
+	} from './kiosk-notice-actions';
 
 	interface Props {
 		onagree: () => void;
@@ -30,12 +34,12 @@
 	<svelte:element
 		this={headingTag}
 		id="face-consent-title"
-		class="text-2xl font-bold text-[#0A2647] sm:text-3xl kiosk-portrait:text-4xl"
+		class="text-2xl font-bold text-[#0A2647] sm:text-3xl kiosk-portrait:text-4xl kiosk-compact:text-2xl"
 	>
 		ตรวจใบหน้าเทียบกับรูปในบัตร
 	</svelte:element>
 	<div
-		class="mt-4 space-y-3 text-base leading-relaxed text-slate-700 kiosk-portrait:text-xl kiosk-compact:mt-2 kiosk-compact:space-y-1.5"
+		class="mt-4 space-y-3 text-lg leading-relaxed text-slate-700 kiosk-portrait:text-2xl kiosk-compact:mt-1.5 kiosk-compact:space-y-1 kiosk-compact:text-base kiosk-compact:leading-snug"
 	>
 		<p>
 			ตู้จะถ่ายภาพใบหน้าของท่านจากกล้อง
@@ -49,18 +53,16 @@
 			หากไม่ยินยอม ท่านยังรับบริการได้ตามปกติ เจ้าหน้าที่จะตรวจสอบตัวตนให้แทน
 		</p>
 	</div>
-	<div class="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end kiosk-compact:mt-4">
+	<div
+		class="mt-7 flex flex-col-reverse gap-3 sm:flex-row kiosk-portrait:mt-10 kiosk-portrait:gap-4 kiosk-compact:mt-3"
+	>
 		<Button
 			type="button"
 			variant="outline"
 			onclick={ondecline}
-			class="min-h-12 px-6 text-base kiosk-portrait:min-h-16 kiosk-portrait:text-xl"
-			>ไม่ยินยอม ให้เจ้าหน้าที่ตรวจแทน</Button
+			class={`sm:flex-1 ${KIOSK_NOTICE_SECONDARY_ACTION}`}>ไม่ยินยอม ให้เจ้าหน้าที่ตรวจแทน</Button
 		>
-		<Button
-			type="button"
-			onclick={onagree}
-			class="min-h-12 bg-[#0A2647] px-6 text-base font-bold text-white hover:bg-[#051930] kiosk-portrait:min-h-16 kiosk-portrait:text-xl"
+		<Button type="button" onclick={onagree} class={`sm:flex-1 ${KIOSK_NOTICE_PRIMARY_ACTION}`}
 			>ยินยอม เริ่มตรวจใบหน้า</Button
 		>
 	</div>

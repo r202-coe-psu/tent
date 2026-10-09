@@ -3,7 +3,6 @@ import {
 	FACE_MATCH_SHOWN_MS,
 	faceOutcomeAction,
 	staffPinCancelAction,
-	type FaceCheckMode,
 	type FaceCheckOutcome,
 	type StaffPinOpenedFrom
 } from '../domain/face-check';
@@ -13,8 +12,6 @@ import type { FaceCheckSession } from './face-check-session.svelte';
 export type FaceCheckPinFlowSession = Pick<FaceCheckSession, 'phase' | 'hold' | 'resume' | 'skip'>;
 
 export type FaceCheckPinFlowDeps = {
-	/** Read on every ending, so a page that changes the mode is followed. */
-	mode: () => FaceCheckMode;
 	/** Tells the scanner client why a check that had already ended carried on. */
 	cancelCheck: (reason: string) => void;
 	/** The person may move on (see `KioskFaceCheck`'s `onfinish`). */
@@ -30,7 +27,7 @@ export type FaceCheckPinCancelFocus = 'continue' | 'skip' | null;
 
 /**
  * Where the face check goes once it ends or staff step in: show the match, wait for the staff
- * PIN on a not-matched result, or hand on. In mode `on` only a match or a staff bypass carries on.
+ * PIN on a not-matched result, or hand on. Only a match or a staff bypass carries on.
  */
 export class FaceCheckPinFlow {
 	/**
@@ -57,7 +54,7 @@ export class FaceCheckPinFlow {
 
 	/** The session ended. */
 	finished(outcome: FaceCheckOutcome): void {
-		switch (faceOutcomeAction(outcome, this.deps.mode())) {
+		switch (faceOutcomeAction(outcome)) {
 			case 'hand_on':
 				return this.#handOn(outcome);
 			case 'show_match':
@@ -73,10 +70,9 @@ export class FaceCheckPinFlow {
 		}
 	}
 
-	/** "Staff skip this step" at the camera. Shadow mode never shows a result, so it never asks. */
+	/** "Staff skip this step" at the camera: hold the check and ask for the staff PIN. */
 	skip(): void {
 		const session = this.#requireSession();
-		if (this.deps.mode() === 'shadow') return session.skip();
 		session.hold();
 		this.#setPinFrom('camera');
 	}

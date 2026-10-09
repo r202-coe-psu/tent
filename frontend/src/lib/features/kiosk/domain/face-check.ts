@@ -4,8 +4,8 @@ import { z } from 'zod';
 export const FACE_CHECK_FLOWS = ['check_in', 'walk_in'] as const;
 export type FaceCheckFlow = (typeof FACE_CHECK_FLOWS)[number];
 
-/** off: nothing changes · shadow: runs but never affects the person · on: tells the person. */
-export const FACE_CHECK_MODES = ['off', 'shadow', 'on'] as const;
+/** off: nothing changes · on: runs the check and tells the person. */
+export const FACE_CHECK_MODES = ['off', 'on'] as const;
 export type FaceCheckMode = (typeof FACE_CHECK_MODES)[number];
 
 export type FaceCheckConfig = { mode: FaceCheckMode; flows: readonly FaceCheckFlow[] };
@@ -142,32 +142,27 @@ export function faceOutcomeIsStaffBypass(outcome: FaceCheckOutcome): boolean {
 }
 
 /**
- * Mode `on`: only a match carries on by itself; every other ending (not confirmed, skipped,
- * camera failed, declined) waits for staff to enter the kiosk's PIN before anything is saved.
- * Shadow mode never shows the person a result, so it never asks for the PIN.
+ * Only a match carries on by itself; every other ending (not confirmed, skipped, camera failed,
+ * declined) waits for staff to enter the kiosk's PIN before anything is saved.
  */
-export function faceOutcomeNeedsStaffPin(outcome: FaceCheckOutcome, mode: FaceCheckMode): boolean {
-	return mode === 'on' && outcome.kind !== 'match';
+export function faceOutcomeNeedsStaffPin(outcome: FaceCheckOutcome): boolean {
+	return outcome.kind !== 'match';
 }
 
 /**
  * What the kiosk page does when a check ends:
- * - `hand_on`: carry on now (staff entered the PIN, or any ending outside mode `on`);
- * - `show_match`: mode `on` match - show "verified" for a moment, then carry on;
+ * - `hand_on`: carry on now (staff entered the PIN);
+ * - `show_match`: a match - show "verified" for a moment, then carry on;
  * - `wait_for_pin`: wait for staff (an open PIN panel stays open, otherwise the result screen asks);
  * - `close_pin`: the card came out while the chip photo was needed - close an open PIN panel (that
  *   is not a staff bypass) and let the result screen ask.
- * In mode `on` only a match or a staff bypass ever carries on.
+ * Only a match or a staff bypass ever carries on.
  */
 export type FaceOutcomeAction = 'hand_on' | 'show_match' | 'wait_for_pin' | 'close_pin';
 
-export function faceOutcomeAction(
-	outcome: FaceCheckOutcome,
-	mode: FaceCheckMode
-): FaceOutcomeAction {
+export function faceOutcomeAction(outcome: FaceCheckOutcome): FaceOutcomeAction {
 	if (faceOutcomeIsStaffBypass(outcome)) return 'hand_on';
-	if (mode !== 'on') return 'hand_on';
-	if (!faceOutcomeNeedsStaffPin(outcome, mode)) return 'show_match';
+	if (!faceOutcomeNeedsStaffPin(outcome)) return 'show_match';
 	if (outcome.kind === 'skipped' && outcome.reason === 'card_removed') return 'close_pin';
 	return 'wait_for_pin';
 }
@@ -244,7 +239,7 @@ export type FaceOutcomeMessage = {
 };
 
 /**
- * The result screen for an ending that is not a match (mode `on`). Only `not_confirmed` was really
+ * The result screen for an ending that is not a match. Only `not_confirmed` was really
  * compared, so only it says the face does not match; the others never use the word "ไม่ตรง".
  * Declining is the person's right, so its wording is plain service, not a failure.
  */

@@ -2,6 +2,7 @@
 	import Check from '@lucide/svelte/icons/check';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { KIOSK_NOTICE_SECONDARY_ACTION } from './kiosk-notice-actions';
 
 	interface Props {
 		/** The camera element: bound by the page so the camera can open into it. */
@@ -56,12 +57,41 @@
 		class="text-2xl font-bold text-[#0A2647] kiosk-portrait:text-4xl kiosk-compact:text-xl"
 		>ตรวจสอบใบหน้า</svelte:element
 	>
-	<!-- Short screens: the picture on the left, the words and buttons on the right. -->
 	<div
-		class="space-y-4 kiosk-compact:flex kiosk-compact:items-center kiosk-compact:gap-6 kiosk-compact:space-y-0"
+		class="space-y-4 kiosk-compact:grid kiosk-compact:grid-cols-[15rem_minmax(0,1fr)] kiosk-compact:items-center kiosk-compact:space-y-0 kiosk-compact:gap-x-6 kiosk-compact:gap-y-2"
 	>
 		<div
-			class="relative mx-auto aspect-[4/3] w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 kiosk-portrait:max-w-3xl kiosk-compact:w-[15rem] kiosk-compact:max-w-[15rem] kiosk-compact:shrink-0"
+			class="mx-auto w-full max-w-md space-y-2 kiosk-portrait:max-w-3xl kiosk-compact:col-start-2 kiosk-compact:row-start-1 kiosk-compact:max-w-none kiosk-compact:self-end"
+		>
+			<p
+				class="flex min-h-16 items-center justify-center rounded-xl bg-[#0A2647] px-4 py-3 text-xl font-bold text-white kiosk-portrait:min-h-24 kiosk-portrait:text-4xl kiosk-compact:min-h-12 kiosk-compact:text-lg"
+				role="status"
+				data-testid="kiosk-face-message"
+			>
+				{#if verifying}
+					<span
+						class="mr-3 inline-block size-5 shrink-0 animate-spin rounded-full border-2 border-white/40 border-t-white motion-reduce:animate-none kiosk-portrait:size-8"
+						aria-hidden="true"
+					></span>กำลังตรวจสอบ…
+				{:else if starting}
+					กำลังเปิดกล้อง…
+				{:else}
+					{message}
+				{/if}
+			</p>
+			{#if attempt > 0}
+				<p class="text-base font-semibold text-slate-700 tabular-nums kiosk-portrait:text-2xl">
+					ครั้งที่ {attempt + 1} จาก {maxAttempts}
+				</p>
+			{/if}
+			{#if slow}
+				<p class="text-base text-slate-700 kiosk-portrait:text-2xl" data-testid="kiosk-face-slow">
+					หากยังไม่สำเร็จ ระบบจะให้เจ้าหน้าที่ช่วยตรวจ
+				</p>
+			{/if}
+		</div>
+		<div
+			class="relative mx-auto aspect-[4/3] w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 kiosk-portrait:max-w-3xl kiosk-compact:col-start-1 kiosk-compact:row-span-2 kiosk-compact:row-start-1 kiosk-compact:w-[15rem] kiosk-compact:max-w-[15rem]"
 		>
 			<video
 				bind:this={video}
@@ -103,45 +133,18 @@
 				</span>
 			{/if}
 		</div>
-		<div class="space-y-4 kiosk-compact:min-w-0 kiosk-compact:flex-1 kiosk-compact:space-y-2">
-			<p
-				class="text-xl font-bold text-slate-900 kiosk-portrait:text-3xl kiosk-compact:text-lg"
-				role="status"
-				data-testid="kiosk-face-message"
+		{#if showSkip}
+			<div
+				class="mx-auto flex w-full max-w-md justify-center kiosk-portrait:max-w-xl kiosk-compact:col-start-2 kiosk-compact:row-start-2 kiosk-compact:max-w-none kiosk-compact:self-start"
 			>
-				{#if verifying}
-					<span
-						class="mr-2 inline-block size-5 animate-spin rounded-full border-2 border-slate-300 border-t-[#0A2647] align-middle motion-reduce:animate-none"
-						aria-hidden="true"
-					></span>กำลังตรวจสอบ…
-				{:else if starting}
-					กำลังเปิดกล้อง…
-				{:else}
-					{message}
-				{/if}
-			</p>
-			{#if attempt > 0}
-				<p class="text-sm font-semibold text-slate-600 tabular-nums kiosk-portrait:text-xl">
-					ครั้งที่ {attempt + 1} จาก {maxAttempts}
-				</p>
-			{/if}
-			{#if slow}
-				<p class="text-sm text-slate-600 kiosk-portrait:text-xl" data-testid="kiosk-face-slow">
-					หากยังไม่สำเร็จ ระบบจะให้เจ้าหน้าที่ช่วยตรวจ
-				</p>
-			{/if}
-			{#if showSkip}
-				<div class="flex justify-center">
-					<Button
-						bind:ref={skipButton}
-						type="button"
-						variant="outline"
-						onclick={onskip}
-						class="min-h-12 px-6 text-base focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 kiosk-portrait:min-h-16 kiosk-portrait:text-xl"
-						>เจ้าหน้าที่ข้ามขั้นตอนนี้</Button
-					>
-				</div>
-			{/if}
-		</div>
+				<Button
+					bind:ref={skipButton}
+					type="button"
+					variant="outline"
+					onclick={onskip}
+					class={KIOSK_NOTICE_SECONDARY_ACTION}>เจ้าหน้าที่ข้ามขั้นตอนนี้</Button
+				>
+			</div>
+		{/if}
 	</div>
 </div>

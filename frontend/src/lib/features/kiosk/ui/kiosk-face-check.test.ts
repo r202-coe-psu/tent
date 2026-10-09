@@ -37,7 +37,14 @@ describe('KioskBiometricConsent', () => {
 	it('gives the buttons a touch size for both kiosk screens', () => {
 		const { body } = render(KioskBiometricConsent, { props: { onagree: noop, ondecline: noop } });
 
-		for (const token of ['min-h-12', 'kiosk-portrait:min-h-16', 'kiosk-compact:']) {
+		// The same sizes as every other kiosk notice: primary min-h-16/24, secondary min-h-14/20.
+		for (const token of [
+			'min-h-16',
+			'kiosk-portrait:min-h-24',
+			'min-h-14',
+			'kiosk-portrait:min-h-20',
+			'kiosk-compact:'
+		]) {
 			expect(body).toContain(token);
 		}
 	});
@@ -47,7 +54,6 @@ describe('KioskFaceCheck', () => {
 	const props = {
 		flow: 'walk_in',
 		citizenId: '1234567890123',
-		mode: 'on',
 		cameraLabel: null,
 		onfinish: noop,
 		oncancel: noop
@@ -96,7 +102,6 @@ describe('KioskFaceCheck — card notice and skip', () => {
 	const props = {
 		flow: 'walk_in',
 		citizenId: '1234567890123',
-		mode: 'on',
 		cameraLabel: null,
 		onfinish: noop,
 		oncancel: noop
@@ -206,12 +211,12 @@ describe('KioskFaceCameraPanel', () => {
 		expect(slow.body).toContain('หากยังไม่สำเร็จ ระบบจะให้เจ้าหน้าที่ช่วยตรวจ');
 	});
 
-	it('offers the skip button only while the camera step runs, as big as the main buttons', () => {
+	it('offers the skip button only while the camera step runs, sized like other kiosk buttons', () => {
 		const running = render(KioskFaceCameraPanel, { props: panel });
 		const idle = render(KioskFaceCameraPanel, { props: { ...panel, showSkip: false } });
 
 		expect(running.body).toContain('เจ้าหน้าที่ข้ามขั้นตอนนี้');
-		for (const token of ['min-h-12', 'kiosk-portrait:min-h-16']) {
+		for (const token of ['min-h-14', 'kiosk-portrait:min-h-20']) {
 			expect(running.body).toContain(token);
 		}
 		expect(idle.body).not.toContain('เจ้าหน้าที่ข้ามขั้นตอนนี้');

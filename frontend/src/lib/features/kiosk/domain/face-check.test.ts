@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
 	FACE_BYPASSED_BY_STAFF,
 	FACE_CHECK_OFF,
-	FACE_CHECK_MODES,
 	FACE_HINTS,
 	FACE_SKIPPED_BY_PERSON,
 	classifyFaceFailure,
@@ -22,11 +21,10 @@ import {
 
 describe('parseFaceCheckConfig', () => {
 	it('reads the mode and the enabled flows', () => {
-		expect(parseFaceCheckConfig({ mode: 'shadow', flows: ['walk_in'] })).toEqual({
-			mode: 'shadow',
+		expect(parseFaceCheckConfig({ mode: 'on', flows: ['walk_in'] })).toEqual({
+			mode: 'on',
 			flows: ['walk_in']
 		});
-		expect(parseFaceCheckConfig({ mode: 'on', flows: ['check_in', 'walk_in'] }).mode).toBe('on');
 	});
 
 	it('means off for anything missing, unknown or off', () => {
@@ -36,6 +34,8 @@ describe('parseFaceCheckConfig', () => {
 			'on',
 			{},
 			{ mode: 'maybe', flows: [] },
+			// removed mode: an older scanner client still sending it gets no face check
+			{ mode: 'shadow', flows: ['walk_in'] },
 			{ mode: 'on', flows: ['qr'] },
 			{ mode: 'on' },
 			{ mode: 'off', flows: ['walk_in'] }
@@ -46,7 +46,7 @@ describe('parseFaceCheckConfig', () => {
 });
 
 describe('isFaceCheckEnabled', () => {
-	it('needs the mode on or shadow and the flow listed', () => {
+	it('needs the mode on and the flow listed', () => {
 		const config = parseFaceCheckConfig({ mode: 'on', flows: ['walk_in'] });
 		expect(isFaceCheckEnabled(config, 'walk_in')).toBe(true);
 		expect(isFaceCheckEnabled(config, 'check_in')).toBe(false);
@@ -143,22 +143,14 @@ const NOT_MATCHES: Exclude<FaceCheckOutcome, { kind: 'match' }>[] = [
 ];
 
 describe('faceOutcomeNeedsStaffPin', () => {
-	it('lets only a match carry on by itself in mode on', () => {
-		expect(faceOutcomeNeedsStaffPin({ kind: 'match' }, 'on')).toBe(false);
-		expect(faceOutcomeNeedsStaffPin({ kind: 'match', chipPhoto: 'AAAA' }, 'on')).toBe(false);
-		for (const outcome of NOT_MATCHES) expect(faceOutcomeNeedsStaffPin(outcome, 'on')).toBe(true);
+	it('lets only a match carry on by itself', () => {
+		expect(faceOutcomeNeedsStaffPin({ kind: 'match' })).toBe(false);
+		expect(faceOutcomeNeedsStaffPin({ kind: 'match', chipPhoto: 'AAAA' })).toBe(false);
+		for (const outcome of NOT_MATCHES) expect(faceOutcomeNeedsStaffPin(outcome)).toBe(true);
 	});
 
 	it('asks for declining too: it is not a way around the check', () => {
-		expect(faceOutcomeNeedsStaffPin({ kind: 'declined' }, 'on')).toBe(true);
-	});
-
-	it('never asks in shadow or off mode', () => {
-		for (const mode of FACE_CHECK_MODES.filter((value) => value !== 'on')) {
-			for (const outcome of NOT_MATCHES) {
-				expect(faceOutcomeNeedsStaffPin(outcome, mode)).toBe(false);
-			}
-		}
+		expect(faceOutcomeNeedsStaffPin({ kind: 'declined' })).toBe(true);
 	});
 });
 
@@ -166,28 +158,21 @@ describe('faceOutcomeAction', () => {
 	const STAFF_BYPASS: FaceCheckOutcome = { kind: 'skipped', reason: FACE_BYPASSED_BY_STAFF };
 	const CARD_REMOVED: FaceCheckOutcome = { kind: 'skipped', reason: 'card_removed' };
 
-	it('in mode on, carries on only after a match or a staff PIN', () => {
-		expect(faceOutcomeAction({ kind: 'match' }, 'on')).toBe('show_match');
-		expect(faceOutcomeAction({ kind: 'match', chipPhoto: 'AAAA' }, 'on')).toBe('show_match');
-		expect(faceOutcomeAction(STAFF_BYPASS, 'on')).toBe('hand_on');
+	it('carries on only after a match or a staff PIN', () => {
+		expect(faceOutcomeAction({ kind: 'match' })).toBe('show_match');
+		expect(faceOutcomeAction({ kind: 'match', chipPhoto: 'AAAA' })).toBe('show_match');
+		expect(faceOutcomeAction(STAFF_BYPASS)).toBe('hand_on');
 		for (const outcome of [...NOT_MATCHES, CARD_REMOVED]) {
-			expect(['wait_for_pin', 'close_pin']).toContain(faceOutcomeAction(outcome, 'on'));
+			expect(['wait_for_pin', 'close_pin']).toContain(faceOutcomeAction(outcome));
 		}
 	});
 
 	it('waits for the PIN after every other ending, declining and skipping included', () => {
-		for (const outcome of NOT_MATCHES)
-			expect(faceOutcomeAction(outcome, 'on')).toBe('wait_for_pin');
+		for (const outcome of NOT_MATCHES) expect(faceOutcomeAction(outcome)).toBe('wait_for_pin');
 	});
 
 	it('closes an open PIN panel when the card came out: that is not a staff bypass', () => {
-		expect(faceOutcomeAction(CARD_REMOVED, 'on')).toBe('close_pin');
-	});
-
-	it('hands every ending on in shadow mode, which never shows a result', () => {
-		for (const outcome of [{ kind: 'match' } as const, ...NOT_MATCHES, CARD_REMOVED]) {
-			expect(faceOutcomeAction(outcome, 'shadow')).toBe('hand_on');
-		}
+		expect(faceOutcomeAction(CARD_REMOVED)).toBe('close_pin');
 	});
 });
 

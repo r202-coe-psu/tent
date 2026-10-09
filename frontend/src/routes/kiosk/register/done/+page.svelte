@@ -8,7 +8,9 @@
 		getKioskDisplayContext,
 		KioskIdleTimeout,
 		KIOSK_IDLE_TIMEOUT_MS,
+		KIOSK_NOTICE_PRIMARY_ACTION,
 		KioskCheckInWizard,
+		KioskNoticePanel,
 		navigateToKioskHome,
 		readKioskDisplayQuery,
 		walkInSession
@@ -36,27 +38,18 @@
 <svelte:window onpointerdown={activity} onkeydown={activity} />
 <div class="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 py-3">
 	<KioskCheckInWizard currentStep={5} step2Label="ลงทะเบียน" />
-	<section
-		class="mx-auto mt-6 w-full max-w-3xl rounded-2xl border border-emerald-200 bg-white p-6 text-center shadow-2xs sm:p-10"
+	<KioskNoticePanel
+		tone="success"
+		icon={CheckCircle2}
+		title="ลงทะเบียนสำเร็จ"
+		headingTag="h1"
+		role="status"
 	>
-		<div
-			class="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-900"
-		>
-			<CheckCircle2 class="h-9 w-9" aria-hidden="true" />
-		</div>
-		<h1 class="mt-5 text-2xl font-bold text-emerald-950 kiosk-portrait:text-4xl">
-			ลงทะเบียนสำเร็จ
-		</h1>
-		<p class="mt-2 text-lg text-slate-700">
-			กรุณานำบัตรออกจากเครื่อง แล้วไปพบเจ้าหน้าที่เพื่อยืนยันข้อมูลและรายงานตัว
-		</p>
-		<div class="mt-7">
-			<Button
-				type="button"
-				onclick={returnHome}
-				class="min-h-12 bg-[#0A2647] px-8 text-base font-bold text-white hover:bg-[#051930]"
+		<p>กรุณานำบัตรออกจากเครื่อง แล้วไปพบเจ้าหน้าที่เพื่อยืนยันข้อมูลและรายงานตัว</p>
+		{#snippet actions()}
+			<Button type="button" onclick={returnHome} class={KIOSK_NOTICE_PRIMARY_ACTION}
 				>กลับหน้าแรก</Button
 			>
-		</div>
-	</section>
+		{/snippet}
+	</KioskNoticePanel>
 </div>

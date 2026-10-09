@@ -9,6 +9,7 @@
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import KioskBackButton from './kiosk-back-button.svelte';
+	import KioskInlineAlert from './kiosk-inline-alert.svelte';
 	import KioskCheckInWizard from './kiosk-check-in-wizard.svelte';
 	import KioskQrScanScene from './kiosk-qr-scan-scene.svelte';
 	import KioskReaderPointer from './kiosk-reader-pointer.svelte';
@@ -256,7 +257,7 @@
 									<Button
 										type="button"
 										onclick={retryCamera}
-										class="min-h-12 gap-2 bg-[#0A2647] px-4 text-base font-bold text-white hover:bg-[#051930]"
+										class="min-h-12 gap-2 bg-[#0A2647] px-5 text-lg font-bold text-white hover:bg-[#051930] focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 kiosk-portrait:min-h-16 kiosk-portrait:text-2xl"
 										><RefreshCw class="h-5 w-5" aria-hidden="true" />ลองอีกครั้ง</Button
 									>
 								</div>
@@ -265,10 +266,7 @@
 					</div>
 				{/if}
 				<p
-					class={[
-						'qr-scan-hint mt-3 text-center font-semibold text-slate-700',
-						plan.readerOnly ? 'text-base kiosk-portrait:text-2xl' : 'text-base'
-					]}
+					class="qr-scan-hint mt-3 text-center text-lg font-semibold text-slate-700 kiosk-portrait:text-2xl kiosk-compact:text-base"
 					aria-live="polite"
 				>
 					{#if plan.pending}
@@ -280,13 +278,9 @@
 					{/if}
 				</p>
 				{#if scanNotice}
-					<div
-						class="mt-3 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-950"
-						role="alert"
+					<KioskInlineAlert tone="warning" icon={AlertCircle} class="mt-3" role="alert"
+						>{scanNotice}</KioskInlineAlert
 					>
-						<AlertCircle class="h-5 w-5 shrink-0" aria-hidden="true" />
-						<p class="text-sm font-semibold sm:text-base">{scanNotice}</p>
-					</div>
 				{/if}
 			</section>
 		</div>

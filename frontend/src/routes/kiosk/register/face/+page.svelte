@@ -4,13 +4,18 @@
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
+	import UserPlus from '@lucide/svelte/icons/user-plus';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import {
 		buildKioskContextQuery,
 		cancelKioskFaceCheck,
 		getKioskDisplayContext,
+		KIOSK_NOTICE_PRIMARY_ACTION,
+		KIOSK_NOTICE_SECONDARY_ACTION,
 		KioskBackButton,
+		KioskBusyStatus,
 		KioskCheckInWizard,
+		KioskNoticePanel,
 		KioskFaceCheck,
 		KioskIdleTimeout,
 		KIOSK_IDLE_TIMEOUT_MS,
@@ -99,42 +104,43 @@
 
 <svelte:head><title>ตรวจสอบใบหน้า — SmartShelter Kiosk</title></svelte:head>
 <svelte:window onpointerdown={activity} onkeydown={activity} />
-<div class="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 py-3">
+<div
+	class="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 py-3 kiosk-compact:gap-1.5 kiosk-compact:py-0"
+>
 	<KioskCheckInWizard currentStep={3} step2Label="อ่านบัตร" />
 	<!-- Leaving mid-check is a cancel: unmounting ends the check and nothing is registered. -->
 	<div class="flex justify-start">
 		<KioskBackButton href={homeUrl} onclick={() => walkInSession.clear()} disabled={registering} />
 	</div>
 	{#if error}
-		<section
-			class="mx-auto mt-4 w-full max-w-3xl rounded-xl border border-amber-200 bg-amber-50 p-5 text-amber-950"
+		<KioskNoticePanel
+			tone="warning"
+			icon={CircleAlert}
+			headingTag="h1"
+			title="ลงทะเบียนไม่สำเร็จ"
 			role="alert"
 		>
-			<div class="flex gap-3">
-				<CircleAlert class="size-6 shrink-0" aria-hidden="true" />
-				<p class="text-lg font-semibold">{error}</p>
-			</div>
-			<div class="mt-4 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-				<Button type="button" variant="outline" onclick={returnHome} class="min-h-12 px-6"
-					>ยกเลิก</Button
+			<p>{error}</p>
+			{#snippet actions()}
+				<Button type="button" onclick={register} class={KIOSK_NOTICE_PRIMARY_ACTION}
+					>ลองอีกครั้ง</Button
 				>
 				<Button
 					type="button"
-					onclick={register}
-					class="min-h-12 bg-[#0A2647] px-6 font-bold text-white hover:bg-[#051930]"
-					>ลองอีกครั้ง</Button
+					variant="outline"
+					onclick={returnHome}
+					class={KIOSK_NOTICE_SECONDARY_ACTION}>ยกเลิก</Button
 				>
-			</div>
-		</section>
+			{/snippet}
+		</KioskNoticePanel>
 	{:else if registering}
-		<p class="mt-8 text-center text-xl font-bold text-slate-900" role="status">
-			กำลังบันทึกข้อมูล…
-		</p>
+		<KioskNoticePanel tone="info" icon={UserPlus} headingTag="h1" title="กำลังบันทึกข้อมูล">
+			<KioskBusyStatus>กรุณารอสักครู่</KioskBusyStatus>
+		</KioskNoticePanel>
 	{:else if walkInSession.citizenId && walkInSession.consented && walkInSession.card}
 		<KioskFaceCheck
 			flow="walk_in"
 			citizenId={walkInSession.citizenId}
-			mode={faceCheck.mode}
 			cameraLabel={faceCheck.cameraLabel}
 			onfinish={handleFaceFinished}
 			oncancel={returnHome}

@@ -5,6 +5,7 @@
 	import CreditCard from '@lucide/svelte/icons/credit-card';
 	import Printer from '@lucide/svelte/icons/printer';
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
+	import UserCheck from '@lucide/svelte/icons/user-check';
 	import UsersRound from '@lucide/svelte/icons/users-round';
 	import QrNameTag from '$lib/components/qr-name-tag.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -46,6 +47,9 @@
 	import { runKioskPrintFlow } from '../application/kiosk-print-flow';
 	import { buildKioskPhotoPayload } from '../application/kiosk-card-photo';
 	import KioskBackButton from './kiosk-back-button.svelte';
+	import KioskWalkInOffer from './kiosk-walk-in-offer.svelte';
+	import KioskNoticePanel from './kiosk-notice-panel.svelte';
+	import { KIOSK_NOTICE_PRIMARY_ACTION } from './kiosk-notice-actions';
 
 	interface Props {
 		input: GateInput | null;
@@ -114,6 +118,13 @@
 			displayShelterCode === (lookup?.shelter_code ?? candidateShelterCode)
 	);
 	const isPhoneGate = $derived(input?.source === 'phone');
+	const holdShown = $derived(
+		holdMembers && Boolean(hold) && Boolean(lookup) && centerMatches && results.length === 0
+	);
+	/** No pre-registration for this card, and this shelter takes walk-ins at the kiosk. */
+	const walkInOffered = $derived(
+		Boolean(lookupError) && canRegister && input?.source === 'smart-card' && Boolean(onregister)
+	);
 	const successfulResults = $derived(
 		results.filter((result) => result.status === 'checked_in' || result.qr_payload)
 	);
@@ -436,22 +447,29 @@
 	</div>
 
 	<div class="flex flex-col gap-3 print:block">
-		<header class="text-center">
+		<!-- Short screen: the face step's own heading says the same, so give the row to it. -->
+		<header class={['text-center', holdShown && 'kiosk-compact:sr-only']}>
 			<h1
 				id="check-in-title"
 				class="text-2xl font-extrabold tracking-tight text-[#0A2647] sm:text-3xl kiosk-portrait:text-4xl"
 			>
-				{results.length > 0
-					? 'ผลรายงานตัว'
-					: candidates.length > 0
-						? 'เลือกครัวเรือน'
-						: lookup
-							? holdMembers
-								? 'ตรวจสอบตัวตน'
-								: 'เลือกสมาชิก'
-							: cardMode && !input
-								? 'รอเสียบบัตร'
-								: 'กำลังค้นหา'}
+				{walkInOffered
+					? 'ยังไม่ได้ลงทะเบียนล่วงหน้า'
+					: alreadyKioskRegistered
+						? 'ลงทะเบียนที่ตู้แล้ว'
+						: lookupError
+							? 'ค้นหาไม่สำเร็จ'
+							: results.length > 0
+								? 'ผลรายงานตัว'
+								: candidates.length > 0
+									? 'เลือกครัวเรือน'
+									: lookup
+										? holdMembers
+											? 'ตรวจสอบตัวตน'
+											: 'เลือกสมาชิก'
+										: cardMode && !input
+											? 'รอเสียบบัตร'
+											: 'กำลังค้นหา'}
 			</h1>
 			{#if cardMode && !input}
 				<p class="mt-1 text-base text-slate-700">เสียบบัตรเพื่อค้นหา</p>
@@ -482,68 +500,57 @@
 
 		{#if isLookingUp}
 			<div
-				class="no-print flex min-h-20 items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white text-base font-semibold text-slate-700"
+				class="no-print flex min-h-24 items-center justify-center gap-4 rounded-2xl border border-slate-200 bg-white text-xl font-semibold text-slate-700 shadow-2xs kiosk-portrait:min-h-40 kiosk-portrait:text-3xl kiosk-compact:min-h-16 kiosk-compact:text-lg"
 				role="status"
 			>
 				<span
-					class="h-6 w-6 animate-spin rounded-full border-2 border-slate-300 border-t-[#0A2647]"
+					class="size-7 animate-spin rounded-full border-[3px] border-slate-300 border-t-[#0A2647] motion-reduce:animate-none kiosk-portrait:size-10"
 					aria-hidden="true"
 				></span>
 				กำลังค้นหาข้อมูล…
 			</div>
 		{/if}
 
-		{#if lookupError}
-			<div
-				class="no-print rounded-2xl border border-amber-200 bg-amber-50 p-5 text-center text-amber-950"
-				role="alert"
-			>
-				<div class="flex flex-col items-center gap-3">
-					<CircleAlert class="h-6 w-6 shrink-0" aria-hidden="true" />
-					<div class="w-full">
-						<h2 class="text-base font-bold">ค้นหาไม่สำเร็จ</h2>
-						<p class="mt-1 text-base leading-relaxed">{lookupError}</p>
-						<KioskLookupErrorActions
-							{lookupErrorCode}
-							{canRegister}
-							{isPhoneGate}
-							{isLookingUp}
-							{retryAfterSeconds}
-							{homeUrl}
-							{backUrl}
-							onretry={retryLookup}
-							onregister={() => {
-								if (input?.source === 'smart-card') onregister?.(input.citizen_id);
-							}}
-							{onreset}
-						/>
-					</div>
-				</div>
-			</div>
+		{#if walkInOffered}
+			<KioskWalkInOffer
+				{isLookingUp}
+				{retryAfterSeconds}
+				onretry={retryLookup}
+				onregister={() => {
+					if (input?.source === 'smart-card') onregister?.(input.citizen_id);
+				}}
+			/>
+		{:else if lookupError}
+			<KioskNoticePanel tone="warning" icon={CircleAlert} title={lookupError} role="alert">
+				{#snippet actions()}
+					<KioskLookupErrorActions
+						{lookupErrorCode}
+						{isPhoneGate}
+						{isLookingUp}
+						{retryAfterSeconds}
+						{homeUrl}
+						{backUrl}
+						onretry={retryLookup}
+						{onreset}
+					/>
+				{/snippet}
+			</KioskNoticePanel>
 		{/if}
 
 		{#if alreadyKioskRegistered}
-			<div
-				class="no-print rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-950"
+			<KioskNoticePanel
+				tone="warning"
+				icon={UserCheck}
+				title="ไปพบเจ้าหน้าที่เพื่อยืนยันข้อมูล"
 				role="status"
 			>
-				<div class="flex items-start gap-3">
-					<CircleAlert class="mt-0.5 h-6 w-6 shrink-0" aria-hidden="true" />
-					<div>
-						<h2 class="text-base font-bold">ลงทะเบียนที่ตู้แล้ว</h2>
-						<p class="mt-1 text-base leading-relaxed">กรุณาไปพบเจ้าหน้าที่เพื่อยืนยันข้อมูล</p>
-					</div>
-				</div>
-				<div class="mt-4 flex justify-end">
-					<Button
-						type="button"
-						variant="outline"
-						onclick={onreset}
-						class="min-h-12 border-[#CBD5E1] px-5 text-base font-bold text-[#0A2647]"
+				<p>บัตรนี้ลงทะเบียนที่ตู้ไว้แล้ว ไม่ต้องลงทะเบียนซ้ำ</p>
+				{#snippet actions()}
+					<Button type="button" onclick={onreset} class={KIOSK_NOTICE_PRIMARY_ACTION}
 						>กลับหน้าแรก</Button
 					>
-				</div>
-			</div>
+				{/snippet}
+			</KioskNoticePanel>
 		{/if}
 
 		{#if candidates.length > 0 && !lookupError && !isLookingUp}
@@ -552,8 +559,8 @@
 			</section>
 		{/if}
 
-		{#if holdMembers && hold && lookup && centerMatches && results.length === 0}
-			{@render hold()}
+		{#if holdShown}
+			{@render hold?.()}
 		{/if}
 
 		{#if lookup && centerMatches && results.length === 0 && !holdMembers}
@@ -838,7 +845,12 @@
 			</div>
 		{/if}
 
-		<p class="no-print flex items-center justify-center gap-2 text-sm text-slate-600">
+		<p
+			class={[
+				'no-print flex items-center justify-center gap-2 text-sm text-slate-600',
+				holdShown && 'kiosk-compact:hidden'
+			]}
+		>
 			<ShieldCheck class="h-4 w-4 shrink-0 text-[#0A2647]" aria-hidden="true" />QR
 			ไม่มีข้อมูลส่วนบุคคล
 		</p>
