@@ -1195,7 +1195,7 @@ test.describe('Pre-register: error matrix (E)', { tag: ['@pre-register', '@smoke
 		);
 		await openPreRegister(page);
 		await fillAddress(page);
-		await page.getByRole('button', { name: 'เข้าร่วมคิวกลาง' }).click();
+		await page.getByRole('button', { name: 'เข้าร่วมครอบครัวนี้' }).click();
 		await expect(page.getByText('จะเข้าร่วมครอบครัวที่มีอยู่แล้ว')).toBeVisible();
 
 		await fillMember(page, 0, { firstName: 'ทดสอบ', gender: 'male', phone: '12' });
