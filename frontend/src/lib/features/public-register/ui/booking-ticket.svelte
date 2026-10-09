@@ -1,5 +1,4 @@
 <script lang="ts">
-	import CheckCircle from '@lucide/svelte/icons/check-circle';
 	import CircleCheck from '@lucide/svelte/icons/circle-check';
 	import Download from '@lucide/svelte/icons/download';
 	import ImageDown from '@lucide/svelte/icons/image-down';
@@ -17,11 +16,9 @@
 		ticket: BookingTicket;
 		/** Shown on the confirmation step; hidden when the ticket is re-opened from lookup. */
 		showSuccessHeader?: boolean;
-		/** Optional callback when citizen confirms ticket has been verified at shelter. */
-		onVerified?: (code: string) => void;
 	}
 
-	const { ticket, showSuccessHeader = true, onVerified }: Props = $props();
+	const { ticket, showSuccessHeader = true }: Props = $props();
 
 	let t = $derived(getTranslation(PUBLIC_BOOKING_TICKET_I18N, langState.current));
 
@@ -90,12 +87,6 @@
 						? t.statusCancelled
 						: ticket.status
 	);
-
-	function handleVerifiedClick() {
-		if (!onVerified) return;
-		if (!confirm(t.verifiedConfirm)) return;
-		onVerified(ticket.code);
-	}
 </script>
 
 <div class="space-y-4">
@@ -213,17 +204,6 @@
 			<ImageDown class="h-4 w-4" />
 			{downloading === 'png' ? t.downloadingBtn : t.downloadPngBtn}
 		</Button>
-		{#if onVerified}
-			<Button
-				type="button"
-				variant="outline"
-				class="min-h-11 gap-1.5 font-semibold text-destructive hover:bg-destructive/10 hover:text-destructive"
-				onclick={handleVerifiedClick}
-			>
-				<CheckCircle class="h-4 w-4" />
-				<span>{t.verifiedBtn}</span>
-			</Button>
-		{/if}
 	</div>
 </div>
 
