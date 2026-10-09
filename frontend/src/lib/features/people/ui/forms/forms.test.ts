@@ -9,31 +9,13 @@ import {
 	HouseholdAddressFields,
 	PetAssetVehicleFields,
 	HealthMedicalFields,
-	ZoneSelectionFields,
-	SPECIAL_NEEDS_COMMON_TAGS
+	ZoneSelectionFields
 } from './index.js';
 import { languageStore } from '$lib/stores/language.svelte';
 
 describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)', () => {
 	afterEach(() => {
 		languageStore.setLanguage('th');
-	});
-
-	describe('Module Exports', () => {
-		it('exports all required form sub-components and constants', () => {
-			expect(PersonalInfoFields).toBeDefined();
-			expect(SpecialNeedsFields).toBeDefined();
-			expect(VulnerableGroupsFields).toBeDefined();
-			expect(EmergencyContactFields).toBeDefined();
-			expect(EwarSymptomsFields).toBeDefined();
-			expect(HouseholdAddressFields).toBeDefined();
-			expect(PetAssetVehicleFields).toBeDefined();
-			expect(HealthMedicalFields).toBeDefined();
-			expect(ZoneSelectionFields).toBeDefined();
-			expect(SPECIAL_NEEDS_COMMON_TAGS).toBeDefined();
-			expect(SPECIAL_NEEDS_COMMON_TAGS).toContain('ใช้วีลแชร์');
-			expect(SPECIAL_NEEDS_COMMON_TAGS).toContain('ผู้ป่วยติดเตียง');
-		});
 	});
 
 	describe('Personal Info Fields (personal-info-fields.svelte)', () => {

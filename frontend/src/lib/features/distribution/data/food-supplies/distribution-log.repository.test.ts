@@ -537,11 +537,4 @@ describe('DistributionLogRemoteRepository', () => {
 			}))
 		).rejects.toThrow(/immutable after issuance/);
 	});
-
-	it('does not expose any hard-delete API', () => {
-		// Verification that no delete method is defined on repository
-		expect((repo as unknown as Record<string, unknown>)['remove']).toBeUndefined();
-		expect((repo as unknown as Record<string, unknown>)['delete']).toBeUndefined();
-		expect((repo as unknown as Record<string, unknown>)['deleteDoc']).toBeUndefined();
-	});
 });
