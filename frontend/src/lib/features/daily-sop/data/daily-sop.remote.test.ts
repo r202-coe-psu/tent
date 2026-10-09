@@ -5,7 +5,7 @@ import {
 	createEmptyRoleDraft,
 	dailySopRoleAssessmentSchema,
 	metricForQuestion,
-	promptForQuestion,
+	questionText,
 	questionsForRole,
 	roleDraftFromAssessment,
 	type DailySopRoleAssessment,
@@ -46,7 +46,7 @@ function validAssessment(roleCode: DailySopRoleCode, date: string): DailySopRole
 		const metric = metricForQuestion(question.id, validRatios);
 		return {
 			id: question.id,
-			question: promptForQuestion(question, validRatios),
+			question: questionText(question, validRatios),
 			metric_spec: metric
 				? {
 						fields: metric.fields,

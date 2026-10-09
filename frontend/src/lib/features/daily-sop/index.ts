@@ -12,7 +12,7 @@ export {
 	isDailySopRoleAssessment,
 	metricParameterForQuestion,
 	metricForQuestion,
-	promptForQuestion,
+	questionText,
 	questionsForRole,
 	roleAssessmentProgress,
 	roleAssessmentStatusFor,
