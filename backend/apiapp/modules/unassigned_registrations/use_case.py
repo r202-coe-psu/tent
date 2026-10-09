@@ -576,14 +576,12 @@ class UnassignedRegistrationsUseCase:
                     claimed_shelter = m.claimed_shelter_code
                     break
 
-            primary_masked = None
-            if doc.members:
-                head = doc.members[0]
-                primary_masked = _masked_member_name(head.first_name, head.last_name)
+            # Cancelled members are no longer part of the family a joiner sees.
+            active_members = [m for m in doc.members if m.status != "cancelled"]
+            head = active_members[0] if active_members else None
+            primary_masked = _masked_member_name(head.first_name, head.last_name) if head else None
             members_masked = [
-                _masked_member_name(m.first_name, m.last_name)
-                for m in doc.members
-                if m.status != "cancelled"
+                _masked_member_name(m.first_name, m.last_name) for m in active_members
             ]
 
             pets_list = [
@@ -617,7 +615,7 @@ class UnassignedRegistrationsUseCase:
                     status=doc.status,
                     primary_contact_name_masked=primary_masked,
                     matched_member_masked=matched_member_str,
-                    member_count=len(doc.members),
+                    member_count=len(active_members),
                     members_masked=members_masked,
                     pets=pets_list,
                     household_address=hh_addr,

@@ -249,10 +249,10 @@ export async function findShelterResidenceMatches(
 				household_id: doc._id
 			},
 			limit: 50,
-			fields: ['_id', 'first_name', 'last_name', 'phone', 'is_head']
+			fields: ['_id', 'first_name', 'last_name', 'phone', 'is_head', 'current_stay']
 		});
 
-		const evList =
+		const allEvacuees =
 			(evRes.status < 400
 				? (
 						evRes.data as {
@@ -262,10 +262,13 @@ export async function findShelterResidenceMatches(
 								last_name?: string;
 								phone?: string;
 								is_head?: boolean;
+								current_stay?: { status?: string } | null;
 							}>;
 						} | null
 					)?.docs
 				: null) ?? [];
+		// Cancelled stays are no longer part of the family a joiner sees (same as the central queue).
+		const evList = allEvacuees.filter((e) => e.current_stay?.status !== 'cancelled');
 		const head =
 			evList.find((e) => e.is_head) ||
 			evList.find((e) => e._id === doc.head_evacuee_id) ||

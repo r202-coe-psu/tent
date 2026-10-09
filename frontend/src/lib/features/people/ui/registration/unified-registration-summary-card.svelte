@@ -319,6 +319,7 @@
 				<button
 					type="button"
 					onclick={() => onNavigate('address')}
+					aria-current={activeSection === 'address' ? 'step' : undefined}
 					class="flex items-center justify-between rounded-lg border border-border/60 bg-muted/20 px-2.5 py-1.5 transition-colors hover:bg-muted/50 {activeSection ===
 					'address'
 						? 'border-primary/40 font-semibold text-primary'
@@ -334,6 +335,7 @@
 				<button
 					type="button"
 					onclick={() => onNavigate('members')}
+					aria-current={activeSection === 'members' ? 'step' : undefined}
 					class="flex items-center justify-between rounded-lg border border-border/60 bg-muted/20 px-2.5 py-1.5 transition-colors hover:bg-muted/50 {activeSection ===
 					'members'
 						? 'border-primary/40 font-semibold text-primary'
@@ -349,6 +351,7 @@
 				<button
 					type="button"
 					onclick={() => onNavigate('pets')}
+					aria-current={activeSection === 'pets' ? 'step' : undefined}
 					class="flex items-center justify-between rounded-lg border border-border/60 bg-muted/20 px-2.5 py-1.5 transition-colors hover:bg-muted/50 {activeSection ===
 					'pets'
 						? 'border-primary/40 font-semibold text-primary'
@@ -361,6 +364,7 @@
 					<button
 						type="button"
 						onclick={() => onNavigate('vehicles')}
+						aria-current={activeSection === 'vehicles' ? 'step' : undefined}
 						class="flex items-center justify-between rounded-lg border border-border/60 bg-muted/20 px-2.5 py-1.5 transition-colors hover:bg-muted/50 {activeSection ===
 						'vehicles'
 							? 'border-primary/40 font-semibold text-primary'
