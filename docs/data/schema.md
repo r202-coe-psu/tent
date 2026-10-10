@@ -2,8 +2,8 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-09
-note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer; CR-135/CR-136 partner OAuth2 client name/module preset + secret reveal/edit/delete; CR-137 shrink master_data (10→4) + zone/community free text; CR-138 remove purchase doc type + withdraw purchase from stock_ledger.reason; CR-139 shelter storage points; CR-140 item_category default_class editable; CR-144/CR-145 meal_service_receipt (§2.7.3); CR-147 removes CR-146 meal_distribution_push (§2.7.4) — ticket flow ends at warehouse stock-in; CR-148 pre-register validation + evacuee religion_other/disability_other_detail (v11) + household dorm_* (v6); CR-151 kiosk pre-registration check-in (report-in arriving status & KIOSK_LOOKUP_MANGO_INDEXES); CR-154 evacuee.gender nullable + registered_via api (v12), external_bookings (§9.7), partner scopes booking-write/residency-read + module M2; decision sync 2026-10-09 — `evacuee.gender = null` ("ไม่ระบุ") ใช้ได้ทุกช่องทาง (public/kiosk/Station 1/back-office/api) เป็นค่าเริ่มต้นของฟอร์ม, `'other'` คงไว้อ่านเฉพาะ doc เดิม (UI ไม่เสนอให้เลือกใหม่, แก้ไขแล้วต้อง preserve) — ยกเลิก CR-154 FR-70/FR-71(บางส่วน)/FR-72; เพิ่ม `public_shelters.occupancy_breakdown.gender_unspecified` (null+other) พร้อม invariant `male+female+gender_unspecified = occupancy_total`; evacuee ไม่ bump schema_v (v12 รองรับ null แล้ว); ต้อง re-project `public_shelters` (worker bootstrap) หลัง deploy
+updated: 2026-10-10
+note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer; CR-135/CR-136 partner OAuth2 client name/module preset + secret reveal/edit/delete; CR-137 shrink master_data (10→4) + zone/community free text; CR-138 remove purchase doc type + withdraw purchase from stock_ledger.reason; CR-139 shelter storage points; CR-140 item_category default_class editable; CR-144/CR-145 meal_service_receipt (§2.7.3); CR-147 removes CR-146 meal_distribution_push (§2.7.4) — ticket flow ends at warehouse stock-in; CR-148 pre-register validation + evacuee religion_other/disability_other_detail (v11) + household dorm_* (v6); CR-151 kiosk pre-registration check-in (report-in arriving status & KIOSK_LOOKUP_MANGO_INDEXES); CR-154 evacuee.gender nullable + registered_via api (v12), external_bookings (§9.7), partner scopes booking-write/residency-read + module M2; decision sync 2026-10-09 — `evacuee.gender = null` ("ไม่ระบุ") ใช้ได้ทุกช่องทาง (public/kiosk/Station 1/back-office/api) เป็นค่าเริ่มต้นของฟอร์ม, `'other'` คงไว้อ่านเฉพาะ doc เดิม (UI ไม่เสนอให้เลือกใหม่, แก้ไขแล้วต้อง preserve) — ยกเลิก CR-154 FR-70/FR-71(บางส่วน)/FR-72; เพิ่ม `public_shelters.occupancy_breakdown.gender_unspecified` (null+other) พร้อม invariant `male+female+gender_unspecified = occupancy_total`; evacuee ไม่ bump schema_v (v12 รองรับ null แล้ว); ต้อง re-project `public_shelters` (worker bootstrap) หลัง deploy; draft-kiosk-staff-pin-face-bypass (proposed) — `scanner_device` v2 (`staff_pin_*` metadata) + DB ใหม่ `scanner_secrets` (§3.11.1, admin-only, ไม่ replicate/sync)
 ---
 
 # Database Schema v5 — field-level
@@ -1664,7 +1664,7 @@ provisioning เท่านั้น. `value` คือเลขล่าสุ
 | `value` | int≥0 | req | เลขที่ allocate ล่าสุด; เริ่ม `0` |
 
 
-### 3.11 `scanner_device` — `scanner_device:{device_id}` · **schema_v 1** (CR-084)
+### 3.11 `scanner_device` — `scanner_device:{device_id}` · **schema_v 2** (CR-084 + [draft-kiosk-staff-pin-face-bypass](../changes/draft-kiosk-staff-pin-face-bypass.md), proposed)
 
 ทะเบียนอุปกรณ์เครื่องอ่านบัตรประชาชน Smart Card Kiosk ประจำศูนย์พักพิง (Hardware Registry). เป็น registry doc กลางสำหรับ Authentication ตรวจสอบ API Key/Secret และกำกับสิทธิ์การ Inbound สแกนบัตรเข้าสู่ฐานข้อมูลศูนย์พักพิง.
 
@@ -1678,12 +1678,53 @@ provisioning เท่านั้น. `value` คือเลขล่าสุ
 | `secret_prefix` | str | req | 16 ตัวอักษรแรกของ secret เพื่อแสดงในหน้าตั้งค่า (เช่น `"sk_scan_a1b2c3d4..."`) |
 | `status` | enum(`active`,`inactive`) | req | สถานะเปิด/ปิดการใช้งานเครื่อง |
 | `last_seen_at` | ts\|null | sys | Timestamp ที่เครื่องยิง API ล่าสุด (Heartbeat) |
+| `staff_pin_set` | bool | req (v2) | มี PIN ของเครื่องใน `scanner_secrets` (§3.11.1) หรือไม่ — metadata เท่านั้น ตอนตรวจ PIN server อ่านจาก `scanner_secrets` เสมอ ไม่เชื่อ field นี้ |
+| `staff_pin_is_default` | bool | req (v2) | `true` = ยังเป็น default PIN ที่สุ่มตอนสร้างเครื่อง; มีความหมายเฉพาะเมื่อ `staff_pin_set = true` |
+| `staff_pin_updated_at` | ts\|null | req (v2) | เวลาที่ตั้ง/สุ่ม PIN ล่าสุด; `null` = ยังไม่เคยตั้ง |
+| `staff_pin_updated_by` | str\|null | req (v2) | `_users` name ของ SA ที่ตั้ง/สุ่ม PIN ล่าสุด; `null` = ยังไม่เคยตั้ง |
+
+**ห้าม** มี PIN, hash หรือ ciphertext ของ PIN ใน doc นี้ หรือใน response รายการเครื่อง — PIN อยู่ใน
+DB `scanner_secrets` เท่านั้น.
+
+**Migration (schema_v 1 → 2, draft-kiosk-staff-pin-face-bypass):** additive — doc v1 (ไม่มี `staff_pin_*`)
+ยังอ่านได้ และอ่านเป็น "ยังไม่ตั้ง PIN" (`staff_pin_set: false`, `staff_pin_is_default: false`,
+`staff_pin_updated_at: null`, `staff_pin_updated_by: null`); ไม่ backfill. server stamp `schema_v: 2`
+เมื่อตั้ง PIN ครั้งแรก; เครื่องที่สร้างใหม่เป็น v2 พร้อม default PIN. การแก้ชื่อ/สถานะเครื่องจาก browser
+ต้อง spread doc เดิมโดยไม่แตะ `staff_pin_*`.
 
 **Index:** `(device_id)` · `(shelter_code)`
 
 > ❓ **Architecture Open Question (Registry vs Shelter DB):**
 > - **ปัจจุบัน (Design Choice):** เก็บไว้ที่ DB `registry` ตรงกลาง เพื่อให้ Inbound API (`/api/v1/scanner/bootstrap`, `/api/v1/scanner/kiosk/lookup`, `/api/v1/scanner/kiosk/check-in` — CR-151; `/draft` ปิดเป็น 410) สามารถ lookup ตรวจสอบ `device_id` และ `secret_hash` ได้อย่างรวดเร็วใน 1 query โดย Client ไม่จำเป็นต้อง hardcode หรือส่ง `shelter_code` มาใน Request Header
 > - **ประเด็นพิจารณาในอนาคต (Future Consideration):** หากต้องการให้ศูนย์พักพิงมีอิสระในการเพิ่ม/จัดการเครื่องเอง (Shelter Autonomy) หรือรองรับ Edge Node ที่เน็ตตัดขาด อาจพิจารณาย้าย `scanner_device` ไปเก็บไว้ใน `shelter_{shelter_code}` โดยมีข้อกำหนดว่า Client Kiosk จะต้องส่ง Header `X-Shelter-Code` แนบมากับทุก request ด้วย
+
+#### 3.11.1 DB `scanner_secrets` — `scanner_staff_pin` — `staff_pin:{device_id}` · **schema_v 1** ([draft-kiosk-staff-pin-face-bypass](../changes/draft-kiosk-staff-pin-face-bypass.md), proposed)
+
+DB แยกจาก `registry` เก็บ staff PIN 6 หลักต่อเครื่อง ที่เจ้าหน้าที่ใช้ยืนยันให้ kiosk ไปต่อเมื่อผลตรวจใบหน้า
+ไม่ใช่ `match` (mode `on`). หนึ่ง doc ต่อเครื่อง.
+
+- **`_security`:** `admins.roles = ["_admin"]` และ `members.roles = ["_admin"]` เท่านั้น — อ่าน/เขียนได้
+  เฉพาะ server ผ่าน admin credential (`$lib/server/scanners/staff-pin-store.ts`). ถ้าพบ member ที่ไม่ใช่
+  `_admin` server ต้องไม่เขียน PIN และตอบ `503` (fail closed).
+- **ไม่ replicate** ลง device/edge และ **ไม่ sync เข้า MongoDB**.
+- **สร้าง DB:** server สร้าง DB + ตั้ง `_security` เองตอนเขียน PIN ครั้งแรก (idempotent).
+- **Envelope:** ไม่มี `shelter_code` / `created_at` / `created_by` (ข้อยกเว้นจาก §0) — ใช้ `updated_at` /
+  `updated_by` ของการตั้ง PIN ล่าสุดแทน.
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `_id` | str | req | `staff_pin:{device_id}` (deterministic — ข้อยกเว้นจาก ULID) |
+| `type` | `"scanner_staff_pin"` | req | — |
+| `schema_v` | int | req | `1` |
+| `device_id` | str | req | ตรงกับ `scanner_device.device_id` |
+| `pin` | str | req | **plaintext** ตัวเลข 6 หลัก `^\d{6}$` (SA ต้องดู PIN ได้ตลอด จึงไม่ hash); PIN ที่ SA ตั้งเองหรือที่สุ่มต้องไม่เป็นเลขซ้ำทั้งชุดหรือเลขเรียงขึ้น/ลง (เช่น `000000`, `123456`, `654321`) |
+| `is_default` | bool | req | `true` = default PIN ที่สุ่ม (`crypto.randomInt`) ตอนสร้างเครื่องหรือกดสุ่มใหม่ |
+| `updated_at` | ts | req | เวลาที่ตั้ง/สุ่ม PIN ล่าสุด |
+| `updated_by` | str | req | `_users` name ของ SA ที่ตั้ง/สุ่ม PIN ล่าสุด |
+
+**Write order:** เขียน PIN doc ก่อน แล้วค่อยเขียน `staff_pin_*` ลง `scanner_device`; ถ้าเขียน registry ไม่สำเร็จ
+ให้ rollback PIN doc (rev-guarded). `_rev` ชน → `409`. ลบเครื่อง (`DELETE /api/v1/scanner/devices/[id]`)
+ลบ PIN doc ตามด้วย (best effort — PIN doc ที่ค้างจะถูกเขียนทับเมื่อสร้างเครื่อง `device_id` เดิมใหม่). ไม่มี doc = `409 staff_pin_not_set` ตอนตรวจ PIN แม้ registry จะเขียน `staff_pin_set: true`.
 
 ---
 
