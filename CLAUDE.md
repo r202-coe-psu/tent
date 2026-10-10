@@ -67,9 +67,14 @@ Dockerfile). Don't add npm/yarn lockfiles.
 | E2E (Playwright) | `pnpm test:e2e` |
 | Regenerate OpenAPI types from FastAPI | `pnpm openapi:update` (backend must be on `:9000`) |
 
-**Definition of done (all must pass locally — see CONTRIBUTING.md §2):** `pnpm lint`, `pnpm check`
-(zero errors), `pnpm test` (new domain/data logic ships with tests), and every `.svelte` file you
-touched run through **`svelte-autofixer`** (Svelte MCP) until clean.
+**Definition of done (see CONTRIBUTING.md §2):**
+
+- **Lint, type-check, unit tests are enforced by Lefthook** — pre-commit runs Prettier + ESLint on
+  staged files; pre-push runs full `pnpm check` + `pnpm test`. Do **not** run the full suites by
+  hand before committing; while developing run only the tests you touched
+  (`pnpm vitest run <file>`). A green push satisfies these.
+- **Not hooked — you must ensure:** new domain/data logic ships with tests, and every `.svelte`
+  file you touched is run through **`svelte-autofixer`** (Svelte MCP) until clean.
 
 ### Infra + public plane (repo root / `backend/` / `worker/`)
 

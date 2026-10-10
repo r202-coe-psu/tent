@@ -2,8 +2,8 @@
 
 Working agreement for the **`frontend`** package (the SvelteKit frontend of _tent / CouchDB Lab_).
 Read this before opening a PR. It captures the conventions the codebase already enforces — most
-are checked by ESLint, `svelte-check`, tests, and the **Lefthook pre-commit hook** (§1), so "the
-hook is green" and "this doc is honored" should mean the same thing for lint/check/test.
+are checked by ESLint, `svelte-check`, tests, and the **Lefthook pre-commit/pre-push hooks** (§1),
+so "the hooks are green" and "this doc is honored" should mean the same thing for lint/check/test.
 
 > The stale `agent-role.md` still describes the original sveltekitten template (JWT auth, flat
 > `api.ts`/`queries.ts` features). **This document and the actual `src/` tree win** where they
@@ -48,33 +48,41 @@ proxies and `FASTAPI_INTERNAL_URL` + `EXTERNAL_API_SECRET` for the BFF → FastA
 
 ### Pre-commit quality gate (Lefthook)
 
-[`lefthook.yml`](../lefthook.yml) at the repo root enforces a **basic code-smell check** before
-every commit that stages `frontend/` files. Commands run sequentially (fail-fast), matching
-Jenkins staging CI:
+[`lefthook.yml`](../lefthook.yml) at the repo root is the quality gate for lint, type-check and
+unit tests:
 
-1. `pnpm lint` — Prettier + ESLint
-2. `pnpm check` — `svelte-check`
-3. `pnpm test` — Vitest
+- **pre-commit** (staged files only, fast): `prettier --write` + `eslint --fix` on staged
+  `frontend/` files; fixes are re-staged automatically.
+- **pre-push** (whole project, sequential): `pnpm check` (`svelte-check`), then `pnpm test`
+  (Vitest). Skipped when the pushed commits touch no `frontend/` source files.
 
 Hooks register automatically via the root `prepare` script when you `pnpm install` at the repo
-root. Commits that only touch docs, infra, or other non-`frontend/` paths skip the gate.
+root. Backend/worker get the equivalent `ruff` (pre-commit) and `pytest` (pre-push) jobs.
 
 **Strict Rule — No Verification Bypass:** Do **NOT** use `git commit --no-verify`, `git push --no-verify`, or `LEFTHOOK=0` under any circumstances (ห้าม commit หรือ push แบบ no-verify โดยเด็ดขาด). All quality gates (linting, type-checking, tests) must pass before code is committed or pushed. If a check fails, fix the code.
 
 ## 2. Definition of done
 
-A change is not ready until **all** of these pass locally:
+A change is not ready until **all** of these hold:
 
-1. `pnpm lint` — Prettier (tabs, single quotes, no trailing comma, printWidth 100) **and** ESLint clean.
-2. `pnpm check` — zero `svelte-check` errors.
-3. `pnpm test` — unit tests green; new domain/data logic ships with tests (see §6).
-4. Every `.svelte` file you touched has been run through the **`svelte-autofixer`** (Svelte MCP)
+**Enforced by Lefthook (§1) — do not re-run the full suites by hand before committing:**
+
+1. Lint/format clean — Prettier (tabs, single quotes, no trailing comma, printWidth 100) + ESLint
+   (pre-commit).
+2. Zero `svelte-check` errors — `pnpm check` (pre-push).
+3. Unit tests green — `pnpm test` (pre-push).
+
+While developing, run only the tests for what you changed (`pnpm vitest run <file>`); the
+pre-push hook runs the full `check` + `test` once. A green push means items 1–3 are met.
+
+**Not hooked — your responsibility (reviewers check these):**
+
+4. New domain/data logic ships with tests (see §6). The hook only proves existing tests pass;
+   it cannot tell that new logic has none.
+5. Every `.svelte` file you touched has been run through the **`svelte-autofixer`** (Svelte MCP)
    until it reports no issues.
 
-Items **1–3** run automatically on `git commit` when `frontend/` files are staged (Lefthook
-pre-commit). Run them manually (`pnpm lint`, `pnpm check`, `pnpm test` in `frontend/`) before
-you stage if you want faster feedback. Item **4** is not hooked — verify it yourself before opening
-a PR.
+Never bypass the hooks (`--no-verify`, `LEFTHOOK=0`) — see the Strict Rule in §1.
 
 ## 3. Architecture: feature-sliced, remote-first
 
