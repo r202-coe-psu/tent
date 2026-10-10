@@ -4,6 +4,7 @@ import {
 	PRIMARY_CONTACT_LABEL,
 	applyAnonymousIdToMember,
 	blankUnifiedMember,
+	membersMissingPhoneChoice,
 	memberCardLabel,
 	parseUnifiedRegistration,
 	planFamilyRegistration,
@@ -207,6 +208,23 @@ describe('unified registration — mononym and anonymous ID', () => {
 		const member = blankUnifiedMember();
 		expect(member.gender).toBeNull();
 		expect(member.religion).toBe('unknown');
+		expect(member.religion_other).toBeNull();
+		expect(member.disability_other_detail).toBeNull();
+	});
+
+	it('blankUnifiedMember opens the phone field ready to type (not "no phone")', () => {
+		expect(blankUnifiedMember().phone).toBe('');
+	});
+
+	it('membersMissingPhoneChoice flags blank phones but not "no phone" (null) or filled ones', () => {
+		expect(
+			membersMissingPhoneChoice([
+				{ phone: '0812345678' },
+				{ phone: '' },
+				{ phone: null },
+				{ phone: '   ' }
+			])
+		).toEqual([1, 3]);
 	});
 
 	it('blankUnifiedMember defines CR-148 optional fields (Svelte bindable fallbacks)', () => {
@@ -495,6 +513,20 @@ describe('unified registration — report-in converters', () => {
 		expect(targetMember.emergency_contact?.name).toBe('กิตติศักดิ์');
 		expect(targetMember.special_needs).toContain('ต้องการแพมเพิส');
 		expect(targetMember.vulnerable_groups).toContain('pregnant');
+	});
+});
+
+describe('planFamilyRegistration — preferred_zone (CR-158)', () => {
+	it('carries the suggestion but never zones at Station 1', () => {
+		const plan = planFamilyRegistration(
+			validInput({ members: [validMember({ preferred_zone: 'Z5' })] }),
+			'onsite'
+		);
+		expect(plan.memberInputs[0]).toMatchObject({
+			preferred_zone: 'Z5',
+			zone: null,
+			status: 'arriving'
+		});
 	});
 });
 

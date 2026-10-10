@@ -272,13 +272,13 @@
 						/>
 					</div>
 
-					<!-- Section 3: Additional needs -->
+					<!-- Section 3: Special needs -->
 					<div class="space-y-3 rounded-xl border border-border/80 bg-card p-4 shadow-xs">
 						<div class="flex items-center gap-2 border-b border-border/60 pb-2.5">
 							<HeartHandshake class="size-4 text-primary" />
 							<div>
 								<h3 class="text-sm font-bold text-foreground">
-									3. ความต้องการเพิ่มเติม (Additional needs)
+									3. ความต้องการพิเศษ (Special needs)
 								</h3>
 								<p class="text-xs text-muted-foreground">
 									แท็กทั่วไปหรือเพิ่มความต้องการพิเศษเอง (ไม่บังคับ)

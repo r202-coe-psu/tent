@@ -12,6 +12,8 @@
 	import * as Card from '$lib/components/ui/card';
 
 	import {
+		ewarSymptomLabel,
+		resolvePreferredZone,
 		useEvacuee,
 		useEvacuees,
 		useHouseholds,
@@ -142,11 +144,6 @@
 		return steps;
 	});
 
-	const selectedZone = $derived(
-		zoneDraftEvacueeId === evacueeId && zoneDraft !== null
-			? zoneDraft
-			: (evacuee?.current_stay.zone ?? '')
-	);
 	// Isolation default: companions start empty (never auto-select household)
 	const selectedCompanionIds = $derived(
 		companionDraftEvacueeId === evacueeId ? companionDraft : []
@@ -159,6 +156,15 @@
 		)
 	);
 	const isolationDefault = $derived(recommendKind === 'quarantine');
+	/** CR-158: Station 1's suggestion — default pick only when there are no EWAR symptoms. */
+	const preferredZone = $derived(
+		resolvePreferredZone(evacuee?.preferred_zone, shelterZones, recommendKind)
+	);
+	const selectedZone = $derived(
+		zoneDraftEvacueeId === evacueeId && zoneDraft !== null
+			? zoneDraft
+			: evacuee?.current_stay.zone || (preferredZone.kind === 'use' ? preferredZone.code : '')
+	);
 	const currentZone = $derived(evacuee?.current_stay.zone?.trim() ?? '');
 	// A zone_change to the same zone writes nothing meaningful — block it
 	const zoneChanged = $derived(!!selectedZone.trim() && selectedZone.trim() !== currentZone);
@@ -388,8 +394,19 @@
 						>
 					{/if}
 				</div>
+				{#if evacuee.vulnerable_groups && evacuee.vulnerable_groups.length > 0}
+					<div class="flex flex-wrap items-center gap-1.5 pt-1">
+						<span class="text-xs font-medium text-muted-foreground">กลุ่มเปราะบาง:</span>
+						{#each evacuee.vulnerable_groups as group (group)}
+							<Badge variant="outline" class="border-primary/30 bg-primary/10 text-primary">
+								{getSpecialNeedLabel(group)}
+							</Badge>
+						{/each}
+					</div>
+				{/if}
 				{#if evacuee.special_needs && evacuee.special_needs.length > 0}
-					<div class="flex flex-wrap gap-1.5 pt-1">
+					<div class="flex flex-wrap items-center gap-1.5 pt-1">
+						<span class="text-xs font-medium text-muted-foreground">ความต้องการพิเศษ:</span>
 						{#each evacuee.special_needs as need (need)}
 							<Badge
 								variant="outline"
@@ -401,6 +418,59 @@
 					</div>
 				{/if}
 			</div>
+
+			<!-- Station 2 findings, so Station 3 can separate the sick from everyone else -->
+			{#if latestScreening}
+				{@const ewarSymptoms = latestScreening.symptoms ?? []}
+				<section
+					aria-labelledby="screening-findings-title"
+					class="mb-4 rounded-xl border p-4 {ewarSymptoms.length > 0
+						? 'border-red-500/40 bg-red-500/5'
+						: 'border-border bg-card'}"
+				>
+					<h2 id="screening-findings-title" class="text-sm font-semibold text-foreground">
+						ผลจากจุดคัดกรอง (สถานี 2)
+					</h2>
+					{#if ewarSymptoms.length > 0}
+						<p class="mt-1 text-sm font-medium text-red-800 dark:text-red-200">
+							มีอาการเฝ้าระวัง — ควรแยกไปโซนกักตัว ไม่ให้อยู่รวมกับผู้อื่น
+						</p>
+					{/if}
+					<dl class="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+						<div class="sm:col-span-2">
+							<dt class="text-xs text-muted-foreground">อาการเฝ้าระวัง (EWAR)</dt>
+							<dd class="mt-1">
+								{#if ewarSymptoms.length > 0}
+									<ul class="flex flex-wrap gap-1.5">
+										{#each ewarSymptoms as symptom (symptom)}
+											<li>
+												<Badge
+													variant="outline"
+													class="border-red-500/40 bg-red-500/15 text-red-800 dark:text-red-200"
+												>
+													{ewarSymptomLabel(symptom)}
+												</Badge>
+											</li>
+										{/each}
+									</ul>
+								{:else}
+									<span class="text-muted-foreground">ไม่มี</span>
+								{/if}
+							</dd>
+						</div>
+						<div>
+							<dt class="text-xs text-muted-foreground">แนวทางดูแล</dt>
+							<dd class="mt-1">
+								{latestScreening.track === 'fast_track' ? 'Fast Track (ดูแลก่อน)' : 'ดูแลตามปกติ'}
+							</dd>
+						</div>
+						<div>
+							<dt class="text-xs text-muted-foreground">อาการทั่วไป / บันทึก</dt>
+							<dd class="mt-1 whitespace-pre-line">{latestScreening.notes?.trim() || '—'}</dd>
+						</div>
+					</dl>
+				</section>
+			{/if}
 
 			{#if intakeBlock === 'not_reported'}
 				<div
@@ -449,6 +519,7 @@
 						bind:selected_zone={() => selectedZone, setSelectedZone}
 						{evacuee}
 						ewar_symptoms={latestScreening?.symptoms}
+						preferred_zone={preferredZone}
 						occupant_counts={occupantCounts}
 						shelter_zones={shelterQuery.data?.zones}
 					/>
@@ -461,7 +532,7 @@
 									: 'จัดโซนสมาชิกครัวเรือนที่รอจัดด้วย'}
 							</p>
 							<p class="text-2xs text-muted-foreground">
-								เลือกเฉพาะคน — ไม่ตัด household_id · คนละโซนได้เมื่อจำเป็น (เช่น กักตัว)
+								เลือกเฉพาะคน — คนละโซนได้เมื่อจำเป็น (เช่น กักตัว)
 							</p>
 							{#each companionCandidates as member (member._id)}
 								{@const checked = selectedCompanionIds.includes(member._id)}

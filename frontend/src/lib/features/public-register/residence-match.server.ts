@@ -30,6 +30,8 @@ export type ResidenceMatchChip = {
 	primary_contact_masked?: string | null;
 	matched_member_masked?: string | null;
 	member_count?: number;
+	/** Current members, first name + masked surname — who is already in the family. */
+	members_masked?: string[];
 	pets?: Array<{ species: string; name?: string; count?: number; details?: string }>;
 	address?: ResidenceFields | null;
 };
@@ -51,6 +53,11 @@ function maskLastName(lastName: string | null | undefined): string {
 		return `${chars[0]}****`;
 	}
 	return `${chars[0]}${chars[1] || ''}****${chars[chars.length - 1] || ''}`;
+}
+
+/** First name + masked surname — the only member detail a public joiner may see. */
+function maskedMemberName(firstName: string | null | undefined, lastName?: string | null): string {
+	return `${firstName ?? ''} ${maskLastName(lastName)}`.trim();
 }
 
 function maskPhone(phone: string | null | undefined): string {
@@ -77,6 +84,7 @@ function toChip(
 		primary_contact_masked?: string | null;
 		matched_member_masked?: string | null;
 		member_count?: number;
+		members_masked?: string[];
 		pets?: Array<{ species: string; name?: string; count?: number; details?: string }>;
 		address?: ResidenceFields | null;
 	}
@@ -95,6 +103,7 @@ function toChip(
 			: {}),
 		...(meta?.matched_member_masked ? { matched_member_masked: meta.matched_member_masked } : {}),
 		...(typeof meta?.member_count === 'number' ? { member_count: meta.member_count } : {}),
+		...(meta?.members_masked?.length ? { members_masked: meta.members_masked } : {}),
 		...(meta?.pets ? { pets: meta.pets } : {}),
 		...(meta?.address ? { address: meta.address } : {}),
 		is_in_shelter: tokenPayload.kind === 'shelter'
@@ -240,10 +249,10 @@ export async function findShelterResidenceMatches(
 				household_id: doc._id
 			},
 			limit: 50,
-			fields: ['_id', 'first_name', 'last_name', 'phone', 'is_head']
+			fields: ['_id', 'first_name', 'last_name', 'phone', 'is_head', 'current_stay']
 		});
 
-		const evList =
+		const allEvacuees =
 			(evRes.status < 400
 				? (
 						evRes.data as {
@@ -253,15 +262,18 @@ export async function findShelterResidenceMatches(
 								last_name?: string;
 								phone?: string;
 								is_head?: boolean;
+								current_stay?: { status?: string } | null;
 							}>;
 						} | null
 					)?.docs
 				: null) ?? [];
+		// Cancelled stays are no longer part of the family a joiner sees (same as the central queue).
+		const evList = allEvacuees.filter((e) => e.current_stay?.status !== 'cancelled');
 		const head =
 			evList.find((e) => e.is_head) ||
 			evList.find((e) => e._id === doc.head_evacuee_id) ||
 			evList[0];
-		const primaryMasked = head ? `${head.first_name} ${maskLastName(head.last_name)}`.trim() : null;
+		const primaryMasked = head ? maskedMemberName(head.first_name, head.last_name) : null;
 
 		let matchedMemberMasked: string | null = null;
 		const matchedEv = phoneMatchedEvacuees[doc._id];
@@ -284,6 +296,7 @@ export async function findShelterResidenceMatches(
 					primary_contact_masked: primaryMasked,
 					matched_member_masked: matchedMemberMasked,
 					member_count: evList.length,
+					members_masked: evList.map((e) => maskedMemberName(e.first_name, e.last_name)),
 					pets: doc.pets ?? [],
 					address: {
 						housing_type: doc.housing_type,
@@ -353,6 +366,7 @@ export async function findUnassignedResidenceMatches(
 			primary_contact_name_masked?: string | null;
 			matched_member_masked?: string | null;
 			member_count?: number;
+			members_masked?: string[];
 			pets?: Array<{ species: string; name?: string; count?: number; details?: string }>;
 			household_address?: ResidenceFields | null;
 		}>;
@@ -364,6 +378,7 @@ export async function findUnassignedResidenceMatches(
 			primary_contact_masked: hit.primary_contact_name_masked,
 			matched_member_masked: hit.matched_member_masked,
 			member_count: hit.member_count,
+			members_masked: hit.members_masked,
 			pets: hit.pets,
 			address: hit.household_address
 		};

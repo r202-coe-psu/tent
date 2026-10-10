@@ -65,20 +65,14 @@
 				createdBy: authStore.user?.name ?? 'staff'
 			};
 
-			// 1. Create Head Evacuee (registered state)
+			// 1. Create Head Evacuee (pre_registered). The picked zone is only a suggestion
+			// (`preferred_zone`, CR-158): the real zone is assigned at Station 3, and the VDU
+			// rejects a zone change on anyone not yet active.
 			const headDoc = await createEvacueeMutation.mutateAsync({
-				input: headData,
+				input: { ...headData, preferred_zone: zone || null },
 				ctx
 			});
-
-			const updatedHeadDoc = await updateEvacueeMutation.mutateAsync({
-				...headDoc,
-				current_stay: {
-					...headDoc.current_stay,
-					zone: zone || null
-				}
-			});
-			createdHead = updatedHeadDoc;
+			createdHead = headDoc;
 
 			if (joinHouseholdId) {
 				// Join existing household — do not create a new one
@@ -110,7 +104,7 @@
 				}
 
 				const finalHeadDoc = await updateEvacueeMutation.mutateAsync({
-					...updatedHeadDoc,
+					...headDoc,
 					household_id: joinHouseholdId
 				});
 				createdHead = finalHeadDoc;
@@ -156,7 +150,7 @@
 
 			// 3. Update Head Evacuee with household_id
 			const finalHeadDoc = await updateEvacueeMutation.mutateAsync({
-				...updatedHeadDoc,
+				...headDoc,
 				household_id: hhDoc._id
 			});
 			createdHead = finalHeadDoc;

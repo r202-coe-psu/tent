@@ -308,7 +308,7 @@ describe('ClinicalScreeningForm component', () => {
 		household_id: null
 	} as Evacuee;
 
-	it('renders 4-section screening form with editable VG and additional needs, without triage/vitals/referral or amber read-only banner', () => {
+	it('renders 4-section screening form with editable VG and special needs, without triage/vitals/referral or amber read-only banner', () => {
 		const result = render(ClinicalScreeningForm, {
 			props: {
 				evacuee: sampleEvacuee,
@@ -333,8 +333,8 @@ describe('ClinicalScreeningForm component', () => {
 		expect(result.body).toContain('ผู้ป่วยติดเตียง');
 		expect(result.body).toContain('id="med-vg-wheelchair"');
 
-		// Section 3: Additional needs
-		expect(result.body).toContain('3. ความต้องการเพิ่มเติม (Additional needs)');
+		// Section 3: Special needs (one name with Station 1)
+		expect(result.body).toContain('3. ความต้องการพิเศษ (Special needs)');
 
 		// Section 4: EWAR Surveillance Symptoms
 		expect(result.body).toContain('4. อาการเฝ้าระวังทางระบาดวิทยา');
@@ -383,7 +383,7 @@ describe('ClinicalScreeningForm component', () => {
 		expect(result.body).not.toContain('แก้ไขผลการคัดกรอง (บันทึกใหม่แบบ append)');
 		expect(result.body).toContain('1. ประวัติสุขภาพและแนวทางดูแล');
 		expect(result.body).toContain('2. กลุ่มเปราะบาง');
-		expect(result.body).toContain('3. ความต้องการเพิ่มเติม');
+		expect(result.body).toContain('3. ความต้องการพิเศษ');
 		expect(result.body).toContain('4. อาการเฝ้าระวังทางระบาดวิทยา');
 		expect(result.body).not.toContain('2. อาการทั่วไป');
 		expect(result.body).not.toContain('กลุ่มเปราะบาง / ความต้องการพิเศษ');

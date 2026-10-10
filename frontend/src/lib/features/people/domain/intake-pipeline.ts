@@ -157,6 +157,50 @@ export function recommendZoneKind(
 	return 'general';
 }
 
+/** Zone type names shared by Station 2 (screening summary) and Station 3 (zone picker). */
+export const ZONE_KIND_LABELS: Record<ZoningRecommendKind, string> = {
+	quarantine: 'โซนกักตัว (มีอาการเฝ้าระวัง)',
+	vulnerable: 'โซนกลุ่มเปราะบาง',
+	general: 'โซนทั่วไป'
+};
+
+/**
+ * First open zone whose type matches `kind` (zones without a type count as general).
+ * Returns null when none matches — callers must not fall back to an unrelated zone,
+ * or the recommendation text would contradict the zone shown.
+ */
+export function pickRecommendedZone<Z extends { type?: string; status?: string }>(
+	zones: readonly Z[],
+	kind: ZoningRecommendKind
+): Z | null {
+	return zones.find((z) => z.status !== 'closed' && (z.type || 'general') === kind) ?? null;
+}
+
+export type PreferredZoneOutcome =
+	| { kind: 'none' }
+	| { kind: 'use'; code: string }
+	/** EWAR symptoms: quarantine is recommended instead, the suggestion is shown read-only (FR-07). */
+	| { kind: 'quarantine_overrides'; code: string }
+	/** The suggested zone is closed or no longer in the shelter (FR-08). */
+	| { kind: 'unavailable'; code: string };
+
+/**
+ * CR-158: what Station 3 does with the zone Station 1 suggested.
+ * Only `use` pre-selects it; staff can always pick another zone.
+ */
+export function resolvePreferredZone<Z extends { code: string; status?: string }>(
+	preferredZone: string | null | undefined,
+	zones: readonly Z[],
+	recommendKind: ZoningRecommendKind
+): PreferredZoneOutcome {
+	const code = preferredZone?.trim();
+	if (!code) return { kind: 'none' };
+	if (recommendKind === 'quarantine') return { kind: 'quarantine_overrides', code };
+	const zone = zones.find((z) => z.code === code);
+	if (!zone || zone.status === 'closed') return { kind: 'unavailable', code };
+	return { kind: 'use', code };
+}
+
 /**
  * Present occupancy per zone: occupants whose stay is still "present"
  * (`active` | `room_confirmed` | `temporary_leave`) — not In-zone-only.

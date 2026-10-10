@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { beforeNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { tick } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
@@ -185,6 +186,7 @@
 			isDirty = false;
 			isNavigatingAfterSave = true;
 			completed = result;
+			await focusCompletionHeading();
 			toast.success(`ลงทะเบียนครอบครัว ${result.members.length} คน สำเร็จ`);
 		} catch (err) {
 			const partial = isRegistrationCompensationIncomplete(err);
@@ -202,6 +204,14 @@
 			}
 			throw err;
 		}
+	}
+
+	async function focusCompletionHeading() {
+		await tick();
+		window.scrollTo({ top: 0, behavior: 'auto' });
+		document.documentElement.scrollTo({ top: 0, behavior: 'auto' });
+		document.body.scrollTo({ top: 0, behavior: 'auto' });
+		document.getElementById('family-batch-print-heading')?.focus({ preventScroll: true });
 	}
 
 	function backToQueue() {
@@ -261,7 +271,8 @@
 
 		<h1 class="mb-2 text-2xl font-bold md:mb-1 md:text-3xl">ลงทะเบียนครอบครัว</h1>
 		<p class="mb-4 text-sm text-muted-foreground md:mb-6">
-			กรอกข้อมูลครอบครัวร่วมด้านบน แล้วเพิ่มสมาชิกทีละคนด้านล่าง — คนแรกคือผู้ติดต่อหลัก
+			กรอกข้อมูลครอบครัวร่วมด้านบน แล้วเพิ่มสมาชิกทีละคนด้านล่าง — คนที่ 1
+			คือผู้ติดต่อหลักของครอบครัวที่ศูนย์จะประสานงานด้วย
 		</p>
 
 		{#if !shelterCode}

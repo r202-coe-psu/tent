@@ -1,14 +1,20 @@
 <script lang="ts">
 	import CheckCircle from '@lucide/svelte/icons/check-circle';
 	import MapPin from '@lucide/svelte/icons/map-pin';
+	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import Sparkles from '@lucide/svelte/icons/sparkles';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
-	import { useShelter } from '$lib/features/shelters/index.js';
+	import { useShelter, ZONE_TYPE_LABELS, type ZoneType } from '$lib/features/shelters/index.js';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import type { Evacuee, TriageLevel } from '$lib/features/people';
-	import { recommendZoneKind } from '$lib/features/people';
+	import {
+		recommendZoneKind,
+		pickRecommendedZone,
+		ZONE_KIND_LABELS,
+		type PreferredZoneOutcome
+	} from '$lib/features/people';
 
 	export interface ZoneItem {
 		code: string;
@@ -24,6 +30,7 @@
 		evacuee = null,
 		triage_level = null,
 		ewar_symptoms = null,
+		preferred_zone = { kind: 'none' },
 		occupant_counts,
 		onSelectZone,
 		disabled = false
@@ -33,6 +40,8 @@
 		evacuee?: Evacuee | null;
 		triage_level?: TriageLevel | null;
 		ewar_symptoms?: readonly string[] | null;
+		/** CR-158: what became of the zone Station 1 suggested (resolved by the caller). */
+		preferred_zone?: PreferredZoneOutcome;
 		occupant_counts?: Map<string, number> | Record<string, number>;
 		onSelectZone?: (zoneCode: string) => void;
 		disabled?: boolean;
@@ -58,6 +67,12 @@
 		return raw.filter((z: ZoneItem) => z.status !== 'closed');
 	});
 
+	/**
+	 * Recommend only for one known person (or known symptoms). The bulk dialog passes no
+	 * subject, and a per-person reason there would be wrong for most of the selection.
+	 */
+	const hasSubject = $derived(evacuee != null || ewar_symptoms != null || triage_level != null);
+
 	const recommendedZoneType = $derived(
 		recommendZoneKind(
 			evacuee ?? { vulnerable_groups: [], special_needs: [] },
@@ -65,13 +80,10 @@
 		)
 	);
 
-	const recommendedZone = $derived.by(() => {
-		const matches = activeZones.filter(
-			(z: ZoneItem) => (z.type || 'general') === recommendedZoneType
-		);
-		if (matches.length > 0) return matches[0];
-		return activeZones[0] || null;
-	});
+	/** Null when no open zone has the recommended type — never another type's zone. */
+	const recommendedZone = $derived(
+		hasSubject ? pickRecommendedZone(activeZones, recommendedZoneType) : null
+	);
 
 	function occupantCount(code: string): number {
 		if (!occupant_counts) return 0;
@@ -82,7 +94,21 @@
 	function recommendLabel(kind: string): string {
 		if (kind === 'quarantine') return 'แนะนำสำหรับผู้มีอาการเฝ้าระวัง (กักตัว)';
 		if (kind === 'vulnerable') return 'แนะนำสำหรับผู้มีความต้องการพิเศษหรือกลุ่มเปราะบาง';
-		return 'โซนที่พักทั่วไป';
+		return 'ไม่มีอาการเฝ้าระวังหรือความต้องการพิเศษ — แนะนำโซนทั่วไป';
+	}
+
+	/** Thai type name; zones saved without a type count as general. */
+	function zoneTypeName(type: string | undefined): string {
+		return ZONE_TYPE_LABELS[(type || 'general') as ZoneType] ?? type ?? '';
+	}
+
+	const isQuarantine = (zone: ZoneItem) => zone.type === 'quarantine';
+
+	function zoneName(code: string): string {
+		const zone = (shelter_zones ?? shelterQuery.data?.zones ?? []).find(
+			(z: ZoneItem) => z.code === code
+		);
+		return zone?.name?.trim() || code;
 	}
 
 	function handleSelect(code: string) {
@@ -92,7 +118,34 @@
 </script>
 
 <div class="space-y-4">
-	{#if recommendedZone}
+	{#if preferred_zone.kind !== 'none'}
+		<p
+			class="rounded-lg border px-3 py-2 text-xs {preferred_zone.kind === 'use'
+				? 'border-primary/30 bg-primary/5 text-foreground'
+				: 'border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-100'}"
+			role="status"
+		>
+			{#if preferred_zone.kind === 'use'}
+				โซนที่สถานี 1 ระบุไว้: <strong>{zoneName(preferred_zone.code)}</strong> — เลือกไว้ให้แล้ว เปลี่ยนได้
+			{:else if preferred_zone.kind === 'quarantine_overrides'}
+				สถานี 1 ระบุโซน <strong>{zoneName(preferred_zone.code)}</strong> ไว้ — ไม่ได้เลือกให้ เพราะมีอาการเฝ้าระวัง
+				ต้องแยกไปโซนกักโรค
+			{:else}
+				โซนที่สถานี 1 ระบุไว้ ({preferred_zone.code}) ไม่เปิดใช้งานแล้ว — กรุณาเลือกโซนเอง
+			{/if}
+		</p>
+	{/if}
+	{#if hasSubject && !recommendedZone && activeZones.length > 0}
+		<div
+			role="status"
+			class="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-100"
+		>
+			<p class="font-semibold">
+				ไม่มี{ZONE_KIND_LABELS[recommendedZoneType]} ที่เปิดอยู่
+			</p>
+			<p class="mt-0.5">{recommendLabel(recommendedZoneType)} — กรุณาเลือกโซนด้วยตนเอง</p>
+		</div>
+	{:else if recommendedZone}
 		{@const isRecSelected = selected_zone === recommendedZone.code}
 		<div
 			class="rounded-xl border p-3 transition-colors {isRecSelected
@@ -111,6 +164,9 @@
 							<span class="text-xs font-bold text-foreground">โซนแนะนำ:</span>
 							<span class="text-xs font-bold text-primary"
 								>{recommendedZone.name || recommendedZone.code}</span
+							>
+							<span class="text-2xs text-muted-foreground"
+								>({zoneTypeName(recommendedZone.type)})</span
 							>
 						</div>
 						<p class="mt-0.5 text-2xs text-muted-foreground">
@@ -171,7 +227,7 @@
 						{@const isRec = recommendedZone?.code === zone.code}
 						<Select.Item
 							value={zone.code}
-							label={`${zone.name?.trim() || zone.code}${isRec ? ' ★ แนะนำ' : ''}`}
+							label={`${zone.name?.trim() || zone.code} · ${isQuarantine(zone) ? '⚠ ' : ''}${zoneTypeName(zone.type)}${isRec ? ' ★ แนะนำ' : ''}`}
 						/>
 					{/each}
 				</Select.Content>
@@ -193,23 +249,38 @@
 						onclick={() => handleSelect(zone.code)}
 						class="flex items-center justify-between rounded-lg border p-2.5 text-left text-xs transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 {isSelected
 							? 'border-primary bg-primary/5 font-semibold text-primary'
-							: 'border-border bg-card text-foreground hover:bg-muted/40'}"
+							: isQuarantine(zone)
+								? 'border-red-500/50 bg-red-500/5 text-foreground hover:bg-red-500/10'
+								: 'border-border bg-card text-foreground hover:bg-muted/40'}"
 					>
 						<div class="flex items-center gap-2">
-							<MapPin class="size-3.5 text-muted-foreground" />
+							{#if isQuarantine(zone)}
+								<ShieldAlert class="size-3.5 text-red-600 dark:text-red-400" aria-hidden="true" />
+							{:else}
+								<MapPin class="size-3.5 text-muted-foreground" />
+							{/if}
 							<div>
-								<div class="flex items-center gap-1.5">
+								<div class="flex flex-wrap items-center gap-1.5">
 									<span>{zone.name?.trim() || zone.code}</span>
+									<span
+										class="inline-flex items-center rounded-md px-1.5 py-px text-xs leading-5 font-semibold {isQuarantine(
+											zone
+										)
+											? 'bg-red-600 text-white dark:bg-red-500'
+											: 'bg-muted text-muted-foreground'}"
+									>
+										{isQuarantine(zone) ? 'โซน' : ''}{zoneTypeName(zone.type)}
+									</span>
 									{#if isRec}
 										<span
-											class="py-0.2 rounded bg-amber-100 px-1 text-[10px] font-bold text-amber-800 dark:bg-amber-950 dark:text-amber-200"
+											class="inline-flex items-center rounded-md bg-amber-100 px-1.5 py-px text-xs leading-5 font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-200"
 										>
 											แนะนำ
 										</span>
 									{/if}
 								</div>
 								<span class="text-2xs text-muted-foreground">
-									{zone.type ? `${zone.type} · ` : ''}พักอยู่ {occupantCount(zone.code)}
+									พักอยู่ {occupantCount(zone.code)}
 									{zone.capacity != null ? `/ ${zone.capacity}` : ''} คน
 								</span>
 							</div>

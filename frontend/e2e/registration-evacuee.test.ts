@@ -40,7 +40,6 @@
  * this run's Tst… last-name tag. Public POSTs allow 3/min/IP, so a run waits ~1 min once.
  */
 
-import { createRequire } from 'node:module';
 import process from 'node:process';
 import {
 	test,
@@ -58,8 +57,7 @@ import {
 	type TestUser
 } from './helpers/couch';
 import { injectSession } from './helpers/login';
-
-const nodeRequire = createRequire(import.meta.url);
+import { decodeQrImage } from './helpers/onsite';
 
 // ─── Run identity ──────────────────────────────────────────────────────────────
 
@@ -334,8 +332,8 @@ interface Person {
 	age?: string;
 	/** Vulnerable-group checkbox codes, e.g. `elderly_dependent`. */
 	vulnerableGroups?: string[];
-	/** Zone name to assign already at Station 1 (leave undefined = "assign later"). */
-	zone?: string;
+	/** Station 1's optional preferred zone (CR-158) — a suggestion for Station 3, not a zone. */
+	preferredZone?: string;
 }
 const fullName = (p: Pick<Person, 'firstName' | 'lastName'>) => `${p.firstName} ${p.lastName}`;
 
@@ -348,14 +346,16 @@ async function fillMemberCard(page: Page, index: number, m: Person): Promise<voi
 	await card.locator(`#member-${index}-last-name`).fill(m.lastName);
 	await card.locator(`#member-${index}-gender-${m.gender}`).click({ force: true });
 	if (m.age) await card.locator(`#member-${index}-age`).fill(m.age);
-	// "ไม่มีเบอร์โทรศัพท์" is ticked by default — untick to type a number.
+	// A new member's phone field opens ready to type; "ไม่มีเบอร์โทรศัพท์" must be ticked
+	// explicitly. The public head has no such checkbox (phone is mandatory there).
+	const noPhone = card.locator(`#member-${index}-no-phone`);
+	const noPhoneTicked = async () =>
+		(await noPhone.count()) > 0 && (await noPhone.getAttribute('aria-checked')) === 'true';
 	if (m.phone) {
-		// The public head has no such checkbox (phone is mandatory there).
-		const noPhone = card.locator(`#member-${index}-no-phone`);
-		if ((await noPhone.count()) && (await noPhone.getAttribute('aria-checked')) === 'true') {
-			await noPhone.click();
-		}
+		if (await noPhoneTicked()) await noPhone.click();
 		await card.locator(`#member-${index}-phone`).fill(m.phone);
+	} else if ((await noPhone.count()) > 0 && !(await noPhoneTicked())) {
+		await noPhone.click();
 	}
 	if (m.vulnerableGroups?.length) {
 		await card.getByRole('button', { name: 'กลุ่มเปราะบาง', exact: true }).click();
@@ -363,8 +363,13 @@ async function fillMemberCard(page: Page, index: number, m: Person): Promise<voi
 			await card.locator(`#vg-${index}-${code}`).click();
 		}
 	}
-	if (m.zone) {
-		await card.locator('div.grid button', { hasText: m.zone }).first().click();
+	if (m.preferredZone) {
+		await card.getByRole('button', { name: /โซนที่ต้องการ \(ไม่บังคับ\)/ }).click();
+		await card.locator('[aria-label="โซนที่ต้องการ"]').click();
+		await page
+			.getByRole('option', { name: new RegExp(m.preferredZone) })
+			.first()
+			.click();
 	}
 }
 
@@ -381,31 +386,6 @@ async function fillAddress(page: Page, addressNo: string, villageNo?: string) {
 		await page.locator(`#${id}`).click();
 		await page.getByRole('button', { name: option, exact: true }).click();
 	}
-}
-
-/** Decode a QR <img> in the page with the app's own html5-qrcode. */
-async function decodeQrImage(page: Page, img: Locator): Promise<string> {
-	const src = await img.getAttribute('src');
-	if (!src?.startsWith('data:image')) throw new Error('QR <img> has no data-URL source');
-	if (!(await page.evaluate(() => 'Html5Qrcode' in window))) {
-		await page.addScriptTag({ path: nodeRequire.resolve('html5-qrcode/html5-qrcode.min.js') });
-	}
-	return page.evaluate(async (dataUrl) => {
-		const holder = document.createElement('div');
-		holder.id = 'e2e-qr-decode';
-		holder.style.display = 'none';
-		document.body.appendChild(holder);
-		const blob = await (await fetch(dataUrl)).blob();
-		const file = new File([blob], 'qr.png', { type: blob.type });
-		type QrScanner = { scanFile(file: File, showImage: boolean): Promise<string> };
-		const { Html5Qrcode } = window as unknown as { Html5Qrcode: new (id: string) => QrScanner };
-		const scanner = new Html5Qrcode(holder.id);
-		try {
-			return await scanner.scanFile(file, false);
-		} finally {
-			holder.remove();
-		}
-	}, src);
 }
 
 /** On the print screen, read each member's evacuee id from their Person QR. */
@@ -559,32 +539,44 @@ async function scanAndSelectOnly(page: Page, payload: string, others: string[]):
 	}
 }
 
-/** Answer any prompt the action raises, then stop listening. */
-async function answeringDialogs(page: Page, answer: string, action: () => Promise<void>) {
-	const handler = (dialog: import('@playwright/test').Dialog) =>
-		void dialog.accept(answer).catch(() => {});
-	page.on('dialog', handler);
-	try {
-		await action();
-	} finally {
-		page.off('dialog', handler);
+/** Check out through the scan page; the reason goes in the check-out dialog. */
+async function checkOutByScan(
+	page: Page,
+	id: string,
+	others: string[],
+	reason: string
+): Promise<void> {
+	await scanAndSelectOnly(page, id, others);
+	await page.getByRole('button', { name: 'เช็คเอาท์', exact: true }).click();
+	const dialog = page.getByRole('dialog', { name: 'เหตุผลการเช็คเอาท์' });
+	await dialog.getByLabel('เหตุผลการเช็คเอาท์').fill(reason);
+	await dialog.getByRole('button', { name: 'ยืนยันเช็คเอาท์' }).click();
+	await expect(page.getByText('เช็คเอาท์สำเร็จ 1 คน')).toBeVisible({ timeout: 15_000 });
+}
+
+/** Check in through the scan page; someone with no zone to return to gets the zone dialog. */
+async function checkInByScan(
+	page: Page,
+	id: string,
+	others: string[],
+	zoneCode: string
+): Promise<void> {
+	await scanAndSelectOnly(page, id, others);
+	await page.getByRole('button', { name: 'เช็คอิน', exact: true }).click();
+	const success = page.getByText('เช็คอินสำเร็จ 1 คน');
+	const zoneDialog = page.getByRole('dialog', { name: 'เลือกโซนสำหรับเช็คอิน' });
+	await expect(success.or(zoneDialog)).toBeVisible({ timeout: 15_000 });
+	if (await zoneDialog.isVisible()) {
+		const picker = zoneDialog.locator('[aria-label="โซนสำหรับเช็คอิน"]');
+		if ((await picker.count()) > 0) {
+			await picker.click();
+			await page.getByRole('option', { name: new RegExp(`\\(${zoneCode}\\)$`) }).click();
+		} else {
+			await zoneDialog.getByLabel('รหัสโซน').fill(zoneCode);
+		}
+		await zoneDialog.getByRole('button', { name: 'ยืนยันเช็คอิน' }).click();
 	}
-}
-
-async function checkOutByScan(page: Page, id: string, others: string[], reason: string) {
-	await scanAndSelectOnly(page, id, others);
-	await answeringDialogs(page, reason, async () => {
-		await page.getByRole('button', { name: 'เช็คเอาท์' }).click();
-		await expect(page.getByText('เช็คเอาท์สำเร็จ 1 คน')).toBeVisible({ timeout: 15_000 });
-	});
-}
-
-async function checkInByScan(page: Page, id: string, others: string[], zoneCode: string) {
-	await scanAndSelectOnly(page, id, others);
-	await answeringDialogs(page, zoneCode, async () => {
-		await page.getByRole('button', { name: 'เช็คอิน' }).click();
-		await expect(page.getByText('เช็คอินสำเร็จ 1 คน')).toBeVisible({ timeout: 15_000 });
-	});
+	await expect(success).toBeVisible({ timeout: 15_000 });
 }
 
 // ─── Public site ───────────────────────────────────────────────────────────────
@@ -704,7 +696,7 @@ async function walkInFlow(browser: Browser, run: Run, s: Sessions) {
 		gender: 'female',
 		nationalId: makeThaiNationalId(run.seed + 7),
 		age: '9',
-		zone: ZONE_VULNERABLE
+		preferredZone: ZONE_VULNERABLE
 	};
 	const relative: Person = {
 		firstName: 'Malee',
@@ -734,7 +726,7 @@ async function walkInFlow(browser: Browser, run: Run, s: Sessions) {
 	});
 
 	// Station 1: new household, 2 members (+ pet / car / assets when enabled)
-	await test.step('Station 1: register a NEW household (address, 2 members, pet, vehicle, assets, zone)', async () => {
+	await test.step('Station 1: register a NEW household (address, 2 members, pet, vehicle, assets, preferred zone)', async () => {
 		await fillAddress(desk, addressNo, 'หมู่ 5');
 		await expect(desk.locator('#postal_code')).not.toHaveValue('');
 
@@ -769,8 +761,8 @@ async function walkInFlow(browser: Browser, run: Run, s: Sessions) {
 
 	await test.step('Station 1: statuses and household details as staff see them', async () => {
 		await expectStay(desk, head, STATUS.arriving);
-		// Zone chosen at registration → active, awaiting arrival.
-		await expectStay(desk, child, STATUS.active, ZONE_VULNERABLE);
+		// A preferred zone is only a suggestion (ADR-0001, CR-158) — still arriving, no zone yet.
+		await expectStay(desk, child, STATUS.arriving);
 
 		await desk.goto(`/onsite/people/evacuee-profile-view/${ids[head.firstName]}`);
 		const profile = desk.getByRole('main').last();
@@ -789,7 +781,7 @@ async function walkInFlow(browser: Browser, run: Run, s: Sessions) {
 		});
 		await fillAddress(desk, addressNo, 'หมู่ 5');
 		await expect(desk.getByText('พบครอบครัวที่อยู่ใกล้เคียง')).toBeVisible({ timeout: 15_000 });
-		await desk.getByRole('button', { name: 'เข้าร่วม', exact: true }).first().click();
+		await desk.getByRole('button', { name: 'เข้าร่วมครอบครัวนี้' }).first().click();
 		await expect(desk.getByText('จะเข้าร่วมครอบครัวที่มีอยู่แล้ว')).toBeVisible();
 
 		await fillMemberCard(desk, 0, relative);
@@ -805,10 +797,12 @@ async function walkInFlow(browser: Browser, run: Run, s: Sessions) {
 	});
 
 	await test.step('Station 3 queue before Station 2: held back (ON) / listed straight away (OFF)', async () => {
-		await expectZoningQueue(desk, run.flags, lastName, [head, relative], { screened: false });
+		await expectZoningQueue(desk, run.flags, lastName, [head, child, relative], {
+			screened: false
+		});
 	});
 
-	// ── Station 2: medical screening (head + relative) ──
+	// ── Station 2: medical screening (head + child + relative) ──
 	await test.step(
 		run.flags.medical
 			? 'Station 2: doctor screens head and relative'
@@ -825,6 +819,7 @@ async function walkInFlow(browser: Browser, run: Run, s: Sessions) {
 						allergies: 'เพนิซิลลิน'
 					}
 				},
+				{ id: ids[child.firstName], fill: { conditions: 'ไม่มี' } },
 				{ id: ids[relative.firstName], fill: { conditions: 'ไม่มี' } }
 			]);
 		}
@@ -832,7 +827,18 @@ async function walkInFlow(browser: Browser, run: Run, s: Sessions) {
 
 	// ── Station 3: zone allocation ──
 	await test.step('Station 3: head gets a zone (relative zoned along), then household confirms arrival', async () => {
-		await expectZoningQueue(desk, run.flags, lastName, [head, relative], { screened: true });
+		await expectZoningQueue(desk, run.flags, lastName, [head, child, relative], {
+			screened: true
+		});
+
+		// The child's Station 1 preferred zone comes preselected; staff confirm it.
+		await desk.goto(`/onsite/zoning/${ids[child.firstName]}`);
+		await expect(desk.getByText('Station 3', { exact: true })).toBeVisible({ timeout: 20_000 });
+		await expect(desk.getByText(`โซนที่สถานี 1 ระบุไว้: ${ZONE_VULNERABLE}`)).toBeVisible();
+		await desk.getByRole('button', { name: 'จัดเข้าโซน (รอยืนยันถึงโซน)' }).click();
+		await expect(desk).toHaveURL(/\/onsite\/zoning$/, { timeout: 20_000 });
+		await expectStay(desk, child, STATUS.active, ZONE_VULNERABLE);
+
 		await desk.goto(`/onsite/zoning/${ids[head.firstName]}`);
 		await expect(desk.getByText('Station 3', { exact: true })).toBeVisible({ timeout: 20_000 });
 		await desk.locator('div.grid button', { hasText: ZONE_GYM_1 }).first().click();
@@ -993,7 +999,7 @@ async function preRegisterFlow(browser: Browser, run: Run, s: Sessions) {
 		const id = String(reply.id ?? '');
 		expect(id).not.toBe('');
 		await expect(screenA.getByText('ลงทะเบียนล่วงหน้าสำเร็จ')).toBeVisible({ timeout: 30_000 });
-		const qr = screenA.getByAltText(/คิวกลาง|queue/i);
+		const qr = screenA.getByAltText(/เจ้าหน้าที่ลงทะเบียน|registration staff/i);
 		await expect(qr).toBeVisible();
 		expect(await decodeQrImage(screenA, qr)).toBe(id);
 		return id;

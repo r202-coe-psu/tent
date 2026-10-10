@@ -492,7 +492,11 @@ test.describe('Household pre-registration — real CouchDB', { tag: ['@quarantin
 		await expect(page).toHaveURL(/\/back-office\/evacuee-management\?tab=household/);
 
 		// The whole staff flow stayed on CouchDB — no PII went near the public plane.
-		expect(publicPlaneCalls, 'no /api/public calls from the staff wizard').toEqual([]);
+		// The layout-wide system banner (CR-142) is fetched on every page — not the wizard's doing.
+		expect(
+			publicPlaneCalls.filter((call) => !call.includes('/api/public/v1/system-banner')),
+			'no /api/public calls from the staff wizard'
+		).toEqual([]);
 
 		// ── Database ──
 		const head = await findEvacueeByNationalId(HEAD_P3.nationalId);
@@ -501,7 +505,8 @@ test.describe('Household pre-registration — real CouchDB', { tag: ['@quarantin
 			last_name: HEAD_P3.lastName,
 			phone: HEAD_P3.phone,
 			created_by: STAFF_A.name,
-			current_stay: { status: 'pre_registered', zone: RECOMMENDED_ZONE.code },
+			current_stay: { status: 'pre_registered', zone: null },
+			preferred_zone: RECOMMENDED_ZONE.code,
 			emergency_contact: { name: HEAD_P3.emergencyName, phone: HEAD_P3.emergencyPhone }
 		});
 		const householdId = head.household_id as string;
@@ -538,7 +543,8 @@ test.describe('Household pre-registration — real CouchDB', { tag: ['@quarantin
 			phone: null,
 			gender: 'female',
 			created_by: STAFF_A.name,
-			current_stay: { zone: RECOMMENDED_ZONE.code }
+			current_stay: { zone: null },
+			preferred_zone: RECOMMENDED_ZONE.code
 		});
 	});
 
@@ -570,7 +576,8 @@ test.describe('Household pre-registration — real CouchDB', { tag: ['@quarantin
 		const head = await findEvacueeByNationalId(HEAD_P4.nationalId);
 		expect(head).toMatchObject({
 			phone: null,
-			current_stay: { status: 'pre_registered', zone: OTHER_ZONE.code }
+			current_stay: { status: 'pre_registered', zone: null },
+			preferred_zone: OTHER_ZONE.code
 		});
 		created.p4HouseholdId = head.household_id as string;
 
@@ -616,7 +623,8 @@ test.describe('Household pre-registration — real CouchDB', { tag: ['@quarantin
 		expect(joined).toMatchObject({
 			household_id: created.p3HouseholdId,
 			created_by: STAFF_B.name,
-			current_stay: { zone: RECOMMENDED_ZONE.code }
+			current_stay: { zone: null },
+			preferred_zone: RECOMMENDED_ZONE.code
 		});
 		expect(await findDocs({ type: 'household', created_by: STAFF_B.name })).toHaveLength(0);
 
@@ -752,7 +760,8 @@ test.describe('Household pre-registration — real CouchDB', { tag: ['@quarantin
 			phone: MEMBER_P7.phone,
 			gender: 'female',
 			vulnerable_groups: ['pregnant'],
-			current_stay: { zone: RECOMMENDED_ZONE.code }
+			current_stay: { zone: null },
+			preferred_zone: RECOMMENDED_ZONE.code
 		});
 	});
 

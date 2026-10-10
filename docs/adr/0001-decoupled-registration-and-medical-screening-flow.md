@@ -2,7 +2,7 @@
 
 - Status: accepted
 - Date: 2026-09-02
-- Updated: 2026-09-03
+- Updated: 2026-10-06
 - Supersedes: monolithic registration+EWAR+zone at a single desk
 
 ## Context & Decision
@@ -17,6 +17,8 @@ At shelter intake, combining personal registration, clinical evaluation, and zon
 | OFF | Station 1 → Station 3 (skip medical) |
 
 The flag **only** toggles Station 2 visibility and whether a Handover Slip is issued after registration. **Zoning / check-in never happens at Station 1.**
+
+> **Note (2026-10-06, [CR-158](../changes/02-people/CR-158-station1-preferred-zone.md)):** Station 1 may record an optional, non-binding `evacuee.preferred_zone`. It does not zone: `current_stay` stays `arriving` + `zone: null`, every person still passes Station 2/3, and Station 3 only uses it as the default pick when the person has no EWAR symptoms.
 
 ### Station 1 — Registration Desk (`/onsite/people`)
 - Primary UI: single table (all stay statuses) + search + filter chips + Person QR scan; column 「คิวถัดไป」 (`รอแพทย์` / `รอโซน` / `พักแล้ว`); household column UI label 「ครอบครัว」

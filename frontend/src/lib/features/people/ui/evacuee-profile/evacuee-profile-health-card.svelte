@@ -227,11 +227,11 @@
 				</div>
 			</div>
 
-			<!-- Section 4: Additional needs (special needs) -->
+			<!-- Section 4: Special needs -->
 			<div class="min-w-0 border-t border-border/40 pt-3">
 				<div class="flex items-center gap-1.5">
 					<HeartHandshake class="size-4 text-sky-700 dark:text-sky-500" />
-					<span class="text-xs font-semibold text-foreground">ความต้องการเพิ่มเติม:</span>
+					<span class="text-xs font-semibold text-foreground">ความต้องการพิเศษ:</span>
 				</div>
 				<div class="mt-2 flex flex-wrap gap-1.5">
 					{#if specialNeeds.length > 0}
@@ -243,7 +243,7 @@
 							</span>
 						{/each}
 					{:else}
-						<span class="text-xs text-muted-foreground italic">ไม่มีความต้องการเพิ่มเติม</span>
+						<span class="text-xs text-muted-foreground italic">ไม่มีความต้องการพิเศษ</span>
 					{/if}
 				</div>
 			</div>

@@ -12,12 +12,14 @@
 	 */
 	let {
 		title,
+		titleId,
 		subtitle = '',
 		facts = [],
 		children,
 		actions
 	}: {
 		title: string;
+		titleId?: string;
 		subtitle?: string;
 		facts?: StationSummaryFact[];
 		children?: Snippet;
@@ -36,7 +38,13 @@
 			<CircleCheck class="size-5" aria-hidden="true" />
 		</div>
 		<div class="min-w-0">
-			<h2 class="text-lg font-bold text-slate-900 sm:text-xl">{title}</h2>
+			<h2
+				id={titleId}
+				tabindex="-1"
+				class="text-lg font-bold text-slate-900 outline-none sm:text-xl"
+			>
+				{title}
+			</h2>
 			{#if subtitle}
 				<p class="text-sm text-slate-500">{subtitle}</p>
 			{/if}

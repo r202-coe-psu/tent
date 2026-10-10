@@ -16,10 +16,14 @@
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
+	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import * as Select from '$lib/components/ui/select/index.js';
 	import ScanSearchModal from './scan-search-modal.svelte';
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import {
-		canCheckInEvacuee,
+		canScanCheckIn,
+		needsIntakeBeforeStay,
 		canCheckOutEvacuee,
 		lookupFederatedByScanCode,
 		useCheckInEvacuee,
@@ -66,6 +70,14 @@
 	const evacueesQuery = useEvacuees();
 	const shelterQuery = useShelter(() => shelterStore.selectedShelterCode ?? getShelterCode());
 	const shelterZones = $derived(shelterQuery.data?.zones ?? []);
+	const openZones = $derived(shelterZones.filter((z) => z.status !== 'closed'));
+
+	/** Dialogs that replace window.prompt: the check-in zone and the check-out reason. */
+	let zoneDialogOpen = $state(false);
+	let pickedZone = $state('');
+	let checkoutDialogOpen = $state(false);
+	let checkoutReason = $state('');
+	let checkoutReasonError = $state<string | null>(null);
 
 	let selectionOverrideIds = $state<string[] | null>(null);
 	let selectionOverrideForId = $state<string | null>(null);
@@ -79,7 +91,7 @@
 	);
 
 	const isActionCheckOut = $derived(foundEvacuee ? canCheckOutEvacuee(foundEvacuee) : false);
-	const isActionCheckIn = $derived(foundEvacuee ? canCheckInEvacuee(foundEvacuee) : false);
+	const isActionCheckIn = $derived(foundEvacuee ? canScanCheckIn(foundEvacuee) : false);
 
 	const eligibleFamilyMembers = $derived.by(() => {
 		if (!foundEvacuee) return [];
@@ -87,7 +99,7 @@
 			return familyMembers.filter((e) => canCheckOutEvacuee(e));
 		}
 		if (isActionCheckIn) {
-			return familyMembers.filter((e) => canCheckInEvacuee(e));
+			return familyMembers.filter((e) => canScanCheckIn(e));
 		}
 		return [];
 	});
@@ -213,20 +225,34 @@
 
 	async function handleBulkCheckIn() {
 		if (selectedMemberIds.length === 0) return;
-		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
-		const targets = eligibleFamilyMembers.filter((e) => selectedMemberIds.includes(e._id));
-		let zone = foundEvacuee?.current_stay.zone?.trim() ?? '';
+		const zone = foundEvacuee?.current_stay.zone?.trim() ?? '';
 		if (!zone) {
-			const entered = window.prompt('ระบุโซนสำหรับเช็คอิน');
-			if (entered === null) return;
-			zone = entered.trim();
+			// No zone to go back to — staff pick one before anyone is checked in.
+			pickedZone = '';
+			zoneDialogOpen = true;
+			return;
 		}
+		await runBulkCheckIn(zone);
+	}
+
+	async function confirmZoneAndCheckIn() {
+		const zone = pickedZone.trim();
 		if (!zone) {
 			toast.error('การเช็คอินต้องระบุโซน');
 			return;
 		}
+		zoneDialogOpen = false;
+		await runBulkCheckIn(zone);
+	}
+
+	async function runBulkCheckIn(zone: string) {
+		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
+		const targets = eligibleFamilyMembers.filter((e) => selectedMemberIds.includes(e._id));
 		try {
-			const promises = targets.map((evacuee) => checkIn.mutateAsync({ evacuee, ctx, zone }));
+			// Returning members go back to their own zone; the scanned person's is only a fallback.
+			const promises = targets.map((evacuee) =>
+				checkIn.mutateAsync({ evacuee, ctx, zone: evacuee.current_stay.zone?.trim() || zone })
+			);
 			const results = await Promise.allSettled(promises);
 
 			const fulfilledResults = results
@@ -258,17 +284,22 @@
 		}
 	}
 
-	async function handleBulkCheckOut() {
+	function handleBulkCheckOut() {
 		if (selectedMemberIds.length === 0) return;
-		const entered = window.prompt('ระบุเหตุผลการเช็คเอาท์');
-		if (entered === null) return;
+		checkoutReason = '';
+		checkoutReasonError = null;
+		checkoutDialogOpen = true;
+	}
+
+	async function confirmCheckOut() {
 		let reason: string;
 		try {
-			reason = normalizeCheckoutRemark(entered);
+			reason = normalizeCheckoutRemark(checkoutReason);
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'ต้องระบุเหตุผลการเช็คเอาท์');
+			checkoutReasonError = err instanceof Error ? err.message : 'ต้องระบุเหตุผลการเช็คเอาท์';
 			return;
 		}
+		checkoutDialogOpen = false;
 		const ctx = { shelterCode: getShelterCode(), createdBy: authStore.user?.name ?? 'staff' };
 		const targets = eligibleFamilyMembers.filter((e) => selectedMemberIds.includes(e._id));
 		try {
@@ -437,7 +468,7 @@
 				{#if scanResult}
 					{@const found = scanResult.success ? scanResult.evacuee : undefined}
 					{@const canCheckOut = found?.current_stay ? canCheckOutEvacuee(found) : false}
-					{@const canCheckIn = found?.current_stay ? canCheckInEvacuee(found) : false}
+					{@const canCheckIn = found?.current_stay ? canScanCheckIn(found) : false}
 					{@const isTerminal = found?.current_stay?.status === 'deceased'}
 					<div
 						class="mt-6 w-full max-w-sm animate-in overflow-hidden rounded-2xl border shadow-md transition-all duration-200 fade-in slide-in-from-top-2
@@ -534,7 +565,7 @@
 											{@const isEligible = isActionCheckOut
 												? canCheckOutEvacuee(member)
 												: isActionCheckIn
-													? canCheckInEvacuee(member)
+													? canScanCheckIn(member)
 													: false}
 											{@const isScanned = member._id === found._id}
 											<label
@@ -567,6 +598,13 @@
 																class="ml-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-2xs font-bold text-primary"
 																>คนที่สแกน</span
 															>
+														{/if}
+														{#if isActionCheckIn && needsIntakeBeforeStay(member)}
+															<span
+																class="block text-2xs font-normal text-amber-700 dark:text-amber-300"
+															>
+																ยังไม่ผ่านจุดคัดกรอง/จัดโซน — ส่งไปสถานี 2–3
+															</span>
 														{/if}
 													</span>
 												</div>
@@ -627,6 +665,13 @@
 										{/if}
 										เช็คอิน
 									</Button>
+								{:else if found && needsIntakeBeforeStay(found)}
+									<p
+										class="flex h-11 flex-1 items-center justify-center rounded-xl bg-amber-100 px-2 text-center text-xs font-semibold text-amber-900 dark:bg-amber-950 dark:text-amber-200"
+										role="status"
+									>
+										ยังไม่ผ่านจุดคัดกรอง/จัดโซน — ส่งไปสถานี 1–3 ก่อนเช็คอิน
+									</p>
 								{:else}
 									<Button
 										disabled
@@ -672,6 +717,71 @@
 	bind:hit={claimHit}
 	shelterCode={shelterStore.selectedShelterCode ?? getShelterCode()}
 />
+
+<Dialog.Root bind:open={zoneDialogOpen}>
+	<Dialog.Content class="sm:max-w-md">
+		<Dialog.Header>
+			<Dialog.Title>เลือกโซนสำหรับเช็คอิน</Dialog.Title>
+			<Dialog.Description>ผู้ประสบภัยยังไม่มีโซนเดิม — เลือกโซนที่จะเช็คอินเข้า</Dialog.Description>
+		</Dialog.Header>
+		{#if openZones.length > 0}
+			<Select.Root type="single" bind:value={pickedZone}>
+				<Select.Trigger class="h-11 w-full" aria-label="โซนสำหรับเช็คอิน">
+					{@const picked = openZones.find((z) => z.code === pickedZone)}
+					{picked ? `${picked.name || picked.code} (${picked.code})` : 'เลือกโซน'}
+				</Select.Trigger>
+				<Select.Content>
+					{#each openZones as zone (zone.code)}
+						<Select.Item value={zone.code} label={`${zone.name || zone.code} (${zone.code})`} />
+					{/each}
+				</Select.Content>
+			</Select.Root>
+		{:else}
+			<div class="space-y-1.5">
+				<Label for="check-in-zone">รหัสโซน</Label>
+				<Input id="check-in-zone" bind:value={pickedZone} placeholder="เช่น Z1" />
+			</div>
+		{/if}
+		<Dialog.Footer>
+			<Button type="button" variant="outline" onclick={() => (zoneDialogOpen = false)}
+				>ยกเลิก</Button
+			>
+			<Button type="button" disabled={!pickedZone.trim()} onclick={confirmZoneAndCheckIn}>
+				ยืนยันเช็คอิน
+			</Button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>
+
+<Dialog.Root bind:open={checkoutDialogOpen}>
+	<Dialog.Content class="sm:max-w-md">
+		<Dialog.Header>
+			<Dialog.Title>เหตุผลการเช็คเอาท์</Dialog.Title>
+			<Dialog.Description
+				>ระบุเหตุผลหรือหมายเหตุ (บังคับ) เช่น ออกไปธุระนอกพื้นที่</Dialog.Description
+			>
+		</Dialog.Header>
+		<div class="space-y-1.5">
+			<Label for="checkout-reason">เหตุผลการเช็คเอาท์</Label>
+			<Input
+				id="checkout-reason"
+				bind:value={checkoutReason}
+				oninput={() => (checkoutReasonError = null)}
+				aria-invalid={checkoutReasonError ? true : undefined}
+				aria-describedby={checkoutReasonError ? 'checkout-reason-error' : undefined}
+			/>
+			{#if checkoutReasonError}
+				<p id="checkout-reason-error" class="text-xs text-destructive">{checkoutReasonError}</p>
+			{/if}
+		</div>
+		<Dialog.Footer>
+			<Button type="button" variant="outline" onclick={() => (checkoutDialogOpen = false)}>
+				ยกเลิก
+			</Button>
+			<Button type="button" onclick={confirmCheckOut}>ยืนยันเช็คเอาท์</Button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>
 
 <style>
 	:global(#qr-reader *) {

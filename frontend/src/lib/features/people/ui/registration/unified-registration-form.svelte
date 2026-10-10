@@ -13,7 +13,9 @@
 	import { replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { useShelter } from '$lib/features/shelters';
 	import * as Alert from '$lib/components/ui/alert/index.js';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import * as Sheet from '$lib/components/ui/sheet/index.js';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
@@ -49,6 +51,7 @@
 	} from './unified-registration-pets';
 	import {
 		blankUnifiedMember,
+		membersMissingPhoneChoice,
 		unifiedRegistrationInputSchema,
 		type MemberPhotoUploadMode,
 		type UnifiedMemberWithMeta,
@@ -59,6 +62,7 @@
 	import {
 		collectMemberRuleIssues,
 		dormFieldsFor,
+		formatPersonName,
 		type HousingType,
 		type HouseholdVehicle,
 		type PetGroup
@@ -73,10 +77,17 @@
 	import { normalizeThaiPhone, sanitizePhoneTyping } from '$lib/db/model';
 	import {
 		hasMinimumResidence,
+		suggestHouseholdsByPhone,
 		type ResidenceFields,
-		type ResidenceMatchCandidate
+		type ResidenceMatchCandidate,
+		type PhoneHouseholdMatchCandidate
 	} from '../../domain/registration-shell';
-	import { peopleKeys, useHouseholds } from '../../application/queries';
+	import {
+		peopleKeys,
+		useEvacuees,
+		useHouseholds,
+		useSearchEvacuees
+	} from '../../application/queries';
 	import { peopleRepository } from '../../data/people.remote';
 	import {
 		readResidenceSuggestDeps,
@@ -108,6 +119,7 @@
 		stickyTopOffset,
 		includeVehiclesAssets,
 		enableUnassignedPhoto = false,
+		allowHouseholdJoin = false,
 		shelterCode = '',
 		shelterName = '',
 		initialThaidProfile = null,
@@ -134,6 +146,8 @@
 		stickyTopOffset?: string;
 		includeVehiclesAssets?: boolean;
 		enableUnassignedPhoto?: boolean;
+		/** Report-in flows with no household must explicitly join or create. */
+		allowHouseholdJoin?: boolean;
 		shelterCode?: string;
 		shelterName?: string;
 		initialThaidProfile?: ThaiDAutofillProfile | null;
@@ -153,6 +167,15 @@
 	/** Locks every field/control (pending submit OR explicit read-only view). */
 	const fieldsLocked = $derived(pending || readOnly);
 	const showVehiclesAssets = $derived(includeVehiclesAssets ?? channel === 'onsite');
+	/** Onsite pages pass only the code — look the shelter up so the summary shows its name. */
+	const onsiteShelter = (() => {
+		try {
+			return useShelter(() => (channel === 'onsite' && !shelterName ? shelterCode : ''));
+		} catch {
+			return null;
+		}
+	})();
+	const summaryShelterName = $derived(shelterName || onsiteShelter?.data?.name || '');
 	const formStickyStyle = $derived(
 		stickyTopOffset ? `--registration-sticky-top: ${stickyTopOffset}` : undefined
 	);
@@ -259,8 +282,8 @@
 	let searchPhoneTouched = $state(false);
 	/** Feedback from a completed phone search driven by the search bar (not head-phone fallback). */
 	let phoneSearchFeedback = $state<'found' | 'not-found' | null>(null);
-	/** Normalized phone last scrolled-to — prevent scroll spam for the same result. */
-	let lastScrolledPhone = $state('');
+	/** Families last scrolled to — scroll again only when a different set of families is found. */
+	let lastScrolledMatchKey = $state('');
 	// CR-148 FR-11: inline error once the user leaves an incomplete / malformed number
 	const searchPhoneError = $derived(
 		searchPhoneTouched && searchPhoneQuery.trim() !== '' && !isThaiPhone(searchPhoneQuery)
@@ -274,7 +297,7 @@
 
 	function clearPhoneSearchFeedback() {
 		phoneSearchFeedback = null;
-		lastScrolledPhone = '';
+		lastScrolledMatchKey = '';
 	}
 
 	/** Currently selected match chip from public residence match (for address prefill & pets). */
@@ -304,8 +327,223 @@
 		return null;
 	});
 
+	let residenceSuggestTimer: ReturnType<typeof setTimeout> | null = null;
+	let residenceSuggestions = $state<ResidenceMatchCandidate[]>([]);
+	let residenceSuggestPending = $state(false);
+	let residenceSuggestCheckedEmpty = $state(false);
+	/** Public lookup request failed — not the same as "no family matched". */
+	let residenceSuggestFailed = $state(false);
+	/** Stay false until GET /api/public/v1/thaid/status confirms ON (public channel only). */
+	let thaidEnabled = $state(false);
+
+	const enableResidenceJoin = $derived(mode === 'create' || allowHouseholdJoin);
+	let householdDecision = $state<'join' | 'create' | null>(null);
+	$effect(() => {
+		if (!allowHouseholdJoin && householdDecision === null) householdDecision = 'create';
+	});
+	/** Same as `useHouseholds`, but `enabled` only for onsite create (no Couch fetch on public). */
+	const householdsQuery = safeQuery(
+		() =>
+			createQuery(() => ({
+				queryKey: peopleKeys.households(),
+				queryFn: () => peopleRepository().listHouseholds(),
+				enabled: channel === 'onsite' && enableResidenceJoin
+			})),
+		{
+			data: [],
+			isLoading: false
+		} as unknown as ReturnType<typeof useHouseholds>
+	);
+
+	const phoneSearchQuery = $derived(normalizeThaiPhone(searchPhoneQuery.trim()));
+	const phoneSearchEnabled = $derived(
+		channel === 'onsite' &&
+			enableResidenceJoin &&
+			isThaiPhone(phoneSearchQuery) &&
+			!hasJoinSelection
+	);
+	const phoneSearch = useSearchEvacuees(
+		() => phoneSearchQuery,
+		() => phoneSearchEnabled
+	);
+	const phoneHouseholdSuggestions = $derived.by((): PhoneHouseholdMatchCandidate[] =>
+		suggestHouseholdsByPhone(phoneSearchQuery, phoneSearch.data ?? [], householdsQuery.data ?? [])
+	);
+
+	/**
+	 * Onsite create: the joined family's read-only list and the members on search results.
+	 * Declared after the suggestions its `enabled` reads (an earlier read would throw and
+	 * safeQuery would silently fall back to an empty list).
+	 */
+	const evacueesQuery = safeQuery(
+		() =>
+			createQuery(() => ({
+				queryKey: peopleKeys.evacuees(),
+				queryFn: () => peopleRepository().listEvacuees(),
+				// Joined family's read-only list, and the members shown on onsite search results.
+				enabled:
+					channel === 'onsite' &&
+					mode === 'create' &&
+					(Boolean(joinHouseholdId) ||
+						phoneHouseholdSuggestions.length > 0 ||
+						residenceSuggestions.length > 0)
+			})),
+		{
+			data: [],
+			isLoading: false
+		} as unknown as ReturnType<typeof useEvacuees>
+	);
+	const phoneSearchPending = $derived(phoneSearchEnabled && phoneSearch.isFetching);
+	const phoneSearchCheckedEmpty = $derived(
+		phoneSearchEnabled && !phoneSearch.isFetching && phoneHouseholdSuggestions.length === 0
+	);
+
+	function normalizedName(first?: string | null, last?: string | null): string {
+		return `${first ?? ''} ${last ?? ''}`.replace(/\s+/g, ' ').trim().toLowerCase();
+	}
+
+	/** The joined family's existing member this card duplicates (same ID number or same full name). */
+	function findExistingFamilyMember(m: UnifiedMemberWithMeta) {
+		const idNo = m.person_id?.number?.replace(/\D/g, '') ?? '';
+		const name = normalizedName(m.first_name, m.last_name);
+		return joinedFamilyMembers.find((e) => {
+			if (m._id && m._id === e._id) return false;
+			const existingNo = e.person_id?.number?.replace(/\D/g, '') ?? '';
+			if (idNo && existingNo && idNo === existingNo) return true;
+			return Boolean(name) && name === normalizedName(e.first_name, e.last_name);
+		});
+	}
+
+	/** The joined family's head stays its primary contact (onsite). */
+	const joinedFamilyHeadName = $derived.by(() => {
+		if (joinedFamilyMembers.length === 0) return '';
+		const headId = (householdsQuery.data ?? []).find(
+			(h) => h._id === joinHouseholdId
+		)?.head_evacuee_id;
+		const head = joinedFamilyMembers.find((e) => e._id === headId) ?? joinedFamilyMembers[0]!;
+		return formatPersonName(head);
+	});
+
+	const GONE_STAY_STATUSES = new Set(['cancelled', 'checked_out', 'deceased', 'transferred']);
+
+	/** One search-result card, the same on Station 1 and the public pre-register form. */
+	type FamilyMatchCardView = {
+		key: string;
+		addressNo?: string | null;
+		landmark?: string | null;
+		primaryContact?: string | null;
+		notes: string[];
+		phoneMatch?: string | null;
+		memberNames: string[];
+		memberCount: number;
+		petCount: number;
+		canJoin: boolean;
+		onJoin: () => void;
+		joinHint?: string | null;
+	};
+
+	/** Onsite: staff see the household's current members by name (no masking on the staff plane). */
+	function onsiteFamilyCard(
+		candidate: ResidenceMatchCandidate & { matched_member_name?: string },
+		onJoin: () => void
+	): FamilyMatchCardView {
+		const household = (householdsQuery.data ?? []).find((h) => h._id === candidate._id);
+		const familyMembers = (evacueesQuery.data ?? []).filter(
+			(e) => e.household_id === candidate._id && !GONE_STAY_STATUSES.has(e.current_stay.status)
+		);
+		const head = familyMembers.find((e) => e._id === household?.head_evacuee_id);
+		return {
+			key: candidate._id,
+			addressNo: candidate.address_no,
+			landmark: candidate.residence_landmark?.trim() || candidate.label?.trim() || null,
+			primaryContact: head ? formatPersonName(head) : null,
+			notes: [],
+			phoneMatch: candidate.matched_member_name ?? null,
+			memberNames: familyMembers.map((e) => formatPersonName(e)),
+			memberCount: familyMembers.length,
+			petCount: (household?.pets ?? []).length,
+			canJoin: true,
+			onJoin
+		};
+	}
+
+	function publicFamilyCard(chip: ResidenceMatchChip): FamilyMatchCardView {
+		const canJoin = canJoinPublicChip(chip);
+		const notes: string[] = [];
+		if (chip.is_in_shelter && chip.shelter_name) {
+			notes.push(
+				`${t.joinChipInShelter(chip.shelter_name)}${canJoin ? '' : ` ${t.joinChipNoWebPreReg}`}`
+			);
+		} else if (chip.shelter_code || chip.shelter_name) {
+			notes.push(t.joinChipMembersAtShelter(chip.shelter_name || chip.shelter_code || ''));
+		}
+		return {
+			key: chip.match_token,
+			addressNo: chip.address?.address_no,
+			landmark: chip.address?.address_no
+				? chip.address.residence_landmark
+				: chip.landmark?.trim() || null,
+			primaryContact: chip.primary_contact_masked,
+			notes,
+			phoneMatch: chip.matched_member_masked,
+			memberNames: chip.members_masked ?? [],
+			memberCount: chip.member_count ?? 0,
+			petCount: (chip.pets ?? []).length,
+			canJoin,
+			onJoin: () => confirmPublicJoin(chip),
+			joinHint: canJoin
+				? chip.is_in_shelter
+					? null
+					: t.joinFamilyCtaQueueHint
+				: t.joinChipShelterClosed(chip.shelter_name ?? '')
+		};
+	}
+
+	/** Found / not-found under the search box: public sets it from the BFF; onsite derives it. */
+	const searchFeedback = $derived.by((): 'found' | 'not-found' | null => {
+		if (channel !== 'onsite') return phoneSearchFeedback;
+		if (!phoneSearchEnabled || phoneSearch.isFetching) return null;
+		return phoneHouseholdSuggestions.length > 0 ? 'found' : 'not-found';
+	});
+
+	// Onsite: bring newly found families into view, once per set (same as the public form).
+	$effect(() => {
+		if (channel !== 'onsite') return;
+		const list =
+			phoneHouseholdSuggestions.length > 0 ? phoneHouseholdSuggestions : residenceSuggestions;
+		const key = list
+			.map((h) => h._id)
+			.sort()
+			.join('|');
+		if (!key || key === untrack(() => lastScrolledMatchKey)) return;
+		lastScrolledMatchKey = key;
+		void tick().then(() => {
+			document
+				.getElementById('family-match-results')
+				?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+		});
+	});
+	/** Onsite join: the family's current members, shown read-only so staff see who is already in. */
+	const joinedFamilyMembers = $derived(
+		channel === 'onsite' && joinHouseholdId
+			? (evacueesQuery.data ?? []).filter(
+					(e) =>
+						e.household_id === joinHouseholdId && !GONE_STAY_STATUSES.has(e.current_stay.status)
+				)
+			: []
+	);
+
+	/** Public join: the matched family's head and members, masked (no member docs reach the browser). */
+	const publicJoinChip = $derived(
+		channel === 'public' && hasJoinSelection ? selectedMatchChip : null
+	);
+	const summaryExistingHeadName = $derived(
+		joinedFamilyHeadName || publicJoinChip?.primary_contact_masked || ''
+	);
+
+	/** Everyone already in the joined family: onsite lists them, public knows the count. */
 	const summaryExistingMemberCount = $derived(
-		hasJoinSelection ? (resolvedExistingMemberCount ?? 0) : 0
+		hasJoinSelection ? Math.max(joinedFamilyMembers.length, resolvedExistingMemberCount ?? 0) : 0
 	);
 	const summaryExistingPetsCount = $derived(
 		hasJoinSelection
@@ -316,28 +554,6 @@
 	const summaryTotalPets = $derived(summaryExistingPetsCount + petItems.length);
 	const mobileSummaryChipLabel = $derived(
 		`${t.memberLabel} ${summaryTotalMembers} · ${t.sectionPets} ${summaryTotalPets}`
-	);
-
-	let residenceSuggestTimer: ReturnType<typeof setTimeout> | null = null;
-	let residenceSuggestions = $state<ResidenceMatchCandidate[]>([]);
-	let residenceSuggestPending = $state(false);
-	let residenceSuggestCheckedEmpty = $state(false);
-	/** Stay false until GET /api/public/v1/thaid/status confirms ON (public channel only). */
-	let thaidEnabled = $state(false);
-
-	const enableResidenceJoin = $derived(mode === 'create');
-	/** Same as `useHouseholds`, but `enabled` only for onsite create (no Couch fetch on public). */
-	const householdsQuery = safeQuery(
-		() =>
-			createQuery(() => ({
-				queryKey: peopleKeys.households(),
-				queryFn: () => peopleRepository().listHouseholds(),
-				enabled: channel === 'onsite' && mode === 'create'
-			})),
-		{
-			data: [],
-			isLoading: false
-		} as unknown as ReturnType<typeof useHouseholds>
 	);
 
 	$effect(() => {
@@ -362,6 +578,7 @@
 		}
 
 		const households = householdsQuery.data ?? [];
+
 		const deps = readResidenceSuggestDeps(
 			'create',
 			household,
@@ -376,7 +593,7 @@
 			residenceSuggestions = [];
 			residenceSuggestPending = false;
 			residenceSuggestCheckedEmpty = false;
-			if (untrack(() => joinHouseholdId)) clearJoinSelection();
+			if (untrack(() => joinHouseholdId) && !untrack(() => joinViaPhone)) dropJoinWithNotice();
 			return;
 		}
 
@@ -395,8 +612,12 @@
 			residenceSuggestions = matches;
 			residenceSuggestPending = false;
 			residenceSuggestCheckedEmpty = matches.length === 0;
-			if (selectedId && !matches.some((m) => m._id === selectedId)) {
-				clearJoinSelection();
+			if (
+				selectedId &&
+				!untrack(() => joinViaPhone) &&
+				!matches.some((m) => m._id === selectedId)
+			) {
+				dropJoinWithNotice();
 			}
 		}, 350);
 		return () => {
@@ -438,15 +659,13 @@
 		const phone = normalizeThaiPhone(searchPhoneQuery.trim() || members[0]?.phone?.trim() || '');
 		const hasSearchPhone = isThaiPhone(phone);
 
-		if (!isPhoneSearchFromBar) {
-			phoneSearchFeedback = null;
-			lastScrolledPhone = '';
-		}
+		if (!isPhoneSearchFromBar) phoneSearchFeedback = null;
 
 		if (!hasMinimumResidence(form) && !hasSearchPhone) {
 			publicMatchChips = [];
 			residenceSuggestPending = false;
 			residenceSuggestCheckedEmpty = false;
+			residenceSuggestFailed = false;
 			return;
 		}
 
@@ -479,28 +698,39 @@
 
 		residenceSuggestPending = true;
 		residenceSuggestCheckedEmpty = false;
+		residenceSuggestFailed = false;
 		let ignore = false;
 		const timer = setTimeout(() => {
 			void matchResidence(request).then((result) => {
 				if (ignore) return;
 				publicMatchChips = result.matches;
 				residenceSuggestPending = false;
-				residenceSuggestCheckedEmpty = result.matches.length === 0;
+				residenceSuggestFailed = result.failed;
+				residenceSuggestCheckedEmpty = !result.failed && result.matches.length === 0;
 
-				if (!isPhoneSearchFromBar) return;
+				if (result.failed) return;
 
-				if (result.matches.length > 0) {
-					phoneSearchFeedback = 'found';
-					if (lastScrolledPhone !== searchBarPhone) {
-						lastScrolledPhone = searchBarPhone;
-						void tick().then(() => {
-							document
-								.getElementById('family-match-results')
-								?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-						});
-					}
-				} else {
-					phoneSearchFeedback = 'not-found';
+				// Families found (by phone or by address): bring the list into view so the user sees
+				// them before filling in the rest. Keyed on the families themselves (match tokens
+				// rotate on every call), so typing that finds the same families never scrolls again.
+				const matchKey = result.matches
+					.map((m) =>
+						[m.shelter_code, m.address?.address_no, m.landmark, m.primary_contact_masked].join('|')
+					)
+					.sort()
+					.join('||');
+				if (result.matches.length > 0 && lastScrolledMatchKey !== matchKey) {
+					lastScrolledMatchKey = matchKey;
+					void tick().then(() => {
+						// Centre it: the address section's header is sticky and would cover the top.
+						document
+							.getElementById('family-match-results')
+							?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+					});
+				}
+
+				if (isPhoneSearchFromBar) {
+					phoneSearchFeedback = result.matches.length > 0 ? 'found' : 'not-found';
 				}
 			});
 		}, 350);
@@ -528,17 +758,19 @@
 	});
 
 	const membersSectionDesc = $derived(
-		mode === 'report-in'
-			? 'ตรวจสอบข้อมูลสมาชิก และติ๊กเลือกผู้ที่มารายงานตัวในรอบนี้ (สามารถกดเพิ่มสมาชิกใหม่ที่เดินทางมาด้วยกันได้)'
-			: showVehiclesAssets
-				? `${t.sectionMembersDesc} ${t.sectionMembersDescOnsite}`
-				: t.sectionMembersDesc
+		joinedFamilyMembers.length > 0
+			? t.membersDescJoined
+			: mode === 'report-in'
+				? t.membersDescReportIn
+				: showVehiclesAssets
+					? `${t.sectionMembersDesc} ${t.sectionMembersDescOnsite}`
+					: t.sectionMembersDesc
 	);
 
 	const effectiveSubmitLabel = $derived(
 		submitLabel ??
 			(mode === 'report-in'
-				? 'ยืนยันรายงานตัวและพิมพ์บัตร'
+				? t.submitReportIn
 				: channel === 'public'
 					? t.submitConfirm
 					: t.submitOnsite)
@@ -563,11 +795,11 @@
 			const errorParam = params.get('error');
 			if (errorParam) {
 				if (errorParam === 'thaid_disabled') {
-					toast.error('การลงทะเบียนผ่าน ThaiD ถูกปิดใช้งานชั่วคราว');
+					toast.error(t.thaidDisabledToast);
 				} else if (errorParam === 'invalid_state') {
-					toast.error('การยืนยันตัวตน ThaiD ไม่ถูกต้อง หรือหมดอายุ กรุณาลองใหม่อีกครั้ง');
+					toast.error(t.thaidInvalidStateToast);
 				} else {
-					toast.error(`การยืนยันตัวตน ThaiD ไม่สำเร็จ (${errorParam})`);
+					toast.error(t.thaidFailedToast(errorParam));
 				}
 				const cleanUrl = new URL(window.location.href);
 				cleanUrl.searchParams.delete('error');
@@ -591,7 +823,7 @@
 						}
 					})
 					.catch(() => {
-						toast.error('ไม่สามารถดึงข้อมูลจาก ThaiD ได้');
+						toast.error(t.thaidClaimFailedToast);
 					})
 					.finally(() => {
 						const cleanUrl = new URL(window.location.href);
@@ -716,25 +948,46 @@
 		onDirtyChange?.(false);
 	}
 
+	const addrGap = $derived(langState.current === 'en' ? ' ' : '');
+
 	function formatResidenceSummary(r: ResidenceFields): string {
 		const parts = [
 			r.residence_landmark,
 			r.address_no,
 			r.village_no,
-			r.subdistrict ? `ต.${r.subdistrict}` : '',
-			r.district ? `อ.${r.district}` : '',
-			r.province ? `จ.${r.province}` : '',
+			r.subdistrict ? `${t.addrSubdistrictAbbr}${addrGap}${r.subdistrict}` : '',
+			r.district ? `${t.addrDistrictAbbr}${addrGap}${r.district}` : '',
+			r.province ? `${t.addrProvinceAbbr}${addrGap}${r.province}` : '',
 			r.postal_code
 		].filter((p) => (p ?? '').toString().trim());
 		return parts.join(' ') || '—';
 	}
 
+	/**
+	 * Join picked from the phone search. The address suggest must not drop it: the family's
+	 * copied address may be too sparse to re-match itself, and a silently dropped join turns
+	 * the save into a brand-new (duplicate) household.
+	 */
+	let joinViaPhone = $state(false);
+
 	function clearJoinSelection() {
+		joinViaPhone = false;
 		joinHouseholdId = null;
 		joinMatchToken = null;
 		joinSelectedSummary = null;
 		selectedMatchChip = null;
 		joinExistingMemberCount = null;
+		if (allowHouseholdJoin) householdDecision = null;
+	}
+
+	/**
+	 * The search changed under an active join (address / phone edited). Clearing it silently
+	 * would turn the next save into a brand-new household — a duplicate family — so say so.
+	 */
+	function dropJoinWithNotice() {
+		if (!joinHouseholdId && !joinMatchToken) return;
+		clearJoinSelection();
+		toast.warning(t.joinDroppedToast);
 	}
 
 	function captureJoinExistingMemberCount(chip: ResidenceMatchChip): number | null {
@@ -753,12 +1006,56 @@
 	});
 
 	function confirmOnsiteJoin(suggestion: ResidenceMatchCandidate) {
+		createNewConfirmed = false;
 		joinHouseholdId = suggestion._id;
 		joinMatchToken = null;
 		selectedMatchChip = null;
 		joinExistingMemberCount = null;
 		joinSelectedSummary = suggestion.label?.trim() || formatResidenceSummary(suggestion);
+
+		// A phone search finds the family before any address is typed — copy theirs in
+		// (the fields lock while joined). Reassign so the cascading selects follow.
+		const source = suggestion as ResidenceMatchCandidate &
+			Pick<UnifiedHouseholdInput, 'dorm_name' | 'dorm_building' | 'dorm_floor' | 'dorm_room'>;
+		household = {
+			...household,
+			housing_type: (source.housing_type as HousingType) || household.housing_type,
+			residence_landmark: source.residence_landmark ?? household.residence_landmark,
+			dorm_name: source.dorm_name ?? household.dorm_name ?? null,
+			dorm_building: source.dorm_building ?? household.dorm_building ?? null,
+			dorm_floor: source.dorm_floor ?? household.dorm_floor ?? null,
+			dorm_room: source.dorm_room ?? household.dorm_room ?? null,
+			address_no: source.address_no || household.address_no,
+			village_no: source.village_no || household.village_no,
+			province: source.province || household.province,
+			district: source.district || household.district,
+			subdistrict: source.subdistrict || household.subdistrict,
+			postal_code: source.postal_code || household.postal_code
+		};
+		toast.success(t.joinFamilyLoadedToast);
+		if (allowHouseholdJoin) householdDecision = 'join';
 		markDirty();
+	}
+
+	function confirmOnsitePhoneJoin(suggestion: PhoneHouseholdMatchCandidate) {
+		confirmOnsiteJoin(suggestion);
+		household = {
+			...household,
+			housing_type: suggestion.housing_type ?? household.housing_type,
+			residence_landmark: suggestion.residence_landmark ?? null,
+			address_no: suggestion.address_no ?? '',
+			village_no: suggestion.village_no ?? '',
+			subdistrict: suggestion.subdistrict ?? '',
+			district: suggestion.district ?? '',
+			province: suggestion.province ?? '',
+			postal_code: suggestion.postal_code ?? '',
+			dorm_name: suggestion.dorm_name ?? null,
+			dorm_building: suggestion.dorm_building ?? null,
+			dorm_floor: suggestion.dorm_floor ?? null,
+			dorm_room: suggestion.dorm_room ?? null
+		};
+		joinSelectedSummary = `${suggestion.label || t.joinThisFamily} · ${t.joinFoundViaMember(suggestion.matched_member_name)}`;
+		joinViaPhone = true;
 	}
 
 	function canJoinPublicChip(chip: ResidenceMatchChip): boolean {
@@ -772,6 +1069,7 @@
 	}
 
 	function confirmPublicJoin(chip: ResidenceMatchChip) {
+		createNewConfirmed = false;
 		joinMatchToken = chip.match_token;
 		joinHouseholdId = null;
 		selectedMatchChip = chip;
@@ -780,14 +1078,14 @@
 
 		// Build summary with masked primary contact
 		const addrPart = chip.address
-			? `บ้านเลขที่ ${chip.address.address_no || '-'} ${chip.address.residence_landmark || ''}`.trim()
+			? `${t.addrHouseNo} ${chip.address.address_no || '-'} ${chip.address.residence_landmark || ''}`.trim()
 			: chip.landmark?.trim() || '';
 		const contactPart = chip.primary_contact_masked
-			? `ผู้ติดต่อหลัก: ${chip.primary_contact_masked}`
+			? `${t.joinPrimaryContact} ${chip.primary_contact_masked}`
 			: '';
-		const shelterPart = chip.shelter_name ? `ศูนย์: ${chip.shelter_name}` : '';
+		const shelterPart = chip.shelter_name ? `${t.joinShelter} ${chip.shelter_name}` : '';
 		joinSelectedSummary =
-			[addrPart, contactPart, shelterPart].filter(Boolean).join(' · ') || 'ครอบครัวที่อยู่นี้';
+			[addrPart, contactPart, shelterPart].filter(Boolean).join(' · ') || t.joinFamilyAtAddress;
 
 		// Prefill address from chip (read-only lock via hasJoinSelection)
 		if (chip.address) {
@@ -803,6 +1101,9 @@
 		}
 
 		markDirty();
+		toast.success(
+			chip.pets && chip.pets.length > 0 ? t.joinFamilyLoadedWithPetsToast : t.joinFamilyLoadedToast
+		);
 	}
 
 	/** ThaiD mock/real autofill: populate head member + address from profile. */
@@ -836,7 +1137,7 @@
 		};
 
 		markDirty();
-		toast.success(`ดึงข้อมูล ${profile.first_name} ${profile.last_name} เรียบร้อย`);
+		toast.success(t.thaidHeadFetchedToast(`${profile.first_name} ${profile.last_name}`));
 	}
 
 	$effect(() => {
@@ -848,7 +1149,26 @@
 		}
 	});
 
+	/** 「สร้างใหม่」 always asks first — skipping a found family is how duplicate households start. */
+	let confirmCreateNewOpen = $state(false);
+	/** Staff confirmed a new family; hide the found-family list until they ask for it again. */
+	let createNewConfirmed = $state(false);
+
 	function continueCreateDespiteSuggest() {
+		confirmCreateNewOpen = true;
+	}
+
+	function confirmCreateNew() {
+		confirmCreateNewOpen = false;
+		createNewConfirmed = true;
+		clearJoinSelection();
+		if (allowHouseholdJoin) householdDecision = 'create';
+		markDirty();
+	}
+
+	function chooseHouseholdJoin() {
+		householdDecision = null;
+		createNewConfirmed = false;
 		clearJoinSelection();
 		markDirty();
 	}
@@ -887,7 +1207,7 @@
 						? { description: assetDescription.trim(), image_url: null }
 						: null
 			},
-			...(mode === 'create'
+			...(enableResidenceJoin
 				? {
 						join_household_id: joinHouseholdId || undefined,
 						join_match_token: joinMatchToken || undefined
@@ -941,11 +1261,40 @@
 			}
 		});
 
-		if (mode === 'report-in' && !members.some((m) => m.reporting_in)) {
-			extras.push({
-				path: ['reporting_in'],
-				message: 'กรุณาเลือกสมาชิกอย่างน้อย 1 คนที่มารายงานตัวในรอบนี้'
+		// Station 1 join: staff must pick the family or confirm a new one (no silent duplicate).
+		if (allowHouseholdJoin && !hasJoinSelection && householdDecision !== 'create') {
+			extras.push({ path: ['household_decision'], message: t.joinChooseOrCreate });
+			fallbackSection ??= 'address';
+		}
+
+		// Joining: a card that is already in the family would be saved as a second copy of them.
+		if (joinedFamilyMembers.length > 0) {
+			members.forEach((member, index) => {
+				const dup = findExistingFamilyMember(member);
+				if (dup && !reported(['members', index, 'first_name'])) {
+					extras.push({
+						path: ['members', index, 'first_name'],
+						message: t.joinMemberAlreadyIn(formatPersonName(dup))
+					});
+					fallbackSection ??= 'members';
+				}
 			});
+		}
+
+		// Blank phone with "ไม่มีเบอร์" unticked. Joining makes phones optional, and the public
+		// head has its own rule (publicHeadPhoneMessage) — the field shows no tick box there.
+		const phoneChoiceMissing = hasJoinSelection
+			? []
+			: membersMissingPhoneChoice(members).filter((i) => !(channel === 'public' && i === 0));
+		for (const index of phoneChoiceMissing) {
+			if (!reported(['members', index, 'phone'])) {
+				extras.push({ path: ['members', index, 'phone'], message: t.phoneOrNoPhoneRequired });
+				fallbackSection ??= 'members';
+			}
+		}
+
+		if (mode === 'report-in' && !members.some((m) => m.reporting_in)) {
+			extras.push({ path: ['reporting_in'], message: t.reportInPickMember });
 			fallbackSection ??= 'members';
 		}
 
@@ -1010,9 +1359,6 @@
 		if (pending || readOnly) return;
 
 		household.pets = syncPetsToHousehold(petItems);
-		for (const m of members) {
-			if (!m.phone?.trim()) m.phone = null;
-		}
 
 		const { parsed, entries, fallbackSection } = collectValidation();
 
@@ -1029,6 +1375,10 @@
 
 		submittedEntries = null;
 		firstErrorMember = null;
+		// Only now: a blank phone that passed validation is saved as "no phone".
+		for (const m of members) {
+			if (!m.phone?.trim()) m.phone = null;
+		}
 		try {
 			await onsubmit(parsed.data as UnifiedRegistrationInput, {
 				reportingInMembers: members.filter((m) => m.reporting_in),
@@ -1040,6 +1390,100 @@
 		}
 	}
 </script>
+
+{#snippet familyMatchList(title: string, cards: FamilyMatchCardView[])}
+	<div
+		id="family-match-results"
+		class="mt-3 space-y-2 rounded-xl border border-border bg-muted/20 p-3"
+	>
+		<p class="text-xs font-semibold text-foreground">{title}</p>
+		<p class="text-2xs text-muted-foreground">{t.joinFamilyMatchesHint}</p>
+		<ul class="space-y-2">
+			{#each cards as card (card.key)}
+				<li class="rounded-lg border border-border/60 bg-card p-2.5">
+					<div class="flex flex-wrap items-start justify-between gap-2">
+						<div class="flex min-w-0 flex-col gap-1">
+							<span class="text-sm font-medium text-foreground">
+								{#if card.addressNo}
+									{t.addrHouseNo}
+									{card.addressNo}
+									{card.landmark || ''}
+								{:else}
+									{card.landmark || t.joinFamilyAtAddress}
+								{/if}
+							</span>
+							{#if card.primaryContact}
+								<span class="text-xs text-muted-foreground">
+									{t.joinPrimaryContact}
+									{card.primaryContact}
+								</span>
+							{/if}
+							{#each card.notes as note (note)}
+								<span class="text-2xs text-muted-foreground">{note}</span>
+							{/each}
+							{#if card.phoneMatch}
+								<span
+									class="mt-0.5 inline-flex w-fit items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-700"
+								>
+									<CheckCircle2 class="size-3" />
+									{t.joinChipPhoneMatch}
+									{card.phoneMatch}
+								</span>
+							{/if}
+							{#if card.memberNames.length > 0}
+								<span class="text-xs text-muted-foreground">
+									{t.joinChipMembersMasked}
+									{card.memberNames.join(', ')}
+								</span>
+							{/if}
+							<div class="mt-0.5 flex flex-wrap gap-1.5">
+								{#if card.memberCount > 0}
+									<span
+										class="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground"
+									>
+										<Users class="size-3" />
+										{t.joinChipMemberCount(card.memberCount)}
+									</span>
+								{/if}
+								{#if card.petCount > 0}
+									<span
+										class="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground"
+									>
+										<PawPrint class="size-3" />
+										{t.joinChipPetCount(card.petCount)}
+									</span>
+								{/if}
+							</div>
+						</div>
+						<div class="flex shrink-0 flex-col items-end gap-1.5">
+							<div class="flex items-center gap-2">
+								{#if card.canJoin}
+									<Button type="button" size="sm" disabled={fieldsLocked} onclick={card.onJoin}>
+										{t.joinFamilyCta}
+									</Button>
+								{/if}
+								<Button
+									type="button"
+									size="sm"
+									variant="outline"
+									disabled={fieldsLocked}
+									onclick={continueCreateDespiteSuggest}
+								>
+									{t.joinCreateNew}
+								</Button>
+							</div>
+							{#if card.joinHint}
+								<p class="max-w-[14rem] text-right text-2xs text-muted-foreground">
+									{card.joinHint}
+								</p>
+							{/if}
+						</div>
+					</div>
+				</li>
+			{/each}
+		</ul>
+	</div>
+{/snippet}
 
 <form
 	class="space-y-6"
@@ -1077,12 +1521,12 @@
 
 	<!-- 2-Column Responsive Layout on Desktop (lg:grid lg:grid-cols-12 lg:gap-8 lg:items-start) -->
 	<div class="lg:grid lg:grid-cols-12 lg:items-start lg:gap-8">
-		<!-- Left Column: Sticky Summary Card (hidden on mobile, sticky on lg+) -->
+		<!-- Left Column: Sticky Summary Card on desktop -->
 		<aside
 			class="hidden lg:sticky lg:top-[calc(var(--registration-sticky-top,0px)+1rem)] lg:col-span-4 lg:block"
 		>
 			<UnifiedRegistrationSummaryCard
-				{shelterName}
+				shelterName={summaryShelterName}
 				{shelterCode}
 				{household}
 				{members}
@@ -1092,7 +1536,8 @@
 				submitDisabled={submitDisabled || readOnly}
 				submitLabel={effectiveSubmitLabel}
 				submittingLabel={t.submitting}
-				existingMemberCount={resolvedExistingMemberCount}
+				existingHeadName={summaryExistingHeadName}
+				existingMemberCount={summaryExistingMemberCount}
 				existingPets={selectedMatchChip?.pets ?? []}
 				newPets={petItems}
 				onNavigate={(id) => scrollToSection(id as FormSectionId)}
@@ -1127,7 +1572,7 @@
 
 				<!-- Quick Search & Merge Tool Bar (both Public and Onsite) -->
 				{#if enableResidenceJoin}
-					<div class="mb-4 space-y-3 rounded-xl border border-border/60 bg-muted/10 p-3 sm:mb-5">
+					<div class="my-4 space-y-3 rounded-xl border border-border/60 bg-muted/10 p-3 sm:mb-5">
 						<div class="flex items-center justify-between gap-2">
 							<p class="flex items-center gap-1.5 text-xs font-semibold text-foreground">
 								<Search class="size-3.5 text-primary" />
@@ -1148,6 +1593,7 @@
 									searchPhoneQuery = sanitizePhoneTyping(
 										(e.currentTarget as HTMLInputElement).value
 									);
+									createNewConfirmed = false;
 								}}
 								onblur={() => (searchPhoneTouched = true)}
 								disabled={fieldsLocked || hasJoinSelection}
@@ -1155,7 +1601,7 @@
 								aria-describedby={searchPhoneError ? 'family-search-phone-error' : undefined}
 								class="h-9 w-full pr-7 text-sm"
 							/>
-							{#if searchPhoneQuery}
+							{#if searchPhoneQuery && !hasJoinSelection}
 								<button
 									type="button"
 									class="absolute top-2.5 right-2.5 text-xs text-muted-foreground hover:text-foreground"
@@ -1179,71 +1625,99 @@
 						{#if channel === 'public'}
 							<p class="text-2xs text-muted-foreground">{t.familySearchHint}</p>
 						{/if}
-						{#if phoneSearchFeedback === 'found'}
-							<p class="text-2xs font-medium text-emerald-700 dark:text-emerald-400">
+						{#if searchFeedback === 'found'}
+							<p
+								class="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-900"
+								role="status"
+							>
+								<CheckCircle2 class="size-4 shrink-0 text-emerald-600" aria-hidden="true" />
 								{t.familySearchFound}
 							</p>
-						{:else if phoneSearchFeedback === 'not-found'}
-							<p class="text-2xs font-medium text-muted-foreground">{t.familySearchNotFound}</p>
+						{:else if searchFeedback === 'not-found'}
+							<p
+								class="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900"
+								role="status"
+							>
+								<CircleAlert class="size-4 shrink-0 text-amber-600" aria-hidden="true" />
+								{t.familySearchNotFound}
+							</p>
 						{/if}
 					</div>
 				{/if}
 
-				<HouseholdAddressFields
-					bind:housing_type={household.housing_type}
-					bind:residence_landmark={
-						() => household.residence_landmark ?? '',
-						(v) => {
-							household.residence_landmark = v || null;
+				<!-- Joined family: its address was filled in for staff/the public and is locked -->
+				<div
+					class={{
+						'space-y-2 rounded-xl transition-colors': true,
+						'bg-primary/5 p-3 ring-2 ring-primary/40': hasJoinSelection
+					}}
+				>
+					{#if hasJoinSelection}
+						<p
+							class="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary"
+							role="status"
+						>
+							<CheckCircle2 class="size-3.5" aria-hidden="true" />
+							{t.joinAddressLocked}
+						</p>
+					{/if}
+					<HouseholdAddressFields
+						bind:housing_type={household.housing_type}
+						bind:residence_landmark={
+							() => household.residence_landmark ?? '',
+							(v) => {
+								household.residence_landmark = v || null;
+							}
 						}
-					}
-					bind:address_no={
-						() => household.address_no ?? '',
-						(v) => {
-							household.address_no = v;
+						bind:address_no={
+							() => household.address_no ?? '',
+							(v) => {
+								household.address_no = v;
+							}
 						}
-					}
-					bind:village_no={
-						() => household.village_no ?? '',
-						(v) => {
-							household.village_no = v;
+						bind:village_no={
+							() => household.village_no ?? '',
+							(v) => {
+								household.village_no = v;
+							}
 						}
-					}
-					bind:subdistrict={
-						() => household.subdistrict ?? '',
-						(v) => {
-							household.subdistrict = v;
+						bind:subdistrict={
+							() => household.subdistrict ?? '',
+							(v) => {
+								household.subdistrict = v;
+							}
 						}
-					}
-					bind:district={
-						() => household.district ?? '',
-						(v) => {
-							household.district = v;
+						bind:district={
+							() => household.district ?? '',
+							(v) => {
+								household.district = v;
+							}
 						}
-					}
-					bind:province={
-						() => household.province ?? '',
-						(v) => {
-							household.province = v;
+						bind:province={
+							() => household.province ?? '',
+							(v) => {
+								household.province = v;
+							}
 						}
-					}
-					bind:postal_code={
-						() => household.postal_code ?? '',
-						(v) => {
-							household.postal_code = v;
+						bind:postal_code={
+							() => household.postal_code ?? '',
+							(v) => {
+								household.postal_code = v;
+							}
 						}
-					}
-					bind:dorm_name={household.dorm_name}
-					bind:dorm_building={household.dorm_building}
-					bind:dorm_floor={household.dorm_floor}
-					bind:dorm_room={household.dorm_room}
-					dormFields={true}
-					errors={visibleErrors.household}
-					loadMasterHousingTypes={channel !== 'public'}
-					required={true}
-					disabled={fieldsLocked || hasJoinSelection}
-				/>
+						bind:dorm_name={household.dorm_name}
+						bind:dorm_building={household.dorm_building}
+						bind:dorm_floor={household.dorm_floor}
+						bind:dorm_room={household.dorm_room}
+						dormFields={true}
+						errors={visibleErrors.household}
+						loadMasterHousingTypes={channel !== 'public'}
+						required={true}
+						disabled={fieldsLocked || hasJoinSelection}
+					/>
+				</div>
 
+				<!-- Family search results: below the address fields; found families are scrolled into view -->
 				{#if enableResidenceJoin}
 					{#if hasJoinSelection}
 						<div
@@ -1251,22 +1725,41 @@
 							role="status"
 							aria-live="polite"
 						>
-							<p class="text-sm font-semibold text-foreground">{t.joinFamilySelectedTitle}</p>
+							<p class="text-sm font-semibold text-foreground">{t.joinWillJoinTitle}</p>
 							{#if joinSelectedSummary}
 								<p class="text-xs text-muted-foreground">{joinSelectedSummary}</p>
 							{/if}
-							<p class="text-xs text-muted-foreground">{t.joinFamilySelectedHint}</p>
+							{#if joinedFamilyMembers.length > 0}
+								<p class="text-xs text-muted-foreground">
+									{t.joinExistingSeeBelow(joinedFamilyMembers.length)}
+								</p>
+							{:else if channel === 'public' && selectedMatchChip?.member_count}
+								<p class="text-xs text-muted-foreground">
+									{t.joinExistingCount(selectedMatchChip.member_count)}
+								</p>
+								{#if selectedMatchChip.members_masked?.length}
+									<!-- Masked names only (first name + hidden surname) — enough to recognise the family -->
+									<ol class="grid gap-1 text-xs text-foreground sm:grid-cols-2">
+										{#each selectedMatchChip.members_masked as name, i (`${i}:${name}`)}
+											<li class="rounded-md bg-background/80 px-2 py-1">{i + 1}. {name}</li>
+										{/each}
+									</ol>
+								{/if}
+							{/if}
+							<p class="text-xs text-muted-foreground">
+								{t.joinFillNewOnly}
+							</p>
 							{#if selectedMatchChip?.shelter_code && selectedMatchChip.shelter_code !== shelterCode}
 								<div
 									class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/20 bg-background/80 p-2 text-2xs"
 								>
 									<span class="text-muted-foreground">
-										มีสมาชิกครอบครัวนี้อยู่ที่ศูนย์:
+										{t.joinAtShelterPrefix}
+
 										<strong class="text-foreground"
 											>{selectedMatchChip.shelter_name || selectedMatchChip.shelter_code}</strong
 										>
-										— แนะนำไปติดต่อที่ศูนย์หรือแจ้งเจ้าหน้าที่ รวมทีหลังที่ศูนย์ได้ · การเข้าร่วมนี้เพิ่มชื่อเข้าคิวกลางใบเดิม
-										ไม่ใช่เข้าศูนย์อัตโนมัติ
+										{t.joinAtShelterSuffix}
 									</span>
 									{#if onselectshelter}
 										<Button
@@ -1280,7 +1773,7 @@
 													selectedMatchChip!.shelter_name ?? undefined
 												)}
 										>
-											ดูศูนย์นี้
+											{t.joinViewShelter}
 										</Button>
 									{/if}
 								</div>
@@ -1292,9 +1785,42 @@
 								disabled={fieldsLocked}
 								onclick={continueCreateDespiteSuggest}
 							>
-								{t.joinFamilyCreateInstead}
+								{t.joinCreateInstead}
 							</Button>
 						</div>
+					{:else if phoneSearchPending}
+						<div
+							class="mt-3 flex items-center gap-2 rounded-xl border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
+							role="status"
+							aria-live="polite"
+						>
+							<Loader2 class="size-3.5 animate-spin" aria-hidden="true" />
+							{t.joinSearchingPhone}
+						</div>
+					{:else if createNewConfirmed && (phoneHouseholdSuggestions.length > 0 || residenceSuggestions.length > 0 || publicMatchChips.length > 0)}
+						<div
+							class="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
+							role="status"
+						>
+							<span>{t.joinWillCreateNew}</span>
+							<Button
+								type="button"
+								size="sm"
+								variant="ghost"
+								class="h-7 text-xs"
+								disabled={fieldsLocked}
+								onclick={() => (createNewConfirmed = false)}
+							>
+								{t.joinShowMatchesAgain}
+							</Button>
+						</div>
+					{:else if channel === 'onsite' && phoneHouseholdSuggestions.length > 0}
+						{@render familyMatchList(
+							t.joinPublicMatchTitle,
+							phoneHouseholdSuggestions.map((suggestion) =>
+								onsiteFamilyCard(suggestion, () => confirmOnsitePhoneJoin(suggestion))
+							)
+						)}
 					{:else if residenceSuggestPending}
 						<div
 							class="mt-3 flex items-center gap-2 rounded-xl border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
@@ -1302,175 +1828,67 @@
 							aria-live="polite"
 						>
 							<Loader2 class="size-3.5 animate-spin" aria-hidden="true" />
-							กำลังค้นหาครอบครัวที่อยู่ตรงกัน...
+							{t.joinSearchingAddress}
 						</div>
 					{:else if channel === 'onsite' && residenceSuggestions.length > 0}
-						<div class="mt-3 space-y-2 rounded-xl border border-border bg-muted/20 p-3">
-							<p class="text-xs font-semibold text-foreground">
-								พบครอบครัวที่อยู่ใกล้เคียง — เข้าร่วมได้ หรือสร้างใหม่ได้เสมอ
-							</p>
-							<ul class="space-y-2">
-								{#each residenceSuggestions as suggestion (suggestion._id)}
-									<li class="flex flex-wrap items-center justify-between gap-2 text-sm">
-										<span>
-											{#if suggestion.label?.trim()}
-												<span class="font-medium">{suggestion.label}</span>
-												<span class="text-muted-foreground">
-													· {formatResidenceSummary(suggestion)}
-												</span>
-											{:else}
-												<span class="text-muted-foreground">
-													{formatResidenceSummary(suggestion)}
-												</span>
-											{/if}
-										</span>
-										<Button
-											type="button"
-											size="sm"
-											variant="outline"
-											disabled={fieldsLocked}
-											onclick={() => confirmOnsiteJoin(suggestion)}
-										>
-											เข้าร่วม
-										</Button>
-									</li>
-								{/each}
-							</ul>
-							<Button
-								type="button"
-								size="sm"
-								disabled={fieldsLocked}
-								onclick={continueCreateDespiteSuggest}
-							>
-								สร้างใหม่
-							</Button>
-						</div>
+						{@render familyMatchList(
+							t.joinNearbyTitle,
+							residenceSuggestions.map((suggestion) =>
+								onsiteFamilyCard(suggestion, () => confirmOnsiteJoin(suggestion))
+							)
+						)}
 					{:else if channel === 'public' && publicMatchChips.length > 0}
-						<div
-							id="family-match-results"
-							class="mt-3 space-y-2 rounded-xl border border-border bg-muted/20 p-3"
-						>
-							<p class="text-xs font-semibold text-foreground">{t.joinFamilyMatchesTitle}</p>
-							<p class="text-2xs text-muted-foreground">{t.joinFamilyMatchesHint}</p>
-							<ul class="space-y-2">
-								{#each publicMatchChips as chip (chip.match_token)}
-									<li class="rounded-lg border border-border/60 bg-card p-2.5">
-										<div class="flex flex-wrap items-start justify-between gap-2">
-											<div class="flex flex-col gap-1">
-												<!-- Address line (no "บ้านตนเอง") -->
-												<span class="text-sm font-medium text-foreground">
-													{#if chip.address?.address_no}
-														บ้านเลขที่ {chip.address.address_no}
-														{chip.address.residence_landmark || ''}
-													{:else}
-														{chip.landmark?.trim() || 'ครอบครัวที่อยู่นี้'}
-													{/if}
-												</span>
-
-												<!-- Masked primary contact -->
-												{#if chip.primary_contact_masked}
-													<span class="text-xs text-muted-foreground">
-														{t.existingMembersPrimary}
-														{chip.primary_contact_masked}
-													</span>
-												{/if}
-
-												<!-- Shelter recommend copy -->
-												{#if chip.is_in_shelter && chip.shelter_name}
-													<span class="text-2xs text-muted-foreground">
-														มีครอบครัวที่ศูนย์ {chip.shelter_name} แล้ว
-														{#if !canJoinPublicChip(chip)}
-															— ศูนย์นี้ยังไม่เปิดรับลงทะเบียนล่วงหน้าจากเว็บ
-														{/if}
-													</span>
-												{:else if chip.shelter_code || chip.shelter_name}
-													<span class="text-2xs text-muted-foreground">
-														มีสมาชิกครอบครัวนี้อยู่ที่ศูนย์
-														{chip.shelter_name || chip.shelter_code} แล้ว — แนะนำไปที่ศูนย์หรือแจ้งเจ้าหน้าที่
-														· กดเข้าร่วมเพื่อเพิ่มชื่อเข้าคิวกลางใบเดิม
-													</span>
-												{/if}
-
-												<!-- Member phone match confirmation badge -->
-												{#if chip.matched_member_masked}
-													<span
-														class="mt-0.5 inline-flex w-fit items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-700"
-													>
-														<CheckCircle2 class="size-3" />
-														{t.existingMembersMatchedPhone}
-														{chip.matched_member_masked}
-													</span>
-												{/if}
-
-												<!-- Member & pet count badges -->
-												<div class="mt-0.5 flex flex-wrap gap-1.5">
-													{#if chip.member_count && chip.member_count > 0}
-														<span
-															class="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground"
-														>
-															<Users class="size-3" />
-															{chip.member_count}
-															{t.joinFamilyMembersUnit}
-														</span>
-													{/if}
-													{#if chip.pets && chip.pets.length > 0}
-														<span
-															class="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground"
-														>
-															<PawPrint class="size-3" />
-															{chip.pets.length}
-															{t.joinFamilyPetsUnit}
-														</span>
-													{/if}
-												</div>
-											</div>
-
-											{#if canJoinPublicChip(chip)}
-												<div class="flex flex-col items-end gap-1">
-													<Button
-														type="button"
-														size="sm"
-														variant="outline"
-														disabled={fieldsLocked}
-														onclick={() => confirmPublicJoin(chip)}
-													>
-														{t.joinFamilyCta}
-													</Button>
-													{#if !chip.is_in_shelter}
-														<p class="max-w-[14rem] text-right text-2xs text-muted-foreground">
-															{t.joinFamilyCtaQueueHint}
-														</p>
-													{/if}
-												</div>
-											{:else}
-												<p class="max-w-[14rem] text-right text-2xs text-muted-foreground">
-													ศูนย์{chip.shelter_name
-														? ` ${chip.shelter_name}`
-														: ''}ยังไม่เปิดรับลงทะเบียนล่วงหน้า —
-													แนะนำติดต่อที่ศูนย์หรือแจ้งเจ้าหน้าที่
-												</p>
-											{/if}
-										</div>
-									</li>
-								{/each}
-							</ul>
-							<Button
-								type="button"
-								size="sm"
-								disabled={fieldsLocked}
-								onclick={continueCreateDespiteSuggest}
-							>
-								{t.joinFamilyCreateNew}
-							</Button>
-						</div>
+						{@render familyMatchList(
+							t.joinPublicMatchTitle,
+							publicMatchChips.map(publicFamilyCard)
+						)}
+					{:else if phoneSearchCheckedEmpty}
+						<p class="mt-3 text-xs text-muted-foreground">
+							{t.joinPhoneNotFound}
+						</p>
+					{:else if residenceSuggestFailed}
+						<p class="mt-3 text-xs text-amber-800 dark:text-amber-200" role="status">
+							{t.residenceMatchFailed}
+						</p>
 					{:else if residenceSuggestCheckedEmpty}
 						<p class="mt-3 text-xs text-muted-foreground">
-							{isThaiPhone(normalizeThaiPhone(searchPhoneQuery.trim()))
-								? t.familySearchNotFound
-								: searchPhoneQuery.trim()
-									? 'ไม่พบครอบครัวที่ตรงกับเบอร์โทรศัพท์นี้ — สามารถกรอกข้อมูลเพื่อลงทะเบียนครอบครัวใหม่ได้'
-									: 'ไม่พบครอบครัวที่อยู่ตรงกัน — จะสร้างครอบครัวใหม่'}
+							{searchPhoneQuery.trim() ? t.joinPhoneNoMatch : t.joinAddressNoMatch}
 						</p>
+					{/if}
+
+					{#if allowHouseholdJoin && !hasJoinSelection}
+						<div
+							class="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-300/60 bg-amber-50/60 p-3"
+						>
+							<div class="min-w-0 text-xs">
+								<p class="font-semibold text-foreground">
+									{householdDecision === 'create' ? t.joinDecisionCreate : t.joinDecisionRequired}
+								</p>
+								<p class="text-muted-foreground">
+									{t.joinDecisionHint}
+								</p>
+							</div>
+							{#if householdDecision === 'create'}
+								<Button
+									type="button"
+									size="sm"
+									variant="outline"
+									disabled={fieldsLocked}
+									onclick={chooseHouseholdJoin}
+								>
+									{t.joinBackToExisting}
+								</Button>
+							{:else}
+								<Button
+									type="button"
+									size="sm"
+									disabled={fieldsLocked}
+									onclick={continueCreateDespiteSuggest}
+								>
+									{t.joinConfirmCreate}
+								</Button>
+							{/if}
+						</div>
 					{/if}
 				{/if}
 			</UnifiedRegistrationSection>
@@ -1489,7 +1907,8 @@
 				{shelterCode}
 				{membersSectionDesc}
 				isJoiningExistingHousehold={hasJoinSelection}
-				existingMemberCount={resolvedExistingMemberCount}
+				existingMembers={joinedFamilyMembers}
+				existingMemberCount={summaryExistingMemberCount}
 				primaryContactPhone={members[0]?.phone ?? null}
 				thaidEnabled={channel === 'public' && thaidEnabled}
 				onDirty={markDirty}
@@ -1586,12 +2005,12 @@
 					class="flex max-h-[85dvh] flex-col gap-0 overflow-hidden p-0 pb-[env(safe-area-inset-bottom)] lg:hidden"
 				>
 					<Sheet.Header class="sr-only">
-						<Sheet.Title>สรุปข้อมูลการลงทะเบียน</Sheet.Title>
+						<Sheet.Title>{t.summaryTitle}</Sheet.Title>
 						<Sheet.Description>{mobileSummaryChipLabel}</Sheet.Description>
 					</Sheet.Header>
 					<div class="min-h-0 flex-1 overflow-y-auto p-3">
 						<UnifiedRegistrationSummaryCard
-							{shelterName}
+							shelterName={summaryShelterName}
 							{shelterCode}
 							{household}
 							{members}
@@ -1602,7 +2021,8 @@
 							submitLabel={effectiveSubmitLabel}
 							submittingLabel={t.submitting}
 							showSubmit={false}
-							existingMemberCount={resolvedExistingMemberCount}
+							existingHeadName={summaryExistingHeadName}
+							existingMemberCount={summaryExistingMemberCount}
 							existingPets={selectedMatchChip?.pets ?? []}
 							newPets={petItems}
 							onNavigate={(id) => {
@@ -1616,3 +2036,18 @@
 		</div>
 	</div>
 </form>
+
+<AlertDialog.Root bind:open={confirmCreateNewOpen}>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>{t.createNewDialogTitle}</AlertDialog.Title>
+			<AlertDialog.Description>
+				{t.createNewDialogDesc}
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel>{t.createNewDialogCancel}</AlertDialog.Cancel>
+			<AlertDialog.Action onclick={confirmCreateNew}>{t.createNewDialogConfirm}</AlertDialog.Action>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>

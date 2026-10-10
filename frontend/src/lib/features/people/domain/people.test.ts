@@ -1,6 +1,9 @@
 // @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest';
 import {
+	ewarSymptomLabel,
+	canScanCheckIn,
+	needsIntakeBeforeStay,
 	createEvacuee,
 	createKioskEvacueeFromCard,
 	genderLabelTh,
@@ -23,6 +26,7 @@ import {
 	resolveStatusChangeAction,
 	normalizeCheckoutRemark,
 	statusChangeHandlerKind,
+	matchesEvacueePhoneSearch,
 	matchesEvacueeSearch,
 	zoneLabel,
 	isEvacuee,
@@ -165,7 +169,7 @@ describe('vulnerable_groups vs special_needs', () => {
 		);
 		expect(e.vulnerable_groups).toEqual(['wheelchair', 'pregnant']);
 		expect(e.special_needs).toEqual(['ใช้ออกซิเจน']);
-		expect(e.schema_v).toBe(12);
+		expect(e.schema_v).toBe(13);
 
 		const bare = createEvacuee(
 			{ first_name: 'A', last_name: 'B', gender: 'other', phone: null },
@@ -238,7 +242,7 @@ describe('Anonymous ID', () => {
 			},
 			ctx
 		);
-		expect(a.schema_v).toBe(12);
+		expect(a.schema_v).toBe(13);
 		expect(a.person_id?.cardType).toBe('anonymous');
 		expect(isAnonymousId(a.person_id?.number ?? '')).toBe(true);
 		expect(b.person_id?.number).not.toBe(a.person_id?.number);
@@ -307,7 +311,7 @@ describe('createEvacuee', () => {
 		);
 		expect(e._id.startsWith('evacuee:')).toBe(true);
 		expect(e.type).toBe('evacuee');
-		expect(e.schema_v).toBe(12);
+		expect(e.schema_v).toBe(13);
 		expect(e.shelter_code).toBe('SH001');
 		expect(e.created_by).toBe('staff1');
 		expect(e.created_at).toBe(e.updated_at);
@@ -331,7 +335,7 @@ describe('createEvacuee', () => {
 			},
 			ctx
 		);
-		expect(e.schema_v).toBe(12);
+		expect(e.schema_v).toBe(13);
 		expect(e.current_stay.status).toBe('arriving');
 	});
 
@@ -1656,6 +1660,21 @@ describe('matchesEvacueeSearch', () => {
 		expect(matchesEvacueeSearch(evacuee, 'ไม่มีตัวตน')).toBe(false);
 	});
 
+	it('normalizes +66 and matches an emergency-contact phone', () => {
+		const withEmergencyPhone = {
+			...evacuee,
+			phone: null,
+			emergency_contact: {
+				name: 'ผู้ติดต่อฉุกเฉิน',
+				phone: '081-234-5678',
+				relation: 'ญาติ'
+			}
+		};
+
+		expect(matchesEvacueePhoneSearch(withEmergencyPhone, '+66 81 234 5678')).toBe(true);
+		expect(matchesEvacueeSearch(withEmergencyPhone, '+66 81 234 5678')).toBe(true);
+	});
+
 	it('defaults to including search_excluded evacuees (internal staff search)', () => {
 		const excluded = { ...evacuee, privacy: { search_excluded: true } };
 		expect(matchesEvacueeSearch(excluded, 'สมชาย')).toBe(true);
@@ -1695,6 +1714,36 @@ describe('zoneLabel', () => {
 	it('falls back to the raw code when no matching name exists', () => {
 		expect(zoneLabel('z9', [{ code: 'z1', name: 'โซนชาย' }])).toBe('z9');
 		expect(zoneLabel('z1')).toBe('z1');
+	});
+});
+
+describe('ewarSymptomLabel', () => {
+	it('maps a persisted symptom id to its plain-Thai label', () => {
+		expect(ewarSymptomLabel('acute_respiratory')).toBe(
+			'ติดเชื้อทางเดินหายใจเฉียบพลัน (ไอ เจ็บคอ หายใจลำบาก)'
+		);
+	});
+
+	it('returns unknown ids unchanged', () => {
+		expect(ewarSymptomLabel('legacy_code')).toBe('legacy_code');
+	});
+});
+
+describe('scan check-in gate (every person goes through Station 2/3)', () => {
+	const stay = (status: StayStatus) => ({ current_stay: { status, zone: 'Z5', since: '' } });
+
+	it('only lets people coming back check in from the scan page', () => {
+		expect(canScanCheckIn(stay('temporary_leave'))).toBe(true);
+		expect(canScanCheckIn(stay('checked_out'))).toBe(true);
+		expect(canScanCheckIn(stay('transferred'))).toBe(true);
+	});
+
+	it('never checks in someone who has not been screened and zoned yet', () => {
+		expect(canScanCheckIn(stay('pre_registered'))).toBe(false);
+		expect(canScanCheckIn(stay('arriving'))).toBe(false);
+		expect(needsIntakeBeforeStay(stay('pre_registered'))).toBe(true);
+		expect(needsIntakeBeforeStay(stay('arriving'))).toBe(true);
+		expect(needsIntakeBeforeStay(stay('active'))).toBe(false);
 	});
 });
 
@@ -1768,5 +1817,23 @@ describe('gender nullable (schema_v 12, CR-154; decision sync 2026-10-09)', () =
 			registered_via: 'api'
 		});
 		expect(parsed.success).toBe(true);
+	});
+});
+
+describe('preferred_zone (schema_v 13, CR-158)', () => {
+	const base = { first_name: 'A', last_name: 'B', gender: 'male' as const, phone: null };
+	const ctx = { shelterCode: 'SH001', createdBy: 'staff' };
+
+	it("stores Station 1's suggestion without zoning the person", () => {
+		const e = createEvacuee({ ...base, status: 'arriving', preferred_zone: 'Z5' }, ctx);
+		expect(e.preferred_zone).toBe('Z5');
+		expect(e.current_stay).toMatchObject({ status: 'arriving', zone: null });
+	});
+
+	it('leaves the field out when no zone was suggested', () => {
+		expect(createEvacuee({ ...base, preferred_zone: '' }, ctx)).not.toHaveProperty(
+			'preferred_zone'
+		);
+		expect(createEvacuee(base, ctx)).not.toHaveProperty('preferred_zone');
 	});
 });

@@ -453,7 +453,7 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 
 		await openMemberAccordion(card, 'ผู้ติดต่อฉุกเฉิน');
 		for (const [selector, label] of [
-			['#emergency-name', 'ชื่อผู้ติดต่อ'],
+			['#emergency-name', 'ชื่อผู้ติดต่อฉุกเฉิน'],
 			['#emergency-phone', 'เบอร์โทรศัพท์'],
 			['#emergency-relation', 'ความสัมพันธ์']
 		]) {
@@ -564,16 +564,18 @@ test.describe('Pre-register: render contract (R)', { tag: ['@pre-register', '@sm
 			await expect(control, field).toBeVisible();
 			await expect(control, field).toBeEnabled();
 		}
-		// members after the first may have no phone (the box starts ticked) — the head may not
-		await expect(card.getByRole('checkbox', { name: 'ไม่มีเบอร์โทรศัพท์' })).toBeChecked();
-		await expect(card.locator('#member-1-phone')).toBeDisabled();
-		await card.getByRole('checkbox', { name: 'ไม่มีเบอร์โทรศัพท์' }).uncheck();
+		// members after the first may have no phone — the head may not. The phone field opens
+		// ready to type (roleplay #10); ticking "no phone" disables it.
+		await expect(card.getByRole('checkbox', { name: 'ไม่มีเบอร์โทรศัพท์' })).not.toBeChecked();
 		await expect(card.locator('#member-1-phone')).toBeEnabled();
+		await card.getByRole('checkbox', { name: 'ไม่มีเบอร์โทรศัพท์' }).check();
+		await expect(card.locator('#member-1-phone')).toBeDisabled();
 		await expect(
 			primaryCard(page).getByRole('checkbox', { name: 'ไม่มีเบอร์โทรศัพท์' })
 		).toHaveCount(0);
 		for (const accordion of ['ผู้ติดต่อฉุกเฉิน', 'กลุ่มเปราะบาง', 'ความต้องการพิเศษ'] as const) {
-			await expect(card.getByRole('button', { name: accordion, exact: true })).toBeVisible();
+			// The emergency trigger also carries a hint line (roleplay #11) — match the title.
+			await expect(card.getByRole('button', { name: new RegExp(`^${accordion}`) })).toBeVisible();
 		}
 		await card.getByRole('button', { name: 'ลบ' }).click();
 		await expect(card).toHaveCount(0);
@@ -1024,7 +1026,10 @@ const ERROR_ROWS: ErrorRow[] = [
 			for (let i = 0; i < 20; i++)
 				await page.getByRole('button', { name: 'เพิ่มสมาชิก', exact: true }).click();
 		},
-		field: (page) => page.getByRole('button', { name: 'เพิ่มสมาชิก', exact: true })
+		field: (page) => page.getByRole('button', { name: 'เพิ่มสมาชิก', exact: true }),
+		// The add button sits below the last member (roleplay #13), so the jump lands on the
+		// first blank member card above it.
+		firstInvalid: (page) => memberCard(page, 2).locator('#member-1-first-name')
 	}
 ];
 
@@ -1140,6 +1145,8 @@ test.describe('Pre-register: error matrix (E)', { tag: ['@pre-register', '@smoke
 		await page.getByRole('button', { name: 'เพิ่มสมาชิก', exact: true }).click();
 		await fillMember(page, 1, { firstName: 'สมาชิกสอง' });
 		await expectUnspecifiedPreselected(memberCard(page, 2));
+		// No phone for member 2 — the field opens ready to type, so tick "no phone" (#10).
+		await page.locator('#member-1-no-phone').click();
 		await submitButton(page).click();
 
 		await expect.poll(() => bodies.length).toBe(1);
@@ -1872,6 +1879,8 @@ test.describe(
 				birthYear: '2490',
 				gender: 'female'
 			});
+			// No phone for member 2 — the field opens ready to type, so tick "no phone" (#10).
+			await page.locator('#member-1-no-phone').click();
 			await openMemberAccordion(card2, 'กลุ่มเปราะบาง');
 			await page.locator('#vg-1-elderly_dependent').click();
 			await page.locator('#vg-1-chronic_illness').click();

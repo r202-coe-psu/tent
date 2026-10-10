@@ -181,6 +181,24 @@ export async function mockCouchRoutes(
 			});
 			return;
 		}
+		if (last === '_bulk_docs' && req.method() === 'POST') {
+			// Family registration writes household + members in one bulk call — store them
+			// like single PUTs so later reads in the same test see them.
+			const body = (req.postDataJSON() ?? {}) as { docs?: Record<string, unknown>[] };
+			const results = (body.docs ?? []).map((doc) => {
+				const id = String(doc._id);
+				revCounter += 1;
+				const rev = `${revCounter}-mock`;
+				docs.set(id, { ...doc, _id: id, _rev: rev });
+				return { ok: true, id, rev };
+			});
+			await route.fulfill({
+				status: 201,
+				contentType: 'application/json',
+				body: JSON.stringify(results)
+			});
+			return;
+		}
 		if (last.startsWith('_')) {
 			// Not a single-doc path (_changes, …) — defer to
 			// the generic mocks registered above.
@@ -227,6 +245,12 @@ export async function mockCouchRoutes(
 	// never run if we registered a blanket /api/** last).
 	await page.route('/api/**', async (route) => {
 		const url = route.request().url();
+		// Auth status (first-login gate, MFA) comes from the real BFF: callers create real
+		// CouchDB users and seed their security question, so a stub would only hide the gate.
+		if (url.includes('/api/v1/auth/me')) {
+			await route.continue();
+			return;
+		}
 		if (url.includes('/api/v1/thailand-location/all')) {
 			await route.fulfill({
 				status: 200,

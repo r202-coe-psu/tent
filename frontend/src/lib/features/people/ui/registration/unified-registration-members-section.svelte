@@ -2,6 +2,7 @@
 	import Plus from '@lucide/svelte/icons/plus';
 	import Users from '@lucide/svelte/icons/users';
 	import QrCodeIcon from '@lucide/svelte/icons/qr-code';
+	import { tick } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { langState } from '$lib/states/i18n.svelte';
@@ -14,6 +15,12 @@
 		type UnifiedRegistrationChannel
 	} from '../../domain/unified-registration';
 	import type { ThaiDAutofillProfile } from '../../domain/thaid-profile';
+	import {
+		evacueeAgeYears,
+		formatPersonName,
+		STATUS_LABELS,
+		type Evacuee
+	} from '../../domain/people';
 	import UnifiedRegistrationMemberCard from './unified-registration-member-card.svelte';
 	import UnifiedRegistrationSection from './unified-registration-section.svelte';
 	import ThaidMemberScanDialog from './thaid-member-scan-dialog.svelte';
@@ -34,6 +41,7 @@
 		existingMemberCount = null,
 		primaryContactPhone = null,
 		thaidEnabled = false,
+		existingMembers = [],
 		onDirty
 	}: {
 		members: UnifiedMemberWithMeta[];
@@ -55,11 +63,15 @@
 		existingMemberCount?: number | null;
 		primaryContactPhone?: string | null;
 		thaidEnabled?: boolean;
+		/** Joining a family: its current members, shown read-only before the new cards. */
+		existingMembers?: readonly Evacuee[];
 		onDirty?: () => void;
 	} = $props();
 
 	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
 	const MEMBERS_ERROR_ID = 'members-limit-error';
+	/** Members already in the joined family — new cards are numbered after them. */
+	const existingTotal = $derived(existingMembers.length || (existingMemberCount ?? 0));
 
 	const sectionTitle = $derived(
 		isJoiningExistingHousehold ? t.sectionMembersJoin : t.sectionMembers
@@ -69,9 +81,8 @@
 	);
 	const addMemberLabel = $derived(isJoiningExistingHousehold ? t.addMemberJoin : t.addMember);
 
-	const knownExistingCount = $derived(
-		existingMemberCount != null && existingMemberCount > 0 ? existingMemberCount : 0
-	);
+	// Onsite lists the joined family's members; public only knows how many (from the match chip).
+	const knownExistingCount = $derived(existingTotal);
 
 	const membersBadges = $derived.by(() => {
 		const unit = t.memberCountUnit ? ` ${t.memberCountUnit}` : '';
@@ -113,7 +124,9 @@
 
 	function memberTabLabel(member: UnifiedMemberWithMeta, index: number): string {
 		const name = [member.first_name, member.last_name].filter(Boolean).join(' ').trim();
-		return name || (index === 0 ? t.primaryContact : `${t.memberLabel} ${index + 1}`);
+		if (name) return name;
+		if (index === 0 && !isJoiningExistingHousehold) return t.primaryContact;
+		return `${t.memberNum} ${existingTotal + index + 1}`;
 	}
 
 	function hasMemberErrors(index: number): boolean {
@@ -129,6 +142,22 @@
 		members = [...members, newMember];
 		selectMemberTab(members.length - 1);
 		onDirty?.();
+		void revealMember(members.length - 1);
+	}
+
+	/** Bring the new member's card into view and put the cursor in its first text field. */
+	async function revealMember(index: number) {
+		await tick();
+		const card = document.getElementById(
+			useMemberTabs ? `member-panel-${index}` : `member-card-${index}`
+		);
+		if (!card) return;
+		card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		card
+			.querySelector<HTMLInputElement>(
+				'input:not([type="file"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])'
+			)
+			?.focus({ preventScroll: true });
 	}
 
 	function removeMember(index: number) {
@@ -179,7 +208,7 @@
 		m.medical_conditions = profile.medical_conditions ?? [];
 		members = [...members];
 		onDirty?.();
-		toast.success(`ดึงข้อมูล ${profile.first_name} ${profile.last_name} เรียบร้อยแล้ว`);
+		toast.success(t.thaidFetchedToast(`${profile.first_name} ${profile.last_name}`));
 	}
 </script>
 
@@ -191,36 +220,53 @@
 	icon={Users}
 	bodyClass="none"
 >
-	{#snippet actions()}
-		<div class="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
-			{#if channel === 'public' && thaidEnabled}
-				<Button
-					type="button"
-					variant="outline"
-					disabled={pending}
-					onclick={handleAddMemberViaThaiD}
-					class="h-9 gap-1.5 border-primary/30 text-xs text-primary hover:bg-primary/10 sm:text-sm"
-				>
-					<QrCodeIcon class="size-4" />
-					<span>เพิ่มสมาชิกด้วย ThaiD (สแกน QR)</span>
-				</Button>
-			{/if}
-			<Button
-				type="button"
-				variant="outline"
-				disabled={pending}
-				onclick={addMember}
-				aria-invalid={membersError ? true : undefined}
-				aria-describedby={membersError ? MEMBERS_ERROR_ID : undefined}
-				class="h-9 flex-1 gap-1.5 text-xs sm:flex-none sm:text-sm"
-			>
-				<Plus class="size-4" />
-				{addMemberLabel}
-			</Button>
-		</div>
-	{/snippet}
+	{#if existingMembers.length > 0}
+		<section
+			aria-labelledby="existing-members-title"
+			class="mb-4 space-y-2 rounded-xl border border-border/70 bg-muted/20 p-3"
+		>
+			<h3 id="existing-members-title" class="text-sm font-semibold text-foreground">
+				{t.onsiteExistingMembersTitle(existingMembers.length)}
+			</h3>
+			<ul class="grid gap-2 sm:grid-cols-2">
+				{#each existingMembers as existing, i (existing._id)}
+					{@const age = evacueeAgeYears(existing)}
+					<li class="rounded-lg border border-border/60 bg-card p-2.5 text-xs">
+						<div class="flex items-start justify-between gap-2">
+							<p class="font-semibold text-foreground">
+								{i + 1}. {formatPersonName(existing)}
+								{#if existing.nickname}
+									<span class="font-normal text-muted-foreground">({existing.nickname})</span>
+								{/if}
+							</p>
+							<span
+								class="shrink-0 rounded-full bg-muted px-2 py-0.5 text-2xs text-muted-foreground"
+							>
+								{STATUS_LABELS[existing.current_stay.status] ?? existing.current_stay.status}
+							</span>
+						</div>
+						<p class="mt-1 text-muted-foreground">
+							{existing.gender === 'male'
+								? t.genderMale
+								: existing.gender === 'female'
+									? t.genderFemale
+									: t.genderUnspecified}
+							{#if age != null}· {t.ageYears(age)}{/if}
+							{#if (existing.vulnerable_groups?.length ?? 0) > 0}
+								· {t.vulnerableCount(existing.vulnerable_groups.length)}
+							{/if}
+						</p>
+					</li>
+				{/each}
+			</ul>
+			<p class="text-2xs text-muted-foreground">
+				{t.onsiteExistingMembersHint}
+			</p>
+		</section>
+		<h3 class="mb-2 text-sm font-semibold text-foreground">{t.newMembersTitle}</h3>
+	{/if}
 
-	{#if isJoiningExistingHousehold && knownExistingCount > 0}
+	{#if isJoiningExistingHousehold && existingMembers.length === 0 && knownExistingCount > 0}
 		<div
 			class="mb-3 rounded-xl border border-border/70 bg-muted/30 p-3 sm:p-3.5"
 			role="status"
@@ -240,7 +286,7 @@
 	{#if useMemberTabs}
 		<div
 			role="tablist"
-			aria-label="สลับสมาชิกครอบครัว"
+			aria-label={t.memberTabsAria}
 			class="mb-4 flex gap-1.5 overflow-x-auto border-b border-slate-200 pb-2"
 		>
 			{#each members as member, index (member._id ?? index)}
@@ -261,7 +307,7 @@
 					{#if hasMemberErrors(index)}
 						<span
 							class="rounded-full border border-red-200 bg-red-50 px-1.5 text-xs font-semibold text-red-900"
-							>มีข้อผิดพลาด</span
+							>{t.memberHasErrors}</span
 						>
 					{/if}
 				</button>
@@ -273,7 +319,7 @@
 		{#each [...members.keys()] as index (index)}
 			<!-- Hidden (not unmounted) so every card keeps its state while switching tabs -->
 			<div
-				id={useMemberTabs ? `member-panel-${index}` : undefined}
+				id={useMemberTabs ? `member-panel-${index}` : `member-card-${index}`}
 				role={useMemberTabs ? 'tabpanel' : undefined}
 				aria-labelledby={useMemberTabs ? `member-tab-${index}` : undefined}
 				class={useMemberTabs && index !== activeMemberTab ? 'hidden' : undefined}
@@ -304,6 +350,7 @@
 					fieldErrors={memberFieldErrors[index]}
 					{validationSeq}
 					{isJoiningExistingHousehold}
+					numberOffset={existingTotal}
 					primaryContactPhone={isJoiningExistingHousehold
 						? primaryContactPhone
 						: (members[0]?.phone ?? null)}
@@ -314,12 +361,40 @@
 		{/each}
 	</div>
 
+	<!-- Below the last member, so adding the next person never needs a scroll back up -->
+	<div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+		{#if channel === 'public' && thaidEnabled}
+			<Button
+				type="button"
+				variant="outline"
+				disabled={pending}
+				onclick={handleAddMemberViaThaiD}
+				class="h-11 w-full gap-1.5 border-primary/30 text-sm text-primary hover:bg-primary/10 sm:w-auto"
+			>
+				<QrCodeIcon class="size-4" />
+				<span>{t.thaidAddMember}</span>
+			</Button>
+		{/if}
+		<Button
+			type="button"
+			variant="outline"
+			disabled={pending}
+			onclick={addMember}
+			aria-invalid={membersError ? true : undefined}
+			aria-describedby={membersError ? MEMBERS_ERROR_ID : undefined}
+			class="h-11 w-full gap-1.5 border-transparent bg-[#0284C7] text-sm font-semibold text-white shadow-2xs hover:bg-[#0369A1] hover:text-white focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 sm:w-auto"
+		>
+			<Plus class="size-4" />
+			{addMemberLabel}
+		</Button>
+	</div>
+
 	{#if thaidEnabled}
 		<ThaidMemberScanDialog
 			bind:open={scanDialogOpen}
 			memberLabel={targetMemberIndex !== null
-				? `สมาชิกคนที่ ${targetMemberIndex + 1}`
-				: 'สมาชิกในครอบครัว'}
+				? t.thaidScanMemberN(targetMemberIndex + 1)
+				: t.thaidScanFamilyMember}
 			onscanned={handleMemberScanned}
 		/>
 	{/if}

@@ -11,6 +11,8 @@ import {
 	nextScreeningQueueEvacuee,
 	parseZoningQrCode,
 	recommendZoneKind,
+	pickRecommendedZone,
+	resolvePreferredZone,
 	sortByZoningQueueSince,
 	zoningQueueSince
 } from './intake-pipeline';
@@ -351,5 +353,63 @@ describe('formatQueueWait', () => {
 	it('returns — for missing or invalid input', () => {
 		expect(formatQueueWait(null, now)).toBe('—');
 		expect(formatQueueWait('not-a-date', now)).toBe('—');
+	});
+});
+
+describe('pickRecommendedZone', () => {
+	type TestZone = { code: string; type?: string; status?: string };
+	const zones: TestZone[] = [
+		{ code: 'A', type: 'general' },
+		{ code: 'B', type: 'vulnerable', status: 'closed' },
+		{ code: 'C', type: 'vulnerable' },
+		{ code: 'D' }
+	];
+
+	it('returns the first open zone of the recommended kind', () => {
+		expect(pickRecommendedZone(zones, 'vulnerable')?.code).toBe('C');
+		expect(pickRecommendedZone(zones, 'general')?.code).toBe('A');
+	});
+
+	it('treats zones without a type as general', () => {
+		expect(pickRecommendedZone<TestZone>([{ code: 'D' }], 'general')?.code).toBe('D');
+	});
+
+	it('returns null instead of an unrelated zone when no zone of that kind is open', () => {
+		expect(pickRecommendedZone(zones, 'quarantine')).toBeNull();
+		expect(
+			pickRecommendedZone<TestZone>(
+				[{ code: 'B', type: 'vulnerable', status: 'closed' }],
+				'vulnerable'
+			)
+		).toBeNull();
+	});
+});
+
+describe('resolvePreferredZone (CR-158)', () => {
+	const zones = [
+		{ code: 'A', status: 'active' },
+		{ code: 'B', status: 'closed' }
+	];
+
+	it('pre-selects the suggested zone when it is open and there are no EWAR symptoms', () => {
+		expect(resolvePreferredZone('A', zones, 'general')).toEqual({ kind: 'use', code: 'A' });
+		expect(resolvePreferredZone('A', zones, 'vulnerable')).toEqual({ kind: 'use', code: 'A' });
+	});
+
+	it('never pre-selects it when the person has EWAR symptoms (quarantine always wins)', () => {
+		expect(resolvePreferredZone('A', zones, 'quarantine')).toEqual({
+			kind: 'quarantine_overrides',
+			code: 'A'
+		});
+	});
+
+	it('reports a closed or missing suggested zone instead of selecting it', () => {
+		expect(resolvePreferredZone('B', zones, 'general')).toEqual({ kind: 'unavailable', code: 'B' });
+		expect(resolvePreferredZone('Z', zones, 'general')).toEqual({ kind: 'unavailable', code: 'Z' });
+	});
+
+	it('does nothing when Station 1 left it empty', () => {
+		expect(resolvePreferredZone(null, zones, 'general')).toEqual({ kind: 'none' });
+		expect(resolvePreferredZone('  ', zones, 'general')).toEqual({ kind: 'none' });
 	});
 });

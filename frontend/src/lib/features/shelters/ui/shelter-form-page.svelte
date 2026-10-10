@@ -325,8 +325,11 @@
 					</div>
 				</div>
 
-				<!-- Mobile Row 3 / Desktop Right Column -->
-				<div class="flex items-center gap-2.5 pt-0.5 sm:pt-0">
+				<!-- Mobile Row 3 / Desktop Right Column — never shrinks past its buttons (the title wraps
+				     instead), and wraps on narrow widths, so บันทึกข้อมูล is never pushed off-screen. -->
+				<div
+					class="flex flex-wrap items-center gap-2.5 pt-0.5 sm:shrink-0 sm:flex-nowrap sm:justify-end sm:pt-0"
+				>
 					{#if isEdit && id}
 						<a
 							href={resolve(

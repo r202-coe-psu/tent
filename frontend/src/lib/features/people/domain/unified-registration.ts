@@ -211,13 +211,15 @@ export function blankUnifiedMember(): UnifiedMemberInput {
 		last_name: '',
 		// Default: ไม่ระบุเพศ (persisted as null).
 		gender: null,
-		phone: null,
+		// '' = not filled in yet (the field opens ready to type); null = "ไม่มีเบอร์" ticked.
+		phone: '',
 		nickname: '',
 		country: 'THAILAND',
 		religion: 'unknown',
 		// Keep defined — Svelte 5 rejects bind:x={undefined} when $bindable has a fallback.
 		religion_other: null,
 		disability_other_detail: null,
+		preferred_zone: null,
 		person_id: { cardType: 'national_id', number: '' },
 		vulnerable_groups: [],
 		special_needs: [],
@@ -228,6 +230,19 @@ export function blankUnifiedMember(): UnifiedMemberInput {
 		photo: null,
 		zone: null
 	};
+}
+
+/**
+ * Members who neither entered a phone nor ticked「ไม่มีเบอร์」. The card keeps
+ * `phone === null` only when that box is ticked, so a blank string means no choice
+ * was made — the schema would otherwise save it silently as "no phone".
+ */
+export function membersMissingPhoneChoice(
+	members: readonly Pick<UnifiedMemberInput, 'phone'>[]
+): number[] {
+	return members.flatMap((m, i) =>
+		typeof m.phone === 'string' && m.phone.trim() === '' ? [i] : []
+	);
 }
 
 /** 「บันทึกเคสไม่มีบัตร / บุคคลนิรนาม」 — mint ANON-{ulid} without blocking submit. */
@@ -348,9 +363,13 @@ export type UnifiedMemberWithMeta = UnifiedMemberInput & {
 
 export interface FamilyReportInPayload {
 	householdId: string;
+	/** Explicit opt-in for the kiosk flow when no existing household was selected. */
+	createHousehold?: boolean;
 	household: UnifiedHouseholdInput;
 	members: UnifiedMemberWithMeta[];
 	ctx: AuthorContext;
+	/** Reuse generated document ids when the same report-in is retried. */
+	ids?: import('$lib/db/ulid-reservation').UlidReservation;
 }
 
 function cleanAreaPrefix(name?: string | null): string {
@@ -435,6 +454,7 @@ export function evacueeToUnifiedMember(
 		religion: evacuee.religion ?? 'buddhist',
 		religion_other: evacuee.religion_other ?? null,
 		disability_other_detail: evacuee.disability_other_detail ?? null,
+		preferred_zone: evacuee.preferred_zone ?? null,
 		original_person_number: evacuee.person_id?.number ?? null,
 		stay_status: evacuee.current_stay.status,
 		reporting_in: isPreReg && isTarget,

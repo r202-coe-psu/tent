@@ -281,6 +281,9 @@ class UnassignedResidenceMatchHit(BaseModel):
     primary_contact_name_masked: str | None = None
     matched_member_masked: str | None = None
     member_count: int = 0
+    # Current members as "first name + masked surname" (no cancelled members) — lets a
+    # joiner see who is already in the family without exposing full names.
+    members_masked: list[str] = Field(default_factory=list)
     pets: list[dict[str, Any]] = Field(default_factory=list)
     household_address: dict[str, Any] | None = None
 

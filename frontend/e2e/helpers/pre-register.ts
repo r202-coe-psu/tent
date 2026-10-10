@@ -119,7 +119,8 @@ export function primaryCard(page: Page): Locator {
 }
 
 export function memberCard(page: Page, n: number): Locator {
-	return page.getByRole('region', { name: `สมาชิก ${n}` });
+	// Cards are titled "สมาชิกคนที่ N" (roleplay #11); the head card is "…(ผู้ติดต่อหลักของครอบครัว)".
+	return page.getByRole('region', { name: `สมาชิกคนที่ ${n}` });
 }
 
 /** The submit button in the bottom bar (the summary aside repeats the same label). */
@@ -199,7 +200,8 @@ export async function openMemberAccordion(
 	card: Locator,
 	name: 'ผู้ติดต่อฉุกเฉิน' | 'กลุ่มเปราะบาง' | 'ความต้องการพิเศษ'
 ): Promise<void> {
-	const trigger = card.getByRole('button', { name, exact: true });
+	// The emergency trigger also carries a one-line hint (roleplay #11), so match the title only.
+	const trigger = card.getByRole('button', { name: new RegExp(`^${name}`) });
 	if ((await trigger.getAttribute('aria-expanded')) !== 'true') await trigger.click();
 }
 

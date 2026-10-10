@@ -26,7 +26,8 @@
  *   household 3: `<prefix>คู่หนึ่ง` (ชาย), `<prefix>คู่สอง` (หญิง)
  *
  * ID numbers must be fictitious: a 13-digit national ID starting with `0` (real Thai
- * IDs start with 1–8, so it can never belong to anyone) and a passport of two letters
+ * IDs start with 1–8, so it can never belong to anyone) whose last digit is a valid
+ * mod-11 check digit (the form rejects others since CR-148) and a passport of two letters
  * plus 7 digits.
  *
  * Shelters fixture — two shelters whose names start with `E2E_SHELTERS_MARKER`,

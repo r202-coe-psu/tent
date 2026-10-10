@@ -3,11 +3,13 @@
 	import Check from '@lucide/svelte/icons/check';
 	import IdCard from '@lucide/svelte/icons/id-card';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
-	import Phone from '@lucide/svelte/icons/phone';
+	import PhoneCall from '@lucide/svelte/icons/phone-call';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import HeartPulse from '@lucide/svelte/icons/heart-pulse';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import QrCode from '@lucide/svelte/icons/qr-code';
+	import ContactRound from '@lucide/svelte/icons/contact-round';
+	import MapPin from '@lucide/svelte/icons/map-pin';
 	import { onDestroy, onMount, untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { toast } from 'svelte-sonner';
@@ -17,6 +19,9 @@
 	import { useSaveImage } from '$lib/features/images';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
+	import * as Select from '$lib/components/ui/select/index.js';
+	import { useShelter, ZONE_TYPE_LABELS, type ZoneType } from '$lib/features/shelters';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import {
 		uploadShelterBookingPhoto,
 		uploadUnassignedPhoto
@@ -70,6 +75,7 @@
 		excludeIds = [],
 		fieldErrors,
 		isJoiningExistingHousehold = false,
+		numberOffset = 0,
 		primaryContactPhone = null,
 		validationSeq = 0,
 		onRemove,
@@ -87,6 +93,8 @@
 		excludeIds?: string[];
 		fieldErrors?: Record<string, string | undefined>;
 		isJoiningExistingHousehold?: boolean;
+		/** Members already in the joined family — new cards are numbered after them. */
+		numberOffset?: number;
 		primaryContactPhone?: string | null;
 		/** Bumped by the form on every failed submit — re-opens a collapsed section holding an error. */
 		validationSeq?: number;
@@ -96,10 +104,36 @@
 	} = $props();
 
 	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
-	const isPrimary = $derived(index === 0);
-	const title = $derived(isPrimary ? t.primaryContact : `${t.memberLabel} ${index + 1}`);
+	// Joining keeps the family's existing head; a new card is never the primary contact.
+	const isPrimary = $derived(index === 0 && !isJoiningExistingHousehold);
+	const title = $derived(
+		isPrimary ? t.primaryContactCardTitle : `${t.memberNum} ${numberOffset + index + 1}`
+	);
 	const photoInputId = $derived(`unified-member-photo-${index}`);
 	const showPhotoUpload = $derived(photoUpload !== 'none');
+	/**
+	 * CR-158: Station 1 may note a zone this person would like — a suggestion for Station 3,
+	 * never a zone assignment. Onsite only; the public form never asks.
+	 */
+	const showPreferredZone = $derived(channel === 'onsite');
+	const NO_PREFERRED_ZONE = '__none__';
+	const shelterForZones = (() => {
+		try {
+			return useShelter(() =>
+				channel === 'onsite' ? (shelterStore.selectedShelterCode ?? getShelterCode() ?? '') : ''
+			);
+		} catch {
+			return null;
+		}
+	})();
+	const openZones = $derived(
+		(shelterForZones?.data?.zones ?? []).filter((z) => z.status !== 'closed')
+	);
+	function zoneOptionLabel(zone: { code: string; name?: string; type?: string }): string {
+		const type = ZONE_TYPE_LABELS[(zone.type || 'general') as ZoneType] ?? '';
+		return `${zone.name?.trim() || zone.code}${type ? ` · ${type}` : ''}`;
+	}
+
 	const hideNoPhone = $derived(channel === 'public' && index === 0 && !isJoiningExistingHousehold);
 
 	const isReportIn = $derived(mode === 'report-in');
@@ -651,6 +685,9 @@
 	<div class="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-3">
 		<div>
 			<div class="flex flex-wrap items-center gap-2">
+				{#if isPrimary}
+					<ContactRound class="size-4 shrink-0 text-primary" aria-hidden="true" />
+				{/if}
 				<h3
 					id="member-card-title-{index}"
 					class={cn(
@@ -757,7 +794,7 @@
 					class="h-9 gap-1.5 border-primary/30 text-xs text-primary hover:bg-primary/10"
 				>
 					<QrCode class="size-3.5" />
-					<span>สแกน ThaiD</span>
+					<span>{t.memberScanThaid}</span>
 				</Button>
 			{/if}
 
@@ -805,7 +842,7 @@
 						<span
 							class="rounded-md bg-muted px-1.5 py-0.5 text-2xs font-normal text-muted-foreground"
 						>
-							(ไม่จำเป็น / หากมี)
+							({t.optionalIfAny})
 						</span>
 						{#if photoPreviewUrl || member.photo}
 							<span class="size-2 shrink-0 rounded-full bg-primary" aria-label={t.facePhotoTitle}
@@ -911,15 +948,23 @@
 	</div>
 
 	<Accordion.Root type="multiple" bind:value={openSections} class="w-full">
-		<Accordion.Item value="emergency">
+		<Accordion.Item
+			value="emergency"
+			class="rounded-xl border border-amber-200 bg-amber-50/40 px-3 shadow-2xs"
+		>
 			<Accordion.Trigger class="hover:no-underline">
-				<span class="flex items-center gap-2">
-					<Phone class="size-4 text-primary" />
-					<span class="text-sm font-semibold text-foreground">{t.emergencySection}</span>
+				<span class="flex min-w-0 items-start gap-2 text-left">
+					<PhoneCall class="mt-0.5 size-4 shrink-0 text-amber-700" aria-hidden="true" />
+					<span class="flex min-w-0 flex-col gap-0.5">
+						<span class="text-sm font-semibold text-amber-950">{t.emergencySection}</span>
+						<span class="text-xs leading-snug font-normal text-amber-900/75">
+							{t.emergencySectionHint}
+						</span>
+					</span>
 				</span>
 			</Accordion.Trigger>
 			<Accordion.Content>
-				<div class="space-y-4 pt-1">
+				<div class="space-y-4 border-t border-amber-200/80 pt-4 pb-2">
 					<EmergencyContactFields
 						bind:name={emergency.name}
 						bind:phone={emergency.phone}
@@ -970,6 +1015,49 @@
 				</div>
 			</Accordion.Content>
 		</Accordion.Item>
+
+		{#if showPreferredZone}
+			<Accordion.Item value="preferred-zone">
+				<Accordion.Trigger class="hover:no-underline">
+					<span class="flex min-w-0 items-start gap-2 text-left">
+						<MapPin class="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+						<span class="flex min-w-0 flex-col gap-0.5">
+							<span class="text-sm font-semibold text-foreground">โซนที่ต้องการ (ไม่บังคับ)</span>
+							<span class="text-xs leading-snug font-normal text-muted-foreground">
+								เป็นค่าแนะนำให้จุดจัดโซน (สถานี 3) — ทุกคนยังต้องผ่านจุดคัดกรองและจัดโซน
+							</span>
+						</span>
+					</span>
+				</Accordion.Trigger>
+				<Accordion.Content>
+					<div class="pt-1 pb-2">
+						{#if openZones.length === 0}
+							<p class="text-xs text-muted-foreground">ศูนย์นี้ยังไม่มีโซนที่เปิดใช้งาน</p>
+						{:else}
+							<Select.Root
+								type="single"
+								value={member.preferred_zone || NO_PREFERRED_ZONE}
+								onValueChange={(value) => {
+									member.preferred_zone = value && value !== NO_PREFERRED_ZONE ? value : null;
+								}}
+								disabled={fieldsDisabled}
+							>
+								<Select.Trigger class="h-11 w-full text-sm" aria-label="โซนที่ต้องการ">
+									{@const picked = openZones.find((z) => z.code === member.preferred_zone)}
+									{picked ? zoneOptionLabel(picked) : 'ไม่ระบุ'}
+								</Select.Trigger>
+								<Select.Content>
+									<Select.Item value={NO_PREFERRED_ZONE} label="ไม่ระบุ" />
+									{#each openZones as zone (zone.code)}
+										<Select.Item value={zone.code} label={zoneOptionLabel(zone)} />
+									{/each}
+								</Select.Content>
+							</Select.Root>
+						{/if}
+					</div>
+				</Accordion.Content>
+			</Accordion.Item>
+		{/if}
 	</Accordion.Root>
 </section>
 

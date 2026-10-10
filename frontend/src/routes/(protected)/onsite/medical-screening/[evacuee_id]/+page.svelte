@@ -17,10 +17,10 @@
 		evacueeAgeYears,
 		nextScreeningQueueEvacuee,
 		recommendZoneKind,
+		ZONE_KIND_LABELS,
 		formatPersonName,
 		StationCompletionSummary,
-		type Screening,
-		type ZoningRecommendKind
+		type Screening
 	} from '$lib/features/people';
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
@@ -71,11 +71,6 @@
 	// The route is reused for 「คนถัดไปในคิว」 — only show the summary for the person just saved
 	const justSaved = $derived(savedEvacueeId !== null && savedEvacueeId === evacueeId);
 
-	const ZONE_KIND_LABELS: Record<ZoningRecommendKind, string> = {
-		quarantine: 'โซนกักตัว (มีอาการเฝ้าระวัง)',
-		vulnerable: 'โซนกลุ่มเปราะบาง',
-		general: 'โซนทั่วไป'
-	};
 	const savedFacts = $derived.by(() => {
 		if (!evacuee) return [];
 		const symptoms = latestScreening?.symptoms ?? [];

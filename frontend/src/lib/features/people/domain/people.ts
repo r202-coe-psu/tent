@@ -5,6 +5,7 @@ import {
 	type Timestamp,
 	makeDoc,
 	now,
+	normalizeThaiPhone,
 	phoneSchema,
 	registeredViaSchema
 } from '$lib/db/model';
@@ -309,6 +310,11 @@ export interface Evacuee extends BaseDoc {
 	card_snapshot?: CardSnapshot | null;
 	household_id: string | null;
 	current_stay: CurrentStay;
+	/**
+	 * Zone code Station 1 suggested for this person (schema_v 13, CR-158). Non-binding: it
+	 * never zones — Station 3 only uses it as the default pick when there are no EWAR symptoms.
+	 */
+	preferred_zone?: string | null;
 	privacy: { search_excluded: boolean };
 	registered_via: z.infer<typeof registeredViaSchema>;
 	anonymized?: boolean; // set by the purge job
@@ -854,6 +860,14 @@ export const evacueeInputSchema = z.object({
 	card_snapshot: cardSnapshotSchema.nullable().optional().default(null),
 	status: stayStatusSchema.optional().default('pre_registered'),
 	zone: z.string().trim().nullable().optional().default(null),
+	/** CR-158: Station 1's optional, non-binding zone suggestion ('' → null). */
+	preferred_zone: z
+		.string()
+		.trim()
+		.nullable()
+		.optional()
+		.default(null)
+		.transform((v) => v || null),
 	registered_via: registeredViaSchema.default('staff')
 });
 export type EvacueeInput = z.input<typeof evacueeInputSchema>;
@@ -1494,7 +1508,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext, id?: stri
 	const person_id = resolvePersonIdOnCreate(d.person_id);
 	return makeDoc(
 		'evacuee',
-		12, // schema_v 12: gender nullable + registered_via `api` (CR-154); 11: religion_other + disability_other_detail (CR-148); 10: anonymous cardType + ANON mint (CR-112); 9: arriving (CR-106); 8: draft/card_snapshot (CR-084); 7 = registered_via `web` (CR-070); 6 = stay cancelled (CR-070); 5 = age (CR-057)
+		13, // schema_v 13: preferred_zone (CR-158); 12: gender nullable + registered_via `api` (CR-154); 11: religion_other + disability_other_detail (CR-148); 10: anonymous cardType + ANON mint (CR-112); 9: arriving (CR-106); 8: draft/card_snapshot (CR-084); 7 = registered_via `web` (CR-070); 6 = stay cancelled (CR-070); 5 = age (CR-057)
 		{
 			first_name: d.first_name,
 			last_name: d.last_name,
@@ -1514,6 +1528,7 @@ export function createEvacuee(input: EvacueeInput, ctx: AuthorContext, id?: stri
 			...(d.card_snapshot ? { card_snapshot: d.card_snapshot } : {}),
 			household_id: d.household_id,
 			current_stay: { status: d.zone ? 'active' : d.status, zone: d.zone ?? null, since: now() },
+			...(d.preferred_zone ? { preferred_zone: d.preferred_zone } : {}),
 			privacy: { search_excluded: false },
 			registered_via: d.registered_via
 		},
@@ -1751,6 +1766,28 @@ export const MARK_DECEASED_ELIGIBLE_STATUSES = [
 export function canCheckInEvacuee(evacuee: Evacuee): boolean {
 	return (CHECK_IN_ELIGIBLE_STATUSES as readonly StayStatus[]).includes(
 		evacuee.current_stay.status
+	);
+}
+
+/**
+ * Scan-page check-in is for people coming *back* — they already went through Station 1–3.
+ * `pre_registered` / `arriving` have not been screened (Station 2) or zoned (Station 3) yet,
+ * so a scan must never check them in — not even alongside a family member who has a zone.
+ */
+export const SCAN_RETURN_STATUSES = [
+	'temporary_leave',
+	'checked_out',
+	'transferred'
+] as const satisfies readonly StayStatus[];
+
+export function canScanCheckIn(evacuee: Pick<Evacuee, 'current_stay'>): boolean {
+	return (SCAN_RETURN_STATUSES as readonly StayStatus[]).includes(evacuee.current_stay.status);
+}
+
+/** Not through intake yet: must go Station 1 → 2 → 3 before staying in a zone. */
+export function needsIntakeBeforeStay(evacuee: Pick<Evacuee, 'current_stay'>): boolean {
+	return (
+		evacuee.current_stay.status === 'pre_registered' || evacuee.current_stay.status === 'arriving'
 	);
 }
 
@@ -2024,6 +2061,19 @@ export function maskNationalId(id: string | null | undefined): string {
 	return `${id.slice(0, 3)}***${id.slice(-3)}`;
 }
 
+/** True when `query` matches an evacuee's own or emergency-contact phone. */
+export function matchesEvacueePhoneSearch(
+	evacuee: Pick<Evacuee, 'phone' | 'emergency_contact'>,
+	query: string
+): boolean {
+	const normalizedQuery = normalizeThaiPhone(query);
+	if (!normalizedQuery || !/\d/.test(normalizedQuery)) return false;
+	return [evacuee.phone, evacuee.emergency_contact?.phone].some((phone) => {
+		const normalizedPhone = normalizeThaiPhone(phone ?? '');
+		return normalizedPhone.includes(normalizedQuery);
+	});
+}
+
 /** True when `query` matches evacuee name, nickname, phone, or person ID (incl. masked). */
 export function matchesEvacueeSearch(
 	evacuee: Evacuee,
@@ -2047,7 +2097,7 @@ export function matchesEvacueeSearch(
 	if (masked.includes(q)) return true;
 	const digitsOnly = q.replace(/\D/g, '');
 	if (digitsOnly) {
-		if (evacuee.phone?.replace(/\D/g, '').includes(digitsOnly)) return true;
+		if (matchesEvacueePhoneSearch(evacuee, q)) return true;
 		if (evacuee.person_id?.number?.replace(/\D/g, '').includes(digitsOnly)) return true;
 	}
 	return false;
@@ -2264,3 +2314,12 @@ export const EWAR_SYMPTOM_GROUPS: EwarSymptomGroup[] = [
 		]
 	}
 ];
+
+const EWAR_SYMPTOM_LABELS: ReadonlyMap<string, string> = new Map(
+	EWAR_SYMPTOM_GROUPS.flatMap((g) => g.symptoms.map((s) => [s.id, s.label] as const))
+);
+
+/** Plain-Thai label for a persisted `Screening.symptoms` id; unknown ids are shown as-is. */
+export function ewarSymptomLabel(id: string): string {
+	return EWAR_SYMPTOM_LABELS.get(id) ?? id;
+}

@@ -92,15 +92,14 @@ export async function registerHouseholdViaUi(
 
 	for (const [i, member] of members.entries()) {
 		if (i > 0) await page.getByRole('button', { name: 'เพิ่มสมาชิก' }).click();
-		const label = i === 0 ? 'ผู้ติดต่อหลัก' : `สมาชิก ${i + 1}`;
-		// Once the tab bar exists, select this member's tab explicitly instead of counting
-		// visible "สมาชิก"-named regions — that pool shrinks/grows as tabs appear. The tab's
-		// accessible name is prefixed with its 1-based index ("3.สมาชิก 3"), so match by
-		// substring rather than exact.
+		// Once the tab bar exists, select this member's tab explicitly (the tab's accessible name
+		// is prefixed with its 1-based index, "3.สมาชิกคนที่ 3", so match by substring). Then locate
+		// the card by its position id, not by role — inactive tabs' cards are hidden, so counting
+		// visible "สมาชิก"-named regions no longer finds the new one.
 		if (i + 1 >= MEMBER_TABS_MIN) {
-			await page.getByRole('tab', { name: label }).click();
+			await page.getByRole('tab', { name: `สมาชิกคนที่ ${i + 1}` }).click();
 		}
-		const card = page.getByRole('region', { name: label, exact: true });
+		const card = page.locator(`#unified-member-${i}`);
 		await card.getByPlaceholder('ชื่อจริง').fill(member.firstName);
 		await card.getByPlaceholder('เช่น มีสุข').fill(member.lastName);
 		await card.getByLabel(member.gender).check();
@@ -112,9 +111,11 @@ export async function registerHouseholdViaUi(
 			}
 			await card.getByRole('textbox', { name: 'เลขที่บัตรประจำตัว' }).fill(member.idCard.number);
 		}
+		// A new member's phone field opens ready to type; "no phone" must be ticked explicitly.
 		if (member.phone) {
-			await card.getByRole('checkbox', { name: 'ไม่มีเบอร์โทรศัพท์' }).uncheck();
 			await card.getByRole('textbox', { name: 'เบอร์โทรศัพท์ *' }).fill(member.phone);
+		} else {
+			await card.getByRole('checkbox', { name: 'ไม่มีเบอร์โทรศัพท์' }).check();
 		}
 	}
 
