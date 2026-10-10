@@ -123,8 +123,17 @@ export function toCountedItems(lines: ReceiveDonationInput['items']): CountedIte
  * Enforce the catalog invariants the client-side receive path already enforces
  * (`assertReceiveAgainstCatalog`) — this route writes with admin credentials, so
  * `validate_doc_update` does not run for it and the checks must happen here.
+ *
+ * `shelterDbName` is the receiving shelter's DB: a shelter may keep its own
+ * `item_master` there (schema.md §4.2 `override` / `shelter_code`), and those overlay
+ * the central catalog by `_id` — the precedence `listItemMasters` / `getItemMaster`
+ * already give staff. Reading `catalog` alone rejected every shelter-made item as
+ * unknown even though staff could pick it when building the campaign.
  */
-export async function assertCountedAgainstCatalog(counted: CountedItem[]): Promise<void> {
+export async function assertCountedAgainstCatalog(
+	counted: CountedItem[],
+	shelterDbName: string
+): Promise<void> {
 	if (counted.length === 0) return;
 
 	// Two shapes share the `catalog` database and the `_id` prefixes do not nest:
@@ -135,11 +144,15 @@ export async function assertCountedAgainstCatalog(counted: CountedItem[]): Promi
 	const itemMasters = (await fetchDocs<ItemMaster>(CATALOG_DB, 'item_master:')).filter(
 		isItemMaster
 	);
+	const shelterItemMasters = (await fetchDocs<ItemMaster>(shelterDbName, 'item_master:')).filter(
+		isItemMaster
+	);
+	// Later entries win in a Map, so the shelter's copy replaces the central one.
 	const byId = new Map<string, { unit: string; requiresExpiry: boolean }>([
 		...supplyItems.map(
 			(i) => [i._id, { unit: i.unit, requiresExpiry: requiresExpiry(i) }] as const
 		),
-		...itemMasters.map(
+		...[...itemMasters, ...shelterItemMasters].map(
 			(m) => [m._id, { unit: itemMasterUnit(m), requiresExpiry: requiresExpiry(m) }] as const
 		)
 	]);

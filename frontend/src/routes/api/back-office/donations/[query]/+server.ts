@@ -15,6 +15,8 @@ import {
 	receiveDonationInputSchema
 } from '$lib/features/donations/server';
 import {
+	deriveDonationReceiptLineId,
+	isStockLedger,
 	keyDonationReceipt,
 	type CountedItem,
 	type Donation,
@@ -23,10 +25,24 @@ import {
 } from '$lib/features/operations/server';
 import { createAuditEntry, type AuditEntry } from '$lib/features/shared';
 import { allocateLotNos } from '$lib/server/lot-number';
+import { persistQty } from '$lib/utils/qty';
 
 function routeErrorResponse(e: unknown) {
 	const { message, status } = toRouteError(e);
 	return json({ success: false, error: message }, { status });
+}
+
+/** The ledger rows already written under `ids`, keyed by `_id` (missing ids are absent). */
+async function fetchLedgerRows(dbName: string, ids: string[]): Promise<Map<string, StockLedger>> {
+	if (ids.length === 0) return new Map();
+	const res = await adminRaw(`/${dbName}/_all_docs?include_docs=true`, 'POST', { keys: ids });
+	if (res.status >= 400) {
+		throw new Error(`Failed to read stock ledger: ${JSON.stringify(res.data)}`);
+	}
+	const rows = (res.data as { rows?: { id?: string; doc?: unknown }[] })?.rows ?? [];
+	return new Map(
+		rows.flatMap((r) => (r.id && isStockLedger(r.doc) ? [[r.id, r.doc] as const] : []))
+	);
 }
 
 // Project a raw donation doc to the redacted view the scan UI needs (no _rev,
@@ -162,7 +178,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		const counted = toCountedItems(countedLines);
 
 		try {
-			await assertCountedAgainstCatalog(counted);
+			await assertCountedAgainstCatalog(counted, dbName);
 		} catch (e) {
 			return json(
 				{
@@ -176,22 +192,62 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
 		const ctx = { shelterCode: donation.shelter_code, createdBy: caller.name };
 
+		// Every ledger row has a deterministic `_id` — (donation, item, line number),
+		// CR-143 FR-B4a — so a retry after a lost response, or after the donation PUT
+		// below answers 409, finds the rows the earlier attempt wrote instead of keying
+		// the same goods into stock twice. The line number is the line's position in
+		// the submitted list, which the scan station builds 1:1 from the declared items.
+		const lineNos = (countedLines ?? []).flatMap((it, i) => (it.item_id ? [i] : []));
+		const ids = await Promise.all(
+			counted.map((line, i) => deriveDonationReceiptLineId(donation._id, line.item_id, lineNos[i]))
+		);
+		const existing = await fetchLedgerRows(dbName, ids);
+
+		// Rows are append-only: a retry that disagrees with what is already recorded
+		// must stop here rather than pretend the edit landed.
+		const changedAt = counted.findIndex((line, i) => {
+			const row = existing.get(ids[i]);
+			return (
+				!!row &&
+				(row.item_id !== line.item_id ||
+					row.unit !== line.unit ||
+					persistQty(row.qty) !== persistQty(line.qty))
+			);
+		});
+		if (changedAt !== -1) {
+			const row = existing.get(ids[changedAt])!;
+			return json(
+				{
+					success: false,
+					error_code: 'RECEIPT_CHANGED',
+					error: `Line ${lineNos[changedAt] + 1} was already received as ${row.qty} ${row.unit}; it cannot be changed`
+				},
+				{ status: 409 }
+			);
+		}
+
 		// Lot labels are minted here, not on the client: the per-day sequence needs
 		// to see every row already on this shelter's ledger (CR-088 · schema.md §2.1).
-		// One label per counted line, in the order the lines are keyed.
-		const lotNos = await allocateLotNos(dbName, counted.length);
-		const countedWithLots: CountedItem[] = counted.map((line, i) => ({
+		// Only rows not yet in the ledger get one — a row already there keeps its label.
+		const pending = counted.flatMap((line, i) =>
+			existing.has(ids[i]) ? [] : [{ line, id: ids[i] }]
+		);
+		const lotNos = await allocateLotNos(dbName, pending.length);
+		const pendingWithLots: CountedItem[] = pending.map(({ line }, i) => ({
 			...line,
 			lot: { ...(line.lot ?? {}), lot_no: lotNos[i] }
 		}));
 
 		// 1) Ledger — the ONLY path from a donation into stock. Positive entries,
 		//    reason `donation`, ref_id back to the donation (couchdb-mongodb-sync.md §4.2).
-		const ledgers: StockLedger[] = keyDonationReceipt(
+		const newRows: StockLedger[] = keyDonationReceipt(
 			donation as unknown as Donation,
-			countedWithLots,
-			ctx
+			pendingWithLots,
+			ctx,
+			pending.map(({ id }) => id)
 		);
+		const newById = new Map(newRows.map((row) => [row._id, row]));
+		const ledgers: StockLedger[] = ids.map((id) => existing.get(id) ?? newById.get(id)!);
 
 		// 2) Audit — who received what, from which booking, declared vs actual.
 		//    No donor PII in `context`: the booking ref is the donor-facing handle.
@@ -220,7 +276,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 					received_items: receivedSnapshot,
 					has_discrepancy: JSON.stringify(declaredSnapshot) !== JSON.stringify(receivedSnapshot),
 					ledger_ids: ledgers.map((l) => l._id),
-					lot_nos: lotNos,
+					lot_nos: ledgers.map((l) => l.lot?.lot_no ?? null),
 					free_text_lines_skipped: (countedLines ?? []).length - counted.length
 				}
 			},
@@ -229,14 +285,28 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
 		// Ledger + audit go in FIRST. If this fails the donation stays `declared`
 		// and staff can key it again — safer than a received donation whose goods
-		// never reached the ledger.
-		const appendRes = await adminRaw(`/${dbName}/_bulk_docs`, 'POST', {
-			docs: [...ledgers, audit]
-		});
-		if (appendRes.status >= 400) {
-			throw new Error(
-				`Failed to write stock ledger / audit trail: ${JSON.stringify(appendRes.data)}`
+		// never reached the ledger. The audit entry went in with the first attempt's
+		// rows, so a retry that finds rows already there does not write a second one.
+		const docs = [...newRows, ...(existing.size === 0 ? [audit] : [])];
+		if (docs.length > 0) {
+			const appendRes = await adminRaw(`/${dbName}/_bulk_docs`, 'POST', { docs });
+			if (appendRes.status >= 400) {
+				throw new Error(
+					`Failed to write stock ledger / audit trail: ${JSON.stringify(appendRes.data)}`
+				);
+			}
+			// `_bulk_docs` answers 201 even when single docs are refused, so check each.
+			// A conflict on a ledger id means a concurrent receive wrote that row first —
+			// it is in the ledger, which is all this step needs.
+			const results = Array.isArray(appendRes.data)
+				? (appendRes.data as { id?: string; error?: string; reason?: string }[])
+				: [];
+			const refused = results.filter(
+				(r) => r.error && !(r.error === 'conflict' && r.id && newById.has(r.id))
 			);
+			if (refused.length > 0) {
+				throw new Error(`Failed to write stock ledger / audit trail: ${JSON.stringify(refused)}`);
+			}
 		}
 
 		const nowStr = new Date().toISOString();

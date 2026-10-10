@@ -64,9 +64,30 @@ const catalogRows = [
 
 function mockCouch(
 	donation: PublicDonationDoc,
-	over: { putStatus?: number; existingLotNos?: string[] } = {}
+	over: {
+		putStatus?: number;
+		existingLotNos?: string[];
+		/** Ledger rows an earlier attempt already wrote, found by `_id`. */
+		existingLedger?: StockLedger[];
+		/** Per-doc `_bulk_docs` error for these `_id`s (the batch itself answers 201). */
+		bulkErrors?: Record<string, string>;
+		/** Shelter-local `item_master` docs in `shelter_sh001` (schema.md §4.2). */
+		shelterItems?: unknown[];
+	} = {}
 ) {
-	vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+	vi.mocked(adminRaw).mockImplementation((path: string, method: string, body?: unknown) => {
+		if (method === 'POST' && path.includes('/_all_docs')) {
+			const keys = (body as { keys: string[] }).keys;
+			return Promise.resolve({
+				status: 200,
+				data: {
+					rows: keys.map((key) => {
+						const doc = over.existingLedger?.find((l) => l._id === key);
+						return doc ? { id: key, key, doc } : { key, error: 'not_found' };
+					})
+				}
+			});
+		}
 		if (method === 'GET' && path.includes('/registry/')) {
 			return Promise.resolve({
 				status: 200,
@@ -75,6 +96,10 @@ function mockCouch(
 		}
 		if (method === 'GET' && path.includes('/catalog/')) {
 			return Promise.resolve({ status: 200, data: { rows: catalogRows } });
+		}
+		if (method === 'GET' && path.includes('/shelter_sh001/') && path.includes('item_master:')) {
+			const rows = (over.shelterItems ?? []).map((doc) => ({ doc }));
+			return Promise.resolve({ status: 200, data: { rows } });
 		}
 		if (method === 'GET' && path.includes('donation:')) {
 			return Promise.resolve({ status: 200, data: { rows: [{ doc: donation }] } });
@@ -87,7 +112,15 @@ function mockCouch(
 			});
 		}
 		if (method === 'POST' && path.includes('_bulk_docs')) {
-			return Promise.resolve({ status: 201, data: [{ ok: true }] });
+			const docs = (body as { docs: { _id: string }[] }).docs;
+			return Promise.resolve({
+				status: 201,
+				data: docs.map(({ _id }) =>
+					over.bulkErrors?.[_id]
+						? { id: _id, error: over.bulkErrors[_id], reason: 'refused' }
+						: { id: _id, ok: true, rev: '1-x' }
+				)
+			});
 		}
 		if (method === 'PUT' && path.includes('/shelter_sh001/')) {
 			return Promise.resolve({ status: over.putStatus ?? 201, data: { ok: true } });
@@ -362,6 +395,64 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 			expect(response.status).toBe(200);
 		});
 
+		// A shelter may keep its own item_master in `shelter_{code}` (schema.md §4.2). The
+		// check read `catalog` only, so receiving a shelter-made item failed "Unknown item"
+		// even though staff had picked it for the campaign.
+		const shelterItem = (over: Record<string, unknown>) => ({
+			type: 'item_master',
+			shelter_code: 'SH001',
+			conversions: [],
+			type_class: 'CONSUMABLE',
+			storage_type: 'DRY',
+			...over
+		});
+
+		it('accepts an item_master that lives only in the shelter DB', async () => {
+			mockCouch(baseDonation, {
+				shelterItems: [
+					shelterItem({ _id: 'item_master:local-soap', name: 'สบู่', base_unit: 'bar' })
+				]
+			});
+
+			const response = await POST(
+				postEvent({
+					status: 'received',
+					items: [{ item_id: 'item_master:local-soap', qty: '5', unit: 'bar' }]
+				})
+			);
+
+			expect(response.status).toBe(200);
+		});
+
+		it("checks the unit against the shelter's copy, not the central one", async () => {
+			const override = shelterItem({
+				_id: 'item_master:flour',
+				name: 'แป้ง',
+				base_unit: 'bag',
+				override: true
+			});
+			mockCouch(baseDonation, { shelterItems: [override] });
+
+			const central = await POST(
+				postEvent({
+					status: 'received',
+					items: [{ item_id: 'item_master:flour', qty: '2', unit: 'kg' }]
+				})
+			);
+			expect(central.status).toBe(422);
+			expect((await central.json()).error).toMatch(/expected bag, got kg/);
+
+			vi.mocked(adminRaw).mockClear();
+			mockCouch(baseDonation, { shelterItems: [override] });
+			const local = await POST(
+				postEvent({
+					status: 'received',
+					items: [{ item_id: 'item_master:flour', qty: '2', unit: 'bag' }]
+				})
+			);
+			expect(local.status).toBe(200);
+		});
+
 		it('accepts a perishable item when lot.expiry is supplied', async () => {
 			mockCouch(baseDonation);
 
@@ -561,6 +652,95 @@ describe('Back-office GET & POST /api/back-office/donations/[query]', () => {
 			const response = await POST(postEvent({ status: 'received' }));
 
 			expect(response.status).toBe(409);
+		});
+	});
+
+	/**
+	 * CR-143 FR-B4a on the scan route: the ledger goes in before the donation PUT, so a
+	 * 409 or a lost response there leaves rows in stock while the donation still looks
+	 * outstanding. The retry staff are told to make must find those rows, not add more.
+	 */
+	describe('retry after a partial receive', () => {
+		const rice = withItems([{ item_id: 'item:rice', qty: '10', unit: 'kg' }]);
+		const riceBody = {
+			status: 'received',
+			items: [{ item_id: 'item:rice', qty: '10', unit: 'kg' }]
+		};
+
+		beforeEach(() => {
+			vi.mocked(requireShelterScopeOrSA).mockResolvedValue({
+				name: 'warehouse1',
+				roles: ['warehouse_staff'],
+				shelterCode: 'SH001',
+				isSA: false
+			});
+		});
+
+		/** Run one receive whose donation PUT conflicts; return the rows it wrote. */
+		async function firstAttempt(): Promise<StockLedger[]> {
+			mockCouch(rice, { putStatus: 409 });
+			const response = await POST(postEvent(riceBody));
+			expect(response.status).toBe(409);
+			return appendedDocs().filter((d): d is StockLedger => d.type === 'stock_ledger');
+		}
+
+		it('derives the same ledger ids for the same donation lines', async () => {
+			const first = await firstAttempt();
+			vi.mocked(adminRaw).mockClear();
+			const second = await firstAttempt();
+
+			expect(second.map((l) => l._id)).toEqual(first.map((l) => l._id));
+		});
+
+		it('writes no second ledger row or audit entry, and finishes the donation', async () => {
+			const written = await firstAttempt();
+			vi.mocked(adminRaw).mockClear();
+			mockCouch(rice, { existingLedger: written });
+
+			const response = await POST(postEvent(riceBody));
+			const body = await response.json();
+
+			expect(response.status).toBe(200);
+			expect(appendedDocs()).toHaveLength(0);
+			expect(vi.mocked(adminRaw).mock.calls.find((c) => c[1] === 'PUT')).toBeDefined();
+			// The boxes keep the label the first attempt gave them.
+			expect(body.lots).toEqual([{ item_id: 'item:rice', lot_no: written[0].lot?.lot_no }]);
+		});
+
+		it('refuses a retry that changes a line already in the ledger', async () => {
+			const written = await firstAttempt();
+			vi.mocked(adminRaw).mockClear();
+			mockCouch(rice, { existingLedger: written });
+
+			const response = await POST(
+				postEvent({ status: 'received', items: [{ item_id: 'item:rice', qty: '12', unit: 'kg' }] })
+			);
+
+			expect(response.status).toBe(409);
+			expect((await response.json()).error_code).toBe('RECEIPT_CHANGED');
+			expect(appendedDocs()).toHaveLength(0);
+			expect(vi.mocked(adminRaw).mock.calls.find((c) => c[1] === 'PUT')).toBeUndefined();
+		});
+
+		it('does not touch the donation when CouchDB refuses a single row', async () => {
+			const [row] = await firstAttempt();
+			vi.mocked(adminRaw).mockClear();
+			mockCouch(rice, { bulkErrors: { [row._id]: 'forbidden' } });
+
+			const response = await POST(postEvent(riceBody));
+
+			expect(response.status).toBe(500);
+			expect(vi.mocked(adminRaw).mock.calls.find((c) => c[1] === 'PUT')).toBeUndefined();
+		});
+
+		it('treats a ledger row a concurrent receive wrote first as recorded', async () => {
+			const [row] = await firstAttempt();
+			vi.mocked(adminRaw).mockClear();
+			mockCouch(rice, { bulkErrors: { [row._id]: 'conflict' } });
+
+			const response = await POST(postEvent(riceBody));
+
+			expect(response.status).toBe(200);
 		});
 	});
 });
