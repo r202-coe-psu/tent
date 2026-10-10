@@ -23,7 +23,6 @@ import {
 
 export type PortalDepartmentId =
 	| 'registration'
-	| 'medical'
 	| 'kitchen'
 	| 'supply'
 	| 'volunteer'
@@ -41,7 +40,6 @@ export type PortalIconKey =
 	| 'database'
 	| 'globe'
 	| 'hand-heart'
-	| 'heart'
 	| 'heart-handshake'
 	| 'heart-pulse'
 	| 'house'
@@ -54,7 +52,6 @@ export type PortalIconKey =
 	| 'settings'
 	| 'shield'
 	| 'shield-alert'
-	| 'stethoscope'
 	| 'tent'
 	| 'user-check'
 	| 'user-cog'
@@ -212,25 +209,6 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				scope: 'shelter',
 				roles: [REG],
 				group: 'tools'
-			}
-		]
-	},
-	{
-		id: 'medical',
-		label: 'ฝ่ายการแพทย์',
-		desc: 'การรักษาและการจ่ายยา',
-		color: '#E11D48',
-		icon: 'stethoscope',
-		items: [
-			{
-				id: 'medical-records',
-				label: 'เวชระเบียนและการจ่ายยา',
-				desc: 'บันทึกการรักษา',
-				color: '#BE123C',
-				icon: 'heart',
-				href: null,
-				scope: 'shelter',
-				roles: [TRG, MED]
 			}
 		]
 	},

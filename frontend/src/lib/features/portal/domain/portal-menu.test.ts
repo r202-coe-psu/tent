@@ -36,7 +36,6 @@ const stateOf = (views: PortalDepartmentView[], id: string): PortalItemState | u
 
 const ORDER = [
 	'registration',
-	'medical',
 	'kitchen',
 	'supply',
 	'volunteer',
@@ -161,22 +160,17 @@ describe('filterPortalMenu — single-department roles', () => {
 	});
 
 	it.each(['triage_staff', 'medical_staff'])(
-		'%s sees the medical placeholder and only Station 2 under registration (flag on)',
+		'%s sees only Station 2 under registration (flag on)',
 		(cap) => {
 			const views = menu(staff(cap), ON);
-			expect(deptIds(views)).toEqual(['registration', 'medical']);
+			expect(deptIds(views)).toEqual(['registration']);
 			expect(itemIds(dept(views, 'registration'))).toEqual(['station-2']);
-			expect(itemIds(dept(views, 'medical'))).toEqual(['medical-records']);
-			expect(stateOf(views, 'medical-records')).toBe('soon');
 		}
 	);
 
-	it.each(['triage_staff', 'medical_staff'])(
-		'%s loses the registration section when the flag is off',
-		(cap) => {
-			expect(deptIds(menu(staff(cap), OFF))).toEqual(['medical']);
-		}
-	);
+	it.each(['triage_staff', 'medical_staff'])('%s sees nothing when the flag is off', (cap) => {
+		expect(menu(staff(cap), OFF)).toEqual([]);
+	});
 
 	it('kitchen_staff sees only the kitchen department', () => {
 		const views = menu(staff('kitchen_staff'));
@@ -278,7 +272,7 @@ describe('portal data integrity', () => {
 			.filter((i) => i.state === 'soon')
 			.map((i) => i.item.id);
 		expect(soon.sort()).toEqual(noRoute.sort());
-		expect(noRoute.sort()).toEqual(['medical-records', 'security-incidents', 'zone-settings']);
+		expect(noRoute.sort()).toEqual(['security-incidents', 'zone-settings']);
 	});
 
 	it('only the central item is system scope', () => {
