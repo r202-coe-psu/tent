@@ -51,6 +51,7 @@ PRINTER_BACKENDS = ("cups", "escpos")
 PRINTER_WIDTH_RANGE = (384, 832)
 DEFAULT_PRINTER_WIDTH_DOTS = 576
 KIOSK_QR_INPUTS = ("camera", "reader", "both")
+KIOSK_QR_CHECK_IN_MODES = ("on", "off")
 QR_READER_GAP_RANGE_MS = (10, 100)
 DEFAULT_QR_READER_GAP_MS = 50
 CARD_READERS = ("pcsc", "rfpro")
@@ -144,7 +145,7 @@ def _bounded_int(
 def validate_hardware_config(config: Mapping[str, Any]) -> dict[str, str]:
     """Validate per-machine printer / QR reader / card reader settings.
 
-    Unset keys keep the original Raspberry Pi behaviour (CUPS, camera, PC/SC). Returns the
+    Unset keys keep the original Raspberry Pi behaviour (CUPS, QR check-in on, camera, PC/SC). Returns the
     normalised values to merge into the config; messages name keys only, never values.
     """
 
@@ -161,6 +162,7 @@ def validate_hardware_config(config: Mapping[str, Any]) -> dict[str, str]:
             "PRINTER_BACKEND=escpos requires PRINTER_USB_ID or PRINTER_DEVICE"
         )
 
+    qr_check_in = _choice(config, "KIOSK_QR_CHECK_IN", KIOSK_QR_CHECK_IN_MODES, "on")
     qr_input = _choice(config, "KIOSK_QR_INPUT", KIOSK_QR_INPUTS, "camera")
     reader_gap_ms = _bounded_int(
         config, "KIOSK_QR_READER_MAX_GAP_MS", DEFAULT_QR_READER_GAP_MS, QR_READER_GAP_RANGE_MS
@@ -182,6 +184,7 @@ def validate_hardware_config(config: Mapping[str, Any]) -> dict[str, str]:
         "PRINTER_USB_ID": printer_usb_id,
         "PRINTER_DEVICE": printer_device,
         "PRINTER_WIDTH_DOTS": str(width_dots),
+        "KIOSK_QR_CHECK_IN": qr_check_in,
         "KIOSK_QR_INPUT": qr_input,
         "KIOSK_CAMERA_LABEL": _clean(config.get("KIOSK_CAMERA_LABEL")),
         "KIOSK_QR_READER_MAX_GAP_MS": str(reader_gap_ms),

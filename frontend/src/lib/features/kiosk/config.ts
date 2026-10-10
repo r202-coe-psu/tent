@@ -8,6 +8,7 @@ export {
 	KIOSK_CONFIG_TIMEOUT_MS,
 	type KioskConfig
 } from './data/kiosk-config.api';
+export { fetchKioskHardware } from './data/kiosk-hardware.api';
 export {
 	isKioskPhoneCheckInEnabled,
 	isKioskThaidCheckInEnabled,

@@ -1121,6 +1121,7 @@ class KioskHardwareRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             route.fulfilled["body"],
             {
+                "qr_check_in": True,
                 "qr_input": "both",
                 "camera_label": "JSK-RGB",
                 "reader_max_gap_ms": 40,
@@ -1139,12 +1140,22 @@ class KioskHardwareRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             route.fulfilled["body"],
             {
+                "qr_check_in": True,
                 "qr_input": "camera",
                 "camera_label": None,
                 "reader_max_gap_ms": 50,
                 "face_check": {"mode": "off", "flows": []},
             },
         )
+
+    async def test_reports_qr_check_in_off_when_the_machine_turns_it_off(self):
+        route = FakeHardwareRoute()
+
+        await manager.ScannerClientManager(valid_config(KIOSK_QR_CHECK_IN="off"))._route_kiosk_api(
+            route
+        )
+
+        self.assertIs(route.fulfilled["body"]["qr_check_in"], False)
 
     async def test_response_is_not_cacheable(self):
         client = manager.ScannerClientManager(valid_config())
@@ -1664,6 +1675,16 @@ class FaceCameraPermissionTests(unittest.IsolatedAsyncioTestCase):
                 await client._grant_camera_permission(context)
 
                 self.assertEqual(context.granted, [(["camera"], "https://tent.example.go.th")])
+
+    async def test_nothing_is_granted_when_qr_check_in_is_off_and_the_face_check_off(self):
+        client = manager.ScannerClientManager(
+            valid_config(KIOSK_QR_CHECK_IN="off", KIOSK_QR_INPUT="camera")
+        )
+        context = self.FakeContext()
+
+        await client._grant_camera_permission(context)
+
+        self.assertEqual(context.granted, [])
 
     async def test_nothing_is_granted_to_a_reader_only_kiosk_with_the_face_check_off(self):
         client = manager.ScannerClientManager(valid_config(KIOSK_QR_INPUT="reader"))

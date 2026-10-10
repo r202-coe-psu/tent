@@ -59,6 +59,8 @@ export const IDENTITY_METHODS: readonly IdentityMethodDefinition[] = [
 ] as const;
 
 export interface IdentityMethodOptions {
+	/** Per machine, from the scanner client (`KIOSK_QR_CHECK_IN`). */
+	qrCheckInEnabled: boolean;
 	phoneCheckInEnabled: boolean;
 	thaidCheckInEnabled: boolean;
 }
@@ -69,6 +71,7 @@ export function visibleIdentityMethods(
 ): readonly IdentityMethodDefinition[] {
 	return IDENTITY_METHODS.filter(
 		(method) =>
+			(method.id !== 'qr' || options.qrCheckInEnabled) &&
 			(method.id !== 'phone' || options.phoneCheckInEnabled) &&
 			(method.id !== 'thaid' || options.thaidCheckInEnabled)
 	);

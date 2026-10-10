@@ -539,6 +539,7 @@ sudo usermod -aG lp kiosk
 
 | key | ค่า | default |
 | :-- | :-- | :-- |
+| `KIOSK_QR_CHECK_IN` | `on` \| `off` (ซ่อนวิธี "QR ลงทะเบียน" บนหน้าแรก และ `/kiosk/qr` เด้งกลับหน้าแรก; ถ้า face check ปิดด้วยจะไม่ขอสิทธิ์กล้อง) | `on` |
 | `KIOSK_QR_INPUT` | `camera` (กล้องอย่างเดียว) \| `reader` (เครื่องอ่านอย่างเดียว ไม่ขอสิทธิ์กล้อง) \| `both` | `camera` |
 | `KIOSK_CAMERA_LABEL` | ข้อความในชื่อกล้อง (ไม่สนตัวพิมพ์) เช่น `JSK-RGB`; ไม่เจอ → กล้องหลังตามเดิม | — |
 | `KIOSK_QR_READER_MAX_GAP_MS` | ช่วงห่างสูงสุดระหว่างตัวอักษรที่นับว่าเป็นเครื่องอ่าน 10–100 ms (วัดด้วย `sudo ./inspect_hardware.sh --qr`; ใช้ค่าสูงสุด × 2) | `50` |

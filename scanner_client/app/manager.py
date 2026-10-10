@@ -136,6 +136,8 @@ class ScannerClientManager:
             config.get("PRINTER_WIDTH_DOTS") or DEFAULT_PRINTER_WIDTH_DOTS
         )
         self._escpos_lock = asyncio.Lock()
+        # `off` hides the QR method on the kiosk home screen and closes /kiosk/qr on this machine.
+        self.qr_check_in = str(config.get("KIOSK_QR_CHECK_IN") or "on").strip().lower() != "off"
         # How /kiosk/qr reads QR codes: camera, a USB keyboard-wedge reader, or both.
         self.qr_input = str(config.get("KIOSK_QR_INPUT") or "camera").strip().lower()
         self.camera_label = str(config.get("KIOSK_CAMERA_LABEL") or "").strip()
@@ -398,6 +400,7 @@ class ScannerClientManager:
             headers={"cache-control": "no-store"},
             body=json.dumps(
                 {
+                    "qr_check_in": self.qr_check_in,
                     "qr_input": self.qr_input,
                     "camera_label": self.camera_label or None,
                     "reader_max_gap_ms": self.qr_reader_max_gap_ms,
@@ -413,8 +416,10 @@ class ScannerClientManager:
         """Let the kiosk page open the camera without a permission prompt. The face check and the
         camera QR scan both open the camera; in --kiosk mode nobody can answer a prompt, and the
         browser profile is in /tmp, so an earlier "allow" would not survive a reboot. A reader-only
-        kiosk with the face check off never asks for the camera, so it is not given one."""
-        if self.face_service is None and self.qr_input not in ("camera", "both"):
+        kiosk (or one with QR check-in off) with the face check off never asks for the camera, so
+        it is not given one."""
+        qr_uses_camera = self.qr_check_in and self.qr_input in ("camera", "both")
+        if self.face_service is None and not qr_uses_camera:
             return
         parts = urllib.parse.urlsplit(self.tent_base_url)
         try:

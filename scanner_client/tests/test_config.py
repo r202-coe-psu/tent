@@ -100,6 +100,7 @@ class HardwareConfigTests(unittest.TestCase):
 
         self.assertEqual(config["PRINTER_BACKEND"], "cups")
         self.assertEqual(config["PRINTER_WIDTH_DOTS"], "576")
+        self.assertEqual(config["KIOSK_QR_CHECK_IN"], "on")
         self.assertEqual(config["KIOSK_QR_INPUT"], "camera")
         self.assertEqual(config["CARD_READER"], "pcsc")
         self.assertEqual(config["CARD_READER_USB_ID"], "0483:4c43")
@@ -131,6 +132,9 @@ class HardwareConfigTests(unittest.TestCase):
                 with self.assertRaises(ScannerConfigError) as raised:
                     self.validate(**{key: value})
                 self.assertIn(key, str(raised.exception))
+
+    def test_qr_check_in_can_be_turned_off(self):
+        self.assertEqual(self.validate(KIOSK_QR_CHECK_IN=" OFF ")["KIOSK_QR_CHECK_IN"], "off")
 
     def test_kiosk3_settings_are_accepted_and_normalised(self):
         config = self.validate(
@@ -167,6 +171,7 @@ class HardwareConfigTests(unittest.TestCase):
             "width below range": {"PRINTER_WIDTH_DOTS": "376"},
             "width above range": {"PRINTER_WIDTH_DOTS": "840"},
             "width not multiple of 8": {"PRINTER_WIDTH_DOTS": "580"},
+            "qr check-in": {"KIOSK_QR_CHECK_IN": "false"},
             "qr input": {"KIOSK_QR_INPUT": "bluetooth"},
             "qr gap below range": {"KIOSK_QR_READER_MAX_GAP_MS": "5"},
             "qr gap above range": {"KIOSK_QR_READER_MAX_GAP_MS": "101"},

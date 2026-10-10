@@ -3,6 +3,8 @@ import { FACE_CHECK_OFF, type FaceCheckConfig } from './face-check';
 export type KioskQrInput = 'camera' | 'reader' | 'both';
 
 export type KioskHardware = {
+	/** `KIOSK_QR_CHECK_IN=off` on this machine hides the QR method and closes /kiosk/qr. */
+	qrCheckInEnabled: boolean;
 	qrInput: KioskQrInput;
 	cameraLabel: string | null;
 	readerMaxGapMs: number;
@@ -16,6 +18,7 @@ export const MAX_READER_GAP_MS = 100;
 
 /** Machines without a scanner client (or any error) keep the camera. */
 export const DEFAULT_KIOSK_HARDWARE: KioskHardware = {
+	qrCheckInEnabled: true,
 	qrInput: 'camera',
 	cameraLabel: null,
 	readerMaxGapMs: DEFAULT_READER_MAX_GAP_MS,

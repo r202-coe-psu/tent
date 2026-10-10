@@ -27,6 +27,22 @@ describe('IdentityMethodSelector', () => {
 		expect(result.body.match(/class="method-card/g)).toHaveLength(2);
 	});
 
+	it('hides the QR card when this machine turns QR check-in off', () => {
+		const result = render(IdentityMethodSelector, {
+			props: {
+				contextQuery: '',
+				qrCheckInEnabled: false,
+				phoneCheckInEnabled: true,
+				thaidCheckInEnabled: true
+			}
+		});
+
+		expect(result.body).toContain('--method-count: 3');
+		expect(result.body).not.toContain('QR ลงทะเบียน');
+		expect(result.body).not.toContain('/kiosk/qr');
+		expect(result.body.match(/class="method-card/g)).toHaveLength(3);
+	});
+
 	it('hides the phone card and renders three cards in one row when disabled', () => {
 		const result = render(IdentityMethodSelector, {
 			props: {

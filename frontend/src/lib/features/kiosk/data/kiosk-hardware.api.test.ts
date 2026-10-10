@@ -17,6 +17,7 @@ describe('fetchKioskHardware', () => {
 			);
 
 		await expect(fetchKioskHardware(fetchFn)).resolves.toEqual({
+			qrCheckInEnabled: true,
 			qrInput: 'both',
 			cameraLabel: 'JSK-RGB',
 			readerMaxGapMs: 40,
@@ -63,6 +64,21 @@ describe('fetchKioskHardware', () => {
 		expect(result.faceCheck).toEqual({ mode: 'off', flows: [] });
 	});
 
+	it('turns QR check-in off only when the scanner client sends an explicit false', async () => {
+		const qrCheckIn = async (value: unknown) =>
+			(
+				await fetchKioskHardware(
+					vi.fn<typeof fetch>().mockResolvedValue(json({ qr_input: 'camera', qr_check_in: value }))
+				)
+			).qrCheckInEnabled;
+
+		expect(await qrCheckIn(false)).toBe(false);
+		expect(await qrCheckIn(true)).toBe(true);
+		expect(await qrCheckIn(undefined)).toBe(true); // older scanner client
+		expect(await qrCheckIn('off')).toBe(true);
+		expect(DEFAULT_KIOSK_HARDWARE.qrCheckInEnabled).toBe(true);
+	});
+
 	it('treats a blank label as no label', async () => {
 		const result = await fetchKioskHardware(
 			vi
@@ -87,6 +103,7 @@ describe('fetchKioskHardware', () => {
 				.mockResolvedValue(json({ qr_input: 'reader', camera_label: null, reader_max_gap_ms: 50 }))
 		);
 		expect(result).toEqual({
+			qrCheckInEnabled: true,
 			qrInput: 'reader',
 			cameraLabel: null,
 			readerMaxGapMs: 50,

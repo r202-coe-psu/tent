@@ -23,6 +23,7 @@ export async function fetchKioskHardware(fetchFn: typeof fetch = fetch): Promise
 		});
 		if (!response.ok) return DEFAULT_KIOSK_HARDWARE;
 		const body = (await response.json()) as {
+			qr_check_in?: unknown;
 			qr_input?: unknown;
 			camera_label?: unknown;
 			reader_max_gap_ms?: unknown;
@@ -33,6 +34,8 @@ export async function fetchKioskHardware(fetchFn: typeof fetch = fetch): Promise
 		}
 		const gap = body.reader_max_gap_ms;
 		return {
+			// Only an explicit `false` turns QR off: older scanner clients do not send the field.
+			qrCheckInEnabled: body.qr_check_in !== false,
 			qrInput: body.qr_input,
 			cameraLabel:
 				typeof body.camera_label === 'string' && body.camera_label.trim()

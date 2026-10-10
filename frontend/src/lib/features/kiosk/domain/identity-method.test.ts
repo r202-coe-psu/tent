@@ -33,13 +33,27 @@ describe('kiosk identity methods', () => {
 
 	it('filters the phone and ThaiD methods from the home screen when disabled', () => {
 		const ids = (phoneCheckInEnabled: boolean, thaidCheckInEnabled: boolean) =>
-			visibleIdentityMethods({ phoneCheckInEnabled, thaidCheckInEnabled }).map(
-				(method) => method.id
-			);
+			visibleIdentityMethods({
+				qrCheckInEnabled: true,
+				phoneCheckInEnabled,
+				thaidCheckInEnabled
+			}).map((method) => method.id);
 
 		expect(ids(true, true)).toEqual(['qr', 'smart-card', 'phone', 'thaid']);
 		expect(ids(false, true)).toEqual(['qr', 'smart-card', 'thaid']);
 		expect(ids(true, false)).toEqual(['qr', 'smart-card', 'phone']);
 		expect(ids(false, false)).toEqual(['qr', 'smart-card']);
+	});
+
+	it('filters the QR method when this machine turns QR check-in off', () => {
+		const ids = (phoneCheckInEnabled: boolean) =>
+			visibleIdentityMethods({
+				qrCheckInEnabled: false,
+				phoneCheckInEnabled,
+				thaidCheckInEnabled: true
+			}).map((method) => method.id);
+
+		expect(ids(true)).toEqual(['smart-card', 'phone', 'thaid']);
+		expect(ids(false)).toEqual(['smart-card', 'thaid']);
 	});
 });
