@@ -3,6 +3,7 @@
 	import UtensilsCrossed from '@lucide/svelte/icons/utensils-crossed';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
+	import Clock from '@lucide/svelte/icons/clock';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import Loader from '@lucide/svelte/icons/loader';
 	import { qtyGte } from '$lib/utils/qty';
@@ -14,10 +15,11 @@
 	import {
 		resolveAuthenticatedAuthorContext,
 		useDistributionLogs,
+		useDispatchedLotExpiry,
 		useRecordFoodDistribution
 	} from '../../application/queries';
 	import { canPerformFrontlineDistribution } from '../../application/food-supplies/auth';
-	import type { RequisitionTicket } from '../../domain/food-supplies';
+	import { lotExpiryStatus, type RequisitionTicket } from '../../domain/food-supplies';
 	import {
 		checkDuplicateMealAdvisory,
 		checkMenuMatchAdvisory,
@@ -124,6 +126,37 @@
 		menuPreflight.isMismatch ? formatMenuTags(menuPreflight.menuTags) : null
 	);
 
+	// Ready-meal safety clock (FR-MQW-06 B): expiry of the lot dispatched for this item.
+	// Advisory — expired food may still go out; the workflow stamps `is_expired_warning`.
+	const lotExpiryQuery = useDispatchedLotExpiry(
+		() => ticket._id,
+		() => selectedItemId,
+		() => shelterCode
+	);
+	let now = $state(Date.now());
+	$effect(() => {
+		const timer = setInterval(() => (now = Date.now()), 30_000);
+		return () => clearInterval(timer);
+	});
+	const expiryStatus = $derived(lotExpiryStatus(lotExpiryQuery.data, now));
+
+	function formatClock(iso: string): string {
+		return new Date(iso).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+	}
+
+	function formatDuration(minutes: number): string {
+		const hours = Math.floor(minutes / 60);
+		const rest = minutes % 60;
+		return hours > 0 ? `${hours} ชม. ${rest} นาที` : `${rest} นาที`;
+	}
+
+	// The duplicate-meal and menu-match preflights need their data before a confirm; without it
+	// they read as "no warning" and the override dialog would be skipped.
+	const preflightLoading = $derived(
+		itemMastersQuery.isPending ||
+			(recipientSelection?.recipientType === 'evacuee' && recipientLogsQuery.isPending)
+	);
+
 	const isQtyValid = $derived.by(() => {
 		const res = validatePositiveQuantity(qtyInput);
 		if (!res.isValid || !res.value) return false;
@@ -190,7 +223,6 @@
 							: undefined,
 					is_override: isOverride,
 					override_reason: overrideReason,
-					// CRITICAL: cooking_completed_at MUST remain omitted in Slice 5.4 (FOOD_4H_TIMESTAMP_BLOCKER)
 					notes: notesInput.trim() || undefined
 				},
 				shelterCode
@@ -294,6 +326,35 @@
 		</div>
 	</fieldset>
 
+	<!-- Ready-meal safety clock for the selected item (FR-MQW-06 B) -->
+	{#if expiryStatus?.isExpired}
+		<div
+			class="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm text-red-900"
+			role="alert"
+		>
+			<AlertTriangle class="mt-0.5 size-4 shrink-0 text-red-600" aria-hidden="true" />
+			<div>
+				<p class="font-bold">อาหารล็อตนี้เกินเวลาปลอดภัยแล้ว</p>
+				<p class="mt-0.5 text-xs text-red-800">
+					หมดอายุเมื่อ {formatClock(expiryStatus.expiry)} น. · แจกต่อได้ แต่ระบบจะบันทึกคำเตือนไว้ในรายการแจก
+				</p>
+			</div>
+		</div>
+	{:else if expiryStatus}
+		<p
+			class="flex items-center gap-2 text-sm {expiryStatus.minutesLeft < 60
+				? 'font-semibold text-amber-800'
+				: 'text-slate-600'}"
+		>
+			<Clock class="size-4 shrink-0" aria-hidden="true" />
+			<span>
+				ปลอดภัยอีก {formatDuration(expiryStatus.minutesLeft)} (ถึง {formatClock(
+					expiryStatus.expiry
+				)} น.)
+			</span>
+		</p>
+	{/if}
+
 	<!-- Recipient: scan first, then confirm -->
 	<RecipientSearchPicker
 		bind:this={picker}
@@ -375,6 +436,7 @@
 			onclick={handleSubmitClick}
 			disabled={recordFoodMutation.isPending ||
 				capacitySummary.isExhausted ||
+				preflightLoading ||
 				!isQtyValid ||
 				!canDistribute}
 			class="h-14 w-full rounded-xl bg-amber-600 text-base font-bold hover:bg-amber-700"

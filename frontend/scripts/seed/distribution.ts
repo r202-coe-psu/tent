@@ -25,6 +25,7 @@ import {
 	createStockLedger,
 	type StockLedger
 } from '$lib/features/operations/domain/operations';
+import { deriveDeterministicLedgerId } from '$lib/features/operations/domain/deterministic-ledger-id';
 import { qtyNeg } from '$lib/utils/qty';
 
 export const DISTRIBUTION_ACTOR = 'seed-distribution';
@@ -76,6 +77,8 @@ interface TicketFixture {
 	requisition_type: 'food' | 'supplies';
 	meal?: MealPeriod;
 	status: 'PENDING_PICK' | 'READY_FOR_DISPATCH' | 'IN_TRANSIT' | 'DISTRIBUTING';
+	/** Ready-meal lot expiry relative to now, in minutes (negative = already expired). */
+	mealExpiresInMinutes?: number;
 	lines: ReadonlyArray<readonly [DistributionItemKey, number]>;
 }
 
@@ -86,6 +89,7 @@ const DESK_TICKETS = {
 		requisition_type: 'food',
 		meal: 'lunch',
 		status: 'IN_TRANSIT',
+		mealExpiresInMinutes: 180,
 		lines: [
 			['mealGeneral', 120],
 			['mealHalal', 30]
@@ -105,6 +109,8 @@ const DESK_TICKETS = {
 		requisition_type: 'food',
 		meal: 'breakfast',
 		status: 'DISTRIBUTING',
+		// Past the safety window so the desk shows the expired-food banner (FR-MQW-06 B).
+		mealExpiresInMinutes: -30,
 		lines: [
 			['mealGeneral', 80],
 			['mealHalal', 20]
@@ -233,13 +239,13 @@ export interface DistributionDocs {
 	ledger: StockLedger[];
 }
 
-export function buildDistributionDocs(
+export async function buildDistributionDocs(
 	catalog: DistributionCatalog,
 	people: readonly DistributionRecipient[],
 	destination: string,
 	ctx: AuthorContext,
 	now = Date.now()
-): DistributionDocs {
+): Promise<DistributionDocs> {
 	if (people.length < DISTRIBUTION_RECIPIENTS_NEEDED) {
 		throw new Error(`Need ${DISTRIBUTION_RECIPIENTS_NEEDED} recipients, got ${people.length}`);
 	}
@@ -247,15 +253,38 @@ export function buildDistributionDocs(
 	let ledgerSeq = LEDGER_ID_BASE;
 
 	/** Opening stock + the dispatch `distribute` row per line, as dispatchTicket writes them. */
-	const dispatchLedger = (ticket: RequisitionTicket): StockLedger[] =>
-		ticket.items.flatMap((line) => {
-			const item = Object.values(catalog).find((c) => c._id === line.item_id);
-			if (!item) throw new Error(`No catalog item for ${line.item_id}`);
-			const unit = itemMasterUnit(item);
+	/**
+	 * Opening stock lot + the dispatch `distribute` row per line, as dispatchTicket writes them:
+	 * the dispatch row has dispatchTicket's deterministic id and points `lot_ref` at the lot, so
+	 * the desk can read the ready-meal expiry (FR-MQW-06 B).
+	 */
+	const dispatchLedger = async (
+		ticket: RequisitionTicket,
+		fixture: TicketFixture
+	): Promise<StockLedger[]> => {
+		const rows: StockLedger[] = [];
+		for (const line of ticket.items) {
+			const key = (Object.keys(catalog) as DistributionItemKey[]).find(
+				(k) => catalog[k]._id === line.item_id
+			);
+			if (!key) throw new Error(`No catalog item for ${line.item_id}`);
+			const unit = itemMasterUnit(catalog[key]);
 			const lotId = `stock_ledger:${seedUlid(ledgerSeq++)}`;
-			return [
+			ledgerSeq++; // keeps lot ids stable with earlier runs that numbered the dispatch row too
+			const expires =
+				fixture.mealExpiresInMinutes !== undefined && READY_MEAL_KEYS.has(key)
+					? { lot: { expiry: new Date(now + fixture.mealExpiresInMinutes * 60_000).toISOString() } }
+					: {};
+			rows.push(
 				createLegacyFlow2StockLedger(
-					{ item_id: line.item_id, qty: line.allocated_qty, unit, reason: 'adjust', ref_id: null },
+					{
+						item_id: line.item_id,
+						qty: line.allocated_qty,
+						unit,
+						reason: 'adjust',
+						ref_id: null,
+						...expires
+					},
 					ctx,
 					lotId
 				),
@@ -270,10 +299,12 @@ export function buildDistributionDocs(
 						occurred_at: ago(now, DISPATCHED_MINUTES_AGO)
 					},
 					ctx,
-					`stock_ledger:${seedUlid(ledgerSeq++)}`
+					await deriveDeterministicLedgerId('dispatch', ticket._id, line.item_id)
 				)
-			];
-		});
+			);
+		}
+		return rows;
+	};
 
 	const ticketKeys = Object.keys(DESK_TICKETS) as DeskTicketKey[];
 	const ticketByKey = new Map<DeskTicketKey, RequisitionTicket>(
@@ -283,7 +314,11 @@ export function buildDistributionDocs(
 		])
 	);
 	const tickets = [...ticketByKey.values()];
-	const ledger = tickets.flatMap(dispatchLedger);
+	const ledger = (
+		await Promise.all(
+			ticketKeys.map((key) => dispatchLedger(ticketByKey.get(key)!, DESK_TICKETS[key]))
+		)
+	).flat();
 
 	const logs = deskLogs().map((f, i) => {
 		const ticket = ticketByKey.get(f.ticket)!;

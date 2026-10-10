@@ -109,7 +109,6 @@ export {
 } from './return-reservation';
 
 export {
-	MENU_AGE_BANDS,
 	deriveRecipientMenuTags,
 	menuTargetTags,
 	matchRecipientToMenu,
@@ -118,3 +117,5 @@ export {
 	type MenuTagSource,
 	type MenuMatchResult
 } from './menu-matching';
+
+export { lotExpiryStatus, isLotExpired, type LotExpiryStatus } from './food-safety';

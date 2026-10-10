@@ -8,12 +8,7 @@
 	import Loader from '@lucide/svelte/icons/loader';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
 	import Building2 from '@lucide/svelte/icons/building-2';
-	import {
-		useSearchEvacuees,
-		lookupEvacueeByScanCode,
-		evacueeAgeYears,
-		type Evacuee
-	} from '$lib/features/people';
+	import { useSearchEvacuees, lookupEvacueeByScanCode, type Evacuee } from '$lib/features/people';
 	import CameraCodeScannerDialog from '$lib/components/camera-code-scanner-dialog.svelte';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -76,7 +71,7 @@
 			label: `${evacuee.first_name} ${evacuee.last_name}${evacuee.nickname ? ` (${evacuee.nickname})` : ''}`,
 			phone: evacuee.phone,
 			stayInfo: evacuee.current_stay?.zone ? `โซน ${evacuee.current_stay.zone}` : undefined,
-			menuTags: deriveRecipientMenuTags({ ...evacuee, age: evacueeAgeYears(evacuee) })
+			menuTags: deriveRecipientMenuTags(evacuee)
 		});
 	}
 

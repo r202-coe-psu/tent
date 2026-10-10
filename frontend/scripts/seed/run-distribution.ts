@@ -94,7 +94,12 @@ export async function mainDistribution({ shelterCode, scenario, reset }: Distrib
 	let summary: string;
 	if (scenario === 'desk') {
 		const people = await loadRecipients(db, DISTRIBUTION_RECIPIENTS_NEEDED);
-		const { tickets, logs, ledger } = buildDistributionDocs(catalog, people, destination, ctx);
+		const { tickets, logs, ledger } = await buildDistributionDocs(
+			catalog,
+			people,
+			destination,
+			ctx
+		);
 		all = [...tickets, ...logs, ...ledger];
 		summary = `${tickets.length} tickets, ${logs.length} distribution logs, ${ledger.length} ledger rows`;
 	} else {

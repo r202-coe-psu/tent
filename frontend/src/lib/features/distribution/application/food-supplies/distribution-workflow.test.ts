@@ -9,6 +9,7 @@ import type {
 	RequisitionTicketInput
 } from '../../domain/food-supplies';
 import { createDistributionLog } from '../../domain/food-supplies';
+import { deriveDeterministicLedgerId, type StockLedger } from '$lib/features/operations';
 import type {
 	DistributionLogListFilter,
 	DistributionLogRepository,
@@ -484,6 +485,56 @@ describe('distribution-workflow', () => {
 
 		expect(log.is_expired_warning).toBe(true);
 	});
+
+	it.each([
+		['expired', -60 * 60 * 1000, true],
+		['still fresh', 60 * 60 * 1000, false]
+	] as const)(
+		'stamps is_expired_warning from the dispatched lot expiry when %s (FR-MQW-06 B)',
+		async (_label, expiryOffsetMs, expected) => {
+			const ticket = await ticketRepo.create(
+				{
+					ticket_no: `TKT-FOOD-LOT-${expected ? 'OLD' : 'NEW'}`,
+					requisition_type: 'food',
+					meal: 'lunch',
+					source_location: 'warehouse:main',
+					destination_location: 'point:a',
+					items: [
+						{
+							item_id: 'item:rice_box',
+							item_name: 'Rice Box',
+							type_class: 'CONSUMABLE',
+							returnable: false,
+							requested_qty: '10',
+							allocated_qty: '10'
+						}
+					]
+				},
+				POS_CTX
+			);
+			const dispatchId = await deriveDeterministicLedgerId('dispatch', ticket._id, 'item:rice_box');
+			const lotId = 'stock_ledger:01JLOT0000000000000000000001';
+			const rows = new Map<string, Partial<StockLedger>>([
+				[dispatchId, { _id: dispatchId, lot_ref: lotId }],
+				[
+					lotId,
+					{ _id: lotId, lot: { expiry: new Date(Date.now() + expiryOffsetMs).toISOString() } }
+				]
+			]);
+			const ledgerReader = {
+				getLedgerEntry: async (id: string) => (rows.get(id) as StockLedger | undefined) ?? null
+			};
+
+			const log = await recordFoodDistribution(
+				ticket._id,
+				{ item_id: 'item:rice_box', qty: '1', recipient_type: 'outside' },
+				POS_CTX,
+				{ ticketRepo, logRepo, ledgerReader }
+			);
+
+			expect(log.is_expired_warning).toBe(expected);
+		}
+	);
 
 	it('records supplies consumable and returnable loans correctly', async () => {
 		const ticket = await ticketRepo.create(

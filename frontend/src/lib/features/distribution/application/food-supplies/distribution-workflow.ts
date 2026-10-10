@@ -1,9 +1,11 @@
 import type { AuthorContext } from '$lib/db/model';
 import { qtyGte } from '$lib/utils/qty';
+import { operationsRepository } from '$lib/features/operations';
 import {
 	assertDistributionLogCanBeVoided,
 	calculateInHandQtyForTicketItem,
 	isDuplicateMealDistributionLog,
+	isLotExpired,
 	type DistributionLog,
 	type DistributionRecipientType,
 	type RequisitionTicket,
@@ -18,10 +20,13 @@ import {
 import { assertCanPerformFrontlineDistribution } from './auth';
 import { CapacityExceededError, TicketStateError, WorkflowValidationError } from './errors';
 import { assertPositiveIntegerQty } from './validation';
+import { resolveDispatchedLotExpiry, type LedgerEntryReader } from './lot-expiry';
 
 export interface DistributionWorkflowDependencies {
 	ticketRepo?: RequisitionTicketRepository;
 	logRepo?: DistributionLogRepository;
+	/** Reads the dispatched lot for the ready-meal expiry check (FR-MQW-06 B). */
+	ledgerReader?: LedgerEntryReader;
 }
 
 export interface FoodDistributionInput {
@@ -144,8 +149,15 @@ export async function recordFoodDistribution(
 		}
 	}
 
-	// 4-Hour Food Safety Countdown Check (CR-121 FR-DST-03)
-	let isExpiredWarning = false;
+	// Food safety window (CR-121 FR-DST-03; draft-onsite-distribution FR-MQW-06 B): the
+	// dispatched lot's expiry. Advisory — expired food may still go out, stamped on the log.
+	// Injected deps without a ledgerReader skip the lot lookup (callers own every dependency).
+	const ledgerReader = deps ? deps.ledgerReader : operationsRepository(ctx.shelterCode);
+	const lotExpiry = ledgerReader
+		? await resolveDispatchedLotExpiry(ticketId, input.item_id, ledgerReader)
+		: undefined;
+	let isExpiredWarning = isLotExpired(lotExpiry);
+	// Legacy explicit cooking timestamp (kept for callers that still pass one).
 	if (input.cooking_completed_at) {
 		const cookingTime = new Date(input.cooking_completed_at).getTime();
 		if (!isNaN(cookingTime) && Date.now() - cookingTime > FOUR_HOURS_MS) {

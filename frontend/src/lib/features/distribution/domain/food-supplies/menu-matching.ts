@@ -1,24 +1,36 @@
 /**
  * Recipient ↔ ready-meal menu matching at the distribution desk
- * (`docs/changes/draft-onsite-distribution.md §C`, status: proposed).
- *
- * Built ahead of the owner's decision on the draft's option A. Open points kept narrow on purpose:
- * - VEGAN is not derived for recipients and VEGAN on a menu is ignored (FR-MRM-01 VEGAN row is
- *   still NEEDS DECISION), so a VEGAN-only menu counts as general.
- * - Age cut-offs live in `MENU_AGE_BANDS` (FR-MRM-01 threshold is still NEEDS DECISION).
+ * (`draft-onsite-distribution.md` §C, decided 2026-10-10):
+ * - FR-MRM-00 A / FR-MRM-04 A — in V1; a mismatch needs an override with a reason.
+ * - FR-MRM-01 VEGAN B — VEGAN is not derived for recipients and a VEGAN tag on a menu is
+ *   ignored, so anyone may take a VEGAN menu without an override.
+ * - FR-MRM-01 age — CR-130 age buckets via `ageBucketForBirthYear` (the demographics
+ *   dashboard's): `<1` INFANT, `1-5` + `6-11` CHILD, `60+` ELDERLY.
  */
+import {
+	ageBucketForBirthYear,
+	type AgeBucket
+} from '$lib/features/dashboard/domain/demographics.schema';
 
 /** Tags a recipient can carry and a menu can target. */
 export type MenuTargetTag = 'HALAL' | 'INFANT' | 'CHILD' | 'ELDERLY';
 
-/** Age bands in years. Proposed values — not yet confirmed by the project owner. */
-export const MENU_AGE_BANDS = { infantUnder: 2, childUnder: 13, elderlyFrom: 60 } as const;
+/** CR-130 age buckets → the age tag they carry; other buckets carry none. */
+const AGE_BUCKET_TAG: Partial<Record<AgeBucket, MenuTargetTag>> = {
+	'<1': 'INFANT',
+	'1-5': 'CHILD',
+	'6-11': 'CHILD',
+	'60+': 'ELDERLY'
+};
 
-/** The evacuee fields the rule reads (schema.md §1.1). `age` = `evacueeAgeYears(doc)`. */
+/** The evacuee fields the rule reads (schema.md §1.1). */
 export interface MenuRecipientProfile {
 	religion?: string | null;
 	vulnerable_groups?: readonly string[] | null;
 	special_needs?: readonly string[] | null;
+	/** Thai Buddhist birth year — the CR-130 source of truth for the age bucket. */
+	birth_year?: number | null;
+	/** Age in years, used only when `birth_year` is missing. */
 	age?: number | null;
 }
 
@@ -37,28 +49,37 @@ function hasVulnerableGroup(profile: MenuRecipientProfile, code: string): boolea
 	return (profile.vulnerable_groups ?? []).includes(code);
 }
 
+/** CR-130 bucket from `birth_year`, else from `age` (converted to a Buddhist birth year). */
+function recipientAgeBucket(profile: MenuRecipientProfile, currentYear: number): AgeBucket {
+	if (typeof profile.birth_year === 'number') {
+		return ageBucketForBirthYear(profile.birth_year, currentYear);
+	}
+	if (typeof profile.age === 'number') {
+		return ageBucketForBirthYear(currentYear + 543 - profile.age, currentYear);
+	}
+	return 'unknown';
+}
+
 /** FR-MRM-01 — tags derived for an `evacuee` recipient (a person may carry several). */
-export function deriveRecipientMenuTags(profile: MenuRecipientProfile): MenuTargetTag[] {
-	const age = typeof profile.age === 'number' ? profile.age : null;
+export function deriveRecipientMenuTags(
+	profile: MenuRecipientProfile,
+	currentYear: number = new Date().getFullYear()
+): MenuTargetTag[] {
+	const ageTag = AGE_BUCKET_TAG[recipientAgeBucket(profile, currentYear)];
 	const tags: MenuTargetTag[] = [];
 	if (profile.religion === 'muslim') tags.push('HALAL');
 	if (
+		ageTag === 'INFANT' ||
 		hasVulnerableGroup(profile, 'infant') ||
-		hasSpecialNeed(profile, 'infant') ||
-		(age !== null && age < MENU_AGE_BANDS.infantUnder)
+		hasSpecialNeed(profile, 'infant')
 	) {
 		tags.push('INFANT');
 	}
+	if (ageTag === 'CHILD' || hasVulnerableGroup(profile, 'young_child')) tags.push('CHILD');
 	if (
-		hasVulnerableGroup(profile, 'young_child') ||
-		(age !== null && age >= MENU_AGE_BANDS.infantUnder && age < MENU_AGE_BANDS.childUnder)
-	) {
-		tags.push('CHILD');
-	}
-	if (
+		ageTag === 'ELDERLY' ||
 		hasVulnerableGroup(profile, 'elderly_dependent') ||
-		hasSpecialNeed(profile, 'elderly') ||
-		(age !== null && age >= MENU_AGE_BANDS.elderlyFrom)
+		hasSpecialNeed(profile, 'elderly')
 	) {
 		tags.push('ELDERLY');
 	}
