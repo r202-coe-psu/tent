@@ -19,15 +19,27 @@
 		useReceiveTicketAtDistributionPoint
 	} from '../../application/queries';
 	import { canPerformFrontlineDistribution } from '../../application/food-supplies/auth';
-	import { getTicketStatusLabel, compareByReconciliationProgress } from '../model/ticket-status';
+	import {
+		getTicketStatusLabel,
+		getMealPeriodLabel,
+		compareByReconciliationProgress
+	} from '../model/ticket-status';
 	import Lock from '@lucide/svelte/icons/lock';
 	import { ticketServiceDay, type RequisitionTicket } from '../../domain/food-supplies';
+	import {
+		ALL_POINTS,
+		distributionPointOptions,
+		filterTicketsByPoint,
+		resolveDistributionPoint,
+		ticketOptionLabel
+	} from '../model/distribution-point';
 	import {
 		filterTicketsByServiceDay,
 		resolveServiceDay,
 		serviceDayOptions
 	} from '../model/service-day';
 	import FoodDistributionCard from './FoodDistributionCard.svelte';
+	import DistributionHistory from '../common/DistributionHistory.svelte';
 	import SuppliesDistributionCard from './SuppliesDistributionCard.svelte';
 	import LoanReturnCard from './LoanReturnCard.svelte';
 	import ShiftReconciliationCard from './ShiftReconciliationCard.svelte';
@@ -71,11 +83,44 @@
 
 	// Categorize tickets by frontline workflow relevance
 	const inTransitTickets = $derived(allTickets.filter((t) => t.status === 'IN_TRANSIT'));
-	const distributingFoodTickets = $derived(
+
+	// Desk tickets before the point filter. Tab badges count these, so a point picked on one tab
+	// never hides work from the badges shown while the filter itself is out of sight.
+	const allDistributingFood = $derived(
 		allTickets.filter((t) => t.status === 'DISTRIBUTING' && t.requisition_type === 'food')
 	);
-	const distributingSuppliesTickets = $derived(
+	const allDistributingSupplies = $derived(
 		allTickets.filter((t) => t.status === 'DISTRIBUTING' && t.requisition_type === 'supplies')
+	);
+	// DISTRIBUTING or post-distribution tickets needing close or submit, ordered by workflow
+	// progress so unfinished tickets surface first and COMPLETED ones sink to the bottom.
+	const allReconciliationTickets = $derived(
+		allTickets
+			.filter(
+				(t) =>
+					t.status === 'DISTRIBUTING' ||
+					t.status === 'SHIFT_CLOSED' ||
+					t.status === 'RETURN_PENDING_RECEIPT' ||
+					t.status === 'RETURN_COMPLETED' ||
+					t.status === 'COMPLETED'
+			)
+			.sort(compareByReconciliationProgress)
+	);
+
+	// Optional distribution-point filter for the food, supplies and close-out tabs. Defaults to
+	// every point, so it narrows the view without deciding which tickets a point may see. Points
+	// come from tickets still in play at the desk (not COMPLETED), so the list does not grow with
+	// history or offer points that only have tickets waiting at the warehouse.
+	let pickedPoint = $state<string | null>(null);
+	const pointSourceTickets = $derived(
+		allReconciliationTickets.filter((t) => t.status !== 'COMPLETED')
+	);
+	const pointOptions = $derived(distributionPointOptions(pointSourceTickets));
+	const point = $derived(resolveDistributionPoint(pickedPoint, pointSourceTickets));
+
+	const distributingFoodTickets = $derived(filterTicketsByPoint(allDistributingFood, point));
+	const distributingSuppliesTickets = $derived(
+		filterTicketsByPoint(allDistributingSupplies, point)
 	);
 
 	// Food tickets are filtered by service day (derived from created_at — FR-MQW-03 A). Defaults to
@@ -108,28 +153,17 @@
 		distributingSuppliesTickets.find((t) => t._id === selectedSuppliesTicketId) ?? null
 	);
 
-	// Reconciliation eligible tickets (DISTRIBUTING or post-distribution tickets needing close or
-	// submit), ordered by workflow progress so unfinished tickets surface first and fully
-	// COMPLETED tickets sink to the bottom of the selector instead of being mixed in.
 	const reconciliationEligibleTickets = $derived(
-		allTickets
-			.filter(
-				(t) =>
-					t.status === 'DISTRIBUTING' ||
-					t.status === 'SHIFT_CLOSED' ||
-					t.status === 'RETURN_PENDING_RECEIPT' ||
-					t.status === 'RETURN_COMPLETED' ||
-					t.status === 'COMPLETED'
-			)
-			.sort(compareByReconciliationProgress)
+		filterTicketsByPoint(allReconciliationTickets, point)
 	);
 
 	// Tickets that specifically need a direct frontline action right now: shift closed but
 	// returns not yet submitted, or warehouse already verified the return but the ticket still
 	// needs to be closed. Excludes DISTRIBUTING (already surfaced by the food/supplies tabs),
 	// RETURN_PENDING_RECEIPT (waiting on the warehouse, not frontline), and COMPLETED.
+	// Counted before the point filter — it feeds a tab badge.
 	const reconciliationPendingActionCount = $derived(
-		reconciliationEligibleTickets.filter(
+		allReconciliationTickets.filter(
 			(t) => t.status === 'SHIFT_CLOSED' || t.status === 'RETURN_COMPLETED'
 		).length
 	);
@@ -166,6 +200,8 @@
 				shelterCode: currentShelterCode
 			});
 			toast.success(`ตรวจรับสินค้าเข้าจุดแจกจ่ายเรียบร้อยแล้ว: ${ticket.ticket_no}`);
+			// Show the received ticket: clear the point filter, then switch to its tab.
+			pickedPoint = null;
 			// If received food, switch tab to food; if supplies, switch to supplies
 			if (ticket.requisition_type === 'food') {
 				activeTab = 'food';
@@ -285,9 +321,9 @@
 					<p class="text-2xs text-slate-500">Ready Meal Handover</p>
 				</div>
 			</div>
-			{#if distributingFoodTickets.length > 0}
+			{#if allDistributingFood.length > 0}
 				<span class="rounded-full bg-amber-100 px-2 py-0.5 text-2xs font-bold text-amber-900">
-					เปิดแจก {distributingFoodTickets.length}
+					เปิดแจก {allDistributingFood.length}
 				</span>
 			{/if}
 		</button>
@@ -314,9 +350,9 @@
 					<p class="text-2xs text-slate-500">Supplies & Loans</p>
 				</div>
 			</div>
-			{#if distributingSuppliesTickets.length > 0}
+			{#if allDistributingSupplies.length > 0}
 				<span class="rounded-full bg-indigo-100 px-2 py-0.5 text-2xs font-bold text-indigo-900">
-					เปิดแจก {distributingSuppliesTickets.length}
+					เปิดแจก {allDistributingSupplies.length}
 				</span>
 			{/if}
 		</button>
@@ -374,6 +410,32 @@
 			{/if}
 		</button>
 	</div>
+
+	<!-- Distribution point filter (food / supplies / close-out tabs) -->
+	{#if pointOptions.length > 1 && (activeTab === 'food' || activeTab === 'supplies' || activeTab === 'reconciliation')}
+		<div
+			class="flex flex-col gap-2 rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs sm:flex-row sm:items-center"
+		>
+			<label for="point-select" class="shrink-0 text-sm font-semibold text-slate-700">
+				จุดแจก:
+			</label>
+			<Select.Root type="single" bind:value={() => point, (v) => (pickedPoint = v)}>
+				<Select.Trigger
+					id="point-select"
+					aria-label="เลือกจุดแจก"
+					class="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 shadow-2xs sm:w-72"
+				>
+					<span class="truncate">{point === ALL_POINTS ? 'ทุกจุด' : point}</span>
+				</Select.Trigger>
+				<Select.Content>
+					<Select.Item value={ALL_POINTS} label="ทุกจุด" />
+					{#each pointOptions as option (option)}
+						<Select.Item value={option} label={option} />
+					{/each}
+				</Select.Content>
+			</Select.Root>
+		</div>
+	{/if}
 
 	<!-- Main Station Content Surface -->
 	{#if ticketsQuery.isPending && allTickets.length === 0}
@@ -556,9 +618,7 @@
 									>
 										<span class="truncate">
 											{#if activeFoodTicket}
-												{activeFoodTicket.ticket_no} - {activeFoodTicket.destination_location} ({activeFoodTicket.items
-													.map((i) => i.item_name)
-													.join(', ')})
+												{ticketOptionLabel(activeFoodTicket)}
 											{:else}
 												เลือกตั๋วอาหาร
 											{/if}
@@ -566,12 +626,7 @@
 									</Select.Trigger>
 									<Select.Content>
 										{#each visibleFoodTickets as t (t._id)}
-											<Select.Item
-												value={t._id}
-												label={`${t.ticket_no} - ${t.destination_location} (${t.items
-													.map((i) => i.item_name)
-													.join(', ')})`}
-											/>
+											<Select.Item value={t._id} label={ticketOptionLabel(t)} />
 										{/each}
 									</Select.Content>
 								</Select.Root>
@@ -582,6 +637,7 @@
 
 				{#if activeFoodTicket}
 					<FoodDistributionCard ticket={activeFoodTicket} shelterCode={currentShelterCode} />
+					<DistributionHistory ticket={activeFoodTicket} shelterCode={currentShelterCode} />
 				{/if}
 			{/if}
 		</div>
@@ -630,9 +686,7 @@
 								>
 									<span class="truncate">
 										{#if activeSuppliesTicket}
-											{activeSuppliesTicket.ticket_no} - {activeSuppliesTicket.destination_location} ({activeSuppliesTicket.items
-												.map((i) => i.item_name)
-												.join(', ')})
+											{ticketOptionLabel(activeSuppliesTicket)}
 										{:else}
 											เลือกตั๋วพัสดุ
 										{/if}
@@ -640,12 +694,7 @@
 								</Select.Trigger>
 								<Select.Content>
 									{#each distributingSuppliesTickets as t (t._id)}
-										<Select.Item
-											value={t._id}
-											label={`${t.ticket_no} - ${t.destination_location} (${t.items
-												.map((i) => i.item_name)
-												.join(', ')})`}
-										/>
+										<Select.Item value={t._id} label={ticketOptionLabel(t)} />
 									{/each}
 								</Select.Content>
 							</Select.Root>
@@ -658,6 +707,7 @@
 						ticket={activeSuppliesTicket}
 						shelterCode={currentShelterCode}
 					/>
+					<DistributionHistory ticket={activeSuppliesTicket} shelterCode={currentShelterCode} />
 				{/if}
 			{/if}
 		</div>
@@ -710,8 +760,7 @@
 												class="shrink-0"
 											/>
 											<span class="truncate">
-												{activeReconciliationTicket.ticket_no} - {activeReconciliationTicket.destination_location}
-												({activeReconciliationTicket.items.map((i) => i.item_name).join(', ')})
+												{ticketOptionLabel(activeReconciliationTicket)}
 											</span>
 										</span>
 									{:else}
@@ -729,9 +778,7 @@
 									{#each reconciliationEligibleTickets as t (t._id)}
 										<Select.Item
 											value={t._id}
-											label={`${t.ticket_no} [${getTicketStatusLabel(t.status)}] - ${t.destination_location} (${t.items
-												.map((i) => i.item_name)
-												.join(', ')})`}
+											label={`[${getTicketStatusLabel(t.status)}] ${ticketOptionLabel(t)}`}
 											class="min-h-14"
 										>
 											<div class="flex w-full min-w-0 flex-col gap-0.5 text-left">
@@ -741,8 +788,11 @@
 													>
 													<TicketStatusBadge status={t.status} class="shrink-0" />
 												</span>
-												<span class="truncate text-2xs text-slate-500">
-													{t.destination_location} · {t.items.map((i) => i.item_name).join(', ')}
+												<span class="truncate text-xs text-slate-500">
+													{t.meal
+														? `มื้อ${getMealPeriodLabel(t.meal)} · `
+														: ''}{t.destination_location} ·
+													{t.items.map((i) => i.item_name).join(', ')}
 												</span>
 											</div>
 										</Select.Item>
