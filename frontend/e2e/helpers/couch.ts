@@ -164,6 +164,16 @@ export const SM_SH002_ROLES = ['shelter:SH002', 'shelter_manager'];
 /** Roles for a Registration Staff member of SH001. */
 export const STAFF_SH001_ROLES = ['shelter:SH001', 'registration_staff'];
 
+/** Shelter-scoped registration desk roles for any `E2E` shelter code. */
+export function registrationStaffRoles(shelterCode: string): string[] {
+	return [`shelter:${shelterCode}`, 'registration_staff'];
+}
+
+/** Shelter-scoped manager roles (Station 2 + shelter edit) for any `E2E` shelter code. */
+export function shelterManagerRoles(shelterCode: string): string[] {
+	return [`shelter:${shelterCode}`, 'shelter_manager'];
+}
+
 // ─── App proxy ─────────────────────────────────────────────────────────────────
 
 /** Base URL of the previewed app; keep in sync with `playwright.config.ts`. */

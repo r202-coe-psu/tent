@@ -21,6 +21,7 @@ from tent_model.unassigned_registration import (
 
 from ...core.staff_session import StaffSession
 from ...infrastructure.gridfs import load_unassigned_photo, parse_photo_ref, photo_ref
+from ...utils.datetime_fmt import utc_z_isoformat
 from ...utils.masking import (
     mask_last_name,
     mask_phone,
@@ -64,6 +65,7 @@ from .schemas import (
     UnassignedRegistrationSearchHit,
     UnassignedRegistrationSearchResponse,
     UnassignedRegistrationStatsResponse,
+    UnassignedRegistrationStatusResponse,
     UnassignedResidenceMatchHit,
     UnassignedResidenceMatchRequest,
     UnassignedResidenceMatchResponse,
@@ -438,7 +440,7 @@ class UnassignedRegistrationsUseCase:
             members=[_member_response(m) for m in doc.members],
             registered_via=doc.registered_via,
             status=doc.status,
-            created_at=doc.created_at.isoformat(),
+            created_at=utc_z_isoformat(doc.created_at),
         )
 
     async def _join_existing(
@@ -519,7 +521,7 @@ class UnassignedRegistrationsUseCase:
             members=[_member_response(m) for m in doc.members],
             registered_via=doc.registered_via,
             status=doc.status,
-            created_at=doc.created_at.isoformat(),
+            created_at=utc_z_isoformat(doc.created_at),
         )
 
     async def match_by_residence(
@@ -699,6 +701,36 @@ class UnassignedRegistrationsUseCase:
             )
         return _detail_response(doc)
 
+    async def get_status(self, registration_id: str) -> UnassignedRegistrationStatusResponse:
+        """Status-only lookup for the public ticket sync (BFF, service secret) — no PII.
+
+        `claimed` is true only once the document is closed/claimed AND at least one member
+        was actually claimed; a partial claim (`open`) keeps the ticket pending because the
+        remaining members still need the QR.
+        """
+        try:
+            doc = await UnassignedRegistration.get(registration_id)
+        except (PyMongoError, ConnectionError, TimeoutError, OSError) as exc:
+            raise _mongo_unavailable("get_status") from exc
+        if doc is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": {
+                        "code": "NOT_FOUND",
+                        "message": "Unassigned Registration not found",
+                    }
+                },
+            )
+        members_claimed = sum(1 for m in doc.members if m.status == "claimed")
+        return UnassignedRegistrationStatusResponse(
+            id=doc.id,
+            status=doc.status,
+            members_total=len(doc.members),
+            members_claimed=members_claimed,
+            claimed=members_claimed > 0 and doc.status in ("closed", "claimed"),
+        )
+
     async def get_review(self, registration_id: str) -> UnassignedRegistrationReviewResponse:
         """Open-only pre-claim review (CR-140 addendum) — read-only, no write."""
         try:
@@ -722,7 +754,7 @@ class UnassignedRegistrationsUseCase:
             reserved_household_id=doc.reserved_household_id,
             registered_via=doc.registered_via,
             status=doc.status,
-            created_at=doc.created_at.isoformat(),
+            created_at=utc_z_isoformat(doc.created_at),
             housing_type=hh.housing_type,
             residence_landmark=hh.residence_landmark,
             dorm_name=hh.dorm_name,
@@ -806,7 +838,7 @@ class UnassignedRegistrationsUseCase:
                     reserved_household_id=doc.reserved_household_id,
                     registered_via=doc.registered_via,
                     status=doc.status,
-                    created_at=doc.created_at.isoformat(),
+                    created_at=utc_z_isoformat(doc.created_at),
                     open_members=open_members,
                     open_pets=open_pet_hits,
                 )
@@ -1439,7 +1471,7 @@ def _open_pet_hit(pet: UnassignedPet) -> OpenPetHit:
 
 
 def _pet_response(pet: UnassignedPet) -> PetCreated:
-    claimed_at = pet.claimed_at.isoformat() if pet.claimed_at else None
+    claimed_at = utc_z_isoformat(pet.claimed_at) if pet.claimed_at else None
     return PetCreated(
         pet_id=pet.pet_id or "",
         status=pet.effective_status(),
@@ -1483,7 +1515,7 @@ def _list_item(doc: UnassignedRegistration) -> UnassignedRegistrationListItem:
         reserved_household_id=doc.reserved_household_id,
         registered_via=doc.registered_via,
         status=doc.status,
-        created_at=doc.created_at.isoformat(),
+        created_at=utc_z_isoformat(doc.created_at),
         household=_household_out(doc.household),
         open_members=open_members,
         open_member_count=len(open_members),
@@ -1500,7 +1532,7 @@ def _detail_response(doc: UnassignedRegistration) -> UnassignedRegistrationDetai
         reserved_household_id=doc.reserved_household_id,
         registered_via=doc.registered_via,
         status=doc.status,
-        created_at=doc.created_at.isoformat(),
+        created_at=utc_z_isoformat(doc.created_at),
         household=_household_out(doc.household),
         members=[_member_response(m) for m in doc.members],
     )

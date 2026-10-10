@@ -10,7 +10,7 @@ import signal
 from tent_model import close_db, init_db
 
 from worker.config import load_settings
-from worker.couch.bootstrap import bootstrap_all, needs_bootstrap
+from worker.couch.bootstrap import maybe_bootstrap
 from worker.couch.client import CouchClient
 from worker.inbound.donations import run_inbound_loop
 from worker.inbound.external_bookings import run_external_booking_inbound_loop
@@ -55,8 +55,7 @@ async def run(*, force_bootstrap: bool, bootstrap_only: bool) -> None:
     external_booking_task: asyncio.Task[None] | None = None
 
     try:
-        if force_bootstrap or bootstrap_only or await needs_bootstrap():
-            await bootstrap_all(couch)
+        await maybe_bootstrap(couch, force=force_bootstrap or bootstrap_only)
         if bootstrap_only:
             logger.info("Bootstrap-only complete — exiting")
             return

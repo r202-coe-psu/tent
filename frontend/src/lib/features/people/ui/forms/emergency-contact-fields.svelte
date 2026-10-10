@@ -12,6 +12,7 @@
 		disabled = false,
 		required = false,
 		formId,
+		idPrefix = 'emergency',
 		errors
 	}: {
 		name?: string;
@@ -21,6 +22,8 @@
 		required?: boolean;
 		/** Associate inputs with an outer form when this block sits outside `<form>`. */
 		formId?: string;
+		/** Prefix of the control ids — keep the default for the first card, make it unique for the rest. */
+		idPrefix?: string;
 		errors?: {
 			name?: string;
 			phone?: string;
@@ -29,6 +32,10 @@
 	} = $props();
 
 	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
+
+	const nameId = $derived(`${idPrefix}-name`);
+	const phoneId = $derived(`${idPrefix}-phone`);
+	const relationId = $derived(`${idPrefix}-relation`);
 
 	const errClass =
 		'border-destructive focus-visible:border-destructive focus-visible:ring-destructive/20';
@@ -41,34 +48,35 @@
 
 <div class="space-y-4">
 	<div class="space-y-1.5">
-		<Label for="emergency-name" class="text-xs font-semibold text-foreground">
+		<Label for={nameId} class="text-xs font-semibold text-foreground">
 			{t.emergencyNameLabel}
 			{#if required}<span class="text-destructive">*</span>{/if}
 		</Label>
 		<Input
-			id="emergency-name"
+			id={nameId}
 			bind:value={name}
 			{disabled}
 			form={formId}
 			autocomplete="name"
 			placeholder={t.emergencyNamePlaceholder}
 			aria-invalid={!!errors?.name}
+			aria-describedby={errors?.name ? `${nameId}-error` : undefined}
 			aria-required={required || undefined}
 			class="h-9 {errors?.name ? errClass : ''}"
 		/>
 		{#if errors?.name}
-			<p class="text-2xs text-destructive">{errors.name}</p>
+			<p id="{nameId}-error" class="text-2xs text-destructive">{errors.name}</p>
 		{/if}
 	</div>
 
 	<div class="grid gap-3 sm:grid-cols-2">
 		<div class="space-y-1.5">
-			<Label for="emergency-phone" class="text-xs font-semibold text-foreground">
+			<Label for={phoneId} class="text-xs font-semibold text-foreground">
 				{t.phoneFieldLabel}
 				{#if required}<span class="text-destructive">*</span>{/if}
 			</Label>
 			<Input
-				id="emergency-phone"
+				id={phoneId}
 				value={phone}
 				oninput={onPhoneInput}
 				{disabled}
@@ -78,31 +86,33 @@
 				autocomplete="tel"
 				placeholder={t.phonePlaceholder}
 				aria-invalid={!!errors?.phone}
+				aria-describedby={errors?.phone ? `${phoneId}-error` : undefined}
 				aria-required={required || undefined}
 				class="h-9 {errors?.phone ? errClass : ''}"
 			/>
 			{#if errors?.phone}
-				<p class="text-2xs text-destructive">{errors.phone}</p>
+				<p id="{phoneId}-error" class="text-2xs text-destructive">{errors.phone}</p>
 			{/if}
 		</div>
 
 		<div class="space-y-1.5">
-			<Label for="emergency-relation" class="text-xs font-semibold text-foreground">
+			<Label for={relationId} class="text-xs font-semibold text-foreground">
 				{t.emergencyRelationLabel}
 				{#if required}<span class="text-destructive">*</span>{/if}
 			</Label>
 			<Input
-				id="emergency-relation"
+				id={relationId}
 				bind:value={relation}
 				{disabled}
 				form={formId}
 				placeholder={t.emergencyRelationPlaceholder}
 				aria-invalid={!!errors?.relation}
+				aria-describedby={errors?.relation ? `${relationId}-error` : undefined}
 				aria-required={required || undefined}
 				class="h-9 {errors?.relation ? errClass : ''}"
 			/>
 			{#if errors?.relation}
-				<p class="text-2xs text-destructive">{errors.relation}</p>
+				<p id="{relationId}-error" class="text-2xs text-destructive">{errors.relation}</p>
 			{/if}
 		</div>
 	</div>

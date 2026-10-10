@@ -17,7 +17,7 @@ note: >
 
 ## สรุป (TL;DR)
 
-- รวม **ศูนย์อพยพ** กับ **บ้านพี่เลี้ยง** ใน doc `shelter` เดิม ด้วย field `site_kind` (`evacuation_center` | `host_house`) — ไม่สร้าง doc type ใหม่ (ตัดกับ [CR-014](../changes/CR-014-design-v5-alignment.md) slice `host_house` แยก — **superseded สำหรับเรื่องนี้**)
+- รวม **ศูนย์อพยพ** กับ **บ้านพี่เลี้ยง** ใน doc `shelter` เดิม ด้วย field `site_kind` (`evacuation_center` | `host_house`) — ไม่สร้าง doc type ใหม่ (ตัดกับ [CR-014](../changes/01-core/CR-014-design-v5-alignment.md) slice `host_house` แยก — **superseded สำหรับเรื่องนี้**)
 - บ้านพี่เลี้ยงอยู่บนหน้ารายการศูนย์เดิม + กรอง `site_kind` — **ถอด** nav/route `/portal/system-management/host-houses` (D-HOST-NAV **B′**)
 - Public map ใช้ **ไอคอนคนละชุด** ตาม `site_kind`; สีหมุดตาม **occupancy health 5 สี** (derived จาก occupancy/capacity; `operation_status` override ได้ตาม D-STANDBY / D-HEALTH-VS-STATUS)
 - ช่องเข้าพักใหม่: จองผ่านเว็บ (`registered_via=web`) + import คน + inbound API (`api`) — ตามสถานะด้วย QR หรือ `official_code` + เบอร์โทร (D-BOOK-TOKEN=A); ยืนยันที่ประตูด้วย QR scan ที่มีอยู่แล้ว (T-51)
@@ -124,14 +124,14 @@ flowchart TD
 
 | Pkg | ชื่อ | CR | Tasks | Owner | พร้อมเมื่อ |
 | --- | --- | --- | --- | --- | --- |
-| **P1** | `site_kind` + ฟอร์ม + กรองบนหน้ารายการศูนย์ (ไม่มีหน้า `/host-houses`) | [CR-067](../changes/CR-067-shelter-site-kind.md) | T-66, T-67 | Lead แจ็ก/เด่น | **approved** — พร้อม implement |
+| **P1** | `site_kind` + ฟอร์ม + กรองบนหน้ารายการศูนย์ (ไม่มีหน้า `/host-houses`) | [CR-067](../changes/00-baseline/CR-067-shelter-site-kind.md) | T-66, T-67 | Lead แจ็ก/เด่น | **approved** — พร้อม implement |
 | **P1b** | SOP-lite, ไม่บังคับ user ประจำ, Sphere auto-capacity | (จอดใน CR-067 §Phase 2) | T-76 | Team D | **รอบ CR ถัดไป** — SOP workshop + D-SOP-LITE / D-HOST-STAFF / D-SPHERE-CAP |
-| **P2** | Excel import ขยาย CR-039 | [CR-068](../changes/CR-068-shelter-import-site-kind.md) | T-68 | Lead | **approved** — หลัง T-66 |
-| **P3** | Occupancy health 5 สี | [CR-069](../changes/CR-069-occupancy-health-colors.md) | T-69, T-70 | Team D + Lead (EOC) | **approved** — T-69 พร้อม; T-70 รอ T-37 |
-| **P4** | จองผ่านเว็บ + ยืนยันที่ประตู | [CR-070](../changes/CR-070-public-booking-gate-confirm.md) | T-71 | Team B | **in progress** — booking + self-lookup ship 2026-08-20; เหลือ multi-member household + D-PRE-REG-AGE |
-| **P5** | People import xlsx/csv + inbound API | [CR-071](../changes/CR-071-people-import-inbound.md) | T-72, T-73 | Team B + Lead | T-72 **approved** (ยังรอ T-48); T-73 **รอบ CR ถัดไป** (blocked payload) |
-| **P6** | Triage เขียว/เหลือง/แดง | [CR-072](../changes/CR-072-triage-green-yellow-red.md) | T-74 | Team B | **รอบ CR ถัดไป** — blocked D-TRIAGE-RULES |
-| **P7** | External GET / ONE PLATFORM | [CR-073](../changes/CR-073-one-platform-external-get-blocked.md) | T-75 | Lead | **รอบ CR ถัดไป** — blocked SPEC ภายนอก (K-14) |
+| **P2** | Excel import ขยาย CR-039 | [CR-068](../changes/00-baseline/CR-068-shelter-import-site-kind.md) | T-68 | Lead | **approved** — หลัง T-66 |
+| **P3** | Occupancy health 5 สี | [CR-069](../changes/00-baseline/CR-069-occupancy-health-colors.md) | T-69, T-70 | Team D + Lead (EOC) | **approved** — T-69 พร้อม; T-70 รอ T-37 |
+| **P4** | จองผ่านเว็บ + ยืนยันที่ประตู | [CR-070](../changes/12-public/CR-070-public-booking-gate-confirm.md) | T-71 | Team B | **in progress** — booking + self-lookup ship 2026-08-20; เหลือ multi-member household + D-PRE-REG-AGE |
+| **P5** | People import xlsx/csv + inbound API | [CR-071](../changes/00-baseline/CR-071-people-import-inbound.md) | T-72, T-73 | Team B + Lead | T-72 **approved** (ยังรอ T-48); T-73 **รอบ CR ถัดไป** (blocked payload) |
+| **P6** | Triage เขียว/เหลือง/แดง | [CR-072](../changes/00-baseline/CR-072-triage-green-yellow-red.md) | T-74 | Team B | **รอบ CR ถัดไป** — blocked D-TRIAGE-RULES |
+| **P7** | External GET / ONE PLATFORM | [CR-073](../changes/10-eoc/CR-073-one-platform-external-get-blocked.md) | T-75 | Lead | **รอบ CR ถัดไป** — blocked SPEC ภายนอก (K-14) |
 
 **Team A (Donation+Volunteer) และ Team C (Supply+Kitchen) ไม่ใช่เจ้าของหลักของโปรแกรมนี้.**
 
@@ -270,14 +270,14 @@ Health **ไม่ persist**. ประเมินตามลำดับ (sta
 
 | CR | บทบาท | Layer | schema_v (ตอน implement หลัง approve) |
 | --- | --- | --- | --- |
-| [CR-066](../changes/CR-066-site-occupancy-booking-program.md) | Program index | volatile | ไม่ bump — **approved** สไลซ์ Wave 1–3 + T-72 |
-| [CR-067](../changes/CR-067-shelter-site-kind.md) | P1 `site_kind` | volatile | shelter 4→5 ตอน implement — **approved P1**; P1b รอบ CR ถัดไป |
-| [CR-068](../changes/CR-068-shelter-import-site-kind.md) | P2 ขยาย CR-039 | volatile | ไม่ bump shelter (ใช้ field จาก CR-067) — **approved** |
-| [CR-069](../changes/CR-069-occupancy-health-colors.md) | P3 health 5 สี | volatile | ไม่ persist; ไม่ bump — **approved** |
-| [CR-070](../changes/CR-070-public-booking-gate-confirm.md) | P4 booking | volatile | evacuee `registered_via` + stay `cancelled` ตอน implement — **approved** |
-| [CR-071](../changes/CR-071-people-import-inbound.md) | P5 import/inbound | volatile | ตาม D-REG-VIA ตอน implement — **approved slice A**; inbound payload รอบ CR ถัดไป |
-| [CR-072](../changes/CR-072-triage-green-yellow-red.md) | P6 triage | volatile | screening/medical — **proposed**; Wave 4 รอบ CR ถัดไป |
-| [CR-073](../changes/CR-073-one-platform-external-get-blocked.md) | P7 stub | volatile | ไม่มีจนกว่า SPEC เข้า — **proposed**; Wave 4 รอบ CR ถัดไป |
+| [CR-066](../changes/00-baseline/CR-066-site-occupancy-booking-program.md) | Program index | volatile | ไม่ bump — **approved** สไลซ์ Wave 1–3 + T-72 |
+| [CR-067](../changes/00-baseline/CR-067-shelter-site-kind.md) | P1 `site_kind` | volatile | shelter 4→5 ตอน implement — **approved P1**; P1b รอบ CR ถัดไป |
+| [CR-068](../changes/00-baseline/CR-068-shelter-import-site-kind.md) | P2 ขยาย CR-039 | volatile | ไม่ bump shelter (ใช้ field จาก CR-067) — **approved** |
+| [CR-069](../changes/00-baseline/CR-069-occupancy-health-colors.md) | P3 health 5 สี | volatile | ไม่ persist; ไม่ bump — **approved** |
+| [CR-070](../changes/12-public/CR-070-public-booking-gate-confirm.md) | P4 booking | volatile | evacuee `registered_via` + stay `cancelled` ตอน implement — **approved** |
+| [CR-071](../changes/00-baseline/CR-071-people-import-inbound.md) | P5 import/inbound | volatile | ตาม D-REG-VIA ตอน implement — **approved slice A**; inbound payload รอบ CR ถัดไป |
+| [CR-072](../changes/00-baseline/CR-072-triage-green-yellow-red.md) | P6 triage | volatile | screening/medical — **proposed**; Wave 4 รอบ CR ถัดไป |
+| [CR-073](../changes/10-eoc/CR-073-one-platform-external-get-blocked.md) | P7 stub | volatile | ไม่มีจนกว่า SPEC เข้า — **proposed**; Wave 4 รอบ CR ถัดไป |
 
 **schema.md ยังไม่ bump ในรอบ approve นี้.** Wave 4 ไม่ถูก mark `approved`.
 

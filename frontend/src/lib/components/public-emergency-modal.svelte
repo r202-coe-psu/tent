@@ -1,9 +1,11 @@
 <script lang="ts">
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import Bell from '@lucide/svelte/icons/bell';
-	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import PublicEmergencyBanner from '$lib/components/public-emergency-banner.svelte';
 	import type { Announcement } from '$lib/features/announcements';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_ALERTS_PANEL_I18N } from '$lib/constants/i18n';
 
 	interface Props {
 		open?: boolean;
@@ -12,6 +14,7 @@
 
 	let { open = $bindable(false), announcements = [] }: Props = $props();
 
+	const t = $derived(getTranslation(PUBLIC_ALERTS_PANEL_I18N, langState.current));
 	const emergencyCount = $derived(announcements.filter((a) => a.severity === 'emergency').length);
 </script>
 
@@ -24,19 +27,12 @@
 						? 'border border-red-200 bg-red-50 text-red-600'
 						: 'border border-sky-200 bg-sky-50 text-[#0284C7]'}"
 				>
-					{#if emergencyCount > 0}
-						<ShieldAlert class="h-5 w-5" />
-					{:else}
-						<Bell class="h-5 w-5" />
-					{/if}
+					<Bell class="h-5 w-5" />
 				</div>
 				<div class="space-y-0.5">
 					<Dialog.Title class="text-base font-bold text-slate-900 sm:text-lg">
-						ประกาศแจ้งเตือนภัยฉุกเฉิน
+						{t.title}
 					</Dialog.Title>
-					<Dialog.Description class="text-xs text-slate-500">
-						ข้อมูลและประกาศสถานการณ์เร่งด่วนจากศูนย์บัญชาการสถานการณ์ (EOC)
-					</Dialog.Description>
 				</div>
 			</div>
 		</Dialog.Header>
@@ -50,9 +46,9 @@
 				<div
 					class="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center text-slate-500"
 				>
-					<p class="text-sm font-medium">ไม่มีประกาศแจ้งเตือนภัยในขณะนี้</p>
+					<p class="text-sm font-medium">{t.emptyTitle}</p>
 					<p class="mt-1 text-xs text-slate-400">
-						สถานการณ์ปกติ ทุกศูนย์พักพิงเปิดให้บริการตามปกติ
+						{t.emptySubtitle}
 					</p>
 				</div>
 			{/if}

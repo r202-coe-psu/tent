@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { SOP_RATIO_KEYS, SOP_RATIO_KIND } from '$lib/features/sop-ratios/server';
 import { DAILY_SOP_QUESTIONS } from '$lib/features/daily-sop';
+import { adjustReasonSchema } from '$lib/features/operations';
 import { buildValidateDocUpdate } from './shelter-access-design';
 
 type UserCtx = { name: string; roles: string[] };
@@ -908,6 +909,225 @@ describe('buildValidateDocUpdate', () => {
 					REGISTRATION
 				)
 			).not.toThrow();
+		});
+	});
+
+	describe('stock_ledger adjust_reason (CR-143 §C, schema_v 6)', () => {
+		const adjust = (over: Doc = {}): Doc =>
+			ledger({
+				schema_v: 6,
+				qty: '-2',
+				reason: 'adjust',
+				ref_id: null,
+				adjust_reason: 'damaged',
+				...over
+			});
+
+		it.each(adjustReasonSchema.options)('accepts adjust with adjust_reason %s', (adjust_reason) => {
+			const note =
+				adjust_reason === 'other'
+					? { note: 'รายละเอียด' }
+					: adjust_reason === 'merge'
+						? { note: 'item_master:other' }
+						: {};
+			expect(() => compile()(adjust({ adjust_reason, ...note }), null, WAREHOUSE)).not.toThrow();
+		});
+
+		// Keeps the CouchDB validator's hand-written list in step with the Zod enum.
+		it('lists exactly the adjustReasonSchema options', () => {
+			const source = buildValidateDocUpdate('SH001');
+			const match = source.match(/var adjustReasons = \[([^\]]*)\]/);
+			expect(match).not.toBeNull();
+			const listed = match![1].split(',').map((v) => v.trim().replace(/^'|'$/g, ''));
+			expect([...listed].sort()).toEqual([...adjustReasonSchema.options].sort());
+		});
+
+		// FR-C9 / AC-C6
+		it.each([undefined, '', '   '])("rejects adjust_reason 'other' with note %j", (note) => {
+			expectForbidden(
+				() => compile()(adjust({ adjust_reason: 'other', note }), null, WAREHOUSE),
+				/requires a non-empty note/
+			);
+		});
+
+		it('accepts an optional note up to 500 characters', () => {
+			expect(() => compile()(adjust({ note: 'ก'.repeat(500) }), null, WAREHOUSE)).not.toThrow();
+			expectForbidden(
+				() => compile()(adjust({ note: 'ก'.repeat(501) }), null, WAREHOUSE),
+				/note must be a string of at most 500 characters/
+			);
+			expectForbidden(
+				() => compile()(adjust({ note: 12 }), null, WAREHOUSE),
+				/note must be a string of at most 500 characters/
+			);
+		});
+
+		it('rejects an adjust_reason outside the enum', () => {
+			expectForbidden(
+				() => compile()(adjust({ adjust_reason: 'stolen' }), null, WAREHOUSE),
+				/adjust_reason must be one of/
+			);
+		});
+
+		it('requires adjust_reason on schema_v >= 6 adjust rows', () => {
+			expectForbidden(
+				() => compile()(adjust({ adjust_reason: undefined }), null, WAREHOUSE),
+				/Adjust stock ledger requires adjust_reason/
+			);
+		});
+
+		it('still accepts a schema_v <= 5 adjust row without adjust_reason (rollout window)', () => {
+			expect(() =>
+				compile()(adjust({ schema_v: 5, adjust_reason: undefined }), null, WAREHOUSE)
+			).not.toThrow();
+		});
+
+		// AC-C2
+		it.each([
+			['donation', { reason: 'donation', qty: '5', ref_id: 'donation:01J' }],
+			['receive', { reason: 'receive', qty: '5', ref_id: 'distribution_log:01J' }],
+			['requisition', { reason: 'requisition', qty: '-5', ref_id: 'requisition_ticket:01J' }],
+			[
+				'distribute',
+				{
+					reason: 'distribute',
+					qty: '-5',
+					ref_id: 'requisition_ticket:01J',
+					lot_ref: 'stock_ledger:01J'
+				}
+			],
+			[
+				'distribution_return',
+				{
+					reason: 'distribution_return',
+					qty: '5',
+					ref_id: 'distribution_batch:01J',
+					lot_ref: 'stock_ledger:01J'
+				}
+			]
+		])('rejects adjust_reason and note on reason=%s', (_name, over) => {
+			const row = ledger({ schema_v: 6, ...(over as Doc) });
+			expect(() => compile()(row, null, WAREHOUSE)).not.toThrow();
+			expectForbidden(
+				() => compile()({ ...row, adjust_reason: 'lost' }, null, WAREHOUSE),
+				/adjust_reason is only allowed when reason is adjust/
+			);
+			expectForbidden(
+				() => compile()({ ...row, note: 'x' }, null, WAREHOUSE),
+				/note is only allowed when reason is adjust/
+			);
+		});
+	});
+
+	// CR-143 §F — FR-F4 is also enforced by the shelter DB, not only by the domain.
+	describe('item merge (CR-143 §F)', () => {
+		const COORDINATOR: UserCtx = {
+			name: 'sc',
+			roles: ['shelter:SH001', 'SH001:supply_coordinator']
+		};
+		const mergeRow = (over: Doc = {}): Doc =>
+			ledger({
+				schema_v: 6,
+				qty: '-6',
+				reason: 'adjust',
+				ref_id: null,
+				adjust_reason: 'merge',
+				note: 'item_master:B',
+				...over
+			});
+		const item = (over: Doc = {}): Doc => ({
+			_id: 'item_master:A',
+			type: 'item_master',
+			...envelope,
+			schema_v: 5,
+			base_unit: 'bottle',
+			conversions: [],
+			...over
+		});
+
+		it.each([
+			['warehouse_staff', WAREHOUSE],
+			['shelter_manager', MANAGER],
+			['system_admin', ADMIN]
+		])('accepts a merge ledger row from %s', (_name, user) => {
+			expect(() => compile()(mergeRow(), null, user)).not.toThrow();
+		});
+
+		it('rejects a merge ledger row from a supply_coordinator, who may otherwise adjust', () => {
+			expect(() =>
+				compile()(mergeRow({ adjust_reason: 'damaged', note: undefined }), null, COORDINATOR)
+			).not.toThrow();
+			expectForbidden(
+				() => compile()(mergeRow(), null, COORDINATOR),
+				/Only warehouse staff, shelter manager, or system admin can write merge stock ledger/
+			);
+		});
+
+		it('requires note to name the other item_master and forbids a ref_id', () => {
+			expectForbidden(
+				() => compile()(mergeRow({ note: undefined }), null, WAREHOUSE),
+				/note must be the item_master id/
+			);
+			expectForbidden(
+				() => compile()(mergeRow({ note: 'item:rice' }), null, WAREHOUSE),
+				/note must be the item_master id/
+			);
+			expectForbidden(
+				() => compile()(mergeRow({ ref_id: 'donation:01J' }), null, WAREHOUSE),
+				/must not carry a ref_id/
+			);
+		});
+
+		it('lets warehouse staff and managers retire a local item_master into another', () => {
+			const merged = item({ merged_into: 'item_master:B', deactivated: true });
+			expect(() => compile()(merged, item(), WAREHOUSE)).not.toThrow();
+			expect(() => compile()(merged, item(), MANAGER)).not.toThrow();
+			expect(() => compile()(merged, item(), ADMIN)).not.toThrow();
+		});
+
+		it('rejects merged_into from anyone else', () => {
+			const merged = item({ merged_into: 'item_master:B', deactivated: true });
+			expectForbidden(() => compile()(merged, item(), REGISTRATION), /can merge items/);
+			expectForbidden(() => compile()(merged, item(), COORDINATOR), /can merge items/);
+		});
+
+		it('rejects merged_into that is not another item_master or leaves the item active', () => {
+			expectForbidden(
+				() =>
+					compile()(item({ merged_into: 'item_master:A', deactivated: true }), item(), WAREHOUSE),
+				/merged_into must be another item_master id/
+			);
+			expectForbidden(
+				() => compile()(item({ merged_into: 'item:rice', deactivated: true }), item(), WAREHOUSE),
+				/merged_into must be another item_master id/
+			);
+			expectForbidden(
+				() => compile()(item({ merged_into: 'item_master:B' }), item(), WAREHOUSE),
+				/must be deactivated/
+			);
+		});
+
+		it('keeps a merge permanent: no clearing, redirecting or reactivating', () => {
+			const merged = item({ merged_into: 'item_master:B', deactivated: true });
+			const { merged_into: _drop, ...cleared } = merged;
+			void _drop;
+			expectForbidden(
+				() => compile()({ ...cleared, deactivated: false }, merged, WAREHOUSE),
+				/cannot be changed or cleared/
+			);
+			expectForbidden(
+				() => compile()({ ...merged, merged_into: 'item_master:C' }, merged, MANAGER),
+				/cannot be changed or cleared/
+			);
+			expectForbidden(
+				() => compile()({ ...merged, deactivated: false }, merged, REGISTRATION),
+				/must be deactivated/
+			);
+		});
+
+		it('does not re-gate edits to an item that is already merged', () => {
+			const merged = item({ merged_into: 'item_master:B', deactivated: true });
+			expect(() => compile()({ ...merged, description: 'x' }, merged, REGISTRATION)).not.toThrow();
 		});
 	});
 
@@ -3846,6 +4066,212 @@ describe('buildValidateDocUpdate', () => {
 					compile()({ ...validAssessment, created_by: 'hacker' }, validAssessment, REGISTRATION),
 				/Shelter readiness assessment identity and creation metadata cannot change/
 			);
+		});
+	});
+
+	describe('bulk_return_claim / bulk_return_pool VDU rules (moved from return-workflow)', () => {
+		it('23. v2 → v1 rejected by VDU', () => {
+			const vduCode = buildValidateDocUpdate('SH001');
+			const validate = new Function(`return ${vduCode}`)();
+
+			const v2Pool = {
+				_id: 'bulk_return_pool:01J00000000000000000000150',
+				type: 'bulk_return_pool',
+				schema_v: 2,
+				shelter_code: 'SH001',
+				item_id: 'item:cot',
+				stock_ledger_id: 'stock_ledger:01J00000000000000000000150',
+				total_received_qty: '10',
+				claimed_qty: '0',
+				unclaimed_quota: '10',
+				claim_ids: [],
+				status: 'ACTIVE',
+				created_at: new Date().toISOString(),
+				created_by: 'wh_user',
+				updated_at: new Date().toISOString()
+			};
+
+			const downgraded = { ...v2Pool, schema_v: 1 };
+			expectForbidden(
+				() =>
+					validate(downgraded, v2Pool, {
+						name: 'wh_user',
+						roles: ['shelter:SH001', 'warehouse_staff']
+					}),
+				/Cannot downgrade bulk_return_pool from schema_v 2 to 1/
+			);
+		});
+
+		it('24. bulk_return_claim hard delete rejected by VDU', () => {
+			const vduCode = buildValidateDocUpdate('SH001');
+			const validate = new Function(`return ${vduCode}`)();
+
+			const claimDoc = {
+				_id: 'bulk_return_claim:01J00000000000000000000151',
+				type: 'bulk_return_claim',
+				schema_v: 1,
+				shelter_code: 'SH001',
+				operation_id: '01J00000000000000000000152',
+				distribution_log_id: 'distribution_log:01J00000000000000000000151',
+				bulk_pool_id: 'bulk_return_pool:01J00000000000000000000153',
+				item_id: 'item:cot',
+				claimed_qty: '1',
+				status: 'CLAIM_INTENT',
+				created_at: new Date().toISOString(),
+				created_by: 'reg_user',
+				updated_at: new Date().toISOString()
+			};
+
+			expectForbidden(
+				() =>
+					validate({ _id: claimDoc._id, _deleted: true }, claimDoc, {
+						name: 'reg_user',
+						roles: ['shelter:SH001', 'registration_staff']
+					}),
+				/Cannot delete bulk_return_claim documents/
+			);
+		});
+
+		it('24a. VDU permits all canonical frontline claim roles including system_admin and rejects unauthorized scope', () => {
+			const vduCode = buildValidateDocUpdate('SH001');
+			const validate = new Function(`return ${vduCode}`)();
+			const claimDoc = {
+				_id: 'bulk_return_claim:01J00000000000000000000170',
+				type: 'bulk_return_claim',
+				schema_v: 1,
+				shelter_code: 'SH001',
+				operation_id: '01J00000000000000000000171',
+				distribution_log_id: 'distribution_log:01J00000000000000000000170',
+				bulk_pool_id: 'bulk_return_pool:01J00000000000000000000172',
+				item_id: 'item:cot',
+				claimed_qty: '1',
+				status: 'CLAIM_INTENT',
+				created_at: new Date().toISOString(),
+				created_by: 'frontline_user',
+				updated_at: new Date().toISOString()
+			};
+
+			for (const userCtx of [
+				{ name: 'reg', roles: ['shelter:SH001', 'registration_staff'] },
+				{ name: 'sc', roles: ['shelter:SH001', 'supply_coordinator'] },
+				{ name: 'mgr', roles: ['shelter:SH001', 'shelter_manager'] },
+				{ name: 'admin', roles: ['system_admin'] }
+			]) {
+				expect(() =>
+					validate({ ...claimDoc, created_by: userCtx.name }, null, userCtx)
+				).not.toThrow();
+			}
+
+			expectForbidden(
+				() =>
+					validate({ ...claimDoc, created_by: 'unauth' }, null, {
+						name: 'unauth',
+						roles: ['shelter:SH001', 'kitchen_staff']
+					}),
+				/Only registration staff, supply coordinator, shelter manager, or system admin can manage bulk return claims/
+			);
+			expectForbidden(
+				() =>
+					validate({ ...claimDoc, created_by: 'reg', shelter_code: 'SH002' }, null, {
+						name: 'reg',
+						roles: ['shelter:SH001', 'registration_staff']
+					}),
+				/shelter_code must be SH001/
+			);
+		});
+
+		it('25. immutable fields on bulk_return_claim rejected by VDU', () => {
+			const vduCode = buildValidateDocUpdate('SH001');
+			const validate = new Function(`return ${vduCode}`)();
+
+			const claimDoc = {
+				_id: 'bulk_return_claim:01J00000000000000000000154',
+				type: 'bulk_return_claim',
+				schema_v: 1,
+				shelter_code: 'SH001',
+				operation_id: '01J00000000000000000000155',
+				distribution_log_id: 'distribution_log:01J00000000000000000000154',
+				bulk_pool_id: 'bulk_return_pool:01J00000000000000000000156',
+				item_id: 'item:cot',
+				claimed_qty: '1',
+				status: 'CLAIM_INTENT',
+				created_at: new Date().toISOString(),
+				created_by: 'reg_user',
+				updated_at: new Date().toISOString()
+			};
+
+			// Mutating permanent immutable fields
+			expectForbidden(
+				() =>
+					validate(
+						{ ...claimDoc, distribution_log_id: 'distribution_log:01J00000000000000000000999' },
+						claimDoc,
+						{
+							name: 'reg_user',
+							roles: ['shelter:SH001', 'registration_staff']
+						}
+					),
+				/bulk_return_claim id must derive from distribution_log_id/
+			);
+
+			expectForbidden(
+				() =>
+					validate({ ...claimDoc, item_id: 'item:other' }, claimDoc, {
+						name: 'reg_user',
+						roles: ['shelter:SH001', 'registration_staff']
+					}),
+				/bulk_return_claim.item_id is permanently immutable/
+			);
+		});
+
+		it('26. attempt fields change only ABORTED → CLAIM_INTENT', () => {
+			const vduCode = buildValidateDocUpdate('SH001');
+			const validate = new Function(`return ${vduCode}`)();
+
+			const claimDoc = {
+				_id: 'bulk_return_claim:01J00000000000000000000157',
+				type: 'bulk_return_claim',
+				schema_v: 1,
+				shelter_code: 'SH001',
+				operation_id: '01J00000000000000000000158',
+				distribution_log_id: 'distribution_log:01J00000000000000000000157',
+				bulk_pool_id: 'bulk_return_pool:01J00000000000000000000159',
+				item_id: 'item:cot',
+				claimed_qty: '1',
+				status: 'CLAIM_INTENT',
+				created_at: new Date().toISOString(),
+				created_by: 'reg_user',
+				updated_at: new Date().toISOString()
+			};
+
+			// Changing operation_id during CLAIM_INTENT -> POOL_CLAIMED is forbidden
+			expectForbidden(
+				() =>
+					validate(
+						{
+							...claimDoc,
+							operation_id: '01J00000000000000000000888',
+							status: 'POOL_CLAIMED'
+						},
+						claimDoc,
+						{ name: 'reg_user', roles: ['shelter:SH001', 'registration_staff'] }
+					),
+				/bulk_return_claim.operation_id is immutable during transition CLAIM_INTENT to POOL_CLAIMED/
+			);
+
+			// Changing operation_id from ABORTED -> CLAIM_INTENT is permitted
+			const abortedClaim = { ...claimDoc, status: 'ABORTED' };
+			expect(() =>
+				validate(
+					{
+						...abortedClaim,
+						operation_id: '01J00000000000000000000999',
+						status: 'CLAIM_INTENT'
+					},
+					abortedClaim,
+					{ name: 'reg_user', roles: ['shelter:SH001', 'registration_staff'] }
+				)
+			).not.toThrow();
 		});
 	});
 });

@@ -41,6 +41,7 @@
 	} from '../model/bulk-return-copy';
 	import InfoDetailPopover from '../shared/InfoDetailPopover.svelte';
 	import CreateBulkPoolDialog from './CreateBulkPoolDialog.svelte';
+	import { formatThaiDateTime } from '$lib/utils/date';
 
 	interface Props {
 		shelterCode?: string;
@@ -90,17 +91,7 @@
 	);
 
 	function formatDateTime(value: string): string {
-		try {
-			return new Intl.DateTimeFormat('th-TH', {
-				year: 'numeric',
-				month: 'short',
-				day: 'numeric',
-				hour: '2-digit',
-				minute: '2-digit'
-			}).format(new Date(value));
-		} catch {
-			return value;
-		}
+		return formatThaiDateTime(value) || value;
 	}
 
 	function statusClass(status: BulkReturnPoolStatus): string {

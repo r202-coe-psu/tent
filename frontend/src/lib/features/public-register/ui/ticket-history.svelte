@@ -14,9 +14,11 @@
 	import type { BookingTicket } from '../application/booking-store.svelte';
 	import { getStoredTickets, removeStoredTicket } from '../data/ticket-storage';
 	import { checkTicketStatus } from '../data/public-register.api';
+	import { syncStoredTicketStatuses } from '../application/ticket-sync';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { PUBLIC_TICKET_HISTORY_I18N } from '$lib/constants/i18n';
 	import { getTranslation } from '$lib/utils/i18n';
+	import { formatThaiDateTime } from '$lib/utils/date';
 
 	interface Props {
 		onNewBooking?: () => void;
@@ -37,27 +39,14 @@
 	});
 
 	async function syncAllStatus() {
-		const current = getStoredTickets();
-		let removedAny = false;
-		for (const t of current) {
-			try {
-				const res = await checkTicketStatus(t.code);
-				if (res.verified || res.notFound) {
-					removeStoredTicket(t.code);
-					removedAny = true;
-				}
-			} catch {
-				// skip on network/status error
-			}
+		const { verified } = await syncStoredTicketStatuses();
+		if (verified.length === 0) return;
+		tickets = getStoredTickets();
+		if (selectedTicket && !tickets.some((t) => t.code === selectedTicket?.code)) {
+			selectedTicket = null;
 		}
-		if (removedAny) {
-			tickets = getStoredTickets();
-			if (selectedTicket && !tickets.some((t) => t.code === selectedTicket?.code)) {
-				selectedTicket = null;
-			}
-			onTicketsChange?.();
-			toast.info(copy.ticketsClaimedToast);
-		}
+		onTicketsChange?.();
+		toast.info(copy.ticketsClaimedToast);
 	}
 
 	function handleRemove(code: string, e?: MouseEvent) {
@@ -99,12 +88,7 @@
 				onTicketsChange?.();
 				toast.success(copy.statusVerified);
 			} else if (res.notFound) {
-				removeStoredTicket(code);
-				tickets = getStoredTickets();
-				if (selectedTicket?.code === code) {
-					selectedTicket = null;
-				}
-				onTicketsChange?.();
+				// Keep the ticket — the user can delete it manually; never auto-drop the only QR.
 				toast.info(copy.statusNotFound);
 			} else {
 				toast.info(copy.statusPending);
@@ -117,14 +101,7 @@
 	}
 
 	function formatDate(dateStr: string): string {
-		if (!dateStr) return '';
-		const d = new Date(dateStr);
-		return Number.isNaN(d.getTime())
-			? ''
-			: d.toLocaleString(langState.current === 'th' ? 'th-TH' : 'en-US', {
-					dateStyle: 'medium',
-					timeStyle: 'short'
-				});
+		return formatThaiDateTime(dateStr);
 	}
 </script>
 
@@ -143,27 +120,20 @@
 			<BookingTicketView
 				ticket={selectedTicket}
 				showSuccessHeader={false}
-				onVerified={(code) => handleConfirmVerified(code)}
+				onVerified={(code) => {
+					/* Confirm lives in BookingTicketView; apply removal only */
+					removeStoredTicket(code);
+					tickets = getStoredTickets();
+					selectedTicket = null;
+					onTicketsChange?.();
+					toast.success(copy.verifiedToast);
+				}}
 			/>
 		</div>
-	{:else}
-		<div class="flex items-center justify-between">
-			<div>
-				<h2 class="text-lg font-bold text-foreground">{copy.title}</h2>
-				<p class="text-xs text-muted-foreground">
-					{copy.subtitle}
-				</p>
-			</div>
-			{#if onNewBooking}
-				<Button size="sm" onclick={onNewBooking} class="gap-1.5 font-semibold">
-					<Plus class="size-4" />
-					<span>{copy.newBooking}</span>
-				</Button>
-			{/if}
-		</div>
-
-		{#if tickets.length === 0}
-			<div class="rounded-2xl border border-dashed border-border bg-card p-10 text-center">
+	{:else if tickets.length === 0}
+		<div class="flex flex-col gap-4">
+			<h2 class="text-lg font-bold text-foreground">{copy.title}</h2>
+			<div class="rounded-2xl border border-dashed border-border bg-card px-4 py-8 text-center">
 				<div
 					class="mx-auto mb-3 flex size-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground"
 				>
@@ -175,14 +145,34 @@
 				</p>
 				{#if onNewBooking}
 					<div class="mt-5">
-						<Button onclick={onNewBooking} class="font-semibold">
+						<Button onclick={onNewBooking} class="min-h-11 font-semibold">
 							<Plus class="mr-1.5 size-4" />
 							<span>{copy.startBooking}</span>
 						</Button>
 					</div>
 				{/if}
 			</div>
-		{:else}
+		</div>
+	{:else}
+		<div class="space-y-4">
+			<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+				<div class="min-w-0">
+					<h2 class="text-lg font-bold text-foreground">{copy.title}</h2>
+					<p class="text-xs text-muted-foreground">
+						{copy.subtitle}
+					</p>
+				</div>
+				{#if onNewBooking}
+					<Button
+						size="sm"
+						onclick={onNewBooking}
+						class="h-9 min-h-9 w-full gap-1.5 font-semibold sm:h-8 sm:min-h-0 sm:w-auto"
+					>
+						<Plus class="size-4" />
+						<span>{copy.newBooking}</span>
+					</Button>
+				{/if}
+			</div>
 			<div class="grid gap-3">
 				{#each tickets as t (t.code)}
 					<div
@@ -195,10 +185,10 @@
 								selectedTicket = t;
 							}
 						}}
-						class="flex cursor-pointer items-center justify-between rounded-2xl border border-border bg-card p-4 shadow-xs transition-all hover:border-primary/50 hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+						class="flex cursor-pointer flex-col gap-3 rounded-2xl border border-border bg-card p-4 shadow-xs transition-all hover:border-primary/50 hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none sm:flex-row sm:items-center sm:justify-between"
 					>
-						<div class="space-y-1.5">
-							<div class="flex items-center gap-2">
+						<div class="min-w-0 flex-1 space-y-1.5">
+							<div class="flex flex-wrap items-center gap-2">
 								<span
 									class="rounded-full {t.shelter_code === 'unassigned' ||
 									t.type === 'unassigned_queue'
@@ -215,30 +205,34 @@
 							</div>
 
 							<div
-								class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground"
+								class="flex flex-col gap-1 text-xs text-muted-foreground sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-1"
 							>
-								<span class="flex items-center gap-1">
-									<MapPin class="size-3.5" />
-									{t.shelter_code === 'unassigned' || t.type === 'unassigned_queue'
-										? copy.unassignedShelter
-										: t.shelter_name || t.shelter_code}
+								<span class="flex min-w-0 items-center gap-1">
+									<MapPin class="size-3.5 shrink-0" />
+									<span class="truncate">
+										{t.shelter_code === 'unassigned' || t.type === 'unassigned_queue'
+											? copy.unassignedShelter
+											: t.shelter_name || t.shelter_code}
+									</span>
 								</span>
 								{#if t.booked_at}
 									<span class="flex items-center gap-1">
-										<Calendar class="size-3.5" />
+										<Calendar class="size-3.5 shrink-0" />
 										{formatDate(t.booked_at)}
 									</span>
 								{/if}
 							</div>
 						</div>
 
-						<div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
+						<div
+							class="flex items-center gap-1.5 border-t border-border/60 pt-3 sm:shrink-0 sm:gap-2 sm:border-0 sm:pt-0"
+						>
 							<Button
 								type="button"
 								variant="outline"
 								size="sm"
 								title={copy.checkStatusTitle}
-								class="h-8 gap-1 px-2 text-xs font-semibold"
+								class="h-9 min-h-9 flex-1 gap-1 px-2 text-xs font-semibold sm:h-8 sm:min-h-0 sm:flex-none"
 								disabled={checkingCode === t.code}
 								onclick={(e) => handleCheckStatus(t.code, e)}
 							>
@@ -250,7 +244,7 @@
 								variant="secondary"
 								size="sm"
 								title={copy.markVerifiedTitle}
-								class="h-8 gap-1 px-2.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 dark:text-emerald-300 dark:hover:bg-emerald-950/50"
+								class="h-9 min-h-9 flex-1 gap-1 px-2.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 sm:h-8 sm:min-h-0 sm:flex-none dark:text-emerald-300 dark:hover:bg-emerald-950/50"
 								onclick={(e) => handleConfirmVerified(t.code, e)}
 							>
 								<CheckCircle class="size-3.5 text-emerald-600" />
@@ -261,7 +255,7 @@
 								variant="ghost"
 								size="icon-sm"
 								aria-label={copy.removeAria}
-								class="text-muted-foreground hover:text-destructive"
+								class="h-9 min-h-9 shrink-0 text-muted-foreground hover:text-destructive sm:h-8 sm:min-h-0"
 								onclick={(e) => handleRemove(t.code, e)}
 							>
 								<Trash2 class="size-4" />
@@ -270,6 +264,6 @@
 					</div>
 				{/each}
 			</div>
-		{/if}
+		</div>
 	{/if}
 </div>

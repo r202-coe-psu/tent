@@ -20,7 +20,8 @@ export interface ThaiDAutofillProfile {
 	first_name: string;
 	last_name: string;
 	nickname: string;
-	gender: 'male' | 'female' | 'other';
+	/** `null` = ThaID returned no gender (ไม่ระบุ). */
+	gender: 'male' | 'female' | null;
 	birth_year: number;
 	age: number;
 	phone: string | null;

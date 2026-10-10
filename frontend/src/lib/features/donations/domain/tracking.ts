@@ -1,5 +1,7 @@
 /** Public donation ticket view — capability-URL lookup via tracking token (DN-6). */
 
+import { formatThaiDateTime } from '$lib/utils/date';
+
 export type DonationTrackStatus =
 	| 'declared'
 	| 'pending_review'
@@ -50,6 +52,20 @@ export type DonationTrackView = {
 		total_items?: number;
 		received_at?: string;
 		remarks?: string;
+		shortfalls?: Array<{
+			item_id?: string;
+			item_name?: string;
+			declared?: string;
+			counted?: string;
+			short?: string;
+		}>;
+		items?: Array<{
+			item_id?: string;
+			free_text?: string;
+			item_name?: string;
+			qty?: string | number;
+			unit?: string;
+		}>;
 	} | null;
 	updated_at: string | null;
 	expires_at: string | null;
@@ -101,17 +117,18 @@ export function vehicleLabel(
 	return VEHICLE_LABELS[vehicle]?.[locale] ?? VEHICLE_LABELS[vehicle]?.th ?? vehicle;
 }
 
+/**
+ * Display timestamp for donation tracking. Always th-TH + Asia/Bangkok;
+ * `locale` is kept for call-site compatibility and is not used for dates.
+ */
 export function formatTrackTimestamp(
 	iso: string | null | undefined,
-	locale: 'th' | 'en' = 'th'
+	_locale?: 'th' | 'en'
 ): string {
+	void _locale;
 	if (!iso) return '-';
-	const d = new Date(iso);
-	if (Number.isNaN(d.getTime())) return iso;
-	return d.toLocaleString(locale === 'en' ? 'en-US' : 'th-TH', {
-		dateStyle: 'medium',
-		timeStyle: 'short'
-	});
+	const formatted = formatThaiDateTime(iso);
+	return formatted || iso;
 }
 
 export function formatTrackSchedule(
