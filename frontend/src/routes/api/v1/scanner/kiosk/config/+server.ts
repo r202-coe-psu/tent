@@ -5,6 +5,7 @@ import {
 	isKioskPhoneCheckInEnabled,
 	isKioskWalkInRegistrationEnabled
 } from '$lib/features/kiosk/config';
+import { isKioskThaidCheckInAllowed } from '$lib/features/kiosk/server';
 import { findMasterByCode } from '$lib/server/shelters.admin';
 import {
 	authenticateScannerDevice,
@@ -25,11 +26,13 @@ export const POST: RequestHandler = async ({ request }) => {
 			scannerServerRepository
 		);
 		const shelter = await findMasterByCode(principal.shelter_code);
+		const thaidCheckInEnabled = await isKioskThaidCheckInAllowed(principal.shelter_code);
 		return json(
 			{
 				shelter_code: principal.shelter_code,
 				phone_check_in_enabled: isKioskPhoneCheckInEnabled(shelter),
-				walk_in_registration_enabled: isKioskWalkInRegistrationEnabled(shelter)
+				walk_in_registration_enabled: isKioskWalkInRegistrationEnabled(shelter),
+				thaid_check_in_enabled: thaidCheckInEnabled
 			},
 			{ status: 200, headers: noStoreHeaders }
 		);

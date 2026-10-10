@@ -22,6 +22,8 @@ import {
 const ULID = '[0-7][0-9A-HJKMNP-TV-Z]{25}';
 const evacueeIdSchema = z.string().regex(new RegExp(`^evacuee:${ULID}$`, 'i'));
 
+const thaidSessionIdSchema = z.string().regex(/^[0-9a-f]{32}$/);
+
 export const kioskGateInputSchema = z.discriminatedUnion('source', [
 	z.object({ source: z.literal('smart-card'), citizen_id: z.string().regex(/^\d{13}$/) }),
 	z.object({
@@ -32,23 +34,54 @@ export const kioskGateInputSchema = z.discriminatedUnion('source', [
 		source: z.literal('phone'),
 		phone: z.string().min(1).max(20),
 		primary_evacuee_id: evacueeIdSchema.optional()
-	})
+	}),
+	// FR-KTD-22: the browser only names the scan session; the 13-digit id is resolved server-side.
+	z.strictObject({ source: z.literal('thaid'), session_id: thaidSessionIdSchema })
 ]);
+
+/** Gate input after the server has resolved a ThaiD session to its verified citizen id. */
+export type KioskResolvedGateInput =
+	| Exclude<z.infer<typeof kioskGateInputSchema>, { source: 'thaid' }>
+	| { source: 'thaid'; citizen_id: string };
 
 export const kioskCheckInInputSchema = z
 	.object({
 		primary_evacuee_id: evacueeIdSchema,
 		evacuee_ids: z.array(evacueeIdSchema).min(1).max(20),
-		source: z.enum(['smart-card', 'qr', 'phone']).optional(),
+		source: z.enum(['smart-card', 'qr', 'phone', 'thaid']).optional(),
 		citizen_id: z
 			.string()
 			.regex(/^\d{13}$/)
 			.optional(),
+		// FR-KTD-26: the verified ThaiD scan session; the server resolves the citizen id from it.
+		thaid_session_id: thaidSessionIdSchema.optional(),
 		// Chip photo from a face `match`; only a smart-card gate has a card to take it from.
 		// A malformed photo is dropped (→ null), never a reason to fail the check-in (Phase 6).
 		photo: kioskPhotoPayloadSchema.nullable().catch(null).default(null)
 	})
 	.superRefine((input, ctx) => {
+		if (input.source === 'thaid') {
+			if (!input.thaid_session_id) {
+				ctx.addIssue({
+					code: 'custom',
+					path: ['thaid_session_id'],
+					message: 'thaid_session_id is required for a thaid check-in'
+				});
+			}
+			if (input.citizen_id) {
+				ctx.addIssue({
+					code: 'custom',
+					path: ['citizen_id'],
+					message: 'citizen_id is never accepted for a thaid check-in'
+				});
+			}
+		} else if (input.thaid_session_id) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['thaid_session_id'],
+				message: 'thaid_session_id is only accepted for a thaid check-in'
+			});
+		}
 		if (input.photo && (input.source !== 'smart-card' || !input.citizen_id)) {
 			ctx.addIssue({
 				code: 'custom',
@@ -123,6 +156,14 @@ export class KioskLookupUnavailableError extends Error {
 	constructor() {
 		super('Kiosk lookup dependency unavailable');
 		this.name = 'KioskLookupUnavailableError';
+	}
+}
+
+/** The primary being checked in is not the citizen the ThaiD session verified (FR-KTD-27). */
+export class KioskThaidIdentityMismatchError extends Error {
+	constructor() {
+		super('Primary evacuee does not match the verified ThaiD citizen');
+		this.name = 'KioskThaidIdentityMismatchError';
 	}
 }
 
@@ -368,7 +409,7 @@ async function lookupByPhone(
 /** Resolve a pre-registration or prior check-in only within the authenticated scanner's shelter. */
 export async function lookupPreRegisteredEvacuee(
 	shelterCode: string,
-	input: z.infer<typeof kioskGateInputSchema>
+	input: KioskResolvedGateInput
 ): Promise<KioskLookupOutcome> {
 	if (input.source === 'phone') {
 		return lookupByPhone(shelterCode, input.phone, input.primary_evacuee_id);
@@ -429,7 +470,8 @@ export async function lookupPreRegisteredEvacuee(
 export async function checkInSelectedMembers(
 	shelterCode: string,
 	primaryEvacueeId: string,
-	evacueeIds: string[]
+	evacueeIds: string[],
+	options: { requiredPrimaryCitizenId?: string } = {}
 ): Promise<KioskCheckInMemberResult[]> {
 	const dbName = shelterDbName(shelterCode);
 	const normalizedPrimaryId = `evacuee:${primaryEvacueeId.slice('evacuee:'.length).toUpperCase()}`;
@@ -437,6 +479,13 @@ export async function checkInSelectedMembers(
 		(id) => `evacuee:${id.slice('evacuee:'.length).toUpperCase()}`
 	);
 	const primary = await getById(dbName, normalizedPrimaryId);
+	if (
+		primary &&
+		options.requiredPrimaryCitizenId !== undefined &&
+		primary.person_id?.number !== options.requiredPrimaryCitizenId
+	) {
+		throw new KioskThaidIdentityMismatchError();
+	}
 	if (
 		!primary ||
 		primary.shelter_code !== shelterCode ||

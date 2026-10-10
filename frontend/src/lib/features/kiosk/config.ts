@@ -10,6 +10,7 @@ export {
 } from './data/kiosk-config.api';
 export {
 	isKioskPhoneCheckInEnabled,
+	isKioskThaidCheckInEnabled,
 	isKioskWalkInRegistrationEnabled
 } from './domain/kiosk-config';
 export {

@@ -14,6 +14,7 @@ describe('kiosk phone route load', () => {
 	it('redirects to kiosk home when the shelter has phone check-in disabled', async () => {
 		vi.mocked(fetchKioskConfig).mockResolvedValueOnce({
 			phoneCheckInEnabled: false,
+			thaidCheckInEnabled: false,
 			walkInRegistrationEnabled: false
 		});
 		const url = new URL(
@@ -39,6 +40,7 @@ describe('kiosk phone route load', () => {
 	it('allows the route only when the shelter setting is enabled', async () => {
 		vi.mocked(fetchKioskConfig).mockResolvedValueOnce({
 			phoneCheckInEnabled: true,
+			thaidCheckInEnabled: false,
 			walkInRegistrationEnabled: false
 		});
 		const url = new URL('https://tent.example.go.th/kiosk/phone?shelter_code=SH001');
@@ -51,6 +53,7 @@ describe('kiosk phone route load', () => {
 	it('fails closed when config cannot be read', async () => {
 		vi.mocked(fetchKioskConfig).mockResolvedValueOnce({
 			phoneCheckInEnabled: false,
+			thaidCheckInEnabled: false,
 			walkInRegistrationEnabled: false
 		});
 		const url = new URL('https://tent.example.go.th/kiosk/phone');

@@ -8,12 +8,14 @@ describe('kiosk home route load', () => {
 	it.each([true, false])('returns the shelter phone flag (%s)', async (enabled) => {
 		vi.mocked(fetchKioskConfig).mockResolvedValueOnce({
 			phoneCheckInEnabled: enabled,
+			thaidCheckInEnabled: false,
 			walkInRegistrationEnabled: false
 		});
 		const fetch = vi.fn<typeof globalThis.fetch>();
 
 		await expect(load({ fetch } as unknown as Parameters<typeof load>[0])).resolves.toEqual({
 			phoneCheckInEnabled: enabled,
+			thaidCheckInEnabled: false,
 			walkInRegistrationEnabled: false
 		});
 		expect(fetchKioskConfig).toHaveBeenCalledWith(fetch);

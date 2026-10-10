@@ -133,6 +133,8 @@ export const kioskPhoneDeviceLimiter = new RateLimiter(60_000, 10);
 export const kioskPhoneNumberLimiter = new RateLimiter(60_000, 5);
 /** Walk-in creation — per authenticated kiosk device. */
 export const kioskRegisterDeviceLimiter = new RateLimiter(60_000, 5);
+/** Kiosk ThaiD session creation — per scanner device (registry_id). D-5 proposal, pending PO decision. */
+export const kioskThaidSessionDeviceLimiter = new RateLimiter(60_000, 10);
 
 // Public volunteer board (CR-092 / T-28). Its own buckets so a donation drive and a
 // volunteer callout cannot starve each other.

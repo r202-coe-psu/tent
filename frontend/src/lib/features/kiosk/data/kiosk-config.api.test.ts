@@ -13,18 +13,21 @@ describe('fetchKioskConfig', () => {
 	});
 
 	it('returns the shelter setting and makes an uncached same-origin POST', async () => {
-		const fetchFn = vi
-			.fn<typeof fetch>()
-			.mockResolvedValue(
-				new Response(
-					JSON.stringify({ phone_check_in_enabled: true, walk_in_registration_enabled: true }),
-					{ status: 200 }
-				)
-			);
+		const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					phone_check_in_enabled: true,
+					walk_in_registration_enabled: true,
+					thaid_check_in_enabled: true
+				}),
+				{ status: 200 }
+			)
+		);
 
 		await expect(fetchKioskConfig(fetchFn)).resolves.toEqual({
 			phoneCheckInEnabled: true,
-			walkInRegistrationEnabled: true
+			walkInRegistrationEnabled: true,
+			thaidCheckInEnabled: true
 		});
 		expect(fetchFn).toHaveBeenCalledWith(
 			'/api/v1/scanner/kiosk/config',
@@ -53,7 +56,8 @@ describe('fetchKioskConfig', () => {
 			fetchKioskConfig(vi.fn<typeof fetch>().mockResolvedValue(response))
 		).resolves.toEqual({
 			phoneCheckInEnabled: false,
-			walkInRegistrationEnabled: false
+			walkInRegistrationEnabled: false,
+			thaidCheckInEnabled: false
 		});
 	});
 
@@ -65,11 +69,13 @@ describe('fetchKioskConfig', () => {
 
 		await expect(fetchKioskConfig(networkError)).resolves.toEqual({
 			phoneCheckInEnabled: false,
-			walkInRegistrationEnabled: false
+			walkInRegistrationEnabled: false,
+			thaidCheckInEnabled: false
 		});
 		await expect(fetchKioskConfig(timeoutError)).resolves.toEqual({
 			phoneCheckInEnabled: false,
-			walkInRegistrationEnabled: false
+			walkInRegistrationEnabled: false,
+			thaidCheckInEnabled: false
 		});
 	});
 
@@ -87,7 +93,11 @@ describe('fetchKioskConfig', () => {
 		const second = await fetchKioskConfig(fetchFn);
 
 		expect(fetchFn).toHaveBeenCalledTimes(1);
-		expect(second).toEqual({ phoneCheckInEnabled: true, walkInRegistrationEnabled: false });
+		expect(second).toEqual({
+			phoneCheckInEnabled: true,
+			walkInRegistrationEnabled: false,
+			thaidCheckInEnabled: false
+		});
 	});
 
 	it('re-fetches once the cache TTL has elapsed', async () => {
@@ -121,6 +131,10 @@ describe('fetchKioskConfig', () => {
 		const second = await fetchKioskConfig(fetchFn);
 
 		expect(fetchFn).toHaveBeenCalledTimes(2);
-		expect(second).toEqual({ phoneCheckInEnabled: true, walkInRegistrationEnabled: true });
+		expect(second).toEqual({
+			phoneCheckInEnabled: true,
+			walkInRegistrationEnabled: true,
+			thaidCheckInEnabled: false
+		});
 	});
 });

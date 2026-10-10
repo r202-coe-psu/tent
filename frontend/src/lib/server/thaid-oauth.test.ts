@@ -46,6 +46,15 @@ describe('thaid-oauth helpers (CR-ThaID)', () => {
 			expect(parseThaidOAuthState('')).toBeNull();
 			expect(parseThaidOAuthState(undefined)).toBeNull();
 		});
+
+		it('round-trips kiosk_check_in state together with its sessionId', () => {
+			const kiosk = createThaidOAuthState('kiosk_check_in', '', undefined, 'sess-kiosk-1');
+			expect(parseThaidOAuthState(kiosk)).toMatchObject({
+				mode: 'kiosk_check_in',
+				name: '',
+				sessionId: 'sess-kiosk-1'
+			});
+		});
 	});
 
 	describe('maskPid', () => {
@@ -112,6 +121,17 @@ describe('thaid-oauth helpers (CR-ThaID)', () => {
 			const scopes = parsed.searchParams.get('scope')?.split(' ') ?? [];
 			expect(scopes).toContain('gender');
 			expect(scopes).toContain('address');
+		});
+
+		it('requests only openid + pid for kiosk_check_in mode (data minimization)', () => {
+			const url = buildThaidAuthorizeUrl({
+				clientId: 'my-client',
+				redirectUri: 'https://shelter.importstar.dev/callback',
+				state: 'test-state-token',
+				mode: 'kiosk_check_in'
+			});
+
+			expect(new URL(url).searchParams.get('scope')).toBe('openid pid');
 		});
 	});
 

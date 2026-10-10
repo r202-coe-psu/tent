@@ -3,7 +3,17 @@ export const KIOSK_CONFIG_TIMEOUT_MS = 3_000;
  * blocking every return-to-home on a round trip, while still picking up an admin toggle promptly. */
 export const KIOSK_CONFIG_CACHE_TTL_MS = 30_000;
 
-export type KioskConfig = { phoneCheckInEnabled: boolean; walkInRegistrationEnabled: boolean };
+export type KioskConfig = {
+	phoneCheckInEnabled: boolean;
+	walkInRegistrationEnabled: boolean;
+	thaidCheckInEnabled: boolean;
+};
+
+const FAIL_CLOSED_CONFIG: KioskConfig = {
+	phoneCheckInEnabled: false,
+	walkInRegistrationEnabled: false,
+	thaidCheckInEnabled: false
+};
 
 let cachedConfig: { config: KioskConfig; fetchedAt: number } | null = null;
 
@@ -25,18 +35,20 @@ export async function fetchKioskConfig(fetchFn: typeof fetch = fetch): Promise<K
 			cache: 'no-store',
 			signal: AbortSignal.timeout(KIOSK_CONFIG_TIMEOUT_MS)
 		});
-		if (!response.ok) return { phoneCheckInEnabled: false, walkInRegistrationEnabled: false };
+		if (!response.ok) return { ...FAIL_CLOSED_CONFIG };
 		const body = (await response.json()) as {
 			phone_check_in_enabled?: unknown;
 			walk_in_registration_enabled?: unknown;
+			thaid_check_in_enabled?: unknown;
 		};
 		const config: KioskConfig = {
 			phoneCheckInEnabled: body.phone_check_in_enabled === true,
-			walkInRegistrationEnabled: body.walk_in_registration_enabled === true
+			walkInRegistrationEnabled: body.walk_in_registration_enabled === true,
+			thaidCheckInEnabled: body.thaid_check_in_enabled === true
 		};
 		cachedConfig = { config, fetchedAt: Date.now() };
 		return config;
 	} catch {
-		return { phoneCheckInEnabled: false, walkInRegistrationEnabled: false };
+		return { ...FAIL_CLOSED_CONFIG };
 	}
 }

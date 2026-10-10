@@ -3,6 +3,7 @@ import { adminFetch } from '$lib/server/couch-admin';
 import {
 	checkInSelectedMembers,
 	KioskInputError,
+	KioskThaidIdentityMismatchError,
 	kioskCheckInInputSchema,
 	kioskGateInputSchema,
 	lookupPreRegisteredEvacuee,
@@ -447,14 +448,11 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 		const person = evacuee(0, { last_name: 'ใจดี' });
 		evacuees = [person];
 
-		const card = await lookupPreRegisteredEvacuee(
-			shelterCode,
-			kioskGateInputSchema.parse({ source: 'smart-card', citizen_id: '1234567890123' })
-		);
-		const qr = await lookupPreRegisteredEvacuee(
-			shelterCode,
-			kioskGateInputSchema.parse({ source: 'qr', token: person._id })
-		);
+		const card = await lookupPreRegisteredEvacuee(shelterCode, {
+			source: 'smart-card',
+			citizen_id: '1234567890123'
+		});
+		const qr = await lookupPreRegisteredEvacuee(shelterCode, { source: 'qr', token: person._id });
 		expect(card).toMatchObject({ kind: 'household', name_masked: true });
 		expect(qr).toMatchObject({ kind: 'household', name_masked: true });
 		if (card.kind === 'household') expect(card.members[0].last_name).toBe('ใ****');
@@ -541,11 +539,70 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 	it('keeps ambiguous card lookup as not_found', async () => {
 		evacuees = [evacuee(0), evacuee(1)];
 		expect(
-			await lookupPreRegisteredEvacuee(
-				shelterCode,
-				kioskGateInputSchema.parse({ source: 'smart-card', citizen_id: '1234567890123' })
-			)
+			await lookupPreRegisteredEvacuee(shelterCode, {
+				source: 'smart-card',
+				citizen_id: '1234567890123'
+			})
 		).toEqual({ kind: 'not_found', can_register: false });
+	});
+});
+
+describe('lookupPreRegisteredEvacuee thaid', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		evacuees = [];
+		households = [];
+		configureCouchMocks();
+	});
+
+	it('finds the household by person_id.number with masked names like a smart-card lookup', async () => {
+		const primary = evacuee(0);
+		const member = evacuee(1, { person_id: { number: '9999999999999' } });
+		setHousehold([primary, member], primary);
+
+		const outcome = await lookupPreRegisteredEvacuee(shelterCode, {
+			source: 'thaid',
+			citizen_id: '1234567890123'
+		});
+
+		expect(outcome).toMatchObject({
+			kind: 'household',
+			name_masked: true,
+			shelter_code: shelterCode,
+			primary_evacuee_id: primary._id
+		});
+		expect(outcome.kind === 'household' && outcome.members.map((m) => m.evacuee_id)).toEqual([
+			primary._id,
+			member._id
+		]);
+		const query = mockAdminFetch.mock.calls.map(
+			([, init]) => JSON.parse(String(init?.body)) as { selector: Record<string, unknown> }
+		)[0];
+		expect(query?.selector).toMatchObject({
+			shelter_code: shelterCode,
+			'person_id.number': '1234567890123'
+		});
+	});
+
+	it('does not offer walk-in registration when the citizen is unknown', async () => {
+		expect(
+			await lookupPreRegisteredEvacuee(shelterCode, {
+				source: 'thaid',
+				citizen_id: '1234567890123'
+			})
+		).toEqual({ kind: 'not_found', can_register: false });
+	});
+
+	it('returns the repeat-registration outcome for kiosk_registered records', async () => {
+		evacuees = [
+			evacuee(0, { registered_via: 'kiosk', current_stay: { status: 'kiosk_registered' } })
+		];
+		expect(
+			await lookupPreRegisteredEvacuee(shelterCode, {
+				source: 'thaid',
+				citizen_id: '1234567890123'
+			})
+		).toEqual({ kind: 'kiosk_registered' });
 	});
 });
 
@@ -657,6 +714,56 @@ describe('checkInSelectedMembers', () => {
 		expect(
 			mockAdminFetch.mock.calls.filter(([path]) => path.endsWith(encodeURIComponent(primary._id)))
 		).toHaveLength(4);
+	});
+});
+
+describe('checkInSelectedMembers requiredPrimaryCitizenId', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		evacuees = [];
+		households = [];
+		configureCheckInCouchMocks();
+	});
+
+	it('writes nothing and signals a mismatch when the primary is another citizen', async () => {
+		const primary = evacuee(0, { person_id: { number: '1111111111111' } });
+		setHousehold([primary]);
+
+		await expect(
+			checkInSelectedMembers(shelterCode, primary._id, [primary._id], {
+				requiredPrimaryCitizenId: '1234567890123'
+			})
+		).rejects.toBeInstanceOf(KioskThaidIdentityMismatchError);
+		expect(mockAdminFetch.mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(false);
+	});
+
+	it('signals a mismatch when the primary has no citizen id', async () => {
+		const primary = evacuee(0, { person_id: undefined });
+		setHousehold([primary]);
+
+		await expect(
+			checkInSelectedMembers(shelterCode, primary._id, [primary._id], {
+				requiredPrimaryCitizenId: '1234567890123'
+			})
+		).rejects.toBeInstanceOf(KioskThaidIdentityMismatchError);
+	});
+
+	it('checks in as usual when the primary citizen id matches', async () => {
+		const primary = evacuee(0);
+		setHousehold([primary]);
+
+		const results = await checkInSelectedMembers(shelterCode, primary._id, [primary._id], {
+			requiredPrimaryCitizenId: '1234567890123'
+		});
+
+		expect(results).toEqual([
+			{
+				evacuee_id: primary._id,
+				status: 'checked_in',
+				stay_status: 'arriving',
+				qr_payload: primary._id
+			}
+		]);
 	});
 });
 
@@ -839,5 +946,93 @@ describe('saveKioskCheckInCardPhoto', () => {
 		const logged = JSON.stringify(warn.mock.calls);
 		expect(logged).not.toContain(photo.full_base64);
 		expect(warn).toHaveBeenCalled();
+	});
+});
+
+describe('kioskGateInputSchema thaid', () => {
+	const sessionId = '0123456789abcdef0123456789abcdef';
+
+	it('accepts a thaid gate that carries only a session id', () => {
+		expect(kioskGateInputSchema.safeParse({ source: 'thaid', session_id: sessionId })).toEqual({
+			success: true,
+			data: { source: 'thaid', session_id: sessionId }
+		});
+	});
+
+	it('never accepts the 13-digit citizen id from the browser for thaid', () => {
+		expect(
+			kioskGateInputSchema.safeParse({
+				source: 'thaid',
+				session_id: sessionId,
+				citizen_id: '1234567890123'
+			}).success
+		).toBe(false);
+	});
+
+	it('rejects a malformed or missing thaid session id', () => {
+		expect(kioskGateInputSchema.safeParse({ source: 'thaid', session_id: 'abc' }).success).toBe(
+			false
+		);
+		expect(
+			kioskGateInputSchema.safeParse({ source: 'thaid', session_id: sessionId.toUpperCase() })
+				.success
+		).toBe(false);
+		expect(kioskGateInputSchema.safeParse({ source: 'thaid' }).success).toBe(false);
+	});
+});
+
+describe('kioskCheckInInputSchema thaid', () => {
+	const primaryId = `evacuee:${ids[0]}`;
+	const sessionId = '0123456789abcdef0123456789abcdef';
+	const base = { primary_evacuee_id: primaryId, evacuee_ids: [primaryId], source: 'thaid' };
+	const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0]);
+	const photo = {
+		content_type: 'image/jpeg' as const,
+		full_base64: jpeg.toString('base64'),
+		width: 1,
+		height: 1,
+		original_size: 4,
+		compressed_size: 4,
+		thumbnail_size: 0
+	};
+
+	it('accepts source thaid with a session id and no photo', () => {
+		const parsed = kioskCheckInInputSchema.safeParse({ ...base, thaid_session_id: sessionId });
+		expect(parsed.success).toBe(true);
+		expect(parsed.data?.photo).toBeNull();
+	});
+
+	it('requires the session id and a well-formed one', () => {
+		expect(kioskCheckInInputSchema.safeParse(base).success).toBe(false);
+		expect(kioskCheckInInputSchema.safeParse({ ...base, thaid_session_id: 'abc' }).success).toBe(
+			false
+		);
+	});
+
+	it('forbids a browser-supplied citizen id', () => {
+		expect(
+			kioskCheckInInputSchema.safeParse({
+				...base,
+				thaid_session_id: sessionId,
+				citizen_id: '1234567890123'
+			}).success
+		).toBe(false);
+	});
+
+	it('rejects a photo', () => {
+		expect(
+			kioskCheckInInputSchema.safeParse({ ...base, thaid_session_id: sessionId, photo }).success
+		).toBe(false);
+	});
+
+	it('rejects a session id on any other source', () => {
+		expect(
+			kioskCheckInInputSchema.safeParse({
+				primary_evacuee_id: primaryId,
+				evacuee_ids: [primaryId],
+				source: 'qr',
+				thaid_session_id: sessionId
+			}).success
+		).toBe(false);
 	});
 });

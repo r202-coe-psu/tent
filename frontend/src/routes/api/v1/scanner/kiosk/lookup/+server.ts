@@ -6,7 +6,9 @@ import {
 	kioskGateInputSchema,
 	KioskInputError,
 	KioskLookupUnavailableError,
-	normalizeKioskPhone
+	isKioskThaidCheckInAllowed,
+	normalizeKioskPhone,
+	type KioskResolvedGateInput
 } from '$lib/features/kiosk/server';
 import {
 	isKioskPhoneCheckInEnabled,
@@ -24,6 +26,7 @@ import {
 	ScannerDependencyError
 } from '$lib/server/scanners/device-credentials';
 import { findMasterByCode } from '$lib/server/shelters.admin';
+import { getKioskSessionForDevice } from '$lib/server/thaid-scan-session';
 
 export const prerender = false;
 
@@ -92,7 +95,38 @@ export const POST: RequestHandler = async ({ request }) => {
 				}
 			}
 		}
-		const result = await lookupPreRegisteredEvacuee(principal.shelter_code, parsed.data);
+		let gateInput: KioskResolvedGateInput;
+		if (parsed.data.source === 'thaid') {
+			// FR-KTD-25: the gate is re-checked on every ThaiD lookup (closed mid-flow → 403).
+			if (!(await isKioskThaidCheckInAllowed(principal.shelter_code))) {
+				return json(
+					{
+						error: {
+							code: 'KIOSK_METHOD_DISABLED',
+							message: 'ช่องทางนี้ปิดใช้งาน กรุณาติดต่อเจ้าหน้าที่'
+						}
+					},
+					{ status: 403, headers: noStoreHeaders }
+				);
+			}
+			// FR-KTD-23: the 13-digit id comes only from the server-held session; lookup does not consume it.
+			const session = getKioskSessionForDevice(parsed.data.session_id, principal.registry_id);
+			if (session?.status !== 'completed' || !session.citizen) {
+				return json(
+					{
+						error: {
+							code: 'KIOSK_THAID_SESSION_INVALID',
+							message: 'การยืนยัน ThaiD หมดอายุหรือไม่ถูกต้อง กรุณาสแกนใหม่'
+						}
+					},
+					{ status: 409, headers: noStoreHeaders }
+				);
+			}
+			gateInput = { source: 'thaid', citizen_id: session.citizen.pid };
+		} else {
+			gateInput = parsed.data;
+		}
+		const result = await lookupPreRegisteredEvacuee(principal.shelter_code, gateInput);
 		if (result.kind === 'not_found' && parsed.data.source === 'smart-card') {
 			walkInRegistrationEnabled = await findMasterByCode(principal.shelter_code)
 				.then(isKioskWalkInRegistrationEnabled)

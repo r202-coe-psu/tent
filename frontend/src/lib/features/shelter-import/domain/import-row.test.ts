@@ -625,6 +625,7 @@ describe('buildUpdatePayload — fields the workbook cannot express', () => {
 				enable_medical_screening: true,
 				accepts_pre_registration: true,
 				kiosk_phone_check_in_enabled: false,
+				kiosk_thaid_check_in_enabled: false,
 				kiosk_walk_in_registration_enabled: false
 			},
 			food_distribution_points: existingPoints
@@ -638,6 +639,7 @@ describe('buildUpdatePayload — fields the workbook cannot express', () => {
 			enable_medical_screening: true,
 			accepts_pre_registration: true,
 			kiosk_phone_check_in_enabled: false,
+			kiosk_thaid_check_in_enabled: false,
 			kiosk_walk_in_registration_enabled: false
 		});
 		expect(payload.food_distribution_points).toEqual(existingPoints);

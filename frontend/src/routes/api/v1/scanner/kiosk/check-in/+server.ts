@@ -4,8 +4,11 @@ import { scannerServerRepository } from '$lib/features/scanners/server';
 import {
 	checkInSelectedMembers,
 	kioskCheckInInputSchema,
+	KioskThaidIdentityMismatchError,
 	saveKioskCheckInCardPhoto
 } from '$lib/features/kiosk/server/kiosk-check-in.server';
+import { isKioskThaidCheckInAllowed } from '$lib/features/kiosk/server/kiosk-thaid-gate.server';
+import { consumeKioskSession } from '$lib/server/thaid-scan-session';
 import {
 	authenticateScannerDevice,
 	DEVICE_AUTH_FAILED,
@@ -17,6 +20,17 @@ import {
 export const prerender = false;
 
 const noStoreHeaders = { 'cache-control': 'no-store', pragma: 'no-cache' };
+
+const thaidSessionInvalid = () =>
+	json(
+		{
+			error: {
+				code: 'KIOSK_THAID_SESSION_INVALID',
+				message: 'การยืนยัน ThaiD หมดอายุหรือไม่ถูกต้อง กรุณาสแกนใหม่'
+			}
+		},
+		{ status: 409, headers: noStoreHeaders }
+	);
 
 export const POST: RequestHandler = async ({ request }) => {
 	try {
@@ -32,11 +46,41 @@ export const POST: RequestHandler = async ({ request }) => {
 				{ status: 400, headers: noStoreHeaders }
 			);
 		}
-		const result = await checkInSelectedMembers(
-			principal.shelter_code,
-			parsed.data.primary_evacuee_id,
-			parsed.data.evacuee_ids
-		);
+		let result;
+		if (parsed.data.source === 'thaid' && parsed.data.thaid_session_id) {
+			// FR-KTD-27: the gate is re-checked, then the session is claimed synchronously before any
+			// write so a double submit cannot check in twice. The schema guarantees the session id.
+			if (!(await isKioskThaidCheckInAllowed(principal.shelter_code))) {
+				return json(
+					{
+						error: {
+							code: 'KIOSK_METHOD_DISABLED',
+							message: 'ช่องทางนี้ปิดใช้งาน กรุณาติดต่อเจ้าหน้าที่'
+						}
+					},
+					{ status: 403, headers: noStoreHeaders }
+				);
+			}
+			const citizen = consumeKioskSession(parsed.data.thaid_session_id, principal.registry_id);
+			if (!citizen) return thaidSessionInvalid();
+			try {
+				result = await checkInSelectedMembers(
+					principal.shelter_code,
+					parsed.data.primary_evacuee_id,
+					parsed.data.evacuee_ids,
+					{ requiredPrimaryCitizenId: citizen.pid }
+				);
+			} catch (error) {
+				if (error instanceof KioskThaidIdentityMismatchError) return thaidSessionInvalid();
+				throw error;
+			}
+		} else {
+			result = await checkInSelectedMembers(
+				principal.shelter_code,
+				parsed.data.primary_evacuee_id,
+				parsed.data.evacuee_ids
+			);
+		}
 		const { photo, citizen_id: citizenId } = parsed.data;
 		if (photo && citizenId) {
 			// Best effort after the authoritative check-in writes; it reports failure as an outcome

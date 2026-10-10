@@ -94,6 +94,20 @@ describe('shelterSchema', () => {
 		expect(walkInEnabled.feature_flags?.kiosk_walk_in_registration_enabled).toBe(true);
 	});
 
+	it('defaults kiosk_thaid_check_in_enabled to false for docs lacking the key and accepts true', () => {
+		const oldFlags = shelterSchema.parse({
+			...validShelterInput,
+			feature_flags: { kiosk_phone_check_in_enabled: true }
+		});
+		const enabled = shelterSchema.parse({
+			...validShelterInput,
+			feature_flags: { kiosk_thaid_check_in_enabled: true }
+		});
+
+		expect(oldFlags.feature_flags?.kiosk_thaid_check_in_enabled).toBe(false);
+		expect(enabled.feature_flags?.kiosk_thaid_check_in_enabled).toBe(true);
+	});
+
 	it('preserves sibling feature_flags when enable_medical_screening is toggled in a full object', () => {
 		const parsed = shelterSchema.parse({
 			...validShelterInput,
@@ -105,6 +119,7 @@ describe('shelterSchema', () => {
 				enable_medical_screening: true,
 				accepts_pre_registration: true,
 				kiosk_phone_check_in_enabled: false,
+				kiosk_thaid_check_in_enabled: false,
 				kiosk_walk_in_registration_enabled: false
 			}
 		});
@@ -116,6 +131,7 @@ describe('shelterSchema', () => {
 			enable_medical_screening: true,
 			accepts_pre_registration: true,
 			kiosk_phone_check_in_enabled: false,
+			kiosk_thaid_check_in_enabled: false,
 			kiosk_walk_in_registration_enabled: false
 		});
 	});

@@ -6,8 +6,10 @@ import {
 	ScannerAuthError
 } from '$lib/server/scanners/device-credentials';
 import { findMasterByCode } from '$lib/server/shelters.admin';
+import { isKioskThaidCheckInAllowed } from '$lib/features/kiosk/server';
 
 vi.mock('$lib/features/scanners/server', () => ({ scannerServerRepository: {} }));
+vi.mock('$lib/features/kiosk/server', () => ({ isKioskThaidCheckInAllowed: vi.fn() }));
 vi.mock('$lib/server/shelters.admin', () => ({ findMasterByCode: vi.fn() }));
 vi.mock('$lib/server/scanners/device-credentials', async () => {
 	const actual = await vi.importActual<typeof import('$lib/server/scanners/device-credentials')>(
@@ -18,6 +20,7 @@ vi.mock('$lib/server/scanners/device-credentials', async () => {
 
 const mockAuthenticate = vi.mocked(authenticateScannerDevice);
 const mockFindShelter = vi.mocked(findMasterByCode);
+const mockThaidAllowed = vi.mocked(isKioskThaidCheckInAllowed);
 
 function request(body: unknown = {}, headers: Record<string, string> = {}): RequestEvent {
 	return {
@@ -36,6 +39,7 @@ describe('POST /api/v1/scanner/kiosk/config', () => {
 			if (!deviceId) throw new ScannerAuthError();
 			return { shelter_code: 'SH001' } as never;
 		});
+		mockThaidAllowed.mockResolvedValue(true);
 		mockFindShelter.mockResolvedValue({
 			code: 'SH001',
 			feature_flags: {
@@ -54,9 +58,11 @@ describe('POST /api/v1/scanner/kiosk/config', () => {
 		expect(await response.json()).toEqual({
 			shelter_code: 'SH001',
 			phone_check_in_enabled: true,
-			walk_in_registration_enabled: true
+			walk_in_registration_enabled: true,
+			thaid_check_in_enabled: true
 		});
 		expect(mockFindShelter).toHaveBeenCalledWith('SH001');
+		expect(mockThaidAllowed).toHaveBeenCalledWith('SH001');
 		expect(response.headers.get('cache-control')).toBe('no-store');
 		expect(response.headers.get('pragma')).toBe('no-cache');
 	});
@@ -74,6 +80,16 @@ describe('POST /api/v1/scanner/kiosk/config', () => {
 		expect((await response.json()).phone_check_in_enabled).toBe(false);
 	});
 
+	it('reports thaid_check_in_enabled false when the ThaiD gate denies', async () => {
+		mockThaidAllowed.mockResolvedValueOnce(false);
+		const response = await POST(
+			request({}, { 'x-device-id': 'device-1', 'x-device-secret': 'secret' })
+		);
+
+		expect(response.status).toBe(200);
+		expect((await response.json()).thaid_check_in_enabled).toBe(false);
+	});
+
 	it('returns 401 when authentication fails', async () => {
 		mockAuthenticate.mockRejectedValueOnce(new ScannerAuthError());
 		const response = await POST(request());
@@ -82,6 +98,7 @@ describe('POST /api/v1/scanner/kiosk/config', () => {
 		expect((await response.json()).error.code).toBe('DEVICE_AUTH_FAILED');
 		expect(response.headers.get('cache-control')).toBe('no-store');
 		expect(mockFindShelter).not.toHaveBeenCalled();
+		expect(mockThaidAllowed).not.toHaveBeenCalled();
 	});
 
 	it('returns 503 when registry lookup fails', async () => {

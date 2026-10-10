@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { isKioskPhoneCheckInEnabled, isKioskWalkInRegistrationEnabled } from './kiosk-config';
+import {
+	isKioskPhoneCheckInEnabled,
+	isKioskThaidCheckInEnabled,
+	isKioskWalkInRegistrationEnabled
+} from './kiosk-config';
 
 describe('isKioskPhoneCheckInEnabled', () => {
 	it('is enabled only when the shelter flag is exactly true', () => {
@@ -28,5 +32,21 @@ describe('isKioskWalkInRegistrationEnabled', () => {
 		).toBe(false);
 		expect(isKioskWalkInRegistrationEnabled({ feature_flags: {} })).toBe(false);
 		expect(isKioskWalkInRegistrationEnabled(null)).toBe(false);
+	});
+});
+
+describe('isKioskThaidCheckInEnabled', () => {
+	it('is enabled only when the shelter flag is exactly true (fail closed)', () => {
+		expect(
+			isKioskThaidCheckInEnabled({ feature_flags: { kiosk_thaid_check_in_enabled: true } })
+		).toBe(true);
+		expect(
+			isKioskThaidCheckInEnabled({ feature_flags: { kiosk_thaid_check_in_enabled: false } })
+		).toBe(false);
+		expect(
+			isKioskThaidCheckInEnabled({ feature_flags: { kiosk_thaid_check_in_enabled: 'true' } })
+		).toBe(false);
+		expect(isKioskThaidCheckInEnabled({ feature_flags: {} })).toBe(false);
+		expect(isKioskThaidCheckInEnabled(null)).toBe(false);
 	});
 });

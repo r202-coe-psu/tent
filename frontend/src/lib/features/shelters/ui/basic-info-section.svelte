@@ -164,6 +164,13 @@
 		});
 	}
 
+	function setKioskThaidCheckIn(checked: boolean) {
+		ensureFeatureFlags();
+		$formData.feature_flags = patchFeatureFlags($formData.feature_flags, {
+			kiosk_thaid_check_in_enabled: checked
+		});
+	}
+
 	function setKioskWalkInRegistration(checked: boolean) {
 		ensureFeatureFlags();
 		$formData.feature_flags = patchFeatureFlags($formData.feature_flags, {
@@ -414,6 +421,28 @@
 				onCheckedChange={(v) => setKioskPhoneCheckIn(v === true)}
 				{disabled}
 				aria-label="รับรายงานตัวด้วยเบอร์โทรที่ Kiosk"
+			/>
+		</div>
+
+		<div
+			class="flex items-center justify-between gap-3 rounded-lg border border-shelter-border bg-background p-4"
+		>
+			<div class="min-w-0 flex-1 space-y-1">
+				<label for="kiosk-thaid-check-in" class="text-sm font-medium text-card-foreground">
+					รายงานตัวด้วย ThaiD ที่ตู้ kiosk
+				</label>
+				<p class="text-xs text-muted-foreground">
+					เปิด: ผู้ประสบภัยยืนยันตัวตนด้วยแอป ThaiD บนมือถือของตนเอง · ต้องเปิด ThaiD ระดับระบบที่
+					/system-management/security ด้วย และมือถือผู้ประสบภัยต้องมีอินเทอร์เน็ต · ปิด:
+					ซ่อนช่องทางนี้ (ค่าเริ่มต้นปิด)
+				</p>
+			</div>
+			<Switch
+				id="kiosk-thaid-check-in"
+				checked={$formData.feature_flags?.kiosk_thaid_check_in_enabled ?? false}
+				onCheckedChange={(v) => setKioskThaidCheckIn(v === true)}
+				{disabled}
+				aria-label="รายงานตัวด้วย ThaiD ที่ตู้ kiosk"
 			/>
 		</div>
 

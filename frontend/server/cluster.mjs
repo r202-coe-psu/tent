@@ -50,12 +50,25 @@ if (workers === 1) {
 			const now = Date.now();
 			if (message.action === 'create' && message.session) {
 				activeSessions.set(message.session.id, message.session);
+			} else if (message.action === 'complete' && message.id && message.citizen) {
+				const s = activeSessions.get(message.id);
+				if (s) {
+					s.status = 'completed';
+					s.citizen = message.citizen;
+					if (message.expiresAt) s.expiresAt = message.expiresAt;
+				}
 			} else if (message.action === 'complete' && message.id && message.profile) {
 				const s = activeSessions.get(message.id);
 				if (s) {
 					s.status = 'completed';
 					s.profile = message.profile;
 				}
+			} else if (message.action === 'cancel' && message.id) {
+				const s = activeSessions.get(message.id);
+				if (s) s.status = 'cancelled';
+			} else if (message.action === 'consume' && message.id) {
+				const s = activeSessions.get(message.id);
+				if (s) s.status = 'consumed';
 			} else if (message.action === 'expire' && message.id) {
 				activeSessions.delete(message.id);
 			} else if (message.action === 'init') {

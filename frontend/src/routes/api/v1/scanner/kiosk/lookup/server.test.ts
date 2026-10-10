@@ -15,6 +15,18 @@ import {
 	kioskPhoneNumberLimiter
 } from '$lib/server/security/rate-limiter';
 import { findMasterByCode } from '$lib/server/shelters.admin';
+import { isKioskThaidCheckInAllowed } from '$lib/features/kiosk/server/kiosk-thaid-gate.server';
+import {
+	_resetSessionsForTest,
+	cancelKioskSession,
+	completeKioskSession,
+	createKioskCheckInSession,
+	getKioskSessionForDevice
+} from '$lib/server/thaid-scan-session';
+
+vi.mock('$lib/features/kiosk/server/kiosk-thaid-gate.server', () => ({
+	isKioskThaidCheckInAllowed: vi.fn()
+}));
 
 vi.mock('$lib/server/shelters.admin', () => ({ findMasterByCode: vi.fn() }));
 
@@ -46,6 +58,7 @@ const mockAuthenticate = vi.mocked(authenticateScannerDevice);
 const mockLookup = vi.mocked(lookupPreRegisteredEvacuee);
 const mockHeartbeat = vi.mocked(scannerServerRepository.updateDeviceLastSeen);
 const mockFindShelter = vi.mocked(findMasterByCode);
+const mockThaidAllowed = vi.mocked(isKioskThaidCheckInAllowed);
 const phone = '0812345678';
 const principalFor = (registryId: string) => ({ registry_id: registryId, shelter_code: 'SH001' });
 const household = {
@@ -91,6 +104,8 @@ describe('POST /api/v1/scanner/kiosk/lookup', () => {
 		});
 		mockHeartbeat.mockResolvedValue(undefined);
 		mockLookup.mockResolvedValue(household as never);
+		mockThaidAllowed.mockResolvedValue(true);
+		_resetSessionsForTest();
 		mockFindShelter.mockResolvedValue({
 			code: 'SH001',
 			feature_flags: {
@@ -267,5 +282,129 @@ describe('POST /api/v1/scanner/kiosk/lookup', () => {
 			expect(response.status).toBe(200);
 		}
 		expect(mockLookup).toHaveBeenCalledTimes(12);
+	});
+});
+
+describe('POST /api/v1/scanner/kiosk/lookup source thaid', () => {
+	const pid = '1234567890123';
+	const device = 'thaid-kiosk-a';
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		mockAuthenticate.mockImplementation(async (deviceId) => {
+			if (!deviceId) throw new ScannerAuthError();
+			return principalFor(deviceId) as never;
+		});
+		mockHeartbeat.mockResolvedValue(undefined);
+		mockLookup.mockResolvedValue(household as never);
+		mockThaidAllowed.mockResolvedValue(true);
+		_resetSessionsForTest();
+	});
+
+	function completedSession(deviceId = device): string {
+		const session = createKioskCheckInSession({ device_id: deviceId, shelter_code: 'SH001' });
+		completeKioskSession(session.id, { pid, sub: 'sub-1' });
+		return session.id;
+	}
+
+	const sessionInvalid = {
+		error: {
+			code: 'KIOSK_THAID_SESSION_INVALID',
+			message: 'การยืนยัน ThaiD หมดอายุหรือไม่ถูกต้อง กรุณาสแกนใหม่'
+		}
+	};
+
+	it('rejects when the ThaiD gate is off, before touching the session', async () => {
+		mockThaidAllowed.mockResolvedValueOnce(false);
+		const sessionId = completedSession();
+
+		const response = await send({ source: 'thaid', session_id: sessionId }, device);
+
+		expect(response.status).toBe(403);
+		expect((await response.json()).error.code).toBe('KIOSK_METHOD_DISABLED');
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(mockThaidAllowed).toHaveBeenCalledWith('SH001');
+		expect(mockLookup).not.toHaveBeenCalled();
+		expect(getKioskSessionForDevice(sessionId, device)?.status).toBe('completed');
+	});
+
+	it('rejects a browser-supplied citizen id with thaid', async () => {
+		const response = await send(
+			{ source: 'thaid', session_id: completedSession(), citizen_id: pid },
+			device
+		);
+
+		expect(response.status).toBe(400);
+		expect((await response.json()).error.code).toBe('INVALID_GATE_INPUT');
+		expect(mockLookup).not.toHaveBeenCalled();
+	});
+
+	it('answers 409 for an unknown session', async () => {
+		const response = await send({ source: 'thaid', session_id: 'f'.repeat(32) }, device);
+
+		expect(response.status).toBe(409);
+		expect(await response.json()).toEqual(sessionInvalid);
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(mockLookup).not.toHaveBeenCalled();
+	});
+
+	it('answers 409 for a session still pending', async () => {
+		const pending = createKioskCheckInSession({ device_id: device, shelter_code: 'SH001' });
+
+		const response = await send({ source: 'thaid', session_id: pending.id }, device);
+
+		expect(response.status).toBe(409);
+		expect(await response.json()).toEqual(sessionInvalid);
+		expect(mockLookup).not.toHaveBeenCalled();
+	});
+
+	it('answers 409 for a cancelled session', async () => {
+		const sessionId = completedSession();
+		cancelKioskSession(sessionId, device);
+
+		const response = await send({ source: 'thaid', session_id: sessionId }, device);
+
+		expect(response.status).toBe(409);
+		expect(await response.json()).toEqual(sessionInvalid);
+		expect(mockLookup).not.toHaveBeenCalled();
+	});
+
+	it('answers 409 when another kiosk presents the session (AC-04)', async () => {
+		const sessionId = completedSession('thaid-kiosk-a');
+
+		const response = await send({ source: 'thaid', session_id: sessionId }, 'thaid-kiosk-b');
+
+		expect(response.status).toBe(409);
+		expect(await response.json()).toEqual(sessionInvalid);
+		expect(mockLookup).not.toHaveBeenCalled();
+	});
+
+	it('looks up by the session citizen id, leaks no pid, and keeps the session usable', async () => {
+		const sessionId = completedSession();
+
+		const response = await send({ source: 'thaid', session_id: sessionId }, device);
+		const text = await response.text();
+
+		expect(response.status).toBe(200);
+		expect(JSON.parse(text)).toMatchObject(household);
+		expect(text).not.toContain(pid);
+		expect(mockLookup).toHaveBeenCalledWith('SH001', { source: 'thaid', citizen_id: pid });
+		expect(getKioskSessionForDevice(sessionId, device)?.status).toBe('completed');
+		expect((await send({ source: 'thaid', session_id: sessionId }, device)).status).toBe(200);
+	});
+
+	it('answers 404 without a walk-in offer when the citizen is not pre-registered (AC-03)', async () => {
+		mockLookup.mockResolvedValueOnce({ kind: 'not_found', can_register: false } as never);
+
+		const response = await send({ source: 'thaid', session_id: completedSession() }, device);
+		const text = await response.text();
+
+		expect(response.status).toBe(404);
+		expect(JSON.parse(text)).toMatchObject({
+			can_register: false,
+			error: { code: 'PRE_REGISTRATION_NOT_FOUND' }
+		});
+		expect(text).not.toContain(pid);
+		expect(mockFindShelter).not.toHaveBeenCalled();
 	});
 });

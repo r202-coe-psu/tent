@@ -4,8 +4,17 @@ import type { RequestEvent } from './$types';
 import { scannerServerRepository } from '$lib/features/scanners/server';
 import {
 	checkInSelectedMembers,
+	KioskThaidIdentityMismatchError,
 	saveKioskCheckInCardPhoto
 } from '$lib/features/kiosk/server/kiosk-check-in.server';
+import { isKioskThaidCheckInAllowed } from '$lib/features/kiosk/server/kiosk-thaid-gate.server';
+import {
+	_resetSessionsForTest,
+	cancelKioskSession,
+	completeKioskSession,
+	createKioskCheckInSession,
+	getKioskSessionForDevice
+} from '$lib/server/thaid-scan-session';
 import {
 	authenticateScannerDevice,
 	DEVICE_AUTH_FAILED,
@@ -31,6 +40,10 @@ vi.mock('$lib/features/kiosk/server/kiosk-check-in.server', async () => {
 	return { ...actual, checkInSelectedMembers: vi.fn(), saveKioskCheckInCardPhoto: vi.fn() };
 });
 
+vi.mock('$lib/features/kiosk/server/kiosk-thaid-gate.server', () => ({
+	isKioskThaidCheckInAllowed: vi.fn()
+}));
+
 vi.mock('$lib/server/scanners/device-credentials', async () => {
 	const actual = await vi.importActual<typeof import('$lib/server/scanners/device-credentials')>(
 		'$lib/server/scanners/device-credentials'
@@ -41,6 +54,7 @@ vi.mock('$lib/server/scanners/device-credentials', async () => {
 const mockAuthenticate = vi.mocked(authenticateScannerDevice);
 const mockCheckIn = vi.mocked(checkInSelectedMembers);
 const mockSavePhoto = vi.mocked(saveKioskCheckInCardPhoto);
+const mockThaidAllowed = vi.mocked(isKioskThaidCheckInAllowed);
 const mockHeartbeat = vi.mocked(scannerServerRepository.updateDeviceLastSeen);
 const primaryId = 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV';
 const memberId = 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAW';
@@ -231,5 +245,156 @@ describe('POST /api/v1/scanner/kiosk/check-in', () => {
 		expect((await response.json()).error.code).toBe('INVALID_CHECK_IN_INPUT');
 		expect(mockCheckIn).not.toHaveBeenCalled();
 		expect(mockSavePhoto).not.toHaveBeenCalled();
+	});
+});
+
+describe('POST /api/v1/scanner/kiosk/check-in source thaid', () => {
+	const sessionInvalid = {
+		error: {
+			code: 'KIOSK_THAID_SESSION_INVALID',
+			message: 'การยืนยัน ThaiD หมดอายุหรือไม่ถูกต้อง กรุณาสแกนใหม่'
+		}
+	};
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		mockAuthenticate.mockImplementation(async (deviceId) => {
+			if (!deviceId) throw new ScannerAuthError();
+			return principal as never;
+		});
+		mockCheckIn.mockResolvedValue([
+			{ evacuee_id: primaryId, status: 'checked_in', qr_payload: primaryId }
+		] as never);
+		mockHeartbeat.mockResolvedValue(undefined);
+		mockThaidAllowed.mockResolvedValue(true);
+		_resetSessionsForTest();
+	});
+
+	function completedSession(deviceId = principal.registry_id): string {
+		const session = createKioskCheckInSession({ device_id: deviceId, shelter_code: 'SH001' });
+		completeKioskSession(session.id, { pid: citizenId, sub: 'sub-1' });
+		return session.id;
+	}
+
+	const body = (sessionId: string, extra: Record<string, unknown> = {}) => ({
+		primary_evacuee_id: primaryId,
+		evacuee_ids: [primaryId, memberId],
+		source: 'thaid',
+		thaid_session_id: sessionId,
+		...extra
+	});
+
+	it('rejects when the ThaiD gate is off and leaves the session untouched', async () => {
+		mockThaidAllowed.mockResolvedValueOnce(false);
+		const sessionId = completedSession();
+
+		const response = await send(body(sessionId));
+
+		expect(response.status).toBe(403);
+		expect((await response.json()).error.code).toBe('KIOSK_METHOD_DISABLED');
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(mockThaidAllowed).toHaveBeenCalledWith('SH001');
+		expect(mockCheckIn).not.toHaveBeenCalled();
+		expect(getKioskSessionForDevice(sessionId, principal.registry_id)?.status).toBe('completed');
+	});
+
+	it('rejects a browser-supplied citizen id with 400 before touching the session', async () => {
+		const sessionId = completedSession();
+
+		const response = await send(body(sessionId, { citizen_id: citizenId }));
+
+		expect(response.status).toBe(400);
+		expect((await response.json()).error.code).toBe('INVALID_CHECK_IN_INPUT');
+		expect(mockCheckIn).not.toHaveBeenCalled();
+		expect(getKioskSessionForDevice(sessionId, principal.registry_id)?.status).toBe('completed');
+	});
+
+	it('answers 409 for a session that is not completed', async () => {
+		const pending = createKioskCheckInSession({
+			device_id: principal.registry_id,
+			shelter_code: 'SH001'
+		});
+
+		const response = await send(body(pending.id));
+
+		expect(response.status).toBe(409);
+		expect(await response.json()).toEqual(sessionInvalid);
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(mockCheckIn).not.toHaveBeenCalled();
+	});
+
+	it('answers 409 for a cancelled or unknown session', async () => {
+		const sessionId = completedSession();
+		cancelKioskSession(sessionId, principal.registry_id);
+
+		expect((await send(body(sessionId))).status).toBe(409);
+		expect((await send(body('e'.repeat(32)))).status).toBe(409);
+		expect(mockCheckIn).not.toHaveBeenCalled();
+	});
+
+	it('answers 409 for a session that belongs to another kiosk (AC-04)', async () => {
+		const sessionId = completedSession('another-device-record');
+
+		const response = await send(body(sessionId));
+
+		expect(response.status).toBe(409);
+		expect(mockCheckIn).not.toHaveBeenCalled();
+		expect(getKioskSessionForDevice(sessionId, 'another-device-record')?.status).toBe('completed');
+	});
+
+	it('checks in with the session citizen required on the primary, then consumes the session', async () => {
+		const sessionId = completedSession();
+
+		const response = await send(body(sessionId));
+		const text = await response.text();
+
+		expect(response.status).toBe(200);
+		expect(JSON.parse(text)).toEqual({
+			shelter_code: 'SH001',
+			members: [{ evacuee_id: primaryId, status: 'checked_in', qr_payload: primaryId }]
+		});
+		expect(text).not.toContain(citizenId);
+		expect(mockCheckIn).toHaveBeenCalledWith('SH001', primaryId, [primaryId, memberId], {
+			requiredPrimaryCitizenId: citizenId
+		});
+		expect(mockSavePhoto).not.toHaveBeenCalled();
+		expect(getKioskSessionForDevice(sessionId, principal.registry_id)?.status).toBe('consumed');
+		expect(mockHeartbeat).toHaveBeenCalledWith('device-record-1');
+	});
+
+	it('answers 409 when the same session is replayed (AC-06)', async () => {
+		const sessionId = completedSession();
+		expect((await send(body(sessionId))).status).toBe(200);
+
+		const replay = await send(body(sessionId));
+
+		expect(replay.status).toBe(409);
+		expect(await replay.json()).toEqual(sessionInvalid);
+		expect(mockCheckIn).toHaveBeenCalledTimes(1);
+	});
+
+	it('lets only one of two concurrent submits through', async () => {
+		const sessionId = completedSession();
+
+		const statuses = (await Promise.all([send(body(sessionId)), send(body(sessionId))])).map(
+			(response) => response.status
+		);
+
+		expect(statuses.sort()).toEqual([200, 409]);
+		expect(mockCheckIn).toHaveBeenCalledTimes(1);
+	});
+
+	it('answers 409 when the primary is not the verified citizen', async () => {
+		mockCheckIn.mockRejectedValueOnce(new KioskThaidIdentityMismatchError());
+		const sessionId = completedSession();
+
+		const response = await send(body(sessionId));
+		const text = await response.text();
+
+		expect(response.status).toBe(409);
+		expect(JSON.parse(text)).toEqual(sessionInvalid);
+		expect(text).not.toContain(citizenId);
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(mockHeartbeat).not.toHaveBeenCalled();
 	});
 });
