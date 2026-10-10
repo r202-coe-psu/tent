@@ -41,11 +41,15 @@ async function loadCatalog(): Promise<DistributionCatalog> {
 	) as DistributionCatalog;
 }
 
+/** How many of the shelter's points the seeded tickets are spread over. */
+const SEED_POINT_COUNT = 2;
+
 /**
- * Where seeded tickets go — the name the back-office destination picker would store: the
- * shelter's first food distribution point, else its first zone (registry shelter master).
+ * Where seeded tickets go — names the back-office destination picker would store: the shelter's
+ * food distribution points, then its zones (registry shelter master). Up to two, so the desk's
+ * point filter has something to choose between.
  */
-async function loadDestination(shelterCode: string): Promise<string> {
+async function loadDestinations(shelterCode: string): Promise<string[]> {
 	const { status, data } = await couchReq('GET', '/registry/_all_docs?include_docs=true');
 	if (status !== 200) throw new Error(`Cannot read registry (HTTP ${status})`);
 	type Named = { name?: string };
@@ -53,13 +57,17 @@ async function loadDestination(shelterCode: string): Promise<string> {
 		doc?: { code?: string; food_distribution_points?: Named[]; zones?: Named[] };
 	};
 	const shelter = (data as { rows: Row[] }).rows.find((r) => r.doc?.code === shelterCode)?.doc;
-	const name = [...(shelter?.food_distribution_points ?? []), ...(shelter?.zones ?? [])].find((p) =>
-		p.name?.trim()
-	)?.name;
-	if (!name) {
+	const names = [
+		...new Set(
+			[...(shelter?.food_distribution_points ?? []), ...(shelter?.zones ?? [])]
+				.map((p) => p.name?.trim() ?? '')
+				.filter(Boolean)
+		)
+	].slice(0, SEED_POINT_COUNT);
+	if (names.length === 0) {
 		throw new Error(`Shelter ${shelterCode} has no food distribution point or zone to deliver to`);
 	}
-	return name.trim();
+	return names;
 }
 
 async function loadRecipients(db: string, limit: number): Promise<DistributionRecipient[]> {
@@ -89,7 +97,7 @@ export async function mainDistribution({ shelterCode, scenario, reset }: Distrib
 	console.log(`\nSeeding ${title} → ${displayCouchUrl()} / ${db}\n`);
 
 	const catalog = await loadCatalog();
-	const destination = await loadDestination(shelterCode);
+	const destinations = await loadDestinations(shelterCode);
 	let all: { _id: string }[];
 	let summary: string;
 	if (scenario === 'desk') {
@@ -97,17 +105,17 @@ export async function mainDistribution({ shelterCode, scenario, reset }: Distrib
 		const { tickets, logs, ledger } = await buildDistributionDocs(
 			catalog,
 			people,
-			destination,
+			destinations,
 			ctx
 		);
 		all = [...tickets, ...logs, ...ledger];
 		summary = `${tickets.length} tickets, ${logs.length} distribution logs, ${ledger.length} ledger rows`;
 	} else {
-		const { tickets, ledger } = buildBackOfficeDocs(catalog, destination, ctx);
+		const { tickets, ledger } = buildBackOfficeDocs(catalog, destinations, ctx);
 		all = [...tickets, ...ledger];
 		summary = `${tickets.length} tickets, ${ledger.length} opening stock lots`;
 	}
-	summary += ` → ${destination}`;
+	summary += ` → ${destinations.join(', ')}`;
 	const revs = await liveRevs(
 		db,
 		all.map((d) => d._id)

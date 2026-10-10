@@ -242,7 +242,8 @@ export interface DistributionDocs {
 export async function buildDistributionDocs(
 	catalog: DistributionCatalog,
 	people: readonly DistributionRecipient[],
-	destination: string,
+	/** Ticket i goes to `destinations[i % length]`. */
+	destinations: readonly string[],
 	ctx: AuthorContext,
 	now = Date.now()
 ): Promise<DistributionDocs> {
@@ -310,7 +311,13 @@ export async function buildDistributionDocs(
 	const ticketByKey = new Map<DeskTicketKey, RequisitionTicket>(
 		ticketKeys.map((key, i) => [
 			key,
-			buildTicket(DESK_TICKETS[key], catalog, destination, ctx, seedUlid(i + 1))
+			buildTicket(
+				DESK_TICKETS[key],
+				catalog,
+				destinations[i % destinations.length],
+				ctx,
+				seedUlid(i + 1)
+			)
 		])
 	);
 	const tickets = [...ticketByKey.values()];
@@ -422,12 +429,13 @@ export interface BackOfficeDocs {
 
 export function buildBackOfficeDocs(
 	catalog: DistributionCatalog,
-	destination: string,
+	/** Ticket i goes to `destinations[i % length]`. */
+	destinations: readonly string[],
 	ctx: AuthorContext,
 	now = Date.now()
 ): BackOfficeDocs {
 	const tickets = BACK_OFFICE_TICKETS.map((f, i) =>
-		buildTicket(f, catalog, destination, ctx, backOfficeUlid(i + 1))
+		buildTicket(f, catalog, destinations[i % destinations.length], ctx, backOfficeUlid(i + 1))
 	);
 	const stockKeys = Object.keys(OPENING_STOCK) as DistributionItemKey[];
 	// Opening stock is `adjust` with no source doc — what the back-office manual receive writes.

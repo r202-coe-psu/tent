@@ -412,7 +412,7 @@
 	</div>
 
 	<!-- Distribution point filter (food / supplies / close-out tabs) -->
-	{#if pointOptions.length > 1 && (activeTab === 'food' || activeTab === 'supplies' || activeTab === 'reconciliation')}
+	{#if pointOptions.length > 0 && (activeTab === 'food' || activeTab === 'supplies' || activeTab === 'reconciliation')}
 		<div
 			class="flex flex-col gap-2 rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs sm:flex-row sm:items-center"
 		>
