@@ -12,13 +12,13 @@
 	import { endpointStore } from '$lib/stores/endpoint.svelte';
 	import { shouldShowDailySopReconnect } from '$lib/features/daily-sop';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { useShelters } from '$lib/features/shelters';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { isSystemAdmin } from '$lib/auth/roles';
 	import Building from '@lucide/svelte/icons/building';
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import { ReauthDialog } from '$lib/features/login';
-	import { useShelters } from '$lib/features/shelters';
-	import { authStore } from '$lib/stores/auth.svelte';
-	import { isSystemAdmin } from '$lib/auth/roles';
 	import { Button } from '$lib/components/ui/button';
 
 	let { children }: LayoutProps = $props();
