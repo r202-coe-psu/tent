@@ -74,7 +74,7 @@ export function createDonationSlot(input: DonationSlotInput, ctx: AuthorContext)
 	const d = donationSlotInputSchema.parse(input);
 	return makeDoc(
 		'donation_slot',
-		1,
+		2,
 		{
 			mode: d.mode,
 			date: d.date,
@@ -122,6 +122,8 @@ export function editDonationSlot(
 	void _previous;
 	return touch({
 		...rest,
+		// A v1 window comes back with `mode` filled in — the v2 shape (CR-157).
+		schema_v: 2,
 		mode: merged.mode,
 		to: merged.to,
 		capacity: merged.capacity,

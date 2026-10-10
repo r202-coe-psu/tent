@@ -19,7 +19,7 @@ function slot(over: Partial<DonationSlot> = {}): DonationSlot {
 		_id: donationSlotId(over.mode ?? 'pickup', over.date ?? '2026-09-22', over.from ?? '09:00'),
 		type: 'donation_slot',
 		mode: 'pickup',
-		schema_v: 1,
+		schema_v: 2,
 		shelter_code: 'SH001',
 		created_at: '2026-09-22T01:00:00.000Z',
 		updated_at: '2026-09-22T01:00:00.000Z',
@@ -46,7 +46,7 @@ describe('createDonationSlot', () => {
 
 		expect(a._id).toBe('donation_slot:pickup:2026-09-22:09:00');
 		expect(b._id).toBe(a._id);
-		expect(a).toMatchObject({ type: 'donation_slot', schema_v: 1, shelter_code: 'SH001' });
+		expect(a).toMatchObject({ type: 'donation_slot', schema_v: 2, shelter_code: 'SH001' });
 	});
 
 	it('keeps the two queues in separate docs at the same hour', () => {
@@ -100,11 +100,13 @@ describe('createDonationSlot', () => {
 
 describe('editDonationSlot', () => {
 	it('edits a window written before the queue split as drop-off', () => {
-		const { mode: _mode, ...legacy } = slot({ capacity: null });
+		const { mode: _mode, ...legacy } = slot({ capacity: null, schema_v: 1 });
 		void _mode;
 		const after = editDonationSlot(legacy as unknown as DonationSlot, { status: 'closed' });
 		expect(after.status).toBe('closed');
 		expect(after.mode).toBe('dropoff');
+		// The edit writes the v2 shape (`mode` filled in), so it carries the v2 tag too.
+		expect(after.schema_v).toBe(2);
 	});
 
 	it('keeps identity, applies the patch and bumps updated_at', () => {
