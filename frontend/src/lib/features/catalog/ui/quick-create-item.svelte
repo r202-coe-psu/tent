@@ -160,9 +160,10 @@
 	const errors = $derived(validateQuickCreate(draft, { requireCategory }));
 	const typeClass = $derived(quickCreateTypeClass(categoryId || undefined, categories));
 	const similar = $derived(findSimilarItems(name, items));
-	const offline = $derived(authStore.needsReauth);
+	/** Writes are blocked while the global session-expired modal is open. */
+	const sessionExpired = $derived(authStore.needsReauth);
 	const catalogReady = $derived(!unitsQuery.isLoading && !categoriesQuery.isLoading);
-	const canSubmit = $derived(catalogReady && !offline && !createMutation.isPending);
+	const canSubmit = $derived(catalogReady && !sessionExpired && !createMutation.isPending);
 
 	function submit(event: SubmitEvent) {
 		event.preventDefault();
@@ -485,12 +486,6 @@
 		<p class="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
 			สินค้านี้จะเป็น <strong class="font-semibold text-slate-900">สินค้าของศูนย์นี้</strong> · ผู้ดูแลส่วนกลางรวมเข้าแคตตาล็อกกลางได้ภายหลัง
 		</p>
-
-		{#if offline}
-			<p class="text-sm font-semibold text-amber-900" role="alert">
-				เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้งก่อนสร้างสินค้า
-			</p>
-		{/if}
 
 		<div class="flex justify-end gap-2 border-t border-slate-200/80 pt-4">
 			<Button type="button" variant="outline" class="min-h-12 rounded-lg px-4" onclick={onCancel}>

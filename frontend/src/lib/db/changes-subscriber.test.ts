@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { classifyChangesPollStatus, startChangesSubscriber } from './changes-subscriber';
 
-const markNeedsReauth = vi.fn();
+const handleAuthFailure = vi.fn();
 const markConnected = vi.fn();
 const markDisconnected = vi.fn();
 const emit = vi.fn();
@@ -10,7 +10,7 @@ vi.mock('$app/environment', () => ({ browser: true }));
 
 vi.mock('$lib/stores/auth.svelte', () => ({
 	authStore: {
-		markNeedsReauth: (...args: unknown[]) => markNeedsReauth(...args)
+		handleAuthFailure: (...args: unknown[]) => handleAuthFailure(...args)
 	}
 }));
 
@@ -51,7 +51,8 @@ describe('classifyChangesPollStatus', () => {
 describe('startChangesSubscriber auth hard-stop', () => {
 	beforeEach(() => {
 		vi.useFakeTimers();
-		markNeedsReauth.mockReset();
+		handleAuthFailure.mockReset();
+		handleAuthFailure.mockResolvedValue('expired');
 		markConnected.mockReset();
 		markDisconnected.mockReset();
 	});
@@ -71,7 +72,9 @@ describe('startChangesSubscriber auth hard-stop', () => {
 		await vi.advanceTimersByTimeAsync(0);
 
 		await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-		expect(markNeedsReauth).toHaveBeenCalledTimes(1);
+		await vi.waitFor(() => expect(handleAuthFailure).toHaveBeenCalledTimes(1));
+		expect(handleAuthFailure.mock.calls[0][0]).toMatchObject({ status: 401 });
+		expect(markConnected).toHaveBeenCalled();
 
 		const callsAfterAuth = fetchMock.mock.calls.length;
 		await vi.advanceTimersByTimeAsync(30_000);
@@ -80,7 +83,7 @@ describe('startChangesSubscriber auth hard-stop', () => {
 		handle.stop();
 	});
 
-	it('aborts sibling pollers when one DB hits 403', async () => {
+	it('aborts sibling pollers when a 403 is confirmed as an expired session', async () => {
 		const fetchMock = vi
 			.fn()
 			.mockResolvedValue(new Response(JSON.stringify({ error: 'forbidden' }), { status: 403 }));
@@ -90,11 +93,63 @@ describe('startChangesSubscriber auth hard-stop', () => {
 		// First poller starts at t=0; second is staggered by POLL_STAGGER_MS (400).
 		await vi.advanceTimersByTimeAsync(0);
 		await vi.waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(1));
-		expect(markNeedsReauth).toHaveBeenCalled();
+		await vi.waitFor(() => expect(handleAuthFailure).toHaveBeenCalled());
+		expect(handleAuthFailure.mock.calls[0][0]).toMatchObject({ status: 403 });
 
 		const callsAfterHalt = fetchMock.mock.calls.length;
 		await vi.advanceTimersByTimeAsync(5_000);
 		expect(fetchMock.mock.calls.length).toBe(callsAfterHalt);
+
+		handle.stop();
+	});
+
+	it('stops only the forbidden DB when a 403 is a permission denial with a valid session', async () => {
+		handleAuthFailure.mockResolvedValue('permission-denied');
+		// A real long-poll holds the request open; model that with a timer so the healthy
+		// poller does not spin on microtasks under fake timers.
+		const fetchMock = vi.fn(
+			(url: string) =>
+				new Promise<Response>((resolve) => {
+					if (url.includes('/db_denied/')) {
+						resolve(new Response(JSON.stringify({ error: 'forbidden' }), { status: 403 }));
+						return;
+					}
+					setTimeout(
+						() =>
+							resolve(
+								new Response(JSON.stringify({ results: [], last_seq: '1' }), { status: 200 })
+							),
+						200
+					);
+				})
+		);
+		vi.stubGlobal('fetch', fetchMock);
+
+		const handle = startChangesSubscriber(['db_denied', 'db_ok']);
+		await vi.advanceTimersByTimeAsync(1_000);
+
+		const deniedCalls = () =>
+			fetchMock.mock.calls.filter(([url]) => (url as string).includes('/db_denied/')).length;
+		const okCalls = () =>
+			fetchMock.mock.calls.filter(([url]) => (url as string).includes('/db_ok/')).length;
+		expect(deniedCalls()).toBe(1);
+		expect(okCalls()).toBeGreaterThan(1);
+
+		handle.stop();
+	});
+
+	it('keeps polling after a backoff when the 403 cannot be verified (offline)', async () => {
+		handleAuthFailure.mockResolvedValue('ignored');
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValue(new Response(JSON.stringify({ error: 'forbidden' }), { status: 403 }));
+		vi.stubGlobal('fetch', fetchMock);
+
+		const handle = startChangesSubscriber(['testdb']);
+		await vi.advanceTimersByTimeAsync(0);
+		await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+		await vi.advanceTimersByTimeAsync(2_100);
+		expect(fetchMock.mock.calls.length).toBeGreaterThan(1);
 
 		handle.stop();
 	});

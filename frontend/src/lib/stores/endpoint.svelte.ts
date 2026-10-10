@@ -1,6 +1,6 @@
 import { browser } from '$app/environment';
 import { probeCentral } from '$lib/db/couch-db';
-import { getSession } from '$lib/db/couch';
+import { authStore } from '$lib/stores/auth.svelte';
 import { CannotConnectError } from '$lib/utils/errors';
 
 export type EndpointStatus = 'connecting' | 'connected' | 'disconnected';
@@ -45,13 +45,15 @@ class EndpointStore {
 		return false;
 	}
 
+	/**
+	 * Re-probe connectivity. Reachability and session validity are independent: an
+	 * expired session over a healthy network must surface as expiry (login modal), not
+	 * as a "cannot connect" banner — so probe first, then re-check the session.
+	 */
 	async forceRetry(fetchFn?: typeof fetch): Promise<boolean> {
-		const session = await getSession(fetchFn).catch(() => null);
-		if (!session) {
-			this.state.status = 'disconnected';
-			return false;
-		}
-		return this.probe(fetchFn);
+		const up = await this.probe(fetchFn);
+		if (up) await authStore.revalidateSession(fetchFn);
+		return up;
 	}
 
 	markDisconnected(): void {

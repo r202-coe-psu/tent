@@ -8,21 +8,18 @@
 		type BackofficeNavbarLeaf
 	} from '$lib/components/backoffice-navbar/static';
 	import { page } from '$app/state';
-	import { backofficeState } from '$lib/stores/backoffice.svelte';
 	import { endpointStore } from '$lib/stores/endpoint.svelte';
 	import { shouldShowDailySopReconnect } from '$lib/features/daily-sop';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import Building from '@lucide/svelte/icons/building';
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
-	import { ReauthDialog } from '$lib/features/login';
 	import { useShelters } from '$lib/features/shelters';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { isSystemAdmin } from '$lib/auth/roles';
 	import { Button } from '$lib/components/ui/button';
 
 	let { children }: LayoutProps = $props();
-	let reauthOpen = $state(false);
 
 	const sheltersQuery = useShelters();
 	const shelters = $derived(sheltersQuery.data ?? []);
@@ -80,15 +77,8 @@
 	const PageIcon = $derived(currentPageNode?.icon ?? Building);
 	const isDailySopPage = $derived(page.url.pathname.startsWith('/back-office/dailysop'));
 
-	const showStatusBanner = $derived(
-		endpointStore.status === 'disconnected' || backofficeState.isOffline
-	);
-
-	$effect(() => {
-		if (!backofficeState.reauthRequested) return;
-		reauthOpen = true;
-		backofficeState.clearReauthRequest();
-	});
+	/** Offline only — session expiry is the global login modal, never this banner. */
+	const showStatusBanner = $derived(endpointStore.status === 'disconnected');
 
 	async function retryDailySopConnection(): Promise<void> {
 		await endpointStore.forceRetry();
@@ -100,7 +90,7 @@
   - Sidebar breakpoint: lg (matches system-management; md–lg was a broken half-row).
   - Sticky stack: mobile nav → page header (top: --bo-mobile-nav-height) → content.
   - Page header is title-only (h-16 / 4rem). Shelter select lives in the sidebar / Sheet.
-  - Status banner appears only when offline or session needs reauth (not always-on Online).
+  - Status banner appears only when offline (session expiry is the global login modal).
   - Subheaders under this chrome: top-[var(--bo-sticky-top)] (see app.css).
   - Page padding on children: prefer p-4 sm:p-6; touch targets min-h-11.
 -->
@@ -121,34 +111,23 @@
 					class="flex min-h-11 flex-wrap items-center gap-2 border-t border-warning-border/40 bg-warning/10 px-4 py-2 sm:px-6"
 					role="status"
 				>
-					{#if backofficeState.isOffline}
+					<span
+						class="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-warning-border/40 bg-warning/15 px-2.5 py-1 text-2xs font-bold text-warning-muted"
+					>
+						<span class="size-1.5 rounded-full bg-warning"></span>
+						Offline — ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้
+					</span>
+					{#if isDailySopPage && shouldShowDailySopReconnect(endpointStore.status)}
 						<button
 							type="button"
-							class="inline-flex min-h-11 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-full border border-warning-border/40 bg-warning/15 px-2.5 py-1 text-2xs font-bold text-warning-muted hover:bg-warning/25"
-							onclick={() => (reauthOpen = true)}
+							class="inline-flex h-11 min-h-11 shrink-0 items-center gap-1.5 rounded-xl border border-sidebar-border bg-card px-2.5 text-2xs font-bold text-foreground shadow-sm hover:bg-muted sm:px-3 sm:text-xs"
+							onclick={retryDailySopConnection}
+							aria-label="ตรวจสอบการเชื่อมต่อและซิงค์ข้อมูลอีกครั้ง"
 						>
-							<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-warning"></span>
-							Session หมดอายุ — เข้าสู่ระบบอีกครั้ง
+							<RotateCcw class="size-3.5" />
+							<span class="hidden sm:inline">ลองเชื่อมต่ออีกครั้ง</span>
+							<span class="sm:hidden">ลองใหม่</span>
 						</button>
-					{:else}
-						<span
-							class="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-warning-border/40 bg-warning/15 px-2.5 py-1 text-2xs font-bold text-warning-muted"
-						>
-							<span class="size-1.5 rounded-full bg-warning"></span>
-							Offline — ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้
-						</span>
-						{#if isDailySopPage && shouldShowDailySopReconnect(endpointStore.status)}
-							<button
-								type="button"
-								class="inline-flex h-11 min-h-11 shrink-0 items-center gap-1.5 rounded-xl border border-sidebar-border bg-card px-2.5 text-2xs font-bold text-foreground shadow-sm hover:bg-muted sm:px-3 sm:text-xs"
-								onclick={retryDailySopConnection}
-								aria-label="ตรวจสอบการเชื่อมต่อและซิงค์ข้อมูลอีกครั้ง"
-							>
-								<RotateCcw class="size-3.5" />
-								<span class="hidden sm:inline">ลองเชื่อมต่ออีกครั้ง</span>
-								<span class="sm:hidden">ลองใหม่</span>
-							</button>
-						{/if}
 					{/if}
 				</div>
 			{/if}
@@ -203,5 +182,3 @@
 		</div>
 	</div>
 </div>
-
-<ReauthDialog bind:open={reauthOpen} />

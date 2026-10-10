@@ -2,6 +2,7 @@ import { browser } from '$app/environment';
 import { getSession, sessionLogin, sessionLogout, type SessionUser } from '$lib/db/couch';
 import { shelterStore } from '$lib/stores/shelter.svelte';
 import { clearMfaOk, invalidateAuthStatusRequest } from '$lib/features/users';
+import { classifyAuthFailure, createExpiryLatch } from '$lib/auth/session-expiry';
 
 const STORAGE_KEY = 'auth:user';
 
@@ -38,6 +39,9 @@ function persistUser(user: SessionUser | null): void {
 	}
 }
 
+/** Result of `authStore.handleAuthFailure`. */
+export type AuthFailureOutcome = 'expired' | 'permission-denied' | 'ignored';
+
 /**
  * Session-backed auth store.
  *
@@ -57,10 +61,70 @@ class AuthStore {
 		needsReauth: false
 	});
 	private initPromise: Promise<void> | null = null;
+	/** De-dups concurrent 401s so the login modal opens once per expiry. */
+	private readonly expiryLatch = createExpiryLatch();
+	private verifyPromise: Promise<AuthFailureOutcome> | null = null;
+	private revalidatePromise: Promise<void> | null = null;
 
-	/** Flag an expired sync session (e.g. from a feature-managed sync). */
+	/**
+	 * Flag an expired session (opens the global login modal). No-op without a cached
+	 * identity (nobody to re-authenticate) and idempotent while already flagged.
+	 */
 	markNeedsReauth(): void {
+		if (!this.state.user) return;
+		if (!this.expiryLatch.trip()) return;
 		this.state.needsReauth = true;
+	}
+
+	private clearNeedsReauth(): void {
+		this.state.needsReauth = false;
+		this.expiryLatch.reset();
+	}
+
+	/**
+	 * Single entry point for HTTP auth failures (CONTRIBUTING.md §4):
+	 *  - 401 from Couch → expired.
+	 *  - 403 / BFF 401 → confirm with `GET /_session`; only anonymous means expired.
+	 *  - network errors / anything else → ignored here (offline banner handles it).
+	 */
+	async handleAuthFailure(err: unknown): Promise<AuthFailureOutcome> {
+		const kind = classifyAuthFailure(err);
+		if (kind === 'session-expired') {
+			this.markNeedsReauth();
+			return 'expired';
+		}
+		if (kind !== 'unverified-auth') return 'ignored';
+		if (!this.state.user) return 'ignored';
+		if (this.state.needsReauth) return 'expired';
+		this.verifyPromise ??= this.confirmAnonymous().finally(() => {
+			this.verifyPromise = null;
+		});
+		return this.verifyPromise;
+	}
+
+	private async confirmAnonymous(): Promise<AuthFailureOutcome> {
+		try {
+			const session = await getSession();
+			if (session) return 'permission-denied';
+			this.markNeedsReauth();
+			return 'expired';
+		} catch {
+			// Offline / timeout — cannot tell; the offline banner owns this case.
+			return 'ignored';
+		}
+	}
+
+	/**
+	 * Re-check the cookie against `/_session` (single-flight). Anonymous with a cached
+	 * identity flags expiry; a network error keeps the current state.
+	 */
+	revalidateSession(fetchFn?: typeof fetch): Promise<void> {
+		this.revalidatePromise ??= this.refreshSession(fetchFn, this.state.user !== null).finally(
+			() => {
+				this.revalidatePromise = null;
+			}
+		);
+		return this.revalidatePromise;
 	}
 
 	get user() {
@@ -103,12 +167,12 @@ class AuthStore {
 			if (user) {
 				this.state.user = user;
 				persistUser(user);
-				this.state.needsReauth = false;
+				this.clearNeedsReauth();
 				return;
 			}
 			if (hadCachedUser) {
 				// Cookie expired — keep the cached identity and prompt re-login for sync.
-				this.state.needsReauth = true;
+				this.markNeedsReauth();
 				return;
 			}
 			this.state.user = null;
@@ -123,7 +187,7 @@ class AuthStore {
 		const user = await withDisplayName(await sessionLogin(input));
 		invalidateAuthStatusRequest();
 		this.state.user = user;
-		this.state.needsReauth = false;
+		this.clearNeedsReauth();
 		shelterStore.selectedShelterCode = undefined;
 		persistUser(user);
 		this.initPromise = Promise.resolve();
@@ -147,7 +211,7 @@ class AuthStore {
 			await sessionLogout();
 		} finally {
 			this.state.user = null;
-			this.state.needsReauth = false;
+			this.clearNeedsReauth();
 			shelterStore.selectedShelterCode = undefined;
 			persistUser(null);
 			this.initPromise = null;

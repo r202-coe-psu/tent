@@ -11,6 +11,7 @@
 	} from '$lib/features/operations';
 	import { ProductsPanel, type ItemMaster } from '$lib/features/catalog';
 	import { authStore } from '$lib/stores/auth.svelte';
+	import { endpointStore } from '$lib/stores/endpoint.svelte';
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
 	import { ResourceNeedsDashboard } from '$lib/features/resource-calc';
 	import { FoodSphereStockTab } from '$lib/features/sop-ratios/components';
@@ -23,7 +24,8 @@
 	import { getShelterCode } from '$lib/db/shelter';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
 
-	const isOffline = $derived(authStore.needsReauth);
+	/** Network offline only — session expiry is the global login modal. */
+	const isOffline = $derived(endpointStore.status === 'disconnected');
 
 	const roles = $derived(authStore.user?.roles ?? []);
 	const shelterCode = $derived(
