@@ -70,6 +70,7 @@ export {
 export { bookingQueue, countSlotBookings, slotMode, slotsOnDate } from './domain/donation-slot';
 
 export {
+	deriveDonationReceiptLineId,
 	donationShortfall,
 	type DonationShortfall,
 	type DonationBatchLine
