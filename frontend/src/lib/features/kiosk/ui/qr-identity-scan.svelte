@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, untrack } from 'svelte';
+	import { onMount } from 'svelte';
 	import { Html5Qrcode } from 'html5-qrcode';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -46,20 +46,17 @@
 	const cameraReaderId = 'kiosk-registration-qr-reader';
 	const tokenPattern = /^evacuee:[0-7][0-9A-HJKMNP-TV-Z]{25}$/i;
 
-	$effect(() => {
+	onMount(() => {
 		// Starts as soon as the camera is up, not only after a scan resolves `gate` — otherwise an
 		// unattended kiosk can sit with the camera open indefinitely waiting for a scan that never
 		// comes.
-		untrack(() => idleTimeout.start());
-		return () => idleTimeout.stop();
-	});
-
-	onMount(() => {
+		idleTimeout.start();
 		let cancelled = false;
 		void loadKioskHardware().then((result) => {
 			if (!cancelled) hardware = result;
 		});
 		return () => {
+			idleTimeout.stop();
 			cancelled = true;
 		};
 	});
