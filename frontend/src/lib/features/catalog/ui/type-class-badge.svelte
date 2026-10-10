@@ -14,7 +14,7 @@
 
 	const CLASS_META: Record<TypeClass, { label: string; icon: typeof Package; badgeClass: string }> =
 		{
-			CONSUMABLE: { label: 'วัสดุสิ้นเปลือง', icon: Package, badgeClass: 'badge-inventory' },
+			CONSUMABLE: { label: 'วัสดุสิ้นเปลือง', icon: Package, badgeClass: 'badge-domain-donation' },
 			DURABLE: { label: 'สิ่งของคงทน', icon: RefreshCcw, badgeClass: 'badge-warning-advisory' },
 			EQUIPMENT: {
 				label: 'อุปกรณ์/ครุภัณฑ์',

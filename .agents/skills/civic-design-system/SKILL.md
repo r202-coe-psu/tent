@@ -49,7 +49,7 @@ import { tokens } from "$lib/tokens";
 // tokens.colors, tokens.typography, tokens.spatial, tokens.responsive, tokens.motion
 ```
 
-### 1. Color Tokens & Specialized Operations Mapping
+### 1. Color Tokens & Domain Colors
 
 - **Brand Navy (Primary)**: `#0A2647` (`bg-[#0A2647]`, `text-[#0A2647]`) — Hover: `#051930`
 - **GovTech Cerulean (Secondary)**: `#0284C7` (`.btn-secondary-brand`, active filters, map points, export actions)
@@ -62,23 +62,48 @@ import { tokens } from "$lib/tokens";
 - **Text Primary**: `#0F172A` (`text-slate-900`) | **Text Body**: `#334155` (`text-slate-700`)
 - **Text Muted**: `#64748B` (`text-slate-500`) | **Borders**: `#E2E8F0` (`border-slate-200/80`)
 
-#### Specialized Operations (Strictly Mapped to Palette)
+#### Domain Colors (one work domain = one color family)
 
-- **Kitchen & LPG Energy**: Warm Orange `#EA580C` (`.badge-kitchen`, `.card-ops-kitchen`, `border-orange-200 bg-orange-50 text-orange-900`)
-- **Family Care (Maternal & Infant)**: Soft Rose `#E11D48` (`.badge-family`, `.card-ops-family`, `border-rose-200 bg-rose-50 text-rose-900`)
-- **Donors & Public Portal**: Civic Cerulean `#0284C7` (`.badge-donor`, `.card-ops-donor`, `border-sky-200 bg-sky-50 text-sky-900` — inherits from Secondary)
-- **Volunteers & Field Responders**: Civic Emerald `#059669` (`.badge-volunteer`, `.card-ops-volunteer`, `border-emerald-200 bg-emerald-50 text-emerald-900`)
-- **Inventory & SPHERE**: Clean Teal `#0D9488` (`.badge-inventory`, `.card-ops-inventory`, `border-teal-200 bg-teal-50 text-teal-900`)
+One work domain uses **one** color family, identically on the public site and the staff app. Each family has 5 steps: **base** (identity, icons, large text), **strong** (solid button background with white text, WCAG AA), **subtle** (soft background), **border** (360° tinted border), **text** (text on subtle; also the solid-button hover).
+
+| Domain (id)                                | Thai                   | base      | strong    | subtle    | border    | text      | Used for                                                                                                  |
+| :----------------------------------------- | :--------------------- | :-------- | :-------- | :-------- | :-------- | :-------- | :-------------------------------------------------------------------------------------------------------- |
+| `registration`                             | ทะเบียนและศูนย์พักพิง   | `#124481` | `#124481` | `#E4F0FF` | `#BFD4F2` | `#0B2647` | Public: pre-register, shelter search, people/family search. Staff: ฝ่ายทะเบียน (stations 1–3 + tools)     |
+| `donation`                                 | บริจาค พัสดุและคลัง     | `#FF5C00` | `#C2410C` | `#FFF3EB` | `#FED7AA` | `#9A3412` | Public: donations + tracking. Staff: ฝ่ายพัสดุและคลัง                                                    |
+| `volunteer`                                | จิตอาสา                | `#059669` | `#047857` | `#ECFDF5` | `#A7F3D0` | `#065F46` | Public: volunteers / job board. Staff: ฝ่ายอาสาสมัคร                                                     |
+| `kitchen`                                  | ครัว                   | `#DB2777` | `#BE185D` | `#FDF2F8` | `#FBCFE8` | `#9D174D` | Staff: ฝ่ายครัว (kitchen pages) — pink, not yellow/orange                                                 |
+| `facility`                                 | อาคารสถานที่            | `#0D9488` | `#0F766E` | `#F0FDFA` | `#99F6E4` | `#134E4A` | Staff: ฝ่ายอาคารสถานที่                                                                                  |
+| `security`                                 | ความปลอดภัย            | `#7C3AED` | `#6D28D9` | `#F5F3FF` | `#DDD6FE` | `#5B21B6` | Staff: ฝ่ายรักษาความปลอดภัย                                                                              |
+| `admin`                                    | บริหารและส่วนกลาง       | `#475569` | `#334155` | `#F1F5F9` | `#CBD5E1` | `#1E293B` | Staff: ฝ่ายบริหารศูนย์ (base) and ส่วนกลาง (use strong)                                                  |
+
+**Tokens & classes** (single source `baseDomain` in `$lib/tokens/colors.ts`; CSS twin `--domain-<id>[-strong|-subtle|-border|-text]` in `app.css`; a unit test keeps them equal; `--domain-registration` references `var(--primary)`, the same `#124481`):
+
+- TypeScript: `colors.domain.<id>` (`name`, hexes, ready class strings `badge` / `card` / `solid` / `subtleBtn` / `iconBox`), `type DomainId`, `DOMAIN_IDS`, `domainVar(id, step)`.
+- Tailwind: `bg-domain-<id>-strong`, `bg-domain-<id>-subtle`, `text-domain-<id>-text`, `border-domain-<id>-border`, `text-domain-<id>` (base). Utilities `.badge-domain-<id>` and `.card-domain-<id>`.
+- Solid text-bearing button: `bg-domain-<id>-strong text-white hover:bg-domain-<id>-text` (white on `#FF5C00` is only 3.1:1 and on `#059669` 3.8:1 — always use `strong` for buttons with text; `base` is for icons and large text).
+- Staff portal: every menu item inside a department uses the **department's** domain color (items are told apart by icon and station number, never by their own color). `PortalDepartment.domain: DomainId`; tiles read `--c`, `--c-strong`, `--c-subtle`, `--c-border`, `--c-text` set by the section.
+
+**Rules**
+
+- Domain colors must **never** express status. Reserved status colors: critical red `#DC2626`, warning amber `#F59E0B`, operational green `#16A34A`, EOC purple `#9333EA`.
+- Color is never the only signal: pair with a label or icon.
+- Civic Light only (no dark values). 360° tinted borders, no single-side stripes.
+- Public "ค้นหาศูนย์พักพิง" uses `registration` (primary), **not red**. Management and central share the grey `admin` family.
+
+#### Family Care & deprecated operations tokens
+
+- **Family Care (Maternal & Infant)**: Soft Rose `#E11D48` (`.badge-family`, `.card-ops-family`, `border-rose-200 bg-rose-50 text-rose-900`) — not a work domain, unchanged.
+- **DEPRECATED** (`DEPRECATED(domain-color-tokens)`): `colors.operations.{kitchen,donor,volunteer,inventory}`, `--ops-*`, `.badge-{kitchen,donor,volunteer,inventory}`, `.card-ops-{kitchen,donor,volunteer,inventory}` now alias the domain families (kitchen → kitchen pink; donor + inventory → donation; volunteer → volunteer). Do not use them in new code; use `colors.domain.<id>` / `--domain-<id>` / `.badge-domain-<id>`.
 
 > [!IMPORTANT]
-> **Single Source of Truth Architecture**: All downstream tokens (Semantic, Domain, Status, Portal Services) inherit directly from `baseBrand`, `baseSecondary`, `baseDestructive`, etc. in `$lib/tokens/colors.ts` and CSS variables (`--brand-primary`, `--brand-secondary`, etc.) in `app.css`. Any change to a base token propagates across the entire application.
+> **Single Source of Truth Architecture**: All downstream tokens (Semantic, Domain, Status, Portal Services) inherit directly from `baseBrand`, `baseSecondary`, `baseDestructive`, `baseDomain`, etc. in `$lib/tokens/colors.ts` and CSS variables (`--brand-primary`, `--brand-secondary`, etc.) in `app.css`. Any change to a base token propagates across the entire application.
 
-#### Public Portal Essential Services Mapping (Adaptive Semantic Palette)
+#### Public Portal Essential Services Mapping (Domain Colors)
 
-- **1. ค้นหาที่พักพิง (Shelters)**: Red `#DC2626` (`portalServices.shelter`: border-red-200, bg-red-50 icon container, primary btn-destructive)
-- **2. ผู้พักพิง (Family Tracing)**: Navy `#0A2647` & Cerulean `#0284C7` (`portalServices.tracing`: border-sky-200, bg-sky-50 icon container, primary btn-primary)
-- **3. บริจาค (Donations)**: Warm Amber `#EA580C` (`portalServices.donation`: border-amber-200, bg-amber-50 icon container, primary amber button)
-- **4. อาสาสมัคร (Volunteers)**: Civic Emerald `#059669` (`portalServices.volunteer`: border-emerald-200, bg-emerald-50 icon container, primary emerald button)
+- **1. ค้นหาที่พักพิง (Shelters)**: `registration` `#124481` (`portalServices.shelter`: `border-domain-registration-border`, `bg-domain-registration-subtle` icon container, primary `bg-domain-registration-strong`) — not red
+- **2. ผู้พักพิง (Family Tracing)**: `registration` `#124481` (`portalServices.tracing`, same family as Shelters)
+- **3. บริจาค (Donations)**: `donation` `#FF5C00` (`portalServices.donation`: `border-domain-donation-border`, `bg-domain-donation-subtle` icon container, text button `bg-domain-donation-strong` `#C2410C`)
+- **4. อาสาสมัคร (Volunteers)**: `volunteer` `#059669` (`portalServices.volunteer`: `border-domain-volunteer-border`, `bg-domain-volunteer-subtle` icon container, text button `bg-domain-volunteer-strong` `#047857`)
 - **Emergency FAQ**: Active border `border-sky-300`, active badge `bg-[#0A2647] text-white`
 - **Floating Emergency Controls**: 1669 Hotline pill (`bg-red-600` Destructive), Alert bell pill (`bg-[#0284C7]` Secondary Cerulean)
 

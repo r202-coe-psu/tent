@@ -195,12 +195,12 @@
 	<!-- Back Navigation -->
 	<div>
 		<Button
-			href={resolve('/onsite')}
+			href={resolve('/portal')}
 			variant="outline"
 			class="h-auto rounded-full px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900"
 		>
 			<ArrowLeft class="h-3.5 w-3.5" />
-			<span>กลับหน้าระบบส่วนหน้า (Onsite)</span>
+			<span>กลับหน้าเลือกเมนูหลัก</span>
 		</Button>
 	</div>
 

@@ -16,6 +16,11 @@
 	--registration-sticky-top: 4rem;
 	--registration-scroll-mt: calc(var(--registration-sticky-top) + 0.5rem);
 	/*
+	 * Staff portal (`/portal`) sticky chip bar: sits directly under the protected-layout app header
+	 * (`h-14` = 3.5rem, sticky top-0). Keep in sync with `(protected)/+layout.svelte`.
+	 */
+	--portal-sticky-top: 3.5rem;
+	/*
 	 * Shelter form sticky offset: BO chrome (`--bo-sticky-top`) + form title bar (~4rem).
 	 * Form title bar uses `top-[var(--bo-sticky-top)]` under the BO page header.
 	 */
@@ -144,30 +149,75 @@
 	--brand-accent-border: #bae6fd;
 	--brand-accent-text: #0369a1;
 
-	--ops-kitchen: #ea580c;
-	--ops-kitchen-bg: #fff7ed;
-	--ops-kitchen-border: #fed7aa;
-	--ops-kitchen-text: #9a3412;
+	/* DEPRECATED(domain-color-tokens): use colors.domain.<id> / --domain-<id> — remove after usages migrate */
+	--ops-kitchen: var(--domain-kitchen);
+	--ops-kitchen-bg: var(--domain-kitchen-subtle);
+	--ops-kitchen-border: var(--domain-kitchen-border);
+	--ops-kitchen-text: var(--domain-kitchen-text);
 
 	--ops-family: #e11d48;
 	--ops-family-bg: #fff1f2;
 	--ops-family-border: #fecdd3;
 	--ops-family-text: #9f1239;
 
-	--ops-donor: var(--brand-secondary);
-	--ops-donor-bg: var(--brand-secondary-subtle);
-	--ops-donor-border: var(--brand-secondary-border);
-	--ops-donor-text: var(--brand-secondary-text);
+	--ops-donor: var(--domain-donation);
+	--ops-donor-bg: var(--domain-donation-subtle);
+	--ops-donor-border: var(--domain-donation-border);
+	--ops-donor-text: var(--domain-donation-text);
 
-	--ops-volunteer: #059669;
-	--ops-volunteer-bg: #ecfdf5;
-	--ops-volunteer-border: #a7f3d0;
-	--ops-volunteer-text: #065f46;
+	--ops-volunteer: var(--domain-volunteer);
+	--ops-volunteer-bg: var(--domain-volunteer-subtle);
+	--ops-volunteer-border: var(--domain-volunteer-border);
+	--ops-volunteer-text: var(--domain-volunteer-text);
 
-	--ops-inventory: #0d9488;
-	--ops-inventory-bg: #f0fdfa;
-	--ops-inventory-border: #99f6e4;
-	--ops-inventory-text: #115e59;
+	--ops-inventory: var(--domain-donation);
+	--ops-inventory-bg: var(--domain-donation-subtle);
+	--ops-inventory-border: var(--domain-donation-border);
+	--ops-inventory-text: var(--domain-donation-text);
+
+	/* Domain colour families (one work domain = one family; keep in sync with baseDomain in
+	   $lib/tokens/colors.ts — unit-tested). Light theme only. Domain colours never express status. */
+	--domain-registration: var(--primary);
+	--domain-registration-strong: var(--primary);
+	--domain-registration-subtle: #e4f0ff;
+	--domain-registration-border: #bfd4f2;
+	--domain-registration-text: #0b2647;
+
+	--domain-donation: #ff5c00;
+	--domain-donation-strong: #c2410c;
+	--domain-donation-subtle: #fff3eb;
+	--domain-donation-border: #fed7aa;
+	--domain-donation-text: #9a3412;
+
+	--domain-volunteer: #059669;
+	--domain-volunteer-strong: #047857;
+	--domain-volunteer-subtle: #ecfdf5;
+	--domain-volunteer-border: #a7f3d0;
+	--domain-volunteer-text: #065f46;
+
+	--domain-kitchen: #db2777;
+	--domain-kitchen-strong: #be185d;
+	--domain-kitchen-subtle: #fdf2f8;
+	--domain-kitchen-border: #fbcfe8;
+	--domain-kitchen-text: #9d174d;
+
+	--domain-facility: #0d9488;
+	--domain-facility-strong: #0f766e;
+	--domain-facility-subtle: #f0fdfa;
+	--domain-facility-border: #99f6e4;
+	--domain-facility-text: #134e4a;
+
+	--domain-security: #7c3aed;
+	--domain-security-strong: #6d28d9;
+	--domain-security-subtle: #f5f3ff;
+	--domain-security-border: #ddd6fe;
+	--domain-security-text: #5b21b6;
+
+	--domain-admin: #475569;
+	--domain-admin-strong: #334155;
+	--domain-admin-subtle: #f1f5f9;
+	--domain-admin-border: #cbd5e1;
+	--domain-admin-text: #1e293b;
 }
 
 /* lg+: sidebar chrome — only the page header sticks; drop mobile-nav from offset */
@@ -315,6 +365,43 @@
 	--shadow-md: 0 4px 6px -1px rgb(15 23 42 / 0.05), 0 2px 4px -2px rgb(15 23 42 / 0.05);
 	--shadow-lg: 0 10px 15px -3px rgb(15 23 42 / 0.05), 0 4px 6px -4px rgb(15 23 42 / 0.05);
 	--shadow-xl: 0 20px 25px -5px rgb(15 23 42 / 0.05), 0 8px 10px -6px rgb(15 23 42 / 0.05);
+
+	/* Domain colour families → bg-domain-<id>[-strong|-subtle], text-/border-domain-<id>[-border|-text] */
+	--color-domain-registration: var(--domain-registration);
+	--color-domain-registration-strong: var(--domain-registration-strong);
+	--color-domain-registration-subtle: var(--domain-registration-subtle);
+	--color-domain-registration-border: var(--domain-registration-border);
+	--color-domain-registration-text: var(--domain-registration-text);
+	--color-domain-donation: var(--domain-donation);
+	--color-domain-donation-strong: var(--domain-donation-strong);
+	--color-domain-donation-subtle: var(--domain-donation-subtle);
+	--color-domain-donation-border: var(--domain-donation-border);
+	--color-domain-donation-text: var(--domain-donation-text);
+	--color-domain-volunteer: var(--domain-volunteer);
+	--color-domain-volunteer-strong: var(--domain-volunteer-strong);
+	--color-domain-volunteer-subtle: var(--domain-volunteer-subtle);
+	--color-domain-volunteer-border: var(--domain-volunteer-border);
+	--color-domain-volunteer-text: var(--domain-volunteer-text);
+	--color-domain-kitchen: var(--domain-kitchen);
+	--color-domain-kitchen-strong: var(--domain-kitchen-strong);
+	--color-domain-kitchen-subtle: var(--domain-kitchen-subtle);
+	--color-domain-kitchen-border: var(--domain-kitchen-border);
+	--color-domain-kitchen-text: var(--domain-kitchen-text);
+	--color-domain-facility: var(--domain-facility);
+	--color-domain-facility-strong: var(--domain-facility-strong);
+	--color-domain-facility-subtle: var(--domain-facility-subtle);
+	--color-domain-facility-border: var(--domain-facility-border);
+	--color-domain-facility-text: var(--domain-facility-text);
+	--color-domain-security: var(--domain-security);
+	--color-domain-security-strong: var(--domain-security-strong);
+	--color-domain-security-subtle: var(--domain-security-subtle);
+	--color-domain-security-border: var(--domain-security-border);
+	--color-domain-security-text: var(--domain-security-text);
+	--color-domain-admin: var(--domain-admin);
+	--color-domain-admin-strong: var(--domain-admin-strong);
+	--color-domain-admin-subtle: var(--domain-admin-subtle);
+	--color-domain-admin-border: var(--domain-admin-border);
+	--color-domain-admin-text: var(--domain-admin-text);
 
 	/* Brand colors (SOP / SmartShelter) */
 	--color-brand: #013365;
@@ -580,38 +667,82 @@
 		@apply inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700;
 	}
 
-	/* Domain & Specialized Operations Badges */
+	/* Domain colour badges / 360° cards — one family per work domain */
+	.badge-domain-registration {
+		@apply inline-flex items-center gap-1.5 rounded-full border border-domain-registration-border bg-domain-registration-subtle px-2.5 py-0.5 text-xs font-semibold text-domain-registration-text;
+	}
+	.card-domain-registration {
+		@apply border-2 border-domain-registration-border bg-white transition-all hover:border-domain-registration;
+	}
+	.badge-domain-donation {
+		@apply inline-flex items-center gap-1.5 rounded-full border border-domain-donation-border bg-domain-donation-subtle px-2.5 py-0.5 text-xs font-semibold text-domain-donation-text;
+	}
+	.card-domain-donation {
+		@apply border-2 border-domain-donation-border bg-white transition-all hover:border-domain-donation;
+	}
+	.badge-domain-volunteer {
+		@apply inline-flex items-center gap-1.5 rounded-full border border-domain-volunteer-border bg-domain-volunteer-subtle px-2.5 py-0.5 text-xs font-semibold text-domain-volunteer-text;
+	}
+	.card-domain-volunteer {
+		@apply border-2 border-domain-volunteer-border bg-white transition-all hover:border-domain-volunteer;
+	}
+	.badge-domain-kitchen {
+		@apply inline-flex items-center gap-1.5 rounded-full border border-domain-kitchen-border bg-domain-kitchen-subtle px-2.5 py-0.5 text-xs font-semibold text-domain-kitchen-text;
+	}
+	.card-domain-kitchen {
+		@apply border-2 border-domain-kitchen-border bg-white transition-all hover:border-domain-kitchen;
+	}
+	.badge-domain-facility {
+		@apply inline-flex items-center gap-1.5 rounded-full border border-domain-facility-border bg-domain-facility-subtle px-2.5 py-0.5 text-xs font-semibold text-domain-facility-text;
+	}
+	.card-domain-facility {
+		@apply border-2 border-domain-facility-border bg-white transition-all hover:border-domain-facility;
+	}
+	.badge-domain-security {
+		@apply inline-flex items-center gap-1.5 rounded-full border border-domain-security-border bg-domain-security-subtle px-2.5 py-0.5 text-xs font-semibold text-domain-security-text;
+	}
+	.card-domain-security {
+		@apply border-2 border-domain-security-border bg-white transition-all hover:border-domain-security;
+	}
+	.badge-domain-admin {
+		@apply inline-flex items-center gap-1.5 rounded-full border border-domain-admin-border bg-domain-admin-subtle px-2.5 py-0.5 text-xs font-semibold text-domain-admin-text;
+	}
+	.card-domain-admin {
+		@apply border-2 border-domain-admin-border bg-white transition-all hover:border-domain-admin;
+	}
+
+	/* DEPRECATED(domain-color-tokens): use .badge-domain-<id> / .card-domain-<id> — remove after usages migrate (.badge-family / .card-ops-family stay) */
 	.badge-kitchen {
-		@apply inline-flex items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-0.5 text-xs font-semibold text-orange-900;
+		@apply inline-flex items-center gap-1.5 rounded-full border border-domain-kitchen-border bg-domain-kitchen-subtle px-2.5 py-0.5 text-xs font-semibold text-domain-kitchen-text;
 	}
 	.badge-family {
 		@apply inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 text-xs font-semibold text-rose-900;
 	}
 	.badge-donor {
-		@apply inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs font-semibold text-sky-900;
+		@apply inline-flex items-center gap-1.5 rounded-full border border-domain-donation-border bg-domain-donation-subtle px-2.5 py-0.5 text-xs font-semibold text-domain-donation-text;
 	}
 	.badge-volunteer {
-		@apply inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-900;
+		@apply inline-flex items-center gap-1.5 rounded-full border border-domain-volunteer-border bg-domain-volunteer-subtle px-2.5 py-0.5 text-xs font-semibold text-domain-volunteer-text;
 	}
 	.badge-inventory {
-		@apply inline-flex items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 px-2.5 py-0.5 text-xs font-semibold text-teal-900;
+		@apply inline-flex items-center gap-1.5 rounded-full border border-domain-donation-border bg-domain-donation-subtle px-2.5 py-0.5 text-xs font-semibold text-domain-donation-text;
 	}
 
 	/* Domain 360° Card Framing */
 	.card-ops-kitchen {
-		@apply border-2 border-orange-200 bg-white transition-all hover:border-orange-300 hover:bg-orange-50/20;
+		@apply border-2 border-domain-kitchen-border bg-white transition-all hover:border-domain-kitchen;
 	}
 	.card-ops-family {
 		@apply border-2 border-rose-200 bg-white transition-all hover:border-rose-300 hover:bg-rose-50/20;
 	}
 	.card-ops-donor {
-		@apply border-2 border-sky-200 bg-white transition-all hover:border-sky-300 hover:bg-sky-50/20;
+		@apply border-2 border-domain-donation-border bg-white transition-all hover:border-domain-donation;
 	}
 	.card-ops-volunteer {
-		@apply border-2 border-emerald-200 bg-white transition-all hover:border-emerald-300 hover:bg-emerald-50/20;
+		@apply border-2 border-domain-volunteer-border bg-white transition-all hover:border-domain-volunteer;
 	}
 	.card-ops-inventory {
-		@apply border-2 border-teal-200 bg-white transition-all hover:border-teal-300 hover:bg-teal-50/20;
+		@apply border-2 border-domain-donation-border bg-white transition-all hover:border-domain-donation;
 	}
 }
 

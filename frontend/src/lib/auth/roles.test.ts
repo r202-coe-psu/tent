@@ -4,6 +4,7 @@ import {
 	canCancelHold,
 	canAccessUnassignedRegistrationQueue,
 	canAccessMedicalScreening,
+	canAccessVolunteerBackoffice,
 	canAccessZoning,
 	capabilitiesForShelter,
 	compoundCapabilityRole,
@@ -84,8 +85,10 @@ describe('roles kernel', () => {
 		expect(hasCapabilityInShelter(roles, 'SH001', 'registration_staff')).toBe(true);
 		expect(hasCapabilityInShelter(roles, 'SH001', 'medical_staff')).toBe(false);
 		expect(hasCapabilityInShelter(roles, 'SH002', 'medical_staff')).toBe(true);
-		expect(canAccessMedicalScreening(roles, 'SH001')).toBe(false);
+		// SH001 only has registration_staff — now admitted to Station 2 (decision sync 2026-10-10).
+		expect(canAccessMedicalScreening(roles, 'SH001')).toBe(true);
 		expect(canAccessMedicalScreening(roles, 'SH002')).toBe(true);
+		expect(canAccessMedicalScreening(roles, 'SH003')).toBe(false);
 		expect(canAccessZoning(roles, 'SH001')).toBe(true);
 		expect(canAccessZoning(roles, 'SH002')).toBe(false);
 	});
@@ -164,16 +167,46 @@ describe('roles kernel', () => {
 		expect(canAccessUnassignedRegistrationQueue([])).toBe(false);
 	});
 
-	it('canAccessMedicalScreening allows medical_staff, triage_staff, shelter_manager, system_admin only', () => {
+	it('canAccessMedicalScreening allows registration_staff, medical_staff, triage_staff, shelter_manager, system_admin only', () => {
 		expect(canAccessMedicalScreening(['system_admin'])).toBe(true);
 		expect(canAccessMedicalScreening(['_admin'])).toBe(true);
 		expect(canAccessMedicalScreening(['shelter:SH001', 'shelter_manager'])).toBe(true);
 		expect(canAccessMedicalScreening(['shelter:SH001', 'medical_staff'])).toBe(true);
 		expect(canAccessMedicalScreening(['shelter:SH001', 'triage_staff'])).toBe(true);
-		expect(canAccessMedicalScreening(['shelter:SH001', 'registration_staff'])).toBe(false);
+		expect(canAccessMedicalScreening(['shelter:SH001', 'registration_staff'])).toBe(true);
+		expect(canAccessMedicalScreening(['shelter:SH001', 'SH001:registration_staff'])).toBe(true);
+		// REG of another shelter does not bleed into this one.
+		expect(
+			canAccessMedicalScreening(
+				['shelter:SH001', 'shelter:SH002', 'SH001:registration_staff'],
+				'SH002'
+			)
+		).toBe(false);
+		expect(canAccessMedicalScreening(['shelter:SH001', 'facility_staff'])).toBe(false);
+		expect(canAccessMedicalScreening(['shelter:SH001', 'volunteer_coordinator'])).toBe(false);
 		expect(canAccessMedicalScreening(['shelter:SH001', 'kitchen_staff'])).toBe(false);
 		expect(canAccessMedicalScreening(['shelter:SH001', 'warehouse_staff'])).toBe(false);
 		expect(canAccessMedicalScreening([])).toBe(false);
+	});
+
+	it('canAccessVolunteerBackoffice allows volunteer_coordinator, shelter_manager, system_admin only', () => {
+		expect(canAccessVolunteerBackoffice(['system_admin'])).toBe(true);
+		expect(canAccessVolunteerBackoffice(['_admin'])).toBe(true);
+		expect(canAccessVolunteerBackoffice(['shelter:SH001', 'shelter_manager'])).toBe(true);
+		expect(canAccessVolunteerBackoffice(['shelter:SH001', 'volunteer_coordinator'])).toBe(true);
+		expect(
+			canAccessVolunteerBackoffice(['shelter:SH001', 'SH001:volunteer_coordinator'], 'SH001')
+		).toBe(true);
+		expect(canAccessVolunteerBackoffice(['shelter:SH001', 'registration_staff'])).toBe(false);
+		expect(canAccessVolunteerBackoffice(['shelter:SH001', 'kitchen_staff'])).toBe(false);
+		expect(canAccessVolunteerBackoffice(['shelter:SH001', 'security_officer'])).toBe(false);
+		expect(canAccessVolunteerBackoffice([])).toBe(false);
+	});
+
+	it('canAccessVolunteerBackoffice is scoped to the selected shelter', () => {
+		const roles = ['shelter:SH001', 'shelter:SH002', 'SH001:volunteer_coordinator'];
+		expect(canAccessVolunteerBackoffice(roles, 'SH001')).toBe(true);
+		expect(canAccessVolunteerBackoffice(roles, 'SH002')).toBe(false);
 	});
 
 	it('canAccessZoning allows registration_staff, facility_staff, shelter_manager, system_admin only', () => {

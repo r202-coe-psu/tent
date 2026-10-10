@@ -12,18 +12,20 @@ import {
 } from './couch-db';
 import { CouchAuthError, CouchDocumentPolicyError, ConflictError } from '$lib/utils/errors';
 
-const markNeedsReauth = vi.fn();
+const handleAuthFailure = vi.fn();
+const markConnected = vi.fn();
+const markDisconnected = vi.fn();
 
 vi.mock('$lib/stores/auth.svelte', () => ({
 	authStore: {
-		markNeedsReauth: (...args: unknown[]) => markNeedsReauth(...args)
+		handleAuthFailure: (...args: unknown[]) => handleAuthFailure(...args)
 	}
 }));
 
 vi.mock('$lib/stores/endpoint.svelte', () => ({
 	endpointStore: {
-		markConnected: vi.fn(),
-		markDisconnected: vi.fn()
+		markConnected: (...args: unknown[]) => markConnected(...args),
+		markDisconnected: (...args: unknown[]) => markDisconnected(...args)
 	}
 }));
 
@@ -113,7 +115,10 @@ function mockFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Respon
 
 beforeEach(() => {
 	store.clear();
-	markNeedsReauth.mockReset();
+	handleAuthFailure.mockReset();
+	handleAuthFailure.mockResolvedValue('expired');
+	markConnected.mockReset();
+	markDisconnected.mockReset();
 	vi.stubGlobal('fetch', mockFetch);
 });
 
@@ -237,12 +242,17 @@ describe('couch-db', () => {
 		expect((results[0] as { _rev?: string })._rev).toBe('1-bulk');
 	});
 
-	it('maps 401 to CouchAuthError and marks needs reauth', async () => {
+	it('maps 401 to CouchAuthError, reports it, and marks the server reachable', async () => {
 		vi.stubGlobal('fetch', () =>
 			Promise.resolve(new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 }))
 		);
-		await expect(putDoc('testdb', { _id: 'x:1' })).rejects.toBeInstanceOf(CouchAuthError);
-		expect(markNeedsReauth).toHaveBeenCalledTimes(1);
+		const err = await putDoc('testdb', { _id: 'x:1' }).catch((e) => e);
+		expect(err).toBeInstanceOf(CouchAuthError);
+		expect((err as CouchAuthError).status).toBe(401);
+		expect(handleAuthFailure).toHaveBeenCalledTimes(1);
+		expect(handleAuthFailure).toHaveBeenCalledWith(err);
+		expect(markConnected).toHaveBeenCalled();
+		expect(markDisconnected).not.toHaveBeenCalled();
 	});
 
 	it('maps validate_doc_update 403 to CouchDocumentPolicyError without reauth', async () => {
@@ -262,10 +272,10 @@ describe('couch-db', () => {
 		expect((err as CouchDocumentPolicyError).reason).toBe('doc type not allowed yet: screening');
 		expect((err as CouchDocumentPolicyError).docId).toBe('screening:1');
 		expect((err as CouchDocumentPolicyError).docType).toBe('screening');
-		expect(markNeedsReauth).not.toHaveBeenCalled();
+		expect(handleAuthFailure).not.toHaveBeenCalled();
 	});
 
-	it('maps membership 403 to CouchAuthError and marks needs reauth', async () => {
+	it('maps membership 403 to CouchAuthError and leaves the expiry decision to the auth store', async () => {
 		vi.stubGlobal('fetch', () =>
 			Promise.resolve(
 				new Response(
@@ -277,8 +287,17 @@ describe('couch-db', () => {
 				)
 			)
 		);
-		await expect(putDoc('testdb', { _id: 'x:1' })).rejects.toBeInstanceOf(CouchAuthError);
-		expect(markNeedsReauth).toHaveBeenCalledTimes(1);
+		const err = await putDoc('testdb', { _id: 'x:1' }).catch((e) => e);
+		expect(err).toBeInstanceOf(CouchAuthError);
+		expect((err as CouchAuthError).status).toBe(403);
+		expect(handleAuthFailure).toHaveBeenCalledWith(err);
+	});
+
+	it('does not report network failures as auth failures', async () => {
+		vi.stubGlobal('fetch', () => Promise.reject(new TypeError('Failed to fetch')));
+		await expect(getDoc('testdb', 'x:1')).rejects.toThrow();
+		expect(handleAuthFailure).not.toHaveBeenCalled();
+		expect(markDisconnected).toHaveBeenCalled();
 	});
 
 	it('getDocWithConflicts includes ?conflicts=true in URL and correctly encodes colons', async () => {

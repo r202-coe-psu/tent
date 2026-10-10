@@ -5,6 +5,17 @@
  * Error whose message the UI can toast. Same-origin paths so the cookie is
  * first-party; the Node BFF serves these in staging/prod.
  */
+/** Error from a non-2xx service response; carries the HTTP status for expiry/permission handling. */
+export class ServiceRequestError extends Error {
+	constructor(
+		message: string,
+		readonly status: number
+	) {
+		super(message);
+		this.name = 'ServiceRequestError';
+	}
+}
+
 export async function serviceFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
 	const res = await fetch(path, {
 		credentials: 'include',
@@ -16,7 +27,10 @@ export async function serviceFetch<T>(path: string, init: RequestInit = {}): Pro
 	if (!res.ok) {
 		const message = data?.error?.message || `Request failed (${res.status})`;
 		const description = data?.error?.description;
-		throw new Error(description ? `${message} — ${description}` : message);
+		throw new ServiceRequestError(
+			description ? `${message} — ${description}` : message,
+			res.status
+		);
 	}
 	return data as T;
 }

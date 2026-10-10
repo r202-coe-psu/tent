@@ -43,7 +43,7 @@
 		badgeText={t.heroBadge}
 		badgeIcon={UserPlus}
 		showLivePing={false}
-		bgClass="bg-primary-dark"
+		bgClass="bg-domain-volunteer-strong"
 		showSearch={false}
 	/>
 
@@ -55,8 +55,8 @@
 			<button
 				class="flex w-full shrink-0 items-center justify-center gap-2.5 rounded-2xl px-6 py-3 text-sm font-bold shadow-sm transition-transform active:scale-[0.98] sm:w-auto {activeTab ===
 				'jobs'
-					? 'bg-primary text-white'
-					: 'bg-transparent text-primary hover:bg-muted/50'}"
+					? 'bg-domain-volunteer-strong text-white'
+					: 'bg-transparent text-domain-volunteer-strong hover:bg-muted/50'}"
 				onclick={() => (activeTab = 'jobs')}
 			>
 				<Briefcase class="h-4.5 w-4.5" />
@@ -65,8 +65,8 @@
 			<button
 				class="flex w-full shrink-0 items-center justify-center gap-2.5 rounded-2xl px-6 py-3 text-sm font-bold transition-colors active:scale-[0.98] sm:w-auto {activeTab ===
 				'ticket'
-					? 'bg-primary text-white shadow-sm'
-					: 'bg-transparent text-primary hover:bg-muted/50'}"
+					? 'bg-domain-volunteer-strong text-white shadow-sm'
+					: 'bg-transparent text-domain-volunteer-strong hover:bg-muted/50'}"
 				onclick={() => (activeTab = 'ticket')}
 			>
 				<Ticket class="h-4.5 w-4.5" />
@@ -75,7 +75,7 @@
 		</div>
 		<a
 			href={resolve('/volunteer/portal')}
-			class="hover:bg-opacity-90 flex w-full shrink-0 items-center justify-center gap-2.5 rounded-[20px] bg-primary px-7 py-4 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] md:w-auto"
+			class="hover:bg-opacity-90 flex w-full shrink-0 items-center justify-center gap-2.5 rounded-[20px] bg-domain-volunteer-strong px-7 py-4 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] md:w-auto"
 		>
 			<Lock class="h-4 w-4 text-warning" />
 			{t.portalLink}

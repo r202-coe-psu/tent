@@ -25,6 +25,9 @@
 	import Lock from '@lucide/svelte/icons/lock';
 	import { toast } from 'svelte-sonner';
 	import { useQueryClient } from '@tanstack/svelte-query';
+	import { isShelterManager, isSystemAdmin } from '$lib/auth/roles';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
@@ -108,6 +111,12 @@
 	let qualificationDialogOpen = $state(false);
 	let qualificationFocusSkillCode = $state<string | null>(null);
 	let accessDialogOpen = $state(false);
+	// Granting system access creates a user account — SM/SA only (the BFF enforces it too); a
+	// volunteer_coordinator manages jobs/shifts but must not see a button that always 403s.
+	const canGrantAccess = $derived.by(() => {
+		const roles = authStore.user?.roles ?? [];
+		return isSystemAdmin(roles) || isShelterManager(roles, shelterStore.selectedShelterCode);
+	});
 	let deleteDialogOpen = $state(false);
 
 	const queryClient = useQueryClient();
@@ -291,14 +300,16 @@
 			{/if}
 
 			<div class="flex items-center gap-1.5">
-				<Button
-					size="sm"
-					class="flex-1 gap-1.5 bg-primary-dark text-white hover:bg-primary-dark/90"
-					onclick={() => (accessDialogOpen = true)}
-				>
-					<KeyRound class="h-3.5 w-3.5" />
-					ออกสิทธิ์ใช้งานระบบ
-				</Button>
+				{#if canGrantAccess}
+					<Button
+						size="sm"
+						class="flex-1 gap-1.5 bg-primary-dark text-white hover:bg-primary-dark/90"
+						onclick={() => (accessDialogOpen = true)}
+					>
+						<KeyRound class="h-3.5 w-3.5" />
+						ออกสิทธิ์ใช้งานระบบ
+					</Button>
+				{/if}
 
 				<Button
 					size="icon"
@@ -328,7 +339,9 @@
 	{shelterLine}
 	focusSkillCode={qualificationFocusSkillCode}
 />
-<VolunteerAccessDialog bind:open={accessDialogOpen} {volunteer} {shelterLine} />
+{#if canGrantAccess}
+	<VolunteerAccessDialog bind:open={accessDialogOpen} {volunteer} {shelterLine} />
+{/if}
 
 <AlertDialog.Root bind:open={deleteDialogOpen}>
 	<AlertDialog.Content>
