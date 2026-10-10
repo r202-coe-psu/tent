@@ -23,7 +23,8 @@
 
 	const focusRing =
 		'focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none';
-	const tileBase = 'flex min-h-11 items-center gap-4 rounded-xl border p-4 shadow-2xs';
+	// Tiles sit inside a department card, so they stay flat (no shadow) until hovered.
+	const tileBase = 'flex min-h-11 items-center gap-4 rounded-xl border p-4';
 </script>
 
 {#snippet title()}

@@ -46,33 +46,42 @@
 	style:--c-subtle={cssVars['--c-subtle']}
 	style:--c-border={cssVars['--c-border']}
 	style:--c-text={cssVars['--c-text']}
-	class="space-y-4"
+	class="overflow-hidden rounded-2xl border border-(color:--c-border) bg-white shadow-2xs"
 >
-	<header class="flex items-center gap-3">
+	<header
+		class="flex items-center gap-3 border-b border-(color:--c-border) bg-(--c-subtle) px-4 py-3 sm:px-6 sm:py-4"
+	>
 		<span
-			class="flex size-11 shrink-0 items-center justify-center rounded-xl border border-(color:--c-border) bg-(--c-subtle) text-(color:--c)"
+			class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-(--c-strong) text-white"
 			aria-hidden="true"
 		>
 			<Icon class="size-6" />
 		</span>
-		<div class="min-w-0">
-			<h2 id={headingId} class="text-lg font-bold text-slate-900 sm:text-xl">
+		<div class="min-w-0 flex-1">
+			<h2 id={headingId} class="text-lg font-bold text-(color:--c-text) sm:text-xl">
 				{department.label}
 			</h2>
 			<p class="text-sm text-slate-600">{department.desc}</p>
 		</div>
+		<span
+			class="shrink-0 rounded-full border border-(color:--c-border) bg-white px-2.5 py-0.5 text-xs font-semibold text-(color:--c-text) tabular-nums"
+		>
+			{department.items.length} เมนู
+		</span>
 	</header>
 
-	{#each blocks as block (block.key)}
-		<div class="space-y-2">
-			{#if block.label}
-				<h3 class="text-sm font-semibold text-slate-600">{block.label}</h3>
-			{/if}
-			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-				{#each block.items as { item, state } (item.id)}
-					<PortalMenuTile {item} {state} {selectedShelterCode} />
-				{/each}
+	<div class="space-y-5 p-4 sm:p-6">
+		{#each blocks as block (block.key)}
+			<div class="space-y-2">
+				{#if block.label}
+					<h3 class="text-sm font-semibold text-slate-600">{block.label}</h3>
+				{/if}
+				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+					{#each block.items as { item, state } (item.id)}
+						<PortalMenuTile {item} {state} {selectedShelterCode} />
+					{/each}
+				</div>
 			</div>
-		</div>
-	{/each}
+		{/each}
+	</div>
 </section>

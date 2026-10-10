@@ -23,7 +23,7 @@
 	const showPublicLink = $derived(canSeePortalPublicLink(roles));
 </script>
 
-<div class="space-y-10">
+<div class="space-y-6">
 	{#if departments.length > 0}
 		{#each departments as department (department.id)}
 			<PortalDepartmentSection {department} {selectedShelterCode} />
