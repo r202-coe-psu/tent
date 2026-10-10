@@ -4,6 +4,7 @@
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import User from '@lucide/svelte/icons/user';
 
+	import { dev } from '$app/environment';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { shelterStore, persistSelectedShelter } from '$lib/stores/shelter.svelte';
 	import { endpointStore } from '$lib/stores/endpoint.svelte';
@@ -77,8 +78,8 @@
 	);
 	const username = $derived(authStore.user?.name ?? '');
 
-	// System-admin role preview (UI-only, not persisted): what the menu shows for the previewed
-	// roles and features. Real roles/permissions and the auth store are never touched.
+	// System-admin role preview (UI-only, not persisted, dev server only): what the menu shows for
+	// the previewed roles and features. Real roles/permissions and the auth store are never touched.
 	let preview = $state<PortalPreviewState>(createPortalPreviewState());
 	const menu = $derived(
 		resolvePortalPreview({
@@ -233,7 +234,10 @@
 		</section>
 
 		<main>
-			<PortalRolePreview bind:preview realRoles={roles} selectedShelterCode={selectedCode} />
+			<!-- Dev-server only: stripped from production builds (`dev` is false there). -->
+			{#if dev}
+				<PortalRolePreview bind:preview realRoles={roles} selectedShelterCode={selectedCode} />
+			{/if}
 			<PortalMenuSections
 				roles={menu.roles}
 				selectedShelterCode={selectedCode}
