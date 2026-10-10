@@ -19,4 +19,4 @@ read-side FastAPI changes). Never decrement it. Bumping costs one full bootstrap
 per deploy, so batch related projector changes into one bump per release when possible.
 """
 
-PROJECTION_VERSION: int = 1
+PROJECTION_VERSION: int = 2

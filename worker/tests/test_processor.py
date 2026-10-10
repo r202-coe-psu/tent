@@ -271,6 +271,38 @@ async def test_process_supply_item_change_does_not_seed_need_counters():
 
 
 @pytest.mark.asyncio
+async def test_process_shelter_item_master_change_reprojects_needs_and_stock():
+    """A shelter-local item names the board card and the stock rows (schema.md §4.2)."""
+    couch = AsyncMock()
+    change = {
+        "seq": 47,
+        "id": "item_master:01LOCAL",
+        "doc": {
+            "_id": "item_master:01LOCAL",
+            "type": "item_master",
+            "shelter_code": "SH001",
+        },
+    }
+
+    with (
+        patch("worker.couch.processor.save_checkpoint", new_callable=AsyncMock),
+        patch("worker.couch.processor.apply_need", new_callable=AsyncMock),
+        patch(
+            "worker.couch.processor.project_needs_for_shelter",
+            new_callable=AsyncMock,
+            return_value=[],
+        ) as project_needs,
+        patch(
+            "worker.couch.processor.refresh_shelter_stock", new_callable=AsyncMock
+        ) as refresh_stock,
+    ):
+        await process_change(couch, "shelter_sh001", change)
+
+    project_needs.assert_awaited_once_with(couch, "SH001")
+    refresh_stock.assert_awaited_once_with(couch, "SH001")
+
+
+@pytest.mark.asyncio
 async def test_process_stock_ledger_change_refreshes_the_ceiling():
     """Goods on the shelf lower what still has to be donated — and the booking ceiling.
 
