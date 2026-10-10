@@ -382,7 +382,7 @@
 			onclick={addMember}
 			aria-invalid={membersError ? true : undefined}
 			aria-describedby={membersError ? MEMBERS_ERROR_ID : undefined}
-			class="h-11 w-full gap-1.5 border-dashed text-sm sm:w-auto"
+			class="h-11 w-full gap-1.5 border-transparent bg-[#0284C7] text-sm font-semibold text-white shadow-2xs hover:bg-[#0369A1] hover:text-white focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 sm:w-auto"
 		>
 			<Plus class="size-4" />
 			{addMemberLabel}

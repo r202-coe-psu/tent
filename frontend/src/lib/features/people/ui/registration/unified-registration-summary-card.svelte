@@ -37,9 +37,7 @@
 		submittingLabel = '',
 		/** Desktop aside keeps submit; mobile summary sheet relies on sticky CTA. */
 		showSubmit = true,
-		existingMembers = [],
 		existingHeadName = '',
-		existingMaskedNames = [],
 		existingMemberCount = null,
 		existingPets = [],
 		newPets = [],
@@ -56,21 +54,8 @@
 		submitLabel?: string;
 		submittingLabel?: string;
 		showSubmit?: boolean;
-		/** Joining a family: its current members (onsite) — counted with the new ones. */
-		existingMembers?: ReadonlyArray<{
-			_id?: string;
-			first_name?: string | null;
-			last_name?: string | null;
-			/** Stored members may have no gender (CR-154). */
-			gender?: string | null;
-			vulnerable_groups?: readonly string[] | null;
-			special_needs?: readonly string[] | null;
-		}>;
-		/** Joining a family: the family's head, who stays the primary contact. */
+		/** Joining a family: its head stays the primary contact (public: masked name). */
 		existingHeadName?: string;
-		/** Public join: the family's current members as masked names (first name + hidden surname). */
-		existingMaskedNames?: readonly string[];
-		/** Public join: how many are already in the family (from the match chip). */
 		existingMemberCount?: number | null;
 		existingPets?: Array<{ species: string; name?: string; count?: number }>;
 		newPets?: Array<{ species: string; name?: string; customSpecies?: string }>;
@@ -102,68 +87,31 @@
 		existingHeadName ||
 			(headMember ? `${headMember.first_name || ''} ${headMember.last_name || ''}`.trim() : '')
 	);
+
 	const existingCount = $derived(
 		existingMemberCount != null && existingMemberCount > 0 ? existingMemberCount : 0
 	);
-	const existingTotal = $derived(
-		Math.max(existingMembers.length, existingMaskedNames.length, existingCount)
+	const totalMemberCount = $derived(
+		existingCount > 0 ? existingCount + members.length : members.length
 	);
-	const totalCount = $derived(existingTotal + members.length);
-	/** Gender / care counts cover everyone in the family, existing and new. */
-	const everyone = $derived([...existingMembers, ...members]);
-
-	/** Joined family first (its head is primary), then the new cards numbered after them. */
-	const memberSummaries = $derived([
-		...existingMembers.map((member, index) => {
-			const name = `${member.first_name || ''} ${member.last_name || ''}`.trim();
-			return {
-				id: member._id || `existing-${index}`,
-				name: name || `${t.summaryMemberNo} ${index + 1}`,
-				isPrimary: Boolean(existingHeadName) && name === existingHeadName,
-				isExisting: true
-			};
-		}),
-		// Public join: names arrive masked, no other details.
-		...(existingMembers.length > 0 ? [] : existingMaskedNames).map((name, index) => ({
-			id: `existing-masked-${index}`,
-			name,
-			isPrimary: Boolean(existingHeadName) && name === existingHeadName,
-			isExisting: true
-		})),
-		...members.map((member, index) => ({
-			id: member._id || `member-${index}`,
-			name:
-				`${member.first_name || ''} ${member.last_name || ''}`.trim() ||
-				`${t.summaryMemberNo} ${existingTotal + index + 1}`,
-			isPrimary: index === 0 && existingTotal === 0 && !existingHeadName,
-			isExisting: false
-		}))
-	]);
 
 	const existingPetCount = $derived(
 		existingPets.reduce((sum, p) => sum + (Number(p.count) || 1), 0)
 	);
 	const petCount = $derived(existingPetCount + newPets.length);
 
-	const maleCount = $derived(everyone.filter((m) => m.gender === 'male').length);
-	const femaleCount = $derived(everyone.filter((m) => m.gender === 'female').length);
+	const maleCount = $derived(members.filter((m) => m.gender === 'male').length);
+	const femaleCount = $derived(members.filter((m) => m.gender === 'female').length);
 	const vulnerableCount = $derived(
-		everyone.filter(
+		members.filter(
 			(m) => (m.vulnerable_groups?.length ?? 0) > 0 || (m.special_needs?.length ?? 0) > 0
 		).length
 	);
 
-	// Whole strings, so the count and its unit render as one text node.
-	const shelterCodeText = $derived(`${t.summaryShelterCode} ${shelterCode}`);
-	const landmarkText = $derived(`${t.summaryLandmark} ${household.residence_landmark ?? ''}`);
+	// Whole strings, so a count and its unit render as one text node.
 	const memberCountText = $derived(
-		`${totalCount} ${totalCount === 1 ? t.summaryPersonUnitOne : t.summaryPersonUnit}`
+		`${totalMemberCount} ${totalMemberCount === 1 ? t.summaryPersonUnitOne : t.summaryPersonUnit}`
 	);
-	const existingNewText = $derived(
-		`${t.summaryExisting} ${existingTotal} · ${t.summaryNew} ${members.length}`
-	);
-	const maleText = $derived(`${t.genderMale} ${maleCount}`);
-	const femaleText = $derived(`${t.genderFemale} ${femaleCount}`);
 	const careText = $derived(
 		`${t.summaryCareGroup} ${vulnerableCount} ${vulnerableCount === 1 ? t.summaryPersonUnitOne : t.summaryPersonUnit}`
 	);
@@ -211,7 +159,7 @@
 			{#if shelterName}
 				<p class="text-sm font-bold text-foreground">{shelterName}</p>
 			{:else if shelterCode}
-				<p class="text-sm font-bold text-foreground">{shelterCodeText}</p>
+				<p class="text-sm font-bold text-foreground">{t.summaryShelterCode} {shelterCode}</p>
 			{:else}
 				<p class="text-sm font-bold text-foreground">{t.summaryNoShelter}</p>
 				<p class="text-2xs text-muted-foreground">{t.summaryNoShelterHint}</p>
@@ -242,7 +190,8 @@
 			{/if}
 			{#if household.residence_landmark}
 				<p class="truncate text-2xs text-muted-foreground">
-					{landmarkText}
+					{t.summaryLandmark}
+					{household.residence_landmark}
 				</p>
 			{/if}
 		</div>
@@ -260,9 +209,10 @@
 					{memberCountText}
 				</span>
 			</div>
-			{#if existingTotal > 0}
+
+			{#if existingCount > 0}
 				<p class="text-2xs text-muted-foreground">
-					{existingNewText}
+					{t.summaryMembersExisting(existingCount)} · {t.summaryMembersAdding(members.length)}
 				</p>
 			{/if}
 
@@ -271,33 +221,17 @@
 				<span class="font-semibold">{headFullName || t.summaryNoName}</span>
 			</div>
 
-			<ul class="space-y-1.5" aria-label={t.summaryMemberListAria}>
-				{#each memberSummaries as member (member.id)}
-					<li
-						class="flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/10 px-2.5 py-1.5 text-xs"
-					>
-						<span class="min-w-0 truncate font-medium text-foreground">{member.name}</span>
-						<span class="flex shrink-0 items-center gap-1">
-							{#if member.isExisting}
-								<span class="text-2xs text-muted-foreground">{t.summaryExistingTag}</span>
-							{/if}
-							{#if member.isPrimary}
-								<span class="text-2xs font-medium text-primary">{t.summaryPrimaryTag}</span>
-							{/if}
-						</span>
-					</li>
-				{/each}
-			</ul>
-
 			<div class="flex flex-wrap items-center gap-1.5 text-2xs text-muted-foreground">
 				{#if maleCount > 0}
 					<span class="rounded-md border border-border bg-muted/40 px-1.5 py-0.5">
-						{maleText}
+						{t.genderMale}
+						{maleCount}
 					</span>
 				{/if}
 				{#if femaleCount > 0}
 					<span class="rounded-md border border-border bg-muted/40 px-1.5 py-0.5">
-						{femaleText}
+						{t.genderFemale}
+						{femaleCount}
 					</span>
 				{/if}
 				{#if vulnerableCount > 0}

@@ -9,7 +9,7 @@ import { langState } from '$lib/states/i18n.svelte';
 import UnifiedRegistrationSummaryCard from './unified-registration-summary-card.svelte';
 
 describe('UnifiedRegistrationSummaryCard', () => {
-	it('renders every member name in the live household summary', () => {
+	it('counts the members and shows the first one as primary contact', () => {
 		const members: UnifiedMemberWithMeta[] = [
 			{
 				...blankUnifiedMember(),
@@ -34,9 +34,8 @@ describe('UnifiedRegistrationSummaryCard', () => {
 			}
 		});
 
-		expect(result.body).toContain('2 คน');
-		expect(result.body).toContain('สมชาย ใจดี');
-		expect(result.body).toContain('สมาชิกคนที่ 2');
+		expect(result.body).toMatch(/2\s*(<!---->)?\s*คน/);
+		expect(result.body).toMatch(/ผู้ติดต่อหลัก:[\s\S]*?สมชาย ใจดี/);
 	});
 
 	it('counts the joined family and keeps its head as the primary contact', () => {
@@ -44,20 +43,18 @@ describe('UnifiedRegistrationSummaryCard', () => {
 			props: {
 				household: householdToUnifiedInput(null),
 				members: [{ ...blankUnifiedMember(), first_name: 'โฮป', last_name: 'ใจดี' }],
-				existingMembers: [
-					{ _id: 'evacuee:a', first_name: 'ชิโน', last_name: 'ใจดี', gender: 'male' }
-				],
+				existingMemberCount: 1,
 				existingHeadName: 'ชิโน ใจดี',
 				activeSection: 'members',
 				onNavigate: vi.fn()
 			}
 		});
 
-		expect(result.body).toContain('2 คน');
-		expect(result.body).toContain('สมาชิกเดิม 1 · มาใหม่ 1');
+		expect(result.body).toMatch(/2\s*(<!---->)?\s*คน/);
+		expect(result.body).toContain('มีอยู่แล้ว 1 คน');
+		expect(result.body).toContain('กำลังเพิ่ม 1 คน');
 		// The family's head (not the new card) is shown as primary contact.
 		expect(result.body).toMatch(/ผู้ติดต่อหลัก:[\s\S]*?ชิโน ใจดี/);
-		expect(result.body).toContain('โฮป ใจดี');
 	});
 
 	it('renders in English when the page language is English', () => {
@@ -81,7 +78,7 @@ describe('UnifiedRegistrationSummaryCard', () => {
 		}
 	});
 
-	it('lists a publicly joined family by masked names, its head as primary contact', () => {
+	it('uses the masked head of a publicly joined family as primary contact', () => {
 		const result = render(UnifiedRegistrationSummaryCard, {
 			props: {
 				household: householdToUnifiedInput(null),
@@ -89,16 +86,12 @@ describe('UnifiedRegistrationSummaryCard', () => {
 				activeSection: 'members',
 				onNavigate: vi.fn(),
 				existingMemberCount: 3,
-				existingHeadName: 'สมชาย ใ****',
-				existingMaskedNames: ['สมชาย ใ****', 'สมหญิง ใ****', 'ดารา ใ****']
+				existingHeadName: 'สมชาย ใ****'
 			}
 		});
 
-		expect(result.body).toContain('4 คน');
-		expect(result.body).toContain('สมหญิง ใ****');
-		expect(result.body).toContain('ดารา ใ****');
-		// The new card is numbered after the three current members, not "1".
-		expect(result.body).toContain('สมาชิกคนที่ 4');
+		expect(result.body).toMatch(/4\s*(<!---->)?\s*คน/);
+		expect(result.body).toMatch(/ผู้ติดต่อหลัก:[\s\S]*?สมชาย ใ\*\*\*\*/);
 		expect(result.body).not.toContain('ยังไม่ได้ระบุชื่อ');
 	});
 });
