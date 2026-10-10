@@ -8,6 +8,7 @@
 	interface Props {
 		lookupErrorCode: string | null;
 		isPhoneGate: boolean;
+		isThaidGate?: boolean;
 		isLookingUp: boolean;
 		retryAfterSeconds: number;
 		homeUrl: string;
@@ -19,6 +20,7 @@
 	let {
 		lookupErrorCode,
 		isPhoneGate,
+		isThaidGate = false,
 		isLookingUp,
 		retryAfterSeconds,
 		homeUrl,
@@ -33,11 +35,20 @@
 			(lookupErrorCode === 'PRE_REGISTRATION_NOT_FOUND' ||
 				lookupErrorCode === 'KIOSK_TOO_MANY_MATCHES')
 	);
+	/** The verified ThaiD session was used up, expired or mismatched: only a new QR scan can go on. */
+	const isThaidSessionInvalid = $derived(lookupErrorCode === 'KIOSK_THAID_SESSION_INVALID');
+	/** Retrying cannot find a pre-registration that is not there, and ThaiD never offers walk-in. */
+	const isThaidLookupMiss = $derived(
+		isThaidGate && lookupErrorCode === 'PRE_REGISTRATION_NOT_FOUND'
+	);
+	const backIsPrimary = $derived(isMethodDisabled || isThaidLookupMiss);
 </script>
 
 <!-- Rendered in a KioskNoticePanel's actions: the panel stacks and sizes them. -->
-{#if !isMethodDisabled}
-	{#if isPhoneLookupMiss}
+{#if !backIsPrimary}
+	{#if isThaidSessionInvalid}
+		<Button type="button" onclick={onreset} class={KIOSK_NOTICE_PRIMARY_ACTION}>สแกนใหม่</Button>
+	{:else if isPhoneLookupMiss}
 		<Button type="button" onclick={onreset} class={KIOSK_NOTICE_PRIMARY_ACTION}
 			>กรอกเบอร์ใหม่</Button
 		>
@@ -58,11 +69,10 @@
 		</Button>
 	{/if}
 {/if}
-<!-- The only way on when the method is off: then it is the main button. -->
+<!-- The only way on when the method is off (or nothing was found): then it is the main button. -->
 <Button
-	href={isMethodDisabled ? homeUrl : backUrl}
-	variant={isMethodDisabled ? 'default' : 'outline'}
-	onclick={onreset}
-	class={isMethodDisabled ? KIOSK_NOTICE_PRIMARY_ACTION : KIOSK_NOTICE_SECONDARY_ACTION}
-	>กลับ</Button
+	href={backIsPrimary ? homeUrl : backUrl}
+	variant={backIsPrimary ? 'default' : 'outline'}
+	onclick={isThaidGate ? undefined : onreset}
+	class={backIsPrimary ? KIOSK_NOTICE_PRIMARY_ACTION : KIOSK_NOTICE_SECONDARY_ACTION}>กลับ</Button
 >

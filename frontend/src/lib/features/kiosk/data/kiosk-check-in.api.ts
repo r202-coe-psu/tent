@@ -3,7 +3,8 @@ import type { KioskPhotoPayload } from '../domain/kiosk-photo';
 export type GateInput =
 	| { source: 'smart-card'; citizen_id: string }
 	| { source: 'qr'; token: string }
-	| { source: 'phone'; phone: string; primary_evacuee_id?: string };
+	| { source: 'phone'; phone: string; primary_evacuee_id?: string }
+	| { source: 'thaid'; session_id: string };
 
 export interface KioskEvacueeSummary {
 	evacuee_id: string;
@@ -188,7 +189,14 @@ export async function lookupPreRegisteredEvacuee(
  * have none yet; a photo problem never fails the check-in.
  */
 export type KioskCheckInPhotoOptions =
-	{ photo?: null; citizenId?: undefined } | { photo: KioskPhotoPayload; citizenId: string };
+	| { photo?: null; citizenId?: undefined; thaidSessionId?: undefined }
+	| { photo: KioskPhotoPayload; citizenId: string; thaidSessionId?: undefined }
+	/**
+	 * ThaiD check-in: the verified session id instead of a citizen id (the server resolves the
+	 * citizen from it and burns the session), and never a photo. Sent once, on the batch that holds
+	 * the primary; the session is single-use, so a retry of leftover members must omit it.
+	 */
+	| { photo?: null; citizenId?: undefined; thaidSessionId: string };
 
 /** The server derives the shelter from device auth and validates household membership. */
 export async function checkInSelectedMembers(
@@ -212,15 +220,17 @@ export async function checkInSelectedMembers(
 
 	// The card owner is the primary; attach the photo only to the batch that checks them in.
 	const photoBatchIndex =
-		options.photo && options.citizenId
+		(options.photo && options.citizenId) || options.thaidSessionId
 			? batches.findIndex((batch) => batch.includes(primaryEvacueeId))
 			: -1;
 
 	for (const [batchIndex, batch] of batches.entries()) {
 		const photoFields =
-			batchIndex === photoBatchIndex
-				? { source: 'smart-card', citizen_id: options.citizenId, photo: options.photo }
-				: {};
+			batchIndex !== photoBatchIndex
+				? {}
+				: options.thaidSessionId
+					? { source: 'thaid', thaid_session_id: options.thaidSessionId, photo: null }
+					: { source: 'smart-card', citizen_id: options.citizenId, photo: options.photo };
 		try {
 			const result = await requestWithTimeout<KioskCheckInResult>(
 				'/api/v1/scanner/kiosk/check-in',

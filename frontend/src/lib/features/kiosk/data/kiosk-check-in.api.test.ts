@@ -203,6 +203,77 @@ describe('checkInSelectedMembers card photo', () => {
 	});
 });
 
+describe('checkInSelectedMembers ThaiD session', () => {
+	afterEach(() => vi.unstubAllGlobals());
+
+	const primaryId = 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV';
+	const sessionId = '0123456789abcdef0123456789abcdef';
+
+	it('sends the thaid source and session id, never a citizen id, on the primary batch only', async () => {
+		const others = Array.from(
+			{ length: 3 },
+			(_, index) => `evacuee:${String(index).padStart(26, '0')}`
+		);
+		const bodies: Array<Record<string, unknown>> = [];
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+				const body = JSON.parse(String(init?.body)) as Record<string, unknown> & {
+					evacuee_ids: string[];
+				};
+				bodies.push(body);
+				return new Response(
+					JSON.stringify({
+						shelter_code: 'SH001',
+						members: body.evacuee_ids.map((evacuee_id) => ({ evacuee_id, status: 'checked_in' }))
+					}),
+					{ status: 200, headers: { 'content-type': 'application/json' } }
+				);
+			})
+		);
+
+		await checkInSelectedMembers(primaryId, [...others, primaryId], {
+			batchLimit: 2,
+			thaidSessionId: sessionId
+		});
+
+		expect(bodies).toEqual([
+			{ primary_evacuee_id: primaryId, evacuee_ids: [others[0], others[1]] },
+			{
+				primary_evacuee_id: primaryId,
+				evacuee_ids: [others[2], primaryId],
+				source: 'thaid',
+				thaid_session_id: sessionId,
+				photo: null
+			}
+		]);
+	});
+});
+
+describe('lookupPreRegisteredEvacuee ThaiD gate', () => {
+	afterEach(() => vi.unstubAllGlobals());
+
+	it('sends only the source and session id, never a citizen id', async () => {
+		const fetchMock = vi.fn<typeof fetch>(async () => {
+			return new Response(JSON.stringify({ kind: 'kiosk_registered', shelter_code: 'SH001' }), {
+				status: 200,
+				headers: { 'content-type': 'application/json' }
+			});
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		await lookupPreRegisteredEvacuee({
+			source: 'thaid',
+			session_id: '0123456789abcdef0123456789abcdef'
+		});
+
+		expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({
+			source: 'thaid',
+			session_id: '0123456789abcdef0123456789abcdef'
+		});
+	});
+});
+
 describe('registerKioskWalkIn', () => {
 	afterEach(() => vi.unstubAllGlobals());
 

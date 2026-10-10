@@ -12,10 +12,11 @@
 	interface Props {
 		contextQuery: KioskContextQuery;
 		phoneCheckInEnabled: boolean;
+		thaidCheckInEnabled: boolean;
 	}
 
-	let { contextQuery, phoneCheckInEnabled }: Props = $props();
-	const methods = $derived(visibleIdentityMethods({ phoneCheckInEnabled }));
+	let { contextQuery, phoneCheckInEnabled, thaidCheckInEnabled }: Props = $props();
+	const methods = $derived(visibleIdentityMethods({ phoneCheckInEnabled, thaidCheckInEnabled }));
 	const columns = $derived(methods.length === 3 ? 3 : 2);
 	const rows = $derived(Math.ceil(methods.length / columns));
 

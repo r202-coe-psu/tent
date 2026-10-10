@@ -110,6 +110,8 @@
 	let lookupKey = '';
 	let retryGate = $state<GateInput | null>(null);
 	let lookupGeneration = 0;
+	/** A ThaiD session is single-use: once a check-in reached the server, a retry must not resend it. */
+	let thaidSessionSpent = false;
 
 	const PRINT_DONE_VISIBLE_MS = 2500;
 	const homeUrl = $derived(`/kiosk${contextQuery}`);
@@ -119,6 +121,7 @@
 			displayShelterCode === (lookup?.shelter_code ?? candidateShelterCode)
 	);
 	const isPhoneGate = $derived(input?.source === 'phone');
+	const isThaidGate = $derived(input?.source === 'thaid');
 	const holdShown = $derived(
 		holdMembers && Boolean(hold) && Boolean(lookup) && centerMatches && results.length === 0
 	);
@@ -165,6 +168,7 @@
 		const nextKey = JSON.stringify(nextInput);
 		if (lookupKey === nextKey) return;
 		lookupKey = nextKey;
+		thaidSessionSpent = false;
 		void performLookup(nextInput);
 	});
 
@@ -277,8 +281,9 @@
 		try {
 			const response = await checkInSelectedMembers(lookup.primary_evacuee_id, ids, {
 				batchLimit: 20,
-				...(await cardPhotoOptions())
+				...(isThaidGate ? thaidOptions() : await cardPhotoOptions())
 			});
+			thaidSessionSpent = true;
 			results = mergeCheckInResults(results, response.members);
 			retryableIds = response.retryable_evacuee_ids;
 			if (retryableIds.length > 0) {
@@ -287,7 +292,14 @@
 			}
 			await prepareQrImages(results);
 		} catch (error) {
-			if (error instanceof KioskPartialCheckInError) {
+			if (isThaidGate && isThaidSessionError(error)) {
+				// The verified session is gone or the method was switched off: only a new scan can go on.
+				lookup = null;
+				results = [];
+				lookupErrorCode = error.code;
+				lookupError = error.message;
+			} else if (error instanceof KioskPartialCheckInError) {
+				thaidSessionSpent = true;
 				results = mergeCheckInResults(results, error.result.members);
 				retryableIds = error.result.retryable_evacuee_ids;
 				actionError = error.message;
@@ -298,6 +310,20 @@
 		} finally {
 			isSubmitting = false;
 		}
+	}
+
+	/** FR-KTD-39: a ThaiD check-in carries only its verified session id; no photo, no face check. */
+	function thaidOptions(): KioskCheckInPhotoOptions {
+		return input?.source === 'thaid' && !thaidSessionSpent
+			? { thaidSessionId: input.session_id }
+			: {};
+	}
+
+	function isThaidSessionError(error: unknown): error is KioskRequestError {
+		return (
+			error instanceof KioskRequestError &&
+			(error.code === 'KIOSK_THAID_SESSION_INVALID' || error.code === 'KIOSK_METHOD_DISABLED')
+		);
 	}
 
 	/** The chip photo, made small enough to send; nothing when it cannot be (the check-in still goes ahead). */
@@ -527,6 +553,7 @@
 					<KioskLookupErrorActions
 						{lookupErrorCode}
 						{isPhoneGate}
+						{isThaidGate}
 						{isLookingUp}
 						{retryAfterSeconds}
 						{homeUrl}

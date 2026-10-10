@@ -8,8 +8,11 @@
 
 	const errorParam = $derived(page.url.searchParams.get('error'));
 	const isError = $derived(Boolean(errorParam));
+	const isKioskFlow = $derived(page.url.searchParams.get('flow') === 'kiosk');
 
 	const errorMessage = $derived.by(() => {
+		if (isKioskFlow && errorParam === 'session_expired')
+			return 'QR หมดอายุ กรุณาสร้าง QR ใหม่ที่ตู้';
 		if (errorParam === 'thaid_disabled') return 'ระบบยืนยันตัวตน ThaiD ถูกปิดใช้งานชั่วคราว';
 		if (errorParam === 'session_expired')
 			return 'QR Code นี้หมดอายุแล้ว กรุณาแจ้งผู้ลงทะเบียนหลักเพื่อสร้าง QR Code ใหม่';
@@ -52,18 +55,27 @@
 			>
 				<CheckCircle2 class="size-9" />
 			</div>
-			<h2 class="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-				ยืนยันตัวตนสำเร็จ!
-			</h2>
-			<p class="mt-2 text-sm text-muted-foreground">
-				ข้อมูลของคุณถูกส่งไปยังหน้าจอลงทะเบียนหลักแล้ว
-			</p>
-			<div
-				class="mt-4 rounded-xl border border-primary/20 bg-primary/5 p-3.5 text-xs font-medium text-primary"
-			>
-				✓ บันทึกข้อมูลส่วนตัวและที่อยู่เรียบร้อย<br />
-				ท่านสามารถปิดหน้าต่างเบราว์เซอร์นี้ได้ทันที
-			</div>
+			{#if isKioskFlow}
+				<h2 class="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+					ยืนยันตัวตนสำเร็จ
+				</h2>
+				<p class="mt-2 text-sm text-muted-foreground">
+					กลับไปที่ตู้เพื่อเลือกสมาชิกและรับบัตรคิว ปิดหน้านี้ได้
+				</p>
+			{:else}
+				<h2 class="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+					ยืนยันตัวตนสำเร็จ!
+				</h2>
+				<p class="mt-2 text-sm text-muted-foreground">
+					ข้อมูลของคุณถูกส่งไปยังหน้าจอลงทะเบียนหลักแล้ว
+				</p>
+				<div
+					class="mt-4 rounded-xl border border-primary/20 bg-primary/5 p-3.5 text-xs font-medium text-primary"
+				>
+					✓ บันทึกข้อมูลส่วนตัวและที่อยู่เรียบร้อย<br />
+					ท่านสามารถปิดหน้าต่างเบราว์เซอร์นี้ได้ทันที
+				</div>
+			{/if}
 		{/if}
 	</div>
 </div>

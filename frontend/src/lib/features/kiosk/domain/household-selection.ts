@@ -14,9 +14,9 @@ type ExistingReportResult = {
 	qr_payload?: string;
 };
 
-/** Phone lookup preselects every eligible member; QR and card preselect the scanned member. */
+/** Phone lookup preselects every eligible member; QR, card and ThaiD preselect the scanned member. */
 export function initialSelection(
-	source: 'phone' | 'qr' | 'smart-card',
+	source: 'phone' | 'qr' | 'smart-card' | 'thaid',
 	selectable: readonly SelectableHouseholdMember[]
 ): string[] {
 	const eligible = selectable.filter((member) => member.selectable);

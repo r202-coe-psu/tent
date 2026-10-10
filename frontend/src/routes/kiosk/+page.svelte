@@ -19,4 +19,8 @@
 	<title>เลือกวิธียืนยันตัวตน — SmartShelter Kiosk</title>
 </svelte:head>
 
-<IdentityMethodSelector {contextQuery} phoneCheckInEnabled={data.phoneCheckInEnabled} />
+<IdentityMethodSelector
+	{contextQuery}
+	phoneCheckInEnabled={data.phoneCheckInEnabled}
+	thaidCheckInEnabled={data.thaidCheckInEnabled}
+/>

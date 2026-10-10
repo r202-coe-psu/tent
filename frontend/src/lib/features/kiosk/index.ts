@@ -16,10 +16,28 @@ export {
 export { default as KioskCardInsertScene } from './ui/kiosk-card-insert-scene.svelte';
 export { default as KioskReaderPointer } from './ui/kiosk-reader-pointer.svelte';
 export { default as KioskPhoneIdentityEntry } from './ui/phone-identity-entry.svelte';
+export { default as KioskThaidIdentityScan } from './ui/thaid-identity-scan.svelte';
 export { KioskIdleTimeout, KIOSK_IDLE_TIMEOUT_MS } from './ui/kiosk-idle-timeout.svelte.js';
 export { navigateToKioskHome } from './application/kiosk-navigation';
 export { registerKioskWalkIn, type GateInput } from './data/kiosk-check-in.api';
 export { fetchKioskConfig } from './data/kiosk-config.api';
+export {
+	cancelKioskThaidSession,
+	createKioskThaidSession,
+	getKioskThaidSessionStatus,
+	KioskThaidError,
+	type KioskThaidErrorKind,
+	type KioskThaidSession,
+	type KioskThaidSessionStatus,
+	type KioskThaidStatusResult
+} from './data/kiosk-thaid.api';
+export {
+	ThaidSession,
+	THAID_POLL_INTERVAL_MS,
+	type ThaidSessionApi,
+	type ThaidSessionState
+} from './application/thaid-session.svelte';
+export { KIOSK_THAID_PATH } from './domain/identity-method';
 export {
 	buildKioskContextQuery,
 	getKioskDisplayContext,
