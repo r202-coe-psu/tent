@@ -226,5 +226,10 @@ async def process_change(couch: Any, database: str, change: dict[str, Any]) -> N
                 await refresh_shelter_stock(couch, shelter_code)  # EXT-004/006
             elif doc_type == "supply_item":
                 await _reproject_needs(couch, shelter_code)
+            elif doc_type == "item_master":
+                # A shelter-local item names the donor-board card and the stock rows
+                # (catalog overlay, schema.md §4.2) — renaming it must reach both.
+                await refresh_shelter_stock(couch, shelter_code)  # EXT-004/006
+                await _reproject_needs(couch, shelter_code)
 
     await save_checkpoint(database, seq)

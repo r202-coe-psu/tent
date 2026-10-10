@@ -45,8 +45,12 @@ CATALOG = [
 ]
 
 
-def _couch(campaigns: list[dict], donations: list[dict] | None = None) -> AsyncMock:
-    shelter_docs = [*campaigns, *(donations or [])]
+def _couch(
+    campaigns: list[dict],
+    donations: list[dict] | None = None,
+    shelter_items: list[dict] | None = None,
+) -> AsyncMock:
+    shelter_docs = [*campaigns, *(donations or []), *(shelter_items or [])]
 
     async def iter_all_docs(database: str):
         for doc in CATALOG if database == "catalog" else shelter_docs:
@@ -255,3 +259,75 @@ async def test_deactivated_item_master_falls_back_instead_of_naming_the_card():
     doc = _upserts(await project_needs_for_shelter(_couch([campaign]), SHELTER))[0]
 
     assert doc["item_name"] == "item_master:retired"
+
+
+# A shelter can keep its own `item_master` in `shelter_{code}` (schema.md §4.2
+# `override` / `shelter_code`). The map read the central `catalog` only, so a campaign
+# bound to a shelter-made item showed its raw id on the donor board.
+
+
+def _item_master_campaign(item_id: str) -> dict:
+    campaign = _campaign("a", "50")
+    campaign["needs"] = [{"item_id": item_id, "qty_target": "50", "unit": "pack"}]
+    return campaign
+
+
+@pytest.mark.asyncio
+async def test_shelter_local_item_master_names_the_card():
+    local = {
+        "_id": "item_master:local-diapers",
+        "type": "item_master",
+        "shelter_code": SHELTER,
+        "name": "ผ้าอ้อมเด็ก",
+        "category": "hygiene",
+        "base_unit": "pack",
+    }
+    couch = _couch(
+        [_item_master_campaign("item_master:local-diapers")], shelter_items=[local]
+    )
+
+    doc = _upserts(await project_needs_for_shelter(couch, SHELTER))[0]
+
+    assert doc["item_name"] == "ผ้าอ้อมเด็ก"
+    assert doc["unit"] == "pack"
+    assert doc["category"] == "hygiene"
+
+
+@pytest.mark.asyncio
+async def test_shelter_copy_overrides_the_central_item():
+    override = {
+        "_id": "item_master:canned-fish",
+        "type": "item_master",
+        "shelter_code": SHELTER,
+        "override": True,
+        "name": "ปลากระป๋อง (ศูนย์)",
+        "category": "food",
+        "base_unit": "box",
+    }
+    couch = _couch(
+        [_item_master_campaign("item_master:canned-fish")], shelter_items=[override]
+    )
+
+    doc = _upserts(await project_needs_for_shelter(couch, SHELTER))[0]
+
+    assert doc["item_name"] == "ปลากระป๋อง (ศูนย์)"
+    assert doc["unit"] == "box"
+
+
+@pytest.mark.asyncio
+async def test_deactivated_shelter_copy_hides_the_central_item():
+    override = {
+        "_id": "item_master:canned-fish",
+        "type": "item_master",
+        "shelter_code": SHELTER,
+        "name": "ปลากระป๋อง",
+        "base_unit": "can",
+        "deactivated": True,
+    }
+    couch = _couch(
+        [_item_master_campaign("item_master:canned-fish")], shelter_items=[override]
+    )
+
+    doc = _upserts(await project_needs_for_shelter(couch, SHELTER))[0]
+
+    assert doc["item_name"] == "item_master:canned-fish"
