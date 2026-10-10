@@ -223,8 +223,8 @@
 				ศูนย์พักพิงนี้ไม่ได้เปิดใช้งานจุดคัดกรองทางการแพทย์ (Station 2) ตามการตั้งค่าศูนย์พักพิง
 			</p>
 			<div class="mt-5 flex flex-col gap-2">
-				<Button variant="default" class="w-full" onclick={() => goto(resolve('/onsite'))}>
-					กลับหน้าระบบส่วนหน้า
+				<Button variant="default" class="w-full" onclick={() => goto(resolve('/portal'))}>
+					กลับหน้าเลือกเมนูหลัก
 				</Button>
 				<Button variant="outline" class="w-full" onclick={() => goto(resolve('/onsite/zoning'))}>
 					ไปจุดจัดสรรที่พัก (Station 3)
@@ -237,9 +237,9 @@
 		<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 			<div class="flex items-center gap-3">
 				<a
-					href={resolve('/onsite')}
+					href={resolve('/portal')}
 					class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-					title="กลับหน้าระบบส่วนหน้า"
+					title="กลับหน้าเลือกเมนูหลัก"
 				>
 					<ArrowLeft class="size-4" />
 				</a>

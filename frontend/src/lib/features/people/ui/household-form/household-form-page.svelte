@@ -46,11 +46,12 @@
 
 	let isSubmitting = $state(false);
 
-	// Determine back URL based on search params or default to evacuee-management
+	// Back URL: `?redirect=onsite` (opened from an onsite station) returns to the portal;
+	// otherwise evacuee-management.
 	const backUrl = $derived.by(() => {
 		const redirectParam = $page.url.searchParams.get('redirect');
 		if (redirectParam === 'onsite') {
-			return resolve('/onsite');
+			return resolve('/portal');
 		}
 		return resolve('/back-office/evacuee-management?tab=household');
 	});

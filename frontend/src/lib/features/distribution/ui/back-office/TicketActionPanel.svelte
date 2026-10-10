@@ -309,7 +309,7 @@
 
 				<div class="flex items-center gap-3">
 					<Button
-						href="/onsite"
+						href="/onsite/distribution"
 						variant="outline"
 						class="border-emerald-300 text-xs font-semibold text-emerald-800 hover:bg-emerald-50 hover:text-emerald-800"
 					>
