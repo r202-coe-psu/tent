@@ -8,6 +8,8 @@
 	import Loader from '@lucide/svelte/icons/loader';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
+	import AlertCircle from '@lucide/svelte/icons/alert-circle';
+	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import { resolve } from '$app/paths';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
@@ -19,7 +21,12 @@
 	import { canPerformFrontlineDistribution } from '../../application/food-supplies/auth';
 	import { getTicketStatusLabel, compareByReconciliationProgress } from '../model/ticket-status';
 	import Lock from '@lucide/svelte/icons/lock';
-	import type { RequisitionTicket } from '../../domain/food-supplies';
+	import { ticketServiceDay, type RequisitionTicket } from '../../domain/food-supplies';
+	import {
+		filterTicketsByServiceDay,
+		resolveServiceDay,
+		serviceDayOptions
+	} from '../model/service-day';
 	import FoodDistributionCard from './FoodDistributionCard.svelte';
 	import SuppliesDistributionCard from './SuppliesDistributionCard.svelte';
 	import LoanReturnCard from './LoanReturnCard.svelte';
@@ -33,7 +40,7 @@
 		initialTab?: 'receive' | 'food' | 'supplies' | 'returns' | 'reconciliation';
 	}
 
-	let { initialTab = 'food' }: Props = $props();
+	let { initialTab = 'receive' }: Props = $props();
 
 	const currentShelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
 
@@ -71,33 +78,31 @@
 		allTickets.filter((t) => t.status === 'DISTRIBUTING' && t.requisition_type === 'supplies')
 	);
 
-	// Selected ticket ID for food/supplies
-	let selectedFoodTicketId = $state<string>('');
-	let selectedSuppliesTicketId = $state<string>('');
+	// Food tickets are filtered by service day (derived from created_at — FR-MQW-03 A). Defaults to
+	// today when any ticket is for today, otherwise every day, so older open tickets stay visible.
+	let pickedFoodDay = $state<string | null>(null);
+	const foodDayOptions = $derived(serviceDayOptions(distributingFoodTickets));
+	const foodDay = $derived(resolveServiceDay(pickedFoodDay, distributingFoodTickets));
+	const visibleFoodTickets = $derived(filterTicketsByServiceDay(distributingFoodTickets, foodDay));
 
-	// Auto-select first active ticket if unselected
-	$effect(() => {
-		if (
-			distributingFoodTickets.length > 0 &&
-			(!selectedFoodTicketId ||
-				!distributingFoodTickets.some((t) => t._id === selectedFoodTicketId))
-		) {
-			selectedFoodTicketId = distributingFoodTickets[0]._id;
-		}
-	});
+	// Ticket the user picked in each selector. The effective selection falls back to the first
+	// active ticket whenever the pick is empty or no longer listed.
+	let pickedFoodTicketId = $state<string>('');
+	let pickedSuppliesTicketId = $state<string>('');
 
-	$effect(() => {
-		if (
-			distributingSuppliesTickets.length > 0 &&
-			(!selectedSuppliesTicketId ||
-				!distributingSuppliesTickets.some((t) => t._id === selectedSuppliesTicketId))
-		) {
-			selectedSuppliesTicketId = distributingSuppliesTickets[0]._id;
-		}
-	});
+	const selectedFoodTicketId = $derived(
+		visibleFoodTickets.some((t) => t._id === pickedFoodTicketId)
+			? pickedFoodTicketId
+			: (visibleFoodTickets[0]?._id ?? '')
+	);
+	const selectedSuppliesTicketId = $derived(
+		distributingSuppliesTickets.some((t) => t._id === pickedSuppliesTicketId)
+			? pickedSuppliesTicketId
+			: (distributingSuppliesTickets[0]?._id ?? '')
+	);
 
 	const activeFoodTicket = $derived(
-		distributingFoodTickets.find((t) => t._id === selectedFoodTicketId) ?? null
+		visibleFoodTickets.find((t) => t._id === selectedFoodTicketId) ?? null
 	);
 	const activeSuppliesTicket = $derived(
 		distributingSuppliesTickets.find((t) => t._id === selectedSuppliesTicketId) ?? null
@@ -129,30 +134,16 @@
 		).length
 	);
 
-	let selectedReconciliationTicketId = $state<string>('');
+	let pickedReconciliationTicketId = $state<string>('');
 
-	$effect(() => {
-		if (reconciliationEligibleTickets.length > 0) {
-			if (
-				!selectedReconciliationTicketId ||
-				!reconciliationEligibleTickets.some((t) => t._id === selectedReconciliationTicketId)
-			) {
-				if (
-					activeFoodTicket &&
-					reconciliationEligibleTickets.some((t) => t._id === activeFoodTicket._id)
-				) {
-					selectedReconciliationTicketId = activeFoodTicket._id;
-				} else if (
-					activeSuppliesTicket &&
-					reconciliationEligibleTickets.some((t) => t._id === activeSuppliesTicket._id)
-				) {
-					selectedReconciliationTicketId = activeSuppliesTicket._id;
-				} else {
-					selectedReconciliationTicketId = reconciliationEligibleTickets[0]._id;
-				}
-			}
-		}
-	});
+	// Falls back to the ticket open on the food tab, then the supplies tab, then the first one.
+	const selectedReconciliationTicketId = $derived(
+		[pickedReconciliationTicketId, activeFoodTicket?._id, activeSuppliesTicket?._id].find(
+			(id) => !!id && reconciliationEligibleTickets.some((t) => t._id === id)
+		) ??
+			reconciliationEligibleTickets[0]?._id ??
+			''
+	);
 
 	const activeReconciliationTicket = $derived(
 		reconciliationEligibleTickets.find((t) => t._id === selectedReconciliationTicketId) ?? null
@@ -178,10 +169,11 @@
 			// If received food, switch tab to food; if supplies, switch to supplies
 			if (ticket.requisition_type === 'food') {
 				activeTab = 'food';
-				selectedFoodTicketId = ticket._id;
+				pickedFoodDay = ticketServiceDay(ticket);
+				pickedFoodTicketId = ticket._id;
 			} else if (ticket.requisition_type === 'supplies') {
 				activeTab = 'supplies';
-				selectedSuppliesTicketId = ticket._id;
+				pickedSuppliesTicketId = ticket._id;
 			}
 		} catch (err) {
 			toast.error(formatDistributionError(err, 'ไม่สามารถตรวจรับสินค้าได้ กรุณาลองใหม่อีกครั้ง'));
@@ -391,6 +383,23 @@
 			<Loader class="h-5 w-5 animate-spin text-sky-600" />
 			<span>กำลังโหลดข้อมูลตั๋วเบิกจ่าย...</span>
 		</div>
+	{:else if ticketsQuery.isError && allTickets.length === 0}
+		<div class="rounded-2xl border border-red-200 bg-red-50/60 p-8 text-center shadow-xs">
+			<AlertCircle class="mx-auto mb-2 h-8 w-8 text-red-500" />
+			<h3 class="text-sm font-bold text-red-900">ไม่สามารถโหลดข้อมูลตั๋วเบิกจ่ายได้</h3>
+			<p class="mt-1 text-xs text-red-700">
+				{formatDistributionError(ticketsQuery.error, 'กรุณาตรวจสอบการเชื่อมต่อแล้วลองใหม่อีกครั้ง')}
+			</p>
+			<Button
+				type="button"
+				variant="outline"
+				onclick={() => ticketsQuery.refetch()}
+				class="mt-4 h-auto rounded-lg border-red-200 px-3 py-1.5 text-xs font-semibold text-red-800 hover:bg-red-50 hover:text-red-800"
+			>
+				<RefreshCw class="h-3.5 w-3.5" />
+				<span>ลองใหม่</span>
+			</Button>
+		</div>
 	{:else if activeTab === 'receive'}
 		<!-- TAB 1: Receive Cargo Surface (Slice 5.3) -->
 		<div class="space-y-4 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs">
@@ -503,43 +512,71 @@
 					{/if}
 				</div>
 			{:else}
-				<!-- Food Ticket Selector Bar -->
-				{#if distributingFoodTickets.length > 1}
+				<!-- Food Service Day + Ticket Selector Bar -->
+				{#if foodDayOptions.length > 2 || visibleFoodTickets.length > 1}
 					<div
-						class="flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs"
+						class="flex flex-col gap-2 rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs sm:flex-row sm:items-center"
 					>
-						<label for="food-ticket-select" class="shrink-0 text-xs font-bold text-slate-700">
-							เลือกตั๋วอาหารที่ใช้งาน:
-						</label>
-						<div class="min-w-0 flex-1">
-							<Select.Root type="single" bind:value={selectedFoodTicketId}>
-								<Select.Trigger
-									id="food-ticket-select"
-									aria-label="เลือกตั๋วอาหารที่ใช้งาน"
-									class="h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 shadow-2xs focus-visible:ring-2 focus-visible:ring-amber-500"
+						{#if foodDayOptions.length > 2}
+							<div class="flex shrink-0 items-center gap-2">
+								<label for="food-day-select" class="shrink-0 text-xs font-bold text-slate-700">
+									วันที่ให้บริการ:
+								</label>
+								<Select.Root type="single" bind:value={() => foodDay, (v) => (pickedFoodDay = v)}>
+									<Select.Trigger
+										id="food-day-select"
+										aria-label="เลือกวันที่ให้บริการ"
+										class="h-9 w-40 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 shadow-2xs focus-visible:ring-2 focus-visible:ring-amber-500"
+									>
+										<span class="truncate">
+											{foodDayOptions.find((o) => o.value === foodDay)?.label ?? 'ทุกวัน'}
+										</span>
+									</Select.Trigger>
+									<Select.Content>
+										{#each foodDayOptions as option (option.value)}
+											<Select.Item value={option.value} label={option.label} />
+										{/each}
+									</Select.Content>
+								</Select.Root>
+							</div>
+						{/if}
+						{#if visibleFoodTickets.length > 1}
+							<label for="food-ticket-select" class="shrink-0 text-xs font-bold text-slate-700">
+								เลือกตั๋วอาหารที่ใช้งาน:
+							</label>
+							<div class="min-w-0 flex-1">
+								<Select.Root
+									type="single"
+									bind:value={() => selectedFoodTicketId, (v) => (pickedFoodTicketId = v)}
 								>
-									<span class="truncate">
-										{#if activeFoodTicket}
-											{activeFoodTicket.ticket_no} - {activeFoodTicket.destination_location} ({activeFoodTicket.items
-												.map((i) => i.item_name)
-												.join(', ')})
-										{:else}
-											เลือกตั๋วอาหาร
-										{/if}
-									</span>
-								</Select.Trigger>
-								<Select.Content>
-									{#each distributingFoodTickets as t (t._id)}
-										<Select.Item
-											value={t._id}
-											label={`${t.ticket_no} - ${t.destination_location} (${t.items
-												.map((i) => i.item_name)
-												.join(', ')})`}
-										/>
-									{/each}
-								</Select.Content>
-							</Select.Root>
-						</div>
+									<Select.Trigger
+										id="food-ticket-select"
+										aria-label="เลือกตั๋วอาหารที่ใช้งาน"
+										class="h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 shadow-2xs focus-visible:ring-2 focus-visible:ring-amber-500"
+									>
+										<span class="truncate">
+											{#if activeFoodTicket}
+												{activeFoodTicket.ticket_no} - {activeFoodTicket.destination_location} ({activeFoodTicket.items
+													.map((i) => i.item_name)
+													.join(', ')})
+											{:else}
+												เลือกตั๋วอาหาร
+											{/if}
+										</span>
+									</Select.Trigger>
+									<Select.Content>
+										{#each visibleFoodTickets as t (t._id)}
+											<Select.Item
+												value={t._id}
+												label={`${t.ticket_no} - ${t.destination_location} (${t.items
+													.map((i) => i.item_name)
+													.join(', ')})`}
+											/>
+										{/each}
+									</Select.Content>
+								</Select.Root>
+							</div>
+						{/if}
 					</div>
 				{/if}
 
@@ -582,7 +619,10 @@
 							เลือกตั๋วพัสดุที่ใช้งาน:
 						</label>
 						<div class="min-w-0 flex-1">
-							<Select.Root type="single" bind:value={selectedSuppliesTicketId}>
+							<Select.Root
+								type="single"
+								bind:value={() => selectedSuppliesTicketId, (v) => (pickedSuppliesTicketId = v)}
+							>
 								<Select.Trigger
 									id="supplies-ticket-select"
 									aria-label="เลือกตั๋วพัสดุที่ใช้งาน"
@@ -652,7 +692,12 @@
 							เลือกตั๋วที่ต้องการปิดรอบ / กระทบยอด:
 						</label>
 						<div class="min-w-0 flex-1">
-							<Select.Root type="single" bind:value={selectedReconciliationTicketId}>
+							<Select.Root
+								type="single"
+								bind:value={
+									() => selectedReconciliationTicketId, (v) => (pickedReconciliationTicketId = v)
+								}
+							>
 								<Select.Trigger
 									id="reconciliation-ticket-select"
 									aria-label="เลือกตั๋วที่ต้องการปิดรอบหรือกระทบยอด"

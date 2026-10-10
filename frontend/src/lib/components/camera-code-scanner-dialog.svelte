@@ -5,17 +5,24 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import Camera from '@lucide/svelte/icons/camera';
 	import Keyboard from '@lucide/svelte/icons/keyboard';
+	import type { Html5QrcodeSupportedFormats } from 'html5-qrcode';
 	import CameraCodeScanner from './camera-code-scanner.svelte';
 
 	let {
 		open = $bindable(false),
 		title = 'สแกนบาร์โค้ด',
 		hint = 'เล็งกล้องไปที่บาร์โค้ด หรือพิมพ์รหัสด้วยมือ / เครื่องสแกนบาร์โค้ด',
+		formats,
+		manualInputMode = 'numeric',
 		onScan
 	}: {
 		open?: boolean;
 		title?: string;
 		hint?: string;
+		/** Symbologies the camera decodes; the scanner's 1D retail default when omitted. */
+		formats?: Html5QrcodeSupportedFormats[];
+		/** Keyboard for the typed fallback — `text` for alphanumeric codes such as QR payloads. */
+		manualInputMode?: 'numeric' | 'text';
 		/** Receives a camera read or a typed code; the dialog closes first. */
 		onScan: (code: string) => void;
 	} = $props();
@@ -43,7 +50,7 @@
 
 		<!-- Mounted only while open so the camera is released when the dialog closes. -->
 		{#if open}
-			<CameraCodeScanner onScan={deliver} />
+			<CameraCodeScanner onScan={deliver} {formats} />
 		{/if}
 
 		<form
@@ -64,7 +71,7 @@
 				<Input
 					id="camera-code-manual"
 					type="text"
-					inputmode="numeric"
+					inputmode={manualInputMode}
 					autocomplete="off"
 					placeholder="พิมพ์หรือยิงเครื่องสแกนบาร์โค้ด"
 					bind:value={manualCode}

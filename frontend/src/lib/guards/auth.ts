@@ -181,6 +181,27 @@ export async function requireTicketAccess(fetchFn?: typeof fetch) {
 }
 
 /**
+ * Distribution Desk (Station 4, `/onsite/distribution`) guard — the union of the
+ * roles that can act on any desk step: frontline distribution (system_admin,
+ * shelter_manager, supply_coordinator, registration_staff) plus physical loan
+ * returns (warehouse_staff). Matches the onsite tile; per-step buttons stay gated
+ * in the UI and the CouchDB `validate_doc_update` guard remains the real boundary.
+ */
+export async function requireDistributionDesk(fetchFn?: typeof fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	const shelter = activeShelterCode(roles);
+	if (
+		!isSystemAdmin(roles) &&
+		!isShelterManager(roles, shelter) &&
+		!isWarehouseStaff(roles, shelter) &&
+		!hasStaffCapability(roles, 'registration_staff', shelter)
+	) {
+		throw redirect(302, resolve(LANDING_ROUTE));
+	}
+}
+
+/**
  * Evacuee registration guard — requires system_admin, shelter_manager, or
  * the `registration_staff` capability. Used for PII surfaces (evacuee/
  * household CRUD) so only staff whose job is registration can reach them;

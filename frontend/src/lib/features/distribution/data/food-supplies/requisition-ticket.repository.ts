@@ -15,6 +15,8 @@ import {
 } from '../../domain/food-supplies';
 import { NotFoundError, resolveShelterDbName, retryCas } from './shared';
 
+const FLOW2_LIST_TYPES: ReadonlySet<string> = new Set<RequisitionType>(['food', 'supplies']);
+
 export interface RequisitionTicketListFilter {
 	status?: RequisitionTicketStatus;
 	requisition_type?: RequisitionType;
@@ -88,7 +90,17 @@ export class RequisitionTicketRemoteRepository implements RequisitionTicketRepos
 				d !== null &&
 				(d as { type?: string }).type === 'requisition_ticket'
 		);
-		const parsed = docs.map((d) => requisitionTicketDocSchema.parse(d));
+		// The shelter DB also holds kitchen tickets (`$lib/features/tickets`, different item
+		// shape) and pre-CR-121 legacy docs. Listing is Flow 2 only and skips anything that
+		// fails the strict schema, so one foreign doc cannot empty the whole desk; `get()`
+		// stays strict.
+		const parsed = docs.flatMap((d) => {
+			if (!FLOW2_LIST_TYPES.has((d as { requisition_type?: string }).requisition_type ?? '')) {
+				return [];
+			}
+			const result = requisitionTicketDocSchema.safeParse(d);
+			return result.success ? [result.data as RequisitionTicket] : [];
+		});
 		return parsed.filter((ticket) => {
 			if (filter?.status && ticket.status !== filter.status) return false;
 			if (filter?.requisition_type && ticket.requisition_type !== filter.requisition_type)

@@ -5,6 +5,7 @@
  */
 
 import type { ItemMaster } from '$lib/features/catalog';
+import { addQty, qtyGt } from '$lib/utils/qty';
 import {
 	validateWholeItemInput,
 	positiveWholeQtySchema,
@@ -13,6 +14,17 @@ import {
 } from '../../domain/food-supplies';
 
 export { validateWholeItemInput, type WholeItemValidationResult, type WholeItemValidationOptions };
+
+/**
+ * Next value for a −/+ stepper: `raw` moved by `delta`, kept within `1..max`. An unparseable
+ * `raw` restarts from 1; a `max` below 1 (nothing left in hand) pins the result to 1.
+ */
+export function stepQuantity(raw: string, delta: 1 | -1, max: string): string {
+	const current = validatePositiveQuantity(raw);
+	const next = current.isValid && current.value ? addQty(current.value, delta) : '1';
+	if (qtyGt(next, max)) return qtyGt('1', max) ? '1' : max;
+	return qtyGt('1', next) ? '1' : next;
+}
 
 export interface QuantityValidationResult {
 	isValid: boolean;

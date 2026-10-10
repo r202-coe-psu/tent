@@ -179,7 +179,7 @@
 	{/if}
 
 	<!-- Recipient Search Picker Reused Component -->
-	<RecipientSearchPicker bind:value={recipientSelection} />
+	<RecipientSearchPicker bind:value={recipientSelection} allowOutside={false} />
 
 	<!-- Loan List & Operations Surface -->
 	{#if !recipientSelection}
@@ -187,12 +187,12 @@
 			class="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 py-12 text-center text-xs text-slate-500"
 		>
 			<Package class="mb-2 h-10 w-10 text-slate-300" />
-			<p class="font-semibold text-slate-700">กรุณาระบุหรือสแกนบัตรผู้ประสบภัย</p>
-			<p class="mt-0.5 text-2xs text-slate-400">
-				ระบบจะค้นหารายการพัสดุและสิ่งของยืม-คืนทั้งหมดที่ผูกกับผู้ประสบภัยรายนี้
+			<p class="text-base font-semibold text-slate-700">สแกน QR ผู้ที่นำของมาคืน</p>
+			<p class="mt-0.5 text-sm text-slate-500">
+				ระบบจะแสดงของที่คนนี้ยังยืมอยู่ แล้วกด "รับคืน" ทีละรายการ
 			</p>
 		</div>
-	{:else if recipientLoansQuery.isPending}
+	{:else if recipientId && recipientLoansQuery.isPending}
 		<div
 			class="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50/50 py-12 text-xs text-slate-500"
 		>

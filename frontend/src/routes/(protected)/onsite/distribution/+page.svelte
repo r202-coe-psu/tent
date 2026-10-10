@@ -10,4 +10,4 @@
 	/>
 </svelte:head>
 
-<FrontlineStationPage initialTab="food" />
+<FrontlineStationPage initialTab="receive" />

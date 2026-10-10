@@ -171,6 +171,62 @@ describe('RequisitionTicketRemoteRepository', () => {
 		await expect(repo.get('requisition_ticket:01JTEST00000000000000000000')).rejects.toThrow();
 	});
 
+	it('lists Flow 2 tickets while skipping kitchen and malformed legacy docs', async () => {
+		const food = await repo.create(
+			{
+				ticket_no: 'TKT-FOOD-0001',
+				requisition_type: 'food',
+				meal: 'lunch',
+				source_location: 'warehouse:main',
+				destination_location: 'distribution_point:hall_a',
+				items: [
+					{
+						item_id: 'item:rice_box',
+						item_name: 'Rice Box',
+						type_class: 'CONSUMABLE',
+						requested_qty: '10',
+						allocated_qty: '10'
+					}
+				]
+			},
+			ctx
+		);
+		const base = {
+			_rev: '1-a',
+			type: 'requisition_ticket',
+			schema_v: 1,
+			shelter_code: 'SH001',
+			created_at: new Date().toISOString(),
+			updated_at: new Date().toISOString(),
+			created_by: 'user:staff1',
+			source_location: 'warehouse',
+			destination_location: 'point',
+			requested_by: 'user:staff1'
+		};
+		// Kitchen ticket ($lib/features/tickets) — allocated_qty '0', no type_class.
+		store.set('requisition_ticket:01JKITCHEN000000000000000000', {
+			...base,
+			_id: 'requisition_ticket:01JKITCHEN000000000000000000',
+			ticket_no: 'TKT-KITCHEN-0001',
+			requisition_type: 'kitchen',
+			status: 'PENDING_PICK',
+			items: [{ item_id: 'item:rice', item_name: 'Rice', requested_qty: '5', allocated_qty: '0' }]
+		});
+		// Pre-CR-121 legacy supplies doc — lowercase status, numeric qty.
+		store.set('requisition_ticket:01JLEGACY000000000000000000', {
+			...base,
+			_id: 'requisition_ticket:01JLEGACY000000000000000000',
+			ticket_no: 'TKT-DIST-8801',
+			requisition_type: 'supplies',
+			status: 'distributing',
+			items: [{ item_id: 'item-dist-8801', name: 'Legacy', quantity: 30 }]
+		});
+
+		const tickets = await repo.list();
+		expect(tickets.map((t) => t._id)).toEqual([food._id]);
+		await expect(repo.list({ requisition_type: 'kitchen' })).resolves.toEqual([]);
+	});
+
 	it('performs legal CAS state transitions with history preservation', async () => {
 		const created = await repo.create(
 			{

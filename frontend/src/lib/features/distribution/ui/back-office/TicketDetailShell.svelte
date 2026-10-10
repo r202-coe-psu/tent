@@ -8,6 +8,7 @@
 	import { getReturnableBadgeLabel, getReturnableBadgeClass } from '../model/catalog-eligibility';
 	import { getRequisitionTypeLabel } from '../model/ticket-status';
 	import { summarizeTicketLoans } from '../model/loan-return';
+	import { calculateDistributedQtyForTicketItem } from '../../domain/food-supplies';
 	import { qtyGt } from '$lib/utils/qty';
 	import Undo2 from '@lucide/svelte/icons/undo-2';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
@@ -42,6 +43,16 @@
 		() => shelterCode,
 		() => Boolean(ticket)
 	);
+	// `items[].distributed_qty` is only stamped at shift close; until then count live from the logs.
+	const ticketLogsQuery = useDistributionLogs(
+		() => (ticket ? { ticket_id: ticket._id } : undefined),
+		() => shelterCode,
+		() => Boolean(ticket)
+	);
+	function distributedQty(itemId: string, stamped: string | undefined): string {
+		if (stamped !== undefined || !ticket) return stamped ?? '0';
+		return calculateDistributedQtyForTicketItem(ticket._id, itemId, ticketLogsQuery.data ?? []);
+	}
 	const loanSummary = $derived(
 		ticket ? summarizeTicketLoans(ticket._id, loanLogsQuery.data ?? []) : null
 	);
@@ -273,7 +284,7 @@
 											<td
 												class="py-3 pr-4 pl-3 text-right text-xs font-medium text-slate-700 tabular-nums"
 											>
-												{item.distributed_qty ?? '0'}
+												{distributedQty(item.item_id, item.distributed_qty)}
 											</td>
 										{/if}
 									</tr>

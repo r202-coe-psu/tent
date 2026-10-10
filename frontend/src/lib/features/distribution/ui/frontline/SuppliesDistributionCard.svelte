@@ -7,6 +7,7 @@
 	import { qtyGte } from '$lib/utils/qty';
 	import { validatePositiveQuantity } from '../model/ticket-quantity';
 	import { Input } from '$lib/components/ui/input/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import {
 		resolveAuthenticatedAuthorContext,
@@ -23,6 +24,7 @@
 	} from '../model/frontline-handover';
 	import { formatDistributionError } from '../model/distribution-error';
 	import RecipientSearchPicker from '../common/RecipientSearchPicker.svelte';
+	import QtyStepper from '../common/QtyStepper.svelte';
 	import InFlightTopUpDialog from './InFlightTopUpDialog.svelte';
 
 	interface Props {
@@ -48,13 +50,15 @@
 		authContext ? canPerformFrontlineDistribution(authContext) : false
 	);
 
-	// State — selectedItemId syncs reactively; never hard-codes a prop value at initialisation
-	let selectedItemId = $state('');
+	// Item the user picked; the effective selection falls back to the first ticket item whenever
+	// the pick is empty or no longer on the ticket (e.g. parent switches active ticket).
+	let pickedItemId = $state('');
 	let qtyInput = $state('1');
 	let recipientSelection = $state<FrontlineRecipientSelection | null>(null);
 	let notesInput = $state('');
 	let localSubmitError = $state<string | null>(null);
 	let topUpDialogOpen = $state(false);
+	let picker = $state<ReturnType<typeof RecipientSearchPicker>>();
 
 	function handleQtyBlur() {
 		const raw = qtyInput.trim();
@@ -62,13 +66,11 @@
 		validatePositiveQuantity(raw);
 	}
 
-	// Keep selectedItemId valid when ticket prop changes (e.g. parent switches active ticket).
-	$effect(() => {
-		const ids = ticket.items.map((i) => i.item_id);
-		if (!selectedItemId || !ids.includes(selectedItemId)) {
-			selectedItemId = ids[0] ?? '';
-		}
-	});
+	const selectedItemId = $derived(
+		ticket.items.some((i) => i.item_id === pickedItemId)
+			? pickedItemId
+			: (ticket.items[0]?.item_id ?? '')
+	);
 
 	// Read queries (ticket-scoped logs for capacity calculation)
 	const ticketLogsQuery = useDistributionLogs(
@@ -154,12 +156,10 @@
 				`บันทึก${modeLabel}สำเร็จ: ${selectedItem.item_name} จำนวน ${qtyRes.value} หน่วย`
 			);
 
-			// Reset form state
+			// Reset for the next person; a scanned recipient reopens the scanner.
 			qtyInput = '1';
 			notesInput = '';
-			if (recipientSelection.recipientType === 'evacuee') {
-				recipientSelection = null;
-			}
+			picker?.next();
 		} catch (err) {
 			localSubmitError = formatDistributionError(
 				err,
@@ -203,8 +203,8 @@
 
 	<!-- Line Items & Live In-Hand Capacity Summary -->
 	<fieldset class="space-y-2">
-		<legend class="block text-2xs font-bold text-slate-700 uppercase">
-			รายการพัสดุในตั๋ว (ยอดคงเหลือในมือ) <span class="text-red-500">*</span>
+		<legend class="text-sm font-semibold text-slate-700">
+			เลือกของที่จะจ่าย <span class="text-red-500">*</span>
 		</legend>
 		<div class="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
 			{#each ticket.items as item (item.item_id)}
@@ -213,23 +213,24 @@
 				{@const isItemReturnable = Boolean(item.returnable)}
 				<button
 					type="button"
-					onclick={() => (selectedItemId = item.item_id)}
-					class="flex items-center justify-between rounded-xl border p-3 text-left transition-all {isSelected
+					onclick={() => (pickedItemId = item.item_id)}
+					aria-pressed={isSelected}
+					class="flex min-h-14 items-center justify-between rounded-xl border p-3 text-left transition-all focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:outline-none {isSelected
 						? 'border-indigo-500 bg-indigo-50/40 ring-2 ring-indigo-500/20'
 						: 'border-slate-200 bg-white hover:border-slate-300'}"
 				>
 					<div class="min-w-0 flex-1">
 						<div class="flex items-center gap-1.5">
-							<p class="truncate text-xs font-bold text-slate-900">{item.item_name}</p>
+							<p class="truncate text-base font-bold text-slate-900">{item.item_name}</p>
 							<span
-								class="py-0.2 shrink-0 rounded-full px-1.5 text-2xs font-bold {isItemReturnable
+								class="shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold {isItemReturnable
 									? 'border border-purple-200 bg-purple-50 text-purple-800'
 									: 'border border-emerald-200 bg-emerald-50 text-emerald-800'}"
 							>
 								{isItemReturnable ? 'ต้องคืน' : 'แจกจ่าย'}
 							</span>
 						</div>
-						<p class="mt-0.5 text-2xs text-slate-500">
+						<p class="mt-0.5 text-xs text-slate-500">
 							จัดสรร: <strong class="text-slate-700">{summary.allocatedQty}</strong> | เบิก/ยืมแล้ว:
 							<strong class="text-slate-700">{summary.distributedQty}</strong>
 						</p>
@@ -237,11 +238,11 @@
 
 					<div class="ml-3 shrink-0 text-right">
 						<span
-							class="inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-bold {summary.isExhausted
+							class="inline-flex items-center rounded-lg px-2.5 py-1 text-sm font-bold tabular-nums {summary.isExhausted
 								? 'bg-red-100 text-red-800'
 								: 'bg-indigo-100 text-indigo-900'}"
 						>
-							เหลือ {summary.inHandQty}
+							{summary.isExhausted ? 'หมดแล้ว' : `เหลือ ${summary.inHandQty}`}
 						</span>
 					</div>
 				</button>
@@ -249,107 +250,95 @@
 		</div>
 	</fieldset>
 
-	<!-- Recipient Search Picker Component -->
+	<!-- Recipient: scan first, then confirm -->
 	<RecipientSearchPicker
+		bind:this={picker}
 		bind:value={recipientSelection}
 		disabled={recordSuppliesMutation.isPending}
 	/>
 
-	<!-- Warning if Returnable Loan item is selected for Outside recipient -->
-	{#if isReturnableItem && recipientSelection && !recipientValidation.isEligible}
-		<div
-			class="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs text-red-800"
-			role="alert"
-		>
-			<AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
-			<div>
-				<p class="font-bold">ไม่สามารถแจกจ่ายรายการประเภท "ต้องคืน" ได้</p>
-				<p class="mt-0.5 text-2xs text-red-700">
-					{recipientValidation.errorMsg}
-				</p>
-			</div>
-		</div>
-	{/if}
-
-	<!-- Quantity & Notes Input Grid -->
-	<div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-		<div>
-			<label
-				for="supplies-qty-input"
-				class="mb-1 block text-2xs font-bold text-slate-700 uppercase"
+	{#if recipientSelection}
+		<!-- Returnable items cannot go to an outside person -->
+		{#if isReturnableItem && !recipientValidation.isEligible}
+			<div
+				class="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm text-red-800"
+				role="alert"
 			>
-				จำนวนที่เบิก/ให้ยืม <span class="text-red-500">*</span>
-			</label>
-			<Input
+				<AlertCircle class="mt-0.5 size-4 shrink-0 text-red-600" aria-hidden="true" />
+				<div>
+					<p class="font-bold">ของประเภท "ต้องคืน" ให้บุคคลภายนอกยืมไม่ได้</p>
+					<p class="mt-0.5 text-xs text-red-700">{recipientValidation.errorMsg}</p>
+				</div>
+			</div>
+		{/if}
+
+		<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+			<QtyStepper
 				id="supplies-qty-input"
-				type="text"
-				inputmode="numeric"
-				step="1"
+				label={isReturnableItem ? 'จำนวนที่ให้ยืม' : 'จำนวนที่จ่าย'}
 				bind:value={qtyInput}
-				onblur={handleQtyBlur}
-				class="h-9 w-full text-xs font-bold shadow-2xs"
+				max={capacitySummary.inHandQty}
 				disabled={recordSuppliesMutation.isPending || capacitySummary.isExhausted}
 			/>
+
+			<div class="space-y-1.5">
+				<Label for="supplies-notes-input" class="text-sm font-semibold text-slate-700">
+					หมายเหตุ (ไม่บังคับ)
+				</Label>
+				<Input
+					id="supplies-notes-input"
+					type="text"
+					bind:value={notesInput}
+					placeholder="เช่น สภาพของ, เลขซีเรียล"
+					class="h-12 text-sm"
+					disabled={recordSuppliesMutation.isPending}
+				/>
+			</div>
 		</div>
 
-		<div class="sm:col-span-2">
-			<label
-				for="supplies-notes-input"
-				class="mb-1 block text-2xs font-bold text-slate-700 uppercase"
+		{#if isReturnableItem}
+			<p class="text-sm text-slate-600">
+				ของชิ้นนี้<strong class="text-slate-800">ต้องคืน</strong> — ระบบจะบันทึกเป็นการยืม และผู้รับต้องนำมาคืนที่ขั้นที่
+				4
+			</p>
+		{/if}
+
+		<!-- Error Alert -->
+		{#if localSubmitError}
+			<div
+				class="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800"
+				role="alert"
 			>
-				หมายเหตุการแจกจ่าย / สภาพสิ่งของ (ถ้ามี)
-			</label>
-			<Input
-				id="supplies-notes-input"
-				type="text"
-				bind:value={notesInput}
-				placeholder="เช่น เบิกสำหรับเต็นท์พยาบาล, ระบุเลขซีเรียล..."
-				class="h-9 w-full text-xs shadow-2xs placeholder:text-slate-400"
-				disabled={recordSuppliesMutation.isPending}
-			/>
-		</div>
-	</div>
-
-	<!-- Error Alert -->
-	{#if localSubmitError}
-		<div
-			class="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700"
-		>
-			<AlertCircle class="h-4 w-4 shrink-0 text-red-500" />
-			<span>{localSubmitError}</span>
-		</div>
-	{/if}
-
-	<!-- Submit Action Button -->
-	<div class="flex items-center justify-between border-t border-slate-100 pt-4">
-		<div class="text-2xs text-slate-500">
-			สถานะที่จะบันทึก:
-			<strong class="text-slate-700">
-				{isReturnableItem ? 'หนี้สินยืม-คืน' : 'แจกจ่ายสิ้นเปลือง'}
-			</strong>
-		</div>
+				<AlertCircle class="size-4 shrink-0 text-red-600" aria-hidden="true" />
+				<span>{localSubmitError}</span>
+			</div>
+		{/if}
 
 		<Button
 			type="button"
-			variant="default"
 			onclick={handleSubmit}
 			disabled={recordSuppliesMutation.isPending ||
 				capacitySummary.isExhausted ||
-				!recipientSelection ||
 				!recipientValidation.isEligible ||
 				!isQtyValid ||
 				!canDistribute}
-			class="h-10 rounded-xl bg-indigo-600 px-5 text-xs font-bold hover:bg-indigo-700"
+			class="h-14 w-full rounded-xl bg-indigo-600 text-base font-bold hover:bg-indigo-700"
 		>
 			{#if recordSuppliesMutation.isPending}
-				<Loader class="h-4 w-4 animate-spin" />
-				<span>กำลังบันทึกรายการ...</span>
+				<Loader class="size-5 animate-spin" aria-hidden="true" />
+				<span>กำลังบันทึก...</span>
 			{:else}
-				<CheckCircle2 class="h-4 w-4" />
+				<CheckCircle2 class="size-5" aria-hidden="true" />
 				<span>{isReturnableItem ? 'ยืนยันบันทึกการยืมสิ่งของ' : 'ยืนยันบันทึกแจกจ่ายพัสดุ'}</span>
 			{/if}
 		</Button>
-	</div>
+		{#if !canDistribute}
+			<p class="text-center text-sm text-slate-500">
+				บัญชีนี้ไม่มีสิทธิ์บันทึกการจ่ายพัสดุ (ต้องเป็นเจ้าหน้าที่ส่วนหน้า ผู้ประสานงาน
+				หรือผู้จัดการศูนย์)
+			</p>
+		{/if}
+	{/if}
 </div>
 
 <!-- In-Flight Top-Up Dialog -->

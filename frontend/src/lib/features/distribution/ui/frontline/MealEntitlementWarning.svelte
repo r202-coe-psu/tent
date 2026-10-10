@@ -11,7 +11,11 @@
 		open: boolean;
 		meal: MealPeriod;
 		recipientLabel: string;
+		/** Recipient already got this meal period today. */
+		isDuplicate: boolean;
 		priorDistributedAt?: string;
+		/** Groups the menu targets when the recipient is not in any of them (menu matching). */
+		menuMismatchLabel?: string | null;
 		onconfirm: (reason: string) => void;
 		oncancel: () => void;
 	}
@@ -20,7 +24,9 @@
 		open = false,
 		meal,
 		recipientLabel,
+		isDuplicate,
 		priorDistributedAt,
+		menuMismatchLabel = null,
 		onconfirm,
 		oncancel
 	}: Props = $props();
@@ -29,14 +35,22 @@
 	let overrideReason = $state('');
 	let error = $state<string | null>(null);
 
+	const title = $derived(
+		isDuplicate && menuMismatchLabel
+			? 'แจ้งเตือน: ต้องยืนยันกรณีพิเศษ'
+			: menuMismatchLabel
+				? 'แจ้งเตือน: เมนูไม่ตรงกลุ่มผู้รับ'
+				: 'แจ้งเตือน: ได้รับอาหารมื้อนี้แล้ว'
+	);
+
 	function handleConfirm() {
 		const trimmed = overrideReason.trim();
 		if (!isConfirmed) {
-			error = 'กรุณากดยืนยันการแจกซ้ำเป็นกรณีพิเศษ';
+			error = 'กรุณากดยืนยันการแจกเป็นกรณีพิเศษ';
 			return;
 		}
 		if (trimmed.length < 3) {
-			error = 'กรุณาระบุเหตุผลในการแจกซ้ำอย่างน้อย 3 ตัวอักษร';
+			error = 'กรุณาระบุเหตุผลอย่างน้อย 3 ตัวอักษร';
 			return;
 		}
 
@@ -76,7 +90,7 @@
 					</div>
 					<div>
 						<AlertDialog.Title class="text-base font-bold text-slate-900">
-							แจ้งเตือน: ได้รับอาหารมื้อนี้แล้ว
+							{title}
 						</AlertDialog.Title>
 						<AlertDialog.Description class="text-xs text-slate-500">
 							ตรวจสอบสิทธิ์การรับอาหาร
@@ -99,31 +113,48 @@
 
 		<!-- Warning Body -->
 		<div class="space-y-3">
-			<div class="rounded-xl border border-amber-200/80 bg-amber-50/60 p-3 text-xs text-amber-950">
-				<p>
-					ผู้ประสบภัย <strong>{recipientLabel}</strong> ได้รับอาหารมื้อ
-					<strong class="text-amber-800">{getMealPeriodLabel(meal)}</strong> ในรอบวันแล้ว
-				</p>
-				{#if priorDistributedAt}
-					<p class="mt-1 text-2xs text-amber-700">
-						(เวลาที่รับล่าสุด: {new Date(priorDistributedAt).toLocaleTimeString('th-TH', {
-							hour: '2-digit',
-							minute: '2-digit'
-						})} น.)
+			{#if isDuplicate}
+				<div
+					class="rounded-xl border border-amber-200/80 bg-amber-50/60 p-3 text-xs text-amber-950"
+				>
+					<p>
+						ผู้รับ <strong>{recipientLabel}</strong> ได้รับอาหารมื้อ
+						<strong class="text-amber-800">{getMealPeriodLabel(meal)}</strong> ในรอบวันแล้ว
 					</p>
-				{/if}
-			</div>
+					{#if priorDistributedAt}
+						<p class="mt-1 text-2xs text-amber-700">
+							(เวลาที่รับล่าสุด: {new Date(priorDistributedAt).toLocaleTimeString('th-TH', {
+								hour: '2-digit',
+								minute: '2-digit'
+							})} น.)
+						</p>
+					{/if}
+				</div>
+			{/if}
+
+			{#if menuMismatchLabel}
+				<div
+					class="rounded-xl border border-amber-200/80 bg-amber-50/60 p-3 text-xs text-amber-950"
+				>
+					<p>
+						เมนูนี้จัดไว้สำหรับกลุ่ม <strong class="text-amber-800">{menuMismatchLabel}</strong>
+						แต่ข้อมูลของ <strong>{recipientLabel}</strong> ไม่อยู่ในกลุ่มนี้
+					</p>
+				</div>
+			{/if}
 
 			<p class="text-xs text-slate-600">
-				ระบบควบคุมการแจกอาหารจำกัด 1 มื้อ ต่อ 1 คน ในรอบวัน หากต้องการแจกซ้ำเป็นกรณีพิเศษ
-				ต้องระบุเหตุผลประกอบ
+				{#if isDuplicate}
+					ระบบจำกัดการแจกอาหาร 1 มื้อ ต่อ 1 คน ในรอบวัน
+				{/if}
+				หากต้องการแจกเป็นกรณีพิเศษ ต้องระบุเหตุผลประกอบ
 			</p>
 
 			<!-- Confirmation & Reason Form -->
 			<div class="space-y-3 pt-2">
 				<label class="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-800">
 					<Checkbox bind:checked={isConfirmed} />
-					<span>ยืนยันแจกซ้ำเป็นกรณีพิเศษ</span>
+					<span>ยืนยันแจกเป็นกรณีพิเศษ</span>
 				</label>
 
 				<div>
@@ -131,7 +162,7 @@
 						for="override-reason-input"
 						class="mb-1 block text-2xs font-bold text-slate-700 uppercase"
 					>
-						เหตุผลในการแจกซ้ำ <span class="text-red-500">*</span>
+						เหตุผลกรณีพิเศษ <span class="text-red-500">*</span>
 					</label>
 					<Textarea
 						id="override-reason-input"
@@ -159,7 +190,7 @@
 					handleConfirm();
 				}}
 			>
-				บันทึกแจกซ้ำแบบมีเหตุผล
+				บันทึกแจกแบบมีเหตุผล
 			</AlertDialog.Action>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>

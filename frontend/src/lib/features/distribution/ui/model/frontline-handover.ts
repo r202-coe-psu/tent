@@ -3,8 +3,11 @@ import {
 	calculateDistributedQtyForTicketItem,
 	calculateInHandQtyForTicketItem,
 	isDuplicateMealDistributionLog,
+	matchRecipientToMenu,
 	type DistributionLog,
 	type MealPeriod,
+	type MenuTagSource,
+	type MenuTargetTag,
 	type TicketItem
 } from '../../domain/food-supplies';
 
@@ -21,6 +24,8 @@ export type FrontlineRecipientSelection =
 			label: string;
 			phone?: string | null;
 			stayInfo?: string;
+			/** Menu-matching tags derived from the evacuee doc at selection time. */
+			menuTags?: MenuTargetTag[];
 	  }
 	| {
 			recipientType: 'outside';
@@ -110,4 +115,30 @@ export function checkDuplicateMealAdvisory(
 		isDuplicate: Boolean(priorLog),
 		priorLog
 	};
+}
+
+const MENU_TAG_LABELS: Record<MenuTargetTag, string> = {
+	HALAL: 'ฮาลาล',
+	INFANT: 'ทารก',
+	CHILD: 'เด็ก',
+	ELDERLY: 'ผู้สูงอายุ'
+};
+
+/** Thai label list for menu target tags, e.g. `['HALAL', 'ELDERLY']` → `ฮาลาล, ผู้สูงอายุ`. */
+export function formatMenuTags(tags: readonly MenuTargetTag[]): string {
+	return tags.map((tag) => MENU_TAG_LABELS[tag]).join(', ');
+}
+
+/**
+ * Advisory check whether the selected menu targets a group the recipient is not in.
+ * An unknown menu (catalog not loaded / item missing) counts as a general menu.
+ */
+export function checkMenuMatchAdvisory(
+	recipient: FrontlineRecipientSelection | null,
+	menu: MenuTagSource | undefined
+): { isMismatch: boolean; menuTags: MenuTargetTag[] } {
+	if (!recipient || !menu) return { isMismatch: false, menuTags: [] };
+	const recipientTags = recipient.recipientType === 'evacuee' ? (recipient.menuTags ?? []) : null;
+	const { matches, menuTags } = matchRecipientToMenu(recipientTags, menu);
+	return { isMismatch: !matches, menuTags };
 }

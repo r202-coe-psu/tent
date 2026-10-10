@@ -10,6 +10,7 @@ import {
 	positiveWholeQtyCoerceSchema,
 	nonNegativeWholeQtyCoerceSchema,
 	requisitionTicketIdSchema,
+	thailandCalendarDay,
 	ULID_PATTERN
 } from './shared';
 
@@ -314,3 +315,12 @@ export function assertRequisitionTicketMutation(
 }
 
 export { mealPeriodSchema, type MealPeriod };
+
+/**
+ * Service day of a ticket as a Thailand calendar day (`YYYY-MM-DD`), derived from `created_at`
+ * (`draft-meal-quota-window` FR-MQW-03 option A — no `service_date` field yet). A ticket opened
+ * the day before its service lands on the earlier day.
+ */
+export function ticketServiceDay(ticket: Pick<RequisitionTicket, 'created_at'>): string {
+	return thailandCalendarDay(ticket.created_at);
+}

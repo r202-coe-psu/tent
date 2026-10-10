@@ -5,6 +5,7 @@ import {
 	buildAllocationItem,
 	buildCreateTicketItem,
 	isPositiveIntegerString,
+	stepQuantity,
 	validatePositiveQuantity
 } from './ticket-quantity';
 import { ticketItemSchema } from '../../domain/food-supplies/requisition-ticket';
@@ -83,5 +84,27 @@ describe('Distribution whole-item quantity validation', () => {
 		expect(qtyGte(inHand, exact.value!)).toBe(true);
 		expect(qtyLte(exact.value!, inHand)).toBe(true);
 		expect(qtyGte(inHand, excessive.value!)).toBe(false);
+	});
+});
+
+describe('stepQuantity', () => {
+	it('moves by one within 1..max', () => {
+		expect(stepQuantity('1', 1, '5')).toBe('2');
+		expect(stepQuantity('3', -1, '5')).toBe('2');
+	});
+
+	it('clamps at 1 and at max', () => {
+		expect(stepQuantity('1', -1, '5')).toBe('1');
+		expect(stepQuantity('5', 1, '5')).toBe('5');
+		expect(stepQuantity('9', 1, '5')).toBe('5');
+	});
+
+	it('restarts from 1 on input it cannot parse', () => {
+		expect(stepQuantity('', 1, '5')).toBe('1');
+		expect(stepQuantity('abc', -1, '5')).toBe('1');
+	});
+
+	it('stays at 1 when nothing is left in hand', () => {
+		expect(stepQuantity('1', 1, '0')).toBe('1');
 	});
 });
