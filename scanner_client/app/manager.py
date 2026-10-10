@@ -351,6 +351,9 @@ class ScannerClientManager:
             "/api/v1/scanner/kiosk/config",
             "/api/v1/scanner/kiosk/register",
             "/api/v1/scanner/kiosk/staff-pin/verify",
+            "/api/v1/scanner/kiosk/thaid/session",
+            "/api/v1/scanner/kiosk/thaid/session/status",
+            "/api/v1/scanner/kiosk/thaid/session/cancel",
         }
 
         headers = dict(request.headers)
