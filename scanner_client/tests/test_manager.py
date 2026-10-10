@@ -901,6 +901,36 @@ class EscposPrintRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(route.fulfilled, {"status": 200, "body": {"printed": 3}})
         self.assertEqual(events, ["label", 1.5, "label", 1.5, "label"])
 
+    async def test_pauses_before_the_next_request_when_the_last_label_is_still_cutting(self):
+        # A household over one request's worth of labels prints in several requests back to back.
+        sysfs, dev = self.fake_usb_printers(("lp3", "28e9:5812"))
+        client = self.client(PRINTER_USB_ID="28e9:5812")
+        events = []
+        real_send = client._send_escpos
+
+        def record_send(image, timeout, init=True):
+            events.append("label")
+            return real_send(image, timeout, init)
+
+        async def fake_sleep(seconds):
+            events.append(seconds)
+
+        with (
+            patch.object(manager, "ESCPOS_LABEL_PAUSE_SEC", 1.5),
+            patch.object(client, "_send_escpos", side_effect=record_send),
+            patch.object(manager.asyncio, "sleep", new=fake_sleep),
+        ):
+            first = await self.print_with(client, sysfs, dev, labels_body(real_png()))
+            second = await self.print_with(client, sysfs, dev, labels_body(real_png()))
+
+        self.assertEqual(first.fulfilled, {"status": 200, "body": {"printed": 1}})
+        self.assertEqual(second.fulfilled, {"status": 200, "body": {"printed": 1}})
+        self.assertEqual(events[0], "label")
+        self.assertEqual(events[-1], "label")
+        self.assertEqual(len(events), 3)
+        self.assertGreater(events[1], 0)
+        self.assertLessEqual(events[1], 1.5)
+
     async def test_waits_for_the_last_write_to_drain_before_closing_the_printer(self):
         # usblp kills an in-flight URB on close(): closing before POLLOUT loses the label's tail
         # (and its cut command), so a printer that never drains must fail the job, not "print".

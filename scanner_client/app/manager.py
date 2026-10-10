@@ -136,6 +136,9 @@ class ScannerClientManager:
             config.get("PRINTER_WIDTH_DOTS") or DEFAULT_PRINTER_WIDTH_DOTS
         )
         self._escpos_lock = asyncio.Lock()
+        # When the last ESC/POS label went out: a large household prints in several requests, and
+        # the first label of the next one must not land while the previous label is still cutting.
+        self._escpos_last_label_at: Optional[float] = None
         # `off` hides the QR method on the kiosk home screen and closes /kiosk/qr on this machine.
         self.qr_check_in = str(config.get("KIOSK_QR_CHECK_IN") or "on").strip().lower() != "off"
         # How /kiosk/qr reads QR codes: camera, a USB keyboard-wedge reader, or both.
@@ -579,9 +582,15 @@ class ScannerClientManager:
         deadline = time.monotonic() + KIOSK_PRINT_OVERALL_DEADLINE_SEC
         printed = 0
         for index, image in enumerate(images):
-            if index and self.printer_backend == "escpos":
-                # Let the previous label finish printing and cutting first.
-                await asyncio.sleep(ESCPOS_LABEL_PAUSE_SEC)
+            if self.printer_backend == "escpos":
+                # Let the previous label finish printing and cutting first, also when it was the last
+                # label of the previous request.
+                if index:
+                    await asyncio.sleep(ESCPOS_LABEL_PAUSE_SEC)
+                elif self._escpos_last_label_at is not None:
+                    wait = ESCPOS_LABEL_PAUSE_SEC - (time.monotonic() - self._escpos_last_label_at)
+                    if wait > 0:
+                        await asyncio.sleep(wait)
             if time.monotonic() >= deadline:
                 logger.error(
                     f"Label print deadline exceeded on {self._print_target} ({printed}/{len(images)} sent)"
@@ -603,6 +612,8 @@ class ScannerClientManager:
                     },
                 }
             printed += 1
+            if self.printer_backend == "escpos":
+                self._escpos_last_label_at = time.monotonic()
         return 200, {"printed": printed}
 
     async def _spool_label(self, image: bytes, first: bool = True) -> bool:
