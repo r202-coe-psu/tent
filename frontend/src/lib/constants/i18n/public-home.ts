@@ -179,10 +179,7 @@ export const PUBLIC_PORTAL_HOME_I18N = {
 	th: {
 		pageTitle: 'Smart Shelter — แพลตฟอร์มช่วยเหลือผู้ประสบภัย',
 		heroTitle: 'แพลตฟอร์มช่วยเหลือผู้ประสบภัย',
-		heroSubtitle: 'ศูนย์พักพิง • ค้นหาผู้พักพิง • บริจาคและจิตอาสา',
-		registerCta: 'ลงทะเบียนผู้ประสบภัยล่วงหน้า',
-		registerCtaHint: 'ลงทะเบียนไว้ก่อน ถึงศูนย์แล้วรายงานตัวได้เร็วขึ้น',
-		findShelterQuick: 'ค้นหาศูนย์พักพิงใกล้ฉัน',
+		registerCta: 'ลงทะเบียนล่วงหน้า',
 		findSheltersTag: 'ค้นหาศูนย์พักพิง',
 		searchSheltersTitle: 'ค้นหาศูนย์พักพิง',
 		searchSheltersSubtitle: 'เช็คพิกัดและศูนย์พักพิงที่เปิดรับ',
@@ -267,10 +264,7 @@ export const PUBLIC_PORTAL_HOME_I18N = {
 	en: {
 		pageTitle: 'Smart Shelter — Disaster Relief & Assistance Platform',
 		heroTitle: 'Disaster Relief & Assistance Platform',
-		heroSubtitle: 'Shelters • Search Evacuees • Donate & Volunteer',
-		registerCta: 'Pre-register as an evacuee',
-		registerCtaHint: 'Register now so check-in at the shelter is faster',
-		findShelterQuick: 'Find a shelter near me',
+		registerCta: 'Pre-register',
 		findSheltersTag: 'Find Shelters',
 		searchSheltersTitle: 'Search Shelters',
 		searchSheltersSubtitle: 'Check GPS & view currently available shelters',

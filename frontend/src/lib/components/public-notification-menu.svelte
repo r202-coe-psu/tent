@@ -7,6 +7,7 @@
 	import type { Announcement } from '$lib/features/announcements';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
+	import { formatThaiTime } from '$lib/utils/date';
 	import { PUBLIC_ALERTS_PANEL_I18N } from '$lib/constants/i18n';
 
 	interface Props {
@@ -27,7 +28,6 @@
 	let buttonEl = $state<HTMLElement | null>(null);
 	let menuEl = $state<HTMLElement | null>(null);
 
-	const isEn = $derived(langState.current === 'en');
 	const t = $derived(getTranslation(PUBLIC_ALERTS_PANEL_I18N, langState.current));
 
 	const announcements = $derived(propAnnouncements);
@@ -195,11 +195,7 @@
 									</span>
 									{#if ann.created_at}
 										<span class="text-2xs text-slate-400 tabular-nums">
-											{new Date(ann.created_at).toLocaleTimeString(isEn ? 'en-US' : 'th-TH', {
-												hour: '2-digit',
-												minute: '2-digit'
-											})}
-											{isEn ? '' : 'น.'}
+											{formatThaiTime(ann.created_at)} น.
 										</span>
 									{/if}
 								</div>
@@ -366,11 +362,7 @@
 										</span>
 										{#if ann.created_at}
 											<span class="text-2xs text-slate-400 tabular-nums">
-												{new Date(ann.created_at).toLocaleTimeString(isEn ? 'en-US' : 'th-TH', {
-													hour: '2-digit',
-													minute: '2-digit'
-												})}
-												{isEn ? '' : 'น.'}
+												{formatThaiTime(ann.created_at)} น.
 											</span>
 										{/if}
 									</div>

@@ -11,6 +11,7 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import { downloadElementAsPdf, downloadElementAsPng } from '$lib/utils/pdf';
 	import { getTranslation } from '$lib/utils/i18n';
+	import { formatThaiDateTime } from '$lib/utils/date';
 	import type { BookingTicket } from '../application/booking-store.svelte';
 
 	interface Props {
@@ -50,16 +51,7 @@
 		})
 	);
 
-	const bookedAt = $derived.by(() => {
-		if (!ticket.booked_at) return '';
-		const d = new Date(ticket.booked_at);
-		return Number.isNaN(d.getTime())
-			? ''
-			: d.toLocaleString(langState.current === 'th' ? 'th-TH' : 'en-US', {
-					dateStyle: 'medium',
-					timeStyle: 'short'
-				});
-	});
+	const bookedAt = $derived(ticket.booked_at ? formatThaiDateTime(ticket.booked_at) : '');
 
 	/**
 	 * Save the ticket straight to the device as `preregister-<code>.pdf` or `.png`

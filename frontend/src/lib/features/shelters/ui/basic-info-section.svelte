@@ -90,7 +90,7 @@
 	}
 
 	const personnelRows: { key: 'eoc_liaison' | 'medical_lead' | 'kitchen_lead'; label: string }[] = [
-		{ key: 'eoc_liaison', label: 'ผู้ประสานงาน EOC (EOC Liaison)' },
+		{ key: 'eoc_liaison', label: 'ผู้ประสานงาน (Coordinator)' },
 		{ key: 'medical_lead', label: 'หัวหน้าทีมแพทย์/พยาบาล (Medical Lead)' },
 		{ key: 'kitchen_lead', label: 'หัวหน้าโรงครัว (Kitchen Lead)' }
 	];

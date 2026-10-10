@@ -7,7 +7,7 @@ author: Soravit Sukkarn (Team Lead)
 affects:
   - docs/data/schema.md §1.1
   - docs/adr/0001-decoupled-registration-and-medical-screening-flow.md
-  - docs/changes/CR-097-smart-card-evacuee-draft-flow.md
+  - docs/changes/14-kiosk/CR-097-smart-card-evacuee-draft-flow.md
   - docs/changes/draft-kiosk-walk-in-registration.md
   - frontend/src/lib/features/scanners/
   - frontend/src/lib/features/people/

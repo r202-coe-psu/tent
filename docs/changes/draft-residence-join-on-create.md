@@ -7,7 +7,7 @@ requested_by: ทีม / field study
 decided_by: project owner
 layer: volatile
 affects:
-  - docs/changes/CR-106-decoupled-registration-medical-screening-flow.md (FR-03b-H suggest semantics — amend)
+  - docs/changes/00-baseline/CR-106-decoupled-registration-medical-screening-flow.md (FR-03b-H suggest semantics — amend)
   - docs/adr/0001-decoupled-registration-and-medical-screening-flow.md (suggest + confirm join on create)
   - frontend/src/lib/features/people/domain (UnifiedRegistrationInput join fields; planFamilyRegistration join mode; homeless residence match)
   - frontend/src/lib/features/people/data/people.remote.ts (createFamilyRegistration join path)

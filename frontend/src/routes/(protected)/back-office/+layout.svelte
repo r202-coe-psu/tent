@@ -14,10 +14,22 @@
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import Building from '@lucide/svelte/icons/building';
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
+	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import { ReauthDialog } from '$lib/features/login';
+	import { useShelters } from '$lib/features/shelters';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { isSystemAdmin } from '$lib/auth/roles';
+	import { Button } from '$lib/components/ui/button';
 
 	let { children }: LayoutProps = $props();
 	let reauthOpen = $state(false);
+
+	const sheltersQuery = useShelters();
+	const shelters = $derived(sheltersQuery.data ?? []);
+	const isZeroShelters = $derived(!sheltersQuery.isLoading && shelters.length === 0);
+
+	const roles = $derived(authStore.user?.roles ?? []);
+	const isSA = $derived(isSystemAdmin(roles));
 
 	function findMatchingLeaf(
 		node: BackofficeNavbarNode,
@@ -144,11 +156,50 @@
 
 		<!-- Content grows with the document; window scroll is the primary scroller. -->
 		<div class="flex flex-1 flex-col">
-			<!-- Reset scoped pages when the navbar changes shelter so every query/form
-			     is recreated with the newly selected shelter context. -->
-			{#key shelterStore.selectedShelterCode}
-				{@render children()}
-			{/key}
+			{#if isZeroShelters}
+				<div class="flex flex-1 items-center justify-center p-6 sm:p-12">
+					<div
+						class="mx-auto flex max-w-md flex-col items-center rounded-2xl border border-slate-200/80 bg-card p-8 text-center shadow-xs"
+					>
+						<div
+							class="mb-4 flex size-14 items-center justify-center rounded-full bg-amber-50 text-amber-600 ring-8 ring-amber-50/50"
+						>
+							<ShieldAlert class="size-7" />
+						</div>
+						<h2 class="text-xl font-bold text-foreground sm:text-2xl">ยังไม่มีศูนย์พักพิงในระบบ</h2>
+						<p class="mt-2 text-sm leading-relaxed text-muted-foreground">
+							การดำเนินการในระบบส่วนหลังจำเป็นต้องมีศูนย์พักพิงที่เปิดใช้งานอย่างน้อย 1 แห่งในระบบ
+						</p>
+						{#if isSA}
+							<div class="mt-6 flex w-full flex-col items-center gap-3">
+								<Button
+									href="/system-management/shelters"
+									size="lg"
+									class="w-full px-6 font-semibold sm:w-auto"
+								>
+									สร้างหรือนำเข้าศูนย์พักพิง
+								</Button>
+								<p class="text-xs text-muted-foreground">
+									ไปที่หน้าจัดการศูนย์พักพิงเพื่อสร้างศูนย์ใหม่หรือนำเข้าข้อมูล
+								</p>
+							</div>
+						{:else}
+							<div
+								class="mt-6 w-full rounded-xl border border-border bg-muted/50 p-4 text-xs text-muted-foreground"
+							>
+								กรุณาติดต่อผู้ดูแลระบบ (System Administrator)
+								เพื่อสร้างหรือเปิดใช้งานศูนย์พักพิงในระบบ
+							</div>
+						{/if}
+					</div>
+				</div>
+			{:else}
+				<!-- Reset scoped pages when the navbar changes shelter so every query/form
+				     is recreated with the newly selected shelter context. -->
+				{#key shelterStore.selectedShelterCode}
+					{@render children()}
+				{/key}
+			{/if}
 		</div>
 	</div>
 </div>

@@ -9,6 +9,7 @@
 	import { KIOSK_QR_PATH } from '../domain/identity-method';
 	import { qrInputPlan } from '../domain/kiosk-hardware';
 	import { KIOSK_COMPACT_MEDIA } from '../domain/kiosk-layout';
+	import { DISPLAY_LOCALE, DISPLAY_TIME_ZONE } from '$lib/utils/date';
 
 	interface Props {
 		shelterName: string;
@@ -65,10 +66,19 @@
 	});
 
 	const timeString = $derived(
-		now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
+		now.toLocaleTimeString(DISPLAY_LOCALE, {
+			timeZone: DISPLAY_TIME_ZONE,
+			hour: '2-digit',
+			minute: '2-digit'
+		})
 	);
 	const dateString = $derived(
-		now.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })
+		now.toLocaleDateString(DISPLAY_LOCALE, {
+			timeZone: DISPLAY_TIME_ZONE,
+			day: 'numeric',
+			month: 'short',
+			year: 'numeric'
+		})
 	);
 </script>
 

@@ -630,6 +630,17 @@ Always show an explicit empty state — never render an empty list silently:
 - Prefer Tailwind tokens over raw colour values (`text-destructive` not `text-red-500`).
 - Dark-mode variants go last: `bg-white dark:bg-zinc-900`.
 
+### Display datetime (locale + timezone)
+
+- **Storage stays UTC ISO** (`…Z`). Do not change persisted shapes for display reasons.
+- **Human-facing dates/times are always `th-TH` + `Asia/Bangkok`** (Buddhist year), including
+  public pages that still switch copy language EN/TH. Numbers may still use `en-US` when copy is EN.
+- Prefer `$lib/utils/date` helpers (`formatThaiDateTime`, `formatThaiShortDate`, `formatThaiTime`,
+  or `DISPLAY_LOCALE` / `DISPLAY_TIME_ZONE`) and `$lib/utils/i18n` `formatDate`. Do not call
+  `toLocale*` / `Intl.DateTimeFormat` with `en-US` for dates, and do not omit `timeZone`.
+- Exception: machine formats such as `en-CA` / `en-GB` used only to derive `YYYY-MM-DD` or logic
+  keys (not user-visible strings).
+
 ---
 
 ## 11. Testing conventions
@@ -752,4 +763,4 @@ export async function familySearch(query: string) {
 
 ---
 
-_Last updated: 2026-08-13_
+_Last updated: 2026-10-09_

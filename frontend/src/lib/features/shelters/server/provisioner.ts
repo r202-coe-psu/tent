@@ -271,6 +271,13 @@ async function provisionShelterUnlocked(
 	assertActive?: () => Promise<void>
 ): Promise<{ ok: true; code: string; db: string; steps: ProvisionStep[] }> {
 	const normalizedName = normalizeShelterName(input.name);
+	// Ensure the registry's by_name/by_code views exist before the first lookup uses
+	// them. allocateShelterCode() deploys the design doc too, but only when it runs —
+	// callers that already hold an allocated code (the async worker path) skip it,
+	// which would otherwise leave this check racing a stale/missing design doc.
+	const registryDb = await adminRaw(`/${SHELTER_REGISTRY_DB}`, 'PUT');
+	assertStatus(registryDb.status, 'registry database', registryDb.data, [412]);
+	await deployRegistryDesign();
 	const duplicateByName = await findMasterByName(input.name);
 	if (duplicateByName && duplicateByName.code !== allocatedCode) {
 		throw new ServiceError('CONFLICT', `Shelter name "${input.name}" already exists`);

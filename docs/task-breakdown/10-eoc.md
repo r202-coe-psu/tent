@@ -73,7 +73,7 @@ note: decision-synced 2026-07-15 — CR-033 remote-first wording; MongoDB read-m
 
 **Status:** ⬜ blocked — T-37 + T-69. D-HEALTH-SURFACE=**A** ล็อกแล้ว (EOC = ฟิลด์ API ทีหลัง; ห้าม dashboard ในแอป)
 **Owner:** Lead pair (แจ็ก/เด่น); Team D สูตรเดียวกันกับ T-69
-**Depends:** T-37, T-69; [CR-069](../changes/CR-069-occupancy-health-colors.md)
+**Depends:** T-37, T-69; [CR-069](../changes/00-baseline/CR-069-occupancy-health-colors.md)
 **Program:** P3 (EOC slice)
 
 **Description:** เพิ่ม derived `occupancy_health` (+ occupancy, capacity, as_of) บน EOC cross-shelter aggregate API. **FD-14 คง** — ไม่มีหน้า EOC dashboard ใน SPA (D-HEALTH-SURFACE=A ตัดตัวเลือก C). สูตรต้องชุดเดียวกับ T-69 (รวม D-STANDBY=A, D-HEALTH-VS-STATUS=B, ตัวเศษ occupancy ตาม D-BOOK-OCC=C = `active` + `pre_registered`).
@@ -90,7 +90,7 @@ note: decision-synced 2026-07-15 — CR-033 remote-first wording; MongoDB read-m
 
 **Status:** ⬜ blocked — D-ONE-PLATFORM / K-14 เซ็นสัญญา — **Wave 4 รอบ CR ถัดไป**
 **Owner:** Lead pair
-**Depends:** partner SPEC; [CR-073](../changes/CR-073-one-platform-external-get-blocked.md)
+**Depends:** partner SPEC; [CR-073](../changes/10-eoc/CR-073-one-platform-external-get-blocked.md)
 **Program:** P7
 
 **Description:** ขยาย `/external/v1` GET ตาม SPEC ที่หน่วยงานส่ง. **ห้ามเดา payload.** ของ CR-062 (GET mirror + API keys) คงเดิม ห้าม breaking change เพื่อเดาสัญญา. ไม่แทนที่ T-39 จนกว่าเทียบสัญญาแล้ว.

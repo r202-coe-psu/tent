@@ -16,6 +16,7 @@
 		type ImportJobSummary
 	} from '../application/queries';
 	import type { ImportRowResult, ShelterImportLog } from '../domain/import-log';
+	import { formatThaiDateTime } from '$lib/utils/date';
 
 	let {
 		basePath,
@@ -48,9 +49,7 @@
 	);
 
 	function formatTime(iso: string | undefined): string {
-		return iso
-			? new Date(iso).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' })
-			: '—';
+		return iso ? formatThaiDateTime(iso) || iso : '—';
 	}
 
 	function createdRows(results: ImportRowResult[] = []): ImportRowResult[] {

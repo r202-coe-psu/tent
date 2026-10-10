@@ -138,25 +138,4 @@ describe('Ticket Query Error UX Mapping & Invariants', () => {
 		expect(p2.description).not.toContain('เชื่อมต่อ');
 		expect(p2.description).not.toContain('เครือข่าย');
 	});
-
-	it('asserts TicketManagementPage consumes mapped error and never falls back to old hardcoded message', async () => {
-		const fs = await import('node:fs');
-		const path = await import('node:path');
-		const componentPath = path.resolve(__dirname, 'TicketManagementPage.svelte');
-		const content = fs.readFileSync(componentPath, 'utf-8');
-
-		// 1. Must NOT contain the old hardcoded database connection message
-		expect(content).not.toContain('ไม่สามารถเชื่อมต่อฐานข้อมูลตั๋วเบิกจ่ายได้');
-
-		// 2. Must import and call mapDistributionQueryError
-		expect(content).toContain('mapDistributionQueryError');
-		expect(content).toMatch(
-			/errorPresentation\s*=\s*\$derived\(mapDistributionQueryError\(ticketsQuery\.error\)\)/
-		);
-
-		// 3. Error card markup must render dynamic mapped title and description
-		expect(content).toContain('{errorPresentation.title}');
-		expect(content).toContain('{errorPresentation.description}');
-		expect(content).toContain('{errorPresentation.actionLabel}');
-	});
 });

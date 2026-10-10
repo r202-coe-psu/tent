@@ -9,7 +9,7 @@
 
 | Item                           | Today                                                                                                                                                                                                                               |
 | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Playwright                     | 1.61, Chromium only                                                                                                                                                                                                                 |
+| Playwright                     | 1.64, Chromium only                                                                                                                                                                                                                 |
 | `playwright.config.ts`         | local: `vite preview` (:4173) + `e2e/mock-api.js` (:9001); `grepInvert: /@quarantine/`                                                                                                                                              |
 | `playwright.staging.config.ts` | remote: `grep: /@release\|@smoke/`, `grepInvert: /@quarantine/`, workers=1, `globalTimeout` 30 min                                                                                                                                  |
 | `playwright.prod.config.ts`    | remote read-only: `grep: /@prod/`, `globalTimeout` 2 min                                                                                                                                                                            |
@@ -22,7 +22,70 @@ Known problems:
 
 - `registration-evacuee.test.ts` flips SH001 policy toggles that it cannot fully restore — unsafe on shared DBs.
 - Query-based teardown (`?q=<run id>`) once deleted unrelated dev records (server search matches digit substrings).
-- `pnpm test:e2e:pre-register` can hang on exit after tests finish.
+- ~~Local `playwright test` hung forever after the last test whenever Playwright spawned the preview
+  server itself.~~ **Fixed** — `playwright.config.ts` used to launch it with `pnpm preview`; pnpm
+  runs the script in its **own process group**, so Playwright's process-group kill at teardown
+  missed `vite preview`, which then got orphaned (re-parented to `systemd --user`) while still
+  holding Playwright's stdout pipe — Playwright waited on that pipe forever. `pnpm exec vite` has
+  the same problem; the config now calls `node_modules/.bin/vite preview` directly. Symptom of the
+  old bug (if you see it on another branch): it only hung when **no** server was already on 4173 —
+  `scripts/run-e2e-headed.sh` always kills the old one first, so it hung every time, while a bare
+  `npx playwright test` right after it reused the orphan and exited fine. Reinstalling
+  `@playwright/test` never fixed it. The hung run's printed results are final — `Ctrl+C` is safe.
+- ~~`[15/37]` in a full local `@critical` run (pre-register **W5**) sat idle for ~1 minute.~~
+  **Fixed** — the ticket-status BFF allows 10 requests/min/IP and W5 used to sleep a fixed 61s
+  after W2 to stay under it. Half of that budget was an app bug: opening the "ใบลงทะเบียนของฉัน" tab
+  synced every stored ticket **twice** (the tab's `onclick` and `TicketHistory`'s own `onMount`),
+  which also burns a real citizen's budget. With the duplicate removed, W2–W5 spend ~8 of 10, and
+  `waitForStatusBudget(needed)` now counts real hits and only waits when the budget is short. The
+  limiters live in the preview server's memory, so re-running the pre-register suite back-to-back
+  against a **reused** server can still get `429 Too Many Requests` on W4/W5 — wait a minute or
+  restart the server.
+  Since develop's `registrations/check-duplicate` (instant duplicate check on the public form)
+  shares that same `registerLookupIpLimiter` budget, W4 and W5 fill the form again and usually
+  wait out one window, so the pre-register `@critical` group takes ~1 min longer than before.
+- ~~`onsite-stations-flow` Station 1 failed at random on the Person QR.~~ **Fixed** — error was
+  `No MultiFormat Readers were able to detect the code`: html5-qrcode's bundled ZXing misses ~8% of the app's Person QR
+  images (random ULID payloads; measured 34/400). `decodeQrImage` (`helpers/onsite.ts`) now
+  retries at other scales, then falls back to an exact module-by-module match against the
+  `qrcode` matrix for the card's `qr-identity-card-<ulid>` id. `registration-evacuee.test.ts`
+  (quarantined) still has its own unpatched copy.
+- After `pnpm unseed`/`pnpm seed`, **always restart the preview server** before the next
+  `playwright test` run. A server left running from a previous run holds state/connections against
+  the old databases; wiping and reseeding CouchDB
+  out from under it has caused it to crash mid-run, which then shows up as unrelated-looking
+  `net::ERR_CONNECTION_REFUSED` failures on every subsequent test. Check with
+  `ss -ltnp | grep 4173` and kill it before reseeding, or before trusting a run's results.
+- `COUCHDB_PUBLIC_WRITER_URL` (needed for the pre-register W5/W6 shelter-booking tests, else they
+  skip) must go in **`frontend/.env`**, not `frontend/e2e/.env` — only `frontend/.env` is read by
+  the seed scripts (`scripts/seed/couch.ts`'s own loader). A bare `npx playwright test` loads no
+  `.env` at all, so `export COUCHDB_PUBLIC_WRITER_URL=...` in the shell first.
+  `scripts/run-e2e-headed.sh local` instead loads `frontend/e2e/.env` and **overrides** your shell
+  exports with it — so a stale password there gives `public booking write failed (401)` in the
+  `[WebServer]` log and W5 fails with 502 even though the bare `npx` run passes. Setting the var does
+  nothing until you also re-run `pnpm seed` (not `pnpm seed:master`, which skips `seedUsers()`
+  entirely) to actually provision the `public_writer` CouchDB user — check with
+  `curl $COUCHDB_ADMIN_URL/_users/org.couchdb.user:public_writer`.
+- For **local** runs, leave `E2E_BASE_URL` **unset** in `frontend/e2e/.env`, even if it is copied
+  from `.env.example`. Any value — even `http://localhost:5173` — makes `IS_REMOTE` true
+  (`helpers/e2e-env.ts`): without `ALLOW_REMOTE_WRITES=true` the run turns read-only, so
+  `public-search-flow` / `public-shelters-filter` look for a provisioned fixture
+  (`E2E_SEARCH_*` / `E2E_SHELTERS_MARKER`) and fail with a `toPass` timeout. The app URL for
+  local runs comes from `PLAYWRIGHT_TEST_BASE_URL`, not `E2E_BASE_URL`.
+- `public-search-flow` / `public-shelters-filter` used to skip their setup on **every** remote
+  target and search a hand-provisioned staging fixture that nobody had created. They now gate on
+  `CAN_WRITE` like the other `@critical` suites: a writable staging run creates per-run `E2E …`
+  data and tears it down; each ends with a Z test. Public persons disappear as soon as the
+  registry doc is deleted. The public **shelter row** stays `closed` / `is_active:false` until
+  the worker's retention job (`reconcile_closed_shelters`, every 5 min) removes it — verified
+  locally, gone within 138 s. `ALLOW_REMOTE_WRITES` must now be exactly `true` (it used to accept
+  any non-empty value, `false` included).
+- `config:app.recaptcha_enabled` defaults to `true`; any suite that writes through a public BFF
+  route gated by `recaptcha-gate.ts` needs to flip it off for the duration of its writes and restore
+  it after (see `setRecaptcha` in `helpers/staff-ui.ts`, used by both pre-register W1-W4/W6 **and**
+  W5/W6 shelter-booking blocks) — a fake `window.__captchaToken` alone does not pass real reCAPTCHA
+  Enterprise verification once the server-side keys are configured. Re-running `pnpm seed` resets
+  this flag back to its default (`true`) even if a previous run had it toggled off mid-test.
 - ~~Repo-wide `playwright test --list` failed because `public-portal-faq-crud.test.ts` imported
   `completeUserOnboarding` (removed when `helpers/couch.ts` renamed it to `seedSecurityQuestion`).~~
   **Fixed in Step A** — the suite now calls `seedSecurityQuestion`; `npx playwright test --list`
@@ -85,8 +148,9 @@ Select a feature and a layer: `playwright test --grep "(?=.*@pre-register)(?=.*@
 
 Reference implementation: `public-pre-register-flow.test.ts` + `helpers/pre-register.ts`.
 
-- **Render contract** — every section, field and option visible/enabled with bound labels; ARIA
-  snapshot (`toMatchAriaSnapshot`) and visual snapshots (`toHaveScreenshot`, dynamic regions masked).
+- **Render contract** — every section, field and option visible/enabled with bound labels, at
+  desktop and mobile widths, with no console/page errors. Structural assertions only — no pixel
+  baselines (`toHaveScreenshot`) or full-text ARIA snapshots, so copy tweaks don't break the suite.
 - **Error contract** — a matrix of every validation message ↔ trigger ↔ field; each row asserts the
   literal message at the field, `aria-invalid` + `aria-describedby`, the summary/jump behavior, and
   that nothing is sent.
@@ -113,7 +177,7 @@ Reference implementation: `public-pre-register-flow.test.ts` + `helpers/pre-regi
 
 1. **Jenkins agent** — the `mgmt` agent already builds and runs Docker containers
    (`scripts/run-staging-e2e.sh` → `frontend/Dockerfile.e2e-staging`, base
-   `mcr.microsoft.com/playwright:v1.61.1-noble`), so Playwright-in-Docker works today. Still to
+   `mcr.microsoft.com/playwright:v1.64.0-noble`), so Playwright-in-Docker works today. Still to
    confirm for phase 4: enough CPU/RAM/ports on `mgmt` to run a full `docker compose` stack.
 2. **Staging may be written to** by `@critical` tests, on the condition that cleanup is guaranteed:
    ledger-only teardown (§4.2), a zero-leak assertion at the end of each run, and a scheduled
@@ -259,9 +323,12 @@ assertion green; `--list` shows every touched test with exactly one layer tag; a
 
 ### 9.C Pipeline (after B is merged) — **done in Step C PR**
 
-- `playwright.staging.config.ts`: `grep: /@release|@smoke/`, `grepInvert: /@quarantine/`,
-  workers=1, `globalTimeout` 30 min. Remote `@critical` journeys still skip via `IS_REMOTE` until
-  staging fixtures + janitor are ready for live writes (they show as skipped, not failures).
+- `playwright.staging.config.ts`: `grep: /@critical|@smoke/`, `grepInvert: /@quarantine/`,
+  workers=1, `globalTimeout` 30 min. `@critical` suites only run their live writes when the
+  `tent-staging-e2e-env` credential sets `ALLOW_REMOTE_WRITES=true` (exactly `true`; `CAN_WRITE`
+  in `helpers/e2e-env.ts`). `public-search-flow` / `public-shelters-filter` now create and tear
+  down their own per-run data on such a run too (zero-leak Z test each); only `public-home-flow`
+  is still gated on `IS_REMOTE` and shows as skipped.
 - `Jenkinsfile.e2e-staging` / `scripts/run-staging-e2e.sh`: fail the job on Playwright failure.
   ~~Post GitHub commit status context **`staging/e2e`** on `DEPLOY_COMMIT` (pending →
   success/failure/error). Credential: `tent-github-status-token`.~~ _Superseded by decision
@@ -279,9 +346,18 @@ assertion green; `--list` shows every touched test with exactly one layer tag; a
   if desired).
 - **Owner follow-ups (not in code):** ~~enable `main` branch protection requiring status
   `staging/e2e`; provision `tent-github-status-token`, `tent-staging-couch-admin-url`,
-  `tent-prod-e2e-env`;~~ provision `tent-staging-couch-admin-url` and `tent-prod-e2e-env`; expand
-  `tent-staging-e2e-env` with the fixture keys in `frontend/e2e/.env.example`; schedule the janitor
-  job. (`tent-github-status-token` is no longer needed; decision 2026-10-09.)
+  `tent-prod-e2e-env`;~~ provision `tent-staging-couch-admin-url` and `tent-prod-e2e-env`; fill
+  `tent-staging-e2e-env` per `frontend/e2e/.env.example` (no provisioned search/shelter fixture is
+  needed on a writable run); schedule the janitor job. (`tent-github-status-token` is no longer
+  needed; decision 2026-10-09.)
+- **Staging reachability (verified 2026-10-10):** the Jenkins container reaches CouchDB only via
+  the app host's `/couch` proxy (`COUCHDB_ADMIN_URL=https://…@shelter.importstar.dev/couch`;
+  `routeBrowserCouchThroughApp` skips same-origin `/couch`) and FastAPI's staff routes only via
+  the host nginx's `/public-api/` (`E2E_FASTAPI_URL`). Without `E2E_FASTAPI_URL` every
+  pre-register live-write group skips rather than leak central-queue documents. That
+  `/public-api/` location predates CR-063 — if it is removed, give the e2e runner another route
+  to FastAPI first. `Dockerfile.e2e-staging`'s image tag must equal the locked
+  `@playwright/test` version.
 - **Acceptance:** ~~a staging deploy with a deliberately broken journey shows a red commit status and
   (once protection is on) blocks the `main` merge; a clean deploy is green;~~ a staging deploy with a
   deliberately broken journey leaves the deploy job green and a red `tent-e2e-staging` build with a
