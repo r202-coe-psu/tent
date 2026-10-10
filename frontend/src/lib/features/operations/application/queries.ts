@@ -14,6 +14,7 @@ import type { AuditAction } from '$lib/features/shared';
 import { operationsRepository, OperationsRemoteRepository } from '../data/operations.remote';
 import type {
 	DonationCampaign,
+	DonationSlot,
 	CampaignInput,
 	ReceiveInput,
 	DistributeInput,
@@ -42,6 +43,7 @@ export const operationsKeys = {
 	ledger: () => [...operationsKeys.all, 'ledger'] as const,
 	byItem: (id: string) => [...operationsKeys.ledger(), id] as const,
 	balance: () => [...operationsKeys.all, 'balance', getShelterCode()] as const,
+	donationSlots: () => [...operationsKeys.all, 'donationSlots'] as const,
 	transfers: () => [...operationsKeys.all, 'transfers'] as const,
 	transfer: (id: string) => [...operationsKeys.transfers(), id] as const
 };
@@ -87,6 +89,44 @@ export const useUpdateCampaign = () => {
 		}) => operationsRepository().updateCampaign(campaign, auditInput),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: operationsKeys.campaigns() });
+		}
+	}));
+};
+
+/**
+ * Queue windows this shelter has configured (DN-5 · schema.md §2.13).
+ *
+ * Named for the schedule, not the public board: `useDonationSlots` in
+ * `$lib/features/donations` is the donor-facing availability read through the BFF,
+ * while this one is staff reading their own CouchDB.
+ */
+export const useDonationSlotSchedule = () =>
+	createQuery(() => ({
+		queryKey: operationsKeys.donationSlots(),
+		queryFn: () => operationsRepository().listDonationSlots()
+	}));
+
+/**
+ * Create or edit one window. `_id` is deterministic per date + start time, so the
+ * same call serves both — the repository merges the current `_rev` before writing.
+ */
+export const useSaveDonationSlot = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (slot: DonationSlot) => operationsRepository().updateDonationSlot(slot),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: operationsKeys.donationSlots() });
+		}
+	}));
+};
+
+/** Delete one window; the repository refuses while it has bookings. */
+export const useDeleteDonationSlot = () => {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn: (slot: DonationSlot) => operationsRepository().deleteDonationSlot(slot),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: operationsKeys.donationSlots() });
 		}
 	}));
 };

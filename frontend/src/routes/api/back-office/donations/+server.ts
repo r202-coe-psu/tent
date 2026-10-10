@@ -14,7 +14,7 @@ import {
 	walkInIntakeInputSchema,
 	type PublicDonationDoc,
 	type PendingDonationRow
-} from '$lib/features/donations';
+} from '$lib/features/donations/server';
 import {
 	createWalkInDonation,
 	keyDonationReceipt,

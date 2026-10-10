@@ -21,6 +21,9 @@ export {
 	expireDonation,
 	canTransitionDonation,
 	stockBalance,
+	isDonationOutstanding,
+	keyedDonationIds,
+	recordedDonationQty,
 	isStockLedger,
 	isDonation,
 	stockLedgerInputSchema,
@@ -63,6 +66,8 @@ export {
 	assertActorMayTransition as assertActorMayTransitionTransfer,
 	TransferAuthorizationError
 } from './domain/transfer.authorization';
+
+export { bookingQueue, countSlotBookings, slotMode, slotsOnDate } from './domain/donation-slot';
 
 export {
 	donationShortfall,

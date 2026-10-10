@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('Public Donation & Queue Booking Wizard (T-60)', () => {
+const TAGS = { tag: ['@regression', '@donation'] };
+
+test.describe('Public Donation & Queue Booking Wizard (T-60)', TAGS, () => {
 	test('successfully performs the entire 4-step wizard donation flow', async ({ page }) => {
 		// 1. Mock API GET /api/public/v1/needs
 		await page.route('**/api/public/v1/needs', async (route) => {
@@ -154,7 +156,7 @@ test.describe('Public Donation & Queue Booking Wizard (T-60)', () => {
  * covered by unit tests on `canCancelDonation`; un-fixme these once the mocking issue
  * is understood.
  */
-test.describe('Donor cancels their own reservation from the track page (T-21 DoD 4)', () => {
+test.describe('Donor cancels their own reservation from the track page (T-21 DoD 4)', TAGS, () => {
 	const TOKEN = 'TX-SH001-CANCELME';
 
 	/** Track payload the BFF returns for GET /api/public/v1/donations/{token}. */
@@ -234,7 +236,7 @@ test.describe('Donor cancels their own reservation from the track page (T-21 DoD
  * levels to the stored value, and keep `normal` a real level rather than the absence
  * of a badge: its chip filters, so it has to be visible and selectable.
  */
-test.describe('Needs board reflects the urgency staff set (not the quantity)', () => {
+test.describe('Needs board reflects the urgency staff set (not the quantity)', TAGS, () => {
 	const SHELTER = 'ศูนย์พักพิงทดสอบความเร่งด่วน';
 
 	/** Every level carries a shortage well over the old `>= 50` threshold. */
@@ -302,7 +304,7 @@ test.describe('Needs board reflects the urgency staff set (not the quantity)', (
  * The "ปกติ" chip used to return every open need — same result as "ทั้งหมด" — because
  * it filtered on `status` alone and never looked at the level.
  */
-test.describe('Urgency filter chips', () => {
+test.describe('Urgency filter chips', TAGS, () => {
 	test.beforeEach(async ({ page }) => {
 		await page.route('**/api/public/v1/needs', async (route) => {
 			await route.fulfill({
@@ -368,7 +370,7 @@ test.describe('Urgency filter chips', () => {
  * deletes `randomUUID` to stand in for a non-secure origin without needing a second
  * host. Keep it deleted for any page that mints client-side ids.
  */
-test.describe('Non-secure context (LAN HTTP over an IP)', () => {
+test.describe('Non-secure context (LAN HTTP over an IP)', TAGS, () => {
 	test.beforeEach(async ({ page }) => {
 		await page.addInitScript(() => {
 			// @ts-expect-error — deleting a readonly DOM property on purpose

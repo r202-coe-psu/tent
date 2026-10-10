@@ -168,6 +168,20 @@ describe('donorCategoryFromCatalog', () => {
 		expect(donorCategoryFromCatalog('other')).toBe('other');
 	});
 
+	it('reads the item_master reference (`item_category:<code>`) the current catalog carries', () => {
+		expect(donorCategoryFromCatalog('item_category:food')).toBe('food');
+		expect(donorCategoryFromCatalog('item_category:water')).toBe('food');
+		expect(donorCategoryFromCatalog('item_category:ready_meal')).toBe('food');
+		expect(donorCategoryFromCatalog('item_category:bedding')).toBe('clothing');
+		expect(donorCategoryFromCatalog('item_category:medical')).toBe('medicine');
+		expect(donorCategoryFromCatalog('item_category:wash')).toBe('supply');
+		expect(donorCategoryFromCatalog('item_category:kits')).toBe('supply');
+		expect(donorCategoryFromCatalog('item_category:special_care')).toBe('supply');
+		expect(donorCategoryFromCatalog('item_category:volunteer_ppe')).toBe('supply');
+		expect(donorCategoryFromCatalog('item_category:fuel_energy')).toBe('supply');
+		expect(donorCategoryFromCatalog('item_category:unknown')).toBeUndefined();
+	});
+
 	it('only ever returns a value the form can actually show', () => {
 		const allowed = PUBLIC_DONATION_CATEGORIES.map((c) => c.value as string);
 		for (const catalog of [
@@ -178,7 +192,14 @@ describe('donorCategoryFromCatalog', () => {
 			'medicine',
 			'hygiene',
 			'equipment',
-			'other'
+			'other',
+			'item_category:ready_meal',
+			'item_category:medical',
+			'item_category:wash',
+			'item_category:kits',
+			'item_category:special_care',
+			'item_category:volunteer_ppe',
+			'item_category:fuel_energy'
 		]) {
 			expect(allowed).toContain(donorCategoryFromCatalog(catalog));
 		}

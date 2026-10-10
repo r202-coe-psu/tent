@@ -7,7 +7,7 @@ import {
 	shelterDb
 } from '$lib/server/donation-intake';
 import { fetchDocs } from '$lib/server/donation-docs';
-import { isDonationRedirect, type DonationRedirect } from '$lib/features/donations';
+import { isDonationRedirect, type DonationRedirect } from '$lib/features/donations/server';
 
 /**
  * Incoming redirect tickets — requests other shelters handed to this one

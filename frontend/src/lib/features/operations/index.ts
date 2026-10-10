@@ -19,6 +19,7 @@ export type {
 	TransferStatus,
 	DonationChannel,
 	DonationSlot,
+	DonationSlotMode,
 	NeedAvailability,
 	StockLotBalance,
 	StockTransfer,
@@ -168,6 +169,22 @@ export {
 	type StoragePointRef
 } from './domain/lot-storage';
 
+// Domain — donation queue slots (DN-5 · schema.md §2.13)
+export {
+	assertDonationSlotDeletable,
+	bookingQueue,
+	countSlotBookings,
+	createDonationSlot,
+	editDonationSlot,
+	donationSlotId,
+	donationSlotInputSchema,
+	parseCapacityInput,
+	slotDates,
+	slotMode,
+	slotsOnDate,
+	type DonationSlotInput
+} from './domain/donation-slot';
+
 // Data — repository contract + remote CouchDB binding
 export type { OperationsRepository } from './data/operations.repository';
 export { operationsRepository, OperationsRemoteRepository } from './data/operations.remote';
@@ -187,6 +204,9 @@ export {
 	useStockLedgers,
 	useDonations,
 	useCreateCampaign,
+	useDonationSlotSchedule,
+	useSaveDonationSlot,
+	useDeleteDonationSlot,
 	useReceiveWalkInDonation,
 	useReceiveDonationBatch,
 	useApplyCycleCount,

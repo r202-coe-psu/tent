@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import {
 	AppError,
 	AuthError,
@@ -100,6 +101,14 @@ describe('fromPouchError', () => {
 });
 
 describe('errorMessage', () => {
+	it('ZodError → the first issue, not the serialised JSON', () => {
+		const result = z
+			.object({ from: z.string().regex(/^\d{2}:\d{2}$/, 'เวลาเริ่มต้องเป็นรูปแบบ HH:mm') })
+			.safeParse({ from: '' });
+		expect(result.success).toBe(false);
+		expect(errorMessage(result.error)).toBe('เวลาเริ่มต้องเป็นรูปแบบ HH:mm');
+	});
+
 	it('NotFoundError → record not found', () => {
 		expect(errorMessage(new NotFoundError())).toBe('Record not found');
 	});

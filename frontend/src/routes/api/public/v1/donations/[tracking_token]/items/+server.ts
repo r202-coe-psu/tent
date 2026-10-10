@@ -9,7 +9,7 @@ import {
 	computeNeeds,
 	isDonorEditable,
 	pickCampaignForItems
-} from '$lib/features/donations';
+} from '$lib/features/donations/server';
 import type { DonationRevision, PublicDonationDoc } from '$lib/features/donations';
 import { fetchDocs } from '$lib/server/donation-docs';
 import type { DonationCampaign, StockLedger } from '$lib/features/operations';

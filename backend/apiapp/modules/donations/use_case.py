@@ -16,6 +16,7 @@ from tent_model.donation_need_counter_ops import (
     release_quota,
     reserve_quota,
 )
+from tent_model.donation_slot_counter_ops import release_slot, reserve_slot, slot_counter_id
 from tent_model.public_donation import DeclaredItem, PublicDonation
 from tent_model.public_shelter import PublicShelter
 
@@ -336,6 +337,7 @@ class DonationsUseCase:
         # buffer-insert failure below) can compensate them — no multi-doc transaction
         # available on single-node Mongo, so rollback is manual (CR-045 Compensation).
         reserved: list[tuple[str, str, Decimal]] = []
+        held_slot: str | None = None
         try:
             for idx, item in enumerate(payload.items):
                 if not payload.campaign_id or not item.item_id:
@@ -374,6 +376,27 @@ class DonationsUseCase:
                 reserved.append((payload.campaign_id, item.item_id, qty))
                 items_declared[idx]["reserved_qty"] = str(qty)
 
+            # The capped window's place, taken after the quota so a SLOT_FULL hands the
+            # quota back through the same compensation below. The BFF re-checks the
+            # window too, but against CouchDB, which cannot see a booking still on its
+            # way through the worker — this counter is what makes SLOT_FULL atomic.
+            if payload.slot_hold is not None:
+                hold = payload.slot_hold
+                slot_id = slot_counter_id(
+                    payload.shelter_code.upper(), hold.mode, hold.date, hold.from_
+                )
+                if not await reserve_slot(
+                    counter_id=slot_id,
+                    capacity=hold.capacity,
+                    baseline=hold.booked,
+                    now=now,
+                ):
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail={"success": False, "error": "SLOT_FULL"},
+                    )
+                held_slot = slot_id
+
             buffer: DonationBuffer | None = None
             booking_ref = ""
             for attempt in range(_MAX_BOOKING_REF_ATTEMPTS):
@@ -384,6 +407,7 @@ class DonationsUseCase:
                     donor=DonorBuffer(**payload.donor.model_dump()),
                     items_declared=items_declared,
                     logistics=payload.logistics,
+                    slot_counter_id=held_slot,
                     campaign_id=payload.campaign_id,
                     booking_ref=booking_ref,
                     tracking_token=tracking_token,
@@ -418,6 +442,8 @@ class DonationsUseCase:
                     qty=qty,
                     now=now,
                 )
+            if held_slot is not None:
+                await release_slot(counter_id=held_slot, now=now)
             raise
 
         # Stub public_donations so GET tracking works before outbound CDC catches up.
@@ -750,6 +776,9 @@ class DonationsUseCase:
                     qty=Decimal(reserved_qty),
                     now=release_now,
                 )
+
+        if buffer.slot_counter_id:
+            await release_slot(counter_id=buffer.slot_counter_id, now=datetime.now(UTC))
 
         # Keep the tracking stub in step so GET reflects the cancellation immediately,
         # instead of waiting for outbound CDC sync to catch up.
