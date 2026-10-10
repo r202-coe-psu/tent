@@ -42,7 +42,10 @@ export default defineConfig({
 			// Pass the admin URL so the SvelteKit BFF can reach CouchDB.
 			// COUCHDB_ADMIN_URL can be overridden via CI env; defaults to local dev value.
 			// Preview port follows PLAYWRIGHT_TEST_BASE_URL so parallel worktrees do not collide.
-			command: `COUCHDB_ADMIN_URL=${process.env.COUCHDB_ADMIN_URL ?? 'http://admin:password@localhost:5984'} pnpm preview --port ${APP_PORT} --strictPort`,
+			// Call the vite binary directly, not `pnpm preview`/`pnpm exec`: pnpm runs the script in
+			// its own process group, so Playwright's process-group kill at teardown misses it and the
+			// run hangs forever after the last test, waiting on the orphan's stdout.
+			command: `COUCHDB_ADMIN_URL=${process.env.COUCHDB_ADMIN_URL ?? 'http://admin:password@localhost:5984'} node_modules/.bin/vite preview --port ${APP_PORT} --strictPort`,
 			url: APP_BASE_URL,
 			reuseExistingServer: !process.env.CI,
 			timeout: 60_000,
