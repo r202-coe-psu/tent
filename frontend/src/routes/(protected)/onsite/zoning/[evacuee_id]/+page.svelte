@@ -532,7 +532,7 @@
 									: 'จัดโซนสมาชิกครัวเรือนที่รอจัดด้วย'}
 							</p>
 							<p class="text-2xs text-muted-foreground">
-								เลือกเฉพาะคน — ไม่ตัด household_id · คนละโซนได้เมื่อจำเป็น (เช่น กักตัว)
+								เลือกเฉพาะคน — คนละโซนได้เมื่อจำเป็น (เช่น กักตัว)
 							</p>
 							{#each companionCandidates as member (member._id)}
 								{@const checked = selectedCompanionIds.includes(member._id)}

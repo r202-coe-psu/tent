@@ -263,7 +263,9 @@
 								<div class="flex flex-wrap items-center gap-1.5">
 									<span>{zone.name?.trim() || zone.code}</span>
 									<span
-										class="rounded px-1 text-[10px] font-bold {isQuarantine(zone)
+										class="inline-flex items-center rounded-md px-1.5 py-px text-xs leading-5 font-semibold {isQuarantine(
+											zone
+										)
 											? 'bg-red-600 text-white dark:bg-red-500'
 											: 'bg-muted text-muted-foreground'}"
 									>
@@ -271,7 +273,7 @@
 									</span>
 									{#if isRec}
 										<span
-											class="py-0.2 rounded bg-amber-100 px-1 text-[10px] font-bold text-amber-800 dark:bg-amber-950 dark:text-amber-200"
+											class="inline-flex items-center rounded-md bg-amber-100 px-1.5 py-px text-xs leading-5 font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-200"
 										>
 											แนะนำ
 										</span>
