@@ -207,9 +207,14 @@
 	);
 
 	let activeFaq = $state<string>('');
+	let hasInitializedFaq = $state(false);
+
 	$effect(() => {
-		if (faqList.length > 0 && !faqList.some((f) => f.id === activeFaq)) {
+		if (faqList.length > 0 && !hasInitializedFaq) {
 			activeFaq = faqList[0].id;
+			hasInitializedFaq = true;
+		} else if (activeFaq !== '' && !faqList.some((f) => f.id === activeFaq)) {
+			activeFaq = '';
 		}
 	});
 </script>
@@ -387,7 +392,7 @@
 			</div>
 		</section>
 
-		<!-- Section 1: ความต้องการบริจาคด่วน -->
+		<!-- Section 1: รับบริจาคด่วน -->
 		<section class="space-y-3 sm:space-y-4">
 			<div class="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
 				<!-- Title & Subtitle -->
@@ -472,21 +477,6 @@
 					<!-- <p class="mt-1 max-w-md text-xs text-slate-500 sm:text-sm">
 						{t.donationsEmptyDesc}
 					</p> -->
-					<div class="mt-5 flex flex-wrap items-center justify-center gap-3">
-						<a
-							href="/donations"
-							class="inline-flex items-center gap-1.5 rounded-xl bg-[#FF5C00] px-4 py-2.5 text-xs font-bold text-white shadow-xs transition-colors hover:bg-[#E05200] sm:text-sm"
-						>
-							<Package class="h-4 w-4" />
-							<span>{t.allDonationsLink}</span>
-						</a>
-						<a
-							href="/donations/track"
-							class="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 sm:text-sm"
-						>
-							<span>{t.trackDonationLink}</span>
-						</a>
-					</div>
 				</div>
 			{/if}
 		</section>
@@ -570,15 +560,6 @@
 					<h3 class="text-base font-bold text-slate-900 sm:text-lg">
 						{t.volunteersEmptyTitle}
 					</h3>
-					<div class="mt-5 flex flex-wrap items-center justify-center gap-3">
-						<button
-							type="button"
-							onclick={() => (devModalOpen = true)}
-							class="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-[#059669] px-4 py-2.5 text-xs font-bold text-white shadow-xs transition-colors hover:bg-[#047857] sm:text-sm"
-						>
-							<span>{t.allMissionsBtn}</span>
-						</button>
-					</div>
 				</div>
 			{/if}
 		</section>
