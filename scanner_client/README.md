@@ -41,7 +41,9 @@ flowchart LR
 ```
 
 1. **Kiosk UI**: QR และบัตรเข้าสู่หน้าแสดงผู้ลงทะเบียนและสมาชิกครัวเรือนชุดเดียวกัน
-2. **Card Engine**: อ่านเลขประจำตัวประชาชน 13 หลักเพื่อค้นหาเท่านั้น; ชื่อ ที่อยู่ และรูปจากบัตรไม่ถูกส่งเข้า API
+2. **Card Engine**: ใช้เลขประจำตัวประชาชน 13 หลักเพื่อค้นหา; ชื่อและที่อยู่จากบัตรไม่ถูกส่งเข้า API ตอนค้นหาหรือรายงานตัว
+   ยกเว้นรูปจากชิป: ถ้าเปิด face check และผลเป็น `match` ตอนรายงานตัวด้วยบัตร หน้า kiosk แนบรูปจากชิปไปกับ `/check-in`
+   server เก็บเป็นรูปของเจ้าของบัตรเฉพาะเมื่อยังไม่มีรูป (ไม่ทับรูปเดิม; รูปผิดรูปแบบหรือบันทึกไม่ได้ก็รายงานตัวสำเร็จตามปกติ)
 3. **Kiosk API**: Python Client แนบ `X-Device-Id` และ `X-Device-Secret` เฉพาะคำขอ same-origin ไปยัง `/api/v1/scanner/kiosk/lookup`, `/check-in`, `/config`, `/register` และ `/staff-pin/verify`; server ตรวจ device และใช้ศูนย์ที่ผูกกับ device
 4. **Check-in**: เจ้าหน้าที่เลือกสมาชิกที่มาถึง ระบบเปลี่ยนเฉพาะผู้ที่เลือกจาก `pre_registered` เป็น `arriving` และสร้าง QR แบบไม่มีข้อมูลส่วนบุคคล
 5. **Wristband**: พิมพ์ label 1 ดวงต่อคนออกเครื่องพิมพ์ label ทันที (ไม่มี print dialog) และสั่งพิมพ์ซ้ำจากผลเดิมโดยไม่ส่ง check-in ซ้ำ — ดู [เครื่องพิมพ์ Label XP-365B](#-เครื่องพิมพ์-label-xp-365b-usb-label-printer)
@@ -569,7 +571,14 @@ sudo python3 inspect_card_rfpro.py --full          # อ่านทั้งใ
 ตรวจว่าคนที่เสียบบัตรตรงกับรูปในชิปบัตรหรือไม่ ทำในเครื่องทั้งหมด (`app/face/`): YuNet หาใบหน้า,
 SFace เทียบหน้า, MiniFASNet ตรวจว่าเป็นคนจริง ภาพจากกล้อง รูปในชิป และ embedding อยู่ใน RAM เท่านั้น
 ไม่เขียนดิสก์ ไม่ log ไม่ส่งไป server เบราว์เซอร์ได้กลับมาแค่ผล (`match` / `not_confirmed` / `retry` / `skipped`)
-หรือคำแนะนำ (เช่น `too_far`) ผลไม่ผ่าน**ไม่ปฏิเสธใคร** แต่ต้องให้เจ้าหน้าที่ตรวจ
+หรือคำแนะนำ (เช่น `too_far`) ยกเว้นรูปจากชิปของการรายงานตัวที่ผลเป็น `match` ซึ่งส่งกลับให้หน้าเว็บครั้งเดียวเพื่อแนบไปกับ `/check-in`
+
+เมื่อ `KIOSK_FACE_CHECK=on` ไปต่อเองได้เฉพาะผล `match` ผลอื่นทั้งหมด (`not_confirmed`, ข้าม, ไม่มีรูปในชิป, หมดเวลา,
+กล้องหรือ scanner_client เสีย, ไม่ยินยอม) **ต้องให้เจ้าหน้าที่ใส่ PIN 6 หลักของเครื่อง** ก่อน kiosk จะลงทะเบียน (walk-in)
+หรือแสดงรายชื่อสมาชิก (check-in) ระบบไม่ปฏิเสธใครถาวร แต่ให้เจ้าหน้าที่ตรวจบัตรด้วยตาแล้วยืนยันด้วย PIN
+PIN ตั้ง/ดูได้ที่ `/system-management/scanners` (SA เท่านั้น) ตรวจผ่าน `/api/v1/scanner/kiosk/staff-pin/verify`
+โดย scanner_client แนบ device credential ให้ ดู [draft-kiosk-staff-pin-face-bypass](../docs/changes/draft-kiosk-staff-pin-face-bypass.md)
+**ก่อนเปิด `on` ต้องตั้ง PIN ให้เครื่องนั้นแล้ว** ไม่งั้นจะข้ามด้วย PIN ไม่ได้ (`staff_pin_not_set`)
 
 ```bash
 ./models/download_models.sh        # ครั้งแรก (setup_big_kiosk.sh ทำให้ด้วย) ตรวจ sha256 ทุกไฟล์
@@ -577,7 +586,7 @@ SFace เทียบหน้า, MiniFASNet ตรวจว่าเป็น�
 #        KIOSK_CAMERA_LABEL=JSK-RGB  # กล้องที่ใช้ถ่ายหน้า (ตัวเดียวกับสแกน QR)
 ```
 
-- **ผลตรวจยังไม่ถูกส่งไป server**: `/register` และ `/check-in` ใช้ schema แบบ `strict` จึงยังแนบ `identity_check` ไม่ได้
+- **ผลตรวจยังไม่ถูกส่งไป server** (มีแค่รูปจากชิปเมื่อ `match`): `/register` และ `/check-in` ใช้ schema แบบ `strict` จึงยังแนบ `identity_check` ไม่ได้
   จนกว่า Phase 3 (CR + schema) จะเสร็จ ตอนนี้ผลมีผลแค่ต่อหน้าจอ kiosk และบรรทัดสรุปใน log (`Face check finished: flow=… result=…`)
 - **เกณฑ์ยังไม่ได้ calibrate** กับรูปบัตรจริง (`app/face/profiles.py`) ใช้ `./inspect_face.py` ทดสอบด้วยบัตรและหน้าของทีมเอง
   (`--card --show-scores`; ลองส่องบัตร รูปพิมพ์ หรือจอมือถือให้กล้องด้วย) อย่าใช้หน้าคนอื่นโดยไม่ได้รับความยินยอม
