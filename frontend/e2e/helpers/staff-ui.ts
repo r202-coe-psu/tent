@@ -93,11 +93,11 @@ export async function registerHouseholdViaUi(
 	for (const [i, member] of members.entries()) {
 		if (i > 0) await page.getByRole('button', { name: 'เพิ่มสมาชิก' }).click();
 		// Once the tab bar exists, select this member's tab explicitly (the tab's accessible name
-		// is prefixed with its 1-based index, "3.สมาชิก 3", so match by substring). Then locate
+		// is prefixed with its 1-based index, "3.สมาชิกคนที่ 3", so match by substring). Then locate
 		// the card by its position id, not by role — inactive tabs' cards are hidden, so counting
 		// visible "สมาชิก"-named regions no longer finds the new one.
 		if (i + 1 >= MEMBER_TABS_MIN) {
-			await page.getByRole('tab', { name: `สมาชิก ${i + 1}` }).click();
+			await page.getByRole('tab', { name: `สมาชิกคนที่ ${i + 1}` }).click();
 		}
 		const card = page.locator(`#unified-member-${i}`);
 		await card.getByPlaceholder('ชื่อจริง').fill(member.firstName);
