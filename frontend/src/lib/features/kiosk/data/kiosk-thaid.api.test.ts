@@ -32,14 +32,16 @@ describe('createKioskThaidSession', () => {
 			jsonResponse({
 				session_id: SESSION_ID,
 				qr_url: 'https://tent.example.go.th/api/v1/auth/oauth/thaid/start?session_id=abc',
-				expires_at: 1_780_000_000_000
+				expires_at: 1_780_000_000_000,
+				expires_in_sec: 180
 			})
 		);
 
 		await expect(createKioskThaidSession()).resolves.toEqual({
 			sessionId: SESSION_ID,
 			qrUrl: 'https://tent.example.go.th/api/v1/auth/oauth/thaid/start?session_id=abc',
-			expiresAt: 1_780_000_000_000
+			expiresAt: 1_780_000_000_000,
+			expiresInSec: 180
 		});
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 		const [url, init] = fetchMock.mock.calls[0];
@@ -53,7 +55,9 @@ describe('createKioskThaidSession errors', () => {
 	it.each([
 		[403, 'disabled', { error: { code: 'KIOSK_METHOD_DISABLED' } }],
 		[429, 'rate_limited', { error: { code: 'KIOSK_RATE_LIMITED' } }],
-		[401, 'unavailable', { error: { code: 'DEVICE_AUTH_FAILED' } }],
+		[401, 'unauthorized', { error: { code: 'DEVICE_AUTH_FAILED' } }],
+		[400, 'invalid', { error: { code: 'INVALID_INPUT' } }],
+		[408, 'unavailable', { error: { code: 'REQUEST_TIMEOUT' } }],
 		[503, 'unavailable', { error: { code: 'DEPENDENCY_UNAVAILABLE' } }]
 	])('maps HTTP %i to a KioskThaidError of kind %s', async (status, kind, body) => {
 		stubFetch(jsonResponse(body, { status, headers: { 'retry-after': '30' } }));
@@ -94,12 +98,13 @@ describe('createKioskThaidSession errors', () => {
 describe('getKioskThaidSessionStatus', () => {
 	it('POSTs the session id and returns the status with its expiry', async () => {
 		const fetchMock = stubFetch(
-			jsonResponse({ status: 'completed', expires_at: 1_780_000_000_000 })
+			jsonResponse({ status: 'completed', expires_at: 1_780_000_000_000, expires_in_sec: 42 })
 		);
 
 		await expect(getKioskThaidSessionStatus(SESSION_ID)).resolves.toEqual({
 			status: 'completed',
-			expiresAt: 1_780_000_000_000
+			expiresAt: 1_780_000_000_000,
+			expiresInSec: 42
 		});
 		const [url, init] = fetchMock.mock.calls[0];
 		expect(url).toBe('/api/v1/scanner/kiosk/thaid/session/status');
@@ -127,7 +132,8 @@ describe('getKioskThaidSessionStatus', () => {
 
 		await expect(getKioskThaidSessionStatus(SESSION_ID)).rejects.toMatchObject({
 			status: 400,
-			code: 'INVALID_INPUT'
+			code: 'INVALID_INPUT',
+			kind: 'invalid'
 		});
 	});
 });

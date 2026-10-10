@@ -26,7 +26,9 @@ export const POST: RequestHandler = async ({ request }) => {
 			scannerServerRepository
 		);
 		const shelter = await findMasterByCode(principal.shelter_code);
-		const thaidCheckInEnabled = await isKioskThaidCheckInAllowed(principal.shelter_code);
+		const thaidCheckInEnabled = await isKioskThaidCheckInAllowed(principal.shelter_code, {
+			shelter
+		});
 		return json(
 			{
 				shelter_code: principal.shelter_code,

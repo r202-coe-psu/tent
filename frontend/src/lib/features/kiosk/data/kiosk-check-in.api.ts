@@ -16,6 +16,8 @@ export interface KioskEvacueeSummary {
 	is_primary: boolean;
 	phone_matched?: boolean;
 	selectable: boolean;
+	/** Unmasked name + phone for the printed label; only on pre-registered/arriving members. */
+	label?: { name: string; phone: string | null };
 }
 
 export interface KioskLookupResult {
@@ -205,8 +207,13 @@ export async function checkInSelectedMembers(
 	options: { signal?: AbortSignal; batchLimit?: number } & KioskCheckInPhotoOptions = {}
 ): Promise<KioskCheckInBatchResult> {
 	const batchLimit = Math.min(20, Math.max(1, options.batchLimit ?? 20));
-	const batches = Array.from({ length: Math.ceil(evacueeIds.length / batchLimit) }, (_, index) =>
-		evacueeIds.slice(index * batchLimit, (index + 1) * batchLimit)
+	// The primary goes first, so the batch carrying the card photo / ThaiD session is sent (and
+	// verified by the server) before any other member of a large household is written.
+	const ordered = evacueeIds.includes(primaryEvacueeId)
+		? [primaryEvacueeId, ...evacueeIds.filter((id) => id !== primaryEvacueeId)]
+		: evacueeIds;
+	const batches = Array.from({ length: Math.ceil(ordered.length / batchLimit) }, (_, index) =>
+		ordered.slice(index * batchLimit, (index + 1) * batchLimit)
 	);
 	const members: KioskCheckInMemberResult[] = [];
 	let shelterCode = '';

@@ -18,26 +18,37 @@ export interface ThaidSessionApi {
 
 export const THAID_POLL_INTERVAL_MS = 2000;
 
+/** Only "try again later" failures keep a poll going; the rest are final. */
+function isRetryable(error: KioskThaidError): boolean {
+	return error.kind === 'unavailable' || error.kind === 'rate_limited';
+}
+
 /**
  * One kiosk ThaiD scan: create a session (QR) → poll its status every 2 s until the phone has
  * confirmed (`completed`, which exposes `gate` for lookup / check-in), or the QR `expired` /
  * was `cancelled` (replaced by a newer one), or creating it failed (`error`).
  *
- * Polling never overlaps (the next tick is scheduled when the previous answer arrived), and a
- * network blip is retried until the QR expires. The local clock also ends the wait at `expiresAt`
- * so the screen flips without waiting for a poll.
+ * Polling never overlaps (the next tick is scheduled when the previous answer arrived). A network
+ * blip / timeout / 5xx / 429 is retried until the QR expires; any other 4xx is final (`error`).
+ *
+ * The deadline is the server's "seconds left" (`expires_in_sec`) added to the kiosk's monotonic
+ * clock (`performance.now()`) when each answer arrives, so a kiosk wall clock that is wrong or gets
+ * corrected never ends a QR early or keeps it alive. When the deadline passes, one last status call
+ * decides: a confirmation in the final seconds is kept (`completed`), anything else is `expired`.
  */
 export class ThaidSession {
 	state = $state<ThaidSessionState>('idle');
 	sessionId = $state<string | null>(null);
 	qrUrl = $state<string | null>(null);
-	/** Unix ms. */
-	expiresAt = $state<number | null>(null);
+	/** When the QR stops being valid, in `performance.now()` ms (monotonic, not the wall clock). */
+	deadline = $state<number | null>(null);
 	errorKind = $state<KioskThaidErrorKind | null>(null);
 	retryAfterSeconds = $state<number | null>(null);
 
 	private pollTimer: ReturnType<typeof setTimeout> | null = null;
 	private expiryTimer: ReturnType<typeof setTimeout> | null = null;
+	/** Identifies the latest status call; an older answer that arrives late is dropped. */
+	private pollSeq = 0;
 	/** Bumped on every start / restart / destroy so an answer for a replaced session is dropped. */
 	private generation = 0;
 
@@ -76,7 +87,7 @@ export class ThaidSession {
 		this.clearTimers();
 		this.sessionId = null;
 		this.qrUrl = null;
-		this.expiresAt = null;
+		this.deadline = null;
 		this.errorKind = null;
 		this.retryAfterSeconds = null;
 		this.state = 'creating';
@@ -94,13 +105,26 @@ export class ThaidSession {
 		}
 		this.sessionId = created.sessionId;
 		this.qrUrl = created.qrUrl;
-		this.expiresAt = created.expiresAt;
 		this.state = 'pending';
+		this.setDeadline(created);
 		this.schedulePoll();
-		this.expiryTimer = setTimeout(
-			() => this.finish('expired'),
-			Math.max(0, created.expiresAt - Date.now())
-		);
+	}
+
+	/**
+	 * (Re)arm the deadline from a server answer: its relative `expiresInSec` first; the absolute
+	 * `expiresAt` (server clock, so only meaningful if the kiosk clock agrees) just as a fallback.
+	 */
+	private setDeadline(reply: { expiresInSec?: number; expiresAt?: number }): void {
+		const mono = performance.now();
+		let remainingMs: number;
+		if (reply.expiresInSec !== undefined) remainingMs = reply.expiresInSec * 1000;
+		else if (reply.expiresAt !== undefined) remainingMs = reply.expiresAt - Date.now();
+		else return;
+		remainingMs = Math.max(0, remainingMs);
+		this.deadline = mono + remainingMs;
+		if (this.expiryTimer !== null) clearTimeout(this.expiryTimer);
+		const generation = this.generation;
+		this.expiryTimer = setTimeout(() => void this.finalPoll(generation), remainingMs);
 	}
 
 	/** Stop timers and cancel the server session when it is still live (pending or completed). */
@@ -132,22 +156,49 @@ export class ThaidSession {
 	private async poll(generation: number): Promise<void> {
 		this.pollTimer = null;
 		if (!this.isCurrent(generation) || !this.sessionId) return;
+		const seq = ++this.pollSeq;
 		let reply: KioskThaidStatusResult;
 		try {
 			reply = await this.api.getStatus(this.sessionId);
 		} catch (error) {
-			if (!this.isCurrent(generation)) return;
-			// A blip (timeout, 5xx) is retried on the next tick until the QR expires; only a switched-off
-			// method is final.
-			if (error instanceof KioskThaidError && error.kind === 'disabled') this.fail(error);
+			if (!this.isCurrent(generation) || seq !== this.pollSeq) return;
+			// A blip (network, timeout, 5xx, 429) is retried on the next tick until the QR expires; any
+			// other 4xx (switched off, not authorised, bad request) cannot get better by asking again.
+			if (error instanceof KioskThaidError && !isRetryable(error)) this.fail(error);
 			else this.schedulePoll();
 			return;
 		}
-		if (!this.isCurrent(generation)) return;
-		if (reply.status === 'completed') return this.finish('completed');
-		if (reply.status === 'cancelled') return this.finish('cancelled');
-		if (reply.status === 'expired' || reply.status === 'consumed') return this.finish('expired');
+		if (!this.isCurrent(generation) || seq !== this.pollSeq) return;
+		if (this.settle(reply)) return;
+		this.setDeadline(reply);
 		this.schedulePoll();
+	}
+
+	/** The deadline passed: ask the server once more so a late confirmation is not lost. */
+	private async finalPoll(generation: number): Promise<void> {
+		this.expiryTimer = null;
+		if (!this.isCurrent(generation) || !this.sessionId) return;
+		if (this.pollTimer !== null) clearTimeout(this.pollTimer);
+		this.pollTimer = null;
+		const seq = ++this.pollSeq;
+		let reply: KioskThaidStatusResult | null = null;
+		try {
+			reply = await this.api.getStatus(this.sessionId);
+		} catch {
+			// Nothing more to wait for: the QR is past its deadline either way.
+		}
+		if (!this.isCurrent(generation) || seq !== this.pollSeq) return;
+		if (reply && this.settle(reply)) return;
+		this.finish('expired');
+	}
+
+	/** Apply a terminal status; false while the session is still waiting for the scan. */
+	private settle(reply: KioskThaidStatusResult): boolean {
+		if (reply.status === 'completed') this.finish('completed');
+		else if (reply.status === 'cancelled') this.finish('cancelled');
+		else if (reply.status === 'expired' || reply.status === 'consumed') this.finish('expired');
+		else return false;
+		return true;
 	}
 
 	private fail(error: unknown): void {

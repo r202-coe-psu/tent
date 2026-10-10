@@ -61,8 +61,18 @@ describe('POST /api/v1/scanner/kiosk/config', () => {
 			walk_in_registration_enabled: true,
 			thaid_check_in_enabled: true
 		});
+		expect(mockFindShelter).toHaveBeenCalledTimes(1);
 		expect(mockFindShelter).toHaveBeenCalledWith('SH001');
-		expect(mockThaidAllowed).toHaveBeenCalledWith('SH001');
+		// The shelter read once here is handed to the gate so it is not fetched a second time.
+		expect(mockThaidAllowed).toHaveBeenCalledWith('SH001', {
+			shelter: {
+				code: 'SH001',
+				feature_flags: {
+					kiosk_phone_check_in_enabled: true,
+					kiosk_walk_in_registration_enabled: true
+				}
+			}
+		});
 		expect(response.headers.get('cache-control')).toBe('no-store');
 		expect(response.headers.get('pragma')).toBe('no-cache');
 	});

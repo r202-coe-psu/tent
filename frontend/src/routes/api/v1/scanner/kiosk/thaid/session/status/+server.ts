@@ -31,7 +31,11 @@ export const POST: RequestHandler = async ({ request }) => {
 			return json({ status: 'expired' }, { status: 404, headers: kioskThaidNoStoreHeaders });
 		}
 		return json(
-			{ status: session.status, expires_at: session.expiresAt },
+			{
+				status: session.status,
+				expires_at: session.expiresAt,
+				expires_in_sec: Math.max(0, Math.ceil((session.expiresAt - Date.now()) / 1000))
+			},
 			{ headers: kioskThaidNoStoreHeaders }
 		);
 	} catch (error) {

@@ -111,7 +111,11 @@ export const POST: RequestHandler = async ({ request }) => {
 			}
 			// FR-KTD-23: the 13-digit id comes only from the server-held session; lookup does not consume it.
 			const session = getKioskSessionForDevice(parsed.data.session_id, principal.registry_id);
-			if (session?.status !== 'completed' || !session.citizen) {
+			if (
+				session?.status !== 'completed' ||
+				!session.citizen ||
+				session.binding?.shelter_code !== principal.shelter_code
+			) {
 				return json(
 					{
 						error: {

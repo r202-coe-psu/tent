@@ -71,6 +71,36 @@ describe('checkInSelectedMembers batching', () => {
 		expect(response.retryable_evacuee_ids).toEqual([]);
 	});
 
+	it('moves the primary into the first batch of a household over twenty', async () => {
+		const primaryId = 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV';
+		const others = Array.from(
+			{ length: 24 },
+			(_, index) => `evacuee:${String(index).padStart(26, '0')}`
+		);
+		const batches: string[][] = [];
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+				const body = JSON.parse(String(init?.body)) as { evacuee_ids: string[] };
+				batches.push(body.evacuee_ids);
+				return new Response(
+					JSON.stringify({
+						shelter_code: 'SH001',
+						members: body.evacuee_ids.map((evacuee_id) => ({ evacuee_id, status: 'checked_in' }))
+					}),
+					{ status: 200, headers: { 'content-type': 'application/json' } }
+				);
+			})
+		);
+
+		const response = await checkInSelectedMembers(primaryId, [...others, primaryId]);
+
+		expect(batches.map((batch) => batch.length)).toEqual([20, 5]);
+		expect(batches[0][0]).toBe(primaryId);
+		expect(batches.flat().sort()).toEqual([...others, primaryId].sort());
+		expect(response.retryable_evacuee_ids).toEqual([]);
+	});
+
 	it('preserves completed batches and exposes retryable ids when a later batch fails', async () => {
 		const primaryId = 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV';
 		const selectedIds = Array.from({ length: 45 }, (_, index) => `evacuee:${index}`);
@@ -191,15 +221,16 @@ describe('checkInSelectedMembers card photo', () => {
 			citizenId: '1234567890123'
 		});
 		expect(bodies).toHaveLength(2);
-		expect(bodies[0]).not.toHaveProperty('photo');
-		expect(bodies[0]).not.toHaveProperty('source');
-		expect(bodies[1]).toEqual({
+		expect(bodies[0]).toEqual({
 			primary_evacuee_id: primaryId,
-			evacuee_ids: [others[2], primaryId],
+			evacuee_ids: [primaryId, others[0]],
 			source: 'smart-card',
 			citizen_id: '1234567890123',
 			photo
 		});
+		expect(bodies[1]).not.toHaveProperty('photo');
+		expect(bodies[1]).not.toHaveProperty('source');
+		expect(bodies[1]).toMatchObject({ evacuee_ids: [others[1], others[2]] });
 	});
 });
 
@@ -209,7 +240,7 @@ describe('checkInSelectedMembers ThaiD session', () => {
 	const primaryId = 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV';
 	const sessionId = '0123456789abcdef0123456789abcdef';
 
-	it('sends the thaid source and session id, never a citizen id, on the primary batch only', async () => {
+	it('sends the primary first, with the thaid session on that batch only (never a citizen id)', async () => {
 		const others = Array.from(
 			{ length: 3 },
 			(_, index) => `evacuee:${String(index).padStart(26, '0')}`
@@ -238,14 +269,14 @@ describe('checkInSelectedMembers ThaiD session', () => {
 		});
 
 		expect(bodies).toEqual([
-			{ primary_evacuee_id: primaryId, evacuee_ids: [others[0], others[1]] },
 			{
 				primary_evacuee_id: primaryId,
-				evacuee_ids: [others[2], primaryId],
+				evacuee_ids: [primaryId, others[0]],
 				source: 'thaid',
 				thaid_session_id: sessionId,
 				photo: null
-			}
+			},
+			{ primary_evacuee_id: primaryId, evacuee_ids: [others[1], others[2]] }
 		]);
 	});
 });

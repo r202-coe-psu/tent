@@ -342,6 +342,21 @@ describe('POST /api/v1/scanner/kiosk/check-in source thaid', () => {
 		expect(getKioskSessionForDevice(sessionId, 'another-device-record')?.status).toBe('completed');
 	});
 
+	it('answers 409 for a session bound to another shelter and leaves it untouched', async () => {
+		const session = createKioskCheckInSession({
+			device_id: principal.registry_id,
+			shelter_code: 'SH002'
+		});
+		completeKioskSession(session.id, { pid: citizenId, sub: 'sub-1' });
+
+		const response = await send(body(session.id));
+
+		expect(response.status).toBe(409);
+		expect(await response.json()).toEqual(sessionInvalid);
+		expect(mockCheckIn).not.toHaveBeenCalled();
+		expect(getKioskSessionForDevice(session.id, principal.registry_id)?.status).toBe('completed');
+	});
+
 	it('checks in with the session citizen required on the primary, then consumes the session', async () => {
 		const sessionId = completedSession();
 
@@ -396,5 +411,56 @@ describe('POST /api/v1/scanner/kiosk/check-in source thaid', () => {
 		expect(text).not.toContain(citizenId);
 		expect(response.headers.get('cache-control')).toBe('no-store');
 		expect(mockHeartbeat).not.toHaveBeenCalled();
+	});
+
+	it('releases the session when the write throws so the same scan can be retried', async () => {
+		mockCheckIn.mockRejectedValueOnce(new Error('database unavailable'));
+		const sessionId = completedSession();
+
+		const failed = await send(body(sessionId));
+
+		expect(failed.status).toBe(500);
+		expect((await failed.json()).error.code).toBe('KIOSK_CHECK_IN_FAILED');
+		expect(getKioskSessionForDevice(sessionId, principal.registry_id)?.status).toBe('completed');
+
+		const retry = await send(body(sessionId));
+
+		expect(retry.status).toBe(200);
+		expect(mockCheckIn).toHaveBeenCalledTimes(2);
+		expect(getKioskSessionForDevice(sessionId, principal.registry_id)?.status).toBe('consumed');
+	});
+
+	it('releases the session when every member write failed', async () => {
+		mockCheckIn.mockResolvedValueOnce([
+			{ evacuee_id: primaryId, status: 'failed' },
+			{ evacuee_id: memberId, status: 'failed' }
+		] as never);
+		const sessionId = completedSession();
+
+		const response = await send(body(sessionId));
+
+		expect(response.status).toBe(200);
+		expect(getKioskSessionForDevice(sessionId, principal.registry_id)?.status).toBe('completed');
+	});
+
+	it('keeps the session consumed when at least one member was written', async () => {
+		mockCheckIn.mockResolvedValueOnce([
+			{ evacuee_id: primaryId, status: 'checked_in', qr_payload: primaryId },
+			{ evacuee_id: memberId, status: 'failed' }
+		] as never);
+		const sessionId = completedSession();
+
+		const response = await send(body(sessionId));
+
+		expect(response.status).toBe(200);
+		expect(getKioskSessionForDevice(sessionId, principal.registry_id)?.status).toBe('consumed');
+	});
+
+	it('keeps the session consumed after an identity mismatch', async () => {
+		mockCheckIn.mockRejectedValueOnce(new KioskThaidIdentityMismatchError());
+		const sessionId = completedSession();
+
+		expect((await send(body(sessionId))).status).toBe(409);
+		expect(getKioskSessionForDevice(sessionId, principal.registry_id)?.status).toBe('consumed');
 	});
 });

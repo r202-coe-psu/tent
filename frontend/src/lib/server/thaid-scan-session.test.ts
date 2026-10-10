@@ -8,6 +8,7 @@ import {
 	completeKioskSession,
 	consumeKioskSession,
 	cancelKioskSession,
+	releaseKioskSession,
 	_resetSessionsForTest
 } from './thaid-scan-session';
 import type { ThaiDAutofillProfile } from '$lib/features/people';
@@ -249,6 +250,36 @@ describe('thaid-scan-session', () => {
 			expect(consumeKioskSession(session.id, KIOSK_A.device_id)).toBeNull();
 		});
 
+		it('releases a consumed session back to completed with its citizen intact', () => {
+			const session = createKioskCheckInSession(KIOSK_A);
+			const citizen = { pid: '1234567890123', sub: 'sub-1' };
+			completeKioskSession(session.id, citizen);
+			consumeKioskSession(session.id, KIOSK_A.device_id);
+
+			expect(releaseKioskSession(session.id, KIOSK_B.device_id)).toBe(false);
+			expect(releaseKioskSession(session.id, KIOSK_A.device_id)).toBe(true);
+			expect(getKioskSessionForDevice(session.id, KIOSK_A.device_id)?.status).toBe('completed');
+			expect(consumeKioskSession(session.id, KIOSK_A.device_id)).toEqual(citizen);
+		});
+
+		it('does not release a session that is not consumed or is past its window', () => {
+			vi.useFakeTimers();
+			try {
+				vi.setSystemTime(new Date('2026-10-10T10:00:00Z'));
+				const session = createKioskCheckInSession(KIOSK_A);
+				expect(releaseKioskSession(session.id, KIOSK_A.device_id)).toBe(false); // pending
+				completeKioskSession(session.id, { pid: '1234567890123', sub: 'sub-1' });
+				expect(releaseKioskSession(session.id, KIOSK_A.device_id)).toBe(false); // completed
+				consumeKioskSession(session.id, KIOSK_A.device_id);
+
+				vi.setSystemTime(new Date('2026-10-10T10:03:01Z'));
+				expect(releaseKioskSession(session.id, KIOSK_A.device_id)).toBe(false);
+				expect(releaseKioskSession('missing', KIOSK_A.device_id)).toBe(false);
+			} finally {
+				vi.useRealTimers();
+			}
+		});
+
 		it('cancels idempotently for its own device and blocks later completion', () => {
 			const session = createKioskCheckInSession(KIOSK_A);
 
@@ -277,6 +308,20 @@ describe('thaid-scan-session', () => {
 			expect(getKioskSessionForDevice(first.id, KIOSK_A.device_id)?.status).toBe('cancelled');
 			expect(second.status).toBe('pending');
 			expect(otherDevice.status).toBe('pending');
+		});
+
+		it("cancels the same device's previous completed session when it creates a new one", () => {
+			const first = createKioskCheckInSession(KIOSK_A);
+			completeKioskSession(first.id, { pid: '1234567890123', sub: 'sub-1' });
+			const otherDevice = createKioskCheckInSession(KIOSK_B);
+			completeKioskSession(otherDevice.id, { pid: '3210987654321', sub: 'sub-2' });
+
+			const second = createKioskCheckInSession(KIOSK_A);
+
+			expect(getKioskSessionForDevice(first.id, KIOSK_A.device_id)?.status).toBe('cancelled');
+			expect(consumeKioskSession(first.id, KIOSK_A.device_id)).toBeNull();
+			expect(second.status).toBe('pending');
+			expect(otherDevice.status).toBe('completed');
 		});
 
 		it('removes cancelled sessions once their expiry passes', () => {
@@ -384,6 +429,42 @@ describe('thaid-scan-session', () => {
 
 			receive({ action: 'cancel', id: 'ipc-2' });
 			expect(getKioskSessionForDevice('ipc-2', KIOSK_A.device_id)?.status).toBe('cancelled');
+		});
+
+		it('broadcasts release and replays a release received from another worker', () => {
+			const spy = captureBroadcasts();
+			try {
+				const session = createKioskCheckInSession(KIOSK_A);
+				completeKioskSession(session.id, CITIZEN);
+				consumeKioskSession(session.id, KIOSK_A.device_id);
+				releaseKioskSession(session.id, KIOSK_A.device_id);
+
+				expect(spy.sent.at(-1)).toEqual({
+					topic: 'thaid-scan-session',
+					action: 'release',
+					id: session.id
+				});
+			} finally {
+				spy.restore();
+			}
+
+			const now = Date.now();
+			receive({
+				action: 'init_sync',
+				sessions: [
+					{
+						id: 'rel-1',
+						kind: 'kiosk_check_in',
+						createdAt: now,
+						expiresAt: now + 100_000,
+						status: 'consumed',
+						citizen: CITIZEN,
+						binding: KIOSK_A
+					}
+				]
+			});
+			receive({ action: 'release', id: 'rel-1' });
+			expect(getKioskSessionForDevice('rel-1', KIOSK_A.device_id)?.status).toBe('completed');
 		});
 
 		it('includes kiosk binding, citizen and non-pending status when answering init', () => {

@@ -52,23 +52,32 @@ if (workers === 1) {
 				activeSessions.set(message.session.id, message.session);
 			} else if (message.action === 'complete' && message.id && message.citizen) {
 				const s = activeSessions.get(message.id);
-				if (s) {
+				if (s && s.kind === 'kiosk_check_in' && s.status === 'pending') {
 					s.status = 'completed';
 					s.citizen = message.citizen;
 					if (message.expiresAt) s.expiresAt = message.expiresAt;
 				}
 			} else if (message.action === 'complete' && message.id && message.profile) {
 				const s = activeSessions.get(message.id);
-				if (s) {
+				if (s && (s.kind ?? 'member_scan') === 'member_scan' && s.status === 'pending') {
 					s.status = 'completed';
 					s.profile = message.profile;
 				}
 			} else if (message.action === 'cancel' && message.id) {
 				const s = activeSessions.get(message.id);
-				if (s) s.status = 'cancelled';
+				if (
+					s &&
+					s.kind === 'kiosk_check_in' &&
+					(s.status === 'pending' || s.status === 'completed')
+				) {
+					s.status = 'cancelled';
+				}
 			} else if (message.action === 'consume' && message.id) {
 				const s = activeSessions.get(message.id);
-				if (s) s.status = 'consumed';
+				if (s && s.kind === 'kiosk_check_in' && s.status === 'completed') s.status = 'consumed';
+			} else if (message.action === 'release' && message.id) {
+				const s = activeSessions.get(message.id);
+				if (s && s.kind === 'kiosk_check_in' && s.status === 'consumed') s.status = 'completed';
 			} else if (message.action === 'expire' && message.id) {
 				activeSessions.delete(message.id);
 			} else if (message.action === 'init') {

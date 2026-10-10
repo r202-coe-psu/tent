@@ -15,6 +15,8 @@
 		backUrl: string;
 		onretry: () => void;
 		onreset: () => void;
+		/** ThaiD: ask for a new QR; falls back to `onreset`. */
+		onrescan?: () => void;
 	}
 
 	let {
@@ -26,7 +28,8 @@
 		homeUrl,
 		backUrl,
 		onretry,
-		onreset
+		onreset,
+		onrescan
 	}: Props = $props();
 
 	const isMethodDisabled = $derived(lookupErrorCode === 'KIOSK_METHOD_DISABLED');
@@ -47,7 +50,9 @@
 <!-- Rendered in a KioskNoticePanel's actions: the panel stacks and sizes them. -->
 {#if !backIsPrimary}
 	{#if isThaidSessionInvalid}
-		<Button type="button" onclick={onreset} class={KIOSK_NOTICE_PRIMARY_ACTION}>สแกนใหม่</Button>
+		<Button type="button" onclick={onrescan ?? onreset} class={KIOSK_NOTICE_PRIMARY_ACTION}
+			>สแกนใหม่</Button
+		>
 	{:else if isPhoneLookupMiss}
 		<Button type="button" onclick={onreset} class={KIOSK_NOTICE_PRIMARY_ACTION}
 			>กรอกเบอร์ใหม่</Button

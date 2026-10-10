@@ -21,22 +21,6 @@ export { KioskIdleTimeout, KIOSK_IDLE_TIMEOUT_MS } from './ui/kiosk-idle-timeout
 export { navigateToKioskHome } from './application/kiosk-navigation';
 export { registerKioskWalkIn, type GateInput } from './data/kiosk-check-in.api';
 export { fetchKioskConfig } from './data/kiosk-config.api';
-export {
-	cancelKioskThaidSession,
-	createKioskThaidSession,
-	getKioskThaidSessionStatus,
-	KioskThaidError,
-	type KioskThaidErrorKind,
-	type KioskThaidSession,
-	type KioskThaidSessionStatus,
-	type KioskThaidStatusResult
-} from './data/kiosk-thaid.api';
-export {
-	ThaidSession,
-	THAID_POLL_INTERVAL_MS,
-	type ThaidSessionApi,
-	type ThaidSessionState
-} from './application/thaid-session.svelte';
 export { KIOSK_THAID_PATH } from './domain/identity-method';
 export {
 	buildKioskContextQuery,

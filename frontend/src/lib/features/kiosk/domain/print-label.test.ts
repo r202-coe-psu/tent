@@ -10,12 +10,17 @@ import {
 	KIOSK_QR_MAX_DOTS_PER_MODULE,
 	KIOSK_QR_MIN_MM,
 	KIOSK_QR_QUIET_ZONE_MODULES,
+	KIOSK_LABEL_CHECKBOX,
+	KIOSK_LABEL_CHECKLIST,
+	KIOSK_LABEL_DIVIDER_MM,
 	KIOSK_LABEL_GAP_MM,
-	KIOSK_LABEL_TEXT_MM,
 	KIOSK_LABEL_TEXT,
+	KIOSK_LABEL_TEXT_MIN_WIDTH_MM,
 	KIOSK_LABEL_TEXT_ROW_GAP_MM,
 	kioskLabelDots,
+	kioskLabelLayout,
 	kioskLabelPageCss,
+	layoutChecklist,
 	kioskQrBoxMm,
 	kioskQrPrintSize,
 	mmToDots,
@@ -40,11 +45,14 @@ describe('kiosk label size', () => {
 		expect(KIOSK_QR_COLOR).toEqual({ dark: '#000000', light: '#FFFFFF' });
 	});
 
-	it('stacks the QR above the text block', () => {
-		expect(kioskQrBoxMm() + KIOSK_LABEL_GAP_MM + KIOSK_LABEL_TEXT_MM).toBeLessThanOrEqual(
-			KIOSK_LABEL_MM.height - KIOSK_LABEL_PADDING_MM * 2
-		);
-		expect(kioskQrBoxMm()).toBeLessThanOrEqual(KIOSK_LABEL_MM.width - KIOSK_LABEL_PADDING_MM * 2);
+	it('puts the QR beside a text column at least the minimum width', () => {
+		expect(
+			KIOSK_LABEL_TEXT_MIN_WIDTH_MM +
+				KIOSK_LABEL_GAP_MM * 2 +
+				KIOSK_LABEL_DIVIDER_MM +
+				kioskQrBoxMm()
+		).toBeLessThanOrEqual(KIOSK_LABEL_MM.width - KIOSK_LABEL_PADDING_MM * 2 + 1e-9);
+		expect(kioskQrBoxMm()).toBeLessThanOrEqual(KIOSK_LABEL_MM.height - KIOSK_LABEL_PADDING_MM * 2);
 	});
 });
 
@@ -83,9 +91,10 @@ describe('kioskQrPrintSize', () => {
 
 	it('keeps the visible QR modules on the label after the horizontal offset', () => {
 		const size = kioskQrPrintSize(QRCode.create(SAMPLE_EVACUEE_ID, {}).modules.size);
-		const sideWhiteMm =
-			(KIOSK_LABEL_MM.width - size.sizeMm) / 2 + dotsToMm(size.margin * size.dotsPerModule);
-		expect(sideWhiteMm).toBeGreaterThan(Math.abs(KIOSK_LABEL_OFFSET_X_MM));
+		const { qr } = kioskLabelLayout(size.widthPx);
+		const marginDots = size.margin * size.dotsPerModule;
+		expect(qr.x + marginDots).toBeGreaterThan(0);
+		expect(qr.x + size.widthPx - marginDots).toBeLessThan(kioskLabelDots().width);
 	});
 
 	it('shrinks rather than overflowing the label for very dense codes', () => {
@@ -105,21 +114,75 @@ describe('kiosk label canvas', () => {
 
 	it('converts pt to printer dots', () => {
 		expect(ptToDots(72)).toBe(203);
-		expect(ptToDots(KIOSK_LABEL_TEXT.name.pt)).toBeCloseTo(33.83, 2);
+		expect(ptToDots(KIOSK_LABEL_TEXT.name.pt)).toBeCloseTo(45.11, 2);
 	});
 
-	it('fits QR, gaps and every text row inside the label height', () => {
-		const size = kioskQrPrintSize(QRCode.create(SAMPLE_EVACUEE_ID, {}).modules.size);
-		const rows = [
-			KIOSK_LABEL_TEXT.caption.pt * KIOSK_LABEL_TEXT.caption.lineHeight,
-			KIOSK_LABEL_TEXT.name.pt * KIOSK_LABEL_TEXT.name.lineHeight * KIOSK_LABEL_TEXT.name.maxLines,
-			KIOSK_LABEL_TEXT.detail.pt * KIOSK_LABEL_TEXT.detail.lineHeight
-		].reduce((sum, pt) => sum + ptToDots(pt), 0);
+	it('fits the name, phone and a two-row checklist inside the label height', () => {
+		const { name, phone, checklist } = KIOSK_LABEL_TEXT;
+		const checkRow = Math.max(
+			mmToDots(KIOSK_LABEL_CHECKBOX.sizeMm),
+			ptToDots(checklist.pt) * checklist.lineHeight
+		);
 		const used =
-			mmToDots(KIOSK_LABEL_PADDING_MM * 2 + KIOSK_LABEL_GAP_MM + KIOSK_LABEL_TEXT_ROW_GAP_MM * 2) +
-			size.widthPx +
-			rows;
+			mmToDots(KIOSK_LABEL_PADDING_MM * 2 + KIOSK_LABEL_TEXT_ROW_GAP_MM) +
+			ptToDots(name.pt) * name.lineHeight * name.maxLines +
+			ptToDots(phone.pt) * phone.lineHeight +
+			checkRow * 2 +
+			mmToDots(KIOSK_LABEL_CHECKBOX.rowGapMm);
 		expect(used).toBeLessThanOrEqual(kioskLabelDots().height);
+	});
+});
+
+describe('kioskLabelLayout', () => {
+	const size = kioskQrPrintSize(QRCode.create(SAMPLE_EVACUEE_ID, {}).modules.size);
+	const layout = kioskLabelLayout(size.widthPx);
+	const { width, height } = kioskLabelDots();
+
+	it('right-aligns the QR inside the padding and centres it vertically', () => {
+		expect(layout.qr.x + size.widthPx).toBe(
+			width -
+				Math.round(mmToDots(KIOSK_LABEL_PADDING_MM)) +
+				Math.round(mmToDots(KIOSK_LABEL_OFFSET_X_MM))
+		);
+		expect(Math.abs(layout.qr.y * 2 + size.widthPx - height)).toBeLessThanOrEqual(1);
+		expect(Number.isInteger(layout.qr.x) && Number.isInteger(layout.qr.y)).toBe(true);
+	});
+
+	it('keeps the divider between the text column and the QR', () => {
+		expect(layout.text.x + layout.text.width).toBeLessThan(layout.divider.x);
+		expect(layout.divider.x + layout.divider.width).toBeLessThan(layout.qr.x);
+	});
+
+	it('leaves the text column at least its minimum width', () => {
+		expect(layout.text.width).toBeGreaterThanOrEqual(mmToDots(KIOSK_LABEL_TEXT_MIN_WIDTH_MM) - 2);
+	});
+});
+
+describe('layoutChecklist', () => {
+	const metrics = { boxSize: 2, textGap: 1, itemGap: 2 };
+	const measure = (text: string) => text.length;
+
+	it('keeps every item on one row when they fit', () => {
+		expect(layoutChecklist(['ab', 'cd'], 20, measure, metrics)).toEqual([
+			[
+				{ text: 'ab', x: 0, width: 5 },
+				{ text: 'cd', x: 7, width: 5 }
+			]
+		]);
+	});
+
+	it('wraps the item that would cross the column edge', () => {
+		expect(layoutChecklist(['ab', 'cd', 'ef'], 12, measure, metrics)).toEqual([
+			[
+				{ text: 'ab', x: 0, width: 5 },
+				{ text: 'cd', x: 7, width: 5 }
+			],
+			[{ text: 'ef', x: 0, width: 5 }]
+		]);
+	});
+
+	it('ships the staff ID card checklist', () => {
+		expect(KIOSK_LABEL_CHECKLIST).toEqual(['เช็คอิน', 'คัดกรอง', 'ที่พัก']);
 	});
 });
 

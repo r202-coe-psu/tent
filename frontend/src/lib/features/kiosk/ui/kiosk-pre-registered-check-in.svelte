@@ -7,7 +7,7 @@
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import UserCheck from '@lucide/svelte/icons/user-check';
 	import UsersRound from '@lucide/svelte/icons/users-round';
-	import QrNameTag from '$lib/components/qr-name-tag.svelte';
+	import QrIdCard from '$lib/components/qr-id-card.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { generateQrDataUrl, qrModuleCount } from '$lib/utils/qrcode';
 	import KioskCheckInWizard from './kiosk-check-in-wizard.svelte';
@@ -20,6 +20,7 @@
 		toExistingReportResults
 	} from '../domain/household-selection';
 	import {
+		KIOSK_LABEL_CHECKLIST,
 		KIOSK_LABEL_GAP_MM,
 		KIOSK_LABEL_MM,
 		KIOSK_LABEL_OFFSET_X_MM,
@@ -61,6 +62,8 @@
 		onprintbusychange?: (busy: boolean) => void;
 		onregister?: (citizenId: string) => void;
 		onreset: () => void;
+		/** ThaiD only: scan again with a new QR once the verified session can no longer be used. */
+		onrescan?: () => void;
 		/** Keep the member list back while `hold` (e.g. the face check) is on screen. */
 		holdMembers?: boolean;
 		hold?: Snippet;
@@ -80,6 +83,7 @@
 		onprintbusychange,
 		onregister,
 		onreset,
+		onrescan,
 		holdMembers = false,
 		hold,
 		cardPhoto = null
@@ -422,9 +426,8 @@
 				if (!qr) throw new Error('QR image missing');
 				return renderKioskLabelPng({
 					qrSrc: qr.src,
-					caption: 'ชื่อ',
-					name: person ? fullName(person) : '',
-					detail: `ศูนย์ ${lookup?.shelter_code ?? ''}`
+					name: person ? labelName(person) : '',
+					phone: person?.label?.phone ?? null
 				});
 			})
 		);
@@ -439,6 +442,11 @@
 
 	function fullName(member: Pick<KioskEvacueeSummary, 'first_name' | 'last_name'>): string {
 		return [member.first_name, member.last_name].filter(Boolean).join(' ') || 'ไม่ระบุชื่อ';
+	}
+
+	/** The printed label carries the unmasked name; the screen keeps the masked one. */
+	function labelName(member: KioskEvacueeSummary): string {
+		return member.label?.name || fullName(member);
 	}
 
 	function statusLabel(status: string): string {
@@ -464,7 +472,10 @@
 	class="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-3"
 	aria-labelledby="check-in-title"
 >
-	<KioskCheckInWizard currentStep={wizardStep} />
+	<KioskCheckInWizard
+		currentStep={wizardStep}
+		step2Label={isThaidGate ? 'สแกนด้วย ThaiD' : undefined}
+	/>
 	<div class="no-print flex justify-start">
 		<KioskBackButton
 			href={backUrl}
@@ -560,6 +571,7 @@
 						{backUrl}
 						onretry={retryLookup}
 						{onreset}
+						{onrescan}
 					/>
 				{/snippet}
 			</KioskNoticePanel>
@@ -572,7 +584,11 @@
 				title="ไปพบเจ้าหน้าที่เพื่อยืนยันข้อมูล"
 				role="status"
 			>
-				<p>บัตรนี้ลงทะเบียนที่ตู้ไว้แล้ว ไม่ต้องลงทะเบียนซ้ำ</p>
+				{#if isThaidGate}
+					<p>ข้อมูลนี้ลงทะเบียนที่ตู้ไว้แล้ว กรุณาติดต่อเจ้าหน้าที่</p>
+				{:else}
+					<p>บัตรนี้ลงทะเบียนที่ตู้ไว้แล้ว ไม่ต้องลงทะเบียนซ้ำ</p>
+				{/if}
 				{#snippet actions()}
 					<Button type="button" onclick={onreset} class={KIOSK_NOTICE_PRIMARY_ACTION}
 						>กลับหน้าแรก</Button
@@ -858,14 +874,13 @@
 						)}
 						{@const qr = qrImages[result.evacuee_id]}
 						<div class="wristband" style:--qr-size="{qr?.sizeMm ?? kioskQrBoxMm()}mm">
-							<QrNameTag
+							<QrIdCard
 								variant="label"
-								class="gap-(--label-gap)"
 								src={qr?.src}
 								alt="QR ประจำตัวสำหรับใช้ภายในศูนย์"
-								caption="ชื่อ"
-								name={person ? fullName(person) : ''}
-								detail="ศูนย์ {lookup?.shelter_code ?? ''}"
+								name={person ? labelName(person) : ''}
+								phone={person?.label?.phone}
+								checklist={KIOSK_LABEL_CHECKLIST}
 							/>
 						</div>
 					{/each}

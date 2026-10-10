@@ -53,7 +53,8 @@ interface ClusterSessionPayload {
 
 interface ClusterMessage {
 	topic: 'thaid-scan-session';
-	action: 'create' | 'complete' | 'cancel' | 'consume' | 'expire' | 'init' | 'init_sync';
+	action:
+		'create' | 'complete' | 'cancel' | 'consume' | 'release' | 'expire' | 'init' | 'init_sync';
 	session?: ClusterSessionPayload;
 	sessions?: ClusterSessionPayload[];
 	id?: string;
@@ -114,6 +115,11 @@ function handleClusterMessage(msg: unknown) {
 		const session = sessions.get(m.id);
 		if (session && session.kind === 'kiosk_check_in' && session.status === 'completed') {
 			session.status = 'consumed';
+		}
+	} else if (m.action === 'release' && m.id) {
+		const session = sessions.get(m.id);
+		if (session && session.kind === 'kiosk_check_in' && session.status === 'consumed') {
+			session.status = 'completed';
 		}
 	} else if (m.action === 'expire' && m.id) {
 		const session = sessions.get(m.id);
@@ -230,11 +236,11 @@ export function createScanSession(ttlSeconds: number = 900): ScanSession {
 }
 
 export function createKioskCheckInSession(binding: KioskSessionBinding): ScanSession {
-	// One active session per kiosk: a new QR supersedes the device's pending one.
+	// One active session per kiosk: a new QR supersedes the device's pending or completed one.
 	for (const existing of [...sessions.values()]) {
 		if (
 			existing.kind === 'kiosk_check_in' &&
-			existing.status === 'pending' &&
+			(existing.status === 'pending' || existing.status === 'completed') &&
 			existing.binding?.device_id === binding.device_id
 		) {
 			cancelKioskSession(existing.id, binding.device_id);
@@ -303,6 +309,19 @@ export function consumeKioskSession(id: string, deviceId: string): KioskCitizen 
 	session.status = 'consumed';
 	broadcastCluster({ action: 'consume', id });
 	return session.citizen;
+}
+
+/**
+ * Undo a `consume` when the check-in write failed: the owning device's consumed session (still
+ * inside its window) goes back to `completed` with the citizen intact so the kiosk can retry.
+ */
+export function releaseKioskSession(id: string, deviceId: string): boolean {
+	const session = getKioskSessionForDevice(id, deviceId);
+	if (!session || session.status !== 'consumed') return false;
+
+	session.status = 'completed';
+	broadcastCluster({ action: 'release', id });
+	return true;
 }
 
 /** Idempotent; pending or completed session of this device becomes `cancelled`. */

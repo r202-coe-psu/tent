@@ -379,6 +379,17 @@ describe('POST /api/v1/scanner/kiosk/lookup source thaid', () => {
 		expect(mockLookup).not.toHaveBeenCalled();
 	});
 
+	it('answers 409 when the session is bound to another shelter than the kiosk', async () => {
+		const session = createKioskCheckInSession({ device_id: device, shelter_code: 'SH002' });
+		completeKioskSession(session.id, { pid, sub: 'sub-1' });
+
+		const response = await send({ source: 'thaid', session_id: session.id }, device);
+
+		expect(response.status).toBe(409);
+		expect(await response.json()).toEqual(sessionInvalid);
+		expect(mockLookup).not.toHaveBeenCalled();
+	});
+
 	it('looks up by the session citizen id, leaks no pid, and keeps the session usable', async () => {
 		const sessionId = completedSession();
 

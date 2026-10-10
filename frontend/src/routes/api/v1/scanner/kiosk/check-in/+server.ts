@@ -3,12 +3,16 @@ import type { RequestHandler } from './$types';
 import { scannerServerRepository } from '$lib/features/scanners/server';
 import {
 	checkInSelectedMembers,
+	isKioskThaidCheckInAllowed,
 	kioskCheckInInputSchema,
 	KioskThaidIdentityMismatchError,
 	saveKioskCheckInCardPhoto
-} from '$lib/features/kiosk/server/kiosk-check-in.server';
-import { isKioskThaidCheckInAllowed } from '$lib/features/kiosk/server/kiosk-thaid-gate.server';
-import { consumeKioskSession } from '$lib/server/thaid-scan-session';
+} from '$lib/features/kiosk/server';
+import {
+	consumeKioskSession,
+	getKioskSessionForDevice,
+	releaseKioskSession
+} from '$lib/server/thaid-scan-session';
 import {
 	authenticateScannerDevice,
 	DEVICE_AUTH_FAILED,
@@ -47,9 +51,17 @@ export const POST: RequestHandler = async ({ request }) => {
 			);
 		}
 		let result;
-		if (parsed.data.source === 'thaid' && parsed.data.thaid_session_id) {
+		if (parsed.data.source === 'thaid') {
+			// The schema guarantees the id; this keeps a thaid check-in from ever taking the unbound path.
+			const sessionId = parsed.data.thaid_session_id;
+			if (!sessionId) {
+				return json(
+					{ error: { code: 'INVALID_CHECK_IN_INPUT', message: 'รายชื่อผู้เข้าพักไม่ถูกต้อง' } },
+					{ status: 400, headers: noStoreHeaders }
+				);
+			}
 			// FR-KTD-27: the gate is re-checked, then the session is claimed synchronously before any
-			// write so a double submit cannot check in twice. The schema guarantees the session id.
+			// write so a double submit cannot check in twice.
 			if (!(await isKioskThaidCheckInAllowed(principal.shelter_code))) {
 				return json(
 					{
@@ -61,7 +73,10 @@ export const POST: RequestHandler = async ({ request }) => {
 					{ status: 403, headers: noStoreHeaders }
 				);
 			}
-			const citizen = consumeKioskSession(parsed.data.thaid_session_id, principal.registry_id);
+			// A session minted for another shelter is invalid here; checked before it is consumed.
+			const session = getKioskSessionForDevice(sessionId, principal.registry_id);
+			if (session?.binding?.shelter_code !== principal.shelter_code) return thaidSessionInvalid();
+			const citizen = consumeKioskSession(sessionId, principal.registry_id);
 			if (!citizen) return thaidSessionInvalid();
 			try {
 				result = await checkInSelectedMembers(
@@ -72,7 +87,12 @@ export const POST: RequestHandler = async ({ request }) => {
 				);
 			} catch (error) {
 				if (error instanceof KioskThaidIdentityMismatchError) return thaidSessionInvalid();
+				// Nothing was committed by an aborted write: give the scan back so the kiosk can retry.
+				releaseKioskSession(sessionId, principal.registry_id);
 				throw error;
+			}
+			if (result.every((member) => member.status === 'failed')) {
+				releaseKioskSession(sessionId, principal.registry_id);
 			}
 		} else {
 			result = await checkInSelectedMembers(

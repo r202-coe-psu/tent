@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import type { Attachment } from 'svelte/attachments';
 	import { resolve } from '$app/paths';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
@@ -39,7 +39,8 @@
 		getStatus: getKioskThaidSessionStatus,
 		cancel: cancelKioskThaidSession
 	});
-	let now = $state(Date.now());
+	// Monotonic, like `session.deadline`: the kiosk wall clock never decides how long the QR lives.
+	let now = $state(performance.now());
 
 	const homeUrl = $derived(resolve(`/kiosk${contextQuery}`));
 	const gate = $derived(session.gate);
@@ -47,7 +48,7 @@
 		session.state === 'idle' || session.state === 'creating' || session.state === 'pending'
 	);
 	const remainingSeconds = $derived(
-		session.expiresAt === null ? 0 : Math.max(0, Math.ceil((session.expiresAt - now) / 1000))
+		session.deadline === null ? 0 : Math.max(0, Math.ceil((session.deadline - now) / 1000))
 	);
 	const countdown = $derived(
 		`${Math.floor(remainingSeconds / 60)}:${String(remainingSeconds % 60).padStart(2, '0')}`
@@ -67,13 +68,14 @@
 	});
 
 	$effect(() => {
-		if (waitingForScan) idleTimeout.stop();
-		else idleTimeout.start();
+		const waiting = waitingForScan;
+		// start() reads `paused`; this effect must follow the scan state only (pausing has its own path).
+		untrack(() => (waiting ? idleTimeout.stop() : idleTimeout.start()));
 	});
 
 	/** Ticks the countdown while the countdown line is on screen (only while waiting for the scan). */
 	const tickClock: Attachment = () => {
-		const tick = () => (now = Date.now());
+		const tick = () => (now = performance.now());
 		tick();
 		const timer = window.setInterval(tick, 1000);
 		return () => window.clearInterval(timer);
@@ -110,6 +112,12 @@
 		idleTimeout.setPaused(busy);
 	}
 
+	/** After the hand-off every way out of the result screens ends the visit: back to the home screen. */
+	function goHome(): void {
+		navigateToKioskHome(contextQuery);
+	}
+
+	/** Only the explicit "new QR" / "scan again" actions ask for a fresh QR. */
 	function newQr(): void {
 		void session.restart();
 	}
@@ -127,7 +135,8 @@
 		{contextQuery}
 		{displayShelterCode}
 		onprintbusychange={handlePrintBusyChange}
-		onreset={newQr}
+		onreset={goHome}
+		onrescan={newQr}
 	/>
 {:else}
 	<section

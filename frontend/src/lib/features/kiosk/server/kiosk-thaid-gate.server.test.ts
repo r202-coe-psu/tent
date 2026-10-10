@@ -53,4 +53,20 @@ describe('isKioskThaidCheckInAllowed (FR-KTD-13)', () => {
 		mockFindShelter.mockRejectedValue(new Error('registry unavailable'));
 		await expect(isKioskThaidCheckInAllowed('SH001')).resolves.toBe(false);
 	});
+
+	it('uses a pre-fetched shelter instead of reading it again', async () => {
+		await expect(isKioskThaidCheckInAllowed('SH001', { shelter: shelterWith(true) })).resolves.toBe(
+			true
+		);
+		await expect(
+			isKioskThaidCheckInAllowed('SH001', { shelter: shelterWith(false) })
+		).resolves.toBe(false);
+		await expect(isKioskThaidCheckInAllowed('SH001', { shelter: null })).resolves.toBe(false);
+		expect(mockFindShelter).not.toHaveBeenCalled();
+	});
+
+	it('asks the system gate to fail closed when config:app cannot be read', async () => {
+		await isKioskThaidCheckInAllowed('SH001');
+		expect(mockSystemGate).toHaveBeenCalledWith({ onConfigError: 'deny' });
+	});
 });

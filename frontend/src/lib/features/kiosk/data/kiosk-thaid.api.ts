@@ -8,12 +8,30 @@ export const KIOSK_THAID_CANCEL_TIMEOUT_MS = 5_000;
 export interface KioskThaidSession {
 	sessionId: string;
 	qrUrl: string;
-	/** Unix ms. */
+	/** Unix ms by the server clock: not comparable with the kiosk clock, prefer `expiresInSec`. */
 	expiresAt: number;
+	/** Seconds left by the server clock when it answered; immune to the kiosk clock being off. */
+	expiresInSec?: number;
 }
 
 /** Why a ThaiD session request failed, in the terms the kiosk screen cares about. */
-export type KioskThaidErrorKind = 'disabled' | 'rate_limited' | 'unavailable';
+export type KioskThaidErrorKind =
+	| 'disabled'
+	| 'rate_limited'
+	/** 401 / 403: this kiosk is not (or no longer) allowed; retrying the same call cannot help. */
+	| 'unauthorized'
+	/** Any other 4xx (e.g. 400): the request itself is wrong; retrying cannot help. */
+	| 'invalid'
+	/** Network error, timeout, 5xx, unreadable reply: worth trying again. */
+	| 'unavailable';
+
+function kindOf(status: number, code: string | null): KioskThaidErrorKind {
+	if (code === 'KIOSK_METHOD_DISABLED') return 'disabled';
+	if (status === 429) return 'rate_limited';
+	if (status === 401 || status === 403) return 'unauthorized';
+	if (status >= 400 && status < 500 && status !== 408) return 'invalid';
+	return 'unavailable';
+}
 
 export class KioskThaidError extends Error {
 	readonly kind: KioskThaidErrorKind;
@@ -25,12 +43,7 @@ export class KioskThaidError extends Error {
 	) {
 		super(`kiosk thaid request failed (${status}${code ? ` ${code}` : ''})`);
 		this.name = 'KioskThaidError';
-		this.kind =
-			code === 'KIOSK_METHOD_DISABLED'
-				? 'disabled'
-				: status === 429
-					? 'rate_limited'
-					: 'unavailable';
+		this.kind = kindOf(status, code);
 	}
 }
 
@@ -75,8 +88,14 @@ export async function createKioskThaidSession(): Promise<KioskThaidSession> {
 		session_id: string;
 		qr_url: string;
 		expires_at: number;
+		expires_in_sec?: unknown;
 	};
-	return { sessionId: body.session_id, qrUrl: body.qr_url, expiresAt: body.expires_at };
+	return {
+		sessionId: body.session_id,
+		qrUrl: body.qr_url,
+		expiresAt: body.expires_at,
+		...(typeof body.expires_in_sec === 'number' ? { expiresInSec: body.expires_in_sec } : {})
+	};
 }
 
 export type KioskThaidSessionStatus =
@@ -90,10 +109,13 @@ const STATUSES: readonly string[] = [
 	'expired'
 ] satisfies KioskThaidSessionStatus[];
 
-/** `expiresAt` (Unix ms) is absent when the server no longer knows the session (404 = expired). */
+/** The expiry fields are absent when the server no longer knows the session (404 = expired). */
 export interface KioskThaidStatusResult {
 	status: KioskThaidSessionStatus;
+	/** Unix ms by the server clock. */
 	expiresAt?: number;
+	/** Seconds left by the server clock when it answered. */
+	expiresInSec?: number;
 }
 
 /** Poll the session; carries no personal data, only the status. */
@@ -108,13 +130,15 @@ export async function getKioskThaidSessionStatus(
 	const body = (await response.json().catch(() => null)) as {
 		status?: unknown;
 		expires_at?: unknown;
+		expires_in_sec?: unknown;
 	} | null;
 	if (typeof body?.status !== 'string' || !STATUSES.includes(body.status)) {
 		throw new KioskThaidError(response.status, 'INVALID_RESPONSE');
 	}
 	return {
 		status: body.status as KioskThaidSessionStatus,
-		...(typeof body.expires_at === 'number' ? { expiresAt: body.expires_at } : {})
+		...(typeof body.expires_at === 'number' ? { expiresAt: body.expires_at } : {}),
+		...(typeof body.expires_in_sec === 'number' ? { expiresInSec: body.expires_in_sec } : {})
 	};
 }
 

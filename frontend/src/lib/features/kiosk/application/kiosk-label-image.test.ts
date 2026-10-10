@@ -18,6 +18,7 @@ function installFakeCanvas() {
 
 	const fakeContext = {
 		fillStyle: '',
+		letterSpacing: '0px',
 		textAlign: '',
 		textBaseline: '',
 		imageSmoothingEnabled: true,
@@ -26,7 +27,7 @@ function installFakeCanvas() {
 		measureText: vi.fn((text: string) => ({ width: text.length * 6 })),
 		getImageData: vi.fn(() => ({ data: new Uint8ClampedArray(4) })),
 		putImageData: vi.fn(),
-		fillText: vi.fn(() => {
+		fillText: vi.fn<(text: string) => void>(() => {
 			// `fillText` is synchronous — if any row's font wasn't `document.fonts.load()`-ed
 			// (and awaited) before this call, the draw races the fetch (see kiosk-label-image.ts).
 			if (fontsLoaded.length < 3) orderViolation = true;
@@ -75,42 +76,39 @@ describe('renderKioskLabelPng', () => {
 		vi.unstubAllGlobals();
 	});
 
-	it('preloads a Thai-capable font for every text row before drawing any of them', async () => {
-		await renderKioskLabelPng({
-			qrSrc: 'data:image/png;base64,AA==',
-			caption: 'ชื่อ',
-			name: 'สมชาย ใจดี',
-			detail: 'ศูนย์ SH001'
-		});
+	const label = {
+		qrSrc: 'data:image/png;base64,AA==',
+		name: 'สมชาย ใจดี',
+		phone: '0804497982'
+	};
+
+	it('preloads every row font before drawing any of them', async () => {
+		await renderKioskLabelPng(label);
 
 		expect(harness.fontsLoaded).toHaveLength(3);
-		for (const font of harness.fontsLoaded) {
-			expect(font).toContain('IBM Plex Sans Thai');
-		}
 		expect(harness.isOrderViolated()).toBe(false);
 	});
 
-	it('draws every row with the Thai-capable font family, never the bare generic fallback', async () => {
-		await renderKioskLabelPng({
-			qrSrc: 'data:image/png;base64,AA==',
-			caption: 'ชื่อ',
-			name: 'สมชาย ใจดี',
-			detail: 'ศูนย์ SH001'
-		});
+	it('draws Thai rows with the Thai-capable family and the phone in the mono family', async () => {
+		await renderKioskLabelPng(label);
 
 		expect(harness.fontsUsedInDrawing.length).toBeGreaterThan(0);
 		for (const font of harness.fontsUsedInDrawing) {
-			expect(font).toContain("'IBM Plex Sans Thai'");
+			expect(font).toMatch(/'IBM Plex Sans Thai'|'Geist Mono'/);
 		}
+		const texts = harness.fakeContext.fillText.mock.calls.map(([text]) => text);
+		expect(texts).toEqual(['สมชาย ใจดี', '0804497982', 'เช็คอิน', 'คัดกรอง', 'ที่พัก']);
+	});
+
+	it('skips the phone line when there is no phone', async () => {
+		await renderKioskLabelPng({ ...label, phone: null });
+
+		const texts = harness.fakeContext.fillText.mock.calls.map(([text]) => text);
+		expect(texts).not.toContain('0804497982');
+		expect(harness.fontsUsedInDrawing.some((font) => font.includes('Geist Mono'))).toBe(false);
 	});
 
 	it('returns the rendered label as base64 PNG', async () => {
-		const png = await renderKioskLabelPng({
-			qrSrc: 'data:image/png;base64,AA==',
-			caption: 'ชื่อ',
-			name: 'สมชาย ใจดี',
-			detail: 'ศูนย์ SH001'
-		});
-		expect(png).toBe('ZmFrZS1wbmc=');
+		expect(await renderKioskLabelPng(label)).toBe('ZmFrZS1wbmc=');
 	});
 });

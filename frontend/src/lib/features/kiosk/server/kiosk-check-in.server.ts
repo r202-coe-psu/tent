@@ -100,6 +100,7 @@ type EvacueeDoc = {
 	registered_via?: string;
 	first_name?: string;
 	last_name?: string;
+	phone?: string | null;
 	gender?: string;
 	age?: number;
 	birth_year?: number;
@@ -123,7 +124,14 @@ export interface KioskEvacueeSummary {
 	is_primary: boolean;
 	phone_matched?: boolean;
 	selectable: boolean;
+	/**
+	 * Unmasked name + phone for the printed ID-card label. Only on members who can get a label
+	 * (pre-registered or arriving); the screen keeps showing the masked `last_name`.
+	 */
+	label?: KioskLabelIdentity;
 }
+
+export type KioskLabelIdentity = { name: string; phone: string | null };
 
 export interface KioskLookupResult {
 	shelter_code: string;
@@ -190,6 +198,7 @@ function toSummary(
 	options: { matchedPhoneIds?: ReadonlySet<string> } = {}
 ): KioskEvacueeSummary {
 	const status = doc.current_stay?.status ?? 'unknown';
+	const selectable = doc.registered_via === 'web' && status === 'pre_registered';
 	return {
 		evacuee_id: doc._id,
 		first_name: doc.first_name ?? '',
@@ -199,8 +208,17 @@ function toSummary(
 		status,
 		is_primary: doc._id === primaryId,
 		...(options.matchedPhoneIds ? { phone_matched: options.matchedPhoneIds.has(doc._id) } : {}),
-		selectable: doc.registered_via === 'web' && status === 'pre_registered'
+		selectable,
+		...(selectable || status === 'arriving' ? { label: toLabelIdentity(doc) } : {})
 	};
+}
+
+function toLabelIdentity(doc: EvacueeDoc): KioskLabelIdentity {
+	const name = [doc.first_name, doc.last_name]
+		.map((part) => part?.trim())
+		.filter(Boolean)
+		.join(' ');
+	return { name, phone: doc.phone?.trim() || null };
 }
 
 async function expandHousehold(
@@ -480,9 +498,8 @@ export async function checkInSelectedMembers(
 	);
 	const primary = await getById(dbName, normalizedPrimaryId);
 	if (
-		primary &&
 		options.requiredPrimaryCitizenId !== undefined &&
-		primary.person_id?.number !== options.requiredPrimaryCitizenId
+		primary?.person_id?.number !== options.requiredPrimaryCitizenId
 	) {
 		throw new KioskThaidIdentityMismatchError();
 	}

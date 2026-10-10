@@ -19,6 +19,12 @@ export const POST: RequestHandler = async ({ request, url }) => {
 			request.headers.get('x-device-secret') ?? '',
 			scannerServerRepository
 		);
+		if (!kioskThaidSessionDeviceLimiter.check(principal.registry_id)) {
+			return json(
+				{ error: { code: 'KIOSK_RATE_LIMITED', message: 'กรุณารอสักครู่แล้วลองใหม่' } },
+				{ status: 429, headers: { ...kioskThaidNoStoreHeaders, 'retry-after': '60' } }
+			);
+		}
 		if (!(await isKioskThaidCheckInAllowed(principal.shelter_code))) {
 			return json(
 				{
@@ -30,12 +36,6 @@ export const POST: RequestHandler = async ({ request, url }) => {
 				{ status: 403, headers: kioskThaidNoStoreHeaders }
 			);
 		}
-		if (!kioskThaidSessionDeviceLimiter.check(principal.registry_id)) {
-			return json(
-				{ error: { code: 'KIOSK_RATE_LIMITED', message: 'กรุณารอสักครู่แล้วลองใหม่' } },
-				{ status: 429, headers: { ...kioskThaidNoStoreHeaders, 'retry-after': '60' } }
-			);
-		}
 		const session = createKioskCheckInSession({
 			device_id: principal.registry_id,
 			shelter_code: principal.shelter_code
@@ -44,7 +44,8 @@ export const POST: RequestHandler = async ({ request, url }) => {
 			{
 				session_id: session.id,
 				qr_url: `${url.origin}/api/v1/auth/oauth/thaid/start?mode=kiosk_check_in&session_id=${session.id}`,
-				expires_at: session.expiresAt
+				expires_at: session.expiresAt,
+				expires_in_sec: Math.max(0, Math.ceil((session.expiresAt - Date.now()) / 1000))
 			},
 			{ headers: kioskThaidNoStoreHeaders }
 		);

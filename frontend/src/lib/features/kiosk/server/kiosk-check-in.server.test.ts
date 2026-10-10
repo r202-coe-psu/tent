@@ -444,6 +444,35 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 		expect(result).toMatchObject({ kind: 'household', primary_evacuee_id: legacy._id });
 	});
 
+	it('sends the unmasked name and phone for the label only to members who can print one', async () => {
+		const person = evacuee(0, { last_name: 'ใจดี' });
+		const arriving = evacuee(1, {
+			phone: null,
+			person_id: { number: '1111111111111' },
+			current_stay: { status: 'arriving' }
+		});
+		const active = evacuee(2, {
+			person_id: { number: '2222222222222' },
+			current_stay: { status: 'active' }
+		});
+		setHousehold([person, arriving, active]);
+
+		const result = await lookupPreRegisteredEvacuee(shelterCode, {
+			source: 'smart-card',
+			citizen_id: '1234567890123'
+		});
+
+		expect(result.kind).toBe('household');
+		if (result.kind !== 'household') return;
+		const byId = new Map(result.members.map((member) => [member.evacuee_id, member]));
+		expect(byId.get(person._id)).toMatchObject({
+			last_name: 'ใ****',
+			label: { name: 'สมชาย0 ใจดี', phone }
+		});
+		expect(byId.get(arriving._id)?.label).toEqual({ name: 'สมชาย1 ใจดี', phone: null });
+		expect(byId.get(active._id)?.label).toBeUndefined();
+	});
+
 	it('masks card and QR household names', async () => {
 		const person = evacuee(0, { last_name: 'ใจดี' });
 		evacuees = [person];
@@ -746,6 +775,15 @@ describe('checkInSelectedMembers requiredPrimaryCitizenId', () => {
 				requiredPrimaryCitizenId: '1234567890123'
 			})
 		).rejects.toBeInstanceOf(KioskThaidIdentityMismatchError);
+	});
+
+	it('signals a mismatch when the primary doc does not exist', async () => {
+		await expect(
+			checkInSelectedMembers(shelterCode, `evacuee:${ids[0]}`, [`evacuee:${ids[0]}`], {
+				requiredPrimaryCitizenId: '1234567890123'
+			})
+		).rejects.toBeInstanceOf(KioskThaidIdentityMismatchError);
+		expect(mockAdminFetch.mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(false);
 	});
 
 	it('checks in as usual when the primary citizen id matches', async () => {

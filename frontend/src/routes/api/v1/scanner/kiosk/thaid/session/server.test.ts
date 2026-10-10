@@ -78,7 +78,13 @@ describe('POST /api/v1/scanner/kiosk/thaid/session', () => {
 		expect(response.status).toBe(200);
 		expect(response.headers.get('cache-control')).toBe('no-store');
 		const body = await response.json();
-		expect(Object.keys(body).sort()).toEqual(['expires_at', 'qr_url', 'session_id']);
+		expect(Object.keys(body).sort()).toEqual([
+			'expires_at',
+			'expires_in_sec',
+			'qr_url',
+			'session_id'
+		]);
+		expect(body.expires_in_sec).toBe(300);
 		expect(body.session_id).toMatch(/^[0-9a-f]{32}$/);
 		expect(body.qr_url).toBe(
 			`http://localhost/api/v1/auth/oauth/thaid/start?mode=kiosk_check_in&session_id=${body.session_id}`
@@ -93,6 +99,19 @@ describe('POST /api/v1/scanner/kiosk/thaid/session', () => {
 
 		expect(getKioskSessionForDevice(first.session_id, 'kiosk-twice')?.status).toBe('cancelled');
 		expect(getKioskSessionForDevice(second.session_id, 'kiosk-twice')?.status).toBe('pending');
+	});
+
+	it('rate limits before the gate, so a flooding device costs no gate reads', async () => {
+		for (let i = 0; i < 10; i += 1) {
+			expect((await POST(event('kiosk-flood'))).status).toBe(200);
+		}
+		mockGate.mockClear();
+		mockGate.mockResolvedValue(false);
+
+		const response = await POST(event('kiosk-flood'));
+
+		expect(response.status).toBe(429);
+		expect(mockGate).not.toHaveBeenCalled();
 	});
 
 	it('returns 429 KIOSK_RATE_LIMITED on the 11th create within a minute for one device', async () => {
