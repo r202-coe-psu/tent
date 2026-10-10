@@ -66,6 +66,16 @@ export async function suspendRecaptcha(browser: Browser): Promise<() => Promise<
 	};
 }
 
+/**
+ * Type a far-future expiry into a `DatePicker` (DD/MM/YYYY) and leave the field, which
+ * also closes the calendar the click opened.
+ */
+export async function fillExpiry(field: Locator, ddmmyyyy = '31/12/2030') {
+	await field.fill(ddmmyyyy);
+	await field.press('Tab');
+	await expect(field).toHaveValue(ddmmyyyy);
+}
+
 export async function publicNeedsBoard(request: APIRequestContext): Promise<PublicShelter[]> {
 	const res = await request.get('/api/public/v1/needs');
 	expect(res.ok(), `needs board unavailable (HTTP ${res.status()}) — is FastAPI up?`).toBe(true);

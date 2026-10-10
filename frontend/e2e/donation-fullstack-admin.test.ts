@@ -7,6 +7,7 @@ import {
 	createWarehouseStaff,
 	deleteDoc,
 	deleteStaff,
+	fillExpiry,
 	findDonation,
 	freeEveningWindows,
 	ledgerRowsFor,
@@ -511,6 +512,8 @@ test.describe('scan station walk-in', () => {
 		await page.getByRole('option', { name: /^สบู่ก้อน/ }).click();
 		await page.getByRole('textbox', { name: 'จำนวนที่รับจริง *' }).fill('3');
 		await page.getByRole('textbox', { name: 'โซนจัดเก็บ (ถ้ามี)' }).fill('A-1');
+		// สบู่ก้อน carries `shelf_life_days`, so the walk-in will not save without an expiry.
+		await fillExpiry(page.getByRole('textbox', { name: 'วันหมดอายุ' }));
 
 		const posted = page.waitForResponse(
 			(r) => r.url().endsWith('/api/back-office/donations') && r.request().method() === 'POST'

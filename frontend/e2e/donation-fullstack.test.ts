@@ -6,6 +6,7 @@ import {
 	bookAsDonor,
 	createWarehouseStaff,
 	deleteStaff,
+	fillExpiry,
 	findDonation,
 	ledgerRowsFor,
 	openBackOffice,
@@ -97,6 +98,9 @@ test.describe('staff review', () => {
 		await page.getByRole('checkbox', { name: 'ผ่านการตรวจสอบแล้ว' }).check();
 		await page.getByRole('button', { name: /^โซนจัดเก็บ/ }).click();
 		await page.getByRole('option').first().click();
+		// An item with `shelf_life_days` counts as perishable (catalog.ts) and holds the
+		// receive until it has an expiry — the seeded catalog gives NEED_ITEM one.
+		await fillExpiry(page.getByRole('textbox', { name: 'วันหมดอายุ' }));
 		await expect(confirm).toBeEnabled();
 
 		const received = page.waitForResponse(
