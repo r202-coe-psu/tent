@@ -19,6 +19,7 @@ import {
 	runDocs,
 	shelterDb,
 	skipUnlessFullStack,
+	suspendRecaptcha,
 	todayYmd,
 	type PublicNeed,
 	type PublicShelter,
@@ -29,7 +30,8 @@ import {
 /**
  * Back-office setup that the donor side depends on, against the REAL stack:
  * campaigns on the public needs board, queue slots, and counter walk-ins.
- *   PW_BASE_URL=http://localhost:5173 pnpm test:e2e e2e/donation-fullstack-admin.test.ts
+ *   PW_BASE_URL=http://localhost:5173 PLAYWRIGHT_TEST_BASE_URL=http://localhost:5173 \
+ *     pnpm test:e2e e2e/donation-fullstack-admin.test.ts
  *
  * Unlike the donor spec this one cleans up after itself: the campaign and slot docs it
  * writes are deleted in afterAll (matched on RUN_ID). Bookings and the walk-in's ledger
@@ -47,9 +49,11 @@ let slotNeed: PublicNeed;
 let campaignStaff: Staff;
 let slotStaff: Staff;
 
+let restoreRecaptcha: (() => Promise<void>) | undefined;
+
 test.describe.configure({ mode: 'serial' });
 
-test.beforeAll(async ({ request }) => {
+test.beforeAll(async ({ request, browser }) => {
 	skipUnlessFullStack(test.skip);
 	board = await publicNeedsBoard(request);
 	const pick = pickOpenNeed(board);
@@ -58,6 +62,7 @@ test.beforeAll(async ({ request }) => {
 	const other = board.find((s) => !s.needs.some((n) => n.name === CAMPAIGN_ITEM));
 	test.skip(!other, `every shelter already asks for ${CAMPAIGN_ITEM}`);
 	campaignShelter = other!;
+	restoreRecaptcha = await suspendRecaptcha(browser);
 
 	campaignStaff = await createWarehouseStaff(campaignShelter.code, 'camp');
 	slotStaff =
@@ -67,6 +72,7 @@ test.beforeAll(async ({ request }) => {
 });
 
 test.afterAll(async ({ request }) => {
+	await restoreRecaptcha?.();
 	if (campaignShelter) {
 		// Close before deleting: the worker does not re-project needs on a campaign
 		// DELETE, so a straight delete leaves the line on the public board for good.

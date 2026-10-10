@@ -1,5 +1,12 @@
-import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 import {
+	expect,
+	type APIRequestContext,
+	type Browser,
+	type Locator,
+	type Page
+} from '@playwright/test';
+import {
+	bootstrapAdminSession,
 	createCouchUser,
 	deleteCouchUser,
 	couchLogin,
@@ -7,15 +14,17 @@ import {
 	seedSecurityQuestion,
 	type TestUser
 } from './couch';
-import { injectSession } from './login';
+import { injectSession, routeBrowserCouchThroughApp } from './login';
+import { setRecaptcha } from './staff-ui';
 
 /**
  * Shared steps for the full-stack donation specs (`donation-fullstack*.test.ts`).
  *
  * Nothing here is route-mocked: the public wizard posts through the SvelteKit BFF to
  * FastAPI → Mongo → sync worker → CouchDB, and the back-office reads CouchDB. The
- * specs skip themselves unless `PW_BASE_URL` points at a running `pnpm dev` — the BFF
- * only skips reCAPTCHA in dev.
+ * specs skip themselves unless `PW_BASE_URL` points at a running `pnpm dev`. Bookings
+ * go through the BFF's reCAPTCHA gate, so each spec turns it off for its run with
+ * `suspendRecaptcha` (README §known issues: a fake token does not pass Enterprise).
  */
 
 export const RUN_ID = Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
@@ -33,6 +42,28 @@ export type Staff = TestUser & { session: string };
 
 export function skipUnlessFullStack(skip: (cond: boolean, why: string) => void) {
 	skip(!process.env.PW_BASE_URL, 'full-stack only — set PW_BASE_URL to a running `pnpm dev`');
+}
+
+/**
+ * Turn `config:app.recaptcha_enabled` off as the CouchDB admin, the same switch
+ * pre-register flips (`setRecaptcha`). It is global, so call this only once the spec
+ * knows it will run, and always await the returned restore in `afterAll` — it puts
+ * back whatever state the switch had before.
+ */
+export async function suspendRecaptcha(browser: Browser): Promise<() => Promise<void>> {
+	const admin = await bootstrapAdminSession();
+	const context = await browser.newContext();
+	const page = await context.newPage();
+	await routeBrowserCouchThroughApp(page);
+	await injectSession(page, admin.user, admin.cookie);
+	const wasEnabled = await setRecaptcha(page, false);
+	return async () => {
+		try {
+			await setRecaptcha(page, wasEnabled);
+		} finally {
+			await context.close();
+		}
+	};
 }
 
 export async function publicNeedsBoard(request: APIRequestContext): Promise<PublicShelter[]> {

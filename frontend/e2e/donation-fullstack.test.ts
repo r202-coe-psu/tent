@@ -16,6 +16,7 @@ import {
 	reloadUntilVisible,
 	retireRunCampaigns,
 	skipUnlessFullStack,
+	suspendRecaptcha,
 	type PublicNeed,
 	type PublicShelter,
 	type Staff
@@ -26,7 +27,8 @@ import {
  *
  * Needs `docker compose up -d` (CouchDB, Mongo, worker, FastAPI), a seeded catalog
  * (`pnpm seed`), and the dev server — the BFF only skips reCAPTCHA in dev:
- *   PW_BASE_URL=http://localhost:5173 pnpm test:e2e e2e/donation-fullstack.test.ts
+ *   PW_BASE_URL=http://localhost:5173 PLAYWRIGHT_TEST_BASE_URL=http://localhost:5173 \
+ *     pnpm test:e2e e2e/donation-fullstack.test.ts
  *
  * The need donors book against is this run's own campaign (NEED_ITEM, on a real
  * `item_master` id) — seeded campaigns use legacy ids the scan station cannot receive.
@@ -41,20 +43,24 @@ const NEED_ITEM = 'ยาสีฟัน';
 let shelter: PublicShelter;
 let need: PublicNeed;
 let ws: Staff;
+let restoreRecaptcha: (() => Promise<void>) | undefined;
 
 test.describe.configure({ mode: 'serial' });
 
-test.beforeAll(async ({ request }) => {
+test.beforeAll(async ({ request, browser }) => {
 	skipUnlessFullStack(test.skip);
 	const board = await publicNeedsBoard(request);
+	test.skip(board.length === 0, 'needs board is empty (no open/full shelter) — run `pnpm seed`');
 	const pick = board.find((s) => !s.needs.some((n) => n.name === NEED_ITEM));
 	test.skip(!pick, `every shelter already asks for ${NEED_ITEM}`);
 	shelter = pick!;
+	restoreRecaptcha = await suspendRecaptcha(browser);
 	need = await openRunCampaign(request, shelter.code, NEED_ITEM, 50, 'donor');
 	ws = await createWarehouseStaff(shelter.code, 'ws');
 });
 
 test.afterAll(async ({ request }) => {
+	await restoreRecaptcha?.();
 	if (shelter) await retireRunCampaigns(request, shelter.code, NEED_ITEM);
 	await deleteStaff(ws);
 });

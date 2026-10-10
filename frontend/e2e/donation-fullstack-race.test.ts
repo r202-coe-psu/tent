@@ -11,6 +11,7 @@ import {
 	runDocs,
 	shelterDb,
 	skipUnlessFullStack,
+	suspendRecaptcha,
 	todayYmd,
 	type BookingOptions,
 	type BookingResponse,
@@ -21,7 +22,8 @@ import {
 /**
  * Two donors pressing "ยืนยันการจองคิวบริจาค" at the same moment for the last spot,
  * against the REAL stack (no route mocks):
- *   PW_BASE_URL=http://localhost:5173 pnpm test:e2e e2e/donation-fullstack-race.test.ts
+ *   PW_BASE_URL=http://localhost:5173 PLAYWRIGHT_TEST_BASE_URL=http://localhost:5173 \
+ *     pnpm test:e2e e2e/donation-fullstack-race.test.ts
  *
  * Each donor gets their own browser context (own cookies/storage — two people, not two
  * tabs), is walked to the confirm button, and only then are both buttons pressed
@@ -41,6 +43,7 @@ const RACE_ITEM = { id: '', name: 'แปรงสีฟัน', unit: '' };
 let shelter: PublicShelter;
 let pickup: SlotWindow;
 let dropoff: SlotWindow;
+let restoreRecaptcha: (() => Promise<void>) | undefined;
 const campaignId = `donation_campaign:e2e-race-${RUN_ID}`;
 
 test.describe.configure({ mode: 'serial' });
@@ -59,9 +62,10 @@ function stamp() {
 	return { created_at: now, updated_at: now, created_by: 'e2e', schema_v: 1 };
 }
 
-test.beforeAll(async ({ request }) => {
+test.beforeAll(async ({ request, browser }) => {
 	skipUnlessFullStack(test.skip);
 	const board = await publicNeedsBoard(request);
+	test.skip(board.length === 0, 'needs board is empty (no open/full shelter) — run `pnpm seed`');
 	const pick = board.find((s) => !s.needs.some((n) => n.name === RACE_ITEM.name));
 	test.skip(!pick, `every shelter already asks for ${RACE_ITEM.name}`);
 	shelter = pick!;
@@ -71,9 +75,11 @@ test.beforeAll(async ({ request }) => {
 	test.skip(!w || !d, 'no free evening windows left today');
 	pickup = w;
 	dropoff = d;
+	restoreRecaptcha = await suspendRecaptcha(browser);
 });
 
 test.afterAll(async ({ request }) => {
+	await restoreRecaptcha?.();
 	if (!shelter) return;
 	const db = shelterDb(shelter.code);
 	// Close before deleting: the worker does not re-project needs on a campaign DELETE
