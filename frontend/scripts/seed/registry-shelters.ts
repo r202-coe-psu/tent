@@ -7,6 +7,7 @@ import { ulid } from '$lib/db/ulid';
 import { deployShelterViewsFn } from '$lib/features/shelters/server/deploy';
 import {
 	buildValidateDocUpdate,
+	DAILY_SOP_ROLE_MANGO_INDEX,
 	REFERRAL_MANGO_INDEXES,
 	shelterDbName
 } from '$lib/server/shelter-access-design';
@@ -405,7 +406,7 @@ async function deployShelterAccessDesign(db: string, shelterCode: string): Promi
 }
 
 async function deployMangoIndexes(db: string): Promise<void> {
-	for (const def of REFERRAL_MANGO_INDEXES) {
+	for (const def of [...REFERRAL_MANGO_INDEXES, DAILY_SOP_ROLE_MANGO_INDEX]) {
 		const { status, data } = await couchReq('POST', `/${db}/_index`, def);
 		if (status >= 400) {
 			const detail = (data as { reason?: string; error?: string } | null) ?? {};
@@ -414,7 +415,7 @@ async function deployMangoIndexes(db: string): Promise<void> {
 			);
 		}
 	}
-	console.log(`  ✓ ${db}: Mango indexes for referral deployed`);
+	console.log(`  ✓ ${db}: referral and Daily SOP role Mango indexes deployed`);
 }
 
 async function listRegistryShelterCodes(): Promise<string[]> {

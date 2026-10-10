@@ -1,5 +1,5 @@
 import { displayCouchUrl } from './couch';
-import { deleteDailySopData, deleteDashboardData, seedDailyCalc, seedDailySop } from './daily';
+import { deleteDashboardData, seedDailyCalc } from './daily';
 import { runMasterSeed } from './master-seed';
 import { provisionRegistryShelterDbs, seedRegistry } from './registry-shelters';
 import { seedStagingOps } from './staging-ops';
@@ -9,18 +9,13 @@ import { seedVolunteers, seedVolunteerJobs, seedVolunteerSchedule } from './volu
 
 /**
  * Full staging/local seed:
- * master → users → shelters → provision → ~1k people → ops → volunteers → daily snapshots.
+ * master → users → shelters → provision → ~1k people → ops → volunteers → daily calculations.
  */
 export async function mainStaging(): Promise<void> {
 	if (process.argv.includes('--delete-dashboard')) {
 		await deleteDashboardData();
 		return;
 	}
-	if (process.argv.includes('--delete-daily-sop')) {
-		await deleteDailySopData();
-		return;
-	}
-
 	console.log(`\nSeeding STAGING (master + demo volume) → ${displayCouchUrl()}\n`);
 
 	await seedUsers();
@@ -34,7 +29,6 @@ export async function mainStaging(): Promise<void> {
 	await seedVolunteerJobs(master);
 	await seedVolunteerSchedule(master);
 	await seedDailyCalc();
-	await seedDailySop();
 
 	console.log('\nStaging seed done.\n');
 }

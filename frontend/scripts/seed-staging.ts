@@ -4,7 +4,6 @@
  *
  * Usage: pnpm seed:staging
  *        pnpm seed:delete-dashboard
- *        pnpm seed:delete-daily-sop
  */
 import { mainStaging } from './seed/run-staging';
 

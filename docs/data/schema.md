@@ -1362,6 +1362,63 @@ backward compatibility ของ CR-059/110; flow ใหม่ใช้ §2.29�
 
 ---
 
+### 2.33 `daily_sop_assessment` — Legacy Daily SOP
+
+เอกสารจาก Daily SOP รุ่นก่อน ระบบปัจจุบันไม่สร้างหรือแสดงเอกสารชนิดนี้ และไม่ย้ายข้อมูลให้อัตโนมัติ หากต้องลบข้อมูลเดิม ให้ทำเฉพาะฐาน local ที่ผู้ใช้ระบุ; ไม่มีคำสั่งลบข้อมูล Legacy รวมอยู่ในแอปหรือ seed ปกติ
+
+### 2.34 `daily_sop_role_assessment` — `daily_sop_role_assessment:{shelter_code}:{assessment_date}:{role_code}` · **schema_v 1**
+
+หนึ่งเอกสารแทนหนึ่ง shelter / วันที่ปฏิทิน Bangkok / Role ใน shelter_{shelter_code}. Schema v1 ใช้ Question Bank รุ่น daily-sop-role-v1 จำนวน 79 ข้อจาก CR-153 (daily-sop-role-assessments); รายการ Role แสดงเฉพาะเอกสารชนิดนี้และไม่รวม Legacy daily_sop_assessment. ไม่ migrate, rewrite, ลบ หรือใช้เอกสาร Legacy เป็น template. JSON _rev เป็น metadata ของ CouchDB ไม่ใช่ field ของ schema application.
+
+| Field                                                   | ชนิด / ค่า                             | Required | กติกา                                                                                              |
+| ------------------------------------------------------- | -------------------------------------- | -------- | -------------------------------------------------------------------------------------------------- |
+| _id                                                     | string                                 | ใช่      | daily_sop_role_assessment:{shelter_code}:{assessment_date}:{role_code}; ต้อง derive ตรงกันทุกครั้ง |
+| type                                                    | literal daily_sop_role_assessment      | ใช่      | VDU อนุญาตเฉพาะชนิดนี้                                                                             |
+| schema_v                                                | integer 1                              | ใช่      | immutable                                                                                          |
+| shelter_code                                            | string                                 | ใช่      | ต้องตรงกับ shelter database; immutable                                                             |
+| assessment_date                                         | วันที่จริงรูปแบบ YYYY-MM-DD            | ใช่      | วันที่ปฏิทิน Bangkok; immutable                                                                    |
+| role_code                                               | SM, REG, TRG, MED, KS, SC, VC, SO, FAC | ใช่      | immutable และใช้ derive _id                                                                        |
+| role_key, role_label                                    | canonical key และ label ของ Role       | ใช่      | ต้องตรงกับ role_code; immutable snapshot                                                           |
+| question_set_version                                    | literal daily-sop-role-v1              | ไม่      | ถ้า omit ให้ถือเป็นรุ่นนี้; ถ้ามีต้องเป็น literal นี้ (null ไม่เท่ากับ omit และถูกปฏิเสธ). รุ่น/การ omit เปลี่ยนภายหลังไม่ได้          |
+| assessed_at                                             | ISO-8601 UTC timestamp ลงท้าย Z        | ใช่      | ต้อง parse เป็นเวลาจริงได้; เวลาเริ่มประเมิน; immutable                                            |
+| assessor_name                                           | non-empty string                       | ใช่      | หลัง trim ต้องไม่ว่าง; immutable และไม่ใช้ยืนยันตัวตนหรือ authorization                            |
+| status                                                  | InProgress หรือ Completed              | ใช่      | Completed เมื่อไม่มี unanswered; นอกนั้น InProgress                                                |
+| pass_count, fail_count, pending_count, unanswered_count | integer ≥ 0                            | ใช่      | ต้องเท่ากับผลนับจาก controls จริง                                                                  |
+| controls                                                | array ของ control snapshots            | ใช่      | ต้องมี ID และลำดับครบตาม Role/version; ห้ามซ้ำ เพิ่ม ลบ หรือเรียงใหม่                              |
+| created_at, updated_at                                  | ISO-8601 UTC timestamp ลงท้าย Z        | ใช่      | ต้อง parse เป็นเวลาจริงได้; created_at immutable                                                   |
+| created_by                                              | non-empty username                     | ใช่      | immutable; ตอน application create ต้องตรงกับ authenticated user                                    |
+
+แต่ละ controls[] มี field ต่อไปนี้:
+
+| Field           | ชนิด / ค่า                      | Required | กติกา                                                                                                                                                                                                                                                                                                                                       |
+| --------------- | ------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| id              | string                          | ใช่      | Question ID ที่ขึ้นต้น D-{role_code}-; unique และ immutable                                                                                                                                                                                                                                                                                 |
+| question        | string                          | ใช่      | immutable snapshot ของข้อความจาก Question Bank; ข้อที่ใช้ SOP Parameter บันทึกค่าที่ resolve ได้ลงข้อความ. หากไม่มีค่า ให้เก็บ token {parameter_key} ตามต้นฉบับและแสดงคำอธิบายว่าขาดค่า                                                                                                                                                     |
+| metric_spec     | object หรือ null                | ใช่      | มีเฉพาะข้อที่ระบุ metric ใน CR; field key/order/label/unit/step และ threshold ต้องตรง contract. step เป็น positive finite decimal string: 1 สำหรับจำนวนเต็ม และ 0.01/0.1 ตามหน่วยที่กำหนด. ข้อที่ใช้ Parameter ต้อง snapshot { key, value } เมื่อ resolve ได้ (value เป็น numeric string > 0 จาก override ของ shelter ทั้งชุด มิฉะนั้นจาก master profile ตาม CR-006/CR-021; ไม่เก็บ ID ของ profile/override; ข้อที่ไม่ใช้ Parameter ห้ามมี parameter; field ที่ยังไม่กรอกเก็บเป็น null); ถ้าไม่มี Parameter ให้เป็น null, สถานะ Pending และมี notes. D-SC-01 ใช้ null |
+| status          | Pass, Fail, Pending หรือ null   | ใช่      | null หมายถึง unanswered                                                                                                                                                                                                                                                                                                                     |
+| notes           | string                          | ใช่      | Pass/unanswered ใช้ ""; Fail/Pending ต้องมีข้อความหลัง trim                                                                                                                                                                                                                                                                                 |
+| observations    | string                          | ใช่      | ใช้ "" ได้                                                                                                                                                                                                                                                                                                                                  |
+| measured_values | object ของ number ≥ 0 หรือ null | ใช่      | key ต้องตรงกับ metric_spec.fields[].key ทุก key; ค่าต้อง finite และเป็นจำนวนเท่าของ step. เมื่อ metric_spec เป็น null ต้องเป็น {}                                                                                                                                                                                                           |
+| checked_by      | non-empty username              | ใช่      | ผู้บันทึก control ล่าสุด; application write ที่เปลี่ยน control ต้องตรงกับ authenticated user                                                                                                                                                                                                                                                |
+| checked_by_name | non-empty string                | ไม่      | ถ้าระบุต้องไม่ว่างหลัง trim; ใช้แสดงผลเท่านั้น                                                                                                                                                                                                                                                                                              |
+| checked_at      | ISO-8601 UTC timestamp ลงท้าย Z | ใช่      | ต้อง parse เป็นเวลาจริงได้; เวลาบันทึก control ล่าสุด                                                                                                                                                                                                                                                                                       |
+
+ตอนสร้างให้ snapshot controls ครบทุกข้อพร้อม checked_by/checked_at ของผู้สร้าง รวม unanswered; audit นี้หมายถึงผู้สร้าง snapshot ไม่ใช่หลักฐานว่าตรวจหน้างานแล้ว. ไม่สร้างเอกสารจนกว่าผู้ใช้จะบันทึกคำตอบ ค่าตรวจ note หรือ observation จริงอย่างน้อยหนึ่งรายการ. Not started เป็น UI projection เท่านั้น. D-SC-01 แสดงยอด stock-status แบบ read-only; schema นี้ไม่เก็บยอดระบบ/ยอดตรวจนับแยกตามสินค้าและไม่เพิ่ม stock mutation.
+
+การแก้ไขต้องส่ง _rev ที่หน้าโหลดมา. หาก revision เปลี่ยนให้ปฏิเสธ write และคง draft ไว้; ผู้ใช้ต้องโหลดข้อมูลล่าสุดและเลือก merge ก่อนกดบันทึกอีกครั้ง. ห้าม retry draft เก่าด้วย revision ใหม่หรือเปลี่ยน create conflict เป็น update อัตโนมัติ. assessor_name, assessed_at, identity, creation metadata และ question/metric snapshots เปลี่ยนไม่ได้; อนุญาตเปลี่ยนคำตอบ, ค่าที่วัด, notes, observations, audit ของ control ที่แก้ และ summary/timestamp ที่ derive จากคำตอบเท่านั้น. ไม่เก็บ check_method, pass_criteria หรือ record_values; ห้ามเติมค่าว่างหรืออนุมานค่า. ห้ามลบเอกสาร.
+
+Authorization และ Bangkok current-day write rule ถูกบังคับที่ VDU ของ shelter database; สมาชิก shelter อ่าน assessment ได้ทุก Role ตาม DB security. Role owner, shelter manager ใน shelter เดียวกัน และ application system_admin เขียนได้ตาม capability; SC รองรับ supply_coordinator และ warehouse_staff. VDU ใช้ Question Bank/metric contract ที่ embed ไว้ใน design document และไม่อ่าน external configuration.
+
+**Question Bank (CR-153 ภาคผนวก A):** 79 ข้อ ต่อ Role = SM 9 · REG 5 · TRG 7 · MED 9 · KS 6 · SC 10 · VC 8 · SO 10 · FAC 15. รหัสที่ตัดจาก 91 ข้อ (12 ข้อ) ต้องไม่ปรากฏ: D-SM-01, D-REG-04, D-REG-05, D-REG-06, D-REG-07, D-REG-09, D-TRG-07, D-MED-08, D-KS-01, D-KS-02, D-KS-03, D-KS-08. ข้อความคำถามและ metric/threshold เป็นไปตามภาคผนวก A ของ CR-153.
+
+**Role mapping:** `role_code` → `role_key` → capability ที่ประเมินได้: SM → shelter_manager · REG → registration_staff · TRG → triage_staff · MED → medical_staff · KS → kitchen_staff · SC → supply_coordinator (รับ `supply_coordinator` หรือ `warehouse_staff`) · VC → volunteer_coordinator · SO → security_officer · FAC → facility_staff. `system_admin` ไม่ใช่ Daily SOP Role.
+
+**วันที่ Bangkok:** VDU คำนวณจาก wall clock ของ CouchDB โดยเลื่อน epoch +07:00 แล้วใช้ UTC getters (16:59:59Z → วันเดิม; 17:00:00Z → วันถัดไป). เฉพาะ `_admin` (trusted replication/restore/migration) ข้าม current-day check; ตรวจ field allowlist, `_id` และ immutability ทุกกรณี.
+
+**Mango index:** ddoc `daily-sop-role-assessment`, name `daily-sop-role-assessment-by-shelter-date`, fields `type`, `shelter_code`, `assessment_date`, `role_code` ทุกตัว `desc`. `_find` ใช้ selector/sort เดียวกัน, `use_index`, `allow_fallback: false`, `limit: 100`, อ่านหน้าถัดไปด้วย `bookmark`. อยู่ใน ddoc แยกจาก `_design/access`.
+
+---
+
 ## 3. DB `registry` (central-managed → pull ลง device; edge fallback replica)
 
 ### 3.1 `shelter` — `shelter:{ulid}`
