@@ -576,10 +576,12 @@ def test_aggregate_occupancy_gender_split():
     assert total == 3
     assert breakdown["male"] == 1
     assert breakdown["female"] == 1
+    # legacy 'other' is counted as unspecified (decision sync 2026-10-09)
+    assert breakdown["gender_unspecified"] == 1
 
 
-def test_aggregate_occupancy_null_gender_counts_in_total_only():
-    """schema_v 12 (CR-154): partner bookings may carry gender=None."""
+def test_aggregate_occupancy_null_gender_counts_as_unspecified():
+    """decision sync 2026-10-09: gender=None (any channel) → gender_unspecified."""
     total, breakdown = aggregate_occupancy(
         [
             _active_evacuee(_id="e1", gender=None),
@@ -589,6 +591,43 @@ def test_aggregate_occupancy_null_gender_counts_in_total_only():
     assert total == 2
     assert breakdown["male"] == 0
     assert breakdown["female"] == 1
+    assert breakdown["gender_unspecified"] == 1
+
+
+def test_aggregate_occupancy_missing_gender_key_counts_as_unspecified():
+    doc = _active_evacuee(_id="e1")
+    doc.pop("gender", None)
+    total, breakdown = aggregate_occupancy([doc])
+    assert total == 1
+    assert breakdown["gender_unspecified"] == 1
+
+
+def test_aggregate_occupancy_gender_groups_partition_total():
+    """Invariant: male + female + gender_unspecified == occupancy_total."""
+    total, breakdown = aggregate_occupancy(
+        [
+            _active_evacuee(_id="e1", gender="male"),
+            _active_evacuee(_id="e2", gender="male"),
+            _active_evacuee(_id="e3", gender="female"),
+            _active_evacuee(_id="e4", gender="other"),
+            _active_evacuee(_id="e5", gender=None),
+            _active_evacuee(_id="e6", gender="unexpected"),
+            {
+                "_id": "e7",
+                "type": "evacuee",
+                "gender": None,
+                "current_stay": {"status": "checked_out"},
+            },
+        ]
+    )
+    assert total == 6
+    assert breakdown["male"] == 2
+    assert breakdown["female"] == 1
+    assert breakdown["gender_unspecified"] == 3
+    assert (
+        breakdown["male"] + breakdown["female"] + breakdown["gender_unspecified"]
+        == total
+    )
 
 
 def test_aggregate_occupancy_age_buckets():
@@ -650,6 +689,7 @@ def test_aggregate_occupancy_empty_list():
     assert breakdown == {
         "male": 0,
         "female": 0,
+        "gender_unspecified": 0,
         "child_under_5": 0,
         "elderly_over_60": 0,
         "pregnant": 0,

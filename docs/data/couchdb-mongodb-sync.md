@@ -2,8 +2,8 @@
 title: Smart Shelter — CouchDB ⇄ MongoDB Sync (Public Plane)
 status: draft for review
 created: 2026-06-11
-updated: 2026-09-08
-note: คู่กับ data-model.md v3 + api-contract.md v1 + CR-017/CR-044 — public tier ทำงานบน MongoDB ผ่าน FastAPI; ตัด public_transparency (CR-017 Decision B); CR-113 unassigned_registrations
+updated: 2026-10-09
+note: คู่กับ data-model.md v3 + api-contract.md v1 + CR-017/CR-044 — public tier ทำงานบน MongoDB ผ่าน FastAPI; ตัด public_transparency (CR-017 Decision B); CR-113 unassigned_registrations; decision sync 2026-10-09 — worker PROJECTION_VERSION + auto re-bootstrap on start (stored in Mongo _worker_meta); bootstrap reads update_seq before scan
 ---
 
 # Smart Shelter — CouchDB ⇄ MongoDB Sync
@@ -70,6 +70,35 @@ staff device (PouchDB) ⇄ WAN ⇄ central (CouchDB) ⇄ sync worker (CDC ทั
 
 > `_purge` (retention) **ไม่โผล่ใน `_changes`** — ดู §7 retention; worker ต้องลบ Mongo แยก
 
+#### Projection version and automatic re-bootstrap
+
+> decision sync 2026-10-09
+
+The worker resumes `_changes` from its checkpoint, so documents that never change
+(e.g. an idle shelter) are not re-projected after a projector changes. To keep Mongo
+`public_*` shapes current, the code defines `PROJECTION_VERSION`
+(`worker/src/worker/projection_version.py`).
+
+- After every successful full bootstrap the worker stores the version in Mongo
+  (`_worker_meta`, `_id: "projection_version"`, next to `_sync_checkpoints`).
+- On start the worker runs a full bootstrap when: the registry checkpoint is missing
+  (first install), OR no stored version exists (one-off on installs that predate this
+  rule), OR stored < `PROJECTION_VERSION`. Stored > code (rollback) does not bootstrap
+  and logs a warning. `--bootstrap` / `--bootstrap-only` always run it.
+- The stored version is written only after the whole scan succeeds; a failed bootstrap
+  is retried on the next start.
+- Bootstrap reads each database's `update_seq` **before** scanning and checkpoints that
+  value, so edits made during the scan are replayed by the `_changes` tail (upserts are
+  idempotent).
+- **When to bump:** whenever a projector or `refresh_*` aggregation changes what it
+  writes (field added/removed/renamed/re-typed, changed semantics, new or newly
+  filtered doc type). Do not bump for refactors or read-side changes. Never decrement.
+- **Deploy effect:** staging/prod deploys (`up -d --build --force-recreate`) re-project
+  automatically on the first start after a bump; no manual `--bootstrap-only` is needed.
+- Limits: bootstrap covers open shelters only and never removes orphan rows. After a
+  rollback followed by a redeploy at the same version, run `sync-worker --bootstrap-only`
+  manually.
+
 ### 3.2 Mongo collections (ปลายทาง projection)
 
 ```js
@@ -124,7 +153,7 @@ staff device (PouchDB) ⇄ WAN ⇄ central (CouchDB) ⇄ sync worker (CDC ทั
 - ห้าม treat เป็น Evacuee / Couch SoR ก่อน claim
 - ห้ามนับเข้า Forecast occupancy รายศูนย์จนกว่า claim
 - claim order (locked, option B): Mongo mark/lock → Couch birth → revert Mongo on Couch failure
-- shape + claim algorithm: `schema.md` §9.5 + [CR-113](../changes/CR-113-unassigned-registration-mongo.md)
+- shape + claim algorithm: `schema.md` §9.5 + [CR-113](../changes/00-baseline/CR-113-unassigned-registration-mongo.md)
 
 **หลักการ projection:** allow-list field เท่านั้น — projector มี whitelist ตายตัวต่อ type; field
 ใหม่ใน CouchDB **ไม่หลุด**ไป Mongo เองจนกว่าจะเพิ่มใน whitelist (กัน PII leak โดยอุบัติเหตุ).

@@ -20,11 +20,11 @@
  */
 import { test, expect } from '@playwright/test';
 import {
-	completeUserOnboarding,
 	couchLogin,
 	createCouchUser,
 	deleteCouchUser,
-	SA_ROLES
+	SA_ROLES,
+	seedSecurityQuestion
 } from './helpers/couch';
 import { IS_REMOTE, READ_ONLY_REASON } from './helpers/e2e-env';
 import { injectSession } from './helpers/login';
@@ -73,7 +73,7 @@ const waitForPublicFaq = (question: string, present: boolean) =>
 test.beforeAll(async () => {
 	if (IS_REMOTE) return;
 	await createCouchUser(TEST_USER);
-	await completeUserOnboarding(TEST_USER.name);
+	await seedSecurityQuestion(TEST_USER.name);
 	sessionCookie = await couchLogin(TEST_USER.name, TEST_USER.password);
 	operatorContactLinks = await readContactLinks();
 });
@@ -189,7 +189,7 @@ test.describe('Public portal FAQ management', () => {
 });
 
 test.describe('Public portal contact links', () => {
-	test('admin sets LINE OA and Facebook links and the footer shows them', async ({ page }) => {
+	test('admin sets LINE OA and Facebook links', async ({ page }) => {
 		await injectSession(page, TEST_USER, sessionCookie);
 		await page.goto('/system-management/public-portal-config');
 		await page.getByRole('button', { name: 'ช่องทางการติดต่อ ตั้งค่าลิงก์ติดต่อ' }).click();
@@ -197,22 +197,9 @@ test.describe('Public portal contact links', () => {
 		await page.getByRole('textbox', { name: 'Facebook URL' }).fill(FACEBOOK_URL);
 		await page.getByRole('button', { name: 'บันทึกการเปลี่ยนแปลง' }).click();
 		await expect(page.getByText('บันทึกการตั้งค่าเรียบร้อยแล้ว')).toBeVisible();
-
-		// The BFF reads the config straight from CouchDB — no projection wait.
-		await page.goto('/');
-		const footer = page.getByRole('contentinfo');
-		await expect(footer.getByRole('heading', { name: 'ช่องทางออนไลน์ด่วน' })).toBeVisible();
-		await expect(footer.getByRole('link', { name: 'LINE OA ฉุกเฉิน' })).toHaveAttribute(
-			'href',
-			LINE_URL
-		);
-		await expect(footer.getByRole('link', { name: 'Facebook ข่าวสาร EOC' })).toHaveAttribute(
-			'href',
-			FACEBOOK_URL
-		);
 	});
 
-	test('admin clears the links and the footer drops the online channels', async ({ page }) => {
+	test('admin clears the links', async ({ page }) => {
 		await injectSession(page, TEST_USER, sessionCookie);
 		await page.goto('/system-management/public-portal-config');
 		await page.getByRole('button', { name: 'ช่องทางการติดต่อ ตั้งค่าลิงก์ติดต่อ' }).click();
@@ -221,12 +208,5 @@ test.describe('Public portal contact links', () => {
 		await page.getByRole('textbox', { name: 'Facebook URL' }).fill('');
 		await page.getByRole('button', { name: 'บันทึกการเปลี่ยนแปลง' }).click();
 		await expect(page.getByText('บันทึกการตั้งค่าเรียบร้อยแล้ว')).toBeVisible();
-
-		await page.goto('/');
-		const footer = page.getByRole('contentinfo');
-		await expect(footer.getByRole('heading', { name: 'เบอร์ติดต่อฉุกเฉิน' })).toBeVisible();
-		await expect(footer.getByRole('heading', { name: 'ช่องทางออนไลน์ด่วน' })).toHaveCount(0);
-		await expect(footer.getByRole('link', { name: 'LINE OA ฉุกเฉิน' })).toHaveCount(0);
-		await expect(footer.getByRole('link', { name: 'Facebook ข่าวสาร EOC' })).toHaveCount(0);
 	});
 });

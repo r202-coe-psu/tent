@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Protocol
 
 import httpx
@@ -16,6 +16,7 @@ from tent_model.unassigned_registration import (
 )
 
 from ...core.config import settings
+from ...utils.datetime_fmt import utc_z_isoformat
 
 _COUCH_TIMEOUT_SECONDS = 15.0
 _RELIGION_ALLOWED = frozenset({"buddhist", "muslim", "christian", "other", "unknown"})
@@ -62,9 +63,7 @@ def shelter_db_name(shelter_code: str) -> str:
 
 
 def _iso(ts: datetime) -> str:
-    if ts.tzinfo is None:
-        ts = ts.replace(tzinfo=UTC)
-    return ts.astimezone(UTC).isoformat().replace("+00:00", "Z")
+    return utc_z_isoformat(ts)
 
 
 def _household_label(doc: UnassignedRegistration, head: UnassignedMember) -> str:

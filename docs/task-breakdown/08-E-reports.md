@@ -7,7 +7,7 @@ module: E
 note: >
   CR-155 — Shelter Incident Log (`shelter_incident`) แทน Shelter Report (`shelter_report`, CR-040)
   ทั้งหมด รวมเรื่องร้องทุกข์ · staff ทุกคนเปิดบันทึกได้ · ไม่มี escalate → referral ในรอบนี้.
-  ดู docs/changes/CR-155-shelter-incident-log.md + docs/data/schema.md §2.10
+  ดู docs/changes/08-E-reports/CR-155-shelter-incident-log.md + docs/data/schema.md §2.10
 ---
 
 # Module E — Shelter Incident Log
@@ -18,7 +18,7 @@ note: >
 - **Phase:** R2, R3
 - **Design input (บริษัท):** P-01 (ส่งมอบแล้ว), P-02 (กำหนดส่งก่อนกรกฎาคม 2026)
 - **Target ส่งมอบ:** ภายในสิงหาคม 2026
-- **Spec:** [CR-155](../changes/CR-155-shelter-incident-log.md) (แทน [CR-040](../changes/CR-040-shelter-case-grievance-reframe.md)) · [schema.md §2.10](../data/schema.md)
+- **Spec:** [CR-155](../changes/08-E-reports/CR-155-shelter-incident-log.md) (แทน [CR-040](../changes/08-E-reports/CR-040-shelter-case-grievance-reframe.md)) · [schema.md §2.10](../data/schema.md)
 
 ## Features / Tasks
 

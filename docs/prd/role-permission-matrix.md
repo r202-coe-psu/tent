@@ -14,7 +14,7 @@ affects:
 
 ## 0. Document Purpose
 
-เอกสารนี้คือแม่บทการควบคุมสิทธิ์การเข้าถึงข้อมูลและการปฏิบัติการของระบบ Smart Shelter (Canonical Role-Based Access Control Specification) ครอบคลุมสถาปัตยกรรม **10 Role Taxonomy**, **Compound Scoped Roles (บทบาทระบุศูนย์)**, **Time-Bound Dynamic Role Provisioning**, และ **Health & Screening Visibility Policy** ตามที่กำหนดใน [CR-093](../changes/CR-093-multi-shelter-compound-roles.md) และ [CR-104](../changes/CR-104-volunteer-backoffice-and-user-management-v10.md).
+เอกสารนี้คือแม่บทการควบคุมสิทธิ์การเข้าถึงข้อมูลและการปฏิบัติการของระบบ Smart Shelter (Canonical Role-Based Access Control Specification) ครอบคลุมสถาปัตยกรรม **10 Role Taxonomy**, **Compound Scoped Roles (บทบาทระบุศูนย์)**, **Time-Bound Dynamic Role Provisioning**, และ **Health & Screening Visibility Policy** ตามที่กำหนดใน [CR-093](../changes/01-core/CR-093-multi-shelter-compound-roles.md) และ [CR-104](../changes/06-A-volunteer/CR-104-volunteer-backoffice-and-user-management-v10.md).
 
 ---
 
@@ -87,7 +87,7 @@ affects:
 | **Inventory & Supply** | รับของบริจาค, ตัดจ่ายพัสดุ, สต็อก | ✓ | scope | — | — | — | — | scope | — | — | — |
 | **Volunteer Job Board** | สร้างประกาศภารกิจงานอาสา, จัดกะ | ✓ | scope | — | — | — | — | — | scope | — | — |
 | **Volunteer Check-in** | รับรายงานตัวอาสาหน้างาน (POS/Kiosk) | ✓ | scope | scope | — | — | — | — | scope | — | — |
-| **Shelter Incident Log** ([CR-155](../changes/CR-155-shelter-incident-log.md)) | เปิดบันทึก + เพิ่มบันทึกสังเกตการณ์ (ทุก staff) · เปลี่ยนสถานะ/ส่งต่อ/ปิด = เจ้าของเคสหรือ SM · ยกเลิก = SM · ลบไม่ได้ทุก role | ✓ | scope | scope | scope | scope | scope | scope | scope | scope | scope |
+| **Shelter Incident Log** ([CR-155](../changes/08-E-reports/CR-155-shelter-incident-log.md)) | เปิดบันทึก + เพิ่มบันทึกสังเกตการณ์ (ทุก staff) · เปลี่ยนสถานะ/ส่งต่อ/ปิด = เจ้าของเคสหรือ SM · ยกเลิก = SM · ลบไม่ได้ทุก role | ✓ | scope | scope | scope | scope | scope | scope | scope | scope | scope |
 | **Zoning & Facilities** | จัดการโซน, เต็นท์, ทรัพย์สินอาคาร | ✓ | scope | — | — | — | — | — | — | — | scope |
 | **User Management** | สร้าง/แก้ไขผู้ใช้ประจำศูนย์ตน | ✓ | scope | — | — | — | — | — | — | — | — |
 

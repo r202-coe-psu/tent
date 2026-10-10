@@ -10,14 +10,14 @@ note: >
   Implement ตาม T-19 / T-33.
 ---
 
-> ⚠️ **Superseded โดย [CR-155](../changes/CR-155-shelter-incident-log.md) (2026-10-07)** — `shelter_report` ไม่ถูก build; ใช้ Shelter Incident Log (`shelter_incident`, [schema.md §2.10](../data/schema.md)) แทน. เอกสารนี้เก็บไว้เป็นประวัติเท่านั้น.
+> ⚠️ **Superseded โดย [CR-155](../changes/08-E-reports/CR-155-shelter-incident-log.md) (2026-10-07)** — `shelter_report` ไม่ถูก build; ใช้ Shelter Incident Log (`shelter_incident`, [schema.md §2.10](../data/schema.md)) แทน. เอกสารนี้เก็บไว้เป็นประวัติเท่านั้น.
 
 # Shelter Reports — Feature Flow & Requirements
 
 ## สรุป (TL;DR)
 
 - Module E = **เปิดและติดตามรายงานในศูนย์** — หน่วยหลัก = **Report** · แยกประเภทด้วย **`kind`**: grievance | incident — ไม่ใช่เฝ้าประตูหรือ CCTV
-- Persist: **`shelter_report:{ulid}`** (state machine) — [CR-040](../changes/CR-040-shelter-case-grievance-reframe.md)
+- Persist: **`shelter_report:{ulid}`** (state machine) — [CR-040](../changes/08-E-reports/CR-040-shelter-case-grievance-reframe.md)
 - **Mutate R3 = `shelter_manager` เท่านั้น** (allow-list ขยายได้ภายหลัง) · `system_admin` = platform override · ไม่มี PUB intake
 - Escalate = **atomic** กับสร้าง `referral` · List sort = **severity แล้ว occurred_at**
 - Occupancy / check-in/out อยู่ที่ People · CR done — implement ตาม T-19/T-33
@@ -31,7 +31,7 @@ note: >
 | **จุดประสงค์** | ให้ SM รับเรื่องในศูนย์ ติดตามจนปิด หรือ escalate ไป referral |
 | **ในขอบเขต** | Intake · list/filter/sort · detail + timeline · assign · สถานะ · escalate atomic → Module F |
 | **นอกขอบเขต** | Gate check-in/out · live occupancy roster · CCTV · public self-service · EOC aggregate ของรายงาน |
-| **Change Record** | [CR-040](../changes/CR-040-shelter-case-grievance-reframe.md) |
+| **Change Record** | [CR-040](../changes/08-E-reports/CR-040-shelter-case-grievance-reframe.md) |
 
 ### 1.1 Baseline vs หลัง CR-040
 

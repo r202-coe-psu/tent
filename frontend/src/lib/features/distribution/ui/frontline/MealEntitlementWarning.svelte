@@ -6,6 +6,7 @@
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import type { MealPeriod } from '../../domain/food-supplies';
 	import { getMealPeriodLabel } from '../model/ticket-status';
+	import { formatThaiTime } from '$lib/utils/date';
 
 	interface Props {
 		open: boolean;
@@ -106,10 +107,7 @@
 				</p>
 				{#if priorDistributedAt}
 					<p class="mt-1 text-2xs text-amber-700">
-						(เวลาที่รับล่าสุด: {new Date(priorDistributedAt).toLocaleTimeString('th-TH', {
-							hour: '2-digit',
-							minute: '2-digit'
-						})} น.)
+						(เวลาที่รับล่าสุด: {formatThaiTime(priorDistributedAt)} น.)
 					</p>
 				{/if}
 			</div>

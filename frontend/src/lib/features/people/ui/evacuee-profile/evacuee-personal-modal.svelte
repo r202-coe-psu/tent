@@ -24,7 +24,7 @@
 		nickname: string;
 		birthYear: number | undefined;
 		age: number | undefined;
-		gender: Gender;
+		gender: Gender | null;
 		phone: string | null;
 		cardType: CardType;
 		cardNumber: string;
@@ -56,8 +56,7 @@
 		age:
 			evacuee.age?.toString() ??
 			(evacuee.birth_year ? String(Math.max(0, currentYearBE - evacuee.birth_year)) : ''),
-		// `null` (partner booking, CR-154) → '' so staff must pick before saving.
-		gender: evacuee.gender ?? ('' as const),
+		gender: evacuee.gender ?? null,
 		phone: evacuee.phone ?? '',
 		noPhone: !evacuee.phone,
 		cardType: evacuee.person_id?.cardType ?? 'national_id',
@@ -73,7 +72,7 @@
 	let nickname = $state(initial.nickname);
 	let birthYear = $state(initial.birthYear);
 	let age = $state(initial.age);
-	let gender = $state<Gender | ''>(initial.gender);
+	let gender = $state<Gender | null>(initial.gender);
 	let phone = $state(initial.phone);
 	let noPhone = $state(initial.noPhone);
 	let personId = $state<{ cardType?: CardType; number?: string }>({
@@ -113,7 +112,7 @@
 			age:
 				evacuee.age?.toString() ??
 				(evacuee.birth_year ? String(Math.max(0, currentYearBE - evacuee.birth_year)) : ''),
-			gender: evacuee.gender ?? ('' as const),
+			gender: evacuee.gender ?? null,
 			phone: evacuee.phone ?? '',
 			noPhone: !evacuee.phone,
 			cardType: evacuee.person_id?.cardType ?? 'national_id',
@@ -247,8 +246,7 @@
 				nickname: validation.data.nickname,
 				birthYear: parsedBirthYear,
 				age: parsedAge,
-				// Valid ⇒ genderSchema already rejected the '' placeholder for a null gender.
-				gender: validation.data.gender as Gender,
+				gender: validation.data.gender,
 				phone: validation.data.noPhone ? null : digits(validation.data.phone),
 				cardType: validation.data.cardType,
 				cardNumber:

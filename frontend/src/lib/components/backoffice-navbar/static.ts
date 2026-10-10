@@ -1,25 +1,23 @@
 import type { ResolvedPathname } from '$app/types';
 import { resolve } from '$app/paths';
 import type { Icon } from '@lucide/svelte';
-import {
-	Users,
-	HeartHandshake,
-	ClipboardList,
-	Package,
-	FileCheck,
-	FileText,
-	Building,
-	UserCog,
-	Database,
-	Warehouse,
-	Calculator,
-	HandHeart,
-	MapPin,
-	UtensilsCrossed,
-	FlaskConical,
-	ClipboardCheck,
-	NotebookPen
-} from '@lucide/svelte/icons';
+import Users from '@lucide/svelte/icons/users';
+import HeartHandshake from '@lucide/svelte/icons/heart-handshake';
+import ClipboardList from '@lucide/svelte/icons/clipboard-list';
+import Package from '@lucide/svelte/icons/package';
+import FileCheck from '@lucide/svelte/icons/file-check';
+import FileText from '@lucide/svelte/icons/file-text';
+import Building from '@lucide/svelte/icons/building';
+import UserCog from '@lucide/svelte/icons/user-cog';
+import Database from '@lucide/svelte/icons/database';
+import Warehouse from '@lucide/svelte/icons/warehouse';
+import Calculator from '@lucide/svelte/icons/calculator';
+import HandHeart from '@lucide/svelte/icons/hand-heart';
+import MapPin from '@lucide/svelte/icons/map-pin';
+import UtensilsCrossed from '@lucide/svelte/icons/utensils-crossed';
+import FlaskConical from '@lucide/svelte/icons/flask-conical';
+import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
+import NotebookPen from '@lucide/svelte/icons/notebook-pen';
 
 type Leaf = {
 	label: string;
@@ -65,12 +63,12 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 		title: '2. บริหารทรัพยากร',
 		items: [
 			{
-				label: 'การประเมินความพร้อมศูนย์ (Readiness SOP)',
+				label: 'การประเมินความพร้อมศูนย์',
 				href: resolve('/back-office/shelters/readiness' as '/back-office/shelters'),
 				icon: ClipboardCheck
 			},
 			{
-				label: 'การประเมินประจำวัน (Daily SOP)',
+				label: 'การประเมินประจำวัน',
 				href: resolve('/back-office/dailysop'),
 				icon: ClipboardList
 			},
@@ -136,12 +134,12 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 			},
 			{ label: 'จัดการผู้ใช้งานและสิทธิ์', href: resolve('/back-office/users'), icon: UserCog },
 			{
-				label: 'จัดการข้อมูลหลัก (Master Data)',
+				label: 'จัดการข้อมูลหลัก',
 				href: null,
 				icon: Database,
 				children: [
 					{
-						label: 'Master Data',
+						label: 'ข้อมูลหลัก',
 						href: resolve('/back-office/master-data'),
 						icon: Database
 					},

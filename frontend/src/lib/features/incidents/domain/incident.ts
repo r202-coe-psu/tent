@@ -6,7 +6,7 @@
  * (append-only), and parties are split into complainant vs respondent so a respondent can
  * be identified later (late binding).
  *
- * Spec: docs/changes/CR-155-shelter-incident-log.md · docs/data/schema.md §2.10. Pure — no I/O, no Svelte.
+ * Spec: docs/changes/08-E-reports/CR-155-shelter-incident-log.md · docs/data/schema.md §2.10. Pure — no I/O, no Svelte.
  */
 import { z } from 'zod';
 import type { BaseDoc, Timestamp } from '$lib/db/model';

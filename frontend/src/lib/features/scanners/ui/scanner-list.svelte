@@ -9,6 +9,7 @@
 	import type { ScannerDevice } from '../domain/scanner.schema';
 	import { useDeleteScannerDevice, useUpdateScannerDevice } from '../application/queries';
 	import { toast } from 'svelte-sonner';
+	import { formatThaiShortDate } from '$lib/utils/date';
 
 	let {
 		devices = [],
@@ -47,7 +48,7 @@
 		if (diff < 60) return 'ออนไลน์เมื่อสักครู่';
 		if (diff < 3600) return `${Math.floor(diff / 60)} นาทีที่แล้ว`;
 		if (diff < 86400) return `${Math.floor(diff / 3600)} ชั่วโมงที่แล้ว`;
-		return new Date(lastSeen).toLocaleDateString('th-TH');
+		return formatThaiShortDate(lastSeen) || lastSeen;
 	}
 </script>
 

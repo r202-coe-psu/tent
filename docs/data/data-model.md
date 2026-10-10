@@ -14,14 +14,14 @@ note: ออกแบบใหม่ทั้งหมด — ไม่สืบ
 
 **Decisions ที่ฝังในรุ่นนี้ (เคาะ 2026-06-11):**
 
-| Decision | ค่า |
-| --- | --- |
-| Medical masking | **ไม่มี** — staff ทุก role เห็น medical เต็ม (สถานการณ์ฉุกเฉิน) |
-| Registration minimum | `first_name` + `last_name` + `gender` + `phone` (กรอก "ไม่มี" ได้ → เก็บ `null`) |
-| Scale assumptions | ≤350 shelters · ≤20,000 คน/ศูนย์ (ใหญ่สุด) · ≤50 devices/ศูนย์ |
-| Retention | purge PII ≤3 เดือนหลังปิดศูนย์ · local db บน device อายุ 1 เดือน (SOP wipe) · PSU = data controller |
-| EOC / Open API | deferred service แยก ใช้ **MongoDB projection** จาก Central CouchDB — ไม่มี operational doc type ในรุ่นนี้ |
-| Public tier | ทำงานบน **MongoDB projection** ที่ sync จาก central — ดู [couchdb-mongodb-sync](./couchdb-mongodb-sync.md) · [public-tier-flow-spec](../features/public-tier-flow-spec.html) |
+| Decision             | ค่า                                                                                                                                                                          |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Medical masking      | **ไม่มี** — staff ทุก role เห็น medical เต็ม (สถานการณ์ฉุกเฉิน)                                                                                                              |
+| Registration minimum | `first_name` + `last_name` + `gender` (key ต้องมี; "ไม่ระบุ" → เก็บ `null` — decision sync 2026-10-09) + `phone` (กรอก "ไม่มี" ได้ → เก็บ `null`)                            |
+| Scale assumptions    | ≤350 shelters · ≤20,000 คน/ศูนย์ (ใหญ่สุด) · ≤50 devices/ศูนย์                                                                                                               |
+| Retention            | purge PII ≤3 เดือนหลังปิดศูนย์ · local db บน device อายุ 1 เดือน (SOP wipe) · PSU = data controller                                                                          |
+| EOC / Open API       | deferred service แยก ใช้ **MongoDB projection** จาก Central CouchDB — ไม่มี operational doc type ในรุ่นนี้                                                                   |
+| Public tier          | ทำงานบน **MongoDB projection** ที่ sync จาก central — ดู [couchdb-mongodb-sync](./couchdb-mongodb-sync.md) · [public-tier-flow-spec](../features/public-tier-flow-spec.html) |
 
 ---
 
@@ -43,14 +43,14 @@ device app  ⇄ WAN ⇄  central (CouchDB)
 - ห้ามยิง write path พร้อมกันไปทั้ง central และ edge; ตอนสลับเป้าหมายต้องปิด traffic ไป endpoint เดิมก่อน
 - Edge เป็น **LAN continuity/fallback replica** ไม่ใช่ normal client hub; เมื่อ WAN กลับมา edge จะ sync backlog กลับ central ด้วย checkpoint ของ replicator
 
-| DB | central | edge (fallback replica) | device | Normal active endpoint | Edge fallback / server replication |
-| --- | --- | --- | --- | --- | --- |
-| `shelter_{shelter_code}` | ✓ (ทุกศูนย์) | ✓ (เฉพาะศูนย์ตน) | no disconnected read cache (status-only when unreachable) | app write/read ผ่าน central (live+retry) | app failover read/write ผ่าน edge เฉพาะ outage · edge ⇄ central sync backlog |
-| `registry` | ✓ master | ✓ replica | no disconnected read cache (status-only when unreachable) | app read จาก central (pull/read-through) | central → edge; app read จาก edge เฉพาะ outage |
-| `shelter_import_audit` | ✓ private | — | no browser access | server-side `adminRaw` + SA-only BFF | — |
-| `catalog` | ✓ master | ✓ replica | no disconnected read cache (status-only when unreachable) | app read จาก central (pull/read-through) | central → edge; app read จาก edge เฉพาะ outage |
-| `_users` | ✓ master | ✓ **filtered replica** (เฉพาะ user ของศูนย์ตน) | — | central `_session` | central → edge (selector by role `shelter:{id}`) เพื่อ fallback login |
-| `central_ops` | ✓ เท่านั้น | — | — | central-only service/read model & cross-tenant store | — (search_audit, export_job, `counter:shelter`, `referral`) |
+| DB                       | central      | edge (fallback replica)                        | device                                                    | Normal active endpoint                               | Edge fallback / server replication                                           |
+| ------------------------ | ------------ | ---------------------------------------------- | --------------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `shelter_{shelter_code}` | ✓ (ทุกศูนย์) | ✓ (เฉพาะศูนย์ตน)                               | no disconnected read cache (status-only when unreachable) | app write/read ผ่าน central (live+retry)             | app failover read/write ผ่าน edge เฉพาะ outage · edge ⇄ central sync backlog |
+| `registry`               | ✓ master     | ✓ replica                                      | no disconnected read cache (status-only when unreachable) | app read จาก central (pull/read-through)             | central → edge; app read จาก edge เฉพาะ outage                               |
+| `shelter_import_audit`   | ✓ private    | —                                              | no browser access                                         | server-side `adminRaw` + SA-only BFF                 | —                                                                            |
+| `catalog`                | ✓ master     | ✓ replica                                      | no disconnected read cache (status-only when unreachable) | app read จาก central (pull/read-through)             | central → edge; app read จาก edge เฉพาะ outage                               |
+| `_users`                 | ✓ master     | ✓ **filtered replica** (เฉพาะ user ของศูนย์ตน) | —                                                         | central `_session`                                   | central → edge (selector by role `shelter:{id}`) เพื่อ fallback login        |
+| `central_ops`            | ✓ เท่านั้น   | —                                              | —                                                         | central-only service/read model & cross-tenant store | — (search_audit, export_job, `counter:shelter`, `referral`)                  |
 
 - 1 ศูนย์ = 1 db → ปิดศูนย์ = หยุด replication + purge ทั้ง db ที่ central, ล้าง edge server ทั้งเครื่อง
 - ศูนย์ 20,000 คน: traffic ปกติวิ่งกับ **central**; ถ้า WAN/central ล่มระหว่าง onboarding จึง failover ไป
@@ -74,20 +74,20 @@ device app  ⇄ WAN ⇄  central (CouchDB)
 
 ### 3.1 People (baseline FR-4..13)
 
-| type | mutability | สาระ |
-| --- | --- | --- |
-| `evacuee` | mutable (LWW) | ตัวตน + สถานะการพักปัจจุบัน |
-| `medical` | mutable (LWW), **purge แยกได้** | ข้อมูล screening/แพทย์ของ evacuee — แยก doc เพื่อ purge ก่อนตามวงจร PDPA |
-| `household` | mutable (LWW) | ครัวเรือน — สมาชิกอ้าง evacuee id |
-| `movement` | **append-only** | event เข้า/ออก/ย้าย — ห้ามแก้ ห้ามลบ |
-| `screening` | **append-only** | event คัดกรองแต่ละครั้ง (ผลสรุปล่าสุดดูผ่าน view) |
+| type        | mutability                      | สาระ                                                                     |
+| ----------- | ------------------------------- | ------------------------------------------------------------------------ |
+| `evacuee`   | mutable (LWW)                   | ตัวตน + สถานะการพักปัจจุบัน                                              |
+| `medical`   | mutable (LWW), **purge แยกได้** | ข้อมูล screening/แพทย์ของ evacuee — แยก doc เพื่อ purge ก่อนตามวงจร PDPA |
+| `household` | mutable (LWW)                   | ครัวเรือน — สมาชิกอ้าง evacuee id                                        |
+| `movement`  | **append-only**                 | event เข้า/ออก/ย้าย — ห้ามแก้ ห้ามลบ                                     |
+| `screening` | **append-only**                 | event คัดกรองแต่ละครั้ง (ผลสรุปล่าสุดดูผ่าน view)                        |
 
 ```js
 // evacuee:{ulid}
 {
   type: "evacuee", schema_v: 2,
   // ---- minimum (บังคับแค่นี้ — เคาะ 2026-06-11) ----
-  first_name: "สมชาย", last_name: "ใจดี", gender: "male|female|other",
+  first_name: "สมชาย", last_name: "ใจดี", gender: "male|female|other" | null,  // null = ไม่ระบุ (default ฟอร์ม; 'other' = legacy อ่าน/preserve เท่านั้น)
   phone: "0812345678" | null,         // required ใน UI — ผู้ลงทะเบียนกด/กรอก "ไม่มี" → เก็บ null
                                       // ใช้ค้นใน FAM search (เบอร์เต็มเท่านั้น) — ไม่ส่งกลับใน public response
   country: "THAILAND",                // ประเทศต้นทาง (เพิ่มใน v2 — CR-007)
@@ -118,23 +118,23 @@ device app  ⇄ WAN ⇄  central (CouchDB)
 
 ### 3.2 Operations (R2–R3)
 
-| type | mutability | สาระ |
-| --- | --- | --- |
-| `stock_ledger` | **append-only** | รับ/จ่าย/ปรับ stock ราย item (+qty/−qty เป็น `qty_str`) — balance = **client** Decimal sum (CR-038; ไม่พึ่ง `_sum` ของ float) |
-| `stock_transfer` | state machine | โอนของข้ามศูนย์: `requested→shipped→received` (เขียนฝั่งต้นทาง replicate ผ่าน central) |
-| `donation` | state machine | pre-declaration จาก public tier หรือบันทึกหน้างาน: `declared→received→expired` |
-| `donation_campaign` | mutable (LWW) | ความต้องการของศูนย์ (needs ที่ public เห็นเป็น aggregate) |
-| `meal_plan` | mutable (LWW) | แผนมื้ออาหารรายวัน — อ้าง `recipe` + ปริมาณ (กล่อง/หม้อ) ต่อมื้อ |
-| `kitchen_requisition` | **append-only** | เบิกวัตถุดิบ — สร้าง `stock_ledger` คู่กัน (qty ติดลบ) |
-| `meal_service` | **append-only** | บันทึกแจกอาหารจริงต่อมื้อ |
-| `volunteer` | mutable (LWW) | อาสาสมัคร (คนละ doc กับ `_users` — อาสาไม่มี login ก็ได้; มี tracking_token ออก Digital Ticket; รหัสอาสา `V-{NNN}`, เช็คอิน/ยืนยันตัวตน, ศูนย์ปัจจุบัน — v2 CR-041 + CR-094) |
-| `job` | state machine | งานประกาศรับสมัครอาสาประจำศูนย์ (`operational` \| `staff-capable`, โควตา 3 สี `confirmed`/`dispatched`/`remaining`, template กะ, `draft`/`paused`/ด่วนพิเศษ) — v2 CR-041 + CR-094, job CRUD อยู่ใน back-office |
-| `job_application` | state machine | ใบสมัครงานอาสา (`pending_review→confirmed|rejected|cancelled`, tracking_token) — v2 CR-041 + CR-094 |
-| `shift_assignment` | mutable (LWW) | ตารางเวร + duty_window + เช็คอิน/เช็คเอาต์หน้างาน (QR หรือ manual override) + dispatch — v3 CR-094, บังคับ Time-Bound Write Access ที่ CouchDB (role grant ตามกะ) |
-| `volunteer_transfer` | state machine | คำขอโอนย้ายอาสาข้ามศูนย์ (`pending→accepted|rejected`) — doc ใหม่ CR-094 §3.5, accepted แล้วอัปเดต `volunteer.current_shelter_code` |
-| `shelter_incident` | state machine (ห้ามลบ) | บันทึกเหตุการณ์ประจำวันในศูนย์ — staff ทุกคนเปิดได้ · timeline append-only · แทน `shelter_report` — [CR-155](../changes/CR-155-shelter-incident-log.md) |
-| `referral` | state machine | ส่งต่อหน่วยงานนอก/ข้ามศูนย์: `draft→sent→accepted|rejected→closed` (จัดเก็บที่ `central_ops` — ดู schema.md §5.4) |
-| `audit` | **append-only** | การกระทำสำคัญ (override duplicate-hint, แก้ retroactive, export, ลบ) |
+| type                  | mutability             | สาระ                                                                                                                                                                                                           |
+| --------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `stock_ledger`        | **append-only**        | รับ/จ่าย/ปรับ stock ราย item (+qty/−qty เป็น `qty_str`) — balance = **client** Decimal sum (CR-038; ไม่พึ่ง `_sum` ของ float)                                                                                  |
+| `stock_transfer`      | state machine          | โอนของข้ามศูนย์: `requested→shipped→received` (เขียนฝั่งต้นทาง replicate ผ่าน central)                                                                                                                         |
+| `donation`            | state machine          | pre-declaration จาก public tier หรือบันทึกหน้างาน: `declared→received→expired`                                                                                                                                 |
+| `donation_campaign`   | mutable (LWW)          | ความต้องการของศูนย์ (needs ที่ public เห็นเป็น aggregate)                                                                                                                                                      |
+| `meal_plan`           | mutable (LWW)          | แผนมื้ออาหารรายวัน — อ้าง `recipe` + ปริมาณ (กล่อง/หม้อ) ต่อมื้อ                                                                                                                                               |
+| `kitchen_requisition` | **append-only**        | เบิกวัตถุดิบ — สร้าง `stock_ledger` คู่กัน (qty ติดลบ)                                                                                                                                                         |
+| `meal_service`        | **append-only**        | บันทึกแจกอาหารจริงต่อมื้อ                                                                                                                                                                                      |
+| `volunteer`           | mutable (LWW)          | อาสาสมัคร (คนละ doc กับ `_users` — อาสาไม่มี login ก็ได้; มี tracking_token ออก Digital Ticket; รหัสอาสา `V-{NNN}`, เช็คอิน/ยืนยันตัวตน, ศูนย์ปัจจุบัน — v2 CR-041 + CR-094)                                   |
+| `job`                 | state machine          | งานประกาศรับสมัครอาสาประจำศูนย์ (`operational` \| `staff-capable`, โควตา 3 สี `confirmed`/`dispatched`/`remaining`, template กะ, `draft`/`paused`/ด่วนพิเศษ) — v2 CR-041 + CR-094, job CRUD อยู่ใน back-office |
+| `job_application`     | state machine          | ใบสมัครงานอาสา (`pending_review→confirmed                                                                                                                                                                      | rejected                                                                                | cancelled`, tracking_token) — v2 CR-041 + CR-094 |
+| `shift_assignment`    | mutable (LWW)          | ตารางเวร + duty_window + เช็คอิน/เช็คเอาต์หน้างาน (QR หรือ manual override) + dispatch — v3 CR-094, บังคับ Time-Bound Write Access ที่ CouchDB (role grant ตามกะ)                                              |
+| `volunteer_transfer`  | state machine          | คำขอโอนย้ายอาสาข้ามศูนย์ (`pending→accepted                                                                                                                                                                    | rejected`) — doc ใหม่ CR-094 §3.5, accepted แล้วอัปเดต `volunteer.current_shelter_code` |
+| `shelter_incident`    | state machine (ห้ามลบ) | บันทึกเหตุการณ์ประจำวันในศูนย์ — staff ทุกคนเปิดได้ · timeline append-only · แทน `shelter_report` — [CR-155](../changes/08-E-reports/CR-155-shelter-incident-log.md)                                                        |
+| `referral`            | state machine          | ส่งต่อหน่วยงานนอก/ข้ามศูนย์: `draft→sent→accepted                                                                                                                                                              | rejected→closed`(จัดเก็บที่`central_ops` — ดู schema.md §5.4)                           |
+| `audit`               | **append-only**        | การกระทำสำคัญ (override duplicate-hint, แก้ retroactive, export, ลบ)                                                                                                                                           |
 
 State machine บน CouchDB = เขียน doc ใหม่ทั้ง doc พร้อม `status` ใหม่ (LWW) — ตัว transition ที่ขัดกัน
 ตอน sync ใช้กติกา **forward-only**: สถานะที่"ไปข้างหน้า"กว่าชนะ (received > shipped > requested)
@@ -171,13 +171,13 @@ State machine บน CouchDB = เขียน doc ใหม่ทั้ง doc 
 
 ## 4. Read models = CouchDB views (ไม่เก็บ aggregate เป็น doc)
 
-| View (design doc `_design/app`) | ใช้ทำ |
-| --- | --- |
-| `occupancy` — map movement → reduce `_count` ตาม status | dashboard FR-14, occupancy guard FR-12 |
-| `stock_balance` — **client** Decimal sum ของ `stock_ledger.qty` (`qty_str`) ต่อ item (CR-038; อย่าพึ่ง `_sum` ของ float) | stock dashboard, reorder alert |
-| `latest_screening` — map screening by (evacuee, ts) | ผลคัดกรองล่าสุด |
-| `meals_served` — reduce `_sum` ต่อวัน/มื้อ | kitchen dashboard |
-| `needs_open` — donation_campaign − donation(declared+received) | GET /public/v1/needs |
+| View (design doc `_design/app`)                                                                                          | ใช้ทำ                                  |
+| ------------------------------------------------------------------------------------------------------------------------ | -------------------------------------- |
+| `occupancy` — map movement → reduce `_count` ตาม status                                                                  | dashboard FR-14, occupancy guard FR-12 |
+| `stock_balance` — **client** Decimal sum ของ `stock_ledger.qty` (`qty_str`) ต่อ item (CR-038; อย่าพึ่ง `_sum` ของ float) | stock dashboard, reorder alert         |
+| `latest_screening` — map screening by (evacuee, ts)                                                                      | ผลคัดกรองล่าสุด                        |
+| `meals_served` — reduce `_sum` ต่อวัน/มื้อ                                                                               | kitchen dashboard                      |
+| `needs_open` — donation_campaign − donation(declared+received)                                                           | GET /public/v1/needs                   |
 
 **Producible boxes (FR-39 ส่วนขยาย — "stock ทำได้กี่กล่อง"):** คำนวณฝั่ง client ด้วย Decimal ไม่ใช่ view
 (ต้อง join ข้าม db) — `producible(recipe) = min( stock_balance[item] / qty_per_box[item] )`
@@ -190,12 +190,12 @@ design doc เดียวกัน deploy พร้อม db provisioning
 
 ## 5. Conflict policy
 
-| กลุ่ม | นโยบาย |
-| --- | --- |
-| append-only (movement, ledger, screening, …) | ไม่มี conflict — `_id` ULID ไม่ชนกัน ห้าม update |
-| mutable (evacuee, household, …) | LWW ด้วย `updated_at`; CouchDB เลือก winner เองแล้ว repair job ฝั่ง central ตรวจ `_conflicts` ทุกชม. → เก็บ revision แพ้ลง `audit` แล้วลบ conflict branch |
-| state machine (donation, transfer, referral) | forward-only: สถานะปลายทางไกลกว่าชนะ |
-| `current_stay` snapshot | movement view ชนะ — repair job sync snapshot |
+| กลุ่ม                                        | นโยบาย                                                                                                                                                    |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| append-only (movement, ledger, screening, …) | ไม่มี conflict — `_id` ULID ไม่ชนกัน ห้าม update                                                                                                          |
+| mutable (evacuee, household, …)              | LWW ด้วย `updated_at`; CouchDB เลือก winner เองแล้ว repair job ฝั่ง central ตรวจ `_conflicts` ทุกชม. → เก็บ revision แพ้ลง `audit` แล้วลบ conflict branch |
+| state machine (donation, transfer, referral) | forward-only: สถานะปลายทางไกลกว่าชนะ                                                                                                                      |
+| `current_stay` snapshot                      | movement view ชนะ — repair job sync snapshot                                                                                                              |
 
 ## 6. Security & validation
 
@@ -220,14 +220,14 @@ design doc เดียวกัน deploy พร้อม db provisioning
 
 ## 7. Retention (PDPA — PSU เป็น data controller)
 
-| ข้อมูล | นโยบาย |
-| --- | --- |
-| `medical` | purge ทันทีที่ครบ 3 เดือนหลัง `shelter.closed_at` (ลำดับแรก) |
-| `evacuee`, `household` | แทนที่ด้วย tombstone ไร้ PII (`{type, anonymized: true}`) ภายใน 3 เดือนหลังปิดศูนย์ |
-| `movement`, `screening`, ledger, audit | เก็บต่อได้ (อ้างถึงแค่ ULID — ไร้ PII หลัง tombstone) จนจบโครงการ |
-| donor PII ใน `donation` | ลบ name/phone ภายใน 3 เดือนหลังปิดศูนย์ (เหลือ hash + ยอด) |
-| local disconnected cache | ไม่ใช้ใน policy นี้ (status-only เมื่อไม่มี endpoint) |
-| edge server | wipe ทั้งเครื่อง (db + `_users` replica) เป็นขั้นตอนปิดศูนย์ — ก่อนนาฬิกา 3 เดือนเริ่มนับที่ central |
+| ข้อมูล                                 | นโยบาย                                                                                               |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `medical`                              | purge ทันทีที่ครบ 3 เดือนหลัง `shelter.closed_at` (ลำดับแรก)                                         |
+| `evacuee`, `household`                 | แทนที่ด้วย tombstone ไร้ PII (`{type, anonymized: true}`) ภายใน 3 เดือนหลังปิดศูนย์                  |
+| `movement`, `screening`, ledger, audit | เก็บต่อได้ (อ้างถึงแค่ ULID — ไร้ PII หลัง tombstone) จนจบโครงการ                                    |
+| donor PII ใน `donation`                | ลบ name/phone ภายใน 3 เดือนหลังปิดศูนย์ (เหลือ hash + ยอด)                                           |
+| local disconnected cache               | ไม่ใช้ใน policy นี้ (status-only เมื่อไม่มี endpoint)                                                |
+| edge server                            | wipe ทั้งเครื่อง (db + `_users` replica) เป็นขั้นตอนปิดศูนย์ — ก่อนนาฬิกา 3 เดือนเริ่มนับที่ central |
 
 Purge จริงบน CouchDB ใช้ `_purge` ที่ central + บังคับ client ที่มี cache เก่าทำ refresh/resync ใหม่
 (replication checkpoint อาจถูก invalidate หลัง purge — ตั้งใจ)

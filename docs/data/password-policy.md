@@ -71,5 +71,5 @@ note: นโยบายการตั้งรหัสผ่านสำห�
 
 | วันที่ | เวอร์ชัน | รายละเอียดการเปลี่ยนแปลง | อ้างอิง | ผู้รับรอง |
 | --- | --- | --- | --- | --- |
-| 2026-07-01 | 1.0 | กำหนดมาตรฐานความยาว 10 ตัวอักษร, พิมพ์ใหญ่, พิมพ์เล็ก, ตัวเลข และอักขระพิเศษ | [CR-027](../changes/CR-027-user-schema-update-and-password-policy.md) | Soravit Sukkarn |
-| 2026-09-01 | 2.0 | เพิ่มมาตรฐาน Memorable Temporary Passphrase (Admin OTP) และนโยบายคำถามความปลอดภัยสำหรับ Self-Service Recovery | [CR-105](../changes/CR-105-user-form-redesign-security-questions-and-passphrase-reset.md) | Project Owner |
+| 2026-07-01 | 1.0 | กำหนดมาตรฐานความยาว 10 ตัวอักษร, พิมพ์ใหญ่, พิมพ์เล็ก, ตัวเลข และอักขระพิเศษ | [CR-027](../changes/01-core/CR-027-user-schema-update-and-password-policy.md) | Soravit Sukkarn |
+| 2026-09-01 | 2.0 | เพิ่มมาตรฐาน Memorable Temporary Passphrase (Admin OTP) และนโยบายคำถามความปลอดภัยสำหรับ Self-Service Recovery | [CR-105](../changes/01-core/CR-105-user-form-redesign-security-questions-and-passphrase-reset.md) | Project Owner |

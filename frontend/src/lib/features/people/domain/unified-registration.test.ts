@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatPersonName, isAnonymousId } from './people';
+import { collectMemberRuleIssues, formatPersonName, isAnonymousId } from './people';
 import {
 	PRIMARY_CONTACT_LABEL,
 	applyAnonymousIdToMember,
@@ -203,9 +203,9 @@ describe('unified registration — mononym and anonymous ID', () => {
 		expect(isAnonymousId(member.person_id?.number ?? '')).toBe(true);
 	});
 
-	it('blankUnifiedMember leaves gender unset for forced male/female choice', () => {
+	it('blankUnifiedMember defaults gender to null (ไม่ระบุเพศ)', () => {
 		const member = blankUnifiedMember();
-		expect(member.gender).toBe('');
+		expect(member.gender).toBeNull();
 		expect(member.religion).toBe('unknown');
 	});
 
@@ -353,6 +353,48 @@ describe('unified registration — report-in converters', () => {
 		expect(otherMember.reporting_in).toBe(false);
 	});
 
+	it('preserves null and legacy other gender when loading an evacuee (decision sync 2026-10-09)', () => {
+		const base = {
+			_id: 'ev-g',
+			type: 'evacuee' as const,
+			household_id: 'hh-1',
+			first_name: 'สมชาย',
+			last_name: 'ใจดี',
+			phone: '0812345678',
+			person_id: { cardType: 'national_id' as const, number: '1234567890121' },
+			current_stay: {
+				status: 'pre_registered' as const,
+				zone: null,
+				since: '2026-01-01T00:00:00.000Z'
+			},
+			registered_via: 'web' as const,
+			created_at: '2026-01-01T00:00:00.000Z',
+			updated_at: '2026-01-01T00:00:00.000Z',
+			shelter_code: 'SH001'
+		};
+		type EvacueeArg = import('./people').Evacuee;
+		expect(
+			evacueeToUnifiedMember({ ...base, gender: null } as unknown as EvacueeArg, 'ev-g').gender
+		).toBeNull();
+		expect(
+			evacueeToUnifiedMember({ ...base, gender: 'other' } as unknown as EvacueeArg, 'ev-g').gender
+		).toBe('other');
+	});
+
+	it('accepts a registration whose members keep the default null gender (no required-gender error)', () => {
+		const parsed = unifiedRegistrationInputSchema.safeParse(
+			validInput({ members: [validMember({ gender: null })] })
+		);
+		expect(parsed.success).toBe(true);
+	});
+
+	it('accepts legacy other gender on a member (edit of an old doc)', () => {
+		const parsed = unifiedRegistrationInputSchema.safeParse(
+			validInput({ members: [validMember({ gender: 'other' })] })
+		);
+		expect(parsed.success).toBe(true);
+	});
+
 	it('pre-fills address from evacuee card_snapshot when household is null (Kiosk flow)', () => {
 		const kioskEvacuee = {
 			_id: 'ev-kiosk-1',
@@ -453,5 +495,62 @@ describe('unified registration — report-in converters', () => {
 		expect(targetMember.emergency_contact?.name).toBe('กิตติศักดิ์');
 		expect(targetMember.special_needs).toContain('ต้องการแพมเพิส');
 		expect(targetMember.vulnerable_groups).toContain('pregnant');
+	});
+});
+
+describe('unified registration — collectMemberRuleIssues (one-pass validation)', () => {
+	it('keeps the cross-field issues Zod skips when gender is missing', () => {
+		const members = [
+			validMember({
+				gender: '' as UnifiedRegistrationInput['members'][number]['gender'],
+				person_id: { cardType: 'national_id', number: '1234567890123' }
+			})
+		];
+
+		const parsed = unifiedRegistrationInputSchema.safeParse(validInput({ members }));
+		expect(parsed.success).toBe(false);
+		const zodMessages = parsed.success ? [] : parsed.error.issues.map((i) => i.message);
+		// Base-schema abort (gender) hides the checksum rule from superRefine…
+		expect(zodMessages.some((m) => m.includes('เลขบัตรประชาชนไม่ถูกต้อง'))).toBe(false);
+
+		// …so the collector must surface it, with the same path the form maps to #member-0-card-number.
+		const issues = collectMemberRuleIssues(members);
+		expect(issues).toHaveLength(1);
+		expect(issues[0].path).toEqual(['members', 0, 'person_id', 'number']);
+		expect(issues[0].message).toContain('เลขบัตรประชาชนไม่ถูกต้อง');
+		expect(zodMessages.some((m) => m.includes('เพศ'))).toBe(true);
+	});
+
+	it('collects every rule per member with members[i] paths', () => {
+		const issues = collectMemberRuleIssues([
+			validMember(),
+			validMember({
+				birth_year: 2500,
+				age: 5,
+				religion: 'other',
+				religion_other: ' ',
+				person_id: { cardType: 'national_id', number: '123' }
+			})
+		]);
+
+		expect(issues.map((i) => i.path.join('.')).sort()).toEqual([
+			'members.1.age',
+			'members.1.person_id.number',
+			'members.1.religion_other'
+		]);
+	});
+
+	it('returns nothing for valid members', () => {
+		expect(collectMemberRuleIssues([validMember()])).toEqual([]);
+	});
+
+	it('skips the checksum for an unchanged stored number (report-in)', () => {
+		const issues = collectMemberRuleIssues([
+			validMember({
+				person_id: { cardType: 'national_id', number: '1234567890123' },
+				original_person_number: '1234567890123'
+			})
+		]);
+		expect(issues).toEqual([]);
 	});
 });

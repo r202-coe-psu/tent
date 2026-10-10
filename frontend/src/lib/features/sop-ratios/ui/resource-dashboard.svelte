@@ -24,7 +24,11 @@
 	const nf = new Intl.NumberFormat('th-TH', { maximumFractionDigits: 1 });
 	const pct = new Intl.NumberFormat('th-TH', { style: 'percent', maximumFractionDigits: 0 });
 	const fmtDateTime = (iso: string) =>
-		new Date(iso).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' });
+		new Date(iso).toLocaleString('th-TH', {
+			timeZone: 'Asia/Bangkok',
+			dateStyle: 'medium',
+			timeStyle: 'short'
+		});
 
 	const SEVERITY_LABEL: Record<Severity, string> = {
 		critical: 'วิกฤต',
