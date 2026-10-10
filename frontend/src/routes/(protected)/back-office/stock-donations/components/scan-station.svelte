@@ -49,6 +49,12 @@
 	import { ulid } from '$lib/db/ulid';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { useShelters } from '$lib/features/shelters';
+	import {
+		StoragePointSelect,
+		storageLotFields,
+		useStoragePoints,
+		type StoragePointRef
+	} from '$lib/features/operations';
 
 	let {
 		initialQuery = '',
@@ -90,14 +96,18 @@
 		}))
 	);
 
-	const STORAGE_ZONE_OPTIONS = [
-		'Zone A (อาหารแห้งและเครื่องดื่ม)',
-		'Zone B (ยาและเวชภัณฑ์)',
-		'Zone C (ของใช้ทั่วไปและสุขอนามัย)',
-		'Zone D (เครื่องนุ่งห่มและที่นอน)',
-		'Zone E (อุปกรณ์และเครื่องมือช่าง)',
-		'Zone F (ห้องควบคุมอุณหภูมิ/ตู้แช่)'
-	];
+	// The shelter's own storage points (`common_areas.sub_storage`, CR-139 FR-11) —
+	// a lot records `storage_point_id` + the name snapshot via `storageLotFields`.
+	const storagePoints = useStoragePoints(() => getShelterCode());
+
+	/** The chosen point, or `null` for unspecified (main store) or a point since deleted. */
+	function storagePointFor(id: string): StoragePointRef | null {
+		return storagePoints.points.find((p) => p.id === id) ?? null;
+	}
+
+	// CR-139 N1: a point is required only once the shelter has set any up; a shelter
+	// with none receives into the main store.
+	const storagePointRequired = $derived(storagePoints.points.length > 0);
 
 	/** The catalog row's display label, or the dropdown placeholder when unmapped. */
 	function catalogLabel(itemId: string | undefined, placeholder: string): string {
@@ -140,7 +150,8 @@
 		unit: string;
 		item_id?: string;
 		expiry: string;
-		storage_zone: string;
+		/** Chosen storage point id ('' = unspecified / main store). */
+		storage_point_id: string;
 		diffReason: string;
 		verified: boolean;
 	};
@@ -284,13 +295,6 @@
 		)
 	);
 
-	// Validation check for receiving into stock
-	const canReceive = $derived(
-		scannedItems.length > 0 &&
-			scannedItems.every((it) => it.verified && it.item_id && it.storage_zone && it.qty) &&
-			scannedMissingExpiry.length === 0
-	);
-
 	// The receive checklist in the action panel — one line per condition `canReceive`
 	// waits on, ticked as staff complete it (it used to be a red error box listing
 	// what was still missing, which read as a failure before anything had been done).
@@ -298,7 +302,19 @@
 		scannedItems.length > 0 && scannedItems.every((it) => it.item_id && it.qty)
 	);
 	const checkZoned = $derived(
-		scannedItems.length > 0 && scannedItems.every((it) => it.storage_zone)
+		scannedItems.length > 0 &&
+			(!storagePointRequired ||
+				scannedItems.every((it) => storagePointFor(it.storage_point_id) !== null))
+	);
+
+	// Validation check for receiving into stock. Wait for the storage points: until
+	// they load, a shelter that has some looks like one that has none (N1).
+	const canReceive = $derived(
+		scannedItems.length > 0 &&
+			!storagePoints.isLoading &&
+			scannedItems.every((it) => it.verified && it.item_id && it.qty) &&
+			checkZoned &&
+			scannedMissingExpiry.length === 0
 	);
 	const verifiedCount = $derived(scannedItems.filter((it) => it.verified).length);
 	const hasPerishableLine = $derived(
@@ -344,7 +360,7 @@
 		qty: string;
 		unit: string;
 		expiry: string;
-		storageZone: string;
+		storagePointId: string;
 	};
 	let walkinItems = $state<WalkinItemState[]>([
 		{
@@ -354,7 +370,7 @@
 			qty: '1',
 			unit: 'piece',
 			expiry: '',
-			storageZone: ''
+			storagePointId: ''
 		}
 	]);
 	let walkinSaving = $state(false);
@@ -437,7 +453,7 @@
 						unit: it.unit || '',
 						item_id: matched?._id || it.item_id || '',
 						expiry: '',
-						storage_zone: '',
+						storage_point_id: '',
 						diffReason: '',
 						verified: false
 					};
@@ -483,11 +499,11 @@
 						...(it.item_id ? { item_id: it.item_id } : { free_text: it.name }),
 						qty: it.qty,
 						unit: it.unit,
-						...(it.item_id && (it.expiry || it.storage_zone.trim())
+						...(it.item_id && (it.expiry || storagePointFor(it.storage_point_id))
 							? {
 									lot: {
 										...(it.expiry ? { expiry: it.expiry } : {}),
-										...(it.storage_zone.trim() ? { storage_zone: it.storage_zone.trim() } : {})
+										...storageLotFields(storagePointFor(it.storage_point_id))
 									}
 								}
 							: {})
@@ -594,7 +610,7 @@
 			qty: '1',
 			unit: 'piece',
 			expiry: '',
-			storageZone: ''
+			storagePointId: ''
 		});
 	}
 
@@ -663,11 +679,11 @@
 						item_id: it.itemId,
 						qty: it.qty,
 						unit: it.unit,
-						...(it.expiry.trim() || it.storageZone.trim()
+						...(it.expiry.trim() || storagePointFor(it.storagePointId)
 							? {
 									lot: {
 										...(it.expiry.trim() ? { expiry: it.expiry.trim() } : {}),
-										...(it.storageZone.trim() ? { storage_zone: it.storageZone.trim() } : {})
+										...storageLotFields(storagePointFor(it.storagePointId))
 									}
 								}
 							: {})
@@ -696,7 +712,7 @@
 					qty: '1',
 					unit: 'piece',
 					expiry: '',
-					storageZone: ''
+					storagePointId: ''
 				}
 			];
 			onSaved?.();
@@ -850,21 +866,14 @@
 
 									<div class="space-y-1.5">
 										<Label for="storage-zone-{idx}" class="text-sm font-semibold text-slate-700">
-											โซนจัดเก็บ <span class="text-red-500">*</span>
+											จุดเก็บของ
+											{#if storagePointRequired}<span class="text-red-500">*</span>{/if}
 										</Label>
-										<Select.Root type="single" bind:value={item.storage_zone}>
-											<Select.Trigger
-												id="storage-zone-{idx}"
-												class="h-11 w-full text-sm data-[size=default]:h-11 sm:h-10 sm:data-[size=default]:h-10"
-											>
-												{item.storage_zone || '-- เลือกโซนจัดเก็บ --'}
-											</Select.Trigger>
-											<Select.Content>
-												{#each STORAGE_ZONE_OPTIONS as zone (zone)}
-													<Select.Item value={zone} label={zone} />
-												{/each}
-											</Select.Content>
-										</Select.Root>
+										<StoragePointSelect
+											id="storage-zone-{idx}"
+											points={storagePoints.points}
+											bind:value={item.storage_point_id}
+										/>
 									</div>
 
 									<div class="space-y-1.5">
@@ -995,7 +1004,9 @@
 									</li>
 								{/snippet}
 								{@render step(checkMapped, 'เลือกรายการในคลังและกรอกจำนวนรับจริงครบ')}
-								{@render step(checkZoned, 'เลือกโซนจัดเก็บครบทุกรายการ')}
+								{#if storagePointRequired}
+									{@render step(checkZoned, 'เลือกจุดเก็บของครบทุกรายการ')}
+								{/if}
 								{#if hasPerishableLine}
 									{@render step(
 										scannedMissingExpiry.length === 0,
@@ -1587,15 +1598,13 @@
 											for="walkin-zone-{item.id}"
 											class="text-sm font-semibold text-foreground"
 										>
-											โซนจัดเก็บ
+											จุดเก็บของ
 											<span class="ml-1 text-xs font-normal text-muted-foreground">(ถ้ามี)</span>
 										</Label>
-										<Input
+										<StoragePointSelect
 											id="walkin-zone-{item.id}"
-											type="text"
-											placeholder="เช่น A-01, ตู้แช่ 2"
-											bind:value={item.storageZone}
-											class="h-10 rounded-xl text-sm"
+											points={storagePoints.points}
+											bind:value={item.storagePointId}
 										/>
 									</div>
 								</div>

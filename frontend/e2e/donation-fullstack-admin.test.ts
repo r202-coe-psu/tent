@@ -504,7 +504,8 @@ test.describe('scan station walk-in', () => {
 		await page.getByRole('button', { name: /^เลือกประเภทสิ่งของ/ }).click();
 		await page.getByRole('option', { name: /^สบู่ก้อน/ }).click();
 		await page.getByRole('textbox', { name: 'จำนวนที่รับจริง *' }).fill('3');
-		await page.getByRole('textbox', { name: 'โซนจัดเก็บ (ถ้ามี)' }).fill('A-1');
+		await page.getByRole('button', { name: /^จุดเก็บของ/ }).click();
+		await page.getByRole('option').first().click();
 
 		const posted = page.waitForResponse(
 			(r) => r.url().endsWith('/api/back-office/donations') && r.request().method() === 'POST'

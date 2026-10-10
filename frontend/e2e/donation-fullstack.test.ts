@@ -89,7 +89,7 @@ test.describe('staff review', () => {
 		await expect(confirm).toBeDisabled();
 		await expect(page.getByRole('textbox', { name: 'จำนวนรับจริง *' })).toHaveValue('1');
 		await page.getByRole('checkbox', { name: 'ผ่านการตรวจสอบแล้ว' }).check();
-		await page.getByRole('button', { name: /^โซนจัดเก็บ/ }).click();
+		await page.getByRole('button', { name: /^จุดเก็บของ/ }).click();
 		await page.getByRole('option').first().click();
 		await expect(confirm).toBeEnabled();
 
