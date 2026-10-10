@@ -11,6 +11,7 @@ import {
 	useUnitsOfMeasure
 } from '$lib/features/catalog';
 import { langState } from '$lib/states/i18n.svelte';
+import { errorMessage } from '$lib/utils/errors';
 import { useQueryClient } from '@tanstack/svelte-query';
 import {
 	operationsKeys,
@@ -370,7 +371,7 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 					options?.onFormCreated?.();
 				},
 				onError: (err) => {
-					toast.error(`ไม่สามารถสร้างประกาศได้: ${err.message}`);
+					toast.error(`ไม่สามารถสร้างประกาศได้: ${errorMessage(err)}`);
 				}
 			}
 		);
@@ -448,7 +449,7 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 					toast.success(`แก้ไขประกาศ "${title}" สำเร็จ`);
 				},
 				onError: (err) => {
-					toast.error(`ไม่สามารถแก้ไขประกาศได้: ${err.message}`);
+					toast.error(`ไม่สามารถแก้ไขประกาศได้: ${errorMessage(err)}`);
 				}
 			}
 		);
