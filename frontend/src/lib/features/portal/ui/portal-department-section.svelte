@@ -12,11 +12,17 @@
 	interface Props {
 		department: PortalDepartmentView;
 		selectedShelterCode: string | null | undefined;
+		/** `tile` = large tiles in a 3-column grid (focused layout); `compact` = rows in one column. */
+		variant?: 'tile' | 'compact';
 	}
 
-	let { department, selectedShelterCode }: Props = $props();
+	let { department, selectedShelterCode, variant = 'tile' }: Props = $props();
 
 	const Icon = $derived(PORTAL_ICONS[department.icon]);
+	const compact = $derived(variant === 'compact');
+	const gridClass = $derived(
+		compact ? 'grid grid-cols-1 gap-2' : 'grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3'
+	);
 	const headingId = $derived(`portal-dept-${department.id}`);
 	const cssVars = $derived(portalDepartmentCssVars(department));
 
@@ -49,36 +55,45 @@
 	class="overflow-hidden rounded-2xl border border-(color:--c-border) bg-white shadow-2xs"
 >
 	<header
-		class="flex items-center gap-3 border-b border-(color:--c-border) bg-(--c-subtle) px-4 py-3 sm:px-6 sm:py-4"
+		class={[
+			'flex items-center gap-3 border-b border-(color:--c-border) bg-(--c-subtle)',
+			compact ? 'px-4 py-3' : 'px-4 py-3 sm:px-6 sm:py-4'
+		]}
 	>
 		<span
-			class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-(--c-strong) text-white"
+			class={[
+				'flex shrink-0 items-center justify-center rounded-xl bg-(--c-strong) text-white',
+				compact ? 'size-9' : 'size-11'
+			]}
 			aria-hidden="true"
 		>
-			<Icon class="size-6" />
+			<Icon class={compact ? 'size-5' : 'size-6'} />
 		</span>
 		<div class="min-w-0 flex-1">
-			<h2 id={headingId} class="text-lg font-bold text-(color:--c-text) sm:text-xl">
+			<h2
+				id={headingId}
+				class={['font-bold text-(color:--c-text)', compact ? 'text-base' : 'text-lg sm:text-xl']}
+			>
 				{department.label}
 			</h2>
-			<p class="text-sm text-slate-600">{department.desc}</p>
+			<p class={['text-sm text-slate-600', compact && 'line-clamp-1']}>{department.desc}</p>
 		</div>
 		<span
-			class="shrink-0 rounded-full border border-(color:--c-border) bg-white px-2.5 py-0.5 text-xs font-semibold text-(color:--c-text) tabular-nums"
+			class="shrink-0 rounded-full border border-(color:--c-border) bg-white px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap text-(color:--c-text) tabular-nums"
 		>
 			{department.items.length} เมนู
 		</span>
 	</header>
 
-	<div class="space-y-5 p-4 sm:p-6">
+	<div class={compact ? 'space-y-4 p-3 sm:p-4' : 'space-y-5 p-4 sm:p-6'}>
 		{#each blocks as block (block.key)}
 			<div class="space-y-2">
 				{#if block.label}
 					<h3 class="text-sm font-semibold text-slate-600">{block.label}</h3>
 				{/if}
-				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+				<div class={gridClass}>
 					{#each block.items as { item, state } (item.id)}
-						<PortalMenuTile {item} {state} {selectedShelterCode} />
+						<PortalMenuTile {item} {state} {selectedShelterCode} {variant} />
 					{/each}
 				</div>
 			</div>

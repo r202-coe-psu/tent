@@ -16,6 +16,11 @@
 	--registration-sticky-top: 4rem;
 	--registration-scroll-mt: calc(var(--registration-sticky-top) + 0.5rem);
 	/*
+	 * Staff portal (`/portal`) sticky chip bar: sits directly under the protected-layout app header
+	 * (`h-14` = 3.5rem, sticky top-0). Keep in sync with `(protected)/+layout.svelte`.
+	 */
+	--portal-sticky-top: 3.5rem;
+	/*
 	 * Shelter form sticky offset: BO chrome (`--bo-sticky-top`) + form title bar (~4rem).
 	 * Form title bar uses `top-[var(--bo-sticky-top)]` under the BO page header.
 	 */

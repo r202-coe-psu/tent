@@ -14,7 +14,14 @@
 		shelterCodesFromRoles,
 		parseCompoundCapability
 	} from '$lib/auth/roles';
-	import { PortalMenuSections, type PortalFeatures } from '$lib/features/portal';
+	import {
+		PortalMenuSections,
+		PortalRolePreview,
+		createPortalPreviewState,
+		resolvePortalPreview,
+		type PortalFeatures,
+		type PortalPreviewState
+	} from '$lib/features/portal';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Select from '$lib/components/ui/select';
 
@@ -69,6 +76,18 @@
 		authStore.user?.display_name || authStore.user?.name || 'ผู้ปฏิบัติงาน'
 	);
 	const username = $derived(authStore.user?.name ?? '');
+
+	// System-admin role preview (UI-only, not persisted): what the menu shows for the previewed
+	// roles and features. Real roles/permissions and the auth store are never touched.
+	let preview = $state<PortalPreviewState>(createPortalPreviewState());
+	const menu = $derived(
+		resolvePortalPreview({
+			realRoles: roles,
+			shelterCode: selectedCode,
+			features,
+			preview
+		})
+	);
 
 	// Role display labels (Thai)
 	const userRoleLabels = $derived.by(() => {
@@ -214,7 +233,13 @@
 		</section>
 
 		<main>
-			<PortalMenuSections {roles} selectedShelterCode={selectedCode} {features} />
+			<PortalRolePreview bind:preview realRoles={roles} selectedShelterCode={selectedCode} />
+			<PortalMenuSections
+				roles={menu.roles}
+				selectedShelterCode={selectedCode}
+				features={menu.features}
+				{username}
+			/>
 		</main>
 	</div>
 </div>
