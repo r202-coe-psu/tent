@@ -6,6 +6,7 @@ import {
 	canSeePortalPublicLink,
 	filterPortalMenu,
 	isPortalItemVisible,
+	portalPriorityDepartments,
 	resolvePortalHref,
 	type PortalDepartmentView,
 	type PortalFeatures,
@@ -47,17 +48,26 @@ const ORDER = [
 	'central'
 ];
 
+/** SA sees central, then management, then the rest in declared order. */
+const SA_ORDER = [
+	'central',
+	'management',
+	...ORDER.filter((id) => id !== 'central' && id !== 'management')
+];
+/** SM (own shelter) sees management first, then the rest; no central. */
+const SM_ORDER = ['management', ...ORDER.filter((id) => id !== 'central' && id !== 'management')];
+
 describe('filterPortalMenu — system admin', () => {
-	it('sees every department in the fixed order with the flag on', () => {
+	it('sees every department with central and management first (flag on)', () => {
 		const views = menu(SA, ON);
-		expect(deptIds(views)).toEqual(ORDER);
+		expect(deptIds(views)).toEqual(SA_ORDER);
 		expect(stations(views)).toEqual([1, 2, 3]);
 		expect(stateOf(views, 'station-2')).toBe('ready');
 	});
 
 	it('hides Station 2 when the flag is off (even for SA)', () => {
 		const views = menu(SA, OFF);
-		expect(deptIds(views)).toEqual(ORDER);
+		expect(deptIds(views)).toEqual(SA_ORDER);
 		expect(stations(views)).toEqual([1, 3]);
 	});
 
@@ -72,12 +82,35 @@ describe('filterPortalMenu — system admin', () => {
 	});
 });
 
+describe('portalPriorityDepartments', () => {
+	it('puts central then management first for SA', () => {
+		expect(portalPriorityDepartments(SA, 'SH001')).toEqual(['central', 'management']);
+	});
+
+	it('puts management first for SM of the selected shelter only', () => {
+		const roles = [
+			'shelter:SH001',
+			'shelter:SH002',
+			'SH001:shelter_manager',
+			'SH002:kitchen_staff'
+		];
+		expect(portalPriorityDepartments(roles, 'SH001')).toEqual(['management']);
+		expect(portalPriorityDepartments(roles, 'SH002')).toEqual([]);
+	});
+
+	it('keeps the declared order for other roles', () => {
+		const roles = ['shelter:SH001', 'SH001:security_officer', 'SH001:kitchen_staff'];
+		expect(portalPriorityDepartments(roles, 'SH001')).toEqual([]);
+		expect(deptIds(menu(roles, ON))).toEqual(['kitchen', 'security']);
+	});
+});
+
 describe('filterPortalMenu — shelter manager', () => {
 	const sm = ['shelter:SH001', 'SH001:shelter_manager'];
 
-	it('sees everything in their own shelter except the central department', () => {
+	it('sees everything in their own shelter except central, management first', () => {
 		const views = menu(sm, ON);
-		expect(deptIds(views)).toEqual(ORDER.filter((id) => id !== 'central'));
+		expect(deptIds(views)).toEqual(SM_ORDER);
 		expect(itemIds(dept(views, 'management'))).toEqual([
 			'shelter-manage',
 			'shelter-readiness',

@@ -518,5 +518,33 @@ export function filterPortalMenu({
 		}
 		if (items.length > 0) views.push({ ...department, items });
 	}
-	return views;
+	return orderForRole(views, roles, shelterCode);
+}
+
+/**
+ * Departments a role works in most, shown first: SA → central then management, SM (of the
+ * selected shelter) → management. Everyone else keeps the declared order.
+ */
+export function portalPriorityDepartments(
+	roles: readonly string[],
+	shelterCode: string | null | undefined
+): readonly PortalDepartmentId[] {
+	if (isSystemAdmin(roles)) return ['central', 'management'];
+	if (isShelterManager(roles, shelterCode)) return ['management'];
+	return [];
+}
+
+function orderForRole(
+	views: PortalDepartmentView[],
+	roles: readonly string[],
+	shelterCode: string | null | undefined
+): PortalDepartmentView[] {
+	const priority = portalPriorityDepartments(roles, shelterCode);
+	if (priority.length === 0) return views;
+	const rank = (id: PortalDepartmentId) => {
+		const index = priority.indexOf(id);
+		return index === -1 ? priority.length : index;
+	};
+	// Array#sort is stable, so non-priority departments keep their declared order.
+	return [...views].sort((a, b) => rank(a.id) - rank(b.id));
 }
