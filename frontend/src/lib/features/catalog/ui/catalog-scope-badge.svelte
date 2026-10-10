@@ -42,7 +42,7 @@
 		ปรับแต่งแล้ว
 	</span>
 {:else}
-	<span class="badge-inventory">
+	<span class="badge-domain-donation">
 		<Building2 class="size-3.5" />
 		เฉพาะศูนย์
 	</span>
