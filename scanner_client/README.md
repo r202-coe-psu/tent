@@ -578,7 +578,9 @@ SFace เทียบหน้า, MiniFASNet ตรวจว่าเป็น�
 หรือแสดงรายชื่อสมาชิก (check-in) ระบบไม่ปฏิเสธใครถาวร แต่ให้เจ้าหน้าที่ตรวจบัตรด้วยตาแล้วยืนยันด้วย PIN
 PIN ตั้ง/ดูได้ที่ `/system-management/scanners` (SA เท่านั้น) ตรวจผ่าน `/api/v1/scanner/kiosk/staff-pin/verify`
 โดย scanner_client แนบ device credential ให้ ดู [draft-kiosk-staff-pin-face-bypass](../docs/changes/draft-kiosk-staff-pin-face-bypass.md)
-**ก่อนเปิด `on` ต้องตั้ง PIN ให้เครื่องนั้นแล้ว** ไม่งั้นจะข้ามด้วย PIN ไม่ได้ (`staff_pin_not_set`)
+**ก่อนตั้ง `on` ที่เครื่องใด ต้องให้เครื่องนั้นมี PIN แล้ว** ไม่งั้นจะข้ามด้วย PIN ไม่ได้ (`staff_pin_not_set`)
+เครื่องที่สร้างใหม่ได้ default PIN ทันที ส่วนเครื่องเดิมที่ยังไม่มี PIN ให้ผู้ดูแลรัน `pnpm sync:central --write --confirm` (ใน `frontend/`)
+เพื่อสร้าง default PIN ให้ แล้ว SA ใช้「ดู PIN」แจ้งเจ้าหน้าที่หน้างาน (`KIOSK_FACE_CHECK` ตั้งต่อเครื่อง ต้องตรวจทีละเครื่อง)
 
 ```bash
 ./models/download_models.sh        # ครั้งแรก (setup_big_kiosk.sh ทำให้ด้วย) ตรวจ sha256 ทุกไฟล์
@@ -607,7 +609,7 @@ PIN ตั้ง/ดูได้ที่ `/system-management/scanners` (SA เ�
   ตั้ง `KIOSK_FACE_MODELS_DIR=/path/ไป/โฟลเดอร์` เฉพาะเมื่อเก็บ model ไว้นอก repo จริงๆ และต้องมีไฟล์ครบ 4 ไฟล์ในโฟลเดอร์นั้น
   **ถ้าไม่ได้ใช้ ให้ปล่อยบรรทัดนี้เป็นคอมเมนต์ หรือลบทิ้ง** (ค่า `/opt/tent/models` ใน `.env.example` เป็นแค่ตัวอย่าง ถ้าเปิดบรรทัดนี้โดยที่ไม่มีไฟล์อยู่ที่นั่น
   จะขึ้น `FACE_MODELS_MISSING` ทั้งที่ `models/` ข้างโค้ดมีไฟล์ครบ) แก้ `.env` แล้วต้อง restart `scanner_client`
-- ถ้า model ไม่ครบ (หรือชี้โฟลเดอร์ผิด) เครื่องจะตอบ `FACE_MODELS_MISSING` และหน้า kiosk ข้ามขั้นตอนนี้ไป (ผู้ใช้ไปต่อได้ แต่ถือเป็น "ยืนยันไม่ได้")
+- ถ้า model ไม่ครบ (หรือชี้โฟลเดอร์ผิด) เครื่องจะตอบ `FACE_MODELS_MISSING` และหน้า kiosk ถือเป็นผล `unavailable` (ยืนยันไม่ได้) ซึ่งเมื่อ `on` **ต้องให้เจ้าหน้าที่ใส่ PIN** ก่อนไปต่อ
   ใน log จะมีบรรทัด `Face check models are missing: … (run models/download_models.sh): <ชื่อไฟล์ที่หาย>` ดูด้วย `grep -i "models" /tmp/kiosk_autostart.log`
 - model ทั้ง 4 ตัวและ license อยู่ใน [`models/MODELS.md`](models/MODELS.md)
 

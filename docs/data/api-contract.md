@@ -2,8 +2,8 @@
 title: Smart Shelter — API Contract v1
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-09
-note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration; Partner Data API EXT-001–007 (#214); CR-124 staff Google step-up MFA + Google SSO login (enrolled + mint AuthSession); decision sync 2026-10-08 — เพิ่ม GET /public/v1/unassigned-registrations/{id}/status (service secret, status-only) แทนการเรียก staff detail จาก BFF registrations/status — แก้ ticket คิวกลางหายจากอุปกรณ์ (QA pre-register 2026-10-08); decision sync 2026-10-09 — `breakdown` ของ EXT-005 เพิ่ม `gender_unspecified` (null+other; `male+female+gender_unspecified = occupancy_total`) และ `POST /public/v1/unassigned-registrations` รับ `members[].gender = null`
+updated: 2026-10-10
+note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration; Partner Data API EXT-001–007 (#214); CR-124 staff Google step-up MFA + Google SSO login (enrolled + mint AuthSession); decision sync 2026-10-08 — เพิ่ม GET /public/v1/unassigned-registrations/{id}/status (service secret, status-only) แทนการเรียก staff detail จาก BFF registrations/status — แก้ ticket คิวกลางหายจากอุปกรณ์ (QA pre-register 2026-10-08); decision sync 2026-10-09 — `breakdown` ของ EXT-005 เพิ่ม `gender_unspecified` (null+other; `male+female+gender_unspecified = occupancy_total`) และ `POST /public/v1/unassigned-registrations` รับ `members[].gender = null`; draft-kiosk-staff-pin-face-bypass (proposed) — §2.2 scanner staff PIN (admin set/regenerate/reveal, DELETE device, kiosk verify ที่หน่วงเมื่อ PIN ผิด)
 ---
 
 # Smart Shelter — API Contract v1
@@ -208,6 +208,54 @@ INVALID_KIOSK_REGISTRATION`, flag ปิดตอบ `403 KIOSK_REGISTRATION_DIS
 ตอบ `429 KIOSK_RATE_LIMITED`, auth ไม่ผ่านตอบ `401 DEVICE_AUTH_FAILED`, และ registry/database
 อ่านหรือเขียนไม่ได้ตอบ `503` โดยไม่สร้าง record. รายละเอียดนี้ implement ตามค่าที่เสนอในแผน;
 CR ที่แผนอ้างถึงยังไม่มีใน `docs/changes/` และต้องได้รับอนุมัติก่อนเปิด PR.
+
+### 2.2 Scanner staff PIN — ข้ามการตรวจใบหน้าด้วย PIN ของเครื่อง
+
+> [draft-kiosk-staff-pin-face-bypass](../changes/draft-kiosk-staff-pin-face-bypass.md) (proposed).
+> PIN อยู่ใน DB `scanner_secrets` (schema.md §3.11.1) บน central เท่านั้น. ทุก response ของ endpoint ในหัวข้อนี้
+> มี `cache-control: no-store`, `pragma: no-cache`. error ใช้ envelope `{ "error": { "code", "message" } }`.
+> ทุก endpoint log ผู้เรียก/เครื่อง, เวลา, ผล — **ห้าม log ค่า PIN**.
+
+**Admin (SA เท่านั้น — `_session` cookie + `system_admin`):**
+
+| Endpoint | Body | สำเร็จ |
+| --- | --- | --- |
+| `POST /api/v1/scanner/devices` (เดิม) | ตามเดิม | response เพิ่ม `plaintext_staff_pin` (default PIN สุ่ม) |
+| `POST /api/v1/scanner/devices/[id]/staff-pin` | `{ "pin": "<6 หลัก>" }` หรือ `{ "regenerate": true }` | `200 { "ok": true }` · regenerate → `200 { "ok": true, "pin": "<6 หลัก>" }` |
+| `POST /api/v1/scanner/devices/[id]/staff-pin/reveal` | — | `200 { "pin", "is_default", "updated_at", "updated_by" }` |
+| `DELETE /api/v1/scanner/devices/[id]` | — | `200 { "ok": true }` — ลบ registry doc ก่อน แล้วลบ PIN doc (best effort) |
+
+Error ของ admin endpoint: ไม่ login `401 UNAUTHENTICATED` · ไม่ใช่ SA `403 FORBIDDEN` · PIN ไม่ใช่ 6 หลักหรือเดาง่าย
+`400 VALIDATION` · ไม่พบเครื่อง `404 NOT_FOUND` · reveal เครื่องที่ไม่มี PIN `409 staff_pin_not_set` · `_rev` ชน
+`409 CONFLICT` · `scanner_secrets` ใช้ไม่ได้หรือ `_security` มี member ที่ไม่ใช่ admin `503 STAFF_PIN_UNAVAILABLE` ·
+registry ใช้ไม่ได้ `503 DEPENDENCY_UNAVAILABLE`.
+
+**Kiosk (device credential):**
+
+```http
+POST /api/v1/scanner/kiosk/staff-pin/verify
+X-Device-ID: kiosk-sh001-01
+X-Device-Secret: …
+Content-Type: application/json
+
+{ "pin": "482913" }
+```
+
+ตรวจ PIN ของเครื่องที่ยืนยันตัวตนแล้วเท่านั้น (ไม่รับ device id จาก body) เทียบแบบ constant-time และอ่าน PIN จาก
+`scanner_secrets` เสมอ (ไม่เชื่อ `staff_pin_set` ใน registry):
+
+| ผล | Response |
+| --- | --- |
+| PIN ถูก | `200 { "ok": true }` ตอบทันที |
+| PIN ผิด | `401 staff_pin_invalid` ตอบหลังหน่วงประมาณ 1 วินาที |
+| device credential ผิด | `401 DEVICE_AUTH_FAILED` (ตรวจก่อน PIN) |
+| body ไม่ใช่ `{ pin: 6 หลัก }` | `400 VALIDATION` |
+| เครื่องไม่มี PIN doc | `409 staff_pin_not_set` |
+| registry / `scanner_secrets` ใช้ไม่ได้ | `503 DEPENDENCY_UNAVAILABLE` |
+
+ไม่ล็อกเครื่องและไม่จำกัดจำนวนครั้ง แต่ server ตรวจ PIN ได้ทีละ request ต่อเครื่อง (request ที่ซ้อนเข้ามารอคิว)
+และ log ระดับ `warn` ทุกครั้งที่ PIN ผิดติดกันครบ 5 ครั้งต่อเครื่อง (ตัวนับอยู่ใน memory, reset เมื่อ PIN ถูกหรือ
+server restart). `scanner_client` แนบ device credential ให้เฉพาะ request `POST` same-origin จากหน้า kiosk.
 
 ## 3. Provisioning (system_admin เท่านั้น)
 

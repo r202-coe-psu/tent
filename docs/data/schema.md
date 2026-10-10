@@ -1681,15 +1681,17 @@ provisioning เท่านั้น. `value` คือเลขล่าสุ
 | `staff_pin_set` | bool | req (v2) | มี PIN ของเครื่องใน `scanner_secrets` (§3.11.1) หรือไม่ — metadata เท่านั้น ตอนตรวจ PIN server อ่านจาก `scanner_secrets` เสมอ ไม่เชื่อ field นี้ |
 | `staff_pin_is_default` | bool | req (v2) | `true` = ยังเป็น default PIN ที่สุ่มตอนสร้างเครื่อง; มีความหมายเฉพาะเมื่อ `staff_pin_set = true` |
 | `staff_pin_updated_at` | ts\|null | req (v2) | เวลาที่ตั้ง/สุ่ม PIN ล่าสุด; `null` = ยังไม่เคยตั้ง |
-| `staff_pin_updated_by` | str\|null | req (v2) | `_users` name ของ SA ที่ตั้ง/สุ่ม PIN ล่าสุด; `null` = ยังไม่เคยตั้ง |
+| `staff_pin_updated_by` | str\|null | req (v2) | `_users` name ของ SA ที่ตั้ง/สุ่ม PIN ล่าสุด หรือ `system:sync-central` เมื่อ default PIN มาจาก backfill; `null` = ยังไม่เคยตั้ง |
 
 **ห้าม** มี PIN, hash หรือ ciphertext ของ PIN ใน doc นี้ หรือใน response รายการเครื่อง — PIN อยู่ใน
 DB `scanner_secrets` เท่านั้น.
 
 **Migration (schema_v 1 → 2, draft-kiosk-staff-pin-face-bypass):** additive — doc v1 (ไม่มี `staff_pin_*`)
 ยังอ่านได้ และอ่านเป็น "ยังไม่ตั้ง PIN" (`staff_pin_set: false`, `staff_pin_is_default: false`,
-`staff_pin_updated_at: null`, `staff_pin_updated_by: null`); ไม่ backfill. server stamp `schema_v: 2`
-เมื่อตั้ง PIN ครั้งแรก; เครื่องที่สร้างใหม่เป็น v2 พร้อม default PIN. การแก้ชื่อ/สถานะเครื่องจาก browser
+`staff_pin_updated_at: null`, `staff_pin_updated_by: null`). Backfill: `pnpm sync:central --write --confirm`
+สร้าง default PIN ให้เครื่องที่ยังไม่มี PIN doc แล้ว stamp v2 (`staff_pin_is_default: true`,
+`staff_pin_updated_by: 'system:sync-central'`) — ไม่ทับ PIN doc ที่มีอยู่, รันซ้ำได้ผลเดิม, ไม่พิมพ์ค่า PIN.
+server stamp `schema_v: 2` เมื่อตั้ง PIN; เครื่องที่สร้างใหม่เป็น v2 พร้อม default PIN. การแก้ชื่อ/สถานะเครื่องจาก browser
 ต้อง spread doc เดิมโดยไม่แตะ `staff_pin_*`.
 
 **Index:** `(device_id)` · `(shelter_code)`
@@ -1706,8 +1708,8 @@ DB แยกจาก `registry` เก็บ staff PIN 6 หลักต่อ�
 - **`_security`:** `admins.roles = ["_admin"]` และ `members.roles = ["_admin"]` เท่านั้น — อ่าน/เขียนได้
   เฉพาะ server ผ่าน admin credential (`$lib/server/scanners/staff-pin-store.ts`). ถ้าพบ member ที่ไม่ใช่
   `_admin` server ต้องไม่เขียน PIN และตอบ `503` (fail closed).
-- **ไม่ replicate** ลง device/edge และ **ไม่ sync เข้า MongoDB**.
-- **สร้าง DB:** server สร้าง DB + ตั้ง `_security` เองตอนเขียน PIN ครั้งแรก (idempotent).
+- **อยู่บน central เท่านั้น:** **ไม่ replicate** ลง device/edge และ **ไม่ sync เข้า MongoDB** (endpoint ของ kiosk อยู่บน central; kiosk แบบ edge/offline อยู่นอกขอบเขต CR-149/CR-151).
+- **สร้าง DB:** `pnpm sync:central --write --confirm` หรือ server ตอนเขียน PIN ครั้งแรก สร้าง DB + ตั้ง `_security` (idempotent ทั้งคู่).
 - **Envelope:** ไม่มี `shelter_code` / `created_at` / `created_by` (ข้อยกเว้นจาก §0) — ใช้ `updated_at` /
   `updated_by` ของการตั้ง PIN ล่าสุดแทน.
 
@@ -1717,14 +1719,18 @@ DB แยกจาก `registry` เก็บ staff PIN 6 หลักต่อ�
 | `type` | `"scanner_staff_pin"` | req | — |
 | `schema_v` | int | req | `1` |
 | `device_id` | str | req | ตรงกับ `scanner_device.device_id` |
-| `pin` | str | req | **plaintext** ตัวเลข 6 หลัก `^\d{6}$` (SA ต้องดู PIN ได้ตลอด จึงไม่ hash); PIN ที่ SA ตั้งเองหรือที่สุ่มต้องไม่เป็นเลขซ้ำทั้งชุดหรือเลขเรียงขึ้น/ลง (เช่น `000000`, `123456`, `654321`) |
+| `pin` | str | req | **plaintext** ตัวเลข 6 หลัก `^\d{6}$` (SA ต้องดู PIN ได้ตลอด จึงไม่ hash); PIN ที่ SA ตั้งเองหรือที่สุ่มต้องไม่เดาง่าย: เลขเดียวกันทั้งชุด (`000000`), เลขเรียงขึ้น/ลง (`123456`, `654321`), เลขซ้ำเป็นคู่ (`112233`), ชุดเลขวนซ้ำ (`121212`, `123123`) หรือมีเลขต่างกันไม่เกิน 2 ตัว (`111222`, `101010`) |
 | `is_default` | bool | req | `true` = default PIN ที่สุ่ม (`crypto.randomInt`) ตอนสร้างเครื่องหรือกดสุ่มใหม่ |
 | `updated_at` | ts | req | เวลาที่ตั้ง/สุ่ม PIN ล่าสุด |
-| `updated_by` | str | req | `_users` name ของ SA ที่ตั้ง/สุ่ม PIN ล่าสุด |
+| `updated_by` | str | req | `_users` name ของ SA ที่ตั้ง/สุ่ม PIN ล่าสุด หรือ `system:sync-central` (backfill) |
 
 **Write order:** เขียน PIN doc ก่อน แล้วค่อยเขียน `staff_pin_*` ลง `scanner_device`; ถ้าเขียน registry ไม่สำเร็จ
-ให้ rollback PIN doc (rev-guarded). `_rev` ชน → `409`. ลบเครื่อง (`DELETE /api/v1/scanner/devices/[id]`)
-ลบ PIN doc ตามด้วย (best effort — PIN doc ที่ค้างจะถูกเขียนทับเมื่อสร้างเครื่อง `device_id` เดิมใหม่). ไม่มี doc = `409 staff_pin_not_set` ตอนตรวจ PIN แม้ registry จะเขียน `staff_pin_set: true`.
+ให้ rollback PIN doc (rev-guarded): ตั้งครั้งแรก → ลบ PIN doc ที่เพิ่งเขียน, เปลี่ยน PIN → เขียนค่าเดิม
+(`pin`, `is_default`, `updated_at`, `updated_by`) กลับคืน **ห้ามลบ**. `_rev` ชน → `409`.
+
+**Delete order:** `DELETE /api/v1/scanner/devices/[id]` ลบ doc ใน `registry` ก่อน แล้วจึงลบ PIN doc (best effort).
+ลบ registry ไม่สำเร็จ → ไม่แตะ PIN doc. PIN doc ที่ค้างใช้ไม่ได้ เพราะเครื่องที่ไม่มีใน registry ไม่ผ่าน device auth
+(`401 DEVICE_AUTH_FAILED` ก่อนถึงขั้นตรวจ PIN) และจะถูกเขียนทับเมื่อสร้างเครื่อง `device_id` เดิมใหม่. ไม่มี doc = `409 staff_pin_not_set` ตอนตรวจ PIN แม้ registry จะเขียน `staff_pin_set: true`.
 
 ---
 
