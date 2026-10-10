@@ -80,41 +80,42 @@ describe('i18n utilities', () => {
 			expect(formatDate('')).toBe('');
 		});
 
-		it('formats ISO string correctly for Thai locale', () => {
-			const formatted = formatDate(fixedIso, 'th');
-			expect(formatted).toBeDefined();
-			expect(typeof formatted).toBe('string');
-			// Thai year for 2025 is 2568, and month is ก.ค.
-			expect(formatted).toMatch(/ก\.ค\.|2568/);
+		it('formats ISO string as th-TH Buddhist calendar regardless of language arg', () => {
+			const th = formatDate(fixedIso, 'th');
+			const en = formatDate(fixedIso, 'en');
+			expect(th).toMatch(/ก\.ค\./);
+			expect(th).toMatch(/2568/);
+			expect(en).toBe(th);
 		});
 
-		it('formats ISO string correctly for English locale', () => {
-			const formatted = formatDate(fixedIso, 'en');
-			expect(formatted).toBeDefined();
-			expect(typeof formatted).toBe('string');
-			expect(formatted).toMatch(/Jul|2025/);
+		it('formats Date instance as th-TH', () => {
+			const formatted = formatDate(fixedDate, 'en');
+			expect(formatted).toMatch(/ก\.ค\./);
+			expect(formatted).toMatch(/2568/);
 		});
 
-		it('formats Date instance correctly', () => {
-			const formattedEn = formatDate(fixedDate, 'en');
-			expect(formattedEn).toMatch(/Jul|2025/);
-
-			const formattedTh = formatDate(fixedDate, 'th');
-			expect(formattedTh).toMatch(/ก\.ค\.|2568/);
-		});
-
-		it('formats numeric timestamp correctly', () => {
+		it('formats numeric timestamp as th-TH', () => {
 			const formatted = formatDate(fixedTimestamp, 'en');
-			expect(formatted).toMatch(/Jul|2025/);
+			expect(formatted).toMatch(/ก\.ค\./);
+			expect(formatted).toMatch(/2568/);
 		});
 
-		it('respects custom Intl.DateTimeFormatOptions', () => {
+		it('respects custom layout options but stays th-TH', () => {
 			const formatted = formatDate(fixedIso, 'en', {
 				year: 'numeric',
 				month: 'long',
 				day: '2-digit'
 			});
-			expect(formatted).toMatch(/July/);
+			expect(formatted).toMatch(/กรกฎาคม/);
+			expect(formatted).toMatch(/2568/);
+		});
+
+		it('uses Bangkok wall clock when date crosses UTC midnight', () => {
+			// 2025-07-04T20:00Z → 05 ก.ค. 2568 in Bangkok
+			const formatted = formatDate('2025-07-04T20:00:00.000Z');
+			expect(formatted).toMatch(/05/);
+			expect(formatted).toMatch(/ก\.ค\./);
+			expect(formatted).toMatch(/2568/);
 		});
 	});
 });

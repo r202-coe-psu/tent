@@ -14,31 +14,24 @@ describe('ticket.i18n and formatters', () => {
 		expect(thKeys.sort()).toEqual(enKeys.sort());
 	});
 
-	it('formats ISO datetime in Thai with BE year and time suffix', () => {
+	it('formats ISO datetime as th-TH Bangkok wall clock with BE year', () => {
 		const iso = '2026-09-05T11:55:00.000Z'; // 18:55 in Asia/Bangkok
 		const formattedTh = formatLocalizedDateTime(iso, 'th');
 		expect(formattedTh).toContain('2569');
 		expect(formattedTh).toContain('น.');
 		expect(formattedTh).toContain('18:55');
-	});
 
-	it('formats ISO datetime in English with Gregorian year', () => {
-		const iso = '2026-09-05T11:55:00.000Z';
+		// Language arg does not switch calendar locale
 		const formattedEn = formatLocalizedDateTime(iso, 'en');
-		expect(formattedEn).toContain('2026');
-		expect(formattedEn).toContain('Sep');
-		expect(formattedEn).toContain('6:55 PM');
+		expect(formattedEn).toBe(formattedTh);
 	});
 
 	it('formats naive UTC datetime string correctly to Asia/Bangkok time (UTC+7)', () => {
-		const naiveIso = '2026-09-05T12:04:00'; // 12:04 UTC = 19:04 (7:04 PM) in Bangkok
-		const formattedTh = formatLocalizedDateTime(naiveIso, 'th');
-		expect(formattedTh).toContain('2569');
-		expect(formattedTh).toContain('19:04');
-
-		const formattedEn = formatLocalizedDateTime(naiveIso, 'en');
-		expect(formattedEn).toContain('2026');
-		expect(formattedEn).toContain('7:04 PM');
+		const naiveIso = '2026-09-05T12:04:00'; // 12:04 UTC = 19:04 in Bangkok
+		const formatted = formatLocalizedDateTime(naiveIso, 'en');
+		expect(formatted).toContain('2569');
+		expect(formatted).toContain('19:04');
+		expect(formatted).toContain('น.');
 	});
 
 	it('honors an explicit local offset without applying Bangkok conversion twice', () => {
@@ -48,7 +41,7 @@ describe('ticket.i18n and formatters', () => {
 		expect(formattedTh).toContain('12:04');
 	});
 
-	it('formats ISO date into Thai and English full dates', () => {
+	it('formats ISO date as th-TH Buddhist calendar regardless of language arg', () => {
 		const dateStr = '2026-09-02';
 		const thDate = formatLocalizedDate(dateStr, 'th');
 		expect(thDate).toContain('กันยายน');
@@ -56,9 +49,7 @@ describe('ticket.i18n and formatters', () => {
 		expect(thDate).toContain('2');
 
 		const enDate = formatLocalizedDate(dateStr, 'en');
-		expect(enDate).toContain('September');
-		expect(enDate).toContain('2026');
-		expect(enDate).toContain('2');
+		expect(enDate).toBe(thDate);
 	});
 
 	it('formats shift times in Thai and English', () => {

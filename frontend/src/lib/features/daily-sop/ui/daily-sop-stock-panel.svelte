@@ -1,5 +1,7 @@
 <script lang="ts">
-	import { RefreshCw, Search, TriangleAlert } from '@lucide/svelte';
+	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
+	import Search from '@lucide/svelte/icons/search';
+	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Sheet from '$lib/components/ui/sheet';
 	import { Input } from '$lib/components/ui/input/index.js';

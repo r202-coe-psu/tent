@@ -65,6 +65,7 @@
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { paginateItems } from '$lib/db/paginate';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { DISPLAY_LOCALE, DISPLAY_TIME_ZONE, formatThaiTime } from '$lib/utils/date';
 	import { authStore } from '$lib/stores/auth.svelte';
 
 	const PAGE_SIZE = 10;
@@ -555,17 +556,14 @@
 
 	function formatTimeOrDate(isoDate?: string | null): string {
 		if (!isoDate) return '—';
-		try {
-			const d = new Date(isoDate);
-			return (
-				d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) +
-				' น. (' +
-				d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' }) +
-				')'
-			);
-		} catch {
-			return isoDate;
-		}
+		const time = formatThaiTime(isoDate);
+		if (!time) return isoDate;
+		const day = new Date(isoDate).toLocaleDateString(DISPLAY_LOCALE, {
+			timeZone: DISPLAY_TIME_ZONE,
+			day: 'numeric',
+			month: 'short'
+		});
+		return `${time} น. (${day})`;
 	}
 
 	const emptyPendingMessage = $derived(

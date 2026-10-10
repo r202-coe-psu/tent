@@ -10,9 +10,9 @@ scope: "CR-119, CR-120 (Catalog & Kitchen Foundation) และ CR-121 (Kitchen 
 
 เอกสารนี้กำหนดแผน implementation สำหรับ `Item Category`, `Item Master`, สูตรอาหารที่คำนวณตามจำนวน `portion`, การบริหารจัดการแก๊สในครัว และ `Kitchen Requisition Ticket` โดยอิงตาม:
 
-- [CR-119 — Seed Item Categories](../changes/CR-119-seed-item-categories.md)
-- [CR-120 — Fuel Energy / Gas Inventory](../changes/CR-120-fuel-energy-gas-inventory.md)
-- [CR-121 — Requisition Ticket](../changes/CR-121-spec-ticket.md)
+- [CR-119 — Seed Item Categories](../changes/03-C-supply/CR-119-seed-item-categories.md)
+- [CR-120 — Fuel Energy / Gas Inventory](../changes/03-C-supply/CR-120-fuel-energy-gas-inventory.md)
+- [CR-121 — Requisition Ticket](../changes/03-C-supply/CR-121-spec-ticket.md)
 - [Data Schema](../data/schema.md)
 
 > **ขอบเขตของแผนนี้ (Scope Definition):**

@@ -1,4 +1,6 @@
-FROM mcr.microsoft.com/playwright:v1.61.1-noble
+# Keep this tag equal to the resolved @playwright/test version in pnpm-lock.yaml — a
+# mismatch fails every test with "Executable doesn't exist" (browsers are baked into the image).
+FROM mcr.microsoft.com/playwright:v1.64.0-noble
 
 WORKDIR /work/frontend
 
@@ -9,8 +11,11 @@ RUN pnpm install --frozen-lockfile --ignore-scripts
 
 COPY playwright.staging.config.ts playwright.prod.config.ts ./
 COPY e2e ./e2e
+# Some e2e helpers import pure modules from src/lib (e.g. utils/qty, db/ulid);
+# Playwright loads every test file before grep filtering, so they must exist in the image.
+COPY src/lib ./src/lib
 
 ENV CI=true
 
-# Default: staging release gate (@release + @smoke). Override CMD for prod @prod.
+# Default: staging release gate (@critical + @smoke). Override CMD for prod @prod.
 CMD ["./node_modules/.bin/playwright", "test", "--config=playwright.staging.config.ts"]

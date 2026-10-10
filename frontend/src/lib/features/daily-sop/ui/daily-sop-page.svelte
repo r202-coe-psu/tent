@@ -3,7 +3,11 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
-	import { ArrowLeft, CheckCircle2, ClipboardCheck, Package, Save } from '@lucide/svelte';
+	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import CheckCircle2 from '@lucide/svelte/icons/circle-check';
+	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
+	import Package from '@lucide/svelte/icons/package';
+	import Save from '@lucide/svelte/icons/save';
 	import { toast } from 'svelte-sonner';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Button } from '$lib/components/ui/button/index.js';

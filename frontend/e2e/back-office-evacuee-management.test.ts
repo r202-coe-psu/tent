@@ -5,12 +5,13 @@
  * registers one household at Station 1, then proves the critical path on the
  * evacuee + household tabs (list → search → open detail / edit).
  *
- * Tags: `@back-office` + `@critical` + `@release`. Skips when `IS_REMOTE`.
+ * Tags: `@back-office` + `@critical` + `@release`. Runs locally or on a remote
+ * target with `ALLOW_REMOTE_WRITES=true` (staging); read-only remote otherwise.
  * Local stack: `docker compose up -d` + `pnpm seed:master` / `pnpm db:sync`.
  */
 import { test, expect } from '@playwright/test';
 import { bootstrapAdminSession, couchReq } from './helpers/couch';
-import { IS_REMOTE, LOCAL_RUN_ID as RUN_ID, READ_ONLY_REASON } from './helpers/e2e-env';
+import { CAN_WRITE, LOCAL_RUN_ID as RUN_ID, READ_ONLY_REASON } from './helpers/e2e-env';
 import { injectSession, routeBrowserCouchThroughApp } from './helpers/login';
 import { fictitiousNationalId, fictitiousPhone } from './helpers/pre-register';
 import { recordCreatedShelter, teardownShelter } from './helpers/public-cleanup';
@@ -45,7 +46,7 @@ test.describe(
 	{ tag: ['@back-office', '@critical', '@release'] },
 	() => {
 		test.beforeEach(() => {
-			test.skip(IS_REMOTE, READ_ONLY_REASON);
+			test.skip(!CAN_WRITE, READ_ONLY_REASON);
 		});
 
 		test('staff creates an E2E shelter and registers one household', async ({ page }) => {
