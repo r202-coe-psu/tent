@@ -164,15 +164,27 @@ describe('scanner.schema', () => {
 			}
 		});
 
-		it.each(['000000', '777777', '123456', '654321', '012345', '987654'])(
-			'treats %s as trivial',
-			(pin) => {
-				expect(isTrivialStaffPin(pin)).toBe(true);
-				expect(chosenStaffPinSchema.safeParse(pin).success).toBe(false);
-			}
-		);
+		it.each([
+			'000000',
+			'777777',
+			'123456',
+			'654321',
+			'012345',
+			'987654',
+			'112233',
+			'998877',
+			'121212',
+			'123123',
+			'907907',
+			'111222',
+			'101010',
+			'100000'
+		])('treats %s as trivial', (pin) => {
+			expect(isTrivialStaffPin(pin)).toBe(true);
+			expect(chosenStaffPinSchema.safeParse(pin).success).toBe(false);
+		});
 
-		it.each(['482913', '112233', '135790', '123457'])('accepts %s', (pin) => {
+		it.each(['482913', '135790', '123457', '112234', '123321'])('accepts %s', (pin) => {
 			expect(isTrivialStaffPin(pin)).toBe(false);
 			expect(chosenStaffPinSchema.safeParse(pin).success).toBe(true);
 		});

@@ -40,21 +40,42 @@ export const staffPinSchema = z
 	.string({ error: 'กรุณากรอก PIN' })
 	.regex(/^\d{6}$/, 'PIN ต้องเป็นตัวเลข 6 หลัก');
 
+/** `pin` is one block of `period` digits written out again and again (`121212`, `123123`). */
+function repeatsEvery(pin: string, period: number): boolean {
+	if (pin.length % period !== 0 || pin.length === period) return false;
+	return pin === pin.slice(0, period).repeat(pin.length / period);
+}
+
+/** Every digit is written twice in a row (`112233`, `998877`). */
+function isDoubledDigits(pin: string): boolean {
+	if (pin.length % 2 !== 0) return false;
+	for (let i = 0; i < pin.length; i += 2) if (pin[i] !== pin[i + 1]) return false;
+	return true;
+}
+
 /**
- * True for PINs a bystander would guess first: one repeated digit (`000000`) or a straight
- * ascending/descending run (`123456`, `654321`, `012345`, …). Rejected when SA picks a PIN and
+ * True for PINs a bystander would guess first: a straight ascending/descending run (`123456`,
+ * `654321`, `012345`, …), doubled digits (`112233`), a repeating block (`121212`, `123123`) or no
+ * more than two distinct digits (`000000`, `111222`, `101010`). Rejected when SA picks a PIN and
  * never produced by the generator.
  */
 export function isTrivialStaffPin(pin: string): boolean {
 	if (!/^\d+$/.test(pin) || pin.length < 2) return false;
 	const digits = [...pin].map(Number);
 	const steps = digits.slice(1).map((d, i) => d - digits[i]);
-	return steps.every((s) => s === 0) || steps.every((s) => s === 1) || steps.every((s) => s === -1);
+	return (
+		steps.every((s) => s === 1) ||
+		steps.every((s) => s === -1) ||
+		new Set(digits).size <= 2 ||
+		isDoubledDigits(pin) ||
+		// A 2-digit block (`121212`) already has no more than two distinct digits.
+		repeatsEvery(pin, 3)
+	);
 }
 
 /** A PIN chosen by SA: 6 digits and not trivially guessable. */
 export const chosenStaffPinSchema = staffPinSchema.refine((pin) => !isTrivialStaffPin(pin), {
-	message: 'PIN นี้เดาง่ายเกินไป (เช่น เลขซ้ำกันทั้งหมด หรือเรียงกันอย่าง 123456)'
+	message: 'PIN นี้เดาง่ายเกินไป (เช่น 000000, 123456, 112233, 121212 หรือใช้เลขไม่เกิน 2 ตัว)'
 });
 
 /** Admin "ตั้ง PIN" form: PIN + confirmation. */

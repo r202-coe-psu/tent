@@ -56,7 +56,7 @@ function secret(pin: string): StaffPinSecret {
 
 describe('staff-pin helpers', () => {
 	it('generates 6-digit, non-trivial PINs', () => {
-		for (let i = 0; i < 200; i += 1) {
+		for (let i = 0; i < 10_000; i += 1) {
 			const pin = generateStaffPin();
 			expect(pin).toMatch(/^\d{6}$/);
 			expect(isTrivialStaffPin(pin)).toBe(false);
