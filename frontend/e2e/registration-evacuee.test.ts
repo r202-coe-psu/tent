@@ -40,7 +40,6 @@
  * this run's Tst… last-name tag. Public POSTs allow 3/min/IP, so a run waits ~1 min once.
  */
 
-import { createRequire } from 'node:module';
 import process from 'node:process';
 import {
 	test,
@@ -58,8 +57,7 @@ import {
 	type TestUser
 } from './helpers/couch';
 import { injectSession } from './helpers/login';
-
-const nodeRequire = createRequire(import.meta.url);
+import { decodeQrImage } from './helpers/onsite';
 
 // ─── Run identity ──────────────────────────────────────────────────────────────
 
@@ -390,31 +388,6 @@ async function fillAddress(page: Page, addressNo: string, villageNo?: string) {
 	}
 }
 
-/** Decode a QR <img> in the page with the app's own html5-qrcode. */
-async function decodeQrImage(page: Page, img: Locator): Promise<string> {
-	const src = await img.getAttribute('src');
-	if (!src?.startsWith('data:image')) throw new Error('QR <img> has no data-URL source');
-	if (!(await page.evaluate(() => 'Html5Qrcode' in window))) {
-		await page.addScriptTag({ path: nodeRequire.resolve('html5-qrcode/html5-qrcode.min.js') });
-	}
-	return page.evaluate(async (dataUrl) => {
-		const holder = document.createElement('div');
-		holder.id = 'e2e-qr-decode';
-		holder.style.display = 'none';
-		document.body.appendChild(holder);
-		const blob = await (await fetch(dataUrl)).blob();
-		const file = new File([blob], 'qr.png', { type: blob.type });
-		type QrScanner = { scanFile(file: File, showImage: boolean): Promise<string> };
-		const { Html5Qrcode } = window as unknown as { Html5Qrcode: new (id: string) => QrScanner };
-		const scanner = new Html5Qrcode(holder.id);
-		try {
-			return await scanner.scanFile(file, false);
-		} finally {
-			holder.remove();
-		}
-	}, src);
-}
-
 /** On the print screen, read each member's evacuee id from their Person QR. */
 async function idsFromPrintScreen(page: Page, people: Person[]): Promise<Record<string, string>> {
 	await expect(page.getByRole('heading', { name: 'ลงทะเบียนสำเร็จ' })).toBeVisible({
@@ -566,32 +539,44 @@ async function scanAndSelectOnly(page: Page, payload: string, others: string[]):
 	}
 }
 
-/** Answer any prompt the action raises, then stop listening. */
-async function answeringDialogs(page: Page, answer: string, action: () => Promise<void>) {
-	const handler = (dialog: import('@playwright/test').Dialog) =>
-		void dialog.accept(answer).catch(() => {});
-	page.on('dialog', handler);
-	try {
-		await action();
-	} finally {
-		page.off('dialog', handler);
+/** Check out through the scan page; the reason goes in the check-out dialog. */
+async function checkOutByScan(
+	page: Page,
+	id: string,
+	others: string[],
+	reason: string
+): Promise<void> {
+	await scanAndSelectOnly(page, id, others);
+	await page.getByRole('button', { name: 'เช็คเอาท์', exact: true }).click();
+	const dialog = page.getByRole('dialog', { name: 'เหตุผลการเช็คเอาท์' });
+	await dialog.getByLabel('เหตุผลการเช็คเอาท์').fill(reason);
+	await dialog.getByRole('button', { name: 'ยืนยันเช็คเอาท์' }).click();
+	await expect(page.getByText('เช็คเอาท์สำเร็จ 1 คน')).toBeVisible({ timeout: 15_000 });
+}
+
+/** Check in through the scan page; someone with no zone to return to gets the zone dialog. */
+async function checkInByScan(
+	page: Page,
+	id: string,
+	others: string[],
+	zoneCode: string
+): Promise<void> {
+	await scanAndSelectOnly(page, id, others);
+	await page.getByRole('button', { name: 'เช็คอิน', exact: true }).click();
+	const success = page.getByText('เช็คอินสำเร็จ 1 คน');
+	const zoneDialog = page.getByRole('dialog', { name: 'เลือกโซนสำหรับเช็คอิน' });
+	await expect(success.or(zoneDialog)).toBeVisible({ timeout: 15_000 });
+	if (await zoneDialog.isVisible()) {
+		const picker = zoneDialog.locator('[aria-label="โซนสำหรับเช็คอิน"]');
+		if ((await picker.count()) > 0) {
+			await picker.click();
+			await page.getByRole('option', { name: new RegExp(`\\(${zoneCode}\\)$`) }).click();
+		} else {
+			await zoneDialog.getByLabel('รหัสโซน').fill(zoneCode);
+		}
+		await zoneDialog.getByRole('button', { name: 'ยืนยันเช็คอิน' }).click();
 	}
-}
-
-async function checkOutByScan(page: Page, id: string, others: string[], reason: string) {
-	await scanAndSelectOnly(page, id, others);
-	await answeringDialogs(page, reason, async () => {
-		await page.getByRole('button', { name: 'เช็คเอาท์' }).click();
-		await expect(page.getByText('เช็คเอาท์สำเร็จ 1 คน')).toBeVisible({ timeout: 15_000 });
-	});
-}
-
-async function checkInByScan(page: Page, id: string, others: string[], zoneCode: string) {
-	await scanAndSelectOnly(page, id, others);
-	await answeringDialogs(page, zoneCode, async () => {
-		await page.getByRole('button', { name: 'เช็คอิน' }).click();
-		await expect(page.getByText('เช็คอินสำเร็จ 1 คน')).toBeVisible({ timeout: 15_000 });
-	});
+	await expect(success).toBeVisible({ timeout: 15_000 });
 }
 
 // ─── Public site ───────────────────────────────────────────────────────────────
@@ -796,7 +781,7 @@ async function walkInFlow(browser: Browser, run: Run, s: Sessions) {
 		});
 		await fillAddress(desk, addressNo, 'หมู่ 5');
 		await expect(desk.getByText('พบครอบครัวที่อยู่ใกล้เคียง')).toBeVisible({ timeout: 15_000 });
-		await desk.getByRole('button', { name: 'เข้าร่วม', exact: true }).first().click();
+		await desk.getByRole('button', { name: 'เข้าร่วมครอบครัวนี้' }).first().click();
 		await expect(desk.getByText('จะเข้าร่วมครอบครัวที่มีอยู่แล้ว')).toBeVisible();
 
 		await fillMemberCard(desk, 0, relative);

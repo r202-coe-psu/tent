@@ -283,17 +283,7 @@ async function scanAndSelectOnly(page: Page, payload: string, others: string[]):
 	}
 }
 
-async function answeringDialogs(page: Page, answer: string, action: () => Promise<void>) {
-	const handler = (dialog: import('@playwright/test').Dialog) =>
-		void dialog.accept(answer).catch(() => {});
-	page.on('dialog', handler);
-	try {
-		await action();
-	} finally {
-		page.off('dialog', handler);
-	}
-}
-
+/** Check out through the scan page; the reason goes in the check-out dialog. */
 export async function checkOutByScan(
 	page: Page,
 	id: string,
@@ -301,12 +291,14 @@ export async function checkOutByScan(
 	reason: string
 ): Promise<void> {
 	await scanAndSelectOnly(page, id, others);
-	await answeringDialogs(page, reason, async () => {
-		await page.getByRole('button', { name: 'เช็คเอาท์' }).click();
-		await expect(page.getByText('เช็คเอาท์สำเร็จ 1 คน')).toBeVisible({ timeout: 15_000 });
-	});
+	await page.getByRole('button', { name: 'เช็คเอาท์', exact: true }).click();
+	const dialog = page.getByRole('dialog', { name: 'เหตุผลการเช็คเอาท์' });
+	await dialog.getByLabel('เหตุผลการเช็คเอาท์').fill(reason);
+	await dialog.getByRole('button', { name: 'ยืนยันเช็คเอาท์' }).click();
+	await expect(page.getByText('เช็คเอาท์สำเร็จ 1 คน')).toBeVisible({ timeout: 15_000 });
 }
 
+/** Check in through the scan page; someone with no zone to return to gets the zone dialog. */
 export async function checkInByScan(
 	page: Page,
 	id: string,
@@ -314,8 +306,19 @@ export async function checkInByScan(
 	zoneCode: string
 ): Promise<void> {
 	await scanAndSelectOnly(page, id, others);
-	await answeringDialogs(page, zoneCode, async () => {
-		await page.getByRole('button', { name: 'เช็คอิน' }).click();
-		await expect(page.getByText('เช็คอินสำเร็จ 1 คน')).toBeVisible({ timeout: 15_000 });
-	});
+	await page.getByRole('button', { name: 'เช็คอิน', exact: true }).click();
+	const success = page.getByText('เช็คอินสำเร็จ 1 คน');
+	const zoneDialog = page.getByRole('dialog', { name: 'เลือกโซนสำหรับเช็คอิน' });
+	await expect(success.or(zoneDialog)).toBeVisible({ timeout: 15_000 });
+	if (await zoneDialog.isVisible()) {
+		const picker = zoneDialog.locator('[aria-label="โซนสำหรับเช็คอิน"]');
+		if ((await picker.count()) > 0) {
+			await picker.click();
+			await page.getByRole('option', { name: new RegExp(`\\(${zoneCode}\\)$`) }).click();
+		} else {
+			await zoneDialog.getByLabel('รหัสโซน').fill(zoneCode);
+		}
+		await zoneDialog.getByRole('button', { name: 'ยืนยันเช็คอิน' }).click();
+	}
+	await expect(success).toBeVisible({ timeout: 15_000 });
 }
