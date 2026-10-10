@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('$env/dynamic/private', () => ({ env: {} }));
 vi.mock('$lib/features/scanners/server', () => ({
@@ -20,6 +20,7 @@ import {
 	StaffPinUnavailableError,
 	type StaffPinSecret
 } from '$lib/server/scanners/staff-pin-store';
+import { STAFF_PIN_WRONG_DELAY_MS } from '$lib/server/scanners/staff-pin-throttle';
 
 const SECRET = 'sk_scan_test_secret';
 
@@ -75,16 +76,29 @@ function request(body: unknown, headers: Record<string, string> = {}): RequestEv
 	} as unknown as RequestEvent;
 }
 
+/** POST, letting the fake clock run past the delay a wrong PIN is held for. */
+async function post(event: RequestEvent): Promise<Response> {
+	const pending = POST(event);
+	await vi.advanceTimersByTimeAsync(STAFF_PIN_WRONG_DELAY_MS);
+	return pending;
+}
+
 describe('POST /api/v1/scanner/kiosk/staff-pin/verify', () => {
 	const mockLookup = vi.mocked(scannerServerRepository.getDeviceByDeviceId);
 	const mockSecret = vi.mocked(staffPinSecretStore.get);
 	let info: ReturnType<typeof vi.spyOn>;
 
 	beforeEach(() => {
+		vi.useFakeTimers();
 		vi.clearAllMocks();
 		info = vi.spyOn(console, 'info').mockImplementation(() => {});
+		vi.spyOn(console, 'warn').mockImplementation(() => {});
 		mockLookup.mockResolvedValue(deviceDoc() as never);
 		mockSecret.mockResolvedValue(secretDoc);
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
 	});
 
 	it('accepts the right PIN with no-store and logs the outcome without the PIN', async () => {
@@ -101,8 +115,15 @@ describe('POST /api/v1/scanner/kiosk/staff-pin/verify', () => {
 		expect(logged).not.toContain('482913');
 	});
 
-	it('returns 401 staff_pin_invalid for a wrong PIN', async () => {
-		const response = await POST(request({ pin: '111112' }));
+	it('returns 401 staff_pin_invalid for a wrong PIN, only after holding it ~1 s', async () => {
+		let answered = false;
+		const pending = Promise.resolve(POST(request({ pin: '111112' }))).finally(
+			() => (answered = true)
+		);
+		await vi.advanceTimersByTimeAsync(STAFF_PIN_WRONG_DELAY_MS - 1);
+		expect(answered).toBe(false);
+		await vi.advanceTimersByTimeAsync(1);
+		const response = await pending;
 
 		expect(response.status).toBe(401);
 		const body = await response.json();
@@ -113,7 +134,7 @@ describe('POST /api/v1/scanner/kiosk/staff-pin/verify', () => {
 
 	it('never locks: the right PIN still works after many wrong ones', async () => {
 		for (let i = 0; i < 10; i += 1) {
-			expect((await POST(request({ pin: '111112' }))).status).toBe(401);
+			expect((await post(request({ pin: '111112' }))).status).toBe(401);
 		}
 		expect((await POST(request({ pin: '482913' }))).status).toBe(200);
 	});

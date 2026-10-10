@@ -12,6 +12,7 @@ import {
 } from '$lib/server/scanners/device-credentials';
 import { StaffPinUnavailableError, verifyDeviceStaffPin } from '$lib/server/scanners/staff-pin';
 import { staffPinJson } from '$lib/server/scanners/staff-pin-http';
+import { staffPinThrottle } from '$lib/server/scanners/staff-pin-throttle';
 // eslint-disable-next-line no-restricted-imports -- server-safe domain schema; feature barrel pulls client UI/query code
 import { staffPinSchema } from '$lib/features/scanners/domain/scanner.schema';
 
@@ -30,6 +31,8 @@ function audit(deviceId: string, outcome: string): void {
  * Kiosk staff bypass: check the PIN a staff member typed on the kiosk for *this* device.
  * Authenticated with the scanner's device credentials (attached by scanner_client); the device
  * whose PIN is checked is always the authenticated one, never something from the body.
+ * Never locks the device, but checks one PIN at a time per device and holds a wrong one ~1 s
+ * (`staffPinThrottle`) so guessing all 10⁶ PINs takes days.
  */
 export const POST: RequestHandler = async ({ request }) => {
 	let device: PersistedScannerDevice | null = null;
@@ -75,8 +78,11 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 
 	try {
-		const result = await verifyDeviceStaffPin(authenticated, parsed.data.pin);
-		audit(authenticated.device_id, result.kind);
+		const result = await staffPinThrottle.run(authenticated.device_id, async () => {
+			const checked = await verifyDeviceStaffPin(authenticated, parsed.data.pin);
+			audit(authenticated.device_id, checked.kind);
+			return checked;
+		});
 		switch (result.kind) {
 			case 'ok':
 				return staffPinJson({ ok: true }, 200);
