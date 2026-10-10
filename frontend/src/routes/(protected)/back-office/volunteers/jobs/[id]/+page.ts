@@ -1,9 +1,9 @@
-import { requireManager } from '$lib/guards/auth';
+import { requireVolunteerBackoffice } from '$lib/guards/auth';
 import { error } from '@sveltejs/kit';
 import type { PageLoad } from './$types';
 
 export const load = (async ({ fetch, params }) => {
-	await requireManager(fetch);
+	await requireVolunteerBackoffice(fetch);
 	if (!params.id) {
 		error(400, 'Missing job id');
 	}
