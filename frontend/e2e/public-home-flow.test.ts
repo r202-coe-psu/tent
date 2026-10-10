@@ -82,9 +82,7 @@ test.describe('Public landing: setup and urgent need', { tag: ['@public', '@crit
 			});
 		}).toPass({ intervals: [2_000], timeout: 35_000 });
 
-		await expect(
-			page.getByRole('heading', { name: 'ความต้องการบริจาคด่วน', exact: true })
-		).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'รับบริจาคด่วน', exact: true })).toBeVisible();
 		await expect(page.getByText(NEED_ITEM)).toBeVisible();
 		await expect(page.getByText('ขาดอีก 500 จากเป้า 500')).toBeVisible();
 
@@ -110,9 +108,7 @@ test.describe(
 				page.getByRole('textbox', { name: 'พิมพ์ชื่อ-นามสกุล, เลขประจำตัว' })
 			).toBeVisible();
 			await expect(page.getByRole('button', { name: 'ค้นหา', exact: true })).toBeVisible();
-			await expect(
-				page.getByRole('heading', { name: 'ความต้องการบริจาคด่วน', exact: true })
-			).toBeVisible();
+			await expect(page.getByRole('heading', { name: 'รับบริจาคด่วน', exact: true })).toBeVisible();
 		});
 
 		test('navigates to the shelter directory and back home', async ({ page }) => {
@@ -187,9 +183,7 @@ test.describe('Public landing: smoke extras', { tag: ['@public', '@smoke'] }, ()
 		await expect(page.getByRole('link', { name: 'Home' })).toBeVisible();
 
 		await page.getByRole('button', { name: 'เปลี่ยนเป็นภาษาไทย' }).click();
-		await expect(
-			page.getByRole('heading', { name: 'ความต้องการบริจาคด่วน', exact: true })
-		).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'รับบริจาคด่วน', exact: true })).toBeVisible();
 	});
 });
 
