@@ -1,30 +1,19 @@
-import { randomInt, timingSafeEqual } from 'node:crypto';
+import { timingSafeEqual } from 'node:crypto';
 // eslint-disable-next-line no-restricted-imports -- server-safe domain schema; feature barrel pulls client UI/query code
-import {
-	isTrivialStaffPin,
-	STAFF_PIN_LENGTH,
-	type PersistedScannerDevice
-} from '$lib/features/scanners/domain/scanner.schema';
+import type { PersistedScannerDevice } from '$lib/features/scanners/domain/scanner.schema';
 import { staffPinSecretStore, type StaffPinSecretStore } from './staff-pin-store';
 
-export { StaffPinNotSetError, StaffPinUnavailableError } from './staff-pin-store';
+export { generateStaffPin, StaffPinNotSetError, StaffPinUnavailableError } from './staff-pin-store';
 
 /**
- * Staff bypass PIN (per scanner device): generation and constant-time check. Wrong PINs are not
- * counted or locked out; access is gated by the device credentials the request must carry.
+ * Staff bypass PIN (per scanner device): generation and constant-time check. Wrong PINs never
+ * lock the device; access is gated by the device credentials the request must carry, and the
+ * verify route slows guessing down with `staff-pin-throttle.ts`.
  *
  * The PIN lives in the admin-only `scanner_secrets` CouchDB database (see `staff-pin-store.ts`),
  * reachable only from this server with the admin client. Never log or return the PIN except
  * through the explicit reveal/create/regenerate paths.
  */
-
-/** Uniform random 6-digit PIN that is never trivially guessable. */
-export function generateStaffPin(): string {
-	for (;;) {
-		const pin = String(randomInt(0, 10 ** STAFF_PIN_LENGTH)).padStart(STAFF_PIN_LENGTH, '0');
-		if (!isTrivialStaffPin(pin)) return pin;
-	}
-}
 
 /** Constant-time comparison of a supplied PIN with the stored one. */
 export function staffPinMatches(supplied: string, expected: string): boolean {

@@ -7,6 +7,9 @@
  * 3. Access control design doc (_design/access) on catalog (VDU for system_admin only)
  * 4. Mango indexes on thailand_locations (province_id, district_id)
  * 5. Baseline master SOP ratio profile (sop_profile:master_sphere_baseline) if missing
+ * 6. System item categories and units of measure in catalog
+ * 7. scanner_secrets (admin-only) + a default staff PIN for every scanner device that has none
+ *    (draft-kiosk-staff-pin-face-bypass FR-13; never prints a PIN, never overwrites one)
  *
  * Fast and idempotent (<1 second). Safe to run on every CI/CD deployment.
  *
@@ -26,6 +29,7 @@ import {
 import { validRatios } from '$lib/features/sop-ratios/domain/sop-ratio.fixture';
 import { FALLBACK_UNIT_DEFINITIONS } from '$lib/features/catalog/domain/unit-of-measure';
 import { SYSTEM_ITEM_CATEGORIES, type ItemCategory } from '$lib/features/catalog/domain/catalog';
+import { backfillStaffPins } from '$lib/server/scanners/staff-pin-backfill';
 
 // ─── env loader ─────────────────────────────────────────────────────────────
 
@@ -585,6 +589,19 @@ async function main() {
 	console.log(
 		`  ✓ catalog: units of measure (${uomRes.created} created/would create, ${uomRes.existing} existing)`
 	);
+
+	// 8. Scanner staff PINs (scanner_secrets) — ids only, never a PIN
+	const pins = await backfillStaffPins((path, method, body) => couchReq(method, path, body), {
+		dryRun: DRY_RUN
+	});
+	console.log(
+		`  ✓ scanner_secrets: default staff PIN for ${pins.pinned.length} device(s) ${DRY_RUN ? 'would be created' : 'created'}${pins.pinned.length ? ` (${pins.pinned.join(', ')})` : ''}`
+	);
+	if (pins.conflicts.length) {
+		console.log(
+			`  ⚠ scanner_secrets: skipped ${pins.conflicts.length} device(s) changed meanwhile (${pins.conflicts.join(', ')}) — run again`
+		);
+	}
 
 	console.log('');
 	console.log('✨ Central database synchronization completed successfully');
