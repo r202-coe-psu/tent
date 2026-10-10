@@ -31,7 +31,7 @@ import { resolve } from 'node:path';
 
 import { couchUserFromUrl } from '$lib/server/couch-credentials';
 import { ensurePublicWriter } from '$lib/server/ensure-public-writer';
-import { buildRegistryDesignDoc, REGISTRY_DESIGN_ID } from '$lib/server/registry-design';
+import { redeployRegistry } from '$lib/server/registry-redeploy';
 import {
 	buildSecurityMutationLock,
 	type SecurityMutationLock
@@ -197,25 +197,6 @@ async function withSecurityMutationLock<T>(resource: string, mutate: () => Promi
 	return result;
 }
 
-interface ShelterMasterRow {
-	code: string;
-}
-
-async function listShelterMasters(): Promise<ShelterMasterRow[]> {
-	const res = await couchReq('GET', '/registry/_all_docs?include_docs=true');
-	if (res.status === 404) return [];
-	if (res.status >= 400) {
-		const detail = (res.data as { reason?: string; error?: string } | null) ?? {};
-		throw new Error(
-			`Could not read registry (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
-		);
-	}
-	const rows = (res.data as { rows?: { id: string; doc?: { code?: string } }[] })?.rows ?? [];
-	return rows
-		.filter((r) => r.id.startsWith('shelter:') && r.doc?.code)
-		.map((r) => ({ code: r.doc!.code! }));
-}
-
 interface AccessRedeployOutcome {
 	status: number;
 	updated: boolean;
@@ -259,47 +240,6 @@ async function redeployShelterAccessDesign(
 		);
 	}
 	return { status: res.status, updated: true, reason: rev ? 'updated' : 'created' };
-}
-
-/**
- * Idempotent PUT of the registry `_design/app` (`by_code` view) so
- * `findMasterByCode` and the public booking BFF can resolve a shelter by code
- * instead of scanning the whole registry.
- */
-async function deployRegistryDesign(dryRun: boolean): Promise<'current' | 'deployed'> {
-	const desired = buildRegistryDesignDoc();
-	const existing = await couchReq('GET', `/registry/${REGISTRY_DESIGN_ID}`);
-	const current =
-		existing.status === 200
-			? (existing.data as {
-					_rev?: string;
-					version?: number;
-					views?: Record<string, { map: string }>;
-					validate_doc_update?: string;
-				} | null)
-			: null;
-
-	if (
-		current &&
-		current.version === desired.version &&
-		current.validate_doc_update === desired.validate_doc_update &&
-		Object.entries(desired.views).every(([name, view]) => current.views?.[name]?.map === view.map)
-	) {
-		return 'current';
-	}
-	if (dryRun) return 'deployed';
-
-	const res = await couchReq('PUT', `/registry/${REGISTRY_DESIGN_ID}`, {
-		...desired,
-		...(current?._rev ? { _rev: current._rev } : {})
-	});
-	if (res.status >= 400) {
-		const detail = (res.data as { reason?: string; error?: string } | null) ?? {};
-		throw new Error(
-			`registry _design/app deploy failed (${res.status}): ${detail.reason ?? detail.error ?? 'unknown'}`
-		);
-	}
-	return 'deployed';
 }
 
 /**
@@ -425,15 +365,9 @@ async function main() {
 	}
 	console.log('');
 
-	const masters = await listShelterMasters();
-	if (masters.length === 0) {
-		console.log('⚠️  No shelter masters in registry — skipping shelter redeploy');
-		return;
-	}
-
-	console.log(`📋 Found ${masters.length} shelter master(s)`);
-
-	const registryDesign = await deployRegistryDesign(DRY_RUN);
+	// Registry views must exist even on a fresh install with zero shelters, so
+	// deploy them before the empty-registry early return.
+	const { design: registryDesign, masters } = await redeployRegistry(couchReq, DRY_RUN);
 	console.log(
 		registryDesign === 'current'
 			? '  ✓ registry _design/app (by_code) already current'
@@ -441,6 +375,14 @@ async function main() {
 				? '  would deploy registry _design/app (by_code view)'
 				: '  ✓ registry _design/app (by_code view) deployed'
 	);
+	console.log('');
+
+	if (masters.length === 0) {
+		console.log('⚠️  No shelter masters in registry — skipping shelter redeploy');
+		return;
+	}
+
+	console.log(`📋 Found ${masters.length} shelter master(s)`);
 	console.log('');
 
 	let ok = 0;
