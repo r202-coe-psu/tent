@@ -1,295 +1,276 @@
-import { test, expect, type Browser, type APIRequestContext } from '@playwright/test';
+import { test, expect, type Browser } from '@playwright/test';
 import { couchReq } from './helpers/couch';
+import { CAN_WRITE, READ_ONLY_REASON } from './helpers/e2e-env';
 import {
+	BOARD_SYNC,
 	RUN_ID,
-	catalogItem,
-	onHandQty,
-	deleteDoc,
+	RunLedger,
+	addSlotViaUi,
+	bookingPacer,
+	boardLineFor,
+	createCampaignViaUi,
+	createWarehouseStaff,
+	expectRunGone,
 	fillBooking,
-	freeEveningWindows,
-	publicNeedsBoard,
-	runDocs,
+	openSlots,
+	provisionShelter,
 	shelterDb,
-	skipUnlessFullStack,
 	suspendRecaptcha,
+	teardownRun,
 	todayYmd,
 	type BookingOptions,
 	type BookingResponse,
+	type PublicNeed,
 	type PublicShelter,
-	type SlotWindow
+	type SlotMode,
+	type SlotWindow,
+	type Staff
 } from './helpers/donation-fullstack';
 
 /**
  * Two donors pressing "ยืนยันการจองคิวบริจาค" at the same moment for the last spot,
- * against the REAL stack (no route mocks):
- *   PW_BASE_URL=http://localhost:5173 PLAYWRIGHT_TEST_BASE_URL=http://localhost:5173 \
- *     pnpm test:e2e e2e/donation-fullstack-race.test.ts
+ * against the REAL stack (no route mocks), on this run's own `E2E Donation race …`
+ * shelter (README §4).
+ *
+ * Needs `docker compose up -d` (CouchDB, Mongo, worker, FastAPI) and a seeded catalog
+ * (`pnpm seed`). Locally use the dev server — only it skips reCAPTCHA keys / the BFF's
+ * per-IP rate limits (on `vite preview` also set DONATION_E2E_PACE=1):
+ *   PLAYWRIGHT_TEST_BASE_URL=http://localhost:5173 \
+ *     pnpm exec playwright test e2e/donation-fullstack-race.test.ts
+ * On a writable remote target (`E2E_BASE_URL` + `ALLOW_REMOTE_WRITES=true`, i.e. staging)
+ * it runs like any `@critical` suite; read-only targets skip it.
  *
  * Each donor gets their own browser context (own cookies/storage — two people, not two
  * tabs), is walked to the confirm button, and only then are both buttons pressed
- * together. Exactly one may win.
+ * together. Exactly one may win. The slots (capacity 1) and the campaigns the donors
+ * fight over are set up through the back-office screens like any other setup; the only
+ * thing not driven through a UI is the race itself — two simultaneous presses, which no
+ * single-user flow can express.
  *
- * The slot and the campaign the donors fight over are written straight into CouchDB
- * here: they are the setting, not the thing under test (the screens that create them
- * are covered in donation-fullstack-admin). Both are removed in afterAll; the bookings
- * stay.
+ * Teardown (`teardownRun`, ids from the per-run ledger only): cancel each winner's
+ * booking as its donor would (which releases the trip / unit), delete the shelter (its
+ * campaigns and slots go with its database) and the staff user; the last test (Z)
+ * asserts nothing is left. Residue the test side cannot remove: the Mongo intake-buffer /
+ * `public_donations` rows of the winning bookings (retention purges them on its TTL) and
+ * the closed `public_shelters` row (dropped by the worker within minutes). Every attempt
+ * counts against the BFF's 3 bookings/min/IP, so the three races pace themselves on a
+ * remote target and the suite takes several minutes there.
  */
 
-// No seeded campaign asks for it, so the board line is this spec's alone. The target is
-// set one above what is already on hand, so stock received by hand does not
-// cover it. `id`/`unit` are looked up in beforeAll: the catalog mints `item_master:<ulid>`.
-const RACE_ITEM = { id: '', name: 'แปรงสีฟัน', unit: '' };
+// Open need with room for both donors of the two slot races — the fight is over the
+// truck / the window, not the item.
+const ROOM_ITEM = 'ยาสีฟัน';
+// A campaign exactly one unit short: only one of two donors can take it.
+const RACE_ITEM = 'แปรงสีฟัน';
 
+const ledger = new RunLedger('donation-fullstack-race');
 let shelter: PublicShelter;
-let pickup: SlotWindow;
-let dropoff: SlotWindow;
+let roomNeed: PublicNeed;
+let staff: Staff;
 let restoreRecaptcha: (() => Promise<void>) | undefined;
-const campaignId = `donation_campaign:e2e-race-${RUN_ID}`;
 
-test.describe.configure({ mode: 'serial' });
+const SYNC = BOARD_SYNC;
 
-async function boardLine(request: APIRequestContext) {
-	const res = await request.get('/api/public/v1/needs');
-	return ((await res.json()) as PublicShelter[])
-		.find((s) => s.code === shelter.code)
-		?.needs.find((n) => n.name === RACE_ITEM.name);
-}
+/** A fresh shelter has no booking and no slot, so fixed evening windows are always free. */
+const PICKUP: SlotWindow = { from: '18:00', to: '18:20' };
+const DROPOFF: SlotWindow = { from: '18:30', to: '18:50' };
 
-const SYNC = { timeout: 30_000 };
-
-function stamp() {
-	const now = new Date().toISOString();
-	return { created_at: now, updated_at: now, created_by: 'e2e', schema_v: 1 };
-}
-
-test.beforeAll(async ({ request, browser }) => {
-	skipUnlessFullStack(test.skip);
-	const board = await publicNeedsBoard(request);
-	test.skip(board.length === 0, 'needs board is empty (no open/full shelter) — run `pnpm seed`');
-	const pick = board.find((s) => !s.needs.some((n) => n.name === RACE_ITEM.name));
-	test.skip(!pick, `every shelter already asks for ${RACE_ITEM.name}`);
-	shelter = pick!;
-	Object.assign(RACE_ITEM, await catalogItem(RACE_ITEM.name));
-
-	const [w, d] = await freeEveningWindows(shelter.code, 2);
-	test.skip(!w || !d, 'no free evening windows left today');
-	pickup = w;
-	dropoff = d;
-	restoreRecaptcha = await suspendRecaptcha(browser);
-});
-
-test.afterAll(async ({ request }) => {
-	await restoreRecaptcha?.();
-	if (!shelter) return;
-	const db = shelterDb(shelter.code);
-	// Close before deleting: the worker does not re-project needs on a campaign DELETE
-	// (see donation-fullstack-admin), so a straight delete strands the board line.
-	const camps = await runDocs(db, 'donation_campaign', 'notes');
-	for (const c of camps) {
-		await couchReq('PUT', `/${db}/${encodeURIComponent(c._id)}`, {
-			...c,
-			status: 'closed',
-			visible_on_home: false
-		});
-	}
-	if (camps.length) await expect.poll(() => boardLine(request), SYNC).toBeUndefined();
-	for (const c of await runDocs(db, 'donation_campaign', 'notes')) await deleteDoc(db, c);
-	for (const s of await runDocs(db, 'donation_slot', 'note')) await deleteDoc(db, s);
-});
-
-/**
- * Two donors, each in their own browser, walked to the confirm button; then both press
- * it in the same tick. Returns both answers in donor order.
- */
-async function raceTwoDonors(
-	browser: Browser,
-	make: (who: 'A' | 'B') => BookingOptions
-): Promise<BookingResponse[]> {
-	const contexts = await Promise.all([browser.newContext(), browser.newContext()]);
+/** Staff add one queue window of capacity 1 today through the slots manager. */
+async function openCappedWindow(browser: Browser, mode: SlotMode, w: SlotWindow) {
+	const context = await browser.newContext();
 	try {
-		const pages = await Promise.all(contexts.map((c) => c.newPage()));
-		const donors = await Promise.all([
-			fillBooking(pages[0], make('A')),
-			fillBooking(pages[1], make('B'))
-		]);
-		return await Promise.all(donors.map((d) => d.submit()));
+		const page = await context.newPage();
+		await openSlots(page, staff, mode);
+		const row = await addSlotViaUi(page, w, 1, `e2e race ${RUN_ID}`);
+		await expect(row).toContainText('จองแล้ว 0 / 1');
 	} finally {
-		await Promise.all(contexts.map((c) => c.close()));
+		await context.close();
 	}
 }
 
-function errorCode(r: BookingResponse) {
-	return typeof r.error === 'string' ? r.error : r.error?.code;
-}
+test.describe('Donation full-stack: booking races', { tag: ['@critical', '@donation'] }, () => {
+	test.describe.configure({ mode: 'serial', timeout: 240_000 });
 
-/** Outstanding bookings CouchDB holds for one window of one queue today. */
-async function bookingsInWindow(
-	w: SlotWindow,
-	method: 'shelter_pickup' | 'self_dropoff' = 'shelter_pickup'
-) {
-	const res = await couchReq('POST', `/${shelterDb(shelter.code)}/_find`, {
-		selector: {
-			type: 'donation',
-			'logistics.delivery_method': method,
-			'logistics.slot.date': todayYmd(),
-			'logistics.slot.from': w.from,
-			status: { $nin: ['cancelled', 'rejected', 'expired', 'redirected'] }
-		},
-		fields: ['booking_ref'],
-		limit: 10
-	});
-	return (res.data as { docs: { booking_ref: string }[] }).docs;
-}
+	test.beforeAll(async ({ request, browser }) => {
+		test.skip(!CAN_WRITE, READ_ONLY_REASON);
+		test.setTimeout(360_000);
+		restoreRecaptcha = await suspendRecaptcha(browser);
+		const created = await provisionShelter(browser, ledger, 'race');
+		staff = await createWarehouseStaff(ledger, created.code, 'race');
 
-test('two donors race for the last pickup trip → only one gets it', async ({
-	browser,
-	request
-}) => {
-	// The BFF's CouchDB count cannot see the winner for a few seconds — it reaches
-	// CouchDB only after FastAPI → Mongo → sync worker — so both donors pass it. The
-	// place is decided by FastAPI's slot counter (`slot_hold`), which sees both.
-	// Any open need at the shelter will do — the fight is over the truck, not the item.
-	const need = (await publicNeedsBoard(request))
-		.find((s) => s.code === shelter.code)!
-		.needs.find((n) => n.status === 'open' && Number(n.qty_needed) >= 2);
-	test.skip(!need, `${shelter.code} has no open need with room for two`);
-
-	const db = shelterDb(shelter.code);
-	const slotId = `donation_slot:pickup:${todayYmd()}:${pickup.from}`;
-	await couchReq('PUT', `/${db}/${encodeURIComponent(slotId)}`, {
-		_id: slotId,
-		type: 'donation_slot',
-		shelter_code: shelter.code,
-		...stamp(),
-		schema_v: 2,
-		mode: 'pickup',
-		date: todayYmd(),
-		from: pickup.from,
-		to: pickup.to,
-		capacity: 1,
-		status: 'open',
-		note: `e2e race ${RUN_ID}`
-	});
-
-	const results = await raceTwoDonors(browser, (who) => ({
-		shelter,
-		need: need!,
-		donorName: `E2E แย่งรถ ${who} ${RUN_ID}`,
-		phone: who === 'A' ? '0861110001' : '0861110002',
-		mode: {
-			kind: 'pickup',
-			address: `${who} 1/1 ถ.ทดสอบ (e2e ${RUN_ID})`,
-			slot: new RegExp(`^${pickup.from} - ${pickup.to} ว่าง`)
+		const context = await browser.newContext();
+		try {
+			roomNeed = await createCampaignViaUi(await context.newPage(), request, staff, created.code, {
+				item: ROOM_ITEM,
+				target: 20,
+				notes: `e2e race room ${RUN_ID}`
+			});
+		} finally {
+			await context.close();
 		}
-	}));
-
-	const winners = results.filter((r) => r.success);
-	const losers = results.filter((r) => !r.success);
-	// What each side got, in the failure message — the point is to see the race.
-	const summary = JSON.stringify(results);
-	expect(winners, `both donors were answered: ${summary}`).toHaveLength(1);
-	expect(losers.map(errorCode), summary).toEqual(['SLOT_FULL']);
-
-	// And the truck really carries one job — checked once the winner has synced in.
-	await expect.poll(async () => (await bookingsInWindow(pickup)).length, SYNC).toBeGreaterThan(0);
-	expect(await bookingsInWindow(pickup)).toEqual([{ booking_ref: winners[0].bookingRef }]);
-});
-
-test('two donors race for the last place in a capped drop-off window → only one gets it', async ({
-	browser,
-	request
-}) => {
-	// Drop-off windows are normally uncapped, but staff may put a ceiling on a busy one
-	// (the slot screen's "จำกัดจำนวนคิว"). That ceiling goes through the same BFF
-	// count as the pickup trip above, so it is held by the same FastAPI slot counter.
-	const need = (await publicNeedsBoard(request))
-		.find((s) => s.code === shelter.code)!
-		.needs.find((n) => n.status === 'open' && Number(n.qty_needed) >= 2);
-	test.skip(!need, `${shelter.code} has no open need with room for two`);
-
-	const db = shelterDb(shelter.code);
-	const slotId = `donation_slot:dropoff:${todayYmd()}:${dropoff.from}`;
-	await couchReq('PUT', `/${db}/${encodeURIComponent(slotId)}`, {
-		_id: slotId,
-		type: 'donation_slot',
-		shelter_code: shelter.code,
-		...stamp(),
-		schema_v: 2,
-		mode: 'dropoff',
-		date: todayYmd(),
-		from: dropoff.from,
-		to: dropoff.to,
-		capacity: 1,
-		status: 'open',
-		note: `e2e race ${RUN_ID}`
+		shelter = { ...created, needs: [roomNeed] };
 	});
 
-	const results = await raceTwoDonors(browser, (who) => ({
-		shelter,
-		need: need!,
-		donorName: `E2E แย่งคิวมาส่ง ${who} ${RUN_ID}`,
-		phone: who === 'A' ? '0863330001' : '0863330002',
-		mode: { kind: 'self', slot: new RegExp(`^${dropoff.from} - ${dropoff.to} ว่าง`) }
-	}));
+	test.afterAll(async ({ request }) => {
+		if (!CAN_WRITE) return;
+		test.setTimeout(240_000);
+		await restoreRecaptcha?.();
+		await teardownRun(request, ledger);
+	});
 
-	const winners = results.filter((r) => r.success);
-	const losers = results.filter((r) => !r.success);
-	const summary = JSON.stringify(results);
-	expect(winners, `both donors were answered: ${summary}`).toHaveLength(1);
-	expect(losers.map(errorCode), summary).toEqual(['SLOT_FULL']);
+	/**
+	 * Two donors, each in their own browser, walked to the confirm button; then both press
+	 * it in the same tick. Returns both answers in donor order.
+	 */
+	async function raceTwoDonors(
+		browser: Browser,
+		make: (who: 'A' | 'B') => Omit<BookingOptions, 'ledger'>
+	): Promise<BookingResponse[]> {
+		const contexts = await Promise.all([browser.newContext(), browser.newContext()]);
+		try {
+			const pages = await Promise.all(contexts.map((c) => c.newPage()));
+			const donors = await Promise.all([
+				fillBooking(pages[0], { ...make('A'), ledger }),
+				fillBooking(pages[1], { ...make('B'), ledger })
+			]);
+			// Both presses count against the BFF's per-IP limit: make room for the pair, then
+			// fire them together (a paced submit each would serialise them).
+			await bookingPacer.acquire(2);
+			return await Promise.all(donors.map((d) => d.submit({ paced: false })));
+		} finally {
+			await Promise.all(contexts.map((c) => c.close()));
+		}
+	}
 
-	await expect
-		.poll(async () => (await bookingsInWindow(dropoff, 'self_dropoff')).length, SYNC)
-		.toBeGreaterThan(0);
-	expect(await bookingsInWindow(dropoff, 'self_dropoff')).toEqual([
-		{ booking_ref: winners[0].bookingRef }
-	]);
-});
+	function errorCode(r: BookingResponse) {
+		return typeof r.error === 'string' ? r.error : r.error?.code;
+	}
 
-test('two donors race for the last unit of a need → only one is accepted', async ({
-	browser,
-	request
-}) => {
-	const db = shelterDb(shelter.code);
-	await couchReq('PUT', `/${db}/${encodeURIComponent(campaignId)}`, {
-		_id: campaignId,
-		type: 'donation_campaign',
-		shelter_code: shelter.code,
-		...stamp(),
-		schema_v: 3,
-		title: RACE_ITEM.name,
-		needs: [
-			{
-				item_id: RACE_ITEM.id,
-				// Exactly one unit short, whatever is already on the shelf.
-				qty_target: String((await onHandQty(shelter.code, RACE_ITEM.id)) + 1),
-				unit: RACE_ITEM.unit,
-				status: 'open'
+	/** Outstanding bookings CouchDB holds for one window of one queue today. */
+	async function bookingsInWindow(
+		w: SlotWindow,
+		method: 'shelter_pickup' | 'self_dropoff' = 'shelter_pickup'
+	) {
+		const res = await couchReq('POST', `/${shelterDb(shelter.code)}/_find`, {
+			selector: {
+				type: 'donation',
+				'logistics.delivery_method': method,
+				'logistics.slot.date': todayYmd(),
+				'logistics.slot.from': w.from,
+				status: { $nin: ['cancelled', 'rejected', 'expired', 'redirected'] }
+			},
+			fields: ['booking_ref'],
+			limit: 10
+		});
+		return (res.data as { docs: { booking_ref: string }[] }).docs;
+	}
+
+	test('two donors race for the last pickup trip → only one gets it', async ({ browser }) => {
+		// The BFF's CouchDB count cannot see the winner for a few seconds — it reaches
+		// CouchDB only after FastAPI → Mongo → sync worker — so both donors pass it. The
+		// place is decided by FastAPI's slot counter (`slot_hold`), which sees both.
+		await openCappedWindow(browser, 'รถศูนย์ไปรับ', PICKUP);
+
+		const results = await raceTwoDonors(browser, (who) => ({
+			shelter,
+			need: roomNeed,
+			donorName: `E2E แย่งรถ ${who} ${RUN_ID}`,
+			phone: who === 'A' ? '0861110001' : '0861110002',
+			mode: {
+				kind: 'pickup',
+				address: `${who} 1/1 ถ.ทดสอบ (e2e ${RUN_ID})`,
+				slot: new RegExp(`^${PICKUP.from} - ${PICKUP.to} ว่าง`)
 			}
-		],
-		status: 'open',
-		visible_on_home: true,
-		urgency: 'critical',
-		notes: `e2e race ${RUN_ID}`
+		}));
+
+		const winners = results.filter((r) => r.success);
+		const losers = results.filter((r) => !r.success);
+		// What each side got, in the failure message — the point is to see the race.
+		const summary = JSON.stringify(results);
+		expect(winners, `both donors were answered: ${summary}`).toHaveLength(1);
+		expect(losers.map(errorCode), summary).toEqual(['SLOT_FULL']);
+
+		// And the truck really carries one job — checked once the winner has synced in.
+		await expect.poll(async () => (await bookingsInWindow(PICKUP)).length, SYNC).toBeGreaterThan(0);
+		expect(await bookingsInWindow(PICKUP)).toEqual([{ booking_ref: winners[0].bookingRef }]);
 	});
-	await expect.poll(async () => Number((await boardLine(request))?.qty_needed), SYNC).toBe(1);
 
-	const results = await raceTwoDonors(browser, (who) => ({
-		shelter,
-		need: { name: RACE_ITEM.name },
-		donorName: `E2E แย่งไข่ ${who} ${RUN_ID}`,
-		phone: who === 'A' ? '0862220001' : '0862220002'
-	}));
+	test('two donors race for the last place in a capped drop-off window → only one gets it', async ({
+		browser
+	}) => {
+		// Drop-off windows are normally uncapped, but staff may put a ceiling on a busy one
+		// (the slot screen's "จำกัดจำนวนคิว"). That ceiling goes through the same BFF
+		// count as the pickup trip above, so it is held by the same FastAPI slot counter.
+		await openCappedWindow(browser, 'ผู้บริจาคมาส่งเอง', DROPOFF);
 
-	const summary = JSON.stringify(results);
-	expect(
-		results.filter((r) => r.success),
-		`both donors were answered: ${summary}`
-	).toHaveLength(1);
-	expect(results.filter((r) => !r.success).map(errorCode), summary).toEqual(['NEED_FULL']);
+		const results = await raceTwoDonors(browser, (who) => ({
+			shelter,
+			need: roomNeed,
+			donorName: `E2E แย่งคิวมาส่ง ${who} ${RUN_ID}`,
+			phone: who === 'A' ? '0863330001' : '0863330002',
+			mode: { kind: 'self', slot: new RegExp(`^${DROPOFF.from} - ${DROPOFF.to} ว่าง`) }
+		}));
 
-	// Filled — the board stops offering it.
-	await expect
-		.poll(async () => (await boardLine(request))?.status ?? 'gone', SYNC)
-		.not.toBe('open');
+		const winners = results.filter((r) => r.success);
+		const losers = results.filter((r) => !r.success);
+		const summary = JSON.stringify(results);
+		expect(winners, `both donors were answered: ${summary}`).toHaveLength(1);
+		expect(losers.map(errorCode), summary).toEqual(['SLOT_FULL']);
+
+		await expect
+			.poll(async () => (await bookingsInWindow(DROPOFF, 'self_dropoff')).length, SYNC)
+			.toBeGreaterThan(0);
+		expect(await bookingsInWindow(DROPOFF, 'self_dropoff')).toEqual([
+			{ booking_ref: winners[0].bookingRef }
+		]);
+	});
+
+	test('two donors race for the last unit of a need → only one is accepted', async ({
+		browser,
+		request
+	}) => {
+		// Exactly one unit short, on a shelf that holds none of it.
+		const context = await browser.newContext();
+		try {
+			const line = await createCampaignViaUi(
+				await context.newPage(),
+				request,
+				staff,
+				shelter.code,
+				{ item: RACE_ITEM, target: 1, notes: `e2e race unit ${RUN_ID}` }
+			);
+			expect(Number(line.qty_needed)).toBe(1);
+		} finally {
+			await context.close();
+		}
+
+		const results = await raceTwoDonors(browser, (who) => ({
+			shelter,
+			need: { name: RACE_ITEM },
+			donorName: `E2E แย่งแปรง ${who} ${RUN_ID}`,
+			phone: who === 'A' ? '0862220001' : '0862220002'
+		}));
+
+		const summary = JSON.stringify(results);
+		expect(
+			results.filter((r) => r.success),
+			`both donors were answered: ${summary}`
+		).toHaveLength(1);
+		expect(results.filter((r) => !r.success).map(errorCode), summary).toEqual(['NEED_FULL']);
+
+		// Filled — the board stops offering it.
+		await expect
+			.poll(
+				async () => (await boardLineFor(request, shelter.code, RACE_ITEM))?.status ?? 'gone',
+				SYNC
+			)
+			.not.toBe('open');
+	});
+
+	test('Z teardown leaves nothing of this run behind', async ({ request }) => {
+		test.setTimeout(240_000);
+		const run = await teardownRun(request, ledger);
+		expect(run.shelters).toHaveLength(1);
+		await expectRunGone(request, run);
+	});
 });

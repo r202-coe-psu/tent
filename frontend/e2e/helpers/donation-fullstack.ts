@@ -1,3 +1,6 @@
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
+import process from 'node:process';
 import {
 	expect,
 	type APIRequestContext,
@@ -14,17 +17,34 @@ import {
 	seedSecurityQuestion,
 	type TestUser
 } from './couch';
+import { IS_REMOTE } from './e2e-env';
 import { injectSession, routeBrowserCouchThroughApp } from './login';
-import { setRecaptcha } from './staff-ui';
+import { publicShelter, teardownShelter, waitForProjection } from './public-cleanup';
+import { createShelterViaUi, setRecaptcha } from './staff-ui';
 
 /**
- * Shared steps for the full-stack donation specs (`donation-fullstack*.test.ts`).
+ * Shared steps for the full-stack donation specs (`donation-fullstack*.test.ts`,
+ * `stock-donations.test.ts`).
  *
  * Nothing here is route-mocked: the public wizard posts through the SvelteKit BFF to
- * FastAPI → Mongo → sync worker → CouchDB, and the back-office reads CouchDB. The
- * specs skip themselves unless `PW_BASE_URL` points at a running `pnpm dev`. Bookings
- * go through the BFF's reCAPTCHA gate, so each spec turns it off for its run with
+ * FastAPI → Mongo → sync worker → CouchDB, and the back-office reads CouchDB. Each spec
+ * follows e2e/README.md §4:
+ *   - it works on its OWN `E2E …` shelter (`provisionShelter`, created through the
+ *     system-management UI) — never on SH001–SH004;
+ *   - campaigns and queue slots are set up through the back-office screens
+ *     (`createCampaignViaUi`, `addSlotViaUi`); admin APIs (`couchReq`) only read state
+ *     back for assertions and tear down;
+ *   - everything it creates is recorded in a per-run `RunLedger` the moment it exists,
+ *     and `teardownRun` removes exactly those ids (never search results);
+ *   - the last test of each spec calls `expectRunGone` (zero-leak).
+ * Bookings go through the BFF's reCAPTCHA gate, so each spec turns it off for its run with
  * `suspendRecaptcha` (README §known issues: a fake token does not pass Enterprise).
+ *
+ * Residue the test side cannot remove: the Mongo donation buffer / `public_donations`
+ * rows of the bookings (and the closed `public_shelters` row, which the worker's retention
+ * job drops within minutes). The donor path is the only API that can release them, so
+ * `teardownRun` cancels every booking that is still open first — quota and queue places go
+ * back — and the rest ages out with the buffer's TTL.
  */
 
 export const RUN_ID = Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
@@ -35,14 +55,102 @@ export type PublicNeed = {
 	status: string;
 	qty_needed: string | number;
 	urgency?: string;
+	on_hand?: string | number;
+	reserved?: string | number;
 };
 export type PublicShelter = { code: string; name: string; needs: PublicNeed[] };
 
 export type Staff = TestUser & { session: string };
 
-export function skipUnlessFullStack(skip: (cond: boolean, why: string) => void) {
-	skip(!process.env.PW_BASE_URL, 'full-stack only — set PW_BASE_URL to a running `pnpm dev`');
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// ─── Rate limits ───────────────────────────────────────────────────────────────
+
+/**
+ * Sliding-window pacer for the BFF's per-IP limiters (`src/lib/server/security/rate-limiter.ts`).
+ * They only exempt loopback under `vite dev`, so a remote target (staging) — or a local
+ * `vite preview` with `DONATION_E2E_PACE=1` — would answer 429 RATE_LIMITED after the 3rd
+ * booking in a minute. On `pnpm dev` it is a no-op.
+ */
+class Pacer {
+	private hits: number[] = [];
+	constructor(
+		private readonly limit: number,
+		private readonly windowMs = 61_000
+	) {}
+
+	async acquire(n = 1): Promise<void> {
+		if (!(IS_REMOTE || process.env.DONATION_E2E_PACE === '1')) return;
+		for (;;) {
+			const now = Date.now();
+			this.hits = this.hits.filter((t) => now - t < this.windowMs);
+			if (this.hits.length + n <= this.limit) {
+				for (let i = 0; i < n; i++) this.hits.push(now);
+				return;
+			}
+			const expiring = this.hits[this.hits.length + n - this.limit - 1];
+			await sleep(Math.max(expiring + this.windowMs - now, 250) + 250);
+		}
+	}
 }
+
+/** `donationIpLimiter`: creating a booking — 3 per minute per IP. */
+export const bookingPacer = new Pacer(3);
+/** `donationEditLimiter`: edit / courier no. / cancel — 10 per minute per IP. */
+const editPacer = new Pacer(9);
+
+// ─── Per-run ledger ────────────────────────────────────────────────────────────
+
+const LEDGER_PATH = 'node_modules/.cache/donation-e2e-created.json';
+
+export type LedgerBooking = { token: string; ref: string; shelter: string };
+type LedgerData = { shelters: string[]; staff: string[]; bookings: LedgerBooking[] };
+
+/**
+ * Everything one spec creates, written the moment it exists. Playwright restarts the
+ * worker after a failed serial test, which wipes module state — a file survives that (and
+ * a crashed run), so the next teardown removes exactly the ids this spec recorded, never
+ * anything found by searching. One entry per spec, so specs never touch each other's ids.
+ */
+export class RunLedger {
+	constructor(private readonly suite: string) {}
+
+	private readAll(): Record<string, LedgerData> {
+		try {
+			return JSON.parse(readFileSync(LEDGER_PATH, 'utf8')) as Record<string, LedgerData>;
+		} catch {
+			return {};
+		}
+	}
+
+	read(): LedgerData {
+		const mine = this.readAll()[this.suite];
+		return {
+			shelters: mine?.shelters ?? [],
+			staff: mine?.staff ?? [],
+			bookings: mine?.bookings ?? []
+		};
+	}
+
+	private write(data: LedgerData) {
+		mkdirSync(dirname(LEDGER_PATH), { recursive: true });
+		writeFileSync(LEDGER_PATH, JSON.stringify({ ...this.readAll(), [this.suite]: data }));
+	}
+
+	add(kind: 'shelters' | 'staff', value: string): void;
+	add(kind: 'bookings', value: LedgerBooking): void;
+	add(kind: keyof LedgerData, value: string | LedgerBooking): void {
+		const data = this.read();
+		(data[kind] as (string | LedgerBooking)[]).push(value);
+		this.write(data);
+	}
+
+	clear(): void {
+		this.write({ shelters: [], staff: [], bookings: [] });
+	}
+}
+
+// ─── reCAPTCHA ─────────────────────────────────────────────────────────────────
 
 /**
  * Turn `config:app.recaptcha_enabled` off as the CouchDB admin, the same switch
@@ -82,33 +190,66 @@ export async function publicNeedsBoard(request: APIRequestContext): Promise<Publ
 	return (await res.json()) as PublicShelter[];
 }
 
-/** First shelter with an open need that has room for a few qty-1 bookings. */
-export function pickOpenNeed(board: PublicShelter[]) {
-	for (const s of board) {
-		const n = s.needs.find((x) => x.status === 'open' && Number(x.qty_needed) >= 5);
-		if (n) return { shelter: s, need: n };
+// ─── Own E2E shelter + staff ───────────────────────────────────────────────────
+
+/**
+ * Create this run's own `E2E …` shelter through the system-management UI (CouchDB admin
+ * session, the only identity allowed to provision shelters), record it in `ledger`, and
+ * wait until the public plane serves it as `open` — FastAPI refuses bookings for a shelter
+ * it has not projected yet (SHELTER_NOT_FOUND).
+ */
+export async function provisionShelter(
+	browser: Browser,
+	ledger: RunLedger,
+	tag: string
+): Promise<{ code: string; name: string }> {
+	const name = `E2E Donation ${tag} ${RUN_ID}`;
+	const admin = await bootstrapAdminSession();
+	const context = await browser.newContext();
+	try {
+		const page = await context.newPage();
+		await routeBrowserCouchThroughApp(page);
+		await injectSession(page, admin.user, admin.cookie);
+		const code = await createShelterViaUi(page, {
+			name,
+			siteKind: 'evacuation_center',
+			lat: 7.006,
+			lng: 100.498,
+			subdistrict: 'คอหงส์',
+			capacity: 40
+		});
+		ledger.add('shelters', code);
+		await waitForProjection(
+			`${code} open on the public plane`,
+			async () => (await publicShelter(code))?.status === 'open',
+			{ timeoutMs: 60_000, intervalMs: 2_000 }
+		);
+		return { code, name };
+	} finally {
+		await context.close();
 	}
-	return null;
 }
 
 /**
  * Flat roles, like `pnpm seed` — the compound form gets past the route guard but not
- * past `catalog._security` (see stock-donations.test.ts).
+ * past `catalog._security` (see stock-donations.test.ts). Recorded in `ledger` before
+ * the user exists, so a crash in between still deletes it.
  */
-export async function createWarehouseStaff(shelterCode: string, tag: string): Promise<Staff> {
+export async function createWarehouseStaff(
+	ledger: RunLedger,
+	shelterCode: string,
+	tag: string
+): Promise<Staff> {
 	const user: TestUser = {
 		name: `dn_${tag}_${RUN_ID}`,
 		password: 'Password1!',
 		roles: [`shelter:${shelterCode}`, 'warehouse_staff'],
 		display_name: `Donation E2E ${tag}`
 	};
+	ledger.add('staff', user.name);
 	await createCouchUser(user);
 	await seedSecurityQuestion(user.name);
 	return { ...user, session: await couchLogin(user.name, user.password) };
-}
-
-export async function deleteStaff(staff: Staff | undefined) {
-	if (staff) await deleteCouchUser(staff.name);
 }
 
 export type DeliveryMode =
@@ -133,31 +274,6 @@ function cardWith(page: Page, text: string, name: string) {
 		.getByRole('button', { name });
 }
 
-/**
- * What the donor board prints for a need. The projection falls back to the raw item id
- * as `name` when the catalog has no doc for it — the staging seed still binds campaigns
- * to legacy `item:*` ids that the current catalog (`item_master:<ulid>`) no longer holds —
- * and the board then relabels those ids itself. Mirrors `formatItemName` in
- * `src/lib/components/public-donor-needs.svelte` (Thai); keep the two in step.
- */
-const LEGACY_ITEM_LABELS: Record<string, string> = {
-	'item:rice': 'ข้าวสาร (อาหารแห้ง)',
-	'item:water': 'น้ำดื่มสะอาด',
-	'item:soap': 'สบู่และของใช้ส่วนตัว',
-	'item:blanket': 'ผ้าห่มกันหนาว',
-	'item:paracetamol': 'ยาพาราเซตามอล (ยาสามัญ)',
-	'item:canned_fish': 'ปลากระป๋อง',
-	'item:instant_noodle': 'บะหมี่กึ่งสำเร็จรูป',
-	'item:mosquito_net': 'มุ้งกันยุง',
-	'item:sanitary_pad': 'ผ้าอนามัย'
-};
-
-export function needLabel(need: { name: string }): string {
-	const label = LEGACY_ITEM_LABELS[need.name];
-	if (label) return label;
-	return need.name.startsWith('item:') ? need.name.slice('item:'.length) : need.name;
-}
-
 /** `item_master` id for a catalog name — ids are minted per seed (`item_master:<ulid>`). */
 export async function catalogItem(name: string): Promise<{ id: string; unit: string }> {
 	const res = await couchReq('POST', '/catalog/_find', {
@@ -171,7 +287,7 @@ export async function catalogItem(name: string): Promise<{ id: string; unit: str
 }
 
 /** Public needs board → `shelter`'s card → the line for `itemName` (as the board prints it). */
-export async function openNeed(page: Page, shelter: PublicShelter, itemName: string) {
+export async function openNeed(page: Page, shelter: Pick<PublicShelter, 'name'>, itemName: string) {
 	await page.goto('/donations');
 	await expect(page.getByRole('heading', { name: /กระดาน\s*ความต้องการด่วน/ })).toBeVisible();
 	await cardWith(page, shelter.name, 'ดูรายละเอียดและบริจาค').click();
@@ -179,11 +295,13 @@ export async function openNeed(page: Page, shelter: PublicShelter, itemName: str
 }
 
 export type BookingOptions = {
-	shelter: PublicShelter;
+	shelter: Pick<PublicShelter, 'code' | 'name'>;
 	need: Pick<PublicNeed, 'name'>;
 	donorName: string;
 	phone: string;
 	mode?: DeliveryMode;
+	/** Every accepted booking is recorded here for `teardownRun`. */
+	ledger: RunLedger;
 };
 
 export type BookingResponse = Partial<Booking> & {
@@ -194,22 +312,23 @@ export type BookingResponse = Partial<Booking> & {
 /**
  * Walk the public wizard up to — not past — "ยืนยันการจองคิวบริจาค", qty 1.
  * Returns `submit`, which presses it and hands back the BFF's answer unasserted, so
- * two donors can be brought to the button first and made to press it together.
+ * two donors can be brought to the button first and made to press it together (the
+ * caller then paces both itself: `submit({ paced: false })` after `bookingPacer.acquire(2)`).
  */
 export async function fillBooking(
 	page: Page,
 	opts: BookingOptions
-): Promise<{ submit: () => Promise<BookingResponse> }> {
+): Promise<{ submit: (o?: { paced?: boolean }) => Promise<BookingResponse> }> {
 	const { shelter, need, donorName, phone } = opts;
 	const mode = opts.mode ?? { kind: 'self' };
 
-	await openNeed(page, shelter, needLabel(need));
+	await openNeed(page, shelter, need.name);
 
 	// Step 2 — donor + item. Name/unit come from the need; only the qty is ours.
 	await expect(page.getByRole('heading', { name: 'ส่วนที่ 1: ข้อมูลผู้บริจาค' })).toBeVisible();
 	await page.locator('#donor-name').fill(donorName);
 	await page.locator('#donor-phone').fill(phone);
-	await expect(page.getByRole('textbox', { name: 'ประเภทสิ่งของ' })).toHaveValue(needLabel(need));
+	await expect(page.getByRole('textbox', { name: 'ประเภทสิ่งของ' })).toHaveValue(need.name);
 	await page.getByRole('spinbutton', { name: 'ปริมาณ' }).fill('1');
 	await page.getByRole('button', { name: 'ถัดไป: เลือกจุดส่งมอบ' }).click();
 
@@ -245,12 +364,21 @@ export async function fillBooking(
 	await expect(button).toBeEnabled();
 
 	return {
-		submit: async () => {
+		submit: async ({ paced = true } = {}) => {
+			if (paced) await bookingPacer.acquire();
 			const posted = page.waitForResponse(
 				(r) => r.url().endsWith('/api/public/v1/donations') && r.request().method() === 'POST'
 			);
 			await button.click();
-			return (await (await posted).json()) as BookingResponse;
+			const body = (await (await posted).json()) as BookingResponse;
+			if (body.success && body.bookingRef && body.trackingToken) {
+				opts.ledger.add('bookings', {
+					token: body.trackingToken,
+					ref: body.bookingRef,
+					shelter: shelter.code
+				});
+			}
+			return body;
 		}
 	};
 }
@@ -260,9 +388,10 @@ export async function bookAsDonor(page: Page, opts: BookingOptions): Promise<Boo
 	const { submit } = await fillBooking(page, opts);
 	const body = await submit();
 	// Under `vite preview` (not dev) with no reCAPTCHA keys the BFF fails closed with
-	// SERVER_MISCONFIGURED — point PW_BASE_URL at `pnpm dev` instead. RATE_LIMITED is
-	// FastAPI's 30 req/min/IP on every donation route: one run fits, two back to back
-	// do not — wait a minute between runs.
+	// SERVER_MISCONFIGURED — run against `pnpm dev` locally (PLAYWRIGHT_TEST_BASE_URL=
+	// http://localhost:5173). RATE_LIMITED is the BFF's 3 bookings/min/IP (paced here on a
+	// remote target) or FastAPI's 30 req/min/IP on every donation route: wait a minute
+	// between back-to-back local runs.
 	expect(body.success, `booking POST failed: ${JSON.stringify(body)}`).toBe(true);
 	const { bookingRef, trackingToken } = body as Booking;
 
@@ -272,8 +401,14 @@ export async function bookAsDonor(page: Page, opts: BookingOptions): Promise<Boo
 	return { bookingRef, trackingToken };
 }
 
+const routedPages = new WeakSet<Page>();
+
 /** Open stock-donations as `staff`. */
 export async function openBackOffice(page: Page, staff: Staff) {
+	if (!routedPages.has(page)) {
+		routedPages.add(page);
+		await routeBrowserCouchThroughApp(page);
+	}
 	await injectSession(page, staff, staff.session);
 	await page.goto('/back-office/stock-donations');
 	await expect(page.getByRole('tab', { name: /รอการประเมิน/ })).toBeVisible({ timeout: 15_000 });
@@ -335,56 +470,11 @@ export async function ledgerRowsFor(shelterCode: string, donationId: string) {
 	return (res.data as { docs: { item_id: string; qty: string }[] }).docs;
 }
 
-/** Every doc of `type` in `db` whose `field` carries this run's id. */
-export async function runDocs(db: string, type: string, field: string) {
-	const res = await couchReq('POST', `/${db}/_find`, {
-		selector: { type, [field]: { $regex: RUN_ID } },
-		limit: 50
-	});
-	return (res.data as { docs: ({ _id: string; _rev: string } & Record<string, unknown>)[] }).docs;
-}
-
-export async function deleteDoc(db: string, d: { _id: string; _rev: string }) {
-	await couchReq('DELETE', `/${db}/${encodeURIComponent(d._id)}?rev=${d._rev}`);
-}
-
 export type SlotWindow = { from: string; to: string };
 
 /** Local YYYY-MM-DD — the wizard and the slot screen both default to it. */
 export function todayYmd() {
 	return new Date().toLocaleDateString('sv-SE');
-}
-
-/**
- * A slot counts every outstanding booking with the same date + `from`, whichever run
- * made it — so a fixed window would already be "full" from the last run's booking.
- * Returns up to `n` 20-minute evening windows no booking and no slot of today uses.
- */
-export async function freeEveningWindows(shelterCode: string, n: number): Promise<SlotWindow[]> {
-	const today = todayYmd();
-	const res = await couchReq('POST', `/${shelterDb(shelterCode)}/_find`, {
-		selector: {
-			$or: [
-				{ type: 'donation', 'logistics.slot.date': today },
-				{ type: 'donation_slot', date: today }
-			]
-		},
-		limit: 5000
-	});
-	const taken = new Set(
-		(res.data as { docs: Record<string, unknown>[] }).docs.map((d) =>
-			d.type === 'donation_slot'
-				? (d.from as string)
-				: (d.logistics as { slot: { from: string } }).slot.from
-		)
-	);
-	const hhmm = (x: number) =>
-		`${String(Math.floor(x / 60)).padStart(2, '0')}:${String(x % 60).padStart(2, '0')}`;
-	const free: SlotWindow[] = [];
-	for (let m = 18 * 60; m + 20 < 24 * 60 && free.length < n; m += 5) {
-		if (!taken.has(hhmm(m))) free.push({ from: hhmm(m), to: hhmm(m + 20) });
-	}
-	return free;
 }
 
 /** The public board's line for `itemName` at `shelterCode`, if any. */
@@ -404,93 +494,6 @@ export async function boardLineFor(
 export const BOARD_SYNC = { timeout: 30_000 };
 
 /**
- * Stock of `itemId` on the shelf at `shelterCode` (sum of `stock_ledger.qty`). The board
- * subtracts it from every campaign's target for that item, so a test campaign's target
- * has to sit on top of it — otherwise stock someone received by hand covers the need
- * and the line never reaches the board. Bookings are NOT added: they count per
- * `campaign_id` (`worker/src/worker/projectors/compute_needs.py`), and a campaign this
- * run just opened has none.
- */
-export async function onHandQty(shelterCode: string, itemId: string): Promise<number> {
-	const res = await couchReq('POST', `/${shelterDb(shelterCode)}/_find`, {
-		selector: { type: 'stock_ledger', item_id: itemId },
-		fields: ['qty'],
-		limit: 10000
-	});
-	const total = (res.data as { docs: { qty: string }[] }).docs.reduce(
-		(sum, d) => sum + Number(d.qty),
-		0
-	);
-	return Math.max(0, total);
-}
-
-/**
- * Open a campaign of this run's own for `itemName` at `shelterCode`, straight into
- * CouchDB, short by `shortfall` on top of the stock already on the shelf (`onHandQty`),
- * and wait for it on the public board. Seeded campaigns bind legacy `item:*`
- * ids the current catalog no longer holds, so their donations cannot be received into
- * stock (CATALOG_MISMATCH); a campaign on a real `item_master` id can.
- */
-export async function openRunCampaign(
-	request: APIRequestContext,
-	shelterCode: string,
-	itemName: string,
-	shortfall: number,
-	tag: string
-): Promise<PublicNeed> {
-	const item = await catalogItem(itemName);
-	const qtyTarget = (await onHandQty(shelterCode, item.id)) + shortfall;
-	const id = `donation_campaign:e2e-${tag}-${RUN_ID}`;
-	const now = new Date().toISOString();
-	await couchReq('PUT', `/${shelterDb(shelterCode)}/${encodeURIComponent(id)}`, {
-		_id: id,
-		type: 'donation_campaign',
-		schema_v: 3,
-		shelter_code: shelterCode,
-		created_at: now,
-		updated_at: now,
-		created_by: 'e2e',
-		title: itemName,
-		needs: [{ item_id: item.id, qty_target: String(qtyTarget), unit: item.unit, status: 'open' }],
-		status: 'open',
-		visible_on_home: true,
-		urgency: 'normal',
-		notes: `e2e ${tag} ${RUN_ID}`
-	});
-	await expect
-		.poll(async () => (await boardLineFor(request, shelterCode, itemName))?.status, BOARD_SYNC)
-		.toBe('open');
-	return (await boardLineFor(request, shelterCode, itemName))!;
-}
-
-/**
- * Close + hide this run's campaigns at `shelterCode`, wait until `itemName` has left the
- * board, then delete them. The worker does not re-project needs on a campaign DELETE, so
- * a straight delete would strand the line on the public board.
- */
-export async function retireRunCampaigns(
-	request: APIRequestContext,
-	shelterCode: string,
-	itemName: string
-) {
-	const db = shelterDb(shelterCode);
-	const camps = await runDocs(db, 'donation_campaign', 'notes');
-	for (const c of camps) {
-		await couchReq('PUT', `/${db}/${encodeURIComponent(c._id)}`, {
-			...c,
-			status: 'closed',
-			visible_on_home: false
-		});
-	}
-	if (camps.length) {
-		await expect
-			.poll(async () => await boardLineFor(request, shelterCode, itemName), BOARD_SYNC)
-			.toBeUndefined();
-	}
-	for (const c of await runDocs(db, 'donation_campaign', 'notes')) await deleteDoc(db, c);
-}
-
-/**
  * The public track page reads the Mongo projection, which trails CouchDB by the sync
  * worker, and does not refetch on its own. After a write, reload until `target` shows.
  */
@@ -499,4 +502,181 @@ export async function reloadUntilVisible(page: Page, target: Locator, timeout = 
 		if (!(await target.isVisible())) await page.reload();
 		await expect(target).toBeVisible({ timeout: 2_000 });
 	}).toPass({ timeout });
+}
+
+// ─── Setup through the back-office UI ──────────────────────────────────────────
+
+/**
+ * Back office → จัดการความต้องการ → สร้างประกาศ…: open a campaign for the catalog item
+ * `item` with `target` units (the unit is the catalog's `base_unit`, not typed), then wait
+ * for its line on the public board. The campaign binds to a real `item_master` id, so
+ * donations to it can be received into stock.
+ */
+export async function createCampaignViaUi(
+	page: Page,
+	request: APIRequestContext,
+	staff: Staff,
+	shelterCode: string,
+	opts: { item: string; target: number; notes: string }
+): Promise<PublicNeed> {
+	await openBackOffice(page, staff);
+	await page.getByRole('tab', { name: 'จัดการความต้องการ' }).click();
+	await page.getByRole('button', { name: /สร้างประกาศแบบกำหนดเอง/ }).click();
+	await expect(page.getByRole('heading', { name: 'สร้างประกาศขอรับบริจาค' })).toBeVisible();
+	const picker = page.locator('#campaign-item-title');
+	await picker.fill(opts.item);
+	await picker.press('Enter');
+	await expect(page.getByText('เลือกรายการพัสดุก่อน')).toHaveCount(0);
+	await page.getByRole('textbox', { name: /จำนวนเป้าหมาย/ }).fill(String(opts.target));
+	await page.getByRole('textbox', { name: /เหตุผลหรือรายละเอียดเพิ่มเติม/ }).fill(opts.notes);
+	await page.getByRole('button', { name: 'ประกาศขอรับบริจาคผ่านหน้าเว็บสาธารณะ' }).click();
+	await expect(page.getByText(`เพิ่มประกาศความต้องการ "${opts.item}" สำเร็จ`)).toBeVisible();
+	await expect
+		.poll(async () => (await boardLineFor(request, shelterCode, opts.item))?.status, BOARD_SYNC)
+		.toBe('open');
+	return (await boardLineFor(request, shelterCode, opts.item))!;
+}
+
+export type SlotMode = 'ผู้บริจาคมาส่งเอง' | 'รถศูนย์ไปรับ';
+
+/** Back office → ช่วงเวลารับของ, on the queue for `mode`. */
+export async function openSlots(page: Page, staff: Staff, mode: SlotMode) {
+	await openBackOffice(page, staff);
+	await page.getByRole('tab', { name: 'ช่วงเวลารับของ' }).click();
+	await expect(page.getByRole('heading', { name: 'ช่วงเวลารับของบริจาค' })).toBeVisible();
+	await page.getByRole('button', { name: mode, exact: true }).click();
+}
+
+/** Filtered on "จองแล้ว" too: the success toast is also an <li> carrying the window. */
+export function slotRow(page: Page, w: SlotWindow) {
+	return page
+		.getByRole('listitem')
+		.filter({ hasText: `${w.from} - ${w.to}` })
+		.filter({ hasText: 'จองแล้ว' });
+}
+
+/** Add `w` today on the slot screen already open (`openSlots`); returns its list row. */
+export async function addSlotViaUi(page: Page, w: SlotWindow, capacity?: number, note = '') {
+	await page.locator('#slot-from').fill(w.from);
+	await page.locator('#slot-to').fill(w.to);
+	if (capacity !== undefined) await page.locator('#slot-capacity').fill(String(capacity));
+	await page.locator('#slot-note').fill(note || `e2e ${RUN_ID}`);
+	await page.getByRole('button', { name: 'เพิ่มช่วงเวลา' }).click();
+	const row = slotRow(page, w);
+	await expect(row).toBeVisible();
+	return row;
+}
+
+// ─── Teardown + zero-leak ──────────────────────────────────────────────────────
+
+/** What `teardownRun` removed — the input of `expectRunGone`. */
+export type TornDown = ReturnType<RunLedger['read']>;
+
+/**
+ * Cancel the bookings of this run that are still open, as their donor would (DELETE
+ * through the BFF). That hands the need's reserved quantity and the queue place back —
+ * Mongo counters that no shelter delete would ever release. Terminal bookings (received,
+ * rejected, already cancelled) answer 400 and are left as they are.
+ */
+async function cancelOpenBookings(request: APIRequestContext, bookings: LedgerBooking[]) {
+	for (const b of bookings) {
+		for (let attempt = 0; attempt < 6; attempt++) {
+			await editPacer.acquire();
+			const res = await request.delete(`/api/public/v1/donations/${b.token}`);
+			// 409: inbound has the row but CouchDB does not show it yet. 429: a limiter.
+			if (res.status() === 409) await sleep(3_000);
+			else if (res.status() === 429) await sleep(61_000);
+			else break;
+		}
+	}
+}
+
+/**
+ * After cancelling, the sync worker re-projects the shelter's needs and settles the
+ * intake buffer in the same pass: once no line of the shelter reserves anything any more,
+ * the counters are back. Best effort — a slow worker must not stop the teardown.
+ */
+async function waitForReservationsReleased(request: APIRequestContext, shelterCode: string) {
+	try {
+		await expect
+			.poll(
+				async () =>
+					(await publicNeedsBoard(request))
+						.find((s) => s.code === shelterCode)
+						?.needs.every((n) => Number(n.reserved ?? 0) === 0) ?? true,
+				BOARD_SYNC
+			)
+			.toBe(true);
+	} catch {
+		console.warn(`reservations of ${shelterCode} not released within ${BOARD_SYNC.timeout} ms`);
+	}
+}
+
+/**
+ * Remove exactly what `ledger` lists: cancel open bookings, wait for the quota to come
+ * back, tear the E2E shelters down (`teardownShelter` refuses anything not named `E2E …`),
+ * delete the staff users, then empty the ledger. Idempotent — safe to call from both the
+ * Z test and afterAll.
+ */
+export async function teardownRun(
+	request: APIRequestContext,
+	ledger: RunLedger
+): Promise<TornDown> {
+	const run = ledger.read();
+	// Releasing counters is best effort: whatever happens there, the shelter and the staff
+	// users are still removed (and the ledger only cleared once they are).
+	try {
+		await cancelOpenBookings(request, run.bookings);
+		for (const code of new Set(run.bookings.map((b) => b.shelter))) {
+			await waitForReservationsReleased(request, code);
+		}
+	} finally {
+		for (const code of run.shelters) await teardownShelter(code);
+		for (const name of run.staff) await deleteCouchUser(name);
+		ledger.clear();
+	}
+	return run;
+}
+
+/** Statuses after which a booking no longer holds quota or a queue place. */
+const RELEASED_STATUSES = ['cancelled', 'rejected', 'received', 'expired', 'redirected'];
+
+/**
+ * Zero-leak: nothing of `run` is left where the test side can see it — no shelter
+ * database or registry row, nothing on the public needs board, no staff user, and no
+ * booking still holding quota. The closed `public_shelters` row lingers until the worker's
+ * retention job drops it; it only has to be unbookable.
+ */
+export async function expectRunGone(request: APIRequestContext, run: TornDown) {
+	for (const code of run.shelters) {
+		expect((await couchReq('GET', `/${shelterDb(code)}`)).status).toBe(404);
+		const byCode = await couchReq(
+			'GET',
+			`/registry/_design/app/_view/by_code?key=${encodeURIComponent(JSON.stringify(code))}`
+		);
+		expect((byCode.data as { rows: unknown[] }).rows).toEqual([]);
+		await expect
+			.poll(async () => (await publicNeedsBoard(request)).some((s) => s.code === code), BOARD_SYNC)
+			.toBe(false);
+		const row = await publicShelter(code);
+		expect(row === undefined || row.status === 'closed', `${code} left as ${row?.status}`).toBe(
+			true
+		);
+	}
+	for (const name of run.staff) {
+		expect(
+			(await couchReq('GET', `/_users/org.couchdb.user:${encodeURIComponent(name)}`)).status
+		).toBe(404);
+	}
+	for (const b of run.bookings) {
+		await expect
+			.poll(
+				async () => {
+					const res = await request.get(`/api/public/v1/donations/${b.token}`);
+					return ((await res.json()) as { donation?: { status?: string } }).donation?.status;
+				},
+				{ timeout: 30_000, intervals: [2_000, 3_000] }
+			)
+			.toEqual(expect.stringMatching(new RegExp(`^(${RELEASED_STATUSES.join('|')})$`)));
+	}
 }

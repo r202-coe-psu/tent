@@ -3,10 +3,14 @@ import {
 	createCouchUser,
 	deleteCouchUser,
 	couchLogin,
+	couchReq,
 	seedSecurityQuestion,
 	STAFF_SH001_ROLES
 } from './helpers/couch';
+import { CAN_WRITE, READ_ONLY_REASON } from './helpers/e2e-env';
 import { injectSession, clearSession, routeBrowserCouchThroughApp } from './helpers/login';
+
+const TAGS = { tag: ['@critical', '@donation'] };
 
 /**
  * Back-office donation campaigns.
@@ -20,6 +24,12 @@ import { injectSession, clearSession, routeBrowserCouchThroughApp } from './help
  * `ปลากระป๋อง` is deliberate: it exists only as `item_master:canned-fish` with no
  * legacy `supply_item` twin, so it exercises the `base_unit` path where the resolver
  * used to come back empty ("หน่วยของ ปลากระป๋อง ต้องเป็น  ตาม Item Master").
+ *
+ * Data (README §4): the only records written are the two `donation_*_<run id>` CouchDB
+ * users, scoped to the seeded SH001 but only read there — nothing on SH001 is modified
+ * and no campaign is submitted (the specs only open the form). Both are removed in
+ * afterAll; the last test (Z) asserts they are gone. No other residue. Runs locally and
+ * on a writable remote target (`ALLOW_REMOTE_WRITES=true`); read-only targets skip it.
  */
 const RUN_ID = Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
 
@@ -44,6 +54,7 @@ const REG = {
 const sessions: Record<string, string> = {};
 
 test.beforeAll(async () => {
+	test.skip(!CAN_WRITE, READ_ONLY_REASON);
 	await createCouchUser(WS);
 	await createCouchUser(REG);
 	await seedSecurityQuestion(WS.name);
@@ -53,6 +64,7 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
+	if (!CAN_WRITE) return;
 	await deleteCouchUser(WS.name);
 	await deleteCouchUser(REG.name);
 });
@@ -61,7 +73,7 @@ test.afterEach(async ({ page }) => {
 	await clearSession(page);
 });
 
-test.describe('Stock donations — access', () => {
+test.describe('Stock donations — access', TAGS, () => {
 	test('warehouse staff can open the page', async ({ page }) => {
 		await injectSession(page, WS, sessions[WS.name]);
 		await page.goto('/back-office/stock-donations');
@@ -78,7 +90,7 @@ test.describe('Stock donations — access', () => {
 	});
 });
 
-test.describe("Create campaign — the unit is the catalog's", () => {
+test.describe("Create campaign — the unit is the catalog's", TAGS, () => {
 	test.beforeEach(async ({ page }) => {
 		await routeBrowserCouchThroughApp(page);
 		await injectSession(page, WS, sessions[WS.name]);
@@ -107,5 +119,16 @@ test.describe("Create campaign — the unit is the catalog's", () => {
 		// No editable unit control exists — the box is display-only.
 		await expect(page.getByRole('textbox', { name: /หน่วยนับ/ })).toHaveCount(0);
 		await expect(page.getByRole('combobox', { name: /หน่วยนับ/ })).toHaveCount(0);
+	});
+});
+
+test.describe('Stock donations — zero-leak', TAGS, () => {
+	test('Z teardown leaves no E2E user behind', async () => {
+		await deleteCouchUser(WS.name);
+		await deleteCouchUser(REG.name);
+		for (const { name } of [WS, REG]) {
+			const res = await couchReq('GET', `/_users/org.couchdb.user:${encodeURIComponent(name)}`);
+			expect(res.status, `${name} still exists`).toBe(404);
+		}
 	});
 });
