@@ -17,6 +17,7 @@ import MapPin from '@lucide/svelte/icons/map-pin';
 import UtensilsCrossed from '@lucide/svelte/icons/utensils-crossed';
 import FlaskConical from '@lucide/svelte/icons/flask-conical';
 import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
+import NotebookPen from '@lucide/svelte/icons/notebook-pen';
 
 type Leaf = {
 	label: string;
@@ -114,6 +115,11 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 	{
 		title: '3. รายงานและการตรวจสอบ',
 		items: [
+			{
+				label: 'บันทึกเหตุการณ์ประจำวัน',
+				href: resolve('/back-office/incidents'),
+				icon: NotebookPen
+			},
 			{ label: 'รายงานความโปร่งใส', href: null, icon: FileCheck },
 			{ label: 'รายงานสรุปหลังเหตุการณ์', href: null, icon: FileText }
 		]

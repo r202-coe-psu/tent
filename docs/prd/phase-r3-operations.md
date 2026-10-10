@@ -5,7 +5,7 @@ phase: R3
 month: ก.ค.–ส.ค. 2026 (Operations Gate 22 ส.ค.)
 gate: Operations Gate
 created: 2026-06-03
-updated: 2026-08-21
+updated: 2026-10-08 # CR-155 — shelter_incident replaces shelter_report
 ---
 
 # Phase R3 PRD: Operations — Donation, Kitchen, Volunteer, SOP & Shelter Reports
@@ -69,7 +69,7 @@ R2 ทำให้ศูนย์เห็นคนเป็นครัวเ�
 - **Skill Match** — การจับคู่ Volunteer กับงานที่ต้องการทักษะตรงกัน
 - **SOP Ratio** — อัตราส่วนมาตรฐาน (วัตถุดิบ/ของ/อาสา ต่อจำนวนผู้พักพิงต่อวัน) ที่ตั้งค่าได้
 - **Resource Calculation** — ผลคำนวณความต้องการรายวันจาก occupancy × SOP Ratio
-- **Shelter Report** — รายงานในศูนย์ (`shelter_report`) แยกประเภทด้วย `kind`: grievance (ร้องเรียน/ร้องทุกข์) | incident (เหตุที่ staff/SM บันทึก); ติดตามจนปิดหรือ escalate → referral — ไม่ใช่ gate check-in/out หรือ occupancy roster ([CR-040](../changes/08-E-reports/CR-040-shelter-case-grievance-reframe.md))
+- **Shelter Incident Log** — สมุดบันทึกเหตุการณ์ประจำวันในศูนย์ (`shelter_incident`) รวมเรื่องร้องทุกข์; staff ทุกคนเปิดได้ ติดตามจนปิดหรือยกเลิก — ไม่ใช่ gate check-in/out หรือ occupancy roster ([CR-155](../changes/08-E-reports/CR-155-shelter-incident-log.md) แทน CR-040)
 - **Referral** — การส่งต่อผู้พักพิง/ความต้องการไปยังศูนย์หรือหน่วยงานอื่น (ศูนย์เต็ม, อาหารขาด, ผู้ป่วยฉุกเฉิน)
 
 ## 4. Features
@@ -207,19 +207,20 @@ Shelter Manager เห็นความต้องการรายวัน�
 
 ### 4.5 Shelter Reports & Referral (Modules E + F)
 
-**Description:** **Shelter Manager** เปิดและติดตามรายงานในศูนย์ (ร้องเรียน/ร้องทุกข์ หรือเหตุการณ์) และส่งต่อ (referral) เมื่อศูนย์เต็ม/อาหารขาด/ผู้ป่วยฉุกเฉิน — mutate report = SM (allow-list) · referral owner = `shelter_manager` · ไม่เพิ่ม role ใหม่ (FD-13 / CR-040)
+**Description:** **Staff ทุกคนในศูนย์** เปิดและติดตามบันทึกเหตุการณ์ประจำวัน (รวมเรื่องร้องทุกข์) โดยไม่ต้องรอ SM และ **Shelter Manager** ส่งต่อ (referral) เมื่อศูนย์เต็ม/อาหารขาด/ผู้ป่วยฉุกเฉิน — referral owner = `shelter_manager` · ไม่เพิ่ม role ใหม่ (FD-13 / [CR-155](../changes/08-E-reports/CR-155-shelter-incident-log.md) แทน CR-040)
 
-#### FR-47: Shelter Report — grievance / incident
+#### FR-47: Shelter Incident Log (สมุดบันทึกเหตุการณ์ประจำวัน)
 
-Shelter Manager เปิดรายงานในศูนย์ ติดตามสถานะและ timeline มอบหมาย และปิด หรือ escalate ไป referral แบบ atomic — คน/สัตว์เป็น related refs เท่านั้น **ไม่ทำ** gate check-in/out หรือ live occupancy monitoring (อยู่ที่ People / movement)
+Staff ทุกคนในศูนย์เปิดบันทึกเหตุการณ์ (รวมเรื่องร้องทุกข์) และเป็นเจ้าของเคสทันที ทุกการเปลี่ยนสถานะ/ส่งต่อมีเหตุผลใน timeline รองรับคู่กรณีที่ยังไม่ทราบตัวตนแล้วระบุภายหลัง — **ไม่ทำ** gate check-in/out หรือ live occupancy monitoring (อยู่ที่ People / movement) · spec: [CR-155](../changes/08-E-reports/CR-155-shelter-incident-log.md)
 
 **Consequences (testable):**
-- Doc type `shelter_report` (state machine, forward-only) · ทุก report มี `kind` ∈ {`grievance`,`incident`}
-- เก็บ category/severity/zone/ผู้เกี่ยวข้อง/`actions[]` timeline; list default sort = severity แล้ว `occurred_at`
-- Escalate → สร้าง `referral` สำเร็จก่อนตั้ง `status=escalated` + `escalation.referral_id` (ห้าม escalated ไร้ referral_id)
-- Mutate = role ใน `SHELTER_REPORT_MUTATE_ROLES` (R3: `shelter_manager`) ใน shelter scope · `system_admin` = platform override · ไม่มี PUB
+- Doc type `shelter_incident` (schema.md §2.10) · status `reported → action_in_progress → resolved → closed` · `resolved → action_in_progress` · SM ยกเลิกได้จาก `reported` / `action_in_progress`
+- Staff ในศูนย์สร้างเคสและเพิ่มบันทึกได้ · เจ้าของเคส (`assigned_to`) หรือ SM/SA เปลี่ยนสถานะ ส่งต่อ ระบุคู่กรณี และปิดเคส (ทุก severity)
+- ทุก update ต่อท้าย `timeline` หนึ่ง entry พร้อมเหตุผล · field ข้อเท็จจริง immutable · เคส `closed`/`cancelled` แก้ไม่ได้
+- ระบุคู่กรณีได้ครั้งเดียว `unknown → known_evacuee | known_external`
+- **ห้ามลบเอกสารทุก role** (VDU 403) · ไม่มี PUB · ไม่มี escalate → referral ในรอบนี้
+- List default = เคสยังไม่ปิด (ส่งเวร) · sort severity แล้ว `occurred_at` · ค้นหา `title` / `incident_no` / จุดเกิดเหตุ
 - ไม่มี write path จาก Module E ไป `movement` / occupancy
-- อ้างอิงสัตว์ผ่าน `pet_refs` (`household_id` + `pet_index`) เมื่อเกี่ยวข้อง (ผูก Pet Record FR-24)
 
 #### FR-48: Referral & Hand-off
 
@@ -248,7 +249,7 @@ Shelter Manager (`shelter_manager`) สร้างคำขอส่งต่�
 - Kitchen: meal plan, requisition (ตัด stock), meal service record
 - Volunteer: registration + skills, skill match + task/shift assignment
 - SOP: ratio config, daily resource calculation, calculation dashboard
-- Shelter Reports: เปิด/ติดตาม `shelter_report` (kind grievance|incident) + escalate atomic → referral ([CR-040](../changes/08-E-reports/CR-040-shelter-case-grievance-reframe.md))
+- Shelter Incident Log: เปิด/ติดตาม/ส่งต่อ `shelter_incident` โดย staff ทุกคนในศูนย์ ([CR-155](../changes/08-E-reports/CR-155-shelter-incident-log.md))
 - Referral: referral & hand-off ภายในเครือข่ายศูนย์
 
 ### 6.2 Out of Scope for R3

@@ -3,7 +3,7 @@ id: CR-155
 title: "Shelter Incident Log — doc type shelter_incident (Daily Occurrence Book, owner-based) · supersede CR-040"
 status: approved
 date: 2026-09-25
-updated: 2026-10-07
+updated: 2026-10-08
 requested_by: den (feature spec "ระบบบันทึกเหตุการณ์ประจำวันในศูนย์")
 decided_by: kong (D1–D5, 2026-10-02 — PR #323 review; approved 2026-10-07)
 layer: volatile
@@ -160,21 +160,21 @@ migration: N/A — doc type ใหม่เข้าแทนที่ shelter_r
 
 ## Impact
 
-| ส่วน                                                          | สิ่งที่ต้องแก้                                                                                                                                                        | สถานะใน branch `feat/shelter-incident-log` |
-| ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| `docs/data/schema.md`                                         | §2.10 `shelter_report` → `shelter_incident` (field ตาม IL-D) · §7 ตัด index ของ `shelter_report` (incident ไม่ต้องมี Mango index — IL-U1) · §8 state machine + ห้ามลบ | รอ approve                                 |
-| `docs/data/data-model.md` · `schema-er-diagram.md`            | แทนแถว `shelter_report` ด้วย `shelter_incident`                                                                                                                       | รอ approve                                 |
-| `docs/changes/CR-040-…` · `_index.md`                         | `status: superseded` + link มา CR นี้                                                                                                                                 | รอ approve                                 |
-| `docs/prd/` FR-47 · `role-permission-matrix.md`               | สิทธิ์ราย record (owner / staff / SM)                                                                                                                                 | รอ approve                                 |
-| `docs/features/shelter-report-flow.md`                        | แทนด้วย flow incident log                                                                                                                                             | รอ approve                                 |
-| `docs/task-breakdown/08-E-reports.md` · `docs/sitemap.md`     | T-19/T-33 · route `/back-office/incidents`                                                                                                                            | รอ approve                                 |
-| `features/incidents/**`                                       | domain · data · application · ui (D3/D4 แล้ว)                                                                                                                         | implement แล้ว                             |
-| `lib/server/shelter-access-design.ts`                         | VDU allow-list + rules (IL-P3/P4/P6, IL-D11)                                                                                                                          | implement แล้ว                             |
-| `lib/server/user-service.ts` + `api/v1/shelters/[code]/staff` | staff directory (IL-P5)                                                                                                                                               | implement แล้ว                             |
-| `lib/auth/roles.ts` · `lib/guards/auth.ts`                    | `canAccessIncidents` · `requireIncidents`                                                                                                                             | implement แล้ว                             |
-| `routes/(protected)/back-office/incidents/**` + sidebar       | IL-U1–U4                                                                                                                                                              | implement แล้ว                             |
-| Tests                                                         | domain 23 · VDU 14 · remote 3 · staff directory 1                                                                                                                     | ผ่าน (`pnpm test`)                         |
-| Deploy                                                        | redeploy `_design/access` ทุกศูนย์ที่ provision แล้ว                                                                                                                  | dev แล้ว · staging/prod หลัง merge         |
+| ส่วน                                                          | สิ่งที่ต้องแก้                                                                                                                                                        | สถานะใน branch `feat/shelter-incident-log`    |
+| ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| `docs/data/schema.md`                                         | §2.10 `shelter_report` → `shelter_incident` (field ตาม IL-D) · §7 ตัด index ของ `shelter_report` (incident ไม่ต้องมี Mango index — IL-U1) · §8 state machine + ห้ามลบ | อัปเดตแล้ว 2026-10-08                         |
+| `docs/data/data-model.md` · `schema-er-diagram.md`            | แทนแถว `shelter_report` ด้วย `shelter_incident`                                                                                                                       | อัปเดตแล้ว 2026-10-08                         |
+| `docs/changes/CR-040-…` · `_index.md`                         | `status: superseded` + link มา CR นี้                                                                                                                                 | อัปเดตแล้ว 2026-10-08                         |
+| `docs/prd/` FR-47 · `role-permission-matrix.md`               | สิทธิ์ราย record (owner / staff / SM)                                                                                                                                 | อัปเดตแล้ว 2026-10-08                         |
+| `docs/features/shelter-report-flow.md`                        | แทนด้วย flow incident log                                                                                                                                             | อัปเดตแล้ว 2026-10-08 (flow doc → superseded) |
+| `docs/task-breakdown/08-E-reports.md` · `docs/sitemap.md`     | T-19/T-33 · route `/back-office/incidents`                                                                                                                            | อัปเดตแล้ว 2026-10-08                         |
+| `features/incidents/**`                                       | domain · data · application · ui (D3/D4 แล้ว)                                                                                                                         | implement แล้ว                                |
+| `lib/server/shelter-access-design.ts`                         | VDU allow-list + rules (IL-P3/P4/P6, IL-D11)                                                                                                                          | implement แล้ว                                |
+| `lib/server/user-service.ts` + `api/v1/shelters/[code]/staff` | staff directory (IL-P5)                                                                                                                                               | implement แล้ว                                |
+| `lib/auth/roles.ts` · `lib/guards/auth.ts`                    | `canAccessIncidents` · `requireIncidents`                                                                                                                             | implement แล้ว                                |
+| `routes/(protected)/back-office/incidents/**` + sidebar       | IL-U1–U4                                                                                                                                                              | implement แล้ว                                |
+| Tests                                                         | domain 23 · VDU 14 · remote 3 · staff directory 1                                                                                                                     | ผ่าน (`pnpm test`)                            |
+| Deploy                                                        | redeploy `_design/access` ทุกศูนย์ที่ provision แล้ว                                                                                                                  | dev แล้ว · staging/prod หลัง merge            |
 
 ## Migration
 
@@ -189,3 +189,4 @@ N/A — doc type ใหม่. ไม่มี `shelter_report` ใน productio
 - 2026-10-03 — เพิ่ม `title` (หัวข้อเหตุการณ์, IL-D12) + ช่องค้นหาในหน้ารวม (IL-U1) — owner อนุมัติให้ implement แล้ว; ยังอยู่ใน schema_v 1
 - 2026-10-05 — PR #323 review รอบ 2: resolve conflict markers (คงฉบับ 2026-10-03 ที่มี D1–D5 + IL-D12 เท่านั้น) · IL-D1 ไม่อ้าง `shelter_id` แล้ว
 - 2026-10-07 — approved: รันเลข CR-155 ตาม branch develop; ปรับสถานะเป็น approved
+- 2026-10-08 — apply canonical docs: schema.md §2.10/§7/§8 · data-model · ER · PRD FR-47 + glossary · role-permission-matrix · sitemap §2.8 · 08-E T-19/T-33 · 09-F / _timeline wording · schema-v3 status · shelter-report-flow.md → superseded (status คง `approved` จนกว่าโค้ดจะ merge → `done`)

@@ -1,14 +1,16 @@
 ---
 title: "Feature Flow — Shelter Reports (grievance / incident)"
-status: active
+status: superseded
 created: 2026-07-15
-updated: 2026-07-23
+updated: 2026-10-08 # superseded by CR-155
 module: E
 audience: developer + stakeholder review
 note: >
   คู่กับ CR-040 (done 2026-07-23). Canonical schema/PRD/sitemap apply แล้ว.
   Implement ตาม T-19 / T-33.
 ---
+
+> ⚠️ **Superseded โดย [CR-155](../changes/08-E-reports/CR-155-shelter-incident-log.md) (2026-10-07)** — `shelter_report` ไม่ถูก build; ใช้ Shelter Incident Log (`shelter_incident`, [schema.md §2.10](../data/schema.md)) แทน. เอกสารนี้เก็บไว้เป็นประวัติเท่านั้น.
 
 # Shelter Reports — Feature Flow & Requirements
 

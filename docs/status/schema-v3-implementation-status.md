@@ -1,7 +1,7 @@
 ---
 title: Schema v3 — Implementation Status
 created: 2026-06-11
-updated: 2026-07-23
+updated: 2026-10-08 # CR-155
 ---
 
 # Schema v3 — Implementation Status
@@ -61,7 +61,7 @@ Extras: `applyMovementToStay()` + type guards ครบ
 | `meal_service` (append-only) | §2.7 | บันทึกแจกอาหารจริง |
 | `volunteer` | §2.8 | คนละ doc กับ `_users` |
 | `shift_assignment` | §2.9 | ตารางเวร |
-| `shelter_report` (state machine) | §2.10 | รายงาน grievance/incident — CR-040; ยังไม่ implement |
+| `shelter_incident` (state machine) | §2.10 | Shelter Incident Log — CR-155 (แทน `shelter_report` / CR-040); implement ใน `features/incidents` |
 | `referral` (state machine) | §2.11 | ส่งต่อหน่วยงานนอก |
 | `audit` (append-only) | §2.12 | การกระทำสำคัญ |
 
