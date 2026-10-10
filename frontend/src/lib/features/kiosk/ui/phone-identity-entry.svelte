@@ -11,9 +11,10 @@
 	import { formatPhoneForDisplay, isKioskPhoneSubmittable, phoneEntryHint } from '../domain/phone';
 	import type { GateInput } from '../data/kiosk-check-in.api';
 	import { KioskIdleTimeout, KIOSK_IDLE_TIMEOUT_MS } from './kiosk-idle-timeout.svelte.js';
+	import type { KioskContextQuery } from '../domain/display-context';
 
 	interface Props {
-		contextQuery: string;
+		contextQuery: KioskContextQuery;
 		displayShelterCode: string;
 	}
 
@@ -23,11 +24,11 @@
 	const isValid = $derived(isKioskPhoneSubmittable(phone));
 	const entryHint = $derived(phoneEntryHint(phone));
 	const displayPhone = $derived(formatPhoneForDisplay(phone));
-	const homeUrl = $derived(resolve(`/kiosk${contextQuery as `?${string}`}`));
-	const phoneUrl = $derived(resolve(`/kiosk/phone${contextQuery as `?${string}`}`));
+	const homeUrl = $derived(resolve(`/kiosk${contextQuery}`));
+	const phoneUrl = $derived(resolve(`/kiosk/phone${contextQuery}`));
 	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, () => {
 		resetEntry();
-		void goto(resolve(`/kiosk${contextQuery as `?${string}`}`));
+		void goto(resolve(`/kiosk${contextQuery}`));
 	});
 
 	function startLookup(): void {

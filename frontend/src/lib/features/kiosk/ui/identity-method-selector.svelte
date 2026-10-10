@@ -7,9 +7,10 @@
 	import Smartphone from '@lucide/svelte/icons/smartphone';
 	import KioskCheckInWizard from './kiosk-check-in-wizard.svelte';
 	import { visibleIdentityMethods, type IdentityMethodDefinition } from '../domain/identity-method';
+	import type { KioskContextQuery } from '../domain/display-context';
 
 	interface Props {
-		contextQuery: string;
+		contextQuery: KioskContextQuery;
 		phoneCheckInEnabled: boolean;
 	}
 
@@ -100,7 +101,7 @@
 			{@const MethodIcon = iconFor(method.icon)}
 			{#if method.enabled && method.href}
 				<a
-					href={resolve(`${method.href}${contextQuery as `?${string}`}`)}
+					href={resolve(`${method.href}${contextQuery}`)}
 					aria-label={`${method.title}${method.description ? ` · ${method.description}` : ''} · ${method.buttonLabel}`}
 					class={`method-card flex flex-col items-center justify-center gap-3 rounded-xl border p-3 text-center no-underline shadow-2xs transition-transform duration-150 ease-out hover:z-10 hover:scale-[1.02] focus-visible:z-10 focus-visible:scale-[1.02] focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none motion-reduce:transition-none motion-reduce:hover:scale-100 motion-reduce:focus-visible:scale-100 sm:p-4 kiosk-portrait:flex-row kiosk-portrait:justify-start kiosk-portrait:px-8 ${cardTone(method.id)}`}
 				>

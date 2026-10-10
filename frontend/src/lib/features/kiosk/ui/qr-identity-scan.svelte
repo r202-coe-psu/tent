@@ -20,9 +20,10 @@
 	import { createKeyboardWedge } from '../domain/keyboard-wedge';
 	import KioskPreRegisteredCheckIn from './kiosk-pre-registered-check-in.svelte';
 	import { KioskIdleTimeout, KIOSK_IDLE_TIMEOUT_MS } from './kiosk-idle-timeout.svelte.js';
+	import type { KioskContextQuery } from '../domain/display-context';
 
 	interface Props {
-		contextQuery: string;
+		contextQuery: KioskContextQuery;
 		displayShelterCode: string;
 	}
 
@@ -38,10 +39,10 @@
 	const plan = $derived(qrInputPlan(hardware));
 	const wedge = $derived(plan.readerEnabled ? createKeyboardWedge(plan.readerMaxGapMs) : null);
 
-	const backUrl = $derived(resolve(`/kiosk${contextQuery as `?${string}`}`));
+	const backUrl = $derived(resolve(`/kiosk${contextQuery}`));
 	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, () => {
 		resetScan();
-		void goto(resolve(`/kiosk${contextQuery as `?${string}`}`));
+		void goto(resolve(`/kiosk${contextQuery}`));
 	});
 	const cameraReaderId = 'kiosk-registration-qr-reader';
 	const tokenPattern = /^evacuee:[0-7][0-9A-HJKMNP-TV-Z]{25}$/i;

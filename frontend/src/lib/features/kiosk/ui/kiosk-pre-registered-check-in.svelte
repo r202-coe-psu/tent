@@ -50,10 +50,11 @@
 	import KioskWalkInOffer from './kiosk-walk-in-offer.svelte';
 	import KioskNoticePanel from './kiosk-notice-panel.svelte';
 	import { KIOSK_NOTICE_PRIMARY_ACTION } from './kiosk-notice-actions';
+	import type { KioskContextQuery } from '../domain/display-context';
 
 	interface Props {
 		input: GateInput | null;
-		contextQuery: string;
+		contextQuery: KioskContextQuery;
 		displayShelterCode: string;
 		cardMode?: boolean;
 		backHref?: string;

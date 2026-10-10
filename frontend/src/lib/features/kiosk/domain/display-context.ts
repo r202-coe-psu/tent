@@ -42,10 +42,16 @@ export function getKioskDisplayContext(query: KioskDisplayQuery): KioskDisplayCo
 }
 
 /**
+ * Query string carrying the kiosk display context between routes: `?…`, or `''` for none. Typed
+ * this way so passing `/kiosk${contextQuery}` to `resolve()` type-checks without a cast.
+ */
+export type KioskContextQuery = '' | `?${string}`;
+
+/**
  * Preserve allowlisted display context when moving between kiosk routes.
  * Secrets, session identifiers, and unknown query parameters never cross this boundary.
  */
-export function buildKioskContextQuery(context: KioskDisplayContext): string {
+export function buildKioskContextQuery(context: KioskDisplayContext): KioskContextQuery {
 	const params = new URLSearchParams();
 
 	params.set('shelter_name', context.shelterName);
