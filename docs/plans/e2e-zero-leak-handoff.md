@@ -1,13 +1,84 @@
 # Handoff: e2e zero-leak
 
-> วันที่: 2026-10-09 · สถานะ: **เปลี่ยนแนวทาง รอเขียนแผนใหม่ เริ่มใหม่จาก `develop`**
+> วันที่: 2026-10-09 · อัปเดต: 2026-10-10 · สถานะ: **เลือกต่อยอดจากโค้ดปัจจุบัน (PR #434) แทน cleanup API**
 > งานรอบก่อนอยู่บน branch ในเครื่องเก่าที่ไม่ได้ push และถูกทิ้งไปแล้ว เอกสารนี้จึงเก็บทุกอย่างที่ต้องใช้ไว้ในตัวเอง (โค้ดต้นแบบอยู่ในภาคผนวก)
+> ส่วน "อัปเดต 2026-10-10" ด้านล่างมาแทน "แนวทางใหม่" และ "ลำดับ PR ที่เสนอ" ของวันที่ 2026-10-09 ส่วนอื่นเก็บไว้เป็นข้อมูลอ้างอิง
+
+## อัปเดต 2026-10-10: ต่อยอดจากโค้ดปัจจุบัน
+
+### เกิดอะไรขึ้นหลังเขียน handoff
+
+PR #434 (`b20181a5`, "staging e2e pipeline for critical test") merge เข้า `develop` และ `staging` แล้ว ใช้แนวที่ให้แต่ละ test ลบข้อมูลของตัวเอง ซึ่งเป็นแนวที่ handoff ฉบับ 2026-10-09 เลือกเลิกใช้
+
+- `playwright.staging.config.ts` เปลี่ยน grep เป็น `@critical|@smoke` และระบุไฟล์ไว้ 9 ไฟล์ใน `testMatch`
+- ตัวกันเปลี่ยนจาก `IS_REMOTE` เป็น `CAN_WRITE = !IS_REMOTE || ALLOW_REMOTE_WRITES` (`e2e/helpers/e2e-env.ts`)
+- credential `tent-staging-e2e-env` (แม่แบบคือ `frontend/e2e/.env.example`) ตั้งค่า 3 ตัว:
+  - `ALLOW_REMOTE_WRITES=true`
+  - `COUCHDB_ADMIN_URL=https://admin:…@shelter.importstar.dev/couch` เป็นรหัส CouchDB server admin ที่ยิงผ่าน `/couch/` ของ nginx
+  - `E2E_FASTAPI_URL=https://shelter.importstar.dev/public-api`
+- `public-search-flow` และ `public-shelters-filter` สร้างและลบข้อมูลของตัวเองแล้ว ไม่ใช้ข้อมูลตั้งต้นที่ provision ไว้อีก ยกเว้นบน target ที่อ่านอย่างเดียว
+- `public-home-flow` ยัง skip เมื่อ `IS_REMOTE` เพราะความต้องการรับบริจาคที่สร้างจริงจะชวนให้คนบริจาคจริง
+
+### สิ่งที่พบบน staging (ตรวจแบบอ่านอย่างเดียว 2026-10-10)
+
+- `/couch/` ของ nginx (`nginx/nginx.conf:8-16`) ส่งต่อ CouchDB API ทั้งก้อน และเปิด Basic auth (`_session` แสดง handler `default`) ใครถือรหัส admin ก็ลบได้ทุก DB จาก internet ส่วนคำขอที่ไม่มี credential ได้ 401 ถูกต้อง
+- `/public-api/staff/v1/unassigned-registrations` ตอบ 401 จาก FastAPI แปลว่า nginx บน host ของ staging ส่ง `/public-api` ตรงไป FastAPI ซึ่งขัดกับ CR-063 และไม่มีอยู่ใน `nginx/nginx.conf` ของ repo
+- มีข้อมูลรั่วแล้ว: `SH034 "E2E ศูนย์ทดสอบ J5 mv0r87lb"` สถานะ **open** แสดงอยู่ใน `/api/public/v1/shelters` อัปเดตล่าสุด 2026-10-09 09:16 เป็นของ J5 ที่ teardown ไม่สำเร็จ
+
+### จุดเสี่ยงในโค้ดปัจจุบัน
+
+1. **`teardownShelter` ลบ DB โดยไม่ตรวจชื่อ** (`e2e/helpers/public-cleanup.ts:72`) การเช็ค `startsWith('E2E')` ทำเฉพาะตอนหา registry doc เจอ ถ้าหาไม่เจอ (view ยังไม่ deploy, GET ได้ 401/500, หรือ code ผิด) ก็ยัง `DELETE /shelter_<code>` ต่อ และ `couchReq` ไม่เช็ค status ของ GET
+2. **ทิ้ง config ทั้งระบบค้างไว้ได้** W-group ของ pre-register ปิด reCAPTCHA ของทั้ง staging แล้วเปิดคืนใน `afterAll` แต่ Jenkins ตั้ง `disableConcurrentBuilds(abortPrevious: true)` ไว้ ถ้ามี deploy ใหม่เข้ามากลางรัน reCAPTCHA อาจค้างอยู่ในสถานะปิด
+3. **รันที่ถูก abort ทิ้งข้อมูลไว้** ledger อยู่ใน `node_modules/.cache/` ภายใน container ที่ถูก `docker rm -f` ทุกรอบ
+4. **`waitForProjection` timeout ลดจาก 90s เหลือ 10s** ถ้า worker บน staging ช้ากว่านั้น teardown จะ throw หลังปิดศูนย์แต่ก่อนลบ ทำให้ศูนย์ค้าง
+5. **Mongo orphan เกิดทุกครั้งที่ teardown สำเร็จ** (ข้อ 4 ใน "สิ่งที่พบ" ด้านล่างยังจริงอยู่ ตรวจกับโค้ดแล้ว)
+   - ลำดับคือ ปิดศูนย์ → `ListenerManager` หยุดฟัง `shelter_<code>` ภายในประมาณ 30 วินาที → ลบ registry doc → worker ลบแค่ persons และ needs (`processor.py:76-85`) → `DELETE` DB โดยที่ worker ไม่รู้
+   - กรณีลบ registry ไม่เรียก `delete_occupants_for_shelter` (เรียกเฉพาะเมื่อ `project_shelter` คืน `"delete"` ที่ `processor.py:131`) รายชื่อปลอมใน `shelter_occupants` จึงค้างถาวร
+   - รหัสศูนย์ไม่ถูกนำกลับมาใช้ (`allocateShelterCode` ใช้ตัวนับที่เพิ่มขึ้นอย่างเดียว) orphan จึงไม่ไปปนกับศูนย์ใหม่
+6. **janitor จับชื่อกว้างเกินไป** ใช้แค่ `startsWith('E2E')` ถ้ายังมีข้อมูลตั้งต้นแบบเก่า (`E2E Search Fixture`, `E2Eกรอง…`) อยู่บน staging จะโดนลบด้วย
+
+### เทียบ 2 แนวทาง
+
+| ประเด็น | โค้ดปัจจุบัน (PR #434) | cleanup API (handoff 2026-10-09) |
+| --- | --- | --- |
+| ใครลบ | แต่ละ suite ลบเองใน `afterAll` + test Z (staging ใช้ 7 suite) | server ลบให้ทั้งหมดในครั้งเดียวตอนจบ |
+| ตัวเปิดการเขียน | `ALLOW_REMOTE_WRITES=true` ใน credential | `E2E_CLEANUP_ENABLED` + secret แยก |
+| ตัวกันการเขียนบน prod | `CAN_WRITE` ที่แต่ละ test เช็คเอง | write guard กลาง + `assertWritable` |
+| รันถูก abort | รั่ว | janitor เรียก API ด้วย runId เก่าได้ |
+| ตรวจว่าลบหมดจริง | test Z ตรวจเฉพาะ CouchDB | API ตรวจทุกที่และรายงานครั้งเดียว |
+| Mongo orphan | ค้าง | ค้างเหมือนกัน ถ้าไม่แก้ worker |
+| ต้องมีรหัส admin ใน CI | ต้องมี | ยังต้องมี เพราะการสร้างศูนย์ต้องใช้ `_admin` |
+| งานที่เหลือ | น้อย มีโค้ดและรันอยู่แล้ว | มาก: ย้าย e2e, write guard, markers, API ใหม่, CR |
+| ผิวโจมตีใหม่ | ไม่มี | มี endpoint ลบข้อมูลบน staging เพิ่มขึ้น |
+
+**เหตุผลที่เลือกต่อยอดจากโค้ดปัจจุบัน:**
+- Mongo orphan ต้องแก้ที่ worker ไม่ว่าจะเลือกทางไหน cleanup API แค่ย้ายจุดเรียก ไม่ได้แก้ต้นเหตุ
+- ข้อได้เปรียบที่เหลือของ cleanup API มีแค่เรื่องรันที่ถูก abort ซึ่ง janitor + runId จาก pipeline ทำแทนได้
+- write guard มีประโยชน์น้อยลง เพราะ staging ตั้งใจให้เขียนได้แล้ว prod เลือกเฉพาะ `@prod` อยู่แล้ว
+- การย้าย e2e ไป root ไม่เกี่ยวกับ zero leak แยกไปทำทีหลังได้
+
+### แผนต่อจากนี้ (เรียงตามความสำคัญ)
+
+| # | งาน | หมายเหตุ |
+| --- | --- | --- |
+| 1 | worker ลบทุก projection ของศูนย์เมื่อ registry doc ถูกลบ (OD-9) รวม `shelter_occupants`, `shelter_stocks`, `donation_need_counters`, `public_donations`, collection ของงาน/จิตอาสา และ `_sync_checkpoints` | stable core (sync) ต้องถามเจ้าของว่าจะบันทึกอย่างไร (OD-10 เคยเลือก decision sync note) |
+| 2 | `teardownShelter` ไม่ลบ DB ถ้าหา registry doc ไม่เจอหรือชื่อไม่ขึ้นต้นด้วย `E2E`, และให้ `couchReq` ฝั่ง GET เช็ค status | ความปลอดภัย แก้ไม่กี่บรรทัด |
+| 3 | รันที่ถูก abort: pipeline ส่ง `E2E_RUN_ID`, janitor กรองด้วย `E2E … <runId>` แทน `startsWith('E2E')`, ตั้ง janitor ต่อท้าย e2e-staging (`propagate: false`) + cron | ปิดช่องรั่วที่ cleanup API เคยตั้งใจแก้ |
+| 4 | test Z ตรวจฝั่ง public ด้วย: ค้น `/api/public/v1/occupants` ด้วยนามสกุลของรันต้องได้ 0 ราย และ `public_shelters` ต้องไม่มีแถว | ใช้ "รายการที่ต้องตรวจหลังลบ" ด้านล่างเป็น checklist |
+| 5 | ลบ SH034 ที่ค้างอยู่บน staging | ผ่าน janitor หรือ staff UI |
+
+**เรื่องที่ต้องคุยแยก (ไม่อยู่ในขอบเขต zero leak):**
+- จำกัด `/couch/` ใน nginx ไม่ให้เข้าถึง `_all_dbs`, `_users`, `_config`, `_node` และไม่ให้ `DELETE /<db>` (stable core)
+- `/public-api` บน nginx ของ host staging ไม่ตรงกับ CR-063
+- reCAPTCHA ค้างในสถานะปิดเมื่อรันถูก abort
+
+**กลับไปพิจารณา cleanup API ก็ต่อเมื่อ:** เพิ่ม janitor แล้วยังพบข้อมูลรั่วจากรันที่ถูก abort บ่อย หรือจำนวน suite ที่เขียนข้อมูลบน staging โตจนการ teardown แยกในแต่ละไฟล์ดูแลไม่ไหว (ตอนนี้มี teardown กระจายอยู่ใน 26 ไฟล์ แต่รันบน staging แค่ 7 suite)
 
 ## สรุปสั้น
 
 - **เป้าหมาย:** ข้อมูลที่ e2e สร้างต้องไม่ค้างในระบบ ยกเว้นข้อมูลตั้งต้นแบบอ่านอย่างเดียว 6 รายการใน `.env` ของ staging และอยากให้ทุก deploy รันครบทุก case รวมทั้ง case ที่เขียนข้อมูลด้วย
 - **รอบก่อนทำอะไรไป:** สร้างกลไกฝั่ง test (ตัวกันการเขียน, markers, ledger, `expectNoLeak`, janitor) ผ่าน lint และ type-check แต่ยังไม่เคยรัน e2e จริง และไม่ได้ push จึงไม่มีโค้ดเหลือใน repo
-- **ตัดสินใจล่าสุด:** เลิกใช้แนวทางนั้น เพราะการลบกระจายอยู่หลายที่และซับซ้อนเกินไป เปลี่ยนไปใช้แนวใหม่ คือ cleanup API ฝั่ง server ตัวเดียว และย้าย e2e ออกจาก `frontend/` ไปไว้ที่ root
+- **ตัดสินใจ 2026-10-09 (ถูกแทนแล้ว ดูอัปเดต 2026-10-10):** เลิกใช้แนวทางนั้น เพราะการลบกระจายอยู่หลายที่และซับซ้อนเกินไป เปลี่ยนไปใช้แนวใหม่ คือ cleanup API ฝั่ง server ตัวเดียว และย้าย e2e ออกจาก `frontend/` ไปไว้ที่ root
 - **ขั้นต่อไป:** เข้า plan mode เขียนแผนชุดใหม่ (PR 1–4 ด้านล่าง) แล้ว grill เรื่องที่ต้องตัดสินใจกับเจ้าของก่อนลงมือ
 
 ## ที่มา
@@ -40,6 +111,8 @@
 - ข้อมูลตั้งต้นที่ห้ามแตะ: `E2E Search Fixture`, `E2Eกรอง` (ไม่มีรหัสต่อท้าย), `ทดสอบE2E*`, `0800000001`, `0123456789012`, `ZZ0000001`
 
 ## แนวทางใหม่ (ตกลงหลักการแล้ว ยังไม่มีแผนละเอียด)
+
+> **ถูกแทนแล้ว (2026-10-10):** ส่วนนี้และ "ลำดับ PR ที่เสนอ" ถูกแทนด้วย "อัปเดต 2026-10-10" ด้านบน เก็บไว้เป็นข้อมูลอ้างอิงเท่านั้น
 
 1. **ย้าย e2e ไป root:** ย้าย `frontend/e2e` ไปที่ `e2e/` เป็นสมาชิกของ pnpm workspace มี `package.json`, tsconfig และ ESLint ของตัวเอง
    - การผูกกับ frontend มีน้อย: import โค้ดแอปแค่ 4 จุด (`ulid` 3 ที่, `subQty` 1 ที่) และ `webServer` ใน `playwright.config.ts` ที่สั่ง `pnpm preview` กับ `mock-api.js`
