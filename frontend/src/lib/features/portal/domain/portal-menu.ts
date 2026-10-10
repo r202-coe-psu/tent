@@ -12,8 +12,12 @@
  *  - unknown / empty roles see nothing.
  * Items gated by a shelter feature flag (`requires`) additionally follow {@link PortalFeatures}
  * for everyone, SA/SM included. A department with no visible item is not rendered at all.
+ *
+ * Colour: each department carries one work-domain colour family (`domain`); its items inherit it
+ * and carry no colour of their own (see {@link portalDepartmentCssVars}).
  */
 import type { Pathname } from '$app/types';
+import { domainVar, type DomainId } from '$lib/tokens';
 import {
 	hasCapabilityInShelter,
 	isShelterManager,
@@ -85,8 +89,6 @@ export type PortalMenuItem = {
 	id: string;
 	label: string;
 	desc: string;
-	/** Hex brand colour for the tile — surfaced as the `--c` CSS variable. */
-	color: string;
 	icon: PortalIconKey;
 	/** Route (or a resolver from the selected shelter code). `null` = placeholder, no route yet. */
 	href: PortalHref | null;
@@ -106,7 +108,13 @@ export type PortalDepartment = {
 	id: PortalDepartmentId;
 	label: string;
 	desc: string;
-	color: string;
+	/**
+	 * Work-domain colour family for the whole department; every item inherits it (items are told
+	 * apart by icon and station number, never by their own colour).
+	 */
+	domain: DomainId;
+	/** Which step of the family is the department accent; defaults to `base`. */
+	tone?: 'base' | 'strong';
 	icon: PortalIconKey;
 	items: readonly PortalMenuItem[];
 };
@@ -136,14 +144,13 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 		id: 'registration',
 		label: 'ฝ่ายทะเบียน',
 		desc: 'รับลงทะเบียน คัดกรอง และจัดโซนผู้ประสบภัย',
-		color: '#0284C7',
+		domain: 'registration',
 		icon: 'clipboard-list',
 		items: [
 			{
 				id: 'station-1',
 				label: 'ลงทะเบียนครอบครัวและครัวเรือน',
 				desc: 'บันทึกผู้ประสบภัย ครอบครัว และออกบัตร QR',
-				color: '#0284C7',
 				icon: 'house',
 				href: '/onsite/people',
 				scope: 'shelter',
@@ -155,7 +162,6 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				id: 'station-2',
 				label: 'คัดกรองการแพทย์',
 				desc: 'คัดกรองอาการและกลุ่มเปราะบางก่อนจัดโซน',
-				color: '#E11D48',
 				icon: 'heart-pulse',
 				href: '/onsite/medical-screening',
 				scope: 'shelter',
@@ -168,7 +174,6 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				id: 'station-3',
 				label: 'จัดโซน',
 				desc: 'จัดผู้ประสบภัยเข้าโซนและเต็นท์ที่พัก',
-				color: '#9333EA',
 				icon: 'map-pin',
 				href: '/onsite/zoning',
 				// FAC keeps direct-URL access via `requireZoning`, but the portal tile is REG only.
@@ -181,7 +186,6 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				id: 'evacuee-search-edit',
 				label: 'ค้นหาและแก้ไขข้อมูลผู้ประสบภัย',
 				desc: 'ค้นหาด้วยชื่อหรือเลขบัตร',
-				color: '#4F46E5',
 				icon: 'search',
 				href: '/onsite/search-edit',
 				scope: 'shelter',
@@ -192,7 +196,6 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				id: 'scan-check-in-out',
 				label: 'สแกนเข้า-ออกศูนย์',
 				desc: 'บันทึกการเข้าออกประจำวัน',
-				color: '#0F766E',
 				icon: 'scan-line',
 				href: '/onsite/scan-check-in-out',
 				scope: 'shelter',
@@ -203,7 +206,6 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				id: 'evacuee-database',
 				label: 'ฐานข้อมูลผู้ประสบภัย',
 				desc: 'รายชื่อและครัวเรือนทั้งศูนย์',
-				color: '#475569',
 				icon: 'database',
 				href: '/back-office/evacuee-management',
 				scope: 'shelter',
@@ -216,14 +218,13 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 		id: 'kitchen',
 		label: 'ฝ่ายครัว',
 		desc: 'วางแผนอาหารและเบิกวัตถุดิบ',
-		color: '#EA580C',
+		domain: 'kitchen',
 		icon: 'utensils',
 		items: [
 			{
 				id: 'kitchen-hub',
 				label: 'ครัวกลางและอาหาร',
 				desc: 'แผนมื้ออาหารและการบริการ',
-				color: '#EA580C',
 				icon: 'utensils-crossed',
 				href: '/back-office/kitchen',
 				scope: 'shelter',
@@ -233,7 +234,6 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				id: 'kitchen-requisition',
 				label: 'เบิกวัตถุดิบครัว',
 				desc: 'ใบเบิกวัตถุดิบและเสบียงอาหาร',
-				color: '#C2410C',
 				icon: 'clipboard-check',
 				href: '/back-office/tickets/kitchen',
 				scope: 'shelter',
@@ -245,14 +245,13 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 		id: 'supply',
 		label: 'ฝ่ายพัสดุและคลัง',
 		desc: 'คลัง ของบริจาค และการแจกจ่าย',
-		color: '#0D9488',
+		domain: 'donation',
 		icon: 'package',
 		items: [
 			{
 				id: 'warehouse',
 				label: 'คลังพัสดุและสต็อก',
 				desc: 'รับ จ่าย และตรวจนับ',
-				color: '#0D9488',
 				icon: 'package',
 				href: '/back-office/supply',
 				scope: 'shelter',
@@ -262,7 +261,6 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				id: 'stock-donations',
 				label: 'รับบริจาค',
 				desc: 'รับของบริจาคเข้าคลัง',
-				color: '#0F766E',
 				icon: 'hand-heart',
 				href: '/back-office/stock-donations',
 				scope: 'shelter',
@@ -272,7 +270,6 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				id: 'supply-distribution',
 				label: 'เบิกจ่ายพัสดุและอาหาร',
 				desc: 'ใบเบิกจากฝ่ายต่างๆ',
-				color: '#0891B2',
 				icon: 'clipboard-list',
 				href: '/back-office/distribution',
 				scope: 'shelter',
@@ -282,7 +279,6 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				id: 'frontline-distribution',
 				label: 'จุดแจกจ่ายพัสดุและอาหาร',
 				desc: 'แจกของรายครัวเรือนหน้างาน',
-				color: '#D97706',
 				icon: 'package-check',
 				href: '/onsite/distribution',
 				scope: 'shelter',
@@ -294,14 +290,13 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 		id: 'volunteer',
 		label: 'ฝ่ายอาสาสมัคร',
 		desc: 'งานอาสา กะงาน และการเช็คอิน',
-		color: '#059669',
+		domain: 'volunteer',
 		icon: 'heart-handshake',
 		items: [
 			{
 				id: 'volunteer-management',
 				label: 'จัดการอาสาสมัครและกะงาน',
 				desc: 'ประกาศงานและจัดกะ',
-				color: '#059669',
 				icon: 'users',
 				href: '/back-office/volunteers',
 				scope: 'shelter',
@@ -311,7 +306,6 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				id: 'volunteer-check-in',
 				label: 'เช็คอินอาสาสมัครเข้างาน',
 				desc: 'รับรายงานตัวหน้าศูนย์',
-				color: '#047857',
 				icon: 'user-check',
 				href: '/onsite/volunteer-check-in',
 				scope: 'shelter',
@@ -323,14 +317,13 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 		id: 'security',
 		label: 'ฝ่ายรักษาความปลอดภัย',
 		desc: 'เหตุการณ์และจุดเข้าออก',
-		color: '#DC2626',
+		domain: 'security',
 		icon: 'shield',
 		items: [
 			{
 				id: 'security-incidents',
 				label: 'ความปลอดภัยและเหตุการณ์',
 				desc: 'บันทึกเหตุไม่ปลอดภัย',
-				color: '#DC2626',
 				icon: 'shield-alert',
 				href: null,
 				scope: 'shelter',
@@ -342,14 +335,13 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 		id: 'facility',
 		label: 'ฝ่ายอาคารสถานที่',
 		desc: 'โซน เต็นท์ และสาธารณูปโภค',
-		color: '#B45309',
+		domain: 'facility',
 		icon: 'building-2',
 		items: [
 			{
 				id: 'zone-settings',
 				label: 'ตั้งค่าโซน',
 				desc: 'กำหนดโซน ความจุ ประเภท เปิด/ปิด',
-				color: '#65A30D',
 				icon: 'tent',
 				// Owner decision: placeholder until the zone configuration screen ships.
 				href: null,
@@ -362,14 +354,13 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 		id: 'management',
 		label: 'ฝ่ายบริหารศูนย์',
 		desc: 'ภาพรวม ผู้ใช้ และการตั้งค่าของศูนย์',
-		color: '#0A2647',
+		domain: 'admin',
 		icon: 'building',
 		items: [
 			{
 				id: 'shelter-manage',
 				label: 'จัดการศูนย์พักพิงและโซน',
 				desc: 'ข้อมูลศูนย์และโซนทั้งหมด',
-				color: '#0A2647',
 				icon: 'building',
 				href: (code) =>
 					code
@@ -382,7 +373,6 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				id: 'shelter-readiness',
 				label: 'ความพร้อมของศูนย์',
 				desc: 'ประเมินความพร้อมรายวัน',
-				color: '#2563EB',
 				icon: 'clipboard-check',
 				href: '/back-office/shelters/readiness',
 				scope: 'shelter',
@@ -392,7 +382,6 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				id: 'shelter-users',
 				label: 'ผู้ใช้งานของศูนย์',
 				desc: 'บัญชีและบทบาทในศูนย์',
-				color: '#475569',
 				icon: 'user-cog',
 				href: '/back-office/users',
 				scope: 'shelter',
@@ -402,7 +391,6 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				id: 'referrals',
 				label: 'การส่งต่อผู้ประสบภัย',
 				desc: 'ส่งต่อโรงพยาบาลหรือศูนย์อื่น',
-				color: '#7C3AED',
 				icon: 'ambulance',
 				href: '/back-office/referrals',
 				scope: 'shelter',
@@ -412,7 +400,6 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 				id: 'back-office',
 				label: 'ระบบหลังบ้าน',
 				desc: 'ตั้งค่าและรายงานของศูนย์',
-				color: '#2563EB',
 				icon: 'monitor',
 				href: '/back-office',
 				scope: 'shelter',
@@ -424,14 +411,14 @@ export const PORTAL_DEPARTMENTS: readonly PortalDepartment[] = [
 		id: 'central',
 		label: 'ส่วนกลาง',
 		desc: 'สำหรับผู้ดูแลระบบส่วนกลางเท่านั้น',
-		color: '#1E293B',
+		domain: 'admin',
+		tone: 'strong',
 		icon: 'settings',
 		items: [
 			{
 				id: 'system-management',
 				label: 'ตั้งค่าระบบส่วนกลาง',
 				desc: 'ศูนย์ทั้งหมดและผู้ใช้ทั้งระบบ',
-				color: '#1E293B',
 				icon: 'settings',
 				href: '/system-management',
 				scope: 'system',
@@ -451,6 +438,24 @@ export const PORTAL_PUBLIC_LINK = {
 /** True when the footer public-site link should show (an authenticated user with ≥1 role). */
 export function canSeePortalPublicLink(roles: readonly string[]): boolean {
 	return roles.length > 0;
+}
+
+/**
+ * CSS custom properties a department section sets for its tiles (from the domain tokens):
+ * `--c` accent (icons), `--c-strong`, `--c-subtle`, `--c-border`, `--c-text`. The `central`
+ * department uses the `strong` step of its family as the accent.
+ */
+export function portalDepartmentCssVars(
+	department: Pick<PortalDepartment, 'domain' | 'tone'>
+): Record<'--c' | '--c-strong' | '--c-subtle' | '--c-border' | '--c-text', string> {
+	const { domain, tone = 'base' } = department;
+	return {
+		'--c': domainVar(domain, tone),
+		'--c-strong': domainVar(domain, 'strong'),
+		'--c-subtle': domainVar(domain, 'subtle'),
+		'--c-border': domainVar(domain, 'border'),
+		'--c-text': domainVar(domain, 'text')
+	};
 }
 
 /** Resolve an item's route for the selected shelter; `null` for placeholders. */

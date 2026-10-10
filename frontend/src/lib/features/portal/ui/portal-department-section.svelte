@@ -1,6 +1,7 @@
 <script lang="ts">
 	import {
 		PORTAL_GROUP_LABELS,
+		portalDepartmentCssVars,
 		type PortalDepartmentView,
 		type PortalMenuItem,
 		type PortalVisibleItem
@@ -17,6 +18,7 @@
 
 	const Icon = $derived(PORTAL_ICONS[department.icon]);
 	const headingId = $derived(`portal-dept-${department.id}`);
+	const cssVars = $derived(portalDepartmentCssVars(department));
 
 	type Block = { key: string; label: string | null; items: PortalVisibleItem[] };
 
@@ -37,10 +39,18 @@
 	});
 </script>
 
-<section aria-labelledby={headingId} style:--c={department.color} class="space-y-4">
+<section
+	aria-labelledby={headingId}
+	style:--c={cssVars['--c']}
+	style:--c-strong={cssVars['--c-strong']}
+	style:--c-subtle={cssVars['--c-subtle']}
+	style:--c-border={cssVars['--c-border']}
+	style:--c-text={cssVars['--c-text']}
+	class="space-y-4"
+>
 	<header class="flex items-center gap-3">
 		<span
-			class="flex size-11 shrink-0 items-center justify-center rounded-xl border border-[color-mix(in_srgb,var(--c)_30%,white)] bg-[color-mix(in_srgb,var(--c)_10%,white)] text-[var(--c)]"
+			class="flex size-11 shrink-0 items-center justify-center rounded-xl border border-(color:--c-border) bg-(--c-subtle) text-(color:--c)"
 			aria-hidden="true"
 		>
 			<Icon class="size-6" />

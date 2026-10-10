@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
+import { DOMAIN_IDS } from '$lib/tokens';
 import {
 	PORTAL_DEPARTMENTS,
+	portalDepartmentCssVars,
 	canSeePortalPublicLink,
 	filterPortalMenu,
 	isPortalItemVisible,
@@ -283,5 +285,48 @@ describe('portal data integrity', () => {
 
 	it('only Station 2 depends on the medical flag', () => {
 		expect(all.filter((a) => a.item.requires).map((a) => a.item.id)).toEqual(['station-2']);
+	});
+});
+
+describe('portal department colours', () => {
+	it('gives every department a valid domain colour family', () => {
+		for (const department of PORTAL_DEPARTMENTS) {
+			expect(DOMAIN_IDS, department.id).toContain(department.domain);
+		}
+	});
+
+	it('maps departments to the approved domains', () => {
+		const mapping = Object.fromEntries(PORTAL_DEPARTMENTS.map((d) => [d.id, d.domain]));
+		expect(mapping).toEqual({
+			registration: 'registration',
+			kitchen: 'kitchen',
+			supply: 'donation',
+			volunteer: 'volunteer',
+			security: 'security',
+			facility: 'facility',
+			management: 'admin',
+			central: 'admin'
+		});
+	});
+
+	it('keeps colour on the department only — items carry none', () => {
+		for (const department of PORTAL_DEPARTMENTS) {
+			for (const item of department.items) {
+				expect(item, `${department.id}/${item.id}`).not.toHaveProperty('color');
+			}
+		}
+	});
+
+	it('uses the base step for departments, and the strong step for central', () => {
+		const byId = Object.fromEntries(PORTAL_DEPARTMENTS.map((d) => [d.id, d]));
+		expect(portalDepartmentCssVars(byId.management)['--c']).toBe('var(--domain-admin)');
+		expect(portalDepartmentCssVars(byId.central)['--c']).toBe('var(--domain-admin-strong)');
+		expect(portalDepartmentCssVars(byId.supply)).toEqual({
+			'--c': 'var(--domain-donation)',
+			'--c-strong': 'var(--domain-donation-strong)',
+			'--c-subtle': 'var(--domain-donation-subtle)',
+			'--c-border': 'var(--domain-donation-border)',
+			'--c-text': 'var(--domain-donation-text)'
+		});
 	});
 });

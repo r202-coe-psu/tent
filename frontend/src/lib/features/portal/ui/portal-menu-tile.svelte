@@ -24,7 +24,6 @@
 	const focusRing =
 		'focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-none';
 	const tileBase = 'flex min-h-11 items-center gap-4 rounded-xl border p-4 shadow-2xs';
-	const chipTint = 'background-color: color-mix(in srgb, var(--c) 12%, white)';
 </script>
 
 {#snippet title()}
@@ -32,7 +31,7 @@
 		<span class="text-base font-semibold text-slate-900">{item.label}</span>
 		{#if item.station}
 			<span
-				class="inline-flex items-center rounded-full border border-[color-mix(in_srgb,var(--c)_35%,white)] bg-[color-mix(in_srgb,var(--c)_8%,white)] px-2 py-0.5 text-xs font-semibold text-slate-800 tabular-nums"
+				class="inline-flex items-center rounded-full border border-(color:--c-border) bg-(--c-subtle) px-2 py-0.5 text-xs font-semibold text-(color:--c-text) tabular-nums"
 			>
 				สถานี {item.station}
 			</span>
@@ -44,12 +43,10 @@
 	<!-- `href` is a union of static pathnames; `resolve` takes one literal route, hence the cast. -->
 	<a
 		href={resolve(href as '/')}
-		style:--c={item.color}
-		class="{tileBase} border-[color-mix(in_srgb,var(--c)_30%,white)] bg-white transition-shadow hover:shadow-xs {focusRing}"
+		class="{tileBase} border-(color:--c-border) bg-white transition-shadow hover:shadow-xs {focusRing}"
 	>
 		<span
-			class="flex size-12 shrink-0 items-center justify-center rounded-xl text-[var(--c)]"
-			style={chipTint}
+			class="flex size-12 shrink-0 items-center justify-center rounded-xl bg-(--c-subtle) text-(color:--c)"
 			aria-hidden="true"
 		>
 			<Icon class="size-6" />
@@ -61,7 +58,7 @@
 		<ChevronRight class="size-5 shrink-0 text-slate-400" aria-hidden="true" />
 	</a>
 {:else if state === 'checking'}
-	<div style:--c={item.color} aria-busy="true" class="{tileBase} border-slate-200/80 bg-white">
+	<div aria-busy="true" class="{tileBase} border-slate-200/80 bg-white">
 		<Skeleton class="size-12 shrink-0 rounded-xl" />
 		<div class="min-w-0 flex-1 space-y-2">
 			<Skeleton class="h-4 w-2/3" />
@@ -70,11 +67,7 @@
 		<span class="sr-only">กำลังตรวจสอบการเปิดใช้งาน {item.label}</span>
 	</div>
 {:else}
-	<div
-		style:--c={item.color}
-		aria-disabled="true"
-		class="{tileBase} border-dashed border-slate-300 bg-slate-50"
-	>
+	<div aria-disabled="true" class="{tileBase} border-dashed border-slate-300 bg-slate-50">
 		<span
 			class="flex size-12 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500"
 			aria-hidden="true"
