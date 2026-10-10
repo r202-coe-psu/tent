@@ -4,6 +4,7 @@ import {
 	donationPreDeclarationInputSchema,
 	computeNeeds,
 	pickCampaignForItems,
+	DEFAULT_SLOT_WINDOWS,
 	slotAvailabilityFor,
 	slotModeForDelivery
 } from '$lib/features/donations/server';
@@ -118,7 +119,8 @@ export const POST = async ({ request, getClientAddress }) => {
 			| undefined;
 		// A truck trip only exists where the shelter published one, so a pickup with no
 		// window — or a window with no doc behind it — is refused rather than waved
-		// through. A drop-off with no doc is fine: it is one of the standard hours.
+		// through. A drop-off with no doc is only fine when it is one of the standard
+		// windows (FR-DS-12); any other hour needs a shelter-published override doc.
 		if (slotMode === 'pickup' && !requested) {
 			return json({ success: false, error: 'SLOT_REQUIRED' }, { status: 422 });
 		}
@@ -157,7 +159,10 @@ export const POST = async ({ request, getClientAddress }) => {
 					};
 				}
 			} else if (slotRes.status === 404) {
-				if (slotMode === 'pickup') {
+				if (
+					slotMode === 'pickup' ||
+					!DEFAULT_SLOT_WINDOWS.some((w) => w.from === from && w.to === to)
+				) {
 					return json({ success: false, error: 'SLOT_UNAVAILABLE' }, { status: 409 });
 				}
 			} else {

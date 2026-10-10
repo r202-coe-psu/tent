@@ -38,8 +38,9 @@ export interface SlotAvailability {
  * Windows offered when a shelter has configured no `donation_slot` for the date.
  *
  * Unconfigured means "no ceiling", not "closed": `POST /api/public/v1/donations`
- * lets a booking through when the slot doc is missing, so hiding the grid here
- * would refuse bookings the write path accepts. They are the standard opening hours
+ * lets a drop-off through when the slot doc is missing and the window is one of
+ * these, so hiding the grid here would refuse bookings the write path accepts
+ * (any other drop-off hour needs a published doc — FR-DS-12). They are the standard opening hours
  * a donor may drive up in — a shelter that wants its VEHICLE queue used has to
  * publish those windows itself, which is why a pickup date with nothing configured
  * comes back empty rather than falling back to these.
@@ -125,29 +126,21 @@ export function computeSlotAvailability(
 	slots: readonly DonationSlot[],
 	donations: readonly SlotBooking[]
 ): SlotAvailability[] {
-	// One window per start time. A slot written before the two queues were split
-	// carries no `mode` and reads as drop-off, so it can collide with the explicit
-	// window staff later created for the same hour — two entries whose label is
-	// identical, which is both meaningless to a donor and a duplicate `{#each}` key.
-	// The explicit one wins; the legacy doc is what staff are replacing.
-	const byStart = new Map<string, DonationSlot>();
-	for (const slot of slotsOnDate(
+	// `slotsOnDate` already keeps one window per start time (an explicit `mode` beats a
+	// legacy doc for the same hour — FR-DS-10), so no label or `{#each}` key repeats.
+	const windows = slotsOnDate(
 		slots.filter((s) => s?.type === 'donation_slot'),
 		mode,
 		date
-	)) {
-		const held = byStart.get(slot.from);
-		if (!held || (held.mode === undefined && slot.mode !== undefined)) {
-			byStart.set(slot.from, slot);
-		}
-	}
+	);
+	const starts = new Set(windows.map((slot) => slot.from));
 
 	if (mode === 'pickup') {
-		return [...byStart.values()].map((slot) => slotAvailabilityFor(slot, donations));
+		return windows.map((slot) => slotAvailabilityFor(slot, donations));
 	}
 
 	const board: SlotAvailability[] = DEFAULT_SLOT_WINDOWS.filter(
-		(window) => !byStart.has(window.from)
+		(window) => !starts.has(window.from)
 	).map((window) => ({
 		label: slotLabel(window.from, window.to),
 		from: window.from,
@@ -157,7 +150,7 @@ export function computeSlotAvailability(
 		status: 'available' as const
 	}));
 
-	for (const slot of byStart.values()) {
+	for (const slot of windows) {
 		board.push(slotAvailabilityFor(slot, donations));
 	}
 

@@ -144,14 +144,28 @@
 			toast.error('กรอกจำนวนเที่ยวรถก่อน แล้วค่อยกดเปิดทั้งวัน');
 			return;
 		}
-		for (const window of missing) {
-			await persist(
+		// Save the missing windows together and report once — one toast per window would
+		// stack five of them on a single click.
+		let docs: DonationSlot[];
+		try {
+			docs = missing.map((window) =>
 				createDonationSlot(
 					{ mode, date: selectedDate, from: window.from, to: window.to, capacity },
 					ctx
-				),
-				`เพิ่มช่วงเวลา ${window.from} - ${window.to} แล้ว`
+				)
 			);
+		} catch (err) {
+			toast.error(errorMessage(err));
+			return;
+		}
+		const results = await Promise.allSettled(docs.map((doc) => saveSlot.mutateAsync(doc)));
+		const failed = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+		const saved = results.length - failed.length;
+		if (failed.length === 0) {
+			toast.success(`เพิ่มช่วงเวลามาตรฐาน ${saved} ช่วงแล้ว`);
+		} else {
+			const reason = errorMessage(failed[0].reason);
+			toast.error(`บันทึกสำเร็จ ${saved} ช่วง ล้มเหลว ${failed.length} ช่วง — ${reason}`);
 		}
 	}
 
@@ -242,7 +256,7 @@
 			<Button
 				variant={isPickup ? 'outline' : 'default'}
 				onclick={() => (mode = 'dropoff')}
-				class="h-11 sm:h-10"
+				class="h-11"
 			>
 				<PackageOpen class="mr-1.5 h-4 w-4" />
 				ผู้บริจาคมาส่งเอง
@@ -250,7 +264,7 @@
 			<Button
 				variant={isPickup ? 'default' : 'outline'}
 				onclick={() => (mode = 'pickup')}
-				class="h-11 sm:h-10"
+				class="h-11"
 			>
 				<Truck class="mr-1.5 h-4 w-4" />
 				รถศูนย์ไปรับ
@@ -273,7 +287,7 @@
 					id="slot-date"
 					ariaLabel="วันที่ของช่วงเวลา"
 					bind:value={selectedDate}
-					class="h-11 sm:h-10"
+					class="h-11"
 				/>
 			</div>
 
@@ -285,18 +299,12 @@
 						type="time"
 						step="900"
 						bind:value={newFrom}
-						class="h-11 tabular-nums sm:h-10"
+						class="h-11 tabular-nums"
 					/>
 				</div>
 				<div class="space-y-1.5">
 					<Label for="slot-to" class="text-sm font-semibold text-slate-700">ถึง</Label>
-					<Input
-						id="slot-to"
-						type="time"
-						step="900"
-						bind:value={newTo}
-						class="h-11 tabular-nums sm:h-10"
-					/>
+					<Input id="slot-to" type="time" step="900" bind:value={newTo} class="h-11 tabular-nums" />
 				</div>
 			</div>
 
@@ -314,7 +322,7 @@
 					min="1"
 					placeholder={isPickup ? 'เช่น 2' : 'เว้นว่าง = ไม่จำกัด'}
 					bind:value={newCapacity}
-					class="h-11 tabular-nums sm:h-10"
+					class="h-11 tabular-nums"
 				/>
 				<p class="text-xs text-slate-500">
 					{#if isPickup}
@@ -332,7 +340,7 @@
 					type="text"
 					placeholder="เช่น เข้าประตู 2 / จอดรถลานหลัง"
 					bind:value={newNote}
-					class="h-11 sm:h-10"
+					class="h-11"
 				/>
 			</div>
 
@@ -340,7 +348,7 @@
 			     full-width buttons side by side (Button is shrink-0, so the second one used to
 			     spill out under the list card and could not be clicked). -->
 			<div class="flex flex-col gap-2">
-				<Button onclick={addSlot} disabled={saveSlot.isPending} class="h-11 w-full sm:h-10">
+				<Button onclick={addSlot} disabled={saveSlot.isPending} class="h-11 w-full">
 					<Plus class="mr-1.5 h-4 w-4" />
 					เพิ่มช่วงเวลา
 				</Button>
@@ -348,7 +356,7 @@
 					variant="outline"
 					onclick={addStandardDay}
 					disabled={saveSlot.isPending}
-					class="h-11 w-full sm:h-10"
+					class="h-11 w-full"
 				>
 					<Wand class="mr-1.5 h-4 w-4" />
 					{isPickup ? 'เปิดรอบรถทั้งวัน' : 'ดึงช่วงมาตรฐานมาแก้'}
@@ -433,7 +441,7 @@
 									variant="outline"
 									onclick={() => openEdit(slot)}
 									disabled={saveSlot.isPending}
-									class="h-11 shrink-0 sm:h-10"
+									class="h-11 shrink-0"
 								>
 									<Pencil class="mr-1.5 h-4 w-4" />
 									แก้ไข
@@ -442,7 +450,7 @@
 									variant="outline"
 									onclick={() => toggleStatus(slot)}
 									disabled={saveSlot.isPending}
-									class="h-11 shrink-0 sm:h-10"
+									class="h-11 shrink-0"
 								>
 									{#if isClosed}
 										<LockOpen class="mr-1.5 h-4 w-4" />
@@ -456,7 +464,7 @@
 									variant="outline"
 									onclick={() => openDelete(slot)}
 									disabled={booked > 0 || deleteSlot.isPending}
-									class="h-11 shrink-0 border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800 sm:h-10"
+									class="h-11 shrink-0 border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
 								>
 									<Trash2 class="mr-1.5 h-4 w-4" />
 									ลบ
@@ -487,12 +495,7 @@
 		<div class="space-y-4">
 			<div class="space-y-1.5">
 				<Label for="edit-slot-to" class="text-sm font-semibold text-slate-700">ถึง</Label>
-				<Input
-					id="edit-slot-to"
-					type="time"
-					bind:value={editTo}
-					class="h-11 tabular-nums sm:h-10"
-				/>
+				<Input id="edit-slot-to" type="time" bind:value={editTo} class="h-11 tabular-nums" />
 			</div>
 			<div class="space-y-1.5">
 				<Label for="edit-slot-capacity" class="text-sm font-semibold text-slate-700">
@@ -505,7 +508,7 @@
 					min="1"
 					placeholder={isPickup ? 'เช่น 2' : 'ไม่จำกัด'}
 					bind:value={editCapacity}
-					class="h-11 tabular-nums sm:h-10"
+					class="h-11 tabular-nums"
 				/>
 				{#if editing}
 					<p class="text-xs text-slate-500">
@@ -519,17 +522,13 @@
 					id="edit-slot-note"
 					placeholder="เช่น เข้าประตู 2 / จอดรถลานหลัง"
 					bind:value={editNote}
-					class="h-11 sm:h-10"
+					class="h-11"
 				/>
 			</div>
 		</div>
 		<Dialog.Footer>
-			<Button variant="outline" onclick={() => (editOpen = false)} class="h-11 sm:h-10"
-				>ยกเลิก</Button
-			>
-			<Button onclick={saveEdit} disabled={saveSlot.isPending} class="h-11 sm:h-10">
-				บันทึกการแก้ไข
-			</Button>
+			<Button variant="outline" onclick={() => (editOpen = false)} class="h-11">ยกเลิก</Button>
+			<Button onclick={saveEdit} disabled={saveSlot.isPending} class="h-11">บันทึกการแก้ไข</Button>
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>

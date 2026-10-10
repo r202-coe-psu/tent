@@ -806,6 +806,49 @@ describe('POST /api/public/v1/donations', () => {
 			expect(res.body.error).toBe('SLOT_FULL');
 		});
 
+		it('accepts a non-standard drop-off hour backed by a legacy-id doc (fallback hit is not re-checked)', async () => {
+			mockFastapiCreate();
+			couch({
+				slot: (path) =>
+					path.includes(encodeURIComponent('donation_slot:2026-06-27:03:00'))
+						? { status: 200, data: { capacity: null, status: 'open' } }
+						: { status: 404, data: {} }
+			});
+			const res = await submit({
+				delivery_method: 'self_dropoff',
+				slot: { date: '2026-06-27', from: '03:00', to: '04:00' }
+			});
+			expect(res.status).toBe(200);
+		});
+
+		it('refuses a drop-off outside the standard windows when no override doc exists (AC-DS-11)', async () => {
+			couch({ slot: () => ({ status: 404, data: {} }) });
+			const res = await submit({
+				delivery_method: 'self_dropoff',
+				slot: { date: '2026-06-27', from: '03:00', to: '04:00' }
+			});
+			expect(res.status).toBe(409);
+			expect(res.body.error).toBe('SLOT_UNAVAILABLE');
+		});
+
+		it('refuses a drop-off whose start matches a standard window but whose end does not', async () => {
+			couch({ slot: () => ({ status: 404, data: {} }) });
+			const res = await submit({
+				delivery_method: 'self_dropoff',
+				slot: { date: '2026-06-27', from: '09:00', to: '11:00' }
+			});
+			expect(res.status).toBe(409);
+			expect(res.body.error).toBe('SLOT_UNAVAILABLE');
+		});
+
+		it('accepts a drop-off in a standard window with no doc behind it', async () => {
+			mockFastapiCreate();
+			couch({ slot: () => ({ status: 404, data: {} }) });
+			const res = await submit({ delivery_method: 'self_dropoff', slot: SLOT });
+			expect(res.status).toBe(200);
+			expect(res.body.success).toBe(true);
+		});
+
 		it('does not count a drop-off booking against the truck at the same hour', async () => {
 			mockFastapiCreate();
 			couch({

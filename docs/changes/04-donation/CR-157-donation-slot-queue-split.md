@@ -179,12 +179,13 @@ collection `donation_slot_counters`. **กระทบ stable core (`_id` patter
 **Code** — ดู `affects:` ใน frontmatter (implement แล้วบน branch `team-A-donation`: `461bce58`,
 `d73bed26`, `a214c1f7`, `63bdd522` (นับแยกคิว + FR-DS-11), `8a5c6450` (§C-6, FR-DS-14/15))
 
-**ยังไม่ตรงกับ CR (ต้องแก้ code ก่อนปิด CR)**
+**ตรงกับ CR แล้ว (แก้ตาม review PR #315 attempt 4, 2026-10-10)**
 
-- FR-DS-12 — `self_dropoff` ที่ไม่มี doc ยังผ่านทุกช่วงเวลา; BFF ไม่ได้เทียบกับช่วงมาตรฐาน
-  (`frontend/src/routes/api/public/v1/donations/+server.ts` กรณี 404 ของ dropoff)
-- FR-DS-10 — มีเฉพาะกระดานฝั่ง public (`compute-slots.ts`); back-office `slotsOnDate` ยังแสดงทั้งสองใบ
-  (ดู §Migration)
+- FR-DS-12 — BFF `POST /donations` กรณี 404 ของ `self_dropoff` เทียบ `from`/`to` กับ
+  `DEFAULT_SLOT_WINDOWS` (export ผ่าน `$lib/features/donations/server`); ไม่ตรง = 409
+  `SLOT_UNAVAILABLE` (AC-DS-11 ครบทั้งสองขา มี test ใน `donations.test.ts`)
+- FR-DS-10 — dedup ย้ายเข้า `slotsOnDate` (`operations/domain/donation-slot.ts`) ที่เดียว: back-office และ
+  กระดาน public (`computeSlotAvailability`) อ่านผลเดียวกัน ใบที่ระบุ `mode` ชนะใบเก่าที่ `from` เดียวกัน
 
 **ยังไม่ทำในรอบนี้ (out of scope)**
 
@@ -209,10 +210,10 @@ collection `donation_slot_counters`. **กระทบ stable core (`_id` patter
 | --- | --- |
 | กระดาน public (`compute-slots.ts`) | ใบเก่าอ่านเป็น `dropoff`; ถ้ามีใบใหม่ `from` เดียวกัน ใบใหม่ชนะ (FR-DS-10) |
 | `POST` re-check | หาใบใหม่ก่อน ไม่เจอจึงหาใบเก่า (`dropoff` เท่านั้น) |
-| back-office `slotsOnDate` | ไม่ dedupe — ใบเก่ากับใบใหม่ `from` เดียวกันแสดงสองแถว |
+| back-office `slotsOnDate` | dedupe ตาม `from` — ใบที่ระบุ `mode` ชนะใบเก่า แสดงแถวเดียว (FR-DS-10) |
 | back-office แก้ไขใบเก่า | ผ่าน validation (`mode` default `dropoff`) แต่บันทึกทับ `_id` เดิม พร้อมเติม `mode: dropoff` — ไม่ได้สร้าง doc รูปใหม่ |
 
-ไม่มีใบเก่าใน dev/staging/production (ตรวจ 2026-09-24) จึงไม่ทำ migration หรือ dedupe ฝั่ง back-office.
+ไม่มีใบเก่าใน dev/staging/production (ตรวจ 2026-09-24) จึงไม่ทำ migration; dedupe ใน `slotsOnDate` เป็น safety net เท่านั้น.
 ถ้าเจอใบเก่าใน local dev ให้ลบทิ้ง หรือ reset ด้วย `docker compose -f docker-compose.yml -f docker-compose.seed.yml run --rm unseed`
 
 **`donation_slot_counters`:** collection ใหม่ ไม่มีข้อมูลเดิม. booking ที่เกิดก่อนมี counter ถูกนับเข้า
@@ -233,3 +234,9 @@ collection `donation_slot_counters`. **กระทบ stable core (`_id` patter
   + FR-DS-14/15 ให้ครอบ Mongo counter ที่ implement ใน `8a5c6450`; แก้ §Migration ให้ตรงกับพฤติกรรม
   back-office จริง; ระบุ FR-DS-12 กับ FR-DS-10 (back-office) ว่ายังไม่ตรง code
 - 2026-10-08 — approved โดย Soravit Sukkarn (Team Lead) (รันเลข CR-157)
+- 2026-10-10 — แก้ตาม review PR #315 attempt 4: ปิด FR-DS-12 ใน BFF (`self_dropoff` ที่ไม่มี doc ต้องตรงช่วง
+  มาตรฐาน ไม่ตรง = 409 `SLOT_UNAVAILABLE`); ย้าย dedup FR-DS-10 เข้า `slotsOnDate` ให้ back-office กับกระดาน
+  public ใช้ logic เดียว; อัปเดต `docs/data/api-contract.md` §5 (เพิ่ม `GET .../donations/slots` + หัวข้อ
+  slot error codes) ตาม `affects`; `addStandardDay()` บันทึกพร้อมกันและ toast สรุปครั้งเดียว; ลบ `sm:h-10`
+  ใน slots-manager และ scan-station (ทัช target ≥ 44px บน tablet). ติดตามการเปลี่ยนแปลงโดยต่อท้าย CR นี้
+  ตามที่เจ้าของโครงการอนุมัติ — ไม่เปิด CR ใหม่

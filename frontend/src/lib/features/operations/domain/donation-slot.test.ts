@@ -224,6 +224,43 @@ describe('slot listing helpers', () => {
 	});
 });
 
+describe('slotsOnDate — legacy dedup (FR-DS-10)', () => {
+	/** A window written before the queue split: no `mode`, id without a mode segment. */
+	function legacy(over: Partial<DonationSlot> = {}): DonationSlot {
+		const doc: Partial<DonationSlot> = slot({ capacity: null, ...over });
+		delete doc.mode;
+		return { ...doc, _id: 'donation_slot:2026-09-22:09:00', schema_v: 1 } as DonationSlot;
+	}
+
+	it('returns only the explicit window when a legacy doc shares its start time', () => {
+		const v2 = slot({ mode: 'dropoff', from: '09:00', capacity: 3 });
+		const result = slotsOnDate([legacy(), v2], 'dropoff', '2026-09-22');
+		expect(result).toEqual([v2]);
+		// Order of the input must not change the winner.
+		expect(slotsOnDate([v2, legacy()], 'dropoff', '2026-09-22')).toEqual([v2]);
+	});
+
+	it('never lets a legacy window into the pickup queue', () => {
+		const v2 = slot({ mode: 'pickup', from: '09:00' });
+		expect(slotsOnDate([legacy(), v2], 'pickup', '2026-09-22')).toEqual([v2]);
+		expect(slotsOnDate([legacy()], 'pickup', '2026-09-22')).toEqual([]);
+	});
+
+	it('keeps a closed explicit window over an open legacy one', () => {
+		const closed = slot({ mode: 'dropoff', from: '09:00', status: 'closed' });
+		expect(slotsOnDate([legacy(), closed], 'dropoff', '2026-09-22')).toEqual([closed]);
+	});
+
+	it('still lists a legacy window when nothing explicit replaces it', () => {
+		const old = legacy();
+		const other = slot({ mode: 'dropoff', from: '13:00', to: '14:00' });
+		expect(slotsOnDate([old, other], 'dropoff', '2026-09-22').map((s) => s.from)).toEqual([
+			'09:00',
+			'13:00'
+		]);
+	});
+});
+
 describe('parseCapacityInput', () => {
 	it('reads every shape a number field hands over', () => {
 		// Typed into the box — Svelte binds `<input type="number">` as a number.

@@ -20,6 +20,7 @@ export { computeNeeds, pickCampaignForItems } from './domain/compute-needs';
 export { carryItemIds } from './domain/carry-item-ids';
 export {
 	computeSlotAvailability,
+	DEFAULT_SLOT_WINDOWS,
 	slotAvailabilityFor,
 	slotModeForDelivery
 } from './domain/compute-slots';
