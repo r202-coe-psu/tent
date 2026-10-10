@@ -3,7 +3,7 @@ id: CR-157
 title: แยกคิวรับของบริจาคเป็นคิวมาส่งเองกับคิวรถศูนย์ไปรับ
 status: approved
 date: 2026-09-24
-updated: 2026-10-08
+updated: 2026-10-10
 requested_by: เจ้าของโครงการ (ทบทวน DN-5 ระหว่าง implement T-60)
 decided_by: Soravit Sukkarn (Team Lead)
 layer: stable + volatile   # `_id` pattern ของ donation_slot = stable core -> ต้อง review ก่อน
@@ -15,7 +15,7 @@ affects:
   - Mongo collection ใหม่ `donation_slot_counters` (schema_v 1) — atomic `SLOT_FULL` (§C-6)
   - docs/features/public-tier-donation-spec.html §DN ขั้น 3 — หน้าจอเลือกช่วงเวลาแยกตามวิธีจัดส่ง
   - docs/task-breakdown/04-donation.md T-60 DoD ขั้น 3 — เกณฑ์ slot
-  - schema_v donation_slot 1 → ? (ดู §Migration — ยังไม่เคาะ)
+  - schema_v donation_slot 1 → 2 (ดู §Migration)
   - frontend/src/lib/features/operations/domain/donation-slot.ts (+ test)
   - frontend/src/lib/features/operations/domain/operations.ts — type DonationSlot, DonationSlotMode
   - frontend/src/lib/features/operations/application/queries.ts — useDonationSlotSchedule, useSaveDonationSlot
@@ -219,12 +219,10 @@ collection `donation_slot_counters`. **กระทบ stable core (`_id` patter
 `booked` ตอนสร้าง counter (§C-6 ค่าเริ่ม) — ข้อจำกัดที่ยอมรับ: booking ที่ยังอยู่ระหว่าง sync เข้า CouchDB
 ตอนสร้าง counter ไม่ถูกนับ ทำให้ `booked` ต่ำกว่าความจริงชั่วคราวได้ (worker settle/retention ปล่อยที่ตามสถานะจริง)
 
-> [NEEDS DECISION: `schema_v` ของ `donation_slot`]
-> เพิ่ม field req (`mode`) + เปลี่ยนชนิด `capacity` เข้าเกณฑ์ bump ตาม change-management §4 แต่ยังไม่มี
-> doc ที่ persist จริง จึงมีสองทาง:
-> (ก) คง `schema_v 1` — ถือว่ารูปนี้คือรุ่นแรกที่ใช้งานจริง เขียน migration note ว่า pre-prod
-> (ข) bump เป็น `schema_v 2` — ตามตัวอักษรของกติกา และได้ร่องรอยว่ารูปเคยเปลี่ยน
-> ผู้ร่างเสนอ (ก) โดยเทียบเคียง §2.4 ที่ใช้ "pre-prod — wipe/re-seed" มาก่อน — **รอเจ้าของโครงการเคาะ**
+**`schema_v`:** `donation_slot` 1 → 2 (เคาะ 2026-10-10). เพิ่ม field req (`mode`) + เปลี่ยนชนิด `capacity`
+เข้าเกณฑ์ bump ตาม change-management §4 แม้ยังไม่มี doc v1 ที่ persist — เขียน migration note แบบ pre-prod
+เหมือน §2.1/§2.3/§2.4 (bump + ไม่ backfill). `createDonationSlot` เขียน v2; `editDonationSlot` เขียน doc รูปเก่า
+กลับเป็น v2 (เติม `mode: dropoff`)
 
 ## Decision log
 
