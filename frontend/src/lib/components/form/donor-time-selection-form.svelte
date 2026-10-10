@@ -222,8 +222,8 @@
 
 <div class="rounded-2xl border border-slate-200 bg-white p-6 text-left shadow-xs md:p-8">
 	<div class="mb-6 flex items-center gap-3 border-b border-slate-100 pb-4">
-		<div class="flex h-10 w-10 items-center justify-center rounded-full bg-[#fff3e0]">
-			<Navigation class="h-5 w-5 text-[#ff9f0a]" />
+		<div class="flex h-10 w-10 items-center justify-center rounded-full bg-domain-donation-subtle">
+			<Navigation class="h-5 w-5 text-domain-donation-strong" />
 		</div>
 		<div>
 			<h3 class="text-xl font-bold text-slate-800">{t.section3Title}</h3>
@@ -241,7 +241,7 @@
 				<button
 					type="button"
 					onclick={() => (isItemsModalOpen = true)}
-					class="flex cursor-pointer items-center gap-0.5 text-xs font-black text-[#013481] hover:underline"
+					class="flex cursor-pointer items-center gap-0.5 text-xs font-black text-domain-donation-text hover:underline"
 				>
 					{t.viewAll}
 				</button>
@@ -262,7 +262,9 @@
 					</span>
 				{/each}
 				{#if donationStore.items.length > 5}
-					<span class="block pl-4 text-left text-2xs font-black text-[#013481] hover:underline">
+					<span
+						class="block pl-4 text-left text-2xs font-black text-domain-donation-text hover:underline"
+					>
 						{t.viewAllRemaining.replace('{count}', String(donationStore.items.length - 5))}
 					</span>
 				{/if}
@@ -280,8 +282,8 @@
 					onclick={() => (donationStore.deliveryMethod = 'self_dropoff')}
 					class="cursor-pointer rounded-xl border-2 p-4 text-left font-bold transition-all {donationStore.deliveryMethod ===
 					'self_dropoff'
-						? 'border-[#ff9f0a] bg-[#fff8e1] text-[#ff9f0a]'
-						: 'border-slate-200 text-slate-600 hover:border-[#ff9f0a]/50'}"
+						? 'border-domain-donation bg-domain-donation-subtle text-domain-donation-strong'
+						: 'border-slate-200 text-slate-600 hover:border-domain-donation/50'}"
 				>
 					{t.deliverySelf}
 				</button>
@@ -290,8 +292,8 @@
 					onclick={() => (donationStore.deliveryMethod = 'parcel')}
 					class="cursor-pointer rounded-xl border-2 p-4 text-left font-bold transition-all {donationStore.deliveryMethod ===
 					'parcel'
-						? 'border-[#ff9f0a] bg-[#fff8e1] text-[#ff9f0a]'
-						: 'border-slate-200 text-slate-600 hover:border-[#ff9f0a]/50'}"
+						? 'border-domain-donation bg-domain-donation-subtle text-domain-donation-strong'
+						: 'border-slate-200 text-slate-600 hover:border-domain-donation/50'}"
 				>
 					{t.deliveryParcel}
 				</button>
@@ -300,8 +302,8 @@
 					onclick={() => (donationStore.deliveryMethod = 'shelter_pickup')}
 					class="cursor-pointer rounded-xl border-2 p-4 text-left font-bold transition-all {donationStore.deliveryMethod ===
 					'shelter_pickup'
-						? 'border-[#ff9f0a] bg-[#fff8e1] text-[#ff9f0a]'
-						: 'border-slate-200 text-slate-600 hover:border-[#ff9f0a]/50'}"
+						? 'border-domain-donation bg-domain-donation-subtle text-domain-donation-strong'
+						: 'border-slate-200 text-slate-600 hover:border-domain-donation/50'}"
 				>
 					{t.deliveryShelterPickup}
 				</button>
@@ -318,7 +320,7 @@
 						<Input
 							bind:value={donationStore.eta}
 							placeholder={t.etaPlaceholder}
-							class="h-12 rounded-xl border-2 border-slate-200 focus:border-[#ff9f0a]"
+							class="h-12 rounded-xl border-2 border-slate-200 focus:border-domain-donation"
 						/>
 					</div>
 					<div>
@@ -326,7 +328,7 @@
 						<Input
 							bind:value={donationStore.courierTrackingNo}
 							placeholder={t.trackingNoPlaceholder}
-							class="h-12 rounded-xl border-2 border-slate-200 focus:border-[#ff9f0a]"
+							class="h-12 rounded-xl border-2 border-slate-200 focus:border-domain-donation"
 						/>
 					</div>
 				</div>
@@ -350,8 +352,8 @@
 								(donationStore.vehicleType = vtype as 'motorcycle' | 'car' | 'pickup' | 'truck')}
 							class="cursor-pointer rounded-xl border-2 p-3 text-center text-sm font-bold transition-all {donationStore.vehicleType ===
 							vtype
-								? 'border-[#ff9f0a] bg-[#ff9f0a] text-white shadow-xs'
-								: 'border-slate-200 text-slate-600 hover:border-[#ff9f0a]/50'}"
+								? 'border-domain-donation bg-domain-donation-strong text-white shadow-xs'
+								: 'border-slate-200 text-slate-600 hover:border-domain-donation/50'}"
 						>
 							{#if vtype === 'motorcycle'}
 								{t.vehicleMotorcycle}
@@ -378,7 +380,7 @@
 					id="pickup-address"
 					placeholder={t.pickupAddressPlaceholder}
 					bind:value={donationStore.pickupAddress}
-					class="min-h-[100px] w-full resize-none rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-all focus:border-[#ff9f0a]"
+					class="min-h-[100px] w-full resize-none rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-all focus:border-domain-donation"
 				></textarea>
 			</div>
 		{/if}
@@ -407,7 +409,7 @@
 					id="shelter-select"
 					bind:value={donationStore.shelterCode}
 					disabled={donationStore.shelterLocked}
-					class="w-full appearance-none rounded-xl border-2 border-slate-200 bg-white p-4 font-bold text-slate-800 shadow-2xs outline-hidden focus:border-[#ff9f0a] disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+					class="w-full appearance-none rounded-xl border-2 border-slate-200 bg-white p-4 font-bold text-slate-800 shadow-2xs outline-hidden focus:border-domain-donation disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
 				>
 					<option value="" disabled selected>{t.selectShelterPlaceholder}</option>
 					{#each shelters as shelter (shelter.code)}
@@ -432,7 +434,7 @@
 							<PopoverTrigger class="w-full">
 								<Button
 									variant="outline"
-									class="h-auto w-full! justify-start rounded-xl border-2 border-slate-200 bg-white py-3.5 text-left font-bold text-slate-800 shadow-2xs hover:border-[#ff9f0a]"
+									class="h-auto w-full! justify-start rounded-xl border-2 border-slate-200 bg-white py-3.5 text-left font-bold text-slate-800 shadow-2xs hover:border-domain-donation"
 								>
 									<CalendarIcon class="mr-2 h-4.5 w-4.5 text-slate-400" />
 									{#if selectedDate}
@@ -462,8 +464,8 @@
 									{isFull
 									? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400 opacity-50'
 									: isSelected
-										? 'border-[#ff9f0a] bg-[#ff9f0a] text-white shadow-xs'
-										: 'cursor-pointer border-slate-200 bg-white text-slate-600 hover:border-[#ff9f0a]'}"
+										? 'border-domain-donation bg-domain-donation-strong text-white shadow-xs'
+										: 'cursor-pointer border-slate-200 bg-white text-slate-600 hover:border-domain-donation'}"
 							>
 								<span class="text-sm font-bold">{slot.label}</span>
 								<span class="text-2xs font-bold {isSelected ? 'text-white/80' : 'text-slate-400'}">
@@ -506,7 +508,7 @@
 					!donationStore.slotTime) ||
 				(donationStore.deliveryMethod === 'shelter_pickup' && !donationStore.pickupAddress.trim())}
 			onclick={handleConfirmBookingRequest}
-			class="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#013481] py-4 text-lg font-bold text-white shadow-md transition-all hover:bg-[#002244] active:scale-95 disabled:opacity-50"
+			class="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl bg-domain-donation-strong py-4 text-lg font-bold text-white shadow-md transition-all hover:bg-domain-donation-text active:scale-95 disabled:opacity-50"
 		>
 			{#if donationStore.isSubmitting}
 				{t.processingBtn}

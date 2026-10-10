@@ -103,8 +103,10 @@
 	<!-- ส่วนที่ 1: ข้อมูลผู้บริจาค -->
 	<div class="mb-8">
 		<div class="mb-6 flex items-center gap-3 border-b border-slate-100 pb-4">
-			<div class="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50">
-				<ShieldCheck class="h-5 w-5 text-[#013481]" />
+			<div
+				class="flex h-10 w-10 items-center justify-center rounded-full bg-domain-donation-subtle"
+			>
+				<ShieldCheck class="h-5 w-5 text-domain-donation-text" />
 			</div>
 			<div>
 				<h3 class="text-xl font-bold text-slate-800">{t.section1Title}</h3>
@@ -124,7 +126,7 @@
 					id="donor-name"
 					bind:value={donationStore.donorName}
 					placeholder={t.donorNamePlaceholder}
-					class="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 outline-hidden transition-colors focus:border-[#013481] focus:bg-white"
+					class="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 outline-hidden transition-colors focus:border-domain-donation-strong focus:bg-white"
 				/>
 			</div>
 			<div>
@@ -136,7 +138,7 @@
 					id="donor-phone"
 					bind:value={donationStore.donorPhone}
 					placeholder={t.phonePlaceholder}
-					class="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 font-bold text-slate-800 outline-hidden transition-colors focus:border-[#013481] focus:bg-white"
+					class="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 font-bold text-slate-800 outline-hidden transition-colors focus:border-domain-donation-strong focus:bg-white"
 				/>
 			</div>
 			<div>
@@ -148,7 +150,7 @@
 					id="donor-line"
 					bind:value={donationStore.donorLine}
 					placeholder={t.linePlaceholder}
-					class="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 outline-hidden transition-colors focus:border-[#013481] focus:bg-white"
+					class="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 outline-hidden transition-colors focus:border-domain-donation-strong focus:bg-white"
 				/>
 			</div>
 			<div>
@@ -160,7 +162,7 @@
 					id="donor-email"
 					bind:value={donationStore.donorEmail}
 					placeholder={t.emailPlaceholder}
-					class="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 outline-hidden transition-colors focus:border-[#013481] focus:bg-white"
+					class="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 outline-hidden transition-colors focus:border-domain-donation-strong focus:bg-white"
 				/>
 			</div>
 		</div>
@@ -169,13 +171,15 @@
 	<!-- ส่วนที่ 2: รายละเอียดสิ่งของบริจาค -->
 	<div>
 		<div class="mb-6 flex items-center gap-3 border-b border-slate-100 pb-4">
-			<div class="flex h-10 w-10 items-center justify-center rounded-full bg-[#fff8e1]">
-				<Package class="h-5 w-5 text-[#fbbc04]" />
+			<div
+				class="flex h-10 w-10 items-center justify-center rounded-full bg-domain-donation-subtle"
+			>
+				<Package class="h-5 w-5 text-domain-donation" />
 			</div>
 			<div>
 				<h3 class="text-xl font-bold text-slate-800">{t.section2Title}</h3>
 				<p
-					class="mt-1 inline-block rounded bg-[#013365]/10 px-3 py-1 text-sm font-medium text-[#013365]"
+					class="mt-1 inline-block rounded bg-domain-donation-subtle px-3 py-1 text-sm font-medium text-domain-donation-text"
 				>
 					{donationStore.flowMode === 'solicited'
 						? t.section2DescSolicited
@@ -216,7 +220,7 @@
 								<select
 									id="category-{item.id}"
 									bind:value={item.category}
-									class="w-full appearance-none rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-colors focus:border-[#013481]"
+									class="w-full appearance-none rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-colors focus:border-domain-donation-strong"
 								>
 									<option value="" disabled>{t.categorySelectPlaceholder}</option>
 									<option value="food">{categoryLabel('food')}</option>
@@ -245,7 +249,7 @@
 									id="name-{item.id}"
 									placeholder={t.itemNamePlaceholder}
 									bind:value={item.name}
-									class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-colors focus:border-[#013481]"
+									class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-colors focus:border-domain-donation-strong"
 								/>
 							{/if}
 						</div>
@@ -261,7 +265,7 @@
 								id="amount-{item.id}"
 								min="1"
 								bind:value={item.amount}
-								class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 font-bold text-slate-800 outline-hidden transition-colors focus:border-[#013481]"
+								class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 font-bold text-slate-800 outline-hidden transition-colors focus:border-domain-donation-strong"
 							/>
 						</div>
 						<div class="col-span-1">
@@ -282,7 +286,7 @@
 									id="unit-{item.id}"
 									placeholder={t.unitPlaceholder}
 									bind:value={item.unit}
-									class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-colors focus:border-[#013481]"
+									class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-colors focus:border-domain-donation-strong"
 								/>
 							{/if}
 						</div>
@@ -293,7 +297,7 @@
 							<select
 								id="condition-{item.id}"
 								bind:value={item.condition}
-								class="w-full appearance-none rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-colors focus:border-[#013481]"
+								class="w-full appearance-none rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-colors focus:border-domain-donation-strong"
 							>
 								<option value="new">{t.conditionNew}</option>
 								<option value="used">{t.conditionUsed}</option>
@@ -311,7 +315,7 @@
 							id="remark-{item.id}"
 							placeholder={t.remarkPlaceholder}
 							bind:value={item.remark}
-							class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-colors focus:border-[#013481]"
+							class="w-full rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-colors focus:border-domain-donation-strong"
 						/>
 					</div>
 
@@ -329,7 +333,7 @@
 								id="file-upload-{item.id}"
 								accept="image/*"
 								onchange={(e) => handleImageUpload(idx, e)}
-								class="w-full rounded-xl border-2 border-slate-200 bg-white p-1 text-sm text-slate-500 file:mr-4 file:cursor-pointer file:rounded-xl file:border-0 file:bg-blue-50 file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-[#013481] file:transition-colors hover:file:bg-blue-100"
+								class="w-full rounded-xl border-2 border-slate-200 bg-white p-1 text-sm text-slate-500 file:mr-4 file:cursor-pointer file:rounded-xl file:border-0 file:bg-domain-donation-subtle file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-domain-donation-text file:transition-colors hover:file:bg-domain-donation-border"
 							/>
 							{#if item.image}
 								<div
@@ -355,7 +359,7 @@
 				<button
 					type="button"
 					onclick={() => donationStore.addItem()}
-					class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[#013481]/30 bg-blue-50/50 py-4 font-bold text-[#013481] transition-colors hover:bg-blue-50"
+					class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-domain-donation-border bg-domain-donation-subtle py-4 font-bold text-domain-donation-text transition-colors hover:bg-domain-donation-border/40"
 				>
 					<PlusCircle class="h-5 w-5" />
 					{t.addItemBtn}
@@ -383,7 +387,7 @@
 		<button
 			type="button"
 			onclick={handleNext}
-			class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#013481] py-4 text-lg font-bold text-white shadow-md transition-colors hover:bg-[#002244] active:scale-95 disabled:opacity-50"
+			class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-domain-donation-strong py-4 text-lg font-bold text-white shadow-md transition-colors hover:bg-domain-donation-text active:scale-95 disabled:opacity-50"
 		>
 			{t.nextBtn}
 			<ArrowRight class="h-5 w-5" />

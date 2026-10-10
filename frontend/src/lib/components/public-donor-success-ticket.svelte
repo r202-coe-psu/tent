@@ -105,7 +105,7 @@
 <div class="mx-auto w-full max-w-sm animate-in duration-300 fade-in">
 	<!-- Ticket Top Part (Voucher Header) -->
 	<div
-		class="relative space-y-2 overflow-hidden rounded-t-3xl bg-[#ff9f0a] p-6 text-center text-white transition-colors"
+		class="relative space-y-2 overflow-hidden rounded-t-3xl bg-domain-donation-strong p-6 text-center text-white transition-colors"
 	>
 		<div
 			class="relative z-10 mx-auto mb-2 flex h-16 w-16 items-center justify-center rounded-full bg-white/20 backdrop-blur-xs"
@@ -158,7 +158,7 @@
 				{donationStore.bookingRef || 'DN-XXXXXX'}
 			</div>
 			<div class="mt-2 text-2xs font-semibold text-slate-400">{t.trackingTokenLabel}</div>
-			<div class="font-mono text-xs font-bold text-[#013365] select-all">
+			<div class="font-mono text-xs font-bold text-domain-donation-text select-all">
 				{donationStore.trackingToken || '-'}
 			</div>
 		</div>
@@ -209,7 +209,7 @@
 						<button
 							type="button"
 							onclick={() => (isItemsModalOpen = true)}
-							class="flex cursor-pointer items-center gap-0.5 text-xs font-black text-[#013481] hover:underline"
+							class="flex cursor-pointer items-center gap-0.5 text-xs font-black text-domain-donation-text hover:underline"
 						>
 							{t.viewAll}
 						</button>
@@ -242,7 +242,7 @@
 		<!-- วิธีติดตามสถานะการบริจาค (v8.5 Tracking Guide Card) -->
 		<div class="mt-8 rounded-2xl border border-slate-200/80 bg-slate-50 p-5 text-left">
 			<div class="mb-3 flex items-center gap-1.5 text-sm font-extrabold text-slate-800">
-				<ShieldCheck class="h-4 w-4 text-[#013365]" />
+				<ShieldCheck class="h-4 w-4 text-domain-donation-text" />
 				<span>{t.trackingGuideTitle}</span>
 			</div>
 			<p class="mb-4 text-xs leading-relaxed font-bold text-slate-500">
@@ -267,7 +267,7 @@
 							onclick={handleCopyRef}
 							class="flex cursor-pointer items-center gap-1 rounded-md border px-2 py-1 text-2xs font-bold transition-all duration-200 {isCopied
 								? 'border-emerald-200 bg-emerald-50 text-emerald-600'
-								: 'border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-[#013365]'}"
+								: 'border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-domain-donation-text'}"
 						>
 							<Copy class="h-3 w-3" />
 							{isCopied ? t.copiedBtn : t.copyCodeBtn}
@@ -292,7 +292,7 @@
 
 			<a
 				href={trackHref}
-				class="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-[#013365] py-3 text-xs font-bold text-white shadow-xs transition-all duration-200 hover:bg-[#013365]/90"
+				class="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-domain-donation-strong py-3 text-xs font-bold text-white shadow-xs transition-all duration-200 hover:bg-domain-donation-text"
 			>
 				<Search class="h-3.5 w-3.5" />
 				{t.checkMyDonationStatus}

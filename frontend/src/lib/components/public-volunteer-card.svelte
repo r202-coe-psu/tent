@@ -29,7 +29,7 @@
 </script>
 
 <div
-	class="flex flex-col justify-between rounded-[22px] border-2 border-emerald-200/90 bg-white p-4 shadow-2xs transition-all hover:border-emerald-300 sm:rounded-[28px] sm:p-7 {customClass ||
+	class="flex flex-col justify-between rounded-[22px] border-2 border-domain-volunteer-border bg-white p-4 shadow-2xs transition-all hover:border-domain-volunteer sm:rounded-[28px] sm:p-7 {customClass ||
 		'w-[86%] max-w-[340px] min-w-[270px] shrink-0 snap-start sm:w-[420px] sm:max-w-none sm:min-w-0 md:w-[460px] lg:w-[480px]'}"
 >
 	<div class="space-y-2.5 sm:space-y-5">
@@ -62,14 +62,14 @@
 					<span
 						class="{idx >= 3
 							? 'hidden sm:inline-flex'
-							: 'inline-flex'} rounded-lg border border-emerald-200/90 bg-[#F0FDF4] px-2.5 py-1 text-[11px] font-medium text-emerald-900 sm:rounded-xl sm:px-3.5 sm:py-1.5 sm:text-sm"
+							: 'inline-flex'} rounded-lg border border-domain-volunteer-border bg-domain-volunteer-subtle px-2.5 py-1 text-[11px] font-medium text-domain-volunteer-text sm:rounded-xl sm:px-3.5 sm:py-1.5 sm:text-sm"
 					>
 						{mission}
 					</span>
 				{/each}
 				{#if item.missions.length > 3}
 					<span
-						class="inline-flex items-center rounded-lg border border-dashed border-emerald-300 bg-emerald-50/70 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 sm:hidden"
+						class="inline-flex items-center rounded-lg border border-dashed border-domain-volunteer-border bg-domain-volunteer-subtle px-2 py-0.5 text-[11px] font-semibold text-domain-volunteer-text sm:hidden"
 					>
 						+{item.missions.length - 3}
 						{isEn ? 'more' : 'ภารกิจ'}
@@ -92,7 +92,7 @@
 			</div>
 			<div class="h-2.5 w-full overflow-hidden rounded-full bg-[#F1F5F9] sm:h-4">
 				<div
-					class="h-full rounded-full bg-[#059669] transition-all duration-500"
+					class="h-full rounded-full bg-domain-volunteer transition-all duration-500"
 					style="width: {item.volunteerPercent}%"
 				></div>
 			</div>
@@ -100,7 +100,7 @@
 
 		<a
 			href={targetHref}
-			class="flex w-full cursor-pointer items-center justify-center rounded-xl bg-[#059669] py-2.5 text-xs font-bold text-white shadow-xs transition-colors hover:bg-[#047857] sm:rounded-2xl sm:py-4 sm:text-base"
+			class="flex w-full cursor-pointer items-center justify-center rounded-xl bg-domain-volunteer-strong py-2.5 text-xs font-bold text-white shadow-xs transition-colors hover:bg-domain-volunteer-text sm:rounded-2xl sm:py-4 sm:text-base"
 		>
 			{isEn ? 'Volunteer' : 'สมัครจิตอาสา'}
 		</a>

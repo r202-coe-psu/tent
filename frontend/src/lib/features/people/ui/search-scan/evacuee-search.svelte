@@ -271,7 +271,7 @@
 								<Button
 									type="button"
 									size="sm"
-									class="h-11 w-full shrink-0 bg-[#10b981] font-semibold text-white hover:bg-[#059669] sm:h-9 sm:w-auto"
+									class="h-11 w-full shrink-0 bg-domain-registration-strong font-semibold text-white hover:bg-domain-registration-text sm:h-9 sm:w-auto"
 									onclick={() => viewEvacueeDetail(evacuee._id)}
 								>
 									{t.btnViewEdit}
