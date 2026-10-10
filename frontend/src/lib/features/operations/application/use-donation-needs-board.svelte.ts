@@ -3,6 +3,7 @@ import { getShelterCode } from '$lib/db/shelter';
 import { authStore } from '$lib/stores/auth.svelte';
 import { isSupplyItem, supplyRepository, useSupplyItems } from '$lib/features/supply';
 import {
+	canonicalizeUnitCode,
 	catalogRepository,
 	formatUnit,
 	itemMasterUnit,
@@ -326,9 +327,19 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 		// unit to announce, so the campaign is refused rather than inventing one (CR-125).
 		const item = await resolveNeedCatalogItem(input.itemId, input.name);
 		if (!item) return;
-		if (input.unit && input.unit.trim() !== item.unit) {
+		// Catalog rows written before CR-125 can carry a label (`กิโลกรัม`, `KG`) where the
+		// code belongs; `campaignInputSchema` accepts only the code, so the raw value came
+		// back as a regex error on save. Resolve both sides through the UOM master.
+		const unit = canonicalizeUnitCode(item.unit, unitsOfMeasure);
+		if (!unit) {
 			toast.error(
-				`หน่วยของ ${input.name} ต้องเป็น ${formatUnit(item.unit, unitsOfMeasure, langState.current)} ตาม Item Master`
+				`หน่วย "${item.unit}" ของ ${input.name} ไม่อยู่ในรายการหน่วยนับ — กรุณาแก้หน่วยที่ Item Master ก่อน`
+			);
+			return;
+		}
+		if (input.unit && canonicalizeUnitCode(input.unit, unitsOfMeasure) !== unit) {
+			toast.error(
+				`หน่วยของ ${input.name} ต้องเป็น ${formatUnit(unit, unitsOfMeasure, langState.current)} ตาม Item Master`
 			);
 			return;
 		}
@@ -339,7 +350,7 @@ export function useDonationNeedsBoard(options?: { onFormCreated?: () => void }) 
 				{
 					item_id: item.itemId,
 					qty_target: input.target,
-					unit: item.unit,
+					unit,
 					status: 'open' as const
 				}
 			],

@@ -9,6 +9,7 @@
 	import { langState } from '$lib/states/i18n.svelte';
 	import { toast } from 'svelte-sonner';
 	import { ulid } from '$lib/db/ulid';
+	import { formatThaiShortDate } from '$lib/utils/date';
 	import { useLedger, useApplyCycleCount } from '../application/queries';
 	import { useStockFormItems } from '../application/use-stock-form-items.svelte';
 	import { useStoragePoints } from '../application/use-storage-points.svelte';
@@ -77,11 +78,7 @@
 		if (!expiry) return 'ไม่ระบุวันหมดอายุ';
 		const date = new Date(expiry);
 		if (Number.isNaN(date.getTime())) return expiry;
-		const label = date.toLocaleDateString('th-TH', {
-			day: '2-digit',
-			month: 'short',
-			year: '2-digit'
-		});
+		const label = formatThaiShortDate(expiry) || expiry;
 		return date.getTime() <= Date.now() ? `หมดอายุแล้ว ${label}` : `หมดอายุ ${label}`;
 	}
 

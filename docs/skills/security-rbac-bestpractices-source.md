@@ -6,7 +6,7 @@
 ข้อมูลที่นำมาใช้สังเคราะห์เป็นกฎและคำแนะนำในไฟล์ `SKILL.md` มาจากการสืบค้นเอกสารและโค้ดของระบบ ดังนี้ครับ:
 
 ### 1. Role-Based Access Control (RBAC)
-* **แหล่งที่มา**: เอกสาร `docs/prd/role-permission-matrix.md`, โค้ด `frontend/src/lib/auth/roles.ts` และเอกสารการแก้โครงสร้าง `docs/changes/CR-002-registration-staff-affiliation-tags.md`
+* **แหล่งที่มา**: เอกสาร `docs/prd/role-permission-matrix.md`, โค้ด `frontend/src/lib/auth/roles.ts` และเอกสารการแก้โครงสร้าง `docs/changes/01-core/CR-002-registration-staff-affiliation-tags.md`
 * **ข้อมูลที่พบ**: 
   - ระบบลดความซับซ้อนของ Role จาก 12 เหลือ 5 บทบาทหลัก (System Admin + 4 Shelter Staffs)
   - Role จะถูกเก็บในรูปแบบของ Array คู่กันคือ `["shelter:{code}", "capability"]` 
@@ -19,7 +19,7 @@
   - การบันทึกหรือดึงข้อมูลต้องบังคับกรองด้วย `shelterCode` ตลอด ห้ามเชื่อใจ Payload ที่ส่งมาจาก Client เพื่อป้องกัน Data Leak ระหว่างศูนย์
 
 ### 3. Data Privacy & Redaction
-* **แหล่งที่มา**: `docs/task-breakdown/10-eoc.md`, `docs/task-breakdown/_index.md` และ **`docs/changes/CR-005-public-portal-landing-public-metrics.md`**
+* **แหล่งที่มา**: `docs/task-breakdown/10-eoc.md`, `docs/task-breakdown/_index.md` และ **`docs/changes/12-public/CR-005-public-portal-landing-public-metrics.md`**
 * **ข้อมูลที่พบ**: 
   - ข้อมูลส่วนบุคคล (PII) เช่น เลขบัตรประชาชน (National ID), ประวัติการแพทย์ (Medical), และกลุ่มเปราะบาง (Vulnerability) ถือเป็นความลับสูงสุด
   - มีกฎระบุว่า "Public/FAM/API/EOC serializers มี no-medical/no-national-ID tests" แปลว่าระบบภายนอกห้ามเห็นข้อมูลนี้เด็ดขาด ต้องทำ Redaction เสมอ

@@ -11,6 +11,7 @@
 	import { toast } from 'svelte-sonner';
 	import { useSupplyItems } from '$lib/features/supply';
 	import {
+		canonicalizeUnitCode,
 		formatUnit,
 		mergeCatalogGenerations,
 		useItemMasters,
@@ -137,7 +138,10 @@
 	 * concern (`item_master.conversions[]`), not something a campaign redefines.
 	 */
 	const catalogUnit = $derived(selectedItem?.unit?.trim() ?? '');
-	const finalUnit = $derived(catalogUnit);
+	// Catalog rows written before CR-125 can still carry a label (`กิโลกรัม`, `KG`)
+	// instead of a code; `campaignInputSchema` only accepts the code, so resolve it
+	// through the UOM master here rather than failing the save with a regex error.
+	const finalUnit = $derived(canonicalizeUnitCode(catalogUnit, unitsOfMeasure) ?? '');
 	const categoryLabel = $derived(
 		CATEGORY_OPTIONS.find((o) => o.value === category)?.label ?? category
 	);
@@ -156,8 +160,14 @@
 		// The unit is the catalog's (see `catalogUnit`), so there is nothing to pick —
 		// but an item_master row with no `base_unit` would silently save `piece`, which
 		// the ledger would then disagree with. Refuse instead.
-		if (!finalUnit) {
+		if (!catalogUnit) {
 			toast.error('รายการนี้ยังไม่มีหน่วยฐานในแคตตาล็อก — กรุณาตั้งหน่วยที่ Item Master ก่อน');
+			return;
+		}
+		if (!finalUnit) {
+			toast.error(
+				`หน่วย "${catalogUnit}" ของรายการนี้ไม่อยู่ในรายการหน่วยนับ — กรุณาแก้หน่วยที่ Item Master ก่อน`
+			);
 			return;
 		}
 		if (!description.trim()) {

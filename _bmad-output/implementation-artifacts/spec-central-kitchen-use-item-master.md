@@ -5,7 +5,7 @@ created: '2026-09-16T00:00:00+07:00'
 status: 'draft'
 review_loop_iteration: 0
 context:
-  - '{project-root}/docs/changes/CR-121-spec-ticket.md'
+  - '{project-root}/docs/changes/03-C-supply/CR-121-spec-ticket.md'
   - '{project-root}/docs/data/schema.md'
   - '{project-root}/docs/task-breakdown/05-D-kitchen.md'
 ---
@@ -77,7 +77,7 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `docs/data/schema.md`, `docs/changes/CR-121-spec-ticket.md` -- reconcile kitchen slice: เพิ่ม `meal_plan_id`, อนุญาต `allocated_qty:'0'` เฉพาะก่อน approve, กำหนด kitchen terminal transition, dispatch idempotency fields, gas drawdown และตัด contract `kitchen_requisition` เก่า
+- [ ] `docs/data/schema.md`, `docs/changes/03-C-supply/CR-121-spec-ticket.md` -- reconcile kitchen slice: เพิ่ม `meal_plan_id`, อนุญาต `allocated_qty:'0'` เฉพาะก่อน approve, กำหนด kitchen terminal transition, dispatch idempotency fields, gas drawdown และตัด contract `kitchen_requisition` เก่า
 - [ ] `docs/data/schema.md`, `frontend/src/lib/features/catalog/domain/catalog.ts`, `frontend/src/routes/api/tickets/` -- กำหนด `ItemMaster.conversions`, deterministic operation record, ticket-number allocation และ HTTP error contract ก่อน implement
 - [ ] `frontend/src/lib/features/tickets/domain/ticket.ts`, `frontend/src/lib/features/tickets/data/`, `frontend/src/lib/features/tickets/application/queries.ts`, `frontend/src/routes/api/tickets/` -- implement create/idempotent lookup, allocate/edit/cancel, approve, dispatch/recover, receive และ list/get พร้อม server-side authorization
 - [ ] `frontend/src/routes/(protected)/back-office/tickets/kitchen/+page.svelte`, `frontend/src/routes/(protected)/back-office/tickets/[id]/+page.svelte`, `frontend/src/lib/components/backoffice-navbar/static.ts` -- สร้าง warehouse queue/detail สำหรับจัดสรร อนุมัติ dispatch และติดตามสถานะตาม role

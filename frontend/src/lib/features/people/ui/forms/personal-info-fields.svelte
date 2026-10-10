@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Checkbox } from '$lib/components/ui/checkbox/index.js';
@@ -57,7 +58,11 @@
 		phoneOptional = false,
 		phoneHelperText = '',
 		idPrefix = '',
-		errors
+		errors,
+		checkingCardNumber = false,
+		onCardNumberBlur,
+		checkingPhone = false,
+		onPhoneBlur
 	}: {
 		first_name?: string;
 		last_name?: string;
@@ -78,6 +83,10 @@
 		phoneHelperText?: string;
 		idPrefix?: string;
 		errors?: Record<string, string | undefined>;
+		checkingCardNumber?: boolean;
+		onCardNumberBlur?: (e: FocusEvent) => void;
+		checkingPhone?: boolean;
+		onPhoneBlur?: (e: FocusEvent) => void;
 	} = $props();
 
 	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
@@ -338,9 +347,21 @@
 		</div>
 
 		<div class="space-y-1.5">
-			<Label for={fid('card-number')} class="text-xs font-semibold text-foreground"
-				>{t.cardNumberLabel}</Label
-			>
+			<div class="flex items-center justify-between">
+				<Label for={fid('card-number')} class="text-xs font-semibold text-foreground">
+					{t.cardNumberLabel}
+				</Label>
+				{#if checkingCardNumber}
+					<span
+						class="inline-flex animate-pulse items-center gap-1 text-2xs font-medium text-primary"
+						role="status"
+						aria-live="polite"
+					>
+						<Loader2 class="size-3 animate-spin" />
+						<span>กำลังตรวจสอบ...</span>
+					</span>
+				{/if}
+			</div>
 			{#if isAnonymousCard}
 				<p
 					id={fid('card-number')}
@@ -349,26 +370,35 @@
 					{t.cardNumberAnonymousHint}
 				</p>
 			{:else}
-				<Input
-					id={fid('card-number')}
-					value={person_id.number ?? ''}
-					oninput={onCardNumberInput}
-					{disabled}
-					maxlength={cardNumberMax}
-					inputmode={activeCardType === 'national_id' ? 'numeric' : 'text'}
-					placeholder={activeCardType === 'national_id'
-						? t.cardNumberPlaceholderNational
-						: t.cardNumberPlaceholderOther}
-					aria-invalid={!!(errors?.cardNumber || errors?.number || errors?.person_id)}
-					aria-describedby={errors?.cardNumber || errors?.number || errors?.person_id
-						? fid('card-number-error')
-						: undefined}
-					class="h-11 min-h-11 sm:h-9 sm:min-h-9 {errors?.cardNumber ||
-					errors?.number ||
-					errors?.person_id
-						? errClass
-						: ''}"
-				/>
+				<div class="relative">
+					<Input
+						id={fid('card-number')}
+						value={person_id.number ?? ''}
+						oninput={onCardNumberInput}
+						onblur={onCardNumberBlur}
+						{disabled}
+						maxlength={cardNumberMax}
+						inputmode={activeCardType === 'national_id' ? 'numeric' : 'text'}
+						placeholder={activeCardType === 'national_id'
+							? t.cardNumberPlaceholderNational
+							: t.cardNumberPlaceholderOther}
+						aria-invalid={!!(errors?.cardNumber || errors?.number || errors?.person_id)}
+						aria-describedby={errors?.cardNumber || errors?.number || errors?.person_id
+							? fid('card-number-error')
+							: undefined}
+						class="h-11 min-h-11 sm:h-9 sm:min-h-9 {checkingCardNumber
+							? 'pr-9'
+							: ''} {errors?.cardNumber || errors?.number || errors?.person_id ? errClass : ''}"
+					/>
+					{#if checkingCardNumber}
+						<div
+							class="pointer-events-none absolute inset-y-0 right-2.5 flex items-center"
+							aria-hidden="true"
+						>
+							<Loader2 class="size-4 animate-spin text-primary" />
+						</div>
+					{/if}
+				</div>
 			{/if}
 			{#if errors?.cardNumber || errors?.number || errors?.person_id}
 				<p id={fid('card-number-error')} class="text-2xs text-destructive">
@@ -588,18 +618,31 @@
 	<!-- Phone -->
 	<div class="space-y-2">
 		<div class="space-y-1.5">
-			<Label for={fid('phone')} class="text-xs font-semibold text-foreground">
-				{t.phoneFieldLabel}
-				{#if phoneOptional}
-					<span class="text-2xs font-normal text-muted-foreground">(ทางเลือก)</span>
-				{:else if !no_phone || hideNoPhone}
-					<span class="text-destructive">*</span>
+			<div class="flex items-center justify-between">
+				<Label for={fid('phone')} class="text-xs font-semibold text-foreground">
+					{t.phoneFieldLabel}
+					{#if phoneOptional}
+						<span class="text-2xs font-normal text-muted-foreground">(ทางเลือก)</span>
+					{:else if !no_phone || hideNoPhone}
+						<span class="text-destructive">*</span>
+					{/if}
+				</Label>
+				{#if checkingPhone}
+					<span
+						class="inline-flex animate-pulse items-center gap-1 text-2xs font-medium text-primary"
+						role="status"
+						aria-live="polite"
+					>
+						<Loader2 class="size-3 animate-spin" />
+						<span>กำลังตรวจสอบ...</span>
+					</span>
 				{/if}
-			</Label>
+			</div>
 			<Input
 				id={fid('phone')}
 				value={phone}
 				oninput={onPhoneInput}
+				onblur={onPhoneBlur}
 				disabled={disabled || (!hideNoPhone && no_phone)}
 				inputmode="tel"
 				maxlength={15}

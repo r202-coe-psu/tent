@@ -41,7 +41,7 @@ note: decision-synced 2026-06-15 — task details and DoD maintained directly in
 
 **Roles:** `SA ✓ · SM scope · VOL scope` — ดู [role-permission-matrix §3](../prd/role-permission-matrix.md#3-action-matrix--r2)
 
-**Description:** สร้าง "ครัวเรือน" เป็น **required grouping** เหนือ person record ของ onsite registration (FR-4..6) — ทุก person ต้องเลือกครัวเรือนเดิมหรือสร้างครัวเรือนใหม่ตั้งแต่ 1 คนขึ้นไป และกำหนด/เปลี่ยนหัวหน้าครัวเรือน (head) ได้ ผู้ที่มาเพียงคนเดียวต้องสร้างครัวเรือน 1 คนโดยมีตนเองเป็น head การจัดการ Household อยู่ใน **Stage 3 (จัดการตั้งค่าหัวหน้าครอบครัว)** แยกจากฟอร์มข้อมูลบุคคลใน Stage 2 (ดู [CR-009](../changes/CR-009-register-household-flow.md), [CR-076](../changes/CR-076-onsite-registration-household-required.md))
+**Description:** สร้าง "ครัวเรือน" เป็น **required grouping** เหนือ person record ของ onsite registration (FR-4..6) — ทุก person ต้องเลือกครัวเรือนเดิมหรือสร้างครัวเรือนใหม่ตั้งแต่ 1 คนขึ้นไป และกำหนด/เปลี่ยนหัวหน้าครัวเรือน (head) ได้ ผู้ที่มาเพียงคนเดียวต้องสร้างครัวเรือน 1 คนโดยมีตนเองเป็น head การจัดการ Household อยู่ใน **Stage 3 (จัดการตั้งค่าหัวหน้าครอบครัว)** แยกจากฟอร์มข้อมูลบุคคลใน Stage 2 (ดู [CR-009](../changes/02-people/CR-009-register-household-flow.md), [CR-076](../changes/02-people/CR-076-onsite-registration-household-required.md))
 
 รองรับ **3 creation path**:
 
@@ -231,7 +231,7 @@ pre-registered  ──(check-in)──→  arriving  ──(confirm)──→  c
 self-lookup ship แล้ว 2026-08-20 (ดู CR-070 Implementation notes). เหลือ multi-member
 household (CR-076) + D-PRE-REG-AGE (FR-77)
 **Owner:** Team B (พีค, โฮป, ปิ๊ก); Lead รีวิว public BFF
-**Depends:** T-48, T-50, T-51 (scan มีแล้ว); [CR-070](../changes/CR-070-public-booking-gate-confirm.md)
+**Depends:** T-48, T-50, T-51 (scan มีแล้ว); [CR-070](../changes/12-public/CR-070-public-booking-gate-confirm.md)
 **Program:** P4
 
 **Description:** เปิดช่องจองผ่านเว็บ — สร้าง `evacuee` (+ household) สถานะ `pre_registered`; occupancy **นับทันที** (D-BOOK-OCC=C); ออก QR ตาม T-50; ประชาชนตามสถานะด้วย QR หรือ `official_code` + เบอร์โทร (D-BOOK-TOKEN=A); ที่ประตู scan ตาม T-51 แล้ว check-in → `active` (ไม่ +1 occupancy ซ้ำ). ไม่มี TTL; ปล่อยที่นั่งเมื่อ SA/SM/RS ยกเลิกชัดเจน (D-HOLD-CANCEL). รายการ staff แสดงอายุการจองวัน/ชม./นาที ตอนโหลด/รีเฟรช (D-PRE-REG-AGE). **ไม่สร้าง doc type booking ใหม่.** ปุ่ม public «ลงทะเบียนผู้ประสบภัย» ที่ disabled อยู่เป็นจุดเข้า. `registered_via=web`.
@@ -257,7 +257,7 @@ household (CR-076) + D-PRE-REG-AGE (FR-77)
 
 **Status:** ⬜ ready — CR-071 slice A **approved** 2026-08-13 (T-72 stay=A + permission RS+SA+SM); ยังรอ T-48
 **Owner:** Team B
-**Depends:** T-48; แนะนำหลัง T-71 เพื่อล็อกช่องทาง; [CR-071](../changes/CR-071-people-import-inbound.md)
+**Depends:** T-48; แนะนำหลัง T-71 เพื่อล็อกช่องทาง; [CR-071](../changes/00-baseline/CR-071-people-import-inbound.md)
 **Program:** P5 slice A
 
 **Description:** Staff อัปโหลด xlsx และ csv → preview รายแถว → commit สร้าง evacuee; `registered_via=import`. คอลัมน์ขั้นต่ำ = T-48 required + `shelter_code`. ห้ามเพิ่ม field schema ใหม่. ทุกแถวสำเร็จได้ `current_stay.status=pre_registered` เสมอ (T-72 initial stay=**A**) — นับ occupancy ตาม D-BOOK-OCC=C; เป็น `active` ผ่านประตู check-in หรือ staff เปลี่ยนสถานะเท่านั้น; **ห้าม** คอลัมน์เลือกสถานะต่อแถวในไฟล์.
@@ -282,7 +282,7 @@ household (CR-076) + D-PRE-REG-AGE (FR-77)
 
 **Status:** ⬜ blocked — D-INBOUND-PLANE + partner payload spec — **Wave 4 รอบ CR ถัดไป**
 **Owner:** Team B + Lead pair
-**Depends:** T-71 (ช่องทางคน); partner SPEC; [CR-071](../changes/CR-071-people-import-inbound.md) slice B
+**Depends:** T-71 (ช่องทางคน); partner SPEC; [CR-071](../changes/00-baseline/CR-071-people-import-inbound.md) slice B
 **Program:** P5 slice B
 
 **Description:** รับรายชื่อจากหน่วยงานผ่าน API. **ห้ามเดา JSON.** เมื่อ SPEC เข้า: amend CR-071 แล้วค่อยออกแบบ path (external X-API-Key vs BFF SA).
@@ -299,7 +299,7 @@ household (CR-076) + D-PRE-REG-AGE (FR-77)
 
 **Status:** ⬜ blocked — D-TRIAGE-RULES + D-TRIAGE-FIELD — **Wave 4 รอบ CR ถัดไป**
 **Owner:** Team B
-**Depends:** T-49; [CR-072](../changes/CR-072-triage-green-yellow-red.md)
+**Depends:** T-49; [CR-072](../changes/00-baseline/CR-072-triage-green-yellow-red.md)
 **Program:** P6
 
 **Description:** คัดกรอง 3 สี. ปัจจุบัน `track` = `normal`|`fast_track`. **ห้าม map มั่ว** และห้ามเดากฎการแพทย์.

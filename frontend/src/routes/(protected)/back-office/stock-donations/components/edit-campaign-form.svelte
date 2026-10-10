@@ -14,7 +14,12 @@
 	import { parseCampaignNotes, type NeedItem } from '$lib/features/operations';
 	import { persistQty, qtyGt, roundQty } from '$lib/utils/qty';
 	import { useSupplyItems } from '$lib/features/supply';
-	import { itemMasterUnit, useItemMasters } from '$lib/features/catalog';
+	import {
+		canonicalizeUnitCode,
+		itemMasterUnit,
+		useItemMasters,
+		useUnitsOfMeasure
+	} from '$lib/features/catalog';
 	import { getShelterCode } from '$lib/db/shelter';
 
 	interface Props {
@@ -131,7 +136,11 @@
 	// While the catalog is still loading — or when the need points at an id no catalog
 	// row claims — keep the stored unit rather than blanking the field and failing the
 	// submit guard below on a save the user did not mean to change.
-	const finalUnit = $derived(catalogUnit || (editedNeed?.unit ?? ''));
+	const rawUnit = $derived(catalogUnit || (editedNeed?.unit ?? ''));
+	// Legacy labels (`กิโลกรัม`, `KG`) fail `campaignInputSchema`'s code regex; resolve
+	// them through the UOM master so saving the form is what corrects the stored unit.
+	const unitsOfMeasureQuery = useUnitsOfMeasure();
+	const finalUnit = $derived(canonicalizeUnitCode(rawUnit, unitsOfMeasureQuery.data ?? []) ?? '');
 	const urgencyLabel = $derived(URGENCY_OPTIONS.find((o) => o.value === urgency)?.label ?? urgency);
 
 	function handleSubmit(e: Event) {
@@ -140,8 +149,14 @@
 			toast.error('กรุณาระบุชื่อประกาศ');
 			return;
 		}
-		if (!finalUnit) {
+		if (!rawUnit) {
 			toast.error('กรุณาระบุหน่วยนับ');
+			return;
+		}
+		if (!finalUnit) {
+			toast.error(
+				`หน่วย "${rawUnit}" ของรายการนี้ไม่อยู่ในรายการหน่วยนับ — กรุณาแก้หน่วยที่ Item Master ก่อน`
+			);
 			return;
 		}
 		if (!targetQty.trim() || !qtyGt(targetQty, 0)) {
@@ -245,7 +260,7 @@
 					class="flex h-10 items-center rounded-xl border border-border/60 bg-muted/40 px-3 text-xs font-medium text-muted-foreground"
 					title="หน่วยฐานจากแคตตาล็อก — แก้ที่นี่ไม่ได้ เพราะยอดคงคลังนับด้วยหน่วยนี้"
 				>
-					{finalUnit || '—'}
+					{finalUnit || rawUnit || '—'}
 				</div>
 				<p class="mt-1.5 text-3xs text-muted-foreground">
 					มาจากหน่วยฐานของรายการในแคตตาล็อก — ต้องแก้ที่แคตตาล็อกถ้าไม่ถูกต้อง

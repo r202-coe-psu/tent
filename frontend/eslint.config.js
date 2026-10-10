@@ -64,6 +64,27 @@ export default ts.config(
 		rules: { 'no-restricted-imports': 'off' }
 	},
 	{
+		// Whole-package lucide imports pull every icon module into the graph (slow
+		// dev/test/build). Deep-import per icon instead. Separate block + the
+		// @typescript-eslint rule so it also applies inside `src/lib/features/**`
+		// (where the core `no-restricted-imports` barrel rule is off) and so the
+		// two rules never override each other.
+		files: ['src/**'],
+		rules: {
+			'@typescript-eslint/no-restricted-imports': [
+				'error',
+				{
+					paths: ['@lucide/svelte', '@lucide/svelte/icons'].map((name) => ({
+						name,
+						allowTypeImports: true,
+						message:
+							"Import icons one-by-one: `import Foo from '@lucide/svelte/icons/<kebab-name>';` (whole-package imports bloat the module graph)."
+					}))
+				}
+			]
+		}
+	},
+	{
 		files: ['**/*.svelte', '**/*.svelte.ts', '**/*.svelte.js'],
 		languageOptions: {
 			parserOptions: {

@@ -5,12 +5,13 @@
  * registry list and the public BFF projection, then tears down with
  * `teardownShelter` (zero-leak).
  *
- * Tags: `@system-admin` + `@critical` + `@release`. Skips when `IS_REMOTE`.
+ * Tags: `@system-admin` + `@critical` + `@release`. Runs locally or on a remote
+ * target with `ALLOW_REMOTE_WRITES=true` (staging); read-only remote otherwise.
  * Local stack: `docker compose up -d` + `pnpm seed:master` / `pnpm db:sync`.
  */
 import { test, expect } from '@playwright/test';
 import { bootstrapAdminSession, couchReq } from './helpers/couch';
-import { IS_REMOTE, LOCAL_RUN_ID as RUN_ID, READ_ONLY_REASON } from './helpers/e2e-env';
+import { CAN_WRITE, LOCAL_RUN_ID as RUN_ID, READ_ONLY_REASON } from './helpers/e2e-env';
 import { injectSession, routeBrowserCouchThroughApp } from './helpers/login';
 import {
 	publicShelter,
@@ -41,7 +42,7 @@ test.describe(
 	{ tag: ['@system-admin', '@critical', '@release'] },
 	() => {
 		test.beforeEach(() => {
-			test.skip(IS_REMOTE, READ_ONLY_REASON);
+			test.skip(!CAN_WRITE, READ_ONLY_REASON);
 		});
 
 		test('SA creates a shelter via system-management', async ({ page }) => {
