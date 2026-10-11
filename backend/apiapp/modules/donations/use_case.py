@@ -731,24 +731,38 @@ class DonationsUseCase:
         the SvelteKit BFF Couch path instead.
         """
         token_hash = sha256_hex(tracking_token)
-        buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == token_hash)
-        if buffer is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={"success": False, "error": "Donation record not found"},
-            )
 
-        if buffer.synced_to_couch:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail={
-                    "success": False,
-                    "error": "SYNCED_TO_COUCH",
-                    "message": "Donation already in CouchDB; cancel via shelter record",
-                },
-            )
-
-        if buffer.status not in DONOR_EDITABLE_STATUSES:
+        # Flip the status atomically: the filter re-checks everything that makes the
+        # booking cancellable, so of two concurrent cancels exactly one matches and gets
+        # the pre-image back. Releasing quota / the slot place is gated on that match —
+        # a read→check→save here let both pass the check and release the same place
+        # twice, which handed another donor's place (or quota) to a third booking.
+        collection = DonationBuffer.get_pymongo_collection()
+        before = await collection.find_one_and_update(
+            {
+                "tracking_token_hash": token_hash,
+                "synced_to_couch": False,
+                "status": {"$in": list(DONOR_EDITABLE_STATUSES)},
+            },
+            {"$set": {"status": "cancelled"}},
+        )
+        if before is None:
+            # Nothing matched — re-read only to say why, so the error contract is unchanged.
+            buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == token_hash)
+            if buffer is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={"success": False, "error": "Donation record not found"},
+                )
+            if buffer.synced_to_couch:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "success": False,
+                        "error": "SYNCED_TO_COUCH",
+                        "message": "Donation already in CouchDB; cancel via shelter record",
+                    },
+                )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
@@ -757,28 +771,27 @@ class DonationsUseCase:
                 },
             )
 
-        buffer.status = "cancelled"
-        await buffer.save()
-
         # Release quota for whatever was actually reserved per item (CR-045) — no-op
         # (underflow-guarded) for items that bypassed the counter (no "reserved_qty").
-        if buffer.campaign_id:
+        campaign_id = before.get("campaign_id")
+        if campaign_id:
             release_now = datetime.now(UTC)
-            for item in buffer.items_declared:
+            for item in before.get("items_declared") or []:
                 reserved_qty = item.get("reserved_qty")
                 item_id = item.get("item_id")
                 if reserved_qty is None or not item_id:
                     continue
                 await release_quota(
-                    shelter_code=buffer.shelter_code,
-                    campaign_id=buffer.campaign_id,
+                    shelter_code=before["shelter_code"],
+                    campaign_id=campaign_id,
                     item_id=item_id,
                     qty=Decimal(reserved_qty),
                     now=release_now,
                 )
 
-        if buffer.slot_counter_id:
-            await release_slot(counter_id=buffer.slot_counter_id, now=datetime.now(UTC))
+        slot_counter = before.get("slot_counter_id")
+        if slot_counter:
+            await release_slot(counter_id=slot_counter, now=datetime.now(UTC))
 
         # Keep the tracking stub in step so GET reflects the cancellation immediately,
         # instead of waiting for outbound CDC sync to catch up.

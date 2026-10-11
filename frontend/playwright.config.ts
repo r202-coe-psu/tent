@@ -1,6 +1,11 @@
 /// <reference types="node" />
 import { defineConfig, devices } from '@playwright/test';
 
+// Local preview server: BFF rate limiters off unless the caller opts in with RATE_LIMIT=true.
+// Set on process.env (not just the server env below) so the test workers inherit it and the
+// donation pacer sees the same value as the server.
+process.env.RATE_LIMIT ??= 'false';
+
 const APP_BASE_URL = process.env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:4173';
 const APP_PORT = (() => {
 	try {
@@ -52,6 +57,11 @@ export default defineConfig({
 			env: {
 				COUCHDB_ADMIN_URL: process.env.COUCHDB_ADMIN_URL ?? 'http://admin:password@localhost:5984',
 				SECRET_RECAPTCHA_KEY: process.env.SECRET_RECAPTCHA_KEY ?? 'e2e-recaptcha-secret',
+				// BFF rate limiters (`$env/dynamic/private` RATE_LIMIT) are off for e2e: every suite
+				// shares 127.0.0.1 and `vite preview` is not `dev`, so the loopback exemption never
+				// applies. Export RATE_LIMIT=true to run against the real limits (the donation
+				// pacer in e2e/helpers/donation-fullstack.ts then paces itself automatically).
+				RATE_LIMIT: process.env.RATE_LIMIT ?? 'false',
 				// Public shelter bookings write as the limited `public_writer` user (production mode
 				// has no admin fallback) — pre-register W5 needs it, see .env.example.
 				...(process.env.COUCHDB_PUBLIC_WRITER_URL

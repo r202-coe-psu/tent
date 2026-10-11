@@ -9,6 +9,8 @@
 	import Wand from '@lucide/svelte/icons/wand-sparkles';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
+	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
+	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import { toast } from 'svelte-sonner';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
@@ -83,6 +85,11 @@
 	const slots = $derived(slotsOnDate(scheduleQuery.data ?? [], mode, selectedDate));
 	const donations = $derived(donationsQuery.data ?? []);
 	const isPickup = $derived(mode === 'pickup');
+	// Everything that depends on how many places are already booked (the capacity floor,
+	// the delete guard, the full/open badge) is only meaningful once the booking list has
+	// actually loaded. `donations` falls back to `[]`, so without this a failed or pending
+	// read looks exactly like "nobody has booked" and lets staff delete a booked window.
+	const bookingsReady = $derived(donationsQuery.isSuccess);
 
 	/** Blank = no ceiling, which only the drop-off counter may have. */
 	function parsedCapacity(): number | null {
@@ -98,12 +105,15 @@
 		return slotBookedCount(donations, slotMode(slot), slot.date, slot.from);
 	}
 
-	async function persist(slot: DonationSlot, message: string) {
+	/** Resolves `true` only when the slot was saved, so callers can keep their form on failure. */
+	async function persist(slot: DonationSlot, message: string): Promise<boolean> {
 		try {
 			await saveSlot.mutateAsync(slot);
 			toast.success(message);
+			return true;
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'บันทึกช่วงเวลาไม่สำเร็จ');
+			return false;
 		}
 	}
 
@@ -124,8 +134,7 @@
 				},
 				ctx
 			);
-			await persist(slot, `เพิ่มช่วงเวลา ${newFrom} - ${newTo} แล้ว`);
-			newNote = '';
+			if (await persist(slot, `เพิ่มช่วงเวลา ${newFrom} - ${newTo} แล้ว`)) newNote = '';
 		} catch (err) {
 			// Zod carries the reason on each issue (เวลาสิ้นสุดก่อนเวลาเริ่ม / ความจุต้องมากกว่า 0)
 			toast.error(errorMessage(err));
@@ -144,14 +153,28 @@
 			toast.error('กรอกจำนวนเที่ยวรถก่อน แล้วค่อยกดเปิดทั้งวัน');
 			return;
 		}
-		for (const window of missing) {
-			await persist(
+		// Save the missing windows together and report once — one toast per window would
+		// stack five of them on a single click.
+		let docs: DonationSlot[];
+		try {
+			docs = missing.map((window) =>
 				createDonationSlot(
 					{ mode, date: selectedDate, from: window.from, to: window.to, capacity },
 					ctx
-				),
-				`เพิ่มช่วงเวลา ${window.from} - ${window.to} แล้ว`
+				)
 			);
+		} catch (err) {
+			toast.error(errorMessage(err));
+			return;
+		}
+		const results = await Promise.allSettled(docs.map((doc) => saveSlot.mutateAsync(doc)));
+		const failed = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+		const saved = results.length - failed.length;
+		if (failed.length === 0) {
+			toast.success(`เพิ่มช่วงเวลามาตรฐาน ${saved} ช่วงแล้ว`);
+		} else {
+			const reason = errorMessage(failed[0].reason);
+			toast.error(`บันทึกสำเร็จ ${saved} ช่วง ล้มเหลว ${failed.length} ช่วง — ${reason}`);
 		}
 	}
 
@@ -166,6 +189,10 @@
 	async function saveEdit() {
 		if (!editing) return;
 		const slot = editing;
+		if (!bookingsReady) {
+			toast.error('ยังโหลดข้อมูลการจองไม่สำเร็จ จึงตรวจเพดานคิวไม่ได้ — ลองโหลดใหม่ก่อนบันทึก');
+			return;
+		}
 		const capacity = parseCapacityInput(editCapacity);
 		if (capacity === null && isPickup) {
 			toast.error('คิวรถต้องกำหนดจำนวนเที่ยว');
@@ -184,9 +211,11 @@
 			toast.error(errorMessage(err));
 			return;
 		}
-		await persist(updated, `แก้ไขช่วง ${slot.from} - ${updated.to} แล้ว`);
-		editOpen = false;
-		editing = null;
+		// Keep the dialog (and what staff typed) open when the write failed.
+		if (await persist(updated, `แก้ไขช่วง ${slot.from} - ${updated.to} แล้ว`)) {
+			editOpen = false;
+			editing = null;
+		}
 	}
 
 	function openDelete(slot: DonationSlot) {
@@ -197,6 +226,12 @@
 	async function confirmDelete() {
 		if (!deleting) return;
 		const slot = deleting;
+		if (!bookingsReady || bookedOn(slot) > 0) {
+			toast.error('ลบไม่ได้ — ตรวจไม่พบว่าช่วงนี้ไม่มีผู้จอง');
+			deleteOpen = false;
+			deleting = null;
+			return;
+		}
 		try {
 			await deleteSlot.mutateAsync(slot);
 			toast.success(`ลบช่วง ${slot.from} - ${slot.to} แล้ว`);
@@ -242,7 +277,7 @@
 			<Button
 				variant={isPickup ? 'outline' : 'default'}
 				onclick={() => (mode = 'dropoff')}
-				class="h-11 sm:h-10"
+				class="h-11"
 			>
 				<PackageOpen class="mr-1.5 h-4 w-4" />
 				ผู้บริจาคมาส่งเอง
@@ -250,7 +285,7 @@
 			<Button
 				variant={isPickup ? 'default' : 'outline'}
 				onclick={() => (mode = 'pickup')}
-				class="h-11 sm:h-10"
+				class="h-11"
 			>
 				<Truck class="mr-1.5 h-4 w-4" />
 				รถศูนย์ไปรับ
@@ -273,7 +308,7 @@
 					id="slot-date"
 					ariaLabel="วันที่ของช่วงเวลา"
 					bind:value={selectedDate}
-					class="h-11 sm:h-10"
+					class="h-11"
 				/>
 			</div>
 
@@ -285,18 +320,12 @@
 						type="time"
 						step="900"
 						bind:value={newFrom}
-						class="h-11 tabular-nums sm:h-10"
+						class="h-11 tabular-nums"
 					/>
 				</div>
 				<div class="space-y-1.5">
 					<Label for="slot-to" class="text-sm font-semibold text-slate-700">ถึง</Label>
-					<Input
-						id="slot-to"
-						type="time"
-						step="900"
-						bind:value={newTo}
-						class="h-11 tabular-nums sm:h-10"
-					/>
+					<Input id="slot-to" type="time" step="900" bind:value={newTo} class="h-11 tabular-nums" />
 				</div>
 			</div>
 
@@ -314,7 +343,7 @@
 					min="1"
 					placeholder={isPickup ? 'เช่น 2' : 'เว้นว่าง = ไม่จำกัด'}
 					bind:value={newCapacity}
-					class="h-11 tabular-nums sm:h-10"
+					class="h-11 tabular-nums"
 				/>
 				<p class="text-xs text-slate-500">
 					{#if isPickup}
@@ -332,7 +361,7 @@
 					type="text"
 					placeholder="เช่น เข้าประตู 2 / จอดรถลานหลัง"
 					bind:value={newNote}
-					class="h-11 sm:h-10"
+					class="h-11"
 				/>
 			</div>
 
@@ -340,7 +369,7 @@
 			     full-width buttons side by side (Button is shrink-0, so the second one used to
 			     spill out under the list card and could not be clicked). -->
 			<div class="flex flex-col gap-2">
-				<Button onclick={addSlot} disabled={saveSlot.isPending} class="h-11 w-full sm:h-10">
+				<Button onclick={addSlot} disabled={saveSlot.isPending} class="h-11 w-full">
 					<Plus class="mr-1.5 h-4 w-4" />
 					เพิ่มช่วงเวลา
 				</Button>
@@ -348,7 +377,7 @@
 					variant="outline"
 					onclick={addStandardDay}
 					disabled={saveSlot.isPending}
-					class="h-11 w-full sm:h-10"
+					class="h-11 w-full"
 				>
 					<Wand class="mr-1.5 h-4 w-4" />
 					{isPickup ? 'เปิดรอบรถทั้งวัน' : 'ดึงช่วงมาตรฐานมาแก้'}
@@ -365,8 +394,58 @@
 				<span class="text-sm text-slate-500 tabular-nums">{slots.length} ช่วง</span>
 			</div>
 
+			{#if donationsQuery.isError}
+				<div
+					role="alert"
+					class="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between"
+				>
+					<div class="flex items-start gap-2.5">
+						<TriangleAlert class="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+						<div class="space-y-0.5">
+							<p class="text-sm font-semibold text-amber-900">โหลดข้อมูลการจองไม่สำเร็จ</p>
+							<p class="text-xs text-amber-900">
+								ยังไม่รู้ว่าแต่ละช่วงมีผู้จองกี่คิว จึงปิดปุ่มลบและการแก้เพดานคิวไว้ก่อน
+							</p>
+						</div>
+					</div>
+					<Button
+						variant="outline"
+						onclick={() => donationsQuery.refetch()}
+						disabled={donationsQuery.isFetching}
+						class="h-11 shrink-0"
+					>
+						<RefreshCw class="mr-1.5 h-4 w-4" />
+						ลองใหม่
+					</Button>
+				</div>
+			{/if}
+
 			{#if scheduleQuery.isPending}
 				<p class="py-8 text-center text-sm text-slate-500">กำลังโหลดช่วงเวลา...</p>
+			{:else if scheduleQuery.isError && scheduleQuery.data === undefined}
+				<div
+					role="alert"
+					class="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 p-4 sm:flex-row sm:items-center sm:justify-between"
+				>
+					<div class="flex items-start gap-2.5">
+						<TriangleAlert class="mt-0.5 h-4 w-4 shrink-0 text-red-700" />
+						<div class="space-y-0.5">
+							<p class="text-sm font-semibold text-red-900">โหลดช่วงเวลาไม่สำเร็จ</p>
+							<p class="text-xs text-red-900">
+								{errorMessage(scheduleQuery.error)} — ยังบอกไม่ได้ว่าวันนี้ตั้งค่าไว้หรือไม่
+							</p>
+						</div>
+					</div>
+					<Button
+						variant="outline"
+						onclick={() => scheduleQuery.refetch()}
+						disabled={scheduleQuery.isFetching}
+						class="h-11 shrink-0"
+					>
+						<RefreshCw class="mr-1.5 h-4 w-4" />
+						ลองใหม่
+					</Button>
+				</div>
 			{:else if slots.length === 0}
 				<div class="rounded-xl border border-slate-200 bg-slate-50 p-5 text-center">
 					<p class="text-sm font-semibold text-slate-700">
@@ -381,7 +460,7 @@
 					{#each slots as slot (slot._id)}
 						{@const booked = bookedOn(slot)}
 						{@const isClosed = slot.status === 'closed'}
-						{@const isFull = slot.capacity !== null && booked >= slot.capacity}
+						{@const isFull = bookingsReady && slot.capacity !== null && booked >= slot.capacity}
 						<li
 							class="flex flex-col gap-3 rounded-xl border bg-white p-4 shadow-2xs sm:flex-row sm:items-center sm:justify-between
 								{isClosed ? 'border-slate-300' : isFull ? 'border-amber-200' : 'border-emerald-200'}"
@@ -415,7 +494,8 @@
 									{/if}
 								</div>
 								<p class="text-sm text-slate-600">
-									จองแล้ว <span class="font-semibold tabular-nums">{booked}</span>
+									จองแล้ว
+									<span class="font-semibold tabular-nums">{bookingsReady ? booked : '–'}</span>
 									{#if slot.capacity === null}
 										คิว · ไม่จำกัด
 									{:else}
@@ -433,7 +513,7 @@
 									variant="outline"
 									onclick={() => openEdit(slot)}
 									disabled={saveSlot.isPending}
-									class="h-11 shrink-0 sm:h-10"
+									class="h-11 shrink-0"
 								>
 									<Pencil class="mr-1.5 h-4 w-4" />
 									แก้ไข
@@ -442,7 +522,7 @@
 									variant="outline"
 									onclick={() => toggleStatus(slot)}
 									disabled={saveSlot.isPending}
-									class="h-11 shrink-0 sm:h-10"
+									class="h-11 shrink-0"
 								>
 									{#if isClosed}
 										<LockOpen class="mr-1.5 h-4 w-4" />
@@ -455,13 +535,15 @@
 								<Button
 									variant="outline"
 									onclick={() => openDelete(slot)}
-									disabled={booked > 0 || deleteSlot.isPending}
-									class="h-11 shrink-0 border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800 sm:h-10"
+									disabled={!bookingsReady || booked > 0 || deleteSlot.isPending}
+									class="h-11 shrink-0 border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
 								>
 									<Trash2 class="mr-1.5 h-4 w-4" />
 									ลบ
 								</Button>
-								{#if booked > 0}
+								{#if !bookingsReady}
+									<p class="w-full text-xs text-slate-500">รอข้อมูลการจองก่อน จึงจะลบได้</p>
+								{:else if booked > 0}
 									<p class="w-full text-xs text-slate-500">
 										มีผู้จองแล้ว ลบไม่ได้ — ใช้ "งดรับ" เพื่อหยุดรับแทน
 									</p>
@@ -487,12 +569,7 @@
 		<div class="space-y-4">
 			<div class="space-y-1.5">
 				<Label for="edit-slot-to" class="text-sm font-semibold text-slate-700">ถึง</Label>
-				<Input
-					id="edit-slot-to"
-					type="time"
-					bind:value={editTo}
-					class="h-11 tabular-nums sm:h-10"
-				/>
+				<Input id="edit-slot-to" type="time" bind:value={editTo} class="h-11 tabular-nums" />
 			</div>
 			<div class="space-y-1.5">
 				<Label for="edit-slot-capacity" class="text-sm font-semibold text-slate-700">
@@ -505,11 +582,15 @@
 					min="1"
 					placeholder={isPickup ? 'เช่น 2' : 'ไม่จำกัด'}
 					bind:value={editCapacity}
-					class="h-11 tabular-nums sm:h-10"
+					class="h-11 tabular-nums"
 				/>
 				{#if editing}
 					<p class="text-xs text-slate-500">
-						จองแล้ว <span class="tabular-nums">{bookedOn(editing)}</span> คิว — เพดานต้องไม่น้อยกว่านี้
+						{#if bookingsReady}
+							จองแล้ว <span class="tabular-nums">{bookedOn(editing)}</span> คิว — เพดานต้องไม่น้อยกว่านี้
+						{:else}
+							ยังโหลดข้อมูลการจองไม่เสร็จ จึงยังบันทึกไม่ได้
+						{/if}
 					</p>
 				{/if}
 			</div>
@@ -519,15 +600,13 @@
 					id="edit-slot-note"
 					placeholder="เช่น เข้าประตู 2 / จอดรถลานหลัง"
 					bind:value={editNote}
-					class="h-11 sm:h-10"
+					class="h-11"
 				/>
 			</div>
 		</div>
 		<Dialog.Footer>
-			<Button variant="outline" onclick={() => (editOpen = false)} class="h-11 sm:h-10"
-				>ยกเลิก</Button
-			>
-			<Button onclick={saveEdit} disabled={saveSlot.isPending} class="h-11 sm:h-10">
+			<Button variant="outline" onclick={() => (editOpen = false)} class="h-11">ยกเลิก</Button>
+			<Button onclick={saveEdit} disabled={saveSlot.isPending || !bookingsReady} class="h-11">
 				บันทึกการแก้ไข
 			</Button>
 		</Dialog.Footer>

@@ -1,4 +1,19 @@
 import { dev } from '$app/environment';
+import { env } from '$env/dynamic/private';
+
+/**
+ * Master switch for every `RateLimiter` below — server-only runtime env `RATE_LIMIT`.
+ *
+ * Enforced by default: unset, empty, or any value that is not an explicit "off" keeps the
+ * limits on, so a typo can never silently disable them. Only `false` or `0`
+ * (case-insensitive, trimmed) turns them off, for every key — not just loopback. It exists
+ * for e2e runs (every suite shares one runner IP) and for staging; production must leave it
+ * unset. Read per call because `$env/dynamic/private` is a runtime lookup.
+ */
+function rateLimitEnabled(): boolean {
+	const raw = env.RATE_LIMIT?.trim().toLowerCase();
+	return raw !== 'false' && raw !== '0';
+}
 
 interface RateLimitEntry {
 	timestamps: number[];
@@ -20,6 +35,7 @@ export class RateLimiter {
 	 */
 	check(key: string): boolean {
 		if (!key) return true;
+		if (!rateLimitEnabled()) return true;
 		if (
 			dev &&
 			(key === '127.0.0.1' || key === '::1' || key === 'localhost' || key === '::ffff:127.0.0.1')
@@ -118,6 +134,13 @@ export const donationEditLimiter = new RateLimiter(60000, 10);
  * Still limited, because each read reaches FastAPI and Mongo.
  */
 export const donationReadLimiter = new RateLimiter(60000, 30);
+/**
+ * The wizard's window grid (`GET /donations/slots`). Anonymous and keyed by IP only, and
+ * each call scans every `donation_slot:` and `donation:` doc of a shelter with admin
+ * credentials — the heaviest public read — so it gets its own bucket rather than sharing
+ * the ticket-read budget. Changing date or queue refetches, hence 30 a minute.
+ */
+export const donationSlotsLimiter = new RateLimiter(60000, 30);
 
 // Public booking (CR-070 / T-71). Separate buckets from donations so a busy
 // donation drive cannot lock a family out of booking a place to sleep.

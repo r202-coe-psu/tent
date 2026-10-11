@@ -1,6 +1,6 @@
-import { requireManager } from '$lib/guards/auth';
+import { requireVolunteerBackoffice } from '$lib/guards/auth';
 import type { PageLoad } from './$types';
 
 export const load = (async ({ fetch }) => {
-	await requireManager(fetch);
+	await requireVolunteerBackoffice(fetch);
 }) satisfies PageLoad;

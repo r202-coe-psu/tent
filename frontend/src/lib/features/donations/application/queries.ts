@@ -95,6 +95,12 @@ export function useDonationSlots(
 		queryKey: ['public-donation-slots', shelterCode(), date(), mode()],
 		queryFn: () => fetchDonationSlots(shelterCode(), date(), mode() ?? 'dropoff'),
 		enabled: Boolean(shelterCode() && date() && mode()),
-		staleTime: 30_000
+		staleTime: 30_000,
+		// svelte-query v6 only notifies for props it has seen read ("tracked props"), and
+		// reads are lazy. A consumer that gates UI on `isSuccess` / `isError` inside a
+		// conditional block can read a prop for the first time AFTER the transition, and
+		// is then handed a stale snapshot that never refreshes. Track every prop (the slot
+		// picker reads isLoading / isError only once a shelter is chosen).
+		notifyOnChangeProps: 'all'
 	}));
 }

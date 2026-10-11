@@ -117,6 +117,7 @@ import {
 	CAN_WRITE as TARGET_CAN_WRITE,
 	IS_REMOTE,
 	LOCAL_RUN_ID as RUN_ID,
+	RATE_LIMIT_ENFORCED,
 	READ_ONLY_REASON as TARGET_READ_ONLY_REASON
 } from './helpers/e2e-env';
 import { injectSession, routeBrowserCouchThroughApp } from './helpers/login';
@@ -1738,6 +1739,8 @@ const STATUS_LIMIT = 10;
 const STATUS_WINDOW_MS = 61_000;
 const statusHits: number[] = [];
 async function waitForStatusBudget(needed: number): Promise<void> {
+	// Nothing to wait for when the target's limiters are off (RATE_LIMIT=false).
+	if (!RATE_LIMIT_ENFORCED) return;
 	for (;;) {
 		const now = Date.now();
 		while (statusHits.length > 0 && now - statusHits[0] >= STATUS_WINDOW_MS) statusHits.shift();

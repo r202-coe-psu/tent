@@ -825,7 +825,7 @@
 										<Select.Root type="single" bind:value={item.item_id}>
 											<Select.Trigger
 												id="map-master-{idx}"
-												class="h-11 w-full text-sm data-[size=default]:h-11 sm:h-10 sm:data-[size=default]:h-10"
+												class="h-11 w-full text-sm data-[size=default]:h-11"
 											>
 												{catalogLabel(item.item_id, '-- เลือกรายการในคลัง --')}
 											</Select.Trigger>
@@ -854,7 +854,7 @@
 												type="text"
 												inputmode="decimal"
 												bind:value={item.qty}
-												class="h-11 pr-16 text-base font-bold tabular-nums sm:h-10"
+												class="h-11 pr-16 text-base font-bold tabular-nums"
 											/>
 											<span
 												class="pointer-events-none absolute right-3 text-sm font-medium text-slate-500"
@@ -869,6 +869,19 @@
 											จุดเก็บของ
 											{#if storagePointRequired}<span class="text-red-500">*</span>{/if}
 										</Label>
+										<Select.Root type="single" bind:value={item.storage_zone}>
+											<Select.Trigger
+												id="storage-zone-{idx}"
+												class="h-11 w-full text-sm data-[size=default]:h-11"
+											>
+												{item.storage_zone || '-- เลือกโซนจัดเก็บ --'}
+											</Select.Trigger>
+											<Select.Content>
+												{#each STORAGE_ZONE_OPTIONS as zone (zone)}
+													<Select.Item value={zone} label={zone} />
+												{/each}
+											</Select.Content>
+										</Select.Root>
 										<StoragePointSelect
 											id="storage-zone-{idx}"
 											points={storagePoints.points}
@@ -890,7 +903,7 @@
 											id="item-expiry-{idx}"
 											ariaLabel="วันหมดอายุ"
 											bind:value={item.expiry}
-											class="h-11 text-sm sm:h-10 {item.item_id &&
+											class="h-11 text-sm {item.item_id &&
 											isPerishable(item.item_id) &&
 											!item.expiry
 												? 'border-red-300'
@@ -907,7 +920,7 @@
 											type="text"
 											placeholder="เช่น แตกเสียหาย 2 ขวด (ถ้ามี)"
 											bind:value={item.diffReason}
-											class="h-11 text-sm sm:h-10"
+											class="h-11 text-sm"
 										/>
 									</div>
 								</div>
@@ -1069,7 +1082,7 @@
 										<Select.Root type="single" bind:value={selectedTargetShelter}>
 											<Select.Trigger
 												id="target-shelter-select"
-												class="h-11 w-full text-sm data-[size=default]:h-11 sm:h-10 sm:data-[size=default]:h-10"
+												class="h-11 w-full text-sm data-[size=default]:h-11"
 											>
 												{redirectTargetLabel}
 											</Select.Trigger>
@@ -1124,7 +1137,7 @@
 											type="text"
 											placeholder="เช่น พื้นที่จัดเก็บไม่เพียงพอ, งดรับเสื้อผ้าชั่วคราว..."
 											bind:value={rejectReason}
-											class="h-11 bg-white text-sm sm:h-10"
+											class="h-11 bg-white text-sm"
 										/>
 									</div>
 									<div class="flex gap-2">

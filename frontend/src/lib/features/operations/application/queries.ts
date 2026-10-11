@@ -63,7 +63,12 @@ export const useStockLedgers = () =>
 export const useDonations = () =>
 	createQuery(() => ({
 		queryKey: operationsKeys.donations(),
-		queryFn: () => operationsRepository().listDonations()
+		queryFn: () => operationsRepository().listDonations(),
+		// svelte-query v6 only notifies for props it has seen read ("tracked props"), and
+		// reads are lazy. A consumer that gates UI on `isSuccess` / `isError` inside a
+		// conditional block can read a prop for the first time AFTER the transition, and
+		// is then handed a stale snapshot that never refreshes. Track every prop.
+		notifyOnChangeProps: 'all'
 	}));
 
 export const useCreateCampaign = () => {

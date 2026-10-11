@@ -6,6 +6,9 @@
 	import Package from '@lucide/svelte/icons/package';
 	import CircleCheckBig from '@lucide/svelte/icons/circle-check-big';
 	import X from '@lucide/svelte/icons/x';
+	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
+	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
+	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import { env } from '$env/dynamic/public';
 	import { Label } from '$lib/components/ui/label';
 	import { Input } from '$lib/components/ui/input';
@@ -16,13 +19,10 @@
 	import { toast } from 'svelte-sonner';
 	import { onMount } from 'svelte';
 	import {
-		DEFAULT_SLOT_WINDOWS,
 		donationPayloadUnit,
 		publicDonationErrorMessage,
-		slotLabel,
 		slotModeForDelivery,
-		useDonationSlots,
-		type SlotAvailability
+		useDonationSlots
 	} from '$lib/features/donations';
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { getDonationStore } from '../../../routes/(public)/donations/donation.svelte';
@@ -57,20 +57,12 @@
 		() => slotMode
 	);
 
-	// Until the board answers (and if it cannot), offer the standard windows rather than
-	// an empty grid: an unconfigured window has no ceiling and submit accepts it.
-	const fallbackSlots: SlotAvailability[] = DEFAULT_SLOT_WINDOWS.map((window) => ({
-		label: slotLabel(window.from, window.to),
-		from: window.from,
-		to: window.to,
-		capacity: null,
-		booked: 0,
-		status: 'available'
-	}));
-	// A shelter that publishes no vehicle schedule is not collecting: show its empty
-	// board rather than the drop-off opening hours, which would promise a truck.
-	const timeSlots = $derived(slotsQuery.data ?? (slotMode === 'pickup' ? [] : fallbackSlots));
-	const isLoadingSlots = $derived(slotsQuery.isPending && Boolean(donationStore.shelterCode));
+	// Windows are only ever the shelter's own answer. While it is loading, or when it
+	// failed, there is nothing to pick: falling back to the standard hours would show
+	// windows as "available" that may be full or closed, and an empty list would read as
+	// "this shelter is not collecting". Each of those states gets its own branch below.
+	const timeSlots = $derived(slotsQuery.isSuccess ? slotsQuery.data : []);
+	const hasShelter = $derived(Boolean(donationStore.shelterCode));
 
 	// A window the donor picked earlier can fill or close before they submit — drop the
 	// selection instead of letting them send a booking the service will reject.
@@ -263,8 +255,8 @@
 
 <div class="rounded-2xl border border-slate-200 bg-white p-6 text-left shadow-xs md:p-8">
 	<div class="mb-6 flex items-center gap-3 border-b border-slate-100 pb-4">
-		<div class="flex h-10 w-10 items-center justify-center rounded-full bg-[#fff3e0]">
-			<Navigation class="h-5 w-5 text-[#ff9f0a]" />
+		<div class="flex h-10 w-10 items-center justify-center rounded-full bg-domain-donation-subtle">
+			<Navigation class="h-5 w-5 text-domain-donation-strong" />
 		</div>
 		<div>
 			<h3 class="text-xl font-bold text-slate-800">{t.section3Title}</h3>
@@ -282,7 +274,7 @@
 				<button
 					type="button"
 					onclick={() => (isItemsModalOpen = true)}
-					class="flex cursor-pointer items-center gap-0.5 text-xs font-black text-[#013481] hover:underline"
+					class="flex cursor-pointer items-center gap-0.5 text-xs font-black text-domain-donation-text hover:underline"
 				>
 					{t.viewAll}
 				</button>
@@ -303,7 +295,9 @@
 					</span>
 				{/each}
 				{#if donationStore.items.length > 5}
-					<span class="block pl-4 text-left text-2xs font-black text-[#013481] hover:underline">
+					<span
+						class="block pl-4 text-left text-2xs font-black text-domain-donation-text hover:underline"
+					>
 						{t.viewAllRemaining.replace('{count}', String(donationStore.items.length - 5))}
 					</span>
 				{/if}
@@ -321,8 +315,8 @@
 					onclick={() => (donationStore.deliveryMethod = 'self_dropoff')}
 					class="cursor-pointer rounded-xl border-2 p-4 text-left font-bold transition-all {donationStore.deliveryMethod ===
 					'self_dropoff'
-						? 'border-[#ff9f0a] bg-[#fff8e1] text-[#ff9f0a]'
-						: 'border-slate-200 text-slate-600 hover:border-[#ff9f0a]/50'}"
+						? 'border-domain-donation bg-domain-donation-subtle text-domain-donation-strong'
+						: 'border-slate-200 text-slate-600 hover:border-domain-donation/50'}"
 				>
 					{t.deliverySelf}
 				</button>
@@ -331,8 +325,8 @@
 					onclick={() => (donationStore.deliveryMethod = 'parcel')}
 					class="cursor-pointer rounded-xl border-2 p-4 text-left font-bold transition-all {donationStore.deliveryMethod ===
 					'parcel'
-						? 'border-[#ff9f0a] bg-[#fff8e1] text-[#ff9f0a]'
-						: 'border-slate-200 text-slate-600 hover:border-[#ff9f0a]/50'}"
+						? 'border-domain-donation bg-domain-donation-subtle text-domain-donation-strong'
+						: 'border-slate-200 text-slate-600 hover:border-domain-donation/50'}"
 				>
 					{t.deliveryParcel}
 				</button>
@@ -341,8 +335,8 @@
 					onclick={() => (donationStore.deliveryMethod = 'shelter_pickup')}
 					class="cursor-pointer rounded-xl border-2 p-4 text-left font-bold transition-all {donationStore.deliveryMethod ===
 					'shelter_pickup'
-						? 'border-[#ff9f0a] bg-[#fff8e1] text-[#ff9f0a]'
-						: 'border-slate-200 text-slate-600 hover:border-[#ff9f0a]/50'}"
+						? 'border-domain-donation bg-domain-donation-subtle text-domain-donation-strong'
+						: 'border-slate-200 text-slate-600 hover:border-domain-donation/50'}"
 				>
 					{t.deliveryShelterPickup}
 				</button>
@@ -359,7 +353,7 @@
 						<Input
 							bind:value={donationStore.eta}
 							placeholder={t.etaPlaceholder}
-							class="h-12 rounded-xl border-2 border-slate-200 focus:border-[#ff9f0a]"
+							class="h-12 rounded-xl border-2 border-slate-200 focus:border-domain-donation"
 						/>
 					</div>
 					<div>
@@ -367,7 +361,7 @@
 						<Input
 							bind:value={donationStore.courierTrackingNo}
 							placeholder={t.trackingNoPlaceholder}
-							class="h-12 rounded-xl border-2 border-slate-200 focus:border-[#ff9f0a]"
+							class="h-12 rounded-xl border-2 border-slate-200 focus:border-domain-donation"
 						/>
 					</div>
 				</div>
@@ -391,8 +385,8 @@
 								(donationStore.vehicleType = vtype as 'motorcycle' | 'car' | 'pickup' | 'truck')}
 							class="cursor-pointer rounded-xl border-2 p-3 text-center text-sm font-bold transition-all {donationStore.vehicleType ===
 							vtype
-								? 'border-[#ff9f0a] bg-[#ff9f0a] text-white shadow-xs'
-								: 'border-slate-200 text-slate-600 hover:border-[#ff9f0a]/50'}"
+								? 'border-domain-donation bg-domain-donation-strong text-white shadow-xs'
+								: 'border-slate-200 text-slate-600 hover:border-domain-donation/50'}"
 						>
 							{#if vtype === 'motorcycle'}
 								{t.vehicleMotorcycle}
@@ -419,7 +413,7 @@
 					id="pickup-address"
 					placeholder={t.pickupAddressPlaceholder}
 					bind:value={donationStore.pickupAddress}
-					class="min-h-[100px] w-full resize-none rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-all focus:border-[#ff9f0a]"
+					class="min-h-[100px] w-full resize-none rounded-xl border-2 border-slate-200 bg-white p-3 font-medium text-slate-800 outline-hidden transition-all focus:border-domain-donation"
 				></textarea>
 			</div>
 		{/if}
@@ -448,7 +442,7 @@
 					id="shelter-select"
 					bind:value={donationStore.shelterCode}
 					disabled={donationStore.shelterLocked}
-					class="w-full appearance-none rounded-xl border-2 border-slate-200 bg-white p-4 font-bold text-slate-800 shadow-2xs outline-hidden focus:border-[#ff9f0a] disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+					class="w-full appearance-none rounded-xl border-2 border-slate-200 bg-white p-4 font-bold text-slate-800 shadow-2xs outline-hidden focus:border-domain-donation disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
 				>
 					<option value="" disabled selected>{t.selectShelterPlaceholder}</option>
 					{#each shelters as shelter (shelter.code)}
@@ -473,7 +467,7 @@
 							<PopoverTrigger class="w-full">
 								<Button
 									variant="outline"
-									class="h-auto w-full! justify-start rounded-xl border-2 border-slate-200 bg-white py-3.5 text-left font-bold text-slate-800 shadow-2xs hover:border-[#ff9f0a]"
+									class="h-auto w-full! justify-start rounded-xl border-2 border-slate-200 bg-white py-3.5 text-left font-bold text-slate-800 shadow-2xs hover:border-domain-donation"
 								>
 									<CalendarIcon class="mr-2 h-4.5 w-4.5 text-slate-400" />
 									{#if selectedDate}
@@ -489,36 +483,73 @@
 						</Popover>
 					</div>
 
-					{#if timeSlots.length === 0}
+					{#if !hasShelter}
+						<div class="rounded-xl border border-slate-200 bg-slate-50 p-4 text-center">
+							<p class="text-sm font-bold text-slate-700">{t.slotsSelectShelterFirst}</p>
+						</div>
+					{:else if slotsQuery.isLoading}
+						<div
+							role="status"
+							class="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm font-bold text-slate-700"
+						>
+							<LoaderCircle class="h-4 w-4 animate-spin text-slate-500" />
+							<span>{t.slotChecking}</span>
+						</div>
+					{:else if slotsQuery.isError}
+						<div
+							role="alert"
+							class="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 p-4 sm:flex-row sm:items-center sm:justify-between"
+						>
+							<div class="flex items-start gap-2.5">
+								<TriangleAlert class="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+								<div class="space-y-0.5">
+									<p class="text-sm font-bold text-red-900">{t.slotsLoadError}</p>
+									<p class="text-sm text-red-900">{t.slotsLoadErrorHint}</p>
+								</div>
+							</div>
+							<Button
+								type="button"
+								variant="outline"
+								onclick={() => slotsQuery.refetch()}
+								disabled={slotsQuery.isFetching}
+								class="h-11 shrink-0 gap-1.5 border-red-200 text-red-900 hover:bg-red-100"
+							>
+								<RefreshCw class="h-4 w-4" />
+								{t.slotsRetry}
+							</Button>
+						</div>
+					{:else if timeSlots.length === 0}
 						<div class="rounded-xl border-2 border-slate-200 bg-slate-50 p-4 text-center">
 							<p class="text-sm font-bold text-slate-700">{t.slotsPickupUnavailable}</p>
 						</div>
-					{/if}
-
-					<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-						{#each timeSlots as slot (slot.from)}
-							{@const isFull = slot.status !== 'available'}
-							{@const isSelected = donationStore.slotTime === slot.label}
-							<button
-								type="button"
-								disabled={isFull}
-								onclick={() => {
-									if (!isFull) donationStore.slotTime = slot.label;
-								}}
-								class="flex flex-col items-center justify-center gap-1 rounded-xl border-2 p-3 transition-all
+					{:else}
+						<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+							{#each timeSlots as slot (slot.from)}
+								{@const isFull = slot.status !== 'available'}
+								{@const isSelected = donationStore.slotTime === slot.label}
+								<button
+									type="button"
+									disabled={isFull}
+									onclick={() => {
+										if (!isFull) donationStore.slotTime = slot.label;
+									}}
+									class="flex flex-col items-center justify-center gap-1 rounded-xl border-2 p-3 transition-all
 									{isFull
-									? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400 opacity-50'
-									: isSelected
-										? 'border-[#ff9f0a] bg-[#ff9f0a] text-white shadow-xs'
-										: 'cursor-pointer border-slate-200 bg-white text-slate-600 hover:border-[#ff9f0a]'}"
-							>
-								<span class="text-sm font-bold">{slot.label}</span>
-								<span class="text-2xs font-bold {isSelected ? 'text-white/80' : 'text-slate-400'}">
-									{isLoadingSlots ? t.slotChecking : isFull ? t.slotFull : t.slotAvailable}
-								</span>
-							</button>
-						{/each}
-					</div>
+										? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400 opacity-50'
+										: isSelected
+											? 'border-domain-donation bg-domain-donation-strong text-white shadow-xs'
+											: 'cursor-pointer border-slate-200 bg-white text-slate-600 hover:border-domain-donation'}"
+								>
+									<span class="text-sm font-bold">{slot.label}</span>
+									<span
+										class="text-2xs font-bold {isSelected ? 'text-white/80' : 'text-slate-400'}"
+									>
+										{isFull ? t.slotFull : t.slotAvailable}
+									</span>
+								</button>
+							{/each}
+						</div>
+					{/if}
 				</div>
 			{/if}
 		</div>
@@ -553,7 +584,7 @@
 					!donationStore.slotTime) ||
 				(donationStore.deliveryMethod === 'shelter_pickup' && !donationStore.pickupAddress.trim())}
 			onclick={handleConfirmBookingRequest}
-			class="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#013481] py-4 text-lg font-bold text-white shadow-md transition-all hover:bg-[#002244] active:scale-95 disabled:opacity-50"
+			class="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl bg-domain-donation-strong py-4 text-lg font-bold text-white shadow-md transition-all hover:bg-domain-donation-text active:scale-95 disabled:opacity-50"
 		>
 			{#if donationStore.isSubmitting}
 				{t.processingBtn}

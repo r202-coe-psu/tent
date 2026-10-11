@@ -21,8 +21,20 @@ import {
  * their own capacity.
  */
 
-const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
-const YMD = /^\d{4}-\d{2}-\d{2}$/;
+/** Zero-padded 24-hour `HH:mm` — the only shape a window's `from` / `to` may take. */
+export const SLOT_TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+/** `YYYY-MM-DD` shape. Not a calendar check — see {@link isRealCalendarDate}. */
+export const SLOT_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+const HHMM = SLOT_TIME_PATTERN;
+const YMD = SLOT_DATE_PATTERN;
+
+/** `YYYY-MM-DD` that exists on the calendar (rejects `2026-02-31`). */
+export function isRealCalendarDate(value: string): boolean {
+	if (!SLOT_DATE_PATTERN.test(value)) return false;
+	const parsed = new Date(`${value}T00:00:00Z`);
+	return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
 
 export const donationSlotInputSchema = z
 	.object({
@@ -192,15 +204,28 @@ export function assertDonationSlotDeletable(slot: DonationSlot, bookedCount: num
 	}
 }
 
-/** Windows of one queue on one date, earliest first. */
+/**
+ * Windows of one queue on one date, earliest first — one per start time.
+ *
+ * A window written before the two queues were split carries no `mode` and reads as
+ * drop-off, so it can collide with the explicit window staff later created for the same
+ * hour (FR-DS-10). The explicit one wins; the legacy doc is what staff are replacing.
+ * Back-office and the public board both read this, so neither shows the hour twice.
+ */
 export function slotsOnDate(
 	slots: readonly DonationSlot[],
 	mode: DonationSlotMode,
 	date: string
 ): DonationSlot[] {
-	return slots
-		.filter((s) => s.date === date && slotMode(s) === mode)
-		.sort((a, b) => a.from.localeCompare(b.from));
+	const byStart = new Map<string, DonationSlot>();
+	for (const slot of slots) {
+		if (slot.date !== date || slotMode(slot) !== mode) continue;
+		const held = byStart.get(slot.from);
+		if (!held || (held.mode === undefined && slot.mode !== undefined)) {
+			byStart.set(slot.from, slot);
+		}
+	}
+	return [...byStart.values()].sort((a, b) => a.from.localeCompare(b.from));
 }
 
 /**

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { type BaseDoc } from '$lib/db/model';
 import type { DonationStatus } from '$lib/features/operations';
+import { isRealCalendarDate, SLOT_TIME_PATTERN } from '$lib/features/operations/server';
 import { qtyStrCoercePositiveSchema } from '$lib/utils/qty';
 
 export const PUBLIC_DONATION_CATEGORIES = [
@@ -70,11 +71,20 @@ export const donationPreDeclarationInputSchema = z.object({
 		.object({
 			delivery_method: z.enum(['self_dropoff', 'parcel', 'shelter_pickup']),
 			vehicle: z.enum(['motorcycle', 'car', 'pickup', 'truck']).optional(),
+			// The donor's window is re-checked against the shelter's published slot by the
+			// BFF, but only well-formed input may reach that lookup: `date` and `from` are
+			// interpolated into a CouchDB doc id, and `to` is compared against the doc.
 			slot: z
 				.object({
-					date: z.string(),
-					from: z.string(),
-					to: z.string()
+					date: z
+						.string()
+						.refine(isRealCalendarDate, 'Slot date must be a real date in YYYY-MM-DD form'),
+					from: z.string().regex(SLOT_TIME_PATTERN, 'Slot start must be HH:mm'),
+					to: z.string().regex(SLOT_TIME_PATTERN, 'Slot end must be HH:mm')
+				})
+				.refine((s) => s.to > s.from, {
+					message: 'Slot end must be after its start',
+					path: ['to']
 				})
 				.optional(),
 			eta: z.string().optional(),

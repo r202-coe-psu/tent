@@ -1363,6 +1363,117 @@ async def test_cancel_gives_the_place_back(
     assert again.status_code == 201
 
 
+def _widen_cancel_race(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hold every ``DonationBuffer.save`` open a little before it writes.
+
+    Two cancels in flight together then both observe ``declared`` before either has
+    written, which is the interleaving a read→check→save cancel loses to. A cancel that
+    flips the status atomically never goes through ``save``, so it is unaffected.
+    """
+    real_save = DonationBuffer.save
+
+    async def slow_save(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+        await asyncio.sleep(0.05)
+        return await real_save(self, *args, **kwargs)
+
+    monkeypatch.setattr(DonationBuffer, "save", slow_save)
+
+
+async def test_concurrent_cancels_release_the_place_once(
+    client: AsyncClient,
+    open_shelter: PublicShelter,
+    auth_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two cancels of one booking in flight together must hand back one place, not two —
+    the second release would free a place that another donor's booking still holds."""
+    donation_router._rate_buckets.clear()
+    tokens = []
+    for i in range(2):
+        created = await client.post(
+            "/public/v1/donations", headers=auth_headers, json=_slot_booking(i, capacity=2)
+        )
+        assert created.status_code == 201, created.text
+        tokens.append(created.json()["tracking_token"])
+    assert await _slot_booked() == 2
+    _widen_cancel_race(monkeypatch)
+
+    responses = await asyncio.gather(
+        *[
+            client.delete(f"/public/v1/donations/{tokens[0]}", headers=auth_headers)
+            for _ in range(2)
+        ]
+    )
+
+    # The loser gets the same error a sequential second cancel always got.
+    assert sorted(r.status_code for r in responses) == [200, 400], [r.text for r in responses]
+    assert await _slot_booked() == 1, "the other donor's place must still be held"
+
+    # With one place free and one held, exactly one more booking fits.
+    donation_router._rate_buckets.clear()
+    third = await client.post(
+        "/public/v1/donations", headers=auth_headers, json=_slot_booking(2, capacity=2)
+    )
+    assert third.status_code == 201
+    donation_router._rate_buckets.clear()
+    fourth = await client.post(
+        "/public/v1/donations", headers=auth_headers, json=_slot_booking(3, capacity=2)
+    )
+    assert fourth.status_code == 409
+
+
+async def test_concurrent_cancels_release_quota_once(
+    client: AsyncClient, auth_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Quota counterpart of the slot race: another booking's 2 kg must survive."""
+    token = "TX-SH001-CANCEL006"
+    now = datetime.now(UTC)
+    counter_id = "SH001:donation_campaign:c6:item:rice"
+    await DonationNeedCounter(
+        id=counter_id,
+        shelter_code="SH001",
+        campaign_id="donation_campaign:c6",
+        item_id="item:rice",
+        qty_target=Decimal("10"),
+        # 4 kg ours + 2 kg someone else's.
+        reserved_qty=Decimal("6"),
+        created_at=now,
+        updated_at=now,
+    ).insert()
+    await DonationBuffer(
+        id=f"donation:{new_ulid()}",
+        shelter_code="SH001",
+        donor=DonorBuffer(name="Cancel Donor", phone="0844444444"),
+        items_declared=[
+            {
+                "item_id": "item:rice",
+                "free_text": "ข้าวสาร",
+                "qty": 4,
+                "unit": "kg",
+                "reserved_qty": "4",
+            }
+        ],
+        campaign_id="donation_campaign:c6",
+        booking_ref="DN-777006",
+        tracking_token=token,
+        tracking_token_hash=sha256_hex(token),
+        status="declared",
+        synced_to_couch=False,
+        created_at=now,
+        expires_at=now + timedelta(hours=72),
+    ).insert()
+    _widen_cancel_race(monkeypatch)
+
+    responses = await asyncio.gather(
+        *[client.delete(f"/public/v1/donations/{token}", headers=auth_headers) for _ in range(2)]
+    )
+
+    assert sorted(r.status_code for r in responses) == [200, 400], [r.text for r in responses]
+    counter = await DonationNeedCounter.get(counter_id)
+    assert counter is not None
+    assert counter.reserved_qty == Decimal("2")
+
+
 async def test_a_booking_without_a_hold_takes_no_place(
     client: AsyncClient, open_shelter: PublicShelter, auth_headers: dict[str, str]
 ) -> None:
