@@ -9,6 +9,9 @@
 	import Smartphone from '@lucide/svelte/icons/smartphone';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
 	import type { ThaiDAutofillProfile } from '../../domain/thaid-profile';
 
 	interface Props {
@@ -17,7 +20,9 @@
 		onscanned?: (profile: ThaiDAutofillProfile) => void;
 	}
 
-	let { open = $bindable(false), memberLabel = 'สมาชิกในครอบครัว', onscanned }: Props = $props();
+	let { open = $bindable(false), memberLabel = '', onscanned }: Props = $props();
+
+	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
 
 	type SessionState = 'loading' | 'active' | 'success' | 'expired' | 'error';
 
@@ -25,6 +30,9 @@
 	let qrDataUrl = $state<string | null>(null);
 	let remainingSeconds = $state<number>(900);
 	let completedProfile = $state<ThaiDAutofillProfile | null>(null);
+
+	const titleText = $derived(t.thaidScanTitle(memberLabel || t.thaidScanFamilyMember));
+	const expiresText = $derived(`${t.thaidScanExpiresIn} ${formatRemainingTime(remainingSeconds)}`);
 
 	let eventSource: EventSource | null = null;
 	let countdownTimer: NodeJS.Timeout | null = null;
@@ -206,10 +214,10 @@
 		<Dialog.Header>
 			<Dialog.Title class="flex items-center gap-2 text-base font-bold sm:text-lg">
 				<QrCodeIcon class="size-5 text-primary" />
-				<span>ดึงข้อมูล {memberLabel} ผ่าน ThaiD</span>
+				<span>{titleText}</span>
 			</Dialog.Title>
 			<Dialog.Description class="text-xs text-muted-foreground">
-				ให้สมาชิกใช้กล้องมือถือสแกน QR Code นี้ เพื่อยืนยันตัวตนและยินยอมส่งข้อมูล
+				{t.thaidScanDesc}
 			</Dialog.Description>
 		</Dialog.Header>
 
@@ -217,7 +225,7 @@
 			{#if sessionState === 'loading'}
 				<div class="flex h-64 flex-col items-center justify-center gap-3">
 					<Loader2 class="size-8 animate-spin text-primary" />
-					<p class="text-xs text-muted-foreground">กำลังสร้าง QR Code เชื่อมต่อ ThaiD...</p>
+					<p class="text-xs text-muted-foreground">{t.thaidScanGenerating}</p>
 				</div>
 			{:else if sessionState === 'active'}
 				<div
@@ -226,7 +234,7 @@
 					{#if qrDataUrl}
 						<img
 							src={qrDataUrl}
-							alt="ThaiD Member Scan QR Code"
+							alt={t.thaidScanQrAlt}
 							class="size-60 rounded-xl bg-white p-2 shadow-xs"
 						/>
 					{/if}
@@ -235,7 +243,7 @@
 						class="mt-3 flex items-center gap-1.5 rounded-full border border-border bg-background/80 px-3 py-1 text-xs font-semibold text-muted-foreground shadow-2xs"
 					>
 						<Clock class="size-3.5 text-amber-600" />
-						<span>หมดอายุใน {formatRemainingTime(remainingSeconds)}</span>
+						<span>{expiresText}</span>
 					</div>
 				</div>
 
@@ -244,14 +252,15 @@
 				>
 					<Smartphone class="mt-0.5 size-5 shrink-0 text-primary" />
 					<div class="space-y-0.5 text-xs">
-						<p class="font-semibold text-foreground">วิธีสแกนสำหรับสมาชิก:</p>
+						<p class="font-semibold text-foreground">{t.thaidScanHowTo}</p>
 						<p class="text-muted-foreground">
-							1. เปิด <strong>กล้องถ่ายรูปมือถือ</strong> หรือ <strong>แอป LINE</strong>
+							{t.thaidScanStep1Prefix} <strong>{t.thaidScanStep1Camera}</strong>
+							{t.thaidScanStep1Or} <strong>{t.thaidScanStep1Line}</strong>
 						</p>
 						<p class="text-muted-foreground">
-							2. ส่องมาที่ QR Code นี้ เพื่อเข้าสู่หน้ายืนยันตัวตน ThaiD
+							{t.thaidScanStep2}
 						</p>
-						<p class="text-muted-foreground">3. ยืนยันบนมือถือ ข้อมูลจะวิ่งมาแสดงบนหน้านี้ทันที</p>
+						<p class="text-muted-foreground">{t.thaidScanStep3}</p>
 					</div>
 				</div>
 			{:else if sessionState === 'success'}
@@ -261,7 +270,7 @@
 					>
 						<CheckCircle2 class="size-10" />
 					</div>
-					<h3 class="text-base font-bold text-foreground">ดึงข้อมูลสำเร็จ!</h3>
+					<h3 class="text-base font-bold text-foreground">{t.thaidScanSuccess}</h3>
 					{#if completedProfile}
 						<p class="text-xs text-muted-foreground">
 							{completedProfile.first_name}
@@ -276,9 +285,9 @@
 					>
 						<Clock class="size-8" />
 					</div>
-					<h3 class="text-sm font-bold text-foreground">QR Code หมดอายุแล้ว</h3>
+					<h3 class="text-sm font-bold text-foreground">{t.thaidScanExpiredTitle}</h3>
 					<p class="max-w-xs text-xs text-muted-foreground">
-						ไม่ได้ทำรายการภายในเวลาที่กำหนด กรุณากดปุ่มเพื่อสร้าง QR Code ใหม่
+						{t.thaidScanExpiredDesc}
 					</p>
 					<Button
 						type="button"
@@ -288,15 +297,15 @@
 						class="mt-2 gap-1.5"
 					>
 						<RotateCw class="size-4" />
-						สร้าง QR Code ใหม่
+						{t.thaidScanRegenerate}
 					</Button>
 				</div>
 			{:else if sessionState === 'error'}
 				<div class="flex h-64 flex-col items-center justify-center gap-3">
-					<p class="text-xs text-destructive">เกิดข้อผิดพลาดในการสร้างเซสชัน</p>
+					<p class="text-xs text-destructive">{t.thaidScanError}</p>
 					<Button type="button" variant="outline" size="sm" onclick={startSession} class="gap-1.5">
 						<RotateCw class="size-4" />
-						ลองใหม่อีกครั้ง
+						{t.thaidScanRetry}
 					</Button>
 				</div>
 			{/if}
@@ -304,7 +313,7 @@
 
 		<Dialog.Footer class="mt-2 flex flex-row items-center justify-between sm:justify-between">
 			<Button type="button" variant="ghost" size="sm" onclick={() => (open = false)}>
-				กรอกข้อมูลด้วยตนเอง (Manual)
+				{t.thaidScanManual}
 			</Button>
 		</Dialog.Footer>
 	</Dialog.Content>

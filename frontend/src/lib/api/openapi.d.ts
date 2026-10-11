@@ -3614,6 +3614,8 @@ export interface components {
 			 * @default 0
 			 */
 			member_count: number;
+			/** Members Masked */
+			members_masked?: string[];
 			/** Pets */
 			pets?: {
 				[key: string]: unknown;
