@@ -4,7 +4,12 @@
 	import Building from '@lucide/svelte/icons/building';
 	import ExternalLink from '@lucide/svelte/icons/external-link';
 	import Mail from '@lucide/svelte/icons/mail';
-	import { PUBLIC_FOOTER_I18N, PUBLIC_POLICY_I18N, PUBLIC_TERM_I18N } from '$lib/constants/i18n';
+	import {
+		PUBLIC_COOKIE_I18N,
+		PUBLIC_FOOTER_I18N,
+		PUBLIC_POLICY_I18N,
+		PUBLIC_TERM_I18N
+	} from '$lib/constants/i18n';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
 
@@ -32,6 +37,7 @@
 
 	const t = $derived(getTranslation(PUBLIC_FOOTER_I18N, langState.current));
 	const termT = $derived(getTranslation(PUBLIC_TERM_I18N, langState.current));
+	const cookieT = $derived(getTranslation(PUBLIC_COOKIE_I18N, langState.current));
 	const policyT = $derived(getTranslation(PUBLIC_POLICY_I18N, langState.current));
 </script>
 
@@ -139,6 +145,13 @@
 					class="underline-offset-2 transition-colors hover:text-white hover:underline"
 				>
 					{termT.footerLink}
+				</a>
+				<span class="text-white/30" aria-hidden="true">·</span>
+				<a
+					href={resolve('/cookie')}
+					class="underline-offset-2 transition-colors hover:text-white hover:underline"
+				>
+					{cookieT.footerLink}
 				</a>
 			</p>
 		</div>
