@@ -2,8 +2,8 @@
 title: Smart Shelter — API Contract v1
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-10
-note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration; Partner Data API EXT-001–007 (#214); CR-124 staff Google step-up MFA + Google SSO login (enrolled + mint AuthSession); decision sync 2026-10-08 — เพิ่ม GET /public/v1/unassigned-registrations/{id}/status (service secret, status-only) แทนการเรียก staff detail จาก BFF registrations/status — แก้ ticket คิวกลางหายจากอุปกรณ์ (QA pre-register 2026-10-08); decision sync 2026-10-09 — `breakdown` ของ EXT-005 เพิ่ม `gender_unspecified` (null+other; `male+female+gender_unspecified = occupancy_total`) และ `POST /public/v1/unassigned-registrations` รับ `members[].gender = null`; draft-kiosk-staff-pin-face-bypass (proposed) — §2.2 scanner staff PIN (admin set/regenerate/reveal, DELETE device, kiosk verify ที่หน่วงเมื่อ PIN ผิด)
+updated: 2026-10-11
+note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration; Partner Data API EXT-001–007 (#214); CR-124 staff Google step-up MFA + Google SSO login (enrolled + mint AuthSession); decision sync 2026-10-08 — เพิ่ม GET /public/v1/unassigned-registrations/{id}/status (service secret, status-only) แทนการเรียก staff detail จาก BFF registrations/status — แก้ ticket คิวกลางหายจากอุปกรณ์ (QA pre-register 2026-10-08); decision sync 2026-10-09 — `breakdown` ของ EXT-005 เพิ่ม `gender_unspecified` (null+other; `male+female+gender_unspecified = occupancy_total`) และ `POST /public/v1/unassigned-registrations` รับ `members[].gender = null`; draft-kiosk-staff-pin-face-bypass (proposed) — §2.2 scanner staff PIN (admin set/regenerate/reveal, DELETE device, kiosk verify ที่หน่วงเมื่อ PIN ผิด); draft-kiosk-thaid-check-in (proposed) — §2.1.1 kiosk ThaiD session 3 endpoint, `source:'thaid'` ใน lookup/check-in, ThaiD OAuth mode `kiosk_check_in`, `/kiosk/config` เพิ่ม `thaid_check_in_enabled`
 ---
 
 # Smart Shelter — API Contract v1
@@ -73,7 +73,7 @@ DELETE /couch/_session          → logout
   GET/POST /api/v1/auth/oauth/google/start      → redirect ไป Google authorize (mode: link | stepup | login)
   GET      /api/v1/auth/oauth/google/callback   → แลก code, อ่าน sub/email; link / step-up / mint login
   POST     /api/v1/auth/oauth/google/unlink     → ถอดการผูก Google (self หรือ admin ตามสิทธิ์)
-  GET/POST /api/v1/auth/oauth/thaid/start       → redirect ไป BORA ThaID authorize (mode: link | stepup | login)
+  GET/POST /api/v1/auth/oauth/thaid/start       → redirect ไป BORA ThaID authorize (mode: link | stepup | login; kiosk_check_in → §2.1.1)
   GET      /api/v1/auth/oauth/thaid/callback    → แลก code (Basic Auth), อ่าน sub/name/pid; link / step-up / mint login
   POST     /api/v1/auth/oauth/thaid/unlink      → ถอดการผูก ThaID (self หรือ admin ตามสิทธิ์)
   GET      /api/public/v1/login-methods          → { password, google, thaid } สำหรับหน้า login (CR-141)
@@ -157,13 +157,14 @@ X-Device-Secret: …
 {
   "shelter_code": "SH001",
   "phone_check_in_enabled": false,
-  "walk_in_registration_enabled": false
+  "walk_in_registration_enabled": false,
+  "thaid_check_in_enabled": false
 }
 ```
 
 `phone_check_in_enabled` อ่านจาก `shelter.feature_flags.kiosk_phone_check_in_enabled` และ
 `walk_in_registration_enabled` อ่านจาก `shelter.feature_flags.kiosk_walk_in_registration_enabled`;
-ไม่มี shelter หรือไม่มี flag ให้ถือเป็น `false` (ค่าเริ่มต้นปิด) ส่วน registry อ่านไม่ได้ตอบ
+`thaid_check_in_enabled` เป็น `true` เมื่อ `shelter.feature_flags.kiosk_thaid_check_in_enabled` **และ** `config:app.thaid_registration_enabled` เปิดคู่กัน (§2.1.1); ไม่มี shelter หรือไม่มี flag ให้ถือเป็น `false` (ค่าเริ่มต้นปิด) ส่วน registry อ่านไม่ได้ตอบ
 `503 DEPENDENCY_UNAVAILABLE`. Kiosk โหลด config เมื่อเข้า `/kiosk` และ `/kiosk/phone`; เมื่อปิดหรืออ่าน
 ไม่สำเร็จจะซ่อนช่องทางเบอร์โทรและนำทางกลับหน้าเลือกวิธี. เมื่อปิด walk-in registration จะไม่แสดง
 ปุ่มลงทะเบียนใหม่บนผล lookup.
@@ -208,6 +209,63 @@ INVALID_KIOSK_REGISTRATION`, flag ปิดตอบ `403 KIOSK_REGISTRATION_DIS
 ตอบ `429 KIOSK_RATE_LIMITED`, auth ไม่ผ่านตอบ `401 DEVICE_AUTH_FAILED`, และ registry/database
 อ่านหรือเขียนไม่ได้ตอบ `503` โดยไม่สร้าง record. รายละเอียดนี้ implement ตามค่าที่เสนอในแผน;
 CR ที่แผนอ้างถึงยังไม่มีใน `docs/changes/` และต้องได้รับอนุมัติก่อนเปิด PR.
+
+### 2.1.1 Kiosk ThaiD check-in — QR บนตู้ → ยืนยันในแอป ThaiD บนมือถือ
+
+> [draft-kiosk-thaid-check-in](../changes/draft-kiosk-thaid-check-in.md) (proposed) · รายละเอียด FR-KTD-01..45:
+> [`docs/plans/kiosk-thaid-check-in-implementation-plan.md`](../plans/kiosk-thaid-check-in-implementation-plan.md).
+> ค่า TTL / rate limit ด้านล่างเป็นข้อเสนอของทีม (D-4 / D-5) รอ PO เคาะ.
+
+**สรุป:** ตู้ขอ session → แสดง `qr_url` เป็น QR → ผู้อพยพสแกนด้วยมือถือและยืนยันในแอป ThaiD → server เก็บเลข
+13 หลัก (`pid`) ไว้ใน session ที่ผูกกับตู้ → ตู้ส่งแค่ `session_id` ไป lookup / check-in. Browser ของตู้ไม่เคยได้รับหรือส่ง
+เลข 13 หลัก. Session อยู่ใน memory ของ Node (relay ข้าม worker ผ่าน cluster IPC) ไม่ persist ลง CouchDB.
+
+**Gate (ตรวจทุก endpoint ด้านล่าง):** เปิดเมื่อ `config:app.thaid_registration_enabled` เปิด (อ่านไม่ได้ = ปิด) **และ**
+shelter ที่ผูกกับเครื่องมี `feature_flags.kiosk_thaid_check_in_enabled = true`. ปิด → `403 KIOSK_METHOD_DISABLED`.
+
+**Endpoint (device credential `X-Device-ID` / `X-Device-Secret`, `cache-control: no-store`):**
+
+| Endpoint | Body | Response |
+| --- | --- | --- |
+| `POST /api/v1/scanner/kiosk/thaid/session` | — | `200 { "session_id", "qr_url", "expires_at", "expires_in_sec" }` |
+| `POST /api/v1/scanner/kiosk/thaid/session/status` | `{ "session_id" }` | `200 { "status", "expires_at", "expires_in_sec" }` · `404 { "status": "expired" }` |
+| `POST /api/v1/scanner/kiosk/thaid/session/cancel` | `{ "session_id" }` | `200 { "ok": true }` (idempotent — session ไม่มี / หมดอายุ / ของเครื่องอื่น ตอบเหมือนกัน) |
+
+- `session_id` = hex 32 ตัว; รูปแบบผิด → `400 INVALID_INPUT`
+- ทุก endpoint: auth ไม่ผ่าน → `401 DEVICE_AUTH_FAILED`; registry อ่านไม่ได้ → `503 DEPENDENCY_UNAVAILABLE`
+- `qr_url` = `{origin}/api/v1/auth/oauth/thaid/start?mode=kiosk_check_in&session_id=…` (origin = `ORIGIN` / `PUBLIC_ORIGIN` ของ deploy)
+- สร้าง session: ลำดับตรวจ auth → rate limit 10 ครั้ง/นาที/เครื่อง (`429 KIOSK_RATE_LIMITED` + `retry-after: 60`, นับต่อ worker) →
+  gate → สร้าง. สร้างใหม่ = ยกเลิก session `pending` / `completed` เดิมของเครื่องเดียวกัน
+- TTL: `pending` 300 วิ; เมื่อยืนยันสำเร็จเป็น `completed` และนับใหม่ 180 วิ. ตู้ต้องนับเวลาจาก `expires_in_sec` ด้วยนาฬิกา
+  monotonic (ไม่ใช้ `expires_at` กับนาฬิกาตู้) และ poll `status` อีกครั้งก่อนแสดงว่าหมดอายุ
+- `status`: `pending` · `completed` · `cancelled` · `consumed`; ไม่มี / หมดอายุ / เป็นของเครื่องอื่น → `404 { "status": "expired" }`
+  (ไม่บอกว่ามี session อยู่). Response ไม่มี `pid` หรือ PII
+- `GET /api/public/v1/thaid/scan-session/[id]` และ `/[id]/events` (ของ flow `member_scan`) ตอบ `404 { "status": "expired" }`
+  สำหรับ session `kind = kiosk_check_in`
+
+**ThaiD OAuth mode `kiosk_check_in`:** `GET /api/v1/auth/oauth/thaid/start?mode=kiosk_check_in&session_id=…` ไม่ต้องมี
+`AuthSession`; scope `openid pid` (ไม่ใช้ `THAID_OAUTH_SCOPE`); ใช้ callback / redirect URI เดิม. Start ตรวจ kill-switch →
+session ต้องเป็น kind kiosk และ `pending` → gate ของ shelter ใน session. Callback ต้องได้ `pid` 13 หลักแล้วตั้ง session เป็น
+`completed`. ทุกผลลัพธ์ redirect ไป `/thaid-scan-success?flow=kiosk&status=success` หรือ `&error=<code>`
+(`missing_session` · `session_expired` · `thaid_disabled` · `missing_pid` · `oauth_exchange_failed` · `oauth_<idp_error>` · `invalid_state`).
+
+**Lookup (`POST /api/v1/scanner/kiosk/lookup`):** body `{ "source": "thaid", "session_id" }` (strict; ไม่รับ `citizen_id`).
+ตรวจ rate limit เดิม → gate → session ต้องเป็นของเครื่องนี้, `completed`, และ `shelter_code` ตรงกับเครื่อง มิฉะนั้น
+`409 KIOSK_THAID_SESSION_INVALID`. Lookup ใช้ `pid` จาก session และ**ไม่** consume session. ไม่พบ → `404
+PRE_REGISTRATION_NOT_FOUND` พร้อม `can_register: false` (walk-in ด้วย ThaiD อยู่นอก scope).
+
+**Check-in (`POST /api/v1/scanner/kiosk/check-in`):** body เพิ่ม `source: "thaid"` + `thaid_session_id`; ห้ามส่ง
+`citizen_id` คู่กับ `source: "thaid"` และห้ามส่ง `thaid_session_id` กับ source อื่น (`400 INVALID_CHECK_IN_INPUT`).
+- ลำดับ: gate → `shelter_code` ของ session ตรงกับเครื่อง → consume session (single-use) → เขียน check-in
+- `pid` ต้องตรงกับ `person_id.number` ของ `primary_evacuee_id`; ไม่ตรงหรือไม่พบ primary → `409 KIOSK_THAID_SESSION_INVALID`
+  และ session ถูกใช้แล้ว (ไม่คืน)
+- การเขียน throw หรือสมาชิกทุกคนได้ `failed` → คืน session เป็น `completed` ให้ลองใหม่ด้วย scan เดิม
+- session ไม่ใช่ `completed` / ใช้แล้ว / เป็นของเครื่องหรือศูนย์อื่น → `409 KIOSK_THAID_SESSION_INVALID`
+- ตู้แนบ `source: "thaid"` เฉพาะ batch แรกที่มี primary (client ส่ง primary ไว้ batch แรกเสมอ); batch ถัดไปส่งแบบไม่มี
+  `source` (ข้อเสนอ D-8 — รอ PO เคาะ)
+- ช่องทาง ThaiD ไม่ใช้ face check / staff PIN
+
+`scanner_client` แนบ device credential ให้ 3 path `thaid/session{,/status,/cancel}` เพิ่มจาก allowlist เดิม.
 
 ### 2.2 Scanner staff PIN — ข้ามการตรวจใบหน้าด้วย PIN ของเครื่อง
 
