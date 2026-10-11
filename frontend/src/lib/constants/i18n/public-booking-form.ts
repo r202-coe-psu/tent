@@ -157,8 +157,9 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		unassignedDisclaimerTitle: 'เงื่อนไขการใช้งานระบบลงทะเบียนล่วงหน้า',
 		unassignedDisclaimerBody:
 			'ข้อมูลที่ท่านกรอกจะถูกเก็บในคิวกลางของระบบจนกว่าเจ้าหน้าที่ศูนย์พักพิงจะยืนยันการลงทะเบียน',
-		unassignedDisclaimerAck:
-			'ข้าพเจ้ารับทราบเงื่อนไขการใช้งานระบบ และยินยอมให้เก็บข้อมูลตามที่ระบุเพื่อการลงทะเบียนล่วงหน้า',
+		unassignedDisclaimerAckPrefix: 'ข้าพเจ้ารับทราบ',
+		unassignedDisclaimerAckLink: 'ข้อตกลงการใช้งาน',
+		unassignedDisclaimerAckSuffix: ' และยินยอมให้เก็บข้อมูลตามที่ระบุเพื่อการลงทะเบียนล่วงหน้า',
 		unassignedDisclaimerRequired: 'กรุณายืนยันการรับทราบเงื่อนไขการใช้งานระบบก่อนส่งข้อมูล',
 		capacityAvailable: (available: number, capacity: number, unit: string) =>
 			`ว่าง ${available} / ${capacity} ${unit}`,
@@ -674,8 +675,10 @@ export const PUBLIC_BOOKING_FORM_I18N = {
 		unassignedDisclaimerTitle: 'System pre-registration terms',
 		unassignedDisclaimerBody:
 			'Your information is stored in the central queue until shelter staff confirms your registration.',
-		unassignedDisclaimerAck:
-			'I acknowledge these system terms and consent to storing this information for advance registration.',
+		unassignedDisclaimerAckPrefix: 'I acknowledge the ',
+		unassignedDisclaimerAckLink: 'Terms of Use',
+		unassignedDisclaimerAckSuffix:
+			' and consent to storing this information for advance registration.',
 		unassignedDisclaimerRequired: 'Please acknowledge the system terms before submitting.',
 		capacityAvailable: (available: number, capacity: number, unit: string) =>
 			`${available} / ${capacity} ${unit} free`,
