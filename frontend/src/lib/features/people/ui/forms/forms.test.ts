@@ -527,7 +527,7 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 			expect(result.body).not.toContain('quarantine ·');
 		});
 
-		it('says when the zone Station 1 suggested is pre-selected (CR-158)', () => {
+		it('says when the zone Station 1 suggested is pre-selected (CR-159)', () => {
 			const result = render(ZoneSelectionFields, {
 				props: {
 					selected_zone: 'Z-01',
@@ -539,7 +539,7 @@ describe('Shared Form Sub-components for Evacuee Intake and Profile (Issue #205)
 			expect(result.body).toContain('เลือกไว้ให้แล้ว');
 		});
 
-		it('explains that EWAR symptoms override the zone Station 1 suggested (CR-158)', () => {
+		it('explains that EWAR symptoms override the zone Station 1 suggested (CR-159)', () => {
 			const result = render(ZoneSelectionFields, {
 				props: {
 					selected_zone: '',

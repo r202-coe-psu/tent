@@ -1,5 +1,5 @@
 ---
-id: CR-158
+id: CR-159
 title: Station 1 บันทึก "โซนที่ต้องการ" รายคนแบบไม่บังคับ — Station 3 ใช้เป็นค่าแนะนำ (ไม่ใช่การจัดโซน)
 status: done
 date: 2026-10-06
@@ -16,7 +16,7 @@ affects:
   - frontend/src/routes/(protected)/onsite/zoning/[evacuee_id]/+page.svelte
 ---
 
-# CR-158 — Station 1 บันทึก "โซนที่ต้องการ" แบบไม่บังคับ — Station 3 ใช้เป็นค่าแนะนำ
+# CR-159 — Station 1 บันทึก "โซนที่ต้องการ" แบบไม่บังคับ — Station 3 ใช้เป็นค่าแนะนำ
 
 > **สรุป (TL;DR):**
 >
@@ -94,3 +94,4 @@ affects:
 - 2026-10-06 — approved เป็น CR-155 (เลขถัดจาก CR-154 บน develop ตอนนั้น); schema_v ปรับเป็น 12 → 13 เพราะ CR-154 ใช้ 12 แล้ว
 - 2026-10-06 — done: schema.md §1.1 + ADR-0001 note + code/tests (people domain/data, Station 1 member card accordion, Station 3 zone picker)
 - 2026-10-09 — เปลี่ยนเลขเป็น **CR-158** ตอน merge `develop`: เลข CR-155 ถูกใช้แล้วโดย Shelter Incident Log (CR-155 ของ develop) — เนื้อหาไม่เปลี่ยน
+- 2026-10-11 — เปลี่ยนเลขเป็น **CR-159** ตอน merge `develop`: เลข CR-158 ถูกใช้แล้วโดย Kiosk staff PIN face bypass (CR-158 ของ develop) — เนื้อหาไม่เปลี่ยน

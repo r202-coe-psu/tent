@@ -1820,7 +1820,7 @@ describe('gender nullable (schema_v 12, CR-154; decision sync 2026-10-09)', () =
 	});
 });
 
-describe('preferred_zone (schema_v 13, CR-158)', () => {
+describe('preferred_zone (schema_v 13, CR-159)', () => {
 	const base = { first_name: 'A', last_name: 'B', gender: 'male' as const, phone: null };
 	const ctx = { shelterCode: 'SH001', createdBy: 'staff' };
 

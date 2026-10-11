@@ -112,7 +112,7 @@
 	const photoInputId = $derived(`unified-member-photo-${index}`);
 	const showPhotoUpload = $derived(photoUpload !== 'none');
 	/**
-	 * CR-158: Station 1 may note a zone this person would like — a suggestion for Station 3,
+	 * CR-159: Station 1 may note a zone this person would like — a suggestion for Station 3,
 	 * never a zone assignment. Onsite only; the public form never asks.
 	 */
 	const showPreferredZone = $derived(channel === 'onsite');

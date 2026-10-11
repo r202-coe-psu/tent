@@ -332,7 +332,7 @@ interface Person {
 	age?: string;
 	/** Vulnerable-group checkbox codes, e.g. `elderly_dependent`. */
 	vulnerableGroups?: string[];
-	/** Station 1's optional preferred zone (CR-158) — a suggestion for Station 3, not a zone. */
+	/** Station 1's optional preferred zone (CR-159) — a suggestion for Station 3, not a zone. */
 	preferredZone?: string;
 }
 const fullName = (p: Pick<Person, 'firstName' | 'lastName'>) => `${p.firstName} ${p.lastName}`;
@@ -761,7 +761,7 @@ async function walkInFlow(browser: Browser, run: Run, s: Sessions) {
 
 	await test.step('Station 1: statuses and household details as staff see them', async () => {
 		await expectStay(desk, head, STATUS.arriving);
-		// A preferred zone is only a suggestion (ADR-0001, CR-158) — still arriving, no zone yet.
+		// A preferred zone is only a suggestion (ADR-0001, CR-159) — still arriving, no zone yet.
 		await expectStay(desk, child, STATUS.arriving);
 
 		await desk.goto(`/onsite/people/evacuee-profile-view/${ids[head.firstName]}`);

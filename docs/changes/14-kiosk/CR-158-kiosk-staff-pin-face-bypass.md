@@ -1,10 +1,11 @@
 ---
-id: draft
+id: CR-158
 title: Kiosk staff PIN — ข้ามการตรวจใบหน้าได้เฉพาะเมื่อเจ้าหน้าที่ใส่ PIN ของเครื่อง (PIN ต่อเครื่อง เก็บใน DB scanner_secrets)
-status: proposed
+status: approved
 date: 2026-10-10
+updated: 2026-10-11
 requested_by: ทีม kiosk
-decided_by: <เจ้าของโครงการ>
+decided_by: Soravit Sukkarn (Team Lead)
 layer: volatile
 affects:
   - docs/features/kiosk/02-walk-in-registration-and-face-check.md ส่วน B (กฎ "ผลไม่ผ่านไม่ปฏิเสธใคร" → ต้องใช้ staff PIN) — **ยังไม่มีใน repo**: feature spec kiosk 01/02 มาใน PR แยก ต้อง merge ก่อนหรือพร้อม CR นี้ แล้วแก้ตามกฎใหม่
@@ -24,7 +25,7 @@ why: ปุ่ม「ข้าม ให้เจ้าหน้าที่ต�
 migration: additive — doc scanner_device v1 อ่านเป็น "ยังไม่มี PIN"; `pnpm sync:central --write --confirm` สร้าง default PIN ให้เครื่องเดิมที่ยังไม่มี PIN doc และ stamp v2 (ไม่ทับ PIN ที่มีอยู่); server stamp v2 เมื่อตั้ง PIN
 ---
 
-# Kiosk staff PIN — ข้ามการตรวจใบหน้าได้เฉพาะเมื่อเจ้าหน้าที่ใส่ PIN ของเครื่อง
+# CR-158: Kiosk staff PIN — ข้ามการตรวจใบหน้าได้เฉพาะเมื่อเจ้าหน้าที่ใส่ PIN ของเครื่อง
 
 > **สรุป (TL;DR):**
 >
@@ -213,3 +214,4 @@ mode `off`: ไม่เปลี่ยน ไม่มี PIN (mode `shadow` �
   - `POST /api/v1/scanner/devices` เป็น endpoint ใหม่, `[id]` = `device_id`, error ใช้ envelope ของ service plane (§2.3)
   - feature spec kiosk 01 / 02 ยังไม่อยู่ใน PR นี้ ระบุใน `affects:` ว่ามาใน PR แยก
   - ถอดบัตรระหว่าง panel PIN เปิด = ยกเลิก session (FR-21, AC-3)
+- 2026-10-11 — approved โดย Soravit Sukkarn (Team Lead) (รันเลข CR-158)

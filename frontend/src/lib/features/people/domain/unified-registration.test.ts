@@ -516,7 +516,7 @@ describe('unified registration — report-in converters', () => {
 	});
 });
 
-describe('planFamilyRegistration — preferred_zone (CR-158)', () => {
+describe('planFamilyRegistration — preferred_zone (CR-159)', () => {
 	it('carries the suggestion but never zones at Station 1', () => {
 		const plan = planFamilyRegistration(
 			validInput({ members: [validMember({ preferred_zone: 'Z5' })] }),
