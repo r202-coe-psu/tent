@@ -3,7 +3,7 @@ title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
 updated: 2026-10-11
-note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer; CR-135/CR-136 partner OAuth2 client name/module preset + secret reveal/edit/delete; CR-137 shrink master_data (10→4) + zone/community free text; CR-138 remove purchase doc type + withdraw purchase from stock_ledger.reason; CR-139 shelter storage points; CR-140 item_category default_class editable; CR-144/CR-145 meal_service_receipt (§2.7.3); CR-147 removes CR-146 meal_distribution_push (§2.7.4) — ticket flow ends at warehouse stock-in; CR-148 pre-register validation + evacuee religion_other/disability_other_detail (v11) + household dorm_* (v6); CR-151 kiosk pre-registration check-in (report-in arriving status & KIOSK_LOOKUP_MANGO_INDEXES); CR-154 evacuee.gender nullable + registered_via api (v12), external_bookings (§9.7), partner scopes booking-write/residency-read + module M2; decision sync 2026-10-09 — `evacuee.gender = null` ("ไม่ระบุ") ใช้ได้ทุกช่องทาง (public/kiosk/Station 1/back-office/api) เป็นค่าเริ่มต้นของฟอร์ม, `'other'` คงไว้อ่านเฉพาะ doc เดิม (UI ไม่เสนอให้เลือกใหม่, แก้ไขแล้วต้อง preserve) — ยกเลิก CR-154 FR-70/FR-71(บางส่วน)/FR-72; เพิ่ม `public_shelters.occupancy_breakdown.gender_unspecified` (null+other) พร้อม invariant `male+female+gender_unspecified = occupancy_total`; evacuee ไม่ bump schema_v (v12 รองรับ null แล้ว); ต้อง re-project `public_shelters` (worker bootstrap) หลัง deploy; draft-kiosk-staff-pin-face-bypass (proposed) — `scanner_device` v2 (`staff_pin_*` metadata) + DB ใหม่ `scanner_secrets` (§3.11.1, admin-only, ไม่ replicate/sync); draft-kiosk-thaid-check-in (proposed) — shelter `feature_flags.kiosk_thaid_check_in_enabled` (additive, ไม่ bump schema_v) + `config:app.thaid_registration_enabled` ครอบคลุม mode `kiosk_check_in` (kiosk อ่านแบบ fail closed)
+note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer; CR-135/CR-136 partner OAuth2 client name/module preset + secret reveal/edit/delete; CR-137 shrink master_data (10→4) + zone/community free text; CR-138 remove purchase doc type + withdraw purchase from stock_ledger.reason; CR-139 shelter storage points; CR-140 item_category default_class editable; CR-144/CR-145 meal_service_receipt (§2.7.3); CR-147 removes CR-146 meal_distribution_push (§2.7.4) — ticket flow ends at warehouse stock-in; CR-148 pre-register validation + evacuee religion_other/disability_other_detail (v11) + household dorm_* (v6); CR-151 kiosk pre-registration check-in (report-in arriving status & KIOSK_LOOKUP_MANGO_INDEXES); CR-154 evacuee.gender nullable + registered_via api (v12), external_bookings (§9.7), partner scopes booking-write/residency-read + module M2; decision sync 2026-10-09 — `evacuee.gender = null` ("ไม่ระบุ") ใช้ได้ทุกช่องทาง (public/kiosk/Station 1/back-office/api) เป็นค่าเริ่มต้นของฟอร์ม, `'other'` คงไว้อ่านเฉพาะ doc เดิม (UI ไม่เสนอให้เลือกใหม่, แก้ไขแล้วต้อง preserve) — ยกเลิก CR-154 FR-70/FR-71(บางส่วน)/FR-72; เพิ่ม `public_shelters.occupancy_breakdown.gender_unspecified` (null+other) พร้อม invariant `male+female+gender_unspecified = occupancy_total`; evacuee ไม่ bump schema_v (v12 รองรับ null แล้ว); ต้อง re-project `public_shelters` (worker bootstrap) หลัง deploy; CR-157 donation_slot แยกคิว dropoff/pickup (§2.13, v2); CR-158 kiosk staff PIN face bypass — `scanner_device` v2 (`staff_pin_*` metadata) + DB ใหม่ `scanner_secrets` (§3.11.1, admin-only, ไม่ replicate/sync); CR-159 evacuee `preferred_zone` (v13); CR-162 kiosk banner — doc type ใหม่ `kiosk_banner` v1 ใน `registry` (§3.12) + capability role `banner_staff` ใน `_users.roles` (§6); CR-163 kiosk ThaiD check-in — shelter `feature_flags.kiosk_thaid_check_in_enabled` (additive, ไม่ bump schema_v) + `config:app.thaid_registration_enabled` ครอบคลุม mode `kiosk_check_in` (kiosk อ่านแบบ fail closed)
 ---
 
 # Database Schema v5 — field-level
@@ -1425,7 +1425,7 @@ backward compatibility ของ CR-059/110; flow ใหม่ใช้ §2.29�
 | `admission_policy` | {`supported_vulnerable_groups`:[str], `pet_policy`:{`policy`:enum(`no_pets`,`conditional`)\|null, `categories`:[{`category`:enum(`small_general`,`large_dog`,`livestock`), `conditions`:[str]?, `max_capacity`:int≥0?, `location`:str?, `other`:str?}]}} | opt | section นโยบายการรับผู้อพยพ/สัตว์ |
 | `luggage_policy` | {`limitation`:enum(`no_limit`,`limited`)\|null, `max_per_family`:int≥0\|null, `rules`:[enum(`valuables_self_responsibility`,`no_hazardous_items`,`no_large_appliances`,`has_temp_storage_service`)], `rules_other`:str\|null} | opt | section นโยบายทรัพย์สิน/สัมภาระ |
 | `parking_policy` | {`availability`:enum(`none`,`available`)\|null, `supported_vehicles`:[{`type`:enum(`motorcycle`,`car`,`truck`,`boat`), `max_capacity`:int≥0\|null}], `rules`:[enum(`no_liability`,`first_come_first_served`,`key_deposit_required`,`no_blocking_emergency_lane`,`ev_emergency_charging`)], `rules_other`:str\|null} | opt | section นโยบายยานพาหนะ |
-| `feature_flags` | {`allow_pets`:bool, `allow_vehicles`:bool, `allow_assets`:bool, `public_donations_enabled`:bool, `enable_medical_screening`:bool, `accepts_pre_registration`:bool, `kiosk_phone_check_in_enabled`:bool, `kiosk_walk_in_registration_enabled`:bool, `kiosk_thaid_check_in_enabled`:bool} | opt | default `allow_* = false`, `public_donations_enabled = true` (CR-048), `enable_medical_screening = false` (CR-106), `accepts_pre_registration = false`, `kiosk_phone_check_in_enabled = false` ([draft CR kiosk phone check-in toggle](../changes/draft-kiosk-phone-check-in-toggle.md)), `kiosk_walk_in_registration_enabled = false` ([CR-149](../changes/CR-149-kiosk-walk-in-registration.md)), `kiosk_thaid_check_in_enabled = false` ([draft CR kiosk ThaiD check-in](../changes/draft-kiosk-thaid-check-in.md), proposed); ควบคุมฟีเจอร์ลงทะเบียน การคัดกรองการแพทย์ การรับลงทะเบียนล่วงหน้าจากหน้าสาธารณะ การแสดงผลบน Public Needs Board และช่องทางรายงานตัวด้วยเบอร์โทรและการลงทะเบียนหน้างานที่ Kiosk เมื่อไม่พบข้อมูลบัตร (phone ปิด = ซ่อนการ์ดเบอร์ + lookup `source:'phone'` ตอบ 403 `KIOSK_METHOD_DISABLED`; walk-in ปิด = ไม่เสนอทางลงทะเบียนใหม่ที่ตู้; ThaiD ปิด = ซ่อนการ์ด ThaiD บนตู้ + `/kiosk/thaid` redirect กลับ `/kiosk` + endpoint `scanner/kiosk/thaid/session`, lookup/check-in `source:'thaid'` ตอบ 403 `KIOSK_METHOD_DISABLED` — การ์ดเปิดได้เมื่อ flag นี้ **และ** `config:app.thaid_registration_enabled` เปิดคู่กัน; doc เดิมที่ไม่มี key อ่านเป็น `false`; เพิ่ม key แบบ additive ไม่ bump `schema_v`) |
+| `feature_flags` | {`allow_pets`:bool, `allow_vehicles`:bool, `allow_assets`:bool, `public_donations_enabled`:bool, `enable_medical_screening`:bool, `accepts_pre_registration`:bool, `kiosk_phone_check_in_enabled`:bool, `kiosk_walk_in_registration_enabled`:bool, `kiosk_thaid_check_in_enabled`:bool} | opt | default `allow_* = false`, `public_donations_enabled = true` (CR-048), `enable_medical_screening = false` (CR-106), `accepts_pre_registration = false`, `kiosk_phone_check_in_enabled = false` ([draft CR kiosk phone check-in toggle](../changes/draft-kiosk-phone-check-in-toggle.md)), `kiosk_walk_in_registration_enabled = false` ([CR-149](../changes/CR-149-kiosk-walk-in-registration.md)), `kiosk_thaid_check_in_enabled = false` ([CR-163](../changes/14-kiosk/CR-163-kiosk-thaid-check-in.md)); ควบคุมฟีเจอร์ลงทะเบียน การคัดกรองการแพทย์ การรับลงทะเบียนล่วงหน้าจากหน้าสาธารณะ การแสดงผลบน Public Needs Board และช่องทางรายงานตัวด้วยเบอร์โทรและการลงทะเบียนหน้างานที่ Kiosk เมื่อไม่พบข้อมูลบัตร (phone ปิด = ซ่อนการ์ดเบอร์ + lookup `source:'phone'` ตอบ 403 `KIOSK_METHOD_DISABLED`; walk-in ปิด = ไม่เสนอทางลงทะเบียนใหม่ที่ตู้; ThaiD ปิด = ซ่อนการ์ด ThaiD บนตู้ + `/kiosk/thaid` redirect กลับ `/kiosk` + endpoint `scanner/kiosk/thaid/session`, lookup/check-in `source:'thaid'` ตอบ 403 `KIOSK_METHOD_DISABLED` — การ์ดเปิดได้เมื่อ flag นี้ **และ** `config:app.thaid_registration_enabled` เปิดคู่กัน; doc เดิมที่ไม่มี key อ่านเป็น `false`; เพิ่ม key แบบ additive ไม่ bump `schema_v`) |
 | `edge_url` | str\|null | sys | base URL ของ LAN Edge fallback ศูนย์นั้น — ใช้เมื่อ WAN/central เข้าไม่ได้; ไม่ใช่ normal client remote |
 | `opened_at` / `closed_at` | ts / ts\|null | sys | — |
 
@@ -1443,7 +1443,7 @@ backward compatibility ของ CR-059/110; flow ใหม่ใช้ §2.29�
 | --- | --- | --- | --- |
 | `public_otp_required` | bool | `false` | risk-based — เปิดเมื่อโดน spam |
 | `recaptcha_enabled` | bool | `true` | operator kill-switch reCAPTCHA; ต้องมี key ใน env ด้วยเมื่อ ON |
-| `thaid_registration_enabled` | bool | `true` | operator kill-switch ThaID ทุก mode ยกเว้น `stepup` (pre-register, login, link, member_scan, kiosk_check_in); mode `kiosk_check_in` อ่านแบบ **fail closed** — อ่าน `config:app` ไม่ได้ = ปิด และต้องเปิดคู่กับ shelter `feature_flags.kiosk_thaid_check_in_enabled` ([draft CR kiosk ThaiD check-in](../changes/draft-kiosk-thaid-check-in.md), proposed); mode อื่นคง fail open ตามเดิม |
+| `thaid_registration_enabled` | bool | `true` | operator kill-switch ThaID ทุก mode ยกเว้น `stepup` (pre-register, login, link, member_scan, kiosk_check_in); mode `kiosk_check_in` อ่านแบบ **fail closed** — อ่าน `config:app` ไม่ได้ = ปิด และต้องเปิดคู่กับ shelter `feature_flags.kiosk_thaid_check_in_enabled` ([CR-163](../changes/14-kiosk/CR-163-kiosk-thaid-check-in.md)); mode อื่นคง fail open ตามเดิม |
 | `password_login_enabled` | bool | `false` | แสดงฟอร์ม username/password บน `/login`; OFF = แสดงเฉพาะ Google/ThaID — `/admin-login` ใช้ได้เสมอ ([CR-141](../changes/01-core/CR-141-oauth-first-login-link.md)) |
 | `duplicate_hint_threshold` | num 0–1 | `0.8` | soft-match registration |
 | `donation_reservation_ttl_hours` | int | `72` | — |
@@ -1682,7 +1682,7 @@ provisioning เท่านั้น. `value` คือเลขล่าสุ
 | `value` | int≥0 | req | เลขที่ allocate ล่าสุด; เริ่ม `0` |
 
 
-### 3.11 `scanner_device` — `scanner_device:{device_id}` · **schema_v 2** (CR-084 + [draft-kiosk-staff-pin-face-bypass](../changes/draft-kiosk-staff-pin-face-bypass.md), proposed)
+### 3.11 `scanner_device` — `scanner_device:{device_id}` · **schema_v 2** (CR-084 + [CR-158](../changes/14-kiosk/CR-158-kiosk-staff-pin-face-bypass.md))
 
 ทะเบียนอุปกรณ์เครื่องอ่านบัตรประชาชน Smart Card Kiosk ประจำศูนย์พักพิง (Hardware Registry). เป็น registry doc กลางสำหรับ Authentication ตรวจสอบ API Key/Secret และกำกับสิทธิ์การ Inbound สแกนบัตรเข้าสู่ฐานข้อมูลศูนย์พักพิง.
 
@@ -1704,7 +1704,7 @@ provisioning เท่านั้น. `value` คือเลขล่าสุ
 **ห้าม** มี PIN, hash หรือ ciphertext ของ PIN ใน doc นี้ หรือใน response รายการเครื่อง — PIN อยู่ใน
 DB `scanner_secrets` เท่านั้น.
 
-**Migration (schema_v 1 → 2, draft-kiosk-staff-pin-face-bypass):** additive — doc v1 (ไม่มี `staff_pin_*`)
+**Migration (schema_v 1 → 2, CR-158):** additive — doc v1 (ไม่มี `staff_pin_*`)
 ยังอ่านได้ และอ่านเป็น "ยังไม่ตั้ง PIN" (`staff_pin_set: false`, `staff_pin_is_default: false`,
 `staff_pin_updated_at: null`, `staff_pin_updated_by: null`). Backfill: `pnpm sync:central --write --confirm`
 สร้าง default PIN ให้เครื่องที่ยังไม่มี PIN doc แล้ว stamp v2 (`staff_pin_is_default: true`,
@@ -1718,7 +1718,7 @@ server stamp `schema_v: 2` เมื่อตั้ง PIN; เครื่อ�
 > - **ปัจจุบัน (Design Choice):** เก็บไว้ที่ DB `registry` ตรงกลาง เพื่อให้ Inbound API (`/api/v1/scanner/bootstrap`, `/api/v1/scanner/kiosk/lookup`, `/api/v1/scanner/kiosk/check-in` — CR-151; `/draft` ปิดเป็น 410) สามารถ lookup ตรวจสอบ `device_id` และ `secret_hash` ได้อย่างรวดเร็วใน 1 query โดย Client ไม่จำเป็นต้อง hardcode หรือส่ง `shelter_code` มาใน Request Header
 > - **ประเด็นพิจารณาในอนาคต (Future Consideration):** หากต้องการให้ศูนย์พักพิงมีอิสระในการเพิ่ม/จัดการเครื่องเอง (Shelter Autonomy) หรือรองรับ Edge Node ที่เน็ตตัดขาด อาจพิจารณาย้าย `scanner_device` ไปเก็บไว้ใน `shelter_{shelter_code}` โดยมีข้อกำหนดว่า Client Kiosk จะต้องส่ง Header `X-Shelter-Code` แนบมากับทุก request ด้วย
 
-#### 3.11.1 DB `scanner_secrets` — `scanner_staff_pin` — `staff_pin:{device_id}` · **schema_v 1** ([draft-kiosk-staff-pin-face-bypass](../changes/draft-kiosk-staff-pin-face-bypass.md), proposed)
+#### 3.11.1 DB `scanner_secrets` — `scanner_staff_pin` — `staff_pin:{device_id}` · **schema_v 1** ([CR-158](../changes/14-kiosk/CR-158-kiosk-staff-pin-face-bypass.md))
 
 DB แยกจาก `registry` เก็บ staff PIN 6 หลักต่อเครื่อง ที่เจ้าหน้าที่ใช้ยืนยันให้ kiosk ไปต่อเมื่อผลตรวจใบหน้า
 ไม่ใช่ `match` (mode `on`). หนึ่ง doc ต่อเครื่อง.
@@ -1755,6 +1755,39 @@ stamp registry v2 (`updated_by: system:sync-central`); เครื่องท�
 **Delete order:** `DELETE /api/v1/scanner/devices/[id]` ลบ doc ใน `registry` ก่อน แล้วจึงลบ PIN doc (best effort).
 ลบ registry ไม่สำเร็จ → ไม่แตะ PIN doc. PIN doc ที่ค้างใช้ไม่ได้ เพราะเครื่องที่ไม่มีใน registry ไม่ผ่าน device auth
 (`401 DEVICE_AUTH_FAILED` ก่อนถึงขั้นตรวจ PIN) และจะถูกเขียนทับเมื่อสร้างเครื่อง `device_id` เดิมใหม่. ไม่มี doc = `409 staff_pin_not_set` ตอนตรวจ PIN แม้ registry จะเขียน `staff_pin_set: true`.
+
+### 3.12 `kiosk_banner` — `kiosk_banner:{ulid}` · **schema_v 1** ([CR-162](../changes/14-kiosk/CR-162-kiosk-banner.md))
+
+แบนเนอร์รูปภาพที่ตู้ kiosk วนแสดงเต็มจอเมื่อหน้า `/kiosk` idle 30 วินาที (attract overlay). registry doc (ไม่มี
+`shelter_code` envelope) — ศูนย์ปลายทางอยู่ใน `shelter_codes`. ตู้อ่านผ่าน `POST /api/v1/scanner/kiosk/banners`
+(device auth) เท่านั้น — **ไม่ sync เข้า MongoDB** และไม่มี projection.
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `_id` | str | req | `kiosk_banner:{ulid}` |
+| `type` | `"kiosk_banner"` | req | — |
+| `schema_v` | int | req | `1` |
+| `title` | str | req | ≤120 ตัวอักษร · ใช้ในหน้าจัดการ + เป็น `alt` ของรูป |
+| `caption` | str\|null | opt | ≤200 ตัวอักษร · text เท่านั้น (ห้าม HTML) · แสดงใต้รูปบนตู้ |
+| `order` | int | req | ≥1 default `1` · เรียง `order` asc → `start_at` asc → `_id` asc |
+| `duration_sec` | int | req | 3–60 default `10` · เวลาแสดงต่อสไลด์ |
+| `start_at` | ts | req | เริ่มแสดง (รวม) |
+| `end_at` | ts | req | สิ้นสุด (ไม่รวม) · ต้อง `> start_at` |
+| `status` | enum(`active`,`inactive`) | req | default `active` |
+| `shelter_codes` | [str] | req | ≥1 รายการ · เทียบกับ `scanner_device.shelter_code` |
+| `created_at` / `updated_at` / `created_by` | ts / ts / str | req | ตาม envelope §0 |
+| `_attachments.image` | attachment | req | `image/png` · `image/jpeg` · `image/webp` · ≤2 MB · server ตรวจ magic bytes ก่อน PUT |
+
+**แสดงบนตู้เมื่อ:** `status = active` และ `start_at ≤ now < end_at` (เวลา server) และ `shelter_codes` มี
+`shelter_code` ของเครื่อง · สูงสุด 20 รายการต่อ response.
+
+**VDU (`registry`):** reject เมื่อ `end_at ≤ start_at`, `duration_sec` นอก 3–60, `order < 1`, `shelter_codes` ว่าง,
+`status` นอก enum. เขียนได้เฉพาะผ่าน BFF `/api/back-office/kiosk-banners/**` (admin credential หลังตรวจสิทธิ์
+`system_admin` / `{code}:shelter_manager` / `{code}:banner_staff` — scope ต้องครอบทุก `shelter_codes` ทั้งค่าเดิมและค่าใหม่).
+
+**ลบ:** hard delete ทั้ง doc (attachment หายไปด้วย).
+
+**Index:** `(type, status, end_at)`
 
 ---
 
@@ -2272,7 +2305,7 @@ CouchDB `_users` DB ไม่ใช่ operational doc ธรรมดา — �
 | `name` | str | req | CouchDB username — alphanumeric (`sa01`, `staff01`, …) หรือเบอร์ 10 หลักก็ได้; ไม่บังคับให้เท่ากับ `phone` |
 | `password` | str | req | CouchDB hash จัดการโดย CouchDB เอง |
 | `display_name` | str\|null | opt | ชื่อ-นามสกุลแสดงผล (UI บังคับกรอกตอนสร้าง) |
-| `roles` | [str] | req | Compound Scoped Roles: อย่างใดอย่างหนึ่ง — (a) `["system_admin"]` (Global Admin เข้าถึงได้ทุกศูนย์) หรือ (b) `["shelter:SH001", "shelter:SH002", "SH001:registration_staff", "SH002:medical_staff"]` (กุญแจ `shelter:{code}` + บทบาทแยกรายศูนย์ `{code}:{capability}`; รองรับ legacy แบน `["shelter:SH001", "registration_staff"]`) |
+| `roles` | [str] | req | Compound Scoped Roles: อย่างใดอย่างหนึ่ง — (a) `["system_admin"]` (Global Admin เข้าถึงได้ทุกศูนย์) หรือ (b) `["shelter:SH001", "shelter:SH002", "SH001:registration_staff", "SH002:medical_staff"]` (กุญแจ `shelter:{code}` + บทบาทแยกรายศูนย์ `{code}:{capability}`; รองรับ legacy แบน `["shelter:SH001", "registration_staff"]`) · capability `banner_staff` (CR-162) จัดการ kiosk banner ของศูนย์ใน scope |
 | `personnel_type` | enum(`staff`,`volunteer`) | req | แยกประเภท: `'staff'` (เจ้าหน้าที่ประจำ) หรือ `'volunteer'` (อาสาช่วยงานระบบ Staff-Capable ที่ได้รับสิทธิ์) |
 | `organization` | str\|null | opt | หน่วยงานต้นสังกัด — optional สำหรับทั้ง staff และ volunteer |
 | `position` | str\|null | opt | ตำแหน่งหน้าที่ / วิชาชีพ (เช่น พยาบาลวิชาชีพ, เจ้าหน้าที่ป้องกันฯ) |
