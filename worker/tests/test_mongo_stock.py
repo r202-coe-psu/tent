@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 
 from tent_model import PublicShelter, ShelterStock
 
-from worker.mongo.stock import refresh_shelter_stock
+from worker.mongo.stock import delete_stocks_for_shelter, refresh_shelter_stock
 
 
 def _fake_couch(shelter_docs: list[dict], catalog_docs: list[dict] | None = None):
@@ -190,3 +190,40 @@ async def test_refresh_shelter_stock_skips_a_shelter_with_no_database(db: None) 
     couch.database_exists = AsyncMock(return_value=False)
 
     assert await refresh_shelter_stock(couch, "SH-DOES-NOT-EXIST") == 0
+
+
+def _stock(shelter_code: str, item: str) -> ShelterStock:
+    return ShelterStock(
+        id=f"{shelter_code}:{item}",
+        shelter_code=shelter_code,
+        item_id=item,
+        name_th="ข้าวสาร",
+        type_code="food",
+        unit_label="กก.",
+        quantity_on_hand=5,
+        updated_at=datetime.now(UTC),
+    )
+
+
+async def test_delete_stocks_for_shelter_only_touches_that_shelter(db: None) -> None:
+    await _stock("SH930", "item_master:rice").insert()
+    await _stock("SH930", "item_master:water").insert()
+    await _stock("SH931", "item_master:rice").insert()
+
+    await delete_stocks_for_shelter("SH930")
+
+    assert await ShelterStock.find(ShelterStock.shelter_code == "SH930").count() == 0
+    assert await ShelterStock.get("SH931:item_master:rice") is not None
+
+
+async def test_refresh_shelter_stock_drops_rows_when_the_database_is_gone(
+    db: None,
+) -> None:
+    """A late ledger tombstone for a deleted shelter must not leave its rows behind (#461)."""
+    await _stock("SH932", "item_master:rice").insert()
+    couch = AsyncMock()
+    couch.database_exists = AsyncMock(return_value=False)
+
+    assert await refresh_shelter_stock(couch, "SH932") == 0
+
+    assert await ShelterStock.get("SH932:item_master:rice") is None

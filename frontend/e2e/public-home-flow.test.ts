@@ -88,7 +88,11 @@ test.describe('Public landing: setup and urgent need', { tag: ['@public', '@crit
 		await expect(page.getByText(NEED_ITEM)).toBeVisible();
 		await expect(page.getByText('ขาดอีก 500 จากเป้า 500')).toBeVisible();
 
-		await page.getByRole('link', { name: 'แจ้งบริจาค' }).click();
+		// Scope to THIS run's shelter: a seeded DB has its own urgent needs, so the bare
+		// "แจ้งบริจาค" link name matches several cards (strict-mode violation).
+		const donateLink = page.locator(`a[href="/donations?shelter=${shelterCode}"]`);
+		await expect(donateLink).toHaveText('แจ้งบริจาค');
+		await donateLink.click();
 		await expect(page).toHaveURL(new RegExp(`/donations\\?shelter=${shelterCode}$`));
 	});
 });

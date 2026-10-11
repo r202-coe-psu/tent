@@ -17,3 +17,30 @@ export async function fetchDocs<T>(dbName: string, prefix: string): Promise<T[]>
 	const rows = (res.data as { rows?: { doc: T }[] })?.rows ?? [];
 	return rows.map((r) => r.doc).filter(Boolean);
 }
+
+/** A CouchDB read that failed for a reason other than "database does not exist". */
+export class CouchReadError extends Error {
+	readonly status: number;
+	constructor(dbName: string, prefix: string, status: number) {
+		super(`CouchDB read failed (${status}) for ${dbName}/${prefix}`);
+		this.name = 'CouchReadError';
+		this.status = status;
+	}
+}
+
+/**
+ * Fail-closed variant of {@link fetchDocs} for reads that gate a decision (e.g. how many
+ * bookings a window already holds). A missing database (404) really is "no docs yet" and
+ * returns `[]`; any other error status throws {@link CouchReadError} so the caller can
+ * refuse instead of treating an outage as "nothing booked".
+ */
+export async function fetchDocsStrict<T>(dbName: string, prefix: string): Promise<T[]> {
+	const res = await adminRaw(
+		`/${dbName}/_all_docs?include_docs=true&startkey="${prefix}"&endkey="${prefix}￰"`,
+		'GET'
+	);
+	if (res.status === 404) return [];
+	if (res.status >= 400) throw new CouchReadError(dbName, prefix, res.status);
+	const rows = (res.data as { rows?: { doc: T }[] })?.rows ?? [];
+	return rows.map((r) => r.doc).filter(Boolean);
+}
