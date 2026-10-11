@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { page } from '$app/state';
 	import { env } from '$env/dynamic/public';
 	import * as Card from '$lib/components/ui/card/index.js';
@@ -14,7 +14,11 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { LANDING_ROUTE, resolvePostLoginDestination } from '$lib/guards/auth';
+	import {
+		LANDING_ROUTE,
+		resolvePostLoginDestination,
+		type PostLoginDestination
+	} from '$lib/guards/auth';
 	import { fetchAuthStatus, googleOAuthStartHref, thaidOAuthStartHref } from '$lib/features/users';
 	import { fetchRecaptchaEnabled } from '$lib/api/recaptcha-status';
 	import { fetchLoginMethods } from '$lib/api/login-methods';
@@ -28,11 +32,20 @@
 		navigateOnSuccess = true,
 		onSuccess,
 		showCard = true,
-		passwordMode = 'auto'
+		passwordMode = 'auto',
+		defaultUsername = '',
+		lockUsername = false,
+		submitLabel = 'เข้าสู่ระบบ (Login)'
 	}: {
 		navigateOnSuccess?: boolean;
-		onSuccess?: () => void;
+		/** Fires after login AND post-login destination resolution, before any navigation. */
+		onSuccess?: (result: { destination: PostLoginDestination }) => void;
 		showCard?: boolean;
+		/** Prefill the username (re-auth: the expired user). */
+		defaultUsername?: string;
+		/** Render the username read-only (re-auth must not silently switch accounts). */
+		lockUsername?: boolean;
+		submitLabel?: string;
 		/**
 		 * `auto` — username/password only when `config:app.password_login_enabled` (CR-141);
 		 * `always` — `/admin-login` and re-auth.
@@ -91,64 +104,67 @@
 		void goto(`${next.pathname}${next.search}${next.hash}`, { replaceState: true, noScroll: true });
 	});
 
-	const form = superForm(defaults(zod4(loginSchema)), {
-		SPA: true,
-		validators: zod4(loginSchema),
-		resetForm: false,
-		onUpdate: async ({ form }) => {
-			if (!form.valid) {
-				toast.error('กรุณากรอกข้อมูลให้ครบถ้วน');
-				return;
-			}
-
-			toast.promise(
-				(async () => {
-					const enabled = await fetchRecaptchaEnabled();
-					captchaEnabled = enabled;
-					if (enabled) {
-						const token = await captchaToken();
-						if (!token) {
-							toast.error(RECAPTCHA_ERROR);
-							throw new Error(RECAPTCHA_ERROR);
-						}
-
-						const captchaRes = await fetch('/api/v1/auth/captcha/verify', {
-							method: 'POST',
-							headers: { 'Content-Type': 'application/json' },
-							body: JSON.stringify({ captchaToken: token })
-						});
-						if (!captchaRes.ok) {
-							throw new Error(CAPTCHA_FAILED);
-						}
-					}
-
-					const name = await resolveLoginIdentifier(form.data.username);
-					await authStore.login({
-						name,
-						password: form.data.password
-					});
-					reset();
-					onSuccess?.();
-					let dest: '/portal' | '/force-setup' | '/mfa-challenge' = LANDING_ROUTE;
-					try {
-						const status = await fetchAuthStatus();
-						dest = resolvePostLoginDestination(status);
-					} catch {
-						// Fallback if status fetch fails
-					}
-					// Always honor force-setup / MFA gates; only skip portal when reauth.
-					if (navigateOnSuccess || dest !== LANDING_ROUTE) {
-						await goto(resolve(dest));
-					}
-				})(),
-				{
-					loading: 'กำลังเข้าสู่ระบบ...',
-					success: 'เข้าสู่ระบบสำเร็จ!',
-					error: (err) => (err instanceof Error ? err.message : 'เข้าสู่ระบบไม่สำเร็จ')
+	const form = superForm(
+		defaults({ username: untrack(() => defaultUsername), password: '' }, zod4(loginSchema)),
+		{
+			SPA: true,
+			validators: zod4(loginSchema),
+			resetForm: false,
+			onUpdate: async ({ form }) => {
+				if (!form.valid) {
+					toast.error('กรุณากรอกข้อมูลให้ครบถ้วน');
+					return;
 				}
-			);
+
+				toast.promise(
+					(async () => {
+						const enabled = await fetchRecaptchaEnabled();
+						captchaEnabled = enabled;
+						if (enabled) {
+							const token = await captchaToken();
+							if (!token) {
+								toast.error(RECAPTCHA_ERROR);
+								throw new Error(RECAPTCHA_ERROR);
+							}
+
+							const captchaRes = await fetch('/api/v1/auth/captcha/verify', {
+								method: 'POST',
+								headers: { 'Content-Type': 'application/json' },
+								body: JSON.stringify({ captchaToken: token })
+							});
+							if (!captchaRes.ok) {
+								throw new Error(CAPTCHA_FAILED);
+							}
+						}
+
+						const name = await resolveLoginIdentifier(form.data.username);
+						await authStore.login({
+							name,
+							password: form.data.password
+						});
+						let dest: PostLoginDestination = LANDING_ROUTE;
+						try {
+							const status = await fetchAuthStatus();
+							dest = resolvePostLoginDestination(status);
+						} catch {
+							// Fallback if status fetch fails
+						}
+						reset();
+						onSuccess?.({ destination: dest });
+						// Always honor force-setup / MFA gates; only skip portal when reauth.
+						if (navigateOnSuccess || dest !== LANDING_ROUTE) {
+							await goto(resolve(dest));
+						}
+					})(),
+					{
+						loading: 'กำลังเข้าสู่ระบบ...',
+						success: 'เข้าสู่ระบบสำเร็จ!',
+						error: (err) => (err instanceof Error ? err.message : 'เข้าสู่ระบบไม่สำเร็จ')
+					}
+				);
+			}
 		}
-	});
+	);
 	const { form: formData, submitting, reset } = form;
 </script>
 
@@ -177,7 +193,8 @@
 								bind:value={$formData.username}
 								placeholder="เช่น staff01 หรือ 0812345678"
 								autocomplete="username"
-								class="h-11"
+								readonly={lockUsername}
+								class={['h-11', lockUsername && 'bg-slate-50 text-slate-700']}
 							/>
 						{/snippet}
 					</Form.Control>
@@ -193,7 +210,7 @@
 								>
 								<a
 									href={resolve('/forgot-password')}
-									class="text-xs font-semibold text-blue-600 hover:text-blue-800 hover:underline"
+									class="inline-flex min-h-11 items-center text-xs font-semibold text-blue-600 hover:text-blue-800 hover:underline"
 								>
 									ลืมรหัสผ่าน?
 								</a>
@@ -211,7 +228,7 @@
 									type="button"
 									variant="ghost"
 									size="icon"
-									class="absolute top-0 right-0 h-full px-3 hover:bg-transparent"
+									class="absolute top-0 right-0 h-full min-w-11 px-3 hover:bg-transparent"
 									aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
 									onclick={() => (showPassword = !showPassword)}
 								>
@@ -233,7 +250,7 @@
 					disabled={$submitting}
 					class="h-11 w-full rounded-xl bg-[#0A2647] font-semibold text-white transition-colors hover:bg-[#051930]"
 				>
-					เข้าสู่ระบบ (Login)
+					{submitLabel}
 				</Form.Button>
 
 				{#if captchaEnabled}

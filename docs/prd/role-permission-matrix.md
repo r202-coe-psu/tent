@@ -2,7 +2,8 @@
 title: "Full-System Role Permission Matrix (R2-R4 & V10)"
 status: approved
 created: 2026-06-04
-updated: 2026-09-01 # CR-093 (Compound Roles) & CR-104 (Volunteer Backoffice, 10-Role Taxonomy, Health Policy)
+updated: 2026-10-10 # CR-093 (Compound Roles) & CR-104 (Volunteer Backoffice, 10-Role Taxonomy, Health Policy); decision sync 2026-10-10
+note: decision sync 2026-10-10 — VC may access /back-office/volunteers (job board/shifts), REG may access Station 2 medical screening; portal groups menus by department (ฝ่าย): ทะเบียน(REG; TRG/MED เห็นเฉพาะ Station 2), ครัว(KS), พัสดุและคลัง(SC, warehouse_staff alias), อาสาสมัคร(VC), รักษาความปลอดภัย(SO), อาคารสถานที่(FAC), บริหารศูนย์(SM), ส่วนกลาง(SA)
 closes: K-12 (A1 RBAC phase-blocker)
 affects:
   - docs/data/schema.md §6 _users
@@ -75,6 +76,8 @@ affects:
 ---
 
 ## 3. Action Matrix — สิทธิ์การปฏิบัติการในระดับศูนย์พักพิง
+
+> **decision sync 2026-10-10** — VC เข้า `/back-office/volunteers` (Job Board/กะงาน) ได้ และ REG เข้า Station 2 คัดกรองการแพทย์ได้ (แถว Volunteer Job Board / Triage & Screening); การจัดการผู้ใช้ยังเป็น SM/SA เท่านั้น. หน้า portal จัดกลุ่มเมนูตามฝ่าย: ทะเบียน(REG; TRG/MED เห็นเฉพาะ Station 2), ครัว(KS), พัสดุและคลัง(SC, `warehouse_staff` เป็น alias), อาสาสมัคร(VC), รักษาความปลอดภัย(SO), อาคารสถานที่(FAC), บริหารศูนย์(SM), ส่วนกลาง(SA).
 
 | หมวดงาน / เอกสาร | การกระทำ (Action) | SA | SM | REG | TRG | MED | KS | SC | VC | SO | FAC |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
