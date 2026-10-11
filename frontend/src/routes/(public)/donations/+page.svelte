@@ -71,7 +71,7 @@
 	{#if donationStore.activeTab === 'needs'}
 		<div class="w-full animate-in duration-300 fade-in">
 			<div
-				class="relative flex flex-col items-start justify-start gap-6 overflow-hidden rounded-3xl bg-[#013481] p-6 text-left text-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] sm:p-10"
+				class="relative flex flex-col items-start justify-start gap-6 overflow-hidden rounded-3xl bg-domain-donation-strong p-6 text-left text-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] sm:p-10"
 			>
 				<div
 					class="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,#ffffff_1px,transparent_1px),linear-gradient(to_bottom,#ffffff_1px,transparent_1px)] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] bg-[size:4rem_4rem] opacity-10"
@@ -110,7 +110,7 @@
 					<div class="absolute inset-0 rounded-full bg-slate-100"></div>
 					<!-- Active Progress Bar -->
 					<div
-						class="absolute top-0 bottom-0 left-0 rounded-full bg-[#013365] transition-all duration-500"
+						class="absolute top-0 bottom-0 left-0 rounded-full bg-domain-donation-strong transition-all duration-500"
 						style:width={progressWidth}
 					></div>
 				</div>
@@ -127,7 +127,7 @@
 						disabled={isStepDisabled}
 						class="relative z-10 flex flex-col items-center gap-2 rounded-xl bg-white p-1 transition-all sm:flex-row sm:px-4 sm:py-2.5
 							{isActive
-							? 'ring-[#013365]/20 sm:-translate-y-0.5 sm:shadow-md sm:ring-1 sm:ring-black/5'
+							? 'ring-domain-donation-border sm:-translate-y-0.5 sm:shadow-md sm:ring-1 sm:ring-black/5'
 							: isStepDisabled
 								? 'cursor-not-allowed'
 								: 'cursor-pointer hover:bg-slate-50'}"
@@ -135,9 +135,9 @@
 						<div
 							class="flex h-8 w-8 items-center justify-center rounded-full transition-colors sm:h-10 sm:w-10
 							{isActive
-								? 'bg-[#013365] text-white shadow-md'
+								? 'bg-domain-donation-strong text-white shadow-md'
 								: isCompleted
-									? 'bg-[#013365] text-white'
+									? 'bg-domain-donation-strong text-white'
 									: 'border border-slate-200/80 bg-slate-100 text-slate-400'}"
 						>
 							<step.icon class={isActive || isCompleted ? 'h-[18px] w-[18px]' : 'h-4 w-4'} />
@@ -145,7 +145,7 @@
 						<div class="mt-1 flex flex-col items-center sm:mt-0 sm:items-start">
 							<span
 								class="hidden text-2xs font-bold tracking-widest uppercase sm:block
-								{isActive || isCompleted ? 'text-[#013365]' : 'text-slate-400'}"
+								{isActive || isCompleted ? 'text-domain-donation-text' : 'text-slate-400'}"
 							>
 								STEP 0{idx + 1}
 							</span>

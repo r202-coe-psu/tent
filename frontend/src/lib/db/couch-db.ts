@@ -152,7 +152,11 @@ async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
 		} catch (err) {
 			lastError = err;
 			if (err instanceof CouchAuthError) {
-				authStore.markNeedsReauth();
+				// The server answered, so it is reachable — a lingering "disconnected" state is wrong.
+				endpointStore.markConnected();
+				// 401 = expired; 403 is confirmed against `/_session` (fire-and-forget: the caller
+				// still gets the original error; a valid-session 403 is a permission denial).
+				void authStore.handleAuthFailure(err);
 				throw err;
 			}
 			if (!isRetryable(err) || attempt === MAX_RETRIES - 1) break;
