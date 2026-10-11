@@ -108,7 +108,7 @@ affects:
 - E2E: `frontend/playwright.config.ts`, `frontend/e2e/helpers/{e2e-env,donation-fullstack}.ts`,
   `frontend/e2e/public-pre-register-flow.test.ts`, `frontend/e2e/donation-fullstack*.test.ts`, `frontend/e2e/README.md`
 - Infra: `docker-compose.production.yml`, `docker-compose.staging.yml`, `docker-compose.staging.no-nginx.yml`, `.env` ที่ root ของ staging/prod servers, Jenkins `tent-staging-e2e-env`
-- Security: เมื่อเปิดสวิตช์ `RATE_LIMIT=false` บน staging จะ bypass เฉพาะฟอร์มสาธารณะที่ e2e ใช้ (donation และ pre-register); ส่วน critical gate (login, captcha, secret reveal, link-account, volunteer) ยังมี rate limit คุ้มกันตลอดเวลา. ทั้งนี้ staging ต้องปิดไม่ให้ public ทั่วไปเข้าถึง (เช่น จำกัดด้วย IP allowlist หรือ basic auth)
+- Security: เมื่อเปิดสวิตช์ `RATE_LIMIT=false` บน staging จะ bypass เฉพาะฟอร์มสาธารณะที่ e2e ใช้ (donation และ pre-register); ส่วน critical gate (login, captcha, secret reveal, link-account, volunteer) ยังมี rate limit คุ้มกันตลอดเวลา. ทั้งนี้ staging ถูกปิดไม่ให้ public ทั่วไปเข้าถึง โดยใช้ IP allowlist (จำกัดเฉพาะ IP ของ Jenkins/CI runner, VPN ภายใน และเครือข่ายทีมพัฒนา)
 - Coverage: e2e local/staging ไม่ทดสอบพฤติกรรม limiter จริงของ donation/pre-register — ครอบคลุมด้วย unit test ของ `RateLimiter` แทน
 
 ## Acceptance
@@ -122,9 +122,11 @@ affects:
 
 ## Open issues (พบระหว่างไล่สาเหตุ — แยก ticket)
 
-- **FastAPI shared bucket:** BFF ไม่ส่ง `X-Real-IP` / `X-Forwarded-For` ไป FastAPI → `client_ip()`
+- **FastAPI shared bucket ([#458](https://github.com/r202-coe-psu/tent/issues/458)):** BFF ไม่ส่ง `X-Real-IP` / `X-Forwarded-For` ไป FastAPI → `client_ip()`
   (`backend/apiapp/utils/request_meta.py`) เห็น IP ของ BFF → ผู้บริจาคทั้งระบบอาจแชร์ 30/min เดียวกันบน prod
-- **`track-search` ใช้ `donationIpLimiter`** ร่วมกับการสร้าง booking → การค้นหา ticket กินโควตาการจอง
+- **`track-search` และ race test ([#459](https://github.com/r202-coe-psu/tent/issues/459)):**
+  - `track-search` ใช้ `donationIpLimiter` ร่วมกับการสร้าง booking → การค้นหา ticket กินโควตาการจอง
+  - `donation-fullstack-race` ชน rate limit เมื่อยิง request พร้อมกัน ทำให้ไม่สามารถทดสอบ invariant การจอง slot ได้
 - **W5 pre-register 502** (`public-pre-register-flow.test.ts`) หายไปหลังเปิด switch แต่ยังไม่ได้ยืนยันสาเหตุ
 
 ## Sunset Criteria & Review Date
@@ -145,3 +147,6 @@ N/A — ไม่เปลี่ยน shape ที่ persist
   - จำกัดขอบเขตสวิตช์เฉพาะฟอร์มสาธารณะที่ e2e ใช้ (donation, pre-register) ด้วย option `bypassable: true` ใน `RateLimiter`; ห้ามปิด auth, secret reveal, link-account, volunteer
   - กำหนดแหล่งค่าและค่าเริ่มต้น: compose ทุกตัว (`production`, `staging`, `staging.no-nginx`) ใช้ `RATE_LIMIT: ${RATE_LIMIT:-true}` อ่านจาก `.env` ที่ root ของ server; ปิดได้เฉพาะบน staging/Jenkins ห้ามตั้ง `false` บน production
   - กำหนดเงื่อนไขเลิกใช้สวิตช์ (e2e per-test key หรือ staging เปิด public) และกำหนดวันทบทวนเป็น 2026-11-10
+- 2026-10-11 — PO review warning resolution:
+  - ระบุมาตรการควบคุมการเข้าถึง staging ด้วย IP allowlist (จำกัดเฉพาะ IP ของ CI/Jenkins, VPN ภายใน และเครือข่ายทีมพัฒนา)
+  - เปิด GitHub issue ติดตามผลแยก 2 เรื่อง: [#458](https://github.com/r202-coe-psu/tent/issues/458) (FastAPI shared bucket) และ [#459](https://github.com/r202-coe-psu/tent/issues/459) (track-search & race test)
