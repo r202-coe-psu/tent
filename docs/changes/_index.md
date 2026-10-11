@@ -2,7 +2,8 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-10-11 # CR-158 approved (kiosk staff PIN bypass); CR-159 done (Station 1 preferred zone)
+updated: 2026-10-11 # CR-160 approved (e2e RATE_LIMIT switch)
+
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
 
@@ -24,7 +25,7 @@ CR แต่ละตัวเก็บในโฟลเดอร์ตาม�
 | [01-core — Platform/Core](#01-core)              | [`01-core/`](01-core/)               | 27       |
 | [02-people — Household & Zoning](#02-people)     | [`02-people/`](02-people/)           | 9        |
 | [03-C — Supply & Inventory](#03-c-supply)        | [`03-C-supply/`](03-C-supply/)       | 22       |
-| [04-donation — Donation](#04-donation)           | [`04-donation/`](04-donation/)       | 10       |
+| [04-donation — Donation](#04-donation)           | [`04-donation/`](04-donation/)       | 11       |
 | [05-D — Kitchen & Food](#05-d-kitchen)           | [`05-D-kitchen/`](05-D-kitchen/)     | 12       |
 | [06-A — Volunteer](#06-a-volunteer)              | [`06-A-volunteer/`](06-A-volunteer/) | 8        |
 | [07-B — SOP & Resource Calc](#07-b-sop)          | [`07-B-sop/`](07-B-sop/)             | 11       |
@@ -164,6 +165,7 @@ CR แต่ละตัวเก็บในโฟลเดอร์ตาม�
 | [CR-087](04-donation/CR-087-donation-redirect-target.md)                | donation — เพิ่ม `redirect_to_shelter_code` (opt) + doc ใหม่ `donation_redirect` เขียนเข้า DB ศูนย์ปลายทางตอนกด "ส่งต่อ" ในแท็บรอการประเมิน (T-16 R-16.4), donation schema_v 4 → 5, ต่อปุ่ม redirect ที่มี UI stub อยู่แล้วให้เข้า endpoint จริง                                                                                 | approved | volatile          | 2026-08-25 (approved 2026-08-25) | docs/data/schema.md §2.3 (+ doc type ใหม่), docs/task-breakdown/04-donation.md §T-16, frontend/src/lib/features/operations/domain/operations.ts, frontend/src/routes/api/back-office/donations/[query]/redirect/+server.ts, frontend/src/lib/components/redirect-donation-dialog.svelte |
 | [CR-129](04-donation/CR-129-quota-ceiling-follows-campaign-target.md)   | เพดานโควตาผู้บริจาคต้องขยับตามเป้าหมายแคมเปญ — ยกเลิก CR-060 FR-2, ขยับ `qty_target` อัตโนมัติผ่าน atomic conditional update (กันลดต่ำกว่ายอดจอง)                                                                                                                                                                                | approved | volatile          | 2026-09-16 (approved 2026-10-03) | docs/changes/04-donation/CR-060-donation-need-counter-worker-seed.md (ยกเลิก FR-2), worker quota_target_rules, donation_need_counter.py, reconcile.py, tent_model set_qty_target, frontend edit-campaign-form.svelte                                                                    |
 | [CR-157](04-donation/CR-157-donation-slot-queue-split.md)               | แยกคิวรับของบริจาคเป็นคิวมาส่งเองกับคิวรถศูนย์ไปรับ (dropoff vs pickup) — ปรับ `_id` เป็น `donation_slot:{mode}:{date}:{from}`, `capacity` opt/nullable, ปรับสูตรนับที่ว่างตรงกับ CR-052, เพิ่ม endpoint public `GET /api/public/v1/donations/slots`, เพิ่ม Mongo collection `donation_slot_counters` สำหรับ atomic `SLOT_FULL`  | approved | stable + volatile | 2026-09-24 (approved 2026-10-08) | docs/data/schema.md §2.13/§2.3, docs/data/api-contract.md, Mongo donation_slot_counters, frontend donations/operations, packages/tent-model, backend, worker                                                                                                                            |
+| [CR-160](04-donation/CR-160-e2e-temporary-rate-limit-switch.md) | Temporary `RATE_LIMIT` env switch — bypass เฉพาะ BFF limiter ของ donation + pre-register (`bypassable: true`) บน local e2e/staging; limiter อื่น (auth, secret reveal, link-account, volunteer) บังคับเสมอ; compose ทุกตัว `${RATE_LIMIT:-true}`; เลิกใช้เมื่อ e2e มี per-test key หรือ staging เปิด public, ทบทวน 2026-11-10 | approved | volatile | 2026-10-11 (approved 2026-10-11) | frontend/src/lib/server/security/rate-limiter.ts, frontend/playwright.config.ts, frontend/e2e/helpers, docker-compose.{production,staging,staging.no-nginx}.yml, .env.example ×3, Jenkins tent-staging-e2e-env, CR-005, CR-080 |
 
 ## 05-D-kitchen
 
