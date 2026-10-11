@@ -16,6 +16,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import {
 	createCouchUser,
+	seedSecurityQuestion,
 	deleteCouchUser,
 	couchLogin,
 	STAFF_SH001_ROLES,
@@ -163,6 +164,8 @@ async function fillMinimalUnifiedRegistration(
 	await page.locator('#residence-landmark').fill('ริมคลอง E2E');
 
 	if (opts.customPet) {
+		// Pets are an optional, collapsed section.
+		await page.getByRole('button', { name: /^สัตว์เลี้ยง ไม่จำเป็น/ }).click();
 		await page.getByRole('button', { name: 'สัตว์อื่นๆ', exact: true }).click();
 		await page.getByPlaceholder('เช่น นกแก้ว, กระต่าย, ชูก้าไรเดอร์').fill('นกเขา');
 	}
@@ -173,15 +176,18 @@ async function fillMinimalUnifiedRegistration(
 	await primary.locator('#member-0-last-name').fill(opts.lastName);
 	// Gender radios required (blankUnifiedMember no longer defaults gender).
 	await primary.locator('#member-0-gender-male').click({ force: true });
+	// No phone: the field opens ready to type, so tick "no phone" (roleplay #10).
+	await primary.locator('#member-0-no-phone').click();
 
 	if (opts.addSecondMember) {
 		await page.getByRole('button', { name: 'เพิ่มสมาชิก' }).click();
-		const member2 = page.getByRole('region', { name: 'สมาชิก 2' });
+		const member2 = page.getByRole('region', { name: 'สมาชิกคนที่ 2' });
 		await expect(member2).toBeVisible();
 		await member2.getByRole('button', { name: 'ไม่มีบัตร / บุคคลนิรนาม' }).click();
 		await member2.locator('#member-1-first-name').fill('สมาชิก');
 		await member2.locator('#member-1-last-name').fill('คนที่สอง');
 		await member2.locator('#member-1-gender-female').click({ force: true });
+		await member2.locator('#member-1-no-phone').click();
 	}
 }
 
@@ -192,6 +198,9 @@ test.describe('Phase 2 intake pipeline (#252)', { tag: ['@onsite', '@regression'
 	test.beforeAll(async () => {
 		await createCouchUser(STAFF);
 		await createCouchUser(MANAGER);
+		// Skip the first-login security-question gate, like the other suites.
+		await seedSecurityQuestion(STAFF.name);
+		await seedSecurityQuestion(MANAGER.name);
 		staffSession = await couchLogin(STAFF.name, STAFF.password);
 		managerSession = await couchLogin(MANAGER.name, MANAGER.password);
 	});
@@ -260,7 +269,9 @@ test.describe('Phase 2 intake pipeline (#252)', { tag: ['@onsite', '@regression'
 
 	// ── Seam 3: medical screening OFF skips Station 2 queue chip ──────────────
 
-	test('when enable_medical_screening is OFF Station 1 hides รอแพทย์ chip', async ({ page }) => {
+	test('when enable_medical_screening is OFF Station 1 counts only zoning waits', async ({
+		page
+	}) => {
 		await setupPage(page, MANAGER, managerSession, {
 			enableMedicalScreening: false,
 			seedDocs: [EXISTING_EVACUEE]
@@ -270,11 +281,12 @@ test.describe('Phase 2 intake pipeline (#252)', { tag: ['@onsite', '@regression'
 			timeout: 15_000
 		});
 
-		await expect(page.getByRole('button', { name: 'รอโซน' })).toBeVisible();
-		await expect(page.getByRole('button', { name: 'รอแพทย์', exact: true })).toHaveCount(0);
+		// The arriving card's breakdown: no medical wait without Station 2.
+		await expect(page.getByText(/รอจัดโซน 1/).first()).toBeVisible();
+		await expect(page.getByText(/รอตรวจแพทย์/)).toHaveCount(0);
 	});
 
-	test('when enable_medical_screening is ON Station 1 shows รอแพทย์ chip', async ({ page }) => {
+	test('when enable_medical_screening is ON Station 1 counts medical waits', async ({ page }) => {
 		await setupPage(page, MANAGER, managerSession, {
 			enableMedicalScreening: true,
 			seedDocs: [EXISTING_EVACUEE]
@@ -284,8 +296,9 @@ test.describe('Phase 2 intake pipeline (#252)', { tag: ['@onsite', '@regression'
 			timeout: 15_000
 		});
 
-		await expect(page.getByRole('button', { name: 'รอแพทย์', exact: true })).toBeVisible();
-		await expect(page.getByRole('button', { name: 'รอโซน' })).toBeVisible();
+		// Not screened yet → waits for Station 2 before zoning.
+		await expect(page.getByText(/รอตรวจแพทย์ 1/).first()).toBeVisible();
+		await expect(page.getByText(/รอจัดโซน 0/).first()).toBeVisible();
 	});
 
 	// ── Seam 1 continued: walk-in → batch QR ──────────────────────────────────
@@ -306,7 +319,7 @@ test.describe('Phase 2 intake pipeline (#252)', { tag: ['@onsite', '@regression'
 			customPet: true
 		});
 
-		await page.getByRole('button', { name: 'บันทึกลงทะเบียนทั้งครอบครัว' }).click();
+		await page.getByRole('button', { name: 'บันทึกลงทะเบียนทั้งครอบครัว' }).last().click();
 
 		await expect(page.getByRole('heading', { name: 'ลงทะเบียนสำเร็จ' })).toBeVisible({
 			timeout: 20_000
@@ -359,24 +372,23 @@ test.describe('Phase 2 intake pipeline (#252)', { tag: ['@onsite', '@regression'
 		});
 
 		await page.getByLabel(INTAKE_SEARCH_PLACEHOLDER).fill('คิวกลาง');
-		await expect(page.getByText('คิวกลาง')).toBeVisible({ timeout: 10_000 });
-		await expect(page.getByText(UNASSIGNED_HIT.id)).toBeVisible();
+		await expect(page.getByText('คิวกลาง (Central Pool)')).toBeVisible({ timeout: 10_000 });
+		// The hit shows the open member, not the internal registration id.
+		await expect(page.getByText(/คิวกลาง\s*หนึ่ง/).first()).toBeVisible();
 
 		await page.getByRole('button', { name: 'รับเข้าศูนย์' }).click();
 		const dialog = page.getByRole('dialog');
-		await expect(dialog.getByText('รับเข้าศูนย์ (claim)')).toBeVisible();
+		await expect(dialog.getByText('เลือกรายการจากคิวกลาง')).toBeVisible();
 
-		// Partial claim — tick only the first open member
+		// Partial claim — tick only the first open member. Since CR-140 the claim itself
+		// happens when Report-in is confirmed; the dialog only hands the selection over.
 		await dialog.getByLabel('เลือก คิวกลาง หนึ่ง').click();
-		await dialog.getByRole('button', { name: 'ยืนยันรับเข้าศูนย์' }).click();
+		await dialog.getByRole('button', { name: /ตรวจสอบรายละเอียด/ }).click();
 
-		await expect(page).toHaveURL(/\/onsite\/people\/evacuee:01JUNASSIGNEDM1\/report-in/, {
-			timeout: 15_000
-		});
-		await expect(page.getByRole('heading', { name: 'รายงานตัว' })).toBeVisible({
-			timeout: 10_000
-		});
-		await expect(page.getByText(/Station 1 · Report-in/)).toBeVisible();
+		await expect(page).toHaveURL(
+			new RegExp(`/onsite/unassigned/${UNASSIGNED_HIT.id}/report-in\\?.*memberIds=`),
+			{ timeout: 15_000 }
+		);
 	});
 
 	// ── Seam 1 / 3: Medical Screening simplified form reachable when flag ON ─
