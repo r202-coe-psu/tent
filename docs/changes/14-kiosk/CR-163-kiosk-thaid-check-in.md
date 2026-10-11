@@ -1,12 +1,12 @@
 ---
-id: draft
+id: CR-163
 title: Kiosk — เปิดช่องทางรายงานตัวด้วย ThaiD (QR บนตู้ → ยืนยันบนมือถือ) + toggle รายศูนย์
-status: proposed
+status: approved
 date: 2026-10-10
 created: 2026-10-10
 updated: 2026-10-11
 requested_by: ทีม kiosk
-decided_by: Project Owner (D-1..D-6, D-8 เคาะ 2026-10-11 · D-7 รอ approve ข้อความ)
+decided_by: เจ้าของโครงการ (PO, net-lynx) — approved 2026-10-11
 layer: volatile
 amends:
   - docs/changes/14-kiosk/CR-151-kiosk-pre-registration-check-in.md F-08 (ThaiD ⏸), FR-KPC-11, §7 สัญญา API
@@ -32,9 +32,9 @@ why: >
 migration: ไม่มี backfill — flag ใหม่ใน `feature_flags` default `false`; doc เดิมที่ไม่มี key อ่านเป็นปิด. ไม่มี doc ใหม่ที่ persist (session อยู่ใน memory)
 ---
 
-# Draft CR: Kiosk — รายงานตัวด้วย ThaiD
+# CR-163: Kiosk — รายงานตัวด้วย ThaiD
 
-> **สถานะ:** proposed โดยทีม kiosk · PO เคาะ D-1..D-6, D-8 แล้ว (2026-10-11) · D-7 (copy) รอ PO approve · โค้ดต้นแบบอยู่บน `feat/pre-register_kiosk` — หลัง CR approve ให้เปิด PR โค้ดใหม่เพื่อรีวิวเทียบกับ CR (ห้าม merge branch เก่าตรง ๆ)
+> **สถานะ:** approved โดย PO 2026-10-11 (spec only — ยังไม่ implement) · D-1..D-8 เคาะครบ · โค้ดต้นแบบอยู่บน `feat/pre-register_kiosk` — หลัง CR approve ให้เปิด PR โค้ดใหม่เพื่อรีวิวเทียบกับ CR (ห้าม merge branch เก่าตรง ๆ)
 
 > **สรุป (TL;DR)**
 >
@@ -76,6 +76,7 @@ migration: ไม่มี backfill — flag ใหม่ใน `feature_flags` 
 | KTD-AC-06 | Timeout ตาม D-4 — pending เกิน 300 วิ หรือ completed เกิน 180 วิ → status คืน 404 `{status:'expired'}` และ lookup/check-in ด้วย session นั้น reject  |
 | KTD-AC-07 | Rate limit ตาม D-5 — สร้าง session เกิน 10 ครั้ง/นาที/kiosk → 429 `KIOSK_RATE_LIMITED`                                                               |
 | KTD-AC-08 | Regression — flow `member_scan` เดิมบนหน้า pre-register (สร้าง session → สแกน → อ่าน profile ผ่าน public GET/SSE) ทำงานเหมือนเดิม                    |
+| KTD-AC-09 | Toggle fail closed — เมื่อ `kiosk_thaid_check_in_enabled=false` หรือ `thaid_registration_enabled=false` → การ์ด ThaiD ซ่อน และ `POST /api/v1/scanner/kiosk/thaid/session` คืน 403/404 (เพิ่มตามเงื่อนไข PO approve 2026-10-11) |
 
 ## Security
 
@@ -84,7 +85,7 @@ migration: ไม่มี backfill — flag ใหม่ใน `feature_flags` 
 - **ไม่ log เลข 13 หลักและชื่อ** — log / error / telemetry ห้ามมี pid หรือชื่อเต็ม; ถ้าจำเป็นต้องอ้างถึงให้ mask (เช่น `x-xxxx-xxxxx-12-3`)
 - **Reject session ที่ถูกใช้ซ้ำ** — `session_id` ที่ consume แล้ว หรือถูกลบแล้ว ใช้ซ้ำไม่ได้ทุก endpoint (KTD-AC-01)
 
-## D-7 — ข้อความที่เสนอ (รอ PO approve)
+## D-7 — ข้อความ (PO approve 2026-10-11 ตามที่เขียน)
 
 ข้อความจริงจากโค้ดต้นแบบบน `feat/pre-register_kiosk`
 
@@ -131,7 +132,7 @@ migration: ไม่มี backfill — flag ใหม่ใน `feature_flags` 
 
 N/A — additive flag (doc เดิมไม่มี key = `false`); session ไม่ persist
 
-## Decisions (PO เคาะ 2026-10-11)
+## Decisions (PO เคาะ 2026-10-11, D-7 approve 2026-10-11)
 
 ทุกข้อในตารางนี้ Project Owner เป็นผู้ตัดสิน — ทีม kiosk เป็นผู้เสนอ
 
@@ -143,7 +144,7 @@ N/A — additive flag (doc เดิมไม่มี key = `false`); session �
 | D-4 | TTL session              | รอมือถือ (pending) 300 วิ · หลังยืนยัน (completed) 180 วิ                                                           |
 | D-5 | Rate limit สร้าง session | ไม่เกิน 10 session/นาที/kiosk                                                                                       |
 | D-6 | Scope                    | ขอทั้งเลข 13 หลักและชื่อ — ใช้ scope เดียวกับโค้ด ThaiD ของ pre-register เดิม (mode `member_scan`)                  |
-| D-7 | Copy การ์ด/หน้า ThaiD    | **รอ PO approve** — ข้อความที่เสนอดู §D-7 (การ์ด ThaiD, หน้า `/kiosk/thaid` ทุกสถานะ, หน้ามือถือหลังยืนยัน)         |
+| D-7 | Copy การ์ด/หน้า ThaiD    | **PO approve 2026-10-11** — ใช้ข้อความตาม §D-7 ตามที่เขียน (การ์ด ThaiD, หน้า `/kiosk/thaid` ทุกสถานะ, หน้ามือถือหลังยืนยัน) |
 | D-8 | ThaiD ยืนยันใคร          | ThaiD ยืนยันเฉพาะคนที่สแกน แล้วคนนั้นเช็กอินให้ทั้งครัวเรือนได้                                                     |
 
 ## Decision log
@@ -154,3 +155,8 @@ N/A — additive flag (doc เดิมไม่มี key = `false`); session �
 - 2026-10-11 — ตัดการอ้างอิง implementation plan (`docs/plans/kiosk-thaid-check-in-implementation-plan.md`) ออก — ไฟล์ไม่อยู่ใน repo; CR นี้เป็น spec ที่ใช้อ้างอิง
 - 2026-10-11 — PO re-review: ยังไม่ approve — FR/AC หายไปพร้อมการตัด plan · เพิ่ม §Requirements / Acceptance (KTD-AC-01..08), §Security และ §D-7 (ข้อความจริงจากโค้ดต้นแบบทุกสถานะ) · รอ PO approve D-7 + re-review
 - ขั้นถัดไป (ตาม PO): approve D-7 → ใช้เลข CR ถัดไปจาก `_index.md` บน develop และย้ายไฟล์ไป `docs/changes/14-kiosk/` · PR ที่ทำ CR ตัวจริงต้องอัปเดต `schema.md` (flag), `api-contract.md` (3 endpoint, `source:'thaid'`, mode `kiosk_check_in`) และ FR-KPC-11/F-08 ใน CR-151/152
+- 2026-10-11 — **PO approved (net-lynx)** — D-7 approve ตามที่เขียน · ได้เลข CR-163 ย้ายไป `docs/changes/14-kiosk/` · status approved (spec only, ยังไม่ implement) · เงื่อนไขสำหรับ code PR:
+  - (a) session single-use ต้องจริงทุก web process (`WEB_CONCURRENCY=3`, broadcast ผ่าน `server/cluster.mjs`) — consume/delete ต้องยืนยันที่ primary หรือทำแบบ atomic, การลบต้องลบสำเนาของ primary ด้วย; ถ้าหลาย server ต้องใช้ shared store · เพิ่ม test check-in ซ้ำพร้อมกัน (concurrent double check-in)
+  - (b) เพิ่ม **KTD-AC-09**: เมื่อ `kiosk_thaid_check_in_enabled=false` หรือ `thaid_registration_enabled=false` → การ์ดซ่อน และสร้าง session คืน 403/404
+  - (c) mask เลข 13 หลักให้เหลือเปิดเผยไม่เกิน 2 หลักท้าย
+  - (d) implementation มาเป็น code PR ใหม่จาก `feat/pre-register_kiosk` รีวิวเทียบกับ CR นี้ — ห้าม merge branch นั้นตรง ๆ · PR นั้นต้องอัปเดต `docs/data/schema.md`, `docs/data/api-contract.md` และ FR-KPC-11/F-08 ใน CR-151/CR-152

@@ -2,7 +2,7 @@
 title: Change Records — Index
 status: active
 created: 2026-06-16
-updated: 2026-10-11 # CR-162 approved (kiosk banner)
+updated: 2026-10-11 # CR-163 approved (kiosk ThaiD check-in)
 
 note: ดัชนี Change Record ทุกตัว — กติกาอยู่ใน ../change-management.md
 ---
@@ -37,7 +37,7 @@ CR แต่ละตัวเก็บในโฟลเดอร์ตาม�
 | [10-eoc — Partner API (EXT-001–007)](#10-eoc)    | [`10-eoc/`](10-eoc/)                 | 7        |
 | [11-famsearch — Family Search](#11-famsearch)    | [`11-famsearch/`](11-famsearch/)     | 2        |
 | [12-public — Public Portal](#12-public)          | [`12-public/`](12-public/)           | 7        |
-| [14-kiosk — Kiosk Station](#14-kiosk)            | [`14-kiosk/`](14-kiosk/)             | 5        |
+| [14-kiosk — Kiosk Station](#14-kiosk)            | [`14-kiosk/`](14-kiosk/)             | 6        |
 
 ## 00-baseline
 
@@ -294,3 +294,4 @@ CR แต่ละตัวเก็บในโฟลเดอร์ตาม�
 | [CR-152](14-kiosk/CR-152-kiosk-phone-check-in-toggle.md)     | Kiosk phone check-in toggle — shelter `feature_flags.kiosk_phone_check_in_enabled` (default false) เปิด/ปิดที่ backoffice, kiosk อ่านผ่าน `POST /api/v1/scanner/kiosk/config`, fail closed, no schema_v bump                                                                                                                                                    | approved | volatile | 2026-09-25 (approved 2026-10-04) | docs/data/schema.md §3.1 feature_flags, docs/data/api-contract.md scanner/kiosk config, frontend shelters + kiosk, scanner_client allowlist                                                                        |
 | [CR-158](14-kiosk/CR-158-kiosk-staff-pin-face-bypass.md)     | Kiosk staff PIN — ข้ามการตรวจใบหน้าได้เฉพาะเมื่อเจ้าหน้าที่ใส่ PIN ของเครื่อง (PIN 6 หลักต่อเครื่อง ใน DB scanner_secrets บน central, admin-only) ทั้ง walk-in และ check-in ด้วยบัตร, endpoint staff-pin CRUD (SA) + verify (device credential หน่วงเวลา 1s เมื่อผิด, limit คิว 429), scanner_device schema_v 1→2 (metadata only), default PIN ตอน sync:central | approved | volatile | 2026-10-10 (approved 2026-10-11) | docs/data/schema.md §3.11/§3.11.1, docs/data/api-contract.md, DB scanner_secrets, frontend scanners + kiosk, routes api/v1/scanner/**, scanner_client                                                              |
 | [CR-162](14-kiosk/CR-162-kiosk-banner.md)                    | Kiosk banner — doc type ใหม่ `kiosk_banner` v1 ใน registry (รูป ≤2 MB, ช่วงเวลา, order, duration 3–60 s, shelter_codes); attract overlay บน `/kiosk` เมื่อ idle 30 s; `POST /api/v1/scanner/kiosk/banners` + signed image URL; back-office `/back-office/kiosk-banners` + preview; role ใหม่ `banner_staff` (SM/SA จัดการได้ด้วย)                               | approved | volatile | 2026-10-11 (approved 2026-10-11) | docs/data/schema.md §3.12/§6, docs/data/api-contract.md §2.3, docs/prd/role-permission-matrix.md, docs/features/kiosk-banner-design-guideline.md, frontend kiosk + kiosk-banners + roles, scanner_client allowlist |
+| [CR-163](14-kiosk/CR-163-kiosk-thaid-check-in.md)            | Kiosk รายงานตัวด้วย ThaiD — QR บนตู้ → ยืนยันในแอป ThaiD บนมือถือ (OAuth mode `kiosk_check_in`, callback เดิม); session in-memory single-use ผูก `device_id`+`shelter_code` (pending 300 s / completed 180 s, 10/นาที/kiosk); `source:'thaid'` ใน lookup/check-in (browser ไม่ส่งเลข 13 หลัก); flag ศูนย์ `kiosk_thaid_check_in_enabled` default off, no schema_v bump | approved | volatile | 2026-10-10 (approved 2026-10-11) | docs/data/schema.md §3.1 feature_flags, docs/data/api-contract.md scanner/kiosk thaid, CR-151 F-08/FR-KPC-11, CR-152, frontend thaid + kiosk + shelters, scanner_client allowlist |
