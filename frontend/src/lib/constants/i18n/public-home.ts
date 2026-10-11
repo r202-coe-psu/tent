@@ -204,7 +204,7 @@ export const PUBLIC_PORTAL_HOME_I18N = {
 		volunteersDesc: 'จิตอาสาในภารกิจเร่งด่วน',
 
 		// Urgent Donations
-		urgentDonationsTitle: 'ความต้องการบริจาคด่วน',
+		urgentDonationsTitle: 'รับบริจาคด่วน',
 		urgentDonationsSubtitle: 'รายการที่ต้องการเร่งด่วนในขณะนี้',
 		allNeedsBtn: 'รายการทั้งหมด',
 		trackStatusBtn: 'ตรวจสอบสถานะ',
@@ -216,7 +216,7 @@ export const PUBLIC_PORTAL_HOME_I18N = {
 		receivedLabel: 'ได้รับแล้ว',
 		moreItemsPrefix: '+',
 		moreItemsSuffix: 'รายการ',
-		donationsEmptyTitle: 'ขณะนี้ยังไม่มีรายการความต้องการสิ่งของบริจาคด่วน',
+		donationsEmptyTitle: 'ไม่มีรายการรับบริจาคด่วน',
 		donationsEmptyDesc:
 			'ศูนย์พักพิงทุกแห่งได้รับการสนับสนุนสิ่งของจำเป็นเพียงพอ หรืออยู่ระหว่างการสำรวจความต้องการเพิ่มเติมจากเจ้าหน้าที่ภาคสนาม',
 		allDonationsLink: 'ดูรายการรับบริจาคทั้งหมด',
