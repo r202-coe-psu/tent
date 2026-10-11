@@ -1726,7 +1726,13 @@ DB แยกจาก `registry` เก็บ staff PIN 6 หลักต่อ�
 
 **Write order:** เขียน PIN doc ก่อน แล้วค่อยเขียน `staff_pin_*` ลง `scanner_device`; ถ้าเขียน registry ไม่สำเร็จ
 ให้ rollback PIN doc (rev-guarded): ตั้งครั้งแรก → ลบ PIN doc ที่เพิ่งเขียน, เปลี่ยน PIN → เขียนค่าเดิม
-(`pin`, `is_default`, `updated_at`, `updated_by`) กลับคืน **ห้ามลบ**. `_rev` ชน → `409`.
+(`pin`, `is_default`, `updated_at`, `updated_by`) กลับคืน **ห้ามลบ**. `_rev` ชน → `409`. rollback ไม่สำเร็จ → log
+ระดับ `error` (`device_id`, ขั้นที่ล้ม, สาเหตุ — ไม่มีค่า PIN) แล้วตอบ `503`; ข้อมูลที่ค้างแก้ด้วย `sync:central`.
+
+**Backfill / reconcile (`pnpm sync:central --write --confirm`):** เครื่องที่ยังไม่มี PIN doc ได้ default PIN สุ่ม +
+stamp registry v2 (`updated_by: system:sync-central`); เครื่องที่มี PIN doc แต่ `staff_pin_*` ใน registry ไม่ตรง
+(หรือยังเป็น v1) → stamp registry ตาม PIN doc โดยไม่แตะ PIN doc; PIN doc ที่ไม่มี `scanner_device` คู่กัน (orphan)
+→ รายงาน id เท่านั้น ไม่ลบ. ไม่เขียนทับ PIN doc ที่มีอยู่ (idempotent) และไม่พิมพ์ค่า PIN.
 
 **Delete order:** `DELETE /api/v1/scanner/devices/[id]` ลบ doc ใน `registry` ก่อน แล้วจึงลบ PIN doc (best effort).
 ลบ registry ไม่สำเร็จ → ไม่แตะ PIN doc. PIN doc ที่ค้างใช้ไม่ได้ เพราะเครื่องที่ไม่มีใน registry ไม่ผ่าน device auth

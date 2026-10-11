@@ -296,6 +296,30 @@ describe('ScannerDeviceRepository', () => {
 			error.mockRestore();
 		});
 
+		it('logs an error and fails with 503 when the rollback itself fails', async () => {
+			secrets.docs.set('kiosk-sh001-01', storedSecret('482913'));
+			const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+			mockRaw
+				.mockResolvedValueOnce({ status: 200, data: v2Doc })
+				.mockResolvedValueOnce({ status: 500, data: null });
+			// First put = the new PIN; the restore put fails.
+			secrets.put.mockImplementationOnce(async (pinInput) => {
+				const doc = storedSecret(pinInput.pin, { _rev: '8-s' });
+				secrets.docs.set(pinInput.device_id, doc);
+				return doc;
+			});
+			secrets.put.mockRejectedValueOnce(new StaffPinUnavailableError());
+
+			await expect(repository.setStaffPin(v2Doc._id, '582047', 'sa')).rejects.toBeInstanceOf(
+				StaffPinUnavailableError
+			);
+			const logged = error.mock.calls.flat().join(' ');
+			expect(logged).toContain('rollback PIN change failed device=kiosk-sh001-01');
+			expect(logged).not.toContain('582047');
+			expect(logged).not.toContain('482913');
+			error.mockRestore();
+		});
+
 		it('removes a newly created PIN doc when the metadata write keeps conflicting', async () => {
 			mockRaw.mockResolvedValue({ status: 409, data: { error: 'conflict' } });
 			mockRaw.mockResolvedValueOnce({ status: 200, data: v1Doc });

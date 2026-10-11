@@ -1,4 +1,3 @@
-import { z } from 'zod';
 import type { RequestHandler } from './$types';
 import {
 	scannerServerRepository,
@@ -13,12 +12,13 @@ import {
 import { StaffPinUnavailableError, verifyDeviceStaffPin } from '$lib/server/scanners/staff-pin';
 import { staffPinJson } from '$lib/server/scanners/staff-pin-http';
 import { staffPinThrottle } from '$lib/server/scanners/staff-pin-throttle';
-// eslint-disable-next-line no-restricted-imports -- server-safe domain schema; feature barrel pulls client UI/query code
-import { staffPinSchema } from '$lib/features/scanners/domain/scanner.schema';
 
 export const prerender = false;
 
-const verifyBodySchema = z.object({ pin: staffPinSchema }).strict();
+/** The `pin` field of the body, whatever its shape; a malformed one is checked as a wrong PIN. */
+function suppliedPin(body: unknown): unknown {
+	return body && typeof body === 'object' ? (body as { pin?: unknown }).pin : undefined;
+}
 
 /** Audit line: device, time, outcome. Never the PIN. */
 function audit(deviceId: string, outcome: string): void {
@@ -32,7 +32,8 @@ function audit(deviceId: string, outcome: string): void {
  * Authenticated with the scanner's device credentials (attached by scanner_client); the device
  * whose PIN is checked is always the authenticated one, never something from the body.
  * Never locks the device, but checks one PIN at a time per device and holds a wrong one ~1 s
- * (`staffPinThrottle`) so guessing all 10⁶ PINs takes days.
+ * (`staffPinThrottle`) so guessing all 10⁶ PINs takes days. A PIN that is not 6 digits is held and
+ * answered like a wrong one; a device whose queue is full gets `429 RATE_LIMITED` at once.
  */
 export const POST: RequestHandler = async ({ request }) => {
 	let device: PersistedScannerDevice | null = null;
@@ -68,22 +69,21 @@ export const POST: RequestHandler = async ({ request }) => {
 		);
 	}
 
-	const body: unknown = await request.json().catch(() => null);
-	const parsed = verifyBodySchema.safeParse(body);
-	if (!parsed.success) {
-		return staffPinJson(
-			{ error: { code: 'VALIDATION', message: 'PIN ต้องเป็นตัวเลข 6 หลัก' } },
-			400
-		);
-	}
+	const pin = suppliedPin(await request.json().catch(() => null));
 
 	try {
 		const result = await staffPinThrottle.run(authenticated.device_id, async () => {
-			const checked = await verifyDeviceStaffPin(authenticated, parsed.data.pin);
+			const checked = await verifyDeviceStaffPin(authenticated, pin);
 			audit(authenticated.device_id, checked.kind);
 			return checked;
 		});
 		switch (result.kind) {
+			case 'busy':
+				audit(authenticated.device_id, 'busy');
+				return staffPinJson(
+					{ error: { code: 'RATE_LIMITED', message: 'กำลังตรวจ PIN อยู่ กรุณารอสักครู่' } },
+					429
+				);
 			case 'ok':
 				return staffPinJson({ ok: true }, 200);
 			case 'wrong':

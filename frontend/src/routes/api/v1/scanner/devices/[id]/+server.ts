@@ -2,6 +2,7 @@ import type { RequestHandler } from './$types';
 import { scannerDeviceRepository } from '$lib/server/scanners/device-repository';
 import {
 	requireStaffPinAdmin,
+	scannerDocIdFromParam,
 	staffPinAdminError,
 	staffPinJson
 } from '$lib/server/scanners/staff-pin-http';
@@ -15,7 +16,8 @@ export const prerender = false;
 export const DELETE: RequestHandler = async ({ request, params }) => {
 	try {
 		const caller = await requireStaffPinAdmin(request);
-		await scannerDeviceRepository.deleteDevice(params.id);
+		const docId = scannerDocIdFromParam(params.id);
+		await scannerDeviceRepository.deleteDevice(docId);
 		console.info(
 			`[scanner-device] deleted device=${params.id} by=${caller.name} at=${new Date().toISOString()}`
 		);

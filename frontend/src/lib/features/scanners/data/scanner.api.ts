@@ -38,9 +38,9 @@ export async function createScannerDevice(
 	return scannerCreateResponseSchema.parse(payload);
 }
 
-/** Delete a device (SA only). Server-side so its staff PIN is removed with it. */
-export async function deleteScannerDevice(id: string): Promise<void> {
-	const response = await fetch(`/api/v1/scanner/devices/${encodeURIComponent(id)}`, {
+/** Delete a device by `device_id` (SA only). Server-side so its staff PIN is removed with it. */
+export async function deleteScannerDevice(deviceId: string): Promise<void> {
+	const response = await fetch(`/api/v1/scanner/devices/${encodeURIComponent(deviceId)}`, {
 		method: 'DELETE',
 		cache: 'no-store'
 	});
@@ -69,16 +69,17 @@ function staffPinErrorMessage(status: number, payload: unknown, fallback: string
 	return fallback;
 }
 
-function staffPinPath(id: string, suffix = ''): string {
-	return `/api/v1/scanner/devices/${encodeURIComponent(id)}/staff-pin${suffix}`;
+/** `[id]` in the path is the `device_id` (`kiosk-01`), not the registry doc `_id`. */
+function staffPinPath(deviceId: string, suffix = ''): string {
+	return `/api/v1/scanner/devices/${encodeURIComponent(deviceId)}/staff-pin${suffix}`;
 }
 
 /** Set a chosen PIN (`{ pin }`) or regenerate one (`{ regenerate: true }` → returns `pin`). */
 export async function setScannerStaffPin(
-	id: string,
+	deviceId: string,
 	input: StaffPinUpdateRequest
 ): Promise<StaffPinUpdateResponse> {
-	const response = await fetch(staffPinPath(id), {
+	const response = await fetch(staffPinPath(deviceId), {
 		method: 'POST',
 		headers: { 'content-type': 'application/json' },
 		body: JSON.stringify(input),
@@ -92,8 +93,11 @@ export async function setScannerStaffPin(
 }
 
 /** Reveal a device's PIN. POST + no-store so the PIN never lands in an HTTP cache. */
-export async function revealScannerStaffPin(id: string): Promise<StaffPinReveal> {
-	const response = await fetch(staffPinPath(id, '/reveal'), { method: 'POST', cache: 'no-store' });
+export async function revealScannerStaffPin(deviceId: string): Promise<StaffPinReveal> {
+	const response = await fetch(staffPinPath(deviceId, '/reveal'), {
+		method: 'POST',
+		cache: 'no-store'
+	});
 	const payload: unknown = await response.json().catch(() => null);
 	if (!response.ok) {
 		throw new Error(staffPinErrorMessage(response.status, payload, 'ไม่สามารถเปิดดู PIN ได้'));

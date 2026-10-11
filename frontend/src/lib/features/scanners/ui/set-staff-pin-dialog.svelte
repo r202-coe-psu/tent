@@ -65,7 +65,10 @@
 			if (!validated.valid || !device) return;
 			const target = device;
 			try {
-				await setMutation.mutateAsync({ id: target.id, body: { pin: validated.data.pin } });
+				await setMutation.mutateAsync({
+					deviceId: target.device_id,
+					body: { pin: validated.data.pin }
+				});
 				setMutation.reset();
 				toast.success(`ตั้ง PIN ของเครื่อง ${target.name} แล้ว`);
 				savedThisSubmit = true;
@@ -109,7 +112,10 @@
 		if (!device) return;
 		const target = device;
 		try {
-			const result = await setMutation.mutateAsync({ id: target.id, body: { regenerate: true } });
+			const result = await setMutation.mutateAsync({
+				deviceId: target.device_id,
+				body: { regenerate: true }
+			});
 			setMutation.reset();
 			// The PIN has changed on the server even if the dialog was closed meanwhile — always say so.
 			toast.success(`สุ่ม PIN ใหม่ให้เครื่อง ${target.name} แล้ว`);

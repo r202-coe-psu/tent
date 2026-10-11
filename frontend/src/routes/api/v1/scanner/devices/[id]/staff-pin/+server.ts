@@ -3,6 +3,7 @@ import { ServiceError } from '$lib/server/couch-admin';
 import { scannerDeviceRepository } from '$lib/server/scanners/device-repository';
 import {
 	requireStaffPinAdmin,
+	scannerDocIdFromParam,
 	staffPinAdminError,
 	staffPinJson
 } from '$lib/server/scanners/staff-pin-http';
@@ -19,6 +20,7 @@ export const prerender = false;
 export const POST: RequestHandler = async ({ request, params }) => {
 	try {
 		const caller = await requireStaffPinAdmin(request);
+		const docId = scannerDocIdFromParam(params.id);
 
 		const body: unknown = await request.json().catch(() => null);
 		const parsed = staffPinUpdateRequestSchema.safeParse(body);
@@ -28,14 +30,14 @@ export const POST: RequestHandler = async ({ request, params }) => {
 		}
 
 		if ('regenerate' in parsed.data) {
-			const pin = await scannerDeviceRepository.regenerateStaffPin(params.id, caller.name);
+			const pin = await scannerDeviceRepository.regenerateStaffPin(docId, caller.name);
 			console.info(
 				`[scanner-staff-pin] regenerated device=${params.id} by=${caller.name} at=${new Date().toISOString()}`
 			);
 			return staffPinJson({ ok: true, pin }, 200);
 		}
 
-		await scannerDeviceRepository.setStaffPin(params.id, parsed.data.pin, caller.name);
+		await scannerDeviceRepository.setStaffPin(docId, parsed.data.pin, caller.name);
 		console.info(
 			`[scanner-staff-pin] set device=${params.id} by=${caller.name} at=${new Date().toISOString()}`
 		);

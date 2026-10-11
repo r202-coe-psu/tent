@@ -154,16 +154,16 @@ export function faceOutcomeNeedsStaffPin(outcome: FaceCheckOutcome): boolean {
  * - `hand_on`: carry on now (staff entered the PIN);
  * - `show_match`: a match - show "verified" for a moment, then carry on;
  * - `wait_for_pin`: wait for staff (an open PIN panel stays open, otherwise the result screen asks);
- * - `close_pin`: the card came out while the chip photo was needed - close an open PIN panel (that
- *   is not a staff bypass) and let the result screen ask.
+ * - `card_removed`: the card came out while the chip photo was needed - with the PIN panel open the
+ *   session is cancelled (go home, nothing saved); otherwise the result screen asks.
  * Only a match or a staff bypass ever carries on.
  */
-export type FaceOutcomeAction = 'hand_on' | 'show_match' | 'wait_for_pin' | 'close_pin';
+export type FaceOutcomeAction = 'hand_on' | 'show_match' | 'wait_for_pin' | 'card_removed';
 
 export function faceOutcomeAction(outcome: FaceCheckOutcome): FaceOutcomeAction {
 	if (faceOutcomeIsStaffBypass(outcome)) return 'hand_on';
 	if (!faceOutcomeNeedsStaffPin(outcome)) return 'show_match';
-	if (outcome.kind === 'skipped' && outcome.reason === 'card_removed') return 'close_pin';
+	if (outcome.kind === 'skipped' && outcome.reason === 'card_removed') return 'card_removed';
 	return 'wait_for_pin';
 }
 

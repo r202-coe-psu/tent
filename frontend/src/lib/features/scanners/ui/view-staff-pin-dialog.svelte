@@ -60,7 +60,7 @@
 		if (current) return current;
 		const deviceId = device.id;
 		try {
-			const data = await revealMutation.mutateAsync(deviceId);
+			const data = await revealMutation.mutateAsync(device.device_id);
 			// Hold the PIN only in this component; drop the mutation's copy right away.
 			revealMutation.reset();
 			if (!open) return null;

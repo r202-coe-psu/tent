@@ -18,6 +18,17 @@ function errorBody(code: string, message: string) {
 	return { error: { code, message } };
 }
 
+const DEVICE_ID_PARAM = /^[A-Za-z0-9_-]{2,}$/;
+
+/**
+ * Registry doc id for the `[id]` path param, which is the `device_id` (`kiosk-01`), not the doc
+ * `_id` (`scanner_device:kiosk-01`). Anything that is not a valid device id is a missing device.
+ */
+export function scannerDocIdFromParam(deviceId: string): string {
+	if (!DEVICE_ID_PARAM.test(deviceId)) throw new ScannerDeviceNotFoundError();
+	return `scanner_device:${deviceId}`;
+}
+
 /** SA-only gate shared by the admin staff-PIN and device-delete routes (same as device create). */
 export async function requireStaffPinAdmin(request: Request): Promise<Caller> {
 	const caller = await authorizeUserWrite(request.headers.get('cookie'));

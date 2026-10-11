@@ -37,8 +37,9 @@
 	let cardReading = $state(false);
 	let reading = $state(false);
 	let error = $state('');
-	// Unknown (null) counts as no face check: the scanner client answers in milliseconds, the chip read takes seconds.
+	// Null until the scanner client answers; a card read that beats it waits for the answer (FR-17).
 	let hardware = $state<KioskHardware | null>(null);
+	let hardwareLoaded: Promise<KioskHardware> | null = null;
 	const busy = $derived(cardReading || reading);
 	// Paused while the chip is read or the card is saved: neither may be cut short by going home.
 	const idleTimeout = new KioskIdleTimeout(KIOSK_IDLE_TIMEOUT_MS, returnHome);
@@ -48,7 +49,7 @@
 			return;
 		}
 		idleTimeout.start();
-		void loadKioskHardware().then((loaded) => (hardware = loaded));
+		hardwareLoaded = loadKioskHardware().then((loaded) => (hardware = loaded));
 		const onCardReading = () => {
 			cardReading = true;
 			error = '';
@@ -94,14 +95,15 @@
 			idleTimeout.setPaused(false);
 			return;
 		}
+		const resolved = hardware ?? (await hardwareLoaded);
 		if (
-			hardware &&
-			isFaceCheckEnabled(hardware.faceCheck, 'walk_in') &&
+			resolved &&
+			isFaceCheckEnabled(resolved.faceCheck, 'walk_in') &&
 			card.citizen_id === walkInSession.citizenId
 		) {
 			// Hold the card in memory; the face page registers it once the check has ended. The face
 			// check found on here goes with it, so the face page never has to ask again (and fail open).
-			walkInSession.holdCard(card, hardware.cameraLabel);
+			walkInSession.holdCard(card, resolved.cameraLabel);
 			await goto(
 				resolve(
 					`/kiosk/register/face${contextQuery}` as

@@ -193,6 +193,7 @@ class ScannerClientManager:
         self.reading_path = "/kiosk/scanner/reading"
         self.remove_card_path = "/kiosk/scanner/remove-card"
         self.register_card_path = "/kiosk/register/card"
+        self.register_face_path = "/kiosk/register/face"
         self.register_path_prefix = "/kiosk/register/"
         self.error_path = "/kiosk/scanner/error"
         self.bootstrap_api_url = f"{self.tent_base_url}/api/v1/scanner/bootstrap"
@@ -839,6 +840,23 @@ class ScannerClientManager:
             logger.warning("Card reader poll failed while waiting for kiosk home")
             return False
 
+    async def _after_card_removed(self) -> None:
+        """The card came out: tell the face-check pages, then wait for home or the next card.
+
+        Check-in (remove-card) and walk-in (register/face) both listen for `kiosk:smart-card-removed`:
+        taking the card out while the staff PIN panel is open cancels the session there.
+        """
+        path = urllib.parse.urlsplit(self.page.url).path
+        if path in (self.remove_card_path, self.register_face_path):
+            await self._dispatch_card_event("kiosk:smart-card-removed")
+            if path == self.remove_card_path:
+                logger.info("Card removed; waiting for staff to complete check-in")
+            await self._wait_for_home_or_new_card()
+        elif path != self.home_path:
+            await self._wait_for_home_or_new_card()
+        else:
+            await self._navigate(self.home_url)
+
     async def _wait_for_home_or_new_card(self) -> bool:
         """Wait for the result screen to close, or restart promptly for the next card."""
         full_read_attempted = False
@@ -995,14 +1013,7 @@ class ScannerClientManager:
 
                 if self.page.is_closed():
                     break
-                if urllib.parse.urlsplit(self.page.url).path == self.remove_card_path:
-                    await self._dispatch_card_event("kiosk:smart-card-removed")
-                    logger.info("Card removed; waiting for staff to complete check-in")
-                    await self._wait_for_home_or_new_card()
-                elif urllib.parse.urlsplit(self.page.url).path != self.home_path:
-                    await self._wait_for_home_or_new_card()
-                else:
-                    await self._navigate(self.home_url)
+                await self._after_card_removed()
             except ReaderLostError:
                 logger.warning("Smart Card Reader disconnected; waiting for the hardware")
                 await self._drop_reader()

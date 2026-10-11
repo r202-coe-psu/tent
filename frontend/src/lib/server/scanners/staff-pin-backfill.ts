@@ -3,6 +3,7 @@ import {
 	SCANNER_REGISTRY_DB,
 	SCANNER_SCHEMA_V,
 	scannerDevicePersistedSchema,
+	staffPinStateOf,
 	type PersistedScannerDevice,
 	type PersistedScannerDeviceV2
 } from '$lib/features/scanners/domain/scanner.schema';
@@ -11,8 +12,10 @@ import {
 	generateStaffPin,
 	SCANNER_SECRETS_DB,
 	StaffPinSecretStore,
+	staffPinSecretSchema,
 	StaffPinUnavailableError,
-	type CouchAdminCall
+	type CouchAdminCall,
+	type StaffPinSecret
 } from './staff-pin-secret';
 
 /** `updated_by` of a default PIN that came from the backfill rather than an SA. */
@@ -25,9 +28,21 @@ const REGISTRY_WRITE_ATTEMPTS = 3;
 export type StaffPinBackfillReport = {
 	/** Devices given (dry-run: that would be given) a default PIN. Never the PINs themselves. */
 	pinned: string[];
+	/**
+	 * Devices whose registry `staff_pin_*` (or v1 shape) disagreed with their PIN doc and were
+	 * (dry-run: would be) stamped from it. The PIN doc is never changed.
+	 */
+	reconciled: string[];
+	/** PIN docs with no scanner device (inert, FR-12). Reported only, never deleted. */
+	orphans: string[];
 	/** Another writer got there first (PIN doc or device doc); left alone — run again to retry. */
 	conflicts: string[];
 };
+
+type StaffPinMetadata = Pick<
+	PersistedScannerDeviceV2,
+	'staff_pin_set' | 'staff_pin_is_default' | 'staff_pin_updated_at' | 'staff_pin_updated_by'
+>;
 
 export type StaffPinBackfillOptions = {
 	dryRun: boolean;
@@ -79,9 +94,40 @@ async function listDevices(call: CouchAdminCall): Promise<Map<string, PersistedS
 	return devices;
 }
 
-async function listPinnedDeviceIds(call: CouchAdminCall): Promise<Set<string>> {
-	const rows = (await allDocs(call, SCANNER_SECRETS_DB, SECRET_ID_PREFIX, false)) ?? [];
-	return new Set(rows.map((row) => row.id.slice(SECRET_ID_PREFIX.length)));
+/**
+ * Every PIN doc, by device id (its `_id` suffix). A doc that does not parse still counts as "has a
+ * PIN" (`null`), so it is never overwritten, but it is not used to reconcile the registry.
+ */
+async function listPinDocs(call: CouchAdminCall): Promise<Map<string, StaffPinSecret | null>> {
+	const rows = (await allDocs(call, SCANNER_SECRETS_DB, SECRET_ID_PREFIX, true)) ?? [];
+	const docs = new Map<string, StaffPinSecret | null>();
+	for (const row of rows) {
+		const parsed = staffPinSecretSchema.safeParse(row.doc);
+		docs.set(row.id.slice(SECRET_ID_PREFIX.length), parsed.success ? parsed.data : null);
+	}
+	return docs;
+}
+
+function metadataOf(secret: StaffPinSecret): StaffPinMetadata {
+	return {
+		staff_pin_set: true,
+		staff_pin_is_default: secret.is_default,
+		staff_pin_updated_at: secret.updated_at,
+		staff_pin_updated_by: secret.updated_by
+	};
+}
+
+/** True when the registry doc is v2 and its `staff_pin_*` match what the PIN doc says. */
+function metadataMatches(device: PersistedScannerDevice, secret: StaffPinSecret): boolean {
+	if (device.schema_v !== SCANNER_SCHEMA_V) return false;
+	const state = staffPinStateOf(device);
+	const want = metadataOf(secret);
+	return (
+		state.staff_pin_set === want.staff_pin_set &&
+		state.staff_pin_is_default === want.staff_pin_is_default &&
+		state.staff_pin_updated_at === want.staff_pin_updated_at &&
+		state.staff_pin_updated_by === want.staff_pin_updated_by
+	);
 }
 
 /**
@@ -91,6 +137,7 @@ async function listPinnedDeviceIds(call: CouchAdminCall): Promise<Set<string>> {
 async function stampRegistry(
 	call: CouchAdminCall,
 	initial: PersistedScannerDevice,
+	metadata: StaffPinMetadata,
 	updatedAt: string
 ): Promise<boolean> {
 	const path = `/${SCANNER_REGISTRY_DB}/${encodeURIComponent(`${DEVICE_ID_PREFIX}${initial.device_id}`)}`;
@@ -98,12 +145,9 @@ async function stampRegistry(
 	for (let attempt = 1; attempt <= REGISTRY_WRITE_ATTEMPTS; attempt += 1) {
 		const updated: PersistedScannerDeviceV2 = {
 			...current,
+			...metadata,
 			schema_v: SCANNER_SCHEMA_V,
-			updated_at: updatedAt,
-			staff_pin_set: true,
-			staff_pin_is_default: true,
-			staff_pin_updated_at: updatedAt,
-			staff_pin_updated_by: STAFF_PIN_BACKFILL_ACTOR
+			updated_at: updatedAt
 		};
 		const put = await call(path, 'PUT', scannerDevicePersistedSchema.parse(updated));
 		if (put.status >= 200 && put.status < 300) return true;
@@ -119,8 +163,10 @@ async function stampRegistry(
 /**
  * Give every registered scanner device that has no staff PIN yet a random default PIN
  * (draft-kiosk-staff-pin-face-bypass FR-13), so existing kiosks can use the staff bypass. Never
- * overwrites a PIN doc; running it again changes nothing. Ensures `scanner_secrets` exists with
- * admin-only `_security` first and refuses to write any PIN otherwise. Never reports a PIN.
+ * overwrites a PIN doc; running it again changes nothing. Devices that already have a PIN doc get
+ * their registry `staff_pin_*` stamped from it when they disagree (the PIN doc is what verify
+ * reads); PIN docs with no device are reported, never deleted. Ensures `scanner_secrets` exists
+ * with admin-only `_security` first and refuses to write any PIN otherwise. Never reports a PIN.
  */
 export async function backfillStaffPins(
 	call: CouchAdminCall,
@@ -133,10 +179,32 @@ export async function backfillStaffPins(
 	if (!options.dryRun) await store.ensureDatabase();
 
 	const devices = await listDevices(call);
-	const pending = devicesWithoutStaffPin([...devices.keys()], await listPinnedDeviceIds(call));
-	if (options.dryRun) return { pinned: pending, conflicts: [] };
+	const pinDocs = await listPinDocs(call);
+	const pending = devicesWithoutStaffPin([...devices.keys()], new Set(pinDocs.keys()));
+	const orphans = [...pinDocs.keys()].filter((id) => !devices.has(id));
+	const stale = [...devices.values()].filter((device) => {
+		const secret = pinDocs.get(device.device_id);
+		return secret ? !metadataMatches(device, secret) : false;
+	});
+	if (options.dryRun) {
+		return {
+			pinned: pending,
+			reconciled: stale.map((device) => device.device_id),
+			orphans,
+			conflicts: []
+		};
+	}
 
-	const report: StaffPinBackfillReport = { pinned: [], conflicts: [] };
+	const report: StaffPinBackfillReport = { pinned: [], reconciled: [], orphans, conflicts: [] };
+	for (const device of stale) {
+		const secret = pinDocs.get(device.device_id);
+		if (!secret) continue;
+		if (await stampRegistry(call, device, metadataOf(secret), now())) {
+			report.reconciled.push(device.device_id);
+		} else {
+			report.conflicts.push(device.device_id);
+		}
+	}
 	for (const deviceId of pending) {
 		const device = devices.get(deviceId);
 		if (!device) continue;
@@ -158,7 +226,13 @@ export async function backfillStaffPins(
 			report.conflicts.push(deviceId);
 			continue;
 		}
-		if (await stampRegistry(call, device, updatedAt)) {
+		const metadata: StaffPinMetadata = {
+			staff_pin_set: true,
+			staff_pin_is_default: true,
+			staff_pin_updated_at: updatedAt,
+			staff_pin_updated_by: STAFF_PIN_BACKFILL_ACTOR
+		};
+		if (await stampRegistry(call, device, metadata, updatedAt)) {
 			report.pinned.push(deviceId);
 		} else {
 			// Only this run's doc goes: a newer one (an SA set the PIN meanwhile) is left alone.

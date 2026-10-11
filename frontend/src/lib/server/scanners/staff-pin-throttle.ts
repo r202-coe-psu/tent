@@ -4,6 +4,11 @@ import type { StaffPinVerifyResult } from './staff-pin';
 export const STAFF_PIN_WRONG_DELAY_MS = 1000;
 /** Warn on every this-many wrong PINs in a row from one device. */
 export const STAFF_PIN_ALERT_EVERY = 5;
+/** Checks one device may have at once: the one running plus one waiting. */
+export const STAFF_PIN_MAX_PENDING = 2;
+
+/** `busy` = the device's queue is full; the check was not run (→ `429 RATE_LIMITED`). */
+export type StaffPinThrottleResult = StaffPinVerifyResult | { kind: 'busy' };
 
 export type StaffPinThrottleDeps = {
 	sleep?: (ms: number) => Promise<void>;
@@ -14,11 +19,14 @@ export type StaffPinThrottleDeps = {
  * Slows down guessing a device's staff PIN without ever locking the device: one check at a time
  * per device, each wrong PIN held for {@link STAFF_PIN_WRONG_DELAY_MS} before the next may start,
  * and a warning on every {@link STAFF_PIN_ALERT_EVERY} wrong PINs in a row. The count lives in this
- * process only and starts again after a right PIN or a restart; it never blocks a check.
+ * process only and starts again after a right PIN or a restart; it never blocks a check. A device
+ * may have at most {@link STAFF_PIN_MAX_PENDING} checks at once (running + waiting); more are
+ * answered `busy` at once so piled-up requests cannot grow memory without bound.
  */
 export class StaffPinThrottle {
 	/** Tail of each device's queue; removed once the device has nothing waiting. */
 	private readonly queues = new Map<string, Promise<void>>();
+	private readonly pending = new Map<string, number>();
 	private readonly wrongInARow = new Map<string, number>();
 	private readonly sleep: (ms: number) => Promise<void>;
 	private readonly warn: (line: string) => void;
@@ -32,7 +40,11 @@ export class StaffPinThrottle {
 	async run(
 		deviceId: string,
 		check: () => Promise<StaffPinVerifyResult>
-	): Promise<StaffPinVerifyResult> {
+	): Promise<StaffPinThrottleResult> {
+		const waiting = this.pending.get(deviceId) ?? 0;
+		if (waiting >= STAFF_PIN_MAX_PENDING) return { kind: 'busy' };
+		this.pending.set(deviceId, waiting + 1);
+
 		const previous = this.queues.get(deviceId) ?? Promise.resolve();
 		let release!: () => void;
 		const turn = new Promise<void>((resolve) => (release = resolve));
@@ -53,6 +65,9 @@ export class StaffPinThrottle {
 		} finally {
 			release();
 			if (this.queues.get(deviceId) === tail) this.queues.delete(deviceId);
+			const left = (this.pending.get(deviceId) ?? 1) - 1;
+			if (left > 0) this.pending.set(deviceId, left);
+			else this.pending.delete(deviceId);
 		}
 	}
 

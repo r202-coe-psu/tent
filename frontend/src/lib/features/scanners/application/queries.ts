@@ -23,6 +23,8 @@ export const useCreateScannerDevice = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
 		mutationFn: (input: Parameters<typeof createScannerDevice>[0]) => createScannerDevice(input),
+		// The result carries the device secret and default PIN; never keep it in the cache.
+		gcTime: 0,
 		onSuccess: () => queryClient.invalidateQueries({ queryKey: scannerKeys.allDevices })
 	}));
 };
@@ -43,7 +45,7 @@ export const useUpdateScannerDevice = () => {
 export const useDeleteScannerDevice = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: (id: string) => deleteScannerDevice(id),
+		mutationFn: (deviceId: string) => deleteScannerDevice(deviceId),
 		onSuccess: () => queryClient.invalidateQueries({ queryKey: scannerKeys.allDevices })
 	}));
 };
@@ -52,8 +54,8 @@ export const useDeleteScannerDevice = () => {
 export const useSetScannerStaffPin = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: (input: { id: string; body: StaffPinUpdateRequest }) =>
-			setScannerStaffPin(input.id, input.body),
+		mutationFn: (input: { deviceId: string; body: StaffPinUpdateRequest }) =>
+			setScannerStaffPin(input.deviceId, input.body),
 		// Never keep a (regenerated) PIN in the mutation cache once the dialog lets go of it.
 		gcTime: 0,
 		onSuccess: () => queryClient.invalidateQueries({ queryKey: scannerKeys.allDevices })
@@ -66,6 +68,6 @@ export const useSetScannerStaffPin = () => {
  */
 export const useRevealScannerStaffPin = () =>
 	createMutation(() => ({
-		mutationFn: (id: string) => revealScannerStaffPin(id),
+		mutationFn: (deviceId: string) => revealScannerStaffPin(deviceId),
 		gcTime: 0
 	}));

@@ -21,7 +21,9 @@ vi.mock('$lib/server/scanners/device-repository', () => ({
 
 vi.mock('$env/dynamic/private', () => ({ env: {} }));
 
-const DEVICE_ID = 'scanner_device:kiosk-01';
+/** `[id]` is the device_id; the repository gets the registry doc `_id`. */
+const DEVICE_ID = 'kiosk-01';
+const DOC_ID = 'scanner_device:kiosk-01';
 
 describe('POST /api/v1/scanner/devices/[id]/staff-pin/reveal', () => {
 	const mockAuthorize = vi.mocked(authorizeUserWrite);
@@ -59,6 +61,7 @@ describe('POST /api/v1/scanner/devices/[id]/staff-pin/reveal', () => {
 		const response = await post();
 
 		expect(response.status).toBe(200);
+		expect(mockReveal).toHaveBeenCalledWith(DOC_ID);
 		expect(response.headers.get('cache-control')).toBe('no-store');
 		expect(response.headers.get('pragma')).toBe('no-cache');
 		expect(await response.json()).toEqual({

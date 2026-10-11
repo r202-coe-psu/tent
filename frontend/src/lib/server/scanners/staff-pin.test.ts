@@ -94,6 +94,14 @@ describe('verifyDeviceStaffPin', () => {
 		expect(await verifyDeviceStaffPin(d, '482913', deps())).toEqual({ kind: 'ok' });
 	});
 
+	it.each([[''], ['48291'], ['4829134'], ['48291a'], [482913], [null]])(
+		'treats %j as a wrong PIN without reading the store',
+		async (pin) => {
+			expect(await verifyDeviceStaffPin(device(), pin, deps())).toEqual({ kind: 'wrong' });
+			expect(get).not.toHaveBeenCalled();
+		}
+	);
+
 	it('reports not_set when no PIN doc exists, whatever the registry metadata says', async () => {
 		get.mockResolvedValue(null);
 		expect(await verifyDeviceStaffPin(device(), '482913', deps())).toEqual({ kind: 'not_set' });

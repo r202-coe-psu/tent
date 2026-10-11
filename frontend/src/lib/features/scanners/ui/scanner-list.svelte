@@ -34,7 +34,7 @@
 
 	function handleDelete(device: ScannerDevice) {
 		if (confirm(`คุณต้องการลบเครื่องสแกน "${device.name}" (${device.device_id}) หรือไม่?`)) {
-			deleteMutation.mutate(device.id, {
+			deleteMutation.mutate(device.device_id, {
 				onSuccess: () => toast.success('ลบเครื่องสแกนเรียบร้อยแล้ว'),
 				onError: (err) => toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการลบ')
 			});

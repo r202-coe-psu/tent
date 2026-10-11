@@ -138,7 +138,12 @@ describe('backfillStaffPins', () => {
 
 		const report = await backfillStaffPins(couch.call, { ...deps, dryRun: true });
 
-		expect(report).toEqual({ pinned: ['kiosk-01'], conflicts: [] });
+		expect(report).toEqual({
+			pinned: ['kiosk-01'],
+			reconciled: ['kiosk-02'],
+			orphans: [],
+			conflicts: []
+		});
 		expect(couch.writes).toEqual([]);
 	});
 
@@ -154,7 +159,7 @@ describe('backfillStaffPins', () => {
 
 		const report = await backfillStaffPins(couch.call, { ...deps, dryRun: false });
 
-		expect(report).toEqual({ pinned: ['kiosk-01'], conflicts: [] });
+		expect(report).toEqual({ pinned: ['kiosk-01'], reconciled: [], orphans: [], conflicts: [] });
 		expect(couch.dbs.get('scanner_secrets')?.get('staff_pin:kiosk-01')).toMatchObject({
 			type: 'scanner_staff_pin',
 			schema_v: 1,
@@ -190,9 +195,59 @@ describe('backfillStaffPins', () => {
 		const second = await backfillStaffPins(couch.call, { ...deps, dryRun: false });
 
 		expect(couch.dbs.get('scanner_secrets')?.get('staff_pin:kiosk-02')?.pin).toBe('482913');
-		expect(afterFirst.some((w) => w.includes('kiosk-02'))).toBe(false);
-		expect(second).toEqual({ pinned: [], conflicts: [] });
+		expect(afterFirst).not.toContain('put scanner_secrets/staff_pin:kiosk-02');
+		expect(second).toEqual({ pinned: [], reconciled: [], orphans: [], conflicts: [] });
 		expect(couch.writes).toEqual(afterFirst);
+	});
+
+	it('stamps registry metadata from an existing PIN doc without touching the PIN doc', async () => {
+		const stale = {
+			...deviceV1('kiosk-02'),
+			schema_v: 2,
+			staff_pin_set: true,
+			staff_pin_is_default: true,
+			staff_pin_updated_at: '2026-10-01T00:00:00Z',
+			staff_pin_updated_by: 'system:sync-central'
+		};
+		const couch = fakeCouch({
+			registry: [deviceV1('kiosk-01'), stale],
+			secrets: [secret('kiosk-01', '482913'), secret('kiosk-02', '739105')]
+		});
+		const pinDocsBefore = JSON.stringify([...couch.dbs.get('scanner_secrets')!.entries()]);
+
+		const report = await backfillStaffPins(couch.call, { ...deps, dryRun: false });
+
+		expect(report).toEqual({
+			pinned: [],
+			reconciled: ['kiosk-01', 'kiosk-02'],
+			orphans: [],
+			conflicts: []
+		});
+		for (const id of ['kiosk-01', 'kiosk-02']) {
+			expect(couch.dbs.get('registry')?.get(`scanner_device:${id}`)).toMatchObject({
+				schema_v: 2,
+				staff_pin_set: true,
+				staff_pin_is_default: false,
+				staff_pin_updated_at: '2026-10-05T00:00:00Z',
+				staff_pin_updated_by: 'sa'
+			});
+		}
+		expect(JSON.stringify([...couch.dbs.get('scanner_secrets')!.entries()])).toBe(pinDocsBefore);
+	});
+
+	it('reports a PIN doc with no scanner device and leaves it in place', async () => {
+		const couch = fakeCouch({
+			registry: [deviceV1('kiosk-01')],
+			secrets: [secret('kiosk-gone', '482913')]
+		});
+
+		const dry = await backfillStaffPins(couch.call, { ...deps, dryRun: true });
+		expect(dry.orphans).toEqual(['kiosk-gone']);
+
+		const report = await backfillStaffPins(couch.call, { ...deps, dryRun: false });
+		expect(report.orphans).toEqual(['kiosk-gone']);
+		expect(couch.dbs.get('scanner_secrets')?.has('staff_pin:kiosk-gone')).toBe(true);
+		expect(couch.writes).not.toContain('delete scanner_secrets/staff_pin:kiosk-gone');
 	});
 
 	it('removes the PIN it just wrote when the registry doc cannot be stamped', async () => {
@@ -204,7 +259,7 @@ describe('backfillStaffPins', () => {
 
 		const report = await backfillStaffPins(couch.call, { ...deps, dryRun: false });
 
-		expect(report).toEqual({ pinned: [], conflicts: ['kiosk-01'] });
+		expect(report).toEqual({ pinned: [], reconciled: [], orphans: [], conflicts: ['kiosk-01'] });
 		expect(couch.dbs.get('scanner_secrets')?.has('staff_pin:kiosk-01')).toBe(false);
 		expect(couch.dbs.get('registry')?.get('scanner_device:kiosk-01')?.schema_v).toBe(1);
 	});
@@ -221,8 +276,11 @@ describe('backfillStaffPins', () => {
 	});
 
 	it('never puts a PIN in its report', async () => {
-		const couch = fakeCouch({ registry: [deviceV1('kiosk-01')], secrets: [] });
-		const report = await backfillStaffPins(couch.call, { ...deps, dryRun: false });
-		expect(JSON.stringify(report)).not.toContain('582047');
+		const couch = fakeCouch({
+			registry: [deviceV1('kiosk-01'), deviceV1('kiosk-02')],
+			secrets: [secret('kiosk-02', '482913'), secret('kiosk-gone', '739105')]
+		});
+		const report = JSON.stringify(await backfillStaffPins(couch.call, { ...deps, dryRun: false }));
+		for (const pin of ['582047', '482913', '739105']) expect(report).not.toContain(pin);
 	});
 });

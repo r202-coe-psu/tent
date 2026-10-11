@@ -15,6 +15,8 @@ export { generateStaffPin, StaffPinNotSetError, StaffPinUnavailableError } from 
  * through the explicit reveal/create/regenerate paths.
  */
 
+const STAFF_PIN_FORMAT = /^\d{6}$/;
+
 /** Constant-time comparison of a supplied PIN with the stored one. */
 export function staffPinMatches(supplied: string, expected: string): boolean {
 	const a = Buffer.from(supplied, 'utf8');
@@ -25,15 +27,17 @@ export function staffPinMatches(supplied: string, expected: string): boolean {
 export type StaffPinVerifyResult = { kind: 'ok' } | { kind: 'wrong' } | { kind: 'not_set' };
 
 /**
- * Check a kiosk-supplied PIN for an already-authenticated device. A device with no stored PIN is
- * `not_set` (bypass blocked). Throws {@link StaffPinUnavailableError} when the secrets store cannot
- * be read.
+ * Check a kiosk-supplied PIN for an already-authenticated device. Anything that is not 6 digits
+ * (empty, short, letters, not a string) is a wrong PIN, checked before the store is read. A device
+ * with no stored PIN is `not_set` (bypass blocked). Throws {@link StaffPinUnavailableError} when the
+ * secrets store cannot be read.
  */
 export async function verifyDeviceStaffPin(
 	device: PersistedScannerDevice,
-	pin: string,
+	pin: unknown,
 	deps: { store?: Pick<StaffPinSecretStore, 'get'> } = {}
 ): Promise<StaffPinVerifyResult> {
+	if (typeof pin !== 'string' || !STAFF_PIN_FORMAT.test(pin)) return { kind: 'wrong' };
 	const store = deps.store ?? staffPinSecretStore;
 
 	const secret = await store.get(device.device_id);

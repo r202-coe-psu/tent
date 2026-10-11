@@ -597,6 +597,16 @@ async function main() {
 	console.log(
 		`  ✓ scanner_secrets: default staff PIN for ${pins.pinned.length} device(s) ${DRY_RUN ? 'would be created' : 'created'}${pins.pinned.length ? ` (${pins.pinned.join(', ')})` : ''}`
 	);
+	if (pins.reconciled.length) {
+		console.log(
+			`  ✓ scanner_secrets: registry PIN metadata ${DRY_RUN ? 'would be reconciled' : 'reconciled'} from PIN doc for ${pins.reconciled.length} device(s) (${pins.reconciled.join(', ')})`
+		);
+	}
+	if (pins.orphans.length) {
+		console.log(
+			`  ⚠ scanner_secrets: ${pins.orphans.length} PIN doc(s) with no scanner device, left in place (${pins.orphans.join(', ')})`
+		);
+	}
 	if (pins.conflicts.length) {
 		console.log(
 			`  ⚠ scanner_secrets: skipped ${pins.conflicts.length} device(s) changed meanwhile (${pins.conflicts.join(', ')}) — run again`

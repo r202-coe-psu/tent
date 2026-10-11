@@ -176,28 +176,6 @@ export class FaceCheckSession {
 		this.releaseWaiters();
 	}
 
-	/**
-	 * Check-in: the card came out while the check still needed the chip photo. Ends the check the way
-	 * the scanner client would have reported it (`skipped / card_removed`); once the photo is read,
-	 * taking the card out is allowed and changes nothing. While held (staff on the PIN) it first asks
-	 * the scanner client, since the read may have finished after the last preview frame.
-	 */
-	async cardRemoved(): Promise<void> {
-		if (!this.busy || this.deps.flow !== 'check_in' || this.referenceReady) return;
-		if (this.held && this.camera) {
-			// No frames go out while staff are on the PIN, so `referenceReady` may be stale: ask once.
-			try {
-				const reply = await this.deps.api.frame(await this.camera.preview());
-				if (reply.reference === 'ready') this.referenceReady = true;
-			} catch {
-				// No answer: treat it as the photo still being needed, as before.
-			}
-			if (this.ended || this.referenceReady) return;
-		}
-		void this.deps.api.cancel();
-		this.finish({ kind: 'skipped', reason: 'card_removed' });
-	}
-
 	/** The page is going away. Wipes an unfinished check; a finished one is kept for the server hand-off. */
 	destroy(): void {
 		this.stopped = true;

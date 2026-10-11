@@ -25,6 +25,7 @@ import { generateStaffPin } from './staff-pin';
 import {
 	StaffPinNotSetError,
 	staffPinSecretStore,
+	StaffPinUnavailableError,
 	type StaffPinSecret,
 	type StaffPinSecretStore
 } from './staff-pin-store';
@@ -56,8 +57,8 @@ function rethrowDependency(error: unknown): never {
  *
  * Staff PIN write ordering: the secret doc in `scanner_secrets` is the source of truth for
  * verify/reveal and is written FIRST; the registry doc's `staff_pin_*` fields are display metadata
- * written SECOND. If the metadata write fails, the secret write is rolled back (best effort) so the
- * SA's error means "nothing changed". Delete runs the other way round (registry first) so a device
+ * written SECOND. If the metadata write fails, the secret write is rolled back so the SA's error
+ * means "nothing changed"; if the rollback fails too it is logged and surfaces as 503. Delete runs the other way round (registry first) so a device
  * never outlives its PIN with stale "PIN set" badges.
  */
 export class ScannerDeviceRepository {
@@ -187,9 +188,11 @@ export class ScannerDeviceRepository {
 			// Put back what was there (rev-guarded on our own revision): if a concurrent create of the
 			// same device_id won the registry race after we replaced its PIN, deleting ours would leave
 			// that live device with no PIN at all.
-			await this.bestEffort('rollback create', input.device_id, () =>
+			const rolledBack = await this.bestEffort('rollback create', input.device_id, () =>
 				this.restoreSecret(input.device_id, orphan, secret._rev)
 			);
+			// The PIN doc may now disagree with the registry; `sync:central` reconciles it.
+			if (!rolledBack) throw new StaffPinUnavailableError('Rollback of staff PIN failed');
 			if (error instanceof ScannerConflictError) throw error;
 			return rethrowDependency(error);
 		}
@@ -235,18 +238,23 @@ export class ScannerDeviceRepository {
 		throw new ScannerDependencyError();
 	}
 
-	/** Run a compensating step; log (never the PIN) instead of masking the original outcome. */
+	/**
+	 * Run a compensating step; log (never the PIN) instead of masking the original outcome.
+	 * `false` = the step failed and was logged.
+	 */
 	private async bestEffort(
 		action: string,
 		deviceId: string,
 		step: () => Promise<void>
-	): Promise<void> {
+	): Promise<boolean> {
 		try {
 			await step();
+			return true;
 		} catch (error) {
 			console.error(
 				`[scanner-staff-pin] ${action} failed device=${deviceId}: ${error instanceof Error ? error.name : 'unknown'}`
 			);
+			return false;
 		}
 	}
 
@@ -301,9 +309,11 @@ export class ScannerDeviceRepository {
 				staff_pin_updated_by: updatedBy
 			});
 		} catch (error) {
-			await this.bestEffort('rollback PIN change', device.device_id, () =>
+			const rolledBack = await this.bestEffort('rollback PIN change', device.device_id, () =>
 				this.restoreSecret(device.device_id, previous, saved._rev)
 			);
+			// The PIN doc may now disagree with the registry; `sync:central` reconciles it.
+			if (!rolledBack) throw new StaffPinUnavailableError('Rollback of staff PIN failed');
 			throw error;
 		}
 	}

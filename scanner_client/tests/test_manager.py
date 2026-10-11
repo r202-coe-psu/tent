@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from app import manager
 from app.escpos import CUT_SELF_FEED_MM, ESC_INIT, LABEL_LENGTH_MM, label_to_escpos
@@ -280,6 +280,27 @@ class CardRescanTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(saw_new_card)
         self.assertEqual(urlparse(client.page.url).path, client.remove_card_path)
         self.assertEqual(sleeps, [0.5])
+
+    async def test_card_removal_is_announced_on_check_in_and_walk_in_face_pages_only(self):
+        client = manager.ScannerClientManager(valid_config())
+        cases = [
+            (client.remove_card_path, True),
+            (client.register_face_path, True),
+            (client.register_card_path, False),
+            ("/kiosk/register/consent", False),
+        ]
+        for path, announced in cases:
+            with self.subTest(path=path):
+                page = EventFakePage(f"https://tent.example.go.th{path}")
+                client.page = page
+                with patch.object(
+                    client, "_wait_for_home_or_new_card", new=AsyncMock(return_value=False)
+                ) as wait:
+                    await client._after_card_removed()
+
+                removed = [c for c in page.evaluated if c[1] == "kiosk:smart-card-removed"]
+                self.assertEqual(len(removed), 1 if announced else 0)
+                wait.assert_awaited_once()
 
     async def test_full_card_read_runs_only_on_registration_card_path(self):
         client = manager.ScannerClientManager(valid_config())

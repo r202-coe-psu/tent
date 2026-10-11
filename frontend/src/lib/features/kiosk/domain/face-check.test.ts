@@ -163,7 +163,7 @@ describe('faceOutcomeAction', () => {
 		expect(faceOutcomeAction({ kind: 'match', chipPhoto: 'AAAA' })).toBe('show_match');
 		expect(faceOutcomeAction(STAFF_BYPASS)).toBe('hand_on');
 		for (const outcome of [...NOT_MATCHES, CARD_REMOVED]) {
-			expect(['wait_for_pin', 'close_pin']).toContain(faceOutcomeAction(outcome));
+			expect(['wait_for_pin', 'card_removed']).toContain(faceOutcomeAction(outcome));
 		}
 	});
 
@@ -172,7 +172,7 @@ describe('faceOutcomeAction', () => {
 	});
 
 	it('closes an open PIN panel when the card came out: that is not a staff bypass', () => {
-		expect(faceOutcomeAction(CARD_REMOVED)).toBe('close_pin');
+		expect(faceOutcomeAction(CARD_REMOVED)).toBe('card_removed');
 	});
 });
 

@@ -2,6 +2,7 @@ import type { RequestHandler } from './$types';
 import { scannerDeviceRepository } from '$lib/server/scanners/device-repository';
 import {
 	requireStaffPinAdmin,
+	scannerDocIdFromParam,
 	staffPinAdminError,
 	staffPinJson
 } from '$lib/server/scanners/staff-pin-http';
@@ -15,7 +16,8 @@ export const prerender = false;
 export const POST: RequestHandler = async ({ request, params }) => {
 	try {
 		const caller = await requireStaffPinAdmin(request);
-		const revealed = await scannerDeviceRepository.revealStaffPin(params.id);
+		const docId = scannerDocIdFromParam(params.id);
+		const revealed = await scannerDeviceRepository.revealStaffPin(docId);
 		console.info(
 			`[scanner-staff-pin] revealed device=${params.id} by=${caller.name} at=${new Date().toISOString()}`
 		);

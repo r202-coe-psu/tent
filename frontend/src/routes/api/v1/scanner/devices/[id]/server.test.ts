@@ -21,7 +21,9 @@ vi.mock('$lib/server/scanners/device-repository', () => ({
 
 vi.mock('$env/dynamic/private', () => ({ env: {} }));
 
-const DEVICE_ID = 'scanner_device:kiosk-01';
+/** `[id]` is the device_id; the repository gets the registry doc `_id`. */
+const DEVICE_ID = 'kiosk-01';
+const DOC_ID = 'scanner_device:kiosk-01';
 
 describe('DELETE /api/v1/scanner/devices/[id]', () => {
 	const mockAuthorize = vi.mocked(authorizeUserWrite);
@@ -39,9 +41,9 @@ describe('DELETE /api/v1/scanner/devices/[id]', () => {
 		mockDelete.mockResolvedValue();
 	});
 
-	async function del(): Promise<Response> {
+	async function del(id = DEVICE_ID): Promise<Response> {
 		return DELETE({
-			params: { id: DEVICE_ID },
+			params: { id },
 			request: new Request('http://localhost/api/v1/scanner/devices/x', {
 				method: 'DELETE',
 				headers: { cookie: 'AuthSession=sa' }
@@ -54,7 +56,15 @@ describe('DELETE /api/v1/scanner/devices/[id]', () => {
 		expect(response.status).toBe(200);
 		expect(response.headers.get('cache-control')).toBe('no-store');
 		expect(await response.json()).toEqual({ ok: true });
-		expect(mockDelete).toHaveBeenCalledWith(DEVICE_ID);
+		expect(mockDelete).toHaveBeenCalledWith(DOC_ID);
+	});
+
+	it('takes the device_id in the path: a doc _id or junk is 404 without touching the registry', async () => {
+		for (const id of ['scanner_device:kiosk-01', '../x', '']) {
+			const response = await del(id);
+			expect(response.status).toBe(404);
+		}
+		expect(mockDelete).not.toHaveBeenCalled();
 	});
 
 	it('returns 403 for non-SA and 401 for anonymous without deleting', async () => {

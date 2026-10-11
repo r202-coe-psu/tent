@@ -144,14 +144,53 @@ describe('FaceCheckPinFlow — from the camera', () => {
 		expect(oncancel).not.toHaveBeenCalled();
 	});
 
-	it('closes the panel when the card came out: that is not a staff bypass', () => {
-		const { flow, onfinish } = setup();
+	it('a card_removed ending while on the PIN cancels the session: that is not a staff bypass', () => {
+		const { flow, onfinish, oncancel } = setup();
 		flow.skip();
 
 		flow.finished({ kind: 'skipped', reason: 'card_removed' });
 
 		expect(flow.pinOpen).toBe(false);
 		expect(onfinish).not.toHaveBeenCalled();
+		expect(oncancel).toHaveBeenCalledOnce();
+	});
+});
+
+describe('FaceCheckPinFlow — card removed', () => {
+	it('with the PIN open from the camera: closes the panel and goes home, nothing handed on', () => {
+		const { flow, session, onfinish, oncancel } = setup();
+		flow.skip();
+
+		expect(flow.cardRemoved()).toBe(true);
+
+		expect(flow.pinOpen).toBe(false);
+		expect(oncancel).toHaveBeenCalledOnce();
+		expect(onfinish).not.toHaveBeenCalled();
+		expect(session.resume).not.toHaveBeenCalled();
+	});
+
+	it('with the PIN open from the result screen: closes the panel and goes home', () => {
+		const { flow, session, onfinish, oncancel } = setup();
+		session.phase = 'done';
+		flow.finished(NOT_CONFIRMED);
+		flow.openFromResult();
+
+		expect(flow.cardRemoved()).toBe(true);
+
+		expect(flow.pinOpen).toBe(false);
+		expect(oncancel).toHaveBeenCalledOnce();
+		expect(onfinish).not.toHaveBeenCalled();
+	});
+
+	it('changes nothing while the PIN panel is closed', () => {
+		const { flow, session, oncancel } = setup();
+		expect(flow.cardRemoved()).toBe(false);
+
+		session.phase = 'done';
+		flow.finished(NOT_CONFIRMED);
+		expect(flow.cardRemoved()).toBe(false);
+		flow.finished({ kind: 'skipped', reason: 'card_removed' });
+		expect(oncancel).not.toHaveBeenCalled();
 	});
 });
 

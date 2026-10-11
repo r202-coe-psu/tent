@@ -16,7 +16,7 @@ export type FaceCheckPinFlowDeps = {
 	cancelCheck: (reason: string) => void;
 	/** The person may move on (see `KioskFaceCheck`'s `onfinish`). */
 	onfinish: (outcome: FaceCheckOutcome) => void;
-	/** Staff cancelled the PIN from the result screen: go home, save nothing. */
+	/** Go home, save nothing: PIN cancelled from the result screen, or the card came out on the PIN. */
 	oncancel: () => void;
 	/** The PIN panel opened or closed (the page pauses its idle timeout meanwhile). */
 	onpinchange?: (open: boolean) => void;
@@ -61,8 +61,8 @@ export class FaceCheckPinFlow {
 				this.#setPinFrom(null);
 				this.#matchTimer = setTimeout(() => this.#handOn(outcome), FACE_MATCH_SHOWN_MS);
 				return;
-			case 'close_pin':
-				this.#setPinFrom(null);
+			case 'card_removed':
+				this.cardRemoved();
 				return;
 			case 'wait_for_pin':
 				// The PIN panel, if open, stays open; otherwise the result screen asks.
@@ -111,6 +111,18 @@ export class FaceCheckPinFlow {
 				session.resume();
 				return 'skip';
 		}
+	}
+
+	/**
+	 * The card came out of the reader. With the PIN panel open (from either place) that cancels the
+	 * session: the panel closes (its PIN is wiped) and the page goes home, saving nothing. Returns
+	 * whether it did; with the panel closed it changes nothing.
+	 */
+	cardRemoved(): boolean {
+		if (!this.pinOpen || this.handedOn) return false;
+		this.#setPinFrom(null);
+		this.deps.oncancel();
+		return true;
 	}
 
 	destroy(): void {

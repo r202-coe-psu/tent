@@ -894,57 +894,6 @@ describe('FaceCheckSession.hold (staff PIN)', () => {
 	});
 });
 
-describe('FaceCheckSession.cardRemoved (check-in)', () => {
-	it('ends as card_removed while the chip photo is still needed', async () => {
-		const { session, api, finished } = setupHeld(2, { flow: 'check_in' });
-		const pending = session.agree();
-		await flush();
-
-		session.cardRemoved();
-		await pending;
-
-		expect(finished).toEqual([{ kind: 'skipped', reason: 'card_removed' }]);
-		expect(api.cancel).toHaveBeenCalledOnce();
-	});
-
-	it('asks the scanner client first while held, and carries on if the photo was read meanwhile', async () => {
-		const { session, api, finished } = setupHeld(2, { flow: 'check_in' });
-		const pending = session.agree();
-		await flush();
-		expect(session.cardRemovable).toBe(false);
-		vi.mocked(api.frame).mockResolvedValueOnce({ ...NOT_READY, reference: 'ready' });
-
-		await session.cardRemoved();
-
-		expect(finished).toEqual([]);
-		expect(session.cardRemovable).toBe(true);
-		expect(api.cancel).not.toHaveBeenCalled();
-		session.destroy();
-		await pending;
-	});
-
-	it('changes nothing once the chip photo was read, or on walk-in', async () => {
-		const read = setupHeld(2, {
-			flow: 'check_in',
-			start: { ok: true, reference: 'ready' }
-		});
-		const readPending = read.session.agree();
-		await flush();
-		read.session.cardRemoved();
-		expect(read.finished).toEqual([]);
-		read.session.destroy();
-		await readPending;
-
-		const walkIn = setupHeld(2);
-		const walkInPending = walkIn.session.agree();
-		await flush();
-		walkIn.session.cardRemoved();
-		expect(walkIn.finished).toEqual([]);
-		walkIn.session.destroy();
-		await walkInPending;
-	});
-});
-
 describe('FaceCheckSession match with the chip photo', () => {
 	it('passes the chip photo on with the match', async () => {
 		const { session, finished } = setup({

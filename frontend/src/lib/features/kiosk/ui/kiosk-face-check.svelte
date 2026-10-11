@@ -133,13 +133,11 @@
 	}
 
 	/**
-	 * The scanner client says when the card comes out. Only matters while staff are on the PIN from
-	 * the camera: the session ends as `card_removed` if the chip photo was still needed.
+	 * The scanner client says when the card comes out. Only matters while staff are on the PIN
+	 * (opened from either place): that cancels the session - go home, nothing saved.
 	 */
 	function listenForCardRemoval(): () => void {
-		const handleCardRemoved = () => {
-			if (flow === 'check_in' && pinFlow.pinFrom === 'camera') void session.cardRemoved();
-		};
+		const handleCardRemoved = () => void pinFlow.cardRemoved();
 		window.addEventListener('kiosk:smart-card-removed', handleCardRemoved);
 		return () => window.removeEventListener('kiosk:smart-card-removed', handleCardRemoved);
 	}

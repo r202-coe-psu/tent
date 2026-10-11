@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
 	STAFF_PIN_ALERT_EVERY,
+	STAFF_PIN_MAX_PENDING,
 	STAFF_PIN_WRONG_DELAY_MS,
 	StaffPinThrottle
 } from './staff-pin-throttle';
@@ -50,7 +51,7 @@ describe('StaffPinThrottle', () => {
 
 	it('checks one PIN at a time per device, so parallel guesses wait their turn', async () => {
 		const checks: number[] = [];
-		const runs = [1, 2, 3].map((n) =>
+		const runs = [1, 2].map((n) =>
 			throttle.run('kiosk-01', async () => {
 				checks.push(n);
 				return WRONG;
@@ -58,9 +59,29 @@ describe('StaffPinThrottle', () => {
 		);
 		const all = Promise.all(runs);
 
-		expect(await settledAfter(all, STAFF_PIN_WRONG_DELAY_MS * 3 - 1)).toBe(false);
-		expect(checks).toEqual([1, 2, 3]);
+		expect(await settledAfter(all, STAFF_PIN_WRONG_DELAY_MS * 2 - 1)).toBe(false);
+		expect(checks).toEqual([1, 2]);
 		expect(await settledAfter(all, 1)).toBe(true);
+	});
+
+	it('answers busy at once, without checking, when the device already has a full queue', async () => {
+		const check = vi.fn(async () => WRONG);
+		const queued = Array.from({ length: STAFF_PIN_MAX_PENDING }, () =>
+			throttle.run('kiosk-01', check)
+		);
+		const extra = throttle.run('kiosk-01', check);
+
+		expect(await settledAfter(extra, 0)).toBe(true);
+		await expect(extra).resolves.toEqual({ kind: 'busy' });
+
+		await vi.advanceTimersByTimeAsync(STAFF_PIN_WRONG_DELAY_MS * STAFF_PIN_MAX_PENDING);
+		await Promise.all(queued);
+		expect(check).toHaveBeenCalledTimes(STAFF_PIN_MAX_PENDING);
+
+		// Once the queue drained, the device is accepted again.
+		const next = throttle.run('kiosk-01', async () => OK);
+		expect(await settledAfter(next, 0)).toBe(true);
+		await expect(next).resolves.toEqual(OK);
 	});
 
 	it('does not make one device wait for another', async () => {

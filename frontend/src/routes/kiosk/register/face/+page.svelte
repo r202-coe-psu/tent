@@ -69,8 +69,8 @@
 	}
 
 	/**
-	 * Mode `on`: only a match or a staff PIN bypass gets here (anything else waits for the PIN, or
-	 * "cancel" goes home without registering). Shadow: every ending, as before.
+	 * Only a match or a staff PIN bypass gets here (anything else waits for the PIN, or "cancel" /
+	 * taking the card out on the PIN goes home without registering).
 	 */
 	function handleFaceFinished(outcome: FaceCheckOutcome) {
 		walkInSession.faceOutcome = outcome;

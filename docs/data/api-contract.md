@@ -220,14 +220,17 @@ CR ที่แผนอ้างถึงยังไม่มีใน `docs/c
 
 | Endpoint | Body | สำเร็จ |
 | --- | --- | --- |
-| `POST /api/v1/scanner/devices` (เดิม) | ตามเดิม | response เพิ่ม `plaintext_staff_pin` (default PIN สุ่ม) |
+| `POST /api/v1/scanner/devices` (ใหม่ — ย้ายการสร้างเครื่องจาก browser มาฝั่ง server) | `{ device_id, name, shelter_code, station_name?, status? }` | `201 { "device", "plaintext_secret", "plaintext_staff_pin" }` — สร้างเครื่องพร้อม default PIN สุ่ม |
 | `POST /api/v1/scanner/devices/[id]/staff-pin` | `{ "pin": "<6 หลัก>" }` หรือ `{ "regenerate": true }` | `200 { "ok": true }` · regenerate → `200 { "ok": true, "pin": "<6 หลัก>" }` |
 | `POST /api/v1/scanner/devices/[id]/staff-pin/reveal` | — | `200 { "pin", "is_default", "updated_at", "updated_by" }` |
 | `DELETE /api/v1/scanner/devices/[id]` | — | `200 { "ok": true }` — ลบ registry doc ก่อน แล้วลบ PIN doc (best effort) |
 
+`[id]` ใน path = `device_id` (เช่น `kiosk-01`) **ไม่ใช่** `_id` ของ doc (`scanner_device:kiosk-01`); ค่าที่ไม่ใช่
+`device_id` ที่ถูกต้อง = `404 NOT_FOUND`.
+
 Error ของ admin endpoint: ไม่ login `401 UNAUTHENTICATED` · ไม่ใช่ SA `403 FORBIDDEN` · PIN ไม่ใช่ 6 หลักหรือเดาง่าย
 `400 VALIDATION` · ไม่พบเครื่อง `404 NOT_FOUND` · reveal เครื่องที่ไม่มี PIN `409 staff_pin_not_set` · `_rev` ชน
-`409 CONFLICT` · `scanner_secrets` ใช้ไม่ได้หรือ `_security` มี member ที่ไม่ใช่ admin `503 STAFF_PIN_UNAVAILABLE` ·
+`409 CONFLICT` · `scanner_secrets` ใช้ไม่ได้, `_security` มี member ที่ไม่ใช่ admin หรือ rollback PIN doc ไม่สำเร็จ `503 STAFF_PIN_UNAVAILABLE` ·
 registry ใช้ไม่ได้ `503 DEPENDENCY_UNAVAILABLE`.
 
 **Kiosk (device credential):**
@@ -249,11 +252,13 @@ Content-Type: application/json
 | PIN ถูก | `200 { "ok": true }` ตอบทันที |
 | PIN ผิด | `401 staff_pin_invalid` ตอบหลังหน่วงประมาณ 1 วินาที |
 | device credential ผิด | `401 DEVICE_AUTH_FAILED` (ตรวจก่อน PIN) |
-| body ไม่ใช่ `{ pin: 6 หลัก }` | `400 VALIDATION` |
+| PIN ไม่ใช่ตัวเลข 6 หลัก (ว่าง, สั้น/ยาว, มีตัวอักษร) หรือ body อ่านไม่ได้ | ถือเป็น PIN ผิด: `401 staff_pin_invalid` หลังหน่วงเหมือนกัน (ตรวจ format ก่อน `timingSafeEqual`) |
+| คิวของเครื่องเต็ม (ตรวจอยู่ 1 + รอ 1) | `429 RATE_LIMITED` ตอบทันที ไม่รับเข้าคิว |
 | เครื่องไม่มี PIN doc | `409 staff_pin_not_set` |
 | registry / `scanner_secrets` ใช้ไม่ได้ | `503 DEPENDENCY_UNAVAILABLE` |
 
-ไม่ล็อกเครื่องและไม่จำกัดจำนวนครั้ง แต่ server ตรวจ PIN ได้ทีละ request ต่อเครื่อง (request ที่ซ้อนเข้ามารอคิว)
+ไม่ล็อกเครื่องและไม่จำกัดจำนวนครั้ง แต่ server ตรวจ PIN ได้ทีละ request ต่อเครื่อง (request ที่ซ้อนเข้ามารอคิวได้
+1 request; เกินนั้น `429`; device auth ตรวจก่อนเข้าคิว เครื่องที่ credential ผิดจึงไม่กินที่ในคิว)
 และ log ระดับ `warn` ทุกครั้งที่ PIN ผิดติดกันครบ 5 ครั้งต่อเครื่อง (ตัวนับอยู่ใน memory, reset เมื่อ PIN ถูกหรือ
 server restart). `scanner_client` แนบ device credential ให้เฉพาะ request `POST` same-origin จากหน้า kiosk.
 

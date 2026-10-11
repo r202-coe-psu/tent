@@ -21,7 +21,9 @@ vi.mock('$lib/server/scanners/device-repository', () => ({
 
 vi.mock('$env/dynamic/private', () => ({ env: {} }));
 
-const DEVICE_ID = 'scanner_device:kiosk-01';
+/** `[id]` is the device_id; the repository gets the registry doc `_id`. */
+const DEVICE_ID = 'kiosk-01';
+const DOC_ID = 'scanner_device:kiosk-01';
 
 describe('POST /api/v1/scanner/devices/[id]/staff-pin', () => {
 	const mockAuthorize = vi.mocked(authorizeUserWrite);
@@ -58,7 +60,7 @@ describe('POST /api/v1/scanner/devices/[id]/staff-pin', () => {
 		expect(response.status).toBe(200);
 		expect(response.headers.get('cache-control')).toBe('no-store');
 		expect(await response.json()).toEqual({ ok: true });
-		expect(mockSet).toHaveBeenCalledWith(DEVICE_ID, '482913', 'sa-user');
+		expect(mockSet).toHaveBeenCalledWith(DOC_ID, '482913', 'sa-user');
 	});
 
 	it('regenerates and returns the new PIN only to the caller', async () => {
@@ -66,7 +68,7 @@ describe('POST /api/v1/scanner/devices/[id]/staff-pin', () => {
 
 		expect(response.status).toBe(200);
 		expect(await response.json()).toEqual({ ok: true, pin: '582047' });
-		expect(mockRegenerate).toHaveBeenCalledWith(DEVICE_ID, 'sa-user');
+		expect(mockRegenerate).toHaveBeenCalledWith(DOC_ID, 'sa-user');
 		expect(mockSet).not.toHaveBeenCalled();
 	});
 

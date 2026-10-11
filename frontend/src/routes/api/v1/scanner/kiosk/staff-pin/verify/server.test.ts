@@ -153,15 +153,55 @@ describe('POST /api/v1/scanner/kiosk/staff-pin/verify', () => {
 	});
 
 	it.each([
-		['short pin', { pin: '4829' }],
+		['empty pin', { pin: '' }],
+		['short pin', { pin: '48291' }],
 		['letters', { pin: '48291a' }],
+		['number pin', { pin: 482913 }],
 		['missing pin', {}],
-		['extra field', { pin: '482913', device_id: 'other' }],
 		['not json', 'nope']
-	])('returns 400 for %s', async (_label, body) => {
-		const response = await POST(request(body));
-		expect(response.status).toBe(400);
+	])('treats %s as a wrong PIN: held ~1 s, then 401 staff_pin_invalid', async (_label, body) => {
+		let answered = false;
+		const pending = Promise.resolve(POST(request(body))).finally(() => (answered = true));
+		await vi.advanceTimersByTimeAsync(STAFF_PIN_WRONG_DELAY_MS - 1);
+		expect(answered).toBe(false);
+		await vi.advanceTimersByTimeAsync(1);
+		const response = await pending;
+
+		expect(response.status).toBe(401);
+		expect((await response.json()).error.code).toBe('staff_pin_invalid');
 		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(mockSecret).not.toHaveBeenCalled();
+	});
+
+	it('queues a second wrong PIN behind the first and answers a third with 429 at once', async () => {
+		const first = POST(request({ pin: '111112' }));
+		const second = POST(request({ pin: '111113' }));
+		const third = await POST(request({ pin: '111114' }));
+
+		expect(third.status).toBe(429);
+		expect((await third.json()).error.code).toBe('RATE_LIMITED');
+		expect(third.headers.get('cache-control')).toBe('no-store');
+
+		let secondAnswered = false;
+		const secondDone = Promise.resolve(second).finally(() => (secondAnswered = true));
+		await vi.advanceTimersByTimeAsync(STAFF_PIN_WRONG_DELAY_MS * 2 - 1);
+		expect(secondAnswered).toBe(false);
+		await vi.advanceTimersByTimeAsync(1);
+		expect((await first).status).toBe(401);
+		expect((await secondDone).status).toBe(401);
+	});
+
+	it('authenticates before queueing: bad credentials never take a slot', async () => {
+		const first = POST(request({ pin: '111112' }));
+		const intruders = await Promise.all(
+			[1, 2, 3].map(() => POST(request({ pin: '482913' }, { 'x-device-secret': 'wrong' })))
+		);
+		expect(intruders.map((r) => r.status)).toEqual([401, 401, 401]);
+
+		const second = POST(request({ pin: '482913' }));
+		await vi.advanceTimersByTimeAsync(STAFF_PIN_WRONG_DELAY_MS);
+		expect((await first).status).toBe(401);
+		expect((await second).status).toBe(200);
 	});
 
 	it('returns 409 staff_pin_not_set when the device has no PIN doc (v1 or v2)', async () => {
