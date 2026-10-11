@@ -124,11 +124,6 @@ export interface KioskEvacueeSummary {
 	is_primary: boolean;
 	phone_matched?: boolean;
 	selectable: boolean;
-	/**
-	 * Unmasked name + phone for the printed ID-card label. Only on members who can get a label
-	 * (pre-registered or arriving); the screen keeps showing the masked `last_name`.
-	 */
-	label?: KioskLabelIdentity;
 }
 
 export type KioskLabelIdentity = { name: string; phone: string | null };
@@ -180,6 +175,11 @@ export type KioskCheckInMemberResult = {
 	status: 'checked_in' | 'already_checked_in' | 'not_found' | 'not_eligible' | 'failed';
 	stay_status?: string;
 	qr_payload?: string;
+	/**
+	 * Unmasked name + phone for the printed ID-card label: only with a `qr_payload` (just checked
+	 * in, or already arriving), never in a lookup — the lookup screen keeps the masked `last_name`.
+	 */
+	label?: KioskLabelIdentity;
 };
 
 function isEvacueeDoc(value: unknown): value is EvacueeDoc {
@@ -208,8 +208,7 @@ function toSummary(
 		status,
 		is_primary: doc._id === primaryId,
 		...(options.matchedPhoneIds ? { phone_matched: options.matchedPhoneIds.has(doc._id) } : {}),
-		selectable,
-		...(selectable || status === 'arriving' ? { label: toLabelIdentity(doc) } : {})
+		selectable
 	};
 }
 
@@ -546,7 +545,9 @@ export async function checkInSelectedMembers(
 				evacuee_id: evacueeId,
 				status: isAlreadyCheckedInStatus(stayStatus) ? 'already_checked_in' : 'not_eligible',
 				stay_status: stayStatus,
-				...(stayStatus === 'arriving' ? { qr_payload: evacueeId } : {})
+				...(stayStatus === 'arriving'
+					? { qr_payload: evacueeId, label: toLabelIdentity(member) }
+					: {})
 			});
 			continue;
 		}
@@ -570,7 +571,8 @@ export async function checkInSelectedMembers(
 				evacuee_id: evacueeId,
 				status: 'checked_in',
 				stay_status: 'arriving',
-				qr_payload: evacueeId
+				qr_payload: evacueeId,
+				label: toLabelIdentity(member)
 			});
 		} catch {
 			const latest = await getById(dbName, member._id).catch(() => null);
@@ -580,7 +582,9 @@ export async function checkInSelectedMembers(
 					evacuee_id: evacueeId,
 					status: 'already_checked_in',
 					stay_status: stayStatus,
-					...(stayStatus === 'arriving' ? { qr_payload: evacueeId } : {})
+					...(stayStatus === 'arriving'
+						? { qr_payload: evacueeId, label: toLabelIdentity(latest) }
+						: {})
 				});
 			} else {
 				results.push({ evacuee_id: evacueeId, status: 'failed' });

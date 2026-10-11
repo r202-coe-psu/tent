@@ -381,12 +381,41 @@
 		}
 	}
 
+	/**
+	 * A lookup never carries the unmasked label text, so a reprint fetches it from /check-in when the
+	 * visitor taps print (arriving members are not written again, only returned with their label).
+	 */
+	async function loadMissingLabels(items: KioskCheckInMemberResult[]): Promise<boolean> {
+		const missing = items
+			.filter((item) => item.qr_payload && !item.label)
+			.map((item) => item.evacuee_id);
+		if (missing.length === 0) return true;
+		if (!lookup) return false;
+		printError = '';
+		try {
+			const response = await checkInSelectedMembers(lookup.primary_evacuee_id, missing, {
+				batchLimit: 20
+			});
+			results = mergeCheckInResults(results, response.members);
+			return true;
+		} catch (error) {
+			if (error instanceof KioskPartialCheckInError) {
+				results = mergeCheckInResults(results, error.result.members);
+			}
+			printError = 'โหลดข้อมูลสำหรับพิมพ์ไม่สำเร็จ กรุณาลองอีกครั้ง';
+			return false;
+		}
+	}
+
 	async function printWristbands(): Promise<void> {
-		const toPrint = printableResults;
-		if (toPrint.length === 0 || printBusy) return;
+		if (printableResults.length === 0 || printBusy) return;
 		printBusy = true;
 		onprintbusychange?.(true);
 		try {
+			if (!(await loadMissingLabels(printableResults))) return;
+			// Re-read: a member who moved past arriving since the lookup has no QR to reprint any more.
+			const toPrint = printableResults;
+			if (toPrint.length === 0) return;
 			if (!(await prepareQrImages(toPrint))) return;
 			printedCount = toPrint.length;
 			printPhase = 'printing';
@@ -426,8 +455,8 @@
 				if (!qr) throw new Error('QR image missing');
 				return renderKioskLabelPng({
 					qrSrc: qr.src,
-					name: person ? labelName(person) : '',
-					phone: person?.label?.phone ?? null
+					name: labelName(result, person),
+					phone: result.label?.phone ?? null
 				});
 			})
 		);
@@ -444,9 +473,9 @@
 		return [member.first_name, member.last_name].filter(Boolean).join(' ') || 'ไม่ระบุชื่อ';
 	}
 
-	/** The printed label carries the unmasked name; the screen keeps the masked one. */
-	function labelName(member: KioskEvacueeSummary): string {
-		return member.label?.name || fullName(member);
+	/** The printed label carries the unmasked name from /check-in; the screen keeps the masked one. */
+	function labelName(result: KioskCheckInMemberResult, person?: KioskEvacueeSummary): string {
+		return result.label?.name || (person ? fullName(person) : '');
 	}
 
 	function statusLabel(status: string): string {
@@ -878,8 +907,8 @@
 								variant="label"
 								src={qr?.src}
 								alt="QR ประจำตัวสำหรับใช้ภายในศูนย์"
-								name={person ? labelName(person) : ''}
-								phone={person?.label?.phone}
+								name={labelName(result, person)}
+								phone={result.label?.phone}
 								checklist={KIOSK_LABEL_CHECKLIST}
 							/>
 						</div>

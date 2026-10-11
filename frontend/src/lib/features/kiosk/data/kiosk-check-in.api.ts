@@ -16,8 +16,6 @@ export interface KioskEvacueeSummary {
 	is_primary: boolean;
 	phone_matched?: boolean;
 	selectable: boolean;
-	/** Unmasked name + phone for the printed label; only on pre-registered/arriving members. */
-	label?: { name: string; phone: string | null };
 }
 
 export interface KioskLookupResult {
@@ -43,6 +41,11 @@ export interface KioskCheckInMemberResult {
 	status: 'checked_in' | 'already_checked_in' | 'not_found' | 'not_eligible' | 'failed';
 	stay_status?: string;
 	qr_payload?: string;
+	/**
+	 * Unmasked name + phone for the printed label; only with a `qr_payload`. A lookup never carries
+	 * it, so a reprint asks /check-in (no write for arriving members) when the visitor taps print.
+	 */
+	label?: { name: string; phone: string | null };
 }
 
 export interface KioskCheckInResult {

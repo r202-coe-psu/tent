@@ -444,7 +444,7 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 		expect(result).toMatchObject({ kind: 'household', primary_evacuee_id: legacy._id });
 	});
 
-	it('sends the unmasked name and phone for the label only to members who can print one', async () => {
+	it('never sends an unmasked last name or a phone in a lookup, even for printable members', async () => {
 		const person = evacuee(0, { last_name: 'ใจดี' });
 		const arriving = evacuee(1, {
 			phone: null,
@@ -465,12 +465,11 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 		expect(result.kind).toBe('household');
 		if (result.kind !== 'household') return;
 		const byId = new Map(result.members.map((member) => [member.evacuee_id, member]));
-		expect(byId.get(person._id)).toMatchObject({
-			last_name: 'ใ****',
-			label: { name: 'สมชาย0 ใจดี', phone }
-		});
-		expect(byId.get(arriving._id)?.label).toEqual({ name: 'สมชาย1 ใจดี', phone: null });
-		expect(byId.get(active._id)?.label).toBeUndefined();
+		expect(byId.get(person._id)).toMatchObject({ last_name: 'ใ****' });
+		for (const member of result.members) expect(member).not.toHaveProperty('label');
+		const body = JSON.stringify(result);
+		expect(body).not.toContain('ใจดี');
+		expect(body).not.toContain(phone);
 	});
 
 	it('masks card and QR household names', async () => {
@@ -666,18 +665,21 @@ describe('checkInSelectedMembers', () => {
 				evacuee_id: primary._id,
 				status: 'checked_in',
 				stay_status: 'arriving',
-				qr_payload: primary._id
+				qr_payload: primary._id,
+				label: { name: 'สมชาย0 ใจดี', phone }
 			},
 			{
 				evacuee_id: member._id,
 				status: 'checked_in',
 				stay_status: 'arriving',
-				qr_payload: member._id
+				qr_payload: member._id,
+				label: { name: 'สมชาย1 ใจดี', phone }
 			},
 			{ evacuee_id: legacyKioskMember._id, status: 'not_eligible' },
 			{ evacuee_id: unrelated._id, status: 'not_eligible' },
 			{ evacuee_id: otherShelter._id, status: 'not_found' }
 		]);
+		for (const result of results.slice(2)) expect(result).not.toHaveProperty('label');
 		expect(primary.current_stay).toMatchObject({ status: 'arriving', zone: null });
 		expect(member.current_stay).toMatchObject({ status: 'arriving', zone: null });
 		expect(typeof primary.current_stay.since).toBe('string');
@@ -702,6 +704,29 @@ describe('checkInSelectedMembers', () => {
 		expect(householdWrite).toBeDefined();
 		const householdBody = JSON.parse(String(householdWrite?.[1]?.body)) as FixtureHousehold;
 		expect(householdBody).toMatchObject({ _rev: '1-household', status: 'arriving' });
+	});
+
+	it('returns the label for a reprint of arriving members and none for members past arrival', async () => {
+		const primary = evacuee(0, { current_stay: { status: 'arriving' } });
+		const active = evacuee(1, { current_stay: { status: 'active' } });
+		setHousehold([primary, active], primary);
+
+		const results = await checkInSelectedMembers(shelterCode, primary._id, [
+			primary._id,
+			active._id
+		]);
+
+		expect(results).toEqual([
+			{
+				evacuee_id: primary._id,
+				status: 'already_checked_in',
+				stay_status: 'arriving',
+				qr_payload: primary._id,
+				label: { name: 'สมชาย0 ใจดี', phone }
+			},
+			{ evacuee_id: active._id, status: 'already_checked_in', stay_status: 'active' }
+		]);
+		expect(mockAdminFetch.mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(false);
 	});
 
 	it('rejects opted-out members even when their IDs are submitted directly', async () => {
@@ -737,7 +762,8 @@ describe('checkInSelectedMembers', () => {
 				evacuee_id: primary._id,
 				status: 'already_checked_in',
 				stay_status: 'arriving',
-				qr_payload: primary._id
+				qr_payload: primary._id,
+				label: { name: 'สมชาย0 ใจดี', phone }
 			}
 		]);
 		expect(
@@ -799,7 +825,8 @@ describe('checkInSelectedMembers requiredPrimaryCitizenId', () => {
 				evacuee_id: primary._id,
 				status: 'checked_in',
 				stay_status: 'arriving',
-				qr_payload: primary._id
+				qr_payload: primary._id,
+				label: { name: 'สมชาย0 ใจดี', phone }
 			}
 		]);
 	});
