@@ -1,0 +1,78 @@
+export type IdentityMethodId = 'qr' | 'smart-card' | 'phone' | 'thaid';
+
+export interface IdentityMethodDefinition {
+	id: IdentityMethodId;
+	icon: 'qr' | 'card' | 'phone' | 'thaid';
+	title: string;
+	description?: string;
+	buttonLabel: string;
+	enabled: boolean;
+	href?:
+		| typeof KIOSK_QR_PATH
+		| typeof KIOSK_CARD_PATH
+		| typeof KIOSK_PHONE_PATH
+		| typeof KIOSK_THAID_PATH;
+}
+
+export const KIOSK_QR_PATH = '/kiosk/qr';
+export const KIOSK_CARD_PATH = '/kiosk/scanner/waiting';
+export const KIOSK_PHONE_PATH = '/kiosk/phone';
+export const KIOSK_THAID_PATH = '/kiosk/thaid';
+
+export const IDENTITY_METHODS: readonly IdentityMethodDefinition[] = [
+	{
+		id: 'qr',
+		icon: 'qr',
+		title: 'QR ลงทะเบียน',
+		description: 'สแกน QR ที่ได้รับจากการลงทะเบียนล่วงหน้า',
+		buttonLabel: 'สแกน QR',
+		enabled: true,
+		href: KIOSK_QR_PATH
+	},
+	{
+		id: 'smart-card',
+		icon: 'card',
+		title: 'บัตรประชาชน',
+		description: 'เสียบบัตรที่ใช้ลงทะเบียน',
+		buttonLabel: 'เสียบบัตร',
+		enabled: true,
+		href: KIOSK_CARD_PATH
+	},
+	{
+		id: 'phone',
+		icon: 'phone',
+		title: 'เบอร์โทรศัพท์',
+		description: 'กรอกเบอร์ที่ใช้ลงทะเบียน',
+		buttonLabel: 'กรอกเบอร์',
+		enabled: true,
+		href: KIOSK_PHONE_PATH
+	},
+	{
+		id: 'thaid',
+		icon: 'thaid',
+		title: 'ThaiD',
+		description: 'สแกน QR ด้วยมือถือแล้วยืนยันในแอป ThaiD',
+		buttonLabel: 'ใช้ ThaiD',
+		enabled: true,
+		href: KIOSK_THAID_PATH
+	}
+] as const;
+
+export interface IdentityMethodOptions {
+	/** Per machine, from the scanner client (`KIOSK_QR_CHECK_IN`). */
+	qrCheckInEnabled: boolean;
+	phoneCheckInEnabled: boolean;
+	thaidCheckInEnabled: boolean;
+}
+
+/** Methods shown on the kiosk home screen; this is a UI toggle, not an access check. */
+export function visibleIdentityMethods(
+	options: IdentityMethodOptions
+): readonly IdentityMethodDefinition[] {
+	return IDENTITY_METHODS.filter(
+		(method) =>
+			(method.id !== 'qr' || options.qrCheckInEnabled) &&
+			(method.id !== 'phone' || options.phoneCheckInEnabled) &&
+			(method.id !== 'thaid' || options.thaidCheckInEnabled)
+	);
+}

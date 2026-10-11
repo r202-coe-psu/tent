@@ -282,6 +282,7 @@ async def test_shelter_detail_occupancy_counts_pre_registered(
         await _insert_person_doc(db_client, settings, f"evacuee:a{idx}", "SH001", status)
     for idx, status in enumerate(["pre_registered", "pre_registered"]):
         await _insert_person_doc(db_client, settings, f"evacuee:p{idx}", "SH001", status)
+    await _insert_person_doc(db_client, settings, "evacuee:kiosk0", "SH001", "kiosk_registered")
     await _insert_person_doc(db_client, settings, "evacuee:arr0", "SH001", "arriving")
     await _insert_person_doc(db_client, settings, "evacuee:rc0", "SH001", "room_confirmed")
     await _insert_person_doc(db_client, settings, "evacuee:tl0", "SH001", "temporary_leave")
@@ -295,12 +296,13 @@ async def test_shelter_detail_occupancy_counts_pre_registered(
     assert response.status_code == 200
 
     shelter = response.json()["shelter"]
-    # Forecast: 3 active + 2 pre_registered + 1 arriving + 1 room_confirmed + 1 temporary_leave = 8
-    assert shelter["occupancy"] == 8
+    # Forecast: 3 active + 2 pre_registered + 1 kiosk_registered + 1 arriving
+    # + 1 room_confirmed + 1 temporary_leave = 9
+    assert shelter["occupancy"] == 9
     # Present: 3 active + 1 room_confirmed + 1 temporary_leave = 5
     assert shelter["present"] == 5
     # In-zone: room_confirmed only
     assert shelter["in_zone"] == 1
     assert shelter["capacity"]["total"] == 100
-    assert shelter["capacity"]["available"] == 92
-    assert shelter["occupancy_rate"] == 8
+    assert shelter["capacity"]["available"] == 91
+    assert shelter["occupancy_rate"] == 9

@@ -43,6 +43,16 @@ export function getPreRegStatusInfo(
 		};
 	}
 
+	if (raw === 'kiosk_registered') {
+		return {
+			label: 'ลงทะเบียนที่ตู้ (รอยืนยัน)',
+			className: 'border-amber-200 bg-amber-50 text-amber-900',
+			dotColor: 'bg-amber-500',
+			isEntered: true,
+			description: 'ผู้ประสบภัยอยู่ที่ศูนย์และรอเจ้าหน้าที่ยืนยันข้อมูลที่ Station 1'
+		};
+	}
+
 	if (raw === 'temporary_leave') {
 		return {
 			label: 'ออกชั่วคราว',

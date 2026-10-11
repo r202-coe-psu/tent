@@ -87,7 +87,11 @@
 	}
 
 	const alreadyReportedIn = $derived(
-		Boolean(evacuee && evacuee.current_stay.status !== 'pre_registered')
+		Boolean(
+			evacuee &&
+			evacuee.current_stay.status !== 'pre_registered' &&
+			evacuee.current_stay.status !== 'kiosk_registered'
+		)
 	);
 
 	async function handleReportIn(
