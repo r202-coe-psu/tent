@@ -1,10 +1,11 @@
 ---
-id: draft
-title: Temporary RATE_LIMIT env switch — disable BFF rate limiters on local e2e and staging
-status: proposed
+id: CR-160
+title: Temporary RATE_LIMIT env switch — bypass donation & pre-register BFF rate limiters on local e2e and staging
+status: approved
 date: 2026-10-11
+updated: 2026-10-11
 requested_by: team A (donation) — e2e @critical failures
-decided_by: project owner
+decided_by: เจ้าของโครงการ (PO, net-lynx) — approved 2026-10-11
 layer: volatile
 affects:
   - frontend/src/lib/server/security/rate-limiter.ts (RateLimiter.check)
@@ -17,7 +18,7 @@ affects:
   - no schema_v bump
 ---
 
-# draft-e2e-donations-temporary-disable-rate-limit — RATE_LIMIT env switch
+# CR-160 — RATE_LIMIT env switch (donation & pre-register BFF limiters)
 
 > **สรุป (TL;DR):**
 >
@@ -150,3 +151,6 @@ N/A — ไม่เปลี่ยน shape ที่ persist
 - 2026-10-11 — PO review warning resolution:
   - ระบุมาตรการควบคุมการเข้าถึง staging ด้วย IP allowlist (จำกัดเฉพาะ IP ของ CI/Jenkins, VPN ภายใน และเครือข่ายทีมพัฒนา)
   - เปิด GitHub issue ติดตามผลแยก 2 เรื่อง: [#458](https://github.com/r202-coe-psu/tent/issues/458) (FastAPI shared bucket) และ [#459](https://github.com/r202-coe-psu/tent/issues/459) (track-search & race test)
+- 2026-10-11 — **approved with conditions** (PO, net-lynx) — spec only, ยังไม่ implement:
+  - (a) เลข CR-160 ใช้เลขถัดไปจาก `_index.md` บน develop (CR-158 ใช้แล้ว, CR-159 จองโดย #426); ไฟล์อยู่ที่ `docs/changes/04-donation/`
+  - (b) implementation ต้องมาเป็น **code PR ใหม่** ที่มีเฉพาะ commit สวิตช์ `87ad8dea` ปรับตามขอบเขตที่ approve (`bypassable: true` เฉพาะ limiter ของ donation + pre-register) แยกจาก `team-A-donation` และ CR-157; **ห้าม merge `team-A-donation` ตรง ๆ**
