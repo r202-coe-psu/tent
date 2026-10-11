@@ -71,20 +71,26 @@ test.describe('Public landing: setup and urgent need', { tag: ['@public', '@crit
 
 	test('lists the critical need and links to its donation form', async ({ page }) => {
 		test.skip(IS_REMOTE, 'no production need fixture — it would invite real donations');
-		test.setTimeout(120_000); // outlasts the 90 s projection wait below
-		// The worker projects new needs asynchronously — retry the landing page.
+		test.setTimeout(45_000); // outlasts the 35 s projection wait below
+		// This shelter was just created — the worker's registry listener only polls for
+		// brand-new shelter databases every 30s (listeners/registry.py), so this first
+		// wait needs headroom past that; retry the landing page until it does.
 		await expect(async () => {
 			await page.goto('/');
 			await expect(page.getByRole('heading', { name: SHELTER_NAME })).toBeVisible({
 				timeout: 3_000
 			});
-		}).toPass({ intervals: [3_000], timeout: 90_000 });
+		}).toPass({ intervals: [2_000], timeout: 35_000 });
 
 		await expect(page.getByRole('heading', { name: 'รับบริจาคด่วน', exact: true })).toBeVisible();
 		await expect(page.getByText(NEED_ITEM)).toBeVisible();
 		await expect(page.getByText('ขาดอีก 500 จากเป้า 500')).toBeVisible();
 
-		await page.getByRole('link', { name: 'แจ้งบริจาค' }).click();
+		// Scope to THIS run's shelter: a seeded DB has its own urgent needs, so the bare
+		// "แจ้งบริจาค" link name matches several cards (strict-mode violation).
+		const donateLink = page.locator(`a[href="/donations?shelter=${shelterCode}"]`);
+		await expect(donateLink).toHaveText('แจ้งบริจาค');
+		await donateLink.click();
 		await expect(page).toHaveURL(new RegExp(`/donations\\?shelter=${shelterCode}$`));
 	});
 });

@@ -4,7 +4,7 @@ import {
 	keyedDonationIds,
 	recordedDonationQty,
 	stockBalance
-} from '$lib/features/operations';
+} from '$lib/features/operations/server';
 import { addQty, subQty, qtyGt } from '$lib/utils/qty';
 
 /**

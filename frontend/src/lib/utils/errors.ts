@@ -1,3 +1,5 @@
+import { ZodError } from 'zod';
+
 /** True when `err` is a CouchDB HTTP error with the given status code. */
 export function isPouchError(err: unknown, status: number): boolean {
 	return typeof err === 'object' && err !== null && (err as { status?: number }).status === status;
@@ -173,6 +175,9 @@ export function errorMessage(err: unknown): string {
 	if (err instanceof ValidationError) return err.message;
 	if (err instanceof CannotConnectError) return 'Cannot connect — check your network and try again';
 	if (err instanceof NetworkError) return 'No connection';
+	// A ZodError's `message` is the issues serialised as JSON — its first line is "[".
+	// The schemas carry the Thai reason on each issue, so show the first one.
+	if (err instanceof ZodError) return err.issues[0]?.message ?? 'ข้อมูลไม่ถูกต้อง';
 	if (err instanceof Error) return err.message;
 	return 'Something went wrong';
 }

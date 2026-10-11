@@ -1,6 +1,9 @@
 <script lang="ts">
 	import Check from '@lucide/svelte/icons/check';
 	import type { Component } from 'svelte';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
 
 	export type StepperSection = {
 		id: string;
@@ -18,16 +21,18 @@
 		onNavigate: (id: string) => void;
 	} = $props();
 
+	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
+
 	function getShortTitle(id: string, fallback: string): string {
 		switch (id) {
 			case 'address':
-				return 'ที่พักอาศัย';
+				return t.stepAddress;
 			case 'members':
-				return 'สมาชิก';
+				return t.stepMembers;
 			case 'pets':
-				return 'สัตว์เลี้ยง';
+				return t.stepPets;
 			case 'vehicles':
-				return 'ยานพาหนะ';
+				return t.stepVehicles;
 			default:
 				return fallback;
 		}
@@ -41,7 +46,7 @@
 	);
 </script>
 
-<nav aria-label="ขั้นตอนการลงทะเบียน" class="w-full">
+<nav aria-label={t.stepperAria} class="w-full">
 	<div class="rounded-2xl border border-border/60 bg-card p-3 shadow-2xs sm:p-4">
 		<ol class="flex items-center justify-between gap-1 sm:gap-3">
 			{#each sections as section, index (section.id)}
@@ -73,7 +78,7 @@
 							<span
 								class="hidden text-3xs font-medium text-muted-foreground uppercase sm:block sm:text-2xs"
 							>
-								ขั้นตอนที่ {index + 1}
+								{t.stepN(index + 1)}
 							</span>
 							<span
 								class="block truncate text-xs font-semibold {isCurrent

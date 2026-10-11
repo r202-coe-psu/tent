@@ -177,3 +177,25 @@ export async function bulkDocsBatched(
 		await bulkDocs(db, docs.slice(i, i + batchSize), options);
 	}
 }
+
+const LOCAL_COUCH_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]', 'couchdb']);
+
+/** Throw unless COUCHDB_ADMIN_URL points at a local / compose CouchDB (demo-data seeds). */
+export function assertLocalCouch(): void {
+	const host = new URL(rawCouchUrl).hostname;
+	if (!LOCAL_COUCH_HOSTS.has(host)) {
+		throw new Error(`Refusing to seed demo data into non-local CouchDB host "${host}"`);
+	}
+}
+
+/** Current `_rev` of each id that exists (and is not deleted) in `db`. */
+export async function liveRevs(db: string, ids: string[]): Promise<Map<string, string>> {
+	const { status, data } = await couchReq('POST', `/${db}/_all_docs`, { keys: ids });
+	if (status !== 200) throw new Error(`Cannot read ${db} (HTTP ${status})`);
+	type Row = { id?: string; value?: { rev: string; deleted?: boolean } };
+	const revs = new Map<string, string>();
+	for (const row of (data as { rows: Row[] }).rows) {
+		if (row.id && row.value && !row.value.deleted) revs.set(row.id, row.value.rev);
+	}
+	return revs;
+}

@@ -108,7 +108,7 @@ describe('ticket-workflow', () => {
 	const POS_CTX: AuthorContext = {
 		shelterCode: 'SH001',
 		createdBy: 'pos_user',
-		roles: ['shelter:SH001', 'registration_staff']
+		roles: ['shelter:SH001', 'SH001:distribution_staff']
 	};
 	const UNAUTH_CTX: AuthorContext = {
 		shelterCode: 'SH001',
@@ -366,6 +366,40 @@ describe('ticket-workflow', () => {
 		const received = await receiveTicketAtDistributionPoint(ticket._id, POS_CTX, repo);
 		expect(received.status).toBe('DISTRIBUTING');
 		expect(received.received_by).toBe(POS_CTX.createdBy);
+	});
+
+	it('rejects receive at distribution point by registration_staff or supply_coordinator (CR-161 R3)', async () => {
+		const ticket = await createRequisitionTicket(
+			{
+				ticket_no: 'TKT-SUPPLIES-0002',
+				requisition_type: 'supplies',
+				source_location: 'warehouse:main',
+				destination_location: 'point:b',
+				items: [
+					{
+						item_id: 'item:mat',
+						item_name: 'Mat',
+						type_class: 'CONSUMABLE',
+						returnable: false,
+						requested_qty: '10',
+						allocated_qty: '10'
+					}
+				]
+			},
+			WH_CTX,
+			repo
+		);
+		await repo.transitionTicket(ticket._id, 'IN_TRANSIT', WH_CTX, { dispatched_by: 'wh_user' });
+
+		for (const roles of [
+			['shelter:SH001', 'SH001:registration_staff'],
+			['shelter:SH001', 'SH001:supply_coordinator']
+		]) {
+			await expect(
+				receiveTicketAtDistributionPoint(ticket._id, { ...POS_CTX, roles }, repo)
+			).rejects.toThrow(/frontline distribution operations require distribution_staff/);
+		}
+		expect((await repo.get(ticket._id))?.status).toBe('IN_TRANSIT');
 	});
 
 	it('allows cancellation only for pre-dispatch tickets', async () => {

@@ -8,6 +8,7 @@ import { deployShelterViewsFn } from '$lib/features/shelters/server/deploy';
 import {
 	buildValidateDocUpdate,
 	REFERRAL_MANGO_INDEXES,
+	KIOSK_LOOKUP_MANGO_INDEXES,
 	shelterDbName
 } from '$lib/server/shelter-access-design';
 import { buildRegistryDesignDoc, REGISTRY_DESIGN_ID } from '$lib/server/registry-design';
@@ -361,26 +362,32 @@ export async function seedRegistry(master: MasterLookup): Promise<void> {
 		}
 	}
 
-	const testScannerSecret = 'kiosk-test-secret';
-	const testScannerDoc = {
-		_id: 'scanner_device:kiosk-test',
-		type: 'scanner_device',
-		schema_v: 1,
-		device_id: 'kiosk-test',
-		name: 'Kiosk Test Scanner',
-		shelter_code: SH001_CODE,
-		station_name: 'จุดสแกน Kiosk ทดสอบ (Kiosk Test)',
-		secret: testScannerSecret,
-		secret_hash: createHash('sha256').update(testScannerSecret).digest('hex'),
-		secret_prefix: testScannerSecret.slice(0, 16) + '...',
-		status: 'active',
-		last_seen_at: null,
-		created_at: ts,
-		updated_at: ts,
-		created_by: 'seed'
-	};
-	await putDoc('registry', testScannerDoc);
-	console.log(`  ✓ registry: 1 scanner device (kiosk-test)`);
+	const testScannerSecret = process.env.SCANNER_SEED_SECRET?.trim();
+	if (testScannerSecret) {
+		if (!/^sk_scan_[0-9a-f]{64}$/.test(testScannerSecret)) {
+			throw new Error('SCANNER_SEED_SECRET must use a generated scanner key format');
+		}
+		const testScannerDoc = {
+			_id: 'scanner_device:kiosk-test',
+			type: 'scanner_device',
+			schema_v: 1,
+			device_id: 'kiosk-test',
+			name: 'Kiosk Test Scanner',
+			shelter_code: SH001_CODE,
+			station_name: 'จุดสแกน Kiosk ทดสอบ (Kiosk Test)',
+			secret_hash: createHash('sha256').update(testScannerSecret).digest('hex'),
+			secret_prefix: testScannerSecret.slice(0, 16) + '...',
+			status: 'active',
+			last_seen_at: null,
+			created_at: ts,
+			updated_at: ts,
+			created_by: 'seed'
+		};
+		await putDoc('registry', testScannerDoc);
+		console.log(`  ✓ registry: 1 scanner device (kiosk-test)`);
+	} else {
+		console.log('  - registry: scanner seed skipped; use System Management or SCANNER_SEED_SECRET');
+	}
 }
 
 async function deployShelterAccessDesign(db: string, shelterCode: string): Promise<void> {
@@ -414,7 +421,20 @@ async function deployMangoIndexes(db: string): Promise<void> {
 			);
 		}
 	}
-	console.log(`  ✓ ${db}: Mango indexes for referral deployed`);
+	console.log(`  ✓ ${db}: referral Mango indexes deployed`);
+}
+
+async function deployKioskLookupMangoIndexes(db: string): Promise<void> {
+	for (const def of KIOSK_LOOKUP_MANGO_INDEXES) {
+		const { status, data } = await couchReq('POST', `/${db}/_index`, def);
+		if (status >= 400) {
+			const detail = (data as { reason?: string; error?: string } | null) ?? {};
+			throw new Error(
+				`Cannot deploy Mango index "${def.name}" to "${db}" (HTTP ${status}): ${detail.reason ?? detail.error ?? 'unknown'}`
+			);
+		}
+	}
+	console.log(`  ✓ ${db}: kiosk lookup Mango indexes deployed`);
 }
 
 async function listRegistryShelterCodes(): Promise<string[]> {
@@ -457,6 +477,7 @@ async function provisionShelterDb(shelterCode: string): Promise<void> {
 	await deployShelterViewsFn(db, (path, method, body) => couchReq(method, path, body));
 	await deployShelterAccessDesign(db, code);
 	await deployMangoIndexes(db);
+	await deployKioskLookupMangoIndexes(db);
 }
 
 export async function provisionRegistryShelterDbs(): Promise<void> {

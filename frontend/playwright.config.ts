@@ -1,6 +1,11 @@
 /// <reference types="node" />
 import { defineConfig, devices } from '@playwright/test';
 
+// CR-160: local preview server runs with the bypassable BFF limiters (donation, pre-register)
+// off unless the caller opts in with RATE_LIMIT=true. Set on process.env (not just the
+// server env below) so the test workers inherit it and the e2e waits see the same value.
+process.env.RATE_LIMIT ??= 'false';
+
 const APP_BASE_URL = process.env.PLAYWRIGHT_TEST_BASE_URL ?? 'http://localhost:4173';
 const APP_PORT = (() => {
 	try {
@@ -42,13 +47,20 @@ export default defineConfig({
 			// Pass the admin URL so the SvelteKit BFF can reach CouchDB.
 			// COUCHDB_ADMIN_URL can be overridden via CI env; defaults to local dev value.
 			// Preview port follows PLAYWRIGHT_TEST_BASE_URL so parallel worktrees do not collide.
-			command: `COUCHDB_ADMIN_URL=${process.env.COUCHDB_ADMIN_URL ?? 'http://admin:password@localhost:5984'} pnpm preview --port ${APP_PORT} --strictPort`,
+			// Call the vite binary directly, not `pnpm preview`/`pnpm exec`: pnpm runs the script in
+			// its own process group, so Playwright's process-group kill at teardown misses it and the
+			// run hangs forever after the last test, waiting on the orphan's stdout.
+			command: `COUCHDB_ADMIN_URL=${process.env.COUCHDB_ADMIN_URL ?? 'http://admin:password@localhost:5984'} node_modules/.bin/vite preview --port ${APP_PORT} --strictPort`,
 			url: APP_BASE_URL,
 			reuseExistingServer: !process.env.CI,
 			timeout: 60_000,
 			env: {
 				COUCHDB_ADMIN_URL: process.env.COUCHDB_ADMIN_URL ?? 'http://admin:password@localhost:5984',
 				SECRET_RECAPTCHA_KEY: process.env.SECRET_RECAPTCHA_KEY ?? 'e2e-recaptcha-secret',
+				// Bypassable BFF limiters (`$env/dynamic/private` RATE_LIMIT, CR-160) are off for e2e:
+				// every suite shares 127.0.0.1 and `vite preview` is not `dev`, so the loopback
+				// exemption never applies. Export RATE_LIMIT=true to run against the real limits.
+				RATE_LIMIT: process.env.RATE_LIMIT ?? 'false',
 				// Public shelter bookings write as the limited `public_writer` user (production mode
 				// has no admin fallback) — pre-register W5 needs it, see .env.example.
 				...(process.env.COUCHDB_PUBLIC_WRITER_URL

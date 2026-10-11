@@ -71,7 +71,7 @@ export const PUBLIC_DONATIONS_I18N = {
 		emailPlaceholder: 'example@email.com',
 		section2Title: 'ส่วนที่ 2: รายละเอียดสิ่งของบริจาค',
 		section2DescSolicited:
-			'💡 เลือกลบรายการที่ไม่ต้องการบริจาคออก และปรับระบุจำนวนที่คุณต้องการบริจาคได้ตามสะดวก',
+			'เลือกลบรายการที่ไม่ต้องการบริจาคออก และปรับระบุจำนวนที่คุณต้องการบริจาคได้ตามสะดวก',
 		section2DescUnsolicited: 'ระบุรายการสิ่งของที่คุณจะนำมามอบให้',
 		deleteItemAria: 'ลบรายการนี้',
 		categoryLabel: 'หมวดหมู่',
@@ -146,6 +146,14 @@ export const PUBLIC_DONATIONS_I18N = {
 		selectDatePlaceholder: 'เลือกวันที่',
 		slotFull: 'คิวเต็ม (งด)',
 		slotAvailable: 'ว่าง',
+		slotChecking: 'กำลังตรวจสอบคิว...',
+		slotsLoadError: 'โหลดช่วงเวลาไม่สำเร็จ',
+		slotsLoadErrorHint:
+			'ตรวจสอบคิวของศูนย์นี้ไม่สำเร็จ จึงยังไม่แสดงช่วงเวลา เพื่อไม่ให้เลือกช่วงที่เต็มแล้วโดยไม่รู้ตัว กรุณาลองใหม่อีกครั้ง',
+		slotsRetry: 'ลองใหม่',
+		slotsSelectShelterFirst: 'เลือกศูนย์พักพิงก่อน เพื่อดูช่วงเวลาที่ว่าง',
+		slotsPickupUnavailable:
+			'ศูนย์นี้ยังไม่เปิดรอบรถเข้ารับของในวันที่เลือก — เลือกวันอื่น หรือเปลี่ยนเป็นนำของมาส่งเอง',
 		backBtn: 'กลับ',
 		submitting: 'กำลังดำเนินการ...',
 		processingBtn: 'กำลังดำเนินการ...',
@@ -433,7 +441,7 @@ export const PUBLIC_DONATIONS_I18N = {
 		emailPlaceholder: 'example@email.com',
 		section2Title: 'Section 2: Donation Items',
 		section2DescSolicited:
-			'💡 Remove items you do not wish to donate and adjust quantities as needed.',
+			'Remove items you do not wish to donate and adjust quantities as needed.',
 		section2DescUnsolicited: 'Specify the items you will provide.',
 		deleteItemAria: 'Delete this item',
 		categoryLabel: 'Category',
@@ -507,6 +515,14 @@ export const PUBLIC_DONATIONS_I18N = {
 		selectDatePlaceholder: 'Select Date',
 		slotFull: 'Full',
 		slotAvailable: 'Available',
+		slotChecking: 'Checking queue...',
+		slotsLoadError: 'Could not load time slots',
+		slotsLoadErrorHint:
+			'We could not check this shelter’s queue, so no time slots are shown — that way you cannot pick one that is already full. Please try again.',
+		slotsRetry: 'Try again',
+		slotsSelectShelterFirst: 'Select a shelter first to see the available time slots.',
+		slotsPickupUnavailable:
+			'This shelter has no pickup runs scheduled on the selected date — pick another date or drop the donation off yourself.',
 		backBtn: 'Back',
 		submitting: 'Submitting...',
 		processingBtn: 'Submitting...',

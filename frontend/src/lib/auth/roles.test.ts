@@ -3,7 +3,9 @@ import {
 	formatRoleList,
 	canCancelHold,
 	canAccessUnassignedRegistrationQueue,
+	canAccessDistributionDesk,
 	canAccessMedicalScreening,
+	canAccessVolunteerBackoffice,
 	canAccessZoning,
 	capabilitiesForShelter,
 	compoundCapabilityRole,
@@ -19,6 +21,10 @@ import {
 	roleDisplayLabel,
 	rolesFromAssignments,
 	assignmentsFromRoles,
+	DISTRIBUTION_STAFF,
+	SA_GRANTABLE_CAPABILITIES,
+	SHELTER_CAPABILITIES,
+	STAFF_CAPABILITIES,
 	shelterCodeFromRoles,
 	shelterCodesFromRoles,
 	shelterScopeRole
@@ -84,8 +90,10 @@ describe('roles kernel', () => {
 		expect(hasCapabilityInShelter(roles, 'SH001', 'registration_staff')).toBe(true);
 		expect(hasCapabilityInShelter(roles, 'SH001', 'medical_staff')).toBe(false);
 		expect(hasCapabilityInShelter(roles, 'SH002', 'medical_staff')).toBe(true);
-		expect(canAccessMedicalScreening(roles, 'SH001')).toBe(false);
+		// SH001 only has registration_staff — now admitted to Station 2 (decision sync 2026-10-10).
+		expect(canAccessMedicalScreening(roles, 'SH001')).toBe(true);
 		expect(canAccessMedicalScreening(roles, 'SH002')).toBe(true);
+		expect(canAccessMedicalScreening(roles, 'SH003')).toBe(false);
 		expect(canAccessZoning(roles, 'SH001')).toBe(true);
 		expect(canAccessZoning(roles, 'SH002')).toBe(false);
 	});
@@ -164,16 +172,46 @@ describe('roles kernel', () => {
 		expect(canAccessUnassignedRegistrationQueue([])).toBe(false);
 	});
 
-	it('canAccessMedicalScreening allows medical_staff, triage_staff, shelter_manager, system_admin only', () => {
+	it('canAccessMedicalScreening allows registration_staff, medical_staff, triage_staff, shelter_manager, system_admin only', () => {
 		expect(canAccessMedicalScreening(['system_admin'])).toBe(true);
 		expect(canAccessMedicalScreening(['_admin'])).toBe(true);
 		expect(canAccessMedicalScreening(['shelter:SH001', 'shelter_manager'])).toBe(true);
 		expect(canAccessMedicalScreening(['shelter:SH001', 'medical_staff'])).toBe(true);
 		expect(canAccessMedicalScreening(['shelter:SH001', 'triage_staff'])).toBe(true);
-		expect(canAccessMedicalScreening(['shelter:SH001', 'registration_staff'])).toBe(false);
+		expect(canAccessMedicalScreening(['shelter:SH001', 'registration_staff'])).toBe(true);
+		expect(canAccessMedicalScreening(['shelter:SH001', 'SH001:registration_staff'])).toBe(true);
+		// REG of another shelter does not bleed into this one.
+		expect(
+			canAccessMedicalScreening(
+				['shelter:SH001', 'shelter:SH002', 'SH001:registration_staff'],
+				'SH002'
+			)
+		).toBe(false);
+		expect(canAccessMedicalScreening(['shelter:SH001', 'facility_staff'])).toBe(false);
+		expect(canAccessMedicalScreening(['shelter:SH001', 'volunteer_coordinator'])).toBe(false);
 		expect(canAccessMedicalScreening(['shelter:SH001', 'kitchen_staff'])).toBe(false);
 		expect(canAccessMedicalScreening(['shelter:SH001', 'warehouse_staff'])).toBe(false);
 		expect(canAccessMedicalScreening([])).toBe(false);
+	});
+
+	it('canAccessVolunteerBackoffice allows volunteer_coordinator, shelter_manager, system_admin only', () => {
+		expect(canAccessVolunteerBackoffice(['system_admin'])).toBe(true);
+		expect(canAccessVolunteerBackoffice(['_admin'])).toBe(true);
+		expect(canAccessVolunteerBackoffice(['shelter:SH001', 'shelter_manager'])).toBe(true);
+		expect(canAccessVolunteerBackoffice(['shelter:SH001', 'volunteer_coordinator'])).toBe(true);
+		expect(
+			canAccessVolunteerBackoffice(['shelter:SH001', 'SH001:volunteer_coordinator'], 'SH001')
+		).toBe(true);
+		expect(canAccessVolunteerBackoffice(['shelter:SH001', 'registration_staff'])).toBe(false);
+		expect(canAccessVolunteerBackoffice(['shelter:SH001', 'kitchen_staff'])).toBe(false);
+		expect(canAccessVolunteerBackoffice(['shelter:SH001', 'security_officer'])).toBe(false);
+		expect(canAccessVolunteerBackoffice([])).toBe(false);
+	});
+
+	it('canAccessVolunteerBackoffice is scoped to the selected shelter', () => {
+		const roles = ['shelter:SH001', 'shelter:SH002', 'SH001:volunteer_coordinator'];
+		expect(canAccessVolunteerBackoffice(roles, 'SH001')).toBe(true);
+		expect(canAccessVolunteerBackoffice(roles, 'SH002')).toBe(false);
 	});
 
 	it('canAccessZoning allows registration_staff, facility_staff, shelter_manager, system_admin only', () => {
@@ -259,5 +297,51 @@ describe('formatRoleList', () => {
 	it('returns the default label for an empty/missing list', () => {
 		expect(formatRoleList([])).toBe('ผู้ใช้ทั่วไป');
 		expect(formatRoleList(undefined)).toBe('ผู้ใช้ทั่วไป');
+	});
+});
+
+describe('distribution_staff capability', () => {
+	it('is a grantable staff capability (SM, SA, and volunteer access pickers)', () => {
+		expect(STAFF_CAPABILITIES).toContain(DISTRIBUTION_STAFF);
+		expect(SHELTER_CAPABILITIES).toContain(DISTRIBUTION_STAFF);
+		expect(SA_GRANTABLE_CAPABILITIES).toContain(DISTRIBUTION_STAFF);
+		expect(isStaffOnly(['shelter:SH001', 'SH001:distribution_staff'])).toBe(true);
+	});
+
+	it('round-trips through compound shelter assignments', () => {
+		const roles = rolesFromAssignments([
+			{ shelter_code: 'SH001', capabilities: [DISTRIBUTION_STAFF] }
+		]);
+		expect(roles).toEqual(['shelter:SH001', 'SH001:distribution_staff']);
+		expect(assignmentsFromRoles(roles)).toEqual([
+			{ shelter_code: 'SH001', capabilities: [DISTRIBUTION_STAFF] }
+		]);
+	});
+
+	it('is scoped to its own shelter', () => {
+		const roles = ['shelter:SH001', 'shelter:SH002', 'SH001:distribution_staff'];
+		expect(hasCapabilityInShelter(roles, 'SH001', DISTRIBUTION_STAFF)).toBe(true);
+		expect(hasCapabilityInShelter(roles, 'SH002', DISTRIBUTION_STAFF)).toBe(false);
+	});
+
+	it('alone (with SA and SM) opens the Distribution Desk page (CR-161 R5)', () => {
+		expect(canAccessDistributionDesk(['system_admin'], 'SH001')).toBe(true);
+		for (const cap of ['shelter_manager', DISTRIBUTION_STAFF]) {
+			expect(canAccessDistributionDesk(['shelter:SH001', `SH001:${cap}`], 'SH001')).toBe(true);
+			expect(canAccessDistributionDesk(['shelter:SH001', `SH001:${cap}`], 'SH002')).toBe(false);
+		}
+		for (const cap of ['registration_staff', 'supply_coordinator', 'warehouse_staff']) {
+			expect(canAccessDistributionDesk(['shelter:SH001', `SH001:${cap}`], 'SH001')).toBe(false);
+		}
+		// Legacy flat role with a single shelter scope (CR-161 R1).
+		expect(canAccessDistributionDesk(['shelter:SH001', DISTRIBUTION_STAFF], 'SH001')).toBe(true);
+	});
+
+	it('has a Thai display label', () => {
+		expect(roleDisplayLabel(DISTRIBUTION_STAFF)).toBe('เจ้าหน้าที่แจกจ่าย');
+		expect(roleDisplayLabel('SH001:distribution_staff')).toBe('เจ้าหน้าที่แจกจ่าย (SH001)');
+		expect(formatRoleList(['shelter:SH001', 'SH001:distribution_staff'])).toBe(
+			'SH001:เจ้าหน้าที่แจกจ่าย'
+		);
 	});
 });

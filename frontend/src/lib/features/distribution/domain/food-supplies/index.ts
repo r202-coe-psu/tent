@@ -13,6 +13,7 @@ export {
 	canTransitionRequisitionTicket,
 	assertRequisitionTicketTransition,
 	assertRequisitionTicketMutation,
+	ticketServiceDay,
 	type RequisitionType,
 	type Flow2RequisitionType,
 	type RequisitionTicketStatus,
@@ -106,3 +107,15 @@ export {
 	type LoanReturnReservation,
 	type CreateLoanReturnReservationInput
 } from './return-reservation';
+
+export {
+	deriveRecipientMenuTags,
+	menuTargetTags,
+	matchRecipientToMenu,
+	type MenuTargetTag,
+	type MenuRecipientProfile,
+	type MenuTagSource,
+	type MenuMatchResult
+} from './menu-matching';
+
+export { lotExpiryStatus, isLotExpired, type LotExpiryStatus } from './food-safety';

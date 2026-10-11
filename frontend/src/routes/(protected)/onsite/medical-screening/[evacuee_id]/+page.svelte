@@ -17,10 +17,10 @@
 		evacueeAgeYears,
 		nextScreeningQueueEvacuee,
 		recommendZoneKind,
+		ZONE_KIND_LABELS,
 		formatPersonName,
 		StationCompletionSummary,
-		type Screening,
-		type ZoningRecommendKind
+		type Screening
 	} from '$lib/features/people';
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
@@ -71,11 +71,6 @@
 	// The route is reused for 「คนถัดไปในคิว」 — only show the summary for the person just saved
 	const justSaved = $derived(savedEvacueeId !== null && savedEvacueeId === evacueeId);
 
-	const ZONE_KIND_LABELS: Record<ZoningRecommendKind, string> = {
-		quarantine: 'โซนกักตัว (มีอาการเฝ้าระวัง)',
-		vulnerable: 'โซนกลุ่มเปราะบาง',
-		general: 'โซนทั่วไป'
-	};
 	const savedFacts = $derived.by(() => {
 		if (!evacuee) return [];
 		const symptoms = latestScreening?.symptoms ?? [];
@@ -213,8 +208,8 @@
 					ศูนย์พักพิงนี้ไม่ได้เปิดใช้งานจุดคัดกรองทางการแพทย์ (Station 2) ตามการตั้งค่าศูนย์พักพิง
 				</p>
 				<div class="mt-5 flex flex-col gap-2">
-					<Button variant="default" class="w-full" onclick={() => goto(resolve('/onsite'))}>
-						กลับหน้าระบบส่วนหน้า
+					<Button variant="default" class="w-full" onclick={() => goto(resolve('/portal'))}>
+						กลับหน้าเลือกเมนูหลัก
 					</Button>
 					<Button
 						variant="outline"
