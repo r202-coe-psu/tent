@@ -13,6 +13,7 @@ import {
 } from '$lib/features/people/server';
 import { isShelterBookable } from '$lib/features/shelters/server';
 import { signResidenceMatchToken } from './residence-match-token.server';
+import { maskedMemberName } from './domain/residence-mask';
 
 export type ResidenceSearchQuery = ResidenceFields & {
 	phone?: string | null;
@@ -45,20 +46,6 @@ type HouseholdDoc = ResidenceFields & {
 	latitude?: number | null;
 	longitude?: number | null;
 };
-
-function maskLastName(lastName: string | null | undefined): string {
-	if (!lastName?.trim()) return '';
-	const chars = Array.from(lastName.trim());
-	if (chars.length <= 4) {
-		return `${chars[0]}****`;
-	}
-	return `${chars[0]}${chars[1] || ''}****${chars[chars.length - 1] || ''}`;
-}
-
-/** First name + masked surname — the only member detail a public joiner may see. */
-function maskedMemberName(firstName: string | null | undefined, lastName?: string | null): string {
-	return `${firstName ?? ''} ${maskLastName(lastName)}`.trim();
-}
 
 function maskPhone(phone: string | null | undefined): string {
 	if (!phone?.trim()) return '***';
