@@ -18,7 +18,7 @@ affects:
 >
 > - เอกสารนี้คือ **แนวทาง implement** kiosk banner ใน tent — requirement ที่ผูกพันอยู่ใน CR [`draft-kiosk-banner`](../changes/draft-kiosk-banner.md) (FR-KBN-xx); ถ้าขัดกัน **CR ชนะ**
 > - Flow: doc `kiosk_banner` ใน `registry` → back-office CRUD (`banner_staff` / SM / SA) → `POST /api/v1/scanner/kiosk/banners` (device auth) → **attract overlay** บน `/kiosk`
-> - อ่านก่อนเขียนโค้ดทุกส่วนของ feature นี้: §1 หลักการ, §2 layer map, §3 state machine, §4 security, §6 checklist
+> - อ่านก่อนเขียนโค้ดทุกส่วนของ feature นี้: §1 หลักการ, §2 layer map + path map (§2.3), §3 state machine, §4 security, §6 checklist
 
 ---
 
@@ -83,6 +83,82 @@ kiosk (Chromium --kiosk, /kiosk)
 - ฝั่ง kiosk ใช้ plain `fetch` ตาม feature kiosk เดิม (timeout 3 s, `cache: 'no-store'`) ไม่ใช้ TanStack Query
 - kiosk ไม่ import `kiosk-banners` — ใช้แค่ response shape ของ API (กำหนด type ใน `features/kiosk/domain/`)
 - ฝั่ง back-office import ข้าม feature ผ่าน barrel เท่านั้น
+
+### 2.3 Path map
+
+#### URL paths
+
+| Path                                                 | Method                                      | ผู้เรียก                     | Auth                                          | สถานะ                        |
+| :--------------------------------------------------- | :------------------------------------------ | :--------------------------- | :-------------------------------------------- | :--------------------------- |
+| `/kiosk`                                             | page                                        | Chromium บนตู้               | — (anonymous page; API ใช้ device credential) | มีอยู่ — เพิ่ม overlay       |
+| `/back-office/kiosk-banners`                         | page                                        | `banner_staff` / SM / SA     | `_session`                                    | **ใหม่**                     |
+| `/api/back-office/kiosk-banners`                     | `GET` (list) · `POST` (create + รูป base64) | back-office UI               | `_session` + scope                            | **ใหม่**                     |
+| `/api/back-office/kiosk-banners/{id}`                | `GET` · `PUT` · `PATCH` (status) · `DELETE` | back-office UI               | `_session` + scope ค่าเดิม/ค่าใหม่            | **ใหม่**                     |
+| `/api/back-office/kiosk-banners/{id}/image`          | `GET`                                       | back-office UI (preview)     | `_session` + scope                            | **ใหม่**                     |
+| `/api/v1/scanner/kiosk/banners`                      | `POST`                                      | ตู้ (ผ่าน scanner client)    | `X-Device-Id` / `X-Device-Secret`             | **ใหม่**                     |
+| `/api/v1/scanner/kiosk/banners/{id}/image?exp=&sig=` | `GET`                                       | `<img>` บนตู้                | signed URL (HMAC, 15 นาที)                    | **ใหม่**                     |
+| `/api/v1/scanner/kiosk/config`                       | `POST`                                      | ตู้                          | device credential                             | มีอยู่ — template ที่ mirror |
+| `/api/public/v1/system-banner`                       | `GET`                                       | ทุกหน้า (`SystemBannerHost`) | —                                             | มีอยู่ — overlay ห้ามบัง     |
+
+#### ไฟล์ใหม่ (`frontend/src/` ยกเว้นระบุ)
+
+| ไฟล์                                                                                  | หน้าที่                                                   |
+| :------------------------------------------------------------------------------------ | :-------------------------------------------------------- |
+| `lib/features/kiosk-banners/domain/kiosk-banner.ts` (+ `.test.ts`)                    | Zod schema, factory, `isActiveAt`, `sortBanners`          |
+| `lib/features/kiosk-banners/data/kiosk-banner.repository.ts`                          | repository interface                                      |
+| `lib/features/kiosk-banners/data/kiosk-banner.remote.ts` (+ `.test.ts`)               | adapter เรียก `/api/back-office/kiosk-banners/**`         |
+| `lib/features/kiosk-banners/application/kiosk-banner.queries.ts`                      | query-key factory + `createQuery` / `createMutation`      |
+| `lib/features/kiosk-banners/ui/kiosk-banner-list.svelte` · `kiosk-banner-form.svelte` | ตาราง 2 แท็บ, ฟอร์ม + upload preview                      |
+| `lib/features/kiosk-banners/index.ts`                                                 | barrel                                                    |
+| `lib/server/kiosk-banners/kiosk-banner.server.ts` (+ `.test.ts`)                      | registry CRUD, decode/ตรวจรูป, PUT attachment             |
+| `lib/server/kiosk-banners/signed-image-url.ts` (+ `.test.ts`)                         | sign / verify HMAC                                        |
+| `routes/(protected)/back-office/kiosk-banners/+page.svelte` (+ `+page.ts` guard)      | หน้าจัดการ                                                |
+| `routes/api/back-office/kiosk-banners/+server.ts` (+ `server.test.ts`)                | list / create                                             |
+| `routes/api/back-office/kiosk-banners/[id]/+server.ts` (+ `server.test.ts`)           | get / update / status / delete                            |
+| `routes/api/back-office/kiosk-banners/[id]/image/+server.ts` (+ `server.test.ts`)     | รูปสำหรับ preview                                         |
+| `routes/api/v1/scanner/kiosk/banners/+server.ts` (+ `server.test.ts`)                 | feed ของตู้                                               |
+| `routes/api/v1/scanner/kiosk/banners/[id]/image/+server.ts` (+ `server.test.ts`)      | รูปของตู้ (signed)                                        |
+| `lib/features/kiosk/domain/kiosk-banner-feed.ts`                                      | type ของ response feed (kiosk ไม่ import `kiosk-banners`) |
+| `lib/features/kiosk/data/kiosk-banners.api.ts` (+ `.test.ts`)                         | `fetch` feed, timeout 3 s, fail soft                      |
+| `lib/features/kiosk/ui/kiosk-banner-attract.svelte` (+ `.test.ts`)                    | overlay เต็มจอ                                            |
+| `lib/features/kiosk/ui/kiosk-banner-attract.svelte.ts` (+ `.test.ts`)                 | controller: idle, rotation, refresh                       |
+| `frontend/e2e/kiosk-banners.test.ts`                                                  | e2e back-office CRUD + upload                             |
+
+#### ไฟล์ที่ต้องแก้
+
+| ไฟล์                                                      | แก้อะไร                                                                   |
+| :-------------------------------------------------------- | :------------------------------------------------------------------------ |
+| `frontend/src/routes/kiosk/+page.svelte`                  | mount `KioskBannerAttract`                                                |
+| `frontend/src/lib/features/kiosk/index.ts`                | export overlay + `fetchKioskBanners`                                      |
+| `frontend/src/lib/auth/roles.ts` (+ `roles.test.ts`)      | `BANNER_STAFF` ใน `STAFF_CAPABILITIES` + helper `canManageKioskBanners`   |
+| `frontend/src/lib/features/users/domain/schema.ts`        | role ใหม่ในตัวเลือกของฟอร์มผู้ใช้                                         |
+| `frontend/src/lib/server/user-service.ts`                 | ยอมให้ SM grant `banner_staff`                                            |
+| `frontend/src/lib/server/registry-design.ts`              | VDU `buildRegistryValidateDocUpdate()` รองรับ `type: 'kiosk_banner'`      |
+| `frontend/src/lib/components/backoffice-navbar/static.ts` | เมนู「แบนเนอร์ Kiosk」(เห็นเฉพาะ `banner_staff` / SM / SA)                |
+| `scanner_client/app/manager.py`                           | `/api/v1/scanner/kiosk/banners` ใน `allowed_paths` ของ `_route_kiosk_api` |
+| `scanner_client/tests/test_manager.py`                    | test allowlist + GET ไม่ได้ header                                        |
+| `docs/data/schema.md`                                     | §3.12 `kiosk_banner` · §6 `_users.roles` (`banner_staff`)                 |
+| `docs/data/api-contract.md`                               | §2.1 kiosk banners · back-office kiosk-banners                            |
+| `docs/prd/role-permission-matrix.md`                      | §1.1 + ตารางสิทธิ์ `banner_staff`                                         |
+| `frontend/.env.example`                                   | server-only secret สำหรับ signed URL (เช่น `KIOSK_BANNER_URL_SECRET`)     |
+
+#### ไฟล์อ้างอิง (อ่านเป็นแบบอย่าง ไม่ต้องแก้)
+
+| ไฟล์                                                                                           | ใช้เป็นแบบอย่างเรื่อง                                              |
+| :--------------------------------------------------------------------------------------------- | :----------------------------------------------------------------- |
+| `frontend/src/routes/api/v1/scanner/kiosk/config/+server.ts` + `server.test.ts`                | device auth, no-store, error envelope, mock pattern                |
+| `frontend/src/lib/features/kiosk/data/kiosk-config.api.ts` + `.test.ts`                        | plain fetch, timeout, fail closed/soft                             |
+| `frontend/src/lib/server/scanners/device-credentials.ts`                                       | `authenticateScannerDevice`, `ScannerAuthError`, `timingSafeEqual` |
+| `frontend/src/lib/features/kiosk/server/kiosk-photo.server.ts`                                 | decode base64 + ตรวจ MIME + PUT attachment                         |
+| `frontend/src/lib/server/announcements-server.ts` · `routes/api/back-office/announcements/**`  | registry CRUD + back-office BFF                                    |
+| `frontend/src/lib/features/announcements/**`                                                   | domain / queries ของ registry doc                                  |
+| `frontend/src/lib/features/shelters/data/shelters.repository.ts` + `shelters.remote.ts`        | repository interface + remote adapter                              |
+| `frontend/src/lib/server/couch-admin.ts`                                                       | `requireSystemAdmin`, `requireShelterManagerOrSA`, `serviceError`  |
+| `frontend/src/lib/features/kiosk/ui/kiosk-idle-timeout.svelte.ts` + `.test.ts`                 | idle timer + fake-timer test                                       |
+| `frontend/src/lib/features/kiosk/domain/kiosk-layout.ts` + `.test.ts` · `frontend/src/app.css` | media literal `kiosk-compact` / `kiosk-portrait`                   |
+| `frontend/src/lib/features/kiosk/ui/identity-method-selector.svelte` · `kiosk-shell.svelte`    | layout หน้า `/kiosk` ที่ overlay ทับ                               |
+| `frontend/src/lib/components/system-banner-host.svelte` · `frontend/src/routes/+layout.svelte` | ประกาศระบบ fixed bottom                                            |
+| `frontend/src/routes/(protected)/back-office/+layout.ts`                                       | guard ของ back-office                                              |
 
 ---
 
