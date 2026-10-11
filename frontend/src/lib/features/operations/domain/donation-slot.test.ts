@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+	isRealCalendarDate,
 	assertDonationSlotDeletable,
 	bookingQueue,
 	countSlotBookings,
@@ -287,5 +288,21 @@ describe('parseCapacityInput', () => {
 				ctx
 			)
 		).toThrow();
+	});
+});
+
+describe('isRealCalendarDate', () => {
+	it('accepts real dates, including a leap day', () => {
+		expect(isRealCalendarDate('2026-06-27')).toBe(true);
+		expect(isRealCalendarDate('2028-02-29')).toBe(true);
+	});
+
+	it('rejects bad shape and dates that do not exist', () => {
+		expect(isRealCalendarDate('27/06/2026')).toBe(false);
+		expect(isRealCalendarDate('2026-6-27')).toBe(false);
+		expect(isRealCalendarDate('2026-02-31')).toBe(false);
+		expect(isRealCalendarDate('2027-02-29')).toBe(false);
+		expect(isRealCalendarDate('2026-13-01')).toBe(false);
+		expect(isRealCalendarDate('')).toBe(false);
 	});
 });

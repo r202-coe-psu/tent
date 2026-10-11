@@ -84,6 +84,34 @@ describe('donationPreDeclarationInputSchema', () => {
 	});
 });
 
+describe('donationPreDeclarationInputSchema — logistics.slot', () => {
+	const withSlot = (slot: unknown) => ({
+		shelter_code: 'SH001',
+		donor: { name: 'John Doe', phone: '0812345678' },
+		items: [{ free_text: 'Rice', qty: 10, unit: 'kg' }],
+		logistics: { delivery_method: 'self_dropoff', slot }
+	});
+
+	it('accepts a well-formed window', () => {
+		const r = donationPreDeclarationInputSchema.safeParse(
+			withSlot({ date: '2026-06-27', from: '09:00', to: '10:00' })
+		);
+		expect(r.success).toBe(true);
+	});
+
+	it.each([
+		['non-ISO date', { date: '27/06/2026', from: '09:00', to: '10:00' }],
+		['impossible date', { date: '2026-02-31', from: '09:00', to: '10:00' }],
+		['unpadded start', { date: '2026-06-27', from: '9:00', to: '10:00' }],
+		['25:00 end', { date: '2026-06-27', from: '09:00', to: '25:00' }],
+		['end before start', { date: '2026-06-27', from: '10:00', to: '09:00' }],
+		['end equals start', { date: '2026-06-27', from: '09:00', to: '09:00' }],
+		['missing end', { date: '2026-06-27', from: '09:00' }]
+	])('rejects %s', (_label, slot) => {
+		expect(donationPreDeclarationInputSchema.safeParse(withSlot(slot)).success).toBe(false);
+	});
+});
+
 describe('isDonationPreDeclaration', () => {
 	it('should return true for a valid donation_pre_declaration document', () => {
 		const mockDoc = {

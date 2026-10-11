@@ -21,8 +21,20 @@ import {
  * their own capacity.
  */
 
-const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
-const YMD = /^\d{4}-\d{2}-\d{2}$/;
+/** Zero-padded 24-hour `HH:mm` — the only shape a window's `from` / `to` may take. */
+export const SLOT_TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+/** `YYYY-MM-DD` shape. Not a calendar check — see {@link isRealCalendarDate}. */
+export const SLOT_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+const HHMM = SLOT_TIME_PATTERN;
+const YMD = SLOT_DATE_PATTERN;
+
+/** `YYYY-MM-DD` that exists on the calendar (rejects `2026-02-31`). */
+export function isRealCalendarDate(value: string): boolean {
+	if (!SLOT_DATE_PATTERN.test(value)) return false;
+	const parsed = new Date(`${value}T00:00:00Z`);
+	return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
 
 export const donationSlotInputSchema = z
 	.object({

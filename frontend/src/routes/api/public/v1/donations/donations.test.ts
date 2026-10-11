@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { POST } from './+server';
 import { adminRaw } from '$lib/server/couch-admin';
 import { donationIpLimiter, donationPhoneLimiter } from '$lib/server/security/rate-limiter';
@@ -47,9 +47,17 @@ function mockFastapiCreate(body: Record<string, unknown> = {}) {
 }
 
 describe('POST /api/public/v1/donations', () => {
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
 	beforeEach(() => {
 		vi.resetAllMocks();
 		vi.unstubAllGlobals();
+		// The fixtures book 2026-06-27; pin "now" before it so they stay in the future
+		// (past dates are refused). Only Date is faked — timers/promises stay real.
+		vi.useFakeTimers({ toFake: ['Date'] });
+		vi.setSystemTime(new Date('2026-06-01T03:00:00Z'));
 		vi.mocked(donationIpLimiter.check).mockReturnValue(true);
 		vi.mocked(donationPhoneLimiter.check).mockReturnValue(true);
 	});
@@ -163,7 +171,7 @@ describe('POST /api/public/v1/donations', () => {
 			}
 			// A pickup needs a published truck window to book into.
 			if (method === 'GET' && path.includes('donation_slot')) {
-				return Promise.resolve({ status: 200, data: { capacity: 2, status: 'open' } });
+				return Promise.resolve({ status: 200, data: { capacity: 2, status: 'open', to: '11:00' } });
 			}
 			if (method === 'GET' && path.includes('donation:')) {
 				return Promise.resolve({
@@ -216,7 +224,10 @@ describe('POST /api/public/v1/donations', () => {
 			}
 			// Opening hours with no ceiling (FR-DS-3): the window never fills.
 			if (method === 'GET' && path.includes('donation_slot')) {
-				return Promise.resolve({ status: 200, data: { capacity: null, status: 'open' } });
+				return Promise.resolve({
+					status: 200,
+					data: { capacity: null, status: 'open', to: '10:00' }
+				});
 			}
 			if (method === 'GET' && path.includes('donation:')) {
 				return Promise.resolve({ status: 200, data: { rows: [] } });
@@ -253,7 +264,7 @@ describe('POST /api/public/v1/donations', () => {
 				return Promise.resolve({ status: 200, data: { rows: [] } });
 			}
 			if (method === 'GET' && path.includes('donation_slot')) {
-				return Promise.resolve({ status: 200, data: { capacity: 1, status: 'open' } });
+				return Promise.resolve({ status: 200, data: { capacity: 1, status: 'open', to: '10:00' } });
 			}
 			if (method === 'GET' && path.includes('donation:')) {
 				return Promise.resolve({ status: 200, data: { rows: [] } });
@@ -520,7 +531,8 @@ describe('POST /api/public/v1/donations', () => {
 					status: 200,
 					data: {
 						capacity: 1,
-						status: 'open'
+						status: 'open',
+						to: '10:00'
 					}
 				});
 			}
@@ -579,7 +591,10 @@ describe('POST /api/public/v1/donations', () => {
 					return Promise.resolve({ status: 200, data: { rows: [] } });
 				}
 				if (method === 'GET' && path.includes('donation_slot')) {
-					return Promise.resolve({ status: 200, data: { capacity: 1, status: 'open' } });
+					return Promise.resolve({
+						status: 200,
+						data: { capacity: 1, status: 'open', to: '10:00' }
+					});
 				}
 				if (method === 'GET' && path.includes('donation')) {
 					return Promise.resolve({
@@ -732,6 +747,8 @@ describe('POST /api/public/v1/donations', () => {
 		/** CouchDB as the route reads it: no campaigns, `bookings`, and a slot lookup. */
 		function couch(opts: {
 			bookings?: Record<string, unknown>[];
+			/** Status of the `donation:` `_all_docs` read (default 200). */
+			donationsStatus?: number;
 			slot?: (path: string) => { status: number; data: unknown };
 		}) {
 			vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
@@ -743,8 +760,10 @@ describe('POST /api/public/v1/donations', () => {
 					return Promise.resolve(opts.slot?.(path) ?? { status: 404, data: {} });
 				}
 				if (path.includes('donation')) {
+					const status = opts.donationsStatus ?? 200;
+					if (status >= 400) return Promise.resolve({ status, data: {} });
 					return Promise.resolve({
-						status: 200,
+						status,
 						data: { rows: (opts.bookings ?? []).map((doc) => ({ doc })) }
 					});
 				}
@@ -785,6 +804,86 @@ describe('POST /api/public/v1/donations', () => {
 			expect(res.body.error).toBe('SLOTS_UNAVAILABLE');
 		});
 
+		it('fails closed (503) when the booking list cannot be read — an outage is not "nothing booked"', async () => {
+			mockFastapiCreate();
+			couch({ donationsStatus: 500, slot: () => ({ status: 404, data: {} }) });
+			const res = await submit({ delivery_method: 'self_dropoff', slot: SLOT });
+			expect(res.status).toBe(503);
+			expect(res.body.error).toBe('SLOTS_UNAVAILABLE');
+			// Nothing may have been created behind a failed count.
+			expect(fetch).not.toHaveBeenCalled();
+		});
+
+		it('treats a missing shelter database (404) on the booking read as no bookings', async () => {
+			mockFastapiCreate();
+			couch({ donationsStatus: 404, slot: () => ({ status: 404, data: {} }) });
+			const res = await submit({ delivery_method: 'self_dropoff', slot: SLOT });
+			expect(res.status).toBe(200);
+		});
+
+		it('refuses a window whose end differs from the one the shelter published', async () => {
+			// Same date + start (so the same doc id), but a longer window than published.
+			couch({
+				slot: () => ({
+					status: 200,
+					data: { capacity: null, status: 'open', date: SLOT.date, from: SLOT.from, to: '10:00' }
+				})
+			});
+			const res = await submit({
+				delivery_method: 'self_dropoff',
+				slot: { ...SLOT, to: '12:00' }
+			});
+			expect(res.status).toBe(409);
+			expect(res.body.error).toBe('SLOT_UNAVAILABLE');
+		});
+
+		it('accepts a window that matches the published doc exactly', async () => {
+			mockFastapiCreate();
+			couch({
+				slot: () => ({
+					status: 200,
+					data: { capacity: 2, status: 'open', date: SLOT.date, from: SLOT.from, to: SLOT.to }
+				})
+			});
+			const res = await submit({ delivery_method: 'self_dropoff', slot: SLOT });
+			expect(res.status).toBe(200);
+		});
+
+		it('refuses a date that is already past in Asia/Bangkok', async () => {
+			// 2026-06-01T20:00Z is already 2026-06-02 03:00 in Bangkok.
+			vi.setSystemTime(new Date('2026-06-01T20:00:00Z'));
+			couch({ slot: () => ({ status: 404, data: {} }) });
+			const res = await submit({
+				delivery_method: 'self_dropoff',
+				slot: { date: '2026-06-01', from: '09:00', to: '10:00' }
+			});
+			expect(res.status).toBe(409);
+			expect(res.body.error).toBe('SLOT_UNAVAILABLE');
+		});
+
+		it('accepts today in Asia/Bangkok even while UTC is still on the previous day', async () => {
+			mockFastapiCreate();
+			vi.setSystemTime(new Date('2026-06-26T20:00:00Z')); // 2026-06-27 03:00 Bangkok
+			couch({ slot: () => ({ status: 404, data: {} }) });
+			const res = await submit({ delivery_method: 'self_dropoff', slot: SLOT });
+			expect(res.status).toBe(200);
+		});
+
+		it.each([
+			['date not YYYY-MM-DD', { date: '27/06/2026', from: '09:00', to: '10:00' }],
+			['date that does not exist', { date: '2026-02-31', from: '09:00', to: '10:00' }],
+			['start not HH:mm', { date: '2026-06-27', from: '9:00', to: '10:00' }],
+			['end not HH:mm', { date: '2026-06-27', from: '09:00', to: '10' }],
+			['end before start', { date: '2026-06-27', from: '10:00', to: '09:00' }],
+			['end equal to start', { date: '2026-06-27', from: '09:00', to: '09:00' }],
+			['id-injecting start', { date: '2026-06-27', from: '09:00/../x', to: '10:00' }]
+		])('rejects a malformed slot with 422 before touching CouchDB: %s', async (_label, slot) => {
+			couch({});
+			const res = await submit({ delivery_method: 'self_dropoff', slot });
+			expect(res.status).toBe(422);
+			expect(adminRaw).not.toHaveBeenCalled();
+		});
+
 		it('finds a drop-off window written before the split under its old id', async () => {
 			couch({
 				bookings: [
@@ -798,7 +897,7 @@ describe('POST /api/public/v1/donations', () => {
 				// Only the legacy id `donation_slot:{date}:{from}` exists, full at 1.
 				slot: (path) =>
 					path.includes(encodeURIComponent('donation_slot:2026-06-27:09:00'))
-						? { status: 200, data: { capacity: 1, status: 'open' } }
+						? { status: 200, data: { capacity: 1, status: 'open', to: '10:00' } }
 						: { status: 404, data: {} }
 			});
 			const res = await submit({ delivery_method: 'self_dropoff', slot: SLOT });
@@ -811,7 +910,7 @@ describe('POST /api/public/v1/donations', () => {
 			couch({
 				slot: (path) =>
 					path.includes(encodeURIComponent('donation_slot:2026-06-27:03:00'))
-						? { status: 200, data: { capacity: null, status: 'open' } }
+						? { status: 200, data: { capacity: null, status: 'open', to: '04:00' } }
 						: { status: 404, data: {} }
 			});
 			const res = await submit({
@@ -860,7 +959,7 @@ describe('POST /api/public/v1/donations', () => {
 						logistics: { delivery_method: 'self_dropoff', slot: SLOT }
 					}
 				],
-				slot: () => ({ status: 200, data: { capacity: 1, status: 'open' } })
+				slot: () => ({ status: 200, data: { capacity: 1, status: 'open', to: '10:00' } })
 			});
 			const res = await submit({
 				delivery_method: 'shelter_pickup',

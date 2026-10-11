@@ -6,6 +6,9 @@
 	import Package from '@lucide/svelte/icons/package';
 	import CircleCheckBig from '@lucide/svelte/icons/circle-check-big';
 	import X from '@lucide/svelte/icons/x';
+	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
+	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
+	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import { env } from '$env/dynamic/public';
 	import { Label } from '$lib/components/ui/label';
 	import { Input } from '$lib/components/ui/input';
@@ -16,13 +19,10 @@
 	import { toast } from 'svelte-sonner';
 	import { onMount } from 'svelte';
 	import {
-		DEFAULT_SLOT_WINDOWS,
 		donationPayloadUnit,
 		publicDonationErrorMessage,
-		slotLabel,
 		slotModeForDelivery,
-		useDonationSlots,
-		type SlotAvailability
+		useDonationSlots
 	} from '$lib/features/donations';
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { getDonationStore } from '../../../routes/(public)/donations/donation.svelte';
@@ -57,20 +57,12 @@
 		() => slotMode
 	);
 
-	// Until the board answers (and if it cannot), offer the standard windows rather than
-	// an empty grid: an unconfigured window has no ceiling and submit accepts it.
-	const fallbackSlots: SlotAvailability[] = DEFAULT_SLOT_WINDOWS.map((window) => ({
-		label: slotLabel(window.from, window.to),
-		from: window.from,
-		to: window.to,
-		capacity: null,
-		booked: 0,
-		status: 'available'
-	}));
-	// A shelter that publishes no vehicle schedule is not collecting: show its empty
-	// board rather than the drop-off opening hours, which would promise a truck.
-	const timeSlots = $derived(slotsQuery.data ?? (slotMode === 'pickup' ? [] : fallbackSlots));
-	const isLoadingSlots = $derived(slotsQuery.isPending && Boolean(donationStore.shelterCode));
+	// Windows are only ever the shelter's own answer. While it is loading, or when it
+	// failed, there is nothing to pick: falling back to the standard hours would show
+	// windows as "available" that may be full or closed, and an empty list would read as
+	// "this shelter is not collecting". Each of those states gets its own branch below.
+	const timeSlots = $derived(slotsQuery.isSuccess ? slotsQuery.data : []);
+	const hasShelter = $derived(Boolean(donationStore.shelterCode));
 
 	// A window the donor picked earlier can fill or close before they submit — drop the
 	// selection instead of letting them send a booking the service will reject.
@@ -491,36 +483,73 @@
 						</Popover>
 					</div>
 
-					{#if timeSlots.length === 0}
+					{#if !hasShelter}
+						<div class="rounded-xl border border-slate-200 bg-slate-50 p-4 text-center">
+							<p class="text-sm font-bold text-slate-700">{t.slotsSelectShelterFirst}</p>
+						</div>
+					{:else if slotsQuery.isLoading}
+						<div
+							role="status"
+							class="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm font-bold text-slate-700"
+						>
+							<LoaderCircle class="h-4 w-4 animate-spin text-slate-500" />
+							<span>{t.slotChecking}</span>
+						</div>
+					{:else if slotsQuery.isError}
+						<div
+							role="alert"
+							class="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 p-4 sm:flex-row sm:items-center sm:justify-between"
+						>
+							<div class="flex items-start gap-2.5">
+								<TriangleAlert class="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+								<div class="space-y-0.5">
+									<p class="text-sm font-bold text-red-900">{t.slotsLoadError}</p>
+									<p class="text-sm text-red-900">{t.slotsLoadErrorHint}</p>
+								</div>
+							</div>
+							<Button
+								type="button"
+								variant="outline"
+								onclick={() => slotsQuery.refetch()}
+								disabled={slotsQuery.isFetching}
+								class="h-11 shrink-0 gap-1.5 border-red-200 text-red-900 hover:bg-red-100"
+							>
+								<RefreshCw class="h-4 w-4" />
+								{t.slotsRetry}
+							</Button>
+						</div>
+					{:else if timeSlots.length === 0}
 						<div class="rounded-xl border-2 border-slate-200 bg-slate-50 p-4 text-center">
 							<p class="text-sm font-bold text-slate-700">{t.slotsPickupUnavailable}</p>
 						</div>
-					{/if}
-
-					<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-						{#each timeSlots as slot (slot.from)}
-							{@const isFull = slot.status !== 'available'}
-							{@const isSelected = donationStore.slotTime === slot.label}
-							<button
-								type="button"
-								disabled={isFull}
-								onclick={() => {
-									if (!isFull) donationStore.slotTime = slot.label;
-								}}
-								class="flex flex-col items-center justify-center gap-1 rounded-xl border-2 p-3 transition-all
+					{:else}
+						<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+							{#each timeSlots as slot (slot.from)}
+								{@const isFull = slot.status !== 'available'}
+								{@const isSelected = donationStore.slotTime === slot.label}
+								<button
+									type="button"
+									disabled={isFull}
+									onclick={() => {
+										if (!isFull) donationStore.slotTime = slot.label;
+									}}
+									class="flex flex-col items-center justify-center gap-1 rounded-xl border-2 p-3 transition-all
 									{isFull
-									? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400 opacity-50'
-									: isSelected
-										? 'border-domain-donation bg-domain-donation-strong text-white shadow-xs'
-										: 'cursor-pointer border-slate-200 bg-white text-slate-600 hover:border-domain-donation'}"
-							>
-								<span class="text-sm font-bold">{slot.label}</span>
-								<span class="text-2xs font-bold {isSelected ? 'text-white/80' : 'text-slate-400'}">
-									{isLoadingSlots ? t.slotChecking : isFull ? t.slotFull : t.slotAvailable}
-								</span>
-							</button>
-						{/each}
-					</div>
+										? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400 opacity-50'
+										: isSelected
+											? 'border-domain-donation bg-domain-donation-strong text-white shadow-xs'
+											: 'cursor-pointer border-slate-200 bg-white text-slate-600 hover:border-domain-donation'}"
+								>
+									<span class="text-sm font-bold">{slot.label}</span>
+									<span
+										class="text-2xs font-bold {isSelected ? 'text-white/80' : 'text-slate-400'}"
+									>
+										{isFull ? t.slotFull : t.slotAvailable}
+									</span>
+								</button>
+							{/each}
+						</div>
+					{/if}
 				</div>
 			{/if}
 		</div>

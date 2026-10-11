@@ -12,8 +12,9 @@ import type { PublicDonationDoc } from '$lib/features/donations';
 import { donationIpLimiter, donationPhoneLimiter } from '$lib/server/security/rate-limiter';
 import { ReCaptchaProvider } from '$lib/server/security/captcha';
 import { verifyRecaptchaOrSkip } from '$lib/server/security/recaptcha-gate';
+import { bangkokToday } from '$lib/utils/date';
 import { adminRaw } from '$lib/server/couch-admin';
-import { fetchDocs } from '$lib/server/donation-docs';
+import { fetchDocs, fetchDocsStrict, CouchReadError } from '$lib/server/donation-docs';
 import { fastapiBaseUrl, fastapiServiceHeaders, unwrapFastapiError } from '$lib/server/fastapi';
 
 import type {
@@ -77,11 +78,14 @@ export const POST = async ({ request, getClientAddress }) => {
 		const dbName = `shelter_${shelterCode.toLowerCase()}`;
 
 		// โหลด campaigns + donations + stock ครั้งเดียวแล้วใช้ซ้ำทุกการตรวจ
+		// `donation:` is read strictly: it feeds both the need-remaining and the slot
+		// count, so an outage there must refuse the booking (503) instead of reading as
+		// "nothing booked yet" and letting a full window or need be overbooked.
 		const [campaigns, donations, stockLedgers] = await Promise.all([
 			fetchDocs<DonationCampaign>(dbName, 'donation_campaign:').then((docs) =>
 				docs.filter((c) => c && c.type === 'donation_campaign' && c.status === 'open')
 			),
-			fetchDocs<PublicDonationDoc>(dbName, 'donation:').then((docs) =>
+			fetchDocsStrict<PublicDonationDoc>(dbName, 'donation:').then((docs) =>
 				docs.filter((d) => d && d.type === 'donation')
 			),
 			// T-22 ปิดรับเมื่อ on-hand + reserved ≥ target — ถ้าไม่นับคลัง หน้าเว็บจะรับ
@@ -126,6 +130,12 @@ export const POST = async ({ request, getClientAddress }) => {
 		}
 		if (requested && slotMode) {
 			const { date, from, to } = requested;
+			// A date that is already past cannot be booked. Compared on the
+			// shelter's calendar (Asia/Bangkok), not UTC, or the early-morning donor
+			// sees "yesterday" as still open.
+			if (date < bangkokToday()) {
+				return json({ success: false, error: 'SLOT_UNAVAILABLE' }, { status: 409 });
+			}
 			const lookup = async (id: string) => adminRaw(`/${dbName}/${encodeURIComponent(id)}`, 'GET');
 			let slotRes = await lookup(`donation_slot:${slotMode}:${date}:${from}`);
 			// A drop-off window written before the queue split has no mode in its id
@@ -139,11 +149,15 @@ export const POST = async ({ request, getClientAddress }) => {
 				// Same verdict the wizard's grid showed (GET .../donations/slots) — one
 				// function, so a window cannot read open there and full here.
 				const slotDoc = slotRes.data as DonationSlot;
-				// `_id` is deterministic per date + start time (schema.md §2.13), so the
-				// requested window IS this doc's identity — count against that rather than
-				// re-reading fields off the doc.
+				// `_id` is deterministic per mode + date + start time (schema.md §2.13), so the
+				// requested date and start ARE this doc's identity. The end is not part of
+				// it: a donor who sends a different `to` is asking for a window the shelter
+				// never published, and must not borrow this doc's capacity for it.
+				if (slotDoc.to !== to) {
+					return json({ success: false, error: 'SLOT_UNAVAILABLE' }, { status: 409 });
+				}
 				const availability = slotAvailabilityFor(
-					{ ...slotDoc, mode: slotMode, date, from, to },
+					{ ...slotDoc, mode: slotMode, date, from },
 					donations
 				);
 				if (availability.status !== 'available') {
@@ -205,6 +219,10 @@ export const POST = async ({ request, getClientAddress }) => {
 			as_of: new Date().toISOString()
 		});
 	} catch (e) {
+		if (e instanceof CouchReadError) {
+			console.error(e);
+			return json({ success: false, error: 'SLOTS_UNAVAILABLE' }, { status: 503 });
+		}
 		console.error(e);
 		return json({ success: false, error: 'Internal Server Error' }, { status: 500 });
 	}

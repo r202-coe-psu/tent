@@ -67,7 +67,15 @@ export {
 	TransferAuthorizationError
 } from './domain/transfer.authorization';
 
-export { bookingQueue, countSlotBookings, slotMode, slotsOnDate } from './domain/donation-slot';
+export {
+	bookingQueue,
+	countSlotBookings,
+	isRealCalendarDate,
+	SLOT_DATE_PATTERN,
+	SLOT_TIME_PATTERN,
+	slotMode,
+	slotsOnDate
+} from './domain/donation-slot';
 
 export {
 	donationShortfall,
