@@ -12,7 +12,6 @@ amends:
   - docs/changes/14-kiosk/CR-151-kiosk-pre-registration-check-in.md F-08 (ThaiD ⏸), FR-KPC-11, §7 สัญญา API
   - docs/changes/14-kiosk/CR-152-kiosk-phone-check-in-toggle.md FR-KPC-11 (จำนวนการ์ด/grid)
 affects:
-  - docs/plans/kiosk-thaid-check-in-implementation-plan.md (FR-KTD-01..45, AC-01..10 — ไฟล์ใน PR นี้)
   - docs/data/schema.md §3.1 shelter `feature_flags` (+ `kiosk_thaid_check_in_enabled`; ไม่ bump schema_v ตาม precedent CR-048/CR-106/CR-152)
   - docs/data/schema.md app config `thaid_registration_enabled` (ครอบคลุม mode `kiosk_check_in`)
   - docs/data/api-contract.md (Scanner / Kiosk — `POST /api/v1/scanner/kiosk/thaid/session{,/status,/cancel}`, `source:'thaid'` ใน lookup/check-in, ThaiD OAuth mode `kiosk_check_in`)
@@ -36,7 +35,6 @@ migration: ไม่มี backfill — flag ใหม่ใน `feature_flags` 
 # Draft CR: Kiosk — รายงานตัวด้วย ThaiD
 
 > **สถานะ:** proposed โดยทีม kiosk · PO เคาะ D-1..D-6, D-8 แล้ว (2026-10-11) · D-7 (copy) รอ PO approve · โค้ดต้นแบบอยู่บน `feat/pre-register_kiosk` — หลัง CR approve ให้เปิด PR โค้ดใหม่เพื่อรีวิวเทียบกับ CR (ห้าม merge branch เก่าตรง ๆ)
-> แผน implement ฉบับเต็ม (FR-KTD-01..45, AC, work breakdown, tests): [`docs/plans/kiosk-thaid-check-in-implementation-plan.md`](../plans/kiosk-thaid-check-in-implementation-plan.md)
 
 > **สรุป (TL;DR)**
 >
@@ -47,7 +45,7 @@ migration: ไม่มี backfill — flag ใหม่ใน `feature_flags` 
 
 ## Why
 
-ดู frontmatter `why` และ plan §10.
+ดู frontmatter `why`.
 
 ## Change
 
@@ -66,13 +64,11 @@ migration: ไม่มี backfill — flag ใหม่ใน `feature_flags` 
 | Face check / staff PIN      | ใช้กับช่องทางบัตร                                                      | ช่องทาง ThaiD ไม่ใช้                                                                                                                         |
 | ไม่พบข้อมูลด้วย ThaiD       | —                                                                      | `not_found` + `can_register:false`                                                                                                           |
 
-Requirements ละเอียด: plan §4 (FR-KTD-01..45, 15a, 27a–27d) · Acceptance: plan §5 (AC-01..10)
-
 ## Impact
 
-- Code/test: ตาม `affects` และ plan §7
+- Code/test: ตาม `affects`
 - scanner_client: เพิ่ม 3 path ใน allowlist เท่านั้น; ไม่แก้ Chromium policy ของตู้
-- Flow `member_scan` เดิมบนหน้า pre-register ต้องทำงานเหมือนเดิม (AC-08)
+- Flow `member_scan` เดิมบนหน้า pre-register ต้องทำงานเหมือนเดิม
 - Ops: มือถือผู้อพยพต้องมีอินเทอร์เน็ต; production ขึ้นกับการอนุมัติ ThaiD client ของ DOPA (redirect URI เดิม)
 
 ## Migration
@@ -91,12 +87,13 @@ N/A — additive flag (doc เดิมไม่มี key = `false`); session �
 | D-4 | TTL session              | รอมือถือ (pending) 300 วิ · หลังยืนยัน (completed) 180 วิ                                                           |
 | D-5 | Rate limit สร้าง session | ไม่เกิน 10 session/นาที/kiosk                                                                                       |
 | D-6 | Scope                    | ขอทั้งเลข 13 หลักและชื่อ — ใช้ scope เดียวกับโค้ด ThaiD ของ pre-register เดิม (mode `member_scan`)                  |
-| D-7 | Copy การ์ด/หน้า ThaiD    | **รอ PO approve** — ร่างตาม plan FR-KTD-32/35/42/43                                                                 |
-| D-8 | ThaiD ยืนยันใคร          | ThaiD ยืนยันเฉพาะคนที่สแกน แล้วคนนั้นเช็กอินให้ทั้งครัวเรือนได้ (plan FR-KTD-27b/27c)                               |
+| D-7 | Copy การ์ด/หน้า ThaiD    | **รอ PO approve** — ข้อความบนการ์ด ThaiD และหน้า `/kiosk/thaid`                                                     |
+| D-8 | ThaiD ยืนยันใคร          | ThaiD ยืนยันเฉพาะคนที่สแกน แล้วคนนั้นเช็กอินให้ทั้งครัวเรือนได้                                                     |
 
 ## Decision log
 
 - 2026-10-10 — proposed โดยทีม kiosk (ข้อเสนอ D-1..D-7) · รอ Project Owner เคาะ
 - 2026-10-10 — sync กับ code ที่ implement (error code, 404 expired, `expires_in_sec`, release session) + เพิ่มข้อเสนอ D-8 (ยืนยันคนเดียว → รายงานตัวทั้งครัวเรือน) · รอ PO เคาะ
-- 2026-10-11 — PO review: เคาะ D-1..D-6 และ D-8 (ตามตาราง Decisions; D-6 เปลี่ยนจากข้อเสนอ `openid pid` เป็น scope เดียวกับ `member_scan`) · D-7 รอ approve ข้อความหลังอ่าน plan · เพิ่ม plan file `docs/plans/kiosk-thaid-check-in-implementation-plan.md` เข้า PR นี้
+- 2026-10-11 — PO review: เคาะ D-1..D-6 และ D-8 (ตามตาราง Decisions; D-6 เปลี่ยนจากข้อเสนอ `openid pid` เป็น scope เดียวกับ `member_scan`) · D-7 รอ approve ข้อความ
+- 2026-10-11 — ตัดการอ้างอิง implementation plan (`docs/plans/kiosk-thaid-check-in-implementation-plan.md`) ออก — ไฟล์ไม่อยู่ใน repo; CR นี้เป็น spec ที่ใช้อ้างอิง
 - ขั้นถัดไป (ตาม PO): approve D-7 → ใช้เลข CR ถัดไปจาก `_index.md` บน develop และย้ายไฟล์ไป `docs/changes/14-kiosk/` · PR ที่ทำ CR ตัวจริงต้องอัปเดต `schema.md` (flag), `api-contract.md` (3 endpoint, `source:'thaid'`, mode `kiosk_check_in`) และ FR-KPC-11/F-08 ใน CR-151/152
