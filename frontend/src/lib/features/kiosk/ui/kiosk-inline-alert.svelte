@@ -16,7 +16,7 @@
 <div
 	{...rest}
 	class={[
-		'mx-auto flex max-w-xl items-center justify-center gap-3 rounded-xl border p-3 text-left text-lg font-bold kiosk-portrait:max-w-2xl kiosk-portrait:p-4 kiosk-portrait:text-2xl kiosk-compact:p-1.5 kiosk-compact:text-base kiosk-compact:leading-tight',
+		'mx-auto flex max-w-xl items-center justify-center gap-3 rounded-xl border p-3 text-left text-lg font-bold kiosk-portrait:max-w-2xl kiosk-portrait:p-4 kiosk-portrait:text-xl kiosk-compact:p-1.5 kiosk-compact:text-base kiosk-compact:leading-tight',
 		tone === 'warning' && 'border-amber-200 bg-amber-50 text-amber-950',
 		tone === 'success' && 'border-emerald-200 bg-emerald-50 text-emerald-950',
 		className

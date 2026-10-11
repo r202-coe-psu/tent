@@ -64,7 +64,7 @@
 			class="mx-auto w-full max-w-md space-y-2 kiosk-portrait:max-w-3xl kiosk-compact:col-start-2 kiosk-compact:row-start-1 kiosk-compact:max-w-none kiosk-compact:self-end"
 		>
 			<p
-				class="flex min-h-16 items-center justify-center rounded-xl bg-[#0A2647] px-4 py-3 text-xl font-bold text-white kiosk-portrait:min-h-24 kiosk-portrait:text-4xl kiosk-compact:min-h-12 kiosk-compact:text-lg"
+				class="flex min-h-16 items-center justify-center rounded-xl bg-[#0A2647] px-4 py-3 text-xl font-bold text-white kiosk-portrait:min-h-20 kiosk-portrait:text-3xl kiosk-compact:min-h-12 kiosk-compact:text-lg"
 				role="status"
 				data-testid="kiosk-face-message"
 			>
@@ -80,12 +80,12 @@
 				{/if}
 			</p>
 			{#if attempt > 0}
-				<p class="text-base font-semibold text-slate-700 tabular-nums kiosk-portrait:text-2xl">
+				<p class="text-base font-semibold text-slate-700 tabular-nums kiosk-portrait:text-xl">
 					ครั้งที่ {attempt + 1} จาก {maxAttempts}
 				</p>
 			{/if}
 			{#if slow}
-				<p class="text-base text-slate-700 kiosk-portrait:text-2xl" data-testid="kiosk-face-slow">
+				<p class="text-base text-slate-700 kiosk-portrait:text-xl" data-testid="kiosk-face-slow">
 					หากยังไม่สำเร็จ ระบบจะให้เจ้าหน้าที่ช่วยตรวจ
 				</p>
 			{/if}

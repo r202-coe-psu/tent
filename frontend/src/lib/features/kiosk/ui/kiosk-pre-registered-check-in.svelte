@@ -17,7 +17,9 @@
 	import {
 		initialReprintSelection,
 		initialSelection,
-		toExistingReportResults
+		isAllSelected,
+		toExistingReportResults,
+		toggleAllSelection
 	} from '../domain/household-selection';
 	import {
 		KIOSK_LABEL_CHECKLIST,
@@ -50,7 +52,14 @@
 	import KioskBackButton from './kiosk-back-button.svelte';
 	import KioskWalkInOffer from './kiosk-walk-in-offer.svelte';
 	import KioskNoticePanel from './kiosk-notice-panel.svelte';
-	import { KIOSK_NOTICE_PRIMARY_ACTION } from './kiosk-notice-actions';
+	import {
+		KIOSK_NOTICE_PRIMARY_ACTION,
+		KIOSK_NOTICE_SECONDARY_ACTION
+	} from './kiosk-notice-actions';
+
+	// A primary button beside secondary ones (confirm, print QR): same height and text, only the colour differs.
+	const INLINE_PRIMARY_SIZE =
+		'min-h-14 text-lg kiosk-portrait:min-h-20 kiosk-portrait:text-2xl kiosk-compact:min-h-12 kiosk-compact:text-base [&_svg]:size-5! kiosk-portrait:[&_svg]:size-7!';
 	import type { KioskContextQuery } from '../domain/display-context';
 
 	interface Props {
@@ -164,6 +173,7 @@
 	const selectableMemberCount = $derived(
 		lookup?.members.filter((member) => member.selectable).length ?? 0
 	);
+	const allSelected = $derived(isAllSelected(selectedIds, lookup?.members ?? []));
 
 	// A gate arrives after camera/card events; this effect owns that async lookup side effect.
 	$effect(() => {
@@ -254,6 +264,11 @@
 		selectedIds = checked
 			? [...new Set([...selectedIds, member.evacuee_id])]
 			: selectedIds.filter((id) => id !== member.evacuee_id);
+	}
+
+	function toggleAllMembers(): void {
+		if (!lookup || isSubmitting) return;
+		selectedIds = toggleAllSelection(selectedIds, lookup.members);
 	}
 
 	function togglePrint(evacueeId: string, checked: boolean | 'indeterminate'): void {
@@ -539,39 +554,52 @@
 											: 'กำลังค้นหา'}
 			</h1>
 			{#if cardMode && !input}
-				<p class="mt-1 text-base text-slate-700">เสียบบัตรเพื่อค้นหา</p>
+				<p class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl">
+					เสียบบัตรเพื่อค้นหา
+				</p>
 			{:else if lookup && results.length === 0 && !holdMembers}
-				<p class="mt-1 text-base text-slate-700">เลือกผู้ที่มาถึง</p>
+				<p class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl">
+					เลือกผู้ที่มาถึง
+				</p>
 			{:else if candidates.length > 0}
-				<p class="mt-1 text-base text-slate-700">เลือกครัวเรือนของท่าน</p>
+				<p class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl">
+					เลือกครัวเรือนของท่าน
+				</p>
 			{:else if isReprintOnly && successfulResults.length > 0}
-				<p class="mt-1 text-base text-slate-700">
+				<p class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl">
 					พบผลรายงานตัวเดิม ไม่มีการบันทึกซ้ำ · เลือกคนที่จะพิมพ์ QR Code
 				</p>
 			{:else if results.some((result) => result.status === 'already_checked_in')}
-				<p class="mt-1 text-base text-slate-700">พบผลรายงานตัวเดิม ไม่มีการบันทึกซ้ำ</p>
+				<p class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl">
+					พบผลรายงานตัวเดิม ไม่มีการบันทึกซ้ำ
+				</p>
 			{:else if results.length > 0}
-				<p class="mt-1 text-base text-slate-700">ตรวจผล แล้วพิมพ์ QR Code</p>
+				<p class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl">
+					ตรวจผล แล้วพิมพ์ QR Code
+				</p>
 			{/if}
 		</header>
 
 		{#if cardMode && !input}
 			<div
-				class="no-print flex min-h-20 items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white text-base font-semibold text-slate-700"
+				class="no-print flex min-h-20 items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white text-lg font-semibold text-slate-700 sm:text-xl kiosk-portrait:min-h-24 kiosk-portrait:text-3xl kiosk-compact:min-h-16"
 				role="status"
 				aria-live="polite"
 			>
-				<CreditCard class="h-5 w-5 text-[#0A2647]" aria-hidden="true" />รอเสียบบัตร
+				<CreditCard
+					class="size-6 text-[#0A2647] kiosk-portrait:size-8"
+					aria-hidden="true"
+				/>รอเสียบบัตร
 			</div>
 		{/if}
 
 		{#if isLookingUp}
 			<div
-				class="no-print flex min-h-24 items-center justify-center gap-4 rounded-2xl border border-slate-200 bg-white text-xl font-semibold text-slate-700 shadow-2xs kiosk-portrait:min-h-40 kiosk-portrait:text-3xl kiosk-compact:min-h-16 kiosk-compact:text-lg"
+				class="no-print flex min-h-24 items-center justify-center gap-4 rounded-2xl border border-slate-200 bg-white text-lg font-semibold text-slate-700 shadow-2xs sm:text-xl kiosk-portrait:min-h-28 kiosk-portrait:text-3xl kiosk-compact:min-h-16"
 				role="status"
 			>
 				<span
-					class="size-7 animate-spin rounded-full border-[3px] border-slate-300 border-t-[#0A2647] motion-reduce:animate-none kiosk-portrait:size-10"
+					class="size-7 animate-spin rounded-full border-[3px] border-slate-300 border-t-[#0A2647] motion-reduce:animate-none kiosk-portrait:size-8"
 					aria-hidden="true"
 				></span>
 				กำลังค้นหาข้อมูล…
@@ -641,32 +669,52 @@
 				class="no-print rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs sm:p-6"
 				aria-labelledby="household-title"
 			>
-				<div class="mb-4 flex items-center gap-3">
+				<div class="mb-4 flex items-center gap-3 kiosk-portrait:mb-6 kiosk-portrait:gap-5">
 					<div
-						class="flex h-11 w-11 items-center justify-center rounded-xl bg-[#F0F4F8] text-[#0A2647]"
+						class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#F0F4F8] text-[#0A2647] kiosk-portrait:h-20 kiosk-portrait:w-20 kiosk-compact:h-11 kiosk-compact:w-11"
 						aria-hidden="true"
 					>
-						<UsersRound class="h-6 w-6" />
+						<UsersRound class="size-6 kiosk-portrait:size-10" />
 					</div>
-					<div>
-						<h2 id="household-title" class="text-lg font-bold text-slate-900">สมาชิก</h2>
-						<p class="text-sm text-slate-600">ศูนย์ {lookup.shelter_code}</p>
+					<div class="min-w-0 flex-1">
+						<h2
+							id="household-title"
+							class="text-lg font-bold text-slate-900 sm:text-xl kiosk-portrait:text-3xl"
+						>
+							สมาชิก
+						</h2>
+						<p class="text-base text-slate-600 kiosk-portrait:text-xl">
+							ศูนย์ {lookup.shelter_code}
+						</p>
 					</div>
+					{#if selectableMemberCount > 1}
+						<Button
+							type="button"
+							variant="outline"
+							disabled={isSubmitting}
+							onclick={toggleAllMembers}
+							class="{KIOSK_NOTICE_SECONDARY_ACTION} w-auto shrink-0 kiosk-portrait:px-10"
+						>
+							{allSelected ? 'ยกเลิกทั้งหมด' : 'เลือกทั้งหมด'}
+						</Button>
+					{/if}
 				</div>
 				{#if lookup.name_masked}
-					<p class="mb-4 rounded-lg bg-sky-50 px-3 py-2 text-sm font-medium text-sky-950">
+					<p
+						class="mb-4 rounded-lg bg-sky-50 px-3 py-2 text-base font-medium text-sky-950 kiosk-portrait:mb-5 kiosk-portrait:px-4 kiosk-portrait:py-3 kiosk-portrait:text-xl kiosk-compact:text-sm"
+					>
 						ชื่อถูกปิดบางส่วนเพื่อความเป็นส่วนตัว
 					</p>
 				{/if}
 
-				<div class="space-y-3">
+				<div class="space-y-3 kiosk-portrait:space-y-4">
 					{#each lookup.members as member (member.evacuee_id)}
 						{@const selected = selectedIds.includes(member.evacuee_id)}
 						{@const locked = isSubmitting}
 						<!-- The whole row is the tap target: the label forwards taps to the checkbox. -->
 						<label
 							class={[
-								'flex min-h-20 items-center gap-4 rounded-xl border-2 px-4 py-3 kiosk-portrait:min-h-28 kiosk-portrait:gap-6 kiosk-portrait:px-6',
+								'flex min-h-20 items-center gap-4 rounded-xl border-2 px-4 py-3 kiosk-portrait:min-h-24 kiosk-portrait:gap-5 kiosk-portrait:px-6 kiosk-compact:min-h-16 kiosk-compact:py-2',
 								!member.selectable && 'border-slate-200 bg-slate-50 opacity-75',
 								member.selectable &&
 									(selected
@@ -682,23 +730,25 @@
 									onCheckedChange={(checked) => toggleMember(member, checked)}
 									disabled={locked}
 									aria-labelledby={`member-name-${member.evacuee_id}`}
-									class="size-12 shrink-0 kiosk-portrait:size-16"
+									class="size-12 shrink-0 kiosk-compact:size-10"
 								/>
 							{:else}
-								<span class="size-12 shrink-0 kiosk-portrait:size-16" aria-hidden="true"></span>
+								<span class="size-12 shrink-0 kiosk-compact:size-10" aria-hidden="true"></span>
 							{/if}
 							<div class="min-w-0 flex-1">
 								<p
 									id={`member-name-${member.evacuee_id}`}
-									class="truncate text-lg font-bold text-slate-950 kiosk-portrait:text-3xl"
+									class="truncate text-lg font-bold text-slate-950 sm:text-xl kiosk-portrait:text-2xl kiosk-compact:text-lg"
 								>
 									{fullName(member)}
 									{#if input?.source === 'phone' ? member.phone_matched : member.is_primary}<span
-											class="ml-2 rounded-full bg-[#F0F4F8] px-2 py-1 text-xs font-bold text-[#0A2647] kiosk-portrait:text-lg"
+											class="ml-2 rounded-full bg-[#F0F4F8] px-2 py-1 text-sm font-bold text-[#0A2647] kiosk-portrait:px-3 kiosk-portrait:text-lg kiosk-compact:text-xs"
 											>{input?.source === 'phone' ? 'เบอร์ตรง' : 'ผู้ลงทะเบียน'}</span
 										>{/if}
 								</p>
-								<p class="mt-1 text-sm text-slate-600 kiosk-portrait:text-xl">
+								<p
+									class="mt-1 text-base text-slate-600 kiosk-portrait:mt-2 kiosk-portrait:text-xl kiosk-compact:text-sm"
+								>
 									{member.age === null ? 'ไม่ระบุอายุ' : `${member.age} ปี`}
 									<span class="mx-1" aria-hidden="true">·</span>{statusLabel(member.status)}
 								</p>
@@ -708,41 +758,49 @@
 				</div>
 
 				{#if selectedMembers.length > 0 && selectedMembers.length < selectableMemberCount}
-					<p class="mt-4 text-sm leading-relaxed text-slate-600">
+					<p
+						class="mt-4 text-base leading-relaxed text-slate-600 kiosk-portrait:mt-5 kiosk-portrait:text-xl kiosk-compact:text-sm"
+					>
 						เลือก {selectedMembers.length} คน · รายงานตัวแล้วเลือกซ้ำไม่ได้
 					</p>
 				{/if}
 
 				{#if actionError}
 					<p
-						class="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-900"
+						class="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-base font-semibold text-rose-900 kiosk-portrait:mt-5 kiosk-portrait:p-4 kiosk-portrait:text-xl kiosk-compact:text-sm"
 						role="alert"
 					>
 						{actionError}
 					</p>
 				{/if}
 
-				<div class="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+				<div
+					class="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end kiosk-portrait:mt-8 kiosk-portrait:gap-4"
+				>
 					<Button
 						type="button"
 						variant="outline"
 						onclick={onreset}
-						class="min-h-12 border-[#CBD5E1] px-5 text-base font-bold text-[#0A2647]">ยกเลิก</Button
+						class="{KIOSK_NOTICE_SECONDARY_ACTION} sm:w-auto sm:px-10 kiosk-portrait:px-14"
+						>ยกเลิก</Button
 					>
 					<Button
 						type="button"
 						disabled={!centerMatches || selectedIds.length === 0 || isSubmitting}
 						onclick={submitCheckIn}
-						class="min-h-12 gap-2 bg-[#0A2647] px-6 text-base font-bold text-white hover:bg-[#051930] focus-visible:ring-2 focus-visible:ring-[#0A2647] focus-visible:ring-offset-2"
+						class="{KIOSK_NOTICE_PRIMARY_ACTION} {INLINE_PRIMARY_SIZE} sm:w-auto"
 					>
 						{#if isSubmitting}<span
-								class="h-5 w-5 animate-spin rounded-full border-2 border-white/40 border-t-white"
+								class="size-5 animate-spin rounded-full border-2 border-white/40 border-t-white kiosk-portrait:size-6"
 								aria-hidden="true"
-							></span>กำลังบันทึก…{:else}<CheckCircle2 class="h-5 w-5" aria-hidden="true" />ยืนยัน · {selectedIds.length}
+							></span>กำลังบันทึก…{:else}<CheckCircle2 aria-hidden="true" />ยืนยัน · {selectedIds.length}
 							คน{/if}
 					</Button>
 				</div>
-				{#if !centerMatches}<p class="mt-3 text-sm font-semibold text-rose-800" role="alert">
+				{#if !centerMatches}<p
+						class="mt-3 text-base font-semibold text-rose-800 kiosk-portrait:mt-4 kiosk-portrait:text-xl kiosk-compact:text-sm"
+						role="alert"
+					>
 						ศูนย์บนหน้าจอไม่ตรงกับศูนย์ที่ผูกกับเครื่อง จึงยังยืนยันไม่ได้
 					</p>{/if}
 			</section>
@@ -750,20 +808,25 @@
 
 		{#if results.length > 0}
 			<section
-				class="no-print rounded-2xl border border-emerald-200 bg-white p-5 shadow-2xs sm:p-7"
+				class="no-print rounded-2xl border border-emerald-200 bg-white p-5 shadow-2xs sm:p-7 kiosk-portrait:p-8 kiosk-compact:p-4"
 				aria-labelledby="result-title"
 				aria-live="polite"
 			>
-				<div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-					<div class="flex items-start gap-3">
+				<div
+					class="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between kiosk-portrait:gap-8"
+				>
+					<div class="flex min-w-0 flex-1 items-start gap-3 sm:basis-sm kiosk-portrait:gap-5">
 						<div
-							class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-800"
+							class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-800 kiosk-portrait:h-20 kiosk-portrait:w-20 kiosk-compact:h-11 kiosk-compact:w-11"
 							aria-hidden="true"
 						>
-							<CheckCircle2 class="h-7 w-7" />
+							<CheckCircle2 class="size-6 kiosk-portrait:size-10" />
 						</div>
 						<div>
-							<h2 id="result-title" class="text-xl font-extrabold text-[#0A2647] sm:text-2xl">
+							<h2
+								id="result-title"
+								class="text-lg font-bold text-[#0A2647] sm:text-xl kiosk-portrait:text-3xl"
+							>
 								{retryableIds.length > 0
 									? 'รายงานตัวได้บางส่วน'
 									: results.some((result) => result.status === 'already_checked_in')
@@ -772,7 +835,9 @@
 											? 'บันทึกผลรายงานตัวแล้ว'
 											: 'ไม่มีสมาชิกที่รายงานตัวสำเร็จ'}
 							</h2>
-							<p class="mt-1 text-sm leading-relaxed text-slate-700">
+							<p
+								class="mt-1 text-base leading-relaxed text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl"
+							>
 								{#if retryableIds.length > 0}
 									รายงานตัวแล้ว {reportedResults.length} คน · ยังเหลือ {retryableIds.length} คนที่ต้องตรวจผลหรือทำรายการซ้ำ
 									· ศูนย์ {lookup?.shelter_code}
@@ -781,19 +846,22 @@
 								{/if}
 							</p>
 							{#if lookup?.name_masked}
-								<p class="mt-2 text-sm font-medium text-slate-700">
+								<p
+									class="mt-2 text-base font-medium text-slate-700 kiosk-portrait:mt-3 kiosk-portrait:text-xl"
+								>
 									ชื่อถูกปิดบางส่วนเพื่อความเป็นส่วนตัว
 								</p>
 							{/if}
 						</div>
 					</div>
-					<div class="flex flex-col gap-2 sm:flex-row">
+					<div class="flex flex-col gap-2 sm:ml-auto sm:flex-row kiosk-portrait:gap-4">
 						{#if retryableIds.length > 0}
 							<Button
 								type="button"
 								disabled={!centerMatches || isSubmitting || printBusy}
+								variant="outline"
 								onclick={() => void submitCheckInIds(retryableIds)}
-								class="min-h-12 border-[#CBD5E1] px-5 text-base font-bold text-[#0A2647]"
+								class="{KIOSK_NOTICE_SECONDARY_ACTION} sm:w-auto"
 							>
 								{isSubmitting
 									? 'กำลังบันทึก…'
@@ -804,9 +872,9 @@
 							type="button"
 							disabled={printableResults.length === 0 || printBusy || isSubmitting}
 							onclick={printWristbands}
-							class="min-h-12 gap-2 bg-[#0A2647] px-5 text-base font-bold text-white hover:bg-[#051930]"
+							class="{KIOSK_NOTICE_PRIMARY_ACTION} {INLINE_PRIMARY_SIZE} sm:w-auto"
 						>
-							<Printer class="h-5 w-5" aria-hidden="true" />{printBusy || isSubmitting
+							<Printer aria-hidden="true" />{printBusy || isSubmitting
 								? 'กำลังเตรียม QR…'
 								: isReprintOnly
 									? `พิมพ์ QR Code · ${printableResults.length} คน`
@@ -816,37 +884,37 @@
 							type="button"
 							variant="outline"
 							onclick={onreset}
-							class="min-h-12 border-[#CBD5E1] px-5 text-base font-bold text-[#0A2647]"
-							>เสร็จสิ้น</Button
+							class="{KIOSK_NOTICE_SECONDARY_ACTION} sm:w-auto">เสร็จสิ้น</Button
 						>
 					</div>
 				</div>
 				{#if actionError}
 					<p
-						class="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-950"
+						class="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-base font-semibold text-amber-950 kiosk-portrait:mt-5 kiosk-portrait:p-4 kiosk-portrait:text-xl kiosk-compact:text-sm"
 						role="alert"
 					>
 						{actionError}
 					</p>
 				{/if}
 				{#if printError}<p
-						class="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-950"
+						class="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-base font-semibold text-amber-950 kiosk-portrait:mt-5 kiosk-portrait:p-4 kiosk-portrait:text-xl kiosk-compact:text-sm"
 						role="alert"
 					>
 						{printError} ใช้ปุ่มพิมพ์อีกครั้งได้โดยไม่บันทึก check-in ซ้ำ
 					</p>{/if}
-				<div class="mt-5 space-y-3">
+				<div class="mt-5 space-y-3 kiosk-portrait:mt-8 kiosk-portrait:space-y-4">
 					{#each results as result (result.evacuee_id)}
 						{@const person = lookup?.members.find(
 							(member) => member.evacuee_id === result.evacuee_id
 						)}
 						<svelte:element
 							this={isReprintOnly && result.qr_payload ? 'label' : 'div'}
-							class="flex items-center gap-3 rounded-xl border {isReprintOnly && result.qr_payload
+							class="flex items-center gap-3 rounded-xl border kiosk-portrait:min-h-24 kiosk-portrait:gap-5 kiosk-portrait:px-6 {isReprintOnly &&
+							result.qr_payload
 								? 'cursor-pointer'
 								: ''} {result.qr_payload || result.status === 'already_checked_in'
 								? 'border-emerald-200 bg-emerald-50'
-								: 'border-amber-200 bg-amber-50'} p-4"
+								: 'border-amber-200 bg-amber-50'} p-4 kiosk-compact:p-3"
 						>
 							{#if isReprintOnly && result.qr_payload}<Checkbox
 									checked={printSelectedIds.includes(result.evacuee_id)}
@@ -854,23 +922,26 @@
 									disabled={printBusy}
 									aria-labelledby={`result-name-${result.evacuee_id}`}
 									aria-describedby={`result-status-${result.evacuee_id}`}
-									class="size-12 bg-white"
+									class="size-12 shrink-0 bg-white kiosk-compact:size-10"
 								/>{:else if isReprintOnly}<span class="size-12 shrink-0" aria-hidden="true"
 								></span>{:else if result.qr_payload || result.status === 'already_checked_in'}<CheckCircle2
-									class="h-6 w-6 shrink-0 text-emerald-800"
+									class="size-6 shrink-0 text-emerald-800 kiosk-portrait:size-8"
 									aria-hidden="true"
 								/>{:else}<CircleAlert
-									class="h-6 w-6 shrink-0 text-amber-800"
+									class="size-6 shrink-0 text-amber-800 kiosk-portrait:size-8"
 									aria-hidden="true"
 								/>{/if}
 							<div class="min-w-0 flex-1">
 								<p
 									id={`result-name-${result.evacuee_id}`}
-									class="truncate text-base font-bold text-slate-950"
+									class="truncate text-lg font-bold text-slate-950 sm:text-xl kiosk-portrait:text-2xl kiosk-compact:text-base"
 								>
 									{person ? fullName(person) : result.evacuee_id}
 								</p>
-								<p id={`result-status-${result.evacuee_id}`} class="mt-1 text-sm text-slate-700">
+								<p
+									id={`result-status-${result.evacuee_id}`}
+									class="mt-1 text-base text-slate-700 kiosk-portrait:mt-2 kiosk-portrait:text-xl kiosk-compact:text-sm"
+								>
 									{result.status === 'checked_in'
 										? 'รายงานตัวสำเร็จ · รอคัดกรอง'
 										: result.qr_payload
@@ -919,12 +990,14 @@
 
 		<p
 			class={[
-				'no-print flex items-center justify-center gap-2 text-sm text-slate-600',
+				'no-print flex items-center justify-center gap-2 text-base text-slate-600 kiosk-portrait:gap-3 kiosk-portrait:text-xl kiosk-compact:text-sm',
 				holdShown && 'kiosk-compact:hidden'
 			]}
 		>
-			<ShieldCheck class="h-4 w-4 shrink-0 text-[#0A2647]" aria-hidden="true" />QR
-			ไม่มีข้อมูลส่วนบุคคล
+			<ShieldCheck
+				class="size-4 shrink-0 text-[#0A2647] kiosk-portrait:size-6"
+				aria-hidden="true"
+			/>QR ไม่มีข้อมูลส่วนบุคคล
 		</p>
 	</div>
 </section>

@@ -54,7 +54,7 @@
 >
 	<div
 		class={[
-			'mx-auto flex size-16 items-center justify-center rounded-full border kiosk-portrait:size-24 kiosk-compact:hidden',
+			'mx-auto flex size-16 items-center justify-center rounded-full border kiosk-portrait:size-20 kiosk-compact:hidden',
 			tone === 'info' && 'border-sky-200 bg-sky-50 text-sky-900',
 			tone === 'warning' && 'border-amber-200 bg-amber-50 text-amber-900',
 			tone === 'success' && 'border-emerald-200 bg-emerald-50 text-emerald-900',
@@ -62,7 +62,7 @@
 		]}
 		aria-hidden="true"
 	>
-		<Icon class="size-8 kiosk-portrait:size-12" />
+		<Icon class="size-8 kiosk-portrait:size-10" />
 	</div>
 	<svelte:element
 		this={headingTag}
@@ -76,7 +76,7 @@
 	</svelte:element>
 	{#if children}
 		<div
-			class="mx-auto mt-2 max-w-xl space-y-3 text-lg leading-relaxed text-slate-700 kiosk-portrait:mt-4 kiosk-portrait:max-w-2xl kiosk-portrait:text-2xl kiosk-compact:text-base"
+			class="mx-auto mt-2 max-w-xl space-y-3 text-base leading-relaxed text-slate-700 kiosk-portrait:mt-4 kiosk-portrait:max-w-2xl kiosk-portrait:text-xl"
 		>
 			{@render children()}
 		</div>

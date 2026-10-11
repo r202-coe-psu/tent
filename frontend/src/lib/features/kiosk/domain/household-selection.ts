@@ -44,3 +44,25 @@ export function initialReprintSelection(
 ): string[] {
 	return results.filter((result) => result.qr_payload).map((result) => result.evacuee_id);
 }
+
+/** Ids the visitor may tick: members already reported stay locked. */
+export function selectableIds(members: readonly SelectableHouseholdMember[]): string[] {
+	return members.filter((member) => member.selectable).map((member) => member.evacuee_id);
+}
+
+/** True when there is something to tick and every selectable member is already ticked. */
+export function isAllSelected(
+	selected: readonly string[],
+	members: readonly SelectableHouseholdMember[]
+): boolean {
+	const ids = selectableIds(members);
+	return ids.length > 0 && ids.every((id) => selected.includes(id));
+}
+
+/** "Select all" tick every selectable member; pressed again with all ticked, it clears the lot. */
+export function toggleAllSelection(
+	selected: readonly string[],
+	members: readonly SelectableHouseholdMember[]
+): string[] {
+	return isAllSelected(selected, members) ? [] : selectableIds(members);
+}

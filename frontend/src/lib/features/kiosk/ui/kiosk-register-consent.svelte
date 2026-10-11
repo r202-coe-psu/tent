@@ -9,14 +9,19 @@
 		oncancel: () => void;
 	}
 	let { onconsent, oncancel }: Props = $props();
+
+	// Button sets whitespace-nowrap and a fixed height: long Thai labels must wrap inside the card.
+	const wrapLabel = 'h-auto min-w-0 whitespace-normal py-3 text-center sm:flex-1';
+	// Both buttons share one row: one label size for both, so neither looks oversized.
+	const labelSize = 'kiosk-portrait:px-4 kiosk-portrait:text-2xl kiosk-compact:text-base';
 </script>
 
 <section
-	class="mx-auto mt-6 w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs sm:p-8 kiosk-compact:mt-0 kiosk-compact:p-4"
+	class="mx-auto mt-6 w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs sm:p-8 kiosk-portrait:p-8 kiosk-compact:mt-0 kiosk-compact:p-4"
 	aria-labelledby="consent-title"
 >
 	<div
-		class="mb-5 inline-flex rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-sm font-semibold text-sky-900 kiosk-compact:mb-2"
+		class="mb-5 inline-flex rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-sm font-semibold text-sky-900 kiosk-portrait:mb-6 kiosk-portrait:px-5 kiosk-portrait:py-2 kiosk-portrait:text-lg kiosk-compact:mb-2"
 	>
 		ก่อนเริ่มลงทะเบียน
 	</div>
@@ -27,7 +32,7 @@
 		ยินยอมให้อ่านข้อมูลจากบัตรประชาชน
 	</h1>
 	<div
-		class="mt-4 space-y-3 text-lg leading-relaxed text-slate-700 kiosk-portrait:mt-6 kiosk-portrait:text-2xl kiosk-compact:mt-2 kiosk-compact:space-y-1.5 kiosk-compact:text-base kiosk-compact:leading-snug"
+		class="mt-4 space-y-3 text-base leading-relaxed text-slate-700 kiosk-portrait:mt-6 kiosk-portrait:text-xl kiosk-compact:mt-2 kiosk-compact:space-y-1.5 kiosk-compact:leading-snug"
 	>
 		<p>
 			ระบบจะอ่านชื่อและนามสกุล เลขบัตรประชาชน เพศ วันเกิด ที่อยู่ และรูปถ่ายจากชิปบัตร
@@ -45,10 +50,12 @@
 			type="button"
 			variant="outline"
 			onclick={oncancel}
-			class={`sm:flex-1 ${KIOSK_NOTICE_SECONDARY_ACTION}`}>ยกเลิก</Button
+			class={`${wrapLabel} ${KIOSK_NOTICE_SECONDARY_ACTION} ${labelSize}`}>ยกเลิก</Button
 		>
-		<Button type="button" onclick={onconsent} class={`sm:flex-1 ${KIOSK_NOTICE_PRIMARY_ACTION}`}
-			>ยินยอมและดำเนินการ</Button
+		<Button
+			type="button"
+			onclick={onconsent}
+			class={`${wrapLabel} ${KIOSK_NOTICE_PRIMARY_ACTION} ${labelSize}`}>ยินยอมและดำเนินการ</Button
 		>
 	</div>
 </section>

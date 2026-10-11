@@ -13,7 +13,7 @@
 <div
 	{...rest}
 	class={[
-		'inline-flex min-h-14 items-center justify-center gap-3 rounded-xl border border-slate-200 bg-[#F8FAFC] px-5 text-lg font-semibold text-slate-800 kiosk-portrait:min-h-20 kiosk-portrait:gap-4 kiosk-portrait:px-7 kiosk-portrait:text-2xl kiosk-compact:min-h-11 kiosk-compact:text-base',
+		'inline-flex min-h-14 items-center justify-center gap-3 rounded-xl border border-slate-200 bg-[#F8FAFC] px-5 text-lg font-semibold text-slate-800 kiosk-portrait:min-h-20 kiosk-portrait:gap-4 kiosk-portrait:px-7 kiosk-portrait:text-xl kiosk-compact:min-h-11 kiosk-compact:text-base',
 		className
 	]}
 	role="status"

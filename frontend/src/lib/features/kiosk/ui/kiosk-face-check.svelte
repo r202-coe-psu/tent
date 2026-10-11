@@ -151,7 +151,7 @@
 </script>
 
 <section
-	class="mx-auto mt-4 w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs sm:p-8 kiosk-compact:mt-0 kiosk-compact:p-3"
+	class="mx-auto mt-4 w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs sm:p-8 kiosk-portrait:p-8 kiosk-compact:mt-0 kiosk-compact:p-3"
 	data-testid="kiosk-face-check"
 	data-face-phase={session.phase}
 	{@attach listenForCardRemoval}

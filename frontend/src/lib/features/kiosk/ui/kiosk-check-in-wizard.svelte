@@ -2,14 +2,16 @@
 	interface Props {
 		currentStep: 1 | 2 | 3 | 4 | 5;
 		step2Label?: string;
+		/** Identity-check flows (card face check, ThaiD) verify here instead of a plain lookup. */
+		step3Label?: string;
 	}
 
-	let { currentStep, step2Label = 'สแกน' }: Props = $props();
+	let { currentStep, step2Label = 'สแกน', step3Label = 'ค้นหา' }: Props = $props();
 
 	const steps = $derived([
 		{ id: 1, label: 'วิธีค้นหา' },
 		{ id: 2, label: step2Label },
-		{ id: 3, label: 'ค้นหา' },
+		{ id: 3, label: step3Label },
 		{ id: 4, label: 'สมาชิก' },
 		{ id: 5, label: 'เสร็จสิ้น' }
 	]);

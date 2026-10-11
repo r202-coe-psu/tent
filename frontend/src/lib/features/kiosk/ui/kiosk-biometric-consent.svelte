@@ -14,6 +14,11 @@
 	}
 
 	let { onagree, ondecline, headingTag = 'h1' }: Props = $props();
+
+	// Button sets whitespace-nowrap and a fixed height: long Thai labels must wrap inside the card.
+	const wrapLabel = 'h-auto min-w-0 whitespace-normal py-3 text-center sm:flex-1';
+	// Both long labels share one row: one size for both that keeps each on a single line.
+	const labelSize = 'kiosk-portrait:px-4 kiosk-portrait:text-xl kiosk-compact:text-base';
 </script>
 
 <!--
@@ -25,11 +30,11 @@
 	<!-- Under another heading on a short screen the page title already says this: save the row. -->
 	<div
 		class={[
-			'mb-4 inline-flex items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-sm font-semibold text-sky-900 kiosk-compact:mb-2',
+			'mb-4 inline-flex items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-sm font-semibold text-sky-900 kiosk-portrait:mb-6 kiosk-portrait:gap-3 kiosk-portrait:px-5 kiosk-portrait:py-2 kiosk-portrait:text-lg kiosk-compact:mb-2',
 			headingTag === 'h2' && 'kiosk-compact:hidden'
 		]}
 	>
-		<ScanFace class="size-4" aria-hidden="true" />ตรวจสอบตัวตน
+		<ScanFace class="size-4 kiosk-portrait:size-5" aria-hidden="true" />ตรวจสอบตัวตน
 	</div>
 	<svelte:element
 		this={headingTag}
@@ -39,7 +44,7 @@
 		ตรวจใบหน้าเทียบกับรูปในบัตร
 	</svelte:element>
 	<div
-		class="mt-4 space-y-3 text-lg leading-relaxed text-slate-700 kiosk-portrait:text-2xl kiosk-compact:mt-1.5 kiosk-compact:space-y-1 kiosk-compact:text-base kiosk-compact:leading-snug"
+		class="mt-4 space-y-3 text-base leading-relaxed text-slate-700 kiosk-portrait:mt-6 kiosk-portrait:space-y-4 kiosk-portrait:text-xl kiosk-compact:mt-1.5 kiosk-compact:space-y-1 kiosk-compact:leading-snug"
 	>
 		<p>
 			ตู้จะถ่ายภาพใบหน้าของท่านจากกล้อง
@@ -60,9 +65,13 @@
 			type="button"
 			variant="outline"
 			onclick={ondecline}
-			class={`sm:flex-1 ${KIOSK_NOTICE_SECONDARY_ACTION}`}>ไม่ยินยอม ให้เจ้าหน้าที่ตรวจแทน</Button
+			class={`${wrapLabel} ${KIOSK_NOTICE_SECONDARY_ACTION} ${labelSize}`}
+			>ไม่ยินยอม ให้เจ้าหน้าที่ตรวจแทน</Button
 		>
-		<Button type="button" onclick={onagree} class={`sm:flex-1 ${KIOSK_NOTICE_PRIMARY_ACTION}`}
+		<Button
+			type="button"
+			onclick={onagree}
+			class={`${wrapLabel} ${KIOSK_NOTICE_PRIMARY_ACTION} ${labelSize}`}
 			>ยินยอม เริ่มตรวจใบหน้า</Button
 		>
 	</div>

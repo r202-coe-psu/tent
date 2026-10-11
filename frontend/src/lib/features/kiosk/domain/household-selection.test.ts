@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
 	initialReprintSelection,
 	initialSelection,
-	toExistingReportResults
+	isAllSelected,
+	selectableIds,
+	toExistingReportResults,
+	toggleAllSelection
 } from './household-selection';
 
 const members = [
@@ -60,5 +63,29 @@ describe('initialReprintSelection', () => {
 			{ evacuee_id: 'evacuee:c', is_primary: false, selectable: false, status: 'arriving' }
 		]);
 		expect(initialReprintSelection(results)).toEqual(['evacuee:a', 'evacuee:c']);
+	});
+});
+
+describe('select all', () => {
+	it('lists only the selectable members, never the ones already reported', () => {
+		expect(selectableIds(members)).toEqual(['evacuee:head', 'evacuee:member']);
+	});
+
+	it('ticks every selectable member when some or none are ticked', () => {
+		expect(toggleAllSelection([], members)).toEqual(['evacuee:head', 'evacuee:member']);
+		expect(toggleAllSelection(['evacuee:head'], members)).toEqual([
+			'evacuee:head',
+			'evacuee:member'
+		]);
+	});
+
+	it('clears the selection when every selectable member is already ticked', () => {
+		expect(toggleAllSelection(['evacuee:head', 'evacuee:member'], members)).toEqual([]);
+	});
+
+	it('reports all-selected only when there is something to select', () => {
+		expect(isAllSelected(['evacuee:head', 'evacuee:member'], members)).toBe(true);
+		expect(isAllSelected(['evacuee:head'], members)).toBe(false);
+		expect(isAllSelected([], [members[2]])).toBe(false);
 	});
 });
