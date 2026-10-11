@@ -17,7 +17,7 @@ import {
 	seedSecurityQuestion,
 	type TestUser
 } from './couch';
-import { IS_REMOTE } from './e2e-env';
+import { IS_REMOTE, RATE_LIMIT_ENFORCED } from './e2e-env';
 import { injectSession, routeBrowserCouchThroughApp } from './login';
 import { publicShelter, teardownShelter, waitForProjection } from './public-cleanup';
 import { createShelterViaUi, setRecaptcha } from './staff-ui';
@@ -70,7 +70,9 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * Sliding-window pacer for the BFF's per-IP limiters (`src/lib/server/security/rate-limiter.ts`).
  * They only exempt loopback under `vite dev`, so a remote target (staging) — or a local
  * `vite preview` with `DONATION_E2E_PACE=1` — would answer 429 RATE_LIMITED after the 3rd
- * booking in a minute. On `pnpm dev` it is a no-op.
+ * booking in a minute. On `pnpm dev` it is a no-op, and so is it when the target runs with
+ * `RATE_LIMIT=false` (CR-160): the booking limiters are bypassed there, so pacing would only
+ * slow the run down.
  */
 class Pacer {
 	private hits: number[] = [];
@@ -80,7 +82,7 @@ class Pacer {
 	) {}
 
 	async acquire(n = 1): Promise<void> {
-		if (!(IS_REMOTE || process.env.DONATION_E2E_PACE === '1')) return;
+		if (!RATE_LIMIT_ENFORCED || !(IS_REMOTE || process.env.DONATION_E2E_PACE === '1')) return;
 		for (;;) {
 			const now = Date.now();
 			this.hits = this.hits.filter((t) => now - t < this.windowMs);

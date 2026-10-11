@@ -1,4 +1,8 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+
+const mockEnv = vi.hoisted(() => ({ env: {} as Record<string, string | undefined> }));
+vi.mock('$env/dynamic/private', () => mockEnv);
+
 import { RateLimiter } from './rate-limiter';
 
 describe('RateLimiter', () => {
@@ -87,5 +91,126 @@ describe('donation limiter budgets', () => {
 		const key = `read-cap-${Math.random()}`;
 		for (let i = 0; i < 30; i++) donationReadLimiter.check(key);
 		expect(donationReadLimiter.check(key)).toBe(false);
+	});
+});
+
+describe('RATE_LIMIT switch (CR-160)', () => {
+	const exhaust = (limiter: RateLimiter, key: string) => {
+		for (let i = 0; i < 3; i++) limiter.check(key);
+	};
+
+	afterEach(() => {
+		delete mockEnv.env.RATE_LIMIT;
+	});
+
+	describe('unset or any value other than false/0', () => {
+		it('enforces a bypassable limiter when RATE_LIMIT is unset (4th booking is blocked)', () => {
+			const limiter = new RateLimiter(60000, 3, { bypassable: true });
+			exhaust(limiter, 'sw-unset');
+			expect(limiter.check('sw-unset')).toBe(false);
+		});
+
+		it.each(['true', '', 'off', 'no', 'garbage', '1'])(
+			'enforces every limiter when RATE_LIMIT=%j',
+			(value) => {
+				mockEnv.env.RATE_LIMIT = value;
+				for (const bypassable of [true, false]) {
+					const limiter = new RateLimiter(60000, 3, { bypassable });
+					const key = `sw-garbage-${bypassable}`;
+					exhaust(limiter, key);
+					expect(limiter.check(key)).toBe(false);
+				}
+			}
+		);
+	});
+
+	describe('RATE_LIMIT=false|0 on a bypassable limiter', () => {
+		it.each(['false', 'FALSE', ' False ', '0'])('never blocks when RATE_LIMIT=%j', (value) => {
+			mockEnv.env.RATE_LIMIT = value;
+			const limiter = new RateLimiter(60000, 3, { bypassable: true });
+			for (let i = 0; i < 10; i++) expect(limiter.check('203.0.113.7')).toBe(true);
+		});
+
+		it('records no hit while bypassed, so re-enabling starts clean', () => {
+			const limiter = new RateLimiter(60000, 3, { bypassable: true });
+			mockEnv.env.RATE_LIMIT = 'false';
+			for (let i = 0; i < 10; i++) limiter.check('sw-reenable');
+			delete mockEnv.env.RATE_LIMIT;
+			exhaust(limiter, 'sw-reenable');
+			// Three fresh hits were allowed, so only the 4th is refused — none were stored earlier.
+			expect(limiter.check('sw-reenable')).toBe(false);
+		});
+
+		it('works through the real donation / pre-register instances', async () => {
+			mockEnv.env.RATE_LIMIT = 'false';
+			const { donationIpLimiter, registerIpLimiter } = await import('./rate-limiter');
+			for (const limiter of [donationIpLimiter, registerIpLimiter]) {
+				const key = `sw-real-${Math.random()}`;
+				for (let i = 0; i < 20; i++) expect(limiter.check(key)).toBe(true);
+			}
+		});
+	});
+
+	describe('RATE_LIMIT=false on a non-bypassable limiter', () => {
+		it('a limiter built without options still blocks', () => {
+			mockEnv.env.RATE_LIMIT = 'false';
+			const limiter = new RateLimiter(60000, 3);
+			expect(limiter.bypassable).toBe(false);
+			exhaust(limiter, 'sw-default');
+			expect(limiter.check('sw-default')).toBe(false);
+		});
+
+		it('auth and volunteer instances keep blocking (CR-160 acceptance)', async () => {
+			mockEnv.env.RATE_LIMIT = 'false';
+			const mod = await import('./rate-limiter');
+			const cases: [RateLimiter, number][] = [
+				[mod.loginCaptchaIpLimiter, 10],
+				[mod.loginResolveIpLimiter, 10],
+				[mod.thirdPartyClientSecretRevealLimiter, 10],
+				[mod.linkAccountIpLimiter, 10],
+				[mod.volunteerApplyIpLimiter, 3]
+			];
+			for (const [limiter, max] of cases) {
+				const key = `sw-closed-${Math.random()}`;
+				for (let i = 0; i < max; i++) expect(limiter.check(key)).toBe(true);
+				expect(limiter.check(key)).toBe(false);
+			}
+		});
+	});
+
+	it('only the donation and pre-register limiters are bypassable — new limiters default closed', async () => {
+		const mod = (await import('./rate-limiter')) as Record<string, unknown>;
+		const bypassable = Object.entries(mod)
+			.filter(([, v]) => v instanceof RateLimiter && v.bypassable)
+			.map(([name]) => name)
+			.sort();
+		const closed = Object.entries(mod)
+			.filter(([, v]) => v instanceof RateLimiter && !v.bypassable)
+			.map(([name]) => name)
+			.sort();
+
+		expect(bypassable).toEqual([
+			'donationEditLimiter',
+			'donationIpLimiter',
+			'donationPhoneLimiter',
+			'donationReadLimiter',
+			'registerIpLimiter',
+			'registerLookupIpLimiter',
+			'registerPhoneLimiter'
+		]);
+		expect(closed).toEqual([
+			'donationSlotsLimiter',
+			'linkAccountIpLimiter',
+			'linkAccountNonceLimiter',
+			'loginCaptchaIpLimiter',
+			'loginResolveIpLimiter',
+			'thirdPartyClientSecretRevealLimiter',
+			'volunteerApplyIpLimiter',
+			'volunteerApplyPhoneLimiter',
+			'volunteerDispatchRespondLimiter',
+			'volunteerProfileUpdateLimiter',
+			'volunteerTicketFindLimiter',
+			'volunteerTicketLimiter'
+		]);
 	});
 });

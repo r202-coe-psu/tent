@@ -39,8 +39,8 @@ Known problems:
   which also burns a real citizen's budget. With the duplicate removed, W2–W5 spend ~8 of 10, and
   `waitForStatusBudget(needed)` now counts real hits and only waits when the budget is short. The
   limiters live in the preview server's memory, so re-running the pre-register suite back-to-back
-  against a **reused** server can still get `429 Too Many Requests` on W4/W5 — wait a minute or
-  restart the server.
+  against a **reused** server with `RATE_LIMIT=true` can still get `429 Too Many Requests` on W4/W5 —
+  wait a minute or restart the server (not an issue with the default `RATE_LIMIT=false`, see §7.1).
   Since develop's `registrations/check-duplicate` (instant duplicate check on the public form)
   shares that same `registerLookupIpLimiter` budget, W4 and W5 fill the form again and usually
   wait out one window, so the pre-register `@critical` group takes ~1 min longer than before.
@@ -204,6 +204,26 @@ pnpm test:e2e:regression                      # mocked suites only
 ```
 
 Live suites also need platform init (`pnpm seed:master`, `pnpm db:sync`); see each file's header.
+
+### 7.1 Rate limits — the `RATE_LIMIT` switch (CR-160)
+
+BFF limiters exempt loopback only under `vite dev`; Playwright runs `vite preview` (a production
+build) and every suite shares the runner's IP, so the 3/min booking limit would throttle e2e.
+CR-160 adds a **server env `RATE_LIMIT`**:
+
+- `false` / `0` (trimmed, case-insensitive) turns off **only** limiters constructed with
+  `{ bypassable: true }`: `donationIp/Phone/Edit/Read` and `registerIp/Phone/LookupIp`. No hit is
+  recorded while off. Everything else — staff login, secret reveal, link-account, volunteer — and
+  any limiter added later enforces regardless (the default is `bypassable: false`).
+- Unset or any other value enforces everything. FastAPI's own per-IP limiter is not affected.
+- `playwright.config.ts` defaults it to `false` for the local preview server (override with
+  `RATE_LIMIT=true`). On staging the server needs `RATE_LIMIT=false` in its root `.env` and the
+  runner env (Jenkins credential `tent-staging-e2e-env`) must carry the same value. The compose
+  files pass `RATE_LIMIT: ${RATE_LIMIT:-true}` to the frontend, so production stays enforced and
+  must never set `false`.
+- The e2e side reads the same variable (`RATE_LIMIT_ENFORCED` in `helpers/e2e-env.ts`):
+  `waitForStatusBudget` in the pre-register suite only waits when limits are enforced (unset counts
+  as enforced).
 
 ## 8. Release gate — six journeys that must pass before prod
 
