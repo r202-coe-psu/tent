@@ -10,6 +10,7 @@
 	import { resolve } from '$app/paths';
 	import { env } from '$env/dynamic/public';
 	import { Checkbox } from '$lib/components/ui/checkbox';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import { Label } from '$lib/components/ui/label';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import type { PublicShelterCardModel } from '$lib/features/public-portal';
@@ -98,10 +99,21 @@
 		shelters.filter((s) => s.status !== 'CLOSED' && s.accepts_pre_registration === true)
 	);
 	const selected = $derived(shelters.find((s) => s.code === selectedShelterCode) ?? null);
+	/** Shelters the server already refused as full this session (CAPACITY_EXCEEDED on submit). */
+	let refusedFullCodes = $state<string[]>([]);
+	/** Full = status FULL, no places left, or the server just refused it — booking would be refused. */
+	function isShelterFull(s: { code: string; status?: string; available: number | null }): boolean {
+		return (
+			s.status === 'FULL' ||
+			(s.available !== null && s.available <= 0) ||
+			refusedFullCodes.includes(s.code)
+		);
+	}
+	const selectedIsFull = $derived(selected !== null && !isUnassigned && isShelterFull(selected));
 	const selectedIsBookable = $derived(
 		isUnassigned || bookable.some((s) => s.code === selectedShelterCode)
 	);
-	const hasShelter = $derived(selected !== null && selectedIsBookable);
+	const hasShelter = $derived(selected !== null && selectedIsBookable && !selectedIsFull);
 	const isShelterOrQueueChosen = $derived(hasShelter || isUnassigned);
 	/** Unassigned flow: confirm stays disabled until disclaimer consent is checked. */
 	const submitDisabled = $derived(isUnassigned && !disclaimerAcknowledged);
@@ -265,6 +277,13 @@
 			onbooked(ticket);
 		} catch (err) {
 			toast.error(submitErrorMessage(err));
+			if (err instanceof PublicApiError && err.code === 'CAPACITY_EXCEEDED' && selected) {
+				// Filled up since the page loaded — show it as full and point to the central queue.
+				refusedFullCodes = [...refusedFullCodes, selected.code];
+				document
+					.getElementById('shelter-choice')
+					?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+			}
 			if (isJoinSelectionInvalidError(err)) {
 				joinResetKey += 1;
 			}
@@ -308,12 +327,12 @@
 			<h3 class="text-base font-bold text-foreground sm:text-lg">{t.step1Title}</h3>
 		</div>
 
-		<div class="space-y-2">
+		<div id="shelter-choice" class="space-y-2">
 			<div class="flex items-center justify-between gap-2">
 				<Label class="text-xs font-semibold text-foreground">
 					{t.shelterLabel} <span class="text-destructive">*</span>
 				</Label>
-				{#if selected && selected.capacity > 0}
+				{#if selected && selected.capacity > 0 && !selectedIsFull}
 					<span
 						class="rounded-full border border-success/30 bg-success-muted/40 px-2 py-0.5 text-2xs font-semibold text-success"
 					>
@@ -341,15 +360,24 @@
 					</Select.Item>
 					<Select.Separator />
 					{#each bookable as shelter (shelter.code)}
+						{@const full = isShelterFull(shelter)}
 						<Select.Item
 							value={shelter.code}
-							label="{shelter.name}{shelter.status === 'FULL' ? t.shelterFullSuffix : ''}"
+							label="{shelter.name}{full ? t.shelterFullSuffix : ''}"
+							disabled={full}
 						>
 							<span class="flex w-full items-center justify-between gap-2">
 								<span class="truncate">
-									{shelter.name}{shelter.status === 'FULL' ? t.shelterFullSuffix : ''}
+									{shelter.name}{full ? t.shelterFullSuffix : ''}
 								</span>
-								{#if shelter.capacity > 0}
+								{#if full}
+									<span
+										class="inline-flex shrink-0 items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-900"
+									>
+										<AlertTriangle class="h-3 w-3" />
+										{t.shelterFullBadge}
+									</span>
+								{:else if shelter.capacity > 0}
 									<span
 										class="shrink-0 rounded-full bg-success-muted px-2 py-0.5 text-2xs font-bold text-success"
 									>
@@ -387,13 +415,24 @@
 			{/if}
 		</div>
 
-		{#if selected?.status === 'FULL'}
-			<p
-				class="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger-muted/40 p-2.5 text-xs text-danger"
+		{#if selectedIsFull}
+			<div
+				class="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm text-red-900 sm:flex-row sm:items-center sm:justify-between"
+				role="alert"
 			>
-				<AlertTriangle class="mt-0.5 h-3.5 w-3.5 shrink-0" />
-				<span>{t.shelterFullWarning}</span>
-			</p>
+				<p class="flex items-start gap-2">
+					<AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+					<span>{t.shelterFullWarning}</span>
+				</p>
+				<Button
+					type="button"
+					variant="outline"
+					class="min-h-11 shrink-0 border-red-200 bg-white text-red-900 hover:bg-red-100"
+					onclick={() => updateShelterSelection(UNASSIGNED_SHELTER_CODE)}
+				>
+					{t.shelterFullUseQueue}
+				</Button>
+			</div>
 		{/if}
 	</section>
 
