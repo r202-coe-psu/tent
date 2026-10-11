@@ -265,7 +265,8 @@ export function canAccessUnassignedRegistrationQueue(
 
 /**
  * True when the actor may access the Station 2 medical screening route / queue:
- * system_admin, shelter_manager, medical_staff, or triage_staff.
+ * system_admin, shelter_manager, registration_staff, medical_staff, or triage_staff.
+ * (registration_staff added by decision sync 2026-10-10 — ADR 0001.)
  */
 export function canAccessMedicalScreening(
 	roles: readonly string[],
@@ -274,8 +275,26 @@ export function canAccessMedicalScreening(
 	return (
 		isSystemAdmin(roles) ||
 		isShelterManager(roles, shelterCode) ||
+		hasStaffCapability(roles, 'registration_staff', shelterCode) ||
 		hasStaffCapability(roles, MEDICAL_STAFF, shelterCode) ||
 		hasStaffCapability(roles, TRIAGE_STAFF, shelterCode)
+	);
+}
+
+/**
+ * True when the actor may use the staff volunteer back-office (`/back-office/volunteers` job
+ * board, shifts, roster): system_admin, shelter_manager, or volunteer_coordinator in the shelter
+ * (role-permission-matrix.md §3 "Volunteer Job Board"; decision sync 2026-10-10). Does **not**
+ * cover user management — granting system access to a volunteer stays SM/SA.
+ */
+export function canAccessVolunteerBackoffice(
+	roles: readonly string[],
+	shelterCode?: string | null
+): boolean {
+	return (
+		isSystemAdmin(roles) ||
+		isShelterManager(roles, shelterCode) ||
+		hasStaffCapability(roles, VOLUNTEER_COORDINATOR, shelterCode)
 	);
 }
 

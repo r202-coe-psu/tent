@@ -16,7 +16,14 @@ let mockIsAuthenticated = true;
 
 vi.mock('$lib/guards/auth', () => ({
 	requireMedicalScreening: vi.fn(async () => {
-		const allowed = ['medical_staff', 'triage_staff', 'shelter_manager', 'system_admin', '_admin'];
+		const allowed = [
+			'registration_staff',
+			'medical_staff',
+			'triage_staff',
+			'shelter_manager',
+			'system_admin',
+			'_admin'
+		];
 		const hasRole = mockUserRoles.some((r) => allowed.includes(r));
 		if (!mockIsAuthenticated || !hasRole) {
 			const error = Object.assign(new Error('Redirect'), { status: 302, location: '/portal' });
@@ -63,8 +70,13 @@ describe('medical-screening +page.ts route guard', () => {
 		await expect(load(loadArg())).resolves.not.toThrow();
 	});
 
-	it('blocks access for registration_staff (redirects to /portal)', async () => {
+	it('allows access for registration_staff (decision sync 2026-10-10)', async () => {
 		mockUserRoles = ['shelter:SH001', 'registration_staff'];
+		await expect(load(loadArg())).resolves.not.toThrow();
+	});
+
+	it('blocks access for kitchen_staff (redirects to /portal)', async () => {
+		mockUserRoles = ['shelter:SH001', 'kitchen_staff'];
 		await expect(load(loadArg())).rejects.toMatchObject({
 			status: 302,
 			location: '/portal'
