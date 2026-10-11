@@ -1,19 +1,4 @@
 import { dev } from '$app/environment';
-import { env } from '$env/dynamic/private';
-
-/**
- * Master switch for every `RateLimiter` below — server-only runtime env `RATE_LIMIT`.
- *
- * Enforced by default: unset, empty, or any value that is not an explicit "off" keeps the
- * limits on, so a typo can never silently disable them. Only `false` or `0`
- * (case-insensitive, trimmed) turns them off, for every key — not just loopback. It exists
- * for e2e runs (every suite shares one runner IP) and for staging; production must leave it
- * unset. Read per call because `$env/dynamic/private` is a runtime lookup.
- */
-function rateLimitEnabled(): boolean {
-	const raw = env.RATE_LIMIT?.trim().toLowerCase();
-	return raw !== 'false' && raw !== '0';
-}
 
 interface RateLimitEntry {
 	timestamps: number[];
@@ -35,7 +20,6 @@ export class RateLimiter {
 	 */
 	check(key: string): boolean {
 		if (!key) return true;
-		if (!rateLimitEnabled()) return true;
 		if (
 			dev &&
 			(key === '127.0.0.1' || key === '::1' || key === 'localhost' || key === '::ffff:127.0.0.1')

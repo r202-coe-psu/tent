@@ -131,9 +131,6 @@ services:
       # BFF donations/needs → FastAPI on the compose network (not localhost)
       FASTAPI_INTERNAL_URL: http://fastapi:9000
       EXTERNAL_API_SECRET: ${EXTERNAL_API_SECRET}
-      # BFF rate limiters off on staging so e2e (one runner IP) is not throttled; override
-      # with RATE_LIMIT=true in .env to test the real limits. Prod compose leaves it unset.
-      RATE_LIMIT: ${RATE_LIMIT:-false}
       # Site key also at runtime for $env/dynamic/public; secret is verify-only
       PUBLIC_RECAPTCHA_SITE_KEY: ${PUBLIC_RECAPTCHA_SITE_KEY}
       RECAPTCHA_PROJECT_ID: ${RECAPTCHA_PROJECT_ID:-smart-shelter-508719}

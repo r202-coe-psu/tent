@@ -1,8 +1,4 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-
-const mockEnv = vi.hoisted(() => ({ env: {} as Record<string, string | undefined> }));
-vi.mock('$env/dynamic/private', () => mockEnv);
-
 import { RateLimiter } from './rate-limiter';
 
 describe('RateLimiter', () => {
@@ -91,45 +87,5 @@ describe('donation limiter budgets', () => {
 		const key = `read-cap-${Math.random()}`;
 		for (let i = 0; i < 30; i++) donationReadLimiter.check(key);
 		expect(donationReadLimiter.check(key)).toBe(false);
-	});
-});
-
-describe('RATE_LIMIT master switch', () => {
-	const exhaust = (limiter: RateLimiter, key: string) => {
-		for (let i = 0; i < 3; i++) limiter.check(key);
-	};
-
-	afterEach(() => {
-		delete mockEnv.env.RATE_LIMIT;
-	});
-
-	it('enforces limits when RATE_LIMIT is unset', () => {
-		const limiter = new RateLimiter(60000, 3);
-		exhaust(limiter, 'sw-unset');
-		expect(limiter.check('sw-unset')).toBe(false);
-	});
-
-	it.each(['false', 'FALSE', ' False ', '0'])('bypasses every key when RATE_LIMIT=%j', (value) => {
-		mockEnv.env.RATE_LIMIT = value;
-		const limiter = new RateLimiter(60000, 3);
-		for (let i = 0; i < 10; i++) expect(limiter.check('203.0.113.7')).toBe(true);
-	});
-
-	it.each(['true', '', 'off', 'no', 'garbage', '1'])(
-		'keeps enforcing when RATE_LIMIT=%j',
-		(value) => {
-			mockEnv.env.RATE_LIMIT = value;
-			const limiter = new RateLimiter(60000, 3);
-			exhaust(limiter, 'sw-garbage');
-			expect(limiter.check('sw-garbage')).toBe(false);
-		}
-	);
-
-	it('does not record hits while bypassed, so re-enabling starts clean', () => {
-		const limiter = new RateLimiter(60000, 3);
-		mockEnv.env.RATE_LIMIT = 'false';
-		for (let i = 0; i < 10; i++) limiter.check('sw-reenable');
-		delete mockEnv.env.RATE_LIMIT;
-		expect(limiter.check('sw-reenable')).toBe(true);
 	});
 });

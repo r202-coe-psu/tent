@@ -38,10 +38,10 @@ import {
  * `E2E Donation admin …` shelter (README §4), driven through the back-office screens.
  *
  * Needs `docker compose up -d` (CouchDB, Mongo, worker, FastAPI) and a seeded catalog
- * (`pnpm seed`). The BFF's per-IP rate limiters are switched off for e2e
- * (`RATE_LIMIT=false`: set by playwright.config.ts for the local preview server, and in
- * staging's compose files), so bookings are not paced. With `RATE_LIMIT=true` in the e2e
- * env they are paced to the real limits (see helpers/donation-fullstack.ts `Pacer`).
+ * (`pnpm seed`). Locally use the dev server — only it skips reCAPTCHA keys / the BFF's
+ * per-IP rate limits (on `vite preview` also set DONATION_E2E_PACE=1):
+ *   PLAYWRIGHT_TEST_BASE_URL=http://localhost:5173 \
+ *     pnpm exec playwright test e2e/donation-fullstack-admin.test.ts
  * On a writable remote target (`E2E_BASE_URL` + `ALLOW_REMOTE_WRITES=true`, i.e. staging)
  * it runs like any `@critical` suite; read-only targets skip it.
  *

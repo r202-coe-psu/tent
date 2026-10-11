@@ -6,7 +6,6 @@ import {
 	RunLedger,
 	approvePending,
 	bookAsDonor,
-	bookingPacer,
 	createCampaignViaUi,
 	createWarehouseStaff,
 	expectRunGone,
@@ -30,10 +29,10 @@ import {
  * this run's own `E2E Donation donor …` shelter (README §4).
  *
  * Needs `docker compose up -d` (CouchDB, Mongo, worker, FastAPI) and a seeded catalog
- * (`pnpm seed`). The BFF's per-IP rate limiters are switched off for e2e
- * (`RATE_LIMIT=false`: set by playwright.config.ts for the local preview server, and in
- * staging's compose files), so bookings are not paced. With `RATE_LIMIT=true` in the e2e
- * env they are paced to the real limits (see helpers/donation-fullstack.ts `Pacer`).
+ * (`pnpm seed`). Locally use the dev server — only it skips reCAPTCHA keys / the BFF's
+ * per-IP rate limits (on `vite preview` also set DONATION_E2E_PACE=1):
+ *   PLAYWRIGHT_TEST_BASE_URL=http://localhost:5173 \
+ *     pnpm exec playwright test e2e/donation-fullstack.test.ts
  * On a writable remote target (`E2E_BASE_URL` + `ALLOW_REMOTE_WRITES=true`, i.e. staging)
  * it runs like any `@critical` suite; read-only targets skip it.
  *
@@ -144,8 +143,6 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 
 			// ── Public: the donor looks it up by ref + phone ────────────────────────
 			await clearSession(page);
-			// The lookup is `track-search`, which spends the same per-IP budget as a booking.
-			await bookingPacer.acquire();
 			await page.goto(`/donations/track?ref=${bookingRef}&phone=${phone}`);
 			await expect(page).toHaveURL(/\/donations\/track\/TX-/);
 			await expect(page.getByRole('heading', { name: bookingRef })).toBeVisible();
@@ -228,7 +225,6 @@ test.describe('Donation full-stack: donor and staff', { tag: ['@critical', '@don
 			});
 
 			await page.goto('/donations/track');
-			await bookingPacer.acquire(); // `track-search` shares the booking limiter
 			await page.locator('#booking-ref-field').fill(bookingRef);
 			await page.locator('#phone-field').fill('0899999999');
 			await page.getByRole('button', { name: 'ติดตามสถานะ' }).click();

@@ -17,7 +17,7 @@ import {
 	seedSecurityQuestion,
 	type TestUser
 } from './couch';
-import { RATE_LIMIT_ENFORCED } from './e2e-env';
+import { IS_REMOTE } from './e2e-env';
 import { injectSession, routeBrowserCouchThroughApp } from './login';
 import { publicShelter, teardownShelter, waitForProjection } from './public-cleanup';
 import { createShelterViaUi, setRecaptcha } from './staff-ui';
@@ -68,73 +68,36 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
  * Sliding-window pacer for the BFF's per-IP limiters (`src/lib/server/security/rate-limiter.ts`).
- *
- * Pacing only matters while those limiters are enforced. The server's `RATE_LIMIT=false`
- * switches every limiter off, and that is how e2e runs: `playwright.config.ts` starts the
- * local preview server with it off, and staging sets it off in its compose files — so the
- * Pacer is a no-op there and the suites run at full speed. Pacing turns itself on when
- * `RATE_LIMIT` is not `false`/`0` in the e2e env (unset counts as enforced, the safe
- * assumption for a remote target), e.g. `RATE_LIMIT=true` to exercise the real limits, in
- * which case every suite shares the one runner IP and the 3rd booking in a minute would
- * answer 429 RATE_LIMITED. `DONATION_E2E_PACE=0` also forces it off.
- *
- * The hit log lives in a file, not module state: Playwright restarts the worker after a
- * failed test, which would otherwise forget the bookings of the last minute and let the
- * next test trip the limiter — one failure cascading into several.
+ * They only exempt loopback under `vite dev`, so a remote target (staging) — or a local
+ * `vite preview` with `DONATION_E2E_PACE=1` — would answer 429 RATE_LIMITED after the 3rd
+ * booking in a minute. On `pnpm dev` it is a no-op.
  */
-const PACE_PATH = 'node_modules/.cache/donation-e2e-pacer.json';
-
-function pacingEnabled(): boolean {
-	return RATE_LIMIT_ENFORCED && process.env.DONATION_E2E_PACE !== '0';
-}
-
 class Pacer {
+	private hits: number[] = [];
 	constructor(
-		private readonly name: string,
 		private readonly limit: number,
 		private readonly windowMs = 61_000
 	) {}
 
-	private read(now: number): number[] {
-		try {
-			const all = JSON.parse(readFileSync(PACE_PATH, 'utf8')) as Record<string, number[]>;
-			return (all[this.name] ?? []).filter((t) => now - t < this.windowMs);
-		} catch {
-			return [];
-		}
-	}
-
-	private write(hits: number[]) {
-		let all: Record<string, number[]> = {};
-		try {
-			all = JSON.parse(readFileSync(PACE_PATH, 'utf8')) as Record<string, number[]>;
-		} catch {
-			// first use, or an unreadable file — start clean
-		}
-		mkdirSync(dirname(PACE_PATH), { recursive: true });
-		writeFileSync(PACE_PATH, JSON.stringify({ ...all, [this.name]: hits }));
-	}
-
 	async acquire(n = 1): Promise<void> {
-		if (!pacingEnabled()) return;
+		if (!(IS_REMOTE || process.env.DONATION_E2E_PACE === '1')) return;
 		for (;;) {
 			const now = Date.now();
-			const hits = this.read(now);
-			if (hits.length + n <= this.limit) {
-				for (let i = 0; i < n; i++) hits.push(now);
-				this.write(hits);
+			this.hits = this.hits.filter((t) => now - t < this.windowMs);
+			if (this.hits.length + n <= this.limit) {
+				for (let i = 0; i < n; i++) this.hits.push(now);
 				return;
 			}
-			const expiring = hits[hits.length + n - this.limit - 1];
+			const expiring = this.hits[this.hits.length + n - this.limit - 1];
 			await sleep(Math.max(expiring + this.windowMs - now, 250) + 250);
 		}
 	}
 }
 
-/** `donationIpLimiter`: creating a booking AND `track-search` (lookup by ref + phone) — 3 per minute per IP. */
-export const bookingPacer = new Pacer('booking', 3);
+/** `donationIpLimiter`: creating a booking — 3 per minute per IP. */
+export const bookingPacer = new Pacer(3);
 /** `donationEditLimiter`: edit / courier no. / cancel — 10 per minute per IP. */
-const editPacer = new Pacer('edit', 9);
+const editPacer = new Pacer(9);
 
 // ─── Per-run ledger ────────────────────────────────────────────────────────────
 
@@ -426,9 +389,9 @@ export async function bookAsDonor(page: Page, opts: BookingOptions): Promise<Boo
 	const body = await submit();
 	// Under `vite preview` (not dev) with no reCAPTCHA keys the BFF fails closed with
 	// SERVER_MISCONFIGURED — run against `pnpm dev` locally (PLAYWRIGHT_TEST_BASE_URL=
-	// http://localhost:5173). RATE_LIMITED is the BFF's 3 bookings/min/IP (only when
-	// RATE_LIMIT is not false; then paced here) or FastAPI's 30 req/min/IP on every donation
-	// route (not switched off by RATE_LIMIT): wait a minute between back-to-back runs.
+	// http://localhost:5173). RATE_LIMITED is the BFF's 3 bookings/min/IP (paced here on a
+	// remote target) or FastAPI's 30 req/min/IP on every donation route: wait a minute
+	// between back-to-back local runs.
 	expect(body.success, `booking POST failed: ${JSON.stringify(body)}`).toBe(true);
 	const { bookingRef, trackingToken } = body as Booking;
 
