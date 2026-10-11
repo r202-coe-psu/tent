@@ -301,6 +301,22 @@ export function canAccessVolunteerBackoffice(
 }
 
 /**
+ * True when the actor may use the Distribution Desk (Station 4, `/onsite/distribution`):
+ * system_admin, shelter_manager, or distribution_staff in the shelter (CR-161 R5, page-level per
+ * CR-159). REG, SC and WH keep their system-level distribution rights but not this page.
+ */
+export function canAccessDistributionDesk(
+	roles: readonly string[],
+	shelterCode?: string | null
+): boolean {
+	return (
+		isSystemAdmin(roles) ||
+		isShelterManager(roles, shelterCode) ||
+		hasStaffCapability(roles, DISTRIBUTION_STAFF, shelterCode)
+	);
+}
+
+/**
  * True when the actor may access Station 3 zoning:
  * system_admin, shelter_manager, registration_staff, or facility_staff.
  */

@@ -115,7 +115,7 @@
 			: { isDuplicate: false, priorLog: null }
 	);
 
-	// Advisory menu matching (draft-meal-recipient-menu-matching, option A): menu tags come from
+	// Advisory menu matching (CR-159 §C FR-MRM-04): menu tags come from
 	// the catalog item_master; an item the catalog does not know counts as a general menu.
 	const itemMastersQuery = useItemMasters(() => shelterCode ?? null);
 	const selectedMenu = $derived(
@@ -151,11 +151,23 @@
 	}
 
 	// The duplicate-meal and menu-match preflights need their data before a confirm; without it
-	// they read as "no warning" and the override dialog would be skipped.
+	// they read as "no warning" and the override dialog would be skipped. A failed load blocks the
+	// confirm too (fail closed) until a retry succeeds.
+	const needsRecipientLogs = $derived(recipientSelection?.recipientType === 'evacuee');
 	const preflightLoading = $derived(
-		itemMastersQuery.isPending ||
-			(recipientSelection?.recipientType === 'evacuee' && recipientLogsQuery.isPending)
+		itemMastersQuery.isPending || (needsRecipientLogs && recipientLogsQuery.isPending)
 	);
+	const preflightError = $derived(
+		itemMastersQuery.isError || (needsRecipientLogs && recipientLogsQuery.isError)
+	);
+	const preflightRetrying = $derived(
+		itemMastersQuery.isFetching || (needsRecipientLogs && recipientLogsQuery.isFetching)
+	);
+
+	function retryPreflight() {
+		if (itemMastersQuery.isError) void itemMastersQuery.refetch();
+		if (needsRecipientLogs && recipientLogsQuery.isError) void recipientLogsQuery.refetch();
+	}
 
 	const isQtyValid = $derived.by(() => {
 		const res = validatePositiveQuantity(qtyInput);
@@ -184,6 +196,7 @@
 			localSubmitError = 'จำนวนที่ระบุเกินยอดคงเหลือในมือ';
 			return;
 		}
+		if (preflightLoading || preflightError) return;
 
 		// Duplicate meal or menu mismatch: open the override warning modal (reason required)
 		if (duplicatePreflight.isDuplicate || menuPreflight.isMismatch) {
@@ -395,6 +408,32 @@
 			</div>
 		{/if}
 
+		<!-- Preflight load failure: confirm stays blocked until the checks can run -->
+		{#if preflightError}
+			<div
+				class="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm text-red-800"
+				role="alert"
+			>
+				<AlertCircle class="mt-0.5 size-4 shrink-0 text-red-600" aria-hidden="true" />
+				<div class="flex-1">
+					<p class="font-bold">ตรวจเมนูและประวัติการรับอาหารไม่สำเร็จ</p>
+					<p class="mt-0.5 text-xs">ยังบันทึกการแจกไม่ได้จนกว่าระบบจะตรวจได้ ลองใหม่อีกครั้ง</p>
+				</div>
+				<Button
+					type="button"
+					variant="outline"
+					size="sm"
+					onclick={retryPreflight}
+					disabled={preflightRetrying}
+				>
+					{#if preflightRetrying}
+						<Loader class="size-4 animate-spin" aria-hidden="true" />
+					{/if}
+					ลองใหม่
+				</Button>
+			</div>
+		{/if}
+
 		<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 			<QtyStepper
 				id="food-qty-input"
@@ -437,6 +476,7 @@
 			disabled={recordFoodMutation.isPending ||
 				capacitySummary.isExhausted ||
 				preflightLoading ||
+				preflightError ||
 				!isQtyValid ||
 				!canDistribute}
 			class="h-14 w-full rounded-xl bg-amber-600 text-base font-bold hover:bg-amber-700"

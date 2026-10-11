@@ -215,28 +215,28 @@ describe('requireDistributionDesk (Station 4 route guard)', () => {
 		mocks.selectedShelterCode = null;
 	});
 
-	it('admits SA, SM, SC, WS, REG and DST of the selected shelter', async () => {
+	it('admits SA, SM and DST of the selected shelter (CR-161 R5)', async () => {
 		expect(await passes(requireDistributionDesk, ['system_admin'])).toBe(true);
-		for (const cap of [
-			'shelter_manager',
-			'supply_coordinator',
-			'warehouse_staff',
-			'registration_staff',
-			'distribution_staff'
-		]) {
+		for (const cap of ['shelter_manager', 'distribution_staff']) {
 			expect(await passes(requireDistributionDesk, ['shelter:SH001', `SH001:${cap}`])).toBe(true);
 		}
 	});
 
-	it('redirects other staff roles and a bare shelter scope', async () => {
-		for (const cap of ['kitchen_staff', 'triage_staff']) {
+	it('redirects REG, SC, WH, other staff roles and a bare shelter scope', async () => {
+		for (const cap of [
+			'registration_staff',
+			'supply_coordinator',
+			'warehouse_staff',
+			'kitchen_staff',
+			'triage_staff'
+		]) {
 			expect(await passes(requireDistributionDesk, ['shelter:SH001', `SH001:${cap}`])).toBe(false);
 		}
 		expect(await passes(requireDistributionDesk, ['shelter:SH001'])).toBe(false);
 	});
 
 	it('is scoped to the selected shelter', async () => {
-		for (const cap of ['registration_staff', 'distribution_staff']) {
+		for (const cap of ['shelter_manager', 'distribution_staff']) {
 			const roles = ['shelter:SH001', 'shelter:SH002', `SH001:${cap}`];
 			expect(await passes(requireDistributionDesk, roles, 'SH001')).toBe(true);
 			expect(await passes(requireDistributionDesk, roles, 'SH002')).toBe(false);

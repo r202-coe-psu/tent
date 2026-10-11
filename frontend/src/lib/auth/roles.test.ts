@@ -3,6 +3,7 @@ import {
 	formatRoleList,
 	canCancelHold,
 	canAccessUnassignedRegistrationQueue,
+	canAccessDistributionDesk,
 	canAccessMedicalScreening,
 	canAccessVolunteerBackoffice,
 	canAccessZoning,
@@ -321,6 +322,19 @@ describe('distribution_staff capability', () => {
 		const roles = ['shelter:SH001', 'shelter:SH002', 'SH001:distribution_staff'];
 		expect(hasCapabilityInShelter(roles, 'SH001', DISTRIBUTION_STAFF)).toBe(true);
 		expect(hasCapabilityInShelter(roles, 'SH002', DISTRIBUTION_STAFF)).toBe(false);
+	});
+
+	it('alone (with SA and SM) opens the Distribution Desk page (CR-161 R5)', () => {
+		expect(canAccessDistributionDesk(['system_admin'], 'SH001')).toBe(true);
+		for (const cap of ['shelter_manager', DISTRIBUTION_STAFF]) {
+			expect(canAccessDistributionDesk(['shelter:SH001', `SH001:${cap}`], 'SH001')).toBe(true);
+			expect(canAccessDistributionDesk(['shelter:SH001', `SH001:${cap}`], 'SH002')).toBe(false);
+		}
+		for (const cap of ['registration_staff', 'supply_coordinator', 'warehouse_staff']) {
+			expect(canAccessDistributionDesk(['shelter:SH001', `SH001:${cap}`], 'SH001')).toBe(false);
+		}
+		// Legacy flat role with a single shelter scope (CR-161 R1).
+		expect(canAccessDistributionDesk(['shelter:SH001', DISTRIBUTION_STAFF], 'SH001')).toBe(true);
 	});
 
 	it('has a Thai display label', () => {

@@ -94,13 +94,21 @@ export class RequisitionTicketRemoteRepository implements RequisitionTicketRepos
 		// shape) and pre-CR-121 legacy docs. Listing is Flow 2 only and skips anything that
 		// fails the strict schema, so one foreign doc cannot empty the whole desk; `get()`
 		// stays strict.
+		const invalidIds: string[] = [];
 		const parsed = docs.flatMap((d) => {
 			if (!FLOW2_LIST_TYPES.has((d as { requisition_type?: string }).requisition_type ?? '')) {
 				return [];
 			}
 			const result = requisitionTicketDocSchema.safeParse(d);
-			return result.success ? [result.data as RequisitionTicket] : [];
+			if (result.success) return [result.data as RequisitionTicket];
+			invalidIds.push(d._id);
+			return [];
 		});
+		if (invalidIds.length > 0) {
+			console.warn(
+				`[requisition_ticket] Skipped ${invalidIds.length} Flow 2 ticket(s) in "${this.dbName}" that fail the schema: ${invalidIds.join(', ')}`
+			);
+		}
 		return parsed.filter((ticket) => {
 			if (filter?.status && ticket.status !== filter.status) return false;
 			if (filter?.requisition_type && ticket.requisition_type !== filter.requisition_type)

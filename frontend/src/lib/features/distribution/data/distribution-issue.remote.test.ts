@@ -401,9 +401,30 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 			expect(issue._id).toMatch(/^distribution_issue:.+/);
 		});
 
+		it('allows a legacy flat distribution_staff with a single shelter scope (CR-161 R1)', async () => {
+			seedActiveEvacuee('evacuee:01J1');
+			seedActiveBatch('distribution_batch:01JBATCH1');
+
+			const issue = await repo.createIssue(
+				{
+					batch_id: 'distribution_batch:01JBATCH1',
+					evacuee_id: 'evacuee:01J1',
+					item_id: 'item:water',
+					qty: '1',
+					idempotency_key: 'idem-dist-flat'
+				},
+				{ ...distributionCtx, roles: ['shelter:SH001', 'distribution_staff'] }
+			);
+			expect(issue._id).toMatch(/^distribution_issue:.+/);
+		});
+
 		it.each([
 			['another shelter', ['shelter:SH002', 'SH002:distribution_staff']],
-			['legacy flat role (unsupported for distribution_staff)', ['distribution_staff']]
+			['legacy flat role without a shelter scope', ['distribution_staff']],
+			[
+				'legacy flat role with several shelter scopes',
+				['shelter:SH001', 'shelter:SH002', 'distribution_staff']
+			]
 		])('rejects distribution_staff from %s before mutation', async (_label, roles) => {
 			seedActiveEvacuee('evacuee:01J1');
 			seedActiveBatch('distribution_batch:01JBATCH1');

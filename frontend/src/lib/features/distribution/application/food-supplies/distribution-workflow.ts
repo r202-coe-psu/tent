@@ -149,7 +149,7 @@ export async function recordFoodDistribution(
 		}
 	}
 
-	// Food safety window (CR-121 FR-DST-03; draft-onsite-distribution FR-MQW-06 B): the
+	// Food safety window (CR-121 FR-DST-03; CR-159 FR-MQW-06 B): the
 	// dispatched lot's expiry. Advisory — expired food may still go out, stamped on the log.
 	// Injected deps without a ledgerReader skip the lot lookup (callers own every dependency).
 	const ledgerReader = deps ? deps.ledgerReader : operationsRepository(ctx.shelterCode);

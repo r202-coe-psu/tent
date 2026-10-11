@@ -1,5 +1,5 @@
 /**
- * Ready-meal safety window at the distribution desk (draft-onsite-distribution FR-MQW-06,
+ * Ready-meal safety window at the distribution desk (CR-159 FR-MQW-06,
  * decided B on 2026-10-10): the clock is the `lot.expiry` of the stock lot the dispatch
  * `distribute` ledger row drew for the ticket item (via `stock_ledger.lot_ref`). No ticket
  * schema change. Expired food may still be handed over; the log is stamped

@@ -171,8 +171,14 @@ describe('RequisitionTicketRemoteRepository', () => {
 			items: [{ item_id: 'item-dist-8801', name: 'Legacy', quantity: 30 }]
 		});
 
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		const tickets = await repo.list();
 		expect(tickets.map((t) => t._id)).toEqual([food._id]);
+		// Only the malformed Flow 2 doc is reported; kitchen tickets are out of scope, not invalid.
+		expect(warn).toHaveBeenCalledTimes(1);
+		expect(warn.mock.calls[0][0]).toContain('Skipped 1 Flow 2 ticket(s)');
+		expect(warn.mock.calls[0][0]).toContain('requisition_ticket:01JLEGACY000000000000000000');
+		warn.mockRestore();
 		await expect(repo.list({ requisition_type: 'kitchen' })).resolves.toEqual([]);
 	});
 

@@ -20,7 +20,8 @@ export type PortalPreviewRole =
 	| 'warehouse_staff'
 	| 'volunteer_coordinator'
 	| 'security_officer'
-	| 'facility_staff';
+	| 'facility_staff'
+	| 'distribution_staff';
 
 /** Role options in picker order. The first option is the admin's own view (no preview). */
 export const PORTAL_PREVIEW_ROLES: readonly { value: PortalPreviewRole; label: string }[] = [
@@ -34,7 +35,8 @@ export const PORTAL_PREVIEW_ROLES: readonly { value: PortalPreviewRole; label: s
 	{ value: 'warehouse_staff', label: 'คลังสินค้า' },
 	{ value: 'volunteer_coordinator', label: 'ประสานงานอาสา' },
 	{ value: 'security_officer', label: 'รักษาความปลอดภัย' },
-	{ value: 'facility_staff', label: 'อาคารสถานที่' }
+	{ value: 'facility_staff', label: 'อาคารสถานที่' },
+	{ value: 'distribution_staff', label: 'จุดแจกจ่าย' }
 ];
 
 /** `ตามศูนย์` = the selected shelter's real flag; `เปิด` / `ปิด` force it. */

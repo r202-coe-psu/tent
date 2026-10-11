@@ -1,6 +1,6 @@
 /**
  * Recipient ↔ ready-meal menu matching at the distribution desk
- * (`draft-onsite-distribution.md` §C, decided 2026-10-10):
+ * (`CR-159-onsite-distribution.md` §C, decided 2026-10-10):
  * - FR-MRM-00 A / FR-MRM-04 A — in V1; a mismatch needs an override with a reason.
  * - FR-MRM-01 VEGAN B — VEGAN is not derived for recipients and a VEGAN tag on a menu is
  *   ignored, so anyone may take a VEGAN menu without an override.

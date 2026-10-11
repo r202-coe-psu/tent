@@ -1812,7 +1812,7 @@ export class DistributionRemoteRepository implements DistributionRepository {
 			hasStaffCapability(ctx.roles, 'registration_staff', ctx.shelterCode) ||
 			ctx.roles.includes(`${ctx.shelterCode}:registration_staff`) ||
 			ctx.roles.includes('registration_staff');
-		// New role: compound-only, no legacy flat fallback.
+		// Compound role, or legacy flat role when the user holds a single shelter scope (CR-161 R1).
 		const hasDistributionRole = hasStaffCapability(ctx.roles, DISTRIBUTION_STAFF, ctx.shelterCode);
 		const hasManagerRole =
 			isShelterManager(ctx.roles, ctx.shelterCode) ||
