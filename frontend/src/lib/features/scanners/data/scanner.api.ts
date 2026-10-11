@@ -69,7 +69,7 @@ export async function updateScannerDevice(
 	return scannerDeviceSummarySchema.parse(payload);
 }
 
-/** Delete a device by `device_id` (SA only). Server-side so its staff PIN is removed with it. */
+/** Delete a device by `device_id`. Server-side so its staff PIN is removed with it. */
 export async function deleteScannerDevice(deviceId: string): Promise<void> {
 	const response = await fetch(`/api/v1/scanner/devices/${encodeURIComponent(deviceId)}`, {
 		method: 'DELETE',
@@ -78,19 +78,19 @@ export async function deleteScannerDevice(deviceId: string): Promise<void> {
 	if (response.ok) return;
 	const payload: unknown = await response.json().catch(() => null);
 	if (response.status === 401) throw new Error('กรุณาเข้าสู่ระบบใหม่');
-	if (response.status === 403) throw new Error('เฉพาะผู้ดูแลระบบ (SA) เท่านั้นที่ลบเครื่องสแกนได้');
+	if (response.status === 403) throw new Error('ไม่มีสิทธิ์ลบเครื่องสแกนของศูนย์นี้');
 	if (response.status === 404) throw new Error('ไม่พบเครื่องสแกนนี้');
 	if (response.status === 409) throw new Error('มีการแก้ไขเครื่องนี้พร้อมกัน กรุณาลองใหม่อีกครั้ง');
 	throw new Error(responseMessage(payload, 'ไม่สามารถลบเครื่องสแกนได้'));
 }
 
-// ---------------------------------------------------------------- Staff PIN (SA only)
+// ---------------------------------------------------------------- Staff PIN
 
 /** Thai, PIN-free message for a failed staff-PIN admin call. */
 function staffPinErrorMessage(status: number, payload: unknown, fallback: string): string {
 	if (status === 400 || status === 422) return responseMessage(payload, 'PIN ไม่ถูกต้อง');
 	if (status === 401) return 'กรุณาเข้าสู่ระบบใหม่';
-	if (status === 403) return 'เฉพาะผู้ดูแลระบบ (SA) เท่านั้นที่จัดการ PIN ได้';
+	if (status === 403) return 'ไม่มีสิทธิ์จัดการ PIN ของเครื่องนี้';
 	if (status === 404) return 'ไม่พบเครื่องสแกนนี้';
 	if (status === 409 && errorCode(payload) === 'staff_pin_not_set') {
 		return 'เครื่องนี้ยังไม่ได้ตั้ง PIN';

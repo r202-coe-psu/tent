@@ -1,7 +1,12 @@
 import type { ResolvedPathname } from '$app/types';
 import { resolve } from '$app/paths';
 import type { Icon } from '@lucide/svelte';
-import { isShelterManager, isSystemAdmin } from '$lib/auth/roles';
+import {
+	hasCapabilityAnywhere,
+	isShelterManager,
+	isSystemAdmin,
+	SCANNER_MANAGER_CAPABILITIES
+} from '$lib/auth/roles';
 import Users from '@lucide/svelte/icons/users';
 import HeartHandshake from '@lucide/svelte/icons/heart-handshake';
 import ClipboardList from '@lucide/svelte/icons/clipboard-list';
@@ -18,6 +23,8 @@ import MapPin from '@lucide/svelte/icons/map-pin';
 import UtensilsCrossed from '@lucide/svelte/icons/utensils-crossed';
 import FlaskConical from '@lucide/svelte/icons/flask-conical';
 import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
+import Cpu from '@lucide/svelte/icons/cpu';
+import MonitorSmartphone from '@lucide/svelte/icons/monitor-smartphone';
 
 type Leaf = {
 	label: string;
@@ -149,6 +156,19 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				icon: Building
 			},
 			{ label: 'จัดการผู้ใช้งานและสิทธิ์', href: resolve('/back-office/users'), icon: UserCog },
+			{
+				label: 'จัดการ Kiosk',
+				href: null,
+				icon: MonitorSmartphone,
+				children: [
+					{
+						label: 'จัดการอุปกรณ์',
+						href: resolve('/back-office/scanners'),
+						icon: Cpu,
+						visibleTo: (roles) => hasCapabilityAnywhere(roles, SCANNER_MANAGER_CAPABILITIES)
+					}
+				]
+			},
 			{
 				label: 'จัดการข้อมูลหลัก',
 				href: null,

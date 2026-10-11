@@ -56,7 +56,7 @@ describe('scanner staff PIN api', () => {
 	});
 
 	it.each([
-		[403, { error: { code: 'FORBIDDEN', message: 'x' } }, 'เฉพาะผู้ดูแลระบบ'],
+		[403, { error: { code: 'FORBIDDEN', message: 'x' } }, 'ไม่มีสิทธิ์จัดการ PIN ของเครื่องนี้'],
 		[404, { error: { code: 'NOT_FOUND', message: 'x' } }, 'ไม่พบเครื่อง'],
 		[409, { error: { code: 'staff_pin_not_set', message: 'x' } }, 'ยังไม่ได้ตั้ง PIN'],
 		[409, { error: { code: 'CONFLICT', message: 'x' } }, 'แก้ไขเครื่องนี้พร้อมกัน'],
@@ -90,7 +90,7 @@ describe('deleteScannerDevice', () => {
 	});
 
 	it.each([
-		[403, 'เฉพาะผู้ดูแลระบบ'],
+		[403, 'ไม่มีสิทธิ์ลบเครื่องสแกนของศูนย์นี้'],
 		[404, 'ไม่พบเครื่อง'],
 		[409, 'แก้ไขเครื่องนี้พร้อมกัน'],
 		[503, 'ไม่สามารถลบเครื่องสแกนได้']

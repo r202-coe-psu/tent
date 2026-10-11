@@ -144,24 +144,34 @@ describe('real backofficeNavbarGroups — visible leaves per role (regression gu
 		'5. พารามิเตอร์',
 		'7. โลจิสติกส์ & GIS'
 	];
-	const withSop = [...everyoneSees.slice(0, 5), sopSimulation, ...everyoneSees.slice(5)];
+	const scannerDevices = 'จัดการอุปกรณ์';
+	const afterUsers = everyoneSees.indexOf('จัดการผู้ใช้งานและสิทธิ์') + 1;
+	const withScanners = [
+		...everyoneSees.slice(0, afterUsers),
+		scannerDevices,
+		...everyoneSees.slice(afterUsers)
+	];
+	const withSopAndScanners = [...withScanners.slice(0, 5), sopSimulation, ...withScanners.slice(5)];
 
 	it('system_admin sees every leaf', () => {
-		expect(visibleLeafLabels(ctx(['system_admin']))).toEqual(withSop);
+		expect(visibleLeafLabels(ctx(['system_admin']))).toEqual(withSopAndScanners);
 	});
 
 	it('the shelter_manager of the active shelter sees every leaf', () => {
 		const roles = ['shelter:SH001', 'SH001:shelter_manager'];
-		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual(withSop);
+		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual(withSopAndScanners);
 	});
 
-	it('registration_staff does not see the manager-only SOP simulation', () => {
+	it('registration_staff sees neither the SOP simulation nor the kiosk device management', () => {
 		const roles = ['shelter:SH001', 'SH001:registration_staff'];
-		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual(everyoneSees);
+		const labels = visibleLeafLabels(ctx(roles, 'SH001'));
+		expect(labels).toEqual(everyoneSees);
+		expect(labels).not.toContain(scannerDevices);
+		expect(labels).not.toContain('จัดการ Kiosk');
 	});
 
-	it('a manager of another shelter does not see the SOP simulation either', () => {
+	it('a manager of another shelter lacks the SOP simulation but keeps the kiosk devices', () => {
 		const roles = ['shelter:SH002', 'SH002:shelter_manager'];
-		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual(everyoneSees);
+		expect(visibleLeafLabels(ctx(roles, 'SH001'))).toEqual(withScanners);
 	});
 });

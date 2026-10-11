@@ -2,41 +2,35 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
-	import * as Select from '$lib/components/ui/select/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { toast } from 'svelte-sonner';
 	import { scannerDeviceInputSchema, type CreatedScannerDevice } from '../domain/scanner.schema';
 	import { useCreateScannerDevice } from '../application/queries';
-	import { useShelters } from '$lib/features/shelters';
+	import ShelterScopeSelect from '$lib/components/shelter-scope-select.svelte';
 
 	let {
 		open = $bindable(false),
+		fixedShelterCode,
 		oncreated
 	}: {
 		open?: boolean;
+		/** `null` = system admin picks any shelter; a code = shelter manager, locked to it. */
+		fixedShelterCode: string | null;
 		oncreated: (created: CreatedScannerDevice) => void;
 	} = $props();
 
 	const createMutation = useCreateScannerDevice();
-	const sheltersQuery = useShelters();
-
-	const shelters = $derived(
-		(sheltersQuery.data ?? []).slice().sort((a, b) => a.name.localeCompare(b.name, 'th'))
-	);
-
 	let deviceId = $state('');
 	let name = $state('');
-	let shelterCode = $state('');
+	let pickedShelterCode = $state<string | undefined>(undefined);
 	let stationName = $state('จุดคัดกรองหลัก');
 
-	const selectedShelterCode = $derived(
-		shelters.some((s) => s.code === shelterCode) ? shelterCode : (shelters[0]?.code ?? 'SH001')
-	);
+	const shelterCode = $derived(fixedShelterCode ?? pickedShelterCode);
 
 	function resetForm() {
 		deviceId = '';
 		name = '';
-		shelterCode = '';
+		pickedShelterCode = undefined;
 		stationName = 'จุดคัดกรองหลัก';
 	}
 
@@ -46,10 +40,14 @@
 	}
 
 	function handleCreate() {
+		if (!shelterCode) {
+			toast.error('กรุณาเลือกศูนย์พักพิง');
+			return;
+		}
 		const parsed = scannerDeviceInputSchema.safeParse({
 			device_id: deviceId,
 			name,
-			shelter_code: selectedShelterCode.toUpperCase(),
+			shelter_code: shelterCode.toUpperCase(),
 			station_name: stationName,
 			status: 'active'
 		});
@@ -113,31 +111,19 @@
 			</div>
 
 			<div class="grid gap-2">
-				<Label for="shelter-select" class="text-sm font-semibold">
+				<span class="text-sm font-semibold">
 					ศูนย์พักพิง <span class="text-destructive">*</span>
-				</Label>
-				<Select.Root
-					type="single"
-					value={selectedShelterCode}
-					onValueChange={(value) => (shelterCode = value ?? '')}
-				>
-					<Select.Trigger id="shelter-select" class="h-11 w-full">
-						<Select.Value placeholder="เลือกศูนย์พักพิง" />
-					</Select.Trigger>
-					<Select.Content>
-						{#if shelters.length === 0}
-							<Select.Item value="SH001" label="ศูนย์พักพิงหลัก (SH001)" />
-						{:else}
-							{#each shelters as s (s.code)}
-								<Select.Item
-									value={s.code}
-									label={`${s.name} (${s.code})${s.province ? ` — จ.${s.province}` : ''}`}
-								/>
-							{/each}
-						{/if}
-					</Select.Content>
-				</Select.Root>
-				<p class="text-xs text-muted-foreground">เลือกศูนย์พักพิงประจำเครื่องสแกน</p>
+				</span>
+				<ShelterScopeSelect
+					allowedCodes={fixedShelterCode === null ? null : [fixedShelterCode]}
+					bind:value={pickedShelterCode}
+					ariaLabel="ศูนย์พักพิงประจำเครื่องสแกน"
+				/>
+				<p class="text-xs text-muted-foreground">
+					{fixedShelterCode === null
+						? 'เลือกศูนย์พักพิงประจำเครื่องสแกน'
+						: 'เครื่องจะถูกลงทะเบียนในศูนย์พักพิงที่เลือกอยู่'}
+				</p>
 			</div>
 
 			<div class="grid gap-2">

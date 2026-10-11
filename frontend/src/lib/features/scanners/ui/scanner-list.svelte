@@ -23,9 +23,9 @@
 	}: {
 		devices: ScannerDevice[];
 		onviewsecret?: (device: ScannerDevice) => void;
-		/** SA: open the reveal-PIN dialog (PIN is fetched only when SA clicks show/copy there). */
+		/** Open the reveal-PIN dialog (PIN is fetched only when the user clicks show/copy there). */
 		onviewpin?: (device: ScannerDevice) => void;
-		/** SA: open the set/regenerate-PIN dialog. */
+		/** Open the set/regenerate-PIN dialog. */
 		onsetpin?: (device: ScannerDevice) => void;
 	} = $props();
 

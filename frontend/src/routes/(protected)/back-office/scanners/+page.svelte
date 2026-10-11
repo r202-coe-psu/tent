@@ -3,6 +3,11 @@
 	import { spatial } from '$lib/tokens';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import Plus from '@lucide/svelte/icons/plus';
+	import ShelterScopeSelect from '$lib/components/shelter-scope-select.svelte';
+	import { authStore } from '$lib/stores/auth.svelte';
+	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { getShelterCode } from '$lib/db/shelter';
+	import { isSystemAdmin } from '$lib/auth/roles';
 	import {
 		CreateScannerDialog,
 		RevealScannerSecretDialog,
@@ -15,7 +20,13 @@
 		type ScannerDevice
 	} from '$lib/features/scanners';
 
-	const devicesQuery = useScannerDevices();
+	const isSA = $derived(isSystemAdmin(authStore.user?.roles ?? []));
+	const activeShelter = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
+
+	/** SA only: `undefined` = every shelter. A shelter manager is always scoped to the active one. */
+	let filter = $state<string | undefined>(undefined);
+
+	const devicesQuery = useScannerDevices(() => (isSA ? filter : activeShelter));
 
 	let createOpen = $state(false);
 	let revealOpen = $state(false);
@@ -58,11 +69,11 @@
 </script>
 
 <svelte:head>
-	<title>จัดการเครื่องสแกนบัตร (Scanners) — SmartShelter</title>
+	<title>จัดการอุปกรณ์ Kiosk — SmartShelter</title>
 </svelte:head>
 
 <StaffPageShell
-	title="เครื่องสแกนบัตรประชาชน (Smart Card Scanners)"
+	title="จัดการอุปกรณ์ Kiosk"
 	description="บริหารจัดการเครื่องอ่านบัตรประชาชน Smart Card Reader ประจำจุดคัดกรองและศูนย์พักพิง — สร้าง Device Secret เพื่อเชื่อมต่อกับ scanner_client"
 >
 	{#snippet actions()}
@@ -71,6 +82,17 @@
 			ลงทะเบียนเครื่องสแกนใหม่
 		</Button>
 	{/snippet}
+
+	{#if isSA}
+		<div class="max-w-sm">
+			<ShelterScopeSelect
+				allowedCodes={null}
+				includeAll
+				bind:value={filter}
+				ariaLabel="กรองเครื่องตามศูนย์พักพิง"
+			/>
+		</div>
+	{/if}
 
 	<div class={spatial.container.staffPageCard}>
 		{#if devicesQuery.isLoading}
@@ -97,7 +119,11 @@
 	</div>
 </StaffPageShell>
 
-<CreateScannerDialog bind:open={createOpen} oncreated={handleCreated} />
+<CreateScannerDialog
+	bind:open={createOpen}
+	fixedShelterCode={isSA ? null : activeShelter}
+	oncreated={handleCreated}
+/>
 <RevealScannerSecretDialog
 	bind:open={revealOpen}
 	device={selectedDevice}

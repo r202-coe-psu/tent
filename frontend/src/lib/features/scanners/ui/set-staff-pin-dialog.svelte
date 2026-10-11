@@ -1,6 +1,6 @@
 <script lang="ts">
 	/**
-	 * SA-only "ตั้ง PIN": choose a 6-digit PIN (+ confirm) or regenerate a random one. The PIN is
+	 * Manager "ตั้ง PIN": choose a 6-digit PIN (+ confirm) or regenerate a random one. The PIN is
 	 * kept server-side in an admin-only database; a regenerated PIN is shown here once (masked by
 	 * default) and dropped from state when the dialog closes. Toasts never contain the PIN.
 	 */

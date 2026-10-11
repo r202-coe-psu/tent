@@ -1,6 +1,6 @@
 <script lang="ts">
 	/**
-	 * SA-only "ดู PIN": the PIN is fetched from the reveal endpoint only when SA clicks show/copy
+	 * Manager "ดู PIN": the PIN is fetched from the reveal endpoint only when the user clicks show/copy
 	 * (never prefetched, never in the query cache), shown masked by default, and dropped from
 	 * state as soon as the dialog closes or switches device. Toasts never contain the PIN.
 	 */
