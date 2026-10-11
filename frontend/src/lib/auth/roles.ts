@@ -129,6 +129,47 @@ export function capabilitiesForShelter(
 	return [...found];
 }
 
+/** Shelters where the user holds any of `capabilities` (SA → null = every shelter). */
+export function shelterCodesWithCapability(
+	roles: readonly string[],
+	capabilities: readonly string[]
+): string[] | null {
+	if (isSystemAdmin(roles)) return null;
+	return shelterCodesFromRoles(roles).filter((code) =>
+		capabilities.some((cap) => hasCapabilityInShelter(roles, code, cap))
+	);
+}
+
+/** True when every code is in the user's scope for one of `capabilities` (SA always; empty list never). */
+export function canManageInShelters(
+	roles: readonly string[],
+	shelterCodes: readonly string[],
+	capabilities: readonly string[]
+): boolean {
+	if (isSystemAdmin(roles)) return true;
+	if (shelterCodes.length === 0) return false;
+	return shelterCodes.every((code) =>
+		capabilities.some((cap) => hasCapabilityInShelter(roles, code, cap))
+	);
+}
+
+/** True when any of `capabilities` is held in at least one shelter (SA always) — nav visibility. */
+export function hasCapabilityAnywhere(
+	roles: readonly string[],
+	capabilities: readonly string[]
+): boolean {
+	const codes = shelterCodesWithCapability(roles, capabilities);
+	return codes === null || codes.length > 0;
+}
+
+/** Capabilities that manage scanner / kiosk devices (CR scanner back-office). */
+export const SCANNER_MANAGER_CAPABILITIES = [SHELTER_MANAGER] as const;
+
+/** True when the user may manage scanner devices in `shelterCode` (SA, or its shelter_manager). */
+export function canManageScanners(roles: readonly string[], shelterCode: string): boolean {
+	return canManageInShelters(roles, [shelterCode], SCANNER_MANAGER_CAPABILITIES);
+}
+
 /** Shelter codes where the user holds `shelter_manager` (compound or legacy). */
 export function managerShelterCodes(roles: readonly string[]): string[] {
 	return shelterCodesFromRoles(roles).filter((code) =>

@@ -7,6 +7,10 @@ import {
 	canAccessMedicalScreening,
 	canAccessVolunteerBackoffice,
 	canAccessZoning,
+	canManageInShelters,
+	hasCapabilityAnywhere,
+	canManageScanners,
+	SCANNER_MANAGER_CAPABILITIES,
 	capabilitiesForShelter,
 	compoundCapabilityRole,
 	hasCapabilityInShelter,
@@ -27,6 +31,7 @@ import {
 	STAFF_CAPABILITIES,
 	shelterCodeFromRoles,
 	shelterCodesFromRoles,
+	shelterCodesWithCapability,
 	shelterScopeRole
 } from './roles';
 
@@ -343,5 +348,104 @@ describe('distribution_staff capability', () => {
 		expect(formatRoleList(['shelter:SH001', 'SH001:distribution_staff'])).toBe(
 			'SH001:เจ้าหน้าที่แจกจ่าย'
 		);
+	});
+});
+
+describe('shelterCodesWithCapability', () => {
+	it('returns null (every shelter) for a system admin', () => {
+		expect(shelterCodesWithCapability(['system_admin'], ['shelter_manager'])).toBeNull();
+	});
+
+	it('lists the shelters where a compound shelter_manager holds the capability', () => {
+		expect(
+			shelterCodesWithCapability(['shelter:A', 'A:shelter_manager'], ['shelter_manager'])
+		).toEqual(['A']);
+		expect(
+			shelterCodesWithCapability(
+				['shelter:A', 'shelter:B', 'A:shelter_manager', 'B:shelter_manager'],
+				['shelter_manager']
+			)
+		).toEqual(['A', 'B']);
+	});
+
+	it('honours the legacy flat role when the user has a single shelter scope', () => {
+		expect(
+			shelterCodesWithCapability(['shelter:A', 'shelter_manager'], ['shelter_manager'])
+		).toEqual(['A']);
+	});
+
+	it('only lists the shelters where the capability is held (SM A + registration_staff B)', () => {
+		expect(
+			shelterCodesWithCapability(
+				['shelter:A', 'shelter:B', 'A:shelter_manager', 'B:registration_staff'],
+				['shelter_manager']
+			)
+		).toEqual(['A']);
+	});
+
+	it('does not count a compound capability without its shelter scope role', () => {
+		expect(shelterCodesWithCapability(['A:shelter_manager'], ['shelter_manager'])).toEqual([]);
+	});
+
+	it('matches any of several capabilities', () => {
+		const roles = ['shelter:A', 'shelter:B', 'A:shelter_manager', 'B:registration_staff'];
+		expect(shelterCodesWithCapability(roles, ['shelter_manager', 'registration_staff'])).toEqual([
+			'A',
+			'B'
+		]);
+	});
+});
+
+describe('canManageInShelters', () => {
+	it('is true for a system admin and false for an empty shelter list of a non-SA', () => {
+		expect(canManageInShelters(['system_admin'], ['A', 'B'], ['shelter_manager'])).toBe(true);
+		expect(canManageInShelters(['shelter:A', 'A:shelter_manager'], [], ['shelter_manager'])).toBe(
+			false
+		);
+	});
+
+	it('requires every shelter to be in scope', () => {
+		const roles = ['shelter:A', 'shelter:B', 'A:shelter_manager', 'B:registration_staff'];
+		expect(canManageInShelters(roles, ['A'], ['shelter_manager'])).toBe(true);
+		expect(canManageInShelters(roles, ['A', 'B'], ['shelter_manager'])).toBe(false);
+		expect(canManageInShelters(roles, ['A', 'B'], ['shelter_manager', 'registration_staff'])).toBe(
+			true
+		);
+	});
+
+	it('is false for a compound capability without its shelter scope role', () => {
+		expect(canManageInShelters(['A:shelter_manager'], ['A'], ['shelter_manager'])).toBe(false);
+	});
+
+	it('accepts the legacy flat role for a single-shelter user', () => {
+		expect(canManageInShelters(['shelter:A', 'shelter_manager'], ['A'], ['shelter_manager'])).toBe(
+			true
+		);
+	});
+});
+
+describe('hasCapabilityAnywhere', () => {
+	it('is true for SA or when held in at least one shelter, false otherwise', () => {
+		expect(hasCapabilityAnywhere(['system_admin'], ['shelter_manager'])).toBe(true);
+		expect(
+			hasCapabilityAnywhere(
+				['shelter:A', 'shelter:B', 'A:registration_staff', 'B:shelter_manager'],
+				['shelter_manager']
+			)
+		).toBe(true);
+		expect(hasCapabilityAnywhere(['shelter:A', 'A:registration_staff'], ['shelter_manager'])).toBe(
+			false
+		);
+		expect(hasCapabilityAnywhere([], ['shelter_manager'])).toBe(false);
+	});
+});
+
+describe('canManageScanners', () => {
+	it('allows SA and the shelter_manager of that shelter only', () => {
+		expect(SCANNER_MANAGER_CAPABILITIES).toEqual(['shelter_manager']);
+		expect(canManageScanners(['system_admin'], 'A')).toBe(true);
+		expect(canManageScanners(['shelter:A', 'A:shelter_manager'], 'A')).toBe(true);
+		expect(canManageScanners(['shelter:A', 'A:shelter_manager'], 'B')).toBe(false);
+		expect(canManageScanners(['shelter:A', 'A:registration_staff'], 'A')).toBe(false);
 	});
 });
