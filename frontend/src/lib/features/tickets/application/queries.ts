@@ -1,4 +1,9 @@
-import { createMutation, createQuery, type QueryClient } from '@tanstack/svelte-query';
+import {
+	createMutation,
+	createQuery,
+	useQueryClient,
+	type QueryClient
+} from '@tanstack/svelte-query';
 import {
 	subscribeDataChanges,
 	type SubscribeDataChangesHandle
@@ -6,6 +11,7 @@ import {
 import { getShelterDb, getShelterCode } from '$lib/db/shelter';
 import type { AuthorContext } from '$lib/db/model';
 import { ticketRepository } from '../data/ticket.remote';
+import { operationsKeys } from '$lib/features/operations';
 import type { CreateTicketInput, RequisitionTicket, TicketItemInput } from '../domain/ticket';
 
 export const ticketKeys = {
@@ -16,9 +22,26 @@ export const ticketKeys = {
 	detail: (id: string) => [...ticketKeys.all, 'detail', getShelterCode(), id] as const
 };
 
+/**
+ * Mutation that refreshes the writer's own UI on success instead of waiting for
+ * the delayed `_changes` feed. Dispatch/receive write stock_ledger, so operations
+ * is refreshed too.
+ */
+function ticketMutation<TData, TVariables>(mutationFn: (variables: TVariables) => Promise<TData>) {
+	const queryClient = useQueryClient();
+	return createMutation(() => ({
+		mutationFn,
+		onSuccess: () => {
+			void queryClient.invalidateQueries({ queryKey: ticketKeys.all });
+			void queryClient.invalidateQueries({ queryKey: operationsKeys.all });
+		}
+	}));
+}
+
 export const useTickets = () =>
 	createQuery(() => ({
 		queryKey: ticketKeys.list(),
+		refetchOnMount: 'always',
 		queryFn: () => ticketRepository().listTickets()
 	}));
 
@@ -43,14 +66,13 @@ export const useActiveTicketByMealPlanId = (mealPlanId: () => string | undefined
 	});
 
 export const useCreateTicket = () =>
-	createMutation(() => ({
-		mutationFn: ({ input, ctx }: { input: CreateTicketInput; ctx: AuthorContext }) =>
-			ticketRepository().createTicket(input, ctx)
-	}));
+	ticketMutation(({ input, ctx }: { input: CreateTicketInput; ctx: AuthorContext }) =>
+		ticketRepository().createTicket(input, ctx)
+	);
 
 export const useAllocateTicketItem = () =>
-	createMutation(() => ({
-		mutationFn: ({
+	ticketMutation(
+		({
 			ticket,
 			itemId,
 			allocatedQty
@@ -59,43 +81,37 @@ export const useAllocateTicketItem = () =>
 			itemId: string;
 			allocatedQty: string;
 		}) => ticketRepository().allocateTicketItem(ticket, itemId, allocatedQty)
-	}));
+	);
 
 export const useUpdateTicketItems = () =>
-	createMutation(() => ({
-		mutationFn: ({ ticket, items }: { ticket: RequisitionTicket; items: TicketItemInput[] }) =>
-			ticketRepository().updateTicketItems(ticket, items)
-	}));
+	ticketMutation(({ ticket, items }: { ticket: RequisitionTicket; items: TicketItemInput[] }) =>
+		ticketRepository().updateTicketItems(ticket, items)
+	);
 
 export const useOneStepApproveTicket = () =>
-	createMutation(() => ({
-		mutationFn: ({ ticket, ctx }: { ticket: RequisitionTicket; ctx: AuthorContext }) =>
-			ticketRepository().oneStepApproveTicket(ticket, ctx)
-	}));
+	ticketMutation(({ ticket, ctx }: { ticket: RequisitionTicket; ctx: AuthorContext }) =>
+		ticketRepository().oneStepApproveTicket(ticket, ctx)
+	);
 
 export const useApproveTicket = () =>
-	createMutation(() => ({
-		mutationFn: ({ ticket, ctx }: { ticket: RequisitionTicket; ctx: AuthorContext }) =>
-			ticketRepository().approveTicket(ticket, ctx)
-	}));
+	ticketMutation(({ ticket, ctx }: { ticket: RequisitionTicket; ctx: AuthorContext }) =>
+		ticketRepository().approveTicket(ticket, ctx)
+	);
 
 export const useDispatchTicket = () =>
-	createMutation(() => ({
-		mutationFn: ({ ticket, ctx }: { ticket: RequisitionTicket; ctx: AuthorContext }) =>
-			ticketRepository().dispatchTicket(ticket, ctx)
-	}));
+	ticketMutation(({ ticket, ctx }: { ticket: RequisitionTicket; ctx: AuthorContext }) =>
+		ticketRepository().dispatchTicket(ticket, ctx)
+	);
 
 export const useReceiveTicket = () =>
-	createMutation(() => ({
-		mutationFn: ({ ticket, ctx }: { ticket: RequisitionTicket; ctx: AuthorContext }) =>
-			ticketRepository().receiveTicket(ticket, ctx)
-	}));
+	ticketMutation(({ ticket, ctx }: { ticket: RequisitionTicket; ctx: AuthorContext }) =>
+		ticketRepository().receiveTicket(ticket, ctx)
+	);
 
 export const useCancelTicket = () =>
-	createMutation(() => ({
-		mutationFn: ({ ticket, reason }: { ticket: RequisitionTicket; reason?: string }) =>
-			ticketRepository().cancelTicket(ticket, reason)
-	}));
+	ticketMutation(({ ticket, reason }: { ticket: RequisitionTicket; reason?: string }) =>
+		ticketRepository().cancelTicket(ticket, reason)
+	);
 
 export function startTicketsLiveQuery(queryClient: QueryClient): SubscribeDataChangesHandle {
 	return subscribeDataChanges(queryClient, getShelterDb, (type) => {
