@@ -7,7 +7,10 @@
 		CreateScannerDialog,
 		RevealScannerSecretDialog,
 		ScannerList,
+		SetStaffPinDialog,
+		ViewStaffPinDialog,
 		useScannerDevices,
+		withoutScannerPlaintext,
 		type CreatedScannerDevice,
 		type ScannerDevice
 	} from '$lib/features/scanners';
@@ -19,6 +22,10 @@
 	let isNewCreated = $state(false);
 	let selectedDevice = $state.raw<ScannerDevice | CreatedScannerDevice | null>(null);
 
+	let viewPinOpen = $state(false);
+	let setPinOpen = $state(false);
+	let pinDevice = $state.raw<ScannerDevice | null>(null);
+
 	const devices = $derived(devicesQuery.data ?? []);
 
 	function handleCreated(created: CreatedScannerDevice) {
@@ -27,10 +34,26 @@
 		revealOpen = true;
 	}
 
+	/** The reveal dialog closed: keep no plaintext secret or default PIN in page state. */
+	function handleRevealClosed() {
+		if (selectedDevice) selectedDevice = withoutScannerPlaintext(selectedDevice);
+		isNewCreated = false;
+	}
+
 	function handleViewSecret(device: ScannerDevice) {
 		selectedDevice = device;
 		isNewCreated = false;
 		revealOpen = true;
+	}
+
+	function handleViewPin(device: ScannerDevice) {
+		pinDevice = device;
+		viewPinOpen = true;
+	}
+
+	function handleSetPin(device: ScannerDevice) {
+		pinDevice = device;
+		setPinOpen = true;
 	}
 </script>
 
@@ -64,10 +87,22 @@
 					: 'Failed to load scanners'}
 			</div>
 		{:else}
-			<ScannerList {devices} onviewsecret={handleViewSecret} />
+			<ScannerList
+				{devices}
+				onviewsecret={handleViewSecret}
+				onviewpin={handleViewPin}
+				onsetpin={handleSetPin}
+			/>
 		{/if}
 	</div>
 </StaffPageShell>
 
 <CreateScannerDialog bind:open={createOpen} oncreated={handleCreated} />
-<RevealScannerSecretDialog bind:open={revealOpen} device={selectedDevice} isNew={isNewCreated} />
+<RevealScannerSecretDialog
+	bind:open={revealOpen}
+	device={selectedDevice}
+	isNew={isNewCreated}
+	onclose={handleRevealClosed}
+/>
+<ViewStaffPinDialog bind:open={viewPinOpen} device={pinDevice} onsetpin={handleSetPin} />
+<SetStaffPinDialog bind:open={setPinOpen} device={pinDevice} />
