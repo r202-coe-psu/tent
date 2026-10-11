@@ -1,9 +1,13 @@
 import {
 	scannerCreateResponseSchema,
+	scannerDeviceListResponseSchema,
+	scannerDeviceSummarySchema,
 	staffPinRevealResponseSchema,
 	staffPinUpdateResponseSchema,
 	type ScannerCreateResponse,
+	type ScannerDevice,
 	type ScannerDeviceInput,
+	type ScannerDevicePatch,
 	type StaffPinReveal,
 	type StaffPinUpdateRequest,
 	type StaffPinUpdateResponse
@@ -36,6 +40,33 @@ export async function createScannerDevice(
 	const payload: unknown = await response.json().catch(() => null);
 	if (!response.ok) throw new Error(responseMessage(payload));
 	return scannerCreateResponseSchema.parse(payload);
+}
+
+/**
+ * List devices through the server. SA may omit `shelterCode` (all shelters); everyone else must
+ * pass one the server will accept (400 / 403 otherwise).
+ */
+export async function listScannerDevices(shelterCode?: string): Promise<ScannerDevice[]> {
+	const query = shelterCode ? `?shelter_code=${encodeURIComponent(shelterCode)}` : '';
+	const response = await fetch(`/api/v1/scanner/devices${query}`, { cache: 'no-store' });
+	const payload: unknown = await response.json().catch(() => null);
+	if (!response.ok) throw new Error(responseMessage(payload, 'ไม่สามารถโหลดรายการเครื่องสแกนได้'));
+	return scannerDeviceListResponseSchema.parse(payload);
+}
+
+/** Patch name / station / status of a device by `device_id` (not the registry doc `_id`). */
+export async function updateScannerDevice(
+	deviceId: string,
+	patch: ScannerDevicePatch
+): Promise<ScannerDevice> {
+	const response = await fetch(`/api/v1/scanner/devices/${encodeURIComponent(deviceId)}`, {
+		method: 'PATCH',
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify(patch)
+	});
+	const payload: unknown = await response.json().catch(() => null);
+	if (!response.ok) throw new Error(responseMessage(payload, 'ไม่สามารถแก้ไขเครื่องสแกนได้'));
+	return scannerDeviceSummarySchema.parse(payload);
 }
 
 /** Delete a device by `device_id` (SA only). Server-side so its staff PIN is removed with it. */

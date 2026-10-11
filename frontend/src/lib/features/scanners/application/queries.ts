@@ -1,23 +1,29 @@
 import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
-import { scannerRepository } from '../data/scanner.remote';
 import {
 	createScannerDevice,
 	deleteScannerDevice,
+	listScannerDevices,
 	revealScannerStaffPin,
-	setScannerStaffPin
+	setScannerStaffPin,
+	updateScannerDevice
 } from '../data/scanner.api';
-import type { ScannerDevice, StaffPinUpdateRequest } from '../domain/scanner.schema';
+import type { ScannerDevicePatch, StaffPinUpdateRequest } from '../domain/scanner.schema';
 
 export const scannerKeys = {
 	allDevices: ['scanner-devices'] as const,
-	devicesList: () => [...scannerKeys.allDevices, 'list'] as const
+	devicesList: (shelterCode?: string) =>
+		[...scannerKeys.allDevices, 'list', shelterCode ?? 'all'] as const
 };
 
-export const useScannerDevices = () =>
-	createQuery(() => ({
-		queryKey: scannerKeys.devicesList(),
-		queryFn: () => scannerRepository.listDevices()
-	}));
+/** `shelterCode` undefined = all shelters (SA only); the key carries it so a switch refetches. */
+export const useScannerDevices = (shelterCode?: () => string | undefined) =>
+	createQuery(() => {
+		const code = shelterCode?.();
+		return {
+			queryKey: scannerKeys.devicesList(code),
+			queryFn: () => listScannerDevices(code)
+		};
+	});
 
 export const useCreateScannerDevice = () => {
 	const queryClient = useQueryClient();
@@ -32,12 +38,8 @@ export const useCreateScannerDevice = () => {
 export const useUpdateScannerDevice = () => {
 	const queryClient = useQueryClient();
 	return createMutation(() => ({
-		mutationFn: (input: {
-			id: string;
-			patch: Partial<
-				Pick<ScannerDevice, 'name' | 'shelter_code' | 'station_name' | 'status' | 'last_seen_at'>
-			>;
-		}) => scannerRepository.updateDevice(input.id, input.patch),
+		mutationFn: (input: { deviceId: string; patch: ScannerDevicePatch }) =>
+			updateScannerDevice(input.deviceId, input.patch),
 		onSuccess: () => queryClient.invalidateQueries({ queryKey: scannerKeys.allDevices })
 	}));
 };

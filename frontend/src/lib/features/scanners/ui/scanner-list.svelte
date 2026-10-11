@@ -44,7 +44,7 @@
 	function handleToggleStatus(device: ScannerDevice) {
 		const nextStatus = device.status === 'active' ? 'inactive' : 'active';
 		updateMutation.mutate(
-			{ id: device.id, patch: { status: nextStatus } },
+			{ deviceId: device.device_id, patch: { status: nextStatus } },
 			{
 				onSuccess: () => toast.success(`เปลี่ยนสถานะเป็น ${nextStatus} เรียบร้อย`),
 				onError: (err) => toast.error(err instanceof Error ? err.message : 'เกิดข้อผิดพลาด')

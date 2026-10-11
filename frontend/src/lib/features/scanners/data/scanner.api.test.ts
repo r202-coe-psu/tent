@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { deleteScannerDevice, revealScannerStaffPin, setScannerStaffPin } from './scanner.api';
+import {
+	deleteScannerDevice,
+	listScannerDevices,
+	revealScannerStaffPin,
+	setScannerStaffPin,
+	updateScannerDevice
+} from './scanner.api';
 
 const fetchMock = vi.fn<typeof fetch>();
 vi.stubGlobal('fetch', fetchMock);
@@ -91,5 +97,76 @@ describe('deleteScannerDevice', () => {
 	])('maps HTTP %i to a Thai message', async (status, expected) => {
 		fetchMock.mockResolvedValueOnce(respond(status, { error: { code: 'X' } }));
 		await expect(deleteScannerDevice('kiosk-01')).rejects.toThrow(expected);
+	});
+});
+
+const summary = {
+	id: 'scanner:kiosk-01',
+	device_id: 'kiosk-01',
+	name: 'Kiosk 1',
+	shelter_code: 'SH001',
+	station_name: 'จุดคัดกรองทั่วไป',
+	status: 'active',
+	last_seen_at: null,
+	staff_pin_set: true,
+	staff_pin_is_default: false
+};
+
+describe('listScannerDevices', () => {
+	afterEach(() => {
+		fetchMock.mockReset();
+	});
+
+	it('gets the device list without a query string when no shelter is given', async () => {
+		fetchMock.mockResolvedValueOnce(respond(200, [summary]));
+		expect(await listScannerDevices()).toEqual([summary]);
+		const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit | undefined];
+		expect(url).toBe('/api/v1/scanner/devices');
+		expect(init?.method ?? 'GET').toBe('GET');
+	});
+
+	it('sends the encoded shelter_code when given', async () => {
+		fetchMock.mockResolvedValueOnce(respond(200, [summary]));
+		await listScannerDevices('SH 001');
+		expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/scanner/devices?shelter_code=SH%20001');
+	});
+
+	it('rejects a payload that does not match the summary shape', async () => {
+		fetchMock.mockResolvedValueOnce(respond(200, [{ ...summary, secret_hash: 'x' }]));
+		await expect(listScannerDevices()).rejects.toThrow();
+	});
+
+	it.each([
+		[400, 'กรุณาระบุศูนย์พักพิง'],
+		[403, 'ไม่มีสิทธิ์ดูเครื่องของศูนย์นี้']
+	])('throws the server message for HTTP %i', async (status, message) => {
+		fetchMock.mockResolvedValueOnce(respond(status, { error: { code: 'X', message } }));
+		await expect(listScannerDevices('SH002')).rejects.toThrow(message);
+	});
+});
+
+describe('updateScannerDevice', () => {
+	afterEach(() => {
+		fetchMock.mockReset();
+	});
+
+	it('patches the encoded device_id path with the JSON body and parses the summary', async () => {
+		const updated = { ...summary, status: 'inactive' };
+		fetchMock.mockResolvedValueOnce(respond(200, updated));
+		expect(await updateScannerDevice('kiosk 01', { status: 'inactive' })).toEqual(updated);
+		const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+		expect(url).toBe('/api/v1/scanner/devices/kiosk%2001');
+		expect(init.method).toBe('PATCH');
+		expect(new Headers(init.headers).get('content-type')).toBe('application/json');
+		expect(JSON.parse(init.body as string)).toEqual({ status: 'inactive' });
+	});
+
+	it('throws the server message on an error envelope', async () => {
+		fetchMock.mockResolvedValueOnce(
+			respond(404, { error: { code: 'NOT_FOUND', message: 'ไม่พบเครื่องสแกนนี้' } })
+		);
+		await expect(updateScannerDevice('kiosk-01', { name: 'A' })).rejects.toThrow(
+			'ไม่พบเครื่องสแกนนี้'
+		);
 	});
 });
