@@ -2,8 +2,8 @@
 title: Smart Shelter — Database Schema v5
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-09
-note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer; CR-135/CR-136 partner OAuth2 client name/module preset + secret reveal/edit/delete; CR-137 shrink master_data (10→4) + zone/community free text; CR-138 remove purchase doc type + withdraw purchase from stock_ledger.reason; CR-139 shelter storage points; CR-140 item_category default_class editable; CR-144/CR-145 meal_service_receipt (§2.7.3); CR-147 removes CR-146 meal_distribution_push (§2.7.4) — ticket flow ends at warehouse stock-in; CR-148 pre-register validation + evacuee religion_other/disability_other_detail (v11) + household dorm_* (v6); CR-151 kiosk pre-registration check-in (report-in arriving status & KIOSK_LOOKUP_MANGO_INDEXES); CR-154 evacuee.gender nullable + registered_via api (v12), external_bookings (§9.7), partner scopes booking-write/residency-read + module M2; decision sync 2026-10-09 — `evacuee.gender = null` ("ไม่ระบุ") ใช้ได้ทุกช่องทาง (public/kiosk/Station 1/back-office/api) เป็นค่าเริ่มต้นของฟอร์ม, `'other'` คงไว้อ่านเฉพาะ doc เดิม (UI ไม่เสนอให้เลือกใหม่, แก้ไขแล้วต้อง preserve) — ยกเลิก CR-154 FR-70/FR-71(บางส่วน)/FR-72; เพิ่ม `public_shelters.occupancy_breakdown.gender_unspecified` (null+other) พร้อม invariant `male+female+gender_unspecified = occupancy_total`; evacuee ไม่ bump schema_v (v12 รองรับ null แล้ว); ต้อง re-project `public_shelters` (worker bootstrap) หลัง deploy
+updated: 2026-10-11
+note: field-level canonical — คู่กับ data-model.md (topology/policy) และ api-contract.md (planes); CR-112/CR-113 registration foundation; CR-118 T-13 lot metadata; CR-119/CR-120/CR-121 catalog, fuel and requisition contracts; CR-124 staff Google step-up MFA on _users; CR-125 Unit of Measure (UOM) master data in catalog; decision sync 2026-09-23 — `_users.phone` เป็น optional; login ได้ทั้ง CouchDB `name` (username) และเบอร์ติดต่อ (resolve ผ่าน BFF); decision sync 2026-09-23 — `_users.organization` optional สำหรับทั้ง staff และ volunteer; CR-135/CR-136 partner OAuth2 client name/module preset + secret reveal/edit/delete; CR-137 shrink master_data (10→4) + zone/community free text; CR-138 remove purchase doc type + withdraw purchase from stock_ledger.reason; CR-139 shelter storage points; CR-140 item_category default_class editable; CR-144/CR-145 meal_service_receipt (§2.7.3); CR-147 removes CR-146 meal_distribution_push (§2.7.4) — ticket flow ends at warehouse stock-in; CR-148 pre-register validation + evacuee religion_other/disability_other_detail (v11) + household dorm_* (v6); CR-151 kiosk pre-registration check-in (report-in arriving status & KIOSK_LOOKUP_MANGO_INDEXES); CR-154 evacuee.gender nullable + registered_via api (v12), external_bookings (§9.7), partner scopes booking-write/residency-read + module M2; decision sync 2026-10-09 — `evacuee.gender = null` ("ไม่ระบุ") ใช้ได้ทุกช่องทาง (public/kiosk/Station 1/back-office/api) เป็นค่าเริ่มต้นของฟอร์ม, `'other'` คงไว้อ่านเฉพาะ doc เดิม (UI ไม่เสนอให้เลือกใหม่, แก้ไขแล้วต้อง preserve) — ยกเลิก CR-154 FR-70/FR-71(บางส่วน)/FR-72; เพิ่ม `public_shelters.occupancy_breakdown.gender_unspecified` (null+other) พร้อม invariant `male+female+gender_unspecified = occupancy_total`; evacuee ไม่ bump schema_v (v12 รองรับ null แล้ว); ต้อง re-project `public_shelters` (worker bootstrap) หลัง deploy; CR-157 donation_slot แยกคิว dropoff/pickup (§2.13, v2); CR-159 evacuee `preferred_zone` (v13); CR-162 kiosk banner — doc type ใหม่ `kiosk_banner` v1 ใน `registry` (§3.12) + capability role `banner_staff` ใน `_users.roles` (§6)
 ---
 
 # Database Schema v5 — field-level
@@ -40,6 +40,7 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 
 ### 1.1 `evacuee` — `evacuee:{ulid}`
 
+> **schema_v 13** — เพิ่ม `preferred_zone` (opt) — โซนที่ Station 1 ระบุไว้แบบไม่บังคับ เป็นค่าแนะนำให้ Station 3 เท่านั้น ไม่ใช่การจัดโซน ([CR-159](../changes/02-people/CR-159-station1-preferred-zone.md)).
 > **decision sync 2026-10-09 (ไม่ bump `schema_v`)** — `gender = null` ("ไม่ระบุ") ใช้ได้ **ทุกช่องทาง** ไม่จำกัดเฉพาะ `registered_via = api`; ฟอร์มลงทะเบียนทุกช่องทาง preselect "ไม่ระบุ" และไม่บังคับเลือกเพศ. ยกเลิก CR-154 FR-70, FR-71 (เหลือเพียง "UI แสดง `null` เป็น ไม่ระบุ + แก้เพศได้ทุกช่องทาง") และ FR-72 (ย้ายไป `public_shelters.occupancy_breakdown.gender_unspecified`, §9.1).
 > **schema_v 12** — `gender` รับ `null` ได้ (ยังไม่ทราบ — partner booking เป็นต้น; ขยายเป็นทุกช่องทางโดย decision sync 2026-10-09); `registered_via` เพิ่ม `api` ([CR-154](../changes/10-eoc/CR-154-m2-partner-booking-residency.md)).
 > **schema_v 11** — เพิ่ม `religion_other`, `disability_other_detail`; validation ปีเกิด/บัตร ปชช./เบอร์ `+66` เข้มขึ้น ([CR-148](../changes/00-baseline/CR-148-pre-register-validation-and-fields.md)).
@@ -80,6 +81,7 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 | `photo` | str\|null | opt | → image:{ulid} (§1.6) (CR-049) null/ไม่มี field = ไม่มีรูป |
 | `card_snapshot` | {...} | opt | snapshot ข้อมูลชิปบัตรและที่อยู่ตามบัตรประชาชน (CR-084) |
 | `current_stay` | {`status`, `zone`, `since`} | req | `status`: enum(`pre_registered`,`arriving`,`active`,`room_confirmed`,`temporary_leave`,`transferred`,`checked_out`,`deceased`,`cancelled`) · `zone`: str\|null · `since`: ts — snapshot เท่านั้น ความจริง = movement · `room_confirmed` = Zone Arrival Confirmation หลัง `active` (CR-112) |
+| `preferred_zone` | str\|null | opt | zone `code` ของศูนย์เดียวกันที่ Station 1 ระบุไว้ (ไม่บังคับ) — **ไม่ใช่การจัดโซน**: ไม่เปลี่ยน `current_stay`, ไม่มีผลต่อ queue/occupancy; Station 3 ใช้เป็นค่าเลือกเริ่มต้นเมื่อไม่มีอาการ EWAR และโซนยังเปิด; staff-only (ไม่ส่งออก public/external) (CR-159) |
 | `privacy` | {`search_excluded`:bool} | req | default `{search_excluded:false}` (opt-out model) |
 | `registered_via` | enum(`kiosk`,`staff`,`backoffice`,`app`,`web`,`import`,`paper`,`api`) | req | `kiosk` = Smart Card Kiosk, `staff` = Onsite desk walk-in, `web` = public portal (CR-070), `backoffice` = Admin desk, `api` = Partner booking EXT-008 ผ่าน worker inbound (CR-154) |
 | `anonymized` | bool | sys | default ไม่มี field; purge job ตั้ง `true` พร้อมล้าง PII (§retention data-model §7) |
@@ -400,7 +402,7 @@ projection — เป็นข้อมูลหลังบ้านล้ว�
 | `items` | [{`item_id`:str?, `free_text`:str?, `category`:str?, `qty`:qty_str>0, `unit`:str, `condition`:str?, `note`:str?}] | kind=items | `item_id` หรือ `free_text` อย่างใดอย่างหนึ่ง; `item_id` → `item_master:{sku\|ulid}`; `category` = ป้าย label จาก `item_category`; `condition` เช่น "ของใหม่ 100%" (public donor กรอกเอง) |
 | `amount_thb` | num>0 | kind=money | — (เงินอยู่นอกขอบเขต CR-038; ระบบเป้าไม่เก็บเงิน — ลบเป็น CR แยกถ้าต้องการ) |
 | `campaign_id` | str\|null | opt | → `donation_campaign:{ulid}` |
-| `logistics` | {`delivery_method`:enum(`self_dropoff`,`parcel`,`shelter_pickup`), `vehicle`:enum(`motorcycle`,`car`,`pickup`,`truck`)?, `slot`:{`date`:str, `from`:str, `to`:str}?, `eta`:ts?, `courier_tracking_no`:str\|null, `pickup_address`:str?} | opt | **req เมื่อ `channel=public`**; `slot` ชี้ `donation_slot` (§2.13, deterministic ต่อ วัน+เวลา); `vehicle` เฉพาะ self_dropoff/shelter_pickup; `eta` = ต้น slot ที่จอง; `courier_tracking_no` donor เติม/แก้ภายหลังผ่าน ticket (DN-6); `pickup_address` ใช้เมื่อให้ศูนย์ไปรับ (CR-010) |
+| `logistics` | {`delivery_method`:enum(`self_dropoff`,`parcel`,`shelter_pickup`), `vehicle`:enum(`motorcycle`,`car`,`pickup`,`truck`)?, `slot`:{`date`:str, `from`:str, `to`:str}?, `eta`:ts?, `courier_tracking_no`:str\|null, `pickup_address`:str?} | opt | **req เมื่อ `channel=public`**; `slot` ชี้ `donation_slot` (§2.13, deterministic ต่อ คิว+วัน+เวลา — คิวอนุมานจาก `delivery_method`, CR-157); `vehicle` เฉพาะ self_dropoff/shelter_pickup; `eta` = ต้น slot ที่จอง; `courier_tracking_no` donor เติม/แก้ภายหลังผ่าน ticket (DN-6); `pickup_address` ใช้เมื่อให้ศูนย์ไปรับ (CR-010) |
 | `status` | enum(`declared`,`pending_review`,`verifying`,`received`,`redirected`,`rejected`,`expired`,`cancelled`) | req | forward-only (CR-048); `declared` → `pending_review` (ประเมิน) → `verifying` (กำลังตรวจรับ) → `received` (ลงสต็อก), หรือ `redirected` (ส่งต่อศูนย์อื่น) / `rejected` (ปฏิเสธ) / `expired` (พ้น TTL) / `cancelled` (ยกเลิก) |
 | `booking_ref` | str | sys | รหัสอ่านออก เช่น `DN-306892` — แสดง/พิมพ์บนตั๋วเพื่อแปะลงของ; **unique** |
 | `tracking_token_hash` | str | sys | SHA-256 ของ token — **ไม่เก็บ token ตรง**; public service lookup/แก้ (PATCH) ด้วย hash |
@@ -775,21 +777,37 @@ open → escalated
 | `context` | {} | opt | payload แล้วแต่ action (เช่น revision ที่แพ้ conflict) |
 | `occurred_at` | ts | req | — |
 
-### 2.13 `donation_slot` — `donation_slot:{date}:{from}` (deterministic) · DN-5
+### 2.13 `donation_slot` — `donation_slot:{mode}:{date}:{from}` (deterministic) · DN-5
 
-> เพิ่มใน CR-005 §F (DN-5) — รองรับ queue booking ("จองคิว") ของ public donation. **ศูนย์เป็นผู้ตั้งค่า slot เอง** (Donation module / back-office); หน้า public `/donate` อ่าน slot + ความจุที่เหลือ. `_id` deterministic ต่อ วัน+เวลาเริ่ม (shelter implicit จาก db) กันสร้าง slot ซ้ำสอง device.
+> **schema_v 2** — แยกเป็นสองคิว: เพิ่ม `mode` (req), `capacity` เป็น opt/nullable (`null` = ไม่มีเพดาน), `_id` เพิ่ม `{mode}`, สูตรที่ว่างนับสถานะที่ถือคิวตาม CR-052. CR-157.
+> schema_v 1 — เพิ่มใน CR-005 §F (DN-5) — queue booking ("จองคิว") ของ public donation. **ศูนย์เป็นผู้ตั้งค่า slot เอง** (Donation module / back-office); หน้า public `/donate` อ่าน slot + ความจุที่เหลือ.
+
+`_id` deterministic ต่อ คิว+วัน+เวลาเริ่ม (shelter implicit จาก db) กันสร้าง slot ซ้ำสอง device. `dropoff` และ `pickup` ที่วัน+เวลาเดียวกันเป็นคนละ doc และความจุไม่กระทบกัน.
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
+| `mode` | enum(`dropoff`,`pickup`) | req | `dropoff` = ผู้บริจาคนำมาส่งเอง · `pickup` = รถศูนย์ออกไปรับ |
 | `date` | str | req | `YYYY-MM-DD` (เวลาท้องถิ่นศูนย์) |
-| `from` / `to` | str / str | req | `HH:mm` ช่วงเวลารับของ เช่น `09:00`–`10:00` |
-| `capacity` | int>0 | req | จำนวนคิวสูงสุดต่อ slot — ศูนย์กำหนด |
+| `from` / `to` | str / str | req | `HH:mm` ช่วงเวลารับของ เช่น `09:00`–`10:00`; `to` > `from` |
+| `capacity` | int>0 \| null | opt | default `null` = ไม่มีเพดาน · จำนวนคิว (dropoff) / เที่ยวรถ (pickup) สูงสุดต่อ slot — ศูนย์กำหนด |
 | `status` | enum(`open`,`closed`) | req | default `open`; `closed` = งดรับ slot นี้ |
 | `note` | str | opt | — |
 
-ที่ว่าง = `capacity` − count(`donation` ที่ `logistics.slot` ตรงกัน และ `status` ∈ {`declared`,`received`}); เต็มหรือ `closed` → public แสดง "คิวเต็ม (งด)" + submit คืน `SLOT_FULL`
+**Invariant:** `mode = pickup` → `capacity` ต้องเป็น int>0 (ห้าม `null`)
 
-**Index:** `(date)` · `(date, from)` · view `slot_availability` (capacity − booked count ต่อ slot)
+**คิวที่ donation จอง** — อนุมานจาก `donation.logistics.delivery_method` (§2.3), ไม่เก็บซ้ำบน donation:
+`self_dropoff` → `dropoff` · `shelter_pickup` → `pickup` · `parcel` → ไม่จองคิว (ไม่มี `logistics.slot`)
+
+**กระดาน public:**
+
+- `dropoff` — แสดงช่วงมาตรฐาน 09:00–10:00, 10:00–11:00, 13:00–14:00, 14:00–15:00, 15:00–16:00 เสมอ (ไม่มีเพดาน); `donation_slot` ของศูนย์ override รายช่วงที่ `from` ตรงกัน (ปิดช่วง / ใส่เพดาน / เพิ่มช่วงนอกเวลามาตรฐาน)
+- `pickup` — แสดงเฉพาะรอบที่ศูนย์ประกาศ; ไม่มี doc ของวันนั้น = วันนั้นไม่มีรถออกไปรับ
+
+ที่ว่าง = `capacity` − count(`donation` ที่คิวเดียวกัน และ `logistics.slot` ตรงกัน และ `status` ∈ {`declared`,`pending_review`,`verifying`,`received`}); `capacity = null` → ไม่มีวันเต็ม. เต็มหรือ `closed` → public แสดง "คิวเต็ม (งด)" + submit คืน 409 `SLOT_FULL`. ช่วงที่มีเพดานตัดสิน `SLOT_FULL` ตอน submit แบบ atomic ผ่าน Mongo `donation_slot_counters` (CR-157 §C-6); error code อื่นของ slot (`SLOT_REQUIRED`, `SLOT_UNAVAILABLE`, `SLOTS_UNAVAILABLE`) ดู CR-157 FR-DS-11..13
+
+**Index:** `(date)` · `(date, from)` · view `slot_availability` (capacity − booked count ต่อ slot) — ยังไม่ implement: ปัจจุบัน `GET /api/public/v1/donations/slots` และ `POST` นับจาก `donation:` ทั้งศูนย์ใน memory (CR-157 out of scope)
+
+**Migration (schema_v 1 → 2):** pre-prod — ไม่มี doc v1 ที่ persist (ตรวจ dev/staging/production 2026-09-24) จึงไม่ต้อง backfill; doc รูปเก่า (`_id` แบบ `donation_slot:{date}:{from}`, ไม่มี `mode`) ถ้าหลงเหลือ reader อ่านเป็น `dropoff` (CR-157 FR-DS-9) และเมื่อแก้ไขผ่าน back-office ถูกเขียนกลับที่ `_id` เดิมพร้อม `mode: dropoff` + `schema_v 2`
 
 ### 2.14 `sop_override` — `sop_override:{ulid}`
 
@@ -1683,6 +1701,39 @@ provisioning เท่านั้น. `value` คือเลขล่าสุ
 > - **ปัจจุบัน (Design Choice):** เก็บไว้ที่ DB `registry` ตรงกลาง เพื่อให้ Inbound API (`/api/v1/scanner/bootstrap`, `/api/v1/scanner/kiosk/lookup`, `/api/v1/scanner/kiosk/check-in` — CR-151; `/draft` ปิดเป็น 410) สามารถ lookup ตรวจสอบ `device_id` และ `secret_hash` ได้อย่างรวดเร็วใน 1 query โดย Client ไม่จำเป็นต้อง hardcode หรือส่ง `shelter_code` มาใน Request Header
 > - **ประเด็นพิจารณาในอนาคต (Future Consideration):** หากต้องการให้ศูนย์พักพิงมีอิสระในการเพิ่ม/จัดการเครื่องเอง (Shelter Autonomy) หรือรองรับ Edge Node ที่เน็ตตัดขาด อาจพิจารณาย้าย `scanner_device` ไปเก็บไว้ใน `shelter_{shelter_code}` โดยมีข้อกำหนดว่า Client Kiosk จะต้องส่ง Header `X-Shelter-Code` แนบมากับทุก request ด้วย
 
+### 3.12 `kiosk_banner` — `kiosk_banner:{ulid}` · **schema_v 1** ([CR-162](../changes/14-kiosk/CR-162-kiosk-banner.md))
+
+แบนเนอร์รูปภาพที่ตู้ kiosk วนแสดงเต็มจอเมื่อหน้า `/kiosk` idle 30 วินาที (attract overlay). registry doc (ไม่มี
+`shelter_code` envelope) — ศูนย์ปลายทางอยู่ใน `shelter_codes`. ตู้อ่านผ่าน `POST /api/v1/scanner/kiosk/banners`
+(device auth) เท่านั้น — **ไม่ sync เข้า MongoDB** และไม่มี projection.
+
+| Field | ชนิด | req | หมายเหตุ |
+| --- | --- | --- | --- |
+| `_id` | str | req | `kiosk_banner:{ulid}` |
+| `type` | `"kiosk_banner"` | req | — |
+| `schema_v` | int | req | `1` |
+| `title` | str | req | ≤120 ตัวอักษร · ใช้ในหน้าจัดการ + เป็น `alt` ของรูป |
+| `caption` | str\|null | opt | ≤200 ตัวอักษร · text เท่านั้น (ห้าม HTML) · แสดงใต้รูปบนตู้ |
+| `order` | int | req | ≥1 default `1` · เรียง `order` asc → `start_at` asc → `_id` asc |
+| `duration_sec` | int | req | 3–60 default `10` · เวลาแสดงต่อสไลด์ |
+| `start_at` | ts | req | เริ่มแสดง (รวม) |
+| `end_at` | ts | req | สิ้นสุด (ไม่รวม) · ต้อง `> start_at` |
+| `status` | enum(`active`,`inactive`) | req | default `active` |
+| `shelter_codes` | [str] | req | ≥1 รายการ · เทียบกับ `scanner_device.shelter_code` |
+| `created_at` / `updated_at` / `created_by` | ts / ts / str | req | ตาม envelope §0 |
+| `_attachments.image` | attachment | req | `image/png` · `image/jpeg` · `image/webp` · ≤2 MB · server ตรวจ magic bytes ก่อน PUT |
+
+**แสดงบนตู้เมื่อ:** `status = active` และ `start_at ≤ now < end_at` (เวลา server) และ `shelter_codes` มี
+`shelter_code` ของเครื่อง · สูงสุด 20 รายการต่อ response.
+
+**VDU (`registry`):** reject เมื่อ `end_at ≤ start_at`, `duration_sec` นอก 3–60, `order < 1`, `shelter_codes` ว่าง,
+`status` นอก enum. เขียนได้เฉพาะผ่าน BFF `/api/back-office/kiosk-banners/**` (admin credential หลังตรวจสิทธิ์
+`system_admin` / `{code}:shelter_manager` / `{code}:banner_staff` — scope ต้องครอบทุก `shelter_codes` ทั้งค่าเดิมและค่าใหม่).
+
+**ลบ:** hard delete ทั้ง doc (attachment หายไปด้วย).
+
+**Index:** `(type, status, end_at)`
+
 ---
 
 ## 4. DB `catalog` (central-managed → pull ลง device; edge fallback replica)
@@ -2199,7 +2250,7 @@ CouchDB `_users` DB ไม่ใช่ operational doc ธรรมดา — �
 | `name` | str | req | CouchDB username — alphanumeric (`sa01`, `staff01`, …) หรือเบอร์ 10 หลักก็ได้; ไม่บังคับให้เท่ากับ `phone` |
 | `password` | str | req | CouchDB hash จัดการโดย CouchDB เอง |
 | `display_name` | str\|null | opt | ชื่อ-นามสกุลแสดงผล (UI บังคับกรอกตอนสร้าง) |
-| `roles` | [str] | req | Compound Scoped Roles: อย่างใดอย่างหนึ่ง — (a) `["system_admin"]` (Global Admin เข้าถึงได้ทุกศูนย์) หรือ (b) `["shelter:SH001", "shelter:SH002", "SH001:registration_staff", "SH002:medical_staff"]` (กุญแจ `shelter:{code}` + บทบาทแยกรายศูนย์ `{code}:{capability}`; รองรับ legacy แบน `["shelter:SH001", "registration_staff"]`) |
+| `roles` | [str] | req | Compound Scoped Roles: อย่างใดอย่างหนึ่ง — (a) `["system_admin"]` (Global Admin เข้าถึงได้ทุกศูนย์) หรือ (b) `["shelter:SH001", "shelter:SH002", "SH001:registration_staff", "SH002:medical_staff"]` (กุญแจ `shelter:{code}` + บทบาทแยกรายศูนย์ `{code}:{capability}`; รองรับ legacy แบน `["shelter:SH001", "registration_staff"]`) · capability `banner_staff` (CR-162) จัดการ kiosk banner ของศูนย์ใน scope |
 | `personnel_type` | enum(`staff`,`volunteer`) | req | แยกประเภท: `'staff'` (เจ้าหน้าที่ประจำ) หรือ `'volunteer'` (อาสาช่วยงานระบบ Staff-Capable ที่ได้รับสิทธิ์) |
 | `organization` | str\|null | opt | หน่วยงานต้นสังกัด — optional สำหรับทั้ง staff และ volunteer |
 | `position` | str\|null | opt | ตำแหน่งหน้าที่ / วิชาชีพ (เช่น พยาบาลวิชาชีพ, เจ้าหน้าที่ป้องกันฯ) |

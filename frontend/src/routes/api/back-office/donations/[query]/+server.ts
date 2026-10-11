@@ -13,7 +13,7 @@ import {
 	type PublicDonationDoc,
 	type ScanDonationView,
 	receiveDonationInputSchema
-} from '$lib/features/donations';
+} from '$lib/features/donations/server';
 import {
 	keyDonationReceipt,
 	type CountedItem,

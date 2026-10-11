@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import AliasChoices, BaseModel, Field
 
@@ -24,12 +24,31 @@ class DonationItemInput(BaseModel):
     note: str | None = None
 
 
+class SlotHold(BaseModel):
+    """The capped queue window a booking takes a place in, as the BFF read it.
+
+    Sent only when the window has a ceiling. ``capacity`` is the window's current
+    ceiling and ``booked`` the places CouchDB already shows held — the counter is seeded
+    from it on the window's first booking. The BFF is the only caller (service secret),
+    so both figures come from CouchDB, not from the donor.
+    """
+
+    mode: Literal["dropoff", "pickup"]
+    date: str
+    from_: str = Field(alias="from")
+    capacity: int = Field(gt=0)
+    booked: int = Field(ge=0)
+
+    model_config = {"populate_by_name": True}
+
+
 class DonationCreateRequest(BaseModel):
     shelter_code: str
     campaign_id: str | None = None
     donor: DonorInput
     items: list[DonationItemInput] = Field(default_factory=list)
     logistics: dict[str, Any] | None = None
+    slot_hold: SlotHold | None = None
     captchaToken: str | None = Field(default=None, validation_alias=AliasChoices("captchaToken"))
 
 

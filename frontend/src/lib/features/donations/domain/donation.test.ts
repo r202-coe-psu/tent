@@ -84,6 +84,34 @@ describe('donationPreDeclarationInputSchema', () => {
 	});
 });
 
+describe('donationPreDeclarationInputSchema — logistics.slot', () => {
+	const withSlot = (slot: unknown) => ({
+		shelter_code: 'SH001',
+		donor: { name: 'John Doe', phone: '0812345678' },
+		items: [{ free_text: 'Rice', qty: 10, unit: 'kg' }],
+		logistics: { delivery_method: 'self_dropoff', slot }
+	});
+
+	it('accepts a well-formed window', () => {
+		const r = donationPreDeclarationInputSchema.safeParse(
+			withSlot({ date: '2026-06-27', from: '09:00', to: '10:00' })
+		);
+		expect(r.success).toBe(true);
+	});
+
+	it.each([
+		['non-ISO date', { date: '27/06/2026', from: '09:00', to: '10:00' }],
+		['impossible date', { date: '2026-02-31', from: '09:00', to: '10:00' }],
+		['unpadded start', { date: '2026-06-27', from: '9:00', to: '10:00' }],
+		['25:00 end', { date: '2026-06-27', from: '09:00', to: '25:00' }],
+		['end before start', { date: '2026-06-27', from: '10:00', to: '09:00' }],
+		['end equals start', { date: '2026-06-27', from: '09:00', to: '09:00' }],
+		['missing end', { date: '2026-06-27', from: '09:00' }]
+	])('rejects %s', (_label, slot) => {
+		expect(donationPreDeclarationInputSchema.safeParse(withSlot(slot)).success).toBe(false);
+	});
+});
+
 describe('isDonationPreDeclaration', () => {
 	it('should return true for a valid donation_pre_declaration document', () => {
 		const mockDoc = {
@@ -168,6 +196,20 @@ describe('donorCategoryFromCatalog', () => {
 		expect(donorCategoryFromCatalog('other')).toBe('other');
 	});
 
+	it('reads the item_master reference (`item_category:<code>`) the current catalog carries', () => {
+		expect(donorCategoryFromCatalog('item_category:food')).toBe('food');
+		expect(donorCategoryFromCatalog('item_category:water')).toBe('food');
+		expect(donorCategoryFromCatalog('item_category:ready_meal')).toBe('food');
+		expect(donorCategoryFromCatalog('item_category:bedding')).toBe('clothing');
+		expect(donorCategoryFromCatalog('item_category:medical')).toBe('medicine');
+		expect(donorCategoryFromCatalog('item_category:wash')).toBe('supply');
+		expect(donorCategoryFromCatalog('item_category:kits')).toBe('supply');
+		expect(donorCategoryFromCatalog('item_category:special_care')).toBe('supply');
+		expect(donorCategoryFromCatalog('item_category:volunteer_ppe')).toBe('supply');
+		expect(donorCategoryFromCatalog('item_category:fuel_energy')).toBe('supply');
+		expect(donorCategoryFromCatalog('item_category:unknown')).toBeUndefined();
+	});
+
 	it('only ever returns a value the form can actually show', () => {
 		const allowed = PUBLIC_DONATION_CATEGORIES.map((c) => c.value as string);
 		for (const catalog of [
@@ -178,7 +220,14 @@ describe('donorCategoryFromCatalog', () => {
 			'medicine',
 			'hygiene',
 			'equipment',
-			'other'
+			'other',
+			'item_category:ready_meal',
+			'item_category:medical',
+			'item_category:wash',
+			'item_category:kits',
+			'item_category:special_care',
+			'item_category:volunteer_ppe',
+			'item_category:fuel_energy'
 		]) {
 			expect(allowed).toContain(donorCategoryFromCatalog(catalog));
 		}

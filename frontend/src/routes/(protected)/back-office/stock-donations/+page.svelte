@@ -2,6 +2,7 @@
 	import Scan from '@lucide/svelte/icons/scan';
 	import ClipboardList from '@lucide/svelte/icons/clipboard-list';
 	import Megaphone from '@lucide/svelte/icons/megaphone';
+	import CalendarClock from '@lucide/svelte/icons/calendar-clock';
 	import { toast } from 'svelte-sonner';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import * as Tabs from '$lib/components/ui/tabs/index.js';
@@ -12,6 +13,7 @@
 	import CreateCampaignForm from './components/create-campaign-form.svelte';
 	import EditCampaignForm from './components/edit-campaign-form.svelte';
 	import ForceCutoffDialog from './components/force-cutoff-dialog.svelte';
+	import DonationSlotsManager from './components/donation-slots-manager.svelte';
 	import { useDonationNeedsBoard, type NeedItem } from '$lib/features/operations';
 	import type { PendingDonationRow } from '$lib/features/donations';
 
@@ -237,6 +239,15 @@
 					<Megaphone class="h-4 w-4" />
 					จัดการความต้องการ
 				</Tabs.Trigger>
+
+				<!-- DN-5 — the queue the public wizard books into (schema.md §2.13). -->
+				<Tabs.Trigger
+					value="slots"
+					class="flex shrink-0 items-center gap-2 rounded-lg border border-transparent px-3.5 py-2 text-xs font-semibold tracking-wide text-muted-foreground transition-all duration-300 hover:text-foreground active:scale-[0.98] data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm md:px-5 md:py-2.5"
+				>
+					<CalendarClock class="h-4 w-4" />
+					ช่วงเวลารับของ
+				</Tabs.Trigger>
 			</Tabs.List>
 		</div>
 
@@ -263,6 +274,10 @@
 					}}
 				/>
 			{/if}
+		</Tabs.Content>
+
+		<Tabs.Content value="slots">
+			<DonationSlotsManager />
 		</Tabs.Content>
 
 		<Tabs.Content value="needs">

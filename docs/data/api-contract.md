@@ -2,8 +2,8 @@
 title: Smart Shelter — API Contract v1
 status: draft for review
 created: 2026-06-11
-updated: 2026-10-09
-note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration; Partner Data API EXT-001–007 (#214); CR-124 staff Google step-up MFA + Google SSO login (enrolled + mint AuthSession); decision sync 2026-10-08 — เพิ่ม GET /public/v1/unassigned-registrations/{id}/status (service secret, status-only) แทนการเรียก staff detail จาก BFF registrations/status — แก้ ticket คิวกลางหายจากอุปกรณ์ (QA pre-register 2026-10-08); decision sync 2026-10-09 — `breakdown` ของ EXT-005 เพิ่ม `gender_unspecified` (null+other; `male+female+gender_unspecified = occupancy_total`) และ `POST /public/v1/unassigned-registrations` รับ `members[].gender = null`
+updated: 2026-10-11
+note: คู่กับ data-model.md v3 — ตัดสิน sync boundary: staff app คุย CouchDB ตรง, service API มีเฉพาะที่ CouchDB ทำเองไม่ได้; CR-112/CR-113 occupancy + unassigned registration; Partner Data API EXT-001–007 (#214); CR-124 staff Google step-up MFA + Google SSO login (enrolled + mint AuthSession); decision sync 2026-10-08 — เพิ่ม GET /public/v1/unassigned-registrations/{id}/status (service secret, status-only) แทนการเรียก staff detail จาก BFF registrations/status — แก้ ticket คิวกลางหายจากอุปกรณ์ (QA pre-register 2026-10-08); decision sync 2026-10-09 — `breakdown` ของ EXT-005 เพิ่ม `gender_unspecified` (null+other; `male+female+gender_unspecified = occupancy_total`) และ `POST /public/v1/unassigned-registrations` รับ `members[].gender = null`; CR-157 (2026-10-10) — เพิ่ม `GET /api/public/v1/donations/slots` (BFF-only อ่าน CouchDB ฝั่ง server) และ error code ของ slot ใน `POST /public/v1/donations` (`SLOT_REQUIRED`, `SLOT_UNAVAILABLE`, `SLOT_FULL`, `SLOTS_UNAVAILABLE`); CR-162 — §2.3 kiosk banner (`POST /api/v1/scanner/kiosk/banners`, signed image GET, back-office `/api/back-office/kiosk-banners/**`)
 ---
 
 # Smart Shelter — API Contract v1
@@ -139,6 +139,65 @@ Versioning: path prefix /api/v1 — breaking change = /api/v2
 | `CONFLICT` 409 | ทำซ้ำ/สถานะไม่ให้ทำ |
 | `RATE_LIMITED` 429 | เกิน limit |
 
+### 2.3 Kiosk banner — feed ของตู้ + back-office ([CR-162](../changes/14-kiosk/CR-162-kiosk-banner.md))
+
+> §2.1 (Scanner kiosk, CR-151/152) และ §2.2 (Scanner staff PIN, CR-158) มากับ branch `feat/pre-register_kiosk` — เลขหัวข้อนี้จองไว้ให้ต่อกันเมื่อ merge
+
+**ฝั่งตู้ (device credential, `cache-control: no-store` + `pragma: no-cache`)**
+
+```http
+POST /api/v1/scanner/kiosk/banners
+X-Device-Id: kiosk-01
+X-Device-Secret: <secret>
+```
+
+คืน banner ของ `shelter_code` ของเครื่อง (จาก device principal เท่านั้น) ที่ `status = active` และ
+`start_at ≤ now < end_at` เรียง `order` → `start_at` → `_id` สูงสุด 20 รายการ:
+
+```json
+{
+  "banners": [
+    {
+      "id": "kiosk_banner:01J...",
+      "title": "แจกอาหารกลางวัน",
+      "caption": "เวลา 12:00 ที่โรงอาหาร",
+      "duration_sec": 10,
+      "image_url": "/api/v1/scanner/kiosk/banners/kiosk_banner:01J.../image?exp=1760190000&sig=..."
+    }
+  ],
+  "fetched_at": "2026-10-11T08:00:00.000Z"
+}
+```
+
+| ผล | Response |
+| --- | --- |
+| สำเร็จ (รวมกรณีไม่มี banner) | `200` · `banners: []` ได้ |
+| device credential ผิด / เครื่อง inactive | `401 DEVICE_AUTH_FAILED` |
+| registry ใช้ไม่ได้ | `503 DEPENDENCY_UNAVAILABLE` |
+
+```http
+GET /api/v1/scanner/kiosk/banners/{id}/image?exp={unix}&sig={hex}
+```
+
+ไม่ใช้ device header (`<img>` ส่ง GET; `scanner_client` ฉีด credential เฉพาะ POST ใน allowlist). `sig =
+HMAC-SHA256(server_secret, "{id}.{exp}")` อายุ 15 นาที · `200` + `content-type` ของรูป · sig ผิด/หมดอายุ `403` ·
+ไม่พบ / inactive / นอกช่วงเวลา `404`.
+
+**ฝั่ง back-office (`_session`; SA ทุกศูนย์ · `{code}:shelter_manager` / `{code}:banner_staff` เฉพาะ banner ที่
+`shelter_codes` ทั้งหมดอยู่ใน scope — ทั้งค่าเดิมและค่าใหม่; อื่น ๆ `403`)**
+
+| Method | Path | หมายเหตุ |
+| --- | --- | --- |
+| `GET` | `/api/back-office/kiosk-banners?view=current\|expired&shelter_code=` | `current` = `end_at ≥ now` เรียง `start_at` asc · `expired` = `end_at < now` เรียง `end_at` desc |
+| `POST` | `/api/back-office/kiosk-banners` | body JSON ทุก field + `image: { content_type, data_base64 }` (req) · `201` |
+| `GET` | `/api/back-office/kiosk-banners/{id}` | — |
+| `PUT` | `/api/back-office/kiosk-banners/{id}` | `_rev` req · `image` opt (ไม่ส่ง = คงรูปเดิม) · `_rev` ชน `409` |
+| `PATCH` | `/api/back-office/kiosk-banners/{id}` | `{ status }` เท่านั้น |
+| `DELETE` | `/api/back-office/kiosk-banners/{id}?rev=` | hard delete |
+| `GET` | `/api/back-office/kiosk-banners/{id}/image` | รูปสำหรับ preview ในหน้าจัดการ |
+
+รูปผิดชนิด (magic bytes) / เกิน 2 MB / field ไม่ผ่าน Zod → `422 VALIDATION`.
+
 ## 3. Provisioning (system_admin เท่านั้น)
 
 ```
@@ -193,6 +252,7 @@ Contract เต็มอยู่ที่ [public-tier-flow-spec.html](../featu
 | `POST /public/v1/occupants` | — (rate-limited + audit) |
 | `GET /public/v1/needs` | — |
 | `POST /public/v1/donations` | เบอร์โทร (+OTP เมื่อ `public_otp_required` เปิด) |
+| `GET /api/public/v1/donations/slots?shelter_code&date&mode` | — (BFF-only, CR-157) — BFF อ่าน `donation_slot` จาก CouchDB ฝั่ง server (doc type นี้ไม่ถูก project ลง Mongo) คืนเฉพาะช่วงเวลา/ความจุ/ยอดจอง ไม่มี PII |
 | `GET /public/v1/donations/{tracking_token}` | token |
 | `PATCH /public/v1/donations/{tracking_token}` | token |
 | `PATCH /public/v1/donations/{tracking_token}/items` | token |
@@ -246,6 +306,18 @@ Contract เต็มอยู่ที่ [public-tier-flow-spec.html](../featu
 | `429` | rate-limit ต่อ IP (ไม่มีเพดานจำนวนครั้งต่อใบจอง) |
 
 TTL **ไม่รีเซ็ต** — `expires_at` ยังนับจาก `declared_at` เดิม
+
+#### Slot error codes ของ `POST /public/v1/donations` (CR-157)
+
+BFF ตรวจช่วงเวลา (`logistics.slot`) ก่อนส่งต่อ FastAPI; ช่วงที่มีเพดานตัดสินแบบ atomic ผ่าน Mongo
+`donation_slot_counters` (CR-157 §C-6). `delivery_method = parcel` ไม่จองคิว จึงไม่ผ่านด่านนี้
+
+| สถานะ | ความหมาย |
+| --- | --- |
+| `422 SLOT_REQUIRED` | `delivery_method = shelter_pickup` แต่ไม่ได้ส่ง `logistics.slot` (FR-DS-11) |
+| `409 SLOT_UNAVAILABLE` | ช่วงที่ส่งมาไม่อยู่บนกระดาน — `shelter_pickup` ที่ศูนย์ไม่ได้ประกาศรอบ (ไม่มี doc `pickup`) (FR-DS-11) หรือ `self_dropoff` ที่ไม่มี doc และ `from`/`to` ไม่ตรงช่วงมาตรฐาน 5 ช่วง (FR-DS-12) |
+| `409 SLOT_FULL` | ช่วงเต็มตามการนับ CouchDB, ถูกปฏิเสธโดย `$inc` แบบมีเงื่อนไขบน `donation_slot_counters`, หรือ doc มี `status = closed` (FR-DS-7, FR-DS-14) |
+| `503 SLOTS_UNAVAILABLE` | อ่าน `donation_slot` จาก CouchDB ไม่สำเร็จ (ไม่ใช่ 200/404) — ไม่รับ booking ที่ตรวจช่วงไม่ได้ (FR-DS-13) |
 
 ### 5.1 External plane `/external/v1` (CR-062) — legacy
 

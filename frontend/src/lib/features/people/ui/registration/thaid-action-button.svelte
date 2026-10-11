@@ -3,6 +3,9 @@
 	import Sparkles from '@lucide/svelte/icons/sparkles';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { langState } from '$lib/states/i18n.svelte';
+	import { getTranslation } from '$lib/utils/i18n';
+	import { PUBLIC_BOOKING_FORM_I18N } from '$lib/constants/i18n';
 
 	interface Props {
 		shelterCode?: string;
@@ -10,6 +13,8 @@
 	}
 
 	let { shelterCode = '', disabled = false }: Props = $props();
+
+	const t = $derived(getTranslation(PUBLIC_BOOKING_FORM_I18N, langState.current));
 
 	let isRedirecting = $state(false);
 
@@ -37,10 +42,10 @@
 			</div>
 			<div>
 				<div class="flex items-center gap-2">
-					<span class="text-sm font-semibold text-foreground">ดึงข้อมูลด้วย ThaiD</span>
+					<span class="text-sm font-semibold text-foreground">{t.thaidTitle}</span>
 				</div>
 				<p class="mt-0.5 text-xs text-muted-foreground">
-					เชื่อมต่อและดึงข้อมูลทะเบียนราษฎร์อัตโนมัติ
+					{t.thaidDesc}
 				</p>
 			</div>
 		</div>
@@ -55,10 +60,10 @@
 		>
 			{#if isRedirecting}
 				<Loader2 class="mr-1.5 size-4 animate-spin" />
-				<span>กำลังเชื่อมต่อ ThaiD...</span>
+				<span>{t.thaidConnecting}</span>
 			{:else}
 				<Sparkles class="mr-1.5 size-4" />
-				<span>เชื่อมต่อ ThaiD</span>
+				<span>{t.thaidConnect}</span>
 			{/if}
 		</Button>
 	</div>

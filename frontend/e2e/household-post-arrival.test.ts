@@ -465,7 +465,11 @@ test.describe('Household post-arrival grouping — real CouchDB', { tag: ['@quar
 		await expect(page).toHaveURL(/\/back-office\/evacuee-management\?tab=household/);
 
 		// The whole staff flow stayed on CouchDB — no PII went near the public plane.
-		expect(publicPlaneCalls, 'no /api/public calls from the staff wizard').toEqual([]);
+		// The layout-wide system banner (CR-142) is fetched on every page — not the wizard's doing.
+		expect(
+			publicPlaneCalls.filter((call) => !call.includes('/api/public/v1/system-banner')),
+			'no /api/public calls from the staff wizard'
+		).toEqual([]);
 
 		// ── Database ──
 		const households = await findDocs({ type: 'household', created_by: STAFF_A.name });
@@ -506,7 +510,7 @@ test.describe('Household post-arrival grouping — real CouchDB', { tag: ['@quar
 		await nextStep(page).click();
 
 		await page.getByRole('button', { name: 'ประเภทที่อยู่อาศัย' }).click();
-		await page.getByRole('option', { name: 'ไร้ที่อยู่อาศัยเป็นหลักแหล่ง' }).click();
+		await page.getByRole('option', { name: /^ไร้ที่อยู่อาศัย/ }).click();
 		await fillGeography(page);
 		await nextToAssets(page).click();
 		await nextToZone(page).click();
@@ -625,7 +629,7 @@ test.describe('Household post-arrival grouping — real CouchDB', { tag: ['@quar
 		await nextStep(page).click();
 		await nextStep(page).click();
 		await page.getByRole('button', { name: 'ประเภทที่อยู่อาศัย' }).click();
-		await page.getByRole('option', { name: 'ไร้ที่อยู่อาศัยเป็นหลักแหล่ง' }).click();
+		await page.getByRole('option', { name: /^ไร้ที่อยู่อาศัย/ }).click();
 		await fillGeography(page);
 		await nextToAssets(page).click();
 		await nextToZone(page).click();
