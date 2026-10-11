@@ -9,6 +9,7 @@ import {
 	isShelterManager,
 	isWarehouseStaff,
 	isSystemAdmin,
+	canAccessDistributionDesk,
 	canAccessMedicalScreening,
 	canAccessVolunteerBackoffice,
 	canAccessZoning,
@@ -177,6 +178,20 @@ export async function requireTicketAccess(fetchFn?: typeof fetch) {
 		!isWarehouseStaff(roles, shelter) &&
 		!hasStaffCapability(roles, 'kitchen_staff', shelter)
 	) {
+		throw redirect(302, resolve(LANDING_ROUTE));
+	}
+}
+
+/**
+ * Distribution Desk (Station 4, `/onsite/distribution`) guard — system_admin, shelter_manager or
+ * distribution_staff of the selected shelter (CR-161 R5). Matches the onsite and portal tiles;
+ * per-step buttons stay gated in the UI and the CouchDB `validate_doc_update` guard remains the
+ * real boundary.
+ */
+export async function requireDistributionDesk(fetchFn?: typeof fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	if (!canAccessDistributionDesk(roles, activeShelterCode(roles))) {
 		throw redirect(302, resolve(LANDING_ROUTE));
 	}
 }

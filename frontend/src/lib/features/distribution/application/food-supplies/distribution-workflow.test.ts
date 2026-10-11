@@ -9,6 +9,7 @@ import type {
 	RequisitionTicketInput
 } from '../../domain/food-supplies';
 import { createDistributionLog } from '../../domain/food-supplies';
+import { deriveDeterministicLedgerId, type StockLedger } from '$lib/features/operations';
 import type {
 	DistributionLogListFilter,
 	DistributionLogRepository,
@@ -187,7 +188,7 @@ describe('distribution-workflow', () => {
 	const POS_CTX: AuthorContext = {
 		shelterCode: 'SH001',
 		createdBy: 'pos_user',
-		roles: ['shelter:SH001', 'registration_staff']
+		roles: ['shelter:SH001', 'SH001:distribution_staff']
 	};
 
 	beforeEach(() => {
@@ -483,6 +484,211 @@ describe('distribution-workflow', () => {
 		);
 
 		expect(log.is_expired_warning).toBe(true);
+	});
+
+	it.each([
+		['expired', -60 * 60 * 1000, true],
+		['still fresh', 60 * 60 * 1000, false]
+	] as const)(
+		'stamps is_expired_warning from the dispatched lot expiry when %s (FR-MQW-06 B)',
+		async (_label, expiryOffsetMs, expected) => {
+			const ticket = await ticketRepo.create(
+				{
+					ticket_no: `TKT-FOOD-LOT-${expected ? 'OLD' : 'NEW'}`,
+					requisition_type: 'food',
+					meal: 'lunch',
+					source_location: 'warehouse:main',
+					destination_location: 'point:a',
+					items: [
+						{
+							item_id: 'item:rice_box',
+							item_name: 'Rice Box',
+							type_class: 'CONSUMABLE',
+							returnable: false,
+							requested_qty: '10',
+							allocated_qty: '10'
+						}
+					]
+				},
+				POS_CTX
+			);
+			const dispatchId = await deriveDeterministicLedgerId('dispatch', ticket._id, 'item:rice_box');
+			const lotId = 'stock_ledger:01JLOT0000000000000000000001';
+			const rows = new Map<string, Partial<StockLedger>>([
+				[dispatchId, { _id: dispatchId, lot_ref: lotId }],
+				[
+					lotId,
+					{ _id: lotId, lot: { expiry: new Date(Date.now() + expiryOffsetMs).toISOString() } }
+				]
+			]);
+			const ledgerReader = {
+				getLedgerEntry: async (id: string) => (rows.get(id) as StockLedger | undefined) ?? null
+			};
+
+			const log = await recordFoodDistribution(
+				ticket._id,
+				{ item_id: 'item:rice_box', qty: '1', recipient_type: 'outside' },
+				POS_CTX,
+				{ ticketRepo, logRepo, ledgerReader }
+			);
+
+			expect(log.is_expired_warning).toBe(expected);
+		}
+	);
+
+	async function createFoodTicket(itemId: string): Promise<RequisitionTicket> {
+		return ticketRepo.create(
+			{
+				ticket_no: `TKT-FOOD-${itemId}`,
+				requisition_type: 'food',
+				meal: 'lunch',
+				source_location: 'warehouse:main',
+				destination_location: 'point:a',
+				items: [
+					{
+						item_id: itemId,
+						item_name: itemId,
+						type_class: 'CONSUMABLE',
+						returnable: false,
+						requested_qty: '10',
+						allocated_qty: '10'
+					}
+				]
+			},
+			POS_CTX
+		);
+	}
+
+	it('rejects registration_staff and supply_coordinator from frontline food handover (CR-161 R3)', async () => {
+		const ticket = await createFoodTicket('item:curry');
+		for (const roles of [
+			['shelter:SH001', 'SH001:registration_staff'],
+			['shelter:SH001', 'SH001:supply_coordinator']
+		]) {
+			await expect(
+				recordFoodDistribution(
+					ticket._id,
+					{ item_id: 'item:curry', qty: '1', recipient_type: 'outside' },
+					{ ...POS_CTX, roles },
+					{ ticketRepo, logRepo }
+				)
+			).rejects.toThrow(/frontline distribution operations require distribution_staff/);
+		}
+		expect(logRepo.logs.size).toBe(0);
+	});
+
+	it('records the handover without an expiry warning when the lot lookup fails', async () => {
+		const ticket = await createFoodTicket('item:rice_box');
+		const ledgerReader = {
+			getLedgerEntry: async (): Promise<StockLedger | null> => {
+				throw new Error('ledger unavailable');
+			}
+		};
+
+		const log = await recordFoodDistribution(
+			ticket._id,
+			{ item_id: 'item:rice_box', qty: '1', recipient_type: 'outside' },
+			POS_CTX,
+			{ ticketRepo, logRepo, ledgerReader }
+		);
+
+		expect(log.status).toBe('fulfilled');
+		expect(log.is_expired_warning).toBe(false);
+		expect(logRepo.logs.size).toBe(1);
+	});
+
+	describe('menu ↔ recipient check (FR-MRM-04)', () => {
+		const evacueeInput = {
+			item_id: 'item:halal_box',
+			qty: '1',
+			recipient_type: 'evacuee' as const,
+			recipient_id: 'evacuee:01JEVACUEE0000000000000009'
+		};
+
+		it('rejects a mismatched menu without override and writes nothing', async () => {
+			const ticket = await createFoodTicket('item:halal_box');
+
+			await expect(
+				recordFoodDistribution(
+					ticket._id,
+					{
+						...evacueeInput,
+						menu_check: { recipient_tags: ['ELDERLY'], menu: { dietary: ['HALAL'] } }
+					},
+					POS_CTX,
+					{ ticketRepo, logRepo }
+				)
+			).rejects.toThrow(/Override required/);
+			expect(logRepo.logs.size).toBe(0);
+		});
+
+		it('rejects a tagged menu for an untagged (outside) recipient without override', async () => {
+			const ticket = await createFoodTicket('item:halal_box');
+
+			await expect(
+				recordFoodDistribution(
+					ticket._id,
+					{
+						item_id: 'item:halal_box',
+						qty: '1',
+						recipient_type: 'outside',
+						menu_check: { recipient_tags: null, menu: { age_group: 'INFANT' } }
+					},
+					POS_CTX,
+					{ ticketRepo, logRepo }
+				)
+			).rejects.toThrow(/Override required/);
+			expect(logRepo.logs.size).toBe(0);
+		});
+
+		it('records a mismatched menu when overridden', async () => {
+			const ticket = await createFoodTicket('item:halal_box');
+
+			const log = await recordFoodDistribution(
+				ticket._id,
+				{
+					...evacueeInput,
+					is_override: true,
+					override_reason: 'Only halal boxes left',
+					menu_check: { recipient_tags: ['ELDERLY'], menu: { dietary: ['HALAL'] } }
+				},
+				POS_CTX,
+				{ ticketRepo, logRepo }
+			);
+
+			expect(log.is_override).toBe(true);
+			expect(logRepo.logs.size).toBe(1);
+		});
+
+		it.each([
+			['a general (untagged) menu', ['ELDERLY'], { dietary: [], age_group: 'ALL' }],
+			['a general menu for an untagged recipient', null, {}],
+			['a matching tag', ['HALAL', 'ELDERLY'], { dietary: ['HALAL'] }]
+		] as const)('records %s without override', async (_label, recipientTags, menu) => {
+			const ticket = await createFoodTicket('item:halal_box');
+
+			const log = await recordFoodDistribution(
+				ticket._id,
+				{ ...evacueeInput, menu_check: { recipient_tags: recipientTags, menu } },
+				POS_CTX,
+				{ ticketRepo, logRepo }
+			);
+
+			expect(log.status).toBe('fulfilled');
+			expect(log.is_override).toBeFalsy();
+		});
+
+		it('skips the check when menu_check is omitted', async () => {
+			const ticket = await createFoodTicket('item:halal_box');
+
+			const log = await recordFoodDistribution(ticket._id, evacueeInput, POS_CTX, {
+				ticketRepo,
+				logRepo
+			});
+
+			expect(log.status).toBe('fulfilled');
+			expect(log.is_override).toBeFalsy();
+		});
 	});
 
 	it('records supplies consumable and returnable loans correctly', async () => {

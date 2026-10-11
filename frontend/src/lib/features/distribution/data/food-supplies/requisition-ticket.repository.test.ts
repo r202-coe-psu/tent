@@ -120,6 +120,79 @@ describe('RequisitionTicketRemoteRepository', () => {
 		await expect(repo.get('requisition_ticket:01JTEST00000000000000000000')).rejects.toThrow();
 	});
 
+	it('lists food/supplies/transfer tickets while skipping kitchen and malformed legacy docs', async () => {
+		const food = await repo.create(
+			{
+				ticket_no: 'TKT-FOOD-0001',
+				requisition_type: 'food',
+				meal: 'lunch',
+				source_location: 'warehouse:main',
+				destination_location: 'distribution_point:hall_a',
+				items: [
+					{
+						item_id: 'item:rice_box',
+						item_name: 'Rice Box',
+						type_class: 'CONSUMABLE',
+						requested_qty: '10',
+						allocated_qty: '10'
+					}
+				]
+			},
+			ctx
+		);
+		const base = {
+			_rev: '1-a',
+			type: 'requisition_ticket',
+			schema_v: 1,
+			shelter_code: 'SH001',
+			created_at: new Date().toISOString(),
+			updated_at: new Date().toISOString(),
+			created_by: 'user:staff1',
+			source_location: 'warehouse',
+			destination_location: 'point',
+			requested_by: 'user:staff1'
+		};
+		// Kitchen ticket ($lib/features/tickets) — allocated_qty '0', no type_class.
+		store.set('requisition_ticket:01JKITCHEN000000000000000000', {
+			...base,
+			_id: 'requisition_ticket:01JKITCHEN000000000000000000',
+			ticket_no: 'TKT-KITCHEN-0001',
+			requisition_type: 'kitchen',
+			status: 'PENDING_PICK',
+			items: [{ item_id: 'item:rice', item_name: 'Rice', requested_qty: '5', allocated_qty: '0' }]
+		});
+		// Pre-CR-121 legacy supplies doc — lowercase status, numeric qty.
+		store.set('requisition_ticket:01JLEGACY000000000000000000', {
+			...base,
+			_id: 'requisition_ticket:01JLEGACY000000000000000000',
+			ticket_no: 'TKT-DIST-8801',
+			requisition_type: 'supplies',
+			status: 'distributing',
+			items: [{ item_id: 'item-dist-8801', name: 'Legacy', quantity: 30 }]
+		});
+
+		// Transfer ticket — same Ticket shape, completes at the warehouse (IN_TRANSIT → COMPLETED).
+		const foodWithoutMeal: Record<string, unknown> = { ...food };
+		delete foodWithoutMeal.meal;
+		const transferId = 'requisition_ticket:01JTRANSFER000000000000000';
+		store.set(transferId, {
+			...foodWithoutMeal,
+			_id: transferId,
+			ticket_no: 'TKT-TRANSFER-0001',
+			requisition_type: 'transfer'
+		});
+
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const tickets = await repo.list();
+		expect(tickets.map((t) => t._id).sort()).toEqual([food._id, transferId].sort());
+		// Only the malformed supplies doc is reported; kitchen tickets are out of scope, not invalid.
+		expect(warn).toHaveBeenCalledTimes(1);
+		expect(warn.mock.calls[0][0]).toContain('Skipped 1 ticket(s)');
+		expect(warn.mock.calls[0][0]).toContain('requisition_ticket:01JLEGACY000000000000000000');
+		warn.mockRestore();
+		await expect(repo.list({ requisition_type: 'kitchen' })).resolves.toEqual([]);
+	});
+
 	it('performs legal CAS state transitions with history preservation', async () => {
 		const created = await repo.create(
 			{
