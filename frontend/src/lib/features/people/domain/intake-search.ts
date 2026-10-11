@@ -52,7 +52,7 @@ export type NewRegistrationCtaKind = 'hidden' | 'prominent' | 'outlined_override
  * `pre_registered` opens Report-in; every other stay status is shown to block duplicates.
  */
 export function resolveShelterHitAction(status: StayStatus): ShelterHitAction {
-	return status === 'pre_registered' ? 'report_in' : 'show_status';
+	return status === 'pre_registered' || status === 'kiosk_registered' ? 'report_in' : 'show_status';
 }
 
 /** Thai label for the stay status shown on already-registered hits. */

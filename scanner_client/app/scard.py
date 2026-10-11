@@ -1,17 +1,26 @@
 import base64
-import io
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 try:
+    from smartcard import scard as pcsc
     from smartcard.System import readers
     from smartcard.Exceptions import NoCardException, CardConnectionException
 except ImportError:
+    pcsc = None
     readers = None
     NoCardException = Exception
     CardConnectionException = Exception
 
 logger = logging.getLogger(__name__)
+
+
+class ReaderLostError(RuntimeError):
+    """The reader hardware vanished (USB unplugged). Unlike a card error it must reach the
+    manager, which then drops the reader and waits for it again instead of showing a read error."""
+
+# Consecutive failed status polls before the reader is treated as gone so the manager re-opens it.
+MAX_POLL_FAILURES = 3
 
 # Thai Smart Card Applet APDU
 SELECT = [0x00, 0xA4, 0x04, 0x00, 0x08]
@@ -56,7 +65,20 @@ CMD_PHOTOS = [
 class ThaiSmartCardReader:
     """Hardware driver interface for Thai National ID Smart Card Reader via PC/SC"""
 
-    def __init__(self, reader_index: int = 0):
+    def __init__(self, reader_index: int = 0, connection: Any = None):
+        """`connection` lets a subclass supply a non-PC/SC transport that offers the same
+        connect() / getATR() / transmit() API; the APDU and decoding logic below is shared."""
+        self.req_prefix = [0x00, 0xC0, 0x00, 0x00]
+        # PC/SC only: a context of our own for the slot status poll (see is_card_inserted).
+        self._hcontext = None
+        self._poll_failures = 0
+        self._last_present = False
+        self._last_event_count: Optional[int] = None
+        if connection is not None:
+            self.reader = None
+            self.connection = connection
+            return
+
         if readers is None:
             raise RuntimeError("pyscard is not installed. Please install pyscard and pcscd.")
 
@@ -69,12 +91,35 @@ class ThaiSmartCardReader:
 
         self.reader = available_readers[reader_index]
         self.connection = self.reader.createConnection()
-        self.req_prefix = [0x00, 0xC0, 0x00, 0x00]
+        hresult, self._hcontext = pcsc.SCardEstablishContext(pcsc.SCARD_SCOPE_USER)
+        if hresult != pcsc.SCARD_S_SUCCESS:
+            self._hcontext = None
+            raise RuntimeError("Could not open a PC/SC context; is pcscd running?")
         logger.info(f"Initialized Smart Card Reader: {self.reader}")
+
+    def close(self) -> None:
+        if self._hcontext is None:
+            return
+        self._release_card_handle()
+        try:
+            self.connection.release()
+        except Exception:
+            pass
+        pcsc.SCardReleaseContext(self._hcontext)
+        self._hcontext = None
+
+    def _release_card_handle(self) -> None:
+        if self.reader is None:  # RFpro and other non-PC/SC transports hold no card handles
+            return
+        try:
+            self.connection.disconnect()
+        except Exception:
+            pass  # the card was pulled or pcscd restarted: the handle is already gone
 
     def connect(self) -> bool:
         """Establish connection with the inserted smart card and select Thai card applet"""
         try:
+            self._release_card_handle()
             self.connection.connect()
             atr = self.connection.getATR()
 
@@ -87,6 +132,9 @@ class ThaiSmartCardReader:
             data, sw1, sw2 = self.connection.transmit(SELECT + THAI_CARD_AID)
             logger.debug(f"Select Applet Response: {sw1:02X} {sw2:02X}")
             return True
+        except ReaderLostError:
+            # Must precede NoCardException: without pyscard that name is an alias of Exception.
+            raise
         except NoCardException:
             logger.debug("No card inserted.")
             return False
@@ -95,14 +143,44 @@ class ThaiSmartCardReader:
             return False
 
     def is_card_inserted(self) -> bool:
-        """Check whether a card is currently inserted in the reader"""
-        try:
-            self.connection.connect()
-            return True
-        except NoCardException:
-            return False
-        except Exception:
-            return False
+        if self.reader is None:
+            raise NotImplementedError("a non-PC/SC reader must provide is_card_inserted")
+        if self._hcontext is None:
+            raise ReaderLostError("card reader is closed")
+        hresult, states = pcsc.SCardGetStatusChange(
+            self._hcontext, 0, [(str(self.reader), pcsc.SCARD_STATE_UNAWARE)]
+        )
+        if hresult in (
+            pcsc.SCARD_E_NO_SERVICE,
+            pcsc.SCARD_E_SERVICE_STOPPED,
+            pcsc.SCARD_E_INVALID_HANDLE,
+            pcsc.SCARD_E_UNKNOWN_READER,
+            pcsc.SCARD_E_READER_UNAVAILABLE,
+            pcsc.SCARD_E_NO_READERS_AVAILABLE,
+        ):
+            raise ReaderLostError(f"card reader unavailable ({pcsc.SCardGetErrorMessage(hresult)})")
+        if hresult != pcsc.SCARD_S_SUCCESS or not states:
+            self._poll_failures += 1
+            if self._poll_failures >= MAX_POLL_FAILURES:
+                self._poll_failures = 0
+                raise ReaderLostError("card reader stopped answering status polls")
+            # A hiccup says nothing about the slot: reporting "empty" would end a removal wait.
+            return self._last_present
+        self._poll_failures = 0
+        event_state = states[0][1]
+        if event_state & (pcsc.SCARD_STATE_UNKNOWN | pcsc.SCARD_STATE_UNAVAILABLE):
+            raise ReaderLostError("card reader is no longer available")
+        present = bool(event_state & pcsc.SCARD_STATE_PRESENT)
+        event_count = (event_state >> 16) & 0xFFFF
+        swapped = (
+            present
+            and self._last_present
+            and self._last_event_count is not None
+            and event_count != self._last_event_count
+        )
+        self._last_event_count = event_count
+        self._last_present = present
+        return present and not swapped
 
     def decode_tis620(self, data: List[int]) -> str:
         """Decode byte array from TIS-620 encoding (standard for Thai Smart Card)"""
@@ -168,9 +246,27 @@ class ThaiSmartCardReader:
             if data:
                 return bytes(bytearray(data))
             return None
+        except ReaderLostError:
+            raise
         except Exception as e:
             logger.error(f"Error extracting photo: {e}")
             return None
+
+    def read_citizen_id(self) -> str:
+        """Read only the 13-digit citizen ID — skips names, address and the 20-chunk photo"""
+        if not self.connect():
+            raise RuntimeError("Failed to connect to smart card")
+
+        cid = self.get_citizen_id()
+        if not cid:
+            raise ValueError("Could not read Citizen ID (CID)")
+        return cid
+
+    def read_photo(self) -> Optional[bytes]:
+        """Read only the chip photo (20 chunks) - no names or address. For the face check."""
+        if not self.connect():
+            raise RuntimeError("Failed to connect to smart card")
+        return self.get_photo_bytes()
 
     def read_all_data(self) -> Dict[str, Any]:
         """Read all available data from the card and return a structured dictionary"""

@@ -243,6 +243,24 @@ def test_project_evacuee_passport():
     assert payload["passport_id_masked"] == mask_passport("AB1234567")
 
 
+@pytest.mark.parametrize("status", ["pre_registered", "kiosk_registered"])
+def test_project_evacuee_pending_registration_has_no_checkin_time(status):
+    doc = {
+        "_id": "evacuee:pending",
+        "type": "evacuee",
+        "current_stay": {
+            "status": status,
+            "since": "2026-01-01T00:00:00.000Z",
+        },
+    }
+
+    action, payload = project_evacuee(doc, shelter_code="SH001")
+
+    assert action == "upsert"
+    assert payload is not None
+    assert payload["checked_in_at"] is None
+
+
 def test_project_evacuee_pink_card_hashes_national_id_field():
     doc = {
         "_id": "evacuee:03PINK",

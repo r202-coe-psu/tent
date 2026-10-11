@@ -7,6 +7,7 @@ import {
 	deployPeopleMangoIndexes,
 	deployRegistryDesign,
 	deployReferralMangoIndexes,
+	deployKioskLookupMangoIndexes,
 	deployRequisitionTicketMangoIndexes,
 	deployShelterViews,
 	deployTransferLedgerMangoIndexes,
@@ -332,6 +333,9 @@ async function provisionShelterUnlocked(
 	await assertActive?.();
 	await deployReferralMangoIndexes(db);
 	steps.push({ step: 'referral-mango', status: 200 });
+	await assertActive?.();
+	await deployKioskLookupMangoIndexes(db);
+	steps.push({ step: 'kiosk-lookup-mango', status: 200 });
 	await assertActive?.();
 	await deployTransferLedgerMangoIndexes(db);
 	steps.push({ step: 'transfer-ledger-mango', status: 200 });
