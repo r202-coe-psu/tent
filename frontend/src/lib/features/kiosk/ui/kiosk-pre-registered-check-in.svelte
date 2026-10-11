@@ -158,10 +158,13 @@
 				result.qr_payload
 		)
 	);
+	/** Card face check (hold) or ThaiD: step 3 is proving who is at the kiosk, not a plain lookup. */
+	const verifiesIdentity = $derived((holdMembers && Boolean(hold)) || isThaidGate);
+	// The face check runs after the lookup, so the members (step 4) only count once it has ended.
 	const wizardStep = $derived(
 		results.length > 0
 			? 5
-			: candidates.length > 0 || lookupError || isLookingUp
+			: candidates.length > 0 || lookupError || isLookingUp || (lookup && holdMembers && hold)
 				? 3
 				: lookup
 					? 4
@@ -519,6 +522,7 @@
 	<KioskCheckInWizard
 		currentStep={wizardStep}
 		step2Label={isThaidGate ? 'สแกนด้วย ThaiD' : undefined}
+		step3Label={verifiesIdentity ? 'ยืนยันตัวตน' : undefined}
 	/>
 	<div class="no-print flex justify-start">
 		<KioskBackButton
