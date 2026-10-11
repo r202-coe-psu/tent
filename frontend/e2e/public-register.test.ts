@@ -282,11 +282,14 @@ test.describe(
 			await expect(page.getByText('ผู้สูงอายุช่วยเหลือตัวเองไม่ได้').first()).toBeVisible();
 
 			await page.getByRole('button', { name: 'เพิ่มสมาชิก' }).click();
-			const member2 = page.getByRole('region', { name: 'สมาชิก 2' });
+			const member2 = page.getByRole('region', { name: 'สมาชิกคนที่ 2' });
 			await expect(member2).toBeVisible();
 			await member2.locator('#member-1-first-name').fill('สมหญิง');
 			await member2.locator('#member-1-last-name').fill('ใจดี');
-			await member2.locator('#member-1-gender-female').click({ force: true });
+			// The label is the real click target (the radio itself is a tiny button).
+			await page.locator('label[for="member-1-gender-female"]').click();
+			// No phone for this member — the field opens ready to type, so say so (roleplay #10).
+			await member2.locator('#member-1-no-phone').click();
 			await member2.getByRole('button', { name: 'กลุ่มเปราะบาง' }).click();
 			await member2.locator('#vg-1-elderly_dependent').click();
 

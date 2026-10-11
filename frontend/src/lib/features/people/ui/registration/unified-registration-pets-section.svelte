@@ -258,21 +258,18 @@
 								<span
 									class="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary"
 								>
-									{totalPetCount}
-									{t.petCountUnit ? `${t.petCountUnit}` : 'ตัว'}
+									{t.petsBadge(totalPetCount)}
 								</span>
 							{:else}
 								<span
 									class="rounded-full bg-muted px-2 py-0.5 text-2xs font-normal text-muted-foreground"
 								>
-									ไม่จำเป็น / หากมี
+									{t.optionalIfAny}
 								</span>
 							{/if}
 						</div>
 						<p class="mt-0.5 text-xs text-muted-foreground">
-							{totalPetCount > 0
-								? `บันทึกข้อมูลสัตว์เลี้ยงแล้ว ${totalPetCount} ตัว`
-								: t.sectionPetsDesc}
+							{totalPetCount > 0 ? t.petsSavedCount(totalPetCount) : t.sectionPetsDesc}
 						</p>
 					</div>
 				</div>
@@ -284,15 +281,14 @@
 						<div class="flex items-center gap-2">
 							<PawPrint class="size-4 text-primary" />
 							<span class="text-xs font-semibold text-foreground sm:text-sm">
-								สัตว์เลี้ยงเดิมของครอบครัวที่ลงทะเบียนแล้ว ({existingPets.length} รายการ)
+								{t.existingPetsTitle(existingPets.length)}
 							</span>
 							<span class="rounded bg-primary/10 px-1.5 py-0.5 text-2xs font-medium text-primary">
-								ลงทะเบียนแล้ว
+								{t.existingPetsBadge}
 							</span>
 						</div>
 						<p class="mt-1 text-xs text-muted-foreground">
-							ครอบครัวนี้มีสัตว์เลี้ยงที่ลงทะเบียนไว้แล้วด้านล่าง
-							หากมีสัตว์เลี้ยงตัวอื่นที่นำมาเพิ่ม สามารถกดปุ่มเพิ่มสัตว์เลี้ยงได้
+							{t.existingPetsHint}
 						</p>
 						<div class="mt-2.5 flex flex-wrap gap-2">
 							{#each existingPets as ep, i (i)}
@@ -300,11 +296,15 @@
 									class="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-background px-2.5 py-1 text-xs shadow-2xs"
 								>
 									<span class="font-medium text-foreground">
-										{ep.species === 'dog' ? 'สุนัข' : ep.species === 'cat' ? 'แมว' : ep.species}
+										{ep.species === 'dog'
+											? t.dogTitle
+											: ep.species === 'cat'
+												? t.catTitle
+												: ep.species}
 										{#if ep.name}· {ep.name}{/if}
 									</span>
 									{#if ep.count && ep.count > 1}
-										<span class="text-muted-foreground">({ep.count} ตัว)</span>
+										<span class="text-muted-foreground">{t.petCountParen(ep.count)}</span>
 									{/if}
 									{#if ep.details}
 										<span class="text-muted-foreground">· {ep.details}</span>
@@ -319,7 +319,7 @@
 					class="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-border/50 pb-3"
 				>
 					<span class="text-xs font-medium text-foreground">
-						{totalPetCount > 0 ? `รายการสัตว์เลี้ยง (${totalPetCount} ตัว)` : 'เพิ่มสัตว์เลี้ยง'}
+						{totalPetCount > 0 ? t.petListTitle(totalPetCount) : t.addPetsTitle}
 						{#if petItems.length >= PETS_MAX_COUNT}
 							<span class="ml-1 font-normal text-amber-800">· {t.petMaxReached}</span>
 						{/if}
@@ -468,7 +468,7 @@
 												class="flex min-w-0 flex-1 flex-wrap items-center gap-1 sm:w-full sm:flex-col sm:items-stretch"
 											>
 												<span class="text-2xs text-muted-foreground sm:text-center">
-													(ไม่จำเป็น / หากมี)
+													({t.optionalIfAny})
 												</span>
 												<label
 													for="pet-photo-{pet.id}"

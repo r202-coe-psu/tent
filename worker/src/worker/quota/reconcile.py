@@ -278,8 +278,8 @@ async def _realign_target(
     else:
         report.target_conflicts.append(key)
         logger.error(
-            "qty_target for %s/%s/%s changed mid-run — re-run inside a maintenance "
-            "window (CR-047 Cutover Lock)",
+            "qty_target for %s/%s/%s changed or was overtaken by new reservations "
+            "mid-run — re-run inside a maintenance window (CR-047 Cutover Lock)",
             shelter_code,
             campaign_id,
             item_id,

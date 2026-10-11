@@ -6,6 +6,7 @@ import {
 	formatThaiDate,
 	daysBetween,
 	buildDateRange,
+	bangkokToday,
 	DISPLAY_LOCALE,
 	DISPLAY_TIME_ZONE
 } from './date';
@@ -79,5 +80,21 @@ describe('date utilities', () => {
 			const range = buildDateRange('2026-07-01', '2026-07-03');
 			expect(range).toEqual(['2026-07-01', '2026-07-02', '2026-07-03']);
 		});
+	});
+});
+
+describe('bangkokToday', () => {
+	it('uses the Bangkok calendar date, not the UTC one', () => {
+		// 20:00 UTC on the 1st is 03:00 on the 2nd in Bangkok (UTC+7).
+		expect(bangkokToday(new Date('2026-06-01T20:00:00Z'))).toBe('2026-06-02');
+	});
+
+	it('stays on the same date until Bangkok midnight', () => {
+		expect(bangkokToday(new Date('2026-06-01T16:59:59Z'))).toBe('2026-06-01');
+		expect(bangkokToday(new Date('2026-06-01T17:00:00Z'))).toBe('2026-06-02');
+	});
+
+	it('defaults to now and returns YYYY-MM-DD', () => {
+		expect(bangkokToday()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
 	});
 });

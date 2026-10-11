@@ -27,6 +27,10 @@ class DonationBuffer(Document):
 	# which bypass the counter entirely. cancel()/expire() release exactly this amount.
 	items_declared: list[dict[str, Any]] = Field(default_factory=list)
 	logistics: dict[str, Any] | None = None
+	# ``DonationSlotCounter`` id this booking holds a place in — set only when the window
+	# had a ceiling. Mongo-only: inbound copies named fields to CouchDB, never this one.
+	# cancel()/expire()/settle release exactly this place.
+	slot_counter_id: str | None = None
 	campaign_id: str | None = None
 	booking_ref: str
 	tracking_token: str

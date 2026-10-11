@@ -14,7 +14,7 @@
 | `playwright.staging.config.ts` | remote: `grep: /@release\|@smoke/`, `grepInvert: /@quarantine/`, workers=1, `globalTimeout` 30 min                                                                                                                                  |
 | `playwright.prod.config.ts`    | remote read-only: `grep: /@prod/`, `globalTimeout` 2 min                                                                                                                                                                            |
 | `playwright.public.config.ts`  | remote read-only public suites (incl. pre-register) — **not wired to any job**                                                                                                                                                      |
-| Suites                         | J1–J6 carry `@release` where green locally; unsafe SH001 suites are `@quarantine`                                                                                                                                                   |
+| Suites                         | J1–J6 carry `@release` where green locally; unsafe SH001 suites are `@quarantine`; donations are `@donation` (§8.3)                                                                                                                 |
 | Automation                     | Staging deploy runs `tent-e2e-staging` with `wait: true, propagate: false` (manual review: no GitHub commit status; a person reads the Staging E2E Report before promoting). Prod deploy runs `@prod` after. Janitor job available. |
 | Pre-push (lefthook)            | lint / check / unit tests only — no e2e                                                                                                                                                                                             |
 
@@ -39,8 +39,8 @@ Known problems:
   which also burns a real citizen's budget. With the duplicate removed, W2–W5 spend ~8 of 10, and
   `waitForStatusBudget(needed)` now counts real hits and only waits when the budget is short. The
   limiters live in the preview server's memory, so re-running the pre-register suite back-to-back
-  against a **reused** server can still get `429 Too Many Requests` on W4/W5 — wait a minute or
-  restart the server.
+  against a **reused** server with `RATE_LIMIT=true` can still get `429 Too Many Requests` on W4/W5 —
+  wait a minute or restart the server (not an issue with the default `RATE_LIMIT=false`, see §7.1).
   Since develop's `registrations/check-duplicate` (instant duplicate check on the public form)
   shares that same `registerLookupIpLimiter` budget, W4 and W5 fill the form again and usually
   wait out one window, so the pre-register `@critical` group takes ~1 min longer than before.
@@ -205,6 +205,26 @@ pnpm test:e2e:regression                      # mocked suites only
 
 Live suites also need platform init (`pnpm seed:master`, `pnpm db:sync`); see each file's header.
 
+### 7.1 Rate limits — the `RATE_LIMIT` switch (CR-160)
+
+BFF limiters exempt loopback only under `vite dev`; Playwright runs `vite preview` (a production
+build) and every suite shares the runner's IP, so the 3/min booking limit would throttle e2e.
+CR-160 adds a **server env `RATE_LIMIT`**:
+
+- `false` / `0` (trimmed, case-insensitive) turns off **only** limiters constructed with
+  `{ bypassable: true }`: `donationIp/Phone/Edit/Read` and `registerIp/Phone/LookupIp`. No hit is
+  recorded while off. Everything else — staff login, secret reveal, link-account, volunteer — and
+  any limiter added later enforces regardless (the default is `bypassable: false`).
+- Unset or any other value enforces everything. FastAPI's own per-IP limiter is not affected.
+- `playwright.config.ts` defaults it to `false` for the local preview server (override with
+  `RATE_LIMIT=true`). On staging the server needs `RATE_LIMIT=false` in its root `.env` and the
+  runner env (Jenkins credential `tent-staging-e2e-env`) must carry the same value. The compose
+  files pass `RATE_LIMIT: ${RATE_LIMIT:-true}` to the frontend, so production stays enforced and
+  must never set `false`.
+- The e2e side reads the same variable (`RATE_LIMIT_ENFORCED` in `helpers/e2e-env.ts`):
+  `waitForStatusBudget` in the pre-register suite only waits when limits are enforced (unset counts
+  as enforced).
+
 ## 8. Release gate — six journeys that must pass before prod
 
 Nothing is merged `staging → main` unless every journey below is green on staging (`@release`) — checked by a person in the Staging E2E Report (decision 2026-10-09), not by an automatic gate.
@@ -254,6 +274,55 @@ J3/J4 `@onsite` `@release` live; unsafe SH001 suites are `@quarantine`.
 | 8        | J5      | Tag SH001 household suites `@quarantine` or explicitly non-`@release` until rewritten                                  | **S** | B3    |
 
 No journey test rewrites in Step A — documentation + `--list` fix only.
+
+### 8.3 Donation suites (`@donation`, outside the six release journeys)
+
+Feature tag `@donation`; none carries `@release`. The mocked wizard is a `@regression` suite;
+the live ones are `@critical` and run on the staging pipeline on a writable run (§9.C).
+
+| Suite                              | Layer         | What it proves                                                                                                                                                                          | Data (§4)                                                                                                                |
+| ---------------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `donation.test.ts`                 | `@regression` | Public wizard, track-page cancel, needs board urgency, filter chips, non-secure context — all `page.route`-mocked                                                                       | none (no DB)                                                                                                             |
+| `stock-donations.test.ts`          | `@critical`   | Warehouse staff open back-office stock-donations, registration staff are turned away, the campaign form offers no unit override                                                         | two `donation_*_<run id>` CouchDB users scoped to SH001 (read-only there; no campaign submitted); deleted in afterAll; Z |
+| `donation-fullstack.test.ts`       | `@critical`   | Donor ↔ staff: approve → QR → receive into stock → donor sees received; rejects (queue, scan station); donor edit / cancel / wrong-phone lookup; parcel tracking no. added later (DN-6) | own `E2E Donation donor …` shelter + warehouse staff; campaign created through back-office; ledger teardown; Z           |
+| `donation-fullstack-admin.test.ts` | `@critical`   | Campaign board lifecycle (create → public board → edit → hide → force cut-off → reopen); DN-5 slots (pickup full → freed, close/reopen, edit/delete, open whole day); counter walk-in   | own `E2E Donation admin …` shelter + staff; campaign and slots through the UI; ledger teardown; Z                        |
+| `donation-fullstack-race.test.ts`  | `@critical`   | Two donors press confirm together: last pickup trip, last capped drop-off place, last unit of a need — exactly one wins (`SLOT_FULL` / `NEED_FULL`)                                     | own `E2E Donation race …` shelter + staff; campaigns and capped slots through the UI; ledger teardown; Z                 |
+
+How the three full-stack suites obey §4:
+
+- **Own shelter.** `provisionShelter` creates an `E2E Donation <tag> <run id>` shelter through the
+  system-management UI (admin session, like `onsite-stations-flow`) and waits until the public
+  plane serves it `open`. Campaigns, staff, slots and bookings live on it; SH001–SH004 are never
+  touched.
+- **Setup through the UI.** Campaigns via back-office จัดการความต้องการ (`createCampaignViaUi`),
+  slots via ช่วงเวลารับของ (`addSlotViaUi`), bookings via the public wizard. Only the warehouse
+  staff user is made with `createCouchUser` — there is no UI that creates users with an arbitrary
+  role set; the rest is `couchReq` reads for assertions (and the shelter teardown).
+- **Ledger-only teardown.** `RunLedger` (`node_modules/.cache/donation-e2e-created.json`, one
+  entry per suite) records each shelter code, staff name and booking token the moment it exists;
+  `teardownRun` removes exactly those: it cancels every still-open booking as its donor would
+  (BFF `DELETE /api/public/v1/donations/{token}`, so FastAPI releases need and slot counters),
+  waits for the shelter's `reserved` to drop to 0, `teardownShelter`s the shelter and deletes
+  the staff. Idempotent — runs in afterAll and in the Z test.
+- **Zero-leak Z test** (`expectRunGone`): shelter database and registry row gone, the shelter
+  absent from the public needs board, staff users gone, every booking released
+  (`cancelled`/`rejected`/`received`/…).
+- **Gating.** `CAN_WRITE` / `READ_ONLY_REASON`, not `PW_BASE_URL`. `suspendRecaptcha` flips
+  `config:app.recaptcha_enabled` off for the run and restores the previous value in afterAll
+  (the switch is global to the stack — do not run these suites against a stack someone else is
+  using for reCAPTCHA-dependent testing).
+- **Residue the test side cannot remove:** the Mongo intake-buffer / `public_donations` rows of
+  the run's bookings (no delete API; retention purges them on their TTL) and the closed
+  `public_shelters` row (the worker's retention job drops it within minutes). A received donation
+  is not reversible either — its `stock_ledger` row lives in the deleted shelter database, so it
+  goes with it.
+- **Rate limits.** The BFF allows 3 bookings and 10 edit/cancel calls per minute per IP, and
+  FastAPI 30 requests per minute per IP on every donation route. The limiters exempt loopback
+  only under `vite dev`, so on a remote target (and on `vite preview` with
+  `DONATION_E2E_PACE=1`) `bookingPacer` / the cancel pacer spread the calls out; the three suites
+  take an estimated 10–15 minutes together there (paced; not yet measured on staging). Locally run them against `pnpm dev`:
+  `PLAYWRIGHT_TEST_BASE_URL=http://localhost:5173 pnpm exec playwright test e2e/donation-fullstack.test.ts`
+  (wait about a minute between two back-to-back runs: FastAPI's limiter is not loopback-exempt).
 
 ## 9. Agent handoff
 
@@ -328,7 +397,10 @@ assertion green; `--list` shows every touched test with exactly one layer tag; a
   `tent-staging-e2e-env` credential sets `ALLOW_REMOTE_WRITES=true` (exactly `true`; `CAN_WRITE`
   in `helpers/e2e-env.ts`). `public-search-flow` / `public-shelters-filter` now create and tear
   down their own per-run data on such a run too (zero-leak Z test each); only `public-home-flow`
-  is still gated on `IS_REMOTE` and shows as skipped.
+  is still gated on `IS_REMOTE` and shows as skipped. The `@donation` suites (§8.3 —
+  `donation-fullstack*.test.ts`, `stock-donations.test.ts`) are in the allowlist too: each
+  builds its own `E2E Donation …` shelter, suspends reCAPTCHA for its run (restored in
+  afterAll) and ends with a Z test; budget an estimated 10–15 min of the 30 (not yet measured on staging).
 - `Jenkinsfile.e2e-staging` / `scripts/run-staging-e2e.sh`: fail the job on Playwright failure.
   ~~Post GitHub commit status context **`staging/e2e`** on `DEPLOY_COMMIT` (pending →
   success/failure/error). Credential: `tent-github-status-token`.~~ _Superseded by decision

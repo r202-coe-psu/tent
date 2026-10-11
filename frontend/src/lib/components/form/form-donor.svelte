@@ -174,13 +174,11 @@
 			<div
 				class="flex h-10 w-10 items-center justify-center rounded-full bg-domain-donation-subtle"
 			>
-				<Package class="h-5 w-5 text-domain-donation" />
+				<Package class="h-5 w-5 text-domain-donation-text" />
 			</div>
 			<div>
 				<h3 class="text-xl font-bold text-slate-800">{t.section2Title}</h3>
-				<p
-					class="mt-1 inline-block rounded bg-domain-donation-subtle px-3 py-1 text-sm font-medium text-domain-donation-text"
-				>
+				<p class="mt-1 text-sm font-medium text-slate-500">
 					{donationStore.flowMode === 'solicited'
 						? t.section2DescSolicited
 						: t.section2DescUnsolicited}
