@@ -16,7 +16,9 @@ affects:
   - docs/data/schema.md §3.12 (ใหม่) `kiosk_banner` — schema_v 1 (doc type ใหม่ ใน DB `registry`)
   - docs/data/api-contract.md §2.1 Scanner kiosk (+ `POST /kiosk/banners`, `GET /kiosk/banners/{id}/image`) · §Back-office (+ `/api/back-office/kiosk-banners/**`)
   - docs/prd/role-permission-matrix.md §1.1 (+ role `banner_staff` — 10 → 11 บทบาท) · docs/data/schema.md §6 `_users.roles`
-  - frontend/src/lib/auth/roles.ts (`BANNER_STAFF` + `STAFF_CAPABILITIES`) · portal nav
+  - frontend/src/lib/auth/roles.ts (`BANNER_STAFF` + `STAFF_CAPABILITIES`) · frontend/src/lib/features/users/domain/schema.ts · frontend/src/lib/server/user-service.ts
+  - frontend/src/lib/components/backoffice-navbar/static.ts (เมนู「แบนเนอร์ Kiosk」)
+  - frontend/.env.example (server-only secret ของ signed image URL)
   - docs/features/kiosk-banner-design-guideline.md (ใหม่ — แนวทาง implement)
   - frontend/src/lib/features/kiosk-banners/{domain,data,application,ui,index.ts} (ใหม่ — back-office)
   - frontend/src/lib/server/kiosk-banners/** (ใหม่ — registry CRUD, signed image URL)
@@ -26,7 +28,9 @@ affects:
   - frontend/src/routes/api/back-office/kiosk-banners/** (ใหม่ + server.test.ts)
   - frontend/src/routes/api/v1/scanner/kiosk/banners/** (ใหม่ + server.test.ts)
   - scanner_client/app/manager.py `_route_kiosk_api` allowed_paths · scanner_client/tests/test_manager.py
-  - couchdb `registry` `validate_doc_update` (type `kiosk_banner`)
+  - frontend/src/lib/server/registry-design.ts `buildRegistryValidateDocUpdate()` (type `kiosk_banner`)
+  - frontend/e2e/kiosk-banners.test.ts (ใหม่)
+  - path ทั้งหมด: docs/features/kiosk-banner-design-guideline.md §2.3
 why: >
   หน้าแรก kiosk ค้างอยู่โดยไม่มีผู้ใช้เกือบตลอดเวลา ศูนย์ต้องใช้หน้าจอนี้แจ้งข่าวสาร (ตารางแจกอาหาร, จุดบริการ, คำเตือน)
   ทีมเคยใช้ banner รูปภาพบน kiosk ในระบบก่อนหน้า (ghosa) และพิสูจน์แล้วว่าพอสำหรับงานประชาสัมพันธ์หน้าตู้
