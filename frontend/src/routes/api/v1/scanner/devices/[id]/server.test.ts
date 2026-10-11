@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { DELETE } from './+server';
+import { DELETE, PATCH } from './+server';
 import type { RequestEvent } from './$types';
 import { readSessionUserCtx } from '$lib/server/couch-admin';
 import {
 	ScannerConflictError,
+	ScannerDependencyError,
 	ScannerDeviceNotFoundError
 } from '$lib/server/scanners/device-credentials';
 import { scannerDeviceRepository } from '$lib/server/scanners/device-repository';
@@ -17,7 +18,7 @@ vi.mock('$lib/server/couch-admin', async () => {
 });
 
 vi.mock('$lib/server/scanners/device-repository', () => ({
-	scannerDeviceRepository: { getDevice: vi.fn(), deleteDevice: vi.fn() }
+	scannerDeviceRepository: { getDevice: vi.fn(), deleteDevice: vi.fn(), updateDevice: vi.fn() }
 }));
 
 vi.mock('$env/dynamic/private', () => ({ env: {} }));
@@ -122,5 +123,140 @@ describe('DELETE /api/v1/scanner/devices/[id]', () => {
 
 		mockDelete.mockRejectedValueOnce(new StaffPinUnavailableError());
 		expect((await del()).status).toBe(503);
+	});
+});
+
+describe('PATCH /api/v1/scanner/devices/[id]', () => {
+	const mockSession = vi.mocked(readSessionUserCtx);
+	const mockGet = vi.mocked(scannerDeviceRepository.getDevice);
+	const mockUpdate = vi.mocked(scannerDeviceRepository.updateDevice);
+
+	type Persisted = Awaited<ReturnType<typeof scannerDeviceRepository.getDevice>>;
+
+	function persisted(shelter_code: string, overrides: Record<string, unknown> = {}): Persisted {
+		return {
+			_id: DOC_ID,
+			_rev: '2-a',
+			type: 'scanner_device',
+			schema_v: 1,
+			created_at: '2026-09-22T00:00:00Z',
+			updated_at: '2026-09-22T00:00:00Z',
+			created_by: 'sa-user',
+			device_id: DEVICE_ID,
+			name: 'จุดคัดกรอง 1',
+			shelter_code,
+			station_name: 'โต๊ะ 1',
+			status: 'active',
+			secret_hash: 'a'.repeat(64),
+			secret_prefix: 'sk_scan_aaaaaaaa...',
+			last_seen_at: null,
+			...overrides
+		} as Persisted;
+	}
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		mockSession.mockResolvedValue(SESSIONS.admin);
+		mockGet.mockResolvedValue(persisted('SH001'));
+		mockUpdate.mockResolvedValue(persisted('SH001', { status: 'inactive' }));
+	});
+
+	async function patch(body: unknown, id = DEVICE_ID): Promise<Response> {
+		return PATCH({
+			params: { id },
+			request: new Request('http://localhost/api/v1/scanner/devices/x', {
+				method: 'PATCH',
+				headers: { 'content-type': 'application/json', cookie: 'AuthSession=abc' },
+				body: typeof body === 'string' ? body : JSON.stringify(body)
+			})
+		} as unknown as RequestEvent);
+	}
+
+	it('updates status as a system admin and returns only the redacted summary', async () => {
+		const response = await patch({ status: 'inactive' });
+		expect(response.status).toBe(200);
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(mockUpdate).toHaveBeenCalledWith(DOC_ID, { status: 'inactive' }, 'sa-user');
+		const data = await response.json();
+		expect(data).toEqual({
+			id: DOC_ID,
+			device_id: DEVICE_ID,
+			name: 'จุดคัดกรอง 1',
+			shelter_code: 'SH001',
+			station_name: 'โต๊ะ 1',
+			status: 'inactive',
+			last_seen_at: null,
+			staff_pin_set: false,
+			staff_pin_is_default: false
+		});
+		expect(JSON.stringify(data)).not.toContain('secret_hash');
+	});
+
+	it('returns 401 for anonymous and 403 for registration staff without touching the device', async () => {
+		mockSession.mockResolvedValueOnce(SESSIONS.anonymous);
+		const anonymous = await patch({ status: 'inactive' });
+		expect(anonymous.status).toBe(401);
+		expect(anonymous.headers.get('cache-control')).toBe('no-store');
+
+		mockSession.mockResolvedValueOnce(SESSIONS.registrationA);
+		expect((await patch({ status: 'inactive' })).status).toBe(403);
+		expect(mockGet).not.toHaveBeenCalled();
+		expect(mockUpdate).not.toHaveBeenCalled();
+	});
+
+	it('lets a shelter manager update a device of their own shelter as themselves', async () => {
+		mockSession.mockResolvedValue(SESSIONS.managerA);
+		expect((await patch({ name: 'เครื่องใหม่' })).status).toBe(200);
+		expect(mockUpdate).toHaveBeenCalledWith(DOC_ID, { name: 'เครื่องใหม่' }, 'sm-a');
+	});
+
+	it('reads a device of another shelter as missing (404) and never writes it', async () => {
+		mockSession.mockResolvedValue(SESSIONS.managerA);
+		mockGet.mockResolvedValue(persisted('SH002'));
+		const response = await patch({ status: 'inactive' });
+		expect(response.status).toBe(404);
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(mockUpdate).not.toHaveBeenCalled();
+	});
+
+	it('lets a manager of both shelters and a system admin update in either', async () => {
+		for (const session of [SESSIONS.managerAB, SESSIONS.admin]) {
+			mockSession.mockResolvedValue(session);
+			mockGet.mockResolvedValue(persisted('SH002'));
+			expect((await patch({ status: 'inactive' })).status).toBe(200);
+		}
+		expect(mockUpdate).toHaveBeenCalledTimes(2);
+	});
+
+	it.each([
+		['empty', {}],
+		['unknown status', { status: 'paused' }],
+		['shelter change', { shelter_code: 'SH002' }],
+		['device id change', { device_id: 'other-01' }],
+		['PIN metadata', { staff_pin_set: true }],
+		['blank name', { name: ' ' }],
+		['not an object', 'not json']
+	])('returns 400 for a %s body before reading the device', async (_label, body) => {
+		const response = await patch(body);
+		expect(response.status).toBe(400);
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(mockGet).not.toHaveBeenCalled();
+		expect(mockUpdate).not.toHaveBeenCalled();
+	});
+
+	it('treats a junk path id as 404 without reading the registry', async () => {
+		expect((await patch({ status: 'inactive' }, '../x')).status).toBe(404);
+		expect(mockGet).not.toHaveBeenCalled();
+	});
+
+	it('maps unknown → 404, rev conflict → 409, store down → 503', async () => {
+		mockGet.mockRejectedValueOnce(new ScannerDeviceNotFoundError());
+		expect((await patch({ status: 'inactive' })).status).toBe(404);
+
+		mockUpdate.mockRejectedValueOnce(new ScannerConflictError('modified'));
+		expect((await patch({ status: 'inactive' })).status).toBe(409);
+
+		mockUpdate.mockRejectedValueOnce(new ScannerDependencyError());
+		expect((await patch({ status: 'inactive' })).status).toBe(503);
 	});
 });

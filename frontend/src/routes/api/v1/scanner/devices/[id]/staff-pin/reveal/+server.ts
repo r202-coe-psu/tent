@@ -10,8 +10,8 @@ import {
 export const prerender = false;
 
 /**
- * Reveal a scanner's staff bypass PIN to SA or the shelter_manager of its shelter. POST (not GET) so it never lands in a browser
- * cache/history; every reveal is logged (who, which device, when) — never the PIN itself.
+ * Reveal a scanner's staff bypass PIN to SA or the shelter_manager of its shelter. POST (not GET)
+ * so it never lands in a browser cache/history; every reveal is logged (who, which device, when) — never the PIN itself.
  */
 export const POST: RequestHandler = async ({ request, params }) => {
 	try {

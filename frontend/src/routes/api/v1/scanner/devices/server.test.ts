@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { POST } from './+server';
+import { GET, POST } from './+server';
 import type { RequestEvent } from './$types';
 import { readSessionUserCtx } from '$lib/server/couch-admin';
 import {
@@ -17,7 +17,7 @@ vi.mock('$lib/server/couch-admin', async () => {
 });
 
 vi.mock('$lib/server/scanners/device-repository', () => ({
-	scannerDeviceRepository: { createDevice: vi.fn() }
+	scannerDeviceRepository: { createDevice: vi.fn(), listDevices: vi.fn() }
 }));
 
 describe('POST /api/v1/scanner/devices', () => {
@@ -159,5 +159,116 @@ describe('POST /api/v1/scanner/devices', () => {
 
 		mockCreate.mockRejectedValueOnce(new ScannerDependencyError());
 		expect((await post(input)).status).toBe(503);
+	});
+});
+
+describe('GET /api/v1/scanner/devices', () => {
+	const mockSession = vi.mocked(readSessionUserCtx);
+	const mockList = vi.mocked(scannerDeviceRepository.listDevices);
+
+	const deviceA = {
+		_id: 'scanner_device:kiosk-sh001-01',
+		_rev: '1-a',
+		type: 'scanner_device' as const,
+		schema_v: 1 as const,
+		created_at: '2026-09-22T00:00:00Z',
+		updated_at: '2026-09-22T00:00:00Z',
+		created_by: 'sa-user',
+		device_id: 'kiosk-sh001-01',
+		name: 'จุดคัดกรอง 1',
+		shelter_code: 'SH001',
+		station_name: 'โต๊ะ 1',
+		status: 'active' as const,
+		secret_hash: 'a'.repeat(64),
+		secret_prefix: 'sk_scan_aaaaaaaa...',
+		last_seen_at: null
+	};
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		mockSession.mockResolvedValue(SESSIONS.admin);
+		mockList.mockResolvedValue([deviceA]);
+	});
+
+	async function get(query = ''): Promise<Response> {
+		return GET({
+			url: new URL(`http://localhost/api/v1/scanner/devices${query}`),
+			request: new Request(`http://localhost/api/v1/scanner/devices${query}`, {
+				headers: { cookie: 'AuthSession=abc' }
+			})
+		} as unknown as RequestEvent);
+	}
+
+	it.each(['', '?shelter_code=SH001', '?shelter_code=SH002'])(
+		'returns 401 for anonymous and 403 for registration staff (%s) without listing',
+		async (query) => {
+			mockSession.mockResolvedValueOnce(SESSIONS.anonymous);
+			const anonymous = await get(query);
+			expect(anonymous.status).toBe(401);
+			expect(anonymous.headers.get('cache-control')).toBe('no-store');
+
+			mockSession.mockResolvedValueOnce(SESSIONS.registrationA);
+			expect((await get(query)).status).toBe(403);
+			expect(mockList).not.toHaveBeenCalled();
+		}
+	);
+
+	it('lists the requested shelter for a shelter manager as redacted summaries', async () => {
+		mockSession.mockResolvedValue(SESSIONS.managerA);
+		const response = await get('?shelter_code=SH001');
+		expect(response.status).toBe(200);
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(mockList).toHaveBeenCalledWith(['SH001']);
+		expect(await response.json()).toEqual([
+			{
+				id: 'scanner_device:kiosk-sh001-01',
+				device_id: 'kiosk-sh001-01',
+				name: 'จุดคัดกรอง 1',
+				shelter_code: 'SH001',
+				station_name: 'โต๊ะ 1',
+				status: 'active',
+				last_seen_at: null,
+				staff_pin_set: false,
+				staff_pin_is_default: false
+			}
+		]);
+	});
+
+	it('requires a shelter manager to name a shelter (400)', async () => {
+		mockSession.mockResolvedValue(SESSIONS.managerA);
+		const response = await get();
+		expect(response.status).toBe(400);
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(mockList).not.toHaveBeenCalled();
+	});
+
+	it('returns 403 when a shelter manager asks for another shelter', async () => {
+		mockSession.mockResolvedValue(SESSIONS.managerA);
+		const response = await get('?shelter_code=SH002');
+		expect(response.status).toBe(403);
+		expect(mockList).not.toHaveBeenCalled();
+	});
+
+	it('lists one shelter at a time for a manager of both', async () => {
+		mockSession.mockResolvedValue(SESSIONS.managerAB);
+		expect((await get()).status).toBe(400);
+		expect((await get('?shelter_code=SH001')).status).toBe(200);
+		expect(mockList).toHaveBeenLastCalledWith(['SH001']);
+		expect((await get('?shelter_code=SH002')).status).toBe(200);
+		expect(mockList).toHaveBeenLastCalledWith(['SH002']);
+	});
+
+	it('lets a system admin list every shelter or filter to one', async () => {
+		expect((await get()).status).toBe(200);
+		expect(mockList).toHaveBeenLastCalledWith(null);
+		expect((await get('?shelter_code=SH002')).status).toBe(200);
+		expect(mockList).toHaveBeenLastCalledWith(['SH002']);
+	});
+
+	it('maps a registry outage to 503', async () => {
+		mockList.mockRejectedValueOnce(new ScannerDependencyError());
+		const response = await get();
+		expect(response.status).toBe(503);
+		expect(response.headers.get('cache-control')).toBe('no-store');
 	});
 });

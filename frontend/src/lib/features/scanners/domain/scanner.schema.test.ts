@@ -6,6 +6,8 @@ import {
 	scannerBootstrapDeviceSchema,
 	scannerCreateResponseSchema,
 	scannerDeviceInputSchema,
+	scannerDeviceListResponseSchema,
+	scannerDevicePatchSchema,
 	scannerDevicePersistedSchema,
 	setStaffPinFormSchema,
 	smartCardDataSchema,
@@ -221,5 +223,45 @@ describe('withoutScannerPlaintext', () => {
 		expect(kept).toEqual(summary);
 		expect(JSON.stringify(kept)).not.toContain('483920');
 		expect(scannerDeviceSummarySchema.safeParse(kept).success).toBe(true);
+	});
+});
+
+describe('scannerDevicePatchSchema', () => {
+	it('accepts a partial change and does not fill in fields that were not sent', () => {
+		expect(scannerDevicePatchSchema.parse({ status: 'inactive' })).toEqual({ status: 'inactive' });
+		expect(scannerDevicePatchSchema.parse({ name: ' เครื่อง 2 ' })).toEqual({ name: 'เครื่อง 2' });
+	});
+
+	it('rejects an empty patch', () => {
+		const result = scannerDevicePatchSchema.safeParse({});
+		expect(result.success).toBe(false);
+		expect(result.error?.issues[0]?.message).toBe('ไม่มีข้อมูลที่จะแก้ไข');
+	});
+
+	it.each([
+		['shelter_code', { shelter_code: 'SH002' }],
+		['device_id', { device_id: 'other-01' }],
+		['staff_pin_set', { staff_pin_set: true }],
+		['secret_hash', { secret_hash: 'a'.repeat(64) }]
+	])('rejects the fixed or server-owned field %s', (_field, body) => {
+		expect(scannerDevicePatchSchema.safeParse({ status: 'active', ...body }).success).toBe(false);
+	});
+
+	it('rejects a status outside active/inactive and a blank name or station', () => {
+		expect(scannerDevicePatchSchema.safeParse({ status: 'paused' }).success).toBe(false);
+		expect(scannerDevicePatchSchema.safeParse({ name: '  ' }).success).toBe(false);
+		expect(scannerDevicePatchSchema.safeParse({ station_name: '' }).success).toBe(false);
+	});
+});
+
+describe('scannerDeviceListResponseSchema', () => {
+	it('parses a list of summaries and rejects extra material such as secret_hash', () => {
+		const summary = toScannerDeviceSummary(scannerDevicePersistedSchema.parse(v2Doc));
+		expect(scannerDeviceListResponseSchema.parse([summary])).toEqual([summary]);
+		expect(scannerDeviceListResponseSchema.parse([])).toEqual([]);
+		expect(
+			scannerDeviceListResponseSchema.safeParse([{ ...summary, secret_hash: 'a'.repeat(64) }])
+				.success
+		).toBe(false);
 	});
 });

@@ -205,6 +205,23 @@ export const scannerDeviceSummarySchema = z
 export type ScannerDeviceSummary = z.infer<typeof scannerDeviceSummarySchema>;
 export type ScannerDevice = ScannerDeviceSummary;
 
+/** Body of `GET /api/v1/scanner/devices`. */
+export const scannerDeviceListResponseSchema = z.array(scannerDeviceSummarySchema);
+
+/**
+ * Body of `PATCH /api/v1/scanner/devices/[id]` — shelter and id are fixed for a device's life.
+ * No defaults here: a key that is not sent must stay untouched on the stored doc.
+ */
+export const scannerDevicePatchSchema = z
+	.object({
+		name: scannerDeviceInputSchema.shape.name.optional(),
+		station_name: z.string().trim().min(1, 'กรุณาระบุจุดบริการ').optional(),
+		status: deviceStatusSchema.optional()
+	})
+	.strict()
+	.refine((value) => Object.keys(value).length > 0, { message: 'ไม่มีข้อมูลที่จะแก้ไข' });
+export type ScannerDevicePatch = z.infer<typeof scannerDevicePatchSchema>;
+
 /** Device details returned by bootstrap; it does not disclose the registry id or PIN state. */
 export const scannerBootstrapDeviceSchema = scannerDeviceSummarySchema
 	.omit({ id: true, staff_pin_set: true, staff_pin_is_default: true })
