@@ -7,21 +7,21 @@ requested_by: ทีม kiosk
 decided_by: <เจ้าของโครงการ>
 layer: volatile
 affects:
-  - docs/features/kiosk/02-walk-in-registration-and-face-check.md ส่วน B (กฎ "ผลไม่ผ่านไม่ปฏิเสธใคร" → ต้องใช้ staff PIN) — ไฟล์ใหม่ที่ร่างมาในชุดเดียวกับ CR นี้
-  - docs/features/kiosk/01-pre-registration-check-in.md (check-in ด้วยบัตร: พักรายชื่อสมาชิกจนกว่า match หรือ PIN ผ่าน) — ไฟล์ใหม่ที่ร่างมาในชุดเดียวกับ CR นี้
+  - docs/features/kiosk/02-walk-in-registration-and-face-check.md ส่วน B (กฎ "ผลไม่ผ่านไม่ปฏิเสธใคร" → ต้องใช้ staff PIN) — **ยังไม่มีใน repo**: feature spec kiosk 01/02 มาใน PR แยก ต้อง merge ก่อนหรือพร้อม CR นี้ แล้วแก้ตามกฎใหม่
+  - docs/features/kiosk/01-pre-registration-check-in.md (check-in ด้วยบัตร: พักรายชื่อสมาชิกจนกว่า match หรือ PIN ผ่าน) — **ยังไม่มีใน repo**: feature spec kiosk 01/02 มาใน PR แยก ต้อง merge ก่อนหรือพร้อม CR นี้ แล้วแก้ตามกฎใหม่
   - docs/data/schema.md §3.11 scanner_device (schema_v 1 → 2, field staff_pin_*) + §3.11.1 DB scanner_secrets ใหม่
   - docs/data/api-contract.md (scanner devices staff-pin, kiosk staff-pin/verify, DELETE devices/[id])
   - scanner_device schema_v 1 → 2
   - frontend/scripts/sync-central-db.ts (สร้าง DB scanner_secrets + _security admin-only + สร้าง default PIN ให้เครื่องที่ยังไม่มี)
   - frontend/src/lib/server/scanners/{staff-pin.ts,staff-pin-store.ts,staff-pin-http.ts,device-repository.ts}
-  - frontend/src/routes/api/v1/scanner/devices/[id]/{+server.ts,staff-pin/+server.ts,staff-pin/reveal/+server.ts}
+  - frontend/src/routes/api/v1/scanner/devices/{+server.ts,[id]/+server.ts,[id]/staff-pin/+server.ts,[id]/staff-pin/reveal/+server.ts}
   - frontend/src/routes/api/v1/scanner/kiosk/staff-pin/verify/+server.ts
   - frontend/src/lib/features/scanners/{domain/scanner.schema.ts,data/scanner.api.ts,data/scanner.remote.ts,application/queries.ts,ui/*staff-pin*,ui/reveal-scanner-secret-dialog.svelte,ui/scanner-list.svelte}
   - frontend/src/lib/features/kiosk/{domain/face-check.ts,data/kiosk-staff-pin.api.ts,application/face-check-pin-flow.svelte.ts,application/staff-pin-entry.svelte.ts,application/walk-in-session.svelte.ts,ui/kiosk-face-check.svelte,ui/kiosk-staff-pin-entry.svelte,ui/kiosk-numpad-panel.svelte}
   - frontend/src/routes/kiosk/register/{card,face,done}/+page.svelte, frontend/src/routes/kiosk/scanner/remove-card/+page.svelte
   - scanner_client/app/manager.py (allowlist /staff-pin/verify, end reason staff_bypass)
 why: ปุ่ม「ข้าม ให้เจ้าหน้าที่ตรวจแทน」ที่หน้ากล้องกดได้โดยไม่มีการยืนยันใดๆ ผู้ที่ใช้บัตรของคนอื่นจึงข้ามการตรวจใบหน้าแล้วบันทึกต่อได้เอง
-migration: additive — doc scanner_device v1 อ่านเป็น "ยังไม่มี PIN"; `pnpm sync:central --write` สร้าง default PIN ให้เครื่องเดิมที่ยังไม่มี PIN doc และ stamp v2 (ไม่ทับ PIN ที่มีอยู่); server stamp v2 เมื่อตั้ง PIN
+migration: additive — doc scanner_device v1 อ่านเป็น "ยังไม่มี PIN"; `pnpm sync:central --write --confirm` สร้าง default PIN ให้เครื่องเดิมที่ยังไม่มี PIN doc และ stamp v2 (ไม่ทับ PIN ที่มีอยู่); server stamp v2 เมื่อตั้ง PIN
 ---
 
 # Kiosk staff PIN — ข้ามการตรวจใบหน้าได้เฉพาะเมื่อเจ้าหน้าที่ใส่ PIN ของเครื่อง
@@ -68,11 +68,14 @@ mode `off`: ไม่เปลี่ยน ไม่มี PIN (mode `shadow` �
 
 | Endpoint | สิทธิ์ | หน้าที่ |
 | --- | --- | --- |
-| `POST /api/v1/scanner/devices` (เดิม) | SA | สร้างเครื่องพร้อม default PIN, response เพิ่ม `plaintext_staff_pin` |
+| `POST /api/v1/scanner/devices` (**ใหม่** — ย้ายการสร้างเครื่องจาก browser `scannerRepository.createDevice` มาฝั่ง server) | SA | สร้างเครื่องพร้อม default PIN, response เพิ่ม `plaintext_staff_pin` |
 | `POST /api/v1/scanner/devices/[id]/staff-pin` | SA | `{ pin }` ตั้ง PIN เอง หรือ `{ regenerate: true }` สุ่มใหม่ (คืน PIN) |
 | `POST /api/v1/scanner/devices/[id]/staff-pin/reveal` | SA | ดู PIN ปัจจุบัน `{ pin, is_default, updated_at, updated_by }` |
 | `DELETE /api/v1/scanner/devices/[id]` | SA | ลบเครื่องฝั่ง server (ลบ PIN doc ด้วย) แทนการลบจาก browser |
-| `POST /api/v1/scanner/kiosk/staff-pin/verify` | device credential | `200 { ok }` · `401 staff_pin_invalid` (ตอบหลังหน่วง ~1 วินาที) · `401 DEVICE_AUTH_FAILED` · `409 staff_pin_not_set` · `503` |
+| `POST /api/v1/scanner/kiosk/staff-pin/verify` | device credential | `200 { ok }` · `401 staff_pin_invalid` (ตอบหลังหน่วง ~1 วินาที) · `401 DEVICE_AUTH_FAILED` · `409 staff_pin_not_set` · `429 RATE_LIMITED` (คิวเต็ม, FR-10) · `503` |
+
+- `[id]` ใน path = `device_id` (เช่น `kiosk-01`) ไม่ใช่ `_id` ของ doc (`scanner_device:kiosk-01`)
+- error ทุกตัวในตารางนี้ใช้ envelope ของ service plane ตาม `docs/data/api-contract.md` §2: `{ "error": { "code": "staff_pin_invalid", "message": "..." } }`
 
 ### 2.4 ขอบเขตการทำงานและ trust boundary
 
@@ -92,23 +95,33 @@ mode `off`: ไม่เปลี่ยน ไม่มี PIN (mode `shadow` �
   - เลขซ้ำเป็นคู่ เช่น `112233`
   - ชุดเลขที่วนซ้ำ เช่น `121212`, `123123`
   - มีเลขต่างกันไม่เกิน 2 ตัว เช่น `111222`, `101010`
+
+  ตรวจด้วยฟังก์ชันเดียวใน `domain` ที่ใช้ทั้ง client (ฟอร์ม SA) และ server (ตั้ง / สุ่ม PIN) PIN เดาง่ายเมื่อเข้าข้อใดข้อหนึ่ง:
+  1. `new Set(pin).size <= 2` (ครอบคลุมเลขเดียวกันทั้งชุดและเลขต่างกันไม่เกิน 2 ตัว)
+  2. ทุกหลักถัดไปเพิ่มขึ้นทีละ 1 หรือลดลงทีละ 1 (`012345`…`456789`, `987654`…`543210`)
+  3. รูปแบบ `aabbcc` (`/^(\d)\1(\d)\2(\d)\3$/`) หรือ `abcabc` (`pin.slice(0, 3) === pin.slice(3)`)
 - **FR-5** — ตั้ง / สุ่มใหม่ / ดู PIN ได้เฉพาะ SA (`authorizeUserWrite` + `isSA`)
 - **FR-6** — ทุก response ที่เกี่ยวกับ PIN ต้องมี `cache-control: no-store` และ endpoint ดู PIN ต้องเป็น `POST`
 - **FR-7** — ระบบต้อง log ทุกครั้งที่ดู/ตั้ง/ตรวจ PIN (ใคร หรือเครื่องไหน, เมื่อไร, ผล) และ**ห้าม log ค่า PIN**
-- **FR-8** — endpoint ตรวจ PIN ต้องยืนยันเครื่องด้วย `x-device-id` / `x-device-secret` และเทียบ PIN แบบ constant-time (`timingSafeEqual`)
+- **FR-8** — endpoint ตรวจ PIN ต้องยืนยันเครื่องด้วย `x-device-id` / `x-device-secret` และเทียบ PIN แบบ constant-time (`timingSafeEqual`) ต้องตรวจ format `^\d{6}$` ก่อนเรียก `timingSafeEqual` (buffer ยาวไม่เท่ากันจะ throw `RangeError` กลายเป็น `500`) PIN ที่ format ผิด (ว่าง, ไม่ใช่ 6 หลัก, ไม่ใช่ตัวเลข) ให้ถือเป็น PIN ผิด: หน่วงและตอบ `401 staff_pin_invalid` เหมือนกัน
 - **FR-9** — ตรวจ PIN ต้องอ่านจาก `scanner_secrets` เสมอ ไม่เชื่อ `staff_pin_set` ใน registry; ไม่มี PIN doc = `409 staff_pin_not_set`
 - **FR-10** — ไม่ล็อกเครื่องและไม่จำกัดจำนวนครั้ง แต่ต้องชะลอการไล่เดา:
   - PIN ผิด → server หน่วงประมาณ 1 วินาทีก่อนตอบ `401 staff_pin_invalid`
   - ตรวจ PIN ได้ทีละ request ต่อเครื่อง request ที่ซ้อนเข้ามาต้องรอคิว ยิงพร้อมกันหลาย request เพื่อเลี่ยงการหน่วงไม่ได้ ไล่เดาครบ 10⁶ แบบจึงใช้เวลาอย่างน้อย ~11 วันต่อเครื่อง
+  - คิวต่อเครื่องมีเพดาน: ตรวจอยู่ 1 + รอได้ไม่เกิน 1 request ถ้าเกินให้ตอบ `429 RATE_LIMITED` ทันทีโดยไม่รับเข้าคิว (กัน request ค้างใน memory ไม่จำกัด) ต้องผ่าน device auth ก่อนเข้าคิว เครื่องที่ credential ผิดจึงไม่กินที่ในคิวของเครื่องจริง
+  - ค่าหน่วงต้อง inject ได้ใน unit / integration test (เช่นส่ง `delayMs` / fake timer เข้า handler) ห้ามมี env flag ที่ปิดการหน่วงใน production
   - PIN ผิดติดกันครบทุก 5 ครั้งต่อเครื่อง → log ระดับ `warn` (`device_id`, จำนวนครั้งที่ผิดติดกัน, เวลา) ห้าม log ค่า PIN
   - ตัวนับครั้งที่ผิดเก็บใน memory ของ server process ไม่ persist และ reset เมื่อ PIN ถูกหรือเมื่อ server restart ตัวนับใช้แค่ส่ง alert **ห้ามใช้ล็อกเครื่อง**
 - **FR-11** — ตั้ง / เปลี่ยน PIN: เขียน PIN doc ก่อนแล้วจึงเขียน registry ถ้าเขียน registry ไม่สำเร็จ ต้อง rollback PIN doc แบบ rev-guarded:
   - ตั้งครั้งแรก (ไม่มี PIN doc เดิม) → ลบ PIN doc ที่เพิ่งเขียน
   - เปลี่ยน PIN (มี PIN doc เดิม) → เขียนค่าเดิม (`pin`, `is_default`, `updated_at`, `updated_by`) กลับคืน **ห้ามลบ** ไม่งั้นเครื่องจะกลายเป็นไม่มี PIN
   - `_rev` ชนตอนเขียน → `409`
+  - rollback ไม่สำเร็จ (process ล่ม / เน็ตขาดระหว่างขั้น) → log ระดับ `error` พร้อม `device_id`, ขั้นที่ล้ม และสาเหตุ (ห้าม log ค่า PIN) แล้วตอบ `503` ข้อมูลที่ค้างจะถูกแก้โดย reconcile ใน FR-13
 - **FR-12** — ลบเครื่อง: ลบ doc ใน `registry` ก่อนแล้วจึงลบ PIN doc ถ้าลบ registry ไม่สำเร็จจะไม่แตะ PIN doc (`404` / `409` / `503` ตามสาเหตุ) ถ้าลบ PIN doc ไม่สำเร็จให้ log แล้วตอบสำเร็จ PIN doc ที่ค้างอยู่ใช้ไม่ได้ เพราะเครื่องที่ไม่มีใน registry ไม่ผ่าน device auth (`401 DEVICE_AUTH_FAILED` ก่อนถึงขั้นตรวจ PIN) และจะถูกเขียนทับถ้าลงทะเบียน id เดิมใหม่ (FR-3)
-- **FR-13** — `pnpm sync:central --write` ต้องสร้าง default PIN สุ่ม (ตาม FR-3, FR-4) ให้ทุก `scanner_device` ที่ยังไม่มี PIN doc แล้ว stamp registry เป็น v2 (`staff_pin_set: true`, `staff_pin_is_default: true`, `staff_pin_updated_by: 'system:sync-central'`):
+- **FR-13** — `pnpm sync:central --write --confirm` ต้องสร้าง default PIN สุ่ม (ตาม FR-3, FR-4) ให้ทุก `scanner_device` ที่ยังไม่มี PIN doc แล้ว stamp registry เป็น v2 (`staff_pin_set: true`, `staff_pin_is_default: true`, `staff_pin_updated_by: 'system:sync-central'`):
   - ห้ามทับ PIN doc ที่มีอยู่แล้ว รันซ้ำต้องได้ผลเดิม (idempotent)
+  - reconcile metadata: เครื่องที่มี PIN doc แต่ `staff_pin_*` ใน registry ไม่ตรงกับ PIN doc (`is_default`, `updated_at`, `updated_by`) หรือยังเป็น v1 → stamp registry ตาม PIN doc **โดยไม่แตะ PIN doc** (ถือ PIN doc เป็นความจริง เพราะ verify อ่านจากที่นั่น FR-9)
+  - PIN doc ที่ไม่มี `scanner_device` คู่กัน (orphan) → แสดง id ใน report (ไม่ลบเอง) เพราะใช้งานไม่ได้อยู่แล้ว (FR-12)
   - ถ้ารันโดยไม่ใส่ `--write` (dry-run) ให้แสดงจำนวนและ id ของเครื่องที่จะได้ PIN แต่ไม่เขียนอะไร
   - ห้ามพิมพ์ค่า PIN ออก stdout หรือ log SA ดู PIN ผ่าน「ดู PIN」(FR-27, FR-28)
 
@@ -132,6 +145,8 @@ mode `off`: ไม่เปลี่ยน ไม่มี PIN (mode `shadow` �
   | หน้ากล้อง แต่การตรวจจบไปแล้วระหว่างที่ panel เปิด | แสดงหน้าผล (FR-20) ให้ตัดสินใจอีกครั้ง |
   | หน้าผล (「เจ้าหน้าที่ดำเนินการต่อ」) | จบ session กลับหน้าแรก ไม่บันทึก ล้างข้อมูลบัตร |
 
+  ถอดบัตรออกจากเครื่องอ่านระหว่างที่ panel PIN เปิดอยู่ (ไม่ว่าเปิดจากจุดไหน) = ยกเลิก session อัตโนมัติ: ปิด panel และล้างค่า PIN (FR-23), ล้างข้อมูลบัตรใน memory, ไม่บันทึก และกลับหน้าแรกทันที (ถอดบัตรระหว่างตรวจหน้า **ก่อน**เปิด panel ยังเป็น `skipped` ตาม §2.1)
+
 - **FR-22** — panel PIN ใช้ `KioskNumpad` ผ่าน wrapper ร่วมกับหน้ากรอกเบอร์โทร, แสดงเป็นจุด 6 ช่อง, ยืนยันด้วยปุ่มหรือ Enter (ไม่ส่งเองเมื่อครบ 6 หลัก)
 - **FR-23** — ล้างค่า PIN ทุกทางออกของ panel (สำเร็จ, ยกเลิก, หมดเวลา, ออกจากหน้า) ห้ามใส่ PIN ใน URL, log หรือ storage
 - **FR-24** — PIN ผิด → แจ้ง「PIN ไม่ถูกต้อง กรุณาลองใหม่」และกรอกใหม่ได้ ระหว่างรอ server (รวมช่วงหน่วงตาม FR-10) แป้นกดต้องแสดงสถานะกำลังตรวจและกดยืนยันซ้ำไม่ได้; server/เน็ตผิดพลาด → ลองใหม่ได้; `not_set` → ปิดแป้นและแจ้งให้ติดต่อผู้ดูแลระบบ
@@ -148,31 +163,31 @@ mode `off`: ไม่เปลี่ยน ไม่มี PIN (mode `shadow` �
 
 - **AC-1** — mode `on`: `not_confirmed`, `skipped`, `unavailable`, `declined` ไม่สร้าง evacuee (walk-in) และไม่แสดงรายชื่อสมาชิก (check-in) จนกว่า PIN ผ่าน
 - **AC-2** — PIN ถูก → walk-in สร้าง evacuee / check-in แสดงรายชื่อสมาชิก; PIN ผิด 20 ครั้งติดกันแล้ว PIN ถูกยังผ่าน (ไม่ล็อก)
-- **AC-3** — ยกเลิกที่ panel PIN ที่เปิดจากหน้าผล → กลับหน้าแรก ไม่มี doc ใหม่และข้อมูลบัตรถูกล้าง; ยกเลิกที่ panel PIN ที่เปิดจากหน้ากล้องระหว่างตรวจ → ตรวจต่อ
+- **AC-3** — ยกเลิกที่ panel PIN ที่เปิดจากหน้าผล → กลับหน้าแรก ไม่มี doc ใหม่และข้อมูลบัตรถูกล้าง; ยกเลิกที่ panel PIN ที่เปิดจากหน้ากล้องระหว่างตรวจ → ตรวจต่อ; ถอดบัตรระหว่าง panel PIN เปิด → กลับหน้าแรก ไม่มี doc ใหม่และข้อมูลบัตรถูกล้าง
 - **AC-4** — mode `off` ไม่มี panel PIN
 - **AC-5** — non-SA เรียก set/reveal ได้ `403`, ไม่ login ได้ `401`; response มี `no-store`; log ไม่มีค่า PIN
 - **AC-6** — เครื่องที่ไม่มี PIN doc → verify `409 staff_pin_not_set` แม้ registry เขียน `staff_pin_set: true`
 - **AC-7** — `scanner_secrets` มี member ที่ไม่ใช่ admin → ตั้ง PIN ได้ `503` และไม่มี PIN ถูกเขียน
 - **AC-8** — device credential ผิด → verify `401 DEVICE_AUTH_FAILED` (ไม่ใช่ `staff_pin_invalid`)
 - **AC-9** — doc `scanner_device` v1 ยังแสดงในรายการเครื่องเป็น「ยังไม่ตั้ง PIN」
-- **AC-10** — PIN ผิด → response ใช้เวลา ≥ ~1 วินาที; ส่ง verify ที่ผิด 3 request พร้อมกันจากเครื่องเดียว → ใช้เวลารวม ≥ ~3 วินาที (ถูกเข้าคิว); ผิดติดกัน 5 ครั้ง → มี log `warn` 1 บรรทัดที่ไม่มีค่า PIN; PIN ถูก → ตอบทันทีไม่หน่วง
+- **AC-10** — PIN ผิด → response ใช้เวลา ≥ ~1 วินาที; ส่ง verify ที่ผิด 2 request พร้อมกันจากเครื่องเดียว → ใช้เวลารวม ≥ ~2 วินาที (ถูกเข้าคิว); request ที่ 3 ที่ส่งพร้อมกัน → `429 RATE_LIMITED` ทันที; PIN ว่าง / 5 หลัก / มีตัวอักษร → `401 staff_pin_invalid` (ไม่ใช่ `500`); ผิดติดกัน 5 ครั้ง → มี log `warn` 1 บรรทัดที่ไม่มีค่า PIN; PIN ถูก → ตอบทันทีไม่หน่วง
 - **AC-11** — เปลี่ยน PIN แล้วจำลองให้เขียน registry ไม่สำเร็จ → PIN doc กลับเป็นค่าเดิมและ PIN เดิมยัง verify ผ่าน; ตั้งครั้งแรกแล้วจำลองแบบเดียวกัน → ไม่มี PIN doc เหลือ
-- **AC-12** — `pnpm sync:central --write` บนเครื่อง v1 ที่ไม่มี PIN → ได้ PIN doc + registry v2 `staff_pin_is_default: true`; รันซ้ำ → PIN เดิมไม่เปลี่ยน; เครื่องที่ SA ตั้ง PIN ไว้แล้วไม่ถูกแตะ; stdout ไม่มีค่า PIN
+- **AC-12** — `pnpm sync:central --write --confirm` บนเครื่อง v1 ที่ไม่มี PIN → ได้ PIN doc + registry v2 `staff_pin_is_default: true`; รันซ้ำ → PIN เดิมไม่เปลี่ยน; เครื่องที่ SA ตั้ง PIN ไว้แล้วไม่ถูกแตะ; เครื่องที่ registry metadata ไม่ตรงกับ PIN doc → registry ถูก stamp ตาม PIN doc และ PIN ไม่เปลี่ยน; PIN doc orphan ถูกรายงานแต่ไม่ถูกลบ; stdout ไม่มีค่า PIN
 - **AC-13** — ตั้ง PIN `112233`, `121212`, `123123`, `111222` → ถูกปฏิเสธ; default PIN ที่สุ่ม 10,000 ครั้งไม่มีแบบที่เดาง่ายตาม FR-4
 - **AC-14** — `pnpm lint`, `pnpm check`, `pnpm test`, scanner_client unittest และ svelte-autofixer ผ่าน
 
 ## 5. Impact
 
-- **Docs:** `docs/features/kiosk/02` ส่วน B (กฎผลไม่ผ่าน), `docs/features/kiosk/01` (check-in ด้วยบัตร), `docs/data/schema.md` §3.11 + §3.11.1, `docs/data/api-contract.md` (endpoint ตาม §2.3), `scanner_client/README.md` (ข้อความ "ผลไม่ผ่านไม่ปฏิเสธใคร")
+- **Docs:** `docs/features/kiosk/02` ส่วน B (กฎผลไม่ผ่าน), `docs/features/kiosk/01` (check-in ด้วยบัตร) — ทั้งสองไฟล์ยังไม่มีใน repo มาใน PR แยกของ feature spec kiosk, `docs/data/schema.md` §3.11 + §3.11.1, `docs/data/api-contract.md` (endpoint ตาม §2.3), `scanner_client/README.md` (ข้อความ "ผลไม่ผ่านไม่ปฏิเสธใคร")
 - **Code / test:** ตาม `affects:` ด้านบน
-- **Deploy:** ต้องรัน `pnpm sync:central --write` (สร้าง `scanner_secrets` + default PIN ให้เครื่องเดิมตาม FR-13) **ก่อนเปิด face check mode `on`** แล้ว SA ใช้「ดู PIN」แจ้ง PIN ให้เจ้าหน้าที่หน้างาน และควรเปลี่ยน PIN เริ่มต้นเป็นค่าที่ศูนย์ตั้งเอง ถ้าไม่ได้รัน เครื่องเดิมจะข้ามด้วย PIN ไม่ได้ (`staff_pin_not_set`)
+- **Deploy:** ต้องรัน `pnpm sync:central --write --confirm` (สร้าง `scanner_secrets` + default PIN ให้เครื่องเดิมตาม FR-13) **ก่อนเปิด face check mode `on`** แล้ว SA ใช้「ดู PIN」แจ้ง PIN ให้เจ้าหน้าที่หน้างาน และควรเปลี่ยน PIN เริ่มต้นเป็นค่าที่ศูนย์ตั้งเอง ถ้าไม่ได้รัน เครื่องเดิมจะข้ามด้วย PIN ไม่ได้ (`staff_pin_not_set`)
 - **Backup:** PIN อยู่เป็น plaintext ในไฟล์ข้อมูลและ backup ของ CouchDB ใต้ `deployment/` ผู้ถือ admin credential อ่านได้ ซึ่งเป็นระดับเดียวกับคนที่เขียน check-in ตรงได้อยู่แล้ว ต้องเพิ่มใน checklist deploy / backup ว่า backup ของ central เก็บแบบจำกัดสิทธิ์เท่ากับ admin credential และถ้า backup รั่วให้ SA สุ่ม PIN ใหม่ทุกเครื่อง (`{ regenerate: true }`)
 - **ไม่กระทบ:** check-in ด้วย QR / เบอร์โทร, หน้าที่ไม่มี face check, MongoDB / public plane, edge server (ไม่มี `scanner_secrets`)
 
 ## 6. Migration
 
 - `scanner_device` v1 → v2 แบบ additive: parser อ่าน v1 เป็น `staff_pin_set: false`, `staff_pin_is_default: false`, `staff_pin_updated_at: null`, `staff_pin_updated_by: null`
-- เครื่องเดิม: `pnpm sync:central --write` สร้าง default PIN และ stamp v2 ให้เครื่องที่ยังไม่มี PIN doc (FR-13) ส่วนเครื่องที่สร้างใหม่เป็น v2 พร้อม default PIN ตั้งแต่สร้าง
+- เครื่องเดิม: `pnpm sync:central --write --confirm` สร้าง default PIN และ stamp v2 ให้เครื่องที่ยังไม่มี PIN doc (FR-13) ส่วนเครื่องที่สร้างใหม่เป็น v2 พร้อม default PIN ตั้งแต่สร้าง
 - DB `scanner_secrets`: สร้างโดย `sync-central-db.ts` หรือโดย server ตอนเขียน PIN ครั้งแรก (idempotent)
 - browser แก้ชื่อ/สถานะเครื่องผ่าน `scannerRepository.updateDevice` ยังทำได้ (spread doc เดิม ไม่แตะ `staff_pin_*`)
 
@@ -190,3 +205,11 @@ mode `off`: ไม่เปลี่ยน ไม่มี PIN (mode `shadow` �
   - `sync:central` สร้าง default PIN ให้เครื่องเดิม (FR-13) แทนให้ SA ตั้งเองทุกเครื่อง
   - ขยายรายการ PIN ที่เดาง่าย (FR-4)
   - ระบุ rollback แบบคืนค่าเดิม (FR-11) และลำดับการลบเครื่อง (FR-12) ตามที่ implement ไว้
+- 2026-10-11 — ทีม kiosk เสนอหลัง review PR #439:
+  - คำสั่ง deploy เป็น `pnpm sync:central --write --confirm` ตาม guard ใน `sync-central-db.ts`
+  - คิวตรวจ PIN มีเพดาน (ตรวจ 1 + รอ 1) เกินตอบ `429` และ device auth ก่อนเข้าคิว (FR-10, AC-10)
+  - ตรวจ format PIN ก่อน `timingSafeEqual` (FR-8), อัลกอริทึมตรวจ PIN เดาง่าย (FR-4)
+  - rollback ล้มต้อง log `error` และ `sync:central` reconcile metadata / รายงาน orphan (FR-11, FR-13)
+  - `POST /api/v1/scanner/devices` เป็น endpoint ใหม่, `[id]` = `device_id`, error ใช้ envelope ของ service plane (§2.3)
+  - feature spec kiosk 01 / 02 ยังไม่อยู่ใน PR นี้ ระบุใน `affects:` ว่ามาใน PR แยก
+  - ถอดบัตรระหว่าง panel PIN เปิด = ยกเลิก session (FR-21, AC-3)
