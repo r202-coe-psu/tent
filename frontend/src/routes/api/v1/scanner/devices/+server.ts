@@ -1,12 +1,13 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { authorizeUserWrite, serviceError, ServiceError } from '$lib/server/couch-admin';
+import { serviceError, ServiceError } from '$lib/server/couch-admin';
 import {
 	ScannerConflictError,
 	ScannerDependencyError,
 	ScannerShelterNotFoundError
 } from '$lib/server/scanners/device-credentials';
 import { scannerDeviceRepository } from '$lib/server/scanners/device-repository';
+import { assertCanCreateFor, requireScannerManager } from '$lib/server/scanners/scanner-access';
 // eslint-disable-next-line no-restricted-imports -- server-safe domain schema; feature barrel pulls client UI/query code
 import {
 	scannerDeviceInputSchema,
@@ -45,8 +46,7 @@ function scannerError(error: unknown): Response | null {
 
 export const POST: RequestHandler = async ({ request }) => {
 	try {
-		const caller = await authorizeUserWrite(request.headers.get('cookie'));
-		if (!caller.isSA) throw new ServiceError('FORBIDDEN', 'Requires system_admin');
+		const caller = await requireScannerManager(request);
 
 		const body: unknown = await request.json().catch(() => ({}));
 		const parsed = scannerDeviceInputSchema.safeParse(body);
@@ -57,7 +57,12 @@ export const POST: RequestHandler = async ({ request }) => {
 			);
 		}
 
+		assertCanCreateFor(caller, parsed.data.shelter_code);
+
 		const created = await scannerDeviceRepository.createDevice(parsed.data, caller.name);
+		console.info(
+			`[scanner-device] created device=${created.device.device_id} shelter=${created.device.shelter_code} by=${caller.name} at=${new Date().toISOString()}`
+		);
 		return json(
 			{
 				device: toScannerDeviceSummary(created.device),
@@ -69,6 +74,8 @@ export const POST: RequestHandler = async ({ request }) => {
 	} catch (error) {
 		const mapped = scannerError(error);
 		if (mapped) return mapped;
-		return serviceError(error);
+		const response = serviceError(error);
+		for (const [name, value] of Object.entries(noStoreHeaders())) response.headers.set(name, value);
+		return response;
 	}
 };

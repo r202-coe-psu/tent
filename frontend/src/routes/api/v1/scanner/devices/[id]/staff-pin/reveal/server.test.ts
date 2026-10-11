@@ -1,22 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST } from './+server';
 import type { RequestEvent } from './$types';
-import { authorizeUserWrite } from '$lib/server/couch-admin';
+import { readSessionUserCtx } from '$lib/server/couch-admin';
 import { ScannerDeviceNotFoundError } from '$lib/server/scanners/device-credentials';
 import { scannerDeviceRepository } from '$lib/server/scanners/device-repository';
 import {
 	StaffPinNotSetError,
 	StaffPinUnavailableError
 } from '$lib/server/scanners/staff-pin-store';
+import { SESSIONS } from '$lib/server/scanners/test-sessions';
 
 vi.mock('$lib/server/couch-admin', async () => {
 	const actual =
 		await vi.importActual<typeof import('$lib/server/couch-admin')>('$lib/server/couch-admin');
-	return { ...actual, authorizeUserWrite: vi.fn() };
+	return { ...actual, readSessionUserCtx: vi.fn() };
 });
 
 vi.mock('$lib/server/scanners/device-repository', () => ({
-	scannerDeviceRepository: { revealStaffPin: vi.fn() }
+	scannerDeviceRepository: { getDevice: vi.fn(), revealStaffPin: vi.fn() }
 }));
 
 vi.mock('$env/dynamic/private', () => ({ env: {} }));
@@ -26,19 +27,23 @@ const DEVICE_ID = 'kiosk-01';
 const DOC_ID = 'scanner_device:kiosk-01';
 
 describe('POST /api/v1/scanner/devices/[id]/staff-pin/reveal', () => {
-	const mockAuthorize = vi.mocked(authorizeUserWrite);
+	const mockSession = vi.mocked(readSessionUserCtx);
+	const mockGet = vi.mocked(scannerDeviceRepository.getDevice);
 	const mockReveal = vi.mocked(scannerDeviceRepository.revealStaffPin);
 	let info: ReturnType<typeof vi.spyOn>;
+
+	/** Only `shelter_code` matters to the route; the repository is mocked. */
+	function deviceIn(shelter_code: string) {
+		return { _id: DOC_ID, device_id: DEVICE_ID, shelter_code } as Awaited<
+			ReturnType<typeof scannerDeviceRepository.getDevice>
+		>;
+	}
 
 	beforeEach(() => {
 		vi.clearAllMocks();
 		info = vi.spyOn(console, 'info').mockImplementation(() => {});
-		mockAuthorize.mockResolvedValue({
-			name: 'sa-user',
-			roles: ['system_admin'],
-			isSA: true,
-			shelterCode: null
-		});
+		mockSession.mockResolvedValue(SESSIONS.admin);
+		mockGet.mockResolvedValue(deviceIn('SH001'));
 		mockReveal.mockResolvedValue({
 			pin: '482913',
 			is_default: true,
@@ -77,17 +82,48 @@ describe('POST /api/v1/scanner/devices/[id]/staff-pin/reveal', () => {
 		expect(logged).not.toContain('482913');
 	});
 
-	it('returns 403 for a non-SA caller without touching the repository', async () => {
-		mockAuthorize.mockResolvedValueOnce({
-			name: 'manager',
-			roles: ['shelter_manager', 'shelter:SH001'],
-			isSA: false,
-			shelterCode: 'SH001'
-		});
-		const response = await post();
-		expect(response.status).toBe(403);
-		expect(response.headers.get('cache-control')).toBe('no-store');
+	it('returns 401 for anonymous and 403 for registration staff without touching the device', async () => {
+		mockSession.mockResolvedValueOnce(SESSIONS.anonymous);
+		const anonymous = await post();
+		expect(anonymous.status).toBe(401);
+		expect(anonymous.headers.get('cache-control')).toBe('no-store');
+
+		mockSession.mockResolvedValueOnce(SESSIONS.registrationA);
+		const forbidden = await post();
+		expect(forbidden.status).toBe(403);
+		expect(forbidden.headers.get('cache-control')).toBe('no-store');
+		expect(mockGet).not.toHaveBeenCalled();
 		expect(mockReveal).not.toHaveBeenCalled();
+	});
+
+	it('lets a shelter manager reveal the PIN of a device in their own shelter and logs shelter and actor', async () => {
+		mockSession.mockResolvedValue(SESSIONS.managerA);
+		const response = await post();
+		expect(response.status).toBe(200);
+		expect(mockReveal).toHaveBeenCalledWith(DOC_ID);
+		const logged = info.mock.calls.flat().join(' ');
+		expect(logged).toContain('[scanner-staff-pin] revealed device=kiosk-01 shelter=SH001');
+		expect(logged).toContain('by=sm-a');
+		expect(logged).not.toContain('482913');
+	});
+
+	it('reads a device of another shelter as missing (404) and never reveals its PIN', async () => {
+		mockSession.mockResolvedValue(SESSIONS.managerA);
+		mockGet.mockResolvedValue(deviceIn('SH002'));
+		const response = await post();
+		expect(response.status).toBe(404);
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(await response.text()).not.toContain('482913');
+		expect(mockReveal).not.toHaveBeenCalled();
+	});
+
+	it('lets a manager of both shelters and a system admin reveal in either', async () => {
+		for (const session of [SESSIONS.managerAB, SESSIONS.admin]) {
+			mockSession.mockResolvedValue(session);
+			mockGet.mockResolvedValue(deviceIn('SH002'));
+			expect((await post()).status).toBe(200);
+		}
+		expect(mockReveal).toHaveBeenCalledTimes(2);
 	});
 
 	it('maps not set → 409, unknown → 404, store down → 503', async () => {

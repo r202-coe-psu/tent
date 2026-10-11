@@ -94,6 +94,14 @@ export class ScannerDeviceRepository {
 		}
 	}
 
+	/**
+	 * The registry doc for `id` (`scanner_device:{device_id}`), or NotFound. Routes call this to
+	 * check the caller's shelter scope before acting on the device.
+	 */
+	async getDevice(id: string): Promise<PersistedScannerDevice> {
+		return this.findDeviceById(id);
+	}
+
 	/** Like {@link getDeviceById} but maps a missing (or non-scanner) doc to NotFound. */
 	private async findDeviceById(id: string): Promise<PersistedScannerDevice> {
 		let result: { status: number; data: unknown };

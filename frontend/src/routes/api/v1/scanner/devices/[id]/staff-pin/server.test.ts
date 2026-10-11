@@ -1,22 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST } from './+server';
 import type { RequestEvent } from './$types';
-import { ServiceError, authorizeUserWrite } from '$lib/server/couch-admin';
+import { readSessionUserCtx } from '$lib/server/couch-admin';
 import {
 	ScannerConflictError,
 	ScannerDeviceNotFoundError
 } from '$lib/server/scanners/device-credentials';
 import { scannerDeviceRepository } from '$lib/server/scanners/device-repository';
 import { StaffPinUnavailableError } from '$lib/server/scanners/staff-pin-store';
+import { SESSIONS } from '$lib/server/scanners/test-sessions';
 
 vi.mock('$lib/server/couch-admin', async () => {
 	const actual =
 		await vi.importActual<typeof import('$lib/server/couch-admin')>('$lib/server/couch-admin');
-	return { ...actual, authorizeUserWrite: vi.fn() };
+	return { ...actual, readSessionUserCtx: vi.fn() };
 });
 
 vi.mock('$lib/server/scanners/device-repository', () => ({
-	scannerDeviceRepository: { setStaffPin: vi.fn(), regenerateStaffPin: vi.fn() }
+	scannerDeviceRepository: { getDevice: vi.fn(), setStaffPin: vi.fn(), regenerateStaffPin: vi.fn() }
 }));
 
 vi.mock('$env/dynamic/private', () => ({ env: {} }));
@@ -26,19 +27,23 @@ const DEVICE_ID = 'kiosk-01';
 const DOC_ID = 'scanner_device:kiosk-01';
 
 describe('POST /api/v1/scanner/devices/[id]/staff-pin', () => {
-	const mockAuthorize = vi.mocked(authorizeUserWrite);
+	const mockSession = vi.mocked(readSessionUserCtx);
+	const mockGet = vi.mocked(scannerDeviceRepository.getDevice);
 	const mockSet = vi.mocked(scannerDeviceRepository.setStaffPin);
 	const mockRegenerate = vi.mocked(scannerDeviceRepository.regenerateStaffPin);
+
+	/** Only `shelter_code` matters to the route; the repository is mocked. */
+	function deviceIn(shelter_code: string) {
+		return { _id: DOC_ID, device_id: DEVICE_ID, shelter_code } as Awaited<
+			ReturnType<typeof scannerDeviceRepository.getDevice>
+		>;
+	}
 
 	beforeEach(() => {
 		vi.clearAllMocks();
 		vi.spyOn(console, 'info').mockImplementation(() => {});
-		mockAuthorize.mockResolvedValue({
-			name: 'sa-user',
-			roles: ['system_admin'],
-			isSA: true,
-			shelterCode: null
-		});
+		mockSession.mockResolvedValue(SESSIONS.admin);
+		mockGet.mockResolvedValue(deviceIn('SH001'));
 		mockSet.mockResolvedValue();
 		mockRegenerate.mockResolvedValue('582047');
 	});
@@ -83,20 +88,53 @@ describe('POST /api/v1/scanner/devices/[id]/staff-pin', () => {
 		expect(logged).not.toContain('582047');
 	});
 
-	it('returns 403 for a shelter manager and 401 for anonymous', async () => {
-		mockAuthorize.mockResolvedValueOnce({
-			name: 'manager',
-			roles: ['shelter_manager', 'shelter:SH001'],
-			isSA: false,
-			shelterCode: 'SH001'
-		});
-		expect((await post({ pin: '482913' })).status).toBe(403);
+	it('returns 401 for anonymous and 403 for registration staff without touching the device', async () => {
+		mockSession.mockResolvedValueOnce(SESSIONS.anonymous);
+		const anonymous = await post({ pin: '482913' });
+		expect(anonymous.status).toBe(401);
+		expect(anonymous.headers.get('cache-control')).toBe('no-store');
 
-		mockAuthorize.mockRejectedValueOnce(
-			new ServiceError('UNAUTHENTICATED', 'Authentication required')
-		);
-		expect((await post({ pin: '482913' })).status).toBe(401);
+		mockSession.mockResolvedValueOnce(SESSIONS.registrationA);
+		expect((await post({ pin: '482913' })).status).toBe(403);
+		expect(mockGet).not.toHaveBeenCalled();
 		expect(mockSet).not.toHaveBeenCalled();
+	});
+
+	it('lets a shelter manager set and regenerate a PIN of their own shelter, recorded under their name', async () => {
+		mockSession.mockResolvedValue(SESSIONS.managerA);
+		expect((await post({ pin: '482913' })).status).toBe(200);
+		expect(mockSet).toHaveBeenCalledWith(DOC_ID, '482913', 'sm-a');
+
+		expect((await post({ regenerate: true })).status).toBe(200);
+		expect(mockRegenerate).toHaveBeenCalledWith(DOC_ID, 'sm-a');
+	});
+
+	it('reads a device of another shelter as missing (404) and writes no PIN', async () => {
+		mockSession.mockResolvedValue(SESSIONS.managerA);
+		mockGet.mockResolvedValue(deviceIn('SH002'));
+		const response = await post({ pin: '482913' });
+		expect(response.status).toBe(404);
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect((await post({ regenerate: true })).status).toBe(404);
+		expect(mockSet).not.toHaveBeenCalled();
+		expect(mockRegenerate).not.toHaveBeenCalled();
+	});
+
+	it('lets a manager of both shelters and a system admin set a PIN in either', async () => {
+		for (const session of [SESSIONS.managerAB, SESSIONS.admin]) {
+			mockSession.mockResolvedValue(session);
+			mockGet.mockResolvedValue(deviceIn('SH002'));
+			expect((await post({ pin: '482913' })).status).toBe(200);
+		}
+		expect(mockSet).toHaveBeenCalledTimes(2);
+	});
+
+	it('logs the shelter with the actor', async () => {
+		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+		mockSession.mockResolvedValue(SESSIONS.managerA);
+		await post({ pin: '482913' });
+		const logged = info.mock.calls.flat().join(' ');
+		expect(logged).toContain('[scanner-staff-pin] set device=kiosk-01 shelter=SH001 by=sm-a');
 	});
 
 	it.each([

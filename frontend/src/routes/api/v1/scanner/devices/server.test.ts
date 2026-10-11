@@ -1,18 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST } from './+server';
 import type { RequestEvent } from './$types';
-import { ServiceError, authorizeUserWrite } from '$lib/server/couch-admin';
+import { readSessionUserCtx } from '$lib/server/couch-admin';
 import {
 	ScannerConflictError,
 	ScannerDependencyError,
 	ScannerShelterNotFoundError
 } from '$lib/server/scanners/device-credentials';
 import { scannerDeviceRepository } from '$lib/server/scanners/device-repository';
+import { SESSIONS } from '$lib/server/scanners/test-sessions';
 
 vi.mock('$lib/server/couch-admin', async () => {
 	const actual =
 		await vi.importActual<typeof import('$lib/server/couch-admin')>('$lib/server/couch-admin');
-	return { ...actual, authorizeUserWrite: vi.fn() };
+	return { ...actual, readSessionUserCtx: vi.fn() };
 });
 
 vi.mock('$lib/server/scanners/device-repository', () => ({
@@ -20,7 +21,7 @@ vi.mock('$lib/server/scanners/device-repository', () => ({
 }));
 
 describe('POST /api/v1/scanner/devices', () => {
-	const mockAuthorize = vi.mocked(authorizeUserWrite);
+	const mockSession = vi.mocked(readSessionUserCtx);
 	const mockCreate = vi.mocked(scannerDeviceRepository.createDevice);
 
 	const input = {
@@ -47,12 +48,7 @@ describe('POST /api/v1/scanner/devices', () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks();
-		mockAuthorize.mockResolvedValue({
-			name: 'sa-user',
-			roles: ['system_admin'],
-			isSA: true,
-			shelterCode: null
-		});
+		mockSession.mockResolvedValue(SESSIONS.admin);
 		mockCreate.mockResolvedValue({
 			device: persisted,
 			plaintext_secret: 'sk_scan_one_time',
@@ -71,22 +67,54 @@ describe('POST /api/v1/scanner/devices', () => {
 	}
 
 	it('returns 401 for an anonymous caller', async () => {
-		mockAuthorize.mockRejectedValue(new ServiceError('UNAUTHENTICATED', 'Authentication required'));
+		mockSession.mockResolvedValue(SESSIONS.anonymous);
 		const response = await post(input);
 		expect(response.status).toBe(401);
+		expect(response.headers.get('cache-control')).toBe('no-store');
 		expect(mockCreate).not.toHaveBeenCalled();
 	});
 
-	it('returns 403 for a non-system-admin caller', async () => {
-		mockAuthorize.mockResolvedValue({
-			name: 'manager',
-			roles: ['shelter:SH001'],
-			isSA: false,
-			shelterCode: 'SH001'
-		});
+	it('returns 403 for registration staff', async () => {
+		mockSession.mockResolvedValue(SESSIONS.registrationA);
 		const response = await post(input);
 		expect(response.status).toBe(403);
 		expect(mockCreate).not.toHaveBeenCalled();
+	});
+
+	it('lets a shelter manager create in their own shelter as themselves', async () => {
+		mockSession.mockResolvedValue(SESSIONS.managerA);
+		const response = await post(input);
+		expect(response.status).toBe(201);
+		expect(mockCreate).toHaveBeenCalledWith(input, 'sm-a');
+	});
+
+	it('returns 403 when a shelter manager creates in another shelter', async () => {
+		mockSession.mockResolvedValue(SESSIONS.managerA);
+		const response = await post({ ...input, shelter_code: 'SH002' });
+		expect(response.status).toBe(403);
+		expect(response.headers.get('cache-control')).toBe('no-store');
+		expect(mockCreate).not.toHaveBeenCalled();
+	});
+
+	it('lets a manager of both shelters and a system admin create in either', async () => {
+		for (const session of [SESSIONS.managerAB, SESSIONS.admin]) {
+			mockSession.mockResolvedValue(session);
+			expect((await post(input)).status).toBe(201);
+			expect((await post({ ...input, shelter_code: 'SH002' })).status).toBe(201);
+		}
+		expect(mockCreate).toHaveBeenCalledTimes(4);
+	});
+
+	it('logs the creation with shelter and actor but never the secret or PIN', async () => {
+		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+		mockSession.mockResolvedValue(SESSIONS.managerA);
+		await post(input);
+		const logged = info.mock.calls.flat().join(' ');
+		expect(logged).toContain('[scanner-device] created device=kiosk-sh001-01 shelter=SH001');
+		expect(logged).toContain('by=sm-a');
+		expect(logged).not.toContain('sk_scan_one_time');
+		expect(logged).not.toContain('482913');
+		info.mockRestore();
 	});
 
 	it('returns a one-time secret and only a redacted device summary', async () => {

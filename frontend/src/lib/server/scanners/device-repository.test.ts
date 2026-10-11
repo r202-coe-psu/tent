@@ -393,6 +393,23 @@ describe('ScannerDeviceRepository', () => {
 		);
 	});
 
+	describe('getDevice', () => {
+		it('returns the registry doc for an id and maps a missing one to not-found', async () => {
+			mockRaw.mockResolvedValueOnce({ status: 200, data: v2Doc });
+			const device = await repository.getDevice(v2Doc._id);
+			expect(device.shelter_code).toBe('SH001');
+			expect(mockRaw.mock.calls[0]?.slice(0, 2)).toEqual([
+				'/registry/scanner_device%3Akiosk-sh001-01',
+				'GET'
+			]);
+
+			mockRaw.mockResolvedValueOnce({ status: 404, data: null });
+			await expect(repository.getDevice('scanner_device:nope')).rejects.toBeInstanceOf(
+				ScannerDeviceNotFoundError
+			);
+		});
+	});
+
 	describe('deleteDevice', () => {
 		it('deletes the registry doc by _rev, then its PIN doc', async () => {
 			secrets.docs.set('kiosk-sh001-01', storedSecret('482913'));
