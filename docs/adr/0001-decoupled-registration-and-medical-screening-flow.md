@@ -2,7 +2,8 @@
 
 - Status: accepted
 - Date: 2026-09-02
-- Updated: 2026-09-03
+- Updated: 2026-10-10
+- Note: decision sync 2026-10-10 — Station 2 route guard admits registration_staff (REG) in addition to medical/triage roles; portal shows Station 1–3 under ฝ่ายทะเบียน; Station 3 portal tile REG only (FAC keeps route access)
 - Supersedes: monolithic registration+EWAR+zone at a single desk
 
 ## Context & Decision
@@ -62,7 +63,9 @@ The flag **only** toggles Station 2 visibility and whether a Handover Slip is is
 - `movement.action` gains additive `zone_change` (no movement schema_v bump)
 - Shared form cores under `$lib/features/people/ui/forms/`; Station 1 composes them into one scroll-spy page (walk-in + Report-in)
 - Route: Report-in at `/onsite/people/[id]/report-in`
-- Route guards: Station 2 medical roles; Station 3 REG+FAC+SM+SA
+> **decision sync 2026-10-10** — Station 2 route guard admits `registration_staff` (REG) in addition to medical/triage roles; portal shows Station 1–3 under ฝ่ายทะเบียน; Station 3 portal tile REG only (FAC keeps route access).
+
+- Route guards: Station 2 REG+TRG+MED+SM+SA; Station 3 REG+FAC+SM+SA
 - Station 1 no longer calls `createEvacueeWithScreening` for the happy path (keeps S2 pending queue meaningful)
 - Glossary: **Report-in**, **Residence**, **Identity-document address**; **Household** remains canonical (Thai UI ครอบครัว) in `CONTEXT.md`
 - Station 1 create validates minimum Residence on Household; no household schema_v bump for this UX rewrite
