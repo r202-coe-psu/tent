@@ -450,7 +450,7 @@ test.describe('Distribution RBAC guards', () => {
 				// before the Distribution page ever renders.
 				await expect(page).toHaveURL(/\/portal/);
 				// Positive control: this is a real landing page, not a blank/crashed screen.
-				await expect(page.getByRole('heading', { name: /SmartShelter Thailand/ })).toBeVisible();
+				await expect(page.getByRole('region', { name: 'บริบทการปฏิบัติงาน' })).toBeVisible();
 			},
 			{ roles: ['shelter:SH001', 'kitchen_staff'] }
 		);
@@ -465,15 +465,60 @@ test.describe('Distribution RBAC guards', () => {
 				// registration_staff is frontline-only; requireWarehouseAccess() does not
 				// include it, so it is redirected the same as any unrelated role.
 				await expect(page).toHaveURL(/\/portal/);
-				await expect(page.getByRole('heading', { name: /SmartShelter Thailand/ })).toBeVisible();
+				await expect(page.getByRole('region', { name: 'บริบทการปฏิบัติงาน' })).toBeVisible();
 			},
 			{ roles: ['shelter:SH001', 'registration_staff'] }
 		);
 	});
 
-	test('warehouse_staff cannot perform the frontline receive action', async ({ page }) => {
+	test('registration_staff is redirected away from the Distribution Desk', async ({ page }) => {
 		await withScenario(
-			'rbac_warehouse',
+			'rbac_desk_registration',
+			async (scenario) => {
+				await injectSession(page, scenario.user, scenario.session);
+				await page.goto('/onsite/distribution');
+				// requireDistributionDesk() (guards/auth.ts) is SA, SM and distribution_staff only
+				// (CR-161 R5) — REG, SC and WH land on /portal.
+				await expect(page).toHaveURL(/\/portal/);
+				await expect(page.getByRole('region', { name: 'บริบทการปฏิบัติงาน' })).toBeVisible();
+			},
+			{ roles: ['shelter:SH001', 'registration_staff'] }
+		);
+	});
+
+	test('supply_coordinator is redirected away from the Distribution Desk', async ({ page }) => {
+		await withScenario(
+			'rbac_desk_supply',
+			async (scenario) => {
+				await injectSession(page, scenario.user, scenario.session);
+				await page.goto('/onsite/distribution');
+				// requireDistributionDesk() (guards/auth.ts) is SA, SM and distribution_staff only
+				// (CR-161 R5) — REG, SC and WH land on /portal.
+				await expect(page).toHaveURL(/\/portal/);
+				await expect(page.getByRole('region', { name: 'บริบทการปฏิบัติงาน' })).toBeVisible();
+			},
+			{ roles: ['shelter:SH001', 'supply_coordinator'] }
+		);
+	});
+
+	test('warehouse_staff is redirected away from the Distribution Desk', async ({ page }) => {
+		await withScenario(
+			'rbac_desk_warehouse',
+			async (scenario) => {
+				await injectSession(page, scenario.user, scenario.session);
+				await page.goto('/onsite/distribution');
+				// requireDistributionDesk() (guards/auth.ts) is SA, SM and distribution_staff only
+				// (CR-161 R5) — REG, SC and WH land on /portal.
+				await expect(page).toHaveURL(/\/portal/);
+				await expect(page.getByRole('region', { name: 'บริบทการปฏิบัติงาน' })).toBeVisible();
+			},
+			{ roles: ['shelter:SH001', 'warehouse_staff'] }
+		);
+	});
+
+	test('distribution_staff can receive a ticket at the distribution point', async ({ page }) => {
+		await withScenario(
+			'rbac_desk_distribution',
 			async (scenario) => {
 				const item = await seedItemWithStock(scenario, {
 					name: `E2E RBAC receive ${scenario.namespace}`,
@@ -484,27 +529,16 @@ test.describe('Distribution RBAC guards', () => {
 				const ticket = await seedDistributingTicket(scenario, item, '50', 'IN_TRANSIT');
 
 				await injectSession(page, scenario.user, scenario.session);
-				// /onsite/distribution only requires general auth (requireAuth), so
-				// warehouse_staff can reach the page and read tickets — the restriction under
-				// test is the in-page frontline-receive action, not route access.
 				await page.goto('/onsite/distribution');
 				await page.getByRole('button', { name: /1\. รับของถึงจุดแจก/ }).click();
 
 				const ticketCard = page
 					.getByText(ticket.ticketNo, { exact: true })
 					.locator('xpath=ancestor::div[contains(@class, "rounded-xl")][1]');
-				// Positive control: the ticket is visible/readable by this role — proves the
-				// disabled assertion below is RBAC, not a data-loading failure.
 				await expect(ticketCard).toBeVisible();
-				await expect(ticketCard).toContainText(item.name);
-
-				// canPerformFrontlineDistribution() (auth.ts) allows registration_staff /
-				// supply_coordinator / shelter_manager / system_admin, but explicitly not
-				// warehouse_staff — the button renders (so the ticket stays visible) but is
-				// disabled rather than hidden (FrontlineStationPage.svelte).
-				await expect(ticketCard.getByRole('button', { name: /ตรวจรับเข้าจุดแจก/ })).toBeDisabled();
+				await expect(ticketCard.getByRole('button', { name: /ตรวจรับเข้าจุดแจก/ })).toBeEnabled();
 			},
-			{ roles: ['shelter:SH001', 'warehouse_staff'] }
+			{ roles: ['shelter:SH001', 'SH001:distribution_staff'] }
 		);
 	});
 });

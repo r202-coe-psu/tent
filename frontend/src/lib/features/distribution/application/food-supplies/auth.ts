@@ -1,5 +1,6 @@
 import type { AuthorContext } from '$lib/db/model';
 import {
+	DISTRIBUTION_STAFF,
 	hasCapabilityInShelter,
 	isSystemAdmin,
 	SHELTER_MANAGER,
@@ -49,14 +50,13 @@ export function canDispatchTicket(ctx: AuthorContext): boolean {
 /**
  * Checks if the actor is authorized to perform frontline distribution operations
  * (Step 4 receive, Step 4B handover/scan, Step 5 shift close, Step 6 submit returns).
- * Allowed: registration_staff, supply_coordinator, shelter_manager, system_admin.
+ * Allowed: distribution_staff, shelter_manager, system_admin (CR-161 R3).
  */
 export function canPerformFrontlineDistribution(ctx: AuthorContext): boolean {
 	if (!ctx.roles) return false;
 	if (isSystemAdmin(ctx.roles)) return true;
 	return (
-		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, 'registration_staff') ||
-		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, SUPPLY_COORDINATOR) ||
+		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, DISTRIBUTION_STAFF) ||
 		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, SHELTER_MANAGER)
 	);
 }
@@ -73,6 +73,19 @@ export function canReceivePhysicalStock(ctx: AuthorContext): boolean {
 		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, WAREHOUSE_STAFF) ||
 		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, SUPPLY_COORDINATOR) ||
 		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, SHELTER_MANAGER)
+	);
+}
+
+/**
+ * Checks if the actor may take a returnable loan back as physical stock (counter return,
+ * `PHYSICAL` reservation): the physical-receipt roles plus distribution_staff (CR-161 R3).
+ * Aligned with VDU `canReturnLoanPhysical`.
+ */
+export function canReturnLoanPhysical(ctx: AuthorContext): boolean {
+	if (!ctx.roles) return false;
+	return (
+		canReceivePhysicalStock(ctx) ||
+		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, DISTRIBUTION_STAFF)
 	);
 }
 
@@ -135,7 +148,7 @@ export function assertCanDispatchTicket(ctx: AuthorContext): void {
 export function assertCanPerformFrontlineDistribution(ctx: AuthorContext): void {
 	if (!canPerformFrontlineDistribution(ctx)) {
 		throw new WorkflowAuthorizationError(
-			'Unauthorized: frontline distribution operations require registration_staff, supply_coordinator, shelter_manager, or system_admin role'
+			'Unauthorized: frontline distribution operations require distribution_staff, shelter_manager, or system_admin role'
 		);
 	}
 }
@@ -144,6 +157,14 @@ export function assertCanReceivePhysicalStock(ctx: AuthorContext): void {
 	if (!canReceivePhysicalStock(ctx)) {
 		throw new WorkflowAuthorizationError(
 			'Unauthorized: physical stock receipt requires warehouse_staff, supply_coordinator, shelter_manager, or system_admin role'
+		);
+	}
+}
+
+export function assertCanReturnLoanPhysical(ctx: AuthorContext): void {
+	if (!canReturnLoanPhysical(ctx)) {
+		throw new WorkflowAuthorizationError(
+			'Unauthorized: physical loan return requires warehouse_staff, supply_coordinator, distribution_staff, shelter_manager, or system_admin role'
 		);
 	}
 }
@@ -161,7 +182,7 @@ export function canOperateReservationMode(
 	ctx: AuthorContext
 ): boolean {
 	if (mode === 'PHYSICAL') {
-		return canReceivePhysicalStock(ctx);
+		return canReturnLoanPhysical(ctx);
 	}
 	return canPerformFrontlineDistribution(ctx);
 }
@@ -171,15 +192,15 @@ export function assertReservationModeAuthority(
 	ctx: AuthorContext
 ): void {
 	if (mode === 'PHYSICAL') {
-		if (!canReceivePhysicalStock(ctx)) {
+		if (!canReturnLoanPhysical(ctx)) {
 			throw new WorkflowAuthorizationError(
-				'Unauthorized: PHYSICAL return reservation requires warehouse_staff, supply_coordinator, shelter_manager, or system_admin role'
+				'Unauthorized: PHYSICAL return reservation requires warehouse_staff, supply_coordinator, distribution_staff, shelter_manager, or system_admin role'
 			);
 		}
 	} else {
 		if (!canPerformFrontlineDistribution(ctx)) {
 			throw new WorkflowAuthorizationError(
-				`Unauthorized: ${mode} return reservation requires registration_staff, supply_coordinator, shelter_manager, or system_admin role`
+				`Unauthorized: ${mode} return reservation requires distribution_staff, shelter_manager, or system_admin role`
 			);
 		}
 	}

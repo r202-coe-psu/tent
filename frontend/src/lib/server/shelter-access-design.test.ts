@@ -33,6 +33,10 @@ function expectForbidden(run: () => void, match: RegExp): void {
 
 const WAREHOUSE: UserCtx = { name: 'ws', roles: ['shelter:SH001', 'warehouse_staff'] };
 const REGISTRATION: UserCtx = { name: 'reg', roles: ['shelter:SH001', 'registration_staff'] };
+const DISTRIBUTION: UserCtx = {
+	name: 'dist',
+	roles: ['shelter:SH001', 'SH001:distribution_staff']
+};
 const KITCHEN: UserCtx = { name: 'kt', roles: ['shelter:SH001', 'kitchen_staff'] };
 const MANAGER: UserCtx = { name: 'sm', roles: ['shelter:SH001', 'shelter_manager'] };
 const ADMIN: UserCtx = { name: 'admin', roles: ['system_admin'] };
@@ -1400,7 +1404,7 @@ describe('buildValidateDocUpdate', () => {
 		};
 		const UNAUTHORIZED: UserCtx = { name: 'unknown', roles: ['shelter:SH001'] };
 
-		const reqDoc = (over: Doc = {}, user: UserCtx = REGISTRATION): Doc => ({
+		const reqDoc = (over: Doc = {}, user: UserCtx = DISTRIBUTION): Doc => ({
 			_id: 'distribution_request:01J',
 			type: 'distribution_request',
 			status: 'pending',
@@ -1436,7 +1440,7 @@ describe('buildValidateDocUpdate', () => {
 		});
 
 		it.each([
-			['registration_staff', REGISTRATION],
+			['distribution_staff', DISTRIBUTION],
 			['shelter_manager', MANAGER],
 			['system_admin', ADMIN]
 		])(
@@ -1448,7 +1452,7 @@ describe('buildValidateDocUpdate', () => {
 
 		it('rejects creating distribution_request with forged created_by', () => {
 			expectForbidden(
-				() => compile()(reqDoc({ created_by: 'forged_author' }, REGISTRATION), null, REGISTRATION),
+				() => compile()(reqDoc({ created_by: 'forged_author' }, DISTRIBUTION), null, DISTRIBUTION),
 				/created_by must match authenticated user/
 			);
 		});
@@ -1456,7 +1460,7 @@ describe('buildValidateDocUpdate', () => {
 		it('rejects creating distribution_request with forged requested_by', () => {
 			expectForbidden(
 				() =>
-					compile()(reqDoc({ requested_by: 'forged_requester' }, REGISTRATION), null, REGISTRATION),
+					compile()(reqDoc({ requested_by: 'forged_requester' }, DISTRIBUTION), null, DISTRIBUTION),
 				/requested_by must match authenticated user/
 			);
 		});
@@ -1465,28 +1469,30 @@ describe('buildValidateDocUpdate', () => {
 			expectForbidden(
 				() =>
 					compile()(
-						reqDoc({ created_by: 'attacker', requested_by: 'attacker' }, REGISTRATION),
+						reqDoc({ created_by: 'attacker', requested_by: 'attacker' }, DISTRIBUTION),
 						null,
-						REGISTRATION
+						DISTRIBUTION
 					),
 				/created_by must match authenticated user/
 			);
 		});
 
 		it.each([
+			['registration_staff (CR-161 R3)', REGISTRATION],
+			['supply_coordinator', SUPPLY_COORDINATOR],
 			['warehouse_staff', WAREHOUSE],
 			['kitchen_staff', KITCHEN],
 			['missing role', UNAUTHORIZED]
 		])('rejects %s directly creating a distribution_request', (_role, userCtx) => {
 			expectForbidden(
 				() => compile()(reqDoc({}, userCtx), null, userCtx),
-				/Only registration staff, shelter manager, or system admin can create distribution requests/
+				/can create distribution requests/
 			);
 		});
 
 		it('rejects creating distribution_request with non-pending status', () => {
 			expectForbidden(
-				() => compile()(reqDoc({ status: 'approving' }), null, REGISTRATION),
+				() => compile()(reqDoc({ status: 'approving' }), null, DISTRIBUTION),
 				/New distribution_request must start pending/
 			);
 		});
@@ -1501,13 +1507,13 @@ describe('buildValidateDocUpdate', () => {
 			['rejection_reason', { rejection_reason: 'Not needed' }]
 		])('rejects creating distribution_request with injected %s', (_field, over) => {
 			expectForbidden(
-				() => compile()(reqDoc(over), null, REGISTRATION),
+				() => compile()(reqDoc(over), null, DISTRIBUTION),
 				/New distribution_request cannot contain lifecycle metadata/
 			);
 		});
 
 		it.each([
-			['registration_staff', REGISTRATION],
+			['distribution_staff', DISTRIBUTION],
 			['shelter_manager', MANAGER],
 			['system_admin', ADMIN]
 		])('allows %s to cancel a pending distribution_request', (_role, userCtx) => {
@@ -1516,6 +1522,8 @@ describe('buildValidateDocUpdate', () => {
 		});
 
 		it.each([
+			['registration_staff (CR-161 R3)', REGISTRATION],
+			['supply_coordinator', SUPPLY_COORDINATOR],
 			['warehouse_staff', WAREHOUSE],
 			['kitchen_staff', KITCHEN],
 			['missing role', UNAUTHORIZED]
@@ -1546,7 +1554,7 @@ describe('buildValidateDocUpdate', () => {
 						updated_at: '2026-08-30T10:30:00.000Z'
 					}),
 					pending,
-					REGISTRATION
+					DISTRIBUTION
 				)
 			).not.toThrow();
 		});
@@ -1593,7 +1601,7 @@ describe('buildValidateDocUpdate', () => {
 				...override
 			});
 			expectForbidden(
-				() => compile()(cancelled, pending, REGISTRATION),
+				() => compile()(cancelled, pending, DISTRIBUTION),
 				/Cannot modify request content or provenance while cancelling distribution_request/
 			);
 		});
@@ -1614,7 +1622,7 @@ describe('buildValidateDocUpdate', () => {
 				...override
 			});
 			expectForbidden(
-				() => compile()(cancelled, pending, REGISTRATION),
+				() => compile()(cancelled, pending, DISTRIBUTION),
 				/Cannot inject approval or rejection metadata while cancelling distribution_request/
 			);
 		});
@@ -1629,7 +1637,7 @@ describe('buildValidateDocUpdate', () => {
 				status: 'cancelled'
 			});
 			expectForbidden(
-				() => compile()(cancelled, current, REGISTRATION),
+				() => compile()(cancelled, current, DISTRIBUTION),
 				/Invalid distribution_request transition|Terminal distribution_request/
 			);
 		});
@@ -1637,7 +1645,7 @@ describe('buildValidateDocUpdate', () => {
 		it('rejects mutations of a cancelled distribution_request', () => {
 			const cancelled = reqDoc({ status: 'cancelled' });
 			expectForbidden(
-				() => compile()(cancelled, cancelled, REGISTRATION),
+				() => compile()(cancelled, cancelled, DISTRIBUTION),
 				/Terminal distribution_request/
 			);
 		});
@@ -1701,7 +1709,7 @@ describe('buildValidateDocUpdate', () => {
 				]
 			});
 			expectForbidden(
-				() => compile()(req, null, REGISTRATION),
+				() => compile()(req, null, DISTRIBUTION),
 				/New distribution_request cannot contain duplicate item_id values/
 			);
 		});
@@ -1725,7 +1733,7 @@ describe('buildValidateDocUpdate', () => {
 					}
 				]
 			});
-			expect(() => compile()(legacy, legacy, REGISTRATION)).not.toThrow();
+			expect(() => compile()(legacy, legacy, DISTRIBUTION)).not.toThrow();
 		});
 
 		it('rejects duplicate request item rows with conflicting units', () => {
@@ -1748,7 +1756,7 @@ describe('buildValidateDocUpdate', () => {
 				]
 			});
 			expectForbidden(
-				() => compile()(req, req, REGISTRATION),
+				() => compile()(req, req, DISTRIBUTION),
 				/Duplicate request item rows must have identical unit and distribution_type_snapshot/
 			);
 		});
@@ -1773,7 +1781,7 @@ describe('buildValidateDocUpdate', () => {
 				]
 			});
 			expectForbidden(
-				() => compile()(req, req, REGISTRATION),
+				() => compile()(req, req, DISTRIBUTION),
 				/Duplicate request item rows must have identical unit and distribution_type_snapshot/
 			);
 		});
@@ -1914,9 +1922,16 @@ describe('buildValidateDocUpdate', () => {
 				state: 'sealed',
 				closing_operation_id: '01J00000000000000000000000'
 			};
-			expect(() => compile()(admitted, gate, REGISTRATION)).not.toThrow();
+			expect(() => compile()(admitted, gate, DISTRIBUTION)).not.toThrow();
+			expect(() => compile()(admitted, gate, MANAGER)).not.toThrow();
 			expect(() => compile()(sealed, gate, WAREHOUSE)).not.toThrow();
-			expectForbidden(() => compile()(sealed, gate, REGISTRATION), /seal issue gate/);
+			expectForbidden(() => compile()(sealed, gate, DISTRIBUTION), /seal issue gate/);
+			// CR-161 R3: registration_staff and supply_coordinator no longer hold the issue side.
+			expectForbidden(() => compile()(admitted, gate, REGISTRATION), /open issue gate claims/);
+			expectForbidden(
+				() => compile()(admitted, gate, SUPPLY_COORDINATOR),
+				/open issue gate claims/
+			);
 			expectForbidden(() => compile()(admitted, gate, WAREHOUSE), /open issue gate claims/);
 			expectForbidden(
 				() => compile()(sealed, gate, { name: 'ws2', roles: ['SH002:warehouse_staff'] }),
@@ -1969,7 +1984,7 @@ describe('buildValidateDocUpdate', () => {
 					),
 				/invalid pending claim/
 			);
-			expectForbidden(() => compile()(reqDoc(), null, KITCHEN), /Only registration staff/);
+			expectForbidden(() => compile()(reqDoc(), null, KITCHEN), /can create distribution requests/);
 		});
 
 		it('rejects modifying purpose, headcount, buffer, or items on non-pending request', () => {
@@ -2079,6 +2094,10 @@ describe('buildValidateDocUpdate', () => {
 	describe('distribution issue doc types access rules (Phase 3B)', () => {
 		const MANAGER: UserCtx = { name: 'mgr', roles: ['shelter:SH001', 'shelter_manager'] };
 		const ADMIN: UserCtx = { name: 'admin', roles: ['system_admin'] };
+		const SUPPLY_COORDINATOR: UserCtx = {
+			name: 'supply',
+			roles: ['shelter:SH001', 'supply_coordinator']
+		};
 
 		const validIssue = {
 			_id: 'distribution_issue:01JABCDEFGHJKMNPQRSTVWXYZ0',
@@ -2149,58 +2168,110 @@ describe('buildValidateDocUpdate', () => {
 			]
 		};
 
-		it('allows registration_staff, shelter_manager, and system_admin to create distribution_issue', () => {
-			expect(() => compile()(validIssue, null, REGISTRATION)).not.toThrow();
+		it('allows distribution_staff, shelter_manager, and system_admin to create distribution_issue', () => {
+			expect(() => compile()(validIssue, null, DISTRIBUTION)).not.toThrow();
 			expect(() => compile()(validIssue, null, MANAGER)).not.toThrow();
 			expect(() => compile()(validIssue, null, ADMIN)).not.toThrow();
+		});
+
+		it.each([
+			['registration_staff', REGISTRATION],
+			['supply_coordinator', SUPPLY_COORDINATOR]
+		])('rejects %s from creating distribution_issue (CR-161 R3)', (_role, userCtx) => {
+			expectForbidden(
+				() => compile()(validIssue, null, userCtx),
+				/Only distribution staff, shelter manager, or system admin can write distribution issues/
+			);
+		});
+
+		describe('isRole legacy flat-role scoping (CR-161 R1)', () => {
+			const issueWith = (roles: string[]): void =>
+				compile()(validIssue, null, { name: 'flat', roles });
+
+			it('accepts a flat role when the only shelter scope is this shelter', () => {
+				expect(() => issueWith(['shelter:SH001', 'distribution_staff'])).not.toThrow();
+			});
+
+			it('accepts a compound role even with several shelter scopes', () => {
+				expect(() =>
+					issueWith(['shelter:SH001', 'shelter:SH002', 'SH001:distribution_staff'])
+				).not.toThrow();
+			});
+
+			it.each([
+				['two shelter scopes', ['shelter:SH001', 'shelter:SH002', 'distribution_staff']],
+				['no shelter scope', ['distribution_staff']],
+				['another shelter scope', ['shelter:SH002', 'distribution_staff']]
+			])('rejects a flat role with %s', (_case, roles) => {
+				expectForbidden(() => issueWith(roles), /can write distribution issues/);
+			});
+
+			it('rejects a flat role scoped to SH002 when compiled for SH001 but accepts it for SH002', () => {
+				const roles = ['shelter:SH002', 'distribution_staff'];
+				expectForbidden(() => issueWith(roles), /can write distribution issues/);
+				expect(() =>
+					compile('SH002')({ ...validIssue, shelter_code: 'SH002' }, null, { name: 'flat', roles })
+				).not.toThrow();
+			});
+		});
+
+		it('rejects distribution_staff scoped to another shelter from creating distribution_issue', () => {
+			const otherShelter: UserCtx = {
+				name: 'dist2',
+				roles: ['shelter:SH002', 'SH002:distribution_staff']
+			};
+			expectForbidden(
+				() => compile()(validIssue, null, otherShelter),
+				/Only distribution staff, shelter manager, or system admin can write distribution issues/
+			);
 		});
 
 		it('rejects warehouse_staff from creating distribution_issue', () => {
 			expectForbidden(
 				() => compile()(validIssue, null, WAREHOUSE),
-				/Only registration staff, shelter manager, or system admin can write distribution issues/
+				/Only distribution staff, shelter manager, or system admin can write distribution issues/
 			);
 		});
 
 		it('rejects updating an existing distribution_issue (append-only)', () => {
 			expectForbidden(
-				() => compile()({ ...validIssue, qty: '2' }, validIssue, REGISTRATION),
+				() => compile()({ ...validIssue, qty: '2' }, validIssue, DISTRIBUTION),
 				/Cannot update append-only distribution_issue/
 			);
 		});
 
 		it('rejects deleting an existing distribution_issue (append-only)', () => {
 			expectForbidden(
-				() => compile()({ ...validIssue, _deleted: true }, validIssue, REGISTRATION),
+				() => compile()({ ...validIssue, _deleted: true }, validIssue, DISTRIBUTION),
 				/Cannot delete append-only distribution_issue/
 			);
 		});
 
 		it('rejects type-changing update of distribution_issue', () => {
 			expectForbidden(
-				() => compile()({ ...validIssue, type: 'audit' }, validIssue, REGISTRATION),
+				() => compile()({ ...validIssue, type: 'audit' }, validIssue, DISTRIBUTION),
 				/Cannot update append-only distribution_issue/
 			);
 		});
 
 		it('rejects distribution_issue with invalid positive qty', () => {
 			expectForbidden(
-				() => compile()({ ...validIssue, qty: '0' }, null, REGISTRATION),
+				() => compile()({ ...validIssue, qty: '0' }, null, DISTRIBUTION),
 				/positive qty decimal string/
 			);
 			expectForbidden(
-				() => compile()({ ...validIssue, qty: '-1' }, null, REGISTRATION),
+				() => compile()({ ...validIssue, qty: '-1' }, null, DISTRIBUTION),
 				/positive qty decimal string/
 			);
 		});
 
 		it('rejects distribution_issue with invalid batch_id or evacuee_id prefix', () => {
 			expectForbidden(
-				() => compile()({ ...validIssue, batch_id: 'invalid:123' }, null, REGISTRATION),
+				() => compile()({ ...validIssue, batch_id: 'invalid:123' }, null, DISTRIBUTION),
 				/valid batch_id/
 			);
 			expectForbidden(
-				() => compile()({ ...validIssue, evacuee_id: 'invalid:123' }, null, REGISTRATION),
+				() => compile()({ ...validIssue, evacuee_id: 'invalid:123' }, null, DISTRIBUTION),
 				/valid evacuee_id/
 			);
 		});
@@ -2218,7 +2289,7 @@ describe('buildValidateDocUpdate', () => {
 							}
 						},
 						null,
-						REGISTRATION
+						DISTRIBUTION
 					),
 				/eligibility_snapshot is structurally invalid/
 			);
@@ -2237,41 +2308,45 @@ describe('buildValidateDocUpdate', () => {
 					previous_receipt_count: 1
 				}
 			};
-			expect(() => compile()(overrideIssue, null, REGISTRATION)).not.toThrow();
+			expect(() => compile()(overrideIssue, null, DISTRIBUTION)).not.toThrow();
 
 			const mismatched = {
 				...overrideIssue,
 				repeat_override_reason: 'damaged'
 			};
 			expectForbidden(
-				() => compile()(mismatched, null, REGISTRATION),
+				() => compile()(mismatched, null, DISTRIBUTION),
 				/repeat_override_reason must match/
 			);
 		});
 
 		it('manages distribution_issue_idempotency and enforces immutability', () => {
-			expect(() => compile()(validIdempotency, null, REGISTRATION)).not.toThrow();
+			expect(() => compile()(validIdempotency, null, DISTRIBUTION)).not.toThrow();
+			for (const userCtx of [WAREHOUSE, REGISTRATION, SUPPLY_COORDINATOR]) {
+				expectForbidden(
+					() => compile()(validIdempotency, null, userCtx),
+					/Only distribution staff, shelter manager, or system admin/
+				);
+			}
 			expectForbidden(
-				() => compile()(validIdempotency, null, WAREHOUSE),
-				/Only registration staff, shelter manager, or system admin/
-			);
-			expectForbidden(
-				() => compile()({ ...validIdempotency, qty: '2' }, validIdempotency, REGISTRATION),
+				() => compile()({ ...validIdempotency, qty: '2' }, validIdempotency, DISTRIBUTION),
 				/Cannot update append-only distribution_issue_idempotency documents/
 			);
 			expectForbidden(
 				() =>
-					compile()({ ...validIdempotency, item_id: 'item:other' }, validIdempotency, REGISTRATION),
+					compile()({ ...validIdempotency, item_id: 'item:other' }, validIdempotency, DISTRIBUTION),
 				/Cannot update append-only distribution_issue_idempotency documents/
 			);
 		});
 
 		it('manages distribution_issue_capacity and enforces immutability', () => {
-			expect(() => compile()(validCapacity, null, REGISTRATION)).not.toThrow();
-			expectForbidden(
-				() => compile()(validCapacity, null, WAREHOUSE),
-				/Only registration staff, shelter manager, or system admin/
-			);
+			expect(() => compile()(validCapacity, null, DISTRIBUTION)).not.toThrow();
+			for (const userCtx of [WAREHOUSE, REGISTRATION, SUPPLY_COORDINATOR]) {
+				expectForbidden(
+					() => compile()(validCapacity, null, userCtx),
+					/Only distribution staff, shelter manager, or system admin/
+				);
+			}
 			const mutated = {
 				...validCapacity,
 				item_id: 'item:other',
@@ -2283,17 +2358,19 @@ describe('buildValidateDocUpdate', () => {
 				]
 			};
 			expectForbidden(
-				() => compile()(mutated, validCapacity, REGISTRATION),
+				() => compile()(mutated, validCapacity, DISTRIBUTION),
 				/Cannot change item_id on capacity record/
 			);
 		});
 
 		it('manages distribution_one_time_guard and enforces immutability', () => {
-			expect(() => compile()(validGuard, null, REGISTRATION)).not.toThrow();
-			expectForbidden(
-				() => compile()(validGuard, null, WAREHOUSE),
-				/Only registration staff, shelter manager, or system admin/
-			);
+			expect(() => compile()(validGuard, null, DISTRIBUTION)).not.toThrow();
+			for (const userCtx of [WAREHOUSE, REGISTRATION, SUPPLY_COORDINATOR]) {
+				expectForbidden(
+					() => compile()(validGuard, null, userCtx),
+					/Only distribution staff, shelter manager, or system admin/
+				);
+			}
 			const mutated = {
 				...validGuard,
 				evacuee_id: 'evacuee:other',
@@ -2305,7 +2382,7 @@ describe('buildValidateDocUpdate', () => {
 				]
 			};
 			expectForbidden(
-				() => compile()(mutated, validGuard, REGISTRATION),
+				() => compile()(mutated, validGuard, DISTRIBUTION),
 				/Cannot change evacuee_id on one-time guard/
 			);
 		});
@@ -2701,6 +2778,8 @@ describe('buildValidateDocUpdate', () => {
 	});
 
 	describe('Ticket-era Flow 2 VDU rules (Rules 12-14 / CR-121)', () => {
+		const SUPPLY_COORD: UserCtx = { name: 'sc', roles: ['shelter:SH001', 'supply_coordinator'] };
+
 		const validTicket = {
 			_id: 'requisition_ticket:01J00000000000000000000001',
 			type: 'requisition_ticket',
@@ -2734,7 +2813,7 @@ describe('buildValidateDocUpdate', () => {
 			shelter_code: 'SH001',
 			created_at: '2026-09-01T00:00:00.000Z',
 			updated_at: '2026-09-01T00:00:00.000Z',
-			created_by: REGISTRATION.name,
+			created_by: DISTRIBUTION.name,
 			ticket_id: 'requisition_ticket:01J00000000000000000000001',
 			item_id: 'item:cooked_rice',
 			qty: '2',
@@ -2746,7 +2825,7 @@ describe('buildValidateDocUpdate', () => {
 			status: 'fulfilled',
 			is_override: false,
 			distributed_at: '2026-09-01T00:00:00.000Z',
-			distributed_by: REGISTRATION.name
+			distributed_by: DISTRIBUTION.name
 		};
 
 		const validReturnableLog = {
@@ -2975,15 +3054,25 @@ describe('buildValidateDocUpdate', () => {
 				const distributing = {
 					...inTransit,
 					status: 'DISTRIBUTING',
-					received_by: REGISTRATION.name
+					received_by: DISTRIBUTION.name
 				};
-				expect(() => compile()(distributing, inTransit, REGISTRATION)).not.toThrow();
+				expect(() => compile()(distributing, inTransit, DISTRIBUTION)).not.toThrow();
+				expect(() =>
+					compile()({ ...distributing, received_by: MANAGER.name }, inTransit, MANAGER)
+				).not.toThrow();
+				// CR-161 R3: registration_staff and supply_coordinator no longer receive at points.
+				for (const actor of [REGISTRATION, SUPPLY_COORD]) {
+					expectForbidden(
+						() => compile()({ ...distributing, received_by: actor.name }, inTransit, actor),
+						/can receive requisition_tickets at distribution points/
+					);
+				}
 				expectForbidden(
 					() => compile()(distributing, inTransit, WAREHOUSE),
 					/can receive requisition_tickets at distribution points/
 				);
 				expectForbidden(
-					() => compile()({ ...distributing, received_by: 'mallory' }, inTransit, REGISTRATION),
+					() => compile()({ ...distributing, received_by: 'mallory' }, inTransit, DISTRIBUTION),
 					/received_by must match/
 				);
 				expect(() =>
@@ -3000,7 +3089,7 @@ describe('buildValidateDocUpdate', () => {
 					...ticketFor(WAREHOUSE, { status: 'DISTRIBUTING' }),
 					approved_by: MANAGER.name,
 					dispatched_by: WAREHOUSE.name,
-					received_by: REGISTRATION.name,
+					received_by: DISTRIBUTION.name,
 					items: [{ ...validTicket.items[0], allocated_qty: '51' }],
 					amendments: [
 						{
@@ -3080,18 +3169,30 @@ describe('buildValidateDocUpdate', () => {
 			it('authorizes warehouse return and transfer completion with the physical-receipt capability', () => {
 				const distributing = ticketFor(WAREHOUSE, { status: 'DISTRIBUTING' });
 				const shiftClosed = { ...distributing, status: 'SHIFT_CLOSED' };
-				expect(() => compile()(shiftClosed, distributing, REGISTRATION)).not.toThrow();
+				expect(() => compile()(shiftClosed, distributing, DISTRIBUTION)).not.toThrow();
+				for (const actor of [REGISTRATION, SUPPLY_COORD]) {
+					expectForbidden(
+						() => compile()(shiftClosed, distributing, actor),
+						/can close requisition_ticket shifts/
+					);
+				}
 				expectForbidden(
 					() => compile()(shiftClosed, distributing, WAREHOUSE),
 					/can close requisition_ticket shifts/
 				);
 				const returnPending = { ...shiftClosed, status: 'RETURN_PENDING_RECEIPT' };
-				expect(() => compile()(returnPending, shiftClosed, REGISTRATION)).not.toThrow();
+				expect(() => compile()(returnPending, shiftClosed, DISTRIBUTION)).not.toThrow();
+				for (const actor of [REGISTRATION, SUPPLY_COORD]) {
+					expectForbidden(
+						() => compile()(returnPending, shiftClosed, actor),
+						/can submit or complete requisition_ticket shifts/
+					);
+				}
 				const pendingReceipt = ticketFor(WAREHOUSE, { status: 'RETURN_PENDING_RECEIPT' });
 				const receiptComplete = { ...pendingReceipt, status: 'RETURN_COMPLETED' };
 				expect(() => compile()(receiptComplete, pendingReceipt, WAREHOUSE)).not.toThrow();
 				expectForbidden(
-					() => compile()(receiptComplete, pendingReceipt, REGISTRATION),
+					() => compile()(receiptComplete, pendingReceipt, DISTRIBUTION),
 					/can receive warehouse returns/
 				);
 				const transfer = ticketFor(WAREHOUSE, {
@@ -3120,20 +3221,20 @@ describe('buildValidateDocUpdate', () => {
 			});
 
 			it('allows valid consumable and returnable distribution_log creation', () => {
-				expect(() => compile()(validFoodLog, null, REGISTRATION)).not.toThrow();
-				expect(() => compile()(validReturnableLog, null, REGISTRATION)).not.toThrow();
+				expect(() => compile()(validFoodLog, null, DISTRIBUTION)).not.toThrow();
+				expect(() => compile()(validReturnableLog, null, DISTRIBUTION)).not.toThrow();
 			});
 
 			it('rejects hard-delete of distribution_log', () => {
 				expectForbidden(
-					() => compile()({ _id: validFoodLog._id, _deleted: true }, validFoodLog, REGISTRATION),
+					() => compile()({ _id: validFoodLog._id, _deleted: true }, validFoodLog, DISTRIBUTION),
 					/Cannot delete distribution_log documents/
 				);
 			});
 
 			it('rejects mutating immutable issuance fields', () => {
 				expectForbidden(
-					() => compile()({ ...validFoodLog, qty: '5' }, validFoodLog, REGISTRATION),
+					() => compile()({ ...validFoodLog, qty: '5' }, validFoodLog, DISTRIBUTION),
 					/distribution_log.qty is immutable after issuance/
 				);
 				expectForbidden(
@@ -3141,7 +3242,7 @@ describe('buildValidateDocUpdate', () => {
 						compile()(
 							{ ...validFoodLog, ticket_id: 'requisition_ticket:01J99999999999999999999999' },
 							validFoodLog,
-							REGISTRATION
+							DISTRIBUTION
 						),
 					/distribution_log.ticket_id is immutable after issuance/
 				);
@@ -3170,12 +3271,18 @@ describe('buildValidateDocUpdate', () => {
 					...validFoodLog,
 					status: 'voided',
 					voided_at: '2026-09-01T01:00:00.000Z',
-					voided_by: REGISTRATION.name
+					voided_by: DISTRIBUTION.name
 				};
-				expect(() => compile()(voided, validFoodLog, REGISTRATION)).not.toThrow();
+				expect(() => compile()(voided, validFoodLog, DISTRIBUTION)).not.toThrow();
+				for (const actor of [REGISTRATION, SUPPLY_COORD]) {
+					expectForbidden(
+						() => compile()({ ...voided, voided_by: actor.name }, validFoodLog, actor),
+						/can void distribution logs/
+					);
+				}
 
 				expectForbidden(
-					() => compile()({ ...voided, voided_at: undefined }, validFoodLog, REGISTRATION),
+					() => compile()({ ...voided, voided_at: undefined }, validFoodLog, DISTRIBUTION),
 					/Voided logs require void audit fields/
 				);
 			});
@@ -3196,26 +3303,31 @@ describe('buildValidateDocUpdate', () => {
 					voided_by: 'user:staff1'
 				};
 				expectForbidden(
-					() => compile()(voided, partiallyReturned, REGISTRATION),
+					() => compile()(voided, partiallyReturned, DISTRIBUTION),
 					/Cannot void a distribution_log after return or clear activity has begun/
 				);
 			});
 
 			it('enforces log creation roles and issuance actor binding', () => {
 				expect(() => compile()(logFor(ADMIN), null, ADMIN)).not.toThrow();
-				expectForbidden(
-					() => compile()(logFor(WAREHOUSE), null, WAREHOUSE),
-					/can create distribution logs/
-				);
+				expect(() => compile()(logFor(DISTRIBUTION), null, DISTRIBUTION)).not.toThrow();
+				expect(() => compile()(logFor(MANAGER), null, MANAGER)).not.toThrow();
+				// CR-161 R3: registration_staff and supply_coordinator no longer issue.
+				for (const actor of [WAREHOUSE, REGISTRATION, SUPPLY_COORD]) {
+					expectForbidden(
+						() => compile()(logFor(actor), null, actor),
+						/can create distribution logs/
+					);
+				}
 				expectForbidden(
 					() =>
-						compile()({ ...logFor(REGISTRATION), distributed_by: 'mallory' }, null, REGISTRATION),
+						compile()({ ...logFor(DISTRIBUTION), distributed_by: 'mallory' }, null, DISTRIBUTION),
 					/created_by and distributed_by must match/
 				);
 			});
 
 			it('enforces transition-specific log roles and preserves issuance actors', () => {
-				const active = logFor(REGISTRATION, {
+				const active = logFor(DISTRIBUTION, {
 					_id: 'distribution_log:01J00000000000000000000003',
 					item_id: 'item:wheelchair',
 					is_returnable: true,
@@ -3231,11 +3343,19 @@ describe('buildValidateDocUpdate', () => {
 				};
 				expect(() => compile()(routineReturn, active, WAREHOUSE)).not.toThrow();
 				expectForbidden(
-					() => compile()({ ...routineReturn, returned_by: REGISTRATION.name }, active, WAREHOUSE),
+					() => compile()({ ...routineReturn, returned_by: DISTRIBUTION.name }, active, WAREHOUSE),
 					/returned_by must match/
 				);
+				// CR-161 R3: distribution_staff may record routine physical returns; REG may not.
+				expect(() =>
+					compile()({ ...routineReturn, returned_by: DISTRIBUTION.name }, active, DISTRIBUTION)
+				).not.toThrow();
+				expect(() =>
+					compile()({ ...routineReturn, returned_by: SUPPLY_COORD.name }, active, SUPPLY_COORD)
+				).not.toThrow();
 				expectForbidden(
-					() => compile()(routineReturn, active, REGISTRATION),
+					() =>
+						compile()({ ...routineReturn, returned_by: REGISTRATION.name }, active, REGISTRATION),
 					/record routine physical returns/
 				);
 				expectForbidden(
@@ -3250,17 +3370,27 @@ describe('buildValidateDocUpdate', () => {
 					clear_reason: 'bulk_dropoff',
 					bulk_pool_id: 'bulk_return_pool:01J00000000000000000000001',
 					returned_at: '2026-09-01T01:00:00.000Z',
-					returned_by: REGISTRATION.name
+					returned_by: DISTRIBUTION.name
 				};
-				expect(() => compile()(bulkReturned, active, REGISTRATION)).not.toThrow();
+				expect(() => compile()(bulkReturned, active, DISTRIBUTION)).not.toThrow();
+				expect(() =>
+					compile()({ ...bulkReturned, returned_by: MANAGER.name }, active, MANAGER)
+				).not.toThrow();
 				expectForbidden(
 					() => compile()(bulkReturned, active, WAREHOUSE),
 					/can clear distribution logs/
 				);
+				// CR-161 R3: bulk / non-physical clears are DST, SM, SA only.
+				for (const actor of [REGISTRATION, SUPPLY_COORD]) {
+					expectForbidden(
+						() => compile()({ ...bulkReturned, returned_by: actor.name }, active, actor),
+						/can clear distribution logs/
+					);
+				}
 			});
 
 			it('allows successive partial returns by different physical-receipt actors only when quantity advances', () => {
-				const partial = logFor(REGISTRATION, {
+				const partial = logFor(DISTRIBUTION, {
 					_id: 'distribution_log:01J00000000000000000000004',
 					item_id: 'item:wheelchair',
 					is_returnable: true,
@@ -3285,18 +3415,18 @@ describe('buildValidateDocUpdate', () => {
 
 			it('rejects forged void actors and terminal reopens', () => {
 				const forgedVoided = {
-					...logFor(REGISTRATION),
+					...logFor(DISTRIBUTION),
 					status: 'voided',
 					voided_at: '2026-09-01T01:00:00.000Z',
 					voided_by: 'mallory'
 				};
 				expectForbidden(
-					() => compile()(forgedVoided, validFoodLog, REGISTRATION),
+					() => compile()(forgedVoided, validFoodLog, DISTRIBUTION),
 					/voided_by must match/
 				);
-				const voided = { ...forgedVoided, voided_by: REGISTRATION.name };
+				const voided = { ...forgedVoided, voided_by: DISTRIBUTION.name };
 				const returned = {
-					...logFor(REGISTRATION, { is_returnable: true, status: 'active' }),
+					...logFor(DISTRIBUTION, { is_returnable: true, status: 'active' }),
 					status: 'returned',
 					qty_returned: '2',
 					clear_reason: 'routine',
@@ -3308,11 +3438,11 @@ describe('buildValidateDocUpdate', () => {
 					/Illegal distribution_log transition/
 				);
 				const lost = {
-					...logFor(REGISTRATION, { is_returnable: true, status: 'active' }),
+					...logFor(DISTRIBUTION, { is_returnable: true, status: 'active' }),
 					status: 'lost',
 					clear_reason: 'lost',
 					returned_at: '2026-09-01T01:00:00.000Z',
-					returned_by: REGISTRATION.name,
+					returned_by: DISTRIBUTION.name,
 					notes: 'Not returned'
 				};
 				expect(() =>
@@ -3326,7 +3456,7 @@ describe('buildValidateDocUpdate', () => {
 							returned_by: undefined,
 							notes: undefined
 						},
-						REGISTRATION
+						DISTRIBUTION
 					)
 				).not.toThrow();
 				expectForbidden(
@@ -3346,11 +3476,11 @@ describe('buildValidateDocUpdate', () => {
 					/can clear distribution logs/
 				);
 				expectForbidden(
-					() => compile()({ ...lost, status: 'active' }, lost, REGISTRATION),
+					() => compile()({ ...lost, status: 'active' }, lost, DISTRIBUTION),
 					/Illegal distribution_log transition/
 				);
 				expectForbidden(
-					() => compile()({ ...voided, status: 'fulfilled' }, voided, REGISTRATION),
+					() => compile()({ ...voided, status: 'fulfilled' }, voided, DISTRIBUTION),
 					/Illegal distribution_log transition/
 				);
 				const waived = {
@@ -3360,7 +3490,7 @@ describe('buildValidateDocUpdate', () => {
 					notes: 'Approved waiver'
 				};
 				expectForbidden(
-					() => compile()({ ...waived, status: 'partially_returned' }, waived, REGISTRATION),
+					() => compile()({ ...waived, status: 'partially_returned' }, waived, DISTRIBUTION),
 					/Illegal distribution_log transition/
 				);
 			});
@@ -3592,6 +3722,20 @@ describe('buildValidateDocUpdate', () => {
 				expect(() => compile()(claim, null, STAFF_A)).not.toThrow();
 			});
 
+			it('still allows REG, SC, DST, SM, and SA to create claims (CR-161 R3 exception)', () => {
+				const dist: UserCtx = {
+					name: 'dist',
+					roles: ['shelter:SH001', 'SH001:distribution_staff']
+				};
+				const mgr: UserCtx = { name: 'sm', roles: ['shelter:SH001', 'shelter_manager'] };
+				const admin: UserCtx = { name: 'admin', roles: ['system_admin'] };
+				for (const actor of [STAFF_A, STAFF_B, dist, mgr, admin]) {
+					expect(() => compile()(claimFor(actor), null, actor)).not.toThrow();
+				}
+				const wh: UserCtx = { name: 'ws', roles: ['shelter:SH001', 'warehouse_staff'] };
+				expectForbidden(() => compile()(claimFor(wh), null, wh), /can manage bulk return claims/);
+			});
+
 			it('rejects claim create when created_by is forged', () => {
 				const claim = claimFor(STAFF_A);
 				expectForbidden(
@@ -3633,6 +3777,10 @@ describe('buildValidateDocUpdate', () => {
 				roles: ['shelter:SH001', 'supply_coordinator']
 			};
 			const MGR_ACTOR: UserCtx = { name: 'mgr1', roles: ['shelter:SH001', 'shelter_manager'] };
+			const DIST_ACTOR: UserCtx = {
+				name: 'dist1',
+				roles: ['shelter:SH001', 'SH001:distribution_staff']
+			};
 			const ADMIN_ACTOR: UserCtx = { name: 'admin1', roles: ['system_admin'] };
 			const UNAUTH_ACTOR: UserCtx = { name: 'unauth1', roles: ['shelter:SH001', 'kitchen_staff'] };
 
@@ -3661,8 +3809,8 @@ describe('buildValidateDocUpdate', () => {
 				...over
 			});
 
-			it('enforces mode-specific RBAC for PHYSICAL reservation create (WH/SC/SM/SA allowed; REG rejected)', () => {
-				for (const actor of [WAREHOUSE_ACTOR, COORD_ACTOR, MGR_ACTOR, ADMIN_ACTOR]) {
+			it('enforces mode-specific RBAC for PHYSICAL reservation create (WH/SC/DST/SM/SA allowed; REG rejected)', () => {
+				for (const actor of [WAREHOUSE_ACTOR, COORD_ACTOR, DIST_ACTOR, MGR_ACTOR, ADMIN_ACTOR]) {
 					const res = resFor(actor, 'PHYSICAL');
 					expect(() => compile()(res, null, actor)).not.toThrow();
 				}
@@ -3673,28 +3821,32 @@ describe('buildValidateDocUpdate', () => {
 				);
 			});
 
-			it('enforces mode-specific RBAC for BULK reservation create (REG/SC/SM/SA allowed; WH rejected)', () => {
-				for (const actor of [REG_ACTOR, COORD_ACTOR, MGR_ACTOR, ADMIN_ACTOR]) {
+			it('enforces mode-specific RBAC for BULK reservation create (DST/SM/SA allowed; REG, SC, WH rejected)', () => {
+				for (const actor of [DIST_ACTOR, MGR_ACTOR, ADMIN_ACTOR]) {
 					const res = resFor(actor, 'BULK');
 					expect(() => compile()(res, null, actor)).not.toThrow();
 				}
-				const whRes = resFor(WAREHOUSE_ACTOR, 'BULK');
-				expectForbidden(
-					() => compile()(whRes, null, WAREHOUSE_ACTOR),
-					/Role cannot manage loan return reservations in BULK mode/
-				);
+				for (const actor of [REG_ACTOR, COORD_ACTOR, WAREHOUSE_ACTOR]) {
+					const res = resFor(actor, 'BULK');
+					expectForbidden(
+						() => compile()(res, null, actor),
+						/Role cannot manage loan return reservations in BULK mode/
+					);
+				}
 			});
 
-			it('enforces mode-specific RBAC for NON_PHYSICAL reservation create (REG/SC/SM/SA allowed; WH rejected)', () => {
-				for (const actor of [REG_ACTOR, COORD_ACTOR, MGR_ACTOR, ADMIN_ACTOR]) {
+			it('enforces mode-specific RBAC for NON_PHYSICAL reservation create (DST/SM/SA allowed; REG, SC, WH rejected)', () => {
+				for (const actor of [DIST_ACTOR, MGR_ACTOR, ADMIN_ACTOR]) {
 					const res = resFor(actor, 'NON_PHYSICAL');
 					expect(() => compile()(res, null, actor)).not.toThrow();
 				}
-				const whRes = resFor(WAREHOUSE_ACTOR, 'NON_PHYSICAL');
-				expectForbidden(
-					() => compile()(whRes, null, WAREHOUSE_ACTOR),
-					/Role cannot manage loan return reservations in NON_PHYSICAL mode/
-				);
+				for (const actor of [REG_ACTOR, COORD_ACTOR, WAREHOUSE_ACTOR]) {
+					const res = resFor(actor, 'NON_PHYSICAL');
+					expectForbidden(
+						() => compile()(res, null, actor),
+						/Role cannot manage loan return reservations in NON_PHYSICAL mode/
+					);
+				}
 			});
 
 			it('rejects reservation create when created_by is forged', () => {
@@ -3745,6 +3897,8 @@ describe('buildValidateDocUpdate', () => {
 
 				// WH actor can FENCE
 				expect(() => compile()(fenced, original, WAREHOUSE_ACTOR)).not.toThrow();
+				// CR-161 R3: DST may also run a PHYSICAL loan return
+				expect(() => compile()(fenced, original, DIST_ACTOR)).not.toThrow();
 
 				const committed = {
 					...fenced,
@@ -3786,7 +3940,7 @@ describe('buildValidateDocUpdate', () => {
 			});
 
 			it('rejects changing mode or operation_id while reservation is active', () => {
-				const original = resFor(COORD_ACTOR, 'PHYSICAL');
+				const original = resFor(MGR_ACTOR, 'PHYSICAL');
 				const modeChanged = {
 					...original,
 					mode: 'BULK',
@@ -3796,7 +3950,7 @@ describe('buildValidateDocUpdate', () => {
 					updated_at: '2026-09-01T00:30:00.000Z'
 				};
 				expectForbidden(
-					() => compile()(modeChanged, original, COORD_ACTOR),
+					() => compile()(modeChanged, original, MGR_ACTOR),
 					/loan_return_reservation\.mode cannot be changed while active/
 				);
 
@@ -3807,7 +3961,7 @@ describe('buildValidateDocUpdate', () => {
 					updated_at: '2026-09-01T00:30:00.000Z'
 				};
 				expectForbidden(
-					() => compile()(opIdChanged, original, COORD_ACTOR),
+					() => compile()(opIdChanged, original, MGR_ACTOR),
 					/loan_return_reservation\.operation_id cannot be changed while active/
 				);
 			});
@@ -3825,18 +3979,29 @@ describe('buildValidateDocUpdate', () => {
 					/Invalid loan_return_reservation transition from COMMITTED to ABORTED/
 				);
 
-				// COMMITTED -> RESERVED as BULK is valid for REG_ACTOR
+				// COMMITTED -> RESERVED as BULK is valid for DIST_ACTOR
 				const reinitFromCommitted = {
 					...committed,
 					operation_id: '01J00000000000000000000099',
-					operation_by: REG_ACTOR.name,
+					operation_by: DIST_ACTOR.name,
 					mode: 'BULK',
 					bulk_pool_id: 'bulk_return_pool:01J00000000000000000000001',
 					claimed_qty: '1',
 					status: 'RESERVED',
 					updated_at: '2026-09-01T02:00:00.000Z'
 				};
-				expect(() => compile()(reinitFromCommitted, committed, REG_ACTOR)).not.toThrow();
+				expect(() => compile()(reinitFromCommitted, committed, DIST_ACTOR)).not.toThrow();
+
+				// CR-161 R3: REG_ACTOR can no longer reinitialize as BULK
+				expectForbidden(
+					() =>
+						compile()(
+							{ ...reinitFromCommitted, operation_by: REG_ACTOR.name },
+							committed,
+							REG_ACTOR
+						),
+					/Role cannot manage loan return reservations in BULK mode/
+				);
 
 				// COMMITTED -> RESERVED as BULK is rejected for WAREHOUSE_ACTOR (WH cannot do BULK)
 				const whReinitBulk = {
@@ -3910,7 +4075,6 @@ describe('buildValidateDocUpdate', () => {
 		});
 
 		describe('stock_ledger reason/ref VDU alignment (Rule 13)', () => {
-			const SUPPLY_COORD: UserCtx = { name: 'sc', roles: ['shelter:SH001', 'supply_coordinator'] };
 			const SHELTER_MGR: UserCtx = { name: 'sm', roles: ['shelter:SH001', 'shelter_manager'] };
 			const SYS_ADMIN: UserCtx = { name: 'admin', roles: ['system_admin'] };
 
@@ -4008,6 +4172,117 @@ describe('buildValidateDocUpdate', () => {
 				expect(() => compile()(receivePool, null, WAREHOUSE)).not.toThrow();
 			});
 
+			describe('distribution_staff loan-return receipt (CR-161 R3)', () => {
+				const DIST: UserCtx = {
+					name: 'dist',
+					roles: ['shelter:SH001', 'SH001:distribution_staff']
+				};
+
+				// Shape written by returnLoanAtCounter (return-workflow.ts).
+				const counterReturn = (over: Doc = {}): Doc =>
+					ledger({
+						_id: 'stock_ledger:01J00000000000000000000009',
+						qty: '1',
+						reason: 'receive',
+						ref_id: 'distribution_log:01J00000000000000000000001',
+						lot: { note: 'counter_loan_return' },
+						created_by: 'dist',
+						...over
+					});
+
+				it('allows a counter loan-return receive referencing distribution_log', () => {
+					expect(() => compile()(counterReturn(), null, DIST)).not.toThrow();
+				});
+
+				it('allows the produced_at stamp that createStockLedger adds to the lot', () => {
+					const doc = counterReturn({
+						lot: { note: 'counter_loan_return', produced_at: '2026-10-11T00:00:00.000Z' }
+					});
+					expect(() => compile()(doc, null, DIST)).not.toThrow();
+				});
+
+				it.each([
+					['another actor', { created_by: 'someone-else' }, /created_by must match/],
+					['a fractional qty', { qty: '1.5' }, /positive whole number/],
+					['a zero qty', { qty: '0' }, /positive whole number/],
+					['a missing lot note', { lot: undefined }, /counter_loan_return lot note/],
+					[
+						'another lot note',
+						{ lot: { note: 'bulk_return_pool' } },
+						/counter_loan_return lot note/
+					],
+					['a short id', { _id: 'stock_ledger:01J' }, /26-char id/],
+					[
+						'extra lot metadata',
+						{ lot: { note: 'counter_loan_return', expiry: '2099-01-01T00:00:00.000Z' } },
+						/only carry note and produced_at/
+					]
+				])('rejects a distribution_staff receipt with %s', (_case, over, match) => {
+					expectForbidden(() => compile()(counterReturn(over), null, DIST), match);
+				});
+
+				it('keeps the warehouse receive shape unchanged for warehouse staff', () => {
+					expect(() =>
+						compile()(counterReturn({ created_by: 'ws', lot: undefined }), null, WAREHOUSE)
+					).not.toThrow();
+				});
+
+				it.each([
+					['donation', ledger({ reason: 'donation' })],
+					[
+						'receive referencing requisition_ticket',
+						ledger({
+							qty: '10',
+							reason: 'receive',
+							ref_id: 'requisition_ticket:01J00000000000000000000001'
+						})
+					],
+					[
+						'receive referencing bulk_return_pool',
+						ledger({
+							qty: '1',
+							reason: 'receive',
+							ref_id: 'bulk_return_pool:01J00000000000000000000001'
+						})
+					],
+					[
+						'distribute referencing requisition_ticket',
+						ledger({
+							qty: '-5',
+							reason: 'distribute',
+							ref_id: 'requisition_ticket:01J00000000000000000000001',
+							lot_ref: 'stock_ledger:01J00000000000000000000001'
+						})
+					],
+					[
+						'distribution_return',
+						ledger({
+							qty: '2',
+							reason: 'distribution_return',
+							ref_id: 'distribution_batch:01J',
+							lot_ref: 'stock_ledger:01J'
+						})
+					]
+				])('rejects %s', (_case, doc) => {
+					expectForbidden(
+						() => compile()(doc, null, DIST),
+						/Only warehouse staff or managers can write stock ledger/
+					);
+				});
+
+				it('rejects registration_staff writing the same distribution_log receive', () => {
+					const receiveLog = ledger({
+						qty: '1',
+						reason: 'receive',
+						ref_id: 'distribution_log:01J00000000000000000000001'
+					});
+					expectForbidden(
+						() => compile()(receiveLog, null, REGISTRATION),
+						/Only warehouse staff or managers can write stock ledger/
+					);
+				});
+			});
+
 			it('rejects distribute with invalid ref_id', () => {
 				const invalid = ledger({
 					qty: '-5',
@@ -4029,7 +4304,7 @@ describe('buildValidateDocUpdate', () => {
 					/shelter_code must be SH001/
 				);
 				expectForbidden(
-					() => compile()({ ...validFoodLog, shelter_code: 'SH002' }, null, REGISTRATION),
+					() => compile()({ ...validFoodLog, shelter_code: 'SH002' }, null, DISTRIBUTION),
 					/shelter_code must be SH001/
 				);
 				expectForbidden(
@@ -4204,7 +4479,7 @@ describe('buildValidateDocUpdate', () => {
 						name: 'unauth',
 						roles: ['shelter:SH001', 'kitchen_staff']
 					}),
-				/Only registration staff, supply coordinator, shelter manager, or system admin can manage bulk return claims/
+				/Only registration staff, distribution staff, supply coordinator, shelter manager, or system admin can manage bulk return claims/
 			);
 			expectForbidden(
 				() =>

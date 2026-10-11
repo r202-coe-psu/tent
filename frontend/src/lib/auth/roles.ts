@@ -21,6 +21,7 @@ export const MEDICAL_STAFF = 'medical_staff';
 export const VOLUNTEER_COORDINATOR = 'volunteer_coordinator';
 export const SECURITY_OFFICER = 'security_officer';
 export const FACILITY_STAFF = 'facility_staff';
+export const DISTRIBUTION_STAFF = 'distribution_staff';
 
 /** Capability roles a shelter_manager or coordinator is allowed to grant (per CR-104 §2.1). */
 export const STAFF_CAPABILITIES = [
@@ -32,7 +33,8 @@ export const STAFF_CAPABILITIES = [
 	WAREHOUSE_STAFF,
 	VOLUNTEER_COORDINATOR,
 	SECURITY_OFFICER,
-	FACILITY_STAFF
+	FACILITY_STAFF,
+	DISTRIBUTION_STAFF
 ] as const;
 export type StaffCapability = (typeof STAFF_CAPABILITIES)[number];
 
@@ -299,6 +301,22 @@ export function canAccessVolunteerBackoffice(
 }
 
 /**
+ * True when the actor may use the Distribution Desk (Station 4, `/onsite/distribution`):
+ * system_admin, shelter_manager, or distribution_staff in the shelter (CR-161 R5, page-level per
+ * CR-159). REG, SC and WH keep their system-level distribution rights but not this page.
+ */
+export function canAccessDistributionDesk(
+	roles: readonly string[],
+	shelterCode?: string | null
+): boolean {
+	return (
+		isSystemAdmin(roles) ||
+		isShelterManager(roles, shelterCode) ||
+		hasStaffCapability(roles, DISTRIBUTION_STAFF, shelterCode)
+	);
+}
+
+/**
  * True when the actor may access Station 3 zoning:
  * system_admin, shelter_manager, registration_staff, or facility_staff.
  */
@@ -363,7 +381,8 @@ const STAFF_CAPABILITY_LABELS: Record<StaffCapability, string> = {
 	warehouse_staff: 'เจ้าหน้าที่คลัง',
 	volunteer_coordinator: 'ผู้ประสานงานจิตอาสา',
 	security_officer: 'เจ้าหน้าที่รักษาความปลอดภัย',
-	facility_staff: 'เจ้าหน้าที่ฝ่ายอาคารสถานที่'
+	facility_staff: 'เจ้าหน้าที่ฝ่ายอาคารสถานที่',
+	distribution_staff: 'เจ้าหน้าที่แจกจ่าย'
 };
 
 /**

@@ -216,12 +216,22 @@ describe('filterPortalMenu — single-department roles', () => {
 	it('supply_coordinator sees only the supply department', () => {
 		const views = menu(staff('supply_coordinator'));
 		expect(deptIds(views)).toEqual(['supply']);
-		expect(itemIds(views[0])).toEqual([
-			'warehouse',
-			'stock-donations',
-			'supply-distribution',
-			'frontline-distribution'
-		]);
+		expect(itemIds(views[0])).toEqual(['warehouse', 'stock-donations', 'supply-distribution']);
+	});
+
+	it('distribution_staff sees only the distribution desk', () => {
+		const views = menu(staff('distribution_staff'));
+		expect(deptIds(views)).toEqual(['supply']);
+		expect(itemIds(views[0])).toEqual(['frontline-distribution']);
+	});
+
+	it('distribution_staff of another shelter does not see the desk', () => {
+		expect(menu(staff('distribution_staff', 'SH002'))).toEqual([]);
+	});
+
+	it('legacy flat distribution_staff with one shelter sees the desk', () => {
+		const views = menu(['shelter:SH001', 'distribution_staff']);
+		expect(itemIds(dept(views, 'supply'))).toEqual(['frontline-distribution']);
 	});
 
 	it('warehouse_staff is treated as supply_coordinator', () => {
