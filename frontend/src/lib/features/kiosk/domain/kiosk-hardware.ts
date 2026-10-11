@@ -7,6 +7,8 @@ export type KioskHardware = {
 	qrCheckInEnabled: boolean;
 	qrInput: KioskQrInput;
 	cameraLabel: string | null;
+	/** `KIOSK_CAMERA_FLIP=on`: show the camera picture flipped left↔right (display only). */
+	cameraFlip: boolean;
 	readerMaxGapMs: number;
 	/** Face check against the chip photo: off unless the scanner client turns it on. */
 	faceCheck: FaceCheckConfig;
@@ -21,6 +23,7 @@ export const DEFAULT_KIOSK_HARDWARE: KioskHardware = {
 	qrCheckInEnabled: true,
 	qrInput: 'camera',
 	cameraLabel: null,
+	cameraFlip: false,
 	readerMaxGapMs: DEFAULT_READER_MAX_GAP_MS,
 	faceCheck: FACE_CHECK_OFF
 };

@@ -20,6 +20,7 @@ describe('fetchKioskHardware', () => {
 			qrCheckInEnabled: true,
 			qrInput: 'both',
 			cameraLabel: 'JSK-RGB',
+			cameraFlip: false,
 			readerMaxGapMs: 40,
 			faceCheck: { mode: 'off', flows: [] }
 		});
@@ -79,6 +80,21 @@ describe('fetchKioskHardware', () => {
 		expect(DEFAULT_KIOSK_HARDWARE.qrCheckInEnabled).toBe(true);
 	});
 
+	it('flips the camera picture only when the scanner client sends an explicit true', async () => {
+		const cameraFlip = async (value: unknown) =>
+			(
+				await fetchKioskHardware(
+					vi.fn<typeof fetch>().mockResolvedValue(json({ qr_input: 'camera', camera_flip: value }))
+				)
+			).cameraFlip;
+
+		expect(await cameraFlip(true)).toBe(true);
+		expect(await cameraFlip(false)).toBe(false);
+		expect(await cameraFlip(undefined)).toBe(false); // older scanner client
+		expect(await cameraFlip('on')).toBe(false);
+		expect(DEFAULT_KIOSK_HARDWARE.cameraFlip).toBe(false);
+	});
+
 	it('treats a blank label as no label', async () => {
 		const result = await fetchKioskHardware(
 			vi
@@ -106,6 +122,7 @@ describe('fetchKioskHardware', () => {
 			qrCheckInEnabled: true,
 			qrInput: 'reader',
 			cameraLabel: null,
+			cameraFlip: false,
 			readerMaxGapMs: 50,
 			faceCheck: { mode: 'off', flows: [] }
 		});

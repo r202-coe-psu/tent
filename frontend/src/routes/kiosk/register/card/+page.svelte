@@ -103,7 +103,10 @@
 		) {
 			// Hold the card in memory; the face page registers it once the check has ended. The face
 			// check found on here goes with it, so the face page never has to ask again (and fail open).
-			walkInSession.holdCard(card, resolved.cameraLabel);
+			walkInSession.holdCard(card, {
+				cameraLabel: resolved.cameraLabel,
+				cameraFlip: resolved.cameraFlip
+			});
 			await goto(
 				resolve(
 					`/kiosk/register/face${contextQuery}` as

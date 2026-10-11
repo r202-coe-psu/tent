@@ -102,6 +102,7 @@ class HardwareConfigTests(unittest.TestCase):
         self.assertEqual(config["PRINTER_WIDTH_DOTS"], "576")
         self.assertEqual(config["KIOSK_QR_CHECK_IN"], "on")
         self.assertEqual(config["KIOSK_QR_INPUT"], "camera")
+        self.assertEqual(config["KIOSK_CAMERA_FLIP"], "off")
         self.assertEqual(config["CARD_READER"], "pcsc")
         self.assertEqual(config["CARD_READER_USB_ID"], "0483:4c43")
         self.assertEqual(config["KIOSK_FACE_CHECK"], "off")
@@ -144,6 +145,7 @@ class HardwareConfigTests(unittest.TestCase):
             KIOSK_QR_INPUT="Reader",
             KIOSK_QR_READER_MAX_GAP_MS="40",
             KIOSK_CAMERA_LABEL=" JSK-RGB ",
+            KIOSK_CAMERA_FLIP="On",
             CARD_READER="rfpro",
             CARD_READER_USB_ID="0483:4C43",
         )
@@ -153,6 +155,7 @@ class HardwareConfigTests(unittest.TestCase):
         self.assertEqual(config["KIOSK_QR_INPUT"], "reader")
         self.assertEqual(config["KIOSK_QR_READER_MAX_GAP_MS"], "40")
         self.assertEqual(config["KIOSK_CAMERA_LABEL"], "JSK-RGB")
+        self.assertEqual(config["KIOSK_CAMERA_FLIP"], "on")
         self.assertEqual(config["CARD_READER"], "rfpro")
         self.assertEqual(config["CARD_READER_USB_ID"], "0483:4c43")
 
@@ -173,6 +176,7 @@ class HardwareConfigTests(unittest.TestCase):
             "width not multiple of 8": {"PRINTER_WIDTH_DOTS": "580"},
             "qr check-in": {"KIOSK_QR_CHECK_IN": "false"},
             "qr input": {"KIOSK_QR_INPUT": "bluetooth"},
+            "camera flip": {"KIOSK_CAMERA_FLIP": "true"},
             "qr gap below range": {"KIOSK_QR_READER_MAX_GAP_MS": "5"},
             "qr gap above range": {"KIOSK_QR_READER_MAX_GAP_MS": "101"},
             "qr gap not integer": {"KIOSK_QR_READER_MAX_GAP_MS": "fast"},

@@ -1160,6 +1160,7 @@ class KioskHardwareRouteTests(unittest.IsolatedAsyncioTestCase):
             valid_config(
                 KIOSK_QR_INPUT="both",
                 KIOSK_CAMERA_LABEL="JSK-RGB",
+                KIOSK_CAMERA_FLIP="on",
                 KIOSK_QR_READER_MAX_GAP_MS="40",
             )
         )
@@ -1175,6 +1176,7 @@ class KioskHardwareRouteTests(unittest.IsolatedAsyncioTestCase):
                 "qr_check_in": True,
                 "qr_input": "both",
                 "camera_label": "JSK-RGB",
+                "camera_flip": True,
                 "reader_max_gap_ms": 40,
                 "face_check": {"mode": "off", "flows": []},
             },
@@ -1194,6 +1196,7 @@ class KioskHardwareRouteTests(unittest.IsolatedAsyncioTestCase):
                 "qr_check_in": True,
                 "qr_input": "camera",
                 "camera_label": None,
+                "camera_flip": False,
                 "reader_max_gap_ms": 50,
                 "face_check": {"mode": "off", "flows": []},
             },

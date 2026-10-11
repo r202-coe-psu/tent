@@ -142,6 +142,7 @@
 			flow="walk_in"
 			citizenId={walkInSession.citizenId}
 			cameraLabel={faceCheck.cameraLabel}
+			cameraFlip={faceCheck.cameraFlip}
 			onfinish={handleFaceFinished}
 			oncancel={returnHome}
 			onbusychange={handleFaceBusyChange}

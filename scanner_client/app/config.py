@@ -52,6 +52,7 @@ PRINTER_WIDTH_RANGE = (384, 832)
 DEFAULT_PRINTER_WIDTH_DOTS = 576
 KIOSK_QR_INPUTS = ("camera", "reader", "both")
 KIOSK_QR_CHECK_IN_MODES = ("on", "off")
+KIOSK_CAMERA_FLIP_MODES = ("off", "on")
 QR_READER_GAP_RANGE_MS = (10, 100)
 DEFAULT_QR_READER_GAP_MS = 50
 CARD_READERS = ("pcsc", "rfpro")
@@ -164,6 +165,7 @@ def validate_hardware_config(config: Mapping[str, Any]) -> dict[str, str]:
 
     qr_check_in = _choice(config, "KIOSK_QR_CHECK_IN", KIOSK_QR_CHECK_IN_MODES, "on")
     qr_input = _choice(config, "KIOSK_QR_INPUT", KIOSK_QR_INPUTS, "camera")
+    camera_flip = _choice(config, "KIOSK_CAMERA_FLIP", KIOSK_CAMERA_FLIP_MODES, "off")
     reader_gap_ms = _bounded_int(
         config, "KIOSK_QR_READER_MAX_GAP_MS", DEFAULT_QR_READER_GAP_MS, QR_READER_GAP_RANGE_MS
     )
@@ -187,6 +189,7 @@ def validate_hardware_config(config: Mapping[str, Any]) -> dict[str, str]:
         "KIOSK_QR_CHECK_IN": qr_check_in,
         "KIOSK_QR_INPUT": qr_input,
         "KIOSK_CAMERA_LABEL": _clean(config.get("KIOSK_CAMERA_LABEL")),
+        "KIOSK_CAMERA_FLIP": camera_flip,
         "KIOSK_QR_READER_MAX_GAP_MS": str(reader_gap_ms),
         "CARD_READER": card_reader,
         "CARD_READER_USB_ID": card_reader_usb_id,

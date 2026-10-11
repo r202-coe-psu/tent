@@ -144,6 +144,8 @@ class ScannerClientManager:
         # How /kiosk/qr reads QR codes: camera, a USB keyboard-wedge reader, or both.
         self.qr_input = str(config.get("KIOSK_QR_INPUT") or "camera").strip().lower()
         self.camera_label = str(config.get("KIOSK_CAMERA_LABEL") or "").strip()
+        # `on` flips the on-screen camera picture left to right (display only: frames are untouched).
+        self.camera_flip = str(config.get("KIOSK_CAMERA_FLIP") or "off").strip().lower() == "on"
         self.qr_reader_max_gap_ms = int(
             config.get("KIOSK_QR_READER_MAX_GAP_MS") or DEFAULT_QR_READER_GAP_MS
         )
@@ -407,6 +409,7 @@ class ScannerClientManager:
                     "qr_check_in": self.qr_check_in,
                     "qr_input": self.qr_input,
                     "camera_label": self.camera_label or None,
+                    "camera_flip": self.camera_flip,
                     "reader_max_gap_ms": self.qr_reader_max_gap_ms,
                     "face_check": {
                         "mode": self.face_mode if self.face_service else "off",

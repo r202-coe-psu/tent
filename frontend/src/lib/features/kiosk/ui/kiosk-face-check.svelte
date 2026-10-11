@@ -31,6 +31,8 @@
 		citizenId: string;
 		/** Which of the kiosk's cameras to use (same label as the QR camera); null = front camera. */
 		cameraLabel: string | null;
+		/** `KIOSK_CAMERA_FLIP=on`: flip the camera picture left↔right (display only). */
+		cameraFlip?: boolean;
 		/**
 		 * The person may move on: a match, or staff entered the PIN (`skipped / staff_bypass`).
 		 * Nothing else gets here.
@@ -50,6 +52,7 @@
 		flow,
 		citizenId,
 		cameraLabel,
+		cameraFlip = false,
 		onfinish,
 		oncancel,
 		onbusychange,
@@ -173,6 +176,7 @@
 		bind:video
 		bind:skipButton
 		{headingTag}
+		flip={cameraFlip}
 		shown={cameraShown}
 		starting={session.phase === 'starting'}
 		verifying={session.phase === 'verifying'}

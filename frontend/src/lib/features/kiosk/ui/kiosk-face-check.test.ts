@@ -73,6 +73,14 @@ describe('KioskFaceCheck', () => {
 		expect(body).toContain('muted');
 	});
 
+	it('mirrors the camera picture unless KIOSK_CAMERA_FLIP flips it back', () => {
+		const videoTag = (cameraFlip?: boolean) =>
+			render(KioskFaceCheck, { props: { ...props, cameraFlip } }).body.match(/<video[^>]*>/)?.[0];
+
+		expect(videoTag()).toContain('-scale-x-100');
+		expect(videoTag(true)).not.toContain('-scale-x-100');
+	});
+
 	it('hides the camera panel and any result until they are needed', () => {
 		const { body } = render(KioskFaceCheck, { props });
 

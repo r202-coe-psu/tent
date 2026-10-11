@@ -8,6 +8,8 @@
 		/** The camera element: bound by the page so the camera can open into it. */
 		video?: HTMLVideoElement;
 		headingTag?: 'h1' | 'h2';
+		/** Flip the picture back: it is mirrored by default, like a mirror the person looks into. */
+		flip?: boolean;
 		/** Panel on screen. It stays mounted when hidden: the camera opens into <video> before a re-render. */
 		shown: boolean;
 		starting: boolean;
@@ -31,6 +33,7 @@
 	let {
 		video = $bindable(),
 		headingTag = 'h1',
+		flip = false,
 		shown,
 		starting,
 		verifying,
@@ -95,7 +98,7 @@
 		>
 			<video
 				bind:this={video}
-				class="size-full -scale-x-100 object-cover"
+				class={['size-full object-cover', !flip && '-scale-x-100']}
 				autoplay
 				playsinline
 				muted

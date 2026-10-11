@@ -2,13 +2,13 @@ import type { SmartCardData } from '$lib/features/scanners';
 import type { FaceCheckOutcome } from '../domain/face-check';
 
 /** The face check the walk-in face page runs, as the card page resolved it from the hardware. */
-export type WalkInFaceCheck = { cameraLabel: string | null };
+export type WalkInFaceCheck = { cameraLabel: string | null; cameraFlip: boolean };
 
 /**
  * Nothing known about the face check (the card page never said): run it anyway with the front
  * camera, so anything but a match waits for the staff PIN. The face page never skips the check.
  */
-export const WALK_IN_FACE_CHECK_STRICT: WalkInFaceCheck = { cameraLabel: null };
+export const WALK_IN_FACE_CHECK_STRICT: WalkInFaceCheck = { cameraLabel: null, cameraFlip: false };
 
 class WalkInSession {
 	citizenId = $state<string | null>(null);
@@ -42,9 +42,9 @@ class WalkInSession {
 	}
 
 	/** Hold the card for the face page, with the camera the card page found for the face check. */
-	holdCard(card: SmartCardData, cameraLabel: string | null): void {
+	holdCard(card: SmartCardData, faceCheck: WalkInFaceCheck): void {
 		this.card = card;
-		this.faceCheck = { cameraLabel };
+		this.faceCheck = faceCheck;
 	}
 
 	clear(): void {

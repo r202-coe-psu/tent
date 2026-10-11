@@ -26,6 +26,7 @@ export async function fetchKioskHardware(fetchFn: typeof fetch = fetch): Promise
 			qr_check_in?: unknown;
 			qr_input?: unknown;
 			camera_label?: unknown;
+			camera_flip?: unknown;
 			reader_max_gap_ms?: unknown;
 			face_check?: unknown;
 		} | null;
@@ -41,6 +42,8 @@ export async function fetchKioskHardware(fetchFn: typeof fetch = fetch): Promise
 				typeof body.camera_label === 'string' && body.camera_label.trim()
 					? body.camera_label.trim()
 					: null,
+			// Only an explicit `true` flips: older scanner clients do not send the field.
+			cameraFlip: body.camera_flip === true,
 			readerMaxGapMs:
 				typeof gap === 'number' &&
 				Number.isInteger(gap) &&

@@ -216,7 +216,10 @@
 									<div
 										id={cameraReaderId}
 										{@attach cameraAttachment(hardware?.cameraLabel ?? null)}
-										class="absolute inset-0 h-full w-full overflow-hidden [&_video]:h-full! [&_video]:w-full! [&_video]:object-cover!"
+										class={[
+											'absolute inset-0 h-full w-full overflow-hidden [&_video]:h-full! [&_video]:w-full! [&_video]:object-cover!',
+											hardware?.cameraFlip && '[&_video]:-scale-x-100'
+										]}
 										aria-label="ภาพจากกล้องสแกน QR"
 									></div>
 								{/key}

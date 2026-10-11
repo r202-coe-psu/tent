@@ -127,6 +127,7 @@
 			flow="check_in"
 			{citizenId}
 			cameraLabel={hardware?.cameraLabel ?? null}
+			cameraFlip={hardware?.cameraFlip ?? false}
 			embedded
 			onfinish={(outcome) => handleFaceFinished(citizenId, outcome)}
 			oncancel={returnHome}

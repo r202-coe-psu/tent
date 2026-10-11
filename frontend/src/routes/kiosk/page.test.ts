@@ -11,6 +11,7 @@ const hardware = (qrCheckInEnabled: boolean) => ({
 	qrCheckInEnabled,
 	qrInput: 'camera' as const,
 	cameraLabel: null,
+	cameraFlip: false,
 	readerMaxGapMs: 50,
 	faceCheck: { mode: 'off' as const, flows: [] }
 });
