@@ -528,6 +528,7 @@
 <!-- Catalog Item Picker Modal -->
 <CatalogItemPicker
 	bind:open={pickerOpen}
+	{shelterCode}
 	{requisitionType}
 	alreadySelectedItemIds={selectedItems.map((i) => i.master._id)}
 	onSelectItem={handleAddItem}
