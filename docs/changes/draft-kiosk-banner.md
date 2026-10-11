@@ -5,7 +5,7 @@ status: proposed
 date: 2026-10-11
 created: 2026-10-11
 updated: 2026-10-11
-requested_by: ทีม kiosk (อ้างอิงฟีเจอร์ banner ของระบบ ghosa)
+requested_by: ทีม kiosk
 decided_by: <เจ้าของโครงการ>
 layer: volatile
 base_branch: feat/pre-register_kiosk
@@ -17,7 +17,7 @@ affects:
   - docs/data/api-contract.md §2.1 Scanner kiosk (+ `POST /kiosk/banners`, `GET /kiosk/banners/{id}/image`) · §Back-office (+ `/api/back-office/kiosk-banners/**`)
   - docs/prd/role-permission-matrix.md §1.1 (+ role `banner_staff` — 10 → 11 บทบาท) · docs/data/schema.md §6 `_users.roles`
   - frontend/src/lib/auth/roles.ts (`BANNER_STAFF` + `STAFF_CAPABILITIES`) · portal nav
-  - docs/features/kiosk-banner-design-guideline.md (ใหม่ — design pattern จาก ghosa)
+  - docs/features/kiosk-banner-design-guideline.md (ใหม่ — แนวทาง implement)
   - frontend/src/lib/features/kiosk-banners/{domain,data,application,ui,index.ts} (ใหม่ — back-office)
   - frontend/src/lib/server/kiosk-banners/** (ใหม่ — registry CRUD, signed image URL)
   - frontend/src/lib/features/kiosk/data/kiosk-banners.api.ts (ใหม่) · features/kiosk/ui/kiosk-banner-attract.svelte (ใหม่) · features/kiosk/index.ts
@@ -29,7 +29,7 @@ affects:
   - couchdb `registry` `validate_doc_update` (type `kiosk_banner`)
 why: >
   หน้าแรก kiosk ค้างอยู่โดยไม่มีผู้ใช้เกือบตลอดเวลา ศูนย์ต้องใช้หน้าจอนี้แจ้งข่าวสาร (ตารางแจกอาหาร, จุดบริการ, คำเตือน)
-  ระบบ ghosa ของทีมเคยมี banner รูปภาพบน kiosk ที่ใช้งานจริงแล้ว — นำ model เดิมมาใช้ และแก้จุดบกพร่องที่พบ
+  ทีมเคยใช้ banner รูปภาพบน kiosk ในระบบก่อนหน้า (ghosa) และพิสูจน์แล้วว่าพอสำหรับงานประชาสัมพันธ์หน้าตู้
 migration: N/A — doc type ใหม่ ไม่มีข้อมูลเดิม; ไม่แตะ schema_v ของ doc type อื่น
 ---
 
@@ -48,7 +48,7 @@ migration: N/A — doc type ใหม่ ไม่มีข้อมูลเด
 ## 1. Why
 
 1. หน้า `/kiosk` (IdentityMethodSelector, CR-151) เป็นหน้าที่ตู้ค้างอยู่นานที่สุด และยังไม่มี idle/attract mode
-2. ghosa (`models/banners.py`, `templates/devices/landing.html`) ใช้ model: รูป + `duration` + `start_date`/`end_date` + `status` + `groups` — พิสูจน์แล้วว่าพอสำหรับงานประชาสัมพันธ์หน้าตู้
+2. model ที่ต้องการ: รูป + ระยะเวลาต่อสไลด์ + ช่วงเวลาแสดง + สถานะ + ศูนย์ปลายทาง — ตามที่ทีมเคยใช้งานจริงบน kiosk ในระบบก่อนหน้า
 3. หน้า `/kiosk` ไม่มีพื้นที่ว่างที่ 1024×600 (`KIOSK_COMPACT_MEDIA`) — การแทรกแถบ banner จะเบียดการ์ดเลือกวิธี จึงใช้ overlay เต็มจอตอน idle แทน
 4. ประกาศ CR-100 (`announcement`) เป็นข้อความล้วน ไม่มีรูป/ช่วงเวลา/เป้าหมายรายศูนย์ และเป็นของ public portal
 
@@ -165,9 +165,9 @@ N/A — doc type ใหม่
 
 ## Decision log
 
-- 2026-10-11 — proposed · owner เลือก scope แบบ ghosa (banner รูปภาพ), track เป็นไฟล์ CR ใน `14-kiosk/`, ยึด base code `feat/pre-register_kiosk`
-- 2026-10-11 — ไม่นำ iframe/link slide ของ ghosa มาใช้ (ghosa ส่ง device key ไปกับ request ของ iframe ภายนอก)
-- 2026-10-11 — ไม่นำ landing message แบบ HTML (`innerHTML`) ของ ghosa มาใช้ → `caption` เป็น text
+- 2026-10-11 — proposed · owner เลือก scope banner รูปภาพ, track เป็นไฟล์ CR ใน `14-kiosk/`, ยึด base code `feat/pre-register_kiosk`
+- 2026-10-11 — ไม่รองรับ iframe/link slide (เปิดเว็บภายนอกบนตู้ + เสี่ยงรั่ว device credential)
+- 2026-10-11 — `caption` เป็น text เท่านั้น ไม่รองรับ HTML
 - 2026-10-11 — owner เคาะ: เพิ่ม role `banner_staff` และให้ `shelter_manager` + `system_admin` จัดการได้ด้วย (FR-KBN-24/26/27) · ยืนยันค่า idle 30 s, refresh 5 นาที, รูป ≤2 MB, `duration_sec` 3–60
 - 2026-10-11 — branch `draft-kiosk-banner` เป็น docs-only; implementation แยกเป็นงานถัดไป
 - 2026-10-11 — เลขที่ว่างถัดไปบน develop = CR-162 (develop มี CR-159 ซ้ำ 2 ไฟล์) — ยืนยันอีกครั้งตอน approve
