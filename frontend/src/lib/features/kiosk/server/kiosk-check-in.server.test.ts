@@ -3,6 +3,7 @@ import { adminFetch } from '$lib/server/couch-admin';
 import {
 	checkInSelectedMembers,
 	KioskInputError,
+	KioskLookupUnavailableError,
 	KioskThaidIdentityMismatchError,
 	kioskCheckInInputSchema,
 	kioskGateInputSchema,
@@ -572,6 +573,41 @@ describe('lookupPreRegisteredEvacuee phone gate', () => {
 				citizen_id: '1234567890123'
 			})
 		).toEqual({ kind: 'not_found', can_register: false });
+	});
+});
+
+describe('lookupPreRegisteredEvacuee CouchDB failures', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		mockAdminFetch.mockRejectedValue(Object.assign(new Error('couch down'), { status: 503 }));
+	});
+
+	it.each([
+		['qr', { source: 'qr' as const, token: `evacuee:${ids[0]}` }],
+		['smart-card', { source: 'smart-card' as const, citizen_id: '1234567890123' }],
+		['phone', { source: 'phone' as const, phone }]
+	])('maps a %s lookup failure to KioskLookupUnavailableError', async (_label, input) => {
+		await expect(lookupPreRegisteredEvacuee(shelterCode, input)).rejects.toBeInstanceOf(
+			KioskLookupUnavailableError
+		);
+	});
+
+	it('maps a household expansion failure to KioskLookupUnavailableError', async () => {
+		mockAdminFetch.mockReset();
+		mockAdminFetch.mockImplementation(async (path) => {
+			if (path.endsWith('/_find')) throw new Error('couch down');
+			return {
+				_id: `evacuee:${ids[0]}`,
+				type: 'evacuee',
+				shelter_code: shelterCode,
+				registered_via: 'web',
+				household_id: `household:${ids[1]}`,
+				current_stay: { status: 'pre_registered' }
+			} as never;
+		});
+		await expect(
+			lookupPreRegisteredEvacuee(shelterCode, { source: 'qr', token: `evacuee:${ids[0]}` })
+		).rejects.toBeInstanceOf(KioskLookupUnavailableError);
 	});
 });
 

@@ -80,6 +80,22 @@ export function getThaidOAuthConfig(): {
 	return { clientId, clientSecret, authUrl, tokenUrl, userinfoUrl };
 }
 
+/**
+ * Public origin a phone can reach — `ORIGIN` (adapter-node / compose) when set, else the request
+ * origin. Behind an SSH tunnel or reverse proxy the request origin is an internal host.
+ */
+export function resolvePublicOrigin(url: URL): string {
+	const configured = env.ORIGIN?.trim();
+	if (configured) {
+		try {
+			return new URL(configured).origin;
+		} catch {
+			// malformed ORIGIN — fall back to the request origin
+		}
+	}
+	return url.origin;
+}
+
 export function resolveThaidRedirectUri(url: URL): string {
 	const configured = env.THAID_OAUTH_REDIRECT_URI?.trim();
 	if (configured) return configured;

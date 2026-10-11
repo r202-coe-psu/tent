@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
 	STAFF_PIN_ALERT_EVERY,
 	STAFF_PIN_MAX_PENDING,
+	STAFF_PIN_TURN_TIMEOUT_MS,
 	STAFF_PIN_WRONG_DELAY_MS,
+	ClusterStaffPinTurnGate,
 	StaffPinThrottle
 } from './staff-pin-throttle';
 import type { StaffPinVerifyResult } from './staff-pin';
@@ -128,5 +130,72 @@ describe('StaffPinThrottle', () => {
 		// The failure released the device: the next check runs at once.
 		const next = throttle.run('kiosk-01', async () => OK);
 		expect(await settledAfter(next, 0)).toBe(true);
+	});
+});
+
+describe('ClusterStaffPinTurnGate', () => {
+	type Sent = { action: string; device: string; req: string; outcome?: string };
+	let sent: Sent[];
+	let gate: ClusterStaffPinTurnGate;
+	let throttle: StaffPinThrottle;
+
+	beforeEach(() => {
+		vi.useFakeTimers();
+		sent = [];
+		gate = new ClusterStaffPinTurnGate((msg) => sent.push(msg));
+		throttle = new StaffPinThrottle({ gate });
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	const reply = (action: 'granted' | 'busy', req: string) =>
+		gate.handleMessage({ topic: 'staff-pin-turn', action, device: 'kiosk-01', req });
+
+	it('waits for the primary to grant the turn, then releases it with the outcome', async () => {
+		const check = vi.fn(async () => WRONG);
+		const result = throttle.run('kiosk-01', check);
+		await vi.advanceTimersByTimeAsync(0);
+		expect(sent).toEqual([
+			{ topic: 'staff-pin-turn', action: 'acquire', device: 'kiosk-01', req: '1' }
+		]);
+		expect(check).not.toHaveBeenCalled();
+
+		reply('granted', '1');
+		expect(await settledAfter(result, STAFF_PIN_WRONG_DELAY_MS - 1)).toBe(false);
+		expect(sent).toHaveLength(1);
+		expect(await settledAfter(result, 1)).toBe(true);
+		await expect(result).resolves.toEqual(WRONG);
+		expect(sent[1]).toMatchObject({
+			action: 'release',
+			device: 'kiosk-01',
+			req: '1',
+			outcome: 'wrong'
+		});
+	});
+
+	it('answers busy without checking when the primary says the device queue is full', async () => {
+		const check = vi.fn(async () => OK);
+		const result = throttle.run('kiosk-01', check);
+		reply('busy', '1');
+		await expect(result).resolves.toEqual({ kind: 'busy' });
+		expect(check).not.toHaveBeenCalled();
+	});
+
+	it('gives up after the timeout and releases a grant that arrives late', async () => {
+		const result = throttle.run('kiosk-01', async () => OK);
+		const settled = expect(result).rejects.toThrow('not granted in time');
+		await vi.advanceTimersByTimeAsync(STAFF_PIN_TURN_TIMEOUT_MS);
+		await settled;
+
+		reply('granted', '1');
+		expect(sent.at(-1)).toMatchObject({ action: 'release', req: '1', outcome: 'error' });
+	});
+
+	it('ignores messages for other topics', () => {
+		gate.handleMessage({ topic: 'thaid-scan-session', action: 'granted', device: 'x', req: '1' });
+		gate.handleMessage(null);
+		expect(sent).toEqual([]);
 	});
 });

@@ -16,6 +16,7 @@ import {
 	resolveThaidLoginUser,
 	exchangeThaidCode,
 	resolveThaidRedirectUri,
+	resolvePublicOrigin,
 	parseThaidCitizenClaims,
 	parseThaiAddressText,
 	setCitizenClaimCookie,
@@ -157,6 +158,23 @@ describe('thaid-oauth helpers (CR-ThaID)', () => {
 			expect(resolveThaidRedirectUri(dummyUrl)).toBe(
 				'https://shelter.example.com/api/v1/auth/oauth/thaid/callback'
 			);
+		});
+	});
+
+	describe('resolvePublicOrigin', () => {
+		const requestUrl = new URL('http://127.0.0.1:3000/api/v1/scanner/kiosk/thaid/session');
+
+		it('prefers the configured ORIGIN over the request origin', () => {
+			(env as Record<string, string | undefined>).ORIGIN = 'https://shelter.example.com/';
+			expect(resolvePublicOrigin(requestUrl)).toBe('https://shelter.example.com');
+		});
+
+		it('falls back to the request origin when ORIGIN is unset or malformed', () => {
+			(env as Record<string, string | undefined>).ORIGIN = undefined;
+			expect(resolvePublicOrigin(requestUrl)).toBe('http://127.0.0.1:3000');
+			(env as Record<string, string | undefined>).ORIGIN = 'not a url';
+			expect(resolvePublicOrigin(requestUrl)).toBe('http://127.0.0.1:3000');
+			(env as Record<string, string | undefined>).ORIGIN = undefined;
 		});
 	});
 

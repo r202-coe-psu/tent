@@ -423,20 +423,28 @@ async function lookupByPhone(
 	};
 }
 
+/** Any CouchDB failure during lookup is a 503, whichever source or step hit it. */
+function asLookupUnavailable(error: unknown): never {
+	if (error instanceof KioskInputError || error instanceof KioskLookupUnavailableError) throw error;
+	throw new KioskLookupUnavailableError();
+}
+
 /** Resolve a pre-registration or prior check-in only within the authenticated scanner's shelter. */
 export async function lookupPreRegisteredEvacuee(
 	shelterCode: string,
 	input: KioskResolvedGateInput
 ): Promise<KioskLookupOutcome> {
 	if (input.source === 'phone') {
-		return lookupByPhone(shelterCode, input.phone, input.primary_evacuee_id);
+		return lookupByPhone(shelterCode, input.phone, input.primary_evacuee_id).catch(
+			asLookupUnavailable
+		);
 	}
 
 	const dbName = shelterDbName(shelterCode);
 	let candidates: EvacueeDoc[];
 	if (input.source === 'qr') {
 		const docId = `evacuee:${input.token.slice('evacuee:'.length).toUpperCase()}`;
-		const doc = await getById(dbName, docId);
+		const doc = await getById(dbName, docId).catch(asLookupUnavailable);
 		candidates = doc ? [doc] : [];
 	} else {
 		let result: { docs?: unknown[] };
@@ -473,7 +481,7 @@ export async function lookupPreRegisteredEvacuee(
 	if (eligible.length !== 1) return { kind: 'not_found', can_register: false };
 
 	const primary = eligible[0];
-	const members = await expandHousehold(dbName, primary, shelterCode);
+	const members = await expandHousehold(dbName, primary, shelterCode).catch(asLookupUnavailable);
 	return {
 		kind: 'household',
 		name_masked: true,
