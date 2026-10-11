@@ -1,5 +1,6 @@
 <script lang="ts">
 	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
+	import ExternalLink from '@lucide/svelte/icons/external-link';
 	import Info from '@lucide/svelte/icons/info';
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import QrCode from '@lucide/svelte/icons/qr-code';
@@ -488,7 +489,16 @@
 								class="mt-0.5 size-5 shrink-0"
 							/>
 							<span class="text-xs leading-relaxed font-semibold select-none sm:text-sm">
-								{t.unassignedDisclaimerAck}
+								{t.unassignedDisclaimerAckPrefix}<a
+									href={resolve('/term')}
+									target="_blank"
+									rel="noopener noreferrer"
+									class="text-blue-600 underline underline-offset-2 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+									>{t.unassignedDisclaimerAckLink}<ExternalLink
+										class="ml-0.5 inline size-3.5 align-[-0.125em]"
+										aria-hidden="true"
+									/></a
+								>{t.unassignedDisclaimerAckSuffix}
 							</span>
 						</label>
 					</section>
