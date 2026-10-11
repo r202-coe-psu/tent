@@ -146,7 +146,7 @@ import type { StockLotReservation } from '../domain/distribution';
 const warehouseCtx: AuthorContext = {
 	shelterCode: 'SH001',
 	createdBy: 'warehouse_bob',
-	roles: ['warehouse_staff']
+	roles: ['shelter:SH001', 'SH001:warehouse_staff']
 };
 const adminCtx: AuthorContext = {
 	shelterCode: 'SH001',
@@ -156,7 +156,7 @@ const adminCtx: AuthorContext = {
 const regCtx: AuthorContext = {
 	shelterCode: 'SH001',
 	createdBy: 'reg_charlie',
-	roles: ['registration_staff']
+	roles: ['shelter:SH001', 'SH001:registration_staff']
 };
 
 const distributionCtx: AuthorContext = {
@@ -167,12 +167,12 @@ const distributionCtx: AuthorContext = {
 const managerCtx: AuthorContext = {
 	shelterCode: 'SH001',
 	createdBy: 'mgr_dave',
-	roles: ['shelter_manager']
+	roles: ['shelter:SH001', 'SH001:shelter_manager']
 };
 const kitchenCtx: AuthorContext = {
 	shelterCode: 'SH001',
 	createdBy: 'kitchen_erin',
-	roles: ['kitchen_staff']
+	roles: ['shelter:SH001', 'SH001:kitchen_staff']
 };
 
 class Phase3TestRepository extends DistributionRemoteRepository {
@@ -248,14 +248,14 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			await expect(
 				repo.approveRequest(
 					request._id,
 					[{ item_id: 'item:rice', lot_ref: inbound._id, qty: '50' }],
-					regCtx
+					distributionCtx
 				)
 			).rejects.toThrow(
 				/Unauthorized: distribution approval requires warehouse_staff or system_admin/
@@ -294,7 +294,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			await expect(
@@ -327,7 +327,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			await expect(repo.rejectRequest(request._id, 'Denied', regCtx)).rejects.toThrow(
@@ -505,7 +505,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			const reqB = await repo.createRequest(
@@ -523,7 +523,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			// Pre-create initial reservation doc R0
@@ -610,7 +610,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			const opId = '01JIDEMPOTENTOP';
@@ -668,7 +668,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			const opId = '01JMISMATCHOP';
@@ -728,7 +728,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			// Manually simulate crash at Checkpoint A: status is approving, operation_id set, 0 claims, 0 batch, 0 ledgers
@@ -773,7 +773,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			await expect(
@@ -823,7 +823,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			const opId = '01JCHECKPOINTC';
@@ -938,7 +938,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			const opId = '01JCHECKPOINTDOK';
@@ -1053,7 +1053,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			const opId = '01JCHECKPOINTDTAMPER';
@@ -1131,7 +1131,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			const opId = '01JCHECKPOINTE';
@@ -1289,7 +1289,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			const opId = '01JCHECKPOINTF';
@@ -1444,7 +1444,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			const opId = '01JCHECKPOINTG';
@@ -1544,7 +1544,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			const opId = '01JCHECKPOINTH';
@@ -1634,7 +1634,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			const opId = '01JCHECKPOINTI';
@@ -1724,7 +1724,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			const opId = '01JCHECKPOINTJ';
@@ -1868,7 +1868,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			expect(request.status).toBe('pending');
@@ -1955,7 +1955,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			// Pass in reverse order
@@ -1995,7 +1995,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			const batch = await repo.approveRequest(
@@ -2037,7 +2037,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			const batch = await repo.approveRequest(
@@ -2068,7 +2068,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			await expect(
@@ -2096,7 +2096,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			await expect(repo.approveRequest(req._id, [], warehouseCtx)).rejects.toThrow(ValidationError);
@@ -2120,7 +2120,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			await expect(
@@ -2150,7 +2150,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			await expect(
@@ -2185,7 +2185,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			// Pre-populate colliding ledger ID with wrong quantity (-50 instead of -40)
@@ -2238,7 +2238,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			const otherCtx: AuthorContext = {
@@ -2271,7 +2271,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			const rejected = await repo.rejectRequest(req._id, 'Insufficient budget', warehouseCtx);
@@ -2300,7 +2300,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			// First operator begins approval on non-existent lot (will fail on missing lot, but transitions request)
@@ -2343,7 +2343,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			// Approval attempts 30 from lot2 (which only has 10) -> Fails on lot2
@@ -2399,7 +2399,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 			for (const lotRef of [
 				water._id,
@@ -2440,7 +2440,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 			const batch = await repo.approveRequest(
 				request._id,
@@ -2471,7 +2471,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 			const batch = await repo.approveRequest(
 				request._id,
@@ -2520,7 +2520,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 							}
 						]
 					},
-					regCtx
+					distributionCtx
 				);
 				const operationId = `01JCLAIM${mismatch.toUpperCase()}`;
 				store.set(request._id, {
@@ -2580,7 +2580,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 			let failOnce = true;
 			beforeStrictWrite = (doc) => {
@@ -2631,7 +2631,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 			const operationId = '01JCHECKPOINTBRESUME';
 			const batchId = `distribution_batch:${request._id.slice('distribution_request:'.length)}`;
@@ -2695,7 +2695,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 			let reached = 0;
 			let release!: () => void;
@@ -2739,8 +2739,8 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 				]
 			});
 			const [requestA, requestB] = await Promise.all([
-				repo.createRequest(input('A'), regCtx),
-				repo.createRequest(input('B'), regCtx)
+				repo.createRequest(input('A'), distributionCtx),
+				repo.createRequest(input('B'), distributionCtx)
 			]);
 			const resId = await makeLotReservationDocId(lot._id);
 			store.set(resId, {
@@ -2798,7 +2798,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			const resId = await makeLotReservationDocId(lot._id);
@@ -2907,7 +2907,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			const resId = await makeLotReservationDocId(lot._id);
@@ -3009,7 +3009,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			const resId = await makeLotReservationDocId(lot._id);
@@ -3051,7 +3051,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			const resId = await makeLotReservationDocId(lot._id);
@@ -3101,7 +3101,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			const resId = await makeLotReservationDocId(lot._id);
@@ -3163,7 +3163,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			const resId = await makeLotReservationDocId(lot._id);
@@ -3217,7 +3217,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			const resId = await makeLotReservationDocId(lot._id);
@@ -3270,7 +3270,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			const resId = await makeLotReservationDocId(lot._id);
@@ -3323,7 +3323,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			const resId = await makeLotReservationDocId(lot._id);
@@ -3399,7 +3399,7 @@ describe('DistributionRemoteRepository (Phase 3A)', () => {
 						}
 					]
 				},
-				regCtx
+				distributionCtx
 			);
 
 			const resId = await makeLotReservationDocId(lot._id);
@@ -3466,12 +3466,12 @@ describe('DistributionRemoteRepository cancelRequest (Phase 4A)', () => {
 					}
 				]
 			},
-			regCtx
+			distributionCtx
 		);
 	}
 
 	it.each([
-		['registration_staff', regCtx],
+		['distribution_staff', distributionCtx],
 		['shelter_manager', managerCtx],
 		['system_admin', adminCtx]
 	])('allows %s to cancel a same-shelter pending request', async (_role, ctx) => {
@@ -3487,8 +3487,9 @@ describe('DistributionRemoteRepository cancelRequest (Phase 4A)', () => {
 		expect(Array.from(store.values()).filter((doc) => doc.type === 'stock_ledger')).toHaveLength(0);
 	});
 
-	it('denies warehouse_staff, kitchen_staff, and callers without a qualifying role before cancelling', async () => {
+	it('denies registration_staff, warehouse_staff, kitchen_staff, and callers without a qualifying role before cancelling', async () => {
 		const request = await createPendingRequest();
+		await expect(repo.cancelRequest(request._id, regCtx)).rejects.toThrow(/Unauthorized/);
 		await expect(repo.cancelRequest(request._id, warehouseCtx)).rejects.toThrow(/Unauthorized/);
 		await expect(repo.cancelRequest(request._id, kitchenCtx)).rejects.toThrow(/Unauthorized/);
 		await expect(
@@ -3503,7 +3504,7 @@ describe('DistributionRemoteRepository cancelRequest (Phase 4A)', () => {
 			repo.cancelRequest(request._id, {
 				shelterCode: 'SH002',
 				createdBy: 'other_manager',
-				roles: ['shelter_manager']
+				roles: ['shelter:SH002', 'SH002:shelter_manager']
 			})
 		).rejects.toThrow(/Cross-shelter/);
 		expect((await repo.getRequest(request._id, adminCtx))?.status).toBe('pending');
@@ -3514,7 +3515,9 @@ describe('DistributionRemoteRepository cancelRequest (Phase 4A)', () => {
 		async (status) => {
 			const request = await createPendingRequest();
 			store.set(request._id, { ...request, status, _rev: nextRev(request._id) });
-			await expect(repo.cancelRequest(request._id, regCtx)).rejects.toThrow(ValidationError);
+			await expect(repo.cancelRequest(request._id, distributionCtx)).rejects.toThrow(
+				ValidationError
+			);
 		}
 	);
 
@@ -3526,12 +3529,12 @@ describe('DistributionRemoteRepository cancelRequest (Phase 4A)', () => {
 			if (current) store.set(request._id, { ...current, _rev: nextRev(request._id) });
 		};
 
-		await expect(repo.cancelRequest(request._id, regCtx)).rejects.toThrow(/Conflict/);
+		await expect(repo.cancelRequest(request._id, distributionCtx)).rejects.toThrow(/Conflict/);
 		expect((await repo.getRequest(request._id, adminCtx))?.status).toBe('pending');
 	});
 
 	it.each([
-		['registration_staff', regCtx],
+		['distribution_staff', distributionCtx],
 		['shelter_manager', managerCtx],
 		['warehouse_staff', warehouseCtx],
 		['system_admin', adminCtx]
@@ -3606,8 +3609,9 @@ describe('DistributionRemoteRepository cancelRequest (Phase 4A)', () => {
 		expect(empty).toEqual([]);
 	});
 
-	it('denies kitchen_staff and missing-role callers before returning distribution requests', async () => {
+	it('denies registration_staff, kitchen_staff, and missing-role callers before returning distribution requests', async () => {
 		await createPendingRequest();
+		await expect(repo.listRequests(undefined, regCtx)).rejects.toThrow(/Unauthorized/);
 		await expect(repo.listRequests(undefined, kitchenCtx)).rejects.toThrow(/Unauthorized/);
 		await expect(
 			repo.getRequest('distribution_request:unknown', {
@@ -3701,7 +3705,6 @@ describe('DistributionRemoteRepository createRequest (Phase 4B)', () => {
 	};
 
 	it.each([
-		['registration_staff', regCtx],
 		['distribution_staff', distributionCtx],
 		['shelter_manager', managerCtx],
 		['system_admin', adminCtx]
@@ -3744,15 +3747,24 @@ describe('DistributionRemoteRepository createRequest (Phase 4B)', () => {
 				...sampleInput,
 				items: [{ ...sampleInput.items[0], unit: 'ชิ้น' }]
 			},
-			regCtx
+			distributionCtx
 		);
 
 		expect(request.items[0]?.unit).toBe('piece');
 	});
 
 	it.each([
+		['registration_staff', regCtx],
 		['warehouse_staff', warehouseCtx],
 		['kitchen_staff', kitchenCtx],
+		[
+			'shelter_manager of another shelter',
+			{
+				shelterCode: 'SH001',
+				createdBy: 'mgr_x',
+				roles: ['shelter:SH002', 'SH002:shelter_manager']
+			}
+		],
 		[
 			'distribution_staff of another shelter',
 			{
@@ -3764,7 +3776,7 @@ describe('DistributionRemoteRepository createRequest (Phase 4B)', () => {
 		['missing role', { shelterCode: 'SH001', createdBy: 'guest', roles: [] as string[] }]
 	])('rejects %s from creating a distribution request', async (_role, ctx) => {
 		await expect(repo.createRequest(sampleInput, ctx)).rejects.toThrow(
-			/Unauthorized: distribution request creation requires registration_staff, distribution_staff, shelter_manager, or system_admin role/
+			/Unauthorized: distribution request creation requires distribution_staff, shelter_manager, or system_admin role/
 		);
 		expect(store.size).toBe(0);
 	});
@@ -3773,7 +3785,7 @@ describe('DistributionRemoteRepository createRequest (Phase 4B)', () => {
 		await expect(
 			repo.createRequest(sampleInput, { shelterCode: 'SH001', createdBy: 'noroles' })
 		).rejects.toThrow(
-			/Unauthorized: distribution request creation requires registration_staff, distribution_staff, shelter_manager, or system_admin role/
+			/Unauthorized: distribution request creation requires distribution_staff, shelter_manager, or system_admin role/
 		);
 		expect(store.size).toBe(0);
 	});

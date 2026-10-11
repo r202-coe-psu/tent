@@ -120,7 +120,7 @@ describe('RequisitionTicketRemoteRepository', () => {
 		await expect(repo.get('requisition_ticket:01JTEST00000000000000000000')).rejects.toThrow();
 	});
 
-	it('lists Flow 2 tickets while skipping kitchen and malformed legacy docs', async () => {
+	it('lists food/supplies/transfer tickets while skipping kitchen and malformed legacy docs', async () => {
 		const food = await repo.create(
 			{
 				ticket_no: 'TKT-FOOD-0001',
@@ -171,12 +171,23 @@ describe('RequisitionTicketRemoteRepository', () => {
 			items: [{ item_id: 'item-dist-8801', name: 'Legacy', quantity: 30 }]
 		});
 
+		// Transfer ticket — same Ticket shape, completes at the warehouse (IN_TRANSIT → COMPLETED).
+		const foodWithoutMeal: Record<string, unknown> = { ...food };
+		delete foodWithoutMeal.meal;
+		const transferId = 'requisition_ticket:01JTRANSFER000000000000000';
+		store.set(transferId, {
+			...foodWithoutMeal,
+			_id: transferId,
+			ticket_no: 'TKT-TRANSFER-0001',
+			requisition_type: 'transfer'
+		});
+
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		const tickets = await repo.list();
-		expect(tickets.map((t) => t._id)).toEqual([food._id]);
-		// Only the malformed Flow 2 doc is reported; kitchen tickets are out of scope, not invalid.
+		expect(tickets.map((t) => t._id).sort()).toEqual([food._id, transferId].sort());
+		// Only the malformed supplies doc is reported; kitchen tickets are out of scope, not invalid.
 		expect(warn).toHaveBeenCalledTimes(1);
-		expect(warn.mock.calls[0][0]).toContain('Skipped 1 Flow 2 ticket(s)');
+		expect(warn.mock.calls[0][0]).toContain('Skipped 1 ticket(s)');
 		expect(warn.mock.calls[0][0]).toContain('requisition_ticket:01JLEGACY000000000000000000');
 		warn.mockRestore();
 		await expect(repo.list({ requisition_type: 'kitchen' })).resolves.toEqual([]);

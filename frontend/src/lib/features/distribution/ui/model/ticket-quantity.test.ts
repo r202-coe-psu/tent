@@ -104,7 +104,8 @@ describe('stepQuantity', () => {
 		expect(stepQuantity('abc', -1, '5')).toBe('1');
 	});
 
-	it('stays at 1 when nothing is left in hand', () => {
-		expect(stepQuantity('1', 1, '0')).toBe('1');
+	it('pins to 0 when nothing is left in hand', () => {
+		expect(stepQuantity('1', 1, '0')).toBe('0');
+		expect(stepQuantity('3', -1, '0')).toBe('0');
 	});
 });

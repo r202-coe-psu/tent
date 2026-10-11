@@ -33,6 +33,7 @@
 		resolveDistributionPoint,
 		ticketOptionLabel
 	} from '../model/distribution-point';
+	import { filterDeskTickets } from '../model/ticket-filters';
 	import {
 		filterTicketsByServiceDay,
 		resolveServiceDay,
@@ -79,7 +80,7 @@
 
 	// Fetch tickets for frontline station
 	const ticketsQuery = useRequisitionTickets(undefined, () => currentShelterCode);
-	const allTickets = $derived(ticketsQuery.data ?? []);
+	const allTickets = $derived(filterDeskTickets(ticketsQuery.data ?? []));
 
 	// Categorize tickets by frontline workflow relevance
 	const inTransitTickets = $derived(allTickets.filter((t) => t.status === 'IN_TRANSIT'));

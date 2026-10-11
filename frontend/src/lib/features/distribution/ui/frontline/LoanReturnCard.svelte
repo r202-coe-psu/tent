@@ -7,7 +7,6 @@
 	import Loader from '@lucide/svelte/icons/loader';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import ChevronUp from '@lucide/svelte/icons/chevron-up';
-	import Info from '@lucide/svelte/icons/info';
 	import FileX from '@lucide/svelte/icons/file-x';
 	import Archive from '@lucide/svelte/icons/archive';
 	import {
@@ -17,7 +16,7 @@
 	} from '../../application/queries';
 	import { useItemMasters } from '$lib/features/catalog';
 	import {
-		canReceivePhysicalStock,
+		canReturnLoanPhysical,
 		canPerformFrontlineDistribution
 	} from '../../application/food-supplies/auth';
 	import type { DistributionLog } from '../../domain/food-supplies';
@@ -53,7 +52,7 @@
 	});
 
 	const canFrontline = $derived(authContext ? canPerformFrontlineDistribution(authContext) : false);
-	const canReturnStock = $derived(authContext ? canReceivePhysicalStock(authContext) : false);
+	const canReturnStock = $derived(authContext ? canReturnLoanPhysical(authContext) : false);
 
 	// State
 	let recipientSelection = $state<FrontlineRecipientSelection | null>(null);
@@ -158,26 +157,6 @@
 			{/if}
 		</div>
 	</div>
-
-	<!-- Role Permission Advisory Banner if only Frontline / Registrar -->
-	{#if !canReturnStock && canFrontline}
-		<div
-			class="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50/80 p-3.5 text-xs text-amber-950"
-			role="note"
-		>
-			<Info class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-			<div>
-				<p class="font-bold">ข้อมูลสิทธิ์การบันทึกตรวจรับของคืน</p>
-				<p class="mt-0.5 text-2xs text-amber-800">
-					เจ้าหน้าที่ส่วนหน้าสามารถค้นหาและตรวจสอบประวัติการยืม และ<strong
-						>บันทึกตัดจำหน่ายรายการ (สูญหาย/ยกเว้น) ได้</strong
-					>
-					แต่การบันทึกรับของคืนจริงเข้าคลังสินค้าต้องดำเนินการโดยเจ้าหน้าที่คลัง ผู้ประสานงาน ผู้จัดการศูนย์
-					หรือผู้ดูแลระบบเท่านั้น
-				</p>
-			</div>
-		</div>
-	{/if}
 
 	<!-- Recipient Search Picker Reused Component -->
 	<RecipientSearchPicker bind:value={recipientSelection} allowOutside={false} />

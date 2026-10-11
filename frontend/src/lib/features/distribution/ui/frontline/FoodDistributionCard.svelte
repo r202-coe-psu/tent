@@ -181,7 +181,7 @@
 
 		if (!canDistribute) {
 			localSubmitError =
-				'คุณไม่มีสิทธิ์ในการแจกจ่ายอาหาร (ต้องการสิทธิ์ส่วนหน้า/ผู้ประสานงาน/ผู้จัดการ)';
+				'คุณไม่มีสิทธิ์ในการแจกจ่ายอาหาร (ต้องการสิทธิ์เจ้าหน้าที่แจกจ่ายหรือผู้จัดการศูนย์)';
 			return;
 		}
 		if (!recipientSelection) {
@@ -236,7 +236,16 @@
 							: undefined,
 					is_override: isOverride,
 					override_reason: overrideReason,
-					notes: notesInput.trim() || undefined
+					notes: notesInput.trim() || undefined,
+					menu_check: selectedMenu
+						? {
+								recipient_tags:
+									recipientSelection.recipientType === 'evacuee'
+										? (recipientSelection.menuTags ?? [])
+										: null,
+								menu: selectedMenu
+							}
+						: undefined
 				},
 				shelterCode
 			});
@@ -491,8 +500,7 @@
 		</Button>
 		{#if !canDistribute}
 			<p class="text-center text-sm text-slate-500">
-				บัญชีนี้ไม่มีสิทธิ์บันทึกการแจกอาหาร (ต้องเป็นเจ้าหน้าที่ส่วนหน้า ผู้ประสานงาน
-				หรือผู้จัดการศูนย์)
+				บัญชีนี้ไม่มีสิทธิ์บันทึกการแจกอาหาร (ต้องเป็นเจ้าหน้าที่แจกจ่ายหรือผู้จัดการศูนย์)
 			</p>
 		{/if}
 	{/if}

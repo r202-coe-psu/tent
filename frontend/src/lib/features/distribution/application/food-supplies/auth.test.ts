@@ -5,7 +5,8 @@ import {
 	canDispatchTicket,
 	canOperateReservationMode,
 	canPerformFrontlineDistribution,
-	canReceivePhysicalStock
+	canReceivePhysicalStock,
+	canReturnLoanPhysical
 } from './auth';
 
 const ctx = (roles: string[], shelterCode = 'SH001'): AuthorContext => ({
@@ -32,15 +33,69 @@ describe('distribution_staff authorization', () => {
 		).toBe(false);
 	});
 
-	it('may operate BULK and NON_PHYSICAL return reservations but not PHYSICAL', () => {
+	it('may operate BULK, NON_PHYSICAL and PHYSICAL return reservations (CR-161 R3)', () => {
 		expect(canOperateReservationMode('BULK', ctx(DIST))).toBe(true);
 		expect(canOperateReservationMode('NON_PHYSICAL', ctx(DIST))).toBe(true);
-		expect(canOperateReservationMode('PHYSICAL', ctx(DIST))).toBe(false);
+		expect(canOperateReservationMode('PHYSICAL', ctx(DIST))).toBe(true);
 	});
 
 	it('gains no warehouse / ticket authority', () => {
 		expect(canCreateTicket(ctx(DIST))).toBe(false);
 		expect(canDispatchTicket(ctx(DIST))).toBe(false);
 		expect(canReceivePhysicalStock(ctx(DIST))).toBe(false);
+	});
+});
+
+const scoped = (capability: string, shelterCode = 'SH001'): string[] => [
+	`shelter:${shelterCode}`,
+	`${shelterCode}:${capability}`
+];
+
+describe('canPerformFrontlineDistribution (CR-161 R3)', () => {
+	it.each([
+		['distribution_staff', scoped('distribution_staff')],
+		['shelter_manager', scoped('shelter_manager')],
+		['system_admin', ['system_admin']]
+	])('allows %s', (_label, roles) => {
+		expect(canPerformFrontlineDistribution(ctx(roles))).toBe(true);
+	});
+
+	it.each([
+		['registration_staff', scoped('registration_staff')],
+		['supply_coordinator', scoped('supply_coordinator')],
+		['warehouse_staff', scoped('warehouse_staff')],
+		['shelter_manager of another shelter', scoped('shelter_manager', 'SH002')],
+		['no roles', [] as string[]]
+	])('rejects %s', (_label, roles) => {
+		expect(canPerformFrontlineDistribution(ctx(roles))).toBe(false);
+	});
+
+	it('rejects a context without roles', () => {
+		expect(canPerformFrontlineDistribution({ shelterCode: 'SH001', createdBy: 'x' })).toBe(false);
+	});
+});
+
+describe('canReturnLoanPhysical (CR-161 R3)', () => {
+	it.each([
+		['warehouse_staff', scoped('warehouse_staff')],
+		['supply_coordinator', scoped('supply_coordinator')],
+		['shelter_manager', scoped('shelter_manager')],
+		['system_admin', ['system_admin']],
+		['distribution_staff', scoped('distribution_staff')]
+	])('allows %s', (_label, roles) => {
+		expect(canReturnLoanPhysical(ctx(roles))).toBe(true);
+	});
+
+	it.each([
+		['registration_staff', scoped('registration_staff')],
+		['distribution_staff of another shelter', scoped('distribution_staff', 'SH002')],
+		['kitchen_staff', scoped('kitchen_staff')],
+		['no roles', [] as string[]]
+	])('rejects %s', (_label, roles) => {
+		expect(canReturnLoanPhysical(ctx(roles))).toBe(false);
+	});
+
+	it('rejects a context without roles', () => {
+		expect(canReturnLoanPhysical({ shelterCode: 'SH001', createdBy: 'x' })).toBe(false);
 	});
 });

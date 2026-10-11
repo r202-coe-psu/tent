@@ -17,12 +17,13 @@ export { validateWholeItemInput, type WholeItemValidationResult, type WholeItemV
 
 /**
  * Next value for a −/+ stepper: `raw` moved by `delta`, kept within `1..max`. An unparseable
- * `raw` restarts from 1; a `max` below 1 (nothing left in hand) pins the result to 1.
+ * `raw` restarts from 1; a `max` below 1 (nothing left in hand) pins the result to 0.
  */
 export function stepQuantity(raw: string, delta: 1 | -1, max: string): string {
+	if (qtyGt('1', max)) return '0';
 	const current = validatePositiveQuantity(raw);
 	const next = current.isValid && current.value ? addQty(current.value, delta) : '1';
-	if (qtyGt(next, max)) return qtyGt('1', max) ? '1' : max;
+	if (qtyGt(next, max)) return max;
 	return qtyGt('1', next) ? '1' : next;
 }
 

@@ -15,7 +15,8 @@ import {
 } from '../../domain/food-supplies';
 import { NotFoundError, resolveShelterDbName, retryCas } from './shared';
 
-const FLOW2_LIST_TYPES: ReadonlySet<string> = new Set<RequisitionType>(['food', 'supplies']);
+/** Types `list()` returns: Flow 2 food/supplies plus transfer; kitchen tickets have their own shape. */
+const LIST_TYPES: ReadonlySet<string> = new Set<RequisitionType>(['food', 'supplies', 'transfer']);
 
 export interface RequisitionTicketListFilter {
 	status?: RequisitionTicketStatus;
@@ -91,12 +92,12 @@ export class RequisitionTicketRemoteRepository implements RequisitionTicketRepos
 				(d as { type?: string }).type === 'requisition_ticket'
 		);
 		// The shelter DB also holds kitchen tickets (`$lib/features/tickets`, different item
-		// shape) and pre-CR-121 legacy docs. Listing is Flow 2 only and skips anything that
+		// shape) and pre-CR-121 legacy docs. Listing skips kitchen tickets and anything that
 		// fails the strict schema, so one foreign doc cannot empty the whole desk; `get()`
 		// stays strict.
 		const invalidIds: string[] = [];
 		const parsed = docs.flatMap((d) => {
-			if (!FLOW2_LIST_TYPES.has((d as { requisition_type?: string }).requisition_type ?? '')) {
+			if (!LIST_TYPES.has((d as { requisition_type?: string }).requisition_type ?? '')) {
 				return [];
 			}
 			const result = requisitionTicketDocSchema.safeParse(d);
@@ -106,7 +107,7 @@ export class RequisitionTicketRemoteRepository implements RequisitionTicketRepos
 		});
 		if (invalidIds.length > 0) {
 			console.warn(
-				`[requisition_ticket] Skipped ${invalidIds.length} Flow 2 ticket(s) in "${this.dbName}" that fail the schema: ${invalidIds.join(', ')}`
+				`[requisition_ticket] Skipped ${invalidIds.length} ticket(s) in "${this.dbName}" that fail the schema: ${invalidIds.join(', ')}`
 			);
 		}
 		return parsed.filter((ticket) => {
