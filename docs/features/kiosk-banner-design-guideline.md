@@ -1,22 +1,22 @@
 ---
 title: Kiosk Banner — Design Pattern Guideline
-status: draft for review
+status: active
 created: 2026-10-11
 updated: 2026-10-11
 author: Soravit Sukkarn (Team Lead)
 base_branch: feat/pre-register_kiosk
 affects:
-  - docs/changes/draft-kiosk-banner.md
-  - docs/data/schema.md §3.12 (kiosk_banner — proposed)
+  - docs/changes/14-kiosk/CR-162-kiosk-banner.md
+  - docs/data/schema.md §3.12 (kiosk_banner)
   - docs/data/api-contract.md §2.1 Scanner kiosk
-  - docs/prd/role-permission-matrix.md §1.1 (banner_staff — proposed)
+  - docs/prd/role-permission-matrix.md §1.1 (banner_staff)
 ---
 
 # Kiosk Banner — Design Pattern Guideline
 
 > **สรุป (TL;DR)**
 >
-> - เอกสารนี้คือ **แนวทาง implement** kiosk banner ใน tent — requirement ที่ผูกพันอยู่ใน CR [`draft-kiosk-banner`](../changes/draft-kiosk-banner.md) (FR-KBN-xx); ถ้าขัดกัน **CR ชนะ**
+> - เอกสารนี้คือ **แนวทาง implement** kiosk banner ใน tent — requirement ที่ผูกพันอยู่ใน [CR-162](../changes/14-kiosk/CR-162-kiosk-banner.md) (FR-KBN-xx); ถ้าขัดกัน **CR ชนะ**
 > - Flow: doc `kiosk_banner` ใน `registry` → back-office CRUD (`banner_staff` / SM / SA) → `POST /api/v1/scanner/kiosk/banners` (device auth) → **attract overlay** บน `/kiosk`
 > - อ่านก่อนเขียนโค้ดทุกส่วนของ feature นี้: §1 หลักการ, §2 layer map + path map (§2.3), §3 state machine, §4 security, §6 checklist
 
@@ -82,7 +82,7 @@ kiosk (Chromium --kiosk, /kiosk)
 
 - ฝั่ง kiosk ใช้ plain `fetch` ตาม feature kiosk เดิม (timeout 3 s, `cache: 'no-store'`) ไม่ใช้ TanStack Query
 - kiosk ไม่ import `kiosk-banners` — ใช้แค่ response shape ของ API (กำหนด type ใน `features/kiosk/domain/`)
-- ฝั่ง back-office import ข้าม feature ผ่าน barrel เท่านั้น
+- ฝั่ง back-office import ข้าม feature ผ่าน barrel เท่านั้น — preview dialog ใช้ `KioskBannerAttract` จาก `$lib/features/kiosk` เพื่อให้ตัวอย่างตรงกับบนตู้ (component รับ `banners` เป็น prop และมีโหมด preview ที่ไม่ใช้ idle timer)
 
 ### 2.3 Path map
 
@@ -102,27 +102,28 @@ kiosk (Chromium --kiosk, /kiosk)
 
 #### ไฟล์ใหม่ (`frontend/src/` ยกเว้นระบุ)
 
-| ไฟล์                                                                                  | หน้าที่                                                   |
-| :------------------------------------------------------------------------------------ | :-------------------------------------------------------- |
-| `lib/features/kiosk-banners/domain/kiosk-banner.ts` (+ `.test.ts`)                    | Zod schema, factory, `isActiveAt`, `sortBanners`          |
-| `lib/features/kiosk-banners/data/kiosk-banner.repository.ts`                          | repository interface                                      |
-| `lib/features/kiosk-banners/data/kiosk-banner.remote.ts` (+ `.test.ts`)               | adapter เรียก `/api/back-office/kiosk-banners/**`         |
-| `lib/features/kiosk-banners/application/kiosk-banner.queries.ts`                      | query-key factory + `createQuery` / `createMutation`      |
-| `lib/features/kiosk-banners/ui/kiosk-banner-list.svelte` · `kiosk-banner-form.svelte` | ตาราง 2 แท็บ, ฟอร์ม + upload preview                      |
-| `lib/features/kiosk-banners/index.ts`                                                 | barrel                                                    |
-| `lib/server/kiosk-banners/kiosk-banner.server.ts` (+ `.test.ts`)                      | registry CRUD, decode/ตรวจรูป, PUT attachment             |
-| `lib/server/kiosk-banners/signed-image-url.ts` (+ `.test.ts`)                         | sign / verify HMAC                                        |
-| `routes/(protected)/back-office/kiosk-banners/+page.svelte` (+ `+page.ts` guard)      | หน้าจัดการ                                                |
-| `routes/api/back-office/kiosk-banners/+server.ts` (+ `server.test.ts`)                | list / create                                             |
-| `routes/api/back-office/kiosk-banners/[id]/+server.ts` (+ `server.test.ts`)           | get / update / status / delete                            |
-| `routes/api/back-office/kiosk-banners/[id]/image/+server.ts` (+ `server.test.ts`)     | รูปสำหรับ preview                                         |
-| `routes/api/v1/scanner/kiosk/banners/+server.ts` (+ `server.test.ts`)                 | feed ของตู้                                               |
-| `routes/api/v1/scanner/kiosk/banners/[id]/image/+server.ts` (+ `server.test.ts`)      | รูปของตู้ (signed)                                        |
-| `lib/features/kiosk/domain/kiosk-banner-feed.ts`                                      | type ของ response feed (kiosk ไม่ import `kiosk-banners`) |
-| `lib/features/kiosk/data/kiosk-banners.api.ts` (+ `.test.ts`)                         | `fetch` feed, timeout 3 s, fail soft                      |
-| `lib/features/kiosk/ui/kiosk-banner-attract.svelte` (+ `.test.ts`)                    | overlay เต็มจอ                                            |
-| `lib/features/kiosk/ui/kiosk-banner-attract.svelte.ts` (+ `.test.ts`)                 | controller: idle, rotation, refresh                       |
-| `frontend/e2e/kiosk-banners.test.ts`                                                  | e2e back-office CRUD + upload                             |
+| ไฟล์                                                                                  | หน้าที่                                                                                                                    |
+| :------------------------------------------------------------------------------------ | :------------------------------------------------------------------------------------------------------------------------- |
+| `lib/features/kiosk-banners/domain/kiosk-banner.ts` (+ `.test.ts`)                    | Zod schema, factory, `isActiveAt`, `sortBanners`                                                                           |
+| `lib/features/kiosk-banners/data/kiosk-banner.repository.ts`                          | repository interface                                                                                                       |
+| `lib/features/kiosk-banners/data/kiosk-banner.remote.ts` (+ `.test.ts`)               | adapter เรียก `/api/back-office/kiosk-banners/**`                                                                          |
+| `lib/features/kiosk-banners/application/kiosk-banner.queries.ts`                      | query-key factory + `createQuery` / `createMutation`                                                                       |
+| `lib/features/kiosk-banners/ui/kiosk-banner-list.svelte` · `kiosk-banner-form.svelte` | ตาราง 2 แท็บ + Switch สถานะ, ฟอร์ม + preview ตอนเลือกไฟล์ + รูปปัจจุบัน (FR-KBN-28)                                        |
+| `lib/features/kiosk-banners/ui/kiosk-banner-preview-dialog.svelte`                    | modal「ดูตัวอย่างบน kiosk」1024×600 / 1080×1920 — render `KioskBannerAttract` จาก barrel `$lib/features/kiosk` (FR-KBN-29) |
+| `lib/features/kiosk-banners/index.ts`                                                 | barrel                                                                                                                     |
+| `lib/server/kiosk-banners/kiosk-banner.server.ts` (+ `.test.ts`)                      | registry CRUD, decode/ตรวจรูป, PUT attachment                                                                              |
+| `lib/server/kiosk-banners/signed-image-url.ts` (+ `.test.ts`)                         | sign / verify HMAC                                                                                                         |
+| `routes/(protected)/back-office/kiosk-banners/+page.svelte` (+ `+page.ts` guard)      | หน้าจัดการ                                                                                                                 |
+| `routes/api/back-office/kiosk-banners/+server.ts` (+ `server.test.ts`)                | list / create                                                                                                              |
+| `routes/api/back-office/kiosk-banners/[id]/+server.ts` (+ `server.test.ts`)           | get / update / status / delete                                                                                             |
+| `routes/api/back-office/kiosk-banners/[id]/image/+server.ts` (+ `server.test.ts`)     | รูปสำหรับ preview                                                                                                          |
+| `routes/api/v1/scanner/kiosk/banners/+server.ts` (+ `server.test.ts`)                 | feed ของตู้                                                                                                                |
+| `routes/api/v1/scanner/kiosk/banners/[id]/image/+server.ts` (+ `server.test.ts`)      | รูปของตู้ (signed)                                                                                                         |
+| `lib/features/kiosk/domain/kiosk-banner-feed.ts`                                      | type ของ response feed (kiosk ไม่ import `kiosk-banners`)                                                                  |
+| `lib/features/kiosk/data/kiosk-banners.api.ts` (+ `.test.ts`)                         | `fetch` feed, timeout 3 s, fail soft                                                                                       |
+| `lib/features/kiosk/ui/kiosk-banner-attract.svelte` (+ `.test.ts`)                    | overlay เต็มจอ                                                                                                             |
+| `lib/features/kiosk/ui/kiosk-banner-attract.svelte.ts` (+ `.test.ts`)                 | controller: idle, rotation, refresh                                                                                        |
+| `frontend/e2e/kiosk-banners.test.ts`                                                  | e2e back-office CRUD + upload                                                                                              |
 
 #### ไฟล์ที่ต้องแก้
 
@@ -225,6 +226,6 @@ kiosk (Chromium --kiosk, /kiosk)
 
 ## 7. อ้างอิง
 
-- CR: [`docs/changes/draft-kiosk-banner.md`](../changes/draft-kiosk-banner.md)
+- CR: [CR-162](../changes/14-kiosk/CR-162-kiosk-banner.md)
 - Kiosk: CR-151 (FR-KPC-06/07/13/14), CR-152 (`kiosk/config`), [`smart-card-registration-spec.md`](smart-card-registration-spec.md)
 - Roles: [`docs/prd/role-permission-matrix.md`](../prd/role-permission-matrix.md), `frontend/src/lib/auth/roles.ts`

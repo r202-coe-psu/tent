@@ -1,25 +1,26 @@
 ---
-id: draft
+id: CR-162
 title: Kiosk banner — แบนเนอร์รูปภาพประชาสัมพันธ์บนหน้าแรก kiosk (attract mode · ตั้งเวลา · เรียงลำดับ · เลือกศูนย์)
-status: proposed
+status: approved
 date: 2026-10-11
 created: 2026-10-11
 updated: 2026-10-11
 requested_by: ทีม kiosk
-decided_by: <เจ้าของโครงการ>
+decided_by: Soravit Sukkarn (Team Lead) — อนุมัติ 2026-10-11 (Asia/Bangkok)
+decision_date: 2026-10-11
 layer: volatile
 base_branch: feat/pre-register_kiosk
 depends_on:
   - CR-151 (kiosk home `/kiosk`, `/api/v1/scanner/kiosk/*`, scanner client allowlist FR-KPC-06)
   - CR-152 (`POST /api/v1/scanner/kiosk/config` — pattern ที่ต้อง mirror)
 affects:
-  - docs/data/schema.md §3.12 (ใหม่) `kiosk_banner` — schema_v 1 (doc type ใหม่ ใน DB `registry`)
-  - docs/data/api-contract.md §2.1 Scanner kiosk (+ `POST /kiosk/banners`, `GET /kiosk/banners/{id}/image`) · §Back-office (+ `/api/back-office/kiosk-banners/**`)
-  - docs/prd/role-permission-matrix.md §1.1 (+ role `banner_staff` — 10 → 11 บทบาท) · docs/data/schema.md §6 `_users.roles`
+  - docs/data/schema.md §3.12 (ใหม่) `kiosk_banner` — schema_v 1 (doc type ใหม่ ใน DB `registry`) *(อัปเดตแล้วใน PR ของ CR นี้)*
+  - docs/data/api-contract.md §2.3 (ใหม่) kiosk banner — `POST /kiosk/banners`, `GET /kiosk/banners/{id}/image`, `/api/back-office/kiosk-banners/**` *(อัปเดตแล้วใน PR ของ CR นี้)*
+  - docs/prd/role-permission-matrix.md §1.1 (+ role `banner_staff` — 10 → 11 บทบาท) · docs/data/schema.md §6 `_users.roles` *(อัปเดตแล้วใน PR ของ CR นี้)*
   - frontend/src/lib/auth/roles.ts (`BANNER_STAFF` + `STAFF_CAPABILITIES`) · frontend/src/lib/features/users/domain/schema.ts · frontend/src/lib/server/user-service.ts
   - frontend/src/lib/components/backoffice-navbar/static.ts (เมนู「แบนเนอร์ Kiosk」)
   - frontend/.env.example (server-only secret ของ signed image URL)
-  - docs/features/kiosk-banner-design-guideline.md (ใหม่ — แนวทาง implement)
+  - docs/features/kiosk-banner-design-guideline.md (ใหม่ — แนวทาง implement, active)
   - frontend/src/lib/features/kiosk-banners/{domain,data,application,ui,index.ts} (ใหม่ — back-office)
   - frontend/src/lib/server/kiosk-banners/** (ใหม่ — registry CRUD, signed image URL)
   - frontend/src/lib/features/kiosk/data/kiosk-banners.api.ts (ใหม่) · features/kiosk/ui/kiosk-banner-attract.svelte (ใหม่) · features/kiosk/index.ts
@@ -37,7 +38,9 @@ why: >
 migration: N/A — doc type ใหม่ ไม่มีข้อมูลเดิม; ไม่แตะ schema_v ของ doc type อื่น
 ---
 
-# Kiosk banner — แบนเนอร์รูปภาพบนหน้าแรก kiosk
+# CR-162: Kiosk banner — แบนเนอร์รูปภาพบนหน้าแรก kiosk
+
+> **สถานะ:** approved เป็น spec เมื่อ 2026-10-11 (Asia/Bangkok) โดย Soravit Sukkarn (Team Lead) · ยังไม่ implement · docs (schema.md §3.12, api-contract.md, role-permission-matrix.md) อัปเดตใน PR เดียวกับ CR นี้
 
 > **สรุป (TL;DR)**
 >
@@ -45,7 +48,7 @@ migration: N/A — doc type ใหม่ ไม่มีข้อมูลเด
 > - **เพื่อใคร / ทำไม:** role ใหม่ `banner_staff` + ผู้จัดการศูนย์ + SA ประชาสัมพันธ์ข่าวสารที่ตู้ได้เองโดยไม่ต้องแตะเครื่อง
 > - **Dev ต้องทำอะไร:** บน base `feat/pre-register_kiosk` — feature `kiosk-banners` (back-office CRUD + อัปโหลดรูป) · `POST /api/v1/scanner/kiosk/banners` (device auth, mirror `kiosk/config`) · signed GET URL สำหรับรูป · overlay บน `/kiosk` · เพิ่ม path ใน allowlist ของ scanner client
 > - **กระทบ schema / scope:** doc type ใหม่ `kiosk_banner` schema_v 1 · role ใหม่ `banner_staff` (compound scoped) · ไม่กระทบ doc type เดิม · อ่านผ่าน Node BFF → CouchDB (ไม่ผ่าน worker/Mongo)
-> - **Design pattern:** [`docs/features/kiosk-banner-design-guideline.md`](../features/kiosk-banner-design-guideline.md)
+> - **Design pattern:** [`docs/features/kiosk-banner-design-guideline.md`](../../features/kiosk-banner-design-guideline.md)
 
 ---
 
@@ -102,16 +105,18 @@ migration: N/A — doc type ใหม่ ไม่มีข้อมูลเด
 
 ### 3.2 Back-office
 
-| ID        | Requirement                                                                                                                                                                                                                   |
-| :-------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR-KBN-20 | หน้า `/back-office/kiosk-banners` แสดง 2 แท็บ:「กำลังแสดง / รอแสดง」(`end_at` ≥ now, เรียง `start_at` asc) ·「หมดอายุ」(`end_at` < now, เรียง `end_at` desc)                                                                  |
-| FR-KBN-21 | ฟอร์มสร้าง/แก้ไข Superforms + Zod ครบทุก field §3.1 + อัปโหลดรูปพร้อม preview · แก้ไขโดยไม่เลือกรูปใหม่ = คงรูปเดิม                                                                                                           |
-| FR-KBN-22 | อัปโหลดรูปส่งเป็น JSON base64 (back-office route เป็น JSON-only) · decode + ตรวจตาม FR-KBN-04 ฝั่ง server ก่อน PUT attachment                                                                                                 |
-| FR-KBN-23 | เปิด/ปิด = `PATCH`, ลบ = `DELETE` เท่านั้น · confirm dialog ผูกกับ banner รายการนั้น                                                                                                                                          |
-| FR-KBN-24 | สิทธิ์จัดการ (อ่าน/สร้าง/แก้/เปิดปิด/ลบ): `system_admin` ทุกศูนย์ · `shelter_manager` และ `banner_staff` เฉพาะ banner ที่ `shelter_codes` ทั้งหมด (ทั้งค่าเดิมและค่าใหม่) อยู่ใน scope ของตัวเอง · role อื่น 403              |
-| FR-KBN-26 | เพิ่ม role `banner_staff` ใน `roles.ts` (`BANNER_STAFF`, อยู่ใน `STAFF_CAPABILITIES`) รูปแบบ compound `{shelter_code}:banner_staff` คู่กับ `shelter:{code}` · SA และ SM ของศูนย์นั้น grant/revoke ได้ผ่านหน้าจัดการผู้ใช้เดิม |
-| FR-KBN-27 | `banner_staff` เห็นเฉพาะเมนู「แบนเนอร์ Kiosk」ใน portal และไม่ได้สิทธิ์อื่นของศูนย์                                                                                                                                           |
-| FR-KBN-25 | รูปในหน้าจัดการโหลดผ่าน back-office route ที่ตรวจ session + สิทธิ์                                                                                                                                                            |
+| ID        | Requirement                                                                                                                                                                                                                                                                                |
+| :-------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR-KBN-20 | หน้า `/back-office/kiosk-banners` แสดง 2 แท็บ:「กำลังแสดง / รอแสดง」(`end_at` ≥ now, เรียง `start_at` asc) ·「หมดอายุ」(`end_at` < now, เรียง `end_at` desc)                                                                                                                               |
+| FR-KBN-21 | ฟอร์มสร้าง/แก้ไข Superforms + Zod ครบทุก field §3.1 · แก้ไขโดยไม่เลือกรูปใหม่ = คงรูปเดิม · ใต้ช่องอัปโหลดแสดงชนิดไฟล์ที่รับ (png / jpeg / webp) และขนาดสูงสุด 2 MB                                                                                                                        |
+| FR-KBN-22 | อัปโหลดรูปส่งเป็น JSON base64 (back-office route เป็น JSON-only) · decode + ตรวจตาม FR-KBN-04 ฝั่ง server ก่อน PUT attachment                                                                                                                                                              |
+| FR-KBN-23 | เปิด/ปิดการแสดงผลใช้ `Switch` ที่มี label สถานะ (「แสดงบนตู้」/「ไม่แสดง」) ส่ง `PATCH` · ลบ = `DELETE` พร้อม confirm dialog ผูกกับ banner รายการนั้น · ห้ามใช้ไอคอนรูปตาแทนสถานะ (สับสนกับ preview)                                                                                       |
+| FR-KBN-24 | สิทธิ์จัดการ (อ่าน/สร้าง/แก้/เปิดปิด/ลบ): `system_admin` ทุกศูนย์ · `shelter_manager` และ `banner_staff` เฉพาะ banner ที่ `shelter_codes` ทั้งหมด (ทั้งค่าเดิมและค่าใหม่) อยู่ใน scope ของตัวเอง · role อื่น 403                                                                           |
+| FR-KBN-25 | รูปในหน้าจัดการโหลดผ่าน back-office route ที่ตรวจ session + สิทธิ์                                                                                                                                                                                                                         |
+| FR-KBN-26 | เพิ่ม role `banner_staff` ใน `roles.ts` (`BANNER_STAFF`, อยู่ใน `STAFF_CAPABILITIES`) รูปแบบ compound `{shelter_code}:banner_staff` คู่กับ `shelter:{code}` · SA และ SM ของศูนย์นั้น grant/revoke ได้ผ่านหน้าจัดการผู้ใช้เดิม                                                              |
+| FR-KBN-27 | `banner_staff` เห็นเฉพาะเมนู「แบนเนอร์ Kiosk」ใน portal และไม่ได้สิทธิ์อื่นของศูนย์                                                                                                                                                                                                        |
+| FR-KBN-28 | เลือกไฟล์แล้วแสดงภาพตัวอย่างทันที (client-side object URL) ก่อนบันทึก · หน้าแก้ไขแสดงรูปปัจจุบัน และเมื่อเลือกรูปใหม่ให้เห็นทั้งรูปเดิมและรูปใหม่                                                                                                                                          |
+| FR-KBN-29 | ปุ่ม「ดูตัวอย่างบน kiosk」(ในรายการและในฟอร์ม) เปิด modal จำลองจอ 1024×600 และ 1080×1920 (สลับได้) · ใช้ component overlay ตัวเดียวกับบนตู้ (FR-KBN-44/45) · ในรายการ = เล่นทุก banner ที่ active ของศูนย์ที่เลือกตามลำดับจริง · ในฟอร์ม = เล่น banner ที่กำลังแก้ (รวมรูปที่ยังไม่บันทึก) |
 
 > หน้าอยู่ใต้ `/back-office/` (ไม่ใช่ `system-management/` ที่ `requireAdmin`) เพื่อให้ SM และ `banner_staff` เข้าถึงได้
 
@@ -152,7 +157,18 @@ migration: N/A — doc type ใหม่ ไม่มีข้อมูลเด
 - scanner client: allowlist ฉีด header ให้ `POST /kiosk/banners` same-origin เท่านั้น
 - `banner_staff` / ผู้จัดการศูนย์ A แก้ banner ของศูนย์ B ไม่ได้ · ย้าย banner ของ B มาเป็นของ A ไม่ได้ · role อื่นของศูนย์ A ได้ 403
 - SM ของศูนย์ A grant `A:banner_staff` ได้ · `banner_staff` ไม่เห็นเมนูอื่น
+- เลือกไฟล์แล้วเห็นภาพตัวอย่างทันที · หน้าแก้ไขแสดงรูปปัจจุบัน · ปุ่ม「ดูตัวอย่างบน kiosk」เล่นสไลด์ที่ 2 ขนาดจอได้ถูกต้อง
+- Switch เปิด/ปิดเปลี่ยน `status` ผ่าน `PATCH` และ label ตรงกับสถานะจริง
 - tests: domain (schema, active window, sort), signed URL, back-office + kiosk route `server.test.ts`, `kiosk-banners.api.test.ts`, attract overlay component test (fake timers), `scanner_client/tests/test_manager.py` allowlist case, e2e back-office CRUD
+
+---
+
+### 3.5 Out of scope (owner เคาะ 2026-10-11)
+
+- แสดง banner ที่หน้าอื่นนอกจาก idle บน `/kiosk` (เช่นหน้า「เสร็จสิ้น」)
+- แถบ banner ถาวรบนหน้า `/kiosk` รวมถึงตู้แนวตั้ง 1080×1920
+- รูปแยกตามแนวจอ — ใช้รูปเดียว + `object-contain`
+- ฟิลด์ภาษาอังกฤษ (`title_en` / `caption_en`)
 
 ---
 
@@ -174,4 +190,6 @@ N/A — doc type ใหม่
 - 2026-10-11 — `caption` เป็น text เท่านั้น ไม่รองรับ HTML
 - 2026-10-11 — owner เคาะ: เพิ่ม role `banner_staff` และให้ `shelter_manager` + `system_admin` จัดการได้ด้วย (FR-KBN-24/26/27) · ยืนยันค่า idle 30 s, refresh 5 นาที, รูป ≤2 MB, `duration_sec` 3–60
 - 2026-10-11 — branch `draft-kiosk-banner` เป็น docs-only; implementation แยกเป็นงานถัดไป
-- 2026-10-11 — เลขที่ว่างถัดไปบน develop = CR-162 (develop มี CR-159 ซ้ำ 2 ไฟล์) — ยืนยันอีกครั้งตอน approve
+- 2026-10-11 — เพิ่ม FR-KBN-21/23/28/29: แจ้งชนิด/ขนาดไฟล์, Switch สถานะ, preview ตอนเลือกไฟล์ + รูปปัจจุบันในหน้าแก้ไข, ปุ่มดูตัวอย่างบน kiosk (จากผลทดสอบระบบเดิมที่ไม่มีทั้งสี่ข้อ)
+- 2026-10-11 — owner เคาะ out of scope §3.5 (คงค่าเดิมทั้งหมด)
+- 2026-10-11 — **approved** โดย Soravit Sukkarn (Team Lead) รวมถึง role ใหม่ `banner_staff` · รันเลข CR-162 (ล่าสุดบน develop = CR-161)
