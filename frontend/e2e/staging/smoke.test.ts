@@ -1,6 +1,9 @@
 import { expect, test, type Page, type Response } from '@playwright/test';
 
 const LOGIN_PATH = '/login';
+// CR-141: the password form is hidden on /login unless config:app.password_login_enabled is on.
+// /admin-login always renders it (passwordMode="always"), so credential tests go through it.
+const ADMIN_LOGIN_PATH = '/admin-login';
 const PORTAL_PATH = '/portal';
 const FORCE_SETUP_PATH = '/force-setup';
 const MFA_CHALLENGE_PATH = '/mfa-challenge';
@@ -65,8 +68,33 @@ test.describe('Staging smoke', { tag: ['@smoke', '@release'] }, () => {
 		expect(await response.json()).toEqual({ ok: true, service: 'frontend' });
 	});
 
-	test('login page renders the credential form', async ({ page }) => {
+	test('login page renders the staff sign-in card and the enabled SSO methods', async ({
+		page,
+		request
+	}) => {
+		const methodsResponse = await request.get('/api/public/v1/login-methods');
+		expect(methodsResponse.status()).toBe(200);
+		const methods = (await methodsResponse.json()) as {
+			password: boolean;
+			google: boolean;
+			thaid: boolean;
+		};
+
 		await page.goto(LOGIN_PATH);
+
+		await expect(page.getByText('เข้าสู่ระบบหลังบ้าน')).toBeVisible();
+		const googleButton = page.getByRole('link', { name: /Google/i });
+		const thaidButton = page.getByRole('link', { name: /ThaID/i });
+		await (methods.google
+			? expect(googleButton).toBeVisible()
+			: expect(googleButton).toHaveCount(0));
+		await (methods.thaid ? expect(thaidButton).toBeVisible() : expect(thaidButton).toHaveCount(0));
+		// The password form follows the flag; it must never be shown when the flag is off.
+		await expect(page.getByLabel(/^Username/i)).toHaveCount(methods.password ? 1 : 0);
+	});
+
+	test('admin-login renders the credential form', async ({ page }) => {
+		await page.goto(ADMIN_LOGIN_PATH);
 
 		await expect(page.getByLabel(/^Username/i)).toBeVisible();
 		await expect(page.getByLabel(/Password/i)).toBeVisible();
@@ -96,7 +124,7 @@ test.describe('Staging smoke', { tag: ['@smoke', '@release'] }, () => {
 			}
 		});
 
-		await page.goto(LOGIN_PATH);
+		await page.goto(ADMIN_LOGIN_PATH);
 		await page.getByLabel(/^Username/i).fill(username);
 		await fillPasswordWithoutReportingValue(page, password);
 		await page.getByRole('button', { name: /Login/i }).click();
