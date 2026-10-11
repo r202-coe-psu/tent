@@ -5,9 +5,9 @@ import {
 	canScanCheckIn,
 	needsIntakeBeforeStay,
 	createEvacuee,
-	createKioskEvacueeFromCard,
 	genderLabelTh,
 	createDraftEvacueeFromCard,
+	createKioskEvacueeFromCard,
 	createMovement,
 	createScreening,
 	applyMovementToStay,
@@ -63,6 +63,7 @@ import {
 	migrateVulnerableGroupCodes,
 	admissionSupportsVulnerableGroup,
 	mergeVulnerableGroupsAndSpecialNeeds,
+	type CardSnapshot,
 	housingTypeSchema,
 	householdInputSchema,
 	migratePetGroup,
@@ -145,12 +146,14 @@ describe('stayStatusSchema and STATUS_LABELS', () => {
 	it('accepts arriving and room_confirmed', () => {
 		expect(stayStatusSchema.parse('arriving')).toBe('arriving');
 		expect(stayStatusSchema.parse('room_confirmed')).toBe('room_confirmed');
+		expect(stayStatusSchema.parse('kiosk_registered')).toBe('kiosk_registered');
 	});
 
 	it('contains arriving, room_confirmed, and checked_out in STATUS_LABELS with Thai labels', () => {
 		expect(STATUS_LABELS.arriving).toBe('รอเข้าพัก');
 		expect(STATUS_LABELS.room_confirmed).toBe('ยืนยันถึงโซนแล้ว');
 		expect(STATUS_LABELS.checked_out).toBe('เช็คเอาต์');
+		expect(STATUS_LABELS.kiosk_registered).toBe('ลงทะเบียนที่ตู้ (รอยืนยัน)');
 	});
 });
 
@@ -339,7 +342,7 @@ describe('createEvacuee', () => {
 		expect(e.current_stay.status).toBe('arriving');
 	});
 
-	it('creates evacuee from card snapshot with schema_v 8, status pre_registered, and registered_via kiosk', () => {
+	it('creates evacuee from card snapshot with schema_v 11, kiosk_registered, and registered_via kiosk', () => {
 		const card = {
 			citizen_id: '1234567890121',
 			title_th: 'นาย',
@@ -355,16 +358,27 @@ describe('createEvacuee', () => {
 		const kioskEv = createDraftEvacueeFromCard(card, ctx);
 		expect(kioskEv._id.startsWith('evacuee:')).toBe(true);
 		expect(kioskEv.type).toBe('evacuee');
-		expect(kioskEv.schema_v).toBe(8);
+		expect(kioskEv.schema_v).toBe(11);
 		expect(kioskEv.first_name).toBe('สมศักดิ์');
 		expect(kioskEv.last_name).toBe('รักชาติ');
 		expect(kioskEv.birth_year).toBe(2533);
 		expect(kioskEv.age).toBe(36);
-		expect(kioskEv.current_stay.status).toBe('pre_registered');
+		expect(kioskEv.current_stay.status).toBe('kiosk_registered');
 		expect(kioskEv.household_id).toBeNull();
 		expect(kioskEv.registered_via).toBe('kiosk');
 		expect(kioskEv.person_id?.number).toBe('1234567890121');
 		expect(kioskEv.card_snapshot?.station_name).toBe('จุดสแกน Kiosk 1');
+	});
+
+	it('uses a persisted kiosk photo id and never stores the card photo base64 in the snapshot', () => {
+		const card = {
+			citizen_id: '1234567890123',
+			first_name_th: 'สมชาย',
+			photo_base64: 'data:image/jpeg;base64,/9j/AA=='
+		} as CardSnapshot;
+		const evacuee = createKioskEvacueeFromCard(card, ctx, 'image:01ARZ3NDEKTSV4RRFFQ69G5FAV');
+		expect(evacuee.photo).toBe('image:01ARZ3NDEKTSV4RRFFQ69G5FAV');
+		expect(evacuee.card_snapshot).not.toHaveProperty('photo_base64');
 	});
 
 	it('creates draft evacuee and calculates age automatically from birth_year_ce when age is not provided', () => {
@@ -800,6 +814,12 @@ describe('movement → current_stay', () => {
 			'checked_out',
 			'transferred'
 		]);
+		expect(
+			canCheckInEvacuee({
+				...base,
+				current_stay: { status: 'kiosk_registered', zone: null, since: base.current_stay.since }
+			})
+		).toBe(false);
 	});
 
 	it('rejects check_in from deceased (terminal status)', () => {
@@ -827,9 +847,15 @@ describe('movement → current_stay', () => {
 		expect(() => assertMovementAllowed(cancelled, 'check_in')).toThrow(/ยกเลิก/);
 	});
 
-	it('canCancel* helpers only allow pre_registered', () => {
+	it('canCancel* helpers allow pending registration stays', () => {
 		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
 		expect(canCancelEvacueePreRegistration(e)).toBe(true);
+		expect(
+			canCancelEvacueePreRegistration({
+				...e,
+				current_stay: { status: 'kiosk_registered', zone: null, since: e.current_stay.since }
+			})
+		).toBe(true);
 		const hh = createHousehold(
 			{
 				label: 'บ้านทดสอบ',
@@ -999,6 +1025,7 @@ describe('movement → current_stay', () => {
 		const e = createEvacuee({ first_name: 'ก', last_name: 'ข', gender: 'male', phone: null }, ctx);
 		expect(canCheckInEvacuee(e)).toBe(true); // pre_registered
 		expect(CHECK_IN_ELIGIBLE_STATUSES).toContain('pre_registered');
+		expect(CHECK_IN_ELIGIBLE_STATUSES).not.toContain('kiosk_registered');
 		expect(CHECK_OUT_ELIGIBLE_STATUSES).toEqual(['active', 'room_confirmed']);
 
 		const active = {
@@ -1606,6 +1633,7 @@ describe('deriveHouseholdStatus (CR-112 A2)', () => {
 	it('falls through arriving → pre_registered → checked_out', () => {
 		expect(deriveHouseholdStatus(['arriving', 'pre_registered'])).toBe('arriving');
 		expect(deriveHouseholdStatus(['pre_registered', 'cancelled'])).toBe('pre_registered');
+		expect(deriveHouseholdStatus(['kiosk_registered', 'cancelled'])).toBe('pre_registered');
 		expect(deriveHouseholdStatus(['checked_out', 'transferred'])).toBe('checked_out');
 		expect(deriveHouseholdStatus(['deceased'])).toBe('checked_out');
 	});

@@ -16,6 +16,7 @@ import {
 	resolveThaidLoginUser,
 	exchangeThaidCode,
 	resolveThaidRedirectUri,
+	resolvePublicOrigin,
 	parseThaidCitizenClaims,
 	parseThaiAddressText,
 	setCitizenClaimCookie,
@@ -45,6 +46,15 @@ describe('thaid-oauth helpers (CR-ThaID)', () => {
 			expect(parseThaidOAuthState('tampered.state')).toBeNull();
 			expect(parseThaidOAuthState('')).toBeNull();
 			expect(parseThaidOAuthState(undefined)).toBeNull();
+		});
+
+		it('round-trips kiosk_check_in state together with its sessionId', () => {
+			const kiosk = createThaidOAuthState('kiosk_check_in', '', undefined, 'sess-kiosk-1');
+			expect(parseThaidOAuthState(kiosk)).toMatchObject({
+				mode: 'kiosk_check_in',
+				name: '',
+				sessionId: 'sess-kiosk-1'
+			});
 		});
 	});
 
@@ -113,6 +123,17 @@ describe('thaid-oauth helpers (CR-ThaID)', () => {
 			expect(scopes).toContain('gender');
 			expect(scopes).toContain('address');
 		});
+
+		it('requests only openid + pid for kiosk_check_in mode (data minimization)', () => {
+			const url = buildThaidAuthorizeUrl({
+				clientId: 'my-client',
+				redirectUri: 'https://shelter.importstar.dev/callback',
+				state: 'test-state-token',
+				mode: 'kiosk_check_in'
+			});
+
+			expect(new URL(url).searchParams.get('scope')).toBe('openid pid');
+		});
 	});
 
 	describe('resolveThaidRedirectUri', () => {
@@ -137,6 +158,23 @@ describe('thaid-oauth helpers (CR-ThaID)', () => {
 			expect(resolveThaidRedirectUri(dummyUrl)).toBe(
 				'https://shelter.example.com/api/v1/auth/oauth/thaid/callback'
 			);
+		});
+	});
+
+	describe('resolvePublicOrigin', () => {
+		const requestUrl = new URL('http://127.0.0.1:3000/api/v1/scanner/kiosk/thaid/session');
+
+		it('prefers the configured ORIGIN over the request origin', () => {
+			(env as Record<string, string | undefined>).ORIGIN = 'https://shelter.example.com/';
+			expect(resolvePublicOrigin(requestUrl)).toBe('https://shelter.example.com');
+		});
+
+		it('falls back to the request origin when ORIGIN is unset or malformed', () => {
+			(env as Record<string, string | undefined>).ORIGIN = undefined;
+			expect(resolvePublicOrigin(requestUrl)).toBe('http://127.0.0.1:3000');
+			(env as Record<string, string | undefined>).ORIGIN = 'not a url';
+			expect(resolvePublicOrigin(requestUrl)).toBe('http://127.0.0.1:3000');
+			(env as Record<string, string | undefined>).ORIGIN = undefined;
 		});
 	});
 

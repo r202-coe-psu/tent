@@ -430,7 +430,9 @@ export function evacueeToUnifiedMember(
 	targetEvacueeId?: string
 ): UnifiedMemberWithMeta {
 	const isTarget = targetEvacueeId ? evacuee._id === targetEvacueeId : true;
-	const isPreReg = evacuee.current_stay.status === 'pre_registered';
+	const isPreReg =
+		evacuee.current_stay.status === 'pre_registered' ||
+		evacuee.current_stay.status === 'kiosk_registered';
 	return {
 		_id: evacuee._id,
 		_rev: evacuee._rev,
