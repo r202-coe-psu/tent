@@ -1,17 +1,18 @@
 ---
-id: draft
+id: CR-159
 title: การแจกของหน้างาน (Distribution Desk / Station 4 — `/onsite/distribution`) — ขอบเขตหน้าจอ + role, กติกาแจกอาหารปรุงสุก, จับคู่ผู้รับ↔เมนู, ปิด CR-109
-status: proposed
+status: approved
 date: 2026-10-06
-updated: 2026-10-10
+updated: 2026-10-11
 requested_by: ทีม frontend (รับช่วง `/onsite/distribution` ต่อ)
-decided_by: <เจ้าของโครงการ>
+decided_by: เจ้าของโครงการ
 layer: volatile
 affects:
-  - docs/changes/CR-121-spec-ticket.md §1.2 ข้อ 2, ผัง §2.1 (โหนด D2), ผัง §2.2 (Step 6), FR-DST-02, FR-DST-03, FR-DST-05, FR-LON-02, §5 ตาราง Screen/Role (หน้าจอ 13–17)
-  - docs/changes/CR-109-meal-distribution-onsite-scan.md (frontmatter `status` + หมายเหตุ superseded)
+  - docs/changes/03-C-supply/CR-121-spec-ticket.md §1.2 ข้อ 2, ผัง §2.1 (โหนด D2), ผัง §2.2 (Step 6), FR-DST-02, FR-DST-03, FR-DST-05, FR-LON-02, §5 ตาราง Screen/Role (หน้าจอ 13–17)
+  - docs/changes/05-D-kitchen/CR-109-meal-distribution-onsite-scan.md (frontmatter `status` + หมายเหตุ superseded)
   - docs/changes/_index.md แถว CR-109
   - docs/prd/role-permission-matrix.md §3 (แถว Meal Planning & Service — RM:85, แถว Inventory & Supply — RM:87)
+  - docs/changes/01-core/CR-160-distribution-staff-role.md (บทบาท distribution_staff สำหรับ Station 4)
   - docs/task-breakdown/03-C-supply.md T-12 (อ้างอิง — ไม่ต้องแก้)
   - docs/data/schema.md §2.5 (อ้างอิง CR-022), §2.7 (ข้อความค้าง), §2.29 `requisition_ticket`, §2.30 `distribution_log` (เพิ่มกติกา)
   - docs/sitemap.md (ยังไม่มี `/onsite/distribution`)
@@ -25,7 +26,7 @@ affects:
   - frontend/src/lib/features/distribution/ui/frontline/FrontlineStationPage.svelte, FoodDistributionCard.svelte (FOOD_4H_TIMESTAMP_BLOCKER), MealEntitlementWarning.svelte
 ---
 
-# การแจกของหน้างาน (Distribution Desk / Station 4)
+# CR-159: การแจกของหน้างาน (Distribution Desk / Station 4)
 
 > **สรุป (TL;DR)**
 > - **เปลี่ยนอะไร:** รวมทุกเรื่องของการแจกของหน้างาน `/onsite/distribution` ไว้ใน CR เดียว แบ่ง 4 หัวข้อ:
@@ -177,7 +178,7 @@ affects:
 
 ### Requirements
 - **FR-CRS-01** — `CR-109-meal-distribution-onsite-scan.md` frontmatter: `status: approved` → `superseded`; เพิ่ม `superseded_by: CR-121`, `superseded_date: <วันที่ approve CR นี้>`, `note: ผนวก meal_distribution เข้า distribution_log (schema.md §2.30) ใน CR-121`; อัปเดต `updated:`; เพิ่มบรรทัดใน Decision log. เนื้อหาเดิมของ CR-109 คงไว้ไม่แก้
-- **FR-CRS-02** — `_index.md` แถว CR-109: คอลัมน์สถานะ `approved` → `superseded`; ต่อท้ายหัวเรื่องด้วย "— **superseded โดย [CR-121](CR-121-spec-ticket.md)**" (รูปแบบเดียวกับ CR-032/CR-096)
+- **FR-CRS-02** — `_index.md` แถว CR-109: คอลัมน์สถานะ `approved` → `superseded`; ต่อท้ายหัวเรื่องด้วย "— **superseded โดย [CR-121](03-C-supply/CR-121-spec-ticket.md)**" (รูปแบบเดียวกับ CR-032/CR-096)
 - **FR-CRS-03** — schema.md §2.7 ย่อหน้า "`actual_yield` vs `served` (CR-084)": แทนวลี "การบังคับเพดานจริงเป็นงานของ flow แจกจ่าย/สแกนหน้างานที่ยังไม่มีในระบบ" ด้วยการอ้างอิง "การแจกรายคนบันทึกใน `distribution_log` (§2.30, CR-121); กติกาเพดานยอดแจกดู §2.30". ไม่เปลี่ยนความหมายของ `served`/`actual_yield`/`MealVariance`; อัปเดต `updated:` และ `note:` ของ schema.md
 - **FR-CRS-04** — branch `docs/draft-meal-distribution-onsite-scan` ไม่ merge > [NEEDS DECISION: (A) ลบทั้ง local และ `origin` หลัง CR นี้ approve — เนื้อหายังอยู่ใน git history ของ CR-109, (B) เก็บ branch ไว้เป็นประวัติ]
 
@@ -216,3 +217,4 @@ affects:
 - 2026-10-06 — proposed เป็น 3 ร่างแยก: `draft-distribution-desk-station-scope` (A), `draft-meal-quota-window` (B), `draft-meal-recipient-menu-matching` (C) — จากการ align `meal-distribution` เข้ากับ schema กลาง แล้ว rescope ให้ชี้ที่ `/onsite/distribution` (`features/distribution`) แทน `features/meal-distribution` ที่เลิกใช้; เพิ่ม FR-MQW-05/06, FR-MRM-00
 - 2026-10-07 — แก้การอ้างอิง: แยกขั้น 3 ไปอ้าง RM:87, VDU Rule 16 / `distribution_log` แทน "VDU 14", อ้าง §1.2 ข้อ 2 / §2.1 / §2.2 / FR-DST-05 แทนเลขบรรทัด, อ้างข้อความ T-12 ตามต้นฉบับ; บันทึกว่า guard FR-DDS-04 ทำแล้วบน `feat/distribution-desk`; เพิ่มร่าง `draft-cr-109-superseded-by-cr-121` (D)
 - 2026-10-10 — รวม 4 ร่าง (A–D) เป็นไฟล์เดียว `draft-onsite-distribution.md` ตามที่เจ้าของโครงการขอ — ไม่แตก CR ย่อย; เลข FR คงเดิม
+- 2026-10-11 — approved โดยเจ้าของโครงการ (รันเลข CR-159)

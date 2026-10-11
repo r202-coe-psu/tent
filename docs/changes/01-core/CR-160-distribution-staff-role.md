@@ -1,8 +1,9 @@
 ---
-id: draft                  # เปลี่ยนเป็น CR-NNN เมื่อเจ้าของโครงการรันเลข (ตรวจ _index.md บน develop)
+id: CR-160
 title: เพิ่มบทบาท distribution_staff (เจ้าหน้าที่แจกจ่าย) แบบระบุศูนย์ {code}:distribution_staff
-status: proposed           # owner เคาะแนวทางแล้ว (decision a) — รอรันเลข CR + ลง _index.md
+status: approved
 date: 2026-10-11
+updated: 2026-10-11
 requested_by: ทีม (GitHub issue — Distribution Staff role)
 decided_by: เจ้าของโครงการ
 layer: volatile
@@ -13,13 +14,14 @@ affects:
   - frontend/src/lib/features/distribution/data/distribution.remote.ts
   - frontend/src/lib/server/shelter-access-design.ts (validate_doc_update)
   - frontend/src/lib/guards/auth.ts (requireDistributionDesk)
+  - frontend/src/lib/features/portal/domain/portal-menu.ts (frontline-distribution tile)
   - frontend/src/lib/features/users/ui/user-form.svelte
   - no schema_v bump
 why: ต้องการบทบาทเฉพาะสำหรับผู้ปฏิบัติงานจุดแจกจ่ายอาหาร/สิ่งของ โดยไม่ต้องให้สิทธิ์ registration_staff (PII ทะเบียน) หรือ warehouse_staff (คลัง) เกินหน้าที่
 migration: N/A — เพิ่มค่าใน role vocabulary เท่านั้น; ผู้ใช้เดิมไม่เปลี่ยน
 ---
 
-# เพิ่มบทบาท `distribution_staff` (เจ้าหน้าที่แจกจ่าย)
+# CR-160: เพิ่มบทบาท `distribution_staff` (เจ้าหน้าที่แจกจ่าย)
 
 ## Summary
 
@@ -56,8 +58,7 @@ migration: N/A — เพิ่มค่าใน role vocabulary เท่า�
 - **R4** `distribution_staff` **ทำไม่ได้**: สร้าง/อนุมัติ/dispatch ใบเบิก (ticket), รับของเข้าคลัง
   (`PHYSICAL`), ปิด gate ฝั่งคลัง, เข้า back-office, งานทะเบียนผู้ประสบภัย.
 - **R5** Route guard `requireDistributionDesk` และไทล์ "จุดแจกจ่ายพัสดุและอาหาร" ใน `/onsite`
-  แสดงให้ `distribution_staff` ของศูนย์ที่เลือกอยู่. Portal การ์ด "ปฏิบัติการหน้างาน" แสดงให้ทุก
-  staff อยู่แล้ว — ไม่ต้องแก้.
+  รวมถึงไทล์ `frontline-distribution` บน `/portal` (`portal-menu.ts`) แสดงให้ `distribution_staff` ของศูนย์ที่เลือกอยู่.
 - **R6** ข้ามศูนย์ไม่ได้: `SH001:distribution_staff` ไม่มีสิทธิ์ใน `shelter_SH002`.
 
 ## Impact
@@ -66,10 +67,9 @@ migration: N/A — เพิ่มค่าใน role vocabulary เท่า�
 - Code: ตาม `affects`. VDU (`shelter-access-design.ts`) ต้อง **push design doc ใหม่ไปทุก `shelter_{code}`**
   หลัง merge จึงจะมีผลที่ CouchDB.
 - Tests: `roles.test.ts`, `guards/auth.test.ts`, `distribution/application/food-supplies/auth.test.ts`,
-  `shelter-access-design.test.ts`, `distribution.remote.test.ts`.
-- หมายเหตุ: issue อ้าง `features/portal/domain/portal-menu.ts` — ไฟล์นี้ไม่มีใน repo; เมนูจริงคือ
-  `routes/(protected)/portal/+page.svelte` → `routes/(protected)/onsite/+page.svelte` ซึ่ง gate ด้วย
-  `canPerformFrontlineDistribution` (ได้ผลอัตโนมัติจาก R3).
+  `shelter-access-design.test.ts`, `distribution.remote.test.ts`, `portal-menu.test.ts`.
+- หมายเหตุ: เมนูบน `/portal` ถูกขับเคลื่อนโดย `portal-menu.ts` (PR #452) ต้องเพิ่ม capability ของ `distribution_staff`
+  ให้กับรายการ `frontline-distribution` (`/onsite/distribution`) พร้อมอัปเดต test `portal-menu.test.ts`.
 
 ## Migration
 
@@ -78,4 +78,4 @@ N/A — ไม่เปลี่ยนรูปร่าง doc ที่ persis
 ## Decision log
 
 - 2026-10-11 — proposed; owner เคาะแนวทาง (decision a) ใน issue แล้ว, implement บน branch.
-  รอ owner รันเลข CR-NNN + เพิ่มแถวใน `_index.md`.
+- 2026-10-11 — approved โดยเจ้าของโครงการ (decision a, รันเลข CR-160).
