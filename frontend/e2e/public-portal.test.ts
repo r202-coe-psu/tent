@@ -5,11 +5,13 @@
  * to end in public-portal-faq-crud.test.ts, which edits that document through the admin
  * UI in the same serial file as the FAQ edits (both save the same document).
  *
+ * Tags: @public @smoke @prod — thin read-only smoke suitable for production.
+ *
  * Locators are generated with Playwright codegen (`pnpm exec playwright codegen`).
  */
 import { test, expect } from '@playwright/test';
 
-test.describe('Public Portal - Footer contacts', () => {
+test.describe('Public Portal - Footer contacts', { tag: ['@public', '@smoke', '@prod'] }, () => {
 	test('always shows the 1784 and 1669 emergency numbers', async ({ page }) => {
 		await page.goto('/');
 

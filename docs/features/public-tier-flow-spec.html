@@ -65,7 +65,7 @@
       </ul></div></section>
 
       <section class="card bg-base-100 border border-base-300"><div class="card-body prose max-w-none"><h2 class="card-title">PUB — Transparency</h2><ul>
-        <li><code>GET /public/v1/transparency/summary</code> — system-wide aggregate: <code>shelters_open</code>/<code>shelters_total</code>, <code>occupancy_total</code> (OP-6 approved), <code>vulnerable_count</code> (OP-8 approved) — ดู <a href="../changes/CR-005-public-portal-landing-public-metrics.md">CR-005 §A/§D</a>; ขับ landing metrics + Shelter Dashboard cards</li>
+        <li><code>GET /public/v1/transparency/summary</code> — system-wide aggregate: <code>shelters_open</code>/<code>shelters_total</code>, <code>occupancy_total</code> (OP-6 approved), <code>vulnerable_count</code> (OP-8 approved) — ดู <a href="../changes/12-public/CR-005-public-portal-landing-public-metrics.md">CR-005 §A/§D</a>; ขับ landing metrics + Shelter Dashboard cards</li>
         <li><code>GET /public/v1/transparency/shelters</code> — รายชื่อศูนย์ที่เปิด + occupancy รวม + capacity ต่อศูนย์ (จำนวนคน ไม่มีรายบุคคล); per-shelter แสดงตัวเลขเป๊ะเสมอ (OP-9 approved — ไม่ปัด/ไม่ mask)</li>
         <li><code>GET /public/v1/transparency/donations</code> — ยอดรับบริจาค aggregate ต่อศูนย์/campaign</li>
         <li>Aggregate เท่านั้นทุกกรณี — ไม่มีเส้นทางใดไปถึงข้อมูลระดับบุคคลจาก tier นี้ (occupancy_total / vulnerable_count = aggregate ระดับระบบ, ห้าม drill-down)</li>

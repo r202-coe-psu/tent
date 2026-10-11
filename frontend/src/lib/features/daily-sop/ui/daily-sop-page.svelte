@@ -2,17 +2,15 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
-	import {
-		Activity,
-		ArrowLeft,
-		CalendarDays,
-		CheckCircle2,
-		ChevronRight,
-		ClipboardCheck,
-		CloudOff,
-		Radio,
-		UserRound
-	} from '@lucide/svelte';
+	import Activity from '@lucide/svelte/icons/activity';
+	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import CalendarDays from '@lucide/svelte/icons/calendar-days';
+	import CheckCircle2 from '@lucide/svelte/icons/circle-check';
+	import ChevronRight from '@lucide/svelte/icons/chevron-right';
+	import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
+	import CloudOff from '@lucide/svelte/icons/cloud-off';
+	import Radio from '@lucide/svelte/icons/radio';
+	import UserRound from '@lucide/svelte/icons/user-round';
 	import { toast } from 'svelte-sonner';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import {
@@ -23,7 +21,6 @@
 		errorMessage
 	} from '$lib/utils/errors';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { backofficeState } from '$lib/stores/backoffice.svelte';
 	import { endpointStore } from '$lib/stores/endpoint.svelte';
 	import { getShelterCode } from '$lib/db/shelter';
 	import { useShelter } from '$lib/features/shelters';
@@ -338,9 +335,14 @@
 
 	function handleSaveError(error: unknown, title: string): void {
 		if (error instanceof AuthError) {
-			authStore.markNeedsReauth();
-			backofficeState.requestReauth();
-			toast.error(title, { description: 'Session หมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง' });
+			// Expiry (and 403 confirmation) is handled globally by the query client →
+			// authStore.handleAuthFailure, which opens the login modal. Only message here.
+			toast.error(title, {
+				description:
+					error.status === 403
+						? 'คุณไม่มีสิทธิ์ในการทำรายการนี้'
+						: 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง'
+			});
 			return;
 		}
 		if (error instanceof ConflictError) {
@@ -382,7 +384,7 @@
 	}
 </script>
 
-<svelte:head><title>การประเมินประจำวัน (Daily SOP)</title></svelte:head>
+<svelte:head><title>การประเมินประจำวัน</title></svelte:head>
 
 <!--
   Sticky subheaders on this page use --bo-sticky-top from app.css (stacked BO

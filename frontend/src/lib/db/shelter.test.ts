@@ -1,6 +1,11 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { getShelterCode, getShelterDb, resolveShelterCode } from './shelter';
+import {
+	getShelterCode,
+	getShelterDb,
+	resolveContextShelterCode,
+	resolveShelterCode
+} from './shelter';
 import { shelterStore } from '$lib/stores/shelter.svelte';
 
 let mockRoles: string[] = [];
@@ -57,5 +62,28 @@ describe('shelter database config', () => {
 
 		shelterStore.selectedShelterCode = 'SH005';
 		expect(resolveShelterCode()).toBe('SH005');
+	});
+
+	it('resolveContextShelterCode is null for SA without an explicit selection', () => {
+		mockRoles = ['system_admin'];
+		shelterStore.listDefaultCode = 'SH004'; // first shelter of some list call — must not leak
+
+		expect(resolveContextShelterCode()).toBeNull();
+	});
+
+	it('resolveContextShelterCode honours an SA explicit selection', () => {
+		mockRoles = ['system_admin'];
+		shelterStore.listDefaultCode = 'SH004';
+		shelterStore.selectedShelterCode = 'SH005';
+
+		expect(resolveContextShelterCode()).toBe('SH005');
+	});
+
+	it('resolveContextShelterCode follows resolveShelterCode for shelter-scoped users', () => {
+		mockRoles = ['shelter:SH003', 'shelter_manager'];
+		expect(resolveContextShelterCode()).toBe('SH003');
+
+		shelterStore.selectedShelterCode = 'SH005';
+		expect(resolveContextShelterCode()).toBe('SH005');
 	});
 });

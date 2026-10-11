@@ -96,7 +96,7 @@
 	const genderOptions = [
 		{ value: 'male', label: 'ชาย (Male)' },
 		{ value: 'female', label: 'หญิง (Female)' },
-		{ value: 'other', label: 'อื่นๆ (Other)' }
+		{ value: 'unspecified', label: 'ไม่ระบุ' }
 	];
 
 	const religionOptions = [
@@ -666,11 +666,17 @@
 						<Form.Field form={memberForm} name="gender">
 							<Form.Control>
 								{#snippet children({ props })}
-									<Form.Label>เพศ <span class="text-destructive">*</span></Form.Label>
-									<Select.Root type="single" bind:value={$memberFormData.gender}
+									<Form.Label>เพศ</Form.Label>
+									<Select.Root
+										type="single"
+										value={$memberFormData.gender ?? 'unspecified'}
+										onValueChange={(v) => {
+											$memberFormData.gender = v === 'male' || v === 'female' ? v : null;
+										}}
 										><Select.Trigger {...props} class="h-9 w-full"
-											>{genderOptions.find((o) => o.value === $memberFormData.gender)?.label ??
-												'— เลือก —'}</Select.Trigger
+											>{genderOptions.find(
+												(o) => o.value === ($memberFormData.gender ?? 'unspecified')
+											)?.label ?? 'ไม่ระบุ'}</Select.Trigger
 										><Select.Content
 											>{#each genderOptions as opt (opt.value)}<Select.Item
 													value={opt.value}

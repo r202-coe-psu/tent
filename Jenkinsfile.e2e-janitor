@@ -1,0 +1,72 @@
+pipeline {
+    agent { label 'mgmt' }
+
+    options {
+        disableConcurrentBuilds(abortPrevious: true)
+        buildDiscarder(logRotator(numToKeepStr: '30', daysToKeepStr: '30'))
+        timeout(time: 20, unit: 'MINUTES')
+        timestamps()
+    }
+
+    parameters {
+        choice(
+            name: 'MODE',
+            choices: ['dry-run', 'execute'],
+            description: 'dry-run lists E2E shelters older than MAX_AGE_HOURS; execute deletes them'
+        )
+        string(
+            name: 'MAX_AGE_HOURS',
+            defaultValue: '6',
+            description: 'Only touch registry shelters whose name starts with E2E and are older than this many hours'
+        )
+    }
+
+    // Schedule: owner should add a Jenkins cron trigger on this job (e.g. H/30 * * * *).
+    // Default MODE for the cron should stay dry-run until the first listings look correct.
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Run Staging E2E Janitor') {
+            steps {
+                withCredentials([
+                    string(credentialsId: 'tent-staging-couch-admin-url', variable: 'COUCHDB_ADMIN_URL')
+                ]) {
+                    script {
+                        def modeFlag = params.MODE == 'execute' ? '--execute' : '--dry-run'
+                        def maxAge = params.MAX_AGE_HOURS?.trim()
+                        if (!(maxAge ==~ /[1-9][0-9]*/)) {
+                            error('MAX_AGE_HOURS must be a positive integer')
+                        }
+                        withEnv([
+                            "JANITOR_MODE_FLAG=${modeFlag}",
+                            "JANITOR_MAX_AGE_HOURS=${maxAge}"
+                        ]) {
+                            sh '''
+                                set -eu
+                                chmod +x scripts/run-staging-e2e-janitor.sh
+                                scripts/run-staging-e2e-janitor.sh \
+                                    "${JANITOR_MODE_FLAG}" \
+                                    --max-age-hours="${JANITOR_MAX_AGE_HOURS}"
+                            '''
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            archiveArtifacts allowEmptyArchive: true, artifacts: 'scripts/staging-e2e-janitor.mjs', fingerprint: false
+            cleanWs(cleanWhenNotBuilt: false,
+                    deleteDirs: true,
+                    disableDeferredWipeout: true,
+                    notFailBuild: true)
+        }
+    }
+}

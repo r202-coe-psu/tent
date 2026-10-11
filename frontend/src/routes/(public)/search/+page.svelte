@@ -17,6 +17,7 @@
 	} from '$lib/features/public-portal';
 
 	import { getTranslation } from '$lib/utils/i18n';
+	import { formatThaiDateTime } from '$lib/utils/date';
 	import { PUBLIC_SEARCH_I18N } from '$lib/constants/i18n';
 	import { langState } from '$lib/states/i18n.svelte';
 
@@ -69,10 +70,7 @@
 
 	function formatDateTime(isoString: string) {
 		if (!isoString) return t.notSpecifiedTime;
-		return (
-			new Date(isoString).toLocaleString(langState.current === 'th' ? 'th-TH' : 'en-US') +
-			(langState.current === 'th' ? ' น.' : '')
-		);
+		return formatThaiDateTime(isoString);
 	}
 
 	// function genderLabel(gender: string | null | undefined) {

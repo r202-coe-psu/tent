@@ -693,7 +693,7 @@ flowchart TB
 | Public portal (CR-005) | ผูก D-PUBLIC / D-REG |
 | Intake registration flows | ผูก UJ-V7 / D-DUTY-ACCESS เมื่อ staff-capable ใช้ `/people/*` |
 
-> เอกสารนี้ผูก **[CR-041](../changes/CR-041-module-a-volunteer-job-board.md)** (`proposed`). ตาม [change-management](../change-management.md) การเคาะที่กระทบ field/workflow/role ต้อง approved ใน CR ก่อนลงมือแก้ canonical docs
+> เอกสารนี้ผูก **[CR-041](../changes/06-A-volunteer/CR-041-module-a-volunteer-job-board.md)** (`proposed`). ตาม [change-management](../change-management.md) การเคาะที่กระทบ field/workflow/role ต้อง approved ใน CR ก่อนลงมือแก้ canonical docs
 
 ---
 
@@ -710,7 +710,7 @@ flowchart TB
 
 ## 10. Next steps หลังประชุม
 
-1. ปิด open decisions ใน [CR-041](../changes/CR-041-module-a-volunteer-job-board.md) (§ Open decisions)  
+1. ปิด open decisions ใน [CR-041](../changes/06-A-volunteer/CR-041-module-a-volunteer-job-board.md) (§ Open decisions)  
 2. PO ตั้ง CR-041 เป็น `approved`  
 3. Apply canonical: schema · FR-42/43 · `06-A-volunteer.md` · sitemap · matrix (ถ้าต้อง) · ตั้ง feature flow เป็น `active`  
 4. แตก/ขยาย task แล้วค่อย implement  

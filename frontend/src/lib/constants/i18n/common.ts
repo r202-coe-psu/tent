@@ -22,10 +22,10 @@ export const PUBLIC_NAVBAR_I18N = {
 		donateAndBook: 'บริจาคและจองคิว',
 		trackDonation: 'ตรวจสอบสถานะ',
 		trackDonationLong: 'ตรวจสอบสถานะบริจาค',
-		volunteers: 'อาสาฯ / พี่เลี้ยง',
-		volunteer: 'จิตอาสา',
-		volunteerJobBoard: 'สมัครอาสาสมัคร (Job Board)',
-		volunteerPortal: 'เข้าสู่ระบบจิตอาสา / ตารางงาน',
+		volunteers: 'อาสาสมัคร',
+		volunteer: 'อาสาสมัคร',
+		volunteerJobBoard: 'ลงทะเบียนอาสาสมัคร',
+		volunteerPortal: 'เข้าสู่ระบบอาสาสมัคร / ตารางงาน',
 		backoffice: 'ระบบหลังบ้าน',
 		alerts: 'การแจ้งเตือนภัย',
 		switchLanguage: 'เปลี่ยนภาษา (Language)',
@@ -48,7 +48,7 @@ export const PUBLIC_NAVBAR_I18N = {
 		trackDonationLong: 'Track Donation Status',
 		volunteers: 'Volunteer',
 		volunteer: 'Volunteer',
-		volunteerJobBoard: 'Volunteer Job Board',
+		volunteerJobBoard: 'Volunteer Registration',
 		volunteerPortal: 'Volunteer Portal / My Schedule',
 		backoffice: 'Backoffice',
 		alerts: 'Emergency Alerts',
@@ -62,25 +62,23 @@ export const PUBLIC_NAVBAR_I18N = {
 
 export const PUBLIC_FOOTER_I18N = {
 	th: {
-		tagline: 'ระบบประสานงานและข้อมูลสาธารณะเพื่อการบรรเทาทุกข์',
+		tagline: '',
 		emergencyNumbers: 'เบอร์ติดต่อฉุกเฉิน',
 		disasterWarning: 'ศูนย์เตือนภัย ปภ.',
 		rescueHotline: 'สายด่วนกู้ชีพ',
 		onlineChannels: 'ช่องทางออนไลน์ด่วน',
 		lineOa: 'LINE OA ฉุกเฉิน',
 		facebook: 'Facebook ข่าวสาร EOC',
-		copyright:
-			'© 2026 SmartShelter • คุ้มครองข้อมูลตาม พ.ร.บ. PDPA • ปฏิบัติการร่วมศูนย์ประสานงานช่วยเหลือผู้ประสบภัย'
+		copyright: '© 2026 SmartShelter • คุ้มครองข้อมูลตาม พ.ร.บ. PDPA'
 	},
 	en: {
-		tagline: 'Public coordination and information system for disaster relief',
+		tagline: '',
 		emergencyNumbers: 'Emergency numbers',
 		disasterWarning: 'DDPM warning center',
 		rescueHotline: 'Emergency medical hotline',
 		onlineChannels: 'Quick online channels',
 		lineOa: 'Emergency LINE OA',
 		facebook: 'EOC news on Facebook',
-		copyright:
-			'© 2026 SmartShelter • Data protected under the Thai PDPA • Joint disaster relief coordination operation'
+		copyright: '© 2026 SmartShelter • Data protected under the Thai PDPA'
 	}
 } as const;

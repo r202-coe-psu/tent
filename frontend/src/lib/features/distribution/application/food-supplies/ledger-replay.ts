@@ -15,7 +15,13 @@ export interface LedgerReplayExpectation {
 	lotRef: StockLedger['lot_ref'];
 }
 
-/** Fails closed unless an existing deterministic ledger row matches every shared immutable fact. */
+/**
+ * Fails closed unless an existing deterministic ledger row matches every shared immutable fact.
+ *
+ * `schema_v` is the doc-shape version, not a fact of the movement: an append-only row written
+ * before a schema bump can never be rewritten, so a replay after a deploy must still accept it
+ * (CR-143 FR-C4). Only a row NEWER than the current writer is refused.
+ */
 export function assertLedgerReplayBase(
 	actual: StockLedger,
 	expected: LedgerReplayExpectation,
@@ -24,7 +30,7 @@ export function assertLedgerReplayBase(
 	if (
 		actual._id !== expected.id ||
 		actual.type !== 'stock_ledger' ||
-		actual.schema_v !== expected.schemaVersion ||
+		actual.schema_v > expected.schemaVersion ||
 		actual.shelter_code !== expected.shelterCode ||
 		actual.reason !== expected.reason ||
 		actual.ref_id !== expected.refId ||

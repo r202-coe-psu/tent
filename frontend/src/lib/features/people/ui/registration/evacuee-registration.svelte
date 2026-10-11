@@ -168,7 +168,7 @@
 		first_name: initial?.first_name ?? '',
 		last_name: initial?.last_name ?? '',
 		nickname: initial?.nickname ?? '',
-		gender: initial?.gender ?? 'other',
+		gender: initial?.gender ?? null,
 		phone: initial?.phone === null ? null : (initial?.phone ?? ''),
 		person_id: initial?.person_id ?? { cardType: 'national_id' as const, number: '' },
 		vulnerable_groups: initial?.vulnerable_groups ?? [],

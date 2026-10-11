@@ -43,6 +43,7 @@
 	import { getShelterCode } from '$lib/db/shelter';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { formatThaiDateTime } from '$lib/utils/date';
 	import type {
 		Evacuee,
 		StayStatus,
@@ -726,15 +727,8 @@
 
 	function formatDateTime(ts: string | number | undefined): string {
 		if (!ts) return 'ไม่ระบุ';
-		const d = new Date(ts);
-		if (isNaN(d.getTime())) return String(ts);
-		return d.toLocaleString('th-TH', {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit'
-		});
+		const formatted = formatThaiDateTime(String(ts));
+		return formatted || String(ts);
 	}
 </script>
 

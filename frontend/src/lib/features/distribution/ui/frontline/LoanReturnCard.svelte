@@ -35,6 +35,7 @@
 	import NonPhysicalClearDialog from './NonPhysicalClearDialog.svelte';
 	import BulkGateClearDialog from './BulkGateClearDialog.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { formatThaiShortDate } from '$lib/utils/date';
 
 	interface Props {
 		shelterCode?: string;
@@ -284,7 +285,7 @@
 
 							<!-- Metadata -->
 							<div class="flex items-center justify-between text-2xs text-slate-400">
-								<span>วันที่ยืม: {new Date(loan.distributed_at).toLocaleDateString('th-TH')}</span>
+								<span>วันที่ยืม: {formatThaiShortDate(loan.distributed_at)}</span>
 								<span>ผู้จ่าย: {loan.distributed_by}</span>
 							</div>
 						</div>

@@ -16,9 +16,14 @@ export default defineConfig({
 	...stagingConfig,
 	testMatch: [
 		'**/public-home-flow.test.ts',
+		'**/public-pre-register-flow.test.ts',
 		'**/public-search-flow.test.ts',
 		'**/public-shelters-filter.test.ts'
 	],
+	// Remote public-plane job: all non-quarantine tests in the allowlisted files
+	// (not limited to the staging @release|@smoke grep).
+	grep: /.*/,
+	grepInvert: /@quarantine/,
 	globalTimeout: 480_000,
 	outputDir: 'test-results/public',
 	reporter: [

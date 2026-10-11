@@ -23,6 +23,7 @@
 	import { useShelters } from '$lib/features/shelters';
 	import { formatUnit, useUnitsOfMeasure } from '$lib/features/catalog';
 	import { langState } from '$lib/states/i18n.svelte';
+	import { DISPLAY_LOCALE, DISPLAY_TIME_ZONE } from '$lib/utils/date';
 
 	let {
 		request,
@@ -110,30 +111,17 @@
 
 	function formatThaiDate(dateStr?: string | null): string {
 		if (!dateStr) return '—';
-		try {
-			const d = new Date(dateStr);
-			if (isNaN(d.getTime())) return dateStr;
-			const months = [
-				'มกราคม',
-				'กุมภาพันธ์',
-				'มีนาคม',
-				'เมษายน',
-				'พฤษภาคม',
-				'มิถุนายน',
-				'กรกฎาคม',
-				'สิงหาคม',
-				'กันยายน',
-				'ตุลาคม',
-				'พฤศจิกายน',
-				'ธันวาคม'
-			];
-			const day = d.getDate();
-			const month = months[d.getMonth()];
-			const year = d.getFullYear();
-			return `${day} ${month} ${year}`;
-		} catch {
-			return dateStr;
-		}
+		const normalized = /^\d{4}-\d{2}-\d{2}$/.test(dateStr.trim())
+			? `${dateStr.trim()}T12:00:00+07:00`
+			: dateStr;
+		const d = new Date(normalized);
+		if (Number.isNaN(d.getTime())) return dateStr;
+		return d.toLocaleDateString(DISPLAY_LOCALE, {
+			timeZone: DISPLAY_TIME_ZONE,
+			day: 'numeric',
+			month: 'long',
+			year: 'numeric'
+		});
 	}
 
 	function formatSlotDate(

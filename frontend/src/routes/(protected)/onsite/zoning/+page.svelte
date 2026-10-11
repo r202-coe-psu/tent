@@ -65,6 +65,7 @@
 	import { shelterStore } from '$lib/stores/shelter.svelte';
 	import { paginateItems } from '$lib/db/paginate';
 	import { getShelterCode } from '$lib/db/shelter';
+	import { DISPLAY_LOCALE, DISPLAY_TIME_ZONE, formatThaiTime } from '$lib/utils/date';
 	import { authStore } from '$lib/stores/auth.svelte';
 
 	const PAGE_SIZE = 10;
@@ -555,17 +556,14 @@
 
 	function formatTimeOrDate(isoDate?: string | null): string {
 		if (!isoDate) return '—';
-		try {
-			const d = new Date(isoDate);
-			return (
-				d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) +
-				' น. (' +
-				d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' }) +
-				')'
-			);
-		} catch {
-			return isoDate;
-		}
+		const time = formatThaiTime(isoDate);
+		if (!time) return isoDate;
+		const day = new Date(isoDate).toLocaleDateString(DISPLAY_LOCALE, {
+			timeZone: DISPLAY_TIME_ZONE,
+			day: 'numeric',
+			month: 'short'
+		});
+		return `${time} น. (${day})`;
 	}
 
 	const emptyPendingMessage = $derived(
@@ -583,9 +581,9 @@
 	<header class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 		<div class="flex items-center gap-3">
 			<a
-				href={resolve('/onsite')}
+				href={resolve('/portal')}
 				class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-600 shadow-2xs transition-colors hover:bg-slate-50"
-				aria-label="กลับหน้าหลักระบบส่วนหน้า"
+				aria-label="กลับหน้าเลือกเมนูหลัก"
 			>
 				<ArrowLeft class="size-4" />
 			</a>

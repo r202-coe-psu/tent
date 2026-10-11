@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { Select, SelectTrigger, SelectContent, SelectItem } from '$lib/components/ui/select';
 	import Building from '@lucide/svelte/icons/building';
 	import { useShelters } from '$lib/features/shelters';
@@ -34,10 +35,25 @@
 		return [];
 	});
 
-	// Prefer persisted selection when still allowed; else first assigned shelter.
+	// `?shelter=CODE` deep link (e.g. the system overview "dashboard" link) wins once per
+	// distinct value, so a later manual pick isn't overridden while the param lingers.
+	let appliedUrlShelter: string | null = null;
+
+	// Prefer URL deep link, then persisted selection when still allowed; else first assigned shelter.
 	$effect(() => {
 		const shelters = availableShelters;
 		if (shelters.length === 0) return;
+		const requested = page.url.searchParams.get('shelter');
+		if (
+			requested &&
+			requested !== appliedUrlShelter &&
+			shelters.some((s) => s.code === requested)
+		) {
+			appliedUrlShelter = requested;
+			shelterStore.selectedShelterCode = requested;
+			persistSelectedShelter(requested);
+			return;
+		}
 		const current = shelterStore.selectedShelterCode;
 		if (current && shelters.some((s) => s.code === current)) {
 			persistSelectedShelter(current);

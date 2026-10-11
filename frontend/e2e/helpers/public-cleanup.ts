@@ -11,8 +11,10 @@
  * worker, FastAPI on :9000).
  */
 
-import { couchReq } from './couch';
-import { appBaseUrl } from './e2e-env';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { bootstrapAdminSession, couchReq } from './couch';
+import { appBaseUrl, IS_REMOTE } from './e2e-env';
 
 /** Public BFF of the app under test (see `appBaseUrl`). */
 const bffBase = () => `${appBaseUrl()}/api/public/v1`;
@@ -27,7 +29,7 @@ export const E2E_SHELTER_PREFIX = 'E2E';
 export async function waitForProjection(
 	what: string,
 	check: () => Promise<boolean>,
-	{ timeoutMs = 90_000, intervalMs = 3_000 } = {}
+	{ timeoutMs = 10_000, intervalMs = 1_000 } = {}
 ): Promise<void> {
 	const deadline = Date.now() + timeoutMs;
 	while (Date.now() < deadline) {
@@ -37,12 +39,25 @@ export async function waitForProjection(
 	throw new Error(`Timed out waiting for projection: ${what} (is the sync worker running?)`);
 }
 
-/** Public projection status of a shelter code via the BFF, or undefined if absent. */
-export async function publicShelterStatus(code: string): Promise<string | undefined> {
+/** Public shelter row as the landing / directory BFF returns it. */
+export interface PublicShelterRow {
+	code: string;
+	name?: string;
+	status: string;
+	capacity?: number;
+}
+
+/** Public projection of a shelter code via the BFF, or undefined if absent. */
+export async function publicShelter(code: string): Promise<PublicShelterRow | undefined> {
 	const res = await fetch(`${bffBase()}/shelters`);
 	if (!res.ok) throw new Error(`shelters HTTP ${res.status}`);
-	const { shelters } = (await res.json()) as { shelters: { code: string; status: string }[] };
-	return shelters.find((s) => s.code === code)?.status;
+	const { shelters } = (await res.json()) as { shelters: PublicShelterRow[] };
+	return shelters.find((s) => s.code === code);
+}
+
+/** Public projection status of a shelter code via the BFF, or undefined if absent. */
+export async function publicShelterStatus(code: string): Promise<string | undefined> {
+	return (await publicShelter(code))?.status;
 }
 
 /**
@@ -167,4 +182,141 @@ export async function restoreContactLinks(links: ContactLinks | null): Promise<v
 	}
 	const put = await couchReq('PUT', path, { ...doc, updated_at: new Date().toISOString() });
 	if (put.status >= 400) throw new Error(`restore contact links failed (HTTP ${put.status})`);
+}
+
+// ---------------------------------------------------------------- central queue (Mongo)
+
+/**
+ * FastAPI the staff-only queue endpoints are reached on. The app has no browser-facing
+ * route for hard-delete / SA list (back-office reads them server-side), so teardown talks to
+ * FastAPI directly with the CouchDB admin session — the same identity FastAPI resolves via
+ * `GET /_session`. Override when FastAPI is not on the default compose port.
+ */
+const fastapiBase = () =>
+	(process.env.E2E_FASTAPI_URL ?? 'http://localhost:9000').replace(/\/$/, '');
+
+async function adminFastapi(method: 'GET' | 'DELETE', path: string): Promise<Response> {
+	const { cookie } = await bootstrapAdminSession();
+	return fetch(`${fastapiBase()}${path}`, {
+		method,
+		headers: { Cookie: `AuthSession=${cookie}`, Accept: 'application/json' }
+	});
+}
+
+interface QueueListItem {
+	id: string;
+	open_members: { first_name: string; last_name: string }[];
+}
+
+/**
+ * Open central-queue registrations that belong to `marker`: the server-side `q` filter is a
+ * loose substring / digit match (it also hits other people's phones and ID numbers), so the
+ * result is narrowed to registrations with an open member whose last name contains `marker`.
+ * Never delete from the unfiltered list.
+ */
+export async function listUnassignedRegistrations(marker: string): Promise<string[]> {
+	const res = await adminFastapi(
+		'GET',
+		`/staff/v1/unassigned-registrations?q=${encodeURIComponent(marker)}&limit=200`
+	);
+	if (!res.ok) throw new Error(`list unassigned registrations HTTP ${res.status}`);
+	const { items } = (await res.json()) as { items: QueueListItem[] };
+	return items
+		.filter((i) => i.open_members.some((m) => (m.last_name ?? '').includes(marker)))
+		.map((i) => i.id);
+}
+
+/** Detail of one queue document (system-admin), or `null` when it no longer exists. */
+export async function getUnassignedRegistration(
+	id: string
+): Promise<Record<string, unknown> | null> {
+	const res = await adminFastapi(
+		'GET',
+		`/staff/v1/unassigned-registrations/${encodeURIComponent(id)}`
+	);
+	if (res.status === 404) return null;
+	if (!res.ok) throw new Error(`get unassigned registration ${id} HTTP ${res.status}`);
+	return (await res.json()) as Record<string, unknown>;
+}
+
+/** Hard-delete one queue document (FR-UR-04). 404 counts as already gone. */
+export async function deleteUnassignedRegistration(id: string): Promise<void> {
+	const res = await adminFastapi(
+		'DELETE',
+		`/staff/v1/unassigned-registrations/${encodeURIComponent(id)}`
+	);
+	if (!res.ok && res.status !== 404) {
+		throw new Error(`delete unassigned registration ${id} HTTP ${res.status}`);
+	}
+}
+
+// ---------------------------------------------------------------- created-data ledger
+
+/**
+ * Everything a run creates is written here the moment it exists. Playwright restarts the
+ * worker after a failed serial test, which wipes module state — the ledger survives that (and
+ * a crashed run), so the next teardown deletes exactly the ids this suite created, never
+ * anything found by searching.
+ */
+const LEDGER_PATH = 'node_modules/.cache/pre-register-e2e-created.json';
+
+interface Ledger {
+	queue: string[];
+	shelters: string[];
+}
+
+function readLedger(): Ledger {
+	try {
+		const raw = JSON.parse(readFileSync(LEDGER_PATH, 'utf8')) as Partial<Ledger>;
+		return { queue: raw.queue ?? [], shelters: raw.shelters ?? [] };
+	} catch {
+		return { queue: [], shelters: [] };
+	}
+}
+
+function writeLedger(ledger: Ledger): void {
+	mkdirSync(dirname(LEDGER_PATH), { recursive: true });
+	writeFileSync(LEDGER_PATH, JSON.stringify(ledger));
+}
+
+export function recordCreatedQueueId(id: string): void {
+	const ledger = readLedger();
+	if (!ledger.queue.includes(id)) writeLedger({ ...ledger, queue: [...ledger.queue, id] });
+}
+
+export function recordCreatedShelter(code: string): void {
+	const ledger = readLedger();
+	if (!ledger.shelters.includes(code)) {
+		writeLedger({ ...ledger, shelters: [...ledger.shelters, code] });
+	}
+}
+
+/**
+ * Delete everything the ledger (plus `extraQueueIds`) lists, and the registrations that
+ * carry this run's `marker`, then empty the ledger. Shelters go through `teardownShelter`,
+ * which refuses anything that is not an `E2E …` shelter.
+ *
+ * On a remote target without `E2E_FASTAPI_URL` the central queue is unreachable: the marker
+ * sweep is skipped when nothing was queued (suites that never touch the queue, e.g. onsite),
+ * and a run that did queue documents fails loudly rather than leave them behind silently.
+ */
+export async function purgeCreatedData(
+	marker: string,
+	extraQueueIds: Iterable<string> = []
+): Promise<{ queue: string[]; shelters: string[] }> {
+	const ledger = readLedger();
+	const queue = new Set<string>([...ledger.queue, ...extraQueueIds]);
+	const queueReachable = !IS_REMOTE || Boolean(process.env.E2E_FASTAPI_URL);
+	if (!queueReachable && queue.size > 0) {
+		throw new Error(
+			`E2E_FASTAPI_URL is not set — cannot delete central-queue documents ${[...queue].join(', ')}`
+		);
+	}
+	if (queueReachable) {
+		for (const id of await listUnassignedRegistrations(marker)) queue.add(id);
+	}
+	for (const id of queue) await deleteUnassignedRegistration(id);
+	for (const code of ledger.shelters) await teardownShelter(code);
+	writeLedger({ queue: [], shelters: [] });
+	return { queue: [...queue], shelters: ledger.shelters };
 }

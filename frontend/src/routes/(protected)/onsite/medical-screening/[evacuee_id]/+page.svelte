@@ -213,8 +213,8 @@
 					ศูนย์พักพิงนี้ไม่ได้เปิดใช้งานจุดคัดกรองทางการแพทย์ (Station 2) ตามการตั้งค่าศูนย์พักพิง
 				</p>
 				<div class="mt-5 flex flex-col gap-2">
-					<Button variant="default" class="w-full" onclick={() => goto(resolve('/onsite'))}>
-						กลับหน้าระบบส่วนหน้า
+					<Button variant="default" class="w-full" onclick={() => goto(resolve('/portal'))}>
+						กลับหน้าเลือกเมนูหลัก
 					</Button>
 					<Button
 						variant="outline"

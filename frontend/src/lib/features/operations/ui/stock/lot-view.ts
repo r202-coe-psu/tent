@@ -2,6 +2,7 @@ import { formatThaiShortDate } from '$lib/utils/date';
 import { qtyGt } from '$lib/utils/qty';
 import { formatLotClockLine } from '../../domain/lot-age';
 import { lotStorageName, type StoragePointRef } from '../../domain/lot-storage';
+import { isLotExpired, lotPriorityReason, type LotPriorityItem } from '../../domain/lot-priority';
 import { sortStockLotsByConsumptionOrder, type StockLotBalance } from '../../domain/operations';
 
 /** One remaining lot as the item detail panel renders it. */
@@ -15,25 +16,32 @@ export interface LotRow {
 	isExpired: boolean;
 	/** "ในคลัง 3 วัน · หมดอายุใน 5 วัน" */
 	clockLine: string;
+	/** Why the lot sits here in the issue order, e.g. "หมดอายุอีก 3 วัน" (CR-143 FR-A6). */
+	reason: string;
 	/** The lot a direct distribute would draw from first. */
 	isNext: boolean;
 }
 
 /**
- * Remaining lots in current consumption order. `isNext` marks the first lot that
- * has not expired — an expired lot must be adjusted out, not drawn from (CR-143 FR-A4).
+ * Remaining lots in issue-priority order (CR-143 §A). `isNext` marks the first lot
+ * that has not expired — an expired lot must be adjusted out, not drawn from (FR-A4).
+ * `itemsById` supplies shelf life / storage type; without it a 365-day horizon is assumed.
  */
 export function buildLotRows(
 	lots: readonly StockLotBalance[],
 	points: readonly StoragePointRef[] = [],
-	now: number = Date.now()
+	now: number = Date.now(),
+	itemsById?: ReadonlyMap<string, LotPriorityItem>
 ): LotRow[] {
-	const ordered = sortStockLotsByConsumptionOrder(lots.filter((l) => qtyGt(l.qty, 0)));
+	const ordered = sortStockLotsByConsumptionOrder(
+		lots.filter((l) => qtyGt(l.qty, 0)),
+		itemsById,
+		now
+	);
 	let nextAssigned = false;
 	return ordered.map((lot) => {
 		const expiry = lot.lot?.expiry ?? null;
-		const expiryMs = expiry ? Date.parse(expiry) : NaN;
-		const isExpired = !Number.isNaN(expiryMs) && expiryMs <= now;
+		const isExpired = isLotExpired(lot, now, itemsById?.get(lot.item_id));
 		const isNext = !isExpired && !nextAssigned;
 		if (isNext) nextAssigned = true;
 		return {
@@ -44,6 +52,7 @@ export function buildLotRows(
 			expiry: expiry ? formatThaiShortDate(expiry) : null,
 			isExpired,
 			clockLine: formatLotClockLine(lot, now),
+			reason: lotPriorityReason(lot, itemsById?.get(lot.item_id), now),
 			isNext
 		};
 	});

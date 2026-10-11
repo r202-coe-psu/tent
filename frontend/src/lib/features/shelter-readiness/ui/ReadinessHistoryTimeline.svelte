@@ -9,6 +9,7 @@
 	import PlusCircle from '@lucide/svelte/icons/plus-circle';
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import Edit3 from '@lucide/svelte/icons/edit-3';
+	import { formatThaiDateTime } from '$lib/utils/date';
 
 	interface Props {
 		shelterName: string;
@@ -25,18 +26,7 @@
 
 	function formatDate(isoStr?: string): string {
 		if (!isoStr) return '-';
-		try {
-			const d = new Date(isoStr);
-			return d.toLocaleDateString('th-TH', {
-				year: 'numeric',
-				month: 'short',
-				day: 'numeric',
-				hour: '2-digit',
-				minute: '2-digit'
-			});
-		} catch {
-			return isoStr;
-		}
+		return formatThaiDateTime(isoStr) || isoStr;
 	}
 </script>
 

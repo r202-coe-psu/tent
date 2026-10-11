@@ -51,7 +51,7 @@ note: >
 
 ### T-30 — SOP ratio configuration (FR-44)
 
-**Description:** หน้าตั้งค่า SOP ratio (วัตถุดิบต่อหัวต่อมื้อ, ของใช้ต่อคนต่อวัน, อาสาต่อผู้พักพิง, ต่อเตาประกอบอาหาร — ตาม source Module B) **สองชั้นตาม [CR-006](../changes/CR-006-sop-profile-master-override.md)**: (1) master `sop_profile` ที่ catalog — `system_admin` ดูแลเป็นค่าตั้งต้นกลางจาก T-18; (2) per-shelter override `sop_override` ที่ `shelter_*` — `shelter_manager` ปรับของศูนย์ตัวเองได้โดยไม่ต้อง deploy ใหม่
+**Description:** หน้าตั้งค่า SOP ratio (วัตถุดิบต่อหัวต่อมื้อ, ของใช้ต่อคนต่อวัน, อาสาต่อผู้พักพิง, ต่อเตาประกอบอาหาร — ตาม source Module B) **สองชั้นตาม [CR-006](../changes/07-B-sop/CR-006-sop-profile-master-override.md)**: (1) master `sop_profile` ที่ catalog — `system_admin` ดูแลเป็นค่าตั้งต้นกลางจาก T-18; (2) per-shelter override `sop_override` ที่ `shelter_*` — `shelter_manager` ปรับของศูนย์ตัวเองได้โดยไม่ต้อง deploy ใหม่
 
 **Definition of Done:**
 - **Master CRUD** (`sop_profile`, catalog): จำกัดสิทธิ์ `system_admin`; replicate ลง shelter เป็น read-only
@@ -65,15 +65,15 @@ note: >
 **Description:** Engine คำนวณความต้องการทรัพยากรรายวันของศูนย์: occupancy จริง (T-06) × SOP ratio (T-30) เทียบ stock คงเหลือ (T-14) → ออกเป็น "ต้องการเท่าไร มีเท่าไร ขาดเท่าไร" ทั้งวัตถุดิบ ของใช้ และจำนวนอาสา — เป็น **hub ของ critical path** (block meal plan T-25, dashboard T-32, backbone T-35, simulation T-42)
 
 **Definition of Done:**
-- คำนวณ need/have/gap ต่อ item ต่อวันจากข้อมูลล่าสุดแบบ **on-demand** (ปุ่มรันจาก UI) — **ไม่มี**รอบอัตโนมัติใน R3 ([CR-042](../changes/CR-042-daily-sop-calc-follow-up.md) OD-3=A; scheduler = backlog)
-- **ใช้ effective ratio ตาม [CR-006](../changes/CR-006-sop-profile-master-override.md)**: resolve `override active ?? master` ก่อนคูณ occupancy (ไม่อ่าน master ตรงเมื่อศูนย์มี override active)
-- Persist `daily_calc:{date}` schema_v **2** พร้อม `ratio_source` + override id/version ([CR-042](../changes/CR-042-daily-sop-calc-follow-up.md) OD-1=A)
+- คำนวณ need/have/gap ต่อ item ต่อวันจากข้อมูลล่าสุดแบบ **on-demand** (ปุ่มรันจาก UI) — **ไม่มี**รอบอัตโนมัติใน R3 ([CR-042](../changes/07-B-sop/CR-042-daily-sop-calc-follow-up.md) OD-3=A; scheduler = backlog)
+- **ใช้ effective ratio ตาม [CR-006](../changes/07-B-sop/CR-006-sop-profile-master-override.md)**: resolve `override active ?? master` ก่อนคูณ occupancy (ไม่อ่าน master ตรงเมื่อศูนย์มี override active)
+- Persist `daily_calc:{date}` schema_v **2** พร้อม `ratio_source` + override id/version ([CR-042](../changes/07-B-sop/CR-042-daily-sop-calc-follow-up.md) OD-1=A)
 - `have` ตาม **hardcode map** ใน CR-042 OD-2=B (ไม่ lookup ด้วยชื่อ ratio key); key ที่ `have_source=none` → `have=null`
-- ผลให้ **dashboard T-32** อ่านจาก `daily_calc` — **ไม่บังคับ** feed Meal Plan (T-25) / Donation (T-23) / Volunteer demand (T-29) ใน R3 ([CR-042](../changes/CR-042-daily-sop-calc-follow-up.md) OD-4=C)
+- ผลให้ **dashboard T-32** อ่านจาก `daily_calc` — **ไม่บังคับ** feed Meal Plan (T-25) / Donation (T-23) / Volunteer demand (T-29) ใน R3 ([CR-042](../changes/07-B-sop/CR-042-daily-sop-calc-follow-up.md) OD-4=C)
 - สูตรมี unit test เทียบค่าคาดหวังจาก SOP จริงครบทุกประเภททรัพยากร (อาหาร/ของใช้/อาสา) ภายใต้ map ที่ล็อก
 - Edge cases ครอบ: occupancy = 0, ratio ขาด, **ศูนย์ไม่มี override → fall back master**, stock = 0 หรือข้อมูลยังไม่ sync — ไม่ crash, แสดงสถานะข้อมูลไม่พอ
 - Demo คำนวณศูนย์ตัวอย่าง 1 วันเต็มตรงกับคำนวณมือ
-- ถอด `rice_g_per_person_meal` จาก runtime `SOP_RATIO_KEYS` ให้ตรง [CR-021](../changes/CR-021-sop-ratio-scope-handbook-plus-volunteer.md)
+- ถอด `rice_g_per_person_meal` จาก runtime `SOP_RATIO_KEYS` ให้ตรง [CR-021](../changes/07-B-sop/CR-021-sop-ratio-scope-handbook-plus-volunteer.md)
 - หลักฐานการปิดงานและ verification gates: [T-31 Exit Criteria](../status/T-31-exit-criteria.md)
 
 ### T-32 — Resource calculation dashboard (FR-46)
@@ -82,7 +82,7 @@ note: >
 
 **Definition of Done:**
 - แสดง gap รายหมวด (อาหาร/ของใช้/อาสา) ชัดเจน รายการขาดเรียงตามความรุนแรง — อ่านจาก `daily_calc` เป็น source หลัก
-- Drill-down ดูที่มาตัวเลขได้ (occupancy, ratio, have/stock, `as_of`) — ระบุว่า ratio มาจาก **master หรือ override** จาก field ใน snapshot (`ratio_source` + override id/version) ไม่ resolve สด ([CR-006](../changes/CR-006-sop-profile-master-override.md) / [CR-042](../changes/CR-042-daily-sop-calc-follow-up.md) OD-1=A)
+- Drill-down ดูที่มาตัวเลขได้ (occupancy, ratio, have/stock, `as_of`) — ระบุว่า ratio มาจาก **master หรือ override** จาก field ใน snapshot (`ratio_source` + override id/version) ไม่ resolve สด ([CR-006](../changes/07-B-sop/CR-006-sop-profile-master-override.md) / [CR-042](../changes/07-B-sop/CR-042-daily-sop-calc-follow-up.md) OD-1=A)
 - มีทางรันคำนวณ on-demand จากหน้า dashboard เมื่อยังไม่มี doc ของวันนั้น
 - จำกัดตาม shelter scope + role, โหลดตาม NFR และ test + demo ผ่าน
 
@@ -102,7 +102,7 @@ note: >
 
 **Status:** ⬜ ready — CR-069 **approved** 2026-08-13. Wave 1–2 ล็อกแล้ว; ตัวเศษ occupancy ตาม Wave 3 D-BOOK-OCC=C
 **Owner:** Team D (เน, ภูดิท, วิลเลียม) เจ้าของสูตร; Lead รีวิว public plane
-**Depends:** T-52; [CR-069](../changes/CR-069-occupancy-health-colors.md) — occupancy health นับ stay `active` + `pre_registered` (D-BOOK-OCC=C)
+**Depends:** T-52; [CR-069](../changes/00-baseline/CR-069-occupancy-health-colors.md) — occupancy health นับ stay `active` + `pre_registered` (D-BOOK-OCC=C)
 **Program:** P3
 
 **Description:** ฟังก์ชัน domain บริสุทธิ์ derive `occupancy_health` จาก occupancy÷capacity + override จาก `operation_status`. **ไม่ persist.** Occupancy = count stay `active` **และ** `pre_registered` (D-BOOK-OCC=C — ทับ T-04/T-06 และตัวเศษ Wave 1 ที่นับแค่ `active`). แทนแถบ staff 3 สีด้วย 5 สีบน staff list/dashboard **และ** public map/card (D-HEALTH-SURFACE=A). **ไม่สร้างหน้า EOC ในแอป (FD-14)** — EOC = ฟิลด์ API ทีหลัง (T-70). กติการวม: `standby`/`closed` → เทา (ไม่เข้า %); `full_capacity` → แดงแม้ occupancy &lt;100%; นอกนั้นตาม % (เทาปิด · ฟ้า &lt;60 · เหลือง 60–89 · แดง 90–100 · แดงเข้ม &gt;100). `capacity=0` + สถานะเปิด → ไม่มีข้อมูลความจุ ห้ามหารศูนย์. เปิดอยู่ = `{active, full_capacity}`. Kitchen/SOP คนอยู่จริง (T-31) ยังนับ `active` อย่างเดียว.

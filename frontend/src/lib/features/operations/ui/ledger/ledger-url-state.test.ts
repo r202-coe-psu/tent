@@ -18,14 +18,15 @@ describe('parseLedgerParams', () => {
 		expect(
 			parseLedgerParams(
 				params(
-					'range=custom&from=2026-09-01&to=2026-09-30&type=out&lq=%E0%B8%99%E0%B9%89%E0%B8%B3&lpage=3'
+					'range=custom&from=2026-09-01&to=2026-09-30&type=adjust&lreason=lost&lq=%E0%B8%99%E0%B9%89%E0%B8%B3&lpage=3'
 				)
 			)
 		).toEqual({
 			range: 'custom',
 			from: '2026-09-01',
 			to: '2026-09-30',
-			type: 'out',
+			type: 'adjust',
+			reason: 'lost',
 			q: 'น้ำ',
 			page: 3
 		});
@@ -62,6 +63,7 @@ describe('serializeLedgerParams', () => {
 			from: '2026-09-01',
 			to: '2026-09-30',
 			type: 'adjust' as const,
+			reason: 'damaged' as const,
 			q: 'นม',
 			page: 2
 		};

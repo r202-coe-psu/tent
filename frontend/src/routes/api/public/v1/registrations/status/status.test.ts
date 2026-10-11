@@ -121,6 +121,72 @@ describe('POST /api/public/v1/registrations/status', () => {
 		});
 	});
 
+	describe('unassigned (central-queue) ticket via FastAPI', () => {
+		function jsonRes(status: number, body: unknown) {
+			return { ok: status >= 200 && status < 300, status, json: async () => body };
+		}
+
+		async function call(fetchMock: ReturnType<typeof vi.fn>) {
+			vi.mocked(adminRaw).mockResolvedValue({ status: 404, data: null });
+			const event = postEvent({ code: ULID });
+			event.fetch = fetchMock as unknown as typeof fetch;
+			return POST(event);
+		}
+
+		it('calls the service-auth /public status route (not the staff detail route)', async () => {
+			const fetchMock = vi
+				.fn()
+				.mockResolvedValue(jsonRes(200, { id: ULID, status: 'open', claimed: false }));
+			await call(fetchMock);
+			const url = String(fetchMock.mock.calls[0][0]);
+			expect(url).toContain(`/public/v1/unassigned-registrations/${ULID}/status`);
+			expect(url).not.toContain('/staff/');
+		});
+
+		it('returns verified: false for an open (pending / partially claimed) doc', async () => {
+			const res = await call(
+				vi.fn().mockResolvedValue(jsonRes(200, { id: ULID, status: 'open', claimed: false }))
+			);
+			expect(res.status).toBe(200);
+			expect(await res.json()).toEqual({ success: true, verified: false, status: 'open' });
+		});
+
+		it('returns verified: true when FastAPI reports claimed: true', async () => {
+			const res = await call(
+				vi.fn().mockResolvedValue(jsonRes(200, { id: ULID, status: 'closed', claimed: true }))
+			);
+			expect(res.status).toBe(200);
+			expect(await res.json()).toEqual({ success: true, verified: true, status: 'closed' });
+		});
+
+		it('maps a real 404 to notFound', async () => {
+			const res = await call(vi.fn().mockResolvedValue(jsonRes(404, {})));
+			expect(res.status).toBe(200);
+			const body = await res.json();
+			expect(body.notFound).toBe(true);
+			expect(body.verified).toBe(false);
+		});
+
+		it.each([401, 403, 500, 503])(
+			'returns 502 STATUS_UNAVAILABLE (no notFound) when upstream answers %i',
+			async (status) => {
+				const res = await call(vi.fn().mockResolvedValue(jsonRes(status, {})));
+				expect(res.status).toBe(502);
+				const body = await res.json();
+				expect(body).toEqual({ success: false, verified: false, error: 'STATUS_UNAVAILABLE' });
+				expect(body).not.toHaveProperty('notFound');
+			}
+		);
+
+		it('returns 502 STATUS_UNAVAILABLE (no notFound) when fetch throws', async () => {
+			const res = await call(vi.fn().mockRejectedValue(new Error('ECONNREFUSED')));
+			expect(res.status).toBe(502);
+			const body = await res.json();
+			expect(body.error).toBe('STATUS_UNAVAILABLE');
+			expect(body).not.toHaveProperty('notFound');
+		});
+	});
+
 	it('returns 200 with notFound: true when ticket is not found in Couch or Mongo', async () => {
 		vi.mocked(adminRaw).mockResolvedValue({ status: 404, data: null });
 		const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 404 });

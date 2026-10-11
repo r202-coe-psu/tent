@@ -31,20 +31,18 @@
 	import { generateTemporaryPassphrase } from '$lib/auth/passphrase-generator';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
-	import {
-		Save,
-		UserCheck,
-		Users,
-		Building,
-		Phone,
-		Mail,
-		Briefcase,
-		FileText,
-		Plus,
-		Trash2,
-		Info,
-		RefreshCw
-	} from '@lucide/svelte';
+	import Save from '@lucide/svelte/icons/save';
+	import UserCheck from '@lucide/svelte/icons/user-check';
+	import Users from '@lucide/svelte/icons/users';
+	import Building from '@lucide/svelte/icons/building';
+	import Phone from '@lucide/svelte/icons/phone';
+	import Mail from '@lucide/svelte/icons/mail';
+	import Briefcase from '@lucide/svelte/icons/briefcase';
+	import FileText from '@lucide/svelte/icons/file-text';
+	import Plus from '@lucide/svelte/icons/plus';
+	import Trash2 from '@lucide/svelte/icons/trash-2';
+	import Info from '@lucide/svelte/icons/info';
+	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import Building2 from '@lucide/svelte/icons/building-2';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';

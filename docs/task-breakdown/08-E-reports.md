@@ -7,7 +7,7 @@ module: E
 note: >
   CR-040 — reframe จาก Security check-in/out → Shelter Report
   (หน่วยหลัก = report · kind = grievance | incident). Doc type `shelter_report`.
-  ดู docs/changes/CR-040-shelter-case-grievance-reframe.md +
+  ดู docs/changes/08-E-reports/CR-040-shelter-case-grievance-reframe.md +
   docs/features/shelter-report-flow.md
 ---
 
@@ -19,7 +19,7 @@ note: >
 - **Phase:** R2, R3
 - **Design input (บริษัท):** P-01 (ส่งมอบแล้ว), P-02 (กำหนดส่งก่อนกรกฎาคม 2026)
 - **Target ส่งมอบ:** ภายในสิงหาคม 2026
-- **Spec:** [CR-040](../changes/CR-040-shelter-case-grievance-reframe.md) · [feature flow](../features/shelter-report-flow.md)
+- **Spec:** [CR-040](../changes/08-E-reports/CR-040-shelter-case-grievance-reframe.md) · [feature flow](../features/shelter-report-flow.md)
 
 ## Features / Tasks
 

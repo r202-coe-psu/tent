@@ -10,14 +10,14 @@
 	import { getShelterCode } from '$lib/db/shelter';
 	import { useDailyCalc } from '../application/use-daily-calc';
 	import { useRunCalc } from '../application/use-run-calc';
+	import { formatThaiDateTime } from '$lib/utils/date';
 
 	let { date }: { date: string } = $props();
 
 	const record = useDailyCalc(() => date);
 	const runCalc = useRunCalc();
 
-	const fmtDateTime = (iso: string) =>
-		new Date(iso).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' });
+	const fmtDateTime = (iso: string) => formatThaiDateTime(iso);
 
 	// record.data.updated_at is the "last recalculated at" public contract (see the JSDoc on
 	// DailyCalcRecord in data/daily-calc.repository.ts) — NOT record.data.as_of, which is a

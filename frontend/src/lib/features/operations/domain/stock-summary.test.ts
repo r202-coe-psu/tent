@@ -52,7 +52,23 @@ describe('summarizeItemStock', () => {
 		expect(s.expiredQty).toBe('12');
 	});
 
-	it('reports none when no lot carries an expiry', () => {
+	it('flags expired stock by shelf_life_days when lot has no explicit expiry', () => {
+		const lots = [lot({ lot_ref: 'a', qty: '10', received_at: iso(-10), lot: {} })];
+		const s = summarizeItemStock(lots, NOW, undefined, { shelf_life_days: 5 });
+		expect(s.expiryState).toBe('expired');
+		expect(s.expiredQty).toBe('10');
+		expect(s.earliestExpiry).toBe(iso(-5));
+	});
+
+	it('flags expiring soon stock by shelf_life_days when lot has no explicit expiry', () => {
+		const lots = [lot({ lot_ref: 'a', qty: '10', received_at: iso(-5), lot: {} })];
+		const s = summarizeItemStock(lots, NOW, undefined, { shelf_life_days: 10 });
+		expect(s.expiryState).toBe('expiring');
+		expect(s.expiredQty).toBe('0');
+		expect(s.earliestExpiry).toBe(iso(5));
+	});
+
+	it('reports none when no lot carries an expiry and no shelf_life_days is configured', () => {
 		expect(summarizeItemStock([lot({ lot_ref: 'a' })], NOW).expiryState).toBe('none');
 		expect(summarizeItemStock([], NOW)).toMatchObject({
 			earliestExpiry: null,

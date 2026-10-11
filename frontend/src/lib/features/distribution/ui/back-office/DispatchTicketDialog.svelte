@@ -107,7 +107,8 @@
 					<span>เลือก Physical Lot และปล่อยรถ</span>
 				</Dialog.Title>
 				<Dialog.Description class="text-xs text-slate-500">
-					บันทึกการตัดสต็อกสินค้าจริงตาม Physical Lot (FEFO) และปล่อยสินค้าเดินทางไปยังจุดแจกจ่าย
+					บันทึกการตัดสต็อกสินค้าจริงตาม Physical Lot (เรียงตามลำดับที่ควรใช้ก่อน)
+					และปล่อยสินค้าเดินทางไปยังจุดแจกจ่าย
 				</Dialog.Description>
 			</Dialog.Header>
 		</div>

@@ -13,13 +13,13 @@
 	import Info from '@lucide/svelte/icons/info';
 	import Construction from '@lucide/svelte/icons/construction';
 	import ClipboardPen from '@lucide/svelte/icons/clipboard-pen';
-	import MapPin from '@lucide/svelte/icons/map-pin';
 
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Button } from '$lib/components/ui/button';
 	import * as Accordion from '$lib/components/ui/accordion/index.js';
 	import PublicDonationCard from '$lib/components/public-donation-card.svelte';
 	import PublicVolunteerCard from '$lib/components/public-volunteer-card.svelte';
+	import PublicNotificationMenu from '$lib/components/public-notification-menu.svelte';
 	import { FamilySearchModal } from '$lib/features/public-portal';
 	import { langState } from '$lib/states/i18n.svelte';
 	import { getTranslation } from '$lib/utils/i18n';
@@ -226,35 +226,22 @@
 	<header
 		class="bg-[#0A2647] px-4 pt-10 pb-12 text-center text-white sm:px-6 sm:pt-14 sm:pb-16 lg:px-8"
 	>
-		<div class="mx-auto max-w-4xl space-y-2.5">
+		<div class="mx-auto max-w-4xl">
 			<h1 class="text-2xl font-extrabold tracking-tight text-white sm:text-3xl lg:text-4xl">
 				{t.heroTitle}
 			</h1>
-			<p class="text-xs font-normal text-white/80 sm:text-sm">
-				{t.heroSubtitle}
-			</p>
 		</div>
 
-		<!-- Primary CTA: pre-register (most important public action), shelter search as quick link -->
-		<div
-			class="mx-auto mt-6 flex max-w-4xl flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-center"
-		>
+		<!-- Primary CTA: pre-register — soft white halo reads on navy -->
+		<div class="mx-auto mt-6 flex max-w-4xl justify-center">
 			<a
 				href={resolve('/pre-register')}
-				class="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white px-6 text-base font-bold text-[#0A2647] shadow-xs transition-colors hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#0A2647] focus-visible:outline-none sm:text-lg"
+				class="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white px-6 text-base font-bold text-domain-registration-text shadow-[0_0_0_1px_rgba(255,255,255,0.45),0_0_18px_rgba(255,255,255,0.28),0_0_40px_rgba(255,255,255,0.12)] transition-[background-color,box-shadow] hover:bg-slate-100 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.55),0_0_22px_rgba(255,255,255,0.36),0_0_48px_rgba(255,255,255,0.16)] focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#0A2647] focus-visible:outline-none sm:text-lg"
 			>
 				<ClipboardPen class="h-5 w-5" aria-hidden="true" />
 				{t.registerCta}
 			</a>
-			<a
-				href={resolve('/shelters')}
-				class="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/60 px-6 text-base font-semibold text-white transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#0A2647] focus-visible:outline-none"
-			>
-				<MapPin class="h-5 w-5" aria-hidden="true" />
-				{t.findShelterQuick}
-			</a>
 		</div>
-		<p class="mt-2 text-center text-xs text-white/75 sm:text-sm">{t.registerCtaHint}</p>
 
 		<!-- 2 Quick Action Cards Inside Hero Area -->
 		<div class="mx-auto mt-7 grid max-w-4xl grid-cols-1 gap-4 text-left sm:grid-cols-2">
@@ -270,12 +257,14 @@
 				>
 					<div class="flex min-w-0 flex-1 items-center gap-2.5 sm:gap-4">
 						<div
-							class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[#BFDBFE] bg-[#EFF6FF] text-[#0A2647] transition-colors group-hover:bg-blue-100 sm:h-14 sm:w-14 sm:rounded-2xl"
+							class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-domain-registration-border bg-domain-registration-subtle text-domain-registration transition-colors group-hover:bg-domain-registration-border/40 sm:h-14 sm:w-14 sm:rounded-2xl"
 						>
-							<Building class="h-6 w-6 text-[#0A2647] sm:h-7 sm:w-7" />
+							<Building class="h-6 w-6 text-domain-registration sm:h-7 sm:w-7" />
 						</div>
 						<div class="min-w-0 flex-1">
-							<div class="truncate text-base font-bold tracking-tight text-[#0A2647] sm:text-xl">
+							<div
+								class="truncate text-base font-bold tracking-tight text-domain-registration sm:text-xl"
+							>
 								{t.searchSheltersTitle}
 							</div>
 							<div class="mt-0.5 truncate text-xs font-normal text-slate-500 sm:text-sm">
@@ -302,7 +291,7 @@
 						e.preventDefault();
 						handleSearch();
 					}}
-					class="flex min-h-[76px] flex-1 items-center rounded-[22px] bg-white p-3 px-3.5 text-left shadow-xs transition-all focus-within:ring-2 focus-within:ring-sky-400 sm:min-h-[82px] sm:rounded-[24px] sm:p-3.5 sm:px-5"
+					class="flex min-h-[76px] flex-1 items-center rounded-[22px] bg-white p-3 px-3.5 text-left shadow-xs transition-all focus-within:ring-2 focus-within:ring-domain-registration-border sm:min-h-[82px] sm:rounded-[24px] sm:p-3.5 sm:px-5"
 				>
 					<Search class="mr-2.5 h-4 w-4 shrink-0 text-slate-400 sm:mr-3 sm:h-5 sm:w-5" />
 					<input
@@ -314,7 +303,7 @@
 					<button
 						type="submit"
 						aria-label={t.searchBtn}
-						class="ml-2 flex h-11 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-[#0A2647] px-3.5 text-xs font-bold text-white shadow-xs transition-colors hover:bg-[#081f3a] sm:h-12 sm:rounded-2xl sm:px-5 sm:text-sm"
+						class="ml-2 flex h-11 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-domain-registration-strong px-3.5 text-xs font-bold text-white shadow-xs transition-colors hover:bg-domain-registration-text sm:h-12 sm:rounded-2xl sm:px-5 sm:text-sm"
 					>
 						<Search class="h-4 w-4 sm:h-4.5 sm:w-4.5" />
 						<span>{t.searchBtn}</span>
@@ -350,10 +339,10 @@
 
 			<!-- Card 2: ความต้องการบริจาค -->
 			<div
-				class="flex items-center gap-4 rounded-2xl border border-orange-200/90 bg-orange-50/20 p-4.5 shadow-2xs sm:p-5"
+				class="flex items-center gap-4 rounded-2xl border border-domain-donation-border bg-domain-donation-subtle/40 p-4.5 shadow-2xs sm:p-5"
 			>
 				<div
-					class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#FF5C00] text-white shadow-xs"
+					class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-domain-donation text-white shadow-xs"
 				>
 					<Package class="h-6 w-6" />
 				</div>
@@ -364,7 +353,7 @@
 							{t.itemsUnit}
 						</span>
 						{#if urgentItemsCount > 0}
-							<span class="text-xs font-bold text-orange-600 sm:text-sm">
+							<span class="text-xs font-bold text-domain-donation-strong sm:text-sm">
 								({t.itemsDeficitText(urgentItemsDeficit)})
 							</span>
 						{:else}
@@ -379,10 +368,10 @@
 
 			<!-- Card 3: จิตอาสา -->
 			<div
-				class="flex items-center gap-4 rounded-2xl border border-emerald-200/90 bg-emerald-50/20 p-4.5 shadow-2xs sm:p-5"
+				class="flex items-center gap-4 rounded-2xl border border-domain-volunteer-border bg-domain-volunteer-subtle/40 p-4.5 shadow-2xs sm:p-5"
 			>
 				<div
-					class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#059669] text-white shadow-xs"
+					class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-domain-volunteer text-white shadow-xs"
 				>
 					<Users class="h-6 w-6" />
 				</div>
@@ -391,7 +380,7 @@
 						<span class="text-xl font-extrabold text-slate-900 tabular-nums sm:text-2xl">
 							{t.volunteersNeededText(volunteersNeeded)}
 						</span>
-						<span class="text-xs font-bold text-emerald-600 sm:text-sm">
+						<span class="text-xs font-bold text-domain-volunteer-strong sm:text-sm">
 							({t.volunteersActiveText(volunteersActive)})
 						</span>
 					</div>
@@ -405,7 +394,7 @@
 			<div class="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
 				<!-- Title & Subtitle -->
 				<div class="flex items-center gap-2.5 sm:gap-3">
-					<Package class="h-6 w-6 shrink-0 text-[#FF5C00] sm:h-7 sm:w-7" />
+					<Package class="h-6 w-6 shrink-0 text-domain-donation sm:h-7 sm:w-7" />
 					<div>
 						<h2 class="text-lg font-bold tracking-tight text-slate-900 sm:text-2xl">
 							{t.urgentDonationsTitle}
@@ -419,14 +408,14 @@
 					<div class="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-2.5">
 						<a
 							href="/donations"
-							class="flex items-center justify-center gap-1 rounded-xl bg-[#FF5C00] px-3 py-2 text-center text-xs font-bold whitespace-nowrap text-white shadow-xs transition-colors hover:bg-[#E05200] sm:inline-flex sm:px-5 sm:py-2.5 sm:text-sm"
+							class="flex items-center justify-center gap-1 rounded-xl bg-domain-donation-strong px-3 py-2 text-center text-xs font-bold whitespace-nowrap text-white shadow-xs transition-colors hover:bg-domain-donation-text sm:inline-flex sm:px-5 sm:py-2.5 sm:text-sm"
 						>
 							<span>{t.allNeedsBtn}</span>
 							<span aria-hidden="true">➔</span>
 						</a>
 						<a
 							href="/donations/track"
-							class="flex items-center justify-center rounded-xl border border-[#FDE68A] bg-[#FFFBEB] px-3 py-2 text-center text-xs font-semibold whitespace-nowrap text-[#92400E] transition-colors hover:bg-[#FEF3C7] sm:inline-flex sm:px-5 sm:py-2.5 sm:text-sm"
+							class="flex items-center justify-center rounded-xl border border-domain-donation-border bg-domain-donation-subtle px-3 py-2 text-center text-xs font-semibold whitespace-nowrap text-domain-donation-text transition-colors hover:bg-domain-donation-border/40 sm:inline-flex sm:px-5 sm:py-2.5 sm:text-sm"
 						>
 							{t.trackStatusBtn}
 						</a>
@@ -475,7 +464,7 @@
 					class="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center shadow-2xs sm:rounded-3xl sm:p-12"
 				>
 					<div
-						class="mb-3.5 flex h-14 w-14 items-center justify-center rounded-2xl bg-orange-50 text-[#FF5C00] sm:h-16 sm:w-16"
+						class="mb-3.5 flex h-14 w-14 items-center justify-center rounded-2xl bg-domain-donation-subtle text-domain-donation sm:h-16 sm:w-16"
 					>
 						<Inbox class="h-7 w-7 sm:h-8 sm:w-8" />
 					</div>
@@ -488,7 +477,7 @@
 					<div class="mt-5 flex flex-wrap items-center justify-center gap-3">
 						<a
 							href="/donations"
-							class="inline-flex items-center gap-1.5 rounded-xl bg-[#FF5C00] px-4 py-2.5 text-xs font-bold text-white shadow-xs transition-colors hover:bg-[#E05200] sm:text-sm"
+							class="inline-flex items-center gap-1.5 rounded-xl bg-domain-donation-strong px-4 py-2.5 text-xs font-bold text-white shadow-xs transition-colors hover:bg-domain-donation-text sm:text-sm"
 						>
 							<Package class="h-4 w-4" />
 							<span>{t.allDonationsLink}</span>
@@ -509,7 +498,7 @@
 			<div class="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
 				<!-- Title & Subtitle -->
 				<div class="flex items-center gap-2.5 sm:gap-3">
-					<Users class="h-6 w-6 shrink-0 text-[#059669] sm:h-7 sm:w-7" />
+					<Users class="h-6 w-6 shrink-0 text-domain-volunteer sm:h-7 sm:w-7" />
 					<div>
 						<h2 class="text-lg font-bold tracking-tight text-slate-900 sm:text-2xl">
 							{t.volunteersTitle}
@@ -526,7 +515,7 @@
 						<button
 							type="button"
 							onclick={() => (devModalOpen = true)}
-							class="flex cursor-pointer items-center justify-center gap-1 rounded-xl bg-[#059669] px-3 py-2 text-center text-xs font-bold whitespace-nowrap text-white shadow-xs transition-colors hover:bg-[#047857] sm:inline-flex sm:px-5 sm:py-2.5 sm:text-sm"
+							class="flex cursor-pointer items-center justify-center gap-1 rounded-xl bg-domain-volunteer-strong px-3 py-2 text-center text-xs font-bold whitespace-nowrap text-white shadow-xs transition-colors hover:bg-domain-volunteer-text sm:inline-flex sm:px-5 sm:py-2.5 sm:text-sm"
 						>
 							<span>{t.allMissionsBtn}</span>
 							<span aria-hidden="true">➔</span>
@@ -576,7 +565,7 @@
 					class="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center shadow-2xs sm:rounded-3xl sm:p-12"
 				>
 					<div
-						class="mb-3.5 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-[#059669] sm:h-16 sm:w-16"
+						class="mb-3.5 flex h-14 w-14 items-center justify-center rounded-2xl bg-domain-volunteer-subtle text-domain-volunteer sm:h-16 sm:w-16"
 					>
 						<Users class="h-7 w-7 sm:h-8 sm:w-8" />
 					</div>
@@ -587,7 +576,7 @@
 						<button
 							type="button"
 							onclick={() => (devModalOpen = true)}
-							class="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-[#059669] px-4 py-2.5 text-xs font-bold text-white shadow-xs transition-colors hover:bg-[#047857] sm:text-sm"
+							class="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-domain-volunteer-strong px-4 py-2.5 text-xs font-bold text-white shadow-xs transition-colors hover:bg-domain-volunteer-text sm:text-sm"
 						>
 							<span>{t.allMissionsBtn}</span>
 						</button>
@@ -661,6 +650,8 @@
 </div>
 
 <FamilySearchModal bind:open={searchOpen} />
+
+<PublicNotificationMenu variant="floating" announcements={data.announcements} />
 
 <Dialog.Root bind:open={devModalOpen}>
 	<Dialog.Content class="max-w-md rounded-2xl p-6 sm:p-7">

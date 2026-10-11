@@ -63,29 +63,60 @@ export const GET = async ({ params, getClientAddress }) => {
 			return json({ success: false, error: 'RATE_LIMITED' }, { status: 429 });
 		}
 
-		const res = await fetch(
-			`${fastapiBaseUrl()}/public/v1/donations/${encodeURIComponent(tracking_token)}`,
-			{ headers: fastapiServiceHeaders() }
-		);
-		const body = await res.json();
-		if (!res.ok) {
-			return json(body, { status: res.status });
+		let donation: Record<string, unknown> = {};
+		let fastapiErrorStatus = 0;
+		let fastapiErrorBody: unknown = null;
+
+		try {
+			const res = await fetch(
+				`${fastapiBaseUrl()}/public/v1/donations/${encodeURIComponent(tracking_token)}`,
+				{ headers: fastapiServiceHeaders() }
+			);
+			const body = await res.json().catch(() => ({}));
+			if (res.ok) {
+				donation = (body.donation as Record<string, unknown>) ?? {};
+			} else {
+				fastapiErrorStatus = res.status;
+				fastapiErrorBody = body;
+			}
+		} catch {
+			fastapiErrorStatus = 503;
+			fastapiErrorBody = { success: false, error: 'FastAPI unavailable' };
 		}
 
-		const donation = body.donation as Record<string, unknown>;
+		const shelterDb = shelterDbFromToken(tracking_token);
+		let latestDoc: PublicDonationDoc | null = null;
+		if (shelterDb) {
+			try {
+				const trackingTokenHash = await sha256Hex(tracking_token);
+				latestDoc = await findByTokenHash(shelterDb, trackingTokenHash);
+			} catch {
+				// CouchDB lookup is optional overlay
+			}
+		}
+
+		if (!latestDoc && fastapiErrorStatus > 0) {
+			return json(
+				fastapiErrorBody && typeof fastapiErrorBody === 'object'
+					? fastapiErrorBody
+					: { success: false, error: 'Donation not found' },
+				{ status: fastapiErrorStatus }
+			);
+		}
+
 		return json({
 			success: true,
 			donation: {
-				status: donation.status,
-				booking_ref: donation.booking_ref,
-				shelter_code: donation.shelter_code,
-				donor: donation.donor ?? {},
-				items: donation.items ?? [],
-				logistics: donation.logistics ?? null,
-				received_summary: donation.received_summary ?? null,
-				updated_at: donation.updated_at ?? null,
-				expires_at: donation.expires_at ?? null,
-				revisions: donation.revisions ?? []
+				status: latestDoc?.status ?? donation.status,
+				booking_ref: latestDoc?.booking_ref ?? donation.booking_ref,
+				shelter_code: latestDoc?.shelter_code ?? donation.shelter_code,
+				donor: latestDoc?.donor ?? donation.donor ?? {},
+				items: latestDoc?.items ?? donation.items ?? [],
+				logistics: latestDoc?.logistics ?? donation.logistics ?? null,
+				received_summary: latestDoc?.received_summary ?? donation.received_summary ?? null,
+				updated_at: latestDoc?.updated_at ?? donation.updated_at ?? null,
+				expires_at: latestDoc?.expires_at ?? donation.expires_at ?? null,
+				revisions: latestDoc?.revisions ?? donation.revisions ?? []
 			}
 		});
 	} catch {

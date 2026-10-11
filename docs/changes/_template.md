@@ -17,7 +17,7 @@ affects:
 1. ตอนร่าง (proposed): ให้บันทึกไฟล์เป็น `docs/changes/draft-<slug>.md` และคง `id: draft` ไว้ (ยังไม่รันเลข CR-NNN)
 2. เมื่อเจ้าของโครงการ Approve:
    - ตรวจสอบหมายเลข CR ล่าสุดจาก `docs/changes/_index.md` (บน branch หลัก)
-   - รันเลขถัดไป และ rename ไฟล์เป็น `docs/changes/CR-NNN-<slug>.md`
+   - รันเลขถัดไป และ rename ไฟล์เป็น `docs/changes/<หมวด>/CR-NNN-<slug>.md`
    - เปลี่ยน `id: draft` -> `id: CR-NNN`, `status: proposed` -> `status: approved`
    - เพิ่มแถวใน `docs/changes/_index.md`
 -->

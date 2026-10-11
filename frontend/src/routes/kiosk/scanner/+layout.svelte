@@ -3,6 +3,7 @@
 	import Tent from '@lucide/svelte/icons/tent';
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import Cpu from '@lucide/svelte/icons/cpu';
+	import { DISPLAY_LOCALE, DISPLAY_TIME_ZONE } from '$lib/utils/date';
 
 	let { children }: { children: Snippet } = $props();
 
@@ -15,10 +16,16 @@
 	});
 
 	const timeString = $derived(
-		now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+		now.toLocaleTimeString(DISPLAY_LOCALE, {
+			timeZone: DISPLAY_TIME_ZONE,
+			hour: '2-digit',
+			minute: '2-digit',
+			second: '2-digit'
+		})
 	);
 	const dateString = $derived(
-		now.toLocaleDateString('th-TH', {
+		now.toLocaleDateString(DISPLAY_LOCALE, {
+			timeZone: DISPLAY_TIME_ZONE,
 			weekday: 'long',
 			year: 'numeric',
 			month: 'long',

@@ -10,7 +10,9 @@
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { SECURITY_QUESTIONS } from '$lib/auth/security-questions';
 	import { fetchAuthStatus, submitForceSetup } from '$lib/features/users';
-	import { ShieldCheck, Lock, ShieldQuestion } from '@lucide/svelte';
+	import ShieldCheck from '@lucide/svelte/icons/shield-check';
+	import Lock from '@lucide/svelte/icons/lock';
+	import ShieldQuestion from '@lucide/svelte/icons/shield-question-mark';
 	import Eye from '@lucide/svelte/icons/eye';
 	import EyeOff from '@lucide/svelte/icons/eye-off';
 

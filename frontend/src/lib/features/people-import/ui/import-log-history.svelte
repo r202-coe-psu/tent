@@ -4,12 +4,13 @@
 	import ExternalLink from '@lucide/svelte/icons/external-link';
 	import { useImportLogs } from '../application/queries';
 	import type { ImportRowResult } from '../domain/import-log';
+	import { formatThaiDateTime } from '$lib/utils/date';
 
 	const logsQuery = useImportLogs();
 	const logs = $derived(logsQuery.data ?? []);
 
 	function formatTime(iso: string): string {
-		return new Date(iso).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' });
+		return formatThaiDateTime(iso) || iso;
 	}
 
 	function createdRows(results: ImportRowResult[]): ImportRowResult[] {

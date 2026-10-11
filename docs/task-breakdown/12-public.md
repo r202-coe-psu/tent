@@ -70,7 +70,7 @@ Spec: `docs/features/public-portal-landing-spec.html` (v0.3) + `docs/features/pu
 
 **Status:** ⬜ ready หลัง T-66 — CR-067 P1 **approved** 2026-08-13
 **Owner:** Lead pair (public surface)
-**Depends:** T-58, T-66; [CR-067](../changes/CR-067-shelter-site-kind.md)
+**Depends:** T-58, T-66; [CR-067](../changes/00-baseline/CR-067-shelter-site-kind.md)
 **Program:** P1 map slice
 
 **Description:** หมุด public map ใช้ไอคอนคนละชุดสำหรับศูนย์อพยพ vs บ้านพี่เลี้ยง. **ไม่ใช้** emoji จากสตริง `shelter_type` เป็นตัวแยกชนิด. สีหมุดตาม occupancy health อยู่ T-69 (D-HEALTH-SURFACE=A ล็อกแล้ว — public map/card แสดง 5 สีตอนนี้; สูตรคนละเรื่องจากไอคอน).

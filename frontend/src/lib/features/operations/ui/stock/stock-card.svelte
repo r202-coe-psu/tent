@@ -9,6 +9,7 @@
 		row,
 		readonly = false,
 		offline = false,
+		canDistribute = true,
 		onopen,
 		onreceive,
 		ondistribute
@@ -17,6 +18,8 @@
 		readonly?: boolean;
 		/** Session expired: the row stays openable but its receive / distribute buttons are off. */
 		offline?: boolean;
+		/** False when user lacks warehouse_staff capability in the active shelter. */
+		canDistribute?: boolean;
 		onopen: (row: StockDisplayRow) => void;
 		onreceive: (row: StockDisplayRow) => void;
 		ondistribute: (row: StockDisplayRow) => void;
@@ -72,6 +75,7 @@
 		itemName={row.name}
 		layout="stack"
 		disabled={readonly || offline}
+		distributeDisabled={!canDistribute}
 		onreceive={() => onreceive(row)}
 		ondistribute={() => ondistribute(row)}
 	/>

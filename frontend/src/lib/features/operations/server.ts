@@ -63,3 +63,9 @@ export {
 	assertActorMayTransition as assertActorMayTransitionTransfer,
 	TransferAuthorizationError
 } from './domain/transfer.authorization';
+
+export {
+	donationShortfall,
+	type DonationShortfall,
+	type DonationBatchLine
+} from './domain/donation-batch';

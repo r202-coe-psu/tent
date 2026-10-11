@@ -42,7 +42,7 @@
 	const tabs = $derived.by(() => [
 		{
 			key: 'jobs' as const,
-			label: 'จัดการงานอาสา (Job Board & Capacity)',
+			label: 'จัดการงานอาสา',
 			icon: BriefcaseBusiness
 		},
 		{ key: 'roster' as const, label: 'ตารางกะและเช็คอิน', icon: CalendarDays },

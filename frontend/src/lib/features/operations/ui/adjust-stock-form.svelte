@@ -16,7 +16,15 @@
 	import { SvelteMap } from 'svelte/reactivity';
 	import { toast } from 'svelte-sonner';
 	import { addQty, subQty, qtyAbs } from '$lib/utils/qty';
-	import type { StockLot, StockLedger } from '../domain/operations';
+	import { formatThaiShortDate } from '$lib/utils/date';
+	import {
+		ADJUST_NOTE_MAX_LENGTH,
+		MANUAL_ADJUST_REASONS,
+		type ManualAdjustReason,
+		type StockLot,
+		type StockLedger
+	} from '../domain/operations';
+	import { ADJUST_REASON_LABELS } from './ledger/ledger-view';
 	import {
 		lotLocationFields,
 		lotStorageKey,
@@ -26,15 +34,6 @@
 	} from '../domain/lot-storage';
 	import { useStoragePoints } from '../application/use-storage-points.svelte';
 	import StoragePointSelect from './storage-point-select.svelte';
-
-	const REASON_CHIPS = [
-		'หมดอายุ',
-		'เสียหาย / เน่าเสีย',
-		'นับไม่ตรง',
-		'สูญหาย',
-		'พบของเพิ่ม',
-		'อื่นๆ'
-	] as const;
 
 	let {
 		onsuccess,
@@ -63,7 +62,9 @@
 	let customPoint = $state<StoragePointRef | null>(null);
 	let customExpiry = $state<string>('');
 	let newQtyInput = $state<string>('');
-	let reason = $state<string>('');
+	/** CR-143 §C — required; `merge` is not offered here (FR-C6). */
+	let adjustReason = $state<ManualAdjustReason | ''>('');
+	let note = $state<string>('');
 
 	const items = $derived(stockItems.items);
 	const balanceByItemId = $derived(balanceQuery.data ?? new Map<string, string>());
@@ -134,6 +135,8 @@
 	});
 
 	const isSubmitting = $derived(adjustMutation.isPending);
+	/** CR-156 FR-C9 — `other` must say what happened. */
+	const noteRequired = $derived(adjustReason === 'other');
 
 	const unitLabel = $derived(
 		selectedItem ? formatUnit(selectedItem.unit, units, langState.current) || selectedItem.unit : ''
@@ -158,15 +161,7 @@
 	// Helpers
 	function formatExpiry(expiryStr: string | undefined): string {
 		if (!expiryStr) return '-';
-		try {
-			return new Date(expiryStr).toLocaleDateString('th-TH', {
-				day: '2-digit',
-				month: 'short',
-				year: '2-digit'
-			});
-		} catch {
-			return expiryStr;
-		}
+		return formatThaiShortDate(expiryStr) || expiryStr;
 	}
 
 	function selectItem(item: StockFormItem) {
@@ -177,7 +172,8 @@
 		customPointId = '';
 		customPoint = null;
 		newQtyInput = '';
-		reason = '';
+		adjustReason = '';
+		note = '';
 	}
 
 	function clearSelection() {
@@ -187,28 +183,22 @@
 		customPointId = '';
 		customPoint = null;
 		newQtyInput = '';
-		reason = '';
+		adjustReason = '';
+		note = '';
 		customExpiry = '';
 	}
 
 	function resetForNextLine() {
 		selectedLotKey = '';
 		newQtyInput = '';
-		reason = '';
+		adjustReason = '';
+		note = '';
 		customPointId = '';
 		customPoint = null;
 		customExpiry = '';
 		if (!preselectedItemId) {
 			clearSelection();
 		}
-	}
-
-	function applyReasonChip(chip: string) {
-		if (chip === 'อื่นๆ') {
-			reason = '';
-			return;
-		}
-		reason = chip;
 	}
 
 	async function handleSubmit(e: SubmitEvent) {
@@ -222,10 +212,6 @@
 			toast.error('กรุณาเลือกสถานที่/ล็อต');
 			return;
 		}
-		if (selectedItem.perishable && selectedLotKey === 'new' && !customExpiry) {
-			toast.error('สินค้าเน่าเสียได้ จำเป็นต้องระบุวันหมดอายุ');
-			return;
-		}
 		if (!newQtyInput || isNaN(Number(newQtyInput)) || Number(newQtyInput) < 0) {
 			toast.error('กรุณาระบุจำนวนใหม่ที่ถูกต้อง (ต้องไม่ติดลบ)');
 			return;
@@ -234,8 +220,12 @@
 			toast.error('จำนวนใหม่เท่ากับจำนวนเดิม ไม่มีความเปลี่ยนแปลง');
 			return;
 		}
-		if (!reason.trim()) {
-			toast.error('กรุณาระบุเหตุผลในการปรับปรุง');
+		if (!adjustReason) {
+			toast.error('กรุณาเลือกเหตุผลในการปรับปรุง');
+			return;
+		}
+		if (noteRequired && !note.trim()) {
+			toast.error('กรุณาระบุรายละเอียดเมื่อเลือกเหตุผล "อื่น ๆ"');
 			return;
 		}
 
@@ -255,11 +245,12 @@
 			};
 		}
 
-		// Prepare input — reason stays UI-only (Phase B / #343 for adjust_reason on ledger)
 		const input = {
 			item_id: selectedItem._id,
 			qty: deltaQty, // positive or negative string
 			unit: selectedItem.unit,
+			adjust_reason: adjustReason,
+			...(note.trim() ? { note: note.trim() } : {}),
 			lot,
 			ref_id: null
 		};
@@ -366,11 +357,7 @@
 				<Field.Root class="col-span-1">
 					<Field.Label for="custom-expiry">
 						วันหมดอายุ
-						{#if selectedItem.perishable}
-							<span class="font-bold text-destructive">*</span>
-						{:else}
-							<span class="font-normal text-muted-foreground">(ไม่บังคับ)</span>
-						{/if}
+						<span class="font-normal text-muted-foreground">(ไม่บังคับ)</span>
 					</Field.Label>
 					<DatePicker id="custom-expiry" ariaLabel="วันหมดอายุ" bind:value={customExpiry} />
 				</Field.Root>
@@ -446,38 +433,38 @@
 				</div>
 
 				<div class="col-span-1 space-y-2 sm:col-span-2">
-					<Field.Label for="reason"
-						>เหตุผล <span class="font-bold text-destructive">*</span></Field.Label
-					>
-					<div class="flex flex-wrap gap-2">
-						{#each REASON_CHIPS as chip (chip)}
+					<span id="adjust-reason-label" class="text-sm leading-snug font-medium">
+						เหตุผล <span class="font-bold text-destructive">*</span>
+					</span>
+					<div role="group" aria-labelledby="adjust-reason-label" class="flex flex-wrap gap-2">
+						{#each MANUAL_ADJUST_REASONS as option (option)}
 							<button
 								type="button"
-								class={chipClass(
-									chip === 'อื่นๆ'
-										? !!reason && !(REASON_CHIPS.slice(0, -1) as readonly string[]).includes(reason)
-										: reason === chip
-								)}
-								onclick={() => applyReasonChip(chip)}
+								aria-pressed={adjustReason === option}
+								class={chipClass(adjustReason === option)}
+								onclick={() => (adjustReason = option)}
 							>
-								{chip}
+								{ADJUST_REASON_LABELS[option]}
 							</button>
 						{/each}
 					</div>
+					<Field.Label for="adjust-note">
+						รายละเอียดเพิ่มเติม
+						{#if noteRequired}
+							<span class="font-bold text-destructive">*</span>
+						{:else}
+							<span class="font-normal text-muted-foreground">(ไม่บังคับ)</span>
+						{/if}
+					</Field.Label>
 					<Textarea
-						id="reason"
-						placeholder="เช่น ของเสีย / พบตกหล่น"
-						bind:value={reason}
+						id="adjust-note"
+						placeholder="เช่น กระสอบฉีก / พบตกหล่นหลังชั้นวาง"
+						bind:value={note}
+						maxlength={ADJUST_NOTE_MAX_LENGTH}
+						required={noteRequired}
 						rows={2}
 						class="min-h-11"
 					/>
-				</div>
-
-				<div
-					class="col-span-1 rounded-xl border border-dashed border-border/70 bg-muted/20 px-3 py-2.5 text-xs text-muted-foreground sm:col-span-2"
-					aria-disabled="true"
-				>
-					รอบตรวจนับหลายรายการยังไม่พร้อมในเวอร์ชันนี้ — ปรับทีละล็อตไปก่อน
 				</div>
 
 				<div
@@ -487,7 +474,11 @@
 						type="submit"
 						size="lg"
 						variant={deltaSign === 'write_off' ? 'destructive' : 'default'}
-						disabled={offline || isSubmitting || deltaQty === '0' || !reason.trim()}
+						disabled={offline ||
+							isSubmitting ||
+							deltaQty === '0' ||
+							!adjustReason ||
+							(noteRequired && !note.trim())}
 						class="min-h-11 w-full font-bold"
 					>
 						{submitLabel}

@@ -25,7 +25,7 @@ migration: >
 > **สรุป (TL;DR):**
 >
 > - **เปลี่ยนอะไร:** เพิ่ม `lot.produced_at` (ts, opt) บน `stock_ledger.lot` และใช้
->   `stock_ledger` `schema_v` **5** ร่วมกับ [CR-139](./CR-139-shelter-storage-points.md)
+>   `stock_ledger` `schema_v` **5** ร่วมกับ [CR-139](00-baseline/CR-139-shelter-storage-points.md)
 >   (`storage_point_id`) — ไม่ bump เป็น 6
 > - **เพื่อใคร/ทำไม:** UX คลังต้องการนาฬิกาอายุ — ในคลัง / เหลือหมดอายุ / จากผลิต
 > - **Default รับเข้า:** ถ้าผู้ใช้ไม่กรอก → `produced_at = occurred_at`

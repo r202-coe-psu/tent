@@ -152,7 +152,11 @@ async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
 		} catch (err) {
 			lastError = err;
 			if (err instanceof CouchAuthError) {
-				authStore.markNeedsReauth();
+				// The server answered, so it is reachable — a lingering "disconnected" state is wrong.
+				endpointStore.markConnected();
+				// 401 = expired; 403 is confirmed against `/_session` (fire-and-forget: the caller
+				// still gets the original error; a valid-session 403 is a permission denial).
+				void authStore.handleAuthFailure(err);
 				throw err;
 			}
 			if (!isRetryable(err) || attempt === MAX_RETRIES - 1) break;
@@ -430,6 +434,48 @@ export async function bulkDocs<T extends { _id: string; _rev?: string }>(
 		const res = results.find((r) => r.id === doc._id);
 		if (res?.rev) return { ...doc, _rev: res.rev };
 		return doc;
+	});
+}
+
+/** Per-document outcome of one `_bulk_docs` request, in the order the docs were sent. */
+export type BulkDocOutcome =
+	| { id: string; ok: true; rev: string }
+	| { id: string; ok: false; status: number | null; error: string; reason: string };
+
+/**
+ * `_bulk_docs` that reports every document on its own instead of throwing when
+ * some of them are rejected (`bulkDocs` above throws on the first non-conflict
+ * failure, hiding which docs DID land). A transport-level failure still throws —
+ * the caller then cannot know what was written and must read back.
+ *
+ * A put-if-absent write (a deterministic `_id`, no `_rev`) that answers 409 means
+ * the doc already exists; it is reported as a failure with `status: 409` so the
+ * caller decides whether "already there" counts as done.
+ */
+export async function bulkDocsDetailed<T extends { _id: string; _rev?: string }>(
+	dbName: string,
+	docs: T[],
+	init?: CouchFetchInit
+): Promise<BulkDocOutcome[]> {
+	if (docs.length === 0) return [];
+	const results = await couchDbFetch<BulkDocResult[]>(dbName, '/_bulk_docs', {
+		method: 'POST',
+		body: JSON.stringify({ docs }),
+		...init
+	});
+
+	return docs.map((doc, index): BulkDocOutcome => {
+		// CouchDB answers in request order; fall back to matching by id.
+		const res =
+			results[index]?.id === doc._id ? results[index] : results.find((r) => r.id === doc._id);
+		if (res && !res.error && res.rev) return { id: doc._id, ok: true, rev: res.rev };
+		return {
+			id: doc._id,
+			ok: false,
+			status: res?.status ?? (res?.error === 'conflict' ? 409 : null),
+			error: res?.error ?? 'missing_result',
+			reason: res?.reason ?? 'CouchDB returned no result for this document'
+		};
 	});
 }
 

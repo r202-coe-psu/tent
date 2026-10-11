@@ -1,13 +1,15 @@
 import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
 import { toast } from 'svelte-sonner';
-import { getShelterCode } from '$lib/db/shelter';
+import { resolveContextShelterCode } from '$lib/db/shelter';
 import { getMaster, listMasters, putMaster, type MasterDataSummary } from '../data/master-data.api';
 import type { MasterDataItem, MasterDataQueryContext, MasterDataType } from '../domain/master-data';
 
 type ContextGetter = () => MasterDataQueryContext | undefined;
 
+/** Effective list for the caller's shelter; global when there is none (SA central views). */
 function defaultContext(): MasterDataQueryContext {
-	return { scope: 'effective', shelterCode: getShelterCode() };
+	const shelterCode = resolveContextShelterCode();
+	return shelterCode ? { scope: 'effective', shelterCode } : { scope: 'global' };
 }
 
 function contextKey(context: MasterDataQueryContext | undefined): readonly unknown[] {

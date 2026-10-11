@@ -348,7 +348,8 @@ function readPerson(raw: RawRow, sink: ErrorSink): EvacueeInput {
 	return {
 		first_name: cell(raw, H.first_name),
 		last_name: cell(raw, H.last_name),
-		gender: resolveEnum(raw, H.gender, GENDER_CHOICES, sink) as EvacueeInput['gender'],
+		// Blank cell = ไม่ระบุ (`null`) — gender is optional on every channel (decision sync 2026-10-09).
+		gender: (resolveEnum(raw, H.gender, GENDER_CHOICES, sink) ?? null) as EvacueeInput['gender'],
 		phone: resolvePhone(raw, H.phone, sink),
 		...(cell(raw, H.nickname) ? { nickname: cell(raw, H.nickname) } : {}),
 		...(birthYear !== undefined ? { birth_year: birthYear } : {}),

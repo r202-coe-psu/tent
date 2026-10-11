@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { useLedger } from '$lib/features/operations';
+	import { useItemMasters } from '$lib/features/catalog';
+	import { getShelterCode } from '$lib/db/shelter';
 	import { getEligiblePhysicalLots } from '../model/physical-lot';
 	import Check from '@lucide/svelte/icons/check';
 	import AlertCircle from '@lucide/svelte/icons/alert-circle';
@@ -7,6 +9,7 @@
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import Boxes from '@lucide/svelte/icons/boxes';
 	import Loader2 from '@lucide/svelte/icons/loader-2';
+	import { formatThaiShortDate } from '$lib/utils/date';
 
 	interface Props {
 		itemId: string;
@@ -31,25 +34,30 @@
 	// Remote-First query to fetch authoritative shelter stock ledger
 	const ledgerQuery = useLedger();
 
-	const lots = $derived.by(() => {
-		if (!ledgerQuery.data) return [];
-		return getEligiblePhysicalLots(ledgerQuery.data, itemId, allocatedQty);
-	});
+	// Shelf life / storage type feed the weighted lot order (CR-143 §A)
+	const itemMastersQuery = useItemMasters(() => getShelterCode());
+	const priorityItem = $derived((itemMastersQuery.data ?? []).find((im) => im._id === itemId));
 
-	const isLoading = $derived(ledgerQuery.isLoading);
+	const lots = $derived.by(() => {
+		if (!ledgerQuery.data || itemMastersQuery.isLoading) return [];
+		return getEligiblePhysicalLots(
+			ledgerQuery.data,
+			itemId,
+			allocatedQty,
+			new Date(),
+			priorityItem
+		);
+	});
+	// The first lot a person may actually draw from: expired lots are never suggested (FR-A4)
+	const firstUsableLotRef = $derived(lots.find((l) => !l.isExpired)?.lot_ref);
+
+	// Wait for item masters too, so the lot order does not reshuffle once shelf life arrives
+	const isLoading = $derived(ledgerQuery.isLoading || itemMastersQuery.isLoading);
 	const hasNoLots = $derived(!isLoading && lots.length === 0);
 
 	function formatExpiryDate(dateStr?: string): string {
 		if (!dateStr) return 'ไม่ระบุวันหมดอายุ';
-		try {
-			return new Intl.DateTimeFormat('th-TH', {
-				year: 'numeric',
-				month: 'short',
-				day: 'numeric'
-			}).format(new Date(dateStr));
-		} catch {
-			return dateStr;
-		}
+		return formatThaiShortDate(dateStr) || dateStr;
 	}
 </script>
 
@@ -88,13 +96,13 @@
 			</div>
 		</div>
 	{:else}
-		<!-- Available Lots List (Sorted by FEFO) -->
+		<!-- Available Lots List (weighted issue priority, CR-143 §A) -->
 		<div
 			class="space-y-2"
 			role="radiogroup"
 			aria-label="เลือก Physical Lot สินค้าสำหรับ {itemName}"
 		>
-			{#each lots as lot, idx (lot.lot_ref)}
+			{#each lots as lot (lot.lot_ref)}
 				{@const isSelected = selectedLotRef === lot.lot_ref}
 				{@const canBeSelected = !disabled && !lot.isExpired && lot.hasSufficientQty}
 
@@ -121,17 +129,17 @@
 					tabindex={canBeSelected ? 0 : -1}
 				>
 					<div class="min-w-0 flex-1 space-y-1">
-						<!-- Lot Identifier & FEFO Tag -->
+						<!-- Lot Identifier & priority tag -->
 						<div class="flex flex-wrap items-center gap-2">
 							<span class="font-mono text-xs font-bold text-slate-900">
 								{lot.lot_no ?? lot.lot_ref.replace('stock_ledger:', 'LOT-')}
 							</span>
 
-							{#if idx === 0 && lot.expiry}
+							{#if lot.lot_ref === firstUsableLotRef}
 								<span
 									class="py-0.2 rounded-md border border-emerald-200 bg-emerald-100/70 px-1.5 text-3xs font-bold text-emerald-800"
 								>
-									FEFO ลำดับแรก
+									ควรใช้ก่อน
 								</span>
 							{/if}
 
@@ -173,6 +181,9 @@
 								<span class="text-slate-400">({lot.note})</span>
 							{/if}
 						</div>
+						<p class="text-2xs font-medium {lot.isExpired ? 'text-red-700' : 'text-slate-600'}">
+							{lot.reason}
+						</p>
 					</div>
 
 					<!-- Available Qty & Selection Indicator -->

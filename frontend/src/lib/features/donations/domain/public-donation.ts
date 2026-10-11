@@ -22,6 +22,19 @@ export interface PublicDonationDoc extends Omit<Donation, 'donor'> {
 		total_items: number;
 		received_at: string;
 		remarks?: string;
+		shortfalls?: Array<{
+			item_id?: string;
+			item_name?: string;
+			declared?: string;
+			counted?: string;
+			short?: string;
+		}>;
+		items?: Array<{
+			item_id?: string;
+			free_text?: string;
+			qty: string;
+			unit?: string;
+		}>;
 	};
 	items_declared?: Array<{
 		item_id?: string;

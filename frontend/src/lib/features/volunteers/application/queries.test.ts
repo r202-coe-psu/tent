@@ -245,16 +245,28 @@ describe('list/detail query hooks', () => {
 		expect(useJob(() => '')).toMatchObject({ enabled: false });
 	});
 
-	it('useJobApplications filters through to the repository', () => {
-		const filter = { jobId: 'job:1' };
-		(useJobApplications(filter) as unknown as { queryFn: () => unknown }).queryFn();
-		expect(jobApplicationRepo.list).toHaveBeenCalledWith(filter);
-	});
-
-	it('useShiftAssignments filters through to the repository', () => {
-		const filter = { volunteerId: 'volunteer:1' };
-		(useShiftAssignments(filter) as unknown as { queryFn: () => unknown }).queryFn();
-		expect(shiftAssignmentRepo.list).toHaveBeenCalledWith(filter);
+	it.each([
+		{
+			hook: 'useJobApplications',
+			run: () => useJobApplications({ jobId: 'job:1' }),
+			repo: () => jobApplicationRepo.list,
+			filter: { jobId: 'job:1' }
+		},
+		{
+			hook: 'useShiftAssignments',
+			run: () => useShiftAssignments({ volunteerId: 'volunteer:1' }),
+			repo: () => shiftAssignmentRepo.list,
+			filter: { volunteerId: 'volunteer:1' }
+		},
+		{
+			hook: 'useVolunteers',
+			run: () => useVolunteers({ status: 'active' }),
+			repo: () => volunteerRepo.list,
+			filter: { status: 'active' }
+		}
+	])('$hook filters through to the repository', ({ run, repo, filter }) => {
+		(run() as unknown as { queryFn: () => unknown }).queryFn();
+		expect(repo()).toHaveBeenCalledWith(filter);
 	});
 
 	it("useTodayAttendance defaults to today's date", () => {
@@ -269,12 +281,6 @@ describe('list/detail query hooks', () => {
 		expect((hook as unknown as { queryKey: readonly unknown[] }).queryKey).toContain('2026-08-01');
 		(hook as unknown as { queryFn: () => unknown }).queryFn();
 		expect(shiftAssignmentRepo.list).toHaveBeenCalledWith({ date: '2026-08-01' });
-	});
-
-	it('useVolunteers filters through to the repository', () => {
-		const filter = { status: 'active' as const };
-		(useVolunteers(filter) as unknown as { queryFn: () => unknown }).queryFn();
-		expect(volunteerRepo.list).toHaveBeenCalledWith(filter);
 	});
 
 	it('useVolunteers reads the shelter the caller names, not the active one', () => {
@@ -313,87 +319,91 @@ describe('mutation author context', () => {
 });
 
 describe('mutation invalidation map', () => {
-	it('useCreateJob invalidates only jobs (no quota move yet)', async () => {
-		jobRepo.create.mockResolvedValue({});
-		const qc = fakeQueryClient();
-		await useCreateJob(qc).mutate({} as never);
-		expect(qc.invalidateQueries).toHaveBeenCalledTimes(1);
-		expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: volunteerKeys.jobsAll() });
-	});
+	const cases: Array<{
+		name: string;
+		seed: () => void;
+		run: (qc: QueryClient) => unknown;
+		keys: () => ReadonlyArray<readonly unknown[]>;
+		afterRun?: () => void;
+	}> = [
+		{
+			name: 'useCreateJob invalidates only jobs (no quota move yet)',
+			seed: () => jobRepo.create.mockResolvedValue({}),
+			run: (qc) => useCreateJob(qc).mutate({} as never),
+			keys: () => [volunteerKeys.jobsAll()]
+		},
+		{
+			name: 'useUpdateJob invalidates only jobs (metadata-only edit)',
+			seed: () => jobRepo.update.mockResolvedValue({}),
+			run: (qc) => useUpdateJob(qc).mutate({} as never),
+			keys: () => [volunteerKeys.jobsAll()]
+		},
+		{
+			name: 'useDeactivateVolunteer invalidates volunteers + hubMetrics',
+			seed: () => volunteerRepo.deactivate.mockResolvedValue({ status: 'inactive' }),
+			run: (qc) => useDeactivateVolunteer(qc).mutate('volunteer:1'),
+			afterRun: () => expect(volunteerRepo.deactivate).toHaveBeenCalledWith('volunteer:1'),
+			keys: () => [volunteerKeys.volunteersAll(), volunteerKeys.hubMetrics()]
+		},
+		{
+			name: 'useDispatchVolunteers invalidates jobs + shiftAssignments + hubMetrics (quota-changing)',
+			seed: () => shiftAssignmentRepo.dispatch.mockResolvedValue({}),
+			run: (qc) => useDispatchVolunteers(qc).mutate({} as never),
+			keys: () => [
+				volunteerKeys.jobsAll(),
+				volunteerKeys.shiftAssignmentsAll(),
+				volunteerKeys.hubMetrics()
+			]
+		},
+		{
+			name: 'useReviewApplication invalidates applications + jobs + hubMetrics (quota-changing)',
+			seed: () => jobApplicationRepo.review.mockResolvedValue({}),
+			run: (qc) =>
+				useReviewApplication(qc).mutate({ id: 'job_application:1', decision: 'confirmed' }),
+			keys: () => [
+				volunteerKeys.jobApplicationsAll(),
+				volunteerKeys.jobsAll(),
+				volunteerKeys.hubMetrics()
+			]
+		},
+		{
+			name: 'useCheckIn invalidates shiftAssignments + volunteers + hubMetrics',
+			seed: () => shiftAssignmentRepo.checkIn.mockResolvedValue({}),
+			run: (qc) => useCheckIn(qc).mutate({ id: 'shift_assignment:1' }),
+			keys: () => [
+				volunteerKeys.shiftAssignmentsAll(),
+				volunteerKeys.volunteersAll(),
+				volunteerKeys.hubMetrics()
+			]
+		},
+		{
+			name: 'useCheckOut invalidates shiftAssignments + volunteers + hubMetrics',
+			seed: () => shiftAssignmentRepo.checkOut.mockResolvedValue({}),
+			run: (qc) => useCheckOut(qc).mutate({ id: 'shift_assignment:1' }),
+			keys: () => [
+				volunteerKeys.shiftAssignmentsAll(),
+				volunteerKeys.volunteersAll(),
+				volunteerKeys.hubMetrics()
+			]
+		},
+		{
+			name: 'useCreateWalkInVolunteer invalidates volunteers + hubMetrics',
+			seed: () => volunteerRepo.create.mockResolvedValue({}),
+			run: (qc) => useCreateWalkInVolunteer(qc).mutate({} as never),
+			keys: () => [volunteerKeys.volunteersAll(), volunteerKeys.hubMetrics()]
+		}
+	];
 
-	it('useUpdateJob invalidates only jobs (metadata-only edit)', async () => {
-		jobRepo.update.mockResolvedValue({});
+	it.each(cases)('$name', async ({ seed, run, keys, afterRun }) => {
+		seed();
 		const qc = fakeQueryClient();
-		await useUpdateJob(qc).mutate({} as never);
-		expect(qc.invalidateQueries).toHaveBeenCalledTimes(1);
-		expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: volunteerKeys.jobsAll() });
-	});
-
-	it('useDeactivateVolunteer invalidates volunteers + hubMetrics', async () => {
-		volunteerRepo.deactivate.mockResolvedValue({ status: 'inactive' });
-		const qc = fakeQueryClient();
-		await useDeactivateVolunteer(qc).mutate('volunteer:1');
-		expect(volunteerRepo.deactivate).toHaveBeenCalledWith('volunteer:1');
-		expect(qc.invalidateQueries).toHaveBeenCalledTimes(2);
-		expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: volunteerKeys.volunteersAll() });
-		expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: volunteerKeys.hubMetrics() });
-	});
-
-	it('useDispatchVolunteers invalidates jobs + shiftAssignments + hubMetrics (quota-changing)', async () => {
-		shiftAssignmentRepo.dispatch.mockResolvedValue({});
-		const qc = fakeQueryClient();
-		await useDispatchVolunteers(qc).mutate({} as never);
-		expect(qc.invalidateQueries).toHaveBeenCalledTimes(3);
-		expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: volunteerKeys.jobsAll() });
-		expect(qc.invalidateQueries).toHaveBeenCalledWith({
-			queryKey: volunteerKeys.shiftAssignmentsAll()
-		});
-		expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: volunteerKeys.hubMetrics() });
-	});
-
-	it('useReviewApplication invalidates applications + jobs + hubMetrics (quota-changing)', async () => {
-		jobApplicationRepo.review.mockResolvedValue({});
-		const qc = fakeQueryClient();
-		await useReviewApplication(qc).mutate({ id: 'job_application:1', decision: 'confirmed' });
-		expect(qc.invalidateQueries).toHaveBeenCalledTimes(3);
-		expect(qc.invalidateQueries).toHaveBeenCalledWith({
-			queryKey: volunteerKeys.jobApplicationsAll()
-		});
-		expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: volunteerKeys.jobsAll() });
-		expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: volunteerKeys.hubMetrics() });
-	});
-
-	it('useCheckIn invalidates shiftAssignments + volunteers + hubMetrics', async () => {
-		shiftAssignmentRepo.checkIn.mockResolvedValue({});
-		const qc = fakeQueryClient();
-		await useCheckIn(qc).mutate({ id: 'shift_assignment:1' });
-		expect(qc.invalidateQueries).toHaveBeenCalledTimes(3);
-		expect(qc.invalidateQueries).toHaveBeenCalledWith({
-			queryKey: volunteerKeys.shiftAssignmentsAll()
-		});
-		expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: volunteerKeys.volunteersAll() });
-		expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: volunteerKeys.hubMetrics() });
-	});
-
-	it('useCheckOut invalidates shiftAssignments + volunteers + hubMetrics', async () => {
-		shiftAssignmentRepo.checkOut.mockResolvedValue({});
-		const qc = fakeQueryClient();
-		await useCheckOut(qc).mutate({ id: 'shift_assignment:1' });
-		expect(qc.invalidateQueries).toHaveBeenCalledTimes(3);
-		expect(qc.invalidateQueries).toHaveBeenCalledWith({
-			queryKey: volunteerKeys.shiftAssignmentsAll()
-		});
-		expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: volunteerKeys.volunteersAll() });
-		expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: volunteerKeys.hubMetrics() });
-	});
-
-	it('useCreateWalkInVolunteer invalidates volunteers + hubMetrics', async () => {
-		volunteerRepo.create.mockResolvedValue({});
-		const qc = fakeQueryClient();
-		await useCreateWalkInVolunteer(qc).mutate({} as never);
-		expect(qc.invalidateQueries).toHaveBeenCalledTimes(2);
-		expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: volunteerKeys.volunteersAll() });
-		expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey: volunteerKeys.hubMetrics() });
+		await run(qc);
+		afterRun?.();
+		const expected = keys();
+		expect(qc.invalidateQueries).toHaveBeenCalledTimes(expected.length);
+		for (const queryKey of expected) {
+			expect(qc.invalidateQueries).toHaveBeenCalledWith({ queryKey });
+		}
 	});
 });
 

@@ -15,6 +15,8 @@ export interface ShelterForm {
 	lng: number;
 	subdistrict: string; // in จ.สงขลา อ.หาดใหญ่
 	capacity: number;
+	/** Tick 「รับลงทะเบียนเข้าพักล่วงหน้าจากหน้าสาธารณะ」 so /pre-register lists the shelter. */
+	acceptsPreRegistration?: boolean;
 }
 
 /** System management → create shelter (status Active). Returns the minted code. */
@@ -43,6 +45,9 @@ export async function createShelterViaUi(page: Page, shelter: ShelterForm): Prom
 	await page
 		.getByRole('spinbutton', { name: 'ความจุสูงสุด (Max Capacity) *' })
 		.fill(String(shelter.capacity));
+	if (shelter.acceptsPreRegistration) {
+		await page.getByRole('switch', { name: 'รับลงทะเบียนเข้าพักล่วงหน้าจากหน้าสาธารณะ' }).click();
+	}
 	await page.getByRole('button', { name: 'บันทึกข้อมูล' }).click();
 
 	await expect(page).toHaveURL(/\/system-management\/shelters\/edit\/SH\d+$/);
@@ -67,6 +72,10 @@ export interface MemberForm {
 	idCard?: { type: 'national_id' | 'passport'; number: string };
 }
 
+/** Station 1 switches to per-member tabs once a household reaches this many members
+ *  (unified-registration-members-section.svelte) and hides every inactive tab's card. */
+const MEMBER_TABS_MIN = 3;
+
 /** Onsite Station 1 → register one household (first member = primary contact). */
 export async function registerHouseholdViaUi(
 	page: Page,
@@ -83,10 +92,15 @@ export async function registerHouseholdViaUi(
 
 	for (const [i, member] of members.entries()) {
 		if (i > 0) await page.getByRole('button', { name: 'เพิ่มสมาชิก' }).click();
-		const card =
-			i === 0
-				? page.getByRole('region', { name: 'ผู้ติดต่อหลัก' })
-				: page.getByRole('region', { name: 'สมาชิก' }).nth(i - 1);
+		const label = i === 0 ? 'ผู้ติดต่อหลัก' : `สมาชิก ${i + 1}`;
+		// Once the tab bar exists, select this member's tab explicitly instead of counting
+		// visible "สมาชิก"-named regions — that pool shrinks/grows as tabs appear. The tab's
+		// accessible name is prefixed with its 1-based index ("3.สมาชิก 3"), so match by
+		// substring rather than exact.
+		if (i + 1 >= MEMBER_TABS_MIN) {
+			await page.getByRole('tab', { name: label }).click();
+		}
+		const card = page.getByRole('region', { name: label, exact: true });
 		await card.getByPlaceholder('ชื่อจริง').fill(member.firstName);
 		await card.getByPlaceholder('เช่น มีสุข').fill(member.lastName);
 		await card.getByLabel(member.gender).check();
@@ -136,4 +150,77 @@ export async function createCriticalNeedViaUi(
 		.fill(reason);
 	await page.getByRole('button', { name: 'ประกาศขอรับบริจาคผ่านหน้าเว็บสาธารณะ' }).click();
 	await expect(page.getByText(/เพิ่มประกาศความต้องการ .* สำเร็จ/)).toBeVisible();
+}
+
+export interface OnsiteShelterConfig {
+	/** Toggle 「เปิดคัดกรองการแพทย์ (Station 2)」. */
+	enableMedicalScreening?: boolean;
+	/** Toggle 「รับลงทะเบียนเข้าพักล่วงหน้าจากหน้าสาธารณะ」. */
+	acceptsPreRegistration?: boolean;
+	/** Living zones to add (empty shelter has none). */
+	zones?: { name: string; capacity: number }[];
+}
+
+/**
+ * On the shelter edit page (system-management or back-office), set feature
+ * flags and living zones the onsite journeys need, then save.
+ * Call after {@link createShelterViaUi} (already on the edit URL) or after
+ * navigating to `/…/shelters/edit/{code}`.
+ */
+export async function configureOnsiteShelterViaUi(
+	page: Page,
+	code: string,
+	config: OnsiteShelterConfig
+): Promise<void> {
+	const medical = page.locator('#enable-medical-screening');
+	await expect(medical).toBeVisible({ timeout: 20_000 });
+
+	if (config.enableMedicalScreening !== undefined) {
+		const want = String(config.enableMedicalScreening);
+		if ((await medical.getAttribute('aria-checked')) !== want) {
+			await medical.click();
+			await expect(medical).toHaveAttribute('aria-checked', want);
+		}
+	}
+	if (config.acceptsPreRegistration !== undefined) {
+		const sw = page.locator('#accepts-pre-registration');
+		const want = String(config.acceptsPreRegistration);
+		if ((await sw.getAttribute('aria-checked')) !== want) {
+			await sw.click();
+			await expect(sw).toHaveAttribute('aria-checked', want);
+		}
+	}
+
+	for (const zone of config.zones ?? []) {
+		await page.getByRole('button', { name: 'เพิ่มโซน' }).click();
+		const row = page.locator('input[placeholder="ชื่อโซน"]').last();
+		await expect(row).toBeVisible();
+		await row.fill(zone.name);
+		await page.locator('input[placeholder="ความจุ"]').last().fill(String(zone.capacity));
+	}
+
+	await page.getByRole('button', { name: 'บันทึกข้อมูล' }).first().click();
+	await expect(page.getByText(`อัปเดตข้อมูลศูนย์พักพิง ${code} สำเร็จ`).first()).toBeVisible({
+		timeout: 20_000
+	});
+}
+
+/** Pin the active workspace shelter in localStorage (staff with one `shelter:` role). */
+export async function pinActiveShelter(page: Page, code: string): Promise<void> {
+	await page.evaluate((c) => localStorage.setItem('tent.activeShelterCode', c), code);
+}
+
+/** Set the reCAPTCHA switch on /system-management/security; returns its previous state. */
+export async function setRecaptcha(page: Page, enabled: boolean): Promise<boolean> {
+	await page.goto('/system-management/security');
+	const sw = page.locator('#recaptcha-enabled');
+	await expect(sw).toBeVisible({ timeout: 20_000 });
+	const before = (await sw.getAttribute('aria-checked')) === 'true';
+	if (before !== enabled) {
+		await sw.click();
+		await expect(
+			page.getByText(enabled ? 'เปิดใช้งาน reCAPTCHA แล้ว' : 'ปิดใช้งาน reCAPTCHA แล้ว')
+		).toBeVisible({ timeout: 20_000 });
+	}
+	return before;
 }

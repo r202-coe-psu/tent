@@ -6,7 +6,7 @@
 
 <script lang="ts">
 	import { tick } from 'svelte';
-	import QRCode from 'qrcode';
+	import { generateQrDataUrl } from '$lib/utils/qrcode';
 	import Printer from '@lucide/svelte/icons/printer';
 	import Check from '@lucide/svelte/icons/check';
 	import X from '@lucide/svelte/icons/x';
@@ -55,7 +55,7 @@
 	$effect(() => {
 		if (!show) return;
 		qrUrl = null;
-		QRCode.toDataURL(deepLink, {
+		generateQrDataUrl(deepLink, {
 			width: 320,
 			margin: 1,
 			color: { dark: '#0f172a', light: '#ffffff' }

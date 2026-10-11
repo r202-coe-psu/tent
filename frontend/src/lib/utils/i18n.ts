@@ -1,3 +1,5 @@
+import { DISPLAY_LOCALE, DISPLAY_TIME_ZONE } from './date';
+
 /**
  * Helper function to get the current translation object based on the language.
  * Default to 'th' if the language is not supported.
@@ -14,16 +16,18 @@ export function getTranslation<T>(
 }
 
 /**
- * BCP 47 tags used for `Intl` formatting. Unknown languages fall back to Thai,
- * mirroring `getTranslation`.
+ * BCP 47 tags used for `Intl` number formatting. Unknown languages fall back
+ * to Thai, mirroring `getTranslation`. Date display always uses
+ * {@link DISPLAY_LOCALE} — see {@link formatDate}.
  */
 const LOCALES: Record<string, string> = {
 	th: 'th-TH',
 	en: 'en-US'
 };
 
-/** Day/short-month/year, the layout every caller gets unless it asks otherwise. */
+/** Day/short-month/year in Asia/Bangkok, the layout every caller gets unless it asks otherwise. */
 const DEFAULT_DATE_OPTIONS: Intl.DateTimeFormatOptions = {
+	timeZone: DISPLAY_TIME_ZONE,
 	day: '2-digit',
 	month: 'short',
 	year: 'numeric'
@@ -49,26 +53,28 @@ export function formatNumber(value: number | null | undefined, language?: string
 /**
  * Format a date for display.
  *
- * Thai dates land on the Buddhist calendar that `th-TH` carries, so 2025 reads
- * 2568. `options` replaces the default layout rather than merging with it —
- * the same semantics `Intl.DateTimeFormat` itself has.
+ * Always uses `th-TH` + `Asia/Bangkok` (Buddhist year). Copy language may still
+ * be EN; the calendar string does not switch. `options` replaces the default
+ * layout rather than merging — same semantics as `Intl.DateTimeFormat` itself —
+ * but `timeZone` stays Bangkok unless the caller overrides it.
  *
  * @param value An ISO string, epoch milliseconds, or a `Date`. Empty and
  *   unparseable values render as '': a display helper should print nothing
  *   rather than "Invalid Date".
- * @param language The current language code. Defaults to 'th'.
+ * @param _language Ignored for dates (kept for call-site compatibility).
  * @param options Overrides for the default day/short-month/year layout.
  * @returns The formatted date, or '' when there is nothing to show.
  */
 export function formatDate(
 	value: string | number | Date | null | undefined,
-	language?: string,
+	_language?: string,
 	options?: Intl.DateTimeFormatOptions
 ): string {
 	if (value === null || value === undefined || value === '') return '';
 	const date = value instanceof Date ? value : new Date(value);
 	if (Number.isNaN(date.getTime())) return '';
-	return new Intl.DateTimeFormat(resolveLocale(language), options ?? DEFAULT_DATE_OPTIONS).format(
-		date
-	);
+	const resolved: Intl.DateTimeFormatOptions = options
+		? { timeZone: DISPLAY_TIME_ZONE, ...options }
+		: DEFAULT_DATE_OPTIONS;
+	return new Intl.DateTimeFormat(DISPLAY_LOCALE, resolved).format(date);
 }

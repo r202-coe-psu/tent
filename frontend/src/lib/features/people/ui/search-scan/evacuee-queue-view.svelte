@@ -23,6 +23,7 @@
 	import { useMasterData, formatMasterLabel } from '$lib/features/master-data';
 	import { useShelter } from '$lib/features/shelters';
 	import { shelterStore } from '$lib/stores/shelter.svelte';
+	import { formatThaiDateTime } from '$lib/utils/date';
 
 	import { useEvacuees, useHouseholds, useScreenings } from '../../application/queries';
 	import {
@@ -209,17 +210,7 @@
 
 	function formatUpdated(iso?: string | null): string {
 		if (!iso) return '—';
-		try {
-			const d = new Date(iso);
-			return d.toLocaleString('th-TH', {
-				day: 'numeric',
-				month: 'short',
-				hour: '2-digit',
-				minute: '2-digit'
-			});
-		} catch {
-			return iso;
-		}
+		return formatThaiDateTime(iso) || iso;
 	}
 
 	function nextQueueBadgeVariant(

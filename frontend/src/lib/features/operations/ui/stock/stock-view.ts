@@ -27,6 +27,8 @@ export interface StockRowBase {
 	storageKeys: string[];
 	/** True when this shelter has no ledger row for the item — catalog-only. */
 	neverReceived: boolean;
+	/** Names of items merged into this one, so searching an old name finds it (CR-143 FR-F5). */
+	aliases?: string[];
 }
 
 /** A row as the table and cards render it — display strings resolved by the orchestrator. */
@@ -98,7 +100,13 @@ export function filterRows<T extends StockRowBase>(
 ): T[] {
 	const q = filter.q.toLowerCase().trim();
 	return visibleRows(rows, filter.all).filter((r) => {
-		if (q && !r.name.toLowerCase().includes(q) && !r._id.toLowerCase().includes(q)) return false;
+		if (
+			q &&
+			!r.name.toLowerCase().includes(q) &&
+			!r._id.toLowerCase().includes(q) &&
+			!r.aliases?.some((a) => a.toLowerCase().includes(q))
+		)
+			return false;
 		if (filter.cat !== 'all' && r.category !== filter.cat) return false;
 		if (filter.loc !== 'all' && !r.storageKeys.includes(filter.loc)) return false;
 		if (filter.status !== 'all' && !matchesStatus(r, filter.status)) return false;

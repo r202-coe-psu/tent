@@ -1,10 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { partitionApplicantQueue, APPLICATION_STATUS_META } from './applicant-queue';
-import {
-	jobApplicationStatusSchema,
-	type JobApplication,
-	type JobApplicationStatus
-} from './job-application.schema';
+import { partitionApplicantQueue } from './applicant-queue';
+import type { JobApplication } from './job-application.schema';
 
 function app(overrides: Partial<JobApplication> & { _id: string }): JobApplication {
 	return {
@@ -82,13 +78,5 @@ describe('partitionApplicantQueue', () => {
 
 	it('handles an empty list', () => {
 		expect(partitionApplicantQueue([], 'job:A')).toEqual({ pending: [], reviewed: [] });
-	});
-});
-
-describe('APPLICATION_STATUS_META', () => {
-	it('covers every status in the schema enum', () => {
-		for (const status of jobApplicationStatusSchema.options as JobApplicationStatus[]) {
-			expect(APPLICATION_STATUS_META[status]?.label).toBeTruthy();
-		}
 	});
 });

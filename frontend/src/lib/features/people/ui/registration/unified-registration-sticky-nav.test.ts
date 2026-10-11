@@ -24,7 +24,7 @@ describe('UnifiedRegistrationStickyNav', () => {
 		expect(result.body).toContain('ส่วนที่ 1: ที่อยู่เดิม');
 	});
 
-	it('renders compact mode without full section text in trigger', () => {
+	it('renders compact mode as bottom sheet trigger without full section text', () => {
 		const result = render(UnifiedRegistrationStickyNav, {
 			props: {
 				sections: mockSections,
@@ -37,5 +37,7 @@ describe('UnifiedRegistrationStickyNav', () => {
 
 		expect(result.body).not.toContain('truncate text-left');
 		expect(result.body).toContain('กระโดดไปยังส่วนของแบบฟอร์ม');
+		// Compact uses Sheet (data-slot), not the floating dropdown content class
+		expect(result.body).not.toContain('bits-floating-anchor-width');
 	});
 });

@@ -141,6 +141,67 @@ async def test_create_persists_mongo_only_with_reserved_ids(
     )
 
 
+def _member(**overrides: object) -> dict:
+    member: dict = dict(_create_payload()["members"][0])
+    member.update(overrides)
+    return member
+
+
+async def test_create_accepts_null_gender_unspecified(
+    client: AsyncClient, auth_headers: dict[str, str], open_shelter: PublicShelter
+) -> None:
+    """decision sync 2026-10-09: gender=null (ไม่ระบุ) is valid on every channel."""
+    response = await client.post(
+        "/public/v1/unassigned-registrations",
+        headers=auth_headers,
+        json=_create_payload(members=[_member(gender=None)]),
+    )
+    assert response.status_code == 201
+    assert response.json()["members"][0]["gender"] is None
+
+    stored = await UnassignedRegistration.get(response.json()["id"])
+    assert stored is not None
+    assert stored.members[0].gender is None
+
+
+async def test_create_still_accepts_legacy_other_gender(
+    client: AsyncClient, auth_headers: dict[str, str], open_shelter: PublicShelter
+) -> None:
+    response = await client.post(
+        "/public/v1/unassigned-registrations",
+        headers=auth_headers,
+        json=_create_payload(members=[_member(gender="other")]),
+    )
+    assert response.status_code == 201
+    assert response.json()["members"][0]["gender"] == "other"
+
+
+async def test_create_rejects_unknown_gender_value(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    response = await client.post(
+        "/public/v1/unassigned-registrations",
+        headers=auth_headers,
+        json=_create_payload(members=[_member(gender="unspecified")]),
+    )
+    assert response.status_code == 422
+    assert await UnassignedRegistration.count() == 0
+
+
+async def test_create_requires_gender_key(
+    client: AsyncClient, auth_headers: dict[str, str]
+) -> None:
+    """Key must be present (null allowed) — mirrors evacuee schema_v 12."""
+    member = _member()
+    member.pop("gender")
+    response = await client.post(
+        "/public/v1/unassigned-registrations",
+        headers=auth_headers,
+        json=_create_payload(members=[member]),
+    )
+    assert response.status_code == 422
+
+
 async def test_create_rejects_missing_address_when_housing_type_omitted(
     client: AsyncClient, auth_headers: dict[str, str]
 ) -> None:

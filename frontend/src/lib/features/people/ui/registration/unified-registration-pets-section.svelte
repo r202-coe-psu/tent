@@ -41,6 +41,8 @@
 		enableUnassignedPhoto = false,
 		shelterCode = '',
 		existingPets = [],
+		petErrors = {},
+		validationSeq = 0,
 		onsync
 	}: {
 		petItems: PetCardItem[];
@@ -50,6 +52,10 @@
 		enableUnassignedPhoto?: boolean;
 		shelterCode?: string;
 		existingPets?: Array<{ species: string; name?: string; count?: number; details?: string }>;
+		/** Pet card index → message (species missing for「อื่นๆ」). */
+		petErrors?: Record<number, string>;
+		/** Bumped on every failed submit so the collapsed section re-opens when it holds an error. */
+		validationSeq?: number;
 		onsync?: () => void;
 	} = $props();
 
@@ -59,6 +65,14 @@
 	let nextPetId = untrack(() => Math.max(0, ...petItems.map((p) => p.id), 0) + 1);
 	let uploadingPetId = $state<number | null>(null);
 	let accordionValue = $state<string[]>(untrack(() => (petItems.length > 0 ? ['pets'] : [])));
+
+	const hasPetError = $derived(Object.values(petErrors).some(Boolean));
+	$effect(() => {
+		void validationSeq;
+		if (hasPetError && !untrack(() => accordionValue).includes('pets')) {
+			accordionValue = [...untrack(() => accordionValue), 'pets'];
+		}
+	});
 
 	function safeQuery<T>(fn: () => T, fallback: T): T {
 		try {
@@ -392,7 +406,7 @@
 					</div>
 				{:else}
 					<div class="space-y-2">
-						{#each petItems as pet (pet.id)}
+						{#each petItems as pet, petIndex (pet.id)}
 							<div class="rounded-xl border border-slate-200/80 bg-white p-2.5 shadow-2xs sm:p-3">
 								<div class="mb-2 flex flex-wrap items-center justify-between gap-2">
 									<div class="flex min-w-0 items-center gap-2">
@@ -502,16 +516,29 @@
 										>
 											{#if pet.species === 'other'}
 												<div class="space-y-1">
-													<Label class="text-xs font-semibold text-foreground">
+													<Label
+														for="pet-species-{pet.id}"
+														class="text-xs font-semibold text-foreground"
+													>
 														{t.petSpeciesCustomLabel} <span class="text-destructive">*</span>
 													</Label>
 													<Input
+														id="pet-species-{pet.id}"
 														placeholder={t.petSpeciesCustomPlaceholder}
 														bind:value={pet.customSpecies}
 														disabled={pending}
+														aria-invalid={petErrors[petIndex] ? true : undefined}
+														aria-describedby={petErrors[petIndex]
+															? `pet-species-${pet.id}-error`
+															: undefined}
 														class="h-9 text-sm"
 														oninput={notifySync}
 													/>
+													{#if petErrors[petIndex]}
+														<p id="pet-species-{pet.id}-error" class="text-2xs text-destructive">
+															{petErrors[petIndex]}
+														</p>
+													{/if}
 												</div>
 											{/if}
 

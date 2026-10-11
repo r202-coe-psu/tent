@@ -1,23 +1,21 @@
 import type { ResolvedPathname } from '$app/types';
 import { resolve } from '$app/paths';
 import type { Icon } from '@lucide/svelte';
-import {
-	Calculator,
-	KeyRound,
-	MapPin,
-	Megaphone,
-	Settings,
-	Shield,
-	Users,
-	Building,
-	UserCog,
-	Warehouse,
-	Cpu,
-	LayoutDashboard,
-	ClipboardList,
-	Database,
-	Flag
-} from '@lucide/svelte/icons';
+import Calculator from '@lucide/svelte/icons/calculator';
+import KeyRound from '@lucide/svelte/icons/key-round';
+import MapPin from '@lucide/svelte/icons/map-pin';
+import Megaphone from '@lucide/svelte/icons/megaphone';
+import Settings from '@lucide/svelte/icons/settings';
+import Shield from '@lucide/svelte/icons/shield';
+import Users from '@lucide/svelte/icons/users';
+import Building from '@lucide/svelte/icons/building';
+import UserCog from '@lucide/svelte/icons/user-cog';
+import Warehouse from '@lucide/svelte/icons/warehouse';
+import Cpu from '@lucide/svelte/icons/cpu';
+import LayoutDashboard from '@lucide/svelte/icons/layout-dashboard';
+import ClipboardList from '@lucide/svelte/icons/clipboard-list';
+import Database from '@lucide/svelte/icons/database';
+import Flag from '@lucide/svelte/icons/flag';
 
 type Leaf = {
 	label: string;

@@ -17,6 +17,7 @@
 	import MapPin from '@lucide/svelte/icons/map-pin';
 	import User from '@lucide/svelte/icons/user';
 	import Calendar from '@lucide/svelte/icons/calendar';
+	import { formatThaiDateTime } from '$lib/utils/date';
 
 	interface Props {
 		ticketId: string;
@@ -50,17 +51,7 @@
 	);
 
 	function formatDateTime(isoString: string): string {
-		try {
-			return new Intl.DateTimeFormat('th-TH', {
-				year: 'numeric',
-				month: 'short',
-				day: 'numeric',
-				hour: '2-digit',
-				minute: '2-digit'
-			}).format(new Date(isoString));
-		} catch {
-			return isoString;
-		}
+		return formatThaiDateTime(isoString) || isoString;
 	}
 </script>
 

@@ -42,7 +42,7 @@
 	const unitsQuery = useUnitsOfMeasure();
 	const storagePoints = useStoragePoints(() => getShelterCode());
 
-	// Range / type / search / page live in the URL (`?range=&from=&to=&type=&lq=&lpage=`) so a
+	// Range / type / search / page live in the URL (`?range=&from=&to=&type=&lreason=&lq=&lpage=`) so a
 	// reload or a shared link restores the view. Other params (`tab`, …) are preserved.
 	const urlState = $derived(parseLedgerParams(page.url.searchParams));
 
@@ -77,7 +77,14 @@
 	// The cards describe the whole range; the type chips and search only narrow the list below.
 	const inRange = $derived(filterByRange(allRows, range));
 	const cards = $derived(summarizeRows(inRange));
-	const filtered = $derived(filterLedger(allRows, { range, type: urlState.type, q: urlState.q }));
+	const filtered = $derived(
+		filterLedger(allRows, {
+			range,
+			type: urlState.type,
+			reason: urlState.reason,
+			q: urlState.q
+		})
+	);
 
 	const currentPage = $derived(clampPage(urlState.page, filtered.length, LEDGER_PAGE_SIZE));
 	const pageRows = $derived(pageSlice(filtered, currentPage, LEDGER_PAGE_SIZE));

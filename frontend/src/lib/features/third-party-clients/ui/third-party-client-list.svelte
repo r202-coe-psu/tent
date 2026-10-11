@@ -13,6 +13,7 @@
 		thirdPartyClientDisplayName,
 		type ThirdPartyClient
 	} from '../domain/third-party-client';
+	import { formatThaiShortDate } from '$lib/utils/date';
 
 	let {
 		clients,
@@ -33,13 +34,7 @@
 	} = $props();
 
 	function formatDate(iso: string): string {
-		const ms = Date.parse(iso);
-		if (Number.isNaN(ms)) return iso;
-		return new Date(ms).toLocaleDateString('th-TH', {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric'
-		});
+		return formatThaiShortDate(iso) || iso;
 	}
 </script>
 

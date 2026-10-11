@@ -127,9 +127,20 @@ vi.mock('$lib/db/couch-db', async (importOriginal) => {
 	};
 });
 
-import { OperationsRemoteRepository, assertReceiveAgainstCatalog } from './operations.remote';
-import { createReceiveEntry, projectStockLotBalances } from '../domain/operations';
+import {
+	OperationsRemoteRepository,
+	assertReceiveAgainstCatalog,
+	catalogItemRules
+} from './operations.remote';
+import {
+	createReceiveEntry,
+	createStockLedger,
+	projectStockLotBalances
+} from '../domain/operations';
 import { createStockLotReservation, makeLotReservationDocId } from '$lib/features/distribution';
+import { rankLotsForIssue } from '../domain/lot-priority';
+import { planLotSplit } from '../domain/lot-split';
+import { distributeAcrossLots } from '../application/distribute-across-lots';
 import type { AuthorContext } from '$lib/db/model';
 
 const ctx: AuthorContext = { shelterCode: 'SH001', createdBy: 'tester' };
@@ -213,18 +224,62 @@ describe('assertReceiveAgainstCatalog', () => {
 		).not.toThrow();
 	});
 
-	it('never demands lot.expiry for an item_master (no perishable flag on that shape)', () => {
-		const masterEntry = createReceiveEntry(
-			{ item_id: 'item_master:milk', qty: 1, unit: 'l', source: 'donation', ref_id: DONATION_REF },
-			ctx
-		);
-		expect(() =>
-			assertReceiveAgainstCatalog(masterEntry, {
-				type: 'item_master',
-				base_unit: 'l',
-				perishable: true
-			} as unknown as ItemMaster)
-		).not.toThrow();
+	// CR-143 §D (FR-D1): an item_master has no `perishable` flag, so the rule is derived.
+	describe('item_master expiry requirement (CR-143 §D)', () => {
+		const masterEntry = (expiry?: string) =>
+			createReceiveEntry(
+				{
+					item_id: 'item_master:milk',
+					qty: 1,
+					unit: 'l',
+					source: 'donation',
+					ref_id: DONATION_REF,
+					...(expiry ? { lot: { expiry } } : {})
+				},
+				ctx
+			);
+		const master = (extra: Record<string, unknown>) =>
+			({ type: 'item_master', base_unit: 'l', ...extra }) as unknown as ItemMaster;
+
+		it('AC-D1: rejects a CHILLED item received without lot.expiry', () => {
+			expect(() =>
+				assertReceiveAgainstCatalog(masterEntry(), master({ storage_type: 'CHILLED' }))
+			).toThrow('requires lot.expiry to be set');
+			expect(() =>
+				assertReceiveAgainstCatalog(masterEntry(), master({ storage_type: 'FROZEN' }))
+			).toThrow('requires lot.expiry to be set');
+		});
+
+		it('rejects an item with shelf_life_days received without lot.expiry', () => {
+			expect(() =>
+				assertReceiveAgainstCatalog(
+					masterEntry(),
+					master({ storage_type: 'DRY', shelf_life_days: 180 })
+				)
+			).toThrow('requires lot.expiry to be set');
+		});
+
+		it('AC-D2: never demands lot.expiry for a DRY item with no shelf life', () => {
+			expect(() =>
+				assertReceiveAgainstCatalog(masterEntry(), master({ storage_type: 'DRY' }))
+			).not.toThrow();
+			expect(() => assertReceiveAgainstCatalog(masterEntry(), master({}))).not.toThrow();
+		});
+
+		it('accepts a CHILLED item once lot.expiry is supplied', () => {
+			expect(() =>
+				assertReceiveAgainstCatalog(masterEntry('2026-12-31'), master({ storage_type: 'CHILLED' }))
+			).not.toThrow();
+		});
+
+		it('catalogItemRules reports the derived requirement for both shapes', () => {
+			expect(catalogItemRules(master({ storage_type: 'CHILLED' })).requiresExpiry).toBe(true);
+			expect(catalogItemRules(master({ storage_type: 'DRY' })).requiresExpiry).toBe(false);
+			expect(
+				catalogItemRules({ type: 'supply_item', unit: 'l', perishable: true } as SupplyItem)
+					.requiresExpiry
+			).toBe(true);
+		});
 	});
 
 	it('passes for a perishable item with lot.expiry set', () => {
@@ -391,6 +446,7 @@ describe('OperationsRemoteRepository', () => {
 			await expect(
 				repo.distributeStock(
 					{
+						note: 'ครัวกลาง',
 						item_id: 'item:soap',
 						qty: 15,
 						unit: 'bar',
@@ -412,6 +468,7 @@ describe('OperationsRemoteRepository', () => {
 			// Exhaust all 10 units from the lot so balance reaches 0
 			await repo.distributeStock(
 				{
+					note: 'ครัวกลาง',
 					item_id: 'item:soap',
 					qty: 10,
 					unit: 'bar',
@@ -428,6 +485,7 @@ describe('OperationsRemoteRepository', () => {
 			await expect(
 				repo.distributeStock(
 					{
+						note: 'ครัวกลาง',
 						item_id: 'item:soap',
 						qty: 1,
 						unit: 'bar',
@@ -453,6 +511,7 @@ describe('OperationsRemoteRepository', () => {
 			await expect(
 				repo.distributeStock(
 					{
+						note: 'ครัวกลาง',
 						item_id: 'item:soap',
 						qty: 5,
 						unit: 'bar',
@@ -478,6 +537,7 @@ describe('OperationsRemoteRepository', () => {
 			await expect(
 				repo.distributeStock(
 					{
+						note: 'ครัวกลาง',
 						item_id: 'item:soap',
 						qty: 1,
 						unit: 'bar',
@@ -491,6 +551,7 @@ describe('OperationsRemoteRepository', () => {
 			await expect(
 				repo.distributeStock(
 					{
+						note: 'ครัวกลาง',
 						item_id: 'item:soap',
 						qty: 1,
 						unit: 'bar',
@@ -533,6 +594,7 @@ describe('OperationsRemoteRepository', () => {
 
 			await repo.distributeStock(
 				{
+					note: 'ครัวกลาง',
 					item_id: 'item:soap',
 					qty: 5,
 					unit: 'bar',
@@ -562,6 +624,7 @@ describe('OperationsRemoteRepository', () => {
 			const results = await Promise.allSettled([
 				clientRepoA.distributeStock(
 					{
+						note: 'ครัวกลาง',
 						item_id: 'item:soap',
 						qty: 7,
 						unit: 'bar',
@@ -572,6 +635,7 @@ describe('OperationsRemoteRepository', () => {
 				),
 				clientRepoB.distributeStock(
 					{
+						note: 'ครัวกลาง',
 						item_id: 'item:soap',
 						qty: 7,
 						unit: 'bar',
@@ -603,6 +667,7 @@ describe('OperationsRemoteRepository', () => {
 			const results = await Promise.allSettled([
 				clientRepoA.distributeStock(
 					{
+						note: 'ครัวกลาง',
 						item_id: 'item:soap',
 						qty: 4,
 						unit: 'bar',
@@ -613,6 +678,7 @@ describe('OperationsRemoteRepository', () => {
 				),
 				clientRepoB.distributeStock(
 					{
+						note: 'ครัวกลาง',
 						item_id: 'item:soap',
 						qty: 4,
 						unit: 'bar',
@@ -628,6 +694,110 @@ describe('OperationsRemoteRepository', () => {
 			expect(projectStockLotBalances(await repo.listLedger())).toEqual([
 				expect.objectContaining({ lot_ref: inbound._id, item_id: 'item:soap', qty: '2' })
 			]);
+		});
+	});
+
+	describe('distribute across lots (CR-143 FR-A7–A9, AC-A5)', () => {
+		const DAY = 86_400_000;
+		const daysFromNow = (d: number) => new Date(Date.now() + d * DAY).toISOString();
+
+		async function receiveLots(quantities: number[]) {
+			mockGetItem.mockResolvedValue({ unit: 'bar' } as SupplyItem);
+			const inbound = [];
+			for (const [i, qty] of quantities.entries()) {
+				// distinct, non-urgent expiries so the priority order is L1, L2, L3
+				inbound.push(
+					await repo.receiveStock(
+						{
+							item_id: 'item:soap',
+							qty,
+							unit: 'bar',
+							source: 'donation',
+							ref_id: DONATION_REF,
+							lot: { expiry: daysFromNow(30 + i * 10) }
+						},
+						ctx
+					)
+				);
+			}
+			return inbound;
+		}
+
+		async function planFor(qty: string) {
+			const lots = projectStockLotBalances(await repo.listLedger());
+			const ranked = rankLotsForIssue(lots, undefined, Date.now(), { excludeExpired: true });
+			return planLotSplit(ranked, qty, Date.now());
+		}
+
+		it('AC-A5: 30 from lots 6 / 20 / 16 writes 3 distribute rows 6 / 20 / 4 on one ref_id', async () => {
+			const [l1, l2, l3] = await receiveLots([6, 20, 16]);
+			const plan = await planFor('30');
+
+			const result = await distributeAcrossLots(
+				repo,
+				{
+					note: 'ครัวกลาง',
+					allocations: plan.allocations,
+					item_id: 'item:soap',
+					ref_id: DISTRIBUTION_BATCH_REF
+				},
+				ctx
+			);
+
+			expect(result.complete).toBe(true);
+			const rows = (await repo.listLedger()).filter((e) => e.reason === 'distribute');
+			expect(rows).toHaveLength(3);
+			expect(rows.map((e) => [e.lot_ref, e.qty])).toEqual([
+				[l1._id, '-6'],
+				[l2._id, '-20'],
+				[l3._id, '-4']
+			]);
+			expect(new Set(rows.map((e) => e.ref_id))).toEqual(new Set([DISTRIBUTION_BATCH_REF]));
+			expect((await repo.getBalance()).get('item:soap')).toBe('12');
+			expect(
+				projectStockLotBalances(await repo.listLedger()).map((l) => [l.lot_ref, l.qty])
+			).toEqual([
+				[l1._id, '0'],
+				[l2._id, '0'],
+				[l3._id, '12']
+			]);
+		});
+
+		it('FR-A9: a failing row keeps the rows already written and reports the rest', async () => {
+			const [l1, l2] = await receiveLots([6, 20, 16]);
+			const plan = await planFor('30');
+			// another writer drains lot 2 after the plan was made, so row 2 is refused
+			await repo.distributeStock(
+				{
+					note: 'ครัวกลาง',
+					item_id: 'item:soap',
+					qty: 19,
+					unit: 'bar',
+					ref_id: 'requisition_ticket:01JOTHERWRITER',
+					lot_ref: l2._id
+				},
+				ctx
+			);
+
+			const result = await distributeAcrossLots(
+				repo,
+				{
+					note: 'ครัวกลาง',
+					allocations: plan.allocations,
+					item_id: 'item:soap',
+					ref_id: DISTRIBUTION_BATCH_REF
+				},
+				ctx
+			);
+
+			expect(result.complete).toBe(false);
+			expect(result.distributed.map((d) => [d.lot_ref, d.qty])).toEqual([[l1._id, '6']]);
+			expect(result.distributedQty).toBe('6');
+			expect(result.remainingQty).toBe('24');
+			expect(result.failure?.lot_ref).toBe(l2._id);
+			expect(result.failure?.message).toContain('Insufficient stock');
+			const mine = (await repo.listLedger()).filter((e) => e.ref_id === DISTRIBUTION_BATCH_REF);
+			expect(mine.map((e) => [e.lot_ref, e.qty])).toEqual([[l1._id, '-6']]);
 		});
 	});
 
@@ -696,6 +866,45 @@ describe('OperationsRemoteRepository', () => {
 			).rejects.toThrow('Perishable item item:rice requires lot.expiry to be set');
 		});
 
+		it('does not demand lot.expiry for any adjustment (CR-156 FR-D2d)', async () => {
+			mockGetItem.mockResolvedValue({ unit: 'kg', perishable: true } as SupplyItem);
+			await repo.receiveStock(
+				{
+					item_id: 'item:rice',
+					qty: 10,
+					unit: 'kg',
+					source: 'donation',
+					ref_id: DONATION_REF,
+					lot: { expiry: '2027-01-01' }
+				},
+				ctx
+			);
+
+			const result = await repo.adjustStock(
+				{
+					item_id: 'item:rice',
+					qty: -2,
+					unit: 'kg',
+					source: 'adjust',
+					adjust_reason: 'damaged'
+				} as never,
+				ctx
+			);
+			expect(result.qty).toBe('-2');
+
+			const up = await repo.adjustStock(
+				{
+					item_id: 'item:rice',
+					qty: 2,
+					unit: 'kg',
+					source: 'adjust',
+					adjust_reason: 'found'
+				} as never,
+				ctx
+			);
+			expect(up.qty).toBe('2');
+		});
+
 		it('persists the ledger entry when the item exists and units match', async () => {
 			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
 
@@ -707,6 +916,82 @@ describe('OperationsRemoteRepository', () => {
 			expect(result.item_id).toBe('item:rice');
 			const list = await repo.listLedger();
 			expect(list).toHaveLength(1);
+		});
+	});
+
+	// CR-143 §C — adjust_reason / note are persisted with schema_v 6 and a mixed
+	// v5/v6 ledger still produces the right balance (AC-C1, AC-C3).
+	describe('adjustStock (CR-143 §C)', () => {
+		beforeEach(() => {
+			mockGetItem.mockReset();
+			mockGetItem.mockResolvedValue({ unit: 'kg' } as SupplyItem);
+		});
+
+		it('persists adjust_reason + note on a schema_v 6 row', async () => {
+			await repo.receiveStock(
+				{ item_id: 'item:rice', qty: 10, unit: 'kg', source: 'donation', ref_id: DONATION_REF },
+				ctx
+			);
+
+			const entry = await repo.adjustStock(
+				{
+					item_id: 'item:rice',
+					qty: '-4',
+					unit: 'kg',
+					adjust_reason: 'damaged',
+					note: 'กระสอบฉีก',
+					ref_id: null
+				},
+				ctx
+			);
+
+			expect(entry.schema_v).toBe(6);
+			const stored = (await repo.listLedger()).find((e) => e._id === entry._id);
+			expect(stored?.adjust_reason).toBe('damaged');
+			expect(stored?.note).toBe('กระสอบฉีก');
+			expect((await repo.getBalance()).get('item:rice')).toBe('6');
+		});
+
+		it('rejects a missing reason and writes nothing', async () => {
+			await expect(
+				repo.adjustStock({ item_id: 'item:rice', qty: '3', unit: 'kg', ref_id: null } as never, ctx)
+			).rejects.toThrow();
+			expect(await repo.listLedger()).toHaveLength(0);
+		});
+
+		it('rejects merge from the generic adjust path', async () => {
+			await expect(
+				repo.adjustStock(
+					{
+						item_id: 'item:rice',
+						qty: '3',
+						unit: 'kg',
+						adjust_reason: 'merge',
+						ref_id: null
+					} as never,
+					ctx
+				)
+			).rejects.toThrow();
+			expect(await repo.listLedger()).toHaveLength(0);
+		});
+
+		it('sums a ledger that mixes schema_v 5 and 6 rows', async () => {
+			// a pre-CR-143 adjust row as an older client persisted it
+			await repo.addLedgerEntry({
+				...createStockLedger(
+					{ item_id: 'item:rice', qty: '10', unit: 'kg', reason: 'donation', ref_id: DONATION_REF },
+					ctx
+				),
+				schema_v: 5 as never
+			});
+			await repo.adjustStock(
+				{ item_id: 'item:rice', qty: '-3', unit: 'kg', adjust_reason: 'lost', ref_id: null },
+				ctx
+			);
+
+			const ledger = await repo.listLedger();
+			expect(ledger.map((e) => e.schema_v).sort()).toEqual([5, 6]);
+			expect((await repo.getBalance()).get('item:rice')).toBe('7');
 		});
 	});
 
@@ -795,6 +1080,205 @@ describe('OperationsRemoteRepository', () => {
 			await expect(repo.receiveWalkInDonation(walkIn, receive, ctx)).rejects.toThrow();
 			expect(await repo.listDonations()).toHaveLength(0);
 		});
+	});
+});
+
+// CR-143 §F — merge a duplicate item into another against in-memory dbs.
+describe('OperationsRemoteRepository.mergeItems (CR-143 §F)', () => {
+	let repo: OperationsRemoteRepository;
+	const MANAGER = ['shelter:SH001', 'SH001:shelter_manager'];
+	const WAREHOUSE = ['shelter:SH001', 'SH001:warehouse_staff'];
+
+	const seedDoc = (doc: Record<string, unknown> & { _id: string }) => {
+		mockPutDoc(doc as { _id: string; _rev?: string });
+	};
+	const itemMaster = (id: string, over: Record<string, unknown> = {}) => ({
+		_id: `item_master:${id}`,
+		type: 'item_master',
+		schema_v: 4,
+		shelter_code: 'SH001',
+		created_at: '2026-10-01T00:00:00.000Z',
+		updated_at: '2026-10-01T00:00:00.000Z',
+		created_by: 'seed',
+		name: `item ${id}`,
+		base_unit: 'bottle',
+		conversions: [],
+		type_class: 'CONSUMABLE',
+		dietary: [],
+		...over
+	});
+	const receive = (itemId: string, qty: string, expiry: string, occurredAt: string) =>
+		repo.addLedgerEntry(
+			createStockLedger(
+				{
+					item_id: itemId,
+					qty,
+					unit: 'bottle',
+					reason: 'donation',
+					ref_id: DONATION_REF,
+					lot: { expiry },
+					occurred_at: occurredAt
+				},
+				ctx
+			)
+		);
+
+	beforeEach(async () => {
+		couchDocs.clear();
+		repo = new OperationsRemoteRepository('shelter_sh001');
+		seedDoc({
+			_id: 'unit_of_measure:bottle',
+			type: 'unit_of_measure',
+			schema_v: 1,
+			code: 'bottle',
+			label_th: 'ขวด',
+			label_en: 'bottle',
+			dimension: 'count',
+			created_at: '2026-10-01T00:00:00.000Z',
+			updated_at: '2026-10-01T00:00:00.000Z',
+			created_by: 'seed'
+		});
+		seedDoc(itemMaster('A'));
+		seedDoc(itemMaster('B'));
+		await receive('item_master:A', '24', '2026-12-01', '2026-10-01T01:00:00.000Z');
+		await receive('item_master:A', '6', '2027-01-01', '2026-10-02T01:00:00.000Z');
+	});
+
+	it('AC-F1 — moves both lots, deactivates the source and stamps item_master schema_v 5', async () => {
+		const result = await repo.mergeItems(
+			{ sourceId: 'item_master:A', targetId: 'item_master:B', roles: MANAGER },
+			ctx
+		);
+
+		const ledger = await repo.listLedger();
+		const mergeRows = ledger.filter((e) => e.adjust_reason === 'merge');
+		expect(mergeRows).toHaveLength(4);
+		const balance = await repo.getBalance();
+		expect(balance.get('item_master:A')).toBe('0');
+		expect(balance.get('item_master:B')).toBe('30');
+
+		expect(result.legs).toHaveLength(2);
+		const stored = mockGetDoc<{ _id: string } & Record<string, unknown>>('item_master:A');
+		expect(stored).toMatchObject({
+			merged_into: 'item_master:B',
+			deactivated: true,
+			schema_v: 5
+		});
+		// the destination is untouched
+		expect(
+			mockGetDoc<{ _id: string } & Record<string, unknown>>('item_master:B')
+		).not.toHaveProperty('merged_into');
+	});
+
+	it('writes every paired row in a single bulkDocs call', async () => {
+		const couch = await import('$lib/db/couch-db');
+		const spy = vi.spyOn(couch, 'bulkDocs');
+		await repo.mergeItems(
+			{ sourceId: 'item_master:A', targetId: 'item_master:B', roles: WAREHOUSE },
+			ctx
+		);
+		expect(spy).toHaveBeenCalledTimes(1);
+		expect(spy.mock.calls[0][1]).toHaveLength(4);
+		spy.mockRestore();
+	});
+
+	it('AC-F2 — refuses incompatible base units before writing anything', async () => {
+		seedDoc(itemMaster('L', { base_unit: 'liter' }));
+		await expect(
+			repo.mergeItems({ sourceId: 'item_master:A', targetId: 'item_master:L', roles: MANAGER }, ctx)
+		).rejects.toMatchObject({ code: 'unit_mismatch' });
+
+		expect((await repo.listLedger()).filter((e) => e.adjust_reason === 'merge')).toHaveLength(0);
+		expect(
+			mockGetDoc<{ _id: string } & Record<string, unknown>>('item_master:A')
+		).not.toHaveProperty('merged_into');
+	});
+
+	it('AC-F3/F4 — a central item is never a source, even for SA, and nothing is written', async () => {
+		seedDoc(itemMaster('CA', { shelter_code: undefined }));
+		seedDoc(itemMaster('CB', { shelter_code: undefined }));
+		await receive('item_master:CA', '5', '2026-12-01', '2026-10-03T01:00:00.000Z');
+
+		for (const roles of [WAREHOUSE, ['system_admin']]) {
+			await expect(
+				repo.mergeItems({ sourceId: 'item_master:CA', targetId: 'item_master:CB', roles }, ctx)
+			).rejects.toMatchObject({ code: 'forbidden' });
+		}
+		expect((await repo.listLedger()).filter((e) => e.adjust_reason === 'merge')).toHaveLength(0);
+		expect(
+			mockGetDoc<{ _id: string } & Record<string, unknown>>('item_master:CA')
+		).not.toHaveProperty('merged_into');
+	});
+
+	it('AC-F4 — SA may merge a local item into a central one', async () => {
+		seedDoc(itemMaster('CB', { shelter_code: undefined }));
+		await repo.mergeItems(
+			{ sourceId: 'item_master:A', targetId: 'item_master:CB', roles: ['system_admin'] },
+			ctx
+		);
+		expect((await repo.getBalance()).get('item_master:CB')).toBe('30');
+	});
+
+	it('FR-F6 — a source update that cannot save writes NO ledger rows', async () => {
+		const { catalogRepository } = await import('$lib/features/catalog');
+		const spy = vi
+			.spyOn(catalogRepository(), 'assertItemMasterWritable')
+			.mockRejectedValueOnce(new Error('unit master unavailable'));
+		await expect(
+			repo.mergeItems({ sourceId: 'item_master:A', targetId: 'item_master:B', roles: MANAGER }, ctx)
+		).rejects.toThrow('unit master unavailable');
+		spy.mockRestore();
+		expect((await repo.listLedger()).filter((e) => e.adjust_reason === 'merge')).toHaveLength(0);
+	});
+
+	it('AC-F5 — ledger written but source update failed: retry finishes the source without duplicating rows', async () => {
+		const { catalogRepository } = await import('$lib/features/catalog');
+		const spy = vi
+			.spyOn(catalogRepository(), 'updateItemMaster')
+			.mockRejectedValueOnce(new Error('conflict'));
+		await expect(
+			repo.mergeItems({ sourceId: 'item_master:A', targetId: 'item_master:B', roles: MANAGER }, ctx)
+		).rejects.toThrow('conflict');
+		spy.mockRestore();
+
+		// moved but not yet deactivated
+		expect((await repo.listLedger()).filter((e) => e.adjust_reason === 'merge')).toHaveLength(4);
+		expect(
+			mockGetDoc<{ _id: string } & Record<string, unknown>>('item_master:A')
+		).not.toHaveProperty('merged_into');
+
+		await repo.mergeItems(
+			{ sourceId: 'item_master:A', targetId: 'item_master:B', roles: MANAGER },
+			ctx
+		);
+		expect((await repo.listLedger()).filter((e) => e.adjust_reason === 'merge')).toHaveLength(4);
+		expect((await repo.getBalance()).get('item_master:B')).toBe('30');
+		expect(mockGetDoc<{ _id: string } & Record<string, unknown>>('item_master:A')).toMatchObject({
+			merged_into: 'item_master:B',
+			deactivated: true
+		});
+	});
+
+	it('refuses an unknown destination', async () => {
+		await expect(
+			repo.mergeItems(
+				{ sourceId: 'item_master:A', targetId: 'item_master:NOPE', roles: MANAGER },
+				ctx
+			)
+		).rejects.toThrow(/Unknown item/);
+	});
+
+	it('merging again moves nothing more (the source is empty and already merged)', async () => {
+		await repo.mergeItems(
+			{ sourceId: 'item_master:A', targetId: 'item_master:B', roles: MANAGER },
+			ctx
+		);
+		await repo.mergeItems(
+			{ sourceId: 'item_master:A', targetId: 'item_master:B', roles: MANAGER },
+			ctx
+		);
+		expect((await repo.listLedger()).filter((e) => e.adjust_reason === 'merge')).toHaveLength(4);
+		expect((await repo.getBalance()).get('item_master:B')).toBe('30');
 	});
 });
 

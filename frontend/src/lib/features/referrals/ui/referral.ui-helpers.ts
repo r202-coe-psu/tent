@@ -5,6 +5,7 @@ import type {
 	ReferralUrgency
 } from '../domain/referral.schema';
 import { getShelterCode } from '$lib/db/shelter';
+import { formatThaiDateTime } from '$lib/utils/date';
 
 export function getStatusLabel(status: ReferralStatus, options?: { verbose?: boolean }): string {
 	const labels: Record<ReferralStatus, { short: string; verbose: string }> = {
@@ -69,19 +70,7 @@ export function getKindLabel(type?: ReferralType | string, options?: { short?: b
 
 export function formatReferralDate(isoString?: string | null): string {
 	if (!isoString) return '-';
-	try {
-		const d = new Date(isoString);
-		if (isNaN(d.getTime())) return isoString;
-		return d.toLocaleString('th-TH', {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit'
-		});
-	} catch {
-		return isoString;
-	}
+	return formatThaiDateTime(isoString) || isoString;
 }
 
 /** List badge: incoming capacity mirror targeting this shelter. */

@@ -313,8 +313,9 @@ async function expectSummary(page: Page, memberCount: number) {
 
 // ─── Suite ─────────────────────────────────────────────────────────────────────
 
-test.describe('Household post-arrival grouping — real CouchDB', () => {
+test.describe('Household post-arrival grouping — real CouchDB', { tag: ['@quarantine'] }, () => {
 	// Each flow builds on the docs the previous one wrote.
+	// Quarantined: live writes on seeded SH001 — not §4 / `@release` safe (Step B3).
 	test.describe.configure({ mode: 'serial' });
 
 	test.beforeAll(async () => {
@@ -717,55 +718,59 @@ async function withAccount(
 	}
 }
 
-test.describe('Household post-arrival grouping — who may open the wizard', () => {
-	test.afterEach(async ({ page }) => {
-		await page.unrouteAll({ behavior: 'ignoreErrors' });
-		await clearSession(page);
-	});
+test.describe(
+	'Household post-arrival grouping — who may open the wizard',
+	{ tag: ['@quarantine'] },
+	() => {
+		test.afterEach(async ({ page }) => {
+			await page.unrouteAll({ behavior: 'ignoreErrors' });
+			await clearSession(page);
+		});
 
-	for (const access of ALLOWED) {
-		test(`A1 — ${access.label} reaches step 1`, async ({ page }) => {
-			await withAccount(access, async (user, session) => {
-				await routeCouchThroughApp(page);
-				await injectSession(page, user, session);
-				await page.goto(WIZARD_PATH);
-				await expect(
-					page.getByRole('heading', { name: '1. ตรวจสอบและเลือกหัวหน้าครัวเรือน' })
-				).toBeVisible({
-					timeout: 20_000
+		for (const access of ALLOWED) {
+			test(`A1 — ${access.label} reaches step 1`, async ({ page }) => {
+				await withAccount(access, async (user, session) => {
+					await routeCouchThroughApp(page);
+					await injectSession(page, user, session);
+					await page.goto(WIZARD_PATH);
+					await expect(
+						page.getByRole('heading', { name: '1. ตรวจสอบและเลือกหัวหน้าครัวเรือน' })
+					).toBeVisible({
+						timeout: 20_000
+					});
+					await expect(page).toHaveURL(WIZARD_URL);
 				});
-				await expect(page).toHaveURL(WIZARD_URL);
 			});
-		});
-	}
+		}
 
-	for (const access of DENIED) {
-		test(`A2 — ${access.label} is turned away`, async ({ page }) => {
-			await withAccount(access, async (user, session) => {
-				await routeCouchThroughApp(page);
-				await injectSession(page, user, session);
-				await page.goto(WIZARD_PATH);
-				await expect(page).not.toHaveURL(WIZARD_URL, { timeout: 15_000 });
-				await expect(
-					page.getByRole('heading', { name: '1. ตรวจสอบและเลือกหัวหน้าครัวเรือน' })
-				).toHaveCount(0);
-				expect(await findDocs({ created_by: user.name })).toHaveLength(0);
+		for (const access of DENIED) {
+			test(`A2 — ${access.label} is turned away`, async ({ page }) => {
+				await withAccount(access, async (user, session) => {
+					await routeCouchThroughApp(page);
+					await injectSession(page, user, session);
+					await page.goto(WIZARD_PATH);
+					await expect(page).not.toHaveURL(WIZARD_URL, { timeout: 15_000 });
+					await expect(
+						page.getByRole('heading', { name: '1. ตรวจสอบและเลือกหัวหน้าครัวเรือน' })
+					).toHaveCount(0);
+					expect(await findDocs({ created_by: user.name })).toHaveLength(0);
+				});
 			});
-		});
-	}
+		}
 
-	for (const access of DENIED) {
-		test(`A3 — CouchDB refuses a household written directly by ${access.label}`, async () => {
-			// Known gap: validate_doc_update (shelter-access-design.ts) lets any
-			// `shelter:SH001` member write people-plane docs; only the client route guard
-			// stops these roles. Remove `test.fail` once the server enforces the matrix.
-			test.fail(true, 'server does not yet enforce household write capability');
-			await withAccount(access, async (user, session) => {
-				const status = await putDocAsSession(session, probeHousehold(user));
-				expect(status, 'denied role must get 401/403 from CouchDB').toBeGreaterThanOrEqual(401);
-				expect(status).toBeLessThanOrEqual(403);
-				expect(await findDocs({ created_by: user.name })).toHaveLength(0);
+		for (const access of DENIED) {
+			test(`A3 — CouchDB refuses a household written directly by ${access.label}`, async () => {
+				// Known gap: validate_doc_update (shelter-access-design.ts) lets any
+				// `shelter:SH001` member write people-plane docs; only the client route guard
+				// stops these roles. Remove `test.fail` once the server enforces the matrix.
+				test.fail(true, 'server does not yet enforce household write capability');
+				await withAccount(access, async (user, session) => {
+					const status = await putDocAsSession(session, probeHousehold(user));
+					expect(status, 'denied role must get 401/403 from CouchDB').toBeGreaterThanOrEqual(401);
+					expect(status).toBeLessThanOrEqual(403);
+					expect(await findDocs({ created_by: user.name })).toHaveLength(0);
+				});
 			});
-		});
+		}
 	}
-});
+);

@@ -8,8 +8,8 @@ note: >
   Topology binding ยังอยู่ที่ docs/data/* จนกว่า CR-064 จะ approved แล้ว reconcile.
   OD-1..OD-5 ล็อกแล้ว (2026-08-12).
 related:
-  - docs/changes/CR-064-edge-disaster-continuity.md
-  - docs/changes/CR-033-remote-first-architecture-program-index.md
+  - docs/changes/01-core/CR-064-edge-disaster-continuity.md
+  - docs/changes/01-core/CR-033-remote-first-architecture-program-index.md
   - docs/task-breakdown/00-baseline.md (T-54)
   - docs/features/offline-fallback-flow-spec.html
   - docs/data/data-model.md §1 §6 §8
@@ -22,7 +22,7 @@ related:
 
 ## สรุป (TL;DR)
 
-บันทึกแนวปฏิบัติการ: **แจก mini PC ที่ image พร้อมก่อนเหตุการณ์ → warm sync central→edge ตลอดช่วงเปิดศูนย์ → WAN ล่มแล้ว network-only cutover ไป edge (login ใหม่ได้) → WAN กลับแล้ว sync edge→central + ops UI สถานะ → ตัดกลับ central** · ไม่รวม FastAPI/Mongo บน edge · ไม่ scale user บน edge · **elevate ผ่าน [CR-064](../changes/CR-064-edge-disaster-continuity.md)** (proposed) + T-54 Package B · ยังไม่ supersede data-model/api-contract จนกว่า CR approve
+บันทึกแนวปฏิบัติการ: **แจก mini PC ที่ image พร้อมก่อนเหตุการณ์ → warm sync central→edge ตลอดช่วงเปิดศูนย์ → WAN ล่มแล้ว network-only cutover ไป edge (login ใหม่ได้) → WAN กลับแล้ว sync edge→central + ops UI สถานะ → ตัดกลับ central** · ไม่รวม FastAPI/Mongo บน edge · ไม่ scale user บน edge · **elevate ผ่าน [CR-064](../changes/01-core/CR-064-edge-disaster-continuity.md)** (proposed) + T-54 Package B · ยังไม่ supersede data-model/api-contract จนกว่า CR approve
 
 ## 1. Intent
 
@@ -108,7 +108,7 @@ related:
 | **OD-2** | Failover = **network-only** — router/DNS ชี้ domain เดิมไป edge; app ไม่สลับ `ActiveEndpoint` เอง | C1–C3 (app-aware probe/switch) **ลด / ไม่ทำ**; โฟกัส cutover ที่ LAN + login บน edge |
 | **OD-3** | Cutover **ยอมให้ login ใหม่** — ไม่บังคับคง `_session` จาก central ข้ามไป edge | Same-domain ยังมีประโยชน์เรื่อง URL/bookmark แต่ cookie continuity ไม่ใช่ hard req; ต้องมี runbook “login ใหม่บน edge / login ใหม่ตอนกลับ central” |
 | **OD-4** | Cutback / continuity มองผ่าน **ops UI**: (1) หน้า central เห็นสถานะ **shelter ทีละศูนย์** (2) ที่ศูนย์ staff เห็นสถานะ **WAN** | เกณฑ์ lag/conflict + ใครประกาศ cutback ผูกกับ UI นี้ (รายละเอียด SLO ลงใน CR/T-54) |
-| **OD-5** | Track = **เปิด CR ใหม่** (ต่อ CR-033 follow-up) + **ขยาย T-54** + **sync ขึ้น Notion** | ✅ [CR-064](../changes/CR-064-edge-disaster-continuity.md) proposed · T-54 Package B · Notion sync |
+| **OD-5** | Track = **เปิด CR ใหม่** (ต่อ CR-033 follow-up) + **ขยาย T-54** + **sync ขึ้น Notion** | ✅ [CR-064](../changes/01-core/CR-064-edge-disaster-continuity.md) proposed · T-54 Package B · Notion sync |
 
 
 
@@ -125,7 +125,7 @@ related:
 | 0.2 | OD-2 network-only | ✅ locked |
 | 0.3 | OD-3 login ใหม่ได้ (ไม่บังคับ cookie continuity) | ✅ locked |
 | 0.4 | OD-4 ops UI สถานะ shelter + WAN ที่ศูนย์ | ✅ locked (รายละเอียดใน CR-064) |
-| 0.5 | OD-5 CR + ขยาย T-54 + Notion | ✅ [CR-064](../changes/CR-064-edge-disaster-continuity.md) proposed · T-54 updated · Notion sync |
+| 0.5 | OD-5 CR + ขยาย T-54 + Notion | ✅ [CR-064](../changes/01-core/CR-064-edge-disaster-continuity.md) proposed · T-54 updated · Notion sync |
 
 
 
@@ -248,7 +248,7 @@ related:
 
 | Doc | Relationship |
 | --- | --- |
-| [CR-033](../changes/CR-033-remote-first-architecture-program-index.md) | Master remote-first; follow-up edge orchestration → CR ใหม่ตาม OD-5 |
+| [CR-033](../changes/01-core/CR-033-remote-first-architecture-program-index.md) | Master remote-first; follow-up edge orchestration → CR ใหม่ตาม OD-5 |
 | [T-54](../task-breakdown/00-baseline.md) | ขยายให้ครอบ network-only cutover + ops UI + failback tests |
 | [data-model.md](../data/data-model.md) / [api-contract.md](../data/api-contract.md) | Binding — อย่า supersede จนกว่า CR approve; note: api-contract เคยเขียน app-aware → CR ต้อง reconcile กับ OD-2 |
 | [offline-fallback-flow-spec.html](./offline-fallback-flow-spec.html) | App-aware state machine — ลด scope ตาม OD-2; เก็บ UX สถานะ WAN / degraded |
@@ -267,5 +267,5 @@ related:
 | --- | --- |
 | 2026-08-12 | Parked idea: mini PC + warm sync + same-domain LAN cutover + failback; ตัด scale user บน edge |
 | 2026-08-12 | **Locked OD-1..OD-5:** staff stack ยกเว้น FastAPI/Mongo · network-only · re-login OK · ops UI shelter+WAN · track = CR + T-54 + Notion |
-| 2026-08-12 | Elevated: [CR-064](../changes/CR-064-edge-disaster-continuity.md) proposed · T-54 Package B · Notion T-54 sync |
+| 2026-08-12 | Elevated: [CR-064](../changes/01-core/CR-064-edge-disaster-continuity.md) proposed · T-54 Package B · Notion T-54 sync |
 

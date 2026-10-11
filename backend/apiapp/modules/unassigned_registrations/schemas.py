@@ -46,7 +46,9 @@ class EmergencyContactOut(BaseModel):
 class MemberInput(BaseModel):
     first_name: str = Field(min_length=1, max_length=100)
     last_name: str = ""
-    gender: Literal["male", "female", "other"]
+    # decision sync 2026-10-09: null = ไม่ระบุ (valid on every channel); key stays required.
+    # 'other' is legacy — accepted so edited/legacy docs round-trip.
+    gender: Literal["male", "female", "other"] | None
     phone: str | None = None
     person_id: PersonIdInput | None = None
     country: str = "THAILAND"
@@ -292,7 +294,7 @@ class MemberCreated(BaseModel):
     status: Literal["open", "claimed", "cancelled"]
     first_name: str
     last_name: str
-    gender: str
+    gender: str | None = None
     phone: str | None = None
     person_id: PersonIdOut | None = None
     country: str
@@ -340,7 +342,7 @@ class OpenMemberHit(BaseModel):
     status: Literal["open"] = "open"
     first_name: str
     last_name: str
-    gender: str
+    gender: str | None = None
     phone: str | None = None
     person_id: PersonIdOut | None = None
     country: str
@@ -418,6 +420,16 @@ class UnassignedRegistrationDetailResponse(BaseModel):
     created_at: str
     household: HouseholdOut
     members: list[MemberCreated]
+
+
+class UnassignedRegistrationStatusResponse(BaseModel):
+    """Status-only projection for the public BFF ticket sync — no PII (names, ids, phones)."""
+
+    id: str
+    status: str
+    members_total: int
+    members_claimed: int
+    claimed: bool
 
 
 class UnassignedRegistrationStatsResponse(BaseModel):

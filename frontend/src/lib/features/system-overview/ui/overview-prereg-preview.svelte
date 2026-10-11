@@ -5,6 +5,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { getPreRegStatusInfo, type PreRegistrationListItem } from '../domain';
+	import { formatThaiDateTime } from '$lib/utils/date';
 
 	let {
 		items,
@@ -18,12 +19,7 @@
 
 	function formatWhen(value: string | null): string {
 		if (!value) return '—';
-		const d = new Date(value);
-		if (Number.isNaN(d.getTime())) return value;
-		return d.toLocaleString('th-TH', {
-			dateStyle: 'short',
-			timeStyle: 'short'
-		});
+		return formatThaiDateTime(value) || value;
 	}
 
 	function originLabel(item: PreRegistrationListItem): string {

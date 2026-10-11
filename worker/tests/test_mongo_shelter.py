@@ -87,6 +87,18 @@ async def test_refresh_occupancy_writes_total_and_breakdown(db: None) -> None:
                 "gender": "female",
                 "current_stay": {"status": "checked_out"},
             },
+            {
+                "_id": "evacuee:3",
+                "type": "evacuee",
+                "gender": None,
+                "current_stay": {"status": "active"},
+            },
+            {
+                "_id": "evacuee:4",
+                "type": "evacuee",
+                "gender": "other",
+                "current_stay": {"status": "active"},
+            },
         ):
             yield doc
 
@@ -98,10 +110,18 @@ async def test_refresh_occupancy_writes_total_and_breakdown(db: None) -> None:
 
     reloaded = await PublicShelter.get("SH910")
     assert reloaded is not None
-    assert reloaded.occupancy_total == 1
+    assert reloaded.occupancy_total == 3
     assert reloaded.occupancy_breakdown.male == 1
     assert reloaded.occupancy_breakdown.elderly_over_60 == 1
     assert reloaded.occupancy_breakdown.female == 0
+    # null + legacy 'other' → ไม่ระบุเพศ; gender groups partition the total
+    assert reloaded.occupancy_breakdown.gender_unspecified == 2
+    assert (
+        reloaded.occupancy_breakdown.male
+        + reloaded.occupancy_breakdown.female
+        + reloaded.occupancy_breakdown.gender_unspecified
+        == reloaded.occupancy_total
+    )
 
 
 async def test_refresh_occupancy_no_op_when_shelter_row_missing(db: None) -> None:

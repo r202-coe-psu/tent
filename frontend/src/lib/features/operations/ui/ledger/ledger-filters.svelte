@@ -9,7 +9,13 @@
 		type LedgerRangePreset,
 		type LedgerUrlState
 	} from './ledger-url-state';
-	import { LEDGER_GROUP_LABELS, type LedgerTypeFilter } from './ledger-view';
+	import { adjustReasonSchema } from '../../domain/operations';
+	import {
+		ADJUST_REASON_LABELS,
+		LEDGER_GROUP_LABELS,
+		type LedgerReasonFilter,
+		type LedgerTypeFilter
+	} from './ledger-view';
 
 	let {
 		state: filter,
@@ -28,6 +34,13 @@
 		{ value: 'out', label: LEDGER_GROUP_LABELS.out },
 		{ value: 'adjust', label: LEDGER_GROUP_LABELS.adjust },
 		{ value: 'transfer', label: LEDGER_GROUP_LABELS.transfer }
+	];
+
+	// CR-143 FR-C5 — reason chips appear with the adjust group (`merge` included: it is
+	// written by the merge flow and must stay filterable).
+	const REASONS: { value: LedgerReasonFilter; label: string }[] = [
+		{ value: 'all', label: 'ทุกเหตุผล' },
+		...adjustReasonSchema.options.map((value) => ({ value, label: ADJUST_REASON_LABELS[value] }))
 	];
 
 	// Typing is debounced into the URL; the box itself stays responsive.
@@ -144,11 +157,30 @@
 			<button
 				type="button"
 				aria-pressed={filter.type === type.value}
-				onclick={() => onchange({ type: type.value })}
+				onclick={() => onchange({ type: type.value, reason: 'all' })}
 				class={chipClass(filter.type === type.value)}
 			>
 				{type.label}
 			</button>
 		{/each}
 	</div>
+
+	{#if filter.type === 'adjust'}
+		<div
+			role="group"
+			aria-label="เหตุผลการปรับยอด"
+			class="flex scrollbar-none gap-1.5 overflow-x-auto"
+		>
+			{#each REASONS as reason (reason.value)}
+				<button
+					type="button"
+					aria-pressed={filter.reason === reason.value}
+					onclick={() => onchange({ reason: reason.value })}
+					class={chipClass(filter.reason === reason.value)}
+				>
+					{reason.label}
+				</button>
+			{/each}
+		</div>
+	{/if}
 </div>

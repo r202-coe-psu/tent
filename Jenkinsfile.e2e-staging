@@ -1,3 +1,4 @@
+// Manual review (decision 2026-10-09): no GitHub commit status; humans read the Staging E2E Report before promoting to main.
 pipeline {
     agent { label 'mgmt' }
 
@@ -5,7 +6,8 @@ pipeline {
         skipDefaultCheckout(true)
         disableConcurrentBuilds(abortPrevious: true)
         buildDiscarder(logRotator(numToKeepStr: '20', daysToKeepStr: '14'))
-        timeout(time: 15, unit: 'MINUTES')
+        // @critical + @smoke remote set can take 15–30 min (playwright globalTimeout 30m).
+        timeout(time: 40, unit: 'MINUTES')
         timestamps()
     }
 
@@ -65,7 +67,11 @@ pipeline {
             }
         }
 
-        stage('Run Staging E2E Smoke') {
+        // @critical (live-write) journeys only run when the tent-staging-e2e-env
+        // credential itself sets ALLOW_REMOTE_WRITES=true (see e2e/.env.example and
+        // CAN_WRITE in e2e/helpers/e2e-env.ts) — never hardcoded here, so flipping
+        // it is a credential change the owner controls, not a pipeline code change.
+        stage('Run Staging E2E (@critical + @smoke)') {
             steps {
                 withCredentials([
                     file(credentialsId: 'tent-staging-e2e-env', variable: 'E2E_ENV_FILE')

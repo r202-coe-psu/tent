@@ -2,7 +2,7 @@
 title: Smart Shelter — Data Model (CouchDB remote-first) v3
 status: draft for review
 created: 2026-06-11
-updated: 2026-08-26
+updated: 2026-10-09
 note: ออกแบบใหม่ทั้งหมด — ไม่สืบทอดจาก docs/data v2.0 (retired 2026-06-11); decision sync 2026-06-15 เลือก MongoDB projection สำหรับ public tier และ EOC read-model
 ---
 
@@ -17,7 +17,7 @@ note: ออกแบบใหม่ทั้งหมด — ไม่สืบ
 | Decision | ค่า |
 | --- | --- |
 | Medical masking | **ไม่มี** — staff ทุก role เห็น medical เต็ม (สถานการณ์ฉุกเฉิน) |
-| Registration minimum | `first_name` + `last_name` + `gender` + `phone` (กรอก "ไม่มี" ได้ → เก็บ `null`) |
+| Registration minimum | `first_name` + `last_name` + `gender` (key ต้องมี; "ไม่ระบุ" → เก็บ `null` — decision sync 2026-10-09) + `phone` (กรอก "ไม่มี" ได้ → เก็บ `null`) |
 | Scale assumptions | ≤350 shelters · ≤20,000 คน/ศูนย์ (ใหญ่สุด) · ≤50 devices/ศูนย์ |
 | Retention | purge PII ≤3 เดือนหลังปิดศูนย์ · local db บน device อายุ 1 เดือน (SOP wipe) · PSU = data controller |
 | EOC / Open API | deferred service แยก ใช้ **MongoDB projection** จาก Central CouchDB — ไม่มี operational doc type ในรุ่นนี้ |
@@ -87,7 +87,7 @@ device app  ⇄ WAN ⇄  central (CouchDB)
 {
   type: "evacuee", schema_v: 2,
   // ---- minimum (บังคับแค่นี้ — เคาะ 2026-06-11) ----
-  first_name: "สมชาย", last_name: "ใจดี", gender: "male|female|other",
+  first_name: "สมชาย", last_name: "ใจดี", gender: "male|female|other" | null,  // null = ไม่ระบุ (default ฟอร์ม; 'other' = legacy อ่าน/preserve เท่านั้น)
   phone: "0812345678" | null,         // required ใน UI — ผู้ลงทะเบียนกด/กรอก "ไม่มี" → เก็บ null
                                       // ใช้ค้นใน FAM search (เบอร์เต็มเท่านั้น) — ไม่ส่งกลับใน public response
   country: "THAILAND",                // ประเทศต้นทาง (เพิ่มใน v2 — CR-007)
@@ -132,7 +132,7 @@ device app  ⇄ WAN ⇄  central (CouchDB)
 | `job_application` | state machine | ใบสมัครงานอาสา (`pending_review→confirmed|rejected|cancelled`, tracking_token) — v2 CR-041 + CR-094 |
 | `shift_assignment` | mutable (LWW) | ตารางเวร + duty_window + เช็คอิน/เช็คเอาต์หน้างาน (QR หรือ manual override) + dispatch — v3 CR-094, บังคับ Time-Bound Write Access ที่ CouchDB (role grant ตามกะ) |
 | `volunteer_transfer` | state machine | คำขอโอนย้ายอาสาข้ามศูนย์ (`pending→accepted|rejected`) — doc ใหม่ CR-094 §3.5, accepted แล้วอัปเดต `volunteer.current_shelter_code` |
-| `shelter_report` | state machine | รายงานในศูนย์ (`kind`: grievance \| incident) — [CR-040](../changes/CR-040-shelter-case-grievance-reframe.md) |
+| `shelter_report` | state machine | รายงานในศูนย์ (`kind`: grievance \| incident) — [CR-040](../changes/08-E-reports/CR-040-shelter-case-grievance-reframe.md) |
 | `referral` | state machine | ส่งต่อหน่วยงานนอก/ข้ามศูนย์: `draft→sent→accepted|rejected→closed` (จัดเก็บที่ `central_ops` — ดู schema.md §5.4) |
 | `audit` | **append-only** | การกระทำสำคัญ (override duplicate-hint, แก้ retroactive, export, ลบ) |
 

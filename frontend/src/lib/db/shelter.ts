@@ -1,5 +1,5 @@
 import { authStore } from '$lib/stores/auth.svelte';
-import { shelterCodeFromRoles } from '$lib/auth/roles';
+import { isSystemAdmin, shelterCodeFromRoles } from '$lib/auth/roles';
 import { shelterStore } from '$lib/stores/shelter.svelte';
 
 /**
@@ -26,6 +26,20 @@ export function resolveShelterCode(): string | null {
 	}
 	const roles = authStore.user?.roles ?? [];
 	return shelterCodeFromRoles(roles) ?? null;
+}
+
+/**
+ * The shelter whose data the caller is currently working in, or `null` for
+ * central (global) context. A system admin has no shelter scope by design, so
+ * only an explicit selection counts — never `listDefaultCode` (first shelter of
+ * any list call) or the 'SH001' fallback, which would leak one shelter's data
+ * into SA's central views.
+ */
+export function resolveContextShelterCode(): string | null {
+	if (isSystemAdmin(authStore.user?.roles ?? [])) {
+		return shelterStore.selectedShelterCode ?? null;
+	}
+	return resolveShelterCode();
 }
 
 /** The CouchDB database name for the current user's shelter. */

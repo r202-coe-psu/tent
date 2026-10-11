@@ -153,7 +153,7 @@ export async function seedItemWithStock(
 	await putDocument(SHELTER_DB, {
 		_id: lotId,
 		type: 'stock_ledger',
-		schema_v: 4,
+		schema_v: 6,
 		shelter_code: 'SH001',
 		created_at: now,
 		updated_at: now,
@@ -162,6 +162,7 @@ export async function seedItemWithStock(
 		qty: options.stockQty,
 		unit: 'piece',
 		reason: 'adjust',
+		adjust_reason: 'found',
 		ref_id: null,
 		lot_ref: lotId,
 		occurred_at: now

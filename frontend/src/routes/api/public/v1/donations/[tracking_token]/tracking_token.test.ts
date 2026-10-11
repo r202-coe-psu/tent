@@ -97,6 +97,71 @@ describe('GET & PATCH & DELETE /api/public/v1/donations/[tracking_token]', () =>
 		expect(data.donation.donor.phone).toBeUndefined();
 	});
 
+	it('GET overlays received status and received_summary from CouchDB if present', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				json: async () => ({
+					success: true,
+					donation: {
+						status: 'verifying',
+						booking_ref: 'DN-999999',
+						shelter_code: 'SH001',
+						donor: { name: 'S***' },
+						items: [{ free_text: 'ข้าวสาร', qty: '10', unit: 'kg' }],
+						logistics: { delivery_method: 'parcel' },
+						received_summary: null,
+						updated_at: '2026-01-01T00:00:00Z'
+					}
+				})
+			})
+		);
+		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
+			if (method === 'GET' && path.includes('/shelter_sh001/') && path.includes('_all_docs')) {
+				return Promise.resolve({
+					status: 200,
+					data: {
+						rows: [
+							{
+								doc: {
+									...mockDonation,
+									status: 'received',
+									received_summary: {
+										total_items: 1,
+										received_at: '2026-01-02T00:00:00Z',
+										shortfalls: [
+											{
+												item_name: 'ข้าวสาร',
+												declared: '10',
+												counted: '8',
+												short: '2'
+											}
+										]
+									}
+								}
+							}
+						]
+					}
+				});
+			}
+			return Promise.resolve({ status: 404, data: {} });
+		});
+
+		const response = await GET({
+			params: { tracking_token: TOKEN },
+			getClientAddress: () => '127.0.0.1'
+		} as unknown as GetEvent);
+
+		const data = await response.json();
+		expect(response.status).toBe(200);
+		expect(data.success).toBe(true);
+		expect(data.donation.status).toBe('received');
+		expect(data.donation.received_summary?.shortfalls).toHaveLength(1);
+		expect(data.donation.received_summary?.shortfalls[0].short).toBe('2');
+	});
+
 	it('PATCH updates the courier tracking number in CouchDB', async () => {
 		vi.mocked(adminRaw).mockImplementation((path: string, method: string) => {
 			if (method === 'GET' && path.includes('/shelter_sh001/') && path.includes('_all_docs')) {

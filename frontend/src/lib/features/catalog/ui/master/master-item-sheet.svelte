@@ -6,6 +6,7 @@
 	import Power from '@lucide/svelte/icons/power';
 	import Ban from '@lucide/svelte/icons/ban';
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
+	import GitMerge from '@lucide/svelte/icons/git-merge';
 	import type { ItemMaster } from '../../domain/catalog';
 	import ItemMasterForm from '../item-master-form.svelte';
 	import MasterBadge from './master-badge.svelte';
@@ -30,6 +31,7 @@
 		defaultCategoryId,
 		onaction,
 		onactivate,
+		onmerge,
 		onclose
 	}: {
 		open?: boolean;
@@ -45,6 +47,8 @@
 		/** Ask the panel to confirm delete / reset / deactivate. */
 		onaction: (kind: 'delete' | 'reset' | 'deactivate') => void;
 		onactivate: () => void;
+		/** Offer "รวมกับรายการอื่น" (CR-143 §F); the panel passes it only when the actor may merge this item. */
+		onmerge?: () => void;
 		/** The sheet closed after a create, so the panel can clear its selection. */
 		onclose: () => void;
 	} = $props();
@@ -250,6 +254,17 @@
 							{/if}
 						{/if}
 					</div>
+				{/if}
+				{#if onmerge}
+					<Button
+						type="button"
+						variant="outline"
+						class="min-h-11 w-full gap-1.5 rounded-lg border-slate-300 text-sm font-semibold text-slate-800"
+						onclick={onmerge}
+					>
+						<GitMerge class="h-4 w-4" aria-hidden="true" />
+						รวมกับรายการอื่น
+					</Button>
 				{/if}
 				{#if action === 'central'}
 					<p

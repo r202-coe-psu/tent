@@ -60,7 +60,8 @@
 	function genderLabel(gender: string | null | undefined) {
 		if (gender === 'male') return t.genderMale;
 		if (gender === 'female') return t.genderFemale;
-		return t.genderOther;
+		// null (ไม่ระบุ) and legacy 'other' both read as ไม่ระบุ (decision sync 2026-10-09).
+		return t.genderUnspecified;
 	}
 
 	function formatDateTime(iso: string | null | undefined) {
