@@ -183,6 +183,11 @@ migration: N/A — doc type ใหม่ ไม่มีข้อมูลเด
 
 N/A — doc type ใหม่
 
+## 7. อ้างอิง
+
+- ไฟล์ประกอบ CR (Google Drive): <https://drive.google.com/drive/folders/1WveB8a35GO591A-blUZuFdyKzdxRz51H?usp=sharing>
+- แนวทาง implement: [`docs/features/kiosk-banner-design-guideline.md`](../../features/kiosk-banner-design-guideline.md)
+
 ## Decision log
 
 - 2026-10-11 — proposed · owner เลือก scope banner รูปภาพ, track เป็นไฟล์ CR ใน `14-kiosk/`, ยึด base code `feat/pre-register_kiosk`
