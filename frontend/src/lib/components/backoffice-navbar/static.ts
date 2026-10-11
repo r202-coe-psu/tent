@@ -1,6 +1,7 @@
 import type { ResolvedPathname } from '$app/types';
 import { resolve } from '$app/paths';
 import type { Icon } from '@lucide/svelte';
+import { isShelterManager, isSystemAdmin } from '$lib/auth/roles';
 import Users from '@lucide/svelte/icons/users';
 import HeartHandshake from '@lucide/svelte/icons/heart-handshake';
 import ClipboardList from '@lucide/svelte/icons/clipboard-list';
@@ -24,6 +25,8 @@ type Leaf = {
 	icon: typeof Icon;
 	requiresAdmin?: boolean;
 	requiresManager?: boolean;
+	/** Fine-grained visibility (e.g. capability in any shelter). Wins over the boolean flags. */
+	visibleTo?: (roles: readonly string[]) => boolean;
 };
 
 type Group = Leaf & {
@@ -33,6 +36,25 @@ type Group = Leaf & {
 export type BackofficeNavbarNode = Leaf | Group;
 
 const isGroup = (n: BackofficeNavbarNode): n is Group => 'children' in n;
+
+export type NavVisibilityContext = {
+	roles: readonly string[];
+	/** Active shelter — scopes `requiresManager` to a manager of this shelter. */
+	shelterCode?: string | null;
+};
+
+/**
+ * Whether the signed-in user sees a nav node. `visibleTo` wins; a group also needs at least one
+ * visible child (no empty parents); otherwise `requiresAdmin` / `requiresManager` apply.
+ */
+export function canSeeNavNode(node: BackofficeNavbarNode, ctx: NavVisibilityContext): boolean {
+	if (node.visibleTo) return node.visibleTo(ctx.roles);
+	const isSA = isSystemAdmin(ctx.roles);
+	if (node.requiresAdmin && !isSA) return false;
+	if (node.requiresManager && !isSA && !isShelterManager(ctx.roles, ctx.shelterCode)) return false;
+	if (isGroup(node)) return node.children.some((child) => canSeeNavNode(child, ctx));
+	return true;
+}
 
 export type BackofficeNavbarGroup = {
 	title: string;
