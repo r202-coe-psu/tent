@@ -1970,8 +1970,8 @@ test.describe(
 			await expect(
 				page.getByText('แสดง QR Code นี้ต่อเจ้าหน้าที่ เพื่อรับเข้าศูนย์')
 			).toBeVisible();
-			// the id rides in the QR only — never printed for a human
-			await expect(page.getByText(queueId)).toHaveCount(0);
+			// CR-150: an unassigned ticket prints its queue code under the name (`รหัส: {code}`)
+			await expect(page.getByText(`รหัส: ${queueId}`, { exact: true })).toBeVisible();
 			await expect.poll(() => storedTicketCodes(page)).toContain(queueId);
 			await expect(page.locator('main')).toMatchAriaSnapshot({ name: 'ticket.aria.yml' });
 			expectHealthy(health);
