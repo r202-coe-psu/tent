@@ -5,8 +5,7 @@ export { default as LoginForm } from './ui/login-form.svelte';
 export { default as GoogleSignInButton } from './ui/google-sign-in-button.svelte';
 export { default as ThaIdSignInButton } from './ui/thaid-sign-in-button.svelte';
 export { default as LogoutButton } from './ui/logout-button.svelte';
-export { default as ReauthDialog } from './ui/reauth-dialog.svelte';
-export { default as SessionExpiredBar } from './ui/session-expired-bar.svelte';
+export { default as SessionExpiredModal } from './ui/session-expired-modal.svelte';
 export { default as LinkAccountForm } from './ui/link-account-form.svelte';
 export {
 	fetchPendingLink,

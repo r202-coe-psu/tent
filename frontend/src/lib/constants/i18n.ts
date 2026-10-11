@@ -19,5 +19,6 @@ export { PUBLIC_BOOKING_TICKET_I18N } from './i18n/public-booking-ticket';
 export { PUBLIC_PRE_REGISTER_I18N, PUBLIC_TICKET_HISTORY_I18N } from './i18n/public-pre-register';
 export { PUBLIC_DONATIONS_I18N } from './i18n/public-donations';
 export { PUBLIC_TERM_I18N } from './i18n/public-term';
+export { PUBLIC_COOKIE_I18N } from './i18n/public-cookie';
 export { PUBLIC_POLICY_I18N } from './i18n/public-policy';
 export * from './i18n/admin-announcements';

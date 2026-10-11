@@ -4,6 +4,7 @@ import { now, type AuthorContext } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
 import { addQty, persistQty, qtyGt, qtyGte, qtyNeg, subQty } from '$lib/utils/qty';
 import {
+	DISTRIBUTION_STAFF,
 	hasStaffCapability,
 	isShelterManager,
 	isSystemAdmin,
@@ -156,12 +157,12 @@ export class DistributionRemoteRepository implements DistributionRepository {
 	private assertAuthorizedRequestCreation(ctx: AuthorContext): void {
 		if (
 			!ctx.roles ||
-			(!hasStaffCapability(ctx.roles, 'registration_staff') &&
-				!isShelterManager(ctx.roles) &&
+			(!hasStaffCapability(ctx.roles, DISTRIBUTION_STAFF, ctx.shelterCode) &&
+				!isShelterManager(ctx.roles, ctx.shelterCode) &&
 				!isSystemAdmin(ctx.roles))
 		) {
 			throw new Error(
-				'Unauthorized: distribution request creation requires registration_staff, shelter_manager, or system_admin role'
+				'Unauthorized: distribution request creation requires distribution_staff, shelter_manager, or system_admin role'
 			);
 		}
 	}
@@ -169,26 +170,28 @@ export class DistributionRemoteRepository implements DistributionRepository {
 	private assertAuthorizedRequestCancellation(ctx: AuthorContext): void {
 		if (
 			!ctx.roles ||
-			(!hasStaffCapability(ctx.roles, 'registration_staff') &&
-				!isShelterManager(ctx.roles) &&
+			(!hasStaffCapability(ctx.roles, DISTRIBUTION_STAFF, ctx.shelterCode) &&
+				!isShelterManager(ctx.roles, ctx.shelterCode) &&
 				!isSystemAdmin(ctx.roles))
 		) {
 			throw new Error(
-				'Unauthorized: distribution cancellation requires registration_staff, shelter_manager, or system_admin role'
+				'Unauthorized: distribution cancellation requires distribution_staff, shelter_manager, or system_admin role'
 			);
 		}
 	}
 
+	// CR-161 R3 drops REG from reading requests/batches. warehouse_staff keeps read access: it
+	// approves/rejects requests and closes batches (assertAuthorizedStaff), which needs the reads.
 	private assertAuthorizedDistributionView(ctx: AuthorContext): void {
 		if (
 			!ctx.roles ||
-			(!hasStaffCapability(ctx.roles, 'registration_staff') &&
-				!isWarehouseStaff(ctx.roles) &&
-				!isShelterManager(ctx.roles) &&
+			(!hasStaffCapability(ctx.roles, DISTRIBUTION_STAFF, ctx.shelterCode) &&
+				!isWarehouseStaff(ctx.roles, ctx.shelterCode) &&
+				!isShelterManager(ctx.roles, ctx.shelterCode) &&
 				!isSystemAdmin(ctx.roles))
 		) {
 			throw new Error(
-				'Unauthorized: distribution view requires registration_staff, warehouse_staff, shelter_manager, or system_admin role'
+				'Unauthorized: distribution view requires distribution_staff, warehouse_staff, shelter_manager, or system_admin role'
 			);
 		}
 	}
@@ -1797,44 +1800,31 @@ export class DistributionRemoteRepository implements DistributionRepository {
 		);
 	}
 
+	// CR-161 R3: issuing goods is SA, SM, DST (REG dropped). Scoped role checks accept a legacy
+	// flat role only when the user holds a single shelter scope (CR-161 R1).
 	private assertAuthorizedIssueStaff(ctx: AuthorContext): void {
-		if (!ctx.roles) {
+		if (
+			!ctx.roles ||
+			(!isSystemAdmin(ctx.roles) &&
+				!hasStaffCapability(ctx.roles, DISTRIBUTION_STAFF, ctx.shelterCode) &&
+				!isShelterManager(ctx.roles, ctx.shelterCode))
+		) {
 			throw new Error(
-				'Unauthorized: distribution issue requires registration_staff, shelter_manager, or system_admin role'
+				'Unauthorized: distribution issue requires distribution_staff, shelter_manager, or system_admin role'
 			);
 		}
-		if (isSystemAdmin(ctx.roles)) return;
-		const hasRegistrationRole =
-			hasStaffCapability(ctx.roles, 'registration_staff', ctx.shelterCode) ||
-			ctx.roles.includes(`${ctx.shelterCode}:registration_staff`) ||
-			ctx.roles.includes('registration_staff');
-		const hasManagerRole =
-			isShelterManager(ctx.roles, ctx.shelterCode) ||
-			ctx.roles.includes(`${ctx.shelterCode}:shelter_manager`) ||
-			ctx.roles.includes('shelter_manager');
-		if (hasRegistrationRole || hasManagerRole) return;
-		throw new Error(
-			'Unauthorized: distribution issue requires registration_staff, shelter_manager, or system_admin role'
-		);
 	}
 
+	// CR-161 R3: reading issues is SA, SM, DST (REG and WH dropped).
 	private assertAuthorizedIssueView(ctx: AuthorContext): void {
-		if (!ctx.roles) throw new Error('Unauthorized: distribution issue view requires shelter staff');
-		const roles = ctx.roles;
-		if (isSystemAdmin(roles)) return;
-		const allowedCapabilities = ['registration_staff', 'warehouse_staff'] as const;
-		const hasScopedStaff = allowedCapabilities.some(
-			(capability) =>
-				hasStaffCapability(roles, capability, ctx.shelterCode) ||
-				roles.includes(`${ctx.shelterCode}:${capability}`) ||
-				roles.includes(capability)
-		);
-		const hasScopedManager =
-			isShelterManager(roles, ctx.shelterCode) ||
-			roles.includes(`${ctx.shelterCode}:shelter_manager`) ||
-			roles.includes('shelter_manager');
-		if (hasScopedStaff || hasScopedManager) return;
-		throw new Error('Unauthorized: distribution issue view requires shelter staff');
+		if (
+			!ctx.roles ||
+			(!isSystemAdmin(ctx.roles) &&
+				!hasStaffCapability(ctx.roles, DISTRIBUTION_STAFF, ctx.shelterCode) &&
+				!isShelterManager(ctx.roles, ctx.shelterCode))
+		) {
+			throw new Error('Unauthorized: distribution issue view requires shelter staff');
+		}
 	}
 
 	private parseCapacityDoc(

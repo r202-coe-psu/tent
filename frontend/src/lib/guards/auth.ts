@@ -9,7 +9,9 @@ import {
 	isShelterManager,
 	isWarehouseStaff,
 	isSystemAdmin,
+	canAccessDistributionDesk,
 	canAccessMedicalScreening,
+	canAccessVolunteerBackoffice,
 	canAccessZoning,
 	shelterCodeFromRoles
 } from '$lib/auth/roles';
@@ -181,6 +183,20 @@ export async function requireTicketAccess(fetchFn?: typeof fetch) {
 }
 
 /**
+ * Distribution Desk (Station 4, `/onsite/distribution`) guard — system_admin, shelter_manager or
+ * distribution_staff of the selected shelter (CR-161 R5). Matches the onsite and portal tiles;
+ * per-step buttons stay gated in the UI and the CouchDB `validate_doc_update` guard remains the
+ * real boundary.
+ */
+export async function requireDistributionDesk(fetchFn?: typeof fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	if (!canAccessDistributionDesk(roles, activeShelterCode(roles))) {
+		throw redirect(302, resolve(LANDING_ROUTE));
+	}
+}
+
+/**
  * Evacuee registration guard — requires system_admin, shelter_manager, or
  * the `registration_staff` capability. Used for PII surfaces (evacuee/
  * household CRUD) so only staff whose job is registration can reach them;
@@ -221,8 +237,22 @@ export async function requireVolunteerCheckIn(fetchFn?: typeof fetch) {
 }
 
 /**
+ * Volunteer back-office guard — requires system_admin, shelter_manager, or
+ * `volunteer_coordinator` in the selected shelter (matrix §3 "Volunteer Job Board").
+ * Used for `/back-office/volunteers` (+ job detail / assign). UX gate; the data layer
+ * stays the authorization boundary. User management is NOT covered (stays SM/SA).
+ */
+export async function requireVolunteerBackoffice(fetchFn?: typeof fetch) {
+	await requireAuth(fetchFn);
+	const roles = authStore.user?.roles ?? [];
+	if (!canAccessVolunteerBackoffice(roles, activeShelterCode(roles))) {
+		throw redirect(302, resolve(LANDING_ROUTE));
+	}
+}
+
+/**
  * Medical screening guard — requires system_admin, shelter_manager,
- * medical_staff, or triage_staff. Used for Station 2 medical screening.
+ * registration_staff, medical_staff, or triage_staff. Used for Station 2 medical screening.
  */
 export async function requireMedicalScreening(fetchFn?: typeof fetch) {
 	await requireAuth(fetchFn);

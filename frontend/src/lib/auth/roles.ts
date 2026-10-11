@@ -21,6 +21,7 @@ export const MEDICAL_STAFF = 'medical_staff';
 export const VOLUNTEER_COORDINATOR = 'volunteer_coordinator';
 export const SECURITY_OFFICER = 'security_officer';
 export const FACILITY_STAFF = 'facility_staff';
+export const DISTRIBUTION_STAFF = 'distribution_staff';
 
 /** Capability roles a shelter_manager or coordinator is allowed to grant (per CR-104 §2.1). */
 export const STAFF_CAPABILITIES = [
@@ -32,7 +33,8 @@ export const STAFF_CAPABILITIES = [
 	WAREHOUSE_STAFF,
 	VOLUNTEER_COORDINATOR,
 	SECURITY_OFFICER,
-	FACILITY_STAFF
+	FACILITY_STAFF,
+	DISTRIBUTION_STAFF
 ] as const;
 export type StaffCapability = (typeof STAFF_CAPABILITIES)[number];
 
@@ -265,7 +267,8 @@ export function canAccessUnassignedRegistrationQueue(
 
 /**
  * True when the actor may access the Station 2 medical screening route / queue:
- * system_admin, shelter_manager, medical_staff, or triage_staff.
+ * system_admin, shelter_manager, registration_staff, medical_staff, or triage_staff.
+ * (registration_staff added by decision sync 2026-10-10 — ADR 0001.)
  */
 export function canAccessMedicalScreening(
 	roles: readonly string[],
@@ -274,8 +277,42 @@ export function canAccessMedicalScreening(
 	return (
 		isSystemAdmin(roles) ||
 		isShelterManager(roles, shelterCode) ||
+		hasStaffCapability(roles, 'registration_staff', shelterCode) ||
 		hasStaffCapability(roles, MEDICAL_STAFF, shelterCode) ||
 		hasStaffCapability(roles, TRIAGE_STAFF, shelterCode)
+	);
+}
+
+/**
+ * True when the actor may use the staff volunteer back-office (`/back-office/volunteers` job
+ * board, shifts, roster): system_admin, shelter_manager, or volunteer_coordinator in the shelter
+ * (role-permission-matrix.md §3 "Volunteer Job Board"; decision sync 2026-10-10). Does **not**
+ * cover user management — granting system access to a volunteer stays SM/SA.
+ */
+export function canAccessVolunteerBackoffice(
+	roles: readonly string[],
+	shelterCode?: string | null
+): boolean {
+	return (
+		isSystemAdmin(roles) ||
+		isShelterManager(roles, shelterCode) ||
+		hasStaffCapability(roles, VOLUNTEER_COORDINATOR, shelterCode)
+	);
+}
+
+/**
+ * True when the actor may use the Distribution Desk (Station 4, `/onsite/distribution`):
+ * system_admin, shelter_manager, or distribution_staff in the shelter (CR-161 R5, page-level per
+ * CR-159). REG, SC and WH keep their system-level distribution rights but not this page.
+ */
+export function canAccessDistributionDesk(
+	roles: readonly string[],
+	shelterCode?: string | null
+): boolean {
+	return (
+		isSystemAdmin(roles) ||
+		isShelterManager(roles, shelterCode) ||
+		hasStaffCapability(roles, DISTRIBUTION_STAFF, shelterCode)
 	);
 }
 
@@ -344,7 +381,8 @@ const STAFF_CAPABILITY_LABELS: Record<StaffCapability, string> = {
 	warehouse_staff: 'เจ้าหน้าที่คลัง',
 	volunteer_coordinator: 'ผู้ประสานงานจิตอาสา',
 	security_officer: 'เจ้าหน้าที่รักษาความปลอดภัย',
-	facility_staff: 'เจ้าหน้าที่ฝ่ายอาคารสถานที่'
+	facility_staff: 'เจ้าหน้าที่ฝ่ายอาคารสถานที่',
+	distribution_staff: 'เจ้าหน้าที่แจกจ่าย'
 };
 
 /**

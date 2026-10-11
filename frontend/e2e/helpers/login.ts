@@ -75,6 +75,10 @@ export async function injectSession(
  */
 export async function routeBrowserCouchThroughApp(page: Page): Promise<void> {
 	const appBase = appBaseUrl();
+	// Remote targets reach CouchDB through the app's own proxy (COUCHDB_ADMIN_URL =
+	// https://…@<app>/couch): the build already calls it same-origin, and routing it again
+	// would rewrite every call to `<app>/couch/couch/...`.
+	if (COUCH_BASE === `${appBase}/couch` || COUCH_BASE.startsWith(`${appBase}/couch/`)) return;
 	await page.route(`${COUCH_BASE}/**`, async (route) => {
 		const request = route.request();
 		const target = new URL(request.url());

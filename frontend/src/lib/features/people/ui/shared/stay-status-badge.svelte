@@ -14,6 +14,11 @@
 				'border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-300',
 			dotClass: 'bg-blue-500'
 		},
+		kiosk_registered: {
+			label: 'ลงทะเบียนที่ตู้ (รอยืนยัน)',
+			badgeClass: 'border-amber-200 bg-amber-50 text-amber-900',
+			dotClass: 'bg-amber-500'
+		},
 		arriving: {
 			label: 'รอเข้าพัก',
 			badgeClass:

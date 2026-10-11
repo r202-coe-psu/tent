@@ -348,7 +348,7 @@
 	>
 		<!-- Header -->
 		<div
-			class="flex flex-col items-start justify-between gap-4 bg-[#013481] p-6 text-white sm:flex-row sm:p-8"
+			class="flex flex-col items-start justify-between gap-4 bg-domain-donation-strong p-6 text-white sm:flex-row sm:p-8"
 		>
 			<div class="flex items-start gap-4">
 				<button
@@ -387,7 +387,7 @@
 			<div class="mx-auto max-w-4xl space-y-6">
 				<div class="flex items-center justify-between">
 					<h3 class="flex items-center gap-2 text-xl font-black text-slate-800">
-						<ClipboardList class="h-6 w-6 text-[#013481]" />
+						<ClipboardList class="h-6 w-6 text-domain-donation-text" />
 						{t.shelterNeedsTitle}
 					</h3>
 				</div>
@@ -436,7 +436,7 @@
 
 							<!-- Active Need Card -->
 							<div
-								class="flex flex-col justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs transition-all hover:border-[#013481]/30 hover:shadow-md"
+								class="flex flex-col justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs transition-all hover:border-domain-donation-border hover:shadow-md"
 							>
 								<div class="flex flex-1 items-start gap-4">
 									<div
@@ -566,7 +566,7 @@
 								<button
 									type="button"
 									onclick={() => donateSingleNeed(selectedShelterDetail, need)}
-									class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 py-3 text-sm font-bold text-emerald-700 transition-all hover:bg-emerald-100"
+									class="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-domain-donation-border bg-domain-donation-subtle py-3 text-sm font-bold text-domain-donation-text transition-all hover:bg-domain-donation-border/40"
 								>
 									{t.donateThisItem}
 									<PackagePlus class="h-4 w-4" />
@@ -579,9 +579,9 @@
 				<!-- Unsolicited Card -->
 				<div class="mt-8 border-t border-slate-200 pt-8">
 					<div
-						class="space-y-4 rounded-2xl border border-[#013481]/10 bg-[#013481]/5 p-6 text-center"
+						class="space-y-4 rounded-2xl border border-domain-donation-border bg-domain-donation-subtle p-6 text-center"
 					>
-						<h4 class="text-lg font-bold text-[#013481]">
+						<h4 class="text-lg font-bold text-domain-donation-text">
 							{t.unsolicitedCardTitle}
 						</h4>
 						<p class="mx-auto max-w-lg text-sm text-slate-600">
@@ -590,7 +590,7 @@
 						<button
 							type="button"
 							onclick={() => donateOtherItems(selectedShelterDetail)}
-							class="inline-flex cursor-pointer items-center gap-2 rounded-xl border-2 border-[#013481] bg-white px-8 py-3 text-sm font-bold text-[#013481] shadow-xs transition-colors hover:bg-[#013481] hover:text-white"
+							class="inline-flex cursor-pointer items-center gap-2 rounded-xl border-2 border-domain-donation-strong bg-white px-8 py-3 text-sm font-bold text-domain-donation-text shadow-xs transition-colors hover:bg-domain-donation-strong hover:text-white"
 						>
 							{t.donateOtherBtn}
 						</button>
@@ -607,7 +607,7 @@
 			class="relative z-10 space-y-5 rounded-2xl border border-[#dadce0] bg-white p-6 text-left shadow-xs md:p-8"
 		>
 			<div>
-				<h3 class="text-xl font-black text-[#013365]">{t.searchTitle}</h3>
+				<h3 class="text-xl font-black text-domain-donation-text">{t.searchTitle}</h3>
 				<p class="mt-1 text-sm text-slate-500">
 					{t.searchDesc}
 				</p>
@@ -622,7 +622,7 @@
 					onblur={() => setTimeout(() => (isSearchFocused = false), 200)}
 					placeholder={t.searchPlaceholder}
 					aria-label={t.searchAriaLabel}
-					class="w-full rounded-xl border-2 border-slate-200 bg-slate-50 py-3.5 pr-4 pl-12 text-base font-semibold text-[#1d1d1f] shadow-xs outline-hidden transition-all placeholder:font-medium placeholder:text-slate-400 focus:border-[#013365] focus:ring-2 focus:ring-[#013365]/20"
+					class="w-full rounded-xl border-2 border-slate-200 bg-slate-50 py-3.5 pr-4 pl-12 text-base font-semibold text-[#1d1d1f] shadow-xs outline-hidden transition-all placeholder:font-medium placeholder:text-slate-400 focus:border-domain-donation-strong focus:ring-2 focus:ring-domain-donation-strong/20"
 				/>
 
 				<!-- Dropdown Suggestion -->
@@ -701,7 +701,7 @@
 		{#if isLoading}
 			<div class="py-16 text-center">
 				<div
-					class="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-[#013365] border-t-transparent"
+					class="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-domain-donation-strong border-t-transparent"
 				></div>
 				<p class="mt-4 text-sm text-slate-500">{t.loadingNeeds}</p>
 			</div>
@@ -754,7 +754,7 @@
 							</div>
 
 							<h3
-								class="mb-1 text-lg leading-tight font-bold text-[#1d1d1f] transition-colors group-hover:text-[#013365]"
+								class="mb-1 text-lg leading-tight font-bold text-[#1d1d1f] transition-colors group-hover:text-domain-donation-text"
 							>
 								{shelter.name}
 							</h3>
@@ -868,7 +868,7 @@
 								<button
 									type="button"
 									onclick={() => goToShelterDetails(shelter)}
-									class="flex min-h-[44px] w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#013365] px-4 py-3 text-xs font-bold text-white shadow-xs transition-colors hover:bg-[#1557b0] sm:text-sm"
+									class="flex min-h-[44px] w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-domain-donation-strong px-4 py-3 text-xs font-bold text-white shadow-xs transition-colors hover:bg-domain-donation-text sm:text-sm"
 								>
 									{t.viewDetailsAndDonate}
 									<ArrowRight class="h-4 w-4 transition-transform group-hover:translate-x-1" />

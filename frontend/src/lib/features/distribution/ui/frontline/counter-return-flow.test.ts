@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { DistributionLog } from '../../domain/food-supplies';
 import {
 	canPerformFrontlineDistribution,
-	canReceivePhysicalStock
+	canReceivePhysicalStock,
+	canReturnLoanPhysical
 } from '../../application/food-supplies/auth';
 import type { AuthorContext } from '$lib/db/model';
 import {
@@ -88,30 +89,44 @@ describe('Frontline Loan Return & Routine Counter Return Flow (Slice 5.5A + 5.5B
 	};
 
 	describe('Authorization Matrix (Frontline Route Access vs Physical Return Mutation)', () => {
-		it('allows registration_staff (REG) to access frontline station but NOT execute physical return mutation', () => {
+		it('denies registration_staff (REG) both frontline station and physical return mutation (CR-161 R3)', () => {
 			const regCtx = createMockContext(['registration_staff']);
-			expect(canPerformFrontlineDistribution(regCtx)).toBe(true);
-			expect(canReceivePhysicalStock(regCtx)).toBe(false);
+			expect(canPerformFrontlineDistribution(regCtx)).toBe(false);
+			expect(canReturnLoanPhysical(regCtx)).toBe(false);
+		});
+
+		it('allows distribution_staff (DST) to access frontline station AND execute counter return (CR-161 R3)', () => {
+			const dstCtx = createMockContext(['distribution_staff']);
+			expect(canPerformFrontlineDistribution(dstCtx)).toBe(true);
+			expect(canReturnLoanPhysical(dstCtx)).toBe(true);
+			expect(canReceivePhysicalStock(dstCtx)).toBe(false);
+		});
+
+		it('denies distribution_staff (DST) of another shelter the counter return', () => {
+			const otherCtx = createMockContext(['distribution_staff'], 'SH002');
+			expect(canReturnLoanPhysical({ ...otherCtx, shelterCode: 'SH001' })).toBe(false);
 		});
 
 		it('allows warehouse_staff (WH) to execute physical return mutation', () => {
 			const whCtx = createMockContext(['warehouse_staff']);
 			expect(canReceivePhysicalStock(whCtx)).toBe(true);
+			expect(canReturnLoanPhysical(whCtx)).toBe(true);
 		});
 
-		it('allows supply_coordinator (SC) to access frontline station AND execute physical return mutation', () => {
+		it('allows supply_coordinator (SC) to execute physical return mutation but NOT access frontline station (CR-161 R3)', () => {
 			const scCtx = createMockContext(['supply_coordinator']);
-			expect(canPerformFrontlineDistribution(scCtx)).toBe(true);
+			expect(canPerformFrontlineDistribution(scCtx)).toBe(false);
 			expect(canReceivePhysicalStock(scCtx)).toBe(true);
+			expect(canReturnLoanPhysical(scCtx)).toBe(true);
 		});
 
 		it('allows shelter_manager (SM) and system_admin (SA) full access to both', () => {
 			const smCtx = createMockContext(['shelter_manager']);
 			const saCtx = createMockContext(['system_admin']);
 			expect(canPerformFrontlineDistribution(smCtx)).toBe(true);
-			expect(canReceivePhysicalStock(smCtx)).toBe(true);
+			expect(canReturnLoanPhysical(smCtx)).toBe(true);
 			expect(canPerformFrontlineDistribution(saCtx)).toBe(true);
-			expect(canReceivePhysicalStock(saCtx)).toBe(true);
+			expect(canReturnLoanPhysical(saCtx)).toBe(true);
 		});
 	});
 
@@ -221,10 +236,16 @@ describe('Frontline Loan Return & Routine Counter Return Flow (Slice 5.5A + 5.5B
 	});
 
 	describe('Slice 5.5C Non-Physical Loan Clear (Lost / Waived Flow & Invariants)', () => {
-		it('allows registration_staff (REG) to perform non-physical clear while denying physical return', () => {
+		it('denies registration_staff (REG) both non-physical clear and physical return (CR-161 R3)', () => {
 			const regCtx = createMockContext(['registration_staff']);
-			expect(canPerformFrontlineDistribution(regCtx)).toBe(true);
-			expect(canReceivePhysicalStock(regCtx)).toBe(false);
+			expect(canPerformFrontlineDistribution(regCtx)).toBe(false);
+			expect(canReturnLoanPhysical(regCtx)).toBe(false);
+		});
+
+		it('allows distribution_staff (DST) both non-physical clear and counter return (CR-161 R3)', () => {
+			const dstCtx = createMockContext(['distribution_staff']);
+			expect(canPerformFrontlineDistribution(dstCtx)).toBe(true);
+			expect(canReturnLoanPhysical(dstCtx)).toBe(true);
 		});
 
 		it('allows warehouse_staff (WH) to perform physical return while denying non-physical clear without frontline role', () => {
@@ -233,12 +254,18 @@ describe('Frontline Loan Return & Routine Counter Return Flow (Slice 5.5A + 5.5B
 			expect(canPerformFrontlineDistribution(whCtx)).toBe(false);
 		});
 
-		it('allows supply_coordinator (SC), shelter_manager (SM), and system_admin (SA) both capabilities', () => {
-			for (const role of ['supply_coordinator', 'shelter_manager', 'system_admin']) {
+		it('allows shelter_manager (SM) and system_admin (SA) both capabilities', () => {
+			for (const role of ['shelter_manager', 'system_admin']) {
 				const ctx = createMockContext([role]);
 				expect(canPerformFrontlineDistribution(ctx)).toBe(true);
 				expect(canReceivePhysicalStock(ctx)).toBe(true);
 			}
+		});
+
+		it('allows supply_coordinator (SC) physical return but NOT non-physical clear (CR-161 R3)', () => {
+			const scCtx = createMockContext(['supply_coordinator']);
+			expect(canReceivePhysicalStock(scCtx)).toBe(true);
+			expect(canPerformFrontlineDistribution(scCtx)).toBe(false);
 		});
 
 		it('validates non-physical clear inputs (requires valid reason and non-empty notes)', () => {
@@ -293,17 +320,21 @@ describe('Frontline Loan Return & Routine Counter Return Flow (Slice 5.5A + 5.5B
 		};
 
 		describe('Role Authorization Matrix for Bulk Gate Clearance', () => {
-			it('allows registration_staff (REG) to execute bulk gate clearance', () => {
-				const regCtx = createMockContext(['registration_staff']);
-				expect(canPerformFrontlineDistribution(regCtx)).toBe(true);
+			it('disallows registration_staff (REG) and supply_coordinator (SC) from bulk gate clearance (CR-161 R3)', () => {
+				expect(canPerformFrontlineDistribution(createMockContext(['registration_staff']))).toBe(
+					false
+				);
+				expect(canPerformFrontlineDistribution(createMockContext(['supply_coordinator']))).toBe(
+					false
+				);
 			});
 
-			it('allows supply_coordinator (SC), shelter_manager (SM), and system_admin (SA) to execute bulk gate clearance', () => {
-				const scCtx = createMockContext(['supply_coordinator']);
+			it('allows distribution_staff (DST), shelter_manager (SM), and system_admin (SA) to execute bulk gate clearance', () => {
+				const dstCtx = createMockContext(['distribution_staff']);
 				const smCtx = createMockContext(['shelter_manager']);
 				const saCtx = createMockContext(['system_admin']);
 
-				expect(canPerformFrontlineDistribution(scCtx)).toBe(true);
+				expect(canPerformFrontlineDistribution(dstCtx)).toBe(true);
 				expect(canPerformFrontlineDistribution(smCtx)).toBe(true);
 				expect(canPerformFrontlineDistribution(saCtx)).toBe(true);
 			});

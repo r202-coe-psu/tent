@@ -33,6 +33,7 @@
 	import { summarizeTicketLoans } from '../model/loan-return';
 	import { qtyGt } from '$lib/utils/qty';
 	import TicketLoanSummary from '../common/TicketLoanSummary.svelte';
+	import ShiftCloseStepGuide from '../common/ShiftCloseStepGuide.svelte';
 	import Undo2 from '@lucide/svelte/icons/undo-2';
 
 	interface Props {
@@ -298,6 +299,9 @@
 					</div>
 				</div>
 			{/if}
+
+			<!-- Where this ticket is in the close-out sequence and what to do now -->
+			<ShiftCloseStepGuide status={ticket.status} />
 
 			{#if ticket.status === 'DISTRIBUTING'}
 				<!-- 1. ACTIVE EDITABLE SHIFT CLOSE FORM -->

@@ -500,12 +500,17 @@ describe('return-workflow', () => {
 	const POS_CTX: AuthorContext = {
 		shelterCode: 'SH001',
 		createdBy: 'pos_user',
-		roles: ['shelter:SH001', 'supply_coordinator']
+		roles: ['shelter:SH001', 'SH001:shelter_manager']
 	};
 	const REG_STAFF_CTX: AuthorContext = {
 		shelterCode: 'SH001',
 		createdBy: 'reg_user',
 		roles: ['shelter:SH001', 'registration_staff']
+	};
+	const DST_CTX: AuthorContext = {
+		shelterCode: 'SH001',
+		createdBy: 'dst_user',
+		roles: ['shelter:SH001', 'SH001:distribution_staff']
 	};
 	const WAREHOUSE_CTX: AuthorContext = {
 		shelterCode: 'SH001',
@@ -2016,6 +2021,91 @@ describe('return-workflow', () => {
 				expect(poolRepo.pools.has(poolId)).toBe(false);
 			});
 
+			it('A2. distribution_staff counter physical return is allowed (CR-161 R3)', async () => {
+				const log = await logRepo.create(
+					{
+						ticket_id: 'requisition_ticket:01J00000000000000000000001',
+						item_id: 'item:fan',
+						qty: '2',
+						recipient_type: 'evacuee',
+						recipient_id: 'evacuee:01J00000000000000000000001',
+						is_returnable: true,
+						status: 'active',
+						is_override: false
+					},
+					DST_CTX
+				);
+
+				const result = await returnLoanAtCounter(
+					log._id,
+					{ qty_returned: '2', condition_on_return: 'READY' },
+					DST_CTX,
+					{
+						logRepo,
+						operationsRepo: opsRepo as unknown as OperationsRepository,
+						poolRepo,
+						claimRepo,
+						reservationRepo
+					}
+				);
+
+				expect(result.log.status).toBe('returned');
+				expect(result.ledgerEntryCreated).toBe(true);
+				expect(opsRepo.ledger).toHaveLength(1);
+			});
+
+			it('A3. distribution_staff of another shelter counter physical return -> authorization error', async () => {
+				const log = await logRepo.create(
+					{
+						ticket_id: 'requisition_ticket:01J00000000000000000000001',
+						item_id: 'item:fan',
+						qty: '1',
+						recipient_type: 'evacuee',
+						recipient_id: 'evacuee:01J00000000000000000000001',
+						is_returnable: true,
+						status: 'active',
+						is_override: false
+					},
+					DST_CTX
+				);
+
+				await expect(
+					returnLoanAtCounter(
+						log._id,
+						{ qty_returned: '1', condition_on_return: 'READY' },
+						{ ...DST_CTX, roles: ['shelter:SH002', 'SH002:distribution_staff'] },
+						{
+							logRepo,
+							operationsRepo: opsRepo as unknown as OperationsRepository,
+							poolRepo,
+							claimRepo,
+							reservationRepo
+						}
+					)
+				).rejects.toBeInstanceOf(WorkflowAuthorizationError);
+				expect(opsRepo.ledger).toHaveLength(0);
+			});
+
+			it('B2. distribution_staff bulk pool creation -> authorization error (physical receipt roles only)', async () => {
+				const operationUlid = '01J00000000000000000000098';
+
+				await expect(
+					createBulkReturnPool(
+						{ operationUlid, item_id: 'item:blanket', total_received_qty: '10' },
+						DST_CTX,
+						{
+							logRepo,
+							operationsRepo: opsRepo as unknown as OperationsRepository,
+							poolRepo,
+							claimRepo,
+							reservationRepo
+						}
+					)
+				).rejects.toBeInstanceOf(WorkflowAuthorizationError);
+				expect(opsRepo.ledger).toHaveLength(0);
+				expect(poolRepo.pools.has(`bulk_return_pool:${operationUlid}`)).toBe(false);
+			});
+
 			it('C. allowed physical-receipt roles (warehouse_staff, supply_coordinator, shelter_manager, system_admin) can write physical stock receipts', async () => {
 				const allowedContexts = [
 					{ name: 'warehouse_staff', ctx: WAREHOUSE_CTX },
@@ -2073,7 +2163,7 @@ describe('return-workflow', () => {
 				}
 			});
 
-			it('D. registration_staff non-physical lost/waived clear remains allowed', async () => {
+			it('D. non-physical lost/waived clear: registration_staff rejected, distribution_staff allowed (CR-161 R3)', async () => {
 				const log = await logRepo.create(
 					{
 						ticket_id: 'requisition_ticket:01J00000000000000000000001',
@@ -2085,20 +2175,31 @@ describe('return-workflow', () => {
 						status: 'active',
 						is_override: false
 					},
-					REG_STAFF_CTX
+					DST_CTX
 				);
+				const deps = {
+					logRepo,
+					operationsRepo: opsRepo as unknown as OperationsRepository,
+					poolRepo,
+					claimRepo,
+					reservationRepo
+				};
+
+				await expect(
+					clearLoanNonPhysical(
+						log._id,
+						{ clear_reason: 'lost', notes: 'Item swept away in flood' },
+						REG_STAFF_CTX,
+						deps
+					)
+				).rejects.toBeInstanceOf(WorkflowAuthorizationError);
+				expect((await logRepo.get(log._id))?.status).toBe('active');
 
 				const cleared = await clearLoanNonPhysical(
 					log._id,
 					{ clear_reason: 'lost', notes: 'Item swept away in flood' },
-					REG_STAFF_CTX,
-					{
-						logRepo,
-						operationsRepo: opsRepo as unknown as OperationsRepository,
-						poolRepo,
-						claimRepo,
-						reservationRepo
-					}
+					DST_CTX,
+					deps
 				);
 
 				expect(cleared.status).toBe('lost');
@@ -2107,7 +2208,7 @@ describe('return-workflow', () => {
 				expect(opsRepo.ledger).toHaveLength(0);
 			});
 
-			it('E. bulk-pool claim/clear without stock receipt remains allowed for registration_staff', async () => {
+			it('E. bulk-pool claim/clear without stock receipt: registration_staff rejected, distribution_staff allowed (CR-161 R3)', async () => {
 				// Pool created ahead of time by warehouse staff (with physical receipt)
 				const operationUlid = '01J00000000000000000000050';
 				const pool = await createBulkReturnPool(
@@ -2135,10 +2236,25 @@ describe('return-workflow', () => {
 						status: 'active',
 						is_override: false
 					},
-					REG_STAFF_CTX
+					DST_CTX
 				);
 
-				// Registration staff resolves loan at gate against pool
+				// Registration staff no longer resolves loans at the gate
+				await expect(
+					clearLoanViaBulkPool(
+						{
+							operationUlid: '01J00000000000000000000052',
+							logId: log._id,
+							poolId: pool._id,
+							notes: 'Gate return swept earlier'
+						},
+						REG_STAFF_CTX,
+						{ logRepo, poolRepo, claimRepo, reservationRepo }
+					)
+				).rejects.toBeInstanceOf(WorkflowAuthorizationError);
+				expect(claimRepo.claims).toHaveLength(0);
+
+				// Distribution staff resolves loan at gate against pool
 				const resolved = await clearLoanViaBulkPool(
 					{
 						operationUlid: '01J00000000000000000000051',
@@ -2146,7 +2262,7 @@ describe('return-workflow', () => {
 						poolId: pool._id,
 						notes: 'Gate return swept earlier'
 					},
-					REG_STAFF_CTX,
+					DST_CTX,
 					{ logRepo, poolRepo, claimRepo, reservationRepo }
 				);
 
@@ -3456,7 +3572,7 @@ describe('return-workflow', () => {
 			const ACTOR_B_CTX: AuthorContext = {
 				shelterCode: 'SH001',
 				createdBy: 'user_b',
-				roles: ['shelter:SH001', 'registration_staff']
+				roles: ['shelter:SH001', 'SH001:distribution_staff']
 			};
 
 			const result = await clearLoanViaBulkPool(
@@ -3475,7 +3591,7 @@ describe('return-workflow', () => {
 			expect(result.claim.created_by).toBe('user_a'); // preserved audit trail
 		});
 
-		it('28. registration_staff allowed for bulk claim if canonical frontline contract says so', async () => {
+		it('28. distribution_staff allowed for bulk claim; registration_staff rejected (CR-161 R3)', async () => {
 			const pool = await poolRepo.create(
 				createBulkReturnPoolDoc(
 					{
@@ -3500,8 +3616,22 @@ describe('return-workflow', () => {
 					status: 'active',
 					is_override: false
 				},
-				REG_STAFF_CTX
+				DST_CTX
 			);
+
+			await expect(
+				clearLoanViaBulkPool(
+					{
+						operationUlid: '01J00000000000000000000164',
+						logId: log._id,
+						poolId: pool._id,
+						notes: 'Gate return'
+					},
+					REG_STAFF_CTX,
+					{ logRepo, poolRepo, claimRepo, reservationRepo }
+				)
+			).rejects.toBeInstanceOf(WorkflowAuthorizationError);
+			expect(claimRepo.claims).toHaveLength(0);
 
 			const result = await clearLoanViaBulkPool(
 				{
@@ -3510,7 +3640,7 @@ describe('return-workflow', () => {
 					poolId: pool._id,
 					notes: 'Gate return'
 				},
-				REG_STAFF_CTX,
+				DST_CTX,
 				{ logRepo, poolRepo, claimRepo, reservationRepo }
 			);
 
@@ -4684,7 +4814,7 @@ describe('return-workflow', () => {
 					clearLoanNonPhysical(
 						log._id,
 						{ clear_reason: 'lost', notes: 'Evacuee lost blanket', operationUlid: opNonPhys },
-						REG_STAFF_CTX,
+						DST_CTX,
 						deps
 					)
 				).rejects.toBeInstanceOf(ConcurrencyCollisionError);
@@ -4741,7 +4871,7 @@ describe('return-workflow', () => {
 						clear_reason: 'lost',
 						notes: 'cross-mode test'
 					},
-					REG_STAFF_CTX,
+					DST_CTX,
 					deps
 				);
 
@@ -4749,7 +4879,7 @@ describe('return-workflow', () => {
 				await expect(
 					clearLoanViaBulkPool(
 						{ operationUlid: opBulk, logId: log._id, poolId: pool._id },
-						REG_STAFF_CTX,
+						DST_CTX,
 						deps
 					)
 				).rejects.toBeInstanceOf(ConcurrencyCollisionError);
@@ -4798,7 +4928,7 @@ describe('return-workflow', () => {
 					clearLoanNonPhysical(
 						log._id,
 						{ clear_reason: 'lost', notes: 'Testing edge rejection' },
-						REG_STAFF_CTX,
+						DST_CTX,
 						edgeDeps
 					)
 				).rejects.toThrow(/Authoritative central connectivity is required/);
@@ -4979,7 +5109,7 @@ describe('return-workflow', () => {
 							status: 'active',
 							is_override: false
 						},
-						REG_STAFF_CTX
+						DST_CTX
 					);
 					const opId = '01J00000000000000000000913';
 					const deps = {
@@ -4998,7 +5128,7 @@ describe('return-workflow', () => {
 							bulk_pool_id: poolA._id,
 							claimed_qty: '3'
 						},
-						REG_STAFF_CTX,
+						DST_CTX,
 						deps
 					);
 
@@ -5012,7 +5142,7 @@ describe('return-workflow', () => {
 								bulk_pool_id: poolB._id,
 								claimed_qty: '3'
 							},
-							REG_STAFF_CTX,
+							DST_CTX,
 							deps
 						)
 					).rejects.toThrow(/Bulk pool ID cannot be modified/);
@@ -5027,7 +5157,7 @@ describe('return-workflow', () => {
 								bulk_pool_id: poolA._id,
 								claimed_qty: '2'
 							},
-							REG_STAFF_CTX,
+							DST_CTX,
 							deps
 						)
 					).rejects.toThrow(/Bulk claimed quantity cannot be modified/);
@@ -5045,7 +5175,7 @@ describe('return-workflow', () => {
 							status: 'active',
 							is_override: false
 						},
-						REG_STAFF_CTX
+						DST_CTX
 					);
 					const opId = '01J00000000000000000000921';
 					const deps = {
@@ -5064,7 +5194,7 @@ describe('return-workflow', () => {
 							clear_reason: 'lost',
 							notes: 'Lost in flood'
 						},
-						REG_STAFF_CTX,
+						DST_CTX,
 						deps
 					);
 
@@ -5078,7 +5208,7 @@ describe('return-workflow', () => {
 								clear_reason: 'waived',
 								notes: 'Waived by manager'
 							},
-							REG_STAFF_CTX,
+							DST_CTX,
 							deps
 						)
 					).rejects.toThrow(/Non-physical clear reason cannot be modified/);
@@ -5237,12 +5367,12 @@ describe('return-workflow', () => {
 							bulk_pool_id: 'bulk_return_pool:01J00000000000000000000911',
 							claimed_qty: '1'
 						},
-						REG_STAFF_CTX,
+						DST_CTX,
 						deps
 					);
 					await expect(
 						fenceReturnReservation(log._id, opBulk, 'BULK', WAREHOUSE_CTX, deps)
-					).rejects.toThrow(/BULK return reservation requires registration/);
+					).rejects.toThrow(/BULK return reservation requires distribution_staff/);
 				});
 
 				it('enforces mode RBAC on COMMIT transition', async () => {
@@ -5299,7 +5429,7 @@ describe('return-workflow', () => {
 							status: 'active',
 							is_override: false
 						},
-						REG_STAFF_CTX
+						DST_CTX
 					);
 					const opId = '01J00000000000000000000971';
 					const deps = {
@@ -5316,7 +5446,7 @@ describe('return-workflow', () => {
 						clearLoanNonPhysical(
 							log._id,
 							{ clear_reason: 'lost', notes: 'Lost in typhoon', operationUlid: opId },
-							REG_STAFF_CTX,
+							DST_CTX,
 							deps
 						)
 					).rejects.toThrow('Simulated reservation commit failure');
@@ -5325,7 +5455,7 @@ describe('return-workflow', () => {
 					expect((await reservationRepo.get(resId))?.status).toBe('FENCED');
 
 					// Inspect operation state: must surface as IRREVERSIBLE_FORWARD_ONLY, NOT TERMINAL
-					const state = await getReturnOperationState(log._id, REG_STAFF_CTX, deps);
+					const state = await getReturnOperationState(log._id, DST_CTX, deps);
 					expect(state.phase).toBe('IRREVERSIBLE_FORWARD_ONLY');
 					expect(state.canResume).toBe(true);
 
@@ -5333,7 +5463,7 @@ describe('return-workflow', () => {
 					const recovered = await clearLoanNonPhysical(
 						log._id,
 						{ clear_reason: 'lost', notes: 'Lost in typhoon', operationUlid: opId },
-						REG_STAFF_CTX,
+						DST_CTX,
 						deps
 					);
 					expect(recovered.status).toBe('lost');
@@ -5366,7 +5496,7 @@ describe('return-workflow', () => {
 							status: 'active',
 							is_override: false
 						},
-						REG_STAFF_CTX
+						DST_CTX
 					);
 					const opId = '01J00000000000000000000982';
 					const deps = {
@@ -5382,7 +5512,7 @@ describe('return-workflow', () => {
 					await expect(
 						clearLoanViaBulkPool(
 							{ operationUlid: opId, logId: log._id, poolId: pool._id },
-							REG_STAFF_CTX,
+							DST_CTX,
 							deps
 						)
 					).rejects.toThrow('Simulated reservation commit failure');
@@ -5391,14 +5521,14 @@ describe('return-workflow', () => {
 					expect((await reservationRepo.get(resId))?.status).toBe('FENCED');
 
 					// Inspect operation state: must surface as IRREVERSIBLE_FORWARD_ONLY
-					const state = await getReturnOperationState(log._id, REG_STAFF_CTX, deps);
+					const state = await getReturnOperationState(log._id, DST_CTX, deps);
 					expect(state.phase).toBe('IRREVERSIBLE_FORWARD_ONLY');
 					expect(state.canResume).toBe(true);
 
 					// Retry clearLoanViaBulkPool -> commits reservation forward
 					const recovered = await clearLoanViaBulkPool(
 						{ operationUlid: opId, logId: log._id, poolId: pool._id },
-						REG_STAFF_CTX,
+						DST_CTX,
 						deps
 					);
 					expect(recovered.log.status).toBe('returned');
@@ -5668,7 +5798,7 @@ describe('return-workflow', () => {
 							status: 'active',
 							is_override: false
 						},
-						REG_STAFF_CTX
+						DST_CTX
 					);
 					const opId = '01J00000000000000000000996';
 					const deps = {
@@ -5688,7 +5818,7 @@ describe('return-workflow', () => {
 							bulk_pool_id: pool._id,
 							claimed_qty: '1'
 						},
-						REG_STAFF_CTX,
+						DST_CTX,
 						deps
 					);
 
@@ -5705,14 +5835,14 @@ describe('return-workflow', () => {
 						claimed_qty: '1',
 						status: 'POOL_CLAIMED',
 						operation_id: opId,
-						created_by: REG_STAFF_CTX.createdBy,
+						created_by: DST_CTX.createdBy,
 						created_at: new Date().toISOString(),
 						updated_at: new Date().toISOString()
 					});
-					await poolRepo.claimQuota(pool._id, claimId, '1', REG_STAFF_CTX);
+					await poolRepo.claimQuota(pool._id, claimId, '1', DST_CTX);
 
 					// Reservation is advanced to FENCED
-					await fenceReturnReservation(log._id, opId, 'BULK', REG_STAFF_CTX, deps);
+					await fenceReturnReservation(log._id, opId, 'BULK', DST_CTX, deps);
 
 					// Check pool status is indeed EXHAUSTED
 					const currentPool = await poolRepo.get(pool._id);
@@ -5726,7 +5856,7 @@ describe('return-workflow', () => {
 							poolId: pool._id,
 							operationUlid: opId
 						},
-						REG_STAFF_CTX,
+						DST_CTX,
 						deps
 					);
 					expect(res.log.status).toBe('returned');
@@ -5780,7 +5910,7 @@ describe('return-workflow', () => {
 						clearLoanNonPhysical(
 							log._id,
 							{ clear_reason: 'lost', notes: 'testing cross-mode' },
-							REG_STAFF_CTX,
+							DST_CTX,
 							deps
 						)
 					).rejects.toThrow(/reserved for PHYSICAL/);
@@ -5809,7 +5939,7 @@ describe('return-workflow', () => {
 								logId: log._id,
 								poolId: pool._id
 							},
-							REG_STAFF_CTX,
+							DST_CTX,
 							deps
 						)
 					).rejects.toThrow(/reserved for PHYSICAL/);

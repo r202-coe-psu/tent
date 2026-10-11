@@ -34,7 +34,6 @@
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
 	import { mapDistributionQueryError } from '../model/distribution-error';
-	import { backofficeState } from '$lib/stores/backoffice.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 
 	const shelterCode = $derived(shelterStore.selectedShelterCode ?? getShelterCode());
@@ -48,7 +47,8 @@
 
 	function handleReauth() {
 		if (authStore.isAuthenticated) {
-			backofficeState.requestReauth();
+			// Opens the global non-dismissable login modal (no-op when already open).
+			authStore.markNeedsReauth();
 		} else {
 			goto('/login');
 		}
