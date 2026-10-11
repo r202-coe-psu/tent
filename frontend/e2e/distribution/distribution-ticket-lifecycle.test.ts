@@ -450,7 +450,7 @@ test.describe('Distribution RBAC guards', () => {
 				// before the Distribution page ever renders.
 				await expect(page).toHaveURL(/\/portal/);
 				// Positive control: this is a real landing page, not a blank/crashed screen.
-				await expect(page.getByRole('heading', { name: /SmartShelter Thailand/ })).toBeVisible();
+				await expect(page.getByRole('region', { name: 'บริบทการปฏิบัติงาน' })).toBeVisible();
 			},
 			{ roles: ['shelter:SH001', 'kitchen_staff'] }
 		);
@@ -465,7 +465,7 @@ test.describe('Distribution RBAC guards', () => {
 				// registration_staff is frontline-only; requireWarehouseAccess() does not
 				// include it, so it is redirected the same as any unrelated role.
 				await expect(page).toHaveURL(/\/portal/);
-				await expect(page.getByRole('heading', { name: /SmartShelter Thailand/ })).toBeVisible();
+				await expect(page.getByRole('region', { name: 'บริบทการปฏิบัติงาน' })).toBeVisible();
 			},
 			{ roles: ['shelter:SH001', 'registration_staff'] }
 		);
@@ -480,7 +480,7 @@ test.describe('Distribution RBAC guards', () => {
 				// requireDistributionDesk() (guards/auth.ts) is SA, SM and distribution_staff only
 				// (CR-161 R5) — REG, SC and WH land on /portal.
 				await expect(page).toHaveURL(/\/portal/);
-				await expect(page.getByRole('heading', { name: /SmartShelter Thailand/ })).toBeVisible();
+				await expect(page.getByRole('region', { name: 'บริบทการปฏิบัติงาน' })).toBeVisible();
 			},
 			{ roles: ['shelter:SH001', 'registration_staff'] }
 		);
@@ -495,7 +495,7 @@ test.describe('Distribution RBAC guards', () => {
 				// requireDistributionDesk() (guards/auth.ts) is SA, SM and distribution_staff only
 				// (CR-161 R5) — REG, SC and WH land on /portal.
 				await expect(page).toHaveURL(/\/portal/);
-				await expect(page.getByRole('heading', { name: /SmartShelter Thailand/ })).toBeVisible();
+				await expect(page.getByRole('region', { name: 'บริบทการปฏิบัติงาน' })).toBeVisible();
 			},
 			{ roles: ['shelter:SH001', 'supply_coordinator'] }
 		);
@@ -510,7 +510,7 @@ test.describe('Distribution RBAC guards', () => {
 				// requireDistributionDesk() (guards/auth.ts) is SA, SM and distribution_staff only
 				// (CR-161 R5) — REG, SC and WH land on /portal.
 				await expect(page).toHaveURL(/\/portal/);
-				await expect(page.getByRole('heading', { name: /SmartShelter Thailand/ })).toBeVisible();
+				await expect(page.getByRole('region', { name: 'บริบทการปฏิบัติงาน' })).toBeVisible();
 			},
 			{ roles: ['shelter:SH001', 'warehouse_staff'] }
 		);
