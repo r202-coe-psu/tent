@@ -15,12 +15,14 @@ depends_on:
 affects:
   - docs/data/schema.md §3.12 (ใหม่) `kiosk_banner` — schema_v 1 (doc type ใหม่ ใน DB `registry`)
   - docs/data/api-contract.md §2.1 Scanner kiosk (+ `POST /kiosk/banners`, `GET /kiosk/banners/{id}/image`) · §Back-office (+ `/api/back-office/kiosk-banners/**`)
-  - docs/prd/role-permission-matrix.md (สิทธิ์จัดการ kiosk banner)
+  - docs/prd/role-permission-matrix.md §1.1 (+ role `banner_staff` — 10 → 11 บทบาท) · docs/data/schema.md §6 `_users.roles`
+  - frontend/src/lib/auth/roles.ts (`BANNER_STAFF` + `STAFF_CAPABILITIES`) · portal nav
+  - docs/features/kiosk-banner-design-guideline.md (ใหม่ — design pattern จาก ghosa)
   - frontend/src/lib/features/kiosk-banners/{domain,data,application,ui,index.ts} (ใหม่ — back-office)
   - frontend/src/lib/server/kiosk-banners/** (ใหม่ — registry CRUD, signed image URL)
   - frontend/src/lib/features/kiosk/data/kiosk-banners.api.ts (ใหม่) · features/kiosk/ui/kiosk-banner-attract.svelte (ใหม่) · features/kiosk/index.ts
   - frontend/src/routes/kiosk/+page.svelte (mount attract overlay)
-  - frontend/src/routes/(protected)/system-management/kiosk-banners/+page.svelte (ใหม่)
+  - frontend/src/routes/(protected)/back-office/kiosk-banners/+page.svelte (ใหม่)
   - frontend/src/routes/api/back-office/kiosk-banners/** (ใหม่ + server.test.ts)
   - frontend/src/routes/api/v1/scanner/kiosk/banners/** (ใหม่ + server.test.ts)
   - scanner_client/app/manager.py `_route_kiosk_api` allowed_paths · scanner_client/tests/test_manager.py
@@ -36,9 +38,10 @@ migration: N/A — doc type ใหม่ ไม่มีข้อมูลเด
 > **สรุป (TL;DR)**
 >
 > - **เปลี่ยนอะไร:** เพิ่ม doc type `kiosk_banner` (รูป + ช่วงเวลาแสดง + ลำดับ + ระยะเวลาต่อสไลด์ + ศูนย์ปลายทาง) ใน DB `registry` · หน้า back-office สำหรับจัดการ · หน้า `/kiosk` เข้า **attract mode** วนแสดงแบนเนอร์เต็มจอเมื่อไม่มีการแตะ 30 วินาที แตะจอ = กลับหน้าเลือกวิธี
-> - **เพื่อใคร / ทำไม:** ผู้จัดการศูนย์ / SA ประชาสัมพันธ์ข่าวสารที่ตู้ได้เองโดยไม่ต้องแตะเครื่อง
+> - **เพื่อใคร / ทำไม:** role ใหม่ `banner_staff` + ผู้จัดการศูนย์ + SA ประชาสัมพันธ์ข่าวสารที่ตู้ได้เองโดยไม่ต้องแตะเครื่อง
 > - **Dev ต้องทำอะไร:** บน base `feat/pre-register_kiosk` — feature `kiosk-banners` (back-office CRUD + อัปโหลดรูป) · `POST /api/v1/scanner/kiosk/banners` (device auth, mirror `kiosk/config`) · signed GET URL สำหรับรูป · overlay บน `/kiosk` · เพิ่ม path ใน allowlist ของ scanner client
-> - **กระทบ schema / scope:** doc type ใหม่ `kiosk_banner` schema_v 1 · ไม่กระทบ doc type เดิม · อ่านผ่าน Node BFF → CouchDB (ไม่ผ่าน worker/Mongo)
+> - **กระทบ schema / scope:** doc type ใหม่ `kiosk_banner` schema_v 1 · role ใหม่ `banner_staff` (compound scoped) · ไม่กระทบ doc type เดิม · อ่านผ่าน Node BFF → CouchDB (ไม่ผ่าน worker/Mongo)
+> - **Design pattern:** [`docs/features/kiosk-banner-design-guideline.md`](../features/kiosk-banner-design-guideline.md)
 
 ---
 
@@ -51,26 +54,27 @@ migration: N/A — doc type ใหม่ ไม่มีข้อมูลเด
 
 **ทางเลือก**
 
-| ทางเลือก | สถานะ |
-| :-- | :-- |
-| ใช้/ขยาย `announcement` (CR-100) | ตัดทิ้ง — ไม่มีรูป/ช่วงเวลา/ศูนย์; ขยายต้อง bump schema_v + PROJECTION_VERSION ของ public plane |
-| แถบ banner ถาวรบนหน้า `/kiosk` | ตัดทิ้ง — ไม่มีที่ว่างที่ 1024×600; เบียดการ์ดเลือกวิธี (FR-KPC-13) |
-| attract overlay เต็มจอเมื่อ idle บน `/kiosk` | **เลือก** — ไม่แตะ layout เดิม, ใช้จอเต็มที่ตอนไม่มีผู้ใช้ |
-| ส่งรูปเป็น base64 ใน response ของ POST | ตัดทิ้ง — payload ใหญ่ทุกครั้งที่ refresh (20 รูป × 2 MB) |
-| signed GET URL สำหรับรูป | **เลือก** — `<img>` ส่ง GET ได้เท่านั้น และ `_route_kiosk_api` แนบ device header เฉพาะ POST ใน allowlist |
-| projection ไป Mongo + FastAPI | ตัดทิ้ง — kiosk ไม่ใช่ anonymous public; ไม่คุ้มเพิ่ม projector |
+| ทางเลือก                                     | สถานะ                                                                                                    |
+| :------------------------------------------- | :------------------------------------------------------------------------------------------------------- |
+| ใช้/ขยาย `announcement` (CR-100)             | ตัดทิ้ง — ไม่มีรูป/ช่วงเวลา/ศูนย์; ขยายต้อง bump schema_v + PROJECTION_VERSION ของ public plane          |
+| แถบ banner ถาวรบนหน้า `/kiosk`               | ตัดทิ้ง — ไม่มีที่ว่างที่ 1024×600; เบียดการ์ดเลือกวิธี (FR-KPC-13)                                      |
+| attract overlay เต็มจอเมื่อ idle บน `/kiosk` | **เลือก** — ไม่แตะ layout เดิม, ใช้จอเต็มที่ตอนไม่มีผู้ใช้                                               |
+| ส่งรูปเป็น base64 ใน response ของ POST       | ตัดทิ้ง — payload ใหญ่ทุกครั้งที่ refresh (20 รูป × 2 MB)                                                |
+| signed GET URL สำหรับรูป                     | **เลือก** — `<img>` ส่ง GET ได้เท่านั้น และ `_route_kiosk_api` แนบ device header เฉพาะ POST ใน allowlist |
+| projection ไป Mongo + FastAPI                | ตัดทิ้ง — kiosk ไม่ใช่ anonymous public; ไม่คุ้มเพิ่ม projector                                          |
 
 ---
 
 ## 2. Change (before → after)
 
-| หัวข้อ | ก่อน | หลัง |
-| :-- | :-- | :-- |
-| DB `registry` | ไม่มี banner | + `kiosk_banner:{ulid}` schema_v 1 พร้อม attachment `image` |
-| Back-office | — | + เมนู「แบนเนอร์ Kiosk」ใต้ System Management |
-| API ฝั่งเครื่อง | bootstrap, kiosk/{config, lookup, check-in, register, staff-pin/verify, thaid/*} | + `POST kiosk/banners` · `GET kiosk/banners/{id}/image` (signed, ไม่ใช้ device header) |
-| scanner client `allowed_paths` (FR-KPC-06) | 8 path | + `/api/v1/scanner/kiosk/banners` |
-| หน้า `/kiosk` | การ์ดเลือกวิธีค้างตลอด | idle 30 วินาที + มี banner → attract overlay; ไม่มี banner = เหมือนเดิม |
+| หัวข้อ                                     | ก่อน                                                                             | หลัง                                                                                   |
+| :----------------------------------------- | :------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------- |
+| DB `registry`                              | ไม่มี banner                                                                     | + `kiosk_banner:{ulid}` schema_v 1 พร้อม attachment `image`                            |
+| Back-office                                | —                                                                                | + เมนู「แบนเนอร์ Kiosk」ที่ `/back-office/kiosk-banners`                               |
+| Roles (`roles.ts`, role matrix)            | 10 บทบาท                                                                         | + `banner_staff` (`{code}:banner_staff`) — SM / SA grant ได้                           |
+| API ฝั่งเครื่อง                            | bootstrap, kiosk/{config, lookup, check-in, register, staff-pin/verify, thaid/*} | + `POST kiosk/banners` · `GET kiosk/banners/{id}/image` (signed, ไม่ใช้ device header) |
+| scanner client `allowed_paths` (FR-KPC-06) | 8 path                                                                           | + `/api/v1/scanner/kiosk/banners`                                                      |
+| หน้า `/kiosk`                              | การ์ดเลือกวิธีค้างตลอด                                                           | idle 30 วินาที + มี banner → attract overlay; ไม่มี banner = เหมือนเดิม                |
 
 ---
 
@@ -78,56 +82,58 @@ migration: N/A — doc type ใหม่ ไม่มีข้อมูลเด
 
 ### 3.1 Data — `kiosk_banner` (schema.md §3.12)
 
-| ID | Requirement |
-| :-- | :-- |
-| FR-KBN-01 | `_id` = `kiosk_banner:{ulid}`, `type: 'kiosk_banner'`, `schema_v: 1`, DB `registry` (registry doc ไม่มี `shelter_code` envelope) |
-| FR-KBN-02 | `title` str req ≤120 — ใช้ในหน้าจัดการและเป็น `alt` ของรูป |
-| FR-KBN-03 | `caption` str opt ≤200 — ข้อความใต้รูปบน kiosk; render เป็น text เท่านั้น (ห้าม HTML) |
+| ID        | Requirement                                                                                                                                                                                                                                           |
+| :-------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR-KBN-01 | `_id` = `kiosk_banner:{ulid}`, `type: 'kiosk_banner'`, `schema_v: 1`, DB `registry` (registry doc ไม่มี `shelter_code` envelope)                                                                                                                      |
+| FR-KBN-02 | `title` str req ≤120 — ใช้ในหน้าจัดการและเป็น `alt` ของรูป                                                                                                                                                                                            |
+| FR-KBN-03 | `caption` str opt ≤200 — ข้อความใต้รูปบน kiosk; render เป็น text เท่านั้น (ห้าม HTML)                                                                                                                                                                 |
 | FR-KBN-04 | `image` = CouchDB attachment ชื่อ `image` req · `image/png` · `image/jpeg` · `image/webp` · ≤2 MB · server ตรวจ magic bytes (mirror `decodeKioskPhoto` ใน `features/kiosk/server/kiosk-photo.server.ts`) ไม่เชื่อ extension/`Content-Type` ของ client |
-| FR-KBN-05 | `order` int req ≥1 default 1 — kiosk เรียง `order` asc → `start_at` asc → `_id` asc |
-| FR-KBN-06 | `duration_sec` int req 3–60 default 10 |
-| FR-KBN-07 | `start_at`, `end_at` ISO ts req · `end_at` > `start_at` (reject ทั้ง Zod และ VDU) |
-| FR-KBN-08 | `status` enum(`active`,`inactive`) req default `active` |
-| FR-KBN-09 | `shelter_codes` str[] req ≥1 — เทียบกับ `shelter_code` ของ device principal |
-| FR-KBN-10 | `created_at`, `updated_at`, `created_by` ตาม envelope §0; timestamp สร้าง ณ เวลาเรียก |
-| FR-KBN-11 | ลบ = hard delete ทั้ง doc (attachment ลบไปด้วย) |
+| FR-KBN-05 | `order` int req ≥1 default 1 — kiosk เรียง `order` asc → `start_at` asc → `_id` asc                                                                                                                                                                   |
+| FR-KBN-06 | `duration_sec` int req 3–60 default 10                                                                                                                                                                                                                |
+| FR-KBN-07 | `start_at`, `end_at` ISO ts req · `end_at` > `start_at` (reject ทั้ง Zod และ VDU)                                                                                                                                                                     |
+| FR-KBN-08 | `status` enum(`active`,`inactive`) req default `active`                                                                                                                                                                                               |
+| FR-KBN-09 | `shelter_codes` str[] req ≥1 — เทียบกับ `shelter_code` ของ device principal                                                                                                                                                                           |
+| FR-KBN-10 | `created_at`, `updated_at`, `created_by` ตาม envelope §0; timestamp สร้าง ณ เวลาเรียก                                                                                                                                                                 |
+| FR-KBN-11 | ลบ = hard delete ทั้ง doc (attachment ลบไปด้วย)                                                                                                                                                                                                       |
 
 ### 3.2 Back-office
 
-| ID | Requirement |
-| :-- | :-- |
-| FR-KBN-20 | หน้า `/system-management/kiosk-banners` แสดง 2 แท็บ:「กำลังแสดง / รอแสดง」(`end_at` ≥ now, เรียง `start_at` asc) ·「หมดอายุ」(`end_at` < now, เรียง `end_at` desc) |
-| FR-KBN-21 | ฟอร์มสร้าง/แก้ไข Superforms + Zod ครบทุก field §3.1 + อัปโหลดรูปพร้อม preview · แก้ไขโดยไม่เลือกรูปใหม่ = คงรูปเดิม |
-| FR-KBN-22 | อัปโหลดรูปส่งเป็น JSON base64 (back-office route เป็น JSON-only) · decode + ตรวจตาม FR-KBN-04 ฝั่ง server ก่อน PUT attachment |
-| FR-KBN-23 | เปิด/ปิด = `PATCH`, ลบ = `DELETE` เท่านั้น · confirm dialog ผูกกับ banner รายการนั้น |
-| FR-KBN-24 | สิทธิ์: `system_admin` จัดการได้ทุกศูนย์ · `shelter_manager` จัดการได้เฉพาะ banner ที่ `shelter_codes` ทั้งหมดอยู่ในขอบเขตศูนย์ตัวเอง (`requireShelterManagerOrSA`) · role อื่น 403 |
-| FR-KBN-25 | รูปในหน้าจัดการโหลดผ่าน back-office route ที่ตรวจ session + สิทธิ์ |
+| ID        | Requirement                                                                                                                                                                                                                   |
+| :-------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR-KBN-20 | หน้า `/back-office/kiosk-banners` แสดง 2 แท็บ:「กำลังแสดง / รอแสดง」(`end_at` ≥ now, เรียง `start_at` asc) ·「หมดอายุ」(`end_at` < now, เรียง `end_at` desc)                                                                  |
+| FR-KBN-21 | ฟอร์มสร้าง/แก้ไข Superforms + Zod ครบทุก field §3.1 + อัปโหลดรูปพร้อม preview · แก้ไขโดยไม่เลือกรูปใหม่ = คงรูปเดิม                                                                                                           |
+| FR-KBN-22 | อัปโหลดรูปส่งเป็น JSON base64 (back-office route เป็น JSON-only) · decode + ตรวจตาม FR-KBN-04 ฝั่ง server ก่อน PUT attachment                                                                                                 |
+| FR-KBN-23 | เปิด/ปิด = `PATCH`, ลบ = `DELETE` เท่านั้น · confirm dialog ผูกกับ banner รายการนั้น                                                                                                                                          |
+| FR-KBN-24 | สิทธิ์จัดการ (อ่าน/สร้าง/แก้/เปิดปิด/ลบ): `system_admin` ทุกศูนย์ · `shelter_manager` และ `banner_staff` เฉพาะ banner ที่ `shelter_codes` ทั้งหมด (ทั้งค่าเดิมและค่าใหม่) อยู่ใน scope ของตัวเอง · role อื่น 403              |
+| FR-KBN-26 | เพิ่ม role `banner_staff` ใน `roles.ts` (`BANNER_STAFF`, อยู่ใน `STAFF_CAPABILITIES`) รูปแบบ compound `{shelter_code}:banner_staff` คู่กับ `shelter:{code}` · SA และ SM ของศูนย์นั้น grant/revoke ได้ผ่านหน้าจัดการผู้ใช้เดิม |
+| FR-KBN-27 | `banner_staff` เห็นเฉพาะเมนู「แบนเนอร์ Kiosk」ใน portal และไม่ได้สิทธิ์อื่นของศูนย์                                                                                                                                           |
+| FR-KBN-25 | รูปในหน้าจัดการโหลดผ่าน back-office route ที่ตรวจ session + สิทธิ์                                                                                                                                                            |
 
-> [NEEDS DECISION: FR-KBN-24 — ให้ `shelter_manager` จัดการ banner ของศูนย์ตัวเองได้ หรือจำกัดเฉพาะ `system_admin` (แบบ CR-100)? ถ้าให้ SM ด้วย หน้าต้องอยู่นอก `system-management/` (layout นั้น `requireAdmin`)]
+> หน้าอยู่ใต้ `/back-office/` (ไม่ใช่ `system-management/` ที่ `requireAdmin`) เพื่อให้ SM และ `banner_staff` เข้าถึงได้
 
 ### 3.3 Kiosk API (device auth)
 
-| ID | Requirement |
-| :-- | :-- |
-| FR-KBN-30 | `POST /api/v1/scanner/kiosk/banners` ยืนยันเครื่องด้วย `authenticateScannerDevice` (`lib/server/scanners/device-credentials.ts`) แบบเดียวกับ `kiosk/config` · 401 `DEVICE_AUTH_FAILED` · 503 `DEPENDENCY_UNAVAILABLE` |
-| FR-KBN-31 | scope จาก `shelter_code` ของ device principal เท่านั้น (ห้ามใช้ query ของ URL / display context) |
-| FR-KBN-32 | คืนเฉพาะ `status = active` และ `start_at ≤ now < end_at` และ `shelter_codes` มี `shelter_code` ของเครื่อง · เรียงตาม FR-KBN-05 · สูงสุด 20 รายการ |
-| FR-KBN-33 | Response: `{ banners: [{ id, title, caption, duration_sec, image_url }], fetched_at }` · header `cache-control: no-store` + `pragma: no-cache` (FR-KPC-07) |
-| FR-KBN-34 | `image_url` = `GET /api/v1/scanner/kiosk/banners/{id}/image?exp=&sig=` — HMAC-SHA256 ด้วย server-only secret, อายุ 15 นาที · sig ผิด/หมดอายุ = 403 · ไม่พบ / inactive / หมดช่วงเวลา = 404 · ไม่ต้องใช้ device header |
+| ID        | Requirement                                                                                                                                                                                                                            |
+| :-------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR-KBN-30 | `POST /api/v1/scanner/kiosk/banners` ยืนยันเครื่องด้วย `authenticateScannerDevice` (`lib/server/scanners/device-credentials.ts`) แบบเดียวกับ `kiosk/config` · 401 `DEVICE_AUTH_FAILED` · 503 `DEPENDENCY_UNAVAILABLE`                  |
+| FR-KBN-31 | scope จาก `shelter_code` ของ device principal เท่านั้น (ห้ามใช้ query ของ URL / display context)                                                                                                                                       |
+| FR-KBN-32 | คืนเฉพาะ `status = active` และ `start_at ≤ now < end_at` และ `shelter_codes` มี `shelter_code` ของเครื่อง · เรียงตาม FR-KBN-05 · สูงสุด 20 รายการ                                                                                      |
+| FR-KBN-33 | Response: `{ banners: [{ id, title, caption, duration_sec, image_url }], fetched_at }` · header `cache-control: no-store` + `pragma: no-cache` (FR-KPC-07)                                                                             |
+| FR-KBN-34 | `image_url` = `GET /api/v1/scanner/kiosk/banners/{id}/image?exp=&sig=` — HMAC-SHA256 ด้วย server-only secret, อายุ 15 นาที · sig ผิด/หมดอายุ = 403 · ไม่พบ / inactive / หมดช่วงเวลา = 404 · ไม่ต้องใช้ device header                   |
 | FR-KBN-35 | scanner client: เพิ่ม `/api/v1/scanner/kiosk/banners` ใน `allowed_paths` ของ `_route_kiosk_api` (POST same-origin เท่านั้น) · GET รูปผ่าน `route.continue_` โดยไม่มี credential ตาม logic เดิม · path ต้องไม่อยู่ใน `LOCAL_ONLY_PATHS` |
 
 ### 3.4 Kiosk UI (`/kiosk`)
 
-| ID | Requirement |
-| :-- | :-- |
-| FR-KBN-40 | client `features/kiosk/data/kiosk-banners.api.ts` ใช้ plain `fetch` (mirror `kiosk-config.api.ts`: `cache: 'no-store'`, timeout 3 s) · ล้มเหลว = คืนรายการว่าง (fail soft) ไม่ cache error |
-| FR-KBN-41 | ดึงรายการเมื่อเข้า `/kiosk` และทุก 5 นาทีระหว่างอยู่หน้าเดิม |
-| FR-KBN-42 | ไม่มีการแตะ/คลิก/กดปุ่มบนหน้า `/kiosk` 30 วินาที และมี banner ≥1 → แสดง attract overlay เต็มจอ |
-| FR-KBN-43 | แตะจอ/กดปุ่มใด ๆ ขณะ overlay แสดง → ปิด overlay กลับหน้าเลือกวิธี และ event นั้นไม่ทริกเกอร์การ์ดที่อยู่ข้างใต้ · เสียบบัตร = scanner client นำทางออกจาก `/kiosk` ตามเดิม |
-| FR-KBN-44 | สไลด์เปลี่ยนตาม `duration_sec` ของแต่ละรายการ วนต่อเนื่อง · fade ≤300 ms · dot indicator · รายการเดียว = ไม่หมุน · แสดงข้อความ「แตะหน้าจอเพื่อเริ่มใช้งาน」ตลอด |
+| ID        | Requirement                                                                                                                                                                                                      |
+| :-------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR-KBN-40 | client `features/kiosk/data/kiosk-banners.api.ts` ใช้ plain `fetch` (mirror `kiosk-config.api.ts`: `cache: 'no-store'`, timeout 3 s) · ล้มเหลว = คืนรายการว่าง (fail soft) ไม่ cache error                       |
+| FR-KBN-41 | ดึงรายการเมื่อเข้า `/kiosk` และทุก 5 นาทีระหว่างอยู่หน้าเดิม                                                                                                                                                     |
+| FR-KBN-42 | ไม่มีการแตะ/คลิก/กดปุ่มบนหน้า `/kiosk` 30 วินาที และมี banner ≥1 → แสดง attract overlay เต็มจอ                                                                                                                   |
+| FR-KBN-43 | แตะจอ/กดปุ่มใด ๆ ขณะ overlay แสดง → ปิด overlay กลับหน้าเลือกวิธี และ event นั้นไม่ทริกเกอร์การ์ดที่อยู่ข้างใต้ · เสียบบัตร = scanner client นำทางออกจาก `/kiosk` ตามเดิม                                        |
+| FR-KBN-44 | สไลด์เปลี่ยนตาม `duration_sec` ของแต่ละรายการ วนต่อเนื่อง · fade ≤300 ms · dot indicator · รายการเดียว = ไม่หมุน · แสดงข้อความ「แตะหน้าจอเพื่อเริ่มใช้งาน」ตลอด                                                  |
 | FR-KBN-45 | รูป `object-contain` (ไม่ crop) · `caption` ใต้รูป · พอดีไม่ scroll ที่ 1024×600 (`kiosk-compact`) และ 1080×1920 (`kiosk-portrait`) · ใช้ media literal เดียวกับ `kiosk-layout.ts` (ผ่าน `kiosk-layout.test.ts`) |
-| FR-KBN-46 | overlay ต้องไม่บัง `SystemBannerHost` (ประกาศระบบ fixed bottom) |
-| FR-KBN-47 | ไม่มี banner / API ล้มเหลว / รูปโหลดไม่ได้ → ไม่แสดง overlay (หรือข้ามสไลด์ที่รูปเสีย) · ไม่มี JS error · หน้าเลือกวิธีทำงานปกติ |
+| FR-KBN-46 | overlay ต้องไม่บัง `SystemBannerHost` (ประกาศระบบ fixed bottom)                                                                                                                                                  |
+| FR-KBN-47 | ไม่มี banner / API ล้มเหลว / รูปโหลดไม่ได้ → ไม่แสดง overlay (หรือข้ามสไลด์ที่รูปเสีย) · ไม่มี JS error · หน้าเลือกวิธีทำงานปกติ                                                                                 |
 
 ---
 
@@ -140,7 +146,8 @@ migration: N/A — doc type ใหม่ ไม่มีข้อมูลเด
 - `image_url` หมดอายุหรือแก้ `sig` → 403
 - `POST kiosk/banners` ที่ header ปลอม/เครื่อง inactive → 401 และไม่ query banner
 - scanner client: allowlist ฉีด header ให้ `POST /kiosk/banners` same-origin เท่านั้น
-- ผู้จัดการศูนย์ A แก้ banner ของศูนย์ B ไม่ได้ (หลังเคาะ FR-KBN-24)
+- `banner_staff` / ผู้จัดการศูนย์ A แก้ banner ของศูนย์ B ไม่ได้ · ย้าย banner ของ B มาเป็นของ A ไม่ได้ · role อื่นของศูนย์ A ได้ 403
+- SM ของศูนย์ A grant `A:banner_staff` ได้ · `banner_staff` ไม่เห็นเมนูอื่น
 - tests: domain (schema, active window, sort), signed URL, back-office + kiosk route `server.test.ts`, `kiosk-banners.api.test.ts`, attract overlay component test (fake timers), `scanner_client/tests/test_manager.py` allowlist case, e2e back-office CRUD
 
 ---
@@ -148,7 +155,7 @@ migration: N/A — doc type ใหม่ ไม่มีข้อมูลเด
 ## 5. Impact
 
 - **ใหม่:** feature `kiosk-banners`, `lib/server/kiosk-banners`, routes back-office + kiosk API, หน้า admin, kiosk overlay, schema.md §3.12, api-contract.md
-- **แก้:** `routes/kiosk/+page.svelte`, `features/kiosk/index.ts`, `scanner_client/app/manager.py`, VDU ของ `registry`, role-permission-matrix
+- **แก้:** `routes/kiosk/+page.svelte`, `features/kiosk/index.ts`, `scanner_client/app/manager.py`, VDU ของ `registry`, `lib/auth/roles.ts`, หน้าจัดการผู้ใช้ (ตัวเลือก role), portal nav, role-permission-matrix, schema.md §6
 - **ไม่กระทบ:** worker, FastAPI, Mongo, `announcement` (CR-100), flow ค้นหา/ลงทะเบียนของ kiosk
 - **Base branch:** `feat/pre-register_kiosk` (ยังไม่ merge เข้า develop) — branch ของ CR นี้แตกจาก branch นั้น และ merge ตามหลัง CR-151/152
 
@@ -161,4 +168,6 @@ N/A — doc type ใหม่
 - 2026-10-11 — proposed · owner เลือก scope แบบ ghosa (banner รูปภาพ), track เป็นไฟล์ CR ใน `14-kiosk/`, ยึด base code `feat/pre-register_kiosk`
 - 2026-10-11 — ไม่นำ iframe/link slide ของ ghosa มาใช้ (ghosa ส่ง device key ไปกับ request ของ iframe ภายนอก)
 - 2026-10-11 — ไม่นำ landing message แบบ HTML (`innerHTML`) ของ ghosa มาใช้ → `caption` เป็น text
+- 2026-10-11 — owner เคาะ: เพิ่ม role `banner_staff` และให้ `shelter_manager` + `system_admin` จัดการได้ด้วย (FR-KBN-24/26/27) · ยืนยันค่า idle 30 s, refresh 5 นาที, รูป ≤2 MB, `duration_sec` 3–60
+- 2026-10-11 — branch `draft-kiosk-banner` เป็น docs-only; implementation แยกเป็นงานถัดไป
 - 2026-10-11 — เลขที่ว่างถัดไปบน develop = CR-162 (develop มี CR-159 ซ้ำ 2 ไฟล์) — ยืนยันอีกครั้งตอน approve
