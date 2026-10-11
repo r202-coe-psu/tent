@@ -32,9 +32,9 @@
  * ── Tags (Playwright `{ tag }`, select with `--grep`) ─────────────────────────────────────
  *  @pre-register  feature tag — every test in this file and in `public-register.test.ts`
  *  @smoke         read-only, safe on staging / production (never writes; server-error cases
- *                 mock the write endpoint): N, R, V, E, S, U. Run on pre-push, the PR gate and
+ *                 mock the write endpoint): N, R, V, E, S (except S2), U. Run on pre-push, the PR gate and
  *                 against staging (`pnpm test:e2e:pre-register:smoke`); kept when `IS_REMOTE`
- *  @critical      writes real data and asserts zero leak afterwards: W1–W6 and Z. Runs
+ *  @critical      writes real data and asserts zero leak afterwards: W1–W6, S2 and Z. Runs
  *                 locally or on a remote target with `ALLOW_REMOTE_WRITES=true` (staging);
  *                 read-only remote otherwise; also run on the PR gate / nightly
  *  @release       release-gate journey only: navigation (N) + critical happy paths (W*) +
@@ -152,11 +152,13 @@ import {
 	type PageHealth
 } from './helpers/pre-register';
 import {
+	forgetCreatedShelter,
 	getUnassignedRegistration,
 	listUnassignedRegistrations,
 	purgeCreatedData,
 	recordCreatedQueueId,
 	recordCreatedShelter,
+	teardownShelter,
 	waitForProjection
 } from './helpers/public-cleanup';
 import { createShelterViaUi, setRecaptcha } from './helpers/staff-ui';
@@ -1468,23 +1470,6 @@ test.describe(
 			await expectFormKept(page);
 		});
 
-		test('S2 a shelter that does not take pre-registrations cannot be chosen from a link', async ({
-			page
-		}) => {
-			const res = await page.request.get('/api/public/v1/shelters');
-			const { shelters } = (await res.json()) as {
-				shelters: { code: string; accepts_pre_registration?: boolean }[];
-			};
-			const closedToBooking = shelters.find((s) => s.accepts_pre_registration !== true);
-			test.skip(!closedToBooking, 'every shelter accepts pre-registration on this target');
-			await page.goto(`/pre-register?shelter=${closedToBooking!.code}`);
-			await expect(
-				page.getByText('ศูนย์นี้ยังไม่เปิดรับลงทะเบียนล่วงหน้าจากหน้าสาธารณะ')
-			).toBeVisible();
-			await expect(page.getByText('กรุณาเลือกศูนย์พักพิง', { exact: true })).toBeVisible();
-			await expect(page.locator('#address-no')).toHaveCount(0);
-		});
-
 		test('S3 a reCAPTCHA failure blocks the send with its own message', async ({
 			page,
 			health
@@ -1602,6 +1587,77 @@ test.describe(
 			).toBeVisible();
 			await expect(page.locator('#address-no')).toHaveCount(0);
 			await expect(page.getByRole('button', { name: SUBMIT_LABEL })).toHaveCount(0);
+		});
+	}
+);
+
+// ====================================================== S2 — shelter that is not accepting
+
+/**
+ * Writes (creates its own `E2E …` shelter), so unlike the rest of S it is not `@smoke`: it
+ * follows W5 — skipped on read-only targets, torn down through `teardownShelter`. The
+ * shelter is created here instead of picked from the live list because leftovers of earlier
+ * runs (closed, registry master deleted) have no shelter policy and would 404 the page.
+ */
+test.describe(
+	'Pre-register: shelter not accepting pre-registrations (S2)',
+	{ tag: ['@pre-register', '@critical'] },
+	() => {
+		test.beforeEach(() => {
+			test.skip(!CAN_WRITE, READ_ONLY_REASON);
+		});
+
+		test('S2 a shelter that does not take pre-registrations cannot be chosen from a link', async ({
+			page,
+			browser,
+			baseURL
+		}) => {
+			test.setTimeout(240_000);
+			liveWritesStarted = true;
+
+			// staff: create a shelter that does NOT accept pre-registrations, through the UI
+			const staffContext = await browser.newContext();
+			let code: string | undefined;
+			try {
+				const staffPage = await staffContext.newPage();
+				const admin = await bootstrapAdminSession();
+				await routeBrowserCouchThroughApp(staffPage);
+				await injectSession(staffPage, admin.user, admin.cookie);
+				code = await createShelterViaUi(staffPage, {
+					name: `E2E ศูนย์ทดสอบไม่รับจองล่วงหน้า ${RUN_ID}`,
+					siteKind: 'evacuation_center',
+					lat: 7.0,
+					lng: 100.48,
+					subdistrict: 'คอหงส์',
+					capacity: 40,
+					acceptsPreRegistration: false
+				});
+				// ledger first: the top-level afterAll sweeps it even if the steps below throw
+				recordCreatedShelter(code);
+
+				// the worker projects it asynchronously — wait until the public API serves it
+				await waitForProjection('shelter open and not accepting in /shelters', async () => {
+					const res = await fetch(`${baseURL}/api/public/v1/shelters`);
+					const { shelters } = (await res.json()) as {
+						shelters: { code: string; status: string; accepts_pre_registration?: boolean }[];
+					};
+					const row = shelters.find((s) => s.code === code);
+					return row?.status === 'open' && row.accepts_pre_registration !== true;
+				});
+
+				await page.goto(`/pre-register?shelter=${code}`);
+				await expect(
+					page.getByText('ศูนย์นี้ยังไม่เปิดรับลงทะเบียนล่วงหน้าจากหน้าสาธารณะ')
+				).toBeVisible();
+				await expect(page.getByText('กรุณาเลือกศูนย์พักพิง', { exact: true })).toBeVisible();
+				await expect(page.locator('#address-no')).toHaveCount(0);
+			} finally {
+				await staffContext.close().catch(() => undefined);
+				if (code) {
+					await teardownShelter(code);
+					forgetCreatedShelter(code);
+				}
+			}
 		});
 	}
 );
@@ -1914,8 +1970,8 @@ test.describe(
 			await expect(
 				page.getByText('แสดง QR Code นี้ต่อเจ้าหน้าที่ เพื่อรับเข้าศูนย์')
 			).toBeVisible();
-			// the id rides in the QR only — never printed for a human
-			await expect(page.getByText(queueId)).toHaveCount(0);
+			// CR-150: an unassigned ticket prints its queue code under the name (`รหัส: {code}`)
+			await expect(page.getByText(`รหัส: ${queueId}`, { exact: true })).toBeVisible();
 			await expect.poll(() => storedTicketCodes(page)).toContain(queueId);
 			await expect(page.locator('main')).toMatchAriaSnapshot({ name: 'ticket.aria.yml' });
 			expectHealthy(health);
