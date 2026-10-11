@@ -4,6 +4,7 @@ import { now, type AuthorContext } from '$lib/db/model';
 import { ulid } from '$lib/db/ulid';
 import { addQty, persistQty, qtyGt, qtyGte, qtyNeg, subQty } from '$lib/utils/qty';
 import {
+	DISTRIBUTION_STAFF,
 	hasStaffCapability,
 	isShelterManager,
 	isSystemAdmin,
@@ -157,11 +158,12 @@ export class DistributionRemoteRepository implements DistributionRepository {
 		if (
 			!ctx.roles ||
 			(!hasStaffCapability(ctx.roles, 'registration_staff') &&
+				!hasStaffCapability(ctx.roles, DISTRIBUTION_STAFF, ctx.shelterCode) &&
 				!isShelterManager(ctx.roles) &&
 				!isSystemAdmin(ctx.roles))
 		) {
 			throw new Error(
-				'Unauthorized: distribution request creation requires registration_staff, shelter_manager, or system_admin role'
+				'Unauthorized: distribution request creation requires registration_staff, distribution_staff, shelter_manager, or system_admin role'
 			);
 		}
 	}
@@ -170,11 +172,12 @@ export class DistributionRemoteRepository implements DistributionRepository {
 		if (
 			!ctx.roles ||
 			(!hasStaffCapability(ctx.roles, 'registration_staff') &&
+				!hasStaffCapability(ctx.roles, DISTRIBUTION_STAFF, ctx.shelterCode) &&
 				!isShelterManager(ctx.roles) &&
 				!isSystemAdmin(ctx.roles))
 		) {
 			throw new Error(
-				'Unauthorized: distribution cancellation requires registration_staff, shelter_manager, or system_admin role'
+				'Unauthorized: distribution cancellation requires registration_staff, distribution_staff, shelter_manager, or system_admin role'
 			);
 		}
 	}
@@ -183,12 +186,13 @@ export class DistributionRemoteRepository implements DistributionRepository {
 		if (
 			!ctx.roles ||
 			(!hasStaffCapability(ctx.roles, 'registration_staff') &&
+				!hasStaffCapability(ctx.roles, DISTRIBUTION_STAFF, ctx.shelterCode) &&
 				!isWarehouseStaff(ctx.roles) &&
 				!isShelterManager(ctx.roles) &&
 				!isSystemAdmin(ctx.roles))
 		) {
 			throw new Error(
-				'Unauthorized: distribution view requires registration_staff, warehouse_staff, shelter_manager, or system_admin role'
+				'Unauthorized: distribution view requires registration_staff, distribution_staff, warehouse_staff, shelter_manager, or system_admin role'
 			);
 		}
 	}
@@ -1800,7 +1804,7 @@ export class DistributionRemoteRepository implements DistributionRepository {
 	private assertAuthorizedIssueStaff(ctx: AuthorContext): void {
 		if (!ctx.roles) {
 			throw new Error(
-				'Unauthorized: distribution issue requires registration_staff, shelter_manager, or system_admin role'
+				'Unauthorized: distribution issue requires registration_staff, distribution_staff, shelter_manager, or system_admin role'
 			);
 		}
 		if (isSystemAdmin(ctx.roles)) return;
@@ -1808,13 +1812,15 @@ export class DistributionRemoteRepository implements DistributionRepository {
 			hasStaffCapability(ctx.roles, 'registration_staff', ctx.shelterCode) ||
 			ctx.roles.includes(`${ctx.shelterCode}:registration_staff`) ||
 			ctx.roles.includes('registration_staff');
+		// New role: compound-only, no legacy flat fallback.
+		const hasDistributionRole = hasStaffCapability(ctx.roles, DISTRIBUTION_STAFF, ctx.shelterCode);
 		const hasManagerRole =
 			isShelterManager(ctx.roles, ctx.shelterCode) ||
 			ctx.roles.includes(`${ctx.shelterCode}:shelter_manager`) ||
 			ctx.roles.includes('shelter_manager');
-		if (hasRegistrationRole || hasManagerRole) return;
+		if (hasRegistrationRole || hasDistributionRole || hasManagerRole) return;
 		throw new Error(
-			'Unauthorized: distribution issue requires registration_staff, shelter_manager, or system_admin role'
+			'Unauthorized: distribution issue requires registration_staff, distribution_staff, shelter_manager, or system_admin role'
 		);
 	}
 
@@ -1823,12 +1829,13 @@ export class DistributionRemoteRepository implements DistributionRepository {
 		const roles = ctx.roles;
 		if (isSystemAdmin(roles)) return;
 		const allowedCapabilities = ['registration_staff', 'warehouse_staff'] as const;
-		const hasScopedStaff = allowedCapabilities.some(
-			(capability) =>
-				hasStaffCapability(roles, capability, ctx.shelterCode) ||
-				roles.includes(`${ctx.shelterCode}:${capability}`) ||
-				roles.includes(capability)
-		);
+		const hasScopedStaff =
+			allowedCapabilities.some(
+				(capability) =>
+					hasStaffCapability(roles, capability, ctx.shelterCode) ||
+					roles.includes(`${ctx.shelterCode}:${capability}`) ||
+					roles.includes(capability)
+			) || hasStaffCapability(roles, DISTRIBUTION_STAFF, ctx.shelterCode);
 		const hasScopedManager =
 			isShelterManager(roles, ctx.shelterCode) ||
 			roles.includes(`${ctx.shelterCode}:shelter_manager`) ||

@@ -98,7 +98,8 @@ describe('requireDistributionDesk', () => {
 		['shelter_manager', ['shelter:SH001', 'SH001:shelter_manager']],
 		['supply_coordinator', ['shelter:SH001', 'SH001:supply_coordinator']],
 		['warehouse_staff', ['shelter:SH001', 'SH001:warehouse_staff']],
-		['registration_staff', ['shelter:SH001', 'SH001:registration_staff']]
+		['registration_staff', ['shelter:SH001', 'SH001:registration_staff']],
+		['distribution_staff', ['shelter:SH001', 'SH001:distribution_staff']]
 	])('lets %s into the desk', async (_label, roles) => {
 		await expect(withRoles(roles)).resolves.toBeUndefined();
 	});
@@ -115,6 +116,13 @@ describe('requireDistributionDesk', () => {
 		mocks.shelterStore.selectedShelterCode = 'SH002';
 		await expect(
 			withRoles(['shelter:SH001', 'shelter:SH002', 'SH001:registration_staff'])
+		).rejects.toMatchObject({ status: 302, location: LANDING_ROUTE });
+	});
+
+	it('keeps distribution_staff out of a shelter where they hold no desk capability', async () => {
+		mocks.shelterStore.selectedShelterCode = 'SH002';
+		await expect(
+			withRoles(['shelter:SH001', 'shelter:SH002', 'SH001:distribution_staff'])
 		).rejects.toMatchObject({ status: 302, location: LANDING_ROUTE });
 	});
 

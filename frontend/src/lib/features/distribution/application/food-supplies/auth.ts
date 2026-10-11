@@ -1,5 +1,6 @@
 import type { AuthorContext } from '$lib/db/model';
 import {
+	DISTRIBUTION_STAFF,
 	hasCapabilityInShelter,
 	isSystemAdmin,
 	SHELTER_MANAGER,
@@ -49,13 +50,14 @@ export function canDispatchTicket(ctx: AuthorContext): boolean {
 /**
  * Checks if the actor is authorized to perform frontline distribution operations
  * (Step 4 receive, Step 4B handover/scan, Step 5 shift close, Step 6 submit returns).
- * Allowed: registration_staff, supply_coordinator, shelter_manager, system_admin.
+ * Allowed: registration_staff, distribution_staff, supply_coordinator, shelter_manager, system_admin.
  */
 export function canPerformFrontlineDistribution(ctx: AuthorContext): boolean {
 	if (!ctx.roles) return false;
 	if (isSystemAdmin(ctx.roles)) return true;
 	return (
 		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, 'registration_staff') ||
+		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, DISTRIBUTION_STAFF) ||
 		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, SUPPLY_COORDINATOR) ||
 		hasCapabilityInShelter(ctx.roles, ctx.shelterCode, SHELTER_MANAGER)
 	);
@@ -135,7 +137,7 @@ export function assertCanDispatchTicket(ctx: AuthorContext): void {
 export function assertCanPerformFrontlineDistribution(ctx: AuthorContext): void {
 	if (!canPerformFrontlineDistribution(ctx)) {
 		throw new WorkflowAuthorizationError(
-			'Unauthorized: frontline distribution operations require registration_staff, supply_coordinator, shelter_manager, or system_admin role'
+			'Unauthorized: frontline distribution operations require registration_staff, distribution_staff, supply_coordinator, shelter_manager, or system_admin role'
 		);
 	}
 }
@@ -179,7 +181,7 @@ export function assertReservationModeAuthority(
 	} else {
 		if (!canPerformFrontlineDistribution(ctx)) {
 			throw new WorkflowAuthorizationError(
-				`Unauthorized: ${mode} return reservation requires registration_staff, supply_coordinator, shelter_manager, or system_admin role`
+				`Unauthorized: ${mode} return reservation requires registration_staff, distribution_staff, supply_coordinator, shelter_manager, or system_admin role`
 			);
 		}
 	}

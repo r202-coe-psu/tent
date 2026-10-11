@@ -28,6 +28,10 @@ function expectForbidden(run: () => void, match: RegExp): void {
 
 const WAREHOUSE: UserCtx = { name: 'ws', roles: ['shelter:SH001', 'warehouse_staff'] };
 const REGISTRATION: UserCtx = { name: 'reg', roles: ['shelter:SH001', 'registration_staff'] };
+const DISTRIBUTION: UserCtx = {
+	name: 'dist',
+	roles: ['shelter:SH001', 'SH001:distribution_staff']
+};
 const KITCHEN: UserCtx = { name: 'kt', roles: ['shelter:SH001', 'kitchen_staff'] };
 const MANAGER: UserCtx = { name: 'sm', roles: ['shelter:SH001', 'shelter_manager'] };
 const ADMIN: UserCtx = { name: 'admin', roles: ['system_admin'] };
@@ -1181,6 +1185,7 @@ describe('buildValidateDocUpdate', () => {
 
 		it.each([
 			['registration_staff', REGISTRATION],
+			['distribution_staff', DISTRIBUTION],
 			['shelter_manager', MANAGER],
 			['system_admin', ADMIN]
 		])(
@@ -1224,7 +1229,7 @@ describe('buildValidateDocUpdate', () => {
 		])('rejects %s directly creating a distribution_request', (_role, userCtx) => {
 			expectForbidden(
 				() => compile()(reqDoc({}, userCtx), null, userCtx),
-				/Only registration staff, shelter manager, or system admin can create distribution requests/
+				/Only registration staff, distribution staff, shelter manager, or system admin can create distribution requests/
 			);
 		});
 
@@ -1893,16 +1898,28 @@ describe('buildValidateDocUpdate', () => {
 			]
 		};
 
-		it('allows registration_staff, shelter_manager, and system_admin to create distribution_issue', () => {
+		it('allows registration_staff, distribution_staff, shelter_manager, and system_admin to create distribution_issue', () => {
 			expect(() => compile()(validIssue, null, REGISTRATION)).not.toThrow();
+			expect(() => compile()(validIssue, null, DISTRIBUTION)).not.toThrow();
 			expect(() => compile()(validIssue, null, MANAGER)).not.toThrow();
 			expect(() => compile()(validIssue, null, ADMIN)).not.toThrow();
+		});
+
+		it('rejects distribution_staff scoped to another shelter from creating distribution_issue', () => {
+			const otherShelter: UserCtx = {
+				name: 'dist2',
+				roles: ['shelter:SH002', 'SH002:distribution_staff']
+			};
+			expectForbidden(
+				() => compile()(validIssue, null, otherShelter),
+				/Only registration staff, distribution staff, shelter manager, or system admin can write distribution issues/
+			);
 		});
 
 		it('rejects warehouse_staff from creating distribution_issue', () => {
 			expectForbidden(
 				() => compile()(validIssue, null, WAREHOUSE),
-				/Only registration staff, shelter manager, or system admin can write distribution issues/
+				/Only registration staff, distribution staff, shelter manager, or system admin can write distribution issues/
 			);
 		});
 
@@ -1997,7 +2014,7 @@ describe('buildValidateDocUpdate', () => {
 			expect(() => compile()(validIdempotency, null, REGISTRATION)).not.toThrow();
 			expectForbidden(
 				() => compile()(validIdempotency, null, WAREHOUSE),
-				/Only registration staff, shelter manager, or system admin/
+				/Only registration staff, distribution staff, shelter manager, or system admin/
 			);
 			expectForbidden(
 				() => compile()({ ...validIdempotency, qty: '2' }, validIdempotency, REGISTRATION),
@@ -2014,7 +2031,7 @@ describe('buildValidateDocUpdate', () => {
 			expect(() => compile()(validCapacity, null, REGISTRATION)).not.toThrow();
 			expectForbidden(
 				() => compile()(validCapacity, null, WAREHOUSE),
-				/Only registration staff, shelter manager, or system admin/
+				/Only registration staff, distribution staff, shelter manager, or system admin/
 			);
 			const mutated = {
 				...validCapacity,
@@ -2036,7 +2053,7 @@ describe('buildValidateDocUpdate', () => {
 			expect(() => compile()(validGuard, null, REGISTRATION)).not.toThrow();
 			expectForbidden(
 				() => compile()(validGuard, null, WAREHOUSE),
-				/Only registration staff, shelter manager, or system admin/
+				/Only registration staff, distribution staff, shelter manager, or system admin/
 			);
 			const mutated = {
 				...validGuard,

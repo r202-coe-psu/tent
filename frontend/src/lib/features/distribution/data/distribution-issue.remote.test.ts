@@ -158,6 +158,12 @@ const supplyCtx: AuthorContext = {
 	roles: ['supply_coordinator']
 };
 
+const distributionCtx: AuthorContext = {
+	createdBy: 'Distribution Staff',
+	shelterCode: 'SH001',
+	roles: ['shelter:SH001', 'SH001:distribution_staff']
+};
+
 const crossShelterRegistrationCtx: AuthorContext = {
 	createdBy: 'Cross-shelter Registration Staff',
 	shelterCode: 'SH001',
@@ -376,6 +382,46 @@ describe('DistributionRemoteRepository — Phase 3B Issue Execution', () => {
 				adminCtx
 			);
 			expect(issue3._id).toMatch(/^distribution_issue:.+/);
+		});
+
+		it('allows distribution_staff of the active shelter to issue goods', async () => {
+			seedActiveEvacuee('evacuee:01J1');
+			seedActiveBatch('distribution_batch:01JBATCH1');
+
+			const issue = await repo.createIssue(
+				{
+					batch_id: 'distribution_batch:01JBATCH1',
+					evacuee_id: 'evacuee:01J1',
+					item_id: 'item:water',
+					qty: '1',
+					idempotency_key: 'idem-dist'
+				},
+				distributionCtx
+			);
+			expect(issue._id).toMatch(/^distribution_issue:.+/);
+		});
+
+		it.each([
+			['another shelter', ['shelter:SH002', 'SH002:distribution_staff']],
+			['legacy flat role (unsupported for distribution_staff)', ['distribution_staff']]
+		])('rejects distribution_staff from %s before mutation', async (_label, roles) => {
+			seedActiveEvacuee('evacuee:01J1');
+			seedActiveBatch('distribution_batch:01JBATCH1');
+			const countBefore = store.size;
+
+			await expect(
+				repo.createIssue(
+					{
+						batch_id: 'distribution_batch:01JBATCH1',
+						evacuee_id: 'evacuee:01J1',
+						item_id: 'item:water',
+						qty: '1',
+						idempotency_key: 'idem-dist-x'
+					},
+					{ ...distributionCtx, roles }
+				)
+			).rejects.toThrow(/Unauthorized/);
+			expect(store.size).toBe(countBefore);
 		});
 
 		it('rejects warehouse_staff, supply_coordinator, and kitchen_staff before mutation', async () => {

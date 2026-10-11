@@ -5,6 +5,7 @@ import { browser } from '$app/environment';
 import { resolve } from '$app/paths';
 import {
 	COUCH_ADMIN,
+	DISTRIBUTION_STAFF,
 	hasStaffCapability,
 	isShelterManager,
 	isWarehouseStaff,
@@ -183,7 +184,7 @@ export async function requireTicketAccess(fetchFn?: typeof fetch) {
 /**
  * Distribution Desk (Station 4, `/onsite/distribution`) guard — the union of the
  * roles that can act on any desk step: frontline distribution (system_admin,
- * shelter_manager, supply_coordinator, registration_staff) plus physical loan
+ * shelter_manager, supply_coordinator, registration_staff, distribution_staff) plus physical loan
  * returns (warehouse_staff). Matches the onsite tile; per-step buttons stay gated
  * in the UI and the CouchDB `validate_doc_update` guard remains the real boundary.
  */
@@ -195,7 +196,8 @@ export async function requireDistributionDesk(fetchFn?: typeof fetch) {
 		!isSystemAdmin(roles) &&
 		!isShelterManager(roles, shelter) &&
 		!isWarehouseStaff(roles, shelter) &&
-		!hasStaffCapability(roles, 'registration_staff', shelter)
+		!hasStaffCapability(roles, 'registration_staff', shelter) &&
+		!hasStaffCapability(roles, DISTRIBUTION_STAFF, shelter)
 	) {
 		throw redirect(302, resolve(LANDING_ROUTE));
 	}

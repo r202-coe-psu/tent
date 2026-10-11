@@ -158,6 +158,12 @@ const regCtx: AuthorContext = {
 	createdBy: 'reg_charlie',
 	roles: ['registration_staff']
 };
+
+const distributionCtx: AuthorContext = {
+	shelterCode: 'SH001',
+	createdBy: 'dist_dana',
+	roles: ['shelter:SH001', 'SH001:distribution_staff']
+};
 const managerCtx: AuthorContext = {
 	shelterCode: 'SH001',
 	createdBy: 'mgr_dave',
@@ -3696,6 +3702,7 @@ describe('DistributionRemoteRepository createRequest (Phase 4B)', () => {
 
 	it.each([
 		['registration_staff', regCtx],
+		['distribution_staff', distributionCtx],
 		['shelter_manager', managerCtx],
 		['system_admin', adminCtx]
 	])('allows %s to create a distribution request', async (_role, ctx) => {
@@ -3746,10 +3753,18 @@ describe('DistributionRemoteRepository createRequest (Phase 4B)', () => {
 	it.each([
 		['warehouse_staff', warehouseCtx],
 		['kitchen_staff', kitchenCtx],
+		[
+			'distribution_staff of another shelter',
+			{
+				shelterCode: 'SH001',
+				createdBy: 'dist_x',
+				roles: ['shelter:SH002', 'SH002:distribution_staff']
+			}
+		],
 		['missing role', { shelterCode: 'SH001', createdBy: 'guest', roles: [] as string[] }]
 	])('rejects %s from creating a distribution request', async (_role, ctx) => {
 		await expect(repo.createRequest(sampleInput, ctx)).rejects.toThrow(
-			/Unauthorized: distribution request creation requires registration_staff, shelter_manager, or system_admin role/
+			/Unauthorized: distribution request creation requires registration_staff, distribution_staff, shelter_manager, or system_admin role/
 		);
 		expect(store.size).toBe(0);
 	});
@@ -3758,7 +3773,7 @@ describe('DistributionRemoteRepository createRequest (Phase 4B)', () => {
 		await expect(
 			repo.createRequest(sampleInput, { shelterCode: 'SH001', createdBy: 'noroles' })
 		).rejects.toThrow(
-			/Unauthorized: distribution request creation requires registration_staff, shelter_manager, or system_admin role/
+			/Unauthorized: distribution request creation requires registration_staff, distribution_staff, shelter_manager, or system_admin role/
 		);
 		expect(store.size).toBe(0);
 	});

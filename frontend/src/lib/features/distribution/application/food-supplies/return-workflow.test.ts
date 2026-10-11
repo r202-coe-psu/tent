@@ -3517,7 +3517,7 @@ describe('return-workflow', () => {
 						name: 'unauth',
 						roles: ['shelter:SH001', 'kitchen_staff']
 					}),
-				/Only registration staff, supply coordinator, shelter manager, or system admin can manage bulk return claims/
+				/Only registration staff, distribution staff, supply coordinator, shelter manager, or system admin can manage bulk return claims/
 			);
 			expectForbidden(
 				() =>
