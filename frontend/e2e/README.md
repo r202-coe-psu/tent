@@ -39,8 +39,8 @@ Known problems:
   which also burns a real citizen's budget. With the duplicate removed, W2–W5 spend ~8 of 10, and
   `waitForStatusBudget(needed)` now counts real hits and only waits when the budget is short. The
   limiters live in the preview server's memory, so re-running the pre-register suite back-to-back
-  against a **reused** server can still get `429 Too Many Requests` on W4/W5 — wait a minute or
-  restart the server.
+  against a **reused** server with `RATE_LIMIT=true` can still get `429 Too Many Requests` on W4/W5 —
+  wait a minute or restart the server (not an issue with the default `RATE_LIMIT=false`).
   Since develop's `registrations/check-duplicate` (instant duplicate check on the public form)
   shares that same `registerLookupIpLimiter` budget, W4 and W5 fill the form again and usually
   wait out one window, so the pre-register `@critical` group takes ~1 min longer than before.
@@ -296,13 +296,24 @@ How the three full-stack suites obey §4:
   `public_shelters` row (the worker's retention job drops it within minutes). A received donation
   is not reversible either — its `stock_ledger` row lives in the deleted shelter database, so it
   goes with it.
-- **Rate limits.** The BFF allows 3 bookings and 10 edit/cancel calls per minute per IP, and
-  FastAPI 30 requests per minute per IP on every donation route. The limiters exempt loopback
-  only under `vite dev`, so on a remote target (and on `vite preview` with
-  `DONATION_E2E_PACE=1`) `bookingPacer` / the cancel pacer spread the calls out; the three suites
-  take an estimated 10–15 minutes together there (paced; not yet measured on staging). Locally run them against `pnpm dev`:
-  `PLAYWRIGHT_TEST_BASE_URL=http://localhost:5173 pnpm exec playwright test e2e/donation-fullstack.test.ts`
-  (wait about a minute between two back-to-back runs: FastAPI's limiter is not loopback-exempt).
+- **Rate limits.** The BFF allows 3 bookings and 10 edit/cancel calls per minute per IP (and
+  FastAPI 30 requests per minute per IP on every donation route). Every suite shares the one
+  runner IP and the BFF's loopback exemption applies only under `vite dev`, so e2e switches the
+  BFF limiters off with the server env flag **`RATE_LIMIT=false`** (any `RateLimiter.check()`
+  returns true, for every key; enforced unless the value is exactly `false`/`0`). It is set for
+  the local preview server by `playwright.config.ts` (default `false`, override with
+  `RATE_LIMIT=true`), in `e2e/.env` / `.env.staging`, and for the staging server in
+  `docker-compose.staging*.yml` (`RATE_LIMIT: ${RATE_LIMIT:-false}`). Production leaves it unset.
+  The e2e side reads the same variable (`RATE_LIMIT_ENFORCED` in `helpers/e2e-env.ts`):
+  `bookingPacer` / the cancel pacer and `waitForStatusBudget` only wait when it is **not**
+  `false`/`0` (unset counts as enforced), so by default runs are unpaced. To exercise the real
+  limits set `RATE_LIMIT=true` in the e2e env (and on the target); pacing then returns, with its
+  hit log persisted in `node_modules/.cache/donation-e2e-pacer.json` so a worker restart after a
+  failure does not forget the last minute, and the three suites take an estimated 10–15 minutes.
+  `DONATION_E2E_PACE=0` still forces pacing off. `RATE_LIMIT` does **not** touch FastAPI's own
+  per-IP limiter (30/min, in-process): wait about a minute between two back-to-back runs if a
+  suite gets a 429 from it. A remote runner whose env lacks `RATE_LIMIT=false` (e.g. the
+  `tent-staging-e2e-env` Jenkins credential) paces even though the server has limits off.
 
 ## 9. Agent handoff
 
