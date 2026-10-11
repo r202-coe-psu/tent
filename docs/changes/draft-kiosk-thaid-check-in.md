@@ -64,6 +64,62 @@ migration: ไม่มี backfill — flag ใหม่ใน `feature_flags` 
 | Face check / staff PIN      | ใช้กับช่องทางบัตร                                                      | ช่องทาง ThaiD ไม่ใช้                                                                                                                         |
 | ไม่พบข้อมูลด้วย ThaiD       | —                                                                      | `not_found` + `can_register:false`                                                                                                           |
 
+## Requirements / Acceptance
+
+| ID        | Requirement — ผ่านเมื่อ                                                                                                                              |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| KTD-AC-01 | Session ใช้ได้ครั้งเดียว — check-in สำเร็จแล้วส่ง `thaid_session_id` เดิมซ้ำ → reject `KIOSK_THAID_SESSION_INVALID`                                  |
+| KTD-AC-02 | Session ผูกกับ `device_id` + `shelter_code` ของตู้ที่สร้าง — ตู้อื่นหรือศูนย์อื่นใช้ `session_id` นี้ (status / lookup / check-in / cancel) → reject |
+| KTD-AC-03 | Public `GET /api/public/v1/thaid/scan-session/[id]` และ SSE คืน **404** เมื่อ session มี `kind=kiosk_check_in`                                       |
+| KTD-AC-04 | Browser ของตู้ไม่ส่งเลข 13 หลักออกไป — lookup/check-in ช่องทาง ThaiD รับแค่ `{source:'thaid', session_id}`; server resolve เลขบัตรจาก session เอง    |
+| KTD-AC-05 | Check-in: pid ใน `thaid_session_id` ต้องตรงกับ pid ของผู้สแกน (primary ใน batch นั้น) — ไม่ตรง → reject `KIOSK_THAID_SESSION_INVALID`                |
+| KTD-AC-06 | Timeout ตาม D-4 — pending เกิน 300 วิ หรือ completed เกิน 180 วิ → status คืน 404 `{status:'expired'}` และ lookup/check-in ด้วย session นั้น reject  |
+| KTD-AC-07 | Rate limit ตาม D-5 — สร้าง session เกิน 10 ครั้ง/นาที/kiosk → 429 `KIOSK_RATE_LIMITED`                                                               |
+| KTD-AC-08 | Regression — flow `member_scan` เดิมบนหน้า pre-register (สร้าง session → สแกน → อ่าน profile ผ่าน public GET/SSE) ทำงานเหมือนเดิม                    |
+
+## Security
+
+- **เก็บใน memory เท่านั้น** — session (รวม pid + ชื่อจาก ThaiD) อยู่ใน in-memory store ของ server; ไม่เขียน CouchDB / Mongo / ไฟล์ / browser storage
+- **ลบทิ้งทันที** เมื่อ check-in สำเร็จ, cancel, หรือหมดเวลาตาม D-4 — ไม่เก็บไว้รอ GC
+- **ไม่ log เลข 13 หลักและชื่อ** — log / error / telemetry ห้ามมี pid หรือชื่อเต็ม; ถ้าจำเป็นต้องอ้างถึงให้ mask (เช่น `x-xxxx-xxxxx-12-3`)
+- **Reject session ที่ถูกใช้ซ้ำ** — `session_id` ที่ consume แล้ว หรือถูกลบแล้ว ใช้ซ้ำไม่ได้ทุก endpoint (KTD-AC-01)
+
+## D-7 — ข้อความที่เสนอ (รอ PO approve)
+
+ข้อความจริงจากโค้ดต้นแบบบน `feat/pre-register_kiosk`
+
+**การ์ด ThaiD บน `/kiosk`**
+
+| ส่วน                | ข้อความ                                 |
+| ------------------- | --------------------------------------- |
+| หัวการ์ด            | ThaiD                                   |
+| คำอธิบาย            | สแกน QR ด้วยมือถือแล้วยืนยันในแอป ThaiD |
+| ปุ่ม                | ใช้ ThaiD                               |
+| ขั้นที่ 2 ใน wizard | สแกนด้วย ThaiD                          |
+
+**หน้า `/kiosk/thaid` (จอตู้)**
+
+| สถานะ                             | หัวข้อ                               | ข้อความ / ปุ่ม                                                                                                                                                         |
+| --------------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| แสดง QR                           | สแกน QR ด้วยมือถือ                   | ขั้นตอน: 1 เปิดกล้องหรือ LINE · 2 สแกน QR · 3 ยืนยันในแอป ThaiD · alt ของรูป: "QR สำหรับยืนยันตัวตนด้วย ThaiD" · ระหว่างสร้าง QR: spinner (aria-label "กำลังสร้าง QR") |
+| รอ (QR ขึ้นแล้ว รอยืนยันบนมือถือ) | สแกน QR ด้วยมือถือ                   | "QR หมดอายุใน m:ss" — นับถอยหลังตาม D-4 (pending 300 วิ)                                                                                                               |
+| สำเร็จ                            | เลือกสมาชิก (ขั้นที่ 3: ยืนยันตัวตน) | "เลือกผู้ที่มาถึง" → หลังบันทึก: หัวข้อ "ผลรายงานตัว" · "ตรวจผล แล้วพิมพ์ QR Code" (เหมือนช่องทางอื่น)                                                                 |
+| หมดเวลา                           | QR หมดอายุ                           | "กรุณาสร้าง QR ใหม่แล้วสแกนอีกครั้ง" · ปุ่ม [สร้าง QR ใหม่] [กลับหน้าเริ่มต้น]                                                                                         |
+| ไม่พบข้อมูล                       | ค้นหาไม่สำเร็จ                       | "ไม่พบผู้ลงทะเบียนล่วงหน้าในศูนย์นี้" · ปุ่มหลัก [กลับ] (ไม่มี "ลองอีกครั้ง" และไม่เสนอ walk-in — `can_register:false`)                                                |
+| Error — ระบบ                      | ใช้ ThaiD ไม่ได้ในขณะนี้             | "ระบบ ThaiD ไม่พร้อมใช้งาน กรุณาลองอีกครั้ง หรือเลือกวิธีอื่น" · ปุ่ม [ลองอีกครั้ง] [กลับหน้าเริ่มต้น]                                                                 |
+| Error — ถี่เกิน (429)             | ขอ QR บ่อยเกินไป                     | "กรุณารอสักครู่ แล้วลองอีกครั้ง" · ปุ่ม [ลองอีกครั้ง] [กลับหน้าเริ่มต้น]                                                                                               |
+| Error — session ใช้ไม่ได้         | ค้นหาไม่สำเร็จ                       | "การยืนยัน ThaiD หมดอายุหรือไม่ถูกต้อง กรุณาสแกนใหม่" · ปุ่ม [สแกนใหม่] [กลับ]                                                                                         |
+| ช่องทางถูกปิดระหว่างใช้           | —                                    | ไม่มีข้อความ — กลับหน้า `/kiosk` ทันที (การ์ดหายตาม flag)                                                                                                              |
+
+**หน้ามือถือหลังยืนยัน ThaiD (`/thaid-scan-success?flow=kiosk`)**
+
+| สถานะ     | ข้อความ                                                                       |
+| --------- | ----------------------------------------------------------------------------- |
+| สำเร็จ    | ยืนยันตัวตนสำเร็จ — "กลับไปที่ตู้เพื่อเลือกสมาชิกและรับบัตรคิว ปิดหน้านี้ได้" |
+| หมดเวลา   | ยืนยันตัวตนไม่สำเร็จ — "QR หมดอายุ กรุณาสร้าง QR ใหม่ที่ตู้"                  |
+| ThaiD ปิด | ยืนยันตัวตนไม่สำเร็จ — "ระบบยืนยันตัวตน ThaiD ถูกปิดใช้งานชั่วคราว"           |
+| อื่น ๆ    | ยืนยันตัวตนไม่สำเร็จ — "การยืนยันตัวตนไม่สำเร็จ กรุณาลองใหม่อีกครั้ง"         |
+
 ## Impact
 
 - Code/test: ตาม `affects`
@@ -87,7 +143,7 @@ N/A — additive flag (doc เดิมไม่มี key = `false`); session �
 | D-4 | TTL session              | รอมือถือ (pending) 300 วิ · หลังยืนยัน (completed) 180 วิ                                                           |
 | D-5 | Rate limit สร้าง session | ไม่เกิน 10 session/นาที/kiosk                                                                                       |
 | D-6 | Scope                    | ขอทั้งเลข 13 หลักและชื่อ — ใช้ scope เดียวกับโค้ด ThaiD ของ pre-register เดิม (mode `member_scan`)                  |
-| D-7 | Copy การ์ด/หน้า ThaiD    | **รอ PO approve** — ข้อความบนการ์ด ThaiD และหน้า `/kiosk/thaid`                                                     |
+| D-7 | Copy การ์ด/หน้า ThaiD    | **รอ PO approve** — ข้อความที่เสนอดู §D-7 (การ์ด ThaiD, หน้า `/kiosk/thaid` ทุกสถานะ, หน้ามือถือหลังยืนยัน)         |
 | D-8 | ThaiD ยืนยันใคร          | ThaiD ยืนยันเฉพาะคนที่สแกน แล้วคนนั้นเช็กอินให้ทั้งครัวเรือนได้                                                     |
 
 ## Decision log
@@ -96,4 +152,5 @@ N/A — additive flag (doc เดิมไม่มี key = `false`); session �
 - 2026-10-10 — sync กับ code ที่ implement (error code, 404 expired, `expires_in_sec`, release session) + เพิ่มข้อเสนอ D-8 (ยืนยันคนเดียว → รายงานตัวทั้งครัวเรือน) · รอ PO เคาะ
 - 2026-10-11 — PO review: เคาะ D-1..D-6 และ D-8 (ตามตาราง Decisions; D-6 เปลี่ยนจากข้อเสนอ `openid pid` เป็น scope เดียวกับ `member_scan`) · D-7 รอ approve ข้อความ
 - 2026-10-11 — ตัดการอ้างอิง implementation plan (`docs/plans/kiosk-thaid-check-in-implementation-plan.md`) ออก — ไฟล์ไม่อยู่ใน repo; CR นี้เป็น spec ที่ใช้อ้างอิง
+- 2026-10-11 — PO re-review: ยังไม่ approve — FR/AC หายไปพร้อมการตัด plan · เพิ่ม §Requirements / Acceptance (KTD-AC-01..08), §Security และ §D-7 (ข้อความจริงจากโค้ดต้นแบบทุกสถานะ) · รอ PO approve D-7 + re-review
 - ขั้นถัดไป (ตาม PO): approve D-7 → ใช้เลข CR ถัดไปจาก `_index.md` บน develop และย้ายไฟล์ไป `docs/changes/14-kiosk/` · PR ที่ทำ CR ตัวจริงต้องอัปเดต `schema.md` (flag), `api-contract.md` (3 endpoint, `source:'thaid'`, mode `kiosk_check_in`) และ FR-KPC-11/F-08 ใน CR-151/152
