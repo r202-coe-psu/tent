@@ -9,12 +9,16 @@ from tent_model import (
     DonationNeedCounter,
     DonationSlotCounter,
     DonorBuffer,
+    PublicShelter,
+    RetentionAudit,
+    ShelterStock,
 )
 
 from worker.projectors.compute_needs import compute_needs
 from worker.retention.job import (
     classify_expired_buffer,
     purge_expired_buffers,
+    reconcile_closed_shelters,
     run_retention_once,
 )
 
@@ -201,3 +205,41 @@ async def test_purge_frees_the_place_of_a_timed_out_booking(db: None) -> None:
     counter = await DonationSlotCounter.get(slot)
     assert counter is not None
     assert counter.booked == 0
+
+
+async def test_reconcile_closed_shelters_audit_deletes_their_stock_rows(
+    db: None,
+) -> None:
+    """`shelter_stocks` is keyed by shelter_code like needs — a closed shelter's rows go
+    with it, audited, while an open shelter's rows stay (#461)."""
+    now = datetime.now(UTC)
+    for code, status in (("SH940", "closed"), ("SH941", "open")):
+        await PublicShelter(
+            id=code,
+            shelter_code=code,
+            name=f"ศูนย์ {code}",
+            status=status,
+            capacity=10,
+            updated_at=now,
+        ).insert()
+        await ShelterStock(
+            id=f"{code}:item_master:rice",
+            shelter_code=code,
+            item_id="item_master:rice",
+            name_th="ข้าวสาร",
+            type_code="food",
+            unit_label="กก.",
+            updated_at=now,
+        ).insert()
+
+    await reconcile_closed_shelters("test-run-stock")
+
+    assert await PublicShelter.get("SH940") is None
+    assert await ShelterStock.get("SH940:item_master:rice") is None
+    assert await PublicShelter.get("SH941") is not None
+    assert await ShelterStock.get("SH941:item_master:rice") is not None
+    audits = await RetentionAudit.find(
+        RetentionAudit.target_collection == "shelter_stocks"
+    ).to_list()
+    assert [a.target_id for a in audits] == ["SH940:item_master:rice"]
+    assert audits[0].status == "verified"

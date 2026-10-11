@@ -22,7 +22,11 @@ from worker.mongo.shelter import (
     apply_shelter_deactivate,
     refresh_occupancy,
 )
-from worker.mongo.stock import apply_shelter_stock, refresh_shelter_stock
+from worker.mongo.stock import (
+    apply_shelter_stock,
+    delete_stocks_for_shelter,
+    refresh_shelter_stock,
+)
 
 __all__ = [
     "apply_announcement",
@@ -42,6 +46,7 @@ __all__ = [
     "delete_needs_for_shelter",
     "delete_occupants_for_shelter",
     "delete_persons_for_shelter",
+    "delete_stocks_for_shelter",
     "refresh_occupancy",
     "refresh_on_hand",
     "refresh_shelter_occupants",

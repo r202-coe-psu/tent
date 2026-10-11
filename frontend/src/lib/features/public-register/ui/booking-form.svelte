@@ -28,6 +28,7 @@
 	import { UNASSIGNED_SHELTER_CODE } from '../domain/booking';
 	import { UnifiedRegistrationForm, type UnifiedRegistrationInput } from '$lib/features/people';
 	import { fetchRecaptchaEnabled } from '$lib/api/recaptcha-status';
+	import { ensureRecaptchaLoaded } from '$lib/api/recaptcha-script';
 	import {
 		isJoinSelectionInvalidError,
 		isNetworkError,
@@ -133,6 +134,8 @@
 		const injected = (window as unknown as { __captchaToken?: string }).__captchaToken || '';
 		if (injected) return injected;
 		if (!captchaEnabled) return '';
+		// The form may have mounted while reCAPTCHA was off (no script tag) — load it now.
+		await ensureRecaptchaLoaded(siteKey);
 		const win = window;
 		if (win.grecaptcha) {
 			try {

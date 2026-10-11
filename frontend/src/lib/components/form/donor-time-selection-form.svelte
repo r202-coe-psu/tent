@@ -30,6 +30,7 @@
 	import { getTranslation } from '$lib/utils/i18n';
 	import { PUBLIC_DONATIONS_I18N } from '$lib/constants/i18n';
 	import { fetchRecaptchaEnabled } from '$lib/api/recaptcha-status';
+	import { ensureRecaptchaLoaded } from '$lib/api/recaptcha-script';
 
 	const donationStore = getDonationStore();
 	const unitsQuery = useUnitsOfMeasure();
@@ -146,6 +147,8 @@
 		const enabled = await fetchRecaptchaEnabled();
 
 		if (enabled) {
+			// The page may have mounted while reCAPTCHA was off (no script tag) — load it now.
+			if (siteKey && !token) await ensureRecaptchaLoaded(siteKey);
 			if (siteKey && window.grecaptcha) {
 				try {
 					if (window.grecaptcha.enterprise) {
