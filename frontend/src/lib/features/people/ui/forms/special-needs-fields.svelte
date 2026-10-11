@@ -68,6 +68,7 @@
 		}
 	}
 
+	/** Also runs on blur, so text left in the box is kept when staff go straight to save. */
 	function addCustomTag() {
 		const trimmed = customTag.trim();
 		if (!trimmed || disabled) return;
@@ -162,6 +163,7 @@
 				bind:value={customTag}
 				placeholder={t.specialNeedsCustomPlaceholder}
 				onkeydown={handleKeydown}
+				onblur={addCustomTag}
 				class="h-9 text-xs"
 			/>
 			<Button

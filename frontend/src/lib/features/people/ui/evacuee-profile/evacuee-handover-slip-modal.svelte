@@ -166,7 +166,7 @@
 								<span
 									class="rounded bg-primary/10 px-2 py-0.5 text-xs font-bold tracking-wide text-primary"
 								>
-									STATION 1 $\rightarrow$ STATION 2
+									STATION 1 -> STATION 2
 								</span>
 								<span
 									class="rounded-full bg-amber-100 px-2 py-0.5 text-2xs font-semibold text-amber-800 dark:bg-amber-950/50 dark:text-amber-300"

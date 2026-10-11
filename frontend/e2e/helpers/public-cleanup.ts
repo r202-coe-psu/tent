@@ -66,7 +66,8 @@ export async function publicShelterStatus(code: string): Promise<string | undefi
  *     Mongo after a delete then reads "closed", not "open");
  *  2. delete the registry master — the worker cascades that to the shelter's
  *     public persons and needs;
- *  3. delete its CouchDB database.
+ *  3. delete its CouchDB database;
+ *  4. forget the code in the pre-register ledger.
  * Refuses shelters whose name does not start with {@link E2E_SHELTER_PREFIX}.
  */
 export async function teardownShelter(code: string): Promise<void> {
@@ -75,6 +76,7 @@ export async function teardownShelter(code: string): Promise<void> {
 		`/registry/_design/app/_view/by_code?key=${encodeURIComponent(JSON.stringify(code))}&include_docs=true`
 	);
 	const doc = (byCode.data as { rows?: { doc?: Record<string, unknown> }[] })?.rows?.[0]?.doc;
+	let docGone = true;
 	if (doc) {
 		if (!String(doc.name ?? '').startsWith(E2E_SHELTER_PREFIX)) {
 			throw new Error(`Refusing to tear down non-E2E shelter ${code} ("${doc.name}")`);
@@ -92,12 +94,19 @@ export async function teardownShelter(code: string): Promise<void> {
 		);
 		const rev = (closed.data as { rev: string }).rev;
 		const delDoc = await couchReq('DELETE', `${path}?rev=${rev}`);
-		if (delDoc.status >= 400 && delDoc.status !== 404)
+		if (delDoc.status >= 400 && delDoc.status !== 404) {
+			docGone = false;
 			console.warn(`delete master doc ${path} returned HTTP ${delDoc.status}`);
+		}
 	}
 	const delDb = await couchReq('DELETE', `/shelter_${code.toLowerCase()}`);
-	if (delDb.status >= 400 && delDb.status !== 404)
+	const dbGone = delDb.status < 400 || delDb.status === 404;
+	if (!dbGone)
 		console.warn(`delete database shelter_${code.toLowerCase()} returned HTTP ${delDb.status}`);
+	// Gone from CouchDB — the ledger must stop naming it, or a later run that is handed the
+	// same code would tear down a shelter it did not create (README §4.2). A failed delete
+	// keeps the entry so the next purge retries it instead of leaking the shelter.
+	if (docGone && dbGone) forgetCreatedShelter(code);
 }
 
 /** Number of public search hits for `query` via the BFF. */
@@ -288,6 +297,14 @@ export function recordCreatedShelter(code: string): void {
 	const ledger = readLedger();
 	if (!ledger.shelters.includes(code)) {
 		writeLedger({ ...ledger, shelters: [...ledger.shelters, code] });
+	}
+}
+
+/** Drop a shelter code from the ledger once it has been torn down. */
+export function forgetCreatedShelter(code: string): void {
+	const ledger = readLedger();
+	if (ledger.shelters.includes(code)) {
+		writeLedger({ ...ledger, shelters: ledger.shelters.filter((c) => c !== code) });
 	}
 }
 

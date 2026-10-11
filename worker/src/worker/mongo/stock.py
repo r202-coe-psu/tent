@@ -21,6 +21,11 @@ async def apply_shelter_stock(action: str, payload: dict[str, Any] | None) -> No
     await apply_document(ShelterStock, action, payload)
 
 
+async def delete_stocks_for_shelter(shelter_code: str) -> None:
+    """Drop every `shelter_stocks` row of a shelter that no longer exists."""
+    await ShelterStock.find(ShelterStock.shelter_code == shelter_code).delete()
+
+
 async def _load_catalog(
     couch: CouchClient, shelter_code: str
 ) -> dict[str, CatalogItem]:
@@ -101,6 +106,9 @@ async def refresh_shelter_stock(couch: CouchClient, shelter_code: str) -> int:
     to a partner, unlike a public donation "need")."""
     database = shelter_db_name(shelter_code)
     if not await couch.database_exists(database):
+        # The shelter DB is gone, so its projection must not outlive it (a late ledger
+        # tombstone would otherwise leave rows behind for a deleted shelter).
+        await delete_stocks_for_shelter(shelter_code)
         return 0
 
     ledgers = [

@@ -128,7 +128,7 @@ describe('religion / disability other (FR-12 – FR-14)', () => {
 			{ ...member({ religion: 'other', religion_other: 'ซิกข์' }), status: 'arriving' },
 			{ shelterCode: 'SH001', createdBy: 'test' }
 		);
-		expect(e.schema_v).toBe(12);
+		expect(e.schema_v).toBe(13);
 		expect(e.religion_other).toBe('ซิกข์');
 		expect(e.disability_other_detail).toBeNull();
 	});

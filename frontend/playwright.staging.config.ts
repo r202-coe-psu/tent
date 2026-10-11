@@ -34,11 +34,20 @@ if (!/^https:\/\/[^\s/]+\/?$/.test(stagingURL)) {
  * provisioned fixture on a writable run. public-home-flow is still gated on
  * `IS_REMOTE` directly (a live critical need would invite real donations) and
  * stays `test.skip` regardless of `ALLOW_REMOTE_WRITES`.
+ *
+ * The donation suites (`donation-fullstack*.test.ts`, `stock-donations.test.ts`; tag
+ * `@donation`) follow the same rule: own `E2E Donation …` shelter, ledger teardown, a
+ * zero-leak Z test. They flip the global reCAPTCHA switch off for their run and restore
+ * it in afterAll, and pace their bookings to the BFF's 3/min/IP limiter, so the three
+ * full-stack files add an estimated 10-15 minutes to a writable run (see e2e/README.md §9.C).
  */
 export default defineConfig({
 	testDir: './e2e',
 	testMatch: [
 		'back-office-evacuee-management.test.ts',
+		'donation-fullstack-admin.test.ts',
+		'donation-fullstack-race.test.ts',
+		'donation-fullstack.test.ts',
 		'onsite-stations-flow.test.ts',
 		'public-home-flow.test.ts',
 		'public-portal.test.ts',
@@ -46,6 +55,7 @@ export default defineConfig({
 		'public-search-flow.test.ts',
 		'public-shelters-filter.test.ts',
 		'staging/smoke.test.ts',
+		'stock-donations.test.ts',
 		'system-admin-shelter.test.ts'
 	],
 	fullyParallel: false,

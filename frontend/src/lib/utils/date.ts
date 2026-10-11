@@ -10,6 +10,22 @@ export const DISPLAY_LOCALE = 'th-TH';
 /** IANA zone for every human-facing date/time string. */
 export const DISPLAY_TIME_ZONE = 'Asia/Bangkok';
 
+/**
+ * The Asia/Bangkok calendar date (`YYYY-MM-DD`) that `now` falls on.
+ *
+ * Between 00:00 and 07:00 Bangkok the UTC date is still yesterday, so anything that
+ * asks "is this date already past?" for a person in Thailand must not use
+ * `toISOString()`. `en-CA` is used only because it formats as `YYYY-MM-DD`.
+ */
+export function bangkokToday(now: Date = new Date()): string {
+	return new Intl.DateTimeFormat('en-CA', {
+		timeZone: DISPLAY_TIME_ZONE,
+		year: 'numeric',
+		month: '2-digit',
+		day: '2-digit'
+	}).format(now);
+}
+
 /** จำนวนวันระหว่าง 2 วัน (inclusive) */
 export function daysBetween(from: string, to: string): number {
 	const f = new Date(from);
