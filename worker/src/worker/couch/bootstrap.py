@@ -26,6 +26,7 @@ from worker.mongo import (
     delete_needs_for_shelter,
     delete_occupants_for_shelter,
     delete_persons_for_shelter,
+    delete_stocks_for_shelter,
     refresh_occupancy,
     refresh_shelter_occupants,
     refresh_shelter_stock,
@@ -78,6 +79,7 @@ async def bootstrap_database(couch: CouchClient, database: str) -> None:
                     await delete_persons_for_shelter(code)
                     await delete_occupants_for_shelter(code)
                     await delete_needs_for_shelter(code)
+                    await delete_stocks_for_shelter(code)
             elif doc_type == "announcement":
                 from worker.mongo.announcement import apply_announcement
                 from worker.projectors.announcement import project_announcement

@@ -118,6 +118,13 @@ export const donationEditLimiter = new RateLimiter(60000, 10);
  * Still limited, because each read reaches FastAPI and Mongo.
  */
 export const donationReadLimiter = new RateLimiter(60000, 30);
+/**
+ * The wizard's window grid (`GET /donations/slots`). Anonymous and keyed by IP only, and
+ * each call scans every `donation_slot:` and `donation:` doc of a shelter with admin
+ * credentials — the heaviest public read — so it gets its own bucket rather than sharing
+ * the ticket-read budget. Changing date or queue refetches, hence 30 a minute.
+ */
+export const donationSlotsLimiter = new RateLimiter(60000, 30);
 
 // Public booking (CR-070 / T-71). Separate buckets from donations so a busy
 // donation drive cannot lock a family out of booking a place to sleep.
