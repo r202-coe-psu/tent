@@ -17,6 +17,7 @@ import {
 	seedSecurityQuestion,
 	type TestUser
 } from './couch';
+import { bangkokToday } from '../../src/lib/utils/date';
 import { IS_REMOTE, RATE_LIMIT_ENFORCED } from './e2e-env';
 import { injectSession, routeBrowserCouchThroughApp } from './login';
 import { publicShelter, teardownShelter, waitForProjection } from './public-cleanup';
@@ -483,9 +484,9 @@ export async function ledgerRowsFor(shelterCode: string, donationId: string) {
 
 export type SlotWindow = { from: string; to: string };
 
-/** Local YYYY-MM-DD — the wizard and the slot screen both default to it. */
+/** Asia/Bangkok YYYY-MM-DD — the wizard and the slot screen both default to it. */
 export function todayYmd() {
-	return new Date().toLocaleDateString('sv-SE');
+	return bangkokToday();
 }
 
 /** The public board's line for `itemName` at `shelterCode`, if any. */

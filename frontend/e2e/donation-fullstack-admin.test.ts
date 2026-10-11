@@ -1,4 +1,5 @@
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
+import { bangkokToday } from '../src/lib/utils/date';
 import { couchReq } from './helpers/couch';
 import { CAN_WRITE, READ_ONLY_REASON } from './helpers/e2e-env';
 import { clearSession } from './helpers/login';
@@ -367,7 +368,7 @@ test.describe('Donation full-stack: back office', { tag: ['@critical', '@donatio
 		test('another day: no truck until staff open the day (เปิดรอบรถทั้งวัน), then donors see it', async ({
 			page
 		}) => {
-			const tomorrow = new Date(Date.now() + 24 * 3600 * 1000).toLocaleDateString('sv-SE');
+			const tomorrow = bangkokToday(new Date(Date.now() + 24 * 3600 * 1000));
 
 			// Donor: tomorrow has no truck — told so, nothing to book.
 			await donorAtLogistics(page, /ต้องการให้รถศูนย์ไปรับ/);

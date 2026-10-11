@@ -207,9 +207,14 @@
 	);
 
 	let activeFaq = $state<string>('');
+	let hasInitializedFaq = $state(false);
+
 	$effect(() => {
-		if (faqList.length > 0 && !faqList.some((f) => f.id === activeFaq)) {
+		if (faqList.length > 0 && !hasInitializedFaq) {
 			activeFaq = faqList[0].id;
+			hasInitializedFaq = true;
+		} else if (activeFaq !== '' && !faqList.some((f) => f.id === activeFaq)) {
+			activeFaq = '';
 		}
 	});
 </script>
@@ -389,7 +394,7 @@
 			</div>
 		</section>
 
-		<!-- Section 1: ความต้องการบริจาคด่วน -->
+		<!-- Section 1: รับบริจาคด่วน -->
 		<section class="space-y-3 sm:space-y-4">
 			<div class="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
 				<!-- Title & Subtitle -->

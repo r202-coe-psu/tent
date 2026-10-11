@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
 	canRecipientReceiveItem,
 	checkDuplicateMealAdvisory,
+	checkMenuMatchAdvisory,
+	formatMenuTags,
 	getItemCapacitySummary,
 	getRecipientValidationErrorMessage,
 	type FrontlineRecipientSelection
@@ -169,6 +171,37 @@ describe('frontline-handover model helpers', () => {
 		it('returns isDuplicate false when logs are empty or targetMeal undefined', () => {
 			expect(checkDuplicateMealAdvisory([], 'lunch').isDuplicate).toBe(false);
 			expect(checkDuplicateMealAdvisory([priorLog], undefined).isDuplicate).toBe(false);
+		});
+	});
+
+	describe('checkMenuMatchAdvisory', () => {
+		const halalMenu = { dietary: ['HALAL'], age_group: 'ALL' };
+		const generalMenu = { dietary: [], age_group: 'ALL' };
+
+		it('flags a tagged menu for an evacuee without a shared tag', () => {
+			expect(checkMenuMatchAdvisory({ ...evacueeRecipient, menuTags: [] }, halalMenu)).toEqual({
+				isMismatch: true,
+				menuTags: ['HALAL']
+			});
+		});
+
+		it('passes an evacuee that shares a tag with the menu', () => {
+			const muslim = { ...evacueeRecipient, menuTags: ['HALAL' as const] };
+			expect(checkMenuMatchAdvisory(muslim, halalMenu).isMismatch).toBe(false);
+		});
+
+		it('flags tagged menus but not general ones for outside recipients', () => {
+			expect(checkMenuMatchAdvisory(outsideRecipient, halalMenu).isMismatch).toBe(true);
+			expect(checkMenuMatchAdvisory(outsideRecipient, generalMenu).isMismatch).toBe(false);
+		});
+
+		it('stays silent without a recipient or a known menu', () => {
+			expect(checkMenuMatchAdvisory(null, halalMenu).isMismatch).toBe(false);
+			expect(checkMenuMatchAdvisory(evacueeRecipient, undefined).isMismatch).toBe(false);
+		});
+
+		it('formats tags as Thai labels', () => {
+			expect(formatMenuTags(['HALAL', 'ELDERLY'])).toBe('ฮาลาล, ผู้สูงอายุ');
 		});
 	});
 });

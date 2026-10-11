@@ -76,6 +76,9 @@ export default defineConfig({
 	],
 	use: {
 		baseURL: stagingURL,
+		// The app's "today" is the Asia/Bangkok calendar day; the runner is UTC, so without
+		// this the browser's clock is a day behind from 00:00 to 07:00 Bangkok.
+		timezoneId: 'Asia/Bangkok',
 		ignoreHTTPSErrors: false,
 		trace: 'off',
 		screenshot: 'only-on-failure',
