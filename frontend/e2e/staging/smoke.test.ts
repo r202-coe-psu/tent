@@ -155,7 +155,7 @@ test.describe('Staging smoke', { tag: ['@smoke', '@release'] }, () => {
 
 		expect(destination).toBe(PORTAL_PATH);
 		expect(captchaVerificationCount()).toBe(captchaStatus.enabled ? 1 : 0);
-		await expect(page).toHaveTitle('SmartShelter Thailand');
+		await expect(page).toHaveTitle('SmartShelter');
 		await expect(page.getByRole('region', { name: 'บริบทการปฏิบัติงาน' })).toBeVisible();
 	});
 });
