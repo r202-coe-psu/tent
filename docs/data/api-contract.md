@@ -374,6 +374,7 @@ Contract เต็มอยู่ที่ [public-tier-flow-spec.html](../featu
 | `POST /public/v1/occupants` | — (rate-limited + audit) |
 | `GET /public/v1/needs` | — |
 | `POST /public/v1/donations` | เบอร์โทร (+OTP เมื่อ `public_otp_required` เปิด) |
+| `GET /api/public/v1/donations/slots?shelter_code&date&mode` | — (BFF-only, CR-157) — BFF อ่าน `donation_slot` จาก CouchDB ฝั่ง server (doc type นี้ไม่ถูก project ลง Mongo) คืนเฉพาะช่วงเวลา/ความจุ/ยอดจอง ไม่มี PII |
 | `GET /public/v1/donations/{tracking_token}` | token |
 | `PATCH /public/v1/donations/{tracking_token}` | token |
 | `PATCH /public/v1/donations/{tracking_token}/items` | token |
@@ -427,6 +428,18 @@ Contract เต็มอยู่ที่ [public-tier-flow-spec.html](../featu
 | `429` | rate-limit ต่อ IP (ไม่มีเพดานจำนวนครั้งต่อใบจอง) |
 
 TTL **ไม่รีเซ็ต** — `expires_at` ยังนับจาก `declared_at` เดิม
+
+#### Slot error codes ของ `POST /public/v1/donations` (CR-157)
+
+BFF ตรวจช่วงเวลา (`logistics.slot`) ก่อนส่งต่อ FastAPI; ช่วงที่มีเพดานตัดสินแบบ atomic ผ่าน Mongo
+`donation_slot_counters` (CR-157 §C-6). `delivery_method = parcel` ไม่จองคิว จึงไม่ผ่านด่านนี้
+
+| สถานะ | ความหมาย |
+| --- | --- |
+| `422 SLOT_REQUIRED` | `delivery_method = shelter_pickup` แต่ไม่ได้ส่ง `logistics.slot` (FR-DS-11) |
+| `409 SLOT_UNAVAILABLE` | ช่วงที่ส่งมาไม่อยู่บนกระดาน — `shelter_pickup` ที่ศูนย์ไม่ได้ประกาศรอบ (ไม่มี doc `pickup`) (FR-DS-11) หรือ `self_dropoff` ที่ไม่มี doc และ `from`/`to` ไม่ตรงช่วงมาตรฐาน 5 ช่วง (FR-DS-12) |
+| `409 SLOT_FULL` | ช่วงเต็มตามการนับ CouchDB, ถูกปฏิเสธโดย `$inc` แบบมีเงื่อนไขบน `donation_slot_counters`, หรือ doc มี `status = closed` (FR-DS-7, FR-DS-14) |
+| `503 SLOTS_UNAVAILABLE` | อ่าน `donation_slot` จาก CouchDB ไม่สำเร็จ (ไม่ใช่ 200/404) — ไม่รับ booking ที่ตรวจช่วงไม่ได้ (FR-DS-13) |
 
 ### 5.1 External plane `/external/v1` (CR-062) — legacy
 

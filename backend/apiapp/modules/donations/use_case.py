@@ -16,6 +16,7 @@ from tent_model.donation_need_counter_ops import (
     release_quota,
     reserve_quota,
 )
+from tent_model.donation_slot_counter_ops import release_slot, reserve_slot, slot_counter_id
 from tent_model.public_donation import DeclaredItem, PublicDonation
 from tent_model.public_shelter import PublicShelter
 
@@ -336,6 +337,7 @@ class DonationsUseCase:
         # buffer-insert failure below) can compensate them — no multi-doc transaction
         # available on single-node Mongo, so rollback is manual (CR-045 Compensation).
         reserved: list[tuple[str, str, Decimal]] = []
+        held_slot: str | None = None
         try:
             for idx, item in enumerate(payload.items):
                 if not payload.campaign_id or not item.item_id:
@@ -374,6 +376,27 @@ class DonationsUseCase:
                 reserved.append((payload.campaign_id, item.item_id, qty))
                 items_declared[idx]["reserved_qty"] = str(qty)
 
+            # The capped window's place, taken after the quota so a SLOT_FULL hands the
+            # quota back through the same compensation below. The BFF re-checks the
+            # window too, but against CouchDB, which cannot see a booking still on its
+            # way through the worker — this counter is what makes SLOT_FULL atomic.
+            if payload.slot_hold is not None:
+                hold = payload.slot_hold
+                slot_id = slot_counter_id(
+                    payload.shelter_code.upper(), hold.mode, hold.date, hold.from_
+                )
+                if not await reserve_slot(
+                    counter_id=slot_id,
+                    capacity=hold.capacity,
+                    baseline=hold.booked,
+                    now=now,
+                ):
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail={"success": False, "error": "SLOT_FULL"},
+                    )
+                held_slot = slot_id
+
             buffer: DonationBuffer | None = None
             booking_ref = ""
             for attempt in range(_MAX_BOOKING_REF_ATTEMPTS):
@@ -384,6 +407,7 @@ class DonationsUseCase:
                     donor=DonorBuffer(**payload.donor.model_dump()),
                     items_declared=items_declared,
                     logistics=payload.logistics,
+                    slot_counter_id=held_slot,
                     campaign_id=payload.campaign_id,
                     booking_ref=booking_ref,
                     tracking_token=tracking_token,
@@ -418,6 +442,8 @@ class DonationsUseCase:
                     qty=qty,
                     now=now,
                 )
+            if held_slot is not None:
+                await release_slot(counter_id=held_slot, now=now)
             raise
 
         # Stub public_donations so GET tracking works before outbound CDC catches up.
@@ -705,24 +731,38 @@ class DonationsUseCase:
         the SvelteKit BFF Couch path instead.
         """
         token_hash = sha256_hex(tracking_token)
-        buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == token_hash)
-        if buffer is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={"success": False, "error": "Donation record not found"},
-            )
 
-        if buffer.synced_to_couch:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail={
-                    "success": False,
-                    "error": "SYNCED_TO_COUCH",
-                    "message": "Donation already in CouchDB; cancel via shelter record",
-                },
-            )
-
-        if buffer.status not in DONOR_EDITABLE_STATUSES:
+        # Flip the status atomically: the filter re-checks everything that makes the
+        # booking cancellable, so of two concurrent cancels exactly one matches and gets
+        # the pre-image back. Releasing quota / the slot place is gated on that match —
+        # a read→check→save here let both pass the check and release the same place
+        # twice, which handed another donor's place (or quota) to a third booking.
+        collection = DonationBuffer.get_pymongo_collection()
+        before = await collection.find_one_and_update(
+            {
+                "tracking_token_hash": token_hash,
+                "synced_to_couch": False,
+                "status": {"$in": list(DONOR_EDITABLE_STATUSES)},
+            },
+            {"$set": {"status": "cancelled"}},
+        )
+        if before is None:
+            # Nothing matched — re-read only to say why, so the error contract is unchanged.
+            buffer = await DonationBuffer.find_one(DonationBuffer.tracking_token_hash == token_hash)
+            if buffer is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={"success": False, "error": "Donation record not found"},
+                )
+            if buffer.synced_to_couch:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "success": False,
+                        "error": "SYNCED_TO_COUCH",
+                        "message": "Donation already in CouchDB; cancel via shelter record",
+                    },
+                )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
@@ -731,25 +771,27 @@ class DonationsUseCase:
                 },
             )
 
-        buffer.status = "cancelled"
-        await buffer.save()
-
         # Release quota for whatever was actually reserved per item (CR-045) — no-op
         # (underflow-guarded) for items that bypassed the counter (no "reserved_qty").
-        if buffer.campaign_id:
+        campaign_id = before.get("campaign_id")
+        if campaign_id:
             release_now = datetime.now(UTC)
-            for item in buffer.items_declared:
+            for item in before.get("items_declared") or []:
                 reserved_qty = item.get("reserved_qty")
                 item_id = item.get("item_id")
                 if reserved_qty is None or not item_id:
                     continue
                 await release_quota(
-                    shelter_code=buffer.shelter_code,
-                    campaign_id=buffer.campaign_id,
+                    shelter_code=before["shelter_code"],
+                    campaign_id=campaign_id,
                     item_id=item_id,
                     qty=Decimal(reserved_qty),
                     now=release_now,
                 )
+
+        slot_counter = before.get("slot_counter_id")
+        if slot_counter:
+            await release_slot(counter_id=slot_counter, now=datetime.now(UTC))
 
         # Keep the tracking stub in step so GET reflects the cancellation immediately,
         # instead of waiting for outbound CDC sync to catch up.

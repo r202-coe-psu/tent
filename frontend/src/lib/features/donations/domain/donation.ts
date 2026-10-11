@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { type BaseDoc } from '$lib/db/model';
 import type { DonationStatus } from '$lib/features/operations';
+import { isRealCalendarDate, SLOT_TIME_PATTERN } from '$lib/features/operations/server';
 import { qtyStrCoercePositiveSchema } from '$lib/utils/qty';
 
 export const PUBLIC_DONATION_CATEGORIES = [
@@ -70,11 +71,20 @@ export const donationPreDeclarationInputSchema = z.object({
 		.object({
 			delivery_method: z.enum(['self_dropoff', 'parcel', 'shelter_pickup']),
 			vehicle: z.enum(['motorcycle', 'car', 'pickup', 'truck']).optional(),
+			// The donor's window is re-checked against the shelter's published slot by the
+			// BFF, but only well-formed input may reach that lookup: `date` and `from` are
+			// interpolated into a CouchDB doc id, and `to` is compared against the doc.
 			slot: z
 				.object({
-					date: z.string(),
-					from: z.string(),
-					to: z.string()
+					date: z
+						.string()
+						.refine(isRealCalendarDate, 'Slot date must be a real date in YYYY-MM-DD form'),
+					from: z.string().regex(SLOT_TIME_PATTERN, 'Slot start must be HH:mm'),
+					to: z.string().regex(SLOT_TIME_PATTERN, 'Slot end must be HH:mm')
+				})
+				.refine((s) => s.to > s.from, {
+					message: 'Slot end must be after its start',
+					path: ['to']
 				})
 				.optional(),
 			eta: z.string().optional(),
@@ -107,17 +117,30 @@ export const isDonationPreDeclaration = (d: unknown): d is DonationPreDeclaratio
  * field empty rather than guess — an empty category is honest, a wrong one is not.
  */
 export function donorCategoryFromCatalog(category?: string | null): string | undefined {
-	switch (category?.trim().toLowerCase()) {
+	// `item_master.category` is a reference to the category doc (`item_category:wash`);
+	// legacy `supply_item.category` is the bare code (`hygiene`). Read both.
+	const code = category
+		?.trim()
+		.toLowerCase()
+		.replace(/^item_category:/, '');
+	switch (code) {
 		case 'food':
 		case 'water':
+		case 'ready_meal':
 			return 'food';
 		case 'clothing':
 		case 'bedding':
 			return 'clothing';
 		case 'medicine':
+		case 'medical':
 			return 'medicine';
 		case 'hygiene':
+		case 'wash':
 		case 'equipment':
+		case 'kits':
+		case 'special_care':
+		case 'volunteer_ppe':
+		case 'fuel_energy':
 			return 'supply';
 		case 'other':
 			return 'other';

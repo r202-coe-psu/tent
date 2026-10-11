@@ -40,6 +40,7 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 
 ### 1.1 `evacuee` — `evacuee:{ulid}`
 
+> **schema_v 13** — เพิ่ม `preferred_zone` (opt) — โซนที่ Station 1 ระบุไว้แบบไม่บังคับ เป็นค่าแนะนำให้ Station 3 เท่านั้น ไม่ใช่การจัดโซน ([CR-159](../changes/02-people/CR-159-station1-preferred-zone.md)).
 > **decision sync 2026-10-09 (ไม่ bump `schema_v`)** — `gender = null` ("ไม่ระบุ") ใช้ได้ **ทุกช่องทาง** ไม่จำกัดเฉพาะ `registered_via = api`; ฟอร์มลงทะเบียนทุกช่องทาง preselect "ไม่ระบุ" และไม่บังคับเลือกเพศ. ยกเลิก CR-154 FR-70, FR-71 (เหลือเพียง "UI แสดง `null` เป็น ไม่ระบุ + แก้เพศได้ทุกช่องทาง") และ FR-72 (ย้ายไป `public_shelters.occupancy_breakdown.gender_unspecified`, §9.1).
 > **schema_v 12** — `gender` รับ `null` ได้ (ยังไม่ทราบ — partner booking เป็นต้น; ขยายเป็นทุกช่องทางโดย decision sync 2026-10-09); `registered_via` เพิ่ม `api` ([CR-154](../changes/10-eoc/CR-154-m2-partner-booking-residency.md)).
 > **schema_v 11** — เพิ่ม `religion_other`, `disability_other_detail`; validation ปีเกิด/บัตร ปชช./เบอร์ `+66` เข้มขึ้น ([CR-148](../changes/00-baseline/CR-148-pre-register-validation-and-fields.md)).
@@ -80,6 +81,7 @@ Decimal — do not rely on CouchDB `_sum` of floats for correctness.
 | `photo` | str\|null | opt | → image:{ulid} (§1.6) (CR-049) null/ไม่มี field = ไม่มีรูป |
 | `card_snapshot` | {...} | opt | snapshot ข้อมูลชิปบัตรและที่อยู่ตามบัตรประชาชน (CR-084); `consented_at`: ts — เวลาที่ผู้ใช้ยินยอมก่อนอ่านชิปเต็ม (schema_v 11, proposed draft CR `draft-kiosk-walk-in-registration`) |
 | `current_stay` | {`status`, `zone`, `since`} | req | `status`: enum(`pre_registered`,`kiosk_registered`,`arriving`,`active`,`room_confirmed`,`temporary_leave`,`transferred`,`checked_out`,`deceased`,`cancelled`) · `kiosk_registered` = kiosk อ่านชิปเต็มและบันทึกแล้ว รอยืนยันตัวตน/ข้อมูลและรับรายงานตัวที่ Station 1; `zone`: str\|null · `since`: ts — snapshot เท่านั้น ความจริง = movement · `room_confirmed` = Zone Arrival Confirmation หลัง `active` (CR-112) |
+| `preferred_zone` | str\|null | opt | zone `code` ของศูนย์เดียวกันที่ Station 1 ระบุไว้ (ไม่บังคับ) — **ไม่ใช่การจัดโซน**: ไม่เปลี่ยน `current_stay`, ไม่มีผลต่อ queue/occupancy; Station 3 ใช้เป็นค่าเลือกเริ่มต้นเมื่อไม่มีอาการ EWAR และโซนยังเปิด; staff-only (ไม่ส่งออก public/external) (CR-159) |
 | `privacy` | {`search_excluded`:bool} | req | default `{search_excluded:false}` (opt-out model) |
 | `registered_via` | enum(`kiosk`,`staff`,`backoffice`,`app`,`web`,`import`,`paper`,`api`) | req | `kiosk` = Smart Card Kiosk, `staff` = Onsite desk walk-in, `web` = public portal (CR-070), `backoffice` = Admin desk, `api` = Partner booking EXT-008 ผ่าน worker inbound (CR-154) |
 | `anonymized` | bool | sys | default ไม่มี field; purge job ตั้ง `true` พร้อมล้าง PII (§retention data-model §7) |
@@ -402,7 +404,7 @@ projection — เป็นข้อมูลหลังบ้านล้ว�
 | `items` | [{`item_id`:str?, `free_text`:str?, `category`:str?, `qty`:qty_str>0, `unit`:str, `condition`:str?, `note`:str?}] | kind=items | `item_id` หรือ `free_text` อย่างใดอย่างหนึ่ง; `item_id` → `item_master:{sku\|ulid}`; `category` = ป้าย label จาก `item_category`; `condition` เช่น "ของใหม่ 100%" (public donor กรอกเอง) |
 | `amount_thb` | num>0 | kind=money | — (เงินอยู่นอกขอบเขต CR-038; ระบบเป้าไม่เก็บเงิน — ลบเป็น CR แยกถ้าต้องการ) |
 | `campaign_id` | str\|null | opt | → `donation_campaign:{ulid}` |
-| `logistics` | {`delivery_method`:enum(`self_dropoff`,`parcel`,`shelter_pickup`), `vehicle`:enum(`motorcycle`,`car`,`pickup`,`truck`)?, `slot`:{`date`:str, `from`:str, `to`:str}?, `eta`:ts?, `courier_tracking_no`:str\|null, `pickup_address`:str?} | opt | **req เมื่อ `channel=public`**; `slot` ชี้ `donation_slot` (§2.13, deterministic ต่อ วัน+เวลา); `vehicle` เฉพาะ self_dropoff/shelter_pickup; `eta` = ต้น slot ที่จอง; `courier_tracking_no` donor เติม/แก้ภายหลังผ่าน ticket (DN-6); `pickup_address` ใช้เมื่อให้ศูนย์ไปรับ (CR-010) |
+| `logistics` | {`delivery_method`:enum(`self_dropoff`,`parcel`,`shelter_pickup`), `vehicle`:enum(`motorcycle`,`car`,`pickup`,`truck`)?, `slot`:{`date`:str, `from`:str, `to`:str}?, `eta`:ts?, `courier_tracking_no`:str\|null, `pickup_address`:str?} | opt | **req เมื่อ `channel=public`**; `slot` ชี้ `donation_slot` (§2.13, deterministic ต่อ คิว+วัน+เวลา — คิวอนุมานจาก `delivery_method`, CR-157); `vehicle` เฉพาะ self_dropoff/shelter_pickup; `eta` = ต้น slot ที่จอง; `courier_tracking_no` donor เติม/แก้ภายหลังผ่าน ticket (DN-6); `pickup_address` ใช้เมื่อให้ศูนย์ไปรับ (CR-010) |
 | `status` | enum(`declared`,`pending_review`,`verifying`,`received`,`redirected`,`rejected`,`expired`,`cancelled`) | req | forward-only (CR-048); `declared` → `pending_review` (ประเมิน) → `verifying` (กำลังตรวจรับ) → `received` (ลงสต็อก), หรือ `redirected` (ส่งต่อศูนย์อื่น) / `rejected` (ปฏิเสธ) / `expired` (พ้น TTL) / `cancelled` (ยกเลิก) |
 | `booking_ref` | str | sys | รหัสอ่านออก เช่น `DN-306892` — แสดง/พิมพ์บนตั๋วเพื่อแปะลงของ; **unique** |
 | `tracking_token_hash` | str | sys | SHA-256 ของ token — **ไม่เก็บ token ตรง**; public service lookup/แก้ (PATCH) ด้วย hash |
@@ -777,21 +779,37 @@ open → escalated
 | `context` | {} | opt | payload แล้วแต่ action (เช่น revision ที่แพ้ conflict) |
 | `occurred_at` | ts | req | — |
 
-### 2.13 `donation_slot` — `donation_slot:{date}:{from}` (deterministic) · DN-5
+### 2.13 `donation_slot` — `donation_slot:{mode}:{date}:{from}` (deterministic) · DN-5
 
-> เพิ่มใน CR-005 §F (DN-5) — รองรับ queue booking ("จองคิว") ของ public donation. **ศูนย์เป็นผู้ตั้งค่า slot เอง** (Donation module / back-office); หน้า public `/donate` อ่าน slot + ความจุที่เหลือ. `_id` deterministic ต่อ วัน+เวลาเริ่ม (shelter implicit จาก db) กันสร้าง slot ซ้ำสอง device.
+> **schema_v 2** — แยกเป็นสองคิว: เพิ่ม `mode` (req), `capacity` เป็น opt/nullable (`null` = ไม่มีเพดาน), `_id` เพิ่ม `{mode}`, สูตรที่ว่างนับสถานะที่ถือคิวตาม CR-052. CR-157.
+> schema_v 1 — เพิ่มใน CR-005 §F (DN-5) — queue booking ("จองคิว") ของ public donation. **ศูนย์เป็นผู้ตั้งค่า slot เอง** (Donation module / back-office); หน้า public `/donate` อ่าน slot + ความจุที่เหลือ.
+
+`_id` deterministic ต่อ คิว+วัน+เวลาเริ่ม (shelter implicit จาก db) กันสร้าง slot ซ้ำสอง device. `dropoff` และ `pickup` ที่วัน+เวลาเดียวกันเป็นคนละ doc และความจุไม่กระทบกัน.
 
 | Field | ชนิด | req | หมายเหตุ |
 | --- | --- | --- | --- |
+| `mode` | enum(`dropoff`,`pickup`) | req | `dropoff` = ผู้บริจาคนำมาส่งเอง · `pickup` = รถศูนย์ออกไปรับ |
 | `date` | str | req | `YYYY-MM-DD` (เวลาท้องถิ่นศูนย์) |
-| `from` / `to` | str / str | req | `HH:mm` ช่วงเวลารับของ เช่น `09:00`–`10:00` |
-| `capacity` | int>0 | req | จำนวนคิวสูงสุดต่อ slot — ศูนย์กำหนด |
+| `from` / `to` | str / str | req | `HH:mm` ช่วงเวลารับของ เช่น `09:00`–`10:00`; `to` > `from` |
+| `capacity` | int>0 \| null | opt | default `null` = ไม่มีเพดาน · จำนวนคิว (dropoff) / เที่ยวรถ (pickup) สูงสุดต่อ slot — ศูนย์กำหนด |
 | `status` | enum(`open`,`closed`) | req | default `open`; `closed` = งดรับ slot นี้ |
 | `note` | str | opt | — |
 
-ที่ว่าง = `capacity` − count(`donation` ที่ `logistics.slot` ตรงกัน และ `status` ∈ {`declared`,`received`}); เต็มหรือ `closed` → public แสดง "คิวเต็ม (งด)" + submit คืน `SLOT_FULL`
+**Invariant:** `mode = pickup` → `capacity` ต้องเป็น int>0 (ห้าม `null`)
 
-**Index:** `(date)` · `(date, from)` · view `slot_availability` (capacity − booked count ต่อ slot)
+**คิวที่ donation จอง** — อนุมานจาก `donation.logistics.delivery_method` (§2.3), ไม่เก็บซ้ำบน donation:
+`self_dropoff` → `dropoff` · `shelter_pickup` → `pickup` · `parcel` → ไม่จองคิว (ไม่มี `logistics.slot`)
+
+**กระดาน public:**
+
+- `dropoff` — แสดงช่วงมาตรฐาน 09:00–10:00, 10:00–11:00, 13:00–14:00, 14:00–15:00, 15:00–16:00 เสมอ (ไม่มีเพดาน); `donation_slot` ของศูนย์ override รายช่วงที่ `from` ตรงกัน (ปิดช่วง / ใส่เพดาน / เพิ่มช่วงนอกเวลามาตรฐาน)
+- `pickup` — แสดงเฉพาะรอบที่ศูนย์ประกาศ; ไม่มี doc ของวันนั้น = วันนั้นไม่มีรถออกไปรับ
+
+ที่ว่าง = `capacity` − count(`donation` ที่คิวเดียวกัน และ `logistics.slot` ตรงกัน และ `status` ∈ {`declared`,`pending_review`,`verifying`,`received`}); `capacity = null` → ไม่มีวันเต็ม. เต็มหรือ `closed` → public แสดง "คิวเต็ม (งด)" + submit คืน 409 `SLOT_FULL`. ช่วงที่มีเพดานตัดสิน `SLOT_FULL` ตอน submit แบบ atomic ผ่าน Mongo `donation_slot_counters` (CR-157 §C-6); error code อื่นของ slot (`SLOT_REQUIRED`, `SLOT_UNAVAILABLE`, `SLOTS_UNAVAILABLE`) ดู CR-157 FR-DS-11..13
+
+**Index:** `(date)` · `(date, from)` · view `slot_availability` (capacity − booked count ต่อ slot) — ยังไม่ implement: ปัจจุบัน `GET /api/public/v1/donations/slots` และ `POST` นับจาก `donation:` ทั้งศูนย์ใน memory (CR-157 out of scope)
+
+**Migration (schema_v 1 → 2):** pre-prod — ไม่มี doc v1 ที่ persist (ตรวจ dev/staging/production 2026-09-24) จึงไม่ต้อง backfill; doc รูปเก่า (`_id` แบบ `donation_slot:{date}:{from}`, ไม่มี `mode`) ถ้าหลงเหลือ reader อ่านเป็น `dropoff` (CR-157 FR-DS-9) และเมื่อแก้ไขผ่าน back-office ถูกเขียนกลับที่ `_id` เดิมพร้อม `mode: dropoff` + `schema_v 2`
 
 ### 2.14 `sop_override` — `sop_override:{ulid}`
 
