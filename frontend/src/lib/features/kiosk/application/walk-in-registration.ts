@@ -27,7 +27,13 @@ export type WalkInCardRegistrationOutcome =
 	| { kind: 'registered' }
 	/** ThaiD only: the verified scan expired or was used up; only a new scan can go on. */
 	| { kind: 'expired'; message: string }
+	/** Someone staying in the shelter already has this phone: only another phone (or none) goes on. */
+	| { kind: 'phone_duplicate'; message: string }
 	| { kind: 'error'; message: string };
+
+function isPhoneDuplicate(cause: unknown): cause is KioskRequestError {
+	return cause instanceof KioskRequestError && cause.code === 'KIOSK_PHONE_DUPLICATE';
+}
 
 const CARD_MISMATCH_MESSAGE = 'บัตรไม่ตรงกับบัตรที่ค้นหา กรุณาเสียบบัตรเดิมหรือติดต่อเจ้าหน้าที่';
 
@@ -54,6 +60,7 @@ export async function registerWalkInCardRead(
 		await register(card, session.consentedAt);
 		return { kind: 'registered' };
 	} catch (cause) {
+		if (isPhoneDuplicate(cause)) return { kind: 'phone_duplicate', message: cause.message };
 		return {
 			kind: 'error',
 			message: cause instanceof Error ? cause.message : 'อ่านข้อมูลไม่สำเร็จ กรุณาลองอีกครั้ง'
@@ -86,6 +93,7 @@ export async function submitWalkInThaid(
 		await register(session.thaidSessionId, session.consentedAt, session.phone ?? null);
 		return { kind: 'registered' };
 	} catch (cause) {
+		if (isPhoneDuplicate(cause)) return { kind: 'phone_duplicate', message: cause.message };
 		const message = cause instanceof Error ? cause.message : 'ลงทะเบียนไม่สำเร็จ กรุณาลองอีกครั้ง';
 		if (cause instanceof KioskRequestError && cause.code === 'KIOSK_THAID_SESSION_INVALID') {
 			return { kind: 'expired', message };

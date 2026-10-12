@@ -8,6 +8,7 @@ import {
 import { findMasterByCode } from '$lib/server/shelters.admin';
 import { ServiceError } from '$lib/server/couch-admin';
 import {
+	KioskPhoneDuplicateError,
 	KioskRegistrationBlockedError,
 	registerKioskThaidWalkIn,
 	registerKioskWalkIn
@@ -198,6 +199,15 @@ describe('POST /api/v1/kiosk/register', () => {
 		expect((await response.json()).error.code).toBe('KIOSK_REGISTRATION_BLOCKED');
 	});
 
+	it('answers 409 KIOSK_PHONE_DUPLICATE when the phone is already in use', async () => {
+		mockRegister.mockRejectedValue(new KioskPhoneDuplicateError());
+		const response = await POST(request({ ...validBody, phone: '0812345678' }));
+		expect(response.status).toBe(409);
+		const { error } = await response.json();
+		expect(error.code).toBe('KIOSK_PHONE_DUPLICATE');
+		expect(error.message).toContain('เบอร์');
+	});
+
 	it('reports the shelter registry as unavailable separately from a write failure', async () => {
 		mockFindShelter.mockRejectedValue(new ServiceError('INTERNAL', 'Could not read registry'));
 		const response = await POST(request(validBody));
@@ -318,5 +328,16 @@ describe('POST /api/v1/kiosk/register source thaid', () => {
 		expect(response.status).toBe(409);
 		expect((await response.json()).error.code).toBe('KIOSK_REGISTRATION_BLOCKED');
 		expect(getKioskSessionForDevice(sessionId, DEVICE)?.status).toBe('consumed');
+	});
+
+	it('gives the session back when the phone is already in use, so a new phone needs no new scan', async () => {
+		mockRegisterThaid.mockRejectedValueOnce(new KioskPhoneDuplicateError());
+		const sessionId = completedSession();
+
+		const response = await POST(request(thaidBody(sessionId)));
+
+		expect(response.status).toBe(409);
+		expect((await response.json()).error.code).toBe('KIOSK_PHONE_DUPLICATE');
+		expect(getKioskSessionForDevice(sessionId, DEVICE)?.status).toBe('completed');
 	});
 });

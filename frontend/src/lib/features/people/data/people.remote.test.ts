@@ -26,7 +26,11 @@ import {
 } from './people.remote';
 import { UlidReservation } from '$lib/db/ulid-reservation';
 import type { EvacueeInput, Medical } from '../domain/people';
-import { createKioskEvacueeFromCard, type CardSnapshot } from '../domain/people';
+import {
+	createKioskEvacueeFromCard,
+	createKioskWalkInHousehold,
+	type CardSnapshot
+} from '../domain/people';
 
 const ctx = { shelterCode: 'SH001', createdBy: 'tester' };
 
@@ -2476,5 +2480,110 @@ describe('peopleRepository singleton', () => {
 		mockShelterDb = 'shelter_sh002';
 		const repo2 = peopleRepository();
 		expect(repo2).not.toBe(repo1);
+	});
+});
+
+describe('kiosk walk-in household at Station 1', () => {
+	let repo: PeopleRemoteRepository;
+	const kioskCtx = { shelterCode: 'SH001', createdBy: 'scanner:KIOSK-01' };
+	const household = {
+		housing_type: 'owned_house' as const,
+		address_no: '1',
+		subdistrict: 'ในเมือง',
+		district: 'เมือง',
+		province: 'เชียงใหม่',
+		pets: [],
+		vehicles: [],
+		assets: null
+	};
+
+	beforeEach(() => {
+		memoryRepo = createInMemoryRepository();
+		repo = new PeopleRemoteRepository('shelter_sh001');
+	});
+
+	/** What the kiosk writes for a walk-in: the record and its own household at the card address. */
+	async function kioskWalkIn() {
+		const snapshot: CardSnapshot = {
+			citizen_id: '1234567890123',
+			first_name_th: 'สมชาย',
+			last_name_th: 'ใจดี',
+			address_no: '99/1',
+			subdistrict: 'บางนา',
+			district: 'บางนา',
+			province: 'กรุงเทพมหานคร',
+			scanned_at: new Date().toISOString(),
+			device_id: 'KIOSK-01'
+		};
+		const unlinked = createKioskEvacueeFromCard(snapshot, kioskCtx);
+		const walkInHousehold = createKioskWalkInHousehold(unlinked, snapshot, kioskCtx);
+		await memoryRepo.put(walkInHousehold);
+		const evacuee = await memoryRepo.put({ ...unlinked, household_id: walkInHousehold._id });
+		return { evacuee, householdId: walkInHousehold._id };
+	}
+
+	it('moves the walk-in household to arriving when the walk-in reports in', async () => {
+		const { evacuee, householdId } = await kioskWalkIn();
+
+		await repo.promoteReportIn(evacuee._id);
+
+		expect((await repo.getHousehold(householdId))?.status).toBe('arriving');
+	});
+
+	it('cancels the walk-in household when the walk-in is pulled into another family', async () => {
+		const { evacuee, householdId } = await kioskWalkIn();
+		const family = await repo.createFamilyRegistration(
+			{
+				members: [
+					{
+						first_name: 'สมหญิง',
+						last_name: 'ใจดี',
+						gender: 'female',
+						phone: '0812345678',
+						country: 'THAILAND'
+					}
+				],
+				household
+			},
+			ctx,
+			'public'
+		);
+
+		await repo.submitFamilyReportIn({
+			householdId: family.household._id,
+			household,
+			members: [
+				{
+					_id: family.members[0]!._id,
+					first_name: 'สมหญิง',
+					last_name: 'ใจดี',
+					gender: 'female',
+					phone: '0812345678',
+					country: 'THAILAND',
+					reporting_in: true
+				},
+				{
+					_id: evacuee._id,
+					first_name: 'สมชาย',
+					last_name: 'ใจดี',
+					gender: 'male',
+					phone: '0898765432',
+					country: 'THAILAND',
+					reporting_in: true
+				}
+			],
+			ctx
+		});
+
+		expect((await repo.getEvacuee(evacuee._id))?.household_id).toBe(family.household._id);
+		expect((await repo.getHousehold(householdId))?.status).toBe('cancelled');
+	});
+
+	it('cancels the walk-in household when the walk-in registration is cancelled', async () => {
+		const { evacuee, householdId } = await kioskWalkIn();
+
+		await repo.cancelEvacueePreRegistration(evacuee._id, ctx);
+
+		expect((await repo.getHousehold(householdId))?.status).toBe('cancelled');
 	});
 });

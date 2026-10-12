@@ -3,6 +3,7 @@ import { adminFetch } from '$lib/server/couch-admin';
 import { smartCardDataSchema } from '$lib/features/kiosk-devices/domain/scanner.schema';
 import {
 	decodeKioskPhoto,
+	KioskPhoneDuplicateError,
 	KioskPhotoValidationError,
 	KioskRegistrationBlockedError,
 	kioskCardSnapshotFromThaid,
@@ -50,15 +51,10 @@ function conflictError(): Error & { status: number } {
 }
 
 describe('registerKioskWalkIn', () => {
-	beforeEach(() => vi.clearAllMocks());
+	beforeEach(() => vi.resetAllMocks());
 
 	it('stores a new kiosk_registered record with full snapshot and consent time', async () => {
-		mockAdminFetch
-			.mockResolvedValueOnce({ rev: '1-lock' } as never) // acquire lock
-			.mockResolvedValueOnce({ docs: [] } as never) // _find
-			.mockResolvedValueOnce({ rev: '1-image' } as never) // image put
-			.mockResolvedValueOnce({ ok: true } as never) // evacuee put
-			.mockResolvedValueOnce({ ok: true } as never); // release lock
+		const db = fakeShelterDb();
 
 		const result = await registerKioskWalkIn(
 			'SH001',
@@ -68,52 +64,52 @@ describe('registerKioskWalkIn', () => {
 			photo,
 			consentedAt
 		);
-		const [findPath, findInit] = mockAdminFetch.mock.calls[1]!;
-		const findBody = JSON.parse(String(findInit?.body)) as { selector: Record<string, unknown> };
-		const [imagePath, imageInit] = mockAdminFetch.mock.calls[2]!;
-		const image = JSON.parse(String(imageInit?.body));
-		const [putPath, putInit] = mockAdminFetch.mock.calls[3]!;
-		const saved = JSON.parse(String(putInit?.body));
+		const findSelectors = mockAdminFetch.mock.calls
+			.filter(([path]) => String(path) === '/shelter_sh001/_find')
+			.map(([, init]) => JSON.parse(String(init?.body)).selector);
+		const [image] = db.ofType<{
+			_id: string;
+			_attachments: Record<string, unknown>;
+			created_by: string;
+			caption: string;
+		}>('image');
+		const [saved] = db.ofType<{
+			_id: string;
+			photo: unknown;
+			card_snapshot: Record<string, unknown>;
+		}>('evacuee');
 
-		expect(findPath).toBe('/shelter_sh001/_find');
-		expect(findBody.selector).toEqual({
+		expect(findSelectors).toContainEqual({
 			type: 'evacuee',
 			'person_id.number': citizenId,
 			shelter_code: 'SH001'
 		});
-		expect(imagePath).toContain('/shelter_sh001/image%3A');
-		expect(image._attachments.full).toEqual({
+		expect(image?._attachments.full).toEqual({
 			content_type: 'image/webp',
 			data: photo.full_base64
 		});
-		expect(image._attachments.thumb).toEqual({
+		expect(image?._attachments.thumb).toEqual({
 			content_type: 'image/webp',
 			data: photo.thumb_base64
 		});
-		expect(image.created_by).toBe('scanner:KIOSK-01');
-		expect(image.caption).toBe('ภาพจากบัตรประชาชน');
-		expect(putPath).toContain('/shelter_sh001/evacuee%3A');
+		expect(image?.created_by).toBe('scanner:KIOSK-01');
+		expect(image?.caption).toBe('ภาพจากบัตรประชาชน');
+		expect(saved?._id).toBe(result._id);
 		expect(result.current_stay.status).toBe('kiosk_registered');
 		expect(result.schema_v).toBe(11);
 		expect(result.registered_via).toBe('kiosk');
-		expect(result.household_id).toBeNull();
+		expect(result.household_id).toBe(db.ofType('household')[0]?._id);
 		expect(result.phone).toBeNull();
-		expect(result.photo).toMatch(/^image:/);
-		expect(saved.card_snapshot.consented_at).toBe(consentedAt);
-		expect(saved.card_snapshot.scanned_at).not.toBe(consentedAt);
-		expect(saved.card_snapshot).not.toHaveProperty('photo_base64');
-		expect(saved.photo).toBe(result.photo);
-		expect(mockAdminFetch.mock.calls[0]?.[1]?.method).toBe('PUT');
-		expect(String(mockAdminFetch.mock.calls[0]?.[0])).toContain('/shelter_sh001/kiosk_reg_lock%3A');
-		expect(mockAdminFetch.mock.calls[4]?.[1]?.method).toBe('DELETE');
+		expect(result.photo).toBe(image?._id);
+		expect(saved?.card_snapshot.consented_at).toBe(consentedAt);
+		expect(saved?.card_snapshot.scanned_at).not.toBe(consentedAt);
+		expect(saved?.card_snapshot).not.toHaveProperty('photo_base64');
+		expect(saved?.photo).toBe(result.photo);
+		expect(db.ofType('kiosk_reg_lock')).toHaveLength(0);
 	});
 
 	it('does not create an image document when the card has no photo', async () => {
-		mockAdminFetch
-			.mockResolvedValueOnce({ rev: '1-lock' } as never) // acquire lock
-			.mockResolvedValueOnce({ docs: [] } as never) // _find
-			.mockResolvedValueOnce({ ok: true } as never) // evacuee put
-			.mockResolvedValueOnce({ ok: true } as never); // release lock
+		const db = fakeShelterDb();
 		const result = await registerKioskWalkIn(
 			'SH001',
 			'KIOSK-01',
@@ -122,28 +118,31 @@ describe('registerKioskWalkIn', () => {
 			null,
 			consentedAt
 		);
-		const saved = JSON.parse(String(mockAdminFetch.mock.calls[2]?.[1]?.body));
-		expect(mockAdminFetch).toHaveBeenCalledTimes(4);
+		expect(db.ofType('image')).toHaveLength(0);
 		expect(result.photo).toBeNull();
-		expect(saved.photo).toBeNull();
-		expect(saved.card_snapshot).not.toHaveProperty('photo_base64');
+		expect(db.ofType('evacuee')[0]?.photo).toBeNull();
+		expect(db.ofType('evacuee')[0]?.card_snapshot).not.toHaveProperty('photo_base64');
 	});
 
-	it('removes the image if creating the evacuee fails', async () => {
-		mockAdminFetch
-			.mockResolvedValueOnce({ rev: '1-lock' } as never) // acquire lock
-			.mockResolvedValueOnce({ docs: [] } as never) // _find
-			.mockResolvedValueOnce({ rev: '1-image' } as never) // image put
-			.mockRejectedValueOnce(new Error('evacuee write failed')) // evacuee put
-			.mockResolvedValueOnce({ ok: true } as never) // image delete (cleanup)
-			.mockResolvedValueOnce({ ok: true } as never); // release lock
+	it('leaves no image or household behind if creating the evacuee fails', async () => {
+		const db = fakeShelterDb([], { failPutOfType: 'evacuee' });
 		await expect(
 			registerKioskWalkIn('SH001', 'KIOSK-01', 'โต๊ะ 1', card, photo, consentedAt)
 		).rejects.toThrow('evacuee write failed');
-		expect(mockAdminFetch.mock.calls[4]?.[0]).toContain('/image%3A');
-		expect(mockAdminFetch.mock.calls[4]?.[1]?.method).toBe('DELETE');
-		expect(mockAdminFetch.mock.calls[5]?.[1]?.method).toBe('DELETE');
-		expect(mockAdminFetch).toHaveBeenCalledTimes(6);
+		expect(db.ofType('image')).toHaveLength(0);
+		expect(db.ofType('household')).toHaveLength(0);
+		expect(db.ofType('evacuee')).toHaveLength(0);
+		expect(db.ofType('kiosk_reg_lock')).toHaveLength(0);
+	});
+
+	it('leaves no image behind and writes no evacuee if creating the household fails', async () => {
+		const db = fakeShelterDb([], { failPutOfType: 'household' });
+		await expect(
+			registerKioskWalkIn('SH001', 'KIOSK-01', 'โต๊ะ 1', card, photo, consentedAt)
+		).rejects.toThrow('household write failed');
+		expect(db.ofType('image')).toHaveLength(0);
+		expect(db.ofType('evacuee')).toHaveLength(0);
+		expect(db.ofType('kiosk_reg_lock')).toHaveLength(0);
 	});
 
 	it('blocks every existing record instead of reactivating it', async () => {
@@ -200,7 +199,8 @@ describe('registerKioskWalkIn', () => {
 				}
 			}
 			if (init?.method === 'PUT') {
-				evacuees.push(JSON.parse(String(init.body)));
+				const doc = JSON.parse(String(init.body));
+				if (doc.type === 'evacuee') evacuees.push(doc);
 				return { ok: true } as never;
 			}
 			return { ok: true } as never;
@@ -258,7 +258,7 @@ describe('registerKioskWalkIn', () => {
 });
 
 describe('kiosk walk-in phone and ThaiD', () => {
-	beforeEach(() => vi.clearAllMocks());
+	beforeEach(() => vi.resetAllMocks());
 
 	const device = { shelterCode: 'SH001', deviceId: 'KIOSK-01', stationName: 'โต๊ะ 1' };
 	const profile: ThaiDAutofillProfile = {
@@ -285,16 +285,8 @@ describe('kiosk walk-in phone and ThaiD', () => {
 		}
 	};
 
-	function mockNewRecordWithoutPhoto() {
-		mockAdminFetch
-			.mockResolvedValueOnce({ rev: '1-lock' } as never) // acquire lock
-			.mockResolvedValueOnce({ docs: [] } as never) // _find
-			.mockResolvedValueOnce({ ok: true } as never) // evacuee put
-			.mockResolvedValueOnce({ ok: true } as never); // release lock
-	}
-
 	it('stores the phone given at the kiosk on a card walk-in', async () => {
-		mockNewRecordWithoutPhoto();
+		fakeShelterDb();
 		const result = await registerKioskWalkIn(
 			'SH001',
 			'KIOSK-01',
@@ -308,20 +300,16 @@ describe('kiosk walk-in phone and ThaiD', () => {
 	});
 
 	it('registers a ThaiD walk-in from the session pid and profile, with no photo', async () => {
-		mockNewRecordWithoutPhoto();
+		const db = fakeShelterDb();
 		const result = await registerKioskThaidWalkIn(
 			device,
 			{ pid: citizenId, profile },
 			consentedAt,
 			'0812345678'
 		);
-		const findBody = JSON.parse(String(mockAdminFetch.mock.calls[1]?.[1]?.body)) as {
-			selector: Record<string, unknown>;
-		};
-		const saved = JSON.parse(String(mockAdminFetch.mock.calls[2]?.[1]?.body));
+		const [saved] = db.ofType('evacuee');
 
-		expect(mockAdminFetch).toHaveBeenCalledTimes(4); // no image document
-		expect(findBody.selector['person_id.number']).toBe(citizenId);
+		expect(db.ofType('image')).toHaveLength(0);
 		expect(result.person_id?.number).toBe(citizenId);
 		expect(result.first_name).toBe('วิภา');
 		expect(result.last_name).toBe('ใจดี');
@@ -330,7 +318,7 @@ describe('kiosk walk-in phone and ThaiD', () => {
 		expect(result.phone).toBe('0812345678');
 		expect(result.photo).toBeNull();
 		expect(result.current_stay.status).toBe('kiosk_registered');
-		expect(saved.card_snapshot).toMatchObject({
+		expect(saved?.card_snapshot).toMatchObject({
 			citizen_id: citizenId,
 			province: 'เชียงใหม่',
 			postal_code: '50200',
@@ -366,5 +354,160 @@ describe('kiosk walk-in phone and ThaiD', () => {
 		await expect(
 			registerKioskThaidWalkIn(device, { pid: citizenId, profile }, consentedAt, null)
 		).rejects.toBeInstanceOf(KioskRegistrationBlockedError);
+	});
+});
+
+/** A shelter DB that answers `_find` from its docs, so tests do not depend on call order. */
+function fakeShelterDb(
+	seed: Record<string, unknown>[] = [],
+	options: { failPutOfType?: string } = {}
+) {
+	const docs = new Map<string, Record<string, unknown>>();
+	seed.forEach((doc, index) => docs.set(String(doc._id ?? `seed:${index}`), doc));
+	const fieldValue = (doc: Record<string, unknown>, path: string): unknown =>
+		path
+			.split('.')
+			.reduce<unknown>(
+				(value, key) =>
+					typeof value === 'object' && value !== null
+						? (value as Record<string, unknown>)[key]
+						: undefined,
+				doc
+			);
+	mockAdminFetch.mockImplementation(async (url, init) => {
+		const [path, query] = String(url).split('?');
+		const id = decodeURIComponent(path!.split('/').pop()!);
+		if (path!.endsWith('/_find')) {
+			const { selector } = JSON.parse(String(init?.body)) as {
+				selector: Record<string, unknown>;
+			};
+			const matches = [...docs.values()].filter((doc) =>
+				Object.entries(selector).every(([key, value]) => fieldValue(doc, key) === value)
+			);
+			return { docs: matches } as never;
+		}
+		if (init?.method === 'PUT') {
+			const doc = JSON.parse(String(init.body)) as { type?: unknown };
+			if (doc.type === options.failPutOfType) throw new Error(`${doc.type} write failed`);
+			docs.set(id, { ...JSON.parse(String(init.body)), _id: id, _rev: '1-x' });
+			return { ok: true, rev: '1-x' } as never;
+		}
+		if (init?.method === 'DELETE') {
+			if (!query?.startsWith('rev=')) throw new Error('DELETE without rev');
+			docs.delete(id);
+			return { ok: true } as never;
+		}
+		return docs.get(id) as never;
+	});
+	return {
+		ofType: <T = Record<string, unknown>>(type: string) =>
+			[...docs.values()].filter((doc) => doc.type === type) as T[]
+	};
+}
+
+describe('kiosk walk-in phone already in use', () => {
+	beforeEach(() => vi.resetAllMocks());
+
+	const otherEvacuee = (phone: string, status: string) => ({
+		_id: 'evacuee:01OTHER',
+		type: 'evacuee',
+		shelter_code: 'SH001',
+		person_id: { cardType: 'national_id', number: '9999999999999' },
+		phone,
+		current_stay: { status, zone: null, since: consentedAt }
+	});
+
+	it('refuses a phone another evacuee in the shelter already has, and writes nothing', async () => {
+		const db = fakeShelterDb([otherEvacuee('0812345678', 'active')]);
+		await expect(
+			registerKioskWalkIn('SH001', 'KIOSK-01', 'โต๊ะ 1', card, photo, consentedAt, '0812345678')
+		).rejects.toBeInstanceOf(KioskPhoneDuplicateError);
+		expect(db.ofType('evacuee')).toHaveLength(1);
+		expect(db.ofType('image')).toHaveLength(0);
+		expect(db.ofType('kiosk_reg_lock')).toHaveLength(0);
+	});
+
+	it.each(['checked_out', 'cancelled', 'transferred', 'deceased'])(
+		'lets the phone of someone %s be used again',
+		async (status) => {
+			const db = fakeShelterDb([otherEvacuee('0812345678', status)]);
+			const result = await registerKioskWalkIn(
+				'SH001',
+				'KIOSK-01',
+				'โต๊ะ 1',
+				card,
+				null,
+				consentedAt,
+				'0812345678'
+			);
+			expect(result.phone).toBe('0812345678');
+			expect(db.ofType('evacuee')).toHaveLength(2);
+		}
+	);
+
+	it('treats a phone stored the legacy +66 way as the same phone', async () => {
+		fakeShelterDb([otherEvacuee('+66812345678', 'kiosk_registered')]);
+		await expect(
+			registerKioskWalkIn('SH001', 'KIOSK-01', 'โต๊ะ 1', card, null, consentedAt, '0812345678')
+		).rejects.toBeInstanceOf(KioskPhoneDuplicateError);
+	});
+});
+
+describe('kiosk walk-in household from the address read', () => {
+	beforeEach(() => vi.resetAllMocks());
+
+	it('gives a card walk-in their own pre-registered household at the card address', async () => {
+		const db = fakeShelterDb();
+		const evacuee = await registerKioskWalkIn(
+			'SH001',
+			'KIOSK-01',
+			'โต๊ะ 1',
+			{ ...card, village_no: '4', lane: 'ซอย 5', road: 'สุขุมวิท' },
+			null,
+			consentedAt
+		);
+		const [household] = db.ofType('household');
+
+		expect(db.ofType('household')).toHaveLength(1);
+		expect(evacuee.household_id).toBe(household?._id);
+		expect(db.ofType('evacuee')[0]?.household_id).toBe(household?._id);
+		expect(household).toMatchObject({
+			label: 'ครอบครัวสมชาย ใจดี',
+			head_evacuee_id: evacuee._id,
+			status: 'pre_registered',
+			shelter_code: 'SH001',
+			created_by: 'scanner:KIOSK-01',
+			address_no: '99/1',
+			village_no: '4',
+			subdistrict: 'บางนา',
+			district: 'บางนา',
+			province: 'กรุงเทพมหานคร',
+			postal_code: '10260',
+			housing_type: null,
+			pets: [],
+			vehicles: []
+		});
+	});
+
+	it('still gives a ThaiD walk-in with no address a household, with the Residence left empty', async () => {
+		const db = fakeShelterDb();
+		const evacuee = await registerKioskThaidWalkIn(
+			{ shelterCode: 'SH001', deviceId: 'KIOSK-01', stationName: 'โต๊ะ 1' },
+			{ pid: citizenId },
+			consentedAt,
+			null
+		);
+		const [household] = db.ofType('household');
+		expect(evacuee.household_id).toBe(household?._id);
+		expect(household).toMatchObject({
+			label: 'ครอบครัวไม่ระบุชื่อ',
+			head_evacuee_id: evacuee._id,
+			status: 'pre_registered',
+			address_no: null,
+			subdistrict: null,
+			district: null,
+			province: null,
+			postal_code: null
+		});
 	});
 });

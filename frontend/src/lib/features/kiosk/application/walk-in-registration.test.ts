@@ -35,6 +35,18 @@ describe('registerWalkInCardRead', () => {
 		});
 		expect(register).toHaveBeenCalledTimes(2);
 	});
+
+	it('tells a phone already in use apart from a failure worth retrying', async () => {
+		const register = vi
+			.fn()
+			.mockRejectedValue(
+				new KioskRequestError('เบอร์โทรศัพท์นี้ถูกใช้ลงทะเบียนแล้ว', 409, 'KIOSK_PHONE_DUPLICATE')
+			);
+		await expect(registerWalkInCardRead(card, session, register)).resolves.toEqual({
+			kind: 'phone_duplicate',
+			message: 'เบอร์โทรศัพท์นี้ถูกใช้ลงทะเบียนแล้ว'
+		});
+	});
 });
 
 describe('submitWalkInThaid', () => {
@@ -76,6 +88,18 @@ describe('submitWalkInThaid', () => {
 		await expect(submitWalkInThaid(thaidSession, down)).resolves.toEqual({
 			kind: 'error',
 			message: 'ลองใหม่'
+		});
+	});
+
+	it('tells a phone already in use apart from a failure worth retrying', async () => {
+		const register = vi
+			.fn()
+			.mockRejectedValue(
+				new KioskRequestError('เบอร์โทรศัพท์นี้ถูกใช้ลงทะเบียนแล้ว', 409, 'KIOSK_PHONE_DUPLICATE')
+			);
+		await expect(submitWalkInThaid(thaidSession, register)).resolves.toEqual({
+			kind: 'phone_duplicate',
+			message: 'เบอร์โทรศัพท์นี้ถูกใช้ลงทะเบียนแล้ว'
 		});
 	});
 });

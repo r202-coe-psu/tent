@@ -35,6 +35,8 @@
 	let error = $state('');
 	/** ThaiD only: the verified scan is gone, so only a new scan can go on. */
 	let expired = $state(false);
+	/** The phone typed is already someone else's: shown on the numpad while another is typed. */
+	let phoneNotice = $state('');
 	/** Registered: the done page takes the walk-in from here, so leaving must not abandon it. */
 	let registered = false;
 	// Paused while saving: the write must not be cut short by going home.
@@ -76,10 +78,18 @@
 		registering = true;
 		idleTimeout.setPaused(true);
 		error = '';
+		phoneNotice = '';
 		const outcome = await submitWalkIn(walkInSession);
 		if (outcome.kind === 'registered') {
 			registered = true;
 			await goto(resolve(`/kiosk/register/done${contextQuery}`));
+			return;
+		}
+		if (outcome.kind === 'phone_duplicate') {
+			walkInSession.phone = null;
+			phoneNotice = outcome.message;
+			registering = false;
+			idleTimeout.setPaused(false);
 			return;
 		}
 		expired = outcome.kind === 'expired';
@@ -135,6 +145,6 @@
 			<KioskBusyStatus>กรุณารอสักครู่</KioskBusyStatus>
 		</KioskNoticePanel>
 	{:else if walkInSession.identityReady}
-		<KioskRegisterPhone onconfirm={confirmPhone} />
+		<KioskRegisterPhone notice={phoneNotice} onconfirm={confirmPhone} />
 	{/if}
 </div>

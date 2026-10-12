@@ -5,6 +5,7 @@ import { findMasterByCode } from '$lib/server/shelters.admin';
 import { ServiceError } from '$lib/server/couch-admin';
 import { isKioskWalkInRegistrationEnabled } from '$lib/features/kiosk/config';
 import {
+	KioskPhoneDuplicateError,
 	KioskRegistrationBlockedError,
 	KioskPhotoValidationError,
 	decodeKioskPhoto,
@@ -173,6 +174,17 @@ export const POST: RequestHandler = async ({ request }) => {
 					error: {
 						code: 'KIOSK_REGISTRATION_BLOCKED',
 						message: 'พบข้อมูลเดิม กรุณาไปพบเจ้าหน้าที่'
+					}
+				},
+				{ status: 409, headers: noStoreHeaders }
+			);
+		}
+		if (error instanceof KioskPhoneDuplicateError) {
+			return json(
+				{
+					error: {
+						code: 'KIOSK_PHONE_DUPLICATE',
+						message: 'เบอร์โทรศัพท์นี้ถูกใช้ลงทะเบียนแล้ว กรุณากรอกเบอร์อื่น หรือกด「ไม่มีเบอร์」'
 					}
 				},
 				{ status: 409, headers: noStoreHeaders }

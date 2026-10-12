@@ -1,6 +1,7 @@
 import { smartCardDataSchema } from '$lib/features/kiosk-devices/domain/scanner.schema';
 import {
 	createKioskEvacueeFromCard,
+	createKioskWalkInHousehold,
 	type CardSnapshot,
 	type Evacuee
 } from '$lib/features/people/domain/people';
@@ -10,7 +11,7 @@ import { adminFetch } from '$lib/server/couch-admin';
 import { shelterDbName } from '$lib/server/shelter-access-design';
 import { createHash } from 'node:crypto';
 import { kioskPhotoPayloadSchema, type KioskPhotoPayload } from '../domain/kiosk-photo';
-import { normalizeKioskPhone } from '../domain/phone';
+import { normalizeKioskPhone, phoneVariants } from '../domain/phone';
 import { deleteKioskCardImage, putKioskCardImage } from './kiosk-photo.server';
 import { z } from 'zod';
 
@@ -68,6 +69,14 @@ export class KioskRegistrationBlockedError extends Error {
 	constructor() {
 		super('Kiosk registration already exists');
 		this.name = 'KioskRegistrationBlockedError';
+	}
+}
+
+/** The phone typed at the kiosk already belongs to someone staying in this shelter. */
+export class KioskPhoneDuplicateError extends Error {
+	constructor() {
+		super('Kiosk walk-in phone already in use');
+		this.name = 'KioskPhoneDuplicateError';
 	}
 }
 
@@ -131,6 +140,53 @@ async function releaseKioskRegistrationLock(
 	await adminFetch(`/${dbName}/${encodeURIComponent(lockId)}?rev=${rev}`, {
 		method: 'DELETE'
 	}).catch(() => {});
+}
+
+/**
+ * Stay statuses whose phone a walk-in may not reuse: anyone still held by the shelter (the
+ * Forecast set). Someone checked out, cancelled, transferred or deceased frees their phone.
+ */
+const PHONE_HOLDING_STATUSES: ReadonlySet<string> = new Set([
+	'pre_registered',
+	'kiosk_registered',
+	'arriving',
+	'active',
+	'room_confirmed',
+	'temporary_leave'
+]);
+
+/**
+ * True when an evacuee still held by this shelter already has `phone` (canonical or legacy
+ * `+66`). Equality on `phone` keeps the query on the `['type', 'phone']` index (CR-151).
+ */
+async function isKioskPhoneInUse(
+	dbName: string,
+	shelterCode: string,
+	phone: string
+): Promise<boolean> {
+	for (const variant of phoneVariants(phone)) {
+		const found = await adminFetch<{ docs?: unknown[] }>(`/${dbName}/_find`, {
+			method: 'POST',
+			body: JSON.stringify({
+				selector: { type: 'evacuee', shelter_code: shelterCode, phone: variant },
+				fields: ['_id', 'current_stay'],
+				limit: 1000
+			})
+		});
+		const holding = (found.docs ?? []).some((doc) => {
+			const status = (doc as { current_stay?: { status?: unknown } } | null)?.current_stay?.status;
+			return typeof status === 'string' && PHONE_HOLDING_STATUSES.has(status);
+		});
+		if (holding) return true;
+	}
+	return false;
+}
+
+/** Undo the household of a walk-in whose record could not be written (no orphan is left). */
+async function deleteKioskHousehold(dbName: string, householdId: string): Promise<void> {
+	const path = `/${dbName}/${encodeURIComponent(householdId)}`;
+	const saved = await adminFetch<{ _rev?: string }>(path);
+	if (saved?._rev) await adminFetch(`${path}?rev=${saved._rev}`, { method: 'DELETE' });
 }
 
 /** The kiosk that took the registration, as written into the snapshot and `created_by`. */
@@ -246,23 +302,31 @@ export async function registerKioskWalkInSnapshot(
 			);
 		});
 		if (!allRowsMatchQuery || docs.length > 0) throw new KioskRegistrationBlockedError();
+		if (phone && (await isKioskPhoneInUse(dbName, shelterCode, phone))) {
+			throw new KioskPhoneDuplicateError();
+		}
 
 		const image = photo ? await putKioskCardImage(dbName, shelterCode, deviceId, photo) : null;
-		const evacuee = createKioskEvacueeFromCard(
-			cardSnapshot,
-			{
-				shelterCode,
-				createdBy: `scanner:${deviceId}`
-			},
-			image?.id,
-			phone
-		);
+		const ctx = { shelterCode, createdBy: `scanner:${deviceId}` };
+		const unlinked = createKioskEvacueeFromCard(cardSnapshot, ctx, image?.id, phone);
+		const household = createKioskWalkInHousehold(unlinked, cardSnapshot, ctx);
+		const evacuee: Evacuee = { ...unlinked, household_id: household._id };
+		try {
+			await adminFetch(`/${dbName}/${encodeURIComponent(household._id)}`, {
+				method: 'PUT',
+				body: JSON.stringify(household)
+			});
+		} catch (error) {
+			if (image) await deleteKioskCardImage(dbName, image).catch(() => {});
+			throw error;
+		}
 		try {
 			await adminFetch(`/${dbName}/${encodeURIComponent(evacuee._id)}`, {
 				method: 'PUT',
 				body: JSON.stringify(evacuee)
 			});
 		} catch (error) {
+			await deleteKioskHousehold(dbName, household._id).catch(() => {});
 			if (image) await deleteKioskCardImage(dbName, image).catch(() => {});
 			throw error;
 		}

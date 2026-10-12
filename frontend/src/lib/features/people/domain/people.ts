@@ -1598,6 +1598,39 @@ export function createKioskEvacueeFromCard(
 
 export const createDraftEvacueeFromCard = createKioskEvacueeFromCard;
 
+/** Auto Household label — UI never shows a label field (FR-03b-H). */
+export function autoHouseholdLabel(personName: string): string {
+	return `ครอบครัว${personName.trim()}`;
+}
+
+/**
+ * The household a kiosk walk-in gets on registering: theirs alone, headed by them, with the
+ * address read from the card or ThaiD as its starting Residence. Station 1 corrects or merges it
+ * when confirming. Lane and road stay in `card_snapshot`: a Residence has no field for them.
+ */
+export function createKioskWalkInHousehold(
+	head: Evacuee,
+	cardSnapshot: CardSnapshot,
+	ctx: AuthorContext,
+	id?: string
+): Household {
+	return createHousehold(
+		{
+			label: autoHouseholdLabel(formatPersonName(head)),
+			head_evacuee_id: head._id,
+			status: 'pre_registered',
+			address_no: cardSnapshot.address_no ?? null,
+			village_no: cardSnapshot.village_no ?? null,
+			subdistrict: cardSnapshot.subdistrict ?? null,
+			district: cardSnapshot.district ?? null,
+			province: cardSnapshot.province ?? null,
+			postal_code: cardSnapshot.postal_code ?? null
+		},
+		ctx,
+		id
+	);
+}
+
 export function createMedical(input: MedicalInput, ctx: AuthorContext, id?: string): Medical {
 	const d = medicalInputSchema.parse(input);
 	return makeDoc(
