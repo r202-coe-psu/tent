@@ -457,6 +457,9 @@ export async function approvePending(page: Page, shelterCode: string, bookingRef
 /** Open a booking in the scan station by typing its ref. */
 export async function openInScanStation(page: Page, bookingRef: string) {
 	await page.reload();
+	// The active tab is kept in `?tab=` and survives the reload, so coming from the
+	// pending queue the scan station has to be picked explicitly.
+	await page.getByRole('tab', { name: /สแกนรับของเข้าคลัง/ }).click();
 	await page.getByRole('textbox', { name: 'รหัสการจอง' }).fill(bookingRef);
 	await page.getByRole('button', { name: 'ค้นหา' }).click();
 	await expect(
