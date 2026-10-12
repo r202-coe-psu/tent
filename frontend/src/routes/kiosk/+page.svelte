@@ -22,6 +22,6 @@
 <IdentityMethodSelector
 	{contextQuery}
 	qrCheckInEnabled={data.qrCheckInEnabled}
-	phoneCheckInEnabled={data.phoneCheckInEnabled}
+	reprintEnabled={data.phoneCheckInEnabled}
 	thaidCheckInEnabled={data.thaidCheckInEnabled}
 />

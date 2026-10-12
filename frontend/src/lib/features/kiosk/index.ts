@@ -18,11 +18,18 @@ export {
 } from './ui/kiosk-notice-actions';
 export { default as KioskCardInsertScene } from './ui/kiosk-card-insert-scene.svelte';
 export { default as KioskReaderPointer } from './ui/kiosk-reader-pointer.svelte';
-export { default as KioskPhoneIdentityEntry } from './ui/phone-identity-entry.svelte';
+export { default as KioskReprint } from './ui/kiosk-reprint.svelte';
 export { default as KioskThaidIdentityScan } from './ui/thaid-identity-scan.svelte';
 export { KioskIdleTimeout, KIOSK_IDLE_TIMEOUT_MS } from './ui/kiosk-idle-timeout.svelte.js';
 export { navigateToKioskHome } from './application/kiosk-navigation';
-export { registerKioskWalkIn, type GateInput } from './data/kiosk-check-in.api';
+export {
+	registerKioskWalkIn,
+	reprintKioskLabels,
+	type GateInput,
+	type KioskReprintInput,
+	type KioskReprintMember,
+	type KioskReprintResult
+} from './data/kiosk-check-in.api';
 export { fetchKioskConfig } from './data/kiosk-config.api';
 export { KIOSK_THAID_PATH } from './domain/identity-method';
 export {
