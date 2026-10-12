@@ -21,12 +21,18 @@
 	import { jobsI18n } from '$lib/features/volunteers/i18n/jobs.i18n';
 	import {
 		applyToJob,
+		fetchVolunteerSkills,
 		resolvePortalAccess
 	} from '$lib/features/volunteer-portal/data/volunteer-api';
+	import {
+		findSkillOption,
+		localizedSkillLabel
+	} from '$lib/features/volunteer-portal/domain/skill-label';
 	import { PORTAL_SESSION_KEY } from '$lib/features/volunteer-portal/domain/volunteer';
 	import type {
 		PortalCredential,
-		VolunteerProfile
+		VolunteerProfile,
+		VolunteerSkillOption
 	} from '$lib/features/volunteer-portal/domain/volunteer';
 
 	export interface ShiftDetail {
@@ -93,73 +99,35 @@
 		renumberSectionTitle(t.applyStep3Title, isPortalApplicant ? 2 : 3)
 	);
 
-	interface SkillOption {
-		id: string;
-		key: string;
-		label: string;
-		category: 'operational' | 'controlled';
-		controlled: boolean;
-		description: string;
-	}
-
-	let masterSkills = $state<SkillOption[]>([]);
+	// Master Data is the only source of skills; there are no fallback labels.
+	let masterSkills = $state<VolunteerSkillOption[]>([]);
 	let isLoadingSkills = $state(false);
+	// Plain flag, not state: the effect below must not re-run when a load comes back empty.
+	let skillsRequested = false;
 
-	function skillDisplayLabel(item: {
-		code: string;
-		label?: string;
-		label_th?: string;
-		label_en?: string;
-	}): string {
-		const th = item.label_th?.trim() ?? '';
-		const en = item.label_en?.trim() ?? '';
-		const localized = languageStore.current === 'en' ? en || th : th || en;
-		return item.label?.trim() || localized || item.code;
-	}
-
-	// Fetch skills from public master data endpoint (NO AUTH REQUIRED)
 	async function loadPublicSkills() {
+		isLoadingSkills = true;
 		try {
-			isLoadingSkills = true;
-			const res = await fetch('/api/public/v1/config/volunteer-skills');
-			if (res.ok) {
-				const data = await res.json();
-				if (Array.isArray(data.volunteerSkills) && data.volunteerSkills.length > 0) {
-					masterSkills = data.volunteerSkills.map(
-						(i: {
-							code: string;
-							label?: string;
-							label_th?: string;
-							label_en?: string;
-							category?: string;
-							description?: string;
-						}) => ({
-							id: i.code,
-							key: i.code,
-							// The endpoint sends label_th / label_en (no `label`) since the master-data shrink.
-							label: skillDisplayLabel(i),
-							category: (i.category ?? 'operational') as 'operational' | 'controlled',
-							controlled: i.category === 'controlled' || i.category === 'CONTROLLED',
-							description: i.description ?? ''
-						})
-					);
-					return;
-				}
-			}
+			masterSkills = await fetchVolunteerSkills();
 		} catch {
-			// Master Data is authoritative; do not expose implementation codes as labels.
+			masterSkills = [];
+			// Let the next open try again.
+			skillsRequested = false;
 		} finally {
 			isLoadingSkills = false;
 		}
-
-		masterSkills = [];
 	}
 
 	$effect(() => {
-		if (isOpen && masterSkills.length === 0) {
+		if (isOpen && !skillsRequested) {
+			skillsRequested = true;
 			loadPublicSkills();
 		}
 	});
+
+	function isControlledSkill(skill: VolunteerSkillOption): boolean {
+		return skill.category?.toLowerCase() === 'controlled';
+	}
 
 	let selectedShiftId = $state<string>('');
 
@@ -252,15 +220,7 @@
 
 	/** Compare job/applicant skills by Master Data code, with legacy labels supported. */
 	function canonicalSkillId(value: string): string {
-		const normalized = value?.trim().toLowerCase() ?? '';
-		return (
-			masterSkills.find(
-				(skill) =>
-					skill.id === value ||
-					skill.key === value ||
-					(skill.label ?? '').trim().toLowerCase() === normalized
-			)?.id ?? value
-		);
+		return findSkillOption(value ?? '', masterSkills)?.code ?? value ?? '';
 	}
 
 	function isSuggestedForJob(skillCode: string): boolean {
@@ -885,13 +845,13 @@
 								</div>
 							{:else}
 								<div class="flex flex-wrap gap-2.5">
-									{#each masterSkills as skill (skill.id)}
-										{@const isSelected = formData.skills.includes(skill.id)}
-										{@const isControlled = skill.controlled}
-										{@const isSuggested = isSuggestedForJob(skill.id)}
+									{#each masterSkills as skill (skill.code)}
+										{@const isSelected = formData.skills.includes(skill.code)}
+										{@const isControlled = isControlledSkill(skill)}
+										{@const isSuggested = isSuggestedForJob(skill.code)}
 										<button
 											type="button"
-											onclick={() => toggleSkill(skill.key || skill.id || skill.label)}
+											onclick={() => toggleSkill(skill.code)}
 											class="flex cursor-pointer items-center gap-2 rounded-2xl border px-4 py-2.5 text-xs font-bold transition-all {isSelected
 												? 'border-emerald-600 bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-200'
 												: isSuggested
@@ -906,7 +866,7 @@
 												<Sparkles class="h-3.5 w-3.5 text-success" />
 											{/if}
 
-											<span>{skill.label}</span>
+											<span>{localizedSkillLabel(skill, languageStore.current)}</span>
 
 											{#if isControlled}
 												<span
