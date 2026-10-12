@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CardSnapshot } from '$lib/features/people/domain/people';
-import { walkInAddressKey } from './walk-in-address';
+import { walkInAddressKey, walkInRoadsCompatible } from './walk-in-address';
 
 const address = {
 	address_no: '99/1',
@@ -105,5 +105,24 @@ describe('walkInAddressKey', () => {
 			);
 			expect(walkInAddressKey({ ...card, address_no: '99/2' })).not.toBe(walkInAddressKey(card));
 		});
+	});
+});
+
+describe('walkInRoadsCompatible', () => {
+	it('is compatible when either road is missing, blank or a dash', () => {
+		expect(walkInRoadsCompatible(undefined, undefined)).toBe(true);
+		expect(walkInRoadsCompatible('', '-')).toBe(true);
+		expect(walkInRoadsCompatible('ถนนเพชรเกษม', undefined)).toBe(true);
+		expect(walkInRoadsCompatible(' - ', 'ถนนเพชรเกษม')).toBe(true);
+	});
+
+	it('is compatible when both roads are the same once the ถนน prefix and spacing are dropped', () => {
+		expect(walkInRoadsCompatible('ถนนเพชรเกษม', 'ถ.เพชรเกษม')).toBe(true);
+		expect(walkInRoadsCompatible(' เพชรเกษม ', 'ถนน เพชรเกษม')).toBe(true);
+		expect(walkInRoadsCompatible('ถนนสุขุมวิท  101', 'สุขุมวิท 101')).toBe(true);
+	});
+
+	it('is not compatible when both roads are given and differ', () => {
+		expect(walkInRoadsCompatible('ถนนเพชรเกษม', 'ถนนมิตรภาพ')).toBe(false);
 	});
 });

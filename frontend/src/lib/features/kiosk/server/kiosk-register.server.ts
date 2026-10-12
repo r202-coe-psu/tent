@@ -12,7 +12,7 @@ import { shelterDbName } from '$lib/server/shelter-access-design';
 import { createHash } from 'node:crypto';
 import { kioskPhotoPayloadSchema, type KioskPhotoPayload } from '../domain/kiosk-photo';
 import { normalizeKioskPhone, phoneVariants } from '../domain/phone';
-import { walkInAddressKey } from '../domain/walk-in-address';
+import { walkInAddressKey, walkInRoadsCompatible } from '../domain/walk-in-address';
 import { refreshHouseholdStatus } from './kiosk-check-in.server';
 import { deleteKioskCardImage, putKioskCardImage } from './kiosk-photo.server';
 import { z } from 'zod';
@@ -223,8 +223,9 @@ const CLOSED_HOUSEHOLD_STATUSES: ReadonlySet<string> = new Set([
 const ADDRESS_PAGE_SIZE = 200;
 
 /**
- * The household a kiosk created earlier for this exact card address (`addressKey`), when it is
- * still open and its head is the kiosk walk-in who made it; the oldest one if several qualify.
+ * The household a kiosk created earlier for this card address (`addressKey`; roads must not
+ * conflict), when it is still open and its head is the kiosk walk-in who made it; the oldest one
+ * if several qualify.
  * Staff-made households, and ones whose head changed, are never joined.
  */
 async function findJoinableKioskHousehold(
@@ -258,7 +259,10 @@ async function findJoinableKioskHousehold(
 				card_snapshot?: CardSnapshot;
 			} | null;
 			if (!evacuee?._id || !evacuee.household_id || !evacuee.card_snapshot) continue;
-			if (walkInAddressKey(evacuee.card_snapshot) === addressKey) {
+			if (
+				walkInAddressKey(evacuee.card_snapshot) === addressKey &&
+				walkInRoadsCompatible(cardSnapshot.road, evacuee.card_snapshot.road)
+			) {
 				candidates.set(evacuee.household_id, evacuee._id);
 			}
 		}

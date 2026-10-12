@@ -546,12 +546,44 @@ describe('kiosk walk-in joining the household at the same card address', () => {
 		expect(db.ofType('evacuee')).toHaveLength(2);
 	});
 
-	it('gives a different road its own household', async () => {
+	it('gives a different road (both from the card) its own household', async () => {
 		const db = fakeShelterDb();
 		const first = await register({ ...card, ...address });
 		const other = await register({ ...second, ...address, road: 'เพชรเกษม' });
 		expect(db.ofType('household')).toHaveLength(2);
 		expect(other.household_id).not.toBe(first.household_id);
+	});
+
+	it('joins when the road is the same, even written with the ถนน prefix', async () => {
+		const db = fakeShelterDb();
+		const first = await register({ ...card, ...address });
+		const joined = await register({ ...second, ...address, road: 'ถนนสุขุมวิท' });
+		expect(db.ofType('household')).toHaveLength(1);
+		expect(joined.household_id).toBe(first.household_id);
+	});
+
+	it('joins a head without a road (ThaiD-style) when the newcomer has one', async () => {
+		const db = fakeShelterDb();
+		const first = await register({ ...card, ...address, road: null });
+		const joined = await register({ ...second, ...address });
+		expect(db.ofType('household')).toHaveLength(1);
+		expect(joined.household_id).toBe(first.household_id);
+	});
+
+	it('joins a head with a road when the newcomer has none (ThaiD-style)', async () => {
+		const db = fakeShelterDb();
+		const first = await register({ ...card, ...address });
+		const joined = await register({ ...second, ...address, road: null });
+		expect(db.ofType('household')).toHaveLength(1);
+		expect(joined.household_id).toBe(first.household_id);
+	});
+
+	it('never compares the lane when grouping', async () => {
+		const db = fakeShelterDb();
+		const first = await register({ ...card, ...address });
+		const joined = await register({ ...second, ...address, lane: 'ซอย 9' });
+		expect(db.ofType('household')).toHaveLength(1);
+		expect(joined.household_id).toBe(first.household_id);
 	});
 
 	it('does not group walk-ins whose card has no house number', async () => {

@@ -47,3 +47,23 @@ export function walkInAddressKey(snapshot: WalkInAddress): string | null {
 	);
 	return incomplete ? null : parts.join(FIELD_SEPARATOR);
 }
+
+const ROAD_PREFIXES = ['ถนน', 'ถ.'] as const;
+
+function normalizeRoad(value: string | undefined): string {
+	const collapsed = (value ?? '').trim().replace(/\s+/g, ' ');
+	const prefix = ROAD_PREFIXES.find((candidate) => collapsed.startsWith(candidate));
+	const bare = prefix ? collapsed.slice(prefix.length).trim() : collapsed;
+	return bare === '-' ? '' : bare;
+}
+
+/**
+ * Whether two walk-ins' roads allow one household: a road is only compared when BOTH sides have
+ * one (ThaiD gives none), after dropping '-', spacing and the ถนน / ถ. prefix. Lane is never
+ * compared.
+ */
+export function walkInRoadsCompatible(a: string | undefined, b: string | undefined): boolean {
+	const roadA = normalizeRoad(a);
+	const roadB = normalizeRoad(b);
+	return roadA === '' || roadB === '' || roadA === roadB;
+}
