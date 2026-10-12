@@ -1,11 +1,11 @@
 ---
-id: draft
+id: CR-164
 title: ให้ `shelter:{code}` เป็นกุญแจอ่าน DB กลาง `registry` / `catalog` — แก้ผู้ใช้ compound role อ่านรายชื่อศูนย์และ catalog ไม่ได้
-status: proposed
+status: approved
 date: 2026-10-12
 updated: 2026-10-12
 requested_by: ทีม (staging — ผู้ใช้ `SH001:distribution_staff` เห็น "เกิดข้อผิดพลาดในการโหลดข้อมูล" ที่ navbar)
-decided_by: <เจ้าของโครงการ — รอเคาะ>
+decided_by: kong — อนุมัติ 2026-10-12
 layer: stable
 affects:
   - docs/data/schema.md §6 (กฎความปลอดภัยของ Compound Roles — เพิ่มกฎ DB กลาง)
@@ -115,3 +115,4 @@ N/A สำหรับ schema — ไม่มี doc ที่ persist เป�
 - 2026-10-12 — proposed. ทางเลือกที่ตัดทิ้ง: ใส่ `{code}:{capability}` ทุกคู่ (ศูนย์ × 11) — list โตตาม
   capability, ต้อง re-sync ทุกครั้งที่เพิ่ม capability, ไม่ครอบ dynamic role ของ Worker Sweeper และใช้สิทธิ์ระดับ
   VDU เป็นกุญแจ DB ขัด CR-093. ใส่ตอนสร้าง user — เขียน `_security` ถี่ และต้องจัดการตอนถอน role.
+- 2026-10-12 — approved โดย kong . อนุมัติแนวทางให้ `shelter:{code}` เป็นกุญแจอ่าน DB กลาง `registry` และ `catalog` ควบคู่กับการควบคุมสิทธิ์การเขียนผ่าน VDU เดิม และวาง write-policy guard ก่อนขยายสิทธิ์ members.
