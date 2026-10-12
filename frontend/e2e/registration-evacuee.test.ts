@@ -993,7 +993,7 @@ async function preRegisterFlow(browser: Browser, run: Run, s: Sessions) {
 			if (i > 0) await screenA.getByRole('button', { name: 'เพิ่มสมาชิก' }).click();
 			await fillMemberCard(screenA, i, member);
 		}
-		await screenA.getByLabel(/ข้าพเจ้ารับทราบเงื่อนไขการใช้งานระบบ/).check();
+		await screenA.getByLabel(/ข้าพเจ้ารับทราบข้อตกลงการใช้งาน/).check();
 		const reply = await submitPublicForm(screenA, '/api/public/v1/unassigned-registrations');
 
 		const id = String(reply.id ?? '');

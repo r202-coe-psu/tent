@@ -21,7 +21,6 @@ import Calculator from '@lucide/svelte/icons/calculator';
 import HandHeart from '@lucide/svelte/icons/hand-heart';
 import MapPin from '@lucide/svelte/icons/map-pin';
 import UtensilsCrossed from '@lucide/svelte/icons/utensils-crossed';
-import FlaskConical from '@lucide/svelte/icons/flask-conical';
 import ClipboardCheck from '@lucide/svelte/icons/clipboard-check';
 import Cpu from '@lucide/svelte/icons/cpu';
 import MonitorSmartphone from '@lucide/svelte/icons/monitor-smartphone';
@@ -99,12 +98,6 @@ export const backofficeNavbarGroups: BackofficeNavbarGroup[] = [
 				label: 'การประเมินประจำวัน',
 				href: resolve('/back-office/dailysop'),
 				icon: ClipboardList
-			},
-			{
-				label: 'จำลองสถานการณ์ SOP',
-				href: resolve('/back-office/sop-simulation'),
-				icon: FlaskConical,
-				requiresManager: true
 			},
 			{
 				label: 'คลัง',
