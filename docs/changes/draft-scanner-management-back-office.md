@@ -26,7 +26,7 @@ affects:
   - frontend/src/routes/(protected)/back-office/scanners/** (ใหม่)
   - frontend/src/routes/(protected)/system-management/scanners/** (เปลี่ยนเป็น redirect)
   - frontend/src/lib/components/{backoffice-navbar/static.ts,backoffice-navbar.svelte,system-management-navbar/static.ts}
-  - frontend/src/lib/components/shelter-scope-select.svelte (ใหม่ — ตัวเลือกศูนย์สำหรับ SA ใช้ร่วมกับหน้า kiosk-banners ของ CR-162)
+  - frontend/src/lib/components/shelter-scope-select.svelte (ใหม่ — ตัวเลือกศูนย์ตาม scope ให้หน้า kiosk-banners ของ CR-162 ใช้ · หน้า scanners ใช้แสดงศูนย์แบบ read-only ใน dialog สร้างเครื่องเท่านั้น)
   - tests — frontend/src/routes/api/v1/scanner/devices/{server.test.ts,[id]/server.test.ts,[id]/staff-pin/server.test.ts,[id]/staff-pin/reveal/server.test.ts} (AC-SBO-04/06/07/08/11/16)
   - tests — frontend/src/lib/features/scanners/data/{scanner.api.test.ts,scanner.remote.test.ts} · frontend/src/lib/server/scanners/device-repository.test.ts · frontend/src/lib/auth/roles.test.ts
   - tests — frontend/src/lib/server/shelter-capability-access.test.ts (ใหม่)
@@ -42,7 +42,7 @@ migration: N/A — ไม่เปลี่ยนรูปร่าง doc `scan
 >
 > - **เปลี่ยนอะไร:** หน้าจัดการเครื่องสแกน/Kiosk ย้ายจาก `/system-management/scanners` (SA เท่านั้น) ไป `/back-office/scanners` · `system_admin` จัดการได้ทุกศูนย์ · `shelter_manager` ดูและจัดการได้**ทุก action** (สร้าง, แก้ไข, เปิดปิด, ลบ, ตั้ง/สุ่ม/ดู staff PIN) เฉพาะเครื่องของศูนย์ที่ตัวเองเป็น SM
 > - **เพื่อใคร/ทำไม:** ต่อยอดงาน Kiosk Banner (CR-162, issue #466) — ให้ศูนย์ดูแลทั้ง「ตู้」และ「สิ่งที่แสดงบนตู้」ได้ใน back-office ที่เดียวด้วยโมเดลสิทธิ์ชุดเดียว และไม่ต้องรอส่วนกลาง
-> - **Dev ต้อง build:** เมนูแม่「จัดการ Kiosk」ใน back-office + ลูก「จัดการอุปกรณ์」(「จัดการแบนเนอร์」ของ CR-162 มาเสียบภายหลัง) + ตัวเลือกศูนย์สำหรับ SA (SM ใช้ศูนย์ที่เลือกอยู่) · guard สิทธิ์ SA/SM-scope ฝั่ง server ให้ทุก admin endpoint ของ scanner · `GET` (list ตาม scope) และ `PATCH` (แก้ชื่อ/จุดบริการ/สถานะ) ใหม่ — browser เลิกอ่าน/เขียน `scanner_device` ใน `registry` ตรง · หน้า back-office + เมนู · URL เดิม redirect
+> - **Dev ต้อง build:** เมนูแม่「จัดการ Kiosk」ใน back-office + ลูก「จัดการอุปกรณ์」(「จัดการแบนเนอร์」ของ CR-162 มาเสียบภายหลัง) · ทุก role (SA และ SM) ใช้ศูนย์ที่เลือกอยู่ (active shelter) — หน้าไม่มีตัวเลือกศูนย์ · guard สิทธิ์ SA/SM-scope ฝั่ง server ให้ทุก admin endpoint ของ scanner · `GET` (list ตาม scope) และ `PATCH` (แก้ชื่อ/จุดบริการ/สถานะ) ใหม่ — browser เลิกอ่าน/เขียน `scanner_device` ใน `registry` ตรง · หน้า back-office + เมนู · URL เดิม redirect
 > - **กระทบ schema/scope:** เปลี่ยน role/permission (SA-only → SA + SM scope) · ไม่เปลี่ยนรูปร่าง doc · ไม่ bump `schema_v` · device auth ของ kiosk, `scanner_secrets` (admin-only), `scanner_client` ไม่เปลี่ยน
 
 ---
@@ -59,8 +59,8 @@ migration: N/A — ไม่เปลี่ยนรูปร่าง doc `scan
 
 | Action | before | after |
 | --- | --- | --- |
-| ดูรายการเครื่อง | SA (browser อ่าน `registry` ทุกศูนย์) | SA: ทุกศูนย์ · SM: เฉพาะเครื่องของศูนย์ที่เลือกอยู่ (active shelter) ซึ่งตัวเองเป็น SM — ดูศูนย์อื่นต้องสลับศูนย์ |
-| สร้างเครื่อง (ได้ device secret + default PIN) | SA | SA: ทุกศูนย์ · SM: เฉพาะศูนย์ที่เลือกอยู่ (active shelter) ซึ่งตัวเองเป็น SM |
+| ดูรายการเครื่อง | SA (browser อ่าน `registry` ทุกศูนย์) | SA และ SM: เฉพาะเครื่องของศูนย์ที่เลือกอยู่ (active shelter) — SM ต้องเป็น SM ของศูนย์นั้น · ดูศูนย์อื่นต้องสลับศูนย์ (SA สลับได้ทุกศูนย์) |
+| สร้างเครื่อง (ได้ device secret + default PIN) | SA | SA และ SM: ศูนย์ที่เลือกอยู่ (active shelter) — SM ต้องเป็น SM ของศูนย์นั้น · SA สลับศูนย์ได้ทุกศูนย์ |
 | แก้ชื่อ / จุดบริการ / เปิดปิดเครื่อง | SA (browser `PUT` ตรง) | SA ทุกเครื่อง · SM เครื่องในศูนย์ตัวเอง — ผ่าน server |
 | ลบเครื่อง | SA | SA · SM เครื่องในศูนย์ตัวเอง |
 | ตั้ง / สุ่ม staff PIN | SA | SA · SM เครื่องในศูนย์ตัวเอง |
@@ -75,7 +75,7 @@ migration: N/A — ไม่เปลี่ยนรูปร่าง doc `scan
 | --- | --- | --- |
 | หน้าจัดการ | `/system-management/scanners` (layout `requireAdmin`) | `/back-office/scanners` (`requireManager`) |
 | เมนู | System Management กลุ่มแรก「เครื่องสแกนบัตร (Scanners)」 · CR-162: เมนู「แบนเนอร์ Kiosk」ใน back-office (ยังไม่ implement) | Back Office กลุ่ม「4. ตั้งค่าระบบ」→ เมนูแม่「จัดการ Kiosk」→ เมนูลูก「จัดการอุปกรณ์」(`/back-office/scanners`) — ลบเมนูเครื่องสแกนออกจาก System Management · งาน CR-162 เพิ่มเมนูลูก「จัดการแบนเนอร์」(`/back-office/kiosk-banners`) ใต้เมนูแม่เดียวกัน |
-| เลือกศูนย์ | dialog สร้างเครื่องเลือกได้ทุกศูนย์ | SA: ตัวเลือกศูนย์ทุกศูนย์ ใช้ทั้งตัวกรองรายการและ dialog สร้างเครื่อง · SM: ไม่มีตัวเลือกศูนย์ — ใช้ศูนย์ที่เลือกอยู่ (active shelter) เหมือนหน้า back-office อื่น |
+| เลือกศูนย์ | dialog สร้างเครื่องเลือกได้ทุกศูนย์ | ไม่มีตัวเลือกศูนย์ในหน้าทุก role — รายการและ dialog สร้างเครื่องใช้ศูนย์ที่เลือกอยู่ (active shelter) เหมือนหน้า back-office อื่น |
 | URL เดิม | — | `/system-management/scanners` → `302` ไป `/back-office/scanners` |
 
 ### 2.3 API
@@ -122,19 +122,19 @@ migration: N/A — ไม่เปลี่ยนรูปร่าง doc `scan
 | --- | --- |
 | FR-SBO-20 | หน้า `/back-office/scanners` ใช้ guard `requireManager` (SA หรือ SM ของศูนย์ที่เลือกอยู่) · ผู้ใช้ที่เป็น SM ของศูนย์อื่นแต่ศูนย์ที่เลือกอยู่ไม่ได้เป็น SM → redirect ตาม guard เดิม (ต้องสลับศูนย์ก่อน) |
 | FR-SBO-21 | feature `scanners` ต้องอ่านรายการผ่าน `GET /api/v1/scanner/devices` และแก้ไขผ่าน `PATCH` เท่านั้น — ไม่มี code path ใดใน browser ที่อ่าน/เขียน `scanner_device` จาก `registry` ตรง |
-| FR-SBO-22 | dialog สร้างเครื่อง: SA เลือกศูนย์ได้ทุกศูนย์ · SM ใช้ศูนย์ที่เลือกอยู่ (active shelter) แสดงเป็นค่าคงที่ เลือกไม่ได้ |
+| FR-SBO-22 | dialog สร้างเครื่อง: ทุก role (SA และ SM) ใช้ศูนย์ที่เลือกอยู่ (active shelter) แสดงเป็นค่าคงที่ เลือกไม่ได้ |
 | FR-SBO-23 | รายการแสดงคอลัมน์ศูนย์ทุก role · action ทั้งหมด (ดู secret ที่เพิ่งสร้าง, ตั้ง/ดู PIN, เปิดปิด, ลบ) แสดงเหมือนกันสำหรับ SA และ SM |
 | FR-SBO-24 | back-office navbar กลุ่ม「4. ตั้งค่าระบบ」เพิ่มเมนูแม่「จัดการ Kiosk」และเมนูลูก「จัดการอุปกรณ์」→ `/back-office/scanners` · เมนูลูกที่สอง「จัดการแบนเนอร์」→ `/back-office/kiosk-banners` เพิ่มโดยงาน CR-162 เมื่อ route นั้นมีจริง — CR นี้ห้ามใส่เมนูที่ชี้ route ที่ยังไม่มี · ลบเมนูเครื่องสแกนเดิมออกจาก system-management navbar |
 | FR-SBO-25 | `/system-management/scanners` redirect `302` ไป `/back-office/scanners` |
 | FR-SBO-26 | เมนูลูกใน back-office navbar กำหนดการแสดงผลได้ตาม capability ในศูนย์ (ไม่จำกัดแค่ SA / SM) · เมนูแม่แสดงเมื่อมีเมนูลูกอย่างน้อย 1 รายการที่ผู้ใช้เห็น ·「จัดการอุปกรณ์」เห็นเฉพาะ SA และ SM · (เมื่อ CR-162 เพิ่ม「จัดการแบนเนอร์」: เห็น SA, SM และ `banner_staff` ตาม FR-KBN-24/27 ด้วยกลไกเดียวกัน) |
-| FR-SBO-27 | หน้า `/back-office/scanners` มีตัวกรองศูนย์เฉพาะ SA: เลือกได้ทุกศูนย์ + ตัวเลือก「ทุกศูนย์」(ค่าเริ่มต้น) · SM ไม่แสดงตัวกรอง — รายการเป็นของศูนย์ที่เลือกอยู่ และเปลี่ยนตามเมื่อสลับศูนย์ |
+| FR-SBO-27 | หน้า `/back-office/scanners` ไม่มีตัวกรองศูนย์ทุก role (รวม SA) · รายการเป็นของศูนย์ที่เลือกอยู่ (active shelter) เสมอ — client ส่ง `?shelter_code=` ทุกครั้ง และเปลี่ยนตามเมื่อสลับศูนย์ · SA ดูศูนย์อื่นด้วยการสลับศูนย์ |
 
 ## 4. Acceptance criteria
 
 | ID | Scenario | ผลที่คาด | FR |
 | --- | --- | --- | --- |
 | AC-SBO-01 | SM ศูนย์ A เปิด `/back-office/scanners` | เห็นเฉพาะเครื่องของ A | 10, 20 |
-| AC-SBO-02 | SA เปิด `/back-office/scanners` | เห็นเครื่องทุกศูนย์ | 02, 10 |
+| AC-SBO-02 | SA เลือกศูนย์ A อยู่ แล้วเปิด `/back-office/scanners` | เห็นเฉพาะเครื่องของ A · ไม่มีตัวกรองศูนย์ในหน้า | 02, 10, 27 |
 | AC-SBO-03 | SM ศูนย์ A สร้างเครื่องให้ A | `201` ได้ device secret + default PIN · kiosk bootstrap ด้วย secret นั้นได้ | 03, 22 |
 | AC-SBO-04 | SM ศูนย์ A ยิง `POST devices` ด้วย `shelter_code: B` | `403` · ไม่มี doc ใหม่ใน `registry` / `scanner_secrets` | 05 |
 | AC-SBO-05 | SM ศูนย์ A เปิดปิด / ลบ / ตั้ง PIN / reveal PIN เครื่องของ A | สำเร็จ · log มี `by` = SM · หลังตั้ง PIN `staff_pin_updated_by` = SM | 03, 07, 08 |
@@ -145,7 +145,7 @@ migration: N/A — ไม่เปลี่ยนรูปร่าง doc `scan
 | AC-SBO-10 | เปิด `/system-management/scanners` | ไปที่ `/back-office/scanners` | 25 |
 | AC-SBO-11 | ไม่ login ยิงทุก admin endpoint | `401` | 01 |
 | AC-SBO-12 | SM เปิด back-office | เห็นเมนูแม่「จัดการ Kiosk」และเมนูลูก「จัดการอุปกรณ์」· ไม่มีเมนูที่ชี้ `/back-office/kiosk-banners` · registration_staff ไม่เห็นเมนูแม่ | 24, 26 |
-| AC-SBO-13 | SA เลือกศูนย์ B ในตัวกรอง | รายการเหลือเฉพาะเครื่องของ B · SM ศูนย์ A ไม่เห็นตัวกรอง | 27 |
+| AC-SBO-13 | SA สลับศูนย์จาก A ไป B (ตัวสลับศูนย์ของ back-office) | รายการเปลี่ยนเป็นเครื่องของ B · dialog สร้างเครื่องล็อกศูนย์ B · SA และ SM ไม่เห็นตัวกรองศูนย์ในหน้า | 22, 27 |
 | AC-SBO-14 | ผู้ใช้เป็น SM ทั้งศูนย์ A และ B เลือกศูนย์ A อยู่ แล้วสลับไป B | ก่อนสลับเห็นเฉพาะเครื่องของ A · หลังสลับเห็นเฉพาะเครื่องของ B · dialog สร้างเครื่องล็อกศูนย์ตามศูนย์ที่เลือก | 10, 22, 27 |
 | AC-SBO-15 | ผู้ใช้เป็น SM ศูนย์ A และ registration_staff ศูนย์ B เลือกศูนย์ B อยู่ แล้วเปิด `/back-office/scanners` | redirect ตาม guard · สลับไปศูนย์ A แล้วเข้าได้ | 20 |
 | AC-SBO-16 | SM ยิง `GET devices` โดยไม่ส่ง `shelter_code` | `400` | 10 |
@@ -158,7 +158,7 @@ migration: N/A — ไม่เปลี่ยนรูปร่าง doc `scan
 
 - **Docs:** `role-permission-matrix.md` §1.1 เพิ่มแถว「Scanner / Kiosk Device (`/back-office/scanners`)」SA ✓ · SM scope · BAN — · อื่น — · `api-contract.md` §2.2 หัวข้อ admin เปลี่ยน "SA เท่านั้น" → "SA ทุกศูนย์ / SM เฉพาะศูนย์" + เพิ่ม `GET`/`PATCH` + error 404 นอก scope · `schema.md` §3.11 `staff_pin_updated_by` = SA หรือ SM และการแก้ชื่อ/สถานะทำฝั่ง server · `schema.md` §3.11.1 `scanner_staff_pin.updated_by` = SA หรือ SM
 - **Code:** ตาม `affects:` · ไม่แตะ `registry` VDU (ยังให้เขียนเฉพาะ SA/`_admin` — server ใช้ admin credential)
-- **ความสัมพันธ์กับ CR-162:** path `/back-office/kiosk-banners` และ `/api/back-office/kiosk-banners/**` คงเดิม · ตัวเลือกศูนย์ (FR-SBO-27) ใช้ซ้ำในหน้า banner ได้ · เมนู banner ของ CR-162 (§2 แถว Back-office: เมนู「แบนเนอร์ Kiosk」ใน `backoffice-navbar/static.ts`) ย้ายไปเป็นเมนูลูก「จัดการแบนเนอร์」ใต้「จัดการ Kiosk」— งาน CR-162 เป็นผู้เพิ่มเมนูนี้ตอน implement route (CR นี้ไม่ใส่) · เปลี่ยนเฉพาะตำแหน่งและชื่อเมนู ไม่เปลี่ยน FR ของ CR-162 · เงื่อนไขเห็นเมนูของ `banner_staff` (FR-KBN-27) ใช้กลไก FR-SBO-26 · `banner_staff` เห็นเมนูแม่「จัดการ Kiosk」ได้เพราะเป็นแค่ตัวจัดกลุ่ม (มีลูกเดียวคือ「จัดการแบนเนอร์」)
+- **ความสัมพันธ์กับ CR-162:** path `/back-office/kiosk-banners` และ `/api/back-office/kiosk-banners/**` คงเดิม · component ตัวเลือกศูนย์ `ShelterScopeSelect` ใช้ซ้ำในหน้า banner ได้ (หน้า scanners ไม่ใช้เป็นตัวกรอง — FR-SBO-27) · เมนู banner ของ CR-162 (§2 แถว Back-office: เมนู「แบนเนอร์ Kiosk」ใน `backoffice-navbar/static.ts`) ย้ายไปเป็นเมนูลูก「จัดการแบนเนอร์」ใต้「จัดการ Kiosk」— งาน CR-162 เป็นผู้เพิ่มเมนูนี้ตอน implement route (CR นี้ไม่ใส่) · เปลี่ยนเฉพาะตำแหน่งและชื่อเมนู ไม่เปลี่ยน FR ของ CR-162 · เงื่อนไขเห็นเมนูของ `banner_staff` (FR-KBN-27) ใช้กลไก FR-SBO-26 · `banner_staff` เห็นเมนูแม่「จัดการ Kiosk」ได้เพราะเป็นแค่ตัวจัดกลุ่ม (มีลูกเดียวคือ「จัดการแบนเนอร์」)
 - **ไม่กระทบ:** `/api/v1/scanner/bootstrap`, `/api/v1/scanner/kiosk/*`, `scanner_client`, `scanner_secrets` `_security`, `sync:central`
 - **ความเสี่ยง:** SM ดู staff PIN ของเครื่องในศูนย์ได้ — ยอมรับเพราะ PIN ใช้ได้เฉพาะที่เครื่องนั้นและ SM เป็นผู้รับผิดชอบเจ้าหน้าที่หน้าตู้อยู่แล้ว · ทุก reveal ถูก log (FR-SBO-07)
 - **ความเสี่ยง:** SM ลบเครื่องในศูนย์ได้ — ลบแล้วย้อนกลับไม่ได้ (ลบ registry doc + PIN doc) ตู้ใช้งานไม่ได้ทันทีและต้องสร้างเครื่องใหม่ + ตั้ง secret ที่ตู้ใหม่ · ยอมรับเพราะเป็นสิทธิ์เดียวกับที่ SA มีอยู่เดิม และหน้า UI ต้อง confirm ก่อนลบ (พฤติกรรมเดิม) · ทุกการลบถูก log (FR-SBO-07)
@@ -177,6 +177,7 @@ N/A — ไม่เปลี่ยนรูปร่าง doc ที่ persis
 - 2026-10-12 — ทีม kiosk เคาะ: scope ของ SM ใช้ศูนย์ที่เลือกอยู่ (active shelter) เหมือนหน้า back-office อื่น — ใช้ `requireManager` เดิม · SM ไม่มีตัวกรองศูนย์ / mode รวมหลายศูนย์ (FR-SBO-10/20/22/27)
 - 2026-10-12 — ทีม kiosk เคาะ: เมนูแม่「จัดการ Kiosk」มีลูก「จัดการอุปกรณ์」และ「จัดการแบนเนอร์」— เมนู banner ของ CR-162 ย้ายมาอยู่ใต้เมนูแม่นี้และเปลี่ยนชื่อจาก「แบนเนอร์ Kiosk」(FR-SBO-24/26)
 - 2026-10-12 — ทีม kiosk เคาะ (หลัง review): เมนู「จัดการแบนเนอร์」ให้งาน CR-162 เป็นผู้เพิ่ม ไม่ใส่ล่วงหน้า (กัน dead link) · `GET` ขอศูนย์นอก scope ตอบ `403` แทน `200 []` ให้ error contract ตรงกับ `POST` · `PATCH` retry เมื่อ `_rev` ชน สูงสุด 3 ครั้ง เพราะ kiosk เขียน `last_seen_at` ทุก bootstrap/lookup/check-in/register
+- 2026-10-12 — ทีม kiosk เคาะ (หลัง implement): ตัดตัวกรองศูนย์ของ SA ออก — ทุก role ใช้ศูนย์ที่เลือกอยู่ (active shelter) ทั้งรายการและ dialog สร้างเครื่อง ให้หน้าทำงานเหมือนหน้า back-office อื่น · SA ดูศูนย์อื่นด้วยการสลับศูนย์ (FR-SBO-22/27, AC-SBO-02/13) · API `GET /api/v1/scanner/devices` คงเดิม (SA ไม่ส่ง `shelter_code` ยังได้ทุกศูนย์ — หน้าไม่ใช้)
 - ทีม kiosk เคาะตัดทิ้ง: ย้าย `scanner_device` ไปไว้ใน `shelter_{code}` (schema.md §3.11 Future Consideration) — ต้องเปลี่ยน device auth ของ kiosk ทั้งชุด เกินขอบเขตการย้ายสิทธิ์
 - ทีม kiosk เคาะตัดทิ้ง: SM เห็นรวมทุกศูนย์ที่ตัวเองเป็น SM (「ทุกศูนย์ของฉัน」) — ต้องทำ guard ใหม่แทน `requireManager` และหน้าจะทำงานต่างจากหน้า back-office อื่น · SM หลายศูนย์มีน้อย สลับศูนย์แทนได้
 - ทีม kiosk เคาะตัดทิ้ง: คงหน้าไว้ทั้ง system-management และ back-office — ซ้ำซ้อน และ SA เข้า back-office ได้อยู่แล้ว
