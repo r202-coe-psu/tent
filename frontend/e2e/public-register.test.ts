@@ -193,7 +193,7 @@ test.describe(
 			await page.locator('#member-0-first-name').fill('สมชาย');
 			await page.locator('#member-0-last-name').fill('ใจดี');
 			await page.locator('#member-0-gender-male').click({ force: true });
-			await page.getByLabel(/ข้าพเจ้ารับทราบเงื่อนไขการใช้งานระบบ/).check();
+			await page.getByLabel(/ข้าพเจ้ารับทราบข้อตกลงการใช้งาน/).check();
 
 			// The sticky summary aside repeats the submit button; use the one in the form body.
 			await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last().click();
@@ -512,7 +512,7 @@ test.describe(
 			});
 			await expect(page.locator('#member-0-no-phone')).toHaveCount(0);
 
-			await page.getByLabel(/ข้าพเจ้ารับทราบเงื่อนไขการใช้งานระบบ/).check();
+			await page.getByLabel(/ข้าพเจ้ารับทราบข้อตกลงการใช้งาน/).check();
 			await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last().click();
 
 			await expect(page.getByText('ลงทะเบียนล่วงหน้าสำเร็จ')).toBeVisible();
@@ -576,7 +576,7 @@ test.describe(
 					lastName: 'ใจดี',
 					phone: '0812345678'
 				});
-				await page.getByLabel(/ข้าพเจ้ารับทราบเงื่อนไขการใช้งานระบบ/).check();
+				await page.getByLabel(/ข้าพเจ้ารับทราบข้อตกลงการใช้งาน/).check();
 				await page.getByRole('button', { name: 'ยืนยันการลงทะเบียน' }).last().click();
 				await expect(page.getByText('ลงทะเบียนล่วงหน้าสำเร็จ')).toBeVisible();
 				await expect.poll(() => storedCodes(page)).toContain(REG_ID);
