@@ -9,9 +9,17 @@ import { findMasterByCode } from '$lib/server/shelters.admin';
 import { ServiceError } from '$lib/server/couch-admin';
 import {
 	KioskRegistrationBlockedError,
+	registerKioskThaidWalkIn,
 	registerKioskWalkIn
 } from '$lib/features/kiosk/server/kiosk-register.server';
+import { isKioskThaidCheckInAllowed } from '$lib/features/kiosk/server/kiosk-thaid-gate.server';
 import { kioskRegisterDeviceLimiter } from '$lib/server/security/rate-limiter';
+import {
+	_resetSessionsForTest,
+	completeKioskSession,
+	createKioskCheckInSession,
+	getKioskSessionForDevice
+} from '$lib/server/thaid-scan-session';
 
 const { mockUpdateLastSeen } = vi.hoisted(() => ({
 	mockUpdateLastSeen: vi.fn().mockResolvedValue(undefined)
@@ -32,12 +40,17 @@ vi.mock('$lib/features/kiosk/server/kiosk-register.server', async () => {
 	const actual = await vi.importActual<
 		typeof import('$lib/features/kiosk/server/kiosk-register.server')
 	>('$lib/features/kiosk/server/kiosk-register.server');
-	return { ...actual, registerKioskWalkIn: vi.fn() };
+	return { ...actual, registerKioskWalkIn: vi.fn(), registerKioskThaidWalkIn: vi.fn() };
 });
+vi.mock('$lib/features/kiosk/server/kiosk-thaid-gate.server', () => ({
+	isKioskThaidCheckInAllowed: vi.fn()
+}));
 
 const mockAuthenticate = vi.mocked(authenticateScannerDevice);
 const mockFindShelter = vi.mocked(findMasterByCode);
 const mockRegister = vi.mocked(registerKioskWalkIn);
+const mockRegisterThaid = vi.mocked(registerKioskThaidWalkIn);
+const mockThaidAllowed = vi.mocked(isKioskThaidCheckInAllowed);
 
 function request(body: unknown, includeHeaders = true): RequestEvent {
 	return {
@@ -92,9 +105,30 @@ describe('POST /api/v1/scanner/kiosk/register', () => {
 			'โต๊ะ 1',
 			expect.objectContaining({ citizen_id: validBody.card.citizen_id }),
 			null,
-			validBody.consented_at
+			validBody.consented_at,
+			null
 		);
 		expect(mockUpdateLastSeen).toHaveBeenCalledWith('registry:KIOSK-01');
+	});
+
+	it('stores the phone typed at the kiosk in its canonical form', async () => {
+		const response = await POST(request({ ...validBody, phone: '+66812345678' }));
+		expect(response.status).toBe(200);
+		expect(mockRegister).toHaveBeenCalledWith(
+			'SH001',
+			'KIOSK-01',
+			'โต๊ะ 1',
+			expect.anything(),
+			null,
+			validBody.consented_at,
+			'0812345678'
+		);
+	});
+
+	it('rejects a phone that is not a Thai number', async () => {
+		const response = await POST(request({ ...validBody, phone: '12345' }));
+		expect(response.status).toBe(400);
+		expect(mockRegister).not.toHaveBeenCalled();
 	});
 
 	it('fails closed when walk-in registration is disabled', async () => {
@@ -170,5 +204,119 @@ describe('POST /api/v1/scanner/kiosk/register', () => {
 		expect(response.status).toBe(503);
 		expect((await response.json()).error.code).toBe('DEPENDENCY_UNAVAILABLE');
 		expect(mockRegister).not.toHaveBeenCalled();
+	});
+});
+
+describe('POST /api/v1/scanner/kiosk/register source thaid', () => {
+	const DEVICE = 'registry:KIOSK-01';
+	const citizen = { pid: '1234567890123', sub: 'sub-1' };
+
+	beforeEach(() => {
+		vi.restoreAllMocks();
+		vi.clearAllMocks();
+		_resetSessionsForTest();
+		vi.spyOn(kioskRegisterDeviceLimiter, 'check').mockReturnValue(true);
+		mockAuthenticate.mockResolvedValue({
+			shelter_code: 'SH001',
+			device_id: 'KIOSK-01',
+			station_name: 'โต๊ะ 1',
+			registry_id: DEVICE
+		} as never);
+		mockFindShelter.mockResolvedValue({
+			feature_flags: { kiosk_walk_in_registration_enabled: true }
+		} as never);
+		mockThaidAllowed.mockResolvedValue(true);
+		mockRegisterThaid.mockResolvedValue({ _id: 'evacuee:01ARZ3NDEKTSV4RRFFQ69G5FAV' } as never);
+	});
+
+	function completedSession(shelterCode = 'SH001'): string {
+		const session = createKioskCheckInSession({ device_id: DEVICE, shelter_code: shelterCode });
+		completeKioskSession(session.id, citizen);
+		return session.id;
+	}
+
+	function thaidBody(sessionId: string, extra: Record<string, unknown> = {}) {
+		return {
+			source: 'thaid',
+			session_id: sessionId,
+			phone: '0812345678',
+			consented: true,
+			consented_at: new Date().toISOString(),
+			...extra
+		};
+	}
+
+	it('registers the session citizen, never a browser-supplied one, and uses the session up', async () => {
+		const sessionId = completedSession();
+		const body = thaidBody(sessionId);
+
+		const response = await POST(request(body));
+
+		expect(response.status).toBe(200);
+		expect(mockRegisterThaid).toHaveBeenCalledWith(
+			{ shelterCode: 'SH001', deviceId: 'KIOSK-01', stationName: 'โต๊ะ 1' },
+			citizen,
+			body.consented_at,
+			'0812345678'
+		);
+		expect(mockRegister).not.toHaveBeenCalled();
+		expect(getKioskSessionForDevice(sessionId, DEVICE)?.status).toBe('consumed');
+		expect((await POST(request(thaidBody(sessionId)))).status).toBe(409);
+	});
+
+	it('registers without a phone', async () => {
+		const response = await POST(request(thaidBody(completedSession(), { phone: null })));
+		expect(response.status).toBe(200);
+		expect(mockRegisterThaid.mock.calls[0]?.[3]).toBeNull();
+	});
+
+	it('rejects a citizen id or card sent with a ThaiD registration', async () => {
+		const sessionId = completedSession();
+		expect((await POST(request(thaidBody(sessionId, { citizen_id: '1' })))).status).toBe(400);
+		expect((await POST(request(thaidBody(sessionId, { card: validBody.card })))).status).toBe(400);
+		expect(mockRegisterThaid).not.toHaveBeenCalled();
+	});
+
+	it('answers 403 when ThaiD is switched off, keeping the session', async () => {
+		mockThaidAllowed.mockResolvedValue(false);
+		const sessionId = completedSession();
+
+		const response = await POST(request(thaidBody(sessionId)));
+
+		expect(response.status).toBe(403);
+		expect((await response.json()).error.code).toBe('KIOSK_METHOD_DISABLED');
+		expect(getKioskSessionForDevice(sessionId, DEVICE)?.status).toBe('completed');
+	});
+
+	it('answers 409 for an unknown session or one minted for another shelter', async () => {
+		const unknown = await POST(request(thaidBody('f'.repeat(32))));
+		expect(unknown.status).toBe(409);
+		expect((await unknown.json()).error.code).toBe('KIOSK_THAID_SESSION_INVALID');
+
+		const otherShelter = completedSession('SH002');
+		expect((await POST(request(thaidBody(otherShelter)))).status).toBe(409);
+		expect(getKioskSessionForDevice(otherShelter, DEVICE)?.status).toBe('completed');
+		expect(mockRegisterThaid).not.toHaveBeenCalled();
+	});
+
+	it('gives the session back when the write fails', async () => {
+		mockRegisterThaid.mockRejectedValueOnce(new Error('couch down'));
+		const sessionId = completedSession();
+
+		const response = await POST(request(thaidBody(sessionId)));
+
+		expect(response.status).toBe(503);
+		expect(getKioskSessionForDevice(sessionId, DEVICE)?.status).toBe('completed');
+	});
+
+	it('keeps the session used when the citizen already has a record', async () => {
+		mockRegisterThaid.mockRejectedValueOnce(new KioskRegistrationBlockedError());
+		const sessionId = completedSession();
+
+		const response = await POST(request(thaidBody(sessionId)));
+
+		expect(response.status).toBe(409);
+		expect((await response.json()).error.code).toBe('KIOSK_REGISTRATION_BLOCKED');
+		expect(getKioskSessionForDevice(sessionId, DEVICE)?.status).toBe('consumed');
 	});
 });

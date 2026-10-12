@@ -5,8 +5,11 @@ import {
 	decodeKioskPhoto,
 	KioskPhotoValidationError,
 	KioskRegistrationBlockedError,
+	kioskCardSnapshotFromThaid,
+	registerKioskThaidWalkIn,
 	registerKioskWalkIn
 } from './kiosk-register.server';
+import type { ThaiDAutofillProfile } from '$lib/features/people/domain/thaid-profile';
 
 vi.mock('$lib/server/couch-admin', () => ({ adminFetch: vi.fn() }));
 
@@ -251,5 +254,117 @@ describe('registerKioskWalkIn', () => {
 		expect(() => decodeKioskPhoto({ ...photo, content_type: 'image/jpeg' })).toThrow(
 			KioskPhotoValidationError
 		);
+	});
+});
+
+describe('kiosk walk-in phone and ThaiD', () => {
+	beforeEach(() => vi.clearAllMocks());
+
+	const device = { shelterCode: 'SH001', deviceId: 'KIOSK-01', stationName: 'โต๊ะ 1' };
+	const profile: ThaiDAutofillProfile = {
+		id: 'thaid-9999999999999',
+		roleLabel: 'ผู้ลงทะเบียนผ่าน ThaiD',
+		person_id: '9999999999999',
+		first_name: 'วิภา',
+		last_name: 'ใจดี',
+		nickname: '',
+		gender: 'female',
+		birth_year: 2530,
+		age: 39,
+		phone: null,
+		vulnerable_groups: [],
+		special_needs: [],
+		medical_conditions: [],
+		address: {
+			address_no: '99/1',
+			village_no: '2',
+			subdistrict: 'สุเทพ',
+			district: 'เมืองเชียงใหม่',
+			province: 'เชียงใหม่',
+			postal_code: '50200'
+		}
+	};
+
+	function mockNewRecordWithoutPhoto() {
+		mockAdminFetch
+			.mockResolvedValueOnce({ rev: '1-lock' } as never) // acquire lock
+			.mockResolvedValueOnce({ docs: [] } as never) // _find
+			.mockResolvedValueOnce({ ok: true } as never) // evacuee put
+			.mockResolvedValueOnce({ ok: true } as never); // release lock
+	}
+
+	it('stores the phone given at the kiosk on a card walk-in', async () => {
+		mockNewRecordWithoutPhoto();
+		const result = await registerKioskWalkIn(
+			'SH001',
+			'KIOSK-01',
+			'โต๊ะ 1',
+			card,
+			null,
+			consentedAt,
+			'0812345678'
+		);
+		expect(result.phone).toBe('0812345678');
+	});
+
+	it('registers a ThaiD walk-in from the session pid and profile, with no photo', async () => {
+		mockNewRecordWithoutPhoto();
+		const result = await registerKioskThaidWalkIn(
+			device,
+			{ pid: citizenId, profile },
+			consentedAt,
+			'0812345678'
+		);
+		const findBody = JSON.parse(String(mockAdminFetch.mock.calls[1]?.[1]?.body)) as {
+			selector: Record<string, unknown>;
+		};
+		const saved = JSON.parse(String(mockAdminFetch.mock.calls[2]?.[1]?.body));
+
+		expect(mockAdminFetch).toHaveBeenCalledTimes(4); // no image document
+		expect(findBody.selector['person_id.number']).toBe(citizenId);
+		expect(result.person_id?.number).toBe(citizenId);
+		expect(result.first_name).toBe('วิภา');
+		expect(result.last_name).toBe('ใจดี');
+		expect(result.gender).toBe('female');
+		expect(result.birth_year).toBe(2530);
+		expect(result.phone).toBe('0812345678');
+		expect(result.photo).toBeNull();
+		expect(result.current_stay.status).toBe('kiosk_registered');
+		expect(saved.card_snapshot).toMatchObject({
+			citizen_id: citizenId,
+			province: 'เชียงใหม่',
+			postal_code: '50200',
+			consented_at: consentedAt,
+			device_id: 'KIOSK-01',
+			station_name: 'โต๊ะ 1'
+		});
+	});
+
+	it('leaves out an unknown ThaiD birth year and copes with no profile at all', () => {
+		const unknownYear = kioskCardSnapshotFromThaid(
+			citizenId,
+			{ ...profile, birth_year: 0, age: 0 },
+			consentedAt,
+			device
+		);
+		expect(unknownYear.birth_year_ce).toBeUndefined();
+		expect(unknownYear.age).toBeUndefined();
+		expect(unknownYear.first_name_th).toBe('วิภา');
+
+		const bare = kioskCardSnapshotFromThaid(citizenId, undefined, consentedAt, device);
+		expect(bare.citizen_id).toBe(citizenId);
+		expect(bare.first_name_th).toBeUndefined();
+	});
+
+	it('blocks a ThaiD walk-in for a citizen who already has a record', async () => {
+		mockAdminFetch
+			.mockResolvedValueOnce({ rev: '1-lock' } as never)
+			.mockResolvedValueOnce({
+				docs: [{ type: 'evacuee', shelter_code: 'SH001', person_id: { number: citizenId } }]
+			} as never)
+			.mockResolvedValueOnce({ ok: true } as never);
+		await expect(
+			registerKioskThaidWalkIn(device, { pid: citizenId, profile }, consentedAt, null)
+		).rejects.toBeInstanceOf(KioskRegistrationBlockedError);
 	});
 });

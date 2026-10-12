@@ -9,13 +9,21 @@
 	import KioskNoticePanel from './kiosk-notice-panel.svelte';
 
 	interface Props {
+		/** What the details come from: the card in the reader, or the ThaiD scan. */
+		source?: 'smart-card' | 'thaid';
 		isLookingUp: boolean;
 		retryAfterSeconds: number;
 		onregister: () => void;
 		onretry: () => void;
 	}
 
-	let { isLookingUp, retryAfterSeconds, onregister, onretry }: Props = $props();
+	let {
+		source = 'smart-card',
+		isLookingUp,
+		retryAfterSeconds,
+		onregister,
+		onretry
+	}: Props = $props();
 </script>
 
 <!--
@@ -29,7 +37,12 @@
 	data-testid="kiosk-walk-in-offer"
 >
 	<p>
-		ระบบจะใช้ข้อมูลจากบัตรประชาชนที่เสียบอยู่ เมื่อเสร็จแล้วกรุณาไปพบเจ้าหน้าที่เพื่อยืนยันข้อมูล
+		{#if source === 'thaid'}
+			ระบบจะใช้ข้อมูลที่ยืนยันผ่าน ThaiD (ไม่มีรูปถ่าย)
+		{:else}
+			ระบบจะใช้ข้อมูลจากบัตรประชาชนที่เสียบอยู่
+		{/if}
+		เมื่อเสร็จแล้วกรุณาไปพบเจ้าหน้าที่เพื่อยืนยันข้อมูล
 	</p>
 	{#snippet actions()}
 		<Button type="button" onclick={onregister} class={KIOSK_NOTICE_PRIMARY_ACTION}>

@@ -57,24 +57,50 @@ export interface KioskCheckInBatchResult extends KioskCheckInResult {
 	retryable_evacuee_ids: string[];
 }
 
-export async function registerKioskWalkIn(
-	card: unknown,
-	photo: KioskPhotoPayload | null,
-	consentedAt: string
-): Promise<{ evacuee_id: string }> {
+function postKioskRegistration(body: Record<string, unknown>): Promise<{ evacuee_id: string }> {
 	return requestWithTimeout(
 		'/api/v1/scanner/kiosk/register',
 		{
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
 			cache: 'no-store',
-			body: JSON.stringify({ card, photo, consented: true, consented_at: consentedAt })
+			body: JSON.stringify({ ...body, consented: true })
 		},
 		async (response) => {
 			if (!response.ok) throw await requestError(response);
 			return (await response.json()) as { evacuee_id: string };
 		}
 	);
+}
+
+/** `phone` is what the visitor typed at the kiosk, or `null` when they gave none. */
+export async function registerKioskWalkIn(
+	card: unknown,
+	photo: KioskPhotoPayload | null,
+	consentedAt: string,
+	phone: string | null = null
+): Promise<{ evacuee_id: string }> {
+	return postKioskRegistration({
+		source: 'smart-card',
+		card,
+		photo,
+		phone,
+		consented_at: consentedAt
+	});
+}
+
+/** ThaiD walk-in: only the verified session id goes out; the server holds who it is. */
+export async function registerKioskThaidWalkIn(
+	sessionId: string,
+	consentedAt: string,
+	phone: string | null
+): Promise<{ evacuee_id: string }> {
+	return postKioskRegistration({
+		source: 'thaid',
+		session_id: sessionId,
+		phone,
+		consented_at: consentedAt
+	});
 }
 
 export class KioskRequestError extends Error {

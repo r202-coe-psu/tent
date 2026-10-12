@@ -1,5 +1,6 @@
 export { default as KioskShell } from './ui/kiosk-shell.svelte';
 export { default as KioskRegisterConsent } from './ui/kiosk-register-consent.svelte';
+export { default as KioskRegisterPhone } from './ui/kiosk-register-phone.svelte';
 export { default as KioskFaceCheck } from './ui/kiosk-face-check.svelte';
 export { default as IdentityMethodSelector } from './ui/identity-method-selector.svelte';
 export { default as KioskQrIdentityScan } from './ui/qr-identity-scan.svelte';
@@ -29,7 +30,11 @@ export {
 } from './domain/display-context';
 export { isKioskPhoneCheckInEnabled } from './domain/kiosk-config';
 export { walkInSession } from './application/walk-in-session.svelte';
-export { submitWalkInCard } from './application/walk-in-card-registration';
+export {
+	abandonWalkIn,
+	submitWalkIn,
+	walkInCardMismatch
+} from './application/walk-in-registration';
 export { loadKioskHardware } from './application/kiosk-qr-input';
 export { cancelKioskFaceCheck } from './data/kiosk-face.api';
 export type { KioskHardware } from './domain/kiosk-hardware';
